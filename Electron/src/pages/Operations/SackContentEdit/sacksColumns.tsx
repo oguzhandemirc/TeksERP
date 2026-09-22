@@ -279,8 +279,16 @@ export function hasContentFilter(searchParams: URLSearchParams): boolean {
  * "Ambalaj No" düşer, içerik süzgeci yokken "Eşleşen" düşer (süzgeçsiz hep "—" basıyordu —
  * gürültü; saha 2026-09-21).
  */
-export function sacksKolonlari(subeAcik: boolean, lotMode = false, contentFilter = false): ColumnDef<SackSearchRow>[] {
+/**
+ * Sütun kümesi bağlama göre. `inLot`: parti içindeyken (sevk partisi modu, gerçek parti ya da
+ * havuz seçili) "Grup" sütunu düşer — her satırda başlıktaki parti tekrar ederdi (saha 2026-09-22).
+ */
+export function sacksKolonlari(subeAcik: boolean, lotMode = false, contentFilter = false, inLot = false): ColumnDef<SackSearchRow>[] {
   return SACKS_KOLONLARI.filter(
-    (c) => (subeAcik || c.id !== "branch") && (lotMode || c.id !== "packageNo") && (contentFilter || c.id !== "match"),
+    (c) =>
+      (subeAcik || c.id !== "branch") &&
+      (lotMode || c.id !== "packageNo") &&
+      (contentFilter || c.id !== "match") &&
+      (!inLot || c.id !== "packingGroup"),
   );
 }

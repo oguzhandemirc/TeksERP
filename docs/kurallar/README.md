@@ -20,6 +20,7 @@
 | Refakat kartı | `docs/kurallar/refakat-karti.md` | 2026-08-05 |
 | Belge · Etiket · Şablon | `docs/kurallar/belge-etiket.md` | 2026-07-30, 2026-08-05, 2026-08-13, 2026-09-04 |
 | Mükerrer · nameFold seddi | `docs/kurallar/mukerrer.md` | 2026-08-21, 2026-08-22, 2026-08-25 |
+| Numaralandırma · numara serisi · ön ek | `docs/kurallar/numaralandirma.md` | 2026-09-22 |
 | Sebep katalogları | `docs/kurallar/sebep-katalogu.md` | 2026-08-25, 2026-08-26 |
 | Keşif · Cihaz · Ağ · Donanım | `docs/kurallar/kesif-cihaz.md` | 2026-09-04 |
 | Sürüm · Yayın (panel/tablet) | `docs/kurallar/surum-yayin.md` | 2026-08-19, 2026-08-26, 2026-08-27, 2026-09-03 |

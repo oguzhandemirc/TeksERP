@@ -12,7 +12,7 @@ import { validateName, validateCode } from "../lib/string-validators";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import prisma from "../lib/prisma";
 import { OrderStatus, Prisma, ShipmentDestination } from "@prisma/client";
-import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
+import { seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { parseQueryParams, readFilterList } from "../utils/query-parser";
 import { applyPartnerRoles, roleListWhere, type PartnerRoles } from "./helpers/partner-roles.helper";
@@ -60,12 +60,12 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * numaralarıyla aynı kalıp ([[code-format]]). Çakışma `withBarcodeRetry` ile telafi.
  */
 async function nextCustomerCode(): Promise<string> {
-  const prefix = dailyCodePrefix(CUSTOMER_CODE_PREFIX);
+  const prefix = seriesCodePrefix("customer");
   const todays = await prisma.customer.findMany({
     where: { code: { gte: prefix, startsWith: prefix } },
     select: { code: true },
   });
-  const seq = nextDailySeq(
+  const seq = seriesSeqFrom(
     todays.map((c) => c.code),
     prefix,
   );

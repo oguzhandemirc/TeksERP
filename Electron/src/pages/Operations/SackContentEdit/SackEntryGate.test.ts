@@ -160,7 +160,8 @@ describe("cari listesi kararı — §4", () => {
 
   it("⭐ mod SORGU ANAHTARINDA — yoksa düğme 'çalışmıyor' görünür", () => {
     // React Query mod değişince eski cevabı gösterirdi.
-    expect(gateSource).toMatch(/queryKey:\s*\["sack-search",\s*"customers",\s*terim,\s*withSacksOnly\]/);
+    // Sıralama da anahtarda: sunucuda sıralanır, sort değişince taze sayfa gelir (2026-09-22).
+    expect(gateSource).toMatch(/queryKey:\s*\["sack-search",\s*"customers",\s*terim,\s*withSacksOnly,\s*sort\]/);
   });
 
   it("⭐ tüm cari modu SAYFALI — sessiz kesme yok", () => {
@@ -173,6 +174,8 @@ describe("cari listesi kararı — §4", () => {
   it("⭐ çuvalsız caride sayı GİZLENMEZ (soluk basılır)", () => {
     // Sayıyı gizlemek modu değiştiren düğmeyi 'bozuk' gösterirdi — kıyaslama
     // düğmenin sebebi.
-    expect(gateSource).toMatch(/sackCount > 0/);
+    // Sayı hücresi (`Sayi`) sıfırı soluk basar, satırı düşürmez; çuval sütunu ondan geçer.
+    expect(gateSource).toMatch(/n > 0 \? "text-muted-foreground" : "text-muted-foreground\/40"/);
+    expect(gateSource).toMatch(/<Sayi n=\{r\.sackCount\} \/>/);
   });
 });

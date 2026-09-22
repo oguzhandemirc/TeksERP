@@ -23,13 +23,11 @@ import prisma from "../lib/prisma";
 import {
   SHORT_BATCH_MAX,
   SHORT_BATCH_MIN,
-  buildDailyCode,
   buildShortBatchCode,
-  dailyCodePrefix,
-  nextDailySeq,
   nextShortBatchSeq,
   parseShortBatchCode,
 } from "../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { AuditService } from "./audit.service";
 import { resolveBatchShortNumberEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -131,17 +129,17 @@ export async function generateBatchNumberTx(
     return buildShortBatchCode(nextShortBatchSeq(await readLastShortBatchSeqTx(tx)));
   }
 
-  const prefix = dailyCodePrefix("P", date);
+  const prefix = seriesCodePrefix("batchDaily", date);
   const todays = await tx.batch.findMany({
     where: { batchNumber: { gte: prefix, startsWith: prefix } },
     select: { batchNumber: true },
   });
-  const seq = nextDailySeq(
+  const seq = seriesSeqFrom(
     todays.map((b) => b.batchNumber),
     prefix,
   );
-  // digits=1 → padStart(1) seq ≥ 1 için no-op: dolgu yok, hane serbest.
-  return buildDailyCode("P", seq, date, 1);
+  // Seride digits=1 → padStart(1) seq ≥ 1 için no-op: dolgu yok, hane serbest.
+  return buildSeriesCode("batchDaily", seq, date);
 }
 
 /**

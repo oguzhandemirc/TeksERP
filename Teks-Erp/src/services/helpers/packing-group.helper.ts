@@ -6,10 +6,11 @@
 // servis yalnız beş genel metodu taşısın. Alan başlığı ve gerekçeler serviste.
 // =============================================================================
 
-import { Prisma } from "@prisma/client";
+import { Prisma, type PackingGroupStatus } from "@prisma/client";
 
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { nextSeriesNo, resolveSeriesFormat } from "../number-series.service";
 import {
   PackageNoMode,
   PackageNumbering,
@@ -22,6 +23,7 @@ import {
   readPackingLotRequired,
   effectivePackingGroupMode,
 } from "../system-setting.service";
+
 
 /**
  * Grup numarası sayacının `pg_advisory_xact_lock` NAMESPACE'i (2 argümanlı form).
@@ -36,12 +38,28 @@ import {
 export const PACKING_GROUP_LOCK_NS: number = 8031;
 
 /**
- * Sevk partisi AMBALAJ NO uzayı — `hashtext(packingGroupId)`; yalnız numaranın
- * sayaçtan GELMEDİĞİ yollarda (ezme · elle · `bosluk-doldur`) tx'in İLK ifadesi.
- * `artan` sayaç tek satır `UPDATE … RETURNING` olduğu için kilitsiz. 8031'den AYRI:
- * o carinin parti sırasını, bu partinin çuval numarasını korur.
+ * PARTİ KODU uzayı — kurulum-geneli tek anahtar (key 0): kod `PRT-YYMM-NNNN` aylık
+ * sayaçtan gelir, cariye bağlı değildir. Parti doğuran tx'in İLK ifadesi; ardından
+ * (otomatik adda) 8031 gelir — sıra her yerde 8034 → 8031.
  */
-export const PACKAGE_NO_LOCK_NS: number = 8033;
+export const PACKING_GROUP_CODE_LOCK_NS: number = 8034;
+
+/**
+ * Sıradaki parti kodu — tx içinde, kilit ALINDIKTAN sonra: o ayın en büyük sayacı + 1.
+ * `@unique` DB seddi ikinci kapıdır; kilit yarışı, unique ise kusuru yakalar.
+ */
+export async function nextPackingGroupCodeTx(tx: Prisma.TransactionClient, at: Date = new Date()): Promise<string> {
+  // SAYISAL en büyük (metin sıralaması 10000'i 9999'un altına koyar; silinen taslak
+  // partiler yüzünden COUNT da güvenilmez — boşluk kodu çakıştırır). Sorgu
+  // `gte + startsWith`: gte index seek, startsWith collation-bağımsız tam-prefix.
+  return nextSeriesNo("packingLotCode", async (full) => {
+    const rows = await tx.packingGroup.findMany({
+      where: { code: { gte: full, startsWith: full } },
+      select: { code: true },
+    });
+    return rows.map((r) => r.code);
+  }, at);
+}
 
 /**
  * Grubun EKRANDA görünen adı. Tek satır, tek yer.
@@ -61,8 +79,12 @@ export const PACKAGE_NO_LOCK_NS: number = 8033;
  * Biçim değişecekse burada tek satır değişir; ekranlar bu fonksiyondan okur.
  */
 export function formatPackingGroupName(seq: number, mode: PackingGroupMode = "grup"): string {
-  // Sevk partisi BELGEYE BASILIR (K7) → üretim partisiyle çakışmayan ön ek.
-  return mode === "sevk-partisi" ? `SP-${seq}` : `P${seq}`;
+  // Sevk partisi BELGEYE BASILIR (K7): "P-n" (tireli) — üretim partisi "P02" ile aynı
+  // kâğıtta ayırt edilir (kullanıcı tercihi 2026-09-22, önceki "SP-n" fazla uzundu).
+  // Ön ek/ayraç `number_series` serisinden gelir; GRUP modunda ayraç DÜŞER (grup adı
+  // belgeye girmez, kısa kalması sahanın tercihi).
+  const fmt = resolveSeriesFormat("packingLotName");
+  return mode === "sevk-partisi" ? `${fmt.prefix}${fmt.separator}${seq}` : `${fmt.prefix}${seq}`;
 }
 
 /** "Canlı grup" yüklemi — GRUP MODU. Havuzda en az bir çuvalı olan grup. */
@@ -79,6 +101,13 @@ export const LIVE_GROUP_WHERE = {
  */
 export function liveGroupWhere(mode: PackingGroupMode): Prisma.PackingGroupWhereInput {
   return mode === "sevk-partisi" ? { status: "OPEN" } : LIVE_GROUP_WHERE;
+}
+
+/** `liveGroupWhere`in SQL İKİZİ (`loadPackingGroupDtos` için; takma ad `g`). Birlikte değişir. */
+export function liveGroupSql(mode: PackingGroupMode): Prisma.Sql {
+  return mode === "sevk-partisi"
+    ? Prisma.sql`g.status::text = 'OPEN'`
+    : Prisma.sql`EXISTS (SELECT 1 FROM sacks s WHERE s."packingGroupId" = g.id AND s."shipmentId" IS NULL)`;
 }
 
 /**
@@ -110,30 +139,6 @@ export async function readPackingLotSettings(
     required: await readPackingLotRequired(tx),
     partialDispatch: await readPackingLotPartialDispatch(tx),
   };
-}
-
-/** İlk çuvalın ambalaj numarası (K3). */
-export function packageNoStart(startsAtZero: boolean): number {
-  return startsAtZero ? 0 : 1;
-}
-
-export interface PackingGroupDto {
-  id: string;
-  name: string;
-  seq: number | null;
-  note: string | null;
-  sackCount: number;
-  rollCount: number;
-  swatchCount: number;
-  totalQty: number;
-  weightKg: number | null;
-  createdAt: Date;
-  /** Sevk partisi alanları — grup modunda `OPEN` / null / 0 döner (ek alan, davranış aynı). */
-  status: "OPEN" | "CLOSED";
-  closedAt: Date | null;
-  /** Sevkiyata bağlanmış (partide numarasıyla kalan) çuval sayısı. */
-  shippedSackCount: number;
-  nextPackageNo: number;
 }
 
 /**
@@ -184,66 +189,6 @@ export async function nextPackingGroupSeqTx(
   return (seqs.length ? seqs[seqs.length - 1] : 0) + 1;
 }
 
-export const GROUP_WITH_SACKS_SELECT = {
-  id: true,
-  // Replay gövde kapısının (F117) kimlik alanı — token'lı grup BAŞKA bir cariye
-  // aitse cached kaydı dönmek yanlış cevap olurdu.
-  customerId: true,
-  name: true,
-  seq: true,
-  note: true,
-  createdAt: true,
-  status: true,
-  closedAt: true,
-  nextPackageNo: true,
-  // Toplam üye (sevk edilmiş dahil) — parti modunda "kaç çuval gitti" bundan türer.
-  _count: { select: { sacks: true } },
-  sacks: {
-    where: { shipmentId: null },
-    select: {
-      id: true,
-      weightKg: true,
-      rolls: { select: { currentQty: true } },
-      swatches: { select: { id: true } },
-    },
-  },
-} satisfies Prisma.PackingGroupSelect;
-
-type GroupRow = Prisma.PackingGroupGetPayload<{ select: typeof GROUP_WITH_SACKS_SELECT }>;
-
-export function toDto(g: GroupRow): PackingGroupDto {
-  let rollCount = 0;
-  let swatchCount = 0;
-  let totalQty = new Prisma.Decimal(0);
-  let weight = new Prisma.Decimal(0);
-  let anyWeight = false;
-  for (const sk of g.sacks) {
-    rollCount += sk.rolls.length;
-    swatchCount += sk.swatches.length;
-    for (const r of sk.rolls) totalQty = totalQty.plus(r.currentQty);
-    if (sk.weightKg != null) {
-      weight = weight.plus(sk.weightKg);
-      anyWeight = true;
-    }
-  }
-  return {
-    id: g.id,
-    name: g.name,
-    seq: g.seq,
-    note: g.note,
-    sackCount: g.sacks.length,
-    rollCount,
-    swatchCount,
-    totalQty: Number(totalQty),
-    weightKg: anyWeight ? Number(weight) : null,
-    createdAt: g.createdAt,
-    status: g.status,
-    closedAt: g.closedAt,
-    shippedSackCount: g._count.sacks - g.sacks.length,
-    nextPackageNo: g.nextPackageNo,
-  };
-}
-
 /**
  * Ad tekilliği CANLI gruplar arasında. DB'de partial unique KURULAMAZ: "canlı"
  * tanımı ÇOCUK satıra bakıyor (havuzda çuvalı var mı) ve bir unique index başka
@@ -272,6 +217,93 @@ export async function assertGroupNameFreeTx(
       code: "PACKING_GROUP_NAME_TAKEN",
     });
   }
+}
+
+
+/**
+ * Çuvalları gruba ATOMİK CLAIM ile bağlar.
+ *
+ * ⚠️ `findUnique → if → update` DEĞİL: yüklem `updateMany`nin WHERE'inde yaşar.
+ * Aksi hâlde okuma ile yazma arasında çuval sevk edilebilir ve sevk edilmiş bir
+ * çuval hazırlık grubuna girerdi.
+ *
+ * ⚠️ BİR ÇUVAL TEK GRUPTA: `packingGroupId` tekil bir kolondur, yani başka
+ * gruptaki çuval seçilirse TAŞINIR (çıkar-ekle). Kullanıcı kararı 2026-09-10.
+ */
+export async function claimSacksIntoGroupTx(
+  tx: Prisma.TransactionClient,
+  args: {
+    customerId: string;
+    sackIds: string[];
+    groupId: string;
+    /** Sevk partisi modu: claim'lenen her çuvala YENİ ambalaj no (havuzdan al / transfer). */
+    lot?: { numbering: PackageNumbering; startsAtZero: boolean } | null;
+  },
+): Promise<void> {
+  const res = await tx.sack.updateMany({
+    where: {
+      id: { in: args.sackIds },
+      // Havuzda olmayan (sevkiyata atanmış / sevk edilmiş) çuval gruplanamaz.
+      shipmentId: null,
+      // Gruplar cariye özel: başka carinin çuvalı bu gruba giremez.
+      customerId: args.customerId,
+      // Parti modunda ZATEN ÜYE çuval yeniden numaralanmaz — claim dışı kalır ve
+      // aşağıdaki tanıda adıyla söylenir.
+      ...(args.lot ? { OR: [{ packingGroupId: null }, { packingGroupId: { not: args.groupId } }] } : {}),
+    },
+    // Transferde eski numara DÜŞER (kaynak partide boşluk kalır); yeni numara aşağıda.
+    data: { packingGroupId: args.groupId, ...(args.lot ? { packageNo: null } : {}) },
+  });
+  if (res.count === args.sackIds.length && args.lot) {
+    const nos = await reservePackageNosTx(tx, {
+      groupId: args.groupId,
+      count: args.sackIds.length,
+      numbering: args.lot.numbering,
+      startsAtZero: args.lot.startsAtZero,
+    });
+    // Sıralı — `tx.*` + Promise.all YASAK; numara sırası istemcinin seçim sırasıdır.
+    for (let i = 0; i < args.sackIds.length; i += 1) {
+      await tx.sack.update({ where: { id: args.sackIds[i] }, data: { packageNo: nos[i] } });
+    }
+  }
+  if (res.count !== args.sackIds.length) {
+    // Sayı tutmuyorsa tanı TX İÇİNDE taze okumayla konur — "kaç tanesi" değil
+    // "hangisi ve neden" söylenir.
+    const alive = await tx.sack.findMany({
+      where: { id: { in: args.sackIds } },
+      select: { id: true, sackNo: true, shipmentId: true, customerId: true, packingGroupId: true },
+    });
+    const missing = args.sackIds.filter((id) => !alive.some((s) => s.id === id));
+    const shipped = alive.filter((s) => s.shipmentId !== null).map((s) => s.sackNo);
+    const foreign = alive
+      .filter((s) => s.shipmentId === null && s.customerId !== args.customerId)
+      .map((s) => s.sackNo);
+    const zatenUye = args.lot
+      ? alive.filter((s) => s.shipmentId === null && s.packingGroupId === args.groupId).map((s) => s.sackNo)
+      : [];
+    const parts: string[] = [];
+    if (shipped.length) parts.push(`sevkiyata girmiş: ${shipped.join(", ")}`);
+    if (foreign.length) parts.push(`başka cariye ait: ${foreign.join(", ")}`);
+    if (zatenUye.length) parts.push(`zaten bu partide: ${zatenUye.join(", ")}`);
+    if (missing.length) parts.push(`bulunamadı: ${missing.length} çuval`);
+    throw AppError.conflict(
+      `Seçilen çuvalların bir kısmı gruplanamadı (${parts.join(" · ")}) — listeyi yenileyip tekrar deneyin.`,
+      { code: "PACKING_GROUP_SACK_CLAIM_FAILED" },
+    );
+  }
+}
+
+/**
+ * Sevk partisi AMBALAJ NO uzayı — `hashtext(packingGroupId)`; yalnız numaranın
+ * sayaçtan GELMEDİĞİ yollarda (ezme · elle · `bosluk-doldur`) tx'in İLK ifadesi.
+ * `artan` sayaç tek satır `UPDATE … RETURNING` olduğu için kilitsiz. 8031'den AYRI:
+ * o carinin parti sırasını, bu partinin çuval numarasını korur.
+ */
+export const PACKAGE_NO_LOCK_NS: number = 8033;
+
+/** İlk çuvalın ambalaj numarası (K3). */
+export function packageNoStart(startsAtZero: boolean): number {
+  return startsAtZero ? 0 : 1;
 }
 
 /**
@@ -360,78 +392,5 @@ export function assertPackageNoInputAllowed(noMode: PackageNoMode, packageNo: nu
   }
   if (noMode === "elle" && packageNo == null) {
     throw AppError.badRequest("Ambalaj numarası zorunlu (ayar: elle)");
-  }
-}
-
-/**
- * Çuvalları gruba ATOMİK CLAIM ile bağlar.
- *
- * ⚠️ `findUnique → if → update` DEĞİL: yüklem `updateMany`nin WHERE'inde yaşar.
- * Aksi hâlde okuma ile yazma arasında çuval sevk edilebilir ve sevk edilmiş bir
- * çuval hazırlık grubuna girerdi.
- *
- * ⚠️ BİR ÇUVAL TEK GRUPTA: `packingGroupId` tekil bir kolondur, yani başka
- * gruptaki çuval seçilirse TAŞINIR (çıkar-ekle). Kullanıcı kararı 2026-09-10.
- */
-export async function claimSacksIntoGroupTx(
-  tx: Prisma.TransactionClient,
-  args: {
-    customerId: string;
-    sackIds: string[];
-    groupId: string;
-    /** Sevk partisi modu: claim'lenen her çuvala YENİ ambalaj no (havuzdan al / transfer). */
-    lot?: { numbering: PackageNumbering; startsAtZero: boolean } | null;
-  },
-): Promise<void> {
-  const res = await tx.sack.updateMany({
-    where: {
-      id: { in: args.sackIds },
-      // Havuzda olmayan (sevkiyata atanmış / sevk edilmiş) çuval gruplanamaz.
-      shipmentId: null,
-      // Gruplar cariye özel: başka carinin çuvalı bu gruba giremez.
-      customerId: args.customerId,
-      // Parti modunda ZATEN ÜYE çuval yeniden numaralanmaz — claim dışı kalır ve
-      // aşağıdaki tanıda adıyla söylenir.
-      ...(args.lot ? { OR: [{ packingGroupId: null }, { packingGroupId: { not: args.groupId } }] } : {}),
-    },
-    // Transferde eski numara DÜŞER (kaynak partide boşluk kalır); yeni numara aşağıda.
-    data: { packingGroupId: args.groupId, ...(args.lot ? { packageNo: null } : {}) },
-  });
-  if (res.count === args.sackIds.length && args.lot) {
-    const nos = await reservePackageNosTx(tx, {
-      groupId: args.groupId,
-      count: args.sackIds.length,
-      numbering: args.lot.numbering,
-      startsAtZero: args.lot.startsAtZero,
-    });
-    // Sıralı — `tx.*` + Promise.all YASAK; numara sırası istemcinin seçim sırasıdır.
-    for (let i = 0; i < args.sackIds.length; i += 1) {
-      await tx.sack.update({ where: { id: args.sackIds[i] }, data: { packageNo: nos[i] } });
-    }
-  }
-  if (res.count !== args.sackIds.length) {
-    // Sayı tutmuyorsa tanı TX İÇİNDE taze okumayla konur — "kaç tanesi" değil
-    // "hangisi ve neden" söylenir.
-    const alive = await tx.sack.findMany({
-      where: { id: { in: args.sackIds } },
-      select: { id: true, sackNo: true, shipmentId: true, customerId: true, packingGroupId: true },
-    });
-    const missing = args.sackIds.filter((id) => !alive.some((s) => s.id === id));
-    const shipped = alive.filter((s) => s.shipmentId !== null).map((s) => s.sackNo);
-    const foreign = alive
-      .filter((s) => s.shipmentId === null && s.customerId !== args.customerId)
-      .map((s) => s.sackNo);
-    const zatenUye = args.lot
-      ? alive.filter((s) => s.shipmentId === null && s.packingGroupId === args.groupId).map((s) => s.sackNo)
-      : [];
-    const parts: string[] = [];
-    if (shipped.length) parts.push(`sevkiyata girmiş: ${shipped.join(", ")}`);
-    if (foreign.length) parts.push(`başka cariye ait: ${foreign.join(", ")}`);
-    if (zatenUye.length) parts.push(`zaten bu partide: ${zatenUye.join(", ")}`);
-    if (missing.length) parts.push(`bulunamadı: ${missing.length} çuval`);
-    throw AppError.conflict(
-      `Seçilen çuvalların bir kısmı gruplanamadı (${parts.join(" · ")}) — listeyi yenileyip tekrar deneyin.`,
-      { code: "PACKING_GROUP_SACK_CLAIM_FAILED" },
-    );
   }
 }

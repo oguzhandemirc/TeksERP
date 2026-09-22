@@ -5,8 +5,8 @@
 //   §3 `lotDeletable`: yalnız hiç çuvalı olmamış parti
 //   §4 `newSackLotTarget`: seçili parti hedef; `lotRequired` + parti yok → engel metni
 //   §5 `parsePackageNoInput`: boş → null; kesirli/negatif → hata; tam sayı → sayı
-//   §6 kaynak metni: `SacksListView` parti modunda PARTİ BAŞLIĞI, grup modunda çip şeridi
-//      çizer; `NewSackDialog` numarayı `packageNoField`ten okur (elle karar yok); `openSack`
+//   §6 kaynak metni: `SacksListView` parti modunda şerit çizmez (rozet başlıkta, eylemler alt
+//      şeritte, "Hepsini Sevk Et" fetchAll ile), grup modunda çip şeridi; `NewSackDialog` numarayı `packageNoField`ten okur (elle karar yok); `openSack`
 //      gövdesi `packingGroupId`yi yalnız doluyken gönderir (grup modunda bayt bayt eski istek)
 //   §7 kaynak metni: parti menüsünde KAPAT/YENİDEN AÇ YOK (durum sevkten türer), sil `lotDeletable`
 //      kapısından geçer; sayfa parti modunda cariye girince PARTİ LİSTESİ çizer, geri oku
@@ -66,10 +66,22 @@ describe("sevk partisi — saf yüklemler", () => {
 });
 
 describe("sevk partisi — kaynak metni kapıları", () => {
-  it("§6a SacksListView parti modunda başlık, grup modunda çip şeridi", () => {
+  it("§6a SacksListView parti modunda çip şeridi YOK; parti rozeti başlıkta, eylemler alt şeritte", () => {
     const s = src("SacksListView.tsx");
-    expect(s).toMatch(/lotMode\s*\?\s*tekCariId && groupFilter && <PackingLotHeader/);
-    expect(s).toMatch(/: <PackingGroupBar/);
+    expect(s).toMatch(/groupsEnabled && !lotMode && <PackingGroupBar/);
+    // Alt şerit eylemleri ayrı dosyada (`SackBulkActions`); "Hepsini Sevk Et" orada.
+    expect(s).toMatch(/<SackBulkActions/);
+    const bulk = src("SackBulkActions.tsx");
+    expect(bulk).toMatch(/<PackingLotBarActions/);
+    // Boş çuval sevk edilemez/dağıtılamaz: Sevk Et ve Dağıt DOLU seçime bakar, Sil ayrı (saha 2026-09-22).
+    expect(bulk).toMatch(/onClick=\{\(\) => p\.onShip\(dolu\)\}/);
+    expect(bulk).toMatch(/p\.onDistribute\(dolu\.map/);
+    expect(bulk).toMatch(/Sil \(\{rows\.length\}\)/);
+    expect(s).not.toMatch(/<PackingLotHeader/);
+    expect(src("SackContentEditPage.tsx")).toMatch(/titleExtra=\{[^}]*<PackingLotTitleExtra/);
+    expect(src("PackingLotHeader.tsx")).toMatch(/<CustomerNameBadge[\s\S]*<PackingLotTitleBadge/);
+    // "Hepsini Sevk Et" kapsamı sunucudan (`fetchAll`), ekrandaki sayfa değil.
+    expect(s).toMatch(/\(await fetchAll\(\)\)\.filter\(isWarehouseSack\)\.filter\(hasSackContents\)/);
   });
   it("§6b NewSackDialog numara alanını packageNoField'tan okur", () => {
     const s = src("NewSackDialog.tsx");
@@ -89,11 +101,29 @@ describe("sevk partisi — kaynak metni kapıları", () => {
     expect(s).toMatch(/lotDeletable\(/);
     expect(src("service.ts")).not.toMatch(/packing-groups\/\$\{groupId\}\/(close|reopen)/);
   });
+  it("§7a parti menüsü toplu eylemleri: sevk · havuza çıkar · depoya çek — kapsam partinin TAMAMI, sunucudan", () => {
+    const menu = src("PackingLotHeader.tsx");
+    for (const k of ["ship", "release", "distribute"]) expect(menu).toContain(`kind: "${k}"`);
+    // Yalnız açık + çuvallı partide; sevk maddesi şeritte düğme varsa tekrar edilmez.
+    expect(menu).toMatch(/const bulk = !!onAction && lot\.status === "OPEN" && lot\.sackCount > 0;/);
+    expect(menu).toMatch(/onAction=\{setAction\} showShip=\{false\}/);
+    const act = src("PackingLotActions.tsx");
+    // Sevk/dağıt kapsamı cursor sonuna kadar sunucudan; "depoya çek" = boşalt + sil (önizlemeli).
+    expect(act).toMatch(/fetchLotWarehouseSacks\(action!\.lot\.id\)/);
+    expect(act).toMatch(/<BulkDistributeSacksDialog[\s\S]*mod="sil"/);
+    const svc = src("service.ts");
+    // Havuza çıkarma id taşımaz — kapsam `:id` ile sunucuda çözülür (§14).
+    expect(svc).toMatch(/packing-groups\/\$\{groupId\}\/release`,\s*\{ target \}/);
+    expect(svc).toMatch(/filters: \{ packingGroupId: groupId, scope: "POOL" \}/);
+    // Liste diyalogları TEK kez, satır başına değil.
+    const list = src("PackingLotListView.tsx");
+    expect(list.match(/<LotActionDialogs /g)?.length).toBe(1);
+  });
   it("§7b sayfa: parti modunda cariye girince parti LİSTESİ; geri oku önce listeye", () => {
     const page = src("SackContentEditPage.tsx");
-    expect(page).toMatch(/const lotList = !gateOpen && lotMode && !!singleCustomer && !groupFilter;/);
+    expect(page).toMatch(/const lotList = !gateOpen && lotMode && !!singleCustomer && !groupFilter && !sacksView;/);
     expect(page).toMatch(/lotList \? \(\s*<PackingLotListView/);
-    expect(page).toMatch(/lotMode && singleCustomer && groupFilter\s*\?\s*\(\) => setGroupFilter\(null\)/);
+    expect(page).toMatch(/inWorkspace && groupFilter \? \(\) => setGroupFilter\(null\)/);
     expect(page).toMatch(/onBack=\{onBack\}/);
     const list = src("PackingLotListView.tsx");
     // Havuz satırı SABİT ve boşken kaybolmaz; parti satırı "N açık · M sevk".
@@ -111,6 +141,9 @@ describe("sütun kümesi bağlama göre", () => {
     expect(ids(sacksKolonlari(true, true, false))).toContain("packageNo");
     expect(ids(sacksKolonlari(true, true, false))).not.toContain("match");
     expect(ids(sacksKolonlari(true, true, true))).toContain("match");
+    // Parti içinde "Grup" sütunu düşer (başlıkta zaten var); dışında kalır.
+    expect(ids(sacksKolonlari(true, true, false, true))).not.toContain("packingGroup");
+    expect(ids(sacksKolonlari(true, true, false, false))).toContain("packingGroup");
   });
   it("§8 hasContentFilter: kumaş / renk / kalite / en; cari ya da kapsam SAYILMAZ", () => {
     expect(hasContentFilter(new URLSearchParams("filter[customerId]=x&filter[scope]=POOL"))).toBe(false);

@@ -30,7 +30,7 @@ export const defectTypeService = new BaseService({
   duplicateNameField: "name",
   entityLabel: "hata tipi",
   // Kod backend-authoritative: `HATA+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
-  autoCode: { prefix: "HATA" },
+  autoCode: { series: "defectType" },
 });
 
 const controller = new BaseController(defectTypeService);

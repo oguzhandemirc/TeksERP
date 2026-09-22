@@ -37,7 +37,7 @@ const colorService = new ColorService({
   searchFields: ["name"],
   codeSearchFields: ["code"],
   uniqueField: "code",
-  autoCode: { prefix: "RNK" },
+  autoCode: { series: "color" },
 });
 
 /** Silinecek / korunacak çiftler — iş anahtarıyla (kod) çözülür, UUID gömülmez. */

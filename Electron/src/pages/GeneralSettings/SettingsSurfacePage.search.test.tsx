@@ -105,21 +105,17 @@ describe("Özellik Anahtarları — arama süzer, gezinmez", () => {
 
   /**
    * İlk sekme "Müşteriler"; oradaki şube anahtarını çevirip taslak kirlet.
-   *
-   * ⚠️ Kutu BAŞLIK METNİNDEN bulunur, erişilebilir addan değil: `FlagToggle`
-   * `<label>`ı `htmlFor`/`id` ile bağlamıyor ve sarmalayıcı etiketin metni
-   * (başlık + özet + rozet) ad hesabına girmiyor — `getByRole("checkbox", {name})`
-   * burada boş döner.
+   * Anahtar iOS `Switch` (`role="switch"`, `aria-label` = başlık, 2026-09-22) — erişilebilir
+   * adla bulunur, durum `aria-checked`ten okunur.
    */
+  const subeAnahtari = () => screen.getByRole("switch", { name: "Müşteri şubeleri (sevk noktaları) özelliğini göster" });
+  const acik = (el: HTMLElement) => el.getAttribute("aria-checked") === "true";
   const makeDirty = () => {
     renderWithProviders(<FeatureFlagsPage />);
-    const toggle = screen
-      .getByText("Müşteri şubeleri (sevk noktaları) özelliğini göster")
-      .closest("label")!
-      .querySelector("input[type=checkbox]") as HTMLInputElement;
-    expect(toggle.checked).toBe(true);
+    const toggle = subeAnahtari();
+    expect(acik(toggle)).toBe(true);
     fireEvent.click(toggle);
-    expect(toggle.checked).toBe(false);
+    expect(acik(toggle)).toBe(false);
     expect(screen.getByText(DIRTY_BADGE)).toBeInTheDocument();
     return toggle;
   };
@@ -145,12 +141,7 @@ describe("Özellik Anahtarları — arama süzer, gezinmez", () => {
     // ref ile bakan bir kontrol regresyonda da YEŞİL kalırdı (ölçüldü).
     fireEvent.click(screen.getByLabelText("Aramayı temizle"));
     expect(
-      (
-        screen
-          .getByText("Müşteri şubeleri (sevk noktaları) özelliğini göster")
-          .closest("label")!
-          .querySelector("input[type=checkbox]") as HTMLInputElement
-      ).checked,
+      acik(subeAnahtari()),
     ).toBe(false);
   });
 
@@ -171,7 +162,7 @@ describe("Özellik Anahtarları — arama süzer, gezinmez", () => {
     // yok). İkincisi, sekmenin hâlâ ÇİZİLİYOR olduğunun kanıtı.
     expect(screen.getByText("Bu bölümde arama ile eşleşen ayar yok.")).toBeInTheDocument();
     expect(screen.getByText(/“zzzyokboylebirsey” ile eşleşen ayar yok/)).toBeInTheDocument();
-    expect(toggle.checked).toBe(false);
+    expect(acik(toggle)).toBe(false);
     expect(screen.getByText(DIRTY_BADGE)).toBeInTheDocument();
   });
 
@@ -184,11 +175,8 @@ describe("Özellik Anahtarları — arama süzer, gezinmez", () => {
     // sekme unmount olsa o düğüm koparılmış (detached) hâlde `checked=false`
     // taşımaya devam eder ve kontrol regresyonda da YEŞİL kalırdı (bu bekçi
     // yazılırken negatif sondayla ölçüldü).
-    const again = screen
-      .getByText("Müşteri şubeleri (sevk noktaları) özelliğini göster")
-      .closest("label")!
-      .querySelector("input[type=checkbox]") as HTMLInputElement;
-    expect(again.checked).toBe(false);
+    const again = subeAnahtari();
+    expect(acik(again)).toBe(false);
     expect(screen.getByText(DIRTY_BADGE)).toBeInTheDocument();
   });
 
@@ -222,7 +210,7 @@ describe("Özellik Anahtarları — arama süzer, gezinmez", () => {
 
     // Vazgeç → sekme değişmedi, taslak duruyor.
     fireEvent.click(screen.getByRole("button", { name: /^Vazgeç$/i }));
-    expect(toggle.checked).toBe(false);
+    expect(acik(toggle)).toBe(false);
     expect(screen.getByText(DIRTY_BADGE)).toBeInTheDocument();
     confirmSpy.mockRestore();
   });

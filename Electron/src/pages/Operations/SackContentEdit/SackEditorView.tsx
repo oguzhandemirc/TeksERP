@@ -1,15 +1,16 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronDown, Keyboard, Layers, Loader2, Lock, MessageSquareText, PackageOpen, PackagePlus, RefreshCw, Scale, Tag, Trash2, Truck, UserRound, UserRoundCog, X } from "lucide-react";
+import { ChevronDown, Keyboard, Layers, Loader2, Lock, MoreVertical, PackageOpen, PackagePlus, RefreshCw, Scale, Tag, Trash2, Truck, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PageShell } from "@/components/layout/PageShell";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
@@ -20,21 +21,28 @@ import { WeighSackDialog } from "./WeighSackDialog";
 import { AddKartelaDialog } from "./AddKartelaDialog";
 import { DeleteSackDialog } from "./DeleteSackDialog";
 import { DistributeSackDialog } from "./DistributeSackDialog";
-import { ReassignCustomerDialog, type ReassignPatch } from "./ReassignCustomerDialog";
+import { ReassignCustomerDialog } from "./ReassignCustomerDialog";
+import { AssignPackingGroupDialog } from "./AssignPackingGroupDialog";
 import { CreateShipmentDialog, type ShipmentDialogSack } from "./CreateShipmentDialog";
 import { SackContentsTable } from "./SackContentsTable";
 import { SackContentDumpMenu } from "./SackContentDumpMenu";
 import { fromDumpRows } from "./sackDump";
 import { SackNoteDialog } from "./SackNoteDialog";
+import { PackageNoDialog } from "./PackageNoDialog";
 import { useSackWeighAction } from "./useSackWeighAction";
 import { StaleLabelsBanner } from "./StaleLabelsBanner";
 import { ContentMismatchBanner } from "./ContentMismatchBanner";
+import { SackIdentityStrip, SackNoBox } from "./SackIdentityStrip";
 import { SackLabelDialog } from "@/components/labels/SackLabelDialog";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { useShippingManualWeightRestrictedEnabled } from "@/hooks/usePricingEnabled";
+import { usePackingGroupMode, usePackingGroupsEnabled, useShippingManualWeightRestrictedEnabled } from "@/hooks/usePricingEnabled";
 import type { EditorTarget } from "./types";
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+/** Editör hedefine geri yazılan yama — müşteri/şube (ReassignCustomerDialog) ya da parti/ambalaj no. */
+export type EditorPatch = Partial<
+  Pick<EditorTarget, "customerId" | "customerName" | "branchId" | "branchName" | "branchCode" | "packingGroupId" | "packingGroupName" | "packageNo">
+>;
+
 
 /**
  * Tek çuval editörü (Çuval Depo modeli) — mühür YOK, depodaki çuval her zaman
@@ -49,7 +57,7 @@ export function SackEditorView({
 }: {
   target: EditorTarget;
   onExit: () => void;
-  onReassigned: (patch: ReassignPatch) => void;
+  onReassigned: (patch: EditorPatch) => void;
   /** "Yeni Çuval" — editörü YENİ açılan çuvala geçirir (liste ekranına dönmeden). */
   onSwitchSack: (target: EditorTarget) => void;
 }) {
@@ -76,8 +84,21 @@ export function SackEditorView({
   const [labelOpen, setLabelOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const [shipOpen, setShipOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [packageNoOpen, setPackageNoOpen] = useState(false);
   // Tartı: tek dokunuş (oku → doğrudan kaydet). Elle giriş ⌄ menüsünde.
   const sackWeigh = useSackWeighAction();
+  const groupsEnabled = usePackingGroupsEnabled();
+  const lotMode = usePackingGroupMode() === "sevk-partisi";
+  // Parti rozeti ve "Yeni Çuvala Geç" hedefi `target`tan okunur; "Partiye Al" sonrası
+  // sunucudaki parti/ambalaj no içerik yanıtıyla gelir → hedefe geri yazılır.
+  useEffect(() => {
+    if (!data || data.packingGroupId === undefined) return;
+    const gid = data.packingGroupId ?? null;
+    const no = data.packageNo ?? null;
+    if (gid === (target.packingGroupId ?? null) && no === (target.packageNo ?? null)) return;
+    onReassigned({ packingGroupId: gid, packingGroupName: data.packingGroup?.name ?? null, packageNo: no });
+  }, [data, target.packingGroupId, target.packageNo, onReassigned]);
 
   // ── "Yeni Çuval" — aynı cariye ARDIŞIK çuval açma (2026-09-04 saha isteği) ──
   // *"bir çuval açtın, içini doldurdun; hemen yeni çuval açmak için tuş koy, bu
@@ -140,119 +161,130 @@ export function SackEditorView({
 
   return (
     <PageShell>
-      {/* Başlık */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="gap-1" onClick={onExit}>
-            <ArrowLeft className="h-4 w-4" /> Listeye Dön
-          </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-base font-semibold">{target.sackNo}</span>
-              {target.packingGroupName && (
-                <Badge variant="default" className="gap-1 text-[10px]" title="Sevk partisi · ambalaj no">
-                  {target.packingGroupName}
-                  {target.packageNo != null ? ` · No ${target.packageNo}` : ""}
-                </Badge>
-              )}
-              {target.customerName ? (
-                <Badge variant="secondary" className="gap-1 text-[10px]">
-                  <UserRound className="h-3 w-3" /> {target.customerName}
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-[10px] text-muted-foreground">Müşterisiz (genel stok)</Badge>
-              )}
-              {target.branchName && <Badge variant="secondary" className="text-[10px]">{target.branchName}</Badge>}
-              {target.branchCode && (
-                <Badge
-                  variant="outline"
-                  className="gap-1 border-amber-500/40 font-mono text-[10px] text-amber-600"
-                  title="Şube ihracat kodu — sevk belgesinde 'İhracat Kodu' olarak basılır"
-                >
-                  İhracat Kodu: {target.branchCode}
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {rolls.length} top · {fmtM(totalQty)} m
-              {swatches.length > 0 ? ` · ${swatches.length} kartela` : ""}
-              {data?.weightKg != null ? ` · ${data.weightKg} kg` : " · tartılmadı"}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {/* Sıradaki çuval — kilitli çuvalda DA açılabilir: bu bir OKUMA değil,
-              yeni bir kayıt yaratma yolu; mevcut çuvalın sevkiyata atanmış olması
-              aynı cariye yeni çuval açmayı engellemez. */}
-          <Button
-            size="sm"
-            className="gap-1"
-            disabled={newSackMut.isPending}
-            title={
-              target.packingGroupName
-                ? `${target.packingGroupName} partisinde sıradaki çuvalı aç (yeni ambalaj no) ve doldurmaya devam et`
-                : target.customerName
-                  ? `Aynı cariye (${target.customerName}) yeni çuval aç ve doldurmaya devam et`
-                  : "Müşterisiz (genel stok) yeni çuval aç ve doldurmaya devam et"
-            }
-            onClick={() => newSackMut.mutate()}
-          >
-            <PackagePlus className="h-4 w-4" />
-            {newSackMut.isPending ? "Açılıyor…" : target.packingGroupName ? "Yeni Çuvala Geç" : "Yeni Çuval"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => void contentsQ.refetch()} disabled={contentsQ.isFetching}>
-            <RefreshCw className={cn("mr-1 h-4 w-4", contentsQ.isFetching && "animate-spin")} /> Yenile
-          </Button>
-          {/* Etiket kilitli çuvalda DA basılabilir — baskı içeriği değiştirmez ve
-              sevkteki çuvalın etiketi yırtılırsa yenisi gerekir.
-              ÇUVALIN KENDİ etiketi bayatsa (müşteri değişti + müşteriye özel çuval
-              şablonu farklı) tuş uyarı rengine döner: üstteki `StaleLabelsBanner`
-              TOPLARIN etiketini anlatır, bu ayrı bir nesnedir. Baskıda temizlenir
-              (`recordSackPrintEvent`). */}
-          <Button
-            variant={data?.labelDirty ? "default" : "outline"}
-            size="sm"
-            onClick={() => setLabelOpen(true)}
-            title={
-              data?.labelDirty
-                ? "Bu çuvalın etiketi bayat — müşteri değişti ve yeni müşterinin çuval şablonu farklı. Yeniden basın."
-                : undefined
-            }
-          >
-            <Tag className="mr-1 h-4 w-4" />
-            {data?.labelDirty ? "Etiket (yenilenmeli)" : "Etiket"}
-          </Button>
-          {/* İçerik dökümü — SEÇİM GEREKMEZ, çuvalın tamamını alır. Kilitli çuvalda
-              da açık (Etiket/Not ile aynı gerekçe: baskı içeriği değiştirmez).
-              Tek dropdown olduğu için başlığa üç tuş değil bir tuş biner.
-
-              Bellekteki `contentsQ` verisi DEĞİL, liste ekranıyla AYNI uç kullanılır:
-              (a) "top fiziksel olarak çuvalda mı" kararı tek yerde (backend
-              `SACK_ABSENT_STATUSES`) kalır — editör tablosu hayalet topu bilerek
-              GÖSTERİR, belge ise saymaz; istemcide statü listesi kopyalamayız.
-              (b) baskı her seferinde TAZE veriyle çıkar (çeki listesi diyaloğuyla
-              aynı gerekçe: bayat kg/içerik kağıda gitmesin). */}
-          <SackContentDumpMenu
-            label="İçerik Dökümü"
-            disabled={!data || !hasContents}
-            hasNotes={!!data?.notes}
-            load={async () => fromDumpRows((await sackHubService.contentDump([target.sackId])).data)}
+      {/* Başlık — diğer sayfalarla AYNI `PageHeader` (ok · dikey çizgi · tonlu zemin);
+          başlık yanında kutulu kimlik şeridi (top · m · kg · cari · parti · ambalaj no;
+          cari ve parti hücreleri tıklanınca ilgili pencereyi açar). Sağda AKIŞ (sıradaki
+          çuval · sevk · ⋮), altta DOLDUR ve ÇIKTI grupları. Saha 2026-09-22. */}
+      <PageHeader
+        title={<SackNoBox sackNo={target.sackNo} />}
+        parent={null}
+        actionsAlign="center"
+        onBack={onExit}
+        titleExtra={
+          <SackIdentityStrip
+            target={target}
+            stats={{ rolls: rolls.length, meters: totalQty, kg: data?.weightKg ?? null, swatches: swatches.length }}
+            note={data ? data.notes : undefined}
+            // Not kilitli çuvalda DA düzenlenir (annotation; içerik/ölçüm değil).
+            onNote={data ? () => setNoteOpen(true) : undefined}
+            onPackageNo={locked ? undefined : () => setPackageNoOpen(true)}
+            onCustomer={locked ? undefined : () => setReassignOpen(true)}
+            // Parti — çuval carisiz ise önce Müşteri (parti cariye özel; diyalog sebebini söyler).
+            onLot={locked || !groupsEnabled ? undefined : () => setAssignOpen(true)}
+            lotMode={lotMode}
           />
-          {/* Yorum kilitli çuvalda DA düzenlenebilir (annotation; içerik/ölçüm değil).
-              Not varsa buton "Notu Düzenle" olur — içerik modalda okunur, ekranda
-              yer kaplamaz. */}
-          <Button variant="outline" size="sm" onClick={() => setNoteOpen(true)}>
-            <MessageSquareText className="mr-1 h-4 w-4" />
-            {data?.notes ? "Notu Düzenle" : "Not Ekle"}
-          </Button>
+        }
+        actions={
+          <>
+            {/* Sıradaki çuval — kilitli çuvalda DA açılabilir: bu bir OKUMA değil,
+                yeni bir kayıt yaratma yolu; mevcut çuvalın sevkiyata atanmış olması
+                aynı cariye yeni çuval açmayı engellemez. */}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1"
+              disabled={newSackMut.isPending}
+              title={
+                target.packingGroupName
+                  ? `${target.packingGroupName} partisinde sıradaki çuvalı aç (yeni ambalaj no) ve doldurmaya devam et`
+                  : target.customerName
+                    ? `Aynı cariye (${target.customerName}) yeni çuval aç ve doldurmaya devam et`
+                    : "Müşterisiz (genel stok) yeni çuval aç ve doldurmaya devam et"
+              }
+              onClick={() => newSackMut.mutate()}
+            >
+              <PackagePlus className="h-4 w-4" />
+              {newSackMut.isPending ? "Açılıyor…" : target.packingGroupName ? "Yeni Çuvala Geç" : "Yeni Çuval"}
+            </Button>
+            {/* ── TEK ÇUVAL SEVKİ (2026-09-04 saha isteği) ────────────────
+                *"bir çuvalın içindeyken onu direkt sevk edebilirim, bazen tek
+                çuval sevkiyatı yapılır; şu an çuvallar ekranına geri dönüp
+                çuvalı seçip sevk et demem gerekiyor, bu pratik değil."*
+
+                ⚠️ KISAYOL, BYPASS DEĞİL: listedeki "Sevkiyat Kur" ile AYNI
+                `CreateShipmentDialog` açılır — yani müşteri/şube çözümü,
+                sipariş seçimi, `shipping.orderRequirement` (`warn`/`block`)
+                kapısı, tartı kuralı, içerik-uyuşmazlığı uyarısı, idempotency
+                token'ı ve `shipping.confirmationEnabled` rejimi (PLANNED mı
+                doğrudan sevk mi) HEPSİ aynı yerden gelir. Burada YAZILAN tek
+                şey yok; defter (`SackAllocation`) yine sunucudaki tek yoldan
+                yazılır. İkinci bir "hızlı sevk" ucu açmak, o kapıların
+                ayrışacağı ilk yer olurdu.
+
+                ⚠️ İZİN: ayrı bir yüklem YOK ve bilinçli — liste ekranındaki
+                ikizi de izin sormaz, otorite sunucudadır (`POST /shipments`
+                → `shipping:write`). Burada kapı koymak iki yüzeyi ayrıştırır.
+
+                ⚠️ MÜŞTERİSİZ ÇUVAL — buton yine ÇİZİLİR. Karar: `Sack.customerId`
+                opsiyoneldir ama SEVKİYAT müşterisizdir OLAMAZ (irsaliye ve
+                `SackAllocation` cari ister). Diyalog bu durumda müşteri
+                kilidini bulamaz ve aramalı cari seçicisini açar; "Sevk Et"
+                cari seçilene kadar pasiftir (`canCreate`). Yani tek tık sevk
+                ETMEZ, sevkiyatı KURAR — müşterisiz çuvalda butonu hiç
+                göstermemek ise operatöre "bu çuval sevk edilemez" yalanını
+                söylerdi (edilebilir; cari sevk anında atanır — çuval havuzu
+                tasarımının kendi kuralı).
+
+                ⚠️ Kilitli (sevkiyata atanmış) çuvalda ÇİZİLMEZ: `!locked`
+                bloğunun içinde — mal zaten bir sevkiyatta. Boş çuvalda pasif:
+                backend "Boş çuval sevk edilemez" ile 400 verir, kullanıcıyı
+                oraya kadar götürmeyiz. */}
+            {!locked && (
+              <Button
+                size="sm"
+                className="gap-1"
+                disabled={!data || !hasContents}
+                title={
+                  hasContents
+                    ? "Bu çuvaldan sevkiyat kur (listeye dönmeden)"
+                    : "Boş çuval sevk edilemez — önce içine top okutun"
+                }
+                onClick={() => setShipOpen(true)}
+              >
+                <Truck className="h-4 w-4" /> Sevk Et
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="px-2" aria-label="Diğer işlemler">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => void contentsQ.refetch()} disabled={contentsQ.isFetching}>
+                  <RefreshCw className={cn("mr-2 h-4 w-4", contentsQ.isFetching && "animate-spin")} /> Yenile
+                </DropdownMenuItem>
+                {!locked && (
+                  <>
+                    <DropdownMenuSeparator />
+                    {hasContents && (
+                      <DropdownMenuItem onSelect={() => setDistributeOpen(true)}>
+                        <PackageOpen className="mr-2 h-4 w-4" /> Dağıt (içerik depoya)
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem className="text-destructive" onSelect={() => setDeleteOpen(true)}>
+                      <Trash2 className="mr-2 h-4 w-4" /> Çuvalı Sil
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+      />
+      <div className="flex flex-wrap items-center gap-2 border-b px-6 py-2">
           {!locked && (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setReassignOpen(true)}>
-                <UserRoundCog className="mr-1 h-4 w-4" /> Müşteri
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setKartelaOpen(true)}>
-                <Layers className="mr-1 h-4 w-4" /> Kartela
-              </Button>
+            <div className="flex items-center gap-1">
               {/* TEK DOKUNUŞ tartı: kantardan oku → doğrudan kaydet (diyalog YOK).
                   Elle giriş yanındaki ⌄ menüsünde — kantar bozuksa kaçış yolu. */}
               <div className="flex">
@@ -299,63 +331,46 @@ export function SackEditorView({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-              {hasContents && (
-                <Button variant="outline" size="sm" onClick={() => setDistributeOpen(true)}>
-                  <PackageOpen className="mr-1 h-4 w-4" /> Dağıt
-                </Button>
-              )}
-              {/* ── TEK ÇUVAL SEVKİ (2026-09-04 saha isteği) ────────────────
-                  *"bir çuvalın içindeyken onu direkt sevk edebilirim, bazen tek
-                  çuval sevkiyatı yapılır; şu an çuvallar ekranına geri dönüp
-                  çuvalı seçip sevk et demem gerekiyor, bu pratik değil."*
-
-                  ⚠️ KISAYOL, BYPASS DEĞİL: listedeki "Sevkiyat Kur" ile AYNI
-                  `CreateShipmentDialog` açılır — yani müşteri/şube çözümü,
-                  sipariş seçimi, `shipping.orderRequirement` (`warn`/`block`)
-                  kapısı, tartı kuralı, içerik-uyuşmazlığı uyarısı, idempotency
-                  token'ı ve `shipping.confirmationEnabled` rejimi (PLANNED mı
-                  doğrudan sevk mi) HEPSİ aynı yerden gelir. Burada YAZILAN tek
-                  şey yok; defter (`SackAllocation`) yine sunucudaki tek yoldan
-                  yazılır. İkinci bir "hızlı sevk" ucu açmak, o kapıların
-                  ayrışacağı ilk yer olurdu.
-
-                  ⚠️ İZİN: ayrı bir yüklem YOK ve bilinçli — liste ekranındaki
-                  ikizi de izin sormaz, otorite sunucudadır (`POST /shipments`
-                  → `shipping:write`). Burada kapı koymak iki yüzeyi ayrıştırır.
-
-                  ⚠️ MÜŞTERİSİZ ÇUVAL — buton yine ÇİZİLİR. Karar: `Sack.customerId`
-                  opsiyoneldir ama SEVKİYAT müşterisizdir OLAMAZ (irsaliye ve
-                  `SackAllocation` cari ister). Diyalog bu durumda müşteri
-                  kilidini bulamaz ve aramalı cari seçicisini açar; "Sevk Et"
-                  cari seçilene kadar pasiftir (`canCreate`). Yani tek tık sevk
-                  ETMEZ, sevkiyatı KURAR — müşterisiz çuvalda butonu hiç
-                  göstermemek ise operatöre "bu çuval sevk edilemez" yalanını
-                  söylerdi (edilebilir; cari sevk anında atanır — çuval havuzu
-                  tasarımının kendi kuralı).
-
-                  ⚠️ Kilitli (sevkiyata atanmış) çuvalda ÇİZİLMEZ: `!locked`
-                  bloğunun içinde — mal zaten bir sevkiyatta. Boş çuvalda pasif:
-                  backend "Boş çuval sevk edilemez" ile 400 verir, kullanıcıyı
-                  oraya kadar götürmeyiz. */}
-              <Button
-                size="sm"
-                className="gap-1"
-                disabled={!data || !hasContents}
-                title={
-                  hasContents
-                    ? "Bu çuvaldan sevkiyat kur (listeye dönmeden)"
-                    : "Boş çuval sevk edilemez — önce içine top okutun"
-                }
-                onClick={() => setShipOpen(true)}
-              >
-                <Truck className="h-4 w-4" /> Sevk Et
+              <Button variant="outline" size="sm" onClick={() => setKartelaOpen(true)}>
+                <Layers className="mr-1 h-4 w-4" /> Kartela Ekle
               </Button>
-              <Button variant="outline" size="sm" className="text-destructive" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="mr-1 h-4 w-4" /> Sil
-              </Button>
-            </>
+            </div>
           )}
-        </div>
+
+          {/* ÇIKTI grubu — kilitli çuvalda DA açık: baskı/not içeriği değiştirmez;
+              sevkteki çuvalın etiketi yırtılırsa yenisi gerekir. */}
+          <div className={cn("flex items-center gap-1", !locked && "border-l pl-2")}>
+            {/* ÇUVALIN KENDİ etiketi bayatsa (müşteri değişti + müşteriye özel çuval
+                şablonu farklı) tuş uyarı rengine döner: üstteki `StaleLabelsBanner`
+                TOPLARIN etiketini anlatır, bu ayrı bir nesnedir. Baskıda temizlenir
+                (`recordSackPrintEvent`). */}
+            <Button
+              variant={data?.labelDirty ? "default" : "outline"}
+              size="sm"
+              onClick={() => setLabelOpen(true)}
+              title={
+                data?.labelDirty
+                  ? "Bu çuvalın etiketi bayat — müşteri değişti ve yeni müşterinin çuval şablonu farklı. Yeniden basın."
+                  : undefined
+              }
+            >
+              <Tag className="mr-1 h-4 w-4" />
+              {data?.labelDirty ? "Etiket Bas (yenilenmeli)" : "Etiket Bas"}
+            </Button>
+            {/* İçerik dökümü — SEÇİM GEREKMEZ, çuvalın tamamını alır. Bellekteki
+                `contentsQ` verisi DEĞİL, liste ekranıyla AYNI uç kullanılır:
+                (a) "top fiziksel olarak çuvalda mı" kararı tek yerde (backend
+                `SACK_ABSENT_STATUSES`) kalır — editör tablosu hayalet topu bilerek
+                GÖSTERİR, belge ise saymaz; istemcide statü listesi kopyalamayız.
+                (b) baskı her seferinde TAZE veriyle çıkar (bayat kg/içerik kağıda gitmesin). */}
+            <SackContentDumpMenu
+              label="Döküm"
+              disabled={!data || !hasContents}
+              hasNotes={!!data?.notes}
+              load={async () => fromDumpRows((await sackHubService.contentDump([target.sackId])).data)}
+            />
+          </div>
+
       </div>
 
       {/* Etiketi bayatlayan toplar VARSA uyarı + tek tuşla yeniden bas. Yoksa
@@ -370,19 +385,6 @@ export function SackEditorView({
           "müşteri değişti, etiket bayatladı" der, bu "içerideki toplar bu
           müşteriye uyuyor mu" der. İkisi aynı çuvalda birden çıkabilir. */}
       <ContentMismatchBanner sackId={data?.id ?? null} rollCount={rolls.length} />
-
-      {/* Not VARSA tek satırlık şerit — yoksa hiç yer kaplamaz (boş input yok). */}
-      {data?.notes && (
-        <button
-          type="button"
-          onClick={() => setNoteOpen(true)}
-          title="Notu düzenle"
-          className="flex w-full items-start gap-2 border-b bg-amber-50/60 px-6 py-2 text-left text-xs text-amber-900 hover:bg-amber-50 dark:bg-amber-950/20 dark:text-amber-200 dark:hover:bg-amber-950/40"
-        >
-          <MessageSquareText className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span className="whitespace-pre-wrap break-words italic">{data.notes}</span>
-        </button>
-      )}
 
       {locked ? (
         <div className="px-6 py-3">
@@ -460,6 +462,11 @@ export function SackEditorView({
         sack={noteOpen && data ? { id: data.id, sackNo: data.sackNo, notes: data.notes } : null}
         onOpenChange={setNoteOpen}
       />
+      <PackageNoDialog
+        sack={packageNoOpen ? { id: target.sackId, sackNo: target.sackNo, packageNo: target.packageNo ?? null, lotName: target.packingGroupName ?? null } : null}
+        onOpenChange={setPackageNoOpen}
+        onSaved={(packageNo) => onReassigned({ packageNo })}
+      />
       <AddKartelaDialog sackId={kartelaOpen ? target.sackId : null} onOpenChange={setKartelaOpen} />
       <DeleteSackDialog
         sack={deleteOpen && data ? { id: data.id, sackNo: data.sackNo, rolls, swatches } : null}
@@ -472,6 +479,12 @@ export function SackEditorView({
         onDistributed={(deleted) => {
           if (deleted) onExit();
         }}
+      />
+      <AssignPackingGroupDialog
+        sacks={assignOpen ? [{ id: target.sackId, customer: target.customerId ? { id: target.customerId, name: target.customerName ?? "" } : null }] : null}
+        onOpenChange={setAssignOpen}
+        onDone={() => void contentsQ.refetch()}
+        lot={lotMode}
       />
       <ReassignCustomerDialog
         open={reassignOpen}

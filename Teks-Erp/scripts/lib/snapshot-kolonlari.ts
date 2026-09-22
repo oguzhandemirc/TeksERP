@@ -201,6 +201,19 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
 
   // ── (b) DONMUŞ İLERİ DEĞER ───────────────────────────────────────────────
   {
+    model: "Shipment",
+    alan: "sackSeqPrefix",
+    sinif: "DONMUS_ILERI",
+    yazan: [SVC + "shipping.service.ts"],
+    neden:
+      "sevk anındaki çuval sırası ÖN EKİ; belge ile program ekranı aynı stringi göstersin diye sevkiyata donar " +
+      "(ayar sonradan değişse bile eski irsaliye bayt-bayt aynı basılır). `shipping.sackSeqPrefixLive` açıkken " +
+      "bilinçli olarak canlıya dönülür — o zaman da İKİ yüzey aynı resolver'dan (`readSackSeqFormat`) okur",
+    bekci: [
+      { dosya: "test_sack_seq_label.ts", bolum: "2", ne: "ön ek sevkte donar; canlı bayrak açıkken her iki yüzey de güncel ön eki basar" },
+    ],
+  },
+  {
     model: "Roll",
     alan: "initialQty",
     sinif: "DONMUS_ILERI",

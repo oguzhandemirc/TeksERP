@@ -30,6 +30,8 @@ vi.mock("./useSackWeighAction", () => ({
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => true }) }));
 vi.mock("@/hooks/usePricingEnabled", () => ({
   useShippingManualWeightRestrictedEnabled: () => false,
+  usePackingGroupsEnabled: () => false,
+  usePackingGroupMode: () => "grup",
 }));
 
 // IO yapan / ağır çocuklar — bu bekçinin konusu değil.
@@ -44,7 +46,18 @@ vi.mock("./DeleteSackDialog", () => ({ DeleteSackDialog: () => null }));
 vi.mock("./DistributeSackDialog", () => ({ DistributeSackDialog: () => null }));
 vi.mock("./SackNoteDialog", () => ({ SackNoteDialog: () => null }));
 vi.mock("./ReassignCustomerDialog", () => ({ ReassignCustomerDialog: () => null }));
+vi.mock("./AssignPackingGroupDialog", () => ({ AssignPackingGroupDialog: () => null }));
 vi.mock("@/components/labels/SackLabelDialog", () => ({ SackLabelDialog: () => null }));
+// Sayfa başlığı router + tercih sağlayıcısı ister — bu bekçinin konusu değil; slotlar aynen çizilir.
+vi.mock("@/components/layout/PageHeader", () => ({
+  PageHeader: (p: { title: string; titleExtra?: React.ReactNode; actions?: React.ReactNode }) => (
+    <div>
+      <h1>{p.title}</h1>
+      {p.titleExtra}
+      {p.actions}
+    </div>
+  ),
+}));
 
 // ⚠️ Diyalog CASUS: gerçek `CreateShipmentDialog` yerine props'u kaydeden bir
 // stub. Ölçtüğümüz şey "sevk oldu mu" değil — "kısayol ORTAK KAPIYA mı

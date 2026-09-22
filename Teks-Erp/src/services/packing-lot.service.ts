@@ -20,15 +20,12 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
 import { readPackingGroupsEnabled } from "./system-setting.service";
-import { sackFieldsAppearOnLabel } from "./helpers/sack-label-stale.helper";
+import { markSackLabelsStaleOnCustomerChangeTx, sackFieldsAppearOnLabel } from "./helpers/sack-label-stale.helper";
 import {
-  GROUP_WITH_SACKS_SELECT,
-  PackingGroupDto,
   PackingLotSettings,
-  assertPackageNoFreeTx,
   readPackingLotSettings,
-  toDto,
 } from "./helpers/packing-group.helper";
+import { assertPackageNoFreeTx } from "./helpers/packing-group.helper";
 
 const GROUP_TABLE = "packing_groups";
 
@@ -66,10 +63,14 @@ export async function markLotLabelsStale(customerId: string | null, sackIds: str
 }
 
 export interface PackingLotCustomerSummary {
+  /** Başlıkta "hangi caridesin" göstermek için — liste ekranı customerId'den ad çözmez. */
+  customer: { id: string; name: string };
   /** Partisiz havuz çuvalları (customerId = cari, packingGroupId NULL, shipmentId NULL). */
   ungrouped: { sackCount: number; rollCount: number; totalQty: number; weightKg: number | null };
   openLotCount: number;
   closedLotCount: number;
+  /** Sevk edilmemiş (havuz + açık parti) çuvallardan tartısı olmayanlar. */
+  unweighedSackCount: number;
 }
 
 export const PackingLotService = {
@@ -80,10 +81,15 @@ export const PackingLotService = {
    */
   async customerSummary(customerId: string): Promise<ApiResponse<PackingLotCustomerSummary>> {
     await requireLotMode();
+    const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true } });
+    if (!customer) throw AppError.notFound("Cari bulunamadı");
     const where = { customerId, packingGroupId: null, shipmentId: null } as const;
     const sacks = await prisma.sack.aggregate({ where, _count: { _all: true }, _sum: { weightKg: true } });
     const rolls = await prisma.roll.aggregate({ where: { sack: where }, _count: { _all: true }, _sum: { currentQty: true } });
     const weighed = await prisma.sack.count({ where: { ...where, weightKg: { not: null } } });
+    // Tartılmamış çuval — carinin SEVK EDİLMEMİŞ bütün çuvalları (havuz + açık parti):
+    // sevk öncesi eksik iş; kart tıklanınca liste "Tartılmadı" süzgeciyle açılır.
+    const unweighedSackCount = await prisma.sack.count({ where: { customerId, shipmentId: null, weightKg: null } });
     const [openLotCount, closedLotCount] = [
       await prisma.packingGroup.count({ where: { customerId, status: "OPEN" } }),
       await prisma.packingGroup.count({ where: { customerId, status: "CLOSED" } }),
@@ -91,6 +97,7 @@ export const PackingLotService = {
     return {
       success: true,
       data: {
+        customer,
         ungrouped: {
           sackCount: sacks._count._all,
           rollCount: rolls._count._all,
@@ -99,6 +106,7 @@ export const PackingLotService = {
         },
         openLotCount,
         closedLotCount,
+        unweighedSackCount,
       },
     };
   },
@@ -130,6 +138,73 @@ export const PackingLotService = {
    * Çuvalın AMBALAJ NUMARASINI ezer (mod `otomatik-ezilebilir` · `elle`). Yalnız
    * havuzdaki (sevk edilmemiş) ve bir partideki çuval; çakışma 409 `PACKAGE_NO_TAKEN`.
    */
+  /**
+   * Partinin HAVUZDAKİ bütün çuvallarını çıkarır (parti satırı ⋮ → "Çuvalları havuza
+   * çıkar") — kapsam SUNUCUDA çözülür (`packingGroupId`), istemcinin cursor'lu sayfası
+   * değil (§14 kuralı). Planlı sevkiyata atanmış çuval ATLANIR ve sayısı yanıtta döner;
+   * parti SİLİNMEZ, boşalan parti ⋮ → Sil ile gider. `GENERAL` hedefi çuvalı carisiz
+   * genel havuza bırakır — müşteri şablonu değişiyorsa etiket bayatlar
+   * (`reassignSackCustomer` ile aynı kural).
+   */
+  async releaseAll(
+    groupId: string,
+    target: "CUSTOMER" | "GENERAL",
+    userId?: string,
+  ): Promise<ApiResponse<{ released: number; skippedPlanned: number; target: "CUSTOMER" | "GENERAL" }>> {
+    await requireLotMode();
+    const group = await prisma.packingGroup.findUnique({
+      where: { id: groupId },
+      select: { id: true, customerId: true, name: true },
+    });
+    if (!group) throw AppError.notFound("Parti bulunamadı");
+
+    const { releasedIds, skippedPlanned } = await prisma.$transaction(async (tx) => {
+      const pool = await tx.sack.findMany({
+        where: { packingGroupId: groupId, shipmentId: null },
+        select: { id: true, customerId: true },
+        orderBy: { sackNo: "asc" },
+      });
+      const planned = await tx.sack.count({
+        where: { packingGroupId: groupId, shipment: { status: "PLANNED" } },
+      });
+      const released: string[] = [];
+      // Çuval başına ATOMİK CLAIM (hâlâ havuzda) — genel havuzda etiket bayatlaması
+      // claim'le aynı tx'te ve yalnız claim tutan çuvalda koşar.
+      for (const sk of pool) {
+        const claimed = await tx.sack.updateMany({
+          where: { id: sk.id, shipmentId: null },
+          data: {
+            packingGroupId: null,
+            packageNo: null,
+            ...(target === "GENERAL" ? { customerId: null, branchId: null } : {}),
+          },
+        });
+        if (claimed.count !== 1) continue;
+        released.push(sk.id);
+        if (target === "GENERAL" && sk.customerId != null) {
+          await markSackLabelsStaleOnCustomerChangeTx(tx, sk.id, sk.customerId, null);
+        }
+      }
+      return { releasedIds: released, skippedPlanned: planned };
+    });
+
+    await markLotLabelsStale(group.customerId, releasedIds);
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: GROUP_TABLE,
+      recordId: groupId,
+      newData: { releasedSackIds: releasedIds, target, skippedPlanned },
+    });
+    const targetText = target === "GENERAL" ? "genel havuza" : "carinin havuzuna";
+    const message =
+      releasedIds.length === 0
+        ? `${group.name}: havuzda çıkarılacak çuval yok`
+        : `${releasedIds.length} çuval ${group.name} partisinden çıkarıldı → ${targetText}` +
+          (skippedPlanned > 0 ? ` · ${skippedPlanned} çuval planlı sevkiyatta, atlandı` : "");
+    return { success: true, data: { released: releasedIds.length, skippedPlanned, target }, message };
+  },
+
   async setPackageNo(sackId: string, packageNo: number, userId?: string): Promise<ApiResponse<{ id: string; packageNo: number }>> {
     const lot = await requireLotMode();
     if (lot.noMode === "otomatik") {

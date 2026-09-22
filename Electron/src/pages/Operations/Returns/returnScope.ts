@@ -19,7 +19,7 @@ export type ReturnScopeKind = "ROLL" | "SACK" | "SHIPMENT" | "LOT";
 
 export interface ReturnScope {
   kind: ReturnScopeKind;
-  /** Başlık: "SP-3" · "CV…" · "SVK…" · top barkodu. */
+  /** Başlık: "P-3" · "CV…" · "SVK…" · top barkodu. */
   label: string;
   groups: ReturnScopeGroup[];
   returnGradingEnabled: boolean;

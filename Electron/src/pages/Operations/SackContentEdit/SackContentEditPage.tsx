@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button";
 import { SacksListView } from "./SacksListView";
 import { SackEditorView } from "./SackEditorView";
 import { SackEntryGate, customerFilterValue, shouldShowEntryGate, type SackGateStep } from "./SackEntryGate";
-import { NewSackDialog } from "./NewSackDialog";
+import { NewSackDialog, useOpenSackInLot } from "./NewSackDialog";
 import { PackingLotListView } from "./PackingLotListView";
+import { PackingLotHeaderMenu, PackingLotTitleExtra } from "./PackingLotHeader";
 import { isLotMode, singleCustomerFromFilter } from "./packingLotUi";
 import { usePackingGroupMode, usePackingGroupsEnabled } from "@/hooks/usePricingEnabled";
-import type { EditorTarget, SackSearchRow } from "./types";
+import { UNGROUPED_FILTER_VALUE, type EditorTarget, type SackSearchRow } from "./types";
 
 /** Arama satırından editör hedefi türet (müşteri/şube bilgisini taşır). */
 function rowToTarget(s: SackSearchRow): EditorTarget {
@@ -41,16 +42,17 @@ export function SackContentEditPage() {
   const [newOpen, setNewOpen] = useState(false);
 
   const { gateStep, setGateStep, gateOpen, returnStep, setReturnStep, backToGate } = useEntryGate(location.state, searchParams, setSearchParams);
-  const { lotMode, singleCustomer, groupFilter, lotList, setGroupFilter } = useLotRouting(gateOpen, searchParams, setSearchParams);
-  // Geri oku üç seviyeli: cari listesi → karolar · parti içi → parti listesi · liste → gelinen kapı adımı.
+  const { lotMode, singleCustomer, groupFilter, lotId, lotList, sacksView, setGroupFilter, openSacksView, closeSacksView } = useLotRouting(gateOpen, searchParams, setSearchParams);
+  // Parti içindeyken "Yeni Çuval" pencere açmaz — doğrudan o partide, sıradaki numarayla.
+  const directOpen = useOpenSackInLot(lotId, setTarget);
+  // Geri oku dört seviyeli: cari listesi → karolar · parti içi → parti listesi · çuval görünümü → parti listesi · liste → gelinen kapı adımı.
+  const inWorkspace = !gateOpen && lotMode && !!singleCustomer;
   const onBack =
-    gateStep === "customers"
-      ? () => setGateStep("choice")
-      : !gateOpen && lotMode && singleCustomer && groupFilter
-        ? () => setGroupFilter(null)
-        : !gateOpen && returnStep
-          ? () => backToGate(returnStep)
-          : undefined;
+    gateStep === "customers" ? () => setGateStep("choice")
+      : inWorkspace && groupFilter ? () => setGroupFilter(null)
+      : inWorkspace && sacksView ? closeSacksView
+      : !gateOpen && returnStep ? () => backToGate(returnStep)
+      : undefined;
 
   if (target) {
     return (
@@ -67,26 +69,25 @@ export function SackContentEditPage() {
     <PageShell>
       <PageHeader
         title="Paketleme / Çuvallar"
+        // Kırıntı ("Operasyon ›") bu ekranda gizli — başlık kutuları (cari · parti) kimliği taşır (saha 2026-09-22).
+        parent={null}
+        actionsAlign="center"
+        // Başlık kutusu HER görünümde çizilir (kapıda "seçin", tümünde "Tümü") — başlık
+        // yüksekliği cari seçilince ZIPLAMASIN (saha 2026-09-22).
+        titleExtra={<PackingLotTitleExtra customerId={!gateOpen && lotMode ? singleCustomer : null} groupFilter={groupFilter || null} />}
         // TEK GERİ YÜZEYİ: cari listesi adımındayken başlıktaki ok bir adım geri
         // alır (kapının seçim karolarına). Diğer durumlarda `undefined` — ok
         // varsayılan davranışına (sekme geçmişi → breadcrumb üstü) düşer.
         onBack={onBack}
         actions={
-          <>
-            {!gateOpen && (
-              // Kapıya dönüş — cari değiştirmenin tek tuşluk yolu.
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => backToGate("choice")}
-              >
-                <Users className="h-4 w-4" /> Cari Seç
-              </Button>
-            )}
-            <Button size="sm" onClick={() => setNewOpen(true)} className="gap-1.5"><PackagePlus className="h-4 w-4" /> Yeni Çuval</Button>
-            <RefreshButton queryKey="sack-search" extraKeys={[["packing"]]} successMessage="Çuval listesi yenilendi" />
-          </>
+          <HeaderActions
+            showCustomerPick={!gateOpen && !(lotMode && singleCustomer)}
+            lotMenuFor={!gateOpen && lotMode && singleCustomer && groupFilter ? groupFilter : null}
+            onPickCustomer={() => backToGate("choice")}
+            onNewSack={directOpen ? directOpen.open : () => setNewOpen(true)}
+            newSackPending={directOpen?.pending ?? false}
+            onLotDeleted={() => setGroupFilter(null)}
+          />
         }
       />
       {gateStep ? (
@@ -111,7 +112,11 @@ export function SackContentEditPage() {
           }}
         />
       ) : lotList ? (
-        <PackingLotListView customerId={singleCustomer!} onOpen={(v) => setGroupFilter(v)} />
+        <PackingLotListView
+          customerId={singleCustomer!}
+          onOpen={(v) => setGroupFilter(v)}
+          onOpenUnweighed={() => openSacksView({ "filter[weighed]": "false" })}
+        />
       ) : (
         <SacksListView onEditSack={(s) => setTarget(rowToTarget(s))} />
       )}
@@ -164,7 +169,34 @@ function useLotRouting(gateOpen: boolean, searchParams: URLSearchParams, setSear
   const lotMode = isLotMode(usePackingGroupsEnabled(), usePackingGroupMode());
   const singleCustomer = singleCustomerFromFilter(searchParams);
   const groupFilter = searchParams.get("filter[packingGroupId]") ?? "";
-  const lotList = !gateOpen && lotMode && !!singleCustomer && !groupFilter;
+  // `view=sacks`: cari çalışma alanında parti seçmeden çuval listesi (ör. "Tartılmamış"
+  // kartı → havuz + partiler, tartı süzgeciyle). Geri oku bu anahtarı ve süzgecini siler.
+  const sacksView = searchParams.get("view") === "sacks";
+  const lotList = !gateOpen && lotMode && !!singleCustomer && !groupFilter && !sacksView;
+  /** Gerçek bir partinin içi (havuz değil) — doğrudan çuval açma ve ⋮ menüsü bunu okur. */
+  const lotId = !gateOpen && lotMode && !!singleCustomer && groupFilter && groupFilter !== UNGROUPED_FILTER_VALUE ? groupFilter : null;
+  const openSacksView = (filters: Record<string, string>) =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("view", "sacks");
+        for (const [k, v] of Object.entries(filters)) next.set(k, v);
+        next.delete("cursor");
+        return next;
+      },
+      { replace: true },
+    );
+  const closeSacksView = () =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("view");
+        next.delete("filter[weighed]");
+        next.delete("cursor");
+        return next;
+      },
+      { replace: true },
+    );
   const setGroupFilter = (value: string | null) =>
     setSearchParams(
       (prev) => {
@@ -176,5 +208,33 @@ function useLotRouting(gateOpen: boolean, searchParams: URLSearchParams, setSear
       },
       { replace: true },
     );
-  return { lotMode, singleCustomer, groupFilter, lotList, setGroupFilter };
+  return { lotMode, singleCustomer, groupFilter, lotId, lotList, sacksView, setGroupFilter, openSacksView, closeSacksView };
+}
+
+/** Başlık eylemleri — Cari Seç (yalnız cari alanı dışında) · Yeni Çuval · Yenile · parti içi ⋮. */
+function HeaderActions(p: {
+  showCustomerPick: boolean;
+  lotMenuFor: string | null;
+  onPickCustomer: () => void;
+  onNewSack: () => void;
+  newSackPending: boolean;
+  onLotDeleted: () => void;
+}) {
+  return (
+    <>
+      {p.showCustomerPick && (
+        // Kapıya dönüş — cari değiştirmenin tek tuşluk yolu. Parti modunda cari
+        // çalışma alanında ÇİZİLMEZ: cari başlıkta, değiştirmek geri okuyla (saha 2026-09-22).
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={p.onPickCustomer}>
+          <Users className="h-4 w-4" /> Cari Seç
+        </Button>
+      )}
+      <Button size="sm" onClick={p.onNewSack} disabled={p.newSackPending} className="gap-1.5">
+        <PackagePlus className="h-4 w-4" /> {p.newSackPending ? "Açılıyor…" : "Yeni Çuval"}
+      </Button>
+      <RefreshButton queryKey="sack-search" extraKeys={[["packing"]]} successMessage="Çuval listesi yenilendi" />
+      {/* Parti içi ⋮: adlandır · havuza çıkar · depoya çek · sil; silinince parti listesine dön. */}
+      {p.lotMenuFor && <PackingLotHeaderMenu groupFilter={p.lotMenuFor} onDeleted={p.onLotDeleted} />}
+    </>
+  );
 }

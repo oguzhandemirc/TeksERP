@@ -22,7 +22,7 @@ import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { deriveCapabilityFlags } from "./station-capability.service";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
@@ -36,12 +36,12 @@ const PROPERTY_CODE_PREFIX = "OZL";
  * çuval kodlarıyla aynı kalıp ([[code-format]]). Çakışma withBarcodeRetry ile telafi.
  */
 async function nextPropertyCode(): Promise<string> {
-  const prefix = dailyCodePrefix(PROPERTY_CODE_PREFIX);
+  const prefix = seriesCodePrefix("fabricProperty");
   const todays = await prisma.fabricProperty.findMany({
     where: { code: { gte: prefix, startsWith: prefix } },
     select: { code: true },
   });
-  const seq = nextDailySeq(
+  const seq = seriesSeqFrom(
     todays.map((p) => p.code),
     prefix,
   );

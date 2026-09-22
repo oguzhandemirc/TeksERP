@@ -57,7 +57,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { factoryDaySql, factoryYmd } from "../constants/time";
 import { D, D0, applyCariBalanceTx, ensureCariAccountTx, resolveExchangeRateTx } from "./helpers/finance.helper";
 import { assertPeriodOpenTx, assertPeriodsOpenTx } from "./helpers/period-guard.helper";
@@ -79,9 +79,9 @@ import { moveAccountBalanceTx as moveLedgerAccountBalanceTx } from "./helpers/ca
  * karıştırırdı; muhasebeci "CK1408260007 hangisiydi" sorusunu belge
  * numarasından cevaplayamazdı (`INVOICE_PREFIX` ile aynı gerekçe).
  */
-const DOC_PREFIX: Record<ChequeKind, Record<ChequeDocType, string>> = {
-  RECEIVED: { CHEQUE: "CKA", PROMISSORY_NOTE: "SNA" },
-  ISSUED: { CHEQUE: "CKV", PROMISSORY_NOTE: "SNV" },
+const DOC_SERIES: Record<ChequeKind, Record<ChequeDocType, string>> = {
+  RECEIVED: { CHEQUE: "chequeReceived", PROMISSORY_NOTE: "noteReceived" },
+  ISSUED: { CHEQUE: "chequeIssued", PROMISSORY_NOTE: "noteIssued" },
 };
 
 /**
@@ -98,13 +98,13 @@ async function nextChequeNo(
   docType: ChequeDocType,
   date: Date,
 ): Promise<string> {
-  const prefix = DOC_PREFIX[kind][docType];
-  const full = dailyCodePrefix(prefix, date);
+  const seriesKey = DOC_SERIES[kind][docType];
+  const full = seriesCodePrefix(seriesKey, date);
   const rows = await tx.cheque.findMany({
     where: { docNo: { gte: full, startsWith: full } },
     select: { docNo: true },
   });
-  return buildDailyCode(prefix, nextDailySeq(rows.map((r) => r.docNo), full), date);
+  return buildSeriesCode(seriesKey, seriesSeqFrom(rows.map((r) => r.docNo), full), date);
 }
 
 // -----------------------------------------------------------------------------

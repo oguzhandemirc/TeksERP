@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Boxes, ClipboardList, Eye, PackageOpen, Scale, Tag, Truck } from "lucide-react";
+import { Eye, PackageOpen, Scale, Tag, Truck } from "lucide-react";
 import { SackLabelDialog } from "@/components/labels/SackLabelDialog";
 import { Button } from "@/components/ui/button";
 import { ContextMenuItem } from "@/components/ui/context-menu";
@@ -24,23 +24,22 @@ import { sackTagService } from "@/pages/SackTags/service";
 import { sackHubService } from "./service";
 import { hasContentFilter, sacksKolonlari } from "./sacksColumns";
 import { useCustomerBranchesEnabled, usePackingGroupMode, usePackingGroupsEnabled } from "@/hooks/usePricingEnabled";
-import { SackContentDumpMenu } from "./SackContentDumpMenu";
-import { fromDumpRows } from "./sackDump";
 import { RollLocateCard } from "./RollLocateCard";
 import { PickListPrintDialog } from "./PickListPrintDialog";
 import { CreateShipmentDialog } from "./CreateShipmentDialog";
 import { PackingGroupBar } from "./PackingGroupBar";
-import { PackingLotHeader } from "./PackingLotHeader";
 import { isLotMode } from "./packingLotUi";
 import { AssignPackingGroupDialog } from "./AssignPackingGroupDialog";
 import { WeighSackDialog } from "./WeighSackDialog";
 import { SackDetailSheet } from "./SackDetailSheet";
-import { SackTagsBulkMenu } from "./SackTagsBulkMenu";
 import { BulkDistributeSacksDialog } from "./BulkDistributeSacksDialog";
+import { SackBulkActions } from "./SackBulkActions";
 import {
   CUSTOMERLESS_FILTER_VALUE,
+  UNGROUPED_FILTER_VALUE,
   UNTAGGED_FILTER_VALUE,
   isWarehouseSack,
+  hasSackContents,
   scopeLabels,
   type LocatedRoll,
   type SackSearchRow,
@@ -204,10 +203,15 @@ interface Props {
  * süzgeç ve kolon yine de duruyordu ve hep "—" basıyordu. Emsal `CreateShipmentDialog`
  * — orada zaten `useCustomerBranchesEnabled()` sorulur; bu ekran sormuyordu.
  */
-function sackFiltreleri(subeAcik: boolean): FilterDef[] {
-  return subeAcik
-    ? SACK_FILTERS_TUM
-    : SACK_FILTERS_TUM.filter((f) => !("key" in f && f.key === "branchId"));
+/**
+ * Süzgeç kümesi bağlama göre: şube yalnız bayrak açıkken; CARİ süzgeci parti modunda
+ * cari çalışma alanındayken (cari → parti → çuvallar) ÇİZİLMEZ — cari zaten
+ * başlıkta, başka cariye geçiş geri okuyla (saha 2026-09-22). URL'deki
+ * `filter[customerId]` korunur; şube süzgeci ondan beslenmeye devam eder.
+ */
+function sackFiltreleri(subeAcik: boolean, cariGizli: boolean): FilterDef[] {
+  const gizli = new Set<string>([...(subeAcik ? [] : ["branchId"]), ...(cariGizli ? ["customerId"] : [])]);
+  return SACK_FILTERS_TUM.filter((f) => !("key" in f && gizli.has(f.key)));
 }
 
 export function SacksListView({ onEditSack }: Props) {
@@ -221,6 +225,7 @@ export function SacksListView({ onEditSack }: Props) {
   const [shipSacks, setShipSacks] = useState<SackSearchRow[] | null>(null);
   /** Toplu dağıtma diyaloğu — seçili çuval id'leri; null = kapalı. */
   const [bulkDistribute, setBulkDistribute] = useState<string[] | null>(null);
+  const [bulkDelete, setBulkDelete] = useState<string[] | null>(null);
   /** "Parti Ata" diyaloğu — seçili çuvallar; null = kapalı. */
   const [groupSacks, setGroupSacks] = useState<SackSearchRow[] | null>(null);
   const [detail, setDetail] = useState<SackSearchRow | null>(null);
@@ -230,7 +235,7 @@ export function SacksListView({ onEditSack }: Props) {
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<SackSearchRow>({
     queryKey: "sack-search",
     fetchFn: sackHubService.listSacks,
-    columns: sacksKolonlari(subeAcik, lotMode, hasContentFilter(searchParams)),
+    columns: sacksKolonlari(subeAcik, lotMode, hasContentFilter(searchParams), lotMode && !!searchParams.get("filter[packingGroupId]")),
     defaultPageSize: 50,
     // Yalnız depodaki (sevk edilmemiş) çuvallar seçilebilir → havuzdan sevk kurulur.
     enableSelection: (row) => isWarehouseSack(row.original),
@@ -284,6 +289,17 @@ export function SacksListView({ onEditSack }: Props) {
 
   const scopeFilter = searchParams.get("filter[scope]") ?? "";
   const groupFilter = searchParams.get("filter[packingGroupId]") ?? "";
+  /** Parti içi (partisiz değil) → parti id; döküm/hepsini sevk kapsamı bu. */
+  const lotParti = lotMode && groupFilter && groupFilter !== UNGROUPED_FILTER_VALUE ? groupFilter : null;
+  // "Hepsini Sevk Et": partinin depodaki TÜM çuvalları — cursor'lu listenin sayfası
+  // değil, süzgecin tamamı (`fetchAll`); sevk edilebilir olanlar (depoda) süzülür.
+  const shipAll = useMutation({
+    mutationFn: async () => (await fetchAll()).filter(isWarehouseSack).filter(hasSackContents),
+    onSuccess: (all) => {
+      if (all.length === 0) { toast.info("Bu partide depoda sevk edilebilir (dolu) çuval yok."); return; }
+      setShipSacks(all);
+    },
+  });
   const showDispatchedHint =
     !query.isLoading &&
     search.trim().length > 0 &&
@@ -329,17 +345,14 @@ export function SacksListView({ onEditSack }: Props) {
         }
       />
 
-      <FilterBar filters={sackFiltreleri(subeAcik)} />
+      <FilterBar filters={sackFiltreleri(subeAcik, lotMode && !!tekCariId)} />
 
       {/* PAKETLEME GRUBU ŞERİDİ — yalnız bayrak açık VE tek cari seçiliyken.
           Gruplar cariye özeldir; çok carili listede iki farklı "P1" yan yana
           gelir ve numara benzersizmiş yanılgısı üretirdi. */}
-      {/* Parti modunda çuval listesi bir PARTİNİN içidir (parti listesi ayrı görünüm);
-          başlık partiyi ve menüsünü taşır. Grup modunda çip şeridi bugünkü gibi. */}
-      {groupsEnabled &&
-        (lotMode
-          ? tekCariId && groupFilter && <PackingLotHeader customerId={tekCariId} groupFilter={groupFilter} />
-          : <PackingGroupBar customerId={tekCariId} />)}
+      {/* Parti modunda çuval listesi bir PARTİNİN içidir: parti sayfa başlığında rozet,
+          eylemleri alt şeritte (`PackingLotBarActions`). Grup modunda çip şeridi bugünkü gibi. */}
+      {groupsEnabled && !lotMode && <PackingGroupBar customerId={tekCariId} />}
 
       {located && <RollLocateCard roll={located} onClear={() => setLocated(null)} />}
 
@@ -392,69 +405,25 @@ export function SacksListView({ onEditSack }: Props) {
             </>
           )
         }
-        selectionHint="Depodaki çuvalları seç → havuzdan sevkiyat kur."
+        selectionHint={null}
         // Sağdaki jenerik tuşlar ÇUVAL SATIRLARINI indirir; içerik dökümü ayrı menüde.
         selectedExportHint="Ekrandaki çuval listesini indirir — çuvalların İÇİNDEKİ topların dökümü için 'İçerik Dökümü'nü kullanın."
         bulkActions={(rows) => (
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              className="gap-1.5 font-semibold"
-              disabled={rows.length === 0}
-              onClick={() => setShipSacks(rows)}
-            >
-              <Truck className="h-4 w-4" /> Sevk Et ({rows.length})
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              disabled={rows.length === 0}
-              title="Sahada çuval aramak için gruplu özet (ürün·renk·en) — top barkodu içermez"
-              onClick={() => setPickListIds(rows.map((r) => r.id))}
-            >
-              <ClipboardList className="h-4 w-4" /> Çeki Listesi
-            </Button>
-            {/* İçerik dökümü — top bazlı. Döküm YALNIZ aksiyon tıklanınca çekilir
-                (menü açılışı ağ çağrısı yapmaz). hasNote liste satırında zaten var →
-                not onay kutusunun görünürlüğü fetch beklemeden çözülür. */}
-            {/* İZ — tek popover (bırak + kaldır aynı hamlede; üç durumlu
-                kutucuklar). Sonuç PARÇALI olabilir; atlananlar uyarıyla söylenir. */}
-            <SackTagsBulkMenu rows={rows} onDone={() => table.resetRowSelection()} />
-            {/* PARTİ ATA — grup bir yaftadır, sevk akışına kural EKLEMEZ:
-                "Sevk Et" yine seçimden çalışır. Bayrak kapalıyken çizilmez. */}
-            {groupsEnabled && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5"
-                disabled={rows.length === 0}
-                title={lotMode ? "Seçili çuvalları bir sevk partisine al / başka partiye taşı (yeni ambalaj no alır)" : "Seçili çuvalları bir hazırlık grubuna al (rezervasyon değil)"}
-                onClick={() => setGroupSacks(rows)}
-              >
-                <Boxes className="h-4 w-4" /> {lotMode ? "Partiye Al" : "Parti Ata"} ({rows.length})
-              </Button>
-            )}
-            {/* DAĞIT — kullanıcının kafasındaki "listeden çuval sil" işi. Gerçekte
-                çuval SİLİNMEZ, içeriği depoya çıkar; diyalog bunu söyler ve
-                etkilenen HER topu listeler (yıkıcı işlem kuralı). */}
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              disabled={rows.length === 0}
-              title="Seçili çuvalların içindeki topları serbest depoya çıkarır — çuval kaydı silinmez"
-              onClick={() => setBulkDistribute(rows.map((r) => r.id))}
-            >
-              <PackageOpen className="h-4 w-4" /> Dağıt ({rows.length})
-            </Button>
-            <SackContentDumpMenu
-              label={`İçerik Dökümü (${rows.length})`}
-              disabled={rows.length === 0}
-              hasNotes={rows.some((r) => r.hasNote)}
-              load={async () => fromDumpRows((await sackHubService.contentDump(rows.map((r) => r.id))).data)}
-            />
-          </div>
+          <SackBulkActions
+            rows={rows}
+            lotMode={lotMode}
+            groupsEnabled={groupsEnabled}
+            lotParti={lotParti}
+            groupFilter={groupFilter}
+            shipping={shipAll.isPending}
+            onShip={setShipSacks}
+            onPickList={(ids) => setPickListIds(ids)}
+            onGroup={setGroupSacks}
+            onDistribute={setBulkDistribute}
+            onDelete={setBulkDelete}
+            onShipAll={() => shipAll.mutate()}
+            onTagsDone={() => table.resetRowSelection()}
+          />
         )}
       />
 
@@ -472,6 +441,15 @@ export function SacksListView({ onEditSack }: Props) {
         onOpenChange={(o) => !o && setBulkDistribute(null)}
         onDone={() => {
           setBulkDistribute(null);
+          table.resetRowSelection();
+        }}
+      />
+      <BulkDistributeSacksDialog
+        sackIds={bulkDelete}
+        mod="sil"
+        onOpenChange={(o) => !o && setBulkDelete(null)}
+        onDone={() => {
+          setBulkDelete(null);
           table.resetRowSelection();
         }}
       />

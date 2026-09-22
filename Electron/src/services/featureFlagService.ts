@@ -3,6 +3,7 @@ import { withSettingsPassword } from "@/lib/settings-password";
 import type { ApiResponse } from "@/types/api";
 import type { SameTypeSessionPolicy } from "@/types/auth";
 import type {
+  PackingPoolPackageNo,
   ShipmentOrderRequirement,
   ShippingDocItemNameMode,
   ShippingDocCekiNameMode,
@@ -421,6 +422,18 @@ export interface FeatureFlags {
   packingLotPartialDispatch: boolean;
   /** Belgede parti adı + ambalaj no kolonu (default false). */
   shippingDocPackingLot: boolean;
+  /** İrsaliye/çeki listesine sevkiyat içi çuval sırası kolonu (default false = bugünkü çıktı). */
+  shippingSackSeqOnDoc: boolean;
+  /** Sıra ön eki — serbest metin, en çok 8 karakter (default ""). */
+  shippingSackSeqPrefix: string;
+  /** Ön ek eski belgelere de uygulansın (default false = sevk anındaki ön ek donar). */
+  shippingSackSeqPrefixLive: boolean;
+  /** Sıra başlangıcı (default 1; 0–999). */
+  shippingSackSeqStart: number;
+  /** Etikette toplam da yazılsın: "3/100" (default false). */
+  shippingSackSeqShowTotal: boolean;
+  /** Partisiz çuvalın ambalaj no'su: 'sevkte' (default) | 'acilista'. */
+  packingPoolPackageNo: PackingPoolPackageNo;
   /** Çuval/grup içerik dökümünde ad: 'ikisi' (default) | 'bizdeki' | 'musterideki'. */
   sackDumpNameMode: SackDumpNameMode;
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik). Kumaş ve renk KESİN. */

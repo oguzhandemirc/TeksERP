@@ -52,6 +52,7 @@ function rowKeys(cat: SettingsCategory): string[] {
     ...(cat.flags ?? []).map((f) => f.key as string),
     ...(cat.numberFlags ?? []).map((f) => f.key as string),
     ...(cat.enumFlags ?? []).map((f) => f.enumKey as string),
+    ...(cat.textFlags ?? []).map((f) => f.textKey as string),
     ...(cat.settingFields ?? []).map((f) => f.key as string),
   ];
 }

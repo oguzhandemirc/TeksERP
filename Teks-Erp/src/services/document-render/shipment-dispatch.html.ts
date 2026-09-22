@@ -43,6 +43,7 @@ import {
 } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import { fmtDate } from "./fmt-date";
+import { formatSackSeqLabel, type SackSeqFormat } from "../helpers/sack-seq.helper";
 
 /** Belge etiketleri — cfg.language: tr | en | auto (auto → EXPORT sevkiyatta EN). */
 const LABELS = {
@@ -74,6 +75,7 @@ const LABELS = {
     toplamMetre: "TOPLAM METRE",
     cuvalCaption: "ÇUVAL LİSTESİ",
     ambalajKodu: "ÇUVAL NO",
+    sira: "SIRA",
     ambalajNo: "AMBALAJ NO",
     sevkPartisi: "SEVK PARTİSİ",
     metreToplami: "METRE TOPLAMI",
@@ -127,6 +129,7 @@ const LABELS = {
     toplamMetre: "TOTAL METERS",
     cuvalCaption: "PACKAGE LIST",
     ambalajKodu: "PACKAGE NO",
+    sira: "SEQ",
     ambalajNo: "PKG #",
     sevkPartisi: "LOT",
     metreToplami: "TOTAL METERS",
@@ -189,6 +192,8 @@ interface ShipmentDocSack {
 
 interface ShipmentDocCeki {
   sackCode: string;
+  /** Sevkiyat içi sıra (2026-09-22) — eski snapshot'ta YOK; `meta.sackSeq` ile çizilir. */
+  seq?: number | null;
   packageNo?: number | null;
   packingGroupName?: string | null;
   barcode: string | null;
@@ -238,6 +243,8 @@ export interface ShipmentDispatchDoc {
   products: ShipmentDocProduct[];
   sacks: ShipmentDocSack[];
   cekiRows: ShipmentDocCeki[];
+  /** Sevk anında donan sıra ön eki (2026-09-22) — eski snapshot'ta YOK (= ön eksiz). */
+  sackSeqPrefix?: string;
   totals: {
     totalRolls: number;
     totalMeters: number;
@@ -280,6 +287,12 @@ interface RenderMeta {
    * hücre BOŞ — uydurulmaz.
    */
   packingLot?: boolean;
+  /**
+   * `shipping.sackSeqOnDoc` (2026-09-22) — çuval ve çeki listesine "SIRA" kolonu
+   * (`shipping.sackSeqPrefix` + `Sack.seq`, isteğe bağlı "/toplam"). Kapalı (varsayılan)
+   * = bugünkü çıktı. Sayı snapshot'ta, biçim baskı anında canlı.
+   */
+  sackSeq?: SackSeqFormat;
   /** Snapshot logoHash'inin çözülmüş görseli (servis katmanı çözer). */
   logoDataUrl?: string | null;
   /** cfg.qr açıksa belge doğrulama karekodu (servis üretir). */
@@ -625,6 +638,9 @@ export function renderShipmentDispatchHtml(
         rows: sacks,
         cols: [
           { key: "code", label: L.ambalajKodu, align: "l", cell: (s) => esc(s.code) },
+          ...(meta.sackSeq
+            ? [{ key: "seq", label: L.sira, align: "r" as const, cell: (s: ShipmentDocSack) => esc(formatSackSeqLabel(s.seq, sacks.length, meta.sackSeq!)) }]
+            : []),
           ...(meta.packingLot
             ? [
                 { key: "packageNo", label: L.ambalajNo, align: "r" as const, cell: (s: ShipmentDocSack) => esc(s.packageNo != null ? String(s.packageNo) : "") },
@@ -679,6 +695,9 @@ export function renderShipmentDispatchHtml(
         rows: cekiRows,
         cols: [
           { key: "sackCode", label: L.cuvalNo, align: "l", cell: (c) => esc(c.sackCode) },
+          ...(meta.sackSeq
+            ? [{ key: "seq", label: L.sira, align: "r" as const, cell: (c: ShipmentDocCeki) => esc(formatSackSeqLabel(c.seq, sacks.length, meta.sackSeq!)) }]
+            : []),
           ...(meta.packingLot
             ? [
                 { key: "packageNo", label: L.ambalajNo, align: "r" as const, cell: (c: ShipmentDocCeki) => esc(c.packageNo != null ? String(c.packageNo) : "") },

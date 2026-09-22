@@ -11,7 +11,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import {
   readCompanyName,
   readCompanyLetterhead,
@@ -39,12 +39,12 @@ function sanitizeConfig(raw: unknown): DocumentConfig {
 }
 
 async function nextFreeDocNo(): Promise<string> {
-  const prefix = dailyCodePrefix(DOC_PREFIX);
+  const prefix = seriesCodePrefix("freeDocument");
   const todays = await prisma.freeDocument.findMany({
     where: { documentNo: { gte: prefix, startsWith: prefix } },
     select: { documentNo: true },
   });
-  const seq = nextDailySeq(todays.map((d) => d.documentNo), prefix);
+  const seq = seriesSeqFrom(todays.map((d) => d.documentNo), prefix);
   return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 

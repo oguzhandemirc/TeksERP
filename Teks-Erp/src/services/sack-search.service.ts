@@ -18,12 +18,17 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
-import { decodeDynamicCursor, dynamicCursorWhere, buildNextDynamicCursor } from "../utils/cursor";
-import { isDailyCode, normalizeScanCode } from "../utils/code-format";
-import { applyDateRange, buildTextSearch, readFilterList, readIdCondition } from "../utils/query-parser";
+import { decodeDynamicCursor, dynamicCursorWhere, buildNextDynamicCursor, encodeDynamicCursor } from "../utils/cursor";
+import { normalizeScanCode } from "../utils/code-format";
+import { matchesSeries, resolveSeriesFormat } from "./number-series.service";
+import { applyDateRange, buildTextSearch, isCodeLikeTerm, readFilterList, readIdCondition } from "../utils/query-parser";
+import { foldSearchTokens } from "../utils/search-fold";
+import { foldCodeForCompare } from "../utils/code-format";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
 import { ACTIVE_TAG_WHERE, ACTIVE_TAG_SELECT, toTagBadges } from "./helpers/sack-tag.helper";
 import { batchLoadAliasesMulti } from "./helpers/customer-name.helper";
+import { readPackingLotSettings } from "./helpers/packing-group.helper";
+import { readPackingGroupsEnabled } from "./system-setting.service";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
 
@@ -256,6 +261,31 @@ function scopeWhere(scope: SackSearchScope): Prisma.SackWhereInput[] {
 }
 
 /**
+ * `scopeWhere`in SQL İKİZİ — cari kapısı toplulaştırma sorgusu (raw SQL) için.
+ * Aynı dört anahtar, aynı hüküm; biri değişince öteki de değişir (bekçi
+ * `test_sack_customer_gate §10` iki tarafı aynı fikstürle ölçer). Enum kolonu
+ * `::text` ile karşılaştırılır (parametre text gelir).
+ */
+function scopeSql(scope: SackSearchScope): Prisma.Sql {
+  switch (scope) {
+    case "POOL":
+      return Prisma.sql`s."shipmentId" IS NULL`;
+    case "PLANNED":
+      return Prisma.sql`sh.status::text IN (${Prisma.join(PLANNED_STATUSES.map((v) => Prisma.sql`${v}`))})`;
+    case "DISPATCHED":
+      return Prisma.sql`sh.status::text = ${ShipmentStatus.DISPATCHED}`;
+    case "ALL":
+      return Prisma.sql`TRUE`;
+  }
+}
+
+/** Varsayılan scope (POOL+PLANNED) — `resolveScopeOr` ile aynı hüküm, SQL. */
+function resolveScopeSql(scope?: SackSearchScope): Prisma.Sql {
+  if (scope) return scopeSql(scope);
+  return Prisma.sql`(${scopeSql("POOL")} OR ${scopeSql("PLANNED")})`;
+}
+
+/**
  * Kapsam çözümü — TEK KAYNAK. Varsayılan (scope verilmezse) POOL+PLANNED, yani
  * "sevk edilmemiş çuvallar". Liste (`searchSacks`) ile cari kapısı
  * (`listSackCustomers`) AYNI yüklemden beslenmek ZORUNDA: ayrışırsa kapı "3 çuval"
@@ -267,15 +297,16 @@ function resolveScopeOr(scope?: SackSearchScope, includeDispatched?: boolean): P
   return [{ shipmentId: null }, { shipment: { status: { in: PLANNED_STATUSES } } }];
 }
 
-/** Cari kapısında tek seferde dönen en fazla cari — aşılırsa arama kutusu istenir. */
-const MAX_SACK_CUSTOMERS = 500;
-
 /** Cari kapısı satırı — `customerId: null` = müşterisiz (genel stok) kovası. */
 export interface SackCustomerBucket {
   customerId: string | null;
   name: string;
   code: string | null;
   sackCount: number;
+  /** Kapsamdaki çuvallardaki top sayısı (çuval sayısıyla AYNI sorgu kapsamı). */
+  rollCount: number;
+  /** Sevk edilmemiş (AÇIK) parti sayısı — yalnız sevk partisi modunda döner. */
+  openLotCount?: number;
 }
 
 /**
@@ -285,16 +316,40 @@ export interface SackCustomerBucket {
  * Her şeyi göstermek için var olan bir modda sessiz 500-kesme, bu kapının
  * kapatmak için yazıldığı "sessizce düşen satır" sınıfını geri getirirdi.
  */
+/** Cari kapısı sıralama anahtarları — SUNUCUDA, toplulaştırılmış kolonlar üstünde. */
+export const SACK_CUSTOMER_SORT_KEYS = ["name", "sackCount", "rollCount", "openLotCount"] as const;
+export type SackCustomerSortKey = (typeof SACK_CUSTOMER_SORT_KEYS)[number];
+export function isSackCustomerSortKey(v: unknown): v is SackCustomerSortKey {
+  return typeof v === "string" && (SACK_CUSTOMER_SORT_KEYS as readonly string[]).includes(v);
+}
+/** Sıralama kolonu → alt sorgudaki kolon (kapalı anahtar kümesi; kullanıcı metni SQL'e girmez). */
+const SORT_COL_SQL: Record<SackCustomerSortKey, Prisma.Sql> = {
+  name: Prisma.sql`t.name`,
+  sackCount: Prisma.sql`t."sackCount"`,
+  rollCount: Prisma.sql`t."rollCount"`,
+  openLotCount: Prisma.sql`t."openLotCount"`,
+};
+
+/** LIKE joker kaçışı — kullanıcı terimi desen değil DEĞERDİR. */
+function likeKacir(v: string): string {
+  return v.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
 /**
- * Kova sırası: çuvalı OLANLAR üstte, sonra ad (tr).
- *
- * ⚠️ "Tüm cariler" isteğini karşılarken ölçülen 39/43 "sonuç yok" tuzağını
- * kapatan şey budur — aradığı cari zaten üstte. Ad karşılaştırması `tr` locale
- * ile: `localeCompare`siz sıralama İ/ı harflerini yanlış yere koyar.
+ * Cari arama SQL'i — `buildTextSearch({text:["name"], code:["code","taxNumber"]})`
+ * ile AYNI hüküm: katlanmış ad kelimeleri AND, kod-biçimli terim koda/vergi no'ya OR.
  */
-function siralaBucket(a: SackCustomerBucket, b: SackCustomerBucket): number {
-  if (a.sackCount !== b.sackCount) return b.sackCount - a.sackCount;
-  return a.name.localeCompare(b.name, "tr");
+function cariAramaSql(search: string): Prisma.Sql {
+  const parcalar: Prisma.Sql[] = [];
+  const tokens = foldSearchTokens(search);
+  if (tokens.length > 0) {
+    parcalar.push(Prisma.sql`(${Prisma.join(tokens.map((t) => Prisma.sql`c."nameFold" LIKE ${`%${likeKacir(t)}%`}`), " AND ")})`);
+  }
+  if (isCodeLikeTerm(search)) {
+    const kod = `%${likeKacir(foldCodeForCompare(search))}%`;
+    parcalar.push(Prisma.sql`c.code LIKE ${kod}`, Prisma.sql`c."taxNumber" LIKE ${kod}`);
+  }
+  return parcalar.length > 0 ? Prisma.sql`(${Prisma.join(parcalar, " OR ")})` : Prisma.sql`FALSE`;
 }
 
 export interface SackCustomerPage {
@@ -773,7 +828,7 @@ export class SackSearchService {
   }
 
   /**
-   * Cari kapısı — İKİ MOD.
+   * Cari kapısı — TEK toplulaştırma sorgusu (raw SQL), SUNUCUDA sıralama + keyset cursor.
    *
    * Saha isteği (2026-09-04): *"sevkiyat ekranına girerken önüme iki kutucuk
    * gelsin — tüm çuvallar / tüm cariler; cariyi seçince o carinin çuvalları
@@ -796,133 +851,137 @@ export class SackSearchService {
    * gizlemek, modu değiştiren düğmeyi "bozuk" gösterirdi — kıyaslama düğmenin
    * sebebi.
    *
-   * ⚠️ TAVANLAR AYRI: `withSacksOnly` modunda küme yapı gereği küçük →
-   * `MAX_SACK_CUSTOMERS` kesmesi korunur. Tüm cari modunda KESME YOK, sayfalama
-   * var (`cursor` + `limit`).
+   * ⚠️ KESME YOK, iki modda da SAYFALAMA var (`cursor` + `limit`); `withSacksOnly`
+   * yalnız bir WHERE. Sıralama (`sortBy`: ad · çuval · top · açık parti) kapsamın
+   * TAMAMI üstünde — istemci sayfa içinde sıralamaz (2026-09-22: 100+ carili firmada
+   * "en çok bekleyen kim" sorusuna sayfa içi cevap eksikti; havuzun tamamını çekip
+   * bellekte toplamak da cari sayısıyla değil havuzla ölçekleniyordu — yanlış eksen).
    *
    * ⚠️ MÜŞTERİSİZ KOVASI SATIR OLARAK DÖNER (`customerId: null`) — ölçümde
    * depodaki 9 çuvalın 4'ü müşterisizdi. Cari listesinde adı olmadığı için
    * "sessizce" düşmesi en olası satırdır; İLK sırada döner. Arama terimi
    * verilince DÖNMEZ (adı yok, eşleşmiyor).
    *
-   * ⚠️ METRAJ/TOP ADEDİ BİLEREK YOK: hayalet-top yüklemini burada İKİNCİ kez
-   * uygulamak listeden/etiketten/irsaliyeden farklı DÖRDÜNCÜ bir rakam üretme
-   * riski demektir. Kapı yalnız ÇUVAL SAYAR.
+   * ⚠️ TOP ADEDİ parti özetiyle AYNI yüklem (çuvaldaki her top; statü süzgeci yok) —
+   * metraj bilerek yok (hayalet-top yüklemini ikinci kez uygulamak dördüncü rakam olurdu).
    *
    * Salt-okunur; yazma/audit yok.
    */
   async listSackCustomers(params: {
     scope?: SackSearchScope;
     search?: string;
-    /** true → yalnız kapsamda çuvalı olan cariler (eski davranış). */
+    /** true → yalnız kapsamda çuvalı olan cariler. */
     withSacksOnly?: boolean;
-    /** Yalnız "tüm cariler" modunda anlamlı. */
+    /** Sıralama SUNUCUDA (toplulaştırılmış kolon); varsayılan çuvalı olanlar üstte, ad. */
+    sortBy?: SackCustomerSortKey;
+    sortOrder?: "asc" | "desc";
     cursor?: string;
     limit?: number;
   }): Promise<ApiResponse<SackCustomerPage>> {
     const search = params.search?.trim();
-
-    // ── Çuval sayıları: iki modda da AYNI sorgudan gelir ─────────────────────
-    // Ayrı hesaplasaydık iki mod iki farklı rakam üretirdi (kapı ↔ /pool
-    // ayrışmasının aynı sınıfı).
-    const sackAnd: Prisma.SackWhereInput[] = [{ OR: resolveScopeOr(params.scope) }];
-    if (search) {
-      sackAnd.push({
-        OR: buildTextSearch<Prisma.SackWhereInput>(search, {
-          text: ["customer.name"],
-          code: ["customer.code"],
-        }),
-      });
-    }
-    const groups = await prisma.sack.groupBy({
-      by: ["customerId"],
-      where: { AND: sackAnd },
-      _count: { _all: true },
-    });
-    const sayac = new Map<string, number>();
-    let customerless: SackCustomerBucket | null = null;
-    for (const g of groups) {
-      if (g.customerId === null) {
-        if (!search) {
-          customerless = { customerId: null, name: "Müşterisiz (genel stok)", code: null, sackCount: g._count._all };
-        }
-        continue;
-      }
-      sayac.set(g.customerId, g._count._all);
-    }
-
-    // ── MOD 1: yalnız çuvalı olanlar (eski davranış, kesmeli) ────────────────
-    if (params.withSacksOnly === true) {
-      const ids = [...sayac.keys()];
-      // Tombstone (birleştirilmiş cari) SÜZÜLMEZ: çuval hâlâ o satırı
-      // gösteriyorsa operatörün onu bulması gerekir.
-      const customers = ids.length
-        ? await prisma.customer.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, code: true } })
-        : [];
-      const byId = new Map(customers.map((c) => [c.id, c]));
-      const named: SackCustomerBucket[] = ids.map((id) => ({
-        customerId: id,
-        // FK var ama kayıt okunamadıysa (yarış/silinme) satır YİNE döner — id ile.
-        name: byId.get(id)?.name ?? "(bilinmeyen cari)",
-        code: byId.get(id)?.code ?? null,
-        sackCount: sayac.get(id) ?? 0,
-      }));
-      named.sort(siralaBucket);
-      const truncated = named.length > MAX_SACK_CUSTOMERS;
-      return {
-        success: true,
-        data: {
-          items: [...(customerless ? [customerless] : []), ...named.slice(0, MAX_SACK_CUSTOMERS)],
-          nextCursor: null,
-        },
-        ...(truncated
-          ? { warnings: [`Çok fazla cari var — ilk ${MAX_SACK_CUSTOMERS} tanesi gösteriliyor. Arama kutusuyla daraltın.`] }
-          : {}),
-      };
-    }
-
-    // ── MOD 2: TÜM cariler (varsayılan) — kesme yok, sayfalama var ───────────
-    // ⚠️ Sıralama İKİ AŞAMALI ve bu bilinçli: DB'den ada göre (deterministik,
-    // cursor'la uyumlu) çekilir, çuvalı olanlar sayfa İÇİNDE öne alınır. Çuval
-    // sayısına göre DB sıralaması yapılamaz — sayı `sacks` tablosundan, liste
-    // `customers` tablosundan geliyor ve tek sorguda ifade edilemez. Bu yüzden
-    // "çuvalı olanlar üstte" garantisi SAYFA içindir; aranan cari zaten aramayla
-    // bulunur.
     const limit = Math.min(Math.max(params.limit ?? 100, 1), 200);
-    const customers = await prisma.customer.findMany({
-      where: {
-        isActive: true,
-        ...(search
-          ? { OR: buildTextSearch<Prisma.CustomerWhereInput>(search, { text: ["name"], code: ["code", "taxNumber"] }) }
-          : {}),
-        ...(params.cursor ? { name: { gt: params.cursor } } : {}),
-      },
-      select: { id: true, name: true, code: true },
-      orderBy: { name: "asc" },
-      take: limit + 1,
-    });
-    const hasMore = customers.length > limit;
-    const sayfa = hasMore ? customers.slice(0, limit) : customers;
-    const items: SackCustomerBucket[] = sayfa.map((c) => ({
-      customerId: c.id,
-      name: c.name,
-      code: c.code,
-      sackCount: sayac.get(c.id) ?? 0,
+    // Varsayılan sıra: çuvalı olanlar üstte (sackCount desc), eşitlikte ad (DB kolasyonu — Prisma orderBy ile aynı).
+    const sortBy: SackCustomerSortKey = params.sortBy ?? "sackCount";
+    const sortOrder: "asc" | "desc" = params.sortOrder ?? (sortBy === "name" ? "asc" : "desc");
+    const col = SORT_COL_SQL[sortBy];
+    const yon = sortOrder === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+    // Keyset cursor: (sıralama kolonu, ad, id) — ad ve id daima ASC tie-break; ad
+    // eşitliğinde id, böylece aynı sayıya sahip cariler sayfa sınırında ne kopyalanır
+    // ne düşer.
+    const cursor = decodeDynamicCursor(params.cursor);
+    let cursorSql = Prisma.sql`TRUE`;
+    if (cursor && cursor.v !== null) {
+      const op = sortOrder === "asc" ? Prisma.sql`>` : Prisma.sql`<`;
+      const [vRaw, adRaw] = cursor.v.split("\u0000");
+      const v = sortBy === "name" ? Prisma.sql`${vRaw}` : Prisma.sql`${Number(vRaw)}::int`;
+      const ad = Prisma.sql`${adRaw ?? ""}`;
+      cursorSql = Prisma.sql`(
+        ${col} ${op} ${v}
+        OR (${col} = ${v} AND t.name > ${ad})
+        OR (${col} = ${v} AND t.name = ${ad} AND t.id > ${cursor.id}::uuid)
+      )`;
+    }
+    const lotMode = (await readPackingGroupsEnabled()) && (await readPackingLotSettings()).mode === "sevk-partisi";
+    const scope = resolveScopeSql(params.scope);
+
+    // ── TEK toplulaştırma sorgusu: cari × (çuval · top · açık parti) ─────────
+    // Sıralama KAPSAMIN tamamı üstünde (sayfa içi değil); maliyet havuz büyüklüğüne
+    // değil cari başına gruba bağlı, sayfa boyutu kadar satır döner.
+    type Row = { id: string; name: string; code: string | null; sackCount: number; rollCount: number; openLotCount: number };
+    const rows = await prisma.$queryRaw<Row[]>(Prisma.sql`
+      WITH pool AS (
+        SELECT s.id, s."customerId"
+        FROM sacks s
+        LEFT JOIN shipments sh ON sh.id = s."shipmentId"
+        WHERE s."customerId" IS NOT NULL AND ${scope}
+      ),
+      agg AS (
+        SELECT p."customerId",
+               COUNT(*)::int AS sack_count,
+               COALESCE(SUM((SELECT COUNT(*) FROM rolls r WHERE r."sackId" = p.id)), 0)::int AS roll_count
+        FROM pool p
+        GROUP BY p."customerId"
+      ),
+      lots AS (
+        SELECT "customerId", COUNT(*)::int AS open_lot_count
+        FROM packing_groups
+        WHERE status::text = 'OPEN'
+        GROUP BY "customerId"
+      ),
+      base AS (
+        SELECT c.id, c.name, c.code,
+               COALESCE(a.sack_count, 0) AS "sackCount",
+               COALESCE(a.roll_count, 0) AS "rollCount",
+               COALESCE(l.open_lot_count, 0) AS "openLotCount"
+        FROM customers c
+        LEFT JOIN agg a ON a."customerId" = c.id
+        LEFT JOIN lots l ON l."customerId" = c.id
+        WHERE c."isActive" = TRUE
+          AND ${search ? cariAramaSql(search) : Prisma.sql`TRUE`}
+          AND ${params.withSacksOnly ? Prisma.sql`COALESCE(a.sack_count, 0) > 0` : Prisma.sql`TRUE`}
+      )
+      SELECT * FROM base t
+      WHERE ${cursorSql}
+      ORDER BY ${col} ${yon}, t.name ASC, t.id ASC
+      LIMIT ${limit + 1}
+    `);
+    const hasMore = rows.length > limit;
+    const sayfa = hasMore ? rows.slice(0, limit) : rows;
+    const items: SackCustomerBucket[] = sayfa.map((r) => ({
+      customerId: r.id,
+      name: r.name,
+      code: r.code,
+      sackCount: r.sackCount,
+      rollCount: r.rollCount,
+      // Açık parti yalnız sevk partisi modunda anlamlı — grup modunda alan hiç gitmez.
+      ...(lotMode ? { openLotCount: r.openLotCount } : {}),
     }));
-    items.sort(siralaBucket);
+    const son = sayfa[sayfa.length - 1];
+    const nextCursor = hasMore && son
+      ? encodeDynamicCursor({ v: `${String(son[sortBy])}\u0000${son.name}`, id: son.id, t: "s" })
+      : null;
+
+    // ── Müşterisiz kovası: İLK sayfada, aramasızken, en üstte (cari değil, sahipsiz stok) ──
+    // Sayısı Prisma yüklemiyle (`resolveScopeOr`): SQL ikizinden ayrışırsa bekçi §10 yakalar.
+    let customerless: SackCustomerBucket | null = null;
+    if (!search && !cursor) {
+      const sahipsiz = { customerId: null, OR: resolveScopeOr(params.scope) } as const;
+      const sackCount = await prisma.sack.count({ where: sahipsiz });
+      if (sackCount > 0) {
+        const rollCount = await prisma.roll.count({ where: { sack: sahipsiz } });
+        customerless = { customerId: null, name: "Müşterisiz (genel stok)", code: null, sackCount, rollCount };
+      }
+    }
 
     return {
       success: true,
-      data: {
-        items: [...(customerless ? [customerless] : []), ...items],
-        nextCursor: hasMore ? (sayfa[sayfa.length - 1]?.name ?? null) : null,
-      },
+      data: { items: [...(customerless ? [customerless] : []), ...items], nextCursor },
     };
   }
 
   /**
    * Tek çuvalın dökümü — arama satırı genişletilince lazy yüklenir.
-   * Tek çuval = sınırlı kapsam (onlarca top) → satırları çekmek güvenli.
+   * Tek çuval = sınırlı scope (onlarca top) → satırları çekmek güvenli.
    */
   async getSackContents(sackId: string): Promise<ApiResponse<unknown>> {
     const sack = await prisma.sack.findUnique({
@@ -944,6 +1003,10 @@ export class SackSearchService {
         // Toplarınki `rolls[].labelDirty`; bu, ÇUVALIN KENDİ etiketi.
         labelDirty: true,
         notes: true, // tek çuval → tam yorum (liste aksine kırpılmaz)
+        // Sevk partisi + ambalaj no — editör başlığı "Partiye Al" sonrası buradan tazelenir.
+        packingGroupId: true,
+        packageNo: true,
+        packingGroup: { select: { name: true } },
         shipment: {
           select: {
             id: true,
@@ -1050,7 +1113,7 @@ export class SackSearchService {
         seq: true,
         weightKg: true,
         // Çeki listesi bir İÇ çalışma kağıdı (müşteriye gitmez) → notun TAM metni
-        // döner (liste uçlarındaki 80 karakter kırpması burada gereksiz; kapsam
+        // döner (liste uçlarındaki 80 karakter kırpması burada gereksiz; scope
         // seçili çuvallarla sınırlı, en fazla 200). Basılması İSTEMCİDE opsiyonel.
         notes: true,
         // ÇUVAL İZLERİ (§F) — çeki listesi SAHADA ELE ALINAN kâğıt; "bunu kontrol
@@ -1239,7 +1302,7 @@ export class SackSearchService {
     if (!code) throw AppError.badRequest("Barkod gerekli");
     // Çuval kodu okutulduysa top araması anlamsız — ne yapacağını söyle
     // (çuval etiketi basılabiliyor, bu okutma kaçınılmaz).
-    if (isDailyCode(code, "CV")) {
+    if (matchesSeries(resolveSeriesFormat("sack"), code)) {
       throw AppError.badRequest(
         `${code} bir ÇUVAL kodu — bu ekran TOP barkodu bekler. Çuvalı bulmak için çuval aramasını kullanın.`,
       );

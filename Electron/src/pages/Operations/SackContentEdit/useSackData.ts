@@ -30,6 +30,9 @@ export function invalidateSackHub(
   void qc.invalidateQueries({ queryKey: ["packing"] }); // pool + open-orders
   void qc.invalidateQueries({ queryKey: ["pool"] });
   void qc.invalidateQueries({ queryKey: ["sack-search"] });
+  // Sevk partisi yüzeyleri çuval sayılarını taşır (liste · özet · detay) — çuval değişince tazelenir.
+  void qc.invalidateQueries({ queryKey: ["packing-groups"] });
+  void qc.invalidateQueries({ queryKey: ["packing-lot-summary"] });
   void qc.invalidateQueries({
     queryKey: ["sack-contents"],
     ...(silinen ? { predicate: (q) => q.queryKey[1] !== silinen } : {}),

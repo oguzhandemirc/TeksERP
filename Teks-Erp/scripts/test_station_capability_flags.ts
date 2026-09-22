@@ -52,7 +52,7 @@ const stationSvc = new StationService({
   uniqueField: "code",
   duplicateNameField: "name",
   entityLabel: "istasyon",
-  autoCode: { prefix: "IST" },
+  autoCode: { series: "station" },
 });
 
 async function main() {

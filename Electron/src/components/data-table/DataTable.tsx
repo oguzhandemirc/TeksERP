@@ -310,9 +310,10 @@ export function DataTable<T>({
         {pagination ? <div ref={sentinelRef} aria-hidden className="h-px w-full shrink-0" /> : null}
       </div>
 
-      {/* Seçim çubuğu kalıcı: satır varsa (ve seçim açıksa) hep görünür. 0
-          seçimde ipucu + pasif aksiyon; seçim varken temizle (sola, belirgin)
-          + aksiyon + CSV. */}
+      {/* Seçim çubuğu kalıcı: satır varsa (ve seçim açıksa) hep görünür. İKİ DURUMDA
+          AYNI İSKELET (saha 2026-09-22: "aktif/pasif arasında çok yer değiştiriyor"):
+          sol slot "N seçili + Seçimi temizle" (0'da pasif, genişlik sabit), hemen
+          ardından toplu eylemler (0'da pasif), sağ slot ipucu (0) ↔ dışa aktarma (seçim). */}
       {selectable && (rows.length > 0 || selected.length > 0) && (
         <div
           className={cn(
@@ -320,63 +321,63 @@ export function DataTable<T>({
             selected.length > 0 ? "bg-primary/5" : "bg-muted/40",
           )}
         >
-          {selected.length > 0 ? (
-            <>
-              <span className="font-medium">{selected.length} seçili</span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5"
-                onClick={() => table.resetRowSelection()}
-              >
-                <X className="h-3.5 w-3.5" />
-                Seçimi temizle
-              </Button>
-              {bulkActions?.(selected.map((r) => r.original))}
-              <Button
-                variant="outline"
-                size="sm"
-                className="ml-auto h-8 gap-1.5"
-                title={selectedExportHint}
-                onClick={() =>
-                  void exportTableToPdf(
-                    table,
-                    selected.map((r) => r.original),
-                    exportListName(exportName, { selected: true }),
-                  )
-                }
-              >
-                <FileText className="h-3.5 w-3.5 text-destructive" />
-                Seçili PDF
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5"
-                title={selectedExportHint}
-                onClick={() =>
-                  void exportTableToXlsx(
-                    table,
-                    selected.map((r) => r.original),
-                    exportListName(exportName, { selected: true }),
-                  )
-                }
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5 text-success" />
-                Seçili Excel
-              </Button>
-            </>
-          ) : (
-            <>
-              {selectionHint ? (
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Info className="h-3.5 w-3.5 shrink-0" />
-                  {selectionHint}
-                </span>
-              ) : null}
-              {bulkActions ? <div className="ml-auto">{bulkActions([])}</div> : null}
-            </>
-          )}
+          <span className={cn("min-w-[4.5rem] font-medium tabular-nums", selected.length === 0 && "text-muted-foreground")}>
+            {selected.length} seçili
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            disabled={selected.length === 0}
+            onClick={() => table.resetRowSelection()}
+          >
+            <X className="h-3.5 w-3.5" />
+            Seçimi temizle
+          </Button>
+          {bulkActions?.(selected.map((r) => r.original))}
+          <div className="ml-auto flex items-center gap-2">
+            {selected.length > 0 ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  title={selectedExportHint}
+                  onClick={() =>
+                    void exportTableToPdf(
+                      table,
+                      selected.map((r) => r.original),
+                      exportListName(exportName, { selected: true }),
+                    )
+                  }
+                >
+                  <FileText className="h-3.5 w-3.5 text-destructive" />
+                  Seçili PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  title={selectedExportHint}
+                  onClick={() =>
+                    void exportTableToXlsx(
+                      table,
+                      selected.map((r) => r.original),
+                      exportListName(exportName, { selected: true }),
+                    )
+                  }
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-success" />
+                  Seçili Excel
+                </Button>
+              </>
+            ) : selectionHint ? (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                {selectionHint}
+              </span>
+            ) : null}
+          </div>
         </div>
       )}
 

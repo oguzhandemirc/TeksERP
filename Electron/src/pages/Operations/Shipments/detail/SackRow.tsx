@@ -105,7 +105,7 @@ export function SackRow({
             open && "rotate-90",
           )}
         />
-        <span className="shrink-0 font-semibold">Çuval #{sack.seq}</span>
+        <span className="shrink-0 font-semibold">{sack.seqLabel ?? `Çuval #${sack.seq}`}</span>
         <span className="shrink-0 font-mono text-xs text-muted-foreground">{sack.sackNo}</span>
         <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
           {sack.weightKg != null ? `${num(sack.weightKg)} kg` : "tartılmadı"} · {rolls.length} top

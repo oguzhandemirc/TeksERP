@@ -38,7 +38,7 @@
 
 import { Prisma, PrintedDocType } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "../number-series.service";
 import { printedDocumentService } from "../printed-document.service";
 import {
   assertNoDirectShipmentTx,
@@ -76,12 +76,12 @@ function emptyResult(): DispatchSurgeryResult {
  * günün NUMERIC max'ı +1). Çağıran withBarcodeRetry kapsamında olmalı (P2002 → retry).
  */
 async function generateDispatchNoTx(tx: Prisma.TransactionClient, date: Date): Promise<string> {
-  const prefix = dailyCodePrefix("FS", date);
+  const prefix = seriesCodePrefix("subcontractorDispatch", date);
   const rows = await tx.subcontractorDispatch.findMany({
     where: { dispatchNo: { gte: prefix, startsWith: prefix } },
     select: { dispatchNo: true },
   });
-  return buildDailyCode("FS", nextDailySeq(rows.map((r) => r.dispatchNo), prefix), date);
+  return buildSeriesCode("subcontractorDispatch", seriesSeqFrom(rows.map((r) => r.dispatchNo), prefix), date);
 }
 
 /**

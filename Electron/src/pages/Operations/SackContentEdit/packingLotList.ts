@@ -9,7 +9,7 @@ import type { PackingGroup } from "./types";
  */
 
 export type LotStatusFilter = "OPEN" | "CLOSED" | "ALL";
-export type LotSortKey = "name" | "sackCount" | "totalQty" | "weightKg" | "createdAt";
+export type LotSortKey = "code" | "name" | "sackCount" | "totalQty" | "weightKg" | "createdAt";
 export interface LotSort {
   key: LotSortKey;
   dir: "asc" | "desc";
@@ -24,7 +24,8 @@ export function filterLots(rows: PackingGroup[], q: { query: string; status: Lot
   return rows.filter((r) => {
     if (q.status !== "ALL" && r.status !== q.status) return false;
     if (!needle) return true;
-    return foldedIncludes(r.name, needle) || foldedIncludes(r.note, needle);
+    // Kod da aranır: "PRT-2609-0007" ya da yalnız "0007" (saha 2026-09-22).
+    return foldedIncludes(r.name, needle) || foldedIncludes(r.note, needle) || foldedIncludes(r.code ?? "", needle);
   });
 }
 
@@ -39,6 +40,8 @@ export function sortLots(rows: PackingGroup[], sort: LotSort): PackingGroup[] {
     switch (sort.key) {
       case "name":
         return trCompare(a.name, b.name) * dir; // sayı-duyarlı tek kaynak (`TR_COLLATOR`)
+      case "code":
+        return trCompare(a.code ?? "", b.code ?? "") * dir;
       case "sackCount":
         return (a.sackCount - b.sackCount) * dir;
       case "totalQty":

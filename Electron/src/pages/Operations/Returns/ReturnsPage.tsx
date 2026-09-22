@@ -14,6 +14,8 @@ import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { useDataTable } from "@/hooks/useDataTable";
 import { ScanField } from "@/components/scanner/ScanField";
+import { classifyBarcode } from "@/lib/scanner/barcode-kind";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { cn } from "@/lib/utils";
 import { customerService } from "@/pages/Customers/service";
 import { returnReasonService } from "@/pages/ReturnReasons/service";
@@ -39,8 +41,10 @@ const FILTERS: FilterDef[] = [
 // İptal durumu segment kontrolü. `filter[cancelled]` URL param'ı → useDataTable
 // → backend listReturns. Default "active" (param yok); iptal edilenler ayrı görünür.
 const STATUS_OPTIONS = [
-  { value: "active", label: "Aktif" },
-  { value: "cancelled", label: "İptal Edilenler" },
+  // "Geçerli" = kayıt duruyor (mal iade rafında); "İptal edilen" = iade KAYDI iptal
+  // edildi, top yeniden sevk edilmiş sayılır. Eski etiket "Aktif" ne olduğunu söylemiyordu.
+  { value: "active", label: "Geçerli" },
+  { value: "cancelled", label: "İptal edilen" },
   { value: "all", label: "Hepsi" },
 ] as const;
 
@@ -85,15 +89,15 @@ export function ReturnsPage() {
   const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
   const [invoiceFor, setInvoiceFor] = useState<ReturnRow | null>(null);
   const [entryOpen, setEntryOpen] = useState(false);
-  const [scanBarcode, setScanBarcode] = useState("");
   const [scanSeed, setScanSeed] = useState<string | undefined>(undefined);
 
   // Tabanca: sevk edilmiş top okut → İade Girişi'ni o barkodla aç (oto-sorgu).
   const startReturnScan = (code: string) => {
     setScanSeed(code);
     setEntryOpen(true);
-    setScanBarcode("");
   };
+  // İade yazma izni yoksa okutulan kod pencere açmaz, aramaya düşer.
+  const canWrite = useRoleAccess().hasPermission("return:write");
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<ReturnRow>({
     queryKey: "returns",
     fetchFn: returnsService.listCursor,
@@ -121,27 +125,33 @@ export function ReturnsPage() {
           </div>
         }
       />
-      <PermissionGate permission="return:write">
-        <ScanField
-          className="border-b px-4 py-2"
-          widthClassName="max-w-xs"
-          value={scanBarcode}
-          onChange={setScanBarcode}
-          onScan={startReturnScan}
-          placeholder="Top · çuval · sevkiyat kodu okut → iade gir"
-          // İki kod türü de kabul edilir — diyalogdaki kutu zaten ikisini de
-          // çözüyor (classifyBarcode). Yalnız ROLL kabul etmek, çuval kodunu
-          // okutan operatöre "yanlış kod" uyarısı verirken AYNI kodun diyalog
-          // içinde çalıştığı tuhaf bir tutarsızlık üretiyordu.
-          expectPrefix={["ROLL", "SACK", "SHIPMENT"]}
-          submitLabel="İade Gir"
-        />
-      </PermissionGate>
+      {/* TEK KUTU (saha 2026-09-22: "iki input kötü"): arama + okutma aynı alanda. Okutulan
+          kod top/çuval/sevkiyat kalıbındaysa İade Al penceresi o kodla açılır ve kutu
+          temizlenir; değilse metin listeyi süzer (Paketleme ekranıyla aynı kalıp). */}
       <DataTableToolbar
         fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
-        placeholder="Müşteri, sipariş, kumaş, barkod veya neden ara..."
+        hideSearch
+        leading={
+          <ScanField
+            value={search}
+            onChange={setSearch}
+            onScan={(code) => {
+              const kind = classifyBarcode(code).kind;
+              if ((kind === "ROLL" || kind === "SACK" || kind === "SHIPMENT") && canWrite) {
+                setSearch("");
+                startReturnScan(code);
+                return;
+              }
+              setSearch(code);
+            }}
+            placeholder="Ara ya da kod okut (top · çuval · sevkiyat) → iade gir"
+            expectPrefix={["ROLL", "SACK", "SHIPMENT"]}
+            widthClassName="w-96"
+            clearable
+          />
+        }
       />
       <FilterBar filters={FILTERS} leading={<ReturnsStatusFilter />} />
       {summary && summary.count > 0 && (

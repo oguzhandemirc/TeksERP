@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { HintIcon, HintBody, InfoPopover, type HintVariant } from "./SettingHint";
+import { HintIcon, HintBody, InfoPopover, Vurgu, type HintVariant } from "./SettingHint";
+import { Switch } from "@/components/ui/switch";
 
 /**
  * Satırın KÜNYESİ — varsayılan rozeti + "kimi etkiler".
@@ -45,6 +46,8 @@ export function FlagToggle({
   disabled = false,
   onChange,
   hint = "popover",
+  compact = false,
+  highlight,
 }: {
   title: string;
   /** Satırda basılan TEK cümle; verilmezse uzun açıklama `hint` kuralına düşer. */
@@ -57,31 +60,37 @@ export function FlagToggle({
   disabled?: boolean;
   onChange: (next: boolean) => void;
   hint?: HintVariant;
+  /**
+   * Sıkı satır (Genel Ayarlar kataloğu, 2026-09-22): satırda yalnız başlık + tek cümle;
+   * "Varsayılan · Etkilenen" künyesi ve uzun açıklama (i) balonuna taşınır.
+   */
+  compact?: boolean;
+  /** Arama metni — başlık ve özette eşleşen kelimeler vurgulanır. */
+  highlight?: string;
 }) {
+  const meta =
+    defaultOn !== undefined ? (
+      <SettingMeta defaultLabel={`Varsayılan: ${defaultOn ? "AÇIK" : "KAPALI"}`} audience={audience ?? []} />
+    ) : null;
+  const balon = compact && meta ? (
+    <div className="space-y-2">
+      {meta}
+      <div>{desc}</div>
+    </div>
+  ) : desc;
   return (
-    <label className="flex cursor-pointer items-start justify-between gap-4">
-      <div className="space-y-1 text-sm">
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0 space-y-0.5 text-sm">
         <div className="flex items-center gap-1.5 font-medium">
-          <span>{title}</span>
-          <HintIcon variant={hint} desc={desc} />
+          <span><Vurgu text={title} query={highlight} /></span>
+          <HintIcon variant={hint} desc={balon} />
         </div>
-        {summary && <p className="text-xs text-muted-foreground">{summary}</p>}
-        {defaultOn !== undefined && (
-          <SettingMeta
-            defaultLabel={`Varsayılan: ${defaultOn ? "AÇIK" : "KAPALI"}`}
-            audience={audience ?? []}
-          />
-        )}
+        {summary && <p className="text-xs text-muted-foreground"><Vurgu text={summary} query={highlight} /></p>}
+        {!compact && meta}
         {!summary && <HintBody variant={hint} desc={desc} />}
       </div>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        disabled={disabled}
-        className="mt-1 h-5 w-5 cursor-pointer"
-      />
-    </label>
+      <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} aria-label={title} />
+    </div>
   );
 }
 

@@ -471,6 +471,15 @@ export const SETTING_KEYS = {
   PACKING_LOT_PARTIAL_DISPATCH: "packing.lotPartialDispatch",
   /** İrsaliye/çeki listesine parti adı + ambalaj no kolonu (default false = bugünkü belge). */
   SHIPPING_DOC_PACKING_LOT: "shipping.docPackingLot",
+  // Sevkiyat içi çuval sırası etiketi (2026-09-22): belgeye basılsın mı · ön ek · başlangıç · "n/N".
+  SHIPPING_SACK_SEQ_ON_DOC: "shipping.sackSeqOnDoc",
+  SHIPPING_SACK_SEQ_PREFIX: "shipping.sackSeqPrefix",
+  SHIPPING_SACK_SEQ_START: "shipping.sackSeqStart",
+  SHIPPING_SACK_SEQ_SHOW_TOTAL: "shipping.sackSeqShowTotal",
+  // Ön ek değişince ESKİ belgeler de değişsin mi (kapalı = sevk anındaki ön ek donar).
+  SHIPPING_SACK_SEQ_PREFIX_LIVE: "shipping.sackSeqPrefixLive",
+  // Partisiz (havuz) çuvalın ambalaj numarası ne zaman doğar: sevkte (sevk sırası) · açılışta (cari havuz sayacı).
+  PACKING_POOL_PACKAGE_NO: "packing.poolPackageNo",
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik, bugünkü davranış). */
   SHIPPING_ALLOC_WIDTH_TOLERANCE_ENABLED: "shipping.allocWidthToleranceEnabled",
   /** Tolerans değeri (cm). Yalnız yukarıdaki bayrak açıkken uygulanır. */
@@ -802,6 +811,37 @@ export const SHIPPING_DOC_CEKI_NAME_MODES: ShippingDocCekiNameMode[] = [
 ];
 /** Varsayılan `devral` — bayrak yazılana kadar TEK BAYT değişmez. */
 export const DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE: ShippingDocCekiNameMode = "devral";
+
+/**
+ * Sevkiyat içi çuval sırası ÖN EKİ (2026-09-22): SERBEST METİN, en çok 8 karakter
+ * (harf · rakam · `- _ . /` · boşluk) — "SP" → "SP1", "P-" → "P-1", "Çuval " → "Çuval 1".
+ * Boş = yalnız sayı (varsayılan). Belgede HTML kaçışından geçer. Eski belgelerin
+ * etkilenip etkilenmediğini `shipping.sackSeqPrefixLive` belirler.
+ */
+export type ShippingSackSeqPrefix = string;
+export const SHIPPING_SACK_SEQ_PREFIX_MAX = 8;
+export const SHIPPING_SACK_SEQ_PREFIX_RE = /^[\p{L}\p{N}\-_./ ]{0,8}$/u;
+export const DEFAULT_SHIPPING_SACK_SEQ_PREFIX: ShippingSackSeqPrefix = "";
+/** Ön ek temizliği — geçersiz/boşluk-only değer boş sayılır (fail-safe: sayı yine basılır). */
+export function sanitizeSackSeqPrefix(v: unknown): string {
+  if (typeof v !== "string") return "";
+  const t = v.replace(/[\u0000-\u001f]/g, "");
+  if (!t.trim() || !SHIPPING_SACK_SEQ_PREFIX_RE.test(t)) return "";
+  return t;
+}
+/** Başlangıç numarası: 1 (varsayılan, sektör) — 0 da seçilebilir; üst sınır 999. */
+export const DEFAULT_SHIPPING_SACK_SEQ_START = 1;
+export const SHIPPING_SACK_SEQ_START_MAX = 999;
+
+/**
+ * Partisiz (havuz) çuvalın AMBALAJ NUMARASI ne zaman doğar (2026-09-22):
+ *  `sevkte`   (varsayılan = bugünkü): havuz çuvalı numarasız yaşar, sevkte sevkiyat sırasını alır.
+ *  `acilista`: çuval açılırken CARİNİN havuz sayacından numara alır (`packageNo`, parti dışı;
+ *              advisory 8035 hashtext(customerId)); sevkte de kalır. Müşterisiz çuval numara almaz.
+ */
+export type PackingPoolPackageNo = "sevkte" | "acilista";
+export const PACKING_POOL_PACKAGE_NO_MODES: PackingPoolPackageNo[] = ["sevkte", "acilista"];
+export const DEFAULT_PACKING_POOL_PACKAGE_NO: PackingPoolPackageNo = "sevkte";
 
 /**
  * Paketleme grubu numara sayacının rejimi.
@@ -1600,6 +1640,18 @@ export interface FeatureFlags {
   packingLotPartialDispatch: boolean;
   /** İrsaliye/çeki listesinde parti adı + ambalaj no kolonu (default false). */
   shippingDocPackingLot: boolean;
+  /** Sevkiyat içi çuval sırası etiketi irsaliye/çeki listesine basılsın (default FALSE = bugünkü çıktı). */
+  shippingSackSeqOnDoc: boolean;
+  /** Sıra etiketi ön eki — serbest metin, en çok 8 karakter (default ""). */
+  shippingSackSeqPrefix: ShippingSackSeqPrefix;
+  /** Ön ek eski belgelere de uygulansın (default FALSE = sevk anındaki ön ek belgede donar). */
+  shippingSackSeqPrefixLive: boolean;
+  /** Sıra başlangıcı (default 1; 0–999). */
+  shippingSackSeqStart: number;
+  /** Etikette toplam da yazılsın: "3/100" (default FALSE). */
+  shippingSackSeqShowTotal: boolean;
+  /** Partisiz çuvalın ambalaj no'su: `sevkte` (default) · `acilista`. */
+  packingPoolPackageNo: PackingPoolPackageNo;
   /** Çuval/grup içerik dökümünde ad: 'ikisi' (default) | 'bizdeki' | 'musterideki'. */
   sackDumpNameMode: SackDumpNameMode;
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik). */
@@ -1999,6 +2051,12 @@ export class SystemSettingService {
       packingLotRequired: await readPackingLotRequired(cacheClient),
       packingLotPartialDispatch: await readPackingLotPartialDispatch(cacheClient),
       shippingDocPackingLot: await readShippingDocPackingLot(cacheClient),
+      shippingSackSeqOnDoc: await readShippingSackSeqOnDoc(cacheClient),
+      shippingSackSeqPrefix: await readShippingSackSeqPrefix(cacheClient),
+      shippingSackSeqPrefixLive: await readShippingSackSeqPrefixLive(cacheClient),
+      shippingSackSeqStart: await readShippingSackSeqStart(cacheClient),
+      shippingSackSeqShowTotal: await readShippingSackSeqShowTotal(cacheClient),
+      packingPoolPackageNo: await readPackingPoolPackageNo(cacheClient),
       sackDumpNameMode: await readSackDumpNameMode(cacheClient),
       shippingAllocWidthToleranceEnabled: await readShippingAllocWidthToleranceEnabled(cacheClient),
       shippingAllocWidthToleranceCm: await readShippingAllocWidthToleranceCm(cacheClient),
@@ -2151,8 +2209,10 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct"
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart"
     > & {
+      /** null = fabrika varsayılanına dön (1). */
+      shippingSackSeqStart?: number | null;
       financeInvoiceQtyTolerancePct?: number | null;
       financeInvoicePriceTolerancePct?: number | null;
       /** null = fabrika varsayılanına dön (1 cm). */
@@ -3003,6 +3063,43 @@ export class SystemSettingService {
         throw AppError.badRequest("shippingDocPackingLot boolean olmalı");
       }
       await this.set(SETTING_KEYS.SHIPPING_DOC_PACKING_LOT, String(input.shippingDocPackingLot), "İrsaliye/çeki listesine parti adı + ambalaj no kolonu", userId);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingSackSeqOnDoc")) {
+      if (typeof input.shippingSackSeqOnDoc !== "boolean") throw AppError.badRequest("shippingSackSeqOnDoc boolean olmalı");
+      await this.set(SETTING_KEYS.SHIPPING_SACK_SEQ_ON_DOC, String(input.shippingSackSeqOnDoc), "İrsaliye/çeki listesine sevkiyat içi çuval sırası kolonu", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "shippingSackSeqPrefix")) {
+      const v = input.shippingSackSeqPrefix;
+      if (typeof v !== "string" || !SHIPPING_SACK_SEQ_PREFIX_RE.test(v)) {
+        throw AppError.badRequest(`Çuval sırası ön eki en çok ${SHIPPING_SACK_SEQ_PREFIX_MAX} karakter: harf, rakam, - _ . / ve boşluk`);
+      }
+      await this.set(SETTING_KEYS.SHIPPING_SACK_SEQ_PREFIX, sanitizeSackSeqPrefix(v), "Sevkiyat içi çuval sırası ön eki (serbest metin, ≤8)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "shippingSackSeqPrefixLive")) {
+      if (typeof input.shippingSackSeqPrefixLive !== "boolean") throw AppError.badRequest("shippingSackSeqPrefixLive boolean olmalı");
+      await this.set(SETTING_KEYS.SHIPPING_SACK_SEQ_PREFIX_LIVE, String(input.shippingSackSeqPrefixLive), "Ön ek değişince eski belgeler de değişsin (kapalı = sevk anındaki ön ek donar)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "shippingSackSeqStart")) {
+      const v = input.shippingSackSeqStart;
+      // `null` = alan temizlendi → varsayılan (1). 0 meşru (bazı müşteriler 0'dan sayar).
+      if (v !== null) {
+        if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > SHIPPING_SACK_SEQ_START_MAX) {
+          throw AppError.badRequest(`Çuval sırası başlangıcı 0 ile ${SHIPPING_SACK_SEQ_START_MAX} arasında tam sayı olmalı`);
+        }
+      }
+      await this.set(SETTING_KEYS.SHIPPING_SACK_SEQ_START, v === null ? DEFAULT_SHIPPING_SACK_SEQ_START : v, "Sevkiyat içi çuval sırası başlangıç numarası", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "shippingSackSeqShowTotal")) {
+      if (typeof input.shippingSackSeqShowTotal !== "boolean") throw AppError.badRequest("shippingSackSeqShowTotal boolean olmalı");
+      await this.set(SETTING_KEYS.SHIPPING_SACK_SEQ_SHOW_TOTAL, String(input.shippingSackSeqShowTotal), "Çuval sırası etiketinde toplam da yazılsın (3/100)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "packingPoolPackageNo")) {
+      const v = input.packingPoolPackageNo;
+      if (typeof v !== "string" || !PACKING_POOL_PACKAGE_NO_MODES.includes(v as PackingPoolPackageNo)) {
+        throw AppError.badRequest("Partisiz çuval ambalaj no rejimi 'sevkte' veya 'acilista' olmalı");
+      }
+      await this.set(SETTING_KEYS.PACKING_POOL_PACKAGE_NO, v, "Partisiz çuvalın ambalaj no'su: sevkte (sevk sırası) / acilista (cari havuz sayacı)", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "kursunBypassEnabled")) {
@@ -4853,6 +4950,34 @@ export async function readShippingDocPackingLot(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+export async function readShippingSackSeqOnDoc(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_SACK_SEQ_ON_DOC }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+export async function readShippingSackSeqShowTotal(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_SACK_SEQ_SHOW_TOTAL }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+export async function readShippingSackSeqPrefix(tx?: Pick<typeof prisma, "systemSetting">): Promise<ShippingSackSeqPrefix> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_SACK_SEQ_PREFIX }, select: { value: true } });
+  return sanitizeSackSeqPrefix(setting?.value);
+}
+export async function readShippingSackSeqPrefixLive(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_SACK_SEQ_PREFIX_LIVE }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+export async function readShippingSackSeqStart(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_SACK_SEQ_START }, select: { value: true } });
+  if (!setting) return DEFAULT_SHIPPING_SACK_SEQ_START;
+  const n = asNumber(setting.value);
+  return n === null || !Number.isInteger(n) || n < 0 || n > SHIPPING_SACK_SEQ_START_MAX ? DEFAULT_SHIPPING_SACK_SEQ_START : n;
+}
+export async function readPackingPoolPackageNo(tx?: Pick<typeof prisma, "systemSetting">): Promise<PackingPoolPackageNo> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.PACKING_POOL_PACKAGE_NO }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && PACKING_POOL_PACKAGE_NO_MODES.includes(v as PackingPoolPackageNo) ? (v as PackingPoolPackageNo) : DEFAULT_PACKING_POOL_PACKAGE_NO;
 }
 
 export async function readKursunBypassEnabled(

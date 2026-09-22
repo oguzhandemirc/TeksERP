@@ -308,6 +308,22 @@ router.get("/packing-groups/summary", verifyToken, READ, controller.packingLotSu
 router.post("/packing-groups/:id/sacks", verifyToken, WRITE, controller.addSacksToPackingGroup);
 /**
  * @openapi
+ * /api/shipping/packing-groups/{id}/release:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Partinin havuzdaki TÜM çuvallarını çıkar — sevk partisi modu (kapsam sunucuda; planlı sevkteki atlanır)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       content: { application/json: { schema: { type: object, properties: { target: { type: string, enum: [CUSTOMER, GENERAL] } } } } }
+ *     responses:
+ *       200: { description: "{released, skippedPlanned, target}" }
+ *       400: { description: "Sevk partisi modu kapalı (PACKING_LOT_MODE_OFF)" }
+ */
+router.post("/packing-groups/:id/release", verifyToken, WRITE, controller.releasePackingGroupSacks);
+/**
+ * @openapi
  * /api/shipping/packing-groups/{id}:
  *   patch:
  *     tags: [Shipping]
@@ -465,18 +481,22 @@ router.get("/sack-search", verifyToken, READ, controller.searchSacks);
  *       sonra ad); `withSacksOnly=1` eski davranışı süzgeç olarak verir.
  *       `customerId: null` satırı = müşterisiz (genel stok) kovası ve İLK sırada
  *       gelir (arama terimi verilirse dönmez). Kapsam varsayılanı `/sack-search`
- *       ile aynıdır (POOL+PLANNED). Salt-okunur, metraj/top adedi DÖNMEZ.
- *       Tüm cari modunda yanıt SAYFALIDIR (`nextCursor`); `withSacksOnly` modunda
- *       ilk 500 ile kesilir ve `warnings` döner.
+ *       ile aynıdır (POOL+PLANNED). Salt-okunur; top adedi ve (sevk partisi modunda)
+ *       açık parti sayısı da döner, metraj DÖNMEZ. İki modda da SAYFALI (`nextCursor`,
+ *       keyset); sıralama `sortBy`/`sortOrder` ile SUNUCUDA, kapsamın tamamı üstünde
+ *       (tek toplulaştırma sorgusu; kesme yok).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: scope, schema: { type: string, enum: [POOL, PLANNED, DISPATCHED, ALL] } }
  *       - { in: query, name: search, schema: { type: string } }
  *       - { in: query, name: withSacksOnly, schema: { type: string, enum: ["0", "1"] } }
+ *       - { in: query, name: sortBy, schema: { type: string, enum: [name, sackCount, rollCount, openLotCount] }, description: "Sunucu sıralaması (kapsamın tamamı); tanınmayan 400" }
+ *       - { in: query, name: sortOrder, schema: { type: string, enum: [asc, desc] } }
  *       - { in: query, name: cursor, schema: { type: string } }
  *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 200 } }
  *     responses:
- *       200: { description: "{ items: [{customerId,name,code,sackCount}], nextCursor }" }
+ *       200: { description: "{ items: [{customerId,name,code,sackCount,rollCount,openLotCount?}], nextCursor }" }
+ *       400: { description: "Geçersiz sortBy / sortOrder" }
  */
 router.get("/sack-search/customers", verifyToken, READ, controller.listSackCustomers);
 router.post("/sack-search/pick-list", verifyToken, READ, controller.getPickList);

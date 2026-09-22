@@ -72,7 +72,7 @@ describe("modül kilidi", () => {
     renderWithProviders(
       <FeatureFlagSection flags={[FLAG]} moduleClosed moduleLabel="Ticaret" />,
     );
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
     expect(screen.getByText(MODUL_BANDI)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /kaydet/i })).toBeNull();
     // ⭐ Satır YANLIŞ TEŞHİS basmaz: sebep izin değil, kapalı modüldür.
@@ -87,13 +87,13 @@ describe("modül kilidi", () => {
     renderWithProviders(
       <FeatureFlagSection flags={[FLAG]} moduleClosed={false} moduleLabel="Ticaret" />,
     );
-    expect(screen.getByRole("checkbox")).toBeTruthy();
+    expect(screen.getByRole("switch")).toBeTruthy();
     expect(screen.queryByText(MODUL_BANDI)).toBeNull();
   });
 
   it("§3 REGRESYON: moduleClosed taşımayan kategori etkilenmez", () => {
     renderWithProviders(<FeatureFlagSection flags={[FLAG]} />);
-    expect(screen.getByRole("checkbox")).toBeTruthy();
+    expect(screen.getByRole("switch")).toBeTruthy();
     expect(screen.queryByText(MODUL_BANDI)).toBeNull();
     expect(screen.queryByText(SUPERADMIN_BANDI)).toBeNull();
   });
@@ -104,7 +104,7 @@ describe("modül kilidi", () => {
     );
     expect(screen.getByText(SUPERADMIN_BANDI)).toBeTruthy();
     expect(screen.getByText(MODUL_BANDI)).toBeTruthy();
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
     // İki not da `role="note"` — sayısı da ölçülüyor (tekil banda dönerse 1).
     expect(screen.getAllByRole("note")).toHaveLength(2);
   });
@@ -124,7 +124,7 @@ describe("modül kilidi", () => {
   it("§6 izin yoksa modül açık olsa da yazılamaz (kapı ÇARPIM)", () => {
     perm.mockImplementation(() => false);
     renderWithProviders(<FeatureFlagSection flags={[FLAG]} moduleLabel="Ticaret" />);
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
     // Sebep izin eksikliğidir → modül bandı çizilmez (yanlış teşhis yok).
     expect(screen.queryByText(MODUL_BANDI)).toBeNull();
   });

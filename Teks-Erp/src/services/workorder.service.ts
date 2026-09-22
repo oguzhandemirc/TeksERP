@@ -146,7 +146,8 @@ import {
 } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq, normalizeScanCode } from "../utils/code-format";
+import { normalizeScanCode } from "../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
 import { nextPrefixedSequenceTx, SubcontractorService } from "./subcontractor.service";
 
@@ -616,7 +617,7 @@ export class WorkOrderService {
    */
   async generateWorkOrderNumber(): Promise<string> {
     const now = new Date();
-    const prefix = dailyCodePrefix("IE", now);
+    const prefix = seriesCodePrefix("workOrder", now);
 
     // Retry loop — nadiren de olsa unique çakışma olursa tekrar dene
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -628,12 +629,12 @@ export class WorkOrderService {
         where: { workOrderNumber: { gte: prefix, startsWith: prefix } },
         select: { workOrderNumber: true },
       });
-      const seq = nextDailySeq(
+      const seq = seriesSeqFrom(
         todays.map((w) => w.workOrderNumber),
         prefix,
       );
 
-      const candidate = `${prefix}${String(seq).padStart(4, "0")}`;
+      const candidate = buildSeriesCode("workOrder", seq, now);
 
       const exists = await prisma.workOrder.findUnique({ where: { workOrderNumber: candidate } });
       if (!exists) return candidate;
@@ -7012,7 +7013,7 @@ export class WorkOrderService {
 
     // Manifest (çeki listesi) no: CL + GGAAYY + NNNN (örn CL1207260001)
     const now = new Date();
-    const prefix = dailyCodePrefix("CL", now);
+    const prefix = seriesCodePrefix("manifest", now);
 
     // manifestNo @unique + günlük sequence TÜM WO'lar arasında paylaşımlı —
     // eşzamanlı iki basım aynı NNN'i hesaplardı; projedeki diğer tüm belge
@@ -7027,11 +7028,11 @@ export class WorkOrderService {
         where: { manifestNo: { gte: prefix, startsWith: prefix } },
         select: { manifestNo: true },
       });
-      const seq = nextDailySeq(
+      const seq = seriesSeqFrom(
         todays.map((m) => m.manifestNo),
         prefix,
       );
-      const manifestNo = `${prefix}${String(seq).padStart(4, "0")}`;
+      const manifestNo = buildSeriesCode("manifest", seq, now);
 
       return prisma.manifest.create({
         data: {

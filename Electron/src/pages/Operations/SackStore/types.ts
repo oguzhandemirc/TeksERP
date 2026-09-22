@@ -93,6 +93,8 @@ export interface ContentSack {
   id: string;
   sackNo: string;
   seq: number;
+  /** Sıra etiketi (sevkiyatta donan ön ek) — yoksa null. */
+  seqLabel?: string | null;
   weightKg: number | null;
   rollCount: number;
   swatchCount: number;

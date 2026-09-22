@@ -1286,6 +1286,7 @@ async function main() {
   // ölü bir satır, gerçek bir enum bayrağını sessizce kapsam dışında tutardı.
   const FREE_TEXT_FLAGS: Record<string, string> = {
     companyName: "serbest METİN — kapalı değer kümesi yok; panel Şirket Bilgileri kartı yazar",
+    shippingSackSeqPrefix: "serbest METİN (≤8, zod regex) — panel `freeText` satırı; belgeye HTML kaçışıyla girer (2026-09-22)",
   };
   const aEnum = A.filter((k) => typeof flags[k] === "string" && !FREE_TEXT_FLAGS[k]);
 
@@ -1379,6 +1380,18 @@ async function main() {
     !electronFound || freeTextInPanel.length === 0,
     `panelde enum satırı var: ${freeTextInPanel.join(", ")} — kapalı kümesi olmayan ayar select ile yönetilemez`,
   );
+  // Serbest metin panelde `textKey:` satırıyla yönetilir (2026-09-22; `companyName` kendi
+  // kartındandır, muaf). Satırı olmayan serbest metin panelden değiştirilemez.
+  const DText = electronFound ? readKeys(ELECTRON_CONFIG, /textKey:\s*"([^"]+)"/g) : [];
+  const TEXT_PANEL_EXEMPT: Record<string, string> = { companyName: "Şirket Bilgileri kartı yazar" };
+  const freeTextNoRow = Object.keys(FREE_TEXT_FLAGS).filter((k) => !TEXT_PANEL_EXEMPT[k] && !DText.includes(k));
+  check(
+    "serbest-metin anahtarının panelde `textFlags` satırı var",
+    !electronFound || freeTextNoRow.length === 0,
+    `satırı yok: ${freeTextNoRow.join(", ")}`,
+  );
+  const textNotFree = DText.filter((k) => !FREE_TEXT_FLAGS[k]);
+  check("panel `textKey` satırları FREE_TEXT_FLAGS listesinde (iki yönlü)", textNotFree.length === 0, textNotFree.join(", "));
 
   // PANELİN "VARSAYILAN" BEYANI ↔ BACKEND OKUYUCUSU — §12'nin enum ikizi.
   // Panel her enum satırının altına "Varsayılan: <etiket>" basar ve bu bir

@@ -28,12 +28,14 @@ import {
   readShippingDocCekiNameMode,
   readShippingDocProductColorSplit,
   readShippingDocPackingLot,
+  readShippingSackSeqOnDoc,
   sanitizeDocumentsConfig,
   type CompanyLetterhead,
   type DocumentConfig,
   type ShippingDocItemNameMode,
   type ShippingDocCekiNameMode,
 } from "./system-setting.service";
+import { readSackSeqFormat, type SackSeqFormat } from "./helpers/sack-seq.helper";
 import { ApiResponse } from "../types/api.types";
 import { SAMPLE_PRINTED_DOCS } from "./document-render/sample-data";
 
@@ -351,6 +353,7 @@ async function buildRenderExtras(
   cekiNameMode: ShippingDocCekiNameMode;
   productColorSplit: boolean;
   packingLot: boolean;
+  sackSeq?: SackSeqFormat;
 }> {
   let qrDataUrl: string | null = null;
   if (snapshot.docConfigOverride?.qr) {
@@ -376,6 +379,11 @@ async function buildRenderExtras(
     cekiNameMode: await readShippingDocCekiNameMode(),
     productColorSplit: await readShippingDocProductColorSplit(),
     packingLot: await readShippingDocPackingLot(),
+    // Çuval sırası kolonu yalnız bayrak açıkken; biçim (ön ek · n/N) her baskıda canlı.
+    // Ön ek: donmuş (snapshot) ya da canlı — `readSackSeqFormat` bayrağa göre seçer.
+    ...((await readShippingSackSeqOnDoc())
+      ? { sackSeq: await readSackSeqFormat((snapshot.doc as { sackSeqPrefix?: string } | null)?.sackSeqPrefix) }
+      : {}),
   };
 }
 

@@ -10,7 +10,7 @@
 //   §2 (DB'siz) 8033 `PACKAGE_NO_LOCK_NS` envanterde; `bosluk-doldur` dalında kilit ilk ifade
 //   §3 GRUP MODUNDA (varsayılan) parti uçları kapalı: openSack+packingGroupId 400 · özet 400 ·
 //      boş grup 400 · liste `status` süzgeci 400 — davranış bayt bayt eski (negatif sonda)
-//   §4 Boş parti doğar ve YAŞAR (OPEN · listede · nextPackageNo = 1); eski grup P1 sayaçta sayılır → SP-2
+//   §4 Boş parti doğar ve YAŞAR (OPEN · listede · nextPackageNo = 1); eski grup P1 sayaçta sayılır → P-2
 //   §5 Çuval partide doğar: openSack({packingGroupId}) → 1, 2, 3; cari partinin carisi
 //   §6 Ezme: packageNo:10 → sayaç 11'e sıçrar; aynı numara 409 PACKAGE_NO_TAKEN; setPackageNo;
 //      mod `otomatik` → ezme 400
@@ -49,7 +49,11 @@ import prisma from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
 import { PackingGroupService } from "../src/services/packing-group.service";
 import { PackingLotService } from "../src/services/packing-lot.service";
+import {
+} from "../src/services/helpers/packing-group.helper";
 import { PACKAGE_NO_LOCK_NS, reservePackageNosTx } from "../src/services/helpers/packing-group.helper";
+import { GROUP_WITH_SACKS_SELECT, loadPackingGroupDtos, toDto } from "../src/services/helpers/packing-group-dto.helper";
+import type { PackingGroupDto } from "../src/services/helpers/packing-group-dto.helper";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { ShippingService } from "../src/services/shipping.service";
 import { fixtureWarehouseId } from "./fixture-warehouse";
@@ -137,7 +141,7 @@ async function readSack(id: string) {
 async function readGroup(id: string) {
   return prisma.packingGroup.findUniqueOrThrow({ where: { id }, select: { status: true, closedAt: true, nextPackageNo: true, seq: true, name: true } });
 }
-type GroupDto = { id: string; name: string; seq: number | null; status: string; nextPackageNo: number; sackCount: number; shippedSackCount: number };
+type GroupDto = { id: string; code: string; name: string; seq: number | null; status: string; nextPackageNo: number; sackCount: number; shippedSackCount: number };
 async function createLot(name?: string): Promise<GroupDto> {
   const r = await PackingGroupService.createWithSacks({ customerId, sackIds: [], name });
   return r.data as GroupDto;
@@ -212,8 +216,8 @@ async function main(): Promise<void> {
     // ---- §4: parti modu — boş parti -------------------------------------------
     await setFlag(SETTING_KEYS.PACKING_GROUP_MODE, "sevk-partisi");
     const p1 = await createLot();
-    // Grup modundan kalan P1 (seq 1) sayılır → ilk parti SP-2 (geçiş kuralı: eski gruplar parti sayılır).
-    check("§4 boş parti SP-2 · OPEN · nextPackageNo 1", p1.name === "SP-2" && p1.seq === 2 && p1.status === "OPEN" && p1.nextPackageNo === 1, `${p1.name}/${p1.status}/${p1.nextPackageNo}`);
+    // Grup modundan kalan P1 (seq 1) sayılır → ilk parti P-2 (geçiş kuralı: eski gruplar parti sayılır).
+    check("§4 boş parti P-2 · OPEN · nextPackageNo 1", p1.name === "P-2" && p1.seq === 2 && p1.status === "OPEN" && p1.nextPackageNo === 1, `${p1.name}/${p1.status}/${p1.nextPackageNo}`);
     const l1 = (await PackingGroupService.list(customerId)).data ?? [];
     check("§4 ⭐ boş parti listede (yaşıyor)", l1.some((g) => g.id === p1.id));
     // Grup modundan kalan P1 (çuvalsız) da parti listesinde OPEN görünür — geçiş kuralı (§7 belge).
@@ -266,6 +270,10 @@ async function main(): Promise<void> {
 
     // ---- §10: transfer ---------------------------------------------------------
     const p2 = await createLot();
+    // Parti KODU: kalıcı, kurulum-geneli tekil, fabrika ayı + aylık sayaç; ardışık iki parti ardışık kod.
+    check("§4b parti kodu PRT-YYMM-NNNN biçiminde", /^PRT-\d{4}-\d{4}$/.test(p1.code), p1.code);
+    check("§4b ⭐ sonraki parti daha büyük kod alır (aynı ay, tekil, artan)",
+      p2.code.slice(0, 9) === p1.code.slice(0, 9) && Number(p2.code.slice(9)) > Number(p1.code.slice(9)), `${p1.code} → ${p2.code}`);
     await PackingGroupService.addSacks(p2.id, [a10.id]);
     const t = await readSack(a10.id);
     check("§10 ⭐ transfer: hedefte yeni numara 1, üyelik p2", t.packingGroupId === p2.id && t.packageNo === 1, `${t.packageNo}`);
@@ -291,6 +299,8 @@ async function main(): Promise<void> {
     // p1 açık çuvalları: a1(1) a3(20) a10→p2'ye gitti; a11(11) e40(40) a41(41) b2(2) a42(42). Dolu olsunlar.
     const p1Open = await prisma.sack.findMany({ where: { packingGroupId: p1.id, shipmentId: null }, select: { id: true } });
     for (const s of p1Open) await fillSack(s.id);
+    // §19 fikstürü: bir çuval tartılı olsun (kg toplamı SQL ↔ bellek karşılaştırılır).
+    await prisma.sack.update({ where: { id: p1Open[0]!.id }, data: { weightKg: 12.5 } });
     const sub = [a1.id, a3.id];
     const sh1 = (await ship.createShipment({ sackIds: sub, customerId, orderless: true })).data as { id: string };
     shipmentIds.push(sh1.id);
@@ -316,16 +326,16 @@ async function main(): Promise<void> {
     await expectErr("§13 sevk edilmiş partiye openSack 409 PACKING_LOT_CLOSED", () => ship.openSack({ packingGroupId: p1.id }), 409, "PACKING_LOT_CLOSED");
     await expectErr("§13 sevk edilmiş partiye addSacks 409", () => PackingGroupService.addSacks(p1.id, [a42.id]), 409, "PACKING_LOT_CLOSED");
     // ---- §14: ad ve numara SEVK EDİLMİŞ partiden sonra yeniden verilir (kimlik `id`) ----
-    // Canlı (OPEN) seq'ler: P1(1) · SP-3(p0) · SP-4(p2) · Cuma(seq null); SP-2 (p1) sevk edildi → 2 boşta.
-    // `artan` rejimi canlı en büyük+1 verir: 5. (SP-2'nin numarası ancak `bosluk-doldur`da döner.)
+    // Canlı (OPEN) seq'ler: P1(1) · P-3(p0) · P-4(p2) · Cuma(seq null); P-2 (p1) sevk edildi → 2 boşta.
+    // `artan` rejimi canlı en büyük+1 verir: 5. (P-2'nin numarası ancak `bosluk-doldur`da döner.)
     const pNext = await createLot();
-    check("§14 artan: canlı en büyük+1 (SP-5), sevk edilmiş parti sayılmaz", pNext.seq === 5 && pNext.name === "SP-5", pNext.name);
+    check("§14 artan: canlı en büyük+1 (P-5), sevk edilmiş parti sayılmaz", pNext.seq === 5 && pNext.name === "P-5", pNext.name);
     await setFlag(SETTING_KEYS.PACKING_GROUP_NUMBERING, "bosluk-doldur");
     const pReuse = await createLot();
-    check("§14 ⭐ bosluk-doldur: sevk edilmiş SP-2'nin numarası yeniden verildi", pReuse.seq === 2 && pReuse.name === "SP-2", pReuse.name);
+    check("§14 ⭐ bosluk-doldur: sevk edilmiş P-2'nin numarası yeniden verildi", pReuse.seq === 2 && pReuse.name === "P-2", pReuse.name);
     await setFlag(SETTING_KEYS.PACKING_GROUP_NUMBERING, "artan");
     check("§14 ⭐ aynı AD iki farklı kimlikte (biri sevk edildi, biri açık)", pReuse.name === p1Closed.name && pReuse.id !== p1.id);
-    await expectErr("§14 iki AÇIK parti aynı adı alamaz (elle ad) 409", () => createLot("SP-2"), 409, "PACKING_GROUP_NAME_TAKEN");
+    await expectErr("§14 iki AÇIK parti aynı adı alamaz (elle ad) 409", () => createLot("P-2"), 409, "PACKING_GROUP_NAME_TAKEN");
     // ---- §15: planlı sevk iptali → parti yeniden AÇIK, numaralar aynı ------------------
     await ship.cancelShipment(sh2.id);
     const back = await readSack(a11.id);
@@ -358,6 +368,25 @@ async function main(): Promise<void> {
     await expectErr("§18 ⭐ partisiz açma 400 PACKING_LOT_REQUIRED", () => ship.openSack({ customerId }), 400, "PACKING_LOT_REQUIRED");
     const req = await openIn(pC.id);
     check("§18 partide açma OK", req.packingGroupId === pC.id);
+    await prisma.sack.update({ where: { id: req.id }, data: { weightKg: 7.25 } }); // §19: havuzda tartılı çuval
+
+    // ---- §19: SQL toplamları ↔ bellek toplamları BİREBİR (büyük hacim planı) --------
+    // Bu carinin bütün partileri (sevk edilmiş çuvallı, tartılı/tartısız, boş, kapalı) iki
+    // yoldan okunur: eski `toDto` (bellek) ve `loadPackingGroupDtos` (GROUP BY). Sayı alanı
+    // farklıysa SQL ikizi anlamı kaydırmıştır.
+    const eskiYol = (await prisma.packingGroup.findMany({ where: { customerId }, select: GROUP_WITH_SACKS_SELECT, orderBy: { createdAt: "asc" } })).map(toDto);
+    const yeniYol = await loadPackingGroupDtos(prisma, Prisma.sql`g."customerId" = ${customerId}::uuid`, Prisma.sql`g."createdAt" ASC`);
+    const alanlar = ["id", "code", "name", "seq", "note", "sackCount", "rollCount", "swatchCount", "totalQty", "weightKg", "status", "shippedSackCount", "nextPackageNo"] as const;
+    const fark: string[] = [];
+    for (const e of eskiYol) {
+      const y = yeniYol.find((x: PackingGroupDto) => x.id === e.id);
+      if (!y) { fark.push(`${e.name}: SQL'de yok`); continue; }
+      for (const k of alanlar) if (e[k] !== y[k]) fark.push(`${e.name}.${k}: ${String(e[k])} ≠ ${String(y[k])}`);
+    }
+    check(`§19 ⭐ SQL toplamları bellek toplamlarıyla birebir (${eskiYol.length} parti)`, eskiYol.length > 0 && eskiYol.length === yeniYol.length && fark.length === 0, fark.slice(0, 3).join(" · "));
+    const sevkli = eskiYol.find((e) => e.shippedSackCount > 0);
+    const tartili = eskiYol.find((e) => e.weightKg != null && e.sackCount > 0);
+    check("§19 fikstür anlamlı: sevk edilmiş çuvallı parti VE havuzda tartılı çuvalı olan parti var", !!sevkli && !!tartili, `${sevkli?.name} / ${tartili?.name}`);
   } finally {
     for (const [k, v] of prevFlags) {
       if (v === undefined) await prisma.systemSetting.deleteMany({ where: { key: k } }).catch(() => {});

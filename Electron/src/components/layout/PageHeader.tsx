@@ -9,7 +9,8 @@ import { useTabId } from "./tabs/tab-active";
 import { canGoBackTab } from "./tabs/history-depth";
 
 interface Props {
-  title: string;
+  /** Düz metin ya da hazır düğüm (ör. kutulu kimlik) — h1 içinde çizilir. */
+  title: ReactNode;
   /** Başlığın hemen yanında (aynı satırda) gösterilen ek içerik — ör. durum rozeti. */
   titleExtra?: ReactNode;
   description?: string;
@@ -19,16 +20,19 @@ interface Props {
    *  sayfaları). Verilmezse sırayla: sekme geçmişinde bir adım geri → breadcrumb üstü. */
   onBack?: () => void;
   /** Breadcrumb üst bağlantısı — verilmezse route'tan otomatik çözülür. Kayıtlı command
-   *  entry'si olmayan alt sayfalar (ör. iş emri oluştur/düzenle) için elle geçilir. */
-  parent?: { label: string; to: string };
+   *  entry'si olmayan alt sayfalar (ör. iş emri oluştur/düzenle) için elle geçilir;
+   *  `null` kırıntıyı GİZLER (kimliği başlıkta taşıyan detay yüzeyleri). */
+  parent?: { label: string; to: string } | null;
+  /** Sağdaki eylemlerin dikey hizası — kutulu/yüksek başlıklarda `center` (varsayılan üst). */
+  actionsAlign?: "start" | "center";
 }
 
-export function PageHeader({ title, titleExtra, description, actions, className, onBack, parent: parentProp }: Props) {
+export function PageHeader({ title, titleExtra, description, actions, className, onBack, parent: parentProp, actionsAlign = "start" }: Props) {
   const location = useLocation();
   const { pathname } = location;
   const navigate = useNavigate();
   const entry = findCommandEntry(pathname);
-  const parent = parentProp ?? findBreadcrumbParent(pathname);
+  const parent = parentProp === null ? null : (parentProp ?? findBreadcrumbParent(pathname));
   const { isFavorite, toggleFavorite } = useFavorites();
   const fav = isFavorite(pathname);
 
@@ -100,7 +104,7 @@ export function PageHeader({ title, titleExtra, description, actions, className,
         </div>
       </div>
       {(entry || actions) && (
-        <div className="flex items-center gap-2">
+        <div className={cn("flex items-center gap-2", actionsAlign === "center" && "self-center")}>
           {entry && (
             <Button
               variant="ghost"

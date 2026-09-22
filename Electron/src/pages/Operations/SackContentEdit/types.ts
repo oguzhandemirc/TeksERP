@@ -56,6 +56,8 @@ export const UNGROUPED_FILTER_VALUE = "none";
  */
 export interface PackingGroup {
   id: string;
+  /** Kalıcı tekil kod `PRT-YYMM-NNNN` (opsiyonel: eski backend göndermez). */
+  code?: string;
   name: string;
   seq: number | null;
   note: string | null;
@@ -77,9 +79,12 @@ export interface PackingGroup {
 
 /** Cari çalışma alanı özeti (sevk partisi modu) — `GET /packing-groups/summary`. */
 export interface PackingLotCustomerSummary {
+  customer: { id: string; name: string };
   ungrouped: { sackCount: number; rollCount: number; totalQty: number; weightKg: number | null };
   openLotCount: number;
   closedLotCount: number;
+  /** Sevk edilmemiş çuvallardan tartısız olanlar (opsiyonel — eski backend göndermez). */
+  unweighedSackCount?: number;
 }
 
 /** Liste satırındaki grup çipi — ad SUNUCUDAN gelir, id'den türetilmez. */
@@ -109,6 +114,10 @@ export interface SackCustomerBucket {
   name: string;
   code: string | null;
   sackCount: number;
+  /** Kapsamdaki çuvallardaki top sayısı (opsiyonel — eski backend göndermez). */
+  rollCount?: number;
+  /** Sevk edilmemiş (açık) parti sayısı — yalnız sevk partisi modunda gelir. */
+  openLotCount?: number;
 }
 
 /**
@@ -146,6 +155,11 @@ export interface SackShipmentRef {
 /** Depodaki çuval mı — çoklu seçim/sevkiyat/düzenleme yalnız bunlarda açık. */
 export function isWarehouseSack(s: { shipment: SackShipmentRef | null }): boolean {
   return s.shipment === null;
+}
+
+/** İçi dolu çuval mı (top ya da kartela) — sevk ve dağıtma yalnız bunlarda anlamlı; boş çuval silinir. */
+export function hasSackContents(s: { rollCount: number; swatchCount: number }): boolean {
+  return s.rollCount > 0 || s.swatchCount > 0;
 }
 
 /**
@@ -343,6 +357,10 @@ export interface SackContents {
   labelDirty?: boolean;
   /** Çuval yorumu — iç serbest not (tam metin). */
   notes: string | null;
+  /** Sevk partisi + ambalaj no (opsiyonel — eski backend göndermez). */
+  packingGroupId?: string | null;
+  packageNo?: number | null;
+  packingGroup?: { name: string } | null;
   /** Dolu = sevkiyatta (içerik kilitli); null = depoda. */
   shipment:
     | (SackShipmentRef & {

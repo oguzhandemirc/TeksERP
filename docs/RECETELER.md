@@ -99,6 +99,22 @@ Mekanik kapı: Teks-Erp/scripts/test_feature_flag_contract.ts (1518 satır, §1-
 - §3.6 tek-resolver TASARIM KARARI olarak yazılı (MODUL-BAYRAK-TASARIM.md:86 ve :289) ama "yeni alt bayrak eklerken system-setting.service.ts §3.6 bloğuna resolver yaz ve enforcement noktasını ondan besle" şeklinde bir REÇETE adımı hiçbir yerde yok.
 - Modül anahtarı eklerken gereken grandfathering migration adımı ilke olarak yazılı (MODUL-BAYRAK-TASARIM.md:290-295, karar 10 ve prova kuralı 2) ama sıralı reçetede (UYGULAMA-PLANI:83) yok.
 
+## Yeni numara serisi (belge/kod numarası)
+
+Mekanik kapı: `scripts/test_number_series.ts` §1 (tohum == üreteç) ve §7 (tek kaynak AST cırcırı).
+
+1. **Katalog satırı** — `Teks-Erp/src/constants/number-series-catalog.ts`'e bir `NumberSeriesCatalogEntry`: `key` (çağrılarda kullanılacak anahtar), `label` (panelde görünen ad), `seedPrefix`/`seedDateSegment`/`seedDigits`/`seedSeparator` = **bugünkü davranış**. Kod okutuluyorsa `kind` ver (`SACK`/`SHIPMENT`/…); biçimi değiştirilemiyorsa `lockedReason` yaz — gerekçesiz kilit yok.
+2. **Üreteç** — servis içinde ön eki LİTERAL yazma. Üç kalıptan biri:
+   · tam kod tek çağrıda: `nextSeriesNo("key", async (full) => rows.map(r => r.no))`
+   · ön ek + sıra ayrı gerekiyorsa: `seriesCodePrefix("key", date)` + `seriesSeqFrom(codes, full)` + `buildSeriesCode("key", seq, date)`
+   · master-data CRUD'da: `autoCode: { series: "key" }` (`BaseController`).
+   ⚠️ Okuma tx callback'inin İÇİNDE kalmalı — `withBarcodeRetry` her denemede baştan çağırır.
+3. **Kod tanıma** — "bu kod bu seriye mi ait" sorusu `matchesSeries(resolveSeriesFormat("key"), code)` ile sorulur; `isDailyCode(code, "XX")` yazma (emekli ön ekleri görmez, 5 haneli kodu reddeder).
+4. **Bekçi** — `test_number_series.ts` §1'deki `BEKLENEN` tablosuna serinin bugünkü kodunu yaz. Tabloya yazmazsan bekçi "beklenen kod yazılmamış" diye KIRMIZI verir (katalog büyüyüp bekçi büyümezse sessiz kalmaz).
+5. **Koş:** `node scripts/agir-is.mjs -- npx tsx Teks-Erp/scripts/run-all-tests.ts number_series` + serinin kendi alan bekçisi.
+
+⚠️ Yeni seri bir DB kolonuna yazılıyorsa kolon `@unique` olmalı ve çağıran `withBarcodeRetry` ile sarılmalı: sayaç türetilmiştir, yarışta P2002 hâlâ mümkündür ve doğru cevap tekrar denemektir.
+
 ## Prisma enum'una yeni değer
 
 > ⚠️ **BU REÇETE YENİ DEĞER İÇİNDİR — YENİ BİR ENUM İÇİN 2. ADIM GEÇERLİ DEĞİL** (2026-09-13, dokuma P4).

@@ -12,21 +12,21 @@
 // §16 panel satırını (enumKey) ve VARSAYILANI mekanik doğrular.
 // =============================================================================
 
-/** Sevkiyat ↔ sipariş bağı zorunluluğu. `warn` = bugünkü davranış. */
+/** Sevkiyat ↔ sipariş bağı zorunluluğu. `warn` = varsayılan davranış. */
 export type ShipmentOrderRequirement = "off" | "warn" | "block";
 
-/** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
+/** Sevkin fatura izi nereden yazılır. `dis` = varsayılan davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
 
-/** Sevk belgesinde ürün adı hangi dilden basılır. `bizdeki` = bugünkü çıktı. */
+/** Sevk belgesinde ürün adı hangi dilden basılır. `bizdeki` = varsayılan çıktı. */
 export type ShippingDocItemNameMode = "bizdeki" | "musterideki" | "ikisi";
-/** Çeki listesi bölümünün ad rejimi. `devral` = genel rejimi izle (bugünkü davranış). */
+/** Çeki listesi bölümünün ad rejimi. `devral` = genel rejimi izle (varsayılan davranış). */
 export type ShippingDocCekiNameMode = "devral" | "bizdeki" | "musterideki" | "ikisi";
 
 /**
  * KAPSAMA rejimi — `ShipmentOrderRequirement` ile DİK eksen.
  * `orderRequirement` "sipariş seçildi mi" (niyet), bu "mal deftere yazıldı mı" (sonuç).
- * `off` = bugünkü davranış.
+ * `off` = varsayılan davranış.
  */
 export type ShippingOrderCoverage = "off" | "warn" | "block";
 
@@ -44,7 +44,7 @@ export const SHIPMENT_ORDER_REQUIREMENT_OPTIONS: ReadonlyArray<{
   {
     value: "warn",
     label: "Uyar (varsayılan)",
-    hint: "Siparişsiz sevk kurulur, ekranda uyarı çıkar. Bugünkü davranış.",
+    hint: "Siparişsiz sevk kurulur, ekranda uyarı çıkar. Varsayılan davranış.",
   },
   {
     value: "block",
@@ -63,7 +63,7 @@ export const SHIPPING_INVOICE_MODE_OPTIONS: ReadonlyArray<{
   {
     value: "dis",
     label: "Dış programdan (varsayılan)",
-    hint: "Fatura dış muhasebe programında kesilir; buraya yalnız numarası işaretlenir. Bugünkü davranış.",
+    hint: "Fatura dış muhasebe programında kesilir; buraya yalnız numarası işaretlenir. Varsayılan davranış.",
   },
   {
     value: "ic",
@@ -87,7 +87,7 @@ export const SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS: ReadonlyArray<{
   {
     value: "bizdeki",
     label: "Bizdeki ad (varsayılan)",
-    hint: "Belgede yalnız kendi ürün adımız basılır. Bugünkü çıktı.",
+    hint: "Belgede yalnız kendi ürün adımız basılır. Varsayılan çıktı.",
   },
   {
     value: "musterideki",
@@ -111,7 +111,7 @@ export const SHIPPING_DOC_CEKI_NAME_MODE_OPTIONS: ReadonlyArray<{
   {
     value: "devral",
     label: "Genel ayarı izle (varsayılan)",
-    hint: "Çeki listesi, üstteki “Sevk belgesinde ürün adı” ayarının dediğini yapar. Bugünkü davranış.",
+    hint: "Çeki listesi, üstteki “Sevk belgesinde ürün adı” ayarının dediğini yapar. Varsayılan davranış.",
   },
   {
     value: "bizdeki",
@@ -140,7 +140,7 @@ export const SHIPPING_ORDER_COVERAGE_OPTIONS: ReadonlyArray<{
   {
     value: "off",
     label: "Sorma (varsayılan)",
-    hint: "Siparişe yazılamayan mal olsa da sevkiyat sessizce kurulur. Bugünkü davranış.",
+    hint: "Siparişe yazılamayan mal olsa da sevkiyat sessizce kurulur. Varsayılan davranış.",
   },
   {
     value: "warn",
@@ -213,7 +213,7 @@ export const PACKING_GROUP_MODE_OPTIONS: ReadonlyArray<{
   {
     value: "grup",
     label: "Paketleme grubu (varsayılan)",
-    hint: "Bugünkü davranış: grup bir çalışma yaftasıdır — çuvalı kilitlemez, boşalınca görünmez olur, numarası yeniden kullanılır, çuvala parti-içi numara verilmez.",
+    hint: "Varsayılan davranış: grup bir çalışma yaftasıdır — çuvalı kilitlemez, boşalınca görünmez olur, numarası yeniden kullanılır, çuvala parti-içi numara verilmez.",
   },
   {
     value: "sevk-partisi",
@@ -277,7 +277,7 @@ export const SACK_DUMP_NAME_MODE_OPTIONS: ReadonlyArray<{
   {
     value: "ikisi",
     label: "İkisi (varsayılan)",
-    hint: "Bugünkü çıktı: PDF'te bizim adımızın altında müşterinin adı, Excel'de “Müşteri kumaş” / “Müşteri renk” ayrı sütunlarda.",
+    hint: "Varsayılan çıktı: PDF'te bizim adımızın altında müşterinin adı, Excel'de “Müşteri kumaş” / “Müşteri renk” ayrı sütunlarda.",
   },
   {
     value: "bizdeki",
@@ -289,4 +289,11 @@ export const SACK_DUMP_NAME_MODE_OPTIONS: ReadonlyArray<{
     label: "Müşterideki ad",
     hint: "Yalnız müşterinin adı basılır. Müşterinin o kumaşa/renge karşılığı yoksa hücre BOŞ kalır — bizim adımız müşterinin adıymış gibi basılmaz.",
   },
+];
+
+// ── Partisiz çuvalın ambalaj numarası ne zaman doğar (2026-09-22) ───────────────
+export type PackingPoolPackageNo = "sevkte" | "acilista";
+export const PACKING_POOL_PACKAGE_NO_OPTIONS: ReadonlyArray<{ value: PackingPoolPackageNo; label: string; hint: string }> = [
+  { value: "sevkte", label: "Sevkte (varsayılan)", hint: "Havuz çuvalı numarasız yaşar; sevk kurulunca sevkiyat içi sırayı alır (1, 2, 3 …). Varsayılan davranış." },
+  { value: "acilista", label: "Çuval açılırken", hint: "Partisiz çuval açılır açılmaz carinin havuz sayacından ambalaj numarası alır; sevkte de kalır. Müşterisiz çuval numara almaz." },
 ];

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowRight, Loader2, PackageOpen, Search, UserRound, Users } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Loader2, PackageOpen, Search, UserRound, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,6 +11,7 @@ import { staggerContainer, staggerItem, springSnappy } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { sackHubService } from "./service";
 import { CUSTOMERLESS_FILTER_VALUE, type SackCustomerBucket } from "./types";
+import { nextGateSort, type GateSort, type GateSortKey } from "./customerGateSort";
 
 /**
  * Paketleme/Çuvallar GİRİŞ KAPISI (2026-09-04 saha isteği):
@@ -120,6 +121,15 @@ function GateCard({
   );
 }
 
+/** Sayı hücresi — sağa dayalı, tabular; sıfır soluk. */
+function Sayi({ n }: { n: number }) {
+  return (
+    <td className={cn("px-4 py-2.5 text-right tabular-nums", n > 0 ? "text-muted-foreground" : "text-muted-foreground/40")}>
+      {n}
+    </td>
+  );
+}
+
 function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void }) {
   const [search, setSearch] = useState("");
   // Varsayılan KAPALI = tüm cariler (2026-09-04 kullanıcı kararı).
@@ -131,12 +141,16 @@ function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void
 
   // ⚠️ `withSacksOnly` SORGU ANAHTARINDA: yoksa mod değiştiğinde React Query
   // eski cevabı gösterir ve düğme "çalışmıyor" sanılır.
+  // Sıralama SUNUCUDA (kapsamın tamamı) — anahtarda, yoksa eski sıra gösterilir.
+  const [sort, setSort] = useState<GateSort>(null);
   const q = useInfiniteQuery({
-    queryKey: ["sack-search", "customers", terim, withSacksOnly],
+    queryKey: ["sack-search", "customers", terim, withSacksOnly, sort],
     queryFn: ({ pageParam }) =>
       sackHubService.listSackCustomers({
         search: terim || undefined,
         withSacksOnly: withSacksOnly || undefined,
+        sortBy: sort?.key,
+        sortOrder: sort?.dir,
         cursor: pageParam as string | undefined,
       }),
     initialPageParam: undefined as string | undefined,
@@ -150,11 +164,28 @@ function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void
     [q.data],
   );
   const warning = q.data?.pages?.[0]?.warnings?.[0];
+  // Açık parti sütunu yalnız sunucu gönderiyorsa (sevk partisi modu).
+  const partiSutunu = rows.some((r) => r.openLotCount != null);
+  const th = (key: GateSortKey, label: string, align: "l" | "r") => (
+    <th className={cn("px-4 py-2 font-medium", align === "r" ? "w-28 text-right" : "text-left")}>
+      <button
+        type="button"
+        onClick={() => setSort((c) => nextGateSort(c, key))}
+        className={cn("inline-flex items-center gap-0.5 hover:text-foreground", sort?.key === key && "text-foreground")}
+      >
+        {label}
+        {sort?.key === key && (sort.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+      </button>
+    </th>
+  );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col p-6">
-      {/* Geri YOK — sayfa başlığındaki ok bir adım geri alır (tek geri yüzeyi). */}
-      <div className="mb-3 flex items-center gap-3">
+    <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3">
+      {/* Geri YOK — sayfa başlığındaki ok bir adım geri alır (tek geri yüzeyi).
+          Arama + süzgeç listenin ÜST ŞERİDİDİR (aynı kartın içinde, eşit dikey boşluk) —
+          havada duran araç çubuğu değil (saha 2026-09-22). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+      <div className="flex items-center gap-3 border-b bg-muted/30 px-3 py-2">
         <div className="relative w-72">
           <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -178,12 +209,12 @@ function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void
       </div>
 
       {warning && (
-        <div className="mb-2 rounded-md border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-muted-foreground">
+        <div className="border-b border-warning/40 bg-warning/5 px-3 py-2 text-xs text-muted-foreground">
           {warning}
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {q.isLoading ? (
           <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Yükleniyor…
@@ -200,35 +231,45 @@ function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void
           </div>
         ) : (
           <>
-            <ul className="divide-y">
-              {rows.map((r) => (
-                <li key={r.customerId ?? "__none__"}>
-                  <button
-                    type="button"
+            {/* TABLO — satır tıklanınca cari seçilir; başlıklar istemci sıralaması (yüklenen sayfa). */}
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-background text-xs text-muted-foreground">
+                <tr className="border-b">
+                  {th("name", "Cari", "l")}
+                  {partiSutunu && th("openLotCount", "Açık parti", "r")}
+                  {th("sackCount", "Çuval", "r")}
+                  {th("rollCount", "Top", "r")}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map((r) => (
+                  <tr
+                    key={r.customerId ?? "__none__"}
+                    // Müşterisiz kova bir cari DEĞİL — parti listesindeki havuz satırıyla aynı tonlu zemin.
+                    className={cn(
+                      "cursor-pointer",
+                      r.customerId ? "hover:bg-accent/50" : "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-950/50",
+                    )}
                     onClick={() => onPick(r)}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm hover:bg-accent/50"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(r); } }}
                   >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <UserRound
-                        className={cn("h-4 w-4 shrink-0", r.customerId ? "text-muted-foreground" : "text-amber-600")}
-                      />
-                      <span className="truncate font-medium">{r.name}</span>
-                      {r.code && <span className="shrink-0 font-mono text-xs text-muted-foreground">{r.code}</span>}
-                    </span>
-                    {/* Çuvalsız cari SOLUK `0 çuval` — sayıyı gizlemek modu
-                        değiştiren düğmeyi "bozuk" gösterirdi; kıyaslama sebebi. */}
-                    <span
-                      className={cn(
-                        "shrink-0 text-xs",
-                        r.sackCount > 0 ? "text-muted-foreground" : "text-muted-foreground/50",
-                      )}
-                    >
-                      {r.sackCount} çuval
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                    <td className="px-4 py-2.5">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <UserRound className={cn("h-4 w-4 shrink-0", r.customerId ? "text-muted-foreground" : "text-amber-600")} />
+                        <span className="truncate font-medium">{r.name}</span>
+                        {r.code && <span className="shrink-0 font-mono text-xs text-muted-foreground">{r.code}</span>}
+                      </span>
+                    </td>
+                    {/* Sıfırlar SOLUK — sayıyı gizlemek modu değiştiren düğmeyi "bozuk" gösterirdi. */}
+                    {partiSutunu && <Sayi n={r.openLotCount ?? 0} />}
+                    <Sayi n={r.sackCount} />
+                    <Sayi n={r.rollCount ?? 0} />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             {q.hasNextPage && (
               <div className="p-3">
                 <Button
@@ -251,6 +292,7 @@ function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void
             )}
           </>
         )}
+      </div>
       </div>
     </div>
   );

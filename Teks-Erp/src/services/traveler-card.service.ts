@@ -35,7 +35,8 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
-import { isDailyCode, normalizeScanCode } from "../utils/code-format";
+import { normalizeScanCode } from "../utils/code-format";
+import { matchesSeries, resolveSeriesFormat } from "./number-series.service";
 // NOT: `readTravelerCardConfig` artık BURADAN çağrılmıyor — kart config'i
 // şablon çözümünden gelir (`travelerTemplateService.resolveForPrint`, şablon
 // yoksa o zaten sistem ayarına düşer). Tip hâlâ gerekli.
@@ -70,9 +71,13 @@ import { workOrderBoundOnly } from "./helpers/dispatch-header.helper";
 // varsayılan/createdAt isteği printedAt'e düşer (yeni basılan kart ilk gelsin).
 const TRAVELER_SORTABLE_FIELDS = ["printedAt", "cardNumber", "status", "version"] as const;
 
-/** Kart kodu kabulü — İE (yeni tek-kod) birincil, RK (eski kart) legacy toleransı. */
+/**
+ * Kart kodu kabulü — yürürlükteki ön ek birincil, EMEKLİ ön ekler legacy toleransı
+ * (bugün `IE` + `RK`). İki ön ek burada elle yazılmaz: seri emekli ön eklerini
+ * kendi taşır, yani ön ek bir daha değişirse bu satır ayrıca düzeltilmek zorunda kalmaz.
+ */
 function isCardCode(code: string): boolean {
-  return isDailyCode(code, "IE") || isDailyCode(code, "RK");
+  return matchesSeries(resolveSeriesFormat("workOrder"), code);
 }
 
 /**

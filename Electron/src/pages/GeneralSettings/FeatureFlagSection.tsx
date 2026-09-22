@@ -11,14 +11,16 @@ import { featureFlagService, type FeatureFlags } from "@/services/featureFlagSer
 import { systemSettingService } from "@/services/systemSettingService";
 import type {
   EnumFlagDef,
+  TextFlagDef,
   FlagDef,
   NumberFlagDef,
   NumberFlagKey,
   SettingFieldDef,
 } from "./settings-config";
-import { InfoPopover } from "./SettingHint";
+import { InfoPopover, Vurgu } from "./SettingHint";
 import { FlagToggle, ReadOnlyRow, SettingMeta } from "./SettingRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
+import { SettingsGroupCard } from "./SettingsGroupCard";
 import { useRegisterSettingsDirty } from "./settings-dirty";
 import { isSettingRowVisible, type SettingsSearchHit } from "./settings-groups";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
@@ -40,11 +42,13 @@ export function FeatureFlagSection({
   flags,
   numberFlags = [],
   enumFlags = [],
+  textFlags = [],
   settingFields = [],
   superadminOnly = false,
   moduleClosed = false,
   moduleLabel,
   searchHit,
+  searchQuery,
 }: {
   flags: FlagDef[];
   /** Sekmeye gömülü SAYISAL feature-flag alanları — toggle'larla AYNI taslak +
@@ -54,6 +58,7 @@ export function FeatureFlagSection({
    *  AYNI PATCH. Ayrı bir kaydetme yolu açmak "iki Kaydet, hangisi neyi yazdı"
    *  karışıklığıydı (üç yazma yolunun tek Kaydet altında toplanma gerekçesi). */
   enumFlags?: EnumFlagDef[];
+  textFlags?: TextFlagDef[];
   /** Ham system-setting sayısal alanları — aynı Kaydet, ayrı uç. */
   settingFields?: SettingFieldDef[];
   /** Kategori yalnız satıcı (süperadmin) hesabına YAZILIR — bkz.
@@ -76,6 +81,8 @@ export function FeatureFlagSection({
   moduleLabel?: string;
   /** Arama açıksa bu kategorinin eşleşme fotoğrafı; yoksa tüm satırlar çizilir. */
   searchHit?: SettingsSearchHit;
+  /** Arama metni — eşleşen kelimeler satırlarda vurgulanır. */
+  searchQuery?: string;
 }) {
   const qc = useQueryClient();
   const { hasPermission } = useRoleAccess();
@@ -212,6 +219,25 @@ export function FeatureFlagSection({
     const v = server?.[f.enumKey];
     return typeof v === "string" && f.options.some((o) => o.value === v) ? v : f.defaultValue;
   };
+  // SERBEST METİN taslağı (2026-09-22) — enum ile aynı kalıp, ayrı küme.
+  const serverTextFor = (f: TextFlagDef): string => {
+    const v = server?.[f.textKey];
+    return typeof v === "string" ? v : f.defaultValue;
+  };
+  const serverTextStr = JSON.stringify(textFlags.map((f) => serverTextFor(f)));
+  const [textDraft, setTextDraft] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const f of textFlags) next[f.textKey] = serverTextFor(f);
+    setTextDraft(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverTextStr]);
+  const textDirty = textFlags.some((f) => (textDraft[f.textKey] ?? serverTextFor(f)) !== serverTextFor(f));
+  // Sınırı aşan metin Kaydet'i kapatır (sunucu zod'u ikinci kapı).
+  const freeTextValid = textFlags.every((f) => {
+    const v = textDraft[f.textKey] ?? "";
+    return v.length <= f.maxLength && f.pattern.test(v);
+  });
   const serverEnumStr = JSON.stringify(enumFlags.map((f) => serverEnumFor(f)));
   const [enumDraft, setEnumDraft] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -248,7 +274,7 @@ export function FeatureFlagSection({
   const enumDirty = enumFlags.some(
     (f) => (enumDraft[f.enumKey] ?? serverEnumFor(f)) !== serverEnumFor(f),
   );
-  const dirty = flagsDirty || numbersDirty || numDirty || enumDirty || fieldDirty;
+  const dirty = flagsDirty || numbersDirty || numDirty || enumDirty || fieldDirty || textDirty;
   const numValid = numberFlags.every((f) => {
     const v = numDraft[f.key];
     return v === undefined || (Number.isFinite(v) && v >= f.min && v <= f.max);
@@ -285,6 +311,12 @@ export function FeatureFlagSection({
           (patch as Record<string, string>)[f.enumKey] = v;
         }
       }
+      for (const f of textFlags) {
+        const v = textDraft[f.textKey];
+        if (v !== undefined && v !== serverTextFor(f)) {
+          (patch as Record<string, string>)[f.textKey] = v;
+        }
+      }
       if (Object.keys(patch).length > 0) await featureFlagService.update(patch);
       for (const f of settingFields) {
         const v = fieldDraft[f.key];
@@ -316,6 +348,9 @@ export function FeatureFlagSection({
     const nextEnum: Record<string, string> = {};
     for (const f of enumFlags) nextEnum[f.enumKey] = serverEnumFor(f);
     setEnumDraft(nextEnum);
+    const nextText: Record<string, string> = {};
+    for (const f of textFlags) nextText[f.textKey] = serverTextFor(f);
+    setTextDraft(nextText);
     const nextField: Record<string, number> = {};
     for (const f of settingFields) nextField[f.key] = serverFieldFor(f);
     setFieldDraft(nextField);
@@ -331,14 +366,24 @@ export function FeatureFlagSection({
   const shownNumberFlags = numberFlags.filter((f) => isSettingRowVisible(searchHit, f.key));
   const shownEnumFlags = enumFlags.filter((f) => isSettingRowVisible(searchHit, f.enumKey));
   const shownSettingFields = settingFields.filter((f) => isSettingRowVisible(searchHit, f.key));
+  const shownTextFlags = textFlags.filter((f) => isSettingRowVisible(searchHit, f.textKey));
 
-  // Ardışık aynı `group` flag'leri tek bloğa topla (sıra korunur).
-  const groups: { name?: string; items: FlagDef[] }[] = [];
-  for (const f of shownFlags) {
-    const last = groups[groups.length - 1];
-    if (last && last.name === f.group) last.items.push(f);
-    else groups.push({ name: f.group, items: [f] });
-  }
+  // GRUPLAMA (2026-09-22): aç/kapa · seçim · sayı satırları TEK listede, `group` adına
+  // göre kümelenir (ilk görülme sırası); grupsuz satırlar "Genel" altında. Her grup
+  // katlanabilir bir kart — kullanıcı "bayraklar çok fazla" dedi.
+  type Row = { kind: "flag"; def: FlagDef } | { kind: "enum"; def: EnumFlagDef } | { kind: "text"; def: TextFlagDef } | { kind: "number"; def: NumberFlagDef } | { kind: "field"; def: SettingFieldDef };
+  const groups: { name: string; items: Row[] }[] = [];
+  const grubaKoy = (name: string | undefined, item: Row) => {
+    const ad = name ?? "Genel";
+    const g = groups.find((x) => x.name === ad);
+    if (g) g.items.push(item);
+    else groups.push({ name: ad, items: [item] });
+  };
+  for (const f of shownFlags) grubaKoy(f.group, { kind: "flag", def: f });
+  for (const f of shownEnumFlags) grubaKoy(f.group, { kind: "enum", def: f });
+  for (const f of shownTextFlags) grubaKoy(f.group, { kind: "text", def: f });
+  for (const f of shownNumberFlags) grubaKoy(undefined, { kind: "number", def: f });
+  for (const f of shownSettingFields) grubaKoy(undefined, { kind: "field", def: f });
 
   /** Salt-okunur satırın altına yazılacak SEBEP — bant ile aynı sırayla. */
   const readOnlyReason: string | undefined = lockedByModule
@@ -350,17 +395,19 @@ export function FeatureFlagSection({
   const renderRow = (flag: FlagDef) => {
     const checked = flagDraft[flag.key] ?? server?.[flag.key] ?? false;
     return (
-      <div key={flag.key} className="py-4 first:pt-0 last:pb-0">
+      <div key={flag.key} className="py-3 first:pt-0 last:pb-0">
         {canEdit ? (
           <FlagToggle
             title={flag.title}
             summary={flag.summary}
+            highlight={searchQuery}
             desc={flag.desc}
             defaultOn={flag.defaultOn}
             audience={flag.audience}
             checked={checked}
             disabled={mut.isPending}
             onChange={(v) => setFlagDraft((d) => ({ ...d, [flag.key]: v }))}
+            compact
           />
         ) : (
           <ReadOnlyRow
@@ -431,26 +478,31 @@ export function FeatureFlagSection({
     const defaultLabel =
       f.options.find((o) => o.value === f.defaultValue)?.label ?? f.defaultValue;
     return (
-      <div key={f.enumKey} className="space-y-1.5">
-        {/* ⚠️ UZUN AÇIKLAMA (i) BALONUNDA (2026-09-07). Aç/kapa satırları bunu
-            zaten yapıyordu (`SettingRow`, varsayılan `hint="popover"`); açılır
-            liste ve sayı satırları `desc`i DÜZ PARAGRAF basıyordu ve bu fark
-            eski enum bayraklarının açıklamaları kısa olduğu için göze
-            batmıyordu. Yeni bayrakların açıklaması uzun olunca ekran okunamaz
-            hâle geldi — kullanıcının sözü: "bu tasarım anlayışını neden
-            bozdun". Satırda yalnız TEK CÜMLELİK `summary` kalır. */}
-        <div className="flex items-center gap-1.5">
-          <p className="text-sm font-medium">{f.title}</p>
-          {f.desc ? <InfoPopover desc={f.desc} /> : null}
+      <div key={f.enumKey} className="flex items-center justify-between gap-4">
+        {/* Uzun açıklama + künye (i) balonunda (2026-09-07 / 2026-09-22): satırda yalnız
+            başlık + tek cümle; seçim sağda, iOS anahtarla aynı hizada. */}
+        <div className="min-w-0 space-y-0.5 text-sm">
+          <div className="flex items-center gap-1.5 font-medium">
+            <span><Vurgu text={f.title} query={searchQuery} /></span>
+            <InfoPopover
+              desc={
+                <div className="space-y-2">
+                  <SettingMeta defaultLabel={`Varsayılan: ${defaultLabel}`} audience={f.audience} />
+                  {f.desc ? <div>{f.desc}</div> : null}
+                  {selected?.hint ? <p className="text-xs"><span className="font-medium">Seçili:</span> {selected.hint}</p> : null}
+                </div>
+              }
+            />
+          </div>
+          <p className="text-xs text-muted-foreground"><Vurgu text={f.summary} query={searchQuery} /></p>
         </div>
-        <SettingMeta defaultLabel={`Varsayılan: ${defaultLabel}`} audience={f.audience} />
-        <p className="text-xs text-muted-foreground">{f.summary}</p>
         {canEdit ? (
           <select
             value={value}
             disabled={mut.isPending}
             onChange={(e) => setEnumDraft((d) => ({ ...d, [f.enumKey]: e.target.value }))}
-            className="h-9 w-full max-w-md rounded-md border bg-background px-2 text-sm"
+            className="h-9 w-56 shrink-0 rounded-md border bg-background px-2 text-sm"
+            aria-label={f.title}
           >
             {f.options.map((o) => (
               <option key={o.value} value={o.value}>
@@ -459,9 +511,48 @@ export function FeatureFlagSection({
             ))}
           </select>
         ) : (
-          <div className="text-sm font-semibold">{selected?.label ?? value}</div>
+          <div className="shrink-0 text-sm font-semibold">{selected?.label ?? value}</div>
         )}
-        {selected && <p className="text-xs text-muted-foreground">{selected.hint}</p>}
+      </div>
+    );
+  };
+
+  /** SERBEST METİN satırı — başlık + özet, sağda <input>; sınır aşılırsa uyarı ve Kaydet kapalı. */
+  const renderText = (f: TextFlagDef) => {
+    const value = textDraft[f.textKey] ?? serverTextFor(f);
+    const valid = value.length <= f.maxLength && f.pattern.test(value);
+    return (
+      <div key={f.textKey} className="flex items-center justify-between gap-4">
+        <div className="min-w-0 space-y-0.5 text-sm">
+          <div className="flex items-center gap-1.5 font-medium">
+            <span><Vurgu text={f.title} query={searchQuery} /></span>
+            <InfoPopover
+              desc={
+                <div className="space-y-2">
+                  <SettingMeta defaultLabel={`Varsayılan: ${f.defaultValue || "boş"}`} audience={f.audience} />
+                  <div>{f.desc}</div>
+                </div>
+              }
+            />
+          </div>
+          <p className="text-xs text-muted-foreground"><Vurgu text={f.summary} query={searchQuery} /></p>
+        </div>
+        {canEdit ? (
+          <div className="flex shrink-0 flex-col items-end gap-0.5">
+            <Input
+              value={value}
+              maxLength={f.maxLength}
+              placeholder={f.placeholder}
+              disabled={mut.isPending}
+              onChange={(e) => setTextDraft((d) => ({ ...d, [f.textKey]: e.target.value }))}
+              className="h-9 w-56 font-mono"
+              aria-label={f.title}
+            />
+            {!valid && <span className="text-[11px] text-destructive">{f.invalidHint}</span>}
+          </div>
+        ) : (
+          <div className="shrink-0 font-mono text-sm font-semibold">{value || "—"}</div>
+        )}
       </div>
     );
   };
@@ -472,17 +563,20 @@ export function FeatureFlagSection({
     serverValue: number,
     onChange: (n: number) => void,
   ) => (
-    <div key={f.key} className="space-y-1.5">
-      <div className="flex items-center gap-1.5">
-        <p className="text-sm font-medium">{f.title}</p>
-        {f.desc ? <InfoPopover desc={f.desc} /> : null}
+    <div key={f.key} className="flex items-center justify-between gap-4">
+      <div className="flex items-center gap-1.5 text-sm font-medium">
+        <span><Vurgu text={f.title} query={searchQuery} /></span>
+        <InfoPopover
+          desc={
+            <div className="space-y-2">
+              <SettingMeta defaultLabel={`Varsayılan: ${f.fallback}${f.unit ? ` ${f.unit}` : ""}`} audience={f.audience} />
+              {f.desc ? <div>{f.desc}</div> : null}
+            </div>
+          }
+        />
       </div>
-      <SettingMeta
-        defaultLabel={`Varsayılan: ${f.fallback}${f.unit ? ` ${f.unit}` : ""}`}
-        audience={f.audience}
-      />
       {canEdit ? (
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           <Input
             type="number"
             min={f.min}
@@ -498,7 +592,7 @@ export function FeatureFlagSection({
           {f.unit && <span className="text-xs text-muted-foreground">{f.unit}</span>}
         </div>
       ) : (
-        <div className="text-sm font-semibold">
+        <div className="shrink-0 text-sm font-semibold">
           {serverValue}
           {f.unit ? ` ${f.unit}` : ""}
         </div>
@@ -508,6 +602,7 @@ export function FeatureFlagSection({
 
   const nothingShown =
     shownFlags.length === 0 &&
+    shownTextFlags.length === 0 &&
     shownNumberFlags.length === 0 &&
     shownEnumFlags.length === 0 &&
     shownSettingFields.length === 0;
@@ -530,42 +625,30 @@ export function FeatureFlagSection({
         <p className="text-sm text-muted-foreground">Bu bölümde arama ile eşleşen ayar yok.</p>
       )}
 
-      <div className="space-y-6">
-        {groups.map((g, gi) => (
-          <div key={g.name ?? gi}>
-            {g.name && (
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {g.name}
-              </p>
+      <div className="space-y-3">
+        {groups.map((g) => (
+          <SettingsGroupCard
+            key={g.name}
+            name={g.name}
+            highlight={searchQuery}
+            count={g.items.length}
+            // Aramada eşleşen grup HEP açık; aramasız açılış durumu kartın kendi hafızasında.
+            forceOpen={!!searchHit}
+          >
+            {g.items.map((it) =>
+              it.kind === "flag"
+                ? renderRow(it.def)
+                : it.kind === "enum"
+                  ? <div key={it.def.enumKey} className="py-3 first:pt-0 last:pb-0">{renderEnum(it.def)}</div>
+                  : it.kind === "text"
+                    ? <div key={it.def.textKey} className="py-3 first:pt-0 last:pb-0">{renderText(it.def)}</div>
+                  : it.kind === "number"
+                    ? <div key={it.def.key} className="py-3 first:pt-0 last:pb-0">{renderNumber(it.def, numDraft[it.def.key] ?? serverNumFor(it.def), serverNumFor(it.def), (n) => setNumDraft((d) => ({ ...d, [it.def.key]: n })))}</div>
+                    : <div key={it.def.key} className="py-3 first:pt-0 last:pb-0">{renderNumber(it.def, fieldDraft[it.def.key] ?? serverFieldFor(it.def), serverFieldFor(it.def), (n) => setFieldDraft((d) => ({ ...d, [it.def.key]: n })))}</div>,
             )}
-            <div className="divide-y divide-border">{g.items.map(renderRow)}</div>
-          </div>
+          </SettingsGroupCard>
         ))}
       </div>
-
-      {shownNumberFlags.length > 0 && (
-        <div className="mt-6 space-y-5 border-t pt-5">
-          {shownNumberFlags.map((f) =>
-            renderNumber(f, numDraft[f.key] ?? serverNumFor(f), serverNumFor(f), (n) =>
-              setNumDraft((d) => ({ ...d, [f.key]: n })),
-            ),
-          )}
-        </div>
-      )}
-
-      {shownEnumFlags.length > 0 && (
-        <div className="mt-6 space-y-5 border-t pt-5">{shownEnumFlags.map(renderEnum)}</div>
-      )}
-
-      {shownSettingFields.length > 0 && (
-        <div className="mt-6 space-y-5 border-t pt-5">
-          {shownSettingFields.map((f) =>
-            renderNumber(f, fieldDraft[f.key] ?? serverFieldFor(f), serverFieldFor(f), (n) =>
-              setFieldDraft((d) => ({ ...d, [f.key]: n })),
-            ),
-          )}
-        </div>
-      )}
 
       {/* Arama tüm satırları gizlese bile KAYDEDİLMEMİŞ taslak varsa bar durur:
           aksi halde kullanıcı bir ayarı değiştirip arama yazınca Kaydet düğmesi
@@ -574,7 +657,7 @@ export function FeatureFlagSection({
         <SettingsSaveBar
           dirty={dirty}
           saving={mut.isPending}
-          canSave={numbersValid && numValid && fieldValid}
+          canSave={numbersValid && numValid && fieldValid && freeTextValid}
           onSave={() => mut.mutate()}
           onReset={reset}
           /* Kapı AÇIKSA kullanıcı bunu KAYDET'e basmadan bilmeli — yoksa

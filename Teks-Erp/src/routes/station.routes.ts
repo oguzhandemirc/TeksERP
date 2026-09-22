@@ -26,7 +26,7 @@ export const stationService = new StationService({
   duplicateNameField: "name",
   entityLabel: "istasyon",
   // Kod backend-authoritative: `IST+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
-  autoCode: { prefix: "IST" },
+  autoCode: { series: "station" },
 });
 
 const stationController = new BaseController(stationService);
@@ -45,7 +45,7 @@ export const machineService = new BaseService({
   duplicateNameScopeField: "stationId",
   entityLabel: "makine",
   // Kod backend-authoritative: `MAK+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
-  autoCode: { prefix: "MAK" },
+  autoCode: { series: "machine" },
 });
 
 const machineController = new BaseController(machineService);

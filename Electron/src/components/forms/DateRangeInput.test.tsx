@@ -1,5 +1,7 @@
 // BEKÇİ — DateRangeInput: iki takvim kutusu, bitiş < başlangıç → takas DEĞİL, amber + status; DateTimeInput değer
 // katmanı. Negatif sonda: `rangeInverted` hep false yapılınca "uyarı" ❌; `joinDateTime` tarihsizken "" dönmeyince ❌.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -59,5 +61,15 @@ describe("DateTimeInput + lib/date-time-input", () => {
     expect(time.value).toBe("08:30");
     fireEvent.change(time, { target: { value: "09:45" } }); // jsdom saat kutusuna harf harf yazımı sanitize eder
     expect(onChange).toHaveBeenLastCalledWith("2026-09-17T09:45");
+  });
+});
+
+describe("DatePickerInput — girdi kutudan taşmaz", () => {
+  it("⭐ <input> flex-1 + min-w-0 + w-0 taşır: içsel genişlik komşu düğmeleri görünmeden örtüyordu (saha 2026-09-22)", () => {
+    const src = readFileSync(join(__dirname, "DatePickerInput.tsx"), "utf-8");
+    const inputCls = src.match(/<input[\s\S]*?className="([^"]+)"/)?.[1] ?? "";
+    expect(inputCls).toMatch(/\bmin-w-0\b/);
+    expect(inputCls).toMatch(/\bw-0\b/);
+    expect(inputCls).toMatch(/\bflex-1\b/);
   });
 });

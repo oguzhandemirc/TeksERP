@@ -140,7 +140,11 @@ function main(): void {
   // 29 → 30 (2026-09-18, 1e onayı 16:58): `helpers/cash-ledger.helper.ts` — kasa/banka defterinin TEK YAZARI, tx İÇİNDE;
   // audit'i çağıran servis basar (payment.service · cash-transaction.service · cheque.service) — EBEVEYN_EYLEMDE kalıbı.
   // Model beyanı DEĞİL (CashTransaction zaten uç katmanında audit'li → §3 ölü beyan sayar), dosya düzeyi beyanlı sınıf ekleme.
-  const AUDITSIZ_YAZICI_TABAN = 30;
+  // 30 → 31 (2026-09-22): `helpers/sack-label-stale.helper.ts` — çuvalın carisi değişince
+  // etiketini bayatlatan TEK YAZAR (`ShippingService`ten ayrıldı, tx İÇİNDE çağrılır);
+  // audit'i çağıran eylem basar (sevk partisi havuza çıkarma · cari değiştirme) —
+  // EBEVEYN_EYLEMDE kalıbı, dosya düzeyinde. Model beyanı DEĞİL (Sack uç katmanında audit'li).
+  const AUDITSIZ_YAZICI_TABAN = 31;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

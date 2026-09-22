@@ -78,7 +78,7 @@ import {
 // söylerdi).
 import { describeContractPricing, loadContractPrices } from "./helpers/contract-price.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { applyDateRange, buildWhereClause } from "../utils/query-parser";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
@@ -307,12 +307,12 @@ export interface AssembledReceipt {
 
 async function nextReceiptNo(tx: Prisma.TransactionClient): Promise<string> {
   const now = new Date();
-  const prefix = dailyCodePrefix(RECEIPT_PREFIX, now);
+  const prefix = seriesCodePrefix("goodsReceipt", now);
   const rows = await tx.goodsReceipt.findMany({
     where: { receiptNo: { gte: prefix, startsWith: prefix } },
     select: { receiptNo: true },
   });
-  return buildDailyCode(RECEIPT_PREFIX, nextDailySeq(rows.map((r) => r.receiptNo), prefix), now);
+  return buildSeriesCode("goodsReceipt", seriesSeqFrom(rows.map((r) => r.receiptNo), prefix), now);
 }
 
 /**

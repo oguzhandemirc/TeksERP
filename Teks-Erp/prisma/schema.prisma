@@ -483,6 +483,7 @@ model User {
   shortClosedPurchaseOrders  PurchaseOrder[]          @relation("PurchaseOrderShortClosedBy")
   manualClosedOrders         Order[]                  @relation("OrderManualClosedBy")
   systemSettingsUpdates      SystemSetting[]
+  numberSeriesUpdates        NumberSeries[]
   preference                 UserPreference?
   receivedReturns            RollReturn[]             @relation("RollReturnReceivedBy")
   cancelledReturns           RollReturn[]             @relation("RollReturnCancelledBy")
@@ -5031,6 +5032,65 @@ model SystemSetting {
 }
 
 // =============================================================================
+// NUMBER SERIES — insan-okur numara/kod biçimi (2026-09-22)
+// =============================================================================
+// Ön ek ve tarih segmenti artık KOD DEĞİL VERİ: başka fabrika başka biçim ister ve
+// müşteri başına fork yasak. Üretim yolu değişmedi — sayaç hâlâ türetilir ("aynı ön ek
+// + tarih segmentiyle başlayan kodların sayısal max'ı + 1", `nextDailySeq`), yani
+// sıfırlama dönemi stringin İÇİNDE kodludur ve `dateSegment` tek knob'tur: ayrı sayaç
+// tablosu, ayrı advisory uzayı, "boşluk kalır mı" sorusu YOK.
+//
+// ⚠️ Numara DOĞUŞTA materyalize edilir; hiçbir sunum katmanı biçimi yeniden uygulamaz —
+// "programda P-2, çıktıda P20260202" ancak bu delinirse olur (kullanıcı değişmezi).
+// ⚠️ Biçim değişimi GEÇMİŞE DOKUNMAZ; eski ön ek `retiredPrefixes`e düşer ve okutulmaya
+// devam eder (donmuş belge + depodaki fiziksel etiket eski kodu taşıyor).
+// =============================================================================
+
+/// Kodun içindeki tarih parçası. Sayaç sıfırlama dönemini de BU belirler:
+/// DDMMYY → günlük · YYMM/YYYYMM → aylık · YY/YYYY → yıllık · NONE → hiç sıfırlanmaz.
+enum NumberSeriesDateSegment {
+  NONE
+  DDMMYY
+  YYMM
+  YYYYMM
+  YY
+  YYYY
+}
+
+model NumberSeries {
+  id     String @id @default(uuid()) @db.Uuid
+  /// Katalog anahtarı — "sack", "shipment", "packingLotCode"… (`number-series-catalog.ts`).
+  key    String @unique @db.VarChar(64)
+  /// Ekranda görünen ad ("Çuval numarası"); katalogdan gelir, panelde değişmez.
+  label  String @db.VarChar(80)
+  prefix String @db.VarChar(6)
+
+  dateSegment NumberSeriesDateSegment
+  /// Sıra hanesi; 1 = DOLGU YOK (günlük parti no emsali). Taşarsa genişler, SARMAZ.
+  digits      Int                     @default(4)
+  /// Ön ek ile tarih arasındaki ayraç ("" ya da "-"). Sayacın kuyruğu her zaman ayraçsızdır.
+  separator   String                  @default("") @db.VarChar(2)
+
+  /// Emekli ön ekler — eski etiket okutulunca hâlâ bu seriye çözülsün diye saklanır.
+  retiredPrefixes String[] @default([])
+
+  /// İstemci barkod sınıflandırmasına giriyor mu? Küresel ön ek tekilliği YALNIZ bu
+  /// kümede aranır (bugün `KS`, `IADE`, `P` farklı tablolarda zararsızca çakışıyor).
+  scanned  Boolean @default(false)
+  /// false = biçimi panelden değiştirilemez (fiziksel plakaya/çözümlenen yapıya bağlı).
+  editable Boolean @default(true)
+
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation(fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([updatedById])
+  @@map("number_series")
+}
+
+// =============================================================================
 // 8. REFAKAT KARTI (Traveler Card) — Adım 5
 // =============================================================================
 
@@ -6446,6 +6506,13 @@ model PackingGroup {
   /// numarayı belirsizce zıplatırdı).
   seq Int?
 
+  /// KALICI, KURULUM-GENELİ TEKİL PARTİ KODU — `PRT-YYMM-NNNN` (fabrika ayı + aylık
+  /// sayaç, advisory 8033). Doğumda üretilir, ad değişse de DEĞİŞMEZ; belgeye/aramaya
+  /// bu basılır (2026-09-22: `P-2` adı yalnız açık partiler arasında tekildi, sevk edilen
+  /// P-2 bitince yeni bir P-2 doğuyor ve belge zamanla iki partiyi gösteriyordu).
+  /// Devralınan satırlar migration'da `createdAt` sırasıyla kodlandı.
+  code String @unique @db.VarChar(16)
+
   /// Grup notu — `Sack.notes` ile AYNI SINIF (annotation): ne ölçüm ne içerik.
   /// Fabrika genelinde aranabilen tek ayırt edici alan budur; numara cariye özel
   /// olduğu için "P2'yi bul" araması anlamsızdır, not araması anlamlıdır.
@@ -6520,6 +6587,12 @@ model Shipment {
   /// NULL = beyan yok → belgede yalnız sistemin saydığı rakam çıkar.
   /// `shipping.manualSackCountEnabled` bayrağı kapalıyken alan hiç sorulmaz.
   manualSackCount Int? @db.SmallInt
+
+  /// Sevkiyat içi çuval sırası ÖN EKİ — sevkiyat KURULURKEN `shipping.sackSeqPrefix`ten
+  /// donar (2026-09-22): ekran ("SP3") ve belge aynı kaynağı okur; ayar sonradan değişse
+  /// de bu sevkiyat aynı kalır (`shipping.sackSeqPrefixLive` açıksa canlı ayar ezer).
+  /// NULL = ön ek doğmadan önce kurulan sevkiyat (öneksiz).
+  sackSeqPrefix String? @db.VarChar(8)
 
   // Araç / sürücü (dispatch'te girilir)
   plateNumber String? @db.VarChar(32)

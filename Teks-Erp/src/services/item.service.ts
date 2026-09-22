@@ -23,7 +23,7 @@ import {
   normalizeItemName,
   foldNameForCompare,
 } from "./helpers/name-normalize.helper";
-import { nextDailySeq } from "../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import {
@@ -116,15 +116,17 @@ function resolveReactivateTarget(
 }
 
 async function nextItemCode(): Promise<string> {
+  // Tarihsiz seri (`dateSegment: NONE`) — sayaç HİÇ sıfırlanmaz, kapsam ön ekin kendisi.
+  const prefix = seriesCodePrefix("item");
   const rows = await prisma.item.findMany({
-    where: { code: { gte: ITEM_CODE_PREFIX, startsWith: ITEM_CODE_PREFIX } },
+    where: { code: { gte: prefix, startsWith: prefix } },
     select: { code: true },
   });
-  const seq = nextDailySeq(
+  const seq = seriesSeqFrom(
     rows.map((r) => r.code).filter((c) => ITEM_CODE_SCAN_RE.test(c)),
-    ITEM_CODE_PREFIX,
+    prefix,
   );
-  return `${ITEM_CODE_PREFIX}${String(seq).padStart(ITEM_CODE_DIGITS, "0")}`;
+  return buildSeriesCode("item", seq);
 }
 
 /** E4: `warpSpecId` yalnız KUMAŞ kartında ve aktif bir çözgü kartını göstermeli (400); `null` temizler, `undefined` dokunmaz. */

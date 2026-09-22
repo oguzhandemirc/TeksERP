@@ -27,7 +27,8 @@ import {
 import { PaginatedResponse, ApiResponse, QueryParams } from "../types/api.types";
 import { Request } from "express";
 import { foldNameForCompare, normalizeDisplayName } from "./helpers/name-normalize.helper";
-import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
+import { foldCodeForCompare } from "../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 
 import { diffFields } from "./helpers/audit-diff.helper";
@@ -290,12 +291,14 @@ export interface BaseServiceConfig {
    * mevcut kaydın koduyla zenginleştirir, o yüzden birlikte set edilebilir.
    */
   autoCode?: {
-    /** Kod öneki, örn. "RNK". Ardına GGAAYY (gün-ay-yıl) + sıra eklenir. */
-    prefix: string;
+    /**
+     * Numara serisi ANAHTARI (`number-series-catalog`), örn. "color" → varsayılan
+     * `RNK`+GGAAYY+NNNN. Ön ek/tarih/hane artık burada değil serinin kendisinde:
+     * başka fabrika başka biçim ister ve müşteri başına fork yasak.
+     */
+    series: string;
     /** Kodun yazılacağı kolon (default "code"). */
     field?: string;
-    /** Günlük sıra hane sayısı (default 4 → 9999/gün). */
-    digits?: number;
   };
   /**
    * Ad-mükerrer koruması: verilirse create/update bu kolonda Türkçe-duyarsız
@@ -974,17 +977,16 @@ export class BaseService {
     const cfg = this.config.autoCode;
     if (!cfg) throw new Error("nextAutoCode çağrıldı ama autoCode config'i yok");
     const field = cfg.field ?? "code";
-    const digits = cfg.digits ?? 4;
-    const fullPrefix = dailyCodePrefix(cfg.prefix);
+    const fullPrefix = seriesCodePrefix(cfg.series);
     const rows = (await this.delegate.findMany({
       where: { [field]: { gte: fullPrefix, startsWith: fullPrefix } },
       select: { [field]: true },
     })) as Record<string, unknown>[];
-    const seq = nextDailySeq(
+    const seq = seriesSeqFrom(
       rows.map((r) => r[field] as string | null | undefined),
       fullPrefix,
     );
-    return `${fullPrefix}${String(seq).padStart(digits, "0")}`;
+    return buildSeriesCode(cfg.series, seq);
   }
 
   /**

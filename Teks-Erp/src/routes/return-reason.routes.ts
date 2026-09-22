@@ -21,7 +21,7 @@ export const returnReasonService = new BaseService({
   duplicateNameField: "name",
   entityLabel: "iade nedeni",
   // Kod backend-authoritative: `IADE+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
-  autoCode: { prefix: "IADE" },
+  autoCode: { series: "returnReason" },
 });
 
 const controller = new BaseController(returnReasonService);

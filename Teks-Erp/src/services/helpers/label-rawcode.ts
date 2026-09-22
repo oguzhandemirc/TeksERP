@@ -129,7 +129,7 @@ export function mockPayload(kind: LabelKind, qualityCode: string | null = ""): L
       branchName: "Merkez Şube",
       sackNote: "Ölçü şüpheli — müşteri kontrol etsin",
       packageNo: 7,
-      packingGroupName: "SP-3",
+      packingGroupName: "P-3",
       // Çuvalda ürün/renk YOK (karışık içerik) — önizleme de bunu yansıtsın.
       itemCode: "", itemName: "", itemNameDefault: "",
       colorCode: null, colorName: null, colorNameDefault: null, colorNameSource: null,

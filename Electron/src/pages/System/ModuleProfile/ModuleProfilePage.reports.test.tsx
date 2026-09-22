@@ -53,7 +53,10 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 import { ReportVisibilitySection, isReportModuleClosed } from "./ReportVisibilitySection";
 
 const rowOf = (key: string) => screen.getByTestId(`rapor-satir:${key}`);
-const checkboxOf = (key: string) => rowOf(key).querySelector<HTMLInputElement>("input[type=checkbox]")!;
+// Anahtar artık iOS tarzı `Switch` (paketsiz `role="switch"` button, `aria-checked`) —
+// `input[type=checkbox]` sorgusu 2026-09-22'de kırıldı; işaretlilik `aria-checked`ten okunur.
+const checkboxOf = (key: string) => rowOf(key).querySelector<HTMLButtonElement>('[role="switch"]')!;
+const isChecked = (key: string) => checkboxOf(key).getAttribute("aria-checked") === "true";
 
 describe("Modüller → Raporlar bölümü", () => {
   beforeEach(() => {
@@ -118,8 +121,8 @@ describe("Modüller → Raporlar bölümü", () => {
   it("§4 ⭐ toggle TEK listeye yazar: kapat → anahtar sıralı kümeye girer; aç → çıkar; null gönderilmez", async () => {
     flagsData = { reportsClosedKeys: ["sales/order-leadtime"] };
     renderWithProviders(<ReportVisibilitySection canWrite />);
-    expect(checkboxOf("sales/order-leadtime")).not.toBeChecked();
-    expect(checkboxOf("sales/order-intake")).toBeChecked();
+    expect(isChecked("sales/order-leadtime")).toBe(false);
+    expect(isChecked("sales/order-intake")).toBe(true);
     fireEvent.click(checkboxOf("sales/order-intake"));
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     expect(update).toHaveBeenLastCalledWith({ reportsClosedKeys: ["sales/order-intake", "sales/order-leadtime"] });

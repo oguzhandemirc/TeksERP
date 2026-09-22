@@ -72,7 +72,7 @@ export const ROUTE_SERVICE_CONFIG: BaseServiceConfig = {
   duplicateNameField: "name",
   entityLabel: "rota",
   // Kod backend-authoritative: `ROT+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
-  autoCode: { prefix: "ROT" },
+  autoCode: { series: "routeTemplate" },
 };
 
 interface IncomingStep {

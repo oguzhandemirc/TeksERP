@@ -43,6 +43,7 @@ import {
   resolveSettingsModuleState,
   resolveSettingsRegime,
   searchSettings,
+  highlightParts,
   settingsCategoryVisibleWhen,
   settingsHitCount,
   settingsModuleLabel,
@@ -353,6 +354,26 @@ describe("⭐ aktif sekme çözümü — arama gezindirmez", () => {
     expect(resolveActiveSettingsCategory(SETTINGS_CATEGORIES, null)).toBe(ids[0]);
     expect(resolveActiveSettingsCategory(SETTINGS_CATEGORIES, "yok-boyle-sekme")).toBe(ids[0]);
     expect(resolveActiveSettingsCategory([], "customers")).toBeUndefined();
+  });
+
+  it("⭐ arama KELİME bazlı ve sırasız: 'ambalaj partisiz' ile 'partisiz ambalaj' aynı satırı bulur; anahtar adı da aranır", () => {
+    const anahtar = (q: string) =>
+      (searchSettings(SETTINGS_CATEGORIES, q) ?? []).flatMap((h) => h.enumFlagKeys);
+    expect(anahtar("ambalaj partisiz")).toContain("packingPoolPackageNo");
+    expect(anahtar("partisiz ambalaj")).toContain("packingPoolPackageNo");
+    // Kelimelerden biri hiçbir satırda yoksa eşleşme YOK (AND).
+    expect(anahtar("partisiz zzzyok")).toEqual([]);
+    // Anahtar adı (kod) ile de bulunur — geliştirici/destek "packingPoolPackageNo" yazar.
+    expect(anahtar("packingPoolPackageNo")).toContain("packingPoolPackageNo");
+  });
+
+  it("⭐ vurgu: eşleşen kelimeler işaretlenir, Türkçe katlama indeksleri kaydırmaz, sorgu boşsa düz", () => {
+    expect(highlightParts("Sevk partisi zorunlu", "PARTİ")).toEqual([
+      { text: "Sevk ", hit: false }, { text: "parti", hit: true }, { text: "si zorunlu", hit: false },
+    ]);
+    // İki kelime, ikisi de işaretlenir; İ/ı katlaması orijinal harfleri korur.
+    expect(highlightParts("İrsaliye ve çeki listesi", "irsaliye çeki").filter((p) => p.hit).map((p) => p.text)).toEqual(["İrsaliye", "çeki"]);
+    expect(highlightParts("Ambalaj", "")).toEqual([{ text: "Ambalaj", hit: false }]);
   });
 
   it("arama aktif sekmeyi DEĞİŞTİRMEZ (taslak kaybı yok)", () => {

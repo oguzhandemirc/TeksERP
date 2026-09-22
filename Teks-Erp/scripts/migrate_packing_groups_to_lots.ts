@@ -5,10 +5,14 @@
 //         npx tsx scripts/migrate_packing_groups_to_lots.ts --apply --canli-onay
 //
 // NE YAPAR (docs/design/SEVK-PARTISI-TASARIM.md §7):
-//   (a) Grup modunda "ölü" (havuzda çuvalı kalmamış) grupları CLOSED'a çeker — parti
-//       modunda canlılık `status`tan okunur; bu satırlar aksi hâlde AÇIK parti
-//       olarak listeye dolar ve sayaç onları sayar (numara zaten sayılıyordu).
+//   (a) Grup modunda "ölü" (havuzda çuvalı kalmamış, en az bir çuvalı olmuş) grupları
+//       CLOSED'a ("sevk edildi") çeker — parti modunda canlılık `status`tan okunur; bu
+//       satırlar aksi hâlde AÇIK parti olarak listeye dolar. BOŞ (hiç çuvalsız) grup
+//       dokunulmaz: o bir taslaktır, açık kalır ya da silinir.
 //   (b) Canlı gruplar OPEN kalır (şema varsayılanı) — DOKUNULMAZ.
+//   (b2) TERS TUTARSIZLIK: CLOSED ama havuzda çuvalı var (2026-09-22 öncesi elle kapatma
+//       ucundan kalan satırlar) → OPEN. Parti modunda CLOSED = "sevk edildi"dir; sevk
+//       edilmemiş çuvalı olan parti kapalı olamaz (bekçi: `test_sevk_partisi` §13).
 //   (c) Çuvallara ambalaj numarası VERMEZ (sessiz backfill yok): grup modunda
 //       çuval numarasızdı; operatör partiyi açıp "Partiye Al" ile numaralar.
 //   (d) Etkilenen HER grubu adıyla raporlar — kuru koşumda da, `--apply` sonrasında da.
@@ -38,25 +42,36 @@ if (APPLY && fixtureDisi && !CANLI_ONAY) {
 }
 
 async function main(): Promise<void> {
-  // Ölü grup = OPEN ama havuzda çuvalı yok (türetilmiş canlılığın tersi).
+  const sel = { id: true, name: true, customer: { select: { name: true } }, _count: { select: { sacks: true } } } as const;
+  // Ölü grup = OPEN, havuzda çuvalı yok, ama en az bir çuvalı OLMUŞ (hepsi sevk edildi).
   const olu = await prisma.packingGroup.findMany({
-    where: { status: "OPEN", NOT: LIVE_GROUP_WHERE },
-    select: { id: true, name: true, customer: { select: { name: true } }, _count: { select: { sacks: true } } },
+    where: { status: "OPEN", NOT: LIVE_GROUP_WHERE, sacks: { some: {} } },
+    select: sel,
     orderBy: { createdAt: "asc" },
   });
-  console.log(`\n${APPLY ? "UYGULANIYOR" : "KURU KOŞUM"} — CLOSED'a çekilecek ölü grup: ${olu.length}`);
-  for (const g of olu) {
-    console.log(`  · ${g.customer.name} / ${g.name} (${g._count.sacks} çuval, hepsi sevk edilmiş ya da boş)`);
-  }
+  // Ters tutarsızlık = CLOSED ama havuzda çuvalı var.
+  const ters = await prisma.packingGroup.findMany({
+    where: { status: "CLOSED", ...LIVE_GROUP_WHERE },
+    select: sel,
+    orderBy: { createdAt: "asc" },
+  });
+  console.log(`\n${APPLY ? "UYGULANIYOR" : "KURU KOŞUM"} — CLOSED'a çekilecek (hepsi sevk edilmiş) grup: ${olu.length}`);
+  for (const g of olu) console.log(`  · ${g.customer.name} / ${g.name} (${g._count.sacks} çuval, hepsi sevk edilmiş)`);
+  console.log(`OPEN'a çekilecek (kapalı ama havuzda çuvalı var) parti: ${ters.length}`);
+  for (const g of ters) console.log(`  · ${g.customer.name} / ${g.name} (${g._count.sacks} çuval)`);
   if (!APPLY) {
     console.log(`\nDeğişiklik YAZILMADI. Uygulamak için: --apply${fixtureDisi ? " --canli-onay" : ""}`);
     return;
   }
-  const res = await prisma.packingGroup.updateMany({
+  const r1 = await prisma.packingGroup.updateMany({
     where: { id: { in: olu.map((g) => g.id) }, status: "OPEN" },
     data: { status: "CLOSED", closedAt: new Date() },
   });
-  console.log(`\n✅ ${res.count} grup CLOSED'a çekildi (rapor yukarıda).`);
+  const r2 = await prisma.packingGroup.updateMany({
+    where: { id: { in: ters.map((g) => g.id) }, status: "CLOSED" },
+    data: { status: "OPEN" },
+  });
+  console.log(`\n✅ ${r1.count} grup CLOSED'a, ${r2.count} parti OPEN'a çekildi (rapor yukarıda).`);
 }
 
 main()

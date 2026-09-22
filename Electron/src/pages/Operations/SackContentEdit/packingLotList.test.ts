@@ -36,3 +36,12 @@ describe("parti listesi", () => {
     expect(nextLotSort(DEFAULT_LOT_SORT, "totalQty")).toEqual({ key: "totalQty", dir: "desc" });
   });
 });
+
+describe("parti kodu", () => {
+  it("§9 arama koda da vurur (tam ve kısmi); kod sıralanır", () => {
+    const rows = [lot({ name: "P-1", code: "PRT-2609-0002" }), lot({ name: "P-2", code: "PRT-2609-0010" })];
+    expect(filterLots(rows, { query: "0010", status: "ALL" }).map((r) => r.name)).toEqual(["P-2"]);
+    expect(filterLots(rows, { query: "prt-2609-0002", status: "ALL" }).map((r) => r.name)).toEqual(["P-1"]);
+    expect(sortLots(rows, { key: "code", dir: "desc" }).map((r) => r.code)).toEqual(["PRT-2609-0010", "PRT-2609-0002"]);
+  });
+});

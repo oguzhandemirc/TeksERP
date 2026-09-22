@@ -188,6 +188,8 @@ export interface ShipmentDetailSack {
   id: string;
   sackNo: number | string;
   seq: number;
+  /** Sıra etiketi ("SP3", "P-3/100") — sevkiyatta donan ön ekle; ön ek yoksa null (ekran "Çuval #n" basar). */
+  seqLabel?: string | null;
   weightKg: number | null;
   /** BRÜT: hâlâ çuvalda olanlar + bu çuvaldan iade alınanlar (sonda, `returned` dolu). */
   rolls: ShipmentDetailRoll[];

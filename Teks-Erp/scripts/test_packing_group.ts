@@ -22,6 +22,9 @@
 //      kümesi VE görünür liste tek yüklemden (`sacksInSelection`) süzülür; bayrak kapalı ya da seçim
 //      yokken yüklem girdiyi AYNEN döndürür (bayt bayt eski); bayrak varsayılanı false; grup ucu
 //      yalnız bayrak açıkken çağrılır; jest ikizi var (CAKILI-VARSAYIM-TARAMA §4 kardeşi kapandı)
+//  §17 PARTİ SATIRI "çuvalları havuza çıkar" (DB'siz, kaynak metni): kapsam SUNUCUDA
+//      (`packingGroupId`), çuval başına atomik claim, genel havuzda cari+şube düşer ve etiket
+//      bayatlaması claim'in tx'inde, parti SİLİNMEZ, gövde şeması katı (yalnız `target`)
 // =============================================================================
 
 // ⭐ NEGATİF SONDA (2026-09-10, ölçüldü):
@@ -38,6 +41,8 @@
 //   (h) `assertReplayPayloadMatches` çağrısı silindi -> §15 KIRMIZI.
 //   (i) 2026-09-15: tablette `shippableSacks` yeniden `sacks.filter(...)` yapıldı -> §16b KIRMIZI;
 //       `sacksInSelection`ın `!enabled` kısa devresi silindi -> §16c KIRMIZI.
+//   (j) 2026-09-22: `releaseAll` claim WHERE'inden `shipmentId: null` silindi -> §17b KIRMIZI;
+//       `markSackLabelsStaleOnCustomerChangeTx` çağrısı silindi -> §17c KIRMIZI.
 //   Hepsi geri alındığında yeşil.
 
 import { readFileSync } from "node:fs";
@@ -159,6 +164,24 @@ async function main(): Promise<void> {
   check("§16d `usePackingGroupsEnabled` varsayılanı false (fail-closed)", /packingGroupsEnabled \?\? false/.test(flags));
   check("§16e grup ucu yalnız bayrak açıkken çağrılır (`enabled: packingGroupsEnabled`)", /listPackingGroups\(customerId\),\s*enabled: packingGroupsEnabled/.test(ekran));
   check("§16f jest ikizi var", readFileSync(join(MOBIL, "screens/Modules/TartiPaket/packingGroupSelection.test.ts"), "utf-8").includes("sacksInSelection"));
+
+  // ---- §17: parti satırı "çuvalları havuza çıkar" (DB'siz, kaynak metni) ------
+  // Kapsam SUNUCUDA (`packingGroupId`, §14 kardeşi) · çuval başına atomik claim
+  // (`shipmentId: null`) · genel havuzda etiket bayatlaması claim ile AYNI tx'te.
+  const lotSvc = readFileSync(join(__dirname, "../src/services/packing-lot.service.ts"), "utf-8");
+  const rel = lotSvc.slice(lotSvc.indexOf("async releaseAll("), lotSvc.indexOf("async setPackageNo("));
+  check("§17a releaseAll var", rel.length > 0);
+  check("§17a kapsam sunucuda: `packingGroupId: groupId, shipmentId: null` — gövdede sackIds YOK",
+    /where: \{ packingGroupId: groupId, shipmentId: null \}/.test(rel) && !/sackIds/.test(rel));
+  check("§17b çuval başına atomik claim (`updateMany WHERE {id, shipmentId: null}`)",
+    /tx\.sack\.updateMany\(\{\s*where: \{ id: sk\.id, shipmentId: null \}/.test(rel) && /claimed\.count !== 1/.test(rel));
+  check("§17c genel havuz: cari ve şube düşer, etiket bayatlaması claim'in tx'inde",
+    /target === "GENERAL" \? \{ customerId: null, branchId: null \}/.test(rel)
+      && /markSackLabelsStaleOnCustomerChangeTx\(tx, sk\.id, sk\.customerId, null\)/.test(rel));
+  check("§17d parti SİLİNMEZ (releaseAll packingGroup.delete çağırmaz)", !/packingGroup\.delete/.test(rel));
+  const ctrl = readFileSync(join(__dirname, "../src/controllers/shipping.controller.ts"), "utf-8");
+  check("§17e gövde şeması katı: yalnız `target` (CUSTOMER|GENERAL), varsayılan carinin havuzu",
+    /target: z\.enum\(\["CUSTOMER", "GENERAL"\]\)\.default\("CUSTOMER"\),\s*\}\)\.strict\(\)/.test(ctrl));
 
   const c1 = await prisma.customer.create({
     data: { code: `TST-PG-${TS}`, name: `PAKETLEME GRUBU TEST ${TS}` }, select: { id: true },

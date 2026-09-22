@@ -279,6 +279,7 @@ export function SettingsSurfacePage({
                     flags={rows.flags}
                     numberFlags={rows.numberFlags}
                     enumFlags={rows.enumFlags}
+                    textFlags={rows.textFlags}
                     settingFields={rows.settingFields}
                     superadminOnly={cat.superadminOnly}
                     moduleClosed={isCategoryModuleClosed(cat, modules)}
@@ -289,6 +290,7 @@ export function SettingsSurfacePage({
                     searchHit={
                       hits ? (hitByCategory.get(cat.id) ?? emptySettingsHit(cat.id)) : undefined
                     }
+                    searchQuery={query}
                   />
                 )}
                 {cat.kind === "device" && <DevicePairingSection />}

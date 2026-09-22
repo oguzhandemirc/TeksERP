@@ -202,7 +202,7 @@ export function ShipmentsPage() {
         fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
-        placeholder="Sevkiyat no, firma, plaka, sürücü ara..."
+        placeholder="Sevkiyat no, firma, parti kodu / adı, çuval no ara…"
         table={table}
         exportName="Sevkiyatlar"
         actions={

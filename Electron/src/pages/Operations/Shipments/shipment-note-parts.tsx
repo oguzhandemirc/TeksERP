@@ -19,6 +19,8 @@ export interface ShipmentDocLine {
 }
 export interface ShipmentDocSack {
   seq: number;
+  /** Sıra etiketi (sevkiyatta donan ön ek) — yoksa "Çuval #n". */
+  seqLabel?: string | null;
   sackNo: string | null;
   weightKg: number | null;
   /** Sevk partisi (2026-09-21) — eski backend göndermez, partisiz çuvalda null. */
@@ -141,7 +143,7 @@ export function SackBreakdown({ sacks, totalKg }: { sacks: ShipmentDocSack[]; to
           <div key={s.seq} className="border border-gray-300">
             <div className="flex items-center justify-between border-b border-gray-300 bg-gray-50 px-2 py-1 text-[11px] font-semibold">
               <span>
-                Çuval #{s.seq}
+                {s.seqLabel ?? `Çuval #${s.seq}`}
                 {s.sackNo ? ` · ${s.sackNo}` : ""}
                 {s.packageNo != null ? ` · Ambalaj No ${s.packageNo}` : ""}
                 {s.packingGroupName ? ` · ${s.packingGroupName}` : ""}

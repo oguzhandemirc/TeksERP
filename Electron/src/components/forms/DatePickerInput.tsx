@@ -134,7 +134,10 @@ export function DatePickerInput({
         onBlur={handleBlur}
         onChange={handleChange}
         maxLength={10}
-        className="h-full flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+        // ⚠️ `min-w-0 w-0` ŞART: <input>'ın içsel genişliği (~20 karakter) flex öğesinin
+        // min-content'i sayılır ve 140px'lik kutudan GÖRÜNMEDEN taşar — komşu "Son 7g"
+        // düğmesine tıklama girdiye düşüyordu (saha 2026-09-22).
+        className="h-full w-0 min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
       />
 
       {!disabled && displayValue && (

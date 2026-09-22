@@ -20,6 +20,9 @@ import type { PackingGroup, SackSearchRow } from "./types";
 
 const MAX_NOTE = 500;
 
+/** Diyaloğun baktığı alanlar — liste satırı da, tek çuval editörü de bunu kurabilir. */
+export type AssignableSack = Pick<SackSearchRow, "id" | "customer">;
+
 /**
  * "Parti Ata" — seçili çuvalları bir paketleme grubuna bağlar.
  *
@@ -37,7 +40,7 @@ const MAX_NOTE = 500;
  * Diyaloğun durumu ve mutasyonu — ana bileşen 80 satır sınırının altında kalsın
  * diye ayrıldı (lint tavanı). Kural gövdesi burada, çizim orada.
  */
-function useAssignGroup(sacks: SackSearchRow[] | null, onOpenChange: (o: boolean) => void, onDone: () => void) {
+function useAssignGroup(sacks: AssignableSack[] | null, onOpenChange: (o: boolean) => void, onDone: () => void) {
   const qc = useQueryClient();
   const open = !!sacks && sacks.length > 0;
   const rows = useMemo(() => sacks ?? [], [sacks]);
@@ -107,7 +110,7 @@ export function AssignPackingGroupDialog({
   lot = false,
 }: {
   /** null = kapalı. Seçili DEPO çuvalları. */
-  sacks: SackSearchRow[] | null;
+  sacks: AssignableSack[] | null;
   onOpenChange: (open: boolean) => void;
   onDone: () => void;
   /** Sevk partisi modu: "Partiye Al / Transfer" — hedefte yeni ambalaj no, kaynakta boşluk. */

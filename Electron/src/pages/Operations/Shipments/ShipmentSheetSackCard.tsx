@@ -38,7 +38,7 @@ export function ShipmentSheetSackCard({
           <ChevronDown
             className={cn("h-3.5 w-3.5 shrink-0 transition-transform", isOpen ? "rotate-0" : "-rotate-90")}
           />
-          Çuval #{sack.seq}
+          {sack.seqLabel ?? `Çuval #${sack.seq}`}
           <span className="font-mono font-normal text-muted-foreground">· {sack.sackNo}</span>
         </span>
         <span className="shrink-0 tabular-nums text-[11px] font-normal text-muted-foreground">

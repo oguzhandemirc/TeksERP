@@ -75,7 +75,7 @@ async function main() {
   const shP = await mkShipment("P", "PLANNED");
   await prisma.shipmentOrder.create({ data: { shipmentId: shA.id, orderId: order.id, isActive: true } });
 
-  const lot = await prisma.packingGroup.create({ data: { customerId: customer.id, name: `TEST-RSC-LOT-${ts}`, status: "CLOSED" }, select: { id: true } });
+  const lot = await prisma.packingGroup.create({ data: { customerId: customer.id, code: `PRT-TST-R${ts}`.slice(0, 16), name: `TEST-RSC-LOT-${ts}`, status: "CLOSED" }, select: { id: true } });
   const mkSack = (suffix: string, shipmentId: string | null, seq: number | null, packageNo: number | null) =>
     prisma.sack.create({
       data: { sackNo: `TEST-RSC-SK-${suffix}-${ts}`, customerId: customer.id, shipmentId, seq, packingGroupId: lot.id, packageNo },

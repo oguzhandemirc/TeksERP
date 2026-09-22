@@ -58,7 +58,8 @@ function dump(over: Partial<SackDump> = {}): SackDump {
 describe("§1 şerit ön koşulu", () => {
   it("bayrak VE tek cari birlikte aranır", () => {
     // 2026-09-21: şerit moda göre dallanır (grup ↔ sevk partisi) — bayrak kapısı aynı.
-    expect(list).toMatch(/groupsEnabled &&\s*\(lotMode\s*\?[\s\S]*?: <PackingGroupBar customerId=\{tekCariId\} \/>\)/);
+    // 2026-09-22: parti modunda şerit YOK (rozet başlıkta, eylemler alt şeritte); grup modunda çip şeridi — bayrak kapısı aynı.
+    expect(list).toMatch(/groupsEnabled && !lotMode && <PackingGroupBar customerId=\{tekCariId\} \/>/);
     expect(list).toContain("usePackingGroupsEnabled()");
     // Tek cari kuralı: CSV bölünür ve müşterisiz sentineli DIŞLANIR.
     expect(list).toContain("cariFiltresi.length === 1");

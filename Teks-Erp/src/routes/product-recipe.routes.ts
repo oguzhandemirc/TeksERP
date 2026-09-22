@@ -31,7 +31,7 @@ export const productRecipeService = new ProductRecipeService({
   },
   uniqueField: "code",
   // Kod backend-authoritative: `REC+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
-  autoCode: { prefix: "REC" },
+  autoCode: { series: "productRecipe" },
 });
 
 const controller = new BaseController(productRecipeService);

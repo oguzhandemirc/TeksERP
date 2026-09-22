@@ -234,7 +234,7 @@ export function ReturnsModal({
                       <td className="text-left">
                         {sack ? (
                           <span>
-                            Çuval #{sack.seq}{" "}
+                            {sack.seqLabel ?? `Çuval #${sack.seq}`}{" "}
                             <span className="font-mono text-[11px] text-muted-foreground">{sack.sackNo}</span>
                           </span>
                         ) : (

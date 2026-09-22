@@ -690,6 +690,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // yeni geçiş yolu) satırın kendisi direnir. COLLECTED bilinçli DIŞARIDA:
   // tahsil edilmiş çeke kapama meşrudur.
   { table: "cheques", name: "cheques_terminal_not_allocated" },
+  // 2026-09-22 — numara serisi (20260922140000_number_series). Hane sayısı 1..8:
+  // 1 = dolgusuz (günlük parti no emsali), 8 = VarChar(64) kolonların pratik tavanı.
+  // Sıfır hane sayacı görünmez kılar, 9+ hane kodu okunmaz uzunluğa taşır.
+  { table: "number_series", name: "number_series_digits_range" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

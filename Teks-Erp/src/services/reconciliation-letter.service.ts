@@ -56,7 +56,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { D } from "./helpers/finance.helper";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
 import {
@@ -84,12 +84,12 @@ const DOC_PREFIX = "MBT";
  * yazmak olurdu.
  */
 async function nextLetterNo(tx: Prisma.TransactionClient, date: Date): Promise<string> {
-  const full = dailyCodePrefix(DOC_PREFIX, date);
+  const full = seriesCodePrefix("reconciliationLetter", date);
   const rows = await tx.reconciliationLetter.findMany({
     where: { docNo: { gte: full, startsWith: full } },
     select: { docNo: true },
   });
-  return buildDailyCode(DOC_PREFIX, nextDailySeq(rows.map((r) => r.docNo), full), date);
+  return buildSeriesCode("reconciliationLetter", seriesSeqFrom(rows.map((r) => r.docNo), full), date);
 }
 
 /**

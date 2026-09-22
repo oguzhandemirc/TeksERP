@@ -34,6 +34,7 @@ import {
   PACKAGE_NO_MODE_OPTIONS,
   PACKAGE_NUMBERING_OPTIONS,
   SACK_DUMP_NAME_MODE_OPTIONS,
+  PACKING_POOL_PACKAGE_NO_OPTIONS,
 } from "@/lib/shipping-flags";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 
@@ -149,6 +150,31 @@ export interface EnumFlagDef {
   /** Backend'in KAYIT YOKKEN döndüğü değer (rozet: "Varsayılan: …"). */
   defaultValue: string;
   options: ReadonlyArray<{ value: string; label: string; hint: string }>;
+  audience: SettingAudience[];
+  group?: string;
+}
+
+/** FeatureFlags'in SERBEST METİN anahtarları — `textFlags` satırları (enum DEĞİL). */
+export type TextFlagKey = {
+  [K in keyof FeatureFlags]: FeatureFlags[K] extends string ? K : never;
+}[keyof FeatureFlags];
+
+/**
+ * SERBEST METİN satırı (2026-09-22): değer <input>'tan gelir; kapalı küme yok. Sınır ve
+ * izinli karakterler burada beyan edilir, sunucu zod'u ikinci kapıdır. ⚠️ İç alan adı
+ * `textKey` — `key`/`enumKey` OLMAMALI: sözleşme bekçisi kümeleri alan adından okur.
+ * Sözleşme bekçisi bu anahtarı `FREE_TEXT_FLAGS` listesinde gerekçeli tutar.
+ */
+export interface TextFlagDef {
+  textKey: TextFlagKey;
+  title: string;
+  summary: string;
+  desc: string;
+  defaultValue: string;
+  maxLength: number;
+  pattern: RegExp;
+  placeholder: string;
+  invalidHint: string;
   audience: SettingAudience[];
   group?: string;
 }
@@ -522,6 +548,7 @@ export interface SettingsCategory {
   numberFlags?: NumberFlagDef[];
   /** kind === "flags" sekmesine gömülü KAPALI KÜMELİ (enum) ayarlar (opsiyonel). */
   enumFlags?: EnumFlagDef[];
+  textFlags?: TextFlagDef[];
   /** Feature-flag sözleşmesi DIŞINDAKİ ham system-setting alanları (opsiyonel). */
   settingFields?: SettingFieldDef[];
   /**
@@ -562,20 +589,18 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "productionEnabled",
         title: "Üretim modülünü aç",
-        summary:
-          "Kumaş Stoğu'ndaki üretim sekmeleri ve siparişlerdeki iş emri yüzeyleri çizilir.",
+        summary: "Kumaş Stoğu'ndaki üretim sekmeleri ve siparişlerdeki iş emri yüzeyleri çizilir.",
         defaultOn: true,
         audience: ["Planlamacı", "Yönetim"],
-        desc: "AÇIK (varsayılan) olduğunda Kumaş Stoğu'nda üretim sekmeleri (Üretimde · Üretim Akışı · Fasonda · Kurşun/Tambur Bekleyen) ve Siparişler'de iş emri kolonu/filtresi/toplu aksiyonu görünür. ⚠️ Ön muhasebeden BAĞIMSIZDIR: ikisi aynı anda açık olabilir — muhasebe tutan bir fabrika üretim ekranlarını kaybetmemeli. Kapatmak yalnız bu yüzeyleri gizler; iş emri verisi ve akışı yerinde kalır. Ayarlar ekranında da 'Üretim & Kalite' bölümü bu anahtara bağlıdır.",
+        desc: "Açıkken (varsayılan) Kumaş Stoğu'nda üretim sekmeleri ve Siparişler'de iş emri kolonu/aksiyonları görünür. Kapatınca yalnız yüzeyler gizlenir; kayıtlar silinmez. Ön muhasebeden bağımsızdır.",
       },
       {
         key: "financeEnabled",
         title: "Ön muhasebe modülünü aç",
-        summary:
-          "Cari, fatura, tahsilat/ödeme, kasa-banka ekranları ve depo/satın alma ayarları açılır.",
+        summary: "Cari, fatura, tahsilat/ödeme, kasa-banka ekranları ve depo/satın alma ayarları açılır.",
         defaultOn: false,
         audience: ["Muhasebeci", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) menüde 'Muhasebe' satırı çizilmez, ekranlar açılmaz ve sevkiyattan otomatik fatura taslağı ÜRETİLMEZ. Bu bir görünürlük ayarı değil rejim anahtarıdır — kapatmak mevcut kayıtları silmez, yalnız modülü devre dışı bırakır. Ekranları görmek için ayrıca 'finance:*' yetkisi gerekir. Ayarlar ekranında da 'Depo & Muhasebe' bölümü bu anahtara bağlıdır.",
+        desc: "Açıkken menüde Muhasebe görünür ve sevkiyattan otomatik fatura taslağı doğabilir. Kapalıyken (varsayılan) ekranlar açılmaz, uçlar 403 verir. Kapatmak mevcut kayıtları silmez.",
       },
       // ⚠️ SIRA LOAD-BEARING (görsel değil, iş sırası): İplik satırı Ticaret'in
       // ALTINDA durur çünkü backend bağımlılığı öyle — ticaret kapalıyken iplik
@@ -584,20 +609,18 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "ticaretEnabled",
         title: "Ticaret modülünü aç",
-        summary:
-          "Alış siparişi, mal kabul, fiyat listeleri ve stok sayımı ekranları açılır.",
+        summary: "Alış siparişi, mal kabul, fiyat listeleri ve stok sayımı ekranları açılır.",
         defaultOn: false,
         audience: ["Depocu", "Muhasebeci", "Yönetim"],
-        desc: "Kapalıyken (üretici fabrikanın varsayılanı) alış siparişi · mal kabul · fiyat listesi · stok sayımı uçları 403 verir ve karoları çizilmez. Ön muhasebeden BAĞIMSIZDIR: bu anahtar MAL hareketinin ticari yüzünü açar, 'Ön muhasebe' ise cari/fatura defterini. Alım-satım yapan bir firmada ikisi de açıktır; yalnız üretim yapan fabrikada ikisi de kapalı kalır.",
+        desc: "Açıkken alış siparişi, mal kabul, fiyat listesi ve stok sayımı ekranları açılır. Kapalıyken (varsayılan) uçlar 403 verir, karolar çizilmez. Ön muhasebeden bağımsızdır; İplik ve Devere bu modüle bağlıdır.",
       },
       {
         key: "iplikEnabled",
         title: "İplik modülünü aç",
-        summary:
-          "İplik kg stok defteri ve hareketleri (giriş/çıkış/sayım düzeltmesi) açılır.",
+        summary: "İplik kg stok defteri ve hareketleri (giriş/çıkış/sayım düzeltmesi) açılır.",
         defaultOn: false,
         audience: ["Depocu", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) iplik kg defteri uçları 403 verir ve karo çizilmez. ⚠️ TİCARET MODÜLÜNE BAĞLIDIR: Ticaret kapalıyken bu anahtar açılamaz (kaydetmede hata verir) ve açık bırakılmış olsa bile ekran çalışmaz. Kapatma sırası da terstir — önce İplik, sonra Ticaret kapatılır.",
+        desc: "Açıkken iplik kg defteri ve hareketleri açılır. Kapalıyken (varsayılan) uçlar 403 verir. ⚠️ Ticaret modülü kapalıyken açılamaz (kaydetmede hata).",
       },
       {
         // ⚠️ SIRA LOAD-BEARING: Devere, İplik'in ALTINDA durur — zincir üç
@@ -605,11 +628,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         // aşağı okuyup açtığında doğru sırayı kendiliğinden uygular.
         key: "devereEnabled",
         title: "Devere / levent modülünü aç",
-        summary:
-          "Çözgü kartları ekranı açılır; levent stoğu ve levent defteri sonraki dilimde gelir.",
+        summary: "Çözgü kartları ekranı açılır; levent stoğu ve levent defteri sonraki dilimde gelir.",
         defaultOn: false,
         audience: ["Planlamacı", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) çözgü kartı uçları 403 verir ve karo çizilmez; kumaş/iplik kartlarındaki devere alanları (denye · çözgü kartı) gösterilmez. ⚠️ İPLİK MODÜLÜNE BAĞLIDIR, o da TİCARETE: levent doğarken iplik kg defterine çıkış yazılır, yani iplik kapalıyken bu anahtar açılamaz (kaydetmede hata verir). Kapatma sırası terstir — önce Devere, sonra İplik, sonra Ticaret. Kumaşı hazır alan kurulumlarda kapalı kalır.",
+        desc: "Açıkken çözgü kartları ve kartlardaki devere alanları (denye · çözgü kartı) görünür. Kapalıyken (varsayılan) uçlar 403 verir. ⚠️ İplik modülü (o da Ticaret) kapalıyken açılamaz.",
       },
       {
         // ⚠️ SIRA LOAD-BEARING: Dokuma işi, Üretim'in ALTINDA durur (ön koşul
@@ -620,16 +642,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           "Dokuma İşleri ekranı (planlama · kapat · iptal) açılır; tezgah koşumu ve top indirme uçları çalışır.",
         defaultOn: false,
         audience: ["Planlamacı", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) dokuma işi · tezgah koşumu · top indirme uçları 403 verir ve Dokuma İşleri karosu çizilmez. ⚠️ ÜRETİM MODÜLÜNE BAĞLIDIR: Üretim kapalıyken bu anahtar açılamaz (kaydetmede hata verir). Tezgah izlemeden BAĞIMSIZDIR — fasona dokutan firmada dokuma işi vardır, tezgah yoktur. Kumaşı hazır alan kurulumlarda kapalı kalır.",
+        desc: "Açıkken Dokuma İşleri ekranı, tezgah koşumu ve top indirme uçları açılır. Kapalıyken (varsayılan) 403 verir, karo çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz.",
       },
       {
         key: "depoMultiEnabled",
         title: "Çoklu depo modülünü aç",
-        summary:
-          "Depo seçicileri, listelerdeki depo kolonu ve depolar arası transfer ekranı açılır.",
+        summary: "Depo seçicileri, listelerdeki depo kolonu ve depolar arası transfer ekranı açılır.",
         defaultOn: false,
         audience: ["Depocu", "Yönetim"],
-        desc: "Kapalıyken (tek depolu kurulumun varsayılanı) depo seçicileri ve depo kolonu çizilmez, Depo Transferi karosu görünmez ve transfer uçları 403 verir — tek depoda taşınacak ikinci bir yer yoktur. Depo TANIMI ve depo defteri bu anahtardan BAĞIMSIZDIR: kapalıyken de depo kartı açılabilir, hareketler yazılmaya devam eder. ⚠️ Bu karar 2026-09-02'ye kadar depo SAYISINDAN türetiliyordu; artık açık bir anahtar — ikinci depoyu açmak yüzeyleri kendiliğinden getirmez, bu satır da açılmalıdır.",
+        desc: "Açıkken depo seçicileri, depo kolonu ve Depo Transferi ekranı gelir. Kapalıyken (tek depolu varsayılan) hepsi gizlenir, transfer uçları 403 verir. Depo tanımı ve defteri her iki modda da yaşar.",
       },
       {
         key: "emanetEnabled",
@@ -638,7 +659,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           "Top, levent ve iplik lotunda “sahibi olan müşteri” alanı açılır; emanet mal yalnız sahibine sevk edilir.",
         defaultOn: false,
         audience: ["Depocu", "Planlamacı", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) sahip müşteri alanı hiçbir formda çizilmez ve yazılamaz (uç 403 verir); her mal fabrikanın malı sayılır — bugünkü davranış. Açıkken KK1 elle girişte, levent planlarken (köken “Müşterinin emanet leventi”) ve iplik lotu açarken sahip seçilir; müşterinin ipliğinden sarılan levent ve fason dokumadan doğan top sahibi kendiliğinden alır. Sahibi olan mal BAŞKA müşteriye sevk edilemez (sevkiyat ve fasondan doğrudan sevk 409 verir, etkilenen toplar listelenir); fatura taslağı emanet topu uyarır. Sahiplik doğumda yazılır, sonradan düzenlenmez. Bağımsız modül — başka anahtara bağlı değildir.",
+        desc: "Açıkken top, levent ve iplik lotunda “sahibi olan müşteri” alanı açılır; emanet mal ayrı sayılır. Kapalıyken (varsayılan) alan çizilmez, yazılamaz ve her mal fabrikanın sayılır.",
       },
       // ⚠️ `kumasTeknikEnabled` ve `tezgahEnabled` BİLEREK BURADA YOK: arkalarında
       // henüz hiçbir yüzey/kapı yok, satırları yalnız "açtım ama hiçbir şey
@@ -659,11 +680,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "customerBranchesEnabled",
         title: "Müşteri şubeleri (sevk noktaları) özelliğini göster",
-        summary:
-          "Müşteri kartında Şubeler sekmesi ve sipariş formunda şube seçimi görünür.",
+        summary: "Müşteri kartında Şubeler sekmesi ve sipariş formunda şube seçimi görünür.",
         defaultOn: true,
         audience: ["Planlamacı", "Sevkiyat"],
-        desc: "Açıkken (varsayılan) müşteri kartında Şubeler sekmesi, yeni müşteri formunda şube taslağı ve sipariş formunda şube seçimi görünür. 'Her şube = ayrı müşteri' düzeninde çalışan firma kapatır — şube ekranları gizlenir; mevcut kayıtlardaki şube verisi ve sipariş bağları KORUNUR, sadece görünmez olur.",
+        desc: "Açıkken (varsayılan) müşteri kartında Şubeler sekmesi ve sipariş/sevk formlarında şube seçimi görünür. “Her şube ayrı müşteri” düzeninde çalışan firma kapatır; mevcut şube kayıtları silinmez.",
       },
       {
         key: "duplicatesFuzzyEnabled",
@@ -673,14 +693,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           "Mükerrer Kayıtlar ekranı yalnız birebir aynı adı değil, BENZER adları da aday olarak listeler.",
         defaultOn: true,
         audience: ["Yönetim"],
-        desc: "Sistem → Mükerrer Kayıtlar ekranı müşteri/kumaş/renk/fason kayıtlarını üç kuralla tarar: aynı ad (büyük/küçük harf ve Türkçe karakter farkı sayılmaz), kimlik çakışması (vergi no, ihracat kodu, e-posta, telefon, kumaş kodu harf-ikizi) ve — bu ayar açıkken (varsayılan) — BENZER ad ('ŞAHİN TEKSTİL A.Ş.' ~ 'Sahin Tekstil Ltd.'). Benzerlik aşağıdaki eşiğin üstündeyse aday olur; sayı/varyant taşıyan adlar (KRİSTAL V-01 / V-02) birebir aynı sayıyı taşımıyorsa hiçbir zaman aday yapılmaz. Aday yalnız GÖSTERİR, hiçbir şey birleştirmez; 'Mükerrer değil' dediğin çift bir daha çıkmaz.",
+        desc: "Açıkken (varsayılan) Mükerrer Kayıtlar ekranı benzer adları da aday listeler (‘ŞAHİN TEKSTİL A.Ş.’ ~ ‘Sahin Tekstil Ltd.’). Aday yalnız gösterilir, birleştirme yapılmaz; eşik aşağıdaki alandan.",
         numberField: {
           numberKey: "duplicatesFuzzyThresholdPct",
           label: "Benzerlik eşiği",
           unit: "%",
           min: 50,
           max: 100,
-          emptyWarning: "Boş bırakılırsa fabrika varsayılanı (%90) kullanılır. 90 = neredeyse aynı; 70'in altı gürültü üretir.",
+          emptyWarning:
+            "Boş bırakılırsa fabrika varsayılanı (%90) kullanılır. 90 = neredeyse aynı; 70'in altı gürültü üretir.",
         },
       },
     ],
@@ -689,8 +710,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "orders",
     label: "Siparişler",
     icon: Banknote,
-    description:
-      "Sipariş ekranlarındaki fiyat alanları, varsayılan termin ve 'tamamlandı' sayma toleransı.",
+    description: "Sipariş ekranlarındaki fiyat alanları, varsayılan termin ve 'tamamlandı' sayma toleransı.",
     keywords:
       "fiyat para birimi birim fiyat tutar döviz kur pricing sipariş termin deadline gün süre varsayılan vade teslim tarih " +
       "tolerans eksik sevk tamamlandı kapanma metre karşılanma",
@@ -703,7 +723,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Sipariş ekranlarında para birimi, birim fiyat ve toplam tutar çizilir.",
         defaultOn: false,
         audience: ["Planlamacı", "Muhasebeci"],
-        desc: "Kapalıyken sipariş ekranlarında para birimi seçici, birim fiyat input'u ve toplam tutar gizlenir. Mevcut kayıtlardaki değerler korunur — kalıcı veri kaybı YOK.",
+        desc: "Kapalıyken sipariş ekranlarında para birimi, birim fiyat ve toplam tutar gizlenir. Mevcut değerler korunur; veri kaybı yok.",
       },
     ],
     settingFields: [
@@ -751,7 +771,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           "Sevk iki adıma bölünür: önce planlı sevkiyat kurulur, çıkış ayrıca Sevk Kapısı'ndan onaylanır.",
         defaultOn: false,
         audience: ["Sevkiyat"],
-        desc: "Kapalı (varsayılan): depo çuvallarını seç → doğrudan sevk edilir (stok o an düşer). Açık: önce PLANNED (planlı) sevkiyat kurulur; fiili çıkış ayrıca 'Sevk Kapısı' ekranından onaylanır. Stok her iki modda da yalnız çıkışta düşer.",
+        desc: "Açıkken sevkiyat önce “planlı” kurulur, fiili çıkış Sevk Kapısı'ndan onaylanır. Kapalıyken (varsayılan) çuvallar seçilince doğrudan sevk edilir. Stok iki modda da yalnız çıkışta düşer.",
       },
       {
         key: "shipmentManualSackCountEnabled",
@@ -760,7 +780,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           "Sevkiyat ekranında 'araca yüklenen çuval adedi' alanı açılır; irsaliyede sistem sayısıyla YAN YANA basılır.",
         defaultOn: false,
         audience: ["Sevkiyat"],
-        desc: "Kapalı (varsayılan): irsaliyede yalnız sistemin saydığı çuval kaydı adedi kullanılır. Açık: sevkiyat ekranında \"Araca yüklenen çuval adedi\" alanı çıkar ve operatör gerçekte kaç çuval gittiğini yazar. Sahada 10 çuval gönderilip hepsi tek bir çuval kaydının içine yazıldığında sistemin saydığı rakam fiziksel gerçeği vermez; bu alan o farkı kapatır. Girilen rakam irsaliyede sistemin saydığıyla YAN YANA basılır (biri diğerinin yerine geçmez) ve muhasebe listesinde de görünür. Alan boş bırakılabilir — boşken belge bugünkü gibi basılır.",
+        desc: "Açıkken sevkiyat ekranında “araca yüklenen çuval adedi” alanı çıkar ve irsaliyeye bu sayı basılır. Kapalıyken (varsayılan) sistemin saydığı çuval adedi kullanılır.",
       },
       {
         key: "shipmentUndoSameDayOnly",
@@ -768,7 +788,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Yalnız bugün sevk edilmiş sevkiyatlar geri alınabilir.",
         defaultOn: false,
         audience: ["Sevkiyat", "Yönetim"],
-        desc: "Kapalı (varsayılan): sevk edilmiş bir sevkiyat tarih sınırı olmadan geri alınabilir (\"Sevki Geri Al\" — mal hiç çıkmadıysa; irsaliye İPTAL edilir, toplar sevk öncesi rafına döner). Açık: yalnız BUGÜN sevk edilenler geri alınabilir. Faturalanmış sevkiyat ve bu sevkiyattan iade alınmış olması bu ayardan bağımsız olarak her zaman geri almayı engeller. Geri alma ayrı bir izin ister: shipping:undo-dispatch.",
+        desc: "Açıkken yalnız bugün sevk edilmiş sevkiyat geri alınabilir. Kapalıyken (varsayılan) tarih sınırı yoktur. Geri alma irsaliyeyi iptal eder, toplar rafa döner (mal hiç çıkmadıysa kullanılır).",
       },
       {
         key: "returnGradingEnabled",
@@ -776,7 +796,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Teslim alan personel iade edilen topun kalitesini düzeltebilir.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Kapalıyken mobil İade ekranında 'kalite belirt' kontrolü gizlenir; top çıktığı kaliteyle döner. Açıkken teslim alan personel topun kalitesini düzeltebilir (etiket değişir; iade yine Hazır Depo'ya iner). Kapalıyken backend gönderilen kalite override'ını yok sayar.",
+        desc: "Açıkken iade teslim alan personel topun kalitesini düzeltebilir (etiket değişir). Kapalıyken tablette kalite kontrolü gizlenir, top çıktığı kaliteyle döner; backend de kalite değişikliğini reddeder.",
       },
       {
         key: "shippingSimulatedWeightEnabled",
@@ -785,27 +805,25 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           "Simülasyon modundaki kantarın ürettiği rastgele kg değeri kabul edilir — yalnız demo kurulumu.",
         defaultOn: false,
         audience: ["Sevkiyat", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) cihaz kaydında “simülasyon” açık bir kantardan okunan kg backend tarafından REDDEDİLİR (400) — simüle kantar 10-100 kg arası rastgele değer üretir ve çuval kg'si sevk irsaliyesine + çeki listesine basılır (müşteri/gümrük belgesi). Elle giriş (⋮ → “Elle kg gir”) bu ayardan ETKİLENMEZ; kantarsız/arızalı durumun kaçış yoludur. Yalnızca demo/eğitim kurulumunda açın.",
+        desc: "Açıkken “simülasyon” işaretli kantardan gelen rastgele kg kabul edilir — yalnız demo/eğitim için. Kapalıyken (varsayılan) backend bu kg'yi reddeder (400). Kg belgeye basıldığı için gerçek kurulumda kapalı kalır.",
       },
       {
         key: "shippingAllowOverAllocation",
         title: "Sipariş miktarını aşan mal da siparişe yazılsın",
-        summary:
-          "Ismarlanandan fazla gönderilen metraj sipariş defterine “fazla sevk” olarak işlenir.",
+        summary: "Ismarlanandan fazla gönderilen metraj sipariş defterine “fazla sevk” olarak işlenir.",
         defaultOn: false,
         audience: ["Sevkiyat", "Muhasebeci"],
         group: "Sipariş eşleştirme",
-        desc: "Kapalı (varsayılan, BUGÜNKÜ DAVRANIŞ): tahsis sipariş kalemini AŞAMAZ. Sipariş 100 m ve siz 130 m gönderdiyseniz 100 m yazılır, kalan 30 m HİÇBİR satıra işlenmez — mal çıkar, irsaliye basılır, ama sipariş defteri o 30 metreyi hiç görmez. Ölçüldü (2026-09-06): fabrikada bu sınıfta 15.723 m / 398 top var. Açık: fazlalık da eşleşen sipariş satırına yazılır ve “Sevk edilen” miktarı ısmarlanandan büyük görünür — yani fazla sevk KAYIT ALTINA ALINIR, sessiz kalmaz. ⚠️ Yalnız kumaş/renk/en'i TUTAN satırlara yazılır; sipariş dışı mal yine yazılmaz. ⚠️ “Açık miktar” hesabı negatife düşemez, ekranlarda 0 görünür; fazlalığı görmek için sevk miktarını ısmarlananla karşılaştırın.",
+        desc: "Açıkken siparişten fazla gönderilen metraj da siparişe “fazla sevk” olarak yazılır. Kapalıyken (varsayılan) tahsis sipariş miktarını aşamaz; fazlası hiçbir satıra işlenmez ve sipariş açık kalır.",
       },
       {
         key: "shippingAllocWidthToleranceEnabled",
         title: "Siparişe yazarken en farkını hoş gör",
-        summary:
-          "Topun eni sipariş satırındakinden az farklıysa yine o siparişe yazılsın.",
+        summary: "Topun eni sipariş satırındakinden az farklıysa yine o siparişe yazılsın.",
         defaultOn: false,
         audience: ["Sevkiyat", "Planlamacı"],
         group: "Sipariş eşleştirme",
-        desc: "Sistem bir çuvaldaki malı siparişe yazarken KUMAŞ, RENK ve EN üçünün de tutmasını ister. En bugün TAM eşleşmek zorunda: sipariş 330 cm yazıyorsa 330,1 cm'lik top o siparişe YAZILAMAZ ve o metraj sipariş defterine hiç girmez (sipariş “Açık” kalır). Ölçüldü (2026-09-06): fabrikada bu yüzden 950 m / 25 top deftere girmemiş; gözlenen farklar 0,1 cm ve 5 cm. Açık: aşağıdaki farka kadar olan sapma hoş görülür. ⚠️ KUMAŞ VE RENK HER ZAMAN KESİN EŞLEŞİR — bu ayar onları GEVŞETMEZ; yanlış rengi bir siparişe yazmak defteri sessizce bozar. Toleransı gerçekten gördüğünüz sapmaya göre seçin; büyük değer farklı ürünleri birbirinin siparişine yazmaya başlar. Kapalı (varsayılan) = bugünkü davranış.",
+        desc: "Açıkken topun eni sipariş satırından en fazla aşağıdaki kadar farklıysa yine o siparişe yazılır. Kapalıyken (varsayılan) en tam eşleşmek zorundadır. Kumaş ve renk her zaman kesin eşleşir.",
         numberField: {
           numberKey: "shippingAllocWidthToleranceCm",
           label: "Kabul edilen en farkı",
@@ -818,22 +836,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "shippingDocProductColorSplit",
         title: "İrsaliye ürün listesinde müşteri rengi ayrı sütun",
-        summary:
-          "Müşteri adı tek hücrede birleşik yazmak yerine, renk kendi sütununa çıkar.",
+        summary: "Müşteri adı tek hücrede birleşik yazmak yerine, renk kendi sütununa çıkar.",
         defaultOn: false,
         audience: ["Sevkiyat", "Muhasebeci"],
         group: "Belge",
-        desc: "Kapalı (varsayılan, BUGÜNKÜ ÇIKTI): irsaliyenin ürün listesinde müşteri adı tek hücrede birleşik yazar — “müşteri kumaş adı + renk + en”. Müşterinin o renge KENDİ adı yoksa oraya bizim renk adımız girer. ⚠️ Bu çoğu zaman DOĞRUDUR: müşterilerin çoğu bizim renk adımızı kullanır, yani eksik veri değil normal hâldir. Ayarın çözdüğü şey dar: kumaş adı müşterinin, renk adı bizim olduğunda tek hücrede yan yana durdukları için okuyucu hangi yarının kime ait olduğunu ayırt edemez. Açık: renk kendi sütununa çıkar ve YALNIZ müşterinin kendi renk adı varsa dolar — yoksa sütun BOŞ kalır (bizim adımız “müşteri varyantı” diye etiketlenmez). ⚠️ Bu ayar MÜŞTERİYE GİDEN belgenin sütun düzenini değiştirir; açmadan önce bir irsaliyenin önizlemesine bakın. Sütunu “Belge Kişiselleştirme”den gizleyebilir, başlığını değiştirebilirsiniz.",
+        desc: "Açıkken irsaliye ürün listesinde müşteri rengi ayrı sütuna çıkar; müşterinin kendi renk adı yoksa hücre boş kalır. Kapalıyken (varsayılan) kumaş + renk + en tek hücrede yazar. ⚠️ Müşteriye giden belgeyi değiştirir.",
       },
       {
         key: "packingGroupsEnabled",
         title: "Paketleme grubu (çuvalları partilere ayır)",
-        summary:
-          "Havuzdaki çuvallar “P1 / P2” diye ayrılır; sevk butonu yalnız açık grubu gönderir.",
+        summary: "Havuzdaki çuvallar “P1 / P2” diye ayrılır; sevk butonu yalnız açık grubu gönderir.",
         defaultOn: false,
         audience: ["Sevkiyat", "Depocu"],
         group: "Paketleme",
-        desc: "Kapalı (varsayılan, BUGÜNKÜ DAVRANIŞ): Paketleme ekranı carinin bütün havuz çuvallarını tek düz liste gösterir ve “Hemen Sevk Et” içi dolu HER çuvalı gönderir. Bir carinin farklı zamanlarda çıkacak iki hazırlığı yan yana beklediğinde bu, salı tırı için basılan butonun gelecek haftanın çuvallarını da almasına yol açar. Açık: operatör çuvalları seçip “Parti Ata” der, grup otomatik numara alır (P1, P2, …) (adı elle de yazılabilir), gruba not bırakılabilir ve sevk butonu yalnız açık grubun çuvallarını gönderir. ⚠️ Grup bir REZERVASYON DEĞİLDİR: stok düşmez, çuvalı kilitlemez, başka bir sevkin o çuvalı almasını engellemez — yalnız “bunlar bir arada dursun” der. ⚠️ Grup numarası ekranda kalır; çuval etiketine ve irsaliyeye BASILMAZ (bu yüzden boşalan numara yeniden kullanılabilir). Grubun Excel/PDF çıktısı bir ÇALIŞMA KÂĞIDIDIR ve başlığında cari + grup + üretim anı yazar. Son çuvalı sevk edilen grup kendiliğinden kapanır.",
+        desc: "Açıkken havuzdaki çuvallar gruplara (P1, P2 …) ayrılır ve “Hemen Sevk Et” yalnız seçili grubu gönderir. Kapalıyken (varsayılan) havuz tek düz listedir ve dolu her çuval gider.",
       },
       {
         key: "packageNoStartsAtZero",
@@ -842,7 +858,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Sevkiyat", "Depocu"],
         group: "Sevk partisi",
-        desc: "Yalnız “Paketleme grubu davranışı” SEVK PARTİSİ iken anlamlıdır. Kapalı (varsayılan): partide açılan ilk çuval 1 numarasını alır — müşteriye giden çeki listeleri sektörde 1’den başlar. Açık: ilk çuval 0 olur. Yalnız YENİ açılan partileri etkiler; açık partilerin sayacı değişmez.",
+        desc: "Açıkken sevk partisinde ilk çuval 0 numarasını alır. Kapalıyken (varsayılan) 1'den başlar. Yalnız yeni açılan partileri etkiler; yalnız sevk partisi modunda anlamlıdır.",
       },
       {
         key: "packingLotRequired",
@@ -851,7 +867,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Sevkiyat", "Depocu"],
         group: "Sevk partisi",
-        desc: "Yalnız SEVK PARTİSİ modunda anlamlıdır. Kapalı (varsayılan): havuza partisiz çuval açılabilir (tablet ve eski akış), sonra “Havuzdan al” ile partiye alınır ve numara alır. Açık: partisiz çuval açma isteği 400 verir. ⚠️ TABLET bu sürümde parti seçmeden çuval açar; bu ayar açıkken tablet Paketleme ekranından çuval AÇAMAZ. Tablet güncellenene kadar açmayın.",
+        desc: "Açıkken partisiz çuval açma isteği reddedilir (400). Kapalıyken (varsayılan) havuza partisiz çuval açılır, sonra partiye alınır. ⚠️ Bu sürümde tablet parti seçmeden çuval açar — tablet güncellenene kadar açmayın.",
       },
       {
         key: "packingLotPartialDispatch",
@@ -860,7 +876,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: true,
         audience: ["Sevkiyat", "Depocu"],
         group: "Sevk partisi",
-        desc: "Yalnız SEVK PARTİSİ modunda anlamlıdır. Açık (varsayılan): partide 100 çuval varken 30–45 arası seçilip sevk edilebilir; kalanlar partide açık kalır, yeni çuvallar giden numaraları almaz (sayaç rejimine bağlı). Kapalı: sevk kurulurken partinin AÇIK çuvallarının tamamı seçilmek zorundadır, eksik seçim 400 verir. Partisiz (havuz) çuvallarla kurulan sevk bu ayardan etkilenmez.",
+        desc: "Açıkken (varsayılan) partiden seçilen çuvallar gider, kalanlar partide açık kalır. Kapalıyken sevk kurulurken partinin açık çuvallarının tamamı seçilmelidir (eksik seçim 400). Partisiz çuvallar etkilenmez.",
       },
       {
         key: "shippingDocPackingLot",
@@ -869,61 +885,108 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Sevkiyat", "Muhasebeci"],
         group: "Belge",
-        desc: "Kapalı (varsayılan, BUGÜNKÜ ÇIKTI): belgede çuval satırı bugünkü kolonlarla basılır. Açık: her çuval satırına “Ambalaj No” ve “Sevk Partisi” kolonları eklenir; partisiz çuvalda hücreler BOŞ kalır (uydurulmaz). ⚠️ MÜŞTERİYE GİDEN belgenin sütun düzenini değiştirir; açmadan önce bir irsaliyenin önizlemesine bakın.",
+        desc: "Açıkken irsaliye ve çeki listesinde çuval satırına “Ambalaj No” ve “Sevk Partisi” kolonları gelir; partisiz çuvalda boş kalır. Kapalıyken (varsayılan) standart çıktı. ⚠️ Müşteriye giden belgeyi değiştirir.",
+      },
+      {
+        key: "shippingSackSeqOnDoc",
+        title: "İrsaliye ve çeki listesinde sevkiyat içi çuval sırası",
+        summary:
+          "Her çuval satırına “Sıra” kolonu (1, 2, 3 … ya da SP1, P-1 …) basılır; başlangıç numarası seçilir.",
+        defaultOn: false,
+        audience: ["Sevkiyat", "Muhasebeci"],
+        group: "Belge",
+        desc: "Açıkken irsaliye ve çeki listesine “Sıra” kolonu gelir (sevk anında verilen 1, 2, 3 …; başlangıç aşağıdaki alandan). Kapalıyken (varsayılan) sayı yalnız sıralamada kullanılır, basılmaz. Yalnız yeni sevkiyatları etkiler.",
+        numberField: {
+          numberKey: "shippingSackSeqStart",
+          label: "Başlangıç numarası",
+          unit: "",
+          min: 0,
+          max: 999,
+          emptyWarning: "Boş bırakılırsa 1’den başlar.",
+        },
+      },
+      {
+        key: "shippingSackSeqShowTotal",
+        title: "Sıra etiketinde toplam da yazılsın (3/100)",
+        summary: "“SP3/100” gibi — kaç çuvalın kaçıncısı olduğu görünür.",
+        defaultOn: false,
+        audience: ["Sevkiyat", "Depocu"],
+        group: "Belge",
+        desc: "Açıkken sıra etiketi “3/100” biçiminde basılır (toplam = sevkiyattaki çuval sayısı). Yalnız sıra kolonu açıkken anlamlıdır; biçim her baskıda canlı okunur.",
+      },
+      {
+        key: "shippingSackSeqPrefixLive",
+        title: "Ön ek değişince eski belgeler de değişsin",
+        summary: "Kapalı (önerilen): her belge sevk anındaki ön ekle kalır. Açık: yeniden baskı ayarlardaki güncel ön eki kullanır.",
+        defaultOn: false,
+        audience: ["Sevkiyat", "Muhasebeci"],
+        group: "Belge",
+        desc: "Kapalıyken (varsayılan, önerilen) ön ek sevk anında belgeye donar; ayar sonradan değişse de eski irsaliyeler aynı basılır. Açıkken her yeniden baskı ayarlardaki güncel ön eki kullanır — geçmiş belgeler değişir.",
       },
       {
         key: "shippingWeighRequiredEnabled",
         title: "Sevk öncesi tüm çuvallar tartılmış olsun",
-        summary:
-          "Yurtiçi sevkte de tartı zorunlu olur; tartısız çuval varken sevkiyat kurulamaz.",
+        summary: "Yurtiçi sevkte de tartı zorunlu olur; tartısız çuval varken sevkiyat kurulamaz.",
         defaultOn: false,
         audience: ["Sevkiyat", "Depocu"],
         group: "Tartı",
-        desc: "Kapalı (varsayılan): yalnız YURTDIŞI sevk tüm çuvalların tartılı olmasını ister — yurtiçi sevk tartısız yapılabilir (bugünkü davranış). Açık: yurtiçi sevk de tartı ister; sevkiyat kurma, çuval ekleme ve sevk etme adımlarının üçü de tartısız çuval varken 400 verir ve hangi çuvalların tartısız olduğunu söyler. İHRACAT KURALI BU AYARDAN BAĞIMSIZDIR ve her zaman geçerlidir (ayar yalnız genişletir, gevşetmez). ⚠️ İKİ YAN ETKİ: (1) “Hızlı Sevk” (topları seç → tek adımda sevk) tamamen kapanır — orada çuval operatöre görünmeden doğduğu için tartılamaz; sevk Paketleme/Çuvallar ekranından yapılır. (2) Tartılı bir çuvala sonradan top eklenirse kg SIFIRLANIR (bayat kg irsaliyeye gitmesin diye) — o çuval yeniden tartılmadan sevk edilemez; operatör bunu “sistem tartıyı unuttu” diye okumasın.",
+        desc: "Açıkken yurtiçi sevkte de tüm çuvalların tartılı olması gerekir; tartısız çuval varken sevkiyat kurulamaz. Kapalıyken (varsayılan) tartı yalnız yurtdışı sevkte zorunludur. Çuvalın içeriği değişirse kg SIFIRLANIR — çuval yeniden tartılır.",
       },
       {
         key: "shippingManualWeightRestrictedEnabled",
         title: "Elle kg girişini sevkiyat sorumlusuyla sınırla",
-        summary:
-          "Tablet operatörü kantardan tartar; elle kg yalnız sevkiyat yazma yetkisi olan kişide.",
+        summary: "Tablet operatörü kantardan tartar; elle kg yalnız sevkiyat yazma yetkisi olan kişide.",
         defaultOn: false,
         audience: ["Sevkiyat", "Operatör"],
         group: "Tartı",
-        desc: "⚠️ ÖNKOŞUL: Tüm tabletler ve paneller güncel olmalı. Eski istemciler tartı kaynağını bildirmediği için elle tartı yolu toplu olarak kapanır. — Kapalı (varsayılan): çuval tartısı elle de girilebilir, kimse ayırt edilmez (bugünkü davranış). Açık: elle giriş yalnız “shipping:write” yetkisi taşıyan kişide serbest kalır; yalnız mobil paketleme/sevkiyat yetkisiyle gelen tablet operatörü kantardan tartmak zorundadır (elle girerse 403). Yeni bir yetki kodu EKLENMEZ — ayrım mevcut yetkilerle kurulur, yani kimseye yeni bir şey atamanız gerekmez. Çuval açılışında kg gönderen yol da aynı kuraldan geçer (arka kapı yok).",
+        desc: "Açıkken elle kg girişi yalnız sevkiyat yazma yetkisi olan kullanıcıya açıktır; tablet operatörü kantardan tartar. Kapalıyken (varsayılan) herkes elle girebilir. ⚠️ ÖNKOŞUL: önce tüm tablet ve paneller güncel sürüme geçmiş olmalı; eski istemci elle/kantar ayrımını göndermez.",
+      },
+    ],
+    textFlags: [
+      {
+        textKey: "shippingSackSeqPrefix",
+        title: "Sevkiyat içi çuval sırası ön eki",
+        summary: "Serbest metin, en çok 8 karakter: “SP” → SP1, “P-” → P-1, “Çuval ” → Çuval 1. Boş = yalnız sayı.",
+        desc: "Belgedeki sıra etiketinin ön eki (SP1, P-1, Çuval 1). Sayı sevk anında donar; ön ek de sevk anında belgeye yazılır — sonradan değiştirmek eski belgeleri etkilemez (“eski belgeler de değişsin” açılmadıkça). Yalnız sıra kolonu açıkken görünür.",
+        defaultValue: "",
+        maxLength: 8,
+        pattern: /^[\p{L}\p{N}\-_./ ]*$/u,
+        placeholder: "örn. SP  ·  P-  ·  Çuval ",
+        invalidHint: "Yalnız harf, rakam, - _ . / ve boşluk; en çok 8 karakter.",
+        audience: ["Sevkiyat", "Muhasebeci"],
+        group: "Belge",
       },
     ],
     enumFlags: [
       {
         enumKey: "sackDumpNameMode",
         title: "Çuval/grup içerik dökümünde ad",
-        summary:
-          "Excel ve PDF dökümünde kumaş+renk adı bizden mi, müşteriden mi, ikisi birden mi.",
+        summary: "Excel ve PDF dökümünde kumaş+renk adı bizden mi, müşteriden mi, ikisi birden mi.",
         defaultValue: "ikisi",
         options: SACK_DUMP_NAME_MODE_OPTIONS,
         audience: ["Sevkiyat", "Depocu"],
         group: "Paketleme",
-        desc: "Bu ayar dökümün VARSAYILANINI belirler; döküm penceresinden tek seferlik başka bir mod seçilebilir ve o seçim bu ayarı EZMEZ. “İkisi” (varsayılan) bugünkü çıktıdır — PDF'te bizim adımızın altında müşterinin adı, Excel'de “Müşteri kumaş” / “Müşteri renk” ayrı sütunlarda. “Bizdeki”: yalnız bizim adımız, müşteri sütunları hiç çizilmez. “Müşterideki”: yalnız müşterinin adı; ⚠️ müşterinin o kumaşa/renge karşılığı yoksa hücre BOŞ kalır — bizim adımız müşterinin adıymış gibi basılmaz. Bu, sevk irsaliyesindeki ad rejiminden BİLEREK farklıdır: irsaliye müşteriye giden resmi belgedir ve orada boş hücre kabul edilemez, bu döküm ise İÇ çalışma kâğıdıdır ve “bunun müşteri karşılığı yok” bilgisi ambarcı için gerçek bir bilgidir.",
+        desc: "Çuval/grup içerik dökümünün (Excel · PDF) varsayılan ad rejimi. “İkisi” (varsayılan) standart çıktıdır. Döküm penceresinden tek seferlik başka mod seçilebilir; o seçim bu ayarı değiştirmez.",
       },
       {
         enumKey: "packingGroupNumbering",
         title: "Paketleme grubu numarası nasıl artsın",
-        summary:
-          "Sevk edilip boşalan numara yeniden kullanılsın mı, yoksa hep ileri mi gitsin.",
+        summary: "Sevk edilip boşalan numara yeniden kullanılsın mı, yoksa hep ileri mi gitsin.",
         defaultValue: "artan",
         options: PACKING_GROUP_NUMBERING_OPTIONS,
         audience: ["Sevkiyat", "Depocu"],
         group: "Paketleme",
-        desc: "Yalnız “Paketleme grubu” ayarı açıkken bir anlamı vardır. Numara bir KİMLİK değil PARK YERİDİR: ekranda kalır, hiçbir belgeye basılmaz, grup boşalınca serbest kalır. “Artan” (varsayılan): yeni grup, açık grupların en büyüğünün bir fazlasını alır — boşalan numaraya geri dönülmez, böylece aynı cari için aynı gün iki farklı P3 dolaşmaz. “Boşluğu doldur”: yeni grup en küçük boş numarayı alır, numaralar sıkı kalır ama sevk edilen bir numara aynı gün yeniden doğabilir. ⚠️ İki rejim de yalnız AÇIK gruplara bakar: carinin havuzu tamamen boşaldığında sayaç kendiliğinden P1’e döner, yani numara sonsuza büyümez.",
+        desc: "Grup numarası kimlik değil park yeridir: belgeye basılmaz, grup boşalınca serbest kalır. “Artan” (varsayılan) hep ileri gider; “Boşluğu doldur” en küçük boş numarayı verir. Yalnız paketleme grubu açıkken anlamlıdır.",
       },
       {
         enumKey: "packingGroupMode",
         title: "Paketleme grubu davranışı",
-        summary: "Grup bir çalışma yaftası mı (bugünkü), yoksa numaralı çuvallar taşıyan SEVK PARTİSİ mi.",
+        summary: "Grup bir çalışma yaftası mı (varsayılan), yoksa numaralı çuvallar taşıyan SEVK PARTİSİ mi.",
         defaultValue: "grup",
         options: PACKING_GROUP_MODE_OPTIONS,
         audience: ["Sevkiyat", "Depocu"],
         group: "Sevk partisi",
-        desc: "Yalnız “Paketleme grubu” ayarı açıkken bir anlamı vardır. “Paketleme grubu” (varsayılan, BUGÜNKÜ DAVRANIŞ): grup yaftadır — boşalınca görünmez olur, numarası yeniden kullanılır, çuvala numara verilmez. “Sevk partisi”: sevkiyat elemanı cariyi seçer, parti açar (boş doğar), partide çuval açar; her çuval parti içinde bir AMBALAJ NUMARASI alır; partiden seçilen çuvallar sevk edilir, parti yaşamaya devam eder; son çuvalı da sevk edilince parti “sevk edildi” olur, listeden düşer ve adı/numarası yeni bir partiye yeniden verilebilir. Sevk edilen çuvallar bu ekranda izlenmez (Sevkiyatlar ekranı). ⚠️ Moddan moda geçiş mevcut gruplara dokunmaz: eski gruplar AÇIK parti sayılır, çuvallarına numara VERİLMEZ (operatör “yeniden numarala” der). Tablet bu sürümde partiyi grup gibi görür ve seçer.",
+        desc: "“Paketleme grubu” (varsayılan): grup bir çalışma yaftasıdır, boşalınca görünmez olur, çuvala numara verilmez. “Sevk partisi”: parti açık/kapalı durum taşır, her çuval ambalaj numarası alır ve belgeye basılabilir.",
       },
       {
         enumKey: "packageNoMode",
@@ -933,7 +996,17 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: PACKAGE_NO_MODE_OPTIONS,
         audience: ["Sevkiyat", "Depocu"],
         group: "Sevk partisi",
-        desc: "Yalnız SEVK PARTİSİ modunda anlamlıdır. “Otomatik, ezilebilir” (varsayılan): çuval açılırken sayaç numara verir, kullanıcı o an ya da sonra değiştirebilir; aynı partide aynı numara iki açık çuvalda olamaz (409). “Otomatik”: numara alanı salt-okunur. “Elle”: numara zorunlu alan, sayaç ilerlemez.",
+        desc: "“Otomatik, ezilebilir” (varsayılan): sayaç verir, kullanıcı değiştirebilir. “Otomatik”: alan salt-okunur. “Elle”: numara zorunlu, sayaç ilerlemez. Aynı partide aynı numara iki açık çuvalda olamaz. Yalnız sevk partisi modunda.",
+      },
+      {
+        enumKey: "packingPoolPackageNo",
+        title: "Partisiz çuvalın ambalaj numarası ne zaman doğsun",
+        summary: "Sevkte (sevk sırası) ya da çuval açılırken (carinin havuz sayacı).",
+        defaultValue: "sevkte",
+        options: PACKING_POOL_PACKAGE_NO_OPTIONS,
+        audience: ["Sevkiyat", "Depocu"],
+        group: "Sevk partisi",
+        desc: "Partisiz (havuz) çuval içindir. “Sevkte” (varsayılan): çuval numarasız yaşar, sevkte sevkiyat sırasını alır. “Çuval açılırken”: carinin havuz sayacından numara alır, sevkte de kalır; müşterisiz çuval numara almaz.",
       },
       {
         enumKey: "packageNumbering",
@@ -943,47 +1016,43 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: PACKAGE_NUMBERING_OPTIONS,
         audience: ["Sevkiyat", "Depocu"],
         group: "Sevk partisi",
-        desc: "Yalnız SEVK PARTİSİ modunda anlamlıdır. “Artan” (varsayılan): numara bir kez verildi mi geri verilmez — 7 numaralı çuval çıkarılsa da sonraki çuval 8 olur; sahada fiziksel “7” etiketiyle ikinci bir 7 dolaşmaz. “Boşluğu doldur”: yeni çuval açık çuvalların tutmadığı en küçük numarayı alır; ⚠️ sevk edilmiş çuvalın numarası yeniden doğabilir, çeki listelerinde aynı parti için iki farklı çuval aynı numarayı taşıyabilir.",
+        desc: "“Artan” (varsayılan): verilen numara geri verilmez, çıkarılan 7'nin yerine sonraki çuval 8 olur. “Boşluğu doldur”: en küçük boş numara verilir — sevk edilmiş bir numara yeniden doğabilir. Yalnız sevk partisi modunda.",
       },
       {
         enumKey: "shippingOrderRequirement",
         title: "Sevkiyat siparişe bağlansın mı",
-        summary:
-          "Siparişsiz sevkte ne yapılsın: sorma · uyar (varsayılan) · zorunlu tut.",
+        summary: "Siparişsiz sevkte ne yapılsın: sorma · uyar (varsayılan) · zorunlu tut.",
         defaultValue: "warn",
         options: SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
         audience: ["Sevkiyat", "Planlamacı"],
-        desc: "⚠️ ÖNKOŞUL (yalnız “Zorunlu tut” için): Tabletlerde sipariş seçici bulunan APK kurulu olmalı. Bugünkü tablet Paketleme ekranı sipariş göndermiyor — “block” seçilirse sahada HİÇ sevkiyat kurulamaz. Önce APK, sonra bu ayar. — Siparişe yazılmayan mal, karşılanma/açık talep/Ürün Dengesi ekranlarında GÖRÜNMEZ; fabrika karşılanmış talebi yeniden üretir. “Uyar” (varsayılan) sevkiyatı kurar ve ekranda uyarı basar. “Zorunlu tut” kurulumu engeller — ama “Siparişsiz devam et” işaretlenirse yine geçer (numune/fazla mal meşru bir iştir; kural “sipariş seç” değil “ne yaptığını söyle”). Engel YALNIZ kurulumdadır: ayar açılmadan önce kurulmuş planlı sevkiyatların çıkışı kilitlenmez. Fasondan doğrudan sevk de AYNI kurala tabidir (orada da “Siparişsiz devam et” kutusu vardır).",
+        desc: "Siparişsiz sevkte ne olsun: “Sorma” · “Uyar” (varsayılan: sevkiyat kurulur, uyarı görünür) · “Zorunlu tut” (sipariş seçilmeden kurulmaz). ⚠️ ÖNKOŞUL: “Zorunlu tut” için tablette sipariş seçici olan APK kurulu olmalı; yoksa sahada sevk kurulamaz.",
       },
       {
         enumKey: "shippingInvoiceMode",
         title: "Fatura izi nereden yazılsın",
-        summary:
-          "Sevkin fatura numarası dış programdan elle mi işaretlensin, ERP faturasından mı gelsin.",
+        summary: "Sevkin fatura numarası dış programdan elle mi işaretlensin, ERP faturasından mı gelsin.",
         defaultValue: "dis",
         options: SHIPPING_INVOICE_MODE_OPTIONS,
         audience: ["Muhasebeci", "Sevkiyat"],
-        desc: "“Dış programdan” (varsayılan): fatura başka bir muhasebe programında kesilir, buraya yalnız numarası + tarihi elle işaretlenir (bugünkü davranış). “Yalnız ERP faturası”: elle işaretleme kapanır (400) ve numara yalnız Muhasebe → Faturalar'da onaylanan faturadan gelir; yanlış girilmiş bir izi KALDIRMAK her modda mümkün kalır. “İkisi de”: elle işaret serbesttir ama sevkin ERP faturası varsa uyarı çıkar (engel yok) — geçiş dönemi için. Fasondan doğrudan sevk de aynı kurala tabidir. NOT: sevk sonrası otomatik fatura taslağı bu ayardan etkilenmez, kendi ön muhasebe anahtarına bağlıdır.",
+        desc: "“Dış programdan” (varsayılan): fatura başka programda kesilir, buraya numara ve tarih elle işaretlenir. “Yalnız ERP faturası”: elle işaretleme kapanır, numara Muhasebe'deki faturadan gelir.",
       },
       {
         enumKey: "shippingDocItemNameMode",
         title: "Sevk belgesinde ürün adı",
-        summary:
-          "İrsaliyede kendi ürün adımız mı, müşterinin kullandığı ad mı, yoksa ikisi de mi yazsın.",
+        summary: "İrsaliyede kendi ürün adımız mı, müşterinin kullandığı ad mı, yoksa ikisi de mi yazsın.",
         defaultValue: "bizdeki",
         options: SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS,
         audience: ["Sevkiyat", "Muhasebeci"],
-        desc: "Müşterinin bizim üründe kullandığı ad iki yerden gelir: sipariş satırına bir SEFERLİĞİNE yazılan ad (varsa O kazanır) ve müşteri kartındaki kalıcı karşılık (Müşteri Adları). İkisi de yoksa bizim adımız basılır — “Müşterideki ad” seçiliyken bile hücre boş kalmaz. Ad, sevk anında belgeye DONAR: müşteri kartındaki karşılığı sonradan değiştirmek eski irsaliyeyi değiştirmez. Bu ayar yalnız HANGİ adın basıldığını belirler; ayarı değiştirmek belgenin içeriğini değiştirmez, yeni revizyon doğurmaz, eski belgeler de yeni ayarla basılır. Kolon başlıklarını “Belge Alanları” tablosundan kendiniz yazabilirsiniz. NOT: kapsam sevk irsaliyesi + muhasebe fişidir; fasondan DOĞRUDAN sevk irsaliyesi bu ayarın dışındadır.",
+        desc: "İrsaliyede ürün adı: bizim adımız (varsayılan) · müşterinin kullandığı ad · ikisi. Müşteri adı önce sipariş satırındaki tek seferlik addan, yoksa müşteri kartındaki karşılıktan gelir; o da yoksa bizim ad basılır.",
       },
       {
         enumKey: "shippingOrderCoverage",
         title: "Siparişe yazılamayan mal",
-        summary:
-          "Çuvaldaki mal seçili siparişlere yazılamıyorsa ne olsun — sessiz mi, uyarı mı, engel mi.",
+        summary: "Çuvaldaki mal seçili siparişlere yazılamıyorsa ne olsun — sessiz mi, uyarı mı, engel mi.",
         defaultValue: "off",
         options: SHIPPING_ORDER_COVERAGE_OPTIONS,
         audience: ["Sevkiyat", "Planlamacı"],
-        desc: "Bu ayar üstteki “sipariş seçme zorunluluğu” ayarından FARKLI bir soruyu sorar. O ayar “sipariş seçildi mi” diye bakar (niyet); bu ayar “seçilen siparişe kaç metre yazılabildi” diye bakar (sonuç). İkisi ayrı olduğu için ikisini ayrı ayarlayabilirsiniz. Neden gerekli: sevkiyat kurulurken sipariş seçilmiş olsa bile, çuvaldaki malın rengi/eni sipariş satırıyla tutmuyorsa ya da sipariş zaten dolmuşsa o metraj sipariş defterine İŞLENMEZ — mal çıkar, irsaliye basılır, ama sipariş “Açık” kalır ve planlamacı aynı metrajı yeniden üretime verebilir. “Uyar” seçilirse sevkiyat kurulur ve uyarı hem panelde hem tablette görünür. “Zorunlu tut” seçilirse kurulum durur; bilinçli fazla/numune sevki için “Siparişsiz/fazla mal” kutusu işaretlenir. Kapı YALNIZ kurulumda çalışır, “Sevk Et” adımında değil — aksi hâlde kamyon kapıdayken mal bina içinde kilitlenirdi.",
+        desc: "Seçilen siparişe yazılamayan mal için: “Sessiz” · “Uyar” (varsayılan) · “Zorunlu tut” (sevkiyat kurulmaz; bilinçli fazla/numune için “siparişsiz mal” kutusu işaretlenir). Kapı yalnız kurulumda çalışır, çıkışta değil.",
       },
       {
         enumKey: "shippingDocCekiNameMode",
@@ -993,7 +1062,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultValue: "devral",
         options: SHIPPING_DOC_CEKI_NAME_MODE_OPTIONS,
         audience: ["Sevkiyat", "Depocu"],
-        desc: "Çeki listesi sevk irsaliyesinin bir bölümüdür ama TEK BAŞINA da basılabilir (Sevkiyat → Yazdır → Çeki Listesi) ve ambarda kontrol listesi olarak kullanılır. Bu yüzden orada “hem bizdeki hem müşterideki ad” istemek anlamlıdır — oysa müşteriye giden ürün listesinde iki ad birden istenmez. Varsayılan “Genel ayarı izle”: çeki listesi üstteki “Sevk belgesinde ürün adı” ayarının dediğini yapar, yani bugünkü çıktı tek bayt değişmez. Diğer üç seçenek YALNIZ çeki bölümünü çevirir; ürün listesine ve muhasebe fişine dokunmaz. Müşterideki ad karşılığı olmayan satırda bizim adımız basılır (hücre boş kalmaz).",
+        desc: "Çeki listesinin ad rejimi. “Genel ayarı izle” (varsayılan) üstteki irsaliye ayarını uygular; diğer seçenekler yalnız çeki bölümünü çevirir. Çeki listesi tek başına da basılıp ambarda kontrol listesi olarak kullanılır.",
       },
     ],
   },
@@ -1019,7 +1088,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "İş emri formunda 'hedef metraj' alanı çizilir.",
         defaultOn: false,
         audience: ["Planlamacı"],
-        desc: "Kapalıyken iş emri formunda 'hedef metraj' alanı gizlenir. Proses-only fabrikada üretim miktarını giren kumaş belirler; ileride örgü/üretim eklenirse açılır.",
+        desc: "Kapalıyken iş emri formunda “hedef metraj” alanı gizlenir; üretim miktarını girilen kumaş belirler. Örgü/üretim eklenirse açılır.",
       },
       {
         key: "partyCodeAuto",
@@ -1027,26 +1096,24 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "İş Emri No elle yazılmak yerine sistem tarafından önerilir.",
         defaultOn: false,
         audience: ["Planlamacı"],
-        desc: "Kapalıyken (varsayılan) iş emri formunda İş Emri No elle girilir ve zorunludur. Açıkken sistem otomatik üretir (İE1207260001 — İE + GGAAYY + sıra); formda 'elle gir' ile yine değiştirilebilir. Not: partinin kendi numarası her zaman otomatiktir, bu ayardan etkilenmez — biçimini aşağıdaki 'Parti no kısa ve dönen olsun' ayarı belirler.",
+        desc: "Açıkken İş Emri No sistem tarafından üretilir (İE + GGAAYY + sıra), formda yine değiştirilebilir. Kapalıyken (varsayılan) elle girilir ve zorunludur.",
       },
       {
         key: "batchShortNumberEnabled",
         title: "Parti no kısa ve dönen olsun (P01…P99)",
-        summary:
-          "Parti numarası P01'den P99'a gider ve başa döner — fabrikadaki plaka düzeninin karşılığı.",
+        summary: "Parti numarası P01'den P99'a gider ve başa döner — fabrikadaki plaka düzeninin karşılığı.",
         defaultOn: true,
         audience: ["Planlamacı", "Operatör"],
-        desc: "Açıkken (varsayılan) parti numarası P01'den başlar, P99'a kadar gider ve sonra tekrar P01'e döner — fabrikadaki numaralı fiziksel parti plakası düzenine karşılık gelir. ⚠️ Bu numara BENZERSİZ DEĞİLDİR: aynı numara birkaç günde bir yeniden kullanılır ve sistem numaranın o an başka bir partide olup olmadığına BAKMAZ. Partiyi kayıt olarak birbirinden ayıran şey numara değil, iş emri + tarihtir; parti no ile arama bu yüzden birden çok sonuç döndürür. Kapatırsan eski biçime dönülür: P + gün-ay-yıl + günlük sıra (P0508261) — o biçim benzersizdir. Ayarı değiştirmek MEVCUT partilerin numarasını değiştirmez, yalnız bundan sonra doğacakları etkiler.",
+        desc: "Açıkken (varsayılan) parti numarası P01…P99 arasında döner — fabrikadaki plaka düzeni. ⚠️ Numara benzersiz değildir; kimlik parti kaydının kendisidir. Kapalıyken uzun, tekil numara üretilir.",
         hint: BatchNumberHint,
       },
       {
         key: "batchLastNumberHintEnabled",
         title: "İş emri formunda 'Son Kullanılan Parti No' rozetini göster",
-        summary:
-          "Yeni iş emri formunda son verilen parti numarası rozet olarak gösterilir.",
+        summary: "Yeni iş emri formunda son verilen parti numarası rozet olarak gösterilir.",
         defaultOn: true,
         audience: ["Planlamacı"],
-        desc: "Açıkken (varsayılan) yeni iş emri formundaki Parti Kodu alanının üstünde son verilmiş parti numarası rozet olarak yazar. Planlamacıya fikir verir; SIRADAKİ numarayı VAAT ETMEZ (numara parti doğduğu anda atanır, aradaki her yeni parti sırayı kaydırır). Yalnız gösterimdir — numara üretimini etkilemez.",
+        desc: "Açıkken (varsayılan) yeni iş emri formunda son verilen parti numarası rozet olarak görünür. Sıradaki numarayı vaat etmez; numara parti doğduğu anda verilir.",
       },
       {
         key: "batchAutoCreateEnabled",
@@ -1055,7 +1122,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           "Tambur'dan elle top eklerken iş emrinde hiç açık parti yoksa sistem yeni bir parti açıp topu ona bağlar.",
         defaultOn: false,
         audience: ["Planlamacı", "Operatör"],
-        desc: "Kapalıyken (varsayılan) Tambur'da elle top eklenirken iş emrinde hiç açık parti yoksa top PARTİSİZ doğar (bugünkü davranış). Açıkken sistem o anda yeni bir parti açar ve topu ona bağlar — operatöre soru sorulmaz, açılan partinin numarası kayıt sonrası ekranda yazar. Birden fazla açık parti varsa davranış değişmez: operatöre hangi partiye ekleneceği sorulur. ÖNKOŞUL: Bu ayar 'parti ZORUNLU olsun' demek DEĞİLDİR — operatörün elle parti açmasını isteyen düzen ayrı bir pakettir; bugün sistemde sıfırdan parti yaratan bir ekran yok, o yüzden 'zorunlu' seçeneği sahayı çıkışsız bırakırdı. İş emrine top bağlamanın diğer yolları (Hızlı İş Emri, toplu top ekleme) bu ayardan ETKİLENMEZ — orada parti zaten her zaman doğar.",
+        desc: "Açıkken Tambur'da elle top eklenirken iş emrinde açık parti yoksa sistem yeni parti açar ve topu ona bağlar. Kapalıyken (varsayılan) top partisiz doğar. ⚠️ ÖNKOŞUL: parti numarası üreteci açık olmalı; kapalıysa elle top ekleme parti bulamaz.",
       },
     ],
     settingFields: [
@@ -1090,7 +1157,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Ham girişte en alanı çizilir; kapalıyken operatör isterse yine girebilir.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Kapalıyken mobil KK1 ekranında en alanı gizlenir; operatör isterse 'en gir' ile yine girebilir. Ham kumaşın eni önemsiz — bitmiş topun eni iş emrinden gelir. Kumaş Dengesi ham stoğu en'e bakmadan sayar.",
+        desc: "Kapalıyken tablet KK1 ekranında en alanı gizlenir; operatör isterse yine girebilir. Bitmiş topun eni iş emrinden gelir, ham stok en'e bakmadan sayılır.",
       },
       {
         key: "kk1WeightEntryEnabled",
@@ -1099,27 +1166,25 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Ham girişte kg alanı açılır; kapalıyken backend gönderilen kg'yi reddeder.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Kapalıyken (varsayılan) mobil KK1 Manuel Giriş ekranında ağırlık (kg) alanı gizlenir VE backend ağırlık verisini reddeder — operatör yanlışlıkla veya kasıtlı olarak kg giremez. Açıkken makine arızasında elle metrajın yanında ağırlık da girilebilir. (Metraj girişi bu ayardan bağımsız, her zaman açıktır.)",
+        desc: "Açıkken KK1 elle girişte kg alanı açılır (makine arızasında metrajın yanına). Kapalıyken (varsayılan) alan gizlenir ve backend gönderilen kg'yi reddeder.",
       },
       {
         key: "kk1DuplicateGuardEnabled",
         group: "KK1 / Kalite",
         title: "Ham girişte mükerrer top uyarısı",
-        summary:
-          "90 saniye içinde birebir aynı top yeniden girilirse sistem sorar; onaylanırsa kaydeder.",
+        summary: "90 saniye içinde birebir aynı top yeniden girilirse sistem sorar; onaylanırsa kaydeder.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Açıkken aynı operatör/makine 90 saniye içinde birebir aynı kumaş + metraj + en girerse sistem uyarır ve kaydı ancak açık onayla alır (engellemez — arka arkaya birebir aynı top gerçekten gelebilir). Sunucu yeniden başlarken tuşa üst üste basılması sonucu doğan kopya stok kayıtlarına karşı ikinci savunma hattıdır. ⚠️ Açmadan önce sahadaki tabletlerin güncel sürüme yükseltildiğinden emin olun — eski sürüm bu uyarıyı tanımaz.",
+        desc: "Açıkken aynı operatör/makine 90 saniye içinde birebir aynı kumaş + metraj + en girerse sistem sorar; kayıt ancak onayla alınır (engellemez). Kapalıyken uyarı yok.",
       },
       {
         key: "qualityGradeRequiredEnabled",
         group: "KK1 / Kalite",
         title: "Top kalitesi zorunlu olsun",
-        summary:
-          "Kalite seçilmeden top girilemez, kesilemez ve iş emri kapanışında depoya indirilemez.",
+        summary: "Kalite seçilmeden top girilemez, kesilemez ve iş emri kapanışında depoya indirilemez.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) kalite opsiyoneldir: kaliteye bakılmadan girilen top 'Belirsiz' kalitede yaşar ve kararı sonraki istasyon verir. Açıkken kalite DÖRT yerde zorunlu olur: (1) ham/manuel top girişi, (2) Tambur'da kesim toplamı topun metrajını doldurmuyorsa doğan 'kalan' parça — kaynak topun da kalitesi yoksa, (3) depodaki topun kesilmesi, (4) iş emri kapanışında 'depoya al' / '2. kalite' kararı verilen toplar. Bilerek DIŞARIDA bırakılanlar: açık kumaş kesimi (kalite zaten hep dolu), fason kabulünde doğan toplar (kaliteye orada bakılmaz — karar Tambur'un), son adımın otomatik depo indirişi (kilitlenirse iş emri hiç kapanmaz) ve iade kabulü (kalite girecek ekran yok). ÖNKOŞUL: Açmadan önce sahadaki tabletler güncel APK'da olmalı — 'kalan parça için kalite' alanı eski sürümde YOK ve o dal 'kalite zorunlu' hatasıyla durur; ayrıca çevrimdışı kuyrukta bekleyen kalitesiz kayıtlar gönderilirken reddedilir ve tekrar denenmez.",
+        desc: "Açıkken kalite dört yerde zorunlu olur: top girişi, Tambur kesimi, iş emri kapanışı ve depo transferi. Kapalıyken (varsayılan) kalite isteğe bağlıdır; seçilmeyen top “Belirsiz” kalitede yaşar. ⚠️ ÖNKOŞUL: kalite kataloğunda aktif kayıt olmalı ve tabletler güncel olmalı, yoksa saha dört yerde de takılır.",
       },
       {
         key: "kk1OnlineOnlyEnabled",
@@ -1128,17 +1193,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Tablet sunucuya ulaşamazken ham giriş yapılamaz; form kilitlenir ve sebebi yazar.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Açıkken mobil KK1 sunucuya ulaşamazken kayıt ALMAZ: form kilitlenir ve sebebi yazar (ağ mı, sunucu mu). Kayıt ile etiket tek akışta yürür — 'sırada bekleyen / basılamayan etiket' listeleri hiç doğmaz, kesintide girilemeyen top sunucu dönünce girilir. Kapalıyken (varsayılan) bugünkü davranış: çevrimdışı girişler kuyruğa alınır, bağlantı gelince gönderilir ve etiketleri o zaman basılır. ⚠️ Açmadan önce sahadaki tabletlerin bu rejimi tanıyan APK'da olduğundan emin olun — eski sürüm bayrağı görmez ve kuyrukla çalışmaya devam eder.",
+        desc: "Açıkken tablet sunucuya ulaşamazken ham giriş yapılamaz; form kilitlenir ve sebebini söyler. Kayıt ile etiket tek akışta yürür, bekleyen kuyruk doğmaz. Kapalıyken çevrimdışı kuyruk kullanılır.",
       },
       {
         key: "kk1HistoryAllEntriesEnabled",
         group: "KK1 / Kalite",
         title: "Ham girişte 'Tüm Girişler' herkesin kayıtlarını göstersin",
-        summary:
-          "Tabletteki 'Tüm Girişler' listesi tüm operatörleri gösterir ve personele göre süzülebilir.",
+        summary: "Tabletteki 'Tüm Girişler' listesi tüm operatörleri gösterir ve personele göre süzülebilir.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Açıkken tabletteki 'Tüm Girişler' listesi TÜM operatörlerin ham girişlerini gösterir ve operatöre göre süzülebilir. Kapalıyken (varsayılan) operatör yalnız KENDİ girdiği topları görür — sağdaki 'Son Kayıtlar' listesi bu ayardan bağımsız her zaman kişiye özeldir. Bu bir yetki duvarı değil ekran sadeleştirmesidir; yönetim panelindeki Toplar listesi aynı veriyi 'Ekleyen' filtresiyle her durumda görür.",
+        desc: "Açıkken tabletteki “Tüm Girişler” listesi bütün operatörlerin ham girişlerini gösterir ve operatöre göre süzülür. Kapalıyken (varsayılan) operatör yalnız kendi girdiği topları görür.",
       },
       {
         key: "kk1LabelScanVerifyEnabled",
@@ -1147,7 +1211,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Basılan etiket okutulmadan yeni top girilemez — 'kâğıt gerçekten çıktı mı' kanıtı.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Açıkken basılan her top etiketi için tablet 'çıkan kâğıdı OKUT' ister ve okutulmadan yeni top girilemez — 'etiket çıktı mı' sorusunu yazılım değil tarayıcı cevaplar (yazıcı baskı onayı döndürmez; yazılımın 'bastım' demesi kâğıdın çıktığını kanıtlamaz). Etiket okunmuyorsa 'Tekrar Bas' ile yeni kâğıt basılır. Kapalıyken (varsayılan) ekranda bu akışa dair hiçbir öğe görünmez. ⚠️ Seri girişe her topta bir okutma adımı ekler; kamera arızasında akışı tıkayabilir — geri dönüş yolu bu anahtarı kapatmaktır. Açmadan önce tabletlerin güncel APK'da olduğundan emin olun.",
+        desc: "Açıkken basılan her top etiketi okutulmadan yeni top girilemez — “kâğıt gerçekten çıktı mı” sorusunu tarayıcı cevaplar. Kapalıyken etiket basılır basılmaz devam edilir.",
       },
       {
         key: "fasonShrinkWarnEnabled",
@@ -1157,7 +1221,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           "Fason kabulünde giden ↔ dönen metraj farkı toleransı aşarsa uyarı çıkar (çekme normaldir, aşırısı sorulur).",
         defaultOn: true,
         audience: ["Operatör", "Planlamacı"],
-        desc: "Boyahanede kumaş ÇEKER: 250 metre giden mal 220 metre döner ve bu normal bir üretim gerçeğidir. Açıkken (varsayılan) kabul ekranı bu farkı gösterir ve yalnız aşağıdaki toleransın ÜSTÜNDEysa uyarı + onay ister. Kapatırsan fark yine yazılır ama hiçbir uyarı/onay çıkmaz. Bu ayar SUNUMU belirler: fark her hâlükârda sapma defterine (fason firesi) kaydedilir ve Fason Karnesi'ndeki fire oranını besler — yani ayarı kapatmak fireyi gizlemez, yalnız operatörü durdurmaz.",
+        desc: "Açıkken (varsayılan) fason kabulde giden ↔ dönen metraj farkı aşağıdaki toleransı aşarsa uyarı + onay ister (boyahanede çekme normaldir). Kapalıyken fark gösterilir ama sorulmaz.",
         numberField: {
           numberKey: "fasonShrinkTolerancePct",
           label: "Tolerans",
@@ -1174,17 +1238,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Operatör sevk sırasında fason talimatını telefondan yazabilir/değiştirebilir.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Kapalıyken (varsayılan) sahadaki operatör mobil Fason Sevk ekranında talimat giremez; talimat yalnızca iş emrindeki fason adımının notundan gelir. Açıkken operatör sevk sırasında telefondan talimat girebilir/değiştirebilir (boş bırakırsa adım notu kullanılır).",
+        desc: "Açıkken sahadaki operatör mobil Fason Sevk ekranında talimatı yazabilir/değiştirebilir. Kapalıyken (varsayılan) talimat yalnız iş emrindeki fason adımının notundan gelir.",
       },
       {
         key: "kursunBypassEnabled",
         group: "Kurşun",
         title: "Kurşun istasyonunda tablet yok — işi dağıtımla yürüt (kurşun bypass)",
-        summary:
-          "Kurşun/KK2 tabletten okutulmaz; iş makineye dağıtılır ve Tambur okutmasıyla kapanır.",
+        summary: "Kurşun/KK2 tabletten okutulmaz; iş makineye dağıtılır ve Tambur okutmasıyla kapanır.",
         defaultOn: false,
         audience: ["Planlamacı", "Operatör"],
-        desc: "Kapalıyken (varsayılan) kurşun + KK2 normal akışta, tabletten okutularak işlenir. Açıkken kurşun fiziksel olarak yapılır ama dijital izlenmez (hatalar kâğıtta kalır): yetkili personel 'Kurşun Dağıtım' ekranından bekleyen iş emrini fiziksel bir kurşun MAKİNESİNE atar (istasyon tek, makineler N tane); Tambur refakat kartını okuttuğunda kurşun/KK2 adımı önizleme+onay ile TAMAMLANMIŞ sayılır ve toplar Tambur'a geçer (kalite Tambur'da belirlenir, kurşunda 'Belirsiz' kalır). Kurşun rotanın son adımıysa iş dağıtım ekranındaki 'İşi Bitir' ile kapanır ve toplar depoya iner. Bu ayar YALNIZCA yeni dağıtım yapılmasını kapılar — kapatsan da hâlihazırda dağıtılmış iş emirleri bypass ile bitirilir; adım ATLANMAZ, normal şekilde tamamlanır. NOT: açıkken 'Kurşun Sırası' ekranı gizlenir — o sıralamanın tek tüketicisi kurşun tabletiydi; izleme ve acil işaretleme 'Kurşun Dağıtım' ekranında (aynı sıralamayla) yapılır.",
+        desc: "Açıkken kurşun/KK2 tabletten okutulmaz; yetkili “Kurşun Dağıtım” ekranından işi makineye dağıtır, Tambur okutmasıyla tamamlanır. Kapalıyken (varsayılan) normal akış. Dağıtılmış işler bayrak kapansa da bypass'ta kalır.",
       },
       {
         key: "tamburOverQuantityEnabled",
@@ -1193,17 +1256,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Kayıtlıdan fazla ölçülen metraj onay sonrası kabul edilir; kaynak top tükenir.",
         defaultOn: true,
         audience: ["Operatör"],
-        desc: "Açıkken (varsayılan) — Tambur asıl ölçüm noktası olduğu için — operatör kayıtlıdan fazla ölçtüğünde (örn. 100m açık kumaşı 150m top yapma) mobilde onay sonrası kabul edilir; kaynak top tamamen tüketilir. Kapatırsan Tambur'da çıkan top kayıtlı metrajdan fazla olamaz (örn. 100m topa 110m girilemez). Yalnızca aşım anında devreye girer, normal kesim etkilenmez.",
+        desc: "Açıkken (varsayılan) Tambur'da kayıtlıdan fazla ölçülen metraj onay sonrası kabul edilir; kaynak top tamamen tüketilir. Kapalıyken aşan ölçüm reddedilir.",
       },
       {
         key: "tamburShortCutA1Enabled",
         group: "Tambur",
         title: "Kısa kesimde kalite otomatik A1 yazılsın",
-        summary:
-          "Tamburda eşiğin ALTINDA kalan kesimin kalitesi kendiliğinden 2. kaliteye (A1) çekilir.",
+        summary: "Tamburda eşiğin ALTINDA kalan kesimin kalitesi kendiliğinden 2. kaliteye (A1) çekilir.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Kapalıyken (varsayılan) tamburda kalite her zaman elle seçilir. Açıkken kesim uzunluğu aşağıdaki eşiğin ALTINDA kalırsa kalite kendiliğinden A1'e çevrilir — kısa parça fiziksel olarak 2. kalitedir ve operatör kaliteyi çevirmeyi unutunca 1. Kalite etiketiyle depoya iniyordu. Kural YALNIZ 1. Kalite seçiliyken devreye girer: operatör A1 ya da Fire'ı kendisi seçtiyse dokunulmaz, otomatik yazılan A1 de elle geri çevrilebilir. Makineden ölçüm ve 'kalanı kes' yolları dahil. Bu ayar FABRİKA VARSAYILANIDIR — tablette yetkili operatör (saha düzeltme yetkisi olan) cihaz bazında açıp kapatabilir ya da kendi eşiğini girebilir.",
+        desc: "Açıkken Tambur'da aşağıdaki eşiğin altında kalan kesimin kalitesi kendiliğinden A1 (2. kalite) olur; operatör değiştirebilir. Kapalıyken (varsayılan) kalite her zaman elle seçilir.",
         numberField: {
           numberKey: "tamburShortCutA1ThresholdM",
           label: "Eşik",
@@ -1220,16 +1282,17 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Dünkü bir Tambur kapanışı tümden geri alınamaz; tek parça iptali etkilenmez.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Tambur'da bir kapanışı TÜMDEN geri almak (o kesimden çıkan tüm topları iptal edip kaynağı diriltmek) iş emrinin geçmişini yeniden yazar; bu yüzden zaten ayrı bir yetki (roll:manual-adjust) ve zorunlu sebep ister. Bu ayar AÇIKKEN ek olarak süre sınırı koyar: kapanış bugün yapıldıysa geri alınabilir, dünkü bir kapanış geri alınamaz. Varsayılan KAPALI — asıl koruma zaten parçaların kendisindedir (çuvala okutulmuş / sevke girmiş / yeniden kesilmiş parça hiçbir koşulda geri alınamaz) ve sert bir süre sınırı, dün akşam yapılmış bir hatayı sabah düzeltmeyi imkânsız kılarak yeni bir çıkmaz üretebilir. TEK PARÇA iptali bu ayardan ETKİLENMEZ.",
+        desc: "Açıkken bir Tambur kapanışı yalnız aynı gün tümden geri alınabilir; dünkü kapanış geri alınamaz. Tek parça iptali etkilenmez. Tümden geri alma zaten ayrı yetki ve sebep ister.",
       },
       {
         key: "productionCancelReasonRequired",
         group: "Top iptali",
         title: "Top iptalinde sebep zorunlu olsun",
-        summary: "Açıkken top iptali sebep (katalogdan ya da metin) girilmeden kaydedilmez; kapalıyken sebep isteğe bağlı.",
+        summary:
+          "Açıkken top iptali sebep (katalogdan ya da metin) girilmeden kaydedilmez; kapalıyken sebep isteğe bağlı.",
         defaultOn: false,
         audience: ["Operatör", "Depocu", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) top iptalinde sebep isteğe bağlıdır — bugünkü davranış (eldivenli operatörü rastgele kategori seçmeye itmemek için). Açıkken panel Toplar → İptal penceresi ve tablet Top İptal ekranı sebebi zorunlu işaretler, sunucu sebepsiz iptali reddeder (kod CANCEL_REASON_REQUIRED). İş emri, dokuma işi, levent ve fason iptallerinde sebep zaten her zaman zorunludur; bu anahtar yalnız top iptalini etkiler. Fire (hurda) kararı ayrı ekrandır, etkilenmez.",
+        desc: "Açıkken top iptali (panel ve tablet) sebep seçilmeden/yazılmadan kaydedilmez. Kapalıyken (varsayılan) sebep isteğe bağlıdır.",
       },
     ],
   },
@@ -1248,7 +1311,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Kartelalar adet dışında cm/kg ile de ölçülür ve listelerde gösterilir.",
         defaultOn: false,
         audience: ["Operatör", "Depocu"],
-        desc: "Kapalıyken (varsayılan) kartelalar yalnızca ADET sayılır; kabul ekranında ve kartela listelerinde cm/kg (Boy/En/Uzunluk) alanları gizlenir. Açıkken kabulde ölçü girilebilir ve listelerde görünür. Kartela firmasına gönderilen topun gerçek metresi bu ayardan ETKİLENMEZ.",
+        desc: "Açıkken kartela kabulünde ve listelerinde cm/kg alanları görünür. Kapalıyken (varsayılan) kartelalar yalnız adet sayılır; alanlar gizlenir.",
       },
     ],
   },
@@ -1266,40 +1329,46 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "devereLotRequired",
         title: "İplik lotu zorunlu olsun",
-        summary: "İçeride levent sarımında iplik çıkış satırı ve mal kabulde iplik satırı lot numarasız kaydedilemez.",
+        summary:
+          "İçeride levent sarımında iplik çıkış satırı ve mal kabulde iplik satırı lot numarasız kaydedilemez.",
         defaultOn: false,
         audience: ["Depocu", "Operatör"],
-        desc: "Kapalıyken (varsayılan) lot numarası isteğe bağlıdır: lotsuz satır yazılır, yalnız uyarı verilir ve o levent lot izlemesine girmez. Açıkken içeride sarımda lotsuz iplik çıkış satırı reddedilir, mal kabulde lotsuz iplik satırı fişe girmez (satır sebebiyle düşer). Fasona sardırılan ya da hazır alınan levent iplik satırı yazmadığı için etkilenmez. ⚠️ Açmadan önce depodaki iplik girişlerine lot yazıldığından emin olun: lotsuz giriş lotlu çıkışı karşılamaz.",
+        desc: "Açıkken içeride sarımda lotsuz iplik çıkışı ve mal kabulde lotsuz iplik satırı reddedilir. Kapalıyken (varsayılan) lot isteğe bağlıdır; lotsuz satır uyarıyla yazılır ve lot izlemesine girmez.",
       },
       {
         key: "devereMountTracking",
         title: "Levent tezgah bağı defteri",
-        summary: "Hazır levent tezgaha takılır, sökülür, tüketimi ve bitişi kaydedilir; kalan metre olaylardan hesaplanır.",
+        summary:
+          "Hazır levent tezgaha takılır, sökülür, tüketimi ve bitişi kaydedilir; kalan metre olaylardan hesaplanır.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) levent sarıldıktan sonra \"hazır\" kalır; Leventler ekranında Tak / Sök / Tüket / Düzelt / Bitir / Hurda eylemleri görünmez ve sunucu bu işlemleri reddeder. Açıkken levent bir tezgahın yuvasına takılır (istasyon kartında \"levent tüketir\" işaretli istasyonların makineleri; yuva sayısı makine kartından), tüketim elle ya da sökümde/bitişte ölçülen kalanla yazılır, kalan metre eksiye düşemez; bitiş ve hurda son kayıttır. Geri almalar en son durum olayından başlar (LIFO).",
+        desc: "Açıkken levent tezgaha takılır, sökülür, tüketimi ve bitişi kaydedilir (Leventler ekranında Tak / Sök / Tüket / Bitir / Hurda). Kapalıyken (varsayılan) levent sarıldıktan sonra “hazır” kalır, bu eylemler görünmez.",
       },
       {
         key: "devereMountTrackingRequired",
         title: "Bağlamada yöntem ve başlangıç saati zorunlu olsun",
-        summary: "Levent tezgaha takılırken bağlama yöntemi (düğüm / tahar / takım) ve kurulum başlangıç saati girilmeden kayıt alınmaz.",
+        summary:
+          "Levent tezgaha takılırken bağlama yöntemi (düğüm / tahar / takım) ve kurulum başlangıç saati girilmeden kayıt alınmaz.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) yöntem ve saat isteğe bağlıdır; sistem yalnız aynı yuvadan son sökülen levent aynı çözgü kartındansa düğüm önerir. Açıkken ikisi de zorunlu — kurulum süresi raporlarında beyan olarak görünür. Yalnız tezgah bağı defteri açıkken anlamlıdır.",      },
+        desc: "Açıkken levent takılırken bağlama yöntemi (düğüm / tahar / takım) ve başlangıç saati zorunludur; kurulum süresi raporlarına girer. Kapalıyken (varsayılan) isteğe bağlıdır. Yalnız levent tezgah bağı açıkken anlamlıdır.",
+      },
       {
         key: "devereAutoConsume",
         title: "Tezgahtan inen top leventten otomatik düşsün",
-        summary: "KK1'de indirme bağıyla doğan topun metresi, indirme anında tezgahta bağlı leventlerden çözgü tüketimi olarak kendiliğinden yazılır.",
+        summary:
+          "KK1'de indirme bağıyla doğan topun metresi, indirme anında tezgahta bağlı leventlerden çözgü tüketimi olarak kendiliğinden yazılır.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) tüketim yalnız elle yazılır; KK1 kaydı hiç değişmez. Açıkken tezgahtan inen top (dokuma modülü, indirme bağı) kaydedilince indirme anında o tezgahta bağlı her levente ayrı bir tüketim satırı düşer: çözgü metre = kumaş metre ÷ (1 − take-up); take-up çözgü kartından, boşsa çözgü = kumaş sayılır ve uyarı verilir; çok hatlı tezgahta top metresi hat payı olarak düşer. Leventte kalan yetmezse kalana kadar yazılır, KK1 engellenmez, fark uyarıda söylenir. Top iptal edilince tüketim ters kayıtla geri döner; fire (hurda) topta geri dönmez — çözgü gerçekten tüketilmiştir. Yalnız levent tezgah bağı defteri açıkken anlamlıdır.",      },
+        desc: "Açıkken tezgahtan inen top kaydedilince metresi o tezgahta bağlı leventlerden otomatik düşer. Kapalıyken (varsayılan) tüketim yalnız elle yazılır; KK1 kaydı değişmez.",
+      },
       {
         key: "devereBeamWeavingLinkRequired",
         title: "Levent sarımında dokuma işi zorunlu olsun",
         summary: "Levent planlanırken/sarılırken hangi dokuma işi için sarıldığı seçilmeden kayıt alınmaz.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) dokuma işi isteğe bağlıdır: stoğa ya da serbest levent sarılır, raporda \"işsiz levent\" olarak ayrı görünür. Açıkken levent bir dokuma işine (planlı ya da devam eden, içeride dokunan) bağlanmadan kaydedilemez; tablet takılı tezgahın işini ön-doldurur, tek dokunuşla değiştirilir. Çözgü kartı işinkinden farklıysa kayıt reddedilmez, uyarı verilir.",
+        desc: "Açıkken levent bir dokuma işine bağlanmadan planlanamaz/sarılamaz. Kapalıyken (varsayılan) stoğa serbest levent sarılır ve raporda “işsiz levent” olarak ayrı görünür.",
       },
     ],
   },
@@ -1319,7 +1388,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Tezgahta koşum açılırken dokuma işi seçilmeden kayıt alınmaz.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) koşum işsiz de açılır (stoka dokuma), raporda \"işsiz koşum\" olarak ayrı görünür. Açıkken koşum bir dokuma işine bağlanmadan açılamaz; tablet takılı leventin işini ön-doldurur, operatör onaylar ya da tek dokunuşla değiştirir. Duruş ve top indirme koşumun işini kendiliğinden alır, ayrıca sorulmaz.",
+        desc: "Açıkken tezgah koşumu bir dokuma işine bağlanmadan açılamaz; tablet takılı leventin işini ön-doldurur. Kapalıyken (varsayılan) işsiz koşum (stoka dokuma) açılır ve raporda ayrı görünür.",
       },
       {
         key: "dokumaOrderLineLinkRequired",
@@ -1327,7 +1396,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Dokuma işi en az bir sipariş satırına bağlanmadan kaydedilmez.",
         defaultOn: false,
         audience: ["Planlamacı", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) sipariş bağı isteğe bağlıdır: stoka dokuma işi açılır, hub ekranında ayrı sekmede durur. Açıkken dokuma işi en az bir sipariş satırına (isteğe bağlı planlanan metreyle) bağlanmadan kaydedilemez; bir iş birden çok satırı besleyebilir. Fasona verilen işler de aynı kurala tabidir.",
+        desc: "Açıkken dokuma işi en az bir sipariş satırına bağlanmadan kaydedilemez. Kapalıyken (varsayılan) stoka dokuma işi açılır ve hub'da ayrı sekmede durur.",
       },
     ],
   },
@@ -1374,7 +1443,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Alış siparişi miktarını aşan kabul satırı reddedilir; serbest kabul muaf.",
         defaultOn: false,
         audience: ["Depocu"],
-        desc: "Kapalıyken (varsayılan) alış siparişinden fazla mal gelirse kayıt yapılır ve sistem yalnız uyarır — fiziksel olarak fazla mal GELEBİLİR ve kayıt gerçeği yazmalıdır. Açıkken sipariş miktarını aşan satır reddedilir; toleransı sıfır olan firmalar için. Siparişe bağlı OLMAYAN (serbest) mal kabulü ile kabul iptali/düzeltmesi bu kuraldan muaftır.",
+        desc: "Açıkken alış siparişi miktarını aşan kabul satırı reddedilir (tolerans ayrı ayardan). Kapalıyken (varsayılan) fazla mal kaydedilir, sistem yalnız uyarır — fiziksel olarak fazla mal gelebilir.",
       },
       {
         key: "goodsReceiptRequirePriceEnabled",
@@ -1382,7 +1451,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Fiyatı satırdan da siparişten de çözülemeyen mal kabul kaydedilemez.",
         defaultOn: false,
         audience: ["Depocu", "Muhasebeci"],
-        desc: "Açıkken satırda birim fiyat yoksa ve siparişten de çözülemiyorsa mal kabul kaydedilemez. Gerekçe: fiyat kabul ANINDA donar ve alış faturası taslağı ile maliyet oradan doğar; sonradan girilen fiyat geçmişe dönük maliyet düzeltmesi demektir. Kapalıyken (varsayılan) fiyatsız kabul yapılabilir, fatura aşamasında girilir. Ters/iptal satırları fiyat taşımaz, muaftır. Bedelsiz mal için Muhasebe'deki 'Sıfır fiyatlı fatura satırına izin ver' ayarıyla birlikte düşünün.",
+        desc: "Açıkken satırda birim fiyat yoksa ve siparişten de çözülemiyorsa mal kabul kaydedilemez. Fiyat kabul anında donar; alış faturası taslağı ve maliyet oradan doğar. Kapalıyken fiyatsız kabul serbesttir.",
       },
     ],
   },
@@ -1396,7 +1465,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     label: "İplik",
     icon: Boxes,
     description: "İplik kg stok hareketlerinin katılık ayarları.",
-    keywords: "iplik kg stok bakiye eksi negatif çıkış sayım düzeltme depo yarn lot kalite bekletme karantina bloke serbest",
+    keywords:
+      "iplik kg stok bakiye eksi negatif çıkış sayım düzeltme depo yarn lot kalite bekletme karantina bloke serbest",
     kind: "flags",
     section: "trade",
     moduleKey: "iplikEnabled",
@@ -1407,15 +1477,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Bakiyeyi eksiye düşürecek iplik çıkışı reddedilir; ters/düzeltme kayıtları muaf.",
         defaultOn: false,
         audience: ["Depocu"],
-        desc: "Açıkken iplik ÇIKIŞI, o kalemin ilgili depodaki kg bakiyesini eksiye düşürecekse reddedilir. Kapalıyken (varsayılan) kayıt geçer ve bakiye eksiye düşebilir. Ters/düzeltme kayıtları ile belge iptalleri MUAFTIR — yanlış girilmiş bir hareket 'bakiye yetmiyor' diye geri alınamaz kalmamalı. ⚠️ Açmadan önce depoların açılış/devir bakiyelerinin girildiğinden emin olun: sistemde 0 görünen dolu bir depodan tek çıkış bile yapılamaz.",
+        desc: "Açıkken bakiyeyi eksiye düşürecek iplik çıkışı reddedilir. Kapalıyken (varsayılan) kayıt geçer, bakiye eksiye düşebilir. Ters/düzeltme kayıtları ve belge iptalleri muaftır.",
       },
       {
         key: "goodsReceiptYarnQualityHoldEnabled",
         title: "Mal kabulde doğan iplik lotu kalite bekletmede doğsun",
-        summary: "Yeni iplik lotu \"kalite bekletmede\" doğar; serbest bırakılmadan levent sarımına ve iplik çıkışına giremez.",
+        summary:
+          'Yeni iplik lotu "kalite bekletmede" doğar; serbest bırakılmadan levent sarımına ve iplik çıkışına giremez.',
         defaultOn: false,
         audience: ["Depocu", "Operatör", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) lot serbest doğar ve hiçbir çıkış kısıtlanmaz — bugünkü davranış. Açıkken mal kabulde doğan iplik lotu \"kalite bekletmede\" doğar (elle açılan lot serbesttir); bekletmedeki ya da bloke lot levent sarımında, iplik çıkışında ve fasona iplik sevkinde reddedilir (giriş, iade ve geri almalar serbest). Karar İplik Stoğu → lot satırından: Serbest bırak / Bekletmeye al / Bloke et (kalite yetkisi); karar tarihi ve veren kişi lotta kalır. Tablet levent sarımı lot listesinde durumu rozetle gösterir; bekletmedeki lot seçilirse sunucu reddeder.",
+        desc: "Açıkken mal kabulde doğan iplik lotu “kalite bekletmede” doğar; serbest bırakılmadan levent sarımına giremez (elle açılan lot serbesttir). Kapalıyken (varsayılan) lot serbest doğar.",
       },
     ],
   },
@@ -1444,7 +1515,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "financeDefaultVatRate",
         title: "Varsayılan KDV oranı",
-        desc: "Fatura formunda yeni satır ve mal kabulden üretilen alış taslağı bu oranla açılır. Yalnız ön-dolum — her satırda değiştirilebilir; mevcut fatura ve taslaklara dokunmaz.",
+        desc: "Fatura formunda yeni satır ve mal kabulden üretilen alış taslağı bu KDV oranıyla açılır. Yalnız ön-dolum; her satırda değiştirilebilir, mevcut kayıtlara dokunmaz.",
         min: 0,
         max: 100,
         fallback: 20,
@@ -1454,7 +1525,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "financeInvoicePriceTolerancePct",
         title: "Fatura ↔ mal kabul tutar toleransı",
-        desc: "\"Fatura onayında mal kabul fişleriyle karşılaştır\" açıkken faturanın kalem tutarı toplamı ile bağlı fişlerin (miktar × donmuş fiyat) toplamı arasındaki sapma bu yüzdeyi aşarsa onay reddedilir. 0 = hiç fark kabul edilmez. Kapalıyken hiçbir etkisi yok.",
+        desc: "“Fatura onayında mal kabul fişleriyle karşılaştır” açıkken fatura tutarı ile fiş tutarı arasındaki sapma bu yüzdeyi aşarsa onay reddedilir. 0 = hiç fark kabul edilmez.",
         min: 0,
         max: 100,
         fallback: 0,
@@ -1467,10 +1538,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "financeInvoiceMatchTolerance",
         group: "Fatura",
         title: "Fatura onayında mal kabul fişleriyle karşılaştır",
-        summary: "Alış faturası onaylanırken bağlı mal kabul fişlerinin miktar ve tutar toplamıyla karşılaştırılır; tolerans aşılırsa onay reddedilir.",
+        summary:
+          "Alış faturası onaylanırken bağlı mal kabul fişlerinin miktar ve tutar toplamıyla karşılaştırılır; tolerans aşılırsa onay reddedilir.",
         defaultOn: false,
         audience: ["Muhasebeci"],
-        desc: "Kapalıyken (varsayılan) fatura ile fiş arasında hiçbir karşılaştırma yapılmaz — bugünkü davranış. Açıkken alış faturası ONAYLANIRKEN bağlı mal kabul fişlerinin kalem toplamı (miktar: kumaş metre + iplik kg; tutar: miktar × fişte donan fiyat) faturanın kalem toplamıyla karşılaştırılır; miktar ya da tutar sapması aşağıdaki toleransları aşarsa onay Türkçe bir fark listesiyle reddedilir (taslak kaydedilebilir, fatura ekranı farkı önceden gösterir). Bir fatura birden çok fişi kapatabilir; fiş bağlı değilse kontrol yoktur.",
+        desc: "Açıkken alış faturası onaylanırken bağlı mal kabul fişlerinin miktar ve tutar toplamıyla karşılaştırılır; sapma toleransı aşarsa onay reddedilir. Kapalıyken (varsayılan) karşılaştırma yapılmaz.",
         numberField: {
           numberKey: "financeInvoiceQtyTolerancePct",
           label: "Miktar toleransı",
@@ -1484,11 +1556,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "financeBlockNegativeCashEnabled",
         group: "Kasa & Risk",
         title: "Kasa eksi bakiyeye düşemesin",
-        summary:
-          "Kasayı eksiye düşürecek nakit çıkışı reddedilir; banka hesapları ve iptaller muaf.",
+        summary: "Kasayı eksiye düşürecek nakit çıkışı reddedilir; banka hesapları ve iptaller muaf.",
         defaultOn: false,
         audience: ["Muhasebeci"],
-        desc: "Açıkken kasadan (fiziksel nakit) para ÇIKARAN dört işlem — ödeme, masraf fişi, virmanın çıkan kasa bacağı, çek ödeme — kasayı eksiye düşürecekse reddedilir; hata mesajı kasa adını, mevcut bakiyeyi ve istenen tutarı söyler. BANKA hesapları muaftır (kredili mevduat meşru); iptal/storno her zaman geçer. ⚠️ Açmadan önce kasaların açılış/devir bakiyelerinin girildiğinden emin olun — sistemde bakiyesi 0 görünen dolu bir kasadan tek işlem bile yapılamaz.",
+        desc: "Açıkken kasayı eksiye düşürecek nakit çıkışı (ödeme, masraf, virman, çek ödeme) reddedilir; hata kasa adını ve bakiyeyi söyler. Banka hesapları ve iptaller etkilenmez. Kapalıyken eksi bakiye serbesttir.",
       },
       {
         key: "financeRiskLimitBlockEnabled",
@@ -1497,7 +1568,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Cari risk limitini aşan satış faturası onaylanamaz; alış ve iptaller muaf.",
         defaultOn: false,
         audience: ["Muhasebeci", "Yönetim"],
-        desc: "Kapalıyken (varsayılan) cari kartındaki risk limiti yalnız UYARIDIR — satışı durdurma kararı ticari bir karardır ve sistem onu vardiya ortasında sessizce vermez. Açıkken limiti aşan SATIŞ faturasının onayı reddedilir; mesaj cari adını, limiti ve mevcut bakiyeyi söyler. Alış faturaları, taslak oluşturma/düzenleme ve iptal/storno bu kuraldan MUAFTIR — limiti aşan bir faturayı iptal edememek çıkmaz olurdu.",
+        desc: "Açıkken cari risk limitini aşan satış faturasının onayı reddedilir; alış ve iptaller muaftır. Kapalıyken (varsayılan) limit yalnız uyarıdır — satışı durdurma kararı ticari bir karardır.",
       },
       {
         key: "financeAllowZeroPriceLineEnabled",
@@ -1506,7 +1577,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Fiyatı 0 olan satır faturayı onaya sokabilir (promosyon/numune/bedelsiz).",
         defaultOn: false,
         audience: ["Muhasebeci"],
-        desc: "Kapalıyken (varsayılan) fiyatı 0 olan satır faturayı onaya sokmaz. Promosyon, numune ve bedelsiz sevk yapan firmalar açar. ⚠️ İzin verilen şey SIFIRDIR, fiyatı boş bırakmak değil: '0 yazdım' bir karardır, 'fiyat bulunamadı' bir eksiktir ve ikisi aynı kapıdan geçmez. Eksi fiyat bu ayardan bağımsız her zaman reddedilir — indirim/iade ayrı belgeyle yapılır.",
+        desc: "Açıkken fiyatı 0 olan satır faturayı onaya sokabilir (promosyon, numune, bedelsiz sevk). Kapalıyken (varsayılan) 0 fiyat onayı durdurur. ⚠️ İzin verilen şey sıfırdır; fiyatı boş bırakmak değil.",
       },
       {
         key: "financeFutureDatedDocumentBlockEnabled",
@@ -1515,7 +1586,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Fatura, tahsilat, masraf ve virman belgesinin tarihi bugünden ileri olamaz.",
         defaultOn: false,
         audience: ["Muhasebeci"],
-        desc: "Açıkken fatura, tahsilat/ödeme, masraf ve virman belgelerinin tarihi bugünden ileri olamaz (gün sınırı fabrika günüdür). Kapalıyken (varsayılan) ileri tarih serbesttir. ⚠️ ÇEK bu kuralın DIŞINDADIR: çekin keşide ve vade tarihi her zaman ileri olabilir — ileri tarihli çek işin normalidir, engellemek özelliği kullanılamaz kılardı.",
+        desc: "Açıkken fatura, tahsilat/ödeme, masraf ve virman belgesinin tarihi bugünden ileri olamaz (fabrika günü). Kapalıyken (varsayılan) serbesttir. ⚠️ Çek bu kuralın dışındadır; vadesi ileri tarihlidir.",
       },
       {
         key: "financeAutoDraftFromShipmentEnabled",
@@ -1524,7 +1595,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Sevk edilen her sevkiyat için satış faturası TASLAĞI doğar; onay her zaman elle.",
         defaultOn: false,
         audience: ["Muhasebeci", "Sevkiyat"],
-        desc: "Açıkken sevk edilen her sevkiyat için satış faturası TASLAĞI kendiliğinden doğar; muhasebeci onu açar, kontrol eder ve onaylar. Fatura ONAYINI sistem asla kendi vermez. Kapalıyken (varsayılan) fatura elle oluşturulur. Not: 'Ön muhasebe modülünü aç' kapalıysa bu ayar açık olsa bile hiçbir taslak üretilmez. Taslak üretilemezse sevk yine tamamlanır — sevkiyat muhasebeye rehin edilmez.",
+        desc: "Açıkken sevk edilen her sevkiyat için satış faturası taslağı kendiliğinden doğar; muhasebeci kontrol edip onaylar. Onayı sistem asla kendi vermez. Kapalıyken (varsayılan) fatura elle oluşturulur.",
       },
       {
         key: "financeAutoAllocateOnPaymentEnabled",
@@ -1533,7 +1604,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Kaydedilen tutar en eski açık faturalardan başlayarak otomatik kapatılır.",
         defaultOn: false,
         audience: ["Muhasebeci"],
-        desc: "Açıkken kaydedilen tutar, carinin en eski açık faturalarından başlayarak otomatik kapatılır; artan tutar avans olarak açıkta bırakılır. Kapalıyken (varsayılan) hangi faturanın kapanacağını kullanıcı seçer. Otomatik yapılan kapama elle silinebilir — 'sistem yaptı' diye kilitlenmez. Faturanın para birimi tahsilattan farklıysa o fatura atlanır: kur kararı otomatikleştirilmez.",
+        desc: "Açıkken kaydedilen tahsilat/ödeme carinin en eski açık faturalarından başlayarak otomatik kapatılır; artan tutar avans olarak açıkta kalır. Kapalıyken (varsayılan) kapanacak faturayı kullanıcı seçer.",
       },
       {
         key: "financeYarnOutOnInvoiceEnabled",
@@ -1543,7 +1614,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           "Faturadaki iplik satırları onayda depodan düşer — sevkte de düşen kurulumda ÇİFTE düşüm olur.",
         defaultOn: false,
         audience: ["Muhasebeci", "Depocu"],
-        desc: "Açıkken satış faturası onaylandığında faturadaki iplik satırları kalemin varsayılan deposundan düşer; fatura iptal edilirse geri yazılır. Kapalıyken (varsayılan) iplik stoğu yalnız sevk/depo hareketiyle düşer. ⚠️ Bu bir EK GÜVENCE DEĞİL, 'stoğu hangi belge düşürüyor' sorusunun cevabıdır: sevkte de düşen bir kurulumda açmak aynı kilogramı İKİ KEZ düşürür.",
+        desc: "Açıkken satış faturası onaylanınca iplik satırları kalemin varsayılan deposundan düşer; fatura iptalinde geri yazılır. Kapalıyken (varsayılan) iplik yalnız sevk/depo hareketiyle düşer. ⚠️ Sevkte de düşen kurulumda çift düşüm olur.",
       },
     ],
   },
@@ -1610,8 +1681,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "scanner",
     label: "Tabanca",
     icon: ScanLine,
-    description:
-      "Barkod tabancası: “her yerde okut” davranışı, terminatör ve burst tespiti hassasiyeti.",
+    description: "Barkod tabancası: “her yerde okut” davranışı, terminatör ve burst tespiti hassasiyeti.",
     keywords:
       "barkod qr tabanca okuyucu scanner wedge klavye usb bluetooth her yerde okut terminator enter tab " +
       "hassasiyet burst test bu bilgisayar yerel workstation",
@@ -1670,19 +1740,17 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     icon: FlaskConical,
     description:
       "Bu kurulum bir DEMO/EĞİTİM kurulumu mu? Açıkken örnek senaryo üreten yardımcılar ve DEMO rozeti görünür.",
-    keywords:
-      "demo eğitim tanıtım örnek senaryo test sunum müşteri gösterimi deneme kurulum sandbox",
+    keywords: "demo eğitim tanıtım örnek senaryo test sunum müşteri gösterimi deneme kurulum sandbox",
     kind: "flags",
     section: "demo",
     flags: [
       {
         key: "demoModeEnabled",
         title: "Bu kurulum bir DEMO kurulumudur",
-        summary:
-          "Ekranlarda örnek veri üreten 'Demo' yardımcıları ve üst şeritte DEMO rozeti görünür.",
+        summary: "Ekranlarda örnek veri üreten 'Demo' yardımcıları ve üst şeritte DEMO rozeti görünür.",
         defaultOn: false,
         audience: ["Yönetim"],
-        desc: "KAPALI (varsayılan) olduğunda hiçbir demo yardımcısı çizilmez ve /api/demo/* uçları 403 döner — yani gerçek bir fabrika kurulumunda bu bölümün varlığı tek başına hiçbir şeyi değiştirmez. AÇIK olduğunda, sahada denenmesi zor akışlar (yeniden etiketle, kartela sevk/kabul, kurşun kuyruğu, planlı sevkiyat) tek tıkla örnek veriyle doldurulabilir; üretilen her kayıt DEMO- önekiyle ve denetim izi bırakarak doğar. Gerçek bir fabrikada AÇMAYIN.",
+        desc: "Açıkken ekranlarda örnek veri üreten Demo yardımcıları ve üst şeritte DEMO rozeti görünür; /api/demo/* uçları açılır. Kapalıyken (varsayılan) hiçbiri çizilmez ve uçlar 403 verir. Gerçek fabrikada kapalı kalır.",
       },
     ],
   },

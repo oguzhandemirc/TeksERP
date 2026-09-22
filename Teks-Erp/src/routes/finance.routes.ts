@@ -764,7 +764,7 @@ const cashBoxService = new BaseService({
   uniqueField: "code",
   duplicateNameField: "name",
   entityLabel: "kasa",
-  autoCode: { prefix: "KS" },
+  autoCode: { series: "cashAccount" },
 });
 const bankAccountService = new BaseService({
   modelName: "bankAccount",
@@ -775,7 +775,7 @@ const bankAccountService = new BaseService({
   uniqueField: "code",
   duplicateNameField: "name",
   entityLabel: "banka hesabı",
-  autoCode: { prefix: "BN" },
+  autoCode: { series: "bankAccount" },
 });
 // ⚠️ EXPORT bekçi içindir (`test_ticaret_links_and_filters` §5): kur listesinin
 // `dateFields` sözleşmesini GERÇEK config üzerinden ölçer. Bekçi kendi

@@ -26,6 +26,8 @@ import { tr } from "date-fns/locale";
 
 /** Backend `tableName` → Türkçe modül adı. */
 export const TABLE_LABELS: Record<string, string> = {
+  NumberSeries: "Numara serisi",
+  number_series: "Numara serisi",
   // Sistem event kategorileri (tableName = kategori string'i)
   AUTH: "Kimlik Doğrulama",
   SYSTEM: "Sistem",
@@ -271,6 +273,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   PERMISSION_CATALOG_RECONCILED: "Yetki kataloğu eşitlendi",
   PERMISSION_CATALOG_RECONCILE_FAILED: "Yetki kataloğu eşitlenemedi",
   ROLE_TEMPLATE_CATALOG_RECONCILED: "Rol kataloğu eşitlendi",
+  NUMBER_SERIES_SEEDED: "Numara serileri eşitlendi",
 
   // ── SYSTEM · onarım / backfill izleri ──
   // Bunlar `scripts/*.ts --apply` koşumlarının bıraktığı izdir: operatör "bu veriyi
@@ -307,6 +310,14 @@ export { auditFieldLabel as fieldLabel } from "./audit-field-labels";
 
 /** Enum DEĞERLERİ (durum/tür kolonlarının içeriği) → Türkçe. Bilinmeyen → ham. */
 export const ENUM_LABELS: Record<string, string> = {
+  // NumberSeriesDateSegment — numara serisindeki tarih parçası. Sıfırlama dönemini
+  // de BU belirler, yani etiket "gösterim" değil "sayaç kapsamı" anlatır.
+  NONE: "Tarih yok (sayaç sıfırlanmaz)",
+  DDMMYY: "Gün-Ay-Yıl (günlük sayaç)",
+  YYMM: "Yıl-Ay, 2 haneli yıl (aylık sayaç)",
+  YYYYMM: "Yıl-Ay, 4 haneli yıl (aylık sayaç)",
+  YY: "Yıl, 2 haneli (yıllık sayaç)",
+  YYYY: "Yıl, 4 haneli (yıllık sayaç)",
   // StationKind / StationType
   RAW_QC: "Ham Kalite (KK1)",
   PROCESS_QC: "Kurşun + Kalite (KK2)",

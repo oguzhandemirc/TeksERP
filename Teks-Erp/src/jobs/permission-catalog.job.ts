@@ -34,6 +34,7 @@ import { PERMISSION_CATALOG, type PermissionCatalogEntry } from "../constants/pe
 import { AuditService } from "../services/audit.service";
 import { reconcileRoleTemplates } from "./role-template-catalog.job";
 import { reconcileReasonPresets } from "./reason-preset-catalog.job";
+import { reconcileNumberSeries } from "./number-series-catalog.job";
 import { bilgi, hata, uyari } from "../lib/logger";
 
 // Soğuk açılışta DB (özellikle Windows sunucuda PostgreSQL servisi) backend'den
@@ -160,6 +161,17 @@ export function startPermissionCatalogReconciler(): void {
           r.created.length > 0
             ? `${r.created.length} yeni sistem sebebi eklendi: ${r.created.join(", ")}`
             : `katalog güncel (${r.existing} sistem + ${r.custom} fabrika satırı)`,
+        );
+      })
+      // (4) Numara serileri — aynı zincir, aynı gerekçe (soğuk açılışta DB hazır
+      // olmayabilir). Düşerse numara üretimi katalog tohumuyla sürer (fail-safe).
+      .then(async () => {
+        const r = await reconcileNumberSeries();
+        bilgi(
+          "number-series",
+          r.created.length > 0
+            ? `${r.created.length} yeni numara serisi eklendi: ${r.created.join(", ")}`
+            : `katalog güncel (${r.existing} seri)`,
         );
       })
       .catch((err) => {

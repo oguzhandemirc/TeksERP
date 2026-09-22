@@ -16,7 +16,7 @@
 // =============================================================================
 
 import { Prisma, StepStatus, WorkOrderStatus } from "@prisma/client";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "../number-series.service";
 import { AppError } from "../../utils/app-error";
 import { TravelerCardService } from "../traveler-card.service";
 import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
@@ -34,16 +34,16 @@ export async function generateWorkOrderNumberTx(
   tx: Prisma.TransactionClient,
   date: Date,
 ): Promise<string> {
-  const prefix = dailyCodePrefix("IE", date);
+  const prefix = seriesCodePrefix("workOrder", date);
   const todays = await tx.workOrder.findMany({
     where: { workOrderNumber: { gte: prefix, startsWith: prefix } },
     select: { workOrderNumber: true },
   });
-  const seq = nextDailySeq(
+  const seq = seriesSeqFrom(
     todays.map((w) => w.workOrderNumber),
     prefix,
   );
-  return buildDailyCode("IE", seq, date);
+  return buildSeriesCode("workOrder", seq, date);
 }
 
 export interface CloneWorkOrderResult {

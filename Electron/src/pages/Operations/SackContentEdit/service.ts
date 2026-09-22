@@ -69,12 +69,17 @@ export const sackHubService = {
     scope?: string;
     /** true → yalnız çuvalı olan cariler. Verilmezse TÜM cariler (varsayılan). */
     withSacksOnly?: boolean;
+    /** Sıralama SUNUCUDA (kapsamın tamamı); verilmezse çuvalı olanlar üstte, ad. */
+    sortBy?: "name" | "sackCount" | "rollCount" | "openLotCount";
+    sortOrder?: "asc" | "desc";
     cursor?: string;
     limit?: number;
   }): Promise<ApiResponse<SackCustomerPage>> => {
     const q = new URLSearchParams();
     if (params?.search?.trim()) q.set("search", params.search.trim());
     if (params?.scope) q.set("scope", params.scope);
+    if (params?.sortBy) q.set("sortBy", params.sortBy);
+    if (params?.sortOrder) q.set("sortOrder", params.sortOrder);
     // ⚠️ Yalnız AÇIKKEN gönderilir. Sunucu varsayılanı "tüm cariler"; burada
     //    koşulsuz `"0"` yazmak sözleşmeyi iki yerde tanımlar.
     if (params?.withSacksOnly) q.set("withSacksOnly", "1");
@@ -166,6 +171,37 @@ export const sackHubService = {
     apiClient
       .post<ApiResponse<PackingGroup>>(`/api/shipping/packing-groups/${groupId}/sacks`, { sackIds })
       .then((r) => r.data),
+
+  /** Partinin havuzdaki TÜM çuvallarını çıkar — kapsam SUNUCUDA (`:id`), sayfa değil.
+   *  `GENERAL` = carisiz genel havuz. Planlı sevkteki çuval atlanır, sayısı yanıtta. */
+  releasePackingGroupSacks: (
+    groupId: string,
+    target: "CUSTOMER" | "GENERAL",
+  ): Promise<ApiResponse<{ released: number; skippedPlanned: number; target: "CUSTOMER" | "GENERAL" }>> =>
+    apiClient
+      .post<ApiResponse<{ released: number; skippedPlanned: number; target: "CUSTOMER" | "GENERAL" }>>(
+        `/api/shipping/packing-groups/${groupId}/release`,
+        { target },
+      )
+      .then((r) => r.data),
+
+  /** Partinin DEPODAKİ çuvalları — cursor sonuna kadar (parti satırından sevk/dağıt
+   *  kapsamı; ekrandaki sayfa değil, `fetchAll` ile aynı disiplin). */
+  fetchLotWarehouseSacks: async (groupId: string): Promise<SackSearchRow[]> => {
+    const all: SackSearchRow[] = [];
+    let cursor: string | null = null;
+    for (let guard = 0; guard < 100; guard++) {
+      const page: CursorPaginatedResponse<SackSearchRow> = await sackHubService.listSacks({
+        cursor,
+        limit: 500,
+        filters: { packingGroupId: groupId, scope: "POOL" },
+      });
+      all.push(...page.data);
+      cursor = page.pagination.nextCursor;
+      if (!cursor) break;
+    }
+    return all;
+  },
 
   /** Çuvalları gruptan çıkar ("Gruplanmamış"a döner). Grup SİLİNMEZ; son çuval
    *  da çıkarsa kendiliğinden görünmez olur. */

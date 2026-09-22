@@ -370,6 +370,14 @@ export const updateSchema = z.strictObject({
   packingLotRequired: z.boolean().optional(),
   packingLotPartialDispatch: z.boolean().optional(),
   shippingDocPackingLot: z.boolean().optional(),
+  // Sevkiyat içi çuval sırası etiketi + partisiz ambalaj no rejimi (2026-09-22).
+  shippingSackSeqOnDoc: z.boolean().optional(),
+  // Serbest metin (≤8): harf · rakam · - _ . / · boşluk — belgeye HTML kaçışıyla girer.
+  shippingSackSeqPrefix: z.string().max(8).regex(/^[\p{L}\p{N}\-_./ ]*$/u, "Yalnız harf, rakam, - _ . / ve boşluk").optional(),
+  shippingSackSeqPrefixLive: z.boolean().optional(),
+  shippingSackSeqStart: z.number().int().min(0).max(999).nullable().optional(),
+  shippingSackSeqShowTotal: z.boolean().optional(),
+  packingPoolPackageNo: z.enum(["sevkte", "acilista"]).optional(),
   sackDumpNameMode: z.enum(["ikisi", "bizdeki", "musterideki"]).optional(),
   // shipping.allocWidthTolerance* — tahsiste EN toleransı (default kapalı = tam eşitlik).
   // ⚠️ Kumaş ve renk toleranstan ETKİLENMEZ.

@@ -22,7 +22,7 @@ export const colorService = new ColorService({
   defaultInclude: undefined,
   uniqueField: "code",
   // Kod backend-authoritative: `RNK+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
-  autoCode: { prefix: "RNK" },
+  autoCode: { series: "color" },
   // ⚠️ `duplicateNameField` DEĞİL: renk mükerreri ayraç-duyarsız ve rakam-önce
   // katlamayla kontrol ediliyor (`ColorService.assertNameAvailable`). Bu alan
   // yalnız "benzer kayıtlar" ucunu besler, genel guard'ı AÇMAZ.

@@ -18,6 +18,14 @@
 //   §8 Sentinel değeri Electron aynasıyla BİREBİR (Electron backend'i import
 //      edemez → değer iki yerde yaşar; ayrışırsa süzgeç sessizce 0 satır döner).
 //   §9 VARSAYILAN mod TÜM cariler; çuvalsız cari 0 ile döner, çuvalı olan ÜSTTE.
+//  §10 SUNUCU SIRALAMASI + KEYSET CURSOR (2026-09-22, tek toplulaştırma SQL'i):
+//      top sayısı çuval kapsamıyla aynı · açık parti yalnız sevk partisi modunda ·
+//      sortBy=sackCount/rollCount/openLotCount/name kapsamın tamamı üstünde ·
+//      limit=1 ile sayfalar kopyasız/boşluksuz · geçersiz sortBy 400 (fail-closed) ·
+//      scope=ALL SQL ikizi (`scopeSql`) Prisma ikiziyle (`scopeWhere`) aynı sayıyı verir.
+//      ⭐ Negatif sonda (2026-09-22): cursor SQL'inde ad tie-break dalı silinince §10e
+//      (limit=1 sayfalama, eşit sayılı C/D) KIRMIZI — D düşer; `openLotCount` her modda
+//      dönünce §10c KIRMIZI.
 //
 // ⚠️ 2026-09-04 AKŞAM: kapı varsayılanı TERSİNE ÇEVRİLDİ (kullanıcı kararı).
 //    Eskiden yalnız çuvalı olanlar dönüyordu; artık o bir SÜZGEÇ
@@ -27,7 +35,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import prisma from "../src/lib/prisma";
-import { SackSearchService, CUSTOMERLESS_FILTER_VALUE } from "../src/services/sack-search.service";
+import { SackSearchService, CUSTOMERLESS_FILTER_VALUE, type SackCustomerSortKey } from "../src/services/sack-search.service";
+import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/system-setting.service";
+import { fixtureWarehouseId } from "./fixture-warehouse";
+import { firstGrade } from "./fixture-quality-grade";
+import type { Prisma } from "@prisma/client";
 
 let pass = 0;
 let fail = 0;
@@ -37,6 +49,21 @@ function check(label: string, ok: boolean, extra = "") {
 }
 
 type Row = { id: string; customer: { id: string; name: string } | null };
+
+const rollIds: string[] = [];
+const groupIds: string[] = [];
+let itemId = "";
+let colorId = "";
+const prevFlags = new Map<string, Prisma.InputJsonValue | undefined>();
+/** Bayrak yazımı — önceki değer saklanır, finally geri koyar; cache her yazımda tazelenir. */
+async function setFlag(key: string, value: Prisma.InputJsonValue): Promise<void> {
+  if (!prevFlags.has(key)) {
+    const cur = await prisma.systemSetting.findUnique({ where: { key }, select: { value: true } });
+    prevFlags.set(key, cur ? (cur.value as Prisma.InputJsonValue) : undefined);
+  }
+  await prisma.systemSetting.upsert({ where: { key }, create: { key, value, description: "test_sack_customer_gate" }, update: { value } });
+  invalidateFeatureFlagsCache();
+}
 
 async function main() {
   const ts = Date.now();
@@ -55,6 +82,9 @@ async function main() {
     // söküp test yine yeşil geçti).
     prisma.customer.create({ data: { code: `TST-GATE-C-${ts}`, name: `ZZKAPI AAA ${ts}` }, select: { id: true, name: true } }),
   ]);
+  // D: C ile HER sayıda eşit (0 çuval · 0 top · 0 parti) — §10e'nin ad/id tie-break'ini
+  // ölçen özne; tek başına C olsaydı eşitlik hiç oluşmaz ve cursor kusuru görünmezdi.
+  const cD = await prisma.customer.create({ data: { code: `TST-GATE-D-${ts}`, name: `ZZKAPI DELTA ${ts}` }, select: { id: true, name: true } });
   const shipment = await prisma.shipment.create({
     data: { shipmentNo: `TEST-GATE-${ts}`, customerId: cA.id, status: "DISPATCHED" },
     select: { id: true },
@@ -205,10 +235,100 @@ async function main() {
       new RegExp(`CUSTOMERLESS_FILTER_VALUE\\s*=\\s*"${CUSTOMERLESS_FILTER_VALUE}"`).test(mirror),
       mirrorPath,
     );
+    // ── §10 Sunucu sıralaması + keyset cursor (tek toplulaştırma SQL'i) ──────
+    // Top: A=2 (SK1), B=1 (SK3), C=0. Açık parti: A=1 (+1 CLOSED sayılmaz), B=2, C=0.
+    const item = await prisma.item.create({
+      data: { code: `TST-GATE-I-${ts}`, name: `GATE KUMAŞ ${ts}`, itemType: "FABRIC", unit: "MT" }, select: { id: true },
+    });
+    itemId = item.id;
+    const color = await prisma.color.create({ data: { code: `TST-GATE-C-${ts}`, name: `GATE EKRU ${ts}` }, select: { id: true } });
+    colorId = color.id;
+    const grade = await firstGrade();
+    const wh = await fixtureWarehouseId();
+    const mkRoll = (n: number, sackId: string) =>
+      prisma.roll.create({
+        data: {
+          warehouseId: wh, barcode: `TEST-GATE-R${n}-${ts}`, itemId, colorId, status: "WAREHOUSE",
+          currentQty: 10, initialQty: 10, width: 150, qualityGrade: grade.code, qualityGradeId: grade.id,
+          entrySource: "SUPPLIER_RECEIPT", sackId,
+        },
+        select: { id: true },
+      });
+    for (const r of [await mkRoll(1, sacks[0]!.id), await mkRoll(2, sacks[0]!.id), await mkRoll(3, sacks[2]!.id)]) rollIds.push(r.id);
+    const mkGroup = (n: number, customerId: string, status: "OPEN" | "CLOSED") =>
+      prisma.packingGroup.create({ data: { customerId, code: `PRT-TST-G${n}${ts}`.slice(0, 16), name: `TEST-GATE-P${n}-${ts}`, status }, select: { id: true } });
+    for (const g of [
+      await mkGroup(1, cA.id, "OPEN"), await mkGroup(2, cA.id, "CLOSED"),
+      await mkGroup(3, cB.id, "OPEN"), await mkGroup(4, cB.id, "OPEN"),
+    ]) groupIds.push(g.id);
+
+    const byKey = async (sortBy: SackCustomerSortKey, sortOrder?: "asc" | "desc") =>
+      (await svc.listSackCustomers({ search: "ZZKAPI", sortBy, sortOrder })).data.items.map((r) => r.customerId);
+    const sira = (ids: (string | null)[], ...beklenen: string[]) =>
+      beklenen.map((id) => ids.indexOf(id)).every((i, k, arr) => i >= 0 && (k === 0 || i > arr[k - 1]!));
+
+    const g10 = (await svc.listSackCustomers({ search: "ZZKAPI" })).data.items;
+    const rA = g10.find((r) => r.customerId === cA.id), rB = g10.find((r) => r.customerId === cB.id), rC = g10.find((r) => r.customerId === cC.id);
+    check("§10a top sayısı çuval kapsamından (A=2 · B=1 · C=0)", rA?.rollCount === 2 && rB?.rollCount === 1 && rC?.rollCount === 0,
+      `${rA?.rollCount}/${rB?.rollCount}/${rC?.rollCount}`);
+    check("§10b sortBy=rollCount desc: A → B → C", sira(await byKey("rollCount"), cA.id, cB.id, cC.id));
+    check("§10b sortBy=name asc: AAA(C) → ALFA(A) → BETA(B)", sira(await byKey("name"), cC.id, cA.id, cB.id));
+    check("§10b sortBy=sackCount asc: C(0) → B(1) → A(2)", sira(await byKey("sackCount", "asc"), cC.id, cB.id, cA.id));
+
+    // Açık parti yalnız sevk partisi modunda döner — bayrak upsert'i try İÇİNDE, finally geri alır.
+    await setFlag(SETTING_KEYS.PACKING_GROUPS_ENABLE, "true");
+    await setFlag(SETTING_KEYS.PACKING_GROUP_MODE, "grup");
+    const grupModu = (await svc.listSackCustomers({ search: "ZZKAPI" })).data.items.find((r) => r.customerId === cB.id);
+    check("§10c grup modunda `openLotCount` alanı HİÇ gitmez", grupModu !== undefined && !("openLotCount" in grupModu));
+    await setFlag(SETTING_KEYS.PACKING_GROUP_MODE, "sevk-partisi");
+    const lotModu = (await svc.listSackCustomers({ search: "ZZKAPI" })).data.items;
+    const lA = lotModu.find((r) => r.customerId === cA.id), lB = lotModu.find((r) => r.customerId === cB.id), lC = lotModu.find((r) => r.customerId === cC.id);
+    check("§10c sevk partisi modunda açık parti (A=1, CLOSED sayılmaz · B=2 · C=0)",
+      lA?.openLotCount === 1 && lB?.openLotCount === 2 && lC?.openLotCount === 0, `${lA?.openLotCount}/${lB?.openLotCount}/${lC?.openLotCount}`);
+    check("§10d sortBy=openLotCount desc: B → A → C", sira(await byKey("openLotCount"), cB.id, cA.id, cC.id));
+
+    // Keyset cursor: limit=1 ile üç sayfa — kopya yok, boşluk yok; eşit sayılı (0 top) cariler de.
+    const sayfalar: (string | null)[] = [];
+    let cur: string | undefined;
+    for (let i = 0; i < 8; i++) {
+      const pg = (await svc.listSackCustomers({ search: "ZZKAPI", sortBy: "rollCount", limit: 1, cursor: cur })).data;
+      sayfalar.push(...pg.items.map((r) => r.customerId));
+      if (!pg.nextCursor) break;
+      cur = pg.nextCursor;
+    }
+    const ucCari = sayfalar.filter((id) => id && [cA.id, cB.id, cC.id, cD.id].includes(id));
+    check("⭐ §10e limit=1 keyset sayfalama: dört cari birer kez, sırayla (A, B, C, D — C/D eşit, ad tie-break)",
+      ucCari.length === 4 && new Set(ucCari).size === 4 && sira(ucCari, cA.id, cB.id, cC.id, cD.id), ucCari.length + " satır");
+    check("§10e cursor'lu sayfada müşterisiz kovası TEKRAR gelmez", sayfalar.filter((id) => id === null).length <= 1);
+
+    // Kapsam ikizi: SQL (`scopeSql`) ↔ Prisma (`scopeWhere`) — scope=ALL'da A 3 çuval, liste de 3.
+    const sqlAll = (await svc.listSackCustomers({ search: "ZZKAPI", scope: "ALL" })).data.items.find((r) => r.customerId === cA.id);
+    const prismaAll = ((await svc.searchSacks({ customerId: cA.id, scope: "ALL", limit: 100 })).data as Row[]).filter((r) => mine.has(r.id));
+    check("⭐ §10f scope=ALL: SQL ikizi ile Prisma ikizi aynı sayıyı verir (3)", sqlAll?.sackCount === 3 && prismaAll.length === 3,
+      `sql=${sqlAll?.sackCount} prisma=${prismaAll.length}`);
+    const sqlPlanned = (await svc.listSackCustomers({ search: "ZZKAPI", scope: "DISPATCHED" })).data.items.find((r) => r.customerId === cA.id);
+    check("§10f scope=DISPATCHED: yalnız sevk edilmiş (1)", sqlPlanned?.sackCount === 1, String(sqlPlanned?.sackCount));
+
+    // Arama SQL ikizi: kod ve ad (katlanmış) — `buildTextSearch` ile aynı hüküm.
+    const kodla = (await svc.listSackCustomers({ search: `TST-GATE-B-${ts}` })).data.items;
+    check("§10g arama KODA vuruyor (SQL ikizi)", kodla.some((r) => r.customerId === cB.id) && !kodla.some((r) => r.customerId === cA.id));
+    const adla = (await svc.listSackCustomers({ search: "zzkapı beta" })).data.items;
+    check("§10g arama ADA Türkçe katlamayla vuruyor (ı → i, iki kelime AND)", adla.some((r) => r.customerId === cB.id) && !adla.some((r) => r.customerId === cA.id));
+    const jokerli = (await svc.listSackCustomers({ search: "%" })).data.items;
+    check("§10g LIKE jokeri DEĞER olarak kaçırılır ('%' hiçbir cariyi eşlemez)", jokerli.length === 0, `${jokerli.length} satır`);
   } finally {
+    await prisma.roll.deleteMany({ where: { id: { in: rollIds } } }).catch(() => {});
+    await prisma.packingGroup.deleteMany({ where: { id: { in: groupIds } } }).catch(() => {});
     await prisma.sack.deleteMany({ where: { id: { in: sackIds } } });
     await prisma.shipment.delete({ where: { id: shipment.id } }).catch(() => {});
-    await prisma.customer.deleteMany({ where: { id: { in: [cA.id, cB.id, cC.id] } } }).catch(() => {});
+    await prisma.customer.deleteMany({ where: { id: { in: [cA.id, cB.id, cC.id, cD.id] } } }).catch(() => {});
+    if (itemId) await prisma.item.delete({ where: { id: itemId } }).catch(() => {});
+    if (colorId) await prisma.color.delete({ where: { id: colorId } }).catch(() => {});
+    for (const [key, prev] of prevFlags) {
+      if (prev === undefined) await prisma.systemSetting.deleteMany({ where: { key } });
+      else await prisma.systemSetting.update({ where: { key }, data: { value: prev } });
+    }
+    invalidateFeatureFlagsCache();
   }
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

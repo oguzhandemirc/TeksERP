@@ -9,7 +9,7 @@ import { Prisma, CariKind, Currency, InvoiceType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { resolvePartyToCardTx } from "./party-card.helper";
-import { dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "../number-series.service";
 
 /** Sıfır Decimal — float aritmetiği YASAK (perf/doğruluk kuralı). */
 export const D0 = (): Prisma.Decimal => new Prisma.Decimal(0);
@@ -22,11 +22,11 @@ export const D = (v: Prisma.Decimal.Value): Prisma.Decimal => new Prisma.Decimal
  * faturalarını aynı sayaçta karıştırırdı ve muhasebeci "SF00012 hangisiydi"
  * sorusunu belge numarasından cevaplayamazdı.
  */
-export const INVOICE_PREFIX: Record<InvoiceType, string> = {
-  SALES: "SF",
-  PURCHASE: "AF",
-  SALES_RETURN: "SI",
-  PURCHASE_RETURN: "AI",
+export const INVOICE_SERIES: Record<InvoiceType, string> = {
+  SALES: "invoiceSales",
+  PURCHASE: "invoicePurchase",
+  SALES_RETURN: "invoiceSalesReturn",
+  PURCHASE_RETURN: "invoicePurchaseReturn",
 };
 
 /**
@@ -42,26 +42,27 @@ export async function nextInvoiceNoTx(
   type: InvoiceType,
   date: Date,
 ): Promise<string> {
-  const full = dailyCodePrefix(INVOICE_PREFIX[type], date);
+  const full = seriesCodePrefix(INVOICE_SERIES[type], date);
   const rows = await tx.invoice.findMany({
     where: { docNo: { gte: full, startsWith: full } },
     select: { docNo: true },
   });
-  return `${full}${String(nextDailySeq(rows.map((r) => r.docNo), full)).padStart(4, "0")}`;
+  return buildSeriesCode(INVOICE_SERIES[type], seriesSeqFrom(rows.map((r) => r.docNo), full), date);
 }
 
-/** Tahsilat "TH", ödeme "OD". */
+/** Tahsilat "TH", ödeme "OD" (varsayılan; ön ekler `number_series`ten). */
 export async function nextPaymentNoTx(
   tx: Prisma.TransactionClient,
   direction: "IN" | "OUT",
   date: Date,
 ): Promise<string> {
-  const full = dailyCodePrefix(direction === "IN" ? "TH" : "OD", date);
+  const seriesKey = direction === "IN" ? "paymentIn" : "paymentOut";
+  const full = seriesCodePrefix(seriesKey, date);
   const rows = await tx.payment.findMany({
     where: { docNo: { gte: full, startsWith: full } },
     select: { docNo: true },
   });
-  return `${full}${String(nextDailySeq(rows.map((r) => r.docNo), full)).padStart(4, "0")}`;
+  return buildSeriesCode(seriesKey, seriesSeqFrom(rows.map((r) => r.docNo), full), date);
 }
 
 // -----------------------------------------------------------------------------

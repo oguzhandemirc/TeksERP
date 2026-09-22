@@ -72,7 +72,7 @@ describe("Modüller kategorisi — süperadmin kilidi", () => {
   it("§1 fabrika yöneticisi: salt-okunur + bant (sistem hesabı VAR)", () => {
     setIdentity(false, true);
     renderWithProviders(<FeatureFlagSection flags={[FLAG]} superadminOnly />);
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
     expect(screen.getByText(BANT)).toBeTruthy();
     // ⭐ SATIR DA AYNI TEŞHİSİ BASAR: eskiden sabit "admin:settings yetkisi
     // gerekir" yazıyordu ve kullanıcı olmayan bir yetkiyi aramaya giderdi.
@@ -84,21 +84,21 @@ describe("Modüller kategorisi — süperadmin kilidi", () => {
   it("§2 satıcı hesabı: yazabilir, bant YOK", () => {
     setIdentity(true, true);
     renderWithProviders(<FeatureFlagSection flags={[FLAG]} superadminOnly />);
-    expect(screen.getByRole("checkbox")).toBeTruthy();
+    expect(screen.getByRole("switch")).toBeTruthy();
     expect(screen.queryByText(BANT)).toBeNull();
   });
 
   it("§3 SUPAP: sistem hesabı hiç doğmamışsa fabrika yöneticisi yazabilir", () => {
     setIdentity(false, false);
     renderWithProviders(<FeatureFlagSection flags={[FLAG]} superadminOnly />);
-    expect(screen.getByRole("checkbox")).toBeTruthy();
+    expect(screen.getByRole("switch")).toBeTruthy();
     expect(screen.queryByText(BANT)).toBeNull();
   });
 
   it("§4 REGRESYON: superadminOnly'siz kategori kimlikten etkilenmez", () => {
     setIdentity(false, true);
     renderWithProviders(<FeatureFlagSection flags={[FLAG]} />);
-    expect(screen.getByRole("checkbox")).toBeTruthy();
+    expect(screen.getByRole("switch")).toBeTruthy();
     expect(screen.queryByText(BANT)).toBeNull();
   });
 
@@ -106,7 +106,7 @@ describe("Modüller kategorisi — süperadmin kilidi", () => {
     perm.mockImplementation(() => false);
     setIdentity(true, true);
     renderWithProviders(<FeatureFlagSection flags={[FLAG]} superadminOnly />);
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
     // Sebep izin eksikliği — kimlik bandı çizilmez (yanlış teşhis vermez).
     expect(screen.queryByText(BANT)).toBeNull();
   });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ import {
   usePackingLotRequired,
 } from "@/hooks/usePricingEnabled";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 import { isLotMode, newSackLotTarget, packageNoField, parsePackageNoInput, singleCustomerFromFilter } from "./packingLotUi";
@@ -99,15 +100,15 @@ export function NewSackDialog({ open, onOpenChange, onCreated, prefillCustomer =
           <DialogTitle className="flex items-center gap-2">
             <PackagePlus className="h-4 w-4" /> Yeni Çuval Aç
           </DialogTitle>
-          <DialogDescription>
-            Müşteri opsiyonel — boş bırakırsan çuval genel stok (müşterisiz) açılır, sevkiyat kurarken atanır.
-          </DialogDescription>
+          <DialogDescription>{hintText(!!urlCustomerId)}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           {lotMode && <LotFields lot={lot} />}
-          {/* Partide açılan çuvalın carisi PARTİDEN gelir — cari/şube alanı çizilmez. */}
-          {!(lotMode && target.packingGroupId) && (
+          {/* Partide açılan çuvalın carisi PARTİDEN gelir — cari/şube alanı çizilmez. Cari
+              çalışma alanındayken (kapıdan cari seçildi) de sorulmaz: cari zaten belli,
+              pencere yalnız parti sorar (saha 2026-09-22). */}
+          {!(lotMode && target.packingGroupId) && !urlCustomerId && (
             <CustomerFields
               customerId={customerId}
               branchId={branchId}
@@ -139,7 +140,7 @@ export function NewSackDialog({ open, onOpenChange, onCreated, prefillCustomer =
 }
 
 /** Backend `OpenedSack` → editör hedefi (çözülmüş ad/kod + parti alanları). */
-function openedToTarget(d: OpenedSack): EditorTarget {
+export function openedToTarget(d: OpenedSack): EditorTarget {
   return {
     sackId: d.id,
     sackNo: d.sackNo,
@@ -154,6 +155,35 @@ function openedToTarget(d: OpenedSack): EditorTarget {
     packageNo: d.packageNo ?? null,
   };
 }
+
+/**
+ * PARTİ İÇİNDEYKEN "Yeni Çuval" PENCERE AÇMAZ (saha 2026-09-22: "zaten partideyim,
+ * sorma"): çuval doğrudan o partide, sıradaki ambalaj numarasıyla açılır — editördeki
+ * "Yeni Çuvala Geç" ile aynı yol. Yalnız `elle` numara modunda pencere kalır (numara
+ * zorunlu, sorulmadan verilemez). Döner: parti içindeyse `open()`, değilse `null`.
+ */
+export function useOpenSackInLot(lotId: string | null, onCreated: (t: EditorTarget) => void): { open: () => void; pending: boolean } | null {
+  const qc = useQueryClient();
+  const noField = packageNoField(usePackageNoMode());
+  const token = useRef(crypto.randomUUID());
+  const mut = useMutation({
+    mutationFn: () => sackHubService.openSack({ customerId: null, branchId: null, clientToken: token.current, packingGroupId: lotId, packageNo: null }),
+    onSuccess: (res) => {
+      token.current = crypto.randomUUID(); // yeni mantıksal deneme
+      invalidateSackHub(qc);
+      toast.success(res.message ?? `Çuval açıldı: ${res.data.sackNo}${res.data.packageNo != null ? ` · Ambalaj No ${res.data.packageNo}` : ""}`);
+      onCreated(openedToTarget(res.data));
+    },
+  });
+  if (!lotId || noField.required) return null;
+  return { open: () => mut.mutate(), pending: mut.isPending };
+}
+
+/** Pencere açıklaması — cari çalışma alanında yalnız parti sorulur (saha 2026-09-22). */
+const hintText = (cariBelli: boolean): string =>
+  cariBelli
+    ? "Çuval bu cariye açılır."
+    : "Müşteri opsiyonel — boş bırakırsan çuval genel stok (müşterisiz) açılır, sevkiyat kurarken atanır.";
 
 /** Müşteri (opsiyonel) + şube (opsiyonel) alanları — partisiz çuval yolu. */
 function CustomerFields({
@@ -235,6 +265,8 @@ function LotFields({ lot }: { lot: ReturnType<typeof useNewSackLot> }) {
   const blocked = target.blocked;
   const showNo = !!target.packingGroupId && noField.shown;
   const noRequired = noField.required;
+  // Sıradaki numara SEÇİLİ partiden — alan boşken ne verileceği görünür (saha 2026-09-22).
+  const siradaki = lots.find((p) => p.id === target.packingGroupId)?.nextPackageNo;
   const noHint = noParse.error ?? noField.hint;
   return (
     <>
@@ -249,7 +281,7 @@ function LotFields({ lot }: { lot: ReturnType<typeof useNewSackLot> }) {
           <option value="">{lotCustomerId ? "Partisiz (havuz)" : "Önce cari seçin"}</option>
           {lots.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name} — {p.sackCount} açık çuval · sıradaki no {p.nextPackageNo}
+              {p.name} · {p.sackCount} çuval
             </option>
           ))}
         </select>
@@ -261,10 +293,19 @@ function LotFields({ lot }: { lot: ReturnType<typeof useNewSackLot> }) {
           <Input
             inputMode="numeric"
             value={packageNoRaw}
-            placeholder={noRequired ? "örn. 12" : "boş = sıradaki"}
+            placeholder={noRequired ? "örn. 12" : "Boş bırakırsan otomatik atama yapar"}
             onChange={(e) => setPackageNoRaw(e.target.value)}
           />
-          <p className="mt-1 text-[11px] text-muted-foreground">{noHint}</p>
+          {/* Sıradaki numara ROZET olarak — yer tutucuda değil (silik metin okunmuyor, saha 2026-09-22).
+              İpucu yalnız hata ya da zorunlu modda; "boş bırakırsan" cümlesi yer tutucuda zaten var. */}
+          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+            {siradaki != null && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground shadow-sm">
+                Sıradaki numara: <span className="tabular-nums font-semibold">{siradaki}</span>
+              </span>
+            )}
+            {(noParse.error || noRequired) && <span className={cn(noParse.error && "text-destructive")}>{noHint}</span>}
+          </div>
         </label>
       )}
     </>

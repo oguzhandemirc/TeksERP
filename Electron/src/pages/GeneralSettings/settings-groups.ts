@@ -18,6 +18,7 @@ import {
   SETTINGS_SECTIONS,
   SETTINGS_TAB_ALIASES,
   type EnumFlagDef,
+  type TextFlagDef,
   type FlagDef,
   type NumberFlagDef,
   type SettingFieldDef,
@@ -190,6 +191,7 @@ export interface ModuleFilteredRows {
   flags: FlagDef[];
   numberFlags: NumberFlagDef[];
   enumFlags: EnumFlagDef[];
+  textFlags: TextFlagDef[];
   settingFields: SettingFieldDef[];
   /** Toplam çizilecek satır — 0 ise kategori hiç çizilmez. */
   rowCount: number;
@@ -213,13 +215,15 @@ export function filterCategoryByModules(
   const flags = (category.flags ?? []).filter((f) => isRowVisible(f.key));
   const numberFlags = (category.numberFlags ?? []).filter((f) => isRowVisible(f.key));
   const enumFlags = (category.enumFlags ?? []).filter((f) => isRowVisible(f.enumKey));
+  const textFlags = (category.textFlags ?? []).filter((f) => isRowVisible(f.textKey));
   const settingFields = (category.settingFields ?? []).filter((f) => isRowVisible(f.key));
   return {
     flags,
     numberFlags,
     enumFlags,
+    textFlags,
     settingFields,
-    rowCount: flags.length + numberFlags.length + enumFlags.length + settingFields.length,
+    rowCount: flags.length + numberFlags.length + enumFlags.length + textFlags.length + settingFields.length,
   };
 }
 
@@ -373,11 +377,26 @@ export interface SettingsSearchHit {
    *  onları AYRI bir listede çizer ve `flagKeys`e karıştırmak sayaç/görünürlük
    *  yüklemlerini boolean satırlar hakkında yalan söyletirdi. */
   enumFlagKeys: string[];
+  /** Serbest metin satırları (2026-09-22) — ayrı küme, ayrı liste. */
+  textFlagKeys: string[];
   settingFieldKeys: string[];
 }
 
+/**
+ * KELİME BAZLI eşleme (2026-09-22): sorgu boşluktan kelimelere bölünür, her kelime
+ * satırın BÜTÜN metninde (başlık + özet + açıklama + grup + seçenekler) geçmeli (AND) —
+ * "parti kodu" ile "kodu parti" aynı satırı bulur; tek uzun tümce eşleşmesi
+ * ("parti kodu" birebir) artık şart değil.
+ */
+function tokens(q: string): string[] {
+  return q.split(/\s+/).filter(Boolean);
+}
+function hitAll(parts: (string | undefined)[], q: string): boolean {
+  const hay = normalizeSettingsSearch(parts.filter(Boolean).join(" "));
+  return hay.length > 0 && tokens(q).every((t) => hay.includes(t));
+}
 function hit(haystack: string | undefined, q: string): boolean {
-  return haystack ? normalizeSettingsSearch(haystack).includes(q) : false;
+  return hitAll([haystack], q);
 }
 
 /**
@@ -398,31 +417,27 @@ export function searchSettings(
       hit(cat.label, q) || hit(cat.description, q) || hit(cat.keywords, q);
 
     const flagKeys = (cat.flags ?? [])
-      .filter(
-        (f) => hit(f.title, q) || hit(f.summary, q) || hit(f.desc, q) || hit(f.group, q),
-      )
+      .filter((f) => hitAll([f.title, f.summary, f.desc, f.group, f.key], q))
       .map((f) => f.key as string);
     const numberFlagKeys = (cat.numberFlags ?? [])
-      .filter((f) => hit(f.title, q) || hit(f.desc, q))
+      .filter((f) => hitAll([f.title, f.desc, f.key], q))
       .map((f) => f.key as string);
     const enumFlagKeys = (cat.enumFlags ?? [])
-      .filter(
-        (f) =>
-          hit(f.title, q) ||
-          hit(f.summary, q) ||
-          hit(f.desc, q) ||
-          f.options.some((o) => hit(o.label, q) || hit(o.hint, q)),
-      )
+      .filter((f) => hitAll([f.title, f.summary, f.desc, f.group, f.enumKey, ...f.options.flatMap((o) => [o.label, o.hint])], q))
       .map((f) => f.enumKey as string);
     const settingFieldKeys = (cat.settingFields ?? [])
-      .filter((f) => hit(f.title, q) || hit(f.desc, q))
+      .filter((f) => hitAll([f.title, f.desc, f.key], q))
       .map((f) => f.key as string);
+    const textFlagKeys = (cat.textFlags ?? [])
+      .filter((f) => hitAll([f.title, f.summary, f.desc, f.group, f.textKey], q))
+      .map((f) => f.textKey as string);
 
     if (
       wholeCategory ||
       flagKeys.length ||
       numberFlagKeys.length ||
       enumFlagKeys.length ||
+      textFlagKeys.length ||
       settingFieldKeys.length
     ) {
       hits.push({
@@ -431,6 +446,7 @@ export function searchSettings(
         flagKeys,
         numberFlagKeys,
         enumFlagKeys,
+        textFlagKeys,
         settingFieldKeys,
       });
     }
@@ -453,6 +469,7 @@ export function emptySettingsHit(categoryId: string): SettingsSearchHit {
     flagKeys: [],
     numberFlagKeys: [],
     enumFlagKeys: [],
+    textFlagKeys: [],
     settingFieldKeys: [],
   };
 }
@@ -465,6 +482,7 @@ export function isSettingRowVisible(hit: SettingsSearchHit | undefined, key: str
     hit.flagKeys.includes(key) ||
     hit.numberFlagKeys.includes(key) ||
     hit.enumFlagKeys.includes(key) ||
+    hit.textFlagKeys.includes(key) ||
     hit.settingFieldKeys.includes(key)
   );
 }
@@ -475,6 +493,36 @@ export function settingsHitCount(hit: SettingsSearchHit): number {
     hit.flagKeys.length +
     hit.numberFlagKeys.length +
     hit.enumFlagKeys.length +
+    hit.textFlagKeys.length +
     hit.settingFieldKeys.length
   );
+}
+
+/**
+ * VURGU (2026-09-22): metni, arama kelimelerinin geçtiği parçalara böler — `hit: true`
+ * parçalar primary renkle işaretlenir. Eşleme `normalizeSettingsSearch` ile aynı katlamayla
+ * (Türkçe harf 1:1 → indeksler orijinal metinde de geçerli). Sorgu boşsa tek parça döner.
+ */
+export function highlightParts(text: string, query: string): { text: string; hit: boolean }[] {
+  const toks = tokens(normalizeSettingsSearch(query));
+  if (!text || toks.length === 0) return [{ text, hit: false }];
+  const hay = normalizeSettingsSearch(text);
+  if (hay.length !== text.length) return [{ text, hit: false }]; // güvenlik: katlama uzunluk değiştirdiyse vurgulama
+  const mask = new Array<boolean>(text.length).fill(false);
+  for (const t of toks) {
+    let i = hay.indexOf(t);
+    while (i !== -1) {
+      for (let k = i; k < i + t.length; k++) mask[k] = true;
+      i = hay.indexOf(t, i + 1);
+    }
+  }
+  const parts: { text: string; hit: boolean }[] = [];
+  let start = 0;
+  for (let i = 1; i <= text.length; i++) {
+    if (i === text.length || mask[i] !== mask[start]) {
+      parts.push({ text: text.slice(start, i), hit: !!mask[start] });
+      start = i;
+    }
+  }
+  return parts;
 }

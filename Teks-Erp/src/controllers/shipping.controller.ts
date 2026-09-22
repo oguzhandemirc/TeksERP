@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { ShippingService } from "../services/shipping.service";
-import { sackSearchService, type SackSearchScope } from "../services/sack-search.service";
+import { sackSearchService, isSackCustomerSortKey, type SackSearchScope } from "../services/sack-search.service";
 import { buildDispatchAccountingExport } from "../services/accounting-export.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { detectMismatchesForSacks } from "../services/helpers/sack-content-mismatch.helper";
@@ -10,6 +10,7 @@ import { PackingGroupService } from "../services/packing-group.service";
 import { PackingLotService } from "../services/packing-lot.service";
 import { HEX_RE } from "../services/helpers/sack-tag.helper";
 import "../types/express-augment";
+import { AppError } from "../utils/app-error";
 
 // ---- Zod şemaları ----------------------------------------------------------
 // Çuval aç — müşteri OPSİYONEL (depoda genel stok da olabilir).
@@ -57,6 +58,10 @@ const packingGroupCreateSchema = z.object({
 const packingGroupSacksSchema = z.object({
   sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "En az bir çuval seçin").max(MAX_GROUP_SACKS),
 });
+// Partinin tamamını havuza çıkar — kapsam sunucuda (`:id`), gövde yalnız hedef.
+const packingGroupReleaseSchema = z.object({
+  target: z.enum(["CUSTOMER", "GENERAL"]).default("CUSTOMER"),
+}).strict();
 const packingGroupUpdateSchema = z
   .object({
     name: z.string().trim().min(1, "Grup adı boş olamaz").max(64).optional(),
@@ -384,6 +389,15 @@ export class ShippingController {
     try {
       const body = packingGroupSacksSchema.parse(req.body ?? {});
       res.status(200).json(await PackingGroupService.removeSacks(body.sackIds, req.user?.userId));
+    } catch (e) { next(e); }
+  };
+
+  releasePackingGroupSacks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = packingGroupReleaseSchema.parse(req.body ?? {});
+      res.status(200).json(
+        await PackingLotService.releaseAll(req.params.id as string, body.target, req.user?.userId),
+      );
     } catch (e) { next(e); }
   };
 
@@ -904,10 +918,21 @@ export class ShippingController {
       const bayrak = req.query.withSacksOnly;
       const withSacksOnly = bayrak === "1" || bayrak === "true";
       const limitRaw = Number(req.query.limit);
+      // Sıralama FAIL-CLOSED: tanınmayan anahtar/yön 400 (varsayılana sapma yok).
+      const sortByRaw = req.query.sortBy;
+      if (sortByRaw !== undefined && !isSackCustomerSortKey(sortByRaw)) {
+        throw AppError.badRequest(`Geçersiz sıralama alanı: ${String(sortByRaw)}`);
+      }
+      const sortOrderRaw = req.query.sortOrder;
+      if (sortOrderRaw !== undefined && sortOrderRaw !== "asc" && sortOrderRaw !== "desc") {
+        throw AppError.badRequest("Geçersiz sıralama yönü (asc | desc)");
+      }
       const result = await sackSearchService.listSackCustomers({
         scope,
         search: typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined,
         withSacksOnly,
+        sortBy: sortByRaw,
+        sortOrder: sortOrderRaw,
         cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
         limit: Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : undefined,
       });

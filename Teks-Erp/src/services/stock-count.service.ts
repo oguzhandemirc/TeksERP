@@ -51,7 +51,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { closeOpenMovementsTx } from "./helpers/roll-disposition.helper";
 import { postStockMoves, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { recordVariancesTx } from "./helpers/roll-variance.helper";
@@ -119,12 +119,12 @@ const D = (v: Prisma.Decimal.Value): Prisma.Decimal => new Prisma.Decimal(v);
  * sarmalar — yarışta P2002 hâlâ mümkündür ve doğru cevap tekrar denemektir.
  */
 async function nextCountNo(tx: Tx, date: Date): Promise<string> {
-  const full = dailyCodePrefix(DOC_PREFIX, date);
+  const full = seriesCodePrefix("stockCount", date);
   const rows = await tx.stockCount.findMany({
     where: { countNo: { gte: full, startsWith: full } },
     select: { countNo: true },
   });
-  return buildDailyCode(DOC_PREFIX, nextDailySeq(rows.map((r) => r.countNo), full), date);
+  return buildSeriesCode("stockCount", seriesSeqFrom(rows.map((r) => r.countNo), full), date);
 }
 
 export interface CreateStockCountInput {

@@ -15,7 +15,7 @@
 // =============================================================================
 import { Prisma, WeavingOrderStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "../number-series.service";
 
 /**
  * Dokuma işi numara sayacı uzayı.
@@ -46,13 +46,13 @@ export async function nextWeavingOrderNumberTx(
   date: Date,
 ): Promise<string> {
   await lockWeavingOrderNumberTx(tx);
-  const prefix = dailyCodePrefix(WEAVING_ORDER_PREFIX, date);
+  const prefix = seriesCodePrefix("weavingOrder", date);
   const todays = await tx.weavingOrder.findMany({
     where: { weavingOrderNumber: { gte: prefix, startsWith: prefix } },
     select: { weavingOrderNumber: true },
   });
-  const seq = nextDailySeq(todays.map((w) => w.weavingOrderNumber), prefix);
-  return buildDailyCode(WEAVING_ORDER_PREFIX, seq, date);
+  const seq = seriesSeqFrom(todays.map((w) => w.weavingOrderNumber), prefix);
+  return buildSeriesCode("weavingOrder", seq, date);
 }
 
 /** Kapanmış/iptal edilmiş iş için tek etiket sözlüğü (helper `ApiResponse` KURMAZ, yalnız hata). */

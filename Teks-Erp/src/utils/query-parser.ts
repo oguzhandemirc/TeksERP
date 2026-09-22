@@ -327,7 +327,7 @@ function toFoldPath(path: string): string {
  *     rakamlı ürün adı kuraldır ("PATOS 300" yalnız boşluğu sayesinde kurtuluyordu).
  * Artık rakam şartı yok ve kod-biçimli terim HEM kod HEM metin yollarına gider.
  */
-function isCodeLikeTerm(term: string): boolean {
+export function isCodeLikeTerm(term: string): boolean {
   return /^[A-Za-z0-9._/-]+$/.test(term);
 }
 

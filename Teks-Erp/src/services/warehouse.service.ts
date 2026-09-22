@@ -99,7 +99,7 @@ class WarehouseService extends BaseService {
       duplicateNameField: "name",
       entityLabel: "depo",
       // Kod backend-authoritative: `DP+GGAAYY+NNNN` (istemci kodu yok sayılır).
-      autoCode: { prefix: "DP" },
+      autoCode: { series: "warehouse" },
     });
   }
 

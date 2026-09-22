@@ -32,7 +32,7 @@ import {
 } from "./printed-document.service";
 import { renderKartelaCekiHtml } from "./document-render/kartela-ceki.html";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { buildPagination, buildTextSearch, readIdCondition } from "../utils/query-parser";
@@ -86,10 +86,10 @@ type ListResult = {
 async function nextKartelaDocSequence(
   tx: Prisma.TransactionClient,
   kind: "dispatch" | "receipt",
-  prefix: string,
   date: Date
 ): Promise<number> {
-  const docPrefix = dailyCodePrefix(prefix, date); // PREFIX + GGAAYY
+  // Ön ek serisinden gelir (`kartelaDispatch` / `kartelaReceipt`); literal KS/KK yok.
+  const docPrefix = seriesCodePrefix(kind === "dispatch" ? "kartelaDispatch" : "kartelaReceipt", date);
 
   // O-21: gte (index seek) + startsWith (collation-bağımsız tam-prefix) + JS sayısal
   // max. Eski startsWith-tek + orderBy desc glibc collation sırasına/lex taşmaya
@@ -108,7 +108,7 @@ async function nextKartelaDocSequence(
     });
     nos = rows.map((r) => r.receiptNo);
   }
-  return nextDailySeq(nos, docPrefix);
+  return seriesSeqFrom(nos, docPrefix);
 }
 
 /** KRT kartela/numune kodu sequence (KRT + GGAAYY + NNNN; barcode = cardNumber). */
@@ -116,14 +116,14 @@ async function nextSwatchSequence(
   tx: Prisma.TransactionClient,
   date: Date
 ): Promise<number> {
-  const codePrefix = dailyCodePrefix("KRT", date); // KRT + GGAAYY
+  const codePrefix = seriesCodePrefix("swatch", date);
   // O-21: gte + startsWith (tam-prefix) + sayısal max — tek collation-top satıra
   // güvenmek yerine günün tüm kodlarının sayısal max'ı.
   const rows = await tx.swatch.findMany({
     where: { cardNumber: { gte: codePrefix, startsWith: codePrefix } },
     select: { cardNumber: true },
   });
-  return nextDailySeq(rows.map((r) => r.cardNumber), codePrefix);
+  return seriesSeqFrom(rows.map((r) => r.cardNumber), codePrefix);
 }
 
 // -----------------------------------------------------------------------------
@@ -299,8 +299,8 @@ export class KartelaService {
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const now = new Date();
-        const seq = await nextKartelaDocSequence(tx, "dispatch", "KS", now);
-        const dispatchNo = buildDailyCode("KS", seq, now);
+        const seq = await nextKartelaDocSequence(tx, "dispatch", now);
+        const dispatchNo = buildSeriesCode("kartelaDispatch", seq, now);
 
         const dispatch = await tx.kartelaDispatch.create({
           data: {
@@ -690,8 +690,8 @@ export class KartelaService {
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const now = new Date();
-        const seq = await nextKartelaDocSequence(tx, "receipt", "KK", now);
-        const receiptNo = buildDailyCode("KK", seq, now);
+        const seq = await nextKartelaDocSequence(tx, "receipt", now);
+        const receiptNo = buildSeriesCode("kartelaReceipt", seq, now);
 
         const receipt = await tx.kartelaReceipt.create({
           data: {
@@ -735,8 +735,8 @@ export class KartelaService {
             const measure = ret.items?.[i];
             swatchData.push({
               // Tek kod: insan-okur cardNumber = tarama barcode (KRT + GGAAYY + NNNN)
-              cardNumber: buildDailyCode("KRT", sSeq, now),
-              barcode: buildDailyCode("KRT", sSeq, now),
+              cardNumber: buildSeriesCode("swatch", sSeq, now),
+              barcode: buildSeriesCode("swatch", sSeq, now),
               itemId: roll.itemId,
               colorId: roll.colorId ?? null,
               width: roll.width ?? null,

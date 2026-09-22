@@ -90,6 +90,7 @@ import {
   readShippingDocItemNameMode,
   readShippingDocCekiNameMode,
   readShippingDocProductColorSplit,
+  readShippingSackSeqPrefix,
 } from "./system-setting.service";
 import { resolveDocNameMode, type DocNameMode } from "./document-render/shipment-name-mode";
 import {
@@ -99,7 +100,8 @@ import {
 } from "./helpers/shipping-invoice-mode.helper";
 import { factoryDayStart } from "../constants/time";
 import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
-import { dailyCodePrefix, isDailyCode, nextDailySeq, normalizeScanCode } from "../utils/code-format";
+import { normalizeScanCode } from "../utils/code-format";
+import { matchesSeries, nextSeriesNo, resolveSeriesFormat } from "./number-series.service";
 import {
   touchWarehouseSackTx,
   touchShipmentPlannedTx,
@@ -124,18 +126,17 @@ import { recomputeOrderStatusForOrdersTx, touchOrderLinesTx } from "./helpers/or
 import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
 import { ACTIVE_TAG_SELECT, ACTIVE_TAG_WHERE, toTagBadges } from "./helpers/sack-tag.helper";
 import {
-  assertPackageNoFreeTx,
-  assertPackageNoInputAllowed,
   readPackingLotSettings,
-  reservePackageNosTx,
 } from "./helpers/packing-group.helper";
+import { assertPackageNoFreeTx, assertPackageNoInputAllowed, reservePackageNosTx } from "./helpers/packing-group.helper";
 import {
   assertWholeLotDispatchTx,
   autoCloseLotsForSacksTx,
   reopenLotsForSacksTx,
 } from "./packing-lot.service";
 import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
-import { sackFieldsAppearOnLabel } from "./helpers/sack-label-stale.helper";
+import { markSackLabelsStaleOnCustomerChangeTx, sackFieldsAppearOnLabel } from "./helpers/sack-label-stale.helper";
+import { formatSackSeqLabel, nextPoolPackageNoTx, readSackSeqFormat, readSackSeqStart } from "./helpers/sack-seq.helper";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import type { Request } from "express";
@@ -241,23 +242,23 @@ const SHIPPABLE_ROLL_WHERE = {
 // `export` ETME: modül-private kalmalı — export edilirse başka servisler tx'siz
 // çağırabilir ve "tx içinde global client" sorunu başka dosyada yeniden doğar.
 async function nextShipmentNo(tx: Prisma.TransactionClient): Promise<string> {
-  const prefix = dailyCodePrefix("SVK");
-  const todays = await tx.shipment.findMany({
-    where: { shipmentNo: { gte: prefix, startsWith: prefix } },
-    select: { shipmentNo: true },
+  return nextSeriesNo("shipment", async (prefix) => {
+    const todays = await tx.shipment.findMany({
+      where: { shipmentNo: { gte: prefix, startsWith: prefix } },
+      select: { shipmentNo: true },
+    });
+    return todays.map((s) => s.shipmentNo);
   });
-  const seq = nextDailySeq(todays.map((s) => s.shipmentNo), prefix);
-  return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 
 async function nextSackNo(tx: Prisma.TransactionClient): Promise<string> {
-  const prefix = dailyCodePrefix("CV");
-  const todays = await tx.sack.findMany({
-    where: { sackNo: { gte: prefix, startsWith: prefix } },
-    select: { sackNo: true },
+  return nextSeriesNo("sack", async (prefix) => {
+    const todays = await tx.sack.findMany({
+      where: { sackNo: { gte: prefix, startsWith: prefix } },
+      select: { sackNo: true },
+    });
+    return todays.map((s) => s.sackNo);
   });
-  const seq = nextDailySeq(todays.map((s) => s.sackNo), prefix);
-  return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 
 /** Tahsis yazımının audit izi — tx dışına taşınır (best-effort). */
@@ -531,6 +532,10 @@ export class ShippingService {
               groupId: lotGroup.id, count: 1, numbering: lot.numbering, startsAtZero: lot.startsAtZero,
             });
           }
+        } else {
+          // Partisiz çuval: `packing.poolPackageNo = acilista` ise carinin havuz sayacından
+          // (8035); `sevkte` (varsayılan) null kalır, numara sevkte `seq` olarak doğar.
+          packageNo = await nextPoolPackageNoTx(tx, customerId);
         }
         return tx.sack.create({
           data: {
@@ -670,7 +675,7 @@ export class ShippingService {
       // de rotasız → bağlam varsayılanı) fiziksel etiket geçerli kalır, dokunmayız.
       return sack.customerId === customerId
         ? 0
-        : await this.markSackLabelsStaleOnCustomerChange(tx, sackId, sack.customerId, customerId);
+        : await markSackLabelsStaleOnCustomerChangeTx(tx, sackId, sack.customerId, customerId);
     });
 
     await AuditService.log({
@@ -690,73 +695,6 @@ export class ShippingService {
     };
   }
 
-  /**
-   * Müşteri değişiminde ÇUVALIN ve İÇİNDEKİ TOPLARIN etiketini "bayat" işaretler —
-   * YALNIZ etkin şablon değişiyorsa. Döner: işaretlenen top adedi (çuvalın kendi
-   * bayrağı `Sack.labelDirty` ayrıca yazılır).
-   *
-   * Etkin şablon = `CustomerTemplateRoute(müşteri, kind)` ?? bağlam varsayılanı.
-   * Top kind'ı renginden türer (renksiz → ROLL_RAW, renkli → ROLL_FINISHED,
-   * `label-routing.resolver` ile aynı kural); ÇUVAL için kind = SACK.
-   * Eski ve yeni müşterinin rotası aynı şablona çıkıyorsa (çoğu kurulumda ikisi de
-   * rotasız) HİÇBİR ŞEY yapılmaz — gereksiz "yeniden bas" uyarısı operatörü körleştirir.
-   *
-   * SACK dalı 2026-07-30'da eklendi: çuval etiketinin müşteri rotası o tarihte
-   * canlandırıldı (öncesinde `buildSackRenderInput` `customerId` geçirmiyordu →
-   * rota ölüydü, dolayısıyla çuval etiketi müşteri değişiminden ETKİLENMİYORDU).
-   */
-  private async markSackLabelsStaleOnCustomerChange(
-    /** ⚠️ tx ZORUNLU: müşteri claim'i ile AYNI transaction'da koşmalı (D1) — ayrı
-     *  koşarsa claim commit olur ama bayatlama/audit kaybolabilir. */
-    tx: Prisma.TransactionClient,
-    sackId: string,
-    oldCustomerId: string | null,
-    newCustomerId: string | null,
-  ): Promise<number> {
-    const rolls = await tx.roll.findMany({
-      where: { sackId },
-      select: { id: true, colorId: true },
-    });
-
-    // ÇUVAL kind'ı her zaman sorgulanır (çuvalın kendi etiketi topların varlığından
-    // BAĞIMSIZ — boş çuvalın da basılı etiketi olabilir), top kind'ları içerikten.
-    const rollKinds = [
-      ...new Set(rolls.map((r) => (r.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED))),
-    ];
-    const kinds = [...new Set([...rollKinds, LabelKind.SACK])];
-    const routesFor = async (cid: string | null): Promise<Map<LabelKind, string>> => {
-      if (!cid) return new Map();
-      const rows = await tx.customerTemplateRoute.findMany({
-        where: { customerId: cid, kind: { in: kinds } },
-        select: { kind: true, templateId: true },
-      });
-      return new Map(rows.map((r) => [r.kind, r.templateId]));
-    };
-    // SIRALI await (tx client'ta Promise.all YASAK — pg adapter tek connection).
-    const oldRoutes = await routesFor(oldCustomerId);
-    const newRoutes = await routesFor(newCustomerId);
-
-    // Şablonu DEĞİŞEN kind'lar (yok → bağlam varsayılanı; iki taraf da yok = değişmedi).
-    const changed = new Set(kinds.filter((k) => (oldRoutes.get(k) ?? null) !== (newRoutes.get(k) ?? null)));
-    if (changed.size === 0) return 0;
-
-    // ÇUVALIN KENDİ etiketi — top sayısından bağımsız.
-    if (changed.has(LabelKind.SACK)) {
-      await tx.sack.updateMany({ where: { id: sackId, labelDirty: false }, data: { labelDirty: true } });
-    }
-
-    const affected = rolls
-      .filter((r) => changed.has(r.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED))
-      .map((r) => r.id);
-    if (affected.length === 0) return 0;
-    // Yalnız henüz işaretsizleri güncelle (count gerçek değişimi yansıtsın).
-    return (
-      await tx.roll.updateMany({
-        where: { id: { in: affected }, labelDirty: false },
-        data: { labelDirty: true },
-      })
-    ).count;
-  }
 
   /**
    * Barkod okut → top ya da kartelayı depodaki çuvala ekle (depodaki serbest mal). Başka
@@ -778,7 +716,7 @@ export class ShippingService {
     // basılabildiği için operatör kaçınılmaz olarak bunu top alanına okutur;
     // yanıltıcı "Bu barkodla top bulunamadı" yerine ne olduğunu söyleyelim.
     // (İstemci bunu zaten yakalayıp çuvalı aktif yapar; bu sunucu tarafı ağdır.)
-    if (isDailyCode(code, "CV")) {
+    if (matchesSeries(resolveSeriesFormat("sack"), code)) {
       throw AppError.badRequest(
         `${code} bir ÇUVAL kodu, top barkodu değil — çuvala eklemek için TOP barkodunu okutun.`,
       );
@@ -1741,7 +1679,7 @@ export class ShippingService {
    * birleştirildiğinde bayrak HİÇ yazılmaz — birinci ifade kg'yi zaten NULL'ladığı
    * için aynı WHERE ikinci kez eşleşmez (sessiz kayıp).
    *
-   * `labelDirty: false` koşulu gereksiz yazmayı eler (`markSackLabelsStaleOnCustomerChange`
+   * `labelDirty: false` koşulu gereksiz yazmayı eler (`markSackLabelsStaleOnCustomerChangeTx`
    * ve `Roll.labelDirty` emsali); baskıda temizlenir (`label.service.recordSackPrintEvent`).
    *
    * NOT: `Sack.notes` (çuval yorumu) bu fonksiyonun kapsamı DIŞINDADIR — not ne
@@ -2438,6 +2376,8 @@ export class ShippingService {
         status: ShipmentStatus.PLANNED,
         destination: p.destination,
         procedureCode: p.procedureCode?.trim() || null,
+        // Sıra ön eki burada DONAR — ekran ve belge bu kolonu okur.
+        sackSeqPrefix: await readShippingSackSeqPrefix(tx),
         createdById: p.userId ?? null,
         updatedById: p.userId ?? null,
       },
@@ -2457,11 +2397,13 @@ export class ShippingService {
     // değişmemişken); "sevk edildi" durumu claim'den SONRA (açık çuval kalmadıysa).
     const lot = await readPackingLotSettings(tx);
     await assertWholeLotDispatchTx(tx, p.sackIds, lot.partialDispatch);
-    // Atomik claim + seq ata (+ müşterisiz çuvala müşteri/şube backfill).
+    // Atomik claim + seq ata (+ müşterisiz çuvala müşteri/şube backfill). Sıra
+    // `shipping.sackSeqStart`tan başlar (varsayılan 1).
+    const seqStart = await readSackSeqStart(tx);
     for (let i = 0; i < p.sackIds.length; i++) {
       const claimed = await tx.sack.updateMany({
         where: { id: p.sackIds[i], shipmentId: null },
-        data: { shipmentId: created.id, seq: i + 1, customerId: p.customerId, branchId: p.branchId },
+        data: { shipmentId: created.id, seq: seqStart + i, customerId: p.customerId, branchId: p.branchId },
       });
       if (claimed.count !== 1) throw AppError.conflict("Çuvallardan biri az önce başka bir sevkiyata girdi — yenileyin.");
     }
@@ -2977,7 +2919,7 @@ export class ShippingService {
       const lot = await readPackingLotSettings(tx);
       await assertWholeLotDispatchTx(tx, sackIds, lot.partialDispatch);
       const maxSeqRow = await tx.sack.findFirst({ where: { shipmentId }, orderBy: { seq: "desc" }, select: { seq: true } });
-      let seq = (maxSeqRow?.seq ?? 0) + 1;
+      let seq = maxSeqRow?.seq != null ? maxSeqRow.seq + 1 : await readSackSeqStart(tx);
       for (const sackId of sackIds) {
         const claimed = await tx.sack.updateMany({ where: { id: sackId, shipmentId: null }, data: { shipmentId, seq, customerId: shipment.customerId, branchId } });
         if (claimed.count !== 1) throw AppError.conflict("Çuvallardan biri az önce başka bir sevkiyata girdi — yenileyin.");
@@ -3271,7 +3213,7 @@ export class ShippingService {
    * "şablona SÜRÜKLENMEZSE basılmaz") — yani çoğu kurulumda not kâğıda hiç çıkmaz.
    * Bu yüzden not düzenlemesi etiketi ancak alan şablonda VARSA bayatlatır.
    *
-   * Şablon zinciri `markSackLabelsStaleOnCustomerChange` ile AYNI:
+   * Şablon zinciri `markSackLabelsStaleOnCustomerChangeTx` ile AYNI:
    * `CustomerTemplateRoute(müşteri, SACK)` ?? bağlam varsayılanı
    * (`LabelContextDefault`). Cihaz (peripheral) rotası BİLEREK dışarıda — not
    * düzenlenirken hangi yazıcıya basılacağı bilinmez; tahmin etmek yanlış şablona
@@ -4633,6 +4575,7 @@ export class ShippingService {
         plateNumber: true, driverName: true, carrier: true, dispatchedAt: true, createdAt: true,
         dispatchNote: true,
         manualSackCount: true,
+        sackSeqPrefix: true,
         customer: { select: { id: true, code: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
         orders: {
@@ -4820,6 +4763,12 @@ export class ShippingService {
 
     const totalKg = shipment.sacks.reduce((s, sk) => s.plus(sk.weightKg ?? 0), D0());
 
+    // Sıra etiketi ("SP3"): ön ek sevkiyatta donmuş (`sackSeqPrefix`), "n/N" canlı — belgeyle aynı kural.
+    const seqFmt = await readSackSeqFormat(shipment.sackSeqPrefix);
+    const seqLabelOf = (seq: number | null) => {
+      const l = formatSackSeqLabel(seq, shipment.sacks.length, seqFmt);
+      return l && l !== String(seq) ? l : null; // düz sayıysa etiket yok (ekran "Çuval #n" basar)
+    };
     const sacks = shipment.sacks.map((sk) => {
       // Çuvalın BRÜT içeriği = hâlâ içindeki toplar + bu çuvaldan iade alınanlar.
       // İade satırları SONA eklenir: operatörün elindeki mal önce okunur, iade
@@ -4839,7 +4788,7 @@ export class ShippingService {
         e.rollCount += 1;
       }
       return {
-        id: sk.id, sackNo: sk.sackNo, seq: sk.seq, weightKg: sk.weightKg,
+        id: sk.id, sackNo: sk.sackNo, seq: sk.seq, seqLabel: seqLabelOf(sk.seq), weightKg: sk.weightKg,
         // Sevk partisi (2026-09-21) — detay/önizleme rozeti; partisiz çuvalda null.
         packageNo: sk.packageNo, packingGroupName: sk.packingGroup?.name ?? null,
         rolls: grossRolls,
@@ -4936,9 +4885,11 @@ export class ShippingService {
     }
     const search = params.search?.trim();
     if (search) {
+      // Parti kodu/adı da aranır (`PRT-2609-0007` · `P-2`): çuval sevkten sonra da
+      // `packingGroupId` taşır, sevkiyat partisiyle bulunur (saha 2026-09-22).
       where.OR = buildTextSearch<Prisma.ShipmentWhereInput>(search, {
         text: ["customer.name"],
-        code: ["shipmentNo", "sacks.some.sackNo"],
+        code: ["shipmentNo", "sacks.some.sackNo", "sacks.some.packingGroup.code", "sacks.some.packingGroup.name"],
       });
     }
 
@@ -4979,7 +4930,7 @@ export class ShippingService {
     const sh = await prisma.shipment.findUnique({
       where: { id: shipmentId },
       select: {
-        id: true, shipmentNo: true, status: true, plateNumber: true, driverName: true, carrier: true,
+        id: true, shipmentNo: true, status: true, plateNumber: true, driverName: true, carrier: true, sackSeqPrefix: true,
         customer: { select: { id: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
         sacks: {
@@ -4996,6 +4947,11 @@ export class ShippingService {
     });
     if (!sh) throw AppError.notFound("Sevkiyat bulunamadı");
 
+    const seqFmt = await readSackSeqFormat(sh.sackSeqPrefix);
+    const seqLabelOf = (seq: number | null) => {
+      const l = formatSackSeqLabel(seq, sh.sacks.length, seqFmt);
+      return l && l !== String(seq) ? l : null;
+    };
     const sacks = sh.sacks.map((sk) => {
       const groups = new Map<string, { itemName: string; colorName: string | null; width: number | null; qty: Prisma.Decimal; rollCount: number }>();
       let sackQty = D0();
@@ -5011,7 +4967,7 @@ export class ShippingService {
         sackQty = sackQty.plus(r.currentQty);
       }
       return {
-        id: sk.id, sackNo: sk.sackNo, seq: sk.seq, weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
+        id: sk.id, sackNo: sk.sackNo, seq: sk.seq, seqLabel: seqLabelOf(sk.seq), weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
         notes: sk.notes,
         rollCount: present.length, swatchCount: sk.swatches.length, totalQty: Number(sackQty),
         contents: [...groups.values()].map((g) => ({ itemName: g.itemName, colorName: g.colorName, width: g.width, qty: Number(g.qty), rollCount: g.rollCount })),
@@ -5359,6 +5315,7 @@ async function collectShipmentDocContent(
     where: { id: shipmentId },
     select: {
       shipmentNo: true, status: true, procedureCode: true, destination: true, dispatchedAt: true, createdAt: true,
+      sackSeqPrefix: true,
       manualSackCount: true,
       plateNumber: true, driverName: true, carrier: true,
       // `customerId` + `orders.orderId` (2026-09-04) — "müşterideki ad" zinciri
@@ -5567,7 +5524,7 @@ async function collectShipmentDocContent(
   const cekiRows = sacksGross.flatMap((sk) =>
     sk.rolls.map((r, idx) => {
       const skips = namePolicy.skips(r.qualityGradeId, r.qualityGrade);
-      return { rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null };
+      return { rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? null, packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null };
     })
   );
 
@@ -5591,6 +5548,9 @@ async function collectShipmentDocContent(
     products,
     sacks: sackRows,
     cekiRows,
+    // Sevk anındaki sıra ön eki DONAR (2026-09-22): `shipping.sackSeqPrefixLive` kapalıyken
+    // baskı bunu kullanır — ön ek sonradan değişse de eski belge değişmez.
+    sackSeqPrefix: sh.sackSeqPrefix ?? "",
     totals: {
       totalRolls,
       totalMeters,

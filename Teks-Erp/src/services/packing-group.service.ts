@@ -55,17 +55,18 @@ import {
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { markLotLabelsStale } from "./packing-lot.service";
 import {
-  GROUP_WITH_SACKS_SELECT,
-  PackingGroupDto,
   assertGroupNameFreeTx,
   claimSacksIntoGroupTx,
   formatPackingGroupName,
-  liveGroupWhere,
   nextPackingGroupSeqTx,
-  packageNoStart,
+  liveGroupSql,
+  nextPackingGroupCodeTx,
+  PACKING_GROUP_CODE_LOCK_NS,
   readPackingLotSettings,
-  toDto,
 } from "./helpers/packing-group.helper";
+import { loadPackingGroupDto, loadPackingGroupDtos } from "./helpers/packing-group-dto.helper";
+import type { PackingGroupDto } from "./helpers/packing-group-dto.helper";
+import { packageNoStart } from "./helpers/packing-group.helper";
 
 const GROUP_TABLE = "packing_groups";
 
@@ -99,7 +100,10 @@ async function replayCreateWithSacks(
   sackIds: string[],
   lotMode: boolean,
 ): Promise<ApiResponse<PackingGroupDto> | null> {
-  const replay = await prisma.packingGroup.findUnique({ where: { clientToken }, select: GROUP_WITH_SACKS_SELECT });
+  const replay = await prisma.packingGroup.findUnique({
+    where: { clientToken },
+    select: { id: true, customerId: true, sacks: { where: { shipmentId: null }, select: { id: true } } },
+  });
   if (!replay) return null;
   assertReplayPayloadMatches(
     [
@@ -119,7 +123,7 @@ async function replayCreateWithSacks(
       { code: "PACKING_GROUP_REPLAY_EMPTY" },
     );
   }
-  return { success: true, data: toDto(replay), message: "Grup zaten oluşturulmuş" };
+  return { success: true, data: (await loadPackingGroupDto(prisma, replay.id))!, message: "Grup zaten oluşturulmuş" };
 }
 
 
@@ -139,23 +143,24 @@ export const PackingGroupService = {
       throw AppError.badRequest("Durum süzgeci yalnız sevk partisi modunda var", { code: "PACKING_LOT_MODE_OFF" });
     }
     const status = opts.status ?? "OPEN";
-    const where: Prisma.PackingGroupWhereInput =
+    // Toplamlar DB'de (`loadPackingGroupDtos`, GROUP BY); canlılık `liveGroupSql` ikizinden.
+    const cari = Prisma.sql`g."customerId" = ${customerId}::uuid`;
+    const where =
       lot.mode === "sevk-partisi"
-        ? { customerId, ...(status === "ALL" ? {} : { status }) }
-        : { ...liveGroupWhere("grup"), customerId };
-    const rows = await prisma.packingGroup.findMany({
-      where,
-      select: GROUP_WITH_SACKS_SELECT,
-      orderBy: [{ seq: "asc" }, { createdAt: "asc" }],
-    });
-    return { success: true, data: rows.map(toDto) };
+        ? status === "ALL"
+          ? cari
+          : status === "OPEN"
+            ? Prisma.sql`${cari} AND ${liveGroupSql("sevk-partisi")}`
+            : Prisma.sql`${cari} AND g.status::text = ${status}`
+        : Prisma.sql`${cari} AND ${liveGroupSql("grup")}`;
+    return { success: true, data: await loadPackingGroupDtos(prisma, where) };
   },
 
   /** Tek parti/grup (parti içi ekranın başlığı). */
   async get(groupId: string): Promise<ApiResponse<PackingGroupDto>> {
-    const row = await prisma.packingGroup.findUnique({ where: { id: groupId }, select: GROUP_WITH_SACKS_SELECT });
+    const row = await loadPackingGroupDto(prisma, groupId);
     if (!row) throw AppError.notFound("Grup bulunamadı");
-    return { success: true, data: toDto(row) };
+    return { success: true, data: row };
   },
 
   /**
@@ -189,8 +194,11 @@ export const PackingGroupService = {
     const manualName = input.name?.trim() || null;
 
     const created = await prisma.$transaction(async (tx) => {
-      // Elle ad verildiyse sayaç HİÇ ÇALIŞMAZ (kilit de alınmaz): "Cuma tırı"
-      // bir sıra numarası değildir ve sonraki otomatik numarayı zıplatmamalı.
+      // KOD KİLİDİ tx'in İLK ifadesi (8034, kurulum-geneli) — sonra ad sayacı (8031).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PACKING_GROUP_CODE_LOCK_NS}::int, 0)`;
+      const code = await nextPackingGroupCodeTx(tx);
+      // Elle ad verildiyse sayaç HİÇ ÇALIŞMAZ: "Cuma tırı" bir sıra numarası değildir
+      // ve sonraki otomatik numarayı zıplatmamalı.
       const seq = manualName ? null : await nextPackingGroupSeqTx(tx, input.customerId, mode, lot.mode);
       const name = manualName ?? formatPackingGroupName(seq as number, lot.mode);
 
@@ -199,6 +207,7 @@ export const PackingGroupService = {
       const group = await tx.packingGroup.create({
         data: {
           customerId: input.customerId,
+          code,
           name,
           seq,
           note: input.note?.trim() || null,
@@ -220,10 +229,7 @@ export const PackingGroupService = {
         });
       }
 
-      return tx.packingGroup.findUniqueOrThrow({
-        where: { id: group.id },
-        select: GROUP_WITH_SACKS_SELECT,
-      });
+      return (await loadPackingGroupDto(tx, group.id))!;
     });
 
     await AuditService.log({
@@ -231,9 +237,9 @@ export const PackingGroupService = {
       action: "CREATE",
       tableName: GROUP_TABLE,
       recordId: created.id,
-      newData: { name: created.name, seq: created.seq, sackCount: created.sacks.length },
+      newData: { code: created.code, name: created.name, seq: created.seq, sackCount: created.sackCount },
     });
-    return { success: true, data: toDto(created), message: `${created.name} oluşturuldu` };
+    return { success: true, data: created, message: `${created.name} oluşturuldu` };
   },
 
   /** Var olan CANLI gruba çuval ekler. */
@@ -278,10 +284,7 @@ export const PackingGroupService = {
         groupId,
         lot: lotMode ? { numbering: lot.numbering, startsAtZero: lot.startsAtZero } : null,
       });
-      return tx.packingGroup.findUniqueOrThrow({
-        where: { id: groupId },
-        select: GROUP_WITH_SACKS_SELECT,
-      });
+      return (await loadPackingGroupDto(tx, groupId))!;
     });
 
     if (lotMode) await markLotLabelsStale(group.customerId, ids);
@@ -292,7 +295,7 @@ export const PackingGroupService = {
       recordId: groupId,
       newData: { addedSackIds: ids },
     });
-    return { success: true, data: toDto(updated), message: lotMode ? `Çuvallar ${group.name} partisine alındı` : "Çuvallar gruba eklendi" };
+    return { success: true, data: updated, message: lotMode ? `Çuvallar ${group.name} partisine alındı` : "Çuvallar gruba eklendi" };
   },
 
   /**
@@ -351,7 +354,7 @@ export const PackingGroupService = {
     const row = await prisma.packingGroup.update({
       where: { id: groupId },
       data,
-      select: GROUP_WITH_SACKS_SELECT,
+      select: { id: true, name: true, seq: true, note: true },
     });
     await AuditService.log({
       userId,
@@ -361,6 +364,6 @@ export const PackingGroupService = {
       oldData: { name: current.name, seq: current.seq, note: current.note },
       newData: { name: row.name, seq: row.seq, note: row.note },
     });
-    return { success: true, data: toDto(row), message: "Grup güncellendi" };
+    return { success: true, data: (await loadPackingGroupDto(prisma, groupId))!, message: "Grup güncellendi" };
   },
 };

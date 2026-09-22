@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Info, ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { highlightParts } from "./settings-groups";
 import { cn } from "@/lib/utils";
 
 /**
@@ -136,4 +137,22 @@ export function HintBody({ variant, desc }: { variant: HintVariant; desc: ReactN
   if (variant === "inline") return <p className="text-xs text-muted-foreground">{desc}</p>;
   if (variant === "disclosure") return <InfoDisclosure desc={desc} />;
   return null;
+}
+
+/** Arama vurgusu — eşleşen kelime parçaları primary renkle işaretlenir; sorgu yoksa düz metin. */
+export function Vurgu({ text, query }: { text: string; query?: string }) {
+  if (!query?.trim()) return <>{text}</>;
+  return (
+    <>
+      {highlightParts(text, query).map((p, i) =>
+        p.hit ? (
+          <mark key={i} className="rounded-sm bg-primary/15 px-0.5 text-primary">
+            {p.text}
+          </mark>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+    </>
+  );
 }

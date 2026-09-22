@@ -13,7 +13,7 @@
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "../number-series.service";
 import { lockCodeScopeTx } from "./code-unique.helper";
 
 /** Fiziksel etiket kodu: `DF` + GGAAYY + NNNN (≤ 32). */
@@ -41,11 +41,11 @@ export async function deriveRunWarnings(machineRunId: string | null | undefined)
  * tx'te bundan önce başka ifade koşturmaz (`nextWeavingOrderNumberTx` emsali).
  */
 export async function nextDoffCodeTx(tx: Prisma.TransactionClient, date: Date): Promise<string> {
-  const prefix = dailyCodePrefix(DOFF_CODE_PREFIX, date);
+  const prefix = seriesCodePrefix("doffEvent", date);
   await lockCodeScopeTx(tx, DOFF_CODE_SCOPE, prefix);
   const codes = await tx.doffEvent.findMany({
     where: { code: { gte: prefix, startsWith: prefix } },
     select: { code: true },
   });
-  return buildDailyCode(DOFF_CODE_PREFIX, nextDailySeq(codes.map((c) => c.code), prefix), date);
+  return buildSeriesCode("doffEvent", seriesSeqFrom(codes.map((c) => c.code), prefix), date);
 }

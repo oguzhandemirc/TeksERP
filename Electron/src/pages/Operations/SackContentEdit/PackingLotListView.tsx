@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Boxes, Lock, Plus, Search, Truck } from "lucide-react";
+import { ArrowDown, ArrowUp, Lock, PackageOpen, Plus, Search, Truck } from "lucide-react";
 import { useTabsStore } from "@/store/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,9 +10,10 @@ import { cn } from "@/lib/utils";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 import { LotRowMenu } from "./PackingLotHeader";
+import { LotActionDialogs, type LotAction } from "./PackingLotActions";
 import { PackingLotSummaryCards } from "./PackingLotSummaryCards";
-import { lotSackLabel, lotStatusLabel } from "./packingLotUi";
-import { DEFAULT_LOT_SORT, filterLots, nextLotSort, sortLots, type LotSort, type LotSortKey, type LotStatusFilter } from "./packingLotList";
+import { lotSackLabel } from "./packingLotUi";
+import { DEFAULT_LOT_SORT, filterLots, nextLotSort, sortLots, type LotSort, type LotSortKey } from "./packingLotList";
 import { UNGROUPED_FILTER_VALUE, type PackingGroup, type PackingLotCustomerSummary } from "./types";
 
 const fmtQty = (n: number): string => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
@@ -30,20 +31,26 @@ const fmtDate = (iso: string): string => new Date(iso).toLocaleDateString("tr-TR
 export function PackingLotListView({
   customerId,
   onOpen,
+  onOpenUnweighed,
 }: {
   customerId: string;
   /** Parti id ya da `UNGROUPED_FILTER_VALUE` → çuval listesine geç. */
   onOpen: (filterValue: string) => void;
+  /** "Tartılmamış çuval" kartı → carinin bütün çuvalları, tartı süzgeciyle. */
+  onOpenUnweighed: () => void;
 }) {
   const qc = useQueryClient();
   const navigateActive = useTabsStore((s) => s.navigateActive);
   // Süzme/sıralama İSTEMCİDE: liste cari başına ve sunucu tamamını döner (cursor yok).
-  const [status, setStatus] = useState<LotStatusFilter>("OPEN");
+  // YALNIZ AÇIK partiler: sevk edilenler bu ekranda izlenmez, yerleri Sevkiyatlar
+  // (saha 2026-09-22: "Açık/Sevk edilmiş/Tümü süzgecine gerek yok").
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<LotSort>(DEFAULT_LOT_SORT);
+  // Satır menüsünden gelen toplu eylem (sevk · havuza çıkar · depoya çek) — diyaloglar tek kez burada.
+  const [action, setAction] = useState<LotAction | null>(null);
   const lots = useQuery({
-    queryKey: ["packing-groups", customerId, "ALL"],
-    queryFn: () => sackHubService.listPackingGroups(customerId, "ALL"),
+    queryKey: ["packing-groups", customerId, "OPEN"],
+    queryFn: () => sackHubService.listPackingGroups(customerId, "OPEN"),
   });
   const summary = useQuery({
     queryKey: ["packing-lot-summary", customerId],
@@ -63,16 +70,20 @@ export function PackingLotListView({
     },
   });
   const all: PackingGroup[] = lots.data?.data ?? [];
-  const rows = sortLots(filterLots(all, { query, status }), sort);
+  const rows = sortLots(filterLots(all, { query, status: "OPEN" }), sort);
   const s: PackingLotCustomerSummary | undefined = summary.data?.data;
 
   return (
     <PageBody className="px-4 pb-4">
-      <PackingLotSummaryCards s={s} onOpenPool={() => onOpen(UNGROUPED_FILTER_VALUE)} />
+      <PackingLotSummaryCards
+        s={s}
+        openLots={lots.data ? all : undefined}
+        onOpenUnweighed={onOpenUnweighed}
+        onOpenOrders={() => navigateActive(`/operations/orders?filter[customerId]=${encodeURIComponent(customerId)}`)}
+      />
+      {/* Araç çubuğu + tablo TEK KART: kapı ekranıyla aynı dil (havada duran şerit yok). */}
+      <div className="overflow-hidden rounded-lg border">
       <LotToolbar
-        status={status}
-        onStatus={setStatus}
-        counts={{ open: s?.openLotCount, closed: s?.closedLotCount }}
         query={query}
         onQuery={setQuery}
         creating={create.isPending}
@@ -82,28 +93,27 @@ export function PackingLotListView({
       <table className="w-full text-sm">
         <LotTableHead sort={sort} onSort={(key) => setSort((c) => nextLotSort(c, key))} />
         <tbody>
-          {status !== "CLOSED" && !query && <UngroupedRow s={s} onOpen={() => onOpen(UNGROUPED_FILTER_VALUE)} />}
+          {!query && <UngroupedRow s={s} onOpen={() => onOpen(UNGROUPED_FILTER_VALUE)} />}
           {rows.map((lot) => (
-            <LotRow key={lot.id} lot={lot} onOpen={() => onOpen(lot.id)} onDone={refresh} />
+            <LotRow key={lot.id} lot={lot} onOpen={() => onOpen(lot.id)} onDone={refresh} onAction={setAction} />
           ))}
           {!lots.isLoading && rows.length === 0 && (
             <tr>
               <td colSpan={8} className="py-6 text-center text-xs text-muted-foreground">
-                {query ? "Aramayla eşleşen parti yok." : `Bu carinin ${status === "OPEN" ? "açık " : status === "CLOSED" ? "sevk edilmiş " : ""}sevk partisi yok — "Sevk Partisi Oluştur" ile başlayın.`}
+                {query ? "Aramayla eşleşen parti yok." : 'Bu carinin açık sevk partisi yok — "Sevk Partisi Oluştur" ile başlayın.'}
               </td>
             </tr>
           )}
         </tbody>
       </table>
+      </div>
+      <LotActionDialogs action={action} onClose={() => setAction(null)} onDone={refresh} />
     </PageBody>
   );
 }
 
-/** Başlık satırı: durum segmenti · arama · "Sevk Partisi Oluştur". */
+/** Başlık satırı: arama · "Sevk Partisi Oluştur" · Sevkiyatlar. */
 function LotToolbar(p: {
-  status: LotStatusFilter;
-  onStatus: (v: LotStatusFilter) => void;
-  counts: { open?: number; closed?: number };
   query: string;
   onQuery: (v: string) => void;
   creating: boolean;
@@ -111,14 +121,10 @@ function LotToolbar(p: {
   onShipments: () => void;
 }) {
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-2">
-      <span className="inline-flex items-center gap-1.5 text-sm font-medium">
-        <Boxes className="h-4 w-4" /> Sevk partileri
-      </span>
-      <StatusSegment value={p.status} onChange={p.onStatus} counts={p.counts} />
+    <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2">
       <div className="relative">
         <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input value={p.query} onChange={(e) => p.onQuery(e.target.value)} placeholder="Parti adı / not ara…" className="h-8 w-56 pl-7 text-xs" />
+        <Input value={p.query} onChange={(e) => p.onQuery(e.target.value)} placeholder="Parti adı / kod / not ara…" className="h-9 w-72 pl-7" />
       </div>
       <Button size="sm" className="ml-auto h-8 gap-1" disabled={p.creating} onClick={p.onCreate}>
         <Plus className="h-3.5 w-3.5" /> {p.creating ? "Açılıyor…" : "Sevk Partisi Oluştur"}
@@ -137,16 +143,16 @@ function LotTableHead({ sort, onSort }: { sort: LotSort; onSort: (key: LotSortKe
     <SortTh key={key} label={label} align={align} active={sort.key === key ? sort.dir : null} onClick={() => onSort(key)} />
   );
   return (
-    <thead className="text-xs text-muted-foreground">
+    <thead className="bg-background text-xs text-muted-foreground">
       <tr className="border-b">
         {th("name", "Parti")}
-        {th("sackCount", "Çuval")}
+        {th("code", "Kod")}
+        {th("sackCount", "Çuval", "r")}
         {th("totalQty", "Metraj", "r")}
         {th("weightKg", "Kg", "r")}
-        <th className="py-1.5 text-left font-medium">Durum</th>
-        {th("createdAt", "Tarih")}
-        <th className="py-1.5 text-left font-medium">Not</th>
-        <th className="w-8" />
+        {th("createdAt", "Tarih", "r")}
+        <th className="px-3 py-1.5 text-left font-medium">Not</th>
+        <th className="w-14" />
       </tr>
     </thead>
   );
@@ -155,7 +161,7 @@ function LotTableHead({ sort, onSort }: { sort: LotSort; onSort: (key: LotSortKe
 /** Sıralanabilir başlık — aktif anahtarda yön oku. */
 function SortTh({ label, align, active, onClick }: { label: string; align: "l" | "r"; active: "asc" | "desc" | null; onClick: () => void }) {
   return (
-    <th className={cn("py-1.5 font-medium", align === "r" ? "text-right" : "text-left")}>
+    <th className={cn("px-3 py-1.5 font-medium", align === "r" ? "text-right" : "text-left")}>
       <button type="button" onClick={onClick} className={cn("inline-flex items-center gap-0.5 hover:text-foreground", active && "text-foreground")}>
         {label}
         {active === "asc" && <ArrowUp className="h-3 w-3" />}
@@ -165,65 +171,56 @@ function SortTh({ label, align, active, onClick }: { label: string; align: "l" |
   );
 }
 
-/** Açık · Sevk edilmiş · Tümü — sayılarıyla. "Sevk edilmiş" = son çuvalı da giden parti (elle kapatma yok). */
-function StatusSegment({ value, onChange, counts }: { value: LotStatusFilter; onChange: (v: LotStatusFilter) => void; counts: { open?: number; closed?: number } }) {
-  const items: { v: LotStatusFilter; label: string }[] = [
-    { v: "OPEN", label: counts.open != null ? `Açık (${counts.open})` : "Açık" },
-    { v: "CLOSED", label: counts.closed != null ? `Sevk edilmiş (${counts.closed})` : "Sevk edilmiş" },
-    { v: "ALL", label: "Tümü" },
-  ];
-  return (
-    <div className="inline-flex rounded-md border p-0.5">
-      {items.map((i) => (
-        <button
-          key={i.v}
-          type="button"
-          onClick={() => onChange(i.v)}
-          className={cn("rounded px-2 py-0.5 text-xs", value === i.v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
-        >
-          {i.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** Sabit "Partisiz çuvallar (havuz)" satırı — boşken soluk, kaybolmaz. */
+/**
+ * Sabit "Partisiz çuvallar (havuz)" satırı — bir PARTİ değil, havuzun kendisi; bu
+ * yüzden parti satırlarından görsel olarak ayrılır (tonlu zemin + kesik alt çizgi +
+ * ikon). Boşken soluk, KAYBOLMAZ.
+ */
 function UngroupedRow({ s, onOpen }: { s: PackingLotCustomerSummary | undefined; onOpen: () => void }) {
   const u = s?.ungrouped;
   const empty = !u || u.sackCount === 0;
   return (
-    <tr className={cn("cursor-pointer border-b hover:bg-muted/40", empty && "text-muted-foreground")} onClick={onOpen}>
-      <td className="py-2 font-medium">Partisiz çuvallar (havuz)</td>
-      <td className="py-2">{u ? `${u.sackCount} çuval` : "…"}</td>
-      <td className="py-2 text-right tabular-nums">{u ? `${fmtQty(u.totalQty)} m` : ""}</td>
-      <td className="py-2 text-right tabular-nums">{u ? fmtKg(u.weightKg) : ""}</td>
-      <td className="py-2 text-xs">{empty ? "boş" : "partiye alınmayı bekliyor"}</td>
-      <td className="py-2" />
-      <td className="py-2" />
+    <tr
+      className={cn(
+        "cursor-pointer border-b border-dashed bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-950/50",
+        empty && "text-muted-foreground",
+      )}
+      onClick={onOpen}
+    >
+      <td className="px-3 py-2 font-medium">
+        <span className="inline-flex items-center gap-1.5">
+          <PackageOpen className="h-3.5 w-3.5 text-muted-foreground" /> Partisiz çuvallar (havuz)
+        </span>
+      </td>
+      <td className="px-3 py-2" />
+      <td className="px-3 py-2 text-right tabular-nums">{u ? `${u.sackCount} çuval` : "…"}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{u ? `${fmtQty(u.totalQty)} m` : ""}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{u ? fmtKg(u.weightKg) : ""}</td>
+      <td className="px-3 py-2" />
+      <td className="px-3 py-2" />
       <td className="py-2" />
     </tr>
   );
 }
 
-function LotRow({ lot, onOpen, onDone }: { lot: PackingGroup; onOpen: () => void; onDone: () => void }) {
+function LotRow({ lot, onOpen, onDone, onAction }: { lot: PackingGroup; onOpen: () => void; onDone: () => void; onAction: (a: LotAction) => void }) {
   const closed = lot.status === "CLOSED";
   return (
     <tr className={cn("cursor-pointer border-b hover:bg-muted/40", closed && "text-muted-foreground")} onClick={onOpen}>
-      <td className="py-2 font-medium">
+      <td className="px-3 py-2 font-medium">
         <span className="inline-flex items-center gap-1.5">
           {closed && <Lock className="h-3 w-3" />}
           {lot.name}
         </span>
       </td>
-      <td className="py-2 tabular-nums">{lotSackLabel(lot)}</td>
-      <td className="py-2 text-right tabular-nums">{fmtQty(lot.totalQty)} m</td>
-      <td className="py-2 text-right tabular-nums">{fmtKg(lot.weightKg)}</td>
-      <td className="py-2 text-xs">{lotStatusLabel(lot.status)}</td>
-      <td className="py-2 text-xs tabular-nums">{fmtDate(lot.createdAt)}</td>
-      <td className="max-w-[28ch] truncate py-2 text-xs italic text-muted-foreground" title={lot.note ?? undefined}>{lot.note ?? ""}</td>
-      <td className="py-1" onClick={(e) => e.stopPropagation()}>
-        <LotRowMenu lot={lot} onDone={onDone} />
+      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{lot.code ?? ""}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{lotSackLabel(lot)}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{fmtQty(lot.totalQty)} m</td>
+      <td className="px-3 py-2 text-right tabular-nums">{fmtKg(lot.weightKg)}</td>
+      <td className="px-3 py-2 text-right text-xs tabular-nums">{fmtDate(lot.createdAt)}</td>
+      <td className="max-w-[28ch] truncate px-3 py-2 text-xs italic text-muted-foreground" title={lot.note ?? undefined}>{lot.note ?? ""}</td>
+      <td className="py-1 pr-3 text-right" onClick={(e) => e.stopPropagation()}>
+        <LotRowMenu lot={lot} onDone={onDone} onAction={onAction} />
       </td>
     </tr>
   );

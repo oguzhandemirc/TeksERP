@@ -47,7 +47,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { D, D0 } from "./helpers/finance.helper";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
@@ -74,12 +74,12 @@ export const BORDRO_KIND_LABEL: Record<ChequeKind, string> = {
  * Çağıran `withBarcodeRetry` ile sarmalar.
  */
 async function nextNoteNo(tx: Prisma.TransactionClient, date: Date): Promise<string> {
-  const full = dailyCodePrefix(DOC_PREFIX, date);
+  const full = seriesCodePrefix("chequeDeliveryNote", date);
   const rows = await tx.chequeDeliveryNote.findMany({
     where: { docNo: { gte: full, startsWith: full } },
     select: { docNo: true },
   });
-  return buildDailyCode(DOC_PREFIX, nextDailySeq(rows.map((r) => r.docNo), full), date);
+  return buildSeriesCode("chequeDeliveryNote", seriesSeqFrom(rows.map((r) => r.docNo), full), date);
 }
 
 /** Para birimi bazlı adet + toplam — `Currency` beyan sırasında (deterministik). */

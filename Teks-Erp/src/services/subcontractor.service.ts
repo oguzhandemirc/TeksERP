@@ -61,7 +61,7 @@ import {
   type BuiltDocContent,
   type PrintedDocDb,
 } from "./printed-document.service";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { buildSeriesCode, nextSeriesNo, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { resolveDispatchCancelBlockReason } from "./helpers/subcontractor-cancel.helper";
@@ -136,10 +136,11 @@ import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
 export async function nextPrefixedSequenceTx(
   tx: Prisma.TransactionClient,
   table: "subcontractorDispatch" | "subcontractorReceipt",
-  prefix: string,
   date: Date
 ): Promise<number> {
-  const fullPrefix = dailyCodePrefix(prefix, date); // PREFIX + GGAAYY
+  // Ön ek artık literal değil: tablo adı AYNI ZAMANDA numara serisinin anahtarıdır
+  // (`number-series-catalog`), yani sevk/kabul ön ekleri fabrikaya göre değişebilir.
+  const fullPrefix = seriesCodePrefix(table, date);
 
   // O-21: collation-güvenli — gte (index seek) + startsWith (tam-prefix, collation-
   // bağımsız) ile günün TÜM kayıtlarını çek, sayısal max'ı JS'te reduce et. Eski
@@ -150,13 +151,13 @@ export async function nextPrefixedSequenceTx(
       where: { dispatchNo: { gte: fullPrefix, startsWith: fullPrefix } },
       select: { dispatchNo: true },
     });
-    return nextDailySeq(rows.map((r) => r.dispatchNo), fullPrefix);
+    return seriesSeqFrom(rows.map((r) => r.dispatchNo), fullPrefix);
   }
   const rows = await tx.subcontractorReceipt.findMany({
     where: { receiptNo: { gte: fullPrefix, startsWith: fullPrefix } },
     select: { receiptNo: true },
   });
-  return nextDailySeq(rows.map((r) => r.receiptNo), fullPrefix);
+  return seriesSeqFrom(rows.map((r) => r.receiptNo), fullPrefix);
 }
 
 async function logTravelerScan(
@@ -702,13 +703,13 @@ async function applyDirectShipSplits(
 
 /** Sonraki DirectShipment numarası (DSK + GGAAYY + NNNN) — tx içinde bugünkü max'tan. */
 async function nextDirectShipmentNo(tx: Prisma.TransactionClient): Promise<string> {
-  const prefix = dailyCodePrefix("DSK");
-  const todays = await tx.directShipment.findMany({
-    where: { shipmentNo: { gte: prefix, startsWith: prefix } },
-    select: { shipmentNo: true },
+  return nextSeriesNo("directShipment", async (prefix) => {
+    const todays = await tx.directShipment.findMany({
+      where: { shipmentNo: { gte: prefix, startsWith: prefix } },
+      select: { shipmentNo: true },
+    });
+    return todays.map((s) => s.shipmentNo);
   });
-  const seq = nextDailySeq(todays.map((s) => s.shipmentNo), prefix);
-  return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 
 export class SubcontractorService {
@@ -1315,8 +1316,8 @@ export class SubcontractorService {
 
       // Dispatch numarası
       const now = new Date();
-      const seq = await nextPrefixedSequenceTx(tx, "subcontractorDispatch", "FS", now);
-      const dispatchNo = buildDailyCode("FS", seq, now);
+      const seq = await nextPrefixedSequenceTx(tx, "subcontractorDispatch", now);
+      const dispatchNo = buildSeriesCode("subcontractorDispatch", seq, now);
 
       const dispatch = await tx.subcontractorDispatch.create({
         data: {
@@ -3092,8 +3093,8 @@ export class SubcontractorService {
         })) > 0;
 
       const now = new Date();
-      const seq = await nextPrefixedSequenceTx(tx, "subcontractorReceipt", "FK", now);
-      const receiptNo = buildDailyCode("FK", seq, now);
+      const seq = await nextPrefixedSequenceTx(tx, "subcontractorReceipt", now);
+      const receiptNo = buildSeriesCode("subcontractorReceipt", seq, now);
 
       const receipt = await tx.subcontractorReceipt.create({
         data: {
