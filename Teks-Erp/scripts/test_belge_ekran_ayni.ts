@@ -24,7 +24,9 @@
 //    §6 ❌3 (üye satırların `returnNo`su null) · belge numarayı kolondan değil
 //    `returnDocumentNo(...)` TÜRETİMİNDEN okuyunca §6 ❌1 — ekran sayaçlı
 //    `IADE-220926-000001` gösterirken belge `id`den türemiş hex kuyruk gösteriyor,
-//    yani kullanıcının şikâyetinin ta kendisi ("programda başka, çıktıda başka").
+//    yani kullanıcının şikâyetinin ta kendisi ("programda başka, çıktıda başka") ·
+//    `seriesImpactCount`tan BELGE ÇAPASI yüklemi kalkınca §6 ❌1 (3 satır → "3
+//    belge"; etki cümlesi "1.314 iade" der, oysa 438 belge vardır).
 // ⭐ Negatif sonda (2026-09-22, ölçüldü): `getShipmentById`in `seqLabel` üretimi
 //    `readSackSeqFormat(sh.sackSeqPrefix)` yerine `readSackSeqFormat(null)` yapılınca
 //    §2 KIRMIZI (ekran "3", belge "SP3"); `collectShipmentDocContent`ten
@@ -36,6 +38,7 @@ import { PrintedDocType, Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
 import { returnService } from "../src/services/return.service";
+import { seriesImpactCount } from "../src/services/helpers/series-panel.helper";
 import { PackingGroupService } from "../src/services/packing-group.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -283,6 +286,14 @@ async function main(): Promise<void> {
     check("§6 zemin: iade belgesi donmuş ve okunabiliyor", iadeBelge.length > 100, `${iadeBelge.length} karakter`);
     check("§6 ⭐ EKRANDAKİ numara BELGEDE birebir geçiyor",
       iadeNo !== "" && iadeBelge.includes(iadeNo), iadeNo);
+
+    // ⭐ ETKİ SAYISININ BİRİMİ: üç SATIR var ama BİR belge. Panelin cümlesi
+    // "N iade belgesinin numarası değişmez" olacağı için sayım belge çapasını
+    // saymalı; `count(*)` üçü de sayar ve cümle yalan olurdu.
+    const satirSayisi = await prisma.rollReturn.count({ where: { id: { in: iadeIds } } });
+    const belgeSayisi = (await seriesImpactCount("returnDoc")) ?? -1;
+    check("§6 ⭐ etki sayısı BELGE sayar, SATIR değil (3 satır → 1 belge)",
+      satirSayisi === 3 && belgeSayisi === 1, `${satirSayisi} satır ↔ ${belgeSayisi} belge`);
   } finally {
     // FK sırası: belge → iade → top → çuval → sevkiyat → parti → master veri
     await prisma.printedDocument.deleteMany({ where: { sourceId: { in: [...shipmentIds, ...returnIds] } } });

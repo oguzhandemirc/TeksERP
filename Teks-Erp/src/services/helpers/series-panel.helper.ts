@@ -65,10 +65,20 @@ export function seriesLock(key: string): { kind: SeriesLockKind; reason: string 
 export async function seriesImpactCount(key: string): Promise<number | null> {
   const e = numberSeriesCatalogEntry(key);
   if (!e.countTable) return null;
-  const delegate = (prisma as unknown as Record<string, { count: () => Promise<number> }>)[
+  const delegate = (prisma as unknown as Record<string, { count: (a?: unknown) => Promise<number> }>)[
     e.countTable.model
   ];
   if (!delegate) return null;
+  // BELGE ÇAPASI — tekil kayıt ya da grup lideri. Kolon-kolon karşılaştırma
+  // prisma alan referansıyla kurulur (katalog buna bağlanamaz, adını yazar).
+  if (e.countTable.kapsam === "belge-capasi") {
+    return delegate.count({
+      where: {
+        returnNo: { not: null },
+        OR: [{ returnGroupId: null }, { returnGroupId: { equals: prisma.rollReturn.fields.id } }],
+      },
+    });
+  }
   // ⚠️ Düz `count()`: `countTable.field` ZORUNLU bir kolon olmak zorundadır, yani
   // tablodaki her satır bu seriyle numaralanmıştır. Nullable bir kolonda "satır
   // sayısı" ile "numaralanmış kayıt sayısı" AYRI şeyler olurdu.

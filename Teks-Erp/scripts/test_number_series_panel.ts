@@ -24,6 +24,7 @@
 // ⭐ NEGATİF SONDA ✓B3 (2026-09-22, ölçüldü): sayaç ve istemci kapılarının sırası
 //    TERS çevrilince §1 ❌1 (`…CLIENT_TOO_OLD` geliyor, beklenen `…COUNTER_NOT_SCOPED`) ·
 //    `listSeries.editable` yalnız `lockedReason`a bakınca §2 ❌1 (46 seri ayrışıyor) ·
+//    `countTable`tan `birim` silinince §4 ❌1 ·
 //    `seriesImpactCount` kaynağı olmayan seride 0 dönünce §4 ❌1 · sayım SABİT 0
 //    dönünce §4 ❌1 (fikstür sayesinde; fikstürsüz hâlinde bu kol YEŞİL kalıyordu).
 //
@@ -163,8 +164,14 @@ async function main(): Promise<void> {
       `${lotSayi} = ${oncekiSayi} + ${fixtureGroups.length}`);
     check("§4 sayım gerçekten DELEGEYE gidiyor: ikinci bir seride de canlı sayıyla eşleşiyor",
       (await seriesImpactCount("sack")) === (await prisma.sack.count()));
+    // ⚠️ Hedef seri KATALOGDAN SEÇİLİR, elle yazılmaz: `packingLotName` bu
+    // dilimde `countTable` kazandı ve iddia sessizce yanlış seriyi ölçmeye
+    // başlardı. Kaynağı olmayan İLK seri hangisiyse o ölçülür.
+    const kaynaksiz = NUMBER_SERIES_CATALOG.find((e) => !e.countTable);
+    check("§4 körlük zemini: kataloğda sayım kaynağı OLMAYAN seri var", kaynaksiz !== undefined);
     check("§4 ⭐ sayım kaynağı OLMAYAN seri `null` döner ('0' demez)",
-      (await seriesImpactCount("packingLotName")) === null);
+      kaynaksiz !== undefined && (await seriesImpactCount(kaynaksiz.key)) === null,
+      kaynaksiz?.key ?? "(yok)");
     // ⚠️ SÖZLEŞME BEKÇİDE: `countTable.field` ZORUNLU bir kolon olmalı, yoksa
     // "satır sayısı" ile "numaralanmış kayıt sayısı" ayrışır. Çalışma anında
     // doğrulanamıyor (ölçüldü: Prisma 7 DMMF alanı `isRequired` taşımıyor),
@@ -175,10 +182,17 @@ async function main(): Promise<void> {
       if (!e.countTable) continue;
       const govde = sema.split(new RegExp(`\\bmodel ${e.countTable.model.replace(/^./, (c) => c.toUpperCase())}\\b`))[1]?.split("\n}")[0] ?? "";
       const satir = govde.split("\n").find((l) => new RegExp(`^\\s*${e.countTable?.field}\\s`).test(l)) ?? "";
-      if (satir === "" || /\?\s/.test(satir)) nullableOlanlar.push(`${e.key}:${e.countTable.field}`);
+      // ⚠️ İKİ KOL: kolon ZORUNLU olabilir, YA DA null'ları eleyen bir kapsam
+      // BEYAN edilmiş olabilir. İkisi de yoksa sayım sessizce satır sayar.
+      const nullable = satir === "" || /\?\s/.test(satir);
+      if (nullable && !e.countTable.kapsam) nullableOlanlar.push(`${e.key}:${e.countTable.field}`);
     }
-    check("§4 ⭐ her `countTable` alanı şemada ZORUNLU kolon (satır sayısı = numaralanmış kayıt)",
-      nullableOlanlar.length === 0, nullableOlanlar.join(", ") || "3 seri denetlendi");
+    check("§4 ⭐ her `countTable` alanı ZORUNLU kolon YA DA beyanlı kapsam taşıyor",
+      nullableOlanlar.length === 0, nullableOlanlar.join(", ") || `${NUMBER_SERIES_CATALOG.filter((e) => e.countTable).length} seri denetlendi`);
+    // ⭐ BİRİM BEYANI ZORUNLU: satır ile belge aynı şey değil.
+    const birimsiz = NUMBER_SERIES_CATALOG.filter((e) => e.countTable && !e.countTable.birim);
+    check("§4 ⭐ her `countTable` BİRİMİNİ beyan ediyor (kayıt ↔ belge)",
+      birimsiz.length === 0, birimsiz.map((e) => e.key).join(", ") || "hepsi beyanlı");
     check("§4 körlük zemini: şema metni gerçekten okundu", sema.length > 10_000, `${sema.length} bayt`);
 
     // ── §5 Önizleme sunucuda + biçim kapısı ───────────────────────────────

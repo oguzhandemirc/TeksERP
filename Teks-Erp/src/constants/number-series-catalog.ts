@@ -65,12 +65,37 @@ export interface NumberSeriesCatalogEntry {
    */
   panelGroup?: "sevkiyat";
   /**
-   * ETKİ CÜMLESİNİN kaynağı: bu seriyle numaralanmış KAYIT sayısı nereden
-   * okunur. Panel "bugüne kadarki N kaydın numarası değişmez" derken bu sayıyı
+   * ETKİ CÜMLESİNİN kaynağı: bu seriyle numaralanmış şeyin sayısı nereden
+   * okunur. Panel "bugüne kadarki N …nin numarası değişmez" derken bu sayıyı
    * kullanır ve sayı UYDURULMAZ — ölçülür. Alan yoksa panel sayı YAZMAZ
    * (üçüncü sonuç: "ölçülmedi"), "0" demez.
+   *
+   * ⚠️ `birim` BEYAN ZORUNLUDUR çünkü SATIR ile BELGE aynı şey değildir: iade
+   * numarası çok kalemli iadede ÜYE satırlara da kopyalanır, yani `count(*)`
+   * üç satırı üç belge sayardı ve cümle yalan olurdu ("1.314 iade" ≠ "438
+   * iade belgesi"). Ekrandaki cümle bu birimden kurulur.
+   *
+   * ⚠️ `field` ZORUNLU bir kolon OLMALI, ya da `where` ile null'lar ELENMELİ —
+   * nullable bir kolonda "satır sayısı" ile "numaralanmış sayı" ayrışır.
+   * Şart `test_number_series_panel §4`te şema METNİNDEN ölçülür (çalışma
+   * anında yapılamıyor: Prisma 7 DMMF alanı `isRequired` taşımıyor).
    */
-  countTable?: { model: string; field: string };
+  countTable?: {
+    model: string;
+    field: string;
+    birim: "kayıt" | "belge";
+    /**
+     * Sayım yüklemi — KAPALI KÜME, serbest `where` nesnesi DEĞİL.
+     *
+     * ⚠️ Katalog bir SABİTLER dosyasıdır ve prisma'ya bağlanamaz; oysa belge
+     * çapası yüklemi kolon-kolon karşılaştırma ister (`returnGroupId = id`) ve
+     * o ancak prisma'nın alan referansıyla kurulur (ölçüldü: Prisma 7
+     * `p.rollReturn.fields.id` DESTEKLİYOR). Bu yüzden katalog yüklemin ADINI
+     * yazar, gerçek yüklemi servis kurar. Serbest nesne olsaydı, katalogda
+     * çalışmayan bir `where` sessizce yanlış sayı üretirdi.
+     */
+    kapsam?: "belge-capasi";
+  };
 }
 
 const D = "DDMMYY" as NumberSeriesDateSegment;
@@ -107,7 +132,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   {
     key: "sack",
     panelGroup: "sevkiyat",
-    countTable: { model: "sack", field: "sackNo" },
+    countTable: { model: "sack", field: "sackNo", birim: "kayıt" },
     label: "Çuval no",
     seedPrefix: "CV",
     seedDateSegment: D,
@@ -119,7 +144,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   {
     key: "shipment",
     panelGroup: "sevkiyat",
-    countTable: { model: "shipment", field: "shipmentNo" },
+    countTable: { model: "shipment", field: "shipmentNo", birim: "kayıt" },
     label: "Sevkiyat no",
     seedPrefix: "SVK",
     seedDateSegment: D,
@@ -137,7 +162,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   {
     key: "packingLotCode",
     panelGroup: "sevkiyat",
-    countTable: { model: "packingGroup", field: "code" },
+    countTable: { model: "packingGroup", field: "code", birim: "kayıt" },
     label: "Sevk partisi kodu",
     seedPrefix: "PRT",
     seedDateSegment: YYMM,
@@ -153,6 +178,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     seedDateSegment: NONE,
     seedDigits: 1,
     seedSeparator: "-",
+    countTable: { model: "packingGroup", field: "name", birim: "kayıt" },
     scopedCounter: {
       durum: "sayac-yok",
       not: "Adın sırası sayaçtan DEĞİL grubun kendi sırasından gelir (`formatPackingGroupName(seq)`); biçim değişimi hiçbir sayacı bozamaz.",
@@ -166,6 +192,16 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     seedDateSegment: D,
     seedDigits: 6,
     seedSeparator: "-",
+    // ⚠️ BİRİM "belge": `returnNo` üye satırlara da kopyalanır, `count(*)` üç
+    // satırı üç belge sayardı. Yüklem partial unique'in AYNISI — sayılan şey
+    // BELGE ÇAPASI (tekil iade ya da grup lideri) — ve aynı zamanda null'ları
+    // eler, yani nullable kolon sözleşmesi de karşılanır.
+    countTable: {
+      model: "rollReturn",
+      field: "returnNo",
+      birim: "belge",
+      kapsam: "belge-capasi",
+    },
     scopedCounter: {
       durum: "hazir",
       not: "`return.service` BELGE BAŞINA tek numara üretir (üyeler liderin kopyasını taşır) ve kapsam damgası migration'da kuruldu — `id`den türemiş eski hex kuyruklar sayaca giremez.",
