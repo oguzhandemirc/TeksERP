@@ -28,6 +28,9 @@
 //  §4e Sayım kaynağı olmayan seri `uretecBagi` ile BEYANLI (kaynaksızlık bir KARAR)
 //  §4f Kaynaklı HER seri gerçekten sayılabiliyor — yanlış model adı sessizce
 //      `null` döndürür ve hiçbir statik kontrol göremez
+//   §6 SAYAÇ AYARLARI: varsayılan satır = BUGÜNKÜ davranış (52 seri) · kendi
+//      mekanizması olan seri 400 · değer kapısı · yazma yolu damgaya dokunmaz ·
+//      yetenek listesi sunucudan, `reset` hep kapalı ve GEREKÇELİ
 //   §5 Önizleme SUNUCUDA hesaplanır ve biçim kapısından geçer
 //
 // ⭐ NEGATİF SONDA ✓B3 (2026-09-22, ölçüldü): sayaç ve istemci kapılarının sırası
@@ -53,18 +56,15 @@ import {
   NUMBER_SERIES_PANEL_GROUPS,
   numberSeriesCatalogEntry,
 } from "../src/constants/number-series-catalog";
-import {
-  assertSeriesFormatAllowed,
-  refreshNumberSeriesCache,
-  previewSeriesCode,
-  resolveSeriesFormat,
-  updateSeriesFormat,
-} from "../src/services/number-series.service";
+import { previewSeriesCode, refreshNumberSeriesCache, resolveSeriesFormat, seriesSeqFrom } from "../src/services/number-series.service";
+import { assertSeriesCounterAllowed, assertSeriesFormatAllowed, updateSeriesCounter, updateSeriesFormat } from "../src/services/helpers/series-write.helper";
 import {
   listSeries,
+  seriesCounterCapabilities,
   seriesImpactCount,
   seriesLock,
 } from "../src/services/helpers/series-panel.helper";
+import { seriesPrefix } from "../src/services/helpers/series-format.helper";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
@@ -90,12 +90,24 @@ async function dene<T>(fn: () => Promise<T>): Promise<T | Error> {
 const kod = (e: unknown): string | undefined =>
   (e as { details?: { code?: string } } | null)?.details?.code;
 
+/** SENKRON kapı sondası — fırlatmazsa false, farklı kodla fırlatırsa da false. */
+function throws(fn: () => void, beklenen: string): boolean {
+  try {
+    fn();
+    return false;
+  } catch (e) {
+    // "ANY" = "herhangi bir hata BEKLENMİYOR" sondası için: hiç fırlamamalı.
+    return beklenen === "ANY" ? true : kod(e) === beklenen;
+  }
+}
+
 const DAMGA = `TEST-${Date.now()}`.slice(0, 14);
 
 async function main(): Promise<void> {
   const fixtureGroups: string[] = [];
   const fixtureInvoices: string[] = [];
   let fixtureCari: string | null = null;
+  const sayacDokunulan: string[] = [];
   const engel = hedefDbEngeli();
   if (engel) {
     console.log(engel);
@@ -391,6 +403,84 @@ async function main(): Promise<void> {
       sayilamayan.length === 0, sayilamayan.join(", ") || `${sayilanSeri} seri sayıldı`);
     check("§4f körlük zemini: sayım gerçekten koştu", sayilanSeri >= 50, `${sayilanSeri} seri`);
 
+    // ── §6 SAYAÇ AYARLARI (D2②) ─────────────────────────────────────────────
+    // ⭐ EN ÖNEMLİ İDDİA §6a: kolonlar indi ama HİÇBİRİ dolu değil ⇒ 52 serinin
+    // HEPSİ bugünküyle birebir aynı numarayı üretmeli. §1'in tohum eşitliği bunu
+    // KARŞILAMAZ: o katalog TOHUMUNU eski biçimlendiriciyle karşılaştırır, sayaç
+    // ayarlarına hiç bakmaz ve DB satırını okumaz.
+    const varsayilanBozuk: string[] = [];
+    for (const e of NUMBER_SERIES_CATALOG) {
+      const f = resolveSeriesFormat(e.key);
+      const p0 = seriesPrefix(f, new Date("2026-09-23T08:00:00.000Z"));
+      const bos = seriesSeqFrom(f, [], p0);
+      const ucKod = seriesSeqFrom(f, [1, 2, 3].map((n) => `${p0}${String(n).padStart(f.digits, "0")}`), p0);
+      if (bos !== 1 || ucKod !== 4) varsayilanBozuk.push(`${e.key}(boş=${bos}, üç=${ucKod})`);
+    }
+    check("§6a ⭐ VARSAYILAN satırla 52 serinin sayacı bugünküyle BİREBİR aynı (boş→1, üç kod→4)",
+      varsayilanBozuk.length === 0,
+      varsayilanBozuk.join(", ") || `${NUMBER_SERIES_CATALOG.length} seri denetlendi`);
+
+    // §6b KENDİ MEKANİZMASI — ayar 400 ile reddedilir (sessiz etkisizlik YASAK)
+    const kendiSayacli = NUMBER_SERIES_CATALOG.filter((e) => e.ownCounter);
+    check("§6b körlük zemini: kendi sayaç mekanizması BEYANLI seri var",
+      kendiSayacli.length >= 3, kendiSayacli.map((e) => e.key).join(", "));
+    const kacan = kendiSayacli.filter(
+      (e) => !throws(() => assertSeriesCounterAllowed(e.key, { startValue: 5, step: null, maxValue: null }),
+        "NUMBER_SERIES_COUNTER_OWN"));
+    check("§6b ⭐ kendi sayacı olan seride ayar 400 `NUMBER_SERIES_COUNTER_OWN`",
+      kacan.length === 0, kacan.map((e) => e.key).join(", ") || `${kendiSayacli.length} seri reddedildi`);
+    check("§6b ⭐ BİÇİM kilidi sayaç kilidi DEĞİL: `workOrder` biçimi kilitli ama sayacı ayarlanabilir",
+      numberSeriesCatalogEntry("workOrder").lockedReason !== undefined &&
+        seriesCounterCapabilities("workOrder").startValue === true);
+
+    // §6c DEĞER KAPISI — DB CHECK'lerinin uygulama ikizi
+    check("§6c sıfır/negatif/ondalık reddedilir",
+      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: 0, step: null, maxValue: null }), "NUMBER_SERIES_COUNTER_INVALID") &&
+      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: null, step: -1, maxValue: null }), "NUMBER_SERIES_COUNTER_INVALID") &&
+      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: null, step: null, maxValue: 1.5 }), "NUMBER_SERIES_COUNTER_INVALID"));
+    check("§6c ⭐ üst sınır başlangıcın ALTINDA olamaz",
+      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: 100, step: null, maxValue: 50 }), "NUMBER_SERIES_COUNTER_RANGE_INVALID"));
+    check("§6c geçerli ayar KABUL edilir (kapı fazla dar değil)",
+      !throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: 100, step: 10, maxValue: 999 }), "ANY"));
+
+    // §6d YAZMA YOLU — gerçekten yazıyor ve `formatChangedAt`e DOKUNMUYOR
+    const oncekiDamga = (await prisma.numberSeries.findUnique({
+      where: { key: "packingLotCode" }, select: { formatChangedAt: true },
+    }))?.formatChangedAt ?? null;
+    await updateSeriesCounter("packingLotCode", { startValue: 500, step: 10, maxValue: 9000 });
+    sayacDokunulan.push("packingLotCode");
+    const yazildi = resolveSeriesFormat("packingLotCode");
+    check("§6d ⭐ yazılan ayar YÜRÜRLÜKTEKİ biçime yansıyor (önbellek tazelendi)",
+      yazildi.startValue === 500 && yazildi.step === 10 && yazildi.maxValue === 9000,
+      `${yazildi.startValue}/${yazildi.step}/${yazildi.maxValue}`);
+    const p1 = seriesPrefix(yazildi, new Date("2026-09-23T08:00:00.000Z"));
+    check("§6d ⭐ ayar SAYACA yansıyor: boş kapsamda başlangıç, dolu kapsamda ADIM",
+      seriesSeqFrom(yazildi, [], p1) === 500 &&
+      seriesSeqFrom(yazildi, [`${p1}0500`], p1) === 510,
+      `${seriesSeqFrom(yazildi, [], p1)} / ${seriesSeqFrom(yazildi, [`${p1}0500`], p1)}`);
+    const sonrakiDamga = (await prisma.numberSeries.findUnique({
+      where: { key: "packingLotCode" }, select: { formatChangedAt: true },
+    }))?.formatChangedAt ?? null;
+    check("§6d ⭐ sayaç ayarı `formatChangedAt` damgasına DOKUNMAZ (biçim değişmedi)",
+      String(oncekiDamga) === String(sonrakiDamga), `${String(oncekiDamga)} → ${String(sonrakiDamga)}`);
+    check("§6d ⭐ üst sınır aşımı yazma yolundan da 409 verir",
+      (() => {
+        try { seriesSeqFrom(yazildi, [`${p1}9000`], p1); return false; } catch (e) { return kod(e) === "NUMBER_SERIES_RANGE_EXHAUSTED"; }
+      })());
+
+    // §6e YETENEK LİSTESİ — panel hesaplamaz, okur
+    const liste2 = listSeries();
+    check("§6e ⭐ her satır sayaç yeteneklerini TAŞIYOR",
+      liste2.every((r) => r.counter !== undefined && typeof r.counter.startValue === "boolean"));
+    check("§6e ⭐ `reset` HER satırda kapalı ve GEREKÇELİ (sessiz 'hiçbir şey olmadı' yok)",
+      liste2.every((r) => r.counter.reset === false && r.counter.resetReason.length > 40));
+    check("§6e ⭐ kendi sayacı olan satırlar kapalı ve gerekçeli, diğerleri açık",
+      liste2.every((r) =>
+        numberSeriesCatalogEntry(r.key).ownCounter
+          ? !r.counter.startValue && !r.counter.step && !r.counter.maxValue && (r.counter.lockedReason ?? "").length > 20
+          : r.counter.startValue && r.counter.step && r.counter.maxValue),
+      `${liste2.filter((r) => r.counter.startValue).length} açık / ${liste2.filter((r) => !r.counter.startValue).length} kapalı`);
+
     // ── §5 Önizleme sunucuda + biçim kapısı ───────────────────────────────
     const fmt = resolveSeriesFormat("packingLotCode");
     check("§5 önizleme serinin kendi biçimiyle kuruluyor",
@@ -413,6 +503,13 @@ async function main(): Promise<void> {
       await prisma.invoice.deleteMany({ where: { id: { in: fixtureInvoices } } });
     }
     if (fixtureCari) await prisma.cariAccount.delete({ where: { id: fixtureCari } });
+    if (sayacDokunulan.length > 0) {
+      await prisma.numberSeries.updateMany({
+        where: { key: { in: sayacDokunulan } },
+        data: { startValue: null, step: null, maxValue: null },
+      });
+      await refreshNumberSeriesCache();
+    }
     // Emekli ön ek sondası satırı geri yazar, ama sonda ortasında düşülebilir.
     await prisma.numberSeries.updateMany({
       where: { key: "invoiceSales", retiredPrefixes: { isEmpty: false } },

@@ -7,6 +7,27 @@ export type SeriesDateSegment = "NONE" | "DDMMYY" | "YYMM" | "YYYYMM" | "YY" | "
  */
 export type SeriesLockKind = "YAPISAL" | "SAYAC" | "ISTEMCI";
 
+/**
+ * ⚠️ `reset` HER ZAMAN `false` ve bu bir EKSİKLİK DEĞİL, sunucuda ÖLÇÜLMÜŞ bir
+ * sonuç: aynı ön ek ve tarih döneminde numaralar tekil olduğu için sayaç 1'e
+ * döndürülse bile ilk boş numaraya kadar ilerler. Ekranda GEREKÇESİYLE kapalı
+ * durur — "neden yok?" sorusunun ekranda cevabı olmaz, "neden kapalı?" olur.
+ */
+export interface SeriesCounterCapabilities {
+  startValue: boolean;
+  step: boolean;
+  maxValue: boolean;
+  reset: false;
+  lockedReason?: string;
+  resetReason: string;
+}
+
+export interface SeriesCounterInput {
+  startValue: number | null;
+  step: number | null;
+  maxValue: number | null;
+}
+
 export interface NumberSeriesRow {
   key: string;
   label: string;
@@ -28,6 +49,12 @@ export interface NumberSeriesRow {
   panelGroup: string;
   /** Bölüm başlığı — BACKEND'den; panelde etiket kopyası tutulmaz. */
   panelGroupLabel: string;
+  /** Sayaç yetenekleri — panel HESAPLAMAZ, okur (`countBirim` emsali). */
+  counter: SeriesCounterCapabilities;
+  /** Yürürlükteki sayaç ayarları; `null` = ayarlanmamış (bugünkü davranış). */
+  startValue: number | null;
+  step: number | null;
+  maxValue: number | null;
   /**
    * Etki cümlesinin birimi — BACKEND'DEN gelir, panelde KOPYALANMAZ.
    * (Satır ile belge aynı şey değil: iade numarası üye satırlara kopyalanır.)

@@ -5080,6 +5080,15 @@ model NumberSeries {
   /// false = biçimi panelden değiştirilemez (fiziksel plakaya/çözümlenen yapıya bağlı).
   editable Boolean @default(true)
 
+  /// SAYAÇ AYARLARI (D2②) — üçü de NULL doğar ve NULL = BUGÜNKÜ DAVRANIŞ:
+  /// başlangıç 1, adım 1, üst sınır yok. Hesapları `series-counter.helper` yapar.
+  ///
+  /// ⚠️ `digits` bir DOLGU ayarıdır, KAPASİTE değil (ölçüldü: 4 hane + sıra 10000
+  /// → "10000", sarmaz). Sayacı durduran tek şey `maxValue`dur.
+  startValue Int?
+  step       Int?
+  maxValue   Int?
+
   /// Biçimin SON değiştiği an — sayacın KAPSAM sınırı. Sıradaki numara yalnız bu
   /// andan SONRA doğan kodlara bakar; eski rejimin kodları sayaca girmez
   /// (`CV220926…` varken tarih segmenti düşerse sıra 2.209.260.004 olurdu).

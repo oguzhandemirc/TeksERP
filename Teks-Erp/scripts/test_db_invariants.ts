@@ -700,6 +700,14 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // 1 = dolgusuz (günlük parti no emsali), 8 = VarChar(64) kolonların pratik tavanı.
   // Sıfır hane sayacı görünmez kılar, 9+ hane kodu okunmaz uzunluğa taşır.
   { table: "number_series", name: "number_series_digits_range" },
+  // 2026-09-23 — sayaç ayarları (20260923120000_number_series_counter). Üçü de
+  // uygulama kapısının DB İKİZİ (çift yüklem): kapı 400 döner, sed bozuk satırı
+  // hiç yazdırmaz. `maxValue >= startValue` yalnız İKİSİ DE doluyken aranır —
+  // NULL'lı karşılaştırma UNKNOWN döner ve CHECK UNKNOWN'ı geçirir, yani tek
+  // taraflı ayar (yalnız adım, yalnız sınır) serbest kalır.
+  { table: "number_series", name: "number_series_start_value_positive" },
+  { table: "number_series", name: "number_series_step_positive" },
+  { table: "number_series", name: "number_series_max_value_range" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

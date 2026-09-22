@@ -38,13 +38,8 @@
 //    bir sonraki koşumu kirletmesin.
 // =============================================================================
 import prisma from "../src/lib/prisma";
-import {
-  invalidateNumberSeriesCache,
-  nextSeriesNo,
-  refreshNumberSeriesCache,
-  resolveSeriesFormat,
-  updateSeriesFormat,
-} from "../src/services/number-series.service";
+import { invalidateNumberSeriesCache, nextSeriesNo, refreshNumberSeriesCache, resolveSeriesFormat } from "../src/services/number-series.service";
+import { updateSeriesFormat } from "../src/services/helpers/series-write.helper";
 import {
   FAZ_B_ONCESI,
   compareClientVersions,

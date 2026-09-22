@@ -121,6 +121,45 @@ export async function seriesImpactCount(key: string): Promise<number | null> {
   return delegate.count();
 }
 
+/**
+ * SAYAÇ YETENEKLERİ — panel satır başına BUNU okur, kendi hesaplamaz.
+ *
+ * ⚠️ `reset` HER ZAMAN kapalı ve bu bir EKSİKLİK DEĞİL, ÖLÇÜLMÜŞ bir sonuç
+ * (2026-09-23): aynı ön ek ve tarih döneminde numaralar `@unique`, sayaç 1'e
+ * döndürülse bile atlama döngüsü eski maksimuma kadar yürüyor ve sonuç
+ * DEĞİŞMİYOR. Yani "sıfırla" düğmesi sessiz bir "hiçbir şey olmadı" üretirdi.
+ * Ekranda GEREKÇESİYLE kapalı durur — "neden yok?" sorusunun ekranda cevabı
+ * olmaz, "neden kapalı?" sorusununki olur (numaralandırma ekranının C3 kararı).
+ */
+export interface SeriesCounterCapabilities {
+  startValue: boolean;
+  step: boolean;
+  maxValue: boolean;
+  reset: false;
+  /** Ayarlar kapalıysa NEDEN (kendi sayaç mekanizması). */
+  lockedReason?: string;
+  /** `reset` neden hep kapalı — ölçülmüş cümle, panelde birebir gösterilir. */
+  resetReason: string;
+}
+
+const RESET_REASON =
+  "Sayaç geriye alınamaz: aynı ön ek ve tarih döneminde üretilmiş numaralar tekildir, " +
+  "sıra 1'e döndürülse bile ilk boş numaraya kadar ilerler ve sonuç değişmez. " +
+  "İleri almak için başlangıç değerini bugünkü en büyük numaranın üstüne yazın.";
+
+export function seriesCounterCapabilities(key: string): SeriesCounterCapabilities {
+  const e = numberSeriesCatalogEntry(key);
+  const open = e.ownCounter === undefined;
+  return {
+    startValue: open,
+    step: open,
+    maxValue: open,
+    reset: false,
+    ...(e.ownCounter ? { lockedReason: e.ownCounter.not } : {}),
+    resetReason: RESET_REASON,
+  };
+}
+
 /** Liste ucu — katalog kimliği + yürürlükteki biçim + örnek. */
 export function listSeries(): Array<
   NumberSeriesFormat & {
@@ -135,6 +174,11 @@ export function listSeries(): Array<
     panelGroupLabel: string;
     /** Etki cümlesinin BİRİMİ — panel bunu KOPYALAMAZ, okur. */
     countBirim?: "kayıt" | "belge";
+    /** Sayaç yetenekleri — panel hesaplamaz, okur. */
+    counter: SeriesCounterCapabilities;
+    startValue: number | null;
+    step: number | null;
+    maxValue: number | null;
     preview: string;
   }
 > {
@@ -160,6 +204,13 @@ export function listSeries(): Array<
       panelGroup: e.panelGroup,
       panelGroupLabel: numberSeriesPanelGroupLabel(e.panelGroup),
       ...(e.countTable ? { countBirim: e.countTable.birim } : {}),
+      counter: seriesCounterCapabilities(e.key),
+      // ⚠️ `undefined` DEĞİL `null`: tohuma düşen seride alan hiç yoktur ve panel
+      // `undefined !== null` yüzünden formu "değişmiş" sanardı (Kaydet düğmesi
+      // dokunulmadan açılırdı). Sözleşme tek tip: yok = `null`.
+      startValue: fmt.startValue ?? null,
+      step: fmt.step ?? null,
+      maxValue: fmt.maxValue ?? null,
       preview: previewSeriesCode(fmt),
     };
   });

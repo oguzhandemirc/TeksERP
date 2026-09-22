@@ -24,12 +24,8 @@ import { NumberSeriesDateSegment } from "@prisma/client";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
-import {
-  previewSeriesCode,
-  resolveSeriesFormat,
-  updateSeriesFormat,
-  assertSeriesFormatAllowed,
-} from "../services/number-series.service";
+import { previewSeriesCode, resolveSeriesFormat } from "../services/number-series.service";
+import { assertSeriesFormatAllowed, updateSeriesCounter, updateSeriesFormat } from "../services/helpers/series-write.helper";
 import { listSeries, seriesImpactCount } from "../services/helpers/series-panel.helper";
 import { numberSeriesCatalogEntry } from "../constants/number-series-catalog";
 
@@ -45,6 +41,23 @@ const formatSchema = z
     dateSegment: z.nativeEnum(NumberSeriesDateSegment),
     digits: z.number().int().min(1).max(8),
     separator: z.string().max(2),
+  })
+  .strict();
+
+/**
+ * Sayaç gövdesi — `null` AYARI KALDIRIR (bugünkü davranışa döner).
+ *
+ * ⚠️ Üç alan da ZORUNLU (`.strict()` + opsiyonel DEĞİL): panel her zaman üçünü
+ * birden gönderir ve "gönderilmeyen alan" ile "temizlenen alan" karışmaz. Zod
+ * tanımadığı anahtarı sessizce silerdi; eksik alanı da `undefined` yapardı ve
+ * `undefined` prisma'da "dokunma" demektir — kullanıcı bir alanı temizlediğini
+ * sanırken eski değer kalırdı.
+ */
+const counterSchema = z
+  .object({
+    startValue: z.number().int().min(1).nullable(),
+    step: z.number().int().min(1).nullable(),
+    maxValue: z.number().int().min(1).nullable(),
   })
   .strict();
 
@@ -153,6 +166,43 @@ router.patch(
         success: true,
         data: row,
         message: `${row.label} biçimi güncellendi. Bundan sonra açılacak kayıtlar yeni numarayı alır; geçmiş değişmez.`,
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/number-series/{key}/counter:
+ *   patch:
+ *     tags: [NumberSeries]
+ *     summary: Sayaç ayarları — başlangıç · artış adımı · üst sınır
+ *     description: |
+ *       BİÇİM ucundan AYRI ve bu bilinçli: ikisi farklı kilitlere tabi. Biçimi
+ *       yapısal olarak kilitli bir serinin (ör. iş emri no) sayacı mevcut
+ *       kodların maksimumundan türüyorsa ayar ORADA anlamlıdır.
+ *
+ *       `null` gönderilen alan AYARI KALDIRIR ve seri bugünkü davranışa döner
+ *       (başlangıç 1, adım 1, üst sınır yok).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Güncellendi }
+ *       400: { description: "Kendi sayaç mekanizması olan seri · geçersiz değer · sınır < başlangıç" }
+ */
+router.patch(
+  "/:key/counter",
+  requireSettingsPassword,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { key } = keyParamSchema.parse(req.params);
+      const counter = counterSchema.parse(req.body ?? {});
+      const row = await updateSeriesCounter(key, counter, req.user?.userId);
+      res.status(200).json({
+        success: true,
+        data: row,
+        message: `${row.label} sayaç ayarları güncellendi. Bundan sonra üretilecek numaralar etkilenir; geçmiş değişmez.`,
       });
     } catch (e) {
       next(e);

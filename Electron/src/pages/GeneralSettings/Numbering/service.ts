@@ -1,5 +1,5 @@
 import apiClient from "@/services/apiClient";
-import type { NumberSeriesRow, SeriesFormatInput } from "./types";
+import type { NumberSeriesRow, SeriesCounterInput, SeriesFormatInput } from "./types";
 
 /**
  * ⚠️ ÖNİZLEME VE ETKİ SAYISI SUNUCUDAN — panel kendi biçimlendiricisini YAZMAZ.
@@ -30,5 +30,13 @@ export const numberingService = {
 
   async update(key: string, fmt: SeriesFormatInput): Promise<void> {
     await apiClient.patch(`/api/number-series/${encodeURIComponent(key)}`, fmt);
+  },
+
+  /**
+   * Sayaç ayarları AYRI uç: biçim ile sayaç farklı kilitlere tabi. Biçimi
+   * yapısal olarak kilitli bir serinin (iş emri no) sayacı ayarlanabilir.
+   */
+  async updateCounter(key: string, ayar: SeriesCounterInput): Promise<void> {
+    await apiClient.patch(`/api/number-series/${encodeURIComponent(key)}/counter`, ayar);
   },
 };

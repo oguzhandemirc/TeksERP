@@ -64,6 +64,17 @@ export interface NumberSeriesCatalogEntry {
    */
   uretecBagi?: { durum: "tarif"; uretec: string; not: string };
   /**
+   * KENDİ SAYAÇ MEKANİZMASI olan seri — sırası "mevcut kodların SAYISAL max'ı"
+   * ile bulunmaz. Sayaç ayarları (başlangıç · adım · üst sınır) bu serilerde
+   * FAIL-CLOSED reddedilir (400), çünkü ayar hiçbir şey yapmazdı ve bu SESSİZ
+   * olurdu — kullanıcı "adımı 10 yaptım" der, üreteç 1'er artmaya devam ederdi.
+   *
+   * ⚠️ Biçim kilidiyle (`lockedReason`) AYRI BİR SORU: `workOrder` biçimi kilitli
+   * ama sayacı max-türetilmiş, yani sayaç ayarları ORADA anlamlıdır. İki kilit
+   * iki farklı gün kalkar.
+   */
+  ownCounter?: { not: string };
+  /**
    * SAYACIN KAPSAMI BİÇİM DEĞİŞİMİNE HAZIR MI? (Faz C ön koşulu C0)
    *
    * ⚠️ KONFİGÜRASYON SINIRI, üretim sınırı DEĞİL: bu alan yoksa serinin biçimi
@@ -155,6 +166,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   // ── Okutulan seriler (istemci sınıflandırmasına girer) ─────────────────────
   {
     key: "roll",
+    ownCounter: { not: "Sıra `roll_barcode_counters` tablosundan atomik olarak alınır (`INSERT … ON CONFLICT DO UPDATE n = n + :count RETURNING n`), mevcut kodlardan türetilmez; kapasite ayrı bir sabittir (`MAX_ROLL_SEQ`)." },
     panelGroup: "uretim",
     label: "Top barkodu",
     seedPrefix: "T",
@@ -275,6 +287,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "packingLotName",
+    ownCounter: { not: "Adın sırası sayaçtan değil GRUBUN KENDİ sırasından gelir (`formatPackingGroupName(seq)`); seri yalnız ön eki ve ayracı verir." },
     panelGroup: "sevkiyat",
     label: "Sevk partisi adı",
     seedPrefix: "P",
@@ -317,6 +330,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   // ── Üretim / depo ──────────────────────────────────────────────────────────
   {
     key: "batchDaily",
+    ownCounter: { not: "İki üreteç yolu var: bayrak açıkken kısa parti kodu (P01…P99, körlemesine SARAR) devreye girer ve sıra `readLastShortBatchSeqTx`ten gelir. Ayar yolların yalnız BİRİNDE etkili olurdu — yarısı çalışan bir ayar, hiç çalışmayandan kötüdür." },
     panelGroup: "uretim",
     countTable: { model: "batch", field: "batchNumber", birim: "kayıt" },
     label: "Parti no (günlük biçim)",
