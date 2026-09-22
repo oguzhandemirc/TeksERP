@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Package, Scale, Layers, Truck, Globe, Pencil, Check } from "lucide-react";
+import { Package, Scale, Layers, Truck, Pencil, Check } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,15 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
-import { cn } from "@/lib/utils";
 import { sackStoreService } from "./service";
 import { ShipmentSackReadonly } from "./ShipmentSackReadonly";
+import { ShipmentDestinationAlign } from "./ShipmentDestinationAlign";
 import {
   sackStoreStatusLabels,
-  destinationLabels,
   type ContentSack,
   type SackStoreShipment,
-  type ShipmentDestination,
 } from "./types";
 
 const fmtKg = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
@@ -159,8 +157,8 @@ export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
 }
 
 /**
- * Saha #19+#21: yurtiçi/yurtdışı toggle + prosedür/ihracat kodu düzenleme.
- * Board kartından açılan slide-over içinde; sevk edilmemiş her durumda serbest.
+ * Saha #19+#21: yurtiçi/yurtdışı (cariden/şubeden kilitli — ShipmentDestinationAlign) +
+ * prosedür/ihracat kodu düzenleme. Board kartından açılan slide-over içinde.
  */
 function DestinationProcedureEditor({
   shipment,
@@ -176,13 +174,6 @@ function DestinationProcedureEditor({
     setEditingCode(false);
   }, [shipment.id, shipment.procedureCode]);
 
-  const destMut = useMutation({
-    mutationFn: (d: ShipmentDestination) => sackStoreService.setDestination(shipment.id, d),
-    onSuccess: (res) => {
-      toast.success(res.message ?? "Güncellendi");
-      onMutated();
-    },
-  });
   const codeMut = useMutation({
     mutationFn: (c: string | null) => sackStoreService.setProcedureCode(shipment.id, c),
     onSuccess: (res) => {
@@ -196,34 +187,8 @@ function DestinationProcedureEditor({
     <Card>
       <CardContent className="space-y-2 p-3 text-xs">
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 font-medium text-muted-foreground">
-            <Globe className="h-3.5 w-3.5" /> Kapsam
-          </span>
-          <PermissionGate
-            permission="shipping:write"
-            fallback={<Badge variant="outline">{destinationLabels[shipment.destination]}</Badge>}
-          >
-            <div className="flex items-center gap-1 rounded-md border p-0.5">
-              {(["DOMESTIC", "EXPORT"] as const).map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  disabled={destMut.isPending}
-                  onClick={() => shipment.destination !== d && destMut.mutate(d)}
-                  className={cn(
-                    "rounded px-2 py-0.5 font-medium transition-colors",
-                    shipment.destination === d
-                      ? d === "EXPORT"
-                        ? "bg-sky-600 text-white"
-                        : "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {destinationLabels[d]}
-                </button>
-              ))}
-            </div>
-          </PermissionGate>
+          <span className="font-medium text-muted-foreground">Kapsam</span>
+          <ShipmentDestinationAlign shipment={shipment} onMutated={onMutated} />
           {shipment.destination === "EXPORT" && (
             <span className="text-[10px] text-muted-foreground">(çuval tartısı zorunlu)</span>
           )}

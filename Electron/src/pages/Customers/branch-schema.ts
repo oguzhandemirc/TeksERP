@@ -30,6 +30,17 @@ export const branchFormDefaults: BranchFormValues = {
   defaultDestination: null,
 };
 
+type Destination = "DOMESTIC" | "EXPORT" | null | undefined;
+
+/**
+ * İhracat kodu alanı yalnız yön YURTDIŞI iken görünür: kendi yönü (şube) doluysa o,
+ * boşsa devraldığı yön (carinin). Gizlenen dolu değer form durumunda KALIR ve
+ * gövdeye aynen gider — gizlemek silmek değildir.
+ */
+export function exportCodeVisible(own: Destination, inherited: Destination = null): boolean {
+  return (own ?? inherited) === "EXPORT";
+}
+
 /** Form → istek gövdesi; gövdeyi elle kuran katman olduğu için yeni alan BURAYA da eklenir. */
 export const branchFormToPayload = (v: BranchFormValues): Partial<CustomerBranchPayload> => ({
   code: v.code?.trim() || null,

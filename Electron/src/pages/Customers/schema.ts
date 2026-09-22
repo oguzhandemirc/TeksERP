@@ -21,6 +21,7 @@ export const branchDraftSchema = z.object({
   code: z.string().max(50, "En fazla 50 karakter").optional().or(z.literal("")),
   address: z.string().max(500, "En fazla 500 karakter").optional().or(z.literal("")),
   notes: z.string().max(500, "En fazla 500 karakter").optional().or(z.literal("")),
+  defaultDestination: z.enum(["DOMESTIC", "EXPORT"]).nullable().optional(),
 });
 
 /** Bir taslak satırında herhangi bir alan dolu mu? (tümü boşsa satır gönderilmez). */
@@ -48,6 +49,7 @@ export const branchDraftDefaults: BranchDraftValues = {
   code: "",
   address: "",
   notes: "",
+  defaultDestination: null,
 };
 
 /** Kaba e-posta biçimi — backend (customer.service EMAIL_REGEX) ile aynı. */

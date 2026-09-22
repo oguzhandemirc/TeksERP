@@ -1844,8 +1844,8 @@ export class ShippingService {
    * workspace'inin canlı kaynağı (çuval aç/okut/tart).
    */
   async listCustomerPoolSacks(customerId: string): Promise<ApiResponse<unknown>> {
-    // `defaultDestination`: tablet paketleme ekranı sevk hedefi seçicisini buradan BAŞLATIR
-    // (varsayılan, kilit değil — operatör değiştirir; sevkiyat kendi değerini saklar).
+    // `defaultDestination`: 2026-09-23 öncesi tabletler seçicisini buradan başlatır — sahada
+    // oldukları sürece alan KALIR. Yeni istemci yönü `/destination-lock`tan okur.
     const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, code: true, name: true, defaultDestination: true } });
     if (!customer) throw AppError.notFound("Müşteri bulunamadı");
     // GÜVENLİK TAVANI (2026-07-30) — sorgu eskiden LİMİTSİZDİ. Kardeşi `listPool`

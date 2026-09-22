@@ -1,46 +1,54 @@
 // =============================================================================
-// SEVK HEDEFİ VARSAYILANI — cari kartı VARSAYILAN verir, KİLİT değil
+// SEVK YÖNÜ — sevk ekranı yönü SEÇMEZ, sunucudan OKUR (kilit kararı 2026-09-23)
 // =============================================================================
-// Kural (2026-09-13): sevkiyat formu müşterinin `defaultDestination`ıyla BAŞLAR;
-// operatör seçiciye bir kez dokunduysa seçimi ezilmez — müşteri sonra değişse
-// bile (açık girdi örtük varsayılanı yener; "dokunma" geri dönülmezdir).
-// Sevkiyat kendi `destination`ını saklar; bu yardımcı yalnız formun ilk değerini
-// üretir, backend'de geri düşüş yoktur. Tablet ikizi: mobil `destinationDefault.ts`.
-import { useEffect } from "react";
+// Zincir (şube → cari → boş) sunucuda `resolveShipmentDestination`da yaşar; bu
+// dosya onu KOPYALAMAZ, `GET /api/shipping/destination-lock` cevabını yorumlar.
+// Kilitliyse yön rozet olur; zincir boşsa operatör bir kez seçer ve seçim karta
+// yazılır. Tablet ikizi: mobil `destinationDefault.ts`.
 import { useQuery } from "@tanstack/react-query";
-import { customerService } from "@/pages/Customers/service";
+import { sackHubService } from "./service";
 import type { ShipmentDestination } from "./types";
 
-export function resolveDestination(input: {
-  current: ShipmentDestination;
-  touched: boolean;
-  customerDefault: ShipmentDestination | null | undefined;
-}): ShipmentDestination {
-  if (input.touched) return input.current;
-  return input.customerDefault ?? "DOMESTIC";
+export type DestinationSource = "BRANCH" | "CUSTOMER";
+
+export interface DestinationLock {
+  destination: ShipmentDestination | null;
+  source: DestinationSource | null;
+  exportCode: string | null;
+  /** Doluysa Hızlı Sevk bu adreste yapılamaz — metin sunucunun 400'üyle aynı. */
+  quickShipBlockedReason: string | null;
 }
 
-/**
- * Seçili müşterinin kartını okur ve seçiciyi varsayılanla BAŞLATIR; operatör
- * dokunduysa (`touched`) hiçbir şey yazmaz. Diyalog kapalıyken sorgu koşmaz.
- */
-export function useCustomerDefaultDestination(input: {
-  open: boolean;
-  customerId: string | undefined;
-  touched: boolean;
-  setDestination: (fn: (cur: ShipmentDestination) => ShipmentDestination) => void;
-}): void {
-  const { open, customerId, touched, setDestination } = input;
-  const customerQ = useQuery({
-    queryKey: ["customer-default-destination", customerId ?? null],
-    queryFn: () => customerService.getById(customerId as string),
-    enabled: open && Boolean(customerId),
-    staleTime: 30_000,
+export const destinationSourceLabels: Record<DestinationSource, string> = {
+  BRANCH: "Şubeden",
+  CUSTOMER: "Cariden",
+};
+
+export interface DestinationView {
+  /** Gönderilecek yön; kilit okunmadıysa ya da ilk seçim yapılmadıysa null. */
+  destination: ShipmentDestination | null;
+  locked: boolean;
+  /** Zincir boş ve operatör henüz seçmedi — sevk düğmesi bekler. */
+  needsPick: boolean;
+}
+
+/** Kilit + operatörün ilk seçimi → ekranın yönü. Kilitliyken seçim YOK sayılır. */
+export function resolveDestination(input: {
+  lock: DestinationLock | null | undefined;
+  picked: ShipmentDestination | null;
+}): DestinationView {
+  const { lock, picked } = input;
+  if (!lock) return { destination: null, locked: false, needsPick: false };
+  if (lock.destination) return { destination: lock.destination, locked: true, needsPick: false };
+  return { destination: picked, locked: false, needsPick: picked == null };
+}
+
+/** Sevk adresinin (cari + şube) yön kilidi; müşteri yokken sorgu koşmaz. */
+export function useDestinationLock(customerId: string | null | undefined, branchId: string | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["destination-lock", customerId ?? null, branchId ?? null],
+    queryFn: () => sackHubService.getDestinationLock(customerId as string, branchId ?? null),
+    enabled: enabled && Boolean(customerId),
+    staleTime: 10_000,
   });
-  const customerDefault = (customerQ.data?.data as { defaultDestination?: ShipmentDestination | null } | undefined)
-    ?.defaultDestination;
-  useEffect(() => {
-    if (!open || !customerQ.data) return;
-    setDestination((cur) => resolveDestination({ current: cur, touched, customerDefault }));
-  }, [open, customerQ.data, customerDefault, touched, setDestination]);
 }

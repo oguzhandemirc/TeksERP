@@ -35,6 +35,8 @@ import type { Customer } from "@/pages/Customers/types";
 import type { Item } from "@/pages/Items/types";
 import type { Color } from "@/pages/Colors/types";
 import { quickShip, findRollsForQuickShip, type QuickShipRoll } from "./quickShipService";
+import { useDestinationLock } from "@/pages/Operations/SackContentEdit/destinationDefault";
+import { Callout } from "@/components/ui/callout";
 
 interface Props {
   open: boolean;
@@ -110,7 +112,10 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], onShipp
     },
   });
 
-  const valid = Boolean(customerId) && rolls.length > 0;
+  // İhracat olarak kilitli caride Hızlı Sevk kapalı — gerekçe sunucunun 400 metniyle aynı.
+  const lockQ = useDestinationLock(customerId, null, open);
+  const blockedReason = lockQ.data?.quickShipBlockedReason ?? null;
+  const valid = Boolean(customerId) && rolls.length > 0 && !blockedReason;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -231,6 +236,12 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], onShipp
               </table>
             )}
           </div>
+
+          {blockedReason && (
+            <Callout tone="danger" title="Hızlı sevk yapılamaz">
+              {blockedReason}
+            </Callout>
+          )}
 
           <p className="text-right text-sm text-muted-foreground">
             Toplam: <b className="text-foreground">{totals.count}</b> top ·{" "}

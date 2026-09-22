@@ -1,6 +1,7 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types/api";
 import { buildCursorQueryString } from "@/lib/query-builder";
+import type { DestinationLock } from "./destinationDefault";
 import type {
   BulkDistributePreview,
   BulkDistributeResult,
@@ -436,6 +437,14 @@ export const sackHubService = {
       .then((r) => r.data),
 
   /** Seçilen depo çuvallarından yeni sevkiyat kur (PLANNED). Müşteri ZORUNLU. */
+  /** Sevk yönü kilidi — yön seçilmez, buradan okunur (panel + tablet aynı uç). */
+  getDestinationLock: (customerId: string, branchId: string | null): Promise<DestinationLock> =>
+    apiClient
+      .get<ApiResponse<DestinationLock>>("/api/shipping/destination-lock", {
+        params: { customerId, ...(branchId ? { branchId } : {}) },
+      })
+      .then((r) => r.data.data),
+
   createShipment: (body: {
     sackIds: string[];
     customerId: string;

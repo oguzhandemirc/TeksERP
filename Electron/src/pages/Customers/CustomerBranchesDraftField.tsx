@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useFieldArray, type UseFormReturn } from "react-hook-form";
+import { Controller, useFieldArray, type UseFormReturn } from "react-hook-form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { exportCodeVisible } from "./branch-schema";
 import { Plus, Trash2, ChevronDown, ChevronRight, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,9 +86,27 @@ export function CustomerBranchesDraftField({ form }: Props) {
                 {isOpen && (
                   <div className="space-y-2 border-t pt-2">
                     <div className="grid grid-cols-2 gap-2">
-                      <FormField label="İhracat Kodu" error={rowErr?.code}>
-                        <Input maxLength={50} placeholder="Opsiyonel" {...register(`branches.${idx}.code`)} />
+                      <FormField label="Sevk yönü">
+                        <Controller
+                          control={control}
+                          name={`branches.${idx}.defaultDestination`}
+                          render={({ field: f }) => (
+                            <Select value={f.value ?? "NONE"} onValueChange={(v) => f.onChange(v === "NONE" ? null : v)}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="NONE">Carinin yönü geçerli</SelectItem>
+                                <SelectItem value="DOMESTIC">Yurtiçi</SelectItem>
+                                <SelectItem value="EXPORT">Yurtdışı</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
                       </FormField>
+                      {exportCodeVisible(form.watch(`branches.${idx}.defaultDestination`), form.watch("defaultDestination")) && (
+                        <FormField label="İhracat Kodu" error={rowErr?.code}>
+                          <Input maxLength={50} placeholder="Opsiyonel" {...register(`branches.${idx}.code`)} />
+                        </FormField>
+                      )}
                       <FormField label="İlçe" error={rowErr?.district}>
                         <Input {...register(`branches.${idx}.district`)} />
                       </FormField>

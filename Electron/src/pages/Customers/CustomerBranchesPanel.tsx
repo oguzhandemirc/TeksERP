@@ -14,9 +14,11 @@ import { branchFormToPayload as toPayload, type BranchFormValues } from "./branc
 
 interface Props {
   customerId: string;
+  /** Carinin yönü — şube kendi yönünü taşımıyorsa ihracat kodu alanı buna göre görünür. */
+  customerDestination?: "DOMESTIC" | "EXPORT" | null;
 }
 
-export function CustomerBranchesPanel({ customerId }: Props) {
+export function CustomerBranchesPanel({ customerId, customerDestination = null }: Props) {
   const qc = useQueryClient();
   const [showInactive, setShowInactive] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -171,6 +173,7 @@ export function CustomerBranchesPanel({ customerId }: Props) {
       )}
 
       <BranchFormDialog
+        customerDestination={customerDestination}
         open={formOpen}
         onOpenChange={(open) => {
           setFormOpen(open);
