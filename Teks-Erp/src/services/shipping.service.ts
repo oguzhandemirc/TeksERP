@@ -138,6 +138,7 @@ import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
 import { markSackLabelsStaleOnCustomerChangeTx, sackFieldsAppearOnLabel } from "./helpers/sack-label-stale.helper";
 import { formatSackSeqLabel, nextPoolPackageNoTx, readSackSeqFormat, readSackSeqStart } from "./helpers/sack-seq.helper";
 import { ApiResponse } from "../types/api.types";
+import { directShipmentsMatchDestinationFilter } from "./helpers/direct-shipment-destination.helper";
 import {
   exportCodeForDestination,
   quickShipExportMessage,
@@ -4219,8 +4220,9 @@ export class ShippingService {
     }
 
     // destination (DOMESTIC|EXPORT) buildWhereClause tarafından where'e YAZILDI;
-    // DirectShipment'ta destination YOK → aktifse doğrudan sevkler union'dan düşer.
-    const hasDestinationFilter = safeFilters.destination != null;
+    // DirectShipment'ta destination YOK → aktifse doğrudan sevkler union'dan düşer
+    // (muhasebe Excel'iyle AYNI yüklem: `directShipmentsMatchDestinationFilter`).
+    const hasDestinationFilter = !directShipmentsMatchDestinationFilter(safeFilters.destination);
 
     // --- SIRALAMA (whitelist) — createdAt|shipmentNo|dispatchedAt.
     // dispatchedAt PLANNED'da NULL'dur; keyset'i bozmadan sıralamak için nulls-last

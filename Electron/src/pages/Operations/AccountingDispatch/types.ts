@@ -148,7 +148,8 @@ export interface AccountingExportData {
     taxNumber: string;
     branchName: string;
     branchCode: string;
-    destination: "DOMESTIC" | "EXPORT";
+    /** null = yön kaydı yok (fasondan doğrudan sevk). */
+    destination: "DOMESTIC" | "EXPORT" | null;
     procedureCode: string;
     plateNumber: string;
     driverName: string;
