@@ -9185,6 +9185,8 @@ olmadan kırmızı — sembolik bağ.
 
 ## 2026-09-13 — Cari yurtiçi/yurtdışı VARSAYILANI: kilit değil, sevkiyat kendi değerini saklar [ÇEKİRDEK]
 
+> ⚠️ **GEÇERSİZ → 2026-09-23** — kullanıcı kararıyla varsayılan KİLİDE çevrildi: sevkiyatta yön seçilmez, şubeden/cariden gelir; bu notun "operatör değiştirir, dokunduysa ezilmez" kuralı ve form seçicisi kalktı → bkz. "2026-09-23 — Sevk yönü cariden/şubeden KİLİTLİ".
+
 **Saha ölçümü (1e):** bir müşteri hem yurtiçi hem ihracat sevkiyatı alıyor; cari düzeyinde
 kilit o müşteriyi çalıştırmazdı. Panelde ve tablette sevk hedefi her sevkte elle seçiliyordu
 (`DOMESTIC` sabit başlangıç; üçüncü tur mobil-A #9).
@@ -11264,3 +11266,25 @@ Faz A biçimi VERİ yapmıştı; Faz B onu okutma tarafında tek kaynağa bağla
 **Ölçüm disiplini — bu turda dört yeni sınıf:** ① ölçüm yapıldı ama sonuca BAĞLANMADI (doğrulama ile yıkıcı adım aynı koşumda) ② iddia hedefini LİTERALLE seçerse hedef değişince sessizce başka şeyi ölçer (iki biçim: hedef sınıf değiştirir → sessiz yeşil; hedef yer değiştirir → sahte kırmızı) ③ koşullu bir yazımın "hatasız döndü"sü "YAZDI" demek değildir (`WHERE EXISTS` korumalı INSERT no-op olur) ④ olumsuz karakter sınıfı iç içe sözdiziminde erken durur. Ayrıca iki kardeş cümle: çökme HİÇ kırmızı üretmez ve "ısırmadı" diye okunur · kırmızı BAŞKA BİR KONTROLDEN gelebilir (ısırdığı kapının doğru kapı olduğu ayrıca doğrulanır).
 
 **Sahaya çıkış YOK** (kullanıcı hükmü): hiçbir paketleme/yayın komutu koşulmadı, sürüm numarası artırılmadı, `minVersion` aktif edilmedi.
+
+## 2026-09-23 — Sevk yönü cariden/şubeden KİLİTLİ; ihracat kodu yalnız yurtdışında [ÇEKİRDEK]
+
+**Kullanıcının sözü:** "bir sevkiyat yapılırken yurtiçi veya yurt dışı mı olduğunu seçiyoruz, fakat buna gerek yok … carinin kendisini düzenlerken/oluştururken bunu seçsek ve buna göre ihracat kodu inputu açılsa, şube özelliği kullanılıyorsa şubelerin yurtiçi-yurtdışı özelliği olsa … sevkiyat esnasında sadece bunu gösteririz, elle yazma düzenleme olmaz, sevk kâğıtlarına istenirse basılabilir." Bilinçli kararlar: ① KİLİT (2026-09-13 "varsayılan, kilit değil" tersine döner; bedel kabul: şube modu kapalı bir cari hem yurtiçi hem yurtdışı sevk EDEMEZ — bunun için şube açılır; SAP/Logo da ihracatı sevk adresine bağlar) ② boş carilere toplu atama YOK, ilk sevkte bir kez sorulur.
+
+**Ölçüm (fabrika yedeği kopyası, en yeni `dump/tekserp_yeni_20260915_030001.dump`):** 29 cari, dolu ihracat kodu 0, şube 0; sevk görmüş 15 carinin 15'i yalnız yurtiçi, karışık yönlü cari 0 ⇒ bugünkü fabrikada kilit kimseyi kısıtlamıyor. `defaultDestination` kolonu o yedekte yok (2026-09-13 migration'ı sonra) ⇒ 29/29 boş, hepsi ilk sevkte sorulacak.
+
+**Karar ve kod:**
+- **[ÇEKİRDEK] Zincir tek yerde** — `services/helpers/shipment-destination.helper.ts` `resolveShipmentDestination`: sevkiyatın `branchId`si var ve şube yönü dolu → şube · değilse cari · değilse `null` (ilk sevk). Fail-closed: başka carinin şubesi 400. **[PROFİL]** `customers.branchesEnabled` bayrağı zincirde OKUNMAZ — bayrak kapalıyken istemci şube göndermez, zincir kendiliğinden cariye düşer; bayrağın "salt UI rehberi" beyanı değişmedi.
+- **Kilit** — `createShipmentCoreTx` (çuvaldan sevk + Hızlı Sevk ortak) yönü tx içinde `resolveShipmentDestination(tx)` ile çözer; kilitliyken istemci değeri kullanılmaz, farklıysa `warnings` Türkçe satırı; tartı kapısı çözülen yönle aynı tx'te.
+- **İlk seçim** — tek yazar `claimFirstDestinationTx`: atomik claim `updateMany WHERE {id, defaultDestination:null}`, count 0 → tx içinde taze okuma (aynı değer başarı, farklı 409 `SHIPMENT_DESTINATION_LOCKED` + kazanan + kaynak), audit tx dışında. Hedef zincirin boş kaldığı EN ALT seviye (şubeli sevkte şube, cariye dokunulmaz). `setDestination` de aynı yazarı çağırır (planlı sevkiyatta ilk açık seçim karta yazılır; kilitliyken yalnız kilitli değere eşitler).
+- **Açık niyet (S5 ölçümü)** — eski panel/tablet (60388c1b) yön boş caride ÖNCEDEN SEÇİLİ DOMESTIC gönderiyordu; bunu "ilk seçim" saymak her eski-istemci sevkinde carileri sessizce yurtiçine kilitlerdi. Sürüm başlığıyla ayırma REDDEDİLDİ (`X-Client-*` başlıkları beyanlı olarak hiçbir karara girmez, `test_client_registry` §1). Çözüm gövdede açık niyet: `destinationChosen` yalnız `true` (false 400); yoksa değer yalnız sevkiyata, kart boş. Koşul yazarın içinde.
+- **Örtük değer yazılmaz** — Hızlı Sevk yön göndermez: zincir boşsa yurtiçi gider, kart boş kalır. DAVRANIŞ DEĞİŞİKLİĞİ (düzeltme): ihracat olarak kilitli cari/şubede Hızlı Sevk KAPALI (`QUICK_SHIP_EXPORT_UNSUPPORTED`, çuval görünmeden doğduğu için tartılamaz; önceden sessizce yurtiçi gidiyordu). Fabrikada ihracat carisi 0.
+- **Şube yönü** — `CustomerBranch.defaultDestination` (migration `20260923100000_customer_branch_default_destination`, yalnız ekler). Üç yazma yolu tek doğrulayıcıdan (`parseDestinationInput`): route Zod · servis · satır içi şube.
+- **Ekran** — `GET /api/shipping/destination-lock` → `{destination, source, exportCode, quickShipBlockedReason}`; panel `DestinationLockField` / `ShipmentDestinationAlign` ("Karttaki yöne eşitle"), tablet `DestinationLockRow`. Cari/şube formunda ihracat kodu alanı yalnız yön yurtdışıyken görünür; gizlenen dolu değer silinmez.
+- **Belge (S6)** — ihracat kodu yalnız yurtdışı sevkiyatın belgesine: kapı render'da DEĞİL snapshot doğarken (`collectShipmentDocContent` → `header.exportCode`); alanı taşımayan eski donmuş belge bayt bayt aynı. İçerik sürüm karşılaştırmasına girmez ⇒ sahte revizyon yok. "İstenirse basılabilir" = mevcut `sections.exportCode` bölüm ayarı. Fason doğrudan sevk (`DirectShipment`) yön kolonu taşımaz ⇒ kapı UYGULANMADI.
+
+**Sözleşme (altı tetik):** uç kaldırılmadı · yanıt alanı değişmedi (havuz ucundaki `defaultDestination` eski tablet için kalır) · tip yok · yeni alan `destinationChosen` OPSİYONEL · enum yok · izin yok ⇒ `minVersion` GEREKMEZ.
+
+**Master veri kapıları:** yön kimlik/rol değil sevk adresinin niteliği · finans kimliğine dokunmaz · sevkiyatın yönü sevkiyatta donar · ihracat kodu salt görüntü · geriye dönüklük = açık niyet + eski sevkiyatlar değişmez.
+
+**Bekçiler:** `test_shipment_destination_chain` · `test_shipment_destination_lock` · `test_customer_branch_destination` · `test_export_code_snapshot_gate` · `test_customer_card_fields` §8 · panel `destinationDefault` / `DestinationLockField` / `ShipmentDestinationAlign` / `branch-schema` · tablet `destinationDefault` / `DestinationLockRow`. Üç kapı: migration EVET (additive, backend önce) · izin HAYIR · tablet OTA yeter. Açık iş: rapor ekseni hâlâ `Customer.defaultDestination`dan süzüyor — sevkiyat yönüne taşınması ayrı iş (R0/R1).

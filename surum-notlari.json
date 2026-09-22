@@ -292,7 +292,7 @@
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
-          "metin": "Müşteri kartına “Sevk varsayılanı” alanı geldi: Yurtiçi, Yurtdışı ya da Yok. Bu müşteriye sevkiyat kurarken panelde ve tablette yurtiçi/yurtdışı seçicisi bu değerle açılır; her sevkte yeniden seçmek gerekmez. Bu bir varsayılandır, kilit değil: aynı müşteriye hem yurtiçi hem ihracat sevkiyatı yapıyorsanız seçiciyi o sevk için değiştirirsiniz ve seçiminiz sonradan değişmez. Geçmiş sevkiyatlara dokunulmaz; boş bırakılan müşteride ekran eskisi gibi yurtiçinden başlar. Toplu müşteri yükleme şablonuna da “Sevk Varsayılanı” sütunu eklendi."
+          "metin": "Müşteri kartına “Sevk yönü” alanı geldi (Yurtiçi ya da Yurtdışı); şubeler kullanılıyorsa her şubenin kendi yönü olabilir. Sevkiyatta yurtiçi/yurtdışı artık seçilmez: yön kartın (şubeye gidiyorsa şubenin) yönünden gelir ve panelde ve tablette kilitli olarak gösterilir. Kartında yön olmayan müşterinin ilk sevkinde yön bir kez sorulur ve karta yazılır. İhracat kodu alanı kartta yalnız yön yurtdışıyken açılır ve sevk belgesine yalnız yurtdışı sevkte basılır; eski belgeler değişmez. Yurtdışı olarak işaretli müşteride Hızlı Sevk yapılamaz — çuvalı açıp tartarak sevk edin. Geçmiş sevkiyatlara dokunulmaz. Toplu müşteri yükleme şablonuna da “Sevk Varsayılanı” sütunu eklendi."
         },
         {
           "kapsam": "her-ikisi",
