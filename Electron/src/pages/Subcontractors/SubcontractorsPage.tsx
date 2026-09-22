@@ -1,5 +1,4 @@
 import { CrudPage } from "@/components/layout/CrudPage";
-import { generateCode } from "@/lib/code-generator";
 import { subcontractorColumns } from "./columns";
 import { subcontractorService } from "./service";
 import { SubcontractorFormDialog } from "./SubcontractorFormDialog";
@@ -7,7 +6,8 @@ import type { Subcontractor } from "./types";
 import type { SubcontractorFormValues } from "./schema";
 
 interface BackendPayload {
-  code: string;
+  /** Yeni kayıtta GÖNDERİLMEZ — kodu sunucu üretir (numara serisi). */
+  code?: string;
   name: string;
   taxNumber: string | null;
   phone: string | null;
@@ -23,7 +23,9 @@ export const buildSubcontractorPayload = (
   v: SubcontractorFormValues,
   initial: Subcontractor | null,
 ): BackendPayload => ({
-  code: initial?.code ?? generateCode("FSN"),
+  // Kod GÖNDERİLMEZ: yeni kayıtta sunucu üretir (`FSN`+GGAAYY+NNNN, numara
+  // serisi ayarından), düzenlemede mevcut kod korunur.
+  ...(initial?.code ? { code: initial.code } : {}),
   name: v.name,
   taxNumber: v.taxNumber?.trim() || null,
   phone: v.phone?.trim() || null,

@@ -14,6 +14,7 @@ import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { validateName, validateCode } from "../lib/string-validators";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { foldCodeForCompare } from "../utils/code-format";
+import { nextSeriesNo } from "./number-series.service";
 import {
   decideCodeUniqueness,
   assertCodeAvailable,
@@ -234,6 +235,37 @@ async function assertSubTaxAvailable(taxNumber: unknown, excludeId?: string): Pr
 // SUBCONTRACTOR CATEGORY (Boyahane, Yıkama, Zımpara...)
 // =============================================================================
 
+
+/**
+ * Kod verilmediyse SUNUCU üretir (`FSN`/`KAT` + GGAAYY + NNNN).
+ *
+ * 2026-09-22'ye kadar bu iki kodu PANEL üretiyordu (`lib/code-generator.ts`,
+ * `FSN-YYMMDD-<rastgele>`) — yani iki kod rejimi yan yana yaşıyordu ve biçim
+ * fabrikanın seri ayarlarından bağımsızdı. Artık bütün master-data kodlarıyla
+ * aynı yoldan geçer. İstemci kod GÖNDERİRSE o kod kullanılır (içe aktarma ve
+ * eski istemci yolu korunur, mükerrer/diriltme kararı değişmez).
+ */
+async function ensureSubCode(
+  kind: "subcontractor" | "subcontractorCategory",
+  code: string | undefined | null,
+): Promise<string> {
+  const trimmed = (code ?? "").trim();
+  if (trimmed !== "") return trimmed;
+  return nextSeriesNo(kind, async (fullPrefix) => {
+    const rows =
+      kind === "subcontractor"
+        ? await prisma.subcontractor.findMany({
+            where: { code: { gte: fullPrefix, startsWith: fullPrefix } },
+            select: { code: true },
+          })
+        : await prisma.subcontractorCategory.findMany({
+            where: { code: { gte: fullPrefix, startsWith: fullPrefix } },
+            select: { code: true },
+          });
+    return rows.map((r) => r.code);
+  });
+}
+
 export class SubcontractorCategoryService {
   async findAll(req: Request): Promise<PaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
@@ -286,7 +318,8 @@ export class SubcontractorCategoryService {
 
   async create(
     data: {
-      code: string;
+      /** Boş/verilmemişse SUNUCU üretir (`KAT`+GGAAYY+NNNN). */
+      code?: string;
       name: string;
       description?: string;
       appliesColor?: boolean;
@@ -294,11 +327,12 @@ export class SubcontractorCategoryService {
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    const code = await ensureSubCode("subcontractorCategory", data.code);
     // §18: kod tekilliği harf-duyarsız. TAM eşleşmeli aktif kayıt → 409; TAM
     // eşleşmeli pasif kayıt → diriltme; YALNIZ harf farkıyla eşleşme → 409
     // (diriltme yok — gerekçe `decideCodeUniqueness` docstring'inde).
     const decision = decideCodeUniqueness(
-      data.code,
+      code,
       await loadSubCodeCandidates("subcontractorCategory"),
       SUB_CATEGORY_CODE_TEXTS,
     );
@@ -317,7 +351,7 @@ export class SubcontractorCategoryService {
         })
       : await prisma.subcontractorCategory.create({
           // Künye (Faz A2)
-          data: { ...data, createdById: userId ?? null, updatedById: userId ?? null },
+          data: { ...data, code, createdById: userId ?? null, updatedById: userId ?? null },
         });
 
     await AuditService.log({
@@ -572,7 +606,8 @@ export class SubcontractorManagementService {
 
   async create(
     data: {
-      code: string;
+      /** Boş/verilmemişse SUNUCU üretir (`FSN`+GGAAYY+NNNN). */
+      code?: string;
       name: string;
       taxNumber?: string | null;
       phone?: string | null;
@@ -585,6 +620,7 @@ export class SubcontractorManagementService {
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     const { categoryIds = [], ...rest } = data;
+    const code = await ensureSubCode("subcontractor", rest.code);
     const payload: {
       code: string;
       name: string;
@@ -596,11 +632,13 @@ export class SubcontractorManagementService {
       // Ad BÜYÜK normalize edilir (2026-08-19) — mükerrer kontrolü aynı
       // katlamayı kullanıyor; depolanan biçim ondan ayrışırsa kontrol kendi
       // yazdığı kaydı bulamaz.
-    } = { code: rest.code, name: normalizeDisplayName(rest.name) };
+    } = { code, name: normalizeDisplayName(rest.name) };
 
-    // Required + length kontrolleri (paylaşımlı validator)
-    const code = validateCode(rest.code, { label: "Fason kodu", required: true });
-    if (typeof code === "string") payload.code = code;
+    // Required + length kontrolleri (paylaşımlı validator). Kod artık her zaman
+    // dolu (istemci göndermediyse sunucu üretti), ama uzunluk/biçim kontrolü
+    // üretilene de uygulanır — üreteç bozulursa sessizce geçmesin.
+    const validatedCode = validateCode(code, { label: "Fason kodu", required: true });
+    if (typeof validatedCode === "string") payload.code = validatedCode;
     const name = validateName(rest.name, { label: "Fason adı", required: true });
     if (typeof name === "string") payload.name = normalizeDisplayName(name);
 

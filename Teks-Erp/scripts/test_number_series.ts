@@ -101,6 +101,8 @@ const BEKLENEN: Record<string, string> = {
   chequeDeliveryNote: `${buildDailyCode("BRD", 1, AT)}`,
   reconciliationLetter: `${buildDailyCode("MBT", 1, AT)}`,
   customer: `${buildDailyCode("MUS", 1, AT)}`,
+  subcontractor: `${buildDailyCode("FSN", 1, AT)}`,
+  subcontractorCategory: `${buildDailyCode("KAT", 1, AT)}`,
   fabricProperty: `${buildDailyCode("OZL", 1, AT)}`,
   color: `${buildDailyCode("RNK", 1, AT)}`,
   station: `${buildDailyCode("IST", 1, AT)}`,
