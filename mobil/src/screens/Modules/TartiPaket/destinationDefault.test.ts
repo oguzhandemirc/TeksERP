@@ -12,10 +12,10 @@ const lock = (d: DestinationLock['destination']): DestinationLock => ({
 // eski vakalar yeni kuralın karşılığına dönüştürüldü.
 describe('resolveDestination — yön cariden/şubeden KİLİTLİ (tablet ikizi)', () => {
   it('cari EXPORT kilitli → EXPORT, seçim gerekmez', () => {
-    expect(resolveDestination({ lock: lock('EXPORT'), picked: null })).toEqual({ destination: 'EXPORT', locked: true, needsPick: false });
+    expect(resolveDestination({ lock: lock('EXPORT'), picked: null })).toEqual({ destination: 'EXPORT', locked: true, chosen: false, needsPick: false });
   });
   it('zincir boş, seçim yok → yön YOK, seçim bekler (örtük DOMESTIC gönderilmez)', () => {
-    expect(resolveDestination({ lock: lock(null), picked: null })).toEqual({ destination: null, locked: false, needsPick: true });
+    expect(resolveDestination({ lock: lock(null), picked: null })).toEqual({ destination: null, locked: false, chosen: false, needsPick: true });
   });
   it('kilitliyken operatörün seçimi YOK SAYILIR (eski "seçim ezilmez" kuralının tersi)', () => {
     expect(resolveDestination({ lock: lock('EXPORT'), picked: 'DOMESTIC' }).destination).toBe('EXPORT');
@@ -24,6 +24,11 @@ describe('resolveDestination — yön cariden/şubeden KİLİTLİ (tablet ikizi)
     expect(resolveDestination({ lock: lock(null), picked: 'DOMESTIC' }).destination).toBe('DOMESTIC');
   });
   it('kilit henüz okunmadı → yön yok, seçim de istenmez', () => {
-    expect(resolveDestination({ lock: undefined, picked: 'EXPORT' })).toEqual({ destination: null, locked: false, needsPick: false });
+    expect(resolveDestination({ lock: undefined, picked: 'EXPORT' })).toEqual({ destination: null, locked: false, chosen: false, needsPick: false });
+  });
+  it('⭐ açık niyet bayrağı: yalnız zincir boşken ve operatör seçtiyse; kilitliyken seçim olsa da ASLA', () => {
+    expect(resolveDestination({ lock: lock('EXPORT'), picked: 'EXPORT' }).chosen).toBe(false);
+    expect(resolveDestination({ lock: lock(null), picked: null }).chosen).toBe(false);
+    expect(resolveDestination({ lock: lock(null), picked: 'DOMESTIC' }).chosen).toBe(true);
   });
 });

@@ -18,7 +18,7 @@ export function ShipmentDestinationAlign({ shipment, onMutated }: { shipment: Sa
   const lockQ = useDestinationLock(shipment.customer.id, shipment.branch?.id ?? null);
   const lock = lockQ.data;
   const destMut = useMutation({
-    mutationFn: (d: ShipmentDestination) => sackStoreService.setDestination(shipment.id, d),
+    mutationFn: (v: { d: ShipmentDestination; chosen: boolean }) => sackStoreService.setDestination(shipment.id, v.d, v.chosen),
     onSuccess: (res) => {
       toast.success(res.message ?? "Güncellendi");
       void lockQ.refetch();
@@ -41,7 +41,7 @@ export function ShipmentDestinationAlign({ shipment, onMutated }: { shipment: Sa
         )}
         {differs && planned && (
           <PermissionGate permission="shipping:write">
-            <Button size="sm" variant="outline" className="h-6 text-[11px]" disabled={destMut.isPending} onClick={() => destMut.mutate(lock.destination!)}>
+            <Button size="sm" variant="outline" className="h-6 text-[11px]" disabled={destMut.isPending} onClick={() => destMut.mutate({ d: lock.destination!, chosen: false })}>
               Karttaki yöne eşitle ({destinationLabels[lock.destination]})
             </Button>
           </PermissionGate>
@@ -61,7 +61,7 @@ export function ShipmentDestinationAlign({ shipment, onMutated }: { shipment: Sa
                 key={d}
                 type="button"
                 disabled={destMut.isPending}
-                onClick={() => destMut.mutate(d)}
+                onClick={() => destMut.mutate({ d, chosen: true })}
                 className={cn(
                   "rounded px-2 py-0.5 font-medium transition-colors",
                   shipment.destination === d ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",

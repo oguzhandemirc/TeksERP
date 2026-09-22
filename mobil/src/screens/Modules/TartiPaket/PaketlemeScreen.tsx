@@ -100,7 +100,7 @@ export default function PaketlemeScreen() {
     queryFn: () => packingService.getDestinationLock(customerId, branchId),
     staleTime: 10_000,
   });
-  const { destination, needsPick } = resolveDestination({ lock: lockQ.data, picked });
+  const { destination, chosen, needsPick } = resolveDestination({ lock: lockQ.data, picked });
 
   const [scanOpen, setScanOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
@@ -343,6 +343,7 @@ export default function PaketlemeScreen() {
         branchId,
         orderIds: undefined,
         destination: destination ?? undefined,
+        ...(chosen ? { destinationChosen: true as const } : {}),
         clientToken: shipTokenRef.current,
       });
       // ⚠️ UYARILAR YANITIN KÖKÜNDE (`ApiResponse.warnings`), `data`nın İÇİNDE

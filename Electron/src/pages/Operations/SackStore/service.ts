@@ -42,9 +42,13 @@ export const sackStoreService = {
       .then((r) => r.data),
 
   /** Saha #19: yurtiçi/yurtdışı kapsamı değiştir. */
-  setDestination: (id: string, destination: "DOMESTIC" | "EXPORT"): Promise<ApiResponse<unknown>> =>
+  /** `chosen`: operatör ilk-seçimde açıkça seçti — sunucu karta yalnız o zaman yazar. */
+  setDestination: (id: string, destination: "DOMESTIC" | "EXPORT", chosen = false): Promise<ApiResponse<unknown>> =>
     apiClient
-      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/destination`, { destination })
+      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/destination`, {
+        destination,
+        ...(chosen ? { destinationChosen: true } : {}),
+      })
       .then((r) => r.data),
 
   /** Saha #21: prosedür/ihracat kodu güncelle (boş = temizle). */

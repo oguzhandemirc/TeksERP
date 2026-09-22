@@ -587,6 +587,8 @@ export const packingService = {
     branchId?: string | null;
     orderIds?: string[];
     destination?: ShipmentDestination;
+    /** Yalnız operatör ilk-seçimde açıkça seçtiyse — sunucu karta yalnız o zaman yazar. */
+    destinationChosen?: true;
     procedureCode?: string | null;
     plateNumber?: string | null;
     driverName?: string | null;

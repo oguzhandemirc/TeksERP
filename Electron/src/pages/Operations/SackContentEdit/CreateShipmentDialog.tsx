@@ -107,7 +107,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   const effCustomerId = lockedCustomerId ?? customerId;
   const effBranchId = lockedBranchId ?? branchId;
   const lockQ = useDestinationLock(effCustomerId, effBranchId, open);
-  const { destination } = resolveDestination({ lock: lockQ.data, picked });
+  const { destination, chosen } = resolveDestination({ lock: lockQ.data, picked });
   const activeOrderIds = orderless ? [] : [...orderIds];
 
   const previewQ = useQuery({
@@ -134,6 +134,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
         branchId: effBranchId ?? null,
         orderIds: activeOrderIds,
         destination: destination ?? undefined,
+        ...(chosen ? { destinationChosen: true as const } : {}),
         clientToken,
         orderless,
       }),

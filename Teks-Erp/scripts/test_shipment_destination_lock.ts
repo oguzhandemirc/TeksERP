@@ -19,7 +19,11 @@
 //  10. setDestination: kilitliyken farklı değer 409 + kaynak · kilitli değer kabul ·
 //      zincir boşken açık seçim İLK SEÇİMDİR, karta (şubeliyse şubeye) yazılır + audit.
 //  11. Şubenin yönü sonradan değişince planlı sevkiyat kendi yönünü korur.
-//  12. Tek yazar: ilk seçim claim'i `claimFirstDestinationTx`te tek tanım, iki çağıran.
+//  12. Tek yazar: ilk seçim claim'i `claimFirstDestinationTx`te tek tanım, iki çağıran; açık-niyet
+//      koşulu da yazarın içinde, çağıranlar süzmez.
+//  13. ESKİ İSTEMCİ (S5): `destinationChosen` yok → değer sevkiyata, kart BOŞ, uyarı yok ·
+//      açık niyet → karta yazılır · açık niyet + kilitli → kilitli değer + uyarı.
+//  14. Sözleşme: `destinationChosen` yalnız `true`; `false`/string 400, alan yok = eski istemci.
 // Negatif sondalar (2026-09-23, `shipping.service.ts`, hepsi geri alındı → 31/0):
 //   ① kilitliyken istek kazanır → 1a ❌ (ihracat tartısı reddetti) · ② uyarı null → 1b/2b/5c ❌
 //   ③ claim'den `defaultDestination: null` düştü → 8a ×2, 8b audit ❌ · ④ aynı-seçim toleransı
@@ -28,12 +32,15 @@
 // Tek yazar sondaları (B1 hizalaması, geri alındı → 38/0): ⑧ setDestination ilk seçimi
 //   yazmaz → 10e/10f/10g/10h/11/12b ❌ · ⑨ setDestination'a kopya claim → 10f/10g/10h/12b/12c ❌
 //   (12c'nin ilk hâli audit `oldData`sını da sayıyordu — sınırsız eşleşme, WHERE'e daraltıldı)
+// Açık niyet sondaları (S5, geri alındı → 51/0): ⑩ yazardaki `!p.chosen` koşulu düştü → 12d/13b/13d ❌ ·
+//   ⑪ koşul çağırana taşındı → 12d/12e/13d ❌ · ⑫ Zod `z.boolean()` (false kabul) → 14b/14d ❌
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
 import { CustomerService } from "../src/services/customer.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { readShipmentDestinationLock } from "../src/services/helpers/shipment-destination.helper";
+import { createShipmentSchema, destinationSchema, quickShipmentSchema } from "../src/controllers/shipping.controller";
 import { AppError } from "../src/utils/app-error";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
@@ -163,7 +170,7 @@ async function main() {
 
   // 3) ilk sevk → cariye
   const c3 = await yeniCari();
-  const r3 = (await shipping.createShipment({ sackIds: [await doluCuval(c3, null, true)], customerId: c3, destination: "EXPORT" })) as Sonuc;
+  const r3 = (await shipping.createShipment({ sackIds: [await doluCuval(c3, null, true)], customerId: c3, destination: "EXPORT", destinationChosen: true })) as Sonuc;
   check("3a ilk sevk (şubesiz) → sevkiyat EXPORT", (await sevkYonu(r3.data.id)) === "EXPORT");
   check("3b yön CARİYE yazıldı", (await yonleri(c3)).cari === "EXPORT");
   const log3 = await prisma.systemLog.findFirst({ where: { tableName: "CUSTOMER", recordId: c3, action: "UPDATE" }, orderBy: { createdAt: "desc" }, select: { newData: true } });
@@ -172,7 +179,7 @@ async function main() {
   // 4) ilk sevk → şubeye, cariye dokunma
   const c4 = await yeniCari();
   const b4 = await yeniSube(c4);
-  const r4 = (await shipping.createShipment({ sackIds: [await doluCuval(c4, b4, false)], customerId: c4, branchId: b4, destination: "DOMESTIC" })) as Sonuc;
+  const r4 = (await shipping.createShipment({ sackIds: [await doluCuval(c4, b4, false)], customerId: c4, branchId: b4, destination: "DOMESTIC", destinationChosen: true })) as Sonuc;
   const y4 = await yonleri(c4, b4);
   check("4a ilk sevk (şubeli) → ŞUBEYE yazıldı", y4.sube === "DOMESTIC" && (await sevkYonu(r4.data.id)) === "DOMESTIC", JSON.stringify(y4));
   check("4b cariye DOKUNULMADI", y4.cari === null, JSON.stringify(y4));
@@ -226,7 +233,7 @@ async function main() {
       await kapi;
     }, { timeout: 20_000 });
     await yazdi;
-    const bSonuc = shipping.createShipment({ sackIds: [cuval], customerId: c8, destination: istek }).then(
+    const bSonuc = shipping.createShipment({ sackIds: [cuval], customerId: c8, destination: istek, destinationChosen: true }).then(
       (r) => ({ ok: r as Sonuc, err: null as AppError | null }),
       (e) => ({ ok: null, err: e instanceof AppError ? e : null }),
     );
@@ -258,13 +265,13 @@ async function main() {
   await customers.update(c1, { defaultDestination: "EXPORT" }, undefined);
   const ok10 = await hataYakala(() => shipping.setDestination(r1.id, "EXPORT"));
   check("10c kilitli değere eşitleme kabul", ok10 === null && (await sevkYonu(r1.id)) === "EXPORT", ok10?.message ?? "");
-  const ok10d = await hataYakala(() => shipping.setDestination(r6.data.id, "EXPORT"));
+  const ok10d = await hataYakala(() => shipping.setDestination(r6.data.id, "EXPORT", undefined, true));
   check("10d zincir boşken açık seçim kabul", ok10d === null && (await sevkYonu(r6.data.id)) === "EXPORT", ok10d?.message ?? "");
   check("10e zincir boşken açık seçim KARTA yazıldı (ilk seçim)", (await yonleri(c6)).cari === "EXPORT");
   const c10 = await yeniCari();
   const b10 = await yeniSube(c10);
   const r10 = (await shipping.createShipment({ sackIds: [await doluCuval(c10, b10, true)], customerId: c10, branchId: b10 })) as Sonuc;
-  const ok10f = await hataYakala(() => shipping.setDestination(r10.data.id, "EXPORT"));
+  const ok10f = await hataYakala(() => shipping.setDestination(r10.data.id, "EXPORT", undefined, true));
   const y10 = await yonleri(c10, b10);
   check("10f şubeli sevkiyatta ilk açık seçim ŞUBEYE, cariye dokunmadan", ok10f === null && y10.sube === "EXPORT" && y10.cari === null, `${ok10f?.message ?? ""} ${JSON.stringify(y10)}`);
   const log10 = await prisma.systemLog.count({ where: { tableName: "CUSTOMER_BRANCH", recordId: b10, action: "UPDATE" } });
@@ -286,7 +293,32 @@ async function main() {
   const claimYeri = [...src.matchAll(CLAIM)].length;
   check("12a claimFirstDestinationTx tek tanım", tanim === 1, String(tanim));
   check("12b iki yol da aynı yazarı çağırır", cagiranlar.length === 2, cagiranlar.join(", "));
+  check("12d açık-niyet koşulu YAZARIN içinde", govde("private async claimFirstDestinationTx(").includes("if (!p.chosen)"));
+  const kosulluCagiran = ["private async decideShipmentDestinationTx(", "async setDestination("].filter((ad) => /if\s*\([^)]*[cC]hosen/.test(govde(ad)));
+  check("12e çağıranlar niyeti SÜZMEZ, yazara geçirir", kosulluCagiran.length === 0, kosulluCagiran.join(", "));
   check("12c claim WHERE'i yalnız yazarın içinde (2 = şube + cari)", claimYeri === 2 && [...govde("private async claimFirstDestinationTx(").matchAll(CLAIM)].length === 2, String(claimYeri));
+
+  // 13) ESKİ İSTEMCİ TAKLİDİ — 2026-09-23 öncesi panel/tablet yönü ÖNCEDEN SEÇİLİ DOMESTIC gönderir,
+  //     `destinationChosen` göndermez ⇒ değer yalnız sevkiyata, kart BOŞ, uyarı yok.
+  const c13 = await yeniCari();
+  const r13 = (await shipping.createShipment({ sackIds: [await doluCuval(c13, null, false)], customerId: c13, destination: "DOMESTIC" })) as Sonuc;
+  check("13a eski istemci, zincir boş → sevkiyat DOMESTIC", (await sevkYonu(r13.data.id)) === "DOMESTIC");
+  check("13b eski istemci → kart BOŞ kaldı (kilitlenmedi)", (await yonleri(c13)).cari === null);
+  check("13c eski istemci → yön uyarısı yok", !(r13.warnings ?? []).some((w) => w.includes("kilitli")), JSON.stringify(r13.warnings));
+  const e13 = await hataYakala(() => shipping.setDestination(r13.data.id, "EXPORT"));
+  check("13d eski panel toggle'ı → sevkiyat değişti, kart BOŞ", e13 === null && (await sevkYonu(r13.data.id)) === "EXPORT" && (await yonleri(c13)).cari === null, e13?.message ?? "");
+  const c13b = await yeniCari();
+  const r13b = (await shipping.createShipment({ sackIds: [await doluCuval(c13b, null, false)], customerId: c13b, destination: "DOMESTIC", destinationChosen: true })) as Sonuc;
+  check("13e yeni istemci (açık niyet) → karta YAZILDI", (await sevkYonu(r13b.data.id)) === "DOMESTIC" && (await yonleri(c13b)).cari === "DOMESTIC");
+  const r13c = (await shipping.createShipment({ sackIds: [await doluCuval(c13b, null, false)], customerId: c13b, destination: "EXPORT", destinationChosen: true })) as Sonuc;
+  check("13f açık niyet ama kilitli → kilitli değer + uyarı (değişmez)", (await sevkYonu(r13c.data.id)) === "DOMESTIC" && (r13c.warnings ?? []).some((w) => w.includes("kilitli")), JSON.stringify(r13c.warnings));
+
+  // 14) sözleşme — alan yalnız `true`; `false`/başka değer 400 (fail-closed), yok = eski istemci
+  const govdeC = { sackIds: ["00000000-0000-4000-8000-000000000001"], customerId: "00000000-0000-4000-8000-000000000002" };
+  check("14a createShipment: true kabul, alan yok kabul", createShipmentSchema.safeParse({ ...govdeC, destinationChosen: true }).success && createShipmentSchema.safeParse(govdeC).success);
+  check("14b createShipment: false RED", !createShipmentSchema.safeParse({ ...govdeC, destinationChosen: false }).success);
+  check("14c setDestination: \"true\" (string) RED", !destinationSchema.safeParse({ destination: "EXPORT", destinationChosen: "true" }).success);
+  check("14d hızlı sevk: false RED", !quickShipmentSchema.safeParse({ rollIds: ["00000000-0000-4000-8000-000000000001"], customerId: govdeC.customerId, destinationChosen: false }).success);
 }
 
 async function temizlik(): Promise<void> {

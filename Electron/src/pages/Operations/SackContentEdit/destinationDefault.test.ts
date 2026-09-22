@@ -12,18 +12,23 @@ const lock = (d: DestinationLock["destination"], source: DestinationLock["source
 // eski vakalar yeni kuralın karşılığına dönüştürüldü.
 describe("resolveDestination — yön cariden/şubeden KİLİTLİ", () => {
   it("cari EXPORT kilitli → EXPORT, seçim gerekmez", () => {
-    expect(resolveDestination({ lock: lock("EXPORT"), picked: null })).toEqual({ destination: "EXPORT", locked: true, needsPick: false });
+    expect(resolveDestination({ lock: lock("EXPORT"), picked: null })).toEqual({ destination: "EXPORT", locked: true, chosen: false, needsPick: false });
   });
   it("zincir boş, seçim yok → yön YOK ve seçim bekler (örtük DOMESTIC gönderilmez)", () => {
-    expect(resolveDestination({ lock: lock(null), picked: null })).toEqual({ destination: null, locked: false, needsPick: true });
+    expect(resolveDestination({ lock: lock(null), picked: null })).toEqual({ destination: null, locked: false, chosen: false, needsPick: true });
   });
   it("⭐ kilitliyken operatörün seçimi YOK SAYILIR (eski 'seçim ezilmez' kuralının tersi)", () => {
     expect(resolveDestination({ lock: lock("EXPORT"), picked: "DOMESTIC" }).destination).toBe("EXPORT");
   });
   it("⭐ zincir boşken ilk seçim kullanılır (karta yazılacak olan)", () => {
-    expect(resolveDestination({ lock: lock(null), picked: "EXPORT" })).toEqual({ destination: "EXPORT", locked: false, needsPick: false });
+    expect(resolveDestination({ lock: lock(null), picked: "EXPORT" })).toEqual({ destination: "EXPORT", locked: false, chosen: true, needsPick: false });
   });
   it("kilit henüz okunmadı → yön yok, seçim de istenmez (yükleniyor)", () => {
-    expect(resolveDestination({ lock: undefined, picked: "EXPORT" })).toEqual({ destination: null, locked: false, needsPick: false });
+    expect(resolveDestination({ lock: undefined, picked: "EXPORT" })).toEqual({ destination: null, locked: false, chosen: false, needsPick: false });
+  });
+  it("⭐ açık niyet bayrağı: yalnız zincir boşken ve operatör seçtiyse; kilitliyken seçim olsa da ASLA", () => {
+    expect(resolveDestination({ lock: lock("EXPORT"), picked: "EXPORT" }).chosen).toBe(false);
+    expect(resolveDestination({ lock: lock(null), picked: null }).chosen).toBe(false);
+    expect(resolveDestination({ lock: lock(null), picked: "DOMESTIC" }).chosen).toBe(true);
   });
 });

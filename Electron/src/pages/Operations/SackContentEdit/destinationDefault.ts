@@ -28,6 +28,11 @@ export interface DestinationView {
   /** Gönderilecek yön; kilit okunmadıysa ya da ilk seçim yapılmadıysa null. */
   destination: ShipmentDestination | null;
   locked: boolean;
+  /**
+   * Operatör yönü ilk-seçim bileşeninde AÇIKÇA seçti — gövdeye `destinationChosen: true`
+   * YALNIZ o zaman girer (sunucu karta yalnız açık niyetle yazar). Kilitliyken asla.
+   */
+  chosen: boolean;
   /** Zincir boş ve operatör henüz seçmedi — sevk düğmesi bekler. */
   needsPick: boolean;
 }
@@ -38,9 +43,9 @@ export function resolveDestination(input: {
   picked: ShipmentDestination | null;
 }): DestinationView {
   const { lock, picked } = input;
-  if (!lock) return { destination: null, locked: false, needsPick: false };
-  if (lock.destination) return { destination: lock.destination, locked: true, needsPick: false };
-  return { destination: picked, locked: false, needsPick: picked == null };
+  if (!lock) return { destination: null, locked: false, chosen: false, needsPick: false };
+  if (lock.destination) return { destination: lock.destination, locked: true, chosen: false, needsPick: false };
+  return { destination: picked, locked: false, chosen: picked != null, needsPick: picked == null };
 }
 
 /** Sevk adresinin (cari + şube) yön kilidi; müşteri yokken sorgu koşmaz. */

@@ -2263,7 +2263,7 @@ export class ShippingService {
   }
 
   async createShipment(
-    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; orderless?: boolean; destination?: ShipmentDestination; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null },
+    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; orderless?: boolean; destination?: ShipmentDestination; destinationChosen?: boolean; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     // İdempotent replay (A4): timeout-retry aynı token'la gelir — çuvallar ilk
@@ -2301,7 +2301,7 @@ export class ShippingService {
           customerId: data.customerId,
           branchId,
           orderIds,
-          requestedDestination: data.destination,
+          requestedDestination: data.destination, destinationChosen: data.destinationChosen === true,
           assertDestination: (d) => assertSacksWeighed(sacks, d, weighRequired),
           procedureCode: data.procedureCode,
           plateNumber: data.plateNumber,
@@ -2391,8 +2391,10 @@ export class ShippingService {
       customerId: string;
       branchId: string | null;
       orderIds: string[];
-      /** İstemcinin gönderdiği yön; kilitliyse kullanılmaz, boşsa İLK SEÇİMDİR. */
+      /** İstemcinin gönderdiği yön; kilitliyse kullanılmaz, boşsa sevkiyata yazılır. */
       requestedDestination?: ShipmentDestination;
+      /** Operatörün açık seçimi mi — yalnız o zaman karta da yazılır (eski istemci göndermez). */
+      destinationChosen?: boolean;
       /** Çözülen yönle koşan kapı (tartı) — tx içinde, yazımdan önce. */
       assertDestination: (destination: ShipmentDestination, lockSource: ShipmentDestinationSource | null) => void;
       procedureCode?: string | null;
@@ -2417,6 +2419,7 @@ export class ShippingService {
       customerId: p.customerId,
       branchId: p.branchId,
       requested: p.requestedDestination,
+      chosen: p.destinationChosen === true,
       userId: p.userId,
     });
     p.assertDestination(yon.destination, yon.lockSource);
@@ -2517,7 +2520,7 @@ export class ShippingService {
    */
   private async decideShipmentDestinationTx(
     tx: Prisma.TransactionClient,
-    p: { customerId: string; branchId: string | null; requested?: ShipmentDestination; userId?: string },
+    p: { customerId: string; branchId: string | null; requested?: ShipmentDestination; chosen: boolean; userId?: string },
   ): Promise<ShipmentDestinationDecision> {
     const kilit = await resolveShipmentDestination(tx, { customerId: p.customerId, branchId: p.branchId });
     if (kilit.destination) {
@@ -2533,11 +2536,14 @@ export class ShippingService {
    * (kurulum ya da planlı sevkiyatta `setDestination`) yapılan açık seçim, zincirin
    * boş kaldığı en alt seviyeye (şube varsa şube, yoksa cari) atomik claim ile yazılır.
    * count 0 → kazanan tx içinde taze okunur: aynı değer başarı, farklı değer 409.
+   * Açık niyet yoksa (`chosen` false — eski istemcinin önceden seçili değeri) değer
+   * yalnız sevkiyata gider, karta YAZILMAZ; koşul BURADA yaşar, çağıran süzmez.
    */
   private async claimFirstDestinationTx(
     tx: Prisma.TransactionClient,
-    p: { customerId: string; branchId: string | null; requested: ShipmentDestination; userId?: string },
+    p: { customerId: string; branchId: string | null; requested: ShipmentDestination; chosen: boolean; userId?: string },
   ): Promise<Omit<ShipmentDestinationDecision, "warning">> {
+    if (!p.chosen) return { destination: p.requested, lockSource: null, firstChoice: null };
     const target = p.branchId
       ? { tableName: "CUSTOMER_BRANCH" as const, recordId: p.branchId }
       : { tableName: "CUSTOMER" as const, recordId: p.customerId };
@@ -2674,6 +2680,7 @@ export class ShippingService {
       /** Siparişsiz sevk NİYETİ — `createShipment` ile AYNI sözleşme (Dilim 2). */
       orderless?: boolean;
       destination?: ShipmentDestination;
+      destinationChosen?: boolean;
       procedureCode?: string | null;
       plateNumber?: string | null;
       driverName?: string | null;
@@ -2784,6 +2791,7 @@ export class ShippingService {
               branchId,
               orderIds,
               requestedDestination: data.destination,
+              destinationChosen: data.destinationChosen === true,
               assertDestination: assertQuickShipAllowed,
               procedureCode: data.procedureCode,
               plateNumber: data.plateNumber,
@@ -3101,7 +3109,7 @@ export class ShippingService {
    * verilir (sevkiyatı karta hizalamak için); farklı değer 409 + kaynak. Zincir boşsa
    * bu açık seçim İLK SEÇİMDİR ve kurulumla aynı yazardan karta yazılır.
    */
-  async setDestination(shipmentId: string, destination: ShipmentDestination, userId?: string): Promise<ApiResponse<unknown>> {
+  async setDestination(shipmentId: string, destination: ShipmentDestination, userId?: string, destinationChosen = false): Promise<ApiResponse<unknown>> {
     const firstPick = await prisma.$transaction(async (tx) => {
       await touchShipmentPlannedTx(tx, shipmentId);
       const sh = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { customerId: true, branchId: true } });
@@ -3116,7 +3124,7 @@ export class ShippingService {
       }
       const picked = kilit.destination
         ? null
-        : await this.claimFirstDestinationTx(tx, { customerId: sh.customerId, branchId: sh.branchId, requested: destination, userId });
+        : await this.claimFirstDestinationTx(tx, { customerId: sh.customerId, branchId: sh.branchId, requested: destination, chosen: destinationChosen, userId });
       await tx.shipment.update({ where: { id: shipmentId }, data: { destination } });
       return { firstChoice: picked?.firstChoice ?? null };
     });

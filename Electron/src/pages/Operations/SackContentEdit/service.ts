@@ -451,6 +451,8 @@ export const sackHubService = {
     branchId?: string | null;
     orderIds?: string[];
     destination?: ShipmentDestination;
+    /** Yalnız operatör ilk-seçimde açıkça seçtiyse — sunucu karta yalnız o zaman yazar. */
+    destinationChosen?: true;
     procedureCode?: string | null;
     /** İdempotency — deneme başına bir üretilir, retry aynı token'la (backend replay, A4). */
     clientToken?: string;
