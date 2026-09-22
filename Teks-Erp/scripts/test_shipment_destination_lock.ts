@@ -17,12 +17,17 @@
 //      SHIPMENT_DESTINATION_LOCKED + kazanan · aynı seçim → başarı, ikinci yazım yok.
 //   9. Cari sonradan değişince eski sevkiyatın yönü DEĞİŞMEZ.
 //  10. setDestination: kilitliyken farklı değer 409 + kaynak · kilitli değer kabul ·
-//      zincir boşken serbest ve karta yazmaz.
+//      zincir boşken açık seçim İLK SEÇİMDİR, karta (şubeliyse şubeye) yazılır + audit.
+//  11. Şubenin yönü sonradan değişince planlı sevkiyat kendi yönünü korur.
+//  12. Tek yazar: ilk seçim claim'i `claimFirstDestinationTx`te tek tanım, iki çağıran.
 // Negatif sondalar (2026-09-23, `shipping.service.ts`, hepsi geri alındı → 31/0):
 //   ① kilitliyken istek kazanır → 1a ❌ (ihracat tartısı reddetti) · ② uyarı null → 1b/2b/5c ❌
 //   ③ claim'den `defaultDestination: null` düştü → 8a ×2, 8b audit ❌ · ④ aynı-seçim toleransı
 //   düştü → 8b ❌ · ⑤ şube dalı düştü (hep cariye) → 4a/4b ❌ · ⑥ örtük DOMESTIC yazıldı →
 //   6b/7b/10d/10e ❌ · ⑦ setDestination kilit kontrolü düştü → 10a/10b ❌
+// Tek yazar sondaları (B1 hizalaması, geri alındı → 38/0): ⑧ setDestination ilk seçimi
+//   yazmaz → 10e/10f/10g/10h/11/12b ❌ · ⑨ setDestination'a kopya claim → 10f/10g/10h/12b/12c ❌
+//   (12c'nin ilk hâli audit `oldData`sını da sayıyordu — sınırsız eşleşme, WHERE'e daraltıldı)
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
@@ -32,6 +37,8 @@ import { AppError } from "../src/utils/app-error";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 import type { ShipmentDestination } from "@prisma/client";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 let pass = 0;
 let fail = 0;
@@ -249,8 +256,34 @@ async function main() {
   const ok10 = await hataYakala(() => shipping.setDestination(r1.id, "EXPORT"));
   check("10c kilitli değere eşitleme kabul", ok10 === null && (await sevkYonu(r1.id)) === "EXPORT", ok10?.message ?? "");
   const ok10d = await hataYakala(() => shipping.setDestination(r6.data.id, "EXPORT"));
-  check("10d zincir boşken serbest", ok10d === null && (await sevkYonu(r6.data.id)) === "EXPORT", ok10d?.message ?? "");
-  check("10e zincir boşken karta YAZMAZ", (await yonleri(c6)).cari === null);
+  check("10d zincir boşken açık seçim kabul", ok10d === null && (await sevkYonu(r6.data.id)) === "EXPORT", ok10d?.message ?? "");
+  check("10e zincir boşken açık seçim KARTA yazıldı (ilk seçim)", (await yonleri(c6)).cari === "EXPORT");
+  const c10 = await yeniCari();
+  const b10 = await yeniSube(c10);
+  const r10 = (await shipping.createShipment({ sackIds: [await doluCuval(c10, b10, true)], customerId: c10, branchId: b10 })) as Sonuc;
+  const ok10f = await hataYakala(() => shipping.setDestination(r10.data.id, "EXPORT"));
+  const y10 = await yonleri(c10, b10);
+  check("10f şubeli sevkiyatta ilk açık seçim ŞUBEYE, cariye dokunmadan", ok10f === null && y10.sube === "EXPORT" && y10.cari === null, `${ok10f?.message ?? ""} ${JSON.stringify(y10)}`);
+  const log10 = await prisma.systemLog.count({ where: { tableName: "CUSTOMER_BRANCH", recordId: b10, action: "UPDATE" } });
+  check("10g şubeye yazım audit'te", log10 === 1, String(log10));
+  const e10h = await hataYakala(() => shipping.setDestination(r10.data.id, "DOMESTIC"));
+  check("10h ilk seçimden sonra kilitli → 409 (kaynak şube)", e10h?.statusCode === 409 && (e10h.details as { source?: string }).source === "BRANCH", e10h?.message ?? "hata yok");
+
+  // 11) şubenin yönü değişince PLANLI sevkiyat kendi yönünü korur
+  await prisma.customerBranch.update({ where: { id: b10 }, data: { defaultDestination: "DOMESTIC" } });
+  check("11 şube yönü değişti → planlı sevkiyat hâlâ EXPORT (donmuş)", (await sevkYonu(r10.data.id)) === "EXPORT");
+
+  // 12) tek yazar — ilk seçim claim'i kaynakta tek tanım, iki çağrı (kurulum + setDestination)
+  const src = readFileSync(join(__dirname, "../src/services/shipping.service.ts"), "utf8");
+  const tanim = src.match(/private async claimFirstDestinationTx\(/g)?.length ?? 0;
+  const govde = (ad: string) => { const i = src.indexOf(ad); const j = src.indexOf("\n  }\n", i); return i < 0 ? "" : src.slice(i, j); };
+  const cagiranlar = ["private async decideShipmentDestinationTx(", "async setDestination("].filter((ad) => govde(ad).includes("this.claimFirstDestinationTx("));
+  // Yalnız WHERE içindeki koşul sayılır (audit `oldData`sı değil): updateMany({ where: { …defaultDestination: null
+  const CLAIM = /updateMany\(\{\s*where: \{[^}]*defaultDestination: null/g;
+  const claimYeri = [...src.matchAll(CLAIM)].length;
+  check("12a claimFirstDestinationTx tek tanım", tanim === 1, String(tanim));
+  check("12b iki yol da aynı yazarı çağırır", cagiranlar.length === 2, cagiranlar.join(", "));
+  check("12c claim WHERE'i yalnız yazarın içinde (2 = şube + cari)", claimYeri === 2 && [...govde("private async claimFirstDestinationTx(").matchAll(CLAIM)].length === 2, String(claimYeri));
 }
 
 async function temizlik(): Promise<void> {

@@ -2517,6 +2517,19 @@ export class ShippingService {
       return { destination: kilit.destination, lockSource: kilit.source, warning, firstChoice: null };
     }
     if (!p.requested) return { destination: ShipmentDestination.DOMESTIC, lockSource: null, warning: null, firstChoice: null };
+    return { ...(await this.claimFirstDestinationTx(tx, { ...p, requested: p.requested })), warning: null };
+  }
+
+  /**
+   * İLK AÇIK YÖN SEÇİMİNİN TEK YAZARI — zincir boşken herhangi bir sevk yolunda
+   * (kurulum ya da planlı sevkiyatta `setDestination`) yapılan açık seçim, zincirin
+   * boş kaldığı en alt seviyeye (şube varsa şube, yoksa cari) atomik claim ile yazılır.
+   * count 0 → kazanan tx içinde taze okunur: aynı değer başarı, farklı değer 409.
+   */
+  private async claimFirstDestinationTx(
+    tx: Prisma.TransactionClient,
+    p: { customerId: string; branchId: string | null; requested: ShipmentDestination; userId?: string },
+  ): Promise<Omit<ShipmentDestinationDecision, "warning">> {
     const target = p.branchId
       ? { tableName: "CUSTOMER_BRANCH" as const, recordId: p.branchId }
       : { tableName: "CUSTOMER" as const, recordId: p.customerId };
@@ -2530,22 +2543,22 @@ export class ShippingService {
           data: { defaultDestination: p.requested, updatedById: p.userId ?? null },
         });
     if (claimed.count === 1) {
-      return { destination: p.requested, lockSource: null, warning: null, firstChoice: { ...target, destination: p.requested } };
+      return { destination: p.requested, lockSource: null, firstChoice: { ...target, destination: p.requested } };
     }
     // Yarışı başka bir ilk sevk kazandı — kazananı tx içinde TAZE oku.
     const fresh = await resolveShipmentDestination(tx, { customerId: p.customerId, branchId: p.branchId });
-    if (fresh.destination === p.requested) return { destination: p.requested, lockSource: fresh.source, warning: null, firstChoice: null };
+    if (fresh.destination === p.requested) return { destination: p.requested, lockSource: fresh.source, firstChoice: null };
     throw AppError.conflict(
       fresh.destination
-        ? `${destinationLockMessage(p.requested, fresh, false)} Sevkiyatı yeniden kurun.`
+        ? `${destinationLockMessage(p.requested, fresh, false)} Ekranı yenileyip tekrar deneyin.`
         : "Sevk yönü az önce değişti — yenileyip tekrar deneyin.",
       { code: "SHIPMENT_DESTINATION_LOCKED", destination: fresh.destination, source: fresh.source },
     );
   }
 
-  /** İlk sevkte karta/şubeye yazılan yön — audit tx DIŞINDA, best-effort. */
+  /** İlk seçimle karta/şubeye yazılan yön — audit tx DIŞINDA, best-effort. */
   private async logFirstShipmentDestination(
-    yon: ShipmentDestinationDecision,
+    yon: Pick<ShipmentDestinationDecision, "firstChoice">,
     shipmentId: string,
     userId?: string,
   ): Promise<void> {
@@ -3083,10 +3096,10 @@ export class ShippingService {
   /**
    * PLANNED sevkiyatın yönünü değiştir. Yön kilitliyse YALNIZ kilitli değere izin
    * verilir (sevkiyatı karta hizalamak için); farklı değer 409 + kaynak. Zincir boşsa
-   * serbest ve karta yazmaz — ilk seçim yalnız sevkiyat KURULURKEN yazılır.
+   * bu açık seçim İLK SEÇİMDİR ve kurulumla aynı yazardan karta yazılır.
    */
   async setDestination(shipmentId: string, destination: ShipmentDestination, userId?: string): Promise<ApiResponse<unknown>> {
-    await prisma.$transaction(async (tx) => {
+    const firstPick = await prisma.$transaction(async (tx) => {
       await touchShipmentPlannedTx(tx, shipmentId);
       const sh = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { customerId: true, branchId: true } });
       if (!sh) throw AppError.notFound("Sevkiyat bulunamadı");
@@ -3098,8 +3111,13 @@ export class ShippingService {
           source: kilit.source,
         });
       }
+      const picked = kilit.destination
+        ? null
+        : await this.claimFirstDestinationTx(tx, { customerId: sh.customerId, branchId: sh.branchId, requested: destination, userId });
       await tx.shipment.update({ where: { id: shipmentId }, data: { destination } });
+      return { firstChoice: picked?.firstChoice ?? null };
     });
+    await this.logFirstShipmentDestination(firstPick, shipmentId, userId);
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "DESTINATION", destination } });
     return { success: true, data: { shipmentId, destination }, message: destination === ShipmentDestination.EXPORT ? "Yurtdışı sevk olarak işaretlendi" : "Yurtiçi sevk olarak işaretlendi" };
   }
