@@ -139,6 +139,7 @@ import { markSackLabelsStaleOnCustomerChangeTx, sackFieldsAppearOnLabel } from "
 import { formatSackSeqLabel, nextPoolPackageNoTx, readSackSeqFormat, readSackSeqStart } from "./helpers/sack-seq.helper";
 import { ApiResponse } from "../types/api.types";
 import {
+  exportCodeForDestination,
   quickShipExportMessage,
   readShipmentDestinationLock,
   resolveShipmentDestination,
@@ -5696,9 +5697,9 @@ async function collectShipmentDocContent(
 
   return {
     // branchCode = şube ihracat kodu; customerExportCode = şirket ihracat kodu.
-    // Belgede TEK "İhracat Kodu" satırı basılır: branchCode ?? customerExportCode
-    // (şube önce, boşsa şirket) — "exportCode" section toggle'ıyla açılıp kapanır.
-    header: { shipmentNo: sh.shipmentNo, customerName: sh.customer.name, customerCode: sh.customer.code, customerTaxNumber: sh.customer.taxNumber ?? null, branchName: sh.branch?.name ?? null, branchCode: sh.branch?.code ?? null, customerExportCode: sh.customer.exportCode ?? null, procedureCode: sh.procedureCode, destination: sh.destination, status: sh.status, date: (sh.dispatchedAt ?? sh.createdAt).toISOString(), plateNumber: sh.plateNumber, driverName: sh.driverName, carrier: sh.carrier, orderNos },
+    // Belgede TEK "İhracat Kodu" satırı basılır: `exportCode` DOĞUŞTA çözülür (yalnız
+    // yurtdışında dolu; yurtiçi snapshot'a kod girmez) — "exportCode" toggle'ıyla açılıp kapanır.
+    header: { shipmentNo: sh.shipmentNo, customerName: sh.customer.name, customerCode: sh.customer.code, customerTaxNumber: sh.customer.taxNumber ?? null, branchName: sh.branch?.name ?? null, branchCode: sh.branch?.code ?? null, customerExportCode: sh.customer.exportCode ?? null, exportCode: exportCodeForDestination(sh.destination, { branchCode: sh.branch?.code, customerExportCode: sh.customer.exportCode }), procedureCode: sh.procedureCode, destination: sh.destination, status: sh.status, date: (sh.dispatchedAt ?? sh.createdAt).toISOString(), plateNumber: sh.plateNumber, driverName: sh.driverName, carrier: sh.carrier, orderNos },
     products,
     sacks: sackRows,
     cekiRows,
