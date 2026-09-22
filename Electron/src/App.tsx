@@ -18,6 +18,7 @@ import { canEnterApp } from "@/types/auth";
 import { TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
 import { BOSS_PATH } from "@/lib/boss-path";
 import { useHashPath } from "@/lib/use-hash-path";
+import { loadScanSeries } from "@/lib/scanner/barcode-kind";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -71,6 +72,19 @@ function AuthHydrator() {
  * önceki kullanıcının 5dk'lık stale verisi yeni oturumda ağa çıkmadan
  * gösterilmesin (farklı yetkili kullanıcılar aynı makinede nöbetleşir).
  */
+/**
+ * Barkod seri tablosunu giriş SONRASI çeker (uç `verifyToken` ister).
+ * Düşerse sessizce yedek tabloda kalınır — okutma yolu fail-closed DEĞİL.
+ */
+function ScanSeriesLoader() {
+  const userId = useAuthStore((s) => s.user?.userId ?? null);
+  useEffect(() => {
+    if (!userId) return;
+    void loadScanSeries();
+  }, [userId]);
+  return null;
+}
+
 function CacheUserGuard() {
   const userId = useAuthStore((s) => s.user?.userId ?? null);
   const prev = useRef<string | null>(null);
@@ -123,6 +137,7 @@ export function App() {
         <QueryClientProvider client={queryClient}>
           <AuthHydrator />
           <CacheUserGuard />
+          <ScanSeriesLoader />
           <PreferencesProvider>
             <MotionProvider>
               <Root />

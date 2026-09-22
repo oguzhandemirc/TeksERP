@@ -1,5 +1,9 @@
 import { create } from "zustand";
-import { classifyBarcode, type BarcodeKind } from "@/lib/scanner/barcode-kind";
+import {
+  classifyBarcode,
+  resolveBarcodeOnServer,
+  type BarcodeKind,
+} from "@/lib/scanner/barcode-kind";
 
 export type ScanSource = "wedge" | "device" | "manual";
 
@@ -29,7 +33,17 @@ export const useScannerStore = create<ScannerState>((set) => ({
   pushScan: (raw, source = "wedge") => {
     const { kind, code } = classifyBarcode(raw);
     if (!code) return;
-    set({ pending: { code, kind, source, nonce: ++nonceSeq } });
+    const nonce = ++nonceSeq;
+    // Tablo sonucu ANINDA yayımlanır (bugünkü davranış; okutma beklemez).
+    set({ pending: { code, kind, source, nonce } });
+    if (kind !== "UNKNOWN") return;
+    // Tablo tanımadıysa son adım sunucuya sorulur — ör. panel açıkken emekliye
+    // ayrılmış bir ön ek. Cevap gelene kadar UNKNOWN gösterilir; TAHMİN YOK.
+    // ⚠️ nonce kontrolü: cevap geciktiğinde ARADAKİ yeni okutmayı ezmesin.
+    void resolveBarcodeOnServer(code).then((r) => {
+      if (r.kind === "UNKNOWN") return;
+      set((s) => (s.pending?.nonce === nonce ? { pending: { ...s.pending, kind: r.kind } } : s));
+    });
   },
   clear: () => set({ pending: null }),
 }));

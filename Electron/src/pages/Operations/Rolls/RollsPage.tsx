@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ReorderableTabBar } from "@/components/layout/ReorderableTabBar";
-import { classifyBarcode, BARCODE_FORMATS } from "@/lib/scanner/barcode-kind";
+import { classifyBarcode, matchesFullFormat } from "@/lib/scanner/barcode-kind";
 import { useTabOrder } from "@/hooks/useTabOrder";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
@@ -110,10 +110,11 @@ export function RollsPage() {
     onSuccess: (res) => setScanRoll(res.data ?? null),
   });
   // Detayı aç (açık niyet: "Aç" butonu / useScanSeed navigasyonu / okutma+toggle-açık).
-  // Yalnız TAM-FORMAT top barkodunda dener — gevşek /^T\d/ değil tam regex ki
-  // "TEKSTİL BEYAZ" gibi kumaş adı yanlışlıkla barkod sayılıp 404 toast'ı vermesin.
+  // Yalnız TAM-FORMAT top barkodunda dener — gevşek ön ek çapası değil tam
+  // biçim ki "TEKSTİL BEYAZ" gibi kumaş adı yanlışlıkla barkod sayılıp 404
+  // toast'ı vermesin. Biçim sunucunun seri tablosundan gelir.
   const openDetail = (code: string) => {
-    if (!BARCODE_FORMATS.ROLL.test(classifyBarcode(code).code)) return;
+    if (!matchesFullFormat("ROLL", classifyBarcode(code).code)) return;
     scanLookup.mutate(code);
   };
   const orderedTabs = ordered.flatMap((k) => {

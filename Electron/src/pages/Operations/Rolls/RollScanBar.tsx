@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScanField } from "@/components/scanner/ScanField";
-import { classifyBarcode, BARCODE_FORMATS } from "@/lib/scanner/barcode-kind";
+import { classifyBarcode, matchesFullFormat } from "@/lib/scanner/barcode-kind";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { usePreferences } from "@/providers/PreferencesProvider";
 
@@ -47,7 +47,7 @@ export function RollScanBar({ openDetail, scanPending }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanBarcode]);
 
-  const canOpen = BARCODE_FORMATS.ROLL.test(classifyBarcode(scanBarcode).code);
+  const canOpen = matchesFullFormat("ROLL", classifyBarcode(scanBarcode).code);
 
   // Okut/Enter → her zaman listeyi süz; detay yalnız toggle AÇIK ise açılır.
   const handleScan = (code: string) => {
