@@ -13,7 +13,7 @@
 //   §3 Emekli ön ekli eski kod (`RK` kartı) hâlâ çözülür
 //   §4 Hane taşmış (5 haneli) kod çözülür — sabit hane dayatan eski yol reddediyordu
 //   §5 Tanınmayan kod `UNKNOWN` + `key:null` döner; istemci TAHMİN YÜRÜTMEZ
-//   §6 ⭐ `/resolve` DB'ye İNMEZ — izinsiz olmasının gerekçesi bu, ve burada ÖLÇÜLÜR
+//   §6 ⭐ `/resolve` KAYIT tablolarına inmez — izinsiz olmasının gerekçesi bu, ve ölçülür
 //   §7 `search.service`te elle yazılmış tam-format ikizi KALMADI (boğaz ikiz)
 //
 // ⭐ NEGATİF SONDA ✓B4 (2026-09-22, ölçüldü): `matchesSeries`te emekli ön ek döngüsü
@@ -108,11 +108,17 @@ check("§5 küçük harfle okutulan kod da çözülür", resolveScannedCode("cv2
 // olmasının gerekçesi "yük iş verisi değil biçim meta verisi". Biri yarın
 // "bulamadıysan rolls'a bak" eklerse gerekçe yalan olur ve hiçbir yerden
 // görünmez — burada görünür.
+//
+// ⚠️ İDDİANIN BOYU ÖLÇÜLENLE AYNI: burada aranan DOĞRUDAN çağrıdır. Uç DOLAYLI
+// olarak bir okuma tetikleyebilir — `resolveSeriesFormat` önbellek boş/bayatsa
+// arka planda `prisma.numberSeries.findMany()` koşar. O bir YAPILANDIRMA
+// satırıdır; güvenlik argümanı KAYIT tablolarına inmemeye dayanır, "hiç DB
+// yok"a değil. "DB'ye hiç inmez" demek, ölçülmemiş bir iddia olurdu.
 const DB_IZI = /\b(prisma|tx)\s*\.\s*[a-zA-Z$]/;
 for (const dosya of ["services/scan.service.ts", "routes/scan.routes.ts"]) {
   const metin = readFileSync(join(SRC, dosya), "utf-8");
   const kodSatirlari = metin.split("\n").filter((l) => !l.trimStart().startsWith("//") && !l.trimStart().startsWith("*"));
-  check(`§6 ⭐ ${dosya} DB'ye inmiyor (izinsiz olmanın gerekçesi)`,
+  check(`§6 ⭐ ${dosya} KAYIT tablosuna inmiyor (izinsiz olmanın gerekçesi)`,
     !kodSatirlari.some((l) => DB_IZI.test(l)),
     kodSatirlari.filter((l) => DB_IZI.test(l)).join(" | ") || "0 DB çağrısı");
   check(`§6 ${dosya} prisma import etmiyor`, !/from "\.\.?\/.*lib\/prisma"/.test(metin));

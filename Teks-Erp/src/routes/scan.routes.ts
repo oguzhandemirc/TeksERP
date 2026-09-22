@@ -6,7 +6,8 @@
 // birebir aynı: okutma HER operatör ekranının ilk adımıdır ve dar bir izin kodu
 // koymak, o kod atanmamış her tablette OKUTMAYI kırardı — yani özelliğin
 // kendisini. Yük iş verisi değil BİÇİM meta verisidir (ön ek · hane · tarih
-// segmenti); `resolve` DB'ye hiç inmez ve kaydın varlığını bile doğrulamaz.
+// segmenti); `resolve` KAYIT tablolarına inmez ve kaydın varlığını doğrulamaz
+// (yalnız `number_series` yapılandırma önbelleğini tazeleyebilir).
 // Sayaç `scripts/test_route_auth_coverage.ts` `BARE_CHAIN_BASELINE`te beyanlı.
 // =============================================================================
 
@@ -53,9 +54,9 @@ router.get("/series", (_req: Request, res: Response) => {
  *     tags: [Scan]
  *     summary: Tek kodu türüne çöz (emekli ön ekler dahil); çözülemezse UNKNOWN
  *     description: |
- *       Tabloyla eşleşmeyen kod için son adım. DB'ye inmez, kaydın varlığını
- *       doğrulamaz — yalnız stringi sınıflandırır. Çözülemeyen kod `UNKNOWN`
- *       döner ve istemci TAHMİN YÜRÜTMEZ.
+ *       Tabloyla eşleşmeyen kod için son adım. Kayıt tablolarına inmez ve
+ *       kaydın varlığını doğrulamaz — yalnız stringi sınıflandırır. Çözülemeyen
+ *       kod `UNKNOWN` döner ve istemci TAHMİN YÜRÜTMEZ.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: query

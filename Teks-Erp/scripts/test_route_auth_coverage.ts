@@ -168,16 +168,19 @@ const EXEMPT: Record<string, string> = {
  * yazmak ise izni anlamsızlaştırır.
  *
  * Asıl gerekçe yükün NE OLMADIĞIDIR: bu iki uç iş verisi değil BİÇİM META
- * VERİSİ döner (ön ek · tarih segmenti · hane · infix). `/resolve` DB'ye HİÇ
- * İNMEZ ve kaydın varlığını bile doğrulamaz — yalnız stringi sınıflandırır,
- * yani "bu kod bir çuval kodu biçimindedir" der, "böyle bir çuval vardır"
- * demez. Sızdırdığı tek bilgi zaten her basılı etikette okunabilen ön eklerdir.
+ * VERİSİ döner (ön ek · tarih segmenti · hane · infix). `/resolve` KAYIT
+ * tablolarına inmez; yalnız `number_series` yapılandırma önbelleğini
+ * tazeleyebilir (`resolveSeriesFormat` → arka plan `findMany`). Ne bir topun
+ * ya da çuvalın VARLIĞINI doğrular ne bir alanını döndürür — "bu kod çuval
+ * kodu biçimindedir" der, "böyle bir çuval vardır" demez. Sızıntı kaydın
+ * varlığından doğar, yapılandırma satırından değil; sızdırdığı ön ekler zaten
+ * her basılı etikette okunabiliyor.
  *
- * ⚠️ Bu gerekçenin taşıyıcı cümlesi ("DB'ye inmiyor") çürümeye açıktır: biri
- * yarın "bulamadıysan `rolls`a bak" ekleyebilir ve blok sessizce yalan olur.
- * Bu yüzden cümle bir KAPIYA bağlandı — `scripts/test_scan_series.ts §6` her
- * koşumda `scan.service.ts` ve `scan.routes.ts` kaynağında `prisma.`/`tx.`
- * çağrısı ve prisma import'u ARAR. Gerekçe değişirse bekçi kırmızı verir.
+ * ⚠️ Bu gerekçenin taşıyıcı cümlesi çürümeye açıktır: biri yarın "bulamadıysan
+ * `rolls`a bak" ekleyebilir ve blok sessizce yalan olur. Bu yüzden cümle bir
+ * KAPIYA bağlandı — `scripts/test_scan_series.ts §6` her koşumda
+ * `scan.service.ts` ve `scan.routes.ts` kaynağında `prisma.`/`tx.` çağrısı ve
+ * prisma import'u ARAR. Gerekçe değişirse bekçi kırmızı verir.
  */
 const BARE_CHAIN_BASELINE = 15;
 

@@ -7,8 +7,10 @@
 // "Top bulunamadı" der. Bu servis, biçimin tek sahibini (`number-series.service`)
 // istemcilere açar: tablo okunur, kod çözülür, istemci biçim BİLMEZ.
 //
-// Yük iş verisi DEĞİL, BİÇİM META VERİSİDİR: `resolve` DB'ye hiç inmez ve
-// kaydın varlığını bile söylemez, yalnız stringi sınıflandırır.
+// Yük iş verisi DEĞİL, BİÇİM META VERİSİDİR: `resolve` KAYIT tablolarına
+// inmez — bir topun/çuvalın varlığını doğrulamaz, alanını döndürmez; yalnız
+// stringi sınıflandırır. (Biçim önbelleği bayatsa arka planda `number_series`
+// tazelenebilir; o bir yapılandırma satırıdır, iş verisi değil.)
 // =============================================================================
 import {
   classifyScannedCode,
