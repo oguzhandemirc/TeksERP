@@ -79,6 +79,35 @@ export async function seriesImpactCount(key: string): Promise<number | null> {
       },
     });
   }
+  // SERİ ÖN EKİ — aynı tabloyu birden çok seri paylaşıyor (bugün üç tablo, on
+  // seri: `Invoice.docNo` ×4 · `Cheque.docNo` ×4 · `Payment.docNo` ×2). Düz
+  // `count(*)` dördünün TOPLAMINI basardı; sayım BU serinin ön ekiyle başlayan
+  // kodlarla sınırlanır. EMEKLİ ön ekler DAHİL: ön ek değiştikten sonra eski
+  // kayıtlar emekli ön ekle duruyor ve onlar da bu serinin numarasını taşıyor.
+  //
+  // ⚠️ Tarih segmenti YOK: kapsam "bu seriyle numaralanmış HER kayıt"tır, bugün
+  // doğanlar değil. Bu yüzden `seriesPrefix()` (tarihli) değil `fmt.prefix`.
+  // `gte` index seek içindir, `startsWith` collation-bağımsız tam ön ektir —
+  // üreteçlerin kanıtlı kalıbı.
+  if (e.countTable.kapsam === "seri-onekli") {
+    const fmt = resolveSeriesFormat(key);
+    const alan = e.countTable.field;
+    return delegate.count({
+      where: {
+        OR: [fmt.prefix, ...fmt.retiredPrefixes].map((onek) => ({
+          [alan]: { gte: onek, startsWith: onek },
+        })),
+      },
+    });
+  }
+  if (e.countTable.kapsam !== undefined) {
+    // ⚠️ TANINMAYAN KAPSAM = FAIL-CLOSED "ölçülemedi" (null), "hepsini say" DEĞİL:
+    // yeni bir kapsam adı eklenip burası unutulursa panel sessizce YANLIŞ bir
+    // sayı basardı. `never` ataması aynı unutmayı DERLEME ANINDA da yakalar.
+    const tanimsiz: never = e.countTable.kapsam;
+    void tanimsiz;
+    return null;
+  }
   // ⚠️ Düz `count()`: `countTable.field` ZORUNLU bir kolon olmak zorundadır, yani
   // tablodaki her satır bu seriyle numaralanmıştır. Nullable bir kolonda "satır
   // sayısı" ile "numaralanmış kayıt sayısı" AYRI şeyler olurdu.

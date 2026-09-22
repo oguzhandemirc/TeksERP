@@ -19,6 +19,10 @@
 //   §3 Üç kilit türü AYRI cümleler (panelde farklı metin göstermeli)
 //   §4 Etki sayısı ÖLÇÜLÜR (fikstürlü — boş tablo sabit-0'ı gizlerdi); kaynağı
 //      olmayan seri `null` döner ("0" demez)
+//  §4b PAYLAŞILAN TABLO: aynı (model, alan) çiftini ≥2 seri kullanıyorsa `kapsam`
+//      beyanı ZORUNLU, ve o serilerin ön ekleri birbirinin BAŞLANGICI olamaz
+//  §4c Kapsam DAVRANIŞTA daralıyor (fikstürlü: aynı tabloya iki serinin kodu) ve
+//      EMEKLİ ön ekle yazılmış kayıt da sayıya giriyor
 //   §5 Önizleme SUNUCUDA hesaplanır ve biçim kapısından geçer
 //
 // ⭐ NEGATİF SONDA ✓B3 (2026-09-22, ölçüldü): sayaç ve istemci kapılarının sırası
@@ -39,9 +43,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import prisma from "../src/lib/prisma";
-import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
+import { NUMBER_SERIES_CATALOG, numberSeriesCatalogEntry } from "../src/constants/number-series-catalog";
 import {
   assertSeriesFormatAllowed,
+  refreshNumberSeriesCache,
   previewSeriesCode,
   resolveSeriesFormat,
   updateSeriesFormat,
@@ -80,6 +85,8 @@ const DAMGA = `TEST-${Date.now()}`.slice(0, 14);
 
 async function main(): Promise<void> {
   const fixtureGroups: string[] = [];
+  const fixtureInvoices: string[] = [];
+  let fixtureCari: string | null = null;
   const engel = hedefDbEngeli();
   if (engel) {
     console.log(engel);
@@ -195,6 +202,133 @@ async function main(): Promise<void> {
       birimsiz.length === 0, birimsiz.map((e) => e.key).join(", ") || "hepsi beyanlı");
     check("§4 körlük zemini: şema metni gerçekten okundu", sema.length > 10_000, `${sema.length} bayt`);
 
+    // ── §4b PAYLAŞILAN TABLO ────────────────────────────────────────────────
+    // ⚠️ §4'ün ÜSTTEKİ kolu yalnız NULLABILITY'ye bakıyor ve paylaşımı GÖREMEZ:
+    // `Invoice.docNo` ZORUNLU bir kolon, yani o kol yeşil kalır — ama dört seri
+    // aynı tabloyu paylaştığı için düz `count(*)` dördünün TOPLAMINI basar ve
+    // "bugüne kadarki N satış faturası" cümlesi YANLIŞ bir sayı söyler (null
+    // değil, yanlış: sessiz ve inandırıcı). Ölçüldü 2026-09-23: 10 seri 3
+    // tabloyu paylaşıyor (`Invoice.docNo` ×4 · `Cheque.docNo` ×4 · `Payment.docNo` ×2).
+    const cifteGore = new Map<string, string[]>();
+    for (const e of NUMBER_SERIES_CATALOG) {
+      if (!e.countTable) continue;
+      const cift = `${e.countTable.model}.${e.countTable.field}`;
+      cifteGore.set(cift, [...(cifteGore.get(cift) ?? []), e.key]);
+    }
+    const paylasan = [...cifteGore.entries()].filter(([, keys]) => keys.length > 1);
+    const kapsamsizPaylasan: string[] = [];
+    for (const [cift, keys] of paylasan) {
+      for (const k of keys) {
+        if (!numberSeriesCatalogEntry(k).countTable?.kapsam) kapsamsizPaylasan.push(`${k}@${cift}`);
+      }
+    }
+    check("§4b ⭐ aynı (model, alan) çiftini paylaşan her seri `kapsam` BEYAN ediyor",
+      kapsamsizPaylasan.length === 0,
+      kapsamsizPaylasan.join(", ") || `${paylasan.length} paylaşılan çift · ${paylasan.reduce((n, [, k]) => n + k.length, 0)} seri`);
+    check("§4b körlük zemini: paylaşılan çift GERÇEKTEN var (yoksa iddia boş kümede yeşil kalırdı)",
+      paylasan.length >= 3, paylasan.map(([c, k]) => `${c}×${k.length}`).join(" · "));
+
+    // ⚠️ §9'un (tarama uzayı) TABLO-PAYLAŞIMI KARDEŞİ: ön ek kapsamı ancak ön
+    // ekler birbirinin BAŞLANGICI değilse ayırt eder. Bugün doğru (SF/AF/SI/AI ·
+    // CKA/CKV/SNA/SNV · TH/OD), ama yarın `SF` yanına `SFX` yazılırsa iki serinin
+    // sayısı SESSİZCE karışır — `SFX…` kodları `SF` aramasına da girerdi.
+    const cakisanPaylasim: string[] = [];
+    let karsilastirilan = 0;
+    for (const [cift, keys] of paylasan) {
+      const onekler = keys.flatMap((k) => {
+        const f = resolveSeriesFormat(k);
+        return [f.prefix, ...f.retiredPrefixes].map((onek) => ({ k, onek }));
+      });
+      for (let i = 0; i < onekler.length; i++) {
+        for (let j = i + 1; j < onekler.length; j++) {
+          const a = onekler[i]!, b = onekler[j]!;
+          if (a.k === b.k) continue;
+          karsilastirilan++;
+          if (a.onek.startsWith(b.onek) || b.onek.startsWith(a.onek)) {
+            cakisanPaylasim.push(`${cift}: ${a.k}:${a.onek} ↔ ${b.k}:${b.onek}`);
+          }
+        }
+      }
+    }
+    check("§4b ⭐ aynı tabloyu paylaşan serilerin ön ekleri birbirinin BAŞLANGICI değil",
+      cakisanPaylasim.length === 0, cakisanPaylasim.join(" · ") || `${karsilastirilan} çift temiz`);
+    check("§4b körlük zemini: ön ek karşılaştırması koştu", karsilastirilan >= 12, `${karsilastirilan} çift`);
+
+    // ── §4c DAVRANIŞ: kapsam GERÇEKTEN daraltıyor mu? (fikstürlü) ───────────
+    // ⚠️ Beyan + statik kontrol yetmez: `seri-onekli` kolu hiç koşmasa da yukarıdaki
+    // iki iddia yeşil kalırdı. Bu yüzden AYNI TABLOYA iki FARKLI serinin kodunu
+    // yazıp sayıların AYRIŞTIĞI ölçülür.
+    // ⚠️ Cari HESAP fikstürü burada kurulur, `seed:fixtures`e bırakılmaz: MUS-001
+    // kartı var ama hesabı YOK (ölçüldü 2026-09-23, `tekserp_ca_test`). Bekçi
+    // kendi ön koşulunu kurmalı — kurmazsa temiz bir CI DB'sinde sessizce düşer.
+    let cari = musteri
+      ? await prisma.cariAccount.findFirst({ where: { customerId: musteri.id }, select: { id: true } })
+      : null;
+    if (musteri && !cari) {
+      cari = await prisma.cariAccount.create({
+        data: { kind: "CUSTOMER", customerId: musteri.id },
+        select: { id: true },
+      });
+      fixtureCari = cari.id;
+    }
+    check("§4c körlük zemini: fikstür carisinin cari HESABI bulundu/kuruldu", cari !== null);
+    if (cari) {
+      const sfOnek = resolveSeriesFormat("invoiceSales").prefix;
+      const afOnek = resolveSeriesFormat("invoicePurchase").prefix;
+      for (const [tip, onek] of [["SALES", sfOnek], ["PURCHASE", afOnek]] as const) {
+        fixtureInvoices.push(
+          (
+            await prisma.invoice.create({
+              data: {
+                docNo: `${onek}${DAMGA}`.slice(0, 32),
+                type: tip,
+                cariId: cari.id,
+                issueDate: new Date(),
+              },
+              select: { id: true },
+            })
+          ).id,
+        );
+      }
+      const sfSayi = (await seriesImpactCount("invoiceSales")) ?? -1;
+      const afSayi = (await seriesImpactCount("invoicePurchase")) ?? -1;
+      const hamSayi = await prisma.invoice.count();
+      check("§4c ⭐ paylaşılan tabloda sayım SERİYE göre daralıyor (düz `count(*)` DEĞİL)",
+        sfSayi < hamSayi && afSayi < hamSayi && sfSayi >= 1 && afSayi >= 1,
+        `SF=${sfSayi} · AF=${afSayi} · ham=${hamSayi}`);
+      check("§4c ⭐ iki serinin sayısı BİRBİRİNDEN bağımsız: yalnız kendi ön ekini sayıyor",
+        sfSayi ===
+          (await prisma.invoice.count({ where: { docNo: { startsWith: sfOnek } } })) &&
+          afSayi === (await prisma.invoice.count({ where: { docNo: { startsWith: afOnek } } })),
+        `SF=${sfSayi} · AF=${afSayi}`);
+      // Emekli ön ek de sayılmalı — ön ek değişince eski kayıtlar kaybolmaz.
+      // ⚠️ Ön ek KOŞUM BAŞINA taze: sabit bir damga ikinci koşumda `docNo @unique`
+      // çakışması verirdi (`DAMGA`nın ilk 6 karakteri her koşumda AYNI: "ZTEST-").
+      const emekliOnek = `Z${String(Date.now()).slice(-5)}`;
+      fixtureInvoices.push(
+        (
+          await prisma.invoice.create({
+            data: { docNo: `${emekliOnek}0001`.slice(0, 32), type: "SALES", cariId: cari.id, issueDate: new Date() },
+            select: { id: true },
+          })
+        ).id,
+      );
+      const oncesi = (await seriesImpactCount("invoiceSales")) ?? -1;
+      await prisma.numberSeries.update({
+        where: { key: "invoiceSales" },
+        data: { retiredPrefixes: [emekliOnek] },
+      });
+      // ⚠️ `invalidate…` YETMEZ ve bu ÖLÇÜLDÜ (ilk yazımda ❌ verdi): geçersiz
+      // önbellekte senkron okuma TOHUMA düşer (beyanlı fail-safe), yani DB'ye
+      // yazdığımız emekli ön eki GÖRMEZ. Tazeleme AWAIT edilir.
+      await refreshNumberSeriesCache();
+      const sonrasi = (await seriesImpactCount("invoiceSales")) ?? -1;
+      await prisma.numberSeries.update({ where: { key: "invoiceSales" }, data: { retiredPrefixes: [] } });
+      await refreshNumberSeriesCache();
+      check("§4c ⭐ EMEKLİ ön ekle yazılmış kayıt da bu serinin sayısına girer",
+        sonrasi === oncesi + 1, `${oncesi} → ${sonrasi}`);
+    }
+
     // ── §5 Önizleme sunucuda + biçim kapısı ───────────────────────────────
     const fmt = resolveSeriesFormat("packingLotCode");
     check("§5 önizleme serinin kendi biçimiyle kuruluyor",
@@ -212,6 +346,16 @@ async function main(): Promise<void> {
     if (fixtureGroups.length > 0) {
       await prisma.packingGroup.deleteMany({ where: { id: { in: fixtureGroups } } });
     }
+    // ⚠️ SIRA: fatura ÖNCE (cari `onDelete: Restrict`), cari SONRA.
+    if (fixtureInvoices.length > 0) {
+      await prisma.invoice.deleteMany({ where: { id: { in: fixtureInvoices } } });
+    }
+    if (fixtureCari) await prisma.cariAccount.delete({ where: { id: fixtureCari } });
+    // Emekli ön ek sondası satırı geri yazar, ama sonda ortasında düşülebilir.
+    await prisma.numberSeries.updateMany({
+      where: { key: "invoiceSales", retiredPrefixes: { isEmpty: false } },
+      data: { retiredPrefixes: [] },
+    });
     // Bu bekçi hiçbir seriyi BAŞARIYLA değiştirmez (hepsi kapıda durur), ama
     // negatif sonda kolları kapıları kaldırabilir ⇒ damga kalmış olabilir.
     const damgalilar = await prisma.numberSeries.findMany({

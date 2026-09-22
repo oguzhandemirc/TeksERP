@@ -110,8 +110,16 @@ export interface NumberSeriesCatalogEntry {
      * `p.rollReturn.fields.id` DESTEKLİYOR). Bu yüzden katalog yüklemin ADINI
      * yazar, gerçek yüklemi servis kurar. Serbest nesne olsaydı, katalogda
      * çalışmayan bir `where` sessizce yanlış sayı üretirdi.
+     *
+     * · `belge-capasi` — tekil kayıt ya da grup lideri (iade belgesi).
+     * · `seri-onekli`  — AYNI TABLOYU BİRDEN ÇOK SERİ paylaşıyor; sayım yalnız
+     *   BU serinin ön ekiyle (emekli ön ekler dahil) başlayan kodları sayar.
+     *   Beyansız bırakılırsa düz `count(*)` dört fatura serisinin TOPLAMINI
+     *   basar ve cümle "bugüne kadarki N satış faturası" derken yalan söyler —
+     *   `null` değil, YANLIŞ bir sayı; bu yüzden ölçüldüğü yerde (bekçi
+     *   `test_number_series_panel §4`) paylaşım varsa beyan ZORUNLUDUR.
      */
-    kapsam?: "belge-capasi";
+    kapsam?: "belge-capasi" | "seri-onekli";
   };
 }
 
@@ -260,17 +268,97 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   { key: "freeDocument", label: "Serbest belge no", seedPrefix: "SB", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
 
   // ── Finans ─────────────────────────────────────────────────────────────────
-  { key: "invoiceSales", label: "Satış faturası no", seedPrefix: "SF", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "invoicePurchase", label: "Alış faturası no", seedPrefix: "AF", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "invoiceSalesReturn", label: "Satış iade faturası no", seedPrefix: "SI", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "invoicePurchaseReturn", label: "Alış iade faturası no", seedPrefix: "AI", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "paymentIn", label: "Tahsilat no", seedPrefix: "TH", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "paymentOut", label: "Ödeme no", seedPrefix: "OD", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  {
+    key: "invoiceSales",
+    countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
+    label: "Satış faturası no",
+    seedPrefix: "SF",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
+  {
+    key: "invoicePurchase",
+    countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
+    label: "Alış faturası no",
+    seedPrefix: "AF",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
+  {
+    key: "invoiceSalesReturn",
+    countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
+    label: "Satış iade faturası no",
+    seedPrefix: "SI",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
+  {
+    key: "invoicePurchaseReturn",
+    countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
+    label: "Alış iade faturası no",
+    seedPrefix: "AI",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
+  {
+    key: "paymentIn",
+    countTable: { model: "payment", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
+    label: "Tahsilat no",
+    seedPrefix: "TH",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
+  {
+    key: "paymentOut",
+    countTable: { model: "payment", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
+    label: "Ödeme no",
+    seedPrefix: "OD",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
   { key: "cashTransaction", label: "Kasa fiş no", seedPrefix: "KH", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "chequeReceived", label: "Alınan çek no", seedPrefix: "CKA", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "chequeIssued", label: "Verilen çek no", seedPrefix: "CKV", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "noteReceived", label: "Alınan senet no", seedPrefix: "SNA", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "noteIssued", label: "Verilen senet no", seedPrefix: "SNV", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  {
+    key: "chequeReceived",
+    countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
+    label: "Alınan çek no",
+    seedPrefix: "CKA",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
+  {
+    key: "chequeIssued",
+    countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
+    label: "Verilen çek no",
+    seedPrefix: "CKV",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
+  {
+    key: "noteReceived",
+    countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
+    label: "Alınan senet no",
+    seedPrefix: "SNA",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
+  {
+    key: "noteIssued",
+    countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
+    label: "Verilen senet no",
+    seedPrefix: "SNV",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
   { key: "chequeDeliveryNote", label: "Çek teslim bordro no", seedPrefix: "BRD", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "reconciliationLetter", label: "Mutabakat mektubu no", seedPrefix: "MBT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
 
