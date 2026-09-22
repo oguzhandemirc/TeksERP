@@ -11,13 +11,17 @@
 //   §7 Tek kaynak: biçimlendirici `utils/code-format`ı yalnız servis import eder
 //   §8 INFIX (top barkodunun faz harfi) tarih ile sıra ARASINDA eşleşir
 //   §9 Okutulan serilerin TOHUM ön ekleri birbirinin başlangıcı DEĞİL
+//  §10 SAYACIN KAPSAMI: biçim değişince sayaç eski rejimin kodlarını SAYMAZ,
+//      ürettiği kod var olanla ÇAKIŞMAZ, ve hazır olmayan seri DÜZENLENEMEZ
 // ⭐ Negatif sonda (2026-09-22, ölçüldü): katalogda `sack` ön ekini "CX" yapınca §1 ❌;
 //    `assertSeriesFormatAllowed`tan çakışma döngüsü silinince §3 ❌; `matchesSeries`teki
 //    `\d{digits,}` → `\d{digits}` yapılınca §5 ❌; §7'de servise ikinci import eklenince ❌;
 //    katalogdaki `roll.infix` silinince §8 ❌ (6 iddia) ve `matchesSeries`ten
 //    `${infix}` çıkarılınca §8 ❌ (4 iddia); ikisinde de geri alınca 34/34 yeşil.
 //    Kataloğa ön eki `CVX` olan geçici bir `scanned` seri eklenince §9 ❌1 (+ §1 ❌2,
-//    katalog büyüdüğü için — beklenen).
+//    katalog büyüdüğü için — beklenen). §10 ÜÇ KOLLU: `nextSeriesNo`tan kapsam
+//    (`since`) filtresi kalkınca ❌ · çakışma atlama döngüsü kalkınca ❌ ·
+//    `updateSeriesFormat`taki `scopedCounter` kapısı kalkınca ❌.
 // Çalıştır: npx tsx scripts/test_number_series.ts
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
@@ -31,6 +35,7 @@ import {
   resolveSeriesFormat,
   seriesClassifierTable,
   seriesPrefix,
+  seriesSeqFrom,
   type NumberSeriesFormat,
 } from "../src/services/number-series.service";
 import { buildDailyCode, dailyCodePrefix } from "../src/utils/code-format";
@@ -293,6 +298,29 @@ check("§9 ⭐ tohum ön ekleri okutma uzayında çakışmıyor (sınıflandırm
   cakisanCiftler.length === 0, cakisanCiftler.join(" · ") || `${karsilastirilanCift} çift temiz`);
 check("§9 körlük zemini: karşılaştırma gerçekten koştu", karsilastirilanCift >= 30,
   `${okutulanOnekler.length} ön ek · ${karsilastirilanCift} çift`);
+
+// ── §10 Sayacın kapsamı — ARIZANIN KENDİSİ (Faz C ön koşulu C0) ───────────
+// ⚠️ BU DOSYA DB'SİZ: §10 burada yalnız arızanın GERÇEK olduğunu ve "matchesSeries
+// ile ele" sahte çözümünün neden işlemediğini kilitler. Davranışın kendisi
+// (kapsam uygulanıyor mu · çakışma atlanıyor mu · hazır olmayan seri reddediliyor
+// mu) `formatChangedAt` satırını GERÇEKTEN yazmayı gerektirir ⇒ ayrı DB'li bekçi:
+// `scripts/test_number_series_scope.ts`. Bölme bilinçli; ikisi birbirine atıf yapar.
+const ESKI_KODLAR = ["CV2209260001", "CV2209260002", "CV2209260003"];
+const cvTarihsiz: NumberSeriesFormat = {
+  prefix: "CV", dateSegment: "NONE", digits: 4, separator: "", retiredPrefixes: [],
+};
+
+check("§10a bugünkü (tarihli) biçimde sayaç doğru: eski üç kod → sıra 4",
+  seriesSeqFrom(ESKI_KODLAR, dailyCodePrefix("CV", AT)) === 4);
+
+const tarihsizBas = seriesPrefix(cvTarihsiz, AT);
+const tarihsizSira = seriesSeqFrom(ESKI_KODLAR, tarihsizBas);
+check("§10b ⭐ ARIZA GERÇEK: tarih segmenti düşünce sabit baş kısalır ve eski kodlar sayaca girer",
+  tarihsizBas === "CV" && tarihsizSira === 2_209_260_004,
+  `sabit baş "${tarihsizBas}" → sıra ${tarihsizSira} (beklenen 4 değil)`);
+check("§10b ⭐ `matchesSeries` bu kodları ELEYEMEZ — 'matchesSeries ile filtrele' SAHTE çözümdür",
+  ESKI_KODLAR.every((k) => matchesSeries(cvTarihsiz, k)),
+  "hane taşması kuralı gereği on haneli kuyruk da meşru, ve bu DOĞRU");
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

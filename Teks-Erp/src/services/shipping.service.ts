@@ -242,12 +242,15 @@ const SHIPPABLE_ROLL_WHERE = {
 // `export` ETME: modül-private kalmalı — export edilirse başka servisler tx'siz
 // çağırabilir ve "tx içinde global client" sorunu başka dosyada yeniden doğar.
 async function nextShipmentNo(tx: Prisma.TransactionClient): Promise<string> {
+  // `createdAt` DE getirilir: sayacın kapsamı "bu biçim yürürlüğe girdikten sonra
+  // doğanlar"dır (`number-series.service` C0). Sorgu kümesi DEĞİŞMEDİ — filtreyi
+  // servis uygular, çünkü çakışma atlaması TÜM kümeye bakmak zorunda.
   return nextSeriesNo("shipment", async (prefix) => {
     const todays = await tx.shipment.findMany({
       where: { shipmentNo: { gte: prefix, startsWith: prefix } },
-      select: { shipmentNo: true },
+      select: { shipmentNo: true, createdAt: true },
     });
-    return todays.map((s) => s.shipmentNo);
+    return todays.map((s) => ({ code: s.shipmentNo, createdAt: s.createdAt }));
   });
 }
 
@@ -255,9 +258,9 @@ async function nextSackNo(tx: Prisma.TransactionClient): Promise<string> {
   return nextSeriesNo("sack", async (prefix) => {
     const todays = await tx.sack.findMany({
       where: { sackNo: { gte: prefix, startsWith: prefix } },
-      select: { sackNo: true },
+      select: { sackNo: true, createdAt: true },
     });
-    return todays.map((s) => s.sackNo);
+    return todays.map((s) => ({ code: s.sackNo, createdAt: s.createdAt }));
   });
 }
 

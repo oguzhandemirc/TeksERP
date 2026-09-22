@@ -45,6 +45,20 @@ export interface NumberSeriesCatalogEntry {
    * `number_series` tablosunda değil burada, kodda yaşar.
    */
   infix?: { re: string; aciklama: string };
+  /**
+   * SAYACIN KAPSAMI BİÇİM DEĞİŞİMİNE HAZIR MI? (Faz C ön koşulu C0)
+   *
+   * ⚠️ KONFİGÜRASYON SINIRI, üretim sınırı DEĞİL: bu alan yoksa serinin biçimi
+   * PANELDEN DEĞİŞTİRİLEMEZ (`updateSeriesFormat` 400
+   * `NUMBER_SERIES_COUNTER_NOT_SCOPED`), ama numara üretimi bugünkü gibi sürer.
+   * Ters kurgu — üretimde fail-closed — çuvalı açılamaz hâle getirirdi; asıl
+   * engellenmesi gereken RİSKLİ AYAR DEĞİŞİKLİĞİDİR.
+   *
+   * Alan YOKSA üçüncü sonuç geçerlidir: *ölçülmedi / çağrı yeri hazır değil.*
+   * `durum` iki hazır hâli ayırır ve `not` GEREKÇEYİ taşır — beyan burada yaşar,
+   * commit mesajında değil, çünkü okunması gereken yer burasıdır.
+   */
+  scopedCounter?: { durum: "hazir" | "sayac-yok"; not: string };
 }
 
 const D = "DDMMYY" as NumberSeriesDateSegment;
@@ -78,16 +92,53 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
       "Kart no = iş emri no (tek kod kuralı) ve eski `RK` kartları hâlâ sahada; ön ek Faz B (sunucu sınıflandırması) inmeden açılmaz.",
   },
   { key: "swatch", label: "Kartela kart no", seedPrefix: "KRT", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "SWATCH" },
-  { key: "sack", label: "Çuval no", seedPrefix: "CV", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "SACK" },
-  { key: "shipment", label: "Sevkiyat no", seedPrefix: "SVK", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "SHIPMENT" },
+  {
+    key: "sack",
+    label: "Çuval no",
+    seedPrefix: "CV",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+    kind: "SACK",
+    scopedCounter: { durum: "hazir", not: "`shipping.service.nextSackNo` zengin biçime geçirildi (kod + createdAt)." },
+  },
+  {
+    key: "shipment",
+    label: "Sevkiyat no",
+    seedPrefix: "SVK",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+    kind: "SHIPMENT",
+    scopedCounter: { durum: "hazir", not: "`shipping.service.nextShipmentNo` zengin biçime geçirildi." },
+  },
   { key: "subcontractorDispatch", label: "Fason sevk belge no", seedPrefix: "FS", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "DISPATCH_DOC" },
   { key: "subcontractorReceipt", label: "Fason kabul belge no", seedPrefix: "FK", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "DISPATCH_DOC" },
   { key: "kartelaDispatch", label: "Kartela sevk belge no", seedPrefix: "KS", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "DISPATCH_DOC" },
   { key: "kartelaReceipt", label: "Kartela kabul belge no", seedPrefix: "KK", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "DISPATCH_DOC" },
 
   // ── Sevkiyat ailesi (Faz C'de panele açılan küme) ──────────────────────────
-  { key: "packingLotCode", label: "Sevk partisi kodu", seedPrefix: "PRT", seedDateSegment: YYMM, seedDigits: 4, seedSeparator: "-" },
-  { key: "packingLotName", label: "Sevk partisi adı", seedPrefix: "P", seedDateSegment: NONE, seedDigits: 1, seedSeparator: "-" },
+  {
+    key: "packingLotCode",
+    label: "Sevk partisi kodu",
+    seedPrefix: "PRT",
+    seedDateSegment: YYMM,
+    seedDigits: 4,
+    seedSeparator: "-",
+    scopedCounter: { durum: "hazir", not: "`helpers/packing-group.nextPackingGroupCodeTx` zengin biçime geçirildi." },
+  },
+  {
+    key: "packingLotName",
+    label: "Sevk partisi adı",
+    seedPrefix: "P",
+    seedDateSegment: NONE,
+    seedDigits: 1,
+    seedSeparator: "-",
+    scopedCounter: {
+      durum: "sayac-yok",
+      not: "Adın sırası sayaçtan DEĞİL grubun kendi sırasından gelir (`formatPackingGroupName(seq)`); biçim değişimi hiçbir sayacı bozamaz.",
+    },
+  },
   {
     key: "returnDoc",
     label: "İade belge no",

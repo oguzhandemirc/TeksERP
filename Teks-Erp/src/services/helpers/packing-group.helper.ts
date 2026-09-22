@@ -55,9 +55,9 @@ export async function nextPackingGroupCodeTx(tx: Prisma.TransactionClient, at: D
   return nextSeriesNo("packingLotCode", async (full) => {
     const rows = await tx.packingGroup.findMany({
       where: { code: { gte: full, startsWith: full } },
-      select: { code: true },
+      select: { code: true, createdAt: true },
     });
-    return rows.map((r) => r.code);
+    return rows.map((r) => ({ code: r.code, createdAt: r.createdAt }));
   }, at);
 }
 

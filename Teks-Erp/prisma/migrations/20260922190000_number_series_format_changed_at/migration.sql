@@ -1,0 +1,13 @@
+-- NUMBER SERIES — SAYACIN KAPSAM DAMGASI (Faz C ön koşulu C0, 2026-09-22)
+-- Yalnız EKLER: tek nullable kolon. Mevcut satırlara dokunmaz, geriye doldurma YOK.
+--
+-- NEDEN (ölçüldü): sayaç adayları `startsWith(sabit baş)` ile toplanıyor. Tarih
+-- segmenti düşerse sabit baş kısalır (`CV220926` → `CV`) ve ESKİ rejimin kodları
+-- sayaca girer: `CV2209260001` varken sıradaki sıra 4 değil 2.209.260.004 olur.
+-- `matchesSeries` bunu ELEYEMEZ — hane taşması kuralı gereği on haneli kuyruğu da
+-- meşru sayar (ve bu doğrudur).
+--
+-- ⇒ Sayacın kapsamı "bu BİÇİM yürürlüğe girdikten sonra doğan kodlar"dır. Damga
+-- her biçim değişiminde tazelenir; NULL = hiç değişmemiş seri ⇒ bugünkü davranış
+-- BİREBİR sürer (kapsam daraltması uygulanmaz).
+ALTER TABLE "number_series" ADD COLUMN "formatChangedAt" TIMESTAMPTZ;

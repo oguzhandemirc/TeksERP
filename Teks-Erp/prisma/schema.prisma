@@ -5080,6 +5080,12 @@ model NumberSeries {
   /// false = biçimi panelden değiştirilemez (fiziksel plakaya/çözümlenen yapıya bağlı).
   editable Boolean @default(true)
 
+  /// Biçimin SON değiştiği an — sayacın KAPSAM sınırı. Sıradaki numara yalnız bu
+  /// andan SONRA doğan kodlara bakar; eski rejimin kodları sayaca girmez
+  /// (`CV220926…` varken tarih segmenti düşerse sıra 2.209.260.004 olurdu).
+  /// NULL = hiç değişmemiş seri ⇒ bugünkü davranış birebir sürer.
+  formatChangedAt DateTime? @db.Timestamptz
+
   updatedById String? @db.Uuid
   updatedBy   User?   @relation(fields: [updatedById], references: [id])
 
