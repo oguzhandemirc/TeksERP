@@ -75,12 +75,13 @@ import {
   fasonNoteLabel,
   trLabel,
 } from '../../../utils/labels';
+import { useScanClassifier } from '../../../hooks/useScanSeries';
 
 // Barkod tipi sezgisi — yanlış alana okutmayı backend 404'üne güvenmeden anında,
-// net mesajla yakalar. Refakat kartı "İE" (= iş emri no; eski kartlar "RK"), top
-// (rulo) "T" + rakam ile başlar; çakışmaz. Yalnızca KESİN ters tipi reddederiz.
-const looksLikeRollBarcode = (code: string) => /^T\d/i.test(code.trim());
-const looksLikeCardBarcode = (code: string) => /^(IE|RK)/i.test(code.trim());
+// net mesajla yakalar. Tür SUNUCU TABLOSUNDAN gelir (ön ek tablette sabit
+// değil); emekliye ayrılmış kart ön eki de tabloda taşındığı için tanınır.
+// ⚠️ Yalnızca KESİN ters tipi reddederiz: tanınmayan kod (UNKNOWN) reddedilmez,
+// kararı backend verir — yanlış dala düşmektense bir adım fazla gitmek yeğdir.
 
 // Android LMK: OS uzun süre arka planda bırakılan uygulamayı öldürür.
 // Form taslağını AsyncStorage'a yazarak uygulama yeniden açılınca geri yükleriz.
@@ -107,6 +108,12 @@ interface ScannedRoll {
 }
 
 export default function FasonSevkScreen() {
+  // Barkod türü SUNUCU TABLOSUNDAN — ön ek tablette sabit değil, emekli ön ek
+  // de tabloda taşındığı için eski kartlar tanınmaya devam eder.
+  const { classify } = useScanClassifier();
+  const looksLikeRollBarcode = (code: string) => classify(code).kind === 'ROLL';
+  const looksLikeCardBarcode = (code: string) => classify(code).kind === 'TRAVELER_CARD';
+
   const qc = useQueryClient();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'FasonSevk'>>();

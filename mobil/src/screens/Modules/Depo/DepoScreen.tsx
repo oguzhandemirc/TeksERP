@@ -53,6 +53,7 @@ import {
 import type { Roll } from '../../../types/models';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import { KartelaStockReduceModal } from './KartelaStockReduceModal';
+import { useScanClassifier } from '../../../hooks/useScanSeries';
 
 const PAGE_SIZE = 50;
 
@@ -121,6 +122,9 @@ interface RollListItem extends Roll {
 }
 
 export default function DepoScreen() {
+  // Barkod türü SUNUCU TABLOSUNDAN — ön ek tablette sabit değil.
+  const { classify } = useScanClassifier();
+
   const device = useDeviceType();
   const isPhone = device === 'phone';
   useLandscapeLock(!isPhone); // tablet yatay
@@ -304,9 +308,10 @@ export default function DepoScreen() {
       return;
     }
     // Sekme = listeleme bağlamı; barkod okutma = nokta sorgu, sekmeden bağımsız.
-    // Prefix sabit: KRT → Kartela, T{rakam} → Top. Operatör Tümü sekmesindeyken
+    // Tür SUNUCU TABLOSUNDAN çözülür (ön ek tablette sabit değil): kartela →
+    // kartela detayı, kalan her şey top yolu. Operatör Tümü sekmesindeyken
     // kartela barkodu okutursa da kartela detayı açılır.
-    const isSwatchBarcode = /^KRT/i.test(barcode);
+    const isSwatchBarcode = classify(barcode).kind === 'SWATCH';
     try {
       if (isSwatchBarcode) {
         const res = await swatchService.getByBarcode(barcode);

@@ -30,6 +30,9 @@ export const BOOTSTRAP_QUERY_KEYS: readonly (readonly string[])[] = [
   ['auth', 'mobile-users'],
   ['auth', 'login-methods'],
   ['feature-flags'],
+  // Okutma seri tablosu: biçim meta verisi, kullanıcıya özel DEĞİL. Diske
+  // yazılır ki tablet ağsız açıldığında da barkod türünü çözebilsin.
+  ['scan-series'],
   ['device', 'status'],
   ['device', 'assignment-required'],
 ];

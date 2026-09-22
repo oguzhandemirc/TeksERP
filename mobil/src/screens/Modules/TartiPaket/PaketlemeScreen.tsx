@@ -54,7 +54,8 @@ import {
 import { usePermissions } from '../../../hooks/usePermission';
 import type { MainStackParamList } from '../../../navigation/types';
 import { foldSearchText } from '../../../utils/searchFold';
-import { upperTr } from '../../../utils/trCase';
+import { useScanClassifier } from '../../../hooks/useScanSeries';
+import { resolvePoolScan } from './resolvePoolScan';
 
 // =============================================================================
 // Paketleme — ÇUVAL DEPO akış (MÜŞTERİ-BAZLI). Param: { customerId, branchId? }.
@@ -70,9 +71,6 @@ import { upperTr } from '../../../utils/trCase';
 // =============================================================================
 
 const kgText = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
-// Çuval kodu mu (CV + GGAAYY + NNNN)? Çuval etiketi basıldığı için operatör bunu
-// top okutma alanına okutabilir — top barkodu (T…H/F…) ile ayırt edilir.
-const isSackCode = (code: string) => /^CV\d{10}$/i.test(code.trim());
 // Tartı zamanı — yalnız saat:dakika (tarih kartta gürültü; çuval aynı gün tartılır).
 const hhmm = (iso: string) => {
   const d = new Date(iso);
@@ -381,6 +379,11 @@ export default function PaketlemeScreen() {
     },
   });
 
+  // Barkod türü SUNUCU TABLOSUNDAN (biçim tablette sabit değil); tablo yoksa
+  // yedek tablo devreye girer ve okutma çalışmaya devam eder.
+  const { classify } = useScanClassifier();
+  const isSackKind = (code: string) => classify(code).kind === 'SACK';
+
   // FIFO okuma kuyruğu — meşgulken gelen okumalar sırayla işlenir (yavaş ağda düşme yok).
   const pendingScansRef = useRef<string[]>([]);
   const processingCodeRef = useRef<string | null>(null);
@@ -392,27 +395,27 @@ export default function PaketlemeScreen() {
     scanBusy.current = true;
     processingCodeRef.current = code;
     try {
-      // ÇUVAL BARKODU (CV+GGAAYY+NNNN) okutulduysa bunu bir TOP sanıp backend'e
-      // göndermek yanıltıcı "Top bulunamadı" verir. Çuval etiketi basılabildiği
-      // için operatör kaçınılmaz olarak bunu okutacak → burada yakalanır ve o
-      // çuval AKTİF yapılır (tamamen istemci; liste ve setActiveSack zaten elde).
-      if (isSackCode(code)) {
-        const target = sacksRef.current.find(
-          (s) => upperTr(s.sackNo) === upperTr(code),
-        );
-        if (target) {
-          setActiveSack(target.id);
-          signalScan('accept');
-          Toast.show({ type: 'success', text1: 'Çuval seçildi', text2: `${target.sackNo} artık aktif` });
-        } else {
-          signalScan('reject');
-          Toast.show({
-            type: 'error',
-            text1: 'Çuval bu havuzda değil',
-            text2: `${code} bu müşterinin depo çuvalları arasında yok (sevk edilmiş olabilir).`,
-            visibilityTime: 6000,
-          });
-        }
+      // Çuval etiketi basılabildiği için operatör onu top alanına okutacak;
+      // top sanıp backend'e göndermek yanıltıcı "Top bulunamadı" verir.
+      // ⚠️ Karar `resolvePoolScan`ta ve sırası ÖNEMLİ: önce HAVUZDA aranır,
+      // sonra sınıflandırmaya bakılır — elle kod verilmiş çuval (`manualSackNo`,
+      // ör. "A-17") seri biçiminin dışındadır ve hiçbir sınıflandırıcı onu
+      // tanıyamaz; arama önce koştuğu için yine de bulunur.
+      const karar = resolvePoolScan(code, sacksRef.current, isSackKind);
+      if (karar.action === 'select-sack') {
+        setActiveSack(karar.sack.id);
+        signalScan('accept');
+        Toast.show({ type: 'success', text1: 'Çuval seçildi', text2: `${karar.sack.sackNo} artık aktif` });
+        return;
+      }
+      if (karar.action === 'sack-not-in-pool') {
+        signalScan('reject');
+        Toast.show({
+          type: 'error',
+          text1: 'Çuval bu havuzda değil',
+          text2: `${code} bu müşterinin depo çuvalları arasında yok (sevk edilmiş olabilir).`,
+          visibilityTime: 6000,
+        });
         return;
       }
       const sackId = await ensureActiveSack();
