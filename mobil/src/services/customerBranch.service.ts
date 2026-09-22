@@ -13,6 +13,8 @@ export interface CustomerBranch {
   contactPhone: string | null;
   notes: string | null;
   isActive: boolean;
+  /** Şubenin sevk yönü (salt okuma; zincir sunucuda çözülür). */
+  defaultDestination?: 'DOMESTIC' | 'EXPORT' | null;
 }
 
 export const customerBranchService = {

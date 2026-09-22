@@ -1,6 +1,8 @@
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
+import { Controller } from "react-hook-form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   branchFormDefaults,
   branchFormSchema,
@@ -29,6 +31,7 @@ export function BranchFormDialog({ open, onOpenChange, initial, onSubmit, isSubm
         contactPhone: initial.contactPhone ?? "",
         notes: initial.notes ?? "",
         isActive: initial.isActive,
+        defaultDestination: initial.defaultDestination ?? null,
       }
     : branchFormDefaults;
 
@@ -54,6 +57,29 @@ export function BranchFormDialog({ open, onOpenChange, initial, onSubmit, isSubm
               <Input id="code" placeholder="Opsiyonel" {...form.register("code")} />
             </FormField>
           </div>
+
+          {/* Şubenin sevk yönü — doluysa bu şubeye giden sevkiyatta carinin yönünün önüne geçer. */}
+          <FormField label="Sevk yönü" error={form.formState.errors.defaultDestination}>
+            <Controller
+              control={form.control}
+              name="defaultDestination"
+              render={({ field }) => (
+                <Select
+                  value={field.value ?? "NONE"}
+                  onValueChange={(v) => field.onChange(v === "NONE" ? null : (v as "DOMESTIC" | "EXPORT"))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">Carinin yönü geçerli</SelectItem>
+                    <SelectItem value="DOMESTIC">Yurtiçi</SelectItem>
+                    <SelectItem value="EXPORT">Yurtdışı</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </FormField>
 
           <FormField label="Adres" htmlFor="address" error={form.formState.errors.address}>
             <textarea

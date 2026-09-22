@@ -22,6 +22,17 @@ export interface ResolvedShipmentDestination {
   source: ShipmentDestinationSource | null;
 }
 
+/**
+ * Gövdeden gelen yön girdisi (şube formu, satır-içi şube): alan yok → undefined
+ * (dokunma) · null/"" → null (yön yok) · DOMESTIC|EXPORT → değer · başka her şey 400.
+ */
+export function parseDestinationInput(raw: unknown, label: string): ShipmentDestination | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  if (raw === "DOMESTIC" || raw === "EXPORT") return raw;
+  throw AppError.badRequest(`${label}: Yurtiçi (DOMESTIC) ya da Yurtdışı (EXPORT) olmalı`);
+}
+
 /** Saf zincir — DB'siz; `resolveShipmentDestination` bunu çağırır, kopyası yazılmaz. */
 export function pickShipmentDestination(input: {
   branchDestination: ShipmentDestination | null | undefined;

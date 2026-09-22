@@ -5,6 +5,7 @@
 // Sevkiyat oluştururken hedef şube olarak seçilir.
 // =============================================================================
 
+import { parseDestinationInput } from "./helpers/shipment-destination.helper";
 import prisma from "../lib/prisma";
 import { normalizeDisplayName } from "./helpers/name-normalize.helper";
 import { AuditService } from "./audit.service";
@@ -89,6 +90,8 @@ export interface CustomerBranchInput {
   contactPhone?: string | null;
   notes?: string | null;
   isActive?: boolean;
+  /** Şubenin sevk yönü — `parseDestinationInput`tan geçer. */
+  defaultDestination?: unknown;
 }
 
 export class CustomerBranchService {
@@ -129,6 +132,7 @@ export class CustomerBranchService {
     const code = typeof data.code === "string" ? data.code.trim() || null : (data.code ?? null);
     await assertBranchNameAvailable(customerId, name);
     await assertBranchCodeAvailable(customerId, code);
+    const defaultDestination = parseDestinationInput(data.defaultDestination, "Şube sevk yönü") ?? null;
 
     const created = await prisma.customerBranch.create({
       data: {
@@ -142,6 +146,7 @@ export class CustomerBranchService {
         contactPhone: data.contactPhone ?? null,
         notes: data.notes ?? null,
         isActive: data.isActive ?? true,
+        defaultDestination,
       },
     });
 
@@ -176,6 +181,8 @@ export class CustomerBranchService {
           ? data.code.trim() || null
           : (data.code ?? null);
 
+    const defaultDestination = parseDestinationInput(data.defaultDestination, "Şube sevk yönü");
+
     // Ad/kod-mükerrer kontrolü yalnız gerçekten değişirken (tarihsel mükerrer
     // kayıt düzenlenebilir kalsın).
     if (name !== undefined && foldNameForCompare(name) !== foldNameForCompare(existing.name)) {
@@ -202,6 +209,8 @@ export class CustomerBranchService {
           data.contactPhone === undefined ? undefined : data.contactPhone,
         notes: data.notes === undefined ? undefined : data.notes,
         isActive: data.isActive,
+        // Planlı sevkiyatlar kendi yönünü dondurdu; şube yönü değişince onlar değişmez.
+        defaultDestination,
       },
     });
 

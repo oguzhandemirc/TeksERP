@@ -10,6 +10,8 @@ export interface CustomerBranch {
   contactPhone: string | null;
   notes: string | null;
   isActive: boolean;
+  /** Şubenin sevk yönü; doluysa bu şubeye giden sevkiyatta carinin yönünün önüne geçer. */
+  defaultDestination: "DOMESTIC" | "EXPORT" | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -14,7 +14,7 @@ const service = new CustomerBranchService();
 
 // Uzunluk sınırları DB kolonlarıyla birebir: name VARCHAR(100) / code VARCHAR(50)
 // (aşan girdi P2000 → jenerik 400 yerine alan-adlı zod hatası alsın).
-const createSchema = z.object({
+export const branchCreateSchema = z.object({
   code: z.string().max(50).optional().nullable(),
   name: z.string().min(1, "Şube adı zorunludur").max(100),
   address: z.string().max(500).optional().nullable(),
@@ -24,9 +24,11 @@ const createSchema = z.object({
   contactPhone: z.string().max(40).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
   isActive: z.boolean().optional(),
+  // Şubenin sevk yönü; değer kümesi servisteki `parseDestinationInput`ta (Türkçe 400).
+  defaultDestination: z.unknown().optional(),
 });
 
-const updateSchema = createSchema.partial();
+export const branchUpdateSchema = branchCreateSchema.partial();
 
 const router = Router({ mergeParams: true });
 
@@ -79,7 +81,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const customerId = req.params.customerId as string;
-      const body = createSchema.parse(req.body);
+      const body = branchCreateSchema.parse(req.body);
       const result = await service.create(customerId, body, req.user?.userId);
       res.status(201).json(result);
     } catch (error) {
@@ -102,7 +104,7 @@ router.patch(
   requirePermission("customer:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const body = updateSchema.parse(req.body);
+      const body = branchUpdateSchema.parse(req.body);
       const result = await service.update(
         req.params.customerId as string, // F204: müşteri-kapsamlı guard
         req.params.branchId as string,

@@ -10,23 +10,11 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { BranchFormDialog } from "./BranchFormDialog";
 import { customerBranchService } from "./branchService";
 import type { CustomerBranch, CustomerBranchPayload } from "./branch-types";
-import type { BranchFormValues } from "./branch-schema";
+import { branchFormToPayload as toPayload, type BranchFormValues } from "./branch-schema";
 
 interface Props {
   customerId: string;
 }
-
-const toPayload = (v: BranchFormValues): Partial<CustomerBranchPayload> => ({
-  code: v.code?.trim() || null,
-  name: v.name.trim(),
-  address: v.address?.trim() || null,
-  city: v.city?.trim() || null,
-  district: v.district?.trim() || null,
-  contactName: v.contactName?.trim() || null,
-  contactPhone: v.contactPhone?.trim() || null,
-  notes: v.notes?.trim() || null,
-  isActive: v.isActive,
-});
 
 export function CustomerBranchesPanel({ customerId }: Props) {
   const qc = useQueryClient();

@@ -7,6 +7,8 @@
 import { AppError } from "../../utils/app-error";
 import { foldNameForCompare } from "./name-normalize.helper";
 import { foldCodeForCompare } from "../../utils/code-format";
+import type { ShipmentDestination } from "@prisma/client";
+import { parseDestinationInput } from "./shipment-destination.helper";
 
 /** Tek create'te izin verilen azami inline şube sayısı (kötüye kullanım seddi). */
 const MAX_INLINE_BRANCHES = 50;
@@ -22,6 +24,7 @@ interface InlineBranchData {
   contactPhone: string | null;
   notes: string | null;
   isActive: boolean;
+  defaultDestination: ShipmentDestination | null;
 }
 
 /** Opsiyonel string alanı: boş/whitespace → null, uzunluk aşımı → 400 (1-tabanlı satır no'lu). */
@@ -107,6 +110,7 @@ export function validateAndShapeBranches(raw: unknown): InlineBranchData[] | und
       contactPhone: optBranchStr(rec.contactPhone, "Telefon", 40, idx),
       notes: optBranchStr(rec.notes, "Notlar", 500, idx),
       isActive: rec.isActive === undefined ? true : Boolean(rec.isActive),
+      defaultDestination: parseDestinationInput(rec.defaultDestination, `${idx + 1}. şube: sevk yönü`) ?? null,
     };
   });
   return shaped;
