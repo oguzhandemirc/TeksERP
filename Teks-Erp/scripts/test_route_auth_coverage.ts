@@ -159,7 +159,27 @@ const EXEMPT: Record<string, string> = {
  * beyanlı; `test_boss_overview §1` her bölümü hem pozitif hem NEGATİF yönde
  * mekanik doğruluyor (tek izin yalnız kendi bölümünü açıyor mu).
  */
-const BARE_CHAIN_BASELINE = 13;
+/**
+ * ⚠️ 13 → 15 (2026-09-22, BİLİNÇLİ): `GET /api/scan/series` ve
+ * `GET /api/scan/resolve` yalnız `verifyToken` taşır — `GET /api/reason-presets`
+ * emsaliyle BİREBİR aynı gerekçe. Okutma her operatör ekranının İLK adımıdır;
+ * route satırına dar bir izin kodu yazmak, o kod atanmamış her tablette
+ * okutmayı 403'e düşürür — yani özelliğin kendisini kırar. Geniş bir kod
+ * yazmak ise izni anlamsızlaştırır.
+ *
+ * Asıl gerekçe yükün NE OLMADIĞIDIR: bu iki uç iş verisi değil BİÇİM META
+ * VERİSİ döner (ön ek · tarih segmenti · hane · infix). `/resolve` DB'ye HİÇ
+ * İNMEZ ve kaydın varlığını bile doğrulamaz — yalnız stringi sınıflandırır,
+ * yani "bu kod bir çuval kodu biçimindedir" der, "böyle bir çuval vardır"
+ * demez. Sızdırdığı tek bilgi zaten her basılı etikette okunabilen ön eklerdir.
+ *
+ * ⚠️ Bu gerekçenin taşıyıcı cümlesi ("DB'ye inmiyor") çürümeye açıktır: biri
+ * yarın "bulamadıysan `rolls`a bak" ekleyebilir ve blok sessizce yalan olur.
+ * Bu yüzden cümle bir KAPIYA bağlandı — `scripts/test_scan_series.ts §6` her
+ * koşumda `scan.service.ts` ve `scan.routes.ts` kaynağında `prisma.`/`tx.`
+ * çağrısı ve prisma import'u ARAR. Gerekçe değişirse bekçi kırmızı verir.
+ */
+const BARE_CHAIN_BASELINE = 15;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

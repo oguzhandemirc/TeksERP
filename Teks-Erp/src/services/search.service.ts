@@ -28,6 +28,7 @@ import { buildTextSearch } from "../utils/query-parser";
 import { foldCodeForCompare, normalizeScanCode } from "../utils/code-format";
 import { foldSearchTokens } from "../utils/search-fold";
 import { SEARCH_ENTITIES, type SearchEntity, type SearchEntityKey } from "../constants/search-entities";
+import { classifyScannedCode } from "./number-series.service";
 
 /** Palet satırı — `ScanResolution` ile BİLEREK aynı şekil (tek satır bileşeni). */
 export interface SearchRow {
@@ -60,15 +61,11 @@ export const MIN_TERM_LENGTH = 2;
 /** Yapıştırılan uzun metin kova başına yol×kelime kadar tarama demek. */
 const MAX_TOKENS = 4;
 
-// ── Tam-format barkodlar — `Electron/src/lib/scanner/barcode-kind.ts` ikizi ──
-// ⚠️ İki taraf ayrı ayrı yazılı çünkü backend panelin dosyasını import edemez.
-// Biçim değişirse İKİSİ birden güncellenir; bekçi eşleşmeyi ölçer.
-const EXACT_FORMATS = {
-  ROLL: /^T\d{6}[HF]\d{4}$/,
-  TRAVELER_CARD: /^(?:IE|RK)\d{10}$/,
-  SWATCH: /^KRT\d{10}$/,
-  SACK: /^CV\d{10}$/,
-} as const;
+// ── Tam-format barkodlar — artık ELLE YAZILMIYOR (2026-09-22, Faz B) ────────
+// Eskiden burada panelin `barcode-kind.ts` dosyasının elle yazılmış bir İKİZİ
+// vardı; ön ek değişince iki tarafın da güncellenmesi gerekiyordu ve biri
+// unutulursa okutma SESSİZCE yanlış dala düşüyordu. Tür artık tek kaynaktan
+// (`number-series.service.classifyScannedCode`) çözülür.
 
 function visible(entity: SearchEntity, permissions: readonly string[]): boolean {
   return entity.permissions.some((code) => matchesPermission(permissions, code));
@@ -153,7 +150,13 @@ const delegateOf = (modelName: string): any => (prisma as any)[modelName];
  */
 async function resolveExact(term: string): Promise<{ entity: string; row: SearchRow } | null> {
   const code = normalizeScanCode(term);
-  if (EXACT_FORMATS.ROLL.test(code)) {
+  // Tür SUNUCUNUN tek sınıflandırıcısından; tanınmayan kod hızlı yola girmez.
+  // ⚠️ Dal kümesi BİLEREK dört: sınıflandırıcı SHIPMENT ve DISPATCH_DOC'u da
+  // tanır ama onların hızlı yolu bugün YOK — tanınıp dalı olmayan kod fan-out'a
+  // düşer, yani bugünkü davranış bayt bayt korunur.
+  const kind = classifyScannedCode(code)?.kind ?? null;
+  if (kind === null) return null;
+  if (kind === "ROLL") {
     const roll = await prisma.roll.findFirst({
       where: { barcode: code },
       select: { id: true, barcode: true, status: true, item: { select: { name: true } } },
@@ -170,7 +173,7 @@ async function resolveExact(term: string): Promise<{ entity: string; row: Search
       };
     }
   }
-  if (EXACT_FORMATS.SACK.test(code)) {
+  if (kind === "SACK") {
     const sack = await prisma.sack.findFirst({
       where: { sackNo: code },
       select: { id: true, sackNo: true, customer: { select: { name: true } } },
@@ -182,7 +185,7 @@ async function resolveExact(term: string): Promise<{ entity: string; row: Search
       };
     }
   }
-  if (EXACT_FORMATS.SWATCH.test(code)) {
+  if (kind === "SWATCH") {
     const sw = await prisma.swatch.findFirst({
       where: { OR: [{ cardNumber: code }, { barcode: code }] },
       select: { id: true, cardNumber: true, item: { select: { name: true } } },
@@ -194,7 +197,7 @@ async function resolveExact(term: string): Promise<{ entity: string; row: Search
       };
     }
   }
-  if (EXACT_FORMATS.TRAVELER_CARD.test(code)) {
+  if (kind === "TRAVELER_CARD") {
     // Kart kodu = iş emri no; sonuç iş emrine götürür (scan-resolvers ile aynı).
     const wo = await prisma.workOrder.findFirst({
       where: { workOrderNumber: code },
@@ -278,5 +281,5 @@ export class SearchService {
 export const searchService = new SearchService();
 
 // Kod aramasında kullanılan normalizasyonu dışa ver — bekçi ikisini karşılaştırır.
-export { foldCodeForCompare, EXACT_FORMATS };
+export { foldCodeForCompare };
 export type { Prisma };

@@ -10,11 +10,14 @@
 //   §6 Tarih segmenti = sıfırlama dönemi (günlük · aylık · yıllık · hiç)
 //   §7 Tek kaynak: biçimlendirici `utils/code-format`ı yalnız servis import eder
 //   §8 INFIX (top barkodunun faz harfi) tarih ile sıra ARASINDA eşleşir
+//   §9 Okutulan serilerin TOHUM ön ekleri birbirinin başlangıcı DEĞİL
 // ⭐ Negatif sonda (2026-09-22, ölçüldü): katalogda `sack` ön ekini "CX" yapınca §1 ❌;
 //    `assertSeriesFormatAllowed`tan çakışma döngüsü silinince §3 ❌; `matchesSeries`teki
 //    `\d{digits,}` → `\d{digits}` yapılınca §5 ❌; §7'de servise ikinci import eklenince ❌;
 //    katalogdaki `roll.infix` silinince §8 ❌ (6 iddia) ve `matchesSeries`ten
 //    `${infix}` çıkarılınca §8 ❌ (4 iddia); ikisinde de geri alınca 34/34 yeşil.
+//    Kataloğa ön eki `CVX` olan geçici bir `scanned` seri eklenince §9 ❌1 (+ §1 ❌2,
+//    katalog büyüdüğü için — beklenen).
 // Çalıştır: npx tsx scripts/test_number_series.ts
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
@@ -259,6 +262,35 @@ check("§8 infix veri-sahipli DEĞİL: `number_series` şemasında böyle bir ko
     .split("model NumberSeries")[1]
     ?.split("}")[0]
     ?.includes("infix"));
+
+// ── §9 Okutma uzayında ön-ek-içinde-ön-ek YOK ──────────────────────────────
+// `classifyScannedCode` seri tablosunu SIRAYLA gezer; sıranın sonucu
+// etkilememesi "hiçbir ön ek ötekinin başlangıcı değil"e bağlıdır.
+// ⚠️ `assertSeriesFormatAllowed ③` bunu yalnız PANELDEN YAZMA yolunda ölçer —
+// katalog TOHUMLARI o kapıdan hiç geçmez, bu yüzden burada ölçülür.
+const okutulanOnekler: Array<{ key: string; prefix: string }> = [];
+for (const e of NUMBER_SERIES_CATALOG) {
+  if (!e.kind) continue;
+  const fmt = resolveSeriesFormat(e.key);
+  for (const onek of [fmt.prefix, ...fmt.retiredPrefixes]) okutulanOnekler.push({ key: e.key, prefix: onek });
+}
+const cakisanCiftler: string[] = [];
+let karsilastirilanCift = 0;
+for (let i = 0; i < okutulanOnekler.length; i++) {
+  for (let j = i + 1; j < okutulanOnekler.length; j++) {
+    const a = okutulanOnekler[i]!;
+    const b = okutulanOnekler[j]!;
+    if (a.key === b.key) continue; // aynı serinin iki ön eki aynı sonuca çözülür
+    karsilastirilanCift++;
+    if (a.prefix.startsWith(b.prefix) || b.prefix.startsWith(a.prefix)) {
+      cakisanCiftler.push(`${a.key}:${a.prefix} ↔ ${b.key}:${b.prefix}`);
+    }
+  }
+}
+check("§9 ⭐ tohum ön ekleri okutma uzayında çakışmıyor (sınıflandırma sırası bu yüzden önemsiz)",
+  cakisanCiftler.length === 0, cakisanCiftler.join(" · ") || `${karsilastirilanCift} çift temiz`);
+check("§9 körlük zemini: karşılaştırma gerçekten koştu", karsilastirilanCift >= 30,
+  `${okutulanOnekler.length} ön ek · ${karsilastirilanCift} çift`);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

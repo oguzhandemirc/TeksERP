@@ -28,7 +28,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { factoryYmd } from "../constants/time";
-import { ddmmyy, nextDailySeq } from "../utils/code-format";
+import { ddmmyy, nextDailySeq, normalizeScanCode } from "../utils/code-format";
 
 /** Biçimin veri-sahipli parçası — panelden yazılan tek şey budur. */
 export interface NumberSeriesFormat {
@@ -269,20 +269,43 @@ export interface SeriesClassifierRow {
   infix?: string;
 }
 
+function classifierRow(entry: NumberSeriesCatalogEntry): SeriesClassifierRow {
+  const fmt = resolveSeriesFormat(entry.key);
+  return {
+    key: entry.key,
+    kind: entry.kind as NumberSeriesKind,
+    prefixes: [fmt.prefix, ...fmt.retiredPrefixes],
+    dateSegment: fmt.dateSegment,
+    digits: fmt.digits,
+    separator: fmt.separator,
+    ...(fmt.infix ? { infix: fmt.infix } : {}),
+  };
+}
+
 /** İstemcilerin barkod sınıflandırması için okuduğu tablo. */
 export function seriesClassifierTable(): SeriesClassifierRow[] {
-  return NUMBER_SERIES_CATALOG.filter((e) => e.kind !== undefined).map((e) => {
-    const fmt = resolveSeriesFormat(e.key);
-    return {
-      key: e.key,
-      kind: e.kind as NumberSeriesKind,
-      prefixes: [fmt.prefix, ...fmt.retiredPrefixes],
-      dateSegment: fmt.dateSegment,
-      digits: fmt.digits,
-      separator: fmt.separator,
-      ...(fmt.infix ? { infix: fmt.infix } : {}),
-    };
-  });
+  return NUMBER_SERIES_CATALOG.filter((e) => e.kind !== undefined).map(classifierRow);
+}
+
+/**
+ * Okutulan kodun HANGİ seriye ait olduğu — emekli ön ekler dahil; tanınmazsa null.
+ *
+ * Sunucudaki TEK sınıflandırıcıdır: `/api/scan/resolve` de `search.service`in
+ * tam-format hızlı yolu da bunu çağırır (boğaz ikiz). Ön ek bir gün değişirse
+ * ikisi birden değişir; elle yazılmış ikinci bir regex tablosu geride kalmaz.
+ *
+ * Sıra sonucu ETKİLEMEZ: okutulan serilerde "biri ötekinin ön eki olamaz" kuralı
+ * `assertSeriesFormatAllowed ③` ile zaten sağlanıyor, yani bir kod en çok bir
+ * seriye uyar.
+ */
+export function classifyScannedCode(code: string): SeriesClassifierRow | null {
+  const upper = normalizeScanCode(code);
+  if (upper === "") return null;
+  for (const entry of NUMBER_SERIES_CATALOG) {
+    if (!entry.kind) continue;
+    if (matchesSeries(resolveSeriesFormat(entry.key), upper)) return classifierRow(entry);
+  }
+  return null;
 }
 
 // ── KAPI ────────────────────────────────────────────────────────────────────
