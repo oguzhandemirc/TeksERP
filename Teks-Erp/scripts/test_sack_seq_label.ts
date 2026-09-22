@@ -6,11 +6,15 @@
 //      açıksa canlı) — eski belgeler ön ek değişince değişmez
 //   §3 Sıra başlangıcı sevk kurulumunda ve sevkiyata çuval eklemede aynı okuyucudan
 //   §4 Partisiz ambalaj no: yalnız `acilista` + carili çuvalda; kilit 8035 envanterde
+//   §5 Ön ek YAZMA yüklemi dar (`/` yok), OKUMA yüklemi geniş kalır (geçmiş bozulmaz)
+//   §6 Aynı yüklem ÜÇ yüzeyde tek cevap: zod sabiti çağırır · panel deseni METİN olarak aynı
 // ⭐ Negatif sonda (2026-09-22): html'de `meta.sackSeq ?` dalı `true ?` yapılınca §2 ❌;
-//    `nextPoolPackageNoTx`'ten `!== "acilista"` kapısı silinince §4 ❌ (kaynak metni).
+//    `nextPoolPackageNoTx`'ten `!== "acilista"` kapısı silinince §4 ❌ (kaynak metni);
+//    panel desenine `/` geri konunca §6 ❌ (desen + ipucu); zod satırına regex literali
+//    geri yazılınca §6 ❌; OKUMA yüklemi yazmaya hizalanınca §5 ❌ (geçmiş bozulurdu).
 // Çalıştır: npx tsx scripts/test_sack_seq_label.ts
 // =============================================================================
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { formatSackSeqLabel, POOL_PACKAGE_NO_LOCK_NS } from "../src/services/helpers/sack-seq.helper";
 import {
@@ -89,6 +93,41 @@ const ZATEN_YOKTU = ["\\", ":", "*", "?", "[", "]"];
 check("§5 kalan altı karakter ZATEN kabul edilmiyordu (maruziyet tek karakterdi)",
   ZATEN_YOKTU.every((c) => !SHIPPING_SACK_SEQ_PREFIX_RE.test(`SP${c}`)),
   ZATEN_YOKTU.join(" "));
+
+// ── §6 ÜÇ YÜZEY, TEK CEVAP: yazma yüklemi kopyalanmaz (2026-09-22) ─────────
+// "Bu ön ek yazılabilir mi" sorusunu ÜÇ yüzey cevaplıyordu: zod şeması · servis
+// kapısı · panel alanı. Panel `/`yi kabul ederken sunucu reddediyordu ⇒ alan
+// YEŞİL görünüp "Kaydet" 400 yiyordu (ayrışan yüzey sınıfı). İkisi tek kaynağa
+// bağlandı; panel AYRI PROJE olduğu için import edemez, bu yüzden METİN ölçülür.
+const routes = readFileSync(join(SRC, "routes/feature-flag.routes.ts"), "utf-8");
+const zodLine = routes.split("\n").find((l) => l.includes("shippingSackSeqPrefix:")) ?? "";
+check("§6 zod şeması deseni KOPYALAMAZ, servis sabitini çağırır",
+  zodLine.includes("SHIPPING_SACK_SEQ_PREFIX_WRITE_RE") && !/regex\(\s*\//.test(zodLine),
+  zodLine.trim().slice(0, 90));
+
+const PANEL = join(__dirname, "../../Electron/src/pages/GeneralSettings/settings-config.ts");
+// ⚠️ ÜÇÜNCÜ SONUÇ AYRI: dosya yoksa bu ÖLÇÜLEMEDİ'dir, "uyumlu" DEĞİL — sessiz
+// atlama, kapının en çok işe yaradığı yeri süse çevirir. Bu yüzden kırmızı.
+const panelVar = existsSync(PANEL);
+check("§6 panel settings-config.ts okunabildi (yoksa ÖLÇÜLEMEDİ = kırmızı)", panelVar, PANEL);
+if (panelVar) {
+  const panelSrc = readFileSync(PANEL, "utf-8");
+  const at = panelSrc.indexOf('textKey: "shippingSackSeqPrefix"');
+  // Dilim SADECE o alanın bloğu: dosyanın tamamında `pattern:` aramak başka bir
+  // alanın desenini ölçerdi (sınırsız eşleşme).
+  const slice = at < 0 ? "" : panelSrc.slice(at, at + 1600);
+  check("§6 panelde `shippingSackSeqPrefix` serbest metin alanı var", at >= 0);
+  const panelPattern = (/^\s*pattern:\s*(\/.*\/[a-z]*),\s*$/m.exec(slice) ?? [])[1] ?? "";
+  const sunucu = `/${SHIPPING_SACK_SEQ_PREFIX_WRITE_RE.source}/${SHIPPING_SACK_SEQ_PREFIX_WRITE_RE.flags}`;
+  check("§6 ⭐ panel deseni ile YAZMA yüklemi BİREBİR aynı metin",
+    panelPattern === sunucu, `panel=${panelPattern || "(bulunamadı)"} · sunucu=${sunucu}`);
+  const hint = (/^\s*invalidHint:\s*"([^"]*)"/m.exec(slice) ?? [])[1] ?? "";
+  // Metin de sözleşmenin parçası: desen daralıp ipucu eski kalırsa kapı susar,
+  // kullanıcı hâlâ "/ yazabilirim" okur.
+  check("§6 ⭐ `invalidHint` eğik çizgiyi ARTIK SAYMAZ", hint.length > 0 && !hint.includes("/"), hint);
+  check("§6 panel yorumu okuyucuyu sunucu sabitine gönderir",
+    slice.includes("SHIPPING_SACK_SEQ_PREFIX_WRITE_RE"));
+}
 
 console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

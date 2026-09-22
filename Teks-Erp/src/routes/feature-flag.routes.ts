@@ -10,7 +10,7 @@
 
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { systemSettingService } from "../services/system-setting.service";
+import { systemSettingService, SHIPPING_SACK_SEQ_PREFIX_WRITE_RE } from "../services/system-setting.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import {
@@ -372,10 +372,12 @@ export const updateSchema = z.strictObject({
   shippingDocPackingLot: z.boolean().optional(),
   // Sevkiyat içi çuval sırası etiketi + partisiz ambalaj no rejimi (2026-09-22).
   shippingSackSeqOnDoc: z.boolean().optional(),
-  // Serbest metin (≤8): harf · rakam · - _ . / · boşluk — belgeye HTML kaçışıyla girer.
+  // Serbest metin (≤8): harf · rakam · - _ . · boşluk — belgeye HTML kaçışıyla girer.
   // ⚠️ Eğik çizgi YOK: `pdf.ipc.safeFileName` ve `dumpSheets.sheetBase` onu
   // `_`/boşluğa çevirir ⇒ iki sevkiyat AYNI dosya adına düşer (ölçüldü).
-  shippingSackSeqPrefix: z.string().max(8).regex(/^[\p{L}\p{N}\-_. ]*$/u, "Yalnız harf, rakam, - _ . ve boşluk").optional(),
+  // Desen BURADA YAZILMAZ: yazma yüklemi tek kaynaktır (servis sabiti) — aynı
+  // soruyu iki yerde cevaplamak bu turda kapattığımız ayrışan-yüzey sınıfıdır.
+  shippingSackSeqPrefix: z.string().max(8).regex(SHIPPING_SACK_SEQ_PREFIX_WRITE_RE, "Yalnız harf, rakam, - _ . ve boşluk").optional(),
   shippingSackSeqPrefixLive: z.boolean().optional(),
   shippingSackSeqStart: z.number().int().min(0).max(999).nullable().optional(),
   shippingSackSeqShowTotal: z.boolean().optional(),

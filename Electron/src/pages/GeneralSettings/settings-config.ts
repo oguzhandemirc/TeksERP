@@ -950,9 +950,13 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Belgedeki sıra etiketinin ön eki (SP1, P-1, Çuval 1). Sayı sevk anında donar; ön ek de sevk anında belgeye yazılır — sonradan değiştirmek eski belgeleri etkilemez (“eski belgeler de değişsin” açılmadıkça). Yalnız sıra kolonu açıkken görünür.",
         defaultValue: "",
         maxLength: 8,
-        pattern: /^[\p{L}\p{N}\-_./ ]*$/u,
+        // ⚠️ SUNUCUNUN YAZMA YÜKLEMİNİN AYNASI — `system-setting.service.ts`
+        // `SHIPPING_SACK_SEQ_PREFIX_WRITE_RE`. Eğik çizgi YOK: dosya/sayfa adını
+        // kırar. Ayrı proje olduğu için import edilemez; eşliği backend bekçisi
+        // `test_sack_seq_label` §5 METİN olarak ölçer — burayı gevşetmek kırmızı verir.
+        pattern: /^[\p{L}\p{N}\-_. ]{0,8}$/u,
         placeholder: "örn. SP  ·  P-  ·  Çuval ",
-        invalidHint: "Yalnız harf, rakam, - _ . / ve boşluk; en çok 8 karakter.",
+        invalidHint: "Yalnız harf, rakam, - _ . ve boşluk; en çok 8 karakter.",
         audience: ["Sevkiyat", "Muhasebeci"],
         group: "Belge",
       },
