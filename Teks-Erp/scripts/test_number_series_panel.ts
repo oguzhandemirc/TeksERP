@@ -17,13 +17,15 @@
 //   §1 Kapı sırası: iki engel birlikteyken ÖNCE gelen konuşur
 //   §2 `listSeries` ile uç AYNI yüklemden besleniyor (ayrışan yüzey yok)
 //   §3 Üç kilit türü AYRI cümleler (panelde farklı metin göstermeli)
-//   §4 Etki sayısı ÖLÇÜLÜR; kaynağı olmayan seri `null` döner ("0" demez)
+//   §4 Etki sayısı ÖLÇÜLÜR (fikstürlü — boş tablo sabit-0'ı gizlerdi); kaynağı
+//      olmayan seri `null` döner ("0" demez)
 //   §5 Önizleme SUNUCUDA hesaplanır ve biçim kapısından geçer
 //
 // ⭐ NEGATİF SONDA ✓B3 (2026-09-22, ölçüldü): sayaç ve istemci kapılarının sırası
 //    TERS çevrilince §1 ❌1 (`…CLIENT_TOO_OLD` geliyor, beklenen `…COUNTER_NOT_SCOPED`) ·
 //    `listSeries.editable` yalnız `lockedReason`a bakınca §2 ❌1 (46 seri ayrışıyor) ·
-//    `seriesImpactCount` kaynağı olmayan seride 0 dönünce §4 ❌1.
+//    `seriesImpactCount` kaynağı olmayan seride 0 dönünce §4 ❌1 · sayım SABİT 0
+//    dönünce §4 ❌1 (fikstür sayesinde; fikstürsüz hâlinde bu kol YEŞİL kalıyordu).
 //
 // ⚠️ §1'in İLK iddiası (YAPISAL kilit en önce) ilk yazımda KIRMIZI verdi ve bu
 //    bir BULGUYDU: `lockedReason` yalnız `assertSeriesFormatAllowed` içinde
@@ -73,7 +75,10 @@ async function dene<T>(fn: () => Promise<T>): Promise<T | Error> {
 const kod = (e: unknown): string | undefined =>
   (e as { details?: { code?: string } } | null)?.details?.code;
 
+const DAMGA = `TEST-${Date.now()}`.slice(0, 14);
+
 async function main(): Promise<void> {
+  const fixtureGroups: string[] = [];
   const engel = hedefDbEngeli();
   if (engel) {
     console.log(engel);
@@ -129,17 +134,35 @@ async function main(): Promise<void> {
         (k) => liste.find((r) => r.key === k)?.panelGroup === "sevkiyat"));
 
     // ── §4 Etki sayısı ─────────────────────────────────────────────────────
-    const sackSayi = await seriesImpactCount("sack");
-    const gercek = await prisma.sack.count();
-    check("§4 ⭐ etki sayısı ÖLÇÜLÜYOR (uydurulmuyor)", sackSayi === gercek, `${sackSayi} = ${gercek}`);
-    // ⚠️ ÖLÇÜMÜN GÜCÜ BEYAN EDİLİR: tabloda kayıt yoksa "0 = 0" iddiası, her
-    // zaman 0 dönen bir fonksiyonu da geçirir. Boş DB'de bu iddia ZAYIFTIR ve
-    // sessizce güçlü sanılmamalı.
-    if (gercek === 0) {
-      console.log("   ⚠️ ZAYIF ÖLÇÜM: `sacks` boş — '0 = 0' sabit-0 bir uygulamayı da geçirir.");
+    // ⚠️ FİKSTÜR ŞART: boş tabloda "0 = 0" iddiası, HER ZAMAN 0 dönen bir
+    // uygulamayı da geçirirdi. Beyan etmek yetmez — "yeşil ≠ kapsandı" tam
+    // bunun için yazılmış. Bu yüzden sayım serisinde GERÇEK kayıt yaratılır.
+    const oncekiSayi = await prisma.packingGroup.count();
+    // ⚠️ İŞ ANAHTARIYLA aranır, "ortamda ne varsa" DEĞİL: `findFirst` ile herhangi
+    // bir cari bulmak, temiz bir CI DB'sinde düşer ya da vakumen yeşil kalır
+    // (`npm run seed:fixtures` MUS-001'i garanti eder).
+    const musteri = await prisma.customer.findFirst({
+      where: { code: "MUS-001" },
+      select: { id: true },
+    });
+    check("§4 körlük zemini: fikstür carisi (MUS-001) bulundu — yoksa `npm run seed:fixtures`",
+      musteri !== null);
+    if (musteri) {
+      fixtureGroups.push(
+        (
+          await prisma.packingGroup.create({
+            data: { customerId: musteri.id, name: `${DAMGA} grup`, code: `${DAMGA}-1`.slice(0, 16) },
+            select: { id: true },
+          })
+        ).id,
+      );
     }
-    check("§4 sayım gerçekten DELEGEYE gidiyor (sabit değil): ikinci bir seride de eşleşiyor",
-      (await seriesImpactCount("shipment")) === (await prisma.shipment.count()));
+    const lotSayi = await seriesImpactCount("packingLotCode");
+    check("§4 ⭐ etki sayısı ÖLÇÜLÜYOR — fikstür kaydı sayıya YANSIDI (sabit-0 uygulama ISIRILIR)",
+      lotSayi === oncekiSayi + fixtureGroups.length && (lotSayi ?? 0) > 0,
+      `${lotSayi} = ${oncekiSayi} + ${fixtureGroups.length}`);
+    check("§4 sayım gerçekten DELEGEYE gidiyor: ikinci bir seride de canlı sayıyla eşleşiyor",
+      (await seriesImpactCount("sack")) === (await prisma.sack.count()));
     check("§4 ⭐ sayım kaynağı OLMAYAN seri `null` döner ('0' demez)",
       (await seriesImpactCount("packingLotName")) === null);
     // ⚠️ SÖZLEŞME BEKÇİDE: `countTable.field` ZORUNLU bir kolon olmalı, yoksa
@@ -172,6 +195,9 @@ async function main(): Promise<void> {
       c instanceof Error && kod(c) === "NUMBER_SERIES_PREFIX_COLLISION",
       c instanceof Error ? (kod(c) ?? c.message) : "KABUL EDİLDİ");
   } finally {
+    if (fixtureGroups.length > 0) {
+      await prisma.packingGroup.deleteMany({ where: { id: { in: fixtureGroups } } });
+    }
     // Bu bekçi hiçbir seriyi BAŞARIYLA değiştirmez (hepsi kapıda durur), ama
     // negatif sonda kolları kapıları kaldırabilir ⇒ damga kalmış olabilir.
     const damgalilar = await prisma.numberSeries.findMany({
