@@ -708,6 +708,11 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Sistem → Yedekler ekranındaki makine dışı yedek kartına “Son başarılı kopya” satırı geldi: yedeklerin uzak hedefe en son ne zaman başarıyla kopyalandığı (tarih, saat, kaç saat önce). Kopyalama 6 saatten uzun süredir başarısızsa kart kırmızıya döner; kaç tur üst üste düştüğünü ve son hatanın ne olduğunu yazar. Bu bilgi sunucu yeniden başlasa da kaybolmuyor. Eskiden yalnız son denemenin sonucu görünüyordu; bir internet kesintisinden sonra ne kadar süredir kopya alınamadığı anlaşılamıyordu."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Panelde manuel top girişinde “Bu top az önce girilmiş olabilir” uyarısı çıktığında “Ekle” ve “Ekle ve Etiket Bas” düğmeleri artık “Yine de Kaydet” / “Yine de Kaydet ve Bas” oluyor (sarı) ve Enter da onaylıyor; kumaş, renk, metraj ya da en değiştirilirse uyarı kalkıp düğmeler normale dönüyor. Eskiden uyarı çıktıktan sonra normal Ekle açık kalıyordu ama 90 saniye boyunca hep aynı uyarıyı veriyordu; onay yalnız küçük bir satır-içi düğmedeydi ve gözden kaçıyordu."
         }
       ]
     },

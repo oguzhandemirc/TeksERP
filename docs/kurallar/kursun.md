@@ -15,6 +15,7 @@
 ### Yasaklar
 
 - **[ÇEKİRDEK]** Atıf UYDURULMAZ: dağıtımsız kapanışta `RollMovement.machineId` NULL kalır — varsayılan makineye yazmak makine bazlı hacim raporunu sistematik yanlışlar. Boşluk GÖRÜNÜR kılınır: `listDistribution.unassignedClosures` → amber bant ('son 7 günde N iş dağıtılmadan kapandı'). · bekçi: `scripts/test_kursun_unassigned_close.ts (atıf uydurulunca 1 kırmızı)` <sub>(CLAUDE.md:52)</sub>
+- **[PROFİL]** adnansahin'de Kurşun/KK2 istasyonu VAR ve mal orada gerçekten bekler; kayıt tabletten değil **Tambur kart okutmasıyla** girer: `tambur/by-card` 400 ("açık top yok, mal Kurşun'da") → `tambur/context` → `bypass-complete` → `by-card` 200 sarmalı bu profilde BEKLENEN akıştır, hata değil (6 günde 75 okutmanın 67'si; Kurşun tabletine 0 istek). "Kurşun bekliyor" bilgisi planlamanın kullandığı gerçek bir sayıdır — rotadan çıkarılmaz, bayrakla otomatik atlatılmaz; log incelemesinde bu 400'ler sayılmaz. Kalan borç yalnız kozmetik: tablet önce `context`e sorup gerekiyorsa `bypass-complete`e gitsin (3 istek, 0 adet 400). · bekçi: yok (borç görünür yazıldı) <sub>(arşiv:2026-09-22 Kurşun bypass ana yol)</sub>
 
 ## Backend
 

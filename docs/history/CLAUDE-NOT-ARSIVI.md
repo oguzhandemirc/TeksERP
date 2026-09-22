@@ -11180,3 +11180,32 @@ göndermezse bayat sayılmaz (kırmızı üretmez), kartta "Son başarılı kopy
 Ders: "son tur ne dedi" ile "en son ne zaman İYİYDİ" farklı sorulardır; ikincisi yoksa kesintinin süresi
 ölçülemez ve bellekte tutulan durum reboot'la yalan söyler. Kod: dal `08-offsite-durum` (feat(yedek) commit'i).
 
+## 2026-09-22 — Kurşun bypass ana yol: DEĞİŞTİRİLMEZ, belgelenir (fabrika log incelemesi 4. madde) [PROFİL]
+
+Log ölçümü (08): 6 günde Tambur `by-card` 75 okutmanın 67'si önce 400 alıyor, aynı saniyede `context` →
+`bypass-complete` → `by-card` 200; Kurşun tablet uçlarına 0 istek. İlk okuma "istisna yolu ana yol olmuş,
+rotadan çıkarılsın ya da bayrakla otomatik atlansın" idi — ikisi de YANLIŞTI. Kullanıcı açıklaması: sahada
+Kurşun/KK2 istasyonu var, mal orada gerçekten bekliyor; demo döneminde operatörler çok hata yapıp patronu
+kızdırdı, patron tabletsiz akış (bypass) istedi. Bugün "Kurşun bekliyor" planlamanın ve yönetimin Kurşun'daki
+mal miktarını gördüğü gerçek bir sayı; Tambur'da iş emri kartı okutulunca Kurşun tamamlanmış sayılıp mal
+Tambur'a geçiyor. "Bu şu an işimizi görüyor." Karar: iş akışına dokunulmaz; kural satırı `kursun.md`
+(Ortak, [PROFİL]) ki bir sonraki okuyucu 400'leri hata sanıp "düzeltmesin". Ders: log'da tekrar eden bir
+"hata" kodu tasarım kusuru olmayabilir — bir hata kodunun KONTROL AKIŞI olarak kullanılması gürültü üretir
+ama iş semantiği doğru olabilir; kod değiştirmeden önce sahaya "bu böyle mi olmalı" sorulur. Kalan borç
+kozmetik: tablet önce `context`e sorsun (3 istek, 0 adet 400) — bir OTA turuna binerse alınır.
+
+## 2026-09-22 — Manuel top girişinde mükerrer onay modu: uyarı açıkken Ekle → "Yine de Kaydet" [ÇEKİRDEK]
+
+Log ölçümü (08): 19.09 16:00:49–53 panel kullanıcısı `POST /rolls/initial-entry`e 4 saniyede 11 kez bastı,
+hepsi 409 POSSIBLE_DUPLICATE (mükerrer tuzağı, `kk1.duplicateGuardEnabled` açık); 16:00:57'de 201. Veri zarar
+görmedi (409 kayıt yaratmaz). Panelde 409 sonrası sarı satır-içi uyarı + küçük "Evet, ayrı bir top — yine de
+kaydet" düğmesi çıkıyordu ama normal Ekle/Ekle-Bas açık kalıyor ve Enter onu tetikliyordu: 90 sn boyunca
+KESİN 409 veren bir düğme ekranda açıktı. Kullanıcı seçimi (a; b=düğmeleri kapat, c=dokunma): uyarı açıkken
+ana düğmeler "Yine de Kaydet" / "Yine de Kaydet ve Bas"a DÖNÜŞÜR (sarı), Enter de onaylar; satır-içi düğme
+kalktı. Güvenlik payı: 409'u üreten gövdenin parmak izi saklanır (sunucunun ikiz alanlarıyla AYNI — itemId ·
+colorId · initialQty · width; `inventory.service` ikiz sorgusu) ve form ondan sapınca uyarı düşer, düğmeler
+normale döner — "aynı top" iddiası artık geçersizdir, onaysız normal kayıt doğru yoldur. Saf modül
+`Rolls/dupConfirm.ts` + `dupConfirm.test.ts` (✓B2). Ders: bir hata yanıtından sonra ekranda "kesin başarısız"
+bir birincil eylem açık bırakılmaz — kullanıcının refleksi aynı düğmeye tekrar basmaktır; refleks
+yasaklanmaz, doğru yola çevrilir.
+
