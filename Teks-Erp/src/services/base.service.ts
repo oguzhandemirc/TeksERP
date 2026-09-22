@@ -977,7 +977,11 @@ export class BaseService {
     const cfg = this.config.autoCode;
     if (!cfg) throw new Error("nextAutoCode çağrıldı ama autoCode config'i yok");
     const field = cfg.field ?? "code";
-    const fullPrefix = seriesCodePrefix(cfg.series);
+    // ⚠️ TEK TARİH: bu yol 10 TARİHLİ seriyi birden üretir (renk · istasyon · makine ·
+    // kasa · banka · iade sebebi · reçete · hata tipi · depo · rota). İki ayrı
+    // `new Date()` gece yarısında dünün ön ekiyle tarayıp bugünün ön ekiyle yazardı.
+    const now = new Date();
+    const fullPrefix = seriesCodePrefix(cfg.series, now);
     const rows = (await this.delegate.findMany({
       where: { [field]: { gte: fullPrefix, startsWith: fullPrefix } },
       select: { [field]: true },
@@ -986,7 +990,7 @@ export class BaseService {
       rows.map((r) => r[field] as string | null | undefined),
       fullPrefix,
     );
-    return buildSeriesCode(cfg.series, seq);
+    return buildSeriesCode(cfg.series, seq, now);
   }
 
   /**

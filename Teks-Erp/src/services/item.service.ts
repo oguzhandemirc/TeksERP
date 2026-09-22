@@ -117,7 +117,10 @@ function resolveReactivateTarget(
 
 async function nextItemCode(): Promise<string> {
   // Tarihsiz seri (`dateSegment: NONE`) — sayaç HİÇ sıfırlanmaz, kapsam ön ekin kendisi.
-  const prefix = seriesCodePrefix("item");
+  // ⚠️ TEK TARİH — bugün `NONE` olduğu için tarih koda GİRMİYOR, ama seri artık
+  // VERİ: biri panelden tarih segmenti açarsa iki `new Date()` gece yarısı ayrışır.
+  const now = new Date();
+  const prefix = seriesCodePrefix("item", now);
   const rows = await prisma.item.findMany({
     where: { code: { gte: prefix, startsWith: prefix } },
     select: { code: true },
@@ -126,7 +129,7 @@ async function nextItemCode(): Promise<string> {
     rows.map((r) => r.code).filter((c) => ITEM_CODE_SCAN_RE.test(c)),
     prefix,
   );
-  return buildSeriesCode("item", seq);
+  return buildSeriesCode("item", seq, now);
 }
 
 /** E4: `warpSpecId` yalnız KUMAŞ kartında ve aktif bir çözgü kartını göstermeli (400); `null` temizler, `undefined` dokunmaz. */

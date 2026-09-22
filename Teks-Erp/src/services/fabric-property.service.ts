@@ -22,7 +22,7 @@ import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { deriveCapabilityFlags } from "./station-capability.service";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
@@ -36,7 +36,9 @@ const PROPERTY_CODE_PREFIX = "OZL";
  * çuval kodlarıyla aynı kalıp ([[code-format]]). Çakışma withBarcodeRetry ile telafi.
  */
 async function nextPropertyCode(): Promise<string> {
-  const prefix = seriesCodePrefix("fabricProperty");
+  // ⚠️ TEK TARİH — `nextCustomerCode` gerekçesi ("iki tarih" sınıfı).
+  const now = new Date();
+  const prefix = seriesCodePrefix("fabricProperty", now);
   const todays = await prisma.fabricProperty.findMany({
     where: { code: { gte: prefix, startsWith: prefix } },
     select: { code: true },
@@ -45,7 +47,7 @@ async function nextPropertyCode(): Promise<string> {
     todays.map((p) => p.code),
     prefix,
   );
-  return `${prefix}${String(seq).padStart(4, "0")}`;
+  return buildSeriesCode("fabricProperty", seq, now);
 }
 
 /** SEÇİM tipli özelliğin değer satırı — istemci sözleşmesi (DÜZ, nested write DEĞİL). */

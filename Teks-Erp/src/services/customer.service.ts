@@ -12,7 +12,7 @@ import { validateName, validateCode } from "../lib/string-validators";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import prisma from "../lib/prisma";
 import { OrderStatus, Prisma, ShipmentDestination } from "@prisma/client";
-import { seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
 import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { parseQueryParams, readFilterList } from "../utils/query-parser";
 import { applyPartnerRoles, roleListWhere, type PartnerRoles } from "./helpers/partner-roles.helper";
@@ -60,7 +60,11 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * numaralarıyla aynı kalıp ([[code-format]]). Çakışma `withBarcodeRetry` ile telafi.
  */
 async function nextCustomerCode(): Promise<string> {
-  const prefix = seriesCodePrefix("customer");
+  // ⚠️ TEK TARİH: sorgunun ön eki ile kodun ön eki AYNI `now`dan doğar. İki ayrı
+  // `new Date()` gece yarısını sıçrayabilir ve dünün ön ekiyle taranıp bugünün
+  // ön ekiyle yazılırdı (sıra 1'e döner, `@unique` çakışır) — "iki tarih" sınıfı.
+  const now = new Date();
+  const prefix = seriesCodePrefix("customer", now);
   const todays = await prisma.customer.findMany({
     where: { code: { gte: prefix, startsWith: prefix } },
     select: { code: true },
@@ -69,7 +73,7 @@ async function nextCustomerCode(): Promise<string> {
     todays.map((c) => c.code),
     prefix,
   );
-  return `${prefix}${String(seq).padStart(4, "0")}`;
+  return buildSeriesCode("customer", seq, now);
 }
 
 export class CustomerService extends BaseService {

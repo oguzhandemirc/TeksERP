@@ -46,6 +46,23 @@ export interface NumberSeriesCatalogEntry {
    */
   infix?: { re: string; aciklama: string };
   /**
+   * ÜRETEÇ BAĞI — bu satır üreteci SÜRÜYOR mu, yoksa yalnız TARİF mi ediyor?
+   *
+   * Normalde katalog satırı üreteci SÜRER: üreteç ön eki `seriesCodePrefix`ten,
+   * haneyi `buildSeriesCode`tan alır. Alan VARSA bu bağ YOKTUR — üreteç kodu
+   * kendi literalleriyle kurar ve katalog satırı yalnız sınıflandırma/tarif
+   * içindir. Beyan ZORUNLU çünkü beyansız hâli SESSİZ BİR YALANDIR: panel
+   * satırı gösterir, fabrika biçimi değiştirdiğini sanır, üreteç eski kodu
+   * yazmaya devam ederdi.
+   *
+   * ⚠️ Beyanlı satır `lockedReason` da taşımalı (bekçi `test_number_series §11c`):
+   * sürmediğimiz bir biçimi panelden düzenlemeye AÇAMAYIZ.
+   *
+   * `uretec` üreteç dosyasının `src/` göreli yoludur — §11b'nin literal taraması
+   * muafiyetini BURADAN okur, kendi içine gömülü bir listeden değil.
+   */
+  uretecBagi?: { durum: "tarif"; uretec: string; not: string };
+  /**
    * SAYACIN KAPSAMI BİÇİM DEĞİŞİMİNE HAZIR MI? (Faz C ön koşulu C0)
    *
    * ⚠️ KONFİGÜRASYON SINIRI, üretim sınırı DEĞİL: bu alan yoksa serinin biçimi
@@ -113,6 +130,17 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     seedSeparator: "",
     kind: "ROLL",
     infix: { re: "[HF]", aciklama: "faz harfi (H=ham · F=final) — `RollBarcodeCounter` anahtarının parçası, biçim ayarı değil" },
+    uretecBagi: {
+      durum: "tarif",
+      uretec: "services/helpers/roll-barcode.helper.ts",
+      not:
+        "Üreteç ön eki `T`, altı haneli tarihi ve dört haneyi LİTERAL yazar; ayrıca " +
+        "`ROLL_BARCODE_RE` ve `rollBarcodePrefix` aynı literalleri ikinci ve üçüncü kez " +
+        "taşır ve `MAX_ROLL_SEQ = 9999` dört haneye çivilidir. Üçünü birden seriye " +
+        "bağlamak tek satırlık iş değil; seri KİLİTLİ olduğu için davranış riski yok, " +
+        "ama bağ olmadığı BEYAN EDİLİR — bu satır sınıflandırma (`kind`/`infix`) içindir, " +
+        "üreteci sürmez.",
+    },
     lockedReason:
       "Kod tarih ile sıra ARASINDA faz harfi taşır (H/F) ve bu harf `RollBarcodeCounter` anahtarının parçasıdır; yapı seri biçimiyle ifade edilemez.",
   },

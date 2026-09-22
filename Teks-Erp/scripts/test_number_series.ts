@@ -13,6 +13,9 @@
 //   §9 Okutulan serilerin TOHUM ön ekleri birbirinin başlangıcı DEĞİL
 //  §10 SAYACIN KAPSAMI: biçim değişince sayaç eski rejimin kodlarını SAYMAZ,
 //      ürettiği kod var olanla ÇAKIŞMAZ, ve hazır olmayan seri DÜZENLENEMEZ
+//  §11 ÜRETEÇ SERİYİ SÜRÜYOR: ön eki seriden alıp HANEYİ literal yazan üreteç
+//      yok (a: yapısal · b: ölçülmüş literal şekil) · beyanlı istisna kilitli
+//      olmak zorunda (c) · ön ek ile kod AYNI tarihten doğar (d, "iki tarih")
 // ⭐ Negatif sonda (2026-09-22, ölçüldü): katalogda `sack` ön ekini "CX" yapınca §1 ❌;
 //    `assertSeriesFormatAllowed`tan çakışma döngüsü silinince §3 ❌; `matchesSeries`teki
 //    `\d{digits,}` → `\d{digits}` yapılınca §5 ❌; §7'de servise ikinci import eklenince ❌;
@@ -22,6 +25,13 @@
 //    katalog büyüdüğü için — beklenen). §10 ÜÇ KOLLU: `nextSeriesNo`tan kapsam
 //    (`since`) filtresi kalkınca ❌ · çakışma atlama döngüsü kalkınca ❌ ·
 //    `updateSeriesFormat`taki `scopedCounter` kapısı kalkınca ❌.
+// ⭐ Negatif sonda §11 (2026-09-23, ölçüldü — İKİ YÖNLÜ): `customer.service`teki
+//    `buildSeriesCode("customer", seq, now)` eski literale (`${prefix}${String(seq)
+//    .padStart(4,"0")}`) geri çevrilince §11a ❌1 ve §11b ❌1 · katalogdaki
+//    `roll.uretecBagi` silinince §11b ❌1 (muafiyet beyandan okunuyor, gömülü
+//    listeden değil) · `roll.lockedReason` silinince §11c ❌1 · `base.service`te
+//    `buildSeriesCode(cfg.series, seq, now)` → `(cfg.series, seq)` yapılınca §11d ❌1.
+//    Hepsinde geri alınca yeşil (POZİTİF yön: ihlal düzelince taban DÜŞÜYOR).
 // Çalıştır: npx tsx scripts/test_number_series.ts
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
@@ -326,6 +336,111 @@ check("§10b ⭐ ARIZA GERÇEK: tarih segmenti düşünce sabit baş kısalır v
 check("§10b ⭐ `matchesSeries` bu kodları ELEYEMEZ — 'matchesSeries ile filtrele' SAHTE çözümdür",
   ESKI_KODLAR.every((k) => matchesSeries(cvTarihsiz, k)),
   "hane taşması kuralı gereği on haneli kuyruk da meşru, ve bu DOĞRU");
+
+// ── §11 Üreteç seriyi SÜRÜYOR mu? ─────────────────────────────────────────
+// Faz A'nın vaadi "ön ek/tarih/hane artık VERİ". §7 bu vaadi bir yönden korur
+// (kimse `code-format`ın biçimlendiricisini import etmesin). Ama ÖLÇÜLDÜ
+// (2026-09-23): üç üreteç `seriesCodePrefix`i çağırıp ön eki seriden alıyor,
+// sonra kuyruğu `String(seq).padStart(4, "0")` ile KENDİ kuruyordu. Yani ön ek
+// veriden, HANE koddan geliyordu. Fabrika haneyi 5 yapsaydı önizleme 5, yazılan
+// kod 4 hane olurdu — kullanıcının değişmezinin ("programdaki ile çıktı aynı
+// olmalı") birebir ihlali, üstelik SESSİZ.
+//
+// ⚠️ İKİ KOL BİRDEN gerekiyor ve biri ötekinin yerine geçmez:
+//   a) YAPISAL — ön eki alan dosya kodu da seriden kurmalı. Yazım biçiminden
+//      bağımsız; `padStart` yerine `pad()` yazan bir gelecek sapmayı da yakalar.
+//   b) ŞEKİL — ölçülmüş literal kalıbı. (a)'yı geçen bir dosyada TEK bir
+//      fonksiyon hâlâ elle kuruyorsa (dosyada başka yerde `buildSeriesCode`
+//      varken) yalnız bu kol görür.
+const SERI_ONEKI = "seriesCodePrefix(";
+const SERI_KODU = "buildSeriesCode(";
+const kaynakDosyalari = tsDosyalari(SRC).filter(
+  (d) => !d.endsWith("services/number-series.service.ts") && !d.endsWith("helpers/series-format.helper.ts"),
+);
+const yapisalIhlal: string[] = [];
+let onekCagiranDosya = 0;
+for (const dosya of kaynakDosyalari) {
+  const metin = readFileSync(dosya, "utf-8");
+  if (!metin.includes(SERI_ONEKI)) continue;
+  onekCagiranDosya++;
+  if (!metin.includes(SERI_KODU)) yapisalIhlal.push(dosya.slice(SRC.length + 1));
+}
+check("§11a ⭐ ön eki seriden alan her üreteç kodu da seriden kurar (`buildSeriesCode`)",
+  yapisalIhlal.length === 0, yapisalIhlal.join(", ") || `${onekCagiranDosya} üreteç dosyası temiz`);
+check("§11a körlük zemini: ön ek çağıran dosya gerçekten bulundu", onekCagiranDosya >= 10,
+  `${onekCagiranDosya} dosya`);
+
+// Muafiyet KATALOGTAN okunur — bekçinin içine gömülü bir liste, beyanla ayrışırdı.
+const tarifEdenUretecler = new Set(
+  NUMBER_SERIES_CATALOG.filter((e) => e.uretecBagi).map((e) => e.uretecBagi!.uretec),
+);
+// Ölçülmüş şekil: `${onEk}${String(sira).padStart(<sayı>, "0")}` — ön ekin hemen
+// ardına elle kurulmuş dolgulu kuyruk. Tarih biçimleyicileri (`String(x).padStart(2,"0")`)
+// bu kalıba UYMAZ çünkü önlerinde bir `${...}` ön eki yoktur; sınır BEYANLIDIR.
+const LITERAL_HANE_RE = /\$\{[A-Za-z_$][A-Za-z0-9_$]*\}\$\{String\([^)]*\)\.padStart\(\s*[0-9]+/;
+const sekilIhlal: string[] = [];
+for (const dosya of kaynakDosyalari) {
+  const goreli = dosya.slice(SRC.length + 1);
+  if (tarifEdenUretecler.has(goreli)) continue;
+  if (LITERAL_HANE_RE.test(readFileSync(dosya, "utf-8"))) sekilIhlal.push(goreli);
+}
+check("§11b ⭐ hiçbir üreteç ön ekin ardına LİTERAL haneli kuyruk yazmıyor",
+  sekilIhlal.length === 0, sekilIhlal.join(", ") || `${kaynakDosyalari.length} dosya tarandı`);
+check("§11b körlük zemini: kalıp gerçekten eşleşebiliyor (ölü regex değil)",
+  LITERAL_HANE_RE.test('`${prefix}${String(seq).padStart(4, "0")}`'));
+check("§11b muafiyet BEYANDAN okunuyor ve beyanlı üreteç dosyası GERÇEKTEN var",
+  tarifEdenUretecler.size > 0 &&
+    [...tarifEdenUretecler].every((u) => kaynakDosyalari.some((d) => d.endsWith(u))),
+  [...tarifEdenUretecler].join(", ") || "beyan yok");
+
+// c) Sürmediğimiz bir biçimi panelden düzenlemeye AÇAMAYIZ.
+const beyanliAmaKilitsiz = NUMBER_SERIES_CATALOG.filter((e) => e.uretecBagi && !e.lockedReason);
+check("§11c ⭐ üreteci SÜRMEYEN seri panelden düzenlenemez (`lockedReason` zorunlu)",
+  beyanliAmaKilitsiz.length === 0,
+  beyanliAmaKilitsiz.map((e) => e.key).join(", ") ||
+    `${NUMBER_SERIES_CATALOG.filter((e) => e.uretecBagi).length} beyan denetlendi`);
+
+// d) "İKİ TARİH" sınıfı: ön ek bir `new Date()`ten, kod BAŞKA bir `new Date()`ten
+// doğarsa gece yarısında dünün ön ekiyle taranıp bugünün ön ekiyle yazılır —
+// sıra 1'e döner ve `@unique` çakışır. İkisi de AÇIK tarih argümanı almalı.
+function cagriArgumanSayisi(metin: string, ad: string): number[] {
+  const sonuc: number[] = [];
+  let i = metin.indexOf(ad);
+  while (i !== -1) {
+    let derinlik = 0, virgul = 0, bos = true;
+    for (let j = i + ad.length - 1; j < metin.length; j++) {
+      const c = metin[j]!;
+      if (c === "(") derinlik++;
+      else if (c === ")") { derinlik--; if (derinlik === 0) break; }
+      else if (derinlik === 1) {
+        if (c === ",") virgul++;
+        else if (!/\s/.test(c)) bos = false;
+      }
+    }
+    sonuc.push(bos ? 0 : virgul + 1);
+    i = metin.indexOf(ad, i + 1);
+  }
+  return sonuc;
+}
+const tarihsizCagri: string[] = [];
+let sayilanCagri = 0;
+for (const dosya of kaynakDosyalari) {
+  const metin = readFileSync(dosya, "utf-8");
+  const goreli = dosya.slice(SRC.length + 1);
+  for (const [ad, gerekli] of [[SERI_ONEKI, 2], [SERI_KODU, 3]] as const) {
+    for (const n of cagriArgumanSayisi(metin, ad)) {
+      sayilanCagri++;
+      if (n < gerekli) tarihsizCagri.push(`${goreli}:${ad.slice(0, -1)}(${n} argüman)`);
+    }
+  }
+}
+check("§11d ⭐ ön ek ile kod AYNI açık tarihten doğar (örtük `new Date()` yok)",
+  tarihsizCagri.length === 0, tarihsizCagri.join(", ") || `${sayilanCagri} çağrı denetlendi`);
+check("§11d körlük zemini: argüman sayacı gerçekten sayıyor",
+  cagriArgumanSayisi('buildSeriesCode("x", seriesSeqFrom(a, b), d)', SERI_KODU)[0] === 3 &&
+    cagriArgumanSayisi('seriesCodePrefix("x")', SERI_ONEKI)[0] === 1 &&
+    sayilanCagri >= 20,
+  `${sayilanCagri} çağrı`);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);
