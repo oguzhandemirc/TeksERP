@@ -1864,6 +1864,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 | `mobil/src/offline/entryAttempt.test.ts` | Token yapışkanlığının İKİ yönü: sunucu restart'ında 4 basış → TEK token (2026-08-03 saha vakası) ve offline seri girişte 5 basış → 5 FARKLI token (yap |  |  |  |
 | `mobil/src/screens/Modules/KK1/EntryConflictModal.test.tsx` | Modal dört durumda da FİİLEN çizilir — 2026-08-12'de TouchableRipple iki çocukla React.Children.only fırlatıp uygulamayı kapatmıştı; metin sabiti bekç |  |  |  |
 | `mobil/src/store/sessionEntriesStore.test.ts` | 'Bu oturumda girilenler' kovası: addPending sayacı, confirmRoll pending→onaylı geçişi, başarısızlık akışı ve logout temizliği; liste ekran değil GİRİŞ |  |  |  |
+| `Electron/src/pages/Operations/Rolls/dupConfirm.test.ts` | Manuel top girişinde mükerrer tuzağı (409 POSSIBLE_DUPLICATE) sonrası ONAY MODU: uyarı açıkken ana düğmeler "Yine de Kaydet"e döner ve `confirmDuplicate:true` taşır (Enter dahil); uyarı kapalıyken tuzak devrede (`false`); parmak izi sunucunun ikiz alanlarıyla AYNI (itemId · colorId · initialQty · width); form parmak izinden sapınca uyarı düşer (metraj/en değişti ⇒ aynı top iddiası yok). Gerekçe: 19.09.2026 bir kullanıcı normal Ekle'ye 11 kez bastı, hepsi 409 — çalışmayan düğme açık duruyordu | | ✓B2 (bu commit) — ① uyarı modunda `confirmDuplicate:false` → §1 ❌ · ② parmak izinden `width` düşürüldü → §3/§4b ❌; ikisi de geri alındı | 2026-09-22 |
 
 ## mukerrer
 

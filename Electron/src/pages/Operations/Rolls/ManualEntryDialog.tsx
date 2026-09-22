@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { entryWarnings } from "./entry-warnings";
+import { dupFingerprint, dupWarnStillValid, submitButtonView, type DupWarnState } from "./dupConfirm";
 import { AlertTriangle, Printer } from "lucide-react";
 import { z } from "zod";
 import {
@@ -161,7 +162,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
   const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
   // Mükerrer tuzağı 409 verdiyse var olan topun barkodu — satır-içi onay yolunu
   // açar. Dialog her açılışta temizlenir (yeni form oturumu = temiz sayfa).
-  const [dupWarn, setDupWarn] = useState<string | null>(null);
+  const [dupWarn, setDupWarn] = useState<DupWarnState | null>(null);
   useEffect(() => {
     if (open) {
       setClientToken(crypto.randomUUID());
@@ -207,8 +208,14 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
     // Toast YOK (proje kuralı — interceptor backend mesajını zaten gösterir).
     // Burada yalnız mükerrer tuzağının 409'unu tanıyıp satır-içi onay yolunu
     // açarız: kullanıcı çıkışsız kalmasın, ama "yine de kaydet" AÇIK bir eylem olsun.
-    onError: (err) => {
-      setDupWarn(readDuplicateConflict(err));
+    onError: (err, vars) => {
+      const barcode = readDuplicateConflict(err);
+      const p = vars.payload;
+      setDupWarn(
+        barcode === null
+          ? null
+          : { barcode, fingerprint: dupFingerprint({ itemId: p.itemId, colorId: p.colorId ?? null, initialQty: p.initialQty, width: p.width ?? null }) },
+      );
     },
   });
 
@@ -252,6 +259,18 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
 
   const pendingAdd = mutation.isPending && !mutation.variables?.printAfter;
   const pendingAddPrint = mutation.isPending && mutation.variables?.printAfter === true;
+
+  // Uyarı açıkken ana düğmeler "Yine de Kaydet"e dönüşür (Enter dahil): normal
+  // Ekle 90 sn boyunca kesin 409'dur, açık durması kullanıcıyı tekrar bastırır.
+  // Form ikiz parmak izinden saparsa iddia düşer, düğmeler normale döner.
+  const [wItemId, wColorId, wQty, wWidth] = form.watch(["itemId", "colorId", "initialQty", "width"]);
+  const warnOpen = dupWarnStillValid(dupWarn, {
+    itemId: wItemId, colorId: wColorId ?? null, initialQty: Number(wQty), width: wWidth ?? null,
+  });
+  useEffect(() => {
+    if (dupWarn && !warnOpen) setDupWarn(null);
+  }, [dupWarn, warnOpen]);
+  const btn = submitButtonView(warnOpen, { add: pendingAdd, addPrint: pendingAddPrint });
 
   const watchedItemId = form.watch("itemId");
 
@@ -313,7 +332,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
           </div>
         )}
 
-        <form onSubmit={doSubmit(false)} className="space-y-3">
+        <form onSubmit={doSubmit(false, btn.confirmDuplicate)} className="space-y-3">
           <FormField label="Kumaş" error={form.formState.errors.itemId} required>
             <Controller
               control={form.control}
@@ -482,25 +501,16 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
           {/* Mükerrer tuzağı: sunucu "bu top az önce girilmiş olabilir" dedi.
               Engel DEĞİL — arka arkaya birebir aynı top gerçekten gelir; çıkış
               yolu açık ama AÇIK bir eylem olarak duruyor. */}
-          {dupWarn && (
+          {warnOpen && dupWarn && (
             <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/40">
               <p className="font-medium text-amber-900 dark:text-amber-200">
-                Bu top az önce girilmiş olabilir — barkod {dupWarn}
+                Bu top az önce girilmiş olabilir — barkod {dupWarn.barcode}
               </p>
               <p className="mt-1 text-amber-800 dark:text-amber-300">
-                Aynı kumaş, metraj ve en, kısa süre önce sizin tarafınızdan
-                kaydedilmiş. Gerçekten ayrı bir topsa onaylayın.
+                Aynı kumaş, metraj ve en, kısa süre önce sizin tarafınızdan kaydedilmiş.
+                Gerçekten ayrı bir topsa <strong>Yine de Kaydet</strong>'e basın; yanlışlıkla
+                tekrar girdiyseniz İptal.
               </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-2"
-                disabled={mutation.isPending}
-                onClick={doSubmit(false, true)}
-              >
-                Evet, ayrı bir top — yine de kaydet
-              </Button>
             </div>
           )}
 
@@ -511,14 +521,19 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
             <Button
               type="submit"
               disabled={mutation.isPending}
-              className="bg-emerald-600 text-white hover:bg-emerald-600/90"
+              className={btn.amber ? "bg-amber-500 text-white hover:bg-amber-500/90" : "bg-emerald-600 text-white hover:bg-emerald-600/90"}
             >
-              {pendingAdd ? "Ekleniyor..." : "Ekle"}
+              {btn.addLabel}
             </Button>
             {canPrint && (
-              <Button type="button" disabled={mutation.isPending} onClick={doSubmit(true)} className="gap-1.5">
+              <Button
+                type="button"
+                disabled={mutation.isPending}
+                onClick={doSubmit(true, btn.confirmDuplicate)}
+                className={btn.amber ? "gap-1.5 bg-amber-500 text-white hover:bg-amber-500/90" : "gap-1.5"}
+              >
                 <Printer className="h-4 w-4" />
-                {pendingAddPrint ? "Ekleniyor..." : "Ekle ve Etiket Bas"}
+                {btn.addPrintLabel}
               </Button>
             )}
           </DialogFooter>
