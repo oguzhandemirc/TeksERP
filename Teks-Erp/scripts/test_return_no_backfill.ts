@@ -23,11 +23,10 @@
 //   §6 ⭐ `returnGroupId` TEK YAZARLI — üye satırdaki numara KOPYASI bayatlayamaz
 //   §7 ⭐ Numara BELGE BAŞINA bir kez üretilir ve TÜM grup satırlarına yazılır
 //
-// ⚠️ KAPSAM BEYANI: §7 YAPISAL bir kontroldür (kaynak metni), davranışsal değil.
-//    Davranışsal kapsama çok kalemli GERÇEK bir iade fikstürü ister (top +
-//    sevkiyat zinciri) ve `test_belge_ekran_ayni`nin İADE DALINA aittir; o dal
-//    inene kadar burası TEK kapıdır. "Yeşil ≠ kapsandı" — hangi yönden
-//    kapsandığı burada yazılı.
+// ⚠️ KAPSAM: §7 YAPISAL bir kontroldür (kaynak metni). DAVRANIŞSAL kapsama
+//    `test_belge_ekran_ayni §6`da İNDİ (çok kalemli gerçek iade: üç satır aynı
+//    numarayı taşıyor VE o numara belgede birebir geçiyor). İkisi birlikte iki
+//    yönden ölçüyor: burası "kod böyle yazılmış", orası "davranış böyle".
 //
 // ⭐ NEGATİF SONDA ✓B3 (2026-09-22, ölçüldü): migration'daki
 //    `AT TIME ZONE 'Europe/Istanbul'` silinince §2 ❌ · `upper(...)` kaldırılınca

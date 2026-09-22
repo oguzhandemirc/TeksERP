@@ -16,7 +16,15 @@
 //   §4 ⭐ "eski belgeler de değişsin" bayrağı açıkken İKİSİ BİRDEN canlıya döner
 //      (bayrağın anlamı "belge değişir, ekran eski kalır" DEĞİLDİR)
 //   §5 ⭐ SEVK PARTİSİ ADI (P-1) ve AMBALAJ NO ekranda ne ise belgede de o
+//   §6 ⭐ İADE BELGE NO — ÇOK KALEMLİ iadede (3 top) ÜÇ SATIRIN ÜÇÜ DE aynı
+//      numarayı taşır ve o numara belgede BİREBİR geçer. Tek kalemli bir iade
+//      bu davranışı ÖLÇEMEZ: kopya semantiği ancak üye satır varken görünür.
 //
+// ⭐ §6 negatif sonda ✓B2 (2026-09-22, ölçüldü): numara yalnız LİDERE yazılınca
+//    §6 ❌3 (üye satırların `returnNo`su null) · belge numarayı kolondan değil
+//    `returnDocumentNo(...)` TÜRETİMİNDEN okuyunca §6 ❌1 — ekran sayaçlı
+//    `IADE-220926-000001` gösterirken belge `id`den türemiş hex kuyruk gösteriyor,
+//    yani kullanıcının şikâyetinin ta kendisi ("programda başka, çıktıda başka").
 // ⭐ Negatif sonda (2026-09-22, ölçüldü): `getShipmentById`in `seqLabel` üretimi
 //    `readSackSeqFormat(sh.sackSeqPrefix)` yerine `readSackSeqFormat(null)` yapılınca
 //    §2 KIRMIZI (ekran "3", belge "SP3"); `collectShipmentDocContent`ten
@@ -27,11 +35,13 @@ import { PrintedDocType, Prisma } from "@prisma/client";
 
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
+import { returnService } from "../src/services/return.service";
 import { PackingGroupService } from "../src/services/packing-group.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { firstGrade } from "./fixture-quality-grade";
+import { ensureTestAdmin } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 const engel = hedefDbEngeli();
@@ -63,6 +73,7 @@ async function setFlag(key: string, value: Prisma.InputJsonValue): Promise<void>
 }
 
 const sackIds: string[] = [];
+const returnIds: string[] = [];
 const rollIds: string[] = [];
 const shipmentIds: string[] = [];
 const lotIds: string[] = [];
@@ -231,9 +242,52 @@ async function main(): Promise<void> {
     check("§5 ⭐ AMBALAJ NO belgede birebir",
       ekran3.satirlar.every((r) => r.packageNo != null && new RegExp(`(^|\\s)${r.packageNo}(\\s|$)`).test(belge3)),
       ekran3.satirlar.map((r) => String(r.packageNo)).join(", "));
+    // ── §6 İADE BELGE NO — çok kalemli iade, kopya semantiği ──────────────
+    const iadeSevk = await sevkKur(3);
+    const sevkTop = await prisma.roll.findMany({
+      where: { shipmentId: iadeSevk },
+      select: { id: true },
+      orderBy: { barcode: "asc" },
+    });
+    check("§6 zemin: iade için ÜÇ sevk edilmiş top hazır", sevkTop.length === 3, `${sevkTop.length} top`);
+
+    // ⚠️ Seed kullanıcısına YASLANMAZ: kendi fikstürünü kurar (`ensureTestAdmin`),
+    // böylece seed şifresi/adı değişse de bekçi ayakta kalır ve ortam-bağımlılığı
+    // tavanı (`test_ortam_bagimliligi_tavani`) büyümez.
+    const admin = await ensureTestAdmin();
+    check("§6 zemin: iadeyi alan personel fikstürü hazır", admin.id.length > 0);
+    const iade = (await returnService.createReturn(
+      { rollIds: sevkTop.map((r) => r.id), reasonText: `TEST-BEA-${TS} hatalı sevk`, note: `TEST-BEA-${TS}` },
+      admin.id,
+    )).data as { ids?: string[]; returnGroupId?: string };
+    const iadeIds = iade.ids ?? [];
+    returnIds.push(...iadeIds);
+    check("§6 zemin: çok kalemli iade üç satır yarattı", iadeIds.length === 3, `${iadeIds.length} satır`);
+
+    const iadeSatirlari = await prisma.rollReturn.findMany({
+      where: { id: { in: iadeIds } },
+      select: { id: true, returnNo: true, returnGroupId: true },
+    });
+    const numaralar = new Set(iadeSatirlari.map((r) => r.returnNo));
+    check("§6 ⭐ ÜÇ SATIRIN ÜÇÜ DE AYNI belge numarasını taşıyor (üyeler liderin kopyası)",
+      numaralar.size === 1 && !numaralar.has(null),
+      [...numaralar].join(" | "));
+    const iadeNo = iadeSatirlari[0]?.returnNo ?? "";
+    check("§6 numara sayaçtan geldi (türetilmiş hex kuyruk DEĞİL)",
+      /^IADE-\d{6}-\d{6}$/.test(iadeNo), iadeNo);
+
+    const iadeBelge = gorunurMetin(
+      ((await printedDocumentService.getHtml(PrintedDocType.RETURN_DISPATCH, iade.returnGroupId ?? iadeIds[0]!))
+        .data as { html: string } | null)?.html ?? "",
+    );
+    check("§6 zemin: iade belgesi donmuş ve okunabiliyor", iadeBelge.length > 100, `${iadeBelge.length} karakter`);
+    check("§6 ⭐ EKRANDAKİ numara BELGEDE birebir geçiyor",
+      iadeNo !== "" && iadeBelge.includes(iadeNo), iadeNo);
   } finally {
-    // FK sırası: belge → top → çuval → sevkiyat → parti → master veri
-    await prisma.printedDocument.deleteMany({ where: { sourceId: { in: shipmentIds } } });
+    // FK sırası: belge → iade → top → çuval → sevkiyat → parti → master veri
+    await prisma.printedDocument.deleteMany({ where: { sourceId: { in: [...shipmentIds, ...returnIds] } } });
+    await prisma.warehouseMovement.deleteMany({ where: { rollReturnId: { in: returnIds } } });
+    await prisma.rollReturn.deleteMany({ where: { id: { in: returnIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     await prisma.sack.deleteMany({ where: { id: { in: sackIds } } });
     await prisma.shipment.deleteMany({ where: { id: { in: shipmentIds } } });
