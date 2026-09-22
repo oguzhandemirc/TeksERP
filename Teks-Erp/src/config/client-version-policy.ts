@@ -149,6 +149,54 @@ export const MOBIL_VERSION_POLICY: ClientVersionPolicy = {
 };
 
 /**
+ * FAZ B'Yİ TAŞIMAYAN SON SÜRÜMLER — bir TAHMİN değil, ölçülmüş bir GEÇMİŞ.
+ *
+ * Faz B (barkod türünün sunucu tablosundan çözülmesi) bu sürümlerden SONRAKİ
+ * her pakette vardır: değişiklik dala girdi, bu tabandan üretilecek her paket
+ * onu taşır. ⇒ `minVersion > buradaki` ise bağlanan her istemci bu daldan
+ * üretilmiştir, yani Faz B'yi taşır. İleriye dönük bir sürüm numarası
+ * ("1.3.2 olacak") yazmak bir TAHMİN olurdu ve çürüdüğünü kimse görmezdi.
+ *
+ * Ölçüm 2026-09-22: `Electron/package.json` 1.3.1 · `mobil/app.json` 1.0.7.
+ */
+export const FAZ_B_ONCESI = { electron: "1.3.1", mobil: "1.0.7" } as const;
+
+/** Sürüm karşılaştırması — SAYISAL, sözlüksel değil ("1.3.10" > "1.3.9"). */
+export function compareClientVersions(a: string, b: string): number {
+  const pa = a.split(".").map((n) => Number.parseInt(n, 10) || 0);
+  const pb = b.split(".").map((n) => Number.parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+/**
+ * Sahadaki İKİ OKUTAN istemci de Faz B'yi taşıyor mu? (`scanned` serilerin
+ * biçim değişimi buna bağlıdır — `number-series.service`.)
+ *
+ * ⚠️ İKİ EKSEN BİRDEN: okutma hem panelde hem tablette yapılıyor; birini
+ * güncelleyip ötekini unutmak tam da bu kapının engellediği şeydir.
+ *
+ * ⚠️ `web` ekseni MUAF ve gerekçesi ÖLÇÜLDÜ — ama "web okutma yapmıyor" DEĞİL:
+ * özet kabuğu `operations` yollarını açıyor ve orada okutan yedi yüzey var
+ * (`RollsPage` · `RollScanBar` · `KartelaTabs` · `SwatchesPanel` ·
+ * `SacksListView` · `ReturnsPage` · `useReturnEntry`). Gerçek gerekçe
+ * DRIFT'İN İMKÂNSIZ olmasıdır: web paketi backend'in İÇİNDE gider
+ * (`deploy/paketle.ps1` → `dist-web`, `WEB_DIST_DIR` ile aynı origin'den
+ * servis edilir), yani Faz B'yi taşıyan bir backend zorunlu olarak Faz B'yi
+ * taşıyan bir web paketi servis eder. `minVersion`ın 1.0.0'da durmasının sebebi
+ * de zaten budur (bu dosyanın `WEB_VERSION_POLICY` gerekçesi).
+ */
+export function scanningClientsCarryFazB(): boolean {
+  return (
+    compareClientVersions(ELECTRON_VERSION_POLICY.minVersion, FAZ_B_ONCESI.electron) > 0 &&
+    compareClientVersions(MOBIL_VERSION_POLICY.minVersion, FAZ_B_ONCESI.mobil) > 0
+  );
+}
+
+/**
  * Kayıt defteri — yeni istemci eklemek route'a değil BURAYA bir satır.
  */
 export const CLIENT_VERSION_POLICIES: Record<string, ClientVersionPolicy> = {

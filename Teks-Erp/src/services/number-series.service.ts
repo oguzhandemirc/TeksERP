@@ -25,6 +25,7 @@ import {
   type NumberSeriesKind,
 } from "../constants/number-series-catalog";
 import prisma from "../lib/prisma";
+import { FAZ_B_ONCESI, scanningClientsCarryFazB } from "../config/client-version-policy";
 
 export { formatSeriesCode, matchesSeries, previewSeriesCode, seriesPrefix };
 export type { NumberSeriesFormat };
@@ -379,6 +380,19 @@ export async function updateSeriesFormat(
   // düzenlenemez. Üretim yolu kapatılmaz — çuval açılamaz hâle gelirdi; asıl
   // engellenmesi gereken riskli AYAR değişikliğidir. Beyan katalogdadır.
   const katalog = numberSeriesCatalogEntry(key);
+  // ⚠️ C0b — ESKİ İSTEMCİ KAPISI, `lockedReason`dan AYRI bir cümledir:
+  // `lockedReason` "bu serinin biçimi YAPISAL olarak değişemez" der (top
+  // barkodunun faz harfi), bu kapı "BUGÜN değişemez çünkü saha hazır değil"
+  // der. İkisi farklı gün kalkar, bu yüzden biri ötekinin yerine geçmez.
+  // Okutulan bir serinin ön eki değişirse, Faz B'yi taşımayan istemci kendi
+  // SABİT regex'iyle okumaya devam eder ve kodu SESSİZCE yanlış türe çözer.
+  if (katalog.kind && !scanningClientsCarryFazB()) {
+    throw AppError.badRequest(
+      `Okutulan serilerin biçimi, sahadaki panel ve tabletler güncellenmeden değiştirilemez: ${katalog.label}. ` +
+        `En düşük sürüm eşiği panelde ${FAZ_B_ONCESI.electron}, tablette ${FAZ_B_ONCESI.mobil} üstüne çıkmalı.`,
+      { code: "NUMBER_SERIES_CLIENT_TOO_OLD", key },
+    );
+  }
   if (!katalog.scopedCounter) {
     throw AppError.badRequest(
       `Bu serinin sayacı biçim değişimine hazır değil: ${katalog.label}. ` +

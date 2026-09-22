@@ -20,10 +20,19 @@
 //   §4 ⭐ `scopedCounter` BEYANI OLMAYAN seri düzenlenemez (konfigürasyon sınırı;
 //        üretim yolu kapatılmaz — çuval açılamaz hâle gelirdi)
 //   §5 `updateSeriesFormat` damgayı GERÇEKTEN yazar
+//   §6 ⭐ C0b — OKUTULAN serinin biçimi, saha Faz B'yi taşımadan değiştirilemez;
+//      eşik "Faz B'yi taşımayan SON sürüm"dür (tahmin değil, ölçülmüş geçmiş)
 //
 // ⭐ NEGATİF SONDA ✓B3 (2026-09-22, ölçüldü): `nextSeriesNo`tan kapsam (`since`)
 //    süzmesi kalkınca §2 ❌1 · çakışma atlama döngüsü kalkınca §3 ❌2 ·
-//    `updateSeriesFormat`taki `scopedCounter` kapısı kalkınca §4 ❌1.
+//    `updateSeriesFormat`taki `scopedCounter` kapısı kalkınca §4 ❌1 ·
+//    `FAZ_B_ONCESI` eşiği `0.0.0`a çekilince §6 ❌3 (kapı yanlışlıkla AÇILIR) ·
+//    C0b kapısı tamamen kalkınca §6 ❌1 ("KABUL EDİLDİ" — okutulan seri gerçekten
+//    düzenlenebilir hâle gelir). ⚠️ İkinci kol ilk yazımda `swatch` üstündeydi ve
+//    YÜKÜ ÖLÇEMİYORDU: kartelanın `scopedCounter` beyanı yok, yani C0b kalksa bile
+//    C0 kapısı onu reddediyordu. `shipment` her iki kapıyı da geçer ⇒ tek engeli
+//    C0b'dir. *Bir sondanın ısırması yetmez; ISIRDIĞI KAPININ ölçmek istediğin kapı
+//    olduğu ayrıca doğrulanır.*
 //    ⚠️ Üçüncü kol `order` serisine damga YAZAR (kapı kalktığı için güncelleme
 //    geçer) — bu yüzden temizlik `order`ı da geri alır; sondanın kendi artığı
 //    bir sonraki koşumu kirletmesin.
@@ -36,6 +45,11 @@ import {
   resolveSeriesFormat,
   updateSeriesFormat,
 } from "../src/services/number-series.service";
+import {
+  FAZ_B_ONCESI,
+  compareClientVersions,
+  scanningClientsCarryFazB,
+} from "../src/config/client-version-policy";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
@@ -134,6 +148,36 @@ async function main(): Promise<void> {
     check("§5 damga biçimle birlikte okunuyor (servis tarafı)",
       resolveSeriesFormat("packingLotCode").formatChangedAt instanceof Date);
 
+    // ── §6 C0b — eski istemci kapısı ───────────────────────────────────────
+    // ⚠️ "Bugün ölçülemez" DEĞİL, "bugün ölçülüyor ve KAPALI": eşik bir geçmiş
+    // olgusunu kaydediyor (`FAZ_B_ONCESI`), sahadaki `minVersion` ise henüz
+    // 1.0.0. Kapının AÇILDIĞI hâl de aynı dosyada ölçülür (aşağıda).
+    check("§6 ⭐ bugün kapı KAPALI (saha minVersion'ı eşiğin altında)",
+      !scanningClientsCarryFazB(), `eşik: electron>${FAZ_B_ONCESI.electron} · mobil>${FAZ_B_ONCESI.mobil}`);
+    // ⚠️ `shipment` SEÇİLDİ, `swatch` DEĞİL: kartelanın `scopedCounter` beyanı yok,
+    // yani C0b kaldırılsa bile İKİNCİ kapı (C0) onu reddederdi ve sonda C0b'nin
+    // yük taşıyıp taşımadığını GÖREMEZDİ. `shipment` ikisini de geçer — tek
+    // engeli C0b'dir, yani kapı kalkınca gerçekten düzenlenebilir hâle gelir.
+    const okutulanRed = await dene(() =>
+      updateSeriesFormat("shipment", { prefix: "SVK", dateSegment: "DDMMYY", digits: 4, separator: "" }),
+    );
+    check("§6 ⭐ OKUTULAN seri (sevkiyat) bugün düzenlenemez",
+      okutulanRed instanceof Error && kod(okutulanRed) === "NUMBER_SERIES_CLIENT_TOO_OLD",
+      okutulanRed instanceof Error ? (kod(okutulanRed) ?? okutulanRed.message) : "KABUL EDİLDİ");
+    check("§6 okutulMAYAN seri aynı anda düzenlenebilir (kapı yalnız `scanned` kümeye bakıyor)",
+      !(kabulEdilmeli instanceof Error));
+
+    // Eşik mantığı kendi başına da ölçülür: sürüm karşılaştırması SAYISAL olmalı
+    // ("1.3.10" sözlüksel olarak "1.3.9"dan küçüktür — klasik tuzak).
+    check("§6 sürüm karşılaştırması SAYISAL", compareClientVersions("1.3.10", "1.3.9") === 1 &&
+      compareClientVersions("1.3.1", "1.3.1") === 0 && compareClientVersions("1.0.7", "1.0.8") === -1);
+    check("§6 ⭐ eşik AŞILDIĞINDA kapı AÇILIR (iddianın ikinci yönü)",
+      compareClientVersions("1.3.2", FAZ_B_ONCESI.electron) > 0 &&
+      compareClientVersions("1.0.8", FAZ_B_ONCESI.mobil) > 0);
+    check("§6 TEK eksen yetmez: yalnız panel güncellenirse kapı KAPALI kalır",
+      !(compareClientVersions("1.3.2", FAZ_B_ONCESI.electron) > 0 &&
+        compareClientVersions("1.0.0", FAZ_B_ONCESI.mobil) > 0));
+
     check("§1 körlük zemini: seri satırı gerçekten okundu", onceki.key === "sack");
   } finally {
     // Seriyi BİREBİR geri yükle — global durum yazan bekçi kuralı.
@@ -149,7 +193,8 @@ async function main(): Promise<void> {
     });
     // `packingLotCode` §5'te, `order` ise ÜÇÜNCÜ NEGATİF SONDA kolunda damga alır
     // (kapı kaldırılınca güncelleme geçer). İkisi de geri alınır.
-    for (const key of ["packingLotCode", "order"]) {
+    // `shipment` yalnız NEGATİF SONDA kolunda (C0b kalkınca) damga alır.
+    for (const key of ["packingLotCode", "order", "shipment"]) {
       const row = await prisma.numberSeries.findUnique({ where: { key } });
       if (row?.formatChangedAt) {
         await prisma.numberSeries.update({ where: { key }, data: { formatChangedAt: null } });
