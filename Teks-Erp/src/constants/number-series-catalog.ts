@@ -77,10 +77,11 @@ export interface NumberSeriesCatalogEntry {
    */
   scopedCounter?: { durum: "hazir" | "sayac-yok"; not: string };
   /**
-   * Panelde hangi bölümde görünür. Faz C YALNIZ "sevkiyat" ailesini açar;
-   * Faz D bu etiketi genişletir — ekran kodu değişmez, katalog satırı değişir.
+   * Panelde hangi bölümde görünür. ZORUNLU (bekçi `test_number_series_panel §4d`):
+   * etiketsiz seri ekrandan DÜŞER ve "çuval numarası neden burada yok?"
+   * sorusunun ekranda cevabı olmaz. Kilitli seriler de çizilir — gerekçeleriyle.
    */
-  panelGroup?: "sevkiyat";
+  panelGroup: NumberSeriesPanelGroup;
   /**
    * ETKİ CÜMLESİNİN kaynağı: bu seriyle numaralanmış şeyin sayısı nereden
    * okunur. Panel "bugüne kadarki N …nin numarası değişmez" derken bu sayıyı
@@ -123,6 +124,28 @@ export interface NumberSeriesCatalogEntry {
   };
 }
 
+/**
+ * PANEL BÖLÜMLERİ — sıra ve ETİKET burada, tek kaynak.
+ *
+ * ⚠️ Etiket panelde KOPYALANMAZ, satırla birlikte gider (`countBirim` emsali):
+ * iki yerde yaşayan bir etiket bayatlar ve yeni bir grup eklendiğinde panel onu
+ * SESSİZCE düşürürdü — "kaydedilen ama görünmeyen kayıt" sınıfı.
+ */
+export const NUMBER_SERIES_PANEL_GROUPS = [
+  { key: "uretim", label: "Üretim" },
+  { key: "sevkiyat", label: "Sevkiyat" },
+  { key: "depo-ticaret", label: "Depo ve ticaret" },
+  { key: "fason-kartela", label: "Fason ve kartela" },
+  { key: "finans", label: "Finans" },
+  { key: "master-veri", label: "Master veri kodları" },
+] as const;
+
+export type NumberSeriesPanelGroup = (typeof NUMBER_SERIES_PANEL_GROUPS)[number]["key"];
+
+export function numberSeriesPanelGroupLabel(g: NumberSeriesPanelGroup): string {
+  return NUMBER_SERIES_PANEL_GROUPS.find((x) => x.key === g)!.label;
+}
+
 const D = "DDMMYY" as NumberSeriesDateSegment;
 const NONE = "NONE" as NumberSeriesDateSegment;
 const YYMM = "YYMM" as NumberSeriesDateSegment;
@@ -131,6 +154,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   // ── Okutulan seriler (istemci sınıflandırmasına girer) ─────────────────────
   {
     key: "roll",
+    panelGroup: "uretim",
     label: "Top barkodu",
     seedPrefix: "T",
     seedDateSegment: D,
@@ -154,6 +178,8 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "workOrder",
+    panelGroup: "uretim",
+    countTable: { model: "workOrder", field: "workOrderNumber", birim: "kayıt" },
     label: "İş emri / refakat kartı no",
     seedPrefix: "IE",
     seedDateSegment: D,
@@ -164,7 +190,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     lockedReason:
       "Kart no = iş emri no (tek kod kuralı) ve eski `RK` kartları hâlâ sahada; ön ek Faz B (sunucu sınıflandırması) inmeden açılmaz.",
   },
-  { key: "swatch", label: "Kartela kart no", seedPrefix: "KRT", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "SWATCH" },
+  { key: "swatch", panelGroup: "fason-kartela", countTable: { model: "swatch", field: "cardNumber", birim: "kayıt" }, label: "Kartela kart no", seedPrefix: "KRT", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "SWATCH" },
   {
     key: "sack",
     panelGroup: "sevkiyat",
@@ -189,10 +215,50 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     kind: "SHIPMENT",
     scopedCounter: { durum: "hazir", not: "`shipping.service.nextShipmentNo` zengin biçime geçirildi." },
   },
-  { key: "subcontractorDispatch", label: "Fason sevk belge no", seedPrefix: "FS", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "DISPATCH_DOC" },
-  { key: "subcontractorReceipt", label: "Fason kabul belge no", seedPrefix: "FK", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "DISPATCH_DOC" },
-  { key: "kartelaDispatch", label: "Kartela sevk belge no", seedPrefix: "KS", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "DISPATCH_DOC" },
-  { key: "kartelaReceipt", label: "Kartela kabul belge no", seedPrefix: "KK", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "DISPATCH_DOC" },
+  {
+    key: "subcontractorDispatch",
+    panelGroup: "fason-kartela",
+    countTable: { model: "subcontractorDispatch", field: "dispatchNo", birim: "belge" },
+    label: "Fason sevk belge no",
+    seedPrefix: "FS",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+    kind: "DISPATCH_DOC",
+  },
+  {
+    key: "subcontractorReceipt",
+    panelGroup: "fason-kartela",
+    countTable: { model: "subcontractorReceipt", field: "receiptNo", birim: "belge" },
+    label: "Fason kabul belge no",
+    seedPrefix: "FK",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+    kind: "DISPATCH_DOC",
+  },
+  {
+    key: "kartelaDispatch",
+    panelGroup: "fason-kartela",
+    countTable: { model: "kartelaDispatch", field: "dispatchNo", birim: "belge" },
+    label: "Kartela sevk belge no",
+    seedPrefix: "KS",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+    kind: "DISPATCH_DOC",
+  },
+  {
+    key: "kartelaReceipt",
+    panelGroup: "fason-kartela",
+    countTable: { model: "kartelaReceipt", field: "receiptNo", birim: "belge" },
+    label: "Kartela kabul belge no",
+    seedPrefix: "KK",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+    kind: "DISPATCH_DOC",
+  },
 
   // ── Sevkiyat ailesi (Faz C'de panele açılan küme) ──────────────────────────
   {
@@ -243,13 +309,15 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
       not: "`return.service` BELGE BAŞINA tek numara üretir (üyeler liderin kopyasını taşır) ve kapsam damgası migration'da kuruldu — `id`den türemiş eski hex kuyruklar sayaca giremez.",
     },
   },
-  { key: "directShipment", label: "Doğrudan sevk no", seedPrefix: "DSK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "manifest", label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "order", label: "Sipariş no", seedPrefix: "SIP", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "directShipment", panelGroup: "fason-kartela", countTable: { model: "directShipment", field: "shipmentNo", birim: "belge" }, label: "Doğrudan sevk no", seedPrefix: "DSK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "manifest", panelGroup: "uretim", countTable: { model: "manifest", field: "manifestNo", birim: "belge" }, label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "order", panelGroup: "depo-ticaret", countTable: { model: "order", field: "orderNumber", birim: "belge" }, label: "Sipariş no", seedPrefix: "SIP", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
 
   // ── Üretim / depo ──────────────────────────────────────────────────────────
   {
     key: "batchDaily",
+    panelGroup: "uretim",
+    countTable: { model: "batch", field: "batchNumber", birim: "kayıt" },
     label: "Parti no (günlük biçim)",
     seedPrefix: "P",
     seedDateSegment: D,
@@ -258,129 +326,64 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     lockedReason:
       "Parti no fabrikanın FİZİKSEL plaka setine bağlı (P01…P99 körlemesine sarar, benzersiz değil — 2026-08-05 kullanıcı kararı); dolgusuzluk ve sarma biçim ayarıyla ifade edilemez.",
   },
-  { key: "weavingOrder", label: "Dokuma işi no", seedPrefix: "DK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "warpBeam", label: "Levent no", seedPrefix: "LV", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "doffEvent", label: "Doff kodu", seedPrefix: "DF", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "goodsReceipt", label: "Mal kabul fiş no", seedPrefix: "MK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "purchaseOrder", label: "Alış siparişi no", seedPrefix: "AS", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "warehouseTransfer", label: "Depo transfer no", seedPrefix: "DT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "stockCount", label: "Sayım no", seedPrefix: "SAY", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "freeDocument", label: "Serbest belge no", seedPrefix: "SB", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "weavingOrder", panelGroup: "uretim", countTable: { model: "weavingOrder", field: "weavingOrderNumber", birim: "kayıt" }, label: "Dokuma işi no", seedPrefix: "DK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "warpBeam", panelGroup: "uretim", countTable: { model: "warpBeam", field: "beamNo", birim: "kayıt" }, label: "Levent no", seedPrefix: "LV", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "doffEvent", panelGroup: "uretim", countTable: { model: "doffEvent", field: "code", birim: "kayıt" }, label: "Doff kodu", seedPrefix: "DF", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "goodsReceipt", panelGroup: "depo-ticaret", countTable: { model: "goodsReceipt", field: "receiptNo", birim: "belge" }, label: "Mal kabul fiş no", seedPrefix: "MK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "purchaseOrder", panelGroup: "depo-ticaret", countTable: { model: "purchaseOrder", field: "orderNo", birim: "belge" }, label: "Alış siparişi no", seedPrefix: "AS", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "warehouseTransfer", panelGroup: "depo-ticaret", countTable: { model: "warehouseTransfer", field: "transferNo", birim: "belge" }, label: "Depo transfer no", seedPrefix: "DT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "stockCount", panelGroup: "depo-ticaret", countTable: { model: "stockCount", field: "countNo", birim: "belge" }, label: "Sayım no", seedPrefix: "SAY", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "freeDocument", panelGroup: "depo-ticaret", countTable: { model: "freeDocument", field: "documentNo", birim: "belge" }, label: "Serbest belge no", seedPrefix: "SB", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
 
   // ── Finans ─────────────────────────────────────────────────────────────────
-  {
-    key: "invoiceSales",
-    countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
-    label: "Satış faturası no",
-    seedPrefix: "SF",
-    seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
-  },
-  {
-    key: "invoicePurchase",
-    countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
-    label: "Alış faturası no",
-    seedPrefix: "AF",
-    seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
-  },
-  {
-    key: "invoiceSalesReturn",
-    countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
-    label: "Satış iade faturası no",
-    seedPrefix: "SI",
-    seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
-  },
-  {
-    key: "invoicePurchaseReturn",
-    countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
-    label: "Alış iade faturası no",
-    seedPrefix: "AI",
-    seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
-  },
-  {
-    key: "paymentIn",
-    countTable: { model: "payment", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
-    label: "Tahsilat no",
-    seedPrefix: "TH",
-    seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
-  },
-  {
-    key: "paymentOut",
-    countTable: { model: "payment", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
-    label: "Ödeme no",
-    seedPrefix: "OD",
-    seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
-  },
-  { key: "cashTransaction", label: "Kasa fiş no", seedPrefix: "KH", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  {
-    key: "chequeReceived",
-    countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
-    label: "Alınan çek no",
-    seedPrefix: "CKA",
-    seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
-  },
-  {
-    key: "chequeIssued",
-    countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
-    label: "Verilen çek no",
-    seedPrefix: "CKV",
-    seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
-  },
-  {
-    key: "noteReceived",
-    countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
-    label: "Alınan senet no",
-    seedPrefix: "SNA",
-    seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
-  },
-  {
-    key: "noteIssued",
-    countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" },
-    label: "Verilen senet no",
-    seedPrefix: "SNV",
-    seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
-  },
-  { key: "chequeDeliveryNote", label: "Çek teslim bordro no", seedPrefix: "BRD", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "reconciliationLetter", label: "Mutabakat mektubu no", seedPrefix: "MBT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "invoiceSales", panelGroup: "finans", countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Satış faturası no", seedPrefix: "SF", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "invoicePurchase", panelGroup: "finans", countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Alış faturası no", seedPrefix: "AF", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "invoiceSalesReturn", panelGroup: "finans", countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Satış iade faturası no", seedPrefix: "SI", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "invoicePurchaseReturn", panelGroup: "finans", countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Alış iade faturası no", seedPrefix: "AI", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "paymentIn", panelGroup: "finans", countTable: { model: "payment", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Tahsilat no", seedPrefix: "TH", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "paymentOut", panelGroup: "finans", countTable: { model: "payment", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Ödeme no", seedPrefix: "OD", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "cashTransaction", panelGroup: "finans", countTable: { model: "cashTransaction", field: "docNo", birim: "belge" }, label: "Kasa fiş no", seedPrefix: "KH", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "chequeReceived", panelGroup: "finans", countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Alınan çek no", seedPrefix: "CKA", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "chequeIssued", panelGroup: "finans", countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Verilen çek no", seedPrefix: "CKV", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "noteReceived", panelGroup: "finans", countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Alınan senet no", seedPrefix: "SNA", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "noteIssued", panelGroup: "finans", countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Verilen senet no", seedPrefix: "SNV", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "chequeDeliveryNote", panelGroup: "finans", countTable: { model: "chequeDeliveryNote", field: "docNo", birim: "belge" }, label: "Çek teslim bordro no", seedPrefix: "BRD", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "reconciliationLetter", panelGroup: "finans", countTable: { model: "reconciliationLetter", field: "docNo", birim: "belge" }, label: "Mutabakat mektubu no", seedPrefix: "MBT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
 
   // ── Master data kodları ────────────────────────────────────────────────────
-  { key: "customer", label: "Cari kodu", seedPrefix: "MUS", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "customer", panelGroup: "master-veri", countTable: { model: "customer", field: "code", birim: "kayıt" }, label: "Cari kodu", seedPrefix: "MUS", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   // ⚠️ `FSN` ile okutulan `FS` (fason sevk belgesi) ön ek olarak çakışmaz:
   // çakışma kapısı yalnız TARAMA uzayında küreseldir ve bu ikisi okutulmaz;
   // ayrıca istemci çapası ön ekten sonra RAKAM ister, `FSN…` `FS`ye uymaz.
-  { key: "subcontractor", label: "Fason firma kodu", seedPrefix: "FSN", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "subcontractorCategory", label: "Fason kategori kodu", seedPrefix: "KAT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "fabricProperty", label: "Kumaş özelliği kodu", seedPrefix: "OZL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "item", label: "Stok kodu", seedPrefix: "STK", seedDateSegment: NONE, seedDigits: 6, seedSeparator: "-" },
-  { key: "color", label: "Renk kodu", seedPrefix: "RNK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "station", label: "İstasyon kodu", seedPrefix: "IST", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "machine", label: "Makine kodu", seedPrefix: "MAK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "cashAccount", label: "Kasa kodu", seedPrefix: "KS", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "bankAccount", label: "Banka hesap kodu", seedPrefix: "BN", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "returnReason", label: "İade sebebi kodu", seedPrefix: "IADE", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "productRecipe", label: "Ürün reçetesi kodu", seedPrefix: "REC", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "defectType", label: "Hata tipi kodu", seedPrefix: "HATA", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "warehouse", label: "Depo kodu", seedPrefix: "DP", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "routeTemplate", label: "Rota kodu", seedPrefix: "ROT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "subcontractor", panelGroup: "master-veri", countTable: { model: "subcontractor", field: "code", birim: "kayıt" }, label: "Fason firma kodu", seedPrefix: "FSN", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "subcontractorCategory", panelGroup: "master-veri", countTable: { model: "subcontractorCategory", field: "code", birim: "kayıt" }, label: "Fason kategori kodu", seedPrefix: "KAT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "fabricProperty", panelGroup: "master-veri", countTable: { model: "fabricProperty", field: "code", birim: "kayıt" }, label: "Kumaş özelliği kodu", seedPrefix: "OZL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "item", panelGroup: "master-veri", countTable: { model: "item", field: "code", birim: "kayıt" }, label: "Stok kodu", seedPrefix: "STK", seedDateSegment: NONE, seedDigits: 6, seedSeparator: "-" },
+  { key: "color", panelGroup: "master-veri", countTable: { model: "color", field: "code", birim: "kayıt" }, label: "Renk kodu", seedPrefix: "RNK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "station", panelGroup: "master-veri", countTable: { model: "station", field: "code", birim: "kayıt" }, label: "İstasyon kodu", seedPrefix: "IST", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "machine", panelGroup: "master-veri", countTable: { model: "machine", field: "code", birim: "kayıt" }, label: "Makine kodu", seedPrefix: "MAK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "cashAccount", panelGroup: "master-veri", countTable: { model: "cashBox", field: "code", birim: "kayıt" }, label: "Kasa kodu", seedPrefix: "KS", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "bankAccount", panelGroup: "master-veri", countTable: { model: "bankAccount", field: "code", birim: "kayıt" }, label: "Banka hesap kodu", seedPrefix: "BN", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "returnReason", panelGroup: "master-veri", countTable: { model: "returnReason", field: "code", birim: "kayıt" }, label: "İade sebebi kodu", seedPrefix: "IADE", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "productRecipe", panelGroup: "master-veri", countTable: { model: "productRecipe", field: "code", birim: "kayıt" }, label: "Ürün reçetesi kodu", seedPrefix: "REC", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "defectType", panelGroup: "master-veri", countTable: { model: "defectType", field: "code", birim: "kayıt" }, label: "Hata tipi kodu", seedPrefix: "HATA", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "warehouse", panelGroup: "master-veri", countTable: { model: "warehouse", field: "code", birim: "kayıt" }, label: "Depo kodu", seedPrefix: "DP", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  {
+    key: "routeTemplate",
+    panelGroup: "master-veri",
+    // ⚠️ `Route.code` NULLABLE ve ELLE de yazılabiliyor ("BKT-STD" — desen kodu
+    // saha dilidir). Kapsam null'ları ve seri-dışı kodları eler; §4'ün "zorunlu
+    // kolon YA DA kapsam" sözleşmesinin ikinci ayağı. BEYAN: ön ek kapsamı,
+    // tesadüfen aynı ön ekle başlayan elle yazılmış bir kodu (`ROTA-1`) DA
+    // sayar — etki cümlesi için kabul edilebilir bir AŞIRI sayım, çünkü o kayıt
+    // da biçim değişiminden etkilenmez; eksik sayım olsaydı kabul edilmezdi.
+    countTable: { model: "route", field: "code", birim: "kayıt", kapsam: "seri-onekli" },
+    label: "Rota kodu",
+    seedPrefix: "ROT",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
 ] as const;
 
 /** Katalog anahtarı — servis çağrıları bunu kullanır (serbest string değil). */

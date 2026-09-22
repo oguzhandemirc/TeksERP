@@ -15,8 +15,11 @@
 import { FAZ_B_ONCESI, scanningClientsCarryFazB } from "../../config/client-version-policy";
 import {
   NUMBER_SERIES_CATALOG,
+  NUMBER_SERIES_PANEL_GROUPS,
   numberSeriesCatalogEntry,
+  numberSeriesPanelGroupLabel,
   type NumberSeriesKind,
+  type NumberSeriesPanelGroup,
 } from "../../constants/number-series-catalog";
 import prisma from "../../lib/prisma";
 import { previewSeriesCode, resolveSeriesFormat } from "../number-series.service";
@@ -127,13 +130,21 @@ export function listSeries(): Array<
     editable: boolean;
     lockedReason?: string;
     lockKind?: SeriesLockKind;
-    panelGroup?: "sevkiyat";
+    panelGroup: NumberSeriesPanelGroup;
+    /** Bölüm başlığı — panel KOPYALAMAZ, okur (`countBirim` emsali). */
+    panelGroupLabel: string;
     /** Etki cümlesinin BİRİMİ — panel bunu KOPYALAMAZ, okur. */
     countBirim?: "kayıt" | "belge";
     preview: string;
   }
 > {
-  return NUMBER_SERIES_CATALOG.map((e) => {
+  // ⚠️ SIRA BACKEND'DE: panel grupları kendi listesine göre dizerse, backend yeni
+  // bir grup eklediğinde panelin listesi bayatlar ve grup ya kaybolur ya da sona
+  // düşer. Satırlar grup sırasında gelir, panel yalnız ardışık olanları toplar.
+  const grupSirasi = new Map(NUMBER_SERIES_PANEL_GROUPS.map((g, i) => [g.key, i]));
+  return [...NUMBER_SERIES_CATALOG]
+    .sort((a, b) => (grupSirasi.get(a.panelGroup) ?? 0) - (grupSirasi.get(b.panelGroup) ?? 0))
+    .map((e) => {
     const fmt = resolveSeriesFormat(e.key);
     // ⚠️ `editable` artık YALNIZ `lockedReason`a bakmaz: sayaç hazırlığı ve eski
     // istemci kapısı da "bugün düzenlenemez" der. Panel tek bir yüklemden
@@ -146,7 +157,8 @@ export function listSeries(): Array<
       ...(e.kind ? { kind: e.kind } : {}),
       editable: lock === null,
       ...(lock ? { lockedReason: lock.reason, lockKind: lock.kind } : {}),
-      ...(e.panelGroup ? { panelGroup: e.panelGroup } : {}),
+      panelGroup: e.panelGroup,
+      panelGroupLabel: numberSeriesPanelGroupLabel(e.panelGroup),
       ...(e.countTable ? { countBirim: e.countTable.birim } : {}),
       preview: previewSeriesCode(fmt),
     };

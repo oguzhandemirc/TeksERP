@@ -1,8 +1,10 @@
 // =============================================================================
-// NUMARA SERİSİ — PANEL YAZMA YÜZEYİ (Faz C, 2026-09-22)
+// NUMARA SERİSİ — PANEL YAZMA YÜZEYİ (Faz C, 2026-09-22 · Faz D, 2026-09-23)
 // =============================================================================
 // Biçim (ön ek · tarih segmenti · hane · ayraç) VERİDİR; bu uçlar onu panele
-// açar. Faz C yalnız SEVKİYAT ailesini düzenlenebilir kılar (`panelGroup`).
+// açar. Faz D'den beri 52 serinin HEPSİ altı bölümde GÖRÜNÜR (`panelGroup`);
+// düzenlenebilirlik ayrı bir sorudur ve kilit üçlüsüne bakar — görünürlük
+// kilidin yerine geçmez, tersine kilidin GEREKÇESİNİ ekrana getirir.
 //
 // ⚠️ ÖNİZLEME SUNUCUDA HESAPLANIR ve panel kendi biçimlendiricisini YAZMAZ.
 // Bütün bu işin sebebi buydu: "programda P-2 yazarken çıktı P20260202" ancak

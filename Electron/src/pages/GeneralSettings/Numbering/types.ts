@@ -19,7 +19,15 @@ export interface NumberSeriesRow {
   editable: boolean;
   lockedReason?: string;
   lockKind?: SeriesLockKind;
-  panelGroup?: "sevkiyat";
+  /**
+   * Bölüm anahtarı. ⚠️ Panel bu kümeyi DARALTMAZ: backend yeni bir grup
+   * eklediğinde burada `string` olduğu için satır DÜŞMEZ, bilinmeyen grup kendi
+   * başlığıyla çizilir. Daraltılmış bir union, "kaydedilen ama görünmeyen kayıt"
+   * sınıfını doğrudan üretirdi.
+   */
+  panelGroup: string;
+  /** Bölüm başlığı — BACKEND'den; panelde etiket kopyası tutulmaz. */
+  panelGroupLabel: string;
   /**
    * Etki cümlesinin birimi — BACKEND'DEN gelir, panelde KOPYALANMAZ.
    * (Satır ile belge aynı şey değil: iade numarası üye satırlara kopyalanır.)

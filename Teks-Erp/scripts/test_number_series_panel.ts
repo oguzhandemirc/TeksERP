@@ -23,6 +23,11 @@
 //      beyanı ZORUNLU, ve o serilerin ön ekleri birbirinin BAŞLANGICI olamaz
 //  §4c Kapsam DAVRANIŞTA daralıyor (fikstürlü: aynı tabloya iki serinin kodu) ve
 //      EMEKLİ ön ekle yazılmış kayıt da sayıya giriyor
+//  §4d Her seri bir panel BÖLÜMÜNE ait (görünmez seri yok), liste grup sırasında
+//      gelir ve bölüm başlığını taşır
+//  §4e Sayım kaynağı olmayan seri `uretecBagi` ile BEYANLI (kaynaksızlık bir KARAR)
+//  §4f Kaynaklı HER seri gerçekten sayılabiliyor — yanlış model adı sessizce
+//      `null` döndürür ve hiçbir statik kontrol göremez
 //   §5 Önizleme SUNUCUDA hesaplanır ve biçim kapısından geçer
 //
 // ⭐ NEGATİF SONDA ✓B3 (2026-09-22, ölçüldü): sayaç ve istemci kapılarının sırası
@@ -43,7 +48,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import prisma from "../src/lib/prisma";
-import { NUMBER_SERIES_CATALOG, numberSeriesCatalogEntry } from "../src/constants/number-series-catalog";
+import {
+  NUMBER_SERIES_CATALOG,
+  NUMBER_SERIES_PANEL_GROUPS,
+  numberSeriesCatalogEntry,
+} from "../src/constants/number-series-catalog";
 import {
   assertSeriesFormatAllowed,
   refreshNumberSeriesCache,
@@ -328,6 +337,59 @@ async function main(): Promise<void> {
       check("§4c ⭐ EMEKLİ ön ekle yazılmış kayıt da bu serinin sayısına girer",
         sonrasi === oncesi + 1, `${oncesi} → ${sonrasi}`);
     }
+
+    // ── §4d PANELDE GÖRÜNÜRLÜK ──────────────────────────────────────────────
+    // ⚠️ Etiketsiz seri ekrandan DÜŞER ve bu SESSİZDİR: "çuval numarası neden
+    // burada yok?" sorusunun ekranda cevabı yoktur, "neden kilitli?" sorusununki
+    // vardır (C3 kararı). Bu yüzden `panelGroup` ZORUNLU, opsiyonel değil.
+    const grupsuz = NUMBER_SERIES_CATALOG.filter((e) => !e.panelGroup);
+    check("§4d ⭐ her seri bir panel bölümüne ait (görünmez seri YOK)",
+      grupsuz.length === 0, grupsuz.map((e) => e.key).join(", ") || `${NUMBER_SERIES_CATALOG.length} seri`);
+    // §2'de kurulan liste yeniden kullanılır (aynı kapsam, saf katalog okuması).
+    check("§4d ⭐ liste GRUP SIRASINDA geliyor (panel kendi sırasını uydurmuyor)",
+      (() => {
+        const sira = NUMBER_SERIES_PANEL_GROUPS.map((g) => g.key);
+        const gorulen = liste.map((r) => sira.indexOf(r.panelGroup));
+        return gorulen.every((n, i) => n >= 0 && (i === 0 || n >= gorulen[i - 1]!));
+      })(),
+      liste.map((r) => r.panelGroup).filter((g, i, a) => g !== a[i - 1]).join(" → "));
+    check("§4d ⭐ her satır bölüm BAŞLIĞINI taşıyor (panel etiket kopyası tutmasın)",
+      liste.every((r) => typeof r.panelGroupLabel === "string" && r.panelGroupLabel.length > 0));
+    check("§4d körlük zemini: bölüm sayısı beklendiği gibi çoğul",
+      new Set(liste.map((r) => r.panelGroup)).size === NUMBER_SERIES_PANEL_GROUPS.length,
+      `${new Set(liste.map((r) => r.panelGroup)).size} / ${NUMBER_SERIES_PANEL_GROUPS.length} bölüm`);
+
+    // ── §4e SAYIM KAYNAĞI ZORUNLU — istisnası BEYANLI ───────────────────────
+    // ⚠️ "Kaynağı yok ⇒ `null` döner" kuralı doğru ama YETERSİZ: her yeni seri
+    // sessizce kaynaksız doğabilir ve panel hiçbir zaman sayı göstermezdi.
+    // Kaynaksızlık artık BİR KARAR ve o karar `uretecBagi` ile beyan edilir:
+    // üretecini SÜRMEYEN bir serinin hangi kayıtları numaraladığını BİLEMEYİZ,
+    // bu yüzden sayamayız (ve saymaya kalkışmak `T` gibi tek harfli bir ön ekte
+    // eski `TEKS…`/`TEST-…` barkodlarını da toplardı).
+    const kaynaksizBeyansiz = NUMBER_SERIES_CATALOG.filter((e) => !e.countTable && !e.uretecBagi);
+    check("§4e ⭐ sayım kaynağı olmayan seri `uretecBagi` ile BEYAN edilmiş",
+      kaynaksizBeyansiz.length === 0,
+      kaynaksizBeyansiz.map((e) => e.key).join(", ") ||
+        `${NUMBER_SERIES_CATALOG.filter((e) => !e.countTable).length} kaynaksız seri, hepsi beyanlı`);
+
+    // ── §4f SAYIM GERÇEKTEN KOŞUYOR MU? ─────────────────────────────────────
+    // ⚠️ `seriesImpactCount` delege bulunamazsa SESSİZCE `null` döner (fail-safe).
+    // Yani katalogdaki bir model adı yanlış yazılırsa (`cashAccount` ↔ `cashBox`
+    // — bu dilimde GERÇEKTEN yaşandı: şemada `CashAccount` diye bir model yok)
+    // panel sonsuza kadar "ölçülmedi" gösterir ve HİÇBİR statik kontrol görmez.
+    // Bu yüzden her kaynaklı seride sayım BİR KEZ KOŞTURULUR.
+    const sayilamayan: string[] = [];
+    let sayilanSeri = 0;
+    for (const e of NUMBER_SERIES_CATALOG) {
+      if (!e.countTable) continue;
+      sayilanSeri++;
+      if ((await seriesImpactCount(e.key)) === null) {
+        sayilamayan.push(`${e.key}→${e.countTable.model}.${e.countTable.field}`);
+      }
+    }
+    check("§4f ⭐ `countTable` taşıyan HER seri gerçekten sayılabiliyor (delege adı doğru)",
+      sayilamayan.length === 0, sayilamayan.join(", ") || `${sayilanSeri} seri sayıldı`);
+    check("§4f körlük zemini: sayım gerçekten koştu", sayilanSeri >= 50, `${sayilanSeri} seri`);
 
     // ── §5 Önizleme sunucuda + biçim kapısı ───────────────────────────────
     const fmt = resolveSeriesFormat("packingLotCode");
