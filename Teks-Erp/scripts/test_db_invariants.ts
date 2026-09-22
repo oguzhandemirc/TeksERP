@@ -220,6 +220,12 @@ const PARTIAL_INDEXES: Array<{
   { table: "roll_errors", index: "roll_errors_roll_meter_defect_uq", uniq: true, predicate: `("defectTypeId" IS NOT NULL)`, why: "aynı metrede mükerrer hata seddi" },
   // roll_returns — çok kalemli iade grubu (migration 20260805100000)
   { table: "roll_returns", index: "roll_returns_returnGroupId_idx", uniq: false, predicate: `("returnGroupId" IS NOT NULL)`, why: "null-yoğun: tekil iadelerde NULL" },
+  // roll_returns — iade belge no KOLONA alındı (migration 20260922210000).
+  // ⚠️ Tekillik BELGE başınadır: üye satırlar liderin numarasının KOPYASINI
+  // taşır ve yüklemin dışında kalır. Yüklem `documentSourceId = returnGroupId ??
+  // id` ifadesinin sed karşılığıdır; yalnız `IS NULL` demek grupların TAMAMINI
+  // (lideri dahil) dışarıda bırakırdı — lider kendi id'sini taşıyor.
+  { table: "roll_returns", index: "roll_returns_returnNo_doc_key", uniq: true, predicate: `(("returnNo" IS NOT NULL) AND (("returnGroupId" IS NULL) OR ("returnGroupId" = id)))`, why: "belge başına tekillik: tekil iade ya da grup lideri" },
   // ticaret paketi — çoklu depo + mal kabul (migration 20260813090000)
   {
     table: "warehouses",

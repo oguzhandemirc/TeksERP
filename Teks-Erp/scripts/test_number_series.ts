@@ -156,10 +156,15 @@ check("§2 hane 0 ve 9 reddedilir",
   throws(() => assertSeriesFormatAllowed("sack", f({ prefix: "PKT", digits: 9 })), "NUMBER_SERIES_DIGITS_INVALID"));
 check("§2 tanınmayan ayraç reddedilir",
   throws(() => assertSeriesFormatAllowed("sack", f({ prefix: "PKT", separator: "*" })), "NUMBER_SERIES_SEPARATOR_INVALID"));
-check("§2 ⭐ kilitli seri (top barkodu · parti no · iade) değiştirilemez",
+// ⚠️ `returnDoc` bu listeden ÇIKTI (Faz C2): kilidin gerekçesi "sayaç YOK,
+// numara `id`den türetiliyor" idi; `returnNo` kolonu doğup geçmiş geri
+// doldurulunca gerekçe ORTADAN KALKTI. Kilit gerekçesiyle birlikte kalkar —
+// gerekçesi çürüyen bir kilit, kilit değil kalıntıdır.
+check("§2 ⭐ YAPISAL kilitli seri (top barkodu · parti no) değiştirilemez",
   throws(() => assertSeriesFormatAllowed("roll", f({ prefix: "TP" })), "NUMBER_SERIES_LOCKED") &&
-  throws(() => assertSeriesFormatAllowed("batchDaily", f({ prefix: "PT" })), "NUMBER_SERIES_LOCKED") &&
-  throws(() => assertSeriesFormatAllowed("returnDoc", f({ prefix: "IAD" })), "NUMBER_SERIES_LOCKED"));
+  throws(() => assertSeriesFormatAllowed("batchDaily", f({ prefix: "PT" })), "NUMBER_SERIES_LOCKED"));
+check("§2 ⭐ `returnDoc` ARTIK yapısal kilitli DEĞİL (kolon doğdu, gerekçe çürüdü)",
+  !throws(() => assertSeriesFormatAllowed("returnDoc", f({ prefix: "IAD", digits: 6, separator: "-" })), "NUMBER_SERIES_LOCKED"));
 let temizGecti = true;
 try {
   assertSeriesFormatAllowed("sack", f({ prefix: "PKT" }));

@@ -31,6 +31,7 @@ import {
 } from "./printed-document.service";
 import { renderReturnDispatchHtml, type ReturnDispatchDoc } from "./document-render/return-dispatch.html";
 import { AppError } from "../utils/app-error";
+import { nextSeriesNo } from "./number-series.service";
 import { AuditService } from "./audit.service";
 import { readReturnGradingEnabled } from "./system-setting.service";
 import { ApiResponse } from "../types/api.types";
@@ -613,6 +614,18 @@ export class ReturnService {
         });
       }
 
+      // İADE BELGE NO — BELGE BAŞINA TEK kez üretilir, bütün satırlara yazılır.
+      //
+      // ⚠️ DÖNGÜ İÇİNDE ÇAĞRILMAZ: iade satırları tek tx'te yaratılıyor ve tx
+      // kendi commit edilmemiş satırlarını GÖREMEZ ⇒ satır başına `nextSeriesNo`
+      // aynı numarayı üretir, `@unique` P2002 verir ve `withBarcodeRetry` bunu
+      // DETERMİNİSTİK tekrarlayıp 409'la biterdi (`shipping.service.ts:230`
+      // aynı tuzağı yazılı beyan ediyor).
+      // ⚠️ Numara BELGEYE ait: belge `returnGroupId ?? id` ile çözülüyor, yani
+      // üye satırların kendi numarası olsaydı hiçbir belgede görünmezdi.
+      const returnNo = await nextReturnDocNoTx(tx);
+      await tx.rollReturn.updateMany({ where: { id: { in: createdIds } }, data: { returnNo } });
+
       // RESMİ BELGE — iade irsaliyesini iade ANINDA dondur (sevk irsaliyesiyle aynı
       // desen: `shipping.service` dispatch tx'i). Eskiden belge yalnız biri ekranı
       // AÇTIĞINDA lazy-init ile kuruluyordu; yani hiç açılmayan iadenin resmi kaydı
@@ -789,6 +802,10 @@ export class ReturnService {
 
     const select = {
       id: true,
+      // Belge no KOLONDAN döner: üye satırlar liderin numarasının kopyasını
+      // taşıdığı için her satır KENDİ belgesinin numarasını gösterir — panel
+      // ayrıca "lider kim" kuralını kopyalamak zorunda kalmaz.
+      returnNo: true,
       qty: true,
       width: true,
       reasonText: true,
@@ -878,6 +895,7 @@ export class ReturnService {
       where: { id },
       select: {
         id: true,
+        returnNo: true,
         qty: true,
         width: true,
         reasonText: true,
@@ -1193,6 +1211,26 @@ export const returnService = new ReturnService();
  * oluşturulan iade önceki günün numarasını taşıyordu (kimlik kusuru; İstanbul
  * saatli sunucuda etki 0). Saf fonksiyon — sondası DB'siz koşar.
  */
+/**
+ * Sıradaki iade BELGE numarası — tx İÇİNDE, sayacın kapsamıyla.
+ *
+ * ⚠️ `tx` zorunlu ve çağrı tx callback'inin İÇİNDE kalmalı: `withBarcodeRetry`
+ * her denemede fonksiyonu baştan çağırır ve okuma içeride kaldığı sürece her
+ * denemede TAZE olur (`shipping.service.nextSackNo` emsali).
+ * ⚠️ Adaylar `createdAt` ile döner: sayacın kapsamı `formatChangedAt`tan sonraki
+ * kodlardır — `id`den türemiş eski HEX kuyrukların rakamla başlayanları
+ * (uuid'in ilk 6 karakteri, ~%6) yoksa sırayı 123.457'ye fırlatırdı.
+ */
+async function nextReturnDocNoTx(tx: Prisma.TransactionClient): Promise<string> {
+  return nextSeriesNo("returnDoc", async (fullPrefix) => {
+    const rows = await tx.rollReturn.findMany({
+      where: { returnNo: { gte: fullPrefix, startsWith: fullPrefix } },
+      select: { returnNo: true, createdAt: true },
+    });
+    return rows.map((r) => ({ code: r.returnNo, createdAt: r.createdAt }));
+  });
+}
+
 export function returnDocumentNo(createdAt: Date, id: string): string {
   return `IADE-${ddmmyy(createdAt)}-${id.slice(0, 6).toUpperCase()}`;
 }
@@ -1205,6 +1243,7 @@ async function buildReturnDispatchDoc(
     where: { id: returnId },
     select: {
       id: true, qty: true, width: true, createdAt: true, reasonText: true, note: true,
+      returnNo: true,
       cancelledAt: true, cancelReason: true, returnGroupId: true,
       customer: { select: { code: true, name: true } },
       order: { select: { orderNumber: true } },
@@ -1245,7 +1284,11 @@ async function buildReturnDispatchDoc(
     },
   });
 
-  const documentNo = returnDocumentNo(rr.createdAt, rr.id);
+  // ⚠️ NUMARA KOLONDAN OKUNUR, RENDER'DA TÜRETİLMEZ — bütün numaralandırma
+  // işinin değişmezi bu. Türetim yalnız `returnNo` boş olan (kolondan önceki,
+  // geri doldurulmamış) bir kayıt için YEDEKTİR; geri doldurma zaten birebir
+  // aynı değeri yazdı (`test_return_no_backfill` iki yolu karşılaştırır).
+  const documentNo = rr.returnNo ?? returnDocumentNo(rr.createdAt, rr.id);
 
   const doc: ReturnDispatchDoc = {
     header: {

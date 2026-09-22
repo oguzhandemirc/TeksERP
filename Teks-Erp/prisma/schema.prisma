@@ -6760,6 +6760,11 @@ model SackAllocation {
 /// (returnGradingEnabled açıkken) override ederse `qualityGradeId`'de saklanır.
 model RollReturn {
   id             String  @id @default(uuid()) @db.Uuid
+  /// İade belge no — DOĞUŞTA materyalize edilir (`IADE-GGAAYY-NNNNNN`). Eskiden
+  /// her okumada `id`den TÜRETİLİYORDU; biçim değişince tüm geçmiş numaralar
+  /// geriye dönük değişirdi. Nullable + partial unique: geçmiş geri dolduruldu,
+  /// eski biçim (`IADE-220926-A1B2C3`) ile yeni sayaçlı biçim yan yana yaşar.
+  returnNo       String? @db.VarChar(64)
   rollId         String  @db.Uuid // İade edilen top
   fromShipmentId String? @db.Uuid // Geldiği sevkiyat (varsa)
   customerId     String  @db.Uuid // Müşteri (sevkiyattan türetilir)

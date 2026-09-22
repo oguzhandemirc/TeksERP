@@ -166,8 +166,10 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     seedDateSegment: D,
     seedDigits: 6,
     seedSeparator: "-",
-    lockedReason:
-      "Bugün sayaç YOK: numara her okumada `RollReturn.id`'nin ilk 6 hanesinden türetiliyor. Faz C'de `returnNo` kolonu doğup geçmiş doldurulana kadar biçim değiştirilemez.",
+    scopedCounter: {
+      durum: "hazir",
+      not: "`return.service` BELGE BAŞINA tek numara üretir (üyeler liderin kopyasını taşır) ve kapsam damgası migration'da kuruldu — `id`den türemiş eski hex kuyruklar sayaca giremez.",
+    },
   },
   { key: "directShipment", label: "Doğrudan sevk no", seedPrefix: "DSK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "manifest", label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
