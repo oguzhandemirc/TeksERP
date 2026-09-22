@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **156 başlık / 11 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **158 başlık / 11 dosya**
 (ölçüldü 2026-09-14; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 ⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
@@ -81,6 +81,7 @@ açan kişi tabloyu yine baştan sona okur.**
 |  | § Tarama, aradığı şeyin YAZILIŞ BİÇİMİNİ değil KENDİSİNİ sormalı | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Bir YOKLUK iddiası, arandığı DESENLE yazılır | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Sınırsız eşleşme — sınırını BEYAN ETMEYEN yüklem alakasızı içeri alır | (`OLCUM-DISIPLINI-YUKLEM.md`) |
+|  | § İddia hedefini LİTERALLE seçerse, hedef değişince sessizce başka şeyi ölçer | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz — bozulma ADAYI yok eder | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Bir POPÜLASYONU saymadan önce ÜYELİĞİNİ sına | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Sayma BİRİMİ, iddianın birimiyle aynı olmalı — yoksa cırcır yanlış pozitif üretir | (`OLCUM-DISIPLINI-YUKLEM.md`) |
@@ -93,6 +94,7 @@ açan kişi tabloyu yine baştan sona okur.**
 |  | § (d) KESİŞİMLE tanımlanan kapsam, YOKLUĞU göremez | (`OLCUM-DISIPLINI-SINIRSIZ.md`) |
 |  | § (e) KISA + SAYISAL + KALABALIK KORPUS — çakışma bir ÇARPIMDIR | (`OLCUM-DISIPLINI-SINIRSIZ.md`) |
 |  | § (f) BİRLEŞTİRME, hiçbir kolonda var olmayan bir KOMŞULUK uydurur | (`OLCUM-DISIPLINI-SINIRSIZ.md`) |
+|  | § Koşullu bir yazımın "hatasız döndü"sü, "YAZDI" demek değildir | (`OLCUM-DISIPLINI-SUREC.md`) |
 |  | § KABUK ailesi — "komut çalıştı" ile "ölçüm okundu" ayrı şeylerdir | (`OLCUM-DISIPLINI-SUREC.md`) |
 |  | § ASILI KALMAK, çalışmanın DELİLİ değildir — stdin bekleyen komut "yavaş" görünür | (`OLCUM-DISIPLINI-SUREC.md`) |
 |  | § KANCA ailesi — kendi repo'sunu kuran araç, KANCANIN git ortamını MİRAS ALIR | (`OLCUM-DISIPLINI-SUREC.md`) |
@@ -201,9 +203,9 @@ açan kişi tabloyu yine baştan sona okur.**
 | [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | YÖNTEM — ölçüm nasıl yapılır, nasıl OKUNUR (15 başlık) |
 | [`OLCUM-DISIPLINI-YAZIM.md`](OLCUM-DISIPLINI-YAZIM.md) | ölçümü YAZMA: sayı · çapa · kimlik (4 başlık) |
 | [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (18 başlık) |
-| [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (15 başlık) |
+| [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (16 başlık) |
 | [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (4 başlık) |
-| [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (5 başlık) |
+| [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (6 başlık) |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (31 başlık) |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — PAYLAŞILAN AĞAÇ, ÇOK OTURUM (8 başlık) |
 | [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (33 başlık) |

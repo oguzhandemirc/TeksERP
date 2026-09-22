@@ -19,6 +19,24 @@ sınıfları [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) (ne/nereye
 [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) / [`-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) (kapı) ·
 [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) (KATMAN 2).
 
+### Koşullu bir yazımın "hatasız döndü"sü, "YAZDI" demek değildir
+Komut koştu, çıkış kodu 0, hata yok — ve **hiçbir satır yazılmadı**. Koşullu yazımlar
+(`INSERT … WHERE EXISTS` · `WHERE NOT EXISTS` · `ON CONFLICT DO NOTHING` · `updateMany`
+ile eşleşmeyen `where`) başarıyla biter ve etkileri SIFIR olabilir. "Uygulandı" diye
+okumak, o migration'ı koşmamış olmakla aynı şeydir — ama artık defterde "koştu" yazar,
+yani ikinci kez koşmaz.
+
+*(Vaka 2026-09-22, iki oturum aynı gün: modül grandfathering damgalarının INSERT'i
+`WHERE EXISTS (SELECT 1 FROM rolls)` ile korunuyor. Sonda DB'si BOŞ ŞEMADAN kurulduğu
+için migration koşarken `rolls` boştu ⇒ dördü de NO-OP oldu, komutlar hatasız döndü ve
+"uygulandı" diye okundu. Bekçiler fikstürle top yaratınca kırmızı açıldı ve teşhis
+"çevresel" sanıldı. Toplar varken yeniden koşulunca damga 0 → 9.)*
+
+**Savunma:** yazımın ETKİSİNİ ayrıca ölç — `RETURNING` say, `count(*)` oku, `updateMany`in
+`count`una bak. Bu depo aynı ilkeyi ÜRÜN kodunda zaten uyguluyor (atomik claim:
+`count === 0 → 409`); ölçüm tarafında da aynısı geçerlidir.
+> **Bir yazımın çıkış kodu, YAZDIĞININ delili değildir. Delil satır sayısıdır.**
+
 ### KABUK ailesi — "komut çalıştı" ile "ölçüm okundu" ayrı şeylerdir
 Altı biçim, hepsi aynı yüklemi paylaşıyor *(kaynak: oturum ölçümü 2026-09-13, sha yok;
 vakalar üç ayrı oturumun KENDİ hataları)*:

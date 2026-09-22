@@ -102,6 +102,30 @@ saat. Gizem çoğu kez aritmetiktir.
 Kardeşleri § NE sorduğun kadar NEREYE sorduğun · § Bir adın geçmesi bir BAĞIMLILIK
 değildir · § Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz (bunun TERSİ).
 
+### İddia hedefini LİTERALLE seçerse, hedef değişince sessizce başka şeyi ölçer
+Yüklem doğru, araç doğru, ölçüm doğru — yanlış olan **hedefin nasıl seçildiği**. İddia
+hedefini bir literalle adlandırdıysa (bir anahtar · bir dosya adı), o literal
+sözleşmenin kendisi değil BUGÜNKÜ TAŞIYICISIDIR; taşıyıcı değişince iddia sessizce
+başka bir şeyi ölçmeye başlar. **İki biçim, zıt belirtiler, aynı kök:**
+
+| # | biçim | belirti | vaka (2026-09-22) |
+|---|---|---|---|
+| a | hedef **SINIF** değiştirdi | sessiz **YEŞİL** | *"sayım kaynağı olmayan seri `null` döner"* iddiası `packingLotName`e çakılıydı; o seri aynı dilimde `countTable` KAZANDI ⇒ iddia artık kaynağı OLAN bir seriyi ölçecekti ve yeşil kalacaktı |
+| b | hedef **YER** değiştirdi | sahte **KIRMIZI** | *"ekran kilitli satırı çiziyor"* iddiası `NumberingPage.tsx`e çakılıydı; boyut tavanı yüzünden çizim `NumberingTable.tsx`e taşındı ⇒ DAVRANIŞ AYNI KALMASINA RAĞMEN kırmızı |
+
+Belirtiler zıt olduğu için iki ayrı arıza sanılır; biri "kapı çalışmıyor", öteki "kod
+bozuldu" diye okunur. İkisi de yanlıştır: bozulan **hedef seçimidir**.
+
+**Savunma:** hedefi elle yazma, **sözleşmeyi ifade eden YÜKLEMLE seç.**
+`find((e) => !e.countTable)` "kaynağı olmayan seri" der; `NumberingPage + NumberingTable`
+"ekran yüzeyi" der. Hangi anahtarın ya da hangi dosyanın o rolü taşıdığı bir **yerleşim
+kararıdır**, sözleşme değil.
+
+> Sor: ***bu literal yarın rol değiştirse, iddiam bunu FARK EDER Mİ?*** Etmiyorsa literal
+> değil yüklem yaz.
+
+Kardeşleri § Araç ölçümün içinde · § Bir POPÜLASYONU saymadan önce ÜYELİĞİNİ sına.
+
 ### Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz — bozulma ADAYI yok eder
 Sınırsız eşleşmenin **tersi**: sınır o kadar dardır ki kusurlu örnek **aday bile
 olmaz**. Cırcır 0'da kalır, çünkü sayacak bir şey doğmamıştır.
@@ -117,6 +141,15 @@ Alan tam okunuyordu; kusur okumada değil **popülasyonun tanımındaydı**.)*
 **Savunma:** popülasyonu **alandan** türet (her `bekçi:` alanının virgülle ayrılmış her
 öğesi bir adaydır), sonra her adayın geçerli biçime uyup uymadığını sor. O zaman
 `te` bir **yokluk** değil bir **kırmızı** olur.
+
+**İkinci biçim — OLUMSUZ KARAKTER SINIFI, iç içe sözdiziminde erken durur.**
+`filter\([^)]*\.editable\)` deseni `filter((r) => r.editable)` metnini GÖREMEZ: `[^)]*`
+İLK `)`de durur ve iç parantez onu oraya kilitler. Yasaklanan biçim aday bile olmaz,
+sonda ısırmaz ve koşan kişi "kapı çalışıyor" diye okur.
+*(Vaka 2026-09-22, ölçüldü: kol yeşil kaldı; `[^;]*` ile ifade sınırına açılınca ısırdı.)*
+> **Olumsuz karakter sınıfı yazarken sor: aradığım metinde o karakterden BİR TANE bile
+> var mı?** Varsa sınıfı ifadenin doğal sınırına genişlet (`[^;]`, satır sonu) ya da
+> dengeli ayrıştırıcıya geç.
 Kardeşleri § Boş çıktı bir ÖLÇÜM değildir · § Tarama, aradığı şeyin YAZILIŞ BİÇİMİNİ
 değil KENDİSİNİ sormalı.
 
