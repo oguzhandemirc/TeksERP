@@ -76,6 +76,7 @@ import {
   trLabel,
 } from '../../../utils/labels';
 import { useScanClassifier } from '../../../hooks/useScanSeries';
+import { isWrongTypeForCardField, isWrongTypeForRollField } from './fasonScanGuards';
 
 // Barkod tipi sezgisi — yanlış alana okutmayı backend 404'üne güvenmeden anında,
 // net mesajla yakalar. Tür SUNUCU TABLOSUNDAN gelir (ön ek tablette sabit
@@ -111,8 +112,10 @@ export default function FasonSevkScreen() {
   // Barkod türü SUNUCU TABLOSUNDAN — ön ek tablette sabit değil, emekli ön ek
   // de tabloda taşındığı için eski kartlar tanınmaya devam eder.
   const { classify } = useScanClassifier();
-  const looksLikeRollBarcode = (code: string) => classify(code).kind === 'ROLL';
-  const looksLikeCardBarcode = (code: string) => classify(code).kind === 'TRAVELER_CARD';
+  // ⚠️ UNKNOWN REDDEDİLMEZ (bkz. `fasonScanGuards.ts`): elle verilmiş ya da
+  // emekliye ayrılmış ön ekli meşru bir kodu sahada kullanılamaz kılardı.
+  const looksLikeRollBarcode = (code: string) => isWrongTypeForCardField(classify(code));
+  const looksLikeCardBarcode = (code: string) => isWrongTypeForRollField(classify(code));
 
   const qc = useQueryClient();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();

@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 
 import {
   FALLBACK_SCAN_SERIES,
+  classifyOrAskWithTable,
   classifyWithTable,
   matchesFullFormatWithTable,
   scanSeriesService,
@@ -37,6 +38,12 @@ export interface ScanClassifier {
   matchesFullFormat: (kind: ScanKind, code: string) => boolean;
   /** Tablo tanımadığında sunucuya sor (async son adım). */
   resolveOnServer: (code: string) => Promise<ScanClassification>;
+  /**
+   * Tablo → sunucu → UNKNOWN. Sınıflandırma İKİ FARKLI DALI seçen yerlerde
+   * kullanılır: tanınmayan kodu yerel tabloya bakıp tahmin etmektense bir kez
+   * sunucuya sormak, yanlış dala düşmenin tek gerçek çaresidir.
+   */
+  classifyOrAsk: (code: string) => Promise<ScanClassification>;
 }
 
 export function useScanClassifier(): ScanClassifier {
@@ -46,6 +53,7 @@ export function useScanClassifier(): ScanClassifier {
       classify: (code: string) => classifyWithTable(rows, code),
       matchesFullFormat: (kind: ScanKind, code: string) => matchesFullFormatWithTable(rows, kind, code),
       resolveOnServer: scanSeriesService.resolve,
+      classifyOrAsk: (code: string) => classifyOrAskWithTable(rows, code),
     }),
     [rows],
   );

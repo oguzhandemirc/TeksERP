@@ -134,6 +134,24 @@ export function matchesFullFormatWithTable(
   return false;
 }
 
+/**
+ * Tablo → sunucu → UNKNOWN zinciri.
+ *
+ * Sınıflandırmanın İKİ FARKLI DALI seçtiği yerlerde (Depo: kartela sorgusu mu
+ * top sorgusu mu) kullanılır: tanınmayan kodu yerel tabloya bakıp TAHMİN
+ * etmektense bir kez sunucuya sormak, yanlış dala düşmenin tek gerçek çaresidir
+ * (emekliye ayrılmış ön ek bu yoldan çözülür). Sunucu da çözemezse UNKNOWN
+ * döner ve çağıran bugünkü varsayılan yolu sürdürür — sonuç yine net bir RET.
+ */
+export async function classifyOrAskWithTable(
+  rows: readonly ScanSeriesRow[],
+  code: string,
+): Promise<ScanClassification> {
+  const local = classifyWithTable(rows, code);
+  if (local.kind !== 'UNKNOWN') return local;
+  return scanSeriesService.resolve(code);
+}
+
 export const scanSeriesService = {
   /** Tabloyu çek. Bozuk/boş yanıt YEDEĞE düşer — okutma yolu kapanmaz. */
   async get(): Promise<ScanSeriesRow[]> {

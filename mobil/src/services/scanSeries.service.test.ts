@@ -14,13 +14,16 @@
 // ⭐ NEGATİF SONDA ✓B4 (2026-09-22, ölçüldü): `FALLBACK_SCAN_SERIES`ten
 //    `roll.infix` silinince ❌3 · `scanSeriesService.get` bozuk yanıtta boş dizi
 //    dönünce ❌1 · `resolve` ağ hatasında `ROLL` uydurunca ❌1 · `persistPolicy`den
-//    `['scan-series']` çıkınca ❌1. Hepsi geri alındı, temiz ağaçta 20/20.
+//    `['scan-series']` çıkınca ❌1 · ön ek çapası ÇIPLAK ön eke düşürülünce ❌2
+//    (fason FİRMA kodu `FSN…` sevk belgesi sanılıyor). Hepsi geri alındı, temiz
+//    ağaçta 24/24.
 // =============================================================================
 import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 
 import {
   FALLBACK_SCAN_SERIES,
+  classifyOrAskWithTable,
   classifyWithTable,
   matchesFullFormatWithTable,
   scanSeriesService,
@@ -64,6 +67,12 @@ describe('② YEDEK tablo = bugünkü davranış', () => {
     for (const c of ['RAF-A12', '', '12345', 'SIP1207260001', 'A-17']) {
       expect(classifyWithTable(T, c).kind).toBe('UNKNOWN');
     }
+  });
+
+  it('⭐ fason FİRMA kodu (FSN…) sevk belgesi (FS…) sanılmıyor', () => {
+    // Ön ek içinde ön ek; ayıran tek şey çapanın ön ekten sonra RAKAM istemesi.
+    expect(classifyWithTable(T, 'FSN2209260001').kind).toBe('UNKNOWN');
+    expect(classifyWithTable(T, 'FS2209260001').key).toBe('subcontractorDispatch'); // kontrol grubu
   });
 
   it('⭐ ön ekten sonra RAKAM ya da AYRAÇ ister ("TEKSTİL BEYAZ" top sayılmaz)', () => {
@@ -137,6 +146,28 @@ describe('Sunucuya tek kod sorma', () => {
     const r = await scanSeriesService.resolve('ZZ1207260001');
     expect(r.kind).toBe('UNKNOWN');
     expect(r.key).toBeNull();
+  });
+});
+
+describe('Tablo → sunucu → UNKNOWN zinciri (iki dalı seçen ekranlar için)', () => {
+  const T = FALLBACK_SCAN_SERIES;
+
+  it('tablo tanıyorsa SUNUCUYA HİÇ SORULMAZ (gereksiz ağ turu yok)', async () => {
+    const r = await classifyOrAskWithTable(T, 'CV1207260001');
+    expect(r.key).toBe('sack');
+    expect(getMock).not.toHaveBeenCalled();
+  });
+
+  it('⭐ tablo tanımıyorsa SUNUCUYA sorulur ve cevabı kullanılır', async () => {
+    getMock.mockResolvedValueOnce({ data: { data: { code: 'ZZ1207260001', kind: 'SWATCH', key: 'swatch' } } });
+    const r = await classifyOrAskWithTable(T, 'ZZ1207260001');
+    expect(getMock).toHaveBeenCalledTimes(1);
+    expect(r.kind).toBe('SWATCH');
+  });
+
+  it('⭐ sunucu da çözemezse UNKNOWN — tahmin YOK', async () => {
+    getMock.mockRejectedValueOnce(new Error('ağ yok'));
+    expect((await classifyOrAskWithTable(T, 'A-17')).kind).toBe('UNKNOWN');
   });
 });
 

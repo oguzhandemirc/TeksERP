@@ -123,7 +123,7 @@ interface RollListItem extends Roll {
 
 export default function DepoScreen() {
   // Barkod türü SUNUCU TABLOSUNDAN — ön ek tablette sabit değil.
-  const { classify } = useScanClassifier();
+  const { classifyOrAsk } = useScanClassifier();
 
   const device = useDeviceType();
   const isPhone = device === 'phone';
@@ -311,7 +311,11 @@ export default function DepoScreen() {
     // Tür SUNUCU TABLOSUNDAN çözülür (ön ek tablette sabit değil): kartela →
     // kartela detayı, kalan her şey top yolu. Operatör Tümü sekmesindeyken
     // kartela barkodu okutursa da kartela detayı açılır.
-    const isSwatchBarcode = classify(barcode).kind === 'SWATCH';
+    // ⚠️ Burada sınıflandırma İKİ FARKLI SORGUYU seçiyor, bu yüzden tanınmayan
+    // kod yerel tabloyla TAHMİN EDİLMEZ: `classifyOrAsk` bir kez sunucuya sorar
+    // (emekliye ayrılmış ön ek bu yoldan çözülür). Sunucu da çözemezse bugünkü
+    // varsayılan yol (top sorgusu) sürer ve sonuç yine net bir RET olur.
+    const isSwatchBarcode = (await classifyOrAsk(barcode)).kind === 'SWATCH';
     try {
       if (isSwatchBarcode) {
         const res = await swatchService.getByBarcode(barcode);

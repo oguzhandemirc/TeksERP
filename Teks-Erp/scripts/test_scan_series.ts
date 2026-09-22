@@ -15,11 +15,17 @@
 //   §5 Tanınmayan kod `UNKNOWN` + `key:null` döner; istemci TAHMİN YÜRÜTMEZ
 //   §6 ⭐ `/resolve` KAYIT tablolarına inmez — izinsiz olmasının gerekçesi bu, ve ölçülür
 //   §7 `search.service`te elle yazılmış tam-format ikizi KALMADI (boğaz ikiz)
+//   §8 ⭐ `FSN…` (fason firma kodu) `FS…` (fason SEVK BELGESİ) serisine DÜŞMEZ
 //
 // ⭐ NEGATİF SONDA ✓B4 (2026-09-22, ölçüldü): `matchesSeries`te emekli ön ek döngüsü
 //    `[fmt.prefix]`e kısılınca §3 ❌1 · `\d{digits,}`→`\d{digits}` §4 ❌2 ·
 //    `resolveScannedCode`ta çözülmeyen koda `kind:"ROLL"` uydurulunca §5 ❌5 ·
-//    `scan.service`e `prisma` import'u + `prisma.roll.findFirst` eklenince §6 ❌2.
+//    `scan.service`e `prisma` import'u + bir top okuması eklenince §6 ❌2.
+//    (Çağrı kalıbı burada YAZIYLA anlatılır: `test_keyfi_arama`nın tarayıcısı
+//     `prisma.<model>.findFirst` desenini YORUM İÇİNDE de sayar ve bu satırı
+//     "ortama yaslanan yeni çağrı" sanardı — dize ile çağrıyı ayırmıyor.)
+//    · `classifyScannedCode` tam-format eşleşmesi yerine ÇIPLAK ön ek çapasına
+//      (`startsWith`) düşürülünce §8 ❌ (`FSN2209260001 → subcontractorDispatch`) + §5 ❌1.
 //    ⚠️ Dördüncü sonda ilk denemede GEÇERSİZDİ: yalnız çağrıyı ekleyince `prisma`
 //    tanımsız kaldı, bekçi ÇÖKTÜ — çökme kırmızı DEĞİLDİR. Kaynak-metni ölçen bir
 //    sondanın mutasyonu DERLENEBİLİR olmalı, yoksa ölçülen şey kapı değil kazadır.
@@ -33,6 +39,7 @@ import {
   formatSeriesCode,
   resolveSeriesFormat,
   seriesClassifierTable,
+  seriesCodePrefix,
 } from "../src/services/number-series.service";
 import { getSeriesClassifier, resolveScannedCode } from "../src/services/scan.service";
 
@@ -143,6 +150,22 @@ check("§7 körlük zemini: dosya gerçekten okundu", searchSrc.length > 5000, `
 const tabloAnahtarlari = new Set(seriesClassifierTable().map((r) => r.key));
 check("§7 sınıflandırma tablosu ile tek-kod çözümü aynı seri kümesini tanır",
   OKUTULAN.every((e) => tabloAnahtarlari.has(e.key)) && tabloAnahtarlari.size === OKUTULAN.length);
+
+// ── §8 FSN ↔ FS: ön ek içinde ön ek ──────────────────────────────────────
+// Fason firma kodu `FSN…`, okutulan fason sevk belgesi `FS…` ile BAŞLIYOR.
+// İkisinin ayrılması ön ek çakışma kapısına DEĞİL, eşleştiricinin ön ekten
+// sonra tarih RAKAMI istemesine dayanıyor (`FS` + `N` → rakam değil).
+// ⚠️ Çakışma kapısı (`assertSeriesFormatAllowed ③`) burada KORUMAZ: o yalnız
+// TARAMA uzayında küresel, `subcontractor` ise okutulan bir seri DEĞİL. Yani
+// iki bağımsız karar birbirine yaslanıyor — bu yüzden ÖLÇÜLÜYOR.
+const fsnKodu = `${seriesCodePrefix("subcontractor")}0001`;
+check("§8 ⭐ fason FİRMA kodu sevk belgesi sanılmıyor", classifyScannedCode(fsnKodu) === null,
+  `${fsnKodu} → ${classifyScannedCode(fsnKodu)?.key ?? "UNKNOWN"}`);
+check("§8 gerçek fason SEVK belgesi hâlâ çözülüyor (kontrol grubu)",
+  classifyScannedCode(`${seriesCodePrefix("subcontractorDispatch")}0001`)?.key === "subcontractorDispatch");
+check("§8 fason firma/kategori serileri OKUTULAN küme DIŞINDA (scanned değil)",
+  NUMBER_SERIES_CATALOG.find((e) => e.key === "subcontractor")?.kind === undefined &&
+  NUMBER_SERIES_CATALOG.find((e) => e.key === "subcontractorCategory")?.kind === undefined);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

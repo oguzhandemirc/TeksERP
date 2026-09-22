@@ -13,8 +13,10 @@
 // ⭐ NEGATİF SONDA ✓B4 (2026-09-22, ölçüldü): `FALLBACK_SERIES`ten `roll.infix`
 //    silinince ❌4 · `loadScanSeries` hatada tabloyu BOŞALTINCA (fail-closed
 //    davranış) ❌1 · `classifyBarcode` sunucu tablosu yerine yedeği okuyunca ❌2 ·
-//    `resolveBarcodeOnServer` ağ hatasında `ROLL` uydurunca ❌1. Hepsi geri
-//    alındı, temiz ağaçta 20/20.
+//    `resolveBarcodeOnServer` ağ hatasında `ROLL` uydurunca ❌1 · ön ek çapası
+//    ÇIPLAK ön eke düşürülünce ❌2 (fason FİRMA kodu `FSN…` sevk belgesi
+//    sanılıyor + tanınmayan kodlar tanınır oluyor). Hepsi geri alındı, temiz
+//    ağaçta 21/21.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -73,6 +75,14 @@ describe("② YEDEK tablo = bugünkü davranış (tablo hiç gelmese de okutma �
     const c = classifyBarcode("  t120726h0001  ");
     expect(c.code).toBe("T120726H0001");
     expect(c.key).toBe("roll");
+  });
+
+  it("⭐ fason FİRMA kodu (FSN…) sevk belgesi (FS…) sanılmıyor", () => {
+    // Ön ek içinde ön ek: `FSN2209260001` `^FS` ile başlıyor. Ayıran tek şey
+    // çapanın ön ekten sonra RAKAM istemesi — çapa gevşetilirse her fason
+    // firma kodu sessizce DISPATCH_DOC olur.
+    expect(classifyBarcode("FSN2209260001").kind).toBe("UNKNOWN");
+    expect(classifyBarcode("FS2209260001").kind).toBe("DISPATCH_DOC"); // kontrol grubu
   });
 
   it("tanınmayan kod UNKNOWN (tahmin yürütülmez)", () => {

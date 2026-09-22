@@ -99,6 +99,23 @@ KONTROLDEN** geldiği ayrıca doğrulanır.
 yanlış girdiyle** koştur. Sahte nesne kod yolunu değil, kod yolunun **kurulumunu**
 kırar.
 
+**Kardeş biçim — çökme HİÇ kırmızı üretmez ve "ısırmadı" diye okunur.** Yukarıdaki
+vakada çökme sahte bir kırmızı üretiyordu; ters yönü daha sinsidir: mutasyon
+**derlenmez ya da çalışma anında patlar**, sonda hiç koşmaz, çıktıda ❌ satırı
+olmaz ve sondayı koşan bunu *"kapı bu ihlali görmüyor"* diye okur — yani kapıyı
+suçlar, oysa ölçüm hiç yapılmamıştır.
+> ***Sondanın mutasyonu ÇALIŞABİLİR olmalı:*** kaynak metnini ya da davranışı
+> ölçen bir sondada mutasyon, ürün kodunun **derlenip koşmasına izin veren**
+> gerçekçi bir değişiklik olmalıdır — yoksa ölçülen şey kapı değil **kaza**dır.
+*(Vaka 2026-09-22, iki kez aynı gün: ① bir servise yalnız `prisma.roll.findFirst`
+çağrısı eklendi ama `prisma` import edilmedi ⇒ `ReferenceError`, bekçi çöktü, çıktı
+boş; import da eklenince ❌2 geldi. ② bir servisin kod üretimi kaldırıldı ⇒ create
+`validateCode`ta fırlattı ve bekçi çöktü; **bekçiye `dene()` sarmalı eklenerek**
+"create patlarsa o iddia ❌ olur" hâline getirildi, sonra ❌10 ölçüldü.)*
+**İki çıkış yolu var ve ikisi de meşru:** mutasyonu derlenebilir yap, **ya da**
+bekçiyi çökmeye dayanıklı yaz (beklenen patlamayı yakalayıp ❌ üret). İkincisi
+tercih edilir: ürün kodu gerçekten patlarsa kapı yine kırmızı verir.
+
 ### Zıt iki cevap = ortam farkı
 Aynı script, aynı ağaç, aynı saniye **zıt iki cevap** veriyorsa bu bir kapı hatası
 değil bir **ortam farkıdır** — ve ortam farkı her zaman bulunabilir. Çelişkiyi

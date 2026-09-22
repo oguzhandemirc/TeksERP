@@ -37,6 +37,22 @@ sanır · § Boş çıktı bir ÖLÇÜM değildir.
 **Savunma:** `pgrep -f` ya da `grep -v grep`. Sonda argümanı, ölçülen sinyalin
 taşıyıcısıyla **aynı kanaldan geçmemeli**.
 
+**Kardeş biçim — BEKLENTİ ile ÖLÇÜLEN aynı kaynaktan geliyorsa iddia totolojidir.**
+Bir bekçi *"üretilen kod `FSN` ile başlamalı"* diyorsa ve beklenen ön eki de
+üretilen kodu da **aynı tablodan** okuyorsa, o tabloyu değiştiren her mutasyon
+bekçiyi **yeşil bırakır**: ölçülen şey "kod doğru mu" değil, "iki okuma birbirine
+eşit mi"dir.
+*(Vaka 2026-09-22: `test_subcontractor_code_autogen` beklentiyi
+`seriesCodePrefix("subcontractor")`tan alıyordu; katalogdaki ön ek `FSN`→`XYZ`
+yapılınca bekçi **12/12 yeşil** kaldı.)*
+⚠️ **Çare her zaman "bekçiyi düzeltmek" değildir.** O vakada ön ek değişince kodun
+da değişmesi **doğru davranıştı** — yani bekçi yanlış şeyi ölçmüyordu, İDDİASI
+ölçtüğünden büyüktü. Üç adım: ① iddiayı ölçtüğü kadar daralt · ② ölçülmeyen ekseni
+**beyan et** ve onu gerçekten ölçen bekçiyi adıyla göster (burada
+`test_number_series §1`, ölçüldü: aynı mutasyonda ❌2) · ③ mümkünse o eksenden
+**bağımsız** bir iddia ekle (burada eski rejimin imzası: iki tire + rastgele
+kuyruk — ön ekten bağımsız, ve ısırdı).
+
 ### Yüklem (ne sorduğun) sınıfları → ayrı dosya
 Aletin **çalışması** ile aletin **ne sorduğu** ayrı iki kusur ailesidir. İkincisi —
 desenin kapsamı, eşleşmenin sınırı, popülasyonun üyeliği, gevşek ya da dar yüklem —
