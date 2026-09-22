@@ -3509,6 +3509,10 @@ model CustomerBranch {
   contactPhone String?
   notes        String?
   isActive     Boolean @default(true)
+  /// Şubenin sevk yönü (yurtiçi/yurtdışı). Doluysa bu şubeye giden sevkiyatta
+  /// carinin yönünün ÖNÜNE geçer; çözüm tek yerde: `resolveShipmentDestination`.
+  /// NULL = şube kendi yönünü taşımaz, cariye düşülür.
+  defaultDestination ShipmentDestination?
 
   customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
   orders          Order[]
