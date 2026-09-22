@@ -73,8 +73,11 @@ export function specMatch(
 // Arama kapsamı liste kolonlarıyla hizalı: neden/not + müşteri + sipariş no +
 // ürün adı + top barkodu (iade hacmi düşük — contains kabul edilebilir).
 const RETURN_SEARCH_FIELDS = ["reasonText", "note", "customer.name", "item.name"];
-// Sipariş no + top barkodu üretilmiş ASCII kodlardır — katlanmaz.
-const RETURN_CODE_SEARCH_FIELDS = ["order.orderNumber", "roll.barcode"];
+// Sipariş no + top barkodu + İADE BELGE NO üretilmiş ASCII kodlardır — katlanmaz.
+// ⚠️ `returnNo` KOD kümesinde: müşteri telefonda belge numarasını söyleyince
+// aranacak bir kimlik (sevk partisi kodunun emsali — kullanıcı kararı: "listeye
+// de koy, bununla filtre de edilebilsin"). Süzme SUNUCUDA, istemcide değil.
+const RETURN_CODE_SEARCH_FIELDS = ["order.orderNumber", "roll.barcode", "returnNo"];
 const RETURN_DATE_FIELDS = ["createdAt"] as const;
 
 /**

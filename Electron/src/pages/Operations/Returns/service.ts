@@ -8,6 +8,15 @@ export type ReturnAppliedStatus = "WAREHOUSE" | "A1_STOCK" | "SCRAP";
 // Backend return.service.listReturns ile uyumlu satır şekli.
 export interface ReturnRow {
   id: string;
+  /**
+   * İade belge no — BACKEND'DEN OLDUĞU GİBİ okunur.
+   *
+   * ⚠️ İSTEMCİDE "LİDER KİM" MANTIĞI YOK: çok kalemli iadede üye satırlar
+   * liderin numarasının kopyasını taşır, yani her satır KENDİ belgesinin
+   * numarasını getirir. `?? lider` gibi bir yedek çözüm yazmak, kuralı bir
+   * ikinci yerde daha yaşatırdı (ve kopyalamayan istemcide sessizlik doğardı).
+   */
+  returnNo: string | null;
   qty: number;
   width: number | null;
   reasonText: string | null;

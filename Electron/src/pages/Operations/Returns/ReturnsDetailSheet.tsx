@@ -136,6 +136,10 @@ export function ReturnsDetailSheet({
 
             <div className="mt-4 space-y-3">
               <div className="space-y-2 rounded-md border bg-card/40 p-3">
+                {/* Liste ile detay AYNI kolonu okur — iki yüzey ayrışamaz. */}
+                <Row label="Belge No">
+                  {row.returnNo ? <span className="font-mono">{row.returnNo}</span> : "—"}
+                </Row>
                 <Row label="Metraj">{DEC.format(row.qty)} m</Row>
                 <Row label="Müşteri">{row.customer?.name ?? "—"}</Row>
                 <Row label="Sipariş">{row.order?.orderNumber ?? "—"}</Row>

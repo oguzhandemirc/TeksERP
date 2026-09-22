@@ -12,6 +12,19 @@ const SHELF_LABEL: Record<ReturnAppliedStatus, string> = {
 
 export const returnColumns: ColumnDef<ReturnRow>[] = [
   {
+    // KİMLİK SÜTUNU satırın başında (sevk partisi kodunun emsali): müşteri
+    // telefonda belge numarasını söyleyince aranacak alan budur. Arama
+    // SUNUCUDA (`RETURN_CODE_SEARCH_FIELDS`), istemcide süzme YOK.
+    id: "returnNo",
+    header: "Belge No",
+    cell: ({ row }) =>
+      row.original.returnNo ? (
+        <span className="font-mono text-xs">{row.original.returnNo}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     accessorKey: "createdAt",
     header: "Tarih",
     cell: ({ row }) => (
