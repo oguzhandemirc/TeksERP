@@ -39,6 +39,12 @@ export interface NumberSeriesCatalogEntry {
    * demek bir karardır ve karar gerekçesiz yazılmaz.
    */
   lockedReason?: string;
+  /**
+   * Tarih ile sıra ARASINDA duran sabit parça (regex parçası). Serinin YAPISAL
+   * özelliğidir, biçim AYARI değil — fabrika panelden değiştiremez, bu yüzden
+   * `number_series` tablosunda değil burada, kodda yaşar.
+   */
+  infix?: { re: string; aciklama: string };
 }
 
 const D = "DDMMYY" as NumberSeriesDateSegment;
@@ -55,6 +61,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     seedDigits: 4,
     seedSeparator: "",
     kind: "ROLL",
+    infix: { re: "[HF]", aciklama: "faz harfi (H=ham · F=final) — `RollBarcodeCounter` anahtarının parçası, biçim ayarı değil" },
     lockedReason:
       "Kod tarih ile sıra ARASINDA faz harfi taşır (H/F) ve bu harf `RollBarcodeCounter` anahtarının parçasıdır; yapı seri biçimiyle ifade edilemez.",
   },

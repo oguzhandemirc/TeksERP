@@ -37,6 +37,13 @@ export interface NumberSeriesFormat {
   digits: number;
   separator: string;
   retiredPrefixes: string[];
+  /**
+   * KOD-SAHİPLİ — katalogdan gelir, `number_series` satırından DEĞİL ve panel
+   * yazamaz (`updateSeriesFormat` tipi dışarıda bırakır). Biçimle birlikte
+   * taşınmasının sebebi: `matchesSeries(resolveSeriesFormat(key), code)` çağıran
+   * bir yol infix'i ayrıca geçirmeyi unutursa sessizce YANLIŞ cevap alırdı.
+   */
+  infix?: string;
 }
 
 // ── ÖNBELLEK ────────────────────────────────────────────────────────────────
@@ -59,23 +66,35 @@ function seedFormat(entry: NumberSeriesCatalogEntry): NumberSeriesFormat {
     digits: entry.seedDigits,
     separator: entry.seedSeparator,
     retiredPrefixes: [...(entry.seedRetiredPrefixes ?? [])],
+    ...(entry.infix ? { infix: entry.infix.re } : {}),
   };
 }
 
 function rowFormat(row: NumberSeries): NumberSeriesFormat {
+  // infix DB satırından değil katalogdan okunur — veri onu ne taşır ne ezer.
+  const entry = numberSeriesCatalogEntry(row.key);
   return {
     prefix: row.prefix,
     dateSegment: row.dateSegment,
     digits: row.digits,
     separator: row.separator,
     retiredPrefixes: [...row.retiredPrefixes],
+    ...(entry.infix ? { infix: entry.infix.re } : {}),
   };
 }
 
 export async function refreshNumberSeriesCache(): Promise<void> {
   const rows = await prisma.numberSeries.findMany();
   const next = new Map<string, NumberSeriesFormat>();
-  for (const row of rows) next.set(row.key, rowFormat(row));
+  // Katalogdan DÜŞMÜŞ bir DB satırı (eski sürümden kalan) tabloyu komple
+  // düşürmesin: kataloğu kod sahiplenir, tanınmayan satır yok sayılır.
+  for (const row of rows) {
+    try {
+      next.set(row.key, rowFormat(row));
+    } catch {
+      continue;
+    }
+  }
   cache = next;
   cachedAt = Date.now();
   refreshBlockedUntil = 0;
@@ -167,9 +186,11 @@ export function matchesSeries(fmt: NumberSeriesFormat, code: string): boolean {
   const upper = code.trim().toUpperCase();
   const dateLen = { NONE: 0, DDMMYY: 6, YYMM: 4, YYYYMM: 6, YY: 2, YYYY: 4 }[fmt.dateSegment];
   const sep = fmt.separator === "" ? "" : escapeRe(fmt.separator);
+  // infix KAÇIRILMAZ: regex parçası olarak katalogda yazılı (`[HF]`), veri değil kod.
+  const infix = fmt.infix ?? "";
   for (const prefix of [fmt.prefix, ...fmt.retiredPrefixes]) {
     const head = dateLen === 0 ? `${escapeRe(prefix)}${sep}` : `${escapeRe(prefix)}${sep}\\d{${dateLen}}${sep}`;
-    if (new RegExp(`^${head}\\d{${fmt.digits},}$`).test(upper)) return true;
+    if (new RegExp(`^${head}${infix}\\d{${fmt.digits},}$`).test(upper)) return true;
   }
   return false;
 }
@@ -244,6 +265,8 @@ export interface SeriesClassifierRow {
   dateSegment: NumberSeries["dateSegment"];
   digits: number;
   separator: string;
+  /** Tarih ile sıra arasındaki sabit parça (regex); istemci tam-format regex'ini bundan kurar. */
+  infix?: string;
 }
 
 /** İstemcilerin barkod sınıflandırması için okuduğu tablo. */
@@ -257,6 +280,7 @@ export function seriesClassifierTable(): SeriesClassifierRow[] {
       dateSegment: fmt.dateSegment,
       digits: fmt.digits,
       separator: fmt.separator,
+      ...(fmt.infix ? { infix: fmt.infix } : {}),
     };
   });
 }
@@ -337,7 +361,7 @@ export function assertSeriesFormatAllowed(key: string, fmt: NumberSeriesFormat):
 /** Panelin yazdığı tek uç. Eski ön ek EMEKLİYE ayrılır (geçmiş kod okunmaya devam eder). */
 export async function updateSeriesFormat(
   key: string,
-  next: Omit<NumberSeriesFormat, "retiredPrefixes">,
+  next: Omit<NumberSeriesFormat, "retiredPrefixes" | "infix">,
   userId?: string,
 ): Promise<NumberSeries> {
   const current = resolveSeriesFormat(key);

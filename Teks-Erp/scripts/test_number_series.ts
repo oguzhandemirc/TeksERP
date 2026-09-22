@@ -9,9 +9,12 @@
 //   §5 Hane taşması GENİŞLER, sarmaz; tam-format doğrulaması 5 haneliyi KABUL eder
 //   §6 Tarih segmenti = sıfırlama dönemi (günlük · aylık · yıllık · hiç)
 //   §7 Tek kaynak: biçimlendirici `utils/code-format`ı yalnız servis import eder
+//   §8 INFIX (top barkodunun faz harfi) tarih ile sıra ARASINDA eşleşir
 // ⭐ Negatif sonda (2026-09-22, ölçüldü): katalogda `sack` ön ekini "CX" yapınca §1 ❌;
 //    `assertSeriesFormatAllowed`tan çakışma döngüsü silinince §3 ❌; `matchesSeries`teki
-//    `\d{digits,}` → `\d{digits}` yapılınca §5 ❌; §7'de servise ikinci import eklenince ❌.
+//    `\d{digits,}` → `\d{digits}` yapılınca §5 ❌; §7'de servise ikinci import eklenince ❌;
+//    katalogdaki `roll.infix` silinince §8 ❌ (6 iddia) ve `matchesSeries`ten
+//    `${infix}` çıkarılınca §8 ❌ (4 iddia); ikisinde de geri alınca 34/34 yeşil.
 // Çalıştır: npx tsx scripts/test_number_series.ts
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
@@ -231,6 +234,31 @@ for (const dosya of tsDosyalari(SRC)) {
 }
 check("§7 ⭐ biçimlendiricileri yalnız numara serisi servisi import eder", ihlaller.length === 0, ihlaller.join(", ") || "0 ihlal");
 check("§7 tarama gerçekten dosya gördü (körlük zemini)", tsDosyalari(SRC).length > 300, `${tsDosyalari(SRC).length} dosya`);
+
+// ── §8 Infix — tarih ile sıra ARASINDAKİ yapısal parça ─────────────────────
+// Top barkodu `T + GGAAYY + [H|F] + NNNN`: faz harfi biçim AYARI değil serinin
+// yapısıdır, bu yüzden katalogda yaşar ve `matchesSeries` onu atlayamaz. Bu
+// olmadan Faz B'nin tek eşleştiricisi SAHADAKİ HER TOP BARKODUNU reddederdi.
+const rollFmt = resolveSeriesFormat("roll");
+const rollGun = dailyCodePrefix("T", AT);
+check("§8 ⭐ faz harfli top barkodu (H) tanınır", matchesSeries(rollFmt, `${rollGun}H0001`));
+check("§8 ⭐ faz harfli top barkodu (F) tanınır", matchesSeries(rollFmt, `${rollGun}F0123`));
+check("§8 ⭐ faz harfsiz kod REDDEDİLİR (infix atlanamaz)", !matchesSeries(rollFmt, `${rollGun}0001`));
+check("§8 geçersiz faz harfi reddedilir", !matchesSeries(rollFmt, `${rollGun}X0001`));
+check("§8 top serisinde 5 haneli kod da tanınır (hane esnekliği infix'le birlikte çalışır)",
+  matchesSeries(rollFmt, `${rollGun}H10000`));
+check("§8 sınıflandırma tablosu infix'i taşır (Faz B istemcisi regex'i bundan kurar)",
+  seriesClassifierTable().find((r) => r.key === "roll")?.infix === "[HF]");
+check("§8 ⭐ infix'siz seriler ETKİLENMEDİ (çuval · kart · sevkiyat bugünkü gibi)",
+  matchesSeries(sackFmt, buildDailyCode("CV", 7, AT)) &&
+  matchesSeries(wo, buildDailyCode("IE", 7, AT)) &&
+  matchesSeries(resolveSeriesFormat("shipment"), buildDailyCode("SVK", 7, AT)) &&
+  seriesClassifierTable().filter((r) => r.infix !== undefined).length === 1);
+check("§8 infix veri-sahipli DEĞİL: `number_series` şemasında böyle bir kolon yok",
+  !readFileSync(join(SRC, "..", "prisma", "schema.prisma"), "utf-8")
+    .split("model NumberSeries")[1]
+    ?.split("}")[0]
+    ?.includes("infix"));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);
