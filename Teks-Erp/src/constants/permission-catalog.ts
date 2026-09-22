@@ -196,6 +196,7 @@ export const PERMISSION_CATALOG = [
   // uygulamasının bir yeteneği (Electron `hasAdminAccess` bu kodu saymaz →
   // taşıyan kişi "Yönetim" menüsünü ve Sistem hub'ını GÖRMEZ).
   { code: "settings:workstation", module: "ADMIN", category: "web", description: "Bu bilgisayarın yerel ayarları (etiket yazıcısı / kantar / tabanca / sunucu adresi) — sistem geneli ayarlar HARİÇ" },
+  { code: "settings:numbering", module: "ADMIN", category: "web", description: "Numara serisi biçimi (ön ek · tarih segmenti · hane · ayraç) — ayar şifresi ayrıca sorulur" },
   // 2026-08-05: Tanımlar → Çıktılar altındaki belge/kart TASARIM ekranları
   // (Belge Şablonları, Refakat Kartı, Refakat Kartı Şablonları, Serbest
   // Belgeler). `admin:settings`ten AYRI olması ürün kararıdır — `settings:

@@ -52,6 +52,7 @@ import inventoryRoutes from "./routes/inventory.routes";
 import orderRoutes from "./routes/order.routes";
 import recordInfoRoutes from "./routes/record-info.routes";
 import scanRoutes from "./routes/scan.routes";
+import numberSeriesRoutes from "./routes/number-series.routes";
 import workOrderRoutes from "./routes/workorder.routes";
 import productionBalanceRoutes from "./routes/production-balance.routes";
 import tamburRoutes from "./routes/tambur.routes";
@@ -850,6 +851,7 @@ app.use("/api/orders", orderRoutes);
 // ⚠️ MOUNT — "yazıldı ama mount edilmedi" sınıfı hata için bkz. reboot-kurtarma notu.
 app.use("/api/record-info", recordInfoRoutes);
 app.use("/api/scan", scanRoutes);
+app.use("/api/number-series", numberSeriesRoutes);
 app.use("/api/work-orders", workOrderRoutes);
 app.use("/api/production-balance", productionBalanceRoutes);
 app.use("/api/tambur", tamburRoutes);

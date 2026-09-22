@@ -380,6 +380,29 @@ export async function updateSeriesFormat(
   // düzenlenemez. Üretim yolu kapatılmaz — çuval açılamaz hâle gelirdi; asıl
   // engellenmesi gereken riskli AYAR değişikliğidir. Beyan katalogdadır.
   const katalog = numberSeriesCatalogEntry(key);
+  // ① YAPISAL kilit EN ÖNCE — hiç kalkmayabilir. `assertSeriesFormatAllowed`
+  // aynı kontrolü taşır (önizleme yolu da ondan geçer), ama orası EN SONDA
+  // koşar: "önerilen DEĞER geçerli mi" sorusu, "bu seriye dokunulabilir mi"
+  // sorusundan sonra gelir.
+  if (katalog.lockedReason) {
+    throw AppError.badRequest(`Bu serinin biçimi değiştirilemez: ${katalog.lockedReason}`, {
+      code: "NUMBER_SERIES_LOCKED",
+      key,
+    });
+  }
+  // ⚠️ KAPI SIRASI LOAD-BEARING — hata mesajının KİME iş çıkardığına göre:
+  // önce kullanıcının ÇÖZEMEYECEĞİ engeller söylenir. `scopedCounter` bizim iç
+  // hazırlığımızdır (çağrı yeri zengin biçime geçmemiş); C0b ise fabrikanın
+  // eyleme geçebileceği bir durumdur (istemcileri güncelle). Ters sırada, ikisi
+  // birden engelliyorken fabrika bir gün harcayıp bütün tabletleri günceller ve
+  // İKİNCİ duvara toslardı.
+  if (!katalog.scopedCounter) {
+    throw AppError.badRequest(
+      `Bu serinin sayacı biçim değişimine hazır değil: ${katalog.label}. ` +
+        "Numara üreten yol kapsam damgasına geçirilmeden biçim değiştirilemez.",
+      { code: "NUMBER_SERIES_COUNTER_NOT_SCOPED", key },
+    );
+  }
   // ⚠️ C0b — ESKİ İSTEMCİ KAPISI, `lockedReason`dan AYRI bir cümledir:
   // `lockedReason` "bu serinin biçimi YAPISAL olarak değişemez" der (top
   // barkodunun faz harfi), bu kapı "BUGÜN değişemez çünkü saha hazır değil"
@@ -391,13 +414,6 @@ export async function updateSeriesFormat(
       `Okutulan serilerin biçimi, sahadaki panel ve tabletler güncellenmeden değiştirilemez: ${katalog.label}. ` +
         `En düşük sürüm eşiği panelde ${FAZ_B_ONCESI.electron}, tablette ${FAZ_B_ONCESI.mobil} üstüne çıkmalı.`,
       { code: "NUMBER_SERIES_CLIENT_TOO_OLD", key },
-    );
-  }
-  if (!katalog.scopedCounter) {
-    throw AppError.badRequest(
-      `Bu serinin sayacı biçim değişimine hazır değil: ${katalog.label}. ` +
-        "Numara üreten yol kapsam damgasına geçirilmeden biçim değiştirilemez.",
-      { code: "NUMBER_SERIES_COUNTER_NOT_SCOPED", key },
     );
   }
   const current = resolveSeriesFormat(key);
@@ -425,31 +441,6 @@ export async function updateSeriesFormat(
     newData: { ...next, retiredPrefixes: retired },
   });
   return row;
-}
-
-/** Liste ucu — katalog kimliği + yürürlükteki biçim + örnek. */
-export function listSeries(): Array<
-  NumberSeriesFormat & {
-    key: string;
-    label: string;
-    kind?: NumberSeriesKind;
-    editable: boolean;
-    lockedReason?: string;
-    preview: string;
-  }
-> {
-  return NUMBER_SERIES_CATALOG.map((e) => {
-    const fmt = resolveSeriesFormat(e.key);
-    return {
-      ...fmt,
-      key: e.key,
-      label: e.label,
-      ...(e.kind ? { kind: e.kind } : {}),
-      editable: !e.lockedReason,
-      ...(e.lockedReason ? { lockedReason: e.lockedReason } : {}),
-      preview: previewSeriesCode(fmt),
-    };
-  });
 }
 
 /** Prisma tx tipini dışa taşımamak için — çağıranlar kendi delegate'ini getirir. */

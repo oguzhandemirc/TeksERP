@@ -1,0 +1,161 @@
+// =============================================================================
+// NUMARA SERİSİ — PANEL YAZMA YÜZEYİ (Faz C, 2026-09-22)
+// =============================================================================
+// Biçim (ön ek · tarih segmenti · hane · ayraç) VERİDİR; bu uçlar onu panele
+// açar. Faz C yalnız SEVKİYAT ailesini düzenlenebilir kılar (`panelGroup`).
+//
+// ⚠️ ÖNİZLEME SUNUCUDA HESAPLANIR ve panel kendi biçimlendiricisini YAZMAZ.
+// Bütün bu işin sebebi buydu: "programda P-2 yazarken çıktı P20260202" ancak
+// iki yerde iki biçimlendirici olunca olur. Panel örnek kodu buradan ister.
+//
+// ⚠️ KAPI SIRASI LOAD-BEARING (`test_number_series_panel` ölçer):
+//   verifyToken → requirePermission("settings:numbering") → requireSettingsPassword
+//   → [servis] kilit üçlüsü (YAPISAL → SAYAÇ → İSTEMCİ) → assertSeriesFormatAllowed
+// Kimlik ve yetki HTTP kenarında; "bu seriye dokunulabilir mi" ve "önerilen
+// DEĞER geçerli mi" serviste. Ayrım bilinçli: ilki oturuma, ikincisi veriye bakar.
+// =============================================================================
+
+import { Router, type Request, type Response, type NextFunction } from "express";
+import { z } from "zod";
+import { NumberSeriesDateSegment } from "@prisma/client";
+
+import { verifyToken } from "../middlewares/auth.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
+import {
+  previewSeriesCode,
+  resolveSeriesFormat,
+  updateSeriesFormat,
+  assertSeriesFormatAllowed,
+} from "../services/number-series.service";
+import { listSeries, seriesImpactCount } from "../services/helpers/series-panel.helper";
+import { numberSeriesCatalogEntry } from "../constants/number-series-catalog";
+
+const router = Router();
+
+// Kapı dosya başında (BE-30): sonradan eklenen uç guard'ı miras alır.
+router.use(verifyToken, requirePermission("settings:numbering"));
+
+/** Biçim gövdesi — okuma uçlarında da aynı şema (tek kaynak). */
+const formatSchema = z
+  .object({
+    prefix: z.string().trim().min(1).max(6),
+    dateSegment: z.nativeEnum(NumberSeriesDateSegment),
+    digits: z.number().int().min(1).max(8),
+    separator: z.string().max(2),
+  })
+  .strict();
+
+const previewSchema = formatSchema.extend({ key: z.string().trim().min(1).max(64) }).strict();
+const keyParamSchema = z.object({ key: z.string().trim().min(1).max(64) });
+
+/**
+ * @openapi
+ * /api/number-series:
+ *   get:
+ *     tags: [NumberSeries]
+ *     summary: Numara serileri — biçim, örnek kod ve BUGÜN düzenlenebilir mi
+ *     description: |
+ *       `editable` YALNIZ yapısal kilide bakmaz: sayaç hazırlığı (`SAYAC`) ve
+ *       eski istemci kapısı (`ISTEMCI`) da "bugün düzenlenemez" der. `lockKind`
+ *       üçünü ayırır çünkü üçü FARKLI GÜN kalkar ve panelde farklı cümle olmalı.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Seri listesi }
+ */
+router.get("/", (_req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: listSeries() });
+});
+
+/**
+ * @openapi
+ * /api/number-series/preview:
+ *   post:
+ *     tags: [NumberSeries]
+ *     summary: Aday biçim için ÖRNEK kod (sunucuda hesaplanır) + biçim kapısı
+ *     description: |
+ *       Panel kendi biçimlendiricisini YAZMAZ. Aday biçim geçersizse (ön ek
+ *       karakteri · hane · ayraç · ön ek çakışması) 400/409 döner ve panel
+ *       kullanıcıya kaydetmeden ÖNCE söyler.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ preview }" }
+ *       400: { description: Geçersiz biçim }
+ *       409: { description: Ön ek çakışması }
+ */
+router.post("/preview", (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { key, ...fmt } = previewSchema.parse(req.body ?? {});
+    const current = resolveSeriesFormat(key);
+    // Çakışma/karakter/hane kapısı ÖNİZLEMEDE de koşar: kullanıcı hatayı
+    // kaydet düğmesinde değil yazarken görsün.
+    assertSeriesFormatAllowed(key, { ...fmt, retiredPrefixes: current.retiredPrefixes });
+    res.status(200).json({
+      success: true,
+      data: { preview: previewSeriesCode({ ...fmt, retiredPrefixes: [], infix: current.infix }) },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/number-series/{key}/impact:
+ *   get:
+ *     tags: [NumberSeries]
+ *     summary: Bu seriyle numaralanmış KAYIT sayısı (etki cümlesinin kaynağı)
+ *     description: |
+ *       Panel "bugüne kadarki N kaydın numarası değişmez" derken bu sayıyı
+ *       kullanır. Kataloğunda sayım kaynağı olmayan seri `null` döner ve panel
+ *       sayı YAZMAZ — "0" demek ölçülmemiş bir şeye sıfır demek olurdu.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ count: number | null }" }
+ */
+router.get("/:key/impact", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { key } = keyParamSchema.parse(req.params);
+    numberSeriesCatalogEntry(key); // tanınmayan anahtar → 500 yerine net hata
+    res.status(200).json({ success: true, data: { count: await seriesImpactCount(key) } });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/number-series/{key}:
+ *   patch:
+ *     tags: [NumberSeries]
+ *     summary: Serinin biçimini değiştir (ayar şifresi ister)
+ *     description: |
+ *       Eski ön ek EMEKLİYE ayrılır ve okutulmaya devam eder; GEÇMİŞ
+ *       YENİDEN NUMARALANMAZ. Sayacın kapsamı bu andan itibaren daralır
+ *       (`formatChangedAt`).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Güncellendi }
+ *       400: { description: "Geçersiz biçim · kilitli seri · sayaç hazır değil · istemci eski" }
+ *       409: { description: Ön ek çakışması }
+ */
+router.patch(
+  "/:key",
+  requireSettingsPassword,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { key } = keyParamSchema.parse(req.params);
+      const fmt = formatSchema.parse(req.body ?? {});
+      const row = await updateSeriesFormat(key, fmt, req.user?.userId);
+      res.status(200).json({
+        success: true,
+        data: row,
+        message: `${row.label} biçimi güncellendi. Bundan sonra açılacak kayıtlar yeni numarayı alır; geçmiş değişmez.`,
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+export default router;

@@ -59,6 +59,18 @@ export interface NumberSeriesCatalogEntry {
    * commit mesajında değil, çünkü okunması gereken yer burasıdır.
    */
   scopedCounter?: { durum: "hazir" | "sayac-yok"; not: string };
+  /**
+   * Panelde hangi bölümde görünür. Faz C YALNIZ "sevkiyat" ailesini açar;
+   * Faz D bu etiketi genişletir — ekran kodu değişmez, katalog satırı değişir.
+   */
+  panelGroup?: "sevkiyat";
+  /**
+   * ETKİ CÜMLESİNİN kaynağı: bu seriyle numaralanmış KAYIT sayısı nereden
+   * okunur. Panel "bugüne kadarki N kaydın numarası değişmez" derken bu sayıyı
+   * kullanır ve sayı UYDURULMAZ — ölçülür. Alan yoksa panel sayı YAZMAZ
+   * (üçüncü sonuç: "ölçülmedi"), "0" demez.
+   */
+  countTable?: { model: string; field: string };
 }
 
 const D = "DDMMYY" as NumberSeriesDateSegment;
@@ -94,6 +106,8 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   { key: "swatch", label: "Kartela kart no", seedPrefix: "KRT", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "SWATCH" },
   {
     key: "sack",
+    panelGroup: "sevkiyat",
+    countTable: { model: "sack", field: "sackNo" },
     label: "Çuval no",
     seedPrefix: "CV",
     seedDateSegment: D,
@@ -104,6 +118,8 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "shipment",
+    panelGroup: "sevkiyat",
+    countTable: { model: "shipment", field: "shipmentNo" },
     label: "Sevkiyat no",
     seedPrefix: "SVK",
     seedDateSegment: D,
@@ -120,6 +136,8 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   // ── Sevkiyat ailesi (Faz C'de panele açılan küme) ──────────────────────────
   {
     key: "packingLotCode",
+    panelGroup: "sevkiyat",
+    countTable: { model: "packingGroup", field: "code" },
     label: "Sevk partisi kodu",
     seedPrefix: "PRT",
     seedDateSegment: YYMM,
@@ -129,6 +147,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "packingLotName",
+    panelGroup: "sevkiyat",
     label: "Sevk partisi adı",
     seedPrefix: "P",
     seedDateSegment: NONE,
@@ -141,6 +160,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "returnDoc",
+    panelGroup: "sevkiyat",
     label: "İade belge no",
     seedPrefix: "IADE",
     seedDateSegment: D,

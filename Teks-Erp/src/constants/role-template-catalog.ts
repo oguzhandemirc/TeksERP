@@ -503,6 +503,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "admin:users",
       "admin:settings",
       "settings:workstation",
+      // Numara serisi biçimi: nadir, ayar şifresi kapılı ve geri alınamaz
+      // nitelikte bir SİSTEM ayarı — sysadmin tanımının içinde.
+      "settings:numbering",
       "report:audit",
       // Toplu içe aktarım: kurulum/veri taşıma işini yapan kişi sistem
       // yöneticisidir. Tek başına yetmez — aktarılacak varlığın write izni de
