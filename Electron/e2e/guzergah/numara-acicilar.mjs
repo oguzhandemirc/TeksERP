@@ -25,12 +25,15 @@ export function acicilarKur(c) {
         const ara = page.getByPlaceholder(aramaPh).filter({ visible: true }).first();
         if (await ara.count()) { await ara.fill(d); await page.waitForTimeout(1500); }
       }
-      out[d] = (await page.getByText(d, { exact: true }).filter({ visible: true }).count()) > 0;
+      // Hücre numaranın altında başka satır taşıyabilir ("ASZ…" + "TRY") → tam metin değil, SINIRLI eşleşme:
+      // numara başka bir harf/rakam/ayraçla BİTİŞİK olmamalı (ASZ…0001 ≠ ASZ…00012).
+      const kalip = new RegExp(`(?<![A-Z0-9])${d.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}(?![0-9])`);
+      out[d] = (await page.getByText(kalip).filter({ visible: true }).count()) > 0;
     }
     return out;
   }
-  async function belgeHtml(tip, id, numara) {
-    const h = await fetch(`${c.ortam.apiUrl}/api/printed-documents/${tip}/${id}/html`, { headers: { authorization: `Bearer ${c.tokenAl()}` } });
+  async function belgeHtml(tip, id, numara, yol = null) {
+    const h = await fetch(`${c.ortam.apiUrl}${yol ?? `/api/printed-documents/${tip}/${id}/html`}`, { headers: { authorization: `Bearer ${c.tokenAl()}` } });
     const html = await h.text();
     return { belgeDurum: h.status, belgedeVar: h.status < 300 && html.includes(numara) };
   }
@@ -116,7 +119,80 @@ export function acicilarKur(c) {
     belge: belge ?? null,
   });
 
+  /** Numara yanıt şekline güvenilmez: kaydın id'siyle DB'den okunur. */
+  const numaraOku = async (tablo, kolon, id) => (await sql(`SELECT "${kolon}" v FROM "${tablo}" WHERE id=$1`, [id]))[0]?.v ?? null;
+  const depo = async () => (await sql(`SELECT id FROM warehouses WHERE "isActive" ORDER BY (code='DP-MERKEZ') DESC, "createdAt" LIMIT 1`))[0]?.id;
+  const kumas = async () => (await sql(`SELECT id FROM items WHERE "isActive" AND "itemType"='FABRIC' ORDER BY "createdAt" DESC LIMIT 1`))[0]?.id;
+  const yeniDepo = async () => zorunlu(await api("/api/warehouses", { method: "POST", body: JSON.stringify({ name: `TEST-E5 Depo ${K()}` }) }), "depo").id;
+  const belgeYok = (neden) => async () => ({ uygulanmaz: neden });
+
+  // ── E2 depo-ticaret dilimi (TAM kip): biçim · varyantlar · yürürlük ─────────
+  const depoTicaret = {
+    // ÇEKİ LİSTESİ — numara yalnız API'de doğar; panelde ve tablette çağıran yok, belge türü yok (K23).
+    manifest: {
+      tablo: { tablo: "manifests", kolon: "manifestNo" }, okutulur: false,
+      yeniOnEk: "CLZ", varyantlar: [{ dateSegment: "NONE" }, { separator: "-", separator2: "/" }], yururluk: "CLY",
+      hazirla: async (dur) => { dur.cekiIsEmri ??= (await sql(`SELECT id FROM work_orders ORDER BY "createdAt" DESC LIMIT 1`))[0]?.id; if (!dur.cekiIsEmri) throw new Error("iş emri yok"); },
+      eskiKayit: () => eskiSec("manifests", "manifestNo"),
+      ac: async (dur) => { const d = zorunlu(await api(`/api/work-orders/${dur.cekiIsEmri}/manifest`, { method: "POST", body: "{}" }), "çeki listesi"); return { id: d.id, numara: await numaraOku("manifests", "manifestNo", d.id) }; },
+      ekran: async () => ({ uygulanmaz: "CL numarası bugün hiçbir panel/tablet yüzeyinde yok — numara DB'den ölçüldü (K23)" }),
+      belge: belgeYok("CL için belge türü yok (snapshot JSON)"),
+    },
+    goodsReceipt: {
+      tablo: { tablo: "goods_receipts", kolon: "receiptNo" }, okutulur: false,
+      yeniOnEk: "MKZ", varyantlar: [{ dateSegment: "NONE" }, { separator: "-", separator2: "/" }],
+      hazirla: async () => {},
+      eskiKayit: () => eskiSec("goods_receipts", "receiptNo"),
+      ac: async () => { const d = zorunlu(await api("/api/goods-receipts", { method: "POST", body: JSON.stringify({ warehouseId: await depo(), lines: [{ itemId: await kumas(), initialQty: 10 }], clientToken: crypto.randomUUID() }) }), "mal kabul"); return { id: d.id, numara: await numaraOku("goods_receipts", "receiptNo", d.id) }; },
+      ekran: (dur, k, eski) => listede("Mal Kabul", /Fiş no veya tedarikçi/, [k.numara, eski]),
+      belge: (dur, k) => belgeHtml("GOODS_RECEIPT", k.id, k.numara),
+    },
+    purchaseOrder: {
+      tablo: { tablo: "purchase_orders", kolon: "orderNo" }, okutulur: false,
+      yeniOnEk: "ASZ", varyantlar: [{ dateSegment: "NONE" }],
+      hazirla: async (dur) => { dur.tedarikci ??= zorunlu(await api("/api/customers", { method: "POST", body: JSON.stringify({ name: `TEST-E5T${K()} Tedarikçi`, isSupplierRole: true }) }), "tedarikçi").id; },
+      eskiKayit: () => eskiSec("purchase_orders", "orderNo"),
+      ac: async (dur) => { const d = zorunlu(await api("/api/purchase-orders", { method: "POST", body: JSON.stringify({ supplierId: dur.tedarikci, lines: [{ itemId: await kumas(), qty: 5 }], clientToken: crypto.randomUUID() }) }), "alış siparişi"); return { id: d.id, numara: await numaraOku("purchase_orders", "orderNo", d.id) }; },
+      ekran: (dur, k, eski) => listede("Alış Siparişleri", /Sipariş no \/ tedarikçi/, [k.numara, eski]),
+      belge: belgeYok("alış siparişinin belge türü yok"),
+    },
+    warehouseTransfer: {
+      tablo: { tablo: "warehouse_transfers", kolon: "transferNo" }, okutulur: false,
+      yeniOnEk: "DTZ", varyantlar: [{ separator: "-", separator2: "/" }],
+      hazirla: async (dur) => { dur.hedefDepo ??= await yeniDepo(); },
+      eskiKayit: () => eskiSec("warehouse_transfers", "transferNo"),
+      ac: async (dur) => {
+        const [top] = await sql(`SELECT id, "warehouseId" w FROM rolls WHERE status='WAREHOUSE' AND "warehouseId" IS NOT NULL AND "warehouseId"<>$1 AND "sackId" IS NULL AND "shipmentId" IS NULL ORDER BY "updatedAt" DESC LIMIT 1`, [dur.hedefDepo]);
+        if (!top) throw new Error("transfer edilecek depo topu yok");
+        const d = zorunlu(await api("/api/warehouse-transfers", { method: "POST", body: JSON.stringify({ fromWarehouseId: top.w, toWarehouseId: dur.hedefDepo, rollIds: [top.id], clientToken: crypto.randomUUID() }) }), "transfer");
+        return { id: d.id, numara: await numaraOku("warehouse_transfers", "transferNo", d.id) };
+      },
+      ekran: (dur, k, eski) => listede("Depo Transferi", null, [k.numara, eski]),
+      belge: (dur, k) => belgeHtml("TRANSFER_DISPATCH", k.id, k.numara),
+    },
+    stockCount: {
+      tablo: { tablo: "stock_counts", kolon: "countNo" }, okutulur: false,
+      yeniOnEk: "SAYZ", varyantlar: [{ dateSegment: "NONE" }],
+      hazirla: async () => {},
+      eskiKayit: () => eskiSec("stock_counts", "countNo"),
+      // Depo başına tek açık sayım → her kayıt için yeni depo.
+      ac: async () => { const d = zorunlu(await api("/api/stock-counts", { method: "POST", body: JSON.stringify({ warehouseId: await yeniDepo() }) }), "sayım"); return { id: d.id, numara: await numaraOku("stock_counts", "countNo", d.id) }; },
+      ekran: (dur, k, eski) => listede("Stok Sayımı", /Sayım no ara/, [k.numara, eski]),
+      belge: (dur, k) => belgeHtml("STOCK_COUNT", k.id, k.numara, `/api/printed-documents/STOCK_COUNT/${k.id}/html?draft=1`),
+    },
+    freeDocument: {
+      tablo: { tablo: "free_documents", kolon: "documentNo" }, okutulur: false,
+      yeniOnEk: "SBZ", varyantlar: [{ dateSegment: "YYMM" }],
+      hazirla: async () => {},
+      eskiKayit: () => eskiSec("free_documents", "documentNo"),
+      ac: async () => { const d = zorunlu(await api("/api/free-documents", { method: "POST", body: JSON.stringify({ title: `TEST-E5 Serbest ${K()}` }) }), "serbest belge"); return { id: d.id, numara: await numaraOku("free_documents", "documentNo", d.id) }; },
+      ekran: (dur, k, eski) => listede("Serbest Belgeler", null, [k.numara, eski]),
+      belge: (dur, k) => belgeHtml(null, k.id, k.numara, `/api/free-documents/${k.id}/html`),
+    },
+  };
+
   return {
+    ...depoTicaret,
     invoiceSales: fatura("SALES", "Faturalar"),
     invoicePurchase: fatura("PURCHASE", "Faturalar"),
     invoiceSalesReturn: fatura("SALES_RETURN", "Faturalar"),

@@ -135,11 +135,14 @@ async function gor(key, ad) {
 }
 async function durumOku(d) {
   await page.waitForTimeout(900); // önizleme sunucudan
-  const onizleme = (await d.locator(".font-mono.text-2xl").textContent().catch(() => null))?.trim() ?? null;
+  // İki kutu (K19): "Biçim örneği" (şekil, hep sıra 1) · "Sıradaki numara" (gerçek sonraki kayıt).
+  const kutu = async (etiket) => (await d.locator("div.rounded-md", { has: page.getByText(etiket, { exact: true }) }).locator(".font-mono").first().textContent().catch(() => null))?.trim() ?? null;
+  const onizleme = await kutu("Biçim örneği");
+  const siradaki = await kutu("Sıradaki numara");
   const hataL = d.locator("p.text-destructive");
   const hata = (await hataL.count()) ? (await hataL.first().textContent())?.trim() : null;
   const kaydetAcik = await d.getByRole("button", { name: "Kaydet" }).isEnabled().catch(() => null);
-  return { onizleme, hata, kaydetAcik };
+  return { onizleme, siradaki, hata, kaydetAcik };
 }
 async function diyaloguKapat() {
   for (let i = 0; i < 3 && (await page.getByRole("dialog").count()); i++) { await page.keyboard.press("Escape"); await page.waitForTimeout(250); }
@@ -206,10 +209,16 @@ async function bicimYaz(key, alanlar, etiket) {
   const d = await ac(await seri(key));
   if (!d) throw new Error("Düzenle pasif");
   if (alanlar.prefix !== undefined) await d.locator("#ns-prefix").fill(alanlar.prefix);
+  if (alanlar.dateSegment !== undefined) await d.locator("#ns-segment").selectOption(alanlar.dateSegment);
+  if (alanlar.digits !== undefined) await d.locator("#ns-digits").fill(String(alanlar.digits));
+  if (alanlar.separator !== undefined) await d.locator("#ns-sep").fill(alanlar.separator);
   if (alanlar.separator2 !== undefined && (await d.locator("#ns-sep2").count())) await d.locator("#ns-sep2").fill(alanlar.separator2 ?? "");
+  if (alanlar.effectiveFrom) { await d.locator("#ns-effective").fill(alanlar.effectiveFrom); await d.locator("#ns-effective").press("Tab"); }
   const on = await durumOku(d);
+  // Hedef biçim zaten kayıtlıysa Kaydet pasiftir (değişiklik yok) — tıklanmaz, "zaten yerinde" döner.
+  if (on.kaydetAcik === false && !on.hata) { await diyaloguKapat(); return { onizleme: on.onizleme, siradaki: on.siradaki, kapandi: true, degisiklikYok: true }; }
   const k = await kaydet(key, d, etiket);
-  return { onizleme: on.onizleme, ...k };
+  return { onizleme: on.onizleme, siradaki: on.siradaki, hata: on.hata, ...k };
 }
 
 // ── KAYIT AÇICILAR — seri → kaydı açma yolu · ekran · belge · okutma · eski kayıt ─────────
@@ -418,7 +427,7 @@ for (const r of hepsi) {
     sonuc.push(kayit); yaz(); console.log(`⏭ ${r.key} [${kip}] ÖLÇÜLMEDİ — ${kayit.neden}`); continue;
   }
   const on = r.key;
-  const orj = { prefix: r.prefix, separator2: r.separator2 ?? "" };
+  const orj = { prefix: r.prefix, dateSegment: r.dateSegment, digits: r.digits, separator: r.separator ?? "", separator2: r.separator2 ?? "" };
   try {
     ag.adim(`${on} · hazırlık`);
     await A.hazirla(dur);
@@ -438,7 +447,13 @@ for (const r of hepsi) {
 
     ag.adim(`${on} · kayıt aç`);
     const k = await A.ac(dur);
-    kayit.adimlar.kayit = { numara: k.numara, acilisYolu: k.acilisYolu ?? "API", onizleme: kip === "tam" ? kayit.adimlar.bicim.onizleme : r.preview, kalibaUyar: hedefKalip.test(String(k.numara ?? "")) };
+    const siradakiEkranda = kip === "tam" ? kayit.adimlar.bicim.siradaki : null;
+    kayit.adimlar.kayit = {
+      numara: k.numara, acilisYolu: k.acilisYolu ?? "API", onizleme: kip === "tam" ? kayit.adimlar.bicim.onizleme : r.preview,
+      kalibaUyar: hedefKalip.test(String(k.numara ?? "")),
+      // Bilgi: diyalogdaki "Sıradaki numara" (kaydetmeden önce, taslak biçimle) açılan kayda eşit mi.
+      siradaki: siradakiEkranda && siradakiEkranda !== "—" ? { ekranda: siradakiEkranda, tutar: siradakiEkranda === k.numara } : "ölçülmedi",
+    };
 
     ag.adim(`${on} · ekran`);
     kayit.adimlar.ekran = await A.ekran(dur, k, eski).catch((e) => ({ hata: String(e.message ?? e).split("\n")[0] }));
@@ -447,6 +462,48 @@ for (const r of hepsi) {
     ag.adim(`${on} · belge`);
     kayit.adimlar.belge = A.belge ? await A.belge(dur, k).catch((e) => ({ hata: String(e.message ?? e).split("\n")[0] })) : { uygulanmaz: "bu serinin belgesi yok" };
     kayit.adimlar.okutma = A.okutulur ? "ölçülmedi (panel okutma kolu E4 sonrası)" : "uygulanmaz (seri okutulmuyor)";
+
+    // VARYANTLAR (TAM kip): tarih · ayraç · hane — her biri: biçim → kayıt → kalıp + ekran → geri.
+    if (kip === "tam" && A.varyantlar?.length) {
+      kayit.adimlar.varyantlar = [];
+      for (const v of A.varyantlar) {
+        ag.adim(`${on} · varyant ${JSON.stringify(v)}`);
+        const b = await bicimYaz(r.key, v, "e5-varyant");
+        const kv = await A.ac(dur);
+        const kk = kalip({ ...r, digits: v.digits ?? r.digits, preview: b.onizleme });
+        const ekr = await A.ekran(dur, kv, null).catch((e) => ({ hata: String(e.message ?? e).split("\n")[0] }));
+        await bicimYaz(r.key, orj, "e5-varyant-geri");
+        kayit.adimlar.varyantlar.push({ v, onizleme: b.onizleme, numara: kv.numara, kalibaUyar: kk.test(String(kv.numara ?? "")), ekran: ekr, kaydedildi: b.kapandi });
+      }
+    }
+    // YÜRÜRLÜK (TAM kip): yarın tarihli değişiklik → bekleyen görünür · bugünkü kayıt ESKİ biçimle · "İptal et".
+    if (kip === "tam" && A.yururluk) {
+      ag.adim(`${on} · yürürlük`);
+      const yarin = new Date(Date.now() + 86_400_000);
+      const gun = `${String(yarin.getDate()).padStart(2, "0")}.${String(yarin.getMonth() + 1).padStart(2, "0")}.${yarin.getFullYear()}`;
+      const b = await bicimYaz(r.key, { prefix: A.yururluk, effectiveFrom: gun }, "e5-yururluk");
+      const d2 = await ac(await seri(r.key));
+      const bekleyenDiyalogda = d2 ? (await d2.getByText("Bekleyen değişiklik:").count()) > 0 : false;
+      const g = await gor(r.key, "yururluk-bekleyen");
+      await diyaloguKapat();
+      const ky = await A.ac(dur);
+      const bugunkuKalip = kalip({ ...r, preview: (await seri(r.key)).preview });
+      const d3 = await ac(await seri(r.key));
+      let iptal = null;
+      if (d3) {
+        const btn = d3.getByRole("button", { name: "İptal et" });
+        if (await btn.count()) {
+          await btn.click();
+          const sd = page.getByRole("dialog").filter({ hasText: "Ayar şifresi" }).first();
+          if (await sd.waitFor({ timeout: 4_000 }).then(() => true, () => false)) { await sd.locator("#settings-password").fill(AYAR_SIFRESI); await sd.getByRole("button", { name: "Onayla" }).click(); }
+          await page.waitForTimeout(1500);
+          iptal = true;
+        } else iptal = "İptal et düğmesi yok";
+      }
+      await diyaloguKapat();
+      const ileriSatir = (await sql(`SELECT count(*)::int n FROM number_series_lines WHERE "seriesKey"=$1 AND "effectiveFrom" > now()`, [r.key]))[0].n;
+      kayit.adimlar.yururluk = { kaydedildi: b.kapandi, bekleyenDiyalogda, gorsel: g, bugunkuKayit: ky.numara, eskiBicimle: bugunkuKalip.test(String(ky.numara ?? "")), iptal, iptalSonrasiIleriSatir: ileriSatir };
+    }
 
     let geriTamam = true;
     if (kip === "tam") {
@@ -458,13 +515,17 @@ for (const r of hepsi) {
     }
     kayit.adimlar.eskiNumaralarAyni = izOnce === (await eskiParmakIzi(A.tablo, sinir));
 
-    const ekranTamam = kayit.adimlar.ekran && !kayit.adimlar.ekran.hata && Object.values(kayit.adimlar.ekran).every(Boolean);
+    const ekranTamam = kayit.adimlar.ekran && !kayit.adimlar.ekran.hata && (kayit.adimlar.ekran.uygulanmaz || Object.values(kayit.adimlar.ekran).every(Boolean));
+    const varyantTamam = (kayit.adimlar.varyantlar ?? []).every((x) => x.kaydedildi && x.kalibaUyar && !x.ekran?.hata && (x.ekran?.uygulanmaz || Object.values(x.ekran ?? {}).every(Boolean)));
+    const y = kayit.adimlar.yururluk;
+    const yururlukTamam = !y || (y.kaydedildi && y.bekleyenDiyalogda && y.eskiBicimle && y.iptal === true && y.iptalSonrasiIleriSatir === 0);
     const belgeTamam = kayit.adimlar.belge.uygulanmaz || kayit.adimlar.belge.belgedeVar === true;
     const agTemiz = Object.values(agKayitlari(on)).every((l) => l.length === 0);
     const bicimTamam = kip === "tam" ? kayit.adimlar.bicim.kapandi : true;
-    kayit.sonuc = bicimTamam && kayit.adimlar.kayit.kalibaUyar && ekranTamam && belgeTamam && geriTamam && kayit.adimlar.eskiNumaralarAyni && agTemiz ? "✓" : "✗";
+    kayit.sonuc = bicimTamam && kayit.adimlar.kayit.kalibaUyar && ekranTamam && belgeTamam && geriTamam && kayit.adimlar.eskiNumaralarAyni && agTemiz && varyantTamam && yururlukTamam ? "✓" : "✗";
   } catch (e) {
     kayit.sonuc = "✗"; kayit.hata = String(e?.message ?? e).split("\n")[0].slice(0, 300);
+    kayit.hataAyrinti = String(e?.message ?? e).slice(0, 1500); // Playwright çağrı günlüğü: hangi locator, neden
     kayit.gorsel.push(await gor(r.key, "hata"));
     if (kip === "tam") await bicimYaz(r.key, orj, "e5-acil-geri").catch(() => undefined);
   }
