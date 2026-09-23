@@ -32,6 +32,7 @@
 - **[ÇEKİRDEK]** `CLIENT_IP_HEADER` app-wide OKUNMAZ — yalnız uzak istekte geçerlidir (`clientIpHeaderRemoteOnly`, `REMOTE_PORT`ten türer); `TRUST_PROXY` de app-wide AYARLANMAZ. Aksi hâlde LAN'daki biri `CF-Connecting-IP` uydurup giriş kilidini VE hız sınırını etkisizleştirir (her denemede farklı kova). · bekçi: `scripts/test_remote_access_guard.ts (IP başlığı negatif sondası)` <sub>(CLAUDE.md:95)</sub>
 
 ## Backend
+- **[ÇEKİRDEK]** P2002'nin hangi kolondan geldiği YALNIZ `src/utils/p2002.ts` yardımcılarıyla okunur (`p2002OnField` · `p2002TargetParts` · `p2002UniqueColumn` · `p2002Mentions`); `meta.target` doğrudan okunmaz — pg adaptörü (Prisma 7) onu VERMEZ, hedef `meta.driverAdapterError.cause` altındadır; doğrudan okuyan retry/409 yüklemi adaptör altında hiç eşleşmez. · bekçi: `test_p2002_hedef_tek_kaynak` (AST, takma ad + yapı çözme; hızlı mandal) + `test_numara_yarisi_levent_dokuma` ① <sub>(arşiv:2026-09-23)</sub>
 
 
 ### Değişmezler

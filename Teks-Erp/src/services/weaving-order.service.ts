@@ -50,6 +50,7 @@ import {
   toWeavingOrderDto,
   weavingOrderAuditView,
 } from "./helpers/weaving-order-input.helper";
+import { p2002OnField } from "../utils/p2002";
 
 export type { WeavingOrderCreateInput, WeavingOrderDto, WeavingOrderUpdateInput };
 // Koşum-açma ucu (machine-run.service) `IN_PROGRESS` geçişini buradan çağırır — tek yazar.
@@ -207,7 +208,7 @@ export async function createWeavingOrder(
       }),
     undefined,
     // Yalnız numara çakışması retry'a girer; `clientToken` çakışması kalıcıdır.
-    (err) => Array.isArray(err.meta?.target) && (err.meta.target as string[]).includes("weavingOrderNumber"),
+    (err) => p2002OnField(err, "weavingOrderNumber"),
   );
 
   await AuditService.log({

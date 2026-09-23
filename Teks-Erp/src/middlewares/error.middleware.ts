@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { AppError } from "../utils/app-error";
+import { p2002UniqueColumn } from "../utils/p2002";
 import {
   BUYUK_GOVDE_LIMITI,
   VARSAYILAN_GOVDE_LIMITI,
@@ -139,33 +140,8 @@ export function extractPrismaValidationField(err: unknown): { field: string; rea
 }
 
 function extractUniqueColumn(meta: Record<string, unknown> | undefined): string | null {
-  if (!meta) return null;
-
-  const target = meta.target;
-  if (Array.isArray(target) && target.length > 0 && typeof target[0] === "string") {
-    return target[0] as string;
-  }
-  if (typeof target === "string" && target.length > 0) {
-    return target;
-  }
-
-  // pg adapter: constraint adından çek ("items_code_key" → "code")
-  const driverErr = meta.driverAdapterError as
-    | { cause?: { originalMessage?: unknown; constraint?: unknown } }
-    | undefined;
-  const cause = driverErr?.cause;
-  const candidates: string[] = [];
-  if (cause && typeof cause.originalMessage === "string") {
-    candidates.push(cause.originalMessage);
-  }
-  if (cause && typeof cause.constraint === "string") {
-    candidates.push(cause.constraint);
-  }
-  for (const raw of candidates) {
-    const m = raw.match(/_([a-zA-Z][a-zA-Z0-9]*)_key/);
-    if (m) return m[1];
-  }
-  return null;
+  // `meta.target` yalnız tek yardımcıda okunur (pg adaptöründe boştur).
+  return meta ? p2002UniqueColumn(meta) : null;
 }
 
 /**

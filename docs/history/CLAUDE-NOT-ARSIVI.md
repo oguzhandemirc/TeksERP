@@ -12030,3 +12030,15 @@ ifadesiydi, o sıra da korundu.
 **Ders.** Yarış bekçisi "iki istek" ile yazılırsa çoğu koşumda pencereyi yakalamaz ve yeşil verir. Yarışın KADERİNİ belirleyen saf yüklem ayrıca, deterministik ölçülür.
 
 **Aynı turda (snapshot envanteri).** `Order.destination` donmuş kolon envanterine beyan edildi: DONMUS_ILERI, yazan `order.service.ts`. Yazımlar `data: { …, destination }` literaline alındı ve `this.delegate.create` → `prisma.order.create` yapıldı; aksi hâlde AST yazıcıyı modele bağlayamıyordu ("çözülemeyen yazım").
+
+**Sınıf kapanışı (aynı gün, 1e isteği).** `meta.target`i doğrudan okuyan dört yer daha vardı. Hepsi adaptör altında hiç eşleşmiyordu:
+- levent numarası retry'ı (`warp-beam.service`)
+- dokuma işi numarası retry'ı (`weaving-order.service`)
+- fason profil tekilliği 409'u (`subcontractor-management.service`)
+- etiket şablonu "tek varsayılan" 409'u (`label-template.service`)
+
+`error.middleware`in kolon çıkarımı da okuyordu, ama adaptör dalını ayrıca taşıdığı için davranışı doğruydu.
+
+- **Tek yardımcı:** `src/utils/p2002.ts` (`p2002MetaTargetParts` · `p2002TargetParts` · `p2002OnField` · `p2002UniqueColumn`; `p2002Mentions` de oradan okur). `barcode-retry` kendi kopyasını bırakıp ona bağlandı.
+- **Kalıcı mandal:** `test_p2002_hedef_tek_kaynak` (AST: doğrudan · döküm içi · takma ad · köşeli · yapı çözme; yorumlar sayılmaz; yedi kalıcı sentetik sonda). 26. hızlı mandal oldu.
+- **Levent ve dokuma işi için** `test_numara_yarisi_levent_dokuma`: zamandan bağımsız yüklem kolu + altı eşzamanlı doğum (duman). Dokuma işinde 8032 kilidi numarayı zaten serileştirir. Levent altı eşzamanlı istekte pencere açmadı. Bu yüzden ısıran kol ①'dir; negatif sondada ② yeşil kaldı ve BEYAN edildi.

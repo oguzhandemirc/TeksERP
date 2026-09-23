@@ -65,6 +65,7 @@ const MANDALLAR = [
   "test_finans_rapor_eksenleri", // finans rapor süzgeç sözleşmesi: eksen uca bağlı · kap koşullu · düşen satır sayılı · bakiye süzgeçten etkilenmez · src/routes + src/services · ağaç · ~0,3 sn · taban 0 sert (23., d9 yazdı, 2026-09-15)
   "test_migration_order", // prisma/migrations sırası: sonra doğan tabloya önce dokunma · DB'siz · 0,3 sn · taban 0 sert (24., 2026-09-23)
   "test_seri_modul_yuklemesi", // numara serisi çağrısı modül yüklenirken koşmaz (AST) · DB'siz · ~0,9 sn · taban 0 sert (25., 2026-09-23)
+  "test_p2002_hedef_tek_kaynak", // P2002 hedefi (`meta.target`) yalnız src/utils/p2002.ts'te okunur (AST; takma ad + yapı çözme; yorum sayılmaz) · DB'siz · ~1 sn · taban 0 sert (26., 2026-09-23)
 ];
 
 function izoleAgacMi() {
