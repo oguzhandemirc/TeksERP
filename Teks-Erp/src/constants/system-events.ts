@@ -143,6 +143,8 @@ const REPAIR_EVENTS = {
   TAMBUR_UNDO_CANCEL_MARKER_BACKFILL: "TAMBUR_UNDO_CANCEL_MARKER_BACKFILL",
   /** Kasa defteri geçmiş doldurma (tek yazar dilimi, 2026-09-18) — `scripts/migrate_cash_ledger_backfill.ts`. */
   CASH_LEDGER_PAYMENT_BACKFILL: "CASH_LEDGER_PAYMENT_BACKFILL",
+  /** Sipariş yönü geri doldurma (2026-09-23) — `scripts/backfill_order_destination.ts`. */
+  ORDER_DESTINATION_BACKFILL: "ORDER_DESTINATION_BACKFILL",
 } as const;
 
 /**
