@@ -34,6 +34,7 @@
 //   (12c'nin ilk hâli audit `oldData`sını da sayıyordu — sınırsız eşleşme, WHERE'e daraltıldı)
 // Açık niyet sondaları (S5, geri alındı → 51/0): ⑩ yazardaki `!p.chosen` koşulu düştü → 12d/13b/13d ❌ ·
 //   ⑪ koşul çağırana taşındı → 12d/12e/13d ❌ · ⑫ Zod `z.boolean()` (false kabul) → 14b/14d ❌
+// Hızlı Sevk ilk seçimi (karar A, geri alındı → 55/0): ⑬ kilit ucunda `quickShipPickExportReason` hep null → 7e ❌
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
@@ -215,6 +216,21 @@ async function main() {
   );
   const kilit7 = await readShipmentDestinationLock(prisma, { customerId: c7e });
   check("7d ekrandaki pasif düğme gerekçesi = sunucunun 400 metni", !!e7b && kilit7.quickShipBlockedReason === e7b.message, String(kilit7.quickShipBlockedReason));
+  // 7e–7g Hızlı Sevk'te İLK SEÇİM (karar A, 2026-09-23): zincir boşken operatör sorulur.
+  const c7p = await yeniCari();
+  const kilit7p = await readShipmentDestinationLock(prisma, { customerId: c7p });
+  const e7p = await hataYakala(async () => shipping.createShipmentFromRolls({ rollIds: [await yeniTop(null)], customerId: c7p, destination: "EXPORT", destinationChosen: true }));
+  check(
+    "7e ⭐ zincir boş + ilk seçim Yurtdışı → 400 QUICK_SHIP_EXPORT_UNSUPPORTED; metin = kilit ucunun seçim gerekçesi",
+    e7p?.statusCode === 400 && kod(e7p) === "QUICK_SHIP_EXPORT_UNSUPPORTED" && kilit7p.quickShipPickExportReason === e7p.message && kilit7p.quickShipBlockedReason === null,
+    `${e7p?.message ?? "hata yok"} | ${kilit7p.quickShipPickExportReason}`,
+  );
+  check("7f ⭐ reddedilen Yurtdışı seçimi karta YAZILMADI (tx geri alındı)", (await yonleri(c7p)).cari === null);
+  const r7p = (await shipping.createShipmentFromRolls({ rollIds: [await yeniTop(null)], customerId: c7p, destination: "DOMESTIC", destinationChosen: true })) as Sonuc;
+  const r7ps = await prisma.shipment.findUnique({ where: { id: r7p.data.id }, select: { sacks: { select: { id: true } } } });
+  for (const s of r7ps?.sacks ?? []) made.sackIds.push(s.id);
+  check("7g ⭐ zincir boş + ilk seçim Yurtiçi (açık niyet) → sevkiyat DOMESTIC VE karta yazıldı", (await sevkYonu(r7p.data.id)) === "DOMESTIC" && (await yonleri(c7p)).cari === "DOMESTIC");
+  check("7h kilitliyken seçim gerekçesi yok (null)", kilit7.quickShipPickExportReason === null);
 
   // 8) eşzamanlı iki ilk sevk
   for (const [etiket, rakip, istek, beklenen] of [

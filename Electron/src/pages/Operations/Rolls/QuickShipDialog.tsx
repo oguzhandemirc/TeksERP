@@ -34,8 +34,10 @@ import { colorService } from "@/pages/Colors/service";
 import type { Customer } from "@/pages/Customers/types";
 import type { Item } from "@/pages/Items/types";
 import type { Color } from "@/pages/Colors/types";
-import { quickShip, findRollsForQuickShip, type QuickShipRoll } from "./quickShipService";
-import { useDestinationLock } from "@/pages/Operations/SackContentEdit/destinationDefault";
+import { quickShip, findRollsForQuickShip, quickShipDestination, type QuickShipRoll } from "./quickShipService";
+import { invalidateDestinationLock, useDestinationLock } from "@/pages/Operations/SackContentEdit/destinationDefault";
+import { DestinationLockField } from "@/pages/Operations/SackContentEdit/DestinationLockField";
+import type { ShipmentDestination } from "@/pages/Operations/SackContentEdit/types";
 import { Callout } from "@/components/ui/callout";
 
 interface Props {
@@ -49,7 +51,13 @@ interface Props {
 
 export function QuickShipDialog({ open, onOpenChange, initialRolls = [], onShipped }: Props) {
   const qc = useQueryClient();
-  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [customerId, setCustomerIdRaw] = useState<string | null>(null);
+  const [picked, setPicked] = useState<ShipmentDestination | null>(null);
+  // İlk seçim cariye aittir — cari değişince sıfırlanır.
+  const setCustomerId = (id: string | null) => {
+    setCustomerIdRaw(id);
+    setPicked(null);
+  };
   const [rolls, setRolls] = useState<QuickShipRoll[]>(initialRolls);
 
   // ② MİKTAR MODU — "3 top patos gri" de, sistem FIFO ile seçsin.
@@ -94,17 +102,26 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], onShipp
     });
   };
 
+  // Yurtdışı (kilitli ya da ilk seçimde seçilen) Hızlı Sevk'i kapatır — gerekçe sunucunun 400 metni.
+  const lockQ = useDestinationLock(customerId, null, open);
+  const yon = quickShipDestination(lockQ.data, picked);
+  const blockedReason = yon.blockedReason;
+  const valid = Boolean(customerId) && rolls.length > 0 && !yon.blocked && yon.destination != null;
+
   const shipM = useMutation({
     mutationFn: () =>
       quickShip({
         rollIds: rolls.map((r) => r.id),
         customerId: customerId as string,
+        destination: yon.destination ?? undefined,
+        ...(yon.chosen ? { destinationChosen: true as const } : {}),
         clientToken: crypto.randomUUID(),
       }),
     onSuccess: (res) => {
       toast.success(res.message ?? "Sevk edildi.");
       void qc.invalidateQueries({ queryKey: ["rolls"] });
       void qc.invalidateQueries({ queryKey: ["shipments"] });
+      invalidateDestinationLock(qc);
       setRolls([]);
       setCustomerId(null);
       onOpenChange(false);
@@ -112,10 +129,6 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], onShipp
     },
   });
 
-  // İhracat olarak kilitli caride Hızlı Sevk kapalı — gerekçe sunucunun 400 metniyle aynı.
-  const lockQ = useDestinationLock(customerId, null, open);
-  const blockedReason = lockQ.data?.quickShipBlockedReason ?? null;
-  const valid = Boolean(customerId) && rolls.length > 0 && !blockedReason;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,6 +155,11 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], onShipp
                 placeholder="Müşteri ara..."
               />
             </div>
+            {customerId && (
+              <div className="mt-2">
+                <DestinationLockField lock={lockQ.data} isLoading={lockQ.isLoading} picked={picked} onPick={setPicked} hasBranch={false} />
+              </div>
+            )}
           </div>
 
           {/* ② MİKTAR MODU */}

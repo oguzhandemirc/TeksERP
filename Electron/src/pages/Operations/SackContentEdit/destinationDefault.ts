@@ -17,6 +17,8 @@ export interface DestinationLock {
   exportCode: string | null;
   /** Doluysa Hızlı Sevk bu adreste yapılamaz — metin sunucunun 400'üyle aynı. */
   quickShipBlockedReason: string | null;
+  /** Zincir boşken: ilk seçim "Yurtdışı" olursa Hızlı Sevk'in gerekçesi (sunucu metni). Eski sunucu göndermez. */
+  quickShipPickExportReason?: string | null;
 }
 
 export const destinationSourceLabels: Record<DestinationSource, string> = {

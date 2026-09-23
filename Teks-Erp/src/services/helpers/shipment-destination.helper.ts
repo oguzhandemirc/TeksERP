@@ -27,6 +27,8 @@ export interface ShipmentDestinationLock extends ResolvedShipmentDestination {
   exportCode: string | null;
   /** Doluysa Hızlı Sevk bu sevk adresinde yapılamaz; metin sunucunun 400'üyle aynı. */
   quickShipBlockedReason: string | null;
+  /** Zincir boşken dolu: ilk seçimde "Yurtdışı" seçilirse Hızlı Sevk'in göstereceği 400 metni. */
+  quickShipPickExportReason: string | null;
 }
 
 /**
@@ -113,5 +115,6 @@ export async function readShipmentDestinationLock(
     ...kilit,
     exportCode: exportCodeForDestination(kilit.destination, { branchCode: branch?.code, customerExportCode: customer?.exportCode }),
     quickShipBlockedReason: kilit.destination === "EXPORT" ? quickShipExportMessage(kilit.source) : null,
+    quickShipPickExportReason: kilit.destination ? null : quickShipExportMessage(null),
   };
 }
