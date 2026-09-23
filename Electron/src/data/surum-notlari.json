@@ -292,7 +292,12 @@
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
-          "metin": "Müşteri kartına “Sevk yönü” alanı geldi (Yurtiçi ya da Yurtdışı); şubeler kullanılıyorsa her şubenin kendi yönü olabilir. Sevkiyatta yurtiçi/yurtdışı artık seçilmez: yön kartın (şubeye gidiyorsa şubenin) yönünden gelir ve panelde ve tablette kilitli olarak gösterilir. Kartında yön olmayan müşterinin ilk sevkinde yön bir kez sorulur ve karta yazılır. İhracat kodu alanı kartta yalnız yön yurtdışıyken açılır ve sevk belgesine yalnız yurtdışı sevkte basılır; eski belgeler değişmez. Yurtdışı olarak işaretli müşteride Hızlı Sevk yapılamaz — çuvalı açıp tartarak sevk edin. Geçmiş sevkiyatlara dokunulmaz. Toplu müşteri yükleme şablonuna da “Sevk Varsayılanı” sütunu eklendi."
+          "metin": "Müşteri kartına “Sevk yönü” alanı geldi (Yurtiçi ya da Yurtdışı); şubeler kullanılıyorsa her şubenin kendi yönü olabilir. Sevkiyatta yurtiçi/yurtdışı artık seçilmez: yön kartın (şubeye gidiyorsa şubenin) yönünden gelir ve panelde ve tablette kilitli olarak gösterilir. Kartında yön olmayan müşterinin ilk sevkinde yön bir kez sorulur ve karta yazılır. İhracat kodu alanı kartta yalnız yön yurtdışıyken açılır ve sevk belgesine yalnız yurtdışı sevkte basılır; eski belgeler değişmez. Yurtdışı olarak işaretli müşteride Hızlı Sevk yapılamaz — çuvalı açıp tartarak sevk edin; yönü boş müşteride Hızlı Sevk de yönü bir kez sorar (Yurtiçi seçilirse karta yazılır, Yurtdışı seçilirse Hızlı Sevk kapanır). Geçmiş sevkiyatlara dokunulmaz. Toplu müşteri yükleme şablonuna da “Sevk Varsayılanı” sütunu eklendi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Yeni rapor: Raporlar → Sipariş & Sevkiyat Raporları → “Yurtiçi / Yurtdışı Satış”. Seçilen dönemde sevk edilen malı sevkiyatın sevk anındaki yönüne göre üç kartta gösterir: Yurtiçi, Yurtdışı ve fasondan doğrudan sevk (bunların yön kaydı yoktur, ayrı kartta durur, yurtiçine katılmaz). Her kartta metre, sevk sayısı, kilo (tartılmamış çuval 0 sayılmaz, “tartılı N / M çuval” yazar), iade (brüt metreden düşülmez, ayrı yazar) ve tutar vardır. Tutar sipariş satırının fiyatından, para birimleri ayrı hesaplanır; fiyatı girilmemiş satır 0 sayılmaz, kapsam “fiyatlı N / M” olarak yazılır. TL karşılığı yalnız sevk gününün kayıtlı kuruyla verilir, kuru olmayan satır ayrıca söylenir. Sekmelerde müşteri, ülke ve ürün kırılımı ile açık sipariş ve termin durumu (siparişin bugünkü cari/şube yönüne göre) bulunur; önceki dönemle karşılaştırma ve Excel/PDF çıktısı var. Sevk & Termin Karnesi ile İade Karnesi'ne de “Sevkiyat yönü (sevk anında)” süzgeci geldi."
         },
         {
           "kapsam": "her-ikisi",
