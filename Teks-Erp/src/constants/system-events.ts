@@ -80,6 +80,11 @@ const IMPORT_EVENTS = {
   ROLE_TEMPLATE_CATALOG_RECONCILED: "ROLE_TEMPLATE_CATALOG_RECONCILED",
   /** Boot uzlaştırması katalogda olup DB'de olmayan numara serilerini doğurdu. */
   NUMBER_SERIES_SEEDED: "NUMBER_SERIES_SEEDED",
+  /**
+   * Eski `workorder.partyCodeAuto` bayrağı `numberSource`a TEK SEFERLİK göç etti.
+   * Damgalıdır: bir daha koşmaz, yani bu olay kurulum başına EN ÇOK BİR KEZ görünür.
+   */
+  NUMBER_SOURCE_MIGRATED: "NUMBER_SOURCE_MIGRATED",
 } as const;
 
 /** Süperadmin, sistem hesabı, modül profili. */

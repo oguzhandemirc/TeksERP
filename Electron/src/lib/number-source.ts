@@ -1,3 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
+import { featureFlagService } from "@/services/featureFlagService";
+
 /**
  * ELLE NUMARA ALANININ EKRANDAKİ HÂLİ — sunucudaki `numberSource` ayarının
  * istemci karşılığı.
@@ -39,4 +42,17 @@ export function numberSourceOf(
   key: string,
 ): NumberSourceMode | undefined {
   return liste?.find((x) => x.key === key)?.mode;
+}
+
+/**
+ * Panel tarafında modu okuyan TEK hook. Her form kendi sorgusunu kurmasın diye
+ * burada: sorgu anahtarı da önbellek süresi de tek yerde kalır.
+ */
+export function useNumberSourceState(key: string): ManualFieldState {
+  const { data } = useQuery({
+    queryKey: ["feature-flags"],
+    queryFn: () => featureFlagService.get(),
+    staleTime: 60_000,
+  });
+  return manualFieldState(numberSourceOf(data?.data?.numberSources, key));
 }

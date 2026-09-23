@@ -38,7 +38,8 @@ import { CoveragePanel } from "./CoveragePanel";
 import { OrderPickerDialog, type PickedOrderLine } from "./OrderPickerDialog";
 import { productRecipeService } from "@/pages/ProductRecipes/service";
 import type { ProductRecipe } from "@/pages/ProductRecipes/types";
-import { useTargetQuantityEnabled, usePartyCodeAuto } from "@/hooks/usePricingEnabled";
+import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
+import { useNumberSourceState } from "@/lib/number-source";
 import { RouteEditor } from "./RouteEditor";
 import { TargetItemPicker } from "./TargetItemPicker";
 import { useFoldValues } from "@/hooks/useFoldValues";
@@ -125,12 +126,17 @@ export function WorkOrderFormView({
 }: Props) {
   const isEdit = Boolean(workOrder);
   const targetQuantityEnabled = useTargetQuantityEnabled();
-  const partyCodeAuto = usePartyCodeAuto();
+  // ⚠️ TEK KAYNAK: eski `partyCodeAuto` bayrağı artık `numberSource`tan TÜRETİLİYOR
+  // (D3③) ve boolean olduğu için ÜÇÜNCÜ hâli (SYSTEM = elle giriş YASAK)
+  // söyleyemez. Bu yüzden form modun kendisini okur; iki ayar bir soruyu
+  // cevaplarken biri mutlaka bayatlar.
+  const partyCodeHal = useNumberSourceState("workOrder");
   // Otomatik mod + yeni kayıt: parti kodunu elle gir (override) seçeneği.
   const [overrideParty, setOverrideParty] = useState(false);
+  const partyCodeGizli = !isEdit && partyCodeHal === "hidden";
   // Parti kodu alanı düzenlenebilir + zorunlu mu? Otomatik modda yeni kayıtta
   // override kapalıysa alan kilitli ve boş kalır → backend otomatik üretir.
-  const partyCodeEditable = isEdit || !partyCodeAuto || overrideParty;
+  const partyCodeEditable = isEdit || partyCodeHal === "required" || overrideParty;
 
   const form = useForm<WorkOrderFormValues>({
     resolver: zodResolver(workOrderFormSchema) as Resolver<WorkOrderFormValues>,
@@ -423,7 +429,7 @@ export function WorkOrderFormView({
             }
             // Manuel mod / override / düzenlemede parti kodu zorunlu. Otomatik modda
             // (override kapalı) boş bırakılır → backend otomatik üretir.
-            if (partyCodeEditable && !(v.batchNumber ?? "").trim()) {
+            if (partyCodeEditable && !partyCodeGizli && !(v.batchNumber ?? "").trim()) {
               form.setError("batchNumber", { type: "manual", message: "Parti kodu zorunlu" });
               manualErrors.push("Parti kodu zorunlu.");
             }
@@ -856,7 +862,10 @@ export function WorkOrderFormView({
                   moda geri döner. Manuel modda + düzenlemede her zaman açık + zorunlu. */}
               {/* Rozet input'un ÜSTÜNDE (2026-08-17 talebi): altta kalınca
                   operatör yazmaya başladıktan sonra görüyordu. */}
-              {!isEdit && <LastBatchBadge className="mb-1" />}
+              {!isEdit && !partyCodeGizli && <LastBatchBadge className="mb-1" />}
+              {/* ⚠️ SYSTEM modunda alan HİÇ ÇİZİLMEZ: çizilseydi kullanıcı
+                  doldurur, sunucu 400 verir ve hatayı kaydet'ten sonra görürdü. */}
+              {!partyCodeGizli && (
               <FormField
                 label="Parti Kodu"
                 htmlFor="batchNumber"
@@ -876,12 +885,12 @@ export function WorkOrderFormView({
                     }
                     className={cn(!partyCodeEditable && "cursor-pointer bg-muted/40 pr-9")}
                     onFocus={() => {
-                      if (partyCodeAuto && !isEdit && !overrideParty) setOverrideParty(true);
+                      if (partyCodeHal === "optional" && !isEdit && !overrideParty) setOverrideParty(true);
                     }}
                     {...form.register("batchNumber", {
                       onBlur: (e) => {
                         const val = e.target.value.trim();
-                        if (partyCodeAuto && !isEdit && !val) {
+                        if (partyCodeHal === "optional" && !isEdit && !val) {
                           setOverrideParty(false);
                           form.clearErrors("batchNumber");
                           return;
@@ -895,6 +904,7 @@ export function WorkOrderFormView({
                   )}
                 </div>
               </FormField>
+              )}
 
               {/* Planlama tarihleri — kendi başlarına, her zaman açık (accordion yok). */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

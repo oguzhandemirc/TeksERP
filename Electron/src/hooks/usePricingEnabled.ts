@@ -166,11 +166,6 @@ export function useKartelaMeasurementEnabled(): boolean {
   return q.data?.data?.kartelaMeasurementEnabled ?? false;
 }
 
-export function usePartyCodeAuto(): boolean {
-  const q = useFeatureFlags();
-  return q.data?.data?.partyCodeAuto ?? false;
-}
-
 export function useFasonNoteMobileEntry(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.fasonNoteMobileEntry ?? false;

@@ -274,6 +274,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   PERMISSION_CATALOG_RECONCILE_FAILED: "Yetki kataloğu eşitlenemedi",
   ROLE_TEMPLATE_CATALOG_RECONCILED: "Rol kataloğu eşitlendi",
   NUMBER_SERIES_SEEDED: "Numara serileri eşitlendi",
+  NUMBER_SOURCE_MIGRATED: "Numara kaynağı ayarı eski bayraktan taşındı (tek seferlik)",
 
   // ── SYSTEM · onarım / backfill izleri ──
   // Bunlar `scripts/*.ts --apply` koşumlarının bıraktığı izdir: operatör "bu veriyi

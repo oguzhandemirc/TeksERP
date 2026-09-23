@@ -4,6 +4,12 @@
 // tek tek girmek yerine yükler. Bir sipariş = N satır (her satır bir KALEM);
 // satırlar "Sipariş Referansı" sütununa göre gruplanır.
 //
+// ⚠️ `numberSource` KAPISI BU YOLDA TETİKLENMEZ ve bu ÖLÇÜLDÜ (2026-09-23):
+// şablonda sipariş numarası SÜTUNU YOKTUR — `createOne` payload'ına `orderNumber`
+// hiç konmaz, yani `SYSTEM` modunda da reddedilecek bir değer üretilmez. Bir gün
+// sütun eklenirse kapı KENDİLİĞİNDEN devreye girer: adaptör `orderService.create`
+// çağırıyor ve kapı orada. Buraya ayrı bir kontrol EKLENMEDİ — bugün ölü kod olurdu.
+//
 // ⚠️ SİPARİŞ NUMARASI SUNUCU ÜRETİR (`SIP+GGAAYY+NNNN`). Dosyadaki referans
 // MÜŞTERİNİN kendi numarasıdır — bizim sipariş numaramız DEĞİLDİR ve onunla
 // eşleşmez. Bu yüzden bu adaptör YALNIZ OLUŞTURUR: aynı dosyayı ikinci kez

@@ -12,6 +12,7 @@ import { Lock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
 import { cn } from "@/lib/utils";
+import { useNumberSourceState } from "@/lib/number-source";
 import type { OrderFormValues } from "./schema";
 
 export const ORDER_NUMBER_AUTO_PLACEHOLDER = "Otomatik oluşturulur — kendiniz girmek için tıklayın.";
@@ -38,9 +39,20 @@ interface Props {
 
 export function OrderNumberField({ form, isEdit }: Props) {
   const [override, setOverride] = useState(false);
-  const editable = isEdit || override;
+  // ⚠️ Alanın hâli SUNUCUDAN (`numberSource`): SYSTEM'de alan HİÇ ÇİZİLMEZ —
+  // çizilseydi kullanıcı doldurur, sunucu 400 verir ve hatayı ancak kaydet'ten
+  // sonra görürdü. Düzenlemede alan zaten kilitli, o yüzden mod aranmaz.
+  const hal = useNumberSourceState("order");
+  const editable = isEdit || override || hal === "required";
+  if (!isEdit && hal === "hidden") return null;
   return (
-    <FormField label="Sipariş No" htmlFor="orderNumber" error={form.formState.errors.orderNumber} hintTone="muted" hint={override && !isEdit ? "Benzersiz olmalı — boş bırakırsanız otomatik atanır." : undefined}>
+    <FormField label="Sipariş No" htmlFor="orderNumber" error={form.formState.errors.orderNumber} hintTone="muted" hint={
+        hal === "required"
+          ? "Bu seride numara ELLE girilir — boş bırakılamaz."
+          : override && !isEdit
+            ? "Benzersiz olmalı — boş bırakırsanız otomatik atanır."
+            : undefined
+      }>
       <div className="relative">
         <Input
           id="orderNumber"
