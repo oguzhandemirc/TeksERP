@@ -11431,3 +11431,27 @@ CASCADE` · `DO UPDATE SET` · `BEFORE INSERT OR UPDATE ON`) — yalnız önceki
 yetmedi, ölçüt ifadenin kuyruğundaki `SET`. Kapsam beyanı: tablolar + görünümler; enum tipi, fonksiyon
 ve uzantı kapsam DIŞI. CI bu sınıfı zaten yakalıyordu (servis konteyneri her koşumda taze `teks_ci` +
 `migrate deploy`), ama CI push'tan SONRA konuşur; mandal commit kapısında konuşur.
+
+## 2026-09-23 — Bekçi süreçleri `--no-maglev` ile koşar: Node v26.8.1 V8 çıkış kilitlenmesi [ÇEKİRDEK]
+
+**Belirti:** `test_fason_ceki_html` tam pakette 180 sn zaman aşımına düştü, tek başına 1 sn'de yeşildi. Çıktı
+"§18-EK"te duruyor sanıldı; kırmızı günlükte `=== Sonuç: 236 geçti, 0 başarısız ===` da basılmıştı. Asılma
+iş bittikten SONRA, `process.exit(0)` anında oluyordu.
+
+**Kök (macOS `sample` yığını):** ana iş parçacığı `process.exit` içinde V8 arka plan iş parçacıklarının
+bitmesini bekliyor (`WorkerThreadsTaskRunner::Shutdown → uv_thread_join`). Maglev arka plan derleyicisi ise
+yalnız ana iş parçacığının yapabileceği bir GC'yi bekliyor (`CollectionBarrier::AwaitCollectionBackground`).
+Karşılıklı bekleme. Ağır iş ile çıkış arasındaki mesafe kısaldıkça ve makine yüklendikçe olasılık artar.
+Havuz, kilit ya da tx değil; ürün hatası değil.
+
+**Ölçüm** (d3, `tekserp_d3b_test`, `npx tsx` gerçek çağrı biçimi, 4 paralel, koşu başına 15 sn):
+bayraksız 900 koşuda **17 asılma** (hepsi "236 geçti" satırından sonra), `--no-maglev` ile 900 koşuda **0**.
+`NODE_OPTIONS` bayrağı kabul etmez; tsx bayrağı node'a iletir.
+
+**Karar (1e):** bayrak bekçi başlatan beş noktaya girer: `run-all-tests.ts` `runOnce` (npm test · CI ·
+tek bekçi), `scripts/hooks/hizli-mandallar.mjs`, `scripts/hooks/pre-commit.mjs` ×3. Node sürümü
+DEĞİŞTİRİLMEZ. Kapsam dışı: bekçilerin kendi içinden başlattığı alt süreçler (`test_script_guards` gibi).
+
+**Upstream bildirimi için:** Node v26.8.1 · macOS arm64 · yeniden üretme: ağır senkron iş (büyük HTML string
+üretimi) ardından `process.exit(0)`, 4 paralel süreç, ~%2 asılma; `--no-maglev` ile 0. Yığın çıktısı
+d3 oturumunun ölçüm kayıtlarında. Bildirimi kimin, ne zaman yapacağı açık iş.

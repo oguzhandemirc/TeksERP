@@ -78,7 +78,8 @@ function izoleAgacMi() {
 function kos(ad) {
   return new Promise((resolve) => {
     const t0 = Date.now();
-    const cp = spawn("npx", ["tsx", `scripts/${ad}.ts`], {
+    // `--no-maglev`: Node v26 V8 çıkış kilitlenmesi (upstream) — gerekçe `Teks-Erp/scripts/run-all-tests.ts` runOnce.
+    const cp = spawn("npx", ["tsx", "--no-maglev", `scripts/${ad}.ts`], {
       cwd: BACKEND,
       env: {
         ...process.env,
