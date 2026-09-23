@@ -11895,3 +11895,4 @@ ifadesiydi, o sıra da korundu.
 **L2:** sipariş gerçek servis yolundan ölçülüyor (müşteri + tek kalem). Dokuma işi · levent · doff
 "tezgah/levent/çözgü zinciri ister" gerekçesiyle beyanlı — ⚠️ bu gerekçe bugün iki kez yanlış çıktı
 (manifest ve mal kabul), bu yüzden sıradaki turda ÖLÇÜLECEK, tahmin edilmeyecek.
+

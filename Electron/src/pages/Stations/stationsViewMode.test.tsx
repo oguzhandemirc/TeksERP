@@ -78,4 +78,11 @@ describe("Liste görünümü — kart ve dosya ile aynı küme", () => {
     expect(screen.getAllByText("Makine yok")).toHaveLength(2);
     expect(screen.getAllByTitle("Düzenle")).toHaveLength(2);
   });
+
+  it("⭐ K22: istasyon KODU listede görünür (formda doğan kimlik listede de görünür)", () => {
+    const s1 = station({ id: "s1", name: "KK1", code: "IST2309260007" });
+    const rows = buildStationMachineRows([s1], new Map(), new Map(), new Map());
+    renderWithProviders(<StationListView rows={rows} canWrite onEditStation={() => {}} onAddMachine={() => {}} machine={{ onEdit: () => {}, onQr: () => {}, onDeactivate: () => {}, onReactivate: () => {}, onDelete: () => {} }} />);
+    expect(screen.getByText("IST2309260007")).toBeInTheDocument();
+  });
 });
