@@ -11716,21 +11716,3 @@ ve `freeDocument` GERÇEK SERVİS yolundan kayıt yaratıyor (`StockCountService
 fikstürü ister ve "bir depoda TEK açık sayım" kuralı yüzünden her çağrı KENDİ deposunu kurar),
 `manifest`/`goodsReceipt`/`purchaseOrder`/`warehouseTransfer` fikstür maliyeti gerekçesiyle "L1'de
 kaldı" olarak BEYANLI ve kapsam tablosunda görünüyor.
-
-## 2026-09-23 — Gümrük/İhracat No yedek değer uydurmaz, yurtiçinde görünmez (K15) [ÇEKİRDEK]
-
-**Bulgu (e2e SK3 görüntüsü):** Sevk Kapısı içerik panelinde YURTİÇİ planlı sevkiyatta "Gümrük/İhracat No
-MUS2309260046 (varsayılan)" yazıyordu. Ölçüm: kolon `Shipment.procedureCode`; panel üç yerde (içerik paneli
-salt-okur ve düzenleme düğmesi, Sevk Kapısı kartı) `procedureCode || branch.code || customer.code` zinciriyle
-yedek değer ÜRETİYORDU ve bu değer hiçbir yere kaydedilmiyordu. "(varsayılan)" ekrandaki bir yalandı. Belge ve
-muhasebe dışa aktarımı uydurmuyordu. Sevkiyat detayı ise yönden bağımsız gösteriyordu.
-
-**Karar (1e):** (a) yurtiçinde satır gizli; bu, carinin ihracat kodu alanıyla (S6) aynı yüklemdir
-(`exportCodeVisible`). (b) Yurtdışında da cari kodu gümrük numarası olarak varsayılmaz; boşsa "girilmedi"
-yazar. Belgede aynı kural geçerlidir: yurtiçinde basılmaz. Boşsa belge satır BASMAZ; "girilmedi" yazısı resmi
-belgeye girmez, yoksa 6 eski yurtdışı belge yeni satır kazanırdı.
-
-**Eski belge etkisi ölçüldü:** donmuş belge VERİYİ dondurur, render baskı anındaki şablonla yapılır. Fabrika
-yedeğinin kopyasında (`tekserp_d3e2e_test`, 139 sevkiyat: 133 yurtiçi · 6 yurtdışı) procedureCode dolu sevkiyat
-0 → bugün basılı hiçbir belgenin çıktısı değişmez. Sevk Kapısı kartındaki şube/cari kodu (saha #21) kimlik
-olarak kalır; gümrük no ayrı ve "Gümrük:" etiketiyle yalnız yurtdışında ve yalnız kayıtlıysa görünür.
