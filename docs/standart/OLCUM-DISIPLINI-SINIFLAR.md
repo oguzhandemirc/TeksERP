@@ -209,6 +209,17 @@ disiplini yakaladı.)*
 > **kapsam** ayrışır (tam-proje lint ≠ commit kapısı) · **sınır** ayrışır (kırpılmış
 > yığın, § Aracın VARSAYILANI) · **özne** ayrışır (sarmalayıcı ≠ iş, burası).
 
+### Teardown'un ÖLÇÜTÜ "geçici mi" değil, "BU KOŞUM mu yarattı"
+Bir bölümün temizliği "geçici olanları sil" diye yazılırsa, koşum sırasında NİTELİK
+DEĞİŞTİREN artık geride kalır ve bir SONRAKİ koşumda BAŞKA bir bölümü düşürür.
+*(Ölçüldü 2026-09-23: "vadesi gelmemiş biçim satırlarını sil" diyen teardown,
+yürürlüğe girmiş bir fikstür satırını bırakıyordu; sonraki koşumda boot
+uzlaştırması onu vadesi gelmiş sanıp damgayı yazıyor ve İLGİSİZ bir bölüm
+kırmızı veriyordu — arıza, onu üreten bölümde görünmüyordu.)*
+**Kurtarma:** teardown, sildiğini KİMLİKLE bilsin (koşum başında toplanan id ya da
+koşum damgası), duruma göre değil. Yan etkisi olan her bölüm, değiştirdiği DURUMU
+da (damga, bayrak, ayar) geri yükler.
+
 ### Fikstürünü kendi kuran bekçi, KURDUĞUNU da ölçmek zorundadır
 Bir ORM'in `data` nesnesindeki `undefined` **sessizce atılır**: alan hiç yazılmaz, hata
 çıkmaz, satır oluşur. Fikstür adımı **hiç çalışmadan** yeşil görünür.

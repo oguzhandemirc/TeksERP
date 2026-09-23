@@ -256,6 +256,17 @@ export async function updateSeriesFormat(
   }
   const isFuture = at.getTime() > simdi.getTime() + 60_000;
   const row = await prisma.$transaction(async (tx) => {
+    // ⚠️ AYNI TARİHE YENİDEN KAYIT = BEKLEYEN SATIRI DEĞİŞTİRME: kullanıcı aynı
+    // günü ikinci kez kaydettiğinde ham bir tekillik hatası ("Bu 'effectiveFrom'
+    // değeri zaten mevcut") görüyordu (d3 ölçtü 2026-09-23). Vadesi GELMEMİŞ satır
+    // hiç yürürlüğe girmedi, yani bir TASLAKTIR: silinmesi hiçbir raporlanan sayıyı
+    // değiştirmez (defter.md ④). Silme ATOMİK CLAIM'lidir — `effectiveFrom > now`
+    // koşulu WHERE'in içinde, yani yürürlüğe girmiş bir satır bu yoldan SİLİNEMEZ.
+    if (isFuture) {
+      await tx.numberSeriesLine.deleteMany({
+        where: { seriesKey: key, effectiveFrom: { equals: at, gt: simdi } },
+      });
+    }
     await tx.numberSeriesLine.create({
       data: { seriesKey: key, ...next, effectiveFrom: at, isSentinel: false, origin: "RECORDED" },
     });

@@ -31,8 +31,9 @@ import {
   updateSeriesFormat,
   updateSeriesNumberSource,
 } from "../services/helpers/series-write.helper";
-import { listSeries, seriesImpactCount } from "../services/helpers/series-panel.helper";
-import { seriesExhaustion } from "../services/helpers/series-exhaustion.helper";
+import { cancelPendingSeriesFormat } from "../services/helpers/series-pending.helper";
+import { listSeries, previewNextNumber, seriesImpactCount } from "../services/helpers/series-panel.helper";
+import { seriesExhaustion, seriesExhaustionWarnings } from "../services/helpers/series-exhaustion.helper";
 import { numberSeriesCatalogEntry } from "../constants/number-series-catalog";
 
 const router = Router();
@@ -138,8 +139,22 @@ const keyParamSchema = z.object({ key: z.string().trim().min(1).max(64) });
  *     responses:
  *       200: { description: Seri listesi }
  */
-router.get("/", (_req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: listSeries() });
+router.get("/", async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    // ⚠️ TÜKENME UYARISI LİSTEDE de var: eskiden yalnız Düzenle diyaloğunda
+    // görünüyordu, yani biçimi kilitli bir seride (top barkodu) kullanıcı günlük
+    // kapasitenin dolmak üzere olduğunu HİÇBİR YERDE göremiyordu (d3 ölçtü
+    // 2026-09-23). Maliyet dar: yalnız üst sınırı OLAN seriler sayılır.
+    const warnings = await seriesExhaustionWarnings();
+    const warningByKey = new Map(warnings.map((w) => [w.key, w]));
+    const data = listSeries().map((r) => {
+      const w = warningByKey.get(r.key);
+      return w ? { ...r, exhaustion: w } : r;
+    });
+    res.status(200).json({ success: true, data });
+  } catch (e) {
+    next(e);
+  }
 });
 
 /**
@@ -158,16 +173,23 @@ router.get("/", (_req: Request, res: Response) => {
  *       400: { description: Geçersiz biçim }
  *       409: { description: Ön ek çakışması }
  */
-router.post("/preview", (req: Request, res: Response, next: NextFunction) => {
+router.post("/preview", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { key, ...fmt } = previewSchema.parse(req.body ?? {});
     const current = resolveSeriesFormat(key);
     // Çakışma/karakter/hane kapısı ÖNİZLEMEDE de koşar: kullanıcı hatayı
     // kaydet düğmesinde değil yazarken görsün.
     assertSeriesFormatAllowed(key, { ...fmt, retiredPrefixes: current.retiredPrefixes });
+    // ⚠️ İKİ SATIR, İKİ SORU (K19): "biçim örneği" kod neye benzeyecek, "sıradaki
+    // numara" bir sonraki kayıt hangi numarayı alacak. Ekran eskiden yalnız ilkini
+    // gösteriyordu ve kullanıcı onu sıradaki numara sanıyordu.
+    const next = await previewNextNumber(key, { ...fmt, retiredPrefixes: current.retiredPrefixes });
     res.status(200).json({
       success: true,
-      data: { preview: previewSeriesCode({ ...fmt, retiredPrefixes: [], infix: current.infix }) },
+      data: {
+        preview: previewSeriesCode({ ...fmt, retiredPrefixes: [], infix: current.infix }),
+        next,
+      },
     });
   } catch (e) {
     next(e);
@@ -252,6 +274,40 @@ router.patch(
  *       vekil sınır SAYILMAZ: taşma haneyi genişletir, sayaç dolmaz.
  *     security: [{ bearerAuth: [] }]
  */
+/**
+ * @openapi
+ * /api/number-series/{key}/pending:
+ *   delete:
+ *     tags: [NumberSeries]
+ *     summary: Bekleyen (vadesi gelmemiş) biçim değişikliğini iptal eder
+ *     description: |
+ *       Vadesi GELMEMİŞ satır hiç yürürlüğe girmedi: onunla numara doğmadı ve
+ *       silinmesi raporlanan hiçbir sayıyı değiştirmez ⇒ defter doktrininin
+ *       "deftere hiç yazmamış taslak" sınıfı, sert silme meşru (atomik claim ile).
+ *       Yürürlüğe girmiş satır bu yoldan SİLİNEMEZ.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "İptal edildi" }
+ *       409: { description: "Bekleyen değişiklik yok ya da bu arada yürürlüğe girdi" }
+ */
+router.delete(
+  "/:key/pending",
+  requireSettingsPassword,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { key } = keyParamSchema.parse(req.params);
+      const cancelled = await cancelPendingSeriesFormat(key, req.user?.userId);
+      res.status(200).json({
+        success: true,
+        data: { cancelled },
+        message: "Bekleyen biçim değişikliği iptal edildi; yürürlükteki biçim değişmedi.",
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
 router.get("/:key/exhaustion", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { key } = keyParamSchema.parse(req.params);
