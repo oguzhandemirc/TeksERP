@@ -77,7 +77,11 @@ describe("Numaralandırma — kilit cümlesi tek kaynaktan", () => {
 
   it("⭐ §5 panel biçimi KENDİ KURMUYOR (önizleme · etki · birim sunucudan)", () => {
     const sayfa = oku("NumberingPage.tsx");
-    const diyalog = oku("NumberingFormDialog.tsx") + oku("NumberingFields.tsx");
+    // ⚠️ YÜZEY = kabuk + alanlar + TASLAK KANCASI: önizleme çağrısı boyut tavanı
+    // yüzünden `useNumberingDraft.ts`e taşındı (2026-09-23). Davranış aynı kalırken
+    // tek dosyaya çakılı iddia kırmızı verdi — yerleşim bir karardır, sözleşme değil.
+    const diyalog =
+      oku("NumberingFormDialog.tsx") + oku("NumberingFields.tsx") + oku("useNumberingDraft.ts");
     expect(diyalog).toMatch(/numberingService\s*\.\s*preview\(/);
     expect(sayfa).toMatch(/numberingService\s*\.\s*impact\(/);
     expect(sayfa).toContain("countBirim");

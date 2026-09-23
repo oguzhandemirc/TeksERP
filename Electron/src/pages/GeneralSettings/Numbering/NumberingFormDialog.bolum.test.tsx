@@ -74,7 +74,7 @@ const kaydet = (): HTMLElement => screen.getByRole("button", { name: "Kaydet" })
 describe("Numaralandırma diyaloğu — bölüm bölüm hata", () => {
   beforeEach(() => {
     vi.mocked(numberingService.preview).mockReset();
-    vi.mocked(numberingService.preview).mockResolvedValue("IE2309230001");
+    vi.mocked(numberingService.preview).mockResolvedValue({ preview: "IE2309230001", next: "IE2309230004" });
   });
 
   it("⭐ §1 kilitli seride önizleme ucuna İSTEK GİTMEZ", () => {
@@ -130,7 +130,8 @@ describe("Numaralandırma diyaloğu — bölüm bölüm hata", () => {
     });
     ciz(row({ key: "packingLotCode", editable: true, lockKind: undefined, lockedReason: undefined }));
     expect(await screen.findByText("Hane sayısı en fazla 8 olabilir.")).toBeTruthy();
-    expect(screen.getByText("—")).toBeTruthy();
+    // İKİ kutu da "—" olur: bayat örnek DE bayat "sıradaki numara" DA kalmaz.
+    expect(screen.getAllByText("—")).toHaveLength(2);
   });
 
   it("⭐ §4 geçersiz sayaç değeri Kaydet'i bağlar, mesaj alanın yanındadır", () => {

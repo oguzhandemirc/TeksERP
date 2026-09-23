@@ -30,13 +30,13 @@ export const numberingService = {
    * diyaloğun kendi iptal bayrağıyla bastırdığı BAYAT yanıt bile ekrana
    * düşüyordu. Hatayı gösteren yüzey diyalogdur.
    */
-  async preview(key: string, fmt: SeriesFormatInput): Promise<string> {
-    const r = await apiClient.post<{ data: { preview: string } }>(
+  async preview(key: string, fmt: SeriesFormatInput): Promise<{ preview: string; next: string | null }> {
+    const r = await apiClient.post<{ data: { preview: string; next: string | null } }>(
       "/api/number-series/preview",
       { key, ...fmt },
       { suppressErrorToast: true },
     );
-    return r.data?.data?.preview ?? "";
+    return { preview: r.data?.data?.preview ?? "", next: r.data?.data?.next ?? null };
   },
 
   /** `null` = bu seride sayım kaynağı yok ⇒ ekran SAYI YAZMAZ ("0" demez). */
@@ -66,6 +66,16 @@ export const numberingService = {
       `/api/number-series/${encodeURIComponent(key)}/exhaustion`,
     );
     return r.data?.data ?? null;
+  },
+
+  /**
+   * BEKLEYEN biçim değişikliğini iptal eder. Vadesi gelmemiş satır hiç yürürlüğe
+   * girmedi (defter doktrininin "taslak" sınıfı); sunucu atomik claim ile siler.
+   */
+  async cancelPending(key: string, scope?: SettingsPasswordScope): Promise<void> {
+    await withSettingsPassword((headers) =>
+      apiClient.delete(`/api/number-series/${encodeURIComponent(key)}/pending`, { headers }),
+    scope);
   },
 
   /** Numara kaynağı AYRI uç: biçim/sayaç/kaynak üçü farklı kilitlere tabi. */

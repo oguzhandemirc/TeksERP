@@ -311,8 +311,17 @@ export async function nextSeriesNo(
   key: string,
   loadCodes: (fullPrefix: string) => Promise<Array<SeriesCodeRow>>,
   date: Date = new Date(),
+  /**
+   * ADAY BİÇİM — yalnız ÖNİZLEME yolu geçirir (panelde "sıradaki numara").
+   *
+   * ⚠️ İKİNCİ BİR HESAP YAZMAMAK için var: "sıradaki numara" sorusunu panel için
+   * ayrıca hesaplasaydık, kapsam damgası · atlama döngüsü · adım/başlangıç
+   * kuralları İKİ YERDE yaşardı ve biri bayatlardı ("türetilmiş alan / ayrışan
+   * yüzey"). Üretim yolu bu parametreyi HİÇ geçirmez.
+   */
+  fmtOverride?: NumberSeriesFormat,
 ): Promise<string> {
-  const fmt = resolveSeriesFormat(key);
+  const fmt = fmtOverride ?? resolveSeriesFormat(key);
   const fullPrefix = seriesPrefix(fmt, date);
   const rows = await loadCodes(fullPrefix);
 
@@ -492,6 +501,20 @@ export function classifyScannedCode(code: string): SeriesClassifierRow | null {
     if (matchesSeries(resolveSeriesFormat(entry.key), upper)) return classifierRow(entry);
   }
   return null;
+}
+
+/**
+ * BEKLEYEN (henüz yürürlüğe girmemiş) BİÇİM DEĞİŞİKLİĞİ — panel bunu gösterir.
+ *
+ * ⚠️ En YAKIN vadeli satır döner: ekranda "şu tarihte şu biçime geçecek" tek bir
+ * cümle vardır; birden çok bekleyen satır varsa sıradaki odur. Panel bunu kendi
+ * hesaplamaz (önbellek sunucuda).
+ */
+export function pendingSeriesLine(key: string): { effectiveFrom: Date; fmt: Partial<NumberSeriesFormat> } | null {
+  const dizi = [...(futureCache.get(key) ?? [])].sort(
+    (a, b) => a.effectiveFrom.getTime() - b.effectiveFrom.getTime(),
+  );
+  return dizi[0] ?? null;
 }
 
 /** Prisma tx tipini dışa taşımamak için — çağıranlar kendi delegate'ini getirir. */

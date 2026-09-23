@@ -65,7 +65,7 @@ const ciz = (r: NumberSeriesRow | null) => (
 describe("Numaralandırma diyaloğu — bayat taslak", () => {
   beforeEach(() => {
     vi.mocked(numberingService.preview).mockReset();
-    vi.mocked(numberingService.preview).mockResolvedValue("X0001");
+    vi.mocked(numberingService.preview).mockResolvedValue({ preview: "X0001", next: "X0002" });
   });
 
   it("⭐ §1 seri değişince önizleme isteği ESKİ biçimi taşımaz", () => {
