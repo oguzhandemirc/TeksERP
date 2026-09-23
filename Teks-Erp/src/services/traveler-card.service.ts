@@ -36,7 +36,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { normalizeScanCode } from "../utils/code-format";
-import { matchesSeries, resolveSeriesFormat } from "./number-series.service";
+import { matchesSeries, previewSeriesCode, resolveSeriesFormat } from "./number-series.service";
 // NOT: `readTravelerCardConfig` artık BURADAN çağrılmıyor — kart config'i
 // şablon çözümünden gelir (`travelerTemplateService.resolveForPrint`, şablon
 // yoksa o zaten sistem ayarına düşer). Tip hâlâ gerekli.
@@ -117,9 +117,13 @@ function planKey(snapshot: unknown): string {
 
 // Belge Şablonu (Refakat Kartı Ayarları) canlı önizlemesi için örnek içerik.
 // Gerçek kart verisi DEĞİL; renderSampleHtml taslak config ile birleştirir.
-const SAMPLE_TRAVELER_BARCODE = "IE1207260001"; // tek kod: İE + GGAAYY + NNNN (= iş emri no)
+// ⚠️ SERİDEN TÜRETİLİR, literal YAZILMAZ (D7): kart no = iş emri no ve biçimi
+// artık VERİ. Sabit bir `IE…` yazmak, fabrika ön eki değiştirdiği gün önizlemeyi
+// sessizce yalan yapardı — üstelik "belge · çıktı · program aynı numarayı
+// göstermeli" değişmezinin tam karşısında.
+const SAMPLE_TRAVELER_BARCODE = previewSeriesCode(resolveSeriesFormat("workOrder"), 1);
 const SAMPLE_TRAVELER_SNAPSHOT: Omit<TravelerCardSnapshot, "config"> = {
-  workOrderNumber: "IE1207260001",
+  workOrderNumber: SAMPLE_TRAVELER_BARCODE,
   type: "ORDER_PRODUCTION",
   width: 150,
   targetQuantity: 680,

@@ -82,7 +82,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     // veride eksik kalırsa Belge Şablonları'nın canlı önizlemesi EN'i BOŞ gösterir
     // ama gerçek baskı dolu çıkar — "önizleme = gerçek baskı" sözleşmesi tam da
     // ayarı yapan kişinin gözü önünde bozulur.
-    workOrder: { id: "wo1", workOrderNumber: "IE1207260001", type: "STOCK_PRODUCTION", width: 150 },
+    workOrder: { id: "wo1", workOrderNumber: ornekNo("workOrder", 1), type: "STOCK_PRODUCTION", width: 150 },
     subcontractor: { id: "sub1", name: "Yıldız Boyahane", code: "FB-03" },
     requestedColor: "Bej",
     targetProperties: ["Yanmazlık Apresi", "Su İtici"],
@@ -120,7 +120,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     notes: null,
     batchNumber: "P1207261",
     customer: { id: "cus1", name: "Örnek Tekstil A.Ş.", code: "M001", taxNumber: "1234567890", branchName: "Merkez Şube", branchCode: "IST-01", exportCode: "EXP-TR-042" },
-    workOrder: { id: "wo1", workOrderNumber: "IE1207260001", type: "ORDER_PRODUCTION" },
+    workOrder: { id: "wo1", workOrderNumber: ornekNo("workOrder", 1), type: "ORDER_PRODUCTION" },
     subcontractor: { id: "sub1", name: "Yıldız Boyahane", code: "FB-03" },
     step: { id: "st1", stepSequence: 2, station: { name: "Boyahane (Fason)", code: "DYE" } },
     rolls: [
@@ -155,7 +155,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     receivedAt: ISO,
     notes: "Renk tutmuş, apre uygulanmış",
     subcontractor: { name: "Yıldız Boyahane", code: "FB-03" },
-    workOrder: { workOrderNumber: "IE1207260001" },
+    workOrder: { workOrderNumber: ornekNo("workOrder", 1) },
     stationName: "Boyahane (Fason)",
     appliedColor: "Bej",
     appliedProperties: ["Yanmazlık Apresi", "Su İtici"],
