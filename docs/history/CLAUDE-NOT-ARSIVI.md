@@ -11783,3 +11783,19 @@ taşıyan ama tabloyu çekmeyen bir ağaç var), yani kilit tablet 1.0.8+ ile a�
 ağacında yaşandı). `check-docs` artık arşivde mükerrer başlığı kırmızıyla durduruyor; körlük zemini
 var (50'den az başlık okunduysa tarayıcı kör sayılır). Ölçüm: bu dalda mükerrer YOK (263 başlık, 0
 tekrar) — sorun iniş ağacının birleştirmesinde doğmuş.
+
+## 2026-09-23 — E2 üretim dilimi: dokuma işi · levent · doff · sipariş açıldı [ÇEKİRDEK]
+
+**Açılanlar:** dokuma işi no (DK) · levent no · doff kodu · sipariş no (SIP). Açık seri 25 → 29;
+SAYAC kilidi 23 → 19.
+
+**Kilit ve numara SIRASI korundu:** levent ve doff üreteçleri advisory kilit alıyor ve kilit
+anahtarı KODUN SABİT BAŞINI (ön ek + tarih) istiyor, yani ön ek numaradan ÖNCE hesaplanmak zorunda.
+Bu yüzden biçim BİR KEZ okunup (`resolveSeriesFormat`) hem kilide hem `nextSeriesNo`ya AYNI NESNE
+olarak geçiriliyor — ikinci bir okuma "iki okuma" sınıfına girerdi (arada önbellek tazelenirse ön ek
+bir sürümden, hane başka sürümden gelir). Dokuma işi numarasında kilit zaten fonksiyonun ilk
+ifadesiydi, o sıra da korundu.
+
+**L2:** sipariş gerçek servis yolundan ölçülüyor (müşteri + tek kalem). Dokuma işi · levent · doff
+"tezgah/levent/çözgü zinciri ister" gerekçesiyle beyanlı — ⚠️ bu gerekçe bugün iki kez yanlış çıktı
+(manifest ve mal kabul), bu yüzden sıradaki turda ÖLÇÜLECEK, tahmin edilmeyecek.
