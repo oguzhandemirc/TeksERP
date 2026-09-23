@@ -52,7 +52,8 @@ export function acicilarKur(c) {
     const f = (await api("/api/feature-flags")).govde?.data ?? {};
     dur.bayrakOnce = { ...(dur.bayrakOnce ?? {}), financeEnabled: f.financeEnabled, productionEnabled: f.productionEnabled };
     if (!f.financeEnabled || !f.productionEnabled) {
-      const r = await c.bayrakYaz({ financeEnabled: true, productionEnabled: true });
+      let r = await c.bayrakYaz({ financeEnabled: true, productionEnabled: true });
+      if (r.status === 403) r = await c.sistemApi("/api/feature-flags", { method: "PATCH", headers: c.sifreBasligi, body: JSON.stringify({ financeEnabled: true, productionEnabled: true }) });
       if (r.status >= 300) throw new Error(`modül: ${r.status} ${JSON.stringify(r.govde).slice(0, 200)}`);
     }
     dur.modulHazir = true;
@@ -222,15 +223,232 @@ export function acicilarKur(c) {
     },
   };
 
+  // ── OKUTULAN AİLE (TAM kip; eksen kilidi: ana değişiklik SERBEST eksende — hane 5) ─────────────
+  const stokTop = async () => (await sql(`SELECT barcode FROM rolls WHERE status='STOCK' AND barcode IS NOT NULL AND "sackId" IS NULL AND "shipmentId" IS NULL ORDER BY "updatedAt" DESC LIMIT 1`))[0]?.barcode;
+  const depoTopu = async () => (await sql(`SELECT id FROM rolls WHERE status='WAREHOUSE' AND "warehouseId" IS NOT NULL AND "sackId" IS NULL AND "shipmentId" IS NULL AND barcode IS NOT NULL ORDER BY "updatedAt" DESC LIMIT 1`))[0]?.id;
+  const icIstasyon = async () => (await sql(`SELECT id FROM stations WHERE "isActive" AND type='INTERNAL' ORDER BY "createdAt" LIMIT 1`))[0]?.id;
+  /** Fason zinciri: EXTERNAL istasyon + o kategoriyi veren fasoncu → quick-start (ilk adımı fasona SEVK eder). */
+  async function fasonSevk() {
+    const [f] = await sql(`SELECT st.id istasyon, st."defaultCategoryId" kategori, l."subcontractorId" fasoncu FROM stations st JOIN subcontractor_category_links l ON l."categoryId"=st."defaultCategoryId" JOIN subcontractors s ON s.id=l."subcontractorId" AND s."isActive" WHERE st."isActive" AND st.type='EXTERNAL' AND st."defaultCategoryId" IS NOT NULL LIMIT 1`);
+    if (!f) throw new Error("fason zinciri için istasyon/kategori/fasoncu yok");
+    const d = zorunlu(await api("/api/work-orders/quick-start", { method: "POST", body: JSON.stringify({ rollBarcodes: [await stokTop()], steps: [{ stationId: f.istasyon, requiredCategoryId: f.kategori, plannedSubcontractorId: f.fasoncu }, { stationId: await icIstasyon() }], dispatchFirstStep: true, clientToken: crypto.randomUUID() }) }), "fason quick-start");
+    if (!d.dispatch?.id) throw new Error(`quick-start sevk üretmedi: ${JSON.stringify(d).slice(0, 200)}`);
+    return { woId: d.workOrder.id, dispatchId: d.dispatch.id, fasoncu: f.fasoncu };
+  }
+  async function kartelaSevk(dur) {
+    dur.kartelaFasoncu ??= (await sql(`SELECT id FROM subcontractors WHERE "isActive" ORDER BY "createdAt" LIMIT 1`))[0]?.id;
+    const d = zorunlu(await api("/api/kartela/dispatch", { method: "POST", body: JSON.stringify({ subcontractorId: dur.kartelaFasoncu, rollIds: [await depoTopu()] }) }), "kartela sevk");
+    const id = d.id ?? d.dispatch?.id;
+    const [kalem] = await sql(`SELECT "rollId" FROM kartela_dispatch_items WHERE "dispatchId"=$1 LIMIT 1`, [id]);
+    return { id, rollId: kalem?.rollId };
+  }
+  async function kartelaKabul(dur) {
+    const ks = await kartelaSevk(dur);
+    const d = zorunlu(await api("/api/kartela/receive", { method: "POST", body: JSON.stringify({ subcontractorId: dur.kartelaFasoncu, dispatchId: ks.id, returns: [{ rollId: ks.rollId, count: 1 }] }) }), "kartela kabul");
+    const id = d.id ?? d.receipt?.id;
+    return { id };
+  }
+  const HANE5 = { digits: 5 }; // serbest eksen — ön ek (ve iş emrinde ayraç) kilitli
+  const okutulan = {
+    // Sevkiyat — okutulan, eksen kilidi YOK (E4: eski istemci SVK'yı ayırt etmiyor).
+    shipment: {
+      tablo: { tablo: "shipments", kolon: "shipmentNo" }, okutulur: true, yeniOnEk: "SVZ",
+      hazirla: async (dur) => { dur.svCari ??= zorunlu(await api("/api/customers", { method: "POST", body: JSON.stringify({ name: `TEST-E5S${K()} Cari`, isCustomerRole: true, defaultDestination: "DOMESTIC" }) }), "cari").id; },
+      eskiKayit: () => eskiSec("shipments", "shipmentNo"),
+      ac: async (dur) => {
+        const [top] = await sql(`SELECT barcode FROM rolls WHERE status='WAREHOUSE' AND "sackId" IS NULL AND "shipmentId" IS NULL AND "ownerCustomerId" IS NULL AND barcode IS NOT NULL ORDER BY "updatedAt" DESC LIMIT 1`);
+        const c = zorunlu(await api("/api/shipping/sacks", { method: "POST", body: JSON.stringify({ customerId: dur.svCari, clientToken: crypto.randomUUID() }) }), "çuval");
+        zorunlu(await api(`/api/shipping/sacks/${c.id}/scan`, { method: "POST", body: JSON.stringify({ barcode: top.barcode }) }), "okutma");
+        const sv = zorunlu(await api("/api/shipping/shipments", { method: "POST", body: JSON.stringify({ sackIds: [c.id], customerId: dur.svCari, orderless: true, destination: "DOMESTIC" }) }), "sevk");
+        return { id: sv.id, numara: await numaraOku("shipments", "shipmentNo", sv.id) };
+      },
+      ekran: (dur, k, eski) => listede("Sevkiyatlar", /Sevkiyat no, firma/, [k.numara, eski]),
+      belge: (dur, k) => belgeHtml("SHIPMENT_DISPATCH", k.id, k.numara),
+    },
+    workOrder: {
+      tablo: { tablo: "work_orders", kolon: "workOrderNumber" }, okutulur: true, anaDegisim: HANE5, varyantlar: [{ dateSegment: "YYMM" }],
+      hazirla: async () => {},
+      eskiKayit: () => eskiSec("work_orders", "workOrderNumber"),
+      ac: async () => {
+        const d = zorunlu(await api("/api/work-orders/quick-start", { method: "POST", body: JSON.stringify({ rollBarcodes: [await stokTop()], steps: [{ stationId: await icIstasyon() }], clientToken: crypto.randomUUID() }) }), "quick-start");
+        return { id: d.workOrder.id, numara: await numaraOku("work_orders", "workOrderNumber", d.workOrder.id) };
+      },
+      ekran: (dur, k, eski) => listede("İş Emirleri", /İş emri, parti/, [k.numara, eski]),
+      belge: async (dur, k) => {
+        const [kart] = await sql(`SELECT id FROM traveler_cards WHERE "workOrderId"=$1 ORDER BY "createdAt" DESC LIMIT 1`, [k.id]);
+        return kart ? belgeHtml(null, kart.id, k.numara, `/api/traveler-cards/${kart.id}/html`) : { hata: "refakat kartı doğmadı" };
+      },
+    },
+    subcontractorDispatch: {
+      tablo: { tablo: "subcontractor_dispatches", kolon: "dispatchNo" }, okutulur: true, anaDegisim: HANE5, varyantlar: [{ dateSegment: "NONE" }],
+      hazirla: async () => {},
+      eskiKayit: () => eskiSec("subcontractor_dispatches", "dispatchNo"),
+      ac: async () => { const f = await fasonSevk(); return { id: f.dispatchId, numara: await numaraOku("subcontractor_dispatches", "dispatchNo", f.dispatchId) }; },
+      ekran: async () => ({ uygulanmaz: "fason sevkin genel listesi yok (iş emri şeridinde) — belge ve okutma ölçülür" }),
+      belge: (dur, k) => belgeHtml("SUBCONTRACTOR_DISPATCH", k.id, k.numara),
+    },
+    subcontractorReceipt: {
+      tablo: { tablo: "subcontractor_receipts", kolon: "receiptNo" }, okutulur: true, anaDegisim: HANE5,
+      hazirla: async () => {},
+      eskiKayit: () => eskiSec("subcontractor_receipts", "receiptNo"),
+      ac: async () => {
+        const f = await fasonSevk();
+        const [adim] = await sql(`SELECT id FROM work_order_steps WHERE "workOrderId"=$1 ORDER BY "stepSequence" LIMIT 1`, [f.woId]);
+        const [kalem] = await sql(`SELECT "rollId" FROM subcontractor_dispatch_items WHERE "dispatchId"=$1 LIMIT 1`, [f.dispatchId]);
+        // Boyahane adımı hedef rengi olmayan iş emrinde kabulde uygulanan rengi ister.
+        const [renk] = await sql(`SELECT id FROM colors WHERE "isActive" ORDER BY "createdAt" LIMIT 1`);
+        const d = zorunlu(await api("/api/subcontractor/receive", { method: "POST", body: JSON.stringify({ workOrderId: f.woId, stepId: adim.id, subcontractorId: f.fasoncu, returns: [{ rollId: kalem.rollId }], newRolls: [{ qty: 10 }], appliedColorId: renk?.id, clientToken: crypto.randomUUID() }) }), "fason kabul");
+        const id = d.id ?? d.receipt?.id ?? (await sql(`SELECT id FROM subcontractor_receipts ORDER BY "createdAt" DESC LIMIT 1`))[0].id;
+        return { id, numara: await numaraOku("subcontractor_receipts", "receiptNo", id) };
+      },
+      ekran: async () => ({ uygulanmaz: "fason kabulün genel listesi yok — belge ve okutma ölçülür" }),
+      belge: (dur, k) => belgeHtml("SUBCONTRACTOR_RECEIPT", k.id, k.numara),
+    },
+    directShipment: {
+      tablo: { tablo: "direct_shipments", kolon: "shipmentNo" }, okutulur: false, yeniOnEk: "DSKZ",
+      hazirla: async (dur) => { dur.dsCari ??= zorunlu(await api("/api/customers", { method: "POST", body: JSON.stringify({ name: `TEST-E5D${K()} Cari`, isCustomerRole: true, defaultDestination: "DOMESTIC" }) }), "cari").id; },
+      eskiKayit: () => eskiSec("direct_shipments", "shipmentNo"),
+      ac: async (dur) => {
+        const f = await fasonSevk();
+        const d = zorunlu(await api(`/api/subcontractor/dispatches/${f.dispatchId}/direct-ship`, { method: "POST", body: JSON.stringify({ reason: "E5 kabul turu", customerId: dur.dsCari, orderless: true }) }), "fasondan sevk");
+        // Yanıt şekli değişken (sevk + doğrudan sevk birlikte döner) → bu sevkin doğrudan sevki DB'den.
+        void d;
+        const id = (await sql(`SELECT id FROM direct_shipments ORDER BY "createdAt" DESC LIMIT 1`))[0].id;
+        return { id, numara: await numaraOku("direct_shipments", "shipmentNo", id) };
+      },
+      ekran: (dur, k, eski) => listede("Sevkiyatlar", /Sevkiyat no, firma/, [k.numara, eski]),
+      belge: (dur, k) => belgeHtml("SUBCONTRACTOR_DIRECT_SHIP", k.id, k.numara),
+    },
+    kartelaDispatch: {
+      tablo: { tablo: "kartela_dispatches", kolon: "dispatchNo" }, okutulur: true, anaDegisim: HANE5, varyantlar: [{ dateSegment: "NONE" }],
+      hazirla: async () => {},
+      eskiKayit: () => eskiSec("kartela_dispatches", "dispatchNo"),
+      ac: async (dur) => { const ks = await kartelaSevk(dur); return { id: ks.id, numara: await numaraOku("kartela_dispatches", "dispatchNo", ks.id) }; },
+      ekran: (dur, k, eski) => listede("Kartela Takibi", /Ara ya da barkod okut/, [k.numara, eski]),
+      belge: (dur, k) => belgeHtml("KARTELA_DISPATCH", k.id, k.numara),
+    },
+    kartelaReceipt: {
+      tablo: { tablo: "kartela_receipts", kolon: "receiptNo" }, okutulur: true, anaDegisim: HANE5,
+      hazirla: async () => {},
+      eskiKayit: () => eskiSec("kartela_receipts", "receiptNo"),
+      ac: async (dur) => { const kk = await kartelaKabul(dur); return { id: kk.id, numara: await numaraOku("kartela_receipts", "receiptNo", kk.id) }; },
+      ekran: async (dur, k, eski) => {
+        await gitSayfa("Kartela Takibi"); await page.waitForTimeout(800);
+        await page.getByText("Kabuller", { exact: false }).filter({ visible: true }).first().click({ timeout: 10_000 }).catch(() => undefined);
+        await page.waitForTimeout(800);
+        const out = {};
+        for (const d of [k.numara, eski].filter(Boolean)) {
+          const ara = page.getByPlaceholder(/Ara ya da barkod okut/).filter({ visible: true }).first();
+          if (await ara.count()) { await ara.fill(d); await page.waitForTimeout(1500); }
+          out[d] = (await page.getByText(new RegExp(`(?<![A-Z0-9])${d}(?![0-9])`)).filter({ visible: true }).count()) > 0;
+        }
+        return out;
+      },
+      belge: belgeYok("kartela kabulün belge türü yok"),
+    },
+    swatch: {
+      tablo: { tablo: "swatches", kolon: "cardNumber" }, okutulur: true, anaDegisim: HANE5,
+      hazirla: async () => {},
+      eskiKayit: () => eskiSec("swatches", "cardNumber"),
+      ac: async (dur) => {
+        const kk = await kartelaKabul(dur);
+        const [sw] = await sql(`SELECT id, "cardNumber" v FROM swatches WHERE "parentReceiptId"=$1 ORDER BY "createdAt" DESC LIMIT 1`, [kk.id]);
+        return { id: sw.id, numara: sw.v };
+      },
+      ekran: async () => ({ uygulanmaz: "kartela kartı listede numarasıyla gösterilmez (okutma + etiket ölçülür)" }),
+      belge: (dur, k) => belgeHtml(null, k.id, k.numara, `/api/labels/swatches/${k.id}/html`),
+    },
+  };
+
+  // ── E2 üretim dilimi: sipariş · dokuma işi · levent · doff (TAM kip; hiçbiri okutulmaz) ──
+  /** Modül anahtarı (dokuma/devere) yalnız sistem hesabıyla çevrilir (MODULE_FLAG_SUPERADMIN_ONLY); panel bayrağı reload ile görür. */
+  async function uretimModulu(dur, anahtarlar) {
+    const f = (await api("/api/feature-flags")).govde?.data ?? {};
+    const eksik = anahtarlar.filter((k) => !f[k]);
+    if (!eksik.length) return;
+    dur.bayrakOnce = { ...Object.fromEntries(eksik.map((k) => [k, f[k] ?? false])), ...(dur.bayrakOnce ?? {}) };
+    const r = await c.sistemApi("/api/feature-flags", { method: "PATCH", headers: c.sifreBasligi, body: JSON.stringify(Object.fromEntries(eksik.map((k) => [k, true]))) });
+    if (r.status >= 300) throw new Error(`modül ${eksik.join(",")}: ${r.status} ${JSON.stringify(r.govde).slice(0, 200)}`);
+    await page.reload(); await page.waitForTimeout(3500);
+  }
+  /** Denyeli aktif iplik → çözgü kartı (kod ELLE; otomatik kod yok). */
+  async function cozguKarti(dur) {
+    if (dur.cozgu) return dur.cozgu;
+    let [iplik] = await sql(`SELECT id FROM items WHERE "isActive" AND "itemType"='YARN' AND "linearDensityDen" IS NOT NULL ORDER BY "createdAt" DESC LIMIT 1`);
+    if (!iplik) iplik = zorunlu(await api("/api/items", { method: "POST", body: JSON.stringify({ name: `TEST-E5 İplik ${K()}`, itemType: "YARN", unit: "KG", linearDensityDen: 150 }) }), "iplik");
+    const k = K();
+    dur.cozgu = zorunlu(await api("/api/warp-specs", { method: "POST", body: JSON.stringify({ code: `TE5${k}`, name: `TEST-E5 Çözgü ${k}`, yarnItemId: iplik.id, endsCount: 4000 }) }), "çözgü kartı").id;
+    return dur.cozgu;
+  }
+  const VAR2 = [{ dateSegment: "NONE" }, { separator: "-", separator2: "/" }];
+  const uretimSerileri = {
+    order: {
+      tablo: { tablo: "orders", kolon: "orderNumber" }, okutulur: false, yeniOnEk: "SIPZ", varyantlar: VAR2,
+      hazirla: async (dur) => { dur.sipCari ??= zorunlu(await api("/api/customers", { method: "POST", body: JSON.stringify({ name: `TEST-E5O${K()} Cari`, isCustomerRole: true, defaultDestination: "DOMESTIC" }) }), "cari").id; },
+      eskiKayit: () => eskiSec("orders", "orderNumber"),
+      ac: async (dur) => {
+        const d = zorunlu(await api("/api/orders", { method: "POST", body: JSON.stringify({ customerId: dur.sipCari, lines: [{ itemId: await kumas(), quantity: 10 }], clientToken: crypto.randomUUID() }) }), "sipariş");
+        return { id: d.id, numara: await numaraOku("orders", "orderNumber", d.id) };
+      },
+      ekran: (dur, k, eski) => listede("Siparişler", /Sipariş no, iş emri no/, [k.numara, eski]),
+      belge: belgeYok("siparişin kendi belge türü yok"),
+    },
+    weavingOrder: {
+      tablo: { tablo: "weaving_orders", kolon: "weavingOrderNumber" }, okutulur: false, yeniOnEk: "DKZ", varyantlar: VAR2,
+      hazirla: (dur) => uretimModulu(dur, ["productionEnabled", "dokumaEnabled"]),
+      eskiKayit: () => eskiSec("weaving_orders", "weavingOrderNumber"),
+      ac: async () => {
+        const d = zorunlu(await api("/api/weaving-orders", { method: "POST", body: JSON.stringify({ itemId: await kumas(), executionKind: "IN_HOUSE", clientToken: crypto.randomUUID() }) }), "dokuma işi");
+        return { id: d.id, numara: await numaraOku("weaving_orders", "weavingOrderNumber", d.id) };
+      },
+      ekran: (dur, k, eski) => listede("Dokuma İşleri", /Dokuma no, kumaş/, [k.numara, eski]),
+      belge: belgeYok("dokuma işinin belge türü yok"),
+    },
+    warpBeam: {
+      tablo: { tablo: "warp_beams", kolon: "beamNo" }, okutulur: false, yeniOnEk: "LVZ", varyantlar: VAR2,
+      hazirla: async (dur) => { await uretimModulu(dur, ["devereEnabled"]); await cozguKarti(dur); },
+      eskiKayit: () => eskiSec("warp_beams", "beamNo"),
+      ac: async (dur) => {
+        const d = zorunlu(await api("/api/warp-beams", { method: "POST", body: JSON.stringify({ warpSpecId: dur.cozgu, plannedLengthM: 100, originKind: "IN_HOUSE", clientToken: crypto.randomUUID() }) }), "levent");
+        return { id: d.id, numara: await numaraOku("warp_beams", "beamNo", d.id) };
+      },
+      ekran: (dur, k, eski) => listede("Leventler", /Levent no, gövde no/, [k.numara, eski]),
+      belge: belgeYok("leventin belge/etiket türü yok"),
+    },
+    doffEvent: {
+      tablo: { tablo: "doff_events", kolon: "code" }, okutulur: false, yeniOnEk: "DFZ", varyantlar: VAR2,
+      hazirla: async (dur) => {
+        await uretimModulu(dur, ["productionEnabled", "dokumaEnabled"]);
+        // Koşumsuz doff 400 değil `warnings`; hat no varsayılan 1.
+        dur.doffMakine ??= (await sql(`SELECT id FROM machines WHERE "isActive" ORDER BY "createdAt" LIMIT 1`))[0]?.id;
+        if (!dur.doffMakine) throw new Error("aktif makine yok");
+      },
+      eskiKayit: () => eskiSec("doff_events", "code"),
+      ac: async (dur) => {
+        const d = zorunlu(await api("/api/machine-doffs", { method: "POST", body: JSON.stringify({ machineId: dur.doffMakine, pieceCount: 1, counterSource: "OPERATOR", clientToken: crypto.randomUUID() }) }), "doff");
+        return { id: d.id, numara: await numaraOku("doff_events", "code", d.id) };
+      },
+      // Panelde doff listesi yok (yalnız tablet Tezgah + KK1 seçici) → ekran yerine API listesi ölçülür.
+      ekran: async (dur, k) => {
+        const r = await api(`/api/machine-doffs?machineId=${dur.doffMakine}`);
+        return { uygulanmaz: "doff kodu panelde gösterilmiyor (tablet Tezgah + KK1)", apiListede: JSON.stringify(r.govde ?? {}).includes(k.numara) };
+      },
+      belge: belgeYok("doff'un belge türü yok"),
+    },
+  };
+
   return {
+    ...uretimSerileri,
+    ...okutulan,
     ...depoTicaret,
-    invoiceSales: fatura("SALES", "Faturalar"),
-    invoicePurchase: fatura("PURCHASE", "Faturalar"),
-    invoiceSalesReturn: fatura("SALES_RETURN", "Faturalar"),
-    invoicePurchaseReturn: fatura("PURCHASE_RETURN", "Faturalar"),
-    paymentIn: odeme("IN"),
-    paymentOut: odeme("OUT"),
+    invoiceSales: { ...fatura("SALES", "Faturalar"), yeniOnEk: "SFZ" },
+    invoicePurchase: { ...fatura("PURCHASE", "Faturalar"), yeniOnEk: "AFZ" },
+    invoiceSalesReturn: { ...fatura("SALES_RETURN", "Faturalar"), yeniOnEk: "SIZ" },
+    invoicePurchaseReturn: { ...fatura("PURCHASE_RETURN", "Faturalar"), yeniOnEk: "AIZ" },
+    paymentIn: { ...odeme("IN"), yeniOnEk: "THZ" },
+    paymentOut: { ...odeme("OUT"), yeniOnEk: "ODZ" },
     cashTransaction: {
+      yeniOnEk: "KHZ",
       tablo: { tablo: "cash_transactions", kolon: "docNo" }, okutulur: false,
       hazirla: kasa,
       eskiKayit: () => eskiSec("cash_transactions", "docNo"),
@@ -238,11 +456,12 @@ export function acicilarKur(c) {
       ekran: (dur, k, eski) => listede("Kasa Hareketleri", /Belge no \/ kategori/, [k.numara, eski]),
       belge: null, // PrintedDocType'ta kasa fişi yok
     },
-    chequeReceived: cek("RECEIVED", "CHEQUE"),
-    chequeIssued: cek("ISSUED", "CHEQUE"),
-    noteReceived: cek("RECEIVED", "PROMISSORY_NOTE"),
-    noteIssued: cek("ISSUED", "PROMISSORY_NOTE"),
+    chequeReceived: { ...cek("RECEIVED", "CHEQUE"), yeniOnEk: "CKAZ" },
+    chequeIssued: { ...cek("ISSUED", "CHEQUE"), yeniOnEk: "CKVZ" },
+    noteReceived: { ...cek("RECEIVED", "PROMISSORY_NOTE"), yeniOnEk: "SNAZ" },
+    noteIssued: { ...cek("ISSUED", "PROMISSORY_NOTE"), yeniOnEk: "SNVZ" },
     chequeDeliveryNote: {
+      yeniOnEk: "BRDZ",
       tablo: { tablo: "cheque_delivery_notes", kolon: "docNo" }, okutulur: false,
       hazirla: finansCari,
       eskiKayit: () => eskiSec("cheque_delivery_notes", "docNo"),
@@ -252,15 +471,16 @@ export function acicilarKur(c) {
         return { id: d.id, numara: d.docNo };
       },
       // Liste yalnız "Çek / Senet → Bordrolar" diyaloğunda — belge ucu birincil ölçüm.
-      ekran: async () => ({ ekranListesiDiyalogda: true }),
+      ekran: async () => ({ uygulanmaz: "liste yalnız diyalogda (Çek / Senet → Bordrolar) — belge ucu ölçülür" }),
       belge: (dur, k) => belgeHtml("CHEQUE_DELIVERY_NOTE", k.id, k.numara),
     },
     reconciliationLetter: {
+      yeniOnEk: "MBTZ",
       tablo: { tablo: "reconciliation_letters", kolon: "docNo" }, okutulur: false,
       hazirla: finansCari,
       eskiKayit: () => eskiSec("reconciliation_letters", "docNo"),
       ac: async (dur) => { const d = zorunlu(await api("/api/finance/reconciliation-letters", { method: "POST", body: JSON.stringify({ cariId: dur.finCari.cariId }) }), "mektup"); return { id: d.id, numara: d.docNo }; },
-      ekran: async () => ({ ekranListesiDiyalogda: true }), // Cari Hesaplar → Ekstre → Mektuplar
+      ekran: async () => ({ uygulanmaz: "liste yalnız diyalogda (Çek / Senet → Bordrolar) — belge ucu ölçülür" }), // Cari Hesaplar → Ekstre → Mektuplar
       belge: (dur, k) => belgeHtml("RECONCILIATION_LETTER", k.id, k.numara),
     },
 
