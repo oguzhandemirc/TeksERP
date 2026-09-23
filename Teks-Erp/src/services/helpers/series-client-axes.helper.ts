@@ -13,6 +13,7 @@ import {
   FAZ_B_ONCESI,
   FAZ_D_ONCESI,
   SCANNED_CLIENT_BREAKING_AXES,
+  firstVersionAbove,
   scanningClientsMissingPhases,
   type SeriesFormatAxis,
 } from "../../config/client-version-policy";
@@ -51,8 +52,9 @@ export function assertAxesAllowed(
   const esik = missingPhases.includes("B") ? FAZ_B_ONCESI : FAZ_D_ONCESI;
   throw AppError.badRequest(
     `"${katalog.label}" serisinde ${eksenAdlariTr(engellenen)} değişimini sahadaki eski panel ve ` +
-      `tabletler okutamaz. Panel ${esik.electron} ve tablet ${esik.mobil} sürümünün üstüne çıkıp ` +
-      "kurulduktan sonra bu alan da değiştirilebilir; biçimin diğer alanları şimdi de değiştirilebilir.",
+      `tabletler okutamaz. Panel ${firstVersionAbove(esik.electron)} ve tablet ` +
+      `${firstVersionAbove(esik.mobil)} ya da üstü kurulunca bu alan da değiştirilebilir; ` +
+      "biçimin diğer alanları şimdi de değiştirilebilir.",
     { code: "NUMBER_SERIES_CLIENT_TOO_OLD", key, missingPhases, lockedAxes: engellenen },
   );
 }

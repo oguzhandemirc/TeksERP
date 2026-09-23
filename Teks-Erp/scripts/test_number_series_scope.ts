@@ -17,16 +17,14 @@
 //        biçim değiştirilip geri alınırsa `@unique` P2002 verir ve
 //        `withBarcodeRetry` bunu DETERMİNİSTİK tekrarlayıp 409'la biter
 //        (`shipping.service.ts:230` bu davranışı yazılı beyan ediyor)
-//   §4 ⭐ `scopedCounter` BEYANI OLMAYAN seri düzenlenemez (konfigürasyon sınırı;
-//        üretim yolu kapatılmaz — çuval açılamaz hâle gelirdi). HEDEF KEŞİFLE
-//        seçilir; kilitli seri kalmazsa sonuç ÖLÇÜLEMEDİ olur, "uyumlu" değil.
+//   (§4 KALDIRILDI — ölçeceği vaka kalmadı: 52 serinin hepsi kapsam damgasında)
 //   §5 `updateSeriesFormat` damgayı GERÇEKTEN yazar
 //   §6 ⭐ C0b — OKUTULAN serinin biçimi, saha Faz B'yi taşımadan değiştirilemez;
 //      eşik "Faz B'yi taşımayan SON sürüm"dür (tahmin değil, ölçülmüş geçmiş)
 //
 // ⭐ NEGATİF SONDA ✓B3 (2026-09-22, ölçüldü): `nextSeriesNo`tan kapsam (`since`)
 //    süzmesi kalkınca §2 ❌1 · çakışma atlama döngüsü kalkınca §3 ❌2 ·
-//    `updateSeriesFormat`taki `scopedCounter` kapısı kalkınca §4 ❌1 ·
+//    `updateSeriesFormat`taki `scopedCounter` kapısı kalkınca (§4, artık SİLİNDİ) ❌1 ·
 //    `FAZ_B_ONCESI` eşiği `0.0.0`a çekilince §6 ❌3 (kapı yanlışlıkla AÇILIR) ·
 //    C0b kapısı tamamen kalkınca §6 ❌1 ("KABUL EDİLDİ" — okutulan seri gerçekten
 //    düzenlenebilir hâle gelir). ⚠️ İkinci kol ilk yazımda `swatch` üstündeydi ve
@@ -46,7 +44,6 @@ import {
   compareClientVersions,
   scanningClientsCarryFazB,
 } from "../src/config/client-version-policy";
-import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
@@ -139,39 +136,19 @@ async function main(): Promise<void> {
     check("§3 atlama en küçük BOŞ sırayı seçer (sessizce ileri atlamaz)",
       geriDonus === "CV2209260004", geriDonus);
 
-    // ── §4 `scopedCounter` beyanı olmayan seri düzenlenemez ────────────────
-    // ⚠️ HEDEF ELLE SEÇİLMEZ, KEŞİFLE BULUNUR (1e hükmü 2026-09-23, ÜÇÜNCÜ kez
-    // bayatladıktan sonra): iddia "SAYAÇ kilitli HERHANGİ bir seri"dir, adı
-    // geçen bir seri değil. Elle seçilen hedef, o seri açıldığı gün sessizce
-    // ölçmeyi bırakıyordu ve kapı "yeşil" görünüyordu.
-    // ⚠️ ÜÇÜNCÜ SONUÇ VAR: kilitli seri KALMADIYSA bu bir ihlal değil, KAPANIŞ
-    // koşuludur — iddia artık gereksizdir ve kapı bunu AÇIKÇA söyler. "Uyumlu"
-    // demek, ölçülmemiş bir şeyi ölçülmüş göstermek olurdu.
+    // ⚠️ §4 SİLİNDİ (2026-09-23, E2 finans dilimiyle): iddia "sayacı hazır
+    // OLMAYAN seri düzenlenemez" idi ve kapanış koşulunu kendisi basıyordu —
+    // "SAYAÇ kilitli seri kalmadı; iddia artık gereksiz". 52 serinin hepsi
+    // kapsam damgasına geçtiği için ölçecek vaka YOK; boş bir bölüm bırakmak,
+    // hiçbir şey ölçmeyen bir kapıyı canlı gibi göstermek olurdu. Kapı kendi
+    // kapanışını söylediğinde doğru hareket onu SİLMEKTİR (gerekçe arşivde).
+    // `updateSeriesFormat`taki `scopedCounter` kapısının kendisi DURUYOR ve
+    // beyansız bir seri yarın doğarsa `test_number_series_geri_uyumluluk L0`
+    // onu üreteç düzeyinde yakalar.
+
+    /** Hata KODU — mesaj metni değil; metin değişince iddia bayatlamasın. */
     const kod = (e: unknown): string | undefined =>
       (e as { details?: { code?: string } } | null)?.details?.code;
-    const kilitliAday = NUMBER_SERIES_CATALOG.find(
-      (e) => !e.lockedReason && !e.ownCounter && e.scopedCounter?.durum !== "hazir",
-    );
-    if (!kilitliAday) {
-      console.log(
-        "⏭️  §4 ÖLÇÜLEMEDİ — SAYAÇ kilitli seri kalmadı; iddia artık gereksiz " +
-          "(52 serinin hepsi kapsam damgasına geçti). Bu bölüm silinebilir.",
-      );
-    } else {
-      // Değer DEĞİŞMİYOR (tohum biçimi aynen geri yazılıyor): red gerekçesi
-      // KİLİT olmalı, karakter/hane/çakışma kapısı değil.
-      const reddedilmeli = await dene(() =>
-        updateSeriesFormat(kilitliAday.key, {
-          prefix: kilitliAday.seedPrefix,
-          dateSegment: kilitliAday.seedDateSegment,
-          digits: kilitliAday.seedDigits,
-          separator: kilitliAday.seedSeparator,
-        }),
-      );
-      check(`§4 ⭐ sayacı hazır OLMAYAN seri düzenlenemez (keşfedilen hedef: ${kilitliAday.key})`,
-        reddedilmeli instanceof Error && kod(reddedilmeli) === "NUMBER_SERIES_COUNTER_NOT_SCOPED",
-        reddedilmeli instanceof Error ? (kod(reddedilmeli) ?? reddedilmeli.message) : "KABUL EDİLDİ");
-    }
 
     // ── §5 Beyanlı seri kabul edilir VE damgayı yazar ──────────────────────
     const kabulEdilmeli = await dene(() =>

@@ -21,6 +21,27 @@
 
 ---
 
+## 2026-09-23 — Faz E kapanışı: kapı kendi kapanışını söyledi ve SİLİNDİ [ÇEKİRDEK]
+
+Faz E'nin (her seri özelleştirilebilir) bütün dilimleri indi; **SAYAÇ kilidi 13 → 0** ve
+kataloğun 52 serisi ya açık ya da ölçülmüş bir YAPISAL gerekçeyle kilitli (top barkodu · kısa
+parti no). Kalan `ISTEMCI` kilidi eksen düzeyindedir ve açılması artık bir KOD işi değil bir
+YAYIN işidir: sahadaki panel 1.3.1'in ÜSTÜNE, tablet ise **1.0.8 ya da üstüne** çıkmalı — tablette
+eşik 1.0.7 DEĞİL, çünkü o etiket Faz B'yi taşımayan bir commit'i de kapsıyor (d3'ün E4 ölçümü).
+Tam tablo ve gerekçeler `docs/design/NUMARALANDIRMA-TASARIM.md` § Faz E'de.
+
+**`test_number_series_scope §4` SİLİNDİ.** İddia "sayacı hazır OLMAYAN seri düzenlenemez" idi ve
+hedefi keşifle seçtiği için kapanış koşulunu KENDİSİ basıyordu: *"ÖLÇÜLEMEDİ — SAYAÇ kilitli seri
+kalmadı; iddia artık gereksiz."* Ölçecek vaka kalmadığında doğru hareket bölümü silmektir: boş bir
+bölüm bırakmak, hiçbir şey ölçmeyen bir kapıyı canlı gibi göstermek olurdu. Korunan davranış
+kaybolmadı — `updateSeriesFormat`taki `scopedCounter` kapısı duruyor ve beyansız bir seri yarın
+doğarsa `test_number_series_geri_uyumluluk L0` onu ÜRETEÇ düzeyinde yakalar. *Bir kapıyı silmenin
+ön koşulu, korunan davranışı ölçen BAŞKA bir kapıyı adıyla göstermektir.*
+
+**Kapanmayan borç beyanlı kaldı:** kasa kodu (`KS`, okutulmaz) ile kartela sevk belge no (`KS`,
+okutulur) aynı biçime çözülüyor. Kapı YENİ ihlali engeller, bugünkü durumu yasaklamaz; kapatmak bir
+ÖN EK GÖÇÜ kararıdır ve kullanıcıya aittir.
+
 ## 2026-09-23 — E2 finans dilimi: son 13 seri açıldı, 52/52 tamam [ÇEKİRDEK]
 
 Fatura (satış · alış · iki iade) · tahsilat · ödeme · kasa fişi · çek ve senet (alınan/verilen) ·

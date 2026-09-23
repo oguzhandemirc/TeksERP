@@ -21,6 +21,7 @@ import {
   FAZ_B_ONCESI,
   FAZ_D_ONCESI,
   SCANNED_CLIENT_BREAKING_AXES,
+  firstVersionAbove,
   scanningClientsMissingPhases,
   type SeriesFormatAxis,
 } from "../../config/client-version-policy";
@@ -211,7 +212,8 @@ export function assertSeriesFormatWritable(key: string): void {
     const esik = missingPhases.includes("B") ? FAZ_B_ONCESI : FAZ_D_ONCESI;
     throw AppError.badRequest(
       `Okutulan serilerin biçimi, sahadaki panel ve tabletler güncellenmeden değiştirilemez: ${katalog.label}. ` +
-        `En düşük sürüm eşiği panelde ${esik.electron}, tablette ${esik.mobil} üstüne çıkmalı.`,
+        `Panelde ${firstVersionAbove(esik.electron)}, tablette ${firstVersionAbove(esik.mobil)} ` +
+          "ya da üstü kurulmalı.",
       { code: "NUMBER_SERIES_CLIENT_TOO_OLD", key, missingPhases },
     );
   }

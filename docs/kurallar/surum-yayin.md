@@ -66,6 +66,7 @@
 
 ### Değişmezler
 
+- **[ÇEKİRDEK]** Okutulan seri kilitlerini (`NUMBER_SERIES_CLIENT_TOO_OLD`) açmak için tablet sürümü **1.0.8 ya da üstü** olmalı; **1.0.7 ATLANIR** çünkü o etiket Faz B'yi taşımayan bir commit'i de kapsıyor. Panel eşiği ayrıdır ve 1.3.1'in ÜSTÜdür. · bekçi: `Teks-Erp/scripts/test_eski_istemci_okutma.ts (c)`
 - **[ÇEKİRDEK]** `runtimeVersion` (app.json) JS↔native uyum kimliğidir, backend sözleşmesini KAPSAMAZ; süzmesi SUNUCUNUN işidir (istemci indirmede bakmaz, yanlış sürümü indirip sessizce eler) → adres sürümü İÇERİR (`/<müşteri>/mobil/ota/<rv>/manifest`), her APK yalnız kendi paketini görür. · bekçi: `Teks-Erp/scripts/test_mobile_update.ts (37; backend↔mobil↔nginx tutarlılığı)` <sub>(CLAUDE.md:128, CLAUDE.md:93)</sub>
 - **[ÇEKİRDEK]** OTA turu da yama numarası alır; tablette görünen sürüm APK'dan DEĞİL PAKETTEN okunur (`Constants.expoConfig.version` → manifestin `extra.expoClient`i), native'e dokunmadan değişir. Yayındaki sürüm `multipart/mixed` gövdenin `manifest` parçasından çözülür ('ilk { son }' kestirmesi ÇALIŞMAZ). · bekçi: `scripts/test_surum.mjs (manifestGovdesindenSurum)` <sub>(CLAUDE.md:182)</sub>
 
