@@ -67,17 +67,39 @@ export interface NumberSeriesFormat {
   maxValue?: number | null;
 }
 
+/**
+ * TARİH SEGMENTİ TABLOSU — TEK KAYNAK (D5①).
+ *
+ * ⚠️ Daha önce aynı bilgi BEŞ yerde yaşıyordu: üretici (`dateText`) bir `if`
+ * zinciri, `matchesSeries` içinde İKİ özdeş uzunluk haritası, panelde ve
+ * tablette birer `DATE_LEN`. Yeni bir segment eklemek beş yeri birden
+ * güncellemek demekti ve biri unutulduğunda sonuç SESSİZ bir yanlış koddu —
+ * kök kuralın "altıncı enum değeri unutuldu" sınıfı.
+ *
+ * ⚠️ FALLBACK KALDIRILDI: eski `dateText`in son satırı `return yyyy` idi, yani
+ * TANINMAYAN bir segment sessizce 4 haneli yıl üretiyordu. Artık tablo
+ * `Record<...>` olarak TAM (exhaustive) yazılıyor: yeni bir enum değeri
+ * eklendiğinde DERLEYİCİ eksik satırı gösterir.
+ *
+ * `len` ile `render` birlikte durur çünkü ikisi AYNI kararın iki yüzü: kaç
+ * rakam yazılacağı ve hangi rakamlar. Ayrı dursalardı biri güncellenip öteki
+ * unutulabilirdi (bu dosyada tam olarak o olmuştu).
+ */
+export const DATE_SEGMENTS: Record<
+  NumberSeries["dateSegment"],
+  { len: number; render: (date: Date) => string }
+> = {
+  NONE: { len: 0, render: () => "" },
+  DDMMYY: { len: 6, render: (d) => ddmmyy(d) },
+  YYMM: { len: 4, render: (d) => `${factoryYmd(d).slice(2, 4)}${factoryYmd(d).slice(5, 7)}` },
+  YYYYMM: { len: 6, render: (d) => `${factoryYmd(d).slice(0, 4)}${factoryYmd(d).slice(5, 7)}` },
+  YY: { len: 2, render: (d) => factoryYmd(d).slice(2, 4) },
+  YYYY: { len: 4, render: (d) => factoryYmd(d).slice(0, 4) },
+};
+
 /** Tarih segmentinin metni. `NONE` → boş (sayaç hiç sıfırlanmaz). */
 function dateText(segment: NumberSeries["dateSegment"], date: Date): string {
-  if (segment === "NONE") return "";
-  if (segment === "DDMMYY") return ddmmyy(date);
-  const ymd = factoryYmd(date); // "YYYY-MM-DD" — fabrika takvim günü (süreç TZ'si değil)
-  const yyyy = ymd.slice(0, 4);
-  const mm = ymd.slice(5, 7);
-  if (segment === "YYMM") return `${yyyy.slice(2)}${mm}`;
-  if (segment === "YYYYMM") return `${yyyy}${mm}`;
-  if (segment === "YY") return yyyy.slice(2);
-  return yyyy; // YYYY
+  return DATE_SEGMENTS[segment].render(date);
 }
 
 /**
@@ -112,7 +134,7 @@ export function previewSeriesCode(fmt: NumberSeriesFormat, seq = 1, date: Date =
  */
 export function matchesSeries(fmt: NumberSeriesFormat, code: string): boolean {
   const upper = code.trim().toUpperCase();
-  const dateLen = { NONE: 0, DDMMYY: 6, YYMM: 4, YYYYMM: 6, YY: 2, YYYY: 4 }[fmt.dateSegment];
+  const dateLen = DATE_SEGMENTS[fmt.dateSegment].len;
   const sep = fmt.separator === "" ? "" : escapeRe(fmt.separator);
   // infix KAÇIRILMAZ: regex parçası olarak katalogda yazılı (`[HF]`), veri değil kod.
   const infix = fmt.infix ?? "";
@@ -125,7 +147,7 @@ export function matchesSeries(fmt: NumberSeriesFormat, code: string): boolean {
   // döngü onun kapatamadığı ekseni kapatır — hane/segment değişimi sonrası eski
   // kod. İkisi birlikte bir ÜST KÜME: hiçbir kod eskisinden daha az tanınmaz.
   for (const eski of fmt.retiredFormats ?? []) {
-    const eskiLen = { NONE: 0, DDMMYY: 6, YYMM: 4, YYYYMM: 6, YY: 2, YYYY: 4 }[eski.dateSegment];
+    const eskiLen = DATE_SEGMENTS[eski.dateSegment].len;
     const eskiSep = eski.separator === "" ? "" : escapeRe(eski.separator);
     const head =
       eskiLen === 0

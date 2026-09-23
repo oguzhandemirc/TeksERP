@@ -730,6 +730,16 @@ async function main(): Promise<void> {
       JSON.stringify((c0bHatasi as { details?: { missingPhases?: string[] } })?.details?.missingPhases ?? null));
     check("§10a tek yüklem: kapı ile bildirilen eksik fazlar AYNI kaynaktan",
       scanningClientsMissingPhases().length === 2);
+    // ⭐ D5② ÖN KOŞULU, BEYAN — YENİ BİR TARİH SEGMENTİ DE BU KAPININ ARKASINDADIR.
+    // Kapı okutulan serinin HERHANGİ bir biçim yazımına bakar (`katalog.kind`),
+    // değişen ALANA değil; yukarıdaki iddia bunu zaten ölçüyor çünkü fikstür
+    // bugünkü biçmin AYNISINI gönderiyor — kapıyı hangi eksene daraltırsanız
+    // daraltın (yalnız ön ek · ön ek+hane+ayraç) bu iddia KIRMIZI verir
+    // (ölçüldü 2026-09-23, iki sonda). ⇒ Segment ekseni için AYRI bir iddia
+    // yazmadım: hiçbir sondada ayrışmıyordu, yani KAPSAM EKLEMİYORDU — sırf
+    // okunsun diye eklenen iddia, kapının ölçtüğünü büyütmeden tabanı şişirir.
+    // İstemci tarafı ayrı ölçülür: tanımadığı segmentli SATIRI atar, tabloyu
+    // düşürmez (`test_tarih_segmenti_aynasi §2`).
 
     // ⭐ SÖZLEŞME: alan EKLENDİ, var olan DEĞİŞTİRİLMEDİ — eski istemci
     // `retiredFormats`ı tanımaz ve görmezden gelir; `prefixes` yerinde durur.
