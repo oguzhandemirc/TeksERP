@@ -11746,3 +11746,37 @@ zinciri ister" YANLIŞ; `createManifest` yalnız var olan bir iş emri istiyor, 
 **Fikstür dersleri (ikisi de iş kuralının doğruluğunu gösterdi):** aynı depoda ikinci DRAFT sayım 409
 (tek açık sayım kuralı) → her çağrı kendi deposunu kurar; aynı adlı ikinci renk 409 (mükerrer adı
 koruması) → her çağrı farklı ad kullanır. Fikstür iş kuralına uyar, iş kuralı fikstüre değil.
+
+## 2026-09-23 — İstemci kilidi EKSEN düzeyine indi: ölçülmemiş genelleme yerine ölçüm [ÇEKİRDEK]
+
+**Eski kural bir GENELLEMEYDİ:** "okutulan seri, sahadaki istemciler güncellenene kadar hiç
+değiştirilemez". d3'ün eski istemci simülasyonu (panel 1.3.1 + tablet 1.0.6, sınıflandırıcılar yayın
+commit'inden çıkarılıp saf fonksiyon olarak koşuldu) bunun ölçülmemiş olduğunu gösterdi:
+- **sevkiyat (SVK):** eski istemcilerin hiçbiri bu seriyi okutmuyor ⇒ kilidin istemci gerekçesi YOK.
+- **iş emri:** yalnız ön ek (tablet kodu TOP sanıyor) ve ayraç (eski panel tanımıyor).
+- **kartela kartı · fason sevk/kabul · kartela sevk/kabul:** yalnız ÖN EK.
+- **çuval:** tablet 1.0.6 çuvalı `/^CV\d{10}$/` ile tanıyor ⇒ HER eksen kırıyor.
+
+**Karar:** kilit `SCANNED_CLIENT_BREAKING_AXES` tablosuyla EKSEN düzeyine indi. Kırılan ekseni
+olmayan seri hiç kilitlenmez; kısmi kilitte panel yalnız o ALANLARI pasifleştirir ve kilit cümlesi
+hangi alanın neden kapalı olduğunu söyler. Yazma tarafında "bu seriye dokunulamaz" kapısı yalnız TÜM
+eksenler kırılıyorsa konuşur; hangi eksenin değiştiği ancak DEĞER bilindiğinde sorulabildiği için
+`assertAxesAllowed` ayrı bir kapıdır (değerden bağımsız soru ↔ değerden doğan soru).
+
+**"?tanımaz" da kilit gerekçesidir** (1e kararı, ölçülmüş): eski panel tanımadığı kodda SESSİZ no-op
+yapıyor — operatör okutur, hiçbir şey olmaz, sahada iş durur. Bu, yanlış dala düşmek kadar kötüdür.
+
+**Kapı iki yönlü:** simülasyonun kırdığı eksen tabloda yoksa KIRMIZI (koruma eksik), tabloda olup
+simülasyonda kırmayan eksen varsa da KIRMIZI (gereksiz kilit — fabrikanın ayarını sebepsiz kapatır).
+Okutulan her serinin tabloda bir satırı olmak zorunda; boş dizi de bir BEYANDIR ("ölçüldü, kırmıyor"
+ile "hiç ölçülmedi" karışmasın).
+
+**`FAZ_D_ONCESI` açıklaması düzeltildi:** eski metin eşiğin "sonraki her pakette karşılandığını" ima
+ediyordu; ölçüldü ki HİÇBİR istemci — HEAD dahil — emekli BİÇİMLERİ denemiyor, yani Faz D henüz hiçbir
+pakette yok. Ayrıca sahadaki tablet 1.0.6'dır, 1.0.7 hiç yayınlanmadı; eşik 1.0.7 kalır (o etiketi
+taşıyan ama tabloyu çekmeyen bir ağaç var), yani kilit tablet 1.0.8+ ile açılır.
+
+**Arşiv hijyeni:** birleştirmede "iki tarafı da tut" çözümü AYNI notu iki kez yazabiliyor (bir iniş
+ağacında yaşandı). `check-docs` artık arşivde mükerrer başlığı kırmızıyla durduruyor; körlük zemini
+var (50'den az başlık okunduysa tarayıcı kör sayılır). Ölçüm: bu dalda mükerrer YOK (263 başlık, 0
+tekrar) — sorun iniş ağacının birleştirmesinde doğmuş.

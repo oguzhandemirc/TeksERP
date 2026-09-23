@@ -167,14 +167,14 @@ async function main(): Promise<void> {
     // 1.0.0. Kapının AÇILDIĞI hâl de aynı dosyada ölçülür (aşağıda).
     check("§6 ⭐ bugün kapı KAPALI (saha minVersion'ı eşiğin altında)",
       !scanningClientsCarryFazB(), `eşik: electron>${FAZ_B_ONCESI.electron} · mobil>${FAZ_B_ONCESI.mobil}`);
-    // ⚠️ `shipment` SEÇİLDİ, `swatch` DEĞİL: kartelanın `scopedCounter` beyanı yok,
-    // yani C0b kaldırılsa bile İKİNCİ kapı (C0) onu reddederdi ve sonda C0b'nin
-    // yük taşıyıp taşımadığını GÖREMEZDİ. `shipment` ikisini de geçer — tek
-    // engeli C0b'dir, yani kapı kalkınca gerçekten düzenlenebilir hâle gelir.
+    // ⚠️ SERİ DEĞİŞTİ: `shipment` 2026-09-23'te AÇILDI (E4 simülasyonu: eski
+    // istemcilerin hiçbiri o seriyi okutmuyor ⇒ kilidin istemci gerekçesi yok).
+    // Yerine `sack` seçildi: `scopedCounter` beyanı VAR (yani C0 onu reddetmez,
+    // sonda gerçekten C0b'yi ölçer) ve eski tablet onu HER eksende kırıyor.
     const okutulanRed = await dene(() =>
-      updateSeriesFormat("shipment", { prefix: "SVK", dateSegment: "DDMMYY", digits: 4, separator: "" }),
+      updateSeriesFormat("sack", { prefix: "CX", dateSegment: "DDMMYY", digits: 4, separator: "" }),
     );
-    check("§6 ⭐ OKUTULAN seri (sevkiyat) bugün düzenlenemez",
+    check("§6 ⭐ OKUTULAN seri (çuval) bugün düzenlenemez",
       okutulanRed instanceof Error && kod(okutulanRed) === "NUMBER_SERIES_CLIENT_TOO_OLD",
       okutulanRed instanceof Error ? (kod(okutulanRed) ?? okutulanRed.message) : "KABUL EDİLDİ");
     check("§6 okutulMAYAN seri aynı anda düzenlenebilir (kapı yalnız `scanned` kümeye bakıyor)",

@@ -420,6 +420,37 @@ if (kodCapalari.length) {
   process.exit(1);
 }
 
+// --- GATE: ARŞİVDE MÜKERRER BAŞLIK (CI FAIL) ---
+// ⚠️ NEDEN VAR: arşiv notları iki daldan gelip BİRLEŞTİRİLİYOR ve çakışma
+// çözümünün doğru cevabı genellikle "iki tarafı da tut"tur (iki farklı not,
+// biri ötekinin yerine geçmez). Ama AYNI not iki yoldan gelirse o çözüm onu
+// İKİ KEZ yazar ve kimse fark etmez — 2026-09-23'te bir iniş ağacında tam bu
+// oldu (K15 notu iki kopya). Başlık arşivde bir KİMLİKTİR: aynı başlık iki kez
+// geçemez.
+const arsivYolu = join(REPO_ROOT, "docs/history/CLAUDE-NOT-ARSIVI.md");
+if (existsSync(arsivYolu)) {
+  const basliklar = readFileSync(arsivYolu, "utf8")
+    .split("\n")
+    .filter((l) => l.startsWith("## "))
+    .map((l) => l.trim());
+  const sayac = new Map();
+  for (const b of basliklar) sayac.set(b, (sayac.get(b) ?? 0) + 1);
+  const mukerrer = [...sayac.entries()].filter(([, n]) => n > 1);
+  if (basliklar.length < 50) {
+    console.error(`❌ Doküman bekçisi: arşivde yalnız ${basliklar.length} başlık okundu — tarayıcı kör.`);
+    process.exit(1);
+  }
+  if (mukerrer.length > 0) {
+    console.error(`❌ Doküman bekçisi: ARŞİVDE MÜKERRER BAŞLIK (${mukerrer.length}):\n`);
+    for (const [b, n] of mukerrer) console.error(`  ${n}× ${b}`);
+    console.error(
+      "\nBirleştirmede 'iki tarafı da tut' çözümü AYNI notu iki kez yazmış olabilir.\n" +
+        "Fazla kopyayı sil; iki not GERÇEKTEN farklıysa başlıklarını ayır.",
+    );
+    process.exit(1);
+  }
+}
+
 // --- GATE: ölü-link (CI FAIL) ---
 if (deadLinks.length === 0) {
   console.log(`✅ Doküman bekçisi: ölü doküman-link yok (${mdFiles.length} .md tarandı).`);

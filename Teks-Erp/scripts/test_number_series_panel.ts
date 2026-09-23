@@ -208,13 +208,24 @@ async function main(): Promise<void> {
       ucuBirden instanceof Error && kod(ucuBirden) === "NUMBER_SERIES_LOCKED",
       ucuBirden instanceof Error ? (kod(ucuBirden) ?? ucuBirden.message) : "KABUL EDİLDİ");
 
-    // `shipment`: yalnız İSTEMCİ engeli (yapısal yok, sayaç hazır).
+    // `sack`: yalnız İSTEMCİ engeli ve TÜM eksenlerde (tablet 1.0.6 çuvalı
+    // `/^CV\d{10}$/` ile tanıyor — uzunluk ve ayraç dahil her değişiklik kırıyor).
     const yalnizIstemci = await dene(() =>
-      updateSeriesFormat("shipment", { prefix: "SVK", dateSegment: "DDMMYY", digits: 4, separator: "" }),
+      updateSeriesFormat("sack", { prefix: "CX", dateSegment: "DDMMYY", digits: 4, separator: "" }),
     );
     check("§1 tek engel kaldığında O konuşur (istemci)",
       yalnizIstemci instanceof Error && kod(yalnizIstemci) === "NUMBER_SERIES_CLIENT_TOO_OLD",
       yalnizIstemci instanceof Error ? (kod(yalnizIstemci) ?? yalnizIstemci.message) : "KABUL EDİLDİ");
+    // ⚠️ `shipment` ARTIK AÇIK ve bu ÖLÇÜLMÜŞ bir karar: eski panel/tablet o
+    // seriyi hiç okutmuyor, yani kilidin istemci gerekçesi YOKTU (E4 simülasyonu).
+    // Eski iddia burada `shipment`ı kilitli varsayıyordu — genellemenin kendisi
+    // ölçülmemişti.
+    const sevkiyatAcik = await dene(() =>
+      updateSeriesFormat("shipment", { prefix: "SVK", dateSegment: "DDMMYY", digits: 4, separator: "" }),
+    );
+    check("§1 ⭐ eski istemcide KIRILMAYAN seri (sevkiyat) kilitlenmiyor",
+      !(sevkiyatAcik instanceof Error),
+      sevkiyatAcik instanceof Error ? (kod(sevkiyatAcik) ?? sevkiyatAcik.message) : "kabul edildi");
 
     // ── §2 Uç ile servis AYNI yüklemden ───────────────────────────────────
     const liste = listSeries();
@@ -229,7 +240,10 @@ async function main(): Promise<void> {
     check("§3 ⭐ yapısal kilit YAPISAL, sayaç kilidi SAYAC, istemci kilidi ISTEMCI",
       seriesLock("roll")?.kind === "YAPISAL" &&
         seriesLock("swatch")?.kind === "SAYAC" &&
-        seriesLock("shipment")?.kind === "ISTEMCI");
+        seriesLock("sack")?.kind === "ISTEMCI");
+    // ⚠️ İSTEMCİ kilidi EKSEN düzeyinde: kırılan ekseni olmayan seri hiç kilitlenmez.
+    check("§3 ⭐ istemci kilidi EKSEN taşıyor, kırılmayan seri (sevkiyat) kilitsiz",
+      (seriesLock("sack")?.lockedAxes?.length ?? 0) === 5 && seriesLock("shipment") === null);
     check("§3 üç gerekçe metni de BİRBİRİNDEN farklı (panelde aynı cümle çıkmasın)",
       new Set([seriesLock("roll")?.reason, seriesLock("swatch")?.reason, seriesLock("shipment")?.reason]).size === 3);
     check("§3 sevkiyat ailesi panelde görünür (`panelGroup`)",

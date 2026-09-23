@@ -15,7 +15,9 @@
 import {
   FAZ_B_ONCESI,
   FAZ_D_ONCESI,
+  SCANNED_CLIENT_BREAKING_AXES,
   scanningClientsMissingPhases,
+  type SeriesFormatAxis,
 } from "../../config/client-version-policy";
 import {
   NUMBER_SERIES_CATALOG,
@@ -63,12 +65,34 @@ export type SeriesLockKind = "YAPISAL" | "SAYAC" | "ISTEMCI";
  */
 export interface SeriesLock {
   kind: SeriesLockKind;
+  /**
+   * KİLİTLİ EKSENLER — `ISTEMCI` kilidinde hangi ALANLARIN değişemeyeceği.
+   *
+   * ⚠️ Eski kapı "okutulan her seri tamamen kilitli" diyordu ve bu ÖLÇÜLMEMİŞ bir
+   * genellemeydi: eski istemcilerin çoğu yalnız ÖN EKTEN kırılıyor, sevkiyat hiç
+   * kırılmıyor (ölçüm: `test_eski_istemci_okutma`). Boş/atlanmış alan = "bütün
+   * biçim kilitli" (YAPISAL ve SAYAC kilitlerinde olduğu gibi).
+   */
+  lockedAxes?: SeriesFormatAxis[];
   /** NEDEN kilitli — kullanıcı diliyle, jargonsuz. */
   reason: string;
   /** NE ZAMAN/NASIL açılır — ölçülebilir koşul, "ileride" değil. */
   acilma: string;
   /** Eylem KİMDE: yalnız "siz"de kullanıcı bir şey yapabilir. */
   kimde: "kimse" | "biz" | "siz";
+}
+
+/** Eksen adlarının kullanıcı dili — panelde ve kilit cümlesinde aynı sözcükler. */
+const EKSEN_ADI: Record<SeriesFormatAxis, string> = {
+  prefix: "ön ek",
+  dateSegment: "tarih",
+  digits: "hane",
+  separator: "ayraç",
+  separator2: "ikinci ayraç",
+};
+
+function eksenAdlari(eksenler: SeriesFormatAxis[]): string {
+  return eksenler.map((a) => EKSEN_ADI[a]).join(" ve ");
 }
 
 export function seriesLock(key: string): SeriesLock | null {
@@ -94,17 +118,24 @@ export function seriesLock(key: string): SeriesLock | null {
   // gösterir, uç 400 dönerdi — bu dosyanın başlığındaki "ayrışan yüzey" tam olarak
   // budur ve iki eşik AYRI AYRI yükselebildiği için soru gerçekten ayrışabilir.
   const eksik = e.kind ? scanningClientsMissingPhases() : [];
-  if (eksik.length > 0) {
+  // ⚠️ KİLİT EKSEN DÜZEYİNDE: hangi alanların eski istemciyi kırdığı ÖLÇÜLDÜ.
+  // Kırılan ekseni olmayan seri (bugün `shipment`) hiç kilitlenmez.
+  const kiranEksenler = e.kind ? (SCANNED_CLIENT_BREAKING_AXES[key] ?? []) : [];
+  if (eksik.length > 0 && kiranEksenler.length > 0) {
     const esik = eksik.includes("B") ? FAZ_B_ONCESI : FAZ_D_ONCESI;
+    const hepsi = kiranEksenler.length === 5;
     return {
       kind: "ISTEMCI",
-      reason:
-        "Okutulan bir seri: kod barkod olarak okutulduğu için biçimi, sahadaki panel ve " +
-        "tabletler yeni biçimi tanıyana kadar değiştirilemez.",
+      reason: hepsi
+        ? "Okutulan bir seri: sahadaki eski panel ve tablet bu kodun BİÇİMİNİ sabit " +
+          "varsaydığı için biçimin hiçbir parçası değiştirilemez."
+        : `Okutulan bir seri: sahadaki eski panel/tablet ${eksenAdlari(kiranEksenler)} ` +
+          "değişimini okutamıyor; biçimin diğer parçaları değiştirilebilir.",
       acilma:
         `Panel ${esik.electron} ve tablet ${esik.mobil} sürümünün ÜSTÜNE çıkıp bu ` +
         "bilgisayarlara/tabletlere kurulunca açılır.",
       kimde: "siz",
+      lockedAxes: kiranEksenler,
     };
   }
   return null;
@@ -341,6 +372,8 @@ export function listSeries(): Array<
     lockKind?: SeriesLockKind;
     /** Kilit NE ZAMAN kalkar — panel cümleyi KOPYALAMAZ, okur. */
     lockUnlock?: string;
+    /** Kilitli ALANLAR — panel yalnız bunları pasifleştirir. */
+    lockedAxes?: SeriesFormatAxis[];
     /** Eylem kimde ("kimse" | "biz" | "siz") — rozet vurgusu buradan. */
     lockActor?: "kimse" | "biz" | "siz";
     panelGroup: NumberSeriesPanelGroup;
@@ -385,13 +418,17 @@ export function listSeries(): Array<
       key: e.key,
       label: e.label,
       ...(e.kind ? { kind: e.kind } : {}),
-      editable: lock === null,
+      // ⚠️ `editable` "hiçbir alan değiştirilemez" demek: eksen kilidinde biçimin
+      // BİR KISMI açıktır, o yüzden satır düzenlenebilir sayılır ve panel yalnız
+      // kilitli ALANLARI pasifleştirir.
+      editable: lock === null || (lock.lockedAxes !== undefined && lock.lockedAxes.length < 5),
       ...(lock
         ? {
             lockedReason: lock.reason,
             lockKind: lock.kind,
             lockUnlock: lock.acilma,
             lockActor: lock.kimde,
+            ...(lock.lockedAxes ? { lockedAxes: lock.lockedAxes } : {}),
           }
         : {}),
       panelGroup: e.panelGroup,

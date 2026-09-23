@@ -303,6 +303,7 @@ const L2_YOLU: Record<string, L2Yolu> = {
   // seri "fikstür maliyeti" gerekçesiyle L1'de kalamaz. Ölçüldü: `createManifest`
   // yalnız VAR OLAN bir iş emri ister (anlık görüntüyü kendi hesaplar) ⇒ fikstür
   // tek satır; "top zinciri gerekir" varsayımı YANLIŞTI.
+  shipment: { not: "Sevkiyat: müşteri + çuval zinciri ister; E4 ile YENİ açıldı, L2 fikstürü sıradaki dilimde (ölçülecek, tahmin edilmeyecek)." },
   manifest: {
     not: "WorkOrderService.createManifest: yalnız var olan bir iş emri ister (anlık görüntü hesaplanır).",
     yarat: async (damga) => {
