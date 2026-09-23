@@ -1,5 +1,5 @@
 import apiClient from "@/services/apiClient";
-import { withSettingsPassword } from "@/lib/settings-password";
+import { createSettingsPasswordScope, withSettingsPassword, type SettingsPasswordScope } from "@/lib/settings-password";
 import type {
   NumberSeriesRow,
   NumberSourceMode,
@@ -40,12 +40,12 @@ export const numberingService = {
   },
 
   /** `effectiveFrom` boş = HEMEN (bugünkü davranış); dolu = ileri tarihli geçiş. */
-  async update(key: string, fmt: SeriesFormatInput, effectiveFrom?: string): Promise<void> {
+  async update(key: string, fmt: SeriesFormatInput, effectiveFrom?: string, scope?: SettingsPasswordScope): Promise<void> {
     const body = {
       ...fmt,
       ...(effectiveFrom ? { effectiveFrom: new Date(`${effectiveFrom}T00:00:00`).toISOString() } : {}),
     };
-    await withSettingsPassword((headers) => apiClient.patch(`/api/number-series/${encodeURIComponent(key)}`, body, { headers }));
+    await withSettingsPassword((headers) => apiClient.patch(`/api/number-series/${encodeURIComponent(key)}`, body, { headers }), scope);
   },
 
   /**
@@ -61,15 +61,31 @@ export const numberingService = {
   },
 
   /** Numara kaynağı AYRI uç: biçim/sayaç/kaynak üçü farklı kilitlere tabi. */
-  async updateSource(key: string, numberSource: NumberSourceMode): Promise<void> {
+  async updateSource(key: string, numberSource: NumberSourceMode, scope?: SettingsPasswordScope): Promise<void> {
     await withSettingsPassword((headers) =>
       apiClient.patch(`/api/number-series/${encodeURIComponent(key)}/source`, { numberSource }, { headers }),
-    );
+    scope);
   },
 
-  async updateCounter(key: string, ayar: SeriesCounterInput): Promise<void> {
+  async updateCounter(key: string, ayar: SeriesCounterInput, scope?: SettingsPasswordScope): Promise<void> {
     await withSettingsPassword((headers) =>
       apiClient.patch(`/api/number-series/${encodeURIComponent(key)}/counter`, ayar, { headers }),
-    );
+    scope);
+  },
+
+  /**
+   * ÜÇ UÇ, ÜÇ KİLİT: yalnız AÇIK olan ve GERÇEKTEN değişen bölüm gönderilir (kapalıyı göndermek dokunulmamış
+   * alan yüzünden 400, değişmeyeni göndermek gereksiz denetim satırı). Tek "Kaydet" = TEK şifre sorusu:
+   * üç istek aynı eylem kapsamını paylaşır, kapsam dönüşte atılır.
+   */
+  async saveChanges(
+    row: NumberSeriesRow,
+    value: { fmt: SeriesFormatInput; counter: SeriesCounterInput; source: NumberSourceMode; effectiveFrom: string },
+    changed: { formatChanged: boolean; counterChanged: boolean; sourceChanged: boolean },
+  ): Promise<void> {
+    const scope = createSettingsPasswordScope();
+    if (row.editable && changed.formatChanged) await numberingService.update(row.key, value.fmt, value.effectiveFrom, scope);
+    if (row.counter.startValue && changed.counterChanged) await numberingService.updateCounter(row.key, value.counter, scope);
+    if (row.source.editable && changed.sourceChanged) await numberingService.updateSource(row.key, value.source, scope);
   },
 };

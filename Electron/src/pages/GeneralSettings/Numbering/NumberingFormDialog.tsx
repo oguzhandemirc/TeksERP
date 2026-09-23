@@ -34,32 +34,6 @@ function EtkiCumlesi({ etkiSayisi, birim }: { etkiSayisi: number | null; birim: 
 }
 
 /**
- * ÜÇ UÇ, ÜÇ KİLİT: yalnız AÇIK olan ve GERÇEKTEN değişen bölüm gönderilir.
- * Kapalı bölümü göndermek, kullanıcının dokunmadığı bir alan yüzünden 400
- * almasına yol açardı; değişmeyeni göndermek de gereksiz bir denetim satırı yazardı.
- */
-async function gonder(
-  row: NumberSeriesRow,
-  deger: {
-    fmt: SeriesFormatInput;
-    counter: SeriesCounterInput;
-    source: NumberSourceMode;
-    effectiveFrom: string;
-  },
-  degisti: { formatChanged: boolean; counterChanged: boolean; sourceChanged: boolean },
-): Promise<void> {
-  if (row.editable && degisti.formatChanged) {
-    await numberingService.update(row.key, deger.fmt, deger.effectiveFrom);
-  }
-  if (row.counter.startValue && degisti.counterChanged) {
-    await numberingService.updateCounter(row.key, deger.counter);
-  }
-  if (row.source.editable && degisti.sourceChanged) {
-    await numberingService.updateSource(row.key, deger.source);
-  }
-}
-
-/**
  * ⚠️ ÖNİZLEME SUNUCUDAN: panel kendi biçimlendiricisini YAZMAZ. Aday biçim
  * geçersizse (karakter · hane · ayraç · ÖN EK ÇAKIŞMASI · KOLONA SIĞMAMA) hata
  * buradan gelir, yani kullanıcı "Kaydet"e basmadan ÖNCE görür.
@@ -133,7 +107,7 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
   const kaydet = async (): Promise<void> => {
     setKaydediliyor(true);
     try {
-      await gonder(row, { fmt, counter, source, effectiveFrom }, { formatChanged, counterChanged, sourceChanged });
+      await numberingService.saveChanges(row, { fmt, counter, source, effectiveFrom }, { formatChanged, counterChanged, sourceChanged });
       onSaved();
     } catch (e) {
       const m = (e as { response?: { data?: { message?: string } } }).response?.data?.message;

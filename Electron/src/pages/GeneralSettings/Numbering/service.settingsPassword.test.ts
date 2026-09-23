@@ -2,7 +2,8 @@
 // `requireSettingsPassword` taşır; `apiClient` o 403'ün toast'ını bastırdığı için sarmalayıcısız çağrı
 // "Kaydet hiçbir şey yapmıyor" olur. Ölçülen: 403 REQUIRED → diyalog (sorucu) açılır → AYNI yük başlıkla
 // tekrar gider. Önizleme/etki/tükenme şifresiz kalır (her tuşta pencere açılmasın).
-// Negatif sonda: `updateCounter`dan `withSettingsPassword` kaldırıldı → ⭐ sayaç ×.
+// Negatif sondalar: `updateCounter`dan `withSettingsPassword` kaldırıldı → ⭐ sayaç × · `saveChanges` ortak
+// kapsamı geçirmedi → ⭐ tek-soru × (sorucu 3 kez).
 import { AxiosError, AxiosHeaders } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -57,6 +58,19 @@ describe("numaralandırma yazma uçları ayar şifresinden geçer", () => {
   it("⭐ kaynak (PATCH /:key/source): 403 → diyalog → aynı yük şifreyle", async () => {
     await numberingService.updateSource("SHIPMENT", "FREE");
     ikiCagri();
+  });
+  it("⭐ tek Kaydet üç bölümü birden yazarsa şifre TEK kez sorulur; üç yazımın üçü de başlığı taşır", async () => {
+    const row = { key: "SHIPMENT", editable: true, counter: { startValue: true }, source: { editable: true } } as never;
+    await numberingService.saveChanges(
+      row,
+      { fmt: { prefix: "S" } as never, counter: { startValue: 1, step: 1, maxValue: null }, source: "FREE", effectiveFrom: "" },
+      { formatChanged: true, counterChanged: true, sourceChanged: true },
+    );
+    expect(sorucu).toHaveBeenCalledTimes(1);
+    const calls = patch.mock.calls as Array<[string, unknown, { headers?: Record<string, string> }?]>;
+    const basarili = calls.filter(([, , cfg]) => cfg?.headers?.[SETTINGS_PASSWORD_HEADER] === "gizli-sifre").map(([url]) => url);
+    expect(basarili).toEqual(["/api/number-series/SHIPMENT", "/api/number-series/SHIPMENT/counter", "/api/number-series/SHIPMENT/source"]);
+    expect(calls).toHaveLength(4); // yalnız ilk istek şifresiz gitti
   });
   it("önizleme şifresiz kalır — sorucu açılmaz", async () => {
     await numberingService.preview("SHIPMENT", {} as never);

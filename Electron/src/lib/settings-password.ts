@@ -84,17 +84,30 @@ export class SettingsPasswordCancelled extends Error {
 }
 
 /**
+ * TEK KULLANICI EYLEMİNİN kapsamı — bir "Kaydet" birden çok kapılı istek atıyorsa şifre en fazla
+ * BİR KEZ sorulur. Kapsam yalnız o eylemin kapanışında (bellekte) yaşar ve eylem bitince atılır;
+ * oturuma, modüle ya da depolamaya YAZILMAZ (§7.2 "hatırlanmaz" kararı eylemler ARASINDA geçerli).
+ */
+export interface SettingsPasswordScope {
+  password: string | null;
+}
+export const createSettingsPasswordScope = (): SettingsPasswordScope => ({ password: null });
+
+/**
  * İsteği ayar şifresi kapısından geçirerek koştur.
  *
  * @param run Başlıkları alan ve isteği ATAN fonksiyon. ⚠️ Aynı yükle TEKRAR
  *   çağrılabilir olmalı — yükü içeride yeniden HESAPLAMA (form yeniden
  *   okunursa kullanıcı arada bir şey değiştirmişse başka veri yazılır).
+ * @param scope Aynı eylemin önceki isteğinde kabul edilen şifre varsa ilk deneme onunla gider;
+ *   sorulup KABUL EDİLEN şifre kapsama yazılır.
  */
 export async function withSettingsPassword<T>(
   run: (headers: Record<string, string>) => Promise<T>,
+  scope?: SettingsPasswordScope,
 ): Promise<T> {
   try {
-    return await run({});
+    return await run(scope?.password ? { [SETTINGS_PASSWORD_HEADER]: scope.password } : {});
   } catch (error) {
     const code = settingsPasswordErrorCode(error);
     if (code === SETTINGS_PASSWORD_CODES.LOCKED) {
@@ -118,7 +131,9 @@ export async function withSettingsPassword<T>(
         throw new SettingsPasswordCancelled();
       }
       try {
-        return await run({ [SETTINGS_PASSWORD_HEADER]: password });
+        const result = await run({ [SETTINGS_PASSWORD_HEADER]: password });
+        if (scope) scope.password = password;
+        return result;
       } catch (retryError) {
         const retryCode = settingsPasswordErrorCode(retryError);
         if (retryCode === SETTINGS_PASSWORD_CODES.INVALID) {
