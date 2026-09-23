@@ -62,7 +62,7 @@
 ### Reçeteler
 
 - **[ÇEKİRDEK]** Karo döngüsü DIŞINDAKİ palet girdileri (`ops:work-order-new`, `def:station-capabilities`) modül/süperadmin kapısını ELLE taşır (karosuz ekranda palet tek keşif yolu). 'Kapatırsan gizlenir' önizlemesi masaüstü/tableti AYRI sayar; manifesto okunamazsa liste ÇİZİLMEZ. · bekçi: `BELİRSİZ — üç kuralın kendisi için adlı bekçi yok; KARO↔ROUTE hizası Electron/src/pages/System/tile-route-permission.test.ts ile ÖLÇÜLÜYOR (karo permission taşıyorsa route AYNI kodu ister)` · Kapanır: `karo döngüsü DIŞINDAKİ palet girdileri bir kümeye çıkarılıp her birinde modül/süperadmin kapısının varlığı ölçüldüğünde (bugün ELLE taşınıyor ve küme beyanlı değil)` · Öncül: ölçüldü <sub>(CLAUDE.md:102)</sub>
-- **[ÇEKİRDEK]** Electron `withSettingsPassword` sarmalayıcısı: istek önce şifresiz gider; 403 REQUIRED/INVALID → `SettingsPasswordDialog` (App'te bir kez mount) → başlıkla tekrar; LOCKED kalan süre. Her kayıtta sorulur, oturumda HATIRLANMAZ; şifre state'te yalnız diyalog açıkken, log/toast/localStorage'a girmez. · bekçi: `yok (backend↔Electron ayna bekçisi yalnız sabitleri kıyaslar)` · Kapanır: `Electron'da ayar YAZAN her isteğin withSettingsPassword sarmalayıcısından geçtiğini ölçen bir PANEL bekçisi yazıldığında — test_settings_password yalnız BACKEND ucunu ölçüyor (ölçüldü: 8 dosya sarmalayıcıyı anıyor, hiçbir panel testi kullanımını ölçmüyor)` · Öncül: ölçüldü <sub>(CLAUDE.md:98)</sub>
+- **[ÇEKİRDEK]** Electron `withSettingsPassword` sarmalayıcısı: istek önce şifresiz gider; 403 REQUIRED/INVALID → `SettingsPasswordDialog` (App'te bir kez mount) → başlıkla tekrar; LOCKED kalan süre. Tek kullanıcı eylemi (bir Kaydet) en fazla BİR KEZ sorar (eylem kapsamı `SettingsPasswordScope`, eylem bitince atılır); eylemler arasında HATIRLANMAZ; şifre log/toast/localStorage'a girmez. Kapılı uca giden her panel çağrısı sarmalayıcıdan geçer — `apiClient` o 403'ün toast'ını bastırır, sarmalayıcısız çağrı sessizce hiçbir şey yapmaz. · bekçi: `Teks-Erp/scripts/test_settings_password_callers.ts` <sub>(arşiv:2026-09-23)</sub>
 
 ### Kararlar
 
@@ -102,7 +102,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_db_invariants`, `test_settings_password`, `test_superadmin`⚠️, `test_superadmin_provision`, `test_superadmin_visible`, `test_user_credentials_guard`
+Backend: `test_db_invariants`, `test_settings_password`, `test_settings_password_callers`, `test_superadmin`⚠️, `test_superadmin_provision`, `test_superadmin_visible`, `test_user_credentials_guard`
 
 İstemci: `SettingsPasswordDialog.test.tsx`⚠️, `superadmin-gate.test.ts`⚠️, `FeatureFlagSection.superadmin.test.tsx`, `SettingsPasswordCard.test.tsx`⚠️, `settings-surface.test.ts`, `ModuleProfilePage.test.tsx`⚠️, `SystemHubPage.superadmin.test.tsx`, `login-totp.test.ts`, `auth.test.ts`, `usePermission.test.ts`
 

@@ -11381,3 +11381,19 @@ düzeyinde sıralama karşılaştırması yok, risk düşük; ms sıralaması is
 **Öncül:** ölçüldü
 **Bekçi:** `test_warp_beam_auto_consume §9a` (Node 10 ms geride söküm → levent düşer; sonda: açık `createdAt`
 kaldırıldı → kırmızı) · `§9b` (aynı tx'te iki olay kesin artan; sonda: `now()` → kırmızı). Migration/izin/APK yok.
+
+## 2026-09-23 — Ayar şifresi İSTEMCİ ayağı: kapılı uç ↔ sarmalayıcı kapısı + tek eylem tek soru [ÇEKİRDEK]
+
+**Saha/ölçüm:** backend'de `requireSettingsPassword` taşıyan 8 uçtan 3'ünün (numaralandırma PATCH `/:key` ·
+`/:key/counter` · `/:key/source`) panel çağıranı `withSettingsPassword`tan geçmiyordu; `apiClient`
+SETTINGS_PASSWORD* 403'ünün toast'ını bilerek bastırdığı için şifre tanımlı kurulumda "Kaydet hiçbir şey
+yapmıyor"du (ca'nın config-bundle `apply` bulgusunun aynı sınıfı). Tablet kapılı uca gitmiyor (yalnız GET).
+**Karar:** üç çağrı sarıldı (233a1c8e). Tek Kaydet üç kapılı istek atınca şifre üç kez soruluyordu →
+eylem kapsamı `SettingsPasswordScope`: kabul edilen şifre yalnız o eylemin kapanışında bellekte, eylem bitince
+atılır; §7.2 "hatırlanmaz" eylemler ARASINDA geçerli (585e6aac). Kenar: kapsamdaki şifre INVALID alırsa akış
+"hatalı" diye YENİDEN SORAR, fırlatmaz (`settings-password.scope.test.ts`).
+**Kalıcı kapı:** `test_settings_password_callers` — uçlar `app.ts` bağları + router dosyalarından keşfedilir;
+panel çağrısı sarmalayıcıda + `headers` config'te (§1) · tablet kapılı uca gitmez (§2) · iki yönlü ölü eşleme
+(§3) · ÖLÇÜLEMEDİ kırmızı (§4). Sıra bağımlılığı ölçüldü: config-bundle `apply` kapısı iki ayağıyla aynı
+commit'te inerse yeşil; yalnız backend → §1 kırmızı, yalnız panel → §3b kırmızı. superadmin.md:65'teki
+"panel bekçisi yok" borcu bu kapıyla KAPANDI. Migration/izin/APK yok.
