@@ -28,7 +28,7 @@ import { PaginatedResponse, ApiResponse, QueryParams } from "../types/api.types"
 import { Request } from "express";
 import { foldNameForCompare, normalizeDisplayName } from "./helpers/name-normalize.helper";
 import { foldCodeForCompare } from "../utils/code-format";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 
 import { diffFields } from "./helpers/audit-diff.helper";
@@ -981,18 +981,25 @@ export class BaseService {
     // kasa · banka · iade sebebi · reçete · hata tipi · depo · rota). İki ayrı
     // `new Date()` gece yarısında dünün ön ekiyle tarayıp bugünün ön ekiyle yazardı.
     const now = new Date();
-    const fmt = resolveSeriesFormat(cfg.series);
-    const fullPrefix = seriesPrefix(fmt, now);
-    const rows = (await this.delegate.findMany({
-      where: { [field]: { gte: fullPrefix, startsWith: fullPrefix } },
-      select: { [field]: true },
-    })) as Record<string, unknown>[];
-    const seq = seriesSeqFrom(
-      fmt,
-      rows.map((r) => r[field] as string | null | undefined),
-      fullPrefix,
+    // ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan kodlara
+    // bakar (`formatChangedAt`). Bu tek yol ON seriyi birden üretiyor (renk ·
+    // istasyon · makine · kasa · banka · iade sebebi · reçete · hata tipi · depo ·
+    // rota); kapsamı burada uygulamak, onu on ayrı yerde tekrarlamaktan daha az
+    // hata yüzeyi demek. `nextSeriesNo` çakışma atlamasını da taşır.
+    return nextSeriesNo(
+      cfg.series,
+      async (fullPrefix) => {
+        const rows = (await this.delegate.findMany({
+          where: { [field]: { gte: fullPrefix, startsWith: fullPrefix } },
+          select: { [field]: true, createdAt: true },
+        })) as Array<Record<string, unknown>>;
+        return rows.map((r) => ({
+          code: (r[field] as string | null) ?? null,
+          createdAt: r.createdAt as Date,
+        }));
+      },
+      now,
     );
-    return formatSeriesCode(fmt, seq, now);
   }
 
   /**

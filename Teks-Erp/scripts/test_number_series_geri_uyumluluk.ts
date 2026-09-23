@@ -23,7 +23,7 @@
 //
 // Koşum: npx tsx scripts/run-all-tests.ts number_series_geri_uyumluluk
 // =============================================================================
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import type { NumberSeriesDateSegment } from "@prisma/client";
@@ -41,6 +41,22 @@ import { seriesImpactCount, seriesLock } from "../src/services/helpers/series-pa
 import { nextSeriesNo, resolveSeriesFormat } from "../src/services/number-series.service";
 import { freeDocumentService } from "../src/services/free-document.service";
 import { stockCountService } from "../src/services/stock-count.service";
+import { WorkOrderService } from "../src/services/workorder.service";
+import { colorService } from "../src/routes/color.routes";
+import { machineService, stationService } from "../src/routes/station.routes";
+import { bankAccountService, cashBoxService } from "../src/routes/finance.routes";
+import { returnReasonService } from "../src/routes/return-reason.routes";
+import { productRecipeService } from "../src/routes/product-recipe.routes";
+import { defectTypeService } from "../src/routes/defect-type.routes";
+import { warehouseService } from "../src/services/warehouse.service";
+import { routeService } from "../src/routes/route.routes";
+import { customerService } from "../src/routes/customer.routes";
+import { fabricPropertyService } from "../src/routes/fabric-property.routes";
+import { itemService } from "../src/routes/item.routes";
+import {
+  SubcontractorCategoryService,
+  SubcontractorManagementService,
+} from "../src/services/subcontractor-management.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0,
@@ -67,6 +83,28 @@ function kaynakTara(dizin: string): string {
 }
 
 let stockCountFikstur = 0;
+let colorFikstur = 0;
+/** Master veri fikstürlerinde ad tekilliği — servisler aynı adı 409 ile reddediyor. */
+let msSayac = 0;
+
+/**
+ * ⚠️ BAĞLI FİKSTÜRLER ORTAMDAN ARANMAZ, KURULUR: `findFirst` ile "ortamda ne varsa"
+ * almak temiz bir CI veritabanında düşer ya da VAKUMEN yeşil kalır (bu depoda adı
+ * konmuş sınıf; `test_keyfi_arama` kapıda yakaladı). Makine/özellik/rota bir
+ * istasyona, reçete bir stok kartına bağlı — ikisini de bu bekçi kendi kurar.
+ */
+const bagli: { stationId: string | null; itemId: string | null } = { stationId: null, itemId: null };
+
+/** `BaseService.create` sonucundan `{ id, kod }` — master veri fikstürlerinin ortak kabuğu. */
+async function msCreate(
+  servis: { create: (data: Record<string, unknown>, userId?: string) => Promise<unknown> },
+  data: Record<string, unknown>,
+): Promise<{ id: string; kod: string } | null> {
+  const r = (await servis.create(data)) as { data?: { id?: string; code?: string } };
+  return r.data?.id && r.data.code ? { id: r.data.id, kod: r.data.code } : null;
+}
+/** Manifest fikstürünün açtığı iş emirleri — teardown (manifest silindikten SONRA). */
+const manifestWorkOrders: string[] = [];
 const SEGMENTLER = Object.keys(DATE_SEGMENTS) as NumberSeriesDateSegment[];
 const AYRACLAR = ["", "-", "_", "/", "."];
 
@@ -136,10 +174,149 @@ const L2_YOLU: Record<string, L2Yolu> = {
       await prisma.stockCount.deleteMany({ where: { id } });
     },
   },
+  // ── MASTER VERİ (E2 dilim 2) ──────────────────────────────────────────────
+  // ⚠️ TEMSİLCİ ÖLÇÜM ve bu BEYANLI bir karar: on master veri serisi TEK üreteçten
+  // doğuyor (`BaseService.nextAutoCode`). Onunu da ayrı ayrı yaratmak AYNI kod
+  // yolunu on kez ölçmek olurdu; temsilci `color` L2'de koşar, diğer dokuzu
+  // "aynı üreteç yolu" gerekçesiyle L1'de kalır ve bu satırda GÖRÜNÜR.
+  color: {
+    not: "ColorService.create: yalnız ad.",
+    // ⚠️ HER ÇAĞRI FARKLI AD: servis aynı adlı ikinci rengi 409 ile reddediyor
+    // (mükerrer koruması) — iş kuralı doğru, fikstür ona uymak zorunda.
+    yarat: async (damga) => {
+      colorFikstur += 1;
+      const r = (await colorService.create({ name: `${damga} E3 renk ${colorFikstur}` })) as {
+        data?: { id?: string; code?: string };
+      };
+      return r.data?.id && r.data.code ? { id: r.data.id, kod: r.data.code } : null;
+    },
+    sil: async (id) => { await prisma.color.deleteMany({ where: { id } }); },
+  },
+  // ⚠️ TEMSİLCİ ÖLÇÜM REDDEDİLDİ (1e, 2026-09-23) ve gerekçe ölçülmüş bir vakaya
+  // dayanıyor: yol ortak olsa da her seri o yola KENDİ yapılandırmasını veriyor
+  // (hangi model, hangi alan, `createdAt` seçiliyor mu, süzgeç var mı) — ve
+  // `ensureSubCode`te kırılan tam olarak buydu. Her seri KENDİ kaydıyla ölçülür.
+  station: {
+    not: "StationService.create: ad + tür.",
+    yarat: async (damga) => msCreate(stationService, { name: `${damga} E3 istasyon ${++msSayac}`, type: "INTERNAL" }),
+    sil: async (id) => { await prisma.station.deleteMany({ where: { id } }); },
+  },
+  machine: {
+    not: "machineService.create: ad + istasyon (fikstür istasyonu kurulur).",
+    yarat: async (damga) => {
+      if (!bagli.stationId) return null;
+      return msCreate(machineService, { name: `${damga} E3 makine ${++msSayac}`, stationId: bagli.stationId });
+    },
+    sil: async (id) => { await prisma.machine.deleteMany({ where: { id } }); },
+  },
+  cashAccount: {
+    not: "cashBoxService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(cashBoxService, { name: `${damga} E3 kasa ${++msSayac}` }),
+    sil: async (id) => { await prisma.cashBox.deleteMany({ where: { id } }); },
+  },
+  bankAccount: {
+    not: "bankAccountService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(bankAccountService, { name: `${damga} E3 banka ${++msSayac}` }),
+    sil: async (id) => { await prisma.bankAccount.deleteMany({ where: { id } }); },
+  },
+  returnReason: {
+    not: "returnReasonService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(returnReasonService, { name: `${damga} E3 sebep ${++msSayac}` }),
+    sil: async (id) => { await prisma.returnReason.deleteMany({ where: { id } }); },
+  },
+  productRecipe: {
+    not: "productRecipeService.create: ad + bağlı stok kartı.",
+    yarat: async (damga) => {
+      if (!bagli.itemId) return null;
+      return msCreate(productRecipeService, { name: `${damga} E3 reçete ${++msSayac}`, itemId: bagli.itemId });
+    },
+    sil: async (id) => { await prisma.productRecipe.deleteMany({ where: { id } }); },
+  },
+  defectType: {
+    not: "defectTypeService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(defectTypeService, { name: `${damga} E3 hata ${++msSayac}` }),
+    sil: async (id) => { await prisma.defectType.deleteMany({ where: { id } }); },
+  },
+  warehouse: {
+    not: "warehouseService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(warehouseService, { name: `${damga} E3 depo ${++msSayac}` }),
+    sil: async (id) => { await prisma.warehouse.deleteMany({ where: { id } }); },
+  },
+  routeTemplate: {
+    not: "routeService.create: ad + en az bir adım.",
+    yarat: async (damga) => {
+      if (!bagli.stationId) return null;
+      return msCreate(routeService, {
+        name: `${damga} E3 rota ${++msSayac}`,
+        steps: [{ stationId: bagli.stationId, sequence: 1 }],
+      });
+    },
+    sil: async (id) => {
+      await prisma.routeStep.deleteMany({ where: { routeId: id } });
+      await prisma.route.deleteMany({ where: { id } });
+    },
+  },
+  customer: {
+    not: "customerService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(customerService, { name: `${damga} E3 cari ${++msSayac}` }),
+    sil: async (id) => { await prisma.customer.deleteMany({ where: { id } }); },
+  },
+  fabricProperty: {
+    not: "fabricPropertyService.create: ad + uygulayan istasyon(lar).",
+    yarat: async (damga) => {
+      if (!bagli.stationId) return null;
+      return msCreate(fabricPropertyService, {
+        name: `${damga} E3 özellik ${++msSayac}`,
+        stationIds: [bagli.stationId],
+      });
+    },
+    sil: async (id) => { await prisma.fabricProperty.deleteMany({ where: { id } }); },
+  },
+  item: {
+    not: "itemService.create: ad + tür (itemType).",
+    yarat: async (damga) => msCreate(itemService, { name: `${damga} E3 stok ${++msSayac}`, itemType: "FABRIC" }),
+    sil: async (id) => { await prisma.item.deleteMany({ where: { id } }); },
+  },
+  subcontractor: {
+    not: "SubcontractorManagementService.create: yalnız ad.",
+    yarat: async (damga) => {
+      const r = await new SubcontractorManagementService().create({ name: `${damga} E3 fason ${++msSayac}` });
+      const d = r.data as { id?: string; code?: string } | null;
+      return d?.id && d.code ? { id: d.id, kod: d.code } : null;
+    },
+    sil: async (id) => { await prisma.subcontractor.deleteMany({ where: { id } }); },
+  },
+  subcontractorCategory: {
+    not: "SubcontractorCategoryService.create: yalnız ad.",
+    yarat: async (damga) => {
+      const r = await new SubcontractorCategoryService().create({ name: `${damga} E3 kategori ${++msSayac}` });
+      const d = r.data as { id?: string; code?: string } | null;
+      return d?.id && d.code ? { id: d.id, kod: d.code } : null;
+    },
+    sil: async (id) => { await prisma.subcontractorCategory.deleteMany({ where: { id } }); },
+  },
+
   // Aşağıdakiler L1'de KALDI ve gerekçesi budur (beyansız sessizlik yok):
   packingLotName: { not: "Sevk partisi ADI kendi sırasından doğar (ownCounter): ayrı bir kayıt yolu yok, kod yolu packingLotCode ile aynı gruptan gelir." },
   returnDoc: { not: "RollReturn: sevk edilmiş top + iade zinciri ister; fikstür maliyeti yüksek (test_return_no_backfill kapsıyor)." },
-  manifest: { not: "Manifest: iş emri + top zinciri ister; fikstür maliyeti yüksek." },
+  // ⚠️ ÇEKİ LİSTESİ L2'YE ALINDI (1e şartı 2026-09-23): kullanıcının şikâyet ettiği
+  // seri "fikstür maliyeti" gerekçesiyle L1'de kalamaz. Ölçüldü: `createManifest`
+  // yalnız VAR OLAN bir iş emri ister (anlık görüntüyü kendi hesaplar) ⇒ fikstür
+  // tek satır; "top zinciri gerekir" varsayımı YANLIŞTI.
+  manifest: {
+    not: "WorkOrderService.createManifest: yalnız var olan bir iş emri ister (anlık görüntü hesaplanır).",
+    yarat: async (damga) => {
+      const wo = await prisma.workOrder.create({
+        data: { workOrderNumber: `${damga}-E3-${Date.now().toString(36).slice(-4)}`.slice(0, 32) },
+        select: { id: true },
+      });
+      manifestWorkOrders.push(wo.id);
+      const r = await new WorkOrderService().createManifest(wo.id);
+      const d = r.data as { id?: string; manifestNo?: string } | null;
+      return d?.id && d.manifestNo ? { id: d.id, kod: d.manifestNo } : null;
+    },
+    sil: async (id) => { await prisma.manifest.deleteMany({ where: { id } }); },
+  },
   goodsReceipt: { not: "GoodsReceipt: tedarikçi + kalem + (kumaşta) top zinciri ister." },
   purchaseOrder: { not: "PurchaseOrder: tedarikçi + kalem + birim fiyat zinciri ister." },
   warehouseTransfer: { not: "WarehouseTransfer: iki depo + taşınacak GERÇEK stok ister." },
@@ -276,9 +453,20 @@ async function main(): Promise<void> {
   // ⚠️ YÜKLEM BOŞLUĞA DAYANIKLI: çağrı biçimlendirici yüzünden satıra bölünebiliyor
   // (`nextSeriesNo(\n  "manifest",`) ve düz `includes` onu GÖREMİYORDU — ölçüldü,
   // bu kontrol ilk koşumda `manifest`i yanlışlıkla "üreteçsiz" saydı.
-  const uretecsizBeyan = beyanliHazir.filter(
-    (e) => !new RegExp(`nextSeriesNo\\(\\s*"${e.key}"`).test(kaynakMetni),
-  );
+  // ⚠️ İKİ YOL, ÇÜNKÜ İKİ ÜRETİM BİÇİMİ VAR: doğrudan çağıran seri anahtarıyla
+  // aranır; ORTAK bir üreteçten (ör. `BaseService.nextAutoCode`, on master veri
+  // serisi) doğan seri anahtarı DEĞİŞKEN olarak geçirir ve metinde hiç görünmez —
+  // o yüzden beyan üretecin YERİNİ söyler (`scopedCounter.uretec`) ve kapı o
+  // dosyanın C0 yolundan geçtiğini ölçer. Beyan yoksa anahtar aranır.
+  const uretecsizBeyan = beyanliHazir.filter((e) => {
+    const yol = e.scopedCounter?.uretec;
+    if (yol) {
+      const tam = join(__dirname, "..", "src", yol);
+      if (!existsSync(tam)) return true;
+      return !/nextSeriesNo\s*\(/.test(readFileSync(tam, "utf-8"));
+    }
+    return !new RegExp(`nextSeriesNo\\(\\s*"${e.key}"`).test(kaynakMetni);
+  });
   check("L0 körlük zemini: kaynak tarandı ve beyanlı seri var",
     kaynakMetni.length > 100_000 && beyanliHazir.length > 0, `${beyanliHazir.length} beyanlı seri`);
   check("L0 ⭐ `sayacı hazır` diyen her serinin üreteci C0 yolundan (`nextSeriesNo`) geçiyor",
@@ -291,6 +479,20 @@ async function main(): Promise<void> {
   const DAMGA = `TEST-${process.pid.toString(36).padStart(3, "0").slice(-3)}${Date.now().toString(36).slice(-6)}`.slice(0, 14);
   const temizlik: Array<() => Promise<void>> = [];
   try {
+    // Bağlı fikstürler ÖNCE ve KENDİ servis yollarından (ortamdan aranmaz).
+    const istasyon = await msCreate(stationService, { name: `${DAMGA} E3 bağlı istasyon`, type: "INTERNAL" });
+    if (istasyon) {
+      bagli.stationId = istasyon.id;
+      temizlik.push(async () => { await prisma.station.deleteMany({ where: { id: istasyon.id } }); });
+    }
+    const stok = await msCreate(itemService, { name: `${DAMGA} E3 bağlı stok`, itemType: "FABRIC" });
+    if (stok) {
+      bagli.itemId = stok.id;
+      temizlik.push(async () => { await prisma.item.deleteMany({ where: { id: stok.id } }); });
+    }
+    check("L2 körlük zemini: bağlı fikstürler (istasyon + stok) KURULDU",
+      bagli.stationId !== null && bagli.itemId !== null);
+
     for (const e of acikSeriler) {
       const yol = L2_YOLU[e.key];
       if (!yol?.yarat) {
@@ -339,6 +541,11 @@ async function main(): Promise<void> {
     }
   } finally {
     for (const t of temizlik.reverse()) await t();
+    // ⚠️ FK SIRASI: manifest satırları silindikten SONRA iş emirleri.
+    if (manifestWorkOrders.length > 0) {
+      await prisma.manifest.deleteMany({ where: { workOrderId: { in: manifestWorkOrders } } });
+      await prisma.workOrder.deleteMany({ where: { id: { in: manifestWorkOrders } } });
+    }
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

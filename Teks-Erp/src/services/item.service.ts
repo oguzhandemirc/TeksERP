@@ -23,7 +23,7 @@ import {
   normalizeItemName,
   foldNameForCompare,
 } from "./helpers/name-normalize.helper";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import {
@@ -119,19 +119,20 @@ async function nextItemCode(): Promise<string> {
   // Tarihsiz seri (`dateSegment: NONE`) — sayaç HİÇ sıfırlanmaz, kapsam ön ekin kendisi.
   // ⚠️ TEK TARİH — bugün `NONE` olduğu için tarih koda GİRMİYOR, ama seri artık
   // VERİ: biri panelden tarih segmenti açarsa iki `new Date()` gece yarısı ayrışır.
-  const now = new Date();
-  const fmt = resolveSeriesFormat("item");
-  const prefix = seriesPrefix(fmt, now);
-  const rows = await prisma.item.findMany({
-    where: { code: { gte: prefix, startsWith: prefix } },
-    select: { code: true },
-  });
-  const seq = seriesSeqFrom(
-      fmt,
-    rows.map((r) => r.code).filter((c) => ITEM_CODE_SCAN_RE.test(c)),
-    prefix,
-  );
-  return formatSeriesCode(fmt, seq, now);
+  // ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan kodlara
+  // bakar; `nextSeriesNo` kapsamı, tek tarihi ve çakışma atlamasını taşır.
+  // ⚠️ SÜZGEÇ KORUNUR: elle yazılmış stok kodları (seri biçimine uymayanlar) sayaca
+  // GİRMEZ — `ITEM_CODE_SCAN_RE` bu serinin kendi sözleşmesi.
+  return nextSeriesNo("item", async (prefix) =>
+    prisma.item
+      .findMany({
+        where: { code: { gte: prefix, startsWith: prefix } },
+        select: { code: true, createdAt: true },
+      })
+      .then((rows) =>
+        rows
+          .filter((r) => ITEM_CODE_SCAN_RE.test(r.code))
+          .map((r) => ({ code: r.code, createdAt: r.createdAt }))), new Date());
 }
 
 /** E4: `warpSpecId` yalnız KUMAŞ kartında ve aktif bir çözgü kartını göstermeli (400); `null` temizler, `undefined` dokunmaz. */
