@@ -611,6 +611,7 @@ for (const r of hepsi) {
       await diyaloguKapat();
       const ky = await A.ac(dur);
       const bugunkuKalip = kalip({ ...r, preview: (await seri(r.key)).preview });
+      await numaralandirmayaGit(); // panel açıcısı başka sekmede bırakmış olabilir
       const d3 = await ac(await seri(r.key));
       let iptal = null;
       if (d3) {

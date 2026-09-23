@@ -162,13 +162,35 @@ export function acicilarKur(c) {
   const depoTicaret = {
     // ÇEKİ LİSTESİ — numara yalnız API'de doğar; panelde ve tablette çağıran yok, belge türü yok (K23).
     manifest: {
+      // Paketleme / Çuvallar → çuval seç → "Çeki Listesi" → Yazdır: CL numarası basımda doğar, kâğıt
+      // kayıttan çizilir. Her kayıt YENİ bir boş çuval basar → içerik farklı → yeni CL (aynı içerik
+      // aynı numarayı döndürürdü; varyant/yürürlük kolları her seferinde yeni numara ister).
       tablo: { tablo: "manifests", kolon: "manifestNo" }, okutulur: false,
       yeniOnEk: "CLZ", varyantlar: [{ dateSegment: "NONE" }, { separator: "-", separator2: "/" }], yururluk: "CLY",
-      hazirla: async (dur) => { dur.cekiIsEmri ??= (await sql(`SELECT id FROM work_orders ORDER BY "createdAt" DESC LIMIT 1`))[0]?.id; if (!dur.cekiIsEmri) throw new Error("iş emri yok"); },
+      hazirla: async (dur) => {
+        dur.cekiCari ??= zorunlu(await api("/api/customers", { method: "POST", body: JSON.stringify({ name: `TEST-E5C${K()} Çeki Cari`, isCustomerRole: true, defaultDestination: "DOMESTIC" }) }), "cari").id;
+      },
       eskiKayit: () => eskiSec("manifests", "manifestNo"),
-      ac: async (dur) => { const d = zorunlu(await api(`/api/work-orders/${dur.cekiIsEmri}/manifest`, { method: "POST", body: "{}" }), "çeki listesi"); return { id: d.id, numara: await numaraOku("manifests", "manifestNo", d.id) }; },
-      ekran: async () => ({ uygulanmaz: "CL numarası bugün hiçbir panel/tablet yüzeyinde yok — numara DB'den ölçüldü (K23)" }),
-      belge: belgeYok("CL için belge türü yok (snapshot JSON)"),
+      ac: async (dur) => {
+        const cuval = zorunlu(await api("/api/shipping/sacks", { method: "POST", body: JSON.stringify({ customerId: dur.cekiCari, clientToken: crypto.randomUUID() }) }), "çuval");
+        const b = await cekiBas(cuval.sackNo);
+        const numara = await numaraOku("manifests", "manifestNo", b.id);
+        dur.cekiSon = { sackNo: cuval.sackNo, numara, diyalogda: b.diyalogda, basilanVar: typeof b.basilan === "string" && b.basilan.includes(numara ?? "∅") };
+        return { id: b.id, numara, acilisYolu: "panel" };
+      },
+      // Ekran = diyaloğun sağ üst köşesi; belge = basılan kâğıdın metni (iframe). İkisi de DB'deki numarayla.
+      // + YENİDEN BASIM: aynı çuval tekrar basılınca AYNI numara, DB'de tek satır (yalnız ana kayıtta).
+      ekran: async (dur, k) => {
+        const out = { [k.numara]: dur.cekiSon?.diyalogda === k.numara };
+        if (dur.cekiSon?.numara === k.numara && !dur.cekiYenidenBasildi) {
+          dur.cekiYenidenBasildi = true;
+          const r = await cekiBas(dur.cekiSon.sackNo);
+          const satir = (await sql(`SELECT count(*)::int n FROM manifests WHERE "manifestNo"=$1`, [k.numara]))[0].n;
+          out[`yeniden basım ${k.numara}`] = r.diyalogda === k.numara && r.reused === true && satir === 1;
+        }
+        return out;
+      },
+      belge: async (dur, k) => ({ belgeDurum: 200, belgedeVar: dur.cekiSon?.numara === k.numara && dur.cekiSon?.basilanVar === true }),
     },
     goodsReceipt: {
       tablo: { tablo: "goods_receipts", kolon: "receiptNo" }, okutulur: false,
@@ -381,6 +403,42 @@ export function acicilarKur(c) {
     return dur.cozgu;
   }
   const VAR2 = [{ dateSegment: "NONE" }, { separator: "-", separator2: "/" }];
+  /** Paketleme / Çuvallar → çuvalı ara → seç → "Çeki Listesi" → Yazdır; dönen numara + basılan kâğıt metni. */
+  async function cekiBas(sackNo) {
+    await gitSayfa("Paketleme / Çuvallar");
+    const hub = page.getByText("Tüm Çuvallar", { exact: true }).filter({ visible: true }).first();
+    if (await hub.count()) { await hub.click({ timeout: 10_000 }); await page.waitForTimeout(1200); }
+    const ara = page.getByPlaceholder(/Ara ya da barkod okut/).filter({ visible: true }).first();
+    await ara.fill(sackNo); await page.waitForTimeout(1500);
+    const satir = page.getByRole("row").filter({ hasText: sackNo }).filter({ visible: true }).first();
+    await satir.waitFor({ timeout: 20_000 });
+    const kutu = satir.getByRole("checkbox").first();
+    if ((await kutu.getAttribute("aria-checked")) !== "true") await kutu.click({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Çeki Listesi", exact: true }).filter({ visible: true }).first().click({ timeout: 10_000 });
+    const d = page.getByRole("dialog").filter({ hasText: "Çeki Listesi —" }).last();
+    await d.waitFor({ timeout: 15_000 });
+    // Sistem baskı penceresi yerine basılan kâğıdın METNİ yakalanır (iframe print'i kapanır).
+    await page.evaluate(() => {
+      window.__cekiBasilan = null;
+      if (window.__cekiGozcu) return;
+      window.__cekiGozcu = new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => {
+        if (n.tagName === "IFRAME" && n.contentWindow) n.contentWindow.print = () => { window.__cekiBasilan = n.contentDocument?.body?.innerText ?? ""; };
+      })));
+      window.__cekiGozcu.observe(document.body, { childList: true });
+    });
+    const yanit = page.waitForResponse((r) => r.request().method() === "POST" && /\/pick-list\/print$/.test(r.url()), { timeout: 20_000 });
+    await d.getByRole("button", { name: /Yazdır/ }).click({ timeout: 10_000 });
+    const g = await (await yanit).json();
+    const noKutusu = d.getByTestId("ceki-listesi-no");
+    await noKutusu.waitFor({ timeout: 10_000 });
+    const diyalogda = (await noKutusu.innerText()).replace(/^.*:\s*/, "").trim();
+    await page.waitForFunction(() => window.__cekiBasilan !== null, null, { timeout: 15_000 }).catch(() => undefined);
+    const basilan = await page.evaluate(() => window.__cekiBasilan);
+    await d.getByRole("button", { name: "Kapat", exact: true }).last().click({ timeout: 10_000 });
+    await d.waitFor({ state: "detached", timeout: 10_000 }).catch(() => undefined);
+    return { id: g?.data?.id, reused: g?.data?.reused, diyalogda, basilan };
+  }
+
   const uretimSerileri = {
     order: {
       tablo: { tablo: "orders", kolon: "orderNumber" }, okutulur: false, yeniOnEk: "SIPZ", varyantlar: VAR2,
