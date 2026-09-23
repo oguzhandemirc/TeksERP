@@ -17,7 +17,7 @@ Bu tablo **kayıtlı kararın kendisidir**: `package.json > dependencies` ile bu
 | İhtiyaç | Paket | Not / reddedilen |
 |---|---|---|
 | HTTP sunucu | `express` 5 (+ `cors` `helmet` `compression` `morgan`) | — |
-| ORM · sürücü | `@prisma/client` · `prisma` (CLI) · `pg` · `@prisma/adapter-pg` | CLI `dependencies`te ZORUNLU ([KU-15]) |
+| ORM · sürücü | `@prisma/client` · `prisma` (CLI) · `pg` · `@prisma/adapter-pg` | CLI `dependencies`te ZORUNLU ([KU-15]) · ⚠️ `pg@9`a Prisma sürümü uyumu beyan etmeden GEÇİLMEZ: sorgu yorumlayıcısı iç içe `select`in ilişki alt sorgularını aynı istemciye paralel yolluyor (pg@8 DeprecationWarning, pg@9'da kaldırılıyor) — ürün kodunda paralel `tx.*` YOK, ölçüldü 2026-09-23 (pg `Client.query` meşgul-istemci sondası, E2E backend SY1+SY2: 13 eşzamanlı çağrı, tek kaynak `device.service` findUnique, ürün çerçevesi 0) |
 | Şema doğrulama | `zod` | route/controller'da; serviste değil (`BACKEND.md`) |
 | Kimlik · API belgesi | `jsonwebtoken` · `bcryptjs` · `swagger-jsdoc` + `swagger-ui-express` | — |
 | Barkod sembolü | `bwip-js` (7 dosya) | — |
