@@ -105,6 +105,8 @@
 - **[ÇEKİRDEK]** Aynı kod kolonunu paylaşan iki seri (fatura ×4 · ödeme ×2 · çek/senet ×4 → `docNo`) ne EŞİT ne de birinin BAŞLANGICI olan ön ek taşıyabilir; emekli ön ekler de karşılaştırmaya girer. Sayaç ön ekle bölündüğü için aynı ön ek, ayrışan kapsam damgalarıyla MÜKERRER kod üretir. Bu kapı tarama çakışmasından AYRI bir sorudur: o tarama uzayını, bu SAYAÇ uzayını korur. · bekçi: `test_number_series_panel §5c`
 - **[ÇEKİRDEK]** Yapılandırma paketi önizlemesi yazma yolunun ÜÇ yüklemini birden kuru koşar (`assertSeriesFormatWritable` · `assertAxesAllowed` · `assertSeriesFormatAllowed`); biri eksikse önizleme "uygulanacak" der, uygulama 400 döner ve kullanıcı engeli GÖRMEDEN onaylar. · bekçi: `test_config_bundle §9c`
 - **[ÇEKİRDEK]** Fatura numarası ekranda ne ise belgede de odur ve bu AYRI ölçülür: numara dört serinin paylaştığı tek kolondan doğuyor, sevkiyat kollarının ölçtüğü yol değil. · bekçi: `test_belge_ekran_ayni §7`
+- **[ÇEKİRDEK]** Sayaç taramasında "bu kod seriye ait mi" yüklemi ELLE REGEX olarak yazılmaz, yürürlükteki biçimden türer (`codeCountsForCounter` → `matchesSeries`); ön eke çakılı bir süzgeç, ön ek değişince bütün satırları eler, sayaç 1'de kalır ve İKİNCİ kayıt `@unique`e çarpar. Hane tavanı (12) biçimden bağımsızdır ve gerekçesi ayrıdır: `parseInt` taşmasında `max + 1 === max` olur, sayaç sessizce kilitlenir. · bekçi: `test_number_series_geri_uyumluluk L2 (f)`
+- **[ÇEKİRDEK]** "Sıradaki numara" önizlemesi ile ÜRETİM aynı yükleyiciden ve aynı süzgeçten beslenir; ayrıştıklarında ekran bir numara gösterir, yazma başka bir numara üretir. · bekçi: `test_number_series_geri_uyumluluk L2 (f)`
 
 ### Kararlar
 

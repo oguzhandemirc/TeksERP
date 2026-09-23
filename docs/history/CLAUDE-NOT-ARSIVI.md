@@ -21,6 +21,44 @@
 
 ---
 
+## 2026-09-23 — K27: ön eke çakılı süzgeç ürün açmayı bloke etti; matrisin kör noktası kapandı [ÇEKİRDEK]
+
+**Arıza (d3 ölçtü, 47/49 kabul koşumu).** Ürün (stok) kodunun sayaç taraması `item.service.ts`te
+`ITEM_CODE_SCAN_RE = /^STK-\d{1,12}$/` diye SABİT yazılmıştı ve yorumu "bu serinin kendi
+sözleşmesi" diyordu. Ön ek panelden `STKZ`ye çevrilince süzgeç BÜTÜN satırları eledi: sayaç her
+çağrıda 1'den başladı, çakışma atlaması eleme yüzünden hiçbir şey göremedi ve **ikinci üründen
+itibaren her `POST /api/items` P2002 → `withBarcodeRetry` → yanıltıcı 409** verdi ("Barkod üretimi
+5 denemede başarısız"). Fabrika yeni ürün AÇAMAZ hâle geliyordu. Üstüne "sıradaki numara"
+önizlemesi BAŞKA bir yükleyiciden beslendiği için doğru değeri gösteriyordu — ayrışan yüzey.
+
+**Düzeltme.** Yüklem biçimden türetildi: `codeCountsForCounter(fmt, code)` = `matchesSeries`
+(yürürlükteki + emekli ön ekler + emekli biçimler) **+** biçimden BAĞIMSIZ 12 hane tavanı. Tavanın
+gerekçesi ayrıdır ve korundu: `parseInt` 13+ haneli bir kodu güvenli tam sayı sınırının üstüne
+taşır, orada `max + 1 === max` olur ve sayaç sessizce kilitlenir. Biçimi ikinci kez okumamak için
+`loadCodes` geri çağrısı artık `(fullPrefix, fmt)` alıyor — `nextSeriesNo` kendi çözdüğü biçimi
+geçiriyor ("iki okuma" sınıfı açılmadı). Önizleme de aynı süzgece bağlandı.
+
+**Tarama (1e sorusu: başka elle yazılmış, ön eke çakılı süzgeç var mı?).** Ölçüldü: `src/` altında
+kalan tek ön-ek-çapalı desen `ROLL_BARCODE_RE` ve o seri YAPISAL kilitli (ön eki zaten
+değişemez); `nextSeriesNo` yükleyicilerinde başka `filter` YOK. Yani sınıfın bilinen tek üyesi
+kapandı.
+
+**⭐ ASIL DERS — E3 MATRİSİNİN KÖR NOKTASI.** Matris 225 kontrolle yeşildi ama bu arızayı
+göremiyordu, çünkü (a)…(e) kolları biçimi yalnız BELLEKTE değiştiriyordu (`yeniFmt` ile
+`matchesSeries`): serinin GERÇEK biçimi hiç değişmiyor, üretecin kendi yükleyicisi yeni ön ekle
+hiç koşmuyordu. Üstelik arıza İKİNCİ kayıtta çıkıyor, matris ise dönüşümden sonra kayıt
+yaratmıyordu. Yeni **(f) kolu**: biçimi DB'de gerçekten değiştirir, İKİ kayıt yaratır, ikisinin
+TEKİL olduğunu ve sayacın İLERLEDİĞİNİ ölçer, sonra doğrudan yazmayla geri alır. Kapı 43 seride
+koşuyor; eksen kilidi yüzünden ön eki değiştirilemeyen 6 okutulan seride ÜÇÜNCÜ SONUÇ basıyor.
+Kontrol 225 → 369.
+⇒ *Bir dönüşümü ölçen matris, dönüşümden SONRA en az İKİ kayıt yaratmalı: birinci kayıt sayacın
+başlangıcını, ikinci kayıt İLERLEYİŞİNİ ölçer ve sayaç arızalarının çoğu yalnız ikincide görünür.*
+
+**Sonda (iki yönlü).** Eski sabit süzgeç geri konunca matris üretim belirtisinin TA KENDİSİNİ
+verdi ("Barkod üretimi 5 denemede başarısız"); düzeltme geri gelince 369/0. İlk sondada bekçi
+ÇÖKTÜ (belirti bir istisnaydı) — (f) kolu artık istisnayı kırmızı iddiaya çeviriyor, çünkü çöken
+bir sonda teardown'ı da düşürür ve artığı bir sonraki koşuma taşır.
+
 ## 2026-09-23 — Faz E kapanışı: kapı kendi kapanışını söyledi ve SİLİNDİ [ÇEKİRDEK]
 
 Faz E'nin (her seri özelleştirilebilir) bütün dilimleri indi; **SAYAÇ kilidi 13 → 0** ve
