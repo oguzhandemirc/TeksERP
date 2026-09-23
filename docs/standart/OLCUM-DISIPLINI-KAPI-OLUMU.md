@@ -93,6 +93,34 @@ engeller, **başlatılamayan kanca daima non-blocking**tir. Tek kalıcı koruma
 yapılandırmanın DOĞRULUĞUNU ölçmektir — `Teks-Erp/scripts/test_hook_config.ts`
 (`1e364f1b`), bugün bilerek kırmızı: `TEST-VE-DERLEME-SINIRLAR.md` §8.
 
+### ⑨ HEDEF BAYATLIĞI — dünya değişir, kapının elle seçtiği örnek bayatlar
+
+Bir kapı bir SINIFI korur ("kilitli seri düzenlenemez"), ama iddiasını o sınıfın ELLE
+SEÇİLMİŞ bir ÜYESİ üstünden kurar. Üye sınıftan çıktığı gün iddia ölçmeyi bırakır — ve bu
+İKİ YÖNDE de bozulur:
+- **sessiz körlük:** seçilen üye artık o sınıfın örneği değildir, iddia vakumen yeşildir;
+- **yanlış kırmızı:** korunan şey BAŞARILDIĞI için kapı kırmızı verir ve düzeltme isteyen
+  taraf, aslında hedefi tazelemek zorundadır.
+
+*(Ölçüldü 2026-09-23, tek günde BEŞ kez: `test_number_series_scope §4` hedefi üç kez elle
+başka bir seriye çekildi · `test_number_series_panel §1` ve `§3`ün örnekleri açıldı ·
+`test_config_bundle §9c` iş emrinin HANE eksenini kullanıyordu ve o eksen açıldığı gün
+"paket kapıyı dolanıyor" diye kırmızı verdi — oysa paket doğru davranıyordu. Beşincisi
+bir GERÇEK kusuru da gizliyordu: hedef tazelenince önizleme ile yazmanın ayrıştığı ortaya
+çıktı.)*
+
+⇒ **Hedef ELLE SEÇİLMEZ, KEŞİFLE BULUNUR:** kapı sınıfın bir üyesini çalışma anında
+kataloğdan/şemadan arar ve bulduğunu ÇIKTISINA YAZAR (`… (keşfedilen hedef: X)`), ki
+neyin ölçüldüğü koşumdan okunabilsin.
+⇒ **Üye kalmazsa sonuç ÜÇÜNCÜ HÂLDİR:** *ölçülemedi — iddia artık gözlemlenemiyor.*
+"Uyumlu" demek, ölçülmemiş bir şeyi ölçülmüş göstermek olurdu.
+⇒ **Kapanış koşulu böylece ÖLÇÜLEBİLİR olur:** kapı kendi gereksizleştiğini söyler. O
+noktada doğru hareket bölümü SİLMEKTİR — ama silmenin ön koşulu, korunan davranışı ölçen
+BAŞKA bir kapıyı adıyla göstermektir.
+⚠️ **Sonucu UYGULAYAN bir iddia bayatlarsa kalıcı VERİ de bırakır:** `§9c` reddedilmesini
+beklediği paket kalemini uyguladı ve iki ayrı test veritabanında seriyi 5 haneye taşıdı.
+Bu yüzden yazan her iddia, kapı bozukken yazdığını da ID ile geri alır.
+
 ## Yerel yeşil, BAŞKASININ commit edilmemiş düzeltmesi olabilir
 
 Bir commit kapısı **çalışma ağacını** okur; CI **HEAD'i** okur. Ortak ağaçta ikisi aynı

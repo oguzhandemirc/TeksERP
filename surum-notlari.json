@@ -27,6 +27,26 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Numaralandırma: artık BÜTÜN numara serileri Genel Ayarlar → Numaralandırma ekranından düzenlenebiliyor. Önceki sürümde yalnız birkaç seri açıktı; bu sürümle fatura, tahsilat, ödeme, kasa fişi, çek ve senet, çek teslim bordrosu, mutabakat mektubu, iş emri / refakat kartı, kartela kartı, fason ve kartela sevk/kabul belgeleri, doğrudan sevk ve doğrudan sevk dışındaki bütün belgeler de listede. Her seride ön ek, tarih bölümü, hane sayısı, iki ayraç, sayaç (başlangıç, adım, üst sınır) ve numara kaynağı ayrı ayrı ayarlanıyor. GEÇMİŞ ASLA YENİDEN NUMARALANMAZ: değişiklik yalnız bundan sonra doğan kayıtları etkiler, eski ön ek emekliye ayrılır ve eski barkodlar okunmaya devam eder. Ekran, kaydetmeden önce kaydetmeden önce önizlemeyi ve kaç kaydın numarasının değişmeyeceğini gösterir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Numaralandırma: barkotla okutulan seriler (top, çuval, iş emri / refakat kartı, kartela kartı, fason ve kartela sevk/kabul) artık TAMAMEN kilitli değil — yalnız eski panel ve tabletlerin okuyamayacağı ALANLAR kilitli. Örneğin kartela sevk belge numarasının tarih bölümü, hane sayısı ve ayraçları şimdi değiştirilebiliyor; yalnız ön eki kilitli. Kilitli alanın üstünde sebebi ve ne zaman açılacağı yazıyor: bu alanlar panel 1.3.2 ve tablet 1.0.8 ya da üstü bu bilgisayarlara ve tabletlere kurulunca açılır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Numaralandırma: bir serinin ön ekini değiştirdikten sonra ESKİ ön ekine geri dönülemiyordu (program, üretilecek kodun başka bir belgeyle karışacağını söyleyip reddediyordu). Artık serinin daha önce kullandığı ya da programla birlikte gelen biçimine geri dönülebiliyor; gerçekten yeni bir karışıklık doğuran biçimler yine reddediliyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Numaralandırma: ayar yedeğini (yapılandırma paketi) içe aktarırken önizleme bazı numara serileri için uygulanacak diyor, uygulama ise aynı kalemi reddediyordu. Önizleme artık uygulamayla aynı kontrollerden geçiyor; engellenecek kalem önizlemede de engellenmiş görünüyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Sevk partisi: Paketleme / Çuvallar ekranında cariyi seçince partiler liste olarak gelir (üstte özet kartları: açık parti, havuzdaki çuval/top/metraj/kg; ilk satır her zaman “Partisiz çuvallar (havuz)”). “Sevk Partisi Oluştur” diyorsunuz; parti boş açılır, çuvallar partinin içinde “Yeni Çuval” ile açılır ve her çuval parti içinde bir ambalaj numarası alır (1'den başlar; ayarla 0'dan başlatılabilir, elle yazılabilir ya da tamamen elle verilebilir). Partiden istediğiniz çuvalları seçip sevk edersiniz, kalanlar partide kalır; son çuvalı da gidince parti kendiliğinden “sevk edildi” olur, listeden düşer ve aynı ad/numara yeni bir partiye yeniden verilebilir. Sevk edilen çuvallar bu ekranda görünmez; carinin sevkiyatlarına “Sevkiyatlar” düğmesiyle geçilir. Partiler durum (Açık / Sevk edilmiş), ad/not araması ve başlık tıklamasıyla süzülüp sıralanır. Çuvalı başka partiye taşıyınca yeni numara alır; hiç çuvalı olmamış parti silinebilir. Genel Ayarlar’da “Paketleme grubu davranışı” ayarı “Sevk partisi” seçilince açılır (“Paketleme grubu” anahtarı da açık olmalı) — kapalıyken paketleme grubu bugünkü gibi çalışır. İsteğe bağlı: irsaliye ve çeki listesine parti adı + ambalaj no kolonu, çuval etiketine “Ambalaj No” ve “Sevk Partisi” alanı. Yeni yetki: “Sevk partisi silebilir, ambalaj no ezebilir” (Depo & Sevkiyat rolünde). Tablet bu sürümde partiyi grup gibi görüp seçer."
         },
         {

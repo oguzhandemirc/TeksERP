@@ -117,8 +117,13 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
 
         {/* ⚠️ KİLİTLİ SERİDE ALANLAR GİZLENMEZ, PASİFLEŞİR (d3/1e kararı
             2026-09-23): kullanıcı bugünkü biçimi ve neyin ne zaman açılacağını
-            görmeli. Cümle SUNUCUDAN gelir — panel kendi gerekçesini yazmaz. */}
-        {!row.editable && row.lockKind && (
+            görmeli. Cümle SUNUCUDAN gelir — panel kendi gerekçesini yazmaz.
+            ⚠️ KISMİ KİLİTTE DE GÖSTERİLİR (K25, 2026-09-23): eksen kilidinde
+            satır `editable` olduğu için cümle HİÇ çizilmiyordu — kullanıcı pasif
+            bir alan görüyor, sebebini yalnız TABLO rozetinde bulabiliyordu.
+            Sebebin alanın YANINDA olması, hata mesajının alanın yanında olmasıyla
+            aynı kuraldır. */}
+        {row.lockKind && (!row.editable || (row.lockedAxes?.length ?? 0) > 0) && (
           <p className="rounded-md border p-3 text-sm text-muted-foreground">{lockSentence(row)}</p>
         )}
         <NumberingFields

@@ -229,6 +229,23 @@ export const SCANNED_CLIENT_BREAKING_AXES: Record<string, SeriesFormatAxis[]> = 
   kartelaReceipt: ["prefix"],
 };
 
+/**
+ * EŞİĞİN ÜSTÜNDEKİ İLK SÜRÜM — kullanıcıya SÖYLENEN sayı.
+ *
+ * ⚠️ EŞİK ile SÖYLENEN SAYI aynı şey DEĞİL: eşik "bu yeteneği taşımayan SON sürüm"dür
+ * (`FAZ_B_ONCESI`), yani karşılaştırma `> esik` ile yapılır. Ama ekranda "1.0.7
+ * sürümünün üstüne çıkın" yazmak kullanıcıyı yanıltır — o sürüm hiç yayınlanmadı ve
+ * kurulacak sürüm 1.0.8'dir (d3 ölçümü 2026-09-23). Mantık eşikte kalır, CÜMLE
+ * kurulabilir sürümü söyler.
+ */
+export function firstVersionAbove(surum: string): string {
+  const parcalar = surum.split(".");
+  const son = Number.parseInt(parcalar[parcalar.length - 1] ?? "", 10);
+  if (!Number.isFinite(son)) return surum; // tanınmayan biçim: olduğu gibi bırak
+  parcalar[parcalar.length - 1] = String(son + 1);
+  return parcalar.join(".");
+}
+
 /** Sürüm karşılaştırması — SAYISAL, sözlüksel değil ("1.3.10" > "1.3.9"). */
 export function compareClientVersions(a: string, b: string): number {
   const pa = a.split(".").map((n) => Number.parseInt(n, 10) || 0);

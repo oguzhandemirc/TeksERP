@@ -220,6 +220,20 @@ kırmızı veriyordu — arıza, onu üreten bölümde görünmüyordu.)*
 koşum damgası), duruma göre değil. Yan etkisi olan her bölüm, değiştirdiği DURUMU
 da (damga, bayrak, ayar) geri yükler.
 
+**Kardeş hâl — REDDEDİLMESİNİ beklediğin bir işlemi UYGULAYAN iddia da yazabilir.** "Kapı
+bunu zaten reddedecek, geri alacak bir şey yok" yanlış bir muhakemedir: ölçülen şey tam
+da kapının çalışması olduğuna göre, kapı bozukken iddia GERÇEKTEN yazar.
+*(Ölçüldü 2026-09-23: yapılandırma paketi kapısının bayat hedefi, reddedilmesi beklenen
+kalemi uyguladı ve İKİ ayrı test veritabanında seriyi 5 haneye taşıdı + zaman çizgisine
+satır düşürdü; arıza sonraki koşumlarda ilgisiz bir bölümde göründü.)*
+⇒ Sonucu uygulayan her iddia, koşum ÖNCESİ durumu (kolonlar + satır id'leri) toplar ve
+sonunda ID İLE geri alır; geri almanın kendisi de ayrı bir iddiayla ölçülür.
+
+**Kardeş hâl — SABİT KİMLİKLİ fikstür kendi artığına da dayanıklı olmalı.** Kodu/adı
+koşumdan koşuma DEĞİŞMEYEN bir fikstür (`…0009` gibi) çökmüş bir koşumdan kalırsa,
+sonraki koşum `@unique` ihlaliyle ve ölçtüğü şeyle İLGİSİZ bir sebepten düşer.
+⇒ Böyle bir fikstür kurulmadan önce kendi kimliğini siler.
+
 ### Fikstürünü kendi kuran bekçi, KURDUĞUNU da ölçmek zorundadır
 Bir ORM'in `data` nesnesindeki `undefined` **sessizce atılır**: alan hiç yazılmaz, hata
 çıkmaz, satır oluşur. Fikstür adımı **hiç çalışmadan** yeşil görünür.
@@ -231,6 +245,16 @@ koşmadı ve senaryo ÖLÇÜLMEMİŞ olarak yeşil kalacaktı.)* *(6e)*
 
 **Savunma: pozitif kontrol** — bu vakayı yakalayan tek şey oydu. Fikstür kurulduktan
 sonra kurulanı GERİ OKU ve beklediğin değerde olduğunu ölç; yazdığını varsayma.
+
+### Kaynağı tarayan bir yüklem KODU ölçer, kuralın ANLATIMINI değil
+Bir kural metinle de anlatılır: yorumlar, belge satırları, commit mesajları. Ham metinde
+desen arayan bir tarayıcı bunları da sayar ve sonuç TERSİNE döner — *kuralı en iyi
+belgeleyen dosya, en çok ihlal eden dosya görünür.*
+*(Ölçüldü 2026-09-23: numara serisi üreteç tarayıcısı ilk yazımında ÜÇ yanlış kırmızı
+verdi; üçü de kuralın kendisini anlatan yorum cümleleriydi — "…`seriesPrefix()` değil
+`fmt.prefix`" diyen satır ve silinmiş sarmalayıcıları anan not.)*
+⇒ Tarayıcı, ölçmeden önce yorumları ve blok açıklamalarını SOYAR; aynı sebeple dize
+literallerini de (bir yasak desenin ÖRNEĞİ, o deseni kullanmak değildir).
 
 ### Bir ortamı TARİF etmek, onu ARAMAK değildir
 Bir ortam şartı yazdığın an ikinci soru ZORUNLUDUR: *"bu şartı bugün sağlayan bir hat
