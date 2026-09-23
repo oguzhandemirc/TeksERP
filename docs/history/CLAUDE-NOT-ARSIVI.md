@@ -11917,3 +11917,21 @@ ifadesiydi, o sıra da korundu.
 "tezgah/levent/çözgü zinciri ister" gerekçesiyle beyanlı — ⚠️ bu gerekçe bugün iki kez yanlış çıktı
 (manifest ve mal kabul), bu yüzden sıradaki turda ÖLÇÜLECEK, tahmin edilmeyecek.
 
+
+## 2026-09-23 — K26: modül kapısı konuma değil KORUDUĞU ROTAYA bakar [ÇEKİRDEK]
+
+**Belirti (d3, 49 serilik kabul özet koşumu).** Cari serisinin ikinci yolunda finans kapatılıp panel yenilendi. Önceki adımlarda açılmış Faturalar, Çek / Senet ve Kasa Hareketleri sekmeleri 8–12 finans isteği attı ve hepsi 403 `MODULE_DISABLED` aldı. Ekranda 12 kez "Bu işlem için yetkiniz bulunmuyor" çıktı; sebep yetki değil kapalı modüldü.
+
+**Kök neden, ölçülerek bulundu.** Ölçüm e2e sondasıyla yapıldı: CDP başlatıcı yığını + geçici `console.warn` izleri.
+1. Bayrak yanıtı `financeEnabled:false` ile geldi ve `ProtectedRoute` üç sekmede de modül reddini verdi.
+2. Kapı `/forbidden`a yönlendirdi.
+3. Yönlendirme geçişinde ESKİ rota öğesi, yani `ProtectedRoute` + sayfa, YENİ konumla (`/forbidden`) bir kez daha çizildi.
+4. Kapı modülü `useLocation().pathname`den çözüyordu. `"/forbidden"`ın modülü olmadığı için kapı AÇILDI, sayfa bağlandı ve sorgular gitti (`InvoicesPage` konum `/forbidden` iken 3+ kez çizildi).
+
+**Düzeltme.**
+- Modül ve rapor kapısı `useResolvedPath(".")` ile korunan rotanın kendi yolunu okur.
+- `/forbidden`a `state.reason:"module"` taşınır; sayfa "Modül kapalı" der.
+- apiClient 403 `MODULE_DISABLED`'da backend cümlesini basar ve aynı mesaj tek toast'ta birleşir.
+- Sonda: önce 8×403, sonra 0 finans isteği; sekmeler "Modül kapalı" gösteriyor.
+
+**Genel ders.** Yönlendirme yapan bir kapı kararını "şu an nerede olduğundan" değil "neyi koruduğundan" türetir. Yoksa kendi yönlendirmesinin geçiş çiziminde kendini açar.

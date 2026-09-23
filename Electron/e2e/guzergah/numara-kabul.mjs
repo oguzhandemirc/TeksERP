@@ -443,23 +443,35 @@ const kalip = (r) => new RegExp(`^${esc(String(r.preview).slice(0, -r.digits))}\
 if (process.env.K26_SONDA === "1") {
   const olay = [];
   const t0 = Date.now();
-  const dinle = (r) => { const u = r.url(); if (/\/api\/(finance\/|feature-flags)/.test(u)) olay.push({ ms: Date.now() - t0, tur: r.status ? "yanıt" : "istek", url: u.replace(ortam.apiUrl, ""), status: r.status ? r.status() : null }); };
+  const konsolIz = []; page.on("console", (m) => { if (m.text().startsWith("K26IZ")) konsolIz.push(`${Date.now() - t0} ${m.text()}`); });
+  const dinle = (r) => {
+    const u = r.url(); if (!/\/api\/(finance\/|feature-flags)/.test(u)) return;
+    const o = { ms: Date.now() - t0, tur: r.status ? "yanıt" : "istek", url: u.replace(ortam.apiUrl, ""), status: r.status ? r.status() : null };
+    olay.push(o);
+    if (r.status && /feature-flags$/.test(u)) r.json().then((j) => { o.financeEnabled = j?.data?.financeEnabled; }).catch(() => undefined);
+  };
   for (const sayfa of ["Faturalar", "Çek / Senet", "Kasa Hareketleri"]) await gitSayfa(sayfa);
   await gitSayfa("Anasayfa");
   const once = (await sistemApi("/api/feature-flags")).govde?.data?.financeEnabled;
   try {
     page.on("request", dinle); page.on("response", dinle);
+    const cdp = await page.context().newCDPSession(page).catch(() => null);
+    const baslatan = [];
+    const cdpKur = async (c) => { if (!c) return; await c.send("Network.enable"); await c.send("Debugger.enable"); await c.send("Debugger.setAsyncCallStackDepth", { maxDepth: 64 }); c.on("Network.requestWillBeSent", (ev) => { if (/\/api\/finance\//.test(ev.request.url)) baslatan.push({ url: ev.request.url.replace(ortam.apiUrl, ""), tip: ev.initiator?.type, yigin: (() => { const out = []; for (let st = ev.initiator?.stack; st && out.length < 80; st = st.parent) { if (st.description) out.push(`— ${st.description} —`); for (const f of st.callFrames ?? []) out.push(`${f.functionName || "?"}@${f.url.split("/").pop()}:${f.lineNumber}`); } return out; })() }); }); };
+    await cdpKur(cdp);
     const kapat = await sistemApi("/api/feature-flags", { method: "PATCH", headers: sifreBasligi, body: JSON.stringify({ financeEnabled: false }) });
     olay.push({ ms: Date.now() - t0, tur: "PATCH finans=false", status: kapat.status });
     await page.reload(); olay.push({ ms: Date.now() - t0, tur: "reload bitti" });
+    const sekmeDefteri = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).filter((k) => /tab/i.test(k)).map((k) => [k, localStorage.getItem(k)?.slice(0, 1500)])));
     await page.waitForTimeout(6000);
     const sekmeler = await page.locator(".tab-pane").count();
+    const panelar = await page.locator(".tab-pane").evaluateAll((els) => els.map((e) => (e.textContent ?? "").replace(/\s+/g, " ").slice(0, 160)));
     const seritler = await page.getByRole("tab").allInnerTexts().catch(() => []);
     await gitSayfa("Anasayfa"); await page.waitForTimeout(3000);
     olay.push({ ms: Date.now() - t0, tur: "sekme değişimi sonrası" });
     const toastlar = await page.locator("[data-sonner-toast]").allInnerTexts().catch(() => []);
     await gor("K26", "sonda");
-    fs.writeFileSync(path.join(CIKTI, "k26-sonda.json"), JSON.stringify({ olay, sekmeler, seritler, toastlar }, null, 2));
+    fs.writeFileSync(path.join(CIKTI, "k26-sonda.json"), JSON.stringify({ konsolIz, olay, sekmeler, panelar, seritler, toastlar, baslatan, sekmeDefteri }, null, 2));
     console.log(`K26 sondası: ${olay.length} olay, ${olay.filter((o) => o.status === 403).length}×403, sekme ${sekmeler}, toast ${toastlar.length} → k26-sonda.json`);
   } finally {
     page.off("request", dinle); page.off("response", dinle);
