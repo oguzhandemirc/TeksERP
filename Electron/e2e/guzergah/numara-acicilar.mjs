@@ -531,7 +531,7 @@ export function acicilarKur(c) {
         return { name: `TEST-E5 Özellik ${K()}`, stationIds: [dur.ozellikIstasyonu] };
       },
     }),
-    item: kod({ tablo: "items", uc: "/api/items", sayfa: "Ürünler", arama: /Kod veya ad ara/, yeniOnEk: "STKZ", panel: { sayfa: "Ürünler" } }),
+    item: { ...kod({ tablo: "items", uc: "/api/items", sayfa: "Ürünler", arama: /Kod veya ad ara/, yeniOnEk: "STKZ", panel: { sayfa: "Ürünler" } }), ardisik: 3 },
     color: kod({ tablo: "colors", uc: "/api/colors", sayfa: "Renkler", arama: /Kod veya ad ara/, yeniOnEk: "RNKZ", panel: { sayfa: "Renkler" } }),
     station: kod({ tablo: "stations", uc: "/api/stations", govde: () => ({ name: `TEST-E5 İstasyon ${K()}`, type: "INTERNAL" }), sayfa: "Üretim İstasyonları", arama: /İstasyon \/ makine ara/, yeniOnEk: "ISTZ" }),
     machine: kod({

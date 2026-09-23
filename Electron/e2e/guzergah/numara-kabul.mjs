@@ -544,6 +544,29 @@ for (const r of hepsi) {
       siradaki: siradakiEkranda && siradakiEkranda !== "—" ? { ekranda: siradakiEkranda, tutar: siradakiEkranda === k.numara } : "ölçülmedi",
     };
 
+    // ARDIŞIK KAYIT (A.ardisik = N): biçim değiştikten sonra N kayıt arka arkaya; her birinden ÖNCE
+    // diyaloğun "Sıradaki numara" kaynağı (preview ucu) okunur. Tek kayıt, sayaç süzgecinin kör noktasını
+    // göremez (K27: ön ek değişince ilk kayıt doğuyor, ikinciden itibaren 409).
+    if (kip === "tam" && A.ardisik > 1) {
+      ag.adim(`${on} · ardışık ${A.ardisik} kayıt`);
+      const s0 = await seri(r.key);
+      const fmt = { prefix: s0.prefix, dateSegment: s0.dateSegment, digits: s0.digits, separator: s0.separator ?? "", ...(s0.separator2 ? { separator2: s0.separator2 } : {}) };
+      const liste = [{ numara: k.numara, siradakiOnce: kayit.adimlar.kayit.siradaki?.ekranda ?? null }];
+      for (let i = 1; i < A.ardisik; i++) {
+        const pv = (await api("/api/number-series/preview", { method: "POST", body: JSON.stringify({ key: r.key, ...fmt }) })).govde?.data?.next ?? null;
+        const kk = await A.ac(dur);
+        liste.push({ numara: kk.numara, siradakiOnce: pv });
+      }
+      const sayi = (n) => Number(String(n ?? "").match(/(\d+)$/)?.[1] ?? NaN);
+      const nums = liste.map((x) => x.numara);
+      kayit.adimlar.ardisik = {
+        liste,
+        tekil: new Set(nums).size === nums.length && nums.every(Boolean),
+        ardisik: nums.every((n, i) => i === 0 || sayi(n) === sayi(nums[i - 1]) + 1),
+        siradakiTutar: liste.every((x) => x.siradakiOnce === null || x.siradakiOnce === x.numara) && liste.slice(1).every((x) => x.siradakiOnce !== null),
+      };
+    }
+
     ag.adim(`${on} · ekran`);
     kayit.adimlar.ekran = await A.ekran(dur, k, eski).catch((e) => ({ hata: String(e.message ?? e).split("\n")[0] }));
     kayit.gorsel.push(await gor(r.key, "ekran"));
@@ -626,7 +649,9 @@ for (const r of hepsi) {
     const belgeTamam = kayit.adimlar.belge.uygulanmaz || kayit.adimlar.belge.belgedeVar === true;
     const agTemiz = Object.values(agKayitlari(on)).every((l) => l.length === 0);
     const bicimTamam = kip === "tam" ? kayit.adimlar.bicim.kapandi : true;
-    kayit.sonuc = bicimTamam && kayit.adimlar.kayit.kalibaUyar && ekranTamam && belgeTamam && geriTamam && kayit.adimlar.eskiNumaralarAyni && agTemiz && varyantTamam && yururlukTamam && ikinciYolTamam && okutmaTamam && kilitTamam ? "✓" : "✗";
+    const ard = kayit.adimlar.ardisik;
+    const ardisikTamam = !ard || (ard.tekil && ard.ardisik && ard.siradakiTutar);
+    kayit.sonuc = bicimTamam && kayit.adimlar.kayit.kalibaUyar && ekranTamam && belgeTamam && geriTamam && kayit.adimlar.eskiNumaralarAyni && agTemiz && varyantTamam && yururlukTamam && ikinciYolTamam && okutmaTamam && kilitTamam && ardisikTamam ? "✓" : "✗";
   } catch (e) {
     kayit.sonuc = "✗"; kayit.hata = String(e?.message ?? e).split("\n")[0].slice(0, 300);
     kayit.hataAyrinti = String(e?.message ?? e).slice(0, 1500); // Playwright çağrı günlüğü: hangi locator, neden
