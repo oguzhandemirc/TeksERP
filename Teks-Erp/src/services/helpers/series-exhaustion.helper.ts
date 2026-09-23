@@ -22,7 +22,7 @@
 import { NUMBER_SERIES_CATALOG, numberSeriesCatalogEntry } from "../../constants/number-series-catalog";
 import prisma from "../../lib/prisma";
 import { resolveSeriesFormat, seriesUsedMaxFrom } from "../number-series.service";
-import { MAX_ROLL_SEQ, rollBarcodePrefix } from "./roll-barcode.helper";
+import { ddmmyy } from "../../utils/code-format";
 import { seriesPrefix } from "./series-format.helper";
 
 /** %90 ve üstü uyarı üretir. Eşik burada, iki yüzey de buradan okur. */
@@ -49,15 +49,27 @@ export interface SeriesExhaustion {
  * (gün+tip başına 9.999) ve dolduğunda üretim durur.
  */
 async function rollExhaustion(label: string, at: Date): Promise<SeriesExhaustion> {
-  const gun = rollBarcodePrefix("H", at).slice(1, 7);
+  // Gün anahtarı sayaç tablosunun kendi biçimidir (`ddmmyy`) — ön ek serisiyle
+  // değişmez, bu yüzden `rollBarcodePrefix`ten DEĞİL doğrudan tarihten okunur.
+  // (Ön ek panelden `RL` olsaydı `slice(1, 7)` yanlış altı karakteri keserdi.)
   const rows = await prisma.rollBarcodeCounter.findMany({
-    where: { day: gun },
+    where: { day: ddmmyy(at) },
     select: { type: true, n: true },
   });
   const used = rows.reduce((m, r) => (r.n > m ? r.n : m), 0);
-  const percent = used / MAX_ROLL_SEQ;
+  // ⚠️ PAYDA SERİNİN ÜST SINIRI, hane DEĞİL (D2③). `maxValue` boşsa sınır yoktur
+  // ve yüzde ÖLÇÜLEMEZ — "%0" demek "bolca yer var" diye okunur ve yanlıştır;
+  // üçüncü sonuç gerekçesiyle döner.
+  const limit = resolveSeriesFormat("roll").maxValue ?? null;
+  if (limit === null) {
+    return {
+      key: "roll", label, limit: null, used, percent: null, warn: false, source: "rollCounter",
+      reason: `Bu seride üst sınır tanımlı değil; bugün ${used} numara kullanıldı, tükenme oranı hesaplanamaz.`,
+    };
+  }
+  const percent = used / limit;
   return {
-    key: "roll", label, limit: MAX_ROLL_SEQ, used, percent,
+    key: "roll", label, limit, used, percent,
     warn: percent >= EXHAUSTION_WARN_RATIO, source: "rollCounter",
   };
 }

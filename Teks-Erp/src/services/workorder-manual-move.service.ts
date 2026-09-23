@@ -18,6 +18,7 @@
 // workorder-split.service.ts (redye rewind + repoint + recompute).
 // =============================================================================
 
+import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
@@ -227,7 +228,7 @@ export class WorkOrderManualMoveService {
         batch: { select: { batchNumber: true, workOrderId: true } },
         currentStep: { select: { station: { select: { name: true } } } },
       },
-      orderBy: [{ barcode: "asc" }, { createdAt: "asc" }],
+      orderBy: ROLL_DISPLAY_ORDER,
     });
 
     // Cross-WO koruması: her top bu WO'ya ait olmalı.

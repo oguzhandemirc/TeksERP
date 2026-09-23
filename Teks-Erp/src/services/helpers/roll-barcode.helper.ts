@@ -1,6 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { ddmmyy } from "../../utils/code-format";
+import { resolveSeriesFormat } from "../number-series.service";
+import { formatSeriesCode, seriesPrefix } from "./series-format.helper";
 
 /**
  * Kısa top barkodu: `T` + `GGAAYY` + tip(`H`|`F`) + sıra(`NNNN`, 4 hane).
@@ -16,16 +18,42 @@ import { ddmmyy } from "../../utils/code-format";
  *   başlar. Sıralı olduğu için **sunucu** üretir (offline istemci üretemez —
  *   idempotency ayrı `Roll.clientToken` ile).
  */
+/**
+ * ⚠️ TOHUM BİÇİMİN regex'i — ARTIK TEK GERÇEK DEĞİL, yalnız bugünkü varsayılanın
+ * yazılı hâli. Biçim 2026-09-23'te `roll` serisine (veriye) taşındı; "bu kod bu
+ * seriye uyuyor mu" sorusunun tek cevabı `matchesSeries(resolveSeriesFormat("roll"), kod)`.
+ * Bu sabit yalnız TOHUMU belgeleyen ve eski kodları tanıyan bekçiler için kaldı.
+ */
 export const ROLL_BARCODE_RE = /^T\d{6}[HF]\d{4}$/;
 
 export type RollBarcodeType = "H" | "F";
 
-/** Gün+tip başına toplam kapasite (0001..9999). */
+/**
+ * TOHUM kapasite — `roll` serisinin `maxValue` TOHUMU (bugünkü davranış: 9999/gün/tip).
+ *
+ * ⚠️ ARTIK KAPASİTENİN KENDİSİ DEĞİL: kapasite serinin `maxValue`sundan okunur
+ * (`rollSeqCapacity`). Ayrım D2③'ün ta kendisi — **hane DOLGUDUR, KAPASİTE
+ * DEĞİLDİR**: fabrika dolguyu kaldırıp (`digits: 1`) `T230926H5` yazdırabilir ve
+ * sınır yine 9999 kalır. Kapasiteyi haneden türetmek (`10**digits - 1`) dolgusuz
+ * seride sınırı 9'a düşürür ve onuncu topta üretimi durdururdu.
+ */
 export const MAX_ROLL_SEQ = 9999;
+
+/**
+ * Gün+tip başına kapasite — serinin ÜST SINIRI. `maxValue` boşsa SINIR YOKTUR
+ * (sayaç `Int`, barkod kolonu `VarChar(64)` — ikisi de günlük üretimin çok
+ * üstünde; ölçüldü 2026-09-23).
+ */
+export function rollSeqCapacity(): number | null {
+  return resolveSeriesFormat("roll").maxValue ?? null;
+}
 
 /** Gün+tip barkod prefix'i (sıra kuyruğu hariç): `T{GGAAYY}{H|F}`. */
 export function rollBarcodePrefix(type: RollBarcodeType, date: Date = new Date()): string {
-  return `T${ddmmyy(date)}${type}`;
+  // ⚠️ ÖN EK ve TARİH artık SERİDEN: literal yazmak, ön ek panelden değişince
+  // sayacı ve süzgeci kör eder (K27'nin düştüğü tuzak). Faz harfi seriye ait
+  // DEĞİL — `infix` olarak katalogda yaşar ve panelden düzenlenemez.
+  return `${seriesPrefix(resolveSeriesFormat("roll"), date)}${type}`;
 }
 
 /**
@@ -87,12 +115,17 @@ export async function reserveRollBarcodesTx(
   `;
   const last = Number(rows[0]?.n ?? 0);
   const first = last - count + 1;
-  if (first < 1 || last > MAX_ROLL_SEQ) {
+  const fmt = resolveSeriesFormat("roll");
+  const kapasite = fmt.maxValue ?? null;
+  if (first < 1 || (kapasite !== null && last > kapasite)) {
     throw AppError.conflict(
-      `Bu gün için ${type} top barkod sırası doldu (${MAX_ROLL_SEQ}). Yarın 0001'den başlar.`,
+      `Bu gün için ${type} top barkod sırası doldu (${kapasite}). Yarın ${formatSeriesCode(fmt, 1, date).slice(-fmt.digits)}'den başlar.`,
     );
   }
-  return Array.from({ length: count }, (_, i) => `T${day}${type}${String(first + i).padStart(4, "0")}`);
+  // ⚠️ DOLGU SERİDEN (`digits`), literal DEĞİL: fabrika dolguyu kaldırınca
+  // (`digits: 1`) kod `T230926H5` olur ve bu bir ÖZELLİKTİR (kullanıcı isteği
+  // 2026-09-23). Kapasite bundan etkilenmez — onu `maxValue` belirler.
+  return Array.from({ length: count }, (_, i) => `${seriesPrefix(fmt, date)}${type}${String(first + i).padStart(fmt.digits, "0")}`);
 }
 
 /**

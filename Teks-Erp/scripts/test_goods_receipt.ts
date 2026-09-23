@@ -71,6 +71,7 @@
 //     kümesine döndürüldü → exit 1, I2b/I2c kırmızı (cancelledRolls=1,
 //     uçuştaki top WAREHOUSE kaldı — yarım iptal).
 // =============================================================================
+import { rollBarkoduMu } from "./lib/roll-barcode-assert";
 import {
   GoodsReceiptStatus,
   ItemType,
@@ -1162,7 +1163,7 @@ async function main(): Promise<void> {
     );
     check(
       "L1b) Barkod tipi statüden türer — satılabilir girişte 'F'",
-      /^T\d{6}F/.test(lDefaultRolls[0]?.barcode ?? ""),
+      rollBarkoduMu(lDefaultRolls[0]?.barcode, "F"),
       lDefaultRolls[0]?.barcode ?? "—",
     );
     const lFalse = await goodsReceiptService.create({
@@ -1200,7 +1201,7 @@ async function main(): Promise<void> {
     // bu oldu ve bayrak sızıntısını gizledi).
     check(
       "L2b) ⭐ Ham girişte barkod tipi 'H' (etiket de doğru şeyi söyler)",
-      lRawRolls.length === 2 && lRawRolls.every((r) => /^T\d{6}H/.test(r.barcode ?? "")),
+      lRawRolls.length === 2 && lRawRolls.every((r) => rollBarkoduMu(r.barcode, "H")),
       lRawRolls.map((r) => r.barcode).join(","),
     );
     check(

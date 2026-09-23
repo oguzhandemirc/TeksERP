@@ -14,6 +14,7 @@
 // içinde yine her top için doğrular (kapı orada).
 // =============================================================================
 
+import { ROLL_DISPLAY_ORDER } from "../../constants/roll-order";
 import { OrderStatus, Prisma, RollStatus, ShipmentStatus } from "@prisma/client";
 
 import prisma from "../../lib/prisma";
@@ -63,7 +64,7 @@ const SACK_SELECT = {
   sackNo: true,
   packageNo: true,
   packingGroup: { select: { id: true, name: true } },
-  rolls: { where: { status: RollStatus.SHIPPED }, orderBy: { barcode: "asc" as const }, select: ROLL_SELECT },
+  rolls: { where: { status: RollStatus.SHIPPED }, orderBy: ROLL_DISPLAY_ORDER, select: ROLL_SELECT },
 } as const;
 
 type RollRow = Prisma.RollGetPayload<{ select: typeof ROLL_SELECT }>;

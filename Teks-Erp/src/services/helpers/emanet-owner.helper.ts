@@ -15,6 +15,7 @@
 //      Aynı soruyu sevk ÖNİZLEMESİ de sorar (`findOwnerMismatches`, red değil uyarı + `ownerMismatches[]`) —
 //      yüklem TEK yerde yaşar ki önizleme "geçer" derken dispatch 409 vermesin.
 // =============================================================================
+import { ROLL_DISPLAY_ORDER } from "../../constants/roll-order";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { readEmanetEnabled } from "../system-setting.service";
@@ -77,7 +78,7 @@ export async function findOwnerMismatches(
   const clash = await db.roll.findMany({
     where: { OR: scope, ownerCustomerId: { not: null }, ...(input.customerId ? { NOT: { ownerCustomerId: input.customerId } } : {}) },
     select: { barcode: true, ownerCustomer: { select: { name: true } } },
-    orderBy: { barcode: "asc" },
+    orderBy: ROLL_DISPLAY_ORDER,
   });
   return clash.map((r) => ({ barcode: r.barcode, owner: r.ownerCustomer?.name ?? null }));
 }

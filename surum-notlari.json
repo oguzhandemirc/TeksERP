@@ -27,6 +27,12 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Top barkodu artık Genel Ayarlar → Numaralandırma ekranından ayarlanıyor: ön ek, tarih bölümü, hane sayısı ve ayraçlar değiştirilebiliyor. HİÇBİR ŞEY DEĞİŞMEDEN AYNI ÇALIŞIR — kurulum bugünkü düzenle gelir. İki yenilik var. Birincisi GÜNLÜK KAPASİTE: bugüne kadar bir günde aynı türden en çok 9.999 top barkodu üretilebiliyordu ve bu sınır yazılıma gömülüydü; artık serinin “üst sınır” ayarı ve gerektiğinde yükseltilebiliyor (boş bırakılırsa sınır kalkar). İkincisi BAŞTAKİ SIFIRLAR: hane sayısını 1 yaparsanız numara dolgusuz büyür (…H5, …H10, …H100) — sıfırlar yazılmaz. Hane yalnız GÖRÜNÜMDÜR; kapasiteyi üst sınır belirler, ikisi birbirinden bağımsızdır. ⚠️ Ön ek, tarih bölümü, hane ve ayraç değişiklikleri sahadaki eski panel ve tabletlerin barkodu okumasını bozar; bu alanlar panel ve tabletler güncellenene kadar kilitli kalır ve ekran sebebini yazar. Tarih bölümü tamamen kaldırılamaz: top barkodunda ham/final harfi var ve tarih kalkınca kod okuyucunun ayırt edemeyeceği bir şekle giriyor. GEÇMİŞ ASLA YENİDEN NUMARALANMAZ; basılmış etiketler okunmaya devam eder.",
+          "dene": "Genel Ayarlar → Numaralandırma → “Top barkodu” satırını açın: sayaç bölümünde üst sınırın 9999 olduğunu görün, hane sayısını 1 yapıp örnek numaranın dolgusuz hâle geldiğini izleyin, sonra geri alın."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Parti numarasının kısa biçimi (bugün P01'den P99'a gidip başa dönen plaka düzeni) artık Genel Ayarlar → Numaralandırma ekranından ayarlanıyor: “Parti no (kısa, dönen)” serisinde ön ek, hane sayısı, başlangıç, üst sınır ve “Üst sınıra varınca başa dön” seçeneği ayrı ayrı değiştirilebiliyor. HİÇBİR ŞEY DEĞİŞMEDEN AYNI ÇALIŞIR: kurulum bugünkü düzenle gelir (P, iki hane, 1–99, başa dönme açık) ve fabrikanın plaka seti değişmedikçe dokunmanıza gerek yok. Plakalar değişirse ayarı siz güncellersiniz. Parti numarası hâlâ benzersiz DEĞİLDİR ve başa döndüğünde tekrar eder — partinin kimliği numara değil kaydın kendisidir; eski partiler yeniden numaralanmaz. Uzun biçim (bayrak kapalıyken kullanılan “Parti no (günlük biçim)” serisi) de artık düzenlenebilir; önceden kilitliydi.",
           "dene": "Genel Ayarlar → Numaralandırma → “Parti no (kısa, dönen)” satırını açın: üst sınırı 99 yerine 50 yapıp kaydedin, aynı ekrandaki “Sıradaki numara” örneğinin değiştiğini görün; sonra 99'a geri alın."
         },

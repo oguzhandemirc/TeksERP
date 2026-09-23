@@ -64,6 +64,7 @@
 //    `updateSeriesFormat`ın başına alındı; `assertSeriesFormatAllowed`taki kopya
 //    KALDI çünkü önizleme yolu yalnız oradan geçiyor.
 // =============================================================================
+import { rollBarkoduMu } from "./lib/roll-barcode-assert";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -216,13 +217,27 @@ async function main(): Promise<void> {
         ikisiDe instanceof Error ? (kod(ikisiDe) ?? ikisiDe.message) : "KABUL EDİLDİ");
     }
 
-    // `roll`: YAPISAL kilit + sayaç beyanı yok + okutulan. En önce YAPISAL.
-    const ucuBirden = await dene(() =>
-      updateSeriesFormat("roll", { prefix: "T", dateSegment: "DDMMYY", digits: 4, separator: "" }),
+    // ⚠️ `roll` 2026-09-23'te YAPISAL kilitten ÇIKTI (kilit eksene indi) ⇒ sıradaki
+    // engel İSTEMCİ. Kapı sırası iddiası ölmedi, ÖRNEĞİ değişti: yapısal kilitli
+    // seri kalmadığı için o kol artık ölçülemez ve bunu SÖYLER.
+    const yapisalOrnek = NUMBER_SERIES_CATALOG.find((e) => e.lockedReason);
+    if (!yapisalOrnek) {
+      console.log("⏭️  §1 YAPISAL kolu ÖLÇÜLEMEDİ — yapısal kilitli seri kalmadı (hepsi eksene indi).");
+    } else {
+      const ucuBirden = await dene(() =>
+        updateSeriesFormat(yapisalOrnek.key, { prefix: "T", dateSegment: "DDMMYY", digits: 4, separator: "" }),
+      );
+      check(`§1 ⭐ üç engel birlikteyken YAPISAL kilit konuşur — ${yapisalOrnek.key}`,
+        ucuBirden instanceof Error && kod(ucuBirden) === "NUMBER_SERIES_LOCKED",
+        ucuBirden instanceof Error ? (kod(ucuBirden) ?? ucuBirden.message) : "KABUL EDİLDİ");
+    }
+    // `roll` artık istemci kilidiyle konuşuyor — eksenleri ölçüldü (yedi eksen).
+    const rollIstemci = await dene(() =>
+      updateSeriesFormat("roll", { prefix: "TP", dateSegment: "DDMMYY", digits: 4, separator: "" }),
     );
-    check("§1 ⭐ üç engel birlikteyken YAPISAL kilit konuşur",
-      ucuBirden instanceof Error && kod(ucuBirden) === "NUMBER_SERIES_LOCKED",
-      ucuBirden instanceof Error ? (kod(ucuBirden) ?? ucuBirden.message) : "KABUL EDİLDİ");
+    check("§1 ⭐ `roll` yapısal değil İSTEMCİ kilidiyle konuşuyor",
+      rollIstemci instanceof Error && kod(rollIstemci) === "NUMBER_SERIES_CLIENT_TOO_OLD",
+      rollIstemci instanceof Error ? (kod(rollIstemci) ?? rollIstemci.message) : "KABUL EDİLDİ");
 
     // `sack`: yalnız İSTEMCİ engeli ve TÜM eksenlerde (tablet 1.0.6 çuvalı
     // `/^CV\d{10}$/` ile tanıyor — uzunluk ve ayraç dahil her değişiklik kırıyor).
@@ -262,8 +277,16 @@ async function main(): Promise<void> {
     // bırakır (`swatch` böyle düştü). Üç türden biri kalmadıysa iddia o tür için
     // ÖLÇÜLEMEZ ve bunu söyler.
     const sayacOrnegi = NUMBER_SERIES_CATALOG.find((e) => seriesLock(e.key)?.kind === "SAYAC");
-    check("§3 ⭐ yapısal kilit YAPISAL, istemci kilidi ISTEMCI",
-      seriesLock("roll")?.kind === "YAPISAL" && seriesLock("sack")?.kind === "ISTEMCI");
+    // ⚠️ YAPISAL örneği de KEŞİFLE (SAYAÇ kolunun emsali): küme boşaldığında iddia
+    // ölçülemez olur, yanlış olmaz — `roll` 2026-09-23'te kümeden çıktı.
+    const yapisalOrnek2 = NUMBER_SERIES_CATALOG.find((e) => seriesLock(e.key)?.kind === "YAPISAL");
+    if (!yapisalOrnek2) {
+      console.log("⏭️  §3 YAPISAL kolu ÖLÇÜLEMEDİ — yapısal kilitli seri kalmadı.");
+    } else {
+      check(`§3 ⭐ yapısal kilit YAPISAL (keşfedilen: ${yapisalOrnek2.key})`,
+        seriesLock(yapisalOrnek2.key)?.kind === "YAPISAL");
+    }
+    check("§3 ⭐ istemci kilidi ISTEMCI", seriesLock("sack")?.kind === "ISTEMCI");
     if (!sayacOrnegi) {
       console.log("⏭️  §3 SAYAÇ kolu ÖLÇÜLEMEDİ — sayacı hazır olmayan seri kalmadı.");
     } else {
@@ -322,8 +345,8 @@ async function main(): Promise<void> {
     // (P01…P99 sarması) ve o rejim kendi serisine (`batchShort`) taşındı, sarma
     // da `number_series.wrap` kolonuna indi.
     const yapisal = kilitliler.filter((x) => x.lock.kind === "YAPISAL").map((x) => x.key).sort();
-    check("§3b ⭐ YAPISAL kilit kümesi kapalı: yalnız `roll`",
-      yapisal.join(",") === "roll", yapisal.join(", ") || "(yok)");
+    check("§3b ⭐ YAPISAL kilit kümesi BOŞ — her kilit gerekçesiyle EKSENE indi",
+      yapisal.length === 0, yapisal.join(", ") || "(yok)");
 
     // ── §3c OKUMA YÜKLEMİ = YAZMA KAPISI (iki fazlı eşik dahil) ───────────
     // `seriesLock` yalnız Faz B'ye bakıyordu, `assertSeriesFormatWritable` ise
@@ -383,11 +406,17 @@ async function main(): Promise<void> {
     // ⚠️ Hedef seri KATALOGDAN SEÇİLİR, elle yazılmaz: `packingLotName` bu
     // dilimde `countTable` kazandı ve iddia sessizce yanlış seriyi ölçmeye
     // başlardı. Kaynağı olmayan İLK seri hangisiyse o ölçülür.
+    // ⚠️ ÜÇÜNCÜ SONUÇ: "kaynaksız seri" kümesi BOŞALABİLİR ve bu bir KAZANIMDIR
+    // (2026-09-23: son kaynaksız seri `roll`du, açılırken `countTable` kazandı).
+    // Zemini kırmızı bırakmak, borcu kapatan commit'i cezalandırırdı; kol
+    // ölçülemez olur, iddia yanlış olmaz.
     const kaynaksiz = NUMBER_SERIES_CATALOG.find((e) => !e.countTable);
-    check("§4 körlük zemini: kataloğda sayım kaynağı OLMAYAN seri var", kaynaksiz !== undefined);
-    check("§4 ⭐ sayım kaynağı OLMAYAN seri `null` döner ('0' demez)",
-      kaynaksiz !== undefined && (await seriesImpactCount(kaynaksiz.key)) === null,
-      kaynaksiz?.key ?? "(yok)");
+    if (kaynaksiz === undefined) {
+      console.log("⏭️  §4 KAYNAKSIZ kolu ÖLÇÜLEMEDİ — her serinin sayım kaynağı var (kaynaksız seri kalmadı).");
+    } else {
+      check("§4 ⭐ sayım kaynağı OLMAYAN seri `null` döner ('0' demez)",
+        (await seriesImpactCount(kaynaksiz.key)) === null, kaynaksiz.key);
+    }
     // ⚠️ SÖZLEŞME BEKÇİDE: `countTable.field` ZORUNLU bir kolon olmalı, yoksa
     // "satır sayısı" ile "numaralanmış kayıt sayısı" ayrışır. Çalışma anında
     // doğrulanamıyor (ölçüldü: Prisma 7 DMMF alanı `isRequired` taşımıyor),
@@ -1002,7 +1031,7 @@ async function main(): Promise<void> {
     // ekranda `T2309260001`, gerçeği `T140926H0113`).
     const rollSatir = listSeries().find((r) => r.key === "roll");
     check("§16 ⭐ top barkodu örneği FAZ HARFİNİ taşıyor (kendi üretecinden)",
-      /^T\d{6}[HF]\d{4}$/.test(rollSatir?.preview ?? ""), rollSatir?.preview ?? "(yok)");
+      rollBarkoduMu(rollSatir?.preview), rollSatir?.preview ?? "(yok)");
     // Sıradaki numara: GERÇEKTEN açılan bir sonraki kaydın numarası (yarış yoksa).
     // ⚠️ ÖNCE ÜST SINIR KALDIRILIR: §7c bu seride sınırı 10'a çekiyor ve sıra ona
     // dayandığında "sıradaki numara" ölçülemez olur (doğru davranış, ama ölçmek

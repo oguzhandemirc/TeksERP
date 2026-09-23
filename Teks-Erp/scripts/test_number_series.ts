@@ -187,8 +187,15 @@ check("§2 tanınmayan ayraç reddedilir",
 // numara `id`den türetiliyor" idi; `returnNo` kolonu doğup geçmiş geri
 // doldurulunca gerekçe ORTADAN KALKTI. Kilit gerekçesiyle birlikte kalkar —
 // gerekçesi çürüyen bir kilit, kilit değil kalıntıdır.
-check("§2 ⭐ YAPISAL kilitli seri (top barkodu) değiştirilemez",
-  throws(() => assertSeriesFormatAllowed("roll", f({ prefix: "TP" })), "NUMBER_SERIES_LOCKED"));
+// ⚠️ 2026-09-23: YAPISAL kilitli seri KALMADI. `roll` son taşıyıcıydı ve kilidi
+// eksen kilitlerine bölündü (faz harfi zaten `infix`te, panelden düzenlenemez).
+// İddia "kilit çalışıyor"dan "kilit KÜMESİ boş ve bu ÖLÇÜLDÜ"ye döndü; kapı
+// yaşıyor — biri `lockedReason` eklerse aşağıdaki küme iddiası kırmızı verir.
+const yapisalKilitli = NUMBER_SERIES_CATALOG.filter((e) => e.lockedReason);
+check("§2 ⭐ YAPISAL kilit kümesi BOŞ (her kilit gerekçesiyle eksene indi)",
+  yapisalKilitli.length === 0, yapisalKilitli.map((e) => e.key).join(", ") || "(yok)");
+check("§2 `roll` biçimi artık DEĞER kapısından geçiyor (yapısal red YOK)",
+  !throws(() => assertSeriesFormatAllowed("roll", f({ prefix: "TP" })), "NUMBER_SERIES_LOCKED"));
 check("§2 ⭐ `batchDaily` ARTIK yapısal kilitli DEĞİL (kısa rejim kendi serisine taşındı)",
   !throws(() => assertSeriesFormatAllowed("batchDaily", f({ prefix: "PT" })), "NUMBER_SERIES_LOCKED"));
 check("§2 ⭐ `returnDoc` ARTIK yapısal kilitli DEĞİL (kolon doğdu, gerekçe çürüdü)",
@@ -287,8 +294,14 @@ check("§8 ⭐ faz harfli top barkodu (H) tanınır", matchesSeries(rollFmt, `${
 check("§8 ⭐ faz harfli top barkodu (F) tanınır", matchesSeries(rollFmt, `${rollGun}F0123`));
 check("§8 ⭐ faz harfsiz kod REDDEDİLİR (infix atlanamaz)", !matchesSeries(rollFmt, `${rollGun}0001`));
 check("§8 geçersiz faz harfi reddedilir", !matchesSeries(rollFmt, `${rollGun}X0001`));
-check("§8 top serisinde 5 haneli kod da tanınır (hane esnekliği infix'le birlikte çalışır)",
-  matchesSeries(rollFmt, `${rollGun}H10000`));
+// ⚠️ İDDİA 2026-09-23'te TERSİNE DÖNDÜ ve sebebi ölçüldü: `roll` artık ÜST SINIR
+// taşıyor (`maxValue: 9999`) ⇒ sabit genişlikli bir seri ve 5 haneli kod bu
+// rejimde ÜRETİLEMEZ. Hane esnekliği (E-1-04) SINIRSIZ serilerde geçerli; sınır
+// haneye sığıyorsa esneklik komşu serinin uzun kodunu kendi kodu sanmaya yarardı.
+check("§8 ⭐ SINIRLI top serisinde 5 haneli kod TANINMAZ (sabit genişlik)",
+  !matchesSeries(rollFmt, `${rollGun}H10000`));
+check("§8 ⭐ SINIR KALKINCA hane esnekliği geri gelir (E-1-04 koruması sürüyor)",
+  matchesSeries({ ...rollFmt, maxValue: null }, `${rollGun}H10000`));
 check("§8 sınıflandırma tablosu infix'i taşır (Faz B istemcisi regex'i bundan kurar)",
   seriesClassifierTable().find((r) => r.key === "roll")?.infix === "[HF]");
 check("§8 ⭐ infix'siz seriler ETKİLENMEDİ (çuval · kart · sevkiyat bugünkü gibi)",
@@ -441,10 +454,17 @@ check("§11b ⭐ hiçbir üreteç ön ekin ardına LİTERAL haneli kuyruk yazmı
   sekilIhlal.length === 0, sekilIhlal.join(", ") || `${kaynakDosyalari.length} dosya tarandı`);
 check("§11b körlük zemini: kalıp gerçekten eşleşebiliyor (ölü regex değil)",
   LITERAL_HANE_RE.test('`${prefix}${String(seq).padStart(4, "0")}`'));
-check("§11b muafiyet BEYANDAN okunuyor ve beyanlı üreteç dosyası GERÇEKTEN var",
-  tarifEdenUretecler.size > 0 &&
+// ⚠️ ÜÇÜNCÜ SONUÇ: muafiyet kümesi BOŞALABİLİR ve bu bir İHLAL DEĞİL, bir
+// KAZANIMDIR — 2026-09-23'te son beyanlı üreteç (`roll`) literal dolguyu bırakıp
+// haneyi seriden okumaya başladı, yani muafiyete ihtiyacı kalmadı. "Beyan yok"u
+// kırmızı saymak, borcu kapatan commit'i cezalandırırdı.
+if (tarifEdenUretecler.size === 0) {
+  console.log("⏭️  §11b ÖLÇÜLEMEDİ — beyanlı üreteç muafiyeti KALMADI (hepsi biçimden türetiyor)");
+} else {
+  check("§11b muafiyet BEYANDAN okunuyor ve beyanlı üreteç dosyası GERÇEKTEN var",
     [...tarifEdenUretecler].every((u) => kaynakDosyalari.some((d) => d.endsWith(u))),
-  [...tarifEdenUretecler].join(", ") || "beyan yok");
+    [...tarifEdenUretecler].join(", "));
+}
 
 // c) Sürmediğimiz bir biçimi panelden düzenlemeye AÇAMAYIZ.
 const beyanliAmaKilitsiz = NUMBER_SERIES_CATALOG.filter((e) => e.uretecBagi && !e.lockedReason);

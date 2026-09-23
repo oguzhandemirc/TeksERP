@@ -48,6 +48,10 @@
 - **[ÇEKİRDEK]** Sayacın üst sınıra varınca ne yapacağı VERİDİR: `number_series.wrap` `false` ise sınırda 409, `true` ise `startValue`a sarar ve numara BİLEREK mükerrer olur; sarma yalnız üst sınır tanımlıyken yazılabilir (`NUMBER_SERIES_WRAP_WITHOUT_MAX`) ve sarmalı seride sayacın kaynağı "en büyük kod" değil EN SON DOĞAN koddur (tek yüklem `seriesCounterReadsLastBorn`). · bekçi: `scripts/test_batch_number_format.ts §0/§0b/§0c`
 - **[ÇEKİRDEK]** Aynı kolonu paylaşan iki seri ön ek tekilliği kapısına takılır; istisna yalnız BEYANLI ve ÇİFT YÖNLÜ ikizlerdir (`exclusiveWith`) — bir anda yalnız biri kod üreten rejim çiftleri. · bekçi: `scripts/test_number_series_panel.ts §5c`
 
+- **[ÇEKİRDEK]** Sabit bir harf parçası (`infix`) taşıyan seride tarih bölümü KALDIRILAMAZ (400 `NUMBER_SERIES_INFIX_NEEDS_DATE`): ön ekten sonra harf gelen kod, ön ek çapalı sınıflandırmayla ayırt edilemez ve bu bir sürüm sorunu DEĞİL yapının sonucudur — istemci güncellemek çözmez. · bekçi: `scripts/test_eski_istemci_okutma.ts` (sunucunun reddettiği kombinasyon ölçülmez, beyan edilir)
+- **[ÇEKİRDEK]** Okutulan serinin istemci kilidi EKSEN başına ve GEREKÇELİDİR; gerekçe iki yüzeyden gelebilir — sınıflandırma (kod yanlış türe çözülür/tanınmaz) ya da TAM-BİÇİM KAPISI (kod doğru çözülür ama "aç/okut" yolu sessizce çalışmaz). İkincisi ölçülmezse kilit eksik kalır: panel 1.3.1'de hane değişimi tam olarak böyle kırıyor. · bekçi: `scripts/test_eski_istemci_okutma.ts` (⛔kapı hücresi; kapı TÜKETİMİ ölçülür, varlığı değil)
+- **[ÇEKİRDEK]** Top listelerinin görünüm sırası `ROLL_DISPLAY_ORDER` (doğuş anı birincil, barkod ikincil) — barkodla metin sıralaması dolgunun varlığına bel bağlar ve dolgu bir GÖRÜNÜM ayarıdır. · bekçi: `scripts/test_roll_barcode.ts` (dolgusuz `…H9`/`…H10` + metin sırasının ters olduğu körlük zemini)
+
 ### Yasaklar
 
 - **[ÇEKİRDEK]** Ön eki servis içinde LİTERAL yazma: `utils/code-format.ts`in biçimlendiricilerini (`dailyCodePrefix` · `buildDailyCode` · `nextDailySeq`) yalnız `services/number-series.service.ts` import eder. İkinci bir import, seri tablosunu SESSİZCE devre dışı bırakır. · bekçi: `test_number_series §7`

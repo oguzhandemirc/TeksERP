@@ -42,6 +42,7 @@ export const NUMBER_SERIES_CODE_CAPACITY: Readonly<Record<string, number>> = {
   // directShipment: DirectShipment.shipmentNo — `@db.VarChar` YOK (TEXT), sınır yok.
   manifest: 64, // manifest.manifestNo
   order: 64, // order.orderNumber
+  roll: 64, // roll.barcode — 2026-09-23'te seri açıldı, kolon kapasitesi kapıya girdi
   batchDaily: 64, // batch.batchNumber
   batchShort: 64, // batch.batchNumber (aynı kolon; iki rejim BİRBİRİNİ DIŞLAR)
   weavingOrder: 64, // weavingOrder.weavingOrderNumber

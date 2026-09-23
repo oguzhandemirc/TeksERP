@@ -12,7 +12,7 @@
 import {
   FAZ_B_ONCESI,
   FAZ_D_ONCESI,
-  SCANNED_CLIENT_BREAKING_AXES,
+  breakingAxesOf,
   firstVersionAbove,
   scanningClientsMissingPhases,
   type SeriesFormatAxis,
@@ -39,7 +39,7 @@ export function assertAxesAllowed(
   if (!katalog.kind) return;
   const missingPhases = scanningClientsMissingPhases();
   if (missingPhases.length === 0) return;
-  const kiran = SCANNED_CLIENT_BREAKING_AXES[key] ?? [];
+  const kiran = breakingAxesOf(key);
   if (kiran.length === 0) return;
   const degisen: SeriesFormatAxis[] = [];
   if (next.prefix !== current.prefix) degisen.push("prefix");

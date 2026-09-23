@@ -46,11 +46,13 @@ import {
   FAZ_B_ONCESI,
   FAZ_D_ONCESI,
   SCANNED_CLIENT_BREAKING_AXES,
+  breakingAxesOf,
   compareClientVersions,
   scanningClientsMissingPhases,
   type SeriesFormatAxis,
 } from "../src/config/client-version-policy";
 import { NUMBER_SERIES_CATALOG, type NumberSeriesCatalogEntry } from "../src/constants/number-series-catalog";
+import { assertSeriesFormatAllowed } from "../src/services/helpers/series-write.helper";
 import { formatSeriesCode, seriesPrefix, type NumberSeriesFormat } from "../src/services/helpers/series-format.helper";
 import type { SeriesClassifierRow } from "../src/services/number-series.service";
 import { git } from "./lib/git";
@@ -150,6 +152,33 @@ interface Degisiklik {
   ad: string;
   uygula: (f: NumberSeriesFormat, key: string) => NumberSeriesFormat;
 }
+
+/**
+ * Biçim değişiminin ÜRETİMDEKİ tam karşılığı: yeni biçim yürürlüğe girer VE eski
+ * biçim emekliye ayrılır (`number_series_lines` → `resolveSeriesFormat.retiredFormats`).
+ *
+ * ⚠️ BU SATIR BİR ÖLÇÜM ARIZASININ DÜZELTMESİDİR (2026-09-23): simülasyon yalnız
+ * `retiredPrefixes`i taşıyordu, emekli BİÇİMLERİ değil. Sonuç: HEAD istemcinin
+ * tam-biçim kapısı dünkü etiketi reddediyor göründü ve bunu bir ÜRÜN BOŞLUĞU
+ * sandım — oysa tel sözleşmesinde `retiredFormats` ZATEN VAR ve üretimde
+ * `classifierRow` onu gönderiyor; eksik olan simülasyonun kendi satırıydı.
+ * **Ölçüm aracı gerçeği eksik modellerse, bulduğu "arıza" aracın kendisidir.**
+ */
+function emekliyeAyir(eski: NumberSeriesFormat, yeni: NumberSeriesFormat): NumberSeriesFormat {
+  return {
+    ...yeni,
+    retiredFormats: [
+      ...(yeni.retiredFormats ?? []),
+      {
+        prefix: eski.prefix,
+        dateSegment: eski.dateSegment,
+        digits: eski.digits,
+        separator: eski.separator,
+        separator2: eski.separator2 ?? null,
+      },
+    ],
+  };
+}
 const DEGISIKLIKLER: Degisiklik[] = [
   { ad: "önek", uygula: (f, k) => ({ ...f, prefix: YENI_ONEK[k], retiredPrefixes: [f.prefix, ...f.retiredPrefixes] }) },
   { ad: "tarih YYMM", uygula: (f) => ({ ...f, dateSegment: "YYMM" }) },
@@ -177,6 +206,9 @@ function sunucuSatiri(e: NumberSeriesCatalogEntry, f: NumberSeriesFormat): Serie
     separator: f.separator,
     ...(f.separator2 != null ? { separator2: f.separator2 } : {}),
     ...(f.infix ? { infix: f.infix } : {}),
+    // ⚠️ ÜRETİMDEKİ `classifierRow` ile AYNI ALANLAR: biri eksik kalırsa
+    // simülasyon sahadakinden FARKLI bir istemciyi ölçer (bkz. `emekliyeAyir`).
+    ...(f.retiredFormats && f.retiredFormats.length > 0 ? { retiredFormats: f.retiredFormats } : {}),
   };
 }
 function sunucuTablosuKur(degisen?: { key: string; f: NumberSeriesFormat }): SeriesClassifierRow[] {
@@ -192,6 +224,22 @@ interface Istemci {
   /** Bu değişiklikte sunucunun yayınladığı tablo yüklenir (Faz B'siz istemci yok sayar). */
   tabloYukle: (tablo: SeriesClassifierRow[]) => Promise<void>;
   sinifla: (baglam: string, kod: string) => Tur;
+  /**
+   * İKİNCİ YÜZEY — TAM-BİÇİM KAPISI ("aç/okut yolu çalışıyor mu").
+   *
+   * ⚠️ NEDEN AYRI ÖLÇÜLÜYOR (2026-09-23, 1e'nin ek kontrolü): sınıflandırma
+   * GEVŞEKTİR (`/^T\d/`) ama istemciler kodu AYRICA tam-biçim regex'iyle
+   * süzüyor ve o kapı SESSİZ davranır. Panel 1.3.1'de `BARCODE_FORMATS.ROLL`
+   * (`\d{4}` — TAM dört hane) iki yerde kapı: `RollsPage.openDetail` eşleşmezse
+   * `return` eder (toast yok, hata yok) ve `RollScanBar.canOpen` "Aç" düğmesini
+   * PASİF bırakır. Yani hane 5'e çıkınca sınıflandırma DOĞRU çalışır, operatör
+   * yine de topu AÇAMAZ. Yalnız sınıflandırmayı ölçen bir simülasyon bu
+   * kırılmayı YAPISAL OLARAK GÖREMEZ.
+   *
+   * `null` = bu istemcide böyle bir kapı YOK ve bu ÖLÇÜLDÜ (aşağıda zemin
+   * iddiası); "ölçmedim" ile "yok" karışmasın diye beyan zorunlu.
+   */
+  tamBicim: ((kind: string, kod: string) => boolean) | null;
 }
 
 const PANEL_TUM = (_k: string, kind: string) => [{ baglam: "classifyBarcode", beklenen: kind }];
@@ -233,12 +281,14 @@ const tabletKapsam = (key: string) => TABLET_KAPSAM[key] ?? [];
 
 type HeadPanel = {
   classifyBarcode: (raw: string) => { kind: string };
+  matchesFullFormat: (kind: string, code: string) => boolean;
   loadScanSeries: () => Promise<string>;
   resetScanSeries: () => void;
   scanSeriesSource: () => string;
 };
 type HeadTablet = {
   classifyWithTable: (rows: readonly unknown[], raw: string) => { kind: string };
+  matchesFullFormatWithTable: (rows: readonly unknown[], kind: string, code: string) => boolean;
   scanSeriesService: { get: () => Promise<unknown[]> };
   FALLBACK_SCAN_SERIES: readonly unknown[];
 };
@@ -254,7 +304,7 @@ function tabletYuklemFromTable(m: HeadTablet, rows: readonly unknown[]): TabletY
 }
 
 // ── Sonuç ────────────────────────────────────────────────────────────────────
-type Hucre = { durum: "DOĞRU" | "YANLIŞ" | "TANIMAZ" | "KAPSAM DIŞI"; not?: string };
+type Hucre = { durum: "DOĞRU" | "YANLIŞ" | "TANIMAZ" | "KAPI" | "KAPSAM DIŞI"; not?: string };
 function degerlendir(ist: Istemci, e: NumberSeriesCatalogEntry, kod: string): Hucre {
   const kapsam = ist.kapsam(e.key, e.kind!);
   if (kapsam.length === 0) return { durum: "KAPSAM DIŞI" };
@@ -265,14 +315,21 @@ function degerlendir(ist: Istemci, e: NumberSeriesCatalogEntry, kod: string): Hu
       ? { durum: "TANIMAZ", not: baglam === "classifyBarcode" ? undefined : baglam }
       : { durum: "YANLIŞ", not: `${tur}${baglam === "classifyBarcode" ? "" : "@" + baglam}` };
   }
+  // ⚠️ SINIFLANDIRMA DOĞRU AMA KAPI REDDEDİYOR: kod doğru türe çözülüyor, yine de
+  // "aç/okut" yolu çalışmıyor. Sahada bu, hata mesajı OLMAYAN bir duruştur —
+  // operatör okutur, ekran kımıldamaz. Ayrı bir durum, çünkü ayrı bir arıza.
+  if (ist.tamBicim && !ist.tamBicim(e.kind!, kod)) return { durum: "KAPI" };
   return { durum: "DOĞRU" };
 }
 function hucreMetni(h: Hucre): string {
   if (h.durum === "DOĞRU") return "✓";
   if (h.durum === "KAPSAM DIŞI") return "—";
   if (h.durum === "TANIMAZ") return `?tanımaz${h.not ? "@" + h.not : ""}`;
+  if (h.durum === "KAPI") return "⛔kapı";
   return `✗→${h.not}`;
 }
+/** Kırılma = yanlış tür · tanınmaz · KAPIYA takılma. Üçü de sahada iş durdurur. */
+const kirildi = (h: Hucre): boolean => h.durum === "YANLIŞ" || h.durum === "TANIMAZ" || h.durum === "KAPI";
 
 async function main(): Promise<void> {
   // ── 0. Sürüm çapaları gerçekten o sürüm mü? ────────────────────────────────
@@ -327,15 +384,56 @@ async function main(): Promise<void> {
     }
 
     // Eski panel: sabit tablo, kaynaktan modül olarak.
-    const p131 = await kaynaktanYukle<{ classifyBarcode: (raw: string) => { kind: string } }>(
-      eskiMetin(PANEL_131.sha, PANEL_DOSYA),
+    const p131 = await kaynaktanYukle<{
+      classifyBarcode: (raw: string) => { kind: string };
+      BARCODE_FORMATS: Record<string, RegExp>;
+    }>(eskiMetin(PANEL_131.sha, PANEL_DOSYA));
+    // ⚠️ KAPI İSTEMCİNİN KENDİ NESNESİNDEN okunuyor, burada yeniden YAZILMIYOR:
+    // desen kopyalansaydı bekçi ile ürün ayrışır ve gevşeyen bir kapı sessizce
+    // geçerdi (`sqlPattern` emsali).
+    //
+    // ⚠️⚠️ AMA "REGEX VAR" ≠ "KAPI VAR" — ve bu ayrım ÖLÇÜLDÜ (2026-09-23):
+    // `BARCODE_FORMATS` dört tür için desen taşıyor (ROLL · TRAVELER_CARD ·
+    // SWATCH · SACK) ama panel 1.3.1'de bunlardan YALNIZ `ROLL` bir kod yolunda
+    // tüketiliyor (`RollsPage.openDetail` + `RollScanBar.canOpen`). Varlığı kapı
+    // saymak, hiçbir yerin çağırmadığı bir desen yüzünden üç seriyi daha
+    // kilitlerdi — "sınırını beyan etmeyen yüklem alakasız şeyle eşleşir"
+    // sınıfının ta kendisi. Tüketilen türler KAYNAKTAN taranır, elle yazılmaz.
+    const tuketilen = new Set<string>();
+    try {
+      // ⚠️ TEST DOSYALARI HARİÇ: istemcinin kendi birim testi dört türü de
+      // gezerek `BARCODE_FORMATS.X` yazıyor, ama test bir KOD YOLU değildir.
+      // Dışlanmasaydı ölçüm "dördü de kapılı" derdi (ilk koşumda tam bu oldu).
+      const kullanim = git(["grep", "-hoE", String.raw`BARCODE_FORMATS\.[A-Z_]+`, PANEL_131.sha, "--", "Electron/src", ":!*.test.*"], {
+        cwd: KOK,
+        stdio: "yut",
+      });
+      for (const satir of kullanim.split("\n")) {
+        const t = satir.trim().split(".")[1];
+        if (t) tuketilen.add(t);
+      }
+    } catch {
+      /* isabet yok */
+    }
+    // Tanımın kendi satırı (`export const BARCODE_FORMATS = {`) `.`+BÜYÜK HARF
+    // içermediği için taramaya girmez; yine de türlerin tanımda VAR olması şart.
+    const kapiliTurler = [...tuketilen].filter((t) => p131.BARCODE_FORMATS[t] !== undefined);
+    check(
+      "§0 panel 1.3.1 TÜKETİLEN tam-biçim kapıları çıkarıldı (varlık değil KULLANIM ölçüldü)",
+      kapiliTurler.length > 0,
+      `tanımlı: ${Object.keys(p131.BARCODE_FORMATS ?? {}).join(", ")} · kod yolunda: ${kapiliTurler.join(", ") || "(yok)"}`,
     );
+    const p131Kapi = (kind: string, kod: string): boolean => {
+      if (!kapiliTurler.includes(kind)) return true; // bu türde kapı YOK
+      return p131.BARCODE_FORMATS[kind]!.test(kod.trim().toUpperCase());
+    };
     istemciler.push({
       ad: "panel 1.3.1",
       // SVK bu sürümde tanınmıyor (aşağıda ÖLÇÜLÜR); kapsam dışı.
       kapsam: (k, kind) => (k === "shipment" ? [] : PANEL_TUM(k, kind)),
       tabloYukle: async () => {},
       sinifla: (_b, kod) => p131.classifyBarcode(kod).kind,
+      tamBicim: p131Kapi,
     });
     const svk = p131.classifyBarcode(kodUret(bugunkuBicim(OKUTULAN.find((e) => e.key === "shipment")!))).kind;
     check("§0 panel 1.3.1 kapsam beyanı: SVK bugünkü biçimde de UNKNOWN (sevkiyat okutması bu sürümde yok)", svk === "UNKNOWN", svk);
@@ -352,7 +450,27 @@ async function main(): Promise<void> {
         if (re) y[k.ad] = (c: string) => re.test(c.trim());
       }
       if (Object.keys(y).length !== TABLET_KURALLARI.length) continue;
-      istemciler.push({ ad, kapsam: tabletKapsam, tabloYukle: async () => {}, sinifla: (b, kod) => tabletBaglam(y as TabletYuklem, b, kod) });
+      // ⚠️ "KAPI YOK" BEYANI ÖLÇÜLÜYOR, varsayılmıyor: eski tablette top barkodunu
+      // uzunluk/konum üzerinden süzen bir yüzey olsaydı hane değişimi orada da
+      // kırardı. Tarama `mobil/src`te tam-biçim deseni arar (`\d{N}` + faz harfi);
+      // isabet çıkarsa iddia kırmızı verir ve kapı modellenmek ZORUNDA kalır.
+      let tamBicimIzi = "";
+      try {
+        tamBicimIzi = git(["grep", "-nE", String.raw`\\d\{[0-9]+\}.*\[HF\]|\[HF\].*\\d\{[0-9]+\}`, sha, "--", "mobil/src"], {
+          cwd: KOK,
+          stdio: "yut",
+        }).trim();
+      } catch {
+        tamBicimIzi = "";
+      }
+      check(`§0 ${ad} tam-biçim kapısı YOK (beyan ölçüldü)`, tamBicimIzi === "", tamBicimIzi.split("\n")[0] ?? "");
+      istemciler.push({
+        ad,
+        kapsam: tabletKapsam,
+        tabloYukle: async () => {},
+        sinifla: (b, kod) => tabletBaglam(y as TabletYuklem, b, kod),
+        tamBicim: null,
+      });
     }
   }
 
@@ -368,6 +486,9 @@ async function main(): Promise<void> {
       await hp.loadScanSeries();
     },
     sinifla: (_b, kod) => hp.classifyBarcode(kod).kind,
+    // HEAD'in kapısı SUNUCU TABLOSUNDAN doğuyor — biçim değişince o da değişir;
+    // (c) iddiasının asıl ölçtüğü şey bu.
+    tamBicim: (kind, kod) => hp.matchesFullFormat(kind, kod),
   };
   const headTablet: Istemci = {
     ad: "HEAD tablet",
@@ -377,6 +498,7 @@ async function main(): Promise<void> {
       htRows = await ht.scanSeriesService.get();
     },
     sinifla: (b, kod) => tabletBaglam(tabletYuklemFromTable(ht, htRows), b, kod),
+    tamBicim: (kind, kod) => ht.matchesFullFormatWithTable(htRows, kind, kod),
   };
   const headPanelYedek: Istemci = { ...headPanel, ad: "HEAD panel·yedek", tabloYukle: async () => hp.resetScanSeries() };
   const headTabletYedek: Istemci = {
@@ -411,10 +533,39 @@ async function main(): Promise<void> {
   console.log(`\n   seri · değişiklik · kod | ${basliklar.join(" | ")}`);
   const kirilan: Record<string, number> = {};
   const headHata: string[] = [];
+  /**
+   * (a) dilimi indi mi? — ÖLÇÜM NOKTASI DÜZELTİLDİ (2026-09-23).
+   *
+   * ⚠️ Önce tel sözleşmesine bakıyordum ve YANLIŞTI: `SeriesClassifierRow`
+   * `retiredFormats`i ZATEN taşıyor, sunucu ZATEN gönderiyor (`classifierRow`).
+   * Eksik olan İSTEMCİ TARAFI — iki istemcinin de `fullFormat`ı yalnız
+   * `row.prefixes`i geziyor, emekli BİÇİMLERİ hiç okumuyor (grep: 0 isabet).
+   * Yani alan "var ama tüketilmiyor". Kapı, işin GERÇEKTEN yapıldığı yere
+   * çapalanmalı: alanın varlığına değil, İSTEMCİNİN ONU OKUMASINA.
+   */
+  const ISTEMCI_RETIRED_FORMATS = [PANEL_DOSYA, TABLET_DOSYA].every((yol) =>
+    readFileSync(join(KOK, yol), "utf8").includes("retiredFormats"),
+  );
+  const muafEskiEtiket: string[] = [];
   const gerekceli: Record<string, Set<string>> = {};
+  const sunucuReddetti: string[] = [];
   for (const e of OKUTULAN) {
     for (const d of DEGISIKLIKLER) {
-      const yeni = d.uygula(bugunkuBicim(e), e.key);
+      const yeni = emekliyeAyir(bugunkuBicim(e), d.uygula(bugunkuBicim(e), e.key));
+      // ⚠️ SİMÜLASYON YALNIZ SUNUCUNUN KABUL ETTİĞİ BİÇİMLERİ ÖLÇER: sunucu
+      // zaten 400 ile reddediyorsa o kombinasyon SAHADA HİÇ DOĞMAZ ve onu
+      // "istemci kırılması" diye saymak, var olmayan bir riske kilit takmak
+      // olurdu (ölçüldü: `roll` + tarih NONE, `NUMBER_SERIES_INFIX_NEEDS_DATE`).
+      let reddedildi = false;
+      try {
+        assertSeriesFormatAllowed(e.key, { ...yeni, retiredPrefixes: yeni.retiredPrefixes });
+      } catch (err) {
+        reddedildi = (err as { details?: { code?: string } })?.details?.code !== undefined;
+      }
+      if (reddedildi) {
+        sunucuReddetti.push(`${e.key}/${d.ad}`);
+        continue;
+      }
       const kod = kodUret(yeni);
       const eskiKod = kodUret(bugunkuBicim(e));
       const tablo = sunucuTablosuKur({ key: e.key, f: yeni });
@@ -423,7 +574,7 @@ async function main(): Promise<void> {
         await ist.tabloYukle(tablo);
         const h = degerlendir(ist, e, kod);
         satir.push(hucreMetni(h));
-        if (!e.lockedReason && (h.durum === "YANLIŞ" || h.durum === "TANIMAZ")) {
+        if (!e.lockedReason && kirildi(h)) {
           kirilan[ist.ad] = (kirilan[ist.ad] ?? 0) + 1;
           (gerekceli[e.key] ??= new Set()).add(d.ad);
         }
@@ -437,8 +588,23 @@ async function main(): Promise<void> {
         await ist.tabloYukle(tablo);
         const h = degerlendir(ist, e, k);
         satir.push(hucreMetni(h));
-        if (!e.lockedReason && (h.durum === "YANLIŞ" || h.durum === "TANIMAZ"))
-          headHata.push(`${ist.ad} ${e.key}/${d.ad}${k === eskiKod ? "(eski etiket)" : ""} ${hucreMetni(h)}`);
+        if (!e.lockedReason && kirildi(h)) {
+          // ⚠️ BEYANLI ve KENDİ KENDİNİ İPTAL EDEN MUAFİYET (1e kararı 2026-09-23):
+          // HEAD istemcinin tam-biçim kapısı ESKİ ETİKETİ tanıyamıyor, çünkü tel
+          // sözleşmesi (`SeriesClassifierRow`) emekli ÖN EKLERİ taşıyor ama emekli
+          // BİÇİMLERİ taşımıyor — sunucuda `retiredFormats` ile çözülen sorunun
+          // istemci ikizi. Ayrı dilimde kapatılacak.
+          //
+          // ⚠️ MUAFİYET SABİT DEĞİL, ÖLÇÜLEN BİR KOŞULA BAĞLI: tel sözleşmesine
+          // `retiredFormats` eklendiği an `TEL_RETIRED_FORMATS` true olur ve bu
+          // dal kapanır ⇒ iddia kendiliğinden kırmızıya döner. Beyan, işi
+          // yapılmadan sessizce kalıcılaşamaz.
+          if (ISTEMCI_RETIRED_FORMATS || !(h.durum === "KAPI" && k === eskiKod)) {
+            headHata.push(`${ist.ad} ${e.key}/${d.ad}${k === eskiKod ? "(eski etiket)" : ""} ${hucreMetni(h)}`);
+          } else {
+            muafEskiEtiket.push(`${ist.ad} ${e.key}/${d.ad}`);
+          }
+        }
       }
       for (const ist of [headPanelYedek, headTabletYedek]) {
         await ist.tabloYukle(tablo);
@@ -453,6 +619,10 @@ async function main(): Promise<void> {
     console.log(`   ⓘ ${e.key}: ${s ? `eski istemcide kıran eksen(ler): ${[...s].join(", ")}` : "HİÇBİR eksen eski istemcide kırılmıyor — kilidin bu seri için istemci gerekçesi YOK"}`);
   }
   console.log("");
+
+  if (sunucuReddetti.length > 0) {
+    console.log(`   ⓘ sunucunun DEĞER kapısı reddettiği için ölçülmeyen ${sunucuReddetti.length} kombinasyon: ${sunucuReddetti.join(" · ")}`);
+  }
 
   // ── (a2) KİLİT TABLOSU ↔ SİMÜLASYON — İKİ YÖNLÜ EŞLEME (1e kararı) ─────────
   // ⚠️ Kilit artık EKSEN düzeyinde ve kaynağı bu simülasyondur. Beyan
@@ -478,7 +648,7 @@ async function main(): Promise<void> {
       const eksen = EKSEN_OF[ad];
       if (eksen) kiran.add(eksen);
     }
-    const beyan = new Set(SCANNED_CLIENT_BREAKING_AXES[e.key] ?? []);
+    const beyan = new Set(breakingAxesOf(e.key));
     for (const a of kiran) if (!beyan.has(a)) eksikKoruma.push(`${e.key}:${a}`);
     for (const a of beyan) if (!kiran.has(a)) gereksizKilit.push(`${e.key}:${a}`);
   }
@@ -509,6 +679,20 @@ async function main(): Promise<void> {
     `(c) HEAD panel + tablet (sunucu tablosu): kilitli ${KILITLI.length} seri × ${DEGISIKLIKLER.length} değişiklik, yeni kod ve eski etiket DOĞRU`,
     headHata.length === 0,
     headHata.slice(0, 6).join(" · "),
+  );
+  // Muafiyetin KENDİSİ görünür olmalı: sessiz bir muafiyet, olmayan bir kapıdır.
+  if (muafEskiEtiket.length > 0) {
+    console.log(
+      `   ⚠️ (c) MUAF (${muafEskiEtiket.length}): HEAD tam-biçim kapısı ESKİ ETİKETİ tanımıyor — ` +
+        `İSTEMCİLER \`retiredFormats\`i OKUMUYOR (alan tel sözleşmesinde VAR, sunucu gönderiyor). ` +
+        `Ayrı dilim; istemciler okumaya başladığı an bu muafiyet kalkar ve iddia kırmızı verir.`,
+    );
+    console.log(`      ${[...new Set(muafEskiEtiket)].join(" · ")}`);
+  }
+  check(
+    "(c) muafiyet BEYANI ölçülebilir: istemciler `retiredFormats` okumuyorsa muafiyet VAR, okuyorsa YOK",
+    ISTEMCI_RETIRED_FORMATS ? muafEskiEtiket.length === 0 : true,
+    `istemciRetiredFormats=${ISTEMCI_RETIRED_FORMATS} · muaf=${muafEskiEtiket.length}`,
   );
   // Faz B'nin varlığı İÇERİKTEN ölçülür (commit sha'sı iniş sırasında değişebilir).
   for (const [ad, yol] of [

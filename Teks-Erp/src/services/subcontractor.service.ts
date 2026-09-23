@@ -13,6 +13,7 @@
 //                     Step COMPLETED olur. Refakat kartı ARRIVAL.
 // =============================================================================
 
+import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY, inheritRollPropertiesTx, revokeRollProperties } from "./helpers/property-revoke.helper";
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
@@ -1985,7 +1986,7 @@ export class SubcontractorService {
         // taşıyamadığı için çoğulu da basabilmeli (aşağıda virgüllü liste).
         batch: { select: { batchNumber: true } },
       },
-      orderBy: [{ barcode: "asc" }, { createdAt: "asc" }],
+      orderBy: ROLL_DISPLAY_ORDER,
     });
     if (projected.length === 0) {
       throw AppError.badRequest(

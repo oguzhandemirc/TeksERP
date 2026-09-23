@@ -213,21 +213,45 @@ export type SeriesFormatAxis = "prefix" | "dateSegment" | "digits" | "separator"
  * İSTEMCİ kilidi HİÇ doğmaz. Eski kapı "okutulan her seri kilitli" diyordu ve
  * bu, ölçülmemiş bir genellemeydi.
  */
-export const SCANNED_CLIENT_BREAKING_AXES: Record<string, SeriesFormatAxis[]> = {
-  // Ön ek değişince tablet 1.0.6 kodu TOP sanıyor; ayraç değişince eski panel tanımıyor.
-  workOrder: ["prefix", "separator"],
-  // Yalnız ön ek: `/^KRT/i` çapası ön eke bağlı, gerisi serbest.
-  swatch: ["prefix"],
-  // Tablet 1.0.6 çuvalı `/^CV\d{10}$/` ile tanıyor: uzunluk ve ayraç DAHİL her eksen kırıyor.
-  sack: ["prefix", "dateSegment", "digits", "separator", "separator2"],
+export const SCANNED_CLIENT_BREAKING_AXES: Record<string, Partial<Record<SeriesFormatAxis, string>>> = {
+  workOrder: {
+    prefix: "Tablet 1.0.6 kodu TOP sanıyor (yanlış tür).",
+    separator: "Eski panel tanımıyor.",
+  },
+  swatch: { prefix: "`/^KRT/i` çapası ön eke bağlı; gerisi serbest." },
+  sack: {
+    prefix: "Tablet 1.0.6 çuvalı `/^CV\\d{10}$/` ile tanıyor.",
+    dateSegment: "Aynı desen tarih uzunluğunu da sabitliyor.",
+    digits: "Aynı desen hane sayısını da sabitliyor.",
+    separator: "Desende ayraç yok.",
+    separator2: "Desende ikinci ayraç da yok.",
+  },
   // Sevkiyat: eski istemcilerin hiçbiri bu seriyi okutmuyor ⇒ istemci gerekçesi YOK.
-  shipment: [],
-  // Fason/kartela belgeleri: eski panelde yalnız ön ek çapası var.
-  subcontractorDispatch: ["prefix"],
-  subcontractorReceipt: ["prefix"],
-  kartelaDispatch: ["prefix"],
-  kartelaReceipt: ["prefix"],
+  shipment: {},
+  subcontractorDispatch: { prefix: "Eski panelde yalnız ön ek çapası var." },
+  subcontractorReceipt: { prefix: "Eski panelde yalnız ön ek çapası var." },
+  kartelaDispatch: { prefix: "Eski panelde yalnız ön ek çapası var." },
+  kartelaReceipt: { prefix: "Eski panelde yalnız ön ek çapası var." },
+  roll: {
+    prefix: "Eski panel ve tablet `T` çapasını kaybedince kodu KART sanıyor.",
+    dateSegment: "Tarih bölümü kalkınca (`NONE`) kod hiçbir çapaya uymuyor.",
+    // ⚠️ SINIFLANDIRMA BU EKSENDE KIRILMIYOR — kırılan İKİNCİ YÜZEY.
+    digits:
+      "Sınıflandırma (`/^T\\d/`) 5 haneyi DOĞRU çözüyor, ama panel 1.3.1'in tam-biçim " +
+      "kapısı (`BARCODE_FORMATS.ROLL`, `\\d{4}`) reddediyor: `RollsPage.openDetail` " +
+      "sessizce `return` ediyor ve `RollScanBar` \"Aç\" düğmesini pasif bırakıyor. " +
+      "Operatör okutur, ekran kımıldamaz. Tablet 1.0.6 bu eksenden ETKİLENMEZ.",
+    separator: "Ayraç girince `/^T\\d/` çapası tutmuyor.",
+    separator2:
+      "Sınıflandırma ayakta kalıyor ama `BARCODE_FORMATS.ROLL` ikinci ayraca yer " +
+      "bırakmıyor ⇒ aynı sessiz kapı (ölçüldü).",
+  },
 };
+
+/** Serinin kıran eksenleri — gerekçeler beyanda, çağıranlar ekseni okur. */
+export function breakingAxesOf(key: string): SeriesFormatAxis[] {
+  return Object.keys(SCANNED_CLIENT_BREAKING_AXES[key] ?? {}) as SeriesFormatAxis[];
+}
 
 /**
  * EŞİĞİN ÜSTÜNDEKİ İLK SÜRÜM — kullanıcıya SÖYLENEN sayı.

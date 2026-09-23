@@ -20,7 +20,7 @@ import type { NumberSeries } from "@prisma/client";
 import {
   FAZ_B_ONCESI,
   FAZ_D_ONCESI,
-  SCANNED_CLIENT_BREAKING_AXES,
+  breakingAxesOf,
   firstVersionAbove,
   scanningClientsMissingPhases,
   type SeriesFormatAxis,
@@ -74,6 +74,21 @@ export function assertSeriesFormatAllowed(key: string, fmt: NumberSeriesFormat):
         ? "Okutulan kodların ön eki yalnız İngiliz alfabesi harfleri ve rakam olabilir (en çok 6 karakter)."
         : "Ön ek yalnız İngiliz alfabesi harfleri, rakam, tire ve alt çizgi olabilir (en çok 6 karakter).",
       { code: "NUMBER_SERIES_PREFIX_INVALID", key },
+    );
+  }
+  // ⚠️ SABİT PARÇA (infix) TAŞIYAN SERİDE TARİH KALDIRILAMAZ — ve bu bir SÜRÜM
+  // sorunu DEĞİL, yapının kendisi (ölçüldü 2026-09-23, `test_eski_istemci_okutma`):
+  // top barkodunun faz harfi ön ekten hemen sonra gelirse kod `TH0001` olur ve
+  // ÖN EK ÇAPALI sınıflandırma (`/^T\d/`) çalışamaz — ön ekten sonra rakam
+  // beklerken harf görür. Sahadaki istemci de, HEAD istemci de kodu tanıyamaz;
+  // yani istemcileri güncellemek bu kombinasyonu KURTARMAZ. Eksen kilidi değil
+  // DEĞER kapısı olmasının sebebi budur: kilit "sonra açılır" der, bu asla açılmaz.
+  if (entry.infix && fmt.dateSegment === "NONE") {
+    throw AppError.badRequest(
+      `"${entry.label}" serisinde tarih bölümü kaldırılamaz: kodun sabit bir harf parçası var ` +
+        "(ham/final) ve tarih kalkınca kod, barkod okuyucunun ayırt edemeyeceği bir şekle giriyor. " +
+        "Tarih bölümünü kısaltabilirsiniz (ör. yıl-ay), ama tamamen kaldıramazsınız.",
+      { code: "NUMBER_SERIES_INFIX_NEEDS_DATE", key },
     );
   }
   if (!Number.isInteger(fmt.digits) || fmt.digits < 1 || fmt.digits > 8) {
@@ -204,7 +219,7 @@ export function assertSeriesFormatWritable(key: string): void {
   // (ölçüldü 2026-09-23, `test_number_series §13a`). "minVersion yükseldi" tek
   // başına bu kilidi AÇMAZ.
   const missingPhases = katalog.kind ? scanningClientsMissingPhases() : [];
-  const kiran = katalog.kind ? (SCANNED_CLIENT_BREAKING_AXES[key] ?? []) : [];
+  const kiran = katalog.kind ? breakingAxesOf(key) : [];
   // ⚠️ SERİ DÜZEYİNDE RED YALNIZ HER EKSEN KIRILIYORSA: kısmi kilitte "bu seriye
   // dokunulamaz" demek, açık eksenleri de kapatırdı. Hangi EKSENİN değiştiği
   // ancak DEĞER bilindiğinde sorulabilir ⇒ `assertAxesAllowed` (aşağıda).

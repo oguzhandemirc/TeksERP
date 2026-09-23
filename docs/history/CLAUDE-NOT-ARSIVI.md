@@ -21,6 +21,64 @@
 
 ---
 
+## 2026-09-23 — Top barkodu AÇILDI: kapasite ile dolgu ayrıldı, kilit EKSENE indi [ÇEKİRDEK]
+
+**İki tetik:** (1) günde 9.999 top sınırına test veritabanında gerçekten çarpıldı; (2) kullanıcı
+*"…0005 yerine …5 yazabilir miyiz? baştaki sıfırları silmek bir ÖZELLİK olsun"* dedi.
+
+**Ölçüm tahmini İKİ KEZ yanlışladı ve ikisi de ders:**
+① İlk raporum "hane değişimi eski istemcileri kırar" diyordu — dayanağı SUNUCUNUN regex'iydi
+(`ROLL_BARCODE_RE`, tam dört hane). Sahadaki istemcinin kuralı ölçülünce çok daha gevşek çıktı
+(`/^T\d/i`) ve hane SINIFLANDIRMAYI kırmıyordu. **Sunucunun katılığı istemcinin katılığı değildir.**
+② Bunun üzerine "hane açık doğsun" dedim — 1e'nin ek kontrolü (sınıflandırma DIŞI yüzeyler var mı)
+bunu da yanlışladı: panel 1.3.1 kodu ayrıca `BARCODE_FORMATS.ROLL` ile süzüyor ve o kapı
+`RollsPage.openDetail`te SESSİZCE `return` ediyor, `RollScanBar`da "Aç" düğmesini pasif bırakıyor.
+Sınıflandırma doğru çalışır, operatör topu yine de açamaz. ⇒ **Bir eksenin "kırmıyor" olması, TEK
+yüzey ölçüldüğünde kanıtlanmış sayılmaz.** Simülasyona ikinci yüzey (`⛔kapı`) eklendi.
+
+**Simülasyonun kendisinde ÜÇ ölçüm arızası çıktı — üçü de "araç gerçeği eksik modelliyor" sınıfı:**
+· "regex VAR" ile "kapı VAR" eşitlenmişti; `BARCODE_FORMATS` dört tür taşıyor ama panel 1.3.1'de
+  yalnız `ROLL` bir kod yolunda tüketiliyor. Varlığı kapı saymak üç seriyi daha sebepsiz kilitlerdi.
+· O tarama istemcinin KENDİ birim testini de sayıp "dördü de kapılı" dedi; test bir kod yolu değil.
+· Simülasyon biçim değişiminde eski biçimi EMEKLİYE AYIRMIYORDU (`retiredPrefixes` vardı,
+  `retiredFormats` yoktu) ⇒ HEAD istemciye sahadakinden FARKLI bir tablo veriyordu. Bu yüzden bir
+  süre "tel sözleşmesinde emekli biçim yok" diye var olmayan bir ürün boşluğu rapor ettim; alan
+  ZATEN vardı ve sunucu ZATEN gönderiyordu. **Ölçüm aracı gerçeği eksik modellerse, bulduğu "arıza"
+  aracın kendisidir.**
+
+**Gerçek boşluk başka yerde ve DURUYOR:** iki istemcinin de `fullFormat`ı `retiredFormats`i hiç
+OKUMUYOR (grep: 0 isabet). Yani alan taşınıyor ama tüketilmiyor — **"alan sözleşmede var" ile
+"davranış var" aynı şey değildir.** Ayrı dilime alındı; o gelene kadar (c) iddiası BEYANLI muaf ve
+muafiyet ALANIN VARLIĞINA değil İSTEMCİNİN OKUMASINA çapalı, yani iş yapıldığı an kendiliğinden
+kalkıyor (54 muaf kombinasyon; boşluk `roll`a özgü değil, bütün okutulan serilerde).
+
+**Kapasite ile dolgu AYRILDI (D2③'ün top barkoduna uygulanması):** `MAX_ROLL_SEQ = 9999` kod sabiti
+olmaktan çıkıp serinin `maxValue`su oldu; `rollSeqCapacity()` onu okur. Kapasiteyi haneden türetmek
+(`10**digits - 1`) dolgusuz seride sınırı 9'a düşürür ve onuncu topta üretimi durdururdu — kullanıcının
+istediği özellik, yanlış tasarımla bir arızaya dönüşecekti. Tükenme uyarısının paydası da `maxValue`;
+sınır boşsa yüzde ÖLÇÜLEMEDİ döner ("%0" yanlış okunur).
+
+⚠️ **Mevcut kurulumlarda `roll.maxValue` NULL'dı** (seri yapısal kilitli olduğu için o kolon hiç
+kullanılmamıştı) ⇒ kapasite koddan seriye taşınınca 9999'luk sınır sessizce KALKARDI. Tek seferlik
+migration sınırı veriye yazıyor; NULL bir SEÇİM değil hiç yazılmamışlığın iziydi.
+
+**Yapısal kilit yerini EKSEN kilitlerine bıraktı.** Faz harfi gerçekten yapısaldır ama `infix`
+alanında zaten beyanlı ve panelden düzenlenemez; serinin GERİ KALANINI kilitlemek için gerekçe
+değildi. Ölçüm yedi eksenin yedisinde de kırılma buldu (ikinci yüzey sayesinde), hepsi gerekçesiyle
+`SCANNED_CLIENT_BREAKING_AXES.roll`da. Eksen tablosu artık eksen→GEREKÇE nesnesi.
+
+**Yeni değer kapısı:** `infix` taşıyan seride `dateSegment: NONE` 400 verir
+(`NUMBER_SERIES_INFIX_NEEDS_DATE`). `TH0001`de ön ekten sonra harf gelir ve ön ek çapalı
+sınıflandırma çalışamaz; istemci güncellemek KURTARMAZ ⇒ eksen kilidi değil DEĞER kapısı.
+Simülasyon da artık sunucunun reddettiği kombinasyonları ölçmez, beyan eder.
+
+**Sıralama:** dolgusuz kodda `…H10` metinde `…H9`dan önce gelir. Topları `barcode asc` ile sıralayan
+sekiz sorgu tek sabite (`ROLL_DISPLAY_ORDER`: doğuş anı birincil, barkod ikincil) bağlandı. Ölçüldü:
+sekizinin hiçbiri belge ya da Excel beslemiyor — hepsi ekran listesi, önizleme ya da uyarı metni;
+belge yolları zaten `createdAt` ile sıralıyor, basılmış kâğıtlar etkilenmez.
+
+---
+
 ## 2026-09-23 — Kısa parti no (P01…P99) artık AYAR; `batchDaily`nin yapısal kilidi kalktı [ÇEKİRDEK + PROFİL]
 
 **Kullanıcı isteği:** *"şu anki yapı yine default kalır, plakayla aynı olur; ama plakalar

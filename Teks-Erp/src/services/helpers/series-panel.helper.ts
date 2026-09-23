@@ -15,7 +15,7 @@
 import {
   FAZ_B_ONCESI,
   FAZ_D_ONCESI,
-  SCANNED_CLIENT_BREAKING_AXES,
+  breakingAxesOf,
   firstVersionAbove,
   scanningClientsMissingPhases,
   type SeriesFormatAxis,
@@ -138,7 +138,7 @@ export function seriesLock(key: string): SeriesLock | null {
   const eksik = e.kind ? scanningClientsMissingPhases() : [];
   // ⚠️ KİLİT EKSEN DÜZEYİNDE: hangi alanların eski istemciyi kırdığı ÖLÇÜLDÜ.
   // Kırılan ekseni olmayan seri (bugün `shipment`) hiç kilitlenmez.
-  const kiranEksenler = e.kind ? (SCANNED_CLIENT_BREAKING_AXES[key] ?? []) : [];
+  const kiranEksenler = e.kind ? breakingAxesOf(key) : [];
   if (eksik.length > 0 && kiranEksenler.length > 0) {
     const esik = eksik.includes("B") ? FAZ_B_ONCESI : FAZ_D_ONCESI;
     const hepsi = kiranEksenler.length === 5;

@@ -8,7 +8,15 @@ import {
   MAX_ROLL_SEQ,
   rollBarcodePrefix,
   generateRollBarcodeTx,
+  reserveRollBarcodesTx,
+  rollSeqCapacity,
 } from "../src/services/helpers/roll-barcode.helper";
+// ⚠️ `invalidateNumberSeriesCache` DEĞİL `refreshNumberSeriesCache`: ilki önbelleği
+// boşaltıyor ve `resolveSeriesFormat` o hâlde DB satırını değil KATALOG TOHUMUNU
+// döndürüyor (fail-safe). Ölçüm tohumu okuyup "ayar bağlı değil" derdi.
+import { refreshNumberSeriesCache, resolveSeriesFormat } from "../src/services/number-series.service";
+import { matchesSeries } from "../src/services/helpers/series-format.helper";
+import { ROLL_DISPLAY_ORDER } from "../src/constants/roll-order";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -62,7 +70,62 @@ async function main() {
   check("MAX aşımı → kapasite hatası", capErr);
 
   // --- eski/yeni format ayrımı: eski TEKS… yeni T311299H prefix'iyle EŞLEŞMEZ ---
+  // ⚠️ BİLİNÇLİ ÇAPA: burada TOHUM biçimin regex'i kullanılıyor, çünkü iddia
+  // "bugünkü seri ne derse desin, 2026 öncesi `TEKS…` kodları bu serinin kodu
+  // DEĞİLDİR" — seriden türetilse fabrika biçimi değiştirdiğinde iddia kayardı.
   check("eski TEKS… yeni regex'e UYMAZ", !ROLL_BARCODE_RE.test("TEKS991231HA001"));
+
+  // ── DOLGU AYARDAN: `digits` bir GÖRÜNÜM ayarıdır, kapasite DEĞİL (D2③) ──────
+  // Kullanıcı isteği 2026-09-23: "…0005 yerine …5 yazabilir miyiz? baştaki
+  // sıfırları silmek bir ÖZELLİK olsun." Kapasite bundan ETKİLENMEMELİ.
+  await cleanup();
+  const seri = await prisma.numberSeries.findUnique({ where: { key: "roll" }, select: { digits: true, maxValue: true } });
+  if (!seri) {
+    console.log("⏭ ÖLÇÜLEMEDİ: `roll` serisi bu DB'de yok (boot uzlaştırması koşmamış)");
+  } else {
+    try {
+      await prisma.numberSeries.update({ where: { key: "roll" }, data: { digits: 1 } });
+      await refreshNumberSeriesCache();
+      const f = resolveSeriesFormat("roll");
+      check("dolgusuz rejim kuruldu (digits=1)", f.digits === 1, String(f.digits));
+      check("⭐ KAPASİTE DOLGUDAN BAĞIMSIZ: digits=1 iken de üst sınır 9999",
+        rollSeqCapacity() === 9999, String(rollSeqCapacity()));
+
+      // ⭐ SIRALAMA: dolgusuz kodlarda `…H10` METİN olarak `…H9`dan ÖNCE gelir;
+      // liste sırası bu yüzden doğuş anına (`ROLL_DISPLAY_ORDER`) bağlandı.
+      await prisma.rollBarcodeCounter.update({ where: { day_type: { day: DAY, type: "H" } }, data: { n: 8 } }).catch(async () => {
+        await prisma.rollBarcodeCounter.create({ data: { day: DAY, type: "H", n: 8 } });
+      });
+      const dokuz = await generateRollBarcodeTx(prisma, "H", DATE);
+      const on = await generateRollBarcodeTx(prisma, "H", DATE);
+      check("dolgusuz kod dolgu YAZMIYOR (…H9 · …H10)", dokuz.endsWith("H9") && on.endsWith("H10"), `${dokuz} · ${on}`);
+      check("dolgusuz kod seriye UYUYOR (okutulabilir)", matchesSeries(resolveSeriesFormat("roll"), on), on);
+      // Metin sırası TERS, doğuş sırası DOĞRU — sabitin varlık sebebi bu farktır.
+      check("⭐ körlük zemini: metin sırası GERÇEKTEN ters (…H10 < …H9)", on < dokuz, `${on} < ${dokuz}`);
+      check("⭐ ROLL_DISPLAY_ORDER doğuş sırasını BİRİNCİL anahtar yapıyor",
+        ROLL_DISPLAY_ORDER[0]?.createdAt === "asc" && ROLL_DISPLAY_ORDER[1]?.barcode === "asc",
+        JSON.stringify(ROLL_DISPLAY_ORDER));
+    } finally {
+      await prisma.numberSeries.update({ where: { key: "roll" }, data: { digits: seri.digits, maxValue: seri.maxValue } });
+      await refreshNumberSeriesCache();
+    }
+  }
+
+  // ── SINIRSIZ SERİ: üst sınır boşsa kapasite kapısı YOKTUR ──────────────────
+  const seri2 = await prisma.numberSeries.findUnique({ where: { key: "roll" }, select: { maxValue: true } });
+  if (seri2) {
+    try {
+      await prisma.numberSeries.update({ where: { key: "roll" }, data: { maxValue: null } });
+      await refreshNumberSeriesCache();
+      check("üst sınır boşken kapasite SINIRSIZ", rollSeqCapacity() === null, String(rollSeqCapacity()));
+      await prisma.rollBarcodeCounter.update({ where: { day_type: { day: DAY, type: "H" } }, data: { n: MAX_ROLL_SEQ } });
+      const asan = await reserveRollBarcodesTx(prisma, "H", 1, DATE);
+      check("⭐ 9999 ÜSTÜ üretilebiliyor (sınır kalkınca gün dolmuyor)", asan[0]?.endsWith("10000") === true, asan[0] ?? "(yok)");
+    } finally {
+      await prisma.numberSeries.update({ where: { key: "roll" }, data: { maxValue: seri2.maxValue } });
+      await refreshNumberSeriesCache();
+    }
+  }
 }
 
 main()

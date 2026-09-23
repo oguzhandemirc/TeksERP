@@ -9,6 +9,7 @@
 //   - Rolls attached to a WO change status from STOCK → IN_PRODUCTION.
 // =============================================================================
 
+import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import {
@@ -2206,7 +2207,7 @@ export class WorkOrderService {
           color: { select: { id: true, code: true, name: true, hex: true } },
           batch: { select: { batchNumber: true } },
         },
-        orderBy: [{ barcode: "asc" }, { createdAt: "asc" }],
+        orderBy: ROLL_DISPLAY_ORDER,
       });
       for (const r of currentRolls) {
         const key = r.currentStepId!;
@@ -2492,7 +2493,7 @@ export class WorkOrderService {
           where: {
             status: { notIn: K18_DEAD_STATUSES },
           },
-          orderBy: [{ barcode: "asc" }, { createdAt: "asc" }],
+          orderBy: ROLL_DISPLAY_ORDER,
           select: {
             id: true,
             barcode: true,

@@ -47,6 +47,10 @@ function assertTargetAllowed(): string {
 // ── ESKİ YOL — panel `Electron/src/lib/scanner/barcode-kind.ts` birebir kopyası ─
 type BarcodeKind = "ROLL" | "TRAVELER_CARD" | "SWATCH" | "SACK" | "SHIPMENT" | "DISPATCH_DOC" | "UNKNOWN";
 
+// ⚠️ BİLİNÇLİ ÇAPA — seriden TÜRETİLMEZ: bu tablo sahadaki ESKİ kodların
+// biçimini tutar ve sorusu "bugünkü seri ne diyor" değil, "bu kod 2026-09
+// öncesinin kalıbına uyuyor mu". Seriye bağlansaydı fabrika biçimi
+// değiştirdiğinde ölçüm kayar ve geçmiş veriyi yanlış sınıflandırırdı.
 const OLD_FORMATS: Partial<Record<BarcodeKind, RegExp>> = {
   ROLL: /^T\d{6}[HF]\d{4}$/,
   TRAVELER_CARD: /^(?:IE|RK)\d{6}\d{4}$/,

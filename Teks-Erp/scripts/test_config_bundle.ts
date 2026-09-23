@@ -48,7 +48,7 @@ import {
 } from "../src/services/import/config-bundle.service";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
-import { SCANNED_CLIENT_BREAKING_AXES } from "../src/config/client-version-policy";
+import { breakingAxesOf } from "../src/config/client-version-policy";
 import { refreshNumberSeriesCache, resolveSeriesFormat } from "../src/services/number-series.service";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -255,9 +255,9 @@ async function main(): Promise<void> {
   // GERÇEKTEN kıran bir eksen taşıyan seriden seçilir.
   const taranan = NUMBER_SERIES_CATALOG.find(
     (e) => e.kind && !e.lockedReason && e.scopedCounter &&
-      (SCANNED_CLIENT_BREAKING_AXES[e.key]?.length ?? 0) > 0,
+      breakingAxesOf(e.key).length > 0,
   );
-  const kiranEksen = taranan ? SCANNED_CLIENT_BREAKING_AXES[taranan.key]![0]! : null;
+  const kiranEksen = taranan ? breakingAxesOf(taranan.key)[0]! : null;
   check("§9 körlük zemini: düzenlenebilir · kilitli · OKUTULAN seri GERÇEKTEN var",
     duzenlenebilir !== undefined && kilitli !== undefined && taranan !== undefined,
     `${duzenlenebilir?.key ?? "-"} / ${kilitli?.key ?? "-"} / ${taranan?.key ?? "-"}`);

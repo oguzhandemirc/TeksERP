@@ -16,6 +16,7 @@
 // ürün-bazlı döküm. Tahsis "hangi top" değil "ne kadar metraj" (SackAllocation defteri).
 // =============================================================================
 
+import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import {
   Prisma,
   InvoiceStatus,
@@ -3845,7 +3846,7 @@ export class ShippingService {
         sacks: { orderBy: { seq: "asc" }, select: { id: true, sackNo: true, _count: { select: { rolls: true } } } },
         // Yıkıcı önizleme: etkilenen HER top somut (barkod · sahibi · döneceği raf) — soyut sayı yetmez.
         // `SHIPPED` filtresi mutasyonun kümesiyle aynı (`undoDispatch` yalnız sevkteki topları döndürür).
-        rolls: { where: { status: RollStatus.SHIPPED }, orderBy: { barcode: "asc" }, select: { id: true, sackId: true, barcode: true, currentQty: true, preShipStatus: true, ownerCustomer: { select: { name: true } } } },
+        rolls: { where: { status: RollStatus.SHIPPED }, orderBy: ROLL_DISPLAY_ORDER, select: { id: true, sackId: true, barcode: true, currentQty: true, preShipStatus: true, ownerCustomer: { select: { name: true } } } },
         orders: { select: { order: { select: { orderNumber: true } } } },
       },
     });

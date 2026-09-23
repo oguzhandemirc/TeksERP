@@ -29,6 +29,10 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     // Kullanıcıya dönen cümlede tablo/sabit adı GEÇMEZ.
     ownCounter: { not: "Top barkodunun sırası kendi sayaç tablosundan atomik olarak alınır, var olan kodlardan hesaplanmaz; günlük kapasitesi de ayrı bir sınırdır." },
     panelGroup: "uretim",
+    // ⚠️ `Roll.barcode` NULLABLE (barkodsuz top var: açık kumaş, kartela tüketimi)
+    // ⇒ §4 gereği kapsam BEYANLI: sayım yalnız bu serinin ön ekiyle başlayan
+    // kodları sayar, `null` barkodları ve eski `TEKS…` kalıbını DEĞİL.
+    countTable: { model: "roll", field: "barcode", birim: "kayıt", kapsam: "seri-onekli" },
     label: "Top barkodu",
     seedPrefix: "T",
     seedDateSegment: D,
@@ -36,20 +40,23 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     seedSeparator: "",
     kind: "ROLL",
     infix: { re: "[HF]", aciklama: "faz harfi (H=ham · F=final) — `RollBarcodeCounter` anahtarının parçası, biçim ayarı değil" },
-    uretecBagi: {
-      durum: "tarif",
+    scopedCounter: {
+      durum: "hazir",
+      not: "Sıra kendi sayaç tablosundan (`roll_barcode_counters`) atomik alınıyor; biçim (ön ek · tarih · hane · ayraç) seriden okunuyor, kapasite `maxValue`dan geliyor.",
       uretec: "services/helpers/roll-barcode.helper.ts",
-      not:
-        "Üreteç ön eki `T`, altı haneli tarihi ve dört haneyi LİTERAL yazar; ayrıca " +
-        "`ROLL_BARCODE_RE` ve `rollBarcodePrefix` aynı literalleri ikinci ve üçüncü kez " +
-        "taşır ve `MAX_ROLL_SEQ = 9999` dört haneye çivilidir. Üçünü birden seriye " +
-        "bağlamak tek satırlık iş değil; seri KİLİTLİ olduğu için davranış riski yok, " +
-        "ama bağ olmadığı BEYAN EDİLİR — bu satır sınıflandırma (`kind`/`infix`) içindir, " +
-        "üreteci sürmez.",
     },
-    // Teknik ayrıntı: faz harfi `RollBarcodeCounter` anahtarının parçasıdır.
-    lockedReason:
-      "Top barkodundaki H/F harfi (ham/final) barkodun yapısal parçasıdır ve tarih ile sıra arasında durur; bu yapı biçim ayarıyla anlatılamaz.",
+    // ⚠️ YAPISAL KİLİT 2026-09-23'te KALKTI ve yerini EKSEN kilitlerine bıraktı.
+    // Gerekçe ölçüldü (`test_eski_istemci_okutma`): faz harfi gerçekten yapısaldır
+    // ama o `infix` alanında zaten beyanlı ve panelden DÜZENLENEMEZ; serinin
+    // GERİ KALANINI (ön ek · tarih · hane · ayraç) kilitlemek için bir sebep
+    // değildi. Hangi eksenin sahadaki istemciyi kırdığı artık tek tek ölçülüyor
+    // ve `SCANNED_CLIENT_BREAKING_AXES.roll`da gerekçesiyle yazılı.
+    //
+    // ⚠️ `maxValue` TOHUMU BUGÜNKÜ DAVRANIŞTIR: `MAX_ROLL_SEQ = 9999` kod sabiti
+    // olmaktan çıkıp serinin üst sınırı oldu. HANE DEĞİL SINIR kapasiteyi belirler
+    // (D2③) — fabrika dolguyu kaldırıp (`digits: 1`) `…H5` yazdırabilir ve sınır
+    // yine 9999 kalır; sınırı boşaltırsa kapasite `Int` tavanına kadar açılır.
+    seedMaxValue: 9999,
   },
   {
     key: "workOrder",

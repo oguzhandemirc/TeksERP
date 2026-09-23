@@ -16,6 +16,7 @@
 // siparişten" sorusu personelin sevkiyat aday siparişlerinden seçimiyle cevaplanır.
 // =============================================================================
 
+import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { Prisma, RollStatus, OrderStatus, PrintedDocType, ShipmentStatus, WarehouseEventType } from "@prisma/client";
 import { ddmmyy, normalizeScanCode } from "../utils/code-format";
 import { postStockMove } from "./helpers/warehouse-ledger.helper";
@@ -281,7 +282,7 @@ export class ReturnService {
         },
         rolls: {
           where: { status: RollStatus.SHIPPED },
-          orderBy: { barcode: "asc" },
+          orderBy: ROLL_DISPLAY_ORDER,
           select: {
             id: true,
             barcode: true,

@@ -7,6 +7,7 @@
 //   3) Çift rescue → 409. 4) Kısa sebep → 400. 5) IN_PRODUCTION olmayan → 409.
 // Koşum: npx tsx scripts/test_rescue_stuck.ts
 // =============================================================================
+import { rollBarkoduMu } from "./lib/roll-barcode-assert";
 import prisma from "../src/lib/prisma";
 import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
@@ -91,7 +92,7 @@ async function main(): Promise<void> {
       await inv.rescueStuckRoll(rollId, { reason: "açık kumaş kurtarma testi" }, ADMIN);
       const r = await prisma.roll.findUniqueOrThrow({ where: { id: rollId }, select: { status: true, barcode: true } });
       check("2a: açık kumaş rescue → WAREHOUSE", r.status === RollStatus.WAREHOUSE, r.status);
-      check("2b: barkod ÜRETİLDİ (T...F...)", !!r.barcode && /^T\d{6}F\d{4}$/.test(r.barcode), r.barcode ?? "null");
+      check("2b: barkod ÜRETİLDİ (T...F...)", rollBarkoduMu(r.barcode, "F"), r.barcode ?? "null");
     }
 
     // 3) Çift rescue → 409 (artık IN_PRODUCTION değil)

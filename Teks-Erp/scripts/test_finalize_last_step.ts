@@ -7,6 +7,7 @@
 //   - form ACIK, currentStepId null, qualityGradeId boşsa katalogdan backfill.
 // Koşum: npx tsx scripts/test_finalize_last_step.ts
 // =============================================================================
+import { rollBarkoduMu } from "./lib/roll-barcode-assert";
 import prisma from "../src/lib/prisma";
 import { RollStatus, RollForm } from "@prisma/client";
 import { finalizeRollsAtLastStep } from "../src/services/helpers/roll-finalize.helper";
@@ -65,11 +66,11 @@ async function main(): Promise<void> {
     check("currentStepId temizlendi", a.currentStepId === null);
 
     check("Açık kumaş → WAREHOUSE", b.status === RollStatus.WAREHOUSE, b.status);
-    check("Açık kumaşa 'F' barkodu ÜRETİLDİ", !!b.barcode && /^T\d{6}F\d{4}$/.test(b.barcode), b.barcode ?? "null");
+    check("Açık kumaşa 'F' barkodu ÜRETİLDİ", rollBarkoduMu(b.barcode, "F"), b.barcode ?? "null");
     check("Açık kumaş form ACIK", b.form === RollForm.ACIK);
 
     check("FIRE kalite → SCRAP (kaliteden çözüldü)", c.status === RollStatus.SCRAP, c.status);
-    check("SCRAP topa 'H' barkodu üretildi", !!c.barcode && /^T\d{6}H\d{4}$/.test(c.barcode), c.barcode ?? "null");
+    check("SCRAP topa 'H' barkodu üretildi", rollBarkoduMu(c.barcode, "H"), c.barcode ?? "null");
 
     // Idempotent: ikinci finalize barkodu değiştirmemeli.
     const bcBefore = b.barcode;

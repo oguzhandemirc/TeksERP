@@ -40,6 +40,7 @@
 // ve `finally` bloğunda silinir.
 // =============================================================================
 
+import { rollBarkoduMu } from "./lib/roll-barcode-assert";
 import type { Server } from "http";
 import type { AddressInfo } from "net";
 import { randomUUID } from "crypto";
@@ -400,7 +401,7 @@ async function main(): Promise<void> {
       );
       check(
         "⭐ barkod tip damgası F (final) — renksiz olmasına rağmen H değil",
-        typeof roll.barcode === "string" && /^T\d{6}F\d{4}$/.test(roll.barcode),
+        rollBarkoduMu(roll.barcode, "F"),
         String(roll.barcode),
       );
       check("form=TOP (Tambur bitmiş top üretir)", roll.form === "TOP", String(roll.form));
@@ -732,7 +733,7 @@ async function main(): Promise<void> {
       );
       check(
         "tabletten üretilen renksiz top da WAREHOUSE + F barkod",
-        r.status === "WAREHOUSE" && /^T\d{6}F\d{4}$/.test(String(r.barcode)),
+        r.status === "WAREHOUSE" && rollBarkoduMu(String(r.barcode), "F"),
         `${r.status} / ${String(r.barcode)}`,
       );
       check("tabletten üretilen top da hiçbir adıma bağlanmadı", r.currentStepId === null);
@@ -780,7 +781,7 @@ async function main(): Promise<void> {
     );
     check(
       "KK1 (renksiz) → barkod tip damgası H (ham)",
-      typeof kk1Raw.data.barcode === "string" && /^T\d{6}H\d{4}$/.test(kk1Raw.data.barcode),
+      rollBarkoduMu(kk1Raw.data.barcode, "H"),
       String(kk1Raw.data.barcode),
     );
     check(
@@ -806,7 +807,7 @@ async function main(): Promise<void> {
     );
     check(
       "KK1 (renkli) → barkod tip damgası F (final)",
-      typeof kk1Colored.data.barcode === "string" && /^T\d{6}F\d{4}$/.test(kk1Colored.data.barcode),
+      rollBarkoduMu(kk1Colored.data.barcode, "F"),
       String(kk1Colored.data.barcode),
     );
     check(
