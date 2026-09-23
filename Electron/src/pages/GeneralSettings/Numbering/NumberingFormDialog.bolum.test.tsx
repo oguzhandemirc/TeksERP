@@ -107,6 +107,23 @@ describe("Numaralandırma diyaloğu — bölüm bölüm hata", () => {
     expect(kaydet()).not.toBeDisabled(); // sayaç bölümü bağımsız
   });
 
+  it("⭐ §5 ALAN mesajı gösterilir: `errors[0].message` `message`in önüne geçer", async () => {
+    // d3 ölçtü (2026-09-23): sunucu alan mesajını `errors[]`te döndürüyor, gövdedeki
+    // `message` yalnız "Validasyon hatası" diyor. Ekran `message`i tek başına
+    // okuyunca kullanıcı sebebi HİÇ görmüyordu.
+    vi.mocked(numberingService.preview).mockRejectedValue({
+      response: {
+        data: {
+          message: "Validasyon hatası",
+          errors: [{ field: "digits", message: "Hane sayısı en fazla 8 olabilir." }],
+        },
+      },
+    });
+    ciz(row({ key: "packingLotCode", editable: true, lockKind: undefined, lockedReason: undefined }));
+    expect(await screen.findByText("Hane sayısı en fazla 8 olabilir.")).toBeTruthy();
+    expect(screen.queryByText("Validasyon hatası")).toBeNull();
+  });
+
   it("⭐ §3 önizleme hatası: örnek '—' olur ve hata BİÇİM bölümünde görünür", async () => {
     vi.mocked(numberingService.preview).mockRejectedValue({
       response: { data: { message: "Hane sayısı en fazla 8 olabilir." } },

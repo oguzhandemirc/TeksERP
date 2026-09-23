@@ -143,6 +143,16 @@ const kod = (e: unknown): string | undefined =>
   (e as { details?: { code?: string } } | null)?.details?.code;
 
 /** SENKRON kapı sondası — fırlatmazsa false, farklı kodla fırlatırsa da false. */
+/** Herhangi bir hata fırlattı mı? ("hiç fırlamamalı" iddiaları için.) */
+function throwsAny(fn: () => void): boolean {
+  try {
+    fn();
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 function throws(fn: () => void, beklenen: string): boolean {
   try {
     fn();
@@ -709,6 +719,61 @@ async function main(): Promise<void> {
     check("§12 ⭐ örnek numara YÜRÜRLÜKTEKİ biçimden geliyor",
       woOrnek.workOrderNumber === previewSeriesCode(resolveSeriesFormat("workOrder"), 1),
       `${String(woOrnek.workOrderNumber)}`);
+
+    // ── §13 KULLANICIYA DÖNEN METİNDE JARGON YOK (K2, 2026-09-23) ──────────
+    // ⚠️ Bu metinler EKRANDA görünür: kilit gerekçesi, sayaç kilidi gerekçesi,
+    // seri adı. İçlerinde tablo/fonksiyon adı, backtick ya da dosya yolu geçmesi
+    // kullanıcıya hiçbir şey söylemez — "RollBarcodeCounter anahtarının parçası"
+    // cümlesi d3'ün panel turunda tam olarak böyle göründü. Teknik ayrıntı
+    // YORUMDA yaşar; ekrana çıkan cümle kullanıcı dilindedir.
+    const ekranMetinleri: Array<{ nerede: string; metin: string }> = [];
+    for (const e of NUMBER_SERIES_CATALOG) {
+      ekranMetinleri.push({ nerede: `${e.key}.label`, metin: e.label });
+      if (e.lockedReason) ekranMetinleri.push({ nerede: `${e.key}.lockedReason`, metin: e.lockedReason });
+      if (e.ownCounter) ekranMetinleri.push({ nerede: `${e.key}.ownCounter`, metin: e.ownCounter.not });
+    }
+    for (const e of NUMBER_SERIES_CATALOG) {
+      const lock = seriesLock(e.key);
+      if (lock) {
+        ekranMetinleri.push({ nerede: `${e.key}.lock.reason`, metin: lock.reason });
+        ekranMetinleri.push({ nerede: `${e.key}.lock.acilma`, metin: lock.acilma });
+      }
+      ekranMetinleri.push({ nerede: `${e.key}.resetReason`, metin: seriesCounterCapabilities(e.key).resetReason });
+    }
+    // Jargon ölçütü: backtick · dosya uzantısı · fonksiyon çağrısı · camelCase ya
+    // da snake_case TANIMLAYICI. Türkçe cümlede geçen büyük harfli kısaltmalar
+    // (P01, H/F, KK) jargon DEĞİLDİR — onlar sahada kullanılan adlardır.
+    const jargonlu = ekranMetinleri.filter(({ metin }) =>
+      metin.includes("`") ||
+      /\.(ts|tsx|sql|mjs)\b/.test(metin) ||
+      /[A-Za-z_][\w.]*\(\)/.test(metin) ||
+      /\b[a-z]+[A-Z][A-Za-z]*\b/.test(metin) ||
+      /\b[a-z]+_[a-z_]+\b/.test(metin));
+    check("§13 körlük zemini: ekran metinleri toplandı", ekranMetinleri.length > 100, `${ekranMetinleri.length} metin`);
+    check("§13 ⭐ kullanıcıya dönen metinde jargon YOK (backtick · dosya · tanımlayıcı)",
+      jargonlu.length === 0,
+      jargonlu.map((x) => `${x.nerede}: "${x.metin.slice(0, 60)}…"`).join(" · "));
+
+    // ── §14 SONUÇ KAPISI (K6): ön ek eşitliği değil, KODUN ÇÖZÜLDÜĞÜ TÜR ──────
+    // ⚠️ Okutulmayan bir serinin ürettiği kod, okutulan bir türe ÇÖZÜLEBİLİR ve
+    // ön ek karşılaştırması bunu SORAMIYORDU (ölçüldü 2026-09-23: okutulmayan 43
+    // seri × okutulan ön ekler = 215 deneme, çakışma reddi 0).
+    const cv = resolveSeriesFormat("sack");
+    check("§14 ⭐ okutulmayan seri, OKUTULAN bir türe çözülen kod üretemez",
+      throws(() => assertSeriesFormatAllowed("packingLotCode", {
+        ...resolveSeriesFormat("packingLotCode"), prefix: cv.prefix, dateSegment: cv.dateSegment,
+        digits: cv.digits, separator: cv.separator, separator2: cv.separator2,
+      }), "NUMBER_SERIES_SCAN_COLLISION"));
+    // ⚠️ KAPI YENİ İHLALİ ENGELLER, BUGÜNKÜ DURUMU YASAKLAMAZ: `cashAccount` (KS)
+    // bugün `kartelaDispatch` (KS) biçimine uyuyor ve bu çakışma BEYANLI/zararsız.
+    // Koşulsuz bir kapı, o serinin hane sayısını bile değiştirilemez yapardı.
+    const devralinanOrnek = NUMBER_SERIES_CATALOG.filter((e) => !e.lockedReason && !throwsAny(() =>
+      assertSeriesFormatAllowed(e.key, resolveSeriesFormat(e.key))));
+    check("§14 ⭐ 52 serinin BUGÜNKÜ biçimi kapıdan geçiyor (devralınan çakışma yasaklanmaz)",
+      devralinanOrnek.length === NUMBER_SERIES_CATALOG.filter((e) => !e.lockedReason).length,
+      `${devralinanOrnek.length}/${NUMBER_SERIES_CATALOG.filter((e) => !e.lockedReason).length}`);
+    check("§14 ⭐ devralınan çakışmada BİÇİMİN BAŞKA EKSENİ değiştirilebiliyor (hane)",
+      !throwsAny(() => assertSeriesFormatAllowed("cashAccount", { ...resolveSeriesFormat("cashAccount"), digits: 5 })));
 
     // ── §7 KAPASİTE ve TÜKENME (D2③) ────────────────────────────────────────
     // ⭐ §7a ENVANTER ŞEMAYLA AYRIŞMIYOR: kapasite dosyası `@db.VarChar(n)`

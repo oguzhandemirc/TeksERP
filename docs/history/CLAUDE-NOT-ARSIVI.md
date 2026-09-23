@@ -11580,3 +11580,37 @@ belgeye girmez, yoksa 6 eski yurtdışı belge yeni satır kazanırdı.
 yedeğinin kopyasında (`tekserp_d3e2e_test`, 139 sevkiyat: 133 yurtiçi · 6 yurtdışı) procedureCode dolu sevkiyat
 0 → bugün basılı hiçbir belgenin çıktısı değişmez. Sevk Kapısı kartındaki şube/cari kodu (saha #21) kimlik
 olarak kalır; gümrük no ayrı ve "Gümrük:" etiketiyle yalnız yurtdışında ve yalnız kayıtlıysa görünür.
+
+## 2026-09-23 — Çakışma kapısı ÖN EK EŞİTLİĞİNE değil SONUCA bakar (K6) + jargon ve alan mesajı (K2·K5) [ÇEKİRDEK]
+
+**Karar (1e):** ön ek karşılaştırması yanlış soruyu soruyordu. Doğru soru: *bu biçimle üretilecek kod
+barkod okutulduğunda NEYE çözülür?* Aday biçimle iki kod üretilir (ilk sıra + hane taşmış sıra —
+taşma kodu uzatır ve uzun kod daha az haneli başka bir seriye de uyabilir) ve okutulan serilerin
+biçimleriyle sınanır; başka bir türe çözülüyorsa 409 `NUMBER_SERIES_SCAN_COLLISION` ve mesaj sonucu
+söyler. Kapı OKUTULMAYAN serilerde de koşar — boşluk tam oradaydı (ölçüldü 2026-09-23: okutulmayan 43
+seri × okutulan ön ekler = 215 deneme, çakışma reddi 0).
+
+**Ölçülen iki şey karar değiştirdi:** ① `packingLotCode → "T"` (1e'nin örneği) aslında ÇAKIŞMIYOR:
+top barkodu tarih ile sıra arasında H/F harfi taşıdığı için `T2309260001` top olarak çözülmüyor.
+Yani sonuç kapısı, ön ek sezgisinin yanıldığı yeri de düzeltiyor. ② `cashAccount` (kasa kodu, `KS`)
+BUGÜN `kartelaDispatch` (`KS`, okutulur) biçimine uyuyor; koşulsuz bir kapı o serinin hane sayısını
+bile değiştirilemez yapardı. Bu yüzden ölçüt FARK: adayın düştüğü tür bugünkü biçimin de düştüğü
+türse DEVRALINMIŞTIR ve engellenmez. Var olan ön ek kuralı (tarama uzayında biri ötekinin başlangıcı
+olamaz) KALDI ve ÖNCE konuşuyor — sözleşme değişmesin diye; sonuç kapısı onun göremediğini kapatır.
+
+**K2 — kilit metinlerinde jargon:** `roll.lockedReason` hâlâ "…`RollBarcodeCounter` anahtarının
+parçasıdır" diyordu (d3 panelde gördü). Katalogdaki KULLANICIYA DÖNEN beş metin (iki `lockedReason`,
+üç `ownCounter.not`) kullanıcı diline çevrildi; teknik ayrıntı koddaki yoruma indi. Kapı: ekranda
+görünen tüm metinler (seri adı · kilit gerekçesi · açılma koşulu · sayaç kilidi · sıfırlama gerekçesi)
+backtick, dosya uzantısı, fonksiyon çağrısı ve camelCase/snake_case tanımlayıcı taşıyamaz. Türkçe
+cümledeki saha kısaltmaları (P01, H/F) jargon SAYILMAZ — yanlış pozitif ölçüldü ve elendi.
+
+**K5 — alan mesajı:** panel `response.data.message`i tek başına okuyordu; Zod alan mesajı
+`errors[0].message`te. Okuma tek kaynağa taşındı (`apiErrorMessage`, `apiClient`ten export) —
+toast'ı basan yol bunu zaten biliyordu, ekran ikinci bir okuma yazıp mesajı kaybediyordu ("türetilmiş
+alan / ayrışan yüzey" sınıfı).
+
+**Kalıcı kapılar:** `test_number_series_panel §13` (jargon) + `§14` (sonuç kapısı + devralınan
+çakışma) · `NumberingFormDialog.bolum.test §5` (alan mesajı `message`in önüne geçer). Üç sonda:
+sonuç kapısı devre dışı → §14 kırmızı · devralınan muafiyeti kalkınca 52 serinin bugünkü biçimi
+reddediliyor (§14 ikinci kol) · jargon geri konunca §13 kırmızı.
