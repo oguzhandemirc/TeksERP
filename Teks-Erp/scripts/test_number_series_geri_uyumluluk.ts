@@ -1113,54 +1113,65 @@ async function main(): Promise<void> {
         // ihlal DEĞİL, ölçülemez bir vakadır ve ADIYLA bildirilir.
         console.log(`   ⏭️ (f) ${e.key}: ön ek ${yeniOnEk} kapıdan geçmedi — ${(err as Error).message.slice(0, 90)}`);
       }
-      if (bicimTasindi) {
-        await refreshNumberSeriesCache();
-        const tasindi = resolveSeriesFormat(e.key);
-        check(`L2 (f) körlük zemini: ${e.key} biçimi GERÇEKTEN değişti`,
-          tasindi.prefix === yeniOnEk, `${taban.prefix} → ${tasindi.prefix}`);
-        // ⚠️ ÇÖKEN SONDA, SONDA DEĞİLDİR: K27'nin belirtisi bir İSTİSNADIR
-        // ("Barkod üretimi 5 denemede başarısız"). Yakalanmazsa bekçi düşer,
-        // teardown koşmaz ve arıza bir SONRAKİ koşumda ilgisiz yerde görünür.
-        // İstisna burada KIRMIZI İDDİAYA çevrilir, sebebi basılır.
-        const uret = async (): Promise<{ id: string; kod: string } | Error> => {
-          try {
-            return (await yol.yarat!(DAMGA)) ?? new Error("(kayıt yaratılamadı)");
-          } catch (err) {
-            return err as Error;
+      // ⚠️ GERİ ALMA `finally`DE (2026-09-24): eskiden taşıma ile geri alma
+      // ARASINDAKİ herhangi bir `await` düşerse geri alma HİÇ koşmuyordu ve seri
+      // `<ÖNEK>Z` olarak SIZIYORDU. Ölçüldü: tam pakette `item` `STKZ` kaldı ve
+      // arıza `test_item_code_autogen`de göründü (ön ek geri konunca 14/0).
+      // ⇒ Bir bekçi FİKSTÜR DEĞİL AYAR yazıyorsa geri alma `finally`ye girer;
+      //   yoksa arıza bir SONRAKİ bekçinin adına yazılır.
+      try {
+        if (bicimTasindi) {
+          await refreshNumberSeriesCache();
+          const tasindi = resolveSeriesFormat(e.key);
+          check(`L2 (f) körlük zemini: ${e.key} biçimi GERÇEKTEN değişti`,
+            tasindi.prefix === yeniOnEk, `${taban.prefix} → ${tasindi.prefix}`);
+          // ⚠️ ÇÖKEN SONDA, SONDA DEĞİLDİR: K27'nin belirtisi bir İSTİSNADIR
+          // ("Barkod üretimi 5 denemede başarısız"). Yakalanmazsa bekçi düşer,
+          // teardown koşmaz ve arıza bir SONRAKİ koşumda ilgisiz yerde görünür.
+          // İstisna burada KIRMIZI İDDİAYA çevrilir, sebebi basılır.
+          const uret = async (): Promise<{ id: string; kod: string } | Error> => {
+            try {
+              return (await yol.yarat!(DAMGA)) ?? new Error("(kayıt yaratılamadı)");
+            } catch (err) {
+              return err as Error;
+            }
+          };
+          const r1 = await uret();
+          const u1 = r1 instanceof Error ? null : r1;
+          if (u1 && yol.sil) temizlik.push(() => yol.sil!(u1.id));
+          const r2 = await uret();
+          const u2 = r2 instanceof Error ? null : r2;
+          if (u2 && yol.sil) temizlik.push(() => yol.sil!(u2.id));
+          check(`L2 ⭐ (f) ${e.key}: ön ek değişiminden sonra İKİ kayıt da doğdu`,
+            u1 !== null && u2 !== null,
+            `${u1?.kod ?? (r1 as Error).message.slice(0, 60)} · ${u2?.kod ?? (r2 as Error).message.slice(0, 60)}`);
+          if (u1 && u2) {
+            check(`L2 ⭐ (f) ${e.key}: iki kod TEKİL ve yeni ön eki taşıyor`,
+              u1.kod !== u2.kod && u1.kod.startsWith(yeniOnEk) && u2.kod.startsWith(yeniOnEk),
+              `${u1.kod} · ${u2.kod}`);
+            // ARDIŞIKLIK: sayaç ikinci kayıtta İLERLEMELİ (1'de takılmamalı).
+            // ⚠️ SON RAKAM ÖBEĞİ: kodda tarih de olabilir (`PRTZ-2609-0002`) ve
+            // "baştan say" kurgusu orada tarihi sıra sanar — ölçüldü, ilk yazımda
+            // bu kol yanlış kırmızı verdi (kod ARTMIŞTI, yüklem okuyamadı).
+            const sira = (k: string): number => Number.parseInt(/(\d+)$/.exec(k)?.[1] ?? "", 10);
+            check(`L2 ⭐ (f) ${e.key}: sayaç İKİNCİ kayıtta ilerledi (1'de takılmadı)`,
+              sira(u2.kod) > sira(u1.kod), `${u1.kod} → ${u2.kod}`);
           }
-        };
-        const r1 = await uret();
-        const u1 = r1 instanceof Error ? null : r1;
-        if (u1 && yol.sil) temizlik.push(() => yol.sil!(u1.id));
-        const r2 = await uret();
-        const u2 = r2 instanceof Error ? null : r2;
-        if (u2 && yol.sil) temizlik.push(() => yol.sil!(u2.id));
-        check(`L2 ⭐ (f) ${e.key}: ön ek değişiminden sonra İKİ kayıt da doğdu`,
-          u1 !== null && u2 !== null,
-          `${u1?.kod ?? (r1 as Error).message.slice(0, 60)} · ${u2?.kod ?? (r2 as Error).message.slice(0, 60)}`);
-        if (u1 && u2) {
-          check(`L2 ⭐ (f) ${e.key}: iki kod TEKİL ve yeni ön eki taşıyor`,
-            u1.kod !== u2.kod && u1.kod.startsWith(yeniOnEk) && u2.kod.startsWith(yeniOnEk),
-            `${u1.kod} · ${u2.kod}`);
-          // ARDIŞIKLIK: sayaç ikinci kayıtta İLERLEMELİ (1'de takılmamalı).
-          // ⚠️ SON RAKAM ÖBEĞİ: kodda tarih de olabilir (`PRTZ-2609-0002`) ve
-          // "baştan say" kurgusu orada tarihi sıra sanar — ölçüldü, ilk yazımda
-          // bu kol yanlış kırmızı verdi (kod ARTMIŞTI, yüklem okuyamadı).
-          const sira = (k: string): number => Number.parseInt(/(\d+)$/.exec(k)?.[1] ?? "", 10);
-          check(`L2 ⭐ (f) ${e.key}: sayaç İKİNCİ kayıtta ilerledi (1'de takılmadı)`,
-            sira(u2.kod) > sira(u1.kod), `${u1.kod} → ${u2.kod}`);
         }
-        // Geri alma DOĞRUDAN yazmayla: ölçülen kod yolu bozuksa teardown da düşerdi.
-        await prisma.numberSeriesLine.deleteMany({ where: { seriesKey: e.key, prefix: yeniOnEk } });
-        await prisma.numberSeries.update({
-          where: { key: e.key },
-          data: {
-            prefix: taban.prefix, dateSegment: taban.dateSegment, digits: taban.digits,
-            separator: taban.separator, separator2: taban.separator2 ?? null,
-            retiredPrefixes: taban.retiredPrefixes,
-          },
-        });
-        await refreshNumberSeriesCache();
+      } finally {
+        if (bicimTasindi) {
+          // Geri alma DOĞRUDAN yazmayla: ölçülen kod yolu bozuksa teardown da düşerdi.
+          await prisma.numberSeriesLine.deleteMany({ where: { seriesKey: e.key, prefix: yeniOnEk } });
+          await prisma.numberSeries.update({
+            where: { key: e.key },
+            data: {
+              prefix: taban.prefix, dateSegment: taban.dateSegment, digits: taban.digits,
+              separator: taban.separator, separator2: taban.separator2 ?? null,
+              retiredPrefixes: taban.retiredPrefixes,
+            },
+          });
+          await refreshNumberSeriesCache();
+        }
       }
     }
   } finally {
