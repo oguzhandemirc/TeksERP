@@ -121,7 +121,13 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
         {!row.editable && row.lockKind && (
           <p className="rounded-md border p-3 text-sm text-muted-foreground">{lockSentence(row)}</p>
         )}
-        <NumberingFields fmt={fmt} onChange={setFmt} disabled={!row.editable} hata={bicimHatasi} />
+        <NumberingFields
+          fmt={fmt}
+          onChange={setFmt}
+          disabled={!row.editable}
+          lockedAxes={row.lockedAxes}
+          hata={bicimHatasi}
+        />
 
         {row.editable && (
           <NumberingEffectiveFromField value={effectiveFrom} onChange={setEffectiveFrom} />

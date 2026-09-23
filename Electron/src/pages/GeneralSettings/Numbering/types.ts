@@ -78,6 +78,12 @@ export interface NumberSeriesRow {
   /** Eylem kimde; rozet vurgusu buradan. Eski backend'de `undefined`. */
   lockActor?: "kimse" | "biz" | "siz";
   /**
+   * KİLİTLİ ALANLAR — yalnız bunlar pasif çizilir (E4 ölçümü): okutulan serilerin
+   * çoğu eski istemcide YALNIZ ön ekten kırılıyor, gerisi serbest. Alan yoksa
+   * (eski backend ya da tam kilit) bütün biçim pasif kabul edilir.
+   */
+  lockedAxes?: Array<"prefix" | "dateSegment" | "digits" | "separator" | "separator2">;
+  /**
    * Bölüm anahtarı. ⚠️ Panel bu kümeyi DARALTMAZ: backend yeni bir grup
    * eklediğinde burada `string` olduğu için satır DÜŞMEZ, bilinmeyen grup kendi
    * başlığıyla çizilir. Daraltılmış bir union, "kaydedilen ama görünmeyen kayıt"

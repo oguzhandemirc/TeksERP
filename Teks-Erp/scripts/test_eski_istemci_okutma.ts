@@ -42,7 +42,14 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { FAZ_B_ONCESI, FAZ_D_ONCESI, compareClientVersions, scanningClientsMissingPhases } from "../src/config/client-version-policy";
+import {
+  FAZ_B_ONCESI,
+  FAZ_D_ONCESI,
+  SCANNED_CLIENT_BREAKING_AXES,
+  compareClientVersions,
+  scanningClientsMissingPhases,
+  type SeriesFormatAxis,
+} from "../src/config/client-version-policy";
 import { NUMBER_SERIES_CATALOG, type NumberSeriesCatalogEntry } from "../src/constants/number-series-catalog";
 import { formatSeriesCode, seriesPrefix, type NumberSeriesFormat } from "../src/services/helpers/series-format.helper";
 import type { SeriesClassifierRow } from "../src/services/number-series.service";
@@ -446,6 +453,46 @@ async function main(): Promise<void> {
     console.log(`   ⓘ ${e.key}: ${s ? `eski istemcide kıran eksen(ler): ${[...s].join(", ")}` : "HİÇBİR eksen eski istemcide kırılmıyor — kilidin bu seri için istemci gerekçesi YOK"}`);
   }
   console.log("");
+
+  // ── (a2) KİLİT TABLOSU ↔ SİMÜLASYON — İKİ YÖNLÜ EŞLEME (1e kararı) ─────────
+  // ⚠️ Kilit artık EKSEN düzeyinde ve kaynağı bu simülasyondur. Beyan
+  // (`SCANNED_CLIENT_BREAKING_AXES`) ile ölçüm İKİ YÖNDEN eşlenir:
+  //   · simülasyonun KIRDIĞI bir eksen beyanda YOKSA → koruma eksik (kırmızı)
+  //   · simülasyonun KIRMADIĞI bir eksen beyanda VARSA → GEREKSİZ kilit (kırmızı),
+  //     çünkü fabrikanın değiştirebileceği bir ayarı sebepsiz kapatır.
+  // Eksen adı eşlemesi burada, çünkü değişiklik listesi de burada tanımlı.
+  const EKSEN_OF: Record<string, SeriesFormatAxis> = {
+    "önek": "prefix",
+    "tarih YYMM": "dateSegment",
+    "tarih NONE": "dateSegment",
+    "tarih YYYYMMDD": "dateSegment",
+    "hane 5": "digits",
+    "ayraç -": "separator",
+    "ayraç2 /": "separator2",
+  };
+  const eksikKoruma: string[] = [];
+  const gereksizKilit: string[] = [];
+  for (const e of KILITLI) {
+    const kiran = new Set<SeriesFormatAxis>();
+    for (const ad of gerekceli[e.key] ?? []) {
+      const eksen = EKSEN_OF[ad];
+      if (eksen) kiran.add(eksen);
+    }
+    const beyan = new Set(SCANNED_CLIENT_BREAKING_AXES[e.key] ?? []);
+    for (const a of kiran) if (!beyan.has(a)) eksikKoruma.push(`${e.key}:${a}`);
+    for (const a of beyan) if (!kiran.has(a)) gereksizKilit.push(`${e.key}:${a}`);
+  }
+  check("(a2) körlük zemini: simülasyon en az bir seride kıran eksen buldu",
+    KILITLI.some((e) => (gerekceli[e.key]?.size ?? 0) > 0));
+  check("(a2) ⭐ simülasyonun KIRDIĞI her eksen kilit tablosunda VAR (koruma eksik değil)",
+    eksikKoruma.length === 0, eksikKoruma.join(", "));
+  check("(a2) ⭐ kilit tablosundaki her eksen simülasyonda GERÇEKTEN kırılıyor (gereksiz kilit yok)",
+    gereksizKilit.length === 0, gereksizKilit.join(", "));
+  // Kilitsiz seri de BEYANLI: tabloda anahtarı olmayan okutulan seri, "ölçülmedi"
+  // ile "kırılmıyor"u karıştırır.
+  const beyansizSeri = KILITLI.filter((e) => SCANNED_CLIENT_BREAKING_AXES[e.key] === undefined);
+  check("(a2) ⭐ okutulan her serinin kilit tablosunda BİR SATIRI var (boş dizi de beyandır)",
+    beyansizSeri.length === 0, beyansizSeri.map((e) => e.key).join(", "));
 
   // ── (b) KİLİDİN GEREKÇESİ ──────────────────────────────────────────────────
   const eksik = scanningClientsMissingPhases();

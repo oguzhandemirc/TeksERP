@@ -28,14 +28,24 @@ export function NumberingFields({
   fmt,
   onChange,
   disabled = false,
+  lockedAxes,
   hata = null,
 }: {
   fmt: SeriesFormatInput;
   onChange: (next: SeriesFormatInput) => void;
   disabled?: boolean;
+  /**
+   * ALAN BAZINDA KİLİT (E4): eski istemcinin kırıldığı eksenler. Ölçüldü — sekiz
+   * okutulan serinin altısında YALNIZ ön ek kırıyor, yani "seriyi tamamen kapat"
+   * fabrikanın hane/ayraç ayarını sebepsiz kilitliyordu. `undefined` = eski
+   * sözleşme (bütün biçim `disabled`a bağlı).
+   */
+  lockedAxes?: Array<"prefix" | "dateSegment" | "digits" | "separator" | "separator2">;
   /** Sunucudan gelen biçim hatası (önizleme ya da kaydetme). */
   hata?: string | null;
 }) {
+  const axisLocked = (eksen: "prefix" | "dateSegment" | "digits" | "separator" | "separator2"): boolean =>
+    disabled || (lockedAxes?.includes(eksen) ?? false);
   return (
     <div className="space-y-2">
     <div className="grid grid-cols-2 gap-3">
@@ -43,7 +53,7 @@ export function NumberingFields({
         <Label htmlFor="ns-prefix">Ön ek</Label>
         <Input
           id="ns-prefix"
-          disabled={disabled}
+          disabled={axisLocked("prefix")}
           value={fmt.prefix}
           maxLength={6}
           onChange={(e) => onChange({ ...fmt, prefix: e.target.value.toUpperCase() })}
@@ -53,7 +63,7 @@ export function NumberingFields({
         <Label htmlFor="ns-digits">Hane</Label>
         <Input
           id="ns-digits"
-          disabled={disabled}
+          disabled={axisLocked("digits")}
           type="number"
           min={1}
           max={8}
@@ -65,7 +75,7 @@ export function NumberingFields({
         <Label htmlFor="ns-segment">Tarih</Label>
         <select
           id="ns-segment"
-          disabled={disabled}
+          disabled={axisLocked("dateSegment")}
           className="h-9 w-full rounded-md border bg-background px-2 text-sm"
           value={fmt.dateSegment}
           onChange={(e) => onChange({ ...fmt, dateSegment: e.target.value as SeriesDateSegment })}
@@ -75,11 +85,35 @@ export function NumberingFields({
           ))}
         </select>
       </div>
+      <NumberingSeparatorFields fmt={fmt} onChange={onChange} axisLocked={axisLocked} />
+    </div>
+    {hata && <p className="text-sm font-medium text-destructive">{hata}</p>}
+    </div>
+  );
+}
+
+/**
+ * AYRAÇ ALANLARI — `NumberingFields`ten AYRILDI (2026-09-23, boyut tavanı).
+ * Bölme ekseni: yukarısı kodun PARÇALARI (ön ek · hane · tarih), burası
+ * parçaların EKLEM YERLERİ. İkinci ayraç tarih yokken hiç çizilmez — görünüp
+ * hiçbir şey yapmayan alan kullanıcıya "ayarladım" dedirtir.
+ */
+function NumberingSeparatorFields({
+  fmt,
+  onChange,
+  axisLocked,
+}: {
+  fmt: SeriesFormatInput;
+  onChange: (next: SeriesFormatInput) => void;
+  axisLocked: (eksen: "prefix" | "dateSegment" | "digits" | "separator" | "separator2") => boolean;
+}) {
+  return (
+    <>
       <div className="space-y-1">
         <Label htmlFor="ns-sep">Ayraç (ön ek ile tarih arası)</Label>
         <Input
           id="ns-sep"
-          disabled={disabled}
+          disabled={axisLocked("separator")}
           value={fmt.separator}
           maxLength={2}
           onChange={(e) => onChange({ ...fmt, separator: e.target.value })}
@@ -96,7 +130,7 @@ export function NumberingFields({
           <Label htmlFor="ns-sep2">Ayraç 2 (tarih ile sayaç arası)</Label>
           <Input
             id="ns-sep2"
-            disabled={disabled}
+            disabled={axisLocked("separator2")}
             value={fmt.separator2 ?? ""}
             maxLength={2}
             placeholder={fmt.separator === "" ? "(ayraçsız)" : fmt.separator}
@@ -104,8 +138,6 @@ export function NumberingFields({
           />
         </div>
       )}
-    </div>
-    {hata && <p className="text-sm font-medium text-destructive">{hata}</p>}
-    </div>
+    </>
   );
 }

@@ -175,9 +175,59 @@ export const FAZ_B_ONCESI = { electron: "1.3.1", mobil: "1.0.7" } as const;
  * ⇒ OKUTULAN serinin biçim kilidi (C0b) İKİ eşiğe birden bakar. "minVersion
  * yükseldi" tek başına YETMEZ; `test_number_series_panel` bunu ölçer.
  *
+ * ⚠️ AÇIKLAMA DÜZELTİLDİ (2026-09-23): eski metin bu eşiğin "sonraki her pakette
+ * karşılandığını" ima ediyordu. ÖLÇÜLDÜ: HİÇBİR istemci — HEAD dahil —
+ * `retiredFormats`ı okumuyor, yani Faz D henüz HİÇBİR pakette YOK. Bugün
+ * zararsız, çünkü sınıflandırma ön ek çapasından yürüyor ve emekli ÖN EKLER
+ * tabloda taşınıyor; ama eşik "yakında düşecek" diye okunmamalı — düşmesi için
+ * istemcilerin emekli BİÇİMLERİ denemesi gerekir.
+ *
+ * ⚠️ SAHADAKİ SÜRÜM 1.0.6'dır, 1.0.7 HİÇ YAYINLANMADI (d3 ölçtü, git etiketleri):
+ * eşik `1.0.7` kalır çünkü o etiketi taşıyan ama tabloyu çekmeyen bir ağaç var —
+ * kilidin açılması için tablet sürümünün 1.0.7'nin ÜSTÜNE (yani 1.0.8+) çıkması
+ * gerekir.
+ *
  * Ölçüm 2026-09-23: `Electron/package.json` 1.3.1 · `mobil/app.json` 1.0.7.
  */
 export const FAZ_D_ONCESI = { electron: "1.3.1", mobil: "1.0.7" } as const;
+
+/** Biçim ekseni — kilit artık seri düzeyinde değil EKSEN düzeyinde. */
+export type SeriesFormatAxis = "prefix" | "dateSegment" | "digits" | "separator" | "separator2";
+
+/**
+ * ESKİ İSTEMCİDE KIRAN EKSENLER — seri × eksen (ÖLÇÜLDÜ, tahmin DEĞİL).
+ *
+ * ⚠️ KAYNAK BİR SİMÜLASYON: sahadaki panel (1.3.1) ve tabletin (1.0.6) barkod
+ * sınıflandırması yayın commit'inden çıkarılıp saf fonksiyon olarak koşuluyor
+ * (`scripts/test_eski_istemci_okutma.ts`) ve aday kodlar sunucunun kendi
+ * biçimlendiricisinden geliyor. Bu tablo o koşumun SONUCUDUR; bekçi ikisini İKİ
+ * YÖNLÜ eşler — simülasyonun kırdığı bir eksen burada yoksa KIRMIZI (koruma
+ * eksik), kırmadığı bir eksen burada varsa da KIRMIZI (gereksiz kilit).
+ *
+ * ⚠️ "KIRILMA" İKİ HÂLİ KAPSAR: kod YANLIŞ TÜRE çözülüyor (✗) ya da HİÇ
+ * tanınmıyor (?tanımaz). İkincisi masum görünür ama ölçüldü: eski panel
+ * tanımadığı kodda SESSİZ no-op yapıyor — operatör okutur, hiçbir şey olmaz ve
+ * sahada iş durur. Bu yüzden ikisi de kilit gerekçesidir (1e kararı 2026-09-23).
+ *
+ * ⚠️ BOŞ DİZİ = KİLİT YOK: `shipment` hiçbir eksende kırılmıyor, yani o serinin
+ * İSTEMCİ kilidi HİÇ doğmaz. Eski kapı "okutulan her seri kilitli" diyordu ve
+ * bu, ölçülmemiş bir genellemeydi.
+ */
+export const SCANNED_CLIENT_BREAKING_AXES: Record<string, SeriesFormatAxis[]> = {
+  // Ön ek değişince tablet 1.0.6 kodu TOP sanıyor; ayraç değişince eski panel tanımıyor.
+  workOrder: ["prefix", "separator"],
+  // Yalnız ön ek: `/^KRT/i` çapası ön eke bağlı, gerisi serbest.
+  swatch: ["prefix"],
+  // Tablet 1.0.6 çuvalı `/^CV\d{10}$/` ile tanıyor: uzunluk ve ayraç DAHİL her eksen kırıyor.
+  sack: ["prefix", "dateSegment", "digits", "separator", "separator2"],
+  // Sevkiyat: eski istemcilerin hiçbiri bu seriyi okutmuyor ⇒ istemci gerekçesi YOK.
+  shipment: [],
+  // Fason/kartela belgeleri: eski panelde yalnız ön ek çapası var.
+  subcontractorDispatch: ["prefix"],
+  subcontractorReceipt: ["prefix"],
+  kartelaDispatch: ["prefix"],
+  kartelaReceipt: ["prefix"],
+};
 
 /** Sürüm karşılaştırması — SAYISAL, sözlüksel değil ("1.3.10" > "1.3.9"). */
 export function compareClientVersions(a: string, b: string): number {

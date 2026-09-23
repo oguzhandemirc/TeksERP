@@ -20,7 +20,9 @@ import type { NumberSeries } from "@prisma/client";
 import {
   FAZ_B_ONCESI,
   FAZ_D_ONCESI,
+  SCANNED_CLIENT_BREAKING_AXES,
   scanningClientsMissingPhases,
+  type SeriesFormatAxis,
 } from "../../config/client-version-policy";
 import { NUMBER_SERIES_CATALOG, numberSeriesCatalogEntry } from "../../constants/number-series-catalog";
 import { NUMBER_SERIES_CODE_CAPACITY } from "../../constants/number-series-capacity";
@@ -35,6 +37,7 @@ import {
   type NumberSeriesFormat,
 } from "./series-format.helper";
 import { retiredPrefixesAfterChange, seriesPrefixUsage } from "./series-retired.helper";
+import { assertAxesAllowed } from "./series-client-axes.helper";
 
 // ── KAPI ────────────────────────────────────────────────────────────────────
 
@@ -197,7 +200,11 @@ export function assertSeriesFormatWritable(key: string): void {
   // (ölçüldü 2026-09-23, `test_number_series §13a`). "minVersion yükseldi" tek
   // başına bu kilidi AÇMAZ.
   const missingPhases = katalog.kind ? scanningClientsMissingPhases() : [];
-  if (missingPhases.length > 0) {
+  const kiran = katalog.kind ? (SCANNED_CLIENT_BREAKING_AXES[key] ?? []) : [];
+  // ⚠️ SERİ DÜZEYİNDE RED YALNIZ HER EKSEN KIRILIYORSA: kısmi kilitte "bu seriye
+  // dokunulamaz" demek, açık eksenleri de kapatırdı. Hangi EKSENİN değiştiği
+  // ancak DEĞER bilindiğinde sorulabilir ⇒ `assertAxesAllowed` (aşağıda).
+  if (missingPhases.length > 0 && kiran.length === 5) {
     const esik = missingPhases.includes("B") ? FAZ_B_ONCESI : FAZ_D_ONCESI;
     throw AppError.badRequest(
       `Okutulan serilerin biçimi, sahadaki panel ve tabletler güncellenmeden değiştirilemez: ${katalog.label}. ` +
@@ -224,6 +231,7 @@ export async function updateSeriesFormat(
 ): Promise<NumberSeries> {
   assertSeriesFormatWritable(key);
   const current = resolveSeriesFormat(key);
+  assertAxesAllowed(key, current, next);
   // ⚠️ SAYIM TX DIŞINDA ve bilerek: emekli liste bir YAPILANDIRMA kararıdır,
   // defter değil; sayım anı ile yazma anı arasında doğan bir kayıt yalnız "ön ek
   // emekliye ayrılsın mı" sorusunu etkiler ve o soru yanlış cevaplanırsa fazladan
