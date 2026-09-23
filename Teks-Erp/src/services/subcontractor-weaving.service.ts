@@ -26,7 +26,7 @@ import { formatSeriesCode } from "./number-series.service";
 import { AuditService } from "./audit.service";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { InventoryService } from "./inventory.service";
-import { nextPrefixedSequenceTx } from "./subcontractor.service";
+import { nextSubcontractorDocNoTx } from "./subcontractor.service";
 import { cancelWarpBeamItemsTx, countReturnedBeamItems, dispatchWarpBeamItemsTx } from "./subcontractor-beam.service";
 import { cancelYarnItemsTx, countReturnedYarnItems, dispatchYarnItemsTx, type YarnDispatchLineInput } from "./subcontractor-yarn.service";
 import { WEAVING_ORDER_OPEN_STATUSES } from "./weaving-order.service";
@@ -122,10 +122,10 @@ export async function dispatchForWeaving(input: WeavingDispatchInput, userId?: s
   const created = await prisma.$transaction(async (tx) => {
     const wo = await claimSubcontractedWeavingOrderTx(tx, input.weavingOrderId, userId);
     const now = new Date();
-    const { seq, fmt } = await nextPrefixedSequenceTx(tx, "subcontractorDispatch", now);
+    const dispatchNo = await nextSubcontractorDocNoTx(tx, "subcontractorDispatch", now);
     const dispatch = await tx.subcontractorDispatch.create({
       data: {
-        dispatchNo: formatSeriesCode(fmt, seq, now),
+        dispatchNo,
         weavingOrderId: wo.id,
         subcontractorId: wo.subcontractorId,
         plateNumber: input.plateNumber ?? null,
@@ -230,10 +230,10 @@ export async function receiveForWeaving(input: WeavingReceiptInput, userId?: str
   const header = await prisma.$transaction(async (tx) => {
     const wo = await claimSubcontractedWeavingOrderTx(tx, input.weavingOrderId, userId);
     const now = new Date();
-    const { seq, fmt } = await nextPrefixedSequenceTx(tx, "subcontractorReceipt", now);
+    const receiptNo = await nextSubcontractorDocNoTx(tx, "subcontractorReceipt", now);
     const receipt = await tx.subcontractorReceipt.create({
       data: {
-        receiptNo: formatSeriesCode(fmt, seq, now),
+        receiptNo,
         clientToken: input.clientToken ?? null,
         manifestNo: input.manifestNo ?? null,
         weavingOrderId: wo.id,

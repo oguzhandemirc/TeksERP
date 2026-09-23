@@ -38,10 +38,12 @@ import {
   type NumberSeriesFormat,
 } from "../src/services/helpers/series-format.helper";
 import { seriesImpactCount, seriesLock } from "../src/services/helpers/series-panel.helper";
+import type { SeriesFormatAxis } from "../src/config/client-version-policy";
 import { nextSeriesNo, resolveSeriesFormat } from "../src/services/number-series.service";
 import { freeDocumentService } from "../src/services/free-document.service";
 import { stockCountService } from "../src/services/stock-count.service";
 import { WorkOrderService } from "../src/services/workorder.service";
+import { kartelaService } from "../src/services/kartela.service";
 import { colorService } from "../src/routes/color.routes";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { purchaseOrderService } from "../src/services/purchase-order.service";
@@ -85,6 +87,9 @@ function kaynakTara(dizin: string): string {
   return out;
 }
 
+/** Biçimin beş ekseni — "hepsi kilitli" ölçütünün tek kaynağı. */
+const TUM_EKSENLER: SeriesFormatAxis[] = ["prefix", "dateSegment", "digits", "separator", "separator2"];
+
 let stockCountFikstur = 0;
 let colorFikstur = 0;
 /** Master veri fikstürlerinde ad tekilliği — servisler aynı adı 409 ile reddediyor. */
@@ -108,6 +113,86 @@ async function msCreate(
 }
 /** Manifest fikstürünün açtığı iş emirleri — teardown (manifest silindikten SONRA). */
 const manifestWorkOrders: string[] = [];
+/** Okutulan aile fikstürü: iş emri · depo · fason firma · top — tek kez kurulur. */
+const okutulan: {
+  workOrderIds: string[];
+  warehouseId: string | null;
+  kartelaFirmaId: string | null;
+  rollIds: string[];
+  kartelaDispatchIds: string[];
+  kartelaReceiptIds: string[];
+  swatchIds: string[];
+} = {
+  workOrderIds: [], warehouseId: null, kartelaFirmaId: null,
+  rollIds: [], kartelaDispatchIds: [], kartelaReceiptIds: [], swatchIds: [],
+};
+let okutulanSayac = 0;
+
+/**
+ * Kartela zincirinin BİR TURU: depodaki taze bir top → kartela sevki → kabul.
+ * Üç seriyi birden besler (`kartelaDispatch` · `kartelaReceipt` · `swatch`),
+ * çünkü üçü de AYNI zincirde doğuyor; ayrı ayrı kurmak aynı zinciri üç kez
+ * kurmak olurdu. Her tur KENDİ topunu yaratır: kartela sevki topu tüketir
+ * (`AT_KARTELA`), yani ikinci tur aynı topu kullanamaz.
+ */
+async function kartelaTuru(damga: string): Promise<{
+  dispatch: { id: string; kod: string } | null;
+  receipt: { id: string; kod: string } | null;
+  swatch: { id: string; kod: string } | null;
+}> {
+  const bos = { dispatch: null, receipt: null, swatch: null };
+  if (!okutulan.warehouseId || !okutulan.kartelaFirmaId || !bagli.itemId) return bos;
+  okutulanSayac += 1;
+  const roll = await prisma.roll.create({
+    data: {
+      barcode: `${damga}-E3R${okutulanSayac}`.slice(0, 32),
+      itemId: bagli.itemId,
+      warehouseId: okutulan.warehouseId,
+      status: "WAREHOUSE",
+      currentQty: 10,
+      initialQty: 10,
+    },
+    select: { id: true },
+  });
+  okutulan.rollIds.push(roll.id);
+
+  const d = (await kartelaService.dispatch({
+    subcontractorId: okutulan.kartelaFirmaId,
+    rollIds: [roll.id],
+  })) as { data?: { id?: string; dispatchNo?: string } };
+  if (!d.data?.id || !d.data.dispatchNo) return bos;
+  okutulan.kartelaDispatchIds.push(d.data.id);
+
+  const r = (await kartelaService.receive({
+    subcontractorId: okutulan.kartelaFirmaId,
+    dispatchId: d.data.id,
+    returns: [{ rollId: roll.id, count: 2, bulkLengthCm: 30, bulkWeightKg: 1 }],
+  })) as { data?: { id?: string; receiptNo?: string } };
+  if (!r.data?.id || !r.data.receiptNo) {
+    return { dispatch: { id: d.data.id, kod: d.data.dispatchNo }, receipt: null, swatch: null };
+  }
+  okutulan.kartelaReceiptIds.push(r.data.id);
+
+  const kart = await prisma.swatch.findFirst({
+    where: { parentReceiptId: r.data.id },
+    select: { id: true, cardNumber: true },
+    orderBy: { cardNumber: "asc" },
+  });
+  if (kart) okutulan.swatchIds.push(kart.id);
+  return {
+    dispatch: { id: d.data.id, kod: d.data.dispatchNo },
+    receipt: { id: r.data.id, kod: r.data.receiptNo },
+    swatch: kart ? { id: kart.id, kod: kart.cardNumber } : null,
+  };
+}
+
+/** Kartela turunun sonucu — üç seri de AYNI turdan okur (ikinci tur ikinci çağrıda). */
+const kartelaTurlari: Array<Awaited<ReturnType<typeof kartelaTuru>>> = [];
+async function kartelaTurAl(damga: string, sira: number): Promise<Awaited<ReturnType<typeof kartelaTuru>>> {
+  while (kartelaTurlari.length <= sira) kartelaTurlari.push(await kartelaTuru(damga));
+  return kartelaTurlari[sira]!;
+}
+let kdSira = 0, krSira = 0, kwSira = 0;
 /** Mal kabul/alış siparişi fikstürlerinin açtığı yardımcı kayıtlar (teardown sırası). */
 const temizlikDepolari: string[] = [];
 const temizlikCariler: string[] = [];
@@ -327,6 +412,39 @@ const L2_YOLU: Record<string, L2Yolu> = {
       await prisma.order.deleteMany({ where: { id } });
     },
   },
+  // ── OKUTULAN AİLE (E2 dilim 5) ────────────────────────────────────────────
+  // ⚠️ İş emri fikstürü ÖLÇÜLDÜ, tahmin edilmedi: `WorkOrderCreateInput` yalnız
+  // `steps[].stationId` istiyor (rota şablonu verilmezse) — "sipariş + rota + top
+  // zinciri gerekir" beklentim YANLIŞTI (manifest/mal kabul dersinin üçüncüsü).
+  workOrder: {
+    not: "WorkOrderService.create: rota şablonu yoksa yalnız bir adım (istasyon) ister.",
+    yarat: async () => {
+      if (!bagli.stationId) return null;
+      const r = (await new WorkOrderService().create({
+        type: "STOCK_PRODUCTION",
+        targetItemId: bagli.itemId,
+        steps: [{ stationId: bagli.stationId }],
+      })) as { data?: { id?: string; workOrderNumber?: string } };
+      if (r.data?.id) okutulan.workOrderIds.push(r.data.id);
+      return r.data?.id && r.data.workOrderNumber ? { id: r.data.id, kod: r.data.workOrderNumber } : null;
+    },
+    // Silme YOK: iş emri + adımları + kartı zincirle siliniyor (toplu temizlikte).
+  },
+  kartelaDispatch: {
+    not: "KartelaService.dispatch: kartela firması + DEPODAKİ top (zincir `kartelaTuru`da, üç seri ortak).",
+    yarat: async (damga) => (await kartelaTurAl(damga, kdSira++)).dispatch,
+  },
+  kartelaReceipt: {
+    not: "KartelaService.receive: açık kartela sevki + dönen top adedi (aynı zincir).",
+    yarat: async (damga) => (await kartelaTurAl(damga, krSira++)).receipt,
+  },
+  swatch: {
+    not: "Kartela kartı kabul anında doğar (KartelaService.receive) — ayrı bir yaratma ucu YOK; aynı zincirden okunur.",
+    yarat: async (damga) => (await kartelaTurAl(damga, kwSira++)).swatch,
+  },
+  subcontractorDispatch: { not: "Fason sevk: iş emri + FASON adımı + o adıma bağlı top zinciri ister (ölçüldü: `dispatch` WO durumu PLANNED/IN_PROGRESS + stepId + rollIds istiyor); sıradaki dilimde." },
+  subcontractorReceipt: { not: "Fason kabul: önce bir fason SEVKİ ister (aynı zincirin ikinci yarısı); sıradaki dilimde." },
+  directShipment: { not: "Doğrudan sevk: açık bir fason sevki ister (fason zincirinin üstüne biner); sıradaki dilimde." },
   weavingOrder: { not: "Dokuma işi: tezgah + levent + çözgü kartı zinciri ister (E2 üretim diliminde AÇILDI; L2 fikstürü sıradaki turda — ölçülecek)." },
   warpBeam: { not: "Levent: çözgü kartı + tezgah zinciri ister (aynı tur)." },
   doffEvent: { not: "Doff: açık tezgah koşusu (MachineRun) ister (aynı tur)." },
@@ -382,22 +500,29 @@ const L2_YOLU: Record<string, L2Yolu> = {
 };
 
 /** Bu koşumda üretilen aday biçimler — her eksen ayrı bir dönüşüm. */
-function adayBicimler(taban: NumberSeriesFormat): Array<{ eksen: string; fmt: NumberSeriesFormat }> {
-  const out: Array<{ eksen: string; fmt: NumberSeriesFormat }> = [];
-  out.push({ eksen: "ön ek", fmt: { ...taban, prefix: "ZZQ" } });
+/**
+ * ⚠️ HER ADAY KENDİ EKSEN KODUNU TAŞIR (`kod`) ve bu ölçülmüş bir ihtiyaç:
+ * `ISTEMCI` kilidi artık EKSEN DÜZEYİNDE — `kartelaDispatch` bugün yalnız ÖN EKTE
+ * kilitli, tarih/hane/ayraç serbest. Adayları yalnız insan-okur etiketle
+ * ayırsaydık "hangi aday hangi eksen" sorusu metin eşlemesiyle cevaplanırdı ve
+ * bir etiket değişince süzme sessizce yanlışlanırdı.
+ */
+function adayBicimler(taban: NumberSeriesFormat): Array<{ eksen: string; eksenKodu: SeriesFormatAxis; fmt: NumberSeriesFormat }> {
+  const out: Array<{ eksen: string; eksenKodu: SeriesFormatAxis; fmt: NumberSeriesFormat }> = [];
+  out.push({ eksen: "ön ek", eksenKodu: "prefix", fmt: { ...taban, prefix: "ZZQ" } });
   for (const seg of SEGMENTLER) {
     if (seg === taban.dateSegment) continue;
-    out.push({ eksen: `tarih ${seg}`, fmt: { ...taban, dateSegment: seg } });
+    out.push({ eksen: `tarih ${seg}`, eksenKodu: "dateSegment", fmt: { ...taban, dateSegment: seg } });
   }
-  out.push({ eksen: "hane +2", fmt: { ...taban, digits: Math.min(8, taban.digits + 2) } });
-  out.push({ eksen: "hane -1", fmt: { ...taban, digits: Math.max(1, taban.digits - 1) } });
+  out.push({ eksen: "hane +2", eksenKodu: "digits", fmt: { ...taban, digits: Math.min(8, taban.digits + 2) } });
+  out.push({ eksen: "hane -1", eksenKodu: "digits", fmt: { ...taban, digits: Math.max(1, taban.digits - 1) } });
   for (const a of AYRACLAR) {
     if (a === taban.separator) continue;
-    out.push({ eksen: `ayraç1 "${a}"`, fmt: { ...taban, separator: a } });
+    out.push({ eksen: `ayraç1 "${a}"`, eksenKodu: "separator", fmt: { ...taban, separator: a } });
   }
   for (const a of AYRACLAR) {
     if (a === (taban.separator2 ?? "")) continue;
-    out.push({ eksen: `ayraç2 "${a}"`, fmt: { ...taban, separator2: a } });
+    out.push({ eksen: `ayraç2 "${a}"`, eksenKodu: "separator2", fmt: { ...taban, separator2: a } });
   }
   return out;
 }
@@ -414,9 +539,28 @@ function eskiKayitlar(fmt: NumberSeriesFormat, adet: number, dun: Date): Array<{
 async function main(): Promise<void> {
   console.log("=== Geriye dönük uyumluluk matrisi (E3) ===\n");
 
-  const acikSeriler = NUMBER_SERIES_CATALOG.filter((e) => seriesLock(e.key) === null);
+  // ⚠️ "AÇIK" ARTIK İKİ HÂLLİ: kilitsiz seri + YALNIZ BAZI EKSENLERİ kilitli seri.
+  // Kısmi kilit bir SERİ kilidi değildir (ölçüldü 2026-09-23, `test_eski_istemci_okutma`:
+  // kartela sevk/kabul yalnız ÖN EKTE kırılıyor, tarih/hane/ayraç bugün serbest) —
+  // eski "kilit varsa hiç ölçme" kuralı bu serilerin BUGÜN yapılabilen değişimlerini
+  // kör bırakıyordu. Kilitli eksen ölçüm DIŞI kalır, serbest eksen ölçülür.
+  const kilitliEksenler = (key: string): SeriesFormatAxis[] => {
+    const k = seriesLock(key);
+    if (k === null) return [];
+    if (k.kind === "ISTEMCI") return k.lockedAxes ?? [];
+    return TUM_EKSENLER; // YAPISAL / SAYAC: hiçbir eksen açık değil
+  };
+  const acikSeriler = NUMBER_SERIES_CATALOG.filter(
+    (e) => kilitliEksenler(e.key).length < TUM_EKSENLER.length,
+  );
+  const kismiAcik = acikSeriler.filter((e) => kilitliEksenler(e.key).length > 0);
   check("körlük zemini: ölçülecek AÇIK seri var", acikSeriler.length > 0, `${acikSeriler.length} seri`);
   console.log(`   ℹ️ açık seriler: ${acikSeriler.map((e) => e.key).join(", ")}`);
+  if (kismiAcik.length > 0) {
+    console.log(
+      `   ℹ️ kısmi açık (eksen kilidi): ${kismiAcik.map((e) => `${e.key}[kilitli: ${kilitliEksenler(e.key).join("+")}]`).join(", ")}`,
+    );
+  }
   const l2Disi = acikSeriler.filter((e) => !L2_YOLU[e.key]);
   console.log(
     `   ℹ️ L2 (gerçek kayıt) kapsamı: ${acikSeriler.filter((e) => L2_YOLU[e.key]).map((e) => e.key).join(", ") || "(yok)"}` +
@@ -435,7 +579,9 @@ async function main(): Promise<void> {
   for (const e of acikSeriler) {
     const taban = resolveSeriesFormat(e.key);
     const eskiler = eskiKayitlar(taban, 3, dun);
-    for (const { eksen, fmt } of adayBicimler(taban)) {
+    const kapali = new Set(kilitliEksenler(e.key));
+    for (const { eksen, eksenKodu, fmt } of adayBicimler(taban)) {
+      if (kapali.has(eksenKodu)) continue; // eksen bugün kilitli — ölçülecek bir dönüşüm değil
       olculenDonusum++;
       // (a) ESKİ NUMARALAR BAYT BAYT AYNI: dönüşüm var olan kodlara DOKUNMAZ —
       // dizeler zaten kayıtta; ölçülen şey, yeni biçimin onları TANIMAYA devam
@@ -517,12 +663,20 @@ async function main(): Promise<void> {
   // serisi) doğan seri anahtarı DEĞİŞKEN olarak geçirir ve metinde hiç görünmez —
   // o yüzden beyan üretecin YERİNİ söyler (`scopedCounter.uretec`) ve kapı o
   // dosyanın C0 yolundan geçtiğini ölçer. Beyan yoksa anahtar aranır.
+  // ⚠️ BEYAN LİSTE OLABİLİR ve HEPSİ ölçülür: bir serinin iki üreteci varsa
+  // (`workOrder`, `subcontractorDispatch`) yalnız birincisini açmak, ikincisi
+  // eski literal hesapta kalsa bile beyanı YEŞİL gösterirdi.
+  // ⚠️ `nextSeriesSeq` de C0 yoludur: aynı çekirdeği (`scopedNextSeq`) çağırır —
+  // kodu çağıranın kurduğu toplu yollar (kartela kabulü) sırayı ister, kodu değil.
   const uretecsizBeyan = beyanliHazir.filter((e) => {
-    const yol = e.scopedCounter?.uretec;
-    if (yol) {
-      const tam = join(__dirname, "..", "src", yol);
-      if (!existsSync(tam)) return true;
-      return !/nextSeriesNo\s*\(/.test(readFileSync(tam, "utf-8"));
+    const beyan = e.scopedCounter?.uretec;
+    if (beyan) {
+      const yollar = typeof beyan === "string" ? [beyan] : beyan;
+      return yollar.some((yol) => {
+        const tam = join(__dirname, "..", "src", yol);
+        if (!existsSync(tam)) return true;
+        return !/next(SeriesNo|SeriesSeq)\s*\(/.test(readFileSync(tam, "utf-8"));
+      });
     }
     return !new RegExp(`nextSeriesNo\\(\\s*"${e.key}"`).test(kaynakMetni);
   });
@@ -549,8 +703,22 @@ async function main(): Promise<void> {
       bagli.itemId = stok.id;
       temizlik.push(async () => { await prisma.item.deleteMany({ where: { id: stok.id } }); });
     }
-    check("L2 körlük zemini: bağlı fikstürler (istasyon + stok) KURULDU",
-      bagli.stationId !== null && bagli.itemId !== null);
+    // Okutulan ailenin zinciri: DEPO (top stok kümesinde olmalı, K6) + KARTELA FİRMASI.
+    const kDepo = await prisma.warehouse.create({
+      data: { code: `${DAMGA}-E3KD`.slice(0, 32), name: `${DAMGA} E3 kartela depo`, isActive: true },
+      select: { id: true },
+    });
+    okutulan.warehouseId = kDepo.id;
+    temizlikDepolari.push(kDepo.id);
+    const kFirma = await prisma.subcontractor.create({
+      data: { code: `${DAMGA}-E3KF`.slice(0, 32), name: `${DAMGA} E3 kartela firma`, isActive: true },
+      select: { id: true },
+    });
+    okutulan.kartelaFirmaId = kFirma.id;
+
+    check("L2 körlük zemini: bağlı fikstürler (istasyon + stok + kartela zinciri) KURULDU",
+      bagli.stationId !== null && bagli.itemId !== null &&
+      okutulan.warehouseId !== null && okutulan.kartelaFirmaId !== null);
 
     for (const e of acikSeriler) {
       const yol = L2_YOLU[e.key];
@@ -599,6 +767,36 @@ async function main(): Promise<void> {
         sayim !== null && sayim >= 2, `${sayim}`);
     }
   } finally {
+    // ⚠️ OKUTULAN AİLE ÖNCE, `temizlik`ten DE ÖNCE: bu kayıtlar BAĞLI
+    // fikstürlere (stok kartı, istasyon) dayanıyor ve `temizlik` onları
+    // siliyor. Ters sıra `rolls_itemId_fkey` ile patlar ve `finally`de
+    // patlayan bir temizlik ARTIK BIRAKIR (ölçüldü 2026-09-23).
+    // ⚠️ OKUTULAN AİLE — FK SIRASI YAPRAKTAN KÖKE: kart → kabul kalemi → kabul →
+    // sevk kalemi → sevk → top → firma. Ters sıra FK ihlali verir ve `finally`
+    // içinde patlayan bir temizlik ARTIK BIRAKIR (bir sonraki koşumu kirletir).
+    if (okutulan.swatchIds.length > 0) {
+      await prisma.swatch.deleteMany({ where: { id: { in: okutulan.swatchIds } } });
+    }
+    if (okutulan.kartelaReceiptIds.length > 0) {
+      await prisma.swatch.deleteMany({ where: { parentReceiptId: { in: okutulan.kartelaReceiptIds } } });
+      await prisma.kartelaReceiptItem.deleteMany({ where: { receiptId: { in: okutulan.kartelaReceiptIds } } });
+      await prisma.kartelaReceipt.deleteMany({ where: { id: { in: okutulan.kartelaReceiptIds } } });
+    }
+    if (okutulan.kartelaDispatchIds.length > 0) {
+      await prisma.kartelaDispatchItem.deleteMany({ where: { dispatchId: { in: okutulan.kartelaDispatchIds } } });
+      await prisma.kartelaDispatch.deleteMany({ where: { id: { in: okutulan.kartelaDispatchIds } } });
+    }
+    if (okutulan.rollIds.length > 0) {
+      await prisma.roll.deleteMany({ where: { id: { in: okutulan.rollIds } } });
+    }
+    if (okutulan.kartelaFirmaId) {
+      await prisma.subcontractor.deleteMany({ where: { id: okutulan.kartelaFirmaId } });
+    }
+    if (okutulan.workOrderIds.length > 0) {
+      await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: okutulan.workOrderIds } } });
+      await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: okutulan.workOrderIds } } });
+      await prisma.workOrder.deleteMany({ where: { id: { in: okutulan.workOrderIds } } });
+    }
     for (const t of temizlik.reverse()) await t();
     // ⚠️ FK SIRASI: önce belgeler (yukarıdaki `temizlik`), sonra onların dayandığı
     // depo/cari kayıtları, en sonda manifest ↔ iş emri zinciri.

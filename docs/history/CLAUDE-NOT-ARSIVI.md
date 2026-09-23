@@ -21,6 +21,45 @@
 
 ---
 
+## 2026-09-23 — E2 okutulan aile dilimi: yedi seri açıldı, kilit SERİDEN EKSENE indi [ÇEKİRDEK]
+
+İş emri/refakat kartı · kartela kart no · fason sevk/kabul · kartela sevk/kabul · doğrudan sevk
+serilerinin üreteçleri C0 yoluna (`nextSeriesNo`) geçirildi; SAYAÇ kilidi 20 seriden 13'e indi ve
+kalan on üçün hepsi finans ailesi.
+
+**Ölçüm 1 — bir serinin İKİ üreteci olabiliyor.** `workOrder` numarasını iki yer üretiyor
+(`workorder.service.generateWorkOrderNumber` normal açılışta, `helpers/workorder-clone.helper`
+split/klon yolunda); `subcontractorDispatch` da iki yerden doğuyor (`subcontractor.service` ve
+`helpers/batch-dispatch-surgery.helper`, parti ameliyatı). Katalogdaki `scopedCounter.uretec`
+alanı bu yüzden `string | readonly string[]` oldu ve L0 kapısı listenin HER dosyasını açıyor. Tek
+yol beyan edilseydi ikinci üreteç eski literal hesapta kalsa bile beyan YEŞİL görünürdü — bu,
+"beyan kendi başına bir şey ölçmez" kuralının ikinci vakası.
+
+**Ölçüm 2 — `nextSeriesNo` yolunda olmak yetmiyor, YÜKLEYİCİNİN BİÇİMİ de ölçülür.**
+`directShipment` zaten `nextSeriesNo` çağırıyordu ama yükleyicisi çıplak string döndürüyordu;
+`hasCreatedAt` false kaldığı için kapsam damgası hiç uygulanmıyordu. `ensureSubCode` vakasının
+birebir tekrarı: çağrı doğru, veri eksik, kapı sessiz.
+
+**Ölçüm 3 — kodu çağıranın kurduğu yollar SIRA ister ve o sıra da kapsamlı olmalı.** Kartela
+toplu kabulünde N kart tek okumadan doğuyor (`seq`, `seq+adım`, …), yani üreteç kod değil sıra
+döndürmek zorunda. `nextSeriesSeq` bu işi yapıyordu ama kapsam damgası ve çakışma atlaması ONDA
+YOKTU. İkinci bir hesap yazmak yerine çekirdek ortaklandı (`scopedNextSeq`): `nextSeriesNo` da
+`nextSeriesSeq` de oradan geçiyor.
+
+**Ölçüm 4 — KISMİ kilit bir SERİ kilidi değil.** `test_eski_istemci_okutma` eski panel/tablet
+sınıflandırıcılarını git'ten kurup simüle ediyor ve ölçüm şu: iş emri önek+ayraçta, kartela kartı
+ile dört fason/kartela belgesi yalnız ÖNEKTE, çuval beş eksende kırılıyor, sevkiyat hiçbirinde.
+Yani kartela sevk no'nun tarih segmenti · hane · ikinci ayracı BUGÜN değiştirilebilir. Uyumluluk
+matrisi ise "kilit varsa hiç ölçme" diyordu ve bu serilerin gerçekten yapılabilen değişimlerini
+kör bırakıyordu. Matrisin "açık" tanımı iki hâlli yapıldı (kilitsiz + kilitli ekseni beşten az),
+kilitli eksen ölçüm dışı kalıyor: açık seri 30 → 36, ölçülen dönüşüm 570 → 674.
+
+**Kapı notu — hedef ELLE seçilmez.** `test_number_series_scope §4` ("beyansız seri düzenlenemez")
+hedefi üçüncü kez bayatladı: ölçtüğü seri açıldıkça elle başka bir seriye çekiliyordu. Hedef artık
+katalogdan KEŞİFLE bulunuyor ("SAYAÇ kilitli HERHANGİ biri") ve değer tohumla aynı yazılıyor ki red
+gerekçesi kilit olsun, değer kapısı olmasın. Kilitli seri kalmadığında kapı üçüncü sonucu basıyor:
+*ÖLÇÜLEMEDİ — iddia artık gereksiz*. Kapanış koşulunun kendisi de böylece ölçülebilir oldu.
+
 ## 2026-09-17 — Master veri kimlik tekilliği: bir tripwire'ın değeri ELEDİKLERİNDEDİR [ÇEKİRDEK]
 
 Kullanıcı kuralı: *"master veri sektör standardında olmalı; ilk fason tablosunda düşünemedik, geriye
