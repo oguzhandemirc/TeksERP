@@ -55,8 +55,23 @@ import { resolveSeriesFormat } from "../src/services/number-series.service";
 /**
  * TABAN — bugün ölçülen literal sayısı. YÜKSELTİLMEZ; düşürmek serbesttir.
  * Düşürmenin yolu literali silmek değil, örneği ÜRETEN YOLDAN türetmektir.
+ *
+ * ⚠️ TEK YÜKSELME GEREKÇESİ KAPSAM DEĞİŞİMİDİR, BORÇ DEĞİL (2026-09-23, 68 → 86):
+ * bu cırcırın kapsamı "YAPISAL kilidi OLMAYAN seriler"dir ve `workOrder` o gün
+ * YAPISAL kümeden çıktı (kilidin gerekçesi "Faz B inmeden açılmaz"dı, Faz B indi
+ * — `returnDoc` emsali). Yani tek satırlık bir sınıflandırma düzeltmesi, ZATEN
+ * VAR OLAN 24 `IE…` literalini (ölçüm 2026-09-23, bu bekçinin kendi koşumu) ölçüm
+ * alanına soktu; yeni literal YAZILMADI.
+ * Aynı turda 6'sı türetildi (`sample-data` ×3 · `traveler-card.service` ×2 ·
+ * `label-rawcode` ×1) ⇒ 92 ölçüldü (2026-09-23), 86'ya indirildi.
+ *
+ * Kalan 18'in sınıfı ÖLÇÜLDÜ (2026-09-23): 12'si YORUM içinde geçen vaka anlatısı
+ * (tambur · inventory · roll ve fason yardımcıları: "IE0808260001 bu hatayı üretmişti"), 6'sı
+ * refakat kartı alan kataloğunun `sample` değerleri (backend ×3 + Electron
+ * aynası ×3 — tek taraflı türetme AYNAYI BOZAR). Bunları düşürmek ayrı bir
+ * karardır: yorumdaki örnek bayatlarsa yalan söyler ama kimseye kod üretmez.
  */
-const TABAN = 68;
+const TABAN = 86;
 
 const KOK = join(__dirname, "..", "..");
 const TARANAN = ["Teks-Erp/src", "Electron/src", "mobil/src"];

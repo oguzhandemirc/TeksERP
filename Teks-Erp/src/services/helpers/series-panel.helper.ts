@@ -12,7 +12,11 @@
 // ZORUNDA: ayrışırlarsa ekran seriyi açık gösterir ve uç 400 döner — bu depoda
 // adı konmuş "ayrışan yüzey" sınıfı.
 // =============================================================================
-import { FAZ_B_ONCESI, scanningClientsCarryFazB } from "../../config/client-version-policy";
+import {
+  FAZ_B_ONCESI,
+  FAZ_D_ONCESI,
+  scanningClientsMissingPhases,
+} from "../../config/client-version-policy";
 import {
   NUMBER_SERIES_CATALOG,
   NUMBER_SERIES_PANEL_GROUPS,
@@ -38,22 +42,63 @@ import type { NumberSeriesFormat } from "./series-format.helper";
  */
 export type SeriesLockKind = "YAPISAL" | "SAYAC" | "ISTEMCI";
 
-export function seriesLock(key: string): { kind: SeriesLockKind; reason: string } | null {
+/**
+ * KİLİT CÜMLESİNİN TEK KAYNAĞI (2026-09-23).
+ *
+ * ⚠️ Panel kendi cümlesini YAZMAZ: 2026-09-23'te ölçüldü — tablo satırı panelin
+ * kendi metnini ("yapısal olarak değişemez"), diyalog ise sunucunun metnini
+ * ("… Faz B inmeden açılmaz") gösteriyordu ve ikisi ÇELİŞİYORDU. Panelde kalan
+ * tek şey ROZET (sınıf adı) ve vurgu; cümleler buradan gider.
+ *
+ * ⚠️ `acilma` AYRI bir alandır, gerekçenin içine gömülmez: kullanıcının sorduğu
+ * iki soru ("neden kilitli" · "ne zaman açılır") iki ayrı cümledir ve ikincisi
+ * KİMİN işi olduğunu (`kimde`) belirler — ekranda kullanıcının kendi
+ * çözebileceği kilit bu yüzden vurgulanır.
+ */
+export interface SeriesLock {
+  kind: SeriesLockKind;
+  /** NEDEN kilitli — kullanıcı diliyle, jargonsuz. */
+  reason: string;
+  /** NE ZAMAN/NASIL açılır — ölçülebilir koşul, "ileride" değil. */
+  acilma: string;
+  /** Eylem KİMDE: yalnız "siz"de kullanıcı bir şey yapabilir. */
+  kimde: "kimse" | "biz" | "siz";
+}
+
+export function seriesLock(key: string): SeriesLock | null {
   const e = numberSeriesCatalogEntry(key);
-  if (e.lockedReason) return { kind: "YAPISAL", reason: e.lockedReason };
+  if (e.lockedReason) {
+    return { kind: "YAPISAL", reason: e.lockedReason, acilma: "Bu kilit kalkmayacak.", kimde: "kimse" };
+  }
   if (!e.scopedCounter) {
     return {
       kind: "SAYAC",
-      reason:
-        "Bu serinin sayacı biçim değişimine hazır değil; numarayı üreten yol kapsam damgasına geçirilmeli.",
+      // ⚠️ JARGON YASAK: eski cümle ("numarayı üreten yol kapsam damgasına
+      // geçirilmeli") DOĞRUYDU ama kullanıcıya hiçbir şey söylemiyordu — kullanıcı
+      // "kapsam damgası"nı ne bilir ne de yapabilir. Cümle ne YAPILABİLDİĞİNİ
+      // söyler: sayaç ayarları bu seride BUGÜN çalışıyor.
+      reason: "Bu serinin biçimi henüz açılmadı; sayaç ayarları kullanılabilir.",
+      acilma: "Bir sonraki program güncellemesinde açılacak.",
+      kimde: "biz",
     };
   }
-  if (e.kind && !scanningClientsCarryFazB()) {
+  // ⚠️ YAZMA KAPISIYLA AYNI YÜKLEM: `assertSeriesFormatWritable` İKİ eşiğe birden
+  // bakar (Faz B "biçimi tablodan oku" · Faz D "emekli BİÇİMLERİ de dene"). Burası
+  // yalnız Faz B'ye baksaydı, Faz D eşiği ileri alındığı gün panel seriyi AÇIK
+  // gösterir, uç 400 dönerdi — bu dosyanın başlığındaki "ayrışan yüzey" tam olarak
+  // budur ve iki eşik AYRI AYRI yükselebildiği için soru gerçekten ayrışabilir.
+  const eksik = e.kind ? scanningClientsMissingPhases() : [];
+  if (eksik.length > 0) {
+    const esik = eksik.includes("B") ? FAZ_B_ONCESI : FAZ_D_ONCESI;
     return {
       kind: "ISTEMCI",
       reason:
-        `Okutulan bir seri: sahadaki panel ve tabletler güncellenmeden değiştirilemez ` +
-        `(en düşük sürüm panelde ${FAZ_B_ONCESI.electron}, tablette ${FAZ_B_ONCESI.mobil} üstüne çıkmalı).`,
+        "Okutulan bir seri: kod barkod olarak okutulduğu için biçimi, sahadaki panel ve " +
+        "tabletler yeni biçimi tanıyana kadar değiştirilemez.",
+      acilma:
+        `Panel ${esik.electron} ve tablet ${esik.mobil} sürümünün ÜSTÜNE çıkıp bu ` +
+        "bilgisayarlara/tabletlere kurulunca açılır.",
+      kimde: "siz",
     };
   }
   return null;
@@ -193,6 +238,10 @@ export function listSeries(): Array<
     editable: boolean;
     lockedReason?: string;
     lockKind?: SeriesLockKind;
+    /** Kilit NE ZAMAN kalkar — panel cümleyi KOPYALAMAZ, okur. */
+    lockUnlock?: string;
+    /** Eylem kimde ("kimse" | "biz" | "siz") — rozet vurgusu buradan. */
+    lockActor?: "kimse" | "biz" | "siz";
     panelGroup: NumberSeriesPanelGroup;
     /** Bölüm başlığı — panel KOPYALAMAZ, okur (`countBirim` emsali). */
     panelGroupLabel: string;
@@ -227,7 +276,14 @@ export function listSeries(): Array<
       label: e.label,
       ...(e.kind ? { kind: e.kind } : {}),
       editable: lock === null,
-      ...(lock ? { lockedReason: lock.reason, lockKind: lock.kind } : {}),
+      ...(lock
+        ? {
+            lockedReason: lock.reason,
+            lockKind: lock.kind,
+            lockUnlock: lock.acilma,
+            lockActor: lock.kimde,
+          }
+        : {}),
       panelGroup: e.panelGroup,
       panelGroupLabel: numberSeriesPanelGroupLabel(e.panelGroup),
       ...(e.countTable ? { countBirim: e.countTable.birim } : {}),

@@ -74,6 +74,7 @@ import {
 import {
   assertSeriesCounterAllowed,
   assertSeriesFormatAllowed,
+  assertSeriesFormatWritable,
   assertSeriesNumberSourceAllowed,
   updateSeriesCounter,
   updateSeriesFormat,
@@ -200,6 +201,59 @@ async function main(): Promise<void> {
     check("§3 sevkiyat ailesi panelde görünür (`panelGroup`)",
       ["sack", "shipment", "packingLotCode", "packingLotName", "returnDoc"].every(
         (k) => liste.find((r) => r.key === k)?.panelGroup === "sevkiyat"));
+
+    // ── §3b KİLİT CÜMLESİ TEK KAYNAK + AÇILMA KOŞULU (2026-09-23) ──────────
+    // Panel kendi kilit cümlesini yazıyordu ve sunucununkiyle ÇELİŞİYORDU
+    // (rozet "yapısal", diyalog "Faz B"). Cümle artık YALNIZ buradan gider ve
+    // iki soruyu AYRI alanlarda cevaplar: neden kilitli (`reason`) · ne zaman
+    // açılır (`acilma`). İkincisi olmadan kullanıcı kendi yapabileceği tek şeyi
+    // ("tabletleri güncelle") ekranda göremez.
+    // Kilit yükleminin İKİ FAZLI olduğu METİNDEN de ölçülür: davranış bugün
+    // aynı sonucu veriyor (iki eşik de karşılanmamış), yani yalnız sonuca bakan
+    // bir iddia tek fazlı bir yüklemi de geçirirdi — `scanningClientsMissingPhases`
+    // listesinin doğuş dersi tam buydu.
+    const seriesPanelKaynagi = readFileSync(
+      join(__dirname, "..", "src", "services", "helpers", "series-panel.helper.ts"),
+      "utf-8",
+    );
+    const kilitliler = NUMBER_SERIES_CATALOG.map((e) => ({ key: e.key, lock: seriesLock(e.key) }))
+      .filter((x): x is { key: string; lock: NonNullable<ReturnType<typeof seriesLock>> } => x.lock !== null);
+    check("§3b körlük zemini: kilitli seri VAR", kilitliler.length > 0, `${kilitliler.length} kilitli`);
+    const acilmasiz = kilitliler.filter((x) => !x.lock.acilma || x.lock.acilma.length < 10);
+    check("§3b ⭐ her kilit AÇILMA KOŞULUNU söylüyor (`acilma`)",
+      acilmasiz.length === 0, acilmasiz.map((x) => x.key).join(", ") || `${kilitliler.length} kilit`);
+    const kimdesiz = kilitliler.filter((x) => !["kimse", "biz", "siz"].includes(x.lock.kimde));
+    check("§3b ⭐ her kilit EYLEMİN KİMDE olduğunu söylüyor (`kimde`)",
+      kimdesiz.length === 0, kimdesiz.map((x) => x.key).join(", "));
+    // ⚠️ Panel `lockedReason`/`lockUnlock`/`lockActor` alanlarını OKUR; biri
+    // listeden düşerse ekranda cümle yarım kalır (ayrışan yüzey).
+    const eksikAlan = liste.filter((r) => r.lockKind && (!r.lockedReason || !r.lockUnlock || !r.lockActor));
+    check("§3b ⭐ liste ucu kilidin ÜÇ alanını da taşıyor (reason · unlock · actor)",
+      eksikAlan.length === 0, eksikAlan.map((r) => r.key).join(", "));
+
+    // YAPISAL küme KAPALIDIR: "gerekçesi çürüyen kilit, kilit değil kalıntıdır"
+    // (returnDoc emsali). Bugün yalnız ÖLÇÜLMÜŞ iki yapısal bağ var: top
+    // barkodundaki faz harfi ve P01…P99 fiziksel plaka seti. `workOrder`
+    // 2026-09-23'te bu kümeden ÇIKTI (gerekçesi Faz B'ydi, Faz B indi).
+    const yapisal = kilitliler.filter((x) => x.lock.kind === "YAPISAL").map((x) => x.key).sort();
+    check("§3b ⭐ YAPISAL kilit kümesi kapalı: yalnız `roll` + `batchDaily`",
+      yapisal.join(",") === "batchDaily,roll", yapisal.join(", ") || "(yok)");
+
+    // ── §3c OKUMA YÜKLEMİ = YAZMA KAPISI (iki fazlı eşik dahil) ───────────
+    // `seriesLock` yalnız Faz B'ye bakıyordu, `assertSeriesFormatWritable` ise
+    // Faz B + Faz D'ye. İki eşik AYRI AYRI yükselebildiği için soru gerçekten
+    // ayrışabilirdi: panel seriyi AÇIK gösterir, uç 400 dönerdi.
+    const pariteBozuk = NUMBER_SERIES_CATALOG.filter((e) => {
+      const kilitli = seriesLock(e.key) !== null;
+      let yazilabilir = true;
+      try { assertSeriesFormatWritable(e.key); } catch { yazilabilir = false; }
+      return kilitli === yazilabilir;
+    });
+    check("§3c ⭐ okuma yüklemi (`seriesLock`) ile yazma kapısı AYNI cevabı veriyor",
+      pariteBozuk.length === 0, pariteBozuk.map((e) => e.key).join(", ") || `${NUMBER_SERIES_CATALOG.length} seri`);
+    check("§3c ⭐ okutulan serinin kilidi İKİ fazı da arıyor (B ve D)",
+      seriesPanelKaynagi.includes("scanningClientsMissingPhases"),
+      "series-panel.helper.ts");
 
     // ── §4 Etki sayısı ─────────────────────────────────────────────────────
     // ⚠️ FİKSTÜR ŞART: boş tabloda "0 = 0" iddiası, HER ZAMAN 0 dönen bir
@@ -468,9 +522,12 @@ async function main(): Promise<void> {
         "NUMBER_SERIES_COUNTER_OWN"));
     check("§6b ⭐ kendi sayacı olan seride ayar 400 `NUMBER_SERIES_COUNTER_OWN`",
       kacan.length === 0, kacan.map((e) => e.key).join(", ") || `${kendiSayacli.length} seri reddedildi`);
+    // ⚠️ İDDİA `lockedReason` ALANINA DEĞİL KİLİDİN KENDİSİNE çapalı: `workOrder`
+    // 2026-09-23'te YAPISAL kümeden çıktı (gerekçesi çürüdü) ama biçimi hâlâ
+    // kilitli (sayaç kapsamı + okutulan seri). Sorulan şey alan değil DAVRANIŞ:
+    // biçim kilitliyken sayaç ayarlanabiliyor mu?
     check("§6b ⭐ BİÇİM kilidi sayaç kilidi DEĞİL: `workOrder` biçimi kilitli ama sayacı ayarlanabilir",
-      numberSeriesCatalogEntry("workOrder").lockedReason !== undefined &&
-        seriesCounterCapabilities("workOrder").startValue === true);
+      seriesLock("workOrder") !== null && seriesCounterCapabilities("workOrder").startValue === true);
 
     // §6c DEĞER KAPISI — DB CHECK'lerinin uygulama ikizi
     check("§6c sıfır/negatif/ondalık reddedilir",

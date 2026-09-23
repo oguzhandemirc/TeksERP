@@ -7,6 +7,7 @@
 // Ek: {{barcodeSvg}}/{{qrSvg}} (HTML için ham SVG). Bilinmeyen anahtar → boş string.
 // =============================================================================
 import bwipjs from "bwip-js";
+import { previewSeriesCode, resolveSeriesFormat } from "../number-series.service";
 import { PrinterLanguage, type LabelKind } from "@prisma/client";
 import type { LabelPayload } from "../../types/label.types";
 import { fieldDisplayValue } from "./label-field-values";
@@ -108,7 +109,7 @@ export function mockPayload(kind: LabelKind, qualityCode: string | null = ""): L
     itemCode: "PA-60S", itemName: "Cotton Lining 60s", itemNameDefault: "Pamuk Astar 60s", itemNameSource: "OVERRIDE",
     colorCode: "BJ", colorName: "Beige", colorNameDefault: "Bej", colorNameSource: "OVERRIDE",
     customerName: "Demo Tekstil A.S.", customerId: "preview", orderNumber: "SIP1207260001", orderLineId: "preview",
-    batchNumber: "P1207261", workOrderNumber: "IE1207260001", printedAt: new Date().toISOString(),
+    batchNumber: "P1207261", workOrderNumber: previewSeriesCode(resolveSeriesFormat("workOrder"), 1), printedAt: new Date().toISOString(),
     // KAT — katalog KODU ("2-KAT"/"6-KAT"/"TUP"), ad değil (bkz. LabelPayload.foldType).
     foldType: "2-KAT",
     kind, cardNumber: "KRT1207260001", lengthCm: 30, parentRollBarcode: "T120726H0001",

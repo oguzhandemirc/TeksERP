@@ -210,8 +210,15 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     seedSeparator: "",
     seedRetiredPrefixes: ["RK"],
     kind: "TRAVELER_CARD",
-    lockedReason:
-      "Kart no = iş emri no (tek kod kuralı) ve eski `RK` kartları hâlâ sahada; ön ek Faz B (sunucu sınıflandırması) inmeden açılmaz.",
+    // ⚠️ YAPISAL KİLİT KALDIRILDI (2026-09-23) — `returnDoc` emsali: gerekçesi
+    // çürüyen bir kilit, kilit değil KALINTIDIR. Eski gerekçe iki şey diyordu ve
+    // ikisi de bugün YANLIŞ: ① "ön ek Faz B inmeden açılmaz" — Faz B İNDİ ve o
+    // engel artık `ISTEMCI` kilidinin işi (ayrı cümle, ayrı gün kalkar) · ②
+    // "kart no = iş emri no, eski `RK` kartları sahada" — bu YAPISAL bir engel
+    // DEĞİL: tek seri iki yüzeyi de besliyor (biçim değişince İKİSİ BİRDEN
+    // değişir) ve `RK` zaten `seedRetiredPrefixes`te, yani okutulmaya devam
+    // ediyor. Seri bugün yine düzenlenemez — ama doğru gerekçeyle: sayacı
+    // kapsam damgasına geçmedi (`SAYAC`) ve okutulan bir seri (`ISTEMCI`).
   },
   { key: "swatch", panelGroup: "fason-kartela", countTable: { model: "swatch", field: "cardNumber", birim: "kayıt" }, label: "Kartela kart no", seedPrefix: "KRT", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "SWATCH" },
   {
