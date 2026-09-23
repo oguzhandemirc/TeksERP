@@ -185,6 +185,17 @@ export function ConfigBundleCard() {
 
       {plan ? (
         <div className="mt-3 space-y-2">
+          {/* Paketin BİLEREK taşımadıkları — "yok" ile "dışarıda" aynı şey değil. */}
+          {envelope?.excluded?.length ? (
+            <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+              <div className="font-medium">Bu paket şunları TAŞIMAZ:</div>
+              <ul className="ml-4 list-disc">
+                {envelope.excluded.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2 text-xs">
             {Object.entries(plan.summary).map(([action, n]) => (
               <span key={action} className="rounded-md border px-2 py-0.5">

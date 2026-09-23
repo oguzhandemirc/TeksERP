@@ -4,6 +4,7 @@ import { BUYUK_GOVDE_LIMITI } from "../constants/body-limits";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import { AppError } from "../utils/app-error";
 import {
   applyBundle,
@@ -36,6 +37,9 @@ const jsonBig = express.json({ limit: BUYUK_GOVDE_LIMITI });
 const ANY_BUNDLE_READ = [...new Set(Object.values(BUNDLE_PERMISSIONS).map((p) => p.read))];
 const ANY_BUNDLE_WRITE = [...new Set(Object.values(BUNDLE_PERMISSIONS).map((p) => p.write))];
 
+/** Ayar şifresi isteyen türler — panelde şifre soran yüzeyin paket karşılığı. */
+const PASSWORD_GATED_KINDS = new Set<BundleKind>(["NUMBER_SERIES"]);
+
 const conflictSchema = z.enum(["rename", "overwrite", "skip"]).default("rename");
 const bodySchema = z.object({
   envelope: z.unknown(),
@@ -57,6 +61,44 @@ function assertKindPermissions(
         .join(" · ")}`,
     );
   }
+}
+
+/**
+ * AYAR ŞİFRESİ KAPISI — İÇERİĞE BAĞLI (D6).
+ *
+ * ⚠️ ÖLÇÜLDÜ 2026-09-23: numara serisi biçimini panelden değiştiren ÜÇ uç
+ * `requireSettingsPassword` taşıyor, `config-bundle` ise HİÇ taşımıyordu. Bu
+ * türü pakete eklemek, şifre kapısının etrafından dolanan İKİNCİ BİR YOL
+ * açardı — `settings:numbering` taşıyan biri, açık kalmış bir oturumdan
+ * fabrikanın canlı numaralandırmasını şifresiz değiştirebilirdi.
+ *
+ * ⚠️ KAPI TÜM UCA DEĞİL, İÇERİĞE TAKILIR — `assertKindPermissions` ile AYNI
+ * ilke: pakette hangi tür varsa YALNIZ onun kapısı aranır. Uca sabit takılsaydı
+ * etiket şablonu taşıyan büro personelinden de ayar şifresi istenirdi ve
+ * koruma, tam da korumadığı kişilere genişlerdi (middleware başlığındaki
+ * "belge-only gövde muaf" kararının aynısı, aynı gerekçeyle).
+ *
+ * ⚠️ YALNIZ `/apply` — `/preview` hiçbir şey YAZMAZ ve panelin `/preview` ucu
+ * da şifresizdir. Bu bir NİYET kapısıdır, YAZMAYI korur.
+ */
+async function requirePasswordForGatedKinds(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  let kinds: BundleKind[] = [];
+  try {
+    kinds = kindsInBundle(validateEnvelope(bodySchema.parse(req.body).envelope));
+  } catch {
+    // Gövde şekli bozuksa kapı KARAR VERMEZ; asıl işleyici 400'ü üretir.
+    next();
+    return;
+  }
+  if (!kinds.some((k) => PASSWORD_GATED_KINDS.has(k))) {
+    next();
+    return;
+  }
+  await requireSettingsPassword(req, res, next);
 }
 
 function parseKinds(raw: unknown): BundleKind[] {
@@ -157,6 +199,7 @@ router.post(
   verifyToken,
   requireAnyPermission(...ANY_BUNDLE_WRITE),
   jsonBig,
+  requirePasswordForGatedKinds,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = bodySchema.parse(req.body);

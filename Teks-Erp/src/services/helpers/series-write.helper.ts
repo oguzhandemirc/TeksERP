@@ -124,21 +124,21 @@ export function assertSeriesFormatAllowed(key: string, fmt: NumberSeriesFormat):
 
 // ── YAZMA ───────────────────────────────────────────────────────────────────
 
-/** Panelin yazdığı tek uç. Eski ön ek EMEKLİYE ayrılır (geçmiş kod okunmaya devam eder). */
-export async function updateSeriesFormat(
-  key: string,
-  next: Omit<NumberSeriesFormat, "retiredPrefixes" | "infix" | "formatChangedAt">,
-  userId?: string,
-  /**
-   * İLERİ TARİHLİ GEÇİŞ (D4③): "1 Ocak'tan itibaren şu biçim".
-   *
-   * ⚠️ GEÇMİŞ TARİH YAZILAMAZ (400): biçim geçmişi bir DEFTERDİR — o tarihte
-   * üretilmiş numaraların hangi rejimde doğduğu bilgisi düzeltilmez.
-   * ⚠️ İleri tarihli yazma YÜRÜRLÜKTEKİ biçime DOKUNMAZ: satır yazılır, kolonlar
-   * (önbellek) olduğu gibi kalır ve vadesi gelince `activateDueLines` alır.
-   */
-  effectiveFrom?: Date,
-): Promise<NumberSeries> {
+/**
+ * "BU SERİYE BUGÜN DOKUNULABİLİR Mİ" — DEĞERDEN BAĞIMSIZ üç kapı.
+ *
+ * `assertSeriesFormatAllowed`tan AYRI bir sorudur: orası "önerilen DEĞER
+ * geçerli mi" (karakter kümesi, hane, kapasite, çakışma), burası "bu seri
+ * düzenlenebilir mi" (yapısal kilit, sayaç hazırlığı, eski istemci). İkisi
+ * farklı gün kalkar ve farklı kişiye iş çıkarır.
+ *
+ * ⚠️ AYRI FONKSİYON OLMASININ SEBEBİ İKİNCİ ÇAĞIRANDIR (D6): yapılandırma
+ * paketi içe aktarımı, YAZMADAN ÖNCE aynı kapıların cevabını önizlemede
+ * göstermek zorunda. Kopyalanmış bir kontrol listesi "türetilmiş alan /
+ * ayrışan yüzey" sınıfına girerdi: önizleme "uygulanacak" der, yazma 400
+ * döner — ya da tersi, ki o daha kötü.
+ */
+export function assertSeriesFormatWritable(key: string): void {
   // ⚠️ KONFİGÜRASYON SINIRI (C0): sayacı biçim değişimine HAZIR OLMAYAN seri
   // düzenlenemez. Üretim yolu kapatılmaz — çuval açılamaz hâle gelirdi; asıl
   // engellenmesi gereken riskli AYAR değişikliğidir. Beyan katalogdadır.
@@ -186,6 +186,24 @@ export async function updateSeriesFormat(
       { code: "NUMBER_SERIES_CLIENT_TOO_OLD", key, missingPhases },
     );
   }
+}
+
+/** Panelin yazdığı tek uç. Eski ön ek EMEKLİYE ayrılır (geçmiş kod okunmaya devam eder). */
+export async function updateSeriesFormat(
+  key: string,
+  next: Omit<NumberSeriesFormat, "retiredPrefixes" | "infix" | "formatChangedAt">,
+  userId?: string,
+  /**
+   * İLERİ TARİHLİ GEÇİŞ (D4③): "1 Ocak'tan itibaren şu biçim".
+   *
+   * ⚠️ GEÇMİŞ TARİH YAZILAMAZ (400): biçim geçmişi bir DEFTERDİR — o tarihte
+   * üretilmiş numaraların hangi rejimde doğduğu bilgisi düzeltilmez.
+   * ⚠️ İleri tarihli yazma YÜRÜRLÜKTEKİ biçime DOKUNMAZ: satır yazılır, kolonlar
+   * (önbellek) olduğu gibi kalır ve vadesi gelince `activateDueLines` alır.
+   */
+  effectiveFrom?: Date,
+): Promise<NumberSeries> {
+  assertSeriesFormatWritable(key);
   const current = resolveSeriesFormat(key);
   const retired =
     current.prefix === next.prefix

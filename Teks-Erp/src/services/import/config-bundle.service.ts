@@ -19,6 +19,8 @@
 // ⚠️ İÇE AKTARIMDA DA SANITIZE: şablon HTML'leri kayıt yolunda temizlenir
 // (`sanitizeTemplateHtml`) — dosya elle düzenlenip script sızdırılamasın.
 
+import type { NumberSeries } from "@prisma/client";
+
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
@@ -28,6 +30,14 @@ import { freeDocumentService } from "../free-document.service";
 import { LabelTemplateService } from "../label-template.service";
 import { PermissionManagementService } from "../permission-management.service";
 import { upperTr } from "../../utils/tr-case";
+import { NUMBER_SERIES_CATALOG } from "../../constants/number-series-catalog";
+import { previewSeriesCode, resolveSeriesFormat } from "../number-series.service";
+import {
+  assertSeriesFormatAllowed,
+  assertSeriesFormatWritable,
+  updateSeriesFormat,
+  updateSeriesNumberSource,
+} from "../helpers/series-write.helper";
 
 /** Paketin taşıyabileceği tür anahtarları. */
 export const BUNDLE_KINDS = [
@@ -36,6 +46,7 @@ export const BUNDLE_KINDS = [
   "DOCUMENT_PROFILE",
   "FREE_DOCUMENT",
   "PERMISSION_TEMPLATE",
+  "NUMBER_SERIES",
 ] as const;
 
 export type BundleKind = (typeof BUNDLE_KINDS)[number];
@@ -48,6 +59,10 @@ export const BUNDLE_PERMISSIONS: Record<BundleKind, { read: string; write: strin
   FREE_DOCUMENT: { read: "document-template:read", write: "document-template:write" },
   // Rol şablonu bir YETKİ nesnesidir — belge tasarımıyla aynı kapıdan geçmemeli.
   PERMISSION_TEMPLATE: { read: "admin:users", write: "admin:users" },
+  // Numara biçimi bir AYAR nesnesidir; belge tasarımıyla aynı kapıdan geçmez.
+  // ⚠️ Yazma ayrıca AYAR ŞİFRESİ ister — kapı `config-bundle.routes.ts`te ve
+  // İÇERİĞE BAĞLIDIR (paket bu türü taşımıyorsa şifre sorulmaz).
+  NUMBER_SERIES: { read: "settings:numbering", write: "settings:numbering" },
 };
 
 export const BUNDLE_LABELS: Record<BundleKind, string> = {
@@ -56,6 +71,7 @@ export const BUNDLE_LABELS: Record<BundleKind, string> = {
   DOCUMENT_PROFILE: "Belge profilleri",
   FREE_DOCUMENT: "Serbest belgeler",
   PERMISSION_TEMPLATE: "Yetki şablonları (roller)",
+  NUMBER_SERIES: "Numara serileri",
 };
 
 export type ConflictStrategy = "rename" | "overwrite" | "skip";
@@ -68,6 +84,15 @@ export interface BundleEnvelope {
   /** Kaynak kurulumun adı (bilgi amaçlı; içe aktarımda kullanılmaz). */
   source?: string;
   items: BundleItem[];
+  /**
+   * PAKETİN TAŞIMADIKLARI — beyanlı (D6).
+   *
+   * ⚠️ "Yok" ile "bilerek dışarıda" aynı şey değildir. Hedefteki bir yönetici
+   * paketi uygulayıp sayacın değişmediğini görünce, bunun bir EKSİKLİK mi yoksa
+   * bir KARAR mı olduğunu pakete bakarak anlayabilmeli. Alan OPSİYONEL: eski
+   * paketler bunu taşımaz ve okunmaya devam eder.
+   */
+  excluded?: string[];
 }
 
 export interface BundleItem {
@@ -103,6 +128,42 @@ function assertKind(k: string): BundleKind {
 
 // =============================================================================
 // DIŞA AKTARIM
+/**
+ * Numara serisi paketinin TAŞIMADIKLARI — beyanlı ve gerekçeli.
+ *
+ * ⚠️ "Yok" ile "bilerek dışarıda" aynı şey değildir: hedefteki yönetici paketi
+ * uygulayıp sayacın değişmediğini görünce, bunun bir EKSİKLİK mi yoksa bir
+ * KARAR mı olduğunu pakete bakarak anlayabilmeli.
+ */
+const NUMBER_SERIES_EXCLUSIONS = [
+  "Sayaç ayarları (başlangıç · adım · üst sınır): hedefteki MEVCUT kodların " +
+    "maksimumuna göre anlam taşır; kaynak kurulumun başlangıç değeri hedefte " +
+    "ya mükerrer kod ya da boşluk üretirdi.",
+  "İleri tarihli biçim geçişleri: bir tarihe bağlı karar hedef kurulumun KENDİ planıdır.",
+  "Emekli biçimler: hedefin geçmişi kendi zaman çizgisinde yaşar, kaynağınki oraya taşınmaz.",
+];
+
+/** Katalogdaki her serinin BUGÜNKÜ biçimi + numara kaynağı (sayaç HARİÇ). */
+function numberSeriesItems(): BundleItem[] {
+  return NUMBER_SERIES_CATALOG.map((e) => {
+    const fmt = resolveSeriesFormat(e.key);
+    return {
+      kind: "NUMBER_SERIES" as const,
+      key: e.key,
+      payload: {
+        label: e.label,
+        prefix: fmt.prefix,
+        dateSegment: fmt.dateSegment,
+        digits: fmt.digits,
+        separator: fmt.separator,
+        separator2: fmt.separator2 ?? null,
+        // İŞ SÜRECİ kararıdır (elle numara girilebilir mi) — taşınır.
+        numberSource: fmt.numberSource ?? "FREE",
+      },
+    };
+  });
+}
+
 // =============================================================================
 
 export async function exportBundle(kinds: BundleKind[]): Promise<BundleEnvelope> {
@@ -167,11 +228,15 @@ export async function exportBundle(kinds: BundleKind[]): Promise<BundleEnvelope>
     }
   }
 
+  const excluded = kinds.includes("NUMBER_SERIES") ? NUMBER_SERIES_EXCLUSIONS : [];
+  if (kinds.includes("NUMBER_SERIES")) items.push(...numberSeriesItems());
+
   return {
     schemaVersion: 1,
     app: "TeksERP",
     exportedAt: new Date().toISOString(),
     items,
+    ...(excluded.length > 0 ? { excluded } : {}),
   };
 }
 
@@ -227,6 +292,12 @@ async function existingKeys(kind: BundleKind): Promise<Set<string>> {
       const rows = await prisma.permissionTemplate.findMany({ select: { name: true } });
       return new Set(rows.map((r) => norm(r.name)));
     }
+    case "NUMBER_SERIES":
+      // ⚠️ Bu tür GENEL plan yoluna hiç girmez (`planNumberSeries` onu önce
+      // alır) ama switch TAM kalmak zorunda: derleyici yeni bir tür eklendiğinde
+      // burayı göstersin diye. Yine de doğru cevabı döndürüyoruz — seri kimliği
+      // KATALOGDADIR, DB'de değil; "hedefte var mı" sorusunun cevabı budur.
+      return new Set(NUMBER_SERIES_CATALOG.map((e) => norm(e.key)));
   }
 }
 
@@ -240,6 +311,163 @@ function nextFreeName(base: string, taken: Set<string>): string {
   return `${base} (${Date.now()})`;
 }
 
+/** Numara kaynağının ekran adı — önizleme cümlesi buradan kurulur. */
+const NUMBER_SOURCE_LABELS: Record<string, string> = {
+  FREE: "Serbest",
+  SYSTEM: "Yalnız sistem üretir",
+  MANUAL: "Yalnız elle girilir",
+};
+
+/** Paketteki numara serisi kaleminin hedefteki karşılığı — tek yerde okunur. */
+function numberSeriesPayload(item: BundleItem): {
+  prefix: string;
+  dateSegment: NumberSeries["dateSegment"];
+  digits: number;
+  separator: string;
+  separator2: string | null;
+  numberSource: "FREE" | "SYSTEM" | "MANUAL";
+} {
+  const p = item.payload;
+  return {
+    prefix: String(p.prefix ?? ""),
+    dateSegment: p.dateSegment as NumberSeries["dateSegment"],
+    digits: Number(p.digits ?? 4),
+    separator: String(p.separator ?? ""),
+    separator2: p.separator2 == null ? null : String(p.separator2),
+    numberSource: (p.numberSource as "FREE" | "SYSTEM" | "MANUAL" | undefined) ?? "FREE",
+  };
+}
+
+/**
+ * Paketteki kalem ile HEDEFİN bugünkü hâlinin FARKI — tek yüklem, iki çağıran.
+ *
+ * ⚠️ Önizleme ile yazma bu soruyu AYRI AYRI cevaplasaydı ("biçim değişti mi")
+ * bir gün ayrışırlardı: önizleme "değişecek" der, yazma dokunmaz (ya da tersi).
+ * Aynı sınıf `assertSeriesFormatWritable`ın ayrılma gerekçesiyle özdeş.
+ */
+function numberSeriesDiff(item: BundleItem): {
+  next: ReturnType<typeof numberSeriesPayload>;
+  current: ReturnType<typeof resolveSeriesFormat>;
+  formatSame: boolean;
+  sourceSame: boolean;
+} {
+  const next = numberSeriesPayload(item);
+  const current = resolveSeriesFormat(item.key);
+  return {
+    next,
+    current,
+    formatSame:
+      current.prefix === next.prefix &&
+      current.dateSegment === next.dateSegment &&
+      current.digits === next.digits &&
+      current.separator === next.separator &&
+      (current.separator2 ?? null) === next.separator2,
+    sourceSame: (current.numberSource ?? "FREE") === next.numberSource,
+  };
+}
+
+/** Önizleme cümlesi — ÖNCESİ → SONRASI, satır satır. */
+function numberSeriesMessage(label: string, d: ReturnType<typeof numberSeriesDiff>): string {
+  const parts: string[] = [];
+  if (!d.formatSame) {
+    parts.push(
+      `${previewSeriesCode(d.current)} → ` +
+        `${previewSeriesCode({ ...d.current, ...d.next, separator2: d.next.separator2 })}`,
+    );
+  }
+  if (!d.sourceSame) {
+    parts.push(
+      `numara girişi: ${NUMBER_SOURCE_LABELS[d.current.numberSource ?? "FREE"]} → ` +
+        `${NUMBER_SOURCE_LABELS[d.next.numberSource]}`,
+    );
+  }
+  return `${label}: ${parts.join(" · ")}`;
+}
+
+/**
+ * ⚠️ HAM DB YAZIMI YOK — panelin çağırdığı YAZARIN TA KENDİSİ çağrılır.
+ *
+ * Biçim değişimi hedefte CANLI numaralandırmayı değiştirir ve yapısal kilit ·
+ * sayaç kapsamı · eski istemci (C0b) · kolon kapasitesi · ön ek çakışması ·
+ * ZAMAN ÇİZGİSİNE SATIR YAZMA hepsi orada yaşar. Kapıları atlayan bir "içe
+ * aktarım modu" yazılmadı ve yazılmamalı: tam olarak bu kapılar, sahadaki
+ * barkodun okunamaz hâle gelmesini engelliyor.
+ */
+async function writeNumberSeries(item: BundleItem, userId?: string): Promise<void> {
+  const d = numberSeriesDiff(item);
+  if (!d.formatSame) {
+    await updateSeriesFormat(
+      item.key,
+      {
+        prefix: d.next.prefix,
+        dateSegment: d.next.dateSegment,
+        digits: d.next.digits,
+        separator: d.next.separator,
+        separator2: d.next.separator2,
+      },
+      userId,
+    );
+  }
+  if (!d.sourceSame) {
+    await updateSeriesNumberSource(item.key, d.next.numberSource, userId);
+  }
+}
+
+/**
+ * NUMARA SERİSİ PLANI — genel (ad eşleşmeli) yoldan AYRI, çünkü kimlik farklı.
+ *
+ * ⚠️ `rename` BU TÜRDE ANLAMSIZDIR: seri kimliği katalog `key`idir (`sack`,
+ * `shipment`…), hedefte zaten VARDIR ve "sack (2)" diye bir seri yaratılamaz.
+ * `LABEL_TEMPLATE`ın ters yöndeki emsaliyle aynı dürüstlük: desteklenmeyen
+ * strateji SESSİZCE başka bir şey yapmaz, ne yaptığını SÖYLER.
+ *
+ * ⚠️ KAPILAR BURADA KURU KOŞULUR: yazma yolunun çağırdığı ile BİREBİR aynı iki
+ * yüklem (`assertSeriesFormatWritable` + `assertSeriesFormatAllowed`). Önizleme
+ * kendi kontrol listesini tutsaydı "uygulanacak" deyip 400 alan bir paket
+ * üretirdi — ya da tersi, ki daha kötü: kullanıcı engeli görmeden onaylar.
+ */
+function planNumberSeries(item: BundleItem, onConflict: ConflictStrategy): BundlePlanRow {
+  const base = { kind: "NUMBER_SERIES" as const, key: item.key };
+  const entry = NUMBER_SERIES_CATALOG.find((e) => e.key === item.key);
+  if (!entry) {
+    return { ...base, action: "SKIP", message: "Bu kurulumda böyle bir numara serisi yok — atlandı." };
+  }
+  if (onConflict === "rename") {
+    return {
+      ...base,
+      action: "SKIP",
+      message: "Numara serisi yeniden adlandırılamaz (kimlik katalogdadır); atlandı.",
+    };
+  }
+
+  const d = numberSeriesDiff(item);
+  if (d.formatSame && d.sourceSame) {
+    return { ...base, action: "SKIP", message: `${entry.label}: hedefteki ayar zaten aynı.` };
+  }
+  if (onConflict === "skip") {
+    return { ...base, action: "SKIP", message: `${entry.label}: hedefte farklı bir ayar var — atlandı.` };
+  }
+
+  // KURU KOŞUM — yazma yolunun kapıları, yazmadan.
+  try {
+    if (!d.formatSame) {
+      assertSeriesFormatWritable(item.key);
+      const retired =
+        d.current.prefix === d.next.prefix
+          ? d.current.retiredPrefixes
+          : [...new Set([...d.current.retiredPrefixes, d.current.prefix])];
+      assertSeriesFormatAllowed(item.key, { ...d.next, retiredPrefixes: retired });
+    }
+  } catch (e) {
+    return { ...base, action: "ERROR", message: e instanceof Error ? e.message : "Uygulanamaz." };
+  }
+
+  // ⚠️ ÖNCESİ → SONRASI, SATIR SATIR: kullanıcı neyi değiştirdiğini GÖREREK
+  // onaylar. Soyut bir "3 seri güncellenecek" cümlesi, bu depoda yıkıcı
+  // işlemlerde açıkça yasaklanmış olan şeydir.
+  return { ...base, action: "OVERWRITE", message: numberSeriesMessage(entry.label, d) };
+}
+
 export async function planBundle(
   envelope: BundleEnvelope,
   onConflict: ConflictStrategy,
@@ -251,6 +479,11 @@ export async function planBundle(
   const rows: BundlePlanRow[] = [];
   for (const item of envelope.items) {
     const kind = assertKind(item.kind);
+    // Kimliği KATALOGDA olan tür, ad eşleşmeli genel yoldan geçmez.
+    if (kind === "NUMBER_SERIES") {
+      rows.push(planNumberSeries(item, onConflict));
+      continue;
+    }
     const set = taken.get(kind)!;
     const exists = set.has(upperTr(item.key.trim()));
 
@@ -322,6 +555,9 @@ async function writeItem(item: BundleItem, row: BundlePlanRow, userId?: string):
   const p = item.payload;
 
   switch (assertKind(item.kind)) {
+    case "NUMBER_SERIES":
+      await writeNumberSeries(item, userId);
+      return;
     case "LABEL_TEMPLATE": {
       // Mevcut importTemplate zarfı ad çakışmasını KENDİ dedup'lar; overwrite
       // istendiğinde önce eskisini pasifleştirmek yerine aynı adı koruyup

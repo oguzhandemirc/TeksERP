@@ -74,6 +74,8 @@
 - **[ÇEKİRDEK]** İstemci, sunucudan gelen seri tablosunu HEP-YA-HİÇ reddetmez: tanımadığı satırı atar, gerisini kullanır. Aksi hâlde tek bir yeni segment, istemciye anladığı serileri de kaybettirip bayat yedekle okutur. · bekçi: `test_tarih_segmenti_aynasi §2`
 - **[ÇEKİRDEK]** Biçimin İKİ eklem yeri vardır (ön ek|tarih ve tarih|sayaç) ve ikisini de `seriesJoints` verir — üreteçle eşleştirici aynı karardan okur. `separator2` yoksa `separator`a düşer; tarih yoksa ikinci eklem hiç kurulmaz. · bekçi: `test_number_series §14`
 - **[ÇEKİRDEK]** Biçim satırı göçü SERİ BAŞINA idempotenttir: satırı olmayan seri her boot'ta kolon önbelleğinden onarılır, satırı olana dokunulmaz. Genel bir damga "iş yapıldı" der ama satırların VARLIĞINI garanti etmez. · bekçi: `test_number_series_lines §1c`
+- **[ÇEKİRDEK]** Yapılandırma paketi numara serisi taşıyabilir ama YAZMA panelin yazarından (`updateSeriesFormat`) geçer: kapıları atlayan bir içe aktarım modu yoktur. Önizleme aynı yüklemleri KURU koşar ve her seriyi ÖNCESİ → SONRASI olarak listeler; sayaç taşınmaz ve taşınmayanlar pakette beyanlıdır. · bekçi: `test_config_bundle §9`
+- **[ÇEKİRDEK]** Paketin numara serisi taşıması AYAR ŞİFRESİ ister ve kapı UCA değil İÇERİĞE takılır — paket bu türü taşımıyorsa şifre sorulmaz. · bekçi: `test_config_bundle §9d`
 - **[ÇEKİRDEK]** Kilitli seriyi (`lockedReason` dolu) panelden düzenlenebilir yapma: top barkodu (tarih ile sıra arasında faz harfi + `RollBarcodeCounter` anahtarı), kısa parti no (fiziksel plaka seti, körlemesine sarar), iş emri/kart no (tek kod + sahadaki `RK` kartları) ve iade belge no (henüz sayaç yok, `id`'den türetiliyor). Kilit kalkacaksa gerekçe önce ölçülür.
 
 ### Kararlar

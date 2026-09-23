@@ -10,8 +10,31 @@
 //   6. Rol şablonu ATAMALARI taşınmaz
 //   7. `isDefault` taşınmaz (hedefin varsayılanı sessizce değişmesin)
 //   8. Tür → izin haritası katalogda TANIMLI kodlar kullanır
+//   9. NUMARA SERİSİ (D6): kimlik KATALOGDA olduğu için `rename` anlamsızdır;
+//      sayaç TAŞINMAZ ve bu BEYANLIDIR; önizleme ÖNCESİ → SONRASI gösterir;
+//      kapılar KURU koşar (kilitli seri HATA verir, yazma denenmez); ayar
+//      şifresi kapısı UCA değil İÇERİĞE takılıdır ve yalnız `/apply`tadır
 //
 // Salt-okunur bölümler DB'ye yazmaz; yazan bölüm kendi fixture'ını temizler.
+//
+// ⭐ §9 NEGATİF SONDALARI (2026-09-23, D6; her biri geri alınıp `cmp`lendi):
+//   ⑬ pakete `startValue` sızdırıldı → §9a ❌ (izinli alan KÜMESİ ölçülüyor,
+//      tek tek alan adı değil — yarın eklenen bir alan da yakalanır)
+//   ⑭ `excluded` beyanı kaldırıldı → §9a ❌
+//   ⑮ `rename` kolu kaldırıldı → §9b ❌
+//   ⑯ kuru koşumdan `assertSeriesFormatWritable` çıkarıldı → §9c ❌ (C0b kolu)
+//   ⑰ `/apply`ten şifre kapısı kaldırıldı → §9d ❌
+//   ⑱ `writeItem` ham `prisma.update` yaptı → §9e ❌ (zaman çizgisi satırı yok)
+//
+// ⚠️ İKİ SONDA ÖNCE ISIRMADI ve İKİSİ DE BULGUYDU:
+//   • ⑯ ilk hâlinde KİLİTLİ seriyle koşuluyordu; o seriyi
+//     `assertSeriesFormatAllowed` DA reddediyor, yani iddia yazılabilirlik
+//     kapısını İZOLE ETMİYORDU. C0b'yi izole eden şey OKUTULAN ama kilitli
+//     OLMAYAN bir seridir (§9c ikinci kol).
+//   • ⑱ hiç ısırmıyordu çünkü bütün kollar HATA veren serilerdi ⇒ `writeItem`a
+//     HİÇ GİRİLMİYORDU. Kapıları ölçmek, YAZMA YOLUNU ölçmek değildir; §9e
+//     gerçekten yazar ve yazmanın GÖZLENEBİLİR SONUCUNU (zaman çizgisi satırı)
+//     ölçer — kodun ne çağırdığını okumak yerine ne BIRAKTIĞINI.
 
 import prisma from "../src/lib/prisma";
 import {
@@ -24,6 +47,10 @@ import {
   type BundleEnvelope,
 } from "../src/services/import/config-bundle.service";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
+import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
+import { refreshNumberSeriesCache, resolveSeriesFormat } from "../src/services/number-series.service";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 let pass = 0;
 let fail = 0;
@@ -180,6 +207,182 @@ async function main(): Promise<void> {
       "refakat kartı şablonu paketinde isDefault=true TAŞINMAZ (uygulama tarafında sıfırlanır)",
       travelerItems.every((i) => i.payload.isDefault === undefined || typeof i.payload.isDefault === "boolean"),
     );
+
+  // --- 9. NUMARA SERİSİ (D6) -------------------------------------------------
+  const nsPaket = await exportBundle(["NUMBER_SERIES"]);
+  const nsItems = nsPaket.items.filter((i) => i.kind === "NUMBER_SERIES");
+  check(
+    "§9a numara serisi paketi KATALOĞUN tamamını taşıyor",
+    nsItems.length === NUMBER_SERIES_CATALOG.length,
+    `${nsItems.length} / ${NUMBER_SERIES_CATALOG.length}`,
+  );
+  // ⚠️ SAYAÇ ALANLARI PAYLOAD'DA OLMAMALI ve bu iddia ANAHTAR KÜMESİNİ ölçer,
+  // tek tek alan adı aramaz: "startValue yok mu" diye sormak, yarın eklenen
+  // `resetPeriod` gibi bir alanı sessizce geçirirdi.
+  const izinliAlanlar = new Set([
+    "label", "prefix", "dateSegment", "digits", "separator", "separator2", "numberSource",
+  ]);
+  const fazlaAlan = [
+    ...new Set(nsItems.flatMap((i) => Object.keys(i.payload)).filter((k) => !izinliAlanlar.has(k))),
+  ];
+  check(
+    "§9a ⭐ paket YALNIZ biçim + numara kaynağı taşıyor (sayaç DIŞARIDA)",
+    fazlaAlan.length === 0,
+    fazlaAlan.join(", ") || `${izinliAlanlar.size} alan`,
+  );
+  check(
+    "§9a ⭐ taşınmayanlar BEYANLI (`excluded`) — 'yok' ile 'bilerek dışarıda' aynı şey değil",
+    Array.isArray(nsPaket.excluded) && nsPaket.excluded.length >= 3,
+    `${nsPaket.excluded?.length ?? 0} beyan`,
+  );
+
+  // Düzenlenebilir bir seri seç — kilitli/kapalı olanlar ayrı kolu ölçer.
+  const duzenlenebilir = NUMBER_SERIES_CATALOG.find(
+    (e) => !e.lockedReason && e.scopedCounter && !e.kind,
+  );
+  const kilitli = NUMBER_SERIES_CATALOG.find((e) => e.lockedReason);
+  // ⚠️ AYRI BİR SERİ ŞART: kilitli seriyi `assertSeriesFormatAllowed` DA
+  // reddediyor, yani o kol "yazılabilirlik kapısı kuru koşuyor mu" sorusunu
+  // İZOLE ETMİYOR (ölçüldü: kapıyı kuru koşumdan çıkardım, iddia yeşil kaldı).
+  // C0b'yi izole eden şey OKUTULAN ama kilitli OLMAYAN bir seridir — ve bu,
+  // paket için en kritik kapı: başka bir kurulumdan gelen bir biçim, sahadaki
+  // okuyucuları sessizce kör edebilir.
+  const taranan = NUMBER_SERIES_CATALOG.find((e) => e.kind && !e.lockedReason && e.scopedCounter);
+  check("§9 körlük zemini: düzenlenebilir · kilitli · OKUTULAN seri GERÇEKTEN var",
+    duzenlenebilir !== undefined && kilitli !== undefined && taranan !== undefined,
+    `${duzenlenebilir?.key ?? "-"} / ${kilitli?.key ?? "-"} / ${taranan?.key ?? "-"}`);
+
+  function nsKalem(key: string, over: Record<string, unknown> = {}): BundleEnvelope {
+    const f = resolveSeriesFormat(key);
+    return {
+      schemaVersion: 1,
+      app: "TeksERP",
+      exportedAt: new Date().toISOString(),
+      items: [{
+        kind: "NUMBER_SERIES",
+        key,
+        payload: {
+          prefix: f.prefix, dateSegment: f.dateSegment, digits: f.digits,
+          separator: f.separator, separator2: f.separator2 ?? null,
+          numberSource: f.numberSource ?? "FREE",
+          ...over,
+        },
+      }],
+    };
+  }
+
+  if (duzenlenebilir && kilitli) {
+    const ayniPlan = await planBundle(nsKalem(duzenlenebilir.key), "overwrite");
+    check("§9b aynı ayar → SKIP (gereksiz yazma yok)",
+      ayniPlan.rows[0]?.action === "SKIP", ayniPlan.rows[0]?.message);
+
+    const renamePlan = await planBundle(nsKalem(duzenlenebilir.key, { digits: 5 }), "rename");
+    check("§9b ⭐ `rename` bu türde ANLAMSIZ — SKIP ve SEBEBİNİ SÖYLÜYOR",
+      renamePlan.rows[0]?.action === "SKIP" &&
+        (renamePlan.rows[0]?.message ?? "").includes("yeniden adlandırılamaz"),
+      renamePlan.rows[0]?.message);
+
+    const degisimPlan = await planBundle(nsKalem(duzenlenebilir.key, { digits: 5 }), "overwrite");
+    check("§9b ⭐ farklı biçim → OVERWRITE ve önizleme ÖNCESİ → SONRASI gösteriyor",
+      degisimPlan.rows[0]?.action === "OVERWRITE" && (degisimPlan.rows[0]?.message ?? "").includes("→"),
+      degisimPlan.rows[0]?.message);
+
+    const kilitPlan = await planBundle(nsKalem(kilitli.key, { digits: 5 }), "overwrite");
+    check("§9c ⭐ KİLİTLİ seri önizlemede HATA verir (kapı KURU koşuyor, yazma denenmiyor)",
+      kilitPlan.rows[0]?.action === "ERROR", kilitPlan.rows[0]?.message);
+    const kilitliOnce = resolveSeriesFormat(kilitli.key);
+    const kilitSonuc = await applyBundle(nsKalem(kilitli.key, { digits: 5 }), "overwrite");
+    const kilitliSonra = resolveSeriesFormat(kilitli.key);
+    check("§9c ⭐ HATA veren kalem UYGULANMIYOR ve DB değişmiyor",
+      kilitSonuc.applied === 0 && kilitliOnce.digits === kilitliSonra.digits,
+      `applied=${kilitSonuc.applied} · hane ${kilitliOnce.digits} → ${kilitliSonra.digits}`);
+  }
+
+  if (taranan) {
+    const c0bPlan = await planBundle(nsKalem(taranan.key, { digits: 5 }), "overwrite");
+    check("§9c ⭐ OKUTULAN seri C0b kilidine takılıyor — paket bu kapının ETRAFINDAN DOLANAMAZ",
+      c0bPlan.rows[0]?.action === "ERROR" &&
+        (c0bPlan.rows[0]?.message ?? "").includes("güncellenmeden"),
+      c0bPlan.rows[0]?.message);
+    const tarananOnce = resolveSeriesFormat(taranan.key);
+    const c0bSonuc = await applyBundle(nsKalem(taranan.key, { digits: 5 }), "overwrite");
+    check("§9c ⭐ C0b'ye takılan kalem UYGULANMIYOR (okutulan biçim sahada bozulmuyor)",
+      c0bSonuc.applied === 0 && resolveSeriesFormat(taranan.key).digits === tarananOnce.digits,
+      `applied=${c0bSonuc.applied}`);
+  }
+
+  // ⭐ §9e BAŞARILI İÇE AKTARIM — ve bu bölüm bir SONDA BULGUSUNDAN doğdu:
+  // `writeItem`daki `updateSeriesFormat` çağrısını ham bir `prisma.update` ile
+  // değiştirdim ve HİÇBİR iddia kırmızı vermedi. Sebep: yukarıdaki bütün
+  // kollar HATA veren serilerdi, yani `writeItem`a HİÇ GİRİLMİYORDU. Kapıların
+  // ölçülmesi, yazma yolunun ölçüldüğü anlamına gelmiyordu.
+  // ⇒ Burada gerçekten YAZILIR ve yazmanın GÖZLENEBİLİR SONUCU ölçülür: ham
+  // bir kolon güncellemesi biçimi değiştirir ama ZAMAN ÇİZGİSİNE SATIR YAZMAZ
+  // (ve emekli ön eki de taşımaz). Kodun ne çağırdığını okumak yerine, ne
+  // BIRAKTIĞINI ölçüyoruz.
+  if (duzenlenebilir) {
+    const oncekiFmt = resolveSeriesFormat(duzenlenebilir.key);
+    const oncekiSatirlar = await prisma.numberSeriesLine.findMany({
+      where: { seriesKey: duzenlenebilir.key },
+    });
+    const oncekiKolon = await prisma.numberSeries.findUnique({
+      where: { key: duzenlenebilir.key },
+      select: { prefix: true, dateSegment: true, digits: true, separator: true,
+        separator2: true, retiredPrefixes: true, formatChangedAt: true },
+    });
+    try {
+      const sonuc = await applyBundle(
+        nsKalem(duzenlenebilir.key, { digits: oncekiFmt.digits + 1 }),
+        "overwrite",
+      );
+      check("§9e ⭐ geçerli kalem GERÇEKTEN uygulanıyor",
+        sonuc.applied === 1 && resolveSeriesFormat(duzenlenebilir.key).digits === oncekiFmt.digits + 1,
+        `applied=${sonuc.applied} · hane ${oncekiFmt.digits} → ${resolveSeriesFormat(duzenlenebilir.key).digits}`);
+      const sonrakiSatirlar = await prisma.numberSeriesLine.findMany({
+        where: { seriesKey: duzenlenebilir.key },
+      });
+      check("§9e ⭐ içe aktarım ZAMAN ÇİZGİSİNE SATIR YAZIYOR (panelin yazarından geçti)",
+        sonrakiSatirlar.length === oncekiSatirlar.length + 1,
+        `${oncekiSatirlar.length} → ${sonrakiSatirlar.length} satır`);
+    } finally {
+      // Geri alma: sondadan ÖNCEKİ ana. Yeni satır silinir, kolonlar birebir
+      // geri yazılır — `updateSeriesFormat` ile geri almak İKİNCİ bir satır
+      // doğururdu ve defter gerçekte olmayan iki geçiş gösterirdi.
+      const kalanlar = await prisma.numberSeriesLine.findMany({
+        where: { seriesKey: duzenlenebilir.key }, select: { id: true },
+      });
+      const eskiIdler = new Set(oncekiSatirlar.map((x) => x.id));
+      await prisma.numberSeriesLine.deleteMany({
+        where: { id: { in: kalanlar.filter((x) => !eskiIdler.has(x.id)).map((x) => x.id) } },
+      });
+      if (oncekiKolon) {
+        await prisma.numberSeries.update({ where: { key: duzenlenebilir.key }, data: oncekiKolon });
+      }
+      await refreshNumberSeriesCache();
+    }
+    check("§9e sonda GERİ ALINDI: biçim sondadan önceki hâlinde",
+      resolveSeriesFormat(duzenlenebilir.key).digits === oncekiFmt.digits,
+      `hane ${resolveSeriesFormat(duzenlenebilir.key).digits}`);
+  }
+
+  // ⚠️ KAPI BAĞLANTISI METİNDEN ÖLÇÜLÜYOR ve SINIRI BEYANLI: burada sorulan
+  // "kapı DOĞRU UCA TAKILI MI"dır; kapının davranışı (şifre yoksa uyur, yanlış
+  // şifre 403 …) `test_settings_password`ın HTTP ayaklı bölümlerinin işidir ve
+  // sunucu yoksa ORASI atlanır. İki soru ayrı; bu iddia ötekinin yerine geçmez.
+  const rotaKodu = readFileSync(join(__dirname, "..", "src", "routes", "config-bundle.routes.ts"), "utf-8")
+    .split("\n").map((l) => l.replace(/\/\/.*$/, "")).join("\n")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  const applyBloku = rotaKodu.slice(rotaKodu.indexOf('router.post(\n  "/apply"'));
+  const previewBloku = rotaKodu.slice(
+    rotaKodu.indexOf('router.post(\n  "/preview"'),
+    rotaKodu.indexOf('router.post(\n  "/apply"'),
+  );
+  check("§9d ⭐ ayar şifresi kapısı `/apply`e TAKILI",
+    applyBloku.includes("requirePasswordForGatedKinds"));
+  check("§9d ⭐ `/preview`te YOK (önizleme hiçbir şey yazmaz; panelin önizlemesi de şifresiz)",
+    previewBloku.length > 0 && !previewBloku.includes("requirePasswordForGatedKinds"),
+    `preview bloğu ${previewBloku.length} karakter`);
+
   } finally {
     await prisma.documentProfile.deleteMany({ where: { name: { startsWith: "TEST-BUNDLE" } } });
     await prisma.permissionTemplate.deleteMany({ where: { name: { startsWith: "TEST-BUNDLE" } } });
