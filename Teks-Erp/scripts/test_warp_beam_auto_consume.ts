@@ -10,6 +10,8 @@
 // NEGATİF SONDALAR (2026-09-15): `readDevereAutoConsume` sabit true → §1 bayt bayt kırmızı ·
 //   `warpLengthFromFabric` take-up dalı düştü → §2b kırmızı · `beamsMountedDuring(… doffedAt, doffedAt)`
 //   yerine `mountedBeamsOnMachineTx` → §6 kırmızı · `cancelConsumedForRollTx` çağrısı `!isScrap` şartsız → §5c kırmızı.
+// §9 İKİ SAAT (2026-09-23, §6'nın aralıklı kırmızısının kökü): olay damgası DB saatinden — sondalar: tek yazardaki
+//   açık `createdAt` kaldırıldı (Prisma Node saati) → §9a kırmızı · damga `now()` (tx başı, GREATEST'siz) → §9b kırmızı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar FOTOĞRAFINA döner.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -24,6 +26,7 @@ import { createWarpBeam, getWarpBeam } from "../src/services/warp-beam.service";
 import { windWarpBeam } from "../src/services/warp-beam-wind.service";
 import { dismountBeam, mountBeam } from "../src/services/warp-beam-mount.service";
 import { warpLengthFromFabric } from "../src/services/warp-beam-auto-consume.service";
+import { applyWarpBeamEventTx } from "../src/services/helpers/warp-beam-event.helper";
 
 let pass = 0;
 let fail = 0;
@@ -174,7 +177,8 @@ async function main(): Promise<void> {
     check("§7 ⭐ 2 hat: her top 100 ÷ 2 = 50 m kumaş → 62,5 m çözgü; iki top toplamı 125 = tam boy (çift sayım yok), uyarı 'hat payı'", c7.length === 2 && c7.every((c) => c.fabricLengthM?.equals(50) && c.lengthM?.equals(62.5)) && (await kalan(b4)) === 875 && (r7a.warnings ?? []).some((w) => /hat payı/.test(w)));
 
     console.log("\n── §8 Beyansız doff damgası DB SAATİNDEN: Node saati 5 sn geride olsa da takma→indirme sırası bozulmaz ──");
-    // Takma satırının `createdAt`i DB saatidir; beyansız `doffedAt` Node saatinden gelirse iki saat karşılaştırılır ve
+    // Takma satırının `createdAt`i DB saatidir (tek yazar `applyWarpBeamEventTx` açıkça yazar — Prisma `@default(now())`
+    // Node saatidir); beyansız `doffedAt` Node saatinden gelirse iki saat karşılaştırılır ve
     // Node'un geride kaldığı her ms'de "indirme takmadan önce" görünür → helper boş döner (bir CI treninde 11 kırmızı).
     const b8 = await sar(600);
     await mountBeam(b8, { machineId: loom.id, position: 1 }); // tek hatlı tezgah; yuva 1 §6'da boşaldı (b3 söküldü)
@@ -201,6 +205,33 @@ async function main(): Promise<void> {
     const r8 = await top(d8, 60);
     const c8 = (await consumedOf((r8.data as { id: string }).id)).filter((c) => c.beamId === b8);
     check("§8b ⭐ Node saati geride olsa da CONSUMED yazıldı (takma DB saatinde < indirme DB saatinde)", c8.length === 1 && (await kalan(b8)) === 525, `consumed=${c8.length} kalan=${await kalan(b8)}`);
+
+    console.log("\n── §9 İki saat: indirmeden hemen sonra söküm, Node saati 10 ms geride ──");
+    // §6'nın aralıklı kırmızısı: söküm satırı Node saatiyle yazılınca, Node DB'nin gerisindeyken "indirmeden önce"
+    // görünüyor ve levent düşmüyordu. Olay damgası DB saatinden yazıldıkça Node kayması sonucu değiştirmez.
+    const d9 = await doff(loom.id);
+    const SOKUM_KAYMA_MS = -10;
+    class GeriDate extends RealDate {
+      constructor(...args: unknown[]) { if (args.length === 0) super(RealDate.now() + SOKUM_KAYMA_MS); else super(...(args as [number])); }
+      static override now(): number { return RealDate.now() + SOKUM_KAYMA_MS; }
+    }
+    globalThis.Date = GeriDate as DateConstructor;
+    try {
+      await dismountBeam(b8, {});
+    } finally {
+      globalThis.Date = RealDate;
+    }
+    const r9 = await top(d9, 8);
+    const c9 = (await consumedOf((r9.data as { id: string }).id)).filter((c) => c.beamId === b8);
+    check("§9a ⭐ söküm indirmeden ms sonra + Node 10 ms geride → doff anında bağlı b8 yine düştü (10 m, kalan 515)", c9.length === 1 && (await kalan(b8)) === 515, `consumed=${c9.length} kalan=${await kalan(b8)}`);
+    const b9 = await sar(100);
+    const [e1, e2] = await prisma.$transaction(async (tx) => {
+      const a = await applyWarpBeamEventTx(tx, { beamId: b9, kind: "MOUNTED", from: WarpBeamStatus.READY, to: WarpBeamStatus.MOUNTED, place: { currentMachineId: loom.id, currentPosition: 2 }, data: { machineId: loom.id, mountPosition: 2 } });
+      const b = await applyWarpBeamEventTx(tx, { beamId: b9, kind: "DISMOUNTED", from: WarpBeamStatus.MOUNTED, to: WarpBeamStatus.READY, place: { currentMachineId: null, currentPosition: null }, data: { machineId: loom.id, mountPosition: 2 } });
+      return [a, b];
+    });
+    const [s1, s2] = await Promise.all([e1, e2].map((e) => prisma.warpBeamEvent.findUniqueOrThrow({ where: { id: e.id }, select: { createdAt: true } })));
+    check("§9b ⭐ aynı tx'te iki olay → damgalar KESİN artan (takma < söküm; sıra korunur)", s1.createdAt.getTime() < s2.createdAt.getTime(), `${s1.createdAt.toISOString()} → ${s2.createdAt.toISOString()}`);
   } finally {
     await prisma.warpBeamEvent.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
