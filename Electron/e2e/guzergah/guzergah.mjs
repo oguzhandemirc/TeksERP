@@ -32,6 +32,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ADIMLAR } from "./adimlar.mjs";
+import { hataAgiDurumu, hataAgiKur } from "./hata-agi.mjs";
 
 const BURASI = path.dirname(fileURLToPath(import.meta.url));
 const ELECTRON_KOK = path.resolve(BURASI, "../..");
@@ -123,6 +124,7 @@ async function api(rol, yol, init = {}) {
   const istek = async () => {
     const token = await apiGiris(rol);
     const r = await fetch(`${ortam.apiUrl}${yol}`, { ...init, headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(init.headers ?? {}) } });
+    surucuCagrisi(init.method ?? "GET", yol, r.status);
     return { status: r.status, govde: await r.json().catch(() => null) };
   };
   const ilk = await istek();
@@ -135,7 +137,13 @@ async function api(rol, yol, init = {}) {
 
 // ── Electron oturumu (rol başına bir uygulama) ───────────────────────────────
 let app = null, page = null, acikRol = null;
+// HATA AĞI — rol değişince uygulama yeniden açılır; kayıtlar ve adım `agDurum`da sürer.
+const agDurum = hataAgiDurumu();
+let ag = null;
+function adimaGec(ad, beklenenler = []) { agDurum.simdiki = ad; agDurum.beklenenler = [...beklenenler]; ag?.adim(ad); for (const b of beklenenler) ag?.beklenen(b); }
+function surucuCagrisi(yontem, url, status) { if (status >= 400) agDurum.kayitlar.surucu.push({ adim: agDurum.simdiki, yontem, url, status }); }
 async function uygulamayiKapat() {
+  ag?.kapat(); ag = null;
   if (app) await app.close().catch(() => undefined);
   app = null; page = null; acikRol = null;
 }
@@ -145,6 +153,8 @@ async function rolIleAc(rol) {
   const udd = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-e2e-udd-"));
   app = await electron.launch({ executablePath: ELECTRON_BIN, args: [MAIN_JS, `--user-data-dir=${udd}`], env: { ...process.env, APP_ENV: "development" }, timeout: 60_000 });
   page = await app.firstWindow();
+  await pencereyiGizle(app);
+  ag = await hataAgiKur({ app, page, cikti: CIKTI, backendLog: process.env.BACKEND_LOG, apiUrl: ortam.apiUrl, durum: agDurum });
   page.on("pageerror", (e) => konsol.push(`[pageerror] ${String(e).slice(0, 300)}`));
   page.on("console", (m) => { if (m.type() === "error") konsol.push(`[console.error] ${m.text().slice(0, 300)}`); });
   // ⚠️ KULLANICININ 4000'İNE TEK İSTEK GİTMEZ: `page.route` yeniden yazımı
@@ -182,6 +192,26 @@ async function rolIleAc(rol) {
   acikRol = rol;
 }
 const konsol = [];
+
+// KULLANICININ EKRANINA ÇIKMAZ (varsayılan): uygulama `ready-to-show`ta show() + maximize() çağırıyor ve
+// odak çalıyordu. Örnek metotları değiştirilir (build'e dokunulmaz); macOS ekran dışı konumu geri kıstırdığı
+// için pencere ayrıca saydam ve tıklama geçirir. Görüntü CDP'den alındığı için etkilenmez. `GUZERGAH_GORUNUR=1` eski davranış.
+const GORUNUR = process.env.GUZERGAH_GORUNUR === "1";
+async function pencereyiGizle(uyg) {
+  if (GORUNUR) return;
+  await uyg.evaluate(({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows()[0];
+    if (!w) return;
+    w.webContents.setBackgroundThrottling(false);
+    w.setSkipTaskbar?.(true);
+    w.maximize = () => undefined;
+    w.focus = () => undefined;
+    w.show = () => { w.setPosition(-10000, -10000); w.showInactive(); w.setPosition(-10000, -10000); };
+    w.setPosition(-10000, -10000);
+    w.setOpacity(0);
+    w.setIgnoreMouseEvents(true);
+  });
+}
 
 /** Giriş ekranı ⚙ → "Sunucu Adresi" diyaloğu: host/port'u E2E backend'ine çevir, kaydet. */
 async function sunucuAdresiniAyarla() {
@@ -254,13 +284,16 @@ const ATLANDI = new Set(); // ön koşulu düşen adımlar zinciri
 for (const adim of secili) {
   const t0 = Date.now();
   const kayit = { id: adim.id, rol: adim.rol, yol: adim.yol, durum: "kirmizi", sure_ms: 0, dogrulama: [], hata: null, ekran: null };
-  const onKosulEksik = (adim.gerektirir ?? []).filter((g) => ATLANDI.has(g) || sonuclar.find((s) => s.id === g)?.durum === "kirmizi");
+  // Yalnız hata ağından kırmızı olan adım (işlevi tuttu, ağda beklenmedik kayıt var) zinciri KESMEZ — kırmızı kalır, bağımlılar koşar.
+  const onKosulEksik = (adim.gerektirir ?? []).filter((g) => { const s = sonuclar.find((x) => x.id === g); return ATLANDI.has(g) || (s?.durum === "kirmizi" && !s.yalnizAg); });
   if (onKosulEksik.length) {
     kayit.durum = "atlandi"; kayit.hata = `ön koşul düştü: ${onKosulEksik.join(", ")}`;
     ATLANDI.add(adim.id); sonuclar.push(kayit);
     console.log(`⏭  ${adim.id} atlandı — ${kayit.hata}`);
     continue;
   }
+  const agAdi = `${adim.id} · ${adim.yol.slice(0, 70)}`;
+  adimaGec(agAdi, adim.beklenenHatalar ?? []);
   try {
     await rolIleAc(adim.rol);
     // Önceki adımdan açık kalmış diyalog (kırmızıda düğmeye ulaşılamamış olabilir) sonraki adımı kilitlemesin.
@@ -287,6 +320,9 @@ for (const adim of secili) {
     }
     kayit.durum = kayit.dogrulama.every((d) => d.ok) ? "yesil" : "kirmizi";
     if (kayit.durum === "kirmizi") kayit.hata = "backend doğrulaması tutmadı";
+    // Beyansız her ağ 4xx/5xx · hata toast'ı · konsol hatası · backend hata satırı adımı kırmızıya çevirir.
+    kayit.hataAgi = ag ? ag.adimKirmizilari(agAdi) : [];
+    if (kayit.hataAgi.length && kayit.durum === "yesil") { kayit.durum = "kirmizi"; kayit.yalnizAg = true; kayit.hata = `hata ağı: ${kayit.hataAgi.length} beklenmedik kayıt`; }
   } catch (e) {
     kayit.hata = String(e?.message ?? e).split("\n")[0].slice(0, 400);
     kayit.hataAyrinti = String(e?.message ?? e).slice(0, 2000); // Playwright çağrı günlüğü (hangi locator, neden) burada
@@ -301,9 +337,12 @@ for (const adim of secili) {
     const isaret = kayit.durum === "yesil" ? "✅" : kayit.durum === "atlandi" ? "⏭ " : "❌";
     console.log(`${isaret} ${adim.id} · ${adim.rol} · ${adim.yol}  (${(kayit.sure_ms / 1000).toFixed(1)} sn)${kayit.hata ? ` — ${kayit.hata}` : ""}`);
     for (const d of kayit.dogrulama) console.log(`     ${d.ok ? "✓" : "✗"} ${d.ad}: beklenen ${d.beklenen} · görülen ${d.gorulen}`);
+    for (const h of kayit.hataAgi ?? []) console.log(`     ⚠ ${h}`);
   }
 }
 
+const agOzet = ag ? ag.rapor() : null;
+console.log(`hata ağı: ${JSON.stringify(agOzet)} → hata-agi.md`);
 await uygulamayiKapat();
 await pg.end().catch(() => undefined);
 

@@ -16,6 +16,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { hataAgiKur } from "./hata-agi.mjs";
+
 const BURASI = path.dirname(fileURLToPath(import.meta.url));
 const ELECTRON_KOK = path.resolve(BURASI, "../..");
 const BACKEND_KOK = path.resolve(ELECTRON_KOK, "../Teks-Erp");
@@ -129,28 +131,9 @@ async function numaralandirmayaGit() {
 await numaralandirmayaGit();
 await page.screenshot({ path: path.join(CIKTI, "00-sayfa.png"), fullPage: true });
 
-// ── TOAST KOLU: her toast adım adıyla kaydedilir, görüntü toast kaybolmadan alınır ──
-let simdikiAdim = "giriş";
-const toastlar = [];
-let toastNo = 0;
-await page.exposeFunction("__kesifToast", async (t) => {
-  const dosya = `toast-${String(++toastNo).padStart(3, "0")}.png`;
-  await page.screenshot({ path: path.join(CIKTI, dosya) }).catch(() => undefined);
-  const k = { adim: simdikiAdim, tur: t.tur, metin: t.metin, zaman: new Date().toISOString(), gorsel: dosya };
-  toastlar.push(k);
-  console.log(`  🔔 toast [${k.tur}] ${k.adim} → ${k.metin.slice(0, 160)}`);
-});
-await page.evaluate(() => {
-  const gorulen = new WeakSet();
-  const tara = () => document.querySelectorAll("[data-sonner-toast]").forEach((el) => {
-    if (gorulen.has(el)) return;
-    gorulen.add(el);
-    // metin bir sonraki karede dolar
-    requestAnimationFrame(() => window.__kesifToast({ tur: el.getAttribute("data-type") ?? "?", metin: (el.textContent ?? "").trim() }));
-  });
-  new MutationObserver(tara).observe(document.body, { childList: true, subtree: true });
-  tara();
-});
+// ── HATA AĞI: toast · ağ · konsol · backend logu (ortak modül) ──
+const ag = await hataAgiKur({ app, page, cikti: CIKTI, backendLog: process.env.BACKEND_LOG, apiUrl: ortam.apiUrl });
+ag.adim("giriş + Numaralandırma sayfası");
 
 // ── yardımcılar ──────────────────────────────────────────────────────────────
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -224,8 +207,12 @@ if (istenen.length) seriler = seriler.filter((r) => istenen.includes(r.key));
 seriler.sort((a, b) => (ONCELIK.indexOf(a.key) + 1 || 99) - (ONCELIK.indexOf(b.key) + 1 || 99));
 
 const sonuc = [];
-const yaz = () => fs.writeFileSync(path.join(CIKTI, "sonuc.json"), JSON.stringify({ zaman, db: ortam.dbName, pencere, seriler: sonuc, toastlar, konsol: konsol.slice(0, 80) }, null, 2));
-const adim = (key, alan, deneme) => { simdikiAdim = `${key} · ${alan} · ${deneme}`; };
+const yaz = () => fs.writeFileSync(path.join(CIKTI, "sonuc.json"), JSON.stringify({ zaman, db: ortam.dbName, pencere, seriler: sonuc, konsol: konsol.slice(0, 80) }, null, 2));
+// Kasıtlı hata denemeleri BEYAN edilir: yalnız önizleme ucunun 400'ü beklenir.
+const adim = (key, alan, deneme) => {
+  ag.adim(`${key} · ${alan} · ${deneme}`);
+  if (/KASITLI|kolon sığmayabilir/.test(deneme)) ag.beklenen({ status: 400, url: /\/api\/number-series\/preview$/ });
+};
 const kayit = (key, alan, deneme, veri) => { const s = { key, alan, deneme, ...veri }; sonuc.push(s); console.log(`${key} · ${alan} · ${deneme} → ${JSON.stringify(veri).slice(0, 260)}`); yaz(); };
 
 for (const r0 of seriler) {
@@ -403,6 +390,8 @@ pencere.sonda = await app.evaluate(({ BrowserWindow, screen }) => {
   return { x, y, visible: w.isVisible(), focused: w.isFocused(), opacity: w.getOpacity(), ekranda };
 }).catch((e) => ({ hata: String(e) }));
 console.log(`pencere sonda: ${JSON.stringify(pencere.sonda)}`);
+const agOzet = ag.rapor();
+console.log(`hata ağı: ${JSON.stringify(agOzet)}`);
 await app.close().catch(() => undefined);
 await pg.end().catch(() => undefined);
 yaz();
