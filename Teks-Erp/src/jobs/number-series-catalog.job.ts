@@ -22,6 +22,8 @@ import { refreshNumberSeriesCache } from "../services/number-series.service";
 export interface NumberSeriesReconcileResult {
   created: string[];
   existing: number;
+  /** Göç BU AÇILIŞTA koştuysa yazılan mod; koşmadıysa `null` (damga vardı). */
+  partyCodeAutoMigratedTo: "FREE" | "MANUAL" | null;
 }
 
 export async function reconcileNumberSeries(): Promise<NumberSeriesReconcileResult> {
@@ -57,6 +59,12 @@ export async function reconcileNumberSeries(): Promise<NumberSeriesReconcileResu
     await prisma.numberSeries.update({ where: { key: e.key }, data: { label: e.label, scanned, editable } });
   }
 
+  // ⚠️ SIRA LOAD-BEARING: göç, satırlar YARATILDIKTAN SONRA koşar. Ters sırada
+  // `workOrder` satırı henüz yoktur ve `update` hiçbir şey yazmadan patlar ya da
+  // (SQL migration'da olsaydı) SESSİZCE no-op olurdu — bu depoda aynı tuzak
+  // "WHERE EXISTS no-op" olarak yaşandı (ön kayıt damgası, top sayısı 0).
+  const migratedTo = await migratePartyCodeAutoOnce();
+
   await refreshNumberSeriesCache();
   if (eksik.length > 0) {
     // Yeni seri doğması bir SİSTEM olayıdır (kullanıcı eylemi değil) — izin kataloğu
@@ -68,5 +76,58 @@ export async function reconcileNumberSeries(): Promise<NumberSeriesReconcileResu
       payload: { keys: eksik.map((e) => e.key) },
     });
   }
-  return { created: eksik.map((e) => e.key), existing: rows.length };
+  return { created: eksik.map((e) => e.key), existing: rows.length, partyCodeAutoMigratedTo: migratedTo };
+}
+
+/** Göç damgası — BİR KEZ koşar, sonra eski bayrağa bir daha BAKILMAZ. */
+export const PARTY_CODE_AUTO_MIGRATION_STAMP = "numbering.partyCodeAutoMigratedAt";
+
+/**
+ * TEK SEFERLİK GÖÇ: eski `workorder.partyCodeAuto` bayrağı → `workOrder.numberSource`.
+ *
+ * ⚠️ HER AÇILIŞTA TÜRETME YAPILMAZ ve bu kararın bedeli ölçülebilir: türetme
+ * kalsaydı fabrika panelden `FREE` seçtiğinde bir sonraki açılış onu EZERDİ.
+ * Damga bir kez basılır; damgadan sonra eski bayrak yalnız TÜRETİLMİŞ olarak
+ * SUNULUR, hiçbir zaman okunmaz.
+ *
+ * ⚠️ SATIRI OLMAYAN kurulumda `FREE` yazılır, `MANUAL` DEĞİL — ve bu ölçümle
+ * seçildi: `readPartyCodeAuto` satır yokken `false` döndürüyor ama o `false`
+ * bir KARAR değil `asBoolean(undefined)` ARTEFAKTIDIR. Açık bir tercihi göç
+ * ettirmek başka, hiç yapılmamış bir tercihi "elle giriş zorunlu"ya çevirmek
+ * başkadır: ikincisi taze kurulumda iş emri açmayı kırardı.
+ */
+async function migratePartyCodeAutoOnce(): Promise<"FREE" | "MANUAL" | null> {
+  const stamp = await prisma.systemSetting.findUnique({
+    where: { key: PARTY_CODE_AUTO_MIGRATION_STAMP },
+    select: { key: true },
+  });
+  if (stamp) return null;
+
+  const oldFlag = await prisma.systemSetting.findUnique({
+    where: { key: "workorder.partyCodeAuto" },
+    select: { value: true },
+  });
+  const explicitChoice = oldFlag !== null && (oldFlag.value === false || oldFlag.value === "false");
+  const mode = explicitChoice ? "MANUAL" : "FREE";
+
+  await prisma.numberSeries.update({ where: { key: "workOrder" }, data: { numberSource: mode } });
+  // ⚠️ `create` DEĞİL `upsert`: damga varken buraya hiç gelinmez, ama bir önceki
+  // açılışta damga basıldıktan SONRA bir şey patlarsa `create` ikinci açılışı
+  // P2002 ile ÇÖKERTİRDİ — göç fonksiyonu boot yolunda, çökerse sunucu açılmaz.
+  await prisma.systemSetting.upsert({
+    where: { key: PARTY_CODE_AUTO_MIGRATION_STAMP },
+    create: {
+      key: PARTY_CODE_AUTO_MIGRATION_STAMP,
+      value: new Date().toISOString(),
+      description: "workorder.partyCodeAuto → numberSource göçü BİR KEZ koştu; bayrak artık türetilir.",
+    },
+    update: {},
+  });
+  await AuditService.logEvent({
+    category: "SYSTEM",
+    action: "NUMBER_SOURCE_MIGRATED",
+    tableName: "number_series",
+    payload: { key: "workOrder", mode, eskiBayrak: oldFlag === null ? null : oldFlag.value },
+  });
+  return mode;
 }

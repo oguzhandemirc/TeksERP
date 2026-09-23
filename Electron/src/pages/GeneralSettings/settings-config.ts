@@ -1098,9 +1098,19 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "partyCodeAuto",
         title: "İş emri parti kodunu otomatik üret",
         summary: "İş Emri No elle yazılmak yerine sistem tarafından önerilir.",
-        defaultOn: false,
+        // ⚠️ VARSAYILAN `true` OLDU (D3③): bayrak artık `workOrder.numberSource`tan
+        // türetiliyor ve o serinin varsayılanı `FREE` ⇒ türetilmiş değer `true`.
+        // Panelin rozeti backend okuyucusuyla BİREBİR olmak zorunda (bekçi
+        // `test_feature_flag_contract` ölçer); `false` bırakmak ekranda "varsayılan
+        // kapalı" yazarken sunucunun açık dönmesi demekti.
+        defaultOn: true,
         audience: ["Planlamacı"],
-        desc: "Açıkken İş Emri No sistem tarafından üretilir (İE + GGAAYY + sıra), formda yine değiştirilebilir. Kapalıyken (varsayılan) elle girilir ve zorunludur.",
+        desc:
+          "Açıkken İş Emri No sistem tarafından üretilir (İE + GGAAYY + sıra), formda yine değiştirilebilir. "
+          + "Kapalıyken elle girilir ve zorunludur. "
+          + "⚠️ Bu anahtar artık Ayarlar → Numaralandırma ekranındaki “numara kaynağı” ayarının iki değerli "
+          + "kısayoludur; oradaki üçüncü seçenek (“yalnız sistem” — elle giriş YASAK) bu anahtarla "
+          + "ifade edilemez ve bu anahtar o seçimi bozmaz.",
       },
       {
         key: "batchShortNumberEnabled",

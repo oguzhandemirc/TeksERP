@@ -39,6 +39,7 @@ import {
   type NumberSeriesFormat,
 } from "./helpers/series-format.helper";
 import { nextDailySeq, normalizeScanCode } from "../utils/code-format";
+import { nextCounterCandidate, nextCounterSeq } from "./helpers/series-counter.helper";
 
 // ── ÖNBELLEK ────────────────────────────────────────────────────────────────
 // `nextNumberTx` bir tx'in İÇİNDEN senkron okur: burada DB'ye gidilirse interaktif
@@ -75,6 +76,11 @@ function rowFormat(row: NumberSeries): NumberSeriesFormat {
     retiredPrefixes: [...row.retiredPrefixes],
     ...(entry.infix ? { infix: entry.infix.re } : {}),
     formatChangedAt: row.formatChangedAt,
+    numberSource: row.numberSource,
+    // NULL = ayarlanmamış = bugünkü davranış (başlangıç 1, adım 1, sınır yok).
+    startValue: row.startValue,
+    step: row.step,
+    maxValue: row.maxValue,
   };
 }
 
@@ -185,7 +191,7 @@ export async function nextSeriesNo(
     ? rows.filter((r) => typeof r === "object" && r !== null && r.createdAt >= since)
     : rows;
 
-  let seq = nextDailySeq(scoped.map(rowCode), fullPrefix);
+  let seq = seriesSeqFrom(fmt, scoped.map(rowCode), fullPrefix);
 
   // ── ÇAKIŞMA ATLAMASI: kapsam daraltması sayacı 1'e döndürebilir ──────────────
   // Aynı gün biçim değiştirilip GERİ alınırsa kapsam boşalır ve sıra 1'den başlar;
@@ -194,10 +200,15 @@ export async function nextSeriesNo(
   // davranışı yazılı beyan ediyor) — yani kendi kendine onarmaz.
   if (since && hasCreatedAt) {
     const taken = new Set(rows.map(rowCode).filter((c): c is string => typeof c === "string"));
-    const startSeq = seq;
+    // ⚠️ SINIR **DENEME** SAYAR, sıra birimi değil (ölçüldü 2026-09-23: eski
+    // `seq - startSeq >= SKIP_LIMIT` birim sayıyordu ⇒ adım 10'da sınır sessizce
+    // 10 kat daralırdı). Atlama da ADIM kadar ilerler; 1'er ilerlemek serinin
+    // kendi dizisinin DIŞINDA numara üretirdi.
+    let deneme = 0;
     while (taken.has(`${fullPrefix}${String(seq).padStart(fmt.digits, "0")}`)) {
-      seq += 1;
-      if (seq - startSeq >= SKIP_LIMIT) {
+      seq = nextCounterCandidate(fmt, seq);
+      deneme += 1;
+      if (deneme >= SKIP_LIMIT) {
         throw AppError.conflict(
           `"${key}" serisinde sıradaki numara bulunamadı: ${SKIP_LIMIT} ardışık kod dolu. ` +
             "Numara biçimi ayarını kontrol edin.",
@@ -209,28 +220,50 @@ export async function nextSeriesNo(
   return `${fullPrefix}${String(seq).padStart(fmt.digits, "0")}`;
 }
 
-/**
- * `dailyCodePrefix` yerine geçen İKİZ — çağıran ön eki artık literal yazmaz, serinin
- * ANAHTARINI yazar. Sorgu kalıbı aynen korunur: `where: { gte, startsWith }`.
- */
-export function seriesCodePrefix(key: string, date: Date = new Date()): string {
-  return seriesPrefix(resolveSeriesFormat(key), date);
-}
+// ⚠️ `seriesCodePrefix(key)` ve `buildSeriesCode(key)` KALDIRILDI (D2①): ikisi de
+// anahtardan KENDİ okumasını yapıyordu, yani bir üreteç ön eki bir okumadan,
+// kodu BAŞKA bir okumadan alıyordu. Arada bir önbellek tazelemesi olursa ön ek
+// eski sürümden, hane/adım yeni sürümden gelirdi — "iki okuma" sınıfı. Doğru
+// kalıp TEK okumadır ve üç adım o okumayı paylaşır:
+//     const fmt = resolveSeriesFormat(key);
+//     const prefix = seriesPrefix(fmt, date);
+//     const seq = seriesSeqFrom(fmt, codes, prefix);
+//     return formatSeriesCode(fmt, seq, date);
+// Sarmalayıcıları bekçiyle YASAKLAMAK yerine SİLMEK bilinçli: var olmayan bir
+// fonksiyon yanlış kullanılamaz (bekçi unutulabilir, imza unutulamaz).
 
-/** `buildDailyCode` ikizi — hane sayısı da seriden gelir (dolgu 1 ise dolgu yok). */
-export function buildSeriesCode(key: string, seq: number, date: Date = new Date()): string {
-  return formatSeriesCode(resolveSeriesFormat(key), seq, date);
-}
-
 /**
- * `nextDailySeq` ikizi — listeden SAYISAL max + 1.
+ * Sıradaki SIRA — listeden sayısal max, üstüne serinin SAYAÇ AYARI.
  *
- * ⚠️ Burada yeniden dışa açılmasının sebebi mimari: `utils/code-format.ts`'i YALNIZ
- * bu servis import eder (bekçi `test_number_series_tek_kaynak`), yoksa yarın biri
- * ön eki gene literal yazar ve seri tablosu sessizce devre dışı kalır.
+ * ⚠️ İLK PARAMETRE BİÇİMİN KENDİSİ, anahtar DEĞİL: ön eki kuran okuma ile sayacı
+ * kuran okuma AYNI olmak zorunda. Anahtar geçilseydi fonksiyon ikinci kez
+ * önbelleği okurdu ve arada TTL tazelemesi olursa ön ek bir sürümden, adım
+ * başka bir sürümden gelirdi — D1①'de kapatılan "iki okuma" sınıfının aynısı.
+ *
+ * ⚠️ `utils/code-format.ts`'i YALNIZ bu servis import eder (bekçi
+ * `test_number_series §7`), yoksa yarın biri ön eki gene literal yazar ve seri
+ * tablosu sessizce devre dışı kalır.
  */
-export function seriesSeqFrom(codes: Array<string | null | undefined>, fullPrefix: string): number {
-  return nextDailySeq(codes, fullPrefix);
+export function seriesSeqFrom(
+  fmt: NumberSeriesFormat,
+  codes: Array<string | null | undefined>,
+  fullPrefix: string,
+): number {
+  // `nextDailySeq` max+1 döner; sayaç çekirdeği MAKSİMUMU ister (başlangıç ve
+  // adım "bir sonraki"yi kendisi kurar).
+  return nextCounterSeq(fmt, nextDailySeq(codes, fullPrefix) - 1, fullPrefix);
+}
+
+/**
+ * KULLANILMIŞ en büyük sıra — tükenme ölçümünün girdisi.
+ *
+ * ⚠️ `seriesSeqFrom` BURADA KULLANILAMAZ ve bu ölçülmüş bir tuzak: o fonksiyon
+ * SIRADAKİNİ verir ve üst sınır dolmuşsa 409 FIRLATIR — yani tam %100'de
+ * "tükenme durumu" sorusu cevap yerine HATA döndürürdü. Kullanılan sıra bir
+ * GÖZLEMDİR, bir talep değil; ayarlardan ve sınırdan bağımsız okunur.
+ */
+export function seriesUsedMaxFrom(codes: Array<string | null | undefined>, fullPrefix: string): number {
+  return Math.max(0, nextDailySeq(codes, fullPrefix) - 1);
 }
 
 /** Sıradaki SIRA numarası (kodu kendi kuran yollar için — top barkodu, kartela). */
@@ -241,7 +274,7 @@ export async function nextSeriesSeq(
 ): Promise<{ seq: number; fullPrefix: string; fmt: NumberSeriesFormat }> {
   const fmt = resolveSeriesFormat(key);
   const fullPrefix = seriesPrefix(fmt, date);
-  return { seq: nextDailySeq(await loadCodes(fullPrefix), fullPrefix), fullPrefix, fmt };
+  return { seq: seriesSeqFrom(fmt, await loadCodes(fullPrefix), fullPrefix), fullPrefix, fmt };
 }
 
 // ── SINIFLANDIRMA (Faz B'nin yemi) ──────────────────────────────────────────
@@ -295,152 +328,6 @@ export function classifyScannedCode(code: string): SeriesClassifierRow | null {
     if (matchesSeries(resolveSeriesFormat(entry.key), upper)) return classifierRow(entry);
   }
   return null;
-}
-
-// ── KAPI ────────────────────────────────────────────────────────────────────
-
-/** Okutulan kodların ön eki: ASCII, büyük harf, 1-6 — Code128 + istemci `toUpperCase()`. */
-const SCANNED_PREFIX_RE = /^[A-Z0-9]{1,6}$/;
-/** Okutulmayan seriler tire/alt çizgi taşıyabilir (STK-, PRT-), Türkçe harf yine yasak. */
-const PLAIN_PREFIX_RE = /^[A-Z0-9_-]{1,6}$/;
-
-/**
- * Biçim kapısı — fail-closed. Üç ayaklı:
- *   ① karakter kümesi (Türkçe harf barkodu bozar, `code-format.ts:167` gerekçesi),
- *   ② hane aralığı (DB CHECK'in uygulama tarafı ikizi),
- *   ③ ÖN EK ÇAKIŞMASI — yalnız TARAMA UZAYINDA küresel.
- *
- * ⚠️ ③'ün dar olması bilinçli ve ÖLÇÜLDÜ: bugün `KS` (kartela sevk + kasa kodu),
- * `IADE` (iade belgesi + iade sebebi) ve `P` (üretim partisi + sevk partisi adı)
- * zaten çakışıyor ve zararsız — ayrı tablolarda yaşıyorlar ve OKUTULMUYORLAR.
- * Kapı küresel olsaydı doğduğu gün üç yanlış kırmızı verirdi.
- */
-export function assertSeriesFormatAllowed(key: string, fmt: NumberSeriesFormat): void {
-  const entry = numberSeriesCatalogEntry(key);
-  if (entry.lockedReason) {
-    throw AppError.badRequest(`Bu serinin biçimi değiştirilemez: ${entry.lockedReason}`, {
-      code: "NUMBER_SERIES_LOCKED",
-      key,
-    });
-  }
-  const re = entry.kind ? SCANNED_PREFIX_RE : PLAIN_PREFIX_RE;
-  if (!re.test(fmt.prefix)) {
-    throw AppError.badRequest(
-      entry.kind
-        ? "Okutulan kodların ön eki yalnız İngiliz alfabesi harfleri ve rakam olabilir (en çok 6 karakter)."
-        : "Ön ek yalnız İngiliz alfabesi harfleri, rakam, tire ve alt çizgi olabilir (en çok 6 karakter).",
-      { code: "NUMBER_SERIES_PREFIX_INVALID", key },
-    );
-  }
-  if (!Number.isInteger(fmt.digits) || fmt.digits < 1 || fmt.digits > 8) {
-    throw AppError.badRequest("Hane sayısı 1 ile 8 arasında olmalı.", {
-      code: "NUMBER_SERIES_DIGITS_INVALID",
-      key,
-    });
-  }
-  if (!["", "-", "_", "/", "."].includes(fmt.separator)) {
-    throw AppError.badRequest("Ayraç boş ya da - _ / . olabilir.", {
-      code: "NUMBER_SERIES_SEPARATOR_INVALID",
-      key,
-    });
-  }
-  if (!entry.kind) return;
-
-  // ③ Tarama uzayında ön ek çakışması — biri diğerinin BAŞLANGICI olamaz, çünkü
-  // istemci sınıflandırması ön-ek çapalıdır (`CV` varken `CV2` ilk kurala takılır).
-  const mine = [fmt.prefix, ...fmt.retiredPrefixes];
-  for (const other of NUMBER_SERIES_CATALOG) {
-    if (other.key === key || !other.kind) continue;
-    const theirs = (() => {
-      const f = resolveSeriesFormat(other.key);
-      return [f.prefix, ...f.retiredPrefixes];
-    })();
-    for (const a of mine) {
-      for (const b of theirs) {
-        if (a.startsWith(b) || b.startsWith(a)) {
-          throw AppError.conflict(
-            `"${a}" ön eki "${other.label}" serisinin "${b}" ön ekiyle çakışıyor; okutulan kod hangi kayda ait olduğu anlaşılamaz.`,
-            { code: "NUMBER_SERIES_PREFIX_COLLISION", key, conflictsWith: other.key },
-          );
-        }
-      }
-    }
-  }
-}
-
-// ── YAZMA ───────────────────────────────────────────────────────────────────
-
-/** Panelin yazdığı tek uç. Eski ön ek EMEKLİYE ayrılır (geçmiş kod okunmaya devam eder). */
-export async function updateSeriesFormat(
-  key: string,
-  next: Omit<NumberSeriesFormat, "retiredPrefixes" | "infix" | "formatChangedAt">,
-  userId?: string,
-): Promise<NumberSeries> {
-  // ⚠️ KONFİGÜRASYON SINIRI (C0): sayacı biçim değişimine HAZIR OLMAYAN seri
-  // düzenlenemez. Üretim yolu kapatılmaz — çuval açılamaz hâle gelirdi; asıl
-  // engellenmesi gereken riskli AYAR değişikliğidir. Beyan katalogdadır.
-  const katalog = numberSeriesCatalogEntry(key);
-  // ① YAPISAL kilit EN ÖNCE — hiç kalkmayabilir. `assertSeriesFormatAllowed`
-  // aynı kontrolü taşır (önizleme yolu da ondan geçer), ama orası EN SONDA
-  // koşar: "önerilen DEĞER geçerli mi" sorusu, "bu seriye dokunulabilir mi"
-  // sorusundan sonra gelir.
-  if (katalog.lockedReason) {
-    throw AppError.badRequest(`Bu serinin biçimi değiştirilemez: ${katalog.lockedReason}`, {
-      code: "NUMBER_SERIES_LOCKED",
-      key,
-    });
-  }
-  // ⚠️ KAPI SIRASI LOAD-BEARING — hata mesajının KİME iş çıkardığına göre:
-  // önce kullanıcının ÇÖZEMEYECEĞİ engeller söylenir. `scopedCounter` bizim iç
-  // hazırlığımızdır (çağrı yeri zengin biçime geçmemiş); C0b ise fabrikanın
-  // eyleme geçebileceği bir durumdur (istemcileri güncelle). Ters sırada, ikisi
-  // birden engelliyorken fabrika bir gün harcayıp bütün tabletleri günceller ve
-  // İKİNCİ duvara toslardı.
-  if (!katalog.scopedCounter) {
-    throw AppError.badRequest(
-      `Bu serinin sayacı biçim değişimine hazır değil: ${katalog.label}. ` +
-        "Numara üreten yol kapsam damgasına geçirilmeden biçim değiştirilemez.",
-      { code: "NUMBER_SERIES_COUNTER_NOT_SCOPED", key },
-    );
-  }
-  // ⚠️ C0b — ESKİ İSTEMCİ KAPISI, `lockedReason`dan AYRI bir cümledir:
-  // `lockedReason` "bu serinin biçimi YAPISAL olarak değişemez" der (top
-  // barkodunun faz harfi), bu kapı "BUGÜN değişemez çünkü saha hazır değil"
-  // der. İkisi farklı gün kalkar, bu yüzden biri ötekinin yerine geçmez.
-  // Okutulan bir serinin ön eki değişirse, Faz B'yi taşımayan istemci kendi
-  // SABİT regex'iyle okumaya devam eder ve kodu SESSİZCE yanlış türe çözer.
-  if (katalog.kind && !scanningClientsCarryFazB()) {
-    throw AppError.badRequest(
-      `Okutulan serilerin biçimi, sahadaki panel ve tabletler güncellenmeden değiştirilemez: ${katalog.label}. ` +
-        `En düşük sürüm eşiği panelde ${FAZ_B_ONCESI.electron}, tablette ${FAZ_B_ONCESI.mobil} üstüne çıkmalı.`,
-      { code: "NUMBER_SERIES_CLIENT_TOO_OLD", key },
-    );
-  }
-  const current = resolveSeriesFormat(key);
-  const retired =
-    current.prefix === next.prefix
-      ? current.retiredPrefixes
-      : [...new Set([...current.retiredPrefixes, current.prefix])];
-  assertSeriesFormatAllowed(key, { ...next, retiredPrefixes: retired });
-
-  const row = await prisma.numberSeries.update({
-    where: { key },
-    // `formatChangedAt` sayacın KAPSAM sınırıdır: bundan sonraki numaralar yalnız
-    // bu andan sonra doğan kodlara bakar (eski rejim sayaca giremez).
-    data: { ...next, retiredPrefixes: retired, formatChangedAt: new Date(), updatedById: userId ?? null },
-  });
-  await refreshNumberSeriesCache();
-  // Biçim değişikliği bir İŞ KARARIDIR (bundan sonraki her belgenin numarası değişir),
-  // bu yüzden denetim defterine yazılır — tx DIŞINDA, best-effort.
-  await AuditService.log({
-    userId,
-    action: "UPDATE",
-    tableName: "NumberSeries",
-    recordId: row.id,
-    oldData: { ...current },
-    newData: { ...next, retiredPrefixes: retired },
-  });
-  return row;
 }
 
 /** Prisma tx tipini dışa taşımamak için — çağıranlar kendi delegate'ini getirir. */

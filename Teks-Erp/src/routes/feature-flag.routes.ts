@@ -27,6 +27,7 @@ import {
 import { AuditService } from "../services/audit.service";
 import { AppError } from "../utils/app-error";
 import "../types/express-augment";
+import { manualNumberModes } from "../services/helpers/manual-number.helper";
 
 const router = Router();
 
@@ -678,6 +679,12 @@ router.get(
         data: {
           ...result.data,
           settingsPasswordRequired: await isSettingsPasswordConfigured(),
+          // ⚠️ `numberSources` da bayrak DEĞİL, DURUM — ve aynı gerekçeyle
+          // burada: istemci "elle numara alanını çizeyim mi, zorunlu mu" kararını
+          // bundan verir. Yeni bir uç açmak, izin guard'sız uç tabanını (cırcırlı)
+          // bir form ayrıntısı için yükseltmek olurdu. Okuma SENKRON'dur
+          // (`number_series` önbelleği), DB'ye gitmez.
+          numberSources: manualNumberModes(),
         },
       });
     } catch (error) {

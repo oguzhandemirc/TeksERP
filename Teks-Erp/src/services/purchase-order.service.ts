@@ -81,7 +81,7 @@ import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { buildTurkishSearch, isEnumMember, readIdCondition } from "../utils/query-parser";
@@ -206,12 +206,13 @@ export interface PurchaseOrderSyncResult {
  * çağıran `withBarcodeRetry` ile sarmalar, sıra okuması tx İÇİNDEDİR.
  */
 async function nextPurchaseOrderNo(tx: Prisma.TransactionClient, date: Date): Promise<string> {
-  const full = seriesCodePrefix("purchaseOrder", date);
+  const fmt = resolveSeriesFormat("purchaseOrder");
+  const full = seriesPrefix(fmt, date);
   const rows = await tx.purchaseOrder.findMany({
     where: { orderNo: { gte: full, startsWith: full } },
     select: { orderNo: true },
   });
-  return buildSeriesCode("purchaseOrder", seriesSeqFrom(rows.map((r) => r.orderNo), full), date);
+  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.orderNo), full), date);
 }
 
 // -----------------------------------------------------------------------------

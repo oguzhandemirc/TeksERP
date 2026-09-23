@@ -11299,3 +11299,59 @@ Faz A biçimi VERİ yapmıştı; Faz B onu okutma tarafında tek kaynağa bağla
 
 **Bekçi:** `test_rapor_yon_ekseni` (19; beş negatif sonda) · `test_accounting_direct_ship` §D · panel `reportAxisFilters` / `ReportMultiSelect`. Sırada: R2 rapor seti (yön dağılımı · dönem karşılaştırması · ihracat müşteri/ülke/ürün kırılımı · birim fiyat · yurtdışı backlog · gerçekleşme/termin · iade sütunu).
 
+
+## 2026-09-23 — Numaralandırma Faz D: sayaç ailesi · numara kaynağı · tek kaynak göçü [ÇEKİRDEK]
+
+**D2 (sayaç ailesi).** Başlangıç · artış adımı · üst sınır `number_series` kolonu oldu; hesap TEK saf
+helper'da (`series-counter.helper`) ve `seriesSeqFrom` de `nextSeriesNo` de oradan geçiyor. Ölçümler:
+`digits` bir DOLGU ayarıdır, KAPASİTE değil (4 hane + sıra 10000 → "10000", sarmaz) ⇒ sayacı durduran
+tek şey `maxValue`dur · `SKIP_LIMIT` SIRA BİRİMİ sayıyordu, adım 10'da sessizce 10 kat daralırdı ⇒
+DENEME sayar oldu · **sayaç SIFIRLAMA yoktur**: aynı ön ek ve tarih döneminde numaralar tekil olduğu
+için sıra 1'e döndürülse bile atlama döngüsü ilk boş numaraya yürüyor ve sonuç DEĞİŞMİYOR (ölçüldü:
+3 eski kod + ileri damga → yine 0004). Panelde gerekçesiyle kapalı durur; ileri alma başlangıç
+değeriyle yapılır.
+
+**D2③ ölçümü GERÇEK BİR AÇIK buldu:** biçim kapısı hedef KOLONUN genişliğine bakmıyordu.
+`packingLotCode` panelden düzenlenebilen üç seriden biri ve `PackingGroup.code` `VarChar(16)`:
+`PRT-2609-` (9) + 8 hane = 17 karakter. Kapı bu ayarı GEÇİRİYORDU ⇒ kaydedildiği an sevk partisi
+açılamaz hâle gelirdi ve hata ayar ekranında değil SAHADA, yazma anında patlardı. Artık 400
+`NUMBER_SERIES_CODE_TOO_LONG`. Kapasite envanteri ayrı dosyada ve şemayla birebir tutuluyor.
+Tükenme uyarısına GİRMEDİ: 51 serinin 50'sinde kolonda 18–61 fazla hane var; kullanılmayan uyarı
+gürültüdür.
+
+**D3 (numara kaynağı).** `numberSource` ÜÇ değerli: `FREE` · `SYSTEM` · `MANUAL`. İki değer bugünkü
+davranışı İFADE EDEMEZDİ — sistem üretiyor AMA elle geleni de kabul ediyor; iki değerli bir ayarda
+"yeni ayarın varsayılanı = BUGÜNKÜ davranış" cümlesi ölçülemez hâle gelirdi. Ayar yalnız elle yolu
+olan 4 seride anlamlı (52'nin 4'ü, ölçüldü) ve sınır katalogda `manualEntry` ile beyanlı.
+
+Okutulan seride (çuval · iş emri) elle değer ASCII olmalı ve `classifyScannedCode` onu KENDİ türüne
+çözmeli: küçük harfli kod okutulunca tanınmaz, başka serinin ön ekiyle başlayan kod YANLIŞ DALA
+düşer. Fabrika KOPYASINDA ölçüldü: 235 çuval no + 417 iş emri no, ihlal SIFIR ⇒ kapı hiçbir geçmişi
+geçersiz kılmıyor. Kapı BEŞ mevcut bekçiyi ısırdı (fikstürler serbest biçimli numara veriyordu);
+kapı gevşetilmedi, fikstürler düzeltildi.
+
+**D3③ — aynı soruya iki ayar sorunu.** `workorder.partyCodeAuto` bayrağı aynı soruyu cevaplıyordu ve
+BOOLEAN olduğu için üçüncü hâli söyleyemiyordu. Tek kaynak `numberSource` oldu; eski bayrak ondan
+TÜRETİLİYOR (FREE→true · SYSTEM→true · MANUAL→false) ve eski anahtara yazmak `numberSource`a yazıyor
+— ama DEĞİŞMEDİYSE hiç yazmıyor, çünkü `SYSTEM` boolean'a `true` diye görünür ve eski panel formu
+olduğu gibi kaydetseydi körlemesine `FREE` yazmak SYSTEM'i SESSİZCE düşürürdü.
+
+Göç TEK SEFERLİK ve DAMGALI: her açılışta türetme yapılsaydı fabrikanın panelden seçtiği değer her
+yeniden başlatmada kaybolurdu. Göç, seri satırları YARATILDIKTAN SONRA koşar — önce koşsaydı satır
+yokken sessizce no-op olurdu (bu depoda aynı tuzak "WHERE EXISTS no-op" olarak yaşandı).
+
+⚠️ **Ayar satırı HİÇ YOKSA `FREE` yazılır, `MANUAL` değil — ve bu sapma ÖLÇÜLEREK kabul edildi:**
+(a) satır yokken panelin gösterdiği bugünkü davranış MANUAL'dı (`defaultOn: false`, `?? false`);
+(b) fabrika KOPYASINDA satır VAR ve değeri `true` (son güncelleme 2026-07-16) ⇒ sahadaki kurulum
+FREE'ye gidiyor, sapma ETKİSİZ. Sapma yalnız TAZE kurulumları etkiliyor ve gevşetme yönünde:
+oradaki `false` bir KARAR değil `asBoolean(undefined)` ARTEFAKTIDIR; hiç yapılmamış bir tercihi
+"elle giriş zorunlu"ya çevirmek taze kurulumda iş emri açmayı kırardı. Panelin "Varsayılan" rozeti
+de `true`ya çekildi (rozet backend okuyucusuyla birebir olmak zorunda).
+
+**Ölçüm dersleri (bu turda yaşandı).** ① Bir tarayıcı KODU ölçmeli, kuralın ANLATIMINI değil: §11
+kolları kuralı anlatan yorum satırlarını kod sandı ve üç yanlış kırmızı verdi; aynı sınıf ortam
+bağımlılığı tavanında İKİNCİ kez tekrarladı (kuralı anlatan yorumdaki örnek, ihlal sayıldı).
+② Bir iddia, ölçtüğü şeyin kendisine değil FİKSTÜRÜN tesadüfi bir özelliğine bağlanırsa ürün
+değişmeden kırmızı verir ve insana "kapıyı gevşet" dedirtir (`test_shipping_flags §3.3` fikstür ön
+ekine bakıyordu). ③ Bir sondanın UYGULANDIĞI doğrulanmadan "tutmadı" denemez: bir negatif sonda
+desen tutmadığı için hiç koşmamıştı ve boş çıktı "temiz" gibi görünmüştü.

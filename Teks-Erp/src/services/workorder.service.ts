@@ -147,7 +147,7 @@ import {
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { normalizeScanCode } from "../utils/code-format";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
 import { nextPrefixedSequenceTx, SubcontractorService } from "./subcontractor.service";
 
@@ -156,6 +156,7 @@ import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason
 import { workOrderBoundOnly, workOrderStepIdOf } from "./helpers/dispatch-header.helper";
 import { hata } from "../lib/logger";
 import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
+import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -617,7 +618,8 @@ export class WorkOrderService {
    */
   async generateWorkOrderNumber(): Promise<string> {
     const now = new Date();
-    const prefix = seriesCodePrefix("workOrder", now);
+    const fmt = resolveSeriesFormat("workOrder");
+    const prefix = seriesPrefix(fmt, now);
 
     // Retry loop — nadiren de olsa unique çakışma olursa tekrar dene
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -630,11 +632,12 @@ export class WorkOrderService {
         select: { workOrderNumber: true },
       });
       const seq = seriesSeqFrom(
+      fmt,
         todays.map((w) => w.workOrderNumber),
         prefix,
       );
 
-      const candidate = buildSeriesCode("workOrder", seq, now);
+      const candidate = formatSeriesCode(fmt, seq, now);
 
       const exists = await prisma.workOrder.findUnique({ where: { workOrderNumber: candidate } });
       if (!exists) return candidate;
@@ -1030,6 +1033,9 @@ export class WorkOrderService {
       manualWorkOrderNumber = data.batchNumber.trim();
       await this.assertWorkOrderNumberUnique(manualWorkOrderNumber);
     }
+    // `numberSource` kapısı KÖPRÜ ALANIN ardından: kullanıcı ne gönderdiyse
+    // ONUN üzerinden karar verilir (alan adı `batchNumber`, anlamı iş emri no).
+    assertManualNumberAllowed("workOrder", manualWorkOrderNumber);
 
     // Otomatik iş emri no sequence çakışırsa (P2002) tx'i baştan dene.
     const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
@@ -7013,7 +7019,8 @@ export class WorkOrderService {
 
     // Manifest (çeki listesi) no: CL + GGAAYY + NNNN (örn CL1207260001)
     const now = new Date();
-    const prefix = seriesCodePrefix("manifest", now);
+    const fmt = resolveSeriesFormat("manifest");
+    const prefix = seriesPrefix(fmt, now);
 
     // manifestNo @unique + günlük sequence TÜM WO'lar arasında paylaşımlı —
     // eşzamanlı iki basım aynı NNN'i hesaplardı; projedeki diğer tüm belge
@@ -7029,10 +7036,11 @@ export class WorkOrderService {
         select: { manifestNo: true },
       });
       const seq = seriesSeqFrom(
+      fmt,
         todays.map((m) => m.manifestNo),
         prefix,
       );
-      const manifestNo = buildSeriesCode("manifest", seq, now);
+      const manifestNo = formatSeriesCode(fmt, seq, now);
 
       return prisma.manifest.create({
         data: {

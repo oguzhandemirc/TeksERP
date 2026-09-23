@@ -27,7 +27,7 @@ import {
   nextShortBatchSeq,
   parseShortBatchCode,
 } from "../utils/code-format";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 import { AuditService } from "./audit.service";
 import { resolveBatchShortNumberEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -129,17 +129,19 @@ export async function generateBatchNumberTx(
     return buildShortBatchCode(nextShortBatchSeq(await readLastShortBatchSeqTx(tx)));
   }
 
-  const prefix = seriesCodePrefix("batchDaily", date);
+  const fmt = resolveSeriesFormat("batchDaily");
+  const prefix = seriesPrefix(fmt, date);
   const todays = await tx.batch.findMany({
     where: { batchNumber: { gte: prefix, startsWith: prefix } },
     select: { batchNumber: true },
   });
   const seq = seriesSeqFrom(
+      fmt,
     todays.map((b) => b.batchNumber),
     prefix,
   );
   // Seride digits=1 → padStart(1) seq ≥ 1 için no-op: dolgu yok, hane serbest.
-  return buildSeriesCode("batchDaily", seq, date);
+  return formatSeriesCode(fmt, seq, date);
 }
 
 /**

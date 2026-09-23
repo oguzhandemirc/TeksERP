@@ -209,7 +209,9 @@ async function main(): Promise<void> {
   // ===========================================================================
   const woRes = await wos.create(
     {
-      batchNumber: `TEST-E2E-WO-${STAMP}`,
+      // ⚠️ Elle iş emri no VERİLMEZ: iş emri no refakat kartının BARKODUDUR
+      // (okutulan seri) ve elle değer kendi türüne çözülmek zorunda.
+      // Numarayı sunucu üretir; bu test numaranın kendisine bakmıyor.
       type: "ORDER_PRODUCTION",
       width: WIDTH,
       targetQuantity: RAW_QTY,

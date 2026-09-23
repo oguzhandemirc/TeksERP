@@ -37,6 +37,20 @@ export interface NumberSeriesFormat {
    * bugünküyle birebir aynı kalır.
    */
   formatChangedAt?: Date | null;
+  /**
+   * SAYAÇ AYARLARI — başlangıç · adım · üst sınır. Hesapları `series-counter.helper`
+   * yapar; burada yalnız TAŞINIRLAR ki ön eki kuran okuma ile sayacı kuran okuma
+   * AYNI olsun ("iki okuma" sınıfı: ön ek bir sürümden, adım başkasından gelirdi).
+   * D2①'de hepsi tanımsız ⇒ davranış bugünküyle birebir.
+   */
+  /**
+   * NUMARA KAYNAĞI — `FREE` bugünkü davranış (elle gelirse kabul, gelmezse üret),
+   * `SYSTEM` elle geleni reddeder, `MANUAL` elle değeri ZORUNLU kılar.
+   */
+  numberSource?: "FREE" | "SYSTEM" | "MANUAL";
+  startValue?: number | null;
+  step?: number | null;
+  maxValue?: number | null;
 }
 
 /** Tarih segmentinin metni. `NONE` → boş (sayaç hiç sıfırlanmaz). */

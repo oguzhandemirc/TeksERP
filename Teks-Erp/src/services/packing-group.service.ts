@@ -67,6 +67,7 @@ import {
 import { loadPackingGroupDto, loadPackingGroupDtos } from "./helpers/packing-group-dto.helper";
 import type { PackingGroupDto } from "./helpers/packing-group-dto.helper";
 import { packageNoStart } from "./helpers/packing-group.helper";
+import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 
 const GROUP_TABLE = "packing_groups";
 
@@ -192,6 +193,9 @@ export const PackingGroupService = {
 
     const mode = await readPackingGroupNumbering();
     const manualName = input.name?.trim() || null;
+    // ⚠️ Bu seri OKUTULMUYOR: kapı yalnız MODA bakar, biçim sınaması yapmaz —
+    // grup adı sahanın kendi kelimesidir ("P3"), barkod değil.
+    assertManualNumberAllowed("packingLotName", manualName);
 
     const created = await prisma.$transaction(async (tx) => {
       // KOD KİLİDİ tx'in İLK ifadesi (8034, kurulum-geneli) — sonra ad sayacı (8031).

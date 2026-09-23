@@ -32,7 +32,9 @@ import {
 } from "./printed-document.service";
 import { renderKartelaCekiHtml } from "./document-render/kartela-ceki.html";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import type { NumberSeriesFormat } from "./helpers/series-format.helper";
+import { nextCounterCandidate } from "./helpers/series-counter.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { buildPagination, buildTextSearch, readIdCondition } from "../utils/query-parser";
@@ -83,13 +85,20 @@ type ListResult = {
 // -----------------------------------------------------------------------------
 
 /** Kartela sevk/kabul belge no sequence (KS/KK + GGAAYY + NNNN). */
+/**
+ * ⚠️ SIRA ile BİÇİM BİRLİKTE döner: kodu kuran çağıran, ön eki kuran okumanın
+ * AYNISINI kullanmak zorunda. Yalnız sayı dönseydi çağıran biçimi İKİNCİ kez
+ * okurdu ve arada bir önbellek tazelemesi olursa ön ek bir sürümden, hane/adım
+ * başka bir sürümden gelirdi ("iki okuma" sınıfı).
+ */
 async function nextKartelaDocSequence(
   tx: Prisma.TransactionClient,
   kind: "dispatch" | "receipt",
   date: Date
-): Promise<number> {
+): Promise<{ seq: number; fmt: NumberSeriesFormat }> {
   // Ön ek serisinden gelir (`kartelaDispatch` / `kartelaReceipt`); literal KS/KK yok.
-  const docPrefix = seriesCodePrefix(kind === "dispatch" ? "kartelaDispatch" : "kartelaReceipt", date);
+  const fmt = resolveSeriesFormat(kind === "dispatch" ? "kartelaDispatch" : "kartelaReceipt");
+  const docPrefix = seriesPrefix(fmt, date);
 
   // O-21: gte (index seek) + startsWith (collation-bağımsız tam-prefix) + JS sayısal
   // max. Eski startsWith-tek + orderBy desc glibc collation sırasına/lex taşmaya
@@ -108,22 +117,23 @@ async function nextKartelaDocSequence(
     });
     nos = rows.map((r) => r.receiptNo);
   }
-  return seriesSeqFrom(nos, docPrefix);
+  return { seq: seriesSeqFrom(fmt, nos, docPrefix), fmt };
 }
 
 /** KRT kartela/numune kodu sequence (KRT + GGAAYY + NNNN; barcode = cardNumber). */
 async function nextSwatchSequence(
   tx: Prisma.TransactionClient,
   date: Date
-): Promise<number> {
-  const codePrefix = seriesCodePrefix("swatch", date);
+): Promise<{ seq: number; fmt: NumberSeriesFormat }> {
+  const fmt = resolveSeriesFormat("swatch");
+  const codePrefix = seriesPrefix(fmt, date);
   // O-21: gte + startsWith (tam-prefix) + sayısal max — tek collation-top satıra
   // güvenmek yerine günün tüm kodlarının sayısal max'ı.
   const rows = await tx.swatch.findMany({
     where: { cardNumber: { gte: codePrefix, startsWith: codePrefix } },
     select: { cardNumber: true },
   });
-  return seriesSeqFrom(rows.map((r) => r.cardNumber), codePrefix);
+  return { seq: seriesSeqFrom(fmt, rows.map((r) => r.cardNumber), codePrefix), fmt };
 }
 
 // -----------------------------------------------------------------------------
@@ -299,8 +309,8 @@ export class KartelaService {
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const now = new Date();
-        const seq = await nextKartelaDocSequence(tx, "dispatch", now);
-        const dispatchNo = buildSeriesCode("kartelaDispatch", seq, now);
+        const { seq, fmt } = await nextKartelaDocSequence(tx, "dispatch", now);
+        const dispatchNo = formatSeriesCode(fmt, seq, now);
 
         const dispatch = await tx.kartelaDispatch.create({
           data: {
@@ -690,8 +700,8 @@ export class KartelaService {
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const now = new Date();
-        const seq = await nextKartelaDocSequence(tx, "receipt", now);
-        const receiptNo = buildSeriesCode("kartelaReceipt", seq, now);
+        const { seq, fmt } = await nextKartelaDocSequence(tx, "receipt", now);
+        const receiptNo = formatSeriesCode(fmt, seq, now);
 
         const receipt = await tx.kartelaReceipt.create({
           data: {
@@ -710,7 +720,8 @@ export class KartelaService {
         // ardışık ata (seq, seq+1, ...). Eski kod her kartela için ayrı
         // nextSwatchSequence taraması + tek-tek create yapıyordu (N+1 + yavaş).
         // P2002 çakışmasında withBarcodeRetry tx'i baştan dener → sıra yeniden okunur.
-        let seqCounter = await nextSwatchSequence(tx, now);
+        const { seq: kartBas, fmt: kartFmt } = await nextSwatchSequence(tx, now);
+        let seqCounter = kartBas;
 
         const receiptItemData: Prisma.KartelaReceiptItemCreateManyInput[] = [];
         const swatchData: Prisma.SwatchCreateManyInput[] = [];
@@ -731,12 +742,15 @@ export class KartelaService {
 
           // N adet kartela doğar (bellekte hazırlanır, aşağıda tek createMany).
           for (let i = 0; i < ret.count; i++) {
-            const sSeq = seqCounter++;
+            // ⚠️ Sıra ADIM KADAR ilerler (`nextCounterCandidate`), `++` değil: adımı
+            // olan bir seride 1'er ilerlemek serinin dizisinin DIŞINDA kod üretirdi.
+            const sSeq = seqCounter;
+            seqCounter = nextCounterCandidate(kartFmt, seqCounter);
             const measure = ret.items?.[i];
             swatchData.push({
               // Tek kod: insan-okur cardNumber = tarama barcode (KRT + GGAAYY + NNNN)
-              cardNumber: buildSeriesCode("swatch", sSeq, now),
-              barcode: buildSeriesCode("swatch", sSeq, now),
+              cardNumber: formatSeriesCode(kartFmt, sSeq, now),
+              barcode: formatSeriesCode(kartFmt, sSeq, now),
               itemId: roll.itemId,
               colorId: roll.colorId ?? null,
               width: roll.width ?? null,

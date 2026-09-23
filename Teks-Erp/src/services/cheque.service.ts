@@ -57,7 +57,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 import { factoryDaySql, factoryYmd } from "../constants/time";
 import { D, D0, applyCariBalanceTx, ensureCariAccountTx, resolveExchangeRateTx } from "./helpers/finance.helper";
 import { assertPeriodOpenTx, assertPeriodsOpenTx } from "./helpers/period-guard.helper";
@@ -99,12 +99,13 @@ async function nextChequeNo(
   date: Date,
 ): Promise<string> {
   const seriesKey = DOC_SERIES[kind][docType];
-  const full = seriesCodePrefix(seriesKey, date);
+  const fmt = resolveSeriesFormat(seriesKey);
+  const full = seriesPrefix(fmt, date);
   const rows = await tx.cheque.findMany({
     where: { docNo: { gte: full, startsWith: full } },
     select: { docNo: true },
   });
-  return buildSeriesCode(seriesKey, seriesSeqFrom(rows.map((r) => r.docNo), full), date);
+  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.docNo), full), date);
 }
 
 // -----------------------------------------------------------------------------

@@ -158,7 +158,9 @@ async function makeSack(qty = 100, weigh = false): Promise<string> {
   rollIds.push(roll.id);
   const sack = (
     await shippingService.openSack(
-      { customerId: CUSTOMER, sackNo: `${SACK_PREFIX}${sackIds.length}` },
+      // ⚠️ Elle çuval no VERİLMEZ: çuval OKUTULAN seri, elle değer kendi türüne
+      // çözülmeli. Teardown zaten MÜŞTERİ üzerinden de topluyor (aşağıdaki not).
+      { customerId: CUSTOMER },
       ADMIN,
     )
   ).data as { id: string };
@@ -553,11 +555,18 @@ async function run(): Promise<void> {
     w400?.statusCode === 400 && w400?.code === "WEIGH_REQUIRED",
     `${w400?.statusCode ?? "—"} / ${w400?.code ?? "—"}`,
   );
+  // ⚠️ İddia FİKSTÜR ÖN EKİNE değil O ÇUVALIN GERÇEK NUMARASINA bakar: numara
+  // artık sunucudan geliyor (elle çuval no okutulan seride yasak) ve ön eke
+  // bakan eski hâli, doğru hatayı yanlış sebeple kırmızıya düşürürdü.
+  const tartisizNo = (
+    await prisma.sack.findUnique({ where: { id: acikTartisiz }, select: { sackNo: true } })
+  )?.sackNo;
   check(
     "§3.3: hata HANGİ ÇUVAL olduğunu söylüyor (operatörün yapacağı iş budur)",
     Array.isArray(w400?.details?.sackNos) &&
-      (w400!.details!.sackNos as string[]).some((x) => x.startsWith(SACK_PREFIX)),
-    JSON.stringify(w400?.details?.sackNos ?? null).slice(0, 70),
+      typeof tartisizNo === "string" &&
+      (w400!.details!.sackNos as string[]).includes(tartisizNo),
+    `${JSON.stringify(w400?.details?.sackNos ?? null).slice(0, 50)} ↔ ${tartisizNo ?? "—"}`,
   );
 
   // addSacksToShipment — ikinci enforcement noktası (PLANNED sevkiyata ekleme).

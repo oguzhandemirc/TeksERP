@@ -105,7 +105,8 @@ async function topKur(width: number, qty: number, colorId: string | null): Promi
 
 async function cuvalKur(barkodlar: string[]): Promise<string> {
   const sack = (
-    await shippingService.openSack({ customerId: CUSTOMER, sackNo: `${P}-S${sackIds.length}` }, ADMIN)
+    // ⚠️ Elle çuval no VERİLMEZ — `test_sack_bulk_distribute` ile aynı gerekçe.
+    await shippingService.openSack({ customerId: CUSTOMER }, ADMIN)
   ).data as { id: string };
   sackIds.push(sack.id);
   for (const b of barkodlar) await shippingService.scanIntoSack({ sackId: sack.id, barcode: b }, ADMIN);

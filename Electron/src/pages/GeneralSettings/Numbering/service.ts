@@ -1,5 +1,11 @@
 import apiClient from "@/services/apiClient";
-import type { NumberSeriesRow, SeriesFormatInput } from "./types";
+import type {
+  NumberSeriesRow,
+  NumberSourceMode,
+  SeriesCounterInput,
+  SeriesExhaustion,
+  SeriesFormatInput,
+} from "./types";
 
 /**
  * ⚠️ ÖNİZLEME VE ETKİ SAYISI SUNUCUDAN — panel kendi biçimlendiricisini YAZMAZ.
@@ -30,5 +36,26 @@ export const numberingService = {
 
   async update(key: string, fmt: SeriesFormatInput): Promise<void> {
     await apiClient.patch(`/api/number-series/${encodeURIComponent(key)}`, fmt);
+  },
+
+  /**
+   * Sayaç ayarları AYRI uç: biçim ile sayaç farklı kilitlere tabi. Biçimi
+   * yapısal olarak kilitli bir serinin (iş emri no) sayacı ayarlanabilir.
+   */
+  /** Tükenme durumu — sınır yoksa `percent: null` (ölçülemedi), ekran yüzde YAZMAZ. */
+  async exhaustion(key: string): Promise<SeriesExhaustion | null> {
+    const r = await apiClient.get<{ data: SeriesExhaustion }>(
+      `/api/number-series/${encodeURIComponent(key)}/exhaustion`,
+    );
+    return r.data?.data ?? null;
+  },
+
+  /** Numara kaynağı AYRI uç: biçim/sayaç/kaynak üçü farklı kilitlere tabi. */
+  async updateSource(key: string, numberSource: NumberSourceMode): Promise<void> {
+    await apiClient.patch(`/api/number-series/${encodeURIComponent(key)}/source`, { numberSource });
+  },
+
+  async updateCounter(key: string, ayar: SeriesCounterInput): Promise<void> {
+    await apiClient.patch(`/api/number-series/${encodeURIComponent(key)}/counter`, ayar);
   },
 };

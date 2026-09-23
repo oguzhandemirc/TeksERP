@@ -39,6 +39,8 @@ import {
   type TravelerFieldStyle,
 } from "./document-render/traveler-card.fields";
 import { resolveSectionOrder, type TravelerSection } from "./document-render/traveler-card.sections";
+import { resolveSeriesFormat } from "./number-series.service";
+import { updateSeriesNumberSource } from "./helpers/series-write.helper";
 
 /**
  * SystemSetting.value bir JsonValue. Reader yardımcıları: gelen değer
@@ -2777,12 +2779,16 @@ export class SystemSettingService {
       if (typeof input.partyCodeAuto !== "boolean") {
         throw AppError.badRequest("partyCodeAuto boolean olmalı");
       }
-      await this.set(
-        SETTING_KEYS.WORKORDER_PARTY_CODE_AUTO,
-        input.partyCodeAuto,
-        "İş emri parti kodunu otomatik üret (manuel giriş yerine)",
-        userId
-      );
+      // ⚠️ TEK YAZAR: bu anahtar artık kendi satırına değil `numberSource`a yazar.
+      // İki yazar kalsaydı eski panel ile Numaralandırma ekranı birbirini ezerdi.
+      //
+      // ⚠️ DEĞİŞMEDİYSE HİÇ YAZILMAZ ve bu load-bearing: `SYSTEM` modu boolean'a
+      // `true` diye görünür; eski panel formu olduğu gibi kaydederse `true`
+      // gelir ve körlemesine `FREE` yazmak SYSTEM'i SESSİZCE düşürürdü.
+      const current = await readPartyCodeAuto();
+      if (current !== input.partyCodeAuto) {
+        await updateSeriesNumberSource("workOrder", input.partyCodeAuto ? "FREE" : "MANUAL", userId);
+      }
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "fasonNoteMobileEntry")) {
@@ -4468,14 +4474,20 @@ export async function readSimulatedWeightEnabled(
  * da otomatik üretir. Flag yalnızca formun manuel/otomatik davranışını belirler.
  */
 export async function readPartyCodeAuto(
-  tx?: Pick<typeof prisma, "systemSetting">,
+  _tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
-  const client = tx ?? prisma;
-  const setting = await client.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.WORKORDER_PARTY_CODE_AUTO },
-    select: { value: true },
-  });
-  return asBoolean(setting?.value);
+  // ⚠️ ARTIK TÜRETİLMİŞ: tek kaynak `workOrder` serisinin `numberSource`u
+  // (D3③). Eski `workorder.partyCodeAuto` satırı OKUNMAZ — göç bir kez koştu ve
+  // damgalandı. İki ayar aynı soruyu cevaplarken biri mutlaka bayatlar ve
+  // bayatlayan hep EKRANDA olan taraf olur.
+  //
+  // Eşleme: FREE → true (otomatik, elle de yazılabilir) · SYSTEM → true
+  // (otomatik; elle yazılan değer sunucuda 400 alır) · MANUAL → false (elle
+  // zorunlu). SYSTEM'de eski panel (1.3.1) alanı tıklanabilir gösterir; kullanıcı
+  // elle bir değer yazarsa kaydetmede 400 görür — BEYANLI bir kabul, çünkü eski
+  // panelin üç hâli gösterecek bir yüzeyi yok.
+  const mode = resolveSeriesFormat("workOrder").numberSource ?? "FREE";
+  return mode !== "MANUAL";
 }
 
 /**

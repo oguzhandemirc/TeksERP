@@ -536,6 +536,19 @@ async function main() {
     // Panelde yüzeyi YOK ve OLMAMALI: panelden değiştirilebilir olsaydı
     // istemcilerin "bağlandığım sunucu değişti mi" kontrolü tek tıkla
     // geçersizleşirdi. Yüzeyi, değeri ÜRETEN boot işidir.
+    // ⚠️ ARTIK BİR AYAR SATIRI DEĞİL, bir GÖÇ GİRDİSİ (D3③, 2026-09-23): bu
+    // anahtarın satırı bundan sonra OKUNMAZ da YAZILMAZ da — `partyCodeAuto`
+    // `workOrder.numberSource`tan TÜRETİLİR ve eski panel anahtarına yazmak
+    // `numberSource`a yazar. Anahtar SETTING_KEYS'te KALIYOR çünkü ① sahadaki
+    // kurulumlarda satır hâlâ var ve ② tek seferlik göç onu bir kez okuyor.
+    // Panelde yüzeyi VAR (Genel Ayarlar → İş Emirleri anahtarı) ama o yüzey
+    // artık bu anahtara değil `numberSource`a yazıyor — bu yüzden `getFeatureFlags`
+    // okuyucularında görünmüyor ve muaf satırı gerekiyor.
+    WORKORDER_PARTY_CODE_AUTO: {
+      why: "Göç girdisi — satır artık okunmuyor/yazılmıyor; bayrak `workOrder.numberSource`tan türetilir (D3③)",
+      file: "Teks-Erp/src/jobs/number-series-catalog.job.ts",
+      needle: "workorder.partyCodeAuto",
+    },
     SYSTEM_INSTALLATION_ID: {
       why: "Feature flag değil, kurulum kimliği — panel yüzeyi YOK (bilinçli); boot işi üretir, /api/discovery/identity okur",
       file: "Teks-Erp/src/jobs/installation-identity.job.ts",

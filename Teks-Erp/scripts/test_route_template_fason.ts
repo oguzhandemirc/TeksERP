@@ -88,7 +88,7 @@ async function main() {
     // ── 2) Şablondan WO aç — planlama devralınmalı ──
     const wo1 = await svc.create({
       type: "STOCK_PRODUCTION",
-      batchNumber: `TEST-RTF1-${suffix}`,
+      // ⚠️ Elle iş emri no VERİLMEZ (okutulan seri) — sunucu üretir.
       targetItemId: item.id,
       targetQuantity: 100,
       routeTemplateId: route.id,
@@ -113,7 +113,7 @@ async function main() {
     if (firmB) {
       const wo2 = await svc.create({
         type: "STOCK_PRODUCTION",
-        batchNumber: `TEST-RTF2-${suffix}`,
+        // ⚠️ Elle iş emri no VERİLMEZ (okutulan seri) — sunucu üretir.
         targetItemId: item.id,
         targetQuantity: 100,
         routeTemplateId: route.id,

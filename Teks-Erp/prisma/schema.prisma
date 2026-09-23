@@ -5052,6 +5052,13 @@ model SystemSetting {
 
 /// Kodun içindeki tarih parçası. Sayaç sıfırlama dönemini de BU belirler:
 /// DDMMYY → günlük · YYMM/YYYYMM → aylık · YY/YYYY → yıllık · NONE → hiç sıfırlanmaz.
+/// Numara kaynağı — `FREE` bugünkü davranış (elle gelirse kabul, gelmezse üret).
+enum NumberSourceMode {
+  FREE
+  SYSTEM
+  MANUAL
+}
+
 enum NumberSeriesDateSegment {
   NONE
   DDMMYY
@@ -5083,6 +5090,24 @@ model NumberSeries {
   scanned  Boolean @default(false)
   /// false = biçimi panelden değiştirilemez (fiziksel plakaya/çözümlenen yapıya bağlı).
   editable Boolean @default(true)
+
+  /// NUMARA KAYNAĞI (D3①) — istemciden gelen ELLE değer ne olacak?
+  ///
+  /// ⚠️ ÜÇ DEĞER ve varsayılan `FREE`, çünkü BUGÜNKÜ DAVRANIŞ iki değerle
+  /// ifade EDİLEMEZ: sistem numarayı üretiyor AMA elle geleni de kabul ediyor.
+  /// `SYSTEM` (elle geleni reddet) bir DAVRANIŞ DEĞİŞİKLİĞİDİR ve ancak fabrika
+  /// açıkça seçerse olur. Ayar YALNIZ elle yolu olan 4 seride anlamlıdır
+  /// (`manualEntry` beyanı); diğerlerinde uç 400 döner.
+  numberSource NumberSourceMode @default(FREE)
+
+  /// SAYAÇ AYARLARI (D2②) — üçü de NULL doğar ve NULL = BUGÜNKÜ DAVRANIŞ:
+  /// başlangıç 1, adım 1, üst sınır yok. Hesapları `series-counter.helper` yapar.
+  ///
+  /// ⚠️ `digits` bir DOLGU ayarıdır, KAPASİTE değil (ölçüldü: 4 hane + sıra 10000
+  /// → "10000", sarmaz). Sayacı durduran tek şey `maxValue`dur.
+  startValue Int?
+  step       Int?
+  maxValue   Int?
 
   /// Biçimin SON değiştiği an — sayacın KAPSAM sınırı. Sıradaki numara yalnız bu
   /// andan SONRA doğan kodlara bakar; eski rejimin kodları sayaca girmez

@@ -16,7 +16,7 @@
 // =============================================================================
 
 import { Prisma, StepStatus, WorkOrderStatus } from "@prisma/client";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "../number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "../number-series.service";
 import { AppError } from "../../utils/app-error";
 import { TravelerCardService } from "../traveler-card.service";
 import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
@@ -34,16 +34,18 @@ export async function generateWorkOrderNumberTx(
   tx: Prisma.TransactionClient,
   date: Date,
 ): Promise<string> {
-  const prefix = seriesCodePrefix("workOrder", date);
+  const fmt = resolveSeriesFormat("workOrder");
+  const prefix = seriesPrefix(fmt, date);
   const todays = await tx.workOrder.findMany({
     where: { workOrderNumber: { gte: prefix, startsWith: prefix } },
     select: { workOrderNumber: true },
   });
   const seq = seriesSeqFrom(
+      fmt,
     todays.map((w) => w.workOrderNumber),
     prefix,
   );
-  return buildSeriesCode("workOrder", seq, date);
+  return formatSeriesCode(fmt, seq, date);
 }
 
 export interface CloneWorkOrderResult {

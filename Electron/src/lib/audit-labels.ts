@@ -274,6 +274,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   PERMISSION_CATALOG_RECONCILE_FAILED: "Yetki kataloğu eşitlenemedi",
   ROLE_TEMPLATE_CATALOG_RECONCILED: "Rol kataloğu eşitlendi",
   NUMBER_SERIES_SEEDED: "Numara serileri eşitlendi",
+  NUMBER_SOURCE_MIGRATED: "Numara kaynağı ayarı eski bayraktan taşındı (tek seferlik)",
 
   // ── SYSTEM · onarım / backfill izleri ──
   // Bunlar `scripts/*.ts --apply` koşumlarının bıraktığı izdir: operatör "bu veriyi
@@ -310,6 +311,9 @@ export { auditFieldLabel as fieldLabel } from "./audit-field-labels";
 
 /** Enum DEĞERLERİ (durum/tür kolonlarının içeriği) → Türkçe. Bilinmeyen → ham. */
 export const ENUM_LABELS: Record<string, string> = {
+  // NumberSourceMode — numara kaynağı. ⚠️ `SYSTEM` ve `MANUAL` bu haritada ZATEN
+  // var (başka enum'lardan) ve anlamları buraya da uyuyor; yalnız `FREE` yeni.
+  FREE: "Serbest (sistem üretir, elle yazılabilir)",
   // NumberSeriesDateSegment — numara serisindeki tarih parçası. Sıfırlama dönemini
   // de BU belirler, yani etiket "gösterim" değil "sayaç kapsamı" anlatır.
   NONE: "Tarih yok (sayaç sıfırlanmaz)",
@@ -924,7 +928,14 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   YARN: "kalem türü, sayım satırı türü ve fason sevk kalemi türü (G1) — üçü de 'İplik'",
   SCRAP: "sapma türü / top statüsü / kalite rolü — üçünde de 'Fire'",
   SCALE: "tartı kaynağı ve çevre birimi türü — ikisi de 'Kantar'",
-  MANUAL: "tartı kaynağı ve kur kaynağı — ikisi de 'Elle girildi'",
+  MANUAL:
+    "tartı kaynağı, kur kaynağı ve NUMARA KAYNAĞI (2026-09-23) — üçünde de " +
+    "değeri ELLE giren insandır; ortak Türkçe doğru",
+  // ── Numara kaynağı (2026-09-23)
+  SYSTEM:
+    "SystemLogCategory(olayın kaynağı sistemdir) ve NumberSourceMode(numarayı " +
+    "yalnız sistem üretir) — ikisinde de eylemi yapan SİSTEMDİR, insan değil; " +
+    "ortak Türkçe doğru",
   CANCELLED: "on beş durum enum'u — hepsinde 'İptal' (en geniş ortaklık)",
   IN_PROGRESS:
     "WorkOrderStatus ve WeavingOrderStatus — ikisi de 'Devam Ediyor'. Dokuma işi " +

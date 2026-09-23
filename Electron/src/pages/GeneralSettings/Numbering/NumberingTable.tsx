@@ -67,7 +67,15 @@ function NumberingRow({
       <td className="hidden p-2 text-xs sm:table-cell">{row.digits}</td>
       <td className="p-2 font-mono text-xs">{row.preview}</td>
       <td className="p-2 text-right">
-        <Button size="sm" variant="outline" disabled={!row.editable} onClick={() => onEdit(row)}>
+        {/* ⚠️ BİÇİM kilidi satırı kapatmaz: sayaç ayarları AYRI bir kilide tabi
+            ve biçimi kilitli 46 seride AÇIK. Yalnız `editable`a bakan bir düğme,
+            motoru olan ama çıkış yüzeyi olmayan bir yetenek üretirdi. */}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!row.editable && !row.counter.startValue}
+          onClick={() => onEdit(row)}
+        >
           Düzenle
         </Button>
       </td>

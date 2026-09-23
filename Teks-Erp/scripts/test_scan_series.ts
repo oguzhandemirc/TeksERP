@@ -34,13 +34,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
-import {
-  classifyScannedCode,
-  formatSeriesCode,
-  resolveSeriesFormat,
-  seriesClassifierTable,
-  seriesCodePrefix,
-} from "../src/services/number-series.service";
+import { classifyScannedCode, formatSeriesCode, resolveSeriesFormat, seriesClassifierTable, seriesPrefix } from "../src/services/number-series.service";
 import { getSeriesClassifier, resolveScannedCode } from "../src/services/scan.service";
 
 let pass = 0,
@@ -158,11 +152,11 @@ check("§7 sınıflandırma tablosu ile tek-kod çözümü aynı seri kümesini 
 // ⚠️ Çakışma kapısı (`assertSeriesFormatAllowed ③`) burada KORUMAZ: o yalnız
 // TARAMA uzayında küresel, `subcontractor` ise okutulan bir seri DEĞİL. Yani
 // iki bağımsız karar birbirine yaslanıyor — bu yüzden ÖLÇÜLÜYOR.
-const fsnKodu = `${seriesCodePrefix("subcontractor")}0001`;
+const fsnKodu = `${seriesPrefix(resolveSeriesFormat("subcontractor"))}0001`;
 check("§8 ⭐ fason FİRMA kodu sevk belgesi sanılmıyor", classifyScannedCode(fsnKodu) === null,
   `${fsnKodu} → ${classifyScannedCode(fsnKodu)?.key ?? "UNKNOWN"}`);
 check("§8 gerçek fason SEVK belgesi hâlâ çözülüyor (kontrol grubu)",
-  classifyScannedCode(`${seriesCodePrefix("subcontractorDispatch")}0001`)?.key === "subcontractorDispatch");
+  classifyScannedCode(`${seriesPrefix(resolveSeriesFormat("subcontractorDispatch"))}0001`)?.key === "subcontractorDispatch");
 check("§8 fason firma/kategori serileri OKUTULAN küme DIŞINDA (scanned değil)",
   NUMBER_SERIES_CATALOG.find((e) => e.key === "subcontractor")?.kind === undefined &&
   NUMBER_SERIES_CATALOG.find((e) => e.key === "subcontractorCategory")?.kind === undefined);

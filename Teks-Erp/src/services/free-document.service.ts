@@ -11,7 +11,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 import {
   readCompanyName,
   readCompanyLetterhead,
@@ -39,13 +39,16 @@ function sanitizeConfig(raw: unknown): DocumentConfig {
 }
 
 async function nextFreeDocNo(): Promise<string> {
-  const prefix = seriesCodePrefix("freeDocument");
+  // ⚠️ TEK TARİH — `nextCustomerCode` gerekçesi ("iki tarih" sınıfı).
+  const now = new Date();
+  const fmt = resolveSeriesFormat("freeDocument");
+  const prefix = seriesPrefix(fmt, now);
   const todays = await prisma.freeDocument.findMany({
     where: { documentNo: { gte: prefix, startsWith: prefix } },
     select: { documentNo: true },
   });
-  const seq = seriesSeqFrom(todays.map((d) => d.documentNo), prefix);
-  return `${prefix}${String(seq).padStart(4, "0")}`;
+  const seq = seriesSeqFrom(fmt, todays.map((d) => d.documentNo), prefix);
+  return formatSeriesCode(fmt, seq, now);
 }
 
 function shape(input: FreeDocumentInput, isCreate: boolean) {

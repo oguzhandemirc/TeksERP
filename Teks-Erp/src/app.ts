@@ -130,6 +130,7 @@ import mobileUpdateRoutes from "./routes/mobile-update.routes";
 import clientPolicyRoutes from "./routes/client-policy.routes";
 import bossRoutes from "./routes/boss.routes";
 import { NIGHTLY_PREFIX } from "./services/helpers/backup-naming.helper";
+import { seriesExhaustionWarnings } from "./services/helpers/series-exhaustion.helper";
 const app: Express = express();
 
 // =============================================================================
@@ -618,6 +619,18 @@ function readResourceMetrics() {
 // Cevap "operasyonel iç durum" ise `buildRichHealth`e ekle, `/health`e DEĞİL.
 // `/health`in alan kümesi DONDURULMUŞTUR.
 async function buildRichHealth(): Promise<Record<string, unknown>> {
+  // NUMARA SERİSİ TÜKENMESİ — yalnız UYARI ÜRETENLER (boş dizi = sorun yok).
+  // ⚠️ Sınırı olmayan seri DB'ye hiç gitmez; bugün bu, `roll` dışında hepsi
+  // demek. Eşik ve hesap TEK helper'da; panel satırı da onu okur.
+  // ⚠️ ÜÇ SONUÇ: `[]` = uyarı YOK · dolu dizi = uyarı VAR · `null` = OKUNAMADI.
+  // Hatayı boş diziye indirgemek, DB düştüğünde sahte bir "her şey yolunda"
+  // üretirdi — `auditGuard` alanının birebir gerekçesi.
+  let numberSeriesExhaustion: unknown[] | null = null;
+  try {
+    numberSeriesExhaustion = await seriesExhaustionWarnings();
+  } catch {
+    numberSeriesExhaustion = null;
+  }
   let db: "UP" | "DOWN" = "DOWN";
   let dbSizeBytes: number | null = null;
   let dbConnections: number | null = null;
@@ -711,6 +724,8 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
     dbBlockedCount, // lock bekleyen oturum sayısı (>0 = bir şey takılmış olabilir)
     restoreCopyCount, // unutulmuş geri yükleme kopyası sayısı
     restoreCopyBytes, // bu kopyaların toplam disk kullanımı
+    // Numara serisi tükenmesi: `[]` uyarı yok · dolu uyarı var · `null` okunamadı.
+    numberSeriesExhaustion,
     lastBackup: latestBackupInfo(),
     // Ham veri değil HÜKÜM: "gece yedeği çalışıyor mu". `lastBackup` bilerek
     // olduğu gibi bırakıldı (eski panel sözleşmesi), bu alan EK'tir.
