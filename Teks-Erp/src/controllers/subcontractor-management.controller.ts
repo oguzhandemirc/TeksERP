@@ -13,8 +13,10 @@ import "../types/express-augment";
 
 // ─── Subcontractor Schemas ──────────────────────────────────────────────────
 
+// Kod OPSİYONEL: boş/verilmemişse sunucu üretir (`ensureSubCode` → FSN/KAT serisi). Zorunlu tutmak panelin
+// kodsuz "Yeni" kaydını 400'e düşürüyordu (K20, 2026-09-23 — servis bekçisi controller'ı görmüyordu).
 const createSubcontractorSchema = z.object({
-  code: z.string().trim().min(1, "Kod boş bırakılamaz").max(64, "Kod en fazla 64 karakter olabilir"),
+  code: z.string().trim().max(64, "Kod en fazla 64 karakter olabilir").optional(),
   name: z.string().trim().min(1, "Fason adı boş bırakılamaz").max(255, "Fason adı en fazla 255 karakter olabilir"),
   taxNumber: z.string().trim().max(32, "Vergi numarası en fazla 32 karakter olabilir").nullish(),
   phone: z.string().trim().max(32, "Telefon en fazla 32 karakter olabilir").nullish(),
@@ -40,9 +42,10 @@ const updateSubcontractorSchema = z.object({
 // ─── Category Schemas ───────────────────────────────────────────────────────
 
 const createCategorySchema = z.object({
-  code: z.string().trim().min(1, "Kod boş bırakılamaz").max(64, "Kod en fazla 64 karakter olabilir"),
+  code: z.string().trim().max(64, "Kod en fazla 64 karakter olabilir").optional(),
   name: z.string().trim().min(1, "Kategori adı boş bırakılamaz").max(128, "Kategori adı en fazla 128 karakter olabilir"),
-  description: z.string().trim().max(500, "Açıklama en fazla 500 karakter olabilir").optional(),
+  // Panel boş açıklamayı `null` gönderir (güncelleme şemasıyla aynı sözleşme).
+  description: z.string().trim().max(500, "Açıklama en fazla 500 karakter olabilir").nullish().transform((v) => v ?? undefined),
   appliesColor: z.boolean().optional(),
   appliesProperty: z.boolean().optional(),
 });
