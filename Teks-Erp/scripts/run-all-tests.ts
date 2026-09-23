@@ -553,7 +553,9 @@ async function main() {
     bilinmeyenAtlama: boolean;
     sessizYesil: boolean;
   } {
-    const res = spawnSync("npx", ["tsx", join(SCRIPTS_DIR, file)], {
+    // `--no-maglev`: Node v26 V8 hatası — process.exit anında Maglev arka plan derlemesi ile GC karşılıklı
+    // bekleyip süreci asıyor (upstream; 900 koşuda 5 asılma → bayrakla 0). NODE_OPTIONS bayrağı kabul etmez.
+    const res = spawnSync("npx", ["tsx", "--no-maglev", join(SCRIPTS_DIR, file)], {
       encoding: "utf8",
       timeout: PER_TEST_TIMEOUT_MS,
       env: process.env,

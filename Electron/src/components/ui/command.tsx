@@ -2,7 +2,7 @@ import * as React from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent } from "./dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./dialog";
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
@@ -29,11 +29,22 @@ interface CommandDialogProps extends React.ComponentProps<typeof Dialog> {
    * Sırası" eşleşmez). Bu yüzden komut paleti kendi katlamasını geçiriyor.
    */
   filter?: React.ComponentProps<typeof Command>["filter"];
+  /** Ekran okuyucu adı — görünmez; Radix başlıksız diyalogda her açılışta console.error basar. */
+  title?: string;
+  description?: string;
 }
 
-const CommandDialog = ({ children, filter, ...props }: CommandDialogProps) => (
+const CommandDialog = ({
+  children,
+  filter,
+  title = "Komut paleti",
+  description = "Sayfa, rapor ya da ayar arayın; Enter ile açın.",
+  ...props
+}: CommandDialogProps) => (
   <Dialog {...props}>
     <DialogContent className="overflow-hidden p-0">
+      <DialogTitle className="sr-only">{title}</DialogTitle>
+      <DialogDescription className="sr-only">{description}</DialogDescription>
       <Command filter={filter} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
         {children}
       </Command>
