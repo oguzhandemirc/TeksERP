@@ -13,7 +13,7 @@
 //   ② şube DOMESTIC, cari EXPORT → sipariş DOMESTIC (şube önce)
 //   ③ zincir boş → NULL ("yön belirsiz")
 //   ④ gövdeden `destination` YAZILAMAZ (create ve update)
-//   ⑤ ⭐ kart değişir (cari + şube) → sipariş kolonu DEĞİŞMEZ
+//   §⑤ ⭐ kart değişir (cari + şube) → sipariş kolonu DEĞİŞMEZ
 //   ⑥ sipariş AÇIKÇA başka cariye taşınır → yön yeniden çözülür; yalnız termin değişirse dokunulmaz
 //   ⑦ birleştirme haritası siparişin yönüne dokunmaz (MOVE yalnız customerId)
 //

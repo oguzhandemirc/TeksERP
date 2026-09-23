@@ -19,10 +19,31 @@ const MAX_ATTEMPTS = 5;
  * koşumda tam bunu üretti). Hedef Prisma'da dizi (`["code"]`) ya da index adı string'i olabilir.
  */
 export function p2002TargetsCode(err: Prisma.PrismaClientKnownRequestError, codeField = "code"): boolean {
-  const t = (err.meta as { target?: unknown } | undefined)?.target;
-  const parts = Array.isArray(t) ? t.map(String) : typeof t === "string" ? [t] : [];
+  const parts = p2002TargetParts(err);
   if (parts.length === 0) return true; // hedef bilinmiyor → geriye uyumlu: retry
   return parts.some((p) => p === codeField || p.toLowerCase().includes(`_${codeField.toLowerCase()}_`) || p.toLowerCase().endsWith(`_${codeField.toLowerCase()}_key`));
+}
+
+/**
+ * P2002 hedefinin parçaları. ⚠️ pg sürücü adaptörü (Prisma 7) `meta.target` VERMEZ; hedef
+ * `meta.driverAdapterError.cause.constraint.fields` ve `originalMessage`taki kısıt adındadır.
+ * Yalnız `target`e bakan yüklem her çakışmayı "hedef bilinmiyor → retry" sayıyordu: içerik/ad
+ * tekilliği beş kez denenip yanıltıcı 409'la bitiyordu (ölçüldü 2026-09-23, çeki listesi yarışı).
+ */
+function p2002TargetParts(err: Prisma.PrismaClientKnownRequestError): string[] {
+  const meta = (err.meta ?? {}) as { target?: unknown; driverAdapterError?: { cause?: { constraint?: unknown; originalMessage?: unknown } } };
+  const t = meta.target;
+  if (Array.isArray(t)) return t.map(String);
+  if (typeof t === "string") return [t];
+  const cause = meta.driverAdapterError?.cause;
+  const parts: string[] = [];
+  const c = cause?.constraint as { fields?: unknown; index?: unknown } | string | undefined;
+  if (typeof c === "string") parts.push(c);
+  else if (c && Array.isArray(c.fields)) parts.push(...c.fields.map((f) => String(f).replace(/"/g, "")));
+  else if (c && typeof c.index === "string") parts.push(c.index);
+  const m = typeof cause?.originalMessage === "string" ? /constraint "([^"]+)"/.exec(cause.originalMessage) : null;
+  if (m) parts.push(m[1]!);
+  return parts;
 }
 
 export async function withBarcodeRetry<T>(
