@@ -11714,3 +11714,35 @@ belgeye girmez, yoksa 6 eski yurtdışı belge yeni satır kazanırdı.
 yedeğinin kopyasında (`tekserp_d3e2e_test`, 139 sevkiyat: 133 yurtiçi · 6 yurtdışı) procedureCode dolu sevkiyat
 0 → bugün basılı hiçbir belgenin çıktısı değişmez. Sevk Kapısı kartındaki şube/cari kodu (saha #21) kimlik
 olarak kalır; gümrük no ayrı ve "Gümrük:" etiketiyle yalnız yurtdışında ve yalnız kayıtlıysa görünür.
+
+## 2026-09-23 — E2 master veri dilimi: 15 seri daha AÇILDI, çeki listesi L2'ye girdi [ÇEKİRDEK]
+
+**Açılanlar:** cari · fason firma · fason kategori · kumaş özelliği · stok · renk · istasyon · makine ·
+kasa · banka · iade sebebi · reçete · hata tipi · depo · rota. Açık seri 9 → 24; kilit dağılımı SAYAC
+38 → 23.
+
+**Ölçüm kararı yönlendirdi:** 15 serinin ONU TEK üreteçten doğuyor (`BaseService.nextAutoCode`), üçü
+kendi fonksiyonunda (cari · kumaş özelliği · stok), ikisi ortak bir yardımcıda (`ensureSubCode`). Yani
+"15 seri" değil DÖRT YER değişti. `ensureSubCode` zaten `nextSeriesNo` çağırıyordu ama yükleyicisi
+yalnız kod dizgisi döndürüyordu — **kapsam damgası sessizce devre dışıydı**, çünkü `nextSeriesNo`
+kapsamı ancak satırlar doğuş anını taşıyorsa uygulayabiliyor. Yükleyici `{ code, createdAt }`e
+çevrildi. `item` serisinin elle yazılmış kodları eleyen süzgeci (`ITEM_CODE_SCAN_RE`) korundu.
+
+**L0 kapısı ikinci bir şekle kavuştu:** beyanlı seri için kaynakta `nextSeriesNo("<key>")` aramak
+ORTAK üreteçlerde ÇALIŞMIYOR — çağrı anahtarı değişken (`cfg.series`) ve metinde hiç geçmiyor; kapı
+"beyan yalan" dedi (yanlış kırmızı, ölçüldü). Beyan artık üretecin YERİNİ de söylüyor
+(`scopedCounter.uretec`) ve kapı o dosyayı açıp C0 yolundan geçtiğini ölçüyor. Yol beyanı yoksa eski
+anahtar araması sürüyor — iki üretim biçimi, iki ölçüm yolu.
+
+**L2 temsilci ölçümü (beyanlı):** on master veri serisi aynı kod yolundan doğduğu için hepsini ayrı
+ayrı yaratmak AYNI yolu on kez ölçmek olurdu; temsilci `color` gerçek servis yolundan (ColorService)
+koşuyor, diğer dokuzu "aynı üreteç yolu, temsilci: color" gerekçesiyle L1'de ve kapsam tablosunda
+GÖRÜNÜYOR. Kendi üreteci olan beş seri (cari · fason firma · fason kategori · kumaş özelliği · stok)
+"ayrı dilimde L2'ye alınacak" beyanıyla duruyor.
+
+**Çeki listesi (CL) L2'ye girdi** (1e şartı): ölçüm bir varsayımı çürüttü — "manifest iş emri + TOP
+zinciri ister" YANLIŞ; `createManifest` yalnız var olan bir iş emri istiyor, fikstür tek satır.
+
+**Fikstür dersleri (ikisi de iş kuralının doğruluğunu gösterdi):** aynı depoda ikinci DRAFT sayım 409
+(tek açık sayım kuralı) → her çağrı kendi deposunu kurar; aynı adlı ikinci renk 409 (mükerrer adı
+koruması) → her çağrı farklı ad kullanır. Fikstür iş kuralına uyar, iş kuralı fikstüre değil.

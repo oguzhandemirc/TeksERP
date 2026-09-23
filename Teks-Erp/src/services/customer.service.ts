@@ -12,7 +12,7 @@ import { validateName, validateCode } from "../lib/string-validators";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import prisma from "../lib/prisma";
 import { OrderStatus, Prisma, ShipmentDestination } from "@prisma/client";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo } from "./number-series.service";
 import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { parseQueryParams, readFilterList } from "../utils/query-parser";
 import { applyPartnerRoles, roleListWhere, type PartnerRoles } from "./helpers/partner-roles.helper";
@@ -63,19 +63,15 @@ async function nextCustomerCode(): Promise<string> {
   // ⚠️ TEK TARİH: sorgunun ön eki ile kodun ön eki AYNI `now`dan doğar. İki ayrı
   // `new Date()` gece yarısını sıçrayabilir ve dünün ön ekiyle taranıp bugünün
   // ön ekiyle yazılırdı (sıra 1'e döner, `@unique` çakışır) — "iki tarih" sınıfı.
-  const now = new Date();
-  const fmt = resolveSeriesFormat("customer");
-  const prefix = seriesPrefix(fmt, now);
-  const todays = await prisma.customer.findMany({
-    where: { code: { gte: prefix, startsWith: prefix } },
-    select: { code: true },
-  });
-  const seq = seriesSeqFrom(
-      fmt,
-    todays.map((c) => c.code),
-    prefix,
-  );
-  return formatSeriesCode(fmt, seq, now);
+  // ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan kodlara
+  // bakar; `nextSeriesNo` kapsamı, tek tarihi ve çakışma atlamasını taşır.
+  return nextSeriesNo("customer", async (prefix) =>
+    prisma.customer
+      .findMany({
+        where: { code: { gte: prefix, startsWith: prefix } },
+        select: { code: true, createdAt: true },
+      })
+      .then((rows) => rows.map((r) => ({ code: r.code, createdAt: r.createdAt }))), new Date());
 }
 
 export class CustomerService extends BaseService {

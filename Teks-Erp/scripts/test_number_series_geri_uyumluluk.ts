@@ -23,7 +23,7 @@
 //
 // Koşum: npx tsx scripts/run-all-tests.ts number_series_geri_uyumluluk
 // =============================================================================
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import type { NumberSeriesDateSegment } from "@prisma/client";
@@ -41,6 +41,8 @@ import { seriesImpactCount, seriesLock } from "../src/services/helpers/series-pa
 import { nextSeriesNo, resolveSeriesFormat } from "../src/services/number-series.service";
 import { freeDocumentService } from "../src/services/free-document.service";
 import { stockCountService } from "../src/services/stock-count.service";
+import { WorkOrderService } from "../src/services/workorder.service";
+import { colorService } from "../src/routes/color.routes";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0,
@@ -67,6 +69,9 @@ function kaynakTara(dizin: string): string {
 }
 
 let stockCountFikstur = 0;
+let colorFikstur = 0;
+/** Manifest fikstürünün açtığı iş emirleri — teardown (manifest silindikten SONRA). */
+const manifestWorkOrders: string[] = [];
 const SEGMENTLER = Object.keys(DATE_SEGMENTS) as NumberSeriesDateSegment[];
 const AYRACLAR = ["", "-", "_", "/", "."];
 
@@ -136,10 +141,61 @@ const L2_YOLU: Record<string, L2Yolu> = {
       await prisma.stockCount.deleteMany({ where: { id } });
     },
   },
+  // ── MASTER VERİ (E2 dilim 2) ──────────────────────────────────────────────
+  // ⚠️ TEMSİLCİ ÖLÇÜM ve bu BEYANLI bir karar: on master veri serisi TEK üreteçten
+  // doğuyor (`BaseService.nextAutoCode`). Onunu da ayrı ayrı yaratmak AYNI kod
+  // yolunu on kez ölçmek olurdu; temsilci `color` L2'de koşar, diğer dokuzu
+  // "aynı üreteç yolu" gerekçesiyle L1'de kalır ve bu satırda GÖRÜNÜR.
+  color: {
+    not: "ColorService.create: yalnız ad.",
+    // ⚠️ HER ÇAĞRI FARKLI AD: servis aynı adlı ikinci rengi 409 ile reddediyor
+    // (mükerrer koruması) — iş kuralı doğru, fikstür ona uymak zorunda.
+    yarat: async (damga) => {
+      colorFikstur += 1;
+      const r = (await colorService.create({ name: `${damga} E3 renk ${colorFikstur}` })) as {
+        data?: { id?: string; code?: string };
+      };
+      return r.data?.id && r.data.code ? { id: r.data.id, kod: r.data.code } : null;
+    },
+    sil: async (id) => { await prisma.color.deleteMany({ where: { id } }); },
+  },
+  station: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
+  machine: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
+  cashAccount: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
+  bankAccount: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
+  returnReason: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
+  productRecipe: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
+  defectType: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
+  warehouse: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
+  routeTemplate: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
+  // KENDİ üreteci olanlar — L2 fikstürleri sonraki dilimde (kart zincirleri):
+  customer: { not: "Kendi üreteci var; cari kartı fikstürü (vergi no/şube/cari hesap zinciri) ayrı dilimde L2'ye alınacak." },
+  subcontractor: { not: "Kendi üreteci var (`ensureSubCode`); fason firma fikstürü `fixture-subcontractor.ts`ten gelir, ayrı dilimde L2'ye alınacak." },
+  subcontractorCategory: { not: "Kendi üreteci var (`ensureSubCode`); ayrı dilimde L2'ye alınacak." },
+  fabricProperty: { not: "Kendi üreteci var; özellik kartı fikstürü ayrı dilimde L2'ye alınacak." },
+  item: { not: "Kendi üreteci var ve elle kod süzgeci taşıyor (`ITEM_CODE_SCAN_RE`); stok kartı fikstürü ayrı dilimde L2'ye alınacak." },
+
   // Aşağıdakiler L1'de KALDI ve gerekçesi budur (beyansız sessizlik yok):
   packingLotName: { not: "Sevk partisi ADI kendi sırasından doğar (ownCounter): ayrı bir kayıt yolu yok, kod yolu packingLotCode ile aynı gruptan gelir." },
   returnDoc: { not: "RollReturn: sevk edilmiş top + iade zinciri ister; fikstür maliyeti yüksek (test_return_no_backfill kapsıyor)." },
-  manifest: { not: "Manifest: iş emri + top zinciri ister; fikstür maliyeti yüksek." },
+  // ⚠️ ÇEKİ LİSTESİ L2'YE ALINDI (1e şartı 2026-09-23): kullanıcının şikâyet ettiği
+  // seri "fikstür maliyeti" gerekçesiyle L1'de kalamaz. Ölçüldü: `createManifest`
+  // yalnız VAR OLAN bir iş emri ister (anlık görüntüyü kendi hesaplar) ⇒ fikstür
+  // tek satır; "top zinciri gerekir" varsayımı YANLIŞTI.
+  manifest: {
+    not: "WorkOrderService.createManifest: yalnız var olan bir iş emri ister (anlık görüntü hesaplanır).",
+    yarat: async (damga) => {
+      const wo = await prisma.workOrder.create({
+        data: { workOrderNumber: `${damga}-E3-${Date.now().toString(36).slice(-4)}`.slice(0, 32) },
+        select: { id: true },
+      });
+      manifestWorkOrders.push(wo.id);
+      const r = await new WorkOrderService().createManifest(wo.id);
+      const d = r.data as { id?: string; manifestNo?: string } | null;
+      return d?.id && d.manifestNo ? { id: d.id, kod: d.manifestNo } : null;
+    },
+    sil: async (id) => { await prisma.manifest.deleteMany({ where: { id } }); },
+  },
   goodsReceipt: { not: "GoodsReceipt: tedarikçi + kalem + (kumaşta) top zinciri ister." },
   purchaseOrder: { not: "PurchaseOrder: tedarikçi + kalem + birim fiyat zinciri ister." },
   warehouseTransfer: { not: "WarehouseTransfer: iki depo + taşınacak GERÇEK stok ister." },
@@ -276,9 +332,20 @@ async function main(): Promise<void> {
   // ⚠️ YÜKLEM BOŞLUĞA DAYANIKLI: çağrı biçimlendirici yüzünden satıra bölünebiliyor
   // (`nextSeriesNo(\n  "manifest",`) ve düz `includes` onu GÖREMİYORDU — ölçüldü,
   // bu kontrol ilk koşumda `manifest`i yanlışlıkla "üreteçsiz" saydı.
-  const uretecsizBeyan = beyanliHazir.filter(
-    (e) => !new RegExp(`nextSeriesNo\\(\\s*"${e.key}"`).test(kaynakMetni),
-  );
+  // ⚠️ İKİ YOL, ÇÜNKÜ İKİ ÜRETİM BİÇİMİ VAR: doğrudan çağıran seri anahtarıyla
+  // aranır; ORTAK bir üreteçten (ör. `BaseService.nextAutoCode`, on master veri
+  // serisi) doğan seri anahtarı DEĞİŞKEN olarak geçirir ve metinde hiç görünmez —
+  // o yüzden beyan üretecin YERİNİ söyler (`scopedCounter.uretec`) ve kapı o
+  // dosyanın C0 yolundan geçtiğini ölçer. Beyan yoksa anahtar aranır.
+  const uretecsizBeyan = beyanliHazir.filter((e) => {
+    const yol = e.scopedCounter?.uretec;
+    if (yol) {
+      const tam = join(__dirname, "..", "src", yol);
+      if (!existsSync(tam)) return true;
+      return !/nextSeriesNo\s*\(/.test(readFileSync(tam, "utf-8"));
+    }
+    return !new RegExp(`nextSeriesNo\\(\\s*"${e.key}"`).test(kaynakMetni);
+  });
   check("L0 körlük zemini: kaynak tarandı ve beyanlı seri var",
     kaynakMetni.length > 100_000 && beyanliHazir.length > 0, `${beyanliHazir.length} beyanlı seri`);
   check("L0 ⭐ `sayacı hazır` diyen her serinin üreteci C0 yolundan (`nextSeriesNo`) geçiyor",
@@ -339,6 +406,11 @@ async function main(): Promise<void> {
     }
   } finally {
     for (const t of temizlik.reverse()) await t();
+    // ⚠️ FK SIRASI: manifest satırları silindikten SONRA iş emirleri.
+    if (manifestWorkOrders.length > 0) {
+      await prisma.manifest.deleteMany({ where: { workOrderId: { in: manifestWorkOrders } } });
+      await prisma.workOrder.deleteMany({ where: { id: { in: manifestWorkOrders } } });
+    }
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
