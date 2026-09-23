@@ -11973,3 +11973,20 @@ ifadesiydi, o sıra da korundu.
 - Sonda: önce 8×403, sonra 0 finans isteği; sekmeler "Modül kapalı" gösteriyor.
 
 **Genel ders.** Yönlendirme yapan bir kapı kararını "şu an nerede olduğundan" değil "neyi koruduğundan" türetir. Yoksa kendi yönlendirmesinin geçiş çiziminde kendini açar.
+
+## 2026-09-23 — Çeki listesi numarası BASILAN KÂĞIDA bağlandı [ÇEKİRDEK]
+
+**Karar (kullanıcı):** "Çeki listesi numarası basılsın; küçük yaz, bir köşeye koy." Kâğıt: Paketleme / Çuvallar → "Çeki Listesi" (seçilen çuvalların saha arama kâğıdı).
+
+**Durum (ölçüldü).** Panelde "çeki" adlı dört kâğıt var: çuval çeki listesi, sevk irsaliyesinin çeki bölümü, fason çekisi, kartela çekisi. Son üçü kendi numarasını (SV/FS/KS) zaten basıyor. Çuval çeki listesi hiçbir kayda bağlı değildi ve numarasızdı. CL serisi yalnız hiçbir istemcinin çağırmadığı `POST /work-orders/:id/manifest` ucunda doğuyordu; fabrika kopyasında o ucun hiç satırı yoktu (tüm satırlar 2026-09-23 test turları).
+
+**Tasarım.**
+- `Manifest` yalnız eklemeyle genişledi: `sourceKind` (WORK_ORDER · SACK_SELECTION), `contentKey` (UNIQUE), `clientToken` (UNIQUE), `workOrderId` nullable; CHECK `manifests_source_shape`.
+- Basım ucu canlı dökümün anahtarını hesaplar. Aynı anahtar varsa AYNI satırı döndürür (numara + anlık görüntü), yoksa yeni CL doğar.
+- Yarış (P2002) kazananın satırını okur; yeni advisory ad alanı gerekmedi.
+
+**Sektör davranışı.** Toplama listesi (WMS/SAP picking list) bir işin anlık görüntüsüdür. Aynı içerik → aynı numara, farklı içerik → yeni numara; eski kâğıt iptal edilmez. İrsaliyeden farkı bilinçlidir: irsaliyenin numarası yasal kimliktir ve sürümlenir, çeki listesininki değildir. En kötü durum "aynı numara, farklı içerik iki kâğıt sahada"dır; tasarım bunu imkânsız kılar.
+
+**Geriye dönük.** Geçmişte numarasız basılmış listeler için bir şey değişmez. Aynı çuvallar bugün yeniden basılırsa bu, o içeriğin ilk KAYITLI basımıdır ve numara o an doğar; kâğıdın önceden basıldığını bilemeyiz, bilir gibi yapmayız.
+
+**Yan düzeltme.** Audit sözlüğünde `manifestNo` = "İrsaliye no" (fason tablolarındaki anlam) olduğundan CL audit satırları yanlış etiketlenirdi; manifest audit'i artık `packingListNo` ("Çeki listesi no") anahtarıyla yazılır.

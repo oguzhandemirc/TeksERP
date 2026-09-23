@@ -410,6 +410,9 @@ export const ENUM_LABELS: Record<string, string> = {
   REPRINTED: "Yeniden Basıldı",
   VOIDED: "İptal",
   SUPERSEDED: "Eski Versiyon",
+  // ManifestSourceKind — çeki listesinin kaynağı
+  WORK_ORDER: "İş emri",
+  SACK_SELECTION: "Çuval seçimi",
   // ScanType
   ARRIVAL: "Varış",
   DEPARTURE: "Ayrılış",

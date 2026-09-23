@@ -6117,17 +6117,31 @@ model KartelaReceiptItem {
 // 11. MANIFEST (Çeki Listesi) — 3.5
 // =============================================================================
 
+/// Çeki listesinin KAYNAĞI. WORK_ORDER: iş emrinin top dökümü (eski uç). SACK_SELECTION: Paketleme /
+/// Çuvallar → "Çeki Listesi" — seçilen çuvalların saha arama kâğıdı; numara ilk basımda doğar.
+enum ManifestSourceKind {
+  WORK_ORDER
+  SACK_SELECTION
+}
+
 model Manifest {
-  id          String   @id @default(uuid()) @db.Uuid
-  manifestNo  String   @unique @db.VarChar(64)
-  workOrderId String   @db.Uuid
-  printedAt   DateTime @default(now()) @db.Timestamptz
-  printedById String?  @db.Uuid
-  snapshot    Json // Yazdırma anındaki roll listesi (immutable belge)
+  id          String             @id @default(uuid()) @db.Uuid
+  manifestNo  String             @unique @db.VarChar(64)
+  sourceKind  ManifestSourceKind @default(WORK_ORDER)
+  /// Yalnız WORK_ORDER'da dolu (CHECK `manifests_source_shape`).
+  workOrderId String?            @db.Uuid
+  /// Yalnız SACK_SELECTION'da dolu: basılan içeriğin sha256'sı. Aynı içerik → aynı CL (yeniden basım);
+  /// farklı içerik → yeni CL, eski liste tarihte kalır. NULL'lar tekilliğe girmez.
+  contentKey  String?            @unique @db.VarChar(64)
+  /// İdempotency — kayıt yaratan uç (`clientToken @unique` sözleşmesi).
+  clientToken String?            @unique @db.Uuid
+  printedAt   DateTime           @default(now()) @db.Timestamptz
+  printedById String?            @db.Uuid
+  snapshot    Json // Yazdırma anındaki içerik (immutable belge) — basılan kâğıt bundan çizilir
   notes       String?
 
   // Relations
-  workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
+  workOrder WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
   printedBy User?     @relation("ManifestPrintedBy", fields: [printedById], references: [id])
 
   createdAt DateTime @default(now()) @db.Timestamptz

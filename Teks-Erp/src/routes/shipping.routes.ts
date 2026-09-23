@@ -524,6 +524,34 @@ router.get("/sack-search/customers", verifyToken, READ, controller.listSackCusto
 router.post("/sack-search/pick-list", verifyToken, READ, controller.getPickList);
 /**
  * @openapi
+ * /api/shipping/sack-search/pick-list/print:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Çeki listesi basımı — CL numarası ilk basımda doğar
+ *     description: >
+ *       Seçilen çuvalların çeki listesini KAYDA bağlar. İçerik (çuval kümesi + dökümü) daha önce
+ *       basılmışsa AYNI CL numarası ve AYNI anlık görüntü döner (200, reused=true); değilse yeni CL
+ *       doğar (201). Kâğıt dönen `snapshot`tan çizilir. Salt-okunur listeyle aynı yetki: basmak bir
+ *       okuma eylemidir, kayıt onun doğum belgesidir.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sackIds, clientToken]
+ *             properties:
+ *               sackIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 200 }
+ *               clientToken: { type: string, format: uuid }
+ *     responses:
+ *       201: { description: "{ id, manifestNo, printedAt, snapshot, reused:false }" }
+ *       200: { description: "Aynı içerik daha önce basılmış — { ..., reused:true }" }
+ *       400: { description: "Boş seçim / 200 üstü / geçersiz gövde" }
+ */
+router.post("/sack-search/pick-list/print", verifyToken, READ, controller.printPickList);
+/**
+ * @openapi
  * /api/shipping/sack-search/content-dump:
  *   post:
  *     tags: [Shipping]

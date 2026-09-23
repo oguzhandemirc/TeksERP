@@ -992,6 +992,18 @@ export class ShippingController {
     } catch (e) { next(e); }
   };
 
+  /** Çeki listesi basımı — CL numarası ilk basımda doğar; aynı içerik aynı numara. */
+  printPickList = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = z
+        .object({ sackIds: z.array(z.string().uuid()).min(1).max(200), clientToken: z.string().uuid() })
+        .strict()
+        .parse(req.body);
+      const result = await sackSearchService.printPickList(body.sackIds, req.user?.userId, body.clientToken);
+      res.status(result.data?.reused ? 200 : 201).json(result);
+    } catch (e) { next(e); }
+  };
+
   /** İçerik dökümü — çeki listesinin GRUPLU özeti değil, TOP BAZLI döküm. */
   getContentDump = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
