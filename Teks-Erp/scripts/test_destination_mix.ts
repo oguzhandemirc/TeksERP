@@ -11,7 +11,10 @@
 // §6 karşılaştırma dönemi ayrı kovalar.
 // NEGATİF SONDALAR (2026-09-23, geri alındı → 17/0): ① doğrudan sevk yurtiçine katıldı → §1b/§1c ❌ ·
 //   ② fiyatsız satır 0 fiyatlı sayıldı → §3c ❌ · ③ kur yoksa 1 sayıldı → §3b ❌ · ④ ülke katlanmadan gruplandı
-//   → §4a ❌ · ⑤ zincir boş sipariş yurtiçine düştü → §5b ❌ · ⑥ iade sütunu 0 → §2c ❌
+//   → §4a ❌ · ⑤ zincir boş sipariş yurtiçine düştü → §5b ❌ · ⑥ iade sütunu 0 → §2c ❌ ·
+//   ⑦ `sa."clearedAt" IS NULL` silindi → §3e ❌ (+§3a) · ⑧ ham SQL'e `ol."cancelledAt" IS NULL` eklendi → §3f ❌
+// §3e damgalı (sevkiyat düzenlemesinde bırakılmış) tahsis tutara GİRMEZ · §3f sonradan İPTAL edilen
+//    kalemin sevk edilmiş tutarı GİRER (GEÇMİŞ sorusu — `order-line-scope.helper` "geçmiş süzmez").
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Pencere 2098-05 (karşılaştırma 2098-04).
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
@@ -75,6 +78,12 @@ function bucket(r: DestinationMixReport, b: string) {
   return r.buckets.find((x) => x.bucket === b)!;
 }
 
+/** İptal edilmiş kalem — sevk edilmiş tutarı geçmişte durur. */
+async function iptalEt(lineId: string): Promise<void> {
+  const admin = await ensureTestAdmin();
+  await prisma.orderLine.update({ where: { id: lineId }, data: { cancelledAt: new Date("2098-04-20T09:00:00.000Z"), cancelledById: admin.id, cancelReason: "test" } });
+}
+
 async function kur(): Promise<{ cE: string; cE2: string; cD: string; cN: string }> {
   item = await prisma.item.create({ data: { code: `${TAG}-I`, name: `${TAG} KUMAŞ`, itemType: "FABRIC" }, select: { id: true } });
   const cE = await cari("CE", "EXPORT", " almanya ");
@@ -90,6 +99,11 @@ async function kur(): Promise<{ cE: string; cE2: string; cD: string; cN: string 
   const lDu = await satir(cD, "TRY", 100, null);
   // Yurtdışı: cE 100 m (90 sevkte + 10 iade), 10 kg tartılı, USD kurlu gün
   const sE = await sevk(cE, "EXPORT", D1, 90, 10, [[lE, 100]]);
+  // §3e — aynı çuvalda DAMGALI (bırakılmış) tahsis: USD 7 × 50 tutara girmemeli
+  const lX = await satir(cE, "USD", 50, 7, { shippedQty: 50 }); // açık değil — §5a backlog etkilenmez
+  const admin0 = await ensureTestAdmin();
+  const kE = ids.sacks[ids.sacks.length - 1]!;
+  await prisma.sackAllocation.create({ data: { sackId: kE, orderLineId: lX, qty: 50, clearedAt: D1, clearedShipmentId: sE, clearedById: admin0.id } });
   const rr = await prisma.roll.create({ data: { barcode: `${TAG}-RR`, itemId: item.id, initialQty: 10, currentQty: 10, status: "WAREHOUSE" }, select: { id: true } });
   ids.rolls.push(rr.id);
   const admin = await ensureTestAdmin();
@@ -100,7 +114,10 @@ async function kur(): Promise<{ cE: string; cE2: string; cD: string; cN: string 
   // Yurtiçi: cD 50 m tartısız, 30 fiyatlı + 20 fiyatsız tahsis
   await sevk(cD, "DOMESTIC", D1, 50, null, [[lDp, 30], [lDu, 20]]);
   // Karşılaştırma dönemi: yurtiçi 25 m
-  await sevk(cD, "DOMESTIC", new Date("2098-04-15T09:00:00.000Z"), 25, null, []);
+  // §3f — tahsisli kalem sevkten SONRA iptal edildi: TRY 10 × 25 = 250 tutarda durur
+  const lC = await satir(cD, "TRY", 25, 10, { shippedQty: 25 });
+  await sevk(cD, "DOMESTIC", new Date("2098-04-15T09:00:00.000Z"), 25, null, [[lC, 25]]);
+  await iptalEt(lC);
   // Doğrudan sevk (yön kaydı yok) — GERÇEK DirectShipment, fasoncu fixture-subcontractor'dan
   const sub = await ensureTestDyeHouse();
   station = await prisma.station.create({ data: { code: `${TAG}-STN`, name: `${TAG} fason`, type: "EXTERNAL" }, select: { id: true } });
@@ -148,6 +165,9 @@ async function main(): Promise<void> {
     check("§3b TL yalnız kurlu gün: 500 × 30 = 15000; kur yok 1 satır", E.money.tlTotal === 15000 && E.money.noRateLineCount === 1, `${E.money.tlTotal}/${E.money.noRateLineCount}`);
     check("§3c yurtiçi fiyatlı 1 / 2 satır; TRY 3000 (fiyatsız 0 sayılmadı)", D.money.pricedLineCount === 1 && D.money.lineCount === 2 && D.money.amounts[0]?.amount === 3000, JSON.stringify(D.money));
     check("§3d doğrudan sevk tutarı kendi kovasında (TRY 1500)", N.money.amounts.find((a) => a.currency === "TRY")?.amount === 1500);
+    check("§3e ⭐ damgalı (bırakılmış) tahsis tutara GİRMEDİ — yurtdışı 2 satır, USD 660", E.money.lineCount === 2 && usd?.amount === 660, `${E.money.lineCount} ${JSON.stringify(usd)}`);
+    const pD = bucket({ ...r, buckets: r.prevBuckets! }, "DOMESTIC");
+    check("§3f ⭐ sevkten sonra iptal edilen kalemin tutarı GEÇMİŞTE durur (TRY 250, 1 satır)", pD.money.lineCount === 1 && pD.money.amounts[0]?.amount === 250, JSON.stringify(pD.money));
     console.log("── §4 ülke ──");
     const de = r.byCountry.filter((c) => c.bucket === "EXPORT" && c.label.trim().toLowerCase() === "almanya");
     check("§4a ' almanya ' ve 'ALMANYA' tek grup, 2 müşteri, 140 m", de.length === 1 && de[0]!.customerCount === 2 && de[0]!.meters === 140, JSON.stringify(de.map((x) => [x.label, x.customerCount, x.meters])));

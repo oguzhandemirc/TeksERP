@@ -36,7 +36,7 @@ export async function collectMoneyRows(range: DateRange): Promise<MoneyRow[]> {
       FROM sack_allocations sa
       JOIN sacks k     ON k.id = sa."sackId"
       JOIN shipments s ON s.id = k."shipmentId"
-      WHERE s.status = 'DISPATCHED' AND s."dispatchedAt" >= ${range.from} AND s."dispatchedAt" <= ${range.to}
+      WHERE sa."clearedAt" IS NULL AND s.status = 'DISPATCHED' AND s."dispatchedAt" >= ${range.from} AND s."dispatchedAt" <= ${range.to}
       UNION ALL
       SELECT 'NONE', ds."customerId", a."orderLineId", a.qty, ${factoryDaySql('ds."shippedAt"')}
       FROM subcontractor_direct_ship_allocations a
@@ -47,6 +47,8 @@ export async function collectMoneyRows(range: DateRange): Promise<MoneyRow[]> {
            al.qty::float AS qty, ol."unitPrice"::float AS "unitPrice",
            CASE WHEN o.currency = 'TRY' THEN 1 ELSE er.rate::float END AS rate
     FROM al
+    -- aktif-kalem-muaf: GEÇMİŞ sorusu — sevk anındaki tahsisin tutarı gerçektir; kalem sonradan
+    -- iptal edilse de sevk edilen metre raporda durur, tutarı da durmalı (metre ↔ tutar aynı küme).
     JOIN order_lines ol ON ol.id = al."orderLineId"
     JOIN orders o       ON o.id = ol."orderId"
     LEFT JOIN exchange_rates er ON er."rateDate" = al.day AND er.currency = o.currency
