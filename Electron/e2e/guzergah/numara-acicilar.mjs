@@ -1,0 +1,205 @@
+// =============================================================================
+// NUMARA KABUL TURU — KAYIT AÇICILAR (kilitli seriler; E2 öncesi TEMEL ölçüm)
+// =============================================================================
+// Her satır: kaydı açma yolu (panel ya da API) · numaranın görüneceği ekran (sayfa + arama) ·
+// belge (varsa) · eski kayıt. Kaynak: panel/servis haritası 2026-09-23 (d3, iki tarama).
+// Yol olmayan seri `olculmedi: "<gerekçe>"` taşır — sürücü "ÖLÇÜLMEDİ" basar, susmaz.
+// Aynı tabloyu paylaşan seriler (fatura ×4 · ödeme ×2 · çek/senet ×4) eski kaydı KENDİ türüyle seçer.
+// =============================================================================
+
+/** @param {{ api: Function, sql: Function, page: any, gitSayfa: Function, ortam: any, tokenAl: () => string, bayrakYaz: Function }} c */
+export function acicilarKur(c) {
+  const { api, sql, page, gitSayfa } = c;
+
+  const ileri = (gun) => new Date(Date.now() + gun * 86_400_000).toISOString().slice(0, 10);
+  const K = () => Date.now().toString(36).slice(-5).toUpperCase();
+  const zorunlu = (r, ne) => { if (r.status >= 300) throw new Error(`${ne}: ${r.status} ${JSON.stringify(r.govde).slice(0, 220)}`); return r.govde?.data; };
+
+  /** Panel listesi: sayfa → (varsa) arama kutusu → değer satırda/ekranda görünüyor mu. */
+  async function listede(sayfa, aramaPh, degerler) {
+    await gitSayfa(sayfa);
+    await page.waitForTimeout(800);
+    const out = {};
+    for (const d of degerler.filter(Boolean)) {
+      if (aramaPh) {
+        const ara = page.getByPlaceholder(aramaPh).filter({ visible: true }).first();
+        if (await ara.count()) { await ara.fill(d); await page.waitForTimeout(1500); }
+      }
+      out[d] = (await page.getByText(d, { exact: true }).filter({ visible: true }).count()) > 0;
+    }
+    return out;
+  }
+  async function belgeHtml(tip, id, numara) {
+    const h = await fetch(`${c.ortam.apiUrl}/api/printed-documents/${tip}/${id}/html`, { headers: { authorization: `Bearer ${c.tokenAl()}` } });
+    const html = await h.text();
+    return { belgeDurum: h.status, belgedeVar: h.status < 300 && html.includes(numara) };
+  }
+  const eskiSec = async (tablo, kolon, kosul = "TRUE", p = []) =>
+    (await sql(`SELECT "${kolon}" v FROM "${tablo}" WHERE "${kolon}" IS NOT NULL AND ${kosul} ORDER BY "createdAt" DESC LIMIT 1`, p))[0]?.v ?? null;
+
+  // ── ortak hazırlık: finans + üretim modülü, cari, kasa ─────────────────────
+  async function modulAc(dur) {
+    if (dur.modulHazir) return;
+    const f = (await api("/api/feature-flags")).govde?.data ?? {};
+    dur.bayrakOnce = { ...(dur.bayrakOnce ?? {}), financeEnabled: f.financeEnabled, productionEnabled: f.productionEnabled };
+    if (!f.financeEnabled || !f.productionEnabled) {
+      const r = await c.bayrakYaz({ financeEnabled: true, productionEnabled: true });
+      if (r.status >= 300) throw new Error(`modül: ${r.status} ${JSON.stringify(r.govde).slice(0, 200)}`);
+    }
+    dur.modulHazir = true;
+  }
+  async function finansCari(dur) {
+    await modulAc(dur);
+    if (dur.finCari) return dur.finCari;
+    const d = zorunlu(await api("/api/customers", { method: "POST", body: JSON.stringify({ name: `TEST-E5F${K()} Finans Cari`, isCustomerRole: true, defaultDestination: "DOMESTIC" }) }), "cari");
+    const cariId = d.cariAccountId ?? (await api(`/api/finance/cari/by-customer/${d.id}`)).govde?.data?.id;
+    dur.finCari = { customerId: d.id, cariId, kod: d.code };
+    return dur.finCari;
+  }
+  async function kasa(dur) {
+    await modulAc(dur);
+    if (dur.kasa) return dur.kasa;
+    const d = zorunlu(await api("/api/finance/cash-boxes", { method: "POST", body: JSON.stringify({ name: `TEST-E5 Kasa ${K()}` }) }), "kasa");
+    dur.kasa = { id: d.id, kod: d.code };
+    return dur.kasa;
+  }
+
+  // ── faturalar (Invoice.docNo · tür ile ayrılır) ────────────────────────────
+  const fatura = (tip, liste) => ({
+    tablo: { tablo: "invoices", kolon: "docNo" }, okutulur: false,
+    hazirla: finansCari,
+    eskiKayit: () => eskiSec("invoices", "docNo", `type=$1`, [tip]),
+    ac: async (dur) => {
+      const cr = await finansCari(dur);
+      const d = zorunlu(await api("/api/finance/invoices", { method: "POST", body: JSON.stringify({ type: tip, customerId: cr.customerId, lines: [{ description: "E5 kabul", qty: "1", unit: "ADET", unitPrice: "10" }], clientToken: crypto.randomUUID() }) }), "fatura");
+      // Belge ONAYDA donar — onaylanmadan belge ucu 409 (taslak).
+      const o = await api(`/api/finance/invoices/${d.id}/confirm`, { method: "POST", body: "{}" });
+      return { id: d.id, numara: d.docNo, onay: o.status };
+    },
+    ekran: (dur, k, eski) => listede(liste, /Belge no \/ cari ara/, [k.numara, eski]),
+    belge: (dur, k) => belgeHtml("INVOICE_INTERNAL", k.id, k.numara),
+  });
+
+  // ── tahsilat / ödeme (Payment.docNo · yön ile ayrılır) ─────────────────────
+  const odeme = (yon) => ({
+    tablo: { tablo: "payments", kolon: "docNo" }, okutulur: false,
+    hazirla: async (dur) => { await finansCari(dur); await kasa(dur); },
+    eskiKayit: () => eskiSec("payments", "docNo", `direction=$1`, [yon]),
+    ac: async (dur) => {
+      const d = zorunlu(await api("/api/finance/payments", { method: "POST", body: JSON.stringify({ direction: yon, method: "CASH", customerId: dur.finCari.customerId, amount: "5", cashBoxId: dur.kasa.id, clientToken: crypto.randomUUID() }) }), "ödeme");
+      return { id: d.id, numara: d.docNo };
+    },
+    ekran: (dur, k, eski) => listede("Tahsilat / Ödeme", /Belge no \/ referans ara/, [k.numara, eski]),
+    belge: (dur, k) => belgeHtml("PAYMENT_RECEIPT", k.id, k.numara),
+  });
+
+  // ── çek / senet (Cheque.docNo · kind + docType ile ayrılır) ────────────────
+  const cek = (kind, docType) => ({
+    tablo: { tablo: "cheques", kolon: "docNo" }, okutulur: false,
+    hazirla: finansCari,
+    eskiKayit: () => eskiSec("cheques", "docNo", `kind=$1 AND "docType"=$2`, [kind, docType]),
+    ac: async (dur) => {
+      const d = zorunlu(await api("/api/finance/cheques", { method: "POST", body: JSON.stringify({ kind, docType, customerId: dur.finCari.customerId, amount: "7", dueDate: ileri(30), clientToken: crypto.randomUUID() }) }), "çek");
+      return { id: d.id, numara: d.docNo };
+    },
+    ekran: (dur, k, eski) => listede("Çek / Senet", /Belge no \/ seri no/, [k.numara, eski]),
+    belge: null, // kendi belgesi yok; numara bordro belgesinde basılır (chequeDeliveryNote satırı ölçer)
+  });
+
+  /** Master veri kodu: POST {gövde} → `code`; sayfa listesi aranır. */
+  const kod = ({ tablo, uc, govde, sayfa, arama, hazirla, belge }) => ({
+    tablo: { tablo, kolon: "code" }, okutulur: false,
+    hazirla: hazirla ?? (async () => {}),
+    eskiKayit: () => eskiSec(tablo, "code"),
+    ac: async (dur) => { const d = zorunlu(await api(uc, { method: "POST", body: JSON.stringify(typeof govde === "function" ? await govde(dur) : govde) }), uc); return { id: d.id, numara: d.code }; },
+    ekran: (dur, k, eski) => listede(sayfa, arama, [k.numara, eski]),
+    belge: belge ?? null,
+  });
+
+  return {
+    invoiceSales: fatura("SALES", "Faturalar"),
+    invoicePurchase: fatura("PURCHASE", "Faturalar"),
+    invoiceSalesReturn: fatura("SALES_RETURN", "Faturalar"),
+    invoicePurchaseReturn: fatura("PURCHASE_RETURN", "Faturalar"),
+    paymentIn: odeme("IN"),
+    paymentOut: odeme("OUT"),
+    cashTransaction: {
+      tablo: { tablo: "cash_transactions", kolon: "docNo" }, okutulur: false,
+      hazirla: kasa,
+      eskiKayit: () => eskiSec("cash_transactions", "docNo"),
+      ac: async (dur) => { const d = zorunlu(await api("/api/finance/cash-transactions", { method: "POST", body: JSON.stringify({ kind: "INCOME", cashBoxId: dur.kasa.id, amount: "3", clientToken: crypto.randomUUID() }) }), "kasa fişi"); return { id: d.id, numara: d.docNo }; },
+      ekran: (dur, k, eski) => listede("Kasa Hareketleri", /Belge no \/ kategori/, [k.numara, eski]),
+      belge: null, // PrintedDocType'ta kasa fişi yok
+    },
+    chequeReceived: cek("RECEIVED", "CHEQUE"),
+    chequeIssued: cek("ISSUED", "CHEQUE"),
+    noteReceived: cek("RECEIVED", "PROMISSORY_NOTE"),
+    noteIssued: cek("ISSUED", "PROMISSORY_NOTE"),
+    chequeDeliveryNote: {
+      tablo: { tablo: "cheque_delivery_notes", kolon: "docNo" }, okutulur: false,
+      hazirla: finansCari,
+      eskiKayit: () => eskiSec("cheque_delivery_notes", "docNo"),
+      ac: async (dur) => {
+        const ck = zorunlu(await api("/api/finance/cheques", { method: "POST", body: JSON.stringify({ kind: "RECEIVED", docType: "CHEQUE", customerId: dur.finCari.customerId, amount: "9", dueDate: ileri(40), clientToken: crypto.randomUUID() }) }), "bordro çeki");
+        const d = zorunlu(await api("/api/finance/cheque-delivery-notes", { method: "POST", body: JSON.stringify({ chequeIds: [ck.id] }) }), "bordro");
+        return { id: d.id, numara: d.docNo };
+      },
+      // Liste yalnız "Çek / Senet → Bordrolar" diyaloğunda — belge ucu birincil ölçüm.
+      ekran: async () => ({ ekranListesiDiyalogda: true }),
+      belge: (dur, k) => belgeHtml("CHEQUE_DELIVERY_NOTE", k.id, k.numara),
+    },
+    reconciliationLetter: {
+      tablo: { tablo: "reconciliation_letters", kolon: "docNo" }, okutulur: false,
+      hazirla: finansCari,
+      eskiKayit: () => eskiSec("reconciliation_letters", "docNo"),
+      ac: async (dur) => { const d = zorunlu(await api("/api/finance/reconciliation-letters", { method: "POST", body: JSON.stringify({ cariId: dur.finCari.cariId }) }), "mektup"); return { id: d.id, numara: d.docNo }; },
+      ekran: async () => ({ ekranListesiDiyalogda: true }), // Cari Hesaplar → Ekstre → Mektuplar
+      belge: (dur, k) => belgeHtml("RECONCILIATION_LETTER", k.id, k.numara),
+    },
+
+    // ── master veri kodları ──────────────────────────────────────────────────
+    customer: kod({ tablo: "customers", uc: "/api/customers", govde: () => ({ name: `TEST-E5M${K()} Cari`, isCustomerRole: true, defaultDestination: "DOMESTIC" }), sayfa: "Cariler", arama: /Ad \/ kod \/ vergi no ara/, hazirla: modulAc }),
+    // K20 adayı: zod `code` zorunlu, panel kod göndermiyor → otomatik FSN yolu HTTP'den ölçülür (400 beklenir).
+    subcontractor: kod({ tablo: "subcontractors", uc: "/api/subcontractors", govde: () => ({ name: `TEST-E5 Fason ${K()}` }), sayfa: "Fason Firmalar", arama: /Ad veya kod ara/ }),
+    subcontractorCategory: kod({ tablo: "subcontractor_categories", uc: "/api/subcontractor-categories", govde: () => ({ name: `TEST-E5 Kategori ${K()}` }), sayfa: "Fason Kategorileri", arama: /Ad ara/ }),
+    fabricProperty: kod({
+      tablo: "fabric_properties", uc: "/api/fabric-properties", sayfa: "Kumaş Özellikleri", arama: null,
+      govde: async (dur) => {
+        if (!dur.ozellikIstasyonu) dur.ozellikIstasyonu = zorunlu(await api("/api/stations", { method: "POST", body: JSON.stringify({ name: `TEST-E5 Özellik İst ${K()}`, type: "INTERNAL", appliesProperty: true }) }), "istasyon").id;
+        return { name: `TEST-E5 Özellik ${K()}`, stationIds: [dur.ozellikIstasyonu] };
+      },
+    }),
+    item: kod({ tablo: "items", uc: "/api/items", govde: () => ({ name: `TEST-E5 Ürün ${K()}`, itemType: "FABRIC" }), sayfa: "Ürünler", arama: /Kod veya ad ara/ }),
+    color: kod({ tablo: "colors", uc: "/api/colors", govde: () => ({ name: `TEST-E5 Renk ${K()}` }), sayfa: "Renkler", arama: /Kod veya ad ara/ }),
+    station: kod({ tablo: "stations", uc: "/api/stations", govde: () => ({ name: `TEST-E5 İstasyon ${K()}`, type: "INTERNAL" }), sayfa: "Üretim İstasyonları", arama: /İstasyon \/ makine ara/ }),
+    machine: kod({
+      tablo: "machines", uc: "/api/machines", sayfa: "Makineler", arama: /Kod veya ad ara/,
+      govde: async (dur) => {
+        if (!dur.makineIstasyonu) dur.makineIstasyonu = zorunlu(await api("/api/stations", { method: "POST", body: JSON.stringify({ name: `TEST-E5 Makine İst ${K()}`, type: "INTERNAL" }) }), "istasyon").id;
+        return { stationId: dur.makineIstasyonu, name: `TEST-E5 Makine ${K()}` };
+      },
+    }),
+    cashAccount: kod({ tablo: "cash_boxes", uc: "/api/finance/cash-boxes", govde: () => ({ name: `TEST-E5 Kasa ${K()}` }), sayfa: "Kasa & Banka", arama: null, hazirla: modulAc }),
+    bankAccount: kod({ tablo: "bank_accounts", uc: "/api/finance/bank-accounts", govde: () => ({ name: `TEST-E5 Banka ${K()}` }), sayfa: "Kasa & Banka", arama: null, hazirla: modulAc }),
+    returnReason: kod({ tablo: "return_reasons", uc: "/api/return-reasons", govde: () => ({ name: `TEST-E5 İade Nedeni ${K()}` }), sayfa: "İade Nedenleri", arama: /Kod veya ad ara/ }),
+    productRecipe: kod({
+      tablo: "product_recipes", uc: "/api/product-recipes", sayfa: "İş Emri Şablonları", arama: /Şablon adı veya kodu ara/, hazirla: modulAc,
+      govde: async () => { const [i] = await sql(`SELECT id FROM items WHERE "isActive" AND "itemType"='FABRIC' ORDER BY "createdAt" DESC LIMIT 1`); return { name: `TEST-E5 Şablon ${K()}`, itemId: i?.id }; },
+    }),
+    defectType: kod({ tablo: "defect_types", uc: "/api/defect-types", govde: () => ({ name: `TEST-E5 Hata ${K()}` }), sayfa: "Hata Tipleri", arama: /Kod veya ad ara/ }),
+    warehouse: kod({ tablo: "warehouses", uc: "/api/warehouses", govde: () => ({ name: `TEST-E5 Depo ${K()}` }), sayfa: "Depolar", arama: /Kod veya depo adı ara/ }),
+    // Rota listesi arka uçta YALNIZ ad arar (kodla aranamaz) → arama kutusuna ADI yaz, kodu ekranda ara.
+    routeTemplate: {
+      tablo: { tablo: "routes", kolon: "code" }, okutulur: false, hazirla: modulAc,
+      eskiKayit: () => eskiSec("routes", "code"),
+      ac: async () => { const ad = `TEST-E5 Rota ${K()}`; const d = zorunlu(await api("/api/routes", { method: "POST", body: JSON.stringify({ name: ad }) }), "rota"); return { id: d.id, numara: d.code, ad }; },
+      ekran: async (dur, k) => {
+        await gitSayfa("Üretim Rotaları"); await page.waitForTimeout(800);
+        const ara = page.getByPlaceholder(/Rota adı ara/).filter({ visible: true }).first();
+        if (await ara.count()) { await ara.fill(k.ad); await page.waitForTimeout(1500); }
+        return { [k.numara]: (await page.getByText(k.numara, { exact: true }).filter({ visible: true }).count()) > 0 };
+      },
+      belge: null,
+    },
+  };
+}
