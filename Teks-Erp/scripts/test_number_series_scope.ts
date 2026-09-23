@@ -138,9 +138,12 @@ async function main(): Promise<void> {
       geriDonus === "CV2209260004", geriDonus);
 
     // ── §4 `scopedCounter` beyanı olmayan seri düzenlenemez ────────────────
-    // `order` (SIP) bugün beyansız: çağrı yeri zengin biçime geçirilmedi.
+    // ⚠️ SERİ DEĞİŞTİ (2026-09-23): `order` E2 üretim diliminde AÇILDI. Bu iddia
+    // "beyansız seri" gerektirdiği için hedef, açılma sırası EN SONDA olan
+    // finans ailesine çekildi (`invoiceSales`) — dilim geldiğinde burası yine
+    // güncellenecek ve bu YAPISAL: kapı, kendisi de değişen bir dünyayı ölçüyor.
     const reddedilmeli = await dene(() =>
-      updateSeriesFormat("order", { prefix: "SIP", dateSegment: "DDMMYY", digits: 4, separator: "" }),
+      updateSeriesFormat("invoiceSales", { prefix: "SF", dateSegment: "DDMMYY", digits: 4, separator: "" }),
     );
     const kod = (e: unknown): string | undefined =>
       (e as { details?: { code?: string } } | null)?.details?.code;
