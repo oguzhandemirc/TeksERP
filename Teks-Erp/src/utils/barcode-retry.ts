@@ -9,6 +9,7 @@
 
 import { Prisma } from "@prisma/client";
 import { AppError } from "./app-error";
+import { p2002TargetParts } from "./p2002";
 
 const MAX_ATTEMPTS = 5;
 
@@ -19,8 +20,7 @@ const MAX_ATTEMPTS = 5;
  * koşumda tam bunu üretti). Hedef Prisma'da dizi (`["code"]`) ya da index adı string'i olabilir.
  */
 export function p2002TargetsCode(err: Prisma.PrismaClientKnownRequestError, codeField = "code"): boolean {
-  const t = (err.meta as { target?: unknown } | undefined)?.target;
-  const parts = Array.isArray(t) ? t.map(String) : typeof t === "string" ? [t] : [];
+  const parts = p2002TargetParts(err);
   if (parts.length === 0) return true; // hedef bilinmiyor → geriye uyumlu: retry
   return parts.some((p) => p === codeField || p.toLowerCase().includes(`_${codeField.toLowerCase()}_`) || p.toLowerCase().endsWith(`_${codeField.toLowerCase()}_key`));
 }

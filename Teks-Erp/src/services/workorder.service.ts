@@ -146,6 +146,7 @@ import {
   readQualityGradeRequiredEnabled,
 } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { nextManifestNo } from "./helpers/manifest-number.helper";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { normalizeScanCode } from "../utils/code-format";
 import { formatSeriesCode, nextSeriesNo, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
@@ -7037,17 +7038,7 @@ export class WorkOrderService {
       // kodlara bakar (`formatChangedAt`); tarih segmenti düşünce eski rejimin
       // kodları sayaca girerdi. `nextSeriesNo` kapsamı ve çakışma atlamasını TEK
       // YERDE tutar — `withBarcodeRetry` sarması korunur (yarışta taze okuma).
-      const manifestNo = await nextSeriesNo(
-        "manifest",
-        async (prefix) =>
-          prisma.manifest
-            .findMany({
-              where: { manifestNo: { gte: prefix, startsWith: prefix } },
-              select: { manifestNo: true, createdAt: true },
-            })
-            .then((rows) => rows.map((r) => ({ code: r.manifestNo, createdAt: r.createdAt }))),
-        now,
-      );
+      const manifestNo = await nextManifestNo(now);
 
       return prisma.manifest.create({
         data: {
@@ -7065,7 +7056,7 @@ export class WorkOrderService {
       action: "CREATE",
       tableName: "MANIFEST",
       recordId: manifest.id,
-      newData: { manifestNo: manifest.manifestNo, workOrderId },
+      newData: { packingListNo: manifest.manifestNo, workOrderId },
     });
 
     return {

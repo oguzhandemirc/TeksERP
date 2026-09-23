@@ -1,9 +1,8 @@
 // =============================================================================
 // YURTİÇİ/YURTDIŞI SATIŞ — SİPARİŞ TARAFI: açık sipariş (backlog) + termin (R2, 2026-09-23)
 // =============================================================================
-// Sevk öncesinde sevkiyat yoktur ⇒ yön siparişin şube → cari ZİNCİRİNDEN (bugünkü kart,
-// `_destination.ts` ile aynı COALESCE) okunur; zincir boşsa "UNSET" (yön belirsiz) —
-// yurtiçi uydurulmaz. Karşılanma yalnız MT satırlarda ölçülür (`order-status.helper`);
+// Sevk öncesinde sevkiyat yoktur ⇒ yön siparişin DOĞUŞTA DONMUŞ yönünden (`Order.destination`,
+// `_destination.ts`) okunur; NULL ise "UNSET" (yön belirsiz) — yurtiçi uydurulmaz. Karşılanma yalnız MT satırlarda ölçülür (`order-status.helper`);
 // KG/ADET satırlar açık miktara GİRMEZ, sayıları ayrıca döner.
 // =============================================================================
 import prisma from "../../lib/prisma";

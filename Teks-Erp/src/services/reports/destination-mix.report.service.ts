@@ -8,7 +8,7 @@
 //   · kg         → `_shipped.collectShippedWeight` (brüt, tartısız çuval "ölçülmedi")
 //   · tutar      → `_destination-mix-money` (tahsis × satır fiyatı; kur yalnız kayıtlıysa)
 //   · iade       → `roll_returns` (sevk dönemindeki sevkiyatlardan; brüt DÜŞÜLMEZ, ayrı sütun)
-//   · backlog/termin → `_destination-mix-orders` (siparişin BUGÜNKÜ şube → cari zinciri)
+//   · backlog/termin → `_destination-mix-orders` (siparişin açılışta donmuş yönü)
 // Kova: DOMESTIC · EXPORT · NONE (doğrudan sevk, yön kaydı yok) — sipariş tarafında UNSET.
 // =============================================================================
 import prisma from "../../lib/prisma";

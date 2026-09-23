@@ -293,6 +293,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   ROLL_WAREHOUSE_BACKFILL: "Top depo bağı geriye dönük dolduruldu (betik)",
   TAMBUR_UNDO_CANCEL_MARKER_BACKFILL: "Tambur geri alma iptal işareti dolduruldu (betik)",
   CASH_LEDGER_PAYMENT_BACKFILL: "Kasa defteri geçmiş satırları dolduruldu (betik)",
+  ORDER_DESTINATION_BACKFILL: "Sipariş yönü geriye dönük dolduruldu (betik)",
 
   // ── SYSTEM · servis keşfi (kurulum kimliği) ──
   INSTALLATION_ID_CREATED: "Kurulum kimliği oluşturuldu",
@@ -410,6 +411,9 @@ export const ENUM_LABELS: Record<string, string> = {
   REPRINTED: "Yeniden Basıldı",
   VOIDED: "İptal",
   SUPERSEDED: "Eski Versiyon",
+  // ManifestSourceKind — çeki listesinin kaynağı
+  WORK_ORDER: "İş emri",
+  SACK_SELECTION: "Çuval seçimi",
   // ScanType
   ARRIVAL: "Varış",
   DEPARTURE: "Ayrılış",

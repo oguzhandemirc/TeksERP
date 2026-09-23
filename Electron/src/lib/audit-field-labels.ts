@@ -228,6 +228,8 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   exportCode: "İhracat kodu",
   documentNo: "Belge no",
   manifestNo: "İrsaliye no",
+  // Çeki listesi (manifests.manifestNo) audit'te bu anahtarla yazılır — `manifestNo` fason irsaliye no'dur.
+  packingListNo: "Çeki listesi no",
   dispatchNote: "Sevk notu",
   allocationCount: "Tahsis adedi",
   fromShipmentId: "Kaynak sevkiyat",

@@ -11679,6 +11679,8 @@ Faz A biçimi VERİ yapmıştı; Faz B onu okutma tarafında tek kaynağa bağla
 
 ## 2026-09-23 — Raporlarda yurtiçi/yurtdışı ekseni: sevk raporu donmuş yönü, sipariş raporu bugünkü zinciri okur [ÇEKİRDEK]
 
+> **GEÇERSİZ (sipariş kısmı) → 2026-09-23:** sipariş raporları artık siparişin açılışta donmuş yönünü (`Order.destination`) okur; "bugünkü kart zinciri" hükmü kalktı (bkz. "Sipariş yönü DOĞUŞTA donar"). Sevk kısmı geçerli.
+
 **Ölçüm (R0):** altı rapor ucu (order-intake · demand-analysis · order-leadtime · order-cancellation · customer/scorecard · customer/order-profile) yön süzgecini `Customer.defaultDestination`dan okuyordu — cari sonradan değişince geçmiş rapor da değişiyordu; Müşteri Karnesi'nin sevk sütunu da aynı varsayılana göre ayrılıyordu. Fabrika kopyası (09-15): 113 sevkiyatın 113'ü yurtiçi, fiyatlı sipariş satırı 0/492, fatura 0, ülkesi dolu cari 1/29.
 
 **Karar (yönetici oturum, kullanıcı adına):** iki eksen, ikisi de beyanlı (`services/reports/_destination.ts`). SEVK raporları `Shipment.destination` (donmuş) okur; fasondan doğrudan sevkin yön kaydı yok ⇒ yön süzgecinde hiçbir kümede, kırılımda "yön kaydı yok" kovası (sabit DOMESTIC rapora uydurma yön olarak GİREMEZ). SİPARİŞ raporları siparişin şube → cari zincirini okur — `resolveShipmentDestination` ile AYNI zincir, Prisma (`orderDestinationWhere`) ve SQL (`orderDestinationSql`) ikizleri boğaz ikizdir. Bu eksen BUGÜNKÜ karttır: kart değişince geçmiş raporun kümesi de değişir — ekranda adı "Cari/şube yönü (bugünkü)" ve dışa aktarım şerhi bunu söyler. Siparişe donmuş bir yön kolonu eklemek AYRI karardır (kullanıcıya soruldu). Müşteri kökündeki raporlar (sipariş profili) carinin kendi yönünü okur (müşteri satırında şube yok).
@@ -11951,6 +11953,25 @@ görünmesin). İki sonda: çağrı modül düzeyine konunca dosya:satır ile KI
 **Sınıf:** bu, "türetilebilen türetilir" kuralının ikinci yarısıdır — TÜRETMENİN ZAMANI da kuralın
 parçasıdır. Doğru yerden okunan ama YANLIŞ ANDA okunan bir değer, literal kadar bayattır.
 
+## 2026-09-23 — Gümrük/İhracat No yedek değer uydurmaz, yurtiçinde görünmez (K15) [ÇEKİRDEK]
+
+**Bulgu (e2e SK3 görüntüsü):** Sevk Kapısı içerik panelinde YURTİÇİ planlı sevkiyatta "Gümrük/İhracat No
+MUS2309260046 (varsayılan)" yazıyordu. Ölçüm: kolon `Shipment.procedureCode`; panel üç yerde (içerik paneli
+salt-okur ve düzenleme düğmesi, Sevk Kapısı kartı) `procedureCode || branch.code || customer.code` zinciriyle
+yedek değer ÜRETİYORDU ve bu değer hiçbir yere kaydedilmiyordu. "(varsayılan)" ekrandaki bir yalandı. Belge ve
+muhasebe dışa aktarımı uydurmuyordu. Sevkiyat detayı ise yönden bağımsız gösteriyordu.
+
+**Karar (1e):** (a) yurtiçinde satır gizli; bu, carinin ihracat kodu alanıyla (S6) aynı yüklemdir
+(`exportCodeVisible`). (b) Yurtdışında da cari kodu gümrük numarası olarak varsayılmaz; boşsa "girilmedi"
+yazar. Belgede aynı kural geçerlidir: yurtiçinde basılmaz. Boşsa belge satır BASMAZ; "girilmedi" yazısı resmi
+belgeye girmez, yoksa 6 eski yurtdışı belge yeni satır kazanırdı.
+
+**Eski belge etkisi ölçüldü:** donmuş belge VERİYİ dondurur, render baskı anındaki şablonla yapılır. Fabrika
+yedeğinin kopyasında (`tekserp_d3e2e_test`, 139 sevkiyat: 133 yurtiçi · 6 yurtdışı) procedureCode dolu sevkiyat
+0 → bugün basılı hiçbir belgenin çıktısı değişmez. Sevk Kapısı kartındaki şube/cari kodu (saha #21) kimlik
+olarak kalır; gümrük no ayrı ve "Gümrük:" etiketiyle yalnız yurtdışında ve yalnız kayıtlıysa görünür.
+
+
 ## 2026-09-23 — Çakışma kapısı ÖN EK EŞİTLİĞİNE değil SONUCA bakar (K6) + jargon ve alan mesajı (K2·K5) [ÇEKİRDEK]
 
 **Karar (1e):** ön ek karşılaştırması yanlış soruyu soruyordu. Doğru soru: *bu biçimle üretilecek kod
@@ -12056,6 +12077,7 @@ kaldırılınca (a+d) kolu kırmızı: tarihsiz geçişten sonra dünkü kod tan
 nitelik değiştiren (yürürlüğe giren) artık kalıyor ve BİR SONRAKİ koşumda İLGİSİZ bir bölümü
 düşürüyordu.
 
+
 ## 2026-09-23 — E2 depo-ticaret dilimi: altı seri biçim değişimine AÇILDI [ÇEKİRDEK]
 
 **Açılanlar (SAYAC kilidi kalktı):** çeki listesi (`manifest`, CL — kullanıcının şikâyet ettiği seri)
@@ -12085,23 +12107,6 @@ fikstürü ister ve "bir depoda TEK açık sayım" kuralı yüzünden her çağr
 `manifest`/`goodsReceipt`/`purchaseOrder`/`warehouseTransfer` fikstür maliyeti gerekçesiyle "L1'de
 kaldı" olarak BEYANLI ve kapsam tablosunda görünüyor.
 
-## 2026-09-23 — Gümrük/İhracat No yedek değer uydurmaz, yurtiçinde görünmez (K15) [ÇEKİRDEK]
-
-**Bulgu (e2e SK3 görüntüsü):** Sevk Kapısı içerik panelinde YURTİÇİ planlı sevkiyatta "Gümrük/İhracat No
-MUS2309260046 (varsayılan)" yazıyordu. Ölçüm: kolon `Shipment.procedureCode`; panel üç yerde (içerik paneli
-salt-okur ve düzenleme düğmesi, Sevk Kapısı kartı) `procedureCode || branch.code || customer.code` zinciriyle
-yedek değer ÜRETİYORDU ve bu değer hiçbir yere kaydedilmiyordu. "(varsayılan)" ekrandaki bir yalandı. Belge ve
-muhasebe dışa aktarımı uydurmuyordu. Sevkiyat detayı ise yönden bağımsız gösteriyordu.
-
-**Karar (1e):** (a) yurtiçinde satır gizli; bu, carinin ihracat kodu alanıyla (S6) aynı yüklemdir
-(`exportCodeVisible`). (b) Yurtdışında da cari kodu gümrük numarası olarak varsayılmaz; boşsa "girilmedi"
-yazar. Belgede aynı kural geçerlidir: yurtiçinde basılmaz. Boşsa belge satır BASMAZ; "girilmedi" yazısı resmi
-belgeye girmez, yoksa 6 eski yurtdışı belge yeni satır kazanırdı.
-
-**Eski belge etkisi ölçüldü:** donmuş belge VERİYİ dondurur, render baskı anındaki şablonla yapılır. Fabrika
-yedeğinin kopyasında (`tekserp_d3e2e_test`, 139 sevkiyat: 133 yurtiçi · 6 yurtdışı) procedureCode dolu sevkiyat
-0 → bugün basılı hiçbir belgenin çıktısı değişmez. Sevk Kapısı kartındaki şube/cari kodu (saha #21) kimlik
-olarak kalır; gümrük no ayrı ve "Gümrük:" etiketiyle yalnız yurtdışında ve yalnız kayıtlıysa görünür.
 
 ## 2026-09-23 — E2 master veri dilimi: 15 seri daha AÇILDI, çeki listesi L2'ye girdi [ÇEKİRDEK]
 
@@ -12184,3 +12189,97 @@ ifadesiydi, o sıra da korundu.
 **L2:** sipariş gerçek servis yolundan ölçülüyor (müşteri + tek kalem). Dokuma işi · levent · doff
 "tezgah/levent/çözgü zinciri ister" gerekçesiyle beyanlı — ⚠️ bu gerekçe bugün iki kez yanlış çıktı
 (manifest ve mal kabul), bu yüzden sıradaki turda ÖLÇÜLECEK, tahmin edilmeyecek.
+
+
+## 2026-09-23 — K26: modül kapısı konuma değil KORUDUĞU ROTAYA bakar [ÇEKİRDEK]
+
+**Belirti (d3, 49 serilik kabul özet koşumu).** Cari serisinin ikinci yolunda finans kapatılıp panel yenilendi. Önceki adımlarda açılmış Faturalar, Çek / Senet ve Kasa Hareketleri sekmeleri 8–12 finans isteği attı ve hepsi 403 `MODULE_DISABLED` aldı. Ekranda 12 kez "Bu işlem için yetkiniz bulunmuyor" çıktı; sebep yetki değil kapalı modüldü.
+
+**Kök neden, ölçülerek bulundu.** Ölçüm e2e sondasıyla yapıldı: CDP başlatıcı yığını + geçici `console.warn` izleri.
+1. Bayrak yanıtı `financeEnabled:false` ile geldi ve `ProtectedRoute` üç sekmede de modül reddini verdi.
+2. Kapı `/forbidden`a yönlendirdi.
+3. Yönlendirme geçişinde ESKİ rota öğesi, yani `ProtectedRoute` + sayfa, YENİ konumla (`/forbidden`) bir kez daha çizildi.
+4. Kapı modülü `useLocation().pathname`den çözüyordu. `"/forbidden"`ın modülü olmadığı için kapı AÇILDI, sayfa bağlandı ve sorgular gitti (`InvoicesPage` konum `/forbidden` iken 3+ kez çizildi).
+
+**Düzeltme.**
+- Modül ve rapor kapısı `useResolvedPath(".")` ile korunan rotanın kendi yolunu okur.
+- `/forbidden`a `state.reason:"module"` taşınır; sayfa "Modül kapalı" der.
+- apiClient 403 `MODULE_DISABLED`'da backend cümlesini basar ve aynı mesaj tek toast'ta birleşir.
+- Sonda: önce 8×403, sonra 0 finans isteği; sekmeler "Modül kapalı" gösteriyor.
+
+**Genel ders.** Yönlendirme yapan bir kapı kararını "şu an nerede olduğundan" değil "neyi koruduğundan" türetir. Yoksa kendi yönlendirmesinin geçiş çiziminde kendini açar.
+
+## 2026-09-23 — Çeki listesi numarası BASILAN KÂĞIDA bağlandı [ÇEKİRDEK]
+
+**Karar (kullanıcı):** "Çeki listesi numarası basılsın; küçük yaz, bir köşeye koy." Kâğıt: Paketleme / Çuvallar → "Çeki Listesi" (seçilen çuvalların saha arama kâğıdı).
+
+**Durum (ölçüldü).** Panelde "çeki" adlı dört kâğıt var: çuval çeki listesi, sevk irsaliyesinin çeki bölümü, fason çekisi, kartela çekisi. Son üçü kendi numarasını (SV/FS/KS) zaten basıyor. Çuval çeki listesi hiçbir kayda bağlı değildi ve numarasızdı. CL serisi yalnız hiçbir istemcinin çağırmadığı `POST /work-orders/:id/manifest` ucunda doğuyordu; fabrika kopyasında o ucun hiç satırı yoktu (tüm satırlar 2026-09-23 test turları).
+
+**Tasarım.**
+- `Manifest` yalnız eklemeyle genişledi: `sourceKind` (WORK_ORDER · SACK_SELECTION), `contentKey` (UNIQUE), `clientToken` (UNIQUE), `workOrderId` nullable; CHECK `manifests_source_shape`.
+- Basım ucu canlı dökümün anahtarını hesaplar. Aynı anahtar varsa AYNI satırı döndürür (numara + anlık görüntü), yoksa yeni CL doğar.
+- Yarış (P2002) kazananın satırını okur; yeni advisory ad alanı gerekmedi.
+
+**Sektör davranışı.** Toplama listesi (WMS/SAP picking list) bir işin anlık görüntüsüdür. Aynı içerik → aynı numara, farklı içerik → yeni numara; eski kâğıt iptal edilmez. İrsaliyeden farkı bilinçlidir: irsaliyenin numarası yasal kimliktir ve sürümlenir, çeki listesininki değildir. En kötü durum "aynı numara, farklı içerik iki kâğıt sahada"dır; tasarım bunu imkânsız kılar.
+
+**Geriye dönük.** Geçmişte numarasız basılmış listeler için bir şey değişmez. Aynı çuvallar bugün yeniden basılırsa bu, o içeriğin ilk KAYITLI basımıdır ve numara o an doğar; kâğıdın önceden basıldığını bilemeyiz, bilir gibi yapmayız.
+
+**Yan düzeltme.** Audit sözlüğünde `manifestNo` = "İrsaliye no" (fason tablolarındaki anlam) olduğundan CL audit satırları yanlış etiketlenirdi; manifest audit'i artık `packingListNo` ("Çeki listesi no") anahtarıyla yazılır.
+
+## 2026-09-23 — Sipariş yönü DOĞUŞTA donar (`Order.destination`) [ÇEKİRDEK]
+
+**Karar (kullanıcı).** Siparişin yurtiçi/yurtdışı yönü, sevkiyatın donmuş yönüyle aynı kalıpta sipariş açılırken sabitlenir. Sipariş raporları bugüne dek yönü CANLI kart zincirinden (şube → cari) okuyordu: cari kartı değişince geçmiş siparişlerin yönü de değişiyordu (etiket "Cari/şube yönü (bugünkü)").
+
+**Ölçüm.** Sipariş yaratan her yol TEK yazardan geçiyor: `OrderService.create`. Panel formu, tablet, hızlı sipariş (`quickOrderFromRolls` → `this.create`), Excel içe aktarma (`order.adapter` → `orderService.create`) ve panel kopyası aynı uçtan geçer. Doğrudan `prisma.order.create` yalnız seed/test/repro script'lerinde var; onlar NULL üretir (kolon nullable, varsayılansız).
+
+**Kurallar.**
+- Zincir `resolveShipmentDestination` ile, sevkiyatla aynı fonksiyondan çözülür (kopya yok). Zincir boşsa NULL ("yön belirsiz"). Sevkiyattan farkı bilinçlidir: sevkiyatta boş zincir DOMESTIC olur, siparişte NULL kalır.
+- Sipariş AÇIKÇA başka cariye/şubeye taşınınca yön aynı claim içinde yeniden çözülür (1e onayı: sipariş o cariye açılmadı). Eski değer audit'te kalır.
+- Cari birleştirme (MOVE `orders.customerId`) yeniden dondurmaz; bu bir kimlik birleştirmesidir, sipariş kararı değildir.
+- NULL doğan sipariş, kart sonradan dolsa da (ör. ilk sevkiyatın seçimi `claimFirstDestinationTx`) NULL kalır. Dondurma kuralı budur.
+- Kolon `ORDER_HEADER_WRITABLE` dışındadır, gövdeden yazılamaz.
+
+**Raporlar (aynı gün, ikinci dilim).** `reports/_destination.ts`in üç sipariş fonksiyonu (`orderDestinationWhere` · `orderDestinationValueSql` · `orderDestinationSql`) artık `Order.destination` okur. Canlı kart zinciri raporda okunmaz. Etiket "Cari/şube yönü (bugünkü)" → "Sipariş yönü (açılışta)"; seçenekler "Yurtiçi/İhracat (sipariş yönü)". Sürüm notundaki iki cümle aynı dilimde düzeltildi. `test_rapor_yon_ekseni` §1 zincir ikizi yerine kolon ikizini ölçer; §2c kart değişiminden sonra rapor kümesinin kıpırdamadığını ölçer (negatif sonda ⑩: canlı zincir → İhracat 130 · Yurtiçi 20, kırmızı). Sipariş fikstürünü doğrudan kuran iki rapor bekçisi (`test_rapor_satis_ekseni`, `test_destination_mix`) siparişi yazar gibi doğurur. R1 notunun sipariş kısmı GEÇERSİZ olarak işaretlendi.
+
+**Geri doldurma (üçüncü dilim).** `scripts/backfill_order_destination.ts`: kuru koşum varsayılan, etkilenen her siparişi numara · durum · cari/şube · yön · kaynak ile listeler. Yalnız `destination IS NULL` satırlara yazar; yazımda da `destination: null` koşulu korunur. Zincir boşsa NULL bırakır. Zincir kopyalanmaz, `pickShipmentDestination` kullanılır. Kapılar `migrate_partner_roles` emsalidir: hedef adıyla basılır, fixture dışı hedefte `--canli-onay`, üretim adlarına hiç yazılmaz. **Beyan:** yazılan değer koşum gününün kart yönüdür, siparişin açıldığı günkü yön DEĞİLDİR; o bilgi hiçbir yerde kaydedilmemişti. Script'i KULLANICI koşar (fabrika verisi); oturumlar koşmaz.
+
+## 2026-09-23 — P2002 hedefi pg adaptöründe `meta.target`te DEĞİL: retry yüklemi körlüğü [ÇEKİRDEK]
+
+**Belirti (1e iniş ağacı).** Çeki listesi bekçisinin ⑥'sı (eşzamanlı özdeş basım) `201/409` verdi. Aynı içeriğin ikinci basımı kazananın satırını okuyacağına 409 döndü. Oturum DB'sinde yeşildi: yarış penceresi yük altında açılıyor. Altı eşzamanlı istekle 1/3 koşumda yeniden üretildi (409×3).
+
+**Kök neden (ölçüldü).** Prisma 7 + `@prisma/adapter-pg`de P2002 hatası `meta.target` TAŞIMAZ. Hedef şuralardadır:
+- `meta.driverAdapterError.cause.constraint.fields` (`["\"contentKey\""]`)
+- `originalMessage`taki kısıt adı (`manifests_contentKey_key`)
+
+`p2002TargetsCode` yalnız `target`e bakıyordu. Hedef yok → "bilinmiyor, geriye uyumlu: retry" dalı çalıştı. İçerik çakışması beş kez yeniden denendi ve yanıltıcı 409'la bitti. Aynı körlük `customer.service` kodu retry'ını da etkiliyordu (ad/vergi tekilliği beş tur boşa dönerdi); 2026-09-18'de tarif edilen belirti budur.
+
+**Düzeltme.** `p2002TargetParts`: `target` yoksa adaptörün `constraint.fields` / `constraint.index` / mesajdaki kısıt adı okunur. `p2002Mentions` (clientToken ayrımı) zaten üç kaynağı okuyordu. İkiz yüklemin biri güncel, biri bayattı ("ayrışan yüzey" sınıfı).
+
+**Bekçi.**
+- `test_ceki_listesi_no` ⑥ artık altı eşzamanlı istek.
+- ⑨ yüklemi pg adaptörünün GERÇEK hata biçimiyle, zamandan bağımsız ölçer.
+- Negatif sonda: adaptör okuması kaldırılınca ⑨ ×2 + ⑥ (409×4) kırmızı.
+
+**Ders.** Yarış bekçisi "iki istek" ile yazılırsa çoğu koşumda pencereyi yakalamaz ve yeşil verir. Yarışın KADERİNİ belirleyen saf yüklem ayrıca, deterministik ölçülür.
+
+**Aynı turda (snapshot envanteri).** `Order.destination` donmuş kolon envanterine beyan edildi: DONMUS_ILERI, yazan `order.service.ts`. Yazımlar `data: { …, destination }` literaline alındı ve `this.delegate.create` → `prisma.order.create` yapıldı; aksi hâlde AST yazıcıyı modele bağlayamıyordu ("çözülemeyen yazım").
+
+**Sınıf kapanışı (aynı gün, 1e isteği).** `meta.target`i doğrudan okuyan dört yer daha vardı. Hepsi adaptör altında hiç eşleşmiyordu:
+- levent numarası retry'ı (`warp-beam.service`)
+- dokuma işi numarası retry'ı (`weaving-order.service`)
+- fason profil tekilliği 409'u (`subcontractor-management.service`)
+- etiket şablonu "tek varsayılan" 409'u (`label-template.service`)
+
+`error.middleware`in kolon çıkarımı da okuyordu, ama adaptör dalını ayrıca taşıdığı için davranışı doğruydu.
+
+- **Tek yardımcı:** `src/utils/p2002.ts` (`p2002MetaTargetParts` · `p2002TargetParts` · `p2002OnField` · `p2002UniqueColumn`; `p2002Mentions` de oradan okur). `barcode-retry` kendi kopyasını bırakıp ona bağlandı.
+- **Kalıcı mandal:** `test_p2002_hedef_tek_kaynak` (AST: doğrudan · döküm içi · takma ad · köşeli · yapı çözme; yorumlar sayılmaz; yedi kalıcı sentetik sonda). 26. hızlı mandal oldu.
+- **Levent ve dokuma işi için** `test_numara_yarisi_levent_dokuma`: zamandan bağımsız yüklem kolu + altı eşzamanlı doğum (duman). Dokuma işinde 8032 kilidi numarayı zaten serileştirir. Levent altı eşzamanlı istekte pencere açmadı. Bu yüzden ısıran kol ①'dir; negatif sondada ② yeşil kaldı ve BEYAN edildi.
+
+**Tip zorlaması düzeltmesi (aynı gün).** `bffdb7d7`, AST'nin yazıcıyı modele bağlayabilmesi için `this.delegate.create`ı `prisma.order.create` + `{ … } as unknown as Prisma.OrderUncheckedCreateInput` yapmıştı. `test_type_assertion_ratchet` A kümesi (uydurulmuş nesne literali) bunu YENİ zorlama saydı (1e iniş paketi 644/645).
+
+Düzeltme ürün kodunu değil TARAYICIYI güçlendirdi:
+- `kolonYazicilari` artık `this.delegate.<metod>` çağrısını sınıfın örneklendiği yerden çözer. Taranan bütün dosyalarda `new <Sınıf>({ modelName: "…" })`; tek ve tutarlıysa o modelin delegesi sayılır, birden çoksa çözülemez kalır (fail-closed).
+- `order.service` özgün tipli çağrısına döndü (zorlama yok, cırcır tabanı yükseltilmedi).
+- Değişkene alıp zorlamak (cırcırın "köprü" istisnası) BİLEREK seçilmedi: kuralı dolanmak olurdu.
+- Negatif sonda: çözüm devre dışı → `test_snapshot_kolonlari` §4a iki yazımı "çözülemeyen" diye KIRMIZI verir.

@@ -14,6 +14,7 @@ import type {
   OpenOrder,
   PackingGroup,
   PackingLotCustomerSummary,
+  PickListPrint,
   PickListRow,
   SackContentDumpSack,
   SackCustomerBucket,
@@ -105,6 +106,15 @@ export const sackHubService = {
   /** Çeki listesi — seçilen çuvalların içerik özetli dökümü (salt-okunur POST). */
   pickList: (sackIds: string[]): Promise<ApiResponse<PickListRow[]>> =>
     apiClient.post<ApiResponse<PickListRow[]>>(`/api/shipping/sack-search/pick-list`, { sackIds }).then((r) => r.data),
+
+  /**
+   * Çeki listesi BASIMI — CL numarası ilk basımda sunucuda doğar; aynı içerik aynı numarayı ve
+   * aynı anlık görüntüyü döndürür. Kâğıt `snapshot`tan çizilir (numara istemcide üretilmez).
+   */
+  printPickList: (sackIds: string[], clientToken: string): Promise<ApiResponse<PickListPrint>> =>
+    apiClient
+      .post<ApiResponse<PickListPrint>>(`/api/shipping/sack-search/pick-list/print`, { sackIds, clientToken })
+      .then((r) => r.data),
 
   /**
    * İçerik dökümü — seçilen çuvalların TOP BAZLI dökümü. Çeki listesinden farkı:

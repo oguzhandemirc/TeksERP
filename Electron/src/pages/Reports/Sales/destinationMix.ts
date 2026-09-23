@@ -123,7 +123,7 @@ export function buildDestinationMixExport(opts: { r: DestinationMix; periodLabel
     `Tutar = sevk anındaki tahsis × sipariş satırı fiyatı, para birimleri ayrı. Kapsam: fiyatlı ${cov.priced} / ${cov.lines} satır.`,
     `TL karşılığı: ${r.kapsam.kurKaynagi}.`,
     `Ülke serbest metindir (düzeltilmez); ${r.kapsam.customersWithCountry} / ${r.kapsam.customersInPeriod} müşteride dolu.`,
-    "Açık sipariş ve termin siparişin BUGÜNKÜ cari/şube yönünü okur (kart değişince küme değişir).",
+    "Açık sipariş ve termin siparişin AÇILIŞTA donmuş yönünü okur (cari kartı sonradan değişse de küme değişmez).",
   ];
   if (compareLabel) meta.push(`Karşılaştırma dönemi: ${compareLabel}`);
   const kova = (b: MixBucketSummary) => ({
@@ -157,7 +157,7 @@ export function buildDestinationMixExport(opts: { r: DestinationMix; periodLabel
       {
         name: "Açık Sipariş ve Termin",
         columns: [
-          { header: "Yön (bugünkü)", key: "yon", width: 28 },
+          { header: "Yön (sipariş açılışında)", key: "yon", width: 28 },
           { header: "Açık (m)", key: "openQty", width: 12, numFmt: "#,##0.0", align: "right" },
           { header: "Termini geçen (m)", key: "overdueQty", width: 16, numFmt: "#,##0.0", align: "right" },
           { header: "Açık tutar", key: "tutar", width: 26 },

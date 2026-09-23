@@ -195,6 +195,25 @@ describe("apiClient interceptor", () => {
       await expect(getInterceptor().rejected(makeError(403, { suppress: true }))).rejects.toBeDefined();
       expect(toastError).not.toHaveBeenCalled();
     });
+
+    // K26: kapalı modül yetki sorunu değil — backend'in modül cümlesi, paralel istekler TEK toast (aynı id).
+    it("⭐ 403 MODULE_DISABLED → 'yetkiniz yok' DEĞİL, modül cümlesi; aynı mesaj aynı toast id'si", async () => {
+      const body = { message: "Ön muhasebe modülü bu kurulumda kapalı.", details: { code: "MODULE_DISABLED" } };
+      await expect(getInterceptor().rejected(makeError(403, { body }))).rejects.toBeDefined();
+      await expect(getInterceptor().rejected(makeError(403, { body }))).rejects.toBeDefined();
+      expect(toastError).not.toHaveBeenCalledWith(expect.stringMatching(/yetkiniz/i));
+      expect(toastError).toHaveBeenCalledTimes(2);
+      const [m1, o1] = toastError.mock.calls[0] as [string, { id: string }];
+      const [, o2] = toastError.mock.calls[1] as [string, { id: string }];
+      expect(m1).toBe(body.message);
+      expect(o1.id).toBe(o2.id); // sonner aynı id'yi tek toast'ta tutar
+    });
+
+    it("403 MODULE_DISABLED + suppressErrorToast → toast yok", async () => {
+      const body = { message: "x", details: { code: "MODULE_DISABLED" } };
+      await expect(getInterceptor().rejected(makeError(403, { body, suppress: true }))).rejects.toBeDefined();
+      expect(toastError).not.toHaveBeenCalled();
+    });
   });
 
   describe("hata mesajı eşleme", () => {

@@ -3,10 +3,12 @@
 // =============================================================================
 // NEDEN: yön ekseni `Customer.defaultDestination` okuyordu — cari sonradan değişince geçmiş sevk
 // raporu da değişiyordu. Kural (`reports/_destination.ts`): SEVK raporu sevkiyatın DONMUŞ yönünü,
-// SİPARİŞ raporu siparişin şube → cari zincirini (bugünkü kart) okur.
-// §1 boğaz ikiz: `resolveShipmentDestination` · `orderDestinationWhere` · `orderDestinationSql` aynı
-//    siparişe aynı yönü verir (şubeli/şubesiz/şube boş/zincir boş).
-// §2 sipariş raporu (order-intake) zinciri okur: şubesi yurtdışı olan yurtiçi carinin siparişi İHRACAT.
+// SİPARİŞ raporu siparişin açılışta DONMUŞ yönünü (`Order.destination`) okur (2026-09-23 kararı;
+// önceki "bugünkü kart zinciri" okuması GEÇERSİZ).
+// §1 ikiz: `orderDestinationWhere` · `orderDestinationSql` · kolonun kendisi aynı siparişe aynı yönü
+//    verir; fikstür siparişleri yazar gibi doğar (zincir doğuşta çözülür, boşsa NULL).
+// §2 sipariş raporu (order-intake) donmuş yönü okur: şubesi yurtdışı olan yurtiçi carinin siparişi
+//    İHRACAT; §2c ⭐ cari + şube kartı sonradan değişince rapor kümesi KIPIRDAMAZ.
 // §3 sevk toplayıcısı (`collectShipped`): hücre sevkiyatın yönünü taşır, süzgeç ona uygulanır; cari
 //    kartı sonradan değişince sevk rakamı DEĞİŞMEZ; müşteri karnesinin sevk sütunu da aynı kaynaktan.
 // §4 kg (`collectShippedWeight`): tartısız çuval 0 SAYILMAZ — kapsam "tartılı N / M".
@@ -14,7 +16,8 @@
 // Kapsam dışı (beyan): doğrudan sevkin "yön kaydı yok" kovası bu dosyada DB'de kurulmadı (fikstür
 // fason zinciri ister); yüklemi `test_accounting_direct_ship` §D ölçer.
 // NEGATİF SONDALAR (2026-09-23, geri alındı → 19/0): ① SQL ikizden şube düştü → §1 ×2 + §3e ❌ ·
-//   ② Prisma ikizden şube düştü → §1 + §2a + §3e ❌ · ③ sevk yön süzgeci boş parça → §3c/§3d/§3e ❌ ·
+//   ② Prisma ikizden şube düştü → §1 + §2a + §3e ❌ (2026-09-23 öncesi zincir okuması için) ·
+//   ⑩ (2026-09-23) sipariş yönü yeniden CANLI zincirden okunur → §2c ❌ · ③ sevk yön süzgeci boş parça → §3c/§3d/§3e ❌ ·
 //   ④ sevk süzgeci cari kartından okur → §3c/§3d/§3e ❌ · ⑤ tartısız çuval tartılı sayılır → §4b ❌
 // R2 ③ sondaları (geri alındı → 24/0): ⑥ sevk karnesi süzmez → §5a/§5b ❌ · ⑦ günlük seri süzmez → §5a ❌ ·
 //   ⑧ iade payı süzmez → §5d ❌ · ⑨ iade paydası süzmez → §5c ❌
@@ -70,8 +73,10 @@ async function main(): Promise<void> {
     const bE = await sube(cD, "BE", "EXPORT");
     const bN = await sube(cD, "BN", null);
     const siparis = async (no: string, customerId: string, branchId: string | null, qty: number) => {
+      // Yazar gibi doğar: yön açılışta zincirden donar (`OrderService.create` ile aynı çözücü).
+      const destination = (await resolveShipmentDestination(prisma, { customerId, branchId })).destination;
       const o = await prisma.order.create({
-        data: { orderNumber: `${TAG}-${no}`, customerId, branchId, orderDate: IN, status: "APPROVED", lines: { create: [{ itemId: item.id, quantity: qty }] } },
+        data: { orderNumber: `${TAG}-${no}`, customerId, branchId, destination, orderDate: IN, status: "APPROVED", lines: { create: [{ itemId: item.id, quantity: qty }] } },
         select: { id: true },
       });
       ids.orders.push(o.id);
@@ -85,23 +90,31 @@ async function main(): Promise<void> {
       nNoBranch: await siparis("O5", cN, null, 160),
     };
 
-    console.log("── §1 boğaz ikiz: zincir = Prisma = SQL ──");
+    console.log("── §1 ikiz: kolon = Prisma = SQL ──");
     for (const d of ["EXPORT", "DOMESTIC"] as const) {
       const prismaSet = new Set((await prisma.order.findMany({ where: { id: { in: ids.orders }, ...orderDestinationWhere(d) }, select: { id: true } })).map((x) => x.id));
       const sqlSet = new Set(
         (await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT o.id FROM orders o WHERE o.id IN (${Prisma.join(ids.orders.map((x) => Prisma.sql`${x}::uuid`))}) ${orderDestinationSql(d, "o")}`)).map((x) => x.id),
       );
       for (const [ad, o] of Object.entries(O)) {
-        const zincir = (await resolveShipmentDestination(prisma, { customerId: o.customerId, branchId: o.branchId })).destination === d;
-        check(`§1 ${d} · ${ad}: zincir=${zincir} Prisma=${prismaSet.has(o.id)} SQL=${sqlSet.has(o.id)}`, zincir === prismaSet.has(o.id) && zincir === sqlSet.has(o.id));
+        const kolon = (await prisma.order.findUnique({ where: { id: o.id }, select: { destination: true } }))?.destination === d;
+        check(`§1 ${d} · ${ad}: kolon=${kolon} Prisma=${prismaSet.has(o.id)} SQL=${sqlSet.has(o.id)}`, kolon === prismaSet.has(o.id) && kolon === sqlSet.has(o.id));
       }
     }
 
-    console.log("── §2 sipariş raporu zinciri okur ──");
+    console.log("── §2 sipariş raporu donmuş yönü okur ──");
     const exp = await getOrderIntake(RANGE, null, { destination: "EXPORT", customerId: ids.customers });
     check("§2a İhracat = O1 (cari EXPORT) + O2 (yurtiçi carinin EXPORT şubesi) = 30 m", exp.summary.totalQty === 30, String(exp.summary.totalQty));
     const dom = await getOrderIntake(RANGE, null, { destination: "DOMESTIC", customerId: ids.customers });
     check("§2b Yurtiçi = O3 (şube yönü boş → cari) + O4 = 120 m; zincir boş O5 hiçbir kümede", dom.summary.totalQty === 120, String(dom.summary.totalQty));
+    // ⭐ Kart değişir: yurtiçi cari → İHRACAT, ihracat şubesi → YURTİÇİ. Donmuş rapor kıpırdamaz.
+    await prisma.customer.update({ where: { id: cD }, data: { defaultDestination: "EXPORT" } });
+    await prisma.customerBranch.update({ where: { id: bE }, data: { defaultDestination: "DOMESTIC" } });
+    const exp2 = (await getOrderIntake(RANGE, null, { destination: "EXPORT", customerId: ids.customers })).summary.totalQty;
+    const dom2 = (await getOrderIntake(RANGE, null, { destination: "DOMESTIC", customerId: ids.customers })).summary.totalQty;
+    await prisma.customer.update({ where: { id: cD }, data: { defaultDestination: "DOMESTIC" } });
+    await prisma.customerBranch.update({ where: { id: bE }, data: { defaultDestination: "EXPORT" } });
+    check("§2c ⭐ cari + şube kartı değişti → sipariş raporu DEĞİŞMEDİ (İhracat 30 · Yurtiçi 120)", exp2 === 30 && dom2 === 120, `İhracat ${exp2} · Yurtiçi ${dom2}`);
 
     console.log("── §3 sevk toplayıcısı sevkiyatın donmuş yönünü okur ──");
     const sevk = async (customerId: string, destination: ShipmentDestination, qty: number, kg: number | null) => {

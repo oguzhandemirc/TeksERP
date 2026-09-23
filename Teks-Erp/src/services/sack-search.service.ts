@@ -29,6 +29,7 @@ import { ACTIVE_TAG_WHERE, ACTIVE_TAG_SELECT, toTagBadges } from "./helpers/sack
 import { batchLoadAliasesMulti } from "./helpers/customer-name.helper";
 import { readPackingLotSettings } from "./helpers/packing-group.helper";
 import { readPackingGroupsEnabled } from "./system-setting.service";
+import { recordSackPickList, type PickListPrint } from "./helpers/manifest-number.helper";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
 
@@ -1187,6 +1188,16 @@ export class SackSearchService {
     });
 
     return { success: true, data };
+  }
+
+  /**
+   * Çeki listesi BASIMI — numara ilk basımda doğar, kâğıt kayıttan çizilir. Canlı dökümün anahtarı
+   * önceki bir basımla aynıysa AYNI CL ve AYNI anlık görüntü döner (yeniden basım); değilse yeni CL.
+   */
+  async printPickList(sackIds: string[], userId: string | undefined, clientToken: string): Promise<ApiResponse<PickListPrint>> {
+    const live = (await this.getPickList(sackIds)).data as Array<{ id: string }>;
+    const data = await recordSackPickList(live, userId, clientToken);
+    return { success: true, data, message: data.reused ? `Çeki listesi yeniden basıldı: ${data.manifestNo}` : `Çeki listesi oluşturuldu: ${data.manifestNo}` };
   }
 
   /**

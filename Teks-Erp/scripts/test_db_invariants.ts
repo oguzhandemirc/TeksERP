@@ -502,6 +502,7 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "rolls", name: "rolls_weightKg_nonneg" },
   { table: "order_lines", name: "order_lines_quantity_pos" },
   { table: "order_lines", name: "order_lines_shippedQty_nonneg" },
+  { table: "manifests", name: "manifests_source_shape" },
   { table: "sacks", name: "sacks_weightKg_nonneg" },
   { table: "work_order_steps", name: "work_order_steps_time_order" },
   // 2026-07-31 denetimi (A6+G-9) — migration 20260731120000_audit_check_hardening:

@@ -20,6 +20,7 @@
 import prisma, { pool } from "../src/lib/prisma";
 import type { Currency, ShipmentDestination } from "@prisma/client";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { resolveShipmentDestination } from "../src/services/helpers/shipment-destination.helper";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { getDestinationMix, type DestinationMixReport } from "../src/services/reports/destination-mix.report.service";
@@ -51,9 +52,11 @@ async function cari(n: string, d: ShipmentDestination | null, country: string | 
   return c.id;
 }
 async function satir(customerId: string, currency: Currency, qty: number, unitPrice: number | null, extra: { deadline?: Date; status?: "APPROVED" | "COMPLETED"; completedAt?: Date; shippedQty?: number } = {}): Promise<string> {
+  // Sipariş yazar gibi doğar: yön açılışta zincirden donar (2026-09-23; raporlar kolonu okur).
+  const destination = (await resolveShipmentDestination(prisma, { customerId })).destination;
   const o = await prisma.order.create({
     data: {
-      orderNumber: `${TAG}-O${ids.orders.length}`, customerId, currency, orderDate: D1, status: extra.status ?? "APPROVED",
+      orderNumber: `${TAG}-O${ids.orders.length}`, customerId, destination, currency, orderDate: D1, status: extra.status ?? "APPROVED",
       deadline: extra.deadline ?? null, completedAt: extra.completedAt ?? null,
       lines: { create: [{ itemId: item!.id, quantity: qty, unitPrice, shippedQty: extra.shippedQty ?? 0 }] },
     },

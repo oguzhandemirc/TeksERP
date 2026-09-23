@@ -1,9 +1,9 @@
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useResolvedPath } from "react-router-dom";
 import { useAuthStore } from "@/store/auth";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { canEnterApp } from "@/types/auth";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
-import { isRouteModuleOpen } from "@/lib/route-modules";
+import { FORBIDDEN_MODULE_STATE, isRouteModuleOpen } from "@/lib/route-modules";
 import { reportKeyOfPath } from "@/lib/report-gate";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 
@@ -35,6 +35,10 @@ export function ProtectedRoute({
   const systemAccountExists = useAuthStore((s) => s.systemAccountExists);
   const { hasPermission, hasAnyPermission } = useRoleAccess();
   const location = useLocation();
+  // ⚠️ MODÜL/RAPOR KAPISI KORUDUĞU ROTANIN yoluna bakar, anlık konuma DEĞİL (K26): /forbidden'a
+  // geçişte ESKİ rota öğesi YENİ konumla bir kez daha çizilir; "/forbidden"ın modülü olmadığı için
+  // kapı açılıyor, kapalı modülün sayfası bağlanıp sorgularını atıyordu (her biri 403 + toast).
+  const guardedPath = useResolvedPath(".").pathname;
   // Modül bağlamı: ETKİN değer + varsayılan yön TEK yerde (karo ve paletle aynı).
   const moduleCtx = useOperationsVisibilityContext();
 
@@ -73,13 +77,13 @@ export function ProtectedRoute({
   // backend'dir (403 MODULE_DISABLED / REPORT_DISABLED); kapalı modülün ekranı boş/403 toast'ıyla
   // kalır, bu "bilinmiyor"u "kapalı" diye okuyup yetkili kullanıcıyı dışarı atmaktan iyidir.
   if (!moduleCtx.flagsFailed) {
-    if (!isRouteModuleOpen(location.pathname, moduleCtx)) {
-      return <Navigate to="/forbidden" replace />;
+    if (!isRouteModuleOpen(guardedPath, moduleCtx)) {
+      return <Navigate to="/forbidden" replace state={FORBIDDEN_MODULE_STATE} />;
     }
     // Rapor kapısı (Raporlar K5): modül kapısından SONRA, izin kapısından SONRA — süperadminin
     // kapattığı rapor izni olan kullanıcıya da çizilmez (backend 403 REPORT_DISABLED ile aynı).
     // Kategori hub'ı (iki segment) rapor değildir; bilinmeyen anahtar KAPALIDIR.
-    const reportKey = reportKeyOfPath(location.pathname);
+    const reportKey = reportKeyOfPath(guardedPath);
     if (reportKey !== null && !moduleCtx.isReportOpen(reportKey)) {
       return <Navigate to="/forbidden" replace />;
     }

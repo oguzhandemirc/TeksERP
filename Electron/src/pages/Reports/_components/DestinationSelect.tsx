@@ -1,9 +1,9 @@
 // =============================================================================
-// SİPARİŞ RAPORLARINDA YÖN SEÇİCİSİ — "cari/şube yönü (bugünkü)", sevkin donmuş yönü DEĞİL
+// SİPARİŞ RAPORLARINDA YÖN SEÇİCİSİ — "sipariş yönü (açılışta)", sevkin yönü DEĞİL
 // =============================================================================
-// ⚠️ Etiket bunu SÖYLEMEK ZORUNDA: süzgeç siparişin şube → cari zincirine (bugünkü
-// kart, `reports/_destination.ts`) bakar; kart değişince geçmiş raporun kümesi de
-// değişir. "İhracat" yazan liste ihracat SEVKLERİ sanılırsa rapor yanlış okunur.
+// ⚠️ Etiket bunu SÖYLEMEK ZORUNDA: süzgeç siparişin AÇILIŞTA donmuş yönüne
+// (`Order.destination`, `reports/_destination.ts`) bakar. "İhracat" yazan liste ihracat
+// SEVKLERİ sanılırsa rapor yanlış okunur.
 // =============================================================================
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,8 +23,8 @@ export function DestinationSelect({ id, value, onChange, variant = "order" }: { 
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL}>Tümü</SelectItem>
-          <SelectItem value="DOMESTIC">{sevk ? "Yurtiçi (sevkiyat)" : "Yurtiçi (cari/şube yönü)"}</SelectItem>
-          <SelectItem value="EXPORT">{sevk ? "İhracat (sevkiyat)" : "İhracat (cari/şube yönü)"}</SelectItem>
+          <SelectItem value="DOMESTIC">{sevk ? "Yurtiçi (sevkiyat)" : "Yurtiçi (sipariş yönü)"}</SelectItem>
+          <SelectItem value="EXPORT">{sevk ? "İhracat (sevkiyat)" : "İhracat (sipariş yönü)"}</SelectItem>
         </SelectContent>
       </Select>
     </div>

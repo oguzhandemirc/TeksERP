@@ -37,6 +37,7 @@ import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEvent
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import { assertWeavingOrderLinkableTx, warpSpecMismatchWarning } from "./helpers/production-chain-gates.helper";
+import { p2002OnField } from "../utils/p2002";
 
 const WARP_BEAM_TABLE = "WARP_BEAM";
 const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
@@ -223,7 +224,8 @@ export async function createWarpBeam(input: WarpBeamCreateInput, userId?: string
         });
       }),
     undefined,
-    (err) => Array.isArray(err.meta?.target) && (err.meta.target as string[]).includes("beamNo"),
+    // Yalnız numara çakışması retry'a girer (hedef pg adaptöründe `meta.target`te değil — tek yardımcı).
+    (err) => p2002OnField(err, "beamNo"),
   );
   await AuditService.log({ userId, action: "CREATE", tableName: WARP_BEAM_TABLE, recordId: created.id, newData: { beamNo: created.beamNo, warpSpecId: created.warpSpecId, originKind: created.originKind, plannedLengthM: Number(created.plannedLengthM) } });
   // K5b: plan = rezervasyon, RED YOK — gövde doluysa/çift planlıysa UYARI (sarımda çıkacak 409 şimdiden söylenir); Z1 çözgü kartı uyarısıyla aynı dizide.

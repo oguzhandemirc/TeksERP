@@ -6,8 +6,8 @@
 // BOŞ — sorgu bayt bayt eski) · ③ `filterEcho` — cevaba yalnız VERİLEN anahtarlar yazılır (R5b-b `suzgec`
 // ile aynı biçim ve AYNI ADRES: cevap kökü, düz nesne, anahtar = sorgu parametresi adı). Tanınmayan kimlik 404 DEĞİL
 // boş sonuçtur (liste semantiği, her eksende — levent dahil). `destination` iki kaynaktan okunur
-// (`_destination.ts`): sipariş kökünde siparişin ŞUBE → CARİ zinciri (bugünkü kart), müşteri kökünde
-// carinin yönü; sevk raporları sevkiyatın donmuş yönünü okur.
+// (`_destination.ts`): sipariş kökünde siparişin açılışta DONMUŞ yönü (`Order.destination`), müşteri
+// kökünde carinin yönü; sevk raporları sevkiyatın donmuş yönünü okur.
 // =============================================================================
 import { Prisma, ShipmentDestination } from "@prisma/client";
 import { z } from "zod";
@@ -25,7 +25,7 @@ const codeList = rawList
   .refine((l) => l.length <= MAX_LIST, { message: `En fazla ${MAX_LIST} kod` })
   .refine((l) => l.every((x) => x.length <= 64), { message: "Kod en fazla 64 karakter" });
 
-/** Sipariş kökenli raporlar: müşteri kimliği + yön (siparişin şube → cari zinciri, `_destination.ts`). */
+/** Sipariş kökenli raporlar: müşteri kimliği + yön (siparişin donmuş yönü, `_destination.ts`). */
 export const musteriEkseni = { customerId: idList, destination: z.nativeEnum(ShipmentDestination).optional() };
 /** Kalem ekseni: kumaş (item) + renk. */
 export const kalemEkseni = { itemId: idList, colorId: idList };
@@ -113,7 +113,7 @@ export function customerRowSql(f: ReportFilterInput, alias = "c"): Prisma.Sql {
   return Prisma.join(parts, " ");
 }
 
-/** Siparişin müşteri tarafı, ham SQL — `customerScopeWhere` ikizi (`orders <alias>`; yön zinciri `orderDestinationSql`). */
+/** Siparişin müşteri tarafı, ham SQL — `customerScopeWhere` ikizi (`orders <alias>`; yön `orderDestinationSql`). */
 export function customerScopeSql(f: ReportFilterInput, orderAlias = "o"): Prisma.Sql {
   const parts: Prisma.Sql[] = [inSql(`${orderAlias}."customerId"`, f.customerId)];
   if (f.destination) parts.push(orderDestinationSql(f.destination, orderAlias));

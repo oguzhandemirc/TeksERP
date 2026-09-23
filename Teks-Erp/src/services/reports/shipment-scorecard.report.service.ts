@@ -96,7 +96,7 @@ interface OtifRow {
   lateCount: bigint;
 }
 
-/** Dönemde KAPANAN siparişlerin termin performansı — yön süzgeci siparişin bugünkü zincirinden. */
+/** Dönemde KAPANAN siparişlerin termin performansı — yön süzgeci siparişin açılışta donmuş yönünden. */
 async function collectOtif(range: DateRange, f: ShippedFilter = {}): Promise<OtifRow> {
   const rows = await prisma.$queryRaw<OtifRow[]>(Prisma.sql`
     SELECT
@@ -124,7 +124,7 @@ async function collectOtif(range: DateRange, f: ShippedFilter = {}): Promise<Oti
 
 /**
  * Yön süzgeci (`f.destination`) iki kaynaklıdır ve ikisi de beyanlıdır: sevk metrajı/serisi
- * sevkiyatın DONMUŞ yönünü, termin kısmı (OTIF · geciken açık) siparişin BUGÜNKÜ zincirini okur.
+ * sevkiyatın DONMUŞ yönünü, termin kısmı (OTIF · geciken açık) siparişin açılışta DONMUŞ yönünü okur.
  */
 export async function getShipmentScorecard(
   range: DateRange,

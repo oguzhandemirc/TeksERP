@@ -2,6 +2,7 @@
 // UÇTAN UCA TEST ORTAMI — kendi DB'n, kendi backend'in, kendi kullanıcıların
 // =============================================================================
 // Koşum (Teks-Erp/ içinden):
+//   E2E_DB_NAME=tekserp_<oturum>e2e_test npx tsx scripts/e2e-ortam.ts kur   # (ad ZORUNLU, varsayılan yok)
 //   npx tsx scripts/e2e-ortam.ts kur       # dump kopyası + migrate + fixture (idempotent)
 //   npx tsx scripts/e2e-ortam.ts sunucu    # backend'i E2E DB'siyle :4110'da başlat (ön plan)
 //   npx tsx scripts/e2e-ortam.ts sistem-hesabi   # sistem hesabını rotasyonla kur, parolayı STDOUT'a bas
@@ -27,7 +28,9 @@ import path from "node:path";
 
 import { cocukOrtami, fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
-const DB_ADI = process.env.E2E_DB_NAME ?? "tekserp_d9e2e_test";
+// Varsayılan YOK (fail-closed): 2026-09-23'te ad verilmeyen bir çağrı varsayılan adla BAŞKA oturumun e2e
+// DB'sinde sistem hesabını döndürdü. Her çağıran kendi DB'sini açıkça söyler.
+const DB_ADI = process.env.E2E_DB_NAME ?? "";
 const DB_KALIP = /^tekserp_[a-z0-9]+e2e_test$/;
 const PG_BIN = process.env.PG_BIN ?? "/opt/homebrew/opt/libpq/bin";
 const PG_HOST = process.env.E2E_PG_HOST ?? "localhost";
@@ -58,6 +61,7 @@ function dur(mesaj: string): never {
  *     kendi hedefini kuran her betikte bu çağrıyı arar (kapısız hedef kurma tavanı).
  */
 function adKapisi(): void {
+  if (!DB_ADI) dur("E2E_DB_NAME zorunlu (ör. E2E_DB_NAME=tekserp_<oturum>e2e_test) — varsayılan ad yok");
   if (!DB_KALIP.test(DB_ADI)) dur(`E2E DB adı kalıba uymuyor: ${DB_ADI} (beklenen ${DB_KALIP})`);
   process.env.DATABASE_URL = dbUrl(DB_ADI);
   const engel = hedefDbEngeli() ?? fixtureHedefEngeli();

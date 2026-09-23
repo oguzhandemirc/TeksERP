@@ -201,6 +201,21 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
 
   // ── (b) DONMUŞ İLERİ DEĞER ───────────────────────────────────────────────
   {
+    model: "Order",
+    alan: "destination",
+    sinif: "DONMUS_ILERI",
+    yazan: [SVC + "order.service.ts"],
+    neden:
+      "sipariş AÇILIRKEN şube → cari zincirinden donan yön (2026-09-23 kullanıcı kararı); kart sonradan değişse de " +
+      "değişmez, sipariş raporları buradan okur. Tek yazar `OrderService.create` ve siparişin AÇIKÇA başka cariye/şubeye " +
+      "taşındığı `update` claim'i (yeni hedef için yeniden çözülür — bilinçli). Geri doldurma script'i (`scripts/`) yalnız " +
+      "NULL satırlara bir kez yazar",
+    bekci: [
+      { dosya: "test_order_destination_frozen.ts", bolum: "⑤", ne: "cari ve şube kartı değişince eski sipariş kolonu değişmez" },
+      { dosya: "test_rapor_yon_ekseni.ts", bolum: "2c", ne: "kart değişince sipariş raporu kümesi kıpırdamaz" },
+    ],
+  },
+  {
     model: "Shipment",
     alan: "sackSeqPrefix",
     sinif: "DONMUS_ILERI",
@@ -792,6 +807,17 @@ export function kolonYazicilari(
   const yazimlar: KolonYazimi[] = [];
   const cozulemeyen: string[] = [];
   const dosyalar = walkTs(dizin);
+  // BaseService delegesi (`this.delegate.create(...)`): model sınıf dosyasında değil, örneklendiği yerde
+  // (`new OrderService({ modelName: "order" })`). Sınıf → modelName kümesi TÜM taranan dosyalardan
+  // çıkarılır; tek ve tutarlıysa `this.delegate` o modelin delegesi sayılır (birden çoksa çözülemez kalır).
+  const sinifModeli = new Map<string, Set<string>>();
+  for (const abs of dosyalar) {
+    for (const m of readFileSync(abs, "utf8").matchAll(/new\s+([A-Z][A-Za-z0-9]*)\(\s*\{\s*modelName:\s*"([a-zA-Z]+)"/g)) {
+      const k = sinifModeli.get(m[1]!) ?? new Set<string>();
+      k.add(m[2]!);
+      sinifModeli.set(m[1]!, k);
+    }
+  }
   for (const abs of dosyalar) {
     const rel = relative(kok, abs);
     const metin = readFileSync(abs, "utf8");
@@ -819,7 +845,17 @@ export function kolonYazicilari(
           if (ts.isCallExpression(p) && ts.isPropertyAccessExpression(p.expression)) {
             const m = p.expression.name.text;
             const ic = p.expression.expression;
-            if (YAZAN_METOD.has(m) && ts.isPropertyAccessExpression(ic)) { delegate = ic.name.text; metod = m; break; }
+            if (YAZAN_METOD.has(m) && ts.isPropertyAccessExpression(ic)) {
+              delegate = ic.name.text;
+              metod = m;
+              if (delegate === "delegate" && ic.expression.kind === ts.SyntaxKind.ThisKeyword) {
+                let c: ts.Node | undefined = p;
+                while (c && !ts.isClassDeclaration(c)) c = c.parent;
+                const modeller = c && ts.isClassDeclaration(c) && c.name ? sinifModeli.get(c.name.text) : undefined;
+                if (modeller && modeller.size === 1) delegate = [...modeller][0]!;
+              }
+              break;
+            }
           }
           if (ts.isReturnStatement(p) || ts.isVariableDeclaration(p) || ts.isFunctionLike(p) && !(ts.isArrowFunction(p) && !ts.isBlock(p.body))) break;
           p = p.parent;

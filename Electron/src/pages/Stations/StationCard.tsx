@@ -71,6 +71,8 @@ export const StationCard = memo(function StationCard({
           <div className="flex min-w-0 items-center gap-2">
             <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", tone.solid)} />
             <span className="truncate text-base font-semibold">{s.name}</span>
+            {/* K22: formda doğan kimlik listede de görünür (istasyon kodu yalnız düzenleme diyaloğundaydı). */}
+            {s.code && <span className="shrink-0 font-mono text-xs text-muted-foreground">{s.code}</span>}
             <Badge className={cn("shrink-0 border-transparent font-medium", tone.bgSoft, tone.text)}>
               {stationKindLabels[s.kind]}
             </Badge>
