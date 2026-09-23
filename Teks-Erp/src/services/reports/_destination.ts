@@ -33,13 +33,18 @@ export function orderDestinationWhere(d: ShipmentDestination): Prisma.OrderWhere
   };
 }
 
-/** `orderDestinationWhere` ham SQL ikizi (`orders <alias>`; tablo takma adları `bdf`/`cdf` sabit). */
-export function orderDestinationSql(d: ShipmentDestination, orderAlias = "o"): Prisma.Sql {
+/** Siparişin zincir DEĞERİ (ham SQL ifadesi; zincir boşsa NULL) — süzgeç ve kova bunu kullanır. */
+export function orderDestinationValueSql(orderAlias = "o"): Prisma.Sql {
   const o = Prisma.raw(orderAlias);
-  return Prisma.sql`AND COALESCE(
+  return Prisma.sql`COALESCE(
     (SELECT bdf."defaultDestination" FROM customer_branches bdf WHERE bdf.id = ${o}."branchId"),
     (SELECT cdf."defaultDestination" FROM customers cdf WHERE cdf.id = ${o}."customerId")
-  ) = ${d}::"ShipmentDestination"`;
+  )`;
+}
+
+/** `orderDestinationWhere` ham SQL ikizi (`orders <alias>`; tablo takma adları `bdf`/`cdf` sabit). */
+export function orderDestinationSql(d: ShipmentDestination, orderAlias = "o"): Prisma.Sql {
+  return Prisma.sql`AND ${orderDestinationValueSql(orderAlias)} = ${d}::"ShipmentDestination"`;
 }
 
 /** Sevkiyat kökü (`shipments <alias>`) — donmuş yön; süzgeç yoksa boş parça. */
