@@ -16,6 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { hataAgiKur } from "./hata-agi.mjs";
+import { acicilarKur } from "./numara-acicilar.mjs";
 
 const BURASI = path.dirname(fileURLToPath(import.meta.url));
 const ELECTRON_KOK = path.resolve(BURASI, "../..");
@@ -375,6 +376,8 @@ const ACICILAR = {
     eskiKayit: async () => (await sql(`SELECT "returnNo" FROM roll_returns WHERE "returnNo" IS NOT NULL ORDER BY "createdAt" DESC LIMIT 1`))[0]?.returnNo ?? null,
   },
 };
+// Kilitli seriler (TEMEL kip) — ayrı modül; yerel üç açık seri önceliklidir.
+for (const [k, v] of Object.entries(acicilarKur({ api, sql, page, gitSayfa, ortam, tokenAl: () => token, bayrakYaz }))) if (!ACICILAR[k]) ACICILAR[k] = v;
 // TABLET — adb yok: ÖLÇÜLMEDİ. Kullanıcı adımları raporda.
 const TABLET_ADIMLARI = [
   "Tartı/Paket → sevk partisi seçicisi: yeni biçimli parti adı listede görünüyor mu (packingLotName).",
@@ -393,63 +396,81 @@ async function gitSayfa(ad) {
 }
 
 // ── KOŞUM ───────────────────────────────────────────────────────────────────
+// İki kip: TAM (biçimi açık seri: değiştir → kayıt → ekran/belge → eski → geri al → md5) ·
+// TEMEL (biçimi kilitli seri: bugünkü biçimle kayıt → numara katalog kalıbına uyuyor mu → ekran/belge →
+// eski → md5). TEMEL, E2 dilimleri inmeden önceki ölçümdür; E2 sonrası farkı gösterir.
 const istenen = process.argv.slice(2);
-const acik = (await seriListesi()).filter((r) => r.editable && (!istenen.length || istenen.includes(r.key)));
+const hepsi = (await seriListesi()).filter((r) => !istenen.length || istenen.includes(r.key));
 const dur = {};
-if (acik.some((r) => r.key.startsWith("packingLot"))) {
+/** Katalog önizlemesinden kalıp: sabit baş (ön ek + bugünkü tarih + ayraçlar) + en az `digits` haneli sayaç. */
+const kalip = (r) => new RegExp(`^${esc(String(r.preview).slice(0, -r.digits))}\\d{${r.digits},}$`);
+if (hepsi.some((r) => r.editable && r.key.startsWith("packingLot"))) {
   ag.adim("K16 · başka istemcinin partisi Yenile'de görünür mü");
   try { await sevkPartisiHazirla(dur); dur.k16 = await k16Sondasi(dur); } catch (e) { dur.k16 = { hata: String(e?.message ?? e).split("\n")[0] }; }
   console.log(`${dur.k16.yenileSonrasiGorundu ? "✓" : "✗"} K16 sondası — ${JSON.stringify(dur.k16)}`);
 }
-for (const r of acik) {
+for (const r of hepsi) {
   const A = ACICILAR[r.key];
-  const kayit = { key: r.key, label: r.label, sonuc: "ÖLÇÜLMEDİ", adimlar: {}, gorsel: [] };
-  if (!A) { kayit.neden = "ACICILAR tablosunda kaydı açma yolu yok"; sonuc.push(kayit); yaz(); console.log(`⏭ ${r.key} ÖLÇÜLMEDİ — ${kayit.neden}`); continue; }
+  const kip = r.editable ? "tam" : "temel";
+  const kayit = { key: r.key, label: r.label, kip, sonuc: "ÖLÇÜLMEDİ", adimlar: {}, gorsel: [] };
+  if (!A || A.olculmedi) {
+    kayit.neden = A?.olcülmedi ?? "ACICILAR tablosunda kaydı açma yolu yok";
+    sonuc.push(kayit); yaz(); console.log(`⏭ ${r.key} [${kip}] ÖLÇÜLMEDİ — ${kayit.neden}`); continue;
+  }
   const on = r.key;
   const orj = { prefix: r.prefix, separator2: r.separator2 ?? "" };
   try {
     ag.adim(`${on} · hazırlık`);
     await A.hazirla(dur);
     const eski = await A.eskiKayit(dur);
-    await new Promise((r) => setTimeout(r, 50));
-    const sinir = new Date(); // biçim değişiminden ÖNCE doğmuş her satır "eski"dir
+    await new Promise((x) => setTimeout(x, 50));
+    const sinir = new Date(); // bu andan ÖNCE doğmuş her satır "eski"dir
     const izOnce = await eskiParmakIzi(A.tablo, sinir);
     kayit.adimlar.eskiKayit = eski;
 
-    ag.adim(`${on} · biçimi değiştir`);
-    kayit.adimlar.bicim = await bicimYaz(r.key, { prefix: A.yeniOnEk, ...(A.separator2 !== undefined ? { separator2: A.separator2 } : {}) }, "e5-bicim");
-    kayit.gorsel.push(await gor(r.key, "bicim-sonra"));
+    let hedefKalip = kalip(r);
+    if (kip === "tam") {
+      ag.adim(`${on} · biçimi değiştir`);
+      kayit.adimlar.bicim = await bicimYaz(r.key, { prefix: A.yeniOnEk, ...(A.separator2 !== undefined ? { separator2: A.separator2 } : {}) }, "e5-bicim");
+      kayit.gorsel.push(await gor(r.key, "bicim-sonra"));
+      hedefKalip = kalip({ ...r, preview: kayit.adimlar.bicim.onizleme });
+    }
 
     ag.adim(`${on} · kayıt aç`);
     const k = await A.ac(dur);
-    kayit.adimlar.kayit = { numara: k.numara, acilisYolu: k.acilisYolu ?? "API", onizleme: kayit.adimlar.bicim.onizleme, yeniOnEkle: String(k.numara ?? "").startsWith(A.yeniOnEk) };
+    kayit.adimlar.kayit = { numara: k.numara, acilisYolu: k.acilisYolu ?? "API", onizleme: kip === "tam" ? kayit.adimlar.bicim.onizleme : r.preview, kalibaUyar: hedefKalip.test(String(k.numara ?? "")) };
 
     ag.adim(`${on} · ekran`);
     kayit.adimlar.ekran = await A.ekran(dur, k, eski).catch((e) => ({ hata: String(e.message ?? e).split("\n")[0] }));
     kayit.gorsel.push(await gor(r.key, "ekran"));
 
     ag.adim(`${on} · belge`);
-    kayit.adimlar.belge = await A.belge(dur, k).catch((e) => ({ hata: String(e.message ?? e).split("\n")[0] }));
-    kayit.adimlar.okutma = A.okutulur ? "TODO" : "uygulanmaz (seri okutulmuyor)";
+    kayit.adimlar.belge = A.belge ? await A.belge(dur, k).catch((e) => ({ hata: String(e.message ?? e).split("\n")[0] })) : { uygulanmaz: "bu serinin belgesi yok" };
+    kayit.adimlar.okutma = A.okutulur ? "ölçülmedi (panel okutma kolu E4 sonrası)" : "uygulanmaz (seri okutulmuyor)";
 
-    ag.adim(`${on} · geri al`);
-    kayit.adimlar.geriAl = await bicimYaz(r.key, orj, "e5-geri");
-    const son = await seri(r.key);
-    kayit.adimlar.geriAl.onEk = son.prefix;
+    let geriTamam = true;
+    if (kip === "tam") {
+      ag.adim(`${on} · geri al`);
+      kayit.adimlar.geriAl = await bicimYaz(r.key, orj, "e5-geri");
+      const son = await seri(r.key);
+      kayit.adimlar.geriAl.onEk = son.prefix;
+      geriTamam = kayit.adimlar.geriAl.kapandi && son.prefix === orj.prefix;
+    }
     kayit.adimlar.eskiNumaralarAyni = izOnce === (await eskiParmakIzi(A.tablo, sinir));
 
     const ekranTamam = kayit.adimlar.ekran && !kayit.adimlar.ekran.hata && Object.values(kayit.adimlar.ekran).every(Boolean);
     const belgeTamam = kayit.adimlar.belge.uygulanmaz || kayit.adimlar.belge.belgedeVar === true;
     const agTemiz = Object.values(agKayitlari(on)).every((l) => l.length === 0);
-    kayit.sonuc = kayit.adimlar.bicim.kapandi && kayit.adimlar.kayit.yeniOnEkle && ekranTamam && belgeTamam && kayit.adimlar.geriAl.kapandi && son.prefix === orj.prefix && kayit.adimlar.eskiNumaralarAyni && agTemiz ? "✓" : "✗";
+    const bicimTamam = kip === "tam" ? kayit.adimlar.bicim.kapandi : true;
+    kayit.sonuc = bicimTamam && kayit.adimlar.kayit.kalibaUyar && ekranTamam && belgeTamam && geriTamam && kayit.adimlar.eskiNumaralarAyni && agTemiz ? "✓" : "✗";
   } catch (e) {
     kayit.sonuc = "✗"; kayit.hata = String(e?.message ?? e).split("\n")[0].slice(0, 300);
     kayit.gorsel.push(await gor(r.key, "hata"));
-    await bicimYaz(r.key, orj, "e5-acil-geri").catch(() => undefined);
+    if (kip === "tam") await bicimYaz(r.key, orj, "e5-acil-geri").catch(() => undefined);
   }
   kayit.ag = agKayitlari(on);
   sonuc.push(kayit); yaz();
-  console.log(`${kayit.sonuc} ${r.key}${kayit.hata ? ` — ${kayit.hata}` : ""}\n   ${JSON.stringify(kayit.adimlar).slice(0, 900)}`);
+  console.log(`${kayit.sonuc} ${r.key} [${kip}]${kayit.hata ? ` — ${kayit.hata}` : ""}\n   ${JSON.stringify(kayit.adimlar).slice(0, 700)}`);
   if (Object.values(kayit.ag).some((l) => l.length)) console.log(`   ağ: ${JSON.stringify(kayit.ag).slice(0, 500)}`);
 }
 if (dur.bayrakOnce) { ag.adim("bayraklar geri"); await bayrakYaz(Object.fromEntries(Object.entries(dur.bayrakOnce).filter(([, v]) => v !== undefined))); }

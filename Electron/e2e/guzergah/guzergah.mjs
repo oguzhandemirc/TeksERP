@@ -79,8 +79,11 @@ const KULLANICI = {
   T: ortam.kullanicilar.operator,
   S: null,
 };
-if (secili.some((a) => a.rol === "S")) {
-  const r = spawnSync("npx", ["tsx", "scripts/e2e-ortam.ts", "sistem-hesabi"], { cwd: BACKEND_KOK, encoding: "utf-8" });
+// `sistemApi`: adım panelde başka rolle koşar ama API'de sistem hesabı ister (modül anahtarı gibi).
+if (secili.some((a) => a.rol === "S" || a.sistemApi)) {
+  // Hedef DB ORTAM DOSYASINDAN: E2E_DB_NAME verilmezse betik varsayılana (başka oturumun e2e DB'si) gider —
+  // 2026-09-23'te d3'ün koşumu d9'un DB'sinde sistem hesabını döndürdü.
+  const r = spawnSync("npx", ["tsx", "scripts/e2e-ortam.ts", "sistem-hesabi"], { cwd: BACKEND_KOK, encoding: "utf-8", env: { ...process.env, E2E_DB_NAME: ortam.dbName } });
   if (r.status !== 0) dur(`sistem hesabı kurulamadı: ${r.stderr?.slice(-400)}`);
   const satir = r.stdout.trim().split("\n").pop();
   KULLANICI.S = JSON.parse(satir);

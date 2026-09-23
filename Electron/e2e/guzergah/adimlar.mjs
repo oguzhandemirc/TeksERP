@@ -105,6 +105,7 @@ async function eksenSec(page, etiket, secenekAdi) {
   return false;
 }
 
+import { MASTER_KOD_ADIMLARI } from "./adimlar-master-kod.mjs";
 import { SEVK_KAPISI_ADIMLARI } from "./adimlar-sevk-kapisi.mjs";
 import { SEVK_YONU_ADIMLARI } from "./adimlar-sevk-yonu.mjs";
 
@@ -2009,4 +2010,6 @@ export const ADIMLAR = [
   ...SEVK_YONU_ADIMLARI,
   // ── SK · Sevk Kapısı (sevk onayı açık rejim) — ayrı dosyada.
   ...SEVK_KAPISI_ADIMLARI,
+  // ── MK · sunucuda üretilen master kodu panelden kodsuz açılır (K20) — ayrı dosyada.
+  ...MASTER_KOD_ADIMLARI,
 ];
