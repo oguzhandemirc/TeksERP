@@ -324,7 +324,24 @@ export async function nextSeriesNo(
   const fmt = fmtOverride ?? resolveSeriesFormat(key);
   const fullPrefix = seriesPrefix(fmt, date);
   const rows = await loadCodes(fullPrefix);
+  const seq = scopedNextSeq(key, fmt, fullPrefix, rows);
+  return `${fullPrefix}${String(seq).padStart(fmt.digits, "0")}`;
+}
 
+/**
+ * KAPSAM + ÇAKIŞMA ATLAMASI — `nextSeriesNo` ile `nextSeriesSeq`in ORTAK çekirdeği.
+ *
+ * ⚠️ TEK GÖVDE OLMASI ŞART: "sıradaki sıra" sorusunu iki yerde hesaplasaydık
+ * kapsam damgası bir yerde, atlama döngüsü başka bir yerde yaşardı ve fark
+ * yalnız SAHADA görünürdü ("türetilmiş alan / ayrışan yüzey"). Kartela toplu
+ * kabulü sırayı ister (N kart tek okumadan), fatura kodu ister — soru aynı.
+ */
+function scopedNextSeq(
+  key: string,
+  fmt: NumberSeriesFormat,
+  fullPrefix: string,
+  rows: Array<SeriesCodeRow>,
+): number {
   // ── KAPSAM: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğanlara bakar ──
   // Tarih segmenti düşünce sabit baş kısalır (`CV220926` → `CV`) ve eski rejimin
   // kodları sayaca girer; ölçüldü: `CV2209260001` varken sıra 2.209.260.004 olur.
@@ -360,7 +377,7 @@ export async function nextSeriesNo(
       }
     }
   }
-  return `${fullPrefix}${String(seq).padStart(fmt.digits, "0")}`;
+  return seq;
 }
 
 // ⚠️ `seriesCodePrefix(key)` ve `buildSeriesCode(key)` KALDIRILDI (D2①): ikisi de
@@ -409,15 +426,24 @@ export function seriesUsedMaxFrom(codes: Array<string | null | undefined>, fullP
   return Math.max(0, nextDailySeq(codes, fullPrefix) - 1);
 }
 
-/** Sıradaki SIRA numarası (kodu kendi kuran yollar için — top barkodu, kartela). */
+/**
+ * Sıradaki SIRA numarası (kodu kendi kuran yollar için — top barkodu, kartela
+ * toplu kabulü). `nextSeriesNo` ile AYNI çekirdekten geçer: kapsam damgası ve
+ * çakışma atlaması burada da uygulanır.
+ *
+ * ⚠️ BİÇİM DE DÖNER ve çağıran kodu ONUNLA kurmalı: ikinci bir
+ * `resolveSeriesFormat` çağrısı arada bir TTL tazelemesine denk gelirse ön ek
+ * bir sürümden, hane/adım başka bir sürümden gelir ("iki okuma" sınıfı).
+ */
 export async function nextSeriesSeq(
   key: string,
-  loadCodes: (fullPrefix: string) => Promise<Array<string | null | undefined>>,
+  loadCodes: (fullPrefix: string) => Promise<Array<SeriesCodeRow>>,
   date: Date = new Date(),
 ): Promise<{ seq: number; fullPrefix: string; fmt: NumberSeriesFormat }> {
   const fmt = resolveSeriesFormat(key);
   const fullPrefix = seriesPrefix(fmt, date);
-  return { seq: seriesSeqFrom(fmt, await loadCodes(fullPrefix), fullPrefix), fullPrefix, fmt };
+  const rows = await loadCodes(fullPrefix);
+  return { seq: scopedNextSeq(key, fmt, fullPrefix, rows), fullPrefix, fmt };
 }
 
 // ── SINIFLANDIRMA (Faz B'nin yemi) ──────────────────────────────────────────

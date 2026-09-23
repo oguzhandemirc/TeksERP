@@ -402,10 +402,24 @@ for (const dosya of kaynakDosyalari) {
   onekCagiranDosya++;
   if (!metin.includes(SERI_KODU)) yapisalIhlal.push(dosya.slice(SRC.length + 1));
 }
-check("§11a ⭐ SIRA hesaplayan her üreteç kodu da AYNI biçimden kurar (`formatSeriesCode`)",
-  yapisalIhlal.length === 0, yapisalIhlal.join(", ") || `${onekCagiranDosya} üreteç dosyası temiz`);
-check("§11a körlük zemini: sıra hesaplayan dosya gerçekten bulundu", onekCagiranDosya >= 10,
-  `${onekCagiranDosya} dosya`);
+// ⚠️ KÖRLÜK ZEMİNİ SABİT SAYI OLAMAZ — ve bu ÖLÇÜLEREK öğrenildi (2026-09-23):
+// bu iddianın popülasyonu (sırayı KENDİ hesaplayan dosyalar) E2 dilimleri
+// ilerledikçe KÜÇÜLÜYOR, çünkü her üreteç `nextSeriesNo`a geçtikçe sırayı artık
+// kendisi hesaplamıyor. Sabit bir taban (`>= 10`) bu yüzden başarıyı kırmızı
+// gösterdi. Popülasyon SIFIRA indiğinde doğru cevap "uyumlu" değil ÜÇÜNCÜ
+// SONUÇTUR: iddia gözlemlenemez hâle geldi ve kapsamı L0'a (beyan ↔ üreteç)
+// taşındı — orada her serinin üreteci ADIYLA ölçülüyor.
+if (onekCagiranDosya === 0) {
+  console.log(
+    "⏭️  §11a ÖLÇÜLEMEDİ — sırayı kendi hesaplayan dosya kalmadı (hepsi `nextSeriesNo` " +
+      "yolunda); kural yapısal olarak sağlanıyor, kapsam `test_number_series_geri_uyumluluk L0`da.",
+  );
+} else {
+  check("§11a ⭐ SIRA hesaplayan her üreteç kodu da AYNI biçimden kurar (`formatSeriesCode`)",
+    yapisalIhlal.length === 0, yapisalIhlal.join(", ") || `${onekCagiranDosya} üreteç dosyası temiz`);
+  check("§11a körlük zemini: sıra hesaplayan dosya gerçekten bulundu (popülasyon küçülüyor)",
+    onekCagiranDosya >= 1, `${onekCagiranDosya} dosya`);
+}
 
 // Muafiyet KATALOGTAN okunur — bekçinin içine gömülü bir liste, beyanla ayrışırdı.
 const tarifEdenUretecler = new Set(

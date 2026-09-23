@@ -21,6 +21,45 @@
 
 ---
 
+## 2026-09-23 — E2 okutulan aile dilimi: yedi seri açıldı, kilit SERİDEN EKSENE indi [ÇEKİRDEK]
+
+İş emri/refakat kartı · kartela kart no · fason sevk/kabul · kartela sevk/kabul · doğrudan sevk
+serilerinin üreteçleri C0 yoluna (`nextSeriesNo`) geçirildi; SAYAÇ kilidi 20 seriden 13'e indi ve
+kalan on üçün hepsi finans ailesi.
+
+**Ölçüm 1 — bir serinin İKİ üreteci olabiliyor.** `workOrder` numarasını iki yer üretiyor
+(`workorder.service.generateWorkOrderNumber` normal açılışta, `helpers/workorder-clone.helper`
+split/klon yolunda); `subcontractorDispatch` da iki yerden doğuyor (`subcontractor.service` ve
+`helpers/batch-dispatch-surgery.helper`, parti ameliyatı). Katalogdaki `scopedCounter.uretec`
+alanı bu yüzden `string | readonly string[]` oldu ve L0 kapısı listenin HER dosyasını açıyor. Tek
+yol beyan edilseydi ikinci üreteç eski literal hesapta kalsa bile beyan YEŞİL görünürdü — bu,
+"beyan kendi başına bir şey ölçmez" kuralının ikinci vakası.
+
+**Ölçüm 2 — `nextSeriesNo` yolunda olmak yetmiyor, YÜKLEYİCİNİN BİÇİMİ de ölçülür.**
+`directShipment` zaten `nextSeriesNo` çağırıyordu ama yükleyicisi çıplak string döndürüyordu;
+`hasCreatedAt` false kaldığı için kapsam damgası hiç uygulanmıyordu. `ensureSubCode` vakasının
+birebir tekrarı: çağrı doğru, veri eksik, kapı sessiz.
+
+**Ölçüm 3 — kodu çağıranın kurduğu yollar SIRA ister ve o sıra da kapsamlı olmalı.** Kartela
+toplu kabulünde N kart tek okumadan doğuyor (`seq`, `seq+adım`, …), yani üreteç kod değil sıra
+döndürmek zorunda. `nextSeriesSeq` bu işi yapıyordu ama kapsam damgası ve çakışma atlaması ONDA
+YOKTU. İkinci bir hesap yazmak yerine çekirdek ortaklandı (`scopedNextSeq`): `nextSeriesNo` da
+`nextSeriesSeq` de oradan geçiyor.
+
+**Ölçüm 4 — KISMİ kilit bir SERİ kilidi değil.** `test_eski_istemci_okutma` eski panel/tablet
+sınıflandırıcılarını git'ten kurup simüle ediyor ve ölçüm şu: iş emri önek+ayraçta, kartela kartı
+ile dört fason/kartela belgesi yalnız ÖNEKTE, çuval beş eksende kırılıyor, sevkiyat hiçbirinde.
+Yani kartela sevk no'nun tarih segmenti · hane · ikinci ayracı BUGÜN değiştirilebilir. Uyumluluk
+matrisi ise "kilit varsa hiç ölçme" diyordu ve bu serilerin gerçekten yapılabilen değişimlerini
+kör bırakıyordu. Matrisin "açık" tanımı iki hâlli yapıldı (kilitsiz + kilitli ekseni beşten az),
+kilitli eksen ölçüm dışı kalıyor: açık seri 30 → 36, ölçülen dönüşüm 570 → 674.
+
+**Kapı notu — hedef ELLE seçilmez.** `test_number_series_scope §4` ("beyansız seri düzenlenemez")
+hedefi üçüncü kez bayatladı: ölçtüğü seri açıldıkça elle başka bir seriye çekiliyordu. Hedef artık
+katalogdan KEŞİFLE bulunuyor ("SAYAÇ kilitli HERHANGİ biri") ve değer tohumla aynı yazılıyor ki red
+gerekçesi kilit olsun, değer kapısı olmasın. Kilitli seri kalmadığında kapı üçüncü sonucu basıyor:
+*ÖLÇÜLEMEDİ — iddia artık gereksiz*. Kapanış koşulunun kendisi de böylece ölçülebilir oldu.
+
 ## 2026-09-17 — Master veri kimlik tekilliği: bir tripwire'ın değeri ELEDİKLERİNDEDİR [ÇEKİRDEK]
 
 Kullanıcı kuralı: *"master veri sektör standardında olmalı; ilk fason tablosunda düşünemedik, geriye
@@ -11746,4 +11785,54 @@ zinciri ister" YANLIŞ; `createManifest` yalnız var olan bir iş emri istiyor, 
 **Fikstür dersleri (ikisi de iş kuralının doğruluğunu gösterdi):** aynı depoda ikinci DRAFT sayım 409
 (tek açık sayım kuralı) → her çağrı kendi deposunu kurar; aynı adlı ikinci renk 409 (mükerrer adı
 koruması) → her çağrı farklı ad kullanır. Fikstür iş kuralına uyar, iş kuralı fikstüre değil.
+
+## 2026-09-23 — İstemci kilidi EKSEN düzeyine indi: ölçülmemiş genelleme yerine ölçüm [ÇEKİRDEK]
+
+**Eski kural bir GENELLEMEYDİ:** "okutulan seri, sahadaki istemciler güncellenene kadar hiç
+değiştirilemez". d3'ün eski istemci simülasyonu (panel 1.3.1 + tablet 1.0.6, sınıflandırıcılar yayın
+commit'inden çıkarılıp saf fonksiyon olarak koşuldu) bunun ölçülmemiş olduğunu gösterdi:
+- **sevkiyat (SVK):** eski istemcilerin hiçbiri bu seriyi okutmuyor ⇒ kilidin istemci gerekçesi YOK.
+- **iş emri:** yalnız ön ek (tablet kodu TOP sanıyor) ve ayraç (eski panel tanımıyor).
+- **kartela kartı · fason sevk/kabul · kartela sevk/kabul:** yalnız ÖN EK.
+- **çuval:** tablet 1.0.6 çuvalı `/^CV\d{10}$/` ile tanıyor ⇒ HER eksen kırıyor.
+
+**Karar:** kilit `SCANNED_CLIENT_BREAKING_AXES` tablosuyla EKSEN düzeyine indi. Kırılan ekseni
+olmayan seri hiç kilitlenmez; kısmi kilitte panel yalnız o ALANLARI pasifleştirir ve kilit cümlesi
+hangi alanın neden kapalı olduğunu söyler. Yazma tarafında "bu seriye dokunulamaz" kapısı yalnız TÜM
+eksenler kırılıyorsa konuşur; hangi eksenin değiştiği ancak DEĞER bilindiğinde sorulabildiği için
+`assertAxesAllowed` ayrı bir kapıdır (değerden bağımsız soru ↔ değerden doğan soru).
+
+**"?tanımaz" da kilit gerekçesidir** (1e kararı, ölçülmüş): eski panel tanımadığı kodda SESSİZ no-op
+yapıyor — operatör okutur, hiçbir şey olmaz, sahada iş durur. Bu, yanlış dala düşmek kadar kötüdür.
+
+**Kapı iki yönlü:** simülasyonun kırdığı eksen tabloda yoksa KIRMIZI (koruma eksik), tabloda olup
+simülasyonda kırmayan eksen varsa da KIRMIZI (gereksiz kilit — fabrikanın ayarını sebepsiz kapatır).
+Okutulan her serinin tabloda bir satırı olmak zorunda; boş dizi de bir BEYANDIR ("ölçüldü, kırmıyor"
+ile "hiç ölçülmedi" karışmasın).
+
+**`FAZ_D_ONCESI` açıklaması düzeltildi:** eski metin eşiğin "sonraki her pakette karşılandığını" ima
+ediyordu; ölçüldü ki HİÇBİR istemci — HEAD dahil — emekli BİÇİMLERİ denemiyor, yani Faz D henüz hiçbir
+pakette yok. Ayrıca sahadaki tablet 1.0.6'dır, 1.0.7 hiç yayınlanmadı; eşik 1.0.7 kalır (o etiketi
+taşıyan ama tabloyu çekmeyen bir ağaç var), yani kilit tablet 1.0.8+ ile açılır.
+
+**Arşiv hijyeni:** birleştirmede "iki tarafı da tut" çözümü AYNI notu iki kez yazabiliyor (bir iniş
+ağacında yaşandı). `check-docs` artık arşivde mükerrer başlığı kırmızıyla durduruyor; körlük zemini
+var (50'den az başlık okunduysa tarayıcı kör sayılır). Ölçüm: bu dalda mükerrer YOK (263 başlık, 0
+tekrar) — sorun iniş ağacının birleştirmesinde doğmuş.
+
+## 2026-09-23 — E2 üretim dilimi: dokuma işi · levent · doff · sipariş açıldı [ÇEKİRDEK]
+
+**Açılanlar:** dokuma işi no (DK) · levent no · doff kodu · sipariş no (SIP). Açık seri 25 → 29;
+SAYAC kilidi 23 → 19.
+
+**Kilit ve numara SIRASI korundu:** levent ve doff üreteçleri advisory kilit alıyor ve kilit
+anahtarı KODUN SABİT BAŞINI (ön ek + tarih) istiyor, yani ön ek numaradan ÖNCE hesaplanmak zorunda.
+Bu yüzden biçim BİR KEZ okunup (`resolveSeriesFormat`) hem kilide hem `nextSeriesNo`ya AYNI NESNE
+olarak geçiriliyor — ikinci bir okuma "iki okuma" sınıfına girerdi (arada önbellek tazelenirse ön ek
+bir sürümden, hane başka sürümden gelir). Dokuma işi numarasında kilit zaten fonksiyonun ilk
+ifadesiydi, o sıra da korundu.
+
+**L2:** sipariş gerçek servis yolundan ölçülüyor (müşteri + tek kalem). Dokuma işi · levent · doff
+"tezgah/levent/çözgü zinciri ister" gerekçesiyle beyanlı — ⚠️ bu gerekçe bugün iki kez yanlış çıktı
+(manifest ve mal kabul), bu yüzden sıradaki turda ÖLÇÜLECEK, tahmin edilmeyecek.
 

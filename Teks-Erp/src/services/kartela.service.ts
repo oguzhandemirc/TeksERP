@@ -32,7 +32,7 @@ import {
 } from "./printed-document.service";
 import { renderKartelaCekiHtml } from "./document-render/kartela-ceki.html";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, nextSeriesNo, nextSeriesSeq } from "./number-series.service";
 import type { NumberSeriesFormat } from "./helpers/series-format.helper";
 import { nextCounterCandidate } from "./helpers/series-counter.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -84,56 +84,72 @@ type ListResult = {
 // Helpers
 // -----------------------------------------------------------------------------
 
-/** Kartela sevk/kabul belge no sequence (KS/KK + GGAAYY + NNNN). */
 /**
- * ⚠️ SIRA ile BİÇİM BİRLİKTE döner: kodu kuran çağıran, ön eki kuran okumanın
- * AYNISINI kullanmak zorunda. Yalnız sayı dönseydi çağıran biçimi İKİNCİ kez
- * okurdu ve arada bir önbellek tazelemesi olursa ön ek bir sürümden, hane/adım
- * başka bir sürümden gelirdi ("iki okuma" sınıfı).
+ * Kartela sevk/kabul belge no — TAM KOD döner (`nextSeriesNo`, C0 yolu).
+ *
+ * ⚠️ Eskiden `{ seq, fmt }` dönüyordu ki çağıran biçimi İKİNCİ kez okumasın
+ * ("iki okuma" sınıfı). Artık kodu üretecin kendisi kuruyor, yani o risk
+ * ORTADAN KALKTI — çağıranın elinde biçim yok, olması da gerekmiyor.
+ *
+ * `createdAt` seçilir: kapsam damgası (`formatChangedAt`) ancak satırın doğuş
+ * anı bilinirse uygulanabilir; çıplak string listesi kapsamı SESSİZCE kapatır.
  */
-async function nextKartelaDocSequence(
+async function nextKartelaDocNo(
   tx: Prisma.TransactionClient,
   kind: "dispatch" | "receipt",
   date: Date
-): Promise<{ seq: number; fmt: NumberSeriesFormat }> {
+): Promise<string> {
   // Ön ek serisinden gelir (`kartelaDispatch` / `kartelaReceipt`); literal KS/KK yok.
-  const fmt = resolveSeriesFormat(kind === "dispatch" ? "kartelaDispatch" : "kartelaReceipt");
-  const docPrefix = seriesPrefix(fmt, date);
-
-  // O-21: gte (index seek) + startsWith (collation-bağımsız tam-prefix) + JS sayısal
-  // max. Eski startsWith-tek + orderBy desc glibc collation sırasına/lex taşmaya
-  // güveniyordu (glibc seq-no bug — order.service.ts deseni).
-  let nos: string[];
-  if (kind === "dispatch") {
-    const rows = await tx.kartelaDispatch.findMany({
-      where: { dispatchNo: { gte: docPrefix, startsWith: docPrefix } },
-      select: { dispatchNo: true },
-    });
-    nos = rows.map((r) => r.dispatchNo);
-  } else {
-    const rows = await tx.kartelaReceipt.findMany({
-      where: { receiptNo: { gte: docPrefix, startsWith: docPrefix } },
-      select: { receiptNo: true },
-    });
-    nos = rows.map((r) => r.receiptNo);
-  }
-  return { seq: seriesSeqFrom(fmt, nos, docPrefix), fmt };
+  const key = kind === "dispatch" ? "kartelaDispatch" : "kartelaReceipt";
+  return nextSeriesNo(
+    key,
+    async (docPrefix) => {
+      // O-21: gte (index seek) + startsWith (collation-bağımsız tam-prefix); sayısal
+      // max JS'te. Eski startsWith-tek + orderBy desc glibc collation sırasına/lex
+      // taşmaya güveniyordu (glibc seq-no bug — order.service.ts deseni).
+      if (kind === "dispatch") {
+        const rows = await tx.kartelaDispatch.findMany({
+          where: { dispatchNo: { gte: docPrefix, startsWith: docPrefix } },
+          select: { dispatchNo: true, createdAt: true },
+        });
+        return rows.map((r) => ({ code: r.dispatchNo, createdAt: r.createdAt }));
+      }
+      const rows = await tx.kartelaReceipt.findMany({
+        where: { receiptNo: { gte: docPrefix, startsWith: docPrefix } },
+        select: { receiptNo: true, createdAt: true },
+      });
+      return rows.map((r) => ({ code: r.receiptNo, createdAt: r.createdAt }));
+    },
+    date,
+  );
 }
 
-/** KRT kartela/numune kodu sequence (KRT + GGAAYY + NNNN; barcode = cardNumber). */
+/**
+ * KRT kartela/numune kodu SIRASI (KRT + GGAAYY + NNNN; barkod = cardNumber).
+ *
+ * ⚠️ KOD DEĞİL SIRA döner ve bu bilinçli: toplu kabulde N kart TEK okumadan
+ * doğar (`seq`, `seq+adım`, …) — her kart için ayrı tarama N+1 olurdu. Sıra
+ * `nextSeriesSeq` üzerinden gelir, yani kapsam damgası ve çakışma atlaması
+ * `nextSeriesNo` ile AYNI çekirdekten uygulanır.
+ */
 async function nextSwatchSequence(
   tx: Prisma.TransactionClient,
   date: Date
 ): Promise<{ seq: number; fmt: NumberSeriesFormat }> {
-  const fmt = resolveSeriesFormat("swatch");
-  const codePrefix = seriesPrefix(fmt, date);
-  // O-21: gte + startsWith (tam-prefix) + sayısal max — tek collation-top satıra
-  // güvenmek yerine günün tüm kodlarının sayısal max'ı.
-  const rows = await tx.swatch.findMany({
-    where: { cardNumber: { gte: codePrefix, startsWith: codePrefix } },
-    select: { cardNumber: true },
-  });
-  return { seq: seriesSeqFrom(fmt, rows.map((r) => r.cardNumber), codePrefix), fmt };
+  const { seq, fmt } = await nextSeriesSeq(
+    "swatch",
+    async (codePrefix) => {
+      // O-21: gte + startsWith (tam-prefix) + sayısal max — tek collation-top satıra
+      // güvenmek yerine günün tüm kodlarının sayısal max'ı.
+      const rows = await tx.swatch.findMany({
+        where: { cardNumber: { gte: codePrefix, startsWith: codePrefix } },
+        select: { cardNumber: true, createdAt: true },
+      });
+      return rows.map((r) => ({ code: r.cardNumber, createdAt: r.createdAt }));
+    },
+    date,
+  );
+  return { seq, fmt };
 }
 
 // -----------------------------------------------------------------------------
@@ -309,8 +325,7 @@ export class KartelaService {
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const now = new Date();
-        const { seq, fmt } = await nextKartelaDocSequence(tx, "dispatch", now);
-        const dispatchNo = formatSeriesCode(fmt, seq, now);
+        const dispatchNo = await nextKartelaDocNo(tx, "dispatch", now);
 
         const dispatch = await tx.kartelaDispatch.create({
           data: {
@@ -700,8 +715,7 @@ export class KartelaService {
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const now = new Date();
-        const { seq, fmt } = await nextKartelaDocSequence(tx, "receipt", now);
-        const receiptNo = formatSeriesCode(fmt, seq, now);
+        const receiptNo = await nextKartelaDocNo(tx, "receipt", now);
 
         const receipt = await tx.kartelaReceipt.create({
           data: {

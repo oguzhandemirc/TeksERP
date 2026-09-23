@@ -18,7 +18,8 @@
 //        `withBarcodeRetry` bunu DETERMİNİSTİK tekrarlayıp 409'la biter
 //        (`shipping.service.ts:230` bu davranışı yazılı beyan ediyor)
 //   §4 ⭐ `scopedCounter` BEYANI OLMAYAN seri düzenlenemez (konfigürasyon sınırı;
-//        üretim yolu kapatılmaz — çuval açılamaz hâle gelirdi)
+//        üretim yolu kapatılmaz — çuval açılamaz hâle gelirdi). HEDEF KEŞİFLE
+//        seçilir; kilitli seri kalmazsa sonuç ÖLÇÜLEMEDİ olur, "uyumlu" değil.
 //   §5 `updateSeriesFormat` damgayı GERÇEKTEN yazar
 //   §6 ⭐ C0b — OKUTULAN serinin biçimi, saha Faz B'yi taşımadan değiştirilemez;
 //      eşik "Faz B'yi taşımayan SON sürüm"dür (tahmin değil, ölçülmüş geçmiş)
@@ -45,6 +46,7 @@ import {
   compareClientVersions,
   scanningClientsCarryFazB,
 } from "../src/config/client-version-policy";
+import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
@@ -138,15 +140,38 @@ async function main(): Promise<void> {
       geriDonus === "CV2209260004", geriDonus);
 
     // ── §4 `scopedCounter` beyanı olmayan seri düzenlenemez ────────────────
-    // `order` (SIP) bugün beyansız: çağrı yeri zengin biçime geçirilmedi.
-    const reddedilmeli = await dene(() =>
-      updateSeriesFormat("order", { prefix: "SIP", dateSegment: "DDMMYY", digits: 4, separator: "" }),
-    );
+    // ⚠️ HEDEF ELLE SEÇİLMEZ, KEŞİFLE BULUNUR (1e hükmü 2026-09-23, ÜÇÜNCÜ kez
+    // bayatladıktan sonra): iddia "SAYAÇ kilitli HERHANGİ bir seri"dir, adı
+    // geçen bir seri değil. Elle seçilen hedef, o seri açıldığı gün sessizce
+    // ölçmeyi bırakıyordu ve kapı "yeşil" görünüyordu.
+    // ⚠️ ÜÇÜNCÜ SONUÇ VAR: kilitli seri KALMADIYSA bu bir ihlal değil, KAPANIŞ
+    // koşuludur — iddia artık gereksizdir ve kapı bunu AÇIKÇA söyler. "Uyumlu"
+    // demek, ölçülmemiş bir şeyi ölçülmüş göstermek olurdu.
     const kod = (e: unknown): string | undefined =>
       (e as { details?: { code?: string } } | null)?.details?.code;
-    check("§4 ⭐ sayacı hazır OLMAYAN seri düzenlenemez",
-      reddedilmeli instanceof Error && kod(reddedilmeli) === "NUMBER_SERIES_COUNTER_NOT_SCOPED",
-      reddedilmeli instanceof Error ? (kod(reddedilmeli) ?? reddedilmeli.message) : "KABUL EDİLDİ");
+    const kilitliAday = NUMBER_SERIES_CATALOG.find(
+      (e) => !e.lockedReason && !e.ownCounter && e.scopedCounter?.durum !== "hazir",
+    );
+    if (!kilitliAday) {
+      console.log(
+        "⏭️  §4 ÖLÇÜLEMEDİ — SAYAÇ kilitli seri kalmadı; iddia artık gereksiz " +
+          "(52 serinin hepsi kapsam damgasına geçti). Bu bölüm silinebilir.",
+      );
+    } else {
+      // Değer DEĞİŞMİYOR (tohum biçimi aynen geri yazılıyor): red gerekçesi
+      // KİLİT olmalı, karakter/hane/çakışma kapısı değil.
+      const reddedilmeli = await dene(() =>
+        updateSeriesFormat(kilitliAday.key, {
+          prefix: kilitliAday.seedPrefix,
+          dateSegment: kilitliAday.seedDateSegment,
+          digits: kilitliAday.seedDigits,
+          separator: kilitliAday.seedSeparator,
+        }),
+      );
+      check(`§4 ⭐ sayacı hazır OLMAYAN seri düzenlenemez (keşfedilen hedef: ${kilitliAday.key})`,
+        reddedilmeli instanceof Error && kod(reddedilmeli) === "NUMBER_SERIES_COUNTER_NOT_SCOPED",
+        reddedilmeli instanceof Error ? (kod(reddedilmeli) ?? reddedilmeli.message) : "KABUL EDİLDİ");
+    }
 
     // ── §5 Beyanlı seri kabul edilir VE damgayı yazar ──────────────────────
     const kabulEdilmeli = await dene(() =>
@@ -167,14 +192,14 @@ async function main(): Promise<void> {
     // 1.0.0. Kapının AÇILDIĞI hâl de aynı dosyada ölçülür (aşağıda).
     check("§6 ⭐ bugün kapı KAPALI (saha minVersion'ı eşiğin altında)",
       !scanningClientsCarryFazB(), `eşik: electron>${FAZ_B_ONCESI.electron} · mobil>${FAZ_B_ONCESI.mobil}`);
-    // ⚠️ `shipment` SEÇİLDİ, `swatch` DEĞİL: kartelanın `scopedCounter` beyanı yok,
-    // yani C0b kaldırılsa bile İKİNCİ kapı (C0) onu reddederdi ve sonda C0b'nin
-    // yük taşıyıp taşımadığını GÖREMEZDİ. `shipment` ikisini de geçer — tek
-    // engeli C0b'dir, yani kapı kalkınca gerçekten düzenlenebilir hâle gelir.
+    // ⚠️ SERİ DEĞİŞTİ: `shipment` 2026-09-23'te AÇILDI (E4 simülasyonu: eski
+    // istemcilerin hiçbiri o seriyi okutmuyor ⇒ kilidin istemci gerekçesi yok).
+    // Yerine `sack` seçildi: `scopedCounter` beyanı VAR (yani C0 onu reddetmez,
+    // sonda gerçekten C0b'yi ölçer) ve eski tablet onu HER eksende kırıyor.
     const okutulanRed = await dene(() =>
-      updateSeriesFormat("shipment", { prefix: "SVK", dateSegment: "DDMMYY", digits: 4, separator: "" }),
+      updateSeriesFormat("sack", { prefix: "CX", dateSegment: "DDMMYY", digits: 4, separator: "" }),
     );
-    check("§6 ⭐ OKUTULAN seri (sevkiyat) bugün düzenlenemez",
+    check("§6 ⭐ OKUTULAN seri (çuval) bugün düzenlenemez",
       okutulanRed instanceof Error && kod(okutulanRed) === "NUMBER_SERIES_CLIENT_TOO_OLD",
       okutulanRed instanceof Error ? (kod(okutulanRed) ?? okutulanRed.message) : "KABUL EDİLDİ");
     check("§6 okutulMAYAN seri aynı anda düzenlenebilir (kapı yalnız `scanned` kümeye bakıyor)",

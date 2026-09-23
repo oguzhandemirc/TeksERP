@@ -149,7 +149,7 @@ import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { normalizeScanCode } from "../utils/code-format";
 import { formatSeriesCode, nextSeriesNo, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
-import { nextPrefixedSequenceTx, SubcontractorService } from "./subcontractor.service";
+import { SubcontractorService } from "./subcontractor.service";
 
 import { diffFields } from "./helpers/audit-diff.helper";
 import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
@@ -618,26 +618,28 @@ export class WorkOrderService {
    */
   async generateWorkOrderNumber(): Promise<string> {
     const now = new Date();
-    const fmt = resolveSeriesFormat("workOrder");
-    const prefix = seriesPrefix(fmt, now);
 
-    // Retry loop — nadiren de olsa unique çakışma olursa tekrar dene
+    // Retry loop — nadiren de olsa unique çakışma olursa tekrar dene.
+    // ⚠️ `nextSeriesNo`un çakışma atlaması bu döngünün YERİNE GEÇMEZ: atlama
+    // yalnız BU okumada görülen kodlara bakar, döngü ise iki eşzamanlı açılışın
+    // arasında doğan kaydı yakalar (okuma tx DIŞINDA — burası `withBarcodeRetry`
+    // kapsamında değil, çünkü kayıt daha yaratılmadı).
     for (let attempt = 0; attempt < 5; attempt++) {
       // O-4: collation-güvenli (gte index seek + startsWith tam-prefix) + NUMERIC
       // max — lexicographic "999">"1000" taşmasını (seq kalıcı 1000'de sıkışırdı) ve
       // manuel harf-kuyruklu workOrderNumber'ın parseInt→NaN zehirlenmesini (Number.isFinite
       // ile) önler. findFirst+orderBy desc ikisine de açıktı.
-      const todays = await prisma.workOrder.findMany({
-        where: { workOrderNumber: { gte: prefix, startsWith: prefix } },
-        select: { workOrderNumber: true },
-      });
-      const seq = seriesSeqFrom(
-      fmt,
-        todays.map((w) => w.workOrderNumber),
-        prefix,
+      const candidate = await nextSeriesNo(
+        "workOrder",
+        async (prefix) => {
+          const todays = await prisma.workOrder.findMany({
+            where: { workOrderNumber: { gte: prefix, startsWith: prefix } },
+            select: { workOrderNumber: true, createdAt: true },
+          });
+          return todays.map((w) => ({ code: w.workOrderNumber, createdAt: w.createdAt }));
+        },
+        now,
       );
-
-      const candidate = formatSeriesCode(fmt, seq, now);
 
       const exists = await prisma.workOrder.findUnique({ where: { workOrderNumber: candidate } });
       if (!exists) return candidate;

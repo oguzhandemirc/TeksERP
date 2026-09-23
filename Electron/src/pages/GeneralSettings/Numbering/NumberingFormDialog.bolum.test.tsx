@@ -149,3 +149,40 @@ describe("Numaralandırma diyaloğu — bölüm bölüm hata", () => {
     expect(kaydet()).toBeDisabled();
   });
 });
+
+describe("Numaralandırma diyaloğu — ALAN bazında kilit (E4)", () => {
+  beforeEach(() => {
+    vi.mocked(numberingService.preview).mockReset();
+    vi.mocked(numberingService.preview).mockResolvedValue({ preview: "FS2309230001", next: "FS2309230002" });
+  });
+
+  // ⭐ ÖLÇÜLDÜ (d3'ün eski istemci simülasyonu): okutulan sekiz serinin altısında
+  // eski panel/tablet YALNIZ ön ekten kırılıyor. "Seriyi tamamen kapat" kararı
+  // fabrikanın hane/tarih/ayraç ayarını SEBEPSİZ kilitliyordu.
+  // ⭐ NEGATİF SONDA (bu commit): `lockedAxes` yok sayılınca tarih alanı da pasif
+  // kalıyor ve §2 kırmızı; `prefix` listeden çıkarılınca §1 kırmızı.
+  it("⭐ §1 kilitli eksen (ön ek) PASİF çizilir", () => {
+    ciz(row({ key: "subcontractorDispatch", editable: true, lockKind: "ISTEMCI", lockedAxes: ["prefix"] }));
+    expect(screen.getByLabelText("Ön ek")).toBeDisabled();
+  });
+
+  it("⭐ §2 kilitli OLMAYAN eksenler AÇIK kalır (tarih · hane · ayraç)", () => {
+    ciz(row({ key: "subcontractorDispatch", editable: true, lockKind: "ISTEMCI", lockedAxes: ["prefix"] }));
+    expect(screen.getByLabelText("Hane")).not.toBeDisabled();
+    expect(screen.getByLabelText("Tarih")).not.toBeDisabled();
+    expect(screen.getByLabelText("Ayraç (ön ek ile tarih arası)")).not.toBeDisabled();
+  });
+
+  it("§3 tam kilitte (tüm eksenler) her alan pasif", () => {
+    ciz(
+      row({
+        key: "sack",
+        editable: false,
+        lockKind: "ISTEMCI",
+        lockedAxes: ["prefix", "dateSegment", "digits", "separator", "separator2"],
+      }),
+    );
+    expect(screen.getByLabelText("Ön ek")).toBeDisabled();
+    expect(screen.getByLabelText("Hane")).toBeDisabled();
+  });
+});
