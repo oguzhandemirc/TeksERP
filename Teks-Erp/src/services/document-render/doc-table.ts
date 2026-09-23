@@ -21,6 +21,20 @@ export interface DocColumnCfg {
    */
   shown?: string[];
   /**
+   * BAŞLIĞI BOŞ BASILACAK kolonlar — `labels`ten AYRI bir alan, çünkü boş dize
+   * orada "VARSAYILANA DÖN" demek (aşağıdaki yazılı güvence) ve aynı kutu iki
+   * niyeti birden anlatamaz. Üç hâl açıkça ayrışır:
+   *   · anahtar hiçbir yerde yok → yerleşik başlık
+   *   · `labels[key]` dolu       → kullanıcının yazdığı metin
+   *   · `blankLabels` içinde     → başlık BASILMAZ (yalnız hücre değerleri)
+   * Saha gerekçesi: "parti kodu" gibi bir kolonda fabrika yalnız numarayı
+   * bastırmak isteyebilir; başlığı kaldırmanın tek yolu kutuyu boşaltmak
+   * olsaydı, o hareket "varsayılana dön"le çakışırdı.
+   * ⚠️ `labels` ile birlikte verilirse BOŞLUK KAZANIR — kullanıcı açıkça
+   * "başlık basma" dediyse, kutuda kalmış eski metin onu ezmemeli.
+   */
+  blankLabels?: string[];
+  /**
    * KOLON BAŞLIĞI ÖZELLEŞTİRME (2026-09-04) — `{ kolonKey: "Yeni Başlık" }`.
    *
    * Fabrika müşteriye giden belgede kendi dilini kullanabilsin diye ("STOK ADI"
@@ -87,9 +101,12 @@ export function applyColumnCfg<R>(cols: DocCol<R>[], cfg?: DocColumnCfg): DocCol
   // başlığını hesaplamak boşuna, ve sıralamadan sonra uygulamak override'ın
   // sıralamaya karışmadığını yapısal olarak garanti eder.
   const labels = cfg?.labels;
-  if (labels) {
+  const blank = new Set(cfg?.blankLabels ?? []);
+  if (labels || blank.size) {
     out = out.map((c) => {
-      const raw = labels[c.key];
+      // BOŞLUK ÖNCE: açık "başlık basma" kararı, kutuda kalmış metni ezer.
+      if (blank.has(c.key)) return { ...c, label: "" };
+      const raw = labels?.[c.key];
       const t = typeof raw === "string" ? raw.trim() : "";
       return t ? { ...c, label: escLabel(t) } : c;
     });

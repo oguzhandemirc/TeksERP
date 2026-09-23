@@ -66,6 +66,14 @@ export interface DocumentConfig {
        * kırpar. Renderer HTML kaçırır (değer kullanıcı girdisidir).
        */
       labels?: Record<string, string>;
+      /**
+       * BAŞLIĞI BOŞ BASILACAK kolonlar (2026-09-23) — `labels`ten AYRI liste,
+       * çünkü orada boş dize "VARSAYILANA DÖN" demek ve aynı kutu iki niyeti
+       * anlatamaz. Üç hâl: anahtar yok → yerleşik başlık · `labels` dolu →
+       * kullanıcı metni · burada → başlık basılmaz. Backend `sanitizeDocumentsConfig`
+       * aynı yorumu yapar; ikisi birlikte verilirse BOŞLUK kazanır.
+       */
+      blankLabels?: string[];
     }
   >;
   /** Belge doğrulama karekodu (belge no + versiyon) — default kapalı. */
@@ -693,6 +701,10 @@ export const DOC_DEFS: DocDef[] = [
           // adı + ambalaj numarası" ayarı AÇIKKEN basılır; burası başlık + gizleme içindir.
           { key: "packageNo", label: "Ambalaj no (sevk partisi)" },
           { key: "packingGroupName", label: "Sevk partisi" },
+          // PARTİ KODU (2026-09-23) — aynı cari için iki parti AYNI ADI taşıyabilir
+          // (ad tekilliği bilinçli olarak sınırlanmadı), kod ayırt eder. TEK KAPI:
+          // yalnız burada açılır, "parti adı + ambalaj no" GLOBAL ayarına bağlı DEĞİL.
+          { key: "packingGroupCode", label: "Parti kodu", defaultHidden: true },
           { key: "totalMeters", label: "Metre toplamı" },
           { key: "totalKg", label: "Kg toplamı" },
           { key: "packageCount", label: "Top adedi" },
@@ -714,6 +726,7 @@ export const DOC_DEFS: DocDef[] = [
           { key: "sackCode", label: "Çuval no" },
           { key: "packageNo", label: "Ambalaj no (sevk partisi)" },
           { key: "packingGroupName", label: "Sevk partisi" },
+          { key: "packingGroupCode", label: "Parti kodu", defaultHidden: true },
           { key: "barcode", label: "Barkod no" },
           { key: "batchNumber", label: "Parti no" },
           { key: "desen", label: "Desen" },
