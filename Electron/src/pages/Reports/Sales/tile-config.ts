@@ -1,4 +1,4 @@
-import { Ban, ClipboardList, PackageSearch, PackageX, Target, Timer, Truck } from "lucide-react";
+import { Ban, ClipboardList, Globe2, PackageSearch, PackageX, Target, Timer, Truck } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 /**
@@ -52,6 +52,13 @@ export const salesReportTiles: HubTile[] = [
     description: "Dönemsel sevk hacmi + zamanında teslim oranı ve geciken siparişler",
     icon: Truck,
     to: "/reports/sales/shipment-scorecard",
+  },
+  {
+    key: "destination-mix",
+    title: "Yurtiçi / Yurtdışı Satış",
+    description: "Yön dağılımı (metre · kg · tutar), ihracat müşteri/ülke/ürün kırılımı, açık sipariş ve termin",
+    icon: Globe2,
+    to: "/reports/sales/destination-mix",
   },
   {
     key: "return-scorecard",
