@@ -35,6 +35,7 @@ function StationCells({ s, canWrite, onEditStation }: { s: Station; canWrite: bo
           <button type="button" disabled={!canWrite} className={LINK_BTN} onClick={() => canWrite && onEditStation(s)} title={canWrite ? "İstasyonu düzenle" : undefined}>
             {s.name}
           </button>
+          {s.code && <span className="shrink-0 font-mono text-xs text-muted-foreground">{s.code}</span>}
           {!s.isActive && (
             <Badge variant="outline" className="shrink-0">
               pasif
