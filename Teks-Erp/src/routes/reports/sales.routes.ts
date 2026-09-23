@@ -132,7 +132,7 @@ router.get("/open-order-coverage", ...reportGate("sales/open-order-coverage"), a
  *         name: compare
  *         schema: { type: string, enum: [none, prev, prevYear, custom] }
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
- *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Cari/şube yönü (BUGÜNKÜ kart): siparişin şubesinin yönü, boşsa carinin — `reports/_destination.ts`; sevkin donmuş yönü değil, kart değişince küme değişir" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
  *       200:
@@ -179,7 +179,7 @@ router.get("/order-intake", ...reportGate("sales/order-intake"), async (req: Req
  *         name: compare
  *         schema: { type: string, enum: [none, prev, prevYear, custom] }
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
- *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Cari/şube yönü (BUGÜNKÜ kart): siparişin şubesinin yönü, boşsa carinin — `reports/_destination.ts`; sevkin donmuş yönü değil, kart değişince küme değişir" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *       - { in: query, name: colorId, schema: { type: string }, description: "Renk süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
@@ -227,7 +227,7 @@ router.get("/demand-analysis", ...reportGate("sales/demand-analysis"), async (re
  *         name: dateTo
  *         schema: { type: string, format: date-time }
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
- *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Cari/şube yönü (BUGÜNKÜ kart): siparişin şubesinin yönü, boşsa carinin — `reports/_destination.ts`; sevkin donmuş yönü değil, kart değişince küme değişir" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
  *       200:
@@ -269,7 +269,7 @@ router.get("/order-leadtime", ...reportGate("sales/order-leadtime"), async (req:
  *         name: dateTo
  *         schema: { type: string, format: date-time }
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
- *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Cari/şube yönü (BUGÜNKÜ kart): siparişin şubesinin yönü, boşsa carinin — `reports/_destination.ts`; sevkin donmuş yönü değil, kart değişince küme değişir" }
  *       - { in: query, name: reasonCode, schema: { type: string }, description: "İptal sebep kodu (ORDER_CANCEL kataloğu; CSV) — yalnız iptal satırlarına, payda süzülmez" }
  *     responses:
  *       200:

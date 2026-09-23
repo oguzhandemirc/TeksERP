@@ -56,7 +56,7 @@ export function labelsOf(options: Array<{ id?: string; code?: string; ad: string
 
 /**
  * Süzgeç satırı (K10) — ÇIKTIYA da girer. Niteleyiciler burada yaşar:
- * `destination` müşterinin VARSAYILAN hedefidir (sevkin fiili hedefi değil) ve
+ * `destination` siparişin BUGÜNKÜ cari/şube yönüdür (sevkin donmuş yönü değil) ve
  * `reasonCode` iptal karnesinde yalnız PAYI süzer. İkisi de ekranda yazılı; aynı
  * cümle dosyaya geçmezse, tek başına paylaşılan dosyada uyarı YOK demektir.
  */
@@ -105,8 +105,8 @@ export const AXIS_CAVEATS: Partial<Record<AxisKey, string>> = {
   reasonCode: "Yalnız PAYI süzer: payda (dönemde açılan siparişler) süzülmez ⇒ oran 'bu sebeple iptal ÷ açılan'.",
 };
 
-export const DESTINATION_LABEL = "Sevk hedefi";
-export const DESTINATION_CAVEAT = "Müşteri kartındaki VARSAYILAN hedef — sevkin fiili hedefi değil.";
+export const DESTINATION_LABEL = "Cari/şube yönü (bugünkü)";
+export const DESTINATION_CAVEAT = "Siparişin BUGÜNKÜ cari/şube yönü (şube yönü, boşsa carinin) — sevkin donmuş yönü değil; kart değişince geçmiş raporun kümesi de değişir.";
 
 interface AxisNoteInput {
   eksenler: readonly AxisKey[];

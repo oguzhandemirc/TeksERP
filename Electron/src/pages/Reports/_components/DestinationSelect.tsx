@@ -1,9 +1,9 @@
 // =============================================================================
-// SEVK HEDEFİ SEÇİCİSİ — "müşteri VARSAYILANI", sevkin fiili hedefi DEĞİL
+// SİPARİŞ RAPORLARINDA YÖN SEÇİCİSİ — "cari/şube yönü (bugünkü)", sevkin donmuş yönü DEĞİL
 // =============================================================================
-// ⚠️ Etiket bunu SÖYLEMEK ZORUNDA: süzgeç `Customer.defaultDestination` alanına
-// bakar. "İhracat" yazan bir liste, ihracat SEVKLERİ sanılırsa rapor yanlış
-// okunur — ve bu yanılgı sessizdir, çünkü sayılar tutarlı görünür.
+// ⚠️ Etiket bunu SÖYLEMEK ZORUNDA: süzgeç siparişin şube → cari zincirine (bugünkü
+// kart, `reports/_destination.ts`) bakar; kart değişince geçmiş raporun kümesi de
+// değişir. "İhracat" yazan liste ihracat SEVKLERİ sanılırsa rapor yanlış okunur.
 // =============================================================================
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,15 +14,15 @@ const ALL = "__all__";
 export function DestinationSelect({ id, value, onChange }: { id: string; value: Destination | ""; onChange: (d: Destination | "") => void }) {
   return (
     <div className="space-y-1">
-      <Label htmlFor={id}>Müşteri varsayılanı</Label>
+      <Label htmlFor={id}>Cari/şube yönü (bugünkü)</Label>
       <Select value={value === "" ? ALL : value} onValueChange={(v) => onChange(v === ALL ? "" : (v as Destination))}>
         <SelectTrigger id={id} className="w-52">
           <SelectValue placeholder="Tümü" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL}>Tümü</SelectItem>
-          <SelectItem value="DOMESTIC">Yurtiçi (müşteri varsayılanı)</SelectItem>
-          <SelectItem value="EXPORT">İhracat (müşteri varsayılanı)</SelectItem>
+          <SelectItem value="DOMESTIC">Yurtiçi (cari/şube yönü)</SelectItem>
+          <SelectItem value="EXPORT">İhracat (cari/şube yönü)</SelectItem>
         </SelectContent>
       </Select>
     </div>

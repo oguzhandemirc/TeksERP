@@ -5,13 +5,15 @@
 // anahtar → `readFilterList`; uuid biçimi 400) · ② Prisma / ham SQL koşul üreticileri (süzgeç yoksa parça
 // BOŞ — sorgu bayt bayt eski) · ③ `filterEcho` — cevaba yalnız VERİLEN anahtarlar yazılır (R5b-b `suzgec`
 // ile aynı biçim ve AYNI ADRES: cevap kökü, düz nesne, anahtar = sorgu parametresi adı). Tanınmayan kimlik 404 DEĞİL
-// boş sonuçtur (liste semantiği, her eksende — levent dahil). `destination` müşterinin VARSAYILAN
-// hedefidir (`Customer.defaultDestination`), sevkin fiili hedefi değil.
+// boş sonuçtur (liste semantiği, her eksende — levent dahil). `destination` iki kaynaktan okunur
+// (`_destination.ts`): sipariş kökünde siparişin ŞUBE → CARİ zinciri (bugünkü kart), müşteri kökünde
+// carinin yönü; sevk raporları sevkiyatın donmuş yönünü okur.
 // =============================================================================
 import { Prisma, ShipmentDestination } from "@prisma/client";
 import { z } from "zod";
 import { readFilterList } from "../../utils/query-parser";
 import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
+import { orderDestinationSql, orderDestinationWhere } from "./_destination";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_LIST = 50;
@@ -23,7 +25,7 @@ const codeList = rawList
   .refine((l) => l.length <= MAX_LIST, { message: `En fazla ${MAX_LIST} kod` })
   .refine((l) => l.every((x) => x.length <= 64), { message: "Kod en fazla 64 karakter" });
 
-/** Sipariş kökenli raporlar: müşteri kimliği + müşterinin varsayılan hedefi. */
+/** Sipariş kökenli raporlar: müşteri kimliği + yön (siparişin şube → cari zinciri, `_destination.ts`). */
 export const musteriEkseni = { customerId: idList, destination: z.nativeEnum(ShipmentDestination).optional() };
 /** Kalem ekseni: kumaş (item) + renk. */
 export const kalemEkseni = { itemId: idList, colorId: idList };
@@ -70,12 +72,12 @@ export const hasAny = (l: string[] | undefined): l is string[] => !!l && l.lengt
 /** `readIdCondition` ikizi (liste zaten çözülmüş): tek → eşitlik, N → `in`, yok → `undefined` (Prisma anahtarı düşer). */
 export const idWhere = (l: string[] | undefined): string | { in: string[] } | undefined => (hasAny(l) ? (l.length === 1 ? l[0] : { in: l }) : undefined);
 
-/** Siparişin MÜŞTERİ tarafı (kimlik + varsayılan hedef) — kalem kökünden `order: {...}` içine de girer. */
+/** Siparişin MÜŞTERİ tarafı (kimlik + yön zinciri) — kalem kökünden `order: {...}` içine de girer. */
 export function customerScopeWhere(f: ReportFilterInput): Prisma.OrderWhereInput {
   const w: Prisma.OrderWhereInput = {};
   const c = idWhere(f.customerId);
   if (c !== undefined) w.customerId = c;
-  if (f.destination) w.customer = { defaultDestination: f.destination };
+  if (f.destination) Object.assign(w, orderDestinationWhere(f.destination));
   return w;
 }
 
@@ -104,18 +106,17 @@ export function inSql(column: string, list: string[] | undefined, cast: "uuid" |
   return Prisma.sql`AND ${Prisma.raw(column)} IN (${Prisma.join(vals)})`;
 }
 
-/** Müşteri KÖKÜ (`customers <alias>`) için ham SQL parçası — kimlik + varsayılan hedef doğrudan satırda. */
+/** Müşteri KÖKÜ (`customers <alias>`) için ham SQL parçası — kimlik + CARİNİN yönü (müşteri satırında şube yok). */
 export function customerRowSql(f: ReportFilterInput, alias = "c"): Prisma.Sql {
   const parts: Prisma.Sql[] = [inSql(`${alias}.id`, f.customerId)];
   if (f.destination) parts.push(Prisma.sql`AND ${Prisma.raw(alias)}."defaultDestination" = ${f.destination}::"ShipmentDestination"`);
   return Prisma.join(parts, " ");
 }
 
-/** Siparişin müşteri tarafı, ham SQL — `customerScopeWhere` ikizi (`orders <alias>`; müşteri tablosu takma adı `cf` sabit). */
+/** Siparişin müşteri tarafı, ham SQL — `customerScopeWhere` ikizi (`orders <alias>`; yön zinciri `orderDestinationSql`). */
 export function customerScopeSql(f: ReportFilterInput, orderAlias = "o"): Prisma.Sql {
-  const o = Prisma.raw(orderAlias);
   const parts: Prisma.Sql[] = [inSql(`${orderAlias}."customerId"`, f.customerId)];
-  if (f.destination) parts.push(Prisma.sql`AND EXISTS (SELECT 1 FROM customers cf WHERE cf.id = ${o}."customerId" AND cf."defaultDestination" = ${f.destination}::"ShipmentDestination")`);
+  if (f.destination) parts.push(orderDestinationSql(f.destination, orderAlias));
   return Prisma.join(parts, " ");
 }
 

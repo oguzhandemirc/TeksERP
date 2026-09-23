@@ -19,7 +19,7 @@ interface Props {
   axes: ReportAxesState;
   secenekler: ReportSecenekler | undefined;
   eksenler: readonly AxisKey[];
-  /** "Müşteri varsayılanı" seçicisi — yalnız müşteri ekseni olan raporlarda. */
+  /** "Cari/şube yönü (bugünkü)" seçicisi — yalnız müşteri ekseni olan raporlarda. */
   destination?: boolean;
 }
 
