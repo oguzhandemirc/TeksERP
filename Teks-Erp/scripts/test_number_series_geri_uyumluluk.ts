@@ -45,6 +45,7 @@ import { WorkOrderService } from "../src/services/workorder.service";
 import { colorService } from "../src/routes/color.routes";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { purchaseOrderService } from "../src/services/purchase-order.service";
+import { orderService } from "../src/routes/order.routes";
 import { machineService, stationService } from "../src/routes/station.routes";
 import { bankAccountService, cashBoxService } from "../src/routes/finance.routes";
 import { returnReasonService } from "../src/routes/return-reason.routes";
@@ -308,6 +309,27 @@ const L2_YOLU: Record<string, L2Yolu> = {
   // seri "fikstür maliyeti" gerekçesiyle L1'de kalamaz. Ölçüldü: `createManifest`
   // yalnız VAR OLAN bir iş emri ister (anlık görüntüyü kendi hesaplar) ⇒ fikstür
   // tek satır; "top zinciri gerekir" varsayımı YANLIŞTI.
+  // ── ÜRETİM (E2 dilim 4) ───────────────────────────────────────────────────
+  order: {
+    not: "orderService.create: müşteri + en az bir kalem (miktar > 0).",
+    yarat: async (damga) => {
+      const musteri = await msCreate(customerService, { name: `${damga} E3 sipariş cari ${++msSayac}` });
+      if (!musteri || !bagli.itemId) return null;
+      temizlikCariler.push(musteri.id);
+      const r = (await orderService.create({
+        customerId: musteri.id,
+        lines: [{ itemId: bagli.itemId, quantity: 5 }],
+      })) as { data?: { id?: string; orderNumber?: string } };
+      return r.data?.id && r.data.orderNumber ? { id: r.data.id, kod: r.data.orderNumber } : null;
+    },
+    sil: async (id) => {
+      await prisma.orderLine.deleteMany({ where: { orderId: id } });
+      await prisma.order.deleteMany({ where: { id } });
+    },
+  },
+  weavingOrder: { not: "Dokuma işi: tezgah + levent + çözgü kartı zinciri ister (E2 üretim diliminde AÇILDI; L2 fikstürü sıradaki turda — ölçülecek)." },
+  warpBeam: { not: "Levent: çözgü kartı + tezgah zinciri ister (aynı tur)." },
+  doffEvent: { not: "Doff: açık tezgah koşusu (MachineRun) ister (aynı tur)." },
   shipment: { not: "Sevkiyat: müşteri + çuval zinciri ister; E4 ile YENİ açıldı, L2 fikstürü sıradaki dilimde (ölçülecek, tahmin edilmeyecek)." },
   manifest: {
     not: "WorkOrderService.createManifest: yalnız var olan bir iş emri ister (anlık görüntü hesaplanır).",

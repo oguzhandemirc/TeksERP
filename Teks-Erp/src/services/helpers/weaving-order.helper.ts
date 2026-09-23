@@ -15,7 +15,7 @@
 // =============================================================================
 import { Prisma, WeavingOrderStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "../number-series.service";
+import { nextSeriesNo } from "../number-series.service";
 
 /**
  * Dokuma işi numara sayacı uzayı.
@@ -46,14 +46,16 @@ export async function nextWeavingOrderNumberTx(
   date: Date,
 ): Promise<string> {
   await lockWeavingOrderNumberTx(tx);
-  const fmt = resolveSeriesFormat("weavingOrder");
-  const prefix = seriesPrefix(fmt, date);
-  const todays = await tx.weavingOrder.findMany({
-    where: { weavingOrderNumber: { gte: prefix, startsWith: prefix } },
-    select: { weavingOrderNumber: true },
-  });
-  const seq = seriesSeqFrom(fmt, todays.map((w) => w.weavingOrderNumber), prefix);
-  return formatSeriesCode(fmt, seq, date);
+  // ⚠️ C0 KAPSAMI (E2 üretim dilimi): sayaç yalnız BU BİÇİM yürürlüğe girdikten
+  // sonra doğan kodlara bakar; `nextSeriesNo` kapsamı ve çakışma atlamasını tek
+  // yerde tutar. Kilit ÖNCE alınır (bu fonksiyonun ilk ifadesi), numara sonra.
+  return nextSeriesNo("weavingOrder", async (prefix) =>
+    tx.weavingOrder
+      .findMany({
+        where: { weavingOrderNumber: { gte: prefix, startsWith: prefix } },
+        select: { weavingOrderNumber: true, createdAt: true },
+      })
+      .then((rows) => rows.map((r) => ({ code: r.weavingOrderNumber, createdAt: r.createdAt }))), date);
 }
 
 /** Kapanmış/iptal edilmiş iş için tek etiket sözlüğü (helper `ApiResponse` KURMAZ, yalnız hata). */

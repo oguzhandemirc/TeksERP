@@ -3,7 +3,7 @@
 // =============================================================================
 import { Prisma, WarpBeamOrigin } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "../number-series.service";
+import { nextSeriesNo, resolveSeriesFormat, seriesPrefix } from "../number-series.service";
 import { lockCodeScopeTx } from "./code-unique.helper";
 import { warpBeamLengthSign, type WarpBeamEventKind } from "../../constants/warp-beam";
 
@@ -84,11 +84,17 @@ export type WarpBeamEventRow = Prisma.WarpBeamEventGetPayload<{ select: typeof W
 
 /** Sıradaki levent numarası — 8029 kilidi bu fonksiyonun İLK ifadesidir (`nextDoffCodeTx` emsali). */
 export async function nextBeamNoTx(tx: Prisma.TransactionClient, date: Date): Promise<string> {
+  // ⚠️ BİÇİM BİR KEZ OKUNUR ve `nextSeriesNo`ya AYNI NESNE geçirilir: kilit
+  // anahtarı sabit başı (ön ek + tarih) gerektiriyor, yani ön ek numaradan ÖNCE
+  // hesaplanmak zorunda. İkinci bir `resolveSeriesFormat` çağrısı "iki okuma"
+  // sınıfına girerdi (arada önbellek tazelenirse ön ek bir sürümden, hane başka
+  // sürümden gelir). C0 kapsamı `nextSeriesNo` içinde uygulanır.
   const fmt = resolveSeriesFormat("warpBeam");
-  const prefix = seriesPrefix(fmt, date);
-  await lockCodeScopeTx(tx, WARP_BEAM_CODE_SCOPE, prefix);
-  const codes = await tx.warpBeam.findMany({ where: { beamNo: { gte: prefix, startsWith: prefix } }, select: { beamNo: true } });
-  return formatSeriesCode(fmt, seriesSeqFrom(fmt, codes.map((c) => c.beamNo), prefix), date);
+  await lockCodeScopeTx(tx, WARP_BEAM_CODE_SCOPE, seriesPrefix(fmt, date));
+  return nextSeriesNo("warpBeam", async (prefix) =>
+    tx.warpBeam
+      .findMany({ where: { beamNo: { gte: prefix, startsWith: prefix } }, select: { beamNo: true, createdAt: true } })
+      .then((rows) => rows.map((r) => ({ code: r.beamNo, createdAt: r.createdAt }))), date, fmt);
 }
 
 export interface OriginParty {

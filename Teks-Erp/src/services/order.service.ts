@@ -35,7 +35,7 @@ import { resolveReasonCode } from "./reason-preset.service";
 import { isMeasuredLine, openLineWhere, someOpenLine } from "./helpers/order-line-scope.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { validate as isUuidString } from "uuid";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo, resolveSeriesFormat, seriesPrefix } from "./number-series.service";
 
 // MASS-ASSIGNMENT WHITELIST'leri (M-3): route'larda Zod yok (BaseController ham
 // body); muhasebe/kimlik alanları (status, shippedQty, completedAt,
@@ -2069,18 +2069,24 @@ export class OrderService extends BaseService {
       // ignorable) bugünün satırlarını dışlar → numara hep 1'den başlar → P2002.
       // `gte` (index seek, bugün+sonrası) + `startsWith` (LIKE, collation-bağımsız
       // tam-prefix; prefix'ten yüksek sıralanan manuel orderNumber'ları eler).
-      const todaysOrders = await prisma.order.findMany({
-        where: { orderNumber: { gte: prefix, startsWith: prefix } },
-        select: { orderNumber: true },
-      });
-      // Numeric tail max: sabit-genişlik kuyruk, lex-sort taşmasına karşı NUMERIC.
-      const seq = seriesSeqFrom(
-      fmt,
-        todaysOrders.map((o) => o.orderNumber),
-        prefix,
+      // ⚠️ C0 KAPSAMI (E2 üretim dilimi): sayaç yalnız BU BİÇİM yürürlüğe girdikten
+      // sonra doğan kodlara bakar; `nextSeriesNo` kapsamı, numeric-tail max'ı ve
+      // çakışma atlamasını tek yerde tutar. Biçim BİR KEZ okunmuş `fmt` olarak
+      // geçirilir ("iki okuma" sınıfı).
+      const orderNumber = await nextSeriesNo(
+        "order",
+        async (fullPrefix) =>
+          prisma.order
+            .findMany({
+              where: { orderNumber: { gte: fullPrefix, startsWith: fullPrefix } },
+              select: { orderNumber: true, createdAt: true },
+            })
+            .then((rows) => rows.map((r) => ({ code: r.orderNumber, createdAt: r.createdAt }))),
+        today,
+        fmt,
       );
       return this.delegate.create({
-        data: { ...prismaData, orderNumber: formatSeriesCode(fmt, seq, today) },
+        data: { ...prismaData, orderNumber },
         ...(this.config.defaultInclude
           ? { include: this.config.defaultInclude }
           : {}),
