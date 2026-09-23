@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { sackHubService } from "./service";
-import { invalidateSackHub } from "./useSackData";
+import { invalidateSackHub, PACKING_LOT_STALE_MS } from "./useSackData";
 import { SackContentDumpMenu } from "./SackContentDumpMenu";
 import { SackTagsBulkMenu } from "./SackTagsBulkMenu";
 import { fromDumpRows } from "./sackDump";
@@ -52,6 +52,7 @@ export function PackingGroupBar({ customerId }: { customerId: string | null }) {
 
   const q = useQuery({
     queryKey: ["packing-groups", customerId],
+    staleTime: PACKING_LOT_STALE_MS,
     queryFn: () => sackHubService.listPackingGroups(customerId!),
     enabled: !!customerId,
   });

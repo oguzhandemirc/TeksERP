@@ -6,6 +6,7 @@ import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { customerService } from "@/pages/Customers/service";
 import { sackHubService } from "@/pages/Operations/SackContentEdit/service";
 import { safeFormat } from "@/lib/format";
+import { PACKING_LOT_STALE_MS } from "@/pages/Operations/SackContentEdit/useSackData";
 
 /**
  * İADE — "SEVK PARTİSİNDEN SEÇ" (barkodsuz yol). Partinin barkodu yoktur: cari →
@@ -25,6 +26,7 @@ export function ReturnLotPicker({
   const [customerId, setCustomerId] = useState<string | null>(null);
   const lots = useQuery({
     queryKey: ["packing-groups", customerId, "ALL"],
+    staleTime: PACKING_LOT_STALE_MS,
     queryFn: () => sackHubService.listPackingGroups(customerId as string, "ALL"),
     enabled: open && !!customerId,
   });

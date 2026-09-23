@@ -166,7 +166,8 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
   adimlar.push({
     ad: "tanımlayıcı dili",
     cwd: "Teks-Erp",
-    cmd: ["npx", ["tsx", "scripts/test_identifier_language.ts"]],
+    // `--no-maglev`: Node v26 V8 çıkış kilitlenmesi (upstream) — gerekçe `Teks-Erp/scripts/run-all-tests.ts` runOnce.
+    cmd: ["npx", ["tsx", "--no-maglev", "scripts/test_identifier_language.ts"]],
     // ⚠️ KAPSAM LİSTESİ BURADAN GİDER, bekçi kendisi TÜRETMEZ. Altı oturum aynı
     // ağacı paylaşıyor: bekçi ağaca baksa BAŞKASININ commit edilmemiş dosyasındaki
     // ihlalden bizi durdururdu (2026-09-13 gecesi tam olarak bu oldu). Liste
@@ -210,14 +211,14 @@ if (staged.some((f) => /^scripts\/(hooks\/|[^/]+\.mjs$)/.test(f))) {
   adimlar.push({
     ad: "kapının kendisi · kapsam",
     cwd: "Teks-Erp",
-    cmd: ["npx", ["tsx", "scripts/test_commit_gate_scope.ts"]],
+    cmd: ["npx", ["tsx", "--no-maglev", "scripts/test_commit_gate_scope.ts"]],
     env: { DATABASE_URL: "postgresql://kapi:kapi@127.0.0.1:1/kapi_test?schema=public" },
     gitEnvSil: true,
   });
   adimlar.push({
     ad: "kapının kendisi · hook config",
     cwd: "Teks-Erp",
-    cmd: ["npx", ["tsx", "scripts/test_hook_config.ts"]],
+    cmd: ["npx", ["tsx", "--no-maglev", "scripts/test_hook_config.ts"]],
     env: { DATABASE_URL: "postgresql://kapi:kapi@127.0.0.1:1/kapi_test?schema=public" },
     gitEnvSil: true,
   });

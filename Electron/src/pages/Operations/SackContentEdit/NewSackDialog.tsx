@@ -25,7 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { sackHubService } from "./service";
-import { invalidateSackHub } from "./useSackData";
+import { invalidateSackHub, PACKING_LOT_STALE_MS } from "./useSackData";
 import { isLotMode, newSackLotTarget, packageNoField, parsePackageNoInput, singleCustomerFromFilter } from "./packingLotUi";
 import { UNGROUPED_FILTER_VALUE, type EditorTarget, type OpenedSack, type PackingGroup } from "./types";
 
@@ -239,6 +239,7 @@ function useNewSackLot(open: boolean, customerId: string | null, searchParams: U
   const lotCustomerId = customerId ?? (prefillCustomer ? singleCustomerFromFilter(searchParams) : null);
   const lots = useQuery({
     queryKey: ["packing-groups", lotCustomerId, "OPEN"],
+    staleTime: PACKING_LOT_STALE_MS,
     queryFn: () => sackHubService.listPackingGroups(lotCustomerId!, "OPEN"),
     enabled: open && lotMode && !!lotCustomerId,
   });

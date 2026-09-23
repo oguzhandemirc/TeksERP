@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { printHtmlString } from "@/lib/print";
 import { printedDocumentService } from "@/services/printedDocumentService";
 import { sackStoreService } from "./service";
+import { invalidateSackHub } from "@/pages/Operations/SackContentEdit/useSackData";
 
 const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
@@ -111,7 +112,8 @@ export function DispatchConfirmDialog({
       // değiştirir — dokunan tüm ekranların cache'i TEK yerden tazelenir (O1).
       void qc.invalidateQueries({ queryKey: ["sack-store"] });
       void qc.invalidateQueries({ queryKey: ["sack-search"] });
-      void qc.invalidateQueries({ queryKey: ["packing"] });
+      // Sevk/iptal/geri al partiyi kapatır ya da yeniden açar — parti listesi dahil hub ailesi (K16).
+      invalidateSackHub(qc);
       void qc.invalidateQueries({ queryKey: ["shipments"] });
       void qc.invalidateQueries({ queryKey: ["shipment-detail", id] });
       void qc.invalidateQueries({ queryKey: ["orders"] });

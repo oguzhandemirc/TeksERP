@@ -8,6 +8,7 @@ import { OrdersModal } from "./OrdersModal";
 import { ReturnsModal } from "./ReturnsModal";
 import { DispatchNoteEditor } from "../DispatchNoteEditor";
 import { ManualSackCountEditor } from "../ManualSackCountEditor";
+import { PROCEDURE_CODE_BOS, procedureCodeView } from "@/pages/Operations/SackStore/procedureCode";
 
 const num = (v: number | null | undefined) => formatNumber(v, 1);
 const int = (v: number | null | undefined) => formatNumber(v, 0);
@@ -72,7 +73,9 @@ export function ShipmentDetailMeta({ d }: { d: ShipmentDetail }) {
           <Info label="Taşıyıcı" value={d.carrier} />
           <Info label="Sevk Tarihi" value={d.dispatchedAt ? safeFormat(d.dispatchedAt, "dd.MM.yyyy HH:mm") : null} />
           <Info label="Hedef" value={shipmentDestinationLabels[d.destination]} />
-          <Info label="Gümrük/İhracat No" value={d.procedureCode} />
+          {procedureCodeView(d).goster && (
+            <Info label="Gümrük/İhracat No" value={procedureCodeView(d).deger ?? PROCEDURE_CODE_BOS} />
+          )}
         </div>
 
         {/* İrsaliye açıklaması — sevkiyata kayıtlı not (annotation); her an düzenlenir,

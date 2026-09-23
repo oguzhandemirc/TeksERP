@@ -11475,6 +11475,30 @@ sonda: `acilma` düşünce · yüklem tek faza dönünce · `workOrder`a kilit g
 SATIRI eşleşiyordu; yüklem ÇAĞRIYA çevrildi (`/kilitCumlesi\s*\(\s*row\s*\)/`). "Sınırsız eşleşme"
 ailesinin bir üyesi daha.
 
+## 2026-09-23 — Bekçi süreçleri `--no-maglev` ile koşar: Node v26.8.1 V8 çıkış kilitlenmesi [ÇEKİRDEK]
+
+**Belirti:** `test_fason_ceki_html` tam pakette 180 sn zaman aşımına düştü, tek başına 1 sn'de yeşildi. Çıktı
+"§18-EK"te duruyor sanıldı; kırmızı günlükte `=== Sonuç: 236 geçti, 0 başarısız ===` da basılmıştı. Asılma
+iş bittikten SONRA, `process.exit(0)` anında oluyordu.
+
+**Kök (macOS `sample` yığını):** ana iş parçacığı `process.exit` içinde V8 arka plan iş parçacıklarının
+bitmesini bekliyor (`WorkerThreadsTaskRunner::Shutdown → uv_thread_join`). Maglev arka plan derleyicisi ise
+yalnız ana iş parçacığının yapabileceği bir GC'yi bekliyor (`CollectionBarrier::AwaitCollectionBackground`).
+Karşılıklı bekleme. Ağır iş ile çıkış arasındaki mesafe kısaldıkça ve makine yüklendikçe olasılık artar.
+Havuz, kilit ya da tx değil; ürün hatası değil.
+
+**Ölçüm** (d3, `tekserp_d3b_test`, `npx tsx` gerçek çağrı biçimi, 4 paralel, koşu başına 15 sn):
+bayraksız 900 koşuda **17 asılma** (hepsi "236 geçti" satırından sonra), `--no-maglev` ile 900 koşuda **0**.
+`NODE_OPTIONS` bayrağı kabul etmez; tsx bayrağı node'a iletir.
+
+**Karar (1e):** bayrak bekçi başlatan beş noktaya girer: `run-all-tests.ts` `runOnce` (npm test · CI ·
+tek bekçi), `scripts/hooks/hizli-mandallar.mjs`, `scripts/hooks/pre-commit.mjs` ×3. Node sürümü
+DEĞİŞTİRİLMEZ. Kapsam dışı: bekçilerin kendi içinden başlattığı alt süreçler (`test_script_guards` gibi).
+
+**Upstream bildirimi için:** Node v26.8.1 · macOS arm64 · yeniden üretme: ağır senkron iş (büyük HTML string
+üretimi) ardından `process.exit(0)`, 4 paralel süreç, ~%2 asılma; `--no-maglev` ile 0. Yığın çıktısı
+d3 oturumunun ölçüm kayıtlarında. Bildirimi kimin, ne zaman yapacağı açık iş.
+
 ## 2026-09-23 — Emekli ön ek hijyeni (K7): liste geçmişin beyanıdır, çöp kutusu değil [ÇEKİRDEK]
 
 **Saha/ölçüm:** d3'ün gerçek panel turunda (`tekserp_d3e2e_test`) iki tür çöp ölçüldü — ① bir ön eki
@@ -11672,3 +11696,21 @@ ve `freeDocument` GERÇEK SERVİS yolundan kayıt yaratıyor (`StockCountService
 fikstürü ister ve "bir depoda TEK açık sayım" kuralı yüzünden her çağrı KENDİ deposunu kurar),
 `manifest`/`goodsReceipt`/`purchaseOrder`/`warehouseTransfer` fikstür maliyeti gerekçesiyle "L1'de
 kaldı" olarak BEYANLI ve kapsam tablosunda görünüyor.
+
+## 2026-09-23 — Gümrük/İhracat No yedek değer uydurmaz, yurtiçinde görünmez (K15) [ÇEKİRDEK]
+
+**Bulgu (e2e SK3 görüntüsü):** Sevk Kapısı içerik panelinde YURTİÇİ planlı sevkiyatta "Gümrük/İhracat No
+MUS2309260046 (varsayılan)" yazıyordu. Ölçüm: kolon `Shipment.procedureCode`; panel üç yerde (içerik paneli
+salt-okur ve düzenleme düğmesi, Sevk Kapısı kartı) `procedureCode || branch.code || customer.code` zinciriyle
+yedek değer ÜRETİYORDU ve bu değer hiçbir yere kaydedilmiyordu. "(varsayılan)" ekrandaki bir yalandı. Belge ve
+muhasebe dışa aktarımı uydurmuyordu. Sevkiyat detayı ise yönden bağımsız gösteriyordu.
+
+**Karar (1e):** (a) yurtiçinde satır gizli; bu, carinin ihracat kodu alanıyla (S6) aynı yüklemdir
+(`exportCodeVisible`). (b) Yurtdışında da cari kodu gümrük numarası olarak varsayılmaz; boşsa "girilmedi"
+yazar. Belgede aynı kural geçerlidir: yurtiçinde basılmaz. Boşsa belge satır BASMAZ; "girilmedi" yazısı resmi
+belgeye girmez, yoksa 6 eski yurtdışı belge yeni satır kazanırdı.
+
+**Eski belge etkisi ölçüldü:** donmuş belge VERİYİ dondurur, render baskı anındaki şablonla yapılır. Fabrika
+yedeğinin kopyasında (`tekserp_d3e2e_test`, 139 sevkiyat: 133 yurtiçi · 6 yurtdışı) procedureCode dolu sevkiyat
+0 → bugün basılı hiçbir belgenin çıktısı değişmez. Sevk Kapısı kartındaki şube/cari kodu (saha #21) kimlik
+olarak kalır; gümrük no ayrı ve "Gümrük:" etiketiyle yalnız yurtdışında ve yalnız kayıtlıysa görünür.

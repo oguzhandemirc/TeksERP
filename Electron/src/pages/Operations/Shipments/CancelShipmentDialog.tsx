@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { shipmentService } from "./service";
+import { invalidateSackHub } from "@/pages/Operations/SackContentEdit/useSackData";
 
 const fmtM = (n: number) => Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
@@ -48,7 +49,8 @@ export function CancelShipmentDialog({ shipmentId, onOpenChange }: Props) {
       void qc.invalidateQueries({ queryKey: ["shipment-detail", shipmentId] });
       void qc.invalidateQueries({ queryKey: ["sack-store"] });
       void qc.invalidateQueries({ queryKey: ["sack-search"] });
-      void qc.invalidateQueries({ queryKey: ["packing"] });
+      // Sevk/iptal/geri al partiyi kapatır ya da yeniden açar — parti listesi dahil hub ailesi (K16).
+      invalidateSackHub(qc);
       void qc.invalidateQueries({ queryKey: ["orders"] });
       void qc.invalidateQueries({ queryKey: ["rolls"] });
       onOpenChange(false);

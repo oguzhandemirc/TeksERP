@@ -14,6 +14,7 @@ import { PackingLotHeaderMenu, PackingLotTitleExtra } from "./PackingLotHeader";
 import { isLotMode, singleCustomerFromFilter } from "./packingLotUi";
 import { usePackingGroupMode, usePackingGroupsEnabled } from "@/hooks/usePricingEnabled";
 import { UNGROUPED_FILTER_VALUE, type EditorTarget, type SackSearchRow } from "./types";
+import { SACK_HUB_KEYS } from "./useSackData";
 
 /** Arama satırından editör hedefi türet (müşteri/şube bilgisini taşır). */
 function rowToTarget(s: SackSearchRow): EditorTarget {
@@ -232,7 +233,7 @@ function HeaderActions(p: {
       <Button size="sm" onClick={p.onNewSack} disabled={p.newSackPending} className="gap-1.5">
         <PackagePlus className="h-4 w-4" /> {p.newSackPending ? "Açılıyor…" : "Yeni Çuval"}
       </Button>
-      <RefreshButton queryKey="sack-search" extraKeys={[["packing"]]} successMessage="Çuval listesi yenilendi" />
+      <RefreshButton queryKey="sack-search" extraKeys={SACK_HUB_KEYS.map((k) => [...k])} successMessage="Çuval listesi yenilendi" />
       {/* Parti içi ⋮: adlandır · havuza çıkar · depoya çek · sil; silinince parti listesine dön. */}
       {p.lotMenuFor && <PackingLotHeaderMenu groupFilter={p.lotMenuFor} onDeleted={p.onLotDeleted} />}
     </>

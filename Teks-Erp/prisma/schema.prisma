@@ -6609,9 +6609,10 @@ model PackingGroup {
   seq Int?
 
   /// KALICI, KURULUM-GENELİ TEKİL PARTİ KODU — `PRT-YYMM-NNNN` (fabrika ayı + aylık
-  /// sayaç, advisory 8033). Doğumda üretilir, ad değişse de DEĞİŞMEZ; belgeye/aramaya
-  /// bu basılır (2026-09-22: `P-2` adı yalnız açık partiler arasında tekildi, sevk edilen
-  /// P-2 bitince yeni bir P-2 doğuyor ve belge zamanla iki partiyi gösteriyordu).
+  /// sayaç, advisory 8034). Doğumda üretilir, ad değişse de DEĞİŞMEZ. Bugün YALNIZ parti
+  /// listesinde ("Kod" kolonu) ve Sevk Kapısı aramasında görünür; hiçbir belgeye, etikete
+  /// ya da okutmaya BASILMAZ (belgede parti ADI basılır — adı cari başına ve yalnız açık
+  /// partiler arasında tekil, sevk edilen P-2 bitince yeni bir P-2 doğabilir).
   /// Devralınan satırlar migration'da `createdAt` sırasıyla kodlandı.
   code String @unique @db.VarChar(16)
 

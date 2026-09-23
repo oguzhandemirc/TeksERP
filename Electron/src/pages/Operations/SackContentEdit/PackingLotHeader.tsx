@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { sackHubService } from "./service";
-import { invalidateSackHub } from "./useSackData";
+import { invalidateSackHub, PACKING_LOT_STALE_MS } from "./useSackData";
 import { PackingGroupEditDialog } from "./PackingGroupBar";
 import { LotActionDialogs, type LotAction } from "./PackingLotActions";
 import { KimlikKutusu } from "./SackIdentityStrip";
@@ -39,6 +39,7 @@ export function useLotDetail(groupFilter: string) {
 export function CustomerNameBadge({ customerId }: { customerId: string }) {
   const summary = useQuery({
     queryKey: ["packing-lot-summary", customerId],
+    staleTime: PACKING_LOT_STALE_MS,
     queryFn: () => sackHubService.packingLotSummary(customerId),
   });
   const name = summary.data?.data.customer.name;
