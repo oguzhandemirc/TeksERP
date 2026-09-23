@@ -5068,6 +5068,8 @@ model NumberSeriesLine {
   dateSegment NumberSeriesDateSegment
   digits      Int                    @default(4)
   separator   String                 @default("") @db.VarChar(2)
+  /// Tarih ile sayaç arasındaki ayraç; NULL = `separator`a düşer (bugünkü davranış).
+  separator2  String?                @db.VarChar(2)
 
   /// BU SATIRIN BİÇİMİ NEREDEN GELİYOR — kayıt mı, göç tahmini mi?
   ///
@@ -5108,8 +5110,14 @@ enum NumberSourceMode {
 enum NumberSeriesDateSegment {
   NONE
   DDMMYY
+  /// 23092026 — Türkiye'de belge üstünde en yaygın tam tarih (ekranda "GGAAYYYY").
+  DDMMYYYY
   YYMM
+  /// 0926 — ay+yıl, dört hane (ekranda "AAYY").
+  MMYY
   YYYYMM
+  /// 20260923 — sıralanabilir tam tarih; kod alfabetik sıralandığında kronolojik olur (ekranda "YYYYAAGG").
+  YYYYMMDD
   YY
   YYYY
 }
@@ -5127,6 +5135,11 @@ model NumberSeries {
   digits      Int                     @default(4)
   /// Ön ek ile tarih arasındaki ayraç ("" ya da "-"). Sayacın kuyruğu her zaman ayraçsızdır.
   separator   String                  @default("") @db.VarChar(2)
+  /// TARİH ile SAYAÇ arasındaki ayraç — `PRT-2609/0001` gibi biçimler için (D5②).
+  ///
+  /// NULL = `separator`a düşer, yani bugünkü davranış bayt bayt korunur. Tarih
+  /// segmenti `NONE` ise ikinci eklem YOKTUR ve bu kolon okunmaz.
+  separator2  String?                 @db.VarChar(2)
 
   /// Emekli ön ekler — eski etiket okutulunca hâlâ bu seriye çözülsün diye saklanır.
   retiredPrefixes String[] @default([])

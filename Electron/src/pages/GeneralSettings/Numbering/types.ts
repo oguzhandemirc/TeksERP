@@ -1,5 +1,14 @@
 /** `GET /api/number-series` satırı — backend `listSeries()` aynası. */
-export type SeriesDateSegment = "NONE" | "DDMMYY" | "YYMM" | "YYYYMM" | "YY" | "YYYY";
+export type SeriesDateSegment =
+  | "NONE"
+  | "DDMMYY"
+  | "DDMMYYYY"
+  | "YYMM"
+  | "MMYY"
+  | "YYYYMM"
+  | "YYYYMMDD"
+  | "YY"
+  | "YYYY";
 
 /**
  * Serinin BUGÜN neden düzenlenemediği. ÜÇ AYRI SINIF ve üçü FARKLI GÜN kalkar —
@@ -57,6 +66,8 @@ export interface NumberSeriesRow {
   dateSegment: SeriesDateSegment;
   digits: number;
   separator: string;
+  /** Tarih ile sayaç arasındaki ayraç; `null` = birinci ayraca düşer (D5②). */
+  separator2: string | null;
   retiredPrefixes: string[];
   kind?: string;
   editable: boolean;
@@ -91,4 +102,12 @@ export interface SeriesFormatInput {
   dateSegment: SeriesDateSegment;
   digits: number;
   separator: string;
+  /**
+   * TARİH ile SAYAÇ arasındaki ayraç; `null` = birinci ayraca düş (D5②).
+   *
+   * ⚠️ ZORUNLU ALAN (opsiyonel değil): panel her kaydetmede açıkça gönderir ki
+   * "göndermedim" ile "temizledim" karışmasın — sayaç alanlarındaki kuralın
+   * aynısı, aynı gerekçeyle.
+   */
+  separator2: string | null;
 }

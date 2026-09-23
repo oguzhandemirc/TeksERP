@@ -205,6 +205,7 @@ export function listSeries(): Array<
     startValue: number | null;
     step: number | null;
     maxValue: number | null;
+    separator2: string | null;
     preview: string;
   }
 > {
@@ -235,6 +236,8 @@ export function listSeries(): Array<
       // ⚠️ `undefined` DEĞİL `null`: tohuma düşen seride alan hiç yoktur ve panel
       // `undefined !== null` yüzünden formu "değişmiş" sanardı (Kaydet düğmesi
       // dokunulmadan açılırdı). Sözleşme tek tip: yok = `null`.
+      // Aynı "yok = null" sözleşmesi ikinci ayraç için de geçerli.
+      separator2: fmt.separator2 ?? null,
       startValue: fmt.startValue ?? null,
       step: fmt.step ?? null,
       maxValue: fmt.maxValue ?? null,

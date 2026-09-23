@@ -23,6 +23,22 @@ export interface NumberSeriesFormat {
   dateSegment: NumberSeries["dateSegment"];
   digits: number;
   separator: string;
+  /**
+   * İKİNCİ AYRAÇ — tarih ile sayaç ARASINDAKİ eklem (D5②).
+   *
+   * `null`/yok = `separator`a düşer ⇒ 52 serinin hepsi bayt bayt bugünküyle
+   * aynı kodu üretir. Ayrı bir alan olmasının sebebi `PRT-2609/0001` gibi
+   * biçimlerin sektörde yaygın olması; tek ayraçla bunu kurmanın yolu yoktu.
+   *
+   * ⚠️ TARİH YOKSA İKİNCİ EKLEM DE YOKTUR: `dateSegment: "NONE"` olan seride
+   * tek eklem `prefix|sayaç`tır ve onu daima `separator` kurar. Bu, ayrı bir
+   * KURAL değil yapının SONUCUDUR — üreteç de eşleştirici de tarih boşken
+   * ikinci eklemi hiç kurmaz. (İlk yazımda `seriesJoints` içine ayrıca bir
+   * `NONE` dalı koymuştum; negatif sonda onu ÖLÜ KOD olarak gösterdi — dal
+   * kaldırılınca hiçbir iddia kırmızı vermedi, çünkü hiçbir çağrı yolu oraya
+   * ulaşmıyordu. Ölçülemeyen savunma, savunma değildir.)
+   */
+  separator2?: string | null;
   retiredPrefixes: string[];
   /**
    * KOD-SAHİPLİ — katalogdan gelir, `number_series` satırından DEĞİL ve panel
@@ -60,6 +76,7 @@ export interface NumberSeriesFormat {
     dateSegment: NumberSeries["dateSegment"];
     digits: number;
     separator: string;
+    separator2?: string | null;
   }>;
   numberSource?: "FREE" | "SYSTEM" | "MANUAL";
   startValue?: number | null;
@@ -91,11 +108,28 @@ export const DATE_SEGMENTS: Record<
 > = {
   NONE: { len: 0, render: () => "" },
   DDMMYY: { len: 6, render: (d) => ddmmyy(d) },
+  DDMMYYYY: { len: 8, render: (d) => `${ddmmyy(d).slice(0, 4)}${factoryYmd(d).slice(0, 4)}` },
   YYMM: { len: 4, render: (d) => `${factoryYmd(d).slice(2, 4)}${factoryYmd(d).slice(5, 7)}` },
+  MMYY: { len: 4, render: (d) => `${factoryYmd(d).slice(5, 7)}${factoryYmd(d).slice(2, 4)}` },
   YYYYMM: { len: 6, render: (d) => `${factoryYmd(d).slice(0, 4)}${factoryYmd(d).slice(5, 7)}` },
+  YYYYMMDD: { len: 8, render: (d) => factoryYmd(d).replace(/-/g, "") },
   YY: { len: 2, render: (d) => factoryYmd(d).slice(2, 4) },
   YYYY: { len: 4, render: (d) => factoryYmd(d).slice(0, 4) },
 };
+
+/**
+ * Biçimin İKİ EKLEM YERİ — üretici ile eşleştirici AYNI karardan okusun diye.
+ *
+ * ⚠️ Bu fonksiyon D5①'in dersinin uygulanmasıdır: `seriesPrefix` ile
+ * `matchesSeries` aynı soruyu iki ayrı yerde cevaplarsa bir gün ayrışırlar ve
+ * sonuç sessiz bir "üretilen kod kendi serisine uymuyor" hâlidir.
+ */
+export function seriesJoints(fmt: { separator: string; separator2?: string | null }): {
+  sep1: string;
+  sep2: string;
+} {
+  return { sep1: fmt.separator, sep2: fmt.separator2 ?? fmt.separator };
+}
 
 /** Tarih segmentinin metni. `NONE` → boş (sayaç hiç sıfırlanmaz). */
 function dateText(segment: NumberSeries["dateSegment"], date: Date): string {
@@ -109,7 +143,8 @@ function dateText(segment: NumberSeries["dateSegment"], date: Date): string {
  */
 export function seriesPrefix(fmt: NumberSeriesFormat, date: Date = new Date()): string {
   const dt = dateText(fmt.dateSegment, date);
-  return dt === "" ? `${fmt.prefix}${fmt.separator}` : `${fmt.prefix}${fmt.separator}${dt}${fmt.separator}`;
+  const { sep1, sep2 } = seriesJoints(fmt);
+  return dt === "" ? `${fmt.prefix}${sep1}` : `${fmt.prefix}${sep1}${dt}${sep2}`;
 }
 
 /**
@@ -135,11 +170,13 @@ export function previewSeriesCode(fmt: NumberSeriesFormat, seq = 1, date: Date =
 export function matchesSeries(fmt: NumberSeriesFormat, code: string): boolean {
   const upper = code.trim().toUpperCase();
   const dateLen = DATE_SEGMENTS[fmt.dateSegment].len;
-  const sep = fmt.separator === "" ? "" : escapeRe(fmt.separator);
+  const { sep1: s1, sep2: s2 } = seriesJoints(fmt);
+  const sep = s1 === "" ? "" : escapeRe(s1);
+  const sepB = s2 === "" ? "" : escapeRe(s2);
   // infix KAÇIRILMAZ: regex parçası olarak katalogda yazılı (`[HF]`), veri değil kod.
   const infix = fmt.infix ?? "";
   for (const prefix of [fmt.prefix, ...fmt.retiredPrefixes]) {
-    const head = dateLen === 0 ? `${escapeRe(prefix)}${sep}` : `${escapeRe(prefix)}${sep}\\d{${dateLen}}${sep}`;
+    const head = dateLen === 0 ? `${escapeRe(prefix)}${sep}` : `${escapeRe(prefix)}${sep}\\d{${dateLen}}${sepB}`;
     if (new RegExp(`^${head}${infix}\\d{${fmt.digits},}$`).test(upper)) return true;
   }
   // ⚠️ EMEKLİ BİÇİMLER KENDİ segment/haneleriyle denenir. Üstteki döngü emekli
@@ -148,11 +185,13 @@ export function matchesSeries(fmt: NumberSeriesFormat, code: string): boolean {
   // kod. İkisi birlikte bir ÜST KÜME: hiçbir kod eskisinden daha az tanınmaz.
   for (const eski of fmt.retiredFormats ?? []) {
     const eskiLen = DATE_SEGMENTS[eski.dateSegment].len;
-    const eskiSep = eski.separator === "" ? "" : escapeRe(eski.separator);
+    const { sep1: e1, sep2: e2 } = seriesJoints(eski);
+    const eskiSep = e1 === "" ? "" : escapeRe(e1);
+    const eskiSepB = e2 === "" ? "" : escapeRe(e2);
     const head =
       eskiLen === 0
         ? `${escapeRe(eski.prefix)}${eskiSep}`
-        : `${escapeRe(eski.prefix)}${eskiSep}\\d{${eskiLen}}${eskiSep}`;
+        : `${escapeRe(eski.prefix)}${eskiSep}\\d{${eskiLen}}${eskiSepB}`;
     if (new RegExp(`^${head}${infix}\\d{${eski.digits},}$`).test(upper)) return true;
   }
   return false;

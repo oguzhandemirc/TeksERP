@@ -81,6 +81,7 @@ function rowFormat(row: NumberSeries): NumberSeriesFormat {
     dateSegment: row.dateSegment,
     digits: row.digits,
     separator: row.separator,
+    separator2: row.separator2,
     retiredPrefixes: [...row.retiredPrefixes],
     ...(entry.infix ? { infix: entry.infix.re } : {}),
     formatChangedAt: row.formatChangedAt,
@@ -112,7 +113,7 @@ async function activateDueLines(): Promise<string[]> {
   const simdi = new Date();
   const seriler = await prisma.numberSeries.findMany({
     select: {
-      key: true, prefix: true, dateSegment: true, digits: true, separator: true,
+      key: true, prefix: true, dateSegment: true, digits: true, separator: true, separator2: true,
       retiredPrefixes: true, formatChangedAt: true,
     },
   });
@@ -121,7 +122,7 @@ async function activateDueLines(): Promise<string[]> {
     const line = await prisma.numberSeriesLine.findFirst({
       where: { seriesKey: s.key, effectiveFrom: { lte: simdi } },
       orderBy: { effectiveFrom: "desc" },
-      select: { prefix: true, dateSegment: true, digits: true, separator: true, effectiveFrom: true },
+      select: { prefix: true, dateSegment: true, digits: true, separator: true, separator2: true, effectiveFrom: true },
     });
     if (!line) continue;
     // ⚠️ ÖLÇÜT "kolonlar satırdan FARKLI" DEĞİL, "DAHA YENİ bir satır VADESİ
@@ -138,7 +139,8 @@ async function activateDueLines(): Promise<string[]> {
       where: { key: s.key },
       data: {
         prefix: line.prefix, dateSegment: line.dateSegment, digits: line.digits,
-        separator: line.separator, retiredPrefixes: retired, formatChangedAt: line.effectiveFrom,
+        separator: line.separator, separator2: line.separator2,
+        retiredPrefixes: retired, formatChangedAt: line.effectiveFrom,
       },
     });
     aktive.push(s.key);
@@ -166,7 +168,10 @@ export async function refreshNumberSeriesCache(): Promise<void> {
   // Yürürlükteki satır hariç TÜMÜ emekli sayılır; sıra yeniden eskiye.
   const lines = await prisma.numberSeriesLine.findMany({
     orderBy: [{ seriesKey: "asc" }, { effectiveFrom: "desc" }],
-    select: { seriesKey: true, prefix: true, dateSegment: true, digits: true, separator: true, effectiveFrom: true },
+    select: {
+      seriesKey: true, prefix: true, dateSegment: true, digits: true,
+      separator: true, separator2: true, effectiveFrom: true,
+    },
   });
   const simdi = Date.now();
   const emekliler = new Map<string, NumberSeriesFormat["retiredFormats"]>();
@@ -179,7 +184,10 @@ export async function refreshNumberSeriesCache(): Promise<void> {
       emekliler.set(l.seriesKey, []);
       continue;
     }
-    retiredList.push({ prefix: l.prefix, dateSegment: l.dateSegment, digits: l.digits, separator: l.separator });
+    retiredList.push({
+      prefix: l.prefix, dateSegment: l.dateSegment, digits: l.digits,
+      separator: l.separator, separator2: l.separator2,
+    });
   }
   // İLERİ TARİHLİ satırlar ayrı tutulur: önizleme (`resolveSeriesFormat(key, at)`)
   // onları okur, ÜRETİM yolu okumaz — bir numara hiçbir zaman "gelecekteki"
@@ -190,7 +198,10 @@ export async function refreshNumberSeriesCache(): Promise<void> {
     const dizi = gelecek.get(l.seriesKey) ?? [];
     dizi.push({
       effectiveFrom: l.effectiveFrom,
-      fmt: { prefix: l.prefix, dateSegment: l.dateSegment, digits: l.digits, separator: l.separator },
+      fmt: {
+        prefix: l.prefix, dateSegment: l.dateSegment, digits: l.digits,
+        separator: l.separator, separator2: l.separator2,
+      },
     });
     gelecek.set(l.seriesKey, dizi);
   }
@@ -410,6 +421,15 @@ export interface SeriesClassifierRow {
   dateSegment: NumberSeries["dateSegment"];
   digits: number;
   separator: string;
+  /**
+   * TARİH ile SAYAÇ arasındaki ayraç — yoksa `separator` geçerlidir (D5②).
+   *
+   * ⚠️ ALAN EKLENDİ: Faz D'siz eski istemci bunu tanımaz ve iki eklemde de
+   * `separator` kurar ⇒ `separator2 !== separator` olan OKUTULAN bir seride
+   * kodu sessizce çözemez. Bu yüzden okutulan serilerin biçimi C0b iki eşikli
+   * kilidin arkasındadır (`series-write.helper.ts`, `test_number_series_panel §10a`).
+   */
+  separator2?: string | null;
   /** Tarih ile sıra arasındaki sabit parça (regex); istemci tam-format regex'ini bundan kurar. */
   infix?: string;
   /**
@@ -427,6 +447,7 @@ export interface SeriesClassifierRow {
     dateSegment: NumberSeries["dateSegment"];
     digits: number;
     separator: string;
+    separator2?: string | null;
   }>;
 }
 
@@ -439,6 +460,7 @@ function classifierRow(entry: NumberSeriesCatalogEntry): SeriesClassifierRow {
     dateSegment: fmt.dateSegment,
     digits: fmt.digits,
     separator: fmt.separator,
+    ...(fmt.separator2 != null ? { separator2: fmt.separator2 } : {}),
     ...(fmt.infix ? { infix: fmt.infix } : {}),
     ...(fmt.retiredFormats && fmt.retiredFormats.length > 0
       ? { retiredFormats: fmt.retiredFormats }

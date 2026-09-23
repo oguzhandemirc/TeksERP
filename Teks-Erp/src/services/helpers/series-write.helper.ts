@@ -90,11 +90,13 @@ export function assertSeriesFormatAllowed(key: string, fmt: NumberSeriesFormat):
       );
     }
   }
-  if (!["", "-", "_", "/", "."].includes(fmt.separator)) {
-    throw AppError.badRequest("Ayraç boş ya da - _ / . olabilir.", {
-      code: "NUMBER_SERIES_SEPARATOR_INVALID",
-      key,
-    });
+  for (const ayrac of [fmt.separator, fmt.separator2 ?? ""]) {
+    if (!["", "-", "_", "/", "."].includes(ayrac)) {
+      throw AppError.badRequest("Ayraç boş ya da - _ / . olabilir.", {
+        code: "NUMBER_SERIES_SEPARATOR_INVALID",
+        key,
+      });
+    }
   }
   if (!entry.kind) return;
 

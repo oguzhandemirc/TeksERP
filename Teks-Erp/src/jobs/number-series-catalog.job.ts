@@ -208,13 +208,13 @@ async function repairFormatLines(): Promise<number> {
     // kurulumda liste zaten boştur ve o hâlde SÜZME YAPILMAZ.
     ...(seriesWithLines.length > 0 ? { where: { key: { notIn: seriesWithLines } } } : {}),
     select: {
-      key: true, prefix: true, dateSegment: true, digits: true, separator: true,
+      key: true, prefix: true, dateSegment: true, digits: true, separator: true, separator2: true,
       retiredPrefixes: true, formatChangedAt: true,
     },
   });
   const data: Array<{
     seriesKey: string; prefix: string; dateSegment: (typeof rows)[number]["dateSegment"];
-    digits: number; separator: string; effectiveFrom: Date; isSentinel: boolean;
+    digits: number; separator: string; separator2: string | null; effectiveFrom: Date; isSentinel: boolean;
     origin: "RECORDED" | "MIGRATED_GUESS";
   }> = [];
   for (const r of rows) {
@@ -222,7 +222,7 @@ async function repairFormatLines(): Promise<number> {
     r.retiredPrefixes.forEach((onek, i) => {
       data.push({
         seriesKey: r.key, prefix: onek, dateSegment: r.dateSegment, digits: r.digits,
-        separator: r.separator,
+        separator: r.separator, separator2: r.separator2,
         effectiveFrom: new Date(1000 * (i + 1)), isSentinel: true,
         // ⚠️ BİÇİM TAHMİN: yalnız ÖN EK biliniyordu; segment/hane/ayraç
         // bugünküyle aynı varsayıldı. Tarihin sentinel olması (`isSentinel`)
@@ -233,6 +233,7 @@ async function repairFormatLines(): Promise<number> {
     data.push({
       seriesKey: r.key, prefix: r.prefix, dateSegment: r.dateSegment, digits: r.digits,
       separator: r.separator,
+      separator2: r.separator2,
       // Damga varsa GERÇEK tarih; yoksa sentinel (biçim hiç değişmemiş seri).
       effectiveFrom: r.formatChangedAt ?? new Date(1000 * (r.retiredPrefixes.length + 1)),
       isSentinel: r.formatChangedAt === null || r.formatChangedAt < SENTINEL_DATE_HORIZON,

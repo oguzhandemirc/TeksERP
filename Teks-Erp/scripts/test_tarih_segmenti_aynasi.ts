@@ -8,6 +8,12 @@
 // sessizdir: istemci kodu yanlış uzunlukla parçalar, sayaç kuyruğunu tarih
 // hanesi sanar ve barkodu YANLIŞ türe çözer — hata mesajı çıkmaz.
 //
+// ⚠️ DÖRDÜNCÜ AYNA PANELDİR (§5): segment bir enum değeri, panelin seçenek
+// listesi ise ELLE yazılmış bir allowlist. Yeni segment enum'a, tabloya ve iki
+// istemciye girip panelde SEÇİLEMEZ kalabilir — hiçbir şey kırmızı vermez,
+// çünkü liste kendi içinde tutarlıdır. Reçetenin "sabit allowlist arama"
+// maddesinin (§ enum, 10b) bu ekrandaki karşılığı.
+//
 // ⚠️ SUNUCU TARAFI METİNDEN DEĞİL ÇALIŞMA ZAMANINDAN okunur (gerçek `import`).
 // İstemci tarafı metinden okunur çünkü o projelerin derleyicisi burada yok;
 // ama ayrıştırıcı YORUMLARI SOYAR — bir tarayıcı, kuralı ANLATAN yorumu değil
@@ -23,6 +29,15 @@
 //   ② mobil `YYYYMM` satırı silindi → §1b kırmızı (eksik YYYYMM=6)
 //   ③ Electron `filter(isRow)` → `every(isRow)` → §2a kırmızı
 //   ④ mobil `DATE_LEN` → `DATE_UZUNLUK` → §1b "ÖLÇÜLEMEDİ" kırmızısı
+//   ⑤ sunucuda `MMYY.len: 4 → 6`     → §3 kırmızı (beyan 6, üretilen 4) + §1 ×2
+//   ⑥ Electron `fullFormat`tan `separator2` tamamen çıkarıldı → §4a kırmızı ×2
+//   ⑦ panelden `MMYY` seçeneği silindi → §5 kırmızı (panelde eksik: MMYY)
+//   ⑧ `SEGMENTLER` → `SEGMENT_LISTESI` → §5 "ÖLÇÜLEMEDİ" kırmızısı
+//
+// ⚠️ ⑥ İLK YAZIMDA ISIRMADI ve sebebi bir YÜKLEM SINIRI hatasıydı: `separator2`yi
+// DOSYANIN TAMAMINDA arıyordum, `ScanSeriesRow` arayüzü onu hâlâ beyan ettiği
+// için iddia yeşil kaldı. Yüklem `fullFormat` GÖVDESİNE daraltıldı — soru
+// "dosya bu alanı tanıyor mu" değil, "REGEX'İ KURAN YOL onu okuyor mu".
 //
 // Koşum: npx tsx scripts/test_tarih_segmenti_aynasi.ts
 // =============================================================================
@@ -45,6 +60,10 @@ function check(label: string, ok: boolean, extra = ""): void {
 
 const ELECTRON = path.resolve(__dirname, "../../Electron/src/lib/scanner/barcode-kind.ts");
 const MOBIL = path.resolve(__dirname, "../../mobil/src/services/scanSeries.service.ts");
+const PANEL_ALANLAR = path.resolve(
+  __dirname,
+  "../../Electron/src/pages/GeneralSettings/Numbering/NumberingFields.tsx",
+);
 
 /**
  * Yorumlar soyulur — bir tarayıcı, kuralı ANLATAN metni değil KODU ölçmelidir.
@@ -128,6 +147,102 @@ karsilastir("§1b mobil", MOBIL);
 console.log("\n── §2 HEP-YA-HİÇ DEĞİL: satır bazında eleme ──");
 satirBazindaEleme("§2a Electron", ELECTRON);
 satirBazindaEleme("§2b mobil", MOBIL);
+
+/**
+ * Beyan edilen uzunluk ile ÜRETİLEN metin aynı mı?
+ *
+ * ⚠️ `len` ile `render` aynı kararın iki yüzü ama AYRI yazılıyor; biri yanlış
+ * girilirse üretici doğru kodu yazar, eşleştirici YANLIŞ uzunluk arar ve
+ * sonuç "ürettiğim kod kendi serime uymuyor" olur — sessiz, çünkü iki yol da
+ * kendi içinde tutarlı. Bu iddia yeni bir segmentin hatalı `len` ile
+ * doğmasını ilk koşumda yakalar.
+ */
+function uzunlukTutarliligi(): void {
+  // Ay ≠ gün ≠ yıl olan bir gün seçilir: 23 Eylül 2026. Hepsi aynı olsaydı
+  // (ör. 01.01.2001) yanlış SIRA yazılmış bir render da doğru görünürdü.
+  const gun = new Date("2026-09-23T10:00:00+03:00");
+  const sapan = Object.entries(DATE_SEGMENTS)
+    .filter(([, v]) => v.render(gun).length !== v.len)
+    .map(([k, v]) => `${k}: beyan ${v.len}, üretilen ${v.render(gun).length}`);
+  check("§3 ⭐ her segmentin ÜRETTİĞİ metin beyan ettiği uzunlukta",
+    sapan.length === 0, sapan.join(" · ") || `${Object.keys(DATE_SEGMENTS).length} segment`);
+}
+
+/**
+ * İkinci eklem (tarih|sayaç) istemcilerde de OKUNUYOR mu? (D5②)
+ *
+ * ⚠️ Bu iddia `separator2`nin DEĞERİNİ değil, istemcinin o alanı hiç GÖRÜP
+ * görmediğini ölçer — sunucu ayrı bir ayraçla kod üretirken istemcinin iki
+ * eklemde de `separator` kurması sessiz bir yanlış sınıflandırmadır ve
+ * bugünkü verilerde (hepsi null) HİÇ görünmez. Kapının bakması gereken an,
+ * alanın ilk kez kullanıldığı an değil, ŞİMDİ.
+ */
+function ikinciEklem(ad: string, dosya: string): void {
+  if (!existsSync(dosya)) {
+    check(`${ad} ⭐ ÖLÇÜLEMEDİ: dosya yok`, false);
+    return;
+  }
+  const kod = kodSatirlari(readFileSync(dosya, "utf-8"));
+  // ⚠️ YÜKLEM SINIRI BEYANLI — dosyanın TAMAMINDA `separator2` aramak SAHTE
+  // YEŞİL veriyordu (ölçüldü: `fullFormat`tan alanı tamamen çıkardım, iddia
+  // yine yeşil kaldı çünkü `ScanSeriesRow` ARAYÜZÜ onu hâlâ beyan ediyor).
+  // Soru "dosya bu alanı tanıyor mu" değil, "REGEX'İ KURAN YOL onu okuyor mu".
+  const govde = kod.match(/function fullFormat\([\s\S]*?\n\}/)?.[0] ?? null;
+  if (govde === null) {
+    check(`${ad} ⭐ ÖLÇÜLEMEDİ: \`fullFormat\` gövdesi bulunamadı`, false);
+    return;
+  }
+  check(`${ad} ⭐ tam-format regex'i \`separator2\`yi okuyor`, govde.includes("separator2"));
+  // ⚠️ İDDİA DEĞİŞTİ ve sebebi bir SONDA BULGUSU: önce "tarih yokken tek eklemi
+  // `separator` kurar" diye ayrı bir dal arıyordum. O dal hem sunucuda hem
+  // istemcide ÖLÜ KODDU — kaldırınca hiçbir iddia kırmızı vermedi, çünkü
+  // `head` tarih boşken ikinci eklemi zaten hiç kurmuyor. Ölçülebilir olan
+  // gerçek kural bu: `separator2` yoksa `separator`a DÜŞÜLÜR (fail-safe).
+  check(`${ad} ⭐ \`separator2\` yokken \`separator\`a düşüyor (sunucudaki \`seriesJoints\` kuralı)`,
+    /row\.separator2\s*\?\?\s*row\.separator(?![\w])/.test(govde));
+}
+
+console.log("\n── §3 BEYAN ↔ ÜRETİM ──");
+uzunlukTutarliligi();
+
+console.log("\n── §4 İKİNCİ EKLEM (separator2) ──");
+ikinciEklem("§4a Electron", ELECTRON);
+ikinciEklem("§4b mobil", MOBIL);
+
+/**
+ * Panelin segment SEÇENEKLERİ eksiksiz mi? (Reçete § enum, 10b maddesi)
+ *
+ * ⚠️ `SEGMENTLER` elle yazılmış bir ALLOWLIST'tir: yeni bir segment enum'a
+ * girer, `DATE_SEGMENTS`e girer, istemci haritalarına girer — ve panelde
+ * SEÇİLEMEZ kalır. Hiçbir şey kırmızı vermez, çünkü liste kendi içinde
+ * tutarlıdır. Yalnız kullanıcı "yeni biçim geldi ama ben seçemiyorum" der.
+ * Bu, "kaydedilen ama görünmeyen kayıt" sınıfının seçenek tarafıdır.
+ */
+function panelSecenekleri(): void {
+  if (!existsSync(PANEL_ALANLAR)) {
+    check("§5 ⭐ ÖLÇÜLEMEDİ: panel alan dosyası yok", false);
+    return;
+  }
+  const kod = kodSatirlari(readFileSync(PANEL_ALANLAR, "utf-8"));
+  const govde = kod.match(/const SEGMENTLER[\s\S]*?\n\];/)?.[0] ?? null;
+  if (govde === null) {
+    check("§5 ⭐ ÖLÇÜLEMEDİ: `SEGMENTLER` listesi ayrıştırılamadı", false);
+    return;
+  }
+  const panelde = new Set([...govde.matchAll(/value:\s*"(\w+)"/g)].map((m) => m[1]));
+  const sunucuda = Object.keys(DATE_SEGMENTS);
+  const eksik = sunucuda.filter((s) => !panelde.has(s));
+  const fazla = [...panelde].filter((s) => !sunucuda.includes(s));
+  check("§5 ⭐ panelde HER segment seçilebiliyor (elle allowlist bayatlamamış)",
+    eksik.length === 0 && fazla.length === 0,
+    eksik.length + fazla.length === 0
+      ? `${panelde.size} seçenek`
+      : `panelde eksik: ${eksik.join(",") || "-"} · fazla: ${fazla.join(",") || "-"}`);
+  check("§5 körlük zemini: seçenek listesi gerçekten dolu", panelde.size >= 5, `${panelde.size} seçenek`);
+}
+
+console.log("\n── §5 PANEL SEÇENEKLERİ ──");
+panelSecenekleri();
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

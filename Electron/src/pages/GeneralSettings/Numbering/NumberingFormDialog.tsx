@@ -111,7 +111,13 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
 
   useEffect(() => {
     if (!row) return;
-    setFmt({ prefix: row.prefix, dateSegment: row.dateSegment, digits: row.digits, separator: row.separator });
+    setFmt({
+      prefix: row.prefix,
+      dateSegment: row.dateSegment,
+      digits: row.digits,
+      separator: row.separator,
+      separator2: row.separator2,
+    });
     setCounter({ startValue: row.startValue, step: row.step, maxValue: row.maxValue });
     setSource(row.source.value);
     setEffectiveFrom("");
@@ -123,9 +129,13 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
 
   if (!row || !fmt) return null;
 
+  // ⚠️ YENİ ALAN BU LİSTEYE DE GİRER: karşılaştırma eksik kalırsa kullanıcı
+  // alanı değiştirir, Kaydet hiçbir şey göndermez ve ekran "kaydedildi" der —
+  // sessiz bir kayıp. `separator2` D5②'de buraya da eklendi.
   const formatChanged =
     fmt.prefix !== row.prefix || fmt.dateSegment !== row.dateSegment ||
-    fmt.digits !== row.digits || fmt.separator !== row.separator;
+    fmt.digits !== row.digits || fmt.separator !== row.separator ||
+    fmt.separator2 !== row.separator2;
   const sourceChanged = source !== row.source.value;
   const counterChanged =
     counter.startValue !== row.startValue || counter.step !== row.step || counter.maxValue !== row.maxValue;

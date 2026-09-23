@@ -47,6 +47,20 @@ const formatSchema = z
     dateSegment: z.nativeEnum(NumberSeriesDateSegment),
     digits: z.number().int().min(1).max(8),
     separator: z.string().max(2),
+    /**
+     * İKİNCİ AYRAÇ — `null` = `separator`a düş (bugünkü davranış).
+     *
+     * ⚠️ `.default(null)`, `.optional()` DEĞİL ve bu ÖLÇÜLMÜŞ bir tercih:
+     * `optional` olsaydı alan gönderilmediğinde kolon "dokunulmadan" kalır ama
+     * aynı yazmada doğan YENİ SATIR onu NULL alırdı ⇒ satır ile önbellek
+     * ayrışırdı (`test_number_series_lines §2`nin tam olarak kovaladığı hâl).
+     * `default(null)` ikisini her zaman aynı değerle yazar.
+     * ⚠️ Eski panel bu alanı göndermez ⇒ `null` yazar, yani "ikinci ayracı
+     * temizler". Dağıtım sırası bunu ZARARSIZ kılar: backend ÖNCE çıkar ve o
+     * pencerede alanı kurabilen bir yüzey yoktur (değer her yerde zaten null).
+     * Panel indikten SONRA alan her kaydetmede açıkça gönderilir.
+     */
+    separator2: z.string().max(2).nullable().default(null),
   })
   .strict();
 

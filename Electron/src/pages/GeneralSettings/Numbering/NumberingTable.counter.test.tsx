@@ -23,6 +23,7 @@ function seriesRow(over: Partial<NumberSeriesRow> = {}): NumberSeriesRow {
     label: "İş emri no",
     prefix: "IE",
     dateSegment: "DDMMYY",
+    separator2: null,
     digits: 4,
     separator: "",
     retiredPrefixes: [],

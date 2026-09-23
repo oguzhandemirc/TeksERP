@@ -35,9 +35,14 @@ export interface ScanSeriesRow {
   kind: Exclude<BarcodeKind, "UNKNOWN">;
   /** Yürürlükteki ön ek ÖNCE, emekliler sonra. */
   prefixes: string[];
-  dateSegment: "NONE" | "DDMMYY" | "YYMM" | "YYYYMM" | "YY" | "YYYY";
+  dateSegment: "NONE" | "DDMMYY" | "DDMMYYYY" | "YYMM" | "MMYY" | "YYYYMM" | "YYYYMMDD" | "YY" | "YYYY";
   digits: number;
   separator: string;
+  /**
+   * TARİH ile SAYAÇ arasındaki ayraç; yoksa `separator` geçerlidir (D5②).
+   * Tarih segmenti `NONE` ise ikinci eklem yoktur ve bu alan okunmaz.
+   */
+  separator2?: string | null;
   /** Tarih ile sıra ARASINDAKİ sabit parça (top barkodunun faz harfi `[HF]`). */
   infix?: string;
 }
@@ -63,8 +68,11 @@ const STORAGE_KEY = "tekserp.scanSeries.v1";
 const DATE_LEN: Record<ScanSeriesRow["dateSegment"], number> = {
   NONE: 0,
   DDMMYY: 6,
+  DDMMYYYY: 8,
   YYMM: 4,
+  MMYY: 4,
   YYYYMM: 6,
+  YYYYMMDD: 8,
   YY: 2,
   YYYY: 4,
 };
@@ -184,8 +192,13 @@ function prefixAnchor(row: ScanSeriesRow, prefix: string): RegExp {
 /** Tam-format regex'i — hane ESNEK (`\d{digits,}`): 9999'u aşan gün kodu da geçer. */
 function fullFormat(row: ScanSeriesRow, prefix: string): RegExp {
   const sep = row.separator === "" ? "" : escapeRe(row.separator);
+  // İkinci eklem (tarih|sayaç) ayrı olabilir; yoksa birincisine düşer —
+  // sunucudaki `seriesJoints` ile AYNI karar (ayna bekçisi karşılaştırır).
+  // Tarih yoksa `head` zaten ikinci eklemi hiç kurmaz, ayrı bir dal gerekmez.
+  const sep2raw = row.separator2 ?? row.separator;
+  const sepB = sep2raw === "" ? "" : escapeRe(sep2raw);
   const len = DATE_LEN[row.dateSegment];
-  const head = len === 0 ? `${escapeRe(prefix)}${sep}` : `${escapeRe(prefix)}${sep}\\d{${len}}${sep}`;
+  const head = len === 0 ? `${escapeRe(prefix)}${sep}` : `${escapeRe(prefix)}${sep}\\d{${len}}${sepB}`;
   return new RegExp(`^${head}${row.infix ?? ""}\\d{${row.digits},}$`);
 }
 

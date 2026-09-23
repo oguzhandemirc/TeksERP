@@ -17,9 +17,23 @@
 //      (boş listede davranış bugünküyle birebir; ekleme ÜST KÜMEDİR)
 //  §12 SAYAÇ ÇEKİRDEĞİ: ayar yokken bugünkü davranış · başlangıç · adım · üst
 //      sınır · taşma haneyi genişletir
+//  §14 YENİ TARİH SEGMENTLERİ (DDMMYYYY · MMYY · YYYYMMDD) + İKİNCİ AYRAÇ:
+//      her segment ÜRET + EŞLEŞTİR birlikte · `separator2` yok/null iken
+//      davranış BAYT BAYT bugünküyle aynı · `NONE`da ikinci eklem yok
 //  §11 ÜRETEÇ SERİYİ SÜRÜYOR: ön eki seriden alıp HANEYİ literal yazan üreteç
 //      yok (a: yapısal · b: ölçülmüş literal şekil) · beyanlı istisna kilitli
 //      olmak zorunda (c) · ön ek ile kod AYNI tarihten doğar (d, "iki tarih")
+// ⭐ §14 negatif sondaları (2026-09-23, D5②; her biri geri alınıp `cmp`lendi):
+//    ⑦ üreteç ikinci eklemde `sep1` kullanınca §14b ❌2 + §14f ❌1 · ⑧ eşleştirici
+//    `sepB` yerine `sep` kurunca §14b ❌1 · ⑨ `DDMMYYYY` sırası ters çevrilince
+//    §14a ❌1 · ⑩b tarih boşken `sep2` kullanılınca §14d ❌1.
+//    ⚠️ BİR SONDA ISIRMADI ve bu bir BULGUYDU: `seriesJoints` içindeki
+//    `dateSegment === "NONE" ? sep1` dalını kaldırdım, HİÇBİR iddia kırmızı
+//    vermedi — çünkü üreteç de eşleştirici de tarih boşken ikinci eklemi zaten
+//    hiç kurmuyor, yani o dal ÖLÜ KODDU. Dal kaldırıldı; §14d artık gerçekten
+//    ulaşılan yolu (`dt === ""` kolu) ölçüyor ve ⑩b ile ısırdığı doğrulandı.
+//    ⇒ Sonda ısırmayınca ilk soru "sonda mı zayıf" değil, "korunan davranış
+//    GERÇEKTEN o kodda mı yaşıyor" olmalı.
 // ⭐ Negatif sonda (2026-09-22, ölçüldü): katalogda `sack` ön ekini "CX" yapınca §1 ❌;
 //    `assertSeriesFormatAllowed`tan çakışma döngüsü silinince §3 ❌; `matchesSeries`teki
 //    `\d{digits,}` → `\d{digits}` yapılınca §5 ❌; §7'de servise ikinci import eklenince ❌;
@@ -542,6 +556,70 @@ check("§13e ⭐ emekli biçim eklemek ESKİ eşleşmeleri BOZMAZ (üst küme)",
     { ...sackFmt, retiredFormats: [{ prefix: "ZZ", dateSegment: "YYMM", digits: 8, separator: "-" }] },
     buildDailyCode("CV", 7, AT),
   ));
+
+// ── §14 YENİ TARİH SEGMENTLERİ + İKİNCİ AYRAÇ (D5②) ────────────────────────
+// ⚠️ ASIL RİSK "üretilen metin doğru mu" DEĞİL, ÜRETEÇ İLE EŞLEŞTİRİCİNİN
+// AYRIŞMASIDIR: ikisi ayrı yerde kurulursa sonuç "kendi ürettiğim kod kendi
+// serime uymuyor" olur ve bu SESSİZDİR (her iki yol da kendi içinde tutarlı).
+// Bu yüzden her segment için ÜRET + EŞLEŞTİR birlikte ölçülür.
+const D5AT = new Date("2026-09-23T10:00:00+03:00");
+function segFmt(
+  dateSegment: NumberSeriesFormat["dateSegment"],
+  extra: Partial<NumberSeriesFormat> = {},
+): NumberSeriesFormat {
+  return { prefix: "PRT", dateSegment, digits: 4, separator: "", retiredPrefixes: [], ...extra };
+}
+for (const [segment, beklenen] of [
+  ["DDMMYYYY", "PRT230920260001"],
+  ["MMYY", "PRT09260001"],
+  ["YYYYMMDD", "PRT202609230001"],
+] as const) {
+  const fmt = segFmt(segment);
+  const kod = formatSeriesCode(fmt, 1, D5AT);
+  check(`§14a ${segment} beklenen metni üretiyor`, kod === beklenen, kod);
+  check(`§14a ⭐ ${segment}: ÜRETİLEN kod kendi serisine UYUYOR (üreteç ↔ eşleştirici)`,
+    matchesSeries(fmt, kod), kod);
+}
+// İkinci ayraç: tarih ile sayaç arasındaki eklem ayrı olabilir.
+const ikiAyrac = segFmt("YYMM", { separator: "-", separator2: "/" });
+check("§14b ⭐ ikinci ayraç ÜRETİMDE tarihten SONRAKİ eklemde",
+  formatSeriesCode(ikiAyrac, 1, D5AT) === "PRT-2609/0001", formatSeriesCode(ikiAyrac, 1, D5AT));
+check("§14b ⭐ ikinci ayraçlı kod kendi serisine UYUYOR",
+  matchesSeries(ikiAyrac, formatSeriesCode(ikiAyrac, 1, D5AT)));
+check("§14b kapı fazla geniş değil: TEK ayraçlı biçim iki ayraçlı kodu tanımaz",
+  !matchesSeries(segFmt("YYMM", { separator: "-" }), "PRT-2609/0001"));
+// ⚠️ FAIL-SAFE: `separator2` yokken/`null`ken davranış BAYT BAYT bugünküyle aynı.
+for (const segment of ["NONE", "DDMMYY", "YYMM", "YYYYMM", "YY", "YYYY"] as const) {
+  const temel = segFmt(segment, { separator: "-" });
+  const acikNull = segFmt(segment, { separator: "-", separator2: null });
+  check(`§14c ⭐ ${segment}: \`separator2\` yok ile null AYNI kodu üretiyor (fail-safe)`,
+    formatSeriesCode(temel, 7, D5AT) === formatSeriesCode(acikNull, 7, D5AT),
+    formatSeriesCode(temel, 7, D5AT));
+}
+// ⚠️ TARİH YOKSA İKİNCİ EKLEM DE YOK — "ikinci ayraç" adı ancak öyle dürüst.
+check("§14d ⭐ `NONE` segmentte `separator2` YOK SAYILIR (tek eklemi `separator` kurar)",
+  formatSeriesCode(segFmt("NONE", { separator: "-", separator2: "/" }), 1, D5AT) === "PRT-0001",
+  formatSeriesCode(segFmt("NONE", { separator: "-", separator2: "/" }), 1, D5AT));
+// Emekli biçim kendi ikinci ayracıyla denenir (D4② ekseninin D5② karşılığı).
+check("§14e ⭐ emekli biçim KENDİ ikinci ayracıyla tanınır",
+  matchesSeries(
+    segFmt("YYMM", { separator: "-", separator2: "/", retiredFormats: [
+      { prefix: "PRT", dateSegment: "YYMM", digits: 4, separator: "-", separator2: "." },
+    ] }),
+    "PRT-2609.0001",
+  ));
+// ⚠️ KAPASİTE İDDİASI YAZILMADI ve gerekçesi ÖLÇÜLDÜ: izin verilen ayraç
+// kümesi `"" - _ / .` yani 0–1 karakter ⇒ `separator2` sabit başı ASLA
+// `separator`ın yapabileceğinden fazla uzatamaz; "ikinci ayraç kapasiteyi
+// taşırır" diye bir iddia yazsaydım ÜRETİLEMEYEN bir durumu ölçüyor olurdum.
+// Ölçülebilir olan şu: sabit baş ikinci eklemden ETKİLENİYOR (uzunluk
+// hesabı onu görüyor) — kapasite kapısı zaten `seriesPrefix`ten okuduğu için
+// bu yeterlidir.
+check("§14f ⭐ sabit baş ikinci eklemi SAYIYOR (kapasite kapısı `seriesPrefix`ten okur)",
+  seriesPrefix(segFmt("YYMM", { separator: "-", separator2: "" }), D5AT).length + 1 ===
+    seriesPrefix(segFmt("YYMM", { separator: "-" }), D5AT).length,
+  `${seriesPrefix(segFmt("YYMM", { separator: "-", separator2: "" }), D5AT)} ↔ ` +
+    `${seriesPrefix(segFmt("YYMM", { separator: "-" }), D5AT)}`);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

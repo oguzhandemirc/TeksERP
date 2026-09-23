@@ -324,6 +324,9 @@ export const ENUM_LABELS: Record<string, string> = {
   // de BU belirler, yani etiket "gösterim" değil "sayaç kapsamı" anlatır.
   NONE: "Tarih yok (sayaç sıfırlanmaz)",
   DDMMYY: "Gün-Ay-Yıl (günlük sayaç)",
+  DDMMYYYY: "Gün-Ay-Yıl, 4 haneli yıl — 23092026 (günlük sayaç)",
+  YYYYMMDD: "Yıl-Ay-Gün — 20260923 (günlük sayaç)",
+  MMYY: "Ay-Yıl, 2 haneli yıl — 0926 (aylık sayaç)",
   YYMM: "Yıl-Ay, 2 haneli yıl (aylık sayaç)",
   YYYYMM: "Yıl-Ay, 4 haneli yıl (aylık sayaç)",
   YY: "Yıl, 2 haneli (yıllık sayaç)",

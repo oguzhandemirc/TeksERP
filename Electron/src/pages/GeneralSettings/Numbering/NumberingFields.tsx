@@ -5,7 +5,10 @@ import type { SeriesDateSegment, SeriesFormatInput } from "./types";
 /** Tarih segmenti = SAYACIN SIFIRLAMA DÖNEMİ; ayrı bir "periyot" ayarı YOKTUR. */
 const SEGMENTLER: Array<{ value: SeriesDateSegment; label: string }> = [
   { value: "DDMMYY", label: "Günlük (GGAAYY)" },
+  { value: "DDMMYYYY", label: "Günlük (GGAAYYYY — 23092026)" },
+  { value: "YYYYMMDD", label: "Günlük (YYYYAAGG — 20260923)" },
   { value: "YYMM", label: "Aylık (YYAA)" },
+  { value: "MMYY", label: "Aylık (AAYY — 0926)" },
   { value: "YYYYMM", label: "Aylık (YYYYAA)" },
   { value: "YY", label: "Yıllık (YY)" },
   { value: "YYYY", label: "Yıllık (YYYY)" },
@@ -55,7 +58,7 @@ export function NumberingFields({
         </select>
       </div>
       <div className="space-y-1">
-        <Label htmlFor="ns-sep">Ayraç</Label>
+        <Label htmlFor="ns-sep">Ayraç (ön ek ile tarih arası)</Label>
         <Input
           id="ns-sep"
           value={fmt.separator}
@@ -63,6 +66,24 @@ export function NumberingFields({
           onChange={(e) => onChange({ ...fmt, separator: e.target.value })}
         />
       </div>
+      {/*
+        İKİNCİ AYRAÇ — tarih YOKKEN tek eklem vardır ve onu birinci ayraç kurar,
+        bu yüzden alan o durumda ÇİZİLMEZ: görünüp hiçbir şey yapmayan bir alan,
+        kullanıcıya "ayarladım" dedirtip sonucu değiştirmez.
+        Boş bırakıldığında `null` gider = "birinci ayraca düş" (bugünkü davranış).
+      */}
+      {fmt.dateSegment !== "NONE" && (
+        <div className="space-y-1">
+          <Label htmlFor="ns-sep2">Ayraç 2 (tarih ile sayaç arası)</Label>
+          <Input
+            id="ns-sep2"
+            value={fmt.separator2 ?? ""}
+            maxLength={2}
+            placeholder={fmt.separator === "" ? "(ayraçsız)" : fmt.separator}
+            onChange={(e) => onChange({ ...fmt, separator2: e.target.value === "" ? null : e.target.value })}
+          />
+        </div>
+      )}
     </div>
   );
 }
