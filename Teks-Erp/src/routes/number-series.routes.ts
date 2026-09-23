@@ -70,6 +70,17 @@ const counterSchema = z
 /** Numara kaynağı gövdesi — tek alan, kapalı küme. */
 const sourceSchema = z.object({ numberSource: z.enum(["FREE", "SYSTEM", "MANUAL"]) }).strict();
 
+/**
+ * İleri tarihli geçiş gövdesi — biçim + YÜRÜRLÜK TARİHİ (D4③).
+ *
+ * ⚠️ Alan OPSİYONEL ve AYNI uçta: ayrı bir uç açmak, "biçim değiştir" ile
+ * "1 Ocak'tan itibaren biçim değiştir"i iki ayrı doğrulama zincirine bölerdi
+ * (aynı kapılar iki kez yazılır, biri bayatlar).
+ */
+const formatWithEffectiveSchema = formatSchema
+  .extend({ effectiveFrom: z.string().datetime().optional() })
+  .strict();
+
 const previewSchema = formatSchema.extend({ key: z.string().trim().min(1).max(64) }).strict();
 const keyParamSchema = z.object({ key: z.string().trim().min(1).max(64) });
 
@@ -169,12 +180,19 @@ router.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { key } = keyParamSchema.parse(req.params);
-      const fmt = formatSchema.parse(req.body ?? {});
-      const row = await updateSeriesFormat(key, fmt, req.user?.userId);
+      const { effectiveFrom, ...fmt } = formatWithEffectiveSchema.parse(req.body ?? {});
+      const row = await updateSeriesFormat(
+        key,
+        fmt,
+        req.user?.userId,
+        effectiveFrom ? new Date(effectiveFrom) : undefined,
+      );
       res.status(200).json({
         success: true,
         data: row,
-        message: `${row.label} biçimi güncellendi. Bundan sonra açılacak kayıtlar yeni numarayı alır; geçmiş değişmez.`,
+        message: effectiveFrom
+          ? `${row.label} biçimi ${new Date(effectiveFrom).toLocaleDateString("tr-TR")} tarihinden itibaren değişecek. Bugünkü numaralar etkilenmez.`
+          : `${row.label} biçimi güncellendi. Bundan sonra açılacak kayıtlar yeni numarayı alır; geçmiş değişmez.`,
       });
     } catch (e) {
       next(e);

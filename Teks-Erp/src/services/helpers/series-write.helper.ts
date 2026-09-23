@@ -17,7 +17,11 @@
 // =============================================================================
 import type { NumberSeries } from "@prisma/client";
 
-import { FAZ_B_ONCESI, scanningClientsCarryFazB } from "../../config/client-version-policy";
+import {
+  FAZ_B_ONCESI,
+  FAZ_D_ONCESI,
+  scanningClientsMissingPhases,
+} from "../../config/client-version-policy";
 import { NUMBER_SERIES_CATALOG, numberSeriesCatalogEntry } from "../../constants/number-series-catalog";
 import { NUMBER_SERIES_CODE_CAPACITY } from "../../constants/number-series-capacity";
 import prisma from "../../lib/prisma";
@@ -123,6 +127,15 @@ export async function updateSeriesFormat(
   key: string,
   next: Omit<NumberSeriesFormat, "retiredPrefixes" | "infix" | "formatChangedAt">,
   userId?: string,
+  /**
+   * İLERİ TARİHLİ GEÇİŞ (D4③): "1 Ocak'tan itibaren şu biçim".
+   *
+   * ⚠️ GEÇMİŞ TARİH YAZILAMAZ (400): biçim geçmişi bir DEFTERDİR — o tarihte
+   * üretilmiş numaraların hangi rejimde doğduğu bilgisi düzeltilmez.
+   * ⚠️ İleri tarihli yazma YÜRÜRLÜKTEKİ biçime DOKUNMAZ: satır yazılır, kolonlar
+   * (önbellek) olduğu gibi kalır ve vadesi gelince `activateDueLines` alır.
+   */
+  effectiveFrom?: Date,
 ): Promise<NumberSeries> {
   // ⚠️ KONFİGÜRASYON SINIRI (C0): sayacı biçim değişimine HAZIR OLMAYAN seri
   // düzenlenemez. Üretim yolu kapatılmaz — çuval açılamaz hâle gelirdi; asıl
@@ -157,11 +170,18 @@ export async function updateSeriesFormat(
   // der. İkisi farklı gün kalkar, bu yüzden biri ötekinin yerine geçmez.
   // Okutulan bir serinin ön eki değişirse, Faz B'yi taşımayan istemci kendi
   // SABİT regex'iyle okumaya devam eder ve kodu SESSİZCE yanlış türe çözer.
-  if (katalog.kind && !scanningClientsCarryFazB()) {
+  // ⚠️ İKİ EŞİK, TEK KAPI (D4②): Faz B "biçimi tablodan oku" der, Faz D
+  // "tablodaki EMEKLİ BİÇİMLERİ de dene" der ve biri ötekini KAPSAMAZ. Faz B'li
+  // ama Faz D'siz bir tablet, hane değiştiği gün dünkü etiketi okuyamaz
+  // (ölçüldü 2026-09-23, `test_number_series §13a`). "minVersion yükseldi" tek
+  // başına bu kilidi AÇMAZ.
+  const missingPhases = katalog.kind ? scanningClientsMissingPhases() : [];
+  if (missingPhases.length > 0) {
+    const esik = missingPhases.includes("B") ? FAZ_B_ONCESI : FAZ_D_ONCESI;
     throw AppError.badRequest(
       `Okutulan serilerin biçimi, sahadaki panel ve tabletler güncellenmeden değiştirilemez: ${katalog.label}. ` +
-        `En düşük sürüm eşiği panelde ${FAZ_B_ONCESI.electron}, tablette ${FAZ_B_ONCESI.mobil} üstüne çıkmalı.`,
-      { code: "NUMBER_SERIES_CLIENT_TOO_OLD", key },
+        `En düşük sürüm eşiği panelde ${esik.electron}, tablette ${esik.mobil} üstüne çıkmalı.`,
+      { code: "NUMBER_SERIES_CLIENT_TOO_OLD", key, missingPhases },
     );
   }
   const current = resolveSeriesFormat(key);
@@ -171,11 +191,40 @@ export async function updateSeriesFormat(
       : [...new Set([...current.retiredPrefixes, current.prefix])];
   assertSeriesFormatAllowed(key, { ...next, retiredPrefixes: retired });
 
-  const row = await prisma.numberSeries.update({
-    where: { key },
-    // `formatChangedAt` sayacın KAPSAM sınırıdır: bundan sonraki numaralar yalnız
-    // bu andan sonra doğan kodlara bakar (eski rejim sayaca giremez).
-    data: { ...next, retiredPrefixes: retired, formatChangedAt: new Date(), updatedById: userId ?? null },
+  // ⚠️ TEK YAZAR, TEK TX: biçim artık İKİ yerde duruyor — zaman çizgisi
+  // (`number_series_lines`, gerçek kaynak) ve `number_series` kolonları
+  // (yürürlükteki satırın ÖNBELLEĞİ). İkisini ayrı yazmak, aralarında bir hata
+  // olduğunda "satır yeni biçimde ama önbellek eskide" diye AYRIŞAN BİR YÜZEY
+  // bırakırdı; tx ikisini birlikte ya yazar ya yazmaz.
+  const simdi = new Date();
+  const at = effectiveFrom ?? simdi;
+  // ⚠️ 60 sn'lik pay SAAT SAPMASINA değil, çağrının kendi gecikmesine verildi
+  // ("şimdi" hesaplandıktan sonra ağ/doğrulama süresi). Daha geniş bir pay,
+  // "dün"ü bugün diye kabul etmenin kapısı olurdu.
+  if (at.getTime() < simdi.getTime() - 60_000) {
+    throw AppError.badRequest(
+      "Biçim geçişi GEÇMİŞ bir tarihe yazılamaz: o tarihte üretilmiş numaraların hangi biçimde doğduğu değişmez.",
+      { code: "NUMBER_SERIES_EFFECTIVE_FROM_PAST", key },
+    );
+  }
+  const isFuture = at.getTime() > simdi.getTime() + 60_000;
+  const row = await prisma.$transaction(async (tx) => {
+    await tx.numberSeriesLine.create({
+      data: { seriesKey: key, ...next, effectiveFrom: at, isSentinel: false, origin: "RECORDED" },
+    });
+    // İLERİ TARİHLİ: yalnız SATIR yazılır; yürürlükteki biçim (kolonlar) DEĞİŞMEZ
+    // ve `formatChangedAt`e dokunulmaz — sayaç kapsamı bugün kaymamalı.
+    if (isFuture) {
+      return tx.numberSeries.update({ where: { key }, data: { updatedById: userId ?? null } });
+    }
+    return tx.numberSeries.update({
+      where: { key },
+      // `formatChangedAt` sayacın KAPSAM sınırıdır: bundan sonraki numaralar yalnız
+      // bu andan sonra doğan kodlara bakar (eski rejim sayaca giremez). Yürürlükteki
+      // satırın `effectiveFrom`u ile AYNI an olmak zorunda — ikisi ayrışırsa sayaç
+      // kapsamı ile biçim geçişi farklı anlardan başlardı.
+      data: { ...next, retiredPrefixes: retired, formatChangedAt: at, updatedById: userId ?? null },
+    });
   });
   await refreshNumberSeriesCache();
   // Biçim değişikliği bir İŞ KARARIDIR (bundan sonraki her belgenin numarası değişir),

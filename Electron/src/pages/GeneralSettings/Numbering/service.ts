@@ -34,8 +34,12 @@ export const numberingService = {
     return r.data?.data?.count ?? null;
   },
 
-  async update(key: string, fmt: SeriesFormatInput): Promise<void> {
-    await apiClient.patch(`/api/number-series/${encodeURIComponent(key)}`, fmt);
+  /** `effectiveFrom` boş = HEMEN (bugünkü davranış); dolu = ileri tarihli geçiş. */
+  async update(key: string, fmt: SeriesFormatInput, effectiveFrom?: string): Promise<void> {
+    await apiClient.patch(`/api/number-series/${encodeURIComponent(key)}`, {
+      ...fmt,
+      ...(effectiveFrom ? { effectiveFrom: new Date(`${effectiveFrom}T00:00:00`).toISOString() } : {}),
+    });
   },
 
   /**

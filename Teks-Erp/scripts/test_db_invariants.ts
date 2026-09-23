@@ -708,6 +708,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "number_series", name: "number_series_start_value_positive" },
   { table: "number_series", name: "number_series_step_positive" },
   { table: "number_series", name: "number_series_max_value_range" },
+  // 2026-09-23 — biçim zaman çizgisi (20260923200000_number_series_line).
+  // Hane sedi `number_series` ile AYNI: satır ile önbellek ayrı sedlerde olsaydı
+  // biri geçerli, öteki geçersiz bir biçim kabul edebilirdi.
+  { table: "number_series_lines", name: "number_series_lines_digits_range" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

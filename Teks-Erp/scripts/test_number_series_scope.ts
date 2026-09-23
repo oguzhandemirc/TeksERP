@@ -81,6 +81,8 @@ async function main(): Promise<void> {
   }
 
   const onceki = await prisma.numberSeries.findUnique({ where: { key: "sack" } });
+  /** Bu koşumun yazdığı biçim satırları — sonda SİLİNİR (artık bırakmaz). */
+  const temizlenecekSatirlar: Date[] = [];
   if (!onceki) {
     console.log("❌ Fikstür eksik: `sack` serisi yok. Boot uzlaştırması koştu mu?");
     process.exit(1);
@@ -96,9 +98,25 @@ async function main(): Promise<void> {
 
     // ── §2 Damga VARKEN eski rejim sayaca girmez ───────────────────────────
     // Damga eski kodlardan SONRA: kapsam boşalır, sıra 1'e döner.
+    // ⚠️ FİKSTÜR BİÇİM SATIRINI DA YAZAR (D4①'den beri): biçim artık bir ZAMAN
+    // ÇİZGİSİ ve `number_series` kolonları onun ÖNBELLEĞİ. Yalnız kolonlara
+    // yazan bir fikstür, vadesi gelen satırları yürürlüğe alan yol tarafından
+    // GERİ ALINIRDI — ölçüldü 2026-09-23: bu bekçi kırmızı verdi ve haklıydı,
+    // çünkü simüle ettiği "biçim değişikliği" gerçek yazma yolunun bırakacağı
+    // izi bırakmıyordu.
+    const damgaAni = new Date("2026-09-22T10:00:00.000Z");
+    temizlenecekSatirlar.push(damgaAni);
+    await prisma.numberSeriesLine.deleteMany({ where: { seriesKey: "sack", effectiveFrom: { gte: damgaAni } } });
+    await prisma.numberSeriesLine.create({
+      data: {
+        seriesKey: "sack", prefix: onceki!.prefix, dateSegment: "NONE",
+        digits: onceki!.digits, separator: onceki!.separator,
+        effectiveFrom: damgaAni, isSentinel: false, origin: "RECORDED",
+      },
+    });
     await prisma.numberSeries.update({
       where: { key: "sack" },
-      data: { dateSegment: "NONE", formatChangedAt: new Date("2026-09-22T10:00:00.000Z") },
+      data: { dateSegment: "NONE", formatChangedAt: damgaAni },
     });
     await refreshNumberSeriesCache();
     const tarihsiz = await nextSeriesNo("sack", async () => ESKI, AT);
@@ -175,6 +193,12 @@ async function main(): Promise<void> {
 
     check("§1 körlük zemini: seri satırı gerçekten okundu", onceki.key === "sack");
   } finally {
+    // ⚠️ Bu koşumun yazdığı BİÇİM SATIRLARI da gider: kolonları geri yazıp satırı
+    // bırakmak, bir sonraki tazelemede satırın kolonları YENİDEN ezmesi demekti
+    // (biçim artık bir zaman çizgisi ve satır efendidir).
+    for (const at of temizlenecekSatirlar) {
+      await prisma.numberSeriesLine.deleteMany({ where: { seriesKey: "sack", effectiveFrom: at } });
+    }
     // Seriyi BİREBİR geri yükle — global durum yazan bekçi kuralı.
     await prisma.numberSeries.update({
       where: { key: "sack" },

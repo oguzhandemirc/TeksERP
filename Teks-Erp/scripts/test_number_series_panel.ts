@@ -28,6 +28,8 @@
 //  §4e Sayım kaynağı olmayan seri `uretecBagi` ile BEYANLI (kaynaksızlık bir KARAR)
 //  §4f Kaynaklı HER seri gerçekten sayılabiliyor — yanlış model adı sessizce
 //      `null` döndürür ve hiçbir statik kontrol göremez
+//  §10 C0b İKİ EŞİK (Faz B + Faz D) · sınıflandırma sözleşmesi: alan EKLENDİ,
+//      var olan `prefixes` DEĞİŞTİRİLMEDİ
 //   §9 ELLE NUMARA KAPISI: FREE/SYSTEM/MANUAL davranışı · okutulan seride elle
 //      değer kendi türüne çözülmeli · beyan edilen her yol kapıyı ÇAĞIRIYOR
 //   §8 NUMARA KAYNAĞI: beyan gerçek · elle yolu olmayan seride 400 · varsayılan
@@ -62,7 +64,13 @@ import {
   NUMBER_SERIES_PANEL_GROUPS,
   numberSeriesCatalogEntry,
 } from "../src/constants/number-series-catalog";
-import { previewSeriesCode, refreshNumberSeriesCache, resolveSeriesFormat, seriesSeqFrom } from "../src/services/number-series.service";
+import {
+  previewSeriesCode,
+  refreshNumberSeriesCache,
+  resolveSeriesFormat,
+  seriesClassifierTable,
+  seriesSeqFrom,
+} from "../src/services/number-series.service";
 import {
   assertSeriesCounterAllowed,
   assertSeriesFormatAllowed,
@@ -79,6 +87,11 @@ import {
   seriesLock,
 } from "../src/services/helpers/series-panel.helper";
 import { seriesPrefix } from "../src/services/helpers/series-format.helper";
+import {
+  scanningClientsCarryFazB,
+  scanningClientsCarryFazD,
+  scanningClientsMissingPhases,
+} from "../src/config/client-version-policy";
 import {
   assertManualNumberAllowed,
   manualNumberModes,
@@ -684,6 +697,51 @@ async function main(): Promise<void> {
     check("§9f ⭐ yük `GET /api/feature-flags` yanıtına bağlı (yeni uç yok)",
       readFileSync(join(__dirname, "..", "src", "routes", "feature-flag.routes.ts"), "utf-8")
         .includes("numberSources: manualNumberModes()"));
+
+    // ── §10 C0b İKİ EŞİK + SINIFLANDIRMA SÖZLEŞMESİ (D4②) ──────────────────
+    // ⭐ "minVersion yükseldi" TEK BAŞINA kilidi açmaz: Faz B "biçimi tablodan
+    // oku" der, Faz D "tablodaki EMEKLİ BİÇİMLERİ de dene" der ve biri ötekini
+    // KAPSAMAZ. Faz B'li ama Faz D'siz bir tablet, hane değiştiği gün dünkü
+    // etiketi okuyamaz (ölçüldü 2026-09-23, `test_number_series §13a`: hane 4 → 6).
+    // ⚠️ SERİ SEÇİMİ LOAD-BEARING: `swatch` SAYAÇ kapısında duruyor (kapı sırası
+    // doğru çalışıyor) ve C0b'ye hiç gelmiyordu — ilk yazımda bu iddia
+    // `…COUNTER_NOT_SCOPED` görüp kırmızı verdi. Okutulan VE sayacı hazır bir
+    // seri seçilir; `sack` ikisini de karşılıyor.
+    const c0bHatasi = await dene(async () =>
+      updateSeriesFormat("sack", { prefix: "CV", dateSegment: "DDMMYY", digits: 4, separator: "" }),
+    );
+    check("§10a ⭐ okutulan seri BUGÜN kilitli (iki eşikten en az biri karşılanmadı)",
+      c0bHatasi instanceof Error && kod(c0bHatasi) === "NUMBER_SERIES_CLIENT_TOO_OLD",
+      kod(c0bHatasi) ?? "KABUL EDİLDİ");
+    check("§10a körlük zemini: iki eşik de BUGÜN karşılanmıyor (kapı vakumen yeşil değil)",
+      !scanningClientsCarryFazB() || !scanningClientsCarryFazD(),
+      `FazB=${scanningClientsCarryFazB()} · FazD=${scanningClientsCarryFazD()}`);
+    // ⭐ İDDİA GÜÇLENDİRİLDİ (2026-09-23) çünkü ESKİSİ ZAYIFTI ve bunu ÖLÇTÜM:
+    // "hata kodu `…CLIENT_TOO_OLD` mı" diye sormak, YALNIZ Faz B'ye bakan bir
+    // kapıyı da geçiriyordu — iki eşik de bugün karşılanmadığı için `false &&
+    // false` ile `false` aynı sonucu veriyor. Kapı artık EKSİK FAZLARI ADIYLA
+    // döndürüyor ve iddia ikisinin de arandığını görebiliyor.
+    check("§10a ⭐ kapı EKSİK FAZLARI ADIYLA bildiriyor — ikisi de aranıyor",
+      (() => {
+        const d = (c0bHatasi as { details?: { missingPhases?: string[] } })?.details?.missingPhases;
+        return Array.isArray(d) && d.includes("B") && d.includes("D");
+      })(),
+      JSON.stringify((c0bHatasi as { details?: { missingPhases?: string[] } })?.details?.missingPhases ?? null));
+    check("§10a tek yüklem: kapı ile bildirilen eksik fazlar AYNI kaynaktan",
+      scanningClientsMissingPhases().length === 2);
+
+    // ⭐ SÖZLEŞME: alan EKLENDİ, var olan DEĞİŞTİRİLMEDİ — eski istemci
+    // `retiredFormats`ı tanımaz ve görmezden gelir; `prefixes` yerinde durur.
+    const tablo = seriesClassifierTable();
+    check("§10b ⭐ sınıflandırma satırı `prefixes` alanını KORUYOR (eski istemci kırılmaz)",
+      tablo.length > 0 && tablo.every((r) => Array.isArray(r.prefixes) && r.prefixes.length >= 1),
+      `${tablo.length} satır`);
+    check("§10b ⭐ `retiredFormats` OPSİYONEL: emeklisi olmayan seride alan HİÇ YOK",
+      tablo.some((r) => r.retiredFormats === undefined),
+      `${tablo.filter((r) => r.retiredFormats !== undefined).length} satırda var`);
+    const emeklili = tablo.find((r) => (r.retiredFormats?.length ?? 0) > 0);
+    check("§10b körlük zemini: emekli biçimi OLAN bir seri gerçekten var",
+      emeklili !== undefined, emeklili?.key ?? "(yok)");
 
     // ── §5 Önizleme sunucuda + biçim kapısı ───────────────────────────────
     const fmt = resolveSeriesFormat("packingLotCode");

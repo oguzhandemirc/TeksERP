@@ -6,6 +6,7 @@ import {
 import { NumberingFields } from "./NumberingFields";
 import { NumberingCounterFields } from "./NumberingCounterFields";
 import { NumberingSourceField } from "./NumberingSourceField";
+import { NumberingEffectiveFromField } from "./NumberingEffectiveFromField";
 import { numberingService } from "./service";
 import type {
   NumberSeriesRow,
@@ -39,10 +40,17 @@ function EtkiCumlesi({ etkiSayisi, birim }: { etkiSayisi: number | null; birim: 
  */
 async function gonder(
   row: NumberSeriesRow,
-  deger: { fmt: SeriesFormatInput; counter: SeriesCounterInput; source: NumberSourceMode },
+  deger: {
+    fmt: SeriesFormatInput;
+    counter: SeriesCounterInput;
+    source: NumberSourceMode;
+    effectiveFrom: string;
+  },
   degisti: { formatChanged: boolean; counterChanged: boolean; sourceChanged: boolean },
 ): Promise<void> {
-  if (row.editable && degisti.formatChanged) await numberingService.update(row.key, deger.fmt);
+  if (row.editable && degisti.formatChanged) {
+    await numberingService.update(row.key, deger.fmt, deger.effectiveFrom);
+  }
   if (row.counter.startValue && degisti.counterChanged) {
     await numberingService.updateCounter(row.key, deger.counter);
   }
@@ -96,6 +104,7 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
   const [fmt, setFmt] = useState<SeriesFormatInput | null>(null);
   const [counter, setCounter] = useState<SeriesCounterInput>({ startValue: null, step: null, maxValue: null });
   const [source, setSource] = useState<NumberSourceMode>("FREE");
+  const [effectiveFrom, setEffectiveFrom] = useState("");
   const [onizleme, setOnizleme] = useState("");
   const [hata, setHata] = useState<string | null>(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -105,6 +114,7 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
     setFmt({ prefix: row.prefix, dateSegment: row.dateSegment, digits: row.digits, separator: row.separator });
     setCounter({ startValue: row.startValue, step: row.step, maxValue: row.maxValue });
     setSource(row.source.value);
+    setEffectiveFrom("");
     setOnizleme(row.preview);
     setHata(null);
   }, [row]);
@@ -123,7 +133,7 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
   const kaydet = async (): Promise<void> => {
     setKaydediliyor(true);
     try {
-      await gonder(row, { fmt, counter, source }, { formatChanged, counterChanged, sourceChanged });
+      await gonder(row, { fmt, counter, source, effectiveFrom }, { formatChanged, counterChanged, sourceChanged });
       onSaved();
     } catch (e) {
       const m = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
@@ -152,6 +162,10 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
           <p className="rounded-md border p-3 text-sm text-muted-foreground">
             Biçim bu seride değiştirilemez. {row.lockedReason}
           </p>
+        )}
+
+        {row.editable && (
+          <NumberingEffectiveFromField value={effectiveFrom} onChange={setEffectiveFrom} />
         )}
 
         <NumberingCounterFields row={row} counter={counter} exhaustion={exhaustion} onChange={setCounter} />
