@@ -291,13 +291,29 @@ async function k16Sondasi(dur) {
   return { kod: p.kod, yenileSonrasiGorundu: gorundu, gorsel: await gor("K16", "yenile-sonrasi") };
 }
 
+/** Panel: cari sayfası → "Sevk Partisi Oluştur" (kullanıcının gerçek yolu) → yanıttan kod + ad. */
+async function partiAcPanel(dur) {
+  await cariSayfasinaGit(dur);
+  const yanit = page.waitForResponse((r) => r.request().method() === "POST" && /\/api\/shipping\/packing-groups(\?|$)/.test(r.url()), { timeout: 20_000 });
+  await page.getByRole("button", { name: /Sevk Partisi Oluştur/ }).filter({ visible: true }).first().click({ timeout: 10_000 });
+  const g = await (await yanit).json();
+  await page.waitForTimeout(1200);
+  return { id: g.data.id, kod: g.data.code, ad: g.data.name };
+}
+
 const ACICILAR = {
   packingLotCode: {
     tablo: { tablo: "packing_groups", kolon: "code" }, okutulur: false, yeniOnEk: "PRZ",
     hazirla: sevkPartisiHazirla,
-    ac: async (dur) => { const p = await partiAc(dur); return { id: p.id, numara: p.kod, ek: p }; },
+    ac: async (dur) => {
+      const p = await partiAcPanel(dur);
+      // Oluştur partiyi açar; kod parti LİSTESİNDE görünür → listeye dön.
+      const geri = page.getByRole("button", { name: "Geri", exact: true }).filter({ visible: true }).first();
+      if (await geri.count()) { await geri.click().catch(() => undefined); await page.waitForTimeout(1000); }
+      return { id: p.id, numara: p.kod, ek: p, acilisYolu: "panel" };
+    },
     ekran: async (dur, k, eski) => partiListesindeVarMi(dur, [k.numara, ...(eski ? [eski] : [])]),
-    belge: async () => ({ uygulanmaz: "PRT kodu hiçbir belgeye basılmıyor (render dosyalarında yok) — BULGU, şema yorumu 'belgeye basılır' diyor" }),
+    belge: async () => ({ uygulanmaz: "PRT kodu hiçbir belgeye basılmıyor (K17 ölçüldü; belgeye basılıp basılmayacağı K18 ürün kararı)" }),
     // Eski kayıt AYNI carinin partisi olmalı (liste cari başına) → biçim değişmeden önce açılır.
     eskiKayit: async (dur) => (await partiAc(dur)).kod,
   },
@@ -305,14 +321,7 @@ const ACICILAR = {
     tablo: { tablo: "packing_groups", kolon: "name" }, okutulur: false, yeniOnEk: "PZ",
     hazirla: sevkPartisiHazirla,
     // Kullanıcının gerçek yolu: panelde "Sevk Partisi Oluştur" (kendi listesini tazeler; K16'dan etkilenmez).
-    ac: async (dur) => {
-      await cariSayfasinaGit(dur);
-      const yanit = page.waitForResponse((r) => r.request().method() === "POST" && /\/api\/shipping\/packing-groups(\?|$)/.test(r.url()), { timeout: 20_000 });
-      await page.getByRole("button", { name: /Sevk Partisi Oluştur/ }).filter({ visible: true }).first().click({ timeout: 10_000 });
-      const g = await (await yanit).json();
-      await page.waitForTimeout(1200);
-      return { id: g.data.id, numara: g.data.name, ek: { id: g.data.id, kod: g.data.code, ad: g.data.name }, acilisYolu: "panel" };
-    },
+    ac: async (dur) => { const p = await partiAcPanel(dur); return { id: p.id, numara: p.ad, ek: p, acilisYolu: "panel" }; },
     ekran: async (dur, k, eski) => {
       // Parti açıldı → başlıktaki "Parti" kutusu; sonra Geri → listede yeni + eski ad.
       const baslikta = (await page.getByText(k.numara, { exact: true }).filter({ visible: true }).count()) > 0;
@@ -328,13 +337,25 @@ const ACICILAR = {
   returnDoc: {
     tablo: { tablo: "roll_returns", kolon: "returnNo" }, okutulur: false, yeniOnEk: "IADZ", separator2: "/",
     hazirla: async () => {},
+    // Kullanıcının gerçek yolu: İade Takibi → "Yeni İade" → top barkodu → "Sorgula" → açıklama → "İade Al".
     ac: async () => {
-      const [r] = await sql(`SELECT r.id FROM rolls r WHERE r.status='SHIPPED' AND r."shipmentId" IS NOT NULL AND r."warehouseId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM roll_returns rr WHERE rr."rollId"=r.id) ORDER BY r."updatedAt" DESC LIMIT 1`);
+      const [r] = await sql(`SELECT r.id, r.barcode FROM rolls r WHERE r.status='SHIPPED' AND r."shipmentId" IS NOT NULL AND r."warehouseId" IS NOT NULL AND r.barcode IS NOT NULL AND NOT EXISTS (SELECT 1 FROM roll_returns rr WHERE rr."rollId"=r.id) ORDER BY r."updatedAt" DESC LIMIT 1`);
       if (!r) throw new Error("iade edilebilir sevk edilmiş top yok");
-      const x = await api("/api/returns", { method: "POST", body: JSON.stringify({ rollIds: [r.id], reasonText: "E5 kabul turu" }) });
-      if (x.status >= 300) throw new Error(`iade: ${x.status} ${JSON.stringify(x.govde).slice(0, 200)}`);
+      await gitSayfa("İade Takibi");
+      await page.getByRole("button", { name: /Yeni İade/ }).filter({ visible: true }).first().click({ timeout: 10_000 });
+      const d = page.getByRole("dialog").filter({ hasText: "İade Girişi" }).last();
+      await d.waitFor({ timeout: 10_000 });
+      await d.getByPlaceholder(/Top barkodu/).fill(r.barcode);
+      await d.getByRole("button", { name: "Sorgula" }).click({ timeout: 10_000 });
+      await page.waitForTimeout(1500);
+      await d.getByPlaceholder(/Açıklama/).fill("E5 kabul turu");
+      const yanit = page.waitForResponse((x) => x.request().method() === "POST" && /\/api\/returns(\/batch)?(\?|$)/.test(x.url()), { timeout: 20_000 });
+      await d.getByRole("button", { name: /^İade Al/ }).click({ timeout: 10_000 });
+      const y = await yanit;
+      if (y.status() >= 300) throw new Error(`iade ${y.status()} ${(await y.text()).slice(0, 200)}`);
+      await page.waitForTimeout(1200);
       const [rr] = await sql(`SELECT id, "returnNo", coalesce("returnGroupId", id) kaynak FROM roll_returns WHERE "rollId"=$1 ORDER BY "createdAt" DESC LIMIT 1`, [r.id]);
-      return { id: rr.id, numara: rr.returnNo, kaynak: rr.kaynak };
+      return { id: rr.id, numara: rr.returnNo, kaynak: rr.kaynak, acilisYolu: "panel" };
     },
     ekran: async (dur, k, eski) => {
       await gitSayfa("İade Takibi");
@@ -401,7 +422,7 @@ for (const r of acik) {
 
     ag.adim(`${on} · kayıt aç`);
     const k = await A.ac(dur);
-    kayit.adimlar.kayit = { numara: k.numara, onizleme: kayit.adimlar.bicim.onizleme, yeniOnEkle: String(k.numara ?? "").startsWith(A.yeniOnEk) };
+    kayit.adimlar.kayit = { numara: k.numara, acilisYolu: k.acilisYolu ?? "API", onizleme: kayit.adimlar.bicim.onizleme, yeniOnEkle: String(k.numara ?? "").startsWith(A.yeniOnEk) };
 
     ag.adim(`${on} · ekran`);
     kayit.adimlar.ekran = await A.ekran(dur, k, eski).catch((e) => ({ hata: String(e.message ?? e).split("\n")[0] }));
