@@ -16,7 +16,7 @@ export function acicilarKur(c) {
   const zorunlu = (r, ne) => { if (r.status >= 300) throw new Error(`${ne}: ${r.status} ${JSON.stringify(r.govde).slice(0, 220)}`); return r.govde?.data; };
 
   /** Panel listesi: sayfa → (varsa) arama kutusu → değer satırda/ekranda görünüyor mu. */
-  async function listede(sayfa, aramaPh, degerler) {
+  async function listede(sayfa, aramaPh, degerler, tekrar = true) {
     await gitSayfa(sayfa);
     await page.waitForTimeout(800);
     const out = {};
@@ -29,6 +29,12 @@ export function acicilarKur(c) {
       // numara başka bir harf/rakam/ayraçla BİTİŞİK olmamalı (ASZ…0001 ≠ ASZ…00012).
       const kalip = new RegExp(`(?<![A-Z0-9])${d.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}(?![0-9])`);
       out[d] = (await page.getByText(kalip).filter({ visible: true }).count()) > 0;
+    }
+    // Sekmeye 30 sn'lik tazelik penceresi İÇİNDE dönüldüyse liste bilerek önbellekten gelir (K21 tasarımı):
+    // pencere aşılıp sayfaya yeniden dönülür; ilk görünmeme `tazelikBekledi` olarak raporda kalır.
+    if (tekrar && Object.values(out).some((v) => !v)) {
+      await gitSayfa("Anasayfa"); await page.waitForTimeout(31_000);
+      return { ...(await listede(sayfa, aramaPh, degerler, false)), tazelikBekledi: true };
     }
     return out;
   }

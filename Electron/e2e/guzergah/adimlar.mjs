@@ -106,6 +106,7 @@ async function eksenSec(page, etiket, secenekAdi) {
 }
 
 import { MASTER_KOD_ADIMLARI } from "./adimlar-master-kod.mjs";
+import { TAZELIK_ADIMLARI } from "./adimlar-tazelik.mjs";
 import { SEVK_KAPISI_ADIMLARI } from "./adimlar-sevk-kapisi.mjs";
 import { SEVK_YONU_ADIMLARI } from "./adimlar-sevk-yonu.mjs";
 
@@ -2012,4 +2013,6 @@ export const ADIMLAR = [
   ...SEVK_KAPISI_ADIMLARI,
   // ── MK · sunucuda üretilen master kodu panelden kodsuz açılır (K20) — ayrı dosyada.
   ...MASTER_KOD_ADIMLARI,
+  // ── TZ · başka istemcinin kaydı sayfaya dönünce görünür (K21) — ayrı dosyada.
+  ...TAZELIK_ADIMLARI,
 ];
