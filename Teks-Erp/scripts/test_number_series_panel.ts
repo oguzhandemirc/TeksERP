@@ -89,6 +89,10 @@ import {
 } from "../src/services/helpers/series-panel.helper";
 import { seriesPrefix } from "../src/services/helpers/series-format.helper";
 import {
+  planRetiredPrefixCleanup,
+  retiredPrefixesAfterChange,
+} from "../src/services/helpers/series-retired.helper";
+import {
   scanningClientsCarryFazB,
   scanningClientsCarryFazD,
   scanningClientsMissingPhases,
@@ -576,6 +580,83 @@ async function main(): Promise<void> {
           ? !r.counter.startValue && !r.counter.step && !r.counter.maxValue && (r.counter.lockedReason ?? "").length > 20
           : r.counter.startValue && r.counter.step && r.counter.maxValue),
       `${liste2.filter((r) => r.counter.startValue).length} açık / ${liste2.filter((r) => !r.counter.startValue).length} kapalı`);
+
+    // ── §11 EMEKLİ ÖN EK HİJYENİ (K7, 2026-09-23) ──────────────────────────
+    // Emekli liste "eskiden bu ön ek kullanılıyordu" DİYE OKUNUR ve tarama
+    // uzayındaki çakışma kapısı onu da sorgular. d3'ün panel turunda iki tür çöp
+    // ölçüldü: ① geri alınan ön ek yürürlükteki değerle BİRLİKTE listede kalıyor
+    // (`prefix=PRT`, `retired={PRT,ZQ}`) ② hiç kod üretmemiş DENEME ön eki
+    // (`ZQ`) kalıcı emekli oluyor.
+    check("§11a ⭐ kullanılmış ön ek emekliye AYRILIR",
+      retiredPrefixesAfterChange({ mevcutEmekliler: [], mevcutOnEk: "CV", yeniOnEk: "CX", mevcutOnEkKullanimi: 12 })
+        .join(",") === "CV");
+    check("§11a ⭐ HİÇ KOD ÜRETMEMİŞ ön ek emekliye ayrılmaz (deneme çöpü)",
+      retiredPrefixesAfterChange({ mevcutEmekliler: [], mevcutOnEk: "ZQ", yeniOnEk: "CV", mevcutOnEkKullanimi: 0 })
+        .length === 0);
+    // ⚠️ ÜÇÜNCÜ SONUÇ: "ölçülemedi" ile "kullanılmamış" AYNI ŞEY DEĞİL. Emekli
+    // listeden düşürmek sahadaki etiketi okutulamaz kılar ⇒ bilinmezlikte KORU.
+    check("§11a ⭐ ÖLÇÜLEMEYEN ön ek KORUNUR (fail-safe: 'bilmiyorum' ≠ 'yok')",
+      retiredPrefixesAfterChange({ mevcutEmekliler: [], mevcutOnEk: "ZQ", yeniOnEk: "CV", mevcutOnEkKullanimi: null })
+        .join(",") === "ZQ");
+    check("§11b ⭐ ESKİ ön eke dönmek onu emekli listeden ÇIKARIR",
+      retiredPrefixesAfterChange({ mevcutEmekliler: ["CV", "ZQ"], mevcutOnEk: "CX", yeniOnEk: "CV", mevcutOnEkKullanimi: 5 })
+        .join(",") === "ZQ,CX");
+    check("§11b ⭐ yürürlükteki ön ek listede DURAMAZ (kirli satır onarılır)",
+      retiredPrefixesAfterChange({ mevcutEmekliler: ["PRT", "ZQ"], mevcutOnEk: "PRT", yeniOnEk: "PRT", mevcutOnEkKullanimi: null })
+        .join(",") === "ZQ");
+
+    // DB SEDİ — uygulama yükleminin İKİZİ (çift yüklem): tek yazar düşürse bile
+    // ham SQL ya da içe aktarım bu satırı yazamaz.
+    const sedVar = await prisma.$queryRaw<Array<{ n: bigint }>>`
+      SELECT count(*) AS n FROM pg_constraint WHERE conname = 'number_series_retired_not_current'`;
+    check("§11c ⭐ DB sedi kurulu (`number_series_retired_not_current`)",
+      Number(sedVar[0]?.n ?? 0) === 1);
+    // ⚠️ SEDİ SINAYAN YAZMA GERİ ALINIR: sed DÜŞÜKSE yazma BAŞARILI olur ve satır
+    // kirli kalır — sondanın kendisi, ölçtüğü arızayı ÜRETİR (2026-09-23'te tam
+    // bu oldu: sondayı denerken `packingLotCode` `{PRT}` ile kaldı ve sed geri
+    // eklenemedi). Temizlik `finally`de, FK sırası yok (tek satır).
+    const sedOncesi = (await prisma.numberSeries.findUnique({
+      where: { key: "packingLotCode" }, select: { retiredPrefixes: true },
+    }))?.retiredPrefixes ?? [];
+    let sedIsirdi = false;
+    try {
+      await prisma.$executeRaw`
+        UPDATE "number_series" SET "retiredPrefixes" = ARRAY["prefix"] WHERE key = 'packingLotCode'`;
+    } catch {
+      sedIsirdi = true;
+    } finally {
+      await prisma.numberSeries.update({
+        where: { key: "packingLotCode" }, data: { retiredPrefixes: sedOncesi },
+      });
+    }
+    check("§11c ⭐ sed GERÇEKTEN ısırıyor (yürürlükteki ön ek yazılamıyor)", sedIsirdi);
+
+    // ONARIM PLANI — kirli satır KEŞİFLE bulunur, plan gerekçesini taşır.
+    const temizPlan = await planRetiredPrefixCleanup();
+    check("§11d onarım planı TEMİZ veride boş (idempotent, damgasız)",
+      temizPlan.length === 0, temizPlan.map((x) => x.key).join(", "));
+    // Kirli veri KURULUR (sed yalnız YÜRÜRLÜKTEKİ ön eki engelliyor; kullanılmamış
+    // deneme ön eki DB'ce meşru) ve planın onu düşürdüğü ölçülür.
+    const oncekiEmekli = (await prisma.numberSeries.findUnique({
+      where: { key: "packingLotCode" }, select: { retiredPrefixes: true },
+    }))?.retiredPrefixes ?? [];
+    try {
+      await prisma.numberSeries.update({
+        where: { key: "packingLotCode" }, data: { retiredPrefixes: ["ZQTEST"] },
+      });
+      const kirliPlan = await planRetiredPrefixCleanup();
+      const satir = kirliPlan.find((x) => x.key === "packingLotCode");
+      check("§11d ⭐ hiç kod üretmemiş emekli ön ek plana DÜŞÜRÜLECEK olarak girer",
+        satir !== undefined && satir.sonraki.length === 0,
+        satir ? satir.gerekceler.join(" · ") : "plan satırı YOK");
+      // TOHUM emekli (workOrder → RK) plana GİRMEZ: geçmiş beyanıdır.
+      check("§11d ⭐ TOHUM emekli ön ek (RK) plana girmez",
+        !kirliPlan.some((x) => x.key === "workOrder"));
+    } finally {
+      await prisma.numberSeries.update({
+        where: { key: "packingLotCode" }, data: { retiredPrefixes: oncekiEmekli },
+      });
+    }
 
     // ── §7 KAPASİTE ve TÜKENME (D2③) ────────────────────────────────────────
     // ⭐ §7a ENVANTER ŞEMAYLA AYRIŞMIYOR: kapasite dosyası `@db.VarChar(n)`

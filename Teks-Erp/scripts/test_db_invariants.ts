@@ -712,6 +712,12 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // Hane sedi `number_series` ile AYNI: satır ile önbellek ayrı sedlerde olsaydı
   // biri geçerli, öteki geçersiz bir biçim kabul edebilirdi.
   { table: "number_series_lines", name: "number_series_lines_digits_range" },
+  // 2026-09-23 — emekli ön ek hijyeni (20260923233000_number_series_retired_not_current).
+  // Yürürlükteki ön ek emekli listede DURAMAZ: liste "eskiden buydu" diye okunur
+  // ve aynı değerin ikisinde birden bulunması o cümleyi yalanlar. Tek yazarın
+  // (`updateSeriesFormat`) DB ikizi — ön eki deneyip geri alan kullanıcı bu
+  // satırı gerçekten üretiyordu (ölçüldü, d3 panel turu).
+  { table: "number_series", name: "number_series_retired_not_current" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -11474,3 +11474,40 @@ sonda: `acilma` düşünce · yüklem tek faza dönünce · `workOrder`a kilit g
 `lockText.test`in yüzey iddiası `toContain("kilitCumlesi")` ile yazılınca sonda ISIRMADI — IMPORT
 SATIRI eşleşiyordu; yüklem ÇAĞRIYA çevrildi (`/kilitCumlesi\s*\(\s*row\s*\)/`). "Sınırsız eşleşme"
 ailesinin bir üyesi daha.
+
+## 2026-09-23 — Emekli ön ek hijyeni (K7): liste geçmişin beyanıdır, çöp kutusu değil [ÇEKİRDEK]
+
+**Saha/ölçüm:** d3'ün gerçek panel turunda (`tekserp_d3e2e_test`) iki tür çöp ölçüldü — ① bir ön eki
+deneyip GERİ ALMAK eski değeri emekli listede bırakıyor ve satır `prefix=PRT`,
+`retiredPrefixes={PRT,ZQ}` hâline geliyor ② hiç kod üretmemiş DENEME ön eki (`ZQ`) kalıcı emekli
+oluyor. Üç seride birden görüldü (`packingLotCode` · `packingLotName` · `returnDoc`). Diğer beş
+veritabanında (ca/1e/d3/fabrika kopyası/kullanıcının dev'i) kirli satır YOK — hata gerçek, veri
+henüz yayılmamış.
+
+**Karar:** emekli liste GEÇMİŞİN BEYANIDIR. Üç kural, tek yazarda (`retiredPrefixesAfterChange`) ve
+DB sedinde (`number_series_retired_not_current`, çift yüklem) yaşar: yürürlükteki ön ek listede
+duramaz · eski ön eke dönmek onu listeden çıkarır · hiç kod üretmemiş ön ek emekliye ayrılmaz.
+Ölçüm ÜÇ SONUÇLU ve düşürme yalnız ÖLÇÜLMÜŞ SIFIRDA yapılır — `null` ("sayım kaynağı yok")
+hâlinde ön ek KORUNUR, çünkü emekli listeden düşen bir ön ek sahadaki etiketi okutulamaz kılar.
+Katalogda TOHUM beyanlı emekli ön ekler hiç düşmez: fabrika kopyasında `RK` ile başlayan tek bir iş
+emri yok (ölçüldü: 0 / 417) ama basılı `RK` refakat kartları sahada okutuluyor — "veritabanında yok"
+ile "dünyada yok" aynı şey değildir.
+
+**Onarım:** `scripts/fix_number_series_retired_prefixes.ts` — dry-run varsayılan, `--apply` ile
+yazar, DAMGASIZ ve idempotent (damga tutsaydı sonradan kirlenen satırı bir daha hiç temizlemezdi),
+her seriyi ÖNCESİ → SONRASI ve gerekçe satırlarıyla listeler (yıkıcı işlemde "etkilenen her kaydı
+göster" kuralı). Planlayıcı CLI'da değil helper'da (`planRetiredPrefixCleanup`), çünkü bekçi bir
+KOMUTU değil YÜKLEMİ ölçebilir. d3'ün kirli DB'sinde kuru koşum üç seriyi de doğru buldu.
+
+**Migration sırası:** önce VERİ (`array_remove(retiredPrefixes, prefix)`, bilgi kaybetmez — düşen
+değer satırın kendi `prefix` kolonunda duruyor), sonra CHECK. Ters sıra kirli bir veritabanında
+23514 ile düşüp migration'ı FAILED bırakırdı (aynı gün öğrenilen ders).
+
+**Kalıcı kapı:** `test_number_series_panel §11a–§11d` (+10 kontrol) · `test_db_invariants` envanteri.
+Üç sonda: eski yüklem geri konunca §11a/§11b KIRMIZI · DB sedi düşünce §11c KIRMIZI · tohum koruması
+kalkınca §11d KIRMIZI. ⚠️ Sonda yazarken sondanın KENDİSİ arıza üretti: sedi sınayan yazma, sed
+düşükken BAŞARILI olup satırı kirli bırakıyordu ve sed geri eklenemedi — sınama yazması artık
+`finally`de geri alınıyor (ölçüldü: sed düşükken koşumdan sonra satır temiz).
+
+**K12:** numaralandırma diyaloğuna `DialogDescription` eklendi (Radix her açılışta uyarı basıyordu,
+d3 turunda 213 kez); cümle sözleşmeyi taşıyor — değişiklik yalnız bundan sonraki kayıtları etkiler.
