@@ -49,6 +49,19 @@ async function api(yol, init = {}) {
   const r = await fetch(`${ortam.apiUrl}${yol}`, { ...init, headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(init.headers ?? {}) } });
   return { status: r.status, govde: await r.json().catch(() => null) };
 }
+/** Sistem hesabı API'si (modül anahtarı gibi yalnız süperadminin yazdığı işler) — parola yalnız bellekte. */
+let sistemToken = null;
+async function sistemApi(yol, init = {}) {
+  if (!sistemToken) {
+    const { spawnSync } = await import("node:child_process");
+    const r = spawnSync("npx", ["tsx", "scripts/e2e-ortam.ts", "sistem-hesabi"], { cwd: BACKEND_KOK, encoding: "utf-8", env: { ...process.env, E2E_DB_NAME: ortam.dbName } });
+    const k = JSON.parse(r.stdout.trim().split("\n").pop());
+    const g = await fetch(`${ortam.apiUrl}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: k.username, password: k.password, clientType: "web" }) });
+    sistemToken = (await g.json()).data.token;
+  }
+  const r = await fetch(`${ortam.apiUrl}${yol}`, { ...init, headers: { authorization: `Bearer ${sistemToken}`, "content-type": "application/json", ...(init.headers ?? {}) } });
+  return { status: r.status, govde: await r.json().catch(() => null) };
+}
 const seriListesi = async () => (await api("/api/number-series")).govde.data;
 
 
@@ -386,7 +399,7 @@ const ACICILAR = {
   },
 };
 // Kilitli seriler (TEMEL kip) — ayrı modül; yerel üç açık seri önceliklidir.
-for (const [k, v] of Object.entries(acicilarKur({ api, sql, page, gitSayfa, ortam, tokenAl: () => token, bayrakYaz }))) if (!ACICILAR[k]) ACICILAR[k] = v;
+for (const [k, v] of Object.entries(acicilarKur({ api, sql, page, gitSayfa, ortam, tokenAl: () => token, bayrakYaz, sistemApi, sifreBasligi, AYAR_SIFRESI }))) if (!ACICILAR[k]) ACICILAR[k] = v;
 // TABLET — adb yok: ÖLÇÜLMEDİ. Kullanıcı adımları raporda.
 const TABLET_ADIMLARI = [
   "Tartı/Paket → sevk partisi seçicisi: yeni biçimli parti adı listede görünüyor mu (packingLotName).",
@@ -476,6 +489,12 @@ for (const r of hepsi) {
         kayit.adimlar.varyantlar.push({ v, onizleme: b.onizleme, numara: kv.numara, kalibaUyar: kk.test(String(kv.numara ?? "")), ekran: ekr, kaydedildi: b.kapandi });
       }
     }
+    // İKİNCİ YOL (TAM kip): aynı seriden başka bir ekran/rejimle kayıt (ör. cari: finans kapalı → Müşteriler).
+    if (kip === "tam" && A.ikinciYol) {
+      ag.adim(`${on} · ikinci yol`);
+      const k2 = await A.ikinciYol(dur);
+      kayit.adimlar.ikinciYol = { yol: k2.yol, numara: k2.numara, kalibaUyar: hedefKalip.test(String(k2.numara ?? "")), ekran: k2.ekran };
+    }
     // YÜRÜRLÜK (TAM kip): yarın tarihli değişiklik → bekleyen görünür · bugünkü kayıt ESKİ biçimle · "İptal et".
     if (kip === "tam" && A.yururluk) {
       ag.adim(`${on} · yürürlük`);
@@ -517,12 +536,14 @@ for (const r of hepsi) {
 
     const ekranTamam = kayit.adimlar.ekran && !kayit.adimlar.ekran.hata && (kayit.adimlar.ekran.uygulanmaz || Object.values(kayit.adimlar.ekran).every(Boolean));
     const varyantTamam = (kayit.adimlar.varyantlar ?? []).every((x) => x.kaydedildi && x.kalibaUyar && !x.ekran?.hata && (x.ekran?.uygulanmaz || Object.values(x.ekran ?? {}).every(Boolean)));
+    const iy = kayit.adimlar.ikinciYol;
+    const ikinciYolTamam = !iy || (iy.kalibaUyar && iy.ekran && Object.values(iy.ekran).every(Boolean));
     const y = kayit.adimlar.yururluk;
     const yururlukTamam = !y || (y.kaydedildi && y.bekleyenDiyalogda && y.eskiBicimle && y.iptal === true && y.iptalSonrasiIleriSatir === 0);
     const belgeTamam = kayit.adimlar.belge.uygulanmaz || kayit.adimlar.belge.belgedeVar === true;
     const agTemiz = Object.values(agKayitlari(on)).every((l) => l.length === 0);
     const bicimTamam = kip === "tam" ? kayit.adimlar.bicim.kapandi : true;
-    kayit.sonuc = bicimTamam && kayit.adimlar.kayit.kalibaUyar && ekranTamam && belgeTamam && geriTamam && kayit.adimlar.eskiNumaralarAyni && agTemiz && varyantTamam && yururlukTamam ? "✓" : "✗";
+    kayit.sonuc = bicimTamam && kayit.adimlar.kayit.kalibaUyar && ekranTamam && belgeTamam && geriTamam && kayit.adimlar.eskiNumaralarAyni && agTemiz && varyantTamam && yururlukTamam && ikinciYolTamam ? "✓" : "✗";
   } catch (e) {
     kayit.sonuc = "✗"; kayit.hata = String(e?.message ?? e).split("\n")[0].slice(0, 300);
     kayit.hataAyrinti = String(e?.message ?? e).slice(0, 1500); // Playwright çağrı günlüğü: hangi locator, neden

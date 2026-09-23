@@ -115,12 +115,37 @@ export function acicilarKur(c) {
     belge: null, // kendi belgesi yok; numara bordro belgesinde basılır (chequeDeliveryNote satırı ölçer)
   });
 
-  /** Master veri kodu: POST {gövde} → `code`; sayfa listesi aranır. */
-  const kod = ({ tablo, uc, govde, sayfa, arama, hazirla, belge }) => ({
-    tablo: { tablo, kolon: "code" }, okutulur: false,
+  /**
+   * PANELDEN yeni kayıt: sayfa → "Yeni" (ya da özel düğme) → ad → (ek alanlar) → Kaydet; kodu POST yanıtından
+   * okur. Panel kod GÖNDERMEZ — sunucu üretir (K20).
+   */
+  async function panelYeni({ sayfa, dugme = "Yeni", uc, ad, doldur }) {
+    await gitSayfa(sayfa);
+    await page.waitForTimeout(600);
+    await page.getByRole("button", { name: dugme, exact: true }).filter({ visible: true }).first().click({ timeout: 15_000 });
+    const d = page.getByRole("dialog").last();
+    await d.waitFor({ timeout: 10_000 });
+    await d.locator("#name").fill(ad);
+    if (doldur) await doldur(d);
+    const yanit = page.waitForResponse((r) => r.request().method() === "POST" && new RegExp(`${uc}(\\?|$)`).test(r.url()), { timeout: 20_000 });
+    await d.locator('button[type="submit"]').last().click({ timeout: 10_000 });
+    const r = await yanit;
+    const g = await r.json().catch(() => ({}));
+    if (r.status() >= 300) throw new Error(`panel ${sayfa}: ${r.status()} ${JSON.stringify(g).slice(0, 200)}`);
+    await page.waitForTimeout(800);
+    return g.data;
+  }
+
+  /** Master veri kodu: panel (varsa) ya da API ile açılır → `code`; sayfa listesi aranır. */
+  const kod = ({ tablo, uc, govde, sayfa, arama, hazirla, belge, yeniOnEk, panel }) => ({
+    tablo: { tablo, kolon: "code" }, okutulur: false, yeniOnEk,
     hazirla: hazirla ?? (async () => {}),
     eskiKayit: () => eskiSec(tablo, "code"),
-    ac: async (dur) => { const d = zorunlu(await api(uc, { method: "POST", body: JSON.stringify(typeof govde === "function" ? await govde(dur) : govde) }), uc); return { id: d.id, numara: d.code }; },
+    ac: async (dur) => {
+      if (panel) { const d = await panelYeni({ uc, ad: `TEST-E5P ${K()}`, ...panel }); return { id: d.id, numara: d.code, acilisYolu: "panel" }; }
+      const d = zorunlu(await api(uc, { method: "POST", body: JSON.stringify(typeof govde === "function" ? await govde(dur) : govde) }), uc);
+      return { id: d.id, numara: d.code };
+    },
     ekran: (dur, k, eski) => listede(sayfa, arama, [k.numara, eski]),
     belge: belge ?? null,
   });
@@ -240,39 +265,74 @@ export function acicilarKur(c) {
     },
 
     // ── master veri kodları ──────────────────────────────────────────────────
-    customer: kod({ tablo: "customers", uc: "/api/customers", govde: () => ({ name: `TEST-E5M${K()} Cari`, isCustomerRole: true, defaultDestination: "DOMESTIC" }), sayfa: "Cariler", arama: /Ad \/ kod \/ vergi no ara/, hazirla: modulAc }),
+    customer: {
+      ...kod({ tablo: "customers", uc: "/api/customers", sayfa: "Cariler", arama: /Ad \/ kod \/ vergi no ara/, hazirla: modulAc, yeniOnEk: "MUSZ",
+        // Finans AÇIK yolu: Cariler → "Yeni Cari" → ad → Müşteri rolü → Kaydet.
+        panel: { sayfa: "Cariler", dugme: "Yeni Cari", doldur: async (d) => { const k = d.locator('input[type="checkbox"][name="isCustomerRole"]'); if (!(await k.isChecked())) await k.check(); } } }),
+      // Finans KAPALI yolu: Müşteriler (CrudPage) → Yeni → ad → Kaydet. Modül anahtarı yalnız sistem hesabıyla çevrilir.
+      ikinciYol: async () => {
+        const once = (await c.sistemApi("/api/feature-flags")).govde?.data?.financeEnabled;
+        const kapat = await c.sistemApi("/api/feature-flags", { method: "PATCH", headers: c.sifreBasligi, body: JSON.stringify({ financeEnabled: false }) });
+        if (kapat.status >= 300) throw new Error(`finans kapatılamadı: ${kapat.status}`);
+        try {
+          await page.reload(); await page.waitForTimeout(3500);
+          const d = await panelYeni({ sayfa: "Müşteriler", uc: "/api/customers", ad: `TEST-E5K ${K()}` });
+          const ekran = await listede("Müşteriler", /Kod, ad veya vergi no ara/, [d.code]);
+          return { yol: "finans kapalı → Müşteriler", numara: d.code, ekran };
+        } finally {
+          await c.sistemApi("/api/feature-flags", { method: "PATCH", headers: c.sifreBasligi, body: JSON.stringify({ financeEnabled: once ?? true }) });
+          await page.reload(); await page.waitForTimeout(3500);
+        }
+      },
+    },
     // K20 adayı: zod `code` zorunlu, panel kod göndermiyor → otomatik FSN yolu HTTP'den ölçülür (400 beklenir).
-    subcontractor: kod({ tablo: "subcontractors", uc: "/api/subcontractors", govde: () => ({ name: `TEST-E5 Fason ${K()}` }), sayfa: "Fason Firmalar", arama: /Ad veya kod ara/ }),
-    subcontractorCategory: kod({ tablo: "subcontractor_categories", uc: "/api/subcontractor-categories", govde: () => ({ name: `TEST-E5 Kategori ${K()}` }), sayfa: "Fason Kategorileri", arama: /Ad ara/ }),
+    // Fason firma kartı finans AÇIKKEN ayrı ekranda yok (Cariler → Fason iş yapar); kayıt API'den açılır.
+    subcontractor: {
+      ...kod({ tablo: "subcontractors", uc: "/api/subcontractors", govde: () => ({ name: `TEST-E5 Fason ${K()}` }), sayfa: "Fason Firmalar", arama: /Ad veya kod ara/, yeniOnEk: "FSNZ" }),
+      // "Fason Firmalar" ekranı yalnız finans KAPALIYKEN var; finans açıkken FSN kodu hiçbir listede görünmez
+      // (fason = cari kartının rolü, kodu MUS). Ekran bu yüzden finans kapalı rejimde ölçülür.
+      ekran: async (dur, k, eski) => {
+        const once = (await c.sistemApi("/api/feature-flags")).govde?.data?.financeEnabled;
+        await c.sistemApi("/api/feature-flags", { method: "PATCH", headers: c.sifreBasligi, body: JSON.stringify({ financeEnabled: false }) });
+        try {
+          await page.reload(); await page.waitForTimeout(3500);
+          return await listede("Fason Firmalar", /Ad veya kod ara/, [k.numara, eski]);
+        } finally {
+          await c.sistemApi("/api/feature-flags", { method: "PATCH", headers: c.sifreBasligi, body: JSON.stringify({ financeEnabled: once ?? true }) });
+          await page.reload(); await page.waitForTimeout(3500);
+        }
+      },
+    },
+    subcontractorCategory: kod({ tablo: "subcontractor_categories", uc: "/api/subcontractor-categories", sayfa: "Fason Kategorileri", arama: /Ad ara/, yeniOnEk: "KATZ", panel: { sayfa: "Fason Kategorileri" } }),
     fabricProperty: kod({
-      tablo: "fabric_properties", uc: "/api/fabric-properties", sayfa: "Kumaş Özellikleri", arama: null,
+      tablo: "fabric_properties", uc: "/api/fabric-properties", sayfa: "Kumaş Özellikleri", arama: null, yeniOnEk: "OZLZ",
       govde: async (dur) => {
         if (!dur.ozellikIstasyonu) dur.ozellikIstasyonu = zorunlu(await api("/api/stations", { method: "POST", body: JSON.stringify({ name: `TEST-E5 Özellik İst ${K()}`, type: "INTERNAL", appliesProperty: true }) }), "istasyon").id;
         return { name: `TEST-E5 Özellik ${K()}`, stationIds: [dur.ozellikIstasyonu] };
       },
     }),
-    item: kod({ tablo: "items", uc: "/api/items", govde: () => ({ name: `TEST-E5 Ürün ${K()}`, itemType: "FABRIC" }), sayfa: "Ürünler", arama: /Kod veya ad ara/ }),
-    color: kod({ tablo: "colors", uc: "/api/colors", govde: () => ({ name: `TEST-E5 Renk ${K()}` }), sayfa: "Renkler", arama: /Kod veya ad ara/ }),
-    station: kod({ tablo: "stations", uc: "/api/stations", govde: () => ({ name: `TEST-E5 İstasyon ${K()}`, type: "INTERNAL" }), sayfa: "Üretim İstasyonları", arama: /İstasyon \/ makine ara/ }),
+    item: kod({ tablo: "items", uc: "/api/items", sayfa: "Ürünler", arama: /Kod veya ad ara/, yeniOnEk: "STKZ", panel: { sayfa: "Ürünler" } }),
+    color: kod({ tablo: "colors", uc: "/api/colors", sayfa: "Renkler", arama: /Kod veya ad ara/, yeniOnEk: "RNKZ", panel: { sayfa: "Renkler" } }),
+    station: kod({ tablo: "stations", uc: "/api/stations", govde: () => ({ name: `TEST-E5 İstasyon ${K()}`, type: "INTERNAL" }), sayfa: "Üretim İstasyonları", arama: /İstasyon \/ makine ara/, yeniOnEk: "ISTZ" }),
     machine: kod({
-      tablo: "machines", uc: "/api/machines", sayfa: "Makineler", arama: /Kod veya ad ara/,
+      tablo: "machines", uc: "/api/machines", sayfa: "Makineler", arama: /Kod veya ad ara/, yeniOnEk: "MAKZ",
       govde: async (dur) => {
         if (!dur.makineIstasyonu) dur.makineIstasyonu = zorunlu(await api("/api/stations", { method: "POST", body: JSON.stringify({ name: `TEST-E5 Makine İst ${K()}`, type: "INTERNAL" }) }), "istasyon").id;
         return { stationId: dur.makineIstasyonu, name: `TEST-E5 Makine ${K()}` };
       },
     }),
-    cashAccount: kod({ tablo: "cash_boxes", uc: "/api/finance/cash-boxes", govde: () => ({ name: `TEST-E5 Kasa ${K()}` }), sayfa: "Kasa & Banka", arama: null, hazirla: modulAc }),
-    bankAccount: kod({ tablo: "bank_accounts", uc: "/api/finance/bank-accounts", govde: () => ({ name: `TEST-E5 Banka ${K()}` }), sayfa: "Kasa & Banka", arama: null, hazirla: modulAc }),
-    returnReason: kod({ tablo: "return_reasons", uc: "/api/return-reasons", govde: () => ({ name: `TEST-E5 İade Nedeni ${K()}` }), sayfa: "İade Nedenleri", arama: /Kod veya ad ara/ }),
+    cashAccount: kod({ tablo: "cash_boxes", uc: "/api/finance/cash-boxes", govde: () => ({ name: `TEST-E5 Kasa ${K()}` }), sayfa: "Kasa & Banka", arama: null, hazirla: modulAc, yeniOnEk: "KSZ" }),
+    bankAccount: kod({ tablo: "bank_accounts", uc: "/api/finance/bank-accounts", govde: () => ({ name: `TEST-E5 Banka ${K()}` }), sayfa: "Kasa & Banka", arama: null, hazirla: modulAc, yeniOnEk: "BNZ" }),
+    returnReason: kod({ tablo: "return_reasons", uc: "/api/return-reasons", sayfa: "İade Nedenleri", arama: /Kod veya ad ara/, yeniOnEk: "IANZ", panel: { sayfa: "İade Nedenleri" } }),
     productRecipe: kod({
-      tablo: "product_recipes", uc: "/api/product-recipes", sayfa: "İş Emri Şablonları", arama: /Şablon adı veya kodu ara/, hazirla: modulAc,
+      tablo: "product_recipes", uc: "/api/product-recipes", sayfa: "İş Emri Şablonları", arama: /Şablon adı veya kodu ara/, hazirla: modulAc, yeniOnEk: "RECZ",
       govde: async () => { const [i] = await sql(`SELECT id FROM items WHERE "isActive" AND "itemType"='FABRIC' ORDER BY "createdAt" DESC LIMIT 1`); return { name: `TEST-E5 Şablon ${K()}`, itemId: i?.id }; },
     }),
-    defectType: kod({ tablo: "defect_types", uc: "/api/defect-types", govde: () => ({ name: `TEST-E5 Hata ${K()}` }), sayfa: "Hata Tipleri", arama: /Kod veya ad ara/ }),
-    warehouse: kod({ tablo: "warehouses", uc: "/api/warehouses", govde: () => ({ name: `TEST-E5 Depo ${K()}` }), sayfa: "Depolar", arama: /Kod veya depo adı ara/ }),
+    defectType: kod({ tablo: "defect_types", uc: "/api/defect-types", sayfa: "Hata Tipleri", arama: /Kod veya ad ara/, yeniOnEk: "HATZ", panel: { sayfa: "Hata Tipleri" } }),
+    warehouse: kod({ tablo: "warehouses", uc: "/api/warehouses", sayfa: "Depolar", arama: /Kod veya depo adı ara/, yeniOnEk: "DPZ", panel: { sayfa: "Depolar" } }),
     // Rota listesi arka uçta YALNIZ ad arar (kodla aranamaz) → arama kutusuna ADI yaz, kodu ekranda ara.
     routeTemplate: {
-      tablo: { tablo: "routes", kolon: "code" }, okutulur: false, hazirla: modulAc,
+      tablo: { tablo: "routes", kolon: "code" }, okutulur: false, hazirla: modulAc, yeniOnEk: "ROTZ",
       eskiKayit: () => eskiSec("routes", "code"),
       ac: async () => { const ad = `TEST-E5 Rota ${K()}`; const d = zorunlu(await api("/api/routes", { method: "POST", body: JSON.stringify({ name: ad }) }), "rota"); return { id: d.id, numara: d.code, ad }; },
       ekran: async (dur, k) => {
