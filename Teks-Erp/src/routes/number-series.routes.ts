@@ -25,7 +25,12 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import { previewSeriesCode, resolveSeriesFormat } from "../services/number-series.service";
-import { assertSeriesFormatAllowed, updateSeriesCounter, updateSeriesFormat } from "../services/helpers/series-write.helper";
+import {
+  assertSeriesFormatAllowed,
+  updateSeriesCounter,
+  updateSeriesFormat,
+  updateSeriesNumberSource,
+} from "../services/helpers/series-write.helper";
 import { listSeries, seriesImpactCount } from "../services/helpers/series-panel.helper";
 import { seriesExhaustion } from "../services/helpers/series-exhaustion.helper";
 import { numberSeriesCatalogEntry } from "../constants/number-series-catalog";
@@ -61,6 +66,9 @@ const counterSchema = z
     maxValue: z.number().int().min(1).nullable(),
   })
   .strict();
+
+/** Numara kaynağı gövdesi — tek alan, kapalı küme. */
+const sourceSchema = z.object({ numberSource: z.enum(["FREE", "SYSTEM", "MANUAL"]) }).strict();
 
 const previewSchema = formatSchema.extend({ key: z.string().trim().min(1).max(64) }).strict();
 const keyParamSchema = z.object({ key: z.string().trim().min(1).max(64) });
@@ -226,6 +234,42 @@ router.patch(
         success: true,
         data: row,
         message: `${row.label} sayaç ayarları güncellendi. Bundan sonra üretilecek numaralar etkilenir; geçmiş değişmez.`,
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/number-series/{key}/source:
+ *   patch:
+ *     tags: [NumberSeries]
+ *     summary: Numara kaynağı — sistem üretir · elle zorunlu · serbest
+ *     description: |
+ *       `FREE` (varsayılan) BUGÜNKÜ davranıştır: elle değer gelirse kabul edilir,
+ *       gelmezse sunucu üretir. `SYSTEM` elle geleni REDDEDER (davranış değişikliği),
+ *       `MANUAL` elle değeri ZORUNLU kılar.
+ *
+ *       Ayar YALNIZ elle yolu olan seride anlamlıdır; diğerlerinde 400.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Güncellendi }
+ *       400: { description: "Elle yolu olmayan seri · geçersiz değer" }
+ */
+router.patch(
+  "/:key/source",
+  requireSettingsPassword,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { key } = keyParamSchema.parse(req.params);
+      const { numberSource } = sourceSchema.parse(req.body ?? {});
+      const row = await updateSeriesNumberSource(key, numberSource, req.user?.userId);
+      res.status(200).json({
+        success: true,
+        data: row,
+        message: `${row.label} numara kaynağı güncellendi.`,
       });
     } catch (e) {
       next(e);

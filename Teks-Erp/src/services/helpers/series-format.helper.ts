@@ -43,6 +43,11 @@ export interface NumberSeriesFormat {
    * AYNI olsun ("iki okuma" sınıfı: ön ek bir sürümden, adım başkasından gelirdi).
    * D2①'de hepsi tanımsız ⇒ davranış bugünküyle birebir.
    */
+  /**
+   * NUMARA KAYNAĞI — `FREE` bugünkü davranış (elle gelirse kabul, gelmezse üret),
+   * `SYSTEM` elle geleni reddeder, `MANUAL` elle değeri ZORUNLU kılar.
+   */
+  numberSource?: "FREE" | "SYSTEM" | "MANUAL";
   startValue?: number | null;
   step?: number | null;
   maxValue?: number | null;

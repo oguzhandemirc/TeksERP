@@ -160,6 +160,30 @@ export function seriesCounterCapabilities(key: string): SeriesCounterCapabilitie
   };
 }
 
+/**
+ * NUMARA KAYNAĞI YETENEĞİ — ayar YALNIZ elle yolu olan seride çizilir.
+ *
+ * ⚠️ Yeteneği olmayan seride panel alanı HİÇ ÇİZMEZ (pasif de çizmez): kimsenin
+ * değiştiremeyeceği bir kutuyu 48 kez göstermek gürültüdür. Bu, kilitli BİÇİM
+ * satırının tersidir ve fark bilinçli: orada kullanıcı "neden kilitli?" diye
+ * sorar (cevabı var), burada ayarın kendisi o seri için ANLAMSIZDIR.
+ */
+export interface SeriesSourceCapability {
+  editable: boolean;
+  value: "FREE" | "SYSTEM" | "MANUAL";
+  /** Elle yolunun yeri — beyan; panelde gösterilmez, bekçi okur. */
+  manualPath?: string;
+}
+
+export function seriesSourceCapability(key: string): SeriesSourceCapability {
+  const e = numberSeriesCatalogEntry(key);
+  return {
+    editable: e.manualEntry !== undefined,
+    value: resolveSeriesFormat(key).numberSource ?? "FREE",
+    ...(e.manualEntry ? { manualPath: e.manualEntry.path } : {}),
+  };
+}
+
 /** Liste ucu — katalog kimliği + yürürlükteki biçim + örnek. */
 export function listSeries(): Array<
   NumberSeriesFormat & {
@@ -176,6 +200,8 @@ export function listSeries(): Array<
     countBirim?: "kayıt" | "belge";
     /** Sayaç yetenekleri — panel hesaplamaz, okur. */
     counter: SeriesCounterCapabilities;
+    /** Numara kaynağı yeteneği — panel hesaplamaz, okur. */
+    source: SeriesSourceCapability;
     startValue: number | null;
     step: number | null;
     maxValue: number | null;
@@ -205,6 +231,7 @@ export function listSeries(): Array<
       panelGroupLabel: numberSeriesPanelGroupLabel(e.panelGroup),
       ...(e.countTable ? { countBirim: e.countTable.birim } : {}),
       counter: seriesCounterCapabilities(e.key),
+      source: seriesSourceCapability(e.key),
       // ⚠️ `undefined` DEĞİL `null`: tohuma düşen seride alan hiç yoktur ve panel
       // `undefined !== null` yüzünden formu "değişmiş" sanardı (Kaydet düğmesi
       // dokunulmadan açılırdı). Sözleşme tek tip: yok = `null`.

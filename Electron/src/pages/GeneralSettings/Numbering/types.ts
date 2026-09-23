@@ -35,6 +35,15 @@ export interface SeriesExhaustion {
   reason?: string;
 }
 
+export type NumberSourceMode = "FREE" | "SYSTEM" | "MANUAL";
+
+/** Numara kaynağı yeteneği — ayar YALNIZ elle yolu olan seride çizilir. */
+export interface SeriesSourceCapability {
+  editable: boolean;
+  value: NumberSourceMode;
+  manualPath?: string;
+}
+
 export interface SeriesCounterInput {
   startValue: number | null;
   step: number | null;
@@ -64,6 +73,7 @@ export interface NumberSeriesRow {
   panelGroupLabel: string;
   /** Sayaç yetenekleri — panel HESAPLAMAZ, okur (`countBirim` emsali). */
   counter: SeriesCounterCapabilities;
+  source: SeriesSourceCapability;
   /** Yürürlükteki sayaç ayarları; `null` = ayarlanmamış (bugünkü davranış). */
   startValue: number | null;
   step: number | null;

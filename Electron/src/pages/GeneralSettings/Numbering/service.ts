@@ -1,5 +1,11 @@
 import apiClient from "@/services/apiClient";
-import type { NumberSeriesRow, SeriesCounterInput, SeriesExhaustion, SeriesFormatInput } from "./types";
+import type {
+  NumberSeriesRow,
+  NumberSourceMode,
+  SeriesCounterInput,
+  SeriesExhaustion,
+  SeriesFormatInput,
+} from "./types";
 
 /**
  * ⚠️ ÖNİZLEME VE ETKİ SAYISI SUNUCUDAN — panel kendi biçimlendiricisini YAZMAZ.
@@ -42,6 +48,11 @@ export const numberingService = {
       `/api/number-series/${encodeURIComponent(key)}/exhaustion`,
     );
     return r.data?.data ?? null;
+  },
+
+  /** Numara kaynağı AYRI uç: biçim/sayaç/kaynak üçü farklı kilitlere tabi. */
+  async updateSource(key: string, numberSource: NumberSourceMode): Promise<void> {
+    await apiClient.patch(`/api/number-series/${encodeURIComponent(key)}/source`, { numberSource });
   },
 
   async updateCounter(key: string, ayar: SeriesCounterInput): Promise<void> {

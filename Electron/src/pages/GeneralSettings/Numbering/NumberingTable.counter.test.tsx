@@ -32,6 +32,7 @@ function seriesRow(over: Partial<NumberSeriesRow> = {}): NumberSeriesRow {
     panelGroup: "uretim",
     panelGroupLabel: "Üretim",
     counter: { startValue: true, step: true, maxValue: true, reset: false, resetReason: "Sayaç geriye alınamaz." },
+    source: { editable: true, value: "FREE", manualPath: "services/workorder.service.ts" },
     startValue: null,
     step: null,
     maxValue: null,

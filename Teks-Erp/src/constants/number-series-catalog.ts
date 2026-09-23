@@ -75,6 +75,15 @@ export interface NumberSeriesCatalogEntry {
    */
   ownCounter?: { not: string };
   /**
+   * ELLE NUMARA YOLU olan seri — `numberSource` ayarı YALNIZ burada anlamlıdır.
+   * Ölçüldü 2026-09-23: 52 serinin yalnız DÖRDÜNDE elle değer kabul eden bir yol
+   * var. Kalan 48'de ayarı açmak, OLMAYAN bir kabul yolunu inşa etmek demek
+   * olurdu; panel orada alanı hiç çizmez, uç 400 döner (`ownCounter` kalıbı).
+   *
+   * `path` yolun yeri — bekçi burayı okuyup gerçekten var olduğunu ölçer.
+   */
+  manualEntry?: { path: string; not: string };
+  /**
    * SAYACIN KAPSAMI BİÇİM DEĞİŞİMİNE HAZIR MI? (Faz C ön koşulu C0)
    *
    * ⚠️ KONFİGÜRASYON SINIRI, üretim sınırı DEĞİL: bu alan yoksa serinin biçimi
@@ -191,6 +200,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "workOrder",
+    manualEntry: { path: "services/workorder.service.ts", not: "İş emri açılırken KÖPRÜ alan `batchNumber` ile gelir (Zod adı sonraki fazda değişir); TARANAN seri (TRAVELER_CARD) — refakat kartının barkodu aynı koddur." },
     panelGroup: "uretim",
     countTable: { model: "workOrder", field: "workOrderNumber", birim: "kayıt" },
     label: "İş emri / refakat kartı no",
@@ -206,6 +216,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   { key: "swatch", panelGroup: "fason-kartela", countTable: { model: "swatch", field: "cardNumber", birim: "kayıt" }, label: "Kartela kart no", seedPrefix: "KRT", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "SWATCH" },
   {
     key: "sack",
+    manualEntry: { path: "services/shipping.service.ts", not: "Çuval açılırken `data.sackNo` gelirse o kullanılır; TARANAN seri (SACK) — elle değer okutulabilir olmalı." },
     panelGroup: "sevkiyat",
     countTable: { model: "sack", field: "sackNo", birim: "kayıt" },
     label: "Çuval no",
@@ -287,6 +298,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "packingLotName",
+    manualEntry: { path: "services/packing-group.service.ts", not: "Grup/parti adı elle verilirse sıra HİÇ tahsis edilmez; bu seri OKUTULMUYOR." },
     ownCounter: { not: "Adın sırası sayaçtan değil GRUBUN KENDİ sırasından gelir (`formatPackingGroupName(seq)`); seri yalnız ön eki ve ayracı verir." },
     panelGroup: "sevkiyat",
     label: "Sevk partisi adı",
@@ -325,7 +337,17 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   { key: "directShipment", panelGroup: "fason-kartela", countTable: { model: "directShipment", field: "shipmentNo", birim: "belge" }, label: "Doğrudan sevk no", seedPrefix: "DSK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "manifest", panelGroup: "uretim", countTable: { model: "manifest", field: "manifestNo", birim: "belge" }, label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "order", panelGroup: "depo-ticaret", countTable: { model: "order", field: "orderNumber", birim: "belge" }, label: "Sipariş no", seedPrefix: "SIP", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  {
+    key: "order",
+    panelGroup: "depo-ticaret",
+    countTable: { model: "order", field: "orderNumber", birim: "belge" },
+    manualEntry: { path: "services/order.service.ts", not: "Sipariş açılırken `data.orderNumber` gelirse o kullanılır (uzunluk ≤ 40); bu seri OKUTULMUYOR." },
+    label: "Sipariş no",
+    seedPrefix: "SIP",
+    seedDateSegment: D,
+    seedDigits: 4,
+    seedSeparator: "",
+  },
 
   // ── Üretim / depo ──────────────────────────────────────────────────────────
   {

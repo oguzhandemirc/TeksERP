@@ -28,6 +28,8 @@
 //  §4e Sayım kaynağı olmayan seri `uretecBagi` ile BEYANLI (kaynaksızlık bir KARAR)
 //  §4f Kaynaklı HER seri gerçekten sayılabiliyor — yanlış model adı sessizce
 //      `null` döndürür ve hiçbir statik kontrol göremez
+//   §8 NUMARA KAYNAĞI: beyan gerçek · elle yolu olmayan seride 400 · varsayılan
+//      `FREE` (bugünkü davranış) · yetenek yalnız 4 seride · okutulan sınırı ölçülü
 //   §7 KAPASİTE ve TÜKENME: kapasite envanteri şemayla birebir · kolona sığmayan
 //      biçim 400 · tükenme ÜÇ SONUÇLU (%90 eşiği tek kaynak, iki yüzey)
 //   §6 SAYAÇ AYARLARI: varsayılan satır = BUGÜNKÜ davranış (52 seri) · kendi
@@ -49,7 +51,7 @@
 //    `updateSeriesFormat`ın başına alındı; `assertSeriesFormatAllowed`taki kopya
 //    KALDI çünkü önizleme yolu yalnız oradan geçiyor.
 // =============================================================================
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import prisma from "../src/lib/prisma";
@@ -59,10 +61,18 @@ import {
   numberSeriesCatalogEntry,
 } from "../src/constants/number-series-catalog";
 import { previewSeriesCode, refreshNumberSeriesCache, resolveSeriesFormat, seriesSeqFrom } from "../src/services/number-series.service";
-import { assertSeriesCounterAllowed, assertSeriesFormatAllowed, updateSeriesCounter, updateSeriesFormat } from "../src/services/helpers/series-write.helper";
+import {
+  assertSeriesCounterAllowed,
+  assertSeriesFormatAllowed,
+  assertSeriesNumberSourceAllowed,
+  updateSeriesCounter,
+  updateSeriesFormat,
+  updateSeriesNumberSource,
+} from "../src/services/helpers/series-write.helper";
 import {
   listSeries,
   seriesCounterCapabilities,
+  seriesSourceCapability,
   seriesImpactCount,
   seriesLock,
 } from "../src/services/helpers/series-panel.helper";
@@ -116,6 +126,7 @@ async function main(): Promise<void> {
   const fixtureInvoices: string[] = [];
   let fixtureCari: string | null = null;
   const sayacDokunulan: string[] = [];
+  const kaynakDokunulan: string[] = [];
   const engel = hedefDbEngeli();
   if (engel) {
     console.log(engel);
@@ -555,6 +566,60 @@ async function main(): Promise<void> {
       uyarilar.some((u) => u.key === "packingLotCode"),
       uyarilar.map((u) => u.key).join(", ") || "(boş)");
 
+    // ── §8 NUMARA KAYNAĞI (D3①) ─────────────────────────────────────────────
+    // ⭐ §8a BEYAN GERÇEK Mİ: `manualEntry.path` var olmayan bir dosyayı
+    // gösteriyorsa beyan bir temenni olur ve ayar hiçbir yere bağlanmaz.
+    const elleliler = NUMBER_SERIES_CATALOG.filter((e) => e.manualEntry);
+    const yokYol = elleliler.filter((e) => !existsSync(join(__dirname, "..", "src", e.manualEntry!.path)));
+    check("§8a ⭐ elle yolu BEYANI gerçek bir dosyayı gösteriyor",
+      yokYol.length === 0, yokYol.map((e) => `${e.key}→${e.manualEntry?.path}`).join(", ") ||
+        elleliler.map((e) => e.key).join(", "));
+    check("§8a körlük zemini: elle yolu olan seri sayısı ÖLÇÜLDÜ (52'nin 4'ü)",
+      elleliler.length === 4, `${elleliler.length} seri`);
+
+    // ⭐ §8b Elle yolu OLMAYAN seride ayar 400 — etkisiz düğme verilmez.
+    const elleYok = NUMBER_SERIES_CATALOG.find((e) => !e.manualEntry)!;
+    check("§8b ⭐ elle yolu olmayan seride ayar 400 `NUMBER_SERIES_NO_MANUAL_PATH`",
+      throws(() => assertSeriesNumberSourceAllowed(elleYok.key, "MANUAL"), "NUMBER_SERIES_NO_MANUAL_PATH"),
+      elleYok.key);
+    check("§8b elle yolu OLAN seride kabul edilir (kapı fazla dar değil)",
+      !throws(() => assertSeriesNumberSourceAllowed("sack", "SYSTEM"), "ANY"));
+
+    // ⭐ §8c VARSAYILAN = BUGÜNKÜ DAVRANIŞ. İki değerli bir ayar bunu ifade
+    // edemezdi: sistem üretiyor AMA elle geleni de kabul ediyor ⇒ `FREE`.
+    const kaynakBozuk = NUMBER_SERIES_CATALOG.filter(
+      (e) => (resolveSeriesFormat(e.key).numberSource ?? "FREE") !== "FREE",
+    );
+    check("§8c ⭐ 52 serinin hepsi varsayılanda `FREE` (bugünkü davranış)",
+      kaynakBozuk.length === 0, kaynakBozuk.map((e) => e.key).join(", ") || `${NUMBER_SERIES_CATALOG.length} seri`);
+
+    // ⭐ §8d Yazma yolu + yetenek listesi
+    await updateSeriesNumberSource("sack", "SYSTEM");
+    kaynakDokunulan.push("sack");
+    check("§8d ⭐ yazılan kaynak YÜRÜRLÜKTEKİ biçime yansıyor",
+      resolveSeriesFormat("sack").numberSource === "SYSTEM",
+      String(resolveSeriesFormat("sack").numberSource));
+    const liste3 = listSeries();
+    check("§8d ⭐ yetenek YALNIZ elle yolu olan 4 seride açık (panel 48 kutu çizmez)",
+      liste3.filter((r) => r.source.editable).length === 4 &&
+        liste3.filter((r) => r.source.editable).every((r) => numberSeriesCatalogEntry(r.key).manualEntry !== undefined),
+      `${liste3.filter((r) => r.source.editable).length} açık`);
+    check("§8d ⭐ satır yürürlükteki DEĞERİ de taşıyor (panel hesaplamaz)",
+      liste3.find((r) => r.key === "sack")?.source.value === "SYSTEM");
+
+    // ⭐ §8e TARANAN SERİ SINIRI — D3②'nin kapsamı burada ÖLÇÜLÜYOR, tahmin
+    // edilmiyor: elle yolu olan 4 serinin İKİSİ okutuluyor (çuval + iş emri /
+    // refakat kartı), ikisi okutulmuyor (sipariş + sevk partisi adı). Elle değer
+    // kapısı yalnız okutulanlara uygulanacak.
+    const elleVeTaranan = elleliler.filter((e) => e.kind !== undefined).map((e) => e.key).sort();
+    check("§8e ⭐ elle yolu olan serilerden OKUTULANLAR ölçüldü",
+      elleVeTaranan.join(",") === "sack,workOrder", elleVeTaranan.join(", ") || "(yok)");
+    check("§8e körlük zemini: okutulmayan elle yol da var (sınır gerçek)",
+      elleliler.some((e) => e.kind === undefined),
+      elleliler.filter((e) => e.kind === undefined).map((e) => e.key).join(", "));
+    check("§8e ⭐ yetenek nesnesi elle yolun YERİNİ de taşıyor (beyan kayıtlı)",
+      seriesSourceCapability("sack").manualPath === "services/shipping.service.ts");
+
     // ── §5 Önizleme sunucuda + biçim kapısı ───────────────────────────────
     const fmt = resolveSeriesFormat("packingLotCode");
     check("§5 önizleme serinin kendi biçimiyle kuruluyor",
@@ -577,6 +642,13 @@ async function main(): Promise<void> {
       await prisma.invoice.deleteMany({ where: { id: { in: fixtureInvoices } } });
     }
     if (fixtureCari) await prisma.cariAccount.delete({ where: { id: fixtureCari } });
+    if (kaynakDokunulan.length > 0) {
+      await prisma.numberSeries.updateMany({
+        where: { key: { in: kaynakDokunulan } },
+        data: { numberSource: "FREE" },
+      });
+      await refreshNumberSeriesCache();
+    }
     if (sayacDokunulan.length > 0) {
       await prisma.numberSeries.updateMany({
         where: { key: { in: sayacDokunulan } },

@@ -5,8 +5,15 @@ import {
 } from "@/components/ui/dialog";
 import { NumberingFields } from "./NumberingFields";
 import { NumberingCounterFields } from "./NumberingCounterFields";
+import { NumberingSourceField } from "./NumberingSourceField";
 import { numberingService } from "./service";
-import type { NumberSeriesRow, SeriesCounterInput, SeriesExhaustion, SeriesFormatInput } from "./types";
+import type {
+  NumberSeriesRow,
+  NumberSourceMode,
+  SeriesCounterInput,
+  SeriesExhaustion,
+  SeriesFormatInput,
+} from "./types";
 
 
 /**
@@ -25,6 +32,56 @@ function EtkiCumlesi({ etkiSayisi, birim }: { etkiSayisi: number | null; birim: 
   );
 }
 
+/**
+ * ÜÇ UÇ, ÜÇ KİLİT: yalnız AÇIK olan ve GERÇEKTEN değişen bölüm gönderilir.
+ * Kapalı bölümü göndermek, kullanıcının dokunmadığı bir alan yüzünden 400
+ * almasına yol açardı; değişmeyeni göndermek de gereksiz bir denetim satırı yazardı.
+ */
+async function gonder(
+  row: NumberSeriesRow,
+  deger: { fmt: SeriesFormatInput; counter: SeriesCounterInput; source: NumberSourceMode },
+  degisti: { formatChanged: boolean; counterChanged: boolean; sourceChanged: boolean },
+): Promise<void> {
+  if (row.editable && degisti.formatChanged) await numberingService.update(row.key, deger.fmt);
+  if (row.counter.startValue && degisti.counterChanged) {
+    await numberingService.updateCounter(row.key, deger.counter);
+  }
+  if (row.source.editable && degisti.sourceChanged) {
+    await numberingService.updateSource(row.key, deger.source);
+  }
+}
+
+/**
+ * ⚠️ ÖNİZLEME SUNUCUDAN: panel kendi biçimlendiricisini YAZMAZ. Aday biçim
+ * geçersizse (karakter · hane · ayraç · ÖN EK ÇAKIŞMASI · KOLONA SIĞMAMA) hata
+ * buradan gelir, yani kullanıcı "Kaydet"e basmadan ÖNCE görür.
+ *
+ * ⚠️ Yalnız BİÇİME bağlı: sayaç ve kaynak ayarları kodun ŞEKLİNİ değiştirmez,
+ * bu yüzden onlar değişince önizleme yeniden sorulmaz.
+ */
+function useOnizleme(
+  row: NumberSeriesRow | null,
+  fmt: SeriesFormatInput | null,
+  setOnizleme: (v: string) => void,
+  setHata: (v: string | null) => void,
+): void {
+  useEffect(() => {
+    if (!row || !fmt) return;
+    let iptal = false;
+    void numberingService
+      .preview(row.key, fmt)
+      .then((p) => { if (!iptal) { setOnizleme(p); setHata(null); } })
+      .catch((e: unknown) => {
+        if (iptal) return;
+        const m = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+        setHata(m ?? "Bu biçim kullanılamıyor.");
+      });
+    return () => { iptal = true; };
+    // `useState` setter'ları KARARLIDIR; bağımlılığa eklemek susturmadan daha
+    // dürüst — susturma, kuralın bir gün gerçekten bir şey yakalamasını da engeller.
+  }, [row, fmt, setOnizleme, setHata]);
+}
+
 interface Props {
   row: NumberSeriesRow | null;
   /** `null` = bu seride sayım kaynağı yok ⇒ CÜMLEDE SAYI YAZILMAZ. */
@@ -38,6 +95,7 @@ interface Props {
 export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClose, onSaved }: Props) {
   const [fmt, setFmt] = useState<SeriesFormatInput | null>(null);
   const [counter, setCounter] = useState<SeriesCounterInput>({ startValue: null, step: null, maxValue: null });
+  const [source, setSource] = useState<NumberSourceMode>("FREE");
   const [onizleme, setOnizleme] = useState("");
   const [hata, setHata] = useState<string | null>(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -46,46 +104,26 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
     if (!row) return;
     setFmt({ prefix: row.prefix, dateSegment: row.dateSegment, digits: row.digits, separator: row.separator });
     setCounter({ startValue: row.startValue, step: row.step, maxValue: row.maxValue });
+    setSource(row.source.value);
     setOnizleme(row.preview);
     setHata(null);
   }, [row]);
 
-  // ⚠️ ÖNİZLEME yalnız BİÇİM değiştiğinde anlamlı: sayaç ayarı kodun ŞEKLİNİ
-  // değiştirmez (yalnız hangi sayıdan devam edileceğini), bu yüzden önizleme
-  // sorgusu sayaç alanlarına bağlı DEĞİL.
-  // ⚠️ ÖNİZLEME SUNUCUDAN: panel kendi biçimlendiricisini YAZMAZ. Aday biçim
-  // geçersizse (karakter · hane · ayraç · ÖN EK ÇAKIŞMASI) hata buradan gelir,
-  // yani kullanıcı "Kaydet"e basmadan ÖNCE görür.
-  useEffect(() => {
-    if (!row || !fmt) return;
-    let iptal = false;
-    void numberingService
-      .preview(row.key, fmt)
-      .then((p) => { if (!iptal) { setOnizleme(p); setHata(null); } })
-      .catch((e: unknown) => {
-        if (iptal) return;
-        const m = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
-        setHata(m ?? "Bu biçim kullanılamıyor.");
-      });
-    return () => { iptal = true; };
-  }, [row, fmt]);
+  useOnizleme(row, fmt, setOnizleme, setHata);
 
   if (!row || !fmt) return null;
 
   const formatChanged =
     fmt.prefix !== row.prefix || fmt.dateSegment !== row.dateSegment ||
     fmt.digits !== row.digits || fmt.separator !== row.separator;
+  const sourceChanged = source !== row.source.value;
   const counterChanged =
     counter.startValue !== row.startValue || counter.step !== row.step || counter.maxValue !== row.maxValue;
 
   const kaydet = async (): Promise<void> => {
     setKaydediliyor(true);
     try {
-      // İKİ UÇ, İKİ KİLİT: yalnız AÇIK olan ve GERÇEKTEN değişen bölüm gönderilir.
-      // Kapalı bölümü göndermek, kullanıcının dokunmadığı bir alan yüzünden 400
-      // almasına yol açardı.
-      if (row.editable && formatChanged) await numberingService.update(row.key, fmt);
-      if (row.counter.startValue && counterChanged) await numberingService.updateCounter(row.key, counter);
+      await gonder(row, { fmt, counter, source }, { formatChanged, counterChanged, sourceChanged });
       onSaved();
     } catch (e) {
       const m = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
@@ -118,6 +156,9 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
 
         <NumberingCounterFields row={row} counter={counter} exhaustion={exhaustion} onChange={setCounter} />
 
+        {/* ⚠️ YALNIZ elle yolu olan seride çizilir — 48 seride pasif kutu YOK. */}
+        {row.source.editable && <NumberingSourceField value={source} onChange={setSource} />}
+
         <EtkiCumlesi etkiSayisi={etkiSayisi} birim={birim} />
 
         {hata && <p className="text-sm font-medium text-destructive">{hata}</p>}
@@ -126,7 +167,7 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
           <Button variant="outline" onClick={onClose}>Vazgeç</Button>
           <Button
             onClick={() => void kaydet()}
-            disabled={kaydediliyor || hata !== null || (!formatChanged && !counterChanged)}
+            disabled={kaydediliyor || hata !== null || (!formatChanged && !counterChanged && !sourceChanged)}
           >
             Kaydet
           </Button>

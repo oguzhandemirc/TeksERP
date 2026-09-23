@@ -76,6 +76,7 @@ function rowFormat(row: NumberSeries): NumberSeriesFormat {
     retiredPrefixes: [...row.retiredPrefixes],
     ...(entry.infix ? { infix: entry.infix.re } : {}),
     formatChangedAt: row.formatChangedAt,
+    numberSource: row.numberSource,
     // NULL = ayarlanmamış = bugünkü davranış (başlangıç 1, adım 1, sınır yok).
     startValue: row.startValue,
     step: row.step,

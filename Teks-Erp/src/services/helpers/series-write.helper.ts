@@ -272,3 +272,59 @@ export async function updateSeriesCounter(
   });
   return row;
 }
+
+// ── NUMARA KAYNAĞI (D3①) ────────────────────────────────────────────────────
+
+export type NumberSourceMode = "FREE" | "SYSTEM" | "MANUAL";
+
+/**
+ * Numara kaynağı kapısı — fail-closed.
+ *
+ * ⚠️ Ayar YALNIZ elle yolu olan seride anlamlı (ölçüldü 2026-09-23: 52 serinin
+ * DÖRDÜ). Kalan 48'de `MANUAL` seçmek OLMAYAN bir kabul yolunu talep etmek,
+ * `SYSTEM` ise zaten bugünkü davranışı yazmak olurdu — yani ayarın hiçbir
+ * değeri bir şey yapmazdı. Sessizce kabul etmek, kullanıcıya ETKİSİZ bir düğme
+ * vermek demekti; sınır katalogda `manualEntry` ile beyanlı.
+ */
+export function assertSeriesNumberSourceAllowed(key: string, next: NumberSourceMode): void {
+  const entry = numberSeriesCatalogEntry(key);
+  if (!entry.manualEntry) {
+    throw AppError.badRequest(
+      `Bu seride elle numara girişi yok, numara kaynağı ayarlanamaz: ${entry.label}.`,
+      { code: "NUMBER_SERIES_NO_MANUAL_PATH", key },
+    );
+  }
+  if (!["FREE", "SYSTEM", "MANUAL"].includes(next)) {
+    throw AppError.badRequest("Numara kaynağı 'FREE', 'SYSTEM' ya da 'MANUAL' olabilir.", {
+      code: "NUMBER_SERIES_SOURCE_INVALID",
+      key,
+    });
+  }
+}
+
+/**
+ * Numara kaynağını yazar. Biçim ve sayaç uçlarından AYRI: üçü farklı kilitlere
+ * tabi ve üçü farklı gün açılır (biçim C0/C0b · sayaç `ownCounter` · kaynak
+ * `manualEntry`).
+ */
+export async function updateSeriesNumberSource(
+  key: string,
+  next: NumberSourceMode,
+  userId?: string,
+): Promise<NumberSeries> {
+  assertSeriesNumberSourceAllowed(key, next);
+  const current = resolveSeriesFormat(key).numberSource ?? "FREE";
+  const row = await prisma.numberSeries.update({ where: { key }, data: { numberSource: next } });
+  await refreshNumberSeriesCache();
+  // Numara kaynağı bir İŞ KARARIDIR (elle girilen numaralar reddedilmeye
+  // başlayabilir) ⇒ denetim defterine, tx DIŞINDA, best-effort.
+  await AuditService.log({
+    userId,
+    action: "UPDATE",
+    tableName: "NumberSeries",
+    recordId: row.id,
+    oldData: { numberSource: current },
+    newData: { numberSource: next },
+  });
+  return row;
+}
