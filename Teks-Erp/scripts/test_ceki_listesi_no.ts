@@ -17,9 +17,14 @@
 //   ⑥ eşzamanlı iki özdeş basım → TEK satır, iki yanıt aynı numara
 //   ⑦ dönen snapshot = DB snapshot (kâğıt kayıttan çizilir)
 //   ⑧ gövde sözleşmesi: token'sız 400
+//   ⑨ yarış yüklemi pg adaptörünün GERÇEK P2002 biçimiyle (zamandan bağımsız)
 //
 // NEGATİF SONDA (2026-09-23, ölçüldü): `recordSackPickList` içindeki contentKey araması
 //    kaldırılınca ② ve ⑥ KIRMIZI (aynı içerik yeni numara aldı); geri alınınca yeşil.
+// ⭐ YARIŞ (2026-09-23, iniş ağacında 201/409): pg adaptörü `meta.target` vermez → `p2002TargetsCode`
+//    içerik çakışmasını "hedef bilinmiyor → retry" sayıp 5 turda 409'la bitiriyordu. ⑥ artık altı
+//    eşzamanlı istek (yük altında 1/3 koşumda kırmızıydı); ⑨ yüklemi zamandan bağımsız ölçer. Negatif
+//    sonda: adaptör okuması kaldırılınca ⑨ ×2 KIRMIZI.
 // =============================================================================
 import type { Server } from "http";
 import type { AddressInfo } from "net";
@@ -28,6 +33,8 @@ import app from "../src/app";
 import prisma from "../src/lib/prisma";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { Prisma } from "@prisma/client";
+import { p2002TargetsCode } from "../src/utils/barcode-retry";
 
 let pass = 0;
 let fail = 0;
@@ -109,13 +116,27 @@ async function main() {
 
     // ⑥ eşzamanlı özdeş basım
     await prisma.sack.update({ where: { id: a }, data: { notes: `${MARK} yaris` } });
-    const [p1, p2] = await Promise.all([bas([a]), bas([a])]);
-    const yarisSatiri = await prisma.manifest.count({ where: { manifestNo: { in: [p1.d?.manifestNo ?? "-", p2.d?.manifestNo ?? "-"] } } });
-    check("⑥ eşzamanlı özdeş → aynı numara, tek satır", p1.d?.manifestNo === p2.d?.manifestNo && yarisSatiri === 1, `${p1.status}/${p2.status} ${p1.d?.manifestNo}`);
+    // YÜK: altı eşzamanlı özdeş basım — ikili yarış sahadaki "ikinci tık"ı nadiren yakalar (iniş
+    // ağacında 201/409 ölçüldü 2026-09-23, tek oturum DB'sinde yeşildi).
+    const yaris = await Promise.all(Array.from({ length: 6 }, () => bas([a])));
+    const numaralar = new Set(yaris.map((y) => y.d?.manifestNo ?? `∅${y.status}`));
+    const yarisSatiri = await prisma.manifest.count({ where: { manifestNo: { in: [...numaralar] } } });
+    check("⑥ altı eşzamanlı özdeş → hepsi 2xx, aynı numara, tek satır", yaris.every((y) => y.status < 300) && numaralar.size === 1 && yarisSatiri === 1, `${yaris.map((y) => y.status).join("/")} ${[...numaralar].join(",")}`);
 
     // ⑦ dönen snapshot = DB
     const db = ilk.d ? await prisma.manifest.findUnique({ where: { id: ilk.d.id }, select: { snapshot: true } }) : null;
     check("⑦ dönen snapshot = DB snapshot", JSON.stringify(db?.snapshot) === JSON.stringify(ilk.d?.snapshot));
+
+    // ⑨ ZAMANDAN BAĞIMSIZ: yarışın kaderini belirleyen yüklem, pg adaptörünün GERÇEK hata biçimiyle
+    // (`meta.target` YOK, kısıt `driverAdapterError`da). İçerik çakışması retry EDİLMEZ (kazanan okunur),
+    // numara çakışması edilir. ⑥ zamanlamaya bağlıdır ve her koşumda pencereyi yakalamaz.
+    const adapterHatasi = (alan: string, kisit: string) => new Prisma.PrismaClientKnownRequestError("dup", {
+      code: "P2002", clientVersion: "test",
+      meta: { modelName: "Manifest", driverAdapterError: { name: "DriverAdapterError", cause: { originalCode: "23505", originalMessage: `duplicate key value violates unique constraint "${kisit}"`, kind: "UniqueConstraintViolation", constraint: { fields: [`"${alan}"`] } } } },
+    });
+    check("⑨ içerik çakışması (adaptör biçimi) numara retry'ına GİRMEZ", p2002TargetsCode(adapterHatasi("contentKey", "manifests_contentKey_key"), "manifestNo") === false);
+    check("⑨ token çakışması (adaptör biçimi) numara retry'ına GİRMEZ", p2002TargetsCode(adapterHatasi("clientToken", "manifests_clientToken_key"), "manifestNo") === false);
+    check("⑨ numara çakışması (adaptör biçimi) retry EDİLİR", p2002TargetsCode(adapterHatasi("manifestNo", "manifests_manifestNo_key"), "manifestNo") === true);
 
     // ⑧ sözleşme
     const tokensiz = await call("POST", "/api/shipping/sack-search/pick-list/print", { sackIds: [a] });

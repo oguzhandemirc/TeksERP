@@ -12054,3 +12054,24 @@ ifadesiydi, o sıra da korundu.
 **Raporlar (aynı gün, ikinci dilim).** `reports/_destination.ts`in üç sipariş fonksiyonu (`orderDestinationWhere` · `orderDestinationValueSql` · `orderDestinationSql`) artık `Order.destination` okur. Canlı kart zinciri raporda okunmaz. Etiket "Cari/şube yönü (bugünkü)" → "Sipariş yönü (açılışta)"; seçenekler "Yurtiçi/İhracat (sipariş yönü)". Sürüm notundaki iki cümle aynı dilimde düzeltildi. `test_rapor_yon_ekseni` §1 zincir ikizi yerine kolon ikizini ölçer; §2c kart değişiminden sonra rapor kümesinin kıpırdamadığını ölçer (negatif sonda ⑩: canlı zincir → İhracat 130 · Yurtiçi 20, kırmızı). Sipariş fikstürünü doğrudan kuran iki rapor bekçisi (`test_rapor_satis_ekseni`, `test_destination_mix`) siparişi yazar gibi doğurur. R1 notunun sipariş kısmı GEÇERSİZ olarak işaretlendi.
 
 **Geri doldurma (üçüncü dilim).** `scripts/backfill_order_destination.ts`: kuru koşum varsayılan, etkilenen her siparişi numara · durum · cari/şube · yön · kaynak ile listeler. Yalnız `destination IS NULL` satırlara yazar; yazımda da `destination: null` koşulu korunur. Zincir boşsa NULL bırakır. Zincir kopyalanmaz, `pickShipmentDestination` kullanılır. Kapılar `migrate_partner_roles` emsalidir: hedef adıyla basılır, fixture dışı hedefte `--canli-onay`, üretim adlarına hiç yazılmaz. **Beyan:** yazılan değer koşum gününün kart yönüdür, siparişin açıldığı günkü yön DEĞİLDİR; o bilgi hiçbir yerde kaydedilmemişti. Script'i KULLANICI koşar (fabrika verisi); oturumlar koşmaz.
+
+## 2026-09-23 — P2002 hedefi pg adaptöründe `meta.target`te DEĞİL: retry yüklemi körlüğü [ÇEKİRDEK]
+
+**Belirti (1e iniş ağacı).** Çeki listesi bekçisinin ⑥'sı (eşzamanlı özdeş basım) `201/409` verdi. Aynı içeriğin ikinci basımı kazananın satırını okuyacağına 409 döndü. Oturum DB'sinde yeşildi: yarış penceresi yük altında açılıyor. Altı eşzamanlı istekle 1/3 koşumda yeniden üretildi (409×3).
+
+**Kök neden (ölçüldü).** Prisma 7 + `@prisma/adapter-pg`de P2002 hatası `meta.target` TAŞIMAZ. Hedef şuralardadır:
+- `meta.driverAdapterError.cause.constraint.fields` (`["\"contentKey\""]`)
+- `originalMessage`taki kısıt adı (`manifests_contentKey_key`)
+
+`p2002TargetsCode` yalnız `target`e bakıyordu. Hedef yok → "bilinmiyor, geriye uyumlu: retry" dalı çalıştı. İçerik çakışması beş kez yeniden denendi ve yanıltıcı 409'la bitti. Aynı körlük `customer.service` kodu retry'ını da etkiliyordu (ad/vergi tekilliği beş tur boşa dönerdi); 2026-09-18'de tarif edilen belirti budur.
+
+**Düzeltme.** `p2002TargetParts`: `target` yoksa adaptörün `constraint.fields` / `constraint.index` / mesajdaki kısıt adı okunur. `p2002Mentions` (clientToken ayrımı) zaten üç kaynağı okuyordu. İkiz yüklemin biri güncel, biri bayattı ("ayrışan yüzey" sınıfı).
+
+**Bekçi.**
+- `test_ceki_listesi_no` ⑥ artık altı eşzamanlı istek.
+- ⑨ yüklemi pg adaptörünün GERÇEK hata biçimiyle, zamandan bağımsız ölçer.
+- Negatif sonda: adaptör okuması kaldırılınca ⑨ ×2 + ⑥ (409×4) kırmızı.
+
+**Ders.** Yarış bekçisi "iki istek" ile yazılırsa çoğu koşumda pencereyi yakalamaz ve yeşil verir. Yarışın KADERİNİ belirleyen saf yüklem ayrıca, deterministik ölçülür.
+
+**Aynı turda (snapshot envanteri).** `Order.destination` donmuş kolon envanterine beyan edildi: DONMUS_ILERI, yazan `order.service.ts`. Yazımlar `data: { …, destination }` literaline alındı ve `this.delegate.create` → `prisma.order.create` yapıldı; aksi hâlde AST yazıcıyı modele bağlayamıyordu ("çözülemeyen yazım").

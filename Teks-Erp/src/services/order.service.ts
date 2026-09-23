@@ -1980,7 +1980,7 @@ export class OrderService extends BaseService {
     }
     // SİPARİŞ YÖNÜ DOĞUŞTA DONAR (sevkiyatın donmuş yönüyle aynı zincir): şube → cari; zincir boşsa
     // NULL ("yön belirsiz"). Kart sonradan değişse de sipariş değişmez; gövdeden yazılamaz (whitelist dışı).
-    prismaData.destination = data.customerId
+    const destination = data.customerId
       ? (await resolveShipmentDestination(prisma, {
           customerId: data.customerId as string,
           branchId: (data.branchId as string | null | undefined) ?? null,
@@ -2067,10 +2067,11 @@ export class OrderService extends BaseService {
         if (stillFree) {
           throw AppError.conflict(`'${manualOrderNumber}' numaralı sipariş zaten var`);
         }
-        return this.delegate.create({
-          data: { ...prismaData, orderNumber: manualOrderNumber },
+        // Açık model delegesi: donmuş kolonun (`destination`) yazıcısı AST ile ölçülür (`test_snapshot_kolonlari`).
+        return prisma.order.create({
+          data: { ...prismaData, orderNumber: manualOrderNumber, destination } as unknown as Prisma.OrderUncheckedCreateInput,
           ...(this.config.defaultInclude
-            ? { include: this.config.defaultInclude }
+            ? { include: this.config.defaultInclude as Prisma.OrderInclude }
             : {}),
         });
       }
@@ -2094,10 +2095,10 @@ export class OrderService extends BaseService {
         today,
         fmt,
       );
-      return this.delegate.create({
-        data: { ...prismaData, orderNumber },
+      return prisma.order.create({
+        data: { ...prismaData, orderNumber, destination } as unknown as Prisma.OrderUncheckedCreateInput,
         ...(this.config.defaultInclude
-          ? { include: this.config.defaultInclude }
+          ? { include: this.config.defaultInclude as Prisma.OrderInclude }
           : {}),
       });
     }, undefined, (err) =>
@@ -2684,10 +2685,12 @@ export class OrderService extends BaseService {
         // manual-close/kısmi-sevk araya girerse müşteri/şube/termin yazımı
         // terminal veya kısıtlı duruma sızmasın. Beklenen durum pre-tx okunandır;
         // değiştiyse 409 — istemci taze veriyle tekrar dener.
-        if (retarget) cleanData.destination = (await resolveShipmentDestination(tx, retarget)).destination;
         const claimed = await tx.order.updateMany({
           where: { id, status: current.status },
-          data: cleanData,
+          data: {
+            ...cleanData,
+            ...(retarget ? { destination: (await resolveShipmentDestination(tx, retarget)).destination } : {}),
+          },
         });
         if (claimed.count === 0) {
           throw AppError.conflict(
