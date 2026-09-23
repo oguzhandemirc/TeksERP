@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateDestinationLock } from "@/pages/Operations/SackContentEdit/destinationDefault";
 import { toast } from "sonner";
 import { Plus, Pencil, Power, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,8 +27,10 @@ export function CustomerBranchesPanel({ customerId, customerDestination = null }
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
   const queryKey = ["customer-branches", customerId, showInactive] as const;
-  const invalidate = () =>
-    qc.invalidateQueries({ queryKey: ["customer-branches", customerId] });
+  const invalidate = () => {
+    invalidateDestinationLock(qc);
+    return qc.invalidateQueries({ queryKey: ["customer-branches", customerId] });
+  };
 
   const { data, isLoading } = useQuery({
     queryKey,

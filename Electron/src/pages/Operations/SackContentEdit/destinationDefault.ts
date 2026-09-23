@@ -5,7 +5,7 @@
 // dosya onu KOPYALAMAZ, `GET /api/shipping/destination-lock` cevabını yorumlar.
 // Kilitliyse yön rozet olur; zincir boşsa operatör bir kez seçer ve seçim karta
 // yazılır. Tablet ikizi: mobil `destinationDefault.ts`.
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { sackHubService } from "./service";
 import type { ShipmentDestination } from "./types";
 
@@ -49,9 +49,17 @@ export function resolveDestination(input: {
 }
 
 /** Sevk adresinin (cari + şube) yön kilidi; müşteri yokken sorgu koşmaz. */
+const DESTINATION_LOCK_KEY = "destination-lock";
+
+/** Kartı/şubeyi yazabilen HER başarı (ilk sevk seçimi · yön hizala · kart/şube kaydı) kilidi tazeler;
+ *  yoksa ikinci çuval bayat "boş" kilitle yönü bir daha sorar. Önek bilerek geniş: şube yazımı cari anahtarını da etkiler. */
+export function invalidateDestinationLock(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: [DESTINATION_LOCK_KEY] });
+}
+
 export function useDestinationLock(customerId: string | null | undefined, branchId: string | null | undefined, enabled = true) {
   return useQuery({
-    queryKey: ["destination-lock", customerId ?? null, branchId ?? null],
+    queryKey: [DESTINATION_LOCK_KEY, customerId ?? null, branchId ?? null],
     queryFn: () => sackHubService.getDestinationLock(customerId as string, branchId ?? null),
     enabled: enabled && Boolean(customerId),
     staleTime: 10_000,

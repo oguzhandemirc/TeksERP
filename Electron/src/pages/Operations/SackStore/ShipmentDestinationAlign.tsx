@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Globe, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { cn } from "@/lib/utils";
 import { sackStoreService } from "./service";
 import { destinationLabels, type SackStoreShipment, type ShipmentDestination } from "./types";
-import { destinationSourceLabels, useDestinationLock } from "@/pages/Operations/SackContentEdit/destinationDefault";
+import { destinationSourceLabels, invalidateDestinationLock, useDestinationLock } from "@/pages/Operations/SackContentEdit/destinationDefault";
 
 /**
  * Planlı sevkiyatın yönü. Yön cariden/şubeden kilitliyse yalnız "karttaki yöne
@@ -15,13 +15,14 @@ import { destinationSourceLabels, useDestinationLock } from "@/pages/Operations/
  * onu karta yazar. Sevk edilmiş sevkiyatta yön değişmez (sunucu PLANNED ister).
  */
 export function ShipmentDestinationAlign({ shipment, onMutated }: { shipment: SackStoreShipment; onMutated: () => void }) {
+  const qc = useQueryClient();
   const lockQ = useDestinationLock(shipment.customer.id, shipment.branch?.id ?? null);
   const lock = lockQ.data;
   const destMut = useMutation({
     mutationFn: (v: { d: ShipmentDestination; chosen: boolean }) => sackStoreService.setDestination(shipment.id, v.d, v.chosen),
     onSuccess: (res) => {
       toast.success(res.message ?? "Güncellendi");
-      void lockQ.refetch();
+      invalidateDestinationLock(qc);
       onMutated();
     },
   });
