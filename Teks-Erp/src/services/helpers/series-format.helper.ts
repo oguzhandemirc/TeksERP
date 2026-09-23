@@ -200,3 +200,26 @@ export function matchesSeries(fmt: NumberSeriesFormat, code: string): boolean {
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+/**
+ * SAYACA GİREN KOD MU? — elle yazılmış serbest kodları eleyen TEK yüklem.
+ *
+ * ⚠️ ELLE REGEX YASAK ve bu ÖLÇÜLMÜŞ bir arızadır (K27, 2026-09-23): ürün
+ * kodunun süzgeci `/^STK-\d{1,12}$/` diye SABİT yazılmıştı. Ön ek panelden
+ * değiştirilince süzgeç BÜTÜN satırları eledi, sayaç hep 1'den başladı, çakışma
+ * atlaması eleme yüzünden hiçbir şey göremedi ve İKİNCİ üründen itibaren her
+ * kayıt P2002 → yanıltıcı 409 ("Barkod üretimi 5 denemede başarısız") verdi:
+ * fabrika yeni ürün AÇAMAZ hâle geldi. Biçim VERİ olduğu an, biçme kuralı da
+ * veriden doğmak zorundadır.
+ *
+ * ⚠️ HANE TAVANI biçimden BAĞIMSIZ ve ayrı bir gerekçesi var: `parseInt` 13+
+ * haneli bir kodu `Number.MAX_SAFE_INTEGER` üstüne taşır, orada `max + 1 === max`
+ * olur ve sayaç SESSİZCE kilitlenir. Bu, biçim doğruluğu değil ARİTMETİK sınırdır.
+ */
+const COUNTER_DIGIT_CEILING = 12;
+
+export function codeCountsForCounter(fmt: NumberSeriesFormat, code: string): boolean {
+  if (!matchesSeries(fmt, code)) return false;
+  const kuyruk = code.trim().replace(/^.*?(\d+)$/, "$1");
+  return kuyruk.length <= COUNTER_DIGIT_CEILING;
+}

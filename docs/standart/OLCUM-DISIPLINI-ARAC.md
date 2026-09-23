@@ -32,6 +32,17 @@ Olumsuz kontrol yoksa, aracın kapsamını değil yalnız o günkü şansını �
 Kardeşleri § 1 · Araç bozuk · § Bir tarayıcı, kendi TARİF ETTİĞİ şeyin ÖRNEĞİNİ gerçek
 sanır · § Boş çıktı bir ÖLÇÜM değildir.
 
+⚠️ **Kardeş hâl — ÖLÇEN TARAFIN KENDİ YÜKLEMİ de bir hata kaynağıdır.** Bir iddia kırmızı
+verdiğinde ilk şüpheli ölçülen koddur; oysa kırmızıyı ölçümün KENDİ ayrıştırıcısı da
+üretebilir ve o hâlde sistem doğru, iddia yanlıştır.
+*(Vaka 2026-09-23: "sayaç ikinci kayıtta ilerledi mi" kolu `PRTZ-2609-0001 → PRTZ-2609-0002`
+çiftinde KIRMIZI verdi. Kod ARTMIŞTI; iddianın sıra çıkarımı kodun içindeki TARİH
+parçasını sıra sanıyordu. Yüklem "son rakam öbeğini oku" diye daraltılınca yeşile döndü —
+ölçülen kodda hiçbir şey değişmedi.)*
+⇒ Kırmızıyı sınıflandırırken sor: *bu sayıyı ölçülen sistem mi üretti, yoksa benim
+ayrıştırıcım mı?* Ayırt etmenin ucuz yolu, iddianın çıktısına HAM DEĞERİ de basmaktır —
+yukarıdaki vakada kırmızı satır iki kodu yan yana yazdığı için kusur bir bakışta görüldü.
+
 ### 4 · Araç ölçümün içinde
 `ps | grep` kendini sayar; sonda, ölçtüğü sinyalin taşıyıcısını kirletir.
 **Savunma:** `pgrep -f` ya da `grep -v grep`. Sonda argümanı, ölçülen sinyalin
