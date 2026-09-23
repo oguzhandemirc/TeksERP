@@ -11613,3 +11613,33 @@ yürürlüğe girmiş fikstür satırını BIRAKIYORDU; sonraki koşumda `activa
 sanıp `formatChangedAt`i yazıyor ve §6d kırmızı veriyordu — yani bir bölümün artığı BAŞKA bir
 bölümü düşürüyordu. Teardown artık "bu koşumun yarattığı" satırları id ile siler ve damgayı geri
 yükler. Ölçüldü: arka arkaya üç koşum 125/0.
+
+## 2026-09-23 — Geriye dönük uyumluluk MATRİSİ (E3): açılan her seri kapsama kendiliğinden girer [ÇEKİRDEK]
+
+**Kullanıcının cümlesi:** *"geriye dönük uyumluluk kesinlikle olmalı, bir kod değişince eski verileri
+bozmamalı"*. Bu bekçi o cümlenin ölçüsüdür ve E2'nin (sayaç kapsamı açılan seriler) KABUL KAPISIDIR.
+
+**Tasarım — iki katman, çünkü iki ayrı soru var:** L1 (DB'siz, HER açık seri) BİÇİM eksenini ölçer:
+ön ek · her tarih segmenti · tarihsiz · hane ± · iki ayraç dönüşümleri, bugün 57 dönüşüm. Kayıt
+yaratmaz, çünkü `nextSeriesNo` kod listesini ENJEKTE edilebilir bir yükleyiciden alıyor — üretim
+yolunun KENDİ hesabı sentetik veriyle koşturulur ve ikinci bir hesap yazılmaz. L2 (DB'li, ucuz
+yaratma yolu olan seride) gerçek kayıtla ölçer: eski kodun BAYT BAYT aynı kaldığı, yeni kodun
+üretilip TEKİL olarak yazılabildiği, ikisinin aynı anda arandığı. Seri listesi KATALOGDAN KEŞFEDİLİR
+⇒ E2 bir seriyi açtığı anda kapsama kendiliğinden girer; hangi serinin hangi katmanda ölçüldüğü her
+koşumda BASILIR ("yeşil ≠ kapsandı").
+
+**Ölçerken bir varsayım çürüdü:** iddia ilk yazımda "biçim değişince sıra HER ZAMAN 1'den başlar"
+idi ve kırmızı verdi. Ölçüm: kapsam damgası eski kodları sayaçtan eler (sıra 1'e döner), AMA
+üretilecek DİZGİ zaten var olan bir kodla aynıysa üreteç onun ÜSTÜNE atlar — `@unique` çakışmasını
+önleyen davranış budur. Hane değişimi ise dolguyu değiştirdiği için AYNI sıra bile FARKLI bir
+dizgidir ve atlama gerekmez. Dönüşümden bağımsız değişmez şudur: **üretilen kod var olanlardan biri
+olamaz ve sıra, dizgi uzayındaki İLK BOŞ değerdir.** İddia buna çevrildi.
+
+**Sondalar:** C0 kapsam filtresi kaldırılınca (c) kolu kırmızı ve arıza tam da belgelenen biçimde
+görünüyor — `PRT-2610` (tarih rakamları sıra sanıldı), `IADE-220927`. Emekli BİÇİM denemesi
+kaldırılınca (a+d) kolu kırmızı: tarihsiz geçişten sonra dünkü kod tanınmıyor.
+
+**Ek ders (ölçüm kataloğuna):** "Teardown'un ÖLÇÜTÜ 'geçici mi' değil, 'BU KOŞUM mu yarattı'" —
+`test_number_series_panel §15`in teardown'u vadesi gelmemiş satırları siliyordu; koşum sırasında
+nitelik değiştiren (yürürlüğe giren) artık kalıyor ve BİR SONRAKİ koşumda İLGİSİZ bir bölümü
+düşürüyordu.

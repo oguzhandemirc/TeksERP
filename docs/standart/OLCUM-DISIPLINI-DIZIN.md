@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **165 başlık / 12 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **166 başlık / 12 dosya**
 (ölçüldü 2026-09-23; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 ⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
@@ -111,6 +111,7 @@ açan kişi tabloyu yine baştan sona okur.**
 | 8 | § Ölçülen değişken SABİT | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 | 9 | § Geç ölçüm — anlık ölçümle pencere iddiası | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 |  | § ERKEN türetme — doğru kaynak, yanlış AN | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
+|  | § Teardown'un ÖLÇÜTÜ "geçici mi" değil, "BU KOŞUM mu yarattı" | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 |  | § Sonda geçerliliği sınıfları → ayrı dosya | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 |  | § Çöken sonda, sonda değildir | (`OLCUM-DISIPLINI-SONDA.md`) |
 |  | § Bir sonda ISIRMAYINCA üç ayrı şey olmuş olabilir — üçü de ayrı ayrı sorulur | (`OLCUM-DISIPLINI-SONDA.md`) |
@@ -213,7 +214,7 @@ açan kişi tabloyu yine baştan sona okur.**
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (16 başlık) |
 | [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (4 başlık) |
 | [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (6 başlık) |
-| [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (32 başlık) |
+| [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (33 başlık) |
 | [`OLCUM-DISIPLINI-SONDA.md`](OLCUM-DISIPLINI-SONDA.md) | SINIFLAR'ın SONDA GEÇERLİLİĞİ ailesi (5 başlık) |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — PAYLAŞILAN AĞAÇ, ÇOK OTURUM (8 başlık) |
 | [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (33 başlık) |
