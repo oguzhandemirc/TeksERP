@@ -718,6 +718,56 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Yetkilendirme → Rol Şablonları’na “Saha operatörü (tüm tablet karoları)” şablonu geldi: tabletteki bütün ekranları tek tıkla verir, geri alma / düzeltme / ana veri yetkilerini (ör. Tambur saha düzeltmesi, top indirme geri alma, sarım iptali, yeni desen açma) vermez — onlar ayrıca verilir. Şablon kurulumda kendiliğinden gelir ve tablete yeni bir ekran eklendiğinde kendiliğinden genişler; “Mobil — Tüm Ekranlar” şablonu (yetkilerle birlikte) aynen durur."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Numaralandırma: belge ve kart numaralarının biçimi artık ayardan yönetiliyor. Ayarlar → Numaralandırma'da her seri için ön ek, tarih parçası, hane sayısı ve ayraçlar seçiliyor; ekranın üstündeki örnek, kaydettiğinizde üretilecek numaranın birebir aynısını gösteriyor. Geçmiş numaralar ASLA yeniden numaralanmaz — eski ön ek emekliye ayrılır ve okutulmaya devam eder."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Numaralandırma: tarih parçası için yeni seçenekler eklendi — GGAAYYYY (23092026), AAYY (0926) ve YYYYAAGG (20260923). Sonuncusu numaraları alfabetik sıraladığınızda kronolojik sıra verir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Numaralandırma: ikinci ayraç. Ön ek ile tarih arasına ve tarih ile sayaç arasına FARKLI ayraç konabiliyor (örnek: PRT-2609/0001). Boş bırakırsanız birinci ayraç kullanılır, yani bugünkü numaralarınız değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Numaralandırma: sayaç ayarları. Her seri için başlangıç numarası, artış adımı ve üst sınır verilebiliyor; sınıra yaklaşınca ekran uyarıyor. Hane sayısı bir DOLGU ayarıdır: numara hanenin üstüne çıkarsa kod uzar, başa dönmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Numaralandırma: numara girişi kuralı. Her seri için “Serbest (sistem üretir, elle yazılabilir)”, “Yalnız sistem” ve “Yalnız elle” seçeneklerinden biri seçilebiliyor. Daha önce yalnız iş emri parti koduna özel olan “İş emri parti kodunu otomatik üret” ayarı bu kuralın içine taşındı; mevcut seçiminiz korunarak aktarıldı."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Numaralandırma: ileri tarihli geçiş. “1 Ocak'tan itibaren şu biçim” diyebiliyorsunuz; biçim o güne kadar değişmiyor, vadesi gelince kendiliğinden yürürlüğe giriyor. Geçmiş bir tarihe yazılamaz — o tarihte üretilmiş numaraların hangi biçimde doğduğu bir kayıttır, düzeltilmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Yapılandırma paketi artık numara serilerini de taşıyor (Sistem → Veri Aktarımı). Paket uygulanmadan ÖNCE önizleme her seriyi satır satır, eski kodundan yeni koduna doğru gösteriyor; uygulanamayacak seriler sebebiyle birlikte HATA satırı oluyor. Sayaç ayarları bilerek taşınmıyor ve paket bunu ekranda yazıyor — başlangıç değeri hedef kurulumun mevcut numaralarına göre anlam taşır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Numaralandırma: ayar şifresi tanımlı kurulumlarda yapılandırma paketi numara serisi taşıyorsa uygulama sırasında şifre soruluyor. Yalnız şablon taşıyan paketlerde sorulmuyor."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "duzeltme",
+          "metin": "Okutulan serilerin (çuval · sevkiyat · kartela · fason belgesi · refakat kartı) biçimi, sahadaki panel ve tabletler güncellenmeden değiştirilemiyor; ekran gereken en düşük sürümü yazıyor. Eski bir tablet yeni biçimi tanımadan okutmaya devam edip kodu sessizce yanlış türe çözebilirdi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Belge önizlemesindeki örnek numaralar artık serinin kendi ayarından üretiliyor; ön ek değiştirildiğinde önizleme ile basılan belge ayrışmıyor."
         }
       ]
     },

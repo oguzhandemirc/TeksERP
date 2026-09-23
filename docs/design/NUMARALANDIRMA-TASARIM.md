@@ -62,4 +62,23 @@ Kod üretimi: `seriesPrefix()` sabit başı kurar (`prefix [sep] [tarih] [sep]`)
   - **C2 (indi):** `RollReturn.returnNo` kolonu + belge-çapalı geri doldurma. Numara SATIRA değil BELGEYE aittir (belge `returnGroupId ?? id` ile çözülür): üye satırlar liderin numarasının kopyasını taşır, tekillik BELGE başınadır (`returnGroupId IS NULL OR = id` — yalnız `IS NULL` demek grupların tamamını kısıt dışında bırakırdı).
   - **C4 (indi):** `shippingSackSeqPrefix` deseninde YAZMA yüklemi daraldı (eğik çizgi dosya/sayfa adını kırıyordu), OKUMA yüklemi GENİŞ kaldı — aynı fonksiyon sevk anında DONMUŞ ön eki de süzüyor ve daraltmak geçmiş belgeyi bugün boş gösterirdi.
 
-- **Faz D:** kalan seriler panele; `document-render/sample-data.ts` örnekleri seri tablosundan üretilir (bugün bayat: `FTR…`/`THS…` gerçek üreteçle uyuşmuyor); istenirse ikinci segment olarak şube/depo kodu.
+- **Faz D (indi, 2026-09-23) — KAPANDI.** Biçim artık tamamen VERİ: kullanıcı ön eki, tarih segmentini, haneyi, İKİ ayracı, sayacı ve numara kaynağını panelden yönetir; geçmiş asla yeniden numaralanmaz.
+  - **YAPILDI**
+    - **D1** kalan seriler panele (52 seri, `panelGroup` ile bölümlenmiş).
+    - **D2** sayaç ailesi: başlangıç · adım · üst sınır · tükenme uyarısı. Hane bir DOLGU ayarıdır, kapasite değil (taşma genişletir, sarmaz); sayacı durduran tek şey `maxValue`dur.
+    - **D3** numara kaynağı (`FREE`/`SYSTEM`/`MANUAL`) — iki değerli bir bayrak bugünkü davranışı İFADE EDEMİYORDU; eski `partyCodeAuto` ayarı bundan TÜRETİLİR oldu (damgalı tek seferlik göç).
+    - **D4** tarihe bağlı geçiş (`number_series_lines`, Dynamics "No. Series Line" kalıbı): "1 Ocak'tan itibaren şu biçim". Biçim artık bir DEĞER değil bir ZAMAN ÇİZGİSİ; `number_series` kolonları yürürlükteki satırın ÖNBELLEĞİ ve tek yazar ikisini tek tx'te yazar. Emekli BİÇİMLER kendi segment/hanesiyle denenir (eski `retiredPrefixes` yalnız ön ek eksenini koruyordu).
+    - **D5** tarih segmenti TEK KAYNAK (`DATE_SEGMENTS`) + üç yeni segment (`DDMMYYYY` · `MMYY` · `YYYYMMDD`) + İKİNCİ AYRAÇ (`separator2`, tarih↔sayaç eklemi). İstemciler sunucu tablosunu artık HEP-YA-HİÇ reddetmiyor: tanınmayan satır atılır, gerisi kullanılır.
+    - **D6** yapılandırma paketi numara serilerini taşır — ama panelin YAZARINDAN geçerek; kapıları atlayan içe aktarım modu YOK. Ayar şifresi kapısı uca değil İÇERİĞE takılı.
+    - **D7** bayat biçim açıklamaları gerçeğe hizalandı, `sample-data.ts` örnekleri seriden türetiliyor, yeni literaller cırcırla kapatıldı.
+  - **ERTELENDİ (gerekçesiyle)**
+    - **Şube/depo kod segmenti** — çok kurulumlu/çok depolu senaryoda anlamlı; `adnansahin`de tek kurulum tek ana depo var, yani bugün ÜRETİLEMEYEN bir durumu modellemek olurdu. `separator2` ile birlikte gelen üçüncü bir parça, biçim uzayını da kapasite kapısını da ölçülmemiş biçimde büyütür.
+    - **Boşluk doldurma rejimi** (iptal edilen numaranın yeniden kullanımı) — defter semantiğiyle çakışır, ayrı bir karar ister.
+    - **Tekillik KAPSAMI ayarı** (yıllık/süresiz) — bugünkü kapsam tarih segmentinden türüyor ve ikinci bir ayar iki gerçek üretirdi.
+    - **Biçim değişikliğini geri alma düğmesi** ve **değişiklik geçmişi ekranı** — veri (`number_series_lines`) ARTIK VAR, yani ikisi de bir sonraki fazın ekran işidir; motor beklemiyor.
+    - **Mükerrer kod tarayıcısı** — `number_series` tekilliği zaten DB seviyesinde; tarayıcı ancak geçmiş onarımı kararı verilirse anlamlı.
+  - **REDDEDİLDİ (yeni; §3'ün devamı)**
+    - **Numaraya SONEK eklemek ve parça SIRASINI değiştirmek** — kullanıcı kararı. Sayaç kuyruğu sabit başın SONUNDA olmak zorunda: `where: { gte, startsWith }` sorgusu ve emekli biçim eşleşmesi bu varsayıma dayanıyor; sıra serbestleşirse sayaç kapsamı ayrıştırılabilir bir string olmaktan çıkar.
+    - **Örnek kodları elle yazmaya devam etmek** — biçim veri olduğu an her literal bir zaman bombası; ölçüldü (68 literal) ve cırcırla dondu.
+    - **İçe aktarımda kapıları atlayan bir mod** — paketin hedefteki canlı numaralandırmayı değiştirmesi panelden değiştirmekle AYNI şeydir; tam olarak o kapılar sahadaki barkodun okunamaz hâle gelmesini engelliyor.
+  - **AÇIK BORÇ:** `number_series` biçim kolonlarının kaldırılması (zaman çizgisi tek gerçek olduğuna göre önbellek bir gün gereksizleşebilir). Ölçülebilir koşul: `resolveSeriesFormat` çağrılarının HİÇBİRİ senkron olmak zorunda kalmadığında — bugün önbellek senkron okuma içindir, kaldırmak her çağrı yerini `async` yapardı.

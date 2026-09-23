@@ -89,47 +89,11 @@ iddia yine de kurulmamıştır.
 başından bir damga (koşum başlangıcı, son commit zamanı) ile karşılaştır.
 Kuşatamıyorsan iddiayı daralt: *"şu an temiz"* de, *"o sırada temizdi"* deme.
 
-### Çöken sonda, sonda değildir
-Negatif sonda kırmızı verdi diye geçerli değildir; kırmızının **ölçmek istediğin
-KONTROLDEN** geldiği ayrıca doğrulanır.
-**Ayırt edici:** FAIL **satır sayısı** ↔ özet **sayısı**. Uyuşmuyorsa fark bir
-çökmedir. *(Vaka: özet "3 başarısız" dedi, ekranda 2 FAIL vardı; üçüncüsü bir
-`.catch()`ten geliyordu — bölümün hiçbir kontrolü koşmamıştı.)*
-**Kurtarma:** sondayı **sahte nesneyle kurma** — gerçek çağrıyı **gerçek ama
-yanlış girdiyle** koştur. Sahte nesne kod yolunu değil, kod yolunun **kurulumunu**
-kırar.
-
-**Kardeş biçim — çökme HİÇ kırmızı üretmez ve "ısırmadı" diye okunur.** Yukarıdaki
-vakada çökme sahte bir kırmızı üretiyordu; ters yönü daha sinsidir: mutasyon
-**derlenmez ya da çalışma anında patlar**, sonda hiç koşmaz, çıktıda ❌ satırı
-olmaz ve sondayı koşan bunu *"kapı bu ihlali görmüyor"* diye okur — yani kapıyı
-suçlar, oysa ölçüm hiç yapılmamıştır.
-> ***Sondanın mutasyonu ÇALIŞABİLİR olmalı:*** kaynak metnini ya da davranışı
-> ölçen bir sondada mutasyon, ürün kodunun **derlenip koşmasına izin veren**
-> gerçekçi bir değişiklik olmalıdır — yoksa ölçülen şey kapı değil **kaza**dır.
-*(Vaka 2026-09-22, iki kez aynı gün: ① bir servise yalnız `prisma.roll.findFirst`
-çağrısı eklendi ama `prisma` import edilmedi ⇒ `ReferenceError`, bekçi çöktü, çıktı
-boş; import da eklenince ❌2 geldi. ② bir servisin kod üretimi kaldırıldı ⇒ create
-`validateCode`ta fırlattı ve bekçi çöktü; **bekçiye `dene()` sarmalı eklenerek**
-"create patlarsa o iddia ❌ olur" hâline getirildi, sonra ❌10 ölçüldü.)*
-**İki çıkış yolu var ve ikisi de meşru:** mutasyonu derlenebilir yap, **ya da**
-bekçiyi çökmeye dayanıklı yaz (beklenen patlamayı yakalayıp ❌ üret). İkincisi
-tercih edilir: ürün kodu gerçekten patlarsa kapı yine kırmızı verir.
-
-**Üçüncü biçim — kırmızı BAŞKA BİR KONTROLDEN gelir.** Çökme yok, mutasyon
-uygulandı, sonda ısırdı — ama ısıran kapı, ölçmek istediğin kapı DEĞİL. Bu en
-sinsisidir, çünkü ekranda "sonda geçerli" görünür.
-**Ayırt edici:** ❌ satırının GEREKÇESİNİ oku, yalnız varlığını değil — beklediğin
-hata kodu/mesajı mı geldi?
-*(Vaka 2026-09-22: "okutulan seri düzenlenemez" kapısı `swatch` üstünde
-sondalandı ve kırmızı verdi; ama gelen kod `NUMBER_SERIES_COUNTER_NOT_SCOPED`ti,
-yani ısıran ÖNCEKİ kapıydı — kartelanın sayaç beyanı yoktu. Sonda, ölçmek
-istediği kapı kaldırıldığında bile kırmızı kalıyordu. `shipment`a çevrilince —
-her iki kapıyı da geçen tek seri — mutasyon "KABUL EDİLDİ" verdi ve sonda
-gerçekten ölçmeye başladı.)*
-**Kurtarma:** sondanın hedefini, ÖLÇÜLEN KAPIDAN BAŞKA hiçbir kapının
-reddetmediği bir örnek üstünde kur. Örnek bulunamıyorsa kapı zaten başka bir
-kapının gölgesindedir ve bunu BEYAN et.
+### Sonda geçerliliği sınıfları → ayrı dosya
+Bir sondanın KENDİSİNİN geçerli olup olmadığını soran sınıflar (çöken sonda · inmeyen
+mutasyon · ölü kodu bozan sonda · kapıyı izole etmeyen vaka · yazma yolunu hiç
+koşmayan kollar · sondayı susturan "düzeltme") ayrı dosyada:
+[`OLCUM-DISIPLINI-SONDA.md`](OLCUM-DISIPLINI-SONDA.md).
 
 ### Zıt iki cevap = ortam farkı
 Aynı script, aynı ağaç, aynı saniye **zıt iki cevap** veriyorsa bu bir kapı hatası

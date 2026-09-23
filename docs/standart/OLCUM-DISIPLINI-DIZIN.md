@@ -21,8 +21,8 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **158 başlık / 11 dosya**
-(ölçüldü 2026-09-14; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **164 başlık / 12 dosya**
+(ölçüldü 2026-09-23; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 ⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
 sözcük örtüşmesi (Jaccard ≥ 0,28) ölçüldü → **9 aday, mükerrer YOK**; dokuzun altısı
@@ -68,6 +68,7 @@ açan kişi tabloyu yine baştan sona okur.**
 |  | § Araç VAR ile araç UYUMLU ayrı iki şeydir | (`OLCUM-DISIPLINI-ARAC.md`) |
 |  | § Bir LİSTE tek başına ölçüm aracı değildir — ELEME adımı onun yarısıdır | (`OLCUM-DISIPLINI-ARAC.md`) |
 |  | § Boş çıktı bir ÖLÇÜM değildir — iki dünya aynı boşluğu üretir | (`OLCUM-DISIPLINI-ARAC.md`) |
+|  | § Satır NUMARASI revizyonlar arası bir KİMLİK değildir | (`OLCUM-DISIPLINI-ARAC.md`) |
 |  | § Ağacı `git` üzerinden okuyan araç, kümesini İNDEKSTEN alır — yazdığın dosya orada olmayabilir | (`OLCUM-DISIPLINI-ARAC.md`) |
 |  | § Bir tarayıcı, kendi TARİF ETTİĞİ şeyin ÖRNEĞİNİ gerçek sanır | (`OLCUM-DISIPLINI-ARAC.md`) |
 |  | § Mutasyonun ürettiği sayı, MUTASYONDAN gelmiş olabilir | (`OLCUM-DISIPLINI-ARAC.md`) |
@@ -109,7 +110,12 @@ açan kişi tabloyu yine baştan sona okur.**
 | 7 | § Geçmiş zamanlı beyan, karşılıksız | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 | 8 | § Ölçülen değişken SABİT | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 | 9 | § Geç ölçüm — anlık ölçümle pencere iddiası | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
-|  | § Çöken sonda, sonda değildir | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
+|  | § Sonda geçerliliği sınıfları → ayrı dosya | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
+|  | § Çöken sonda, sonda değildir | (`OLCUM-DISIPLINI-SONDA.md`) |
+|  | § Bir sonda ISIRMAYINCA üç ayrı şey olmuş olabilir — üçü de ayrı ayrı sorulur | (`OLCUM-DISIPLINI-SONDA.md`) |
+|  | § Bir kapıyı ölçen sonda, YALNIZ o kapının yakaladığı vakayı kullanmalı | (`OLCUM-DISIPLINI-SONDA.md`) |
+|  | § Kapıları ölçmek, YAZMA YOLUNU ölçmek değildir | (`OLCUM-DISIPLINI-SONDA.md`) |
+|  | § Bir düzeltme, sondayı SUSTURARAK da "çalışabilir" | (`OLCUM-DISIPLINI-SONDA.md`) |
 |  | § Zıt iki cevap = ortam farkı | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 |  | § Ölçümün KURULUM adımı da ölçülen sistemin içindedir | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 |  | § Paylaşılan ağaç ve çok-oturum sınıfları → ayrı dosya | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
@@ -202,11 +208,12 @@ açan kişi tabloyu yine baştan sona okur.**
 |---|---|
 | [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | YÖNTEM — ölçüm nasıl yapılır, nasıl OKUNUR (15 başlık) |
 | [`OLCUM-DISIPLINI-YAZIM.md`](OLCUM-DISIPLINI-YAZIM.md) | ölçümü YAZMA: sayı · çapa · kimlik (4 başlık) |
-| [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (18 başlık) |
+| [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (19 başlık) |
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (16 başlık) |
 | [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (4 başlık) |
 | [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (6 başlık) |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (31 başlık) |
+| [`OLCUM-DISIPLINI-SONDA.md`](OLCUM-DISIPLINI-SONDA.md) | SINIFLAR'ın SONDA GEÇERLİLİĞİ ailesi (5 başlık) |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — PAYLAŞILAN AĞAÇ, ÇOK OTURUM (8 başlık) |
 | [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (33 başlık) |
 | [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | ölçümü KAPIYA çevirmek (11 başlık) |

@@ -188,6 +188,21 @@ koşturulup `MODULE_NOT_FOUND` verdi ve az kalsın *"kapı bozuk"* denecekti. Mo
 `cwd` gerçekten önemlidir; ama 01'in vakasında **sebep o değildi**. Ve evde zaten yazılı
 olan satırın ihlali: **`>/dev/null` gerekçeyi yutar.**
 
+### Satır NUMARASI revizyonlar arası bir KİMLİK değildir
+Çalışma ağacından okunan bir satır numarasını başka bir revizyona (HEAD, bir etiket, bir
+merge tabanı) uygulamak sessiz bir hatadır: dosya araya satır aldıysa numara KAYAR.
+İki sonuç da kötüdür — dosya uzadıysa araç `fatal: file has only N lines` der (ve bir
+`catch` bunu kolayca *"çözülemedi"* diye yutar), kısaldıysa **YANLIŞ SATIRIN** cevabı
+döner ve hiçbir şey kırmızı vermez.
+*(Vaka 2026-09-23: bir merge, harita dosyasını 2211'den 2280 satıra çıkardı; `(bu commit)`
+işaretli satırların sha'sı çalışma-ağacı numarasıyla HEAD'e blame'leniyordu ve geçmişi
+OLAN iki satır "havada" göründü.)*
+**Çare:** satırı **içerikle** bul — hedef revizyonun metninde o satır geçiyorsa ONUN
+numarasını kullan, geçmiyorsa satır gerçekten YENİDİR ve fail-closed dal işler.
+⚠️ `git blame --contents <dosya>` bu işi **çözmez, körleştirir**: geçmişte hiç olmayan
+satırı da komşusunun commit'ine atfeder (§ Bir düzeltme, sondayı SUSTURARAK da
+"çalışabilir").
+
 ### Ağacı `git` üzerinden okuyan araç, kümesini İNDEKSTEN alır — yazdığın dosya orada olmayabilir
 `git ls-files` **çalışma dizinini değil İNDEKSİ** listeler. Yeni yazılmış ama `git add`
 edilmemiş bir dosya ağaçta DURUR, o komut için **YOKTUR** — ve fark sessizdir, çünkü
@@ -225,6 +240,14 @@ kural değil, **kuralın resmidir**. *(5e teşhis · d5 formülasyon)*
 aynı gece bir başka oturuma dört kez çarptı.)*
 ⚠️ Ters yönü de var ve bu belgede yaşandı: *yasağı anlatan cümle, yasağın kendisi
 sayılabilir* (§ Dolaylılık'ın ters yönü).
+
+⚠️ **Yorum SOYMAK yetmez — HANGİ yorum biçimlerini soyduğun ölçülmelidir.**
+*(Vaka 2026-09-23: yeni bir ayna bekçisi istemci kodunda `rows.every(isRow)` arıyordu
+ve KENDİ JSDoc'unda o ifadeyi açıklıyordu; soyucu yalnız `//` satırlarını siliyordu,
+`/* */` bloğunu değil ⇒ bekçi kendi açıklamasını ihlal sanıp iki iddiayı kırmızı
+yaptı.)* Aynı sınıf bu depoda dört kez tekrarladı. ⇒ *Bir ayrıştırıcı, ölçtüğü dilin
+yorum kurallarının HEPSİNİ bilmek zorundadır;* "yorumu soyuyorum" bir beyan değil,
+ölçülmesi gereken bir iddiadır.
 
 ### Mutasyonun ürettiği sayı, MUTASYONDAN gelmiş olabilir
 Bir sondanın ürettiği sayıyı bulgu saymadan önce, o sayının **mutasyonun KENDİSİNDEN**

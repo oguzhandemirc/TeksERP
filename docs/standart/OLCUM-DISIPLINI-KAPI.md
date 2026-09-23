@@ -88,6 +88,16 @@ Sorulacak şey *"ölçtüm mü"* değil, ***"bu ölçüm yanlış bir dünyada F
 *(2026-09-13: altı dosya duvara dayandı; beşinde çizgi net çıktı — yöntem ↔ kapı,
 araç ↔ kurgu, kural ↔ envanter…)*
 
+⚠️ **Üçüncü işlev: tavan bazen bir TEKRARIN habercisidir.** Bölünme çizgisi hep
+"içerik ayrılsın" biçiminde okunmaz; bazen duvara dayanan fonksiyon, aynı soruyu
+İKİNCİ KEZ cevapladığı için büyümüştür.
+*(Vaka 2026-09-23: `config-bundle` numara serisi dilimi `max-lines-per-function`
+tavanını bir satır aştı. Ayıklarken görüldü ki "biçim değişti mi" sorusu ÖNİZLEME ve
+YAZMA yollarında ayrı ayrı hesaplanıyordu — yani tavan, benim görmediğim bir
+"türetilmiş alan / ayrışan yüzey" adayını göstermişti. Ayıklama tek yükleme indirdi.)*
+⇒ Tavan kırmızı verince sorulacak ikinci soru: *bu fonksiyon büyüdü mü, yoksa bir
+şeyi İKİ KEZ mi yapıyor?*
+
 ⚠️ **AMA TAVAN YANILABİLİR — ve bugün bir kez yanıldı.** `BACKEND.md` duvara dayandı ve
 **hiçbir dikiş göstermedi**: "içerik yanlış dosyada" hipotezi ölçüldü ve çürüdü
 (taşınabilir aday **%4**), gerçek sebep **kanıt kuyruğuydu** (`zorlama:` + `kanıt:` +
