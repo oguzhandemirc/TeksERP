@@ -158,6 +158,7 @@ import {
 } from "../utils/cursor";
 import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-owner.helper";
+import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 
 // Re-export saf primitifler (geriye uyum — eskiden bu dosyada tanımlıydı).
 export {
@@ -509,6 +510,9 @@ export class ShippingService {
     }
 
     const manualSackNo = data.sackNo?.trim() || null;
+    // `numberSource` kapısı: SYSTEM'de elle değer reddedilir, MANUAL'de zorunlu,
+    // ve OKUTULAN seri olduğu için elle değer kendi türüne çözülmek zorunda.
+    assertManualNumberAllowed("sack", manualSackNo);
     let sack: {
       id: string; sackNo: string; weightKg: Prisma.Decimal | null; customerId: string | null; branchId: string | null;
       packingGroupId: string | null; packageNo: number | null;

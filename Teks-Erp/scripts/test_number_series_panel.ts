@@ -28,6 +28,8 @@
 //  §4e Sayım kaynağı olmayan seri `uretecBagi` ile BEYANLI (kaynaksızlık bir KARAR)
 //  §4f Kaynaklı HER seri gerçekten sayılabiliyor — yanlış model adı sessizce
 //      `null` döndürür ve hiçbir statik kontrol göremez
+//   §9 ELLE NUMARA KAPISI: FREE/SYSTEM/MANUAL davranışı · okutulan seride elle
+//      değer kendi türüne çözülmeli · beyan edilen her yol kapıyı ÇAĞIRIYOR
 //   §8 NUMARA KAYNAĞI: beyan gerçek · elle yolu olmayan seride 400 · varsayılan
 //      `FREE` (bugünkü davranış) · yetenek yalnız 4 seride · okutulan sınırı ölçülü
 //   §7 KAPASİTE ve TÜKENME: kapasite envanteri şemayla birebir · kolona sığmayan
@@ -77,6 +79,10 @@ import {
   seriesLock,
 } from "../src/services/helpers/series-panel.helper";
 import { seriesPrefix } from "../src/services/helpers/series-format.helper";
+import {
+  assertManualNumberAllowed,
+  manualNumberModes,
+} from "../src/services/helpers/manual-number.helper";
 import { NUMBER_SERIES_CODE_CAPACITY } from "../src/constants/number-series-capacity";
 import {
   EXHAUSTION_WARN_RATIO,
@@ -619,6 +625,65 @@ async function main(): Promise<void> {
       elleliler.filter((e) => e.kind === undefined).map((e) => e.key).join(", "));
     check("§8e ⭐ yetenek nesnesi elle yolun YERİNİ de taşıyor (beyan kayıtlı)",
       seriesSourceCapability("sack").manualPath === "services/shipping.service.ts");
+
+    // ── §9 ELLE NUMARA KAPISI (D3②) ─────────────────────────────────────────
+    // Ayarı panel yazar; ayarın BİR ŞEY YAPTIĞI yer üretim yoludur.
+    // ⚠️ `sack` bu noktada `SYSTEM`e alınmış durumda (§8d) — modu ölçen her
+    // iddia hedefini AÇIKÇA ayarlar, "ortamda ne varsa"ya güvenmez.
+    const sackFull = seriesPrefix(resolveSeriesFormat("sack"), new Date());
+    const gecerliCuval = `${sackFull}0001`;
+
+    await updateSeriesNumberSource("sack", "FREE");
+    check("§9a ⭐ FREE: elle değer KABUL edilir (bugünkü davranış korunuyor)",
+      !throws(() => assertManualNumberAllowed("sack", gecerliCuval), "ANY"));
+    check("§9a ⭐ OKUTULAN seride küçük harfli elle değer 400 (okutulunca tanınmaz)",
+      throws(() => assertManualNumberAllowed("sack", gecerliCuval.toLowerCase()),
+        "NUMBER_SERIES_MANUAL_NOT_SCANNABLE"));
+    const fasonKod = `${seriesPrefix(resolveSeriesFormat("subcontractorDispatch"), new Date())}0001`;
+    check("§9a ⭐ BAŞKA okutulan serinin kodu 400 — yanlış dala düşme engellendi",
+      throws(() => assertManualNumberAllowed("sack", fasonKod), "NUMBER_SERIES_MANUAL_NOT_SCANNABLE"),
+      fasonKod);
+    check("§9a ⭐ hiçbir seriye çözülmeyen serbest metin de 400",
+      throws(() => assertManualNumberAllowed("sack", "CUVAL1"), "NUMBER_SERIES_MANUAL_NOT_SCANNABLE"));
+
+    await updateSeriesNumberSource("sack", "SYSTEM");
+    check("§9b ⭐ SYSTEM: elle değer REDDEDİLİR",
+      throws(() => assertManualNumberAllowed("sack", gecerliCuval), "NUMBER_SERIES_MANUAL_NOT_ALLOWED"));
+    check("§9b SYSTEM: elle değer YOKSA sorun yok (sunucu üretir)",
+      !throws(() => assertManualNumberAllowed("sack", null), "ANY"));
+
+    await updateSeriesNumberSource("sack", "MANUAL");
+    check("§9c ⭐ MANUAL: elle değer YOKSA 400 (otomatik üretim kapalı)",
+      throws(() => assertManualNumberAllowed("sack", null), "NUMBER_SERIES_MANUAL_REQUIRED"));
+    check("§9c MANUAL: geçerli elle değer kabul edilir",
+      !throws(() => assertManualNumberAllowed("sack", gecerliCuval), "ANY"));
+    await updateSeriesNumberSource("sack", "FREE");
+
+    check("§9d ⭐ OKUTULMAYAN seride biçim sınaması YOK (grup adı barkod değil)",
+      !throws(() => assertManualNumberAllowed("packingLotName", "P3 sağ taraf"), "ANY"));
+
+    // ⭐ §9e BEYAN ile BAĞLANTI: `manualEntry` beyanı olan her serinin BEYAN
+    // ETTİĞİ dosyada kapı gerçekten çağrılıyor mu? Beyan varsa ama çağrı yoksa
+    // ayar sessizce etkisizdir — ekranda seçenek görünür, üretim yolu umursamaz.
+    const bagsiz: string[] = [];
+    for (const e of NUMBER_SERIES_CATALOG) {
+      if (!e.manualEntry) continue;
+      const govde = readFileSync(join(__dirname, "..", "src", e.manualEntry.path), "utf-8");
+      if (!govde.includes(`assertManualNumberAllowed("${e.key}"`)) bagsiz.push(e.key);
+    }
+    check("§9e ⭐ beyan edilen her elle yolu kapıyı GERÇEKTEN çağırıyor",
+      bagsiz.length === 0, bagsiz.join(", ") ||
+        `${NUMBER_SERIES_CATALOG.filter((e) => e.manualEntry).length} yol bağlı`);
+
+    // ⭐ §9f İSTEMCİ YÜZEYİ: form çizimi için gereken yük üretiliyor ve
+    // `feature-flags` yanıtına giriyor (yeni bare-auth uç AÇILMADI).
+    const modlar = manualNumberModes();
+    check("§9f ⭐ istemci yükü 4 seriyi taşıyor (mod + okutulur mu)",
+      modlar.length === 4 && modlar.every((m) => typeof m.mode === "string" && typeof m.scanned === "boolean"),
+      modlar.map((m) => `${m.key}=${m.mode}${m.scanned ? "/okutulur" : ""}`).join(" "));
+    check("§9f ⭐ yük `GET /api/feature-flags` yanıtına bağlı (yeni uç yok)",
+      readFileSync(join(__dirname, "..", "src", "routes", "feature-flag.routes.ts"), "utf-8")
+        .includes("numberSources: manualNumberModes()"));
 
     // ── §5 Önizleme sunucuda + biçim kapısı ───────────────────────────────
     const fmt = resolveSeriesFormat("packingLotCode");

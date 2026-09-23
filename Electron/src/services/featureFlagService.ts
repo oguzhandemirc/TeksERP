@@ -20,6 +20,7 @@ import {
   type DocumentsConfig,
   DEFAULT_COMPANY_LETTERHEAD,
 } from "./documentConfig";
+import type { NumberSourceInfo } from "@/lib/number-source";
 
 export type { CompanyLetterhead, DocumentsConfig } from "./documentConfig";
 
@@ -609,7 +610,16 @@ export interface BatchNumberState {
  * kaldırılmış bir şifreyi sormaya devam ederdi. Panel bunu yalnız BİLGİ olarak
  * kullanır (kilit ikonu) — kapıyı sunucu uygular.
  */
-export type FeatureFlagsView = FeatureFlags & { settingsPasswordRequired?: boolean };
+/**
+ * ⚠️ `numberSources` da bayrak DEĞİL, aynı gerekçeyle yanıta ayrıca eklenir:
+ * istemci "elle numara alanını çizeyim mi, zorunlu mu" kararını buradan verir.
+ * Yeni bir uç açılmadı — izin guard'sız uç sayısı cırcırlı bir tabandır ve onu
+ * bir form ayrıntısı için yükseltmek kapıyı gevşetirdi.
+ */
+export type FeatureFlagsView = FeatureFlags & {
+  settingsPasswordRequired?: boolean;
+  numberSources?: NumberSourceInfo[];
+};
 
 export const featureFlagService = {
   get: (): Promise<ApiResponse<FeatureFlagsView>> =>

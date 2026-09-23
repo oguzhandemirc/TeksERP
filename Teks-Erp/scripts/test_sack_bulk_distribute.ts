@@ -49,7 +49,10 @@ const shipmentIds: string[] = [];
 /** Depoda, içinde `n` top olan bir çuval kur. */
 async function cuvalKur(n: number, metraj = 50): Promise<string> {
   const sack = (
-    await shippingService.openSack({ customerId: CUSTOMER, sackNo: `${P}-S${sackIds.length}` }, ADMIN)
+    // ⚠️ Elle çuval no VERİLMEZ: çuval OKUTULAN bir seri ve elle değer kendi
+    // türüne çözülmek zorunda; fikstür ön eki bunu bozardı. Numarayı sunucu
+    // üretir, temizlik toplanan id'lerden yürür.
+    await shippingService.openSack({ customerId: CUSTOMER }, ADMIN)
   ).data as { id: string };
   sackIds.push(sack.id);
   for (let i = 0; i < n; i++) {

@@ -156,6 +156,7 @@ import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason
 import { workOrderBoundOnly, workOrderStepIdOf } from "./helpers/dispatch-header.helper";
 import { hata } from "../lib/logger";
 import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
+import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -1032,6 +1033,9 @@ export class WorkOrderService {
       manualWorkOrderNumber = data.batchNumber.trim();
       await this.assertWorkOrderNumberUnique(manualWorkOrderNumber);
     }
+    // `numberSource` kapısı KÖPRÜ ALANIN ardından: kullanıcı ne gönderdiyse
+    // ONUN üzerinden karar verilir (alan adı `batchNumber`, anlamı iş emri no).
+    assertManualNumberAllowed("workOrder", manualWorkOrderNumber);
 
     // Otomatik iş emri no sequence çakışırsa (P2002) tx'i baştan dene.
     const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {

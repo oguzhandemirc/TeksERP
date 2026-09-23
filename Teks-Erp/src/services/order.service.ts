@@ -92,6 +92,7 @@ import { Request } from "express";
 import { hata } from "../lib/logger";
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx, withActiveOrderLinks } from "./helpers/order-link.helper";
+import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 
 // ─── Cancel Akışı Karar Matrisi ─────────────────────────────────────────────
 //
@@ -2026,6 +2027,7 @@ export class OrderService extends BaseService {
       typeof data.orderNumber === "string" && data.orderNumber.trim()
         ? data.orderNumber.trim()
         : null;
+    assertManualNumberAllowed("order", manualOrderNumber);
     if (manualOrderNumber) {
       if (manualOrderNumber.length > 40) {
         throw AppError.badRequest("Sipariş numarası en fazla 40 karakter olabilir");

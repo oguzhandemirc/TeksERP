@@ -17,6 +17,8 @@ import { Label } from "@/components/ui/label";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 import type { PackingGroup, SackSearchRow } from "./types";
+import { featureFlagService } from "@/services/featureFlagService";
+import { manualFieldState, numberSourceOf, type ManualFieldState } from "@/lib/number-source";
 
 const MAX_NOTE = 500;
 
@@ -100,7 +102,16 @@ function useAssignGroup(sacks: AssignableSack[] | null, onOpenChange: (o: boolea
       ? "Seçimde birden çok cari var — grup cariye özeldir, tek cari seçin."
       : null;
 
-  return { open, rows, hedef, setHedef, ad, setAd, not, setNot, openGroups, mut, engel };
+  // ⚠️ Alanın hâli SUNUCUDAN gelir, panel kendi kuralını yazmaz; bayrak yükü
+  // zaten açılışta çekiliyor (`numberSources`). Yük yoksa BUGÜNKÜ davranış sürer.
+  const { data: bayraklar } = useQuery({
+    queryKey: ["feature-flags"],
+    queryFn: () => featureFlagService.get(),
+    staleTime: 60_000,
+  });
+  const adHali = manualFieldState(numberSourceOf(bayraklar?.data?.numberSources, "packingLotName"));
+
+  return { open, rows, hedef, setHedef, ad, setAd, not, setNot, openGroups, mut, engel, adHali };
 }
 
 export function AssignPackingGroupDialog({
@@ -116,7 +127,7 @@ export function AssignPackingGroupDialog({
   /** Sevk partisi modu: "Partiye Al / Transfer" — hedefte yeni ambalaj no, kaynakta boşluk. */
   lot?: boolean;
 }) {
-  const { open, rows, hedef, setHedef, ad, setAd, not, setNot, openGroups, mut, engel } =
+  const { open, rows, hedef, setHedef, ad, setAd, not, setNot, openGroups, mut, engel, adHali } =
     useAssignGroup(sacks, onOpenChange, onDone);
 
   return (
@@ -143,6 +154,7 @@ export function AssignPackingGroupDialog({
             openGroups={openGroups}
             ad={ad}
             setAd={setAd}
+            adHali={adHali}
             not={not}
             setNot={setNot}
           />
@@ -170,6 +182,7 @@ function TargetForm({
   openGroups,
   ad,
   setAd,
+  adHali,
   not,
   setNot,
 }: {
@@ -178,6 +191,8 @@ function TargetForm({
   setHedef: (v: string) => void;
   openGroups: PackingGroup[];
   ad: string;
+  /** Elle ad alanının hâli — SUNUCUDAKİ `numberSource` ayarının karşılığı. */
+  adHali: ManualFieldState;
   setAd: (v: string) => void;
   not: string;
   setNot: (v: string) => void;
@@ -202,16 +217,23 @@ function TargetForm({
 
       {hedef === "yeni" && (
         <>
-          <div className="space-y-1.5">
-            <Label htmlFor="pg-ad">Ad (boş bırakılırsa sıradaki numara)</Label>
-            <Input
-              id="pg-ad"
-              value={ad}
-              maxLength={64}
-              placeholder="örn. Cuma tırı"
-              onChange={(e) => setAd(e.target.value)}
-            />
-          </div>
+          {/* ⚠️ Alanın hâli SUNUCUDAN: `numberSource` SYSTEM ise ad elle
+              verilemez ve kutu HİÇ ÇİZİLMEZ — çizilseydi kullanıcı doldurur,
+              sunucu 400 verir ve hatayı ancak kaydet'ten sonra görürdü. */}
+          {adHali !== "hidden" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="pg-ad">
+                {adHali === "required" ? "Ad (zorunlu)" : "Ad (boş bırakılırsa sıradaki numara)"}
+              </Label>
+              <Input
+                id="pg-ad"
+                value={ad}
+                maxLength={64}
+                placeholder="örn. Cuma tırı"
+                onChange={(e) => setAd(e.target.value)}
+              />
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="pg-not">Grup notu (opsiyonel)</Label>
             <Textarea
