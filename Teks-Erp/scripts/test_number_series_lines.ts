@@ -1,7 +1,8 @@
 // =============================================================================
 // BEKÇİ — BİÇİM ZAMAN ÇİZGİSİ (`number_series_lines`, D4①, 2026-09-23)
 // =============================================================================
-//   §1 GÖÇ tek seferlik + damgalı; satırlar YARATILDIKTAN SONRA koşar
+//   §1 GÖÇ satırlar YARATILDIKTAN SONRA koşar ve SERİ BAŞINA İDEMPOTENTTİR:
+//      satırı olmayan seri her boot'ta ONARILIR (§1c), olanına dokunulmaz
 //   §2 ⭐ ÖNBELLEK = YÜRÜRLÜKTEKİ SATIR: `number_series` biçim kolonları, o
 //      serinin EN SON `effectiveFrom`lu satırıyla birebir
 //   §3 ⭐ EMEKLİ ÖN EK KÜMESİ = GEÇMİŞ SATIRLARIN ön ekleri (iki yönlü)
@@ -20,11 +21,26 @@
 //    konunca §4 ❌ · göç damgası kaldırılınca §1 ❌ · emekli ön ek satır olarak
 //    yazılmayınca §3 ❌.
 //
+// ⭐ §1c İKİ KOLLU SONDA (2026-09-23, gerçek bir saha hasarından doğdu): bütün
+//    satırlar silinip DAMGA bırakıldı — eski kod (damga kapısı) `yazılan=0`,
+//    tablo BOŞ kaldı ve bir daha asla dolmadı; yeni kod `yazılan=53`, ikinci
+//    koşum `0`. Hasar teorik değildi: bir iniş DB'si bu hâlde bulundu.
+//    ⚠️ SONDANIN KENDİSİ AYNI HASARI ÜRETİYORDU: §1c hedef serinin satırlarını
+//    siliyor, onarım YENİ id'lerle yazıyor ve koşum sonundaki anlık-görüntü
+//    temizliği o id'leri "bu koşumda doğdu" diye siliyordu ⇒ seri satırsız
+//    kalıyordu. Sonda artık TAM SATIRLARI (id dahil) geri yazıyor.
+//    ⚠️ İKİNCİ BULGU: sentinel tarih `formatChangedAt` kolonuna SIZIYOR (kolon,
+//    yürürlükteki satırın önbelleğidir) ve kolonun `isSentinel` karşılığı YOK.
+//    İkinci onarımda 1970 GERÇEK tarih sanılıyor ve satır `isSentinel: false`
+//    doğuyordu. Ufuk artık tek sabit: `SENTINEL_DATE_HORIZON` — üretici de bekçi
+//    de onu okur ("sentinel nedir"in iki cevabı olamaz).
+//
 // Çalıştır: npx tsx scripts/test_number_series_lines.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import {
   FORMAT_LINES_MIGRATION_STAMP,
+  SENTINEL_DATE_HORIZON,
   reconcileNumberSeries,
 } from "../src/jobs/number-series-catalog.job";
 import { refreshNumberSeriesCache, resolveSeriesFormat } from "../src/services/number-series.service";
@@ -110,10 +126,57 @@ async function main(): Promise<void> {
   const damga = await prisma.systemSetting.findUnique({
     where: { key: FORMAT_LINES_MIGRATION_STAMP }, select: { key: true },
   });
-  check("§1a göç damgası basıldı", damga !== null);
+  check("§1a göç damgası basıldı (bilgi amaçlı — KAPI DEĞİL)", damga !== null);
   const r2 = await reconcileNumberSeries();
-  check("§1b ⭐ damga varken göç BİR DAHA KOŞMAZ", r2.formatLinesCreated === null,
+  check("§1b ⭐ ikinci koşum HİÇBİR satır yazmaz (seri başına idempotent)",
+    r2.formatLinesCreated === 0,
     `ilk koşum: ${String(r1.formatLinesCreated)} · ikinci: ${String(r2.formatLinesCreated)}`);
+  // ⭐ ASIL İDDİA (2026-09-23 saha bulgusu): DAMGA "iş yapıldı" der ama satırların
+  // VARLIĞINI garanti etmez. Satırları silinmiş bir kurulumda eski göç, damgayı
+  // görüp atlıyordu ve tablo KALICI boş kalıyordu — emekli biçimler, zaman
+  // çizgisi ve `retiredFormats` sessizce yoktu. Onarım seri başına olmalı.
+  const ONARIM_HEDEFI = "swatch";
+  // ⚠️ TAM SATIR SAKLANIR (id dahil), yalnız karşılaştırılacak alanlar değil:
+  // sonda satırları SİLİYOR ve onarım YENİ id'lerle yazıyor. Yeni id'ler koşum
+  // sonundaki anlık-görüntü temizliğinde "bu koşumda doğdu" diye silinir ve
+  // seri SATIRSIZ kalırdı — yani sonda, ölçtüğü hasarın aynısını üretirdi.
+  // Geri alma, sondadan ÖNCEKİ ANA döner: aynı id'lerle aynı satırlar.
+  const oncekiTamSatirlar = await prisma.numberSeriesLine.findMany({
+    where: { seriesKey: ONARIM_HEDEFI },
+    orderBy: { effectiveFrom: "asc" },
+  });
+  const oncekiSatirlar = oncekiTamSatirlar.map((x) => ({
+    prefix: x.prefix, dateSegment: x.dateSegment, digits: x.digits,
+    separator: x.separator, origin: x.origin,
+  }));
+  await prisma.numberSeriesLine.deleteMany({ where: { seriesKey: ONARIM_HEDEFI } });
+  check("§1c körlük zemini: hedef serinin satırları GERÇEKTEN silindi",
+    (await prisma.numberSeriesLine.count({ where: { seriesKey: ONARIM_HEDEFI } })) === 0 &&
+      oncekiSatirlar.length > 0,
+    `${oncekiSatirlar.length} satır silindi`);
+  const r3 = await reconcileNumberSeries();
+  const onarilan = await prisma.numberSeriesLine.findMany({
+    where: { seriesKey: ONARIM_HEDEFI },
+    select: { prefix: true, dateSegment: true, digits: true, separator: true, origin: true },
+    orderBy: { effectiveFrom: "asc" },
+  });
+  check("§1c ⭐ DAMGA DURURKEN bile satırı olmayan seri ONARILIR (kurulum kendini toparlar)",
+    onarilan.length > 0 && r3.formatLinesCreated > 0,
+    `${onarilan.length} satır · koşum ${r3.formatLinesCreated} yazdı`);
+  check("§1c onarılan satır kolon önbelleğiyle UYUMLU (yürürlükteki biçim geri geldi)",
+    onarilan.at(-1)?.prefix === oncekiSatirlar.at(-1)?.prefix &&
+      onarilan.at(-1)?.digits === oncekiSatirlar.at(-1)?.digits,
+    `${onarilan.at(-1)?.prefix}/${onarilan.at(-1)?.digits}`);
+  const r4 = await reconcileNumberSeries();
+  check("§1c onarımdan SONRA yine idempotent (ikinci onarım 0 yazar)",
+    r4.formatLinesCreated === 0, String(r4.formatLinesCreated));
+  await prisma.numberSeriesLine.deleteMany({ where: { seriesKey: ONARIM_HEDEFI } });
+  await prisma.numberSeriesLine.createMany({ data: oncekiTamSatirlar });
+  await refreshNumberSeriesCache();
+  check("§1c sonda GERİ ALINDI: hedef seri sondadan ÖNCEKİ satırlarında",
+    (await prisma.numberSeriesLine.count({ where: { seriesKey: ONARIM_HEDEFI } })) ===
+      oncekiTamSatirlar.length,
+    `${oncekiTamSatirlar.length} satır`);
 
   const seriler = await prisma.numberSeries.findMany({
     select: { key: true, prefix: true, dateSegment: true, digits: true, separator: true,
@@ -158,11 +221,21 @@ async function main(): Promise<void> {
     emekliAyrisan.length === 0, emekliAyrisan.slice(0, 3).join(" · ") || "ayrışma yok");
 
   // ── §5 SENTINEL BEYANLI ───────────────────────────────────────────────────
-  const sentinelsiz = await prisma.numberSeriesLine.count({
-    where: { isSentinel: false, effectiveFrom: { lt: new Date("2000-01-01T00:00:00.000Z") } },
+  // ⚠️ SAYI DEĞİL SATIR: "1 beyansız" bir hata mesajı TEŞHİS ETTİRMEZ — hangi
+  // seri, hangi ön ek, hangi tarih olduğu yazılmadan kırmızının kaynağı elle
+  // aranır (2026-09-23'te tam olarak bu oldu).
+  const sentinelsizSatirlar = await prisma.numberSeriesLine.findMany({
+    // ⚠️ EŞİK BEKÇİDE YAZILI DEĞİL, ÜRETİCİDEN OKUNUR: "sentinel nedir"in iki
+    // ayrı cevabı olursa bekçi kendi tanımına göre yeşil verir, üretim başka
+    // tanıma göre satır yazar ve ikisi de haklı görünür.
+    where: { isSentinel: false, effectiveFrom: { lt: SENTINEL_DATE_HORIZON } },
+    select: { seriesKey: true, prefix: true, effectiveFrom: true, origin: true },
   });
+  const sentinelsiz = sentinelsizSatirlar.length;
   check("§5 ⭐ 2000 öncesi her satır SENTİNEL olarak beyanlı (rapor '1970'te değişti' demez)",
-    sentinelsiz === 0, `${sentinelsiz} beyansız`);
+    sentinelsiz === 0,
+    sentinelsizSatirlar.map((x) => `${x.seriesKey}:${x.prefix}@${x.effectiveFrom.toISOString()}/${x.origin}`).join(" · ") ||
+      "beyansız satır yok");
 
   // ── §6 KÖKEN: tahmin mi, kayıt mı? (D4②) ─────────────────────────────────
   // ⚠️ AYRI ALAN, not değil: "ölçüldü mü, elle mi, TAHMİN mi" beyanı bu depoda
