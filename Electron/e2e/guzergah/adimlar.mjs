@@ -105,6 +105,8 @@ async function eksenSec(page, etiket, secenekAdi) {
   return false;
 }
 
+import { SEVK_YONU_ADIMLARI } from "./adimlar-sevk-yonu.mjs";
+
 export const ADIMLAR = [
   // ── A · HAZIRLIK ────────────────────────────────────────────────────────────
   {
@@ -171,7 +173,8 @@ export const ADIMLAR = [
       if (!(await musteriKutu.isChecked())) await musteriKutu.check();
       const tedarikciKutu = d.getByLabel("Tedarikçi", { exact: true });
       if (await tedarikciKutu.isChecked()) await tedarikciKutu.uncheck();
-      await sec(d.getByRole("combobox").filter({ hasText: /Yok|Yurtiçi|Yurtdışı/ }).first(), "Yurtiçi");
+      // Sevk yönü seçicisi (2026-09-23: "Sevk varsayılanı · Yok" → "Sevk yönü · Seçilmedi (ilk sevkte sorulur)").
+      await sec(d.getByRole("combobox").filter({ hasText: /Seçilmedi|Yurtiçi|Yurtdışı/ }).first(), "Yurtiçi");
       await tikla("Kaydet", { icinde: d, exact: true });
       await d.waitFor({ state: "detached", timeout: 15_000 });
       // ② TEST Tedarikçi — yalnız Tedarikçi rolü
@@ -993,6 +996,9 @@ export const ADIMLAR = [
         await page().waitForTimeout(1200); // önizleme sorgusu
       };
       await musteriSec(i4Olcum.digerMusteri);
+      // Yönü boş cari (2026-09-23 kilit): ilk sevkte yön bir kez seçilir; seçilmeden "Sevk Et" pasif.
+      const ilkSecim = sd.getByTestId("destination-first-pick");
+      if (await ilkSecim.count()) await ilkSecim.getByRole("button", { name: "Yurtiçi", exact: true }).click({ timeout: 15_000 });
       i4Olcum.onizlemeSahipVar = await sd.getByText(/emanet|sahib/i).count();
       const sevkYaniti = () => page().waitForResponse((r) => r.request().method() === "POST" && /\/api\/shipping\/shipments(\?|$)/.test(r.url()), { timeout: 30_000 });
       const [red] = await Promise.all([sevkYaniti(), sd.getByRole("button", { name: "Sevk Et", exact: true }).click({ timeout: 15_000 })]);
@@ -1521,10 +1527,10 @@ export const ADIMLAR = [
       await gor(page().getByLabel("Müşteri", { exact: true }).filter({ visible: true }).first(), { sure: 20_000 });
       await gor(page().getByText(/Bu rapor nasıl okunur|Sipariş/).filter({ visible: true }).last(), { sure: 20_000 }); await page().waitForTimeout(800);
       if (!(await eksenSec(page(), "Müşteri", buyukTr(AD.musteri)))) throw new Error("müşteri ekseni seçilemedi");
-      // Sevk hedefi: shadcn Select — etiketi "Müşteri varsayılanı" (niteleyici etikette).
-      await page().getByLabel("Müşteri varsayılanı", { exact: true }).filter({ visible: true }).first().click({ timeout: 15_000 });
+      // Yön: shadcn Select — etiketi "Cari/şube yönü (bugünkü)" (niteleyici etikette; 2026-09-23'e kadar "Müşteri varsayılanı").
+      await page().getByLabel("Cari/şube yönü (bugünkü)", { exact: true }).filter({ visible: true }).first().click({ timeout: 15_000 });
       await page().getByRole("option", { name: /Yurtiçi/ }).first().click({ timeout: 15_000 });
-      await page().getByText(/SÜZGEÇ — Sevk hedefi/).filter({ visible: true }).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      await page().getByText(/SÜZGEÇ — Cari\/şube yönü/).filter({ visible: true }).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
       // Müşteri şerhi etiketini CEVAPTAKİ seçeneklerden alır — süzülmüş sorgu dönene dek görünmez, onu da bekle.
       await page().getByText(/SÜZGEÇ — Müşteri: /).filter({ visible: true }).first().waitFor({ timeout: 15_000 }).catch(() => undefined);
       const m1 = await page().locator("body").innerText();
@@ -1535,8 +1541,8 @@ export const ADIMLAR = [
       l4Olcum.suzgecliIstek = gidenler.filter((x) => /customerId=/.test(x) && /destination=DOMESTIC/.test(x)).length;
       l4Olcum.tani = `tetik=${(await page().getByLabel("Müşteri", { exact: true }).filter({ visible: true }).first().textContent().catch(() => "?"))?.trim()} | ${(m1.match(/SÜZGEÇ[^\n]*/g) ?? []).join(" || ")}`;
       l4Olcum.notMusteri = /SÜZGEÇ — Müşteri: .*MÜŞTERİ/.test(m1) ? 1 : 0;
-      l4Olcum.notHedef = /SÜZGEÇ — Sevk hedefi: Yurtiçi/.test(m1) ? 1 : 0;
-      l4Olcum.notHedefSerh = /Müşteri kartındaki VARSAYILAN hedef — sevkin fiili hedefi değil/.test(m1) ? 1 : 0;
+      l4Olcum.notHedef = /SÜZGEÇ — Cari\/şube yönü \(bugünkü\): Yurtiçi/.test(m1) ? 1 : 0;
+      l4Olcum.notHedefSerh = /BUGÜNKÜ cari\/şube yönü .*sevkin donmuş yönü değil/.test(m1) ? 1 : 0;
       // Seçimi temizle (X) → müşteri şerhi düşer.
       await page().getByTitle("Süzgeci temizle").filter({ visible: true }).first().click({ timeout: 15_000 });
       await page().waitForTimeout(1200);
@@ -1998,4 +2004,6 @@ export const ADIMLAR = [
       { ad: "customers değişmedi; izinler geri yüklendi (2xx) ve customer:write yeniden var", sql: `SELECT count(*)::int n FROM user_permissions up JOIN permissions p ON p.id=up."permissionId" JOIN users u ON u.id=up."userId" WHERE u.username='e2e-yonetici' AND p.code='customer:write'`, oku: (r) => `${p4Olcum.musteriSonra - p4Olcum.musteriOnce}:${p4Olcum.geriDurum}:${r[0].n}`, beklenen: (v) => /^0:20\d:1$/.test(v) },
     ],
   },
+  // ── SY · sevk yönü kilidi + Yurtiçi/Yurtdışı Satış (2026-09-23) — ayrı dosyada.
+  ...SEVK_YONU_ADIMLARI,
 ];
