@@ -14,7 +14,7 @@
 import type { SeriesCounterInput } from "./types";
 
 export interface CounterFieldError {
-  alan: "startValue" | "step" | "maxValue";
+  alan: "startValue" | "step" | "maxValue" | "wrap";
   mesaj: string;
 }
 
@@ -32,6 +32,10 @@ export function counterErrors(c: SeriesCounterInput): CounterFieldError[] {
     c.maxValue < c.startValue
   ) {
     out.push({ alan: "maxValue", mesaj: "Üst sınır, başlangıç değerinden küçük olamaz." });
+  }
+  // Sarma üst sınırsız ANLAMSIZ — sunucu da 400 verir (`NUMBER_SERIES_WRAP_WITHOUT_MAX`).
+  if (c.wrap && c.maxValue === null) {
+    out.push({ alan: "wrap", mesaj: "Başa dönme için önce üst sınır girilmeli." });
   }
   return out;
 }

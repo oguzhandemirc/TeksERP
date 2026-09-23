@@ -20,14 +20,9 @@
 
 import { Prisma, PrintedDocType, RollStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
-import {
-  SHORT_BATCH_MAX,
-  SHORT_BATCH_MIN,
-  buildShortBatchCode,
-  nextShortBatchSeq,
-  parseShortBatchCode,
-} from "../utils/code-format";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, nextSeriesNo, resolveSeriesFormat } from "./number-series.service";
+import { seriesCodeSeq, seriesPosixRegex } from "./helpers/series-format.helper";
+import { nextCounterSeq, seriesCounterReadsLastBorn } from "./helpers/series-counter.helper";
 import { AuditService } from "./audit.service";
 import { resolveBatchShortNumberEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -125,48 +120,69 @@ export async function generateBatchNumberTx(
 ): Promise<string> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BATCH_NUMBER_LOCK_NS}::int, ${BATCH_NUMBER_LOCK_KEY}::int)`;
 
+  // ⚠️ İKİ REJİM, TEK ÜRETEÇ YOLU (`nextSeriesNo`): kapsam damgası · çakışma
+  // atlaması · sayaç ayarları · sarma — hepsi orada tek kez yaşıyor. Rejimler
+  // yalnız HANGİ SATIRLARI okuduklarıyla ayrışır, numarayı nasıl kurduklarıyla
+  // değil (ikinci bir hesap "ayrışan yüzey" sınıfına girerdi).
   if (await resolveBatchShortNumberEnabled(tx)) {
-    return buildShortBatchCode(nextShortBatchSeq(await readLastShortBatchSeqTx(tx)));
+    return nextSeriesNo("batchShort", (_prefix, fmt) => readWrapRowsTx(tx, fmt), date);
   }
 
-  const fmt = resolveSeriesFormat("batchDaily");
-  const prefix = seriesPrefix(fmt, date);
-  const todays = await tx.batch.findMany({
-    where: { batchNumber: { gte: prefix, startsWith: prefix } },
-    select: { batchNumber: true },
-  });
-  const seq = seriesSeqFrom(
-      fmt,
-    todays.map((b) => b.batchNumber),
-    prefix,
+  return nextSeriesNo(
+    "batchDaily",
+    (prefix) =>
+      tx.batch
+        .findMany({
+          where: { batchNumber: { gte: prefix, startsWith: prefix } },
+          select: { batchNumber: true, createdAt: true },
+        })
+        .then((rows) => rows.map((b) => ({ code: b.batchNumber, createdAt: b.createdAt }))),
+    date,
   );
-  // Seride digits=1 → padStart(1) seq ≥ 1 için no-op: dolgu yok, hane serbest.
-  return formatSeriesCode(fmt, seq, date);
 }
 
 /**
- * Sayacın KAYNAĞI: en son doğan kısa parti numarası (yoksa `null` → P01'den başlar).
+ * Sayacın KAYNAĞI: EN SON DOĞAN koddan okunan sıra (yoksa `null` → seri başından).
  *
  * Neden saklanan bir sayaç DEĞİL de veriden türetme: bu repo tüm sıra üretimini
- * veriden türetiyor (`nextDailySeq`, `nextPrefixedSequenceTx`) ve saklanan sayaç
- * "ayar ne diyor" ile "veri ne diyor" diye ikinci bir doğruluk kaynağı açardı.
- * Türetilmiş sayaç kendi kendini onarır ve yedekten geri yüklemede tutarlı gelir.
+ * veriden türetiyor ve saklanan sayaç "ayar ne diyor" ile "veri ne diyor" diye
+ * ikinci bir doğruluk kaynağı açardı. Türetilmiş sayaç kendi kendini onarır ve
+ * yedekten geri yüklemede tutarlı gelir.
  *
- * ⚠️ Regex SADECE kısa biçimi kabul eder (`P01`-`P99`) — eski günlük kodlar
- * (`P0508260019`) ve `P00` dışarıda kalır. Günlük kodlar sızsaydı bayrak ilk
- * açıldığında sayaç P01 yerine "son günlük sıra + 1"den başlardı.
+ * ⚠️ SIRALAMA `createdAt DESC` — `batchNumber` ile SIRALANAMAZ: sarmalı seride
+ * numara döner, en büyük numara "en son" demek değildir (P99'dan sonra doğan P01
+ * en yenisidir). Destek index: `batches_createdAt_idx`.
  *
- * Sıralama `createdAt DESC` — `batchNumber` ile SIRALANAMAZ (numara sarıyor, en
- * büyük numara "en son" demek değil; P99'dan sonra doğan P01 en yenisidir).
- * Destek index: `batches_createdAt_idx` (aynı migration).
+ * ⚠️ SÜZGEÇ BİÇİMDEN DOĞAR (`seriesPosixRegex`), elle yazılmış bir literal
+ * DEĞİL — K27'nin dersi: ön ek panelden değişince sabit süzgeç bütün satırları
+ * eler ve sayaç sessizce 1'de takılır. Kapsam damgası da SQL'e iner: biçim
+ * değiştikten sonra yalnız YENİ rejimde doğan kodlar sayacı sürükler.
+ *
+ * ⚠️ `TAIL_SCAN` bir SINIRDIR ve gerekçesi dar: aralık DARALTILIRSA (99 → 50)
+ * en yeni kodlar aralık dışı kalabilir ve sayacın kaynağı onların ARKASINDADIR.
+ * Ellisi de aralık dışıysa `null` dönülür, yani seri başından devam edilir —
+ * bu zaten bugünkü "kayıt yok" yolunun aynısıdır, yeni bir hata yolu açmaz.
  */
-async function readLastShortBatchSeqTx(tx: Prisma.TransactionClient): Promise<number | null> {
-  const rows = await tx.$queryRaw<Array<{ batchNumber: string }>>`
-    SELECT "batchNumber" FROM batches
-    WHERE "batchNumber" ~ '^P(0[1-9]|[1-9][0-9])$'
+const TAIL_SCAN = 50;
+
+async function readWrapRowsTx(
+  tx: Prisma.TransactionClient,
+  fmt: ReturnType<typeof resolveSeriesFormat>,
+): Promise<Array<{ code: string; createdAt: Date }>> {
+  const re = seriesPosixRegex(fmt);
+  // ⚠️ ARALIK SÜZGECİ SQL'DE DE VAR, yalnız bellek-içi ikinci hatta değil.
+  // Gevşek bir SQL süzgeci "en son satır" olarak aralık dışı bir kod döndürür,
+  // bellek-içi yüklem onu eler ve sayaç seri başına düşer: canlı P01 dururken
+  // ikinci bir P01 doğar. İki hat AYNI kaynaktan (biçim + aralık) türer.
+  const min = fmt.startValue ?? 1;
+  const max = fmt.maxValue ?? 10 ** fmt.digits - 1;
+  const rows = await tx.$queryRaw<Array<{ batchNumber: string; createdAt: Date }>>`
+    SELECT "batchNumber", "createdAt" FROM batches
+    WHERE "batchNumber" ~ ${re}
+      AND substring("batchNumber" from '[0-9]+$')::bigint BETWEEN ${min} AND ${max}
     ORDER BY "createdAt" DESC
-    LIMIT 1`;
-  return parseShortBatchCode(rows[0]?.batchNumber);
+    LIMIT ${TAIL_SCAN}`;
+  return rows.map((r) => ({ code: r.batchNumber, createdAt: r.createdAt }));
 }
 
 /**
@@ -184,29 +200,39 @@ export async function getBatchNumberState(): Promise<{
   next: number | null;
   lastCode: string | null;
   nextCode: string | null;
+  minCode: string;
+  maxCode: string;
 }> {
   const enabled = await resolveBatchShortNumberEnabled();
+  const fmt = resolveSeriesFormat("batchShort");
+  // ⚠️ SINIRLAR AYARDAN OKUNUR, koddan değil: panel cümlesi "P01…P99" diye
+  // ÇİVİLENSEYDİ fabrika aralığı 1–999 yaptığında ekran hâlâ eskisini söylerdi.
+  const min = fmt.startValue ?? 1;
+  const max = fmt.maxValue ?? 10 ** fmt.digits - 1;
+  // Tarih TEK KEZ okunur: ön ek ile kodun aynı andan doğması sözleşmedir
+  // (gece yarısını iki ayrı `new Date()` ile geçmek iki farklı güne yazardı).
+  const now = new Date();
+  const minCode = formatSeriesCode(fmt, min, now);
+  const maxCode = formatSeriesCode(fmt, max, now);
   if (!enabled) {
-    return {
-      enabled,
-      min: SHORT_BATCH_MIN,
-      max: SHORT_BATCH_MAX,
-      last: null,
-      next: null,
-      lastCode: null,
-      nextCode: null,
-    };
+    return { enabled, min, max, last: null, next: null, lastCode: null, nextCode: null, minCode, maxCode };
   }
-  const last = await readLastShortBatchSeqTx(prisma as unknown as Prisma.TransactionClient);
-  const next = nextShortBatchSeq(last);
+  // ⚠️ ÖNİZLEME ÜRETİM YOLUNUN KENDİSİNDEN: "sıradaki numara" ikinci kez
+  // hesaplansaydı sarma · kapsam · atlama kuralları iki yerde yaşardı ve biri
+  // bayatlardı ("türetilmiş alan / ayrışan yüzey").
+  const rows = await readWrapRowsTx(prisma as unknown as Prisma.TransactionClient, fmt);
+  const last = rows.map((r) => seriesCodeSeq(fmt, r.code)).find((n) => n !== null) ?? null;
+  const nextCode = await nextSeriesNo("batchShort", async () => rows, now);
   return {
     enabled,
-    min: SHORT_BATCH_MIN,
-    max: SHORT_BATCH_MAX,
+    min,
+    max,
     last,
-    next,
-    lastCode: last === null ? null : buildShortBatchCode(last),
-    nextCode: buildShortBatchCode(next),
+    next: seriesCodeSeq(fmt, nextCode),
+    lastCode: last === null ? null : formatSeriesCode(fmt, last, now),
+    nextCode,
+    minCode,
+    maxCode,
   };
 }
 

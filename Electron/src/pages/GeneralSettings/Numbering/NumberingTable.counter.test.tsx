@@ -37,6 +37,7 @@ function seriesRow(over: Partial<NumberSeriesRow> = {}): NumberSeriesRow {
     startValue: null,
     step: null,
     maxValue: null,
+    wrap: false,
     preview: "IE2309230001",
     ...over,
   };

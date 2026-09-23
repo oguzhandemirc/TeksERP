@@ -105,6 +105,12 @@ const counterSchema = z
       .int("Üst sınır tam sayı olmalı.")
       .min(1, "Üst sınır en az 1 olabilir.")
       .nullable(),
+    // ⚠️ DÖRDÜNCÜ ALAN ve TEK VARSAYILANLI OLAN — üstteki "hepsi zorunlu" kuralının
+    // BEYANLI istisnası. Gerekçe: üç sayı alanında `null` gerçek bir değerdir
+    // ("ayarı kaldır") ve eksik alan onunla karışırdı; `wrap` BOOLEAN'dır, üçüncü
+    // hâli yoktur. Varsayılanı BUGÜNKÜ DAVRANIŞTIR (sınırda hata) ⇒ alanı hiç
+    // göndermeyen eski bir panel gövdesi 400 almaz ve davranışı değişmez.
+    wrap: z.boolean({ message: "Sarma ayarı doğru/yanlış olmalı." }).default(false),
   })
   .strict();
 

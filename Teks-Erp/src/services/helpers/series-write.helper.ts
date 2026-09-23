@@ -222,7 +222,13 @@ export function assertSeriesFormatWritable(key: string): void {
 /** Panelin yazdığı tek uç. Eski ön ek EMEKLİYE ayrılır (geçmiş kod okunmaya devam eder). */
 export async function updateSeriesFormat(
   key: string,
-  next: Omit<NumberSeriesFormat, "retiredPrefixes" | "infix" | "formatChangedAt">,
+  // ⚠️ SAYAÇ ALANLARI BİÇİM UCUNDAN DIŞLANIR (`wrap` dahil): ikisi ayrı uç, ayrı
+  // kilit. Dışlanmasaydı biçim kaydetmek sarmayı da sessizce ezerdi — panelde
+  // dokunulmamış bir kutunun değeri, başka bir formun kaydında değişirdi.
+  next: Omit<
+    NumberSeriesFormat,
+    "retiredPrefixes" | "infix" | "formatChangedAt" | "wrap" | "startValue" | "step" | "maxValue"
+  >,
   userId?: string,
   /**
    * İLERİ TARİHLİ GEÇİŞ (D4③): "1 Ocak'tan itibaren şu biçim".
@@ -318,6 +324,8 @@ export interface SeriesCounterInput {
   startValue: number | null;
   step: number | null;
   maxValue: number | null;
+  /** Üst sınıra varınca başa dön (D2③). Üst sınır yoksa ANLAMSIZDIR ve reddedilir. */
+  wrap: boolean;
 }
 
 /**
@@ -359,6 +367,15 @@ export function assertSeriesCounterAllowed(key: string, next: SeriesCounterInput
       key,
     });
   }
+  // ③ SARMA ÜST SINIRSIZ OLAMAZ — sarılacak bir sınır yoktur. Sessizce kabul
+  // edilseydi panel "açık" gösterir, sayaç sonsuza kadar artardı: ayar var,
+  // etkisi yok ("çıkışsız kapı" sınıfı).
+  if (next.wrap && next.maxValue === null) {
+    throw AppError.badRequest(
+      "Başa dönme yalnız bir üst sınır tanımlıysa anlamlıdır; önce üst sınırı belirleyin.",
+      { code: "NUMBER_SERIES_WRAP_WITHOUT_MAX", key },
+    );
+  }
 }
 
 /**
@@ -387,7 +404,12 @@ export async function updateSeriesCounter(
     action: "UPDATE",
     tableName: "NumberSeries",
     recordId: row.id,
-    oldData: { startValue: current.startValue ?? null, step: current.step ?? null, maxValue: current.maxValue ?? null },
+    oldData: {
+      startValue: current.startValue ?? null,
+      step: current.step ?? null,
+      maxValue: current.maxValue ?? null,
+      wrap: current.wrap ?? false,
+    },
     newData: { ...next },
   });
   return row;

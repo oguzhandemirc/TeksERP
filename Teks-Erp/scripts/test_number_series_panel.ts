@@ -316,12 +316,14 @@ async function main(): Promise<void> {
       eksikAlan.length === 0, eksikAlan.map((r) => r.key).join(", "));
 
     // YAPISAL küme KAPALIDIR: "gerekçesi çürüyen kilit, kilit değil kalıntıdır"
-    // (returnDoc emsali). Bugün yalnız ÖLÇÜLMÜŞ iki yapısal bağ var: top
-    // barkodundaki faz harfi ve P01…P99 fiziksel plaka seti. `workOrder`
-    // 2026-09-23'te bu kümeden ÇIKTI (gerekçesi Faz B'ydi, Faz B indi).
+    // (returnDoc emsali). Bugün ÖLÇÜLMÜŞ tek yapısal bağ kaldı: top barkodundaki
+    // faz harfi. `workOrder` 2026-09-23 sabahı çıktı (gerekçesi Faz B'ydi, Faz B
+    // indi); `batchDaily` aynı gün akşam çıktı — gerekçesi ÖTEKİ rejimin biçimiydi
+    // (P01…P99 sarması) ve o rejim kendi serisine (`batchShort`) taşındı, sarma
+    // da `number_series.wrap` kolonuna indi.
     const yapisal = kilitliler.filter((x) => x.lock.kind === "YAPISAL").map((x) => x.key).sort();
-    check("§3b ⭐ YAPISAL kilit kümesi kapalı: yalnız `roll` + `batchDaily`",
-      yapisal.join(",") === "batchDaily,roll", yapisal.join(", ") || "(yok)");
+    check("§3b ⭐ YAPISAL kilit kümesi kapalı: yalnız `roll`",
+      yapisal.join(",") === "roll", yapisal.join(", ") || "(yok)");
 
     // ── §3c OKUMA YÜKLEMİ = YAZMA KAPISI (iki fazlı eşik dahil) ───────────
     // `seriesLock` yalnız Faz B'ye bakıyordu, `assertSeriesFormatWritable` ise
@@ -442,6 +444,16 @@ async function main(): Promise<void> {
     const cakisanPaylasim: string[] = [];
     let karsilastirilan = 0;
     for (const [cift, keys] of paylasan) {
+      // ⚠️ BEYANLI İKİZLER MUAF: `exclusiveWith` çifti aynı kolonu paylaşır ama
+      // bir anda yalnız BİRİ kod üretir (rejim bayrağı), yani sayıları karışamaz.
+      // Muafiyet ÇİFT YÖNLÜ aranır — tek yönlüsü kapıyı çağrı yönüne göre açardı.
+      if (
+        keys.length === 2 &&
+        numberSeriesCatalogEntry(keys[0] as string).exclusiveWith?.key === keys[1] &&
+        numberSeriesCatalogEntry(keys[1] as string).exclusiveWith?.key === keys[0]
+      ) {
+        continue;
+      }
       const onekler = keys.flatMap((k) => {
         const f = resolveSeriesFormat(k);
         return [f.prefix, ...f.retiredPrefixes].map((onek) => ({ k, onek }));
@@ -628,10 +640,15 @@ async function main(): Promise<void> {
 
     // §6b KENDİ MEKANİZMASI — ayar 400 ile reddedilir (sessiz etkisizlik YASAK)
     const kendiSayacli = NUMBER_SERIES_CATALOG.filter((e) => e.ownCounter);
+    // ⚠️ ZEMİN 3 → 2'YE İNDİ (2026-09-23) ve sebebi ÖLÇÜLDÜ, gevşetme DEĞİL:
+    // `batchDaily` kendi mekanizmasını KAYBETTİ — kısa rejim ayrı seriye taşınınca
+    // günlük rejim `nextSeriesNo`nun birebir kalıbına oturdu, yani sayaç ayarları
+    // orada artık ANLAMLI. Zemin popülasyonu takip eder; sabit kalsaydı gerçek bir
+    // sadeleşme kırmızı verirdi.
     check("§6b körlük zemini: kendi sayaç mekanizması BEYANLI seri var",
-      kendiSayacli.length >= 3, kendiSayacli.map((e) => e.key).join(", "));
+      kendiSayacli.length >= 2, kendiSayacli.map((e) => e.key).join(", "));
     const kacan = kendiSayacli.filter(
-      (e) => !throws(() => assertSeriesCounterAllowed(e.key, { startValue: 5, step: null, maxValue: null }),
+      (e) => !throws(() => assertSeriesCounterAllowed(e.key, { startValue: 5, step: null, maxValue: null, wrap: false }),
         "NUMBER_SERIES_COUNTER_OWN"));
     check("§6b ⭐ kendi sayacı olan seride ayar 400 `NUMBER_SERIES_COUNTER_OWN`",
       kacan.length === 0, kacan.map((e) => e.key).join(", ") || `${kendiSayacli.length} seri reddedildi`);
@@ -644,19 +661,19 @@ async function main(): Promise<void> {
 
     // §6c DEĞER KAPISI — DB CHECK'lerinin uygulama ikizi
     check("§6c sıfır/negatif/ondalık reddedilir",
-      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: 0, step: null, maxValue: null }), "NUMBER_SERIES_COUNTER_INVALID") &&
-      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: null, step: -1, maxValue: null }), "NUMBER_SERIES_COUNTER_INVALID") &&
-      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: null, step: null, maxValue: 1.5 }), "NUMBER_SERIES_COUNTER_INVALID"));
+      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: 0, step: null, maxValue: null, wrap: false }), "NUMBER_SERIES_COUNTER_INVALID") &&
+      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: null, step: -1, maxValue: null, wrap: false }), "NUMBER_SERIES_COUNTER_INVALID") &&
+      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: null, step: null, maxValue: 1.5, wrap: false }), "NUMBER_SERIES_COUNTER_INVALID"));
     check("§6c ⭐ üst sınır başlangıcın ALTINDA olamaz",
-      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: 100, step: null, maxValue: 50 }), "NUMBER_SERIES_COUNTER_RANGE_INVALID"));
+      throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: 100, step: null, maxValue: 50, wrap: false }), "NUMBER_SERIES_COUNTER_RANGE_INVALID"));
     check("§6c geçerli ayar KABUL edilir (kapı fazla dar değil)",
-      !throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: 100, step: 10, maxValue: 999 }), "ANY"));
+      !throws(() => assertSeriesCounterAllowed("packingLotCode", { startValue: 100, step: 10, maxValue: 999, wrap: false }), "ANY"));
 
     // §6d YAZMA YOLU — gerçekten yazıyor ve `formatChangedAt`e DOKUNMUYOR
     const oncekiDamga = (await prisma.numberSeries.findUnique({
       where: { key: "packingLotCode" }, select: { formatChangedAt: true },
     }))?.formatChangedAt ?? null;
-    await updateSeriesCounter("packingLotCode", { startValue: 500, step: 10, maxValue: 9000 });
+    await updateSeriesCounter("packingLotCode", { startValue: 500, step: 10, maxValue: 9000, wrap: false });
     sayacDokunulan.push("packingLotCode");
     const yazildi = resolveSeriesFormat("packingLotCode");
     check("§6d ⭐ yazılan ayar YÜRÜRLÜKTEKİ biçime yansıyor (önbellek tazelendi)",
@@ -874,7 +891,7 @@ async function main(): Promise<void> {
       rollDurum.limit === 9999 && rollDurum.source === "rollCounter" && rollDurum.percent !== null,
       `${rollDurum.used}/${rollDurum.limit}`);
     // Fikstür: sınır koy + o sınırın %90'ına gelen bir kod yaz.
-    await updateSeriesCounter("packingLotCode", { startValue: null, step: null, maxValue: 10 });
+    await updateSeriesCounter("packingLotCode", { startValue: null, step: null, maxValue: 10, wrap: false });
     sayacDokunulan.push("packingLotCode");
     const pFull = seriesPrefix(resolveSeriesFormat("packingLotCode"), new Date());
     if (musteri) {
@@ -990,7 +1007,7 @@ async function main(): Promise<void> {
     // ⚠️ ÖNCE ÜST SINIR KALDIRILIR: §7c bu seride sınırı 10'a çekiyor ve sıra ona
     // dayandığında "sıradaki numara" ölçülemez olur (doğru davranış, ama ölçmek
     // istediğimiz eksen bu değil). Bölümler arası bağımlılık BEYANLIDIR.
-    await updateSeriesCounter("packingLotCode", { startValue: null, step: null, maxValue: null });
+    await updateSeriesCounter("packingLotCode", { startValue: null, step: null, maxValue: null, wrap: false });
     const siradaki = await previewNextNumber("packingLotCode");
     check("§16 ⭐ sıradaki numara ölçülüyor (sayaç kaynağı olan seride)",
       siradaki !== null && siradaki.startsWith(seriesPrefix(resolveSeriesFormat("packingLotCode"), new Date())),
@@ -1238,9 +1255,46 @@ async function main(): Promise<void> {
       const anahtar = `${e.countTable.model}.${e.countTable.field}`;
       paylasimlar.set(anahtar, [...(paylasimlar.get(anahtar) ?? []), e.key]);
     }
-    const paylasilan = [...paylasimlar.values()].find((lst) => lst.length > 1);
+    // ⚠️ BEYANLI İKİZLER HEDEF OLAMAZ: `exclusiveWith` çifti kapıdan MUAFTIR
+    // (bir anda yalnız biri kod üretir) ve aynı ön eki taşır — hedef olarak
+    // seçilirse körlük zemini ("ön ekleri FARKLI") haklı olarak kırmızı verir
+    // ve kapı ölçülmemiş kalır.
+    const ikiz = (a: string, b: string): boolean =>
+      numberSeriesCatalogEntry(a).exclusiveWith?.key === b &&
+      numberSeriesCatalogEntry(b).exclusiveWith?.key === a;
+    const paylasilan = [...paylasimlar.values()].find(
+      (lst) => lst.length > 1 && !(lst.length === 2 && ikiz(lst[0] as string, lst[1] as string)),
+    );
+
+    // ── §5c2 MUAFİYETİN KENDİSİ ÖLÇÜLÜR ──────────────────────────────────
+    // Muafiyet beyanlı olduğu için "kapı buraya bakmıyor" demek YETMEZ: beyanın
+    // GERÇEKTEN çalıştığı (ikizin ön ekine dokunmanın engellenmediği) ve
+    // TEK YÖNLÜ beyanın muafiyet vermediği ayrı ayrı ölçülür.
+    const ikizCifti = [...paylasimlar.values()].find(
+      (lst) => lst.length === 2 && ikiz(lst[0] as string, lst[1] as string),
+    );
+    if (!ikizCifti) {
+      console.log("⏭️  §5c2 ÖLÇÜLEMEDİ — beyanlı ikiz seri çifti yok.");
+    } else {
+      const [iA, iB] = ikizCifti as [string, string];
+      const fA = resolveSeriesFormat(iA);
+      const fB = resolveSeriesFormat(iB);
+      check(`§5c2 körlük zemini: ikizler AYNI ön eki taşıyor (${iA} ↔ ${iB})`,
+        fA.prefix === fB.prefix, `${fA.prefix} / ${fB.prefix}`);
+      const ikizGecti = dene(async () =>
+        assertSeriesFormatAllowed(iA, {
+          prefix: fB.prefix, dateSegment: fA.dateSegment, digits: fA.digits,
+          separator: fA.separator, retiredPrefixes: [],
+        }),
+      );
+      const ikizSonuc = await ikizGecti;
+      check("§5c2 ⭐ BEYANLI ikiz paylaşılan-kolon kapısına TAKILMAZ",
+        !(ikizSonuc instanceof Error) || kod(ikizSonuc) !== "NUMBER_SERIES_SHARED_TABLE_PREFIX",
+        ikizSonuc instanceof Error ? (kod(ikizSonuc) ?? ikizSonuc.message) : "kabul");
+    }
+
     if (!paylasilan) {
-      console.log("⏭️  §5c ÖLÇÜLEMEDİ — aynı kolonu paylaşan seri çifti kalmadı.");
+      console.log("⏭️  §5c ÖLÇÜLEMEDİ — aynı kolonu paylaşan (ikiz olmayan) seri çifti kalmadı.");
     } else {
       const [aKey, bKey] = paylasilan as [string, string];
       const aFmt = resolveSeriesFormat(aKey);
@@ -1387,7 +1441,7 @@ async function main(): Promise<void> {
     if (sayacDokunulan.length > 0) {
       await prisma.numberSeries.updateMany({
         where: { key: { in: sayacDokunulan } },
-        data: { startValue: null, step: null, maxValue: null },
+        data: { startValue: null, step: null, maxValue: null, wrap: false },
       });
       await refreshNumberSeriesCache();
     }

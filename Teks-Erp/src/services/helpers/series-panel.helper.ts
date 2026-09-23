@@ -412,6 +412,8 @@ export function listSeries(): Array<
     startValue: number | null;
     step: number | null;
     maxValue: number | null;
+    /** Üst sınıra varınca başa dönüyor mu — panel kutuyu bundan çizer. */
+    wrap: boolean;
     separator2: string | null;
     preview: string;
     /** Vadesi gelmemiş biçim değişikliği — panel "bekleyen değişiklik" satırı. */
@@ -468,6 +470,7 @@ export function listSeries(): Array<
       startValue: fmt.startValue ?? null,
       step: fmt.step ?? null,
       maxValue: fmt.maxValue ?? null,
+      wrap: fmt.wrap === true,
       // ⚠️ ÖRNEK KENDİ ÜRETECİNDEN: `previewSeriesCode` katalog `infix`ini YAZMAZ
       // (top barkodunun faz harfi), yani düz türetme `T2309260001` gibi GERÇEKTE
       // ÜRETİLMEYEN bir kod gösteriyordu — gerçeği `T140926H0113` (d3 ölçtü

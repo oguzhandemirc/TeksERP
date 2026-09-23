@@ -27,6 +27,12 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Parti numarasının kısa biçimi (bugün P01'den P99'a gidip başa dönen plaka düzeni) artık Genel Ayarlar → Numaralandırma ekranından ayarlanıyor: “Parti no (kısa, dönen)” serisinde ön ek, hane sayısı, başlangıç, üst sınır ve “Üst sınıra varınca başa dön” seçeneği ayrı ayrı değiştirilebiliyor. HİÇBİR ŞEY DEĞİŞMEDEN AYNI ÇALIŞIR: kurulum bugünkü düzenle gelir (P, iki hane, 1–99, başa dönme açık) ve fabrikanın plaka seti değişmedikçe dokunmanıza gerek yok. Plakalar değişirse ayarı siz güncellersiniz. Parti numarası hâlâ benzersiz DEĞİLDİR ve başa döndüğünde tekrar eder — partinin kimliği numara değil kaydın kendisidir; eski partiler yeniden numaralanmaz. Uzun biçim (bayrak kapalıyken kullanılan “Parti no (günlük biçim)” serisi) de artık düzenlenebilir; önceden kilitliydi.",
+          "dene": "Genel Ayarlar → Numaralandırma → “Parti no (kısa, dönen)” satırını açın: üst sınırı 99 yerine 50 yapıp kaydedin, aynı ekrandaki “Sıradaki numara” örneğinin değiştiğini görün; sonra 99'a geri alın."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Numaralandırma: artık BÜTÜN numara serileri Genel Ayarlar → Numaralandırma ekranından düzenlenebiliyor. Önceki sürümde yalnız birkaç seri açıktı; bu sürümle fatura, tahsilat, ödeme, kasa fişi, çek ve senet, çek teslim bordrosu, mutabakat mektubu, iş emri / refakat kartı, kartela kartı, fason ve kartela sevk/kabul belgeleri, doğrudan sevk ve doğrudan sevk dışındaki bütün belgeler de listede. Her seride ön ek, tarih bölümü, hane sayısı, iki ayraç, sayaç (başlangıç, adım, üst sınır) ve numara kaynağı ayrı ayrı ayarlanıyor. GEÇMİŞ ASLA YENİDEN NUMARALANMAZ: değişiklik yalnız bundan sonra doğan kayıtları etkiler, eski ön ek emekliye ayrılır ve eski barkodlar okunmaya devam eder. Ekran, kaydetmeden önce kaydetmeden önce önizlemeyi ve kaç kaydın numarasının değişmeyeceğini gösterir."
         },
         {

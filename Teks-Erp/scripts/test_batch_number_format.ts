@@ -33,15 +33,18 @@ import type { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { generateBatchNumberTx, BATCH_NUMBER_LOCK_NS } from "../src/services/batch.service";
 import { DUPLICATE_GUARD_LOCK_NS } from "../src/services/helpers/duplicate-guard.helper";
+import { buildDailyCode, dailyCodePrefix } from "../src/utils/code-format";
+import { numberSeriesCatalogEntry } from "../src/constants/number-series-catalog";
+import { resolveSeriesFormat } from "../src/services/number-series.service";
 import {
-  SHORT_BATCH_MAX,
-  SHORT_BATCH_MIN,
-  buildDailyCode,
-  buildShortBatchCode,
-  dailyCodePrefix,
-  nextShortBatchSeq,
-  parseShortBatchCode,
-} from "../src/utils/code-format";
+  formatSeriesCode,
+  matchesSeries,
+  seriesCodeSeq,
+  seriesDigitsQuantifier,
+  seriesPosixRegex,
+  type NumberSeriesFormat,
+} from "../src/services/helpers/series-format.helper";
+import { nextCounterSeq, seriesCounterReadsLastBorn } from "../src/services/helpers/series-counter.helper";
 
 let pass = 0;
 let fail = 0;
@@ -70,25 +73,43 @@ function stubTx(opts: {
   lastShort?: string | null;
   /** Günlük rejimde `batch.findMany`'nin göreceği kodlar. */
   daily?: string[];
-}): { tx: Prisma.TransactionClient; calls: string[]; sqlPattern: () => string | null } {
+}): {
+  tx: Prisma.TransactionClient;
+  calls: string[];
+  sqlPattern: () => string | null;
+  sqlFilter: () => ((code: string) => boolean) | null;
+} {
   const calls: string[] = [];
   let sqlPattern: string | null = null;
+  let sqlFilter: ((code: string) => boolean) | null = null;
   const tx = {
     $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const sql = strings.join("?");
       calls.push(/pg_advisory_xact_lock/.test(sql) ? `lock(${values.join(",")})` : "execRaw");
       return 1;
     },
-    $queryRaw: async (strings: TemplateStringsArray) => {
-      const sql = strings.join("?");
+    $queryRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) => {
       calls.push("queryLastShort");
       // PG'nin `~` süzgecini ÜRÜNÜN KENDİ deseniyle taklit et — desen sabitlenirse
       // bekçi ile ürün ayrışır ve gevşeyen bir süzgeç sessizce geçerdi.
-      const m = sql.match(/~\s*'(\^[^']+)'/);
-      sqlPattern = m ? (m[1] as string) : null;
+      // ⚠️ Desen artık SQL METNİNDE değil PARAMETREDE (biçimden türetiliyor);
+      // metinden okuyan eski kol sessizce `null` görüp HER kodu geçirirdi.
+      const pat = values.find((v) => typeof v === "string" && v.startsWith("^"));
+      sqlPattern = typeof pat === "string" ? pat : null;
+      // Süzgeç İKİ AYAKLI (desen + sayısal aralık); taklit de iki ayaklı olmalı,
+      // yoksa bekçi ürünün yalnız yarısını ölçer ve öteki yarısı gevşeyebilir.
+      const sayilar = values.filter((v): v is number => typeof v === "number");
+      const [dMin, dMax] = [sayilar[0] ?? 1, sayilar[1] ?? Number.MAX_SAFE_INTEGER];
+      sqlFilter = (code: string): boolean => {
+        if (!sqlPattern || !new RegExp(sqlPattern).test(code)) return false;
+        const kuyruk = code.match(/[0-9]+$/)?.[0];
+        if (kuyruk === undefined) return false;
+        const n = Number(kuyruk);
+        return n >= dMin && n <= dMax;
+      };
       const last = opts.lastShort ?? null;
-      if (!last || !sqlPattern) return [];
-      return new RegExp(sqlPattern).test(last) ? [{ batchNumber: last }] : [];
+      if (!last) return [];
+      return sqlFilter(last) ? [{ batchNumber: last }] : [];
     },
     batch: {
       findMany: async (args: { where: { batchNumber: { startsWith: string } } }) => {
@@ -106,7 +127,7 @@ function stubTx(opts: {
       },
     },
   } as unknown as Prisma.TransactionClient;
-  return { tx, calls, sqlPattern: () => sqlPattern };
+  return { tx, calls, sqlPattern: () => sqlPattern, sqlFilter: () => sqlFilter };
 }
 
 // Sabit an — fabrika takvim günü 05.08.2026 (12:00 Europe/Istanbul).
@@ -115,35 +136,106 @@ const PFX = "P050826";
 
 async function main(): Promise<void> {
   // ── 0) Saf yardımcılar ────────────────────────────────────────────────────
-  console.log("\n── 0) Saf yardımcılar (biçim + sarma aritmetiği) ──");
-  check("aralık 1–99", SHORT_BATCH_MIN === 1 && SHORT_BATCH_MAX === 99);
+  // ⚠️ 2026-09-23'te AYNI SORULAR, YENİ KAYNAK: aralık · dolgu · sarma artık
+  // `code-format.ts` sabitleri değil `batchShort` SERİSİNİN AYARLARI. Bu bölümün
+  // asıl iddiası "VARSAYILAN = BUGÜNKÜ DAVRANIŞ"tır — ayar açılırken davranışın
+  // değişmediği ölçülmezse, açma işinin kendisi sessiz bir göç olurdu.
+  console.log("\n── 0) Saf yardımcılar (biçim + sarma, AYARDAN) ──");
+  const seed = numberSeriesCatalogEntry("batchShort");
+  check(
+    "⭐ TOHUM = BUGÜNKÜ DAVRANIŞ: P · 2 hane · tarihsiz · 1–99 · sarma AÇIK",
+    seed.seedPrefix === "P" &&
+      seed.seedDigits === 2 &&
+      seed.seedDateSegment === "NONE" &&
+      seed.seedSeparator === "" &&
+      seed.seedMaxValue === 99 &&
+      seed.seedWrap === true,
+    `${seed.seedPrefix}/${seed.seedDigits}/${seed.seedDateSegment}/${seed.seedMaxValue}/${seed.seedWrap}`,
+  );
+  const kisa = resolveSeriesFormat("batchShort");
+  check("aralık 1–99 (ayardan)", (kisa.startValue ?? 1) === 1 && kisa.maxValue === 99);
+  check("sarmalı seri sayacı EN SON DOĞAN koddan okur", seriesCounterReadsLastBorn(kisa));
   check(
     "iki hane dolgulu biçim",
-    buildShortBatchCode(1) === "P01" &&
-      buildShortBatchCode(7) === "P07" &&
-      buildShortBatchCode(42) === "P42" &&
-      buildShortBatchCode(99) === "P99",
-    buildShortBatchCode(7),
+    formatSeriesCode(kisa, 1) === "P01" &&
+      formatSeriesCode(kisa, 7) === "P07" &&
+      formatSeriesCode(kisa, 42) === "P42" &&
+      formatSeriesCode(kisa, 99) === "P99",
+    formatSeriesCode(kisa, 7),
   );
-  check(
-    "kısa kod parse edilir",
-    parseShortBatchCode("P01") === 1 && parseShortBatchCode("P42") === 42,
-  );
+  check("kısa kod parse edilir", seriesCodeSeq(kisa, "P01") === 1 && seriesCodeSeq(kisa, "P42") === 42);
   check(
     "ESKİ GÜNLÜK KOD kısa sayılmaz (sayaç onu görmemeli)",
-    parseShortBatchCode("P0508260019") === null && parseShortBatchCode("P0508261") === null,
+    seriesCodeSeq(kisa, "P0508260019") === null && seriesCodeSeq(kisa, "P0508261") === null,
   );
   check(
     "aralık dışı / bozuk değer reddedilir",
-    parseShortBatchCode("P00") === null &&
-      parseShortBatchCode("P1") === null &&
-      parseShortBatchCode("X42") === null &&
-      parseShortBatchCode(null) === null,
+    seriesCodeSeq(kisa, "P00") === null &&
+      seriesCodeSeq(kisa, "P1") === null &&
+      seriesCodeSeq(kisa, "X42") === null &&
+      seriesCodeSeq(kisa, null) === null,
   );
-  check("sarma: 42 → 43", nextShortBatchSeq(42) === 43);
-  check("sarma: 98 → 99", nextShortBatchSeq(98) === 99);
-  check("SARMA: 99 → 1 (100 ÜRETMEZ)", nextShortBatchSeq(99) === 1, String(nextShortBatchSeq(99)));
-  check("kayıt yoksa 1'den başlar", nextShortBatchSeq(null) === 1);
+  check("sarma: 42 → 43", nextCounterSeq(kisa, 42, "kısa") === 43);
+  check("sarma: 98 → 99", nextCounterSeq(kisa, 98, "kısa") === 99);
+  check("SARMA: 99 → 1 (100 ÜRETMEZ)", nextCounterSeq(kisa, 99, "kısa") === 1, String(nextCounterSeq(kisa, 99, "kısa")));
+  check("kayıt yoksa 1'den başlar", nextCounterSeq(kisa, 0, "kısa") === 1);
+
+  // ── 0b) AYAR GERÇEKTEN BAĞLI MI? (pozitif sonda) ──────────────────────────
+  // ⚠️ Yukarıdaki kol tek başına SAHTE YEŞİL verebilir: ayar hiç okunmuyor,
+  // değerler hâlâ koda gömülü olsa da "varsayılan bugünküyle aynı" iddiası
+  // GEÇERDİ. Bu yüzden ayarı DEĞİŞTİRİP davranışın DEĞİŞTİĞİ de ölçülür.
+  console.log("\n── 0b) Ayar değişince davranış DEĞİŞİYOR mu ──");
+  const genis: NumberSeriesFormat = { ...kisa, digits: 3, maxValue: 999 };
+  check("hane 3 → P001 (dolgu ayardan)", formatSeriesCode(genis, 1) === "P001", formatSeriesCode(genis, 1));
+  check("aralık 999 → 99'da SARMAZ", nextCounterSeq(genis, 99, "kısa") === 100);
+  check("aralık 999 → 999'da SARAR", nextCounterSeq(genis, 999, "kısa") === 1);
+  const oneksiz: NumberSeriesFormat = { ...kisa, prefix: "PRT" };
+  check("ön ek PRT → PRT42", formatSeriesCode(oneksiz, 42) === "PRT42", formatSeriesCode(oneksiz, 42));
+  check(
+    "⭐ SQL süzgeci de ön eki AYARDAN alır (K27: sabit süzgeç her satırı eler)",
+    seriesPosixRegex(oneksiz).startsWith("^PRT") && !seriesPosixRegex(oneksiz).startsWith("^P["),
+    seriesPosixRegex(oneksiz),
+  );
+  const sarmasiz: NumberSeriesFormat = { ...kisa, wrap: false };
+  check("sarma KAPALI seri EN SON DOĞANI okumaz (max'a döner)", !seriesCounterReadsLastBorn(sarmasiz));
+
+  // ── 0d) HANE GENİŞLİĞİ: SINIRLI seri SABİT, sınırsız seri ESNEK ──────────
+  // ⚠️ BU KOL BİR NEGATİF SONDANIN SESSİZ KALMASIYLA DOĞDU (2026-09-23):
+  // `seriesDigitsQuantifier` daraltmasını geri alan sonda 56/0 verdi, çünkü
+  // "SQL süzgeci eski günlük kodları dışlar" iddiasını o an SAYISAL ARALIK
+  // ayağı tek başına taşıyordu. Yani daraltma KORUNMASIZDI: biri onu geri
+  // alsa hiçbir kapı konuşmayacaktı. Sonda ısırmıyorsa kapı kördür.
+  check(
+    "⭐ SINIRLI seride hane SABİT (`{2}`) — komşu serinin uzun kodu kendi kodu sanılmaz",
+    seriesDigitsQuantifier(kisa) === "{2}" && !matchesSeries(kisa, "P0508260019"),
+    seriesDigitsQuantifier(kisa),
+  );
+  const sinirsiz: NumberSeriesFormat = { ...kisa, maxValue: null, wrap: false };
+  check(
+    "⭐ SINIRSIZ seride hane ESNEK (`{2,}`) — 99'u aşan kod okutulabilir kalır (E-1-04)",
+    seriesDigitsQuantifier(sinirsiz) === "{2,}" && matchesSeries(sinirsiz, "P100"),
+    seriesDigitsQuantifier(sinirsiz),
+  );
+  check(
+    "⭐ SQL deseni ile bellek-içi yüklem AYNI genişlikten doğar (boğaz ikizi)",
+    seriesPosixRegex(kisa).endsWith("[0-9]{2}$") && seriesPosixRegex(sinirsiz).endsWith("[0-9]{2,}$"),
+    `${seriesPosixRegex(kisa)} / ${seriesPosixRegex(sinirsiz)}`,
+  );
+
+  // ── 0c) HANE KÜÇÜLTME → BÜYÜTME: öngörülebilirlik (2 → 1 → 2) ─────────────
+  // Kullanıcı kararı: hane küçültme SERBEST. Tek şart davranışın öngörülebilir
+  // kalması — her geçişte kapsam damgası sayacı yeni rejime taşır, eski kodlar
+  // DOKUNULMAZ ve numara zaten benzersiz değildir.
+  console.log("\n── 0c) Hane 2 → 1 → 2 geçişi ──");
+  const tekHane: NumberSeriesFormat = { ...kisa, digits: 1, maxValue: 9 };
+  check("2 → 1: yeni kod P1 (dolgu yok)", formatSeriesCode(tekHane, 1) === "P1", formatSeriesCode(tekHane, 1));
+  check("1 hane rejiminde P42 ARALIK DIŞI (sayaç onu sürüklemez)", seriesCodeSeq(tekHane, "P42") === null);
+  check("1 hane rejiminde 9'dan sonra P1'e sarar", nextCounterSeq(tekHane, 9, "kısa") === 1);
+  check("1 → 2: geri dönünce P01 yeniden geçerli", seriesCodeSeq(kisa, "P01") === 1);
+  check(
+    "⭐ HER ÜÇ REJİMDE DE eski kodlar SİLİNMEZ, yalnız sayaç kapsamı değişir",
+    seriesCodeSeq(kisa, "P42") === 42 && seriesCodeSeq(tekHane, "P4") === 4,
+  );
 
   // ── 1) Kısa rejim (bayrak AÇIK) ──────────────────────────────────────────
   console.log("\n── 1) Kısa rejim — bayrak AÇIK ──");
@@ -167,24 +259,27 @@ async function main(): Promise<void> {
   );
   check("kısa rejimde günlük sorgu HİÇ koşmaz", !s4.calls.includes("findManyDaily"), s4.calls.join(" → "));
 
-  // SQL SÜZGECİNİN KENDİSİ — `parseShortBatchCode` ikinci hat olarak yanlış satırı
+  // SQL SÜZGECİNİN KENDİSİ — `seriesCodeSeq` ikinci hat olarak yanlış satırı
   // zaten eler, ama süzgeç gevşerse sorgu "en son satır" olarak bir GÜNLÜK kod
   // döndürür, parse null verir ve sayaç HER SEFERİNDE P01'e düşer: canlı P01
   // dururken ikinci bir P01 doğar. İki hat da ayrı ayrı doğrulanmalı.
   const pat = s4.sqlPattern();
+  const sqlSuz = s4.sqlFilter();
   check("kısa-parti sorgusunun deseni yakalandı (körlük zemini)", pat !== null, pat ?? "YOK");
-  if (pat) {
-    const re = () => new RegExp(pat);
+  check("kısa-parti sorgusunun ARALIK ayağı da yakalandı (körlük zemini)", sqlSuz !== null, pat ?? "YOK");
+  if (sqlSuz) {
+    // ⚠️ SÜZGEÇ İKİ AYAKLI: biçim deseni + sayısal aralık. Tek ayağı ölçmek
+    // ötekinin sessizce gevşemesine izin verirdi; iddia BİRLEŞİK süzgeci ölçer.
     check(
       "SQL süzgeci ESKİ GÜNLÜK kodları DIŞLAR",
-      !re().test("P0508260019") && !re().test("P0508261") && !re().test("P05082628"),
-      pat,
+      !sqlSuz("P0508260019") && !sqlSuz("P0508261") && !sqlSuz("P05082628"),
+      pat ?? "",
     );
-    check("SQL süzgeci P00'ı DIŞLAR", !re().test("P00"), pat);
+    check("SQL süzgeci P00'ı DIŞLAR (aralık ayağı)", !sqlSuz("P00"), pat ?? "");
     check(
       "SQL süzgeci P01–P99'u KABUL EDER",
-      re().test("P01") && re().test("P42") && re().test("P99"),
-      pat,
+      sqlSuz("P01") && sqlSuz("P42") && sqlSuz("P99"),
+      pat ?? "",
     );
   }
 
@@ -319,7 +414,7 @@ async function main(): Promise<void> {
   console.log("\n── 7) Canlı veri (salt-okunur) ──");
   const live = await prisma.batch.findMany({ select: { batchNumber: true } });
   const daily = live.filter((b) => /^P\d{6}\d+$/.test(b.batchNumber));
-  const short = live.filter((b) => parseShortBatchCode(b.batchNumber) !== null);
+  const short = live.filter((b) => seriesCodeSeq(kisa, b.batchNumber) !== null);
   // ⚠️ İKİ FARKLI "SIFIR" — karıştırmak bu testi TEMİZ KURULUMDA kırıyordu
   // (CI, 2026-08-09: `günlük 0 · kısa 0 / toplam 0`). Ayrım şu:
   //   · `toplam 0`  → veritabanında gerçekten hiç parti YOK. Bu bir ihlal değil,

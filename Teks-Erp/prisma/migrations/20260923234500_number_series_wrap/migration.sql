@@ -1,0 +1,16 @@
+-- SAYAÇ SARMASI: üst sınıra varınca hata mı, başa dönme mi? (D2③, 2026-09-23)
+--
+-- ADDITIVE: tek yeni kolon, NOT NULL + DEFAULT false. Varsayılan BUGÜNKÜ
+-- davranıştır — `maxValue` aşımı bugün 409 veriyor ve `false` tam olarak onu
+-- söyler. Hiçbir satır yeniden yazılmaz, hiçbir kod değişmez.
+--
+-- NEDEN VERİYE TAŞINDI: kısa parti numarası (P01…P99, 99'dan sonra P01) bugün
+-- KODDA yaşıyor (`SHORT_BATCH_MAX`, `nextShortBatchSeq`ın `% 99` formülü).
+-- Fabrikanın fiziksel plaka seti değişirse yazılıma müdahale gerekiyordu;
+-- başka bir fabrikanın plaka standardı da farklı olabilir. Sınır (`maxValue`)
+-- ve başlangıç (`startValue`) kolonları ZATEN vardı; eksik olan tek şey
+-- "dolunca ne olacak" sorusuydu.
+--
+-- ⚠️ `maxValue` NULL iken bu kolonun hiçbir etkisi yoktur: sarılacak bir sınır
+-- yoktur. Panel de alanı yalnız üst sınır doluyken çizer.
+ALTER TABLE "number_series" ADD COLUMN IF NOT EXISTS "wrap" BOOLEAN NOT NULL DEFAULT false;

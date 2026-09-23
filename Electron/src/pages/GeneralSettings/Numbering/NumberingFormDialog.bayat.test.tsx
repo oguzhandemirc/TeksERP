@@ -47,6 +47,7 @@ function row(key: string, prefix: string): NumberSeriesRow {
     startValue: null,
     step: null,
     maxValue: null,
+    wrap: false,
     preview: `${prefix}2309230001`,
   };
 }

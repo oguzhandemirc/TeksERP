@@ -149,6 +149,8 @@ const BEKLENEN: Record<string, string> = {
   packingLotCode: `PRT-${yymm}-0001`,
   packingLotName: "P-1",
   batchDaily: `P${ymd.slice(8, 10)}${ymd.slice(5, 7)}${ymd.slice(2, 4)}1`,
+  // Tarihsiz + 2 hane + aralık 1–99: kısa parti rejimi (fiziksel plaka seti).
+  batchShort: "P01",
   returnDoc: `IADE-${ymd.slice(8, 10)}${ymd.slice(5, 7)}${ymd.slice(2, 4)}-000001`,
   item: "STK-000001",
 };
@@ -185,9 +187,10 @@ check("§2 tanınmayan ayraç reddedilir",
 // numara `id`den türetiliyor" idi; `returnNo` kolonu doğup geçmiş geri
 // doldurulunca gerekçe ORTADAN KALKTI. Kilit gerekçesiyle birlikte kalkar —
 // gerekçesi çürüyen bir kilit, kilit değil kalıntıdır.
-check("§2 ⭐ YAPISAL kilitli seri (top barkodu · parti no) değiştirilemez",
-  throws(() => assertSeriesFormatAllowed("roll", f({ prefix: "TP" })), "NUMBER_SERIES_LOCKED") &&
-  throws(() => assertSeriesFormatAllowed("batchDaily", f({ prefix: "PT" })), "NUMBER_SERIES_LOCKED"));
+check("§2 ⭐ YAPISAL kilitli seri (top barkodu) değiştirilemez",
+  throws(() => assertSeriesFormatAllowed("roll", f({ prefix: "TP" })), "NUMBER_SERIES_LOCKED"));
+check("§2 ⭐ `batchDaily` ARTIK yapısal kilitli DEĞİL (kısa rejim kendi serisine taşındı)",
+  !throws(() => assertSeriesFormatAllowed("batchDaily", f({ prefix: "PT" })), "NUMBER_SERIES_LOCKED"));
 check("§2 ⭐ `returnDoc` ARTIK yapısal kilitli DEĞİL (kolon doğdu, gerekçe çürüdü)",
   !throws(() => assertSeriesFormatAllowed("returnDoc", f({ prefix: "IAD", digits: 6, separator: "-" })), "NUMBER_SERIES_LOCKED"));
 let temizGecti = true;
@@ -208,10 +211,9 @@ check("§3 EMEKLİ ön ekle çakışma da reddedilir (workOrder'ın RK'si)",
 // ⚠️ Bu üçü BUGÜN çakışıyor ve zararsız: ayrı tablolarda yaşıyorlar ve OKUTULMUYORLAR.
 // Kapı küresel olsaydı doğduğu gün üç yanlış kırmızı verirdi.
 let bugunkuCakismalarTemiz = true;
-for (const key of ["cashAccount", "returnReason", "packingLotName", "batchDaily"]) {
+for (const key of ["cashAccount", "returnReason", "packingLotName", "batchDaily", "batchShort"]) {
   try {
-    const fmt = resolveSeriesFormat(key);
-    if (key !== "batchDaily") assertSeriesFormatAllowed(key, fmt);
+    assertSeriesFormatAllowed(key, resolveSeriesFormat(key));
   } catch {
     bugunkuCakismalarTemiz = false;
   }

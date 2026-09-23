@@ -21,6 +21,59 @@
 
 ---
 
+## 2026-09-23 — Kısa parti no (P01…P99) artık AYAR; `batchDaily`nin yapısal kilidi kalktı [ÇEKİRDEK + PROFİL]
+
+**Kullanıcı isteği:** *"şu anki yapı yine default kalır, plakayla aynı olur; ama plakalar
+değişirse fabrikadakiler yazılımdan değiştirebilsin, benim yazılıma müdahale etmem gerekmesin.
+Başka fabrikalara satarsak onların standardı farklı olabilir."*
+
+**Ne vardı:** kısa parti numarasının BÜTÜN kararları koddaydı — `SHORT_BATCH_MIN=1`,
+`SHORT_BATCH_MAX=99`, `buildShortBatchCode`un `padStart(2)`ı, `nextShortBatchSeq`in `(last % 99) + 1`
+formülü ve `batch.service`teki `'^P(0[1-9]|[1-9][0-9])$'` SQL literali. Plaka seti değişirse
+sürüm gerekiyordu. ⚠️ [PROFİL] Bugünkü `adnansahin` plakası P01–P99'dur; başka fabrikanın
+standardı farklı olabilir ve bu bir KURULUM seçimidir.
+
+**Ölçüm önce, tasarım sonra — ve ölçüm ÖNERİYİ DARALTTI.** İlk öneri "seriye `rangeMin`/`rangeMax`/
+`wrap` ekleyelim" idi. Şema okunduğunda `NumberSeries` zaten `startValue`/`step`/`maxValue`
+taşıyordu (D2②, aynı ay inmiş) ve `nextCounterSeq` tek sahipti. ⇒ `rangeMin` = `startValue`,
+`rangeMax` = `maxValue`, geriye TEK yeni alan kaldı: **`wrap`** — "üst sınıra varınca hata mı,
+başa dönüş mü". Üç alan yerine bir alan; kısa partiye özel kaçamak yerine her seride çalışan bir
+ayar. **Ders: yeni alan önermeden önce şemanın o eksende ne taşıdığını OKU — bu depoda aynı
+soruyu cevaplayan ikinci bir alan, "ayrışan yüzey" sınıfının doğum yeridir.**
+
+**Uygulama:**
+- `number_series.wrap BOOLEAN NOT NULL DEFAULT false` (additive; varsayılan = bugünkü 409 davranışı).
+- Kısa rejim kendi serisine taşındı: **`batchShort`** (tohum `P` · 2 hane · tarihsiz · 1–99 · sarma AÇIK).
+  Tohum, bugünkü davranışın BİREBİR aynısıdır ve bunu bekçi ölçer.
+- `nextCounterSeq` sarmayı öğrendi; sarmalı seride sayacın kaynağı **EN SON DOĞAN** koddur
+  (`seriesCounterReadsLastBorn` — tek yüklem). Max'a bakan bir sayaç P99'da sonsuza dek takılırdı.
+- SQL süzgeci biçimden türetiliyor (`seriesPosixRegex`, `matchesSeries`in boğaz ikizi); elle yazılan
+  literal K27'nin tam olarak düştüğü tuzaktı.
+- `code-format.ts`teki dört sabit/fonksiyon SİLİNDİ — iki kaynak bırakmamak için.
+
+**`batchDaily`nin YAPISAL kilidi kalktı ve gerekçesi öğretici:** kilit `batchDaily` satırındaydı
+ama gerekçesi ÖTEKİ rejimin biçimiydi ("P01…P99 sarması biçim ayarıyla anlatılamaz"). Kısa rejim
+kendi serisine taşınınca `batchDaily`de anlatılamayan bir şey kalmadı: ön ek + GGAAYY + dolgusuz
+sıra, `nextSeriesNo`nun birebir kalıbı. ⇒ **Bir kilidin gerekçesi BAŞKA bir nesnenin özelliğiyse,
+kilit yanlış nesnededir.** YAPISAL kilit kümesi `roll`a indi (`test_number_series_panel §3b`).
+
+**Yeni kapı istisnası — BEYANLI İKİZ (`exclusiveWith`).** İki parti serisi aynı kolonu (`batch.batchNumber`)
+ve aynı `P` ön ekini paylaşıyor; paylaşılan-kolon ön ek tekilliği kapısı (④) ikisini de düzenlenemez
+yapardı. İstisna beyanlı ve **ÇİFT YÖNLÜ** aranıyor: tek yönlü beyan, kapının çağrı yönüne göre bir
+açılıp bir kapanmasına yol açardı. Muafiyetin KENDİSİ ölçülüyor (`§5c2`), ve §5c'nin hedef keşfi
+ikizleri atlıyor — atlamasaydı körlük zemini ("ön ekler FARKLI") haklı olarak kırmızı verir ve asıl
+kapı hiç ölçülmezdi.
+
+**Hane küçültme SERBEST (kullanıcı kararı):** kapsam damgası zaten çözüyor — biçim değişince sayaç
+yeni kapsamdaki son koda bakar, yoksa `startValue`dan başlar. Eski kodlar DOKUNULMAZ ve numara
+zaten benzersiz değildir. 2 → 1 → 2 geçişinin öngörülebilirliği ayrı bir bekçi kolu (`§0c`).
+
+**Panel:** "başa dön" kutusu yalnız üst sınır doluyken çizilir (sınırsız seride çıkışsız kapı olurdu);
+aralık cümlesi artık sunucudan KOD olarak geliyor (`minCode`/`maxCode`) — panel `P` + dolgu KURMAZ,
+yoksa ön ek değişince ekran sessizce yalan söylerdi. Bayrak başlığındaki "(P01…P99)" literali kalktı.
+
+---
+
 ## 2026-09-23 — Parti KODU belgeye basılabilir oldu; "başlık basma" ayrı bir karar [ÇEKİRDEK]
 
 **Saha vakası (kullanıcı):** aynı cari için eski ve yeni sevk partisi AYNI ADI (`P-2`) taşıyabiliyor

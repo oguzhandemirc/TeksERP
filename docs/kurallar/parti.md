@@ -20,7 +20,7 @@
 
 ### Kararlar
 
-- **[PROFİL]** Parti no biçimi PROFİL kararıdır: `batch.shortNumberEnabled` AÇIK (varsayılan; kayıt yoksa true) → `P01…P99`, P99'dan sonra KÖRLEMESİNE `P01`'e sarar (numara canlı mı diye BAKILMAZ); KAPALI → `P+GGAAYY+günlük sıra`. · bekçi: `scripts/test_batch_number_format.ts §1/§3 (iki rejim + sarma aritmetiği)` <sub>(CLAUDE.md:161)</sub>
+- **[PROFİL]** Parti no biçimi PROFİL kararıdır: `batch.shortNumberEnabled` AÇIK (varsayılan; kayıt yoksa true) → kısa/dönen biçim (tohum `P01…P99`), üst sınırdan sonra KÖRLEMESİNE başa sarar (numara canlı mı diye BAKILMAZ); KAPALI → `P+GGAAYY+günlük sıra`. İki rejim iki AYRI seridir (`batchShort` · `batchDaily`) ve ön ek/hane/aralık/sarma panelden değiştirilir — varsayılanlar bugünkü davranışın birebir aynısıdır. · bekçi: `scripts/test_batch_number_format.ts §0/§0b/§0c/§1/§3 (tohum = bugünkü davranış + ayar değişince davranış değişiyor + hane 2→1→2 + iki rejim)` <sub>(CLAUDE.md:161)</sub>
 
 ## Backend
 
@@ -34,7 +34,7 @@
 
 ### Tuzaklar
 
-- **[ÇEKİRDEK]** Sayaç sorgusunun regex'i `^P(0[1-9]|[1-9][0-9])$` LOAD-BEARING: gevşerse eski günlük kodlar sızar, parse null döner ve sayaç her seferinde P01'e düşer (canlı P01 dururken ikinci P01 doğar). · bekçi: `scripts/test_batch_number_format.ts §1 (sahte tx'ten yakalanan SQL deseni eski günlük kodları ve P00'ı DIŞLAR, P01-P99'u KABUL eder; DB'de yalnız eski kodlar varken P01'den başlar; parse ikinci hattı ayrı — negatif sonda: SQL süzgeci gevşeyince 2 kırmızı)` <sub>(CLAUDE.md:161 · kaynak: batch.service.ts:164 · test:160-189 · arşiv:3236, ölçüldü 2026-09-13)</sub>
+- **[ÇEKİRDEK]** Sayaç sorgusunun regex'i BİÇİMDEN TÜRETİLİR (`seriesPosixRegex`), elle yazılmaz; gevşerse eski günlük kodlar sızar, parse null döner ve sayaç her seferinde seri başına düşer (canlı P01 dururken ikinci P01 doğar). Sabit yazılan süzgeç ön ek değişince TERS yönde de kırar — bütün satırları eler ve sayaç 1'de takılır (K27). · bekçi: `scripts/test_batch_number_format.ts §1 (sahte tx'ten yakalanan SQL deseni eski günlük kodları ve P00'ı DIŞLAR, P01-P99'u KABUL eder; DB'de yalnız eski kodlar varken P01'den başlar; parse ikinci hattı ayrı — negatif sonda: SQL süzgeci gevşeyince 2 kırmızı)` <sub>(CLAUDE.md:161 · kaynak: batch.service.ts:164 · test:160-189 · arşiv:3236, ölçüldü 2026-09-13)</sub>
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 

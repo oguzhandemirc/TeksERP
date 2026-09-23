@@ -46,6 +46,11 @@ export async function reconcileNumberSeries(): Promise<NumberSeriesReconcileResu
         retiredPrefixes: [...(e.seedRetiredPrefixes ?? [])],
         scanned: e.kind !== undefined,
         editable: !e.lockedReason,
+        // ⚠️ VERİ-SAHİPLİ ama TOHUMLU: sınır/sarma yalnız satır DOĞARKEN yazılır;
+        // aşağıdaki tazeleme döngüsü bunlara ASLA dokunmaz, yoksa fabrikanın
+        // panelden seçtiği aralık her deploy'da geri ezilirdi.
+        maxValue: e.seedMaxValue ?? null,
+        wrap: e.seedWrap ?? false,
       })),
       skipDuplicates: true,
     });

@@ -28,6 +28,7 @@ import { join } from "node:path";
 
 import type { NumberSeriesDateSegment } from "@prisma/client";
 
+import { seriesCounterReadsLastBorn } from "../src/services/helpers/series-counter.helper";
 import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
 import prisma from "../src/lib/prisma";
 import {
@@ -428,6 +429,13 @@ interface L2Yolu {
 }
 
 const L2_YOLU: Record<string, L2Yolu> = {
+  // Parti numarasının İKİ REJİMİ: hangisinin koşacağını `batch.shortNumberEnabled`
+  // bayrağı seçer, yani L2 yaratma yolu bayrağı DEĞİŞTİRMEDEN kurulamaz — ve
+  // bayrağı değiştirmek fabrikanın numara rejimini bekçi koşumu sırasında
+  // oynatmak demektir. Rejim aritmetiği kendi bekçisinde sahte tx ile ölçülüyor
+  // (`test_batch_number_format` §0/§0b/§0c/§1/§3, 56 iddia).
+  batchDaily: { not: "İki rejimli üreteç; L2 yolu `batch.shortNumberEnabled` bayrağını oynatmayı gerektirir — rejim aritmetiği `test_batch_number_format`ta sahte tx ile ölçülüyor." },
+  batchShort: { not: "İki rejimli üreteç; L2 yolu `batch.shortNumberEnabled` bayrağını oynatmayı gerektirir — sarma ve aralık `test_batch_number_format` §0/§0b/§0c'de ölçülüyor." },
   packingLotCode: {
     not: "PackingGroup: müşteri + ad + kod, başka zincir yok.",
     yarat: async (damga) => {
@@ -893,6 +901,13 @@ async function main(): Promise<void> {
       // değişimi dolguyu değiştirdiği için AYNI sıra bile FARKLI bir dizgidir).
       // Dönüşümden bağımsız DEĞİŞMEZ: kod var olanlardan biri olamaz ve sıra,
       // dizgi uzayındaki İLK BOŞ değerdir.
+      // ⚠️ SARMALI SERİ BU İDDİANIN DIŞINDADIR ve muafiyet BİÇİMDEN TÜRER, ad
+      // listesinden değil: sarma KÖRLEMESİNEDİR (2026-08-05 kullanıcı kararı) —
+      // numara bilerek TEKRAR EDER, çünkü fabrikanın fiziksel plaka setinin
+      // karşılığıdır ve "boştaki numarayı bul" alternatifi 99'u da doluyken
+      // üretimi durdururdu. Orada "kod zaten var" bir İHLAL değil, TANIMDIR;
+      // ölçülen yer `test_batch_number_format` §0/§0b/§0c.
+      if (seriesCounterReadsLastBorn(yeniFmt)) continue;
       const cizilen = (n: number): string => `${beklenenBas}${String(n).padStart(yeniFmt.digits, "0")}`;
       const varOlan = new Set(eskiler.map((x) => x.code));
       let ilkBos = 1;

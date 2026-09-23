@@ -204,65 +204,18 @@ export function normalizeScanCode(code: string): string {
 }
 
 // =============================================================================
-// KISA PARTİ NO — P01 … P99, körlemesine sarar (bayrak: batch.shortNumberEnabled)
+// KISA PARTİ NO — 2026-09-23'te BURADAN KALKTI
 // =============================================================================
-// Buradaki üç fonksiyon SAF'tır (DB yok) — DB'ye dokunan orkestrasyon
-// `batch.service.generateBatchNumberTx`'te. Ayrım bilinçli: sarma aritmetiği ve
-// biçim, kilit/sorgu kurmadan birim testlenebilmeli (KK1 `duplicate-guard.helper`
-// emsali; bekçi `scripts/test_batch_number_format.ts` §7).
+// `SHORT_BATCH_MIN/MAX`, `buildShortBatchCode`, `parseShortBatchCode` ve
+// `nextShortBatchSeq` silindi: ikisi de artık VERİDİR, kod değil. Aralık
+// `number_series.startValue/maxValue`, sarma `number_series.wrap`, biçim
+// `prefix/digits` kolonlarında yaşıyor (seri anahtarı `batchShort`) ve hesabı
+// `helpers/series-counter.helper` ile `helpers/series-format.helper` yapıyor.
+//
+// Gerekçe (kullanıcı, 2026-09-23): "plakalar değişirse fabrikadakiler
+// yazılımdan değiştirebilsin, benim yazılıma müdahale etmem gerekmesin; başka
+// fabrikalara satarsak onların standardı farklı olabilir." Sabit kalsaydı her
+// plaka seti değişimi bir sürüm gerektirirdi.
+//
+// Davranış AYNEN korundu: tohum `P` + 2 hane + aralık 1–99 + sarma AÇIK.
 // =============================================================================
-
-/** Kısa parti no alt sınırı. Sıfır KULLANILMAZ — fabrikada P01'den başlayan plaka seti var. */
-export const SHORT_BATCH_MIN = 1;
-
-/** Kısa parti no üst sınırı; buradan sonra `SHORT_BATCH_MIN`'e sarılır. */
-export const SHORT_BATCH_MAX = 99;
-
-/**
- * Kısa parti no biçimi: `P` + İKİ HANE DOLGULU sıra → `P01`, `P42`, `P99`.
- *
- * Dolgu BURADA bilinçli olarak VAR — günlük parti kalıbının dolgusuzluğuyla
- * çelişmez, çünkü gerekçeleri farklıdır. Günlük kalıpta hane sayısı serbesttir
- * (sıra 9999'u aşabilsin diye); burada aralık 1-99 ile SABİT olduğu için dolgu
- * bedava gelir ve karşılığında sabit genişlik kazandırır: kâğıtta hizalı durur ve
- * yeni biçimin KENDİ içinde sözlüksel sıra = sayısal sıra olur.
- *
- * ⚠️ Bu, `orderBy: { batchNumber }` yasağını KALDIRMAZ. Eski günlük kodlar
- * (`P0508260019`) veritabanında kalıcı olarak yan yana yaşıyor ve karışık kümede
- * sözlüksel sıra yine anlamsızdır. Parti listeleyen her yer `createdAt` ile sıralar.
- */
-export function buildShortBatchCode(seq: number): string {
-  return `P${String(seq).padStart(2, "0")}`;
-}
-
-/**
- * Kod kısa parti biçiminde mi? Öyleyse sayısal değeri, değilse `null`.
- *
- * Aralık dışı (`P00`) `null` döner — üretmediğimiz bir değerdir; elle/veri
- * bozulmasıyla oluşmuşsa sayacın kaynağı olarak KABUL EDİLMEMELİ. `null` dönmesi
- * çağıranı `SHORT_BATCH_MIN`'e düşürür, yani en kötü ihtimalle P01'den devam edilir.
- *
- * Eski günlük kodlar (`P0508260019`) tanım gereği eşleşmez (8+ karakter) — sayaç
- * onları GÖRMEZ. Bu load-bearing: görseydi bayrak ilk açıldığında son günlük
- * partinin sırasını (örn. 28) okuyup P29'dan başlardı; oysa doğrusu P01'dir.
- */
-export function parseShortBatchCode(code: string | null | undefined): number | null {
-  if (!code || !/^P\d{2}$/.test(code)) return null;
-  const n = parseInt(code.slice(1), 10);
-  return n >= SHORT_BATCH_MIN && n <= SHORT_BATCH_MAX ? n : null;
-}
-
-/**
- * Sıradaki kısa parti no — KÖRLEMESİNE sarar (2026-08-05 kullanıcı kararı).
- *
- * "Körlemesine" = numaranın o an başka bir CANLI partide kullanılıp kullanılmadığına
- * BAKILMAZ. Bu bilinçli: fabrika benzersizliğin kalkacağını bilerek istedi ve
- * "boştaki numarayı bul" alternatifi "99'u da doluysa ne olacak" sorusunu doğurup
- * üretimi durdurabilecek bir hata yolu açardı.
- *
- * `last === null` (henüz hiç kısa parti yok / bozuk değer) → `SHORT_BATCH_MIN`.
- */
-export function nextShortBatchSeq(last: number | null): number {
-  if (last === null || !Number.isFinite(last)) return SHORT_BATCH_MIN;
-  return (last % SHORT_BATCH_MAX) + SHORT_BATCH_MIN;
-}

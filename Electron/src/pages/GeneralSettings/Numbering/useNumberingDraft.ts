@@ -74,7 +74,7 @@ export function useNumberingDraft(row: NumberSeriesRow | null) {
   const setFmt = (next: SeriesFormatInput): void => {
     if (row) setTaslak({ key: row.key, fmt: next });
   };
-  const [counter, setCounter] = useState<SeriesCounterInput>({ startValue: null, step: null, maxValue: null });
+  const [counter, setCounter] = useState<SeriesCounterInput>({ startValue: null, step: null, maxValue: null, wrap: false });
   const [source, setSource] = useState<NumberSourceMode>("FREE");
   const [effectiveFrom, setEffectiveFrom] = useState("");
   const [onizleme, setOnizleme] = useState("");
@@ -98,7 +98,7 @@ export function useNumberingDraft(row: NumberSeriesRow | null) {
         separator2: row.separator2,
       },
     });
-    setCounter({ startValue: row.startValue, step: row.step, maxValue: row.maxValue });
+    setCounter({ startValue: row.startValue, step: row.step, maxValue: row.maxValue, wrap: row.wrap });
     setSource(row.source.value);
     setEffectiveFrom("");
     setOnizleme(row.preview);

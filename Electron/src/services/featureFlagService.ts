@@ -599,6 +599,9 @@ export interface BatchNumberState {
   next: number | null;
   lastCode: string | null;
   nextCode: string | null;
+  /** Aralığın KOD hâli — panel ön eki/haneyi kendisi kurmaz (biçim ayardan). */
+  minCode?: string;
+  maxCode?: string;
 }
 
 /**

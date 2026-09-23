@@ -52,7 +52,7 @@ describe("numaralandırma yazma uçları ayar şifresinden geçer", () => {
     ikiCagri();
   });
   it("⭐ sayaç (PATCH /:key/counter): 403 → diyalog → aynı yük şifreyle", async () => {
-    await numberingService.updateCounter("SHIPMENT", { startValue: 100, step: 1, maxValue: null });
+    await numberingService.updateCounter("SHIPMENT", { startValue: 100, step: 1, maxValue: null, wrap: false });
     ikiCagri();
   });
   it("⭐ kaynak (PATCH /:key/source): 403 → diyalog → aynı yük şifreyle", async () => {
@@ -63,7 +63,7 @@ describe("numaralandırma yazma uçları ayar şifresinden geçer", () => {
     const row = { key: "SHIPMENT", editable: true, counter: { startValue: true }, source: { editable: true } } as never;
     await numberingService.saveChanges(
       row,
-      { fmt: { prefix: "S" } as never, counter: { startValue: 1, step: 1, maxValue: null }, source: "FREE", effectiveFrom: "" },
+      { fmt: { prefix: "S" } as never, counter: { startValue: 1, step: 1, maxValue: null, wrap: false }, source: "FREE", effectiveFrom: "" },
       { formatChanged: true, counterChanged: true, sourceChanged: true },
     );
     expect(sorucu).toHaveBeenCalledTimes(1);

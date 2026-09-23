@@ -45,6 +45,9 @@
 - **[ÇEKİRDEK]** Panel hata mesajını TEK KAYNAKTAN okur (`apiErrorMessage`): gövdedeki `message` alan doğrulamasında yalnız "Validasyon hatası" der, asıl cümle `errors[0].message`tedir. Kendi okumasını yazan ekran, sunucunun Türkçe alan mesajını kaybeder. · bekçi: `NumberingFormDialog.bolum.test §5`
 - **[ÇEKİRDEK]** Okutulan serinin ön eki ASCII büyük harf + rakam, en çok 6 karakter (Code128 ve istemcilerin `toUpperCase()` varsayımı; Türkçe harf barkodu bozar). · bekçi: `test_number_series §2`
 
+- **[ÇEKİRDEK]** Sayacın üst sınıra varınca ne yapacağı VERİDİR: `number_series.wrap` `false` ise sınırda 409, `true` ise `startValue`a sarar ve numara BİLEREK mükerrer olur; sarma yalnız üst sınır tanımlıyken yazılabilir (`NUMBER_SERIES_WRAP_WITHOUT_MAX`) ve sarmalı seride sayacın kaynağı "en büyük kod" değil EN SON DOĞAN koddur (tek yüklem `seriesCounterReadsLastBorn`). · bekçi: `scripts/test_batch_number_format.ts §0/§0b/§0c`
+- **[ÇEKİRDEK]** Aynı kolonu paylaşan iki seri ön ek tekilliği kapısına takılır; istisna yalnız BEYANLI ve ÇİFT YÖNLÜ ikizlerdir (`exclusiveWith`) — bir anda yalnız biri kod üreten rejim çiftleri. · bekçi: `scripts/test_number_series_panel.ts §5c`
+
 ### Yasaklar
 
 - **[ÇEKİRDEK]** Ön eki servis içinde LİTERAL yazma: `utils/code-format.ts`in biçimlendiricilerini (`dailyCodePrefix` · `buildDailyCode` · `nextDailySeq`) yalnız `services/number-series.service.ts` import eder. İkinci bir import, seri tablosunu SESSİZCE devre dışı bırakır. · bekçi: `test_number_series §7`

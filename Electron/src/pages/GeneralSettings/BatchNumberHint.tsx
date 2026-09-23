@@ -40,9 +40,16 @@ export function BatchNumberHint() {
             <span className="font-mono font-semibold">{s.nextCode}</span> olacak
           </>
         )}
-        <span className="ml-1 opacity-70">
-          (aralık P{String(s.min).padStart(2, "0")}–P{s.max}; sıradaki tahminidir, ayrılmış değildir)
-        </span>
+        {/* ⚠️ ARALIK SUNUCUDAN KOD OLARAK GELİR: panel `P` + dolgu KURMAZ — ön ek
+            ve hane artık ayardır (`batchShort` serisi) ve elle kurulan bir metin
+            fabrika aralığı değiştirdiğinde sessizce yalan söylerdi. Eski sunucu
+            kod alanlarını göndermezse aralık satırı HİÇ çizilmez (yanlış yazmaktansa
+            yazmamak). */}
+        {s.minCode && s.maxCode && (
+          <span className="ml-1 opacity-70">
+            (aralık {s.minCode}–{s.maxCode}; sıradaki tahminidir, ayrılmış değildir)
+          </span>
+        )}
       </span>
     </div>
   );

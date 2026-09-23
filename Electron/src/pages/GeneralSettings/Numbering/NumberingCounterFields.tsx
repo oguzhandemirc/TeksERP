@@ -112,6 +112,31 @@ export function NumberingCounterFields({
             />
           </div>
 
+          {/* ⚠️ SARMA YALNIZ ÜST SINIR DOLUYKEN ÇİZİLİR: sınırsız bir seride
+              "başa dön" çıkışsız bir kapıdır (açık görünür, hiçbir şey yapmaz).
+              Alanı hep çizip devre dışı bırakmak yerine hiç çizmemek seçildi —
+              kullanıcı önce sınırı girer, kutu o zaman belirir. */}
+          {counter.maxValue !== null && (
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={counter.wrap}
+                onChange={(e) => onChange({ ...counter, wrap: e.target.checked })}
+                className="mt-0.5 size-4 shrink-0"
+              />
+              <span>
+                Üst sınıra varınca başa dön
+                <span className="block text-xs text-muted-foreground">
+                  Numara {counter.startValue ?? 1}'den yeniden başlar ve TEKRAR EDER — fabrikanın
+                  numaralı plaka seti gibi. Kapalıyken sınırda numara üretimi durur ve hata verir.
+                </span>
+              </span>
+            </label>
+          )}
+          {counterFieldError(hatalar, "wrap") && (
+            <p className="text-xs font-medium text-destructive">{counterFieldError(hatalar, "wrap")}</p>
+          )}
+
           {/* ⚠️ Q3 BEYANI — kullanıcı "4 hane" görüp 9999'da duracağını sanmasın. */}
           <p className="text-xs text-muted-foreground">
             Hane sayısı yalnız GÖRÜNÜMDÜR (dolgu); sayacı durduran tek şey üst sınırdır.

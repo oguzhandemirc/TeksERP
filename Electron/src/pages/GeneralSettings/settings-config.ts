@@ -1114,11 +1114,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
       {
         key: "batchShortNumberEnabled",
-        title: "Parti no kısa ve dönen olsun (P01…P99)",
-        summary: "Parti numarası P01'den P99'a gider ve başa döner — fabrikadaki plaka düzeninin karşılığı.",
+        title: "Parti no kısa ve dönen olsun",
+        summary: "Parti numarası kısa bir aralıkta gidip başa döner — fabrikadaki plaka düzeninin karşılığı.",
         defaultOn: true,
         audience: ["Planlamacı", "Operatör"],
-        desc: "Açıkken (varsayılan) parti numarası P01…P99 arasında döner — fabrikadaki plaka düzeni. ⚠️ Numara benzersiz değildir; kimlik parti kaydının kendisidir. Kapalıyken uzun, tekil numara üretilir.",
+        desc: "Açıkken (varsayılan) parti numarası kısa bir aralıkta döner — fabrikadaki plaka düzeni. Aralığın kendisi (ön ek, hane, alt/üst sınır, başa dönme) Ayarlar → Numaralandırma ekranındaki “Parti no (kısa, dönen)” serisinden değiştirilir; aşağıdaki satır yürürlükteki aralığı gösterir. ⚠️ Numara benzersiz değildir; kimlik parti kaydının kendisidir. Kapalıyken uzun, tekil numara üretilir.",
         hint: BatchNumberHint,
       },
       {

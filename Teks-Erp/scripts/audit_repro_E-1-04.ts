@@ -40,10 +40,10 @@ import {
   ddmmyy,
   isDailyCode,
   nextDailySeq,
-  nextShortBatchSeq,
-  parseShortBatchCode,
-  SHORT_BATCH_MAX,
 } from "../src/utils/code-format";
+import { resolveSeriesFormat } from "../src/services/number-series.service";
+import { seriesCodeSeq } from "../src/services/helpers/series-format.helper";
+import { nextCounterSeq } from "../src/services/helpers/series-counter.helper";
 import { ROLL_BARCODE_RE, MAX_ROLL_SEQ, rollBarcodePrefix } from "../src/services/helpers/roll-barcode.helper";
 
 let fail = 0;
@@ -130,10 +130,15 @@ console.log("      (src/services/workorder.service.ts:34 WO_SORTABLE_FIELDS, shi
 // ── (4) Parti no P99 → P01 körlemesine sarma ─────────────────────────────────
 console.log("");
 console.log("--- (4) Kısa parti no sarması (bilinçli karar — sınır davranışı kayda geçiriliyor) ---");
-console.log(`   next(97)=${nextShortBatchSeq(97)}  next(98)=${nextShortBatchSeq(98)}  next(${SHORT_BATCH_MAX})=${nextShortBatchSeq(SHORT_BATCH_MAX)}`);
-console.log(`   next(null)=${nextShortBatchSeq(null)}  parse('P00')=${parseShortBatchCode("P00")}  parse('P0508260019')=${parseShortBatchCode("P0508260019")}`);
+// ⚠️ 2026-09-23: aralık ve sarma artık `batchShort` SERİSİNİN AYARI (kod sabiti
+// değil). Bulgu aynı bulgu; yalnız kaynağı veriye taşındı.
+const kisaFmt = resolveSeriesFormat("batchShort");
+const ust = kisaFmt.maxValue ?? 99;
+const nx = (n: number) => nextCounterSeq(kisaFmt, n, "kısa parti");
+console.log(`   next(97)=${nx(97)}  next(98)=${nx(98)}  next(${ust})=${nx(ust)}`);
+console.log(`   next(0)=${nx(0)}  parse('P00')=${seriesCodeSeq(kisaFmt, "P00")}  parse('P0508260019')=${seriesCodeSeq(kisaFmt, "P0508260019")}`);
 check(
-  nextShortBatchSeq(SHORT_BATCH_MAX) === 1,
+  nx(ust) === 1,
   "P99 sonrası P01'e sarıyor; 'numara canlı mı' kontrolü YOK (2026-08-05 kullanıcı kararı — bulgu değil, sınır kaydı)",
 );
 

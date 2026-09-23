@@ -82,6 +82,8 @@ export interface NumberSeriesFormat {
   startValue?: number | null;
   step?: number | null;
   maxValue?: number | null;
+  /** Üst sınıra varınca başa dön (D2③). Hesabı `series-counter.helper` yapar. */
+  wrap?: boolean | null;
 }
 
 /**
@@ -167,6 +169,21 @@ export function previewSeriesCode(fmt: NumberSeriesFormat, seq = 1, date: Date =
  * 9999'u aşan günde üretilen 5 haneli kodu REDDEDİYOR (kayıt yazılıyor ama
  * okutulamıyor — `scripts/audit_repro_E-1-04.ts`). En az `digits`, fazlası serbest.
  */
+/**
+ * SIRA HANESİNİN NİCELİK BELİRTECİ — `{n,}` mi `{n}` mi? TEK KARAR, iki okuyucu.
+ *
+ * ⚠️ Esneklik (`{n,}`) bir HATA DÜZELTMESİDİR (E-1-04): sınırsız bir seride sıra
+ * `10^n`i aşınca kod GENİŞLER ve dar bir yüklem onu okutulamaz yapardı.
+ * ⚠️ Ama SINIRLI bir seride (üst sınır tanımlı ve haneye sığıyor) esneklik
+ * YANLIŞTIR: o seri tanım gereği sabit genişliktedir ve `{n,}` komşu serinin
+ * uzun kodunu (günlük parti `P0508260019`) kendi kodu sanar. İkisini ayıran
+ * şey ölçülebilir: `maxValue` haneye sığıyor mu?
+ */
+export function seriesDigitsQuantifier(fmt: NumberSeriesFormat): string {
+  const sabitGenislik = fmt.maxValue != null && fmt.maxValue < 10 ** fmt.digits;
+  return sabitGenislik ? `{${fmt.digits}}` : `{${fmt.digits},}`;
+}
+
 export function matchesSeries(fmt: NumberSeriesFormat, code: string): boolean {
   const upper = code.trim().toUpperCase();
   const dateLen = DATE_SEGMENTS[fmt.dateSegment].len;
@@ -177,7 +194,7 @@ export function matchesSeries(fmt: NumberSeriesFormat, code: string): boolean {
   const infix = fmt.infix ?? "";
   for (const prefix of [fmt.prefix, ...fmt.retiredPrefixes]) {
     const head = dateLen === 0 ? `${escapeRe(prefix)}${sep}` : `${escapeRe(prefix)}${sep}\\d{${dateLen}}${sepB}`;
-    if (new RegExp(`^${head}${infix}\\d{${fmt.digits},}$`).test(upper)) return true;
+    if (new RegExp(`^${head}${infix}\\d${seriesDigitsQuantifier(fmt)}$`).test(upper)) return true;
   }
   // ⚠️ EMEKLİ BİÇİMLER KENDİ segment/haneleriyle denenir. Üstteki döngü emekli
   // ÖN EKLERİ yürürlükteki biçimle deniyor (bugünkü davranış, KORUNUYOR); bu
@@ -199,6 +216,48 @@ export function matchesSeries(fmt: NumberSeriesFormat, code: string): boolean {
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Serinin YÜRÜRLÜKTEKİ biçiminin POSIX regex'i — SQL süzgeci için.
+ *
+ * ⚠️ `matchesSeries`in BOĞAZ İKİZİ: aynı soruyu (bu kod bu seriye uyuyor mu)
+ * cevaplar ve onunla BİRLİKTE değişir. İkisi ayrı yazılsaydı SQL bir kümeyi,
+ * bellek-içi yüklem başka bir kümeyi kabul ederdi ve fark yalnız SAHADA
+ * görünürdü. Bu yüzden ikisi de `seriesJoints` + `DATE_SEGMENTS` + aynı hane
+ * esnekliğini (`\d{digits,}`) kullanır.
+ *
+ * ⚠️ EMEKLİ ÖN EKLER YOK: sayacın kaynağı YÜRÜRLÜKTEKİ biçimdir; emekli kod
+ * okutulur ama sayacı sürüklemez (kapsam damgasının SQL'e inmiş hâli).
+ */
+export function seriesPosixRegex(fmt: NumberSeriesFormat): string {
+  const dateLen = DATE_SEGMENTS[fmt.dateSegment].len;
+  const { sep1, sep2 } = seriesJoints(fmt);
+  const s1 = sep1 === "" ? "" : escapeRe(sep1);
+  const s2 = sep2 === "" ? "" : escapeRe(sep2);
+  const infix = fmt.infix ?? "";
+  const head = dateLen === 0 ? `${escapeRe(fmt.prefix)}${s1}` : `${escapeRe(fmt.prefix)}${s1}[0-9]{${dateLen}}${s2}`;
+  return `^${head}${infix}[0-9]${seriesDigitsQuantifier(fmt)}$`;
+}
+
+/**
+ * Kodun SAYAÇ DEĞERİ — biçime uyuyorsa kuyruktaki sayı, uymuyorsa `null`.
+ *
+ * Aralık dışı değer de `null` döner: üretmediğimiz bir numaradır (elle giriş,
+ * veri bozulması ya da aralık DARALTILDIKTAN sonra kalan eski kod) ve sayacın
+ * kaynağı olamaz. `null` çağıranı `startValue`a düşürür — en kötü ihtimalle
+ * seri başından devam edilir, bu bugünkü davranışın birebir aynısıdır.
+ */
+export function seriesCodeSeq(fmt: NumberSeriesFormat, code: string | null | undefined): number | null {
+  if (!code || !matchesSeries(fmt, code)) return null;
+  const kuyruk = code.trim().replace(/^.*?(\d+)$/, "$1");
+  if (kuyruk.length > COUNTER_DIGIT_CEILING) return null;
+  const n = Number.parseInt(kuyruk, 10);
+  if (!Number.isFinite(n)) return null;
+  const min = fmt.startValue ?? 1;
+  if (n < min) return null;
+  if (fmt.maxValue != null && n > fmt.maxValue) return null;
+  return n;
 }
 
 /**

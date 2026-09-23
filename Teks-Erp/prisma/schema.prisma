@@ -5173,6 +5173,15 @@ model NumberSeries {
   step       Int?
   maxValue   Int?
 
+  /// ÜST SINIRA VARINCA NE OLACAK — hata mı, BAŞA DÖNME mi? (D2③)
+  ///
+  /// `false` (varsayılan) = bugünkü davranış: `maxValue` aşılınca 409. `true` =
+  /// sayaç `startValue`a SARAR ve numara bilerek MÜKERRER olur — fabrikanın
+  /// numaralı fiziksel plaka setinin karşılığı (kısa parti no emsali, P01…P99).
+  /// Sarmalı seride numara KİMLİK DEĞİLDİR; kimlik kaydın kendisidir.
+  /// `maxValue` NULL iken bu kolonun hiçbir etkisi yoktur (sarılacak sınır yok).
+  wrap       Boolean @default(false)
+
   /// Biçimin SON değiştiği an — sayacın KAPSAM sınırı. Sıradaki numara yalnız bu
   /// andan SONRA doğan kodlara bakar; eski rejimin kodları sayaca girmez
   /// (`CV220926…` varken tarih segmenti düşerse sıra 2.209.260.004 olurdu).

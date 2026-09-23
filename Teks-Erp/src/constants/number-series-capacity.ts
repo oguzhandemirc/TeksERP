@@ -43,6 +43,7 @@ export const NUMBER_SERIES_CODE_CAPACITY: Readonly<Record<string, number>> = {
   manifest: 64, // manifest.manifestNo
   order: 64, // order.orderNumber
   batchDaily: 64, // batch.batchNumber
+  batchShort: 64, // batch.batchNumber (aynı kolon; iki rejim BİRBİRİNİ DIŞLAR)
   weavingOrder: 64, // weavingOrder.weavingOrderNumber
   warpBeam: 32, // warpBeam.beamNo
   doffEvent: 32, // doffEvent.code

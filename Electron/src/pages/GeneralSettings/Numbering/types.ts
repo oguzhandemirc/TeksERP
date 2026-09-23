@@ -57,6 +57,13 @@ export interface SeriesCounterInput {
   startValue: number | null;
   step: number | null;
   maxValue: number | null;
+  /**
+   * Üst sınıra varınca BAŞA DÖN. `false` = bugünkü davranış (sınırda hata).
+   *
+   * ⚠️ Yalnız ÜST SINIR doluyken anlamlıdır; sınırsız bir seride "başa dön"
+   * çıkışsız bir kapı olurdu (ayar açık görünür, hiçbir şey yapmaz).
+   */
+  wrap: boolean;
 }
 
 export interface NumberSeriesRow {
@@ -99,6 +106,8 @@ export interface NumberSeriesRow {
   startValue: number | null;
   step: number | null;
   maxValue: number | null;
+  /** Üst sınıra varınca başa dönüyor mu (sarma). Üst sınır yoksa etkisizdir. */
+  wrap: boolean;
   /**
    * Etki cümlesinin birimi — BACKEND'DEN gelir, panelde KOPYALANMAZ.
    * (Satır ile belge aynı şey değil: iade numarası üye satırlara kopyalanır.)

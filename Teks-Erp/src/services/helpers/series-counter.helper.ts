@@ -18,8 +18,27 @@ export interface SeriesCounterSettings {
   startValue?: number | null;
   /** Artış adımı (Odoo `number_increment`). Yoksa 1. */
   step?: number | null;
-  /** Üst sınır; aşımda 409. Yoksa sınır yok — taşma HANEYİ GENİŞLETİR (İ3). */
+  /** Üst sınır; aşımda 409 (ya da `wrap` ise başa dönüş). Yoksa sınır yok — taşma HANEYİ GENİŞLETİR (İ3). */
   maxValue?: number | null;
+  /**
+   * Üst sınıra varınca BAŞA DÖN (D2③). `false`/yok = bugünkü davranış (409).
+   *
+   * ⚠️ `maxValue` YOKSA ETKİSİZDİR — sarılacak bir sınır yoktur.
+   */
+  wrap?: boolean | null;
+}
+
+/**
+ * SAYACIN KAYNAĞI "EN SON DOĞAN KOD" MU, "EN BÜYÜK KOD" MU? — TEK YÜKLEM.
+ *
+ * ⚠️ Sarmalı seride en büyük numara "en son" DEMEK DEĞİLDİR: P99'dan sonra doğan
+ * P01 en yenisidir ve max'a bakan bir sayaç sonsuza dek P99'da takılırdı. Bu
+ * yüzden okuma yolu `wrap`a bağlıdır ve o bağ TEK YERDE yaşar — çağıran taraf
+ * "sanırım bu seri sarıyor" diye kendi kararını veremesin (boğaz-ikiz kuralı:
+ * bellek-içi yüklem ile SQL sıralaması birlikte değişir).
+ */
+export function seriesCounterReadsLastBorn(settings: SeriesCounterSettings): boolean {
+  return settings.wrap === true;
 }
 
 /**
@@ -42,6 +61,11 @@ export function nextCounterSeq(
   const seq =
     currentMax < start ? start : start + Math.ceil((currentMax + 1 - start) / step) * step;
   if (settings.maxValue != null && seq > settings.maxValue) {
+    // SARMA: numara BİLEREK mükerrer olur ve bu bir istisna değil, serinin
+    // tanımıdır (fabrikanın numaralı fiziksel plaka seti). Yukarıdaki
+    // "geçmişi ezmek MÜKERRER yapardı" gerekçesi sarmalı seride GEÇERSİZDİR —
+    // kimlik numara değil kaydın kendisidir (`Batch.id`).
+    if (settings.wrap === true) return settings.startValue ?? 1;
     throw AppError.conflict(
       `"${seriesLabel}" serisinin numara aralığı doldu (üst sınır ${settings.maxValue}). ` +
         "Seri ayarından üst sınırı yükseltin ya da yeni bir ön eke geçin.",

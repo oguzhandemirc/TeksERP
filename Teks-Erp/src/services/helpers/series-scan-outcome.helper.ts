@@ -105,12 +105,17 @@ function seriesKnownFormats(key: string): NumberSeriesFormat[] {
  * sayımına karışır. Aynı sınıf, yalnız zamanı farklı.
  */
 export function assertSharedTablePrefixUnique(key: string, fmt: NumberSeriesFormat): void {
-  const tablo = numberSeriesCatalogEntry(key).countTable;
+  const entry = numberSeriesCatalogEntry(key);
+  const tablo = entry.countTable;
   if (!tablo) return;
   const benimkiler = [fmt.prefix, ...fmt.retiredPrefixes];
   for (const other of NUMBER_SERIES_CATALOG) {
     if (other.key === key) continue;
     if (other.countTable?.model !== tablo.model || other.countTable.field !== tablo.field) continue;
+    // BEYANLI İKİZ: rejimler birbirini dışlıyorsa aynı kolonda aynı ön ek
+    // zararsızdır. Beyan İKİ YÖNLÜ aranır — tek yönlüsü kapıyı çağrı yönüne
+    // göre bir açıp bir kapardı.
+    if (entry.exclusiveWith?.key === other.key && other.exclusiveWith?.key === key) continue;
     const of = resolveSeriesFormat(other.key);
     for (const a of benimkiler) {
       for (const b of [of.prefix, ...of.retiredPrefixes]) {

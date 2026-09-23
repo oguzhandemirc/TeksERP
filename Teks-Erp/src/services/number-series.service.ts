@@ -35,11 +35,16 @@ import {
   formatSeriesCode,
   matchesSeries,
   previewSeriesCode,
+  seriesCodeSeq,
   seriesPrefix,
   type NumberSeriesFormat,
 } from "./helpers/series-format.helper";
 import { nextDailySeq, normalizeScanCode } from "../utils/code-format";
-import { nextCounterCandidate, nextCounterSeq } from "./helpers/series-counter.helper";
+import {
+  nextCounterCandidate,
+  nextCounterSeq,
+  seriesCounterReadsLastBorn,
+} from "./helpers/series-counter.helper";
 
 // ── ÖNBELLEK ────────────────────────────────────────────────────────────────
 // `nextNumberTx` bir tx'in İÇİNDEN senkron okur: burada DB'ye gidilirse interaktif
@@ -70,6 +75,11 @@ function seedFormat(entry: NumberSeriesCatalogEntry): NumberSeriesFormat {
     separator: entry.seedSeparator,
     retiredPrefixes: [...(entry.seedRetiredPrefixes ?? [])],
     ...(entry.infix ? { infix: entry.infix.re } : {}),
+    // Tohum sayaç ayarları: satır henüz doğmamışken de BUGÜNKÜ davranış geçerli
+    // olsun diye. Önbellek boşken `resolveSeriesFormat` buraya düşüyor; sınır ve
+    // sarma burada olmasaydı ilk boot'ta kısa parti no sarmayı unuturdu.
+    ...(entry.seedMaxValue === undefined ? {} : { maxValue: entry.seedMaxValue }),
+    ...(entry.seedWrap === undefined ? {} : { wrap: entry.seedWrap }),
   };
 }
 
@@ -90,6 +100,7 @@ function rowFormat(row: NumberSeries): NumberSeriesFormat {
     startValue: row.startValue,
     step: row.step,
     maxValue: row.maxValue,
+    wrap: row.wrap,
   };
 }
 
@@ -336,6 +347,25 @@ export async function nextSeriesNo(
  * yalnız SAHADA görünürdü ("türetilmiş alan / ayrışan yüzey"). Kartela toplu
  * kabulü sırayı ister (N kart tek okumadan), fatura kodu ister — soru aynı.
  */
+/**
+ * SARMALI SERİDE SAYACIN KAYNAĞI — listenin İLK geçerli kodunun sırası.
+ *
+ * ⚠️ SIRA ÇAĞIRANIN SORUMLULUĞU: bu fonksiyon "ilk satır en yenidir" varsayar
+ * ve bunu doğrulayamaz (satırlar `createdAt` taşımayabilir). Sarmalı serinin
+ * üreteci `ORDER BY "createdAt" DESC` ile okur; okumayan bir çağıran sayacı
+ * rastgele bir koddan sürdürürdü. Bu yüzden sarma bugün yalnız TEK üreteçte
+ * (`batch.service`) açıktır ve yeni bir sarmalı seri açılırken bu cümle okunur.
+ *
+ * Geçerli kod yoksa `0` — `nextCounterSeq` onu `startValue`a çevirir.
+ */
+function sonDoganSeq(fmt: NumberSeriesFormat, rows: Array<SeriesCodeRow>): number {
+  for (const r of rows) {
+    const n = seriesCodeSeq(fmt, rowCode(r));
+    if (n !== null) return n;
+  }
+  return 0;
+}
+
 function scopedNextSeq(
   key: string,
   fmt: NumberSeriesFormat,
@@ -351,14 +381,26 @@ function scopedNextSeq(
     ? rows.filter((r) => typeof r === "object" && r !== null && r.createdAt >= since)
     : rows;
 
-  let seq = seriesSeqFrom(fmt, scoped.map(rowCode), fullPrefix);
+  // ⚠️ SAYACIN KAYNAĞI SERİYE GÖRE DEĞİŞİR ve yüklem TEK YERDE (`series-counter`):
+  // sarmalı seride (plaka seti) en büyük numara "en son" DEĞİLDİR — P99'dan sonra
+  // doğan P01 en yenisidir ve max'a bakan bir sayaç sonsuza dek P99'da takılırdı.
+  // Sarmalı serilerde çağıran satırları EN YENİ ÖNCE sıralı verir ve ilk satır
+  // sayacın kaynağıdır; diğer 51 seride davranış bayt bayt aynıdır.
+  let seq = seriesCounterReadsLastBorn(fmt)
+    ? nextCounterSeq(fmt, sonDoganSeq(fmt, scoped), fullPrefix)
+    : seriesSeqFrom(fmt, scoped.map(rowCode), fullPrefix);
 
   // ── ÇAKIŞMA ATLAMASI: kapsam daraltması sayacı 1'e döndürebilir ──────────────
   // Aynı gün biçim değiştirilip GERİ alınırsa kapsam boşalır ve sıra 1'den başlar;
   // o kod ZATEN VAR olabilir. `@unique` P2002 verir ve `withBarcodeRetry` bunu
   // DETERMİNİSTİK olarak tekrarlayıp 409'la biter (`shipping.service.ts:230` bu
   // davranışı yazılı beyan ediyor) — yani kendi kendine onarmaz.
-  if (since && hasCreatedAt) {
+  // ⚠️ SARMALI SERİDE ATLAMA YOK ve bu bir EKSİKLİK DEĞİL: sarma KÖRLEMESİNEDİR
+  // (2026-08-05 kullanıcı kararı) — numara o an başka bir canlı kayıtta kullanılıyor
+  // olabilir ve fabrika bunu bilerek istedi. Atlama döngüsü burada koşsaydı biçim
+  // değişiminden sonra sayaç "boştaki numarayı" arar, 99'u da doluysa 409 verir ve
+  // üretimi durdururdu — reddedilen alternatifin ta kendisi.
+  if (since && hasCreatedAt && !seriesCounterReadsLastBorn(fmt)) {
     const taken = new Set(rows.map(rowCode).filter((c): c is string => typeof c === "string"));
     // ⚠️ SINIR **DENEME** SAYAR, sıra birimi değil (ölçüldü 2026-09-23: eski
     // `seq - startSeq >= SKIP_LIMIT` birim sayıyordu ⇒ adım 10'da sınır sessizce
@@ -446,88 +488,12 @@ export async function nextSeriesSeq(
   return { seq: scopedNextSeq(key, fmt, fullPrefix, rows), fullPrefix, fmt };
 }
 
-// ── SINIFLANDIRMA (Faz B'nin yemi) ──────────────────────────────────────────
-
-export interface SeriesClassifierRow {
-  key: string;
-  kind: NumberSeriesKind;
-  /** Yürürlükteki ön ek ÖNCE, emekliler sonra — eski etiket de çözülsün diye. */
-  prefixes: string[];
-  dateSegment: NumberSeries["dateSegment"];
-  digits: number;
-  separator: string;
-  /**
-   * TARİH ile SAYAÇ arasındaki ayraç — yoksa `separator` geçerlidir (D5②).
-   *
-   * ⚠️ ALAN EKLENDİ: Faz D'siz eski istemci bunu tanımaz ve iki eklemde de
-   * `separator` kurar ⇒ `separator2 !== separator` olan OKUTULAN bir seride
-   * kodu sessizce çözemez. Bu yüzden okutulan serilerin biçimi C0b iki eşikli
-   * kilidin arkasındadır (`series-write.helper.ts`, `test_number_series_panel §10a`).
-   */
-  separator2?: string | null;
-  /** Tarih ile sıra arasındaki sabit parça (regex); istemci tam-format regex'ini bundan kurar. */
-  infix?: string;
-  /**
-   * EMEKLİ BİÇİMLER — her biri KENDİ segment/hane/ayracıyla (D4②).
-   *
-   * ⚠️ ALAN EKLENDİ, `prefixes` DEĞİŞTİRİLMEDİ ve bu bilinçli: eski istemci
-   * (Faz B taşıyan ama Faz D taşımayan) bu alanı TANIMAZ ve görmezden gelir —
-   * davranışı bugünküyle birebir aynı kalır (emekli ön ekleri yürürlükteki
-   * hane ile dener). Alanı `prefixes`in yerine koysaydık eski istemci emekli
-   * ön eki HİÇ tanımaz olurdu; sözleşme kıran değişiklik, alan EKLEMEK değil
-   * var olanı DEĞİŞTİRMEKTİR.
-   */
-  retiredFormats?: Array<{
-    prefix: string;
-    dateSegment: NumberSeries["dateSegment"];
-    digits: number;
-    separator: string;
-    separator2?: string | null;
-  }>;
-}
-
-function classifierRow(entry: NumberSeriesCatalogEntry): SeriesClassifierRow {
-  const fmt = resolveSeriesFormat(entry.key);
-  return {
-    key: entry.key,
-    kind: entry.kind as NumberSeriesKind,
-    prefixes: [fmt.prefix, ...fmt.retiredPrefixes],
-    dateSegment: fmt.dateSegment,
-    digits: fmt.digits,
-    separator: fmt.separator,
-    ...(fmt.separator2 != null ? { separator2: fmt.separator2 } : {}),
-    ...(fmt.infix ? { infix: fmt.infix } : {}),
-    ...(fmt.retiredFormats && fmt.retiredFormats.length > 0
-      ? { retiredFormats: fmt.retiredFormats }
-      : {}),
-  };
-}
-
-/** İstemcilerin barkod sınıflandırması için okuduğu tablo. */
-export function seriesClassifierTable(): SeriesClassifierRow[] {
-  return NUMBER_SERIES_CATALOG.filter((e) => e.kind !== undefined).map(classifierRow);
-}
-
-/**
- * Okutulan kodun HANGİ seriye ait olduğu — emekli ön ekler dahil; tanınmazsa null.
- *
- * Sunucudaki TEK sınıflandırıcıdır: `/api/scan/resolve` de `search.service`in
- * tam-format hızlı yolu da bunu çağırır (boğaz ikiz). Ön ek bir gün değişirse
- * ikisi birden değişir; elle yazılmış ikinci bir regex tablosu geride kalmaz.
- *
- * Sıra sonucu ETKİLEMEZ: okutulan serilerde "biri ötekinin ön eki olamaz" kuralı
- * `assertSeriesFormatAllowed ③` ile zaten sağlanıyor, yani bir kod en çok bir
- * seriye uyar.
- */
-export function classifyScannedCode(code: string): SeriesClassifierRow | null {
-  const upper = normalizeScanCode(code);
-  if (upper === "") return null;
-  for (const entry of NUMBER_SERIES_CATALOG) {
-    if (!entry.kind) continue;
-    if (matchesSeries(resolveSeriesFormat(entry.key), upper)) return classifierRow(entry);
-  }
-  return null;
-}
+// ── SINIFLANDIRMA → `helpers/series-classifier.helper.ts` (boyut bölmesi) ────
+export {
+  classifyScannedCode,
+  seriesClassifierTable,
+  type SeriesClassifierRow,
+} from "./helpers/series-classifier.helper";
 
 /**
  * BEKLEYEN (henüz yürürlüğe girmemiş) BİÇİM DEĞİŞİKLİĞİ — panel bunu gösterir.
