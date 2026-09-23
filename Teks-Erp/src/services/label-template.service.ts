@@ -52,6 +52,7 @@ import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-previ
 import { mmToDots } from "./helpers/native-label.shared";
 import { isRasterLanguage, renderCanvasRaster, type RasterLanguage } from "./helpers/raster/raster-render";
 import { rasterPreviewHtml } from "./helpers/raster/raster-bmp";
+import { p2002TargetParts } from "../utils/p2002";
 
 const TABLE = "LABEL_TEMPLATE";
 
@@ -62,11 +63,7 @@ const TABLE = "LABEL_TEMPLATE";
  */
 function rethrowDefaultConflict(e: unknown): never {
   if (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    e.code === "P2002" &&
-    String((e.meta as { target?: unknown } | undefined)?.target ?? "")
-      .toLowerCase()
-      .includes("default")
+    p2002TargetParts(e).some((p) => p.toLowerCase().includes("default"))
   ) {
     throw AppError.conflict(
       "Bu tür için varsayılan az önce değişti — sayfayı yenileyip tekrar deneyin."

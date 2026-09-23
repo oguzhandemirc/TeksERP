@@ -30,6 +30,7 @@ import {
   readIdCondition,
 } from "../utils/query-parser";
 import { Request } from "express";
+import { p2002OnField } from "../utils/p2002";
 
 // =============================================================================
 // FASON = CARİNİN ROLÜ (kullanıcı kararı 2026-09-17, SAP BP kalıbı)
@@ -121,11 +122,7 @@ export async function createProfileForCustomerTx(
 
 /** Yarışta DB tekil index'i kazanır: P2002(customerId) → aynı 409 cümlesi. */
 function isProfileUniqueViolation(e: unknown): boolean {
-  return (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    e.code === "P2002" &&
-    JSON.stringify((e.meta as { target?: unknown } | undefined)?.target ?? "").includes("customerId")
-  );
+  return p2002OnField(e, "customerId");
 }
 
 /**
