@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { resolveDestination } from './destinationDefault';
+import { destinationLockQueryKey, invalidateAfterShipment, resolveDestination } from './destinationDefault';
+import { DestinationLockRow } from './DestinationLockRow';
 import { PackingGroupChips } from './PackingGroupChips';
 import { reconcileSelection, sacksInSelection, selectionName, shipButtonLabel, type PackingGroupSelection } from './packingGroupSelection';
 import {
@@ -29,7 +30,6 @@ import { AnimatedEntrance, MarqueeText } from '../../../components/motion';
 import { colors, palette, spacing, radius, shadow, typography } from '../../../theme';
 import {
   packingService,
-  shipmentDestinationLabels,
   type PoolSack,
   type KartelaStockGroup,
   type ShipmentDestination,
@@ -92,10 +92,15 @@ export default function PaketlemeScreen() {
   const customerId = route.params.customerId;
   const branchId = route.params.branchId ?? null;
 
-  // Sevkiyat kapsamı (yurtiçi/yurtdışı) — sevkiyat KURULUMUNDA kullanılır (taslak).
-  // İlk değer cari kartının VARSAYILANIdır (kilit değil); operatör dokunduysa ezilmez.
-  const [destination, setDestination] = useState<ShipmentDestination>('DOMESTIC');
-  const destinationTouchedRef = useRef(false);
+  // Sevk yönü cariden/şubeden KİLİTLİ gelir (sunucudan okunur); yalnız zincir boşken
+  // operatör bir kez seçer ve seçim sevkiyatla karta yazılır.
+  const [picked, setPicked] = useState<ShipmentDestination | null>(null);
+  const lockQ = useQuery({
+    queryKey: destinationLockQueryKey(customerId, branchId),
+    queryFn: () => packingService.getDestinationLock(customerId, branchId),
+    staleTime: 10_000,
+  });
+  const { destination, chosen, needsPick } = resolveDestination({ lock: lockQ.data, picked });
 
   const [scanOpen, setScanOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
@@ -157,13 +162,6 @@ export default function PaketlemeScreen() {
   const pool = poolQ.data?.data ?? null;
   const sacks = pool?.sacks ?? [];
   const customer = pool?.customer ?? null;
-  const customerDefaultDestination = customer?.defaultDestination ?? null;
-  useEffect(() => {
-    if (!pool) return;
-    setDestination((cur) =>
-      resolveDestination({ current: cur, touched: destinationTouchedRef.current, customerDefault: customerDefaultDestination }),
-    );
-  }, [pool, customerDefaultDestination]);
 
   // Render'dan bağımsız güncel çuval listesi (scan callback stale closure önlemi).
   // Grup seçiliyse okutma hedefi de o grubun çuvalları (aşağıda `groupSacks` atanır).
@@ -205,10 +203,7 @@ export default function PaketlemeScreen() {
     'Çuvallar güncellendi',
   );
   const finishAndBack = () => {
-    void qc.invalidateQueries({ queryKey: ['pool'] });
-    void qc.invalidateQueries({ queryKey: ['pool-sacks', customerId] });
-    void qc.invalidateQueries({ queryKey: ['open-orders'] });
-    void qc.invalidateQueries({ queryKey: ['sack-store'] });
+    invalidateAfterShipment(qc, customerId);
     nav.goBack();
   };
 
@@ -344,7 +339,8 @@ export default function PaketlemeScreen() {
         customerId,
         branchId,
         orderIds: undefined,
-        destination,
+        destination: destination ?? undefined,
+        ...(chosen ? { destinationChosen: true as const } : {}),
         clientToken: shipTokenRef.current,
       });
       // ⚠️ UYARILAR YANITIN KÖKÜNDE (`ApiResponse.warnings`), `data`nın İÇİNDE
@@ -471,12 +467,13 @@ export default function PaketlemeScreen() {
   // ── Sevk kısıtları — dolu çuval + (yurtdışı ise) tartı. Mühür/şube kısıtı yok.
   const requireWeigh = destination === 'EXPORT' || weighRequiredFlag;
   const unweighed = shippableSacks.filter((s) => (s.weightKg ?? 0) <= 0);
-  const canShip = shippableSacks.length > 0 && (!requireWeigh || unweighed.length === 0);
+  const canShip = shippableSacks.length > 0 && destination != null && (!requireWeigh || unweighed.length === 0);
 
   const groupName = packingGroupsEnabled ? selectionName(groupSel, groups) : null;
 
   let shipHint = '';
-  if (shippableSacks.length === 0) shipHint = groupName ? `“${groupName}” grubunda dolu çuval yok.` : 'Dolu çuval yok — çuvala top/kartela okut.';
+  if (needsPick) shipHint = 'Sevk yönünü seçin — ilk sevk, seçim karta yazılır.';
+  else if (shippableSacks.length === 0) shipHint = groupName ? `“${groupName}” grubunda dolu çuval yok.` : 'Dolu çuval yok — çuvala top/kartela okut.';
   else if (requireWeigh && unweighed.length > 0)
     shipHint =
       destination === 'EXPORT'
@@ -608,32 +605,8 @@ export default function PaketlemeScreen() {
                   <Text style={styles.swatchNote}>+{swatchCount} kartela okutuldu</Text>
                 )}
 
-                {/* Saha #19: yurtiçi/yurtdışı — sevk kurulumunda kullanılır (yurtdışı: tartı zorunlu) */}
-                <View style={styles.destRow}>
-                  {(['DOMESTIC', 'EXPORT'] as const).map((d) => {
-                    const active = destination === d;
-                    return (
-                      <TouchableRipple
-                        key={d}
-                        onPress={() => {
-                          if (active) return;
-                          destinationTouchedRef.current = true;
-                          setDestination(d);
-                        }}
-                        style={[
-                          styles.destChip,
-                          active && (d === 'EXPORT' ? styles.destChipExport : styles.destChipActive),
-                        ]}
-                        borderless
-                      >
-                        <Text style={[styles.destChipText, active && styles.destChipTextActive]}>
-                          {shipmentDestinationLabels[d]}
-                        </Text>
-                      </TouchableRipple>
-                    );
-                  })}
-                  {destination === 'EXPORT' && <Text style={styles.destHint}>çuval tartısı zorunlu</Text>}
-                </View>
+                {/* Saha #19: yurtiçi/yurtdışı — cariden/şubeden kilitli; boşsa ilk sevkte seçilir */}
+                <DestinationLockRow lock={lockQ.data} picked={picked} onPick={setPicked} hasBranch={!!branchId} />
               </Surface>
             </AnimatedEntrance>
 
@@ -1110,19 +1083,6 @@ const styles = StyleSheet.create({
 
   swatchNote: { fontSize: typography.size.xs, color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' },
 
-  destRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, justifyContent: 'center' },
-  destChip: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  destChipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-  destChipExport: { backgroundColor: '#0284c7', borderColor: '#0284c7' },
-  destChipText: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: '600' },
-  destChipTextActive: { color: colors.textOnDark },
-  destHint: { fontSize: typography.size.xs, color: colors.textSecondary, fontStyle: 'italic' },
 
   // ── Kartlar ──
   card: {

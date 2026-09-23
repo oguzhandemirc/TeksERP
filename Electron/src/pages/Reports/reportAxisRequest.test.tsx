@@ -24,6 +24,8 @@ import { OrderIntakePage } from "@/pages/Reports/Sales/OrderIntakePage";
 import { DemandAnalysisPage } from "@/pages/Reports/Sales/DemandAnalysisPage";
 import { OrderLeadTimePage } from "@/pages/Reports/Sales/OrderLeadTimePage";
 import { OrderCancellationPage } from "@/pages/Reports/Sales/OrderCancellationPage";
+import { ShipmentScorecardPage } from "@/pages/Reports/Sales/ShipmentScorecardPage";
+import { ReturnScorecardPage } from "@/pages/Reports/Sales/ReturnScorecardPage";
 import { OpenOrderCoveragePage } from "@/pages/Reports/Sales/OpenOrderCoveragePage";
 import { CustomerScorecardPage } from "@/pages/Reports/Customer/CustomerScorecardPage";
 import { OrderProfilePage } from "@/pages/Reports/Customer/OrderProfilePage";
@@ -36,6 +38,8 @@ const YAPRAKLAR: Array<{ key: string; page: ReactElement; eksen: string; deger: 
   { key: "sales/demand-analysis", page: <DemandAnalysisPage />, eksen: "customerId", deger: "c1" },
   { key: "sales/order-leadtime", page: <OrderLeadTimePage />, eksen: "customerId", deger: "c1" },
   { key: "sales/order-cancellation", page: <OrderCancellationPage />, eksen: "customerId", deger: "c1" },
+  { key: "sales/shipment-scorecard", page: <ShipmentScorecardPage />, eksen: "destination", deger: "EXPORT" },
+  { key: "sales/return-scorecard", page: <ReturnScorecardPage />, eksen: "destination", deger: "EXPORT" },
   { key: "sales/open-order-coverage", page: <OpenOrderCoveragePage />, eksen: "itemId", deger: "i1" },
   { key: "customer/scorecard", page: <CustomerScorecardPage />, eksen: "customerId", deger: "c1" },
   { key: "customer/order-profile", page: <OrderProfilePage />, eksen: "customerId", deger: "c1" },

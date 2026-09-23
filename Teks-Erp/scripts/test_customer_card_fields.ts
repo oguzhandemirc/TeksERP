@@ -10,8 +10,10 @@
 //   5. Sınır aşımı (exportCode 51 karakter) → alan-adlı 400, DB'ye ulaşmaz.
 //   6. Metin olmayan tip → 400.
 //   7. findAll search exportCode üzerinden müşteriyi bulur (route searchFields).
-//   8. defaultDestination (sevk hedefi VARSAYILANI, 2026-09-13): EXPORT yazılır, "" → null,
-//      enum dışı → 400 ve kaydı değiştirmez, alan gönderilmezse null (bugünkü davranış).
+//   8. defaultDestination (sevk yönü KİLİDİ — 2026-09-13'te varsayılan doğdu, 2026-09-23'te kilit
+//      oldu; zincir `test_shipment_destination_chain`, kilit `test_shipment_destination_lock`):
+//      EXPORT yazılır, "" → null (ilk sevkte sorulur), enum dışı → 400 ve kaydı değiştirmez,
+//      alan gönderilmezse null — kart formu yönü yazar, sevkiyat seçmez.
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { CustomerService } from "../src/services/customer.service";
@@ -166,7 +168,7 @@ async function main() {
     } catch (e) { badDest = e; }
     check(
       "8c enum dışı defaultDestination → 400 (Türkçe, alan adlı)",
-      badDest instanceof AppError && badDest.statusCode === 400 && badDest.message.includes("sevk varsayılanı"),
+      badDest instanceof AppError && badDest.statusCode === 400 && badDest.message.includes("sevk yönü"),
       badDest instanceof Error ? badDest.message : String(badDest),
     );
     const ddAfter = await prisma.customer.findUnique({ where: { id: ddId }, select: { defaultDestination: true } });

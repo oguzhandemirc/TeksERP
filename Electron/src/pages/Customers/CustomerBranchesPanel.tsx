@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateDestinationLock } from "@/pages/Operations/SackContentEdit/destinationDefault";
 import { toast } from "sonner";
 import { Plus, Pencil, Power, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,25 +11,15 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { BranchFormDialog } from "./BranchFormDialog";
 import { customerBranchService } from "./branchService";
 import type { CustomerBranch, CustomerBranchPayload } from "./branch-types";
-import type { BranchFormValues } from "./branch-schema";
+import { branchFormToPayload as toPayload, type BranchFormValues } from "./branch-schema";
 
 interface Props {
   customerId: string;
+  /** Carinin yönü — şube kendi yönünü taşımıyorsa ihracat kodu alanı buna göre görünür. */
+  customerDestination?: "DOMESTIC" | "EXPORT" | null;
 }
 
-const toPayload = (v: BranchFormValues): Partial<CustomerBranchPayload> => ({
-  code: v.code?.trim() || null,
-  name: v.name.trim(),
-  address: v.address?.trim() || null,
-  city: v.city?.trim() || null,
-  district: v.district?.trim() || null,
-  contactName: v.contactName?.trim() || null,
-  contactPhone: v.contactPhone?.trim() || null,
-  notes: v.notes?.trim() || null,
-  isActive: v.isActive,
-});
-
-export function CustomerBranchesPanel({ customerId }: Props) {
+export function CustomerBranchesPanel({ customerId, customerDestination = null }: Props) {
   const qc = useQueryClient();
   const [showInactive, setShowInactive] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -36,8 +27,10 @@ export function CustomerBranchesPanel({ customerId }: Props) {
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
   const queryKey = ["customer-branches", customerId, showInactive] as const;
-  const invalidate = () =>
-    qc.invalidateQueries({ queryKey: ["customer-branches", customerId] });
+  const invalidate = () => {
+    invalidateDestinationLock(qc);
+    return qc.invalidateQueries({ queryKey: ["customer-branches", customerId] });
+  };
 
   const { data, isLoading } = useQuery({
     queryKey,
@@ -183,6 +176,7 @@ export function CustomerBranchesPanel({ customerId }: Props) {
       )}
 
       <BranchFormDialog
+        customerDestination={customerDestination}
         open={formOpen}
         onOpenChange={(open) => {
           setFormOpen(open);

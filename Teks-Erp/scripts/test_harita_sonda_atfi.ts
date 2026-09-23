@@ -98,10 +98,33 @@ function sahnelenmisSatirlar(): Set<number> {
   return out;
 }
 
-/** HEAD'de o satırı yazan commit — `(bu commit)` işaretinin türetilmiş sha'sı; çözülmezse null. */
-function blameSha(satirNo: number): string | null {
+/**
+ * O satırı yazan commit — `(bu commit)` işaretinin türetilmiş sha'sı; çözülmezse null.
+ *
+ * ⚠️ SATIR NUMARASI REVİZYONLAR ARASI BİR KİMLİK DEĞİLDİR (2026-09-23, bir
+ * birleştirme sırasında ölçüldü): çalışma ağacındaki numara doğrudan HEAD'e
+ * uygulanıyordu ve merge dosyayı büyütünce blame `fatal: file has only N
+ * lines` diyordu — `catch` bunu sessizce "çözülmedi"ye çeviriyor, yani geçmişi
+ * OLAN satırlar havada görünüyordu. Dosya kısalmasaydı daha kötüsü olurdu:
+ * YANLIŞ satırın sha'sı türetilirdi ve hiçbir şey kırmızı vermezdi.
+ *
+ * ⚠️ ÖLÇÜM (2026-09-23, düzeltmeden SONRA, doğrudan): HEAD'de GEÇEN bir satır
+ * `7842948f` çözüyor · metni değiştirilmiş (HEAD'de olmayan) satır `NULL`
+ * veriyor ⇒ fail-closed korundu.
+ *
+ * ⚠️ `--contents` İLE ÇÖZÜLMEZ ve bu ÖLÇÜLDÜ: o hâlde git, geçmişte HİÇ
+ * olmayan bir satırı da komşusunun commit'ine atfediyor ⇒ sonda ısırmıyor,
+ * bekçi körleşiyor. Doğru çözüm satırı İÇERİKLE bulmak: HEAD'in kendi
+ * metninde o satır GEÇİYORSA onun numarası blame'lenir; geçmiyorsa satır
+ * gerçekten YENİDİR ve `null` döner — "sahnelenmiş olmalı" kuralı işler
+ * (fail-closed korunur).
+ */
+function blameSha(satirMetni: string): string | null {
   try {
-    const b = git(["blame", "-l", "-s", "-L", `${satirNo},${satirNo}`, "HEAD", "--", HARITA], { cwd: KOK });
+    const headMetni = git(["show", `HEAD:${HARITA}`], { cwd: KOK }).split("\n");
+    const headNo = headMetni.indexOf(satirMetni) + 1;
+    if (headNo === 0) return null; // HEAD'de yok ⇒ satır YENİ ⇒ sahnelenmiş olmalı
+    const b = git(["blame", "-l", "-s", "-L", `${headNo},${headNo}`, "HEAD", "--", HARITA], { cwd: KOK });
     // `^` SINIR işareti sha'nın ilk hanesinin YERİNE basılır (39 hane kalır) — sığ klonda her
     // satır sınırdır ve bu "çözülmedi" demektir; tam klonda yalnız kök commit'te görülür.
     if (b.startsWith("^")) return null;
@@ -139,7 +162,7 @@ function haritayiOku(): { metin: string; kaynak: "INDEX" | "AĞAÇ" } {
   }
 }
 
-interface Satir { no: number; dosya: string; hucre: string }
+interface Satir { no: number; dosya: string; hucre: string; ham: string }
 function satirlar(metin: string): Satir[] {
   const out: Satir[] = [];
   let tabloda = false;
@@ -151,7 +174,7 @@ function satirlar(metin: string): Satir[] {
     if (tabloda && !l.startsWith("|")) { tabloda = false; continue; }
     if (tabloda) {
       const c = l.split("|").map((s) => s.trim());
-      out.push({ no: i + 1, dosya: c[1] ?? "", hucre: c[4] ?? "" });
+      out.push({ no: i + 1, dosya: c[1] ?? "", hucre: c[4] ?? "", ham: l });
     }
   }
   return out;
@@ -186,7 +209,7 @@ function main(): void {
   for (const s of buCommit) {
     if (sahneli.has(s.no)) { console.log(`     ℹ️ ${HARITA}:${s.no} ${s.dosya} ✓B ${BU_COMMIT} — sahnelenmiş, sha commit'te doğar`); continue; }
     if (sig) { olculemedi.push(s); continue; }
-    const sha = blameSha(s.no);
+    const sha = blameSha(s.ham);
     if (sha) console.log(`     ℹ️ ${HARITA}:${s.no} ${s.dosya} ✓B ${BU_COMMIT} → blame ${sha}`);
     else havada.push(s);
   }

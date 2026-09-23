@@ -7,6 +7,23 @@
 // =============================================================================
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
+import { resolveDestination, type DestinationLock, type DestinationView } from "@/pages/Operations/SackContentEdit/destinationDefault";
+import type { ShipmentDestination } from "@/pages/Operations/SackContentEdit/types";
+
+/**
+ * Hızlı Sevk'in yönü — çuvallı sevkle AYNI kural (`resolveDestination`): kilitliyse kilit, zincir
+ * boşsa operatör bir kez seçer ve seçim karta yazılır. Yurtdışı (kilitli ya da seçilen) Hızlı Sevk'i
+ * kapatır; gerekçe metni sunucudan gelir. `blocked` metin olmasa da (eski sunucu) düğmeyi kapatır.
+ */
+export function quickShipDestination(
+  lock: DestinationLock | null | undefined,
+  picked: ShipmentDestination | null,
+): DestinationView & { blocked: boolean; blockedReason: string | null } {
+  const view = resolveDestination({ lock, picked });
+  if (lock?.quickShipBlockedReason) return { ...view, blocked: true, blockedReason: lock.quickShipBlockedReason };
+  if (!view.locked && view.destination === "EXPORT") return { ...view, blocked: true, blockedReason: lock?.quickShipPickExportReason ?? null };
+  return { ...view, blocked: false, blockedReason: null };
+}
 
 /**
  * "Seçilenleri Sevk Et" görünür mü — SAF YÜKLEM (bekçi: `quickShip.test.ts`).
@@ -66,6 +83,9 @@ export async function quickShip(payload: {
   customerId: string;
   branchId?: string | null;
   orderIds?: string[];
+  destination?: ShipmentDestination;
+  /** Yalnız operatör ilk-seçimde açıkça seçtiyse — sunucu karta yalnız o zaman yazar. */
+  destinationChosen?: true;
   clientToken?: string;
 }): Promise<ApiResponse<{ id: string; shipmentNo: string; dispatched?: boolean }>> {
   const res = await apiClient.post<ApiResponse<{ id: string; shipmentNo: string; dispatched?: boolean }>>(

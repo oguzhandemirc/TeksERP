@@ -66,6 +66,28 @@ router.get("/open-orders", verifyToken, READ, controller.openOrders);
  *     responses: { 200: { description: Müşteri bazlı havuz özeti } }
  */
 router.get("/pool", verifyToken, READ, controller.listPool);
+
+/**
+ * @openapi
+ * /api/shipping/destination-lock:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Sevk yönü kilidi — sevk ekranı yönü buradan okur (seçilmez)
+ *     description: >
+ *       Zincir: şube yönü (branchId verildiyse ve doluysa) → cari yönü → null (ilk sevk,
+ *       operatöre sorulur ve karta yazılır). exportCode yalnız yurtdışında dolu (belgeyle
+ *       aynı çözüm: şube ihracat kodu, boşsa cari ihracat kodu). quickShipBlockedReason
+ *       doluysa Hızlı Sevk bu adreste yapılamaz.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: customerId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: branchId, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ destination: DOMESTIC|EXPORT|null, source: BRANCH|CUSTOMER|null, exportCode, quickShipBlockedReason }" }
+ *       400: { description: Şube bu müşteriye ait değil }
+ *       404: { description: Müşteri bulunamadı }
+ */
+router.get("/destination-lock", verifyToken, READ, controller.getDestinationLock);
 router.get("/pool/sacks", verifyToken, READ, controller.listCustomerPoolSacks);
 
 /**

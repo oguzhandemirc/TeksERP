@@ -34,6 +34,9 @@ const AXES_BY_REPORT: Record<string, readonly string[]> = {
   "sales/demand-analysis": ["customerId", "itemId", "colorId", "destination"],
   "sales/order-leadtime": ["customerId", "itemId", "destination"],
   "sales/order-cancellation": ["customerId", "reasonCode", "destination"],
+  // Sevk raporlarında yön SEVKİYATIN donmuş yönüdür (`destination="shipment"`), müşteri ekseni yok.
+  "sales/shipment-scorecard": ["destination"],
+  "sales/return-scorecard": ["destination"],
   // Açık karşılanmada müşteri ekseni BİLEREK yok: FIFO havuzu spec başına paylaşılır.
   "sales/open-order-coverage": ["itemId"],
   "customer/scorecard": ["customerId", "itemId", "destination"],
@@ -110,8 +113,9 @@ describe("eksen süzgeci kapsamı — beyan ↔ ekran", () => {
       const liste = src.match(/const AXIS_KEYS = \[([^\]]*)\]/);
       if (!liste) { sapma.push(`${anahtar}: AXIS_KEYS bulunamadı`); continue; }
       const gercek = [...liste[1]!.matchAll(/"([a-zA-Z]+)"/g)].map((m) => m[1]!);
-      // `destination` ayrı bir seçicidir: şeride `destination` propuyla girer.
-      if (/<ReportAxisBar[^>]*\sdestination(\s|\/|>)/.test(src)) gercek.push("destination");
+      // `destination` ayrı bir seçicidir: şeride `destination` propuyla girer (çıplak = sipariş yönü,
+      // `destination="shipment"` = sevkiyatın donmuş yönü — ikisi de yön ekseni sayılır).
+      if (/<ReportAxisBar[^>]*\sdestination(\s|\/|>|=)/.test(src)) gercek.push("destination");
       const b = [...beklenen].sort().join(",");
       const g = [...gercek].sort().join(",");
       if (b !== g) sapma.push(`${anahtar}: beyan [${b}] ≠ ekran [${g}]`);

@@ -7,7 +7,7 @@
 // =============================================================================
 import type { ReportKey } from "@/lib/report-catalog";
 import type { ReportSecenekler } from "../_services/types";
-import { AXIS_EMPTY_HINTS, AXIS_LABELS, type AxisKey } from "../_hooks/reportAxisFilters";
+import { AXIS_EMPTY_HINTS, AXIS_LABELS, type AxisKey, type DestinationAxis } from "../_hooks/reportAxisFilters";
 import type { ReportAxesState } from "../_hooks/useReportAxes";
 import { DestinationSelect } from "./DestinationSelect";
 import { ReportDateFilter } from "./ReportDateFilter";
@@ -19,8 +19,8 @@ interface Props {
   axes: ReportAxesState;
   secenekler: ReportSecenekler | undefined;
   eksenler: readonly AxisKey[];
-  /** "Müşteri varsayılanı" seçicisi — yalnız müşteri ekseni olan raporlarda. */
-  destination?: boolean;
+  /** Yön seçicisi: `true` sipariş raporu ("Cari/şube yönü (bugünkü)") · `"shipment"` sevk raporu (donmuş yön). */
+  destination?: DestinationAxis;
 }
 
 export function ReportAxisBar({ reportKey, showCompare, axes, secenekler, eksenler, destination }: Props) {
@@ -39,7 +39,7 @@ export function ReportAxisBar({ reportKey, showCompare, axes, secenekler, eksenl
           emptyHint={AXIS_EMPTY_HINTS[a]}
         />
       ))}
-      {destination ? <DestinationSelect id={`${id}-destination`} value={axes.sel.destination} onChange={axes.setDestination} /> : null}
+      {destination ? <DestinationSelect id={`${id}-destination`} value={axes.sel.destination} onChange={axes.setDestination} variant={destination === "shipment" ? "shipment" : "order"} /> : null}
     </div>
   );
 }

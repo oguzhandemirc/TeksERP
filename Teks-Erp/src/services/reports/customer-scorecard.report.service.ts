@@ -352,8 +352,9 @@ export async function getCustomerScorecard(
     collectLifetime(filters),
     compareRange ? collectPeriod(compareRange, filters) : Promise.resolve(null),
     // "Dönemde sevk edilen metraj" TEK TANIM (`_shipped.ts`) — brüt, doğrudan
-    // sevkler dahil, iade geri-eklemeli. İkinci bir tanım üretmiyoruz.
-    collectShipped(range),
+    // sevkler dahil, iade geri-eklemeli. İkinci bir tanım üretmiyoruz. Yön süzgeci sevk
+    // sütununda SEVKİYATIN donmuş yönüdür (müşteri listesi ise sipariş zincirinden).
+    collectShipped(range, { destination: filters.destination }),
     // R5b-c3: seçici kaynağı süzgeçten bağımsız — süzgeçli istek dönem toplayıcısını bir kez daha süzgeçsiz koşar (beyanlı ×2).
     hasFilters(filters) ? collectPeriod(range, {}) : Promise.resolve(null),
   ]);

@@ -34,32 +34,6 @@ function EtkiCumlesi({ etkiSayisi, birim }: { etkiSayisi: number | null; birim: 
 }
 
 /**
- * ÜÇ UÇ, ÜÇ KİLİT: yalnız AÇIK olan ve GERÇEKTEN değişen bölüm gönderilir.
- * Kapalı bölümü göndermek, kullanıcının dokunmadığı bir alan yüzünden 400
- * almasına yol açardı; değişmeyeni göndermek de gereksiz bir denetim satırı yazardı.
- */
-async function gonder(
-  row: NumberSeriesRow,
-  deger: {
-    fmt: SeriesFormatInput;
-    counter: SeriesCounterInput;
-    source: NumberSourceMode;
-    effectiveFrom: string;
-  },
-  degisti: { formatChanged: boolean; counterChanged: boolean; sourceChanged: boolean },
-): Promise<void> {
-  if (row.editable && degisti.formatChanged) {
-    await numberingService.update(row.key, deger.fmt, deger.effectiveFrom);
-  }
-  if (row.counter.startValue && degisti.counterChanged) {
-    await numberingService.updateCounter(row.key, deger.counter);
-  }
-  if (row.source.editable && degisti.sourceChanged) {
-    await numberingService.updateSource(row.key, deger.source);
-  }
-}
-
-/**
  * ⚠️ ÖNİZLEME SUNUCUDAN: panel kendi biçimlendiricisini YAZMAZ. Aday biçim
  * geçersizse (karakter · hane · ayraç · ÖN EK ÇAKIŞMASI · KOLONA SIĞMAMA) hata
  * buradan gelir, yani kullanıcı "Kaydet"e basmadan ÖNCE görür.
@@ -100,14 +74,20 @@ interface Props {
   onSaved: () => void;
 }
 
-export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClose, onSaved }: Props) {
+/**
+ * Formun TASLAK durumu — satır değişince sıfırlanır.
+ *
+ * Bileşenden AYRILDI (2026-09-23): durum kurulumu ile çizim aynı fonksiyonda
+ * büyüyüp boyut tavanını aştı. Ayrım rastgele değil: burası "ne düzenleniyor",
+ * aşağısı "nasıl çiziliyor" — ikisi ayrı hızda değişir.
+ */
+function useNumberingDraft(row: NumberSeriesRow | null) {
   const [fmt, setFmt] = useState<SeriesFormatInput | null>(null);
   const [counter, setCounter] = useState<SeriesCounterInput>({ startValue: null, step: null, maxValue: null });
   const [source, setSource] = useState<NumberSourceMode>("FREE");
   const [effectiveFrom, setEffectiveFrom] = useState("");
   const [onizleme, setOnizleme] = useState("");
   const [hata, setHata] = useState<string | null>(null);
-  const [kaydediliyor, setKaydediliyor] = useState(false);
 
   useEffect(() => {
     if (!row) return;
@@ -126,24 +106,45 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
   }, [row]);
 
   useOnizleme(row, fmt, setOnizleme, setHata);
+  return { fmt, setFmt, counter, setCounter, source, setSource, effectiveFrom, setEffectiveFrom, onizleme, hata, setHata };
+}
+
+/**
+ * HANGİ BÖLÜM DEĞİŞTİ — üç ayrı uca üç ayrı istek gider, bu yüzden üç ayrı soru.
+ *
+ * ⚠️ YENİ ALAN BU KARŞILAŞTIRMAYA DA GİRER: eksik kalırsa kullanıcı alanı
+ * değiştirir, Kaydet hiçbir şey göndermez ve ekran "kaydedildi" der — sessiz
+ * bir kayıp. `separator2` D5②'de buraya eklendi.
+ */
+export function degisenBolumler(
+  row: NumberSeriesRow,
+  draft: { fmt: SeriesFormatInput; counter: SeriesCounterInput; source: NumberSourceMode },
+): { formatChanged: boolean; counterChanged: boolean; sourceChanged: boolean } {
+  const { fmt, counter, source } = draft;
+  return {
+    formatChanged:
+      fmt.prefix !== row.prefix || fmt.dateSegment !== row.dateSegment ||
+      fmt.digits !== row.digits || fmt.separator !== row.separator ||
+      fmt.separator2 !== row.separator2,
+    counterChanged:
+      counter.startValue !== row.startValue || counter.step !== row.step || counter.maxValue !== row.maxValue,
+    sourceChanged: source !== row.source.value,
+  };
+}
+
+export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClose, onSaved }: Props) {
+  const d = useNumberingDraft(row);
+  const { fmt, setFmt, counter, setCounter, source, setSource, effectiveFrom, setEffectiveFrom, onizleme, hata, setHata } = d;
+  const [kaydediliyor, setKaydediliyor] = useState(false);
 
   if (!row || !fmt) return null;
 
-  // ⚠️ YENİ ALAN BU LİSTEYE DE GİRER: karşılaştırma eksik kalırsa kullanıcı
-  // alanı değiştirir, Kaydet hiçbir şey göndermez ve ekran "kaydedildi" der —
-  // sessiz bir kayıp. `separator2` D5②'de buraya da eklendi.
-  const formatChanged =
-    fmt.prefix !== row.prefix || fmt.dateSegment !== row.dateSegment ||
-    fmt.digits !== row.digits || fmt.separator !== row.separator ||
-    fmt.separator2 !== row.separator2;
-  const sourceChanged = source !== row.source.value;
-  const counterChanged =
-    counter.startValue !== row.startValue || counter.step !== row.step || counter.maxValue !== row.maxValue;
+  const { formatChanged, counterChanged, sourceChanged } = degisenBolumler(row, { fmt, counter, source });
 
   const kaydet = async (): Promise<void> => {
     setKaydediliyor(true);
     try {
-      await gonder(row, { fmt, counter, source, effectiveFrom }, { formatChanged, counterChanged, sourceChanged });
+      await numberingService.saveChanges(row, { fmt, counter, source, effectiveFrom }, { formatChanged, counterChanged, sourceChanged });
       onSaved();
     } catch (e) {
       const m = (e as { response?: { data?: { message?: string } } }).response?.data?.message;

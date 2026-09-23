@@ -8,6 +8,10 @@
 //      - shipments: 1 satır, sackCount=0 (çuval yok), rollCount=2, 250m, kg=0, vergi no
 //      - detail: PATOS grubu 2 top / 250m / 250cm + orderNos dolu
 //      - byCustomer / byProduct / totals tutarlı (çuval sevkiyatlarıyla AYNI yapı)
+//   D. Liste ↔ Excel aynı küme (süzgeçsiz · İhracat · Yurtiçi): yön süzgecinde doğrudan sevk
+//      ikisinde de YOK — yön kaydı yok, yurtiçi sayılmaz (`directShipmentsMatchDestinationFilter`).
+//      Negatif sonda (2026-09-23): Excel'deki `includeDirect` true'ya sabitlendi → İhracat/Yurtiçi
+//      eşitlikleri + iki "YOK" ❌; geri alındı → yeşil.
 //   B. getDirectShipmentDispatchReport (fiş): header DOMESTIC/DISPATCHED, products 1,
 //      sacks:[], cekiRows 2 (sackCode "—", kg 0), totals doğru.
 // =============================================================================
@@ -135,7 +139,7 @@ async function main(): Promise<void> {
       s?.sackCount === 0 && s?.rollCount === 2 && s?.totalMeters === 250 && s?.totalKg === 0,
       `${s?.sackCount}/${s?.rollCount}/${s?.totalMeters}/${s?.totalKg}`,
     );
-    check("export shipment: vergi no + yön DOMESTIC", s?.taxNumber === "9998887776" && s?.destination === "DOMESTIC", `${s?.taxNumber}/${s?.destination}`);
+    check("export shipment: vergi no + yön KAYDI YOK (null — yurtiçi uydurulmaz)", s?.taxNumber === "9998887776" && s?.destination === null, `${s?.taxNumber}/${s?.destination}`);
     check("export shipment: şube adı + KODU (ihracat)", s?.branchName === "İhracat Şubesi" && s?.branchCode === "IHR-01", `${s?.branchName}/${s?.branchCode}`);
 
     const det = d.detail.find((x) => x.itemName === "PATOS");
@@ -171,6 +175,26 @@ async function main(): Promise<void> {
     // 2026-07-28: belge artık TEK "İhracat Kodu" satırı basıyor (şube ihracat kodu
     // ?? şirket ihracat kodu). Şube kodu doluysa "İhracat Kodu: IHR-01" görünür.
     check("fiş HTML: şube ihracat kodu belgede 'İhracat Kodu' olarak görünür", htmlStr.includes("İhracat Kodu") && htmlStr.includes("IHR-01"));
+
+    // ---- D) Liste ↔ Excel AYNI küme — yön süzgecinde doğrudan sevk ikisinde de yok ----
+    const liste = async (q: Record<string, string>) => {
+      const r = (await shipping.listShipments({ query: q } as unknown as Request)) as { data: unknown };
+      const rows = (Array.isArray(r.data) ? r.data : ((r.data as { items?: unknown[] })?.items ?? [])) as Array<{ shipmentNo: string }>;
+      return new Set(rows.map((x) => x.shipmentNo));
+    };
+    const excel = async (q: Record<string, string>) =>
+      new Set(((await buildDispatchAccountingExport({ query: q } as unknown as Request)).data as ExportData).shipments.map((x) => x.shipmentNo));
+    const esit = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((x) => b.has(x));
+    for (const [etiket, q] of [
+      ["süzgeçsiz", { "filter[customerId]": customer.id }],
+      ["İhracat", { "filter[customerId]": customer.id, "filter[destination]": "EXPORT" }],
+      ["Yurtiçi", { "filter[customerId]": customer.id, "filter[destination]": "DOMESTIC" }],
+    ] as const) {
+      const [l, e] = [await liste(q), await excel(q)];
+      check(`liste ↔ Excel ${etiket}: aynı küme`, esit(l, e), `liste=[${[...l]}] excel=[${[...e]}]`);
+    }
+    check("İhracat süzgecinde doğrudan sevk Excel'de YOK", !(await excel({ "filter[customerId]": customer.id, "filter[destination]": "EXPORT" })).has(directShipment!.shipmentNo));
+    check("Yurtiçi süzgecinde de YOK (yurtiçi sayılmaz)", !(await excel({ "filter[customerId]": customer.id, "filter[destination]": "DOMESTIC" })).has(directShipment!.shipmentNo));
 
     // ---- C) Regresyon: DIRECT'i istemeyen scope (olmayan müşteri) → 0 sevk ----
     const emptyReq = { query: { "filter[customerId]": "00000000-0000-0000-0000-000000000000" } } as unknown as Request;

@@ -10,10 +10,14 @@ import {
   ReportExportBar,
   ReportPageLayout,
   SimpleLineChart,
+  ReportAxisBar,
+  ReportFilterNotes,
 } from "../_components";
 import { fmtDate, fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { useReportCompare } from "../_hooks/useReportCompare";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
+import type { AxisKey } from "../_hooks/reportAxisFilters";
 import { buildShipmentExport, shipmentScorecardApi, type ShipmentScorecard } from "./shipmentScorecard";
 
 type OverdueRow = ShipmentScorecard["overdueOpen"][number];
@@ -45,6 +49,11 @@ const overdueColumns: ColumnDef<OverdueRow, unknown>[] = [
   },
 ];
 
+/** Yön ekseni tek başına — müşteri/kalem ekseni bu karnede yok. */
+const AXIS_KEYS = [] as readonly AxisKey[];
+/** Yön süzgeci açıkken: termin kısmının kaynağı sevk metrajından AYRIDIR. */
+const DEADLINE_AXIS_NOTE = "Termin (zamanında teslim · geciken açık) siparişin BUGÜNKÜ cari/şube yönünü okur; sevk metrajı sevkiyatın donmuş yönünü.";
+
 function hint(now: number | undefined, prev: number | undefined, unit: string): string | undefined {
   if (prev === undefined || now === undefined) return undefined;
   const d = Math.round((now - prev) * 10) / 10;
@@ -55,10 +64,11 @@ function hint(now: number | undefined, prev: number | undefined, unit: string): 
 export function ShipmentScorecardPage() {
   const { params, dateFrom, dateTo } = useReportDateRange("sales/shipment-scorecard");
   const compare = useReportCompare();
+  const axes = useReportAxes();
 
   const query = useQuery({
-    queryKey: ["reports", "sales", "shipment-scorecard", params, compare.params],
-    queryFn: () => shipmentScorecardApi.get({ ...params, ...compare.params }),
+    queryKey: ["reports", "sales", "shipment-scorecard", params, compare.params, axes.params],
+    queryFn: () => shipmentScorecardApi.get({ ...params, ...compare.params, ...axes.params }),
     enabled: Boolean(params.dateFrom && params.dateTo),
     staleTime: 30_000,
   });
@@ -68,10 +78,11 @@ export function ShipmentScorecardPage() {
   const hasCompare = Boolean(cmpRange);
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
   const compareLabel = cmpRange ? `${fmtDate(cmpRange.from)} – ${fmtDate(cmpRange.to)}` : null;
+  const { notes: suzgecNotlari } = useAxisNotes(query.data, axes.sel, AXIS_KEYS, { destination: "shipment", ek: [DEADLINE_AXIS_NOTE] });
 
   const spec = useMemo(
-    () => () => (sc ? buildShipmentExport({ sc, periodLabel, compareLabel }) : null),
-    [sc, periodLabel, compareLabel],
+    () => () => (sc ? buildShipmentExport({ sc, periodLabel, compareLabel, filterNotes: suzgecNotlari }) : null),
+    [sc, periodLabel, compareLabel, suzgecNotlari],
   );
 
   return (
@@ -80,8 +91,10 @@ export function ShipmentScorecardPage() {
       title="Sevk & Termin Karnesi"
       description="Dönemsel sevk hacmi ve zamanında teslim oranı — müşteri ve kumaş kırılımıyla."
       showCompare
+      filters={<ReportAxisBar reportKey="sales/shipment-scorecard" showCompare axes={axes} secenekler={undefined} eksenler={AXIS_KEYS} destination="shipment" />}
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="Sevk edilen"

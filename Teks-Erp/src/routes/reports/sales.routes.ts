@@ -18,6 +18,7 @@ import {
 } from "../../services/reports/_shared";
 import { getReturnScorecard } from "../../services/reports/return-scorecard.report.service";
 import { getShipmentScorecard } from "../../services/reports/shipment-scorecard.report.service";
+import { getDestinationMix } from "../../services/reports/destination-mix.report.service";
 import { getOpenOrderCoverage } from "../../services/reports/open-order-coverage.report.service";
 import { getOrderIntake } from "../../services/reports/order-intake.report.service";
 import { getDemandAnalysis } from "../../services/reports/demand-analysis.report.service";
@@ -39,6 +40,10 @@ export const demandAnalysisQuerySchema = compareRangeSchema.extend({ ...musteriE
 export const orderLeadTimeQuerySchema = dateRangeSchema.extend({ ...musteriEkseni, itemId: kalemEkseni.itemId }).strict();
 export const orderCancellationQuerySchema = dateRangeSchema.extend({ ...musteriEkseni, ...iptalEkseni }).strict();
 export const openOrderCoverageQuerySchema = z.object({ itemId: kalemEkseni.itemId }).strict();
+export const destinationMixQuerySchema = compareRangeSchema.strict();
+// Sevk raporlarının yön süzgeci — SEVKİYATIN donmuş yönü (`_destination.ts`), cari kartı değil.
+export const shipmentScorecardQuerySchema = compareRangeSchema.extend({ destination: musteriEkseni.destination }).strict();
+export const returnScorecardQuerySchema = compareRangeSchema.extend({ destination: musteriEkseni.destination }).strict();
 const SIPARIS_ANAHTARLARI = ["customerId", "destination", "itemId", "colorId", "reasonCode"] as const;
 
 /**
@@ -46,14 +51,48 @@ const SIPARIS_ANAHTARLARI = ["customerId", "destination", "itemId", "colorId", "
  * `report:sales` altında: payda sevkiyat, ana kırılım müşteri. Nedenler kalite
  * geri-beslemesidir ama raporu okuyan kişi sevkiyat/müşteri tarafındadır.
  */
-/** SEVK & TERMİN KARNESİ (OTIF) — sevk hacmi + zamanında teslim oranı. */
+/** SEVK & TERMİN KARNESİ (OTIF) — sevk hacmi + zamanında teslim oranı. `destination`: sevk
+ *  metrajı SEVKİYATIN donmuş yönü, termin kısmı siparişin bugünkü cari/şube yönü (`_destination.ts`). */
 router.get("/shipment-scorecard", ...reportGate("sales/shipment-scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = compareRangeSchema.parse(req.query);
+    const input = shipmentScorecardQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const data = await getShipmentScorecard(range, compareRange);
-    res.status(200).json(reportEnvelope(data, range, compareRange));
+    const data = await getShipmentScorecard(range, compareRange, { destination: input.destination });
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, ["destination"]) }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/sales/destination-mix:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Yurtiçi / Yurtdışı Satış — yön dağılımı, ihracat kırılımları, açık sipariş ve termin
+ *     description: |
+ *       Sevk tarafı sevkiyatın DONMUŞ yönünü okur (metre/top `_shipped`, kg tartılı çuvallardan —
+ *       tartısız çuval "ölçülmedi"; iade ayrı sütun, brütten düşülmez); fasondan doğrudan sevk
+ *       "yön kaydı yok" kovasıdır. Tutar = sevk anındaki tahsis × sipariş satırı fiyatı, para
+ *       birimleri AYRI; TL karşılığı yalnız kayıtlı kurun sevk günü satırıyla ("kur yok" sayılır);
+ *       fiyatsız satır 0 sayılmaz, kapsam "fiyatlı N / M". Açık sipariş ve termin siparişin
+ *       BUGÜNKÜ şube → cari yönünden (zincir boşsa "yön belirsiz"). Ülke serbest metin (trim +
+ *       katlanmış gruplama; boş = "Belirtilmemiş").
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
+ *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: compare, schema: { type: string, enum: [none, prev, prevYear, custom] } }
+ *     responses:
+ *       200: { description: "Kova özetleri (+ karşılaştırma), müşteri/ülke/ürün kırılımları, açık sipariş, termin" }
+ */
+router.get("/destination-mix", ...reportGate("sales/destination-mix"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = destinationMixQuerySchema.parse(req.query);
+    const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
+    const compareRange = resolveCompareRange(input, range);
+    res.status(200).json(reportEnvelope(await getDestinationMix(range, compareRange), range, compareRange));
   } catch (e) {
     next(e);
   }
@@ -61,11 +100,11 @@ router.get("/shipment-scorecard", ...reportGate("sales/shipment-scorecard"), asy
 
 router.get("/return-scorecard", ...reportGate("sales/return-scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = compareRangeSchema.parse(req.query);
+    const input = returnScorecardQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const data = await getReturnScorecard(range, compareRange);
-    res.status(200).json(reportEnvelope(data, range, compareRange));
+    const data = await getReturnScorecard(range, compareRange, { destination: input.destination });
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, ["destination"]) }));
   } catch (e) {
     next(e);
   }
@@ -132,7 +171,7 @@ router.get("/open-order-coverage", ...reportGate("sales/open-order-coverage"), a
  *         name: compare
  *         schema: { type: string, enum: [none, prev, prevYear, custom] }
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
- *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Cari/şube yönü (BUGÜNKÜ kart): siparişin şubesinin yönü, boşsa carinin — `reports/_destination.ts`; sevkin donmuş yönü değil, kart değişince küme değişir" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
  *       200:
@@ -179,7 +218,7 @@ router.get("/order-intake", ...reportGate("sales/order-intake"), async (req: Req
  *         name: compare
  *         schema: { type: string, enum: [none, prev, prevYear, custom] }
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
- *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Cari/şube yönü (BUGÜNKÜ kart): siparişin şubesinin yönü, boşsa carinin — `reports/_destination.ts`; sevkin donmuş yönü değil, kart değişince küme değişir" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *       - { in: query, name: colorId, schema: { type: string }, description: "Renk süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
@@ -227,7 +266,7 @@ router.get("/demand-analysis", ...reportGate("sales/demand-analysis"), async (re
  *         name: dateTo
  *         schema: { type: string, format: date-time }
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
- *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Cari/şube yönü (BUGÜNKÜ kart): siparişin şubesinin yönü, boşsa carinin — `reports/_destination.ts`; sevkin donmuş yönü değil, kart değişince küme değişir" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
  *       200:
@@ -269,7 +308,7 @@ router.get("/order-leadtime", ...reportGate("sales/order-leadtime"), async (req:
  *         name: dateTo
  *         schema: { type: string, format: date-time }
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
- *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Cari/şube yönü (BUGÜNKÜ kart): siparişin şubesinin yönü, boşsa carinin — `reports/_destination.ts`; sevkin donmuş yönü değil, kart değişince küme değişir" }
  *       - { in: query, name: reasonCode, schema: { type: string }, description: "İptal sebep kodu (ORDER_CANCEL kataloğu; CSV) — yalnız iptal satırlarına, payda süzülmez" }
  *     responses:
  *       200:

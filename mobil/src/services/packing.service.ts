@@ -17,6 +17,14 @@ import type { ApiResponse, CursorPaginatedResponse } from '../types/api';
 export type ShipmentStatus = 'PLANNED' | 'DISPATCHED' | 'CANCELLED';
 /** Saha #19+#22: yurtiçi/yurtdışı sevkiyat kapsamı. */
 export type ShipmentDestination = 'DOMESTIC' | 'EXPORT';
+
+/** Sevk yönü kilidi (`GET /shipping/destination-lock`) — yön seçilmez, buradan okunur. */
+export interface DestinationLock {
+  destination: ShipmentDestination | null;
+  source: 'BRANCH' | 'CUSTOMER' | null;
+  exportCode: string | null;
+  quickShipBlockedReason: string | null;
+}
 export const shipmentDestinationLabels: Record<ShipmentDestination, string> = {
   DOMESTIC: 'Yurtiçi',
   EXPORT: 'Yurtdışı',
@@ -539,6 +547,13 @@ export const packingService = {
   },
 
   /** Bir müşterinin havuz çuvalları — içerikleriyle. Paketleme workspace kaynağı. */
+  getDestinationLock: (customerId: string, branchId: string | null): Promise<DestinationLock> =>
+    apiClient
+      .get<ApiResponse<DestinationLock>>('/shipping/destination-lock', {
+        params: { customerId, ...(branchId ? { branchId } : {}) },
+      })
+      .then((r) => r.data.data),
+
   listCustomerPoolSacks: (customerId: string): Promise<ApiResponse<CustomerPoolSacks>> =>
     apiClient
       .get<ApiResponse<CustomerPoolSacks>>(`/shipping/pool/sacks?customerId=${encodeURIComponent(customerId)}`)
@@ -572,6 +587,8 @@ export const packingService = {
     branchId?: string | null;
     orderIds?: string[];
     destination?: ShipmentDestination;
+    /** Yalnız operatör ilk-seçimde açıkça seçtiyse — sunucu karta yalnız o zaman yazar. */
+    destinationChosen?: true;
     procedureCode?: string | null;
     plateNumber?: string | null;
     driverName?: string | null;

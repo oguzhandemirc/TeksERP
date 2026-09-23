@@ -8,11 +8,18 @@ import {
   ReportExportBar,
   ReportPageLayout,
   SimpleLineChart,
+  ReportAxisBar,
+  ReportFilterNotes,
 } from "../_components";
 import { fmtDate, fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { useReportCompare } from "../_hooks/useReportCompare";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
+import type { AxisKey } from "../_hooks/reportAxisFilters";
 import { buildReturnExport, returnScorecardApi } from "./returnScorecard";
+
+/** Yön ekseni tek başına — müşteri/kalem ekseni bu karnede yok. */
+const AXIS_KEYS = [] as readonly AxisKey[];
 
 function hint(now: number | undefined, prev: number | undefined, unit: string): string | undefined {
   if (prev === undefined || now === undefined) return undefined;
@@ -24,10 +31,11 @@ function hint(now: number | undefined, prev: number | undefined, unit: string): 
 export function ReturnScorecardPage() {
   const { params, dateFrom, dateTo } = useReportDateRange("sales/return-scorecard");
   const compare = useReportCompare();
+  const axes = useReportAxes();
 
   const query = useQuery({
-    queryKey: ["reports", "sales", "return-scorecard", params, compare.params],
-    queryFn: () => returnScorecardApi.get({ ...params, ...compare.params }),
+    queryKey: ["reports", "sales", "return-scorecard", params, compare.params, axes.params],
+    queryFn: () => returnScorecardApi.get({ ...params, ...compare.params, ...axes.params }),
     enabled: Boolean(params.dateFrom && params.dateTo),
     staleTime: 30_000,
   });
@@ -37,11 +45,12 @@ export function ReturnScorecardPage() {
   const hasCompare = Boolean(cmpRange);
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
   const compareLabel = cmpRange ? `${fmtDate(cmpRange.from)} – ${fmtDate(cmpRange.to)}` : null;
+  const { notes: suzgecNotlari } = useAxisNotes(query.data, axes.sel, AXIS_KEYS, { destination: "shipment", ek: [] });
   const returnQty = sc?.summary.returnQty ?? 0;
 
   const spec = useMemo(
-    () => () => (sc ? buildReturnExport({ sc, periodLabel, compareLabel }) : null),
-    [sc, periodLabel, compareLabel],
+    () => () => (sc ? buildReturnExport({ sc, periodLabel, compareLabel, filterNotes: suzgecNotlari }) : null),
+    [sc, periodLabel, compareLabel, suzgecNotlari],
   );
 
   const reasonGaps = (sc?.summary.freeTextReasonCount ?? 0) + (sc?.summary.missingReasonCount ?? 0);
@@ -52,8 +61,10 @@ export function ReturnScorecardPage() {
       title="İade Karnesi"
       description="Müşteriden geri gelen mal — oran, neden ve müşteri kırılımı."
       showCompare
+      filters={<ReportAxisBar reportKey="sales/return-scorecard" showCompare axes={axes} secenekler={undefined} eksenler={AXIS_KEYS} destination="shipment" />}
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       {/* Oranın TANIMI ekranda da durur: "kohort değil" uyarısı olmadan kullanıcı
           rakamı "bu ay sevk ettiğimin %X'i geri geldi" diye okur ve yanılır. */}
       <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">

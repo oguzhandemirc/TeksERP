@@ -109,6 +109,7 @@ import { BatchTracePage } from "@/pages/Reports/Production/BatchTracePage";
 import { SalesReportsHubPage } from "@/pages/Reports/Sales/SalesReportsHubPage";
 import { ReturnScorecardPage } from "@/pages/Reports/Sales/ReturnScorecardPage";
 import { ShipmentScorecardPage } from "@/pages/Reports/Sales/ShipmentScorecardPage";
+import { DestinationMixPage } from "@/pages/Reports/Sales/DestinationMixPage";
 import { OpenOrderCoveragePage } from "@/pages/Reports/Sales/OpenOrderCoveragePage";
 import { OrderIntakePage } from "@/pages/Reports/Sales/OrderIntakePage";
 import { DemandAnalysisPage } from "@/pages/Reports/Sales/DemandAnalysisPage";
@@ -1060,6 +1061,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:sales">
         <SalesReportsHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/sales/destination-mix",
+    element: (
+      <ProtectedRoute requirePermission="report:sales">
+        <DestinationMixPage />
       </ProtectedRoute>
     ),
   },

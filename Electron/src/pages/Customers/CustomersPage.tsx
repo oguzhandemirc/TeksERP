@@ -17,6 +17,7 @@ interface BranchCreatePayload {
   code: string | null;
   address: string | null;
   notes: string | null;
+  defaultDestination: "DOMESTIC" | "EXPORT" | null;
 }
 
 type CustomerWritePayload = Partial<Omit<Customer, "finance">> & { branches?: BranchCreatePayload[]; subcontractorRole?: true; finance?: FinanceSubBody };
@@ -52,6 +53,7 @@ export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | 
             code: b.code?.trim() || null,
             address: b.address?.trim() || null,
             notes: b.notes?.trim() || null,
+            defaultDestination: b.defaultDestination ?? null,
           })),
         }
       : {}),

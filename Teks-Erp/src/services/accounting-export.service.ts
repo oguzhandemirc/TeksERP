@@ -20,6 +20,7 @@
 // (bounded set); shipment sayısı eşiği aşarsa 400 ("aralığı daraltın").
 // =============================================================================
 
+import { DIRECT_SHIPMENT_DESTINATION, directShipmentsMatchDestinationFilter } from "./helpers/direct-shipment-destination.helper";
 import { Prisma, ShipmentStatus } from "@prisma/client";
 import type { Request } from "express";
 import prisma from "../lib/prisma";
@@ -61,7 +62,8 @@ interface ShipmentRow {
   taxNumber: string;
   branchName: string;
   branchCode: string;
-  destination: string;
+  /** null = yön kaydı yok (fasondan doğrudan sevk) — yurtiçi sayılmaz. */
+  destination: string | null;
   procedureCode: string;
   plateNumber: string;
   driverName: string;
@@ -238,9 +240,11 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
 
   // Perf guard — önce UCUZ indexli COUNT (iki tablo); aşımda hiç yüklemeden 400 (sunucu
   // RAM/CPU şişmez). Excel üretimi zaten istemci (renderer) tarafında — sunucu yalnız JSON.
+  // Yön süzgeci aktifse doğrudan sevk kümeye girmez — sevkiyat listesiyle AYNI yüklem.
+  const includeDirect = directShipmentsMatchDestinationFilter(params.filters.destination);
   const [shipCount, directCount] = await Promise.all([
     prisma.shipment.count({ where }),
-    prisma.directShipment.count({ where: directWhere }),
+    includeDirect ? prisma.directShipment.count({ where: directWhere }) : Promise.resolve(0),
   ]);
   const count = shipCount + directCount;
   if (count > MAX_SHIPMENTS) {
@@ -469,7 +473,7 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
 
   // ---- Fasondan doğrudan sevkler — çuval sevkleriyle AYNI satır/detay/icmal/totals
   // yapılarını besler (byCustomer/byProduct map'leri ortak → aynı müşteri/ürün birleşir).
-  const directShipments = await prisma.directShipment.findMany({
+  const directShipments = !includeDirect ? [] : await prisma.directShipment.findMany({
     where: directWhere,
     orderBy: [{ shippedAt: "desc" }, { createdAt: "desc" }],
     select: {
@@ -532,7 +536,7 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
       taxNumber,
       branchName: ds.branch?.name ?? "",
       branchCode: ds.branch?.code ?? "",
-      destination: "DOMESTIC",
+      destination: DIRECT_SHIPMENT_DESTINATION,
       procedureCode: "",
       plateNumber: "",
       driverName: "",

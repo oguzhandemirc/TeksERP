@@ -1,6 +1,7 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types/api";
 import { buildCursorQueryString } from "@/lib/query-builder";
+import type { DestinationLock } from "./destinationDefault";
 import type {
   BulkDistributePreview,
   BulkDistributeResult,
@@ -436,12 +437,22 @@ export const sackHubService = {
       .then((r) => r.data),
 
   /** Seçilen depo çuvallarından yeni sevkiyat kur (PLANNED). Müşteri ZORUNLU. */
+  /** Sevk yönü kilidi — yön seçilmez, buradan okunur (panel + tablet aynı uç). */
+  getDestinationLock: (customerId: string, branchId: string | null): Promise<DestinationLock> =>
+    apiClient
+      .get<ApiResponse<DestinationLock>>("/api/shipping/destination-lock", {
+        params: { customerId, ...(branchId ? { branchId } : {}) },
+      })
+      .then((r) => r.data.data),
+
   createShipment: (body: {
     sackIds: string[];
     customerId: string;
     branchId?: string | null;
     orderIds?: string[];
     destination?: ShipmentDestination;
+    /** Yalnız operatör ilk-seçimde açıkça seçtiyse — sunucu karta yalnız o zaman yazar. */
+    destinationChosen?: true;
     procedureCode?: string | null;
     /** İdempotency — deneme başına bir üretilir, retry aynı token'la (backend replay, A4). */
     clientToken?: string;
@@ -461,6 +472,8 @@ export const sackHubService = {
         ...(body.branchId ? { branchId: body.branchId } : {}),
         ...(body.orderIds && body.orderIds.length ? { orderIds: body.orderIds } : {}),
         ...(body.destination ? { destination: body.destination } : {}),
+        // Açık niyet — düşerse ilk sevk seçimi karta YAZILMAZ (gövdeyi elle kuran katman sessiz allowlist'tir).
+        ...(body.destinationChosen ? { destinationChosen: true } : {}),
         ...(body.procedureCode ? { procedureCode: body.procedureCode } : {}),
         ...(body.clientToken ? { clientToken: body.clientToken } : {}),
         // ⚠️ AÇIKÇA gönderilir (true DE false DA değil — yalnız true anlamlı,

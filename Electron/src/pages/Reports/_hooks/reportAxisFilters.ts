@@ -56,7 +56,7 @@ export function labelsOf(options: Array<{ id?: string; code?: string; ad: string
 
 /**
  * Süzgeç satırı (K10) — ÇIKTIYA da girer. Niteleyiciler burada yaşar:
- * `destination` müşterinin VARSAYILAN hedefidir (sevkin fiili hedefi değil) ve
+ * `destination` siparişin BUGÜNKÜ cari/şube yönüdür (sevkin donmuş yönü değil) ve
  * `reasonCode` iptal karnesinde yalnız PAYI süzer. İkisi de ekranda yazılı; aynı
  * cümle dosyaya geçmezse, tek başına paylaşılan dosyada uyarı YOK demektir.
  */
@@ -105,12 +105,18 @@ export const AXIS_CAVEATS: Partial<Record<AxisKey, string>> = {
   reasonCode: "Yalnız PAYI süzer: payda (dönemde açılan siparişler) süzülmez ⇒ oran 'bu sebeple iptal ÷ açılan'.",
 };
 
-export const DESTINATION_LABEL = "Sevk hedefi";
-export const DESTINATION_CAVEAT = "Müşteri kartındaki VARSAYILAN hedef — sevkin fiili hedefi değil.";
+export const DESTINATION_LABEL = "Cari/şube yönü (bugünkü)";
+/** Sevk raporlarının yön ekseni — SEVKİYATIN donmuş yönü (sipariş raporlarından AYRI kaynak). */
+export const SHIPMENT_DESTINATION_LABEL = "Sevkiyat yönü (sevk anında)";
+export const SHIPMENT_DESTINATION_CAVEAT = "Sevkiyatın SEVK ANINDA donmuş yönü — cari kartı sonradan değişse de geçmiş değişmez; fasondan doğrudan sevkin yön kaydı yoktur, bu süzgeçte hiçbir kümeye girmez.";
+/** `true` = sipariş raporu (bugünkü cari/şube yönü) · `"shipment"` = sevk raporu (donmuş yön). */
+export type DestinationAxis = boolean | "shipment";
+export const destinationLabelOf = (d: DestinationAxis | undefined): string => (d === "shipment" ? SHIPMENT_DESTINATION_LABEL : DESTINATION_LABEL);
+export const DESTINATION_CAVEAT = "Siparişin BUGÜNKÜ cari/şube yönü (şube yönü, boşsa carinin) — sevkin donmuş yönü değil; kart değişince geçmiş raporun kümesi de değişir.";
 
 interface AxisNoteInput {
   eksenler: readonly AxisKey[];
-  destination?: boolean;
+  destination?: DestinationAxis;
   secenekler: Partial<Record<AxisKey, Array<{ id?: string; code?: string; ad: string }>>> | undefined;
   sel: Record<AxisKey, string[]> & { destination: Destination | "" };
   dusenSatir?: number;
@@ -141,9 +147,9 @@ export function axisNotes({ eksenler, destination, secenekler, sel, dusenSatir, 
   }));
   if (destination) {
     parts.push({
-      eksen: DESTINATION_LABEL,
+      eksen: destinationLabelOf(destination),
       degerler: sel.destination ? [sel.destination === "EXPORT" ? "İhracat" : "Yurtiçi"] : [],
-      serh: DESTINATION_CAVEAT,
+      serh: destination === "shipment" ? SHIPMENT_DESTINATION_CAVEAT : DESTINATION_CAVEAT,
     });
   }
   const notes = filterNotes(parts);
@@ -155,7 +161,7 @@ export function axisNotes({ eksenler, destination, secenekler, sel, dusenSatir, 
   // yankıda yoksa uyarı — süzgeç sunucuya ulaşmadı ya da uç o ekseni tanımıyor.
   // `undefined` = yankı ÖLÇÜLMEDİ (eski çağıran / veri henüz yok) → eski çıktı; `null` = cevap geldi ama yankı YOK → hepsi uygulanmamış.
   const eksik = uygulanan === undefined ? [] : unappliedAxes(sel, [...eksenler, ...(destination ? ["destination"] : [])], uygulanan);
-  const uyari = eksik.length > 0 ? [unappliedNote(eksik.map((a) => (a === "destination" ? DESTINATION_LABEL : AXIS_LABELS[a as AxisKey])))] : [];
+  const uyari = eksik.length > 0 ? [unappliedNote(eksik.map((a) => (a === "destination" ? destinationLabelOf(destination) : AXIS_LABELS[a as AxisKey])))] : [];
   return [...notes, ...ek, ...(dropped ? [dropped] : []), ...uyari];
 }
 

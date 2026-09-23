@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Callout } from "@/components/ui/callout";
 import { ShipmentMismatchSummary } from "./ContentMismatchBanner";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
@@ -27,8 +26,9 @@ import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 import { ShipmentOrderSelect } from "./ShipmentOrderSelect";
 import { ShipmentPreviewPanel } from "./ShipmentPreviewPanel";
-import { destinationLabels, type SackSearchRow, type ShipmentDestination } from "./types";
-import { useCustomerDefaultDestination } from "./destinationDefault";
+import type { SackSearchRow, ShipmentDestination } from "./types";
+import { resolveDestination, useDestinationLock } from "./destinationDefault";
+import { DestinationLockField } from "./DestinationLockField";
 import { shipmentService } from "@/pages/Operations/Shipments/service";
 import { ShipmentSackCountField } from "./ShipmentSackCountField";
 
@@ -86,8 +86,8 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   const [postWarnings, setPostWarnings] = useState<string[]>([]);
   const [orderless, setOrderless] = useState(false);
   const [orderIds, setOrderIds] = useState<Set<string>>(new Set());
-  const [destination, setDestination] = useState<ShipmentDestination>("DOMESTIC");
-  const [destinationTouched, setDestinationTouched] = useState(false); // dokunduysa cari varsayılanı EZMEZ
+  /** Yalnız zincir boşken (ilk sevk) operatörün seçimi; kilitliyken yok sayılır. */
+  const [picked, setPicked] = useState<ShipmentDestination | null>(null);
   // İdempotency (A4) — ManualEntryDialog emsali: açılış başına taze token, deneme
   // içinde sabit → timeout-retry kurulmuş sevkiyatı geri alır (kör 409 yerine).
   const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
@@ -98,16 +98,16 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
     setBranchId(lockedBranchId ?? null);
     setOrderless(false);
     setOrderIds(new Set());
-    setDestination("DOMESTIC");
-    setDestinationTouched(false);
+    setPicked(null);
     setPostWarnings([]);
     setClientToken(crypto.randomUUID()); // yeni açılış = yeni mantıksal deneme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sackKey]);
 
   const effCustomerId = lockedCustomerId ?? customerId;
-  useCustomerDefaultDestination({ open, customerId: effCustomerId, touched: destinationTouched, setDestination }); // cari varsayılanı, kilit değil
   const effBranchId = lockedBranchId ?? branchId;
+  const lockQ = useDestinationLock(effCustomerId, effBranchId, open);
+  const { destination, chosen } = resolveDestination({ lock: lockQ.data, picked });
   const activeOrderIds = orderless ? [] : [...orderIds];
 
   const previewQ = useQuery({
@@ -133,7 +133,8 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
         customerId: effCustomerId!,
         branchId: effBranchId ?? null,
         orderIds: activeOrderIds,
-        destination,
+        destination: destination ?? undefined,
+        ...(chosen ? { destinationChosen: true as const } : {}),
         clientToken,
         orderless,
       }),
@@ -170,7 +171,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   });
 
   const blocked = customerConflict || branchConflict;
-  const canCreate = !!effCustomerId && !blocked && !createMut.isPending;
+  const canCreate = !!effCustomerId && !blocked && !createMut.isPending && destination != null;
 
   const toggleOrder = (id: string) =>
     setOrderIds((prev) => {
@@ -246,6 +247,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
                   onChange={(v) => {
                     setCustomerId(v ?? undefined);
                     setBranchId(null);
+                    setPicked(null); // ilk seçim sevk adresine aittir
                     setOrderIds(new Set()); // cari değişti → eski siparişler geçersiz
                   }}
                   service={customerService}
@@ -269,7 +271,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
                 <BranchSelect
                   customerId={effCustomerId ?? null}
                   value={branchId}
-                  onChange={(v) => setBranchId(v)}
+                  onChange={(v) => { setBranchId(v); setPicked(null); }}
                 />
               )}
             </div>
@@ -309,19 +311,10 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
           {/* Canlı önizleme + uyarılar */}
           <ShipmentPreviewPanel preview={previewQ.data?.data} isLoading={previewQ.isLoading} />
 
-          {/* Kapsam (yurtiçi / yurtdışı) — ihracat/prosedür kodu artık belgede
-              otomatik çözülür (şube kodu ?? müşteri ihracat kodu), elle girilmez. */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={destination} onValueChange={(v) => { setDestinationTouched(true); setDestination(v as ShipmentDestination); }}>
-              <SelectTrigger className="h-9 w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="DOMESTIC">{destinationLabels.DOMESTIC}</SelectItem>
-                <SelectItem value="EXPORT">{destinationLabels.EXPORT}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Sevk yönü cariden/şubeden KİLİTLİ gelir; yalnız ilk sevkte bir kez seçilir. */}
+          {effCustomerId && (
+            <DestinationLockField lock={lockQ.data} isLoading={lockQ.isLoading} picked={picked} onPick={setPicked} hasBranch={!!effBranchId} />
+          )}
           {(destination === "EXPORT" || weighRequired) && unweighed > 0 && (
             <Callout tone="danger" title="Tartısız çuval var">
               {unweighed} çuval tartılmadı —{" "}

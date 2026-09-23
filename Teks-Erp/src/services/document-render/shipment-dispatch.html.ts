@@ -44,6 +44,7 @@ import {
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import { fmtDate } from "./fmt-date";
 import { formatSackSeqLabel, type SackSeqFormat } from "../helpers/sack-seq.helper";
+import { pickExportCode } from "../helpers/shipment-destination.helper";
 
 /** Belge etiketleri — cfg.language: tr | en | auto (auto → EXPORT sevkiyatta EN). */
 const LABELS = {
@@ -231,6 +232,9 @@ export interface ShipmentDispatchDoc {
      *  "İhracat Kodu" satırına yedek olarak basılır; "exportCode" toggle'ıyla
      *  açılıp kapanır. Eski donmuş snapshot'larda alan yoktur (opsiyonel). */
     customerExportCode?: string | null;
+    /** Snapshot DOĞARKEN çözülmüş ihracat kodu (yalnız yurtdışında dolu). Alanı taşımayan
+     *  eski snapshot yönden bağımsız eski çözüme düşer — donmuş belge bayt bayt aynı kalır. */
+    exportCode?: string | null;
     procedureCode: string | null;
     destination: "DOMESTIC" | "EXPORT";
     status: string;
@@ -457,7 +461,8 @@ export function renderShipmentDispatchHtml(
   const showDirection = sectionOn(cfg.sections, "direction");
   const showProcedure = sectionOn(cfg.sections, "procedureCode");
   const showOrders = sectionOn(cfg.sections, "orders");
-  const shipCode = h.branchCode ?? h.customerExportCode;
+  const shipCode =
+    h.exportCode !== undefined ? h.exportCode : pickExportCode({ branchCode: h.branchCode, customerExportCode: h.customerExportCode });
   const customerSub = [
     showTaxNo && h.customerTaxNumber ? `${L.taxNo}: ${esc(h.customerTaxNumber)}` : "",
     showBranchName && h.branchName ? `${L.branch}: ${esc(h.branchName)}` : "",

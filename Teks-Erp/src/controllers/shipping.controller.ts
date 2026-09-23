@@ -146,7 +146,11 @@ const splitSackSchema = z.object({
 const moveSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
 
 // Sevkiyat kur — depodan çuval seç + müşteri/şube ata + (opsiyonel) sipariş seç.
-const createShipmentSchema = z.object({
+// Operatörün yönü İLK-SEÇİM bileşeninde AÇIKÇA seçtiği beyanı — yalnız `true`; alan yoksa
+// (eski istemci önceden seçili değer gönderir) değer yalnız sevkiyata yazılır, karta YAZILMAZ.
+const destinationChosenField = z.literal(true, { error: "destinationChosen yalnız true olabilir" }).optional();
+
+export const createShipmentSchema = z.object({
   // .max(500) — önizleme (previewShipmentSchema) ve sackIdsSchema zaten 500'de
   // sınırlıydı, YAZAN yol sınırsızdı: express.json({limit:"1mb"}) ≈ 26.000 UUID
   // geçirir ve createShipment çuval-BAŞINA sıralı updateMany + tahsis +
@@ -158,6 +162,7 @@ const createShipmentSchema = z.object({
   branchId: z.string().uuid("Geçersiz şube ID").nullable().optional(),
   orderIds: z.array(z.string().uuid("Geçersiz sipariş ID")).optional(),
   destination: z.enum(["DOMESTIC", "EXPORT"]).optional(),
+  destinationChosen: destinationChosenField,
   procedureCode: z.string().trim().max(64).nullable().optional(),
   // Sevk onayı kapalıyken (varsayılan) doğrudan sevk → araç bilgisi opsiyonel.
   plateNumber: z.string().trim().max(32).nullable().optional(),
@@ -178,12 +183,13 @@ const shipmentOrdersSchema = z.object({
 // HIZLI SEVK — çuval YOK, doğrudan top listesi. Barkod İSTEMEZ (rollIds):
 // etiket basmayan kullanıcı birinci sınıf. 500 tavanı createShipment ile aynı
 // gerekçe (tek tx'in uzunluğu).
-const quickShipmentSchema = z.object({
+export const quickShipmentSchema = z.object({
   rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top seçilmeli").max(500),
   customerId: z.string().uuid("Geçersiz müşteri ID"),
   branchId: z.string().uuid("Geçersiz şube ID").nullable().optional(),
   orderIds: z.array(z.string().uuid("Geçersiz sipariş ID")).optional(),
   destination: z.enum(["DOMESTIC", "EXPORT"]).optional(),
+  destinationChosen: destinationChosenField,
   procedureCode: z.string().trim().max(64).nullable().optional(),
   plateNumber: z.string().trim().max(32).nullable().optional(),
   driverName: z.string().trim().max(100).nullable().optional(),
@@ -212,7 +218,7 @@ const previewShipmentSchema = z.object({
 });
 const sackIdsSchema = z.object({ sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "Çuval seçilmeli").max(500) });
 const removeShipmentSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
-const destinationSchema = z.object({ destination: z.enum(["DOMESTIC", "EXPORT"]) });
+export const destinationSchema = z.object({ destination: z.enum(["DOMESTIC", "EXPORT"]), destinationChosen: destinationChosenField });
 const procedureCodeSchema = z.object({ procedureCode: z.string().trim().max(64).nullable().optional() });
 const dispatchNoteSchema = z.object({ dispatchNote: z.string().trim().max(500).nullable().optional() });
 // Araca yüklenen gerçek çuval adedi (operatör beyanı). `null` = beyanı kaldır.
@@ -564,6 +570,16 @@ export class ShippingController {
     } catch (e) { next(e); }
   };
 
+  getDestinationLock = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const q = z.object({
+        customerId: z.string().uuid("Geçersiz müşteri ID"),
+        branchId: z.string().uuid("Geçersiz şube ID").optional(),
+      }).parse(req.query);
+      res.status(200).json(await this.service.getDestinationLock(q.customerId, q.branchId ?? null));
+    } catch (e) { next(e); }
+  };
+
   listCustomerPoolSacks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const customerId = z.string().uuid("Geçersiz müşteri ID").parse(req.query.customerId);
@@ -576,7 +592,7 @@ export class ShippingController {
   createShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = createShipmentSchema.parse(req.body);
-      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, procedureCode: body.procedureCode ?? null, plateNumber: body.plateNumber ?? null, driverName: body.driverName ?? null, carrier: body.carrier ?? null, clientToken: body.clientToken ?? null, orderless: body.orderless }, req.user?.userId);
+      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, destinationChosen: body.destinationChosen === true, procedureCode: body.procedureCode ?? null, plateNumber: body.plateNumber ?? null, driverName: body.driverName ?? null, carrier: body.carrier ?? null, clientToken: body.clientToken ?? null, orderless: body.orderless }, req.user?.userId);
       res.status(201).json(result);
     } catch (e) { next(e); }
   };
@@ -601,6 +617,7 @@ export class ShippingController {
           orderIds: body.orderIds,
           orderless: body.orderless,
           destination: body.destination,
+          destinationChosen: body.destinationChosen === true,
           procedureCode: body.procedureCode ?? null,
           plateNumber: body.plateNumber ?? null,
           driverName: body.driverName ?? null,
@@ -653,7 +670,7 @@ export class ShippingController {
   setDestination = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = destinationSchema.parse(req.body);
-      const result = await this.service.setDestination(req.params.id as string, body.destination, req.user?.userId);
+      const result = await this.service.setDestination(req.params.id as string, body.destination, req.user?.userId, body.destinationChosen === true);
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

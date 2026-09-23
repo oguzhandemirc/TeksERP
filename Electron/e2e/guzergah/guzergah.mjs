@@ -244,6 +244,8 @@ function fiiller() {
     oturumuYenile: () => { acikRol = null; },
     bekle: (ms) => page.waitForTimeout(ms),
     page: () => page,
+    /** Ana süreç (Electron `app`) — yerel diyalog taklidi gibi yalnız sürücünün yapabildiği işler için. */
+    app: () => app,
   };
 }
 

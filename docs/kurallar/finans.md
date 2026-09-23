@@ -31,6 +31,7 @@
 ### Reçeteler
 
 - **[ÇEKİRDEK]** SINIF 1 — İki tarih: yeni mali belge tipi eklerken sor 'kâğıdın tarihi = işlem tarihimiz mi?'; değilse İKİ alan (`Cheque.issueDate` ↔ `postingDate`); defter/kilit/belge-no/kur DÖRDÜ `postingDate`ten. Payment/Invoice tek tarihli MEŞRU — çift tarihi her tabloya yaymak reddedildi. · bekçi: `postingDate okuyan bekçiler: Teks-Erp/scripts/test_cheque_portfolio.ts (115 kontrol, 9 postingDate atfı) + test_cash_period_close.ts (64 kontrol, 1 postingDate atfı) — kapsam ASİMETRİK, dönem kapanışı tarafı dar` <sub>(CLAUDE.md:286)</sub>
+- **[ÇEKİRDEK]** SINIF 1'in alt yüzü — İki SAAT: ms düzeyinde sıralama karşılaştırması yapılan iki damgayı AYNI saatten al; Prisma `@default(now())` Node saatidir (istemci doldurur), trigger/ham SQL `now()` DB saatidir — levent olayı `createdAt`i tek yazarda `clock_timestamp()`ten yazılır (`now()` değil: tx başıdır, aynı tx'teki olaylar aynı damgayı alır). · bekçi: `Teks-Erp/scripts/test_warp_beam_auto_consume.ts` §9 <sub>(arşiv:2026-09-23)</sub>
 
 ### Kararlar
 
@@ -91,3 +92,4 @@ Backend: `test_partner_roles`, `test_cari_kart_hesap`, `test_kart_teardown_hesap
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
 - 2026-08-02 · 2026-08-02 — brüt kuralı LİSTE yüzeyine de uzandı + muhasebe ekranı tamamlandı — `CLAUDE-NOT-ARSIVI.md:53-61`
+- 2026-09-23 · İki SAAT: ms düzeyinde sıralama karşılaştırması tek saatten — `CLAUDE-NOT-ARSIVI.md:11359-11383`

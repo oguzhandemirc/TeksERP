@@ -21,6 +21,7 @@ import { CustomerBranchesDraftField } from "./CustomerBranchesDraftField";
 import { CustomerFinanceSection, useCustomerFinanceAccess } from "./CustomerFinanceSection";
 import { financeFormDefaults } from "./customerFinance";
 import { CustomerBranchesPanel } from "./CustomerBranchesPanel";
+import { exportCodeVisible } from "./branch-schema";
 import { CustomerItemAliasesPanel } from "./CustomerItemAliasesPanel";
 import { CustomerColorAliasesPanel } from "./CustomerColorAliasesPanel";
 import { CustomerTemplateRoutesPanel } from "./CustomerTemplateRoutesPanel";
@@ -187,14 +188,17 @@ export function CustomerFormDialog({
             {...form.register("taxNumber")}
           />
         </FormField>
-        <FormField
-          label="İhracat Kodu"
-          htmlFor="exportCode"
-          error={form.formState.errors.exportCode}
-          hint="Şirket ihracat kodu — sevk belgesine yalnız şube ihracat kodu yoksa basılır"
-        >
-          <Input id="exportCode" placeholder="Opsiyonel" {...form.register("exportCode")} />
-        </FormField>
+        {/* Yalnız yurtdışı yönde görünür; gizlenen dolu değer silinmez (form durumunda kalır). */}
+        {exportCodeVisible(form.watch("defaultDestination")) && (
+          <FormField
+            label="İhracat Kodu"
+            htmlFor="exportCode"
+            error={form.formState.errors.exportCode}
+            hint="Şirket ihracat kodu — sevk belgesine yalnız şube ihracat kodu yoksa basılır"
+          >
+            <Input id="exportCode" placeholder="Opsiyonel" {...form.register("exportCode")} />
+          </FormField>
+        )}
       </div>
 
       <FormField label="Adres" htmlFor="address" error={form.formState.errors.address}>
@@ -210,8 +214,8 @@ export function CustomerFormDialog({
         <FormField label="Ülke" htmlFor="country" error={form.formState.errors.country}>
           <Input id="country" placeholder="Türkiye" {...form.register("country")} />
         </FormField>
-        {/* Sevk hedefi VARSAYILANI — sevkiyat formu buradan başlar; operatör değiştirir (kilit değil). */}
-        <FormField label="Sevk varsayılanı" error={form.formState.errors.defaultDestination}>
+        {/* Sevk yönü KİLİDİ — sevkiyatta seçilmez, buradan gelir; boşsa ilk sevkte sorulur ve buraya yazılır. */}
+        <FormField label="Sevk yönü" error={form.formState.errors.defaultDestination}>
           <Controller
             control={form.control}
             name="defaultDestination"
@@ -224,7 +228,7 @@ export function CustomerFormDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="NONE">Yok (her sevkte seçilir)</SelectItem>
+                  <SelectItem value="NONE">Seçilmedi (ilk sevkte sorulur)</SelectItem>
                   <SelectItem value="DOMESTIC">Yurtiçi</SelectItem>
                   <SelectItem value="EXPORT">Yurtdışı</SelectItem>
                 </SelectContent>
@@ -347,7 +351,7 @@ export function CustomerFormDialog({
 
               {branchesEnabled && (
                 <TabsContent value="branches">
-                  {initial && <CustomerBranchesPanel customerId={initial.id} />}
+                  {initial && <CustomerBranchesPanel customerId={initial.id} customerDestination={form.watch("defaultDestination")} />}
                 </TabsContent>
               )}
 

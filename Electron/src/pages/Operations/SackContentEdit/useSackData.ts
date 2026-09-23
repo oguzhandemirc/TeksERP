@@ -1,5 +1,6 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { sackHubService } from "./service";
+import { invalidateDestinationLock } from "./destinationDefault";
 
 /** Tek çuvalın canlı dökümü — editör içerik kaynağı (rulo + kartela). */
 export function useSackContents(sackId: string | null) {
@@ -43,5 +44,6 @@ export function invalidateSackHub(
   if (opts?.shipment) {
     void qc.invalidateQueries({ queryKey: ["shipments"] });
     void qc.invalidateQueries({ queryKey: ["shipment-detail"] });
+    invalidateDestinationLock(qc);
   }
 }

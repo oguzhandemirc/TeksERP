@@ -193,7 +193,7 @@ export class CustomerService extends BaseService {
   }
 
   /**
-   * `defaultDestination`: boş/"" → null (varsayılan yok), enum dışı → 400 TR.
+   * `defaultDestination` (sevk yönü KİLİDİ): boş/"" → null (ilk sevkte sorulur), enum dışı → 400 TR.
    * Prisma'nın kendi validation hatası da 400'e iner ama alan adı ve mesaj burada
    * belirgin olsun — kullanıcı "kg yazdım m oldu" benzeri sessiz kaymayı görmesin.
    */
@@ -205,7 +205,7 @@ export class CustomerService extends BaseService {
       return;
     }
     if (typeof v !== "string" || !(Object.values(ShipmentDestination) as string[]).includes(v)) {
-      throw AppError.badRequest(`Geçersiz sevk varsayılanı: ${String(v)} (DOMESTIC veya EXPORT).`);
+      throw AppError.badRequest(`Geçersiz sevk yönü: ${String(v)} (DOMESTIC veya EXPORT).`);
     }
   }
 

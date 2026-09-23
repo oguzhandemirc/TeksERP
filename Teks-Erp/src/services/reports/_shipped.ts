@@ -21,11 +21,23 @@
 // ── DOĞRUDAN SEVKLER DE DAHİL ──────────────────────────────────────────────
 // `DirectShipment` ayrı tablodur, tarih kolonu bile farklıdır (`shippedAt`).
 // Unutulması kolay ve unutulunca sevk rakamı sessizce küçülür.
+//
+// ── YÖN (R1, 2026-09-23) ───────────────────────────────────────────────────
+// Her hücre sevkiyatın DONMUŞ yönünü taşır (`Shipment.destination`); doğrudan sevkin
+// yön kaydı yoktur → `null` ("yön kaydı yok"), yön süzgecinde hiçbir kümeye girmez.
+// KG ayrı toplayıcıdadır (`collectShippedWeight`): kg ÇUVALA aittir, topa bölünmez.
 // =============================================================================
 
 import prisma from "../../lib/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, type ShipmentDestination } from "@prisma/client";
 import type { DateRange } from "./_shared";
+import { shipmentDestinationSql } from "./_destination";
+import { directShipmentsMatchDestinationFilter } from "../helpers/direct-shipment-destination.helper";
+
+/** Sevk toplayıcılarının süzgeci — yön sevkiyatın donmuş değeridir. */
+export interface ShippedFilter {
+  destination?: ShipmentDestination;
+}
 
 export interface ShippedCell {
   customerId: string;
@@ -34,6 +46,8 @@ export interface ShippedCell {
   itemName: string | null;
   colorId: string | null;
   colorName: string | null;
+  /** Sevk anında donmuş yön; `null` = yön kaydı yok (fasondan doğrudan sevk). */
+  destination: ShipmentDestination | null;
   rollCount: number;
   qty: number;
 }
@@ -43,7 +57,9 @@ export interface ShippedCell {
  * Üç kaynak UNION ALL ile birleşir: canlı sevk satırları · iade geri-eklemesi ·
  * doğrudan sevkler.
  */
-export async function collectShipped(range: DateRange): Promise<ShippedCell[]> {
+export async function collectShipped(range: DateRange, f: ShippedFilter = {}): Promise<ShippedCell[]> {
+  // Yön süzgeci aktifken doğrudan sevk (yön kaydı yok) hiçbir kümeye girmez.
+  const withDirect = directShipmentsMatchDestinationFilter(f.destination);
   const rows = await prisma.$queryRaw<
     Array<{
       customerId: string;
@@ -52,12 +68,13 @@ export async function collectShipped(range: DateRange): Promise<ShippedCell[]> {
       itemName: string | null;
       colorId: string | null;
       colorName: string | null;
+      destination: ShipmentDestination | null;
       rollCount: bigint;
       qty: number | null;
     }>
   >(Prisma.sql`
     WITH disp AS (
-      SELECT id, "customerId" FROM shipments
+      SELECT id, "customerId", destination FROM shipments
       -- ⚠️ status süzgeci İKİNCİ SAVUNMA HATTIDIR ve bekçi onun kaybını
       -- GÖREMEZ (ölçüldü: kaldırıldığında test yeşil kalıyor). Sebep: storno
       -- (undoDispatch) dispatchedAt'i NULL'lar, yani PLANNED bir sevkiyatın
@@ -66,19 +83,20 @@ export async function collectShipped(range: DateRange): Promise<ShippedCell[]> {
       -- koruduğunu bil.
       WHERE status = 'DISPATCHED'
         AND "dispatchedAt" >= ${range.from} AND "dispatchedAt" <= ${range.to}
+        ${shipmentDestinationSql(f.destination, "shipments")}
     ),
     parts AS (
       -- 1) Sevkiyatta DURAN toplar (iade sonrası eksilmiş canlı küme)
-      SELECT d."customerId", r."itemId", r."colorId", 1::int AS cnt, r."currentQty" AS qty
+      SELECT d."customerId", d.destination, r."itemId", r."colorId", 1::int AS cnt, r."currentQty" AS qty
       FROM rolls r JOIN disp d ON d.id = r."shipmentId"
       UNION ALL
       -- 2) İADE GERİ-EKLEMESİ — spec snapshot'ı iadenin KENDİ satırından okunur
-      SELECT d."customerId", rr."itemId", rr."colorId", 1::int, rr.qty
+      SELECT d."customerId", d.destination, rr."itemId", rr."colorId", 1::int, rr.qty
       FROM roll_returns rr JOIN disp d ON d.id = rr."fromShipmentId"
       WHERE rr."cancelledAt" IS NULL
-      UNION ALL
+      ${withDirect ? Prisma.sql`UNION ALL
       -- 3a) Doğrudan sevklerin KUMAŞ KIRILIMI — bağlı toplardan.
-      SELECT ds."customerId", r."itemId", r."colorId", 1::int, r."currentQty"
+      SELECT ds."customerId", NULL::"ShipmentDestination", r."itemId", r."colorId", 1::int, r."currentQty"
       FROM direct_shipments ds JOIN rolls r ON r."directShipmentId" = ds.id
       WHERE ds."shippedAt" >= ${range.from} AND ds."shippedAt" <= ${range.to}
       UNION ALL
@@ -88,7 +106,7 @@ export async function collectShipped(range: DateRange): Promise<ShippedCell[]> {
       -- hiç bağ kurulmamış olabilir). Farkı kumaşı BİLİNMEYEN bir satır olarak
       -- eklemek iki şeyi birden sağlar: TOPLAM Sevkiyatlar ekranıyla birebir
       -- kalır, ve kırılım uydurma bir kumaşa yazılmaz. Fark sıfırsa satır doğmaz.
-      SELECT ds."customerId", NULL::uuid, NULL::uuid, 0::int,
+      SELECT ds."customerId", NULL::"ShipmentDestination", NULL::uuid, NULL::uuid, 0::int,
              ds."totalQty" - COALESCE((
                SELECT SUM(r2."currentQty") FROM rolls r2 WHERE r2."directShipmentId" = ds.id
              ), 0)
@@ -96,7 +114,7 @@ export async function collectShipped(range: DateRange): Promise<ShippedCell[]> {
       WHERE ds."shippedAt" >= ${range.from} AND ds."shippedAt" <= ${range.to}
         AND ds."totalQty" <> COALESCE((
               SELECT SUM(r2."currentQty") FROM rolls r2 WHERE r2."directShipmentId" = ds.id
-            ), 0)
+            ), 0)` : Prisma.empty}
     )
     SELECT
       p."customerId" AS "customerId",
@@ -105,13 +123,14 @@ export async function collectShipped(range: DateRange): Promise<ShippedCell[]> {
       i.name         AS "itemName",
       p."colorId"    AS "colorId",
       c.name         AS "colorName",
+      p.destination  AS "destination",
       SUM(p.cnt)     AS "rollCount",
       SUM(p.qty)::float AS "qty"
     FROM parts p
     JOIN customers cu   ON cu.id = p."customerId"
     LEFT JOIN items i   ON i.id  = p."itemId"
     LEFT JOIN colors c  ON c.id  = p."colorId"
-    GROUP BY p."customerId", cu.name, p."itemId", i.name, p."colorId", c.name
+    GROUP BY p."customerId", cu.name, p."itemId", i.name, p."colorId", c.name, p.destination
   `);
 
   return rows.map((r) => ({
@@ -121,13 +140,52 @@ export async function collectShipped(range: DateRange): Promise<ShippedCell[]> {
     itemName: r.itemName,
     colorId: r.colorId,
     colorName: r.colorName,
+    destination: r.destination,
     rollCount: Number(r.rollCount),
     qty: Number(r.qty ?? 0),
   }));
 }
 
 /** Yalnız toplam gerekiyorsa (İade Karnesi paydası) — aynı tanımdan türetilir. */
-export async function shippedGrossTotal(range: DateRange): Promise<number> {
-  const cells = await collectShipped(range);
+export async function shippedGrossTotal(range: DateRange, f: ShippedFilter = {}): Promise<number> {
+  const cells = await collectShipped(range, f);
   return cells.reduce((a, c) => a + c.qty, 0);
+}
+
+export interface ShippedWeightCell {
+  customerId: string;
+  destination: ShipmentDestination;
+  /** Tartılı çuvalların brüt (dara dahil) toplamı — tartısız çuval 0 SAYILMAZ, dışarıda kalır. */
+  kg: number;
+  weighedSacks: number;
+  totalSacks: number;
+}
+
+/**
+ * Dönemde sevk edilen çuvalların BRÜT kg'ı (dara dahil, sevk anındaki tartı), müşteri × yön.
+ * Kapsam her hücrede: "tartılı N / M çuval" — tartısız çuval "ölçülmedi"dir, 0 değil.
+ * Kısmi iadede kg DÜŞÜLMEZ: kg sevk anındaki brüt çuval ağırlığıdır, iade kg'ı ayrıca ölçülmez.
+ * Doğrudan sevkte çuval yok ⇒ kg hiç ölçülmez, bu toplayıcıya girmez.
+ */
+export async function collectShippedWeight(range: DateRange, f: ShippedFilter = {}): Promise<ShippedWeightCell[]> {
+  const rows = await prisma.$queryRaw<
+    Array<{ customerId: string; destination: ShipmentDestination; kg: number | null; weighed: bigint; total: bigint }>
+  >(Prisma.sql`
+    SELECT s."customerId" AS "customerId", s.destination AS destination,
+           COALESCE(SUM(k."weightKg") FILTER (WHERE k."weightKg" > 0), 0)::float AS kg,
+           COUNT(*) FILTER (WHERE k."weightKg" > 0) AS weighed,
+           COUNT(*) AS total
+    FROM shipments s JOIN sacks k ON k."shipmentId" = s.id
+    WHERE s.status = 'DISPATCHED'
+      AND s."dispatchedAt" >= ${range.from} AND s."dispatchedAt" <= ${range.to}
+      ${shipmentDestinationSql(f.destination, "s")}
+    GROUP BY s."customerId", s.destination
+  `);
+  return rows.map((r) => ({
+    customerId: r.customerId,
+    destination: r.destination,
+    kg: Number(r.kg ?? 0),
+    weighedSacks: Number(r.weighed),
+    totalSacks: Number(r.total),
+  }));
 }

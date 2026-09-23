@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CustomerBranchPayload } from "./branch-types";
 
 // Uzunluk sınırları DB kolonlarıyla birebir: name VARCHAR(100) / code VARCHAR(50).
 export const branchFormSchema = z.object({
@@ -11,6 +12,7 @@ export const branchFormSchema = z.object({
   contactPhone: z.string().max(40).optional().or(z.literal("")),
   notes: z.string().max(500).optional().or(z.literal("")),
   isActive: z.boolean(),
+  defaultDestination: z.enum(["DOMESTIC", "EXPORT"]).nullable(),
 });
 
 export type BranchFormValues = z.infer<typeof branchFormSchema>;
@@ -25,4 +27,30 @@ export const branchFormDefaults: BranchFormValues = {
   contactPhone: "",
   notes: "",
   isActive: true,
+  defaultDestination: null,
 };
+
+type Destination = "DOMESTIC" | "EXPORT" | null | undefined;
+
+/**
+ * İhracat kodu alanı yalnız yön YURTDIŞI iken görünür: kendi yönü (şube) doluysa o,
+ * boşsa devraldığı yön (carinin). Gizlenen dolu değer form durumunda KALIR ve
+ * gövdeye aynen gider — gizlemek silmek değildir.
+ */
+export function exportCodeVisible(own: Destination, inherited: Destination = null): boolean {
+  return (own ?? inherited) === "EXPORT";
+}
+
+/** Form → istek gövdesi; gövdeyi elle kuran katman olduğu için yeni alan BURAYA da eklenir. */
+export const branchFormToPayload = (v: BranchFormValues): Partial<CustomerBranchPayload> => ({
+  code: v.code?.trim() || null,
+  name: v.name.trim(),
+  address: v.address?.trim() || null,
+  city: v.city?.trim() || null,
+  district: v.district?.trim() || null,
+  contactName: v.contactName?.trim() || null,
+  contactPhone: v.contactPhone?.trim() || null,
+  notes: v.notes?.trim() || null,
+  isActive: v.isActive,
+  defaultDestination: v.defaultDestination,
+});

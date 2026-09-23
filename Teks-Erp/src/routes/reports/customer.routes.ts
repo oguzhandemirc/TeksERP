@@ -43,7 +43,7 @@ const MUSTERI_ANAHTARLARI = ["customerId", "destination", "itemId"] as const;
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
- *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Cari/şube yönü (BUGÜNKÜ kart): siparişin şubesinin yönü, boşsa carinin — `reports/_destination.ts`; sevkin donmuş yönü değil, kart değişince küme değişir" }
  *     responses:
  *       200: { description: "Profil satırları (süzgeçliyse kökte suzgec (+dusenSatir); meta.secenekler müşteri seçici kaynağı ≤200, süzgeçten bağımsız — süzgeçli istek bir kez daha süzgeçsiz toplar)" }
  */
@@ -98,7 +98,7 @@ router.get("/order-profile", ...reportGate("customer/order-profile"), async (req
  *         name: compare
  *         schema: { type: string, enum: [none, prev, prevYear, custom] }
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50) — ABC sınıfı süzülmüş evrende hesaplanır" }
- *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Cari/şube yönü (BUGÜNKÜ kart): siparişin şubesinin yönü, boşsa carinin — `reports/_destination.ts`; sevkin donmuş yönü değil, kart değişince küme değişir" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV) — dönem, ömür boyu ve sevk metrajı aynı koşulla" }
  *     responses:
  *       200:

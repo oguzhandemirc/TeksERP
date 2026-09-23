@@ -4,7 +4,7 @@
 // Üç iddia ölçülür: ① "Tümü" seçiliyken istekte anahtar HİÇ GİTMEZ (bugünkü
 // davranış bayt bayt korunur) ② CSV ayrıştırma tek yerde ve boşluğa/tekrara
 // dayanıklı ③ süzgeç satırı ÇIKTIYA giden metni üretir ve niteleyicileri
-// (müşteri varsayılanı · yalnız pay) TAŞIR — kâğıtta olmayan uyarı yoktur.
+// (bugünkü cari/şube yönü · yalnız pay) TAŞIR — kâğıtta olmayan uyarı yoktur.
 //
 // Negatif sondalar (bir kezlik, cp+sha256 ile geri alındı): `axisParams`ten
 // boş-eksen koşulu kaldırıldı → ⭐① ❌ · `filterNotes`ten şerh eki düşürüldü → ⭐③ ❌.
@@ -43,12 +43,12 @@ describe("eksen süzgeci — saf yarı", () => {
   it("⭐ süzgeç satırı NİTELEYİCİYİ taşır; seçim yoksa satır YOK", () => {
     const n = filterNotes([
       { eksen: "Müşteri", degerler: ["Acme"] },
-      { eksen: "Sevk hedefi", degerler: ["İhracat"], serh: "Müşteri kartındaki VARSAYILAN hedef — sevkin fiili hedefi değil." },
+      { eksen: "Cari/şube yönü (bugünkü)", degerler: ["İhracat"], serh: "Siparişin BUGÜNKÜ cari/şube yönü (şube yönü, boşsa carinin) — sevkin donmuş yönü değil; kart değişince geçmiş raporun kümesi de değişir." },
       { eksen: "Kumaş", degerler: [] },
     ]);
     expect(n).toHaveLength(2);
     expect(n[0]).toBe("SÜZGEÇ — Müşteri: Acme.");
-    expect(n[1]).toContain("VARSAYILAN hedef");
+    expect(n[1]).toContain("BUGÜNKÜ cari/şube yönü");
   });
 
   it("⭐ 'süzgeç kesti' cümlesi boş tabloyu süzülmüş tablodan ayırır", () => {
@@ -77,7 +77,7 @@ describe("axisNotes — sayfanın süzgeç satırları (ekran = çıktı)", () =
     expect(n).toEqual(["SÜZGEÇ — Kumaş: Poplin."]);
   });
 
-  it("⭐ eksenin KENDİ şerhi taşınır: reasonCode 'yalnız PAY' · destination 'müşteri varsayılanı'", () => {
+  it("⭐ eksenin KENDİ şerhi taşınır: reasonCode 'yalnız PAY' · destination 'bugünkü cari/şube yönü'", () => {
     const n = axisNotes({
       eksenler: ["reasonCode"],
       destination: true,
@@ -86,7 +86,14 @@ describe("axisNotes — sayfanın süzgeç satırları (ekran = çıktı)", () =
     });
     expect(n[0]).toContain("Yalnız PAYI süzer");
     expect(n[1]).toContain("İhracat");
-    expect(n[1]).toContain("VARSAYILAN hedef");
+    expect(n[1]).toContain("BUGÜNKÜ cari/şube yönü");
+  });
+
+  it("⭐ sevk raporunda yön ekseni SEVKİYATIN donmuş yönüdür — etiket ve şerh sipariş yönünden ayrı", () => {
+    const n = axisNotes({ eksenler: [], destination: "shipment", secenekler, sel: { ...bos, destination: "EXPORT" } });
+    expect(n[0]).toContain("Sevkiyat yönü (sevk anında)");
+    expect(n[0]).toContain("SEVK ANINDA donmuş");
+    expect(n[0]).not.toContain("BUGÜNKÜ cari/şube");
   });
 
   it("⭐ ek şerh (ABC evreni) ve kesti cümlesi süzgeç AÇIKKEN ve SIRAYLA eklenir", () => {

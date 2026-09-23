@@ -8,7 +8,8 @@ const NUM1 = "#,##0.0"; // metre/kg (1 ondalık)
 const INT = "#,##0"; // adet
 const DATE = "dd.mm.yyyy hh:mm";
 
-const yon = (d: "DOMESTIC" | "EXPORT") => (d === "EXPORT" ? "Yurtdışı" : "Yurtiçi");
+/** null = yön kaydı yok (fasondan doğrudan sevk) — yurtiçi sayılmaz. */
+const yon = (d: "DOMESTIC" | "EXPORT" | null) => (d === "EXPORT" ? "Yurtdışı" : d === "DOMESTIC" ? "Yurtiçi" : "Yön kaydı yok (doğrudan sevk)");
 const toDate = (s: string | null) => (s ? new Date(s) : null);
 
 /** Dosya adı: Sevk_Edilenler_<from>_<to>.xlsx (yalnız tarih kısmı). */

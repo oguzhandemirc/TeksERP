@@ -1,9 +1,12 @@
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
+import { Controller } from "react-hook-form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   branchFormDefaults,
   branchFormSchema,
+  exportCodeVisible,
   type BranchFormValues,
 } from "./branch-schema";
 import type { CustomerBranch } from "./branch-types";
@@ -14,9 +17,11 @@ interface Props {
   initial?: CustomerBranch | null;
   onSubmit: (values: BranchFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
+  /** Carinin yönü — şube yönü boşken ihracat kodu görünürlüğü buna düşer. */
+  customerDestination?: "DOMESTIC" | "EXPORT" | null;
 }
 
-export function BranchFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+export function BranchFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting, customerDestination = null }: Props) {
   const isEdit = Boolean(initial);
   const defaults: BranchFormValues = initial
     ? {
@@ -29,6 +34,7 @@ export function BranchFormDialog({ open, onOpenChange, initial, onSubmit, isSubm
         contactPhone: initial.contactPhone ?? "",
         notes: initial.notes ?? "",
         isActive: initial.isActive,
+        defaultDestination: initial.defaultDestination ?? null,
       }
     : branchFormDefaults;
 
@@ -48,12 +54,37 @@ export function BranchFormDialog({ open, onOpenChange, initial, onSubmit, isSubm
             <FormField label="Şube Adı" htmlFor="name" error={form.formState.errors.name} required className="col-span-2">
               <Input id="name" autoFocus placeholder="Örn. Merkez Depo, Ankara Şubesi" {...form.register("name")} />
             </FormField>
-            {/* Şube ihracat kodu — sevk belgesinde tek "İhracat Kodu" satırına, dolu
-                ise şirket ihracat kodunun önüne geçerek basılır. */}
-            <FormField label="İhracat Kodu" htmlFor="code" error={form.formState.errors.code}>
-              <Input id="code" placeholder="Opsiyonel" {...form.register("code")} />
-            </FormField>
+            {/* Şube ihracat kodu — yalnız yön yurtdışıyken görünür (şubenin, boşsa carinin);
+                gizlenen dolu değer silinmez. Belgede şirket kodunun önüne geçer. */}
+            {exportCodeVisible(form.watch("defaultDestination"), customerDestination) && (
+              <FormField label="İhracat Kodu" htmlFor="code" error={form.formState.errors.code}>
+                <Input id="code" placeholder="Opsiyonel" {...form.register("code")} />
+              </FormField>
+            )}
           </div>
+
+          {/* Şubenin sevk yönü — doluysa bu şubeye giden sevkiyatta carinin yönünün önüne geçer. */}
+          <FormField label="Sevk yönü" error={form.formState.errors.defaultDestination}>
+            <Controller
+              control={form.control}
+              name="defaultDestination"
+              render={({ field }) => (
+                <Select
+                  value={field.value ?? "NONE"}
+                  onValueChange={(v) => field.onChange(v === "NONE" ? null : (v as "DOMESTIC" | "EXPORT"))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">Carinin yönü geçerli</SelectItem>
+                    <SelectItem value="DOMESTIC">Yurtiçi</SelectItem>
+                    <SelectItem value="EXPORT">Yurtdışı</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </FormField>
 
           <FormField label="Adres" htmlFor="address" error={form.formState.errors.address}>
             <textarea

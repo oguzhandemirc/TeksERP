@@ -33,7 +33,8 @@ import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { attachPrev, buildBreakdown, pctOf, round1, type BreakdownDim, type BreakdownRow } from "./_breakdown";
-import { collectShipped, type ShippedCell } from "./_shipped";
+import { collectShipped, type ShippedCell, type ShippedFilter } from "./_shipped";
+import { orderDestinationSql, shipmentDestinationSql } from "./_destination";
 import { factoryDaySql } from "../../constants/time";
 
 export interface ShipmentScorecardSummary {
@@ -95,8 +96,8 @@ interface OtifRow {
   lateCount: bigint;
 }
 
-/** Dönemde KAPANAN siparişlerin termin performansı. */
-async function collectOtif(range: DateRange): Promise<OtifRow> {
+/** Dönemde KAPANAN siparişlerin termin performansı — yön süzgeci siparişin bugünkü zincirinden. */
+async function collectOtif(range: DateRange, f: ShippedFilter = {}): Promise<OtifRow> {
   const rows = await prisma.$queryRaw<OtifRow[]>(Prisma.sql`
     SELECT
       COUNT(*)                                                        AS "total",
@@ -112,6 +113,7 @@ async function collectOtif(range: DateRange): Promise<OtifRow> {
     FROM orders o
     WHERE o."completedAt" >= ${range.from} AND o."completedAt" <= ${range.to}
       AND o.status <> 'CANCELLED'
+      ${f.destination ? orderDestinationSql(f.destination, "o") : Prisma.empty}
   `);
   return (
     rows[0] ?? {
@@ -120,19 +122,25 @@ async function collectOtif(range: DateRange): Promise<OtifRow> {
   );
 }
 
+/**
+ * Yön süzgeci (`f.destination`) iki kaynaklıdır ve ikisi de beyanlıdır: sevk metrajı/serisi
+ * sevkiyatın DONMUŞ yönünü, termin kısmı (OTIF · geciken açık) siparişin BUGÜNKÜ zincirini okur.
+ */
 export async function getShipmentScorecard(
   range: DateRange,
   compareRange: DateRange | null = null,
+  f: ShippedFilter = {},
 ): Promise<ShipmentScorecard> {
   const [cells, otif, dailyRows, overdueRows, prevCells, prevOtif] = await Promise.all([
-    collectShipped(range),
-    collectOtif(range),
+    collectShipped(range, f),
+    collectOtif(range, f),
     prisma.$queryRaw<Array<{ day: Date; qty: number | null }>>(Prisma.sql`
       SELECT ${factoryDaySql('s."dispatchedAt"')} AS day,
              SUM(r."currentQty")::float           AS qty
       FROM shipments s JOIN rolls r ON r."shipmentId" = s.id
       WHERE s.status = 'DISPATCHED'
         AND s."dispatchedAt" >= ${range.from} AND s."dispatchedAt" <= ${range.to}
+        ${shipmentDestinationSql(f.destination, "s")}
       GROUP BY 1 ORDER BY 1
     `),
     prisma.$queryRaw<
@@ -156,12 +164,13 @@ export async function getShipmentScorecard(
       -- günü sorusu değil — fabrika saat dilimine kesilmez.
       WHERE o.deadline < now()
         AND o.status IN ('PENDING','APPROVED','PARTIAL_SHIPPED')
+        ${f.destination ? orderDestinationSql(f.destination, "o") : Prisma.empty}
       ORDER BY o.deadline ASC
       LIMIT 25
     `),
-    compareRange ? collectShipped(compareRange) : Promise.resolve<ShippedCell[]>([]),
+    compareRange ? collectShipped(compareRange, f) : Promise.resolve<ShippedCell[]>([]),
     compareRange
-      ? collectOtif(compareRange)
+      ? collectOtif(compareRange, f)
       : Promise.resolve<OtifRow>({ total: 0n, onTime: 0n, withDeadline: 0n, noDeadline: 0n, lateDaysSum: null, lateCount: 0n }),
   ]);
 

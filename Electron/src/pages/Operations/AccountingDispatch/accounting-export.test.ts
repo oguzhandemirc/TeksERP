@@ -228,6 +228,12 @@ describe("buildAccountingWorkbookSheets — dönem dökümü (5 sayfa)", () => {
     expect(row.manualSackCountOrBlank).toBe(10);
   });
 
+  it("⭐ Sevk Listesi: doğrudan sevkin yönü 'Yön kaydı yok' — yurtiçi uydurulmaz", () => {
+    const d = buildAccountingWorkbookSheets({ ...data, shipments: [{ ...data.shipments[0]!, destination: null }] });
+    expect((d[0]!.rows[0] as { yon: string }).yon).toBe("Yön kaydı yok (doğrudan sevk)");
+    expect((sheets[0]!.rows[0] as { yon: string }).yon).toBe("Yurtdışı");
+  });
+
   it("Sevk Listesi: beyan yoksa fiili sütunu BOŞ kalır (0 değil)", () => {
     // 0 yazmak "sıfır çuval gitti" diye okunurdu; beyan yokluğu bir rakam değil.
     const beyansiz = buildAccountingWorkbookSheets({

@@ -29,6 +29,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCustomerFinanceAccess } from "@/pages/Customers/CustomerFinanceSection";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateDestinationLock } from "@/pages/Operations/SackContentEdit/destinationDefault";
 import { toast } from "sonner";
 import { Search, Plus, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -188,6 +189,7 @@ export function CarilerPage() {
       toast.success("Kart güncellendi.");
       setEditCustomer(null);
       void qc.invalidateQueries({ queryKey: ["customers"] });
+      invalidateDestinationLock(qc);
     },
   });
   const updateSubM = useMutation({
