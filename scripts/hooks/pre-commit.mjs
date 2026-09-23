@@ -194,7 +194,10 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
 // birebirler ve ikisi panelde (`routes/content-routes.tsx` · `pages/Reports/**` · `lib/report-catalog.ts`
 // aynası). Katalog satırı backend'de, karo/route panelde doğar ⇒ yalnız panele dokunan commit de
 // mandal görmezse ayna kapıda değil CI'da ısırırdı. Bedel panel commit'ine +~7 sn.
-if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/|Electron\/src\/|docs\/)/.test(f))) {
+// `Teks-Erp/prisma/` (2026-09-23, migration_order ile): bekçi YALNIZ `prisma/migrations/`i okur ve
+// yalnız MIGRATION ekleyen bir commit hiçbir tetiğe girmiyordu — yani kapı o sınıfı hiç görmezdi.
+// Tetik bekçinin okuduğu dizinden dar kalamaz. Bedel: migration commit'ine +~0,3 sn.
+if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/|Teks-Erp\/prisma\/|Electron\/src\/|docs\/)/.test(f))) {
   adimlar.push({ ad: "hızlı mandallar", cwd: ".", cmd: ["node", ["scripts/hooks/hizli-mandallar.mjs"]] });
 }
 

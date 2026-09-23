@@ -11397,3 +11397,37 @@ panel çağrısı sarmalayıcıda + `headers` config'te (§1) · tablet kapılı
 (§3) · ÖLÇÜLEMEDİ kırmızı (§4). Sıra bağımlılığı ölçüldü: config-bundle `apply` kapısı iki ayağıyla aynı
 commit'te inerse yeşil; yalnız backend → §1 kırmızı, yalnız panel → §3b kırmızı. superadmin.md:65'teki
 "panel bekçisi yok" borcu bu kapıyla KAPANDI. Migration/izin/APK yok.
+
+## 2026-09-23 — Migration SIRASI: sonra doğan tabloya önce dokunan migration temiz DB'de düşer [ÇEKİRDEK]
+
+**Saha/ölçüm:** `20260923120000_number_series_separator2` (D5②) `number_series_lines` tablosuna
+`ALTER TABLE` yazıyordu; o tabloyu yaratan `20260923200000_number_series_line` (D4①) leksikografik
+sırada ONDAN SONRA geliyor. Geliştirici veritabanlarında görünmedi çünkü migration'lar parça parça,
+elle sırayla uygulanmıştı — tablo, ALTER koştuğunda zaten vardı. BOŞ bir veritabanında `migrate deploy`
+`42P01 relation "number_series_lines" does not exist` ile düştü ve migration FAILED kaldı (ölçüldü,
+`tekserp_ca_bos1`). Fabrika ve CI'ın taze veritabanı da aynı noktada düşerdi; kök CLAUDE.md'nin
+"şema provası en eski canlı dump'ta" kuralı bu turda atlanmıştı.
+
+**Karar:** `number_series_lines` satırı, tablonun doğumundan SONRA gelen yeni bir migration'a taşındı
+(`20260923230000_number_series_line_separator2`, `ADD COLUMN IF NOT EXISTS` → ara durumdaki DB'lerde
+no-op). Uygulanmış bir migration dosyasını DÜZENLEMENİN bedeli ölçüldü ve KABUL EDİLDİ: `migrate deploy`
+ve `migrate status` checksum farkını umursamıyor (DB'deki `ed812041…` ≠ dosyanın `fe8a5f33…`, yine de
+"no pending" / yeni satırı uyguladı); yalnız `migrate dev` konuşur ve o zaten bu depoda yasak. Sahada bu
+migration'ların hiçbiri uygulanmadı, yani dosya düzeltmesi sahayı etkilemez.
+
+**Prova (üç ortam):** ① BOŞ DB `tekserp_ca_bos2` — 342 migration temiz, ikinci deploy "no pending".
+② FABRİKA YEDEĞİNİN KOPYASI `tekserp_ca_prova2` (`dump/tekserp_yeni_20260915_030001.dump`, 238
+migration + 6.514 top) — 104 bekleyen migration temiz uygulandı, boot uzlaştırması 52 numara serisi +
+21 izin + 36 sebebi yazdı, `number_series_lines` 53 satır ve `separator2`/`origin` kolonları yerinde.
+③ Ara durumdaki DB'ler (`tekserp_ca_test`, `tekserp_1e_test`) yalnız yeni migration'ı bekliyor gördü.
+
+**Kalıcı kapı:** `test_migration_order` (DB'siz, 0,3 sn, 24. hızlı mandal; tetiğe `Teks-Erp/prisma/`
+eklendi — yalnız migration ekleyen commit hiçbir tetiğe girmiyordu). Deploy sırasını leksikografik
+okur, `CREATE TABLE/VIEW` ile yaşayan tablo kümesini kurar, `ALTER/INDEX/REFERENCES/INSERT/UPDATE/
+DELETE` hedefini o kümede arar; `DROP`/`RENAME` kümeyi günceller. Körlük zemini var (3.297 kullanım
+görülmeden "0 ihlal" yazılmaz). İki sonda: ihlal geri konunca KIRMIZI (ihlalin adıyla) · aynı dosyada
+yarat+dokun YEŞİL (yanlış pozitif yok). UPDATE'in üç yalancı arkadaşı ölçülerek elendi (`ON UPDATE
+CASCADE` · `DO UPDATE SET` · `BEFORE INSERT OR UPDATE ON`) — yalnız önceki kelimeye bakan eleme
+yetmedi, ölçüt ifadenin kuyruğundaki `SET`. Kapsam beyanı: tablolar + görünümler; enum tipi, fonksiyon
+ve uzantı kapsam DIŞI. CI bu sınıfı zaten yakalıyordu (servis konteyneri her koşumda taze `teks_ci` +
+`migrate deploy`), ama CI push'tan SONRA konuşur; mandal commit kapısında konuşur.
