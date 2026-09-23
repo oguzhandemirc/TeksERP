@@ -221,11 +221,18 @@ async function bicimYaz(key, alanlar, etiket) {
   await numaralandirmayaGit();
   const d = await ac(await seri(key));
   if (!d) throw new Error("Düzenle pasif");
-  if (alanlar.prefix !== undefined) await d.locator("#ns-prefix").fill(alanlar.prefix);
-  if (alanlar.dateSegment !== undefined) await d.locator("#ns-segment").selectOption(alanlar.dateSegment);
-  if (alanlar.digits !== undefined) await d.locator("#ns-digits").fill(String(alanlar.digits));
-  if (alanlar.separator !== undefined) await d.locator("#ns-sep").fill(alanlar.separator);
-  if (alanlar.separator2 !== undefined && (await d.locator("#ns-sep2").count())) await d.locator("#ns-sep2").fill(alanlar.separator2 ?? "");
+  // Eksen kilidi: PASİF alana yazılmaz (kilitli eksen zaten değişmez); değeri aynı olan alana da dokunulmaz.
+  const yaz = async (sel, deger, secim = false) => {
+    const l = d.locator(sel);
+    if (!(await l.count()) || (await l.isDisabled())) return;
+    if ((await l.inputValue()) === String(deger)) return;
+    if (secim) await l.selectOption(String(deger)); else await l.fill(String(deger));
+  };
+  if (alanlar.prefix !== undefined) await yaz("#ns-prefix", alanlar.prefix);
+  if (alanlar.dateSegment !== undefined) await yaz("#ns-segment", alanlar.dateSegment, true);
+  if (alanlar.digits !== undefined) await yaz("#ns-digits", alanlar.digits);
+  if (alanlar.separator !== undefined) await yaz("#ns-sep", alanlar.separator);
+  if (alanlar.separator2 !== undefined) await yaz("#ns-sep2", alanlar.separator2 ?? "");
   if (alanlar.effectiveFrom) { await d.locator("#ns-effective").fill(alanlar.effectiveFrom); await d.locator("#ns-effective").press("Tab"); }
   const on = await durumOku(d);
   // Hedef biçim zaten kayıtlıysa Kaydet pasiftir (değişiklik yok) — tıklanmaz, "zaten yerinde" döner.
@@ -424,6 +431,7 @@ async function gitSayfa(ad) {
 const istenen = process.argv.slice(2);
 const hepsi = (await seriListesi()).filter((r) => !istenen.length || istenen.includes(r.key));
 const dur = {};
+const bicimAyni = (a, b) => a.prefix === b.prefix && a.dateSegment === b.dateSegment && a.digits === b.digits && (a.separator ?? "") === (b.separator ?? "") && (a.separator2 ?? "") === (b.separator2 ?? "");
 /** Katalog önizlemesinden kalıp: sabit baş (ön ek + bugünkü tarih + ayraçlar) + en az `digits` haneli sayaç. */
 const kalip = (r) => new RegExp(`^${esc(String(r.preview).slice(0, -r.digits))}\\d{${r.digits},}$`);
 if (hepsi.some((r) => r.editable && r.key.startsWith("packingLot"))) {
@@ -450,12 +458,35 @@ for (const r of hepsi) {
     const izOnce = await eskiParmakIzi(A.tablo, sinir);
     kayit.adimlar.eskiKayit = eski;
 
+    // EKSEN KİLİDİ (okutulan seriler): kilitli eksen panelde PASİF + gerekçe görünür; serbest eksen açık;
+    // kilitli değişiklik API'den zorlanırsa sunucu reddeder.
+    if (kip === "tam" && r.lockedAxes?.length) {
+      ag.adim(`${on} · eksen kilidi`);
+      const ALAN = { prefix: "#ns-prefix", dateSegment: "#ns-segment", digits: "#ns-digits", separator: "#ns-sep", separator2: "#ns-sep2" };
+      await numaralandirmayaGit();
+      const d0 = await ac(r);
+      const eksen = {};
+      for (const [ad, sel] of Object.entries(ALAN)) {
+        const l = d0.locator(sel);
+        eksen[ad] = (await l.count()) ? ((await l.isDisabled()) ? "pasif" : "açık") : "yok";
+      }
+      const gerekce = (await d0.getByText(String(r.lockedReason ?? "").slice(0, 40), { exact: false }).count()) > 0;
+      kayit.gorsel.push(await gor(r.key, "eksen-kilidi"));
+      await diyaloguKapat();
+      ag.beklenen({ url: new RegExp(`/api/number-series/${r.key}$`) });
+      const zorla = await api(`/api/number-series/${r.key}`, { method: "PATCH", headers: sifreBasligi, body: JSON.stringify({ prefix: `${r.prefix}X`, dateSegment: r.dateSegment, digits: r.digits, separator: r.separator ?? "", separator2: r.separator2 ?? null }) });
+      const beklenenKilit = r.lockedAxes.every((a) => eksen[a] === "pasif") && Object.keys(ALAN).filter((a) => !r.lockedAxes.includes(a) && eksen[a] !== "yok").every((a) => eksen[a] === "açık");
+      kayit.adimlar.eksenKilidi = { lockedAxes: r.lockedAxes, eksen, gerekceGorunur: gerekce, apiZorlama: zorla.status, apiMesaj: String(zorla.govde?.message ?? "").slice(0, 160), tamam: beklenenKilit && zorla.status >= 400 };
+      // K25: kilitli alanın yanında gerekçe yazısı ürün bulgusudur, kilidin kendisini bozmaz — ayrı sütunda raporlanır.
+      if (!gerekce) kayit.bulgular = [...(kayit.bulgular ?? []), "K25: kilitli eksenin gerekçesi diyalogda görünmüyor"];
+    }
+
     let hedefKalip = kalip(r);
     if (kip === "tam") {
       ag.adim(`${on} · biçimi değiştir`);
-      kayit.adimlar.bicim = await bicimYaz(r.key, { prefix: A.yeniOnEk, ...(A.separator2 !== undefined ? { separator2: A.separator2 } : {}) }, "e5-bicim");
+      kayit.adimlar.bicim = await bicimYaz(r.key, A.anaDegisim ?? { prefix: A.yeniOnEk, ...(A.separator2 !== undefined ? { separator2: A.separator2 } : {}) }, "e5-bicim");
       kayit.gorsel.push(await gor(r.key, "bicim-sonra"));
-      hedefKalip = kalip({ ...r, preview: kayit.adimlar.bicim.onizleme });
+      hedefKalip = kalip({ ...r, digits: A.anaDegisim?.digits ?? r.digits, preview: kayit.adimlar.bicim.onizleme });
     }
 
     ag.adim(`${on} · kayıt aç`);
@@ -474,7 +505,12 @@ for (const r of hepsi) {
 
     ag.adim(`${on} · belge`);
     kayit.adimlar.belge = A.belge ? await A.belge(dur, k).catch((e) => ({ hata: String(e.message ?? e).split("\n")[0] })) : { uygulanmaz: "bu serinin belgesi yok" };
-    kayit.adimlar.okutma = A.okutulur ? "ölçülmedi (panel okutma kolu E4 sonrası)" : "uygulanmaz (seri okutulmuyor)";
+    if (A.okutulur) {
+      // Okutma: yeni ve eski kod sunucu sınıflandırıcısında KENDİ serisine çözülüyor mu (panel HEAD aynı tabloyu kullanır).
+      const coz = async (kod) => kod ? (await api(`/api/scan/resolve?code=${encodeURIComponent(kod)}`)).govde?.data?.key ?? null : "—";
+      const yeniKey = await coz(k.numara), eskiKey = await coz(eski);
+      kayit.adimlar.okutma = { yeni: yeniKey, eski: eskiKey, tamam: yeniKey === r.key && (eski ? eskiKey === r.key : true) };
+    } else kayit.adimlar.okutma = "uygulanmaz (seri okutulmuyor)";
 
     // VARYANTLAR (TAM kip): tarih · ayraç · hane — her biri: biçim → kayıt → kalıp + ekran → geri.
     if (kip === "tam" && A.varyantlar?.length) {
@@ -530,12 +566,14 @@ for (const r of hepsi) {
       kayit.adimlar.geriAl = await bicimYaz(r.key, orj, "e5-geri");
       const son = await seri(r.key);
       kayit.adimlar.geriAl.onEk = son.prefix;
-      geriTamam = kayit.adimlar.geriAl.kapandi && son.prefix === orj.prefix;
+      geriTamam = kayit.adimlar.geriAl.kapandi && bicimAyni(son, orj);
     }
     kayit.adimlar.eskiNumaralarAyni = izOnce === (await eskiParmakIzi(A.tablo, sinir));
 
     const ekranTamam = kayit.adimlar.ekran && !kayit.adimlar.ekran.hata && (kayit.adimlar.ekran.uygulanmaz || Object.values(kayit.adimlar.ekran).every(Boolean));
     const varyantTamam = (kayit.adimlar.varyantlar ?? []).every((x) => x.kaydedildi && x.kalibaUyar && !x.ekran?.hata && (x.ekran?.uygulanmaz || Object.values(x.ekran ?? {}).every(Boolean)));
+    const okutmaTamam = typeof kayit.adimlar.okutma === "string" || kayit.adimlar.okutma.tamam;
+    const kilitTamam = !kayit.adimlar.eksenKilidi || kayit.adimlar.eksenKilidi.tamam;
     const iy = kayit.adimlar.ikinciYol;
     const ikinciYolTamam = !iy || (iy.kalibaUyar && iy.ekran && Object.values(iy.ekran).every(Boolean));
     const y = kayit.adimlar.yururluk;
@@ -543,12 +581,21 @@ for (const r of hepsi) {
     const belgeTamam = kayit.adimlar.belge.uygulanmaz || kayit.adimlar.belge.belgedeVar === true;
     const agTemiz = Object.values(agKayitlari(on)).every((l) => l.length === 0);
     const bicimTamam = kip === "tam" ? kayit.adimlar.bicim.kapandi : true;
-    kayit.sonuc = bicimTamam && kayit.adimlar.kayit.kalibaUyar && ekranTamam && belgeTamam && geriTamam && kayit.adimlar.eskiNumaralarAyni && agTemiz && varyantTamam && yururlukTamam && ikinciYolTamam ? "✓" : "✗";
+    kayit.sonuc = bicimTamam && kayit.adimlar.kayit.kalibaUyar && ekranTamam && belgeTamam && geriTamam && kayit.adimlar.eskiNumaralarAyni && agTemiz && varyantTamam && yururlukTamam && ikinciYolTamam && okutmaTamam && kilitTamam ? "✓" : "✗";
   } catch (e) {
     kayit.sonuc = "✗"; kayit.hata = String(e?.message ?? e).split("\n")[0].slice(0, 300);
     kayit.hataAyrinti = String(e?.message ?? e).slice(0, 1500); // Playwright çağrı günlüğü: hangi locator, neden
     kayit.gorsel.push(await gor(r.key, "hata"));
     if (kip === "tam") await bicimYaz(r.key, orj, "e5-acil-geri").catch(() => undefined);
+  }
+  // SIZINTI SEDDİ: panelden geri alma başarısız olduysa biçim API'den eski hâline döner ve seri KIRMIZI
+  // yazılır — yarıda kalan koşum sonraki koşumun "önceki hâl"ini kirletmesin (2026-09-23: kirletti).
+  if (kip === "tam") {
+    const son = await seri(r.key).catch(() => null);
+    const ileri = (await sql(`SELECT count(*)::int n FROM number_series_lines WHERE "seriesKey"=$1 AND "effectiveFrom" > now()`, [r.key]))[0].n;
+    if (ileri > 0) await api(`/api/number-series/${r.key}/pending`, { method: "DELETE", headers: sifreBasligi });
+    if (!son || !bicimAyni(son, orj)) await api(`/api/number-series/${r.key}`, { method: "PATCH", headers: sifreBasligi, body: JSON.stringify({ ...orj, separator2: orj.separator2 || null }) });
+    if (ileri > 0 || !son || !bicimAyni(son, orj)) { kayit.sizinti = { ileriSatir: ileri, bicim: son ? { prefix: son.prefix, dateSegment: son.dateSegment, digits: son.digits } : null }; kayit.sonuc = "✗"; }
   }
   kayit.ag = agKayitlari(on);
   sonuc.push(kayit); yaz();
