@@ -59,6 +59,15 @@ const DATE_LEN: Record<ScanDateSegment, number> = {
   YYYY: 4,
 };
 
+/**
+ * ⚠️ SATIR BAZINDA ELEME, HEP-YA-HİÇ DEĞİL (D5①).
+ *
+ * Eski hâli `rows.every(isRow)` idi: sunucu tablosundaki TEK bir tanınmayan
+ * satır (ör. bu istemcinin bilmediği yeni bir `dateSegment`) TABLONUN TAMAMINI
+ * reddettiriyordu ve tablet sessizce yedeğe düşüyordu — anladığı serileri de
+ * kaybederek. Artık tanınmayan satır ATILIR, gerisi kullanılır: o serinin kodu
+ * yerelde "çözülemedi" olur (dürüst üçüncü sonuç) ve sunucuya sorulur.
+ */
 function isRow(v: unknown): v is ScanSeriesRow {
   const r = v as Partial<ScanSeriesRow> | null;
   return (
@@ -157,7 +166,8 @@ export const scanSeriesService = {
   async get(): Promise<ScanSeriesRow[]> {
     const res = await apiClient.get<{ success: boolean; data: ScanSeriesRow[] }>('/api/scan/series');
     const rows = res.data?.data;
-    if (Array.isArray(rows) && rows.length > 0 && rows.every(isRow)) return rows;
+    const taninan = Array.isArray(rows) ? rows.filter(isRow) : [];
+    if (taninan.length > 0) return taninan;
     return [...FALLBACK_SCAN_SERIES];
   },
 

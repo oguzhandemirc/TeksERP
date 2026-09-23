@@ -74,6 +74,15 @@ export type ScanSeriesSource = "server" | "cache" | "fallback";
 let table: readonly ScanSeriesRow[] = FALLBACK_SERIES;
 let source: ScanSeriesSource = "fallback";
 
+/**
+ * ⚠️ SATIR BAZINDA ELEME, HEP-YA-HİÇ DEĞİL (D5①).
+ *
+ * Eski hâli `rows.every(isRow)` idi: sunucu tablosundaki TEK bir tanınmayan
+ * satır (ör. bu istemcinin bilmediği yeni bir `dateSegment`) TABLONUN TAMAMINI
+ * reddettiriyordu ve istemci sessizce bayat yedeğe düşüyordu — yani anladığı
+ * serileri de kaybediyordu. Artık tanınmayan satır ATILIR, gerisi kullanılır:
+ * o serinin kodu "çözülemedi" olur (dürüst üçüncü sonuç), ötekiler çalışır.
+ */
 function isRow(v: unknown): v is ScanSeriesRow {
   const r = v as Partial<ScanSeriesRow> | null;
   return (
@@ -97,8 +106,9 @@ function readCache(): readonly ScanSeriesRow[] | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isRow)) return null;
-    return parsed;
+    if (!Array.isArray(parsed)) return null;
+    const taninan = parsed.filter(isRow);
+    return taninan.length > 0 ? taninan : null;
   } catch {
     return null;
   }
@@ -126,10 +136,11 @@ export async function loadScanSeries(): Promise<ScanSeriesSource> {
   try {
     const res = await apiClient.get<{ success: boolean; data: ScanSeriesRow[] }>("/api/scan/series");
     const rows = res.data?.data;
-    if (Array.isArray(rows) && rows.length > 0 && rows.every(isRow)) {
-      table = rows;
+    const taninan = Array.isArray(rows) ? rows.filter(isRow) : [];
+    if (taninan.length > 0) {
+      table = taninan;
       source = "server";
-      writeCache(rows);
+      writeCache(taninan);
     }
   } catch {
     /* ağ/401 — yedek ya da yerel kopya yerinde kalır */

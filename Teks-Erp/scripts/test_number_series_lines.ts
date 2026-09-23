@@ -59,6 +59,17 @@ async function main(): Promise<void> {
   const baslangicSatirlari = new Set(
     (await prisma.numberSeriesLine.findMany({ select: { id: true } })).map((x) => x.id),
   );
+  // ⚠️ DAMGA DA ANLIK GÖRÜNTÜDEN (2026-09-23 bulgusu): teardown göçün yarattığı
+  // satırları siliyordu ama DAMGAYA dokunmuyordu. Boot görmemiş bir DB'de zincir
+  // şöyleydi: §1 göçü çağırır → satırlar + damga doğar → teardown satırları
+  // siler, damga KALIR → sonraki boot göçü ATLAR → satır tablosu KALICI boş.
+  // Bu bir bekçi artığı değil, bekçinin DB'ye kalıcı bıraktığı bir hasardı.
+  // ⇒ Geri alma, sondadan ÖNCEKİ ana döner: damga o an YOKSA sonda da silinir;
+  // VARSA dokunulmaz (bizim yarattığımız iz değil).
+  const damgaBastaVardi =
+    (await prisma.systemSetting.findUnique({
+      where: { key: FORMAT_LINES_MIGRATION_STAMP }, select: { key: true },
+    })) !== null;
   const seriDurumu = new Map(
     (await prisma.numberSeries.findMany({
       select: { key: true, prefix: true, dateSegment: true, digits: true, separator: true,
@@ -330,6 +341,9 @@ async function main(): Promise<void> {
   const sonSatirlar = await prisma.numberSeriesLine.findMany({ select: { id: true } });
   for (const l of sonSatirlar) {
     if (!baslangicSatirlari.has(l.id)) await prisma.numberSeriesLine.delete({ where: { id: l.id } });
+  }
+  if (!damgaBastaVardi) {
+    await prisma.systemSetting.deleteMany({ where: { key: FORMAT_LINES_MIGRATION_STAMP } });
   }
   for (const [key, s] of seriDurumu) {
     await prisma.numberSeries.update({

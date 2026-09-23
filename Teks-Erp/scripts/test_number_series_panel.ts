@@ -141,6 +141,7 @@ function throws(fn: () => void, beklenen: string): boolean {
 const DAMGA = `TEST-${Date.now()}`.slice(0, 14);
 
 async function main(): Promise<void> {
+  const fixtureLines: string[] = [];
   const fixtureGroups: string[] = [];
   const fixtureInvoices: string[] = [];
   let fixtureCari: string | null = null;
@@ -729,9 +730,50 @@ async function main(): Promise<void> {
       JSON.stringify((c0bHatasi as { details?: { missingPhases?: string[] } })?.details?.missingPhases ?? null));
     check("§10a tek yüklem: kapı ile bildirilen eksik fazlar AYNI kaynaktan",
       scanningClientsMissingPhases().length === 2);
+    // ⭐ D5② ÖN KOŞULU, BEYAN — YENİ BİR TARİH SEGMENTİ DE BU KAPININ ARKASINDADIR.
+    // Kapı okutulan serinin HERHANGİ bir biçim yazımına bakar (`katalog.kind`),
+    // değişen ALANA değil; yukarıdaki iddia bunu zaten ölçüyor çünkü fikstür
+    // bugünkü biçmin AYNISINI gönderiyor — kapıyı hangi eksene daraltırsanız
+    // daraltın (yalnız ön ek · ön ek+hane+ayraç) bu iddia KIRMIZI verir
+    // (ölçüldü 2026-09-23, iki sonda). ⇒ Segment ekseni için AYRI bir iddia
+    // yazmadım: hiçbir sondada ayrışmıyordu, yani KAPSAM EKLEMİYORDU — sırf
+    // okunsun diye eklenen iddia, kapının ölçtüğünü büyütmeden tabanı şişirir.
+    // İstemci tarafı ayrı ölçülür: tanımadığı segmentli SATIRI atar, tabloyu
+    // düşürmez (`test_tarih_segmenti_aynasi §2`).
 
     // ⭐ SÖZLEŞME: alan EKLENDİ, var olan DEĞİŞTİRİLMEDİ — eski istemci
     // `retiredFormats`ı tanımaz ve görmezden gelir; `prefixes` yerinde durur.
+    // ⚠️ EMEKLİ SATIR FİKSTÜRDEN, BOOT'TAN DEĞİL (2026-09-23 iniş kırmızısı).
+    // Emekli biçimleri D4 göçü yazar ve göç BOOT'ta koşar, `migrate deploy`de
+    // değil — ayrıca `test_number_series_lines` teardown'u kendi koşumunda
+    // doğan satırları siler. ⇒ Bu bölüm "boot koştu mu" / "komşu bekçi ne
+    // bıraktı" varsayımlarına dayanırsa temiz CI DB'sinde kırmızı, benim
+    // DB'mde yeşil olur; ortama bağımlı bir iddia HİÇBİR ŞEY ölçmez.
+    // İKİ satır gerekir: en yenisi YÜRÜRLÜKTEKİDİR, emekli listesine girmez.
+    // İkisi de serinin `formatChangedAt`ından ESKİ ⇒ aktivasyon tetiklenmez
+    // (ölçüt "daha YENİ bir satır vadesi geldi"), yani ortak durum kirlenmez.
+    // ⚠️ ÖNCE KENDİ ARTIĞINI SİL: koşum SIGKILL ile düşerse `finally` koşmaz ve
+    // sızan satırı `test_number_series_lines`in normalizasyonu KORUR (göç satırı
+    // sanır). Kendi tarih penceresini süpürmek bu bekçiyi kendi geçmişine karşı
+    // da bağışık yapar — "geri alma, sondadan ÖNCEKİ ana döner".
+    await prisma.numberSeriesLine.deleteMany({
+      where: {
+        seriesKey: "sack",
+        effectiveFrom: { gte: new Date("2001-01-01T00:00:00Z"), lte: new Date("2002-01-01T00:00:00Z") },
+      },
+    });
+    for (const [i, hane] of [3, 4].entries()) {
+      const satir = await prisma.numberSeriesLine.create({
+        data: {
+          seriesKey: "sack", prefix: "CV", dateSegment: "DDMMYY", digits: hane, separator: "",
+          effectiveFrom: new Date(`200${i + 1}-01-01T00:00:00Z`),
+          isSentinel: true, origin: "MIGRATED_GUESS",
+        },
+        select: { id: true },
+      });
+      fixtureLines.push(satir.id);
+    }
+    await refreshNumberSeriesCache();
     const tablo = seriesClassifierTable();
     check("§10b ⭐ sınıflandırma satırı `prefixes` alanını KORUYOR (eski istemci kırılmaz)",
       tablo.length > 0 && tablo.every((r) => Array.isArray(r.prefixes) && r.prefixes.length >= 1),
@@ -757,6 +799,10 @@ async function main(): Promise<void> {
       c instanceof Error && kod(c) === "NUMBER_SERIES_PREFIX_COLLISION",
       c instanceof Error ? (kod(c) ?? c.message) : "KABUL EDİLDİ");
   } finally {
+    if (fixtureLines.length > 0) {
+      await prisma.numberSeriesLine.deleteMany({ where: { id: { in: fixtureLines } } });
+      await refreshNumberSeriesCache();
+    }
     if (fixtureGroups.length > 0) {
       await prisma.packingGroup.deleteMany({ where: { id: { in: fixtureGroups } } });
     }
