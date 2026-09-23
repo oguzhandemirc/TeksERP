@@ -10,7 +10,25 @@
 
 import { PrintedDocType } from "@prisma/client";
 
+import { previewSeriesCode, resolveSeriesFormat } from "../number-series.service";
+
 const ISO = "2026-06-07T10:30:00.000Z";
+
+/**
+ * Örnek belge numarası — SERİDEN TÜRETİLİR, literal YAZILMAZ (D7).
+ *
+ * ⚠️ Bu dosyanın sözleşmesi "önizleme baskıyla BİREBİR AYNI". Sabit bir
+ * `MK1308260001` yazmak, fabrika mal kabul serisinin ön ekini değiştirdiği gün
+ * önizlemeyi sessizce YALAN yapardı — üstelik kullanıcının "belge · çıktı ·
+ * program aynı numarayı göstermeli" değişmezinin tam karşısında.
+ *
+ * ⚠️ KENDİ ÜRETECİ OLAN seride kullanılamaz: `previewSeriesCode` katalog
+ * `infix`ini (top barkodunun faz harfi) YAZMAZ — o serinin örneği kendi
+ * üretecinden gelmelidir, yoksa türetme sessiz bir yanlış üretir.
+ */
+function ornekNo(key: string, seq: number): string {
+  return previewSeriesCode(resolveSeriesFormat(key), seq);
+}
 
 /** docType → renderHtml'in okuduğu örnek `doc`. Gerçek sevk verisi DEĞİL. */
 export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>> = {
@@ -185,12 +203,12 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   // belge tipiyle AYNI commit'te gelmek zorunda (örneksiz tip = boş/çöp kart).
   TRANSFER_DISPATCH: {
     header: {
-      documentNo: "DT1308260001",
+      documentNo: ornekNo("warehouseTransfer", 1),
       date: ISO,
       fromWarehouseName: "Merkez Depo",
       fromWarehouseCode: "DP-MERKEZ",
       toWarehouseName: "Şube Deposu",
-      toWarehouseCode: "DP1308260002",
+      toWarehouseCode: ornekNo("warehouse", 2),
       createdBy: "Mehmet Yılmaz",
     },
     lines: [
@@ -201,12 +219,12 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   },
   GOODS_RECEIPT: {
     header: {
-      documentNo: "MK1308260001",
+      documentNo: ornekNo("goodsReceipt", 1),
       date: ISO,
       warehouseName: "Merkez Depo",
       warehouseCode: "DP-MERKEZ",
       supplierName: "Örnek Tedarik A.Ş.",
-      supplierCode: "MUS1308260007",
+      supplierCode: ornekNo("customer", 7),
       deliveryNoteNo: "IRS-2026-4471",
       createdBy: "Ayşe Kaya",
     },
@@ -273,7 +291,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   // İKİ para birimi (tek TOPLAM yazılmadığı dal önizlemede görünsün).
   RECONCILIATION_LETTER: {
     header: {
-      documentNo: "MBT1508260001",
+      documentNo: ornekNo("reconciliationLetter", 1),
       date: new Date().toISOString(),
       asOf: new Date().toISOString(),
       partyName: "Örnek Tekstil Ltd. Şti.",
@@ -290,7 +308,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   },
   CHEQUE_DELIVERY_NOTE: {
     header: {
-      documentNo: "BRD1508260001",
+      documentNo: ornekNo("chequeDeliveryNote", 1),
       date: new Date().toISOString(),
       kind: "RECEIVED",
       kindLabel: "Alınan",
@@ -300,19 +318,19 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     },
     lines: [
       {
-        docNo: "CKA1508260001", serialNo: "0034512", issueDate: ISO,
+        docNo: ornekNo("chequeReceived", 1), serialNo: "0034512", issueDate: ISO,
         dueDate: new Date(Date.now() + 45 * 864e5).toISOString(),
         drawerName: "Yıldız Konfeksiyon A.Ş.", bankName: "Garanti BBVA",
         currency: "TRY", amount: "42500.00",
       },
       {
-        docNo: "CKA1508260002", serialNo: "0034513", issueDate: ISO,
+        docNo: ornekNo("chequeReceived", 2), serialNo: "0034513", issueDate: ISO,
         dueDate: new Date(Date.now() + 60 * 864e5).toISOString(),
         drawerName: "Yıldız Konfeksiyon A.Ş.", bankName: "Garanti BBVA",
         currency: "TRY", amount: "18750.50",
       },
       {
-        docNo: "SNA1508260003", serialNo: null, issueDate: ISO,
+        docNo: ornekNo("noteReceived", 3), serialNo: null, issueDate: ISO,
         dueDate: new Date(Date.now() + 30 * 864e5).toISOString(),
         drawerName: "Delta Tekstil Ltd.", bankName: null,
         currency: "USD", amount: "5000.00",
@@ -331,7 +349,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   // ayarlayan kişi "DURUM" kolonunun neye benzediğini önizlemede görmeli.
   STOCK_COUNT: {
     header: {
-      documentNo: "SAY1508260001",
+      documentNo: ornekNo("stockCount", 1),
       date: ISO,
       warehouseName: "Merkez Depo",
       warehouseCode: "DP-MERKEZ",

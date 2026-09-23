@@ -130,7 +130,7 @@ export interface InitialEntryRequest {
   width?: number;
   /**
    * Opsiyonel idempotency anahtarı (UUID) — offline KK1 / ağ-retry için. Barkod
-   * artık SUNUCU'da sıralı atanır (TEKS+YYMMDD+H/F+A001..); aynı token'la 2. çağrı
+   * artık SUNUCU'da sıralı atanır (`T`+GGAAYY+`H|F`+NNNN); aynı token'la 2. çağrı
    * cached Roll döner (mükerrer top önlenir). Etiket sunucudan dönen barkodla basılır.
    */
   clientToken?: string;

@@ -76,6 +76,7 @@
 - **[ÇEKİRDEK]** Biçim satırı göçü SERİ BAŞINA idempotenttir: satırı olmayan seri her boot'ta kolon önbelleğinden onarılır, satırı olana dokunulmaz. Genel bir damga "iş yapıldı" der ama satırların VARLIĞINI garanti etmez. · bekçi: `test_number_series_lines §1c`
 - **[ÇEKİRDEK]** Yapılandırma paketi numara serisi taşıyabilir ama YAZMA panelin yazarından (`updateSeriesFormat`) geçer: kapıları atlayan bir içe aktarım modu yoktur. Önizleme aynı yüklemleri KURU koşar ve her seriyi ÖNCESİ → SONRASI olarak listeler; sayaç taşınmaz ve taşınmayanlar pakette beyanlıdır. · bekçi: `test_config_bundle §9`
 - **[ÇEKİRDEK]** Paketin numara serisi taşıması AYAR ŞİFRESİ ister ve kapı UCA değil İÇERİĞE takılır — paket bu türü taşımıyorsa şifre sorulmaz. · bekçi: `test_config_bundle §9d`
+- **[ÇEKİRDEK]** Kaynakta örnek kod LİTERALİ yazma: biçim veri olduğu için literal, fabrika ön eki değiştirdiği gün sessizce yalan olur. Örnek, o kodu GERÇEKTEN üreten yoldan türetilir — `infix` taşıyan seride (top barkodu) seri tablosundan türetmek faz harfini DÜŞÜRÜR, kendi üreteci çağrılır. · bekçi: `test_bayat_kod_literali`
 - **[ÇEKİRDEK]** Kilitli seriyi (`lockedReason` dolu) panelden düzenlenebilir yapma: top barkodu (tarih ile sıra arasında faz harfi + `RollBarcodeCounter` anahtarı), kısa parti no (fiziksel plaka seti, körlemesine sarar), iş emri/kart no (tek kod + sahadaki `RK` kartları) ve iade belge no (henüz sayaç yok, `id`'den türetiliyor). Kilit kalkacaksa gerekçe önce ölçülür.
 
 ### Kararlar

@@ -2779,7 +2779,7 @@ model Roll {
   barcode     String? @unique @db.VarChar(64)
   /// Idempotency anahtarı — mobil/istemci üretir (UUID); ağ-retry'de mükerrer top
   /// yaratılmasını önler. Barkod artık SUNUCU tarafından sıralı atandığından
-  /// (TEKS+YYMMDD+H/F+A001..) dedup görevini barkod yerine bu alan yapar. Sunucu-üretimi
+  /// (`T`+GGAAYY+`H|F`+NNNN) dedup görevini barkod yerine bu alan yapar. Sunucu-üretimi
   /// (KK1 dışı) kayıtlar için NULL — partial unique index (NULL'lar çakışmaz).
   clientToken String? @unique @db.Uuid
   itemId      String  @db.Uuid
@@ -4441,11 +4441,12 @@ model DefectType {
 }
 
 /// Top barkod sıra sayacı — gün+tip başına atomik sıralı numara kaynağı.
-/// Barkod = `TEKS`+`YYMMDD`+`H|F`+encodeRollSeq(n). `INSERT … ON CONFLICT (day,type)
+/// Barkod = `T`+GGAAYY+`H|F`+NNNN (ör. `T230926H0001`; tek kaynak
+/// `helpers/roll-barcode.helper.ts`). `INSERT … ON CONFLICT (day,type)
 /// DO UPDATE n=n+1 RETURNING n` ile ÇAKIŞMASIZ (satır kilidi serileştirir) — offline
 /// istemci sırayı üretemediği için sunucu tek kaynak. Yeni gün → yeni satır (n=1'den).
 model RollBarcodeCounter {
-  day  String @db.VarChar(6) /// YYMMDD
+  day  String @db.VarChar(6) /// GGAAYY — `ddmmyy(date)`, Türkiye sırası (gün.ay.yıl)
   type String @db.VarChar(1) /// H (ham) | F (final)
   n    Int    @default(0)
 

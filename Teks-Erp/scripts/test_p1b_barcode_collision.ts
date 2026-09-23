@@ -6,7 +6,9 @@
 //   2. Aynı clientToken + FARKLI ürün → 409 CLIENT_TOKEN_COLLISION
 //   3. Aynı clientToken + FARKLI metre → 409
 //   4. O token'la DB'de tam 1 Roll (2. ve sonraki girişler yaratmadı)
-//   5. Atanan barkod yeni kısa formata (TEKS+YYMMDD+H+A001..) uyar
+//   5. Atanan barkod kısa formata uyar — biçim BURADA YAZILI DEĞİL, ölçüm
+//      `ROLL_BARCODE_RE`den gelir (üreteçle aynı kaynak); bugünkü hâli
+//      `T`+GGAAYY+`H|F`+NNNN
 // =============================================================================
 import { v4 as uuidv4 } from "uuid";
 import prisma from "../src/lib/prisma";

@@ -3,7 +3,7 @@
 // ile doğrular. Aynı token mutate variables'ına gömülür → resume/retry'da backend
 // idempotent (aynı token ile 2. çağrı mevcut kaydı döner).
 //
-// NOT: Top barkodu artık SUNUCU'da sıralı atanır (TEKS+YYMMDD+H/F+A001..) — offline
+// NOT: Top barkodu artık SUNUCU'da sıralı atanır (`T`+GGAAYY+`H|F`+NNNN) — offline
 // istemci sırayı üretemez; bu yüzden eski client-üretimi TEKS barkod kaldırıldı.
 // uuid paketi kurulu değil; Math.random yeterli (collision pratikte sıfır).
 

@@ -33,7 +33,12 @@ export interface CreatePayload {
   /** İdempotency anahtarı — timeout sonrası tekrar gönderimde mükerrer İE +
    *  refakat kartı önlenir. Yalnız create yolunda gönderilir (replace ALMAZ). */
   clientToken?: string;
-  /** Parti Kodu. Boş/atlanırsa backend otomatik üretir (P-YYMMDD-NNN). */
+  /**
+   * Parti Kodu. Boş/atlanırsa backend otomatik üretir ve İKİ REJİM var:
+   * kısa parti bayrağı AÇIKKEN `P01`…`P99` (fiziksel plaka seti, körlemesine
+   * sarar), KAPALIYKEN `batchDaily` serisinden (bugünkü tohum `P`+GGAAYY+N).
+   * Biçim buraya YAZILMAZ: seri tablosundan okunur, panel onu kopyalamaz.
+   */
   batchNumber?: string;
   routeTemplateId?: string;
   steps?: CustomRouteStep[];
