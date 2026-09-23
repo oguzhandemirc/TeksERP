@@ -273,6 +273,15 @@ temizlik kapıyı KENDİ ZEMİNİYLE kırmızıya düşürecekti. Doğru soru "k
 ***"tarayıcı hâlâ görüyor mu ve her aday TEK bir kovaya düşüyor mu"***: zemin artık
 bölümleme eksiksizliği + en az bir aday + birden çok dosya.
 
+⚠️ **Kardeş hâl — popülasyonu KASITLI küçülen iddianın tabanı sabit sayı olamaz.** Yukarıdaki
+vakada kova temizlikle boşaldı; bu vakada popülasyonun küçülmesi İŞİN KENDİSİDİR. *(Ölçüldü
+2026-09-23: "sırayı KENDİ hesaplayan dosya" ve "ön eki/kodu KENDİ kuran çağrı" iddialarının
+tabanları `>= 10` ve `>= 20` idi; her numara serisi ortak üretece (`nextSeriesNo`) geçtikçe o
+çağrı yerleri azalıyor ve iki kapı, tam da korudukları şey BAŞARILDIĞI için kırmızı verdi.)*
+⇒ Böyle bir iddianın zemini SAYI değil ARACIN KENDİSİDİR (uydurma bir girdide doğru ölçüyor mu),
+**ve sıfıra inmek bir ihlal değil ÜÇÜNCÜ SONUÇTUR**: *ölçülemedi — iddia artık gözlemlenemiyor,
+kural yapısal olarak sağlanıyor.* Kapsam nereye taşındıysa o da cümlede yazılır.
+
 ⚠️ **Sınır `-` ve `/` de içerir:** UUID parçası hex'tir (`3f2504e0-4f89-…`) ve tireyi
 sınır saymayan bir kalıp her fikstür UUID'sinin her dilimini "ölü sha" sanar — ölçüldü
 2026-09-14: 100 aday → 80, farkın TAMAMI UUID dilimiydi.

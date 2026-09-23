@@ -10,7 +10,7 @@
 // =============================================================================
 import { CashTxnKind, PaymentDirection, PaymentStatus, Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "../number-series.service";
+import { nextSeriesNo } from "../number-series.service";
 import { assertCashBalanceCoversTx } from "./cash-balance-guard.helper";
 import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./cash-period-guard.helper";
 
@@ -36,10 +36,13 @@ export const KIND_DIRECTION: Record<CashTxnKind, PaymentDirection> = {
 
 /** Günlük belge numarası KH+GGAAYY+NNNN — P2002 yarışı çağıranın `withBarcodeRetry`inde. */
 export async function nextCashNoTx(tx: Tx, date: Date): Promise<string> {
-  const fmt = resolveSeriesFormat("cashTransaction");
-  const prefix = seriesPrefix(fmt, date);
-  const rows = await tx.cashTransaction.findMany({ where: { docNo: { gte: prefix, startsWith: prefix } }, select: { docNo: true } });
-  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.docNo), prefix), date);
+  return nextSeriesNo("cashTransaction", async (prefix) => {
+    const rows = await tx.cashTransaction.findMany({
+      where: { docNo: { gte: prefix, startsWith: prefix } },
+      select: { docNo: true, createdAt: true },
+    });
+    return rows.map((r) => ({ code: r.docNo, createdAt: r.createdAt }));
+  }, date);
 }
 
 /** Bakiyeyi ATOMİK oynatır — kod tabanında `balance: { increment }`in TEK yeri (okuyup-yazmak eşzamanlıyı yutardı). */

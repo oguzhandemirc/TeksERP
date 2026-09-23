@@ -21,6 +21,35 @@
 
 ---
 
+## 2026-09-23 — E2 finans dilimi: son 13 seri açıldı, 52/52 tamam [ÇEKİRDEK]
+
+Fatura (satış · alış · iki iade) · tahsilat · ödeme · kasa fişi · çek ve senet (alınan/verilen) ·
+çek teslim bordrosu · mutabakat mektubu C0 yoluna geçti. **SAYAÇ kilidi 13 → 0**; kataloğun 52
+serisinin tamamı ya açık ya da ölçülmüş bir YAPISAL gerekçeyle kilitli (top barkodu · kısa parti no).
+
+**Altı üreteç, tek desen.** Fatura/ödeme/çek üreteçleri anahtarı PARAMETREDEN alıyor
+(`INVOICE_SERIES[type]` · yön · `DOC_SERIES[kind][docType]`), yani `BaseService.nextAutoCode`
+sınıfında: beyan üretecin YERİNİ söyler, kapı orayı ölçer. Kasa fişi · bordro · mutabakat literal.
+
+**Yeni kapı ④ — PAYLAŞILAN KOLONDA ÖN EK TEKİLLİĞİ.** Üç kolon paylaşılıyor: `Invoice.docNo`
+(SF · AF · SI · AI), `Payment.docNo` (TH · OD), `Cheque.docNo` (CKA · CKV · SNA · SNV). Sayaç ön
+ekle bölündüğü için iki serinin aynı ön eke düşmesi, ayrışan `formatChangedAt` damgalarıyla
+MÜKERRER kod üretir (`@unique` P2002 → atlama → numarada boşluk → sınırda 409). Kapı: ne eşit ne
+birinin başlangıcı, **emekli ön ekler dahil** (1e eklemesi: kardeşin dünkü ön ekine geçmek onun
+eski belgelerini bu serinin sayacına karıştırır). Bugünkü ihlal ÖLÇÜLDÜ: sıfır — kapı doğduğu gün
+yeşil, grandfathering borcu yok. Tarama çakışmasından AYRI bir uzay olduğu için ayrı dosyada
+(`series-scan-outcome.helper.ts`).
+
+**L2 tamamlandı: 49 açık serinin 49'u gerçek kayıtla ölçülüyor** (225 kontrol). Dört fatura türü
+DÖRT AYRI kayıt yaratıyor — "aynı servis, temsilci yeter" reddedildi, çünkü tür ön eki belirliyor
+ve dört tür dört ayrı sayaç uzayı. Ölçülen teardown tuzakları: cari hareket satırları fatura ·
+ödeme · çekin HEPSİNE FK ile bağlı (belgeden önce silinir) ve nakit tahsilat kendi kasa fişini
+doğuruyor (`cash_transactions_paymentId_fkey`).
+
+**Fatura numarası belge ↔ ekran ölçüldü** (`test_belge_ekran_ayni §7`): numara dört serinin
+paylaştığı kolondan doğuyor, yani sevkiyat kollarının ölçtüğü yol değil — "aynı mekanizma, zaten
+ölçüldü" varsayımı bu depoda defalarca yanlış çıktı.
+
 ## 2026-09-23 — K24: eski biçime dönüş + fason zincirinin L2'ye girmesi [ÇEKİRDEK]
 
 **K24 — tek yönlü kapı.** d3 on beş master serinin tam turunu koştururken kasa kodunda takıldı:

@@ -88,3 +88,40 @@ function seriesKnownFormats(key: string): NumberSeriesFormat[] {
     },
   ];
 }
+
+/**
+ * ④ AYNI KOLONU PAYLAŞAN SERİLER — ön ek NE EŞİT NE DE BİRİNİN BAŞLANGICI olabilir.
+ *
+ * ⚠️ SONUÇ KAPISINDAN AYRI UZAY: yukarısı TARAMA uzayını korur ("okutulan kod
+ * hangi kayda ait"), burası SAYAÇ uzayını. Fatura · ödeme · çek/senet serileri
+ * aynı `docNo` kolonunu ÖN EKLE bölüyor (`kapsam: "seri-onekli"`) ve üreteç
+ * sırayı `startsWith: <ön ek + tarih>` taramasıyla buluyor. İki seri aynı ön eke
+ * düşerse kapsam damgaları AYRIŞIR: farklı damgalar farklı satır kümesi görür,
+ * ikisi aynı kodu üretebilir ve `@unique` P2002 verir. Atlama döngüsü bunu
+ * kapatır ama numarada boşluk bırakır ve sınırda 409'a döner.
+ *
+ * ⚠️ EMEKLİ ÖN EKLER DE KARŞILAŞTIRILIR: bir faturanın YENİ ön eki, kardeş
+ * serinin DÜNKÜ ön ekiyse kardeşin eski belgeleri yeni serinin sayacına ve etki
+ * sayımına karışır. Aynı sınıf, yalnız zamanı farklı.
+ */
+export function assertSharedTablePrefixUnique(key: string, fmt: NumberSeriesFormat): void {
+  const tablo = numberSeriesCatalogEntry(key).countTable;
+  if (!tablo) return;
+  const benimkiler = [fmt.prefix, ...fmt.retiredPrefixes];
+  for (const other of NUMBER_SERIES_CATALOG) {
+    if (other.key === key) continue;
+    if (other.countTable?.model !== tablo.model || other.countTable.field !== tablo.field) continue;
+    const of = resolveSeriesFormat(other.key);
+    for (const a of benimkiler) {
+      for (const b of [of.prefix, ...of.retiredPrefixes]) {
+        if (!a.startsWith(b) && !b.startsWith(a)) continue;
+        throw AppError.conflict(
+          `"${a}" ön eki "${other.label}" serisinin "${b}" ön ekiyle AYNI kolonu paylaşıyor; ` +
+            "iki seri aynı numarayı üretebilir. Ön eki, o serinin ön ekiyle başlamayacak " +
+            "biçimde değiştirin.",
+          { code: "NUMBER_SERIES_SHARED_TABLE_PREFIX", key, conflictsWith: other.key },
+        );
+      }
+    }
+  }
+}

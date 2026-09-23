@@ -45,6 +45,12 @@ import { stockCountService } from "../src/services/stock-count.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { kartelaService } from "../src/services/kartela.service";
 import { SubcontractorService } from "../src/services/subcontractor.service";
+import { invoiceService } from "../src/services/invoice.service";
+import { paymentService } from "../src/services/payment.service";
+import { chequeService } from "../src/services/cheque.service";
+import { cashTransactionService } from "../src/services/cash-transaction.service";
+import { chequeDeliveryNoteService } from "../src/services/cheque-delivery-note.service";
+import { reconciliationLetterService } from "../src/services/reconciliation-letter.service";
 import { colorService } from "../src/routes/color.routes";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { purchaseOrderService } from "../src/services/purchase-order.service";
@@ -334,6 +340,65 @@ async function fasonTurAl(damga: string, sira: number): Promise<Awaited<ReturnTy
 }
 let fdSira = 0, frSira = 0, dsSira = 0;
 
+/**
+ * FİNANS fikstürü — ortak bağlar: cari (müşteri) + kasa. Her seri KENDİ gerçek
+ * kaydını yaratır; "aynı servis, temsilci yeter" reddedildi (1e şartı): fatura
+ * TÜRÜ ön eki belirliyor ve sayaç ön ekle bölünüyor, yani dört tür DÖRT AYRI
+ * sayaç uzayıdır — birini ölçmek ötekini ölçmez.
+ */
+const finans: {
+  musteriId: string | null;
+  cariId: string | null;
+  kasaId: string | null;
+  invoiceIds: string[];
+  paymentIds: string[];
+  chequeIds: string[];
+  cashTxnIds: string[];
+  noteIds: string[];
+  letterIds: string[];
+} = {
+  musteriId: null, cariId: null, kasaId: null,
+  invoiceIds: [], paymentIds: [], chequeIds: [], cashTxnIds: [], noteIds: [], letterIds: [],
+};
+
+/** Fatura — tür PARAMETRE, kayıt her çağrıda YENİ (dört seri aynı yolu kullanır). */
+async function finansFatura(tur: "SALES" | "PURCHASE" | "SALES_RETURN" | "PURCHASE_RETURN") {
+  if (!finans.musteriId) return null;
+  // ⚠️ UCUN ADI `createDraft` — fatura TASLAK doğar ve belge NUMARASI taslakta
+  // zaten verilir (`nextInvoiceNoTx`, onayda değil). Ölçülen yol budur.
+  const r = await invoiceService.createDraft({
+    type: tur as never,
+    customerId: finans.musteriId,
+    lines: [{ description: "E3", qty: 1, unit: "m", unitPrice: 10 }],
+  });
+  if (!r.data?.id) return null;
+  finans.invoiceIds.push(r.data.id);
+  return { id: r.data.id, kod: r.data.docNo };
+}
+
+async function finansOdeme(yon: "IN" | "OUT") {
+  if (!finans.musteriId || !finans.kasaId) return null;
+  const r = await paymentService.create({
+    direction: yon as never, method: "CASH" as never,
+    customerId: finans.musteriId, amount: 5, cashBoxId: finans.kasaId,
+  });
+  if (!r.data?.id) return null;
+  finans.paymentIds.push(r.data.id);
+  return { id: r.data.id, kod: r.data.docNo };
+}
+
+async function finansCek(kind: "RECEIVED" | "ISSUED", docType: "CHEQUE" | "PROMISSORY_NOTE") {
+  if (!finans.musteriId) return null;
+  const r = await chequeService.create({
+    kind: kind as never, docType: docType as never,
+    customerId: finans.musteriId, amount: 100,
+    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  });
+  if (!r.data?.id) return null;
+  finans.chequeIds.push(r.data.id);
+  return { id: r.data.id, kod: r.data.docNo };
+}
+
 /** Kartela turunun sonucu — üç seri de AYNI turdan okur (ikinci tur ikinci çağrıda). */
 const kartelaTurlari: Array<Awaited<ReturnType<typeof kartelaTuru>>> = [];
 async function kartelaTurAl(damga: string, sira: number): Promise<Awaited<ReturnType<typeof kartelaTuru>>> {
@@ -558,6 +623,57 @@ const L2_YOLU: Record<string, L2Yolu> = {
     sil: async (id) => {
       await prisma.orderLine.deleteMany({ where: { orderId: id } });
       await prisma.order.deleteMany({ where: { id } });
+    },
+  },
+  // ── FİNANS (E2 dilim 6) ───────────────────────────────────────────────────
+  // ⚠️ DÖRT FATURA TÜRÜ DÖRT AYRI KAYIT: tür ön eki belirliyor ve sayaç ön ekle
+  // bölünüyor — "aynı servis, biri yeter" burada YANLIŞ olurdu.
+  invoiceSales: { not: "InvoiceService.create: cari + tek kalem.", yarat: async () => finansFatura("SALES") },
+  invoicePurchase: { not: "InvoiceService.create (alış).", yarat: async () => finansFatura("PURCHASE") },
+  invoiceSalesReturn: { not: "InvoiceService.create (satış iade).", yarat: async () => finansFatura("SALES_RETURN") },
+  invoicePurchaseReturn: { not: "InvoiceService.create (alış iade).", yarat: async () => finansFatura("PURCHASE_RETURN") },
+  paymentIn: { not: "PaymentService.create: cari + kasa + tutar (tahsilat).", yarat: async () => finansOdeme("IN") },
+  paymentOut: { not: "PaymentService.create (ödeme).", yarat: async () => finansOdeme("OUT") },
+  chequeReceived: { not: "ChequeService.create: cari + tutar + vade (alınan çek).", yarat: async () => finansCek("RECEIVED", "CHEQUE") },
+  chequeIssued: { not: "ChequeService.create (verilen çek).", yarat: async () => finansCek("ISSUED", "CHEQUE") },
+  noteReceived: { not: "ChequeService.create (alınan senet).", yarat: async () => finansCek("RECEIVED", "PROMISSORY_NOTE") },
+  noteIssued: { not: "ChequeService.create (verilen senet).", yarat: async () => finansCek("ISSUED", "PROMISSORY_NOTE") },
+  cashTransaction: {
+    not: "CashTransactionService.create: kasa + tutar.",
+    yarat: async () => {
+      if (!finans.kasaId) return null;
+      const r = await cashTransactionService.create({ kind: "INCOME" as never, amount: 7, cashBoxId: finans.kasaId });
+      if (!r.data?.id) return null;
+      finans.cashTxnIds.push(r.data.id);
+      return { id: r.data.id, kod: r.data.docNo };
+    },
+  },
+  chequeDeliveryNote: {
+    not: "ChequeDeliveryNoteService.create: en az bir çek (fikstür kendi çekini açar).",
+    yarat: async () => {
+      const cek = await finansCek("RECEIVED", "CHEQUE");
+      if (!cek) return null;
+      const r = await chequeDeliveryNoteService.create({ chequeIds: [cek.id] } as never);
+      if (!r.data?.id) return null;
+      finans.noteIds.push(r.data.id);
+      return { id: r.data.id, kod: r.data.docNo };
+    },
+  },
+  reconciliationLetter: {
+    not: "ReconciliationLetterService.create: cari hesap (müşteri kartından LAZY açılır).",
+    yarat: async () => {
+      // ⚠️ CARİ HESAP MÜŞTERİ KARTIYLA BİRLİKTE DOĞMAZ, ilk parasal belgede LAZY
+      // açılır (`ensureCariAccountTx`) — o yüzden burada ARANIR, fikstürde
+      // kurulmaz. Fatura/ödeme fikstürleri bu bekçide daha önce koştuğu için
+      // hesap vardır; yoksa iddia kırmızı olur ve sebebi görünür.
+      finans.cariId ??= (await prisma.cariAccount.findFirst({
+        where: { customerId: finans.musteriId ?? "" }, select: { id: true },
+      }))?.id ?? null;
+      if (!finans.cariId) return null;
+      const r = await reconciliationLetterService.create({ cariId: finans.cariId } as never);
+      if (!r.data?.id) return null;
+      finans.letterIds.push(r.data.id);
+      return { id: r.data.id, kod: r.data.docNo };
     },
   },
   // ── OKUTULAN AİLE (E2 dilim 5) ────────────────────────────────────────────
@@ -895,6 +1011,17 @@ async function main(): Promise<void> {
       okutulan.musteriId = dMusteri.id;
       temizlikCariler.push(dMusteri.id);
     }
+    // Finans zinciri: cari (cari hesabı LAZY açılır) + kasa.
+    const fMusteri = await msCreate(customerService, { name: `${DAMGA} E3 finans cari ${++msSayac}` });
+    if (fMusteri) {
+      finans.musteriId = fMusteri.id;
+      temizlikCariler.push(fMusteri.id);
+    }
+    const fKasa = await msCreate(cashBoxService, { name: `${DAMGA} E3 finans kasa` });
+    if (fKasa) {
+      finans.kasaId = fKasa.id;
+      temizlik.push(async () => { await prisma.cashBox.deleteMany({ where: { id: fKasa.id } }); });
+    }
 
     check("L2 körlük zemini: bağlı fikstürler (istasyon + stok + kartela/fason zinciri) KURULDU",
       bagli.stationId !== null && bagli.itemId !== null &&
@@ -968,6 +1095,50 @@ async function main(): Promise<void> {
       await prisma.kartelaDispatchItem.deleteMany({ where: { dispatchId: { in: okutulan.kartelaDispatchIds } } });
       await prisma.kartelaDispatch.deleteMany({ where: { id: { in: okutulan.kartelaDispatchIds } } });
     }
+    // ── FİNANS — yapraktan köke: bordro pivotu → bordro → çek → ödeme → fatura
+    // → kasa fişi → mutabakat → cari hesap. Cari hesap `onDelete: Restrict`
+    // taşıdığı için EN SONDA ve yalnız bu bekçinin açtığı kayıt silinir.
+    // ⚠️ CARİ DEFTERİ ÖNCE: fatura · ödeme · çek satırlarının HEPSİ cari harekete
+    // yazıyor (`cari_transactions_*_fkey`) — belgeyi önce silmek FK ile düşer.
+    // Cari hesap fikstürün müşterisinden ARANIR: ilk parasal belgede lazy açıldı.
+    finans.cariId ??= (await prisma.cariAccount.findFirst({
+      where: { customerId: finans.musteriId ?? "" }, select: { id: true },
+    }))?.id ?? null;
+    if (finans.cariId) {
+      await prisma.cariTransaction.deleteMany({ where: { cariId: finans.cariId } });
+    }
+    if (finans.noteIds.length > 0) {
+      await prisma.chequeDeliveryNoteItem.deleteMany({ where: { noteId: { in: finans.noteIds } } });
+      await prisma.chequeDeliveryNote.deleteMany({ where: { id: { in: finans.noteIds } } });
+    }
+    if (finans.chequeIds.length > 0) {
+      await prisma.chequeEvent.deleteMany({ where: { chequeId: { in: finans.chequeIds } } });
+      await prisma.cheque.deleteMany({ where: { id: { in: finans.chequeIds } } });
+    }
+    if (finans.paymentIds.length > 0) {
+      await prisma.paymentAllocation.deleteMany({ where: { paymentId: { in: finans.paymentIds } } });
+      // ⚠️ NAKİT TAHSİLAT KASA FİŞİ DOĞURUR (`cash_transactions_paymentId_fkey`):
+      // ödemeyi silmeden önce onun doğurduğu fiş de silinir. Fikstürün kendi
+      // listesinde olmayan bu satırı bağdan bulmak, FK'yı tek tek kovalamaktan
+      // daha dürüst — hangi satırın nereden doğduğu ŞEMADA yazılı.
+      await prisma.cashTransaction.deleteMany({ where: { paymentId: { in: finans.paymentIds } } });
+      await prisma.payment.deleteMany({ where: { id: { in: finans.paymentIds } } });
+    }
+    if (finans.invoiceIds.length > 0) {
+      await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: finans.invoiceIds } } });
+      await prisma.invoice.deleteMany({ where: { id: { in: finans.invoiceIds } } });
+    }
+    if (finans.cashTxnIds.length > 0) {
+      await prisma.cashTransaction.deleteMany({ where: { id: { in: finans.cashTxnIds } } });
+    }
+    if (finans.letterIds.length > 0) {
+      await prisma.reconciliationLetter.deleteMany({ where: { id: { in: finans.letterIds } } });
+    }
+    if (finans.cariId) {
+      await prisma.cariTransaction.deleteMany({ where: { cariId: finans.cariId } });
+      await prisma.cariAccount.deleteMany({ where: { id: finans.cariId } });
+    }
+
     if (okutulan.directShipmentIds.length > 0) {
       // Doğrudan sevkin KALEMİ yok: toplar doğrudan bağlanıyor (`rolls Roll[]`),
       // o yüzden önce bağ koparılır, sonra belge silinir.

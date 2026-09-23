@@ -47,7 +47,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo } from "./number-series.service";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { D, D0 } from "./helpers/finance.helper";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
@@ -74,13 +74,13 @@ export const BORDRO_KIND_LABEL: Record<ChequeKind, string> = {
  * Çağıran `withBarcodeRetry` ile sarmalar.
  */
 async function nextNoteNo(tx: Prisma.TransactionClient, date: Date): Promise<string> {
-  const fmt = resolveSeriesFormat("chequeDeliveryNote");
-  const full = seriesPrefix(fmt, date);
-  const rows = await tx.chequeDeliveryNote.findMany({
-    where: { docNo: { gte: full, startsWith: full } },
-    select: { docNo: true },
-  });
-  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.docNo), full), date);
+  return nextSeriesNo("chequeDeliveryNote", async (full) => {
+    const rows = await tx.chequeDeliveryNote.findMany({
+      where: { docNo: { gte: full, startsWith: full } },
+      select: { docNo: true, createdAt: true },
+    });
+    return rows.map((r) => ({ code: r.docNo, createdAt: r.createdAt }));
+  }, date);
 }
 
 /** Para birimi bazlı adet + toplam — `Currency` beyan sırasında (deterministik). */
