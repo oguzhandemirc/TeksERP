@@ -44,6 +44,7 @@ import { freeDocumentService } from "../src/services/free-document.service";
 import { stockCountService } from "../src/services/stock-count.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { kartelaService } from "../src/services/kartela.service";
+import { SubcontractorService } from "../src/services/subcontractor.service";
 import { colorService } from "../src/routes/color.routes";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { purchaseOrderService } from "../src/services/purchase-order.service";
@@ -122,9 +123,17 @@ const okutulan: {
   kartelaDispatchIds: string[];
   kartelaReceiptIds: string[];
   swatchIds: string[];
+  externalStationId: string | null;
+  fasonFirmaId: string | null;
+  musteriId: string | null;
+  fasonDispatchIds: string[];
+  fasonReceiptIds: string[];
+  directShipmentIds: string[];
 } = {
   workOrderIds: [], warehouseId: null, kartelaFirmaId: null,
   rollIds: [], kartelaDispatchIds: [], kartelaReceiptIds: [], swatchIds: [],
+  externalStationId: null, fasonFirmaId: null, musteriId: null,
+  fasonDispatchIds: [], fasonReceiptIds: [], directShipmentIds: [],
 };
 let okutulanSayac = 0;
 
@@ -185,6 +194,145 @@ async function kartelaTuru(damga: string): Promise<{
     swatch: kart ? { id: kart.id, kod: kart.cardNumber } : null,
   };
 }
+
+/**
+ * FASON zincirinin BİR TURU: EXTERNAL adımlı iş emri + serbest stok topu →
+ * fason sevki → kabul; ikinci bir sevk de DOĞRUDAN SEVK edilir.
+ *
+ * Üç seriyi birden besler (`subcontractorDispatch` · `subcontractorReceipt` ·
+ * `directShipment`) çünkü üçü de AYNI zincirde doğuyor. Ölçülen ön koşullar:
+ * adımın istasyonu EXTERNAL, iş emri PLANNED/IN_PROGRESS, top `STOCK` +
+ * adımsız + çuvalsız (o hâlde sevk onu kendisi adıma bağlar), doğrudan sevkte
+ * müşteri ve en az 3 karakterlik sebep ZORUNLU.
+ */
+async function fasonTuru(damga: string): Promise<{
+  dispatch: { id: string; kod: string } | null;
+  receipt: { id: string; kod: string } | null;
+  direct: { id: string; kod: string } | null;
+}> {
+  const bos = { dispatch: null, receipt: null, direct: null };
+  if (!okutulan.externalStationId || !okutulan.fasonFirmaId || !bagli.itemId) return bos;
+  const svc = new SubcontractorService();
+
+  const yeniTop = async (): Promise<string> => {
+    okutulanSayac += 1;
+    const r = await prisma.roll.create({
+      data: {
+        barcode: `${damga}-E3F${okutulanSayac}`.slice(0, 32),
+        itemId: bagli.itemId!,
+        // K6: deposuz top stok kümesinden ÇIKAMAZ — fason sevki tam olarak bunu
+        // yapıyor, o yüzden fikstür topu bir depoda doğar.
+        warehouseId: okutulan.warehouseId,
+        status: "STOCK",
+        currentQty: 20,
+        initialQty: 20,
+      },
+      select: { id: true },
+    });
+    okutulan.rollIds.push(r.id);
+    return r.id;
+  };
+  const yeniIsEmri = async (): Promise<{ woId: string; stepId: string } | null> => {
+    const r = (await new WorkOrderService().create({
+      type: "STOCK_PRODUCTION",
+      targetItemId: bagli.itemId,
+      steps: [{ stationId: okutulan.externalStationId! }],
+    })) as { data?: { id?: string } };
+    if (!r.data?.id) return null;
+    okutulan.workOrderIds.push(r.data.id);
+    const step = await prisma.workOrderStep.findFirst({
+      where: { workOrderId: r.data.id },
+      select: { id: true },
+    });
+    return step ? { woId: r.data.id, stepId: step.id } : null;
+  };
+
+  // ① Sevk + kabul
+  const a = await yeniIsEmri();
+  if (!a) return bos;
+  const d1 = (await svc.dispatch({
+    workOrderId: a.woId, stepId: a.stepId,
+    subcontractorId: okutulan.fasonFirmaId, rollIds: [await yeniTop()],
+  })) as { data?: { id?: string; dispatchNo?: string } };
+  if (!d1.data?.id || !d1.data.dispatchNo) return bos;
+  okutulan.fasonDispatchIds.push(d1.data.id);
+
+  const gonderilen = await prisma.subcontractorDispatchItem.findMany({
+    where: { dispatchId: d1.data.id },
+    select: { rollId: true },
+  });
+  const k1 = (await svc.receive({
+    workOrderId: a.woId, stepId: a.stepId, subcontractorId: okutulan.fasonFirmaId,
+    returns: gonderilen
+      .map((x) => x.rollId)
+      .filter((x): x is string => x !== null)
+      .map((rollId) => ({ rollId })),
+  })) as { data?: { id?: string; receiptNo?: string } };
+  if (k1.data?.id) okutulan.fasonReceiptIds.push(k1.data.id);
+
+  // ② İKİNCİ sevk — doğrudan sevk edilir (kabul edilen sevk tüketildi).
+  const b = await yeniIsEmri();
+  if (!b) {
+    return {
+      dispatch: { id: d1.data.id, kod: d1.data.dispatchNo },
+      receipt: k1.data?.id && k1.data.receiptNo ? { id: k1.data.id, kod: k1.data.receiptNo } : null,
+      direct: null,
+    };
+  }
+  const d2 = (await svc.dispatch({
+    workOrderId: b.woId, stepId: b.stepId,
+    subcontractorId: okutulan.fasonFirmaId, rollIds: [await yeniTop()],
+  })) as { data?: { id?: string } };
+  let direct: { id: string; kod: string } | null = null;
+  // ⚠️ AYRI `try`: doğrudan sevk düşerse sevk ve kabul sonuçları YİNE bildirilir —
+  // üç iddiayı tek halkanın kaderine bağlamak, çalışan iki seriyi de kör bırakırdı.
+  try {
+   if (d2.data?.id && okutulan.musteriId) {
+    okutulan.fasonDispatchIds.push(d2.data.id);
+    await svc.executeDirectShip({
+      dispatchId: d2.data.id,
+      reason: "E3 uyumluluk matrisi fikstürü",
+      customerId: okutulan.musteriId,
+      orderless: true,
+    });
+    const ds = await prisma.directShipment.findFirst({
+      where: { dispatchId: d2.data.id },
+      select: { id: true, shipmentNo: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (ds) {
+      okutulan.directShipmentIds.push(ds.id);
+      direct = { id: ds.id, kod: ds.shipmentNo };
+    }
+   }
+  } catch (e) {
+    console.log(`   ⚠️ doğrudan sevk kurulamadı: ${(e as Error).message}`);
+  }
+  return {
+    dispatch: { id: d1.data.id, kod: d1.data.dispatchNo },
+    receipt: k1.data?.id && k1.data.receiptNo ? { id: k1.data.id, kod: k1.data.receiptNo } : null,
+    direct,
+  };
+}
+
+const fasonTurlari: Array<Awaited<ReturnType<typeof fasonTuru>>> = [];
+/**
+ * ⚠️ ÇÖKEN FİKSTÜR BEKÇİYİ ÇÖKERTMEZ: zincirin herhangi bir halkası 4xx atarsa
+ * sonuç boş döner, ilgili iddia KIRMIZI olur ve sebep basılır. Çöken bir sonda
+ * sonda değildir — teardown bile koşmadan düşer ve bir sonraki koşumu kirletir.
+ */
+async function fasonTurAl(damga: string, sira: number): Promise<Awaited<ReturnType<typeof fasonTuru>>> {
+  while (fasonTurlari.length <= sira) {
+    try {
+      fasonTurlari.push(await fasonTuru(damga));
+    } catch (e) {
+      console.log(`   ⚠️ fason zinciri kurulamadı: ${(e as Error).message}`);
+      fasonTurlari.push({ dispatch: null, receipt: null, direct: null });
+    }
+  }
+  return fasonTurlari[sira]!;
+}
+let fdSira = 0, frSira = 0, dsSira = 0;
 
 /** Kartela turunun sonucu — üç seri de AYNI turdan okur (ikinci tur ikinci çağrıda). */
 const kartelaTurlari: Array<Awaited<ReturnType<typeof kartelaTuru>>> = [];
@@ -442,9 +590,18 @@ const L2_YOLU: Record<string, L2Yolu> = {
     not: "Kartela kartı kabul anında doğar (KartelaService.receive) — ayrı bir yaratma ucu YOK; aynı zincirden okunur.",
     yarat: async (damga) => (await kartelaTurAl(damga, kwSira++)).swatch,
   },
-  subcontractorDispatch: { not: "Fason sevk: iş emri + FASON adımı + o adıma bağlı top zinciri ister (ölçüldü: `dispatch` WO durumu PLANNED/IN_PROGRESS + stepId + rollIds istiyor); sıradaki dilimde." },
-  subcontractorReceipt: { not: "Fason kabul: önce bir fason SEVKİ ister (aynı zincirin ikinci yarısı); sıradaki dilimde." },
-  directShipment: { not: "Doğrudan sevk: açık bir fason sevki ister (fason zincirinin üstüne biner); sıradaki dilimde." },
+  subcontractorDispatch: {
+    not: "SubcontractorService.dispatch: EXTERNAL adımlı iş emri + serbest stok topu (zincir `fasonTuru`da, üç seri ortak).",
+    yarat: async (damga) => (await fasonTurAl(damga, fdSira++)).dispatch,
+  },
+  subcontractorReceipt: {
+    not: "SubcontractorService.receive: açık fason sevki + dönen top (aynı zincir).",
+    yarat: async (damga) => (await fasonTurAl(damga, frSira++)).receipt,
+  },
+  directShipment: {
+    not: "SubcontractorService.executeDirectShip: açık fason sevki + müşteri + sebep (aynı zincirin ikinci sevki).",
+    yarat: async (damga) => (await fasonTurAl(damga, dsSira++)).direct,
+  },
   weavingOrder: { not: "Dokuma işi: tezgah + levent + çözgü kartı zinciri ister (E2 üretim diliminde AÇILDI; L2 fikstürü sıradaki turda — ölçülecek)." },
   warpBeam: { not: "Levent: çözgü kartı + tezgah zinciri ister (aynı tur)." },
   doffEvent: { not: "Doff: açık tezgah koşusu (MachineRun) ister (aynı tur)." },
@@ -715,10 +872,35 @@ async function main(): Promise<void> {
       select: { id: true },
     });
     okutulan.kartelaFirmaId = kFirma.id;
+    // Fason zinciri: adımın istasyonu EXTERNAL OLMALI (ölçüldü — `dispatch`
+    // başka tipte 400 döner), firma ayrı (kartela firması ile karışmasın) ve
+    // doğrudan sevkte müşteri ZORUNLU.
+    // ⚠️ İKİ AYRI ALAN, İKİ AYRI KAPI (ölçüldü): sevk `station.type === EXTERNAL`
+    // ister, DOĞRUDAN SEVK ise `station.kind === SUBCONTRACTOR` — birini kurup
+    // ötekini unutmak zinciri ikinci halkada düşürür.
+    const dIstasyon = await msCreate(stationService, {
+      name: `${DAMGA} E3 fason istasyon`, type: "EXTERNAL", kind: "SUBCONTRACTOR",
+    });
+    if (dIstasyon) {
+      okutulan.externalStationId = dIstasyon.id;
+      temizlik.push(async () => { await prisma.station.deleteMany({ where: { id: dIstasyon.id } }); });
+    }
+    const fFirma = await prisma.subcontractor.create({
+      data: { code: `${DAMGA}-E3FF`.slice(0, 32), name: `${DAMGA} E3 fason firma`, isActive: true },
+      select: { id: true },
+    });
+    okutulan.fasonFirmaId = fFirma.id;
+    const dMusteri = await msCreate(customerService, { name: `${DAMGA} E3 sevk cari ${++msSayac}` });
+    if (dMusteri) {
+      okutulan.musteriId = dMusteri.id;
+      temizlikCariler.push(dMusteri.id);
+    }
 
-    check("L2 körlük zemini: bağlı fikstürler (istasyon + stok + kartela zinciri) KURULDU",
+    check("L2 körlük zemini: bağlı fikstürler (istasyon + stok + kartela/fason zinciri) KURULDU",
       bagli.stationId !== null && bagli.itemId !== null &&
-      okutulan.warehouseId !== null && okutulan.kartelaFirmaId !== null);
+      okutulan.warehouseId !== null && okutulan.kartelaFirmaId !== null &&
+      okutulan.externalStationId !== null && okutulan.fasonFirmaId !== null &&
+      okutulan.musteriId !== null);
 
     for (const e of acikSeriler) {
       const yol = L2_YOLU[e.key];
@@ -786,11 +968,61 @@ async function main(): Promise<void> {
       await prisma.kartelaDispatchItem.deleteMany({ where: { dispatchId: { in: okutulan.kartelaDispatchIds } } });
       await prisma.kartelaDispatch.deleteMany({ where: { id: { in: okutulan.kartelaDispatchIds } } });
     }
-    if (okutulan.rollIds.length > 0) {
-      await prisma.roll.deleteMany({ where: { id: { in: okutulan.rollIds } } });
+    if (okutulan.directShipmentIds.length > 0) {
+      // Doğrudan sevkin KALEMİ yok: toplar doğrudan bağlanıyor (`rolls Roll[]`),
+      // o yüzden önce bağ koparılır, sonra belge silinir.
+      await prisma.roll.updateMany({
+        where: { directShipmentId: { in: okutulan.directShipmentIds } },
+        data: { directShipmentId: null },
+      });
+      await prisma.directShipment.deleteMany({ where: { id: { in: okutulan.directShipmentIds } } });
     }
-    if (okutulan.kartelaFirmaId) {
-      await prisma.subcontractor.deleteMany({ where: { id: okutulan.kartelaFirmaId } });
+    if (okutulan.fasonReceiptIds.length > 0) {
+      await prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: okutulan.fasonReceiptIds } } });
+      await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: okutulan.fasonReceiptIds } } });
+    }
+    if (okutulan.fasonDispatchIds.length > 0) {
+      await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: okutulan.fasonDispatchIds } } });
+      await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: okutulan.fasonDispatchIds } } });
+    }
+    // ⚠️ FASON KABULÜ YENİ TOP DOĞURUR ve top iş emrine DOĞRUDAN bağlı değildir
+    // (`currentStepId → WorkOrderStep`, soyağacı `parentRollId`). Çocuklar ÖNCE
+    // silinir: ebeveyni silmek `RollLineage` FK'sını ihlal ederdi.
+    // ⚠️ TOPUN DEFTERLERİ ÖNCE: sevk/kabul topa hareket, operasyon ve stok satırı
+    // yazıyor — ölçüldü, `roll_operations_rollId_fkey` teardown'ı düşürdü. Liste
+    // şemadan çıkarıldı (Roll'a `rollId` ile bağlanan her model), tek tek
+    // keşfedilmedi: bir FK'yı kovalayıp ötekini beklemek aynı hatanın tekrarıdır.
+    const topIdleri = [
+      ...okutulan.rollIds,
+      ...(await prisma.roll.findMany({
+        where: {
+          OR: [
+            { parentRollId: { in: okutulan.rollIds } },
+            ...(okutulan.workOrderIds.length > 0
+              ? [{ currentStep: { workOrderId: { in: okutulan.workOrderIds } } }]
+              : []),
+          ],
+        },
+        select: { id: true },
+      })).map((r) => r.id),
+    ];
+    if (topIdleri.length > 0) {
+      await prisma.rollOperation.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollMovement.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollProperty.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollError.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollVariance.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollPlanDeviation.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollReturn.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.stockCountLine.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.roll.deleteMany({ where: { id: { in: topIdleri } } });
+    }
+    if (okutulan.workOrderIds.length > 0) {
+      await prisma.batch.deleteMany({ where: { workOrderId: { in: okutulan.workOrderIds } } });
+    }
+    for (const id of [okutulan.kartelaFirmaId, okutulan.fasonFirmaId]) {
+      if (id) await prisma.subcontractor.deleteMany({ where: { id } });
     }
     if (okutulan.workOrderIds.length > 0) {
       await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: okutulan.workOrderIds } } });

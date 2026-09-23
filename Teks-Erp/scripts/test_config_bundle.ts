@@ -48,6 +48,7 @@ import {
 } from "../src/services/import/config-bundle.service";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
+import { SCANNED_CLIENT_BREAKING_AXES } from "../src/config/client-version-policy";
 import { refreshNumberSeriesCache, resolveSeriesFormat } from "../src/services/number-series.service";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -247,7 +248,16 @@ async function main(): Promise<void> {
   // C0b'yi izole eden şey OKUTULAN ama kilitli OLMAYAN bir seridir — ve bu,
   // paket için en kritik kapı: başka bir kurulumdan gelen bir biçim, sahadaki
   // okuyucuları sessizce kör edebilir.
-  const taranan = NUMBER_SERIES_CATALOG.find((e) => e.kind && !e.lockedReason && e.scopedCounter);
+  // ⚠️ HEDEF (SERİ, EKSEN) ÇİFTİDİR, yalnız seri DEĞİL — ve bu ölçülerek öğrenildi
+  // (2026-09-23): C0b kilidi artık EKSEN düzeyinde. İddia iş emrinin HANE
+  // değişikliğiyle kuruluyordu; hane ekseni açıldığı gün paket onu doğru olarak
+  // UYGULADI ve kapı, korunan şey bozulmadığı hâlde kırmızı verdi. Hedef, kilidi
+  // GERÇEKTEN kıran bir eksen taşıyan seriden seçilir.
+  const taranan = NUMBER_SERIES_CATALOG.find(
+    (e) => e.kind && !e.lockedReason && e.scopedCounter &&
+      (SCANNED_CLIENT_BREAKING_AXES[e.key]?.length ?? 0) > 0,
+  );
+  const kiranEksen = taranan ? SCANNED_CLIENT_BREAKING_AXES[taranan.key]![0]! : null;
   check("§9 körlük zemini: düzenlenebilir · kilitli · OKUTULAN seri GERÇEKTEN var",
     duzenlenebilir !== undefined && kilitli !== undefined && taranan !== undefined,
     `${duzenlenebilir?.key ?? "-"} / ${kilitli?.key ?? "-"} / ${taranan?.key ?? "-"}`);
@@ -298,16 +308,39 @@ async function main(): Promise<void> {
       `applied=${kilitSonuc.applied} · hane ${kilitliOnce.digits} → ${kilitliSonra.digits}`);
   }
 
-  if (taranan) {
-    const c0bPlan = await planBundle(nsKalem(taranan.key, { digits: 5 }), "overwrite");
-    check("§9c ⭐ OKUTULAN seri C0b kilidine takılıyor — paket bu kapının ETRAFINDAN DOLANAMAZ",
+  if (!taranan || !kiranEksen) {
+    console.log(
+      "⏭️  §9c C0b kolu ÖLÇÜLEMEDİ — eski istemcinin kırıldığı ekseni kalan " +
+        "okutulan seri yok; kilit bu ağaçta gözlemlenemiyor.",
+    );
+  } else {
+    // Kilitli EKSENİ oynatan bir yük kurulur; hangi alan olduğu keşiften gelir.
+    const tarananFmt = resolveSeriesFormat(taranan.key);
+    const kiranYuk: Record<string, unknown> =
+      kiranEksen === "prefix" ? { prefix: `${tarananFmt.prefix}Z`.slice(0, 6) }
+      : kiranEksen === "dateSegment" ? { dateSegment: tarananFmt.dateSegment === "NONE" ? "DDMMYY" : "NONE" }
+      : kiranEksen === "digits" ? { digits: tarananFmt.digits === 5 ? 4 : 5 }
+      : kiranEksen === "separator" ? { separator: tarananFmt.separator === "-" ? "_" : "-" }
+      : { separator2: (tarananFmt.separator2 ?? "") === "/" ? "." : "/" };
+    const c0bPlan = await planBundle(nsKalem(taranan.key, kiranYuk), "overwrite");
+    check(`§9c ⭐ OKUTULAN seri C0b kilidine takılıyor — paket bu kapının ETRAFINDAN DOLANAMAZ (${taranan.key} · ${kiranEksen})`,
+      // ⚠️ YÜKLEM METNE DEĞİL C0b'NİN AYIRT EDİCİ ÖĞESİNE bakar: "güncellenmeden"
+      // SERİ düzeyindeki cümlenin sözcüğüydü, EKSEN düzeyindeki cümlede yok
+      // (ölçüldü 2026-09-23). İki cümlenin ortak ve ayırt edici yanı SAHADAKİ
+      // İSTEMCİYİ anmalarıdır — sayaç ve yapısal kilitler tabletten hiç söz etmez.
       c0bPlan.rows[0]?.action === "ERROR" &&
-        (c0bPlan.rows[0]?.message ?? "").includes("güncellenmeden"),
+        (c0bPlan.rows[0]?.message ?? "").includes("tablet"),
       c0bPlan.rows[0]?.message);
     const tarananOnce = resolveSeriesFormat(taranan.key);
-    const c0bSonuc = await applyBundle(nsKalem(taranan.key, { digits: 5 }), "overwrite");
+    const c0bSonuc = await applyBundle(nsKalem(taranan.key, kiranYuk), "overwrite");
+    const tarananSonra = resolveSeriesFormat(taranan.key);
     check("§9c ⭐ C0b'ye takılan kalem UYGULANMIYOR (okutulan biçim sahada bozulmuyor)",
-      c0bSonuc.applied === 0 && resolveSeriesFormat(taranan.key).digits === tarananOnce.digits,
+      c0bSonuc.applied === 0 &&
+        tarananSonra.prefix === tarananOnce.prefix &&
+        tarananSonra.dateSegment === tarananOnce.dateSegment &&
+        tarananSonra.digits === tarananOnce.digits &&
+        tarananSonra.separator === tarananOnce.separator &&
+        (tarananSonra.separator2 ?? null) === (tarananOnce.separator2 ?? null),
       `applied=${c0bSonuc.applied}`);
   }
 
