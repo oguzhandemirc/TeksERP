@@ -38,16 +38,16 @@ export function resolveRunStamp(declared: Date | null | undefined, label: string
   };
 }
 
-/** DB saati — `createdAt` varsayılanlarıyla (`now()`) aynı kaynak; tek satırlık okuma, tx'e girmez. */
+/** DB saati — tek satırlık okuma, tx'e girmez. ⚠️ Prisma `@default(now())` DB saati DEĞİL, Node saatidir (istemci doldurur). */
 export async function readDbNow(client: Pick<typeof prisma, "$queryRaw"> = prisma): Promise<Date> {
-  const rows = await client.$queryRaw<Array<{ now: Date }>>`SELECT now() AS now -- tz-ok: doffedAt timestamptz, createdAt varsayılanıyla aynı DB saati`;
+  const rows = await client.$queryRaw<Array<{ now: Date }>>`SELECT now() AS now -- tz-ok: doffedAt timestamptz, levent olay damgasıyla aynı DB saati`;
   return rows[0]!.now;
 }
 
 /**
  * İndirme damgası — beyan varken `resolveRunStamp` (kullanıcı zamanı); beyan YOKKEN DB saati.
- * Neden: `beamsMountedDuring` takma satırının `createdAt`ini (DB saati) bu damgayla karşılaştırır;
- * iki saat arasındaki ms farkı aynı saniyedeki takma→indirme sırasını tersine çevirebiliyordu.
+ * Neden: `beamsMountedDuring` levent olaylarının `createdAt`ini bu damgayla karşılaştırır; o damga da DB
+ * saatinden yazılır (`applyWarpBeamEventTx`) — iki saat karşılaştırılırsa ms farkı sırayı tersine çevirir.
  */
 export async function resolveDoffStamp(declared: Date | null | undefined): Promise<StampResolution> {
   if (declared) return resolveRunStamp(declared, "indirme zamanı");

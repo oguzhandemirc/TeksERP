@@ -11355,3 +11355,29 @@ bağımlılığı tavanında İKİNCİ kez tekrarladı (kuralı anlatan yorumdak
 değişmeden kırmızı verir ve insana "kapıyı gevşet" dedirtir (`test_shipping_flags §3.3` fikstür ön
 ekine bakıyordu). ③ Bir sondanın UYGULANDIĞI doğrulanmadan "tutmadı" denemez: bir negatif sonda
 desen tutmadığı için hiç koşmamıştı ve boş çıktı "temiz" gibi görünmüştü.
+
+## 2026-09-23 — İki SAAT: ms düzeyinde sıralama karşılaştırması tek saatten [ÇEKİRDEK]
+
+**Saha/ölçüm:** `test_warp_beam_auto_consume §6` tam pakette aralıklı kırmızı (tek başına yeşil). Kök:
+doff damgası `doffedAt` (beyansız) DB saatinden (`readDbNow` → `SELECT now()`, µs); levent olaylarının
+`createdAt`i Prisma `@default(now())` — İSTEMCİ doldurur, Node saati, ms (ölçüldü: Prisma satırlarının µs
+hanesi hep 000). `BEAMS_MOUNTED_DURING_SQL` ikisini karşılaştırır; doff → söküm arası birkaç ms iken Node
+saati DB'nin (Docker VM) gerisindeyse söküm "indirmeden önce" görünür, levent düşmez, helper yalnız uyarı
+yazar. Yeniden üretim: §6 sökümü Node −10 ms ile sarıldı → aynı kırmızı; 0 ms → yeşil. §8'in ve
+`readDbNow`un "createdAt DB saatidir" yorumu YANLIŞ öncüldü.
+**Karar:** tek yazar `applyWarpBeamEventTx` `createdAt`i açıkça DB saatinden yazar: `clock_timestamp()`
+(`now()` tx başıdır — aynı tx'teki iki olay aynı damgayı alır), ms'ye YUKARI yuvarlanır ve leventin son
+olayından ≥ 1 ms sonra. Kapsam tek yazar = 18 çağrı noktası. Kural "iki tarih" sınıfının alt yüzü
+(`docs/kurallar/finans.md`).
+**Sınıf taraması (statik, tarayıcı YAZILMADI):** sistem normu Node saati; DB saati ADALARI: `rolls.finalizedAt`
+/ `statusChangedAt` (trigger) · `roll_movements.exitedAt` (13 ham `SET "exitedAt" = now()`; aynı kolon Prisma'dan
+da yazılır → KARIŞIK SAATLİ KOLON) · `doff_events.doffedAt` (beyansız) · `item_prices`/`yarn_stocks` ham upsert.
+Karşılaştırmalar: tek riskli olan bu vaka (parametre üzerinden, sütun adında iz yok — statik ölçülemez);
+`inventory.service` ±10 dk toleranslı; wip-scorecard süre ortalaması; ikisi de güvenli.
+**BORÇ:** `roll_movements.exitedAt` karışık saatli kolon (ham `now()` = DB saati + Prisma = Node saati) — bugün ms
+düzeyinde sıralama karşılaştırması yok, risk düşük; ms sıralaması isteyen ilk okuyucu önce kolonu tek saate çeker.
+**Kapanır:** `roll_movements.exitedAt` yazan her yol aynı saatten yazar (ham SQL `SET "exitedAt" = now()` sayısı 0 ya da Prisma yazımı 0).
+**Çapa:** `roll_movements.exitedAt`
+**Öncül:** ölçüldü
+**Bekçi:** `test_warp_beam_auto_consume §9a` (Node 10 ms geride söküm → levent düşer; sonda: açık `createdAt`
+kaldırıldı → kırmızı) · `§9b` (aynı tx'te iki olay kesin artan; sonda: `now()` → kırmızı). Migration/izin/APK yok.
