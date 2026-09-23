@@ -25,7 +25,8 @@ export interface NumberSeriesReconcileResult {
   /** Göç BU AÇILIŞTA koştuysa yazılan mod; koşmadıysa `null` (damga vardı). */
   partyCodeAutoMigratedTo: "FREE" | "MANUAL" | null;
   /** Biçim satırı göçü BU AÇILIŞTA koştuysa yazılan satır sayısı; koşmadıysa `null`. */
-  formatLinesCreated: number | null;
+  /** Bu koşumda ONARILAN satır sayısı; 0 = eksik yoktu (artık `null` dönmez). */
+  formatLinesCreated: number;
 }
 
 export async function reconcileNumberSeries(): Promise<NumberSeriesReconcileResult> {
@@ -66,7 +67,7 @@ export async function reconcileNumberSeries(): Promise<NumberSeriesReconcileResu
   // (SQL migration'da olsaydı) SESSİZCE no-op olurdu — bu depoda aynı tuzak
   // "WHERE EXISTS no-op" olarak yaşandı (ön kayıt damgası, top sayısı 0).
   const migratedTo = await migratePartyCodeAutoOnce();
-  const lineCount = await migrateFormatLinesOnce();
+  const lineCount = await repairFormatLines();
 
   await refreshNumberSeriesCache();
   if (eksik.length > 0) {
@@ -140,8 +141,41 @@ async function migratePartyCodeAutoOnce(): Promise<"FREE" | "MANUAL" | null> {
   return mode;
 }
 
-/** Biçim satırı göçü damgası — D3③ kalıbı: BİR KEZ koşar, sonra bakılmaz. */
+/**
+ * Biçim satırı göçünün İLK koştuğu an — BİLGİ AMAÇLI, KAPI DEĞİL.
+ *
+ * ⚠️ 2026-09-23'te GATE OLMAKTAN ÇIKTI ve sebebi sahada ölçüldü: damga "bu iş
+ * yapıldı" der ama işin SONUCUNU (satırların varlığını) garanti etmez. Satırları
+ * bir yolla silinmiş bir kurulumda (bir bekçinin teardown'u sildi, damgaya
+ * dokunmadı) her boot göçü ATLIYORDU ve satır tablosu KALICI boş kalıyordu —
+ * yani emekli biçimler, zaman çizgisi ve `retiredFormats` sessizce yoktu.
+ * ⇒ Genel bir damga yerine SERİ BAŞINA İDEMPOTENSİ: satırı olmayan seri
+ * onarılır, olanına dokunulmaz. Kurulum kendini bir sonraki boot'ta toparlar.
+ *
+ * ⚠️ D3③'teki damgalı göç (`partyCodeAuto`) FARKLI bir durumdur ve o kalıp
+ * DOĞRU KALIR: orada damga, kullanıcının göçten SONRA yaptığı seçimi ezmemek
+ * için gerekir. Burada ezilecek bir seçim yoktur — satırı olmayan bir seride
+ * kullanıcı hiçbir şey yazmamıştır, çünkü yazsaydı satır doğardı.
+ *
+ * Damga SİLİNMEDİ: değeri gerçek bir tarihsel olgudur (göç ilk ne zaman koştu)
+ * ve kaldırmak davranışa hiçbir şey katmayan bir veri göçü olurdu.
+ */
 export const FORMAT_LINES_MIGRATION_STAMP = "numbering.formatLinesMigratedAt";
+
+/**
+ * SENTİNEL TARİH UFKU — bundan ÖNCEKİ her `effectiveFrom` "tarihi bilinmiyor"
+ * demektir, gerçek bir an değil.
+ *
+ * ⚠️ TEK KAYNAK ve bir ARIZA DÜZELTMESİ (2026-09-23, kendi bekçim ölçtü):
+ * sentinel tarih `number_series.formatChangedAt` kolonuna SIZIYOR — sızmak
+ * zorunda, çünkü kolon yürürlükteki satırın önbelleğidir ve `effectiveFrom`
+ * ile BİREBİR olmalı. Ama kolonun `isSentinel` karşılığı YOK. Sonuç: satırlar
+ * ikinci kez silinip onarıldığında 1970 tarihi GERÇEK sanılıyor ve satır
+ * `isSentinel: false` doğuyordu — yani "biçim 1970'te değişti" diyen bir defter
+ * satırı. Onarım artık tarihin KENDİSİNE bakıyor; bekçi de aynı sabiti okur ki
+ * "sentinel nedir" sorusunun tek cevabı olsun.
+ */
+export const SENTINEL_DATE_HORIZON = new Date("2000-01-01T00:00:00.000Z");
 
 /**
  * TEK SEFERLİK GÖÇ: `number_series` biçim kolonları → `number_series_lines`.
@@ -162,14 +196,17 @@ export const FORMAT_LINES_MIGRATION_STAMP = "numbering.formatLinesMigratedAt";
  * karşılığıdır (emekli ön ek bugün de yürürlükteki segment/haneyle deneniyor),
  * yani göç DAVRANIŞI DEĞİŞTİRMEZ — yalnız veriyi taşır.
  */
-async function migrateFormatLinesOnce(): Promise<number | null> {
-  const stamp = await prisma.systemSetting.findUnique({
-    where: { key: FORMAT_LINES_MIGRATION_STAMP },
-    select: { key: true },
-  });
-  if (stamp) return null;
+async function repairFormatLines(): Promise<number> {
+  // SERİ BAŞINA İDEMPOTENSİ: satırı OLAN seriye dokunulmaz (kullanıcının yazdığı
+  // zaman çizgisi kutsaldır), satırı OLMAYAN seri kolon önbelleğinden onarılır.
+  const seriesWithLines = (
+    await prisma.numberSeriesLine.findMany({ select: { seriesKey: true }, distinct: ["seriesKey"] })
+  ).map((x) => x.seriesKey);
 
   const rows = await prisma.numberSeries.findMany({
+    // ⚠️ `notIn: []` YASAK (boş liste Prisma'da hiçbir şey döndürmez) — ilk
+    // kurulumda liste zaten boştur ve o hâlde SÜZME YAPILMAZ.
+    ...(seriesWithLines.length > 0 ? { where: { key: { notIn: seriesWithLines } } } : {}),
     select: {
       key: true, prefix: true, dateSegment: true, digits: true, separator: true,
       retiredPrefixes: true, formatChangedAt: true,
@@ -185,7 +222,8 @@ async function migrateFormatLinesOnce(): Promise<number | null> {
     r.retiredPrefixes.forEach((onek, i) => {
       data.push({
         seriesKey: r.key, prefix: onek, dateSegment: r.dateSegment, digits: r.digits,
-        separator: r.separator, effectiveFrom: new Date(1000 * (i + 1)), isSentinel: true,
+        separator: r.separator,
+        effectiveFrom: new Date(1000 * (i + 1)), isSentinel: true,
         // ⚠️ BİÇİM TAHMİN: yalnız ÖN EK biliniyordu; segment/hane/ayraç
         // bugünküyle aynı varsayıldı. Tarihin sentinel olması (`isSentinel`)
         // BİÇİMİN tahmin olduğunu söylemez — ikisi AYRI beyan.
@@ -197,21 +235,23 @@ async function migrateFormatLinesOnce(): Promise<number | null> {
       separator: r.separator,
       // Damga varsa GERÇEK tarih; yoksa sentinel (biçim hiç değişmemiş seri).
       effectiveFrom: r.formatChangedAt ?? new Date(1000 * (r.retiredPrefixes.length + 1)),
-      isSentinel: r.formatChangedAt === null,
+      isSentinel: r.formatChangedAt === null || r.formatChangedAt < SENTINEL_DATE_HORIZON,
       // Yürürlükteki satırın BİÇİMİ tahmin DEĞİL — bugünkü biçimin ta kendisi;
       // yalnız TARİHİ bilinmiyor olabilir.
       origin: "RECORDED",
     });
   }
-  if (data.length > 0) {
-    await prisma.numberSeriesLine.createMany({ data, skipDuplicates: true });
-  }
+  // Yapacak iş yoksa hiçbir yan etki YAZILMAZ: her boot'ta damga tazelemek ve
+  // audit satırı düşmek, gerçekten bir onarım olduğu anı görünmez kılardı.
+  if (data.length === 0) return 0;
+
+  await prisma.numberSeriesLine.createMany({ data, skipDuplicates: true });
   await prisma.systemSetting.upsert({
     where: { key: FORMAT_LINES_MIGRATION_STAMP },
     create: {
       key: FORMAT_LINES_MIGRATION_STAMP,
       value: new Date().toISOString(),
-      description: "Biçim kolonları → number_series_lines göçü BİR KEZ koştu.",
+      description: "Biçim kolonları → number_series_lines göçünün İLK koştuğu an (bilgi amaçlı).",
     },
     update: {},
   });
