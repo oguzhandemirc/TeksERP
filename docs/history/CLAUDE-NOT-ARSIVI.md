@@ -12087,3 +12087,11 @@ ifadesiydi, o sıra da korundu.
 - **Tek yardımcı:** `src/utils/p2002.ts` (`p2002MetaTargetParts` · `p2002TargetParts` · `p2002OnField` · `p2002UniqueColumn`; `p2002Mentions` de oradan okur). `barcode-retry` kendi kopyasını bırakıp ona bağlandı.
 - **Kalıcı mandal:** `test_p2002_hedef_tek_kaynak` (AST: doğrudan · döküm içi · takma ad · köşeli · yapı çözme; yorumlar sayılmaz; yedi kalıcı sentetik sonda). 26. hızlı mandal oldu.
 - **Levent ve dokuma işi için** `test_numara_yarisi_levent_dokuma`: zamandan bağımsız yüklem kolu + altı eşzamanlı doğum (duman). Dokuma işinde 8032 kilidi numarayı zaten serileştirir. Levent altı eşzamanlı istekte pencere açmadı. Bu yüzden ısıran kol ①'dir; negatif sondada ② yeşil kaldı ve BEYAN edildi.
+
+**Tip zorlaması düzeltmesi (aynı gün).** `bffdb7d7`, AST'nin yazıcıyı modele bağlayabilmesi için `this.delegate.create`ı `prisma.order.create` + `{ … } as unknown as Prisma.OrderUncheckedCreateInput` yapmıştı. `test_type_assertion_ratchet` A kümesi (uydurulmuş nesne literali) bunu YENİ zorlama saydı (1e iniş paketi 644/645).
+
+Düzeltme ürün kodunu değil TARAYICIYI güçlendirdi:
+- `kolonYazicilari` artık `this.delegate.<metod>` çağrısını sınıfın örneklendiği yerden çözer. Taranan bütün dosyalarda `new <Sınıf>({ modelName: "…" })`; tek ve tutarlıysa o modelin delegesi sayılır, birden çoksa çözülemez kalır (fail-closed).
+- `order.service` özgün tipli çağrısına döndü (zorlama yok, cırcır tabanı yükseltilmedi).
+- Değişkene alıp zorlamak (cırcırın "köprü" istisnası) BİLEREK seçilmedi: kuralı dolanmak olurdu.
+- Negatif sonda: çözüm devre dışı → `test_snapshot_kolonlari` §4a iki yazımı "çözülemeyen" diye KIRMIZI verir.

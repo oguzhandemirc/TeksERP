@@ -2067,11 +2067,11 @@ export class OrderService extends BaseService {
         if (stillFree) {
           throw AppError.conflict(`'${manualOrderNumber}' numaralı sipariş zaten var`);
         }
-        // Açık model delegesi: donmuş kolonun (`destination`) yazıcısı AST ile ölçülür (`test_snapshot_kolonlari`).
-        return prisma.order.create({
-          data: { ...prismaData, orderNumber: manualOrderNumber, destination } as unknown as Prisma.OrderUncheckedCreateInput,
+        // `destination` data literalinde: donmuş kolonun yazıcısı AST ile ölçülür (`test_snapshot_kolonlari`).
+        return this.delegate.create({
+          data: { ...prismaData, orderNumber: manualOrderNumber, destination },
           ...(this.config.defaultInclude
-            ? { include: this.config.defaultInclude as Prisma.OrderInclude }
+            ? { include: this.config.defaultInclude }
             : {}),
         });
       }
@@ -2095,10 +2095,10 @@ export class OrderService extends BaseService {
         today,
         fmt,
       );
-      return prisma.order.create({
-        data: { ...prismaData, orderNumber, destination } as unknown as Prisma.OrderUncheckedCreateInput,
+      return this.delegate.create({
+        data: { ...prismaData, orderNumber, destination },
         ...(this.config.defaultInclude
-          ? { include: this.config.defaultInclude as Prisma.OrderInclude }
+          ? { include: this.config.defaultInclude }
           : {}),
       });
     }, undefined, (err) =>
