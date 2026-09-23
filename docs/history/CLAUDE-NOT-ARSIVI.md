@@ -11491,6 +11491,8 @@ Faz A biçimi VERİ yapmıştı; Faz B onu okutma tarafında tek kaynağa bağla
 
 ## 2026-09-23 — Raporlarda yurtiçi/yurtdışı ekseni: sevk raporu donmuş yönü, sipariş raporu bugünkü zinciri okur [ÇEKİRDEK]
 
+> **GEÇERSİZ (sipariş kısmı) → 2026-09-23:** sipariş raporları artık siparişin açılışta donmuş yönünü (`Order.destination`) okur; "bugünkü kart zinciri" hükmü kalktı (bkz. "Sipariş yönü DOĞUŞTA donar"). Sevk kısmı geçerli.
+
 **Ölçüm (R0):** altı rapor ucu (order-intake · demand-analysis · order-leadtime · order-cancellation · customer/scorecard · customer/order-profile) yön süzgecini `Customer.defaultDestination`dan okuyordu — cari sonradan değişince geçmiş rapor da değişiyordu; Müşteri Karnesi'nin sevk sütunu da aynı varsayılana göre ayrılıyordu. Fabrika kopyası (09-15): 113 sevkiyatın 113'ü yurtiçi, fiyatlı sipariş satırı 0/492, fatura 0, ülkesi dolu cari 1/29.
 
 **Karar (yönetici oturum, kullanıcı adına):** iki eksen, ikisi de beyanlı (`services/reports/_destination.ts`). SEVK raporları `Shipment.destination` (donmuş) okur; fasondan doğrudan sevkin yön kaydı yok ⇒ yön süzgecinde hiçbir kümede, kırılımda "yön kaydı yok" kovası (sabit DOMESTIC rapora uydurma yön olarak GİREMEZ). SİPARİŞ raporları siparişin şube → cari zincirini okur — `resolveShipmentDestination` ile AYNI zincir, Prisma (`orderDestinationWhere`) ve SQL (`orderDestinationSql`) ikizleri boğaz ikizdir. Bu eksen BUGÜNKÜ karttır: kart değişince geçmiş raporun kümesi de değişir — ekranda adı "Cari/şube yönü (bugünkü)" ve dışa aktarım şerhi bunu söyler. Siparişe donmuş bir yön kolonu eklemek AYRI karardır (kullanıcıya soruldu). Müşteri kökündeki raporlar (sipariş profili) carinin kendi yönünü okur (müşteri satırında şube yok).
@@ -12035,3 +12037,20 @@ ifadesiydi, o sıra da korundu.
 **Geriye dönük.** Geçmişte numarasız basılmış listeler için bir şey değişmez. Aynı çuvallar bugün yeniden basılırsa bu, o içeriğin ilk KAYITLI basımıdır ve numara o an doğar; kâğıdın önceden basıldığını bilemeyiz, bilir gibi yapmayız.
 
 **Yan düzeltme.** Audit sözlüğünde `manifestNo` = "İrsaliye no" (fason tablolarındaki anlam) olduğundan CL audit satırları yanlış etiketlenirdi; manifest audit'i artık `packingListNo` ("Çeki listesi no") anahtarıyla yazılır.
+
+## 2026-09-23 — Sipariş yönü DOĞUŞTA donar (`Order.destination`) [ÇEKİRDEK]
+
+**Karar (kullanıcı).** Siparişin yurtiçi/yurtdışı yönü, sevkiyatın donmuş yönüyle aynı kalıpta sipariş açılırken sabitlenir. Sipariş raporları bugüne dek yönü CANLI kart zincirinden (şube → cari) okuyordu: cari kartı değişince geçmiş siparişlerin yönü de değişiyordu (etiket "Cari/şube yönü (bugünkü)").
+
+**Ölçüm.** Sipariş yaratan her yol TEK yazardan geçiyor: `OrderService.create`. Panel formu, tablet, hızlı sipariş (`quickOrderFromRolls` → `this.create`), Excel içe aktarma (`order.adapter` → `orderService.create`) ve panel kopyası aynı uçtan geçer. Doğrudan `prisma.order.create` yalnız seed/test/repro script'lerinde var; onlar NULL üretir (kolon nullable, varsayılansız).
+
+**Kurallar.**
+- Zincir `resolveShipmentDestination` ile, sevkiyatla aynı fonksiyondan çözülür (kopya yok). Zincir boşsa NULL ("yön belirsiz"). Sevkiyattan farkı bilinçlidir: sevkiyatta boş zincir DOMESTIC olur, siparişte NULL kalır.
+- Sipariş AÇIKÇA başka cariye/şubeye taşınınca yön aynı claim içinde yeniden çözülür (1e onayı: sipariş o cariye açılmadı). Eski değer audit'te kalır.
+- Cari birleştirme (MOVE `orders.customerId`) yeniden dondurmaz; bu bir kimlik birleştirmesidir, sipariş kararı değildir.
+- NULL doğan sipariş, kart sonradan dolsa da (ör. ilk sevkiyatın seçimi `claimFirstDestinationTx`) NULL kalır. Dondurma kuralı budur.
+- Kolon `ORDER_HEADER_WRITABLE` dışındadır, gövdeden yazılamaz.
+
+**Raporlar (aynı gün, ikinci dilim).** `reports/_destination.ts`in üç sipariş fonksiyonu (`orderDestinationWhere` · `orderDestinationValueSql` · `orderDestinationSql`) artık `Order.destination` okur. Canlı kart zinciri raporda okunmaz. Etiket "Cari/şube yönü (bugünkü)" → "Sipariş yönü (açılışta)"; seçenekler "Yurtiçi/İhracat (sipariş yönü)". Sürüm notundaki iki cümle aynı dilimde düzeltildi. `test_rapor_yon_ekseni` §1 zincir ikizi yerine kolon ikizini ölçer; §2c kart değişiminden sonra rapor kümesinin kıpırdamadığını ölçer (negatif sonda ⑩: canlı zincir → İhracat 130 · Yurtiçi 20, kırmızı). Sipariş fikstürünü doğrudan kuran iki rapor bekçisi (`test_rapor_satis_ekseni`, `test_destination_mix`) siparişi yazar gibi doğurur. R1 notunun sipariş kısmı GEÇERSİZ olarak işaretlendi.
+
+**Geri doldurma (üçüncü dilim).** `scripts/backfill_order_destination.ts`: kuru koşum varsayılan, etkilenen her siparişi numara · durum · cari/şube · yön · kaynak ile listeler. Yalnız `destination IS NULL` satırlara yazar; yazımda da `destination: null` koşulu korunur. Zincir boşsa NULL bırakır. Zincir kopyalanmaz, `pickShipmentDestination` kullanılır. Kapılar `migrate_partner_roles` emsalidir: hedef adıyla basılır, fixture dışı hedefte `--canli-onay`, üretim adlarına hiç yazılmaz. **Beyan:** yazılan değer koşum gününün kart yönüdür, siparişin açıldığı günkü yön DEĞİLDİR; o bilgi hiçbir yerde kaydedilmemişti. Script'i KULLANICI koşar (fabrika verisi); oturumlar koşmaz.

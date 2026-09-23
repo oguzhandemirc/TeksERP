@@ -52,7 +52,7 @@ const overdueColumns: ColumnDef<OverdueRow, unknown>[] = [
 /** Yön ekseni tek başına — müşteri/kalem ekseni bu karnede yok. */
 const AXIS_KEYS = [] as readonly AxisKey[];
 /** Yön süzgeci açıkken: termin kısmının kaynağı sevk metrajından AYRIDIR. */
-const DEADLINE_AXIS_NOTE = "Termin (zamanında teslim · geciken açık) siparişin BUGÜNKÜ cari/şube yönünü okur; sevk metrajı sevkiyatın donmuş yönünü.";
+const DEADLINE_AXIS_NOTE = "Termin (zamanında teslim · geciken açık) siparişin açılışta donmuş yönünü okur; sevk metrajı sevkiyatın sevk anında donmuş yönünü.";
 
 function hint(now: number | undefined, prev: number | undefined, unit: string): string | undefined {
   if (prev === undefined || now === undefined) return undefined;

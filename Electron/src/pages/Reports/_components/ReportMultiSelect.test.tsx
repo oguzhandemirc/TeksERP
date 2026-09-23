@@ -81,12 +81,12 @@ describe("ReportMultiSelect", () => {
 });
 
 describe("DestinationSelect", () => {
-  it("⭐ niteleyici ETİKETTE: 'cari/şube yönü (bugünkü)' hem başlıkta hem seçeneklerde", async () => {
+  it("⭐ niteleyici ETİKETTE: 'sipariş yönü (açılışta)' hem başlıkta hem seçeneklerde", async () => {
     const u = userEvent.setup();
     render(<DestinationSelect id="d" value="" onChange={vi.fn()} />);
-    expect(screen.getByText("Cari/şube yönü (bugünkü)")).toBeInTheDocument();
+    expect(screen.getByText("Sipariş yönü (açılışta)")).toBeInTheDocument();
     await u.click(screen.getByRole("combobox"));
-    expect(await screen.findByText("İhracat (cari/şube yönü)")).toBeInTheDocument();
-    expect(screen.getByText("Yurtiçi (cari/şube yönü)")).toBeInTheDocument();
+    expect(await screen.findByText("İhracat (sipariş yönü)")).toBeInTheDocument();
+    expect(screen.getByText("Yurtiçi (sipariş yönü)")).toBeInTheDocument();
   });
 });

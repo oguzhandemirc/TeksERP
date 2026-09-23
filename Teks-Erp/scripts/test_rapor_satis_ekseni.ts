@@ -20,6 +20,7 @@
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { resolveShipmentDestination } from "../src/services/helpers/shipment-destination.helper";
 import { filterEcho } from "../src/services/reports/_filters";
 import { demandAnalysisQuerySchema, openOrderCoverageQuerySchema, orderCancellationQuerySchema, orderIntakeQuerySchema, orderLeadTimeQuerySchema } from "../src/routes/reports/sales.routes";
 import { customerScorecardQuerySchema, orderProfileQuerySchema } from "../src/routes/reports/customer.routes";
@@ -80,8 +81,10 @@ async function main(): Promise<void> {
   const f1 = await prisma.subcontractor.create({ data: { code: `${TAG}-F1`, name: `${TAG} fasoncu 1` }, select: { id: true } });
   const f2 = await prisma.subcontractor.create({ data: { code: `${TAG}-F2`, name: `${TAG} fasoncu 2` }, select: { id: true } });
   const mkOrder = async (no: string, customerId: string, lines: Array<{ itemId: string; quantity: number }>, cancel?: string, at: Date = IN) => {
+    // Sipariş yazar gibi doğar: yön açılışta zincirden donar (2026-09-23; raporlar kolonu okur).
+    const destination = (await resolveShipmentDestination(prisma, { customerId })).destination;
     const o = await prisma.order.create({
-      data: { orderNumber: `${TAG}-${no}`, customerId, orderDate: at, status: cancel ? "CANCELLED" : "APPROVED", ...(cancel ? { cancelledAt: at, cancelReasonCode: cancel } : {}), lines: { create: lines } },
+      data: { orderNumber: `${TAG}-${no}`, customerId, destination, orderDate: at, status: cancel ? "CANCELLED" : "APPROVED", ...(cancel ? { cancelledAt: at, cancelReasonCode: cancel } : {}), lines: { create: lines } },
       select: { id: true },
     });
     ids.orders.push(o.id);

@@ -3570,6 +3570,10 @@ model Order {
   clientToken String? @unique @db.Uuid
   customerId  String  @db.Uuid
   branchId    String? @db.Uuid // Hedef şube — opsiyonel; bir sipariş tek bir şubeye gider. Mevcut kayıtlar için null kabul.
+  /// Sipariş yönü — DOĞUŞTA donar (`resolveShipmentDestination`: şube → cari), zincir boşsa NULL ("yön
+  /// belirsiz"). Kart sonradan değişse de DEĞİŞMEZ; yalnız sipariş açıkça başka cariye/şubeye taşınınca
+  /// yeniden çözülür. Tek yazar `OrderService.create/update`; gövdeden yazılamaz. Raporlar buradan okur.
+  destination ShipmentDestination?
 
   // Finance & Pricing
   currency    Currency @default(TRY)
@@ -3644,6 +3648,7 @@ model Order {
   // K7 (2026-08-29): rapor tarih eksenleri indeksiz taranıyordu (BULGU-T1-120).
   @@index([orderDate])
   @@index([completedAt])
+  @@index([destination])
   @@map("orders")
 }
 

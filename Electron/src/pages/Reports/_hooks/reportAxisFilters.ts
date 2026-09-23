@@ -56,7 +56,7 @@ export function labelsOf(options: Array<{ id?: string; code?: string; ad: string
 
 /**
  * Süzgeç satırı (K10) — ÇIKTIYA da girer. Niteleyiciler burada yaşar:
- * `destination` siparişin BUGÜNKÜ cari/şube yönüdür (sevkin donmuş yönü değil) ve
+ * `destination` siparişin AÇILIŞTA donmuş yönüdür (sevkin donmuş yönü değil) ve
  * `reasonCode` iptal karnesinde yalnız PAYI süzer. İkisi de ekranda yazılı; aynı
  * cümle dosyaya geçmezse, tek başına paylaşılan dosyada uyarı YOK demektir.
  */
@@ -105,14 +105,14 @@ export const AXIS_CAVEATS: Partial<Record<AxisKey, string>> = {
   reasonCode: "Yalnız PAYI süzer: payda (dönemde açılan siparişler) süzülmez ⇒ oran 'bu sebeple iptal ÷ açılan'.",
 };
 
-export const DESTINATION_LABEL = "Cari/şube yönü (bugünkü)";
+export const DESTINATION_LABEL = "Sipariş yönü (açılışta)";
 /** Sevk raporlarının yön ekseni — SEVKİYATIN donmuş yönü (sipariş raporlarından AYRI kaynak). */
 export const SHIPMENT_DESTINATION_LABEL = "Sevkiyat yönü (sevk anında)";
 export const SHIPMENT_DESTINATION_CAVEAT = "Sevkiyatın SEVK ANINDA donmuş yönü — cari kartı sonradan değişse de geçmiş değişmez; fasondan doğrudan sevkin yön kaydı yoktur, bu süzgeçte hiçbir kümeye girmez.";
-/** `true` = sipariş raporu (bugünkü cari/şube yönü) · `"shipment"` = sevk raporu (donmuş yön). */
+/** `true` = sipariş raporu (siparişin açılışta donmuş yönü) · `"shipment"` = sevk raporu (sevk anında donmuş yön). */
 export type DestinationAxis = boolean | "shipment";
 export const destinationLabelOf = (d: DestinationAxis | undefined): string => (d === "shipment" ? SHIPMENT_DESTINATION_LABEL : DESTINATION_LABEL);
-export const DESTINATION_CAVEAT = "Siparişin BUGÜNKÜ cari/şube yönü (şube yönü, boşsa carinin) — sevkin donmuş yönü değil; kart değişince geçmiş raporun kümesi de değişir.";
+export const DESTINATION_CAVEAT = "Siparişin AÇILIŞTA donmuş yönü (o günkü şube yönü, boşsa carinin) — sevkin yönü değil; cari kartı sonradan değişse de geçmiş rapor değişmez. Yönü belirsiz açılan sipariş hiçbir kümeye girmez.";
 
 interface AxisNoteInput {
   eksenler: readonly AxisKey[];

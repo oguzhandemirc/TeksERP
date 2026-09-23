@@ -23,7 +23,7 @@ export function DestinationMixCoverage({ r, priced, lines }: { r: DestinationMix
   );
 }
 
-/** Açık sipariş (BUGÜN) + termini dönemde olan siparişlerin gerçekleşmesi — yön siparişin bugünkü zinciri. */
+/** Açık sipariş (BUGÜN) + termini dönemde olan siparişlerin gerçekleşmesi — yön siparişin açılışta donmuş yönü. */
 export function DestinationMixOrdersTab({ r, isLoading }: { r: DestinationMix; isLoading: boolean }) {
   return (
     <>
@@ -39,7 +39,7 @@ export function DestinationMixOrdersTab({ r, isLoading }: { r: DestinationMix; i
       </div>
       <DetailTable
         title="Yurtdışı açık siparişler"
-        description="BUGÜNKÜ durum (dönemden bağımsız); yön siparişin bugünkü cari/şube yönüdür."
+        description="BUGÜNKÜ durum (dönemden bağımsız); yön siparişin açılışta donmuş yönüdür."
         data={r.backlogExport}
         columns={backlogExportColumns}
         isLoading={isLoading}
