@@ -43,6 +43,8 @@ import { freeDocumentService } from "../src/services/free-document.service";
 import { stockCountService } from "../src/services/stock-count.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { colorService } from "../src/routes/color.routes";
+import { goodsReceiptService } from "../src/services/goods-receipt.service";
+import { purchaseOrderService } from "../src/services/purchase-order.service";
 import { machineService, stationService } from "../src/routes/station.routes";
 import { bankAccountService, cashBoxService } from "../src/routes/finance.routes";
 import { returnReasonService } from "../src/routes/return-reason.routes";
@@ -105,6 +107,9 @@ async function msCreate(
 }
 /** Manifest fikstürünün açtığı iş emirleri — teardown (manifest silindikten SONRA). */
 const manifestWorkOrders: string[] = [];
+/** Mal kabul/alış siparişi fikstürlerinin açtığı yardımcı kayıtlar (teardown sırası). */
+const temizlikDepolari: string[] = [];
+const temizlikCariler: string[] = [];
 const SEGMENTLER = Object.keys(DATE_SEGMENTS) as NumberSeriesDateSegment[];
 const AYRACLAR = ["", "-", "_", "/", "."];
 
@@ -318,8 +323,39 @@ const L2_YOLU: Record<string, L2Yolu> = {
     },
     sil: async (id) => { await prisma.manifest.deleteMany({ where: { id } }); },
   },
-  goodsReceipt: { not: "GoodsReceipt: tedarikçi + kalem + (kumaşta) top zinciri ister." },
-  purchaseOrder: { not: "PurchaseOrder: tedarikçi + kalem + birim fiyat zinciri ister." },
+  // ⚠️ İKİSİ DE ÖLÇÜLDÜ ve "zincir ister" gerekçem YANLIŞ ÇIKTI (manifest dersinin
+  // tekrarı): mal kabul fişi yalnız DEPO istiyor (kalemler opsiyonel), alış
+  // siparişi tedarikçi + tek kalem. Tahmin değil imza okundu.
+  goodsReceipt: {
+    not: "GoodsReceiptService.create: yalnız depo (kalemler opsiyonel).",
+    yarat: async (damga) => {
+      const depo = await msCreate(warehouseService, { name: `${damga} E3 mk depo ${++msSayac}` });
+      if (!depo) return null;
+      temizlikDepolari.push(depo.id);
+      const r = await goodsReceiptService.create({ warehouseId: depo.id });
+      const d = r.data as { id?: string; receiptNo?: string } | null;
+      return d?.id && d.receiptNo ? { id: d.id, kod: d.receiptNo } : null;
+    },
+    sil: async (id) => { await prisma.goodsReceipt.deleteMany({ where: { id } }); },
+  },
+  purchaseOrder: {
+    not: "purchaseOrderService.create: tedarikçi (cari) + tek kalem.",
+    yarat: async (damga) => {
+      const tedarikci = await msCreate(customerService, { name: `${damga} E3 tedarikçi ${++msSayac}` });
+      if (!tedarikci || !bagli.itemId) return null;
+      temizlikCariler.push(tedarikci.id);
+      const r = await purchaseOrderService.create({
+        supplierId: tedarikci.id,
+        lines: [{ itemId: bagli.itemId, qty: 10 }],
+      });
+      const d = r.data as { id?: string; orderNo?: string } | null;
+      return d?.id && d.orderNo ? { id: d.id, kod: d.orderNo } : null;
+    },
+    sil: async (id) => {
+      await prisma.purchaseOrderLine.deleteMany({ where: { purchaseOrderId: id } });
+      await prisma.purchaseOrder.deleteMany({ where: { id } });
+    },
+  },
   warehouseTransfer: { not: "WarehouseTransfer: iki depo + taşınacak GERÇEK stok ister." },
 };
 
@@ -542,6 +578,14 @@ async function main(): Promise<void> {
     }
   } finally {
     for (const t of temizlik.reverse()) await t();
+    // ⚠️ FK SIRASI: önce belgeler (yukarıdaki `temizlik`), sonra onların dayandığı
+    // depo/cari kayıtları, en sonda manifest ↔ iş emri zinciri.
+    if (temizlikDepolari.length > 0) {
+      await prisma.warehouse.deleteMany({ where: { id: { in: temizlikDepolari } } });
+    }
+    if (temizlikCariler.length > 0) {
+      await prisma.customer.deleteMany({ where: { id: { in: temizlikCariler } } });
+    }
     // ⚠️ FK SIRASI: manifest satırları silindikten SONRA iş emirleri.
     if (manifestWorkOrders.length > 0) {
       await prisma.manifest.deleteMany({ where: { workOrderId: { in: manifestWorkOrders } } });
