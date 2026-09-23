@@ -32,6 +32,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ADIMLAR } from "./adimlar.mjs";
+import { derlemeKapisi } from "./derleme-tazeligi.mjs";
 import { hataAgiDurumu, hataAgiKur } from "./hata-agi.mjs";
 
 const BURASI = path.dirname(fileURLToPath(import.meta.url));
@@ -54,6 +55,7 @@ function dur(mesaj) {
 if (!fs.existsSync(ORTAM_DOSYASI)) dur(`ortam dosyası yok: ${ORTAM_DOSYASI} — önce \`npx tsx scripts/e2e-ortam.ts kur\``);
 const ortam = JSON.parse(fs.readFileSync(ORTAM_DOSYASI, "utf-8"));
 const MAIN_JS = path.join(ELECTRON_KOK, "out/main/main.js");
+derlemeKapisi(ELECTRON_KOK); // bayat `out/` eski paneli ölçer — tur başlamaz
 if (!fs.existsSync(MAIN_JS)) dur(`${MAIN_JS} yok — önce \`npx electron-vite build\``);
 // Electron ikilisi AÇIKÇA bu ağacın node_modules'ünden — Playwright'ın kendi
 // çözümlemesi cwd'ye göre başka bir ağaca (ya da indirmeye) kayabiliyor.

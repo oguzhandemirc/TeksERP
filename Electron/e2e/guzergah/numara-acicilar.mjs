@@ -52,7 +52,8 @@ export function acicilarKur(c) {
     const f = (await api("/api/feature-flags")).govde?.data ?? {};
     dur.bayrakOnce = { ...(dur.bayrakOnce ?? {}), financeEnabled: f.financeEnabled, productionEnabled: f.productionEnabled };
     if (!f.financeEnabled || !f.productionEnabled) {
-      const r = await c.bayrakYaz({ financeEnabled: true, productionEnabled: true });
+      let r = await c.bayrakYaz({ financeEnabled: true, productionEnabled: true });
+      if (r.status === 403) r = await c.sistemApi("/api/feature-flags", { method: "PATCH", headers: c.sifreBasligi, body: JSON.stringify({ financeEnabled: true, productionEnabled: true }) });
       if (r.status >= 300) throw new Error(`modül: ${r.status} ${JSON.stringify(r.govde).slice(0, 200)}`);
     }
     dur.modulHazir = true;
@@ -359,16 +360,95 @@ export function acicilarKur(c) {
     },
   };
 
+  // ── E2 üretim dilimi: sipariş · dokuma işi · levent · doff (TAM kip; hiçbiri okutulmaz) ──
+  /** Modül anahtarı (dokuma/devere) yalnız sistem hesabıyla çevrilir (MODULE_FLAG_SUPERADMIN_ONLY); panel bayrağı reload ile görür. */
+  async function uretimModulu(dur, anahtarlar) {
+    const f = (await api("/api/feature-flags")).govde?.data ?? {};
+    const eksik = anahtarlar.filter((k) => !f[k]);
+    if (!eksik.length) return;
+    dur.bayrakOnce = { ...Object.fromEntries(eksik.map((k) => [k, f[k] ?? false])), ...(dur.bayrakOnce ?? {}) };
+    const r = await c.sistemApi("/api/feature-flags", { method: "PATCH", headers: c.sifreBasligi, body: JSON.stringify(Object.fromEntries(eksik.map((k) => [k, true]))) });
+    if (r.status >= 300) throw new Error(`modül ${eksik.join(",")}: ${r.status} ${JSON.stringify(r.govde).slice(0, 200)}`);
+    await page.reload(); await page.waitForTimeout(3500);
+  }
+  /** Denyeli aktif iplik → çözgü kartı (kod ELLE; otomatik kod yok). */
+  async function cozguKarti(dur) {
+    if (dur.cozgu) return dur.cozgu;
+    let [iplik] = await sql(`SELECT id FROM items WHERE "isActive" AND "itemType"='YARN' AND "linearDensityDen" IS NOT NULL ORDER BY "createdAt" DESC LIMIT 1`);
+    if (!iplik) iplik = zorunlu(await api("/api/items", { method: "POST", body: JSON.stringify({ name: `TEST-E5 İplik ${K()}`, itemType: "YARN", unit: "KG", linearDensityDen: 150 }) }), "iplik");
+    const k = K();
+    dur.cozgu = zorunlu(await api("/api/warp-specs", { method: "POST", body: JSON.stringify({ code: `TE5${k}`, name: `TEST-E5 Çözgü ${k}`, yarnItemId: iplik.id, endsCount: 4000 }) }), "çözgü kartı").id;
+    return dur.cozgu;
+  }
+  const VAR2 = [{ dateSegment: "NONE" }, { separator: "-", separator2: "/" }];
+  const uretimSerileri = {
+    order: {
+      tablo: { tablo: "orders", kolon: "orderNumber" }, okutulur: false, yeniOnEk: "SIPZ", varyantlar: VAR2,
+      hazirla: async (dur) => { dur.sipCari ??= zorunlu(await api("/api/customers", { method: "POST", body: JSON.stringify({ name: `TEST-E5O${K()} Cari`, isCustomerRole: true, defaultDestination: "DOMESTIC" }) }), "cari").id; },
+      eskiKayit: () => eskiSec("orders", "orderNumber"),
+      ac: async (dur) => {
+        const d = zorunlu(await api("/api/orders", { method: "POST", body: JSON.stringify({ customerId: dur.sipCari, lines: [{ itemId: await kumas(), quantity: 10 }], clientToken: crypto.randomUUID() }) }), "sipariş");
+        return { id: d.id, numara: await numaraOku("orders", "orderNumber", d.id) };
+      },
+      ekran: (dur, k, eski) => listede("Siparişler", /Sipariş no, iş emri no/, [k.numara, eski]),
+      belge: belgeYok("siparişin kendi belge türü yok"),
+    },
+    weavingOrder: {
+      tablo: { tablo: "weaving_orders", kolon: "weavingOrderNumber" }, okutulur: false, yeniOnEk: "DKZ", varyantlar: VAR2,
+      hazirla: (dur) => uretimModulu(dur, ["productionEnabled", "dokumaEnabled"]),
+      eskiKayit: () => eskiSec("weaving_orders", "weavingOrderNumber"),
+      ac: async () => {
+        const d = zorunlu(await api("/api/weaving-orders", { method: "POST", body: JSON.stringify({ itemId: await kumas(), executionKind: "IN_HOUSE", clientToken: crypto.randomUUID() }) }), "dokuma işi");
+        return { id: d.id, numara: await numaraOku("weaving_orders", "weavingOrderNumber", d.id) };
+      },
+      ekran: (dur, k, eski) => listede("Dokuma İşleri", /Dokuma no, kumaş/, [k.numara, eski]),
+      belge: belgeYok("dokuma işinin belge türü yok"),
+    },
+    warpBeam: {
+      tablo: { tablo: "warp_beams", kolon: "beamNo" }, okutulur: false, yeniOnEk: "LVZ", varyantlar: VAR2,
+      hazirla: async (dur) => { await uretimModulu(dur, ["devereEnabled"]); await cozguKarti(dur); },
+      eskiKayit: () => eskiSec("warp_beams", "beamNo"),
+      ac: async (dur) => {
+        const d = zorunlu(await api("/api/warp-beams", { method: "POST", body: JSON.stringify({ warpSpecId: dur.cozgu, plannedLengthM: 100, originKind: "IN_HOUSE", clientToken: crypto.randomUUID() }) }), "levent");
+        return { id: d.id, numara: await numaraOku("warp_beams", "beamNo", d.id) };
+      },
+      ekran: (dur, k, eski) => listede("Leventler", /Levent no, gövde no/, [k.numara, eski]),
+      belge: belgeYok("leventin belge/etiket türü yok"),
+    },
+    doffEvent: {
+      tablo: { tablo: "doff_events", kolon: "code" }, okutulur: false, yeniOnEk: "DFZ", varyantlar: VAR2,
+      hazirla: async (dur) => {
+        await uretimModulu(dur, ["productionEnabled", "dokumaEnabled"]);
+        // Koşumsuz doff 400 değil `warnings`; hat no varsayılan 1.
+        dur.doffMakine ??= (await sql(`SELECT id FROM machines WHERE "isActive" ORDER BY "createdAt" LIMIT 1`))[0]?.id;
+        if (!dur.doffMakine) throw new Error("aktif makine yok");
+      },
+      eskiKayit: () => eskiSec("doff_events", "code"),
+      ac: async (dur) => {
+        const d = zorunlu(await api("/api/machine-doffs", { method: "POST", body: JSON.stringify({ machineId: dur.doffMakine, pieceCount: 1, counterSource: "OPERATOR", clientToken: crypto.randomUUID() }) }), "doff");
+        return { id: d.id, numara: await numaraOku("doff_events", "code", d.id) };
+      },
+      // Panelde doff listesi yok (yalnız tablet Tezgah + KK1 seçici) → ekran yerine API listesi ölçülür.
+      ekran: async (dur, k) => {
+        const r = await api(`/api/machine-doffs?machineId=${dur.doffMakine}`);
+        return { uygulanmaz: "doff kodu panelde gösterilmiyor (tablet Tezgah + KK1)", apiListede: JSON.stringify(r.govde ?? {}).includes(k.numara) };
+      },
+      belge: belgeYok("doff'un belge türü yok"),
+    },
+  };
+
   return {
+    ...uretimSerileri,
     ...okutulan,
     ...depoTicaret,
-    invoiceSales: fatura("SALES", "Faturalar"),
-    invoicePurchase: fatura("PURCHASE", "Faturalar"),
-    invoiceSalesReturn: fatura("SALES_RETURN", "Faturalar"),
-    invoicePurchaseReturn: fatura("PURCHASE_RETURN", "Faturalar"),
-    paymentIn: odeme("IN"),
-    paymentOut: odeme("OUT"),
+    invoiceSales: { ...fatura("SALES", "Faturalar"), yeniOnEk: "SFZ" },
+    invoicePurchase: { ...fatura("PURCHASE", "Faturalar"), yeniOnEk: "AFZ" },
+    invoiceSalesReturn: { ...fatura("SALES_RETURN", "Faturalar"), yeniOnEk: "SIZ" },
+    invoicePurchaseReturn: { ...fatura("PURCHASE_RETURN", "Faturalar"), yeniOnEk: "AIZ" },
+    paymentIn: { ...odeme("IN"), yeniOnEk: "THZ" },
+    paymentOut: { ...odeme("OUT"), yeniOnEk: "ODZ" },
     cashTransaction: {
+      yeniOnEk: "KHZ",
       tablo: { tablo: "cash_transactions", kolon: "docNo" }, okutulur: false,
       hazirla: kasa,
       eskiKayit: () => eskiSec("cash_transactions", "docNo"),
@@ -376,11 +456,12 @@ export function acicilarKur(c) {
       ekran: (dur, k, eski) => listede("Kasa Hareketleri", /Belge no \/ kategori/, [k.numara, eski]),
       belge: null, // PrintedDocType'ta kasa fişi yok
     },
-    chequeReceived: cek("RECEIVED", "CHEQUE"),
-    chequeIssued: cek("ISSUED", "CHEQUE"),
-    noteReceived: cek("RECEIVED", "PROMISSORY_NOTE"),
-    noteIssued: cek("ISSUED", "PROMISSORY_NOTE"),
+    chequeReceived: { ...cek("RECEIVED", "CHEQUE"), yeniOnEk: "CKAZ" },
+    chequeIssued: { ...cek("ISSUED", "CHEQUE"), yeniOnEk: "CKVZ" },
+    noteReceived: { ...cek("RECEIVED", "PROMISSORY_NOTE"), yeniOnEk: "SNAZ" },
+    noteIssued: { ...cek("ISSUED", "PROMISSORY_NOTE"), yeniOnEk: "SNVZ" },
     chequeDeliveryNote: {
+      yeniOnEk: "BRDZ",
       tablo: { tablo: "cheque_delivery_notes", kolon: "docNo" }, okutulur: false,
       hazirla: finansCari,
       eskiKayit: () => eskiSec("cheque_delivery_notes", "docNo"),
@@ -390,15 +471,16 @@ export function acicilarKur(c) {
         return { id: d.id, numara: d.docNo };
       },
       // Liste yalnız "Çek / Senet → Bordrolar" diyaloğunda — belge ucu birincil ölçüm.
-      ekran: async () => ({ ekranListesiDiyalogda: true }),
+      ekran: async () => ({ uygulanmaz: "liste yalnız diyalogda (Çek / Senet → Bordrolar) — belge ucu ölçülür" }),
       belge: (dur, k) => belgeHtml("CHEQUE_DELIVERY_NOTE", k.id, k.numara),
     },
     reconciliationLetter: {
+      yeniOnEk: "MBTZ",
       tablo: { tablo: "reconciliation_letters", kolon: "docNo" }, okutulur: false,
       hazirla: finansCari,
       eskiKayit: () => eskiSec("reconciliation_letters", "docNo"),
       ac: async (dur) => { const d = zorunlu(await api("/api/finance/reconciliation-letters", { method: "POST", body: JSON.stringify({ cariId: dur.finCari.cariId }) }), "mektup"); return { id: d.id, numara: d.docNo }; },
-      ekran: async () => ({ ekranListesiDiyalogda: true }), // Cari Hesaplar → Ekstre → Mektuplar
+      ekran: async () => ({ uygulanmaz: "liste yalnız diyalogda (Çek / Senet → Bordrolar) — belge ucu ölçülür" }), // Cari Hesaplar → Ekstre → Mektuplar
       belge: (dur, k) => belgeHtml("RECONCILIATION_LETTER", k.id, k.numara),
     },
 

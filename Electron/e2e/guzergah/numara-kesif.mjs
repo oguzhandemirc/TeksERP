@@ -16,6 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { derlemeKapisi } from "./derleme-tazeligi.mjs";
 import { hataAgiKur } from "./hata-agi.mjs";
 
 const BURASI = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,7 @@ const AYAR_SIFRESI = fs.readFileSync(process.env.AYAR_SIFRESI_DOSYASI, "utf-8").
 const SERI_TABLO = JSON.parse(fs.readFileSync(process.env.SERI_TABLO_DOSYASI, "utf-8"));
 SERI_TABLO.roll = { table: "rolls", column: "barcode" };
 const MAIN_JS = path.join(ELECTRON_KOK, "out/main/main.js");
+derlemeKapisi(ELECTRON_KOK); // bayat `out/` eski paneli ölçer — tur başlamaz
 const ELECTRON_DIST = path.join(ELECTRON_KOK, "node_modules/electron");
 const ELECTRON_BIN = path.join(ELECTRON_DIST, "dist", fs.readFileSync(path.join(ELECTRON_DIST, "path.txt"), "utf-8").trim());
 

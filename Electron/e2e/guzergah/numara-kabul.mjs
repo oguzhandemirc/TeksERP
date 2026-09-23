@@ -15,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { derlemeKapisi } from "./derleme-tazeligi.mjs";
 import { hataAgiKur } from "./hata-agi.mjs";
 import { acicilarKur } from "./numara-acicilar.mjs";
 
@@ -27,6 +28,7 @@ const { Client: PgClient } = requireBackend("pg");
 const ortam = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), "tekserp-e2e-env.json"), "utf-8"));
 const AYAR_SIFRESI = fs.readFileSync(process.env.AYAR_SIFRESI_DOSYASI, "utf-8").trim();
 const MAIN_JS = path.join(ELECTRON_KOK, "out/main/main.js");
+const DERLEME = derlemeKapisi(ELECTRON_KOK); // bayat `out/` eski paneli ölçer — tur başlamaz
 const ELECTRON_DIST = path.join(ELECTRON_KOK, "node_modules/electron");
 const ELECTRON_BIN = path.join(ELECTRON_DIST, "dist", fs.readFileSync(path.join(ELECTRON_DIST, "path.txt"), "utf-8").trim());
 
@@ -201,7 +203,7 @@ async function kaydet(key, d, ad) {
 
 
 const sonuc = [];
-const yaz = () => fs.writeFileSync(path.join(CIKTI, "sonuc.json"), JSON.stringify({ zaman, db: ortam.dbName, pencere, seriler: sonuc }, null, 2));
+const yaz = () => fs.writeFileSync(path.join(CIKTI, "sonuc.json"), JSON.stringify({ zaman, db: ortam.dbName, pencere, derleme: DERLEME, seriler: sonuc }, null, 2));
 const agKayitlari = (ad) => ({
   toast: ag.kayitlar.toast.filter((x) => x.adim.startsWith(ad) && x.tur === "error").map((x) => `${x.metin.slice(0, 140)} (${x.gorsel})`),
   ag: ag.kayitlar.ag.filter((x) => x.adim.startsWith(ad) && !x.beklenen).map((x) => `${x.status} ${x.yontem} ${x.url} — ${x.mesaj ?? ""}`),
@@ -419,7 +421,9 @@ async function gitSayfa(ad) {
   if (await acici.count()) await acici.click(); else await page.keyboard.press("Meta+k");
   const kutu = page.getByPlaceholder("Sayfa, rapor, ayar ara...");
   await kutu.fill(ad); await page.waitForTimeout(500);
-  const aday = page.getByRole("option", { name: ad }).first();
+  // Tam ad önce: "Siparişler" "Alış Siparişleri"nin alt dizgisidir.
+  const tam = page.getByRole("option", { name: ad, exact: true }).first();
+  const aday = (await tam.count()) ? tam : page.getByRole("option", { name: ad }).first();
   if (await aday.count()) await aday.click(); else await page.keyboard.press("Enter");
   await page.waitForTimeout(1200);
 }
@@ -434,6 +438,35 @@ const dur = {};
 const bicimAyni = (a, b) => a.prefix === b.prefix && a.dateSegment === b.dateSegment && a.digits === b.digits && (a.separator ?? "") === (b.separator ?? "") && (a.separator2 ?? "") === (b.separator2 ?? "");
 /** Katalog önizlemesinden kalıp: sabit baş (ön ek + bugünkü tarih + ayraçlar) + en az `digits` haneli sayaç. */
 const kalip = (r) => new RegExp(`^${esc(String(r.preview).slice(0, -r.digits))}\\d{${r.digits},}$`);
+// K26 SONDASI (K26_SONDA=1): finans sekmeleri açıkken modül kapanır → sayfa yenilenir → hangi istek
+// bayrak yanıtından ÖNCE/SONRA gidiyor, sekmeler ne oluyor. Seri turundan bağımsız.
+if (process.env.K26_SONDA === "1") {
+  const olay = [];
+  const t0 = Date.now();
+  const dinle = (r) => { const u = r.url(); if (/\/api\/(finance\/|feature-flags)/.test(u)) olay.push({ ms: Date.now() - t0, tur: r.status ? "yanıt" : "istek", url: u.replace(ortam.apiUrl, ""), status: r.status ? r.status() : null }); };
+  for (const sayfa of ["Faturalar", "Çek / Senet", "Kasa Hareketleri"]) await gitSayfa(sayfa);
+  await gitSayfa("Anasayfa");
+  const once = (await sistemApi("/api/feature-flags")).govde?.data?.financeEnabled;
+  try {
+    page.on("request", dinle); page.on("response", dinle);
+    const kapat = await sistemApi("/api/feature-flags", { method: "PATCH", headers: sifreBasligi, body: JSON.stringify({ financeEnabled: false }) });
+    olay.push({ ms: Date.now() - t0, tur: "PATCH finans=false", status: kapat.status });
+    await page.reload(); olay.push({ ms: Date.now() - t0, tur: "reload bitti" });
+    await page.waitForTimeout(6000);
+    const sekmeler = await page.locator(".tab-pane").count();
+    const seritler = await page.getByRole("tab").allInnerTexts().catch(() => []);
+    await gitSayfa("Anasayfa"); await page.waitForTimeout(3000);
+    olay.push({ ms: Date.now() - t0, tur: "sekme değişimi sonrası" });
+    const toastlar = await page.locator("[data-sonner-toast]").allInnerTexts().catch(() => []);
+    await gor("K26", "sonda");
+    fs.writeFileSync(path.join(CIKTI, "k26-sonda.json"), JSON.stringify({ olay, sekmeler, seritler, toastlar }, null, 2));
+    console.log(`K26 sondası: ${olay.length} olay, ${olay.filter((o) => o.status === 403).length}×403, sekme ${sekmeler}, toast ${toastlar.length} → k26-sonda.json`);
+  } finally {
+    page.off("request", dinle); page.off("response", dinle);
+    await sistemApi("/api/feature-flags", { method: "PATCH", headers: sifreBasligi, body: JSON.stringify({ financeEnabled: once ?? true }) });
+    await page.reload(); await page.waitForTimeout(3000);
+  }
+}
 if (hepsi.some((r) => r.editable && r.key.startsWith("packingLot"))) {
   ag.adim("K16 · başka istemcinin partisi Yenile'de görünür mü");
   try { await sevkPartisiHazirla(dur); dur.k16 = await k16Sondasi(dur); } catch (e) { dur.k16 = { hata: String(e?.message ?? e).split("\n")[0] }; }
@@ -602,7 +635,15 @@ for (const r of hepsi) {
   console.log(`${kayit.sonuc} ${r.key} [${kip}]${kayit.hata ? ` — ${kayit.hata}` : ""}\n   ${JSON.stringify(kayit.adimlar).slice(0, 700)}`);
   if (Object.values(kayit.ag).some((l) => l.length)) console.log(`   ağ: ${JSON.stringify(kayit.ag).slice(0, 500)}`);
 }
-if (dur.bayrakOnce) { ag.adim("bayraklar geri"); await bayrakYaz(Object.fromEntries(Object.entries(dur.bayrakOnce).filter(([, v]) => v !== undefined))); }
+if (dur.bayrakOnce) {
+  ag.adim("bayraklar geri");
+  const govde = Object.fromEntries(Object.entries(dur.bayrakOnce).filter(([, v]) => v !== undefined));
+  // Modül anahtarları yalnız sistem hesabıyla yazılır (403 MODULE_FLAG_SUPERADMIN_ONLY) — o durumda sistem API'si.
+  ag.beklenen({ url: /\/api\/feature-flags$/ }); // modül anahtarında 403 MODULE_FLAG_SUPERADMIN_ONLY → sistem API'si
+  let r = await bayrakYaz(govde);
+  if (r.status === 403) r = await sistemApi("/api/feature-flags", { method: "PATCH", headers: sifreBasligi, body: JSON.stringify(govde) });
+  console.log(`bayraklar geri: ${r.status} ${JSON.stringify(govde)}`);
+}
 sonuc.push({ key: "TABLET", sonuc: "ÖLÇÜLMEDİ", neden: "adb bağlı değil", kullaniciAdimlari: TABLET_ADIMLARI });
 sonuc.push({ key: "K16", sonuc: dur.k16?.yenileSonrasiGorundu ? "✓" : "✗", sonda: dur.k16 ?? null, akisBayatligi: bayatlik }); yaz();
 if (bayatlik.length) console.log(`⚠ K16 Yenile sonrası bayat parti listesi: ${JSON.stringify(bayatlik)}`);
