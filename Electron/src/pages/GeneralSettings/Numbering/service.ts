@@ -1,4 +1,5 @@
 import apiClient from "@/services/apiClient";
+import { withSettingsPassword } from "@/lib/settings-password";
 import type {
   NumberSeriesRow,
   NumberSourceMode,
@@ -11,6 +12,10 @@ import type {
  * ⚠️ ÖNİZLEME VE ETKİ SAYISI SUNUCUDAN — panel kendi biçimlendiricisini YAZMAZ.
  * Bütün bu işin sebebi iki yerde iki biçimlendirici olmasıydı ("programda P-2,
  * çıktıda P20260202"). Ekran örnek kodu da, etki cümlesindeki sayıyı da ister.
+ *
+ * ⚠️ ÜÇ YAZMA UCU AYAR ŞİFRESİ KAPILI (`requireSettingsPassword`) → `withSettingsPassword`tan geçer:
+ * `apiClient` o 403'ün toast'ını bastırır; sarmalayıcı yoksa ne diyalog açılır ne hata görünür.
+ * Yük sarmalayıcının DIŞINDA bir kez kurulur — şifreyle tekrar AYNI yükü gönderir.
  */
 export const numberingService = {
   async list(): Promise<NumberSeriesRow[]> {
@@ -36,10 +41,11 @@ export const numberingService = {
 
   /** `effectiveFrom` boş = HEMEN (bugünkü davranış); dolu = ileri tarihli geçiş. */
   async update(key: string, fmt: SeriesFormatInput, effectiveFrom?: string): Promise<void> {
-    await apiClient.patch(`/api/number-series/${encodeURIComponent(key)}`, {
+    const body = {
       ...fmt,
       ...(effectiveFrom ? { effectiveFrom: new Date(`${effectiveFrom}T00:00:00`).toISOString() } : {}),
-    });
+    };
+    await withSettingsPassword((headers) => apiClient.patch(`/api/number-series/${encodeURIComponent(key)}`, body, { headers }));
   },
 
   /**
@@ -56,10 +62,14 @@ export const numberingService = {
 
   /** Numara kaynağı AYRI uç: biçim/sayaç/kaynak üçü farklı kilitlere tabi. */
   async updateSource(key: string, numberSource: NumberSourceMode): Promise<void> {
-    await apiClient.patch(`/api/number-series/${encodeURIComponent(key)}/source`, { numberSource });
+    await withSettingsPassword((headers) =>
+      apiClient.patch(`/api/number-series/${encodeURIComponent(key)}/source`, { numberSource }, { headers }),
+    );
   },
 
   async updateCounter(key: string, ayar: SeriesCounterInput): Promise<void> {
-    await apiClient.patch(`/api/number-series/${encodeURIComponent(key)}/counter`, ayar);
+    await withSettingsPassword((headers) =>
+      apiClient.patch(`/api/number-series/${encodeURIComponent(key)}/counter`, ayar, { headers }),
+    );
   },
 };
