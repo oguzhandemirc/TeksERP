@@ -99,6 +99,12 @@ export interface NumberSeriesRow {
    */
   countBirim?: "kayıt" | "belge";
   preview: string;
+  /** Vadesi gelmemiş biçim değişikliği — SUNUCUDAN; panel hesaplamaz. */
+  pending?: { effectiveFrom: string; preview: string };
+  /** Bugünkü biçim OKUTULAN başka bir seriye de uyuyor (bilgi, engel değil). */
+  scanOverlapWith?: string;
+  /** Sınıra yaklaşan seride tükenme durumu — listede de görünür (K8). */
+  exhaustion?: SeriesExhaustion;
 }
 
 export interface SeriesFormatInput {

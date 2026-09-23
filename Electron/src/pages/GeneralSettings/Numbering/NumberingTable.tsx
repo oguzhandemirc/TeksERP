@@ -65,7 +65,21 @@ function NumberingRow({
       <td className="p-2 font-mono text-xs">{row.prefix}</td>
       <td className="hidden p-2 text-xs sm:table-cell">{row.dateSegment}</td>
       <td className="hidden p-2 text-xs sm:table-cell">{row.digits}</td>
-      <td className="p-2 font-mono text-xs">{row.preview}</td>
+      <td className="p-2 font-mono text-xs">
+        {row.preview}
+        {/* TÜKENME LİSTEDE de görünür (K8): biçimi kilitli seride (top barkodu)
+            kullanıcı kapasitenin dolduğunu başka hiçbir yerde göremiyordu. */}
+        {row.exhaustion?.warn && (
+          <div className="mt-0.5 text-[10px] font-medium text-destructive">
+            {row.exhaustion.used?.toLocaleString("tr-TR")}/{row.exhaustion.limit?.toLocaleString("tr-TR")} — sınıra yaklaşıldı
+          </div>
+        )}
+        {row.pending && (
+          <div className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-400">
+            {new Date(row.pending.effectiveFrom).toLocaleDateString("tr-TR")} → {row.pending.preview}
+          </div>
+        )}
+      </td>
       <td className="p-2 text-right">
         {/* ⚠️ BİÇİM kilidi satırı kapatmaz: sayaç ayarları AYRI bir kilide tabi
             ve biçimi kilitli 46 seride AÇIK. Yalnız `editable`a bakan bir düğme,

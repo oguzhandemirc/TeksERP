@@ -175,7 +175,10 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   // ── Okutulan seriler (istemci sınıflandırmasına girer) ─────────────────────
   {
     key: "roll",
-    ownCounter: { not: "Sıra `roll_barcode_counters` tablosundan atomik olarak alınır (`INSERT … ON CONFLICT DO UPDATE n = n + :count RETURNING n`), mevcut kodlardan türetilmez; kapasite ayrı bir sabittir (`MAX_ROLL_SEQ`)." },
+    // Teknik ayrıntı YORUMDA kalır: sıra `roll_barcode_counters` üzerinde
+    // `INSERT … ON CONFLICT DO UPDATE` ile atomik alınır, kapasite `MAX_ROLL_SEQ`.
+    // Kullanıcıya dönen cümlede tablo/sabit adı GEÇMEZ.
+    ownCounter: { not: "Top barkodunun sırası kendi sayaç tablosundan atomik olarak alınır, var olan kodlardan hesaplanmaz; günlük kapasitesi de ayrı bir sınırdır." },
     panelGroup: "uretim",
     label: "Top barkodu",
     seedPrefix: "T",
@@ -195,8 +198,9 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
         "ama bağ olmadığı BEYAN EDİLİR — bu satır sınıflandırma (`kind`/`infix`) içindir, " +
         "üreteci sürmez.",
     },
+    // Teknik ayrıntı: faz harfi `RollBarcodeCounter` anahtarının parçasıdır.
     lockedReason:
-      "Kod tarih ile sıra ARASINDA faz harfi taşır (H/F) ve bu harf `RollBarcodeCounter` anahtarının parçasıdır; yapı seri biçimiyle ifade edilemez.",
+      "Top barkodundaki H/F harfi (ham/final) barkodun yapısal parçasıdır ve tarih ile sıra arasında durur; bu yapı biçim ayarıyla anlatılamaz.",
   },
   {
     key: "workOrder",
@@ -306,7 +310,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   {
     key: "packingLotName",
     manualEntry: { path: "services/packing-group.service.ts", not: "Grup/parti adı elle verilirse sıra HİÇ tahsis edilmez; bu seri OKUTULMUYOR." },
-    ownCounter: { not: "Adın sırası sayaçtan değil GRUBUN KENDİ sırasından gelir (`formatPackingGroupName(seq)`); seri yalnız ön eki ve ayracı verir." },
+    ownCounter: { not: "Sevk partisi adının sırası sayaçtan değil grubun kendi sırasından gelir; seri yalnız ön eki ve ayracı belirler." },
     panelGroup: "sevkiyat",
     label: "Sevk partisi adı",
     seedPrefix: "P",
@@ -343,7 +347,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     },
   },
   { key: "directShipment", panelGroup: "fason-kartela", countTable: { model: "directShipment", field: "shipmentNo", birim: "belge" }, label: "Doğrudan sevk no", seedPrefix: "DSK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "manifest", panelGroup: "uretim", countTable: { model: "manifest", field: "manifestNo", birim: "belge" }, label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "manifest", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kod listesi `formatChangedAt` damgasına göre süzülüyor ve çakışma atlaması aynı yerde (E2 depo-ticaret dilimi, 2026-09-23)." }, panelGroup: "uretim", countTable: { model: "manifest", field: "manifestNo", birim: "belge" }, label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   {
     key: "order",
     panelGroup: "depo-ticaret",
@@ -359,7 +363,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   // ── Üretim / depo ──────────────────────────────────────────────────────────
   {
     key: "batchDaily",
-    ownCounter: { not: "İki üreteç yolu var: bayrak açıkken kısa parti kodu (P01…P99, körlemesine SARAR) devreye girer ve sıra `readLastShortBatchSeqTx`ten gelir. Ayar yolların yalnız BİRİNDE etkili olurdu — yarısı çalışan bir ayar, hiç çalışmayandan kötüdür." },
+    ownCounter: { not: "Parti numarasının iki ayrı üretim yolu var ve sayaç ayarı yalnız birinde etkili olurdu; yarısı çalışan bir ayar yerine kapalı tutuluyor." },
     panelGroup: "uretim",
     countTable: { model: "batch", field: "batchNumber", birim: "kayıt" },
     label: "Parti no (günlük biçim)",
@@ -368,16 +372,16 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     seedDigits: 1,
     seedSeparator: "",
     lockedReason:
-      "Parti no fabrikanın FİZİKSEL plaka setine bağlı (P01…P99 körlemesine sarar, benzersiz değil — 2026-08-05 kullanıcı kararı); dolgusuzluk ve sarma biçim ayarıyla ifade edilemez.",
+      "Parti numarası fabrikanın fiziksel plaka setine bağlıdır (P01 ile P99 arası, dolduğunda başa sarar ve benzersiz değildir); dolgusuzluk ve başa sarma biçim ayarıyla anlatılamaz.",
   },
   { key: "weavingOrder", panelGroup: "uretim", countTable: { model: "weavingOrder", field: "weavingOrderNumber", birim: "kayıt" }, label: "Dokuma işi no", seedPrefix: "DK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "warpBeam", panelGroup: "uretim", countTable: { model: "warpBeam", field: "beamNo", birim: "kayıt" }, label: "Levent no", seedPrefix: "LV", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "doffEvent", panelGroup: "uretim", countTable: { model: "doffEvent", field: "code", birim: "kayıt" }, label: "Doff kodu", seedPrefix: "DF", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "goodsReceipt", panelGroup: "depo-ticaret", countTable: { model: "goodsReceipt", field: "receiptNo", birim: "belge" }, label: "Mal kabul fiş no", seedPrefix: "MK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "purchaseOrder", panelGroup: "depo-ticaret", countTable: { model: "purchaseOrder", field: "orderNo", birim: "belge" }, label: "Alış siparişi no", seedPrefix: "AS", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "warehouseTransfer", panelGroup: "depo-ticaret", countTable: { model: "warehouseTransfer", field: "transferNo", birim: "belge" }, label: "Depo transfer no", seedPrefix: "DT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "stockCount", panelGroup: "depo-ticaret", countTable: { model: "stockCount", field: "countNo", birim: "belge" }, label: "Sayım no", seedPrefix: "SAY", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "freeDocument", panelGroup: "depo-ticaret", countTable: { model: "freeDocument", field: "documentNo", birim: "belge" }, label: "Serbest belge no", seedPrefix: "SB", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "goodsReceipt", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kapsam damgası + çakışma atlaması tek yerde (E2, 2026-09-23)." }, panelGroup: "depo-ticaret", countTable: { model: "goodsReceipt", field: "receiptNo", birim: "belge" }, label: "Mal kabul fiş no", seedPrefix: "MK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "purchaseOrder", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kapsam damgası + çakışma atlaması tek yerde (E2, 2026-09-23)." }, panelGroup: "depo-ticaret", countTable: { model: "purchaseOrder", field: "orderNo", birim: "belge" }, label: "Alış siparişi no", seedPrefix: "AS", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "warehouseTransfer", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kapsam damgası + çakışma atlaması tek yerde (E2, 2026-09-23)." }, panelGroup: "depo-ticaret", countTable: { model: "warehouseTransfer", field: "transferNo", birim: "belge" }, label: "Depo transfer no", seedPrefix: "DT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "stockCount", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kapsam damgası + çakışma atlaması tek yerde (E2, 2026-09-23)." }, panelGroup: "depo-ticaret", countTable: { model: "stockCount", field: "countNo", birim: "belge" }, label: "Sayım no", seedPrefix: "SAY", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "freeDocument", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kapsam damgası + çakışma atlaması tek yerde (E2, 2026-09-23)." }, panelGroup: "depo-ticaret", countTable: { model: "freeDocument", field: "documentNo", birim: "belge" }, label: "Serbest belge no", seedPrefix: "SB", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
 
   // ── Finans ─────────────────────────────────────────────────────────────────
   { key: "invoiceSales", panelGroup: "finans", countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Satış faturası no", seedPrefix: "SF", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },

@@ -26,8 +26,14 @@ import {
   type NumberSeriesPanelGroup,
 } from "../../constants/number-series-catalog";
 import prisma from "../../lib/prisma";
-import { previewSeriesCode, resolveSeriesFormat } from "../number-series.service";
-import type { NumberSeriesFormat } from "./series-format.helper";
+import { rollBarcodePrefix } from "./roll-barcode.helper";
+import {
+  nextSeriesNo,
+  pendingSeriesLine,
+  previewSeriesCode,
+  resolveSeriesFormat,
+} from "../number-series.service";
+import { matchesSeries, type NumberSeriesFormat } from "./series-format.helper";
 
 /**
  * Serinin BUGÜN düzenlenebilir olup olmadığı ve OLMADIYSA neden.
@@ -244,6 +250,86 @@ export function seriesSourceCapability(key: string): SeriesSourceCapability {
   };
 }
 
+/**
+ * PANELDE GÖSTERİLECEK ÖRNEK KOD — üreteci olan seride O ÜRETEÇTEN.
+ *
+ * ⚠️ `previewSeriesCode` yalnız BİÇİMİ uygular; katalogdaki `infix` (bugün top
+ * barkodunun H/F faz harfi) bir YAPI parçasıdır ve önizlemede düşerdi. Sonuç,
+ * ekranda gerçekte hiç üretilmeyen bir kod göstermekti — "örnek kod literali
+ * yazma" kuralının aynı sınıftaki kardeşi: yanlış yoldan türetmek de yalandır.
+ */
+function seriesOrnekKod(key: string, fmt: NumberSeriesFormat): string {
+  if (key === "roll") return `${rollBarcodePrefix("H")}0001`;
+  return previewSeriesCode(fmt);
+}
+
+/**
+ * BU SERİNİN BUGÜNKÜ BİÇİMİ OKUTULAN BİR SERİYLE ÇAKIŞIYOR MU? (bilgi, engel DEĞİL)
+ *
+ * ⚠️ Kapı bu çakışmayı ENGELLEMEZ (devralınmış olabilir; yeni bir kural var olan
+ * ayarı bir anda kaydedilemez yapamaz) ama SUSMAZ da: bugün `cashAccount` (`KS`)
+ * ile `kartelaDispatch` (`KS`) bu durumda ve fark, bilerek bırakılmış bir çakışma
+ * ile bilmeden bırakılmış olan arasındadır.
+ */
+function scanOverlapLabel(key: string, fmt: NumberSeriesFormat): string | null {
+  const kod = previewSeriesCode(fmt);
+  for (const other of NUMBER_SERIES_CATALOG) {
+    if (other.key === key || !other.kind) continue;
+    if (matchesSeries(resolveSeriesFormat(other.key), kod)) return other.label;
+  }
+  return null;
+}
+
+/**
+ * SIRADAKİ NUMARA — sayacı TÜKETMEDEN, üretim yolunun KENDİ hesabıyla (K19).
+ *
+ * ⚠️ Ekrandaki "Örnek" hep sıra 1'i gösteriyordu ve kullanıcı onu SIRADAKİ numara
+ * sanıyordu (d3 ölçtü 2026-09-23: ekranda `PZ-1`, oysa açılan kayıt `PZ-4`). İki
+ * satır iki ayrı soruyu cevaplar: biçim örneği ("kod neye benzeyecek") ve sıradaki
+ * numara ("bir sonraki kayıt hangi numarayı alacak").
+ *
+ * ⚠️ ÜÇ SONUÇ: kendi sayaç mekanizması olan seri (`ownCounter`) ve sayım kaynağı
+ * olmayan seri `null` döner — ekran "—" yazar, sayı UYDURMAZ.
+ *
+ * ⚠️ ÖNİZLEMEDİR, REZERVASYON DEĞİL: numara üretim anında tx içinde belirlenir;
+ * arada doğan bir kayıt sıradakini alabilir. Yazma yapmaz.
+ */
+export async function previewNextNumber(
+  key: string,
+  fmtOverride?: NumberSeriesFormat,
+): Promise<string | null> {
+  const e = numberSeriesCatalogEntry(key);
+  if (e.ownCounter || !e.countTable) return null;
+  const delegate = (prisma as unknown as Record<string, { findMany: (a?: unknown) => Promise<unknown[]> }>)[
+    e.countTable.model
+  ];
+  if (!delegate) return null;
+  const alan = e.countTable.field;
+  try {
+    return await nextSeriesNo(
+      key,
+      async (fullPrefix) => {
+        const rows = (await delegate.findMany({
+          where: { [alan]: { gte: fullPrefix, startsWith: fullPrefix } },
+          select: { [alan]: true, createdAt: true },
+        })) as Array<Record<string, unknown>>;
+        // ⚠️ `{ code, createdAt }` biçimine ÇEVİRİLİR: kapsam damgası (createdAt)
+        // olmadan sayaç eski rejimin kodlarını da sayardı — üretim yolunun aynı
+        // sözleşmesi (`SeriesCodeRow`).
+        return rows.map((r) => ({
+          code: (r[alan] as string | null) ?? null,
+          createdAt: r.createdAt as Date,
+        }));
+      },
+      new Date(),
+      fmtOverride,
+    ).then((kod) => kod);
+  } catch {
+    // Sıra tükenmesi gibi hâller ÖNİZLEMEYİ düşürmez: "—" gösterilir.
+    return null;
+  }
+}
+
 /** Liste ucu — katalog kimliği + yürürlükteki biçim + örnek. */
 export function listSeries(): Array<
   NumberSeriesFormat & {
@@ -271,6 +357,15 @@ export function listSeries(): Array<
     maxValue: number | null;
     separator2: string | null;
     preview: string;
+    /** Vadesi gelmemiş biçim değişikliği — panel "bekleyen değişiklik" satırı. */
+    pending?: { effectiveFrom: string; preview: string };
+    /**
+     * DEVRALINAN ÇAKIŞMA — bu serinin bugünkü biçimiyle üretilen kod, OKUTULAN
+     * başka bir serininkine de uyuyor. Engellenmiyor (yeni kural eski ayarı
+     * kaydedilemez yapamaz) ama kullanıcıya SÖYLENİYOR: bilmeden bırakılmış bir
+     * çakışma ile bilerek bırakılmış olan arasındaki fark budur.
+     */
+    scanOverlapWith?: string;
   }
 > {
   // ⚠️ SIRA BACKEND'DE: panel grupları kendi listesine göre dizerse, backend yeni
@@ -312,7 +407,26 @@ export function listSeries(): Array<
       startValue: fmt.startValue ?? null,
       step: fmt.step ?? null,
       maxValue: fmt.maxValue ?? null,
-      preview: previewSeriesCode(fmt),
+      // ⚠️ ÖRNEK KENDİ ÜRETECİNDEN: `previewSeriesCode` katalog `infix`ini YAZMAZ
+      // (top barkodunun faz harfi), yani düz türetme `T2309260001` gibi GERÇEKTE
+      // ÜRETİLMEYEN bir kod gösteriyordu — gerçeği `T140926H0113` (d3 ölçtü
+      // 2026-09-23). Üreteci olan seride örnek O ÜRETEÇTEN kurulur.
+      preview: seriesOrnekKod(e.key, fmt),
+      ...(() => {
+        const p = pendingSeriesLine(e.key);
+        return p
+          ? {
+              pending: {
+                effectiveFrom: p.effectiveFrom.toISOString(),
+                preview: previewSeriesCode({ ...fmt, ...p.fmt }),
+              },
+            }
+          : {};
+      })(),
+      ...(() => {
+        const ortak = scanOverlapLabel(e.key, fmt);
+        return ortak ? { scanOverlapWith: ortak } : {};
+      })(),
     };
   });
 }

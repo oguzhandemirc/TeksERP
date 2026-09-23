@@ -74,7 +74,7 @@ const kaydet = (): HTMLElement => screen.getByRole("button", { name: "Kaydet" })
 describe("Numaralandırma diyaloğu — bölüm bölüm hata", () => {
   beforeEach(() => {
     vi.mocked(numberingService.preview).mockReset();
-    vi.mocked(numberingService.preview).mockResolvedValue("IE2309230001");
+    vi.mocked(numberingService.preview).mockResolvedValue({ preview: "IE2309230001", next: "IE2309230004" });
   });
 
   it("⭐ §1 kilitli seride önizleme ucuna İSTEK GİTMEZ", () => {
@@ -107,13 +107,31 @@ describe("Numaralandırma diyaloğu — bölüm bölüm hata", () => {
     expect(kaydet()).not.toBeDisabled(); // sayaç bölümü bağımsız
   });
 
+  it("⭐ §5 ALAN mesajı gösterilir: `errors[0].message` `message`in önüne geçer", async () => {
+    // d3 ölçtü (2026-09-23): sunucu alan mesajını `errors[]`te döndürüyor, gövdedeki
+    // `message` yalnız "Validasyon hatası" diyor. Ekran `message`i tek başına
+    // okuyunca kullanıcı sebebi HİÇ görmüyordu.
+    vi.mocked(numberingService.preview).mockRejectedValue({
+      response: {
+        data: {
+          message: "Validasyon hatası",
+          errors: [{ field: "digits", message: "Hane sayısı en fazla 8 olabilir." }],
+        },
+      },
+    });
+    ciz(row({ key: "packingLotCode", editable: true, lockKind: undefined, lockedReason: undefined }));
+    expect(await screen.findByText("Hane sayısı en fazla 8 olabilir.")).toBeTruthy();
+    expect(screen.queryByText("Validasyon hatası")).toBeNull();
+  });
+
   it("⭐ §3 önizleme hatası: örnek '—' olur ve hata BİÇİM bölümünde görünür", async () => {
     vi.mocked(numberingService.preview).mockRejectedValue({
       response: { data: { message: "Hane sayısı en fazla 8 olabilir." } },
     });
     ciz(row({ key: "packingLotCode", editable: true, lockKind: undefined, lockedReason: undefined }));
     expect(await screen.findByText("Hane sayısı en fazla 8 olabilir.")).toBeTruthy();
-    expect(screen.getByText("—")).toBeTruthy();
+    // İKİ kutu da "—" olur: bayat örnek DE bayat "sıradaki numara" DA kalmaz.
+    expect(screen.getAllByText("—")).toHaveLength(2);
   });
 
   it("⭐ §4 geçersiz sayaç değeri Kaydet'i bağlar, mesaj alanın yanındadır", () => {

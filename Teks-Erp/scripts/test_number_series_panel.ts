@@ -93,6 +93,7 @@ import {
   listSeries,
   seriesCounterCapabilities,
   seriesSourceCapability,
+  previewNextNumber,
   seriesImpactCount,
   seriesLock,
 } from "../src/services/helpers/series-panel.helper";
@@ -102,6 +103,8 @@ import {
   planRetiredPrefixCleanup,
   retiredPrefixesAfterChange,
 } from "../src/services/helpers/series-retired.helper";
+import { cancelPendingSeriesFormat } from "../src/services/helpers/series-pending.helper";
+import { pendingSeriesLine } from "../src/services/number-series.service";
 import {
   scanningClientsCarryFazB,
   scanningClientsCarryFazD,
@@ -143,6 +146,16 @@ const kod = (e: unknown): string | undefined =>
   (e as { details?: { code?: string } } | null)?.details?.code;
 
 /** SENKRON kapı sondası — fırlatmazsa false, farklı kodla fırlatırsa da false. */
+/** Herhangi bir hata fırlattı mı? ("hiç fırlamamalı" iddiaları için.) */
+function throwsAny(fn: () => void): boolean {
+  try {
+    fn();
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 function throws(fn: () => void, beklenen: string): boolean {
   try {
     fn();
@@ -710,6 +723,61 @@ async function main(): Promise<void> {
       woOrnek.workOrderNumber === previewSeriesCode(resolveSeriesFormat("workOrder"), 1),
       `${String(woOrnek.workOrderNumber)}`);
 
+    // ── §13 KULLANICIYA DÖNEN METİNDE JARGON YOK (K2, 2026-09-23) ──────────
+    // ⚠️ Bu metinler EKRANDA görünür: kilit gerekçesi, sayaç kilidi gerekçesi,
+    // seri adı. İçlerinde tablo/fonksiyon adı, backtick ya da dosya yolu geçmesi
+    // kullanıcıya hiçbir şey söylemez — "RollBarcodeCounter anahtarının parçası"
+    // cümlesi d3'ün panel turunda tam olarak böyle göründü. Teknik ayrıntı
+    // YORUMDA yaşar; ekrana çıkan cümle kullanıcı dilindedir.
+    const ekranMetinleri: Array<{ nerede: string; metin: string }> = [];
+    for (const e of NUMBER_SERIES_CATALOG) {
+      ekranMetinleri.push({ nerede: `${e.key}.label`, metin: e.label });
+      if (e.lockedReason) ekranMetinleri.push({ nerede: `${e.key}.lockedReason`, metin: e.lockedReason });
+      if (e.ownCounter) ekranMetinleri.push({ nerede: `${e.key}.ownCounter`, metin: e.ownCounter.not });
+    }
+    for (const e of NUMBER_SERIES_CATALOG) {
+      const lock = seriesLock(e.key);
+      if (lock) {
+        ekranMetinleri.push({ nerede: `${e.key}.lock.reason`, metin: lock.reason });
+        ekranMetinleri.push({ nerede: `${e.key}.lock.acilma`, metin: lock.acilma });
+      }
+      ekranMetinleri.push({ nerede: `${e.key}.resetReason`, metin: seriesCounterCapabilities(e.key).resetReason });
+    }
+    // Jargon ölçütü: backtick · dosya uzantısı · fonksiyon çağrısı · camelCase ya
+    // da snake_case TANIMLAYICI. Türkçe cümlede geçen büyük harfli kısaltmalar
+    // (P01, H/F, KK) jargon DEĞİLDİR — onlar sahada kullanılan adlardır.
+    const jargonlu = ekranMetinleri.filter(({ metin }) =>
+      metin.includes("`") ||
+      /\.(ts|tsx|sql|mjs)\b/.test(metin) ||
+      /[A-Za-z_][\w.]*\(\)/.test(metin) ||
+      /\b[a-z]+[A-Z][A-Za-z]*\b/.test(metin) ||
+      /\b[a-z]+_[a-z_]+\b/.test(metin));
+    check("§13 körlük zemini: ekran metinleri toplandı", ekranMetinleri.length > 100, `${ekranMetinleri.length} metin`);
+    check("§13 ⭐ kullanıcıya dönen metinde jargon YOK (backtick · dosya · tanımlayıcı)",
+      jargonlu.length === 0,
+      jargonlu.map((x) => `${x.nerede}: "${x.metin.slice(0, 60)}…"`).join(" · "));
+
+    // ── §14 SONUÇ KAPISI (K6): ön ek eşitliği değil, KODUN ÇÖZÜLDÜĞÜ TÜR ──────
+    // ⚠️ Okutulmayan bir serinin ürettiği kod, okutulan bir türe ÇÖZÜLEBİLİR ve
+    // ön ek karşılaştırması bunu SORAMIYORDU (ölçüldü 2026-09-23: okutulmayan 43
+    // seri × okutulan ön ekler = 215 deneme, çakışma reddi 0).
+    const cv = resolveSeriesFormat("sack");
+    check("§14 ⭐ okutulmayan seri, OKUTULAN bir türe çözülen kod üretemez",
+      throws(() => assertSeriesFormatAllowed("packingLotCode", {
+        ...resolveSeriesFormat("packingLotCode"), prefix: cv.prefix, dateSegment: cv.dateSegment,
+        digits: cv.digits, separator: cv.separator, separator2: cv.separator2,
+      }), "NUMBER_SERIES_SCAN_COLLISION"));
+    // ⚠️ KAPI YENİ İHLALİ ENGELLER, BUGÜNKÜ DURUMU YASAKLAMAZ: `cashAccount` (KS)
+    // bugün `kartelaDispatch` (KS) biçimine uyuyor ve bu çakışma BEYANLI/zararsız.
+    // Koşulsuz bir kapı, o serinin hane sayısını bile değiştirilemez yapardı.
+    const devralinanOrnek = NUMBER_SERIES_CATALOG.filter((e) => !e.lockedReason && !throwsAny(() =>
+      assertSeriesFormatAllowed(e.key, resolveSeriesFormat(e.key))));
+    check("§14 ⭐ 52 serinin BUGÜNKÜ biçimi kapıdan geçiyor (devralınan çakışma yasaklanmaz)",
+      devralinanOrnek.length === NUMBER_SERIES_CATALOG.filter((e) => !e.lockedReason).length,
+      `${devralinanOrnek.length}/${NUMBER_SERIES_CATALOG.filter((e) => !e.lockedReason).length}`);
+    check("§14 ⭐ devralınan çakışmada BİÇİMİN BAŞKA EKSENİ değiştirilebiliyor (hane)",
+      !throwsAny(() => assertSeriesFormatAllowed("cashAccount", { ...resolveSeriesFormat("cashAccount"), digits: 5 })));
+
     // ── §7 KAPASİTE ve TÜKENME (D2③) ────────────────────────────────────────
     // ⭐ §7a ENVANTER ŞEMAYLA AYRIŞMIYOR: kapasite dosyası `@db.VarChar(n)`
     // kopyalarıdır; kopya bayatlarsa kapı yanlış yerde durur ya da hiç durmaz.
@@ -775,6 +843,117 @@ async function main(): Promise<void> {
     check("§7c ⭐ sağlık yüzeyi AYNI helper'dan besleniyor (iki yüzey tek hesap)",
       uyarilar.some((u) => u.key === "packingLotCode"),
       uyarilar.map((u) => u.key).join(", ") || "(boş)");
+
+    // ── §15 BEKLEYEN DEĞİŞİKLİK: göster · değiştir · iptal et (K4) ─────────
+    // ⚠️ Vadesi GELMEMİŞ satır bir TASLAKTIR: onunla numara doğmadı, silinmesi
+    // raporlanan hiçbir sayıyı değiştirmez ⇒ defter doktrininin ④ sınıfı, sert
+    // silme meşru (ATOMİK CLAIM ile). Yürürlüğe girmiş satır bu yoldan SİLİNEMEZ.
+    const KOSUM_BASI = new Date(Date.now() - 5 * 60 * 1000);
+    const lotDamgaOncesi = (await prisma.numberSeries.findUnique({
+      where: { key: "packingLotCode" }, select: { formatChangedAt: true },
+    }))?.formatChangedAt ?? null;
+    const yarin = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const obur = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const lotYurur = resolveSeriesFormat("packingLotCode");
+    // ⚠️ YALNIZ BİÇİM ALANLARI: `resolveSeriesFormat` sayaç/kaynak alanlarını da
+    // taşır ve onlar satır şemasında YOK — yazma ucunun sözleşmesi beş alandır.
+    const lotFmt = {
+      prefix: lotYurur.prefix, dateSegment: lotYurur.dateSegment, digits: lotYurur.digits,
+      separator: lotYurur.separator, separator2: lotYurur.separator2 ?? null,
+    };
+    try {
+      await updateSeriesFormat("packingLotCode", { ...lotFmt, prefix: "PRT" }, undefined, yarin);
+      sayacDokunulan.push("packingLotCode");
+      const bekleyen = pendingSeriesLine("packingLotCode");
+      check("§15 ⭐ bekleyen değişiklik panele GÖRÜNÜR (liste ucu taşır)",
+        bekleyen !== null && bekleyen.effectiveFrom.getTime() === yarin.getTime(),
+        bekleyen ? bekleyen.effectiveFrom.toISOString() : "(yok)");
+      const satir = listSeries().find((r) => r.key === "packingLotCode");
+      check("§15 ⭐ liste ucu bekleyen değişikliği örnek koduyla taşıyor",
+        satir?.pending !== undefined && satir.pending.preview.length > 0,
+        satir?.pending?.preview ?? "(yok)");
+      // AYNI TARİHE yeniden kayıt: ham tekillik hatası DEĞİL, DEĞİŞTİRME.
+      const ikinci = await dene(async () =>
+        updateSeriesFormat("packingLotCode", { ...lotFmt, prefix: "PRT", digits: 5 }, undefined, yarin));
+      check("§15 ⭐ aynı tarihe yeniden kayıt bekleyen satırı DEĞİŞTİRİR (P2002 yok)",
+        !(ikinci instanceof Error), ikinci instanceof Error ? (kod(ikinci) ?? ikinci.message) : "değiştirildi");
+      const bekleyen2 = pendingSeriesLine("packingLotCode");
+      check("§15 ⭐ değiştirilen satır TEK kalır ve yeni biçimi taşır",
+        (await prisma.numberSeriesLine.count({ where: { seriesKey: "packingLotCode", effectiveFrom: { gt: new Date() } } })) === 1 &&
+          bekleyen2?.fmt.digits === 5,
+        `hane ${bekleyen2?.fmt.digits}`);
+      // İPTAL: taslak silinir, YÜRÜRLÜKTEKİ biçim DEĞİŞMEZ.
+      const oncekiYururluk = resolveSeriesFormat("packingLotCode");
+      const iptalAdet = await cancelPendingSeriesFormat("packingLotCode");
+      const sonrakiYururluk = resolveSeriesFormat("packingLotCode");
+      check("§15 ⭐ iptal bekleyen satırı siler, YÜRÜRLÜKTEKİ biçime dokunmaz",
+        iptalAdet === 1 && pendingSeriesLine("packingLotCode") === null &&
+          sonrakiYururluk.prefix === oncekiYururluk.prefix && sonrakiYururluk.digits === oncekiYururluk.digits);
+      const bosIptal = await dene(async () => cancelPendingSeriesFormat("packingLotCode"));
+      check("§15 ⭐ bekleyen yokken iptal 409 `NUMBER_SERIES_NO_PENDING` (sessiz başarı YOK)",
+        bosIptal instanceof Error && kod(bosIptal) === "NUMBER_SERIES_NO_PENDING");
+      // ⭐ ATOMİK CLAIM: YÜRÜRLÜĞE GİRMİŞ satır bu yoldan silinemez.
+      const yururlukteSatir = await prisma.numberSeriesLine.count({
+        where: { seriesKey: "packingLotCode", effectiveFrom: { lte: new Date() } },
+      });
+      await updateSeriesFormat("packingLotCode", { ...lotFmt, prefix: "PRT" }, undefined, obur);
+      await cancelPendingSeriesFormat("packingLotCode");
+      check("§15 ⭐ iptal YÜRÜRLÜKTEKİ (geçmiş) satırlara DOKUNMAZ — defter korunur",
+        (await prisma.numberSeriesLine.count({
+          where: { seriesKey: "packingLotCode", effectiveFrom: { lte: new Date() } },
+        })) === yururlukteSatir,
+        `${yururlukteSatir} satır`);
+    } finally {
+      // ⚠️ TEMİZLİK "VADESİ GELMEMİŞ" DEĞİL, "BU KOŞUMUN YARATTIĞI" satırları siler
+      // (ölçüldü 2026-09-23): yalnız gelecek satırları silen bir teardown,
+      // yürürlüğe girmiş bir fikstür satırını bırakıyor ve SONRAKİ koşumda
+      // `activateDueLines` onu vadesi gelmiş sanıp `formatChangedAt`i yazıyor —
+      // §6d bir sonraki koşumda kırmızı veriyordu. Artık `fixtureLines` ile
+      // id bazlı silinir (dosyanın ortak teardown'ı).
+      const kalanlar = await prisma.numberSeriesLine.findMany({
+        where: { seriesKey: "packingLotCode", isSentinel: false, createdAt: { gte: KOSUM_BASI } },
+        select: { id: true },
+      });
+      fixtureLines.push(...kalanlar.map((x) => x.id));
+      await prisma.numberSeriesLine.deleteMany({ where: { id: { in: kalanlar.map((x) => x.id) } } });
+      await prisma.numberSeries.update({
+        where: { key: "packingLotCode" },
+        data: { formatChangedAt: lotDamgaOncesi },
+      });
+      await refreshNumberSeriesCache();
+    }
+
+    // ── §16 ÖRNEK KOD ÜRETECİNDEN + SIRADAKİ NUMARA (K8 · K19) ─────────────
+    // ⚠️ `previewSeriesCode` katalog `infix`ini YAZMAZ: top barkodunun faz harfi
+    // düşüyor ve ekranda GERÇEKTE ÜRETİLMEYEN bir kod görünüyordu (d3 ölçtü:
+    // ekranda `T2309260001`, gerçeği `T140926H0113`).
+    const rollSatir = listSeries().find((r) => r.key === "roll");
+    check("§16 ⭐ top barkodu örneği FAZ HARFİNİ taşıyor (kendi üretecinden)",
+      /^T\d{6}[HF]\d{4}$/.test(rollSatir?.preview ?? ""), rollSatir?.preview ?? "(yok)");
+    // Sıradaki numara: GERÇEKTEN açılan bir sonraki kaydın numarası (yarış yoksa).
+    // ⚠️ ÖNCE ÜST SINIR KALDIRILIR: §7c bu seride sınırı 10'a çekiyor ve sıra ona
+    // dayandığında "sıradaki numara" ölçülemez olur (doğru davranış, ama ölçmek
+    // istediğimiz eksen bu değil). Bölümler arası bağımlılık BEYANLIDIR.
+    await updateSeriesCounter("packingLotCode", { startValue: null, step: null, maxValue: null });
+    const siradaki = await previewNextNumber("packingLotCode");
+    check("§16 ⭐ sıradaki numara ölçülüyor (sayaç kaynağı olan seride)",
+      siradaki !== null && siradaki.startsWith(seriesPrefix(resolveSeriesFormat("packingLotCode"), new Date())),
+      siradaki ?? "(null)");
+    if (musteri && siradaki) {
+      const yeniGrup = await prisma.packingGroup.create({
+        data: { customerId: musteri.id, name: `${DAMGA} sira`, code: siradaki.slice(0, 16) },
+        select: { id: true, code: true },
+      });
+      fixtureGroups.push(yeniGrup.id);
+      check("§16 ⭐ sıradaki numara GERÇEKTEN bir sonraki kayda yazılabiliyor (tekil)",
+        yeniGrup.code === siradaki.slice(0, 16));
+      const sonraki = await previewNextNumber("packingLotCode");
+      check("§16 ⭐ kayıt açılınca sıradaki numara İLERLİYOR (donmuş değer değil)",
+        sonraki !== null && sonraki !== siradaki, `${siradaki} → ${sonraki}`);
+    }
+    // ÜÇ SONUÇ: kendi sayacı olan seride "ölçülemedi" (null) — ekran "—" yazar.
+    check("§16 ⭐ kendi sayacı olan seride sıradaki numara `null` (uydurulmaz)",
+      (await previewNextNumber("roll")) === null);
 
     // ── §8 NUMARA KAYNAĞI (D3①) ─────────────────────────────────────────────
     // ⭐ §8a BEYAN GERÇEK Mİ: `manualEntry.path` var olmayan bir dosyayı

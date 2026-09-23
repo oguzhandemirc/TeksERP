@@ -89,6 +89,20 @@ iddia yine de kurulmamıştır.
 başından bir damga (koşum başlangıcı, son commit zamanı) ile karşılaştır.
 Kuşatamıyorsan iddiayı daralt: *"şu an temiz"* de, *"o sırada temizdi"* deme.
 
+### ERKEN türetme — doğru kaynak, yanlış AN
+Bir değer doğru kaynaktan türetiliyor ama kaynağın HENÜZ HAZIR OLMADIĞI bir anda
+okunuyorsa, türetme biçimsel olarak yapılmış, amacına ULAŞMAMIŞ olur. En sinsi hâli
+kaynağın **fail-safe bir yedeği** olmasıdır: okuma hata vermez, sessizce yedeğe düşer
+ve sonuç bir daha hiç değişmez — yani sabit yazmakla aynı yere varılır, üstelik
+"türetiyoruz" güvencesiyle.
+*(Ölçüldü 2026-09-23: örnek belge numarası MODÜL YÜKLENİRKEN seriden türetiliyordu;
+o anda numara serisi önbelleği boş olduğu için katalog tohumuna düşüyor ve fabrikanın
+gerçek ön ekini hiç göstermiyordu. İkinci bedel: boş önbellek yükleme anında 52 seriyi
+tazeleyip ~55 sorgu açıyor ve BAŞKA bir bekçinin sorgu bütçesini taşırıyordu.)*
+**Kurtarma:** türetmenin ZAMANINI da kuralın parçası yaz — "türetilebilen türetilir"in
+ikinci yarısı "İSTEK ANINDA türetilir"dir. Kapı, çağrının bir fonksiyon gövdesinde
+(getter dahil) olup olmadığını AST ile sorabilir (`test_seri_modul_yuklemesi`).
+
 ### Sonda geçerliliği sınıfları → ayrı dosya
 Bir sondanın KENDİSİNİN geçerli olup olmadığını soran sınıflar (çöken sonda · inmeyen
 mutasyon · ölü kodu bozan sonda · kapıyı izole etmeyen vaka · yazma yolunu hiç
@@ -194,6 +208,17 @@ disiplini yakaladı.)*
 > **Üçleme tamam — "ölçtüğün araç kapının kendisi değildir":**
 > **kapsam** ayrışır (tam-proje lint ≠ commit kapısı) · **sınır** ayrışır (kırpılmış
 > yığın, § Aracın VARSAYILANI) · **özne** ayrışır (sarmalayıcı ≠ iş, burası).
+
+### Teardown'un ÖLÇÜTÜ "geçici mi" değil, "BU KOŞUM mu yarattı"
+Bir bölümün temizliği "geçici olanları sil" diye yazılırsa, koşum sırasında NİTELİK
+DEĞİŞTİREN artık geride kalır ve bir SONRAKİ koşumda BAŞKA bir bölümü düşürür.
+*(Ölçüldü 2026-09-23: "vadesi gelmemiş biçim satırlarını sil" diyen teardown,
+yürürlüğe girmiş bir fikstür satırını bırakıyordu; sonraki koşumda boot
+uzlaştırması onu vadesi gelmiş sanıp damgayı yazıyor ve İLGİSİZ bir bölüm
+kırmızı veriyordu — arıza, onu üreten bölümde görünmüyordu.)*
+**Kurtarma:** teardown, sildiğini KİMLİKLE bilsin (koşum başında toplanan id ya da
+koşum damgası), duruma göre değil. Yan etkisi olan her bölüm, değiştirdiği DURUMU
+da (damga, bayrak, ayar) geri yükler.
 
 ### Fikstürünü kendi kuran bekçi, KURDUĞUNU da ölçmek zorundadır
 Bir ORM'in `data` nesnesindeki `undefined` **sessizce atılır**: alan hiç yazılmaz, hata

@@ -11563,6 +11563,140 @@ görünmesin). İki sonda: çağrı modül düzeyine konunca dosya:satır ile KI
 **Sınıf:** bu, "türetilebilen türetilir" kuralının ikinci yarısıdır — TÜRETMENİN ZAMANI da kuralın
 parçasıdır. Doğru yerden okunan ama YANLIŞ ANDA okunan bir değer, literal kadar bayattır.
 
+## 2026-09-23 — Çakışma kapısı ÖN EK EŞİTLİĞİNE değil SONUCA bakar (K6) + jargon ve alan mesajı (K2·K5) [ÇEKİRDEK]
+
+**Karar (1e):** ön ek karşılaştırması yanlış soruyu soruyordu. Doğru soru: *bu biçimle üretilecek kod
+barkod okutulduğunda NEYE çözülür?* Aday biçimle iki kod üretilir (ilk sıra + hane taşmış sıra —
+taşma kodu uzatır ve uzun kod daha az haneli başka bir seriye de uyabilir) ve okutulan serilerin
+biçimleriyle sınanır; başka bir türe çözülüyorsa 409 `NUMBER_SERIES_SCAN_COLLISION` ve mesaj sonucu
+söyler. Kapı OKUTULMAYAN serilerde de koşar — boşluk tam oradaydı (ölçüldü 2026-09-23: okutulmayan 43
+seri × okutulan ön ekler = 215 deneme, çakışma reddi 0).
+
+**Ölçülen iki şey karar değiştirdi:** ① `packingLotCode → "T"` (1e'nin örneği) aslında ÇAKIŞMIYOR:
+top barkodu tarih ile sıra arasında H/F harfi taşıdığı için `T2309260001` top olarak çözülmüyor.
+Yani sonuç kapısı, ön ek sezgisinin yanıldığı yeri de düzeltiyor. ② `cashAccount` (kasa kodu, `KS`)
+BUGÜN `kartelaDispatch` (`KS`, okutulur) biçimine uyuyor; koşulsuz bir kapı o serinin hane sayısını
+bile değiştirilemez yapardı. Bu yüzden ölçüt FARK: adayın düştüğü tür bugünkü biçimin de düştüğü
+türse DEVRALINMIŞTIR ve engellenmez. Var olan ön ek kuralı (tarama uzayında biri ötekinin başlangıcı
+olamaz) KALDI ve ÖNCE konuşuyor — sözleşme değişmesin diye; sonuç kapısı onun göremediğini kapatır.
+
+**K2 — kilit metinlerinde jargon:** `roll.lockedReason` hâlâ "…`RollBarcodeCounter` anahtarının
+parçasıdır" diyordu (d3 panelde gördü). Katalogdaki KULLANICIYA DÖNEN beş metin (iki `lockedReason`,
+üç `ownCounter.not`) kullanıcı diline çevrildi; teknik ayrıntı koddaki yoruma indi. Kapı: ekranda
+görünen tüm metinler (seri adı · kilit gerekçesi · açılma koşulu · sayaç kilidi · sıfırlama gerekçesi)
+backtick, dosya uzantısı, fonksiyon çağrısı ve camelCase/snake_case tanımlayıcı taşıyamaz. Türkçe
+cümledeki saha kısaltmaları (P01, H/F) jargon SAYILMAZ — yanlış pozitif ölçüldü ve elendi.
+
+**K5 — alan mesajı:** panel `response.data.message`i tek başına okuyordu; Zod alan mesajı
+`errors[0].message`te. Okuma tek kaynağa taşındı (`apiErrorMessage`, `apiClient`ten export) —
+toast'ı basan yol bunu zaten biliyordu, ekran ikinci bir okuma yazıp mesajı kaybediyordu ("türetilmiş
+alan / ayrışan yüzey" sınıfı).
+
+**Kalıcı kapılar:** `test_number_series_panel §13` (jargon) + `§14` (sonuç kapısı + devralınan
+çakışma) · `NumberingFormDialog.bolum.test §5` (alan mesajı `message`in önüne geçer). Üç sonda:
+sonuç kapısı devre dışı → §14 kırmızı · devralınan muafiyeti kalkınca 52 serinin bugünkü biçimi
+reddediliyor (§14 ikinci kol) · jargon geri konunca §13 kırmızı.
+
+## 2026-09-23 — Bekleyen biçim değişikliği iptal edilebilir + iki numara satırı (K4·K8·K19) [ÇEKİRDEK]
+
+**K4 — bekleyen değişiklik:** diyalog vadesi gelmemiş değişikliği göstermiyordu; kullanıcı aynı tarihe
+ikinci kez kaydedince ham bir tekillik hatası görüyordu ("Bu 'effectiveFrom' değeri zaten mevcut").
+Üç karar: ① panel bekleyen satırı gösterir (tarih + o biçimle üretilecek örnek) ② aynı tarihe yeniden
+kayıt bekleyen satırı DEĞİŞTİRİR (tek tx: eskisi silinir, yenisi yazılır) ③ "İptal et" düğmesi.
+İptal SERT SİLMEDİR ve gerekçesi defter doktrininden ölçüldü: vadesi gelmemiş satır HİÇ YÜRÜRLÜĞE
+GİRMEDİ — onunla numara doğmadı, hiçbir rapor onu okumuyor, silindiğinde raporlanan hiçbir sayı
+değişmiyor ⇒ ④ "deftere hiç yazmamış taslak" sınıfı. `revokedAt` damgası burada YANLIŞ olurdu:
+damga, satırın bir zamanlar GEÇERLİ olduğunu ima eder ve hiç yaşamamış bir rejimi geçmişe sokar.
+Silme ATOMİK CLAIM'li (`effectiveFrom > now` WHERE'in İÇİNDE): önce okuyup sonra silseydik, arada
+vadesi gelen bir satır (önbellek tazelemesi onu yürürlüğe alır) silinebilirdi — yani gerçek bir
+defter satırı. 0 satır silinirse 409 `NUMBER_SERIES_NO_PENDING` (sessiz başarı yok). İptal bir iş
+kararıdır ⇒ audit'e yazılır.
+
+**K8 — örnek kod ve tükenme:** top barkodu örneği `previewSeriesCode` ile kuruluyordu ve katalog
+`infix`i (H/F faz harfi) DÜŞÜYORDU: ekranda `T2309260001`, gerçeği `T230926H0001`. Üreteci olan seride
+örnek artık o üreteçten kurulur — "örnek kod literali yazma" kuralının kardeşi: YANLIŞ YOLDAN
+türetmek de yalandır. Tükenme uyarısı liste ucuna da eklendi (biçimi kilitli seride kullanıcı günlük
+kapasitenin dolduğunu hiçbir yerde göremiyordu); maliyet dar, yalnız üst sınırı olan seriler sayılır.
+
+**K19 — iki numara satırı:** "Örnek" hep sıra 1'i gösteriyordu ve kullanıcı onu SIRADAKİ numara
+sanıyordu (ekranda `PZ-1`, açılan kayıt `PZ-4`). Artık iki kutu: "biçim örneği" (kodun şekli) ve
+"sıradaki numara" (bir sonraki kaydın gerçek numarası). Sıradaki numara ÜRETİM YOLUNUN KENDİ
+hesabıyla üretilir — `nextSeriesNo` bir `fmtOverride` parametresi aldı, çünkü ikinci bir sayaç
+hesabı yazmak kapsam damgasını, atlama döngüsünü ve adım/başlangıç kurallarını iki yerde
+yaşatırdı. Yazma YOK, rezervasyon YOK: numara üretim anında tx içinde belirlenir. Ölçülemeyen
+seride (kendi sayaç mekanizması) "—".
+
+**BORÇ (1e kararı):** `cashAccount` (kasa kodu, `KS`) ile `kartelaDispatch` (kartela sevk belge no,
+`KS`) bugün AYNI kod şeklini üretiyor; kasa kodu okutulmadığı için zararsız sayıldı ve sonuç kapısı
+bunu DEVRALINMIŞ kabul edip engellemiyor. Panelde bilgi satırı olarak görünüyor ("değiştirmeniz
+önerilir"). **Kapanış koşulu:** iki ön ekten biri değişince kendiliğinden kapanır; kapı yeni bir
+çakışmaya zaten izin vermez.
+
+**Bekçi hijyeni dersi:** §15'in teardown'ı önce "vadesi gelmemiş satırları sil" diye yazılmıştı ve
+yürürlüğe girmiş fikstür satırını BIRAKIYORDU; sonraki koşumda `activateDueLines` onu vadesi gelmiş
+sanıp `formatChangedAt`i yazıyor ve §6d kırmızı veriyordu — yani bir bölümün artığı BAŞKA bir
+bölümü düşürüyordu. Teardown artık "bu koşumun yarattığı" satırları id ile siler ve damgayı geri
+yükler. Ölçüldü: arka arkaya üç koşum 125/0.
+
+## 2026-09-23 — Geriye dönük uyumluluk MATRİSİ (E3): açılan her seri kapsama kendiliğinden girer [ÇEKİRDEK]
+
+**Kullanıcının cümlesi:** *"geriye dönük uyumluluk kesinlikle olmalı, bir kod değişince eski verileri
+bozmamalı"*. Bu bekçi o cümlenin ölçüsüdür ve E2'nin (sayaç kapsamı açılan seriler) KABUL KAPISIDIR.
+
+**Tasarım — iki katman, çünkü iki ayrı soru var:** L1 (DB'siz, HER açık seri) BİÇİM eksenini ölçer:
+ön ek · her tarih segmenti · tarihsiz · hane ± · iki ayraç dönüşümleri, bugün 57 dönüşüm. Kayıt
+yaratmaz, çünkü `nextSeriesNo` kod listesini ENJEKTE edilebilir bir yükleyiciden alıyor — üretim
+yolunun KENDİ hesabı sentetik veriyle koşturulur ve ikinci bir hesap yazılmaz. L2 (DB'li, ucuz
+yaratma yolu olan seride) gerçek kayıtla ölçer: eski kodun BAYT BAYT aynı kaldığı, yeni kodun
+üretilip TEKİL olarak yazılabildiği, ikisinin aynı anda arandığı. Seri listesi KATALOGDAN KEŞFEDİLİR
+⇒ E2 bir seriyi açtığı anda kapsama kendiliğinden girer; hangi serinin hangi katmanda ölçüldüğü her
+koşumda BASILIR ("yeşil ≠ kapsandı").
+
+**Ölçerken bir varsayım çürüdü:** iddia ilk yazımda "biçim değişince sıra HER ZAMAN 1'den başlar"
+idi ve kırmızı verdi. Ölçüm: kapsam damgası eski kodları sayaçtan eler (sıra 1'e döner), AMA
+üretilecek DİZGİ zaten var olan bir kodla aynıysa üreteç onun ÜSTÜNE atlar — `@unique` çakışmasını
+önleyen davranış budur. Hane değişimi ise dolguyu değiştirdiği için AYNI sıra bile FARKLI bir
+dizgidir ve atlama gerekmez. Dönüşümden bağımsız değişmez şudur: **üretilen kod var olanlardan biri
+olamaz ve sıra, dizgi uzayındaki İLK BOŞ değerdir.** İddia buna çevrildi.
+
+**Sondalar:** C0 kapsam filtresi kaldırılınca (c) kolu kırmızı ve arıza tam da belgelenen biçimde
+görünüyor — `PRT-2610` (tarih rakamları sıra sanıldı), `IADE-220927`. Emekli BİÇİM denemesi
+kaldırılınca (a+d) kolu kırmızı: tarihsiz geçişten sonra dünkü kod tanınmıyor.
+
+**Ek ders (ölçüm kataloğuna):** "Teardown'un ÖLÇÜTÜ 'geçici mi' değil, 'BU KOŞUM mu yarattı'" —
+`test_number_series_panel §15`in teardown'u vadesi gelmemiş satırları siliyordu; koşum sırasında
+nitelik değiştiren (yürürlüğe giren) artık kalıyor ve BİR SONRAKİ koşumda İLGİSİZ bir bölümü
+düşürüyordu.
+
+## 2026-09-23 — E2 depo-ticaret dilimi: altı seri biçim değişimine AÇILDI [ÇEKİRDEK]
+
+**Açılanlar (SAYAC kilidi kalktı):** çeki listesi (`manifest`, CL — kullanıcının şikâyet ettiği seri)
+· mal kabul fişi (`goodsReceipt`, MK) · alış siparişi (`purchaseOrder`, AS) · depo transferi
+(`warehouseTransfer`, DT) · sayım (`stockCount`, SAY) · serbest belge (`freeDocument`, SB). Açık seri
+sayısı 3 → 9; kilit dağılımı SAYAC 44 → 38.
+
+**Açmak ne demek:** altı üreteç de aynı elle kalıbı taşıyordu — `resolveSeriesFormat` → `seriesPrefix`
+→ `findMany` → `seriesSeqFrom` → `formatSeriesCode`. Bu kalıpta C0 KAPSAMI YOKTU: sayaç, biçim
+değişmeden önce doğan kodları da sayıyordu ve tarih segmenti düşünce sabit baş kısaldığı için sıra
+`MK2209260001` → 2.209.260.002 olurdu. Altısı da `nextSeriesNo(key, loadCodes, date)` yoluna taşındı;
+kapsam damgası ve çakışma atlaması artık TEK YERDE. `withBarcodeRetry` sarmaları korundu (yarışta
+taze okuma), yükleyiciler `{ code, createdAt }` döndürüyor.
+
+**Kalıcı kapı — BEYAN ↔ GERÇEK:** `scopedCounter: "hazir"` bir beyandır ve tek başına hiçbir şey
+ölçmez; üreteç eski literal yolda kalırsa seri panelde AÇILIR ama kapsam hiç uygulanmaz. Yeni kontrol
+(L0) beyanlı her seri için kaynakta `nextSeriesNo("<key>")` çağrısı arar (`ownCounter` muaf).
+⚠️ İlk yazımda yüklem `includes` idi ve çağrı satıra bölündüğü için `manifest`i "üreteçsiz" saydı —
+yüklem boşluğa dayanıklı regex'e çevrildi (aynı sınıfın tersi: daha önce `toContain` IMPORT satırıyla
+eşleşip ısırmamıştı).
+⚠️ Sondanın kendisi de bir kez geçersiz çıktı: ilk denemede mutasyon (regex ile) DOSYAYA UYGULANMADI
+ve sonda "yeşil" göründü; mutasyonun uygulandığı DOĞRULANDIKTAN sonra kapı ısırdı (`goodsReceipt`).
+
+**E3 matrisi büyüdü:** 11 → 28 kontrol. 1e'nin şartıyla her açılan seri L2'ye de girdi: `stockCount`
+ve `freeDocument` GERÇEK SERVİS yolundan kayıt yaratıyor (`StockCountService.create` bir depo
+fikstürü ister ve "bir depoda TEK açık sayım" kuralı yüzünden her çağrı KENDİ deposunu kurar),
+`manifest`/`goodsReceipt`/`purchaseOrder`/`warehouseTransfer` fikstür maliyeti gerekçesiyle "L1'de
+kaldı" olarak BEYANLI ve kapsam tablosunda görünüyor.
+
 ## 2026-09-23 — Gümrük/İhracat No yedek değer uydurmaz, yurtiçinde görünmez (K15) [ÇEKİRDEK]
 
 **Bulgu (e2e SK3 görüntüsü):** Sevk Kapısı içerik panelinde YURTİÇİ planlı sevkiyatta "Gümrük/İhracat No
