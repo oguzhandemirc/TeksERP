@@ -260,33 +260,35 @@ async function cariSayfasinaGit(dur) {
   await page.getByText(dur.cariAd, { exact: true }).filter({ visible: true }).first().click({ timeout: 10_000 });
   await page.waitForTimeout(1500);
 }
-/** Paketleme / Çuvallar → cari → parti listesinde metin var mı (K16 bayatlığı ayrı kaydedilir). */
+/** Paketleme / Çuvallar → cari sayfası → Yenile → parti listesinde metin var mı. K16 ölçümü: cari sayfası
+ *  AÇIKKEN Yenile'den sonra görünmeyen metin "bayatlık"tır (cari seçilmemişken aramak bayatlık sayılmaz). */
 async function partiListesindeVarMi(dur, metinler) {
-  await gitSayfa("Paketleme / Çuvallar");
-  await page.getByRole("button", { name: "Yenile" }).filter({ visible: true }).first().click({ timeout: 5_000 }).catch(() => undefined);
-  await page.waitForTimeout(1200);
   const gorunen = async () => Object.fromEntries(await Promise.all(metinler.map(async (m) => [m, (await page.getByText(m, { exact: true }).filter({ visible: true }).count()) > 0])));
-  // Sekme durumunu korur: aynı cari zaten açıksa seçiciye gerek yok.
-  const hazir = await gorunen();
-  if (Object.values(hazir).every(Boolean)) return hazir;
-  // K16: "Yenile" parti listesini tazelemiyor (anahtar ["packing"] ≠ ["packing-groups", …]). Bayatlık AYRI kaydedilir,
-  // sonra insanın yapacağı gibi carilere dönülüp cari yeniden seçilir (liste yeniden bağlanır, taze çekilir).
-  bayatlik.push({ metinler, yenileSonrasi: hazir });
+  await cariSayfasinaGit(dur);
+  await page.getByRole("button", { name: "Yenile" }).filter({ visible: true }).first().click({ timeout: 5_000 }).catch(() => undefined);
+  await page.waitForTimeout(1500);
+  const sonra = await gorunen();
+  if (Object.values(sonra).every(Boolean)) return sonra;
+  bayatlik.push({ metinler, yenileSonrasi: sonra });
+  // İnsanın yapacağı: carilere dön, cariyi yeniden seç.
   const geri = page.getByRole("button", { name: "Geri", exact: true }).filter({ visible: true }).first();
   if (await geri.count()) { await geri.click().catch(() => undefined); await page.waitForTimeout(1000); }
-  // Sevk partisi modunda sayfa cari listesiyle açılır ("Cari ara (ad ya da kod)…"); aksi hâlde "Cari Seç".
-  let ara = page.getByPlaceholder(/Cari ara/).filter({ visible: true }).first();
-  if (!(await ara.count())) {
-    // Hub ("Tüm Çuvallar" · "Tüm Cariler") ya da "Cari Seç" — tıklandıktan sonra arama kutusu yeniden aranır.
-    await page.getByText(/^(Tüm Cariler|Cari Seç)$/).filter({ visible: true }).first().click({ timeout: 10_000 });
-    await page.waitForTimeout(1000);
-    ara = page.getByPlaceholder(/Cari ara/).filter({ visible: true }).first();
-    if (!(await ara.count())) ara = page.getByPlaceholder(/Ara/).filter({ visible: true }).last();
-  }
-  await ara.fill(dur.cariAd); await page.waitForTimeout(1200);
-  await page.getByText(dur.cariAd, { exact: true }).filter({ visible: true }).first().click({ timeout: 10_000 });
-  await page.waitForTimeout(1500);
+  await cariSayfasinaGit(dur);
   return gorunen();
+}
+
+/**
+ * K16 SONDASI — sıra kasıtlı: liste YÜKLENİR → "başka istemci" (API) parti açar → Yenile → yeni parti
+ * görünmeli. Liste parti açıldıktan sonra ilk kez yüklenirse bayatlık hiç oluşmaz; sonda bunu ölçemezdi.
+ */
+async function k16Sondasi(dur) {
+  await cariSayfasinaGit(dur);
+  await page.waitForTimeout(1000);
+  const p = await partiAc(dur);
+  await page.getByRole("button", { name: "Yenile" }).filter({ visible: true }).first().click({ timeout: 5_000 });
+  await page.waitForTimeout(2000);
+  const gorundu = (await page.getByText(p.kod, { exact: true }).filter({ visible: true }).count()) > 0;
+  return { kod: p.kod, yenileSonrasiGorundu: gorundu, gorsel: await gor("K16", "yenile-sonrasi") };
 }
 
 const ACICILAR = {
@@ -373,6 +375,11 @@ async function gitSayfa(ad) {
 const istenen = process.argv.slice(2);
 const acik = (await seriListesi()).filter((r) => r.editable && (!istenen.length || istenen.includes(r.key)));
 const dur = {};
+if (acik.some((r) => r.key.startsWith("packingLot"))) {
+  ag.adim("K16 · başka istemcinin partisi Yenile'de görünür mü");
+  try { await sevkPartisiHazirla(dur); dur.k16 = await k16Sondasi(dur); } catch (e) { dur.k16 = { hata: String(e?.message ?? e).split("\n")[0] }; }
+  console.log(`${dur.k16.yenileSonrasiGorundu ? "✓" : "✗"} K16 sondası — ${JSON.stringify(dur.k16)}`);
+}
 for (const r of acik) {
   const A = ACICILAR[r.key];
   const kayit = { key: r.key, label: r.label, sonuc: "ÖLÇÜLMEDİ", adimlar: {}, gorsel: [] };
@@ -426,7 +433,7 @@ for (const r of acik) {
 }
 if (dur.bayrakOnce) { ag.adim("bayraklar geri"); await bayrakYaz(Object.fromEntries(Object.entries(dur.bayrakOnce).filter(([, v]) => v !== undefined))); }
 sonuc.push({ key: "TABLET", sonuc: "ÖLÇÜLMEDİ", neden: "adb bağlı değil", kullaniciAdimlari: TABLET_ADIMLARI });
-sonuc.push({ key: "BULGU-K16", aciklama: "Paketleme / Çuvallar 'Yenile' parti listesini tazelemedi", kayitlar: bayatlik }); yaz();
+sonuc.push({ key: "K16", sonuc: dur.k16?.yenileSonrasiGorundu ? "✓" : "✗", sonda: dur.k16 ?? null, akisBayatligi: bayatlik }); yaz();
 if (bayatlik.length) console.log(`⚠ K16 Yenile sonrası bayat parti listesi: ${JSON.stringify(bayatlik)}`);
 
 const agOzet = ag.rapor();

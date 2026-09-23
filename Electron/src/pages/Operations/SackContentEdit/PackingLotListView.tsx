@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { PageBody } from "@/components/layout/PageShell";
 import { cn } from "@/lib/utils";
 import { sackHubService } from "./service";
-import { invalidateSackHub } from "./useSackData";
+import { invalidateSackHub, PACKING_LOT_STALE_MS } from "./useSackData";
 import { LotRowMenu } from "./PackingLotHeader";
 import { LotActionDialogs, type LotAction } from "./PackingLotActions";
 import { PackingLotSummaryCards } from "./PackingLotSummaryCards";
@@ -50,10 +50,12 @@ export function PackingLotListView({
   const [action, setAction] = useState<LotAction | null>(null);
   const lots = useQuery({
     queryKey: ["packing-groups", customerId, "OPEN"],
+    staleTime: PACKING_LOT_STALE_MS,
     queryFn: () => sackHubService.listPackingGroups(customerId, "OPEN"),
   });
   const summary = useQuery({
     queryKey: ["packing-lot-summary", customerId],
+    staleTime: PACKING_LOT_STALE_MS,
     queryFn: () => sackHubService.packingLotSummary(customerId),
   });
   const refresh = () => {
