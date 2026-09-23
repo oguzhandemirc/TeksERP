@@ -38,7 +38,7 @@ import {
 } from "./series-format.helper";
 import { retiredPrefixesAfterChange, seriesPrefixUsage } from "./series-retired.helper";
 import { assertAxesAllowed } from "./series-client-axes.helper";
-import { assertScanOutcomeAllowed } from "./series-scan-outcome.helper";
+import { assertScanOutcomeAllowed, assertSharedTablePrefixUnique } from "./series-scan-outcome.helper";
 
 // ── KAPI ────────────────────────────────────────────────────────────────────
 
@@ -143,6 +143,7 @@ export function assertSeriesFormatAllowed(key: string, fmt: NumberSeriesFormat):
   // (`\d{digits,}`) ve uzun kod, daha AZ haneli başka bir seriye de uyabilir —
   // yalnız ilk sırayı denemek bu ekseni kör bırakırdı.
   assertScanOutcomeAllowed(key, fmt);
+  assertSharedTablePrefixUnique(key, fmt);
 }
 
 

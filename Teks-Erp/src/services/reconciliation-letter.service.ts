@@ -56,7 +56,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo } from "./number-series.service";
 import { D } from "./helpers/finance.helper";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
 import {
@@ -84,13 +84,13 @@ const DOC_PREFIX = "MBT";
  * yazmak olurdu.
  */
 async function nextLetterNo(tx: Prisma.TransactionClient, date: Date): Promise<string> {
-  const fmt = resolveSeriesFormat("reconciliationLetter");
-  const full = seriesPrefix(fmt, date);
-  const rows = await tx.reconciliationLetter.findMany({
-    where: { docNo: { gte: full, startsWith: full } },
-    select: { docNo: true },
-  });
-  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.docNo), full), date);
+  return nextSeriesNo("reconciliationLetter", async (full) => {
+    const rows = await tx.reconciliationLetter.findMany({
+      where: { docNo: { gte: full, startsWith: full } },
+      select: { docNo: true, createdAt: true },
+    });
+    return rows.map((r) => ({ code: r.docNo, createdAt: r.createdAt }));
+  }, date);
 }
 
 /**

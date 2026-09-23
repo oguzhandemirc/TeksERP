@@ -487,11 +487,22 @@ for (const dosya of kaynakDosyalari) {
 }
 check("§11d ⭐ ön ek ile kod AYNI açık tarihten doğar (örtük `new Date()` yok)",
   tarihsizCagri.length === 0, tarihsizCagri.join(", ") || `${sayilanCagri} çağrı denetlendi`);
-check("§11d körlük zemini: argüman sayacı gerçekten sayıyor",
+// ⚠️ ZEMİN SABİT SAYI DEĞİL, ARACIN KENDİSİ (2026-09-23): §11a ile AYNI yapısal
+// sorun — bu iddianın popülasyonu (ön eki/kodu KENDİ kuran çağrı yerleri) her E2
+// dilimiyle küçülüyor, çünkü üreteçler `nextSeriesNo`a geçtikçe ikisini de
+// çağırmayı bırakıyor. Eski `>= 20` eşiği BAŞARIYI kırmızı gösterdi (9 çağrı
+// kaldı). Araç hâlâ ölçülüyor — uydurma iki çağrı üstünde doğru sayıyor mu —
+// ama popülasyon büyüklüğü artık bir SONUÇ, bir şart değil.
+check("§11d körlük zemini: argüman sayacı gerçekten sayıyor (araç sondası)",
   cagriArgumanSayisi('formatSeriesCode(f, seriesSeqFrom(f, a, b), d)', SERI_KODU)[0] === 3 &&
-    cagriArgumanSayisi('seriesPrefix(f)', SERI_ONEKI)[0] === 1 &&
-    sayilanCagri >= 20,
-  `${sayilanCagri} çağrı`);
+    cagriArgumanSayisi('seriesPrefix(f)', SERI_ONEKI)[0] === 1,
+  `${sayilanCagri} çağrı denetlendi (popülasyon küçülüyor: C0 yoluna geçen üreteç ikisini de çağırmaz)`);
+if (sayilanCagri === 0) {
+  console.log(
+    "⏭️  §11d ÖLÇÜLEMEDİ — ön eki/kodu kendi kuran çağrı kalmadı; kural yapısal " +
+      "olarak sağlanıyor, kapsam `test_number_series_geri_uyumluluk L0`da.",
+  );
+}
 
 // ⚠️ §11e — SİLİNEN SARMALAYICILAR GERİ GELMESİN. `seriesCodePrefix(key)` ve
 // `buildSeriesCode(key)` her biri KENDİ okumasını yapıyordu: bir üreteç ön eki

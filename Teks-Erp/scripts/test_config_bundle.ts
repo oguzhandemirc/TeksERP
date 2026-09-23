@@ -322,6 +322,20 @@ async function main(): Promise<void> {
       : kiranEksen === "digits" ? { digits: tarananFmt.digits === 5 ? 4 : 5 }
       : kiranEksen === "separator" ? { separator: tarananFmt.separator === "-" ? "_" : "-" }
       : { separator2: (tarananFmt.separator2 ?? "") === "/" ? "." : "/" };
+    // ⚠️ GERİ ALMA, REDDEDİLMESİ BEKLENEN BİR KALEM İÇİN DE ŞART (1e dersi
+    // 2026-09-23): bu iddia `applyBundle` çağırıyor, yani SONUCU UYGULAYAN bir
+    // iddia. Kapı sağlamken hiçbir şey yazılmaz — ama kapı bozulduğunda (ölçülen
+    // durum tam olarak budur) kalem UYGULANIR ve test DB'sinde KALICI artık
+    // bırakır. Bayat §9c bunu iki ayrı DB'de yaptı: iş emri serisi 5 haneye
+    // kaydı ve zaman çizgisine satır düştü. *Yazan bir bekçi, yazdığını yalnız
+    // "yazmamam gerekiyordu" diyerek geri alamaz.*
+    const c0bOncekiKolon = await prisma.numberSeries.findUnique({
+      where: { key: taranan.key },
+      select: { prefix: true, dateSegment: true, digits: true, separator: true, separator2: true, formatChangedAt: true },
+    });
+    const c0bOncekiSatirlar = await prisma.numberSeriesLine.findMany({
+      where: { seriesKey: taranan.key }, select: { id: true },
+    });
     const c0bPlan = await planBundle(nsKalem(taranan.key, kiranYuk), "overwrite");
     check(`§9c ⭐ OKUTULAN seri C0b kilidine takılıyor — paket bu kapının ETRAFINDAN DOLANAMAZ (${taranan.key} · ${kiranEksen})`,
       // ⚠️ YÜKLEM METNE DEĞİL C0b'NİN AYIRT EDİCİ ÖĞESİNE bakar: "güncellenmeden"
@@ -342,6 +356,24 @@ async function main(): Promise<void> {
         tarananSonra.separator === tarananOnce.separator &&
         (tarananSonra.separator2 ?? null) === (tarananOnce.separator2 ?? null),
       `applied=${c0bSonuc.applied}`);
+    // Kapı bozukken yazılmış olabilecek her şeyi ID İLE geri al (§9e deseni).
+    const c0bKalanlar = await prisma.numberSeriesLine.findMany({
+      where: { seriesKey: taranan.key }, select: { id: true },
+    });
+    const c0bEskiIdler = new Set(c0bOncekiSatirlar.map((x) => x.id));
+    const c0bYeniler = c0bKalanlar.filter((x) => !c0bEskiIdler.has(x.id)).map((x) => x.id);
+    if (c0bYeniler.length > 0) {
+      await prisma.numberSeriesLine.deleteMany({ where: { id: { in: c0bYeniler } } });
+    }
+    if (c0bOncekiKolon) {
+      await prisma.numberSeries.update({ where: { key: taranan.key }, data: c0bOncekiKolon });
+    }
+    await refreshNumberSeriesCache();
+    const c0bGeri = resolveSeriesFormat(taranan.key);
+    check("§9c geri alma ÖLÇÜLDÜ: seri sondadan önceki hâlinde (kapı bozuksa bile artık yok)",
+      c0bGeri.prefix === tarananOnce.prefix && c0bGeri.digits === tarananOnce.digits &&
+        c0bYeniler.length === 0,
+      `${c0bGeri.prefix}/${c0bGeri.digits} · artık satır ${c0bYeniler.length}`);
   }
 
   // ⭐ §9e BAŞARILI İÇE AKTARIM — ve bu bölüm bir SONDA BULGUSUNDAN doğdu:
