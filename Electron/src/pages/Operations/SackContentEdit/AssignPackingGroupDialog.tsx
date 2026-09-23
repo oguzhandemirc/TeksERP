@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { sackHubService } from "./service";
-import { invalidateSackHub } from "./useSackData";
+import { invalidateSackHub, PACKING_LOT_STALE_MS } from "./useSackData";
 import type { PackingGroup, SackSearchRow } from "./types";
 import { featureFlagService } from "@/services/featureFlagService";
 import { manualFieldState, numberSourceOf, type ManualFieldState } from "@/lib/number-source";
@@ -71,6 +71,7 @@ function useAssignGroup(sacks: AssignableSack[] | null, onOpenChange: (o: boolea
 
   const gruplar = useQuery({
     queryKey: ["packing-groups", tekCari],
+    staleTime: PACKING_LOT_STALE_MS,
     queryFn: () => sackHubService.listPackingGroups(tekCari!),
     enabled: open && !!tekCari,
   });

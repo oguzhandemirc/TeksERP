@@ -2,6 +2,24 @@ import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { sackHubService } from "./service";
 import { invalidateDestinationLock } from "./destinationDefault";
 
+/**
+ * Çuval hub'ının LİSTE aileleri — mutasyon sonrası tazeleme (`invalidateSackHub`) ile sayfanın
+ * "Yenile" düğmesi AYNI listeyi kullanır. react-query öneki dizi ELEMANI düzeyinde eşler:
+ * `["packing"]` `["packing-groups", …]`ı KAPSAMAZ (K16, 2026-09-23 — tabletin açtığı parti
+ * Yenile'de görünmüyordu). Yeni bir liste sorgusu bu aileye girer, yoksa Yenile onu atlar.
+ */
+export const SACK_HUB_KEYS: readonly (readonly string[])[] = [
+  ["packing"], ["pool"], ["sack-search"], ["packing-groups"], ["packing-lot-summary"],
+  ["sack-contents"], ["sack-store"], ["orders"], ["rolls"],
+];
+
+/**
+ * Başka istemcinin (tablet · ikinci panel) açtığı/kapattığı partiyi gösteren sorguların tazelik
+ * süresi. Genel 5 dk varsayılanı burada fazla uzun: yeniden bağlanan liste 15 sn'den eskiyse
+ * sunucuya tekrar sorar.
+ */
+export const PACKING_LOT_STALE_MS = 15_000;
+
 /** Tek çuvalın canlı dökümü — editör içerik kaynağı (rulo + kartela). */
 export function useSackContents(sackId: string | null) {
   return useQuery({
@@ -28,19 +46,13 @@ export function invalidateSackHub(
   opts?: { shipment?: boolean; silinenSackId?: string },
 ): void {
   const silinen = opts?.silinenSackId;
-  void qc.invalidateQueries({ queryKey: ["packing"] }); // pool + open-orders
-  void qc.invalidateQueries({ queryKey: ["pool"] });
-  void qc.invalidateQueries({ queryKey: ["sack-search"] });
-  // Sevk partisi yüzeyleri çuval sayılarını taşır (liste · özet · detay) — çuval değişince tazelenir.
-  void qc.invalidateQueries({ queryKey: ["packing-groups"] });
-  void qc.invalidateQueries({ queryKey: ["packing-lot-summary"] });
-  void qc.invalidateQueries({
-    queryKey: ["sack-contents"],
-    ...(silinen ? { predicate: (q) => q.queryKey[1] !== silinen } : {}),
-  });
-  void qc.invalidateQueries({ queryKey: ["sack-store"] });
-  void qc.invalidateQueries({ queryKey: ["orders"] });
-  void qc.invalidateQueries({ queryKey: ["rolls"] });
+  for (const key of SACK_HUB_KEYS) {
+    void qc.invalidateQueries({
+      queryKey: [...key],
+      // Silinen çuvalın dökümü tazelenmez (404 toast'ı — aşağıdaki not).
+      ...(silinen && key[0] === "sack-contents" ? { predicate: (q) => q.queryKey[1] !== silinen } : {}),
+    });
+  }
   if (opts?.shipment) {
     void qc.invalidateQueries({ queryKey: ["shipments"] });
     void qc.invalidateQueries({ queryKey: ["shipment-detail"] });

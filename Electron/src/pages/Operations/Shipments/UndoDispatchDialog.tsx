@@ -18,6 +18,7 @@ import { FormField } from "@/components/forms/FormField";
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import { shipmentService } from "./service";
 import { UndoAffectedList } from "./UndoAffectedList";
+import { invalidateSackHub } from "@/pages/Operations/SackContentEdit/useSackData";
 
 interface Props {
   /** Geri alınacak sevkiyat id'si — null ise dialog kapalı. */
@@ -89,7 +90,8 @@ export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
       void qc.invalidateQueries({ queryKey: ["shipment-detail", shipmentId] });
       void qc.invalidateQueries({ queryKey: ["sack-store"] });
       void qc.invalidateQueries({ queryKey: ["sack-search"] });
-      void qc.invalidateQueries({ queryKey: ["packing"] });
+      // Sevk/iptal/geri al partiyi kapatır ya da yeniden açar — parti listesi dahil hub ailesi (K16).
+      invalidateSackHub(qc);
       void qc.invalidateQueries({ queryKey: ["orders"] });
       void qc.invalidateQueries({ queryKey: ["rolls"] });
       setReason("");
