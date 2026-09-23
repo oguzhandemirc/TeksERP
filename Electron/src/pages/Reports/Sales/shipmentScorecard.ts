@@ -74,8 +74,10 @@ export function buildShipmentExport(opts: {
   sc: ShipmentScorecard;
   periodLabel: string;
   compareLabel: string | null;
+  /** Ekrandaki süzgeç satırları — çıktıya AYNI dizi girer. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { sc, periodLabel, compareLabel } = opts;
+  const { sc, periodLabel, compareLabel, filterNotes = [] } = opts;
   const hasCompare = compareLabel !== null;
 
   const meta = [
@@ -84,6 +86,7 @@ export function buildShipmentExport(opts: {
     `Termini olmayan ${sc.summary.noDeadlineOrders} sipariş orana DAHİL EDİLMEDİ — "zamanında" saymak oranı sahte yükseltir, "geç" saymak haksız düşürürdü.`,
   ];
   if (compareLabel) meta.push(`Karşılaştırma dönemi: ${compareLabel}`);
+  meta.unshift(...filterNotes);
 
   return {
     title: "Sevk ve Termin Karnesi",

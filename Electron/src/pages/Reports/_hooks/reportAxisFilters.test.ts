@@ -89,6 +89,13 @@ describe("axisNotes — sayfanın süzgeç satırları (ekran = çıktı)", () =
     expect(n[1]).toContain("BUGÜNKÜ cari/şube yönü");
   });
 
+  it("⭐ sevk raporunda yön ekseni SEVKİYATIN donmuş yönüdür — etiket ve şerh sipariş yönünden ayrı", () => {
+    const n = axisNotes({ eksenler: [], destination: "shipment", secenekler, sel: { ...bos, destination: "EXPORT" } });
+    expect(n[0]).toContain("Sevkiyat yönü (sevk anında)");
+    expect(n[0]).toContain("SEVK ANINDA donmuş");
+    expect(n[0]).not.toContain("BUGÜNKÜ cari/şube");
+  });
+
   it("⭐ ek şerh (ABC evreni) ve kesti cümlesi süzgeç AÇIKKEN ve SIRAYLA eklenir", () => {
     const n = axisNotes({
       eksenler: ["customerId"],

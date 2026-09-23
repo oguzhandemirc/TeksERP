@@ -3,7 +3,7 @@
 // =============================================================================
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { axisNotes, axisParams, parseCsv, toCsv, type AxisKey, type Destination } from "./reportAxisFilters";
+import { axisNotes, axisParams, parseCsv, toCsv, type AxisKey, type Destination, type DestinationAxis } from "./reportAxisFilters";
 import type { ReportSecenekler, ReportSuzgec } from "../_services/types";
 
 export interface ReportAxesState {
@@ -62,7 +62,7 @@ export function useAxisNotes(
   data: { meta?: { secenekler?: ReportSecenekler }; suzgec?: ReportSuzgec } | undefined,
   sel: ReportAxesState["sel"],
   eksenler: readonly AxisKey[],
-  opts: { destination?: boolean; ek?: string[] } = {},
+  opts: { destination?: DestinationAxis; ek?: string[] } = {},
 ): { secenekler: ReportSecenekler | undefined; notes: string[] } {
   const secenekler = data?.meta?.secenekler;
   const suzgec = data?.suzgec;

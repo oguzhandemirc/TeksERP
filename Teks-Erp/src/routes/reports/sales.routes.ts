@@ -41,6 +41,9 @@ export const orderLeadTimeQuerySchema = dateRangeSchema.extend({ ...musteriEksen
 export const orderCancellationQuerySchema = dateRangeSchema.extend({ ...musteriEkseni, ...iptalEkseni }).strict();
 export const openOrderCoverageQuerySchema = z.object({ itemId: kalemEkseni.itemId }).strict();
 export const destinationMixQuerySchema = compareRangeSchema.strict();
+// Sevk raporlarının yön süzgeci — SEVKİYATIN donmuş yönü (`_destination.ts`), cari kartı değil.
+export const shipmentScorecardQuerySchema = compareRangeSchema.extend({ destination: musteriEkseni.destination }).strict();
+export const returnScorecardQuerySchema = compareRangeSchema.extend({ destination: musteriEkseni.destination }).strict();
 const SIPARIS_ANAHTARLARI = ["customerId", "destination", "itemId", "colorId", "reasonCode"] as const;
 
 /**
@@ -48,14 +51,15 @@ const SIPARIS_ANAHTARLARI = ["customerId", "destination", "itemId", "colorId", "
  * `report:sales` altında: payda sevkiyat, ana kırılım müşteri. Nedenler kalite
  * geri-beslemesidir ama raporu okuyan kişi sevkiyat/müşteri tarafındadır.
  */
-/** SEVK & TERMİN KARNESİ (OTIF) — sevk hacmi + zamanında teslim oranı. */
+/** SEVK & TERMİN KARNESİ (OTIF) — sevk hacmi + zamanında teslim oranı. `destination`: sevk
+ *  metrajı SEVKİYATIN donmuş yönü, termin kısmı siparişin bugünkü cari/şube yönü (`_destination.ts`). */
 router.get("/shipment-scorecard", ...reportGate("sales/shipment-scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = compareRangeSchema.parse(req.query);
+    const input = shipmentScorecardQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const data = await getShipmentScorecard(range, compareRange);
-    res.status(200).json(reportEnvelope(data, range, compareRange));
+    const data = await getShipmentScorecard(range, compareRange, { destination: input.destination });
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, ["destination"]) }));
   } catch (e) {
     next(e);
   }
@@ -96,11 +100,11 @@ router.get("/destination-mix", ...reportGate("sales/destination-mix"), async (re
 
 router.get("/return-scorecard", ...reportGate("sales/return-scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = compareRangeSchema.parse(req.query);
+    const input = returnScorecardQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const data = await getReturnScorecard(range, compareRange);
-    res.status(200).json(reportEnvelope(data, range, compareRange));
+    const data = await getReturnScorecard(range, compareRange, { destination: input.destination });
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, ["destination"]) }));
   } catch (e) {
     next(e);
   }

@@ -10,11 +10,14 @@
 // §3 sevk toplayıcısı (`collectShipped`): hücre sevkiyatın yönünü taşır, süzgeç ona uygulanır; cari
 //    kartı sonradan değişince sevk rakamı DEĞİŞMEZ; müşteri karnesinin sevk sütunu da aynı kaynaktan.
 // §4 kg (`collectShippedWeight`): tartısız çuval 0 SAYILMAZ — kapsam "tartılı N / M".
+// §5 sevk ve iade karnesi yön süzgeci sevkiyatın donmuş yönünden (R2 ③).
 // Kapsam dışı (beyan): doğrudan sevkin "yön kaydı yok" kovası bu dosyada DB'de kurulmadı (fikstür
 // fason zinciri ister); yüklemi `test_accounting_direct_ship` §D ölçer.
 // NEGATİF SONDALAR (2026-09-23, geri alındı → 19/0): ① SQL ikizden şube düştü → §1 ×2 + §3e ❌ ·
 //   ② Prisma ikizden şube düştü → §1 + §2a + §3e ❌ · ③ sevk yön süzgeci boş parça → §3c/§3d/§3e ❌ ·
 //   ④ sevk süzgeci cari kartından okur → §3c/§3d/§3e ❌ · ⑤ tartısız çuval tartılı sayılır → §4b ❌
+// R2 ③ sondaları (geri alındı → 24/0): ⑥ sevk karnesi süzmez → §5a/§5b ❌ · ⑦ günlük seri süzmez → §5a ❌ ·
+//   ⑧ iade payı süzmez → §5d ❌ · ⑨ iade paydası süzmez → §5c ❌
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Pencere 2098-03.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
@@ -25,6 +28,10 @@ import { orderDestinationSql, orderDestinationWhere } from "../src/services/repo
 import { collectShipped, collectShippedWeight } from "../src/services/reports/_shipped";
 import { getOrderIntake } from "../src/services/reports/order-intake.report.service";
 import { getCustomerScorecard } from "../src/services/reports/customer-scorecard.report.service";
+import { getShipmentScorecard } from "../src/services/reports/shipment-scorecard.report.service";
+import { getReturnScorecard } from "../src/services/reports/return-scorecard.report.service";
+import { returnScorecardQuerySchema, shipmentScorecardQuerySchema } from "../src/routes/reports/sales.routes";
+import { ensureTestAdmin } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -43,7 +50,7 @@ async function main(): Promise<void> {
     console.log(`⛔ ${engel}`);
     process.exit(2);
   }
-  const ids = { customers: [] as string[], branches: [] as string[], orders: [] as string[], shipments: [] as string[], sacks: [] as string[], rolls: [] as string[], items: [] as string[] };
+  const ids = { returns: [] as string[], customers: [] as string[], branches: [] as string[], orders: [] as string[], shipments: [] as string[], sacks: [] as string[], rolls: [] as string[], items: [] as string[] };
   const cari = async (n: string, d: ShipmentDestination | null) => {
     const c = await prisma.customer.create({ data: { code: `${TAG}-${n}`, name: `${TAG} ${n}`, defaultDestination: d }, select: { id: true } });
     ids.customers.push(c.id);
@@ -133,7 +140,23 @@ async function main(): Promise<void> {
     const d = kg.find((c) => c.destination === "DOMESTIC");
     check("§4a ihracat: 12.5 kg, tartılı 1 / 1", e?.kg === 12.5 && e?.weighedSacks === 1 && e?.totalSacks === 1, JSON.stringify(e));
     check("§4b yurtiçi: tartısız → kg 0 değil ÖLÇÜLMEDİ (tartılı 0 / 1)", d?.weighedSacks === 0 && d?.totalSacks === 1, JSON.stringify(d));
+
+    console.log("── §5 sevk ve iade karnesi yön süzgeci (sevkiyatın donmuş yönü) ──");
+    const sk = await getShipmentScorecard(RANGE, null, { destination: "EXPORT" });
+    check("§5a sevk karnesi İhracat → 7 m (yurtiçi carinin ihracat sevkiyatı), günlük seri de 7", sk.summary.shippedQty === 7 && sk.daily.reduce((a, x) => a + x.qty, 0) === 7, `${sk.summary.shippedQty}`);
+    check("§5b sevk karnesi Yurtiçi → 11 m", (await getShipmentScorecard(RANGE, null, { destination: "DOMESTIC" })).summary.shippedQty === 11);
+    const eSevk = await prisma.shipment.findFirstOrThrow({ where: { id: { in: ids.shipments }, destination: "EXPORT" }, select: { id: true } });
+    const admin = await ensureTestAdmin();
+    const rr = await prisma.roll.create({ data: { barcode: `${TAG}-RR`, itemId: item.id, initialQty: 2, currentQty: 2, status: "WAREHOUSE" }, select: { id: true } });
+    ids.rolls.push(rr.id);
+    const ret = await prisma.rollReturn.create({ data: { rollId: rr.id, customerId: cD, itemId: item.id, qty: 2, receivedById: admin.id, fromShipmentId: eSevk.id, createdAt: IN }, select: { id: true } });
+    ids.returns.push(ret.id);
+    const ik = await getReturnScorecard(RANGE, null, { destination: "EXPORT" });
+    check("§5c iade karnesi İhracat → iade 2 m, payda ihracat brütü 9 m (7 + iade 2 geri eklenmiş)", ik.summary.returnQty === 2 && ik.summary.shippedQty === 9, JSON.stringify(ik.summary));
+    check("§5d iade karnesi Yurtiçi → iade 0 (iade ihracat sevkiyatından)", (await getReturnScorecard(RANGE, null, { destination: "DOMESTIC" })).summary.returnQty === 0);
+    check("§5e sözleşme: enum dışı yön 400, iki şema strict", !shipmentScorecardQuerySchema.safeParse({ destination: "MARS" }).success && !returnScorecardQuerySchema.safeParse({ baska: "1" }).success && shipmentScorecardQuerySchema.safeParse({ destination: "EXPORT" }).success);
   } finally {
+    await prisma.rollReturn.deleteMany({ where: { id: { in: ids.returns } } });
     await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
     await prisma.sack.deleteMany({ where: { id: { in: ids.sacks } } });
     await prisma.shipment.deleteMany({ where: { id: { in: ids.shipments } } });

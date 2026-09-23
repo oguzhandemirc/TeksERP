@@ -70,8 +70,10 @@ export function buildReturnExport(opts: {
   sc: ReturnScorecard;
   periodLabel: string;
   compareLabel: string | null;
+  /** Ekrandaki süzgeç satırları — çıktıya AYNI dizi girer. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { sc, periodLabel, compareLabel } = opts;
+  const { sc, periodLabel, compareLabel, filterNotes = [] } = opts;
   const hasCompare = compareLabel !== null;
 
   const meta = [
@@ -82,6 +84,7 @@ export function buildReturnExport(opts: {
     "İptal edilen (yanlış kabul edilip geri alınan) iadeler hiçbir yerde sayılmaz.",
   ];
   if (compareLabel) meta.push(`Karşılaştırma dönemi: ${compareLabel}`);
+  meta.unshift(...filterNotes);
   if (sc.summary.freeTextReasonCount > 0 || sc.summary.missingReasonCount > 0) {
     meta.push(
       `Sebep verisi: ${sc.summary.freeTextReasonCount} iade serbest metinle, ${sc.summary.missingReasonCount} iade sebepsiz kaydedildi.`,

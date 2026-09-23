@@ -36,7 +36,8 @@ import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { attachPrev, buildBreakdown, pctOf, round1, type BreakdownDim, type BreakdownRow } from "./_breakdown";
 import { factoryDaySql } from "../../constants/time";
-import { shippedGrossTotal } from "./_shipped";
+import { shippedGrossTotal, type ShippedFilter } from "./_shipped";
+import { shipmentDestinationSql } from "./_destination";
 
 // ---------- Tipler -----------------------------------------------------------
 
@@ -82,7 +83,8 @@ interface ReturnCell {
 const REASON_FREE = "__FREE_TEXT__";
 const REASON_NONE = "__NO_REASON__";
 
-async function collectReturns(range: DateRange): Promise<ReturnCell[]> {
+/** Yön süzgeci iadenin GELDİĞİ sevkiyatın donmuş yönüdür; sevkiyatsız iade o kümeye girmez. */
+async function collectReturns(range: DateRange, f: ShippedFilter = {}): Promise<ReturnCell[]> {
   const rows = await prisma.$queryRaw<
     Array<{
       customerId: string;
@@ -130,6 +132,7 @@ async function collectReturns(range: DateRange): Promise<ReturnCell[]> {
     WHERE rr."createdAt" >= ${range.from}
       AND rr."createdAt" <= ${range.to}
       AND rr."cancelledAt" IS NULL
+      ${f.destination ? Prisma.sql`AND EXISTS (SELECT 1 FROM shipments s WHERE s.id = rr."fromShipmentId" ${shipmentDestinationSql(f.destination, "s")})` : Prisma.empty}
     GROUP BY rr."customerId", cu.name, rr."reasonId", rn.name, rr."reasonText",
              rr."itemId", i.name, rr."colorId", c.name
   `);
@@ -184,10 +187,11 @@ const dims = {
 export async function getReturnScorecard(
   range: DateRange,
   compareRange: DateRange | null = null,
+  f: ShippedFilter = {},
 ): Promise<ReturnScorecard> {
   const [cells, shipped, dailyRows, prevCells, prevShipped] = await Promise.all([
-    collectReturns(range),
-    shippedGrossTotal(range),
+    collectReturns(range, f),
+    shippedGrossTotal(range, f),
     prisma.$queryRaw<Array<{ day: Date; qty: number | null; cnt: bigint }>>(Prisma.sql`
       SELECT ${factoryDaySql('rr."createdAt"')} AS day,
              SUM(rr.qty)::float                 AS qty,
@@ -195,10 +199,11 @@ export async function getReturnScorecard(
       FROM roll_returns rr
       WHERE rr."createdAt" >= ${range.from} AND rr."createdAt" <= ${range.to}
         AND rr."cancelledAt" IS NULL
+        ${f.destination ? Prisma.sql`AND EXISTS (SELECT 1 FROM shipments s WHERE s.id = rr."fromShipmentId" ${shipmentDestinationSql(f.destination, "s")})` : Prisma.empty}
       GROUP BY 1 ORDER BY 1
     `),
-    compareRange ? collectReturns(compareRange) : Promise.resolve<ReturnCell[]>([]),
-    compareRange ? shippedGrossTotal(compareRange) : Promise.resolve(0),
+    compareRange ? collectReturns(compareRange, f) : Promise.resolve<ReturnCell[]>([]),
+    compareRange ? shippedGrossTotal(compareRange, f) : Promise.resolve(0),
   ]);
 
   const returnQty = cells.reduce((a, c) => a + c.qty, 0);
