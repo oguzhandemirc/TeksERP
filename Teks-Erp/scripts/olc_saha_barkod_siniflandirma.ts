@@ -20,12 +20,8 @@
 //   GENİŞLEME = eski reddediyordu, yeni ediyor    → beklenen: 5+ haneli kodlar
 // =============================================================================
 import prisma from "../src/lib/prisma";
-import {
-  resolveSeriesFormat,
-  matchesSeries,
-  seriesClassifierTable,
-  type NumberSeriesFormat,
-} from "../src/services/number-series.service";
+import { resolveSeriesFormat, matchesSeries, type NumberSeriesFormat } from "../src/services/number-series.service";
+import { seriesClassifierTable } from "../src/services/helpers/series-classifier.helper";
 import type { NumberSeriesKind } from "../src/constants/number-series-catalog";
 
 // ── HEDEF DB KAPISI — fail-closed allowlist (ad tanınmıyorsa RED) ────────────

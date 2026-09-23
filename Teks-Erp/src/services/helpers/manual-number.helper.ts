@@ -19,7 +19,8 @@
 // =============================================================================
 import { NUMBER_SERIES_CATALOG, numberSeriesCatalogEntry } from "../../constants/number-series-catalog";
 import { AppError } from "../../utils/app-error";
-import { classifyScannedCode, resolveSeriesFormat } from "../number-series.service";
+import { resolveSeriesFormat } from "../number-series.service";
+import { classifyScannedCode } from "./series-classifier.helper";
 
 /** Okutulan kodların karakter kümesi — Code128 + istemcilerin `toUpperCase()` varsayımı. */
 const SCANNABLE = /^[A-Z0-9]+$/;

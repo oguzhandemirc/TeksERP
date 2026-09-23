@@ -54,7 +54,7 @@ import {
 import { NUMBER_SERIES_CATALOG, type NumberSeriesCatalogEntry } from "../src/constants/number-series-catalog";
 import { assertSeriesFormatAllowed } from "../src/services/helpers/series-write.helper";
 import { formatSeriesCode, seriesPrefix, type NumberSeriesFormat } from "../src/services/helpers/series-format.helper";
-import type { SeriesClassifierRow } from "../src/services/number-series.service";
+import type { SeriesClassifierRow } from "../src/services/helpers/series-classifier.helper";
 import { git } from "./lib/git";
 
 let pass = 0,

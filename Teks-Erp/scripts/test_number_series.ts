@@ -56,7 +56,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
-import { formatSeriesCode, matchesSeries, resolveSeriesFormat, seriesClassifierTable, seriesPrefix, seriesSeqFrom, type NumberSeriesFormat } from "../src/services/number-series.service";
+import { formatSeriesCode, matchesSeries, resolveSeriesFormat, seriesPrefix, seriesSeqFrom, type NumberSeriesFormat } from "../src/services/number-series.service";
+import { seriesClassifierTable } from "../src/services/helpers/series-classifier.helper";
 import { assertSeriesFormatAllowed } from "../src/services/helpers/series-write.helper";
 import { buildDailyCode, dailyCodePrefix } from "../src/utils/code-format";
 import {

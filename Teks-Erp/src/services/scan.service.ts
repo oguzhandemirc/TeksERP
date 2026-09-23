@@ -12,11 +12,7 @@
 // stringi sınıflandırır. (Biçim önbelleği bayatsa arka planda `number_series`
 // tazelenebilir; o bir yapılandırma satırıdır, iş verisi değil.)
 // =============================================================================
-import {
-  classifyScannedCode,
-  seriesClassifierTable,
-  type SeriesClassifierRow,
-} from "./number-series.service";
+import { classifyScannedCode, seriesClassifierTable, type SeriesClassifierRow } from "./helpers/series-classifier.helper";
 import type { ApiResponse } from "../types/api.types";
 
 export interface ScanResolveDto {

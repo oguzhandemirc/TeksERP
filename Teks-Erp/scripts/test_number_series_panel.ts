@@ -74,13 +74,8 @@ import {
   NUMBER_SERIES_PANEL_GROUPS,
   numberSeriesCatalogEntry,
 } from "../src/constants/number-series-catalog";
-import {
-  previewSeriesCode,
-  refreshNumberSeriesCache,
-  resolveSeriesFormat,
-  seriesClassifierTable,
-  seriesSeqFrom,
-} from "../src/services/number-series.service";
+import { previewSeriesCode, refreshNumberSeriesCache, resolveSeriesFormat, seriesSeqFrom } from "../src/services/number-series.service";
+import { seriesClassifierTable } from "../src/services/helpers/series-classifier.helper";
 import {
   assertSeriesCounterAllowed,
   assertSeriesFormatAllowed,

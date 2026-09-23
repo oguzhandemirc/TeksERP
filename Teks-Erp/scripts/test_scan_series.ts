@@ -34,7 +34,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
-import { classifyScannedCode, formatSeriesCode, resolveSeriesFormat, seriesClassifierTable, seriesPrefix } from "../src/services/number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix } from "../src/services/number-series.service";
+import { classifyScannedCode, seriesClassifierTable } from "../src/services/helpers/series-classifier.helper";
+import { matchesSeries } from "../src/services/helpers/series-format.helper";
 import { getSeriesClassifier, resolveScannedCode } from "../src/services/scan.service";
 
 let pass = 0,
@@ -91,8 +93,26 @@ check("§3 yürürlükteki ön ek de aynı seriye çözülür", ie.data.key === 
 const besHane = resolveScannedCode("CV220926" + "10000");
 check("§4 ⭐ 5 haneli çuval kodu çözülür (günde 9999 aşılınca üretilen kod)",
   besHane.data.key === "sack", `${besHane.data.key}`);
-const besHaneTop = resolveScannedCode("T220926H10000");
-check("§4 top serisinde de hane esnekliği infix'le birlikte çalışır", besHaneTop.data.key === "roll");
+// ⚠️ İDDİA DEĞİŞTİ ÇÜNKÜ DAVRANIŞ DEĞİŞTİ (2026-09-24, D2③): eskiden burada
+// `T220926H10000` "çözülmeli" deniyordu. `roll` o gün YAPISAL kilitliydi ve
+// ÜST SINIRI yoktu ⇒ hane esnekliği açıktı. Bugün üst sınır VERİDE (`maxValue`,
+// bugün 9999): kapasite 9999 iken BEŞ HANELİ BİR TOP KODU HİÇ DOĞAMAZ, yani
+// onu "tanıyan" bir sınıflandırıcı var olmayan bir kodu var sayardı.
+// ⇒ Doğru iddia ÇİFTTİR: kapasite dolgudan BAĞIMSIZ ve eşleşme onu İZLİYOR.
+const rollFmt = resolveSeriesFormat("roll");
+check("§4 ⭐ kapasite 9999 iken 5 haneli TOP kodu çözülmez (o kod hiç doğamaz)",
+  resolveScannedCode("T220926H10000").data.key !== "roll",
+  `maxValue=${rollFmt.maxValue ?? "yok"} · ${resolveScannedCode("T220926H10000").data.key ?? "UNKNOWN"}`);
+check("§4 ⭐ 4 haneli top kodu ÇÖZÜLÜR (infix korunuyor, regresyon yok)",
+  resolveScannedCode("T220926H0033").data.key === "roll");
+// ⚠️ ESNEKLİK KAYBOLMADI, VERİYE BAĞLANDI: fabrika tavanı yükseltirse aynı kod
+// çözülür. Bu, `matchesSeries` ÜZERİNDEN ölçülür (dar ama doğru araç: sınıflandırma
+// yolunun kendi yüklemi; DB'ye dokunmadan tavanı değiştirmenin başka yolu yok).
+check("§4 ⭐ tavan yükseltilince AYNI kod çözülür — esneklik VERİDEN geliyor, koddan değil",
+  matchesSeries({ ...rollFmt, maxValue: 99999 }, "T220926H10000"),
+  "maxValue 9999 → 99999");
+check("§4 ⭐ ve infix hâlâ zorunlu (tavan yükselince kapı gevşemiyor)",
+  !matchesSeries({ ...rollFmt, maxValue: 99999 }, "T22092610000"));
 
 // ── §5 Tanınmayan kod ───────────────────────────────────────────────────────
 for (const kod of ["ZZZ2209260001", "12345", "CV22092", "", "   "]) {

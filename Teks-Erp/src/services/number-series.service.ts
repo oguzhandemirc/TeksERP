@@ -488,12 +488,12 @@ export async function nextSeriesSeq(
   return { seq: scopedNextSeq(key, fmt, fullPrefix, rows), fullPrefix, fmt };
 }
 
-// ── SINIFLANDIRMA → `helpers/series-classifier.helper.ts` (boyut bölmesi) ────
-export {
-  classifyScannedCode,
-  seriesClassifierTable,
-  type SeriesClassifierRow,
-} from "./helpers/series-classifier.helper";
+// ── SINIFLANDIRMA → `helpers/series-classifier.helper.ts` ────────────────────
+// ⚠️ BURADAN YENİDEN İHRAÇ EDİLMİYOR ve bu bir SÖZLEŞME (2026-09-24): sınıflandırıcı
+// bu servisin `resolveSeriesFormat`ını çağırır, yani ihraç geri konursa iki modül
+// RUNTIME (value) DÖNGÜSÜNE girer — `test_import_cycles` bunu kırmızı verir.
+// Boyut bölmesi yapılırken kolaylık olsun diye konmuştu; çağıranlar helper'ı
+// DOĞRUDAN import eder, tek yön kalır.
 
 /**
  * BEKLEYEN (henüz yürürlüğe girmemiş) BİÇİM DEĞİŞİKLİĞİ — panel bunu gösterir.

@@ -258,9 +258,23 @@ async function main(): Promise<void> {
       breakingAxesOf(e.key).length > 0,
   );
   const kiranEksen = taranan ? breakingAxesOf(taranan.key)[0]! : null;
-  check("§9 körlük zemini: düzenlenebilir · kilitli · OKUTULAN seri GERÇEKTEN var",
-    duzenlenebilir !== undefined && kilitli !== undefined && taranan !== undefined,
-    `${duzenlenebilir?.key ?? "-"} / ${kilitli?.key ?? "-"} / ${taranan?.key ?? "-"}`);
+  // ⚠️ ZEMİN İKİYE AYRILDI ve sebebi ÖLÇÜLDÜ (2026-09-24): YAPISAL kilitli seri
+  // SAYISI SIFIRA İNDİ (numaralandırma fazının amacı buydu — biçim tamamen veri
+  // oldu). Eski tek parça zemin bunu "kapı bozuk" diye rapor ediyordu; oysa
+  // bozulan bir şey yok, ÖLÇÜLECEK HEDEF kalmadı. Bunlar aynı şey değildir:
+  //   · düzenlenebilir + OKUTULAN seri → hedef VAR, iddia SERT kalır
+  //   · kilitli seri                   → hedef YOK, sonuç ÖLÇÜLEMEDİ
+  // ⚠️ VE KALICI BİR ATLAMA DEĞİL: yarın bir seri yapısal kilit kazanırsa §9c
+  // KENDİLİĞİNDEN yeniden koşar — küme keşifle bulunuyor, elle listeyle değil.
+  check("§9 körlük zemini: düzenlenebilir · OKUTULAN seri GERÇEKTEN var",
+    duzenlenebilir !== undefined && taranan !== undefined,
+    `${duzenlenebilir?.key ?? "-"} / ${taranan?.key ?? "-"}`);
+  if (kilitli === undefined) {
+    console.log(
+      `ℹ️  §9c ÖLÇÜLEMEDİ: YAPISAL kilitli seri YOK (${NUMBER_SERIES_CATALOG.length} serinin 0'ı) ⇒ ` +
+        "kilitli-seri kolu koşmadı. Bir seri kilit kazandığı gün kol kendiliğinden döner.",
+    );
+  }
 
   function nsKalem(key: string, over: Record<string, unknown> = {}): BundleEnvelope {
     const f = resolveSeriesFormat(key);
@@ -281,7 +295,7 @@ async function main(): Promise<void> {
     };
   }
 
-  if (duzenlenebilir && kilitli) {
+  if (duzenlenebilir) {
     const ayniPlan = await planBundle(nsKalem(duzenlenebilir.key), "overwrite");
     check("§9b aynı ayar → SKIP (gereksiz yazma yok)",
       ayniPlan.rows[0]?.action === "SKIP", ayniPlan.rows[0]?.message);
@@ -297,6 +311,9 @@ async function main(): Promise<void> {
       degisimPlan.rows[0]?.action === "OVERWRITE" && (degisimPlan.rows[0]?.message ?? "").includes("→"),
       degisimPlan.rows[0]?.message);
 
+  }
+
+  if (kilitli) {
     const kilitPlan = await planBundle(nsKalem(kilitli.key, { digits: 5 }), "overwrite");
     check("§9c ⭐ KİLİTLİ seri önizlemede HATA verir (kapı KURU koşuyor, yazma denenmiyor)",
       kilitPlan.rows[0]?.action === "ERROR", kilitPlan.rows[0]?.message);

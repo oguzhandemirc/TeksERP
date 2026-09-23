@@ -198,8 +198,14 @@ function ikinciEklem(ad: string, dosya: string): void {
   // istemcide ÖLÜ KODDU — kaldırınca hiçbir iddia kırmızı vermedi, çünkü
   // `head` tarih boşken ikinci eklemi zaten hiç kurmuyor. Ölçülebilir olan
   // gerçek kural bu: `separator2` yoksa `separator`a DÜŞÜLÜR (fail-safe).
+  // ⚠️ ALICININ ADI SÖZLEŞME DEĞİL (ölçüldü 2026-09-24): iddia `row.separator2 ??
+  // row.separator` diye YAZILIYDI ve `fullFormat` parametresi `row`dan `sekil`e
+  // dönünce kırmızı verdi — korunan davranış BOZULMADIĞI hâlde. Kapının deseni
+  // yapıya değil BİR ADA bağlanmıştı. Yeni desen adı serbest bırakır ama yapıyı
+  // SIKILAŞTIRIR: iki yanın AYNI nesne olması artık şart (geri referans `\1`),
+  // yani `a.separator2 ?? b.separator` gibi sessiz bir karışım da geçemez.
   check(`${ad} ⭐ \`separator2\` yokken \`separator\`a düşüyor (sunucudaki \`seriesJoints\` kuralı)`,
-    /row\.separator2\s*\?\?\s*row\.separator(?![\w])/.test(govde));
+    /(\w+)\.separator2\s*\?\?\s*\1\.separator(?![\w])/.test(govde));
 }
 
 console.log("\n── §3 BEYAN ↔ ÜRETİM ──");

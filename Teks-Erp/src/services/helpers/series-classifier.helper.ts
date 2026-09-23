@@ -16,12 +16,12 @@ import {
 } from "../../constants/number-series-catalog";
 import { matchesSeries, type NumberSeriesFormat } from "./series-format.helper";
 import { normalizeScanCode } from "../../utils/code-format";
-// ⚠️ DÖNGÜSEL İÇE AKTARMA ve BİLİNÇLİ: servis bu dosyayı yeniden dışa veriyor,
-// bu dosya da servisin önbellek okuyucusunu çağırıyor. Modül YÜKLENİRKEN
-// çalışan bir kod yok (yalnız fonksiyon tanımları), yani başlatma sırası
-// sorunu doğmaz. Alternatif — biçim çözücüyü parametre olarak geçirmek —
-// çağıranların "hangi çözücü" diye karar vermesini isterdi ve tek
-// sınıflandırıcı iddiasını zayıflatırdı.
+// ⚠️ BAĞIMLILIK TEK YÖNLÜ OLMAK ZORUNDA: bu dosya servisin önbellek okuyucusunu
+// çağırır, servis ise bu dosyayı YENİDEN İHRAÇ ETMEZ. 2026-09-24'e kadar ediyordu
+// ve "bilinçli döngü, modül yüklenirken kod koşmuyor" diye yazılıydı — `test_import_cycles`
+// o gerekçeyi kabul etmedi ve HAKLIYDI: döngünün bugün zararsız olması, yarın
+// birinin modül düzeyine bir çağrı eklemesini engellemez (`test_seri_modul_yuklemesi`
+// tam o kazayı ölçüyor). ⇒ Çağıranlar bu helper'ı DOĞRUDAN import eder.
 import { resolveSeriesFormat } from "../number-series.service";
 
 export interface SeriesClassifierRow {

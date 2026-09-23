@@ -30,8 +30,25 @@
 // yani sessiz bir yanlış. ⇒ Örnek, o kodu GERÇEKTEN üreten yoldan türetilir
 // (`roll` için `rollBarcodePrefix`), seri tablosundan değil.
 //
-// ⛔ ÖLÇMEDİĞİ (beyanlı): geçmişte GERÇEKTEN yaşanmış saha vakaları (`inventory.service.ts`
-// içindeki `T050826H0033` gibi) — onlar örnek değil KANIT, ve zaten kilitli seridendir.
+// ⛔ ÖLÇMEDİĞİ ① — YORUMLAR (2026-09-24, 1e kararı): tarayıcı eşleştirmeden ÖNCE yorumları
+// soyar. Yorumdaki bayat örnek yalan söyler ama kimseye kod ÜRETMEZ; üstelik bu depoda
+// ölçüm anlatısı yorumda yaşar ("IE0808260001 bu hatayı üretmişti"), yani yorumları saymak
+// kapıyı BELGE DİSİPLİNİNİN karşısına koyardı. Ölçüldü 2026-09-24: 594 ham eşleşmenin
+// 442'si yorumdaydı, 152'si kodda.
+//
+// ⛔ ÖLÇMEDİĞİ ② — AYIRT EDİCİ OLMAYAN SERİLER (ÜÇÜNCÜ SONUÇ, ölçüldü 2026-09-24):
+// bir serinin deseni `ön ek + ayraç + tarih` SABİT parçasıyla ayırt edilir; bu parça
+// kısaldıkça desen sıradan metinle çakışır. `batchShort` (`P` + en az iki rakam, tarihsiz)
+// 479 eşleşme üretti ve en kalabalık dosyası `error.middleware.ts`ti — 63 eşleşmenin
+// hepsi PRİSMA HATA KODU (`P2002`, `P2010`…). Böyle bir seri "0 bulgu" da vermez,
+// "479 bulgu" da: ÖLÇÜLEMEZ, ve ölçülemediği ADIYLA BASILIR. Eşik ölçülerek seçildi
+// (`item` = `STK` + `-` = 4 ile TAM SINIRDA ve gerçek bir literali var: `STK-000001`).
+// ⚠️ Küme DONDURULUR (`OLCULEMEZ`): yarın tarihsiz tek harfli bir seri daha doğarsa
+// kapı onu sessizce yutmaz, kırmızı verir ve kapsam yeniden sorulur.
+//
+// ⛔ ÖLÇMEDİĞİ ③: geçmişte GERÇEKTEN yaşanmış saha vakaları (`inventory.service.ts`
+// içindeki `T050826H0033` gibi) — onlar örnek değil KANIT. (2026-09-24'e kadar gerekçe
+// "zaten kilitli seridendir"di; YAPISAL kilitli seri KALMADI, gerekçe artık yorum soymadır.)
 // Testler (`*.test.*`) kapsam dışı: fikstür kodu `TEST-` ön ekiyle doğar.
 //
 // İKİ KOLLU SONDA (ölçüldü 2026-09-23; ikisi de geri alındı, `cmp` birebir):
@@ -71,7 +88,20 @@ import { resolveSeriesFormat } from "../src/services/number-series.service";
  * aynası ×3 — tek taraflı türetme AYNAYI BOZAR). Bunları düşürmek ayrı bir
  * karardır: yorumdaki örnek bayatlarsa yalan söyler ama kimseye kod üretmez.
  */
-const TABAN = 86;
+const TABAN = 49;
+
+/**
+ * AYIRT EDİCİLİK EŞİĞİ — desenin SABİT parçasının en az bu kadar karakter olması.
+ * Altında kalan seri ölçülemez (bkz. başlık, ÖLÇMEDİĞİ ②).
+ */
+const AYIRT_EDICI_ESIK = 4;
+
+/**
+ * ÖLÇÜLEMEYEN seriler — ADIYLA dondurulur ki küme sessizce büyümesin.
+ * İkisi de kullanıcının istediği KISA, tarihsiz numaralardır (`P-1`), yani
+ * kusur serilerde değil: bu tarayıcı onları ayırt edemez ve bunu söyler.
+ */
+const OLCULEMEZ = new Set(["batchShort", "packingLotName"]);
 
 const KOK = join(__dirname, "..", "..");
 const TARANAN = ["Teks-Erp/src", "Electron/src", "mobil/src"];
@@ -114,15 +144,54 @@ export function seriDeseni(key: string): RegExp {
   return new RegExp(`\\b${bas}\\d{${f.digits},}\\b`, "g");
 }
 
+/**
+ * Yorumları BOŞLUĞA çevirir (silmez) — satır/sütun kayması olmasın diye.
+ * Blok yorumun içindeki satır sonları korunur.
+ */
+function yorumlariSoy(metin: string): string {
+  return metin
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .split("\n")
+    .map((satir) => {
+      const i = satir.indexOf("//");
+      return i >= 0 ? satir.slice(0, i) : satir;
+    })
+    .join("\n");
+}
+
+/** Desenin SABİT (rakam olmayan) parçasının uzunluğu — ayırt ediciliğin ölçüsü. */
+export function sabitParcaUzunlugu(key: string): number {
+  const f = resolveSeriesFormat(key);
+  const len = DATE_SEGMENTS[f.dateSegment].len;
+  const ikinci = f.separator2 ?? f.separator;
+  return (
+    f.prefix.length +
+    (f.separator === "" ? 0 : f.separator.length) +
+    len +
+    (len > 0 && ikinci !== "" ? ikinci.length : 0)
+  );
+}
+
+/** Bugün ölçülebilen seriler — eşiğin altındakiler ÜÇÜNCÜ SONUÇ olarak ayrılır. */
+export function olculebilirSeriler(): { olculen: string[]; olculemeyen: string[] } {
+  const olculen: string[] = [];
+  const olculemeyen: string[] = [];
+  for (const e of NUMBER_SERIES_CATALOG.filter((x) => !x.lockedReason)) {
+    (sabitParcaUzunlugu(e.key) >= AYIRT_EDICI_ESIK ? olculen : olculemeyen).push(e.key);
+  }
+  return { olculen, olculemeyen };
+}
+
 export function bulgulariTopla(): Array<{ key: string; kod: string; yer: string }> {
   const out: Array<{ key: string; kod: string; yer: string }> = [];
-  const duzenlenebilir = NUMBER_SERIES_CATALOG.filter((e) => !e.lockedReason);
-  for (const e of duzenlenebilir) {
-    const re = seriDeseni(e.key);
+  for (const key of olculebilirSeriler().olculen) {
+    const re = seriDeseni(key);
     for (const dir of TARANAN) {
       for (const dosya of kaynakDosyalari(join(KOK, dir))) {
-        for (const m of readFileSync(dosya, "utf-8").matchAll(re)) {
-          out.push({ key: e.key, kod: m[0], yer: relative(KOK, dosya) });
+        // ⚠️ YORUM SOYMA EŞLEŞMEDEN ÖNCE: sonra süzmek "hangi satırdaydı" sorusunu
+        // yeniden sormak olurdu ve çok satırlı blok yorumda yanlış cevap verirdi.
+        for (const m of yorumlariSoy(readFileSync(dosya, "utf-8")).matchAll(re)) {
+          out.push({ key, kod: m[0], yer: relative(KOK, dosya) });
         }
       }
     }
@@ -136,6 +205,17 @@ const kilitli = NUMBER_SERIES_CATALOG.filter((e) => e.lockedReason).length;
 check("§0 körlük zemini: kapsam gerçekten dar değil (düzenlenebilir seri çoğunlukta)",
   NUMBER_SERIES_CATALOG.length - kilitli >= 40,
   `${NUMBER_SERIES_CATALOG.length - kilitli} düzenlenebilir / ${kilitli} kilitli`);
+
+// ── ÜÇÜNCÜ SONUÇ: ölçülemeyen seriler ADIYLA basılır ve KÜMESİ donar ────────
+const { olculen, olculemeyen } = olculebilirSeriler();
+console.log(
+  `\nℹ️  ÖLÇÜLEMEDİ (${olculemeyen.length}): ${olculemeyen.map((k) => `${k} (sabit parça ${sabitParcaUzunlugu(k)} < ${AYIRT_EDICI_ESIK})`).join(" · ") || "yok"}`,
+);
+check("§0c ⭐ ölçülemeyen seri kümesi BEYAN EDİLENLE aynı (sessizce büyümedi)",
+  olculemeyen.length === OLCULEMEZ.size && olculemeyen.every((k) => OLCULEMEZ.has(k)),
+  `ölçülemeyen: ${olculemeyen.join(", ") || "yok"} · beyan: ${[...OLCULEMEZ].join(", ")}`);
+check("§0d körlük zemini: ölçüm alanı BOŞALMADI (eşik her şeyi elemedi)",
+  olculen.length >= 40, `${olculen.length} seri ölçülüyor`);
 
 const bulgular = bulgulariTopla();
 check("§0 körlük zemini: tarayıcı GERÇEKTEN eşleşiyor (ölü regex değil)",

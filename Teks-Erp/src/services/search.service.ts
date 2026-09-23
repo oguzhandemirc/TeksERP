@@ -28,7 +28,7 @@ import { buildTextSearch } from "../utils/query-parser";
 import { foldCodeForCompare, normalizeScanCode } from "../utils/code-format";
 import { foldSearchTokens } from "../utils/search-fold";
 import { SEARCH_ENTITIES, type SearchEntity, type SearchEntityKey } from "../constants/search-entities";
-import { classifyScannedCode } from "./number-series.service";
+import { classifyScannedCode } from "./helpers/series-classifier.helper";
 
 /** Palet satırı — `ScanResolution` ile BİLEREK aynı şekil (tek satır bileşeni). */
 export interface SearchRow {
