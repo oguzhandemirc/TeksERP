@@ -67,6 +67,29 @@ const konsol = [];
 const udd = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-e2e-udd-"));
 const app = await electron.launch({ executablePath: ELECTRON_BIN, args: [MAIN_JS, `--user-data-dir=${udd}`], env: { ...process.env, APP_ENV: "development" }, timeout: 60_000 });
 const page = await app.firstWindow();
+// GÖRÜNÜRLÜK: `KESIF_GORUNUR=1` yoksa pencere kullanıcının ekranından çekilir (odak çalmaz).
+// Ölçüm sonucu `pencere` alanında raporlanır — gizli pencerede görüntü alınabiliyor mu.
+const GORUNUR = process.env.KESIF_GORUNUR === "1";
+const pencere = await app.evaluate(({ BrowserWindow }, gorunur) => {
+  const w = BrowserWindow.getAllWindows()[0];
+  if (!w) return { yok: true };
+  // Uygulama `ready-to-show`ta show() + maximize() çağırıyor (electron/main.ts) — örnek
+  // metotları ekran dışı ve odak çalmayan sürümlerle değiştirilir; build'e dokunulmaz.
+  if (!gorunur) {
+    w.webContents.setBackgroundThrottling(false);
+    w.setSkipTaskbar?.(true);
+    w.maximize = () => undefined;
+    w.focus = () => undefined;
+    w.show = () => { w.setPosition(-10000, -10000); w.showInactive(); w.setPosition(-10000, -10000); };
+    w.setPosition(-10000, -10000);
+    // macOS pencereyi ekrana geri kıstırır (ölçüldü: x=-1240) → görünmez + tıklama geçirir.
+    w.setOpacity(0);
+    w.setIgnoreMouseEvents(true);
+  }
+  const [x, y] = w.getPosition();
+  return { gorunur, x, y, visible: w.isVisible(), focused: w.isFocused() };
+}, GORUNUR);
+console.log(`pencere: ${JSON.stringify(pencere)}`);
 page.on("console", (m) => { if (m.type() === "error") konsol.push(m.text().slice(0, 300)); });
 await page.route("http://localhost:4000/**", (r) => r.abort("blockedbyclient"));
 {
@@ -105,6 +128,29 @@ async function numaralandirmayaGit() {
 }
 await numaralandirmayaGit();
 await page.screenshot({ path: path.join(CIKTI, "00-sayfa.png"), fullPage: true });
+
+// ── TOAST KOLU: her toast adım adıyla kaydedilir, görüntü toast kaybolmadan alınır ──
+let simdikiAdim = "giriş";
+const toastlar = [];
+let toastNo = 0;
+await page.exposeFunction("__kesifToast", async (t) => {
+  const dosya = `toast-${String(++toastNo).padStart(3, "0")}.png`;
+  await page.screenshot({ path: path.join(CIKTI, dosya) }).catch(() => undefined);
+  const k = { adim: simdikiAdim, tur: t.tur, metin: t.metin, zaman: new Date().toISOString(), gorsel: dosya };
+  toastlar.push(k);
+  console.log(`  🔔 toast [${k.tur}] ${k.adim} → ${k.metin.slice(0, 160)}`);
+});
+await page.evaluate(() => {
+  const gorulen = new WeakSet();
+  const tara = () => document.querySelectorAll("[data-sonner-toast]").forEach((el) => {
+    if (gorulen.has(el)) return;
+    gorulen.add(el);
+    // metin bir sonraki karede dolar
+    requestAnimationFrame(() => window.__kesifToast({ tur: el.getAttribute("data-type") ?? "?", metin: (el.textContent ?? "").trim() }));
+  });
+  new MutationObserver(tara).observe(document.body, { childList: true, subtree: true });
+  tara();
+});
 
 // ── yardımcılar ──────────────────────────────────────────────────────────────
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -178,12 +224,14 @@ if (istenen.length) seriler = seriler.filter((r) => istenen.includes(r.key));
 seriler.sort((a, b) => (ONCELIK.indexOf(a.key) + 1 || 99) - (ONCELIK.indexOf(b.key) + 1 || 99));
 
 const sonuc = [];
-const yaz = () => fs.writeFileSync(path.join(CIKTI, "sonuc.json"), JSON.stringify({ zaman, db: ortam.dbName, seriler: sonuc, konsol: konsol.slice(0, 80) }, null, 2));
+const yaz = () => fs.writeFileSync(path.join(CIKTI, "sonuc.json"), JSON.stringify({ zaman, db: ortam.dbName, pencere, seriler: sonuc, toastlar, konsol: konsol.slice(0, 80) }, null, 2));
+const adim = (key, alan, deneme) => { simdikiAdim = `${key} · ${alan} · ${deneme}`; };
 const kayit = (key, alan, deneme, veri) => { const s = { key, alan, deneme, ...veri }; sonuc.push(s); console.log(`${key} · ${alan} · ${deneme} → ${JSON.stringify(veri).slice(0, 260)}`); yaz(); };
 
 for (const r0 of seriler) {
   const key = r0.key;
   try {
+    adim(key, "diyalog", "aç");
     const izOnce = await parmakIzi(key);
     const tr = satir(r0.label);
     await tr.scrollIntoViewIfNeeded();
@@ -211,24 +259,32 @@ for (const r0 of seriler) {
         await page.waitForTimeout(300);
       };
       for (const p of catismaAdaylari(r0)) {
+        adim(key, "ön ek", `→ ${p}`);
         await d.locator("#ns-prefix").fill(p);
         kayit(key, "ön ek", `→ ${p} (okutulan/başka seri ön eki)`, { ...(await durumOku(d)), gorsel: await gor(key, `onek-${p}`) });
       }
+      adim(key, "ön ek", "→ ZQ");
       await d.locator("#ns-prefix").fill("ZQ");
       kayit(key, "ön ek", "→ ZQ (benzersiz)", { ...(await durumOku(d)), gorsel: await gor(key, "onek-ZQ") });
+      adim(key, "ön ek", "→ boş [KASITLI HATA]");
       await d.locator("#ns-prefix").fill("");
       kayit(key, "ön ek", "→ boş", { ...(await durumOku(d)), gorsel: await gor(key, "onek-bos") });
       await sifirla();
+      adim(key, "tarih", "tarihsiz/YYMM");
       await d.locator("#ns-segment").selectOption(orj.ds === "NONE" ? "YYMM" : "NONE");
       kayit(key, "tarih", orj.ds === "NONE" ? "→ YYMM" : "→ Tarihsiz", { ...(await durumOku(d)), gorsel: await gor(key, "tarih") });
+      adim(key, "tarih", "→ YYYYMMDD [kolon sığmayabilir]");
       await d.locator("#ns-segment").selectOption("YYYYMMDD");
       kayit(key, "tarih", "→ YYYYMMDD", { ...(await durumOku(d)), gorsel: await gor(key, "tarih2") });
       await sifirla();
+      adim(key, "hane", "+1");
       await d.locator("#ns-digits").fill(String(Math.min(8, r0.digits + 1)));
       kayit(key, "hane", `→ ${Math.min(8, r0.digits + 1)}`, { ...(await durumOku(d)), gorsel: await gor(key, "hane") });
+      adim(key, "hane", "→ 9 [KASITLI HATA]");
       await d.locator("#ns-digits").fill("9");
       kayit(key, "hane", "→ 9 (sınır dışı)", { ...(await durumOku(d)), gorsel: await gor(key, "hane9") });
       await sifirla();
+      adim(key, "ayraç", "- ve /");
       await d.locator("#ns-sep").fill("-");
       const sep2Var = (await d.locator("#ns-sep2").count()) > 0;
       if (sep2Var) await d.locator("#ns-sep2").fill("/");
@@ -236,6 +292,7 @@ for (const r0 of seriler) {
       await sifirla();
 
       // GERÇEK KAYIT: ön ek ZQ + ayraç '-' → doğrula → geri al
+      adim(key, "kaydet", "ZQ + -");
       await d.locator("#ns-prefix").fill("ZQ");
       await d.locator("#ns-sep").fill("-");
       const on = await durumOku(d);
@@ -245,6 +302,7 @@ for (const r0 of seriler) {
       kayit(key, "kaydet", "ön ek ZQ + ayraç '-'", { onizleme: on.onizleme, ...k1, dbSonra: sonra, eskiNumaralarAyni: izOnce === izSonra, cizgi: await cizgiSayisi(key) });
       // geri al
       await page.waitForTimeout(800);
+      adim(key, "geri al", "biçim");
       const r1 = (await seriListesi()).find((x) => x.key === key);
       const d2 = await ac(r1);
       if (d2) {
@@ -261,6 +319,7 @@ for (const r0 of seriler) {
 
     // SAYAÇ: üst sınır → kaydet → geri al (boş)
     if (sayacAcik) {
+      adim(key, "sayaç", "üst sınır");
       const d3 = await ac((await seriListesi()).find((x) => x.key === key));
       await d3.locator("#ns-max").fill("99999999");
       const on = await durumOku(d3);
@@ -269,6 +328,7 @@ for (const r0 of seriler) {
       const db = (await sql(`SELECT "startValue","step","maxValue" FROM number_series WHERE key=$1`, [key]))[0];
       kayit(key, "sayaç", "üst sınır 99999999", { ...on, ...k, db });
       await diyaloguKapat();
+      adim(key, "sayaç", "geri al");
       const d4 = await ac((await seriListesi()).find((x) => x.key === key));
       await d4.locator("#ns-max").fill("");
       const on4 = await durumOku(d4);
@@ -276,6 +336,7 @@ for (const r0 of seriler) {
       const db4 = (await sql(`SELECT "startValue","step","maxValue" FROM number_series WHERE key=$1`, [key]))[0];
       kayit(key, "sayaç", "geri al (boş)", { ...on4, ...k4, db: db4 });
       await diyaloguKapat();
+      adim(key, "sayaç", "adım 0");
       const d5 = await ac((await seriListesi()).find((x) => x.key === key));
       await d5.locator("#ns-start").fill("1");
       await d5.locator("#ns-step").fill("0");
@@ -285,15 +346,18 @@ for (const r0 of seriler) {
 
     // KAYNAK: Yalnız sistem → kaydet → geri al
     if (kaynakVar) {
+      adim(key, "numara kaynağı", "değiştir");
       const orjKaynak = (await seriListesi()).find((x) => x.key === key).source.value;
       const d6 = await ac((await seriListesi()).find((x) => x.key === key));
       await d6.locator("#ns-source").click();
       await page.getByRole("option", { exact: false, name: orjKaynak === "SYSTEM" ? "Serbest (sistem üretir, elle yazılabilir)" : "Yalnız sistem" }).click();
       const on = await durumOku(d6);
+      if (!on.kaydetAcik) { kayit(key, "numara kaynağı", "değiştir", { ...on, sonuc: "Kaydet PASİF", gorsel: await gor(key, "kaynak-pasif") }); await diyaloguKapat(); throw new Error("SKIP"); }
       const k = await kaydet(key, d6, "kaynak");
       const db = (await sql(`SELECT "numberSource"::text AS s FROM number_series WHERE key=$1`, [key]).catch((e) => [{ s: `HATA ${e.message}` }]))[0];
       kayit(key, "numara kaynağı", `${orjKaynak} → ${orjKaynak === "SYSTEM" ? "FREE" : "SYSTEM"}`, { ...on, ...k, db });
       await diyaloguKapat();
+      adim(key, "numara kaynağı", "geri al");
       const d7 = await ac((await seriListesi()).find((x) => x.key === key));
       await d7.locator("#ns-source").click();
       await page.getByRole("option", { exact: false, name: orjKaynak === "FREE" ? "Serbest (sistem üretir, elle yazılabilir)" : orjKaynak === "SYSTEM" ? "Yalnız sistem" : "Yalnız elle" }).click();
@@ -305,6 +369,7 @@ for (const r0 of seriler) {
 
     // YÜRÜRLÜK: yarın + ön ek ZQ → kaydet → satır ölç → "hemen" ile geri dön
     if (yururlukVar) {
+      adim(key, "yürürlük", "yarın + ZQ");
       const d8 = await ac((await seriListesi()).find((x) => x.key === key));
       await d8.locator("#ns-prefix").fill("ZQ");
       await d8.locator("#ns-effective").fill(yarin());
@@ -317,6 +382,7 @@ for (const r0 of seriler) {
       kayit(key, "yürürlük", `yarın (${yarin()}) + ön ek ZQ`, { ...on, ...k, listeOnEk: liste.prefix, listeOnizleme: liste.preview, cizgiler });
       await diyaloguKapat();
       // geri: gelecekteki çizgi nasıl iptal edilir? Panelde yol var mı — ölç.
+      adim(key, "yürürlük", "sonra diyalog");
       const d9 = await ac(liste);
       const on9 = await durumOku(d9);
       const g9 = await gor(key, "yururluk-sonra-diyalog");
@@ -324,11 +390,19 @@ for (const r0 of seriler) {
       await diyaloguKapat();
     }
   } catch (e) {
+    if (String(e?.message) === "SKIP") continue;
     kayit(key, "SÜRÜCÜ", "hata", { hata: String(e?.message ?? e).split("\n")[0].slice(0, 300), gorsel: await gor(key, "surucu-hata") });
     await diyaloguKapat();
   }
 }
 
+pencere.sonda = await app.evaluate(({ BrowserWindow, screen }) => {
+  const w = BrowserWindow.getAllWindows()[0];
+  const [x, y] = w.getPosition();
+  const ekranda = screen.getAllDisplays().some((dp) => { const b = dp.bounds; return x < b.x + b.width && x + w.getSize()[0] > b.x && y < b.y + b.height && y + w.getSize()[1] > b.y; });
+  return { x, y, visible: w.isVisible(), focused: w.isFocused(), opacity: w.getOpacity(), ekranda };
+}).catch((e) => ({ hata: String(e) }));
+console.log(`pencere sonda: ${JSON.stringify(pencere.sonda)}`);
 await app.close().catch(() => undefined);
 await pg.end().catch(() => undefined);
 yaz();
