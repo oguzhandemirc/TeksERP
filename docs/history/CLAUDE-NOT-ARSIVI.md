@@ -21,6 +21,39 @@
 
 ---
 
+## 2026-09-24 — Etiket taşma kapısı: ölçüm aracı ile ürün aracı AYNI olmak zorunda değil [ÇEKİRDEK]
+
+**Boşluk:** emit katmanı taşmayı bilerek lint etmiyor ("sorumluluk EDİTÖRDE"), editör lint'i ise
+şablon ELLE düzenlenince koşuyor — SERİ ayarı değişince koşmuyor. Arada fabrika haneyi büyütür,
+etiket sessizce kırpılır: ne hata, ne log, yalnız okunmayan barkod.
+
+**ÜÇ ÖLÇÜM, ÜÇÜ DE VARSAYIMI DÜZELTTİ:**
+① *Kapsam.* "Etikete basılan her seri" yanlıştı: `payload.barcode` bağlama göre dolar ve üç
+bağlamın YALNIZ İKİSİ bir seri basar (roll → `roll.barcode`, sack → `sack.sackNo`); swatch
+etiketi `SW-YYMM-XXXXXX-C` ile kendi şemasını basar, `swatch` SERİSİ (`cardNumber`, KRT…) o
+etikette hiç görünmez. Kapsamı varsaysaydım swatch'ta ya hiç ateşlemeyen ya da yanlış seriyi
+ölçen bir kapı olurdu.
+② *Genişlik.* Emitter'da hazır bir `code128WidthDots` var ama `(11·len+35)·mw` karakter başına 11
+modül sayıyor; Code128 rakam çiftlerini subset C ile İKİŞER paketliyor ⇒ 12 karakterde 167 diyor,
+gerçeği 145 (bwip-js ile ölçüldü). **%15 şişik bir ölçüm SIĞAN yerleşimi 409'la reddeder** — yani
+kapı, çözdüğü sorundan daha sık zarar verirdi. Formül yanlış DEĞİL, BAŞKA BİR İŞ için yazılmış
+(okunur satırı ortalamak; kendi yorumu "kabaca" diyor). ⇒ **Hazır bir hesabı devralmadan önce onun
+hangi soruyu cevapladığını sor: aynı büyüklüğü ölçen iki fonksiyon, farklı hassasiyet sözleşmeleri
+taşıyabilir.** Emitter'ınki DEĞİŞTİRİLMEDİ (değiştirmek basılı etiketin görünümünü kaydırırdı).
+③ *Kart ve belgeler.* 1e'nin sorusu üzerine ölçüldü: refakat kartı numarayı METİN olarak basıyor
+(`.barcode` CSS'i, sabit genişlik yok) ve QR'ı SABİT bir kutuya ölçekliyor (`width/height` px,
+`svg { width: 100% }`) — numara uzayınca QR SIKLAŞIR, taşmaz. Belgelerde (irsaliye, çeki) barkod bir
+TABLO KOLONU metni, HTML ile esner. ⇒ Etiket şablonları dışında SABİT GENİŞLİKLİ barkod alanı YOK;
+kapı oraya uzanmıyor ve bu beyanlıdır.
+
+**SONDA SESSİZLİĞİ ÜÇÜNCÜ KEZ BİR KÖRLÜK GÖSTERDİ:** `x` (elemanın konumu) terimini hesaptan
+çıkaran sonda 14/0 verdi — çünkü "dar" fikstüründe barkod ZATEN tek başına taşıyordu ve konumun
+katkısı hiç ölçülmüyordu. Barkodun rahat sığdığı (18 mm / 100 mm) ama `x: 90` yüzünden taşan ikinci
+bir fikstür eklendi; sonda tekrarlandı ve şimdi ısırıyor. *Bir kapının iki terimi varsa, her terim
+İÇİN AYRI bir vaka gerekir; tek vaka ikisini birden "ölçüyor" gibi görünür.*
+
+---
+
 ## 2026-09-23 — Emekli biçimler İSTEMCİDE de tüketiliyor: "alan var" ≠ "davranış var" [ÇEKİRDEK]
 
 **Boşluk nasıl bulundu:** top barkodu diliminde eksen kilidini ölçerken simülasyona İKİNCİ YÜZEY

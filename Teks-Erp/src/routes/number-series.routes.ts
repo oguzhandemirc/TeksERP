@@ -17,6 +17,7 @@
 // DEĞER geçerli mi" serviste. Ayrım bilinçli: ilki oturuma, ikincisi veriye bakar.
 // =============================================================================
 
+import { assertLabelWidthFits, labelWidthFindings, labelWidthWarnings } from "../services/helpers/label-width-gate.helper";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { NumberSeriesDateSegment } from "@prisma/client";
@@ -190,12 +191,26 @@ router.post("/preview", async (req: Request, res: Response, next: NextFunction) 
     // numara" bir sonraki kayıt hangi numarayı alacak. Ekran eskiden yalnız ilkini
     // gösteriyordu ve kullanıcı onu sıradaki numara sanıyordu.
     const next = await previewNextNumber(key, { ...fmt, retiredPrefixes: current.retiredPrefixes });
+    const ornek = previewSeriesCode({ ...fmt, retiredPrefixes: [], infix: current.infix });
+    // ⚠️ ÖNİZLEMEDE ENGEL DEĞİL UYARI: kullanıcı biçimi YAZARKEN etiketin taşacağını
+    // görmeli, ama önizleme bir KAYDETME değildir — burada 409 atmak, henüz karar
+    // vermemiş kullanıcının ekranını hata ile doldururdu. Yükleme AYNI (`labelWidthFindings`),
+    // yalnız sonucun SUNUMU farklı: önizlemede cümle, kaydetmede kapı.
+    const etiket = await labelWidthFindings(key, ornek);
+    const tasan = etiket.filter((b) => b.overflowMm !== null);
     res.status(200).json({
       success: true,
-      data: {
-        preview: previewSeriesCode({ ...fmt, retiredPrefixes: [], infix: current.infix }),
-        next,
-      },
+      data: { preview: ornek, next },
+      ...(tasan.length > 0 || labelWidthWarnings(etiket).length > 0
+        ? {
+            warnings: [
+              ...tasan.map(
+                (b) => `“${b.templateName} · ${b.variantName}” etiketine SIĞMIYOR (${b.overflowMm} mm taşıyor).`,
+              ),
+              ...labelWidthWarnings(etiket),
+            ],
+          }
+        : {}),
     });
   } catch (e) {
     next(e);
@@ -249,6 +264,16 @@ router.patch(
     try {
       const { key } = keyParamSchema.parse(req.params);
       const { effectiveFrom, ...fmt } = formatWithEffectiveSchema.parse(req.body ?? {});
+      // ⚠️ ETİKET KAPISI YAZMADAN ÖNCE: biçim kaydedildikten sonra ölçmek, taşan
+      // barkodu SAHAYA çıkardıktan sonra fark etmek olurdu — emit katmanı taşmayı
+      // lint etmez ve kırpılan barkod hata vermez, yalnız okunmaz.
+      // Önizlemeyle AYNI yüklem; burada sonuç KAPI, orada cümle.
+      const currentFmt = resolveSeriesFormat(key);
+      const etiketBulgu = await labelWidthFindings(
+        key,
+        previewSeriesCode({ ...fmt, retiredPrefixes: [], infix: currentFmt.infix }),
+      );
+      assertLabelWidthFits(key, etiketBulgu);
       const row = await updateSeriesFormat(
         key,
         fmt,

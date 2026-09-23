@@ -25,6 +25,12 @@
       },
       "maddeler": [
         {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Numara biçimini değiştirirken barkodun etiketE SIĞIP SIĞMADIĞI artık kontrol ediliyor. Top ve çuval barkodu uzadığında (ön ek büyüdü, hane arttı) basılan barkod etiketin dışına taşabiliyordu; taşan barkod hata vermez, yalnız okunmaz ve bu sahada ancak okutma sırasında fark edilirdi. Artık kaydetmeden önce her etkin etiket şablonu ölçülüyor: sığmayan varsa kaydetme DURUR ve hangi şablonların taştığı adıyla ve kaç mm taştığıyla birlikte yazılır. Numaralandırma ekranındaki önizleme de aynı ölçümü yapıyor, yani sorunu yazarken görüyorsunuz. Bir şablonun tasarımı okunamazsa ölçüm yapılamadığı SÖYLENİR — sessizce “sığıyor” denmez.",
+          "dene": "Ayarlar → Numaralandırma → “Top barkodu”nda hane sayısını çok artırın: sığmayan etiket şablonları varsa kaydetme durur ve şablon adlarını listeler."
+        },
+        {
           "kapsam": "her-ikisi",
           "tip": "duzeltme",
           "metin": "Barkod biçimi değiştirildikten sonra ESKİ etiketler de okutulmaya devam ediyor. Önceden: bir serinin ön eki, tarih bölümü ya da hane sayısı değiştirilince panel ve tablet eski barkodu TANIYOR ama “aç/okut” adımında sessizce hiçbir şey yapmıyordu — operatör okutuyor, ekran kımıldamıyordu, hata da çıkmıyordu. Artık her iki cihaz da serinin emekli biçimlerini kendi hane ve tarih düzenleriyle deniyor, yani dünkü etiket de bugünkü etiket de açılıyor. Biçimi hiç değişmemiş serilerde davranış aynı.",
