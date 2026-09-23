@@ -178,6 +178,7 @@ async function migrateFormatLinesOnce(): Promise<number | null> {
   const data: Array<{
     seriesKey: string; prefix: string; dateSegment: (typeof rows)[number]["dateSegment"];
     digits: number; separator: string; effectiveFrom: Date; isSentinel: boolean;
+    origin: "RECORDED" | "MIGRATED_GUESS";
   }> = [];
   for (const r of rows) {
     // Emekliler önce (sentinel, liste sırasıyla), yürürlükteki en sonda.
@@ -185,6 +186,10 @@ async function migrateFormatLinesOnce(): Promise<number | null> {
       data.push({
         seriesKey: r.key, prefix: onek, dateSegment: r.dateSegment, digits: r.digits,
         separator: r.separator, effectiveFrom: new Date(1000 * (i + 1)), isSentinel: true,
+        // ⚠️ BİÇİM TAHMİN: yalnız ÖN EK biliniyordu; segment/hane/ayraç
+        // bugünküyle aynı varsayıldı. Tarihin sentinel olması (`isSentinel`)
+        // BİÇİMİN tahmin olduğunu söylemez — ikisi AYRI beyan.
+        origin: "MIGRATED_GUESS",
       });
     });
     data.push({
@@ -193,6 +198,9 @@ async function migrateFormatLinesOnce(): Promise<number | null> {
       // Damga varsa GERÇEK tarih; yoksa sentinel (biçim hiç değişmemiş seri).
       effectiveFrom: r.formatChangedAt ?? new Date(1000 * (r.retiredPrefixes.length + 1)),
       isSentinel: r.formatChangedAt === null,
+      // Yürürlükteki satırın BİÇİMİ tahmin DEĞİL — bugünkü biçimin ta kendisi;
+      // yalnız TARİHİ bilinmiyor olabilir.
+      origin: "RECORDED",
     });
   }
   if (data.length > 0) {

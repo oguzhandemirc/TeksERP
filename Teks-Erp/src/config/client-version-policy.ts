@@ -161,6 +161,24 @@ export const MOBIL_VERSION_POLICY: ClientVersionPolicy = {
  */
 export const FAZ_B_ONCESI = { electron: "1.3.1", mobil: "1.0.7" } as const;
 
+/**
+ * FAZ D'Yİ (EMEKLİ BİÇİMLE SINIFLANDIRMA) TAŞIMAYAN SON SÜRÜMLER — Faz B'nin
+ * birebir emsali, ve AYRI BİR EKSEN olması ÖLÇÜLMÜŞ bir gerekçeye dayanıyor:
+ *
+ * Faz B istemciye "biçim tablodan gelir" dedi ama tablo satırı SERİ BAŞINA TEK
+ * biçim taşıyordu (`prefixes[]` × tek `dateSegment`/`digits`). Yani emekli bir
+ * ön ek YÜRÜRLÜKTEKİ hane ile deneniyordu; hane 4 → 6 yapılınca dünkü kod
+ * istemcide TANINMIYOR (ölçüldü 2026-09-23, sunucuda da aynıydı — D4② onu
+ * düzeltti). Faz B'yi taşıyan ama Faz D'yi taşımayan bir tablet, biçim
+ * değiştiği gün eski etiketleri okuyamaz.
+ *
+ * ⇒ OKUTULAN serinin biçim kilidi (C0b) İKİ eşiğe birden bakar. "minVersion
+ * yükseldi" tek başına YETMEZ; `test_number_series_panel` bunu ölçer.
+ *
+ * Ölçüm 2026-09-23: `Electron/package.json` 1.3.1 · `mobil/app.json` 1.0.7.
+ */
+export const FAZ_D_ONCESI = { electron: "1.3.1", mobil: "1.0.7" } as const;
+
 /** Sürüm karşılaştırması — SAYISAL, sözlüksel değil ("1.3.10" > "1.3.9"). */
 export function compareClientVersions(a: string, b: string): number {
   const pa = a.split(".").map((n) => Number.parseInt(n, 10) || 0);
@@ -193,6 +211,20 @@ export function scanningClientsCarryFazB(): boolean {
   return (
     compareClientVersions(ELECTRON_VERSION_POLICY.minVersion, FAZ_B_ONCESI.electron) > 0 &&
     compareClientVersions(MOBIL_VERSION_POLICY.minVersion, FAZ_B_ONCESI.mobil) > 0
+  );
+}
+
+/**
+ * Sahadaki iki okutan istemci EMEKLİ BİÇİMLERİ de çözebiliyor mu? (Faz D②)
+ *
+ * ⚠️ Faz B'den AYRI sorulur: Faz B "tabloyu oku" diyordu, Faz D "tablodaki
+ * emekli BİÇİMLERİ de dene" diyor. Biri ötekini KAPSAMAZ — Faz B'li bir tablet
+ * emekli ön eki yürürlükteki haneyle dener ve hane değişmişse okuyamaz.
+ */
+export function scanningClientsCarryFazD(): boolean {
+  return (
+    compareClientVersions(ELECTRON_VERSION_POLICY.minVersion, FAZ_D_ONCESI.electron) > 0 &&
+    compareClientVersions(MOBIL_VERSION_POLICY.minVersion, FAZ_D_ONCESI.mobil) > 0
   );
 }
 

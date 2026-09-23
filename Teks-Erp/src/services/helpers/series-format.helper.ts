@@ -47,6 +47,20 @@ export interface NumberSeriesFormat {
    * NUMARA KAYNAĞI — `FREE` bugünkü davranış (elle gelirse kabul, gelmezse üret),
    * `SYSTEM` elle geleni reddeder, `MANUAL` elle değeri ZORUNLU kılar.
    */
+  /**
+   * EMEKLİ BİÇİMLER — geçmiş `number_series_lines` satırları (D4②).
+   *
+   * ⚠️ `retiredPrefixes` yalnız ÖN EK eksenini koruyordu: hane 4 → 6 yapılınca
+   * dünkü kod TANINMIYORDU (ölçüldü 2026-09-23), çünkü emekli ön ek YÜRÜRLÜKTEKİ
+   * segment/haneyle deneniyordu. Burada her emekli biçim KENDİ segment/hanesiyle
+   * denenir. Liste boşsa davranış bugünküyle birebir aynıdır (fail-safe).
+   */
+  retiredFormats?: Array<{
+    prefix: string;
+    dateSegment: NumberSeries["dateSegment"];
+    digits: number;
+    separator: string;
+  }>;
   numberSource?: "FREE" | "SYSTEM" | "MANUAL";
   startValue?: number | null;
   step?: number | null;
@@ -105,6 +119,19 @@ export function matchesSeries(fmt: NumberSeriesFormat, code: string): boolean {
   for (const prefix of [fmt.prefix, ...fmt.retiredPrefixes]) {
     const head = dateLen === 0 ? `${escapeRe(prefix)}${sep}` : `${escapeRe(prefix)}${sep}\\d{${dateLen}}${sep}`;
     if (new RegExp(`^${head}${infix}\\d{${fmt.digits},}$`).test(upper)) return true;
+  }
+  // ⚠️ EMEKLİ BİÇİMLER KENDİ segment/haneleriyle denenir. Üstteki döngü emekli
+  // ÖN EKLERİ yürürlükteki biçimle deniyor (bugünkü davranış, KORUNUYOR); bu
+  // döngü onun kapatamadığı ekseni kapatır — hane/segment değişimi sonrası eski
+  // kod. İkisi birlikte bir ÜST KÜME: hiçbir kod eskisinden daha az tanınmaz.
+  for (const eski of fmt.retiredFormats ?? []) {
+    const eskiLen = { NONE: 0, DDMMYY: 6, YYMM: 4, YYYYMM: 6, YY: 2, YYYY: 4 }[eski.dateSegment];
+    const eskiSep = eski.separator === "" ? "" : escapeRe(eski.separator);
+    const head =
+      eskiLen === 0
+        ? `${escapeRe(eski.prefix)}${eskiSep}`
+        : `${escapeRe(eski.prefix)}${eskiSep}\\d{${eskiLen}}${eskiSep}`;
+    if (new RegExp(`^${head}${infix}\\d{${eski.digits},}$`).test(upper)) return true;
   }
   return false;
 }

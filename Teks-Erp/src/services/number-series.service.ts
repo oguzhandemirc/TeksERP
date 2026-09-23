@@ -86,12 +86,34 @@ function rowFormat(row: NumberSeries): NumberSeriesFormat {
 
 export async function refreshNumberSeriesCache(): Promise<void> {
   const rows = await prisma.numberSeries.findMany();
+  // ⚠️ EMEKLİ BİÇİMLER AYNI OKUMADA: satırlar ayrı bir turda çekilseydi ön ek
+  // bir sürümden, emekli biçimler başkasından gelirdi ("iki okuma" sınıfı).
+  // Yürürlükteki satır hariç TÜMÜ emekli sayılır; sıra yeniden eskiye.
+  const lines = await prisma.numberSeriesLine.findMany({
+    orderBy: [{ seriesKey: "asc" }, { effectiveFrom: "desc" }],
+    select: { seriesKey: true, prefix: true, dateSegment: true, digits: true, separator: true, effectiveFrom: true },
+  });
+  const simdi = Date.now();
+  const emekliler = new Map<string, NumberSeriesFormat["retiredFormats"]>();
+  for (const l of lines) {
+    // İleri tarihli satır henüz yürürlükte DEĞİL ve EMEKLİ de değil — atlanır.
+    if (l.effectiveFrom.getTime() > simdi) continue;
+    const retiredList = emekliler.get(l.seriesKey);
+    if (retiredList === undefined) {
+      // İlk (en yeni) satır YÜRÜRLÜKTEKİDİR, emekli listesine girmez.
+      emekliler.set(l.seriesKey, []);
+      continue;
+    }
+    retiredList.push({ prefix: l.prefix, dateSegment: l.dateSegment, digits: l.digits, separator: l.separator });
+  }
   const next = new Map<string, NumberSeriesFormat>();
   // Katalogdan DÜŞMÜŞ bir DB satırı (eski sürümden kalan) tabloyu komple
   // düşürmesin: kataloğu kod sahiplenir, tanınmayan satır yok sayılır.
   for (const row of rows) {
     try {
-      next.set(row.key, rowFormat(row));
+      const f = rowFormat(row);
+      const eski = emekliler.get(row.key);
+      next.set(row.key, eski && eski.length > 0 ? { ...f, retiredFormats: eski } : f);
     } catch {
       continue;
     }
@@ -289,6 +311,22 @@ export interface SeriesClassifierRow {
   separator: string;
   /** Tarih ile sıra arasındaki sabit parça (regex); istemci tam-format regex'ini bundan kurar. */
   infix?: string;
+  /**
+   * EMEKLİ BİÇİMLER — her biri KENDİ segment/hane/ayracıyla (D4②).
+   *
+   * ⚠️ ALAN EKLENDİ, `prefixes` DEĞİŞTİRİLMEDİ ve bu bilinçli: eski istemci
+   * (Faz B taşıyan ama Faz D taşımayan) bu alanı TANIMAZ ve görmezden gelir —
+   * davranışı bugünküyle birebir aynı kalır (emekli ön ekleri yürürlükteki
+   * hane ile dener). Alanı `prefixes`in yerine koysaydık eski istemci emekli
+   * ön eki HİÇ tanımaz olurdu; sözleşme kıran değişiklik, alan EKLEMEK değil
+   * var olanı DEĞİŞTİRMEKTİR.
+   */
+  retiredFormats?: Array<{
+    prefix: string;
+    dateSegment: NumberSeries["dateSegment"];
+    digits: number;
+    separator: string;
+  }>;
 }
 
 function classifierRow(entry: NumberSeriesCatalogEntry): SeriesClassifierRow {
@@ -301,6 +339,9 @@ function classifierRow(entry: NumberSeriesCatalogEntry): SeriesClassifierRow {
     digits: fmt.digits,
     separator: fmt.separator,
     ...(fmt.infix ? { infix: fmt.infix } : {}),
+    ...(fmt.retiredFormats && fmt.retiredFormats.length > 0
+      ? { retiredFormats: fmt.retiredFormats }
+      : {}),
   };
 }
 

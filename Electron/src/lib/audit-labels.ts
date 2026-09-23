@@ -316,6 +316,9 @@ export const ENUM_LABELS: Record<string, string> = {
   // NumberSourceMode — numara kaynağı. ⚠️ `SYSTEM` ve `MANUAL` bu haritada ZATEN
   // var (başka enum'lardan) ve anlamları buraya da uyuyor; yalnız `FREE` yeni.
   FREE: "Serbest (sistem üretir, elle yazılabilir)",
+  // NumberSeriesLineOrigin — biçim satırının kökeni (tahmin mi, kayıt mı).
+  RECORDED: "Kayıtlı (o an gerçekten bu biçimdi)",
+  MIGRATED_GUESS: "Göç tahmini (eski biçim yazılı değildi)",
   // NumberSeriesDateSegment — numara serisindeki tarih parçası. Sıfırlama dönemini
   // de BU belirler, yani etiket "gösterim" değil "sayaç kapsamı" anlatır.
   NONE: "Tarih yok (sayaç sıfırlanmaz)",

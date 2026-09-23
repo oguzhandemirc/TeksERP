@@ -13,6 +13,8 @@
 //   §9 Okutulan serilerin TOHUM ön ekleri birbirinin başlangıcı DEĞİL
 //  §10 SAYACIN KAPSAMI: biçim değişince sayaç eski rejimin kodlarını SAYMAZ,
 //      ürettiği kod var olanla ÇAKIŞMAZ, ve hazır olmayan seri DÜZENLENEMEZ
+//  §13 EMEKLİ BİÇİMLER: hane/segment değişiminden sonra eski kod hâlâ tanınır
+//      (boş listede davranış bugünküyle birebir; ekleme ÜST KÜMEDİR)
 //  §12 SAYAÇ ÇEKİRDEĞİ: ayar yokken bugünkü davranış · başlangıç · adım · üst
 //      sınır · taşma haneyi genişletir
 //  §11 ÜRETEÇ SERİYİ SÜRÜYOR: ön eki seriden alıp HANEYİ literal yazan üreteç
@@ -508,6 +510,38 @@ check("§12d ⭐ sınır YOKKEN taşma HANEYİ genişletir, sarmaz (İ3 aynen)",
   formatSeriesCode({ prefix: "CV", dateSegment: "NONE", digits: 4, separator: "", retiredPrefixes: [] }, 10_000) === "CV10000");
 check("§12e ⭐ atlama adayı ADIM kadar ilerler (`++` değil)",
   nextCounterCandidate(bos, 5) === 6 && nextCounterCandidate({ step: 10 }, 11) === 21);
+
+// ── §13 EMEKLİ BİÇİMLER — hane/segment ekseni (D4②) ───────────────────────
+// ⭐ ARIZA ÖLÇÜLDÜ (2026-09-23): `retiredPrefixes` yalnız ÖN EK eksenini
+// koruyordu; emekli ön ek YÜRÜRLÜKTEKİ hane ile deneniyordu. Hane 4 → 6
+// yapılınca dünkü kod TANINMIYORDU. Emekli BİÇİM kendi hanesiyle denenir.
+const DUN = new Date("2026-09-22T08:00:00.000Z");
+const eskiKod = `${dailyCodePrefix("CV", DUN)}0001`; // CV2209260001 (4 hane)
+
+const haneArtti: NumberSeriesFormat = {
+  prefix: "CV", dateSegment: "DDMMYY", digits: 6, separator: "", retiredPrefixes: [],
+};
+check("§13a ⭐ ARIZA GERÇEK: hane artınca eski kod emekli biçim OLMADAN tanınmıyor",
+  !matchesSeries(haneArtti, eskiKod), eskiKod);
+check("§13b ⭐ emekli BİÇİM eklenince eski kod yine tanınıyor",
+  matchesSeries(
+    { ...haneArtti, retiredFormats: [{ prefix: "CV", dateSegment: "DDMMYY", digits: 4, separator: "" }] },
+    eskiKod,
+  ));
+check("§13c emekli biçim YANLIŞ kodu tanımaz (kapı fazla geniş değil)",
+  !matchesSeries(
+    { ...haneArtti, retiredFormats: [{ prefix: "CV", dateSegment: "DDMMYY", digits: 4, separator: "" }] },
+    "XX2209260001",
+  ));
+check("§13d ⭐ emekli biçim listesi BOŞKEN davranış bugünküyle BİREBİR (fail-safe)",
+  matchesSeries({ ...sackFmt, retiredFormats: [] }, buildDailyCode("CV", 7, AT)) &&
+    matchesSeries(sackFmt, buildDailyCode("CV", 7, AT)));
+// ⚠️ ÜST KÜME OLMA ŞARTI: emekli biçim eklemek hiçbir kodu TANINMAZ yapmamalı.
+check("§13e ⭐ emekli biçim eklemek ESKİ eşleşmeleri BOZMAZ (üst küme)",
+  matchesSeries(
+    { ...sackFmt, retiredFormats: [{ prefix: "ZZ", dateSegment: "YYMM", digits: 8, separator: "-" }] },
+    buildDailyCode("CV", 7, AT),
+  ));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

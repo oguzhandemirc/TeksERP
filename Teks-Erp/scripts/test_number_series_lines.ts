@@ -8,6 +8,9 @@
 //   §4 ⭐ TEK YAZAR: biçim yazınca hem YENİ SATIR doğar hem önbellek güncellenir
 //      ve ikisinin anı AYNIDIR (`effectiveFrom` == `formatChangedAt`)
 //   §5 Sentinel BEYANLI: tarihi bilinmeyen geçmiş satır `isSentinel` taşır
+//   §6 KÖKEN AYRI BEYAN: göçün ürettiği emekli satır `MIGRATED_GUESS`, panelden
+//      doğan satır `RECORDED` — tarihin sentinel olması BİÇİMİN tahmin olduğunu
+//      söylemez, ikisi AYRI sorudur
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-09-23): tek yazar tx'inden satır yazımı
 //    kaldırılınca §4 ❌ · `formatChangedAt` ile `effectiveFrom` farklı anlara
@@ -103,6 +106,36 @@ async function main(): Promise<void> {
   check("§5 ⭐ 2000 öncesi her satır SENTİNEL olarak beyanlı (rapor '1970'te değişti' demez)",
     sentinelsiz === 0, `${sentinelsiz} beyansız`);
 
+  // ── §6 KÖKEN: tahmin mi, kayıt mı? (D4②) ─────────────────────────────────
+  // ⚠️ AYRI ALAN, not değil: "ölçüldü mü, elle mi, TAHMİN mi" beyanı bu depoda
+  // VERİDE durur — makine okuyamazsa kapı da kuramaz.
+  //
+  // ⚠️ İDDİA İKİ KEZ DÜZELTİLDİ ve ikisi de BULGUYDU: ① "geçmiş satır ⇒ tahmin"
+  // yanlış (panelden yazılmış bir biçim sonradan geçmişe düşer ama TAHMİN
+  // DEĞİLDİR) ② "sentinel + geçmiş ⇒ tahmin" de yanlış (göçün yazdığı
+  // YÜRÜRLÜKTEKİ satır da sentinel tarihlidir ve panelden bir değişiklik
+  // gelince geçmişe düşer — biçimi yine tahmin değildir).
+  // Doğru değişmez KONUMDAN değil YAZARDAN türer: tahmini YALNIZ göç üretir ve
+  // yalnız `retiredPrefixes`ten; panelin yazdığı her satır kayıttır.
+  const tahminler = await prisma.numberSeriesLine.findMany({
+    where: { origin: "MIGRATED_GUESS" },
+    select: { seriesKey: true, prefix: true, isSentinel: true },
+  });
+  check("§6a ⭐ her TAHMİN satırı sentinel tarihli (tahmini yalnız göç üretir)",
+    tahminler.every((x) => x.isSentinel),
+    tahminler.filter((x) => !x.isSentinel).map((x) => `${x.seriesKey}:${x.prefix}`).join(", ") ||
+      `${tahminler.length} tahmin satırı`);
+  const panelYazimlari = await prisma.numberSeriesLine.findMany({
+    where: { isSentinel: false },
+    select: { seriesKey: true, prefix: true, origin: true },
+  });
+  check("§6b ⭐ PANELDEN yazılan (gerçek tarihli) her satır KAYIT — tahmin değil",
+    panelYazimlari.every((x) => x.origin === "RECORDED"),
+    panelYazimlari.filter((x) => x.origin !== "RECORDED").map((x) => `${x.seriesKey}:${x.prefix}`).join(", ") ||
+      `${panelYazimlari.length} kayıt satırı`);
+  check("§6 körlük zemini: tahmin satırı GERÇEKTEN var (iddia boş kümede yeşil değil)",
+    tahminler.length >= 1, `${tahminler.length} tahmin satırı`);
+
   // ── §4 TEK YAZAR ──────────────────────────────────────────────────────────
   const HEDEF = "packingLotCode";
   const once = resolveSeriesFormat(HEDEF);
@@ -126,6 +159,9 @@ async function main(): Promise<void> {
     const sonra = resolveSeriesFormat(HEDEF);
     check("§4c yazma davranışı DEĞİŞMEDİ: biçim aynı kaldı (aynı değerler yazıldı)",
       sonra.prefix === once.prefix && sonra.digits === once.digits);
+    const yeniSatir = await yururlukteki(HEDEF);
+    check("§4d ⭐ PANELDEN doğan satır TAHMİN DEĞİL (`RECORDED`)",
+      yeniSatir?.origin === "RECORDED", String(yeniSatir?.origin));
   } finally {
     // Fikstür satırını ve damgayı geri al: bu bekçi GERÇEK seri satırına yazıyor.
     const fazlalik = await prisma.numberSeriesLine.findMany({

@@ -5069,6 +5069,15 @@ model NumberSeriesLine {
   digits      Int                    @default(4)
   separator   String                 @default("") @db.VarChar(2)
 
+  /// BU SATIRIN BİÇİMİ NEREDEN GELİYOR — kayıt mı, göç tahmini mi?
+  ///
+  /// ⚠️ AYRI ALAN, not değil: bu depoda "ölçüldü mü, elle mi, TAHMİN mi" beyanı
+  /// VERİDE durur, metinde değil — makine okuyamazsa kapı da kuramaz.
+  /// `MIGRATED_GUESS`: göç `retiredPrefixes`ten üretti ve segment/hane/ayracı
+  /// BUGÜNKÜYLE AYNI varsaydı (eski biçim hiçbir yerde yazılı değildi).
+  /// `RECORDED`: panelden yazıldı, biçim GERÇEKTEN o andaki biçimdir.
+  origin NumberSeriesLineOrigin @default(RECORDED)
+
   /// Bu biçimin YÜRÜRLÜĞE GİRDİĞİ an. Geçmiş satırlarda göç sırasında konan
   /// SENTİNEL bir tarih olabilir (gerçek geçmiş bilinmiyordu) — `isSentinel` onu
   /// beyan eder ki rapor "1970'te biçim değişti" demesin.
@@ -5081,6 +5090,12 @@ model NumberSeriesLine {
   @@unique([seriesKey, effectiveFrom])
   @@index([seriesKey, effectiveFrom])
   @@map("number_series_lines")
+}
+
+/// Biçim satırının kökeni — göç tahmini mi, kayıt mı? (D4②)
+enum NumberSeriesLineOrigin {
+  RECORDED
+  MIGRATED_GUESS
 }
 
 /// Numara kaynağı — `FREE` bugünkü davranış (elle gelirse kabul, gelmezse üret).
