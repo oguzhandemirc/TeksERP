@@ -251,18 +251,22 @@ async function ensureSubCode(
 ): Promise<string> {
   const trimmed = (code ?? "").trim();
   if (trimmed !== "") return trimmed;
+  // ⚠️ `createdAt` DE SEÇİLİR: `nextSeriesNo` kapsam damgasını (`formatChangedAt`)
+  // ancak satırlar doğuş anını taşıyorsa uygulayabilir — yalnız kod dizgisi dönen
+  // bir yükleyicide kapsam SESSİZCE devre dışı kalır ve eski rejimin kodları
+  // sayaca girer (E2 ölçümü 2026-09-23).
   return nextSeriesNo(kind, async (fullPrefix) => {
     const rows =
       kind === "subcontractor"
         ? await prisma.subcontractor.findMany({
             where: { code: { gte: fullPrefix, startsWith: fullPrefix } },
-            select: { code: true },
+            select: { code: true, createdAt: true },
           })
         : await prisma.subcontractorCategory.findMany({
             where: { code: { gte: fullPrefix, startsWith: fullPrefix } },
-            select: { code: true },
+            select: { code: true, createdAt: true },
           });
-    return rows.map((r) => r.code);
+    return rows.map((r) => ({ code: r.code, createdAt: r.createdAt }));
   });
 }
 

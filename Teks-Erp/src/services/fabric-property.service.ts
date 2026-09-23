@@ -22,7 +22,7 @@ import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { deriveCapabilityFlags } from "./station-capability.service";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
@@ -37,19 +37,15 @@ const PROPERTY_CODE_PREFIX = "OZL";
  */
 async function nextPropertyCode(): Promise<string> {
   // ⚠️ TEK TARİH — `nextCustomerCode` gerekçesi ("iki tarih" sınıfı).
-  const now = new Date();
-  const fmt = resolveSeriesFormat("fabricProperty");
-  const prefix = seriesPrefix(fmt, now);
-  const todays = await prisma.fabricProperty.findMany({
-    where: { code: { gte: prefix, startsWith: prefix } },
-    select: { code: true },
-  });
-  const seq = seriesSeqFrom(
-      fmt,
-    todays.map((p) => p.code),
-    prefix,
-  );
-  return formatSeriesCode(fmt, seq, now);
+  // ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan kodlara
+  // bakar; `nextSeriesNo` kapsamı, tek tarihi ve çakışma atlamasını taşır.
+  return nextSeriesNo("fabricProperty", async (prefix) =>
+    prisma.fabricProperty
+      .findMany({
+        where: { code: { gte: prefix, startsWith: prefix } },
+        select: { code: true, createdAt: true },
+      })
+      .then((rows) => rows.map((r) => ({ code: r.code, createdAt: r.createdAt }))), new Date());
 }
 
 /** SEÇİM tipli özelliğin değer satırı — istemci sözleşmesi (DÜZ, nested write DEĞİL). */
