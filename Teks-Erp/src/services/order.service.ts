@@ -20,6 +20,7 @@ import {
 } from "../utils/cursor";
 import { AppError } from "../utils/app-error";
 import { assertOrderReplayAlive } from "./helpers/token-replay.helper";
+import { resolveShipmentDestination } from "./helpers/shipment-destination.helper";
 import {
   OrderStatus,
   Prisma,
@@ -1977,6 +1978,14 @@ export class OrderService extends BaseService {
     for (const key of Object.keys(data)) {
       if (ORDER_HEADER_WRITABLE.has(key)) prismaData[key] = data[key];
     }
+    // SİPARİŞ YÖNÜ DOĞUŞTA DONAR (sevkiyatın donmuş yönüyle aynı zincir): şube → cari; zincir boşsa
+    // NULL ("yön belirsiz"). Kart sonradan değişse de sipariş değişmez; gövdeden yazılamaz (whitelist dışı).
+    prismaData.destination = data.customerId
+      ? (await resolveShipmentDestination(prisma, {
+          customerId: data.customerId as string,
+          branchId: (data.branchId as string | null | undefined) ?? null,
+        })).destination
+      : null;
 
     // Lines: whitelist + requiredPropertyIds → { create: [...] } formatı.
     if (Array.isArray(data.lines)) {
@@ -2434,6 +2443,8 @@ export class OrderService extends BaseService {
 
     const branchChanging = Object.prototype.hasOwnProperty.call(cleanData, "branchId");
     const customerChanging = Object.prototype.hasOwnProperty.call(cleanData, "customerId");
+    // Sipariş AÇIKÇA başka cariye/şubeye taşınırsa yön yeniden çözülür (o cariye açılmadı; eski değer audit'te).
+    let retarget: { customerId: string; branchId: string | null } | null = null;
 
     if (branchChanging || customerChanging) {
       const blockingStatuses = new Set(["IN_PROGRESS", "COMPLETED"]);
@@ -2483,6 +2494,7 @@ export class OrderService extends BaseService {
       if (finalBranchId) {
         await this.validateBranch(finalBranchId, finalCustomerId);
       }
+      retarget = { customerId: finalCustomerId, branchId: finalBranchId ?? null };
     }
 
     // Lines payload geldiyse: WO bağı kontrolü + diff uygula.
@@ -2672,6 +2684,7 @@ export class OrderService extends BaseService {
         // manual-close/kısmi-sevk araya girerse müşteri/şube/termin yazımı
         // terminal veya kısıtlı duruma sızmasın. Beklenen durum pre-tx okunandır;
         // değiştiyse 409 — istemci taze veriyle tekrar dener.
+        if (retarget) cleanData.destination = (await resolveShipmentDestination(tx, retarget)).destination;
         const claimed = await tx.order.updateMany({
           where: { id, status: current.status },
           data: cleanData,

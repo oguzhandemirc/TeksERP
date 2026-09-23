@@ -11990,3 +11990,16 @@ ifadesiydi, o sıra da korundu.
 **Geriye dönük.** Geçmişte numarasız basılmış listeler için bir şey değişmez. Aynı çuvallar bugün yeniden basılırsa bu, o içeriğin ilk KAYITLI basımıdır ve numara o an doğar; kâğıdın önceden basıldığını bilemeyiz, bilir gibi yapmayız.
 
 **Yan düzeltme.** Audit sözlüğünde `manifestNo` = "İrsaliye no" (fason tablolarındaki anlam) olduğundan CL audit satırları yanlış etiketlenirdi; manifest audit'i artık `packingListNo` ("Çeki listesi no") anahtarıyla yazılır.
+
+## 2026-09-23 — Sipariş yönü DOĞUŞTA donar (`Order.destination`) [ÇEKİRDEK]
+
+**Karar (kullanıcı).** Siparişin yurtiçi/yurtdışı yönü, sevkiyatın donmuş yönüyle aynı kalıpta sipariş açılırken sabitlenir. Sipariş raporları bugüne dek yönü CANLI kart zincirinden (şube → cari) okuyordu: cari kartı değişince geçmiş siparişlerin yönü de değişiyordu (etiket "Cari/şube yönü (bugünkü)").
+
+**Ölçüm.** Sipariş yaratan her yol TEK yazardan geçiyor: `OrderService.create`. Panel formu, tablet, hızlı sipariş (`quickOrderFromRolls` → `this.create`), Excel içe aktarma (`order.adapter` → `orderService.create`) ve panel kopyası aynı uçtan geçer. Doğrudan `prisma.order.create` yalnız seed/test/repro script'lerinde var; onlar NULL üretir (kolon nullable, varsayılansız).
+
+**Kurallar.**
+- Zincir `resolveShipmentDestination` ile, sevkiyatla aynı fonksiyondan çözülür (kopya yok). Zincir boşsa NULL ("yön belirsiz"). Sevkiyattan farkı bilinçlidir: sevkiyatta boş zincir DOMESTIC olur, siparişte NULL kalır.
+- Sipariş AÇIKÇA başka cariye/şubeye taşınınca yön aynı claim içinde yeniden çözülür (1e onayı: sipariş o cariye açılmadı). Eski değer audit'te kalır.
+- Cari birleştirme (MOVE `orders.customerId`) yeniden dondurmaz; bu bir kimlik birleştirmesidir, sipariş kararı değildir.
+- NULL doğan sipariş, kart sonradan dolsa da (ör. ilk sevkiyatın seçimi `claimFirstDestinationTx`) NULL kalır. Dondurma kuralı budur.
+- Kolon `ORDER_HEADER_WRITABLE` dışındadır, gövdeden yazılamaz.
