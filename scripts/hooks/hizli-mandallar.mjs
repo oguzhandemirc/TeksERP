@@ -12,7 +12,7 @@
 //
 // KÜME (ölçüldü 2026-09-13, d5): 534 bekçinin 105'i DB'siz geçiyor, 95'i ≤5 sn;
 //    bunların `Teks-Erp/scripts/` | `docs/standart/` | `docs/kurallar/`ı KONU
-//    edinen 12'si burada (+13. `belge_capa_atfi` · 14. `gun_anahtari_kaynagi` · 15. `yerel_ayar_bagimliligi` · 16. `harita_sonda_atfi` · 17. `fikstur_sabit_ad` · 18. `lookup_beyan_aynasi` · 19. `sha_atfi` · 20. `audit_muafiyeti`, 2026-09-14 · 21. `rapor_katalogu` · 22. `rapor_kapisi` · 23. `finans_rapor_eksenleri`, 2026-09-15 · 24. `migration_order`, 2026-09-23). Küme ELLE listelenir — "scripts/ altında DB'siz olan
+//    edinen 12'si burada (+13. `belge_capa_atfi` · 14. `gun_anahtari_kaynagi` · 15. `yerel_ayar_bagimliligi` · 16. `harita_sonda_atfi` · 17. `fikstur_sabit_ad` · 18. `lookup_beyan_aynasi` · 19. `sha_atfi` · 20. `audit_muafiyeti`, 2026-09-14 · 21. `rapor_katalogu` · 22. `rapor_kapisi` · 23. `finans_rapor_eksenleri`, 2026-09-15 · 24. `migration_order` · 25. `seri_modul_yuklemesi`, 2026-09-23). Küme ELLE listelenir — "scripts/ altında DB'siz olan
 //    her şey" gibi türetilmiş bir kapsam, DB'siz görünen ama vakumen yeşil kalan
 //    bekçiyi de (0/0, çıkış 0 — iki emsal var) kapıya sokardı.
 //
@@ -64,6 +64,7 @@ const MANDALLAR = [
   "test_rapor_kapisi", // rapor kapısı: 29 uçta `requireReportOpen` · sıra · İKİ YÖNLÜ kapsama · süperadmin yazma kümesi · üç sonuç · src/middlewares + src/routes + src/services + src/jobs · ağaç · ~0,4 sn · statik kol DB'siz (canlı §7 sunucu yoksa ⏭ beyanla) (22., d9 yazdı, 2026-09-15)
   "test_finans_rapor_eksenleri", // finans rapor süzgeç sözleşmesi: eksen uca bağlı · kap koşullu · düşen satır sayılı · bakiye süzgeçten etkilenmez · src/routes + src/services · ağaç · ~0,3 sn · taban 0 sert (23., d9 yazdı, 2026-09-15)
   "test_migration_order", // prisma/migrations sırası: sonra doğan tabloya önce dokunma · DB'siz · 0,3 sn · taban 0 sert (24., 2026-09-23)
+  "test_seri_modul_yuklemesi", // numara serisi çağrısı modül yüklenirken koşmaz (AST) · DB'siz · ~0,9 sn · taban 0 sert (25., 2026-09-23)
 ];
 
 function izoleAgacMi() {

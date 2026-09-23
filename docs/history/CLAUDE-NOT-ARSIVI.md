@@ -11498,3 +11498,67 @@ DEĞİŞTİRİLMEZ. Kapsam dışı: bekçilerin kendi içinden başlattığı al
 **Upstream bildirimi için:** Node v26.8.1 · macOS arm64 · yeniden üretme: ağır senkron iş (büyük HTML string
 üretimi) ardından `process.exit(0)`, 4 paralel süreç, ~%2 asılma; `--no-maglev` ile 0. Yığın çıktısı
 d3 oturumunun ölçüm kayıtlarında. Bildirimi kimin, ne zaman yapacağı açık iş.
+
+## 2026-09-23 — Emekli ön ek hijyeni (K7): liste geçmişin beyanıdır, çöp kutusu değil [ÇEKİRDEK]
+
+**Saha/ölçüm:** d3'ün gerçek panel turunda (`tekserp_d3e2e_test`) iki tür çöp ölçüldü — ① bir ön eki
+deneyip GERİ ALMAK eski değeri emekli listede bırakıyor ve satır `prefix=PRT`,
+`retiredPrefixes={PRT,ZQ}` hâline geliyor ② hiç kod üretmemiş DENEME ön eki (`ZQ`) kalıcı emekli
+oluyor. Üç seride birden görüldü (`packingLotCode` · `packingLotName` · `returnDoc`). Diğer beş
+veritabanında (ca/1e/d3/fabrika kopyası/kullanıcının dev'i) kirli satır YOK — hata gerçek, veri
+henüz yayılmamış.
+
+**Karar:** emekli liste GEÇMİŞİN BEYANIDIR. Üç kural, tek yazarda (`retiredPrefixesAfterChange`) ve
+DB sedinde (`number_series_retired_not_current`, çift yüklem) yaşar: yürürlükteki ön ek listede
+duramaz · eski ön eke dönmek onu listeden çıkarır · hiç kod üretmemiş ön ek emekliye ayrılmaz.
+Ölçüm ÜÇ SONUÇLU ve düşürme yalnız ÖLÇÜLMÜŞ SIFIRDA yapılır — `null` ("sayım kaynağı yok")
+hâlinde ön ek KORUNUR, çünkü emekli listeden düşen bir ön ek sahadaki etiketi okutulamaz kılar.
+Katalogda TOHUM beyanlı emekli ön ekler hiç düşmez: fabrika kopyasında `RK` ile başlayan tek bir iş
+emri yok (ölçüldü: 0 / 417) ama basılı `RK` refakat kartları sahada okutuluyor — "veritabanında yok"
+ile "dünyada yok" aynı şey değildir.
+
+**Onarım:** `scripts/fix_number_series_retired_prefixes.ts` — dry-run varsayılan, `--apply` ile
+yazar, DAMGASIZ ve idempotent (damga tutsaydı sonradan kirlenen satırı bir daha hiç temizlemezdi),
+her seriyi ÖNCESİ → SONRASI ve gerekçe satırlarıyla listeler (yıkıcı işlemde "etkilenen her kaydı
+göster" kuralı). Planlayıcı CLI'da değil helper'da (`planRetiredPrefixCleanup`), çünkü bekçi bir
+KOMUTU değil YÜKLEMİ ölçebilir. d3'ün kirli DB'sinde kuru koşum üç seriyi de doğru buldu.
+
+**Migration sırası:** önce VERİ (`array_remove(retiredPrefixes, prefix)`, bilgi kaybetmez — düşen
+değer satırın kendi `prefix` kolonunda duruyor), sonra CHECK. Ters sıra kirli bir veritabanında
+23514 ile düşüp migration'ı FAILED bırakırdı (aynı gün öğrenilen ders).
+
+**Kalıcı kapı:** `test_number_series_panel §11a–§11d` (+10 kontrol) · `test_db_invariants` envanteri.
+Üç sonda: eski yüklem geri konunca §11a/§11b KIRMIZI · DB sedi düşünce §11c KIRMIZI · tohum koruması
+kalkınca §11d KIRMIZI. ⚠️ Sonda yazarken sondanın KENDİSİ arıza üretti: sedi sınayan yazma, sed
+düşükken BAŞARILI olup satırı kirli bırakıyordu ve sed geri eklenemedi — sınama yazması artık
+`finally`de geri alınıyor (ölçüldü: sed düşükken koşumdan sonra satır temiz).
+
+**K12:** numaralandırma diyaloğuna `DialogDescription` eklendi (Radix her açılışta uyarı basıyordu,
+d3 turunda 213 kez); cümle sözleşmeyi taşıyor — değişiklik yalnız bundan sonraki kayıtları etkiler.
+
+## 2026-09-23 — Türetilen örnek MODÜL YÜKLENİRKEN koşarsa amacına ulaşmaz [ÇEKİRDEK]
+
+**Saha/ölçüm (d3'ün alt ajanı buldu, burada doğrulandı):** `traveler-card.service.ts` örnek barkodu
+modül düzeyinde türetiyordu (`const X = previewSeriesCode(resolveSeriesFormat("workOrder"), 1)`,
+35d786d6 ile geldi) ve `document-render/sample-data.ts` on üç örnek numarayı aynı biçimde modül
+düzeyinde üretiyordu (bu ondan eskiydi). İki SESSİZ zarar:
+① Yükleme anında numara serisi önbelleği BOŞ; senkron okuma katalog TOHUMUNA düşer (beyanlı
+fail-safe) ⇒ örnek, fabrikanın GERÇEK ön ekini hiç göstermez ve bir daha da değişmez. "Literal
+yazma, seriden türet" kuralı biçimsel olarak sağlanır ama AMACINA ULAŞMAZ — en kötü tür yeşil.
+② Boş önbellek, modül yüklenirken 52 seriyi tazelemek için arka planda ~55 SELECT açar; bu, sorgu
+bütçesi bekçisinin penceresine taşar (ölçüldü: beklenen 64, ölçülen 72–95) ve arıza BAŞKA bir
+bekçide, alakasız bir yerde görünür.
+
+**Karar:** seriden türetilen her örnek İSTEK ANINDA üretilir. Uygulama biçimi GETTER: modül düzeyindeki
+örnek veri sabitinin yapısı korunur, yalnız türetilen alanlar `get x() { return ornekNo(…); }` olur
+(fonksiyona çevirmek 350 satırlık nesneyi tek fonksiyona sokup boyut tavanını kırardı).
+
+**Kalıcı kapı:** `test_seri_modul_yuklemesi` — AST ile, çağrının bir FONKSİYON gövdesinde (getter ve
+metot dahil) olup olmadığını sorar; 613 dosya, ~0,9 sn, DB'siz, 25. hızlı mandal. Gömülü sondası
+tarayıcının modül düzeyi ↔ fonksiyon ayrımını kendi içinde ölçer ("0 bulgu" ile "hiç bakılmadı" aynı
+görünmesin). İki sonda: çağrı modül düzeyine konunca dosya:satır ile KIRMIZI · getter biçimine
+çevrilince YEŞİL (meşru erteleme yanlış pozitif değil). Ek olarak `test_number_series_panel §12`
+örnek verinin kendisini ölçer: alan bir GETTER mı ve değeri YÜRÜRLÜKTEKİ biçimden mi geliyor.
+
+**Sınıf:** bu, "türetilebilen türetilir" kuralının ikinci yarısıdır — TÜRETMENİN ZAMANI da kuralın
+parçasıdır. Doğru yerden okunan ama YANLIŞ ANDA okunan bir değer, literal kadar bayattır.
