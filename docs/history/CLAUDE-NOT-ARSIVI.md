@@ -11446,6 +11446,8 @@ Faz A biçimi VERİ yapmıştı; Faz B onu okutma tarafında tek kaynağa bağla
 
 ## 2026-09-23 — Raporlarda yurtiçi/yurtdışı ekseni: sevk raporu donmuş yönü, sipariş raporu bugünkü zinciri okur [ÇEKİRDEK]
 
+> **GEÇERSİZ (sipariş kısmı) → 2026-09-23:** sipariş raporları artık siparişin açılışta donmuş yönünü (`Order.destination`) okur; "bugünkü kart zinciri" hükmü kalktı (bkz. "Sipariş yönü DOĞUŞTA donar"). Sevk kısmı geçerli.
+
 **Ölçüm (R0):** altı rapor ucu (order-intake · demand-analysis · order-leadtime · order-cancellation · customer/scorecard · customer/order-profile) yön süzgecini `Customer.defaultDestination`dan okuyordu — cari sonradan değişince geçmiş rapor da değişiyordu; Müşteri Karnesi'nin sevk sütunu da aynı varsayılana göre ayrılıyordu. Fabrika kopyası (09-15): 113 sevkiyatın 113'ü yurtiçi, fiyatlı sipariş satırı 0/492, fatura 0, ülkesi dolu cari 1/29.
 
 **Karar (yönetici oturum, kullanıcı adına):** iki eksen, ikisi de beyanlı (`services/reports/_destination.ts`). SEVK raporları `Shipment.destination` (donmuş) okur; fasondan doğrudan sevkin yön kaydı yok ⇒ yön süzgecinde hiçbir kümede, kırılımda "yön kaydı yok" kovası (sabit DOMESTIC rapora uydurma yön olarak GİREMEZ). SİPARİŞ raporları siparişin şube → cari zincirini okur — `resolveShipmentDestination` ile AYNI zincir, Prisma (`orderDestinationWhere`) ve SQL (`orderDestinationSql`) ikizleri boğaz ikizdir. Bu eksen BUGÜNKÜ karttır: kart değişince geçmiş raporun kümesi de değişir — ekranda adı "Cari/şube yönü (bugünkü)" ve dışa aktarım şerhi bunu söyler. Siparişe donmuş bir yön kolonu eklemek AYRI karardır (kullanıcıya soruldu). Müşteri kökündeki raporlar (sipariş profili) carinin kendi yönünü okur (müşteri satırında şube yok).
@@ -12003,3 +12005,5 @@ ifadesiydi, o sıra da korundu.
 - Cari birleştirme (MOVE `orders.customerId`) yeniden dondurmaz; bu bir kimlik birleştirmesidir, sipariş kararı değildir.
 - NULL doğan sipariş, kart sonradan dolsa da (ör. ilk sevkiyatın seçimi `claimFirstDestinationTx`) NULL kalır. Dondurma kuralı budur.
 - Kolon `ORDER_HEADER_WRITABLE` dışındadır, gövdeden yazılamaz.
+
+**Raporlar (aynı gün, ikinci dilim).** `reports/_destination.ts`in üç sipariş fonksiyonu (`orderDestinationWhere` · `orderDestinationValueSql` · `orderDestinationSql`) artık `Order.destination` okur. Canlı kart zinciri raporda okunmaz. Etiket "Cari/şube yönü (bugünkü)" → "Sipariş yönü (açılışta)"; seçenekler "Yurtiçi/İhracat (sipariş yönü)". Sürüm notundaki iki cümle aynı dilimde düzeltildi. `test_rapor_yon_ekseni` §1 zincir ikizi yerine kolon ikizini ölçer; §2c kart değişiminden sonra rapor kümesinin kıpırdamadığını ölçer (negatif sonda ⑩: canlı zincir → İhracat 130 · Yurtiçi 20, kırmızı). Sipariş fikstürünü doğrudan kuran iki rapor bekçisi (`test_rapor_satis_ekseni`, `test_destination_mix`) siparişi yazar gibi doğurur. R1 notunun sipariş kısmı GEÇERSİZ olarak işaretlendi.

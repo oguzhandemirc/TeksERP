@@ -4,45 +4,31 @@
 // ① SEVK raporları `Shipment.destination` okur: sevk anında DONMUŞ değer, cari sonradan
 //    değişse de geçmiş değişmez. Fasondan doğrudan sevkin yön kaydı YOKTUR → yön süzgecinde
 //    hiçbir kümeye girmez, kırılımda "yön kaydı yok" kovasıdır (`direct-shipment-destination`).
-// ② SİPARİŞ raporları (sevk öncesi, sevkiyat yok) zinciri okur: siparişin şubesinin yönü,
-//    boşsa carinin yönü — `resolveShipmentDestination` ile AYNI zincir. Bu BUGÜNKÜ karttır:
-//    kart değişince geçmiş raporun kümesi de değişir; ekranda eksen adı bunu söyler.
-// Zincirin Prisma/SQL ikizleri burada yaşar ve `resolveShipmentDestination` ile birlikte
-// değişir (boğaz ikiz — `test_rapor_yon_ekseni` üçünü aynı fikstürde karşılaştırır).
+// ② SİPARİŞ raporları (sevk öncesi, sevkiyat yok) `Order.destination` okur: sipariş AÇILIRKEN
+//    şube → cari zincirinden DONMUŞ değer (tek yazar `OrderService.create/update`); kart sonradan
+//    değişse de geçmiş rapor değişmez. NULL = "yön belirsiz" (doğuşta zincir boştu).
+// Sipariş yönünün raporlarda TEK okuma noktası burasıdır; canlı kart zinciri artık okunmaz
+// (`test_rapor_yon_ekseni` kart değişiminden sonra rapor kümesinin kıpırdamadığını ölçer).
 // =============================================================================
 import { Prisma, type ShipmentDestination } from "@prisma/client";
 
 /** Ekranda eksenin adı — hangi kaynaktan okunduğunu kullanıcıya söyler. */
 export const DESTINATION_AXIS_LABELS = {
-  ORDER: "Cari/şube yönü (bugünkü)",
+  ORDER: "Sipariş yönü (açılışta)",
   SHIPMENT: "Sevkiyat yönü (sevk anında)",
 } as const;
 
-/** Sipariş kökü (`Order`) — zincir: şube yönü doluysa o, değilse carinin yönü. */
+/** Sipariş kökü (`Order`) — doğuşta donmuş yön. */
 export function orderDestinationWhere(d: ShipmentDestination): Prisma.OrderWhereInput {
-  return {
-    OR: [
-      { branch: { is: { defaultDestination: d } } },
-      {
-        AND: [
-          { OR: [{ branchId: null }, { branch: { is: { defaultDestination: null } } }] },
-          { customer: { defaultDestination: d } },
-        ],
-      },
-    ],
-  };
+  return { destination: d };
 }
 
-/** Siparişin zincir DEĞERİ (ham SQL ifadesi; zincir boşsa NULL) — süzgeç ve kova bunu kullanır. */
+/** Siparişin donmuş yön DEĞERİ (ham SQL ifadesi; NULL = yön belirsiz) — süzgeç ve kova bunu kullanır. */
 export function orderDestinationValueSql(orderAlias = "o"): Prisma.Sql {
-  const o = Prisma.raw(orderAlias);
-  return Prisma.sql`COALESCE(
-    (SELECT bdf."defaultDestination" FROM customer_branches bdf WHERE bdf.id = ${o}."branchId"),
-    (SELECT cdf."defaultDestination" FROM customers cdf WHERE cdf.id = ${o}."customerId")
-  )`;
+  return Prisma.sql`${Prisma.raw(orderAlias)}."destination"`;
 }
 
-/** `orderDestinationWhere` ham SQL ikizi (`orders <alias>`; tablo takma adları `bdf`/`cdf` sabit). */
+/** `orderDestinationWhere` ham SQL ikizi (`orders <alias>`). */
 export function orderDestinationSql(d: ShipmentDestination, orderAlias = "o"): Prisma.Sql {
   return Prisma.sql`AND ${orderDestinationValueSql(orderAlias)} = ${d}::"ShipmentDestination"`;
 }

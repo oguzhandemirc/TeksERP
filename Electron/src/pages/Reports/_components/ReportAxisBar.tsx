@@ -19,7 +19,7 @@ interface Props {
   axes: ReportAxesState;
   secenekler: ReportSecenekler | undefined;
   eksenler: readonly AxisKey[];
-  /** Yön seçicisi: `true` sipariş raporu ("Cari/şube yönü (bugünkü)") · `"shipment"` sevk raporu (donmuş yön). */
+  /** Yön seçicisi: `true` sipariş raporu ("Sipariş yönü (açılışta)") · `"shipment"` sevk raporu (sevk anında donmuş yön). */
   destination?: DestinationAxis;
 }
 
