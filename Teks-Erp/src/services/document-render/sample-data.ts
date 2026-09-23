@@ -17,6 +17,14 @@ const ISO = "2026-06-07T10:30:00.000Z";
 /**
  * Örnek belge numarası — SERİDEN TÜRETİLİR, literal YAZILMAZ (D7).
  *
+ * ⚠️ ÇAĞRILAR GETTER İÇİNDE, DÜZ DEĞER DEĞİL (2026-09-23): bu dosya modül
+ * düzeyinde bir sabit; düz değer yazıldığında `ornekNo` MODÜL YÜKLENİRKEN koşuyor
+ * ve iki zarar veriyordu — ① numara serisi önbelleği o anda BOŞ olduğu için örnek
+ * KATALOG TOHUMUYLA donuyor, yani fabrikanın gerçek ön ekini hiç göstermiyor
+ * (türetmenin amacı tam da buydu) ② boş önbellek modül yüklenirken 52 seriyi
+ * tazelemek için arka planda ~55 SELECT açıyor ve sorgu bütçesi ölçümüne taşıyor
+ * (d3 ölçtü: pencere 64 → 72-95). Getter, aynı ifadeyi İSTEK ANINA erteler.
+ *
  * ⚠️ Bu dosyanın sözleşmesi "önizleme baskıyla BİREBİR AYNI". Sabit bir
  * `MK1308260001` yazmak, fabrika mal kabul serisinin ön ekini değiştirdiği gün
  * önizlemeyi sessizce YALAN yapardı — üstelik kullanıcının "belge · çıktı ·
@@ -82,7 +90,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     // veride eksik kalırsa Belge Şablonları'nın canlı önizlemesi EN'i BOŞ gösterir
     // ama gerçek baskı dolu çıkar — "önizleme = gerçek baskı" sözleşmesi tam da
     // ayarı yapan kişinin gözü önünde bozulur.
-    workOrder: { id: "wo1", workOrderNumber: ornekNo("workOrder", 1), type: "STOCK_PRODUCTION", width: 150 },
+    workOrder: { id: "wo1", get workOrderNumber() { return ornekNo("workOrder", 1); }, type: "STOCK_PRODUCTION", width: 150 },
     subcontractor: { id: "sub1", name: "Yıldız Boyahane", code: "FB-03" },
     requestedColor: "Bej",
     targetProperties: ["Yanmazlık Apresi", "Su İtici"],
@@ -120,7 +128,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     notes: null,
     batchNumber: "P1207261",
     customer: { id: "cus1", name: "Örnek Tekstil A.Ş.", code: "M001", taxNumber: "1234567890", branchName: "Merkez Şube", branchCode: "IST-01", exportCode: "EXP-TR-042" },
-    workOrder: { id: "wo1", workOrderNumber: ornekNo("workOrder", 1), type: "ORDER_PRODUCTION" },
+    workOrder: { id: "wo1", get workOrderNumber() { return ornekNo("workOrder", 1); }, type: "ORDER_PRODUCTION" },
     subcontractor: { id: "sub1", name: "Yıldız Boyahane", code: "FB-03" },
     step: { id: "st1", stepSequence: 2, station: { name: "Boyahane (Fason)", code: "DYE" } },
     rolls: [
@@ -155,7 +163,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     receivedAt: ISO,
     notes: "Renk tutmuş, apre uygulanmış",
     subcontractor: { name: "Yıldız Boyahane", code: "FB-03" },
-    workOrder: { workOrderNumber: ornekNo("workOrder", 1) },
+    workOrder: { get workOrderNumber() { return ornekNo("workOrder", 1); } },
     stationName: "Boyahane (Fason)",
     appliedColor: "Bej",
     appliedProperties: ["Yanmazlık Apresi", "Su İtici"],
@@ -203,12 +211,12 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   // belge tipiyle AYNI commit'te gelmek zorunda (örneksiz tip = boş/çöp kart).
   TRANSFER_DISPATCH: {
     header: {
-      documentNo: ornekNo("warehouseTransfer", 1),
+      get documentNo() { return ornekNo("warehouseTransfer", 1); },
       date: ISO,
       fromWarehouseName: "Merkez Depo",
       fromWarehouseCode: "DP-MERKEZ",
       toWarehouseName: "Şube Deposu",
-      toWarehouseCode: ornekNo("warehouse", 2),
+      get toWarehouseCode() { return ornekNo("warehouse", 2); },
       createdBy: "Mehmet Yılmaz",
     },
     lines: [
@@ -219,12 +227,12 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   },
   GOODS_RECEIPT: {
     header: {
-      documentNo: ornekNo("goodsReceipt", 1),
+      get documentNo() { return ornekNo("goodsReceipt", 1); },
       date: ISO,
       warehouseName: "Merkez Depo",
       warehouseCode: "DP-MERKEZ",
       supplierName: "Örnek Tedarik A.Ş.",
-      supplierCode: ornekNo("customer", 7),
+      get supplierCode() { return ornekNo("customer", 7); },
       deliveryNoteNo: "IRS-2026-4471",
       createdBy: "Ayşe Kaya",
     },
@@ -291,7 +299,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   // İKİ para birimi (tek TOPLAM yazılmadığı dal önizlemede görünsün).
   RECONCILIATION_LETTER: {
     header: {
-      documentNo: ornekNo("reconciliationLetter", 1),
+      get documentNo() { return ornekNo("reconciliationLetter", 1); },
       date: new Date().toISOString(),
       asOf: new Date().toISOString(),
       partyName: "Örnek Tekstil Ltd. Şti.",
@@ -308,7 +316,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   },
   CHEQUE_DELIVERY_NOTE: {
     header: {
-      documentNo: ornekNo("chequeDeliveryNote", 1),
+      get documentNo() { return ornekNo("chequeDeliveryNote", 1); },
       date: new Date().toISOString(),
       kind: "RECEIVED",
       kindLabel: "Alınan",
@@ -318,19 +326,19 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     },
     lines: [
       {
-        docNo: ornekNo("chequeReceived", 1), serialNo: "0034512", issueDate: ISO,
+        get docNo() { return ornekNo("chequeReceived", 1); }, serialNo: "0034512", issueDate: ISO,
         dueDate: new Date(Date.now() + 45 * 864e5).toISOString(),
         drawerName: "Yıldız Konfeksiyon A.Ş.", bankName: "Garanti BBVA",
         currency: "TRY", amount: "42500.00",
       },
       {
-        docNo: ornekNo("chequeReceived", 2), serialNo: "0034513", issueDate: ISO,
+        get docNo() { return ornekNo("chequeReceived", 2); }, serialNo: "0034513", issueDate: ISO,
         dueDate: new Date(Date.now() + 60 * 864e5).toISOString(),
         drawerName: "Yıldız Konfeksiyon A.Ş.", bankName: "Garanti BBVA",
         currency: "TRY", amount: "18750.50",
       },
       {
-        docNo: ornekNo("noteReceived", 3), serialNo: null, issueDate: ISO,
+        get docNo() { return ornekNo("noteReceived", 3); }, serialNo: null, issueDate: ISO,
         dueDate: new Date(Date.now() + 30 * 864e5).toISOString(),
         drawerName: "Delta Tekstil Ltd.", bankName: null,
         currency: "USD", amount: "5000.00",
@@ -349,7 +357,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   // ayarlayan kişi "DURUM" kolonunun neye benzediğini önizlemede görmeli.
   STOCK_COUNT: {
     header: {
-      documentNo: ornekNo("stockCount", 1),
+      get documentNo() { return ornekNo("stockCount", 1); },
       date: ISO,
       warehouseName: "Merkez Depo",
       warehouseCode: "DP-MERKEZ",

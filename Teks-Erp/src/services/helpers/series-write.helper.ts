@@ -29,6 +29,7 @@ import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { refreshNumberSeriesCache, resolveSeriesFormat } from "../number-series.service";
 import { seriesPrefix, type NumberSeriesFormat } from "./series-format.helper";
+import { retiredPrefixesAfterChange, seriesPrefixUsage } from "./series-retired.helper";
 
 // ── KAPI ────────────────────────────────────────────────────────────────────
 
@@ -205,10 +206,18 @@ export async function updateSeriesFormat(
 ): Promise<NumberSeries> {
   assertSeriesFormatWritable(key);
   const current = resolveSeriesFormat(key);
-  const retired =
-    current.prefix === next.prefix
-      ? current.retiredPrefixes
-      : [...new Set([...current.retiredPrefixes, current.prefix])];
+  // ⚠️ SAYIM TX DIŞINDA ve bilerek: emekli liste bir YAPILANDIRMA kararıdır,
+  // defter değil; sayım anı ile yazma anı arasında doğan bir kayıt yalnız "ön ek
+  // emekliye ayrılsın mı" sorusunu etkiler ve o soru yanlış cevaplanırsa fazladan
+  // bir emekli ön ek kalır (zararsız yön). Tx'i bir COUNT için uzatmak, tx kısa
+  // tutma kuralını çiğnerdi.
+  const kullanim = current.prefix === next.prefix ? null : await seriesPrefixUsage(key, current.prefix);
+  const retired = retiredPrefixesAfterChange({
+    mevcutEmekliler: current.retiredPrefixes,
+    mevcutOnEk: current.prefix,
+    yeniOnEk: next.prefix,
+    mevcutOnEkKullanimi: kullanim,
+  });
   assertSeriesFormatAllowed(key, { ...next, retiredPrefixes: retired });
 
   // ⚠️ TEK YAZAR, TEK TX: biçim artık İKİ yerde duruyor — zaman çizgisi

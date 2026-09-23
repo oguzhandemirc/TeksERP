@@ -110,7 +110,22 @@ export function seriesLock(key: string): SeriesLock | null {
  * ⚠️ Sayı UYDURULMAZ: kataloğunda `countTable` olmayan seri `null` döner ve
  * panel sayı YAZMAZ. "0" demek, ölçülmemiş bir şeye sıfır demek olurdu.
  */
-export async function seriesImpactCount(key: string): Promise<number | null> {
+export async function seriesImpactCount(
+  key: string,
+  /**
+   * BİÇİM ENJEKSİYONU — varsayılan yürürlükteki biçim.
+   *
+   * ⚠️ SIRF ÖLÇÜM İÇİN VAR ve bu bilinçli: "emekli ön ekle yazılmış kayıt da
+   * sayılıyor mu" sorusunu ölçmenin tek yolu, emekli listesi DOLU bir biçimle
+   * saydırmaktı. Bekçi bunu `number_series` satırını geçici olarak DEĞİŞTİREREK
+   * yapıyordu; satır GLOBAL olduğu için aynı bekçinin iki koşumu çakıştığında
+   * biri ötekinin emekli ön ekini siliyor ve ARALIKLI kırmızı doğuyordu
+   * (ölçüldü 2026-09-23: üç kırmızı, ardından iki temiz koşum). Parametre,
+   * ölçümün yan etkisini sıfıra indirir — üretim çağıranları hiçbir şey
+   * geçirmez ve davranış değişmez.
+   */
+  fmtOverride?: NumberSeriesFormat,
+): Promise<number | null> {
   const e = numberSeriesCatalogEntry(key);
   if (!e.countTable) return null;
   const delegate = (prisma as unknown as Record<string, { count: (a?: unknown) => Promise<number> }>)[
@@ -138,7 +153,7 @@ export async function seriesImpactCount(key: string): Promise<number | null> {
   // `gte` index seek içindir, `startsWith` collation-bağımsız tam ön ektir —
   // üreteçlerin kanıtlı kalıbı.
   if (e.countTable.kapsam === "seri-onekli") {
-    const fmt = resolveSeriesFormat(key);
+    const fmt = fmtOverride ?? resolveSeriesFormat(key);
     const alan = e.countTable.field;
     return delegate.count({
       where: {

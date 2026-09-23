@@ -121,9 +121,15 @@ function planKey(snapshot: unknown): string {
 // artık VERİ. Sabit bir `IE…` yazmak, fabrika ön eki değiştirdiği gün önizlemeyi
 // sessizce yalan yapardı — üstelik "belge · çıktı · program aynı numarayı
 // göstermeli" değişmezinin tam karşısında.
-const SAMPLE_TRAVELER_BARCODE = previewSeriesCode(resolveSeriesFormat("workOrder"), 1);
+// ⚠️ FONKSİYON, SABİT DEĞİL (2026-09-23): modül düzeyinde çağrılınca `ornekNo`
+// sınıfının iki zararı doğuyordu — ① numara serisi önbelleği o anda BOŞ olduğu
+// için örnek KATALOG TOHUMUYLA donuyor (fabrikanın gerçek ön ekini hiç
+// göstermiyor, yani türetme amacına ulaşmıyor) ② boş önbellek modül yüklenirken
+// 52 seriyi tazelemek için ~55 SELECT açıyor ve sorgu bütçesi ölçümüne taşıyor
+// (d3 ölçtü: pencere 64 → 72-95). Örnek artık İSTEK ANINDA üretilir.
+const sampleTravelerBarcode = (): string => previewSeriesCode(resolveSeriesFormat("workOrder"), 1);
 const SAMPLE_TRAVELER_SNAPSHOT: Omit<TravelerCardSnapshot, "config"> = {
-  workOrderNumber: SAMPLE_TRAVELER_BARCODE,
+  get workOrderNumber() { return sampleTravelerBarcode(); },
   type: "ORDER_PRODUCTION",
   width: 150,
   targetQuantity: 680,
@@ -1131,13 +1137,13 @@ export class TravelerCardService {
     const snapshot: TravelerCardSnapshot = { ...SAMPLE_TRAVELER_SNAPSHOT, config, template };
     let qrSvg: string | null = null;
     try {
-      qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: SAMPLE_TRAVELER_BARCODE, scale: 3, backgroundcolor: "FFFFFF" });
+      qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: sampleTravelerBarcode(), scale: 3, backgroundcolor: "FFFFFF" });
     } catch {
       qrSvg = null;
     }
     return renderTravelerCard(snapshot, {
-      cardNumber: SAMPLE_TRAVELER_BARCODE,
-      barcode: SAMPLE_TRAVELER_BARCODE,
+      cardNumber: sampleTravelerBarcode(),
+      barcode: sampleTravelerBarcode(),
       version: 1,
       printedAt: "2026-06-07T10:30:00.000Z",
       qrSvg,

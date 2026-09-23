@@ -3,6 +3,15 @@
 // =============================================================================
 // Çalıştırma: npx tsx scripts/run-all-tests.ts number_series_panel   (DB GEREKİR)
 //
+// ⚠️ KAPSAM BEYANI — BU BEKÇİ KOŞARKEN `number_series` YAPILANDIRMASININ SAHİBİDİR:
+// §6/§7 gerçek biçim ve sayaç YAZAR (ölçtüğü şey zaten yazma yolu) ve o satırlar
+// GLOBAL'dir. Bu yüzden bekçinin İKİ KOPYASI aynı veritabanında AYNI ANDA
+// koşturulamaz; koşucu (`run-all-tests.ts`) sıralıdır, sözleşme oradan gelir.
+// Sahiplik gerektirmeyen ölçümler ise satıra HİÇ yazmaz (2026-09-23'te üçü
+// düzeltildi: §4c biçim enjeksiyonuyla · §11c geri sarılan tx ile · §11d sentetik
+// satırlarla) — çünkü onların yazması bir ölçüm ihtiyacı değil, bir kolaylıktı ve
+// aralıklı kırmızı üretiyordu.
+//
 // ⭐ NEDEN SIRA ÖNEMLİ: birden çok engel aynı anda geçerliyse, İLK SÖYLENEN
 //    engel kullanıcının gününü belirler. Önce çözebileceği engeli söylersek
 //    (ör. "istemcileri güncelle"), fabrika bir gün harcayıp bütün tabletleri
@@ -88,6 +97,11 @@ import {
   seriesLock,
 } from "../src/services/helpers/series-panel.helper";
 import { seriesPrefix } from "../src/services/helpers/series-format.helper";
+import { SAMPLE_PRINTED_DOCS } from "../src/services/document-render/sample-data";
+import {
+  planRetiredPrefixCleanup,
+  retiredPrefixesAfterChange,
+} from "../src/services/helpers/series-retired.helper";
 import {
   scanningClientsCarryFazB,
   scanningClientsCarryFazD,
@@ -139,7 +153,14 @@ function throws(fn: () => void, beklenen: string): boolean {
   }
 }
 
-const DAMGA = `TEST-${Date.now()}`.slice(0, 14);
+// ⚠️ DAMGA SÜREÇ-TEKİL: `TEST-${Date.now()}`.slice(0, 14) ms hanelerini KESİYORDU,
+// yani aynı saniyede başlayan iki koşum AYNI damgayı üretiyor ve `PackingGroup.code`
+// üzerinde P2002 veriyordu (ölçüldü 2026-09-23: iki kopya eşzamanlı koşturulunca biri
+// çöktü). Süreç kimliği (base36) damgayı koşuma bağlar; `TEST-` ön eki fikstür
+// sözleşmesi gereği korunur, toplam 14 karakter (kod kolonları 16).
+const DAMGA = `TEST-${process.pid.toString(36).padStart(3, "0").slice(-3)}${Date.now()
+  .toString(36)
+  .slice(-6)}`.slice(0, 14);
 
 async function main(): Promise<void> {
   const fixtureLines: string[] = [];
@@ -279,10 +300,19 @@ async function main(): Promise<void> {
         ).id,
       );
     }
+    // ⚠️ İKİ SINIRLI OKUMA: sayım ile canlı `count()` arasına başka bir yazar
+    // girebilir (paralel fikstür), yani DÜZ EŞİTLİK yanlış kırmızı verir. Doğru
+    // iddia bir ARALIK: sayım, aynı anın iki gözleminin ARASINDA olmalı. Sabit-0
+    // uygulamayı ısıran şey eşitlik değil, bu aralık + artışın kendisidir.
+    const canliOnce = await prisma.packingGroup.count();
     const lotSayi = await seriesImpactCount("packingLotCode");
+    const canliSonra = await prisma.packingGroup.count();
+    const alt = Math.min(canliOnce, canliSonra);
+    const ust = Math.max(canliOnce, canliSonra);
     check("§4 ⭐ etki sayısı ÖLÇÜLÜYOR — fikstür kaydı sayıya YANSIDI (sabit-0 uygulama ISIRILIR)",
-      lotSayi === oncekiSayi + fixtureGroups.length && (lotSayi ?? 0) > 0,
-      `${lotSayi} = ${oncekiSayi} + ${fixtureGroups.length}`);
+      lotSayi !== null && lotSayi >= alt && lotSayi <= ust &&
+        lotSayi >= oncekiSayi + fixtureGroups.length && lotSayi > 0,
+      `${lotSayi} ∈ [${alt}, ${ust}] · önce ${oncekiSayi} + ${fixtureGroups.length}`);
     check("§4 sayım gerçekten DELEGEYE gidiyor: ikinci bir seride de canlı sayıyla eşleşiyor",
       (await seriesImpactCount("sack")) === (await prisma.sack.count()));
     // ⚠️ Hedef seri KATALOGDAN SEÇİLİR, elle yazılmaz: `packingLotName` bu
@@ -410,11 +440,20 @@ async function main(): Promise<void> {
       check("§4c ⭐ paylaşılan tabloda sayım SERİYE göre daralıyor (düz `count(*)` DEĞİL)",
         sfSayi < hamSayi && afSayi < hamSayi && sfSayi >= 1 && afSayi >= 1,
         `SF=${sfSayi} · AF=${afSayi} · ham=${hamSayi}`);
+      // ⚠️ ARALIK İDDİASI: sayım ile karşılaştırma okuması arasına başka bir yazar
+      // girebilir (paralel fikstür) ⇒ düz eşitlik yanlış kırmızı verir. Doğru
+      // iddia "aynı anın iki gözleminin ARASINDA" olmaktır.
+      const sfHam1 = await prisma.invoice.count({ where: { docNo: { startsWith: sfOnek } } });
+      const sfTekrar = (await seriesImpactCount("invoiceSales")) ?? -1;
+      const sfHam2 = await prisma.invoice.count({ where: { docNo: { startsWith: sfOnek } } });
+      const afHam1 = await prisma.invoice.count({ where: { docNo: { startsWith: afOnek } } });
+      const afTekrar = (await seriesImpactCount("invoicePurchase")) ?? -1;
+      const afHam2 = await prisma.invoice.count({ where: { docNo: { startsWith: afOnek } } });
+      const aralikta = (v: number, a: number, b: number): boolean =>
+        v >= Math.min(a, b) && v <= Math.max(a, b);
       check("§4c ⭐ iki serinin sayısı BİRBİRİNDEN bağımsız: yalnız kendi ön ekini sayıyor",
-        sfSayi ===
-          (await prisma.invoice.count({ where: { docNo: { startsWith: sfOnek } } })) &&
-          afSayi === (await prisma.invoice.count({ where: { docNo: { startsWith: afOnek } } })),
-        `SF=${sfSayi} · AF=${afSayi}`);
+        aralikta(sfTekrar, sfHam1, sfHam2) && aralikta(afTekrar, afHam1, afHam2),
+        `SF=${sfTekrar} ∈ [${sfHam1},${sfHam2}] · AF=${afTekrar} ∈ [${afHam1},${afHam2}]`);
       // Emekli ön ek de sayılmalı — ön ek değişince eski kayıtlar kaybolmaz.
       // ⚠️ Ön ek KOŞUM BAŞINA taze: sabit bir damga ikinci koşumda `docNo @unique`
       // çakışması verirdi (`DAMGA`nın ilk 6 karakteri her koşumda AYNI: "ZTEST-").
@@ -427,20 +466,31 @@ async function main(): Promise<void> {
           })
         ).id,
       );
-      const oncesi = (await seriesImpactCount("invoiceSales")) ?? -1;
-      await prisma.numberSeries.update({
-        where: { key: "invoiceSales" },
-        data: { retiredPrefixes: [emekliOnek] },
-      });
-      // ⚠️ `invalidate…` YETMEZ ve bu ÖLÇÜLDÜ (ilk yazımda ❌ verdi): geçersiz
-      // önbellekte senkron okuma TOHUMA düşer (beyanlı fail-safe), yani DB'ye
-      // yazdığımız emekli ön eki GÖRMEZ. Tazeleme AWAIT edilir.
-      await refreshNumberSeriesCache();
-      const sonrasi = (await seriesImpactCount("invoiceSales")) ?? -1;
-      await prisma.numberSeries.update({ where: { key: "invoiceSales" }, data: { retiredPrefixes: [] } });
-      await refreshNumberSeriesCache();
+      // ⚠️ GLOBAL SATIRA YAZMADAN ölçülür (2026-09-23): bu bölüm eskiden
+      // `number_series.invoiceSales.retiredPrefixes`i geçici olarak değiştirip
+      // geri alıyordu. Satır GLOBAL olduğu için aynı bekçinin iki koşumu
+      // çakıştığında biri ötekinin emekli ön ekini siliyor ve ARALIKLI kırmızı
+      // doğuyordu ("1 → 1"); üç kırmızı, ardından iki temiz koşum ölçüldü.
+      // Biçim artık ÇAĞRIYA verilir — yan etki sıfır, ölçülen yüklem aynı.
+      // ⚠️ İDDİA SÜREÇ-TEKİL ÖN EK ÜZERİNDEN kurulur, TOPLAM ÜZERİNDEN DEĞİL:
+      // "toplam bir arttı" iddiası, aynı tabloya yazan paralel bir koşumda
+      // yanlış kırmızı verir. Burada sayılan şey YALNIZ bu koşumun yarattığı
+      // kayıttır: yürürlükteki ön ek imkânsız bir değere çekilir ve kaydı YALNIZ
+      // EMEKLİ LİSTE eşleştirebilir — yani ölçülen eksen tam olarak "emekli ön
+      // ek sayıma giriyor mu" sorusudur.
+      const yurur = resolveSeriesFormat("invoiceSales");
+      const yalnizEmekli =
+        (await seriesImpactCount("invoiceSales", {
+          ...yurur, prefix: "ZZZYOK", retiredPrefixes: [emekliOnek],
+        })) ?? -1;
       check("§4c ⭐ EMEKLİ ön ekle yazılmış kayıt da bu serinin sayısına girer",
-        sonrasi === oncesi + 1, `${oncesi} → ${sonrasi}`);
+        yalnizEmekli === 1, `emekli ön ek "${emekliOnek}" → ${yalnizEmekli}`);
+      // Körlük zemini: emekli liste BOŞKEN aynı biçim o kaydı SAYMAZ (yoksa
+      // yukarıdaki 1, emekli listeden değil başka bir eşleşmeden gelirdi).
+      check("§4c körlük zemini: emekli liste BOŞKEN aynı kayıt sayılmıyor",
+        ((await seriesImpactCount("invoiceSales", {
+          ...yurur, prefix: "ZZZYOK", retiredPrefixes: [],
+        })) ?? -1) === 0);
     }
 
     // ── §4d PANELDE GÖRÜNÜRLÜK ──────────────────────────────────────────────
@@ -576,6 +626,89 @@ async function main(): Promise<void> {
           ? !r.counter.startValue && !r.counter.step && !r.counter.maxValue && (r.counter.lockedReason ?? "").length > 20
           : r.counter.startValue && r.counter.step && r.counter.maxValue),
       `${liste2.filter((r) => r.counter.startValue).length} açık / ${liste2.filter((r) => !r.counter.startValue).length} kapalı`);
+
+    // ── §11 EMEKLİ ÖN EK HİJYENİ (K7, 2026-09-23) ──────────────────────────
+    // Emekli liste "eskiden bu ön ek kullanılıyordu" DİYE OKUNUR ve tarama
+    // uzayındaki çakışma kapısı onu da sorgular. d3'ün panel turunda iki tür çöp
+    // ölçüldü: ① geri alınan ön ek yürürlükteki değerle BİRLİKTE listede kalıyor
+    // (`prefix=PRT`, `retired={PRT,ZQ}`) ② hiç kod üretmemiş DENEME ön eki
+    // (`ZQ`) kalıcı emekli oluyor.
+    check("§11a ⭐ kullanılmış ön ek emekliye AYRILIR",
+      retiredPrefixesAfterChange({ mevcutEmekliler: [], mevcutOnEk: "CV", yeniOnEk: "CX", mevcutOnEkKullanimi: 12 })
+        .join(",") === "CV");
+    check("§11a ⭐ HİÇ KOD ÜRETMEMİŞ ön ek emekliye ayrılmaz (deneme çöpü)",
+      retiredPrefixesAfterChange({ mevcutEmekliler: [], mevcutOnEk: "ZQ", yeniOnEk: "CV", mevcutOnEkKullanimi: 0 })
+        .length === 0);
+    // ⚠️ ÜÇÜNCÜ SONUÇ: "ölçülemedi" ile "kullanılmamış" AYNI ŞEY DEĞİL. Emekli
+    // listeden düşürmek sahadaki etiketi okutulamaz kılar ⇒ bilinmezlikte KORU.
+    check("§11a ⭐ ÖLÇÜLEMEYEN ön ek KORUNUR (fail-safe: 'bilmiyorum' ≠ 'yok')",
+      retiredPrefixesAfterChange({ mevcutEmekliler: [], mevcutOnEk: "ZQ", yeniOnEk: "CV", mevcutOnEkKullanimi: null })
+        .join(",") === "ZQ");
+    check("§11b ⭐ ESKİ ön eke dönmek onu emekli listeden ÇIKARIR",
+      retiredPrefixesAfterChange({ mevcutEmekliler: ["CV", "ZQ"], mevcutOnEk: "CX", yeniOnEk: "CV", mevcutOnEkKullanimi: 5 })
+        .join(",") === "ZQ,CX");
+    check("§11b ⭐ yürürlükteki ön ek listede DURAMAZ (kirli satır onarılır)",
+      retiredPrefixesAfterChange({ mevcutEmekliler: ["PRT", "ZQ"], mevcutOnEk: "PRT", yeniOnEk: "PRT", mevcutOnEkKullanimi: null })
+        .join(",") === "ZQ");
+
+    // DB SEDİ — uygulama yükleminin İKİZİ (çift yüklem): tek yazar düşürse bile
+    // ham SQL ya da içe aktarım bu satırı yazamaz.
+    const sedVar = await prisma.$queryRaw<Array<{ n: bigint }>>`
+      SELECT count(*) AS n FROM pg_constraint WHERE conname = 'number_series_retired_not_current'`;
+    check("§11c ⭐ DB sedi kurulu (`number_series_retired_not_current`)",
+      Number(sedVar[0]?.n ?? 0) === 1);
+    // ⚠️ SEDİ SINAYAN YAZMA GERİ SARILAN BİR TX'İN İÇİNDE: sed DÜŞÜKSE yazma
+    // BAŞARILI olur ve satır kirli kalırdı — sondanın kendisi, ölçtüğü arızayı
+    // ÜRETİRDİ (2026-09-23'te tam bu oldu: `packingLotCode` `{PRT}` ile kaldı ve
+    // sed geri eklenemedi). `finally`li temizlik de yetmez: eşzamanlı koşan ikinci
+    // bir kopya o pencerede kirli satırı GÖRÜR. Tx hiçbir pencere bırakmaz.
+    let sedIsirdi = false;
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`
+          UPDATE "number_series" SET "retiredPrefixes" = ARRAY["prefix"] WHERE key = 'packingLotCode'`;
+        throw new Error("SONDA-GERI-SAR");
+      });
+    } catch (e) {
+      // Sed ısırdıysa hata CHECK'ten (23514) gelir; ısırmadıysa bizim geri sarma
+      // işaretimizden. İkisini AYIRT ETMEK şart, yoksa her hâl "ısırdı" sayılırdı.
+      sedIsirdi = !(e instanceof Error && e.message === "SONDA-GERI-SAR");
+    }
+    check("§11c ⭐ sed GERÇEKTEN ısırıyor (yürürlükteki ön ek yazılamıyor)", sedIsirdi);
+
+    // ONARIM PLANI — karar yüklemi SENTETİK satırlarla ölçülür: canlı satıra
+    // yazmak, eşzamanlı koşan ikinci kopyaya kirli veri gösterirdi (§4c'nin
+    // öğrettiği ders). IO tarafı (findMany) ayrıca ve SALT-OKUNUR doğrulanır.
+    const temizPlan = await planRetiredPrefixCleanup();
+    check("§11d onarım planı CANLI veride boş (idempotent, damgasız)",
+      temizPlan.length === 0, temizPlan.map((x) => x.key).join(", "));
+    const sentetikPlan = await planRetiredPrefixCleanup([
+      { key: "packingLotCode", prefix: "PRT", retiredPrefixes: ["ZQTEST", "PRT"] },
+      { key: "workOrder", prefix: "IE", retiredPrefixes: ["RK"] },
+      { key: "BILINMEYEN_ANAHTAR", prefix: "XX", retiredPrefixes: ["YY"] },
+    ]);
+    const lotPlan = sentetikPlan.find((x) => x.key === "packingLotCode");
+    check("§11d ⭐ hiç kod üretmemiş emekli ön ek + yürürlükteki ön ek plana DÜŞÜRÜLECEK olarak girer",
+      lotPlan !== undefined && lotPlan.sonraki.length === 0,
+      lotPlan ? lotPlan.gerekceler.join(" · ") : "plan satırı YOK");
+    check("§11d ⭐ TOHUM emekli ön ek (RK) plana girmez",
+      !sentetikPlan.some((x) => x.key === "workOrder"));
+    check("§11d ⭐ katalogda OLMAYAN anahtara dokunulmaz (neyi numaraladığı bilinmiyor)",
+      !sentetikPlan.some((x) => x.key === "BILINMEYEN_ANAHTAR"));
+
+    // ── §12 ÖRNEK BELGE NUMARASI İSTEK ANINDA ÜRETİLİR (2026-09-23) ────────
+    // ⚠️ "Seriden türet" kuralı MODÜL YÜKLENİRKEN uygulanınca amacına ULAŞMIYOR:
+    // önbellek o an boş olduğu için örnek katalog TOHUMUNA donuyor ve fabrikanın
+    // gerçek ön ekini bir daha hiç göstermiyor (d3 ölçtü). Yapısal kural
+    // `test_seri_modul_yuklemesi`te; burada ÖRNEK VERİNİN kendisi ölçülür.
+    const ornekBelge = SAMPLE_PRINTED_DOCS.SUBCONTRACTOR_DISPATCH as Record<string, unknown>;
+    const woOrnek = ornekBelge.workOrder as Record<string, unknown>;
+    const betim = Object.getOwnPropertyDescriptor(woOrnek, "workOrderNumber");
+    check("§12 ⭐ örnek belge numarası HER OKUMADA üretilir (getter, donmuş değer değil)",
+      typeof betim?.get === "function", betim?.get ? "getter" : "DÜZ DEĞER");
+    check("§12 ⭐ örnek numara YÜRÜRLÜKTEKİ biçimden geliyor",
+      woOrnek.workOrderNumber === previewSeriesCode(resolveSeriesFormat("workOrder"), 1),
+      `${String(woOrnek.workOrderNumber)}`);
 
     // ── §7 KAPASİTE ve TÜKENME (D2③) ────────────────────────────────────────
     // ⭐ §7a ENVANTER ŞEMAYLA AYRIŞMIYOR: kapasite dosyası `@db.VarChar(n)`

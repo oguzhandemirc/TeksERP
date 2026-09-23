@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { NumberingFields } from "./NumberingFields";
 import { NumberingCounterFields } from "./NumberingCounterFields";
@@ -207,7 +207,17 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>{row.label}</DialogTitle></DialogHeader>
+        {/* ⚠️ AÇIKLAMA ZORUNLU (K12): `aria-describedby` olmadan Radix her açılışta
+            uyarı basıyordu (d3 turunda 213 kez) ve ekran okuyucu diyaloğun ne
+            yaptığını söylemiyordu. Cümle sözleşmeyi taşır: değişiklik GEÇMİŞE
+            dokunmaz. */}
+        <DialogHeader>
+          <DialogTitle>{row.label}</DialogTitle>
+          <DialogDescription>
+            Numara biçimi, sayacı ve numara kaynağı. Değişiklik yalnız bundan sonra açılacak
+            kayıtları etkiler; geçmiş numaralar aynı kalır.
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Önizleme EN ÜSTTE ve BÜYÜK — kullanıcı ne üreteceğini önce görür. */}
         <div className="rounded-md border bg-muted/40 p-4 text-center">
