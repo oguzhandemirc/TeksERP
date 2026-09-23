@@ -502,6 +502,18 @@ export interface LocatedRoll {
 }
 
 // ── Çeki listesi (POST /sack-search/pick-list) ───────────────────────────────
+/** Çeki listesi basım kaydı (`POST /sack-search/pick-list/print`). */
+export interface PickListPrint {
+  id: string;
+  /** Çeki listesi no (CL…) — kâğıdın sağ üst köşesine basılır. */
+  manifestNo: string;
+  printedAt: string;
+  /** Basılan içerik — kâğıt bundan çizilir. */
+  snapshot: PickListRow[];
+  /** true: aynı içerik daha önce basılmış (aynı numara). */
+  reused: boolean;
+}
+
 export interface PickListRow {
   id: string;
   sackNo: string;

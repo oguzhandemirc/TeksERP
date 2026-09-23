@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { printDocumentArea } from "@/lib/print";
 import { isDarkHex } from "@/pages/SackTags/service";
+import { isAmbiguousFailure } from "@/lib/fasonReceiveAttempt";
 import { sackHubService } from "./service";
-import { shipmentStatusLabels, type PickListRow } from "./types";
+import { shipmentStatusLabels, type PickListPrint, type PickListRow } from "./types";
 
 const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 const locLabel = (r: PickListRow) => (r.shipment ? shipmentStatusLabels[r.shipment.status] : "Depoda");
@@ -52,7 +53,38 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mutate stabil; yalnız açılışta
   }, [open, sackIds?.join(",")]);
 
-  const rows: PickListRow[] = fetchMut.data?.data ?? [];
+  // ÇEKİ LİSTESİ NO: "Yazdır"da sunucu kaydı doğurur (aynı içerik → aynı CL); kâğıt dönen anlık
+  // görüntüden çizilir ve numara sağ üstte basılır. Token MANTIKSAL DENEME başına bir kez üretilir;
+  // yalnız sonucu belirsiz hatada (ağ/5xx) yapışır.
+  const [baski, setBaski] = useState<PickListPrint | null>(null);
+  const tokenRef = useRef<string | null>(null);
+  const bekleyenBaski = useRef(false);
+  const printMut = useMutation({
+    mutationFn: (ids: string[]) => {
+      tokenRef.current ??= crypto.randomUUID();
+      return sackHubService.printPickList(ids, tokenRef.current);
+    },
+    onSuccess: (res) => {
+      tokenRef.current = null;
+      bekleyenBaski.current = true;
+      setBaski(res.data ?? null);
+    },
+    onError: (e) => {
+      if (!isAmbiguousFailure(e)) tokenRef.current = null;
+    },
+  });
+  // Kâğıt kayıttan çizildikten SONRA basılır (aynı render turunda DOM henüz eski içeriği taşır).
+  useEffect(() => {
+    if (!baski || !bekleyenBaski.current || !printRef.current) return;
+    bekleyenBaski.current = false;
+    printDocumentArea(printRef.current);
+  }, [baski]);
+  // Diyalog kapanınca kayıt bağı düşer: yeniden açılış taze döküm + yeni deneme demektir.
+  useEffect(() => {
+    if (!open) { setBaski(null); tokenRef.current = null; }
+  }, [open]);
+
+  const rows: PickListRow[] = baski?.snapshot ?? fetchMut.data?.data ?? [];
   const totalQty = rows.reduce((a, r) => a + r.totalQty, 0);
   const totalKg = rows.reduce((a, r) => a + (r.weightKg ?? 0), 0);
   const totalRolls = rows.reduce((a, r) => a + r.rollCount, 0);
@@ -82,7 +114,14 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
           <>
             <div ref={printRef} className="print-area">
             <div className="mb-2">
-              <div className="text-base font-semibold">ÇEKİ LİSTESİ (saha arama kağıdı)</div>
+              <div className="flex items-start justify-between gap-4">
+                <div className="text-base font-semibold">ÇEKİ LİSTESİ (saha arama kağıdı)</div>
+                {baski && (
+                  <div className="shrink-0 text-right text-[10px] leading-tight text-muted-foreground" data-testid="ceki-listesi-no">
+                    Çeki Listesi No: <span className="font-mono font-semibold text-foreground">{baski.manifestNo}</span>
+                  </div>
+                )}
+              </div>
               <div className="text-xs text-muted-foreground">
                 {customers.join(", ")} · {rows.length} çuval · {totalRolls} top · {fmtM(totalQty)} m
                 {totalKg > 0 ? ` · ${fmtM(totalKg)} kg` : ""} · Basım: {new Date().toLocaleString("tr-TR")}
@@ -231,10 +270,10 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
             Kapat
           </Button>
           <Button
-            disabled={fetchMut.isPending || rows.length === 0}
-            onClick={() => printRef.current && printDocumentArea(printRef.current)}
+            disabled={fetchMut.isPending || printMut.isPending || rows.length === 0}
+            onClick={() => sackIds && printMut.mutate(sackIds)}
           >
-            {fetchMut.isPending ? (
+            {fetchMut.isPending || printMut.isPending ? (
               <Loader2 className="mr-1 h-4 w-4 animate-spin" />
             ) : (
               <Printer className="mr-1 h-4 w-4" />
