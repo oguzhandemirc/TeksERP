@@ -7,6 +7,7 @@ import { AnimatedNumber } from "@/components/motion/AnimatedNumber";
 import { safeFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { sackStoreStatusLabels, destinationLabels, type SackStoreShipment } from "./types";
+import { procedureCodeView } from "./procedureCode";
 
 // Board yalnız PLANNED (çıkış bekleyen) sevkleri listeler. Tone setinde "purple"
 // yok → Planlı Sevkiyat rozeti neutral ton + mor className override ile çizilir.
@@ -69,11 +70,13 @@ export function SackStoreCard({ shipment, scannedCount, onOpen, onDispatch }: Pr
             <div className="mt-0.5 truncate text-sm text-muted-foreground">
               {shipment.customer.name}
               {shipment.branch ? ` · ${shipment.branch.name}` : ""}
-              {/* Saha #21: prosedür/ihracat kodu veya müşteri/şube kodu */}
-              {(shipment.procedureCode || shipment.branch?.code || shipment.customer.code) && (
-                <span className="ml-1 font-mono text-xs">
-                  · {shipment.procedureCode || shipment.branch?.code || shipment.customer.code}
-                </span>
+              {/* Saha #21: şube/cari KODU kimlik olarak görünür; gümrük no ayrı ve etiketli —
+                  cari kodu gümrük numarası yerine GEÇMEZ (yalnız yurtdışında, yalnız kayıtlıysa). */}
+              {(shipment.branch?.code || shipment.customer.code) && (
+                <span className="ml-1 font-mono text-xs">· {shipment.branch?.code || shipment.customer.code}</span>
+              )}
+              {procedureCodeView(shipment).goster && procedureCodeView(shipment).deger && (
+                <span className="ml-1 font-mono text-xs">· Gümrük: {procedureCodeView(shipment).deger}</span>
               )}
             </div>
             {shipment.createdAt && (

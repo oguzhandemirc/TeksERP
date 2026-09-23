@@ -18,6 +18,7 @@ import {
   type ContentSack,
   type SackStoreShipment,
 } from "./types";
+import { PROCEDURE_CODE_BOS, procedureCodeView } from "./procedureCode";
 
 const fmtKg = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 2 });
@@ -174,6 +175,8 @@ function DestinationProcedureEditor({
     setEditingCode(false);
   }, [shipment.id, shipment.procedureCode]);
 
+  const gumruk = procedureCodeView(shipment);
+
   const codeMut = useMutation({
     mutationFn: (c: string | null) => sackStoreService.setProcedureCode(shipment.id, c),
     onSuccess: (res) => {
@@ -194,14 +197,14 @@ function DestinationProcedureEditor({
           )}
         </div>
 
+        {/* Yalnız YURTDIŞI (carinin ihracat kodu alanıyla aynı yüklem); yedek değer uydurulmaz. */}
+        {gumruk.goster && (
         <div className="flex items-center gap-2">
           <span className="font-medium text-muted-foreground">Gümrük/İhracat No</span>
           <PermissionGate
             permission="shipping:write"
             fallback={
-              <span className="font-mono">
-                {shipment.procedureCode || shipment.branch?.code || shipment.customer.code || "—"}
-              </span>
+              <span className="font-mono">{gumruk.deger ?? PROCEDURE_CODE_BOS}</span>
             }
           >
             {editingCode ? (
@@ -229,16 +232,13 @@ function DestinationProcedureEditor({
                 onClick={() => setEditingCode(true)}
                 className="flex items-center gap-1 font-mono hover:text-primary"
               >
-                {shipment.procedureCode || (
-                  <span className="italic text-muted-foreground">
-                    {shipment.branch?.code || shipment.customer.code || "kod yok"} (varsayılan)
-                  </span>
-                )}
+                {gumruk.deger ?? <span className="italic text-muted-foreground">{PROCEDURE_CODE_BOS}</span>}
                 <Pencil className="h-3 w-3" />
               </button>
             )}
           </PermissionGate>
         </div>
+        )}
       </CardContent>
     </Card>
   );

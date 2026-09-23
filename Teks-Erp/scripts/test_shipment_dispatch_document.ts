@@ -86,6 +86,14 @@ function part1Pure() {
   check("tarih TR biçim (28.06.2026)", html.includes("28.06.2026"));
   check("yön Yurtdışı (EXPORT)", html.includes("Yurtdışı"));
   check("gümrük/ihracat no", html.includes("GB-2026-555"));
+  // K15 (2026-09-23): gümrük no yalnız YURTDIŞINDA basılır; yurtiçinde dolu değer de basılmaz, boşsa satır yok
+  // (yedek değer uydurulmaz). Eski belgelere etki ölçüldü: fabrika kopyasında procedureCode dolu sevk 0.
+  const yurtici = makeSnapshot();
+  (yurtici.doc as { header: { destination: string } }).header.destination = "DOMESTIC";
+  check("yurtiçi: gümrük no BASILMAZ (dolu olsa bile)", !renderShipmentDispatchHtml(yurtici, {}).includes("GB-2026-555"));
+  const bos = makeSnapshot();
+  (bos.doc as { header: { procedureCode: string | null } }).header.procedureCode = null;
+  check("yurtdışı + boş: 'Gümrük/İhracat No' satırı yok, cari kodu yerine geçmez", !renderShipmentDispatchHtml(bos, {}).includes("Gümrük/İhracat No"));
   check("sipariş no'ları", html.includes("ORD-1, ORD-2"));
   check("plaka + şoför", html.includes("34 ABC 34") && html.includes("Ali Veli"));
 

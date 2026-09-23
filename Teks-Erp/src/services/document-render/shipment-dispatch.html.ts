@@ -44,7 +44,7 @@ import {
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import { fmtDate } from "./fmt-date";
 import { formatSackSeqLabel, type SackSeqFormat } from "../helpers/sack-seq.helper";
-import { pickExportCode } from "../helpers/shipment-destination.helper";
+import { pickExportCode, procedureCodeForDestination } from "../helpers/shipment-destination.helper";
 
 /** Belge etiketleri — cfg.language: tr | en | auto (auto → EXPORT sevkiyatta EN). */
 const LABELS = {
@@ -477,7 +477,9 @@ export function renderShipmentDispatchHtml(
     showDocNo ? `<div class="ln">${L.docNo}: <b>${esc(h.shipmentNo)}</b></div>` : "",
     showDate ? `<div class="ln">${L.date}: <b>${esc(fmtDate(h.date))}</b></div>` : "",
     showDirection ? `<div class="ln">${L.direction}: <b>${esc(yon)}</b></div>` : "",
-    showProcedure && h.procedureCode ? `<div class="ln">${L.customsNo}: <b>${esc(h.procedureCode)}</b></div>` : "",
+    showProcedure && procedureCodeForDestination(h.destination, h.procedureCode)
+      ? `<div class="ln">${L.customsNo}: <b>${esc(h.procedureCode as string)}</b></div>`
+      : "",
     showOrders && h.orderNos ? `<div class="ln sub">${L.orders}: ${esc(h.orderNos)}</div>` : "",
     // ÇUVAL ADEDİ — yalnız operatör BEYAN ETTİYSE basılır.
     //

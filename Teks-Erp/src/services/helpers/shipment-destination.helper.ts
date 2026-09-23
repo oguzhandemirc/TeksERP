@@ -47,6 +47,15 @@ export function exportCodeForDestination(
   return destination === "EXPORT" ? pickExportCode(codes) : null;
 }
 
+/**
+ * Gümrük/ihracat no (`Shipment.procedureCode`) yalnız YURTDIŞI sevkte basılır; yurtiçinde
+ * dolu değer de basılmaz (gizlemek silmek değildir). Yedek değer UYDURULMAZ — cari kodu
+ * gümrük numarası değildir.
+ */
+export function procedureCodeForDestination(destination: ShipmentDestination | null, procedureCode: string | null | undefined): string | null {
+  return destination === "EXPORT" ? procedureCode || null : null;
+}
+
 /** Hızlı Sevkin ihracat reddi — sunucu 400'ü ve ekrandaki pasif düğme gerekçesi bu metni kullanır. */
 export function quickShipExportMessage(source: ShipmentDestinationSource | null): string {
   const kim = source === "BRANCH" ? "Bu şube" : source === "CUSTOMER" ? "Bu cari" : null;
