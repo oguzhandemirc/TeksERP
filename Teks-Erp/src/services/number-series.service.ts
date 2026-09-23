@@ -47,6 +47,14 @@ import { nextCounterCandidate, nextCounterSeq } from "./helpers/series-counter.h
 // tx kendi commit edilmemiş satırını göremez. Bu yüzden okuma SENKRON'dur ve
 // önbellek boot'ta doldurulur (`number-series-catalog.job`).
 let cache: Map<string, NumberSeriesFormat> | null = null;
+/**
+ * İLERİ TARİHLİ biçim satırları (D4③) — yalnız ÖNİZLEME okur.
+ *
+ * ⚠️ ÜRETİM YOLU BURAYA BAKMAZ: bir numara hiçbir zaman "gelecekteki" biçimle
+ * doğmaz. `resolveSeriesFormat(key)` (tarihsiz) her zaman YÜRÜRLÜKTEKİ biçimi
+ * verir; `at` verildiğinde yalnız "o gün ne olacak" sorusu cevaplanır.
+ */
+let futureCache: Map<string, Array<{ effectiveFrom: Date; fmt: Partial<NumberSeriesFormat> }>> = new Map();
 let cachedAt = 0;
 const CACHE_TTL_MS = 60_000;
 let backgroundRefresh: Promise<void> | null = null;
@@ -84,7 +92,74 @@ function rowFormat(row: NumberSeries): NumberSeriesFormat {
   };
 }
 
+/**
+ * VADESİ GELEN İLERİ TARİHLİ SATIRLARI YÜRÜRLÜĞE ALIR (D4③).
+ *
+ * ⚠️ NEDEN ÖNBELLEK TAZELEMESİNİN İÇİNDE: `number_series` kolonları yürürlükteki
+ * satırın ÖNBELLEĞİ (D4①) ve o eşitliği bir bekçi ölçüyor. İleri tarihli bir
+ * satır vadesi gelince kendiliğinden yürürlüğe girerse kolonlar BAYATLARDI —
+ * yani "1 Ocak geldi ama sistem hâlâ eski biçimi üretiyor" ya da "satır yeni,
+ * önbellek eski" ayrışması. Aktivasyon bir OLAYDIR ve tek yerde yapılır.
+ *
+ * ⚠️ AYRI BİR ZAMANLAYICI YOK ve bu bilinçli: tazeleme zaten her 60 sn'de bir
+ * (ve her boot'ta) koşuyor; ikinci bir zamanlayıcı, çalışıp çalışmadığı ayrıca
+ * ölçülmesi gereken ikinci bir mekanizma olurdu.
+ *
+ * Eski ön ek EMEKLİYE ayrılır — biçim panelden değiştirildiğindeki davranışın
+ * aynısı; geçmiş kod okunmaya devam eder.
+ */
+async function activateDueLines(): Promise<string[]> {
+  const simdi = new Date();
+  const seriler = await prisma.numberSeries.findMany({
+    select: {
+      key: true, prefix: true, dateSegment: true, digits: true, separator: true,
+      retiredPrefixes: true, formatChangedAt: true,
+    },
+  });
+  const aktive: string[] = [];
+  for (const s of seriler) {
+    const line = await prisma.numberSeriesLine.findFirst({
+      where: { seriesKey: s.key, effectiveFrom: { lte: simdi } },
+      orderBy: { effectiveFrom: "desc" },
+      select: { prefix: true, dateSegment: true, digits: true, separator: true, effectiveFrom: true },
+    });
+    if (!line) continue;
+    // ⚠️ ÖLÇÜT "kolonlar satırdan FARKLI" DEĞİL, "DAHA YENİ bir satır VADESİ
+    // GELDİ": aktivasyon bir OLAYDIR, bir eşitleme değil. Fark ölçütüyle
+    // yazılmış ilk hâli, kolonlara doğrudan yazan her yolu (bekçi fikstürleri
+    // dahil) sessizce GERİ ALIYORDU — ölçüldü 2026-09-23, `test_number_series_scope
+    // §2` kırmızı verdi ve HAKLIYDI: kolonları satırın kopyası saymak başka,
+    // satırı kolonların EFENDİSİ yapmak başkadır.
+    const stamp = s.formatChangedAt?.getTime() ?? 0;
+    if (line.effectiveFrom.getTime() <= stamp) continue;
+    const retired =
+      line.prefix === s.prefix ? s.retiredPrefixes : [...new Set([...s.retiredPrefixes, s.prefix])];
+    await prisma.numberSeries.update({
+      where: { key: s.key },
+      data: {
+        prefix: line.prefix, dateSegment: line.dateSegment, digits: line.digits,
+        separator: line.separator, retiredPrefixes: retired, formatChangedAt: line.effectiveFrom,
+      },
+    });
+    aktive.push(s.key);
+  }
+  if (aktive.length > 0) {
+    // Bir SİSTEM olayı (kullanıcı eylemi değil): fabrikanın aylar önce verdiği
+    // karar bugün yürürlüğe girdi ve bunun izi olmalı.
+    await AuditService.logEvent({
+      category: "SYSTEM",
+      action: "NUMBER_SERIES_LINE_ACTIVATED",
+      tableName: "number_series",
+      payload: { keys: aktive },
+    });
+  }
+  return aktive;
+}
+
 export async function refreshNumberSeriesCache(): Promise<void> {
+  // ⚠️ SIRA LOAD-BEARING: aktivasyon ÖNCE koşar, önbellek SONRA dolar. Ters
+  // sırada, vadesi gelen satır bir tur boyunca (60 sn) görünmezdi.
+  await activateDueLines();
   const rows = await prisma.numberSeries.findMany();
   // ⚠️ EMEKLİ BİÇİMLER AYNI OKUMADA: satırlar ayrı bir turda çekilseydi ön ek
   // bir sürümden, emekli biçimler başkasından gelirdi ("iki okuma" sınıfı).
@@ -106,6 +181,19 @@ export async function refreshNumberSeriesCache(): Promise<void> {
     }
     retiredList.push({ prefix: l.prefix, dateSegment: l.dateSegment, digits: l.digits, separator: l.separator });
   }
+  // İLERİ TARİHLİ satırlar ayrı tutulur: önizleme (`resolveSeriesFormat(key, at)`)
+  // onları okur, ÜRETİM yolu okumaz — bir numara hiçbir zaman "gelecekteki"
+  // biçimle doğmaz.
+  const gelecek = new Map<string, Array<{ effectiveFrom: Date; fmt: Partial<NumberSeriesFormat> }>>();
+  for (const l of lines) {
+    if (l.effectiveFrom.getTime() <= simdi) continue;
+    const dizi = gelecek.get(l.seriesKey) ?? [];
+    dizi.push({
+      effectiveFrom: l.effectiveFrom,
+      fmt: { prefix: l.prefix, dateSegment: l.dateSegment, digits: l.digits, separator: l.separator },
+    });
+    gelecek.set(l.seriesKey, dizi);
+  }
   const next = new Map<string, NumberSeriesFormat>();
   // Katalogdan DÜŞMÜŞ bir DB satırı (eski sürümden kalan) tabloyu komple
   // düşürmesin: kataloğu kod sahiplenir, tanınmayan satır yok sayılır.
@@ -119,6 +207,7 @@ export async function refreshNumberSeriesCache(): Promise<void> {
     }
   }
   cache = next;
+  futureCache = gelecek;
   cachedAt = Date.now();
   refreshBlockedUntil = 0;
 }
@@ -150,14 +239,26 @@ export function invalidateNumberSeriesCache(): void {
  * "bilinmiyor" hâlinin en güvenli karşılığı reddetmek değil, eski biçimi sürdürmektir.
  * Bayat önbellek de döner ve arka planda tazelenir (TTL tazeliktir, geçerlilik değil).
  */
-export function resolveSeriesFormat(key: string): NumberSeriesFormat {
+export function resolveSeriesFormat(key: string, at?: Date): NumberSeriesFormat {
   const entry = numberSeriesCatalogEntry(key);
   if (cache === null) {
     scheduleBackgroundRefresh();
     return seedFormat(entry);
   }
   if (Date.now() - cachedAt >= CACHE_TTL_MS) scheduleBackgroundRefresh();
-  return cache.get(key) ?? seedFormat(entry);
+  const yururlukte = cache.get(key) ?? seedFormat(entry);
+  if (at === undefined) return yururlukte;
+  // ⚠️ REJİMİ ÜRETİM ANI SEÇER, TARİH SEGMENTİNİN DEĞERİNİ BELGE TARİHİ VERİR.
+  // Üreteçler bu fonksiyonu TARİHSİZ çağırır (yürürlükteki rejim) ve belge
+  // tarihini `seriesPrefix`/`formatSeriesCode`a geçirir. `at` YALNIZ önizleme
+  // içindir: "1 Ocak'ta bu seri neye benzeyecek?". Ters kurgu (rejimi belge
+  // tarihi seçsin) 1 Ocak'ta girilen 28 Aralık tarihli bir fişi KAPANMIŞ bir
+  // sayaç kapsamına yazardı; emsal `reconciliation-letter.service` başlığında:
+  // "geçmiş tarihli numara üretmek, bugün kesilen kâğıdı geçmişe yazmak olurdu".
+  const ileri = (futureCache.get(key) ?? [])
+    .filter((x) => x.effectiveFrom.getTime() <= at.getTime())
+    .sort((a1, b1) => b1.effectiveFrom.getTime() - a1.effectiveFrom.getTime())[0];
+  return ileri ? { ...yururlukte, ...ileri.fmt, formatChangedAt: ileri.effectiveFrom } : yururlukte;
 }
 
 // ── BİÇİMLENDİRME → `helpers/series-format.helper.ts` (saf çekirdek, boyut bölmesi)

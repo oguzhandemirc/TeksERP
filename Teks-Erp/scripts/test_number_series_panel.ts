@@ -90,6 +90,7 @@ import { seriesPrefix } from "../src/services/helpers/series-format.helper";
 import {
   scanningClientsCarryFazB,
   scanningClientsCarryFazD,
+  scanningClientsMissingPhases,
 } from "../src/config/client-version-policy";
 import {
   assertManualNumberAllowed,
@@ -715,6 +716,19 @@ async function main(): Promise<void> {
     check("§10a körlük zemini: iki eşik de BUGÜN karşılanmıyor (kapı vakumen yeşil değil)",
       !scanningClientsCarryFazB() || !scanningClientsCarryFazD(),
       `FazB=${scanningClientsCarryFazB()} · FazD=${scanningClientsCarryFazD()}`);
+    // ⭐ İDDİA GÜÇLENDİRİLDİ (2026-09-23) çünkü ESKİSİ ZAYIFTI ve bunu ÖLÇTÜM:
+    // "hata kodu `…CLIENT_TOO_OLD` mı" diye sormak, YALNIZ Faz B'ye bakan bir
+    // kapıyı da geçiriyordu — iki eşik de bugün karşılanmadığı için `false &&
+    // false` ile `false` aynı sonucu veriyor. Kapı artık EKSİK FAZLARI ADIYLA
+    // döndürüyor ve iddia ikisinin de arandığını görebiliyor.
+    check("§10a ⭐ kapı EKSİK FAZLARI ADIYLA bildiriyor — ikisi de aranıyor",
+      (() => {
+        const d = (c0bHatasi as { details?: { missingPhases?: string[] } })?.details?.missingPhases;
+        return Array.isArray(d) && d.includes("B") && d.includes("D");
+      })(),
+      JSON.stringify((c0bHatasi as { details?: { missingPhases?: string[] } })?.details?.missingPhases ?? null));
+    check("§10a tek yüklem: kapı ile bildirilen eksik fazlar AYNI kaynaktan",
+      scanningClientsMissingPhases().length === 2);
 
     // ⭐ SÖZLEŞME: alan EKLENDİ, var olan DEĞİŞTİRİLMEDİ — eski istemci
     // `retiredFormats`ı tanımaz ve görmezden gelir; `prefixes` yerinde durur.

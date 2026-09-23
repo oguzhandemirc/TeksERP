@@ -277,6 +277,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   NUMBER_SERIES_SEEDED: "Numara serileri eşitlendi",
   NUMBER_SOURCE_MIGRATED: "Numara kaynağı ayarı eski bayraktan taşındı (tek seferlik)",
   NUMBER_SERIES_LINES_MIGRATED: "Numara biçimi zaman çizgisine taşındı (tek seferlik)",
+  NUMBER_SERIES_LINE_ACTIVATED: "İleri tarihli numara biçimi yürürlüğe girdi",
 
   // ── SYSTEM · onarım / backfill izleri ──
   // Bunlar `scripts/*.ts --apply` koşumlarının bıraktığı izdir: operatör "bu veriyi

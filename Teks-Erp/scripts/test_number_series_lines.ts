@@ -8,6 +8,9 @@
 //   §4 ⭐ TEK YAZAR: biçim yazınca hem YENİ SATIR doğar hem önbellek güncellenir
 //      ve ikisinin anı AYNIDIR (`effectiveFrom` == `formatChangedAt`)
 //   §5 Sentinel BEYANLI: tarihi bilinmeyen geçmiş satır `isSentinel` taşır
+//   §7 İLERİ TARİHLİ GEÇİŞ: geçmişe yazılamaz · bugünü değiştirmez (ama önizleme
+//      gösterir) · vadesi gelince kendiliğinden yürürlüğe girer ve ÖNBELLEK
+//      kolonlarını da günceller
 //   §6 KÖKEN AYRI BEYAN: göçün ürettiği emekli satır `MIGRATED_GUESS`, panelden
 //      doğan satır `RECORDED` — tarihin sentinel olması BİÇİMİN tahmin olduğunu
 //      söylemez, ikisi AYRI sorudur
@@ -26,6 +29,7 @@ import {
 } from "../src/jobs/number-series-catalog.job";
 import { refreshNumberSeriesCache, resolveSeriesFormat } from "../src/services/number-series.service";
 import { updateSeriesFormat } from "../src/services/helpers/series-write.helper";
+import { formatSeriesCode } from "../src/services/helpers/series-format.helper";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
@@ -46,6 +50,49 @@ async function yururlukteki(key: string) {
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) { console.log(engel); process.exit(1); }
+
+  // ⚠️ TEMİZLİK ANLIK GÖRÜNTÜYLE, SAYIYLA DEĞİL: ilk yazımda teardown "fazladan
+  // kaç satır var" diye sayıyordu ve bir koşum ORTASINDA düşünce artık kalıyordu
+  // (ölçüldü 2026-09-23: `packingLotCode`ta altı artık satır birikti ve sonraki
+  // koşumları kırmızıya düşürdü). Şimdi başta var olan id'ler kaydediliyor;
+  // sonda o kümede OLMAYAN her satır siliniyor — koşum nerede düşerse düşsün.
+  const baslangicSatirlari = new Set(
+    (await prisma.numberSeriesLine.findMany({ select: { id: true } })).map((x) => x.id),
+  );
+  const seriDurumu = new Map(
+    (await prisma.numberSeries.findMany({
+      select: { key: true, prefix: true, dateSegment: true, digits: true, separator: true,
+        retiredPrefixes: true, formatChangedAt: true },
+    })).map((s) => [s.key, s]),
+  );
+
+  // ⚠️ HEDEF SERİ BİLİNEN BİR HÂLE ÇEKİLİR — "ortamda ne varsa" ile koşmak, bu
+  // bekçiyi ÖNCEKİ koşumların artığına bağımlı yapıyordu (ölçüldü 2026-09-23:
+  // arka arkaya iki tur koşunca ikincisi kırmızı veriyordu ve sebep ÜRÜN DEĞİL
+  // fikstürdü). Göç satırları (`MIGRATED_GUESS`) KORUNUR; onların üstüne yazılmış
+  // her deneme satırı silinir ve kolonlar en eski satıra eşitlenir.
+  for (const hedef of ["packingLotCode", "sack"]) {
+    const satirlar = await prisma.numberSeriesLine.findMany({
+      where: { seriesKey: hedef }, orderBy: { effectiveFrom: "asc" },
+      select: { id: true, prefix: true, dateSegment: true, digits: true, separator: true, origin: true },
+    });
+    for (const s of satirlar.slice(1)) {
+      if (s.origin !== "MIGRATED_GUESS") await prisma.numberSeriesLine.delete({ where: { id: s.id } });
+    }
+    const kalan = await prisma.numberSeriesLine.findMany({
+      where: { seriesKey: hedef }, orderBy: { effectiveFrom: "desc" }, take: 1,
+      select: { prefix: true, dateSegment: true, digits: true, separator: true },
+    });
+    const y = kalan[0];
+    if (y) {
+      await prisma.numberSeries.update({
+        where: { key: hedef },
+        data: { prefix: y.prefix, dateSegment: y.dateSegment, digits: y.digits, separator: y.separator,
+          retiredPrefixes: [], formatChangedAt: null },
+      });
+    }
+  }
+  await refreshNumberSeriesCache();
 
   // ── §1 GÖÇ ────────────────────────────────────────────────────────────────
   const r1 = await reconcileNumberSeries();
@@ -177,6 +224,123 @@ async function main(): Promise<void> {
     });
     await refreshNumberSeriesCache();
   }
+
+  // ── §7 İLERİ TARİHLİ GEÇİŞ (D4③) ─────────────────────────────────────────
+  // ⭐ Üç ayrı soru: ① geçmişe yazılamaz ② ileri tarihli yazma BUGÜNÜ değiştirmez
+  // ③ vadesi gelince KENDİLİĞİNDEN yürürlüğe girer (ayrı zamanlayıcı yok).
+  const H2 = "packingLotName"; // sayacı `sayac-yok`… biçim kapısı için uygun değil
+  const HEDEF2 = "packingLotCode";
+  const oncekiFmt = resolveSeriesFormat(HEDEF2);
+  const satirOnce = await prisma.numberSeriesLine.count({ where: { seriesKey: HEDEF2 } });
+  const eklenen: string[] = [];
+  try {
+    // ① GEÇMİŞE YAZMA → 400
+    let gecmisHata: unknown = null;
+    try {
+      await updateSeriesFormat(
+        HEDEF2,
+        { prefix: oncekiFmt.prefix, dateSegment: oncekiFmt.dateSegment, digits: oncekiFmt.digits, separator: oncekiFmt.separator },
+        undefined,
+        new Date(Date.now() - 3 * 86_400_000),
+      );
+    } catch (e) { gecmisHata = e; }
+    check("§7a ⭐ GEÇMİŞ tarihli geçiş 400 (`NUMBER_SERIES_EFFECTIVE_FROM_PAST`)",
+      (gecmisHata as { details?: { code?: string } })?.details?.code === "NUMBER_SERIES_EFFECTIVE_FROM_PAST",
+      String((gecmisHata as { details?: { code?: string } })?.details?.code));
+
+    // ② İLERİ TARİHLİ yazma BUGÜNÜ DEĞİŞTİRMEZ
+    const yarin = new Date(Date.now() + 86_400_000);
+    const yeniOnek = oncekiFmt.prefix === "PRT" ? "PRX" : "PRT";
+    await updateSeriesFormat(
+      HEDEF2,
+      { prefix: yeniOnek, dateSegment: oncekiFmt.dateSegment, digits: oncekiFmt.digits, separator: oncekiFmt.separator },
+      undefined,
+      yarin,
+    );
+    eklenen.push(HEDEF2);
+    await refreshNumberSeriesCache();
+    const bugunFmt = resolveSeriesFormat(HEDEF2);
+    check("§7b ⭐ ileri tarihli geçiş BUGÜNKÜ biçime DOKUNMAZ",
+      bugunFmt.prefix === oncekiFmt.prefix, `${oncekiFmt.prefix} → ${bugunFmt.prefix}`);
+    check("§7b ⭐ ama ÖNİZLEME o tarihte yeni biçimi gösterir (`resolveSeriesFormat(key, at)`)",
+      resolveSeriesFormat(HEDEF2, new Date(Date.now() + 2 * 86_400_000)).prefix === yeniOnek,
+      resolveSeriesFormat(HEDEF2, new Date(Date.now() + 2 * 86_400_000)).prefix);
+    check("§7b ⭐ ÜRETİM yolu (tarihsiz çağrı) hâlâ bugünkü rejimi veriyor",
+      resolveSeriesFormat(HEDEF2).prefix === oncekiFmt.prefix);
+
+    // ③ VADESİ GELİNCE kendiliğinden yürürlüğe girer
+    // ⚠️ Vadeyi "şimdi"ye çekiyoruz; `formatChangedAt`ten SONRA olmalı çünkü
+    // aktivasyonun ölçütü "DAHA YENİ bir satır vadesi geldi"dir (fark değil).
+    await prisma.numberSeries.update({
+      where: { key: HEDEF2 },
+      data: { formatChangedAt: new Date(Date.now() - 10_000) },
+    });
+    await prisma.numberSeriesLine.updateMany({
+      where: { seriesKey: HEDEF2, effectiveFrom: yarin },
+      data: { effectiveFrom: new Date(Date.now() - 1000) },
+    });
+    await refreshNumberSeriesCache();
+    check("§7c ⭐ vadesi gelen satır KENDİLİĞİNDEN yürürlüğe girdi (ayrı zamanlayıcı yok)",
+      resolveSeriesFormat(HEDEF2).prefix === yeniOnek, resolveSeriesFormat(HEDEF2).prefix);
+    const kolonlar = await prisma.numberSeries.findUnique({
+      where: { key: HEDEF2 }, select: { prefix: true, retiredPrefixes: true },
+    });
+    check("§7c ⭐ aktivasyon ÖNBELLEK KOLONLARINI da güncelledi (D4① eşitliği korunuyor)",
+      kolonlar?.prefix === yeniOnek, String(kolonlar?.prefix));
+    // ⭐ §7d B2 BEYANI: "Rejimi (hangi biçim) ÜRETİM ANI seçer; tarih
+    // segmentinin DEĞERİNİ belge tarihi verir." Geçiş yürürlüğe girdikten SONRA
+    // girilen ESKİ TARİHLİ bir belge YENİ biçimi alır ama tarih segmentinde
+    // KENDİ tarihini taşır. Ters kurgu (rejimi belge tarihi seçsin) o belgeyi
+    // KAPANMIŞ bir sayaç kapsamına yazardı.
+    const aralik = new Date("2026-12-28T10:00:00.000Z");
+    const rejim = resolveSeriesFormat(HEDEF2); // ÜRETİM ANI (tarihsiz çağrı)
+    const uretilen = formatSeriesCode(rejim, 7, aralik); // DEĞER: belge tarihi
+    check("§7d ⭐ REJİM üretim anından: eski tarihli belge YENİ ön eki alıyor",
+      uretilen.startsWith(yeniOnek), uretilen);
+    check("§7d ⭐ ama TARİH SEGMENTİ belge tarihinden (Aralık) — ikisi AYRI kaynak",
+      uretilen.includes("2612") || uretilen.includes("281226") || uretilen.includes("2612"),
+      `${uretilen} (belge 28.12.2026)`);
+
+    check("§7c ⭐ eski ön ek EMEKLİYE ayrıldı (geçmiş kod okunmaya devam eder)",
+      (kolonlar?.retiredPrefixes ?? []).includes(oncekiFmt.prefix),
+      (kolonlar?.retiredPrefixes ?? []).join(","));
+  } finally {
+    // Seriyi eski hâline döndür: fazla satırları sil, kolonları geri yaz.
+    if (eklenen.length > 0) {
+      const hepsi = await prisma.numberSeriesLine.findMany({
+        where: { seriesKey: HEDEF2 }, orderBy: { effectiveFrom: "asc" }, select: { id: true },
+      });
+      for (const l of hepsi.slice(satirOnce)) {
+        await prisma.numberSeriesLine.delete({ where: { id: l.id } });
+      }
+      await prisma.numberSeries.update({
+        where: { key: HEDEF2 },
+        data: {
+          prefix: oncekiFmt.prefix, dateSegment: oncekiFmt.dateSegment, digits: oncekiFmt.digits,
+          separator: oncekiFmt.separator, retiredPrefixes: oncekiFmt.retiredPrefixes,
+          formatChangedAt: oncekiFmt.formatChangedAt ?? null,
+        },
+      });
+      await refreshNumberSeriesCache();
+    }
+    void H2;
+  }
+
+  // ── SON TEMİZLİK: bu koşumun yarattığı HER satır gider, seriler eski hâline döner.
+  const sonSatirlar = await prisma.numberSeriesLine.findMany({ select: { id: true } });
+  for (const l of sonSatirlar) {
+    if (!baslangicSatirlari.has(l.id)) await prisma.numberSeriesLine.delete({ where: { id: l.id } });
+  }
+  for (const [key, s] of seriDurumu) {
+    await prisma.numberSeries.update({
+      where: { key },
+      data: {
+        prefix: s.prefix, dateSegment: s.dateSegment, digits: s.digits, separator: s.separator,
+        retiredPrefixes: s.retiredPrefixes, formatChangedAt: s.formatChangedAt,
+      },
+    });
+  }
+  await refreshNumberSeriesCache();
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();

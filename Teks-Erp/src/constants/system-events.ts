@@ -87,6 +87,8 @@ const IMPORT_EVENTS = {
   NUMBER_SOURCE_MIGRATED: "NUMBER_SOURCE_MIGRATED",
   /** Biçim kolonları `number_series_lines` tablosuna TEK SEFERLİK taşındı. */
   NUMBER_SERIES_LINES_MIGRATED: "NUMBER_SERIES_LINES_MIGRATED",
+  /** İleri tarihli bir biçim satırı VADESİ GELDİĞİ için yürürlüğe alındı. */
+  NUMBER_SERIES_LINE_ACTIVATED: "NUMBER_SERIES_LINE_ACTIVATED",
 } as const;
 
 /** Süperadmin, sistem hesabı, modül profili. */

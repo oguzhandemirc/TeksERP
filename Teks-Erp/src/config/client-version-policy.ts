@@ -229,6 +229,23 @@ export function scanningClientsCarryFazD(): boolean {
 }
 
 /**
+ * OKUTULAN SERİNİN BİÇİM KİLİDİ İÇİN EKSİK FAZLAR — adlandırılmış liste.
+ *
+ * ⚠️ NEDEN BOOLEAN DEĞİL LİSTE ve bu ÖLÇÜLMÜŞ bir dersin sonucu: kapı iki
+ * eşiğe birden bakıyor ama ikisi de bugün karşılanmadığı için `false && false`
+ * ile `false` AYNI sonucu veriyordu — yani "yalnız Faz B'ye bakan" bir kapı da
+ * bekçiyi GEÇİYORDU (2026-09-23: iki eşikli kapı bir sonda temizliğinde
+ * sessizce tek eşikliye döndü ve hiçbir iddia bunu görmedi). Eksik fazların
+ * ADI dönünce iddia "ikisi de aranıyor mu" diye sorabiliyor.
+ */
+export function scanningClientsMissingPhases(): Array<"B" | "D"> {
+  const eksik: Array<"B" | "D"> = [];
+  if (!scanningClientsCarryFazB()) eksik.push("B");
+  if (!scanningClientsCarryFazD()) eksik.push("D");
+  return eksik;
+}
+
+/**
  * Kayıt defteri — yeni istemci eklemek route'a değil BURAYA bir satır.
  */
 export const CLIENT_VERSION_POLICIES: Record<string, ClientVersionPolicy> = {
