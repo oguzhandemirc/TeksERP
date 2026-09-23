@@ -1419,7 +1419,14 @@ export interface DocumentConfig {
    *  varsayılana dön; değer kullanıcı girdisidir → renderer HTML kaçırır). */
   columns?: Record<
     string,
-    { hidden?: string[]; order?: string[]; shown?: string[]; labels?: Record<string, string> }
+    {
+      hidden?: string[];
+      order?: string[];
+      shown?: string[];
+      labels?: Record<string, string>;
+      /** Başlığı BOŞ basılacak kolonlar — `labels`te boş dize "varsayılana dön" demek. */
+      blankLabels?: string[];
+    }
   >;
   /** Belge doğrulama karekodu (belge no + versiyon) basılsın mı (default false). */
   qr?: boolean;
@@ -5621,6 +5628,7 @@ export function sanitizeDocumentsConfig(raw: Record<string, unknown>): Documents
           order?: string[];
           shown?: string[];
           labels?: Record<string, string>;
+          blankLabels?: string[];
         } = {};
         if (Array.isArray(tvo.hidden)) {
           entry.hidden = tvo.hidden
@@ -5653,6 +5661,15 @@ export function sanitizeDocumentsConfig(raw: Record<string, unknown>): Documents
             entry.labels = Object.fromEntries(keys.map((k) => [k, labels[k] as string]));
           }
         }
+        // BAŞLIĞI BOŞ BASILACAK kolonlar — `labels`ten AYRI liste, çünkü orada
+        // boş dize "varsayılana dön" demek ve aynı kutu iki niyeti anlatamaz.
+        if (Array.isArray(tvo.blankLabels)) {
+          entry.blankLabels = tvo.blankLabels
+            .filter((x): x is string => typeof x === "string")
+            .map((x) => x.trim().slice(0, 40))
+            .filter((x) => x.length > 0)
+            .slice(0, 20);
+        }
         // ⚠️ `shown` bu kapıya EKLENMELİ — yoksa yalnız opt-in kolon açılmış bir satır
         // (hidden/order boş) sessizce atılır: kullanıcı kolonu açar, ayar kaydolmaz,
         // sebebi hiçbir yerde görünmez. (`labels` aynı sebeple burada.)
@@ -5660,6 +5677,7 @@ export function sanitizeDocumentsConfig(raw: Record<string, unknown>): Documents
           entry.hidden?.length ||
           entry.order?.length ||
           entry.shown?.length ||
+          entry.blankLabels?.length ||
           entry.labels
         ) {
           columns[tk.slice(0, 40)] = entry;

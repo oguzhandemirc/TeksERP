@@ -224,6 +224,8 @@ export interface DocRowValue {
   canLabel: boolean;
   /** Kayıtlı başlık override'ı; yoksa undefined (yerleşik başlık geçerli). */
   labelOverride?: string;
+  /** Başlık BASILMASIN kararı — `labelOverride`den ayrı (boş kutu "varsayılana dön"). */
+  blankLabel: boolean;
 }
 
 export function readDocRow(
@@ -247,14 +249,15 @@ export function readDocRow(
       canHide: true,
       canLabel: true,
       labelOverride: entry.labels?.[row.column.key],
+      blankLabel: (entry.blankLabels ?? []).includes(row.column.key),
     };
   }
   if (row.section) {
     const raw = resolved.sections[row.section];
     const visible = row.sectionOptIn ? raw === true : raw !== false;
-    return { ...base, visible, canHide: true, canLabel: false };
+    return { ...base, visible, canHide: true, canLabel: false, blankLabel: false };
   }
-  return { ...base, visible: true, canHide: false, canLabel: false };
+  return { ...base, visible: true, canHide: false, canLabel: false, blankLabel: false };
 }
 
 // ─── yazma ───────────────────────────────────────────────────────────────────
@@ -268,6 +271,13 @@ export interface DocRowPatch {
   /** Kolon başlığı override'ı. Boş dize = anahtarı SİL (yerleşik başlığa dön) —
    *  punto kutusundaki "boş = varsayılan" sözleşmesinin birebir aynısı. */
   label?: string;
+  /**
+   * BAŞLIK BASILMASIN (2026-09-23) — `label`den AYRI bir karar, çünkü orada boş
+   * dize "varsayılana dön" demek ve aynı kutu iki niyeti anlatamaz. `true` iken
+   * kolon başlığı BOŞ basılır; kutuda metin kalsa bile boşluk kazanır (backend
+   * `applyColumnCfg` de aynı önceliği uygular).
+   */
+  blankLabel?: boolean;
 }
 
 /**
@@ -324,6 +334,24 @@ export function writeDocRow(
     }
   }
 
+  // BAŞLIK BASILMASIN — `labels`ten AYRI liste (`blankLabels`). Görünürlük ve
+  // başlık yamalarıyla AYNI girdiyi paylaşır; bu yüzden o da `out.columns`u
+  // temel alır, yoksa üç dal birbirini sessizce ezerdi.
+  if (row.column && patch.blankLabel !== undefined) {
+    const table = row.column.table;
+    const base = (out.columns?.[table] ?? cfg?.columns?.[table] ?? {}) as {
+      hidden?: string[]; order?: string[]; shown?: string[];
+      labels?: Record<string, string>; blankLabels?: string[];
+    };
+    const entry = { ...base };
+    const blank = new Set(entry.blankLabels ?? []);
+    if (patch.blankLabel) blank.add(row.column.key);
+    else blank.delete(row.column.key);
+    if (blank.size) entry.blankLabels = [...blank];
+    else delete entry.blankLabels;
+    out.columns = { ...cfg?.columns, ...out.columns, [table]: entry };
+  }
+
   // Kolon başlığı override'ı — görünürlükle AYNI `columns[tablo]` girdisine yazar.
   // ⚠️ Aynı yamada ikisi de gelirse `out.columns`taki girdiyi temel al: iki dal
   // da `cfg`den okusaydı ikincisi birincisini sessizce EZERDİ.
@@ -334,6 +362,7 @@ export function writeDocRow(
       order?: string[];
       shown?: string[];
       labels?: Record<string, string>;
+      blankLabels?: string[];
     };
     const entry = { ...base };
     const labels = { ...(entry.labels ?? {}) };

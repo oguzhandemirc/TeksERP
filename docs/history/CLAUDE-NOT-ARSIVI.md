@@ -21,6 +21,51 @@
 
 ---
 
+## 2026-09-23 — Parti KODU belgeye basılabilir oldu; "başlık basma" ayrı bir karar [ÇEKİRDEK]
+
+**Saha vakası (kullanıcı):** aynı cari için eski ve yeni sevk partisi AYNI ADI (`P-2`) taşıyabiliyor
+ve irsaliyede ayırt edilemiyordu. Kullanıcı ad tekrarının SINIRLANMAMASINI istedi ("sahada tekrar
+etmesi gerekse bile mevcut yöntem istendi") ve ayırt ediciyi belgeye basmayı seçti: **parti kodu
+(`PackingGroup.code`, `PRT…`) opt-in bir kolon olarak irsaliye ve çeki bölümüne girdi.**
+
+**Kalıp icat edilmedi, ÖLÇÜLDÜ:** opt-in kolon (`DocCol.defaultHidden` + `columns.<tablo>.shown`)
+ve düzenlenebilir başlık (`columns.<tablo>.labels`) zaten vardı; emsali çuval AÇIKLAMA kolonu.
+Veri tarafında eksik olan tek şey snapshot'tı — sevk anında yalnız `packingGroupName` donuyordu,
+yanına `packingGroupCode` eklendi. Kod DOĞUŞTA materyalize (İ1), render'da kurulmuyor.
+
+**⭐ KARAR 1 — "başlığı kaldırabilmek" bugünkü sözleşmeyle İFADE EDİLEMİYORDU.** Kolon başlığı
+kutusunda boş dize "VARSAYILANA DÖN" demek ve bu yazılı, gerekçeli bir güvence ("kullanıcı kutuyu
+boşaltınca niyeti başlıksız kolon değil eski hâline dön"). Aynı kutuya ikinci bir niyet yüklemek
+onu çift anlamlı yapardı. Çözüm AYRI bir alan: `columns.<tablo>.blankLabels` — üç hâl açıkça
+ayrışır (anahtar yok → yerleşik · `labels` dolu → kullanıcı metni · `blankLabels` → başlıksız) ve
+ikisi birlikte verilirse BOŞLUK kazanır, çünkü açık "başlık basma" kararı kutuda kalmış eski
+metni ezmeli. Alternatif ("boş dize artık başlıksız demek olsun") REDDEDİLDİ: tek satırlık bir
+değişiklik ama BÜTÜN kolonları etkiler ve bugün kutuyu boşaltan herkes farkında olmadan başlıksız
+kolon üretirdi.
+
+**⭐ KARAR 2 — İÇ VERİ KOLONU TEK KAPIDAN YÖNETİLİR.** Kod kolonu YALNIZ belge tasarımından
+açılır; bugünkü parti ADI kolonlarının bağlı olduğu GLOBAL `shipping.docPackingLot` anahtarına
+bağlanmadı. Gerekçe: iki kapı olsaydı kullanıcı kolonu belgeden açar, global anahtar kapalı
+olduğu için hiçbir şey değişmez ve sebebi hiçbir ekranda görünmezdi.
+⚠️ **ÖLÇÜLDÜ ve BEYAN EDİLİYOR (bu dilimde DEĞİŞTİRİLMEDİ, 1e kararı):** bugünkü parti ADI ve
+AMBALAJ NO kolonları (`shipment-dispatch.html.ts`, çuval ve çeki tabloları) tam da bu kuralı
+ihlal ediyor — panel kataloğunda satır olarak duruyorlar ve başlıkları düzenlenebiliyor, ama
+çizilmeleri `meta.packingLot` global anahtarına bağlı. Yani kullanıcı panelden kolonu görür,
+başlığını yazar ve anahtar kapalıyken belgede hiçbir şey olmaz. Düzeltme AYRI bir karardır
+(görünürlük kapısını değiştirmek, bugün o anahtarla yayında olan fabrikaların belgesini
+değiştirebilir) ve 1e'ye taşındı.
+
+**Kapanan ikinci boşluk:** belge tasarımının KOLON kataloğunun ayna bekçisi YOKTU —
+`test_doc_density_fields §5` yalnız YAZI ayarı kataloğunu aynalıyordu. Kolon kataloğu için iki
+yönlü ayna eklendi (`test_document_customization §1c`).
+
+**Sonda (iki yönlü, ikisi de ısırdı):** `applyColumnCfg`ten boşluk kolu çıkarılınca §1b'nin üç
+iddiası kırmızı · snapshot'tan `packingGroupCode` düşürülünce §8'in iki iddiası kırmızı; ikisi de
+geri alınınca yeşil. §8'in ilk yazımı da kırmızı verdi ve ÖĞRETİCİYDİ: belge tasarımı sevk anında
+DONUYOR (`docConfigOverride`), yani donmuş bir belgenin kolonu sonradan açılamaz — ayarı sevkten
+ÖNCE yazmak gerekiyordu. Bu kırmızı aynı zamanda eski belgelerin korunduğunun kanıtı oldu ve ayrı
+bir iddiaya çevrildi.
+
 ## 2026-09-23 — K27: ön eke çakılı süzgeç ürün açmayı bloke etti; matrisin kör noktası kapandı [ÇEKİRDEK]
 
 **Arıza (d3 ölçtü, 47/49 kabul koşumu).** Ürün (stok) kodunun sayaç taraması `item.service.ts`te

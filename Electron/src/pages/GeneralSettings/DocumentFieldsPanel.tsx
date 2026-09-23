@@ -80,17 +80,31 @@ function Row({
         // satırında ikisi de anlamsız: kolonun puntosu tablo başlığı alanından
         // ayarlanır). Boş bırakmak "varsayılan başlığa dön" demektir; placeholder
         // yerleşik başlığı gösterir ki kullanıcı neye döneceğini bilsin.
-        <input
-          type="text"
-          maxLength={40}
-          value={v.labelOverride ?? ""}
-          disabled={disabled || !v.visible}
-          placeholder={row.label}
-          title="Kolon başlığı — boş bırakılırsa varsayılan başlık basılır"
-          aria-label={`${row.label} — kolon başlığı`}
-          onChange={(e) => onPatch({ label: e.target.value })}
-          className={cn(NUM_CLS, "col-span-2 text-left")}
-        />
+        <div className="col-span-2 flex items-center gap-1">
+          <input
+            type="text"
+            maxLength={40}
+            value={v.blankLabel ? "" : (v.labelOverride ?? "")}
+            disabled={disabled || !v.visible || v.blankLabel}
+            placeholder={v.blankLabel ? "(başlıksız)" : row.label}
+            title="Kolon başlığı — boş bırakılırsa varsayılan başlık basılır"
+            aria-label={`${row.label} — kolon başlığı`}
+            onChange={(e) => onPatch({ label: e.target.value })}
+            className={cn(NUM_CLS, "flex-1 text-left")}
+          />
+          {/* BAŞLIK BASMA — kutuyu boşaltmak "varsayılana dön" demek olduğu için
+              ayrı bir karar; işaretliyken kutu pasifleşir ki iki niyet ekranda
+              da karışmasın. */}
+          <input
+            type="checkbox"
+            checked={v.blankLabel}
+            disabled={disabled || !v.visible}
+            title="Başlık basma — yalnız hücre değerleri yazılır"
+            aria-label={`${row.label} — başlık basma`}
+            onChange={(e) => onPatch({ blankLabel: e.target.checked })}
+            className="size-4 shrink-0"
+          />
+        </div>
       ) : v.canStyle ? (
         <input
           type="number"

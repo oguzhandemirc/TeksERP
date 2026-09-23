@@ -12,7 +12,11 @@
 //      hata vermeden ölür.
 //
 // Ayrıca kilitlenen: satırlar TÜRETİLİR (elle liste tutulmaz), ikiz eşlemesi
-// bölüm adını korur, boş punto anahtarı siler.
+// bölüm adını korur.
+//
+// BÖLME (2026-09-23, dosya boyutu tavanı): stil kararları `docRows.stil.test.ts`,
+// başlık kararları `docRows.baslik.test.ts`; ortak kurulum `docRows.testkit.ts`.
+// Aşağıdaki sonda kaydı ÜÇÜNÜ birden kapsar — sonda o dosyalarda da tekrarlanır.
 //
 // NEGATİF SONDA — "kırmızı verebiliyor mu" KANITLANDI (2026-08-06, 4 sonda; her
 // sondadan sonra dosya `diff` ile birebir geri yüklendiği doğrulandı):
@@ -25,36 +29,9 @@
 // =============================================================================
 
 import { describe, expect, it } from "vitest";
-import {
-  buildDocRowGroups,
-  moveColumn,
-  orderedColumnRows,
-  parseDocSize,
-  readDocRow,
-  writeDocRow,
-  type DocRow,
-} from "./docRows";
-import {
-  DOC_DEFS,
-  DOC_DEF_MAP,
-  resolveDocConfig,
-  type DocumentConfig,
-} from "@/services/documentConfig";
-
-const FASON = DOC_DEF_MAP.fasonSevk!;
-const SEVK = DOC_DEF_MAP.shipmentDispatch!;
-/** Satırı config ile birlikte okumak için kısayol (panelin yaptığının aynısı). */
-const read = (defKey: string, cfg: DocumentConfig, row: DocRow) =>
-  readDocRow(cfg, resolveDocConfig({ [defKey]: cfg }, defKey), row);
-const write = (defKey: string, cfg: DocumentConfig, row: DocRow, patch: Parameters<typeof writeDocRow>[3]) =>
-  writeDocRow(cfg, resolveDocConfig({ [defKey]: cfg }, defKey), row, patch);
-
-const allRows = (def: typeof FASON) => buildDocRowGroups(def).flatMap((g) => g.rows);
-const rowById = (def: typeof FASON, id: string): DocRow => {
-  const r = allRows(def).find((x) => x.id === id);
-  if (!r) throw new Error(`satır yok: ${id}`);
-  return r;
-};
+import { buildDocRowGroups, moveColumn, orderedColumnRows } from "./docRows";
+import { DOC_DEFS, type DocumentConfig } from "@/services/documentConfig";
+import { FASON, SEVK, allRows, read, rowById, write } from "./docRows.testkit";
 
 describe("satır üretimi", () => {
   it("yedi belgenin hepsi satır üretiyor", () => {
@@ -263,121 +240,5 @@ describe("grid'in En (Cm) kutusu", () => {
   });
   it("boş kutunun puntosu ayarlanamaz (yazacak metni yok)", () => {
     expect(read("fasonSevk", {}, row()).canStyle).toBe(false);
-  });
-});
-
-describe("punto ve kalınlık", () => {
-  const row = () => rowById(FASON, "f:gridMetre");
-
-  it("punto fields'a yazılır", () => {
-    expect(write("fasonSevk", {}, row(), { size: 14 }).fields?.gridMetre).toEqual({ size: 14 });
-  });
-  it("boş punto anahtarı SİLER, 0 yazmaz", () => {
-    const cfg: DocumentConfig = { fields: { gridMetre: { size: 14 } } };
-    expect(write("fasonSevk", cfg, row(), { size: null }).fields?.gridMetre).toBeUndefined();
-  });
-  it("kalınlık puntoyu korur", () => {
-    const cfg: DocumentConfig = { fields: { gridMetre: { size: 14 } } };
-    const out = write("fasonSevk", cfg, row(), { weight: "bold" });
-    expect(out.fields?.gridMetre).toEqual({ size: 14, weight: "bold" });
-  });
-  // ⚠️ Komşu GERÇEK bir alan olmalı. Eskiden burada `gridCm` yazıyordu; o alan
-  // 2026-08-06'da kaldırıldı (grid'de EN sütunu yok) ve kontrol sessizce
-  // BOŞA DÖNDÜ — var olmayan anahtar her koşulda undefined'dır.
-  it("komşu alana dokunmaz — metre ↔ top sıra no ayrı kalır", () => {
-    const out = write("fasonSevk", {}, row(), { size: 14 });
-    expect(out.fields?.gridTop).toBeUndefined();
-    expect(out.fields?.gridMetre).toEqual({ size: 14 });
-  });
-  it("stil taşımayan satırda punto girdisi çizilmez", () => {
-    const secOnly = allRows(FASON).find((r) => r.section && !r.field);
-    expect(secOnly).toBeDefined();
-    expect(read("fasonSevk", {}, secOnly!).canStyle).toBe(false);
-  });
-  it("kaynağı MUTATE etmez (React state güvenliği)", () => {
-    const cfg: DocumentConfig = { fields: { gridMetre: { size: 14 } } };
-    write("fasonSevk", cfg, row(), { size: 20 });
-    expect(cfg.fields?.gridMetre).toEqual({ size: 14 });
-  });
-});
-
-describe("parseDocSize", () => {
-  it("boş/anlamsız → null", () => {
-    expect(parseDocSize("", 5, 48)).toBeNull();
-    expect(parseDocSize("abc", 5, 48)).toBeNull();
-  });
-  it("sınırlara kırpar, virgüllü ondalık kabul eder", () => {
-    expect(parseDocSize("999", 5, 48)).toBe(48);
-    expect(parseDocSize("1", 5, 48)).toBe(5);
-    expect(parseDocSize("10,5", 5, 48)).toBe(10.5);
-  });
-});
-
-// =============================================================================
-// KOLON BAŞLIĞI ÖZELLEŞTİRME (2026-09-04) — `columns[tablo].labels`
-// =============================================================================
-// Fabrika müşteriye giden belgede kendi dilini kullanabilsin diye ("STOK ADI"
-// yerine "ÜRÜN"). Panel tarafındaki iki tuzak:
-//   1. Boş kutu = "varsayılana dön" (anahtar SİLİNİR) — punto kutusuyla AYNI
-//      sözleşme. Boş dize saklanırsa belge BAŞLIKSIZ kolon basar.
-//   2. Görünürlük ve başlık AYNI `columns[tablo]` girdisine yazar → aynı yamada
-//      ikisi de gelirse ikincisi birincisini EZMEMELİ.
-describe("kolon başlığı override", () => {
-  const nameRow = (): DocRow => rowById(SEVK, "c:urun:name");
-
-  it("kolon satırında başlık düzenlenebilir, bölüm satırında DEĞİL", () => {
-    expect(read("shipmentDispatch", {}, nameRow()).canLabel).toBe(true);
-    const secOnly = allRows(SEVK).find((r) => r.section && !r.column);
-    expect(secOnly).toBeDefined();
-    expect(read("shipmentDispatch", {}, secOnly!).canLabel).toBe(false);
-  });
-
-  it("kayıtlı başlık okunur; yoksa undefined (yerleşik başlık geçerli)", () => {
-    const cfg: DocumentConfig = { columns: { urun: { labels: { name: "ÜRÜN" } } } };
-    expect(read("shipmentDispatch", cfg, nameRow()).labelOverride).toBe("ÜRÜN");
-    expect(read("shipmentDispatch", {}, nameRow()).labelOverride).toBeUndefined();
-  });
-
-  it("başlık yazılır (trim'li)", () => {
-    const out = write("shipmentDispatch", {}, nameRow(), { label: "  ÜRÜN  " });
-    expect(out.columns?.urun?.labels).toEqual({ name: "ÜRÜN" });
-  });
-
-  it("⭐ BOŞ kutu anahtarı SİLER (varsayılana dön), boş dize saklamaz", () => {
-    const cfg: DocumentConfig = { columns: { urun: { labels: { name: "ÜRÜN" } } } };
-    const out = write("shipmentDispatch", cfg, nameRow(), { label: "   " });
-    expect(out.columns?.urun?.labels).toBeUndefined();
-  });
-
-  it("başlık yazmak GÖRÜNÜRLÜK ayarını ezmez", () => {
-    const cfg: DocumentConfig = { columns: { urun: { hidden: ["rollCount"] } } };
-    const out = write("shipmentDispatch", cfg, nameRow(), { label: "ÜRÜN" });
-    expect(out.columns?.urun?.hidden).toEqual(["rollCount"]);
-    expect(out.columns?.urun?.labels).toEqual({ name: "ÜRÜN" });
-  });
-
-  it("⭐ aynı yamada görünürlük + başlık birlikte gelirse İKİSİ de yazılır", () => {
-    const out = write("shipmentDispatch", {}, nameRow(), { visible: false, label: "ÜRÜN" });
-    expect(out.columns?.urun?.hidden).toEqual(["name"]);
-    expect(out.columns?.urun?.labels).toEqual({ name: "ÜRÜN" });
-  });
-
-  it("başka tablonun başlıklarına dokunmaz", () => {
-    const cfg: DocumentConfig = { columns: { ceki: { labels: { desen: "MOTİF" } } } };
-    const out = write("shipmentDispatch", cfg, nameRow(), { label: "ÜRÜN" });
-    expect(out.columns?.ceki?.labels).toEqual({ desen: "MOTİF" });
-  });
-
-  it("kaynağı MUTATE etmez (React state güvenliği)", () => {
-    const cfg: DocumentConfig = { columns: { urun: { labels: { name: "ÜRÜN" } } } };
-    write("shipmentDispatch", cfg, nameRow(), { label: "KOD" });
-    expect(cfg.columns?.urun?.labels).toEqual({ name: "ÜRÜN" });
-  });
-
-  it("müşteri adı kolonları panelde satır olarak GÖRÜNÜR (başlık yazılabilsin)", () => {
-    const ids = allRows(SEVK).map((r) => r.id);
-    expect(ids).toContain("c:urun:customerName");
-    expect(ids).toContain("c:ceki:customerDesen");
-    expect(ids).toContain("c:ceki:customerVaryant");
   });
 });

@@ -42,7 +42,7 @@ import { invoiceService } from "../src/services/invoice.service";
 import { seriesImpactCount } from "../src/services/helpers/series-panel.helper";
 import { PackingGroupService } from "../src/services/packing-group.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
-import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { SETTING_KEYS, sanitizeDocumentsConfig } from "../src/services/system-setting.service";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { firstGrade } from "./fixture-quality-grade";
 import { ensureTestAdmin } from "./fixture-test-user";
@@ -74,6 +74,29 @@ async function setFlag(key: string, value: Prisma.InputJsonValue): Promise<void>
     create: { key, value, description: "test_belge_ekran_ayni" },
     update: { value },
   });
+}
+
+/**
+ * Sevk irsaliyesinin BELGE AYARINI yaz — `setFlag` ile aynı geri-alma defterine
+ * girer (`prevFlags`), yani teardown onu da eski hâline döndürür.
+ * ⚠️ Ayar YAZMA YOLUNDAN (`sanitizeDocumentsConfig`) geçirilir: kapıyı atlayan
+ * bir fikstür, kapının sildiği bir alanı ölçüyor olabilirdi.
+ */
+/**
+ * Sevkiyatı DONMUŞ hâle getir — onay bayrağı kapalıyken `createShipment` zaten
+ * sevk ediyor (ölçüldü 2026-09-23: ikinci `dispatchShipment` "zaten sevk edilmiş" 409'u
+ * verdi ve bekçiyi düşürdü). Durum SORULUR, varsayılmaz.
+ */
+async function sevkEt(shipmentId: string, plaka: string): Promise<void> {
+  const d = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId }, select: { status: true } });
+  if (d.status !== "DISPATCHED") await ship.dispatchShipment(shipmentId, { plateNumber: plaka });
+}
+
+async function setDocCfg(cfg: Record<string, unknown>): Promise<void> {
+  await setFlag(
+    SETTING_KEYS.DOCUMENTS_CONFIG,
+    sanitizeDocumentsConfig({ shipmentDispatch: cfg }) as unknown as Prisma.InputJsonValue,
+  );
 }
 
 const sackIds: string[] = [];
@@ -247,6 +270,52 @@ async function main(): Promise<void> {
     check("§5 ⭐ AMBALAJ NO belgede birebir",
       ekran3.satirlar.every((r) => r.packageNo != null && new RegExp(`(^|\\s)${r.packageNo}(\\s|$)`).test(belge3)),
       ekran3.satirlar.map((r) => String(r.packageNo)).join(", "));
+    // ── §8 PARTİ KODU — OPT-IN kolon, TEK KAPI (2026-09-23) ───────────────
+    // Saha vakası: aynı cari için eski ve yeni parti AYNI ADI taşıyabiliyor
+    // (ad tekilliği bilinçli olarak sınırlanmadı) ve irsaliyede ayırt
+    // edilemiyordu. Kod belgeye BASILABİLİR oldu — ama iç veri olduğu için
+    // OPT-IN ve YALNIZ belge tasarımından yönetiliyor.
+    const lotKodu = (await prisma.packingGroup.findUniqueOrThrow({
+      where: { id: lot.id }, select: { code: true },
+    })).code;
+    check("§8 zemin: partinin KODU var (doğuşta materyalize)", lotKodu.length > 0, lotKodu);
+    check("⭐ §8 OPT-IN KAPALIYKEN kod belgeye BASILMAZ (varsayılan sessiz)",
+      !belge3.includes(lotKodu), lotKodu);
+    // ⚠️ AYAR SEVKTEN ÖNCE YAZILIR ve bu ÖLÇÜLEREK öğrenildi: belge tasarımı
+    // sevk anında DONAR (`docConfigOverride`), yani donmuş bir belgenin kolonu
+    // sonradan açılamaz — ilk yazımda ayarı sevkten SONRA yazdım ve üç iddia
+    // kırmızı verdi. Bu aynı zamanda ESKİ BELGELERİN korunduğunun kanıtıdır:
+    // yukarıdaki `belge3` bugün de kodu basmıyor.
+    await setDocCfg({ columns: { cuval: { shown: ["packingGroupCode"] } } });
+    const lot4 = (await PackingGroupService.createWithSacks({ customerId, sackIds: [] })).data as { id: string };
+    lotIds.push(lot4.id);
+    const lot4Kod = (await prisma.packingGroup.findUniqueOrThrow({
+      where: { id: lot4.id }, select: { code: true },
+    })).code;
+    const s4 = (await ship.createShipment({ sackIds: [await cuvalKur(lot4.id)], customerId })).data as { id: string };
+    shipmentIds.push(s4.id);
+    await sevkEt(s4.id, "34 TST 35");
+    const belge4 = await belgeyiOku(s4.id);
+    check("⭐ §8 kolon AÇIKKEN kod belgede BİREBİR geçiyor", belge4.includes(lot4Kod), lot4Kod);
+    check("⭐ §8 başlık varsayılan olarak basılıyor", belge4.includes("PARTİ KODU"));
+    check("⭐ §8 ESKİ belge (kolon kapalıyken donmuş) DEĞİŞMEDİ",
+      !(await belgeyiOku(s3.id)).includes(lotKodu), lotKodu);
+
+    // BAŞLIK BASMA: `blankLabels` — kod durur, başlık düşer (yeni bir sevkte).
+    await setDocCfg({ columns: { cuval: { shown: ["packingGroupCode"], blankLabels: ["packingGroupCode"] } } });
+    const lot5 = (await PackingGroupService.createWithSacks({ customerId, sackIds: [] })).data as { id: string };
+    lotIds.push(lot5.id);
+    const lot5Kod = (await prisma.packingGroup.findUniqueOrThrow({
+      where: { id: lot5.id }, select: { code: true },
+    })).code;
+    const s5 = (await ship.createShipment({ sackIds: [await cuvalKur(lot5.id)], customerId })).data as { id: string };
+    shipmentIds.push(s5.id);
+    await sevkEt(s5.id, "34 TST 36");
+    const belge5 = await belgeyiOku(s5.id);
+    check("⭐ §8 `blankLabels` ile BAŞLIK düşer, KOD durur",
+      belge5.includes(lot5Kod) && !belge5.includes("PARTİ KODU"), lot5Kod);
+    await setDocCfg({ columns: {} });
+
     // ── §6 İADE BELGE NO — çok kalemli iade, kopya semantiği ──────────────
     const iadeSevk = await sevkKur(3);
     const sevkTop = await prisma.roll.findMany({

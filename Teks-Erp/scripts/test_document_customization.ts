@@ -23,6 +23,8 @@ import {
 } from "../src/services/system-setting.service";
 import { documentProfileService } from "../src/services/document-profile.service";
 import { applyColumnCfg, buildDocTable } from "../src/services/document-render/doc-table";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 let pass = 0;
 let fail = 0;
@@ -62,6 +64,68 @@ async function main(): Promise<void> {
   // footLabel yalnız foot'suz bir kolona oturur; tüm görünürlerde foot varsa
   // etiket düşer ama toplam DEĞERLERİ yine basılır (tr.tot).
   check("kolon: toplam satırı korunur", tbl.includes('class="tot"') && tbl.includes(">9<") && tbl.includes(">8<"));
+  // ── 1b) BAŞLIK BASMA (`blankLabels`, 2026-09-23) ─────────────────────────
+  // ⚠️ `labels`te boş dize "VARSAYILANA DÖN" demek (yazılı güvence) — o yüzden
+  // "başlık basma" AYRI bir listedir. Üç hâl ayrı ayrı ölçülür, çünkü ikisini
+  // tek kutuya yüklemek kullanıcının iki farklı niyetini karıştırırdı.
+  const bl = [
+    { key: "a", label: "A", align: "l" as const, cell: () => "1" },
+    { key: "b", label: "B", align: "l" as const, cell: () => "2" },
+  ];
+  check("başlık ①: anahtar hiç yoksa YERLEŞİK başlık",
+    applyColumnCfg(bl, {})[0]?.label === "A");
+  check("başlık ②: `labels` dolu → KULLANICI metni",
+    applyColumnCfg(bl, { labels: { a: "PARTİ" } })[0]?.label === "PARTİ");
+  check("başlık ②b: boş dize VARSAYILANA DÖNER (başlığı SİLMEZ)",
+    applyColumnCfg(bl, { labels: { a: "   " } })[0]?.label === "A");
+  check("⭐ başlık ③: `blankLabels` → başlık BOŞ basılır",
+    applyColumnCfg(bl, { blankLabels: ["a"] })[0]?.label === "");
+  check("⭐ başlık ③b: boşluk kararı METNİ EZER (kutuda kalan eski metin kazanmaz)",
+    applyColumnCfg(bl, { labels: { a: "PARTİ" }, blankLabels: ["a"] })[0]?.label === "");
+  check("başlık ③c: karar YALNIZ adı geçen kolona uygulanır",
+    applyColumnCfg(bl, { blankLabels: ["a"] })[1]?.label === "B");
+  const blTbl = buildDocTable({
+    className: "sec", cols: bl, rows: [{}], colCfg: { blankLabels: ["a"] },
+  });
+  check("⭐ başlık ③d: başlıksız kolon TABLODA da başlıksız (hücreler durur)",
+    !blTbl.includes(">A<") && blTbl.includes(">1<") && blTbl.includes(">B<"));
+
+  // ── 1c) KOLON KATALOĞU AYNASI (renderer ↔ panel) ─────────────────────────
+  // ⚠️ BU AYNANIN KAPISI YOKTU (ölçüldü 2026-09-23): `test_doc_density_fields §5`
+  // yalnız YAZI ayarı kataloğunu (`DOC_FIELD_CATALOGS`) aynalıyor, TABLO KOLONU
+  // kataloğunu (`DocTableDef`) değil. Ayrışmanın iki yönü de SESSİZ: renderer'da
+  // olup panelde olmayan kolon HİÇBİR YERDEN açılamaz (opt-in kolonlar için bu
+  // "özellik yok" demektir), panelde olup renderer'da olmayan kolon ise ayarı
+  // kaydeder ama baskıyı değiştirmez.
+  const rendererSrc = join(__dirname, "..", "src", "services", "document-render", "shipment-dispatch.html.ts");
+  const panelSrc = join(__dirname, "..", "..", "Electron", "src", "services", "documentConfig.ts");
+  if (!existsSync(panelSrc)) {
+    console.log("  ⏭️  Electron kaynağı yok — kolon aynası ÖLÇÜLEMEDİ (atlandı)");
+  } else {
+    const rsrc = readFileSync(rendererSrc, "utf8");
+    const psrc = readFileSync(panelSrc, "utf8");
+    // Panelin sevk irsaliyesi tabloları: `sacks` ve `ceki`.
+    // ⚠️ TABLO ANAHTARLARI ÖLÇÜLDÜ, TAHMİN EDİLMEDİ: renderer `cfg.columns.cuval`
+    // ve `cfg.columns.ceki` okuyor; panel kataloğu da aynı iki anahtarı taşıyor.
+    for (const tablo of ["cuval", "ceki"]) {
+      const blok = new RegExp(`key: "${tablo}",[\\s\\S]*?columns: \\[([\\s\\S]*?)\\n {8}\\],`).exec(psrc);
+      check(`ayna körlük zemini: panelde \`${tablo}\` tablosu okunabildi`, blok !== null);
+      if (!blok) continue;
+      const panelKeys = [...blok[1].matchAll(/\{\s*key:\s*"([^"]+)"/g)].map((m) => m[1]!);
+      check(`ayna körlük zemini: \`${tablo}\` kolon listesi dolu`, panelKeys.length > 3, `${panelKeys.length} kolon`);
+      const eksik = panelKeys.filter((k) => !new RegExp(`key: "${k}"`).test(rsrc));
+      check(`⭐ ayna: panelde listelenen her \`${tablo}\` kolonu RENDERER'da da var`,
+        eksik.length === 0, eksik.join(", "));
+    }
+    // Ters yön: renderer'daki OPT-IN kolonlar panelde de opt-in olarak görünmeli,
+    // yoksa kullanıcı onları hiçbir yerden açamaz.
+    const optIn = [...rsrc.matchAll(/key: "([^"]+)", label: [^,]+, align: "[lrc]", defaultHidden: true/g)].map((m) => m[1]!);
+    check("ayna körlük zemini: renderer'da opt-in kolon var", optIn.length > 0, optIn.join(", "));
+    const panelsizOptIn = optIn.filter((k) => !new RegExp(`key: "${k}", label: "[^"]*", defaultHidden: true`).test(psrc));
+    check("⭐ ayna: renderer'daki her OPT-IN kolon PANELDE de opt-in",
+      panelsizOptIn.length === 0, panelsizOptIn.join(", "));
+  }
+
   const tblWithLabel = buildDocTable({
     className: "sec",
     cols,

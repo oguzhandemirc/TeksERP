@@ -79,6 +79,7 @@ const LABELS = {
     sira: "SIRA",
     ambalajNo: "AMBALAJ NO",
     sevkPartisi: "SEVK PARTİSİ",
+    partiKodu: "PARTİ KODU",
     metreToplami: "METRE TOPLAMI",
     kgToplami: "KG TOPLAMI",
     paketSayisi: "TOP ADEDİ",
@@ -133,6 +134,7 @@ const LABELS = {
     sira: "SEQ",
     ambalajNo: "PKG #",
     sevkPartisi: "LOT",
+    partiKodu: "LOT CODE",
     metreToplami: "TOTAL METERS",
     kgToplami: "TOTAL KG",
     paketSayisi: "ROLL COUNT",
@@ -189,6 +191,12 @@ interface ShipmentDocSack {
   /** Sevk partisi (2026-09-21) — eski snapshot'ta YOK; yalnız `meta.packingLot` açıkken çizilir. */
   packageNo?: number | null;
   packingGroupName?: string | null;
+  /**
+   * Sevk partisi KODU (`PackingGroup.code`, 2026-09-23) — aynı cari için iki parti
+   * AYNI ADI taşıyabiliyor (ad tekilliği bilinçli olarak sınırlanmadı) ve irsaliyede
+   * ayırt edilemiyordu. Kod TEK KAPIDAN yönetilir: belge tasarımındaki opt-in kolon.
+   */
+  packingGroupCode?: string | null;
 }
 
 interface ShipmentDocCeki {
@@ -197,6 +205,8 @@ interface ShipmentDocCeki {
   seq?: number | null;
   packageNo?: number | null;
   packingGroupName?: string | null;
+  /** Sevk partisi KODU — çuvaldakiyle aynı alan, aynı gerekçe. */
+  packingGroupCode?: string | null;
   barcode: string | null;
   desen: string;
   varyant: string;
@@ -654,6 +664,13 @@ export function renderShipmentDispatchHtml(
                 { key: "packingGroupName", label: L.sevkPartisi, align: "l" as const, cell: (s: ShipmentDocSack) => esc(s.packingGroupName ?? "") },
               ]
             : []),
+          // ⚠️ TEK KAPI (1e kararı 2026-09-23): parti KODU yalnız belge tasarımından
+          // yönetilir (`defaultHidden` + `columns.sacks.shown`); `meta.packingLot`
+          // GLOBAL anahtarına BAĞLANMAZ. İkinci bir anahtar, kullanıcının belgeden
+          // açtığı kolonu sessizce yutardı ve sebebi hiçbir ekranda görünmezdi.
+          // İç veri olduğu için varsayılan KAPALI (opt-in kuralı).
+          { key: "packingGroupCode", label: L.partiKodu, align: "l", defaultHidden: true,
+            cell: (s: ShipmentDocSack) => esc(s.packingGroupCode ?? "") },
           { key: "totalMeters", label: L.metreToplami, align: "r", cell: (s) => esc(fmtQty(s.totalMeters)), foot: esc(fmtQty(t.totalMeters)) },
           { key: "totalKg", label: L.kgToplami, align: "r", cell: (s) => esc(fmtQty(s.totalKg)), foot: esc(fmtQty(t.totalKg)) },
           { key: "packageCount", label: L.paketSayisi, align: "r", cell: (s) => esc(fmtCount(s.packageCount)), foot: esc(fmtCount(t.totalRolls)) },
@@ -711,6 +728,8 @@ export function renderShipmentDispatchHtml(
                 { key: "packingGroupName", label: L.sevkPartisi, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(c.packingGroupName ?? "") },
               ]
             : []),
+          { key: "packingGroupCode", label: L.partiKodu, align: "l", defaultHidden: true,
+            cell: (c: ShipmentDocCeki) => esc(c.packingGroupCode ?? "") },
           { key: "barcode", label: L.barkodNo, align: "l", cell: (c) => esc(c.barcode ?? "—") },
           // Varsayılan GÖRÜNÜR (2026-08-05 ürün kararı — lot no müşterinin de
           // sorduğu bilgi). Normal blocklist: `columns.ceki.hidden` ile kapatılır.
