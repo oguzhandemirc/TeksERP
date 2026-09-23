@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { resolveDestination } from './destinationDefault';
+import { destinationLockQueryKey, invalidateAfterShipment, resolveDestination } from './destinationDefault';
 import { DestinationLockRow } from './DestinationLockRow';
 import { PackingGroupChips } from './PackingGroupChips';
 import { reconcileSelection, sacksInSelection, selectionName, shipButtonLabel, type PackingGroupSelection } from './packingGroupSelection';
@@ -96,7 +96,7 @@ export default function PaketlemeScreen() {
   // operatör bir kez seçer ve seçim sevkiyatla karta yazılır.
   const [picked, setPicked] = useState<ShipmentDestination | null>(null);
   const lockQ = useQuery({
-    queryKey: ['destination-lock', customerId, branchId],
+    queryKey: destinationLockQueryKey(customerId, branchId),
     queryFn: () => packingService.getDestinationLock(customerId, branchId),
     staleTime: 10_000,
   });
@@ -203,10 +203,7 @@ export default function PaketlemeScreen() {
     'Çuvallar güncellendi',
   );
   const finishAndBack = () => {
-    void qc.invalidateQueries({ queryKey: ['pool'] });
-    void qc.invalidateQueries({ queryKey: ['pool-sacks', customerId] });
-    void qc.invalidateQueries({ queryKey: ['open-orders'] });
-    void qc.invalidateQueries({ queryKey: ['sack-store'] });
+    invalidateAfterShipment(qc, customerId);
     nav.goBack();
   };
 
