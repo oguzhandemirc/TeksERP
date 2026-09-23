@@ -29,6 +29,16 @@ function check(label: string, ok: boolean, detail = ""): void {
   }
 }
 
+/** `label.copies`in bekçi ÖNCESİ satırı; `undefined` = hiç dokunulmadı, `null` = satır yoktu. */
+let ayarOnce: { value: unknown } | null | undefined;
+
+/** Teardown: `label.copies` bekçi öncesi hâline BİREBİR döner (satır yoksa silinir). */
+async function temizleAyar(once: { value: unknown } | null | undefined): Promise<void> {
+  if (once === undefined) return;
+  if (once) await prisma.systemSetting.update({ where: { key: "label.copies" }, data: { value: once.value as never } });
+  else await prisma.systemSetting.deleteMany({ where: { key: "label.copies" } });
+}
+
 async function main(): Promise<void> {
   const ts = Date.now();
   const labelSvc = new LabelService();
@@ -50,7 +60,7 @@ async function main(): Promise<void> {
 
     // Ayarı ÇOKLU kopyaya çek — fixture ayırt edici olmazsa test vakumen yeşil
     // kalır ("1 kopya bulundu" ama zaten 1 isteniyordu).
-    const prevRow = await prisma.systemSetting.findUnique({ where: { key: "label.copies" } });
+    ayarOnce = await prisma.systemSetting.findUnique({ where: { key: "label.copies" } });
     await prisma.systemSetting.upsert({
       where: { key: "label.copies" },
       create: { key: "label.copies", value: 3, description: "test — önizleme kopya bekçisi" },
@@ -84,24 +94,19 @@ async function main(): Promise<void> {
       console.log("   ℹ️  Barkod metni önizlemede gömülü değil — 2. parmak izi atlandı.");
     }
 
-    // Ayarı geri al (paylaşımlı dev DB — bırakılan ayar sonraki koşumları etkiler).
-    if (prevRow) {
-      await prisma.systemSetting.update({
-        where: { key: "label.copies" },
-        data: { value: prevRow.value as never },
-      });
-    } else {
-      await prisma.systemSetting.deleteMany({ where: { key: "label.copies" } });
-    }
-    const restoredRow = await prisma.systemSetting.findUnique({ where: { key: "label.copies" } });
-    const restored = restoredRow ? String(restoredRow.value) : "—";
-    const expected = prevRow ? String(prevRow.value) : "—";
-    check("ayar geri alındı", restored === expected, `${restored} (beklenen ${expected})`);
   } finally {
+    // Ayar geri alma `finally`de (paylaşımlı durum): bekçi yarıda düşse de sonraki bekçiye sızmaz.
+    await temizleAyar(ayarOnce);
     await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } }).catch(() => {});
     if (itemId) await prisma.item.deleteMany({ where: { id: itemId } }).catch(() => {});
+  }
+  if (ayarOnce !== undefined) {
+    const restoredRow = await prisma.systemSetting.findUnique({ where: { key: "label.copies" } });
+    const restored = restoredRow ? String(restoredRow.value) : "—";
+    const expected = ayarOnce ? String(ayarOnce.value) : "—";
+    check("ayar geri alındı (finally)", restored === expected, `${restored} (beklenen ${expected})`);
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

@@ -129,6 +129,14 @@ async function setFlag(key: string, on: boolean): Promise<void> {
   await prisma.systemSetting.upsert({ where: { key }, create: { key, value: on }, update: { value: on } });
 }
 
+/** Teardown: dokunulan her bayrak testten ÖNCEKİ hâline BİREBİR döner (satır yoktuysa silinir). */
+async function temizleBayraklar(): Promise<void> {
+  for (const [key, once] of priorFlags) {
+    if (once.existed) await prisma.systemSetting.update({ where: { key }, data: { value: once.value ?? Prisma.JsonNull } });
+    else await prisma.systemSetting.deleteMany({ where: { key } });
+  }
+}
+
 /** Dördünü birden kapat — bölümler birbirinin bayrağını miras almasın. */
 async function allFlagsOff(): Promise<void> {
   for (const key of Object.values(FLAG)) await setFlag(key, false);
@@ -647,6 +655,8 @@ main()
     fail++;
   })
   .finally(async () => {
+    // Bayraklar ÖNCE ve `finally`de: `priorFlags` kaydediliyordu ama hiç geri yazılmıyordu (2026-09-24).
+    await temizleBayraklar().catch((e) => { console.error("bayraklar geri alınamadı:", e); fail++; });
     // Temizlik: defter satırları FK ile faturaya bağlı (RESTRICT) → önce onlar.
     if (invoiceIds.length > 0) {
       await prisma.cariTransaction.deleteMany({ where: { invoiceId: { in: invoiceIds } } });

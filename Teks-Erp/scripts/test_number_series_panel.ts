@@ -188,6 +188,9 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Başta var olan biçim satırları: sonda bu kümede OLMAYAN her satır silinir — §1'in kapı kolu
+  // `shipment` serisine satır yazıyordu ve teardown onu bilmiyordu (ölçüldü 2026-09-24: +1 satır).
+  const satirlarOnce = new Set((await prisma.numberSeriesLine.findMany({ select: { id: true } })).map((l) => l.id));
   try {
     // ── §1 Kapı sırası ────────────────────────────────────────────────────
     // Hedef: `scopedCounter` beyanı OLMAYAN **ve** okutulan bir seri — iki engel
@@ -1423,6 +1426,8 @@ async function main(): Promise<void> {
       yc instanceof Error && kod(yc) === "NUMBER_SERIES_SCAN_COLLISION",
       yc instanceof Error ? (kod(yc) ?? yc.message) : "KABUL EDİLDİ");
   } finally {
+    const yeniSatirlar = (await prisma.numberSeriesLine.findMany({ select: { id: true } })).filter((l) => !satirlarOnce.has(l.id)).map((l) => l.id);
+    if (yeniSatirlar.length) await prisma.numberSeriesLine.deleteMany({ where: { id: { in: yeniSatirlar } } });
     // ⚠️ KASA SERİSİ GERİ ALINIR ve bu DOĞRUDAN yazmayla yapılır: geri alma bir
     // TEMİZLİKTİR, ölçülen kod yolu DEĞİL — `updateSeriesFormat` üzerinden geri
     // dönmek, düzeltme bozulduğunda teardown'ı da düşürür ve artık bırakırdı.

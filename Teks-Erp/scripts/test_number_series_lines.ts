@@ -37,6 +37,7 @@
 //
 // Çalıştır: npx tsx scripts/test_number_series_lines.ts
 // =============================================================================
+import { Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import {
   FORMAT_LINES_MIGRATION_STAMP,
@@ -63,6 +64,40 @@ async function yururlukteki(key: string) {
   });
 }
 
+const SERI_ANLIK_SEC = {
+  key: true, prefix: true, dateSegment: true, digits: true, separator: true, separator2: true,
+  retiredPrefixes: true, formatChangedAt: true,
+} as const;
+
+/** Sondadan ÖNCEKİ an: var olan satır id'leri · damga · seri kolonları (teardown bunlara döner). */
+let anlik: {
+  baslangicSatirlari: Set<string>;
+  damgaBastaVardi: boolean;
+  seriDurumu: Map<string, Prisma.NumberSeriesGetPayload<{ select: typeof SERI_ANLIK_SEC }>>;
+} | null = null;
+
+/** Teardown: bu koşumun yarattığı HER satır gider, damga ve seriler eski hâline döner (BİREBİR). */
+async function temizleSeriler(): Promise<void> {
+  if (!anlik) return;
+  const sonSatirlar = await prisma.numberSeriesLine.findMany({ select: { id: true } });
+  for (const l of sonSatirlar) {
+    if (!anlik.baslangicSatirlari.has(l.id)) await prisma.numberSeriesLine.delete({ where: { id: l.id } });
+  }
+  if (!anlik.damgaBastaVardi) {
+    await prisma.systemSetting.deleteMany({ where: { key: FORMAT_LINES_MIGRATION_STAMP } });
+  }
+  for (const [key, s] of anlik.seriDurumu) {
+    await prisma.numberSeries.update({
+      where: { key },
+      data: {
+        prefix: s.prefix, dateSegment: s.dateSegment, digits: s.digits, separator: s.separator, separator2: s.separator2,
+        retiredPrefixes: s.retiredPrefixes, formatChangedAt: s.formatChangedAt,
+      },
+    });
+  }
+  await refreshNumberSeriesCache();
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) { console.log(engel); process.exit(1); }
@@ -72,7 +107,7 @@ async function main(): Promise<void> {
   // (ölçüldü 2026-09-23: `packingLotCode`ta altı artık satır birikti ve sonraki
   // koşumları kırmızıya düşürdü). Şimdi başta var olan id'ler kaydediliyor;
   // sonda o kümede OLMAYAN her satır siliniyor — koşum nerede düşerse düşsün.
-  const baslangicSatirlari = new Set(
+  const baslangicSatirlari = new Set<string>(
     (await prisma.numberSeriesLine.findMany({ select: { id: true } })).map((x) => x.id),
   );
   // ⚠️ DAMGA DA ANLIK GÖRÜNTÜDEN (2026-09-23 bulgusu): teardown göçün yarattığı
@@ -87,11 +122,9 @@ async function main(): Promise<void> {
       where: { key: FORMAT_LINES_MIGRATION_STAMP }, select: { key: true },
     })) !== null;
   const seriDurumu = new Map(
-    (await prisma.numberSeries.findMany({
-      select: { key: true, prefix: true, dateSegment: true, digits: true, separator: true,
-        retiredPrefixes: true, formatChangedAt: true },
-    })).map((s) => [s.key, s]),
+    (await prisma.numberSeries.findMany({ select: SERI_ANLIK_SEC })).map((s) => [s.key, s]),
   );
+  anlik = { baslangicSatirlari, damgaBastaVardi, seriDurumu };
 
   // ⚠️ HEDEF SERİ BİLİNEN BİR HÂLE ÇEKİLİR — "ortamda ne varsa" ile koşmak, bu
   // bekçiyi ÖNCEKİ koşumların artığına bağımlı yapıyordu (ölçüldü 2026-09-23:
@@ -410,28 +443,14 @@ async function main(): Promise<void> {
     void H2;
   }
 
-  // ── SON TEMİZLİK: bu koşumun yarattığı HER satır gider, seriler eski hâline döner.
-  const sonSatirlar = await prisma.numberSeriesLine.findMany({ select: { id: true } });
-  for (const l of sonSatirlar) {
-    if (!baslangicSatirlari.has(l.id)) await prisma.numberSeriesLine.delete({ where: { id: l.id } });
-  }
-  if (!damgaBastaVardi) {
-    await prisma.systemSetting.deleteMany({ where: { key: FORMAT_LINES_MIGRATION_STAMP } });
-  }
-  for (const [key, s] of seriDurumu) {
-    await prisma.numberSeries.update({
-      where: { key },
-      data: {
-        prefix: s.prefix, dateSegment: s.dateSegment, digits: s.digits, separator: s.separator,
-        retiredPrefixes: s.retiredPrefixes, formatChangedAt: s.formatChangedAt,
-      },
-    });
-  }
-  await refreshNumberSeriesCache();
-
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  await prisma.$disconnect();
-  process.exit(fail > 0 ? 1 : 0);
 }
 
-main().catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1); });
+main()
+  .catch((e) => { console.error(e); fail++; })
+  .finally(async () => {
+    // Geri alma `finally`de: koşum nerede düşerse düşsün seriler, satırlar ve damga eski ana döner.
+    await temizleSeriler().catch((e) => { console.error("seriler geri alınamadı:", e); fail++; });
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    await prisma.$disconnect();
+    process.exit(fail > 0 ? 1 : 0);
+  });

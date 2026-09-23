@@ -39,7 +39,21 @@ async function upsertSetting(key: string, value: unknown): Promise<void> {
   });
 }
 
+/** Ayar satırlarının bekçi ÖNCESİ hâli — geri alma `finally`de BİREBİR (eskiden koşulsuz siliniyordu). */
+let ayarlarOnce: Array<{ key: string; value: unknown }> | null = null;
+
+/** Teardown: üç kilit ayarı eski hâline (önceden olmayan satır silinir, olan eski değerine döner). */
+async function temizleAyarlar(): Promise<void> {
+  if (!ayarlarOnce) return;
+  for (const key of Object.values(SETTING_KEYS)) {
+    const once = ayarlarOnce.find((r) => r.key === key);
+    if (once) await prisma.systemSetting.update({ where: { key }, data: { value: once.value as never } });
+    else await prisma.systemSetting.deleteMany({ where: { key } });
+  }
+}
+
 async function main(): Promise<void> {
+  ayarlarOnce = await prisma.systemSetting.findMany({ where: { key: { in: Object.values(SETTING_KEYS) } }, select: { key: true, value: true } });
   // Ön koşul: kilit AÇIK, attempts=5 (temiz sayı için penalty uzun).
   const ATTEMPTS = 5;
   await upsertSetting(SETTING_KEYS.enabled, true);
@@ -100,20 +114,14 @@ async function main(): Promise<void> {
 }
 
 main()
-  .then(async () => {
-    // Cleanup: yarattığımız ayar satırlarını sil (test DB'yi kirletme).
-    await prisma.systemSetting.deleteMany({
-      where: { key: { in: Object.values(SETTING_KEYS) } },
-    });
+  .catch((err) => {
+    console.error("HATA:", err);
+    fail++;
+  })
+  .finally(async () => {
+    // Paylaşımlı ayar `finally`de: bekçi yarıda düşse de sonraki bekçiye sızmaz.
+    await temizleAyarlar().catch((e) => { console.error("ayarlar geri alınamadı:", e); fail++; });
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     process.exit(fail > 0 ? 1 : 0);
-  })
-  .catch(async (err) => {
-    console.error("HATA:", err);
-    await prisma.systemSetting.deleteMany({
-      where: { key: { in: Object.values(SETTING_KEYS) } },
-    }).catch(() => {});
-    await prisma.$disconnect();
-    process.exit(1);
   });

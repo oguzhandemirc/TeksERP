@@ -46,7 +46,18 @@ const createdOrders: string[] = [];
 let itemId = "";
 let customerId = "";
 
+/** `shipping.confirmationEnabled`in bekçi ÖNCESİ satırı; `undefined` = dokunulmadı, `null` = yoktu. */
+let bayrakOnce: { value: unknown } | null | undefined;
+
+/** Teardown: bayrak BİREBİR eski hâline (eskiden sonda koşulsuz `false` yazılıyordu). */
+async function temizleBayrak(): Promise<void> {
+  if (bayrakOnce === undefined) return;
+  if (bayrakOnce) await prisma.systemSetting.update({ where: { key: SETTING_KEY }, data: { value: bayrakOnce.value as never } });
+  else await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEY } });
+}
+
 async function setFlag(on: boolean) {
+  if (bayrakOnce === undefined) bayrakOnce = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEY }, select: { value: true } });
   await prisma.systemSetting.upsert({
     where: { key: SETTING_KEY },
     update: { value: on },
@@ -330,6 +341,7 @@ async function main() {
 }
 
 async function cleanup() {
+  await temizleBayrak().catch((e) => { console.error("bayrak geri alınamadı:", e); fail++; });
   try {
     await prisma.sackAllocation.deleteMany({ where: { sackId: { in: createdSacks } } });
     await prisma.roll.updateMany({ where: { id: { in: createdRolls } }, data: { shipmentId: null, sackId: null } });

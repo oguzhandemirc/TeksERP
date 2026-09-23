@@ -18,6 +18,7 @@ import prisma from "../src/lib/prisma";
 import {
   systemSettingService,
   invalidateFeatureFlagsCache,
+  SETTING_KEYS,
 } from "../src/services/system-setting.service";
 import { AuditService } from "../src/services/audit.service";
 
@@ -32,6 +33,18 @@ function check(cond: boolean, label: string): void {
     fail++;
     console.error(`  ✗ ${label}`);
   }
+}
+
+/** `pricingEnabled` ham satırının bekçi ÖNCESİ hâli; `undefined` = dokunulmadı, `null` = satır yoktu. */
+let fiyatSatiriOnce: { value: unknown } | null | undefined;
+
+/** Teardown: fiyat bayrağı satırı BİREBİR eski hâline (satır yoktuysa silinir) + önbellek tazelenir. */
+async function temizleFiyatBayragi(): Promise<void> {
+  if (fiyatSatiriOnce === undefined) return;
+  const key = SETTING_KEYS.FINANCE_PRICING_ENABLED;
+  if (fiyatSatiriOnce) await prisma.systemSetting.update({ where: { key }, data: { value: fiyatSatiriOnce.value as never } });
+  else await prisma.systemSetting.deleteMany({ where: { key } });
+  invalidateFeatureFlagsCache();
 }
 
 async function main(): Promise<void> {
@@ -50,6 +63,8 @@ async function main(): Promise<void> {
   // --- 2) Invalidation + tazelik: setFeatureFlags sonrası taze değer ---
   console.log("2) setFeatureFlags() invalidation + tazelik");
   const original = r1.data!.pricingEnabled;
+  // Ham satır: geri alma BİREBİR olsun (satır yoktuysa yine yok) — `finally`de.
+  fiyatSatiriOnce = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.FINANCE_PRICING_ENABLED } });
   const toggled = !original;
   const afterSet = await systemSettingService.setFeatureFlags(
     { pricingEnabled: toggled },
@@ -69,7 +84,7 @@ async function main(): Promise<void> {
   const r4 = await systemSettingService.getFeatureFlags();
   check(r4.data === r3.data, "yeniden cache hit (TTL içinde aynı referans)");
 
-  // restore
+  // Geri alma `finally`de (`temizleFiyatBayragi`); burada yalnız servis yolundan eski değere dönüş ölçülür.
   await systemSettingService.setFeatureFlags({ pricingEnabled: original }, admin.id);
   const restored = await systemSettingService.getFeatureFlags();
   check(
@@ -127,6 +142,7 @@ main()
     fail++;
   })
   .finally(async () => {
+    await temizleFiyatBayragi().catch((e) => { console.error("bayrak geri alınamadı:", e); fail++; });
     await prisma.$disconnect();
     process.exit(fail > 0 ? 1 : 0);
   });

@@ -12283,3 +12283,36 @@ Düzeltme ürün kodunu değil TARAYICIYI güçlendirdi:
 - `order.service` özgün tipli çağrısına döndü (zorlama yok, cırcır tabanı yükseltilmedi).
 - Değişkene alıp zorlamak (cırcırın "köprü" istisnası) BİLEREK seçilmedi: kuralı dolanmak olurdu.
 - Negatif sonda: çözüm devre dışı → `test_snapshot_kolonlari` §4a iki yazımı "çözülemeyen" diye KIRMIZI verir.
+
+## 2026-09-24 — Global ayar yazan bekçi geri almayı `finally`de yapar (TD-18a) [ÇEKİRDEK]
+
+**Tetik (ca + 1e).** İki kırmızı başka bekçilerin artığıydı: `depo.multiEnabled`ın `false` kalması → `test_module_grandfathering §2d`; açık sipariş kalemi artığı → `test_rapor_satis_ekseni §11b`.
+
+**Ölçüm (d3).**
+- AST tarayıcısı (`scripts/lib/bekci-ayar-geri-alma.ts`): 645 bekçinin 107'si global ayar yazıyor. 8'i geri almayı `finally` dışında yapıyordu:
+  - `finance_invoice`: `priorFlags` kaydedilip HİÇ geri yazılmıyordu
+  - `observability_cache`: akışın ortasında
+  - `label_preview_single_copy`: `try` içinde
+  - `backup`: koşulsuz siliyordu — BİREBİR değil
+  - `p2_infra`: `.then`/`.catch`de, silerek
+  - `sack_pool_lifecycle`: koşulsuz `false`
+  - `number_series_geri_uyumluluk`: ca kendi E3 düzeltmesiyle kapattı
+  - `number_series_lines`: son temizlik `finally` dışında
+- Bekçi başına TEK TEK koşum + önce/sonra global durum farkı:
+  - Sonda önce GEÇERSİZDİ: `IN_PROGRESS` OrderStatus değil, sorgu düştü, durum iki tarafta da boş → "0 fark". Pozitif kontrolle yakalandı.
+  - Geçerli sondada geçerken sızdıran yalnız iki bekçi: `number_series_panel` ve `number_series_scope`, birer biçim satırı.
+- `depo.multiEnabled` ve sipariş artığı geçen bir koşumdan DEĞİL, geliştirme sırasındaki çöken koşumlardan birikmiş (ca'nın damgaları: satır 2026-09-22 17:08, sipariş artığı 15:03–15:47; raporlayan koşum 21:14). Kırmızıyı veren paket onları yalnız SAYDI.
+
+**SIGTERM (ölçüldü).**
+- Node, SIGTERM'de `finally` KOŞTURMAZ.
+- İşleyiciden fırlatmak da bekleyen `await`i çözmez.
+- ⇒ Koşucunun "önce SIGTERM, 5 sn bekle, sonra SIGKILL" değişikliği TEK BAŞINA hiçbir şeyi çözmez. Gerekirse bekçilerin teardown'u kaydettiği bir kayıt defteri gerekir. ca'nın koşumunda öldürme yoktu, şimdilik yapılmadı.
+
+**Düzeltme.**
+- Sekiz bekçi `finally`de BİREBİR geri alır: önceki satır okunur, yoksa silinir.
+- İki seri bekçisi başta var olan satır id'lerini alır, sonda kümede olmayanı siler.
+- **Mandal** `test_bekci_ayar_geri_alma` (27. hızlı mandal):
+  - sınıf düzeyi + ANAHTAR düzeyi: bayrak alanı → DB anahtarı eşlemesi `system-setting.service.ts`ten TÜRETİLİR
+  - dokuz kalıcı sentetik sonda
+  - gerçek ağaçta iki negatif sonda
+- Muaf: `test_superadmin` (modül anahtarına mevcut değeri yazar, durum değişmez).

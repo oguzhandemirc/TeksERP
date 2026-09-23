@@ -114,6 +114,21 @@ async function testNaming(): Promise<void> {
     n.backupKind("elden.dump") === "other");
 }
 
+/** `backup.hour` satırının bekçi ÖNCESİ hâli; `undefined` = dokunulmadı, `null` = satır yoktu. */
+let yedekSaatiOnce: { value: unknown; description: string | null } | null | undefined;
+
+/** Teardown: `backup.hour` BİREBİR eski hâline (satır yoktuysa yok). */
+async function temizleYedekSaati(prisma: typeof import("../src/lib/prisma").default): Promise<void> {
+  if (yedekSaatiOnce === undefined) return;
+  if (yedekSaatiOnce) {
+    await prisma.systemSetting.upsert({
+      where: { key: "backup.hour" },
+      create: { key: "backup.hour", value: yedekSaatiOnce.value as never, description: yedekSaatiOnce.description },
+      update: { value: yedekSaatiOnce.value as never, description: yedekSaatiOnce.description },
+    });
+  } else await prisma.systemSetting.deleteMany({ where: { key: "backup.hour" } });
+}
+
 async function main(): Promise<void> {
   await testNaming();
 
@@ -548,6 +563,8 @@ async function main(): Promise<void> {
     // env geçerli kalır (geriye-uyum), o da yoksa 3.
     const settings = await import("../src/services/system-setting.service");
     const envBefore = process.env.BACKUP_HOUR;
+    // Satırın bekçi ÖNCESİ hâli: geri alma `finally`de BİREBİR (eskiden sonda koşulsuz siliniyordu).
+    yedekSaatiOnce = await prisma.systemSetting.findUnique({ where: { key: "backup.hour" } });
     await prisma.systemSetting.deleteMany({ where: { key: "backup.hour" } });
 
     delete process.env.BACKUP_HOUR;
@@ -607,6 +624,8 @@ async function main(): Promise<void> {
     check("24 saatten ESKİ .part budandı", !fs.existsSync(stalePart));
     check("TAZE .part'a dokunulmadı (koşan dump'ın dosyası olabilir)", fs.existsSync(freshPart));
   } finally {
+    // Paylaşımlı ayar ÖNCE: bekçi yarıda düşse de `backup.hour` sonraki bekçiye sızmaz.
+    await temizleYedekSaati(prisma).catch((e) => { console.error("backup.hour geri alınamadı:", e); fail += 1; });
     // Test kendi yarattığını siler: geçici klasör + bu koşumun audit satırları
     // + 12c-2'nin geçici topu.
     fs.rmSync(root, { recursive: true, force: true });

@@ -87,6 +87,9 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Başta var olan biçim satırları: sonda bu kümede OLMAYAN her satır silinir — §5'in kabul koluna
+  // `packingLotCode` satırı yazıyordu ve teardown yalnız `sack`ı biliyordu (ölçüldü 2026-09-24: +1 satır).
+  const satirlarOnce = new Set((await prisma.numberSeriesLine.findMany({ select: { id: true } })).map((l) => l.id));
   try {
     // ── §1 Damga YOKKEN bugünkü davranış ──────────────────────────────────
     await prisma.numberSeries.update({ where: { key: "sack" }, data: { formatChangedAt: null } });
@@ -195,6 +198,8 @@ async function main(): Promise<void> {
 
     check("§1 körlük zemini: seri satırı gerçekten okundu", onceki.key === "sack");
   } finally {
+    const yeniSatirlar = (await prisma.numberSeriesLine.findMany({ select: { id: true } })).filter((l) => !satirlarOnce.has(l.id)).map((l) => l.id);
+    if (yeniSatirlar.length) await prisma.numberSeriesLine.deleteMany({ where: { id: { in: yeniSatirlar } } });
     // ⚠️ Bu koşumun yazdığı BİÇİM SATIRLARI da gider: kolonları geri yazıp satırı
     // bırakmak, bir sonraki tazelemede satırın kolonları YENİDEN ezmesi demekti
     // (biçim artık bir zaman çizgisi ve satır efendidir).
