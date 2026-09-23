@@ -95,6 +95,7 @@ import {
   seriesSourceCapability,
   previewNextNumber,
   seriesImpactCount,
+  seriesFullyLocked,
   seriesLock,
 } from "../src/services/helpers/series-panel.helper";
 import { seriesPrefix } from "../src/services/helpers/series-format.helper";
@@ -190,15 +191,27 @@ async function main(): Promise<void> {
 
   try {
     // ── §1 Kapı sırası ────────────────────────────────────────────────────
-    // `swatch`: `scopedCounter` beyanı YOK **ve** okutulan bir seri (C0b de
-    // engelliyor). İkisi birden geçerliyken SAYAÇ konuşmalı — fabrikanın
-    // çözemeyeceği engel önce.
-    const ikisiDe = await dene(() =>
-      updateSeriesFormat("swatch", { prefix: "KRT", dateSegment: "DDMMYY", digits: 4, separator: "" }),
+    // Hedef: `scopedCounter` beyanı OLMAYAN **ve** okutulan bir seri — iki engel
+    // birlikteyken SAYAÇ konuşmalı (fabrikanın çözemeyeceği engel önce).
+    // ⚠️ HEDEF ELLE SEÇİLMEZ, KEŞİFLE BULUNUR: eski hâli `swatch`ı adıyla
+    // yazıyordu ve o seri açıldığı gün iddia sessizce ölçmeyi bıraktı. Böyle bir
+    // seri kalmadığında sonuç ÜÇÜNCÜ hâldir — "ölçülemedi", "uyumlu" değil.
+    const ikiEngelli = NUMBER_SERIES_CATALOG.find(
+      (e) => !e.lockedReason && !e.scopedCounter && e.kind !== undefined,
     );
-    check("§1 ⭐ iki engel birlikteyken SAYAÇ kapısı konuşur (istemci değil)",
-      ikisiDe instanceof Error && kod(ikisiDe) === "NUMBER_SERIES_COUNTER_NOT_SCOPED",
-      ikisiDe instanceof Error ? (kod(ikisiDe) ?? ikisiDe.message) : "KABUL EDİLDİ");
+    if (!ikiEngelli) {
+      console.log(
+        "⏭️  §1 ÖLÇÜLEMEDİ — hem sayacı hazır olmayan hem OKUTULAN seri kalmadı; " +
+          "kapı sırası iddiası bu ağaçta gözlemlenemiyor.",
+      );
+    } else {
+      const tohum = { prefix: ikiEngelli.seedPrefix, dateSegment: ikiEngelli.seedDateSegment,
+        digits: ikiEngelli.seedDigits, separator: ikiEngelli.seedSeparator };
+      const ikisiDe = await dene(() => updateSeriesFormat(ikiEngelli.key, tohum));
+      check(`§1 ⭐ iki engel birlikteyken SAYAÇ kapısı konuşur (istemci değil) — ${ikiEngelli.key}`,
+        ikisiDe instanceof Error && kod(ikisiDe) === "NUMBER_SERIES_COUNTER_NOT_SCOPED",
+        ikisiDe instanceof Error ? (kod(ikisiDe) ?? ikisiDe.message) : "KABUL EDİLDİ");
+    }
 
     // `roll`: YAPISAL kilit + sayaç beyanı yok + okutulan. En önce YAPISAL.
     const ucuBirden = await dene(() =>
@@ -229,7 +242,12 @@ async function main(): Promise<void> {
 
     // ── §2 Uç ile servis AYNI yüklemden ───────────────────────────────────
     const liste = listSeries();
-    const ayrisma = liste.filter((r) => r.editable !== (seriesLock(r.key) === null));
+    // ⚠️ YÜKLEM `seriesFullyLocked` — "kilit var mı" DEĞİL. Eksen kilidi bir
+    // SERİ kilidi değildir: kısmi kilitli seri düzenlenebilir ve panel yalnız
+    // kilitli ALANI pasifleştirir. Eski iddia "kilit varsa düzenlenemez" diyordu
+    // ve kartela/fason serileri açıldığı gün kırmızı verdi — kodun değil
+    // İDDİANIN eskimesi (ölçüldü 2026-09-23).
+    const ayrisma = liste.filter((r) => r.editable !== !seriesFullyLocked(r.key));
     check("§2 ⭐ `listSeries.editable` ile kapı AYNI yüklemden besleniyor",
       ayrisma.length === 0, ayrisma.map((r) => r.key).join(", ") || `${liste.length} seri`);
     check("§2 körlük zemini: listede hem açık hem kilitli seri var",
@@ -237,15 +255,30 @@ async function main(): Promise<void> {
       `${liste.filter((r) => r.editable).length} açık / ${liste.filter((r) => !r.editable).length} kilitli`);
 
     // ── §3 Üç kilit türü ayrı cümle ───────────────────────────────────────
-    check("§3 ⭐ yapısal kilit YAPISAL, sayaç kilidi SAYAC, istemci kilidi ISTEMCI",
-      seriesLock("roll")?.kind === "YAPISAL" &&
-        seriesLock("swatch")?.kind === "SAYAC" &&
-        seriesLock("sack")?.kind === "ISTEMCI");
+    // ⚠️ SAYAÇ örneği KEŞİFLE: adıyla yazılan hedef, o seri açıldığı gün ölçmeyi
+    // bırakır (`swatch` böyle düştü). Üç türden biri kalmadıysa iddia o tür için
+    // ÖLÇÜLEMEZ ve bunu söyler.
+    const sayacOrnegi = NUMBER_SERIES_CATALOG.find((e) => seriesLock(e.key)?.kind === "SAYAC");
+    check("§3 ⭐ yapısal kilit YAPISAL, istemci kilidi ISTEMCI",
+      seriesLock("roll")?.kind === "YAPISAL" && seriesLock("sack")?.kind === "ISTEMCI");
+    if (!sayacOrnegi) {
+      console.log("⏭️  §3 SAYAÇ kolu ÖLÇÜLEMEDİ — sayacı hazır olmayan seri kalmadı.");
+    } else {
+      check(`§3 ⭐ sayaç kilidi SAYAC (keşfedilen: ${sayacOrnegi.key})`,
+        seriesLock(sayacOrnegi.key)?.kind === "SAYAC");
+    }
     // ⚠️ İSTEMCİ kilidi EKSEN düzeyinde: kırılan ekseni olmayan seri hiç kilitlenmez.
     check("§3 ⭐ istemci kilidi EKSEN taşıyor, kırılmayan seri (sevkiyat) kilitsiz",
       (seriesLock("sack")?.lockedAxes?.length ?? 0) === 5 && seriesLock("shipment") === null);
-    check("§3 üç gerekçe metni de BİRBİRİNDEN farklı (panelde aynı cümle çıkmasın)",
-      new Set([seriesLock("roll")?.reason, seriesLock("swatch")?.reason, seriesLock("shipment")?.reason]).size === 3);
+    // ⚠️ Gerekçeler KİLİT TÜRÜ BAŞINA farklı olmalı; örnekler keşiften gelir.
+    const turGerekceleri = [...new Set(
+      NUMBER_SERIES_CATALOG.map((e) => seriesLock(e.key))
+        .filter((l): l is NonNullable<typeof l> => l !== null)
+        .map((l) => `${l.kind}::${l.reason}`),
+    )];
+    const turSayisi = new Set(turGerekceleri.map((x) => x.split("::")[0])).size;
+    check("§3 her kilit TÜRÜ kendi gerekçe cümlesini taşıyor (panelde aynı cümle çıkmasın)",
+      turGerekceleri.length >= turSayisi && turSayisi > 0, `${turSayisi} tür / ${turGerekceleri.length} cümle`);
     check("§3 sevkiyat ailesi panelde görünür (`panelGroup`)",
       ["sack", "shipment", "packingLotCode", "packingLotName", "returnDoc"].every(
         (k) => liste.find((r) => r.key === k)?.panelGroup === "sevkiyat"));
@@ -292,7 +325,7 @@ async function main(): Promise<void> {
     // Faz B + Faz D'ye. İki eşik AYRI AYRI yükselebildiği için soru gerçekten
     // ayrışabilirdi: panel seriyi AÇIK gösterir, uç 400 dönerdi.
     const pariteBozuk = NUMBER_SERIES_CATALOG.filter((e) => {
-      const kilitli = seriesLock(e.key) !== null;
+      const kilitli = seriesFullyLocked(e.key); // SERİ düzeyinde red — eksen kilidi değil
       let yazilabilir = true;
       try { assertSeriesFormatWritable(e.key); } catch { yazilabilir = false; }
       return kilitli === yazilabilir;

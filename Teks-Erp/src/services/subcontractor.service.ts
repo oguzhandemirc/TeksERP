@@ -140,32 +140,35 @@ import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
  * okurdu ve arada bir önbellek tazelemesi olursa ön ek bir sürümden, hane/adım
  * başka bir sürümden gelirdi ("iki okuma" sınıfı).
  */
-export async function nextPrefixedSequenceTx(
+export async function nextSubcontractorDocNoTx(
   tx: Prisma.TransactionClient,
   table: "subcontractorDispatch" | "subcontractorReceipt",
   date: Date
-): Promise<{ seq: number; fmt: NumberSeriesFormat }> {
+): Promise<string> {
   // Ön ek artık literal değil: tablo adı AYNI ZAMANDA numara serisinin anahtarıdır
   // (`number-series-catalog`), yani sevk/kabul ön ekleri fabrikaya göre değişebilir.
-  const fmt = resolveSeriesFormat(table);
-  const fullPrefix = seriesPrefix(fmt, date);
-
-  // O-21: collation-güvenli — gte (index seek) + startsWith (tam-prefix, collation-
-  // bağımsız) ile günün TÜM kayıtlarını çek, sayısal max'ı JS'te reduce et. Eski
-  // startsWith-tek + orderBy desc glibc collation sırasına + lex taşmaya güveniyordu
-  // (glibc seq-no bug — bkz. order.service.ts kanıtlı desen).
-  if (table === "subcontractorDispatch") {
-    const rows = await tx.subcontractorDispatch.findMany({
-      where: { dispatchNo: { gte: fullPrefix, startsWith: fullPrefix } },
-      select: { dispatchNo: true },
-    });
-    return { seq: seriesSeqFrom(fmt, rows.map((r) => r.dispatchNo), fullPrefix), fmt };
-  }
-  const rows = await tx.subcontractorReceipt.findMany({
-    where: { receiptNo: { gte: fullPrefix, startsWith: fullPrefix } },
-    select: { receiptNo: true },
-  });
-  return { seq: seriesSeqFrom(fmt, rows.map((r) => r.receiptNo), fullPrefix), fmt };
+  return nextSeriesNo(
+    table,
+    async (fullPrefix) => {
+      // O-21: collation-güvenli — gte (index seek) + startsWith (tam-prefix, collation-
+      // bağımsız) ile günün TÜM kayıtlarını çek, sayısal max'ı JS'te reduce et. Eski
+      // startsWith-tek + orderBy desc glibc collation sırasına + lex taşmaya güveniyordu
+      // (glibc seq-no bug — bkz. order.service.ts kanıtlı desen).
+      if (table === "subcontractorDispatch") {
+        const rows = await tx.subcontractorDispatch.findMany({
+          where: { dispatchNo: { gte: fullPrefix, startsWith: fullPrefix } },
+          select: { dispatchNo: true, createdAt: true },
+        });
+        return rows.map((r) => ({ code: r.dispatchNo, createdAt: r.createdAt }));
+      }
+      const rows = await tx.subcontractorReceipt.findMany({
+        where: { receiptNo: { gte: fullPrefix, startsWith: fullPrefix } },
+        select: { receiptNo: true, createdAt: true },
+      });
+      return rows.map((r) => ({ code: r.receiptNo, createdAt: r.createdAt }));
+    },
+    date,
+  );
 }
 
 async function logTravelerScan(
@@ -714,9 +717,9 @@ async function nextDirectShipmentNo(tx: Prisma.TransactionClient): Promise<strin
   return nextSeriesNo("directShipment", async (prefix) => {
     const todays = await tx.directShipment.findMany({
       where: { shipmentNo: { gte: prefix, startsWith: prefix } },
-      select: { shipmentNo: true },
+      select: { shipmentNo: true, createdAt: true },
     });
-    return todays.map((s) => s.shipmentNo);
+    return todays.map((s) => ({ code: s.shipmentNo, createdAt: s.createdAt }));
   });
 }
 
@@ -1324,8 +1327,7 @@ export class SubcontractorService {
 
       // Dispatch numarası
       const now = new Date();
-      const { seq, fmt } = await nextPrefixedSequenceTx(tx, "subcontractorDispatch", now);
-      const dispatchNo = formatSeriesCode(fmt, seq, now);
+      const dispatchNo = await nextSubcontractorDocNoTx(tx, "subcontractorDispatch", now);
 
       const dispatch = await tx.subcontractorDispatch.create({
         data: {
@@ -3101,8 +3103,7 @@ export class SubcontractorService {
         })) > 0;
 
       const now = new Date();
-      const { seq, fmt } = await nextPrefixedSequenceTx(tx, "subcontractorReceipt", now);
-      const receiptNo = formatSeriesCode(fmt, seq, now);
+      const receiptNo = await nextSubcontractorDocNoTx(tx, "subcontractorReceipt", now);
 
       const receipt = await tx.subcontractorReceipt.create({
         data: {

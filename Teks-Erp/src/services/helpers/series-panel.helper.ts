@@ -95,6 +95,23 @@ function eksenAdlari(eksenler: SeriesFormatAxis[]): string {
   return eksenler.map((a) => EKSEN_ADI[a]).join(" ve ");
 }
 
+/**
+ * BÜTÜN BİÇİM KİLİTLİ Mİ? — `editable`in, yazma kapısının ve bekçilerin TEK yüklemi.
+ *
+ * ⚠️ "Kilit var" ile "hiçbir alan değiştirilemez" AYNI ŞEY DEĞİL ve bu ayrım
+ * ölçülmüş bir davranıştır: `ISTEMCI` kilidi EKSEN düzeyindedir, yani kartela
+ * sevk no bugün yalnız ÖN EKTE kilitlidir ve tarih/hane/ayraç değiştirilebilir
+ * (`assertSeriesFormatWritable` seri düzeyinde ancak BEŞ eksen birden kırılıyorsa
+ * reddeder). Bu soruyu üç yerde ayrı ayrı yazmak "ayrışan yüzey" sınıfıdır:
+ * panelin `editable`ı bir cevaba, bekçinin yüklemi başka bir cevaba yaslanınca
+ * kırmızı, kodun değil ÖLÇÜMÜN eskimesinden doğar (ölçüldü 2026-09-23).
+ */
+export function seriesFullyLocked(key: string): boolean {
+  const lock = seriesLock(key);
+  if (lock === null) return false;
+  return lock.lockedAxes === undefined || lock.lockedAxes.length === 5;
+}
+
 export function seriesLock(key: string): SeriesLock | null {
   const e = numberSeriesCatalogEntry(key);
   if (e.lockedReason) {
@@ -421,7 +438,7 @@ export function listSeries(): Array<
       // ⚠️ `editable` "hiçbir alan değiştirilemez" demek: eksen kilidinde biçimin
       // BİR KISMI açıktır, o yüzden satır düzenlenebilir sayılır ve panel yalnız
       // kilitli ALANLARI pasifleştirir.
-      editable: lock === null || (lock.lockedAxes !== undefined && lock.lockedAxes.length < 5),
+      editable: !seriesFullyLocked(e.key),
       ...(lock
         ? {
             lockedReason: lock.reason,

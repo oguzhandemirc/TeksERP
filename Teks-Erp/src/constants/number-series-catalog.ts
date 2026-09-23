@@ -107,8 +107,14 @@ export interface NumberSeriesCatalogEntry {
      * yoldan (`BaseService.nextAutoCode`) üretiliyor ve çağrı anahtarı DEĞİŞKEN
      * (`cfg.series`) — anahtar metnini arayan bir kapı orada hiçbir şey bulamaz
      * ve "beyan yalan" der (ölçüldü 2026-09-23). Beyan yeri söyler, kapı orayı ölçer.
+     *
+     * ⚠️ LİSTE OLABİLİR ve bu ölçülmüş bir ihtiyaç: bir serinin İKİ üreteci
+     * olabiliyor (`workOrder` → `workorder.service` + `helpers/workorder-clone.helper`;
+     * `subcontractorDispatch` → `subcontractor.service` + `helpers/batch-dispatch-surgery.helper`).
+     * Tek yol beyan edilseydi kapı İKİNCİ üreteci hiç açmazdı ve o yol eski
+     * literal hesapta kalsa bile beyan YEŞİL görünürdü.
      */
-    uretec?: string;
+    uretec?: string | readonly string[];
   };
   /**
    * Panelde hangi bölümde görünür. ZORUNLU (bekçi `test_number_series_panel §4d`):
@@ -217,6 +223,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "workOrder",
+    scopedCounter: { durum: "hazir", not: "İKİ üreteç de `nextSeriesNo` yolundan geçiyor (iş emri açılışı + klon/split); yükleyiciler doğuş anını taşıyor (E2 okutulan aile dilimi, 2026-09-23).", uretec: ["services/workorder.service.ts", "services/helpers/workorder-clone.helper.ts"] },
     manualEntry: { path: "services/workorder.service.ts", not: "İş emri açılırken KÖPRÜ alan `batchNumber` ile gelir (Zod adı sonraki fazda değişir); TARANAN seri (TRAVELER_CARD) — refakat kartının barkodu aynı koddur." },
     panelGroup: "uretim",
     countTable: { model: "workOrder", field: "workOrderNumber", birim: "kayıt" },
@@ -237,7 +244,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     // ediyor. Seri bugün yine düzenlenemez — ama doğru gerekçeyle: sayacı
     // kapsam damgasına geçmedi (`SAYAC`) ve okutulan bir seri (`ISTEMCI`).
   },
-  { key: "swatch", panelGroup: "fason-kartela", countTable: { model: "swatch", field: "cardNumber", birim: "kayıt" }, label: "Kartela kart no", seedPrefix: "KRT", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "SWATCH" },
+  { key: "swatch", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesSeq` ile `nextSeriesNo` ile AYNI çekirdekten geçiyor (toplu kabul sırayı ister, kodu değil); yükleyici doğuş anını taşıyor (E2 okutulan aile dilimi, 2026-09-23).", uretec: "services/kartela.service.ts" }, panelGroup: "fason-kartela", countTable: { model: "swatch", field: "cardNumber", birim: "kayıt" }, label: "Kartela kart no", seedPrefix: "KRT", seedDateSegment: D, seedDigits: 4, seedSeparator: "", kind: "SWATCH" },
   {
     key: "sack",
     manualEntry: { path: "services/shipping.service.ts", not: "Çuval açılırken `data.sackNo` gelirse o kullanılır; TARANAN seri (SACK) — elle değer okutulabilir olmalı." },
@@ -265,6 +272,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "subcontractorDispatch",
+    scopedCounter: { durum: "hazir", not: "İKİ üreteç de `nextSeriesNo` yolundan geçiyor (fason sevk + parti ameliyatı); yükleyiciler doğuş anını taşıyor (E2 okutulan aile dilimi, 2026-09-23).", uretec: ["services/subcontractor.service.ts", "services/helpers/batch-dispatch-surgery.helper.ts"] },
     panelGroup: "fason-kartela",
     countTable: { model: "subcontractorDispatch", field: "dispatchNo", birim: "belge" },
     label: "Fason sevk belge no",
@@ -276,6 +284,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "subcontractorReceipt",
+    scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor: kapsam damgası + çakışma atlaması tek yerde (E2 okutulan aile dilimi, 2026-09-23).", uretec: "services/subcontractor.service.ts" },
     panelGroup: "fason-kartela",
     countTable: { model: "subcontractorReceipt", field: "receiptNo", birim: "belge" },
     label: "Fason kabul belge no",
@@ -287,6 +296,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "kartelaDispatch",
+    scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor: kapsam damgası + çakışma atlaması tek yerde (E2 okutulan aile dilimi, 2026-09-23).", uretec: "services/kartela.service.ts" },
     panelGroup: "fason-kartela",
     countTable: { model: "kartelaDispatch", field: "dispatchNo", birim: "belge" },
     label: "Kartela sevk belge no",
@@ -298,6 +308,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "kartelaReceipt",
+    scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor: kapsam damgası + çakışma atlaması tek yerde (E2 okutulan aile dilimi, 2026-09-23).", uretec: "services/kartela.service.ts" },
     panelGroup: "fason-kartela",
     countTable: { model: "kartelaReceipt", field: "receiptNo", birim: "belge" },
     label: "Kartela kabul belge no",
@@ -359,7 +370,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
       not: "`return.service` BELGE BAŞINA tek numara üretir (üyeler liderin kopyasını taşır) ve kapsam damgası migration'da kuruldu — `id`den türemiş eski hex kuyruklar sayaca giremez.",
     },
   },
-  { key: "directShipment", panelGroup: "fason-kartela", countTable: { model: "directShipment", field: "shipmentNo", birim: "belge" }, label: "Doğrudan sevk no", seedPrefix: "DSK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "directShipment", scopedCounter: { durum: "hazir", not: "Üreteç zaten `nextSeriesNo` yolundaydı ama yükleyici ÇIPLAK string döndürüyordu — kapsam damgası SESSİZCE kapalıydı; doğuş anı eklendi (E2 okutulan aile dilimi, 2026-09-23).", uretec: "services/subcontractor.service.ts" }, panelGroup: "fason-kartela", countTable: { model: "directShipment", field: "shipmentNo", birim: "belge" }, label: "Doğrudan sevk no", seedPrefix: "DSK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "manifest", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kod listesi `formatChangedAt` damgasına göre süzülüyor ve çakışma atlaması aynı yerde (E2 depo-ticaret dilimi, 2026-09-23)." }, panelGroup: "uretim", countTable: { model: "manifest", field: "manifestNo", birim: "belge" }, label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   {
     key: "order",

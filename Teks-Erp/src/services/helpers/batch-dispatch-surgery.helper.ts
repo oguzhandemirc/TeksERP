@@ -30,15 +30,14 @@
 // retarget edilen / yeni doğan) targetByStep ile takip edilir, aynı adımdaki
 // sonraki kaynak kalemleri ona birleşir.
 //
-// NOT: FS numarası üreteci subcontractor.service.nextPrefixedSequenceTx ile AYNI
-// desen/kaynaktır (aynı tablo taraması, collation-güvenli gte+startsWith) —
-// import EDİLMEZ çünkü subcontractor.service → batch.service → bu helper yönlü
-// zincir var; ters import modül döngüsü kurardı.
+// NOT: FS numarası burada İKİNCİ kez üretilir (subcontractor.service yönlü zincirin
+// tepesinde, import modül döngüsü kurardı); ikisi de `nextSeriesNo` çekirdeğinden
+// geçer ve katalog bunu iki yollu `scopedCounter.uretec` ile beyan eder.
 // =============================================================================
 
 import { Prisma, PrintedDocType } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "../number-series.service";
+import { nextSeriesNo } from "../number-series.service";
 import { printedDocumentService } from "../printed-document.service";
 import {
   assertNoDirectShipmentTx,
@@ -71,18 +70,15 @@ function emptyResult(): DispatchSurgeryResult {
   };
 }
 
-/**
- * FS sevk no üretici — tx İÇİNDE, mevcut üreteç kalıbı (PREFIX+GGAAYY+NNNN,
- * günün NUMERIC max'ı +1). Çağıran withBarcodeRetry kapsamında olmalı (P2002 → retry).
- */
+/** FS sevk no — tx İÇİNDE; çağıran `withBarcodeRetry` kapsamında olmalı (P2002 → retry). */
 async function generateDispatchNoTx(tx: Prisma.TransactionClient, date: Date): Promise<string> {
-  const fmt = resolveSeriesFormat("subcontractorDispatch");
-  const prefix = seriesPrefix(fmt, date);
-  const rows = await tx.subcontractorDispatch.findMany({
-    where: { dispatchNo: { gte: prefix, startsWith: prefix } },
-    select: { dispatchNo: true },
-  });
-  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.dispatchNo), prefix), date);
+  return nextSeriesNo("subcontractorDispatch", async (prefix) => {
+    const rows = await tx.subcontractorDispatch.findMany({
+      where: { dispatchNo: { gte: prefix, startsWith: prefix } },
+      select: { dispatchNo: true, createdAt: true },
+    });
+    return rows.map((r) => ({ code: r.dispatchNo, createdAt: r.createdAt }));
+  }, date);
 }
 
 /**
