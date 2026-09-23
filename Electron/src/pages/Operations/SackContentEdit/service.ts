@@ -472,6 +472,8 @@ export const sackHubService = {
         ...(body.branchId ? { branchId: body.branchId } : {}),
         ...(body.orderIds && body.orderIds.length ? { orderIds: body.orderIds } : {}),
         ...(body.destination ? { destination: body.destination } : {}),
+        // Açık niyet — düşerse ilk sevk seçimi karta YAZILMAZ (gövdeyi elle kuran katman sessiz allowlist'tir).
+        ...(body.destinationChosen ? { destinationChosen: true } : {}),
         ...(body.procedureCode ? { procedureCode: body.procedureCode } : {}),
         ...(body.clientToken ? { clientToken: body.clientToken } : {}),
         // ⚠️ AÇIKÇA gönderilir (true DE false DA değil — yalnız true anlamlı,
