@@ -11511,3 +11511,30 @@ düşükken BAŞARILI olup satırı kirli bırakıyordu ve sed geri eklenemedi �
 
 **K12:** numaralandırma diyaloğuna `DialogDescription` eklendi (Radix her açılışta uyarı basıyordu,
 d3 turunda 213 kez); cümle sözleşmeyi taşıyor — değişiklik yalnız bundan sonraki kayıtları etkiler.
+
+## 2026-09-23 — Türetilen örnek MODÜL YÜKLENİRKEN koşarsa amacına ulaşmaz [ÇEKİRDEK]
+
+**Saha/ölçüm (d3'ün alt ajanı buldu, burada doğrulandı):** `traveler-card.service.ts` örnek barkodu
+modül düzeyinde türetiyordu (`const X = previewSeriesCode(resolveSeriesFormat("workOrder"), 1)`,
+35d786d6 ile geldi) ve `document-render/sample-data.ts` on üç örnek numarayı aynı biçimde modül
+düzeyinde üretiyordu (bu ondan eskiydi). İki SESSİZ zarar:
+① Yükleme anında numara serisi önbelleği BOŞ; senkron okuma katalog TOHUMUNA düşer (beyanlı
+fail-safe) ⇒ örnek, fabrikanın GERÇEK ön ekini hiç göstermez ve bir daha da değişmez. "Literal
+yazma, seriden türet" kuralı biçimsel olarak sağlanır ama AMACINA ULAŞMAZ — en kötü tür yeşil.
+② Boş önbellek, modül yüklenirken 52 seriyi tazelemek için arka planda ~55 SELECT açar; bu, sorgu
+bütçesi bekçisinin penceresine taşar (ölçüldü: beklenen 64, ölçülen 72–95) ve arıza BAŞKA bir
+bekçide, alakasız bir yerde görünür.
+
+**Karar:** seriden türetilen her örnek İSTEK ANINDA üretilir. Uygulama biçimi GETTER: modül düzeyindeki
+örnek veri sabitinin yapısı korunur, yalnız türetilen alanlar `get x() { return ornekNo(…); }` olur
+(fonksiyona çevirmek 350 satırlık nesneyi tek fonksiyona sokup boyut tavanını kırardı).
+
+**Kalıcı kapı:** `test_seri_modul_yuklemesi` — AST ile, çağrının bir FONKSİYON gövdesinde (getter ve
+metot dahil) olup olmadığını sorar; 613 dosya, ~0,9 sn, DB'siz, 25. hızlı mandal. Gömülü sondası
+tarayıcının modül düzeyi ↔ fonksiyon ayrımını kendi içinde ölçer ("0 bulgu" ile "hiç bakılmadı" aynı
+görünmesin). İki sonda: çağrı modül düzeyine konunca dosya:satır ile KIRMIZI · getter biçimine
+çevrilince YEŞİL (meşru erteleme yanlış pozitif değil). Ek olarak `test_number_series_panel §12`
+örnek verinin kendisini ölçer: alan bir GETTER mı ve değeri YÜRÜRLÜKTEKİ biçimden mi geliyor.
+
+**Sınıf:** bu, "türetilebilen türetilir" kuralının ikinci yarısıdır — TÜRETMENİN ZAMANI da kuralın
+parçasıdır. Doğru yerden okunan ama YANLIŞ ANDA okunan bir değer, literal kadar bayattır.

@@ -88,11 +88,23 @@ export interface RetiredPrefixCleanupPlan {
  * emri yok (ölçüldü 2026-09-23: 0 / 417) ama basılı `RK` kartları sahada
  * okutuluyor. "Veritabanında yok" ile "dünyada yok" aynı şey değildir.
  */
-export async function planRetiredPrefixCleanup(): Promise<RetiredPrefixCleanupPlan[]> {
-  const rows = await prisma.numberSeries.findMany({
-    select: { key: true, prefix: true, retiredPrefixes: true },
-    orderBy: { key: "asc" },
-  });
+export async function planRetiredPrefixCleanup(
+  /**
+   * SATIRLAR ENJEKTE EDİLEBİLİR — varsayılan canlı tablo.
+   *
+   * ⚠️ Yalnız ÖLÇÜM içindir: karar yüklemini sınamak için bekçi eskiden canlı bir
+   * satırı geçici olarak KİRLETİYORDU ve eşzamanlı koşan ikinci bir kopya o
+   * pencerede kirli veri görüyordu (§4c'nin aralıklı kırmızısıyla aynı sınıf).
+   * Üretim çağıranı hiçbir şey geçirmez.
+   */
+  satirlar?: ReadonlyArray<{ key: string; prefix: string; retiredPrefixes: string[] }>,
+): Promise<RetiredPrefixCleanupPlan[]> {
+  const rows =
+    satirlar ??
+    (await prisma.numberSeries.findMany({
+      select: { key: true, prefix: true, retiredPrefixes: true },
+      orderBy: { key: "asc" },
+    }));
   const planlar: RetiredPrefixCleanupPlan[] = [];
   for (const satir of rows) {
     // Katalogda olmayan satır (eski anahtar) DOKUNULMAZ: neyi numaraladığı
