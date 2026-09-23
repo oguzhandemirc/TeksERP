@@ -20,7 +20,7 @@ import { AppError } from "../utils/app-error";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo } from "./number-series.service";
 import { applyDateRange, buildWhereClause } from "../utils/query-parser";
 import { ROLL_STATUS_TR } from "../constants/status-labels";
 import { postStockMoves } from "./helpers/warehouse-ledger.helper";
@@ -62,14 +62,14 @@ export interface TransferCreateInput {
 }
 
 async function nextTransferNo(tx: Prisma.TransactionClient): Promise<string> {
-  const now = new Date();
-  const fmt = resolveSeriesFormat("warehouseTransfer");
-  const prefix = seriesPrefix(fmt, now);
-  const rows = await tx.warehouseTransfer.findMany({
-    where: { transferNo: { gte: prefix, startsWith: prefix } },
-    select: { transferNo: true },
-  });
-  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.transferNo), prefix), now);
+  // ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan kodlara
+  // bakar (`formatChangedAt`); tarih segmenti düşünce eski rejimin kodları sayaca
+  // girerdi. `nextSeriesNo` kapsamı ve çakışma atlamasını TEK YERDE tutar.
+  return nextSeriesNo("warehouseTransfer", async (prefix) =>
+    tx.warehouseTransfer.findMany({
+      where: { transferNo: { gte: prefix, startsWith: prefix } },
+      select: { transferNo: true, createdAt: true },
+    }).then((rows) => rows.map((r) => ({ code: r.transferNo, createdAt: r.createdAt }))));
 }
 
 /**

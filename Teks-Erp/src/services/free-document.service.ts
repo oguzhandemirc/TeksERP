@@ -11,7 +11,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo } from "./number-series.service";
 import {
   readCompanyName,
   readCompanyLetterhead,
@@ -39,16 +39,16 @@ function sanitizeConfig(raw: unknown): DocumentConfig {
 }
 
 async function nextFreeDocNo(): Promise<string> {
-  // ⚠️ TEK TARİH — `nextCustomerCode` gerekçesi ("iki tarih" sınıfı).
-  const now = new Date();
-  const fmt = resolveSeriesFormat("freeDocument");
-  const prefix = seriesPrefix(fmt, now);
-  const todays = await prisma.freeDocument.findMany({
-    where: { documentNo: { gte: prefix, startsWith: prefix } },
-    select: { documentNo: true },
-  });
-  const seq = seriesSeqFrom(fmt, todays.map((d) => d.documentNo), prefix);
-  return formatSeriesCode(fmt, seq, now);
+  // ⚠️ TEK TARİH — `nextCustomerCode` gerekçesi ("iki tarih" sınıfı): ön ek ve kod
+  // AYNI `now`dan kurulur; `nextSeriesNo` tarihi tek argüman olarak taşır.
+  // ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan kodlara
+  // bakar (`formatChangedAt`); tarih segmenti düşünce eski rejimin kodları sayaca
+  // girerdi. `nextSeriesNo` kapsamı ve çakışma atlamasını TEK YERDE tutar.
+  return nextSeriesNo("freeDocument", async (prefix) =>
+    prisma.freeDocument.findMany({
+      where: { documentNo: { gte: prefix, startsWith: prefix } },
+      select: { documentNo: true, createdAt: true },
+    }).then((rows) => rows.map((r) => ({ code: r.documentNo, createdAt: r.createdAt }))), new Date());
 }
 
 function shape(input: FreeDocumentInput, isCreate: boolean) {

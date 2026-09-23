@@ -11643,3 +11643,32 @@ kaldırılınca (a+d) kolu kırmızı: tarihsiz geçişten sonra dünkü kod tan
 `test_number_series_panel §15`in teardown'u vadesi gelmemiş satırları siliyordu; koşum sırasında
 nitelik değiştiren (yürürlüğe giren) artık kalıyor ve BİR SONRAKİ koşumda İLGİSİZ bir bölümü
 düşürüyordu.
+
+## 2026-09-23 — E2 depo-ticaret dilimi: altı seri biçim değişimine AÇILDI [ÇEKİRDEK]
+
+**Açılanlar (SAYAC kilidi kalktı):** çeki listesi (`manifest`, CL — kullanıcının şikâyet ettiği seri)
+· mal kabul fişi (`goodsReceipt`, MK) · alış siparişi (`purchaseOrder`, AS) · depo transferi
+(`warehouseTransfer`, DT) · sayım (`stockCount`, SAY) · serbest belge (`freeDocument`, SB). Açık seri
+sayısı 3 → 9; kilit dağılımı SAYAC 44 → 38.
+
+**Açmak ne demek:** altı üreteç de aynı elle kalıbı taşıyordu — `resolveSeriesFormat` → `seriesPrefix`
+→ `findMany` → `seriesSeqFrom` → `formatSeriesCode`. Bu kalıpta C0 KAPSAMI YOKTU: sayaç, biçim
+değişmeden önce doğan kodları da sayıyordu ve tarih segmenti düşünce sabit baş kısaldığı için sıra
+`MK2209260001` → 2.209.260.002 olurdu. Altısı da `nextSeriesNo(key, loadCodes, date)` yoluna taşındı;
+kapsam damgası ve çakışma atlaması artık TEK YERDE. `withBarcodeRetry` sarmaları korundu (yarışta
+taze okuma), yükleyiciler `{ code, createdAt }` döndürüyor.
+
+**Kalıcı kapı — BEYAN ↔ GERÇEK:** `scopedCounter: "hazir"` bir beyandır ve tek başına hiçbir şey
+ölçmez; üreteç eski literal yolda kalırsa seri panelde AÇILIR ama kapsam hiç uygulanmaz. Yeni kontrol
+(L0) beyanlı her seri için kaynakta `nextSeriesNo("<key>")` çağrısı arar (`ownCounter` muaf).
+⚠️ İlk yazımda yüklem `includes` idi ve çağrı satıra bölündüğü için `manifest`i "üreteçsiz" saydı —
+yüklem boşluğa dayanıklı regex'e çevrildi (aynı sınıfın tersi: daha önce `toContain` IMPORT satırıyla
+eşleşip ısırmamıştı).
+⚠️ Sondanın kendisi de bir kez geçersiz çıktı: ilk denemede mutasyon (regex ile) DOSYAYA UYGULANMADI
+ve sonda "yeşil" göründü; mutasyonun uygulandığı DOĞRULANDIKTAN sonra kapı ısırdı (`goodsReceipt`).
+
+**E3 matrisi büyüdü:** 11 → 28 kontrol. 1e'nin şartıyla her açılan seri L2'ye de girdi: `stockCount`
+ve `freeDocument` GERÇEK SERVİS yolundan kayıt yaratıyor (`StockCountService.create` bir depo
+fikstürü ister ve "bir depoda TEK açık sayım" kuralı yüzünden her çağrı KENDİ deposunu kurar),
+`manifest`/`goodsReceipt`/`purchaseOrder`/`warehouseTransfer` fikstür maliyeti gerekçesiyle "L1'de
+kaldı" olarak BEYANLI ve kapsam tablosunda görünüyor.
