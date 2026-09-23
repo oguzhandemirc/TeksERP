@@ -86,6 +86,19 @@ Kapı kuru koşumdan çıkarıldı, iddia yeşil kaldı. İzole eden vaka OKUTUL
 OLMAYAN seriydi — onunla ısırdı.)*
 ⇒ Sonda tasarlarken sor: *bu vakayı yalnız ölçtüğüm kapı mı reddediyor?*
 
+**Kardeş hâl — korunan DURUM sondada hiç kurulmamış olabilir.** Vaka doğru kapıyı hedeflese
+bile, iddia sistemin yanlış BAŞLANGIÇ DURUMU üzerinde koşuyorsa düzeltmeyi geri aldığında da
+yeşil kalır: reddi doğuracak durum hiç var olmamıştır.
+*(Vaka 2026-09-23: "seri kendi eski biçimine dönebilmeli" iddiası seriyi `KS`te bırakıp
+doğrudan `KS`i deniyordu; oysa reddi doğuran hâl serinin `KSZ`de OLMASIYDI. Düzeltme geri
+alındı, iddia yeşil kaldı — çünkü "bugünkü biçim" zaten `KS`ti ve dar istisna da onu
+geçiriyordu. İkinci yazım seriyi gerçekten `KSZ`ye taşıdı, taşındığını ayrı bir körlük zemini
+iddiasıyla ölçtü ve sonda ısırdı.)*
+⇒ Bir sonda ısırmayınca sorulacak ikinci soru: *iddianın reddi doğuracak DURUMU gerçekten
+kurdum mu, yoksa kurulduğunu mu varsaydım?* Kurulumun kendisi ayrı bir körlük zemini iddiasıyla
+ölçülür — geri alma ise ölçülen kod yolundan DEĞİL, doğrudan yazmayla yapılır (düzeltme
+bozulursa teardown da düşer ve artık bırakır).
+
 ### Kapıları ölçmek, YAZMA YOLUNU ölçmek değildir
 Bir yazma yolunun kapıları eksiksiz ölçülebilir ve yazma yolunun KENDİSİ hiç
 koşulmamış olabilir: bütün sonda kolları "reddedilen" vakalardan seçilmişse yürütme

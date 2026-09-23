@@ -9,7 +9,7 @@ import { Prisma, CariKind, Currency, InvoiceType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { resolvePartyToCardTx } from "./party-card.helper";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "../number-series.service";
+import { nextSeriesNo } from "../number-series.service";
 
 /** Sıfır Decimal — float aritmetiği YASAK (perf/doğruluk kuralı). */
 export const D0 = (): Prisma.Decimal => new Prisma.Decimal(0);
@@ -42,13 +42,17 @@ export async function nextInvoiceNoTx(
   type: InvoiceType,
   date: Date,
 ): Promise<string> {
-  const fmt = resolveSeriesFormat(INVOICE_SERIES[type]);
-  const full = seriesPrefix(fmt, date);
-  const rows = await tx.invoice.findMany({
-    where: { docNo: { gte: full, startsWith: full } },
-    select: { docNo: true },
-  });
-  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.docNo), full), date);
+  return nextSeriesNo(
+    INVOICE_SERIES[type],
+    async (full) => {
+      const rows = await tx.invoice.findMany({
+        where: { docNo: { gte: full, startsWith: full } },
+        select: { docNo: true, createdAt: true },
+      });
+      return rows.map((r) => ({ code: r.docNo, createdAt: r.createdAt }));
+    },
+    date,
+  );
 }
 
 /** Tahsilat "TH", ödeme "OD" (varsayılan; ön ekler `number_series`ten). */
@@ -57,14 +61,17 @@ export async function nextPaymentNoTx(
   direction: "IN" | "OUT",
   date: Date,
 ): Promise<string> {
-  const seriesKey = direction === "IN" ? "paymentIn" : "paymentOut";
-  const fmt = resolveSeriesFormat(seriesKey);
-  const full = seriesPrefix(fmt, date);
-  const rows = await tx.payment.findMany({
-    where: { docNo: { gte: full, startsWith: full } },
-    select: { docNo: true },
-  });
-  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.docNo), full), date);
+  return nextSeriesNo(
+    direction === "IN" ? "paymentIn" : "paymentOut",
+    async (full) => {
+      const rows = await tx.payment.findMany({
+        where: { docNo: { gte: full, startsWith: full } },
+        select: { docNo: true, createdAt: true },
+      });
+      return rows.map((r) => ({ code: r.docNo, createdAt: r.createdAt }));
+    },
+    date,
+  );
 }
 
 // -----------------------------------------------------------------------------

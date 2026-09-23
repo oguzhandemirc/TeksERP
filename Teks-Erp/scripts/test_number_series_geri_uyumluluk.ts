@@ -44,6 +44,13 @@ import { freeDocumentService } from "../src/services/free-document.service";
 import { stockCountService } from "../src/services/stock-count.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { kartelaService } from "../src/services/kartela.service";
+import { SubcontractorService } from "../src/services/subcontractor.service";
+import { invoiceService } from "../src/services/invoice.service";
+import { paymentService } from "../src/services/payment.service";
+import { chequeService } from "../src/services/cheque.service";
+import { cashTransactionService } from "../src/services/cash-transaction.service";
+import { chequeDeliveryNoteService } from "../src/services/cheque-delivery-note.service";
+import { reconciliationLetterService } from "../src/services/reconciliation-letter.service";
 import { colorService } from "../src/routes/color.routes";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { purchaseOrderService } from "../src/services/purchase-order.service";
@@ -122,9 +129,17 @@ const okutulan: {
   kartelaDispatchIds: string[];
   kartelaReceiptIds: string[];
   swatchIds: string[];
+  externalStationId: string | null;
+  fasonFirmaId: string | null;
+  musteriId: string | null;
+  fasonDispatchIds: string[];
+  fasonReceiptIds: string[];
+  directShipmentIds: string[];
 } = {
   workOrderIds: [], warehouseId: null, kartelaFirmaId: null,
   rollIds: [], kartelaDispatchIds: [], kartelaReceiptIds: [], swatchIds: [],
+  externalStationId: null, fasonFirmaId: null, musteriId: null,
+  fasonDispatchIds: [], fasonReceiptIds: [], directShipmentIds: [],
 };
 let okutulanSayac = 0;
 
@@ -184,6 +199,204 @@ async function kartelaTuru(damga: string): Promise<{
     receipt: { id: r.data.id, kod: r.data.receiptNo },
     swatch: kart ? { id: kart.id, kod: kart.cardNumber } : null,
   };
+}
+
+/**
+ * FASON zincirinin BİR TURU: EXTERNAL adımlı iş emri + serbest stok topu →
+ * fason sevki → kabul; ikinci bir sevk de DOĞRUDAN SEVK edilir.
+ *
+ * Üç seriyi birden besler (`subcontractorDispatch` · `subcontractorReceipt` ·
+ * `directShipment`) çünkü üçü de AYNI zincirde doğuyor. Ölçülen ön koşullar:
+ * adımın istasyonu EXTERNAL, iş emri PLANNED/IN_PROGRESS, top `STOCK` +
+ * adımsız + çuvalsız (o hâlde sevk onu kendisi adıma bağlar), doğrudan sevkte
+ * müşteri ve en az 3 karakterlik sebep ZORUNLU.
+ */
+async function fasonTuru(damga: string): Promise<{
+  dispatch: { id: string; kod: string } | null;
+  receipt: { id: string; kod: string } | null;
+  direct: { id: string; kod: string } | null;
+}> {
+  const bos = { dispatch: null, receipt: null, direct: null };
+  if (!okutulan.externalStationId || !okutulan.fasonFirmaId || !bagli.itemId) return bos;
+  const svc = new SubcontractorService();
+
+  const yeniTop = async (): Promise<string> => {
+    okutulanSayac += 1;
+    const r = await prisma.roll.create({
+      data: {
+        barcode: `${damga}-E3F${okutulanSayac}`.slice(0, 32),
+        itemId: bagli.itemId!,
+        // K6: deposuz top stok kümesinden ÇIKAMAZ — fason sevki tam olarak bunu
+        // yapıyor, o yüzden fikstür topu bir depoda doğar.
+        warehouseId: okutulan.warehouseId,
+        status: "STOCK",
+        currentQty: 20,
+        initialQty: 20,
+      },
+      select: { id: true },
+    });
+    okutulan.rollIds.push(r.id);
+    return r.id;
+  };
+  const yeniIsEmri = async (): Promise<{ woId: string; stepId: string } | null> => {
+    const r = (await new WorkOrderService().create({
+      type: "STOCK_PRODUCTION",
+      targetItemId: bagli.itemId,
+      steps: [{ stationId: okutulan.externalStationId! }],
+    })) as { data?: { id?: string } };
+    if (!r.data?.id) return null;
+    okutulan.workOrderIds.push(r.data.id);
+    const step = await prisma.workOrderStep.findFirst({
+      where: { workOrderId: r.data.id },
+      select: { id: true },
+    });
+    return step ? { woId: r.data.id, stepId: step.id } : null;
+  };
+
+  // ① Sevk + kabul
+  const a = await yeniIsEmri();
+  if (!a) return bos;
+  const d1 = (await svc.dispatch({
+    workOrderId: a.woId, stepId: a.stepId,
+    subcontractorId: okutulan.fasonFirmaId, rollIds: [await yeniTop()],
+  })) as { data?: { id?: string; dispatchNo?: string } };
+  if (!d1.data?.id || !d1.data.dispatchNo) return bos;
+  okutulan.fasonDispatchIds.push(d1.data.id);
+
+  const gonderilen = await prisma.subcontractorDispatchItem.findMany({
+    where: { dispatchId: d1.data.id },
+    select: { rollId: true },
+  });
+  const k1 = (await svc.receive({
+    workOrderId: a.woId, stepId: a.stepId, subcontractorId: okutulan.fasonFirmaId,
+    returns: gonderilen
+      .map((x) => x.rollId)
+      .filter((x): x is string => x !== null)
+      .map((rollId) => ({ rollId })),
+  })) as { data?: { id?: string; receiptNo?: string } };
+  if (k1.data?.id) okutulan.fasonReceiptIds.push(k1.data.id);
+
+  // ② İKİNCİ sevk — doğrudan sevk edilir (kabul edilen sevk tüketildi).
+  const b = await yeniIsEmri();
+  if (!b) {
+    return {
+      dispatch: { id: d1.data.id, kod: d1.data.dispatchNo },
+      receipt: k1.data?.id && k1.data.receiptNo ? { id: k1.data.id, kod: k1.data.receiptNo } : null,
+      direct: null,
+    };
+  }
+  const d2 = (await svc.dispatch({
+    workOrderId: b.woId, stepId: b.stepId,
+    subcontractorId: okutulan.fasonFirmaId, rollIds: [await yeniTop()],
+  })) as { data?: { id?: string } };
+  let direct: { id: string; kod: string } | null = null;
+  // ⚠️ AYRI `try`: doğrudan sevk düşerse sevk ve kabul sonuçları YİNE bildirilir —
+  // üç iddiayı tek halkanın kaderine bağlamak, çalışan iki seriyi de kör bırakırdı.
+  try {
+   if (d2.data?.id && okutulan.musteriId) {
+    okutulan.fasonDispatchIds.push(d2.data.id);
+    await svc.executeDirectShip({
+      dispatchId: d2.data.id,
+      reason: "E3 uyumluluk matrisi fikstürü",
+      customerId: okutulan.musteriId,
+      orderless: true,
+    });
+    const ds = await prisma.directShipment.findFirst({
+      where: { dispatchId: d2.data.id },
+      select: { id: true, shipmentNo: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (ds) {
+      okutulan.directShipmentIds.push(ds.id);
+      direct = { id: ds.id, kod: ds.shipmentNo };
+    }
+   }
+  } catch (e) {
+    console.log(`   ⚠️ doğrudan sevk kurulamadı: ${(e as Error).message}`);
+  }
+  return {
+    dispatch: { id: d1.data.id, kod: d1.data.dispatchNo },
+    receipt: k1.data?.id && k1.data.receiptNo ? { id: k1.data.id, kod: k1.data.receiptNo } : null,
+    direct,
+  };
+}
+
+const fasonTurlari: Array<Awaited<ReturnType<typeof fasonTuru>>> = [];
+/**
+ * ⚠️ ÇÖKEN FİKSTÜR BEKÇİYİ ÇÖKERTMEZ: zincirin herhangi bir halkası 4xx atarsa
+ * sonuç boş döner, ilgili iddia KIRMIZI olur ve sebep basılır. Çöken bir sonda
+ * sonda değildir — teardown bile koşmadan düşer ve bir sonraki koşumu kirletir.
+ */
+async function fasonTurAl(damga: string, sira: number): Promise<Awaited<ReturnType<typeof fasonTuru>>> {
+  while (fasonTurlari.length <= sira) {
+    try {
+      fasonTurlari.push(await fasonTuru(damga));
+    } catch (e) {
+      console.log(`   ⚠️ fason zinciri kurulamadı: ${(e as Error).message}`);
+      fasonTurlari.push({ dispatch: null, receipt: null, direct: null });
+    }
+  }
+  return fasonTurlari[sira]!;
+}
+let fdSira = 0, frSira = 0, dsSira = 0;
+
+/**
+ * FİNANS fikstürü — ortak bağlar: cari (müşteri) + kasa. Her seri KENDİ gerçek
+ * kaydını yaratır; "aynı servis, temsilci yeter" reddedildi (1e şartı): fatura
+ * TÜRÜ ön eki belirliyor ve sayaç ön ekle bölünüyor, yani dört tür DÖRT AYRI
+ * sayaç uzayıdır — birini ölçmek ötekini ölçmez.
+ */
+const finans: {
+  musteriId: string | null;
+  cariId: string | null;
+  kasaId: string | null;
+  invoiceIds: string[];
+  paymentIds: string[];
+  chequeIds: string[];
+  cashTxnIds: string[];
+  noteIds: string[];
+  letterIds: string[];
+} = {
+  musteriId: null, cariId: null, kasaId: null,
+  invoiceIds: [], paymentIds: [], chequeIds: [], cashTxnIds: [], noteIds: [], letterIds: [],
+};
+
+/** Fatura — tür PARAMETRE, kayıt her çağrıda YENİ (dört seri aynı yolu kullanır). */
+async function finansFatura(tur: "SALES" | "PURCHASE" | "SALES_RETURN" | "PURCHASE_RETURN") {
+  if (!finans.musteriId) return null;
+  // ⚠️ UCUN ADI `createDraft` — fatura TASLAK doğar ve belge NUMARASI taslakta
+  // zaten verilir (`nextInvoiceNoTx`, onayda değil). Ölçülen yol budur.
+  const r = await invoiceService.createDraft({
+    type: tur as never,
+    customerId: finans.musteriId,
+    lines: [{ description: "E3", qty: 1, unit: "m", unitPrice: 10 }],
+  });
+  if (!r.data?.id) return null;
+  finans.invoiceIds.push(r.data.id);
+  return { id: r.data.id, kod: r.data.docNo };
+}
+
+async function finansOdeme(yon: "IN" | "OUT") {
+  if (!finans.musteriId || !finans.kasaId) return null;
+  const r = await paymentService.create({
+    direction: yon as never, method: "CASH" as never,
+    customerId: finans.musteriId, amount: 5, cashBoxId: finans.kasaId,
+  });
+  if (!r.data?.id) return null;
+  finans.paymentIds.push(r.data.id);
+  return { id: r.data.id, kod: r.data.docNo };
+}
+
+async function finansCek(kind: "RECEIVED" | "ISSUED", docType: "CHEQUE" | "PROMISSORY_NOTE") {
+  if (!finans.musteriId) return null;
+  const r = await chequeService.create({
+    kind: kind as never, docType: docType as never,
+    customerId: finans.musteriId, amount: 100,
+    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  });
+  if (!r.data?.id) return null;
+  finans.chequeIds.push(r.data.id);
+  return { id: r.data.id, kod: r.data.docNo };
 }
 
 /** Kartela turunun sonucu — üç seri de AYNI turdan okur (ikinci tur ikinci çağrıda). */
@@ -412,6 +625,57 @@ const L2_YOLU: Record<string, L2Yolu> = {
       await prisma.order.deleteMany({ where: { id } });
     },
   },
+  // ── FİNANS (E2 dilim 6) ───────────────────────────────────────────────────
+  // ⚠️ DÖRT FATURA TÜRÜ DÖRT AYRI KAYIT: tür ön eki belirliyor ve sayaç ön ekle
+  // bölünüyor — "aynı servis, biri yeter" burada YANLIŞ olurdu.
+  invoiceSales: { not: "InvoiceService.create: cari + tek kalem.", yarat: async () => finansFatura("SALES") },
+  invoicePurchase: { not: "InvoiceService.create (alış).", yarat: async () => finansFatura("PURCHASE") },
+  invoiceSalesReturn: { not: "InvoiceService.create (satış iade).", yarat: async () => finansFatura("SALES_RETURN") },
+  invoicePurchaseReturn: { not: "InvoiceService.create (alış iade).", yarat: async () => finansFatura("PURCHASE_RETURN") },
+  paymentIn: { not: "PaymentService.create: cari + kasa + tutar (tahsilat).", yarat: async () => finansOdeme("IN") },
+  paymentOut: { not: "PaymentService.create (ödeme).", yarat: async () => finansOdeme("OUT") },
+  chequeReceived: { not: "ChequeService.create: cari + tutar + vade (alınan çek).", yarat: async () => finansCek("RECEIVED", "CHEQUE") },
+  chequeIssued: { not: "ChequeService.create (verilen çek).", yarat: async () => finansCek("ISSUED", "CHEQUE") },
+  noteReceived: { not: "ChequeService.create (alınan senet).", yarat: async () => finansCek("RECEIVED", "PROMISSORY_NOTE") },
+  noteIssued: { not: "ChequeService.create (verilen senet).", yarat: async () => finansCek("ISSUED", "PROMISSORY_NOTE") },
+  cashTransaction: {
+    not: "CashTransactionService.create: kasa + tutar.",
+    yarat: async () => {
+      if (!finans.kasaId) return null;
+      const r = await cashTransactionService.create({ kind: "INCOME" as never, amount: 7, cashBoxId: finans.kasaId });
+      if (!r.data?.id) return null;
+      finans.cashTxnIds.push(r.data.id);
+      return { id: r.data.id, kod: r.data.docNo };
+    },
+  },
+  chequeDeliveryNote: {
+    not: "ChequeDeliveryNoteService.create: en az bir çek (fikstür kendi çekini açar).",
+    yarat: async () => {
+      const cek = await finansCek("RECEIVED", "CHEQUE");
+      if (!cek) return null;
+      const r = await chequeDeliveryNoteService.create({ chequeIds: [cek.id] } as never);
+      if (!r.data?.id) return null;
+      finans.noteIds.push(r.data.id);
+      return { id: r.data.id, kod: r.data.docNo };
+    },
+  },
+  reconciliationLetter: {
+    not: "ReconciliationLetterService.create: cari hesap (müşteri kartından LAZY açılır).",
+    yarat: async () => {
+      // ⚠️ CARİ HESAP MÜŞTERİ KARTIYLA BİRLİKTE DOĞMAZ, ilk parasal belgede LAZY
+      // açılır (`ensureCariAccountTx`) — o yüzden burada ARANIR, fikstürde
+      // kurulmaz. Fatura/ödeme fikstürleri bu bekçide daha önce koştuğu için
+      // hesap vardır; yoksa iddia kırmızı olur ve sebebi görünür.
+      finans.cariId ??= (await prisma.cariAccount.findFirst({
+        where: { customerId: finans.musteriId ?? "" }, select: { id: true },
+      }))?.id ?? null;
+      if (!finans.cariId) return null;
+      const r = await reconciliationLetterService.create({ cariId: finans.cariId } as never);
+      if (!r.data?.id) return null;
+      finans.letterIds.push(r.data.id);
+      return { id: r.data.id, kod: r.data.docNo };
+    },
+  },
   // ── OKUTULAN AİLE (E2 dilim 5) ────────────────────────────────────────────
   // ⚠️ İş emri fikstürü ÖLÇÜLDÜ, tahmin edilmedi: `WorkOrderCreateInput` yalnız
   // `steps[].stationId` istiyor (rota şablonu verilmezse) — "sipariş + rota + top
@@ -442,9 +706,18 @@ const L2_YOLU: Record<string, L2Yolu> = {
     not: "Kartela kartı kabul anında doğar (KartelaService.receive) — ayrı bir yaratma ucu YOK; aynı zincirden okunur.",
     yarat: async (damga) => (await kartelaTurAl(damga, kwSira++)).swatch,
   },
-  subcontractorDispatch: { not: "Fason sevk: iş emri + FASON adımı + o adıma bağlı top zinciri ister (ölçüldü: `dispatch` WO durumu PLANNED/IN_PROGRESS + stepId + rollIds istiyor); sıradaki dilimde." },
-  subcontractorReceipt: { not: "Fason kabul: önce bir fason SEVKİ ister (aynı zincirin ikinci yarısı); sıradaki dilimde." },
-  directShipment: { not: "Doğrudan sevk: açık bir fason sevki ister (fason zincirinin üstüne biner); sıradaki dilimde." },
+  subcontractorDispatch: {
+    not: "SubcontractorService.dispatch: EXTERNAL adımlı iş emri + serbest stok topu (zincir `fasonTuru`da, üç seri ortak).",
+    yarat: async (damga) => (await fasonTurAl(damga, fdSira++)).dispatch,
+  },
+  subcontractorReceipt: {
+    not: "SubcontractorService.receive: açık fason sevki + dönen top (aynı zincir).",
+    yarat: async (damga) => (await fasonTurAl(damga, frSira++)).receipt,
+  },
+  directShipment: {
+    not: "SubcontractorService.executeDirectShip: açık fason sevki + müşteri + sebep (aynı zincirin ikinci sevki).",
+    yarat: async (damga) => (await fasonTurAl(damga, dsSira++)).direct,
+  },
   weavingOrder: { not: "Dokuma işi: tezgah + levent + çözgü kartı zinciri ister (E2 üretim diliminde AÇILDI; L2 fikstürü sıradaki turda — ölçülecek)." },
   warpBeam: { not: "Levent: çözgü kartı + tezgah zinciri ister (aynı tur)." },
   doffEvent: { not: "Doff: açık tezgah koşusu (MachineRun) ister (aynı tur)." },
@@ -715,10 +988,46 @@ async function main(): Promise<void> {
       select: { id: true },
     });
     okutulan.kartelaFirmaId = kFirma.id;
+    // Fason zinciri: adımın istasyonu EXTERNAL OLMALI (ölçüldü — `dispatch`
+    // başka tipte 400 döner), firma ayrı (kartela firması ile karışmasın) ve
+    // doğrudan sevkte müşteri ZORUNLU.
+    // ⚠️ İKİ AYRI ALAN, İKİ AYRI KAPI (ölçüldü): sevk `station.type === EXTERNAL`
+    // ister, DOĞRUDAN SEVK ise `station.kind === SUBCONTRACTOR` — birini kurup
+    // ötekini unutmak zinciri ikinci halkada düşürür.
+    const dIstasyon = await msCreate(stationService, {
+      name: `${DAMGA} E3 fason istasyon`, type: "EXTERNAL", kind: "SUBCONTRACTOR",
+    });
+    if (dIstasyon) {
+      okutulan.externalStationId = dIstasyon.id;
+      temizlik.push(async () => { await prisma.station.deleteMany({ where: { id: dIstasyon.id } }); });
+    }
+    const fFirma = await prisma.subcontractor.create({
+      data: { code: `${DAMGA}-E3FF`.slice(0, 32), name: `${DAMGA} E3 fason firma`, isActive: true },
+      select: { id: true },
+    });
+    okutulan.fasonFirmaId = fFirma.id;
+    const dMusteri = await msCreate(customerService, { name: `${DAMGA} E3 sevk cari ${++msSayac}` });
+    if (dMusteri) {
+      okutulan.musteriId = dMusteri.id;
+      temizlikCariler.push(dMusteri.id);
+    }
+    // Finans zinciri: cari (cari hesabı LAZY açılır) + kasa.
+    const fMusteri = await msCreate(customerService, { name: `${DAMGA} E3 finans cari ${++msSayac}` });
+    if (fMusteri) {
+      finans.musteriId = fMusteri.id;
+      temizlikCariler.push(fMusteri.id);
+    }
+    const fKasa = await msCreate(cashBoxService, { name: `${DAMGA} E3 finans kasa` });
+    if (fKasa) {
+      finans.kasaId = fKasa.id;
+      temizlik.push(async () => { await prisma.cashBox.deleteMany({ where: { id: fKasa.id } }); });
+    }
 
-    check("L2 körlük zemini: bağlı fikstürler (istasyon + stok + kartela zinciri) KURULDU",
+    check("L2 körlük zemini: bağlı fikstürler (istasyon + stok + kartela/fason zinciri) KURULDU",
       bagli.stationId !== null && bagli.itemId !== null &&
-      okutulan.warehouseId !== null && okutulan.kartelaFirmaId !== null);
+      okutulan.warehouseId !== null && okutulan.kartelaFirmaId !== null &&
+      okutulan.externalStationId !== null && okutulan.fasonFirmaId !== null &&
+      okutulan.musteriId !== null);
 
     for (const e of acikSeriler) {
       const yol = L2_YOLU[e.key];
@@ -786,11 +1095,105 @@ async function main(): Promise<void> {
       await prisma.kartelaDispatchItem.deleteMany({ where: { dispatchId: { in: okutulan.kartelaDispatchIds } } });
       await prisma.kartelaDispatch.deleteMany({ where: { id: { in: okutulan.kartelaDispatchIds } } });
     }
-    if (okutulan.rollIds.length > 0) {
-      await prisma.roll.deleteMany({ where: { id: { in: okutulan.rollIds } } });
+    // ── FİNANS — yapraktan köke: bordro pivotu → bordro → çek → ödeme → fatura
+    // → kasa fişi → mutabakat → cari hesap. Cari hesap `onDelete: Restrict`
+    // taşıdığı için EN SONDA ve yalnız bu bekçinin açtığı kayıt silinir.
+    // ⚠️ CARİ DEFTERİ ÖNCE: fatura · ödeme · çek satırlarının HEPSİ cari harekete
+    // yazıyor (`cari_transactions_*_fkey`) — belgeyi önce silmek FK ile düşer.
+    // Cari hesap fikstürün müşterisinden ARANIR: ilk parasal belgede lazy açıldı.
+    finans.cariId ??= (await prisma.cariAccount.findFirst({
+      where: { customerId: finans.musteriId ?? "" }, select: { id: true },
+    }))?.id ?? null;
+    if (finans.cariId) {
+      await prisma.cariTransaction.deleteMany({ where: { cariId: finans.cariId } });
     }
-    if (okutulan.kartelaFirmaId) {
-      await prisma.subcontractor.deleteMany({ where: { id: okutulan.kartelaFirmaId } });
+    if (finans.noteIds.length > 0) {
+      await prisma.chequeDeliveryNoteItem.deleteMany({ where: { noteId: { in: finans.noteIds } } });
+      await prisma.chequeDeliveryNote.deleteMany({ where: { id: { in: finans.noteIds } } });
+    }
+    if (finans.chequeIds.length > 0) {
+      await prisma.chequeEvent.deleteMany({ where: { chequeId: { in: finans.chequeIds } } });
+      await prisma.cheque.deleteMany({ where: { id: { in: finans.chequeIds } } });
+    }
+    if (finans.paymentIds.length > 0) {
+      await prisma.paymentAllocation.deleteMany({ where: { paymentId: { in: finans.paymentIds } } });
+      // ⚠️ NAKİT TAHSİLAT KASA FİŞİ DOĞURUR (`cash_transactions_paymentId_fkey`):
+      // ödemeyi silmeden önce onun doğurduğu fiş de silinir. Fikstürün kendi
+      // listesinde olmayan bu satırı bağdan bulmak, FK'yı tek tek kovalamaktan
+      // daha dürüst — hangi satırın nereden doğduğu ŞEMADA yazılı.
+      await prisma.cashTransaction.deleteMany({ where: { paymentId: { in: finans.paymentIds } } });
+      await prisma.payment.deleteMany({ where: { id: { in: finans.paymentIds } } });
+    }
+    if (finans.invoiceIds.length > 0) {
+      await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: finans.invoiceIds } } });
+      await prisma.invoice.deleteMany({ where: { id: { in: finans.invoiceIds } } });
+    }
+    if (finans.cashTxnIds.length > 0) {
+      await prisma.cashTransaction.deleteMany({ where: { id: { in: finans.cashTxnIds } } });
+    }
+    if (finans.letterIds.length > 0) {
+      await prisma.reconciliationLetter.deleteMany({ where: { id: { in: finans.letterIds } } });
+    }
+    if (finans.cariId) {
+      await prisma.cariTransaction.deleteMany({ where: { cariId: finans.cariId } });
+      await prisma.cariAccount.deleteMany({ where: { id: finans.cariId } });
+    }
+
+    if (okutulan.directShipmentIds.length > 0) {
+      // Doğrudan sevkin KALEMİ yok: toplar doğrudan bağlanıyor (`rolls Roll[]`),
+      // o yüzden önce bağ koparılır, sonra belge silinir.
+      await prisma.roll.updateMany({
+        where: { directShipmentId: { in: okutulan.directShipmentIds } },
+        data: { directShipmentId: null },
+      });
+      await prisma.directShipment.deleteMany({ where: { id: { in: okutulan.directShipmentIds } } });
+    }
+    if (okutulan.fasonReceiptIds.length > 0) {
+      await prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: okutulan.fasonReceiptIds } } });
+      await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: okutulan.fasonReceiptIds } } });
+    }
+    if (okutulan.fasonDispatchIds.length > 0) {
+      await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: okutulan.fasonDispatchIds } } });
+      await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: okutulan.fasonDispatchIds } } });
+    }
+    // ⚠️ FASON KABULÜ YENİ TOP DOĞURUR ve top iş emrine DOĞRUDAN bağlı değildir
+    // (`currentStepId → WorkOrderStep`, soyağacı `parentRollId`). Çocuklar ÖNCE
+    // silinir: ebeveyni silmek `RollLineage` FK'sını ihlal ederdi.
+    // ⚠️ TOPUN DEFTERLERİ ÖNCE: sevk/kabul topa hareket, operasyon ve stok satırı
+    // yazıyor — ölçüldü, `roll_operations_rollId_fkey` teardown'ı düşürdü. Liste
+    // şemadan çıkarıldı (Roll'a `rollId` ile bağlanan her model), tek tek
+    // keşfedilmedi: bir FK'yı kovalayıp ötekini beklemek aynı hatanın tekrarıdır.
+    const topIdleri = [
+      ...okutulan.rollIds,
+      ...(await prisma.roll.findMany({
+        where: {
+          OR: [
+            { parentRollId: { in: okutulan.rollIds } },
+            ...(okutulan.workOrderIds.length > 0
+              ? [{ currentStep: { workOrderId: { in: okutulan.workOrderIds } } }]
+              : []),
+          ],
+        },
+        select: { id: true },
+      })).map((r) => r.id),
+    ];
+    if (topIdleri.length > 0) {
+      await prisma.rollOperation.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollMovement.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollProperty.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollError.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollVariance.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollPlanDeviation.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.rollReturn.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.stockCountLine.deleteMany({ where: { rollId: { in: topIdleri } } });
+      await prisma.roll.deleteMany({ where: { id: { in: topIdleri } } });
+    }
+    if (okutulan.workOrderIds.length > 0) {
+      await prisma.batch.deleteMany({ where: { workOrderId: { in: okutulan.workOrderIds } } });
+    }
+    for (const id of [okutulan.kartelaFirmaId, okutulan.fasonFirmaId]) {
+      if (id) await prisma.subcontractor.deleteMany({ where: { id } });
     }
     if (okutulan.workOrderIds.length > 0) {
       await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: okutulan.workOrderIds } } });

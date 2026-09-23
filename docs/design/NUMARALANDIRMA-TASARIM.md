@@ -82,3 +82,32 @@ Kod üretimi: `seriesPrefix()` sabit başı kurar (`prefix [sep] [tarih] [sep]`)
     - **Örnek kodları elle yazmaya devam etmek** — biçim veri olduğu an her literal bir zaman bombası; ölçüldü (68 literal) ve cırcırla dondu.
     - **İçe aktarımda kapıları atlayan bir mod** — paketin hedefteki canlı numaralandırmayı değiştirmesi panelden değiştirmekle AYNI şeydir; tam olarak o kapılar sahadaki barkodun okunamaz hâle gelmesini engelliyor.
   - **AÇIK BORÇ:** `number_series` biçim kolonlarının kaldırılması (zaman çizgisi tek gerçek olduğuna göre önbellek bir gün gereksizleşebilir). Ölçülebilir koşul: `resolveSeriesFormat` çağrılarının HİÇBİRİ senkron olmak zorunda kalmadığında — bugün önbellek senkron okuma içindir, kaldırmak her çağrı yerini `async` yapardı.
+
+- **Faz E (indi, 2026-09-23) — KAPANDI.** Amaç: "her seri tamamen özelleştirilebilir olsun; geriye dönük uyumluluk kesinlikle olmalı, bir kod değişince eski verileri bozmamalı" (kullanıcı). **SAYAÇ kilidi 13 → 0; kataloğun 52 serisinin hepsi ya açık ya da ÖLÇÜLMÜŞ bir yapısal gerekçeyle kilitli.**
+  - **YAPILDI**
+    - **E1** kilit metinleri, hata yüzeyi ve önizleme: kilit cümlesi TEK KAYNAK (neden · ne zaman açılır · eylem kimde), jargon kaldırıldı, bekleyen değişiklik iptal edilebilir, emekli ön ek hijyeni (veri düzeltme + CHECK).
+    - **E2** SAYAÇ kilidinin kaldırılması, alan alan: depo-ticaret → master veri → üretim → okutulan aile → finans. Her seride üreteç ortak C0 yoluna (`nextSeriesNo`/`nextSeriesSeq`) geçti ve yükleyici DOĞUŞ ANINI taşır — çağrının doğru fonksiyona yapılması yetmez, satırın biçimi de ölçülür (`directShipment` çağrıyı yapıyordu ama çıplak string döndürdüğü için kapsam damgası SESSİZCE kapalıydı).
+    - **E3** geriye dönük uyumluluk matrisi (`test_number_series_geri_uyumluluk`, 225 kontrol): **L0** beyan ↔ gerçek (her serinin üreteci ADIYLA ölçülür; `scopedCounter.uretec` bir yol ya da YOL LİSTESİ olabilir — `workOrder` ve `subcontractorDispatch`in İKİ üreteci var), **L1** biçim ekseni (49 seri × her dönüşüm = 921 dönüşüm; eski kod tanınmaya devam eder, yeni kod geçerlidir, sayaç ilk BOŞ sıradan başlar), **L2** kayıt ekseni (49 açık serinin 49'u GERÇEK kayıtla, servis yolundan).
+    - **E4** İSTEMCİ kilidi SERİ düzeyinden EKSEN düzeyine indi: hangi alanın eski istemciyi kırdığı ölçülür, kırılmayan eksen bugün serbesttir.
+  - **KALAN KİLİTLER (tamamı ölçülmüş)**
+    - **YAPISAL (2)** — küme KAPALI: `roll` (top barkodunda tarih ile sıra ARASINDA duran faz harfi `H`/`F` + `RollBarcodeCounter` anahtarı) · `batchDaily` (P01…P99 fiziksel plaka seti, körlemesine sarar). Gerekçesi çürüyen kilit, kilit değil KALINTIDIR ve kaldırılır — `returnDoc` ve `workOrder` bu yüzden kümeden çıktı.
+    - **İSTEMCİ (eksen düzeyinde)** — `test_eski_istemci_okutma` sahadaki panel 1.3.1 ve tablet 1.0.6/1.0.7 sınıflandırıcılarını git'ten kurup simüle ederek ÖLÇTÜ:
+
+      | Seri | Eski istemcide KIRILAN eksen(ler) | Bugün serbest |
+      |---|---|---|
+      | `sack` (çuval) | ön ek · tarih · hane · ayraç · ikinci ayraç | — (tablet `/^CV\d{10}$/` ile tanıyor) |
+      | `workOrder` (iş emri / refakat kartı) | ön ek · ayraç | tarih · hane · ikinci ayraç |
+      | `swatch` (kartela kartı) | ön ek | tarih · hane · iki ayraç |
+      | `subcontractorDispatch` · `subcontractorReceipt` | ön ek | tarih · hane · iki ayraç |
+      | `kartelaDispatch` · `kartelaReceipt` | ön ek | tarih · hane · iki ayraç |
+      | `shipment` (sevkiyat) | — (hiçbiri) | hepsi |
+
+      **Açılma koşulu:** sahadaki **panel 1.3.1'in ÜSTÜNE** ve **tablet 1.0.8 ya da üstüne** çıkılıp kurulması. Tablette eşik 1.0.7 DEĞİL 1.0.8'dir ve bu ölçülmüştür: `1.0.7` etiketi Faz B'yi taşımayan bir commit'i de kapsıyor, yani o sürüm atlanır.
+  - **KAPILAR (hepsi fail-closed, hepsi negatif sondayla doğrulandı)**
+    - **① karakter kümesi · ② hane ve KOLON KAPASİTESİ** — kod hedef kolona sığmalı (`packingLotCode` + 8 hane = 17 karakter, kolon `VarChar(16)`: o ayardan sonra hiçbir sevk partisi açılamazdı).
+    - **③ tarama uzayında ön ek çakışması** + **③a SONUÇ KAPISI** — ölçüt ön ek EŞİTLİĞİ değil, üretilen kodun NEYE ÇÖZÜLDÜĞÜ: okutulmayan bir seri de tarama uzayına düşen kod üretebilir. Devralınan çakışma serinin BÜTÜN zaman çizgisinden (yürürlükteki + emekli + tohum) hesaplanır; yalnız bugüne bakan bir istisna kullanıcıyı kendi eski biçimine dönemez hâle getiriyordu (K24).
+    - **④ paylaşılan kolonda ön ek tekilliği** — aynı `countTable` altındaki iki seri ne eşit ne birinin BAŞLANGICI olan ön ek taşıyabilir, EMEKLİ ön ekler dahil. ③ TARAMA uzayını, ④ SAYAÇ uzayını korur.
+    - **C0 kapsam damgası** ve **C0b/E4 istemci ekseni** — yazma yolu ve yapılandırma paketi ÖNİZLEMESİ aynı üç yüklemden geçer (önizleme eksen kapısını çağırmıyordu: paket "uygulanacak" derken uygulama 400 veriyordu).
+    - **L0 beyan ↔ gerçek** ve **E3 matrisi** ve **eski istemci İKİ YÖNLÜ kapısı** (simülasyonun kırdığı her eksen tabloda VAR · tablodaki her eksen simülasyonda GERÇEKTEN kırılıyor).
+  - **ÖLÇÜLEN BORÇ (kapatılmadı, beyanlı):** kasa kodu (`cashAccount`, ön ek `KS`, okutulmaz) ile kartela sevk belge no (`kartelaDispatch`, ön ek `KS`, okutulur) aynı biçime çözülüyor. Çakışma yıllardır var ve zararsız sayılmış; kapı YENİ ihlali engeller, bugünkü durumu yasaklamaz (yasaklasaydı o serinin hane sayısı bile değiştirilemezdi). Kapatmak bir ÖN EK GÖÇÜ kararıdır ve kullanıcıya aittir.
+  - **AÇIK İŞ:** yok. Kilitlerin açılması artık bir KOD işi değil bir YAYIN işidir (panel + tablet sürümü).

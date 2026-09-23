@@ -38,6 +38,7 @@ import { PrintedDocType, Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
 import { returnService } from "../src/services/return.service";
+import { invoiceService } from "../src/services/invoice.service";
 import { seriesImpactCount } from "../src/services/helpers/series-panel.helper";
 import { PackingGroupService } from "../src/services/packing-group.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
@@ -77,6 +78,7 @@ async function setFlag(key: string, value: Prisma.InputJsonValue): Promise<void>
 
 const sackIds: string[] = [];
 const returnIds: string[] = [];
+const invoiceIds: string[] = [];
 const rollIds: string[] = [];
 const shipmentIds: string[] = [];
 const lotIds: string[] = [];
@@ -294,9 +296,47 @@ async function main(): Promise<void> {
     const belgeSayisi = (await seriesImpactCount("returnDoc")) ?? -1;
     check("§6 ⭐ etki sayısı BELGE sayar, SATIR değil (3 satır → 1 belge)",
       satirSayisi === 3 && belgeSayisi === 1, `${satirSayisi} satır ↔ ${belgeSayisi} belge`);
+    // ── §7 FATURA NUMARASI — ekran ile belge AYNI (E2 finans dilimi) ────────
+    // ⚠️ NEDEN AYRI BİR KOL: fatura numarası DÖRT serinin (satış · alış · iki
+    // iade) PAYLAŞTIĞI tek kolondan (`Invoice.docNo`) doğuyor ve sayaç ön ekle
+    // bölünüyor. Sevkiyat kolları bu yolu hiç koşmuyor; numara üreteci finans
+    // diliminde `nextSeriesNo`a taşındı, yani ekran ↔ belge eşitliği YENİDEN
+    // ölçülmeli — "aynı mekanizma, zaten ölçüldü" varsayımı tam da bu depoda
+    // yanlış çıkan varsayım sınıfıdır.
+    const faturaMusteri = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+    check("§7 zemin: fatura için cari fikstürü hazır", faturaMusteri !== null);
+    const fatura = await invoiceService.createDraft({
+      type: "SALES" as never,
+      customerId,
+      lines: [{ description: "E-belge ölçümü", qty: 1, unit: "m", unitPrice: 10 }],
+    });
+    const faturaId = fatura.data?.id ?? null;
+    invoiceIds.push(...(faturaId ? [faturaId] : []));
+    check("§7 zemin: fatura taslağı numarasıyla doğdu", Boolean(faturaId && fatura.data?.docNo),
+      fatura.data?.docNo ?? "(yok)");
+    if (faturaId && fatura.data?.docNo) {
+      const ekranNo = (await prisma.invoice.findUnique({
+        where: { id: faturaId }, select: { docNo: true },
+      }))?.docNo ?? "";
+      check("§7 ⭐ EKRANIN okuduğu numara üretecin döndürdüğüyle AYNI",
+        ekranNo === fatura.data.docNo, `${fatura.data.docNo} ↔ ${ekranNo}`);
+      const faturaBelge = ((await printedDocumentService.getHtml(
+        PrintedDocType.INVOICE_INTERNAL, faturaId, undefined, { allowDraft: true },
+      )).data?.html) ?? "";
+      check("§7 zemin: fatura belgesi okunabiliyor", faturaBelge.length > 100, `${faturaBelge.length} karakter`);
+      check("§7 ⭐ FATURA NUMARASI belgede BİREBİR geçiyor (programda başka, çıktıda başka DEĞİL)",
+        faturaBelge.includes(ekranNo), ekranNo);
+    }
   } finally {
     // FK sırası: belge → iade → top → çuval → sevkiyat → parti → master veri
-    await prisma.printedDocument.deleteMany({ where: { sourceId: { in: [...shipmentIds, ...returnIds] } } });
+    await prisma.printedDocument.deleteMany({ where: { sourceId: { in: [...shipmentIds, ...returnIds, ...invoiceIds] } } });
+    if (invoiceIds.length > 0) {
+      const faturaCari = await prisma.cariAccount.findFirst({ where: { customerId }, select: { id: true } });
+      if (faturaCari) await prisma.cariTransaction.deleteMany({ where: { cariId: faturaCari.id } });
+      await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+      await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+      if (faturaCari) await prisma.cariAccount.deleteMany({ where: { id: faturaCari.id } });
+    }
     await prisma.warehouseMovement.deleteMany({ where: { rollReturnId: { in: returnIds } } });
     await prisma.rollReturn.deleteMany({ where: { id: { in: returnIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });

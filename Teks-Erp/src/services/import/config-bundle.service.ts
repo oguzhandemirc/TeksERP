@@ -32,6 +32,7 @@ import { PermissionManagementService } from "../permission-management.service";
 import { upperTr } from "../../utils/tr-case";
 import { NUMBER_SERIES_CATALOG } from "../../constants/number-series-catalog";
 import { previewSeriesCode, resolveSeriesFormat } from "../number-series.service";
+import { assertAxesAllowed } from "../helpers/series-client-axes.helper";
 import {
   assertSeriesFormatAllowed,
   assertSeriesFormatWritable,
@@ -422,7 +423,7 @@ async function writeNumberSeries(item: BundleItem, userId?: string): Promise<voi
  * strateji SESSİZCE başka bir şey yapmaz, ne yaptığını SÖYLER.
  *
  * ⚠️ KAPILAR BURADA KURU KOŞULUR: yazma yolunun çağırdığı ile BİREBİR aynı iki
- * yüklem (`assertSeriesFormatWritable` + `assertSeriesFormatAllowed`). Önizleme
+ * yüklem (`assertSeriesFormatWritable` + `assertAxesAllowed` + `assertSeriesFormatAllowed`). Önizleme
  * kendi kontrol listesini tutsaydı "uygulanacak" deyip 400 alan bir paket
  * üretirdi — ya da tersi, ki daha kötü: kullanıcı engeli görmeden onaylar.
  */
@@ -452,6 +453,13 @@ function planNumberSeries(item: BundleItem, onConflict: ConflictStrategy): Bundl
   try {
     if (!d.formatSame) {
       assertSeriesFormatWritable(item.key);
+      // ⚠️ ÜÇÜNCÜ YÜKLEM — EKSEN KAPISI: `assertSeriesFormatWritable` seri düzeyinde
+      // ancak BEŞ eksen birden kırılıyorsa reddeder; hangi ALANIN değiştiği ancak
+      // DEĞER bilindiğinde sorulabilir. Önizlemede eksikti ve ölçüldü (2026-09-23):
+      // paket "uygulanacak" (OVERWRITE) diyor, yazma 400 veriyordu — kullanıcının
+      // engeli GÖRMEDEN onayladığı hâl, yani bu başlığın kendi yorumunda "daha
+      // kötü" denen yön.
+      assertAxesAllowed(item.key, d.current, d.next);
       const retired =
         d.current.prefix === d.next.prefix
           ? d.current.retiredPrefixes

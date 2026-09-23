@@ -16,6 +16,7 @@ import {
   FAZ_B_ONCESI,
   FAZ_D_ONCESI,
   SCANNED_CLIENT_BREAKING_AXES,
+  firstVersionAbove,
   scanningClientsMissingPhases,
   type SeriesFormatAxis,
 } from "../../config/client-version-policy";
@@ -149,8 +150,8 @@ export function seriesLock(key: string): SeriesLock | null {
         : `Okutulan bir seri: sahadaki eski panel/tablet ${eksenAdlari(kiranEksenler)} ` +
           "değişimini okutamıyor; biçimin diğer parçaları değiştirilebilir.",
       acilma:
-        `Panel ${esik.electron} ve tablet ${esik.mobil} sürümünün ÜSTÜNE çıkıp bu ` +
-        "bilgisayarlara/tabletlere kurulunca açılır.",
+        `Panel ${firstVersionAbove(esik.electron)} ve tablet ${firstVersionAbove(esik.mobil)} ` +
+        "ya da üstü bu bilgisayarlara/tabletlere kurulunca açılır.",
       kimde: "siz",
       lockedAxes: kiranEksenler,
     };

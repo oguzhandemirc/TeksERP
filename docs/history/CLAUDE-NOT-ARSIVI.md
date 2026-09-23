@@ -21,6 +21,84 @@
 
 ---
 
+## 2026-09-23 — Faz E kapanışı: kapı kendi kapanışını söyledi ve SİLİNDİ [ÇEKİRDEK]
+
+Faz E'nin (her seri özelleştirilebilir) bütün dilimleri indi; **SAYAÇ kilidi 13 → 0** ve
+kataloğun 52 serisi ya açık ya da ölçülmüş bir YAPISAL gerekçeyle kilitli (top barkodu · kısa
+parti no). Kalan `ISTEMCI` kilidi eksen düzeyindedir ve açılması artık bir KOD işi değil bir
+YAYIN işidir: sahadaki panel 1.3.1'in ÜSTÜNE, tablet ise **1.0.8 ya da üstüne** çıkmalı — tablette
+eşik 1.0.7 DEĞİL, çünkü o etiket Faz B'yi taşımayan bir commit'i de kapsıyor (d3'ün E4 ölçümü).
+Tam tablo ve gerekçeler `docs/design/NUMARALANDIRMA-TASARIM.md` § Faz E'de.
+
+**`test_number_series_scope §4` SİLİNDİ.** İddia "sayacı hazır OLMAYAN seri düzenlenemez" idi ve
+hedefi keşifle seçtiği için kapanış koşulunu KENDİSİ basıyordu: *"ÖLÇÜLEMEDİ — SAYAÇ kilitli seri
+kalmadı; iddia artık gereksiz."* Ölçecek vaka kalmadığında doğru hareket bölümü silmektir: boş bir
+bölüm bırakmak, hiçbir şey ölçmeyen bir kapıyı canlı gibi göstermek olurdu. Korunan davranış
+kaybolmadı — `updateSeriesFormat`taki `scopedCounter` kapısı duruyor ve beyansız bir seri yarın
+doğarsa `test_number_series_geri_uyumluluk L0` onu ÜRETEÇ düzeyinde yakalar. *Bir kapıyı silmenin
+ön koşulu, korunan davranışı ölçen BAŞKA bir kapıyı adıyla göstermektir.*
+
+**Kapanmayan borç beyanlı kaldı:** kasa kodu (`KS`, okutulmaz) ile kartela sevk belge no (`KS`,
+okutulur) aynı biçime çözülüyor. Kapı YENİ ihlali engeller, bugünkü durumu yasaklamaz; kapatmak bir
+ÖN EK GÖÇÜ kararıdır ve kullanıcıya aittir.
+
+## 2026-09-23 — E2 finans dilimi: son 13 seri açıldı, 52/52 tamam [ÇEKİRDEK]
+
+Fatura (satış · alış · iki iade) · tahsilat · ödeme · kasa fişi · çek ve senet (alınan/verilen) ·
+çek teslim bordrosu · mutabakat mektubu C0 yoluna geçti. **SAYAÇ kilidi 13 → 0**; kataloğun 52
+serisinin tamamı ya açık ya da ölçülmüş bir YAPISAL gerekçeyle kilitli (top barkodu · kısa parti no).
+
+**Altı üreteç, tek desen.** Fatura/ödeme/çek üreteçleri anahtarı PARAMETREDEN alıyor
+(`INVOICE_SERIES[type]` · yön · `DOC_SERIES[kind][docType]`), yani `BaseService.nextAutoCode`
+sınıfında: beyan üretecin YERİNİ söyler, kapı orayı ölçer. Kasa fişi · bordro · mutabakat literal.
+
+**Yeni kapı ④ — PAYLAŞILAN KOLONDA ÖN EK TEKİLLİĞİ.** Üç kolon paylaşılıyor: `Invoice.docNo`
+(SF · AF · SI · AI), `Payment.docNo` (TH · OD), `Cheque.docNo` (CKA · CKV · SNA · SNV). Sayaç ön
+ekle bölündüğü için iki serinin aynı ön eke düşmesi, ayrışan `formatChangedAt` damgalarıyla
+MÜKERRER kod üretir (`@unique` P2002 → atlama → numarada boşluk → sınırda 409). Kapı: ne eşit ne
+birinin başlangıcı, **emekli ön ekler dahil** (1e eklemesi: kardeşin dünkü ön ekine geçmek onun
+eski belgelerini bu serinin sayacına karıştırır). Bugünkü ihlal ÖLÇÜLDÜ: sıfır — kapı doğduğu gün
+yeşil, grandfathering borcu yok. Tarama çakışmasından AYRI bir uzay olduğu için ayrı dosyada
+(`series-scan-outcome.helper.ts`).
+
+**L2 tamamlandı: 49 açık serinin 49'u gerçek kayıtla ölçülüyor** (225 kontrol). Dört fatura türü
+DÖRT AYRI kayıt yaratıyor — "aynı servis, temsilci yeter" reddedildi, çünkü tür ön eki belirliyor
+ve dört tür dört ayrı sayaç uzayı. Ölçülen teardown tuzakları: cari hareket satırları fatura ·
+ödeme · çekin HEPSİNE FK ile bağlı (belgeden önce silinir) ve nakit tahsilat kendi kasa fişini
+doğuruyor (`cash_transactions_paymentId_fkey`).
+
+**Fatura numarası belge ↔ ekran ölçüldü** (`test_belge_ekran_ayni §7`): numara dört serinin
+paylaştığı kolondan doğuyor, yani sevkiyat kollarının ölçtüğü yol değil — "aynı mekanizma, zaten
+ölçüldü" varsayımı bu depoda defalarca yanlış çıktı.
+
+## 2026-09-23 — K24: eski biçime dönüş + fason zincirinin L2'ye girmesi [ÇEKİRDEK]
+
+**K24 — tek yönlü kapı.** d3 on beş master serinin tam turunu koştururken kasa kodunda takıldı:
+`KS → KSZ` değişimi kabul ediliyor ama `KSZ → KS` dönüşü 409 `NUMBER_SERIES_SCAN_COLLISION`
+veriyordu ("Kartela sevk belge no sanılır"). Kök neden, devralınan çakışma istisnasının yalnız
+YÜRÜRLÜKTEKİ biçime bakmasıydı: seri `KSZ` iken `KS` "yeni bir çakışma" sayılıyordu. Sonuç, bir
+kez değiştiren kullanıcının kendi varsayılanına dönememesiydi. İstisna serinin bütün zaman
+çizgisine genişletildi — yürürlükteki biçim + emekli biçimler (`number_series_lines`) + katalog
+tohumu. Ölçüt: *o biçimle üretilmiş kodlar dünyada zaten var mı?* Hiç kullanılmamış çakışan bir
+şekil (kasa için `KRT`) yine reddediliyor. Kasa ön ekinin kartela sevkiyle çakışması ayrı ve
+beyanlı bir borçtur; bu karar onu değiştirmez.
+
+**⚠️ SONDA DERSİ — ısırmayan sonda, kurulmamış durumun işareti olabilir.** §5b'nin ilk yazımı
+seriyi `KS`te bırakıp doğrudan "KS kabul edilmeli" diyordu; düzeltme geri alındığında bile YEŞİL
+kaldı, çünkü "bugünkü biçim" zaten `KS`ti ve eski dar istisna da onu geçiriyordu. İddia vakumendi.
+İkinci yazım seriyi GERÇEKTEN `KSZ`ye taşıyor, taşındığını ayrı bir körlük zemini iddiasıyla ölçüyor
+ve geri almayı doğrudan yazmayla (ölçülen kod yolundan DEĞİL) yapıyor — düzeltme bozulursa teardown
+da düşerdi ve artık bırakırdı.
+
+**Fason zinciri L2'ye girdi.** Fason sevk · fason kabul · doğrudan sevk için gerçek kayıt yolu
+kuruldu (EXTERNAL adımlı iş emri + depodaki serbest stok topu → sevk → kabul; ikinci sevk doğrudan
+sevk edilir). Ölçülen iki tuzak: ① istasyonun `type` alanı EXTERNAL olmalı ama doğrudan sevk ayrıca
+`kind === SUBCONTRACTOR` istiyor — birini kurup ötekini unutmak zinciri ikinci halkada düşürür ·
+② fason kabulü YENİ top doğurur ve top iş emrine doğrudan bağlı değildir (`currentStepId` +
+`parentRollId`), üstelik topun kendi defterleri (`RollOperation`, `RollMovement`, …) FK ile
+teardown'ı düşürür; silme listesi şemadan çıkarıldı, FK'lar tek tek kovalanmadı. Matris 148 → 160
+kontrol; L1'de kalan seri sayısı 6 → 3 (sevkiyat · iade belgesi · depo transferi).
+
 ## 2026-09-23 — E2 okutulan aile dilimi: yedi seri açıldı, kilit SERİDEN EKSENE indi [ÇEKİRDEK]
 
 İş emri/refakat kartı · kartela kart no · fason sevk/kabul · kartela sevk/kabul · doğrudan sevk
@@ -11602,6 +11680,25 @@ görünmesin). İki sonda: çağrı modül düzeyine konunca dosya:satır ile KI
 **Sınıf:** bu, "türetilebilen türetilir" kuralının ikinci yarısıdır — TÜRETMENİN ZAMANI da kuralın
 parçasıdır. Doğru yerden okunan ama YANLIŞ ANDA okunan bir değer, literal kadar bayattır.
 
+## 2026-09-23 — Gümrük/İhracat No yedek değer uydurmaz, yurtiçinde görünmez (K15) [ÇEKİRDEK]
+
+**Bulgu (e2e SK3 görüntüsü):** Sevk Kapısı içerik panelinde YURTİÇİ planlı sevkiyatta "Gümrük/İhracat No
+MUS2309260046 (varsayılan)" yazıyordu. Ölçüm: kolon `Shipment.procedureCode`; panel üç yerde (içerik paneli
+salt-okur ve düzenleme düğmesi, Sevk Kapısı kartı) `procedureCode || branch.code || customer.code` zinciriyle
+yedek değer ÜRETİYORDU ve bu değer hiçbir yere kaydedilmiyordu. "(varsayılan)" ekrandaki bir yalandı. Belge ve
+muhasebe dışa aktarımı uydurmuyordu. Sevkiyat detayı ise yönden bağımsız gösteriyordu.
+
+**Karar (1e):** (a) yurtiçinde satır gizli; bu, carinin ihracat kodu alanıyla (S6) aynı yüklemdir
+(`exportCodeVisible`). (b) Yurtdışında da cari kodu gümrük numarası olarak varsayılmaz; boşsa "girilmedi"
+yazar. Belgede aynı kural geçerlidir: yurtiçinde basılmaz. Boşsa belge satır BASMAZ; "girilmedi" yazısı resmi
+belgeye girmez, yoksa 6 eski yurtdışı belge yeni satır kazanırdı.
+
+**Eski belge etkisi ölçüldü:** donmuş belge VERİYİ dondurur, render baskı anındaki şablonla yapılır. Fabrika
+yedeğinin kopyasında (`tekserp_d3e2e_test`, 139 sevkiyat: 133 yurtiçi · 6 yurtdışı) procedureCode dolu sevkiyat
+0 → bugün basılı hiçbir belgenin çıktısı değişmez. Sevk Kapısı kartındaki şube/cari kodu (saha #21) kimlik
+olarak kalır; gümrük no ayrı ve "Gümrük:" etiketiyle yalnız yurtdışında ve yalnız kayıtlıysa görünür.
+
+
 ## 2026-09-23 — Çakışma kapısı ÖN EK EŞİTLİĞİNE değil SONUCA bakar (K6) + jargon ve alan mesajı (K2·K5) [ÇEKİRDEK]
 
 **Karar (1e):** ön ek karşılaştırması yanlış soruyu soruyordu. Doğru soru: *bu biçimle üretilecek kod
@@ -11707,6 +11804,7 @@ kaldırılınca (a+d) kolu kırmızı: tarihsiz geçişten sonra dünkü kod tan
 nitelik değiştiren (yürürlüğe giren) artık kalıyor ve BİR SONRAKİ koşumda İLGİSİZ bir bölümü
 düşürüyordu.
 
+
 ## 2026-09-23 — E2 depo-ticaret dilimi: altı seri biçim değişimine AÇILDI [ÇEKİRDEK]
 
 **Açılanlar (SAYAC kilidi kalktı):** çeki listesi (`manifest`, CL — kullanıcının şikâyet ettiği seri)
@@ -11736,23 +11834,6 @@ fikstürü ister ve "bir depoda TEK açık sayım" kuralı yüzünden her çağr
 `manifest`/`goodsReceipt`/`purchaseOrder`/`warehouseTransfer` fikstür maliyeti gerekçesiyle "L1'de
 kaldı" olarak BEYANLI ve kapsam tablosunda görünüyor.
 
-## 2026-09-23 — Gümrük/İhracat No yedek değer uydurmaz, yurtiçinde görünmez (K15) [ÇEKİRDEK]
-
-**Bulgu (e2e SK3 görüntüsü):** Sevk Kapısı içerik panelinde YURTİÇİ planlı sevkiyatta "Gümrük/İhracat No
-MUS2309260046 (varsayılan)" yazıyordu. Ölçüm: kolon `Shipment.procedureCode`; panel üç yerde (içerik paneli
-salt-okur ve düzenleme düğmesi, Sevk Kapısı kartı) `procedureCode || branch.code || customer.code` zinciriyle
-yedek değer ÜRETİYORDU ve bu değer hiçbir yere kaydedilmiyordu. "(varsayılan)" ekrandaki bir yalandı. Belge ve
-muhasebe dışa aktarımı uydurmuyordu. Sevkiyat detayı ise yönden bağımsız gösteriyordu.
-
-**Karar (1e):** (a) yurtiçinde satır gizli; bu, carinin ihracat kodu alanıyla (S6) aynı yüklemdir
-(`exportCodeVisible`). (b) Yurtdışında da cari kodu gümrük numarası olarak varsayılmaz; boşsa "girilmedi"
-yazar. Belgede aynı kural geçerlidir: yurtiçinde basılmaz. Boşsa belge satır BASMAZ; "girilmedi" yazısı resmi
-belgeye girmez, yoksa 6 eski yurtdışı belge yeni satır kazanırdı.
-
-**Eski belge etkisi ölçüldü:** donmuş belge VERİYİ dondurur, render baskı anındaki şablonla yapılır. Fabrika
-yedeğinin kopyasında (`tekserp_d3e2e_test`, 139 sevkiyat: 133 yurtiçi · 6 yurtdışı) procedureCode dolu sevkiyat
-0 → bugün basılı hiçbir belgenin çıktısı değişmez. Sevk Kapısı kartındaki şube/cari kodu (saha #21) kimlik
-olarak kalır; gümrük no ayrı ve "Gümrük:" etiketiyle yalnız yurtdışında ve yalnız kayıtlıysa görünür.
 
 ## 2026-09-23 — E2 master veri dilimi: 15 seri daha AÇILDI, çeki listesi L2'ye girdi [ÇEKİRDEK]
 

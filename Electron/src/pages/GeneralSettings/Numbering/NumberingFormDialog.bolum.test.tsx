@@ -173,6 +173,31 @@ describe("Numaralandırma diyaloğu — ALAN bazında kilit (E4)", () => {
     expect(screen.getByLabelText("Ayraç (ön ek ile tarih arası)")).not.toBeDisabled();
   });
 
+  // ⭐ K25 (2026-09-23): kısmi kilitte satır `editable` olduğu için gerekçe
+  // cümlesi HİÇ çizilmiyordu — kullanıcı pasif bir alan görüyor, sebebini yalnız
+  // TABLO rozetinde bulabiliyordu. Sebep, alanın YANINDA olmalı.
+  // ⭐ NEGATİF SONDA (bu commit): koşuldaki `lockedAxes` kolu kaldırılınca §2b ❌.
+  it("⭐ §2b KISMİ kilitte de GEREKÇE cümlesi çizilir (sebep alanın yanında)", () => {
+    ciz(
+      row({
+        key: "subcontractorDispatch",
+        editable: true,
+        lockKind: "ISTEMCI",
+        lockedAxes: ["prefix"],
+        lockedReason: "Okutulan bir seri: sahadaki eski panel/tablet ön ek değişimini okutamıyor.",
+        lockUnlock: "Panel 1.3.2 ve tablet 1.0.8 ya da üstü kurulunca açılır.",
+      }),
+    );
+    // Cümle SUNUCUDAN gelir; panel yalnız birleştirir (`lockSentence`).
+    expect(screen.getByText(/ön ek değişimini okutamıyor/i)).toBeInTheDocument();
+    expect(screen.getByText(/1\.0\.8 ya da üstü/i)).toBeInTheDocument();
+  });
+
+  it("§2c kilitsiz seride gerekçe cümlesi ÇİZİLMEZ (kapı fazla geniş değil)", () => {
+    ciz(row({ key: "order", editable: true, lockKind: undefined, lockedAxes: undefined }));
+    expect(screen.queryByText(/okutamıyor/i)).toBeNull();
+  });
+
   it("§3 tam kilitte (tüm eksenler) her alan pasif", () => {
     ciz(
       row({

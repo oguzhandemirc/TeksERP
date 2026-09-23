@@ -178,6 +178,9 @@ const DAMGA = `TEST-${process.pid.toString(36).padStart(3, "0").slice(-3)}${Date
 
 async function main(): Promise<void> {
   const fixtureLines: string[] = [];
+  let kasaTasindi = false;
+  let emekliDokunulan: string | null = null;
+  let emekliOnceki: string[] = [];
   const fixtureGroups: string[] = [];
   const fixtureInvoices: string[] = [];
   let fixtureCari: string | null = null;
@@ -875,8 +878,14 @@ async function main(): Promise<void> {
     sayacDokunulan.push("packingLotCode");
     const pFull = seriesPrefix(resolveSeriesFormat("packingLotCode"), new Date());
     if (musteri) {
+      // ⚠️ ÖNCEKİ KOŞUMUN ARTIĞI TEMİZLENİR: bu fikstürün kodu SABİT (`…0009`)
+      // ve `@unique` — çöken bir koşum satırı bırakırsa sonraki koşum P2002 ile
+      // DÜŞER, üstelik ölçtüğü şeyle ilgisiz bir sebepten. Sabit kimlikli her
+      // fikstür, kendi artığına karşı da dayanıklı olmak zorundadır.
+      const tukKod = `${pFull}0009`.slice(0, 16);
+      await prisma.packingGroup.deleteMany({ where: { code: tukKod } });
       fixtureGroups.push((await prisma.packingGroup.create({
-        data: { customerId: musteri.id, name: `${DAMGA} tük`, code: `${pFull}0009`.slice(0, 16) },
+        data: { customerId: musteri.id, name: `${DAMGA} tük`, code: tukKod },
         select: { id: true },
       })).id);
     }
@@ -1214,7 +1223,148 @@ async function main(): Promise<void> {
     check("§5 ⭐ önizleme yolu ÇAKIŞMAYI da yakalar (kullanıcı kaydetmeden önce görür)",
       c instanceof Error && kod(c) === "NUMBER_SERIES_PREFIX_COLLISION",
       c instanceof Error ? (kod(c) ?? c.message) : "KABUL EDİLDİ");
+
+    // ── §5c PAYLAŞILAN KOLON — ÖN EK TEKİLLİĞİ (kapı ④) ──────────────────
+    // Fatura · ödeme · çek/senet serileri AYNI `docNo` kolonunu ÖN EKLE bölüyor
+    // ve üreteç sırayı `startsWith: <ön ek + tarih>` taramasıyla buluyor. İki
+    // seri aynı ön eke düşerse kapsam damgaları ayrışır, ikisi aynı kodu
+    // üretebilir ve `@unique` P2002 verir.
+    //
+    // ⚠️ HEDEF KEŞİFLE: paylaşılan kolonu olan İLK seri çifti katalogdan bulunur.
+    // Böyle bir çift kalmazsa iddia ÖLÇÜLEMEZ ve bunu söyler.
+    const paylasimlar = new Map<string, string[]>();
+    for (const e of NUMBER_SERIES_CATALOG) {
+      if (!e.countTable) continue;
+      const anahtar = `${e.countTable.model}.${e.countTable.field}`;
+      paylasimlar.set(anahtar, [...(paylasimlar.get(anahtar) ?? []), e.key]);
+    }
+    const paylasilan = [...paylasimlar.values()].find((lst) => lst.length > 1);
+    if (!paylasilan) {
+      console.log("⏭️  §5c ÖLÇÜLEMEDİ — aynı kolonu paylaşan seri çifti kalmadı.");
+    } else {
+      const [aKey, bKey] = paylasilan as [string, string];
+      const aFmt = resolveSeriesFormat(aKey);
+      const bFmt = resolveSeriesFormat(bKey);
+      check(`§5c körlük zemini: paylaşılan kolon GERÇEKTEN var (${aKey} ↔ ${bKey})`,
+        aFmt.prefix !== bFmt.prefix, `${aFmt.prefix} / ${bFmt.prefix}`);
+      // (a) KARDEŞİN ÖN EKİNE geçmek REDDEDİLİR.
+      const esit = dene(async () =>
+        assertSeriesFormatAllowed(aKey, {
+          prefix: bFmt.prefix, dateSegment: aFmt.dateSegment, digits: aFmt.digits,
+          separator: aFmt.separator, retiredPrefixes: [],
+        }),
+      );
+      const es = await esit;
+      check("§5c ⭐ aynı kolonu paylaşan iki seri AYNI ön eki taşıyamaz",
+        es instanceof Error && kod(es) === "NUMBER_SERIES_SHARED_TABLE_PREFIX",
+        es instanceof Error ? (kod(es) ?? es.message) : "KABUL EDİLDİ");
+      // (b) KARDEŞİN ÖN EKİNİN BAŞLANGICI olmak da reddedilir (`SF` ↔ `S`).
+      const basi = dene(async () =>
+        assertSeriesFormatAllowed(aKey, {
+          prefix: bFmt.prefix.slice(0, 1), dateSegment: aFmt.dateSegment, digits: aFmt.digits,
+          separator: aFmt.separator, retiredPrefixes: [],
+        }),
+      );
+      const bs = await basi;
+      check("§5c ⭐ kardeşin ön ekinin BAŞLANGICI olmak da reddedilir",
+        bs instanceof Error && kod(bs) === "NUMBER_SERIES_SHARED_TABLE_PREFIX",
+        bs instanceof Error ? (kod(bs) ?? bs.message) : "KABUL EDİLDİ");
+      // (c) KARDEŞİN EMEKLİ ön eki de karşılaştırmaya girer — kardeşin DÜNKÜ
+      // ön ekine geçmek, onun eski belgelerini bu serinin sayacına karıştırır.
+      const bOnce = await prisma.numberSeries.findUnique({
+        where: { key: bKey }, select: { retiredPrefixes: true },
+      });
+      await prisma.numberSeries.update({
+        where: { key: bKey }, data: { retiredPrefixes: ["ZQX"] },
+      });
+      emekliDokunulan = bKey;
+      emekliOnceki = bOnce?.retiredPrefixes ?? [];
+      await refreshNumberSeriesCache();
+      const emekliCakisma = dene(async () =>
+        assertSeriesFormatAllowed(aKey, {
+          prefix: "ZQX", dateSegment: aFmt.dateSegment, digits: aFmt.digits,
+          separator: aFmt.separator, retiredPrefixes: [],
+        }),
+      );
+      const ec = await emekliCakisma;
+      check("§5c ⭐ kardeşin EMEKLİ ön ekine geçmek de reddedilir (eski belgeler sayaca karışır)",
+        ec instanceof Error && kod(ec) === "NUMBER_SERIES_SHARED_TABLE_PREFIX",
+        ec instanceof Error ? (kod(ec) ?? ec.message) : "KABUL EDİLDİ");
+      // (d) KARŞI KOL — bugünkü ayarlar kapıdan GEÇİYOR (kapı her şeyi reddetmiyor).
+      const bugunku = dene(async () =>
+        assertSeriesFormatAllowed(aKey, {
+          prefix: aFmt.prefix, dateSegment: aFmt.dateSegment, digits: aFmt.digits,
+          separator: aFmt.separator, retiredPrefixes: aFmt.retiredPrefixes,
+        }),
+      );
+      const bg = await bugunku;
+      check("§5c ⭐ bugünkü ayar kapıdan GEÇİYOR (doğduğu gün kırmızı vermiyor)",
+        !(bg instanceof Error), bg instanceof Error ? (kod(bg) ?? bg.message) : "kabul");
+    }
+
+    // ── §5b DEVRALINAN ÇAKIŞMA SERİNİN KENDİ ZAMAN ÇİZGİSİDİR (K24) ───────
+    // Ölçülen saha vakası (d3, 2026-09-23): kasa kodu `KS → KSZ` yapıldıktan
+    // SONRA `KS`e geri dönülemiyordu — devralınan istisnası yalnız YÜRÜRLÜKTEKİ
+    // biçime bakıyordu. Kasa kodu okutulmaz ama ürettiği kod kartela sevk belge
+    // no biçimine uyar; bu çakışma yıllardır var ve beyanlı.
+    //
+    // ⚠️ İDDİA SERİYİ GERÇEKTEN `KSZ`YE TAŞIR ve bu ölçülerek öğrenildi: ilk
+    // yazımda seri `KS`te kalıyordu, yani "bugünkü biçim" zaten `KS`ti ve
+    // DÜZELTME GERİ ALINDIĞINDA BİLE iddia yeşil kalıyordu — vakumen bir kontrol.
+    // *Bir sondanın ısırmaması, korunan durumun sondada hiç kurulmamış olmasının
+    // da işareti olabilir.*
+    const kasaOnce = resolveSeriesFormat("cashAccount");
+    check("§5b körlük zemini: kasa serisi çakışan tohumu (`KS`) taşıyor",
+      kasaOnce.prefix === "KS", kasaOnce.prefix);
+    await updateSeriesFormat("cashAccount", {
+      prefix: "KSZ", dateSegment: kasaOnce.dateSegment, digits: kasaOnce.digits,
+      separator: kasaOnce.separator, separator2: kasaOnce.separator2 ?? null,
+    });
+    kasaTasindi = true;
+    await refreshNumberSeriesCache();
+    check("§5b körlük zemini: seri GERÇEKTEN taşındı (iddia vakumen değil)",
+      resolveSeriesFormat("cashAccount").prefix === "KSZ",
+      resolveSeriesFormat("cashAccount").prefix);
+    const gd = await dene(async () =>
+      assertSeriesFormatAllowed("cashAccount", {
+        prefix: "KS", dateSegment: kasaOnce.dateSegment, digits: kasaOnce.digits,
+        separator: kasaOnce.separator, retiredPrefixes: ["KSZ"],
+      }),
+    );
+    check("§5b ⭐ KENDİ eski biçimine DÖNÜŞ kabul edilir (o kodlar dünyada zaten var)",
+      !(gd instanceof Error), gd instanceof Error ? (kod(gd) ?? gd.message) : "kabul");
+    // KARŞI KOL — hiç kullanılmamış, çakışan başka bir şekil YİNE reddedilmeli.
+    // `KRT` kartela KART no'nun ön ekidir: kasa bu şekle hiç girmedi.
+    const yc = await dene(async () =>
+      assertSeriesFormatAllowed("cashAccount", {
+        prefix: "KRT", dateSegment: kasaOnce.dateSegment, digits: kasaOnce.digits,
+        separator: kasaOnce.separator, retiredPrefixes: [],
+      }),
+    );
+    check("§5b ⭐ hiç kullanılmamış çakışan şekil YİNE reddedilir (istisna genişlemedi)",
+      yc instanceof Error && kod(yc) === "NUMBER_SERIES_SCAN_COLLISION",
+      yc instanceof Error ? (kod(yc) ?? yc.message) : "KABUL EDİLDİ");
   } finally {
+    // ⚠️ KASA SERİSİ GERİ ALINIR ve bu DOĞRUDAN yazmayla yapılır: geri alma bir
+    // TEMİZLİKTİR, ölçülen kod yolu DEĞİL — `updateSeriesFormat` üzerinden geri
+    // dönmek, düzeltme bozulduğunda teardown'ı da düşürür ve artık bırakırdı.
+    // §5c'nin dokunduğu emekli listesi ID/DEĞER ile geri alınır.
+    if (emekliDokunulan) {
+      await prisma.numberSeries.update({
+        where: { key: emekliDokunulan }, data: { retiredPrefixes: emekliOnceki },
+      });
+      await refreshNumberSeriesCache();
+    }
+    if (kasaTasindi) {
+      await prisma.numberSeriesLine.deleteMany({
+        where: { seriesKey: "cashAccount", prefix: "KSZ" },
+      });
+      await prisma.numberSeries.update({
+        where: { key: "cashAccount" },
+        data: { prefix: "KS", retiredPrefixes: [] },
+      });
+      await refreshNumberSeriesCache();
+    }
     if (fixtureLines.length > 0) {
       await prisma.numberSeriesLine.deleteMany({ where: { id: { in: fixtureLines } } });
       await refreshNumberSeriesCache();

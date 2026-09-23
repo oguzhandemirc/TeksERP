@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **166 başlık / 12 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **168 başlık / 12 dosya**
 (ölçüldü 2026-09-23; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 ⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
@@ -130,6 +130,7 @@ açan kişi tabloyu yine baştan sona okur.**
 |  | § İki rejimli bekçi — tam kapsam tek koşumda ölçülemez | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 |  | § Bir işin "başarıyla bitti"si, SARMALAYICININ çıkış kodudur | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 |  | § Fikstürünü kendi kuran bekçi, KURDUĞUNU da ölçmek zorundadır | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
+|  | § Kaynağı tarayan bir yüklem KODU ölçer, kuralın ANLATIMINI değil | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 |  | § Bir ortamı TARİF etmek, onu ARAMAK değildir | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 |  | § Bir örneklem yanlılığının VARLIĞINI bilmek, YÖNÜNÜ bilmek değildir | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 |  | § Bir kümeyi YAZARININ İZİNDEN bölersen, ölçtüğün şey yazardır | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
@@ -193,6 +194,7 @@ açan kişi tabloyu yine baştan sona okur.**
 |  | § Bir bekçinin KENDİ yeşili, KAPIDAN geçeceğini söylemez — "koştu" ≠ "derlendi" | (`OLCUM-DISIPLINI-KAPI.md`) |
 |  | § Kapının ölüm biçimleri | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
 |  | § ⑦ Kapı, koruduğu şeyle ilgisiz bir sebeple sessizce ölebilir | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
+|  | § ⑨ HEDEF BAYATLIĞI — dünya değişir, kapının elle seçtiği örnek bayatlar | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
 |  | § Yerel yeşil, BAŞKASININ commit edilmemiş düzeltmesi olabilir | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
 |  | § Kapsam: yalnız bekçi değil, AĞACI OKUYAN HER ARAÇ | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
 |  | § En ağır biçimi: KANCAYA yapılan commit'siz değişiklik | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
@@ -214,10 +216,10 @@ açan kişi tabloyu yine baştan sona okur.**
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (16 başlık) |
 | [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (4 başlık) |
 | [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (6 başlık) |
-| [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (33 başlık) |
+| [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (34 başlık) |
 | [`OLCUM-DISIPLINI-SONDA.md`](OLCUM-DISIPLINI-SONDA.md) | SINIFLAR'ın SONDA GEÇERLİLİĞİ ailesi (5 başlık) |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — PAYLAŞILAN AĞAÇ, ÇOK OTURUM (8 başlık) |
 | [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (33 başlık) |
 | [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | ölçümü KAPIYA çevirmek (11 başlık) |
-| [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) | kapının ÖLÜMÜ, kırmızının okunması (12 başlık) |
+| [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) | kapının ÖLÜMÜ, kırmızının okunması (13 başlık) |
 
