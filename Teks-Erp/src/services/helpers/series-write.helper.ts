@@ -171,11 +171,24 @@ export async function updateSeriesFormat(
       : [...new Set([...current.retiredPrefixes, current.prefix])];
   assertSeriesFormatAllowed(key, { ...next, retiredPrefixes: retired });
 
-  const row = await prisma.numberSeries.update({
-    where: { key },
-    // `formatChangedAt` sayacın KAPSAM sınırıdır: bundan sonraki numaralar yalnız
-    // bu andan sonra doğan kodlara bakar (eski rejim sayaca giremez).
-    data: { ...next, retiredPrefixes: retired, formatChangedAt: new Date(), updatedById: userId ?? null },
+  // ⚠️ TEK YAZAR, TEK TX: biçim artık İKİ yerde duruyor — zaman çizgisi
+  // (`number_series_lines`, gerçek kaynak) ve `number_series` kolonları
+  // (yürürlükteki satırın ÖNBELLEĞİ). İkisini ayrı yazmak, aralarında bir hata
+  // olduğunda "satır yeni biçimde ama önbellek eskide" diye AYRIŞAN BİR YÜZEY
+  // bırakırdı; tx ikisini birlikte ya yazar ya yazmaz.
+  const at = new Date();
+  const row = await prisma.$transaction(async (tx) => {
+    await tx.numberSeriesLine.create({
+      data: { seriesKey: key, ...next, effectiveFrom: at, isSentinel: false },
+    });
+    return tx.numberSeries.update({
+      where: { key },
+      // `formatChangedAt` sayacın KAPSAM sınırıdır: bundan sonraki numaralar yalnız
+      // bu andan sonra doğan kodlara bakar (eski rejim sayaca giremez). Yürürlükteki
+      // satırın `effectiveFrom`u ile AYNI an olmak zorunda — ikisi ayrışırsa sayaç
+      // kapsamı ile biçim geçişi farklı anlardan başlardı.
+      data: { ...next, retiredPrefixes: retired, formatChangedAt: at, updatedById: userId ?? null },
+    });
   });
   await refreshNumberSeriesCache();
   // Biçim değişikliği bir İŞ KARARIDIR (bundan sonraki her belgenin numarası değişir),

@@ -5048,6 +5048,41 @@ model SystemSetting {
 
 /// Kodun içindeki tarih parçası. Sayaç sıfırlama dönemini de BU belirler:
 /// DDMMYY → günlük · YYMM/YYYYMM → aylık · YY/YYYY → yıllık · NONE → hiç sıfırlanmaz.
+/// NUMARA SERİSİ BİÇİM SATIRI — Dynamics "No. Series Line" kalıbı (D4①, 2026-09-23).
+///
+/// ⚠️ NEDEN AYRI TABLO: biçim artık bir DEĞER değil bir ZAMAN ÇİZGİSİDİR. İki
+/// ihtiyaç aynı veriyi istiyor: ① "1 Ocak'tan itibaren şu biçim" (ileri tarihli
+/// satır) ② okutulan eski kodun hâlâ TANINMASI (geçmiş satır). `retiredPrefixes`
+/// bu tablonun ilkel hâliydi ve yalnız ÖN EK eksenini koruyordu — hane değişimi
+/// eski kodların sınıflandırmasını kırıyordu (ölçüldü 2026-09-23).
+///
+/// ⚠️ `number_series` üzerindeki biçim kolonları KALDIRILMADI: bu fazda onlar
+/// YÜRÜRLÜKTEKİ satırdan türetilen bir ÖNBELLEKTİR ve tek yazar aynı tx'te ikisini
+/// birden yazar. Kaldırma ayrı faz; ölçülebilir koşulu arşiv notunda.
+model NumberSeriesLine {
+  id        String      @id @default(uuid()) @db.Uuid
+  series    NumberSeries @relation(fields: [seriesKey], references: [key], onDelete: Cascade)
+  seriesKey String      @db.VarChar(64)
+
+  prefix      String                 @db.VarChar(6)
+  dateSegment NumberSeriesDateSegment
+  digits      Int                    @default(4)
+  separator   String                 @default("") @db.VarChar(2)
+
+  /// Bu biçimin YÜRÜRLÜĞE GİRDİĞİ an. Geçmiş satırlarda göç sırasında konan
+  /// SENTİNEL bir tarih olabilir (gerçek geçmiş bilinmiyordu) — `isSentinel` onu
+  /// beyan eder ki rapor "1970'te biçim değişti" demesin.
+  effectiveFrom DateTime @db.Timestamptz
+  isSentinel    Boolean  @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([seriesKey, effectiveFrom])
+  @@index([seriesKey, effectiveFrom])
+  @@map("number_series_lines")
+}
+
 /// Numara kaynağı — `FREE` bugünkü davranış (elle gelirse kabul, gelmezse üret).
 enum NumberSourceMode {
   FREE
@@ -5113,6 +5148,9 @@ model NumberSeries {
 
   updatedById String? @db.Uuid
   updatedBy   User?   @relation(fields: [updatedById], references: [id])
+
+  /// Biçim zaman çizgisi (D4①). Yürürlükteki satır + geçmiş + ileri tarihliler.
+  lines NumberSeriesLine[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz

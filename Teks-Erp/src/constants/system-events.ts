@@ -85,6 +85,8 @@ const IMPORT_EVENTS = {
    * Damgalıdır: bir daha koşmaz, yani bu olay kurulum başına EN ÇOK BİR KEZ görünür.
    */
   NUMBER_SOURCE_MIGRATED: "NUMBER_SOURCE_MIGRATED",
+  /** Biçim kolonları `number_series_lines` tablosuna TEK SEFERLİK taşındı. */
+  NUMBER_SERIES_LINES_MIGRATED: "NUMBER_SERIES_LINES_MIGRATED",
 } as const;
 
 /** Süperadmin, sistem hesabı, modül profili. */

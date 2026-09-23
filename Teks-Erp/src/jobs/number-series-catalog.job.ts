@@ -24,6 +24,8 @@ export interface NumberSeriesReconcileResult {
   existing: number;
   /** Göç BU AÇILIŞTA koştuysa yazılan mod; koşmadıysa `null` (damga vardı). */
   partyCodeAutoMigratedTo: "FREE" | "MANUAL" | null;
+  /** Biçim satırı göçü BU AÇILIŞTA koştuysa yazılan satır sayısı; koşmadıysa `null`. */
+  formatLinesCreated: number | null;
 }
 
 export async function reconcileNumberSeries(): Promise<NumberSeriesReconcileResult> {
@@ -64,6 +66,7 @@ export async function reconcileNumberSeries(): Promise<NumberSeriesReconcileResu
   // (SQL migration'da olsaydı) SESSİZCE no-op olurdu — bu depoda aynı tuzak
   // "WHERE EXISTS no-op" olarak yaşandı (ön kayıt damgası, top sayısı 0).
   const migratedTo = await migratePartyCodeAutoOnce();
+  const lineCount = await migrateFormatLinesOnce();
 
   await refreshNumberSeriesCache();
   if (eksik.length > 0) {
@@ -76,7 +79,12 @@ export async function reconcileNumberSeries(): Promise<NumberSeriesReconcileResu
       payload: { keys: eksik.map((e) => e.key) },
     });
   }
-  return { created: eksik.map((e) => e.key), existing: rows.length, partyCodeAutoMigratedTo: migratedTo };
+  return {
+    created: eksik.map((e) => e.key),
+    existing: rows.length,
+    partyCodeAutoMigratedTo: migratedTo,
+    formatLinesCreated: lineCount,
+  };
 }
 
 /** Göç damgası — BİR KEZ koşar, sonra eski bayrağa bir daha BAKILMAZ. */
@@ -130,4 +138,80 @@ async function migratePartyCodeAutoOnce(): Promise<"FREE" | "MANUAL" | null> {
     payload: { key: "workOrder", mode, eskiBayrak: oldFlag === null ? null : oldFlag.value },
   });
   return mode;
+}
+
+/** Biçim satırı göçü damgası — D3③ kalıbı: BİR KEZ koşar, sonra bakılmaz. */
+export const FORMAT_LINES_MIGRATION_STAMP = "numbering.formatLinesMigratedAt";
+
+/**
+ * TEK SEFERLİK GÖÇ: `number_series` biçim kolonları → `number_series_lines`.
+ *
+ * ⚠️ SIRA LOAD-BEARING: seri satırları YARATILDIKTAN SONRA koşar. SQL
+ * migration'ında yapılsaydı, satırları boot uzlaştırması yarattığı için
+ * migration anında tablo BOŞ olur ve INSERT … SELECT sessizce hiçbir şey
+ * yazmazdı ("WHERE EXISTS no-op" tuzağı).
+ *
+ * ⚠️ GEÇMİŞİN TARİHİ BİLİNMİYOR: `retiredPrefixes` yalnız bir ÖN EK LİSTESİdir,
+ * ne zaman emekli olduğu hiçbir yerde yazmıyor. Bu yüzden emekli satırlara
+ * SENTİNEL tarihler konur ve `isSentinel` ile BEYAN EDİLİR — rapor "1970'te
+ * biçim değişti" demesin diye. Sentinel tarihler yalnız SIRALAMA taşır:
+ * emekliler yürürlükteki satırdan ÖNCE gelir, kendi aralarında liste sırasıyla.
+ *
+ * ⚠️ EMEKLİ SATIRIN BİÇİMİ TAHMİNDİR: yalnız ön ek biliniyor; segment/hane/ayraç
+ * bugünküyle AYNI varsayılır. Bu, bugünkü `matchesSeries` davranışının birebir
+ * karşılığıdır (emekli ön ek bugün de yürürlükteki segment/haneyle deneniyor),
+ * yani göç DAVRANIŞI DEĞİŞTİRMEZ — yalnız veriyi taşır.
+ */
+async function migrateFormatLinesOnce(): Promise<number | null> {
+  const stamp = await prisma.systemSetting.findUnique({
+    where: { key: FORMAT_LINES_MIGRATION_STAMP },
+    select: { key: true },
+  });
+  if (stamp) return null;
+
+  const rows = await prisma.numberSeries.findMany({
+    select: {
+      key: true, prefix: true, dateSegment: true, digits: true, separator: true,
+      retiredPrefixes: true, formatChangedAt: true,
+    },
+  });
+  const data: Array<{
+    seriesKey: string; prefix: string; dateSegment: (typeof rows)[number]["dateSegment"];
+    digits: number; separator: string; effectiveFrom: Date; isSentinel: boolean;
+  }> = [];
+  for (const r of rows) {
+    // Emekliler önce (sentinel, liste sırasıyla), yürürlükteki en sonda.
+    r.retiredPrefixes.forEach((onek, i) => {
+      data.push({
+        seriesKey: r.key, prefix: onek, dateSegment: r.dateSegment, digits: r.digits,
+        separator: r.separator, effectiveFrom: new Date(1000 * (i + 1)), isSentinel: true,
+      });
+    });
+    data.push({
+      seriesKey: r.key, prefix: r.prefix, dateSegment: r.dateSegment, digits: r.digits,
+      separator: r.separator,
+      // Damga varsa GERÇEK tarih; yoksa sentinel (biçim hiç değişmemiş seri).
+      effectiveFrom: r.formatChangedAt ?? new Date(1000 * (r.retiredPrefixes.length + 1)),
+      isSentinel: r.formatChangedAt === null,
+    });
+  }
+  if (data.length > 0) {
+    await prisma.numberSeriesLine.createMany({ data, skipDuplicates: true });
+  }
+  await prisma.systemSetting.upsert({
+    where: { key: FORMAT_LINES_MIGRATION_STAMP },
+    create: {
+      key: FORMAT_LINES_MIGRATION_STAMP,
+      value: new Date().toISOString(),
+      description: "Biçim kolonları → number_series_lines göçü BİR KEZ koştu.",
+    },
+    update: {},
+  });
+  await AuditService.logEvent({
+    category: "SYSTEM",
+    action: "NUMBER_SERIES_LINES_MIGRATED",
+    tableName: "number_series_lines",
+    payload: { lines: data.length, series: rows.length },
+  });
+  return data.length;
 }
