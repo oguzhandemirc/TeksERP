@@ -23,6 +23,9 @@
 //
 // Koşum: npx tsx scripts/run-all-tests.ts number_series_geri_uyumluluk
 // =============================================================================
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+
 import type { NumberSeriesDateSegment } from "@prisma/client";
 
 import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
@@ -34,8 +37,10 @@ import {
   seriesPrefix,
   type NumberSeriesFormat,
 } from "../src/services/helpers/series-format.helper";
-import { seriesLock } from "../src/services/helpers/series-panel.helper";
+import { seriesImpactCount, seriesLock } from "../src/services/helpers/series-panel.helper";
 import { nextSeriesNo, resolveSeriesFormat } from "../src/services/number-series.service";
+import { freeDocumentService } from "../src/services/free-document.service";
+import { stockCountService } from "../src/services/stock-count.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0,
@@ -50,6 +55,18 @@ function check(label: string, ok: boolean, extra = ""): void {
   }
 }
 
+/** `src` altındaki tüm TS kaynağı tek metin — beyan ↔ gerçek karşılaştırması için. */
+function kaynakTara(dizin: string): string {
+  let out = "";
+  for (const ad of readdirSync(dizin)) {
+    const tam = join(dizin, ad);
+    if (statSync(tam).isDirectory()) out += kaynakTara(tam);
+    else if (ad.endsWith(".ts")) out += readFileSync(tam, "utf-8");
+  }
+  return out;
+}
+
+let stockCountFikstur = 0;
 const SEGMENTLER = Object.keys(DATE_SEGMENTS) as NumberSeriesDateSegment[];
 const AYRACLAR = ["", "-", "_", "/", "."];
 
@@ -58,8 +75,74 @@ const AYRACLAR = ["", "-", "_", "/", "."];
  * burada olmayan seri L1'de ölçülür ve gerekçesi basılır ("kayıt yaratmak fikstür
  * zinciri ister"). Beyan olmadan "ölçüldü" denmez.
  */
-const L2_YOLU: Record<string, { not: string }> = {
-  packingLotCode: { not: "PackingGroup: müşteri + ad + kod, başka zincir yok." },
+interface L2Yolu {
+  /** Kaydı GERÇEK yoldan yaratır ve kodunu döndürür; `null` = fikstür kurulamadı. */
+  yarat?: (damga: string) => Promise<{ id: string; kod: string } | null>;
+  /** Silme — teardown. */
+  sil?: (id: string) => Promise<void>;
+  /** Yaratma yolu YOKSA gerekçe: neden L1'de kaldı. */
+  not: string;
+}
+
+const L2_YOLU: Record<string, L2Yolu> = {
+  packingLotCode: {
+    not: "PackingGroup: müşteri + ad + kod, başka zincir yok.",
+    yarat: async (damga) => {
+      const musteri = await prisma.customer.findFirst({ where: { code: "MUS-001" }, select: { id: true } });
+      if (!musteri) return null;
+      const kod = await nextSeriesNo("packingLotCode", async (full) =>
+        prisma.packingGroup
+          .findMany({ where: { code: { gte: full, startsWith: full } }, select: { code: true, createdAt: true } })
+          .then((rows) => rows.map((r) => ({ code: r.code, createdAt: r.createdAt }))));
+      const g = await prisma.packingGroup.create({
+        data: { customerId: musteri.id, name: `${damga} e3`, code: kod.slice(0, 16) },
+        select: { id: true, code: true },
+      });
+      return { id: g.id, kod: g.code };
+    },
+    sil: async (id) => { await prisma.packingGroup.deleteMany({ where: { id } }); },
+  },
+  // ⚠️ SERVİS YOLUNDAN (1e şartı 2026-09-23): her üretecin KENDİ `loadCodes`u var ve
+  // E2'de değişen tam olarak o — L1 tek başına o yolu hiç koşmaz.
+  freeDocument: {
+    not: "FreeDocumentService.create: yalnız başlık + gövde.",
+    yarat: async (damga) => {
+      const r = (await freeDocumentService.create({ title: `${damga} E3`, body: "E3" })) as {
+        data?: { id?: string; documentNo?: string };
+      };
+      return r.data?.id && r.data.documentNo ? { id: r.data.id, kod: r.data.documentNo } : null;
+    },
+    sil: async (id) => { await prisma.freeDocument.deleteMany({ where: { id } }); },
+  },
+  stockCount: {
+    not: "StockCountService.create: yalnız aktif depo (fikstür deposu kurulur).",
+    // ⚠️ HER ÇAĞRI KENDİ DEPOSUNU kurar: servis "bir depoda TEK açık sayım" kuralını
+    // uyguluyor (409) ve ikinci kayıt aynı depoda açılamazdı — iş kuralı doğru,
+    // fikstür ona uymak zorunda.
+    yarat: async (damga) => {
+      stockCountFikstur += 1;
+      const kod = `E3${stockCountFikstur}-${damga}`.slice(0, 32);
+      const depo = await prisma.warehouse.upsert({
+        where: { code: kod },
+        update: {},
+        create: { code: kod, name: `${damga} E3 depo ${stockCountFikstur}`, isActive: true },
+        select: { id: true },
+      });
+      const r = await stockCountService.create({ warehouseId: depo.id });
+      return r.data?.id && r.data.countNo ? { id: r.data.id, kod: r.data.countNo } : null;
+    },
+    sil: async (id) => {
+      await prisma.stockCountLine.deleteMany({ where: { stockCountId: id } });
+      await prisma.stockCount.deleteMany({ where: { id } });
+    },
+  },
+  // Aşağıdakiler L1'de KALDI ve gerekçesi budur (beyansız sessizlik yok):
+  packingLotName: { not: "Sevk partisi ADI kendi sırasından doğar (ownCounter): ayrı bir kayıt yolu yok, kod yolu packingLotCode ile aynı gruptan gelir." },
+  returnDoc: { not: "RollReturn: sevk edilmiş top + iade zinciri ister; fikstür maliyeti yüksek (test_return_no_backfill kapsıyor)." },
+  manifest: { not: "Manifest: iş emri + top zinciri ister; fikstür maliyeti yüksek." },
+  goodsReceipt: { not: "GoodsReceipt: tedarikçi + kalem + (kumaşta) top zinciri ister." },
+  purchaseOrder: { not: "PurchaseOrder: tedarikçi + kalem + birim fiyat zinciri ister." },
+  warehouseTransfer: { not: "WarehouseTransfer: iki depo + taşınacak GERÇEK stok ister." },
 };
 
 /** Bu koşumda üretilen aday biçimler — her eksen ayrı bir dönüşüm. */
@@ -180,32 +263,48 @@ async function main(): Promise<void> {
   check("L1 ⭐ (c) SAYAÇ doğru yerden başlıyor (tarih rakamları sıra SANILMIYOR, var olan kod ÜSTÜNE yazılmıyor)",
     yanlisSayac.length === 0, yanlisSayac.slice(0, 5).join(" · "));
 
+  // ── L0: BEYAN ↔ GERÇEK — "sayacı hazır" diyen serinin üreteci C0 yolundan mı? ──
+  // ⚠️ `scopedCounter: "hazir"` bir BEYANDIR ve beyan kendi başına bir şey ölçmez:
+  // üreteç eski literal yolunda kalmışsa seri panelde AÇILIR ama kapsam damgası
+  // hiç uygulanmaz — tarih segmenti değişince sayaç eski rejimin kodlarını sayar.
+  // Ölçüt: o serinin anahtarıyla `nextSeriesNo` çağrısı kaynakta VAR MI?
+  // Muaf: kendi sayaç mekanizması olan seri (`ownCounter`) — orada C0 zaten anlamsız.
+  const kaynakMetni = kaynakTara(join(__dirname, "..", "src"));
+  const beyanliHazir = NUMBER_SERIES_CATALOG.filter(
+    (e) => e.scopedCounter?.durum === "hazir" && !e.ownCounter,
+  );
+  // ⚠️ YÜKLEM BOŞLUĞA DAYANIKLI: çağrı biçimlendirici yüzünden satıra bölünebiliyor
+  // (`nextSeriesNo(\n  "manifest",`) ve düz `includes` onu GÖREMİYORDU — ölçüldü,
+  // bu kontrol ilk koşumda `manifest`i yanlışlıkla "üreteçsiz" saydı.
+  const uretecsizBeyan = beyanliHazir.filter(
+    (e) => !new RegExp(`nextSeriesNo\\(\\s*"${e.key}"`).test(kaynakMetni),
+  );
+  check("L0 körlük zemini: kaynak tarandı ve beyanlı seri var",
+    kaynakMetni.length > 100_000 && beyanliHazir.length > 0, `${beyanliHazir.length} beyanlı seri`);
+  check("L0 ⭐ `sayacı hazır` diyen her serinin üreteci C0 yolundan (`nextSeriesNo`) geçiyor",
+    uretecsizBeyan.length === 0, uretecsizBeyan.map((e) => e.key).join(", ") || `${beyanliHazir.length} seri`);
+
   // ── L2: KAYIT EKSENİ — gerçek kayıt, gerçek kod, gerçek sayım ─────────────
+  // ⚠️ SERVİS YOLUNDAN yaratılır (1e şartı): her üretecin KENDİ `loadCodes`u var ve
+  // E2'de değişen tam olarak odur; L1 o yolu hiç koşmaz.
   await hedefDbEngeli();
   const DAMGA = `TEST-${process.pid.toString(36).padStart(3, "0").slice(-3)}${Date.now().toString(36).slice(-6)}`.slice(0, 14);
-  const yaratilan: string[] = [];
+  const temizlik: Array<() => Promise<void>> = [];
   try {
-    const musteri = await prisma.customer.findFirst({ where: { code: "MUS-001" }, select: { id: true } });
-    check("L2 körlük zemini: fikstür carisi (MUS-001) bulundu — yoksa `npm run seed:fixtures`", musteri !== null);
-    if (musteri) {
-      const taban = resolveSeriesFormat("packingLotCode");
-      const eskiKod = await nextSeriesNo(
-        "packingLotCode",
-        async (full) =>
-          (await prisma.packingGroup.findMany({
-            where: { code: { gte: full, startsWith: full } },
-            select: { code: true, createdAt: true },
-          })),
-        bugun,
-      );
-      const grup = await prisma.packingGroup.create({
-        data: { customerId: musteri.id, name: `${DAMGA} e3`, code: eskiKod.slice(0, 16) },
-        select: { id: true, code: true },
-      });
-      yaratilan.push(grup.id);
-      const kayitliKod = grup.code;
+    for (const e of acikSeriler) {
+      const yol = L2_YOLU[e.key];
+      if (!yol?.yarat) {
+        console.log(`   ℹ️ ${e.key}: L1'de kaldı — ${yol?.not ?? "BEYAN YOK"}`);
+        check(`L2 beyanı var: ${e.key} neden L1'de kaldı`, Boolean(yol?.not), yol?.not ?? "(beyansız)");
+        continue;
+      }
+      const taban = resolveSeriesFormat(e.key);
+      const kayit = await yol.yarat(DAMGA);
+      check(`L2 körlük zemini: ${e.key} kaydı SERVİS yolundan yaratıldı`, kayit !== null, kayit?.kod ?? "(yaratılamadı)");
+      if (!kayit) continue;
+      if (yol.sil) temizlik.push(() => yol.sil!(kayit.id));
 
-      // Biçim DEĞİŞİR (tarihli → TARİHSİZ: en riskli eksen) ve eski kayıt okunur.
+      // Biçim tarihli → TARİHSİZ (en riskli eksen) ve eski kayıt yeniden okunur.
       const yeniFmt: NumberSeriesFormat = {
         ...taban,
         dateSegment: "NONE" as NumberSeriesDateSegment,
@@ -219,35 +318,27 @@ async function main(): Promise<void> {
         ],
         formatChangedAt: new Date(),
       };
-      const tazeKayit = await prisma.packingGroup.findUnique({ where: { id: grup.id }, select: { code: true } });
-      check("L2 ⭐ (a) ESKİ kaydın kodu BAYT BAYT aynı (biçim değişimi geçmişe dokunmaz)",
-        tazeKayit?.code === kayitliKod, `${kayitliKod} → ${tazeKayit?.code}`);
-      check("L2 ⭐ (d) ESKİ kod yeni biçimde de TANINIYOR (emekli biçim)",
-        matchesSeries(yeniFmt, kayitliKod), kayitliKod);
+      const model = (prisma as unknown as Record<string, { findUnique: (a: unknown) => Promise<Record<string, unknown> | null> }>)[
+        NUMBER_SERIES_CATALOG.find((x) => x.key === e.key)!.countTable!.model
+      ];
+      const alan = NUMBER_SERIES_CATALOG.find((x) => x.key === e.key)!.countTable!.field;
+      const taze = await model.findUnique({ where: { id: kayit.id }, select: { [alan]: true } });
+      check(`L2 ⭐ (a) ${e.key}: eski kod BAYT BAYT aynı (biçim değişimi geçmişe dokunmaz)`,
+        taze?.[alan] === kayit.kod, `${kayit.kod} → ${String(taze?.[alan])}`);
+      check(`L2 ⭐ (d) ${e.key}: eski kod YENİ biçimde de tanınıyor (emekli biçim)`,
+        matchesSeries(yeniFmt, kayit.kod), kayit.kod);
 
-      const yeniKod = await nextSeriesNo(
-        "packingLotCode",
-        async (full) =>
-          (await prisma.packingGroup.findMany({
-            where: { code: { gte: full, startsWith: full } },
-            select: { code: true, createdAt: true },
-          })),
-        new Date(),
-        yeniFmt,
-      );
-      check("L2 ⭐ (b) YENİ kod geçerli ve ESKİSİNDEN FARKLI", matchesSeries(yeniFmt, yeniKod) && yeniKod !== kayitliKod,
-        `${kayitliKod} → ${yeniKod}`);
-      const yeniGrup = await prisma.packingGroup.create({
-        data: { customerId: musteri.id, name: `${DAMGA} e3b`, code: yeniKod.slice(0, 16) },
-        select: { id: true, code: true },
-      });
-      yaratilan.push(yeniGrup.id);
-      check("L2 ⭐ (b) YENİ kod TEKİL (aynı tabloda çakışmıyor)", yeniGrup.code === yeniKod.slice(0, 16));
-      const ikisiDe = await prisma.packingGroup.count({ where: { id: { in: yaratilan } } });
-      check("L2 ⭐ (e) eski ve yeni kayıt AYNI ANDA aranıp bulunuyor (etki sayısı)", ikisiDe === 2, `${ikisiDe}/2`);
+      const ikinci = await yol.yarat(DAMGA);
+      if (ikinci && yol.sil) temizlik.push(() => yol.sil!(ikinci.id));
+      check(`L2 ⭐ (b) ${e.key}: ikinci kayıt YENİ ve TEKİL bir numara aldı`,
+        ikinci !== null && ikinci.kod !== kayit.kod, `${kayit.kod} → ${ikinci?.kod ?? "(yok)"}`);
+      // (e) ETKİ SAYISI: iki kayıt da seri sayımına giriyor.
+      const sayim = await seriesImpactCount(e.key);
+      check(`L2 ⭐ (e) ${e.key}: etki sayısı ikisini de kapsıyor`,
+        sayim !== null && sayim >= 2, `${sayim}`);
     }
   } finally {
-    if (yaratilan.length > 0) await prisma.packingGroup.deleteMany({ where: { id: { in: yaratilan } } });
+    for (const t of temizlik.reverse()) await t();
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

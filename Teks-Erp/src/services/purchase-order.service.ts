@@ -81,7 +81,7 @@ import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo } from "./number-series.service";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { buildTurkishSearch, isEnumMember, readIdCondition } from "../utils/query-parser";
@@ -206,13 +206,14 @@ export interface PurchaseOrderSyncResult {
  * çağıran `withBarcodeRetry` ile sarmalar, sıra okuması tx İÇİNDEDİR.
  */
 async function nextPurchaseOrderNo(tx: Prisma.TransactionClient, date: Date): Promise<string> {
-  const fmt = resolveSeriesFormat("purchaseOrder");
-  const full = seriesPrefix(fmt, date);
-  const rows = await tx.purchaseOrder.findMany({
-    where: { orderNo: { gte: full, startsWith: full } },
-    select: { orderNo: true },
-  });
-  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.orderNo), full), date);
+  // ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan kodlara
+  // bakar (`formatChangedAt`); tarih segmenti düşünce eski rejimin kodları sayaca
+  // girerdi. `nextSeriesNo` kapsamı ve çakışma atlamasını TEK YERDE tutar.
+  return nextSeriesNo("purchaseOrder", async (full) =>
+    tx.purchaseOrder.findMany({
+      where: { orderNo: { gte: full, startsWith: full } },
+      select: { orderNo: true, createdAt: true },
+    }).then((rows) => rows.map((r) => ({ code: r.orderNo, createdAt: r.createdAt }))), date);
 }
 
 // -----------------------------------------------------------------------------

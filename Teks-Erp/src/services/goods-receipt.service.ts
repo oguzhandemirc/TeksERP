@@ -78,7 +78,7 @@ import {
 // söylerdi).
 import { describeContractPricing, loadContractPrices } from "./helpers/contract-price.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo } from "./number-series.service";
 import { applyDateRange, buildWhereClause } from "../utils/query-parser";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
@@ -306,14 +306,15 @@ export interface AssembledReceipt {
 }
 
 async function nextReceiptNo(tx: Prisma.TransactionClient): Promise<string> {
-  const now = new Date();
-  const fmt = resolveSeriesFormat("goodsReceipt");
-  const prefix = seriesPrefix(fmt, now);
-  const rows = await tx.goodsReceipt.findMany({
-    where: { receiptNo: { gte: prefix, startsWith: prefix } },
-    select: { receiptNo: true },
-  });
-  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.receiptNo), prefix), now);
+  // ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan kodlara
+  // bakar (`formatChangedAt`). Tarih segmenti düşünce sabit baş kısalır ve eski
+  // rejimin kodları sayaca girerdi: `MK2209260001` → sıra 2.209.260.002.
+  // `nextSeriesNo` bu kapsamı ve çakışma atlamasını TEK YERDE tutar.
+  return nextSeriesNo("goodsReceipt", async (prefix) =>
+    tx.goodsReceipt.findMany({
+      where: { receiptNo: { gte: prefix, startsWith: prefix } },
+      select: { receiptNo: true, createdAt: true },
+    }).then((rows) => rows.map((r) => ({ code: r.receiptNo, createdAt: r.createdAt }))));
 }
 
 /**

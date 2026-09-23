@@ -27,6 +27,8 @@ import { tr } from "date-fns/locale";
 /** Backend `tableName` → Türkçe modül adı. */
 export const TABLE_LABELS: Record<string, string> = {
   NumberSeries: "Numara serisi",
+  // Vadesi gelmemiş biçim değişikliği satırı (iptal edildiğinde denetime düşer).
+  NumberSeriesLine: "Numara serisi biçim satırı",
   number_series: "Numara serisi",
   number_series_lines: "Numara serisi biçim satırı",
   // Sistem event kategorileri (tableName = kategori string'i)

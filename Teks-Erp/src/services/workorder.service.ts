@@ -147,7 +147,7 @@ import {
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { normalizeScanCode } from "../utils/code-format";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, nextSeriesNo, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
 import { nextPrefixedSequenceTx, SubcontractorService } from "./subcontractor.service";
 
@@ -7017,10 +7017,9 @@ export class WorkOrderService {
       throw AppError.notFound("İş emri bulunamadı");
     }
 
-    // Manifest (çeki listesi) no: CL + GGAAYY + NNNN (örn CL1207260001)
+    // Çeki listesi numarası biçimi VERİDİR (numara serisi `manifest`); ön ek,
+    // tarih segmenti ve hane fabrikanın ayarından gelir.
     const now = new Date();
-    const fmt = resolveSeriesFormat("manifest");
-    const prefix = seriesPrefix(fmt, now);
 
     // manifestNo @unique + günlük sequence TÜM WO'lar arasında paylaşımlı —
     // eşzamanlı iki basım aynı NNN'i hesaplardı; projedeki diğer tüm belge
@@ -7031,16 +7030,21 @@ export class WorkOrderService {
       // "999">"1000" taşmasını önler (findFirst+orderBy desc "...999"da sıkışıp
       // withBarcodeRetry'ı kalıcı 409'a düşürüyordu). withBarcodeRetry sarması
       // korunur: P2002'de closure taze max okur.
-      const todays = await prisma.manifest.findMany({
-        where: { manifestNo: { gte: prefix, startsWith: prefix } },
-        select: { manifestNo: true },
-      });
-      const seq = seriesSeqFrom(
-      fmt,
-        todays.map((m) => m.manifestNo),
-        prefix,
+      // ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan
+      // kodlara bakar (`formatChangedAt`); tarih segmenti düşünce eski rejimin
+      // kodları sayaca girerdi. `nextSeriesNo` kapsamı ve çakışma atlamasını TEK
+      // YERDE tutar — `withBarcodeRetry` sarması korunur (yarışta taze okuma).
+      const manifestNo = await nextSeriesNo(
+        "manifest",
+        async (prefix) =>
+          prisma.manifest
+            .findMany({
+              where: { manifestNo: { gte: prefix, startsWith: prefix } },
+              select: { manifestNo: true, createdAt: true },
+            })
+            .then((rows) => rows.map((r) => ({ code: r.manifestNo, createdAt: r.createdAt }))),
+        now,
       );
-      const manifestNo = formatSeriesCode(fmt, seq, now);
 
       return prisma.manifest.create({
         data: {

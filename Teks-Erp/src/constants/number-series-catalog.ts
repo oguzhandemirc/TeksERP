@@ -347,7 +347,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     },
   },
   { key: "directShipment", panelGroup: "fason-kartela", countTable: { model: "directShipment", field: "shipmentNo", birim: "belge" }, label: "Doğrudan sevk no", seedPrefix: "DSK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "manifest", panelGroup: "uretim", countTable: { model: "manifest", field: "manifestNo", birim: "belge" }, label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "manifest", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kod listesi `formatChangedAt` damgasına göre süzülüyor ve çakışma atlaması aynı yerde (E2 depo-ticaret dilimi, 2026-09-23)." }, panelGroup: "uretim", countTable: { model: "manifest", field: "manifestNo", birim: "belge" }, label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   {
     key: "order",
     panelGroup: "depo-ticaret",
@@ -377,11 +377,11 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   { key: "weavingOrder", panelGroup: "uretim", countTable: { model: "weavingOrder", field: "weavingOrderNumber", birim: "kayıt" }, label: "Dokuma işi no", seedPrefix: "DK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "warpBeam", panelGroup: "uretim", countTable: { model: "warpBeam", field: "beamNo", birim: "kayıt" }, label: "Levent no", seedPrefix: "LV", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "doffEvent", panelGroup: "uretim", countTable: { model: "doffEvent", field: "code", birim: "kayıt" }, label: "Doff kodu", seedPrefix: "DF", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "goodsReceipt", panelGroup: "depo-ticaret", countTable: { model: "goodsReceipt", field: "receiptNo", birim: "belge" }, label: "Mal kabul fiş no", seedPrefix: "MK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "purchaseOrder", panelGroup: "depo-ticaret", countTable: { model: "purchaseOrder", field: "orderNo", birim: "belge" }, label: "Alış siparişi no", seedPrefix: "AS", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "warehouseTransfer", panelGroup: "depo-ticaret", countTable: { model: "warehouseTransfer", field: "transferNo", birim: "belge" }, label: "Depo transfer no", seedPrefix: "DT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "stockCount", panelGroup: "depo-ticaret", countTable: { model: "stockCount", field: "countNo", birim: "belge" }, label: "Sayım no", seedPrefix: "SAY", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
-  { key: "freeDocument", panelGroup: "depo-ticaret", countTable: { model: "freeDocument", field: "documentNo", birim: "belge" }, label: "Serbest belge no", seedPrefix: "SB", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "goodsReceipt", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kapsam damgası + çakışma atlaması tek yerde (E2, 2026-09-23)." }, panelGroup: "depo-ticaret", countTable: { model: "goodsReceipt", field: "receiptNo", birim: "belge" }, label: "Mal kabul fiş no", seedPrefix: "MK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "purchaseOrder", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kapsam damgası + çakışma atlaması tek yerde (E2, 2026-09-23)." }, panelGroup: "depo-ticaret", countTable: { model: "purchaseOrder", field: "orderNo", birim: "belge" }, label: "Alış siparişi no", seedPrefix: "AS", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "warehouseTransfer", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kapsam damgası + çakışma atlaması tek yerde (E2, 2026-09-23)." }, panelGroup: "depo-ticaret", countTable: { model: "warehouseTransfer", field: "transferNo", birim: "belge" }, label: "Depo transfer no", seedPrefix: "DT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "stockCount", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kapsam damgası + çakışma atlaması tek yerde (E2, 2026-09-23)." }, panelGroup: "depo-ticaret", countTable: { model: "stockCount", field: "countNo", birim: "belge" }, label: "Sayım no", seedPrefix: "SAY", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "freeDocument", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor: kapsam damgası + çakışma atlaması tek yerde (E2, 2026-09-23)." }, panelGroup: "depo-ticaret", countTable: { model: "freeDocument", field: "documentNo", birim: "belge" }, label: "Serbest belge no", seedPrefix: "SB", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
 
   // ── Finans ─────────────────────────────────────────────────────────────────
   { key: "invoiceSales", panelGroup: "finans", countTable: { model: "invoice", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Satış faturası no", seedPrefix: "SF", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },

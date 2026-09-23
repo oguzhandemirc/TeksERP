@@ -51,7 +51,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import { nextSeriesNo } from "./number-series.service";
 import { closeOpenMovementsTx } from "./helpers/roll-disposition.helper";
 import { postStockMoves, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { recordVariancesTx } from "./helpers/roll-variance.helper";
@@ -119,13 +119,14 @@ const D = (v: Prisma.Decimal.Value): Prisma.Decimal => new Prisma.Decimal(v);
  * sarmalar — yarışta P2002 hâlâ mümkündür ve doğru cevap tekrar denemektir.
  */
 async function nextCountNo(tx: Tx, date: Date): Promise<string> {
-  const fmt = resolveSeriesFormat("stockCount");
-  const full = seriesPrefix(fmt, date);
-  const rows = await tx.stockCount.findMany({
-    where: { countNo: { gte: full, startsWith: full } },
-    select: { countNo: true },
-  });
-  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.countNo), full), date);
+  // ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan kodlara
+  // bakar (`formatChangedAt`); tarih segmenti düşünce eski rejimin kodları sayaca
+  // girerdi. `nextSeriesNo` kapsamı ve çakışma atlamasını TEK YERDE tutar.
+  return nextSeriesNo("stockCount", async (full) =>
+    tx.stockCount.findMany({
+      where: { countNo: { gte: full, startsWith: full } },
+      select: { countNo: true, createdAt: true },
+    }).then((rows) => rows.map((r) => ({ code: r.countNo, createdAt: r.createdAt }))), date);
 }
 
 export interface CreateStockCountInput {
