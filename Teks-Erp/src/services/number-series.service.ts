@@ -253,6 +253,18 @@ export function seriesSeqFrom(
   return nextCounterSeq(fmt, nextDailySeq(codes, fullPrefix) - 1, fullPrefix);
 }
 
+/**
+ * KULLANILMIŞ en büyük sıra — tükenme ölçümünün girdisi.
+ *
+ * ⚠️ `seriesSeqFrom` BURADA KULLANILAMAZ ve bu ölçülmüş bir tuzak: o fonksiyon
+ * SIRADAKİNİ verir ve üst sınır dolmuşsa 409 FIRLATIR — yani tam %100'de
+ * "tükenme durumu" sorusu cevap yerine HATA döndürürdü. Kullanılan sıra bir
+ * GÖZLEMDİR, bir talep değil; ayarlardan ve sınırdan bağımsız okunur.
+ */
+export function seriesUsedMaxFrom(codes: Array<string | null | undefined>, fullPrefix: string): number {
+  return Math.max(0, nextDailySeq(codes, fullPrefix) - 1);
+}
+
 /** Sıradaki SIRA numarası (kodu kendi kuran yollar için — top barkodu, kartela). */
 export async function nextSeriesSeq(
   key: string,

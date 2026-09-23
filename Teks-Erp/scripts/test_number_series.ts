@@ -346,11 +346,18 @@ check("§10b ⭐ `matchesSeries` bu kodları ELEYEMEZ — 'matchesSeries ile fil
 // olmalı") birebir ihlali, üstelik SESSİZ.
 //
 // ⚠️ İKİ KOL BİRDEN gerekiyor ve biri ötekinin yerine geçmez:
-//   a) YAPISAL — ön eki alan dosya kodu da seriden kurmalı. Yazım biçiminden
-//      bağımsız; `padStart` yerine `pad()` yazan bir gelecek sapmayı da yakalar.
+//   a) YAPISAL — SIRA HESAPLAYAN dosya kodu da AYNI biçimden kurmalı. Yazım
+//      biçiminden bağımsız; `padStart` yerine `pad()` yazan sapmayı da yakalar.
+//      ⚠️ ANTECEDENT `seriesSeqFrom(`, `seriesPrefix(` DEĞİL — ve bu SINIR
+//      ÖLÇÜLEREK daraltıldı (2026-09-23): ön eki alan her dosya üreteç değildir.
+//      `series-exhaustion.helper` ön eki TARAMA PENCERESİ için, `series-write.helper`
+//      UZUNLUK ÖLÇMEK için alıyor; ikisi de kod ÜRETMİYOR. Geniş yüklem bu iki
+//      dosyayı yanlış kırmızıya soktu; "ön eki alan = üreteç" beyansız bir
+//      varsayımdı. Üreteç olmanın ölçülebilir imzası SIRAYI HESAPLAMAKTIR.
 //   b) ŞEKİL — ölçülmüş literal kalıbı. (a)'yı geçen bir dosyada TEK bir
 //      fonksiyon hâlâ elle kuruyorsa (dosyada başka yerde `buildSeriesCode`
 //      varken) yalnız bu kol görür.
+const SERI_SIRASI = "seriesSeqFrom(";
 const SERI_ONEKI = "seriesPrefix(";
 const SERI_KODU = "formatSeriesCode(";
 /**
@@ -375,13 +382,13 @@ const yapisalIhlal: string[] = [];
 let onekCagiranDosya = 0;
 for (const dosya of kaynakDosyalari) {
   const metin = kodSatirlari(readFileSync(dosya, "utf-8"));
-  if (!metin.includes(SERI_ONEKI)) continue;
+  if (!metin.includes(SERI_SIRASI)) continue;
   onekCagiranDosya++;
   if (!metin.includes(SERI_KODU)) yapisalIhlal.push(dosya.slice(SRC.length + 1));
 }
-check("§11a ⭐ ön eki biçimden alan her üreteç kodu da AYNI biçimden kurar (`formatSeriesCode`)",
+check("§11a ⭐ SIRA hesaplayan her üreteç kodu da AYNI biçimden kurar (`formatSeriesCode`)",
   yapisalIhlal.length === 0, yapisalIhlal.join(", ") || `${onekCagiranDosya} üreteç dosyası temiz`);
-check("§11a körlük zemini: ön ek çağıran dosya gerçekten bulundu", onekCagiranDosya >= 10,
+check("§11a körlük zemini: sıra hesaplayan dosya gerçekten bulundu", onekCagiranDosya >= 10,
   `${onekCagiranDosya} dosya`);
 
 // Muafiyet KATALOGTAN okunur — bekçinin içine gömülü bir liste, beyanla ayrışırdı.

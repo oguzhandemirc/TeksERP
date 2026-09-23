@@ -6,7 +6,7 @@ import {
 import { NumberingFields } from "./NumberingFields";
 import { NumberingCounterFields } from "./NumberingCounterFields";
 import { numberingService } from "./service";
-import type { NumberSeriesRow, SeriesCounterInput, SeriesFormatInput } from "./types";
+import type { NumberSeriesRow, SeriesCounterInput, SeriesExhaustion, SeriesFormatInput } from "./types";
 
 
 /**
@@ -30,11 +30,12 @@ interface Props {
   /** `null` = bu seride sayım kaynağı yok ⇒ CÜMLEDE SAYI YAZILMAZ. */
   etkiSayisi: number | null;
   birim: string;
+  exhaustion: SeriesExhaustion | null;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export function NumberingFormDialog({ row, etkiSayisi, birim, onClose, onSaved }: Props) {
+export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClose, onSaved }: Props) {
   const [fmt, setFmt] = useState<SeriesFormatInput | null>(null);
   const [counter, setCounter] = useState<SeriesCounterInput>({ startValue: null, step: null, maxValue: null });
   const [onizleme, setOnizleme] = useState("");
@@ -115,7 +116,7 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, onClose, onSaved }
           </p>
         )}
 
-        <NumberingCounterFields row={row} counter={counter} onChange={setCounter} />
+        <NumberingCounterFields row={row} counter={counter} exhaustion={exhaustion} onChange={setCounter} />
 
         <EtkiCumlesi etkiSayisi={etkiSayisi} birim={birim} />
 

@@ -4,7 +4,7 @@ import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { NumberingFormDialog } from "./NumberingFormDialog";
 import { NumberingTable } from "./NumberingTable";
 import { numberingService } from "./service";
-import type { NumberSeriesRow } from "./types";
+import type { NumberSeriesRow, SeriesExhaustion } from "./types";
 
 const NUMBERING_KEY = ["number-series"] as const;
 
@@ -41,13 +41,16 @@ export function NumberingPage() {
   });
   const [secili, setSecili] = useState<NumberSeriesRow | null>(null);
   const [etki, setEtki] = useState<number | null>(null);
+  const [tukenme, setTukenme] = useState<SeriesExhaustion | null>(null);
 
   // Etki sayısı SUNUCUDAN, seri seçildiğinde. Uydurulmaz.
   useEffect(() => {
     if (!secili) return;
     let iptal = false;
     setEtki(null);
+    setTukenme(null);
     void numberingService.impact(secili.key).then((n) => { if (!iptal) setEtki(n); });
+    void numberingService.exhaustion(secili.key).then((d) => { if (!iptal) setTukenme(d); });
     return () => { iptal = true; };
   }, [secili]);
 
@@ -78,6 +81,7 @@ export function NumberingPage() {
         <NumberingFormDialog
           row={secili}
           etkiSayisi={etki}
+          exhaustion={tukenme}
           /* ⚠️ Birim BACKEND'den: panel "hangi seri belge sayar" kuralını
              KOPYALAMAZ — kural iki yerde yaşarsa biri bayatlar. */
           birim={secili?.countBirim === "belge" ? "belgenin" : "kaydın"}

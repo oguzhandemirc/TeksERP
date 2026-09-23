@@ -1,6 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { NumberSeriesRow, SeriesCounterInput } from "./types";
+import type { NumberSeriesRow, SeriesCounterInput, SeriesExhaustion } from "./types";
 
 /**
  * SAYAÇ AYARLARI — başlangıç · artış adımı · üst sınır.
@@ -14,13 +14,32 @@ import type { NumberSeriesRow, SeriesCounterInput } from "./types";
  * de `null`dur — "1 yazmak" ile "boş bırakmak" aynı sonucu verir ama niyet
  * farklıdır ve ekran ikisini ayırt eder.
  */
+/** Tükenme satırı — ölçülemediyse yüzde YAZILMAZ, gerekçe yazılır. */
+function Tukenme({ exhaustion }: { exhaustion: SeriesExhaustion | null }) {
+  if (!exhaustion) return null;
+  if (exhaustion.percent === null) {
+    return <p className="text-xs text-muted-foreground">{exhaustion.reason}</p>;
+  }
+  const yuzde = Math.round(exhaustion.percent * 100);
+  return (
+    <p className={`text-xs ${exhaustion.warn ? "font-medium text-destructive" : "text-muted-foreground"}`}>
+      Yürürlükteki dönemde {exhaustion.used?.toLocaleString("tr-TR")} /{" "}
+      {exhaustion.limit?.toLocaleString("tr-TR")} kullanıldı (%{yuzde})
+      {exhaustion.warn ? " — sınıra yaklaşıldı." : "."}
+    </p>
+  );
+}
+
 export function NumberingCounterFields({
   row,
   counter,
+  exhaustion,
   onChange,
 }: {
   row: NumberSeriesRow;
   counter: SeriesCounterInput;
+  /** `null` = henüz okunmadı; `percent === null` = ÖLÇÜLEMEDİ (yüzde yazılmaz). */
+  exhaustion: SeriesExhaustion | null;
   onChange: (a: SeriesCounterInput) => void;
 }) {
   const locked = !row.counter.startValue;
@@ -32,6 +51,10 @@ export function NumberingCounterFields({
   return (
     <div className="space-y-3 rounded-md border p-3">
       <div className="text-sm font-medium">Sayaç</div>
+
+      {/* ⚠️ TÜKENME KİLİTTEN BAĞIMSIZ ÇİZİLİR: top barkodunun sayaç AYARLARI
+          kapalı ama günlük kapasitesi (9.999) gerçek ve dolduğunda üretim durur. */}
+      <Tukenme exhaustion={exhaustion} />
 
       {locked ? (
         <p className="text-sm text-muted-foreground">{row.counter.lockedReason}</p>

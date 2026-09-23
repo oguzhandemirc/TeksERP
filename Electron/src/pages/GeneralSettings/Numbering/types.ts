@@ -22,6 +22,19 @@ export interface SeriesCounterCapabilities {
   resetReason: string;
 }
 
+/**
+ * Tükenme durumu — ÜÇ SONUÇ: `percent` sayı ise ölçüldü, `null` ise ÖLÇÜLEMEDİ
+ * ve `reason` gerekçeyi taşır. "0 %" demek, ölçülmemiş bir şeye sıfır demektir.
+ */
+export interface SeriesExhaustion {
+  limit: number | null;
+  used: number | null;
+  percent: number | null;
+  warn: boolean;
+  source: "maxValue" | "rollCounter" | null;
+  reason?: string;
+}
+
 export interface SeriesCounterInput {
   startValue: number | null;
   step: number | null;

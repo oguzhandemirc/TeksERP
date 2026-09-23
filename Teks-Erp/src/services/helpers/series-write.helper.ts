@@ -19,11 +19,12 @@ import type { NumberSeries } from "@prisma/client";
 
 import { FAZ_B_ONCESI, scanningClientsCarryFazB } from "../../config/client-version-policy";
 import { NUMBER_SERIES_CATALOG, numberSeriesCatalogEntry } from "../../constants/number-series-catalog";
+import { NUMBER_SERIES_CODE_CAPACITY } from "../../constants/number-series-capacity";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { refreshNumberSeriesCache, resolveSeriesFormat } from "../number-series.service";
-import type { NumberSeriesFormat } from "./series-format.helper";
+import { seriesPrefix, type NumberSeriesFormat } from "./series-format.helper";
 
 // ── KAPI ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,25 @@ export function assertSeriesFormatAllowed(key: string, fmt: NumberSeriesFormat):
       code: "NUMBER_SERIES_DIGITS_INVALID",
       key,
     });
+  }
+  // ⚠️ KOD KOLONA SIĞIYOR MU? Kapı bugüne kadar YALNIZ haneye bakıyordu ve
+  // hedef kolonun genişliğini hiç sormuyordu (ölçüldü 2026-09-23: `packingLotCode`
+  // + 8 hane = 17 karakter, `PackingGroup.code` = VarChar(16) ⇒ o ayardan sonra
+  // HİÇBİR sevk partisi açılamazdı ve hata yazma anında, sahada patlardı).
+  // Kapasite anahtarı OLMAYAN seride kontrol YAPILMAZ: "bilmiyorum" hâlinde
+  // reddetmek gerçekten sınırsız olan kolonu boşuna daraltırdı.
+  const kapasite = NUMBER_SERIES_CODE_CAPACITY[key];
+  if (kapasite !== undefined) {
+    // En kısa kod bile sığmalı: sabit baş + DOLGULU sıra (taşma daha da uzatır).
+    const sabitBas = seriesPrefix({ ...fmt, prefix: fmt.prefix }, new Date()).length;
+    const enKisa = sabitBas + (entry.infix ? 1 : 0) + fmt.digits;
+    if (enKisa > kapasite) {
+      throw AppError.badRequest(
+        `Bu biçimle üretilecek kod ${enKisa} karakter, ama "${entry.label}" kodunun kolonu ` +
+          `${kapasite} karakter alıyor. Ön eki kısaltın ya da hane sayısını düşürün.`,
+        { code: "NUMBER_SERIES_CODE_TOO_LONG", key, uzunluk: enKisa, kapasite },
+      );
+    }
   }
   if (!["", "-", "_", "/", "."].includes(fmt.separator)) {
     throw AppError.badRequest("Ayraç boş ya da - _ / . olabilir.", {

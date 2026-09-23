@@ -27,6 +27,7 @@ import { requireSettingsPassword } from "../middlewares/settings-password.middle
 import { previewSeriesCode, resolveSeriesFormat } from "../services/number-series.service";
 import { assertSeriesFormatAllowed, updateSeriesCounter, updateSeriesFormat } from "../services/helpers/series-write.helper";
 import { listSeries, seriesImpactCount } from "../services/helpers/series-panel.helper";
+import { seriesExhaustion } from "../services/helpers/series-exhaustion.helper";
 import { numberSeriesCatalogEntry } from "../constants/number-series-catalog";
 
 const router = Router();
@@ -172,6 +173,28 @@ router.patch(
     }
   },
 );
+
+/**
+ * @openapi
+ * /api/number-series/{key}/exhaustion:
+ *   get:
+ *     tags: [NumberSeries]
+ *     summary: Tükenme durumu — yürürlükteki dönemde sınırın ne kadarı kullanıldı
+ *     description: |
+ *       ÜÇ SONUÇ: `percent` sayı ise ölçüldü · `null` ise ÖLÇÜLEMEDİ ve `reason`
+ *       gerekçeyi taşır (üst sınır tanımlı değilse yüzde tanımsızdır). `digits`
+ *       vekil sınır SAYILMAZ: taşma haneyi genişletir, sayaç dolmaz.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/:key/exhaustion", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { key } = keyParamSchema.parse(req.params);
+    numberSeriesCatalogEntry(key); // tanınmayan anahtar → 400 (fail-closed)
+    res.status(200).json({ success: true, data: await seriesExhaustion(key) });
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

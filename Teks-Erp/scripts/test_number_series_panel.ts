@@ -28,6 +28,8 @@
 //  §4e Sayım kaynağı olmayan seri `uretecBagi` ile BEYANLI (kaynaksızlık bir KARAR)
 //  §4f Kaynaklı HER seri gerçekten sayılabiliyor — yanlış model adı sessizce
 //      `null` döndürür ve hiçbir statik kontrol göremez
+//   §7 KAPASİTE ve TÜKENME: kapasite envanteri şemayla birebir · kolona sığmayan
+//      biçim 400 · tükenme ÜÇ SONUÇLU (%90 eşiği tek kaynak, iki yüzey)
 //   §6 SAYAÇ AYARLARI: varsayılan satır = BUGÜNKÜ davranış (52 seri) · kendi
 //      mekanizması olan seri 400 · değer kapısı · yazma yolu damgaya dokunmaz ·
 //      yetenek listesi sunucudan, `reset` hep kapalı ve GEREKÇELİ
@@ -65,6 +67,12 @@ import {
   seriesLock,
 } from "../src/services/helpers/series-panel.helper";
 import { seriesPrefix } from "../src/services/helpers/series-format.helper";
+import { NUMBER_SERIES_CODE_CAPACITY } from "../src/constants/number-series-capacity";
+import {
+  EXHAUSTION_WARN_RATIO,
+  seriesExhaustion,
+  seriesExhaustionWarnings,
+} from "../src/services/helpers/series-exhaustion.helper";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
@@ -480,6 +488,72 @@ async function main(): Promise<void> {
           ? !r.counter.startValue && !r.counter.step && !r.counter.maxValue && (r.counter.lockedReason ?? "").length > 20
           : r.counter.startValue && r.counter.step && r.counter.maxValue),
       `${liste2.filter((r) => r.counter.startValue).length} açık / ${liste2.filter((r) => !r.counter.startValue).length} kapalı`);
+
+    // ── §7 KAPASİTE ve TÜKENME (D2③) ────────────────────────────────────────
+    // ⭐ §7a ENVANTER ŞEMAYLA AYRIŞMIYOR: kapasite dosyası `@db.VarChar(n)`
+    // kopyalarıdır; kopya bayatlarsa kapı yanlış yerde durur ya da hiç durmaz.
+    const kapasiteHatasi: string[] = [];
+    let kapasiteDenetlenen = 0;
+    for (const e of NUMBER_SERIES_CATALOG) {
+      const beyan = NUMBER_SERIES_CODE_CAPACITY[e.key];
+      if (!e.countTable) { if (beyan !== undefined) kapasiteHatasi.push(`${e.key}: kaynaksız ama beyan var`); continue; }
+      const M = e.countTable.model.replace(/^./, (c) => c.toUpperCase());
+      const govde = sema.split(new RegExp(`\\bmodel ${M}\\b`))[1]?.split("\n}")[0] ?? "";
+      const satir = govde.split("\n").find((l) => new RegExp(`^\\s*${e.countTable?.field}\\s`).test(l)) ?? "";
+      const m = /@db\.VarChar\((\d+)\)/.exec(satir);
+      const gercek = m ? Number(m[1]) : undefined;
+      kapasiteDenetlenen++;
+      if (gercek !== beyan) kapasiteHatasi.push(`${e.key}: beyan=${String(beyan)} şema=${String(gercek)}`);
+    }
+    check("§7a ⭐ kapasite envanteri `schema.prisma` ile BİREBİR (bayat kopya yok)",
+      kapasiteHatasi.length === 0, kapasiteHatasi.join(", ") || `${kapasiteDenetlenen} seri denetlendi`);
+    check("§7a körlük zemini: envanter gerçekten dolu", Object.keys(NUMBER_SERIES_CODE_CAPACITY).length >= 45,
+      `${Object.keys(NUMBER_SERIES_CODE_CAPACITY).length} kayıt`);
+
+    // ⭐ §7b KAPI — ölçülmüş açık: `PRT-2609-` (9) + 8 hane = 17 > VarChar(16).
+    // Bu ayar bugüne kadar KABUL EDİLİYORDU ve hata sahada, YAZMA anında patlardı.
+    check("§7b ⭐ kolona sığmayan biçim 400 `NUMBER_SERIES_CODE_TOO_LONG`",
+      throws(() => assertSeriesFormatAllowed("packingLotCode",
+        { prefix: "PRT", dateSegment: "YYMM", digits: 8, separator: "-", retiredPrefixes: [] }),
+        "NUMBER_SERIES_CODE_TOO_LONG"));
+    check("§7b kapı FAZLA DAR değil: sığan biçim kabul edilir",
+      !throws(() => assertSeriesFormatAllowed("packingLotCode",
+        { prefix: "PRT", dateSegment: "YYMM", digits: 4, separator: "-", retiredPrefixes: [] }), "ANY"));
+    check("§7b kapasitesi BEYAN EDİLMEMİŞ seride kontrol yok (bilmiyorum ≠ reddet)",
+      NUMBER_SERIES_CODE_CAPACITY.directShipment === undefined);
+
+    // ⭐ §7c TÜKENME — ÜÇ SONUÇ
+    // ⚠️ SERİ SEÇİMİ LOAD-BEARING: `packingLotCode` bu bekçide §6d'de sınır
+    // ALMIŞTI ve "sınırsız" iddiası orada sessizce yanlış seriyi ölçerdi (ilk
+    // yazımda KIRMIZI verdi ve doğrusu buydu). Hiç dokunulmamış bir seri seçilir.
+    const sinirsiz = await seriesExhaustion("customer");
+    check("§7c ⭐ üst sınır yoksa yüzde ÖLÇÜLEMEDİ (`null`) ve GEREKÇE var — '0 %' demez",
+      sinirsiz.percent === null && sinirsiz.limit === null && (sinirsiz.reason ?? "").length > 20,
+      sinirsiz.reason ?? "(gerekçe yok)");
+    const rollDurum = await seriesExhaustion("roll");
+    check("§7c ⭐ top barkodunda sınır GERÇEK ve ölçülüyor (sayaç ayarları kapalı olsa da)",
+      rollDurum.limit === 9999 && rollDurum.source === "rollCounter" && rollDurum.percent !== null,
+      `${rollDurum.used}/${rollDurum.limit}`);
+    // Fikstür: sınır koy + o sınırın %90'ına gelen bir kod yaz.
+    await updateSeriesCounter("packingLotCode", { startValue: null, step: null, maxValue: 10 });
+    sayacDokunulan.push("packingLotCode");
+    const pFull = seriesPrefix(resolveSeriesFormat("packingLotCode"), new Date());
+    if (musteri) {
+      fixtureGroups.push((await prisma.packingGroup.create({
+        data: { customerId: musteri.id, name: `${DAMGA} tük`, code: `${pFull}0009`.slice(0, 16) },
+        select: { id: true },
+      })).id);
+    }
+    const dolu = await seriesExhaustion("packingLotCode");
+    check("§7c ⭐ sınır varken kullanım ÖLÇÜLÜYOR ve eşiği geçince UYARI (%90)",
+      dolu.limit === 10 && dolu.used === 9 && dolu.percent === 0.9 && dolu.warn,
+      `${dolu.used}/${dolu.limit} = %${Math.round((dolu.percent ?? 0) * 100)}`);
+    check("§7c ⭐ eşik TEK KAYNAK: helper'ın sabiti kullanılıyor",
+      EXHAUSTION_WARN_RATIO === 0.9 && (dolu.percent ?? 0) >= EXHAUSTION_WARN_RATIO);
+    const uyarilar = await seriesExhaustionWarnings();
+    check("§7c ⭐ sağlık yüzeyi AYNI helper'dan besleniyor (iki yüzey tek hesap)",
+      uyarilar.some((u) => u.key === "packingLotCode"),
+      uyarilar.map((u) => u.key).join(", ") || "(boş)");
 
     // ── §5 Önizleme sunucuda + biçim kapısı ───────────────────────────────
     const fmt = resolveSeriesFormat("packingLotCode");
