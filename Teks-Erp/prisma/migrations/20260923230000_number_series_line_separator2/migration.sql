@@ -1,0 +1,11 @@
+-- BİÇİM SATIRINDA İKİNCİ AYRAÇ (D5② — sıra düzeltmesi, 2026-09-23)
+--
+-- Bu kolon `20260923120000_number_series_separator2`de yazılmıştı; o migration
+-- `number_series_lines` tablosunu YARATAN `20260923200000_number_series_line`ten
+-- ÖNCE sıralanıyor ve temiz bir veritabanında `42P01` ile düşüyordu. Kolon,
+-- tablonun doğumundan SONRAYA taşındı; şema aynı, yalnız SIRA düzeldi.
+--
+-- YALNIZ EKLER: NULL kabul eder, NULL = "`separator`a düş" (bugünkü davranış).
+-- `IF NOT EXISTS` idempotenttir: kolonu ara durumda zaten almış veritabanlarında
+-- (eski sıralı koşumla) bu migration no-op'tur.
+ALTER TABLE "number_series_lines" ADD COLUMN IF NOT EXISTS "separator2" VARCHAR(2);

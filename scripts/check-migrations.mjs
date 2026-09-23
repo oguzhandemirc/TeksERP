@@ -19,9 +19,20 @@
 //
 //   [GATE 1] prisma/migrations altında UNTRACKED dosya → FAIL.
 //   [GATE 2] prisma/migrations altında MODIFIED/DELETED dosya → FAIL.
-//            Uygulanmış migration IMMUTABLE'dır: `_prisma_migrations` checksum
-//            tutar, dosyayı değiştirmek "migration modified after applied"
-//            hatasıyla deploy'u kilitler.
+//            Uygulanmış migration IMMUTABLE'dır. ⚠️ GEREKÇE 2026-09-23'te
+//            DÜZELTİLDİ: eski metin "deploy 'migration modified after applied'
+//            ile KİLİTLER" diyordu; ÖLÇÜLDÜ ve bu YANLIŞ — `migrate deploy` ve
+//            `migrate status` uygulanmış bir migration'ın checksum'ını
+//            DOĞRULAMIYOR (yalnız `migrate dev` konuşur, o da bu depoda yasak).
+//            Gerçek bedel AYRIŞMADIR: bir ortam eski metni, başka bir ortam yeni
+//            metni koşar ve hiçbir yerde bu fark görünmez.
+//            BEYANLI ONARIM (tek istisna): `prisma/migration-onarimlari.json`.
+//            Bir dosya ancak ORADA, düzeltilmiş hâlinin sha256'sı ÇİVİLENEREK
+//            beyan edildiyse değiştirilebilir. Çivi sonraki sessiz düzenlemeyi de
+//            yakalar (sha tutmazsa kapı, dosya commit'li olsa bile kırmızı verir).
+//            Doğan ihtiyaç: sonra doğan bir tabloya dokunan migration temiz DB'de
+//            `42P01` ile düşüyordu ve "dosyayı eski hâline al" ÇARE DEĞİLDİ —
+//            eski hâli hiçbir temiz kurulumda koşamıyordu (2026-09-23).
 //   [GATE 3] her migration dizini `migration.sql` içeriyor mu (boş/yarım dizin).
 //   [GATE 4] scripts/test_*.ts UNTRACKED → FAIL. Test commit edilmezse CI'ın
 //            P2022 gate'i kaybolur.
@@ -42,6 +53,7 @@
 // =============================================================================
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, dirname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -181,14 +193,101 @@ if (untrackedMig.length) {
   });
 }
 
-if (changedMig.length) {
+// BEYANLI ONARIM DEFTERİ — GATE 2'nin TEK istisnası (2026-09-23).
+//
+// ⚠️ "Dosyayı eski hâline al" her zaman bir ÇARE DEĞİLDİR: sonra doğan bir tabloya
+// dokunan migration'ın ESKİ hâli hiçbir temiz kurulumda koşamıyor (42P01). Böyle bir
+// dosya düzeltilmek ZORUNDA. İstisna sessiz kalmasın diye beyan VERİDE durur ve
+// düzeltilmiş içeriğin sha256'sını ÇİVİLER — sonraki sessiz bir düzenleme, dosya
+// commit'li olsa bile kapıyı kırmızıya düşürür (iki yönlü: ölü beyan da kırmızı).
+const ONARIM_DOSYASI = "Teks-Erp/prisma/migration-onarimlari.json";
+function onarimDefteri() {
+  const yol = join(REPO_ROOT, ONARIM_DOSYASI);
+  if (!existsSync(yol)) return [];
+  try {
+    const d = JSON.parse(readFileSync(yol, "utf8"));
+    return Array.isArray(d) ? d : [];
+  } catch (e) {
+    problems.push({
+      gate: "GATE 2 — ONARIM DEFTERİ OKUNAMADI",
+      why: "Defter bozuksa istisna ÖLÇÜLEMEZ; ölçülemeyen istisna sessiz bir kapı deliğidir.",
+      items: [`${ONARIM_DOSYASI}: ${e.message}`],
+      fix: "JSON'u düzelt",
+    });
+    return null;
+  }
+}
+const onarimlar = onarimDefteri() ?? [];
+const sha256 = (mutlakYol) =>
+  existsSync(mutlakYol) ? createHash("sha256").update(readFileSync(mutlakYol)).digest("hex") : null;
+
+// Beyanın KENDİSİ ölçülür: dizin var mı, çivi tutuyor mu, taşındığı migration
+// gerçekten SONRA mı geliyor. (Üçüncüsü olmadan defter, sırayı düzeltmeyen bir
+// düzenlemeyi de aklardı.)
+const olcumsuzBeyan = [];
+for (const o of onarimlar) {
+  const dizin = join(REPO_ROOT, MIGRATIONS_DIR, String(o.migration ?? ""));
+  const sqlYolu = join(dizin, "migration.sql");
+  if (!existsSync(sqlYolu)) {
+    olcumsuzBeyan.push(`${o.migration}: beyan var ama migration.sql YOK (ölü beyan)`);
+    continue;
+  }
+  if (sha256(sqlYolu) !== o.sha256) {
+    olcumsuzBeyan.push(
+      `${o.migration}: beyandaki sha256 dosyayla TUTMUYOR — dosya beyandan SONRA da düzenlenmiş ` +
+        `(dosya ${String(sha256(sqlYolu)).slice(0, 12)}…, beyan ${String(o.sha256).slice(0, 12)}…)`,
+    );
+  }
+  if (o.tasindigiMigration) {
+    const hedef = join(REPO_ROOT, MIGRATIONS_DIR, String(o.tasindigiMigration), "migration.sql");
+    if (!existsSync(hedef)) {
+      olcumsuzBeyan.push(`${o.migration}: taşındığı migration (${o.tasindigiMigration}) YOK`);
+    } else if (String(o.tasindigiMigration) <= String(o.migration)) {
+      olcumsuzBeyan.push(
+        `${o.migration}: taşındığı migration (${o.tasindigiMigration}) SONRA gelmiyor — sıra düzelmemiş`,
+      );
+    }
+  }
+  if (!o.gerekce || String(o.gerekce).length < 40) {
+    olcumsuzBeyan.push(`${o.migration}: gerekçe yok ya da bir cümle bile değil`);
+  }
+}
+if (olcumsuzBeyan.length) {
+  problems.push({
+    gate: "GATE 2 — ONARIM BEYANI ÖLÇÜLEMEDİ",
+    why:
+      "Beyanlı onarım, GATE 2'nin tek istisnasıdır; beyanın kendisi ölçülemiyorsa\n" +
+      "  istisna bir kapı deliğine dönüşür (çivi tutmuyorsa dosya beyandan sonra\n" +
+      "  yeniden düzenlenmiş demektir).",
+    items: olcumsuzBeyan,
+    fix: `${ONARIM_DOSYASI} içindeki sha256'yı ve taşındığı migration'ı güncelle`,
+  });
+}
+
+const beyanliOnarim = new Set(
+  onarimlar
+    .filter((o) => sha256(join(REPO_ROOT, MIGRATIONS_DIR, String(o.migration ?? ""), "migration.sql")) === o.sha256)
+    .map((o) => `${MIGRATIONS_DIR}/${o.migration}/migration.sql`),
+);
+const beyansizDegisim = changedMig.filter((e) => !beyanliOnarim.has(normalize(e.path)));
+const beyanliDegisim = changedMig.filter((e) => beyanliOnarim.has(normalize(e.path)));
+
+for (const e of beyanliDegisim) {
+  // SESSİZ GEÇMEZ: istisna her koşumda tek satırla duyurulur.
+  console.log(`   📌 BEYANLI ONARIM (GATE 2 istisnası): ${e.path} — ${ONARIM_DOSYASI}`);
+}
+
+if (beyansizDegisim.length) {
   problems.push({
     gate: "GATE 2 — UYGULANMIŞ MIGRATION DEĞİŞTİRİLMİŞ",
     why:
-      "Migration dosyaları IMMUTABLE'dır — `_prisma_migrations` checksum tutar.\n" +
-      "  Uygulanmış bir dosyayı değiştirmek deploy'u 'migration modified after it\n" +
-      "  was applied' ile KİLİTLER. Değişiklik gerekiyorsa YENİ migration yaz.",
-    items: changedMig.map((e) => `${e.code.trim()} ${e.path}`),
+      "Migration dosyaları IMMUTABLE'dır. Bedel deploy'un kilitlenmesi DEĞİL (ölçüldü:\n" +
+      "  `migrate deploy`/`status` checksum'a bakmaz), ORTAMLARIN SESSİZCE AYRIŞMASIDIR:\n" +
+      "  bir veritabanı eski metni, ötekisi yeniyi koşar ve fark hiçbir yerde görünmez.\n" +
+      "  Değişiklik gerekiyorsa YENİ migration yaz. Dosyanın ESKİ HÂLİ hiçbir temiz\n" +
+      "  kurulumda koşamıyorsa (ör. sonra doğan tabloya dokunuyorsa) düzeltmeyi\n" +
+      `  ${ONARIM_DOSYASI} defterine BEYAN ET (sha256 çivisiyle).`,
+    items: beyansizDegisim.map((e) => `${e.code.trim()} ${e.path}`),
     fix: "Dosyayı eski hâline al (git checkout --) ve düzeltmeyi YENİ bir migration'a yaz",
   });
 }

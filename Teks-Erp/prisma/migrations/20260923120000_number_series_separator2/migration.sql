@@ -1,8 +1,12 @@
 -- TARİH ile SAYAÇ arasındaki ikinci ayraç (D5②).
 --
--- YALNIZ EKLER: iki kolon da NULL kabul eder ve NULL = "separator'a düş",
--- yani var olan 52 serinin ürettiği kod bayt bayt aynı kalır. Varsayılan
--- DEĞER KONMAZ — "" koysaydık, ayracı "-" olan bir seri sessizce
--- `PRT-26090001` üretmeye başlardı.
+-- YALNIZ EKLER: kolon NULL kabul eder ve NULL = "separator'a düş", yani var olan
+-- 52 serinin ürettiği kod bayt bayt aynı kalır. Varsayılan DEĞER KONMAZ — ""
+-- koysaydık, ayracı "-" olan bir seri sessizce `PRT-26090001` üretmeye başlardı.
+--
+-- ⚠️ `number_series_lines` KOLONU BURADA DEĞİL: o tablo daha SONRAKİ bir
+-- migration'da (`20260923200000_number_series_line`) doğuyor ve buradaki bir
+-- ALTER temiz bir veritabanında `42P01 relation … does not exist` ile düşüyordu
+-- (ölçüldü 2026-09-23, boş DB'de `migrate deploy`). Satır tablonun doğumundan
+-- SONRA gelen `20260923230000_number_series_line_separator2`e taşındı.
 ALTER TABLE "number_series" ADD COLUMN IF NOT EXISTS "separator2" VARCHAR(2);
-ALTER TABLE "number_series_lines" ADD COLUMN IF NOT EXISTS "separator2" VARCHAR(2);
