@@ -110,6 +110,37 @@ describe('① Sunucu tablosu sınıflandırmayı BELİRLER', () => {
     expect(matchesFullFormatWithTable(degisik, 'ROLL', 'TP-120726-X00001')).toBe(false);
   });
 
+  // ── EMEKLİ BİÇİM (panelin AYNASI) ─────────────────────────────────────────
+  // ⚠️ Doğuş sebebi ölçüldü (2026-09-23): sınıflandırma gevşek olduğu için eski
+  // etiketi tanıyordu, TAM-BİÇİM kapısı ise yalnız yürürlükteki şekli deniyordu
+  // ⇒ hane büyüyünce dünkü barkod "aç/okut" yolundan geçmiyordu. Emekli ÖN EK
+  // yetmez: dünkü kod dünkü HANEYLE basıldı.
+  it('⭐ emekli biçimle basılmış ESKİ etiket tam-format kapısından GEÇER', () => {
+    const emekli: ScanSeriesRow[] = [
+      {
+        key: 'roll',
+        kind: 'ROLL',
+        prefixes: ['T'],
+        dateSegment: 'DDMMYY',
+        digits: 5,
+        separator: '',
+        infix: '[HF]',
+        retiredFormats: [{ prefix: 'T', dateSegment: 'DDMMYY', digits: 4, separator: '' }],
+      },
+    ];
+    expect(matchesFullFormatWithTable(emekli, 'ROLL', 'T120726H00001')).toBe(true);
+    expect(matchesFullFormatWithTable(emekli, 'ROLL', 'T120726H0001')).toBe(true);
+    expect(matchesFullFormatWithTable(emekli, 'ROLL', 'T120726X0001')).toBe(false);
+  });
+
+  it('emekli biçim YOKSA davranış bugünküyle aynı (alan opsiyonel)', () => {
+    const emeklisiz: ScanSeriesRow[] = [
+      { key: 'roll', kind: 'ROLL', prefixes: ['T'], dateSegment: 'DDMMYY', digits: 5, separator: '', infix: '[HF]' },
+    ];
+    expect(matchesFullFormatWithTable(emeklisiz, 'ROLL', 'T120726H00001')).toBe(true);
+    expect(matchesFullFormatWithTable(emeklisiz, 'ROLL', 'T120726H0001')).toBe(false);
+  });
+
   it('geçerli tablo olduğu gibi döner', async () => {
     getMock.mockResolvedValueOnce({ data: { success: true, data: degisik } });
     expect(await scanSeriesService.get()).toEqual(degisik);

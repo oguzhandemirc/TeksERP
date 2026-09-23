@@ -5,6 +5,8 @@
 > Hakem notu: 12 üye; 8'i gerçekten sürüm/yayın konusu (N0 kök bölüm, N1 backend, N2/N3/N4 mobil, N7/N8 kök tarihli, N9 Electron). N5/N6/N10/N11 kümeye yalnız 'Backend ÖNCE / APK YOK' ibaresiyle düşmüş — dizin kararı kendi kümelerinde. Bayat olanlar: N9 (elle version artırma → 2026-09-02 script), N7 (4 saat → 15 dk, 2026-09-04 kodda), N4:136 + N0 bash bloğu (`build:apk` --musteri'siz; kod zorunlu kılıyor), N8 arşivinin LAN-kanal yarısı (aynı gün VPS'e taşındı). En riskli uyuşmazlık: kök bölümün kendi komut satırı kodun reddedeceği bir çağrı öğretiyor (`npm run build:apk` argümansız); ikincisi 'elle tur' ifadesinin APK'nın tabletçe indirildiği gerçeğini gizlemesi. Sürüm numaralandırması 2026-08-28'de 1.0.0'dan yeniden başladı; eski 2.9.x/vc5x örnekleri tarihsel.
 
 
+- **[ÇEKİRDEK]** Okutulan serinin eksen kilidi bir SÜRÜM VAAT EDİYORSA ("panel X / tablet Y ile açılır"), o sürümün paketlendiği ağaç vaadin gerektirdiği istemci davranışını TAŞIMALIDIR; taşımayan bir paket kilidi açılabilir gösterir ama sahada dünkü etiket okunmaz. Bugünkü şart: iki istemcinin de tam-biçim kapısı `retiredFormats`i tüketmesi. · bekçi: `scripts/test_eski_istemci_okutma.ts (c2)`
+
 ## Ortak (backend + panel + tablet)
 
 

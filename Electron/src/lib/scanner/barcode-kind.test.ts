@@ -135,6 +135,44 @@ describe("① Sunucu tablosu sınıflandırmayı BELİRLER (ön ek değişebilir
     expect(matchesFullFormat("ROLL", "TP-120726-X00001")).toBe(false); // infix tutmadı
   });
 
+  // ── EMEKLİ BİÇİM: dünkü etiket bugünkü kapıdan geçer ──────────────────────
+  // ⚠️ BU TESTİN DOĞUŞ SEBEBİ ÖLÇÜLDÜ (2026-09-23, `test_eski_istemci_okutma`):
+  // sınıflandırma GEVŞEK olduğu için eski etiketi tanıyordu, ama TAM-BİÇİM kapısı
+  // yalnız YÜRÜRLÜKTEKİ şekli deniyordu ⇒ fabrika haneyi büyütünce dünkü barkod
+  // "Aç" yolundan geçemiyor, ekran SESSİZCE kımıldamıyordu. Emekli ön ekler
+  // yetmez: dünkü kod dünkü HANEYLE basıldı.
+  it("⭐ emekli biçimle basılmış ESKİ etiket tam-format kapısından GEÇER", async () => {
+    const emekliTablo: ScanSeriesRow[] = [
+      {
+        key: "roll",
+        kind: "ROLL",
+        prefixes: ["T"],
+        dateSegment: "DDMMYY",
+        digits: 5,
+        separator: "",
+        infix: "[HF]",
+        retiredFormats: [{ prefix: "T", dateSegment: "DDMMYY", digits: 4, separator: "" }],
+      },
+    ];
+    getMock.mockResolvedValueOnce({ data: { success: true, data: emekliTablo } });
+    await loadScanSeries();
+    expect(matchesFullFormat("ROLL", "T120726H00001")).toBe(true); // yürürlükteki (5 hane)
+    expect(matchesFullFormat("ROLL", "T120726H0001")).toBe(true); // ESKİ etiket (4 hane)
+    expect(matchesFullFormat("ROLL", "T120726X0001")).toBe(false); // infix emekli biçimde de zorunlu
+  });
+
+  it("emekli biçim YOKSA davranış bugünküyle aynı (alan opsiyonel)", async () => {
+    const emeklisiz: ScanSeriesRow[] = [
+      { key: "roll", kind: "ROLL", prefixes: ["T"], dateSegment: "DDMMYY", digits: 5, separator: "", infix: "[HF]" },
+    ];
+    getMock.mockResolvedValueOnce({ data: { success: true, data: emeklisiz } });
+    await loadScanSeries();
+    expect(matchesFullFormat("ROLL", "T120726H00001")).toBe(true);
+    // ⚠️ Hane ESNEK (`\d{n,}`) olduğu için 4 hane zaten yürürlükteki şekle UYMAZ,
+    // 6 hane uyar — emekli biçimin kattığı şey "DAHA AZ hane"yi tanımaktır.
+    expect(matchesFullFormat("ROLL", "T120726H0001")).toBe(false);
+  });
+
   it("başarılı tablo yerel kopyaya yazılır ve sonraki açılışta kullanılır", async () => {
     getMock.mockResolvedValueOnce({ data: { success: true, data: degisikTablo } });
     await loadScanSeries();

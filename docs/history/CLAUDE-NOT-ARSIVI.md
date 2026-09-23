@@ -21,6 +21,38 @@
 
 ---
 
+## 2026-09-23 — Emekli biçimler İSTEMCİDE de tüketiliyor: "alan var" ≠ "davranış var" [ÇEKİRDEK]
+
+**Boşluk nasıl bulundu:** top barkodu diliminde eksen kilidini ölçerken simülasyona İKİNCİ YÜZEY
+(istemcinin tam-biçim kapısı) eklendi ve (c) "açılma koşulu" iddiası 54 kombinasyonda kırmızı verdi:
+HEAD panel ve tablet, biçim değiştikten sonra DÜNKÜ etiketi sınıflandırıyor ama "aç/okut" kapısından
+geçiremiyordu.
+
+**İlk teşhisim YANLIŞTI ve düzeltmesi dersin kendisi.** "Tel sözleşmesi emekli biçimleri taşımıyor"
+dedim; ölçünce `SeriesClassifierRow.retiredFormats` alanının ZATEN var olduğu ve `classifierRow`un
+onu ZATEN gönderdiği çıktı — hatta alanın yorumunda geriye uyumluluk gerekçesi yazılıydı. Eksik olan
+İSTEMCİ TARAFIYDI: iki istemcinin de `fullFormat`ı yalnız `row.prefixes`i geziyor, deseni
+YÜRÜRLÜKTEKİ hane/segmentle kuruyordu (grep: 0 isabet). ⇒ **Alan sözleşmede var olabilir, sunucu onu
+gönderiyor olabilir ve davranış yine de YOK olabilir.** Ölü veri, taşındığı için yaşıyor sanılır.
+
+**Çözüm sunucudaki `matchesSeries` ile AYNI yapı:** `fullFormat` artık bir BİÇİM ŞEKLİ alıyor
+(yürürlükteki satır da, emekli biçim de o şekle uyuyor); kapı önce yürürlükteki ön ekleri
+yürürlükteki şekille, sonra her emekli biçimi KENDİ şekliyle deniyor. İki döngü birlikte bir ÜST
+KÜME: hiçbir kod eskisinden daha az tanınmaz. Alan opsiyonel olduğu için taşımayan bir sunucu
+tablosunda davranış bugünküyle birebir aynı.
+
+**Muafiyetin kendi kendini iptal etmesi ÇALIŞTI:** top diliminde (c) iddiası, muafiyeti alanın
+varlığına değil İSTEMCİNİN OKUMASINA çapalamıştı. İstemciler okumaya başlayınca muafiyet
+kendiliğinden kalktı ve iddia 54 muaftan 0'a düşerek yeşile döndü — beyan, işi yapılmadan sessizce
+kalıcılaşamadı.
+
+**Sürüm vaadi artık ÖLÇÜLÜYOR (c2):** eksen kilidi kullanıcıya "panel X / tablet Y ile açılır" diyor.
+Bu cümlenin doğru olması, o sürümün paketlendiği AĞACIN emekli biçimleri tüketmesine bağlı; tüketmeyen
+bir paket kilidi açılabilir gösterir ama sahada dünkü etiket okunmaz. Vaat koda çapalandı ve
+`surum-yayin.md`ye kural satırı olarak indi.
+
+---
+
 ## 2026-09-23 — Top barkodu AÇILDI: kapasite ile dolgu ayrıldı, kilit EKSENE indi [ÇEKİRDEK]
 
 **İki tetik:** (1) günde 9.999 top sınırına test veritabanında gerçekten çarpıldı; (2) kullanıcı

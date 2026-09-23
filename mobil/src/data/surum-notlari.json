@@ -25,6 +25,12 @@
       },
       "maddeler": [
         {
+          "kapsam": "her-ikisi",
+          "tip": "duzeltme",
+          "metin": "Barkod biçimi değiştirildikten sonra ESKİ etiketler de okutulmaya devam ediyor. Önceden: bir serinin ön eki, tarih bölümü ya da hane sayısı değiştirilince panel ve tablet eski barkodu TANIYOR ama “aç/okut” adımında sessizce hiçbir şey yapmıyordu — operatör okutuyor, ekran kımıldamıyordu, hata da çıkmıyordu. Artık her iki cihaz da serinin emekli biçimlerini kendi hane ve tarih düzenleriyle deniyor, yani dünkü etiket de bugünkü etiket de açılıyor. Biçimi hiç değişmemiş serilerde davranış aynı.",
+          "dene": "Ayarlar → Numaralandırma'da bir serinin hane sayısını değiştirin, sonra o seriden ESKİ biçimle basılmış bir etiketi okutun: kayıt açılmalı."
+        },
+        {
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Top barkodu artık Genel Ayarlar → Numaralandırma ekranından ayarlanıyor: ön ek, tarih bölümü, hane sayısı ve ayraçlar değiştirilebiliyor. HİÇBİR ŞEY DEĞİŞMEDEN AYNI ÇALIŞIR — kurulum bugünkü düzenle gelir. İki yenilik var. Birincisi GÜNLÜK KAPASİTE: bugüne kadar bir günde aynı türden en çok 9.999 top barkodu üretilebiliyordu ve bu sınır yazılıma gömülüydü; artık serinin “üst sınır” ayarı ve gerektiğinde yükseltilebiliyor (boş bırakılırsa sınır kalkar). İkincisi BAŞTAKİ SIFIRLAR: hane sayısını 1 yaparsanız numara dolgusuz büyür (…H5, …H10, …H100) — sıfırlar yazılmaz. Hane yalnız GÖRÜNÜMDÜR; kapasiteyi üst sınır belirler, ikisi birbirinden bağımsızdır. ⚠️ Ön ek, tarih bölümü, hane ve ayraç değişiklikleri sahadaki eski panel ve tabletlerin barkodu okumasını bozar; bu alanlar panel ve tabletler güncellenene kadar kilitli kalır ve ekran sebebini yazar. Tarih bölümü tamamen kaldırılamaz: top barkodunda ham/final harfi var ve tarih kalkınca kod okuyucunun ayırt edemeyeceği bir şekle giriyor. GEÇMİŞ ASLA YENİDEN NUMARALANMAZ; basılmış etiketler okunmaya devam eder.",

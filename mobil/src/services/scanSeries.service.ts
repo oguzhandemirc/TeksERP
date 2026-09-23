@@ -49,6 +49,21 @@ export interface ScanSeriesRow {
   separator: string;
   /** Tarih ile sıra ARASINDAKİ sabit parça (top barkodunun faz harfi `[HF]`). */
   infix?: string;
+  /**
+   * EMEKLİ BİÇİMLER — biçim değiştiğinde ESKİ etiketler okunmaya devam etsin diye.
+   *
+   * ⚠️ `prefixes` YETMİYOR ve bu ÖLÇÜLDÜ (2026-09-23): emekli ön ekler
+   * YÜRÜRLÜKTEKİ segment/hane ile deneniyor, oysa dünkü etiket dünkü haneyle
+   * basıldı. Her emekli biçim KENDİ segment/hanesiyle denenir; alan opsiyonel,
+   * taşımayan sunucu tablosunda davranış bugünkü gibi kalır.
+   */
+  retiredFormats?: {
+    prefix: string;
+    dateSegment: ScanDateSegment;
+    digits: number;
+    separator: string;
+    separator2?: string | null;
+  }[];
 }
 
 /** Sunucuya hiç ulaşılamadığında kullanılan bugünkü biçim (backend tohumlarının aynası). */
@@ -116,16 +131,24 @@ function prefixAnchor(row: ScanSeriesRow, prefix: string): RegExp {
 }
 
 /** Tam-format regex'i — hane ESNEK (`\d{digits,}`): 9999'u aşan gün kodu da geçer. */
-function fullFormat(row: ScanSeriesRow, prefix: string): RegExp {
-  const sep = row.separator === '' ? '' : escapeRe(row.separator);
+/** Bir BİÇİM ŞEKLİ — yürürlükteki satır da, emekli biçim de bu şekle uyar. */
+interface FormatShape {
+  dateSegment: ScanDateSegment;
+  digits: number;
+  separator: string;
+  separator2?: string | null;
+}
+
+function fullFormat(sekil: FormatShape, prefix: string, infix?: string): RegExp {
+  const sep = sekil.separator === '' ? '' : escapeRe(sekil.separator);
   // İkinci eklem (tarih|sayaç) ayrı olabilir; yoksa birincisine düşer —
   // sunucudaki `seriesJoints` ile AYNI karar (ayna bekçisi karşılaştırır).
   // Tarih yoksa `head` zaten ikinci eklemi hiç kurmaz, ayrı bir dal gerekmez.
-  const sep2raw = row.separator2 ?? row.separator;
+  const sep2raw = sekil.separator2 ?? sekil.separator;
   const sepB = sep2raw === '' ? '' : escapeRe(sep2raw);
-  const len = DATE_LEN[row.dateSegment];
+  const len = DATE_LEN[sekil.dateSegment];
   const head = len === 0 ? `${escapeRe(prefix)}${sep}` : `${escapeRe(prefix)}${sep}\\d{${len}}${sepB}`;
-  return new RegExp(`^${head}${row.infix ?? ''}\\d{${row.digits},}$`, 'i');
+  return new RegExp(`^${head}${infix ?? ''}\\d{${sekil.digits},}$`, 'i');
 }
 
 export interface ScanClassification {
@@ -159,7 +182,13 @@ export function matchesFullFormatWithTable(
   for (const row of rows) {
     if (row.kind !== kind) continue;
     for (const prefix of row.prefixes) {
-      if (fullFormat(row, prefix).test(code)) return true;
+      if (fullFormat(row, prefix, row.infix).test(code)) return true;
+    }
+    // ⚠️ EMEKLİ BİÇİMLER KENDİ ŞEKİLLERİYLE denenir (panel ve sunucuyla AYNI
+    // yapı): hane/segment/ayraç değişiminden SONRA basılmış eski etiket ancak
+    // böyle tanınır. Üst küme — hiçbir kod eskisinden daha az tanınmaz.
+    for (const eski of row.retiredFormats ?? []) {
+      if (fullFormat(eski, eski.prefix, row.infix).test(code)) return true;
     }
   }
   return false;

@@ -45,6 +45,24 @@ export interface ScanSeriesRow {
   separator2?: string | null;
   /** Tarih ile sıra ARASINDAKİ sabit parça (top barkodunun faz harfi `[HF]`). */
   infix?: string;
+  /**
+   * EMEKLİ BİÇİMLER — biçim değiştiğinde ESKİ etiketler okunmaya devam etsin diye.
+   *
+   * ⚠️ `prefixes` YETMİYOR ve bu ÖLÇÜLDÜ (2026-09-23): emekli ön ekler
+   * YÜRÜRLÜKTEKİ segment/hane ile deneniyor, oysa dünkü etiket dünkü HANEYLE
+   * basıldı. Fabrika haneyi 4'ten 5'e çıkarınca sınıflandırma (gevşek) çalışıyor
+   * ama TAM-BİÇİM kapısı dünkü kodu reddediyordu — panelde "Aç" sessizce
+   * çalışmıyordu. Her emekli biçim KENDİ segment/hanesiyle denenir.
+   *
+   * Alan OPSİYONEL: taşımayan sunucudan gelen tablo bugünkü gibi davranır.
+   */
+  retiredFormats?: Array<{
+    prefix: string;
+    dateSegment: ScanSeriesRow["dateSegment"];
+    digits: number;
+    separator: string;
+    separator2?: string | null;
+  }>;
 }
 
 /**
@@ -190,16 +208,24 @@ function prefixAnchor(row: ScanSeriesRow, prefix: string): RegExp {
 }
 
 /** Tam-format regex'i — hane ESNEK (`\d{digits,}`): 9999'u aşan gün kodu da geçer. */
-function fullFormat(row: ScanSeriesRow, prefix: string): RegExp {
-  const sep = row.separator === "" ? "" : escapeRe(row.separator);
+/** Bir BİÇİM ŞEKLİ — yürürlükteki satır da, emekli biçim de bu şekle uyar. */
+interface FormatShape {
+  dateSegment: ScanSeriesRow["dateSegment"];
+  digits: number;
+  separator: string;
+  separator2?: string | null;
+}
+
+function fullFormat(sekil: FormatShape, prefix: string, infix?: string): RegExp {
+  const sep = sekil.separator === "" ? "" : escapeRe(sekil.separator);
   // İkinci eklem (tarih|sayaç) ayrı olabilir; yoksa birincisine düşer —
   // sunucudaki `seriesJoints` ile AYNI karar (ayna bekçisi karşılaştırır).
   // Tarih yoksa `head` zaten ikinci eklemi hiç kurmaz, ayrı bir dal gerekmez.
-  const sep2raw = row.separator2 ?? row.separator;
+  const sep2raw = sekil.separator2 ?? sekil.separator;
   const sepB = sep2raw === "" ? "" : escapeRe(sep2raw);
-  const len = DATE_LEN[row.dateSegment];
+  const len = DATE_LEN[sekil.dateSegment];
   const head = len === 0 ? `${escapeRe(prefix)}${sep}` : `${escapeRe(prefix)}${sep}\\d{${len}}${sepB}`;
-  return new RegExp(`^${head}${row.infix ?? ""}\\d{${row.digits},}$`);
+  return new RegExp(`^${head}${infix ?? ""}\\d{${sekil.digits},}$`);
 }
 
 export interface ClassifiedBarcode {
@@ -239,7 +265,15 @@ export function matchesFullFormat(kind: Exclude<BarcodeKind, "UNKNOWN">, code: s
   for (const row of table) {
     if (row.kind !== kind) continue;
     for (const prefix of row.prefixes) {
-      if (fullFormat(row, prefix).test(normalized)) return true;
+      if (fullFormat(row, prefix, row.infix).test(normalized)) return true;
+    }
+    // ⚠️ EMEKLİ BİÇİMLER KENDİ ŞEKİLLERİYLE denenir — üstteki döngü emekli ÖN
+    // EKLERİ yürürlükteki şekille deniyor (bugünkü davranış, KORUNUYOR); bu
+    // döngü onun kapatamadığı ekseni kapatır: hane/segment/ayraç değişiminden
+    // SONRA basılmış eski etiket. İkisi birlikte bir ÜST KÜME — hiçbir kod
+    // eskisinden daha az tanınmaz. Sunucudaki `matchesSeries` ile AYNI yapı.
+    for (const eski of row.retiredFormats ?? []) {
+      if (fullFormat(eski, eski.prefix, row.infix).test(normalized)) return true;
     }
   }
   return false;

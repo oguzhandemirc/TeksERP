@@ -694,6 +694,19 @@ async function main(): Promise<void> {
     ISTEMCI_RETIRED_FORMATS ? muafEskiEtiket.length === 0 : true,
     `istemciRetiredFormats=${ISTEMCI_RETIRED_FORMATS} · muaf=${muafEskiEtiket.length}`,
   );
+  // ── (c2) KİLİDİN VAADİ SAHAYA ÇIKACAK PAKETLE ÖRTÜŞÜYOR MU? ───────────────
+  // ⚠️ Eksen kilidinin kullanıcıya SÖYLEDİĞİ cümle şudur: "panel X ve tablet Y
+  // kurulunca bu alan da değiştirilebilir". Bu cümlenin DOĞRU olması, o
+  // sürümlerin paketlendiği AĞACIN emekli biçimleri tüketmesine bağlı — çünkü
+  // tüketmeyen bir istemcide alan açılsa bile dünkü etiket okunamaz ve fabrika
+  // kilidi kaldırdığında sahada sessiz bir arıza doğar.
+  // ⇒ Vaat KODA çapalı: bu ağaçtan üretilen paket şartı taşımıyorsa kilit
+  // cümlesi YALANDIR ve bu iddia kırmızı verir (1e kararı 2026-09-23).
+  check(
+    "(c2) ⭐ kilidin vaat ettiği sürüm bu ağaçtan üretilir ve İKİ istemci de emekli biçimleri TÜKETİR",
+    ISTEMCI_RETIRED_FORMATS,
+    `panel+tablet retiredFormats tüketimi=${ISTEMCI_RETIRED_FORMATS}`,
+  );
   // Faz B'nin varlığı İÇERİKTEN ölçülür (commit sha'sı iniş sırasında değişebilir).
   for (const [ad, yol] of [
     ["panel", PANEL_DOSYA],
