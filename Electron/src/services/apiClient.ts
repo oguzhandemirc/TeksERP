@@ -84,6 +84,22 @@ interface ApiErrorBody {
   details?: { code?: string };
 }
 
+/**
+ * YAKALANAN BİR HATADAN kullanıcıya gösterilecek mesaj — TEK KAYNAK.
+ *
+ * ⚠️ `response.data.message`i TEK BAŞINA okumak YETMEZ ve bu ölçüldü (d3,
+ * 2026-09-23): Zod doğrulaması alan-bazlı `errors[]` döndürüyor ve gövdedeki
+ * `message` yalnız "Validasyon hatası" diyor. Toast'ı basan yol bunu zaten
+ * biliyordu (`buildErrorMessage`), ama hatayı KENDİ yüzeyinde gösteren ekranlar
+ * ikinci bir okuma yazıp alan mesajını kaybediyordu — "türetilmiş alan / ayrışan
+ * yüzey" sınıfı. Ekran bu yardımcıyı çağırır, kendi okumasını yazmaz.
+ */
+export function apiErrorMessage(e: unknown, yedek = "Beklenmeyen bir hata oluştu"): string {
+  const body = (e as { response?: { data?: ApiErrorBody } } | undefined)?.response?.data;
+  if (!body) return yedek;
+  return buildErrorMessage(body) || yedek;
+}
+
 /** Backend validation errors → tek satır okunabilir mesaj. */
 function buildErrorMessage(body: ApiErrorBody | undefined): string {
   const fieldErrors = body?.errors ?? [];

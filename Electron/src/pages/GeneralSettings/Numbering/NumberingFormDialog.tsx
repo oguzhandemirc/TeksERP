@@ -7,6 +7,7 @@ import { NumberingFields } from "./NumberingFields";
 import { NumberingCounterFields } from "./NumberingCounterFields";
 import { NumberingSourceField } from "./NumberingSourceField";
 import { NumberingEffectiveFromField } from "./NumberingEffectiveFromField";
+import { apiErrorMessage } from "@/services/apiClient";
 import { numberingService } from "./service";
 import { counterErrors } from "./counterRules";
 import { lockSentence } from "./lockText";
@@ -64,11 +65,13 @@ function useOnizleme(
       .then((p) => { if (!iptal) { setOnizleme(p); setBicimHatasi(null); } })
       .catch((e: unknown) => {
         if (iptal) return;
-        const m = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+        // ⚠️ ALAN MESAJI KAYBOLMASIN: `message` tek başına "Validasyon hatası"
+        // diyor, asıl cümle `errors[0].message`te ("Hane sayısı en fazla 8
+        // olabilir."). Okuma TEK KAYNAKTAN (`apiErrorMessage`).
         // ⚠️ BAYAT ÖRNEK GÖSTERME: hata anında eski örnek ekranda kalırsa
         // kullanıcı reddedilen biçimin çalıştığını sanır. Örnek "—" olur.
         setOnizleme("");
-        setBicimHatasi(m ?? "Bu biçim kullanılamıyor.");
+        setBicimHatasi(apiErrorMessage(e, "Bu biçim kullanılamıyor."));
       });
     return () => { iptal = true; };
     // `useState` setter'ları KARARLIDIR; bağımlılığa eklemek susturmadan daha
@@ -187,11 +190,11 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
       await numberingService.saveChanges(row, { fmt, counter, source, effectiveFrom }, { formatChanged, counterChanged, sourceChanged });
       onSaved();
     } catch (e) {
-      const m = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+      const m = apiErrorMessage(e, "Kaydedilemedi.");
       // Kaydetme hatası HANGİ bölümden geldiyse oraya yazılır: yalnız biçim
       // gönderildiyse biçim kovasına, aksi hâlde genel kovaya.
-      if (formatChanged && !counterChanged && !sourceChanged) setBicimHatasi(m ?? "Kaydedilemedi.");
-      else setGenelHata(m ?? "Kaydedilemedi.");
+      if (formatChanged && !counterChanged && !sourceChanged) setBicimHatasi(m);
+      else setGenelHata(m);
     } finally {
       setKaydediliyor(false);
     }

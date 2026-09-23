@@ -89,6 +89,20 @@ iddia yine de kurulmamıştır.
 başından bir damga (koşum başlangıcı, son commit zamanı) ile karşılaştır.
 Kuşatamıyorsan iddiayı daralt: *"şu an temiz"* de, *"o sırada temizdi"* deme.
 
+### ERKEN türetme — doğru kaynak, yanlış AN
+Bir değer doğru kaynaktan türetiliyor ama kaynağın HENÜZ HAZIR OLMADIĞI bir anda
+okunuyorsa, türetme biçimsel olarak yapılmış, amacına ULAŞMAMIŞ olur. En sinsi hâli
+kaynağın **fail-safe bir yedeği** olmasıdır: okuma hata vermez, sessizce yedeğe düşer
+ve sonuç bir daha hiç değişmez — yani sabit yazmakla aynı yere varılır, üstelik
+"türetiyoruz" güvencesiyle.
+*(Ölçüldü 2026-09-23: örnek belge numarası MODÜL YÜKLENİRKEN seriden türetiliyordu;
+o anda numara serisi önbelleği boş olduğu için katalog tohumuna düşüyor ve fabrikanın
+gerçek ön ekini hiç göstermiyordu. İkinci bedel: boş önbellek yükleme anında 52 seriyi
+tazeleyip ~55 sorgu açıyor ve BAŞKA bir bekçinin sorgu bütçesini taşırıyordu.)*
+**Kurtarma:** türetmenin ZAMANINI da kuralın parçası yaz — "türetilebilen türetilir"in
+ikinci yarısı "İSTEK ANINDA türetilir"dir. Kapı, çağrının bir fonksiyon gövdesinde
+(getter dahil) olup olmadığını AST ile sorabilir (`test_seri_modul_yuklemesi`).
+
 ### Sonda geçerliliği sınıfları → ayrı dosya
 Bir sondanın KENDİSİNİN geçerli olup olmadığını soran sınıflar (çöken sonda · inmeyen
 mutasyon · ölü kodu bozan sonda · kapıyı izole etmeyen vaka · yazma yolunu hiç
