@@ -36,7 +36,7 @@ import {
   previewSeriesCode,
   resolveSeriesFormat,
 } from "../number-series.service";
-import { matchesSeries, type NumberSeriesFormat } from "./series-format.helper";
+import { codeCountsForCounter, matchesSeries, type NumberSeriesFormat } from "./series-format.helper";
 
 /**
  * Serinin BUGÜN düzenlenebilir olup olmadığı ve OLMADIYSA neden.
@@ -357,7 +357,7 @@ export async function previewNextNumber(
   try {
     return await nextSeriesNo(
       key,
-      async (fullPrefix) => {
+      async (fullPrefix, fmt) => {
         const rows = (await delegate.findMany({
           where: { [alan]: { gte: fullPrefix, startsWith: fullPrefix } },
           select: { [alan]: true, createdAt: true },
@@ -365,10 +365,16 @@ export async function previewNextNumber(
         // ⚠️ `{ code, createdAt }` biçimine ÇEVİRİLİR: kapsam damgası (createdAt)
         // olmadan sayaç eski rejimin kodlarını da sayardı — üretim yolunun aynı
         // sözleşmesi (`SeriesCodeRow`).
-        return rows.map((r) => ({
-          code: (r[alan] as string | null) ?? null,
-          createdAt: r.createdAt as Date,
-        }));
+        // ⚠️ SÜZGEÇ DE ÜRETİM YOLUYLA AYNI (K19/K27): önizleme ile üretim farklı
+        // yüklemlerden beslendiğinde ekran "sıradaki numara" der, yazma başka bir
+        // numara üretir — ürün kodunda tam olarak bu yaşandı (ekran STKZ-000002,
+        // üretim STKZ-000001'de ısrar edip P2002'ye çarptı).
+        return rows
+          .map((r) => ({
+            code: (r[alan] as string | null) ?? null,
+            createdAt: r.createdAt as Date,
+          }))
+          .filter((r) => r.code === null || codeCountsForCounter(fmt, r.code));
       },
       new Date(),
       fmtOverride,

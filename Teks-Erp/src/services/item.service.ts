@@ -24,6 +24,7 @@ import {
   foldNameForCompare,
 } from "./helpers/name-normalize.helper";
 import { nextSeriesNo } from "./number-series.service";
+import { codeCountsForCounter } from "./helpers/series-format.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import {
@@ -60,11 +61,6 @@ const ITEM_CODE_DIGITS = 6;
 const ITEM_CODE_MAX_LEN = 32;
 /** Item.name DB kolonu VarChar(100) — paylaşımlı NAME_MAX_LEN (200) ile aynı P2000 tuzağı. */
 const ITEM_NAME_MAX_LEN = 100;
-/** Sayaç taramasında kabul edilen otomatik kod biçimi: en çok 12 hane —
- * parseInt sonucu her zaman Number.MAX_SAFE_INTEGER altında kalır; legacy/elle
- * girilmiş dev sayılı bir STK- kaydı float taşmasıyla max+1 === max yapıp
- * sayacı kilitleyemez. */
-const ITEM_CODE_SCAN_RE = /^STK-\d{1,12}$/;
 
 /**
  * Kod tekilliği metinleri + kilit kapsamı (§18, 2026-08-15).
@@ -121,9 +117,11 @@ async function nextItemCode(): Promise<string> {
   // VERİ: biri panelden tarih segmenti açarsa iki `new Date()` gece yarısı ayrışır.
   // ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan kodlara
   // bakar; `nextSeriesNo` kapsamı, tek tarihi ve çakışma atlamasını taşır.
-  // ⚠️ SÜZGEÇ KORUNUR: elle yazılmış stok kodları (seri biçimine uymayanlar) sayaca
-  // GİRMEZ — `ITEM_CODE_SCAN_RE` bu serinin kendi sözleşmesi.
-  return nextSeriesNo("item", async (prefix) =>
+  // ⚠️ SÜZGEÇ BİÇİMDEN TÜRER, ELLE YAZILMAZ (K27, 2026-09-23): eski hâli
+  // `/^STK-\d{1,12}$/` idi ve ön ek panelden değişince BÜTÜN satırları eledi —
+  // sayaç 1'den başladı, ikinci ürün P2002'ye çarptı, fabrika ürün açamadı.
+  // Yüklem artık `nextSeriesNo`un ÇÖZDÜĞÜ biçimden gelir (ikinci okuma yok).
+  return nextSeriesNo("item", async (prefix, fmt) =>
     prisma.item
       .findMany({
         where: { code: { gte: prefix, startsWith: prefix } },
@@ -131,7 +129,7 @@ async function nextItemCode(): Promise<string> {
       })
       .then((rows) =>
         rows
-          .filter((r) => ITEM_CODE_SCAN_RE.test(r.code))
+          .filter((r) => codeCountsForCounter(fmt, r.code))
           .map((r) => ({ code: r.code, createdAt: r.createdAt }))), new Date());
 }
 

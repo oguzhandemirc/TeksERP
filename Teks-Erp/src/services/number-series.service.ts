@@ -309,7 +309,7 @@ const SKIP_LIMIT = 10_000;
 
 export async function nextSeriesNo(
   key: string,
-  loadCodes: (fullPrefix: string) => Promise<Array<SeriesCodeRow>>,
+  loadCodes: (fullPrefix: string, fmt: NumberSeriesFormat) => Promise<Array<SeriesCodeRow>>,
   date: Date = new Date(),
   /**
    * ADAY BİÇİM — yalnız ÖNİZLEME yolu geçirir (panelde "sıradaki numara").
@@ -323,7 +323,7 @@ export async function nextSeriesNo(
 ): Promise<string> {
   const fmt = fmtOverride ?? resolveSeriesFormat(key);
   const fullPrefix = seriesPrefix(fmt, date);
-  const rows = await loadCodes(fullPrefix);
+  const rows = await loadCodes(fullPrefix, fmt);
   const seq = scopedNextSeq(key, fmt, fullPrefix, rows);
   return `${fullPrefix}${String(seq).padStart(fmt.digits, "0")}`;
 }
@@ -437,12 +437,12 @@ export function seriesUsedMaxFrom(codes: Array<string | null | undefined>, fullP
  */
 export async function nextSeriesSeq(
   key: string,
-  loadCodes: (fullPrefix: string) => Promise<Array<SeriesCodeRow>>,
+  loadCodes: (fullPrefix: string, fmt: NumberSeriesFormat) => Promise<Array<SeriesCodeRow>>,
   date: Date = new Date(),
 ): Promise<{ seq: number; fullPrefix: string; fmt: NumberSeriesFormat }> {
   const fmt = resolveSeriesFormat(key);
   const fullPrefix = seriesPrefix(fmt, date);
-  const rows = await loadCodes(fullPrefix);
+  const rows = await loadCodes(fullPrefix, fmt);
   return { seq: scopedNextSeq(key, fmt, fullPrefix, rows), fullPrefix, fmt };
 }
 

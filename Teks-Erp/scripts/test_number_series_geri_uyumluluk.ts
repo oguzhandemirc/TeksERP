@@ -38,8 +38,9 @@ import {
   type NumberSeriesFormat,
 } from "../src/services/helpers/series-format.helper";
 import { seriesImpactCount, seriesLock } from "../src/services/helpers/series-panel.helper";
+import { updateSeriesFormat } from "../src/services/helpers/series-write.helper";
 import type { SeriesFormatAxis } from "../src/config/client-version-policy";
-import { nextSeriesNo, resolveSeriesFormat } from "../src/services/number-series.service";
+import { nextSeriesNo, refreshNumberSeriesCache, resolveSeriesFormat } from "../src/services/number-series.service";
 import { freeDocumentService } from "../src/services/free-document.service";
 import { stockCountService } from "../src/services/stock-count.service";
 import { WorkOrderService } from "../src/services/workorder.service";
@@ -1074,6 +1075,78 @@ async function main(): Promise<void> {
       const sayim = await seriesImpactCount(e.key);
       check(`L2 ⭐ (e) ${e.key}: etki sayısı ikisini de kapsıyor`,
         sayim !== null && sayim >= 2, `${sayim}`);
+
+      // ── (f) BİÇİM GERÇEKTEN DEĞİŞTİKTEN SONRA İKİ KAYIT ────────────────────
+      // ⚠️ MATRİSİN KÖR NOKTASIYDI (K27, 2026-09-23): (a)…(e) kolları biçimi
+      // yalnız BELLEKTE değiştiriyordu (`yeniFmt` ile `matchesSeries`), yani
+      // serinin GERÇEK biçimi hiç değişmiyordu ve üretecin kendi yükleyicisi
+      // yeni ön ekle HİÇ koşmuyordu. Ürün kodunun süzgeci (`/^STK-\d+$/`) tam
+      // orada saklandı: ön ek değişince süzgeç bütün satırları eliyor, sayaç
+      // 1'de kalıyor ve arıza ancak İKİNCİ kayıtta (P2002) görünüyordu.
+      // ⇒ Bu kol biçimi DB'de değiştirir, İKİ kayıt yaratır ve ikisinin hem
+      // TEKİL hem ARDIŞIK olduğunu ölçer. Tek kayıt bu sınıfı göremez.
+      const yeniOnEk = `${taban.prefix}Z`.slice(0, 6);
+      let bicimTasindi = false;
+      try {
+        await updateSeriesFormat(e.key, {
+          prefix: yeniOnEk, dateSegment: taban.dateSegment, digits: taban.digits,
+          separator: taban.separator, separator2: taban.separator2 ?? null,
+        });
+        bicimTasindi = true;
+      } catch (err) {
+        // Kapılar (çakışma · kapasite · istemci ekseni) reddedebilir — bu bir
+        // ihlal DEĞİL, ölçülemez bir vakadır ve ADIYLA bildirilir.
+        console.log(`   ⏭️ (f) ${e.key}: ön ek ${yeniOnEk} kapıdan geçmedi — ${(err as Error).message.slice(0, 90)}`);
+      }
+      if (bicimTasindi) {
+        await refreshNumberSeriesCache();
+        const tasindi = resolveSeriesFormat(e.key);
+        check(`L2 (f) körlük zemini: ${e.key} biçimi GERÇEKTEN değişti`,
+          tasindi.prefix === yeniOnEk, `${taban.prefix} → ${tasindi.prefix}`);
+        // ⚠️ ÇÖKEN SONDA, SONDA DEĞİLDİR: K27'nin belirtisi bir İSTİSNADIR
+        // ("Barkod üretimi 5 denemede başarısız"). Yakalanmazsa bekçi düşer,
+        // teardown koşmaz ve arıza bir SONRAKİ koşumda ilgisiz yerde görünür.
+        // İstisna burada KIRMIZI İDDİAYA çevrilir, sebebi basılır.
+        const uret = async (): Promise<{ id: string; kod: string } | Error> => {
+          try {
+            return (await yol.yarat!(DAMGA)) ?? new Error("(kayıt yaratılamadı)");
+          } catch (err) {
+            return err as Error;
+          }
+        };
+        const r1 = await uret();
+        const u1 = r1 instanceof Error ? null : r1;
+        if (u1 && yol.sil) temizlik.push(() => yol.sil!(u1.id));
+        const r2 = await uret();
+        const u2 = r2 instanceof Error ? null : r2;
+        if (u2 && yol.sil) temizlik.push(() => yol.sil!(u2.id));
+        check(`L2 ⭐ (f) ${e.key}: ön ek değişiminden sonra İKİ kayıt da doğdu`,
+          u1 !== null && u2 !== null,
+          `${u1?.kod ?? (r1 as Error).message.slice(0, 60)} · ${u2?.kod ?? (r2 as Error).message.slice(0, 60)}`);
+        if (u1 && u2) {
+          check(`L2 ⭐ (f) ${e.key}: iki kod TEKİL ve yeni ön eki taşıyor`,
+            u1.kod !== u2.kod && u1.kod.startsWith(yeniOnEk) && u2.kod.startsWith(yeniOnEk),
+            `${u1.kod} · ${u2.kod}`);
+          // ARDIŞIKLIK: sayaç ikinci kayıtta İLERLEMELİ (1'de takılmamalı).
+          // ⚠️ SON RAKAM ÖBEĞİ: kodda tarih de olabilir (`PRTZ-2609-0002`) ve
+          // "baştan say" kurgusu orada tarihi sıra sanar — ölçüldü, ilk yazımda
+          // bu kol yanlış kırmızı verdi (kod ARTMIŞTI, yüklem okuyamadı).
+          const sira = (k: string): number => Number.parseInt(/(\d+)$/.exec(k)?.[1] ?? "", 10);
+          check(`L2 ⭐ (f) ${e.key}: sayaç İKİNCİ kayıtta ilerledi (1'de takılmadı)`,
+            sira(u2.kod) > sira(u1.kod), `${u1.kod} → ${u2.kod}`);
+        }
+        // Geri alma DOĞRUDAN yazmayla: ölçülen kod yolu bozuksa teardown da düşerdi.
+        await prisma.numberSeriesLine.deleteMany({ where: { seriesKey: e.key, prefix: yeniOnEk } });
+        await prisma.numberSeries.update({
+          where: { key: e.key },
+          data: {
+            prefix: taban.prefix, dateSegment: taban.dateSegment, digits: taban.digits,
+            separator: taban.separator, separator2: taban.separator2 ?? null,
+            retiredPrefixes: taban.retiredPrefixes,
+          },
+        });
+        await refreshNumberSeriesCache();
+      }
     }
   } finally {
     // ⚠️ OKUTULAN AİLE ÖNCE, `temizlik`ten DE ÖNCE: bu kayıtlar BAĞLI
