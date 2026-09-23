@@ -101,6 +101,7 @@
 - **[ÇEKİRDEK]** Kodu çağıranın kurduğu toplu yollar (kartela kabulü) SIRA ister, kod değil; sıra da `nextSeriesNo` ile AYNI çekirdekten (`scopedNextSeq`) geçer. İkinci bir sıra hesabı yazmak kapsam damgasını bir yerde, atlama döngüsünü başka bir yerde bırakırdı ("ayrışan yüzey"). · bekçi: `test_number_series_scope §2`, `§3`
 - **[ÇEKİRDEK]** KISMİ kilit bir SERİ kilidi DEĞİLDİR: `ISTEMCI` kilidi eksen düzeyindedir ve kilitli ekseni beşten az olan seri diğer eksenlerinde BUGÜN düzenlenebilir. Ölçüm ve panel bu ayrımı yapar; "kilit var, hiç ölçme" kuralı o serilerin gerçekten yapılabilen değişimlerini kör bırakır. · bekçi: `test_number_series_geri_uyumluluk L1`, `test_eski_istemci_okutma (a2)`
 - **[ÇEKİRDEK]** Kilitli serileri ölçen bir bekçi hedefini ELLE seçmez, KEŞİFLE bulur ("kilitli olan HERHANGİ biri") ve kilitli seri kalmadığında ÜÇÜNCÜ sonucu basar: *ölçülemedi — iddia artık gereksiz*. Elle seçilen hedef, o seri açıldığı gün ölçmeyi sessizce bırakır. · bekçi: `test_number_series_scope §4`
+- **[ÇEKİRDEK]** Devralınan tarama çakışması istisnası serinin BÜTÜN zaman çizgisini kapsar — yürürlükteki biçim, emekli biçimler ve katalog tohumu: o biçimlerle üretilmiş kodlar dünyada zaten vardır, oraya DÖNMEK yeni bir belirsizlik doğurmaz. Yalnız bugüne bakan bir istisna, kullanıcıyı bir değişiklikten sonra kendi eski biçimine dönemez hâle getirir. Hiç kullanılmamış çakışan şekil yine reddedilir. · bekçi: `test_number_series_panel §5b`
 
 ### Kararlar
 

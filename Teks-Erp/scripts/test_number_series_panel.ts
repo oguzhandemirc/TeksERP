@@ -178,6 +178,7 @@ const DAMGA = `TEST-${process.pid.toString(36).padStart(3, "0").slice(-3)}${Date
 
 async function main(): Promise<void> {
   const fixtureLines: string[] = [];
+  let kasaTasindi = false;
   const fixtureGroups: string[] = [];
   const fixtureInvoices: string[] = [];
   let fixtureCari: string | null = null;
@@ -1214,7 +1215,63 @@ async function main(): Promise<void> {
     check("§5 ⭐ önizleme yolu ÇAKIŞMAYI da yakalar (kullanıcı kaydetmeden önce görür)",
       c instanceof Error && kod(c) === "NUMBER_SERIES_PREFIX_COLLISION",
       c instanceof Error ? (kod(c) ?? c.message) : "KABUL EDİLDİ");
+
+    // ── §5b DEVRALINAN ÇAKIŞMA SERİNİN KENDİ ZAMAN ÇİZGİSİDİR (K24) ───────
+    // Ölçülen saha vakası (d3, 2026-09-23): kasa kodu `KS → KSZ` yapıldıktan
+    // SONRA `KS`e geri dönülemiyordu — devralınan istisnası yalnız YÜRÜRLÜKTEKİ
+    // biçime bakıyordu. Kasa kodu okutulmaz ama ürettiği kod kartela sevk belge
+    // no biçimine uyar; bu çakışma yıllardır var ve beyanlı.
+    //
+    // ⚠️ İDDİA SERİYİ GERÇEKTEN `KSZ`YE TAŞIR ve bu ölçülerek öğrenildi: ilk
+    // yazımda seri `KS`te kalıyordu, yani "bugünkü biçim" zaten `KS`ti ve
+    // DÜZELTME GERİ ALINDIĞINDA BİLE iddia yeşil kalıyordu — vakumen bir kontrol.
+    // *Bir sondanın ısırmaması, korunan durumun sondada hiç kurulmamış olmasının
+    // da işareti olabilir.*
+    const kasaOnce = resolveSeriesFormat("cashAccount");
+    check("§5b körlük zemini: kasa serisi çakışan tohumu (`KS`) taşıyor",
+      kasaOnce.prefix === "KS", kasaOnce.prefix);
+    await updateSeriesFormat("cashAccount", {
+      prefix: "KSZ", dateSegment: kasaOnce.dateSegment, digits: kasaOnce.digits,
+      separator: kasaOnce.separator, separator2: kasaOnce.separator2 ?? null,
+    });
+    kasaTasindi = true;
+    await refreshNumberSeriesCache();
+    check("§5b körlük zemini: seri GERÇEKTEN taşındı (iddia vakumen değil)",
+      resolveSeriesFormat("cashAccount").prefix === "KSZ",
+      resolveSeriesFormat("cashAccount").prefix);
+    const gd = await dene(async () =>
+      assertSeriesFormatAllowed("cashAccount", {
+        prefix: "KS", dateSegment: kasaOnce.dateSegment, digits: kasaOnce.digits,
+        separator: kasaOnce.separator, retiredPrefixes: ["KSZ"],
+      }),
+    );
+    check("§5b ⭐ KENDİ eski biçimine DÖNÜŞ kabul edilir (o kodlar dünyada zaten var)",
+      !(gd instanceof Error), gd instanceof Error ? (kod(gd) ?? gd.message) : "kabul");
+    // KARŞI KOL — hiç kullanılmamış, çakışan başka bir şekil YİNE reddedilmeli.
+    // `KRT` kartela KART no'nun ön ekidir: kasa bu şekle hiç girmedi.
+    const yc = await dene(async () =>
+      assertSeriesFormatAllowed("cashAccount", {
+        prefix: "KRT", dateSegment: kasaOnce.dateSegment, digits: kasaOnce.digits,
+        separator: kasaOnce.separator, retiredPrefixes: [],
+      }),
+    );
+    check("§5b ⭐ hiç kullanılmamış çakışan şekil YİNE reddedilir (istisna genişlemedi)",
+      yc instanceof Error && kod(yc) === "NUMBER_SERIES_SCAN_COLLISION",
+      yc instanceof Error ? (kod(yc) ?? yc.message) : "KABUL EDİLDİ");
   } finally {
+    // ⚠️ KASA SERİSİ GERİ ALINIR ve bu DOĞRUDAN yazmayla yapılır: geri alma bir
+    // TEMİZLİKTİR, ölçülen kod yolu DEĞİL — `updateSeriesFormat` üzerinden geri
+    // dönmek, düzeltme bozulduğunda teardown'ı da düşürür ve artık bırakırdı.
+    if (kasaTasindi) {
+      await prisma.numberSeriesLine.deleteMany({
+        where: { seriesKey: "cashAccount", prefix: "KSZ" },
+      });
+      await prisma.numberSeries.update({
+        where: { key: "cashAccount" },
+        data: { prefix: "KS", retiredPrefixes: [] },
+      });
+      await refreshNumberSeriesCache();
+    }
     if (fixtureLines.length > 0) {
       await prisma.numberSeriesLine.deleteMany({ where: { id: { in: fixtureLines } } });
       await refreshNumberSeriesCache();

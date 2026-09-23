@@ -38,6 +38,7 @@ import {
 } from "./series-format.helper";
 import { retiredPrefixesAfterChange, seriesPrefixUsage } from "./series-retired.helper";
 import { assertAxesAllowed } from "./series-client-axes.helper";
+import { assertScanOutcomeAllowed } from "./series-scan-outcome.helper";
 
 // ── KAPI ────────────────────────────────────────────────────────────────────
 
@@ -143,6 +144,7 @@ export function assertSeriesFormatAllowed(key: string, fmt: NumberSeriesFormat):
   // yalnız ilk sırayı denemek bu ekseni kör bırakırdı.
   assertScanOutcomeAllowed(key, fmt);
 }
+
 
 // ── YAZMA ───────────────────────────────────────────────────────────────────
 
@@ -442,51 +444,4 @@ export async function updateSeriesNumberSource(
     newData: { numberSource: next },
   });
   return row;
-}
-
-/**
- * ③a SONUÇ KAPISI — ön ek eşitliğine DEĞİL, üretilecek kodun NEYE ÇÖZÜLDÜĞÜNE bakar
- * (1e kararı 2026-09-23). Ön ek karşılaştırması bu soruyu SORAMIYORDU: okutulmayan
- * bir seri, okutulan bir türün biçimine düşen kod üretebiliyor ve kapı susuyordu
- * (ölçüldü 2026-09-23: okutulmayan 43 seri × okutulan ön ekler = 215 deneme,
- * çakışma reddi 0).
- *
- * AYRI FONKSİYON: `assertSeriesFormatAllowed` boyut tavanını aştı ve bölme ekseni
- * doğal — orası "değer geçerli mi", burası "bu değerin SONUCU ne".
- */
-function assertScanOutcomeAllowed(key: string, fmt: NumberSeriesFormat): void {
-  const entry = numberSeriesCatalogEntry(key);
-  // ⚠️ KAPI YENİ İHLALİ ENGELLER, BUGÜNKÜ DURUMU YASAKLAMAZ: ölçüldü 2026-09-23 —
-  // `cashAccount` (kasa kodu, okutulmaz) bugün `KS` ön ekiyle doğuyor ve ürettiği
-  // kod `kartelaDispatch` (KS, okutulur) biçimine UYUYOR. Bu çakışma yıllardır var,
-  // zararsız sayılmış ve alan kural dosyasında BEYANLI. Kapıyı koşulsuz yazsaydık
-  // o serinin hane sayısını bile değiştiremezdiniz — yeni bir kural, var olan
-  // yapılandırmayı bir anda "kaydedilemez" yapamaz. Bu yüzden ölçüt FARKTIR:
-  // adayın düştüğü tür, BUGÜNKÜ biçimin de düştüğü türse geçmişten devralınmıştır.
-  const adayFmt: NumberSeriesFormat = { ...fmt, ...(entry.infix ? { infix: entry.infix.re } : {}) };
-  const cozulenTurler = (f: NumberSeriesFormat): Set<string> => {
-    const out = new Set<string>();
-    for (const kod of [previewSeriesCode(f, 1), previewSeriesCode(f, 10 ** f.digits)]) {
-      for (const other of NUMBER_SERIES_CATALOG) {
-        if (other.key === key || !other.kind) continue;
-        if (matchesSeries(resolveSeriesFormat(other.key), kod)) out.add(`${other.key}\u0000${kod}`);
-      }
-    }
-    return out;
-  };
-  const devralinan = new Set(
-    [...cozulenTurler({ ...resolveSeriesFormat(key), ...(entry.infix ? { infix: entry.infix.re } : {}) })].map(
-      (x) => x.split("\u0000")[0],
-    ),
-  );
-  for (const bulgu of cozulenTurler(adayFmt)) {
-    const [otherKey, kod] = bulgu.split("\u0000") as [string, string];
-    if (devralinan.has(otherKey)) continue;
-    const other = NUMBER_SERIES_CATALOG.find((e) => e.key === otherKey)!;
-    throw AppError.conflict(
-      `Bu biçimle üretilen kod ("${kod}") barkod okutmada "${other.label}" sanılır; ` +
-        "farklı bir ön ek ya da ayraç seçin.",
-      { code: "NUMBER_SERIES_SCAN_COLLISION", key, conflictsWith: otherKey, ornekKod: kod },
-    );
-  }
 }

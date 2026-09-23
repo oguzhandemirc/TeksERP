@@ -21,6 +21,34 @@
 
 ---
 
+## 2026-09-23 — K24: eski biçime dönüş + fason zincirinin L2'ye girmesi [ÇEKİRDEK]
+
+**K24 — tek yönlü kapı.** d3 on beş master serinin tam turunu koştururken kasa kodunda takıldı:
+`KS → KSZ` değişimi kabul ediliyor ama `KSZ → KS` dönüşü 409 `NUMBER_SERIES_SCAN_COLLISION`
+veriyordu ("Kartela sevk belge no sanılır"). Kök neden, devralınan çakışma istisnasının yalnız
+YÜRÜRLÜKTEKİ biçime bakmasıydı: seri `KSZ` iken `KS` "yeni bir çakışma" sayılıyordu. Sonuç, bir
+kez değiştiren kullanıcının kendi varsayılanına dönememesiydi. İstisna serinin bütün zaman
+çizgisine genişletildi — yürürlükteki biçim + emekli biçimler (`number_series_lines`) + katalog
+tohumu. Ölçüt: *o biçimle üretilmiş kodlar dünyada zaten var mı?* Hiç kullanılmamış çakışan bir
+şekil (kasa için `KRT`) yine reddediliyor. Kasa ön ekinin kartela sevkiyle çakışması ayrı ve
+beyanlı bir borçtur; bu karar onu değiştirmez.
+
+**⚠️ SONDA DERSİ — ısırmayan sonda, kurulmamış durumun işareti olabilir.** §5b'nin ilk yazımı
+seriyi `KS`te bırakıp doğrudan "KS kabul edilmeli" diyordu; düzeltme geri alındığında bile YEŞİL
+kaldı, çünkü "bugünkü biçim" zaten `KS`ti ve eski dar istisna da onu geçiriyordu. İddia vakumendi.
+İkinci yazım seriyi GERÇEKTEN `KSZ`ye taşıyor, taşındığını ayrı bir körlük zemini iddiasıyla ölçüyor
+ve geri almayı doğrudan yazmayla (ölçülen kod yolundan DEĞİL) yapıyor — düzeltme bozulursa teardown
+da düşerdi ve artık bırakırdı.
+
+**Fason zinciri L2'ye girdi.** Fason sevk · fason kabul · doğrudan sevk için gerçek kayıt yolu
+kuruldu (EXTERNAL adımlı iş emri + depodaki serbest stok topu → sevk → kabul; ikinci sevk doğrudan
+sevk edilir). Ölçülen iki tuzak: ① istasyonun `type` alanı EXTERNAL olmalı ama doğrudan sevk ayrıca
+`kind === SUBCONTRACTOR` istiyor — birini kurup ötekini unutmak zinciri ikinci halkada düşürür ·
+② fason kabulü YENİ top doğurur ve top iş emrine doğrudan bağlı değildir (`currentStepId` +
+`parentRollId`), üstelik topun kendi defterleri (`RollOperation`, `RollMovement`, …) FK ile
+teardown'ı düşürür; silme listesi şemadan çıkarıldı, FK'lar tek tek kovalanmadı. Matris 148 → 160
+kontrol; L1'de kalan seri sayısı 6 → 3 (sevkiyat · iade belgesi · depo transferi).
+
 ## 2026-09-23 — E2 okutulan aile dilimi: yedi seri açıldı, kilit SERİDEN EKSENE indi [ÇEKİRDEK]
 
 İş emri/refakat kartı · kartela kart no · fason sevk/kabul · kartela sevk/kabul · doğrudan sevk
