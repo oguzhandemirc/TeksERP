@@ -220,6 +220,13 @@ apiClient.interceptors.response.use(
           toast.error(buildErrorMessage(body));
           return Promise.reject(error);
         }
+        // KAPALI MODÜL yetki sorunu değildir (K26): kurulumun kararıdır; "yetkiniz yok" kullanıcıyı
+        // rolünü aramaya yollar. Aynı modülün paralel istekleri TEK toast'ta birleşir (sonner `id`).
+        if (body?.details?.code === "MODULE_DISABLED") {
+          const msg = body.message || "Bu modül bu kurulumda kapalı.";
+          if (!suppressToast) toast.error(msg, { id: `module-disabled:${msg}` });
+          return Promise.reject(error);
+        }
         if (!suppressToast) toast.error("Bu işlem için yetkiniz bulunmuyor.");
         return Promise.reject(error);
       }

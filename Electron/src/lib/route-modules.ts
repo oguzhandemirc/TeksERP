@@ -99,3 +99,10 @@ export function isRouteModuleOpen(pathname: string, ctx: OperationsVisibilityCon
   const m = routeModuleOf(pathname);
   return m === null ? true : ctx[m];
 }
+
+/** Modül kapısının /forbidden'a taşıdığı durum — sayfa "yetki yok" değil "modül kapalı" der. */
+export const FORBIDDEN_MODULE_STATE = { reason: "module" } as const;
+
+export function isForbiddenByModule(state: unknown): boolean {
+  return typeof state === "object" && state !== null && (state as { reason?: unknown }).reason === "module";
+}
