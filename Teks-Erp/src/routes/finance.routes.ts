@@ -755,7 +755,7 @@ router.post("/payments/:id/cancel", requirePermission("finance:payment"), async 
 // ayrışmasına en kısa yoldur (ve mutabakat bekçisi o günden sonra kırmızı kalır).
 // Açılış bakiyesi gerekiyorsa doğru yol bir ADJUSTMENT tahsilatıdır.
 
-const cashBoxService = new BaseService({
+export const cashBoxService = new BaseService({
   modelName: "cashBox",
   tableName: "CASH_BOX",
   // ⚠️ KOD ↔ METİN kovası AYRI — bkz. `warehouse.service.ts` gerekçesi.
@@ -766,7 +766,7 @@ const cashBoxService = new BaseService({
   entityLabel: "kasa",
   autoCode: { series: "cashAccount" },
 });
-const bankAccountService = new BaseService({
+export const bankAccountService = new BaseService({
   modelName: "bankAccount",
   tableName: "BANK_ACCOUNT",
   // ⚠️ `iban` de KOD kovasında: boşluksuz ASCII saklanır, katlama onu bozar.

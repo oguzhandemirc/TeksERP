@@ -43,6 +43,20 @@ import { freeDocumentService } from "../src/services/free-document.service";
 import { stockCountService } from "../src/services/stock-count.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { colorService } from "../src/routes/color.routes";
+import { machineService, stationService } from "../src/routes/station.routes";
+import { bankAccountService, cashBoxService } from "../src/routes/finance.routes";
+import { returnReasonService } from "../src/routes/return-reason.routes";
+import { productRecipeService } from "../src/routes/product-recipe.routes";
+import { defectTypeService } from "../src/routes/defect-type.routes";
+import { warehouseService } from "../src/services/warehouse.service";
+import { routeService } from "../src/routes/route.routes";
+import { customerService } from "../src/routes/customer.routes";
+import { fabricPropertyService } from "../src/routes/fabric-property.routes";
+import { itemService } from "../src/routes/item.routes";
+import {
+  SubcontractorCategoryService,
+  SubcontractorManagementService,
+} from "../src/services/subcontractor-management.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0,
@@ -70,6 +84,25 @@ function kaynakTara(dizin: string): string {
 
 let stockCountFikstur = 0;
 let colorFikstur = 0;
+/** Master veri fikstürlerinde ad tekilliği — servisler aynı adı 409 ile reddediyor. */
+let msSayac = 0;
+
+/**
+ * ⚠️ BAĞLI FİKSTÜRLER ORTAMDAN ARANMAZ, KURULUR: `findFirst` ile "ortamda ne varsa"
+ * almak temiz bir CI veritabanında düşer ya da VAKUMEN yeşil kalır (bu depoda adı
+ * konmuş sınıf; `test_keyfi_arama` kapıda yakaladı). Makine/özellik/rota bir
+ * istasyona, reçete bir stok kartına bağlı — ikisini de bu bekçi kendi kurar.
+ */
+const bagli: { stationId: string | null; itemId: string | null } = { stationId: null, itemId: null };
+
+/** `BaseService.create` sonucundan `{ id, kod }` — master veri fikstürlerinin ortak kabuğu. */
+async function msCreate(
+  servis: { create: (data: Record<string, unknown>, userId?: string) => Promise<unknown> },
+  data: Record<string, unknown>,
+): Promise<{ id: string; kod: string } | null> {
+  const r = (await servis.create(data)) as { data?: { id?: string; code?: string } };
+  return r.data?.id && r.data.code ? { id: r.data.id, kod: r.data.code } : null;
+}
 /** Manifest fikstürünün açtığı iş emirleri — teardown (manifest silindikten SONRA). */
 const manifestWorkOrders: string[] = [];
 const SEGMENTLER = Object.keys(DATE_SEGMENTS) as NumberSeriesDateSegment[];
@@ -159,21 +192,109 @@ const L2_YOLU: Record<string, L2Yolu> = {
     },
     sil: async (id) => { await prisma.color.deleteMany({ where: { id } }); },
   },
-  station: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
-  machine: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
-  cashAccount: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
-  bankAccount: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
-  returnReason: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
-  productRecipe: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
-  defectType: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
-  warehouse: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
-  routeTemplate: { not: "Aynı üreteç yolu (`BaseService.nextAutoCode`); temsilci L2 serisi: color." },
-  // KENDİ üreteci olanlar — L2 fikstürleri sonraki dilimde (kart zincirleri):
-  customer: { not: "Kendi üreteci var; cari kartı fikstürü (vergi no/şube/cari hesap zinciri) ayrı dilimde L2'ye alınacak." },
-  subcontractor: { not: "Kendi üreteci var (`ensureSubCode`); fason firma fikstürü `fixture-subcontractor.ts`ten gelir, ayrı dilimde L2'ye alınacak." },
-  subcontractorCategory: { not: "Kendi üreteci var (`ensureSubCode`); ayrı dilimde L2'ye alınacak." },
-  fabricProperty: { not: "Kendi üreteci var; özellik kartı fikstürü ayrı dilimde L2'ye alınacak." },
-  item: { not: "Kendi üreteci var ve elle kod süzgeci taşıyor (`ITEM_CODE_SCAN_RE`); stok kartı fikstürü ayrı dilimde L2'ye alınacak." },
+  // ⚠️ TEMSİLCİ ÖLÇÜM REDDEDİLDİ (1e, 2026-09-23) ve gerekçe ölçülmüş bir vakaya
+  // dayanıyor: yol ortak olsa da her seri o yola KENDİ yapılandırmasını veriyor
+  // (hangi model, hangi alan, `createdAt` seçiliyor mu, süzgeç var mı) — ve
+  // `ensureSubCode`te kırılan tam olarak buydu. Her seri KENDİ kaydıyla ölçülür.
+  station: {
+    not: "StationService.create: ad + tür.",
+    yarat: async (damga) => msCreate(stationService, { name: `${damga} E3 istasyon ${++msSayac}`, type: "INTERNAL" }),
+    sil: async (id) => { await prisma.station.deleteMany({ where: { id } }); },
+  },
+  machine: {
+    not: "machineService.create: ad + istasyon (fikstür istasyonu kurulur).",
+    yarat: async (damga) => {
+      if (!bagli.stationId) return null;
+      return msCreate(machineService, { name: `${damga} E3 makine ${++msSayac}`, stationId: bagli.stationId });
+    },
+    sil: async (id) => { await prisma.machine.deleteMany({ where: { id } }); },
+  },
+  cashAccount: {
+    not: "cashBoxService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(cashBoxService, { name: `${damga} E3 kasa ${++msSayac}` }),
+    sil: async (id) => { await prisma.cashBox.deleteMany({ where: { id } }); },
+  },
+  bankAccount: {
+    not: "bankAccountService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(bankAccountService, { name: `${damga} E3 banka ${++msSayac}` }),
+    sil: async (id) => { await prisma.bankAccount.deleteMany({ where: { id } }); },
+  },
+  returnReason: {
+    not: "returnReasonService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(returnReasonService, { name: `${damga} E3 sebep ${++msSayac}` }),
+    sil: async (id) => { await prisma.returnReason.deleteMany({ where: { id } }); },
+  },
+  productRecipe: {
+    not: "productRecipeService.create: ad + bağlı stok kartı.",
+    yarat: async (damga) => {
+      if (!bagli.itemId) return null;
+      return msCreate(productRecipeService, { name: `${damga} E3 reçete ${++msSayac}`, itemId: bagli.itemId });
+    },
+    sil: async (id) => { await prisma.productRecipe.deleteMany({ where: { id } }); },
+  },
+  defectType: {
+    not: "defectTypeService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(defectTypeService, { name: `${damga} E3 hata ${++msSayac}` }),
+    sil: async (id) => { await prisma.defectType.deleteMany({ where: { id } }); },
+  },
+  warehouse: {
+    not: "warehouseService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(warehouseService, { name: `${damga} E3 depo ${++msSayac}` }),
+    sil: async (id) => { await prisma.warehouse.deleteMany({ where: { id } }); },
+  },
+  routeTemplate: {
+    not: "routeService.create: ad + en az bir adım.",
+    yarat: async (damga) => {
+      if (!bagli.stationId) return null;
+      return msCreate(routeService, {
+        name: `${damga} E3 rota ${++msSayac}`,
+        steps: [{ stationId: bagli.stationId, sequence: 1 }],
+      });
+    },
+    sil: async (id) => {
+      await prisma.routeStep.deleteMany({ where: { routeId: id } });
+      await prisma.route.deleteMany({ where: { id } });
+    },
+  },
+  customer: {
+    not: "customerService.create: yalnız ad.",
+    yarat: async (damga) => msCreate(customerService, { name: `${damga} E3 cari ${++msSayac}` }),
+    sil: async (id) => { await prisma.customer.deleteMany({ where: { id } }); },
+  },
+  fabricProperty: {
+    not: "fabricPropertyService.create: ad + uygulayan istasyon(lar).",
+    yarat: async (damga) => {
+      if (!bagli.stationId) return null;
+      return msCreate(fabricPropertyService, {
+        name: `${damga} E3 özellik ${++msSayac}`,
+        stationIds: [bagli.stationId],
+      });
+    },
+    sil: async (id) => { await prisma.fabricProperty.deleteMany({ where: { id } }); },
+  },
+  item: {
+    not: "itemService.create: ad + tür (itemType).",
+    yarat: async (damga) => msCreate(itemService, { name: `${damga} E3 stok ${++msSayac}`, itemType: "FABRIC" }),
+    sil: async (id) => { await prisma.item.deleteMany({ where: { id } }); },
+  },
+  subcontractor: {
+    not: "SubcontractorManagementService.create: yalnız ad.",
+    yarat: async (damga) => {
+      const r = await new SubcontractorManagementService().create({ name: `${damga} E3 fason ${++msSayac}` });
+      const d = r.data as { id?: string; code?: string } | null;
+      return d?.id && d.code ? { id: d.id, kod: d.code } : null;
+    },
+    sil: async (id) => { await prisma.subcontractor.deleteMany({ where: { id } }); },
+  },
+  subcontractorCategory: {
+    not: "SubcontractorCategoryService.create: yalnız ad.",
+    yarat: async (damga) => {
+      const r = await new SubcontractorCategoryService().create({ name: `${damga} E3 kategori ${++msSayac}` });
+      const d = r.data as { id?: string; code?: string } | null;
+      return d?.id && d.code ? { id: d.id, kod: d.code } : null;
+    },
+    sil: async (id) => { await prisma.subcontractorCategory.deleteMany({ where: { id } }); },
+  },
 
   // Aşağıdakiler L1'de KALDI ve gerekçesi budur (beyansız sessizlik yok):
   packingLotName: { not: "Sevk partisi ADI kendi sırasından doğar (ownCounter): ayrı bir kayıt yolu yok, kod yolu packingLotCode ile aynı gruptan gelir." },
@@ -358,6 +479,20 @@ async function main(): Promise<void> {
   const DAMGA = `TEST-${process.pid.toString(36).padStart(3, "0").slice(-3)}${Date.now().toString(36).slice(-6)}`.slice(0, 14);
   const temizlik: Array<() => Promise<void>> = [];
   try {
+    // Bağlı fikstürler ÖNCE ve KENDİ servis yollarından (ortamdan aranmaz).
+    const istasyon = await msCreate(stationService, { name: `${DAMGA} E3 bağlı istasyon`, type: "INTERNAL" });
+    if (istasyon) {
+      bagli.stationId = istasyon.id;
+      temizlik.push(async () => { await prisma.station.deleteMany({ where: { id: istasyon.id } }); });
+    }
+    const stok = await msCreate(itemService, { name: `${DAMGA} E3 bağlı stok`, itemType: "FABRIC" });
+    if (stok) {
+      bagli.itemId = stok.id;
+      temizlik.push(async () => { await prisma.item.deleteMany({ where: { id: stok.id } }); });
+    }
+    check("L2 körlük zemini: bağlı fikstürler (istasyon + stok) KURULDU",
+      bagli.stationId !== null && bagli.itemId !== null);
+
     for (const e of acikSeriler) {
       const yol = L2_YOLU[e.key];
       if (!yol?.yarat) {
