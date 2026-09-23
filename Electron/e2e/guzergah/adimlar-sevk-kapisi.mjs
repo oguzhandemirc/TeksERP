@@ -106,6 +106,13 @@ export const SEVK_KAPISI_ADIMLARI = [
       // Okutulan sevkiyat en üste gelir ve "1/1 çuval okutuldu" yazar; kartın GÖVDESİ içerik panelini açar,
       // çıkış yalnız karttaki "Sevk Et" düğmesindedir.
       await gor(page().getByText(/1 \/ 1 çuval okutuldu/).first(), { sure: 20_000 });
+      // K15: YURTİÇİ sevkiyatın içerik panelinde Gümrük/İhracat No satırı YOK (cari kodu uydurulmaz).
+      await page().getByText(/1 \/ 1 çuval okutuldu/).first().click({ timeout: 10_000 });
+      const panel = page().getByRole("dialog").filter({ hasText: "Çuvallar" }).last();
+      await gor(panel, { sure: 15_000 });
+      olc.gumrukSatiri = await panel.getByText("Gümrük/İhracat No").count();
+      olc.varsayilanYazisi = await panel.getByText(/\(varsayılan\)/).count();
+      await page().keyboard.press("Escape"); await page().waitForTimeout(600);
       await page().getByRole("button", { name: "Sevk Et", exact: true }).filter({ visible: true }).first().click({ timeout: 15_000 });
       const d = page().getByRole("dialog").filter({ hasText: "Sevk Et —" }).last();
       await gor(d);
@@ -118,6 +125,7 @@ export const SEVK_KAPISI_ADIMLARI = [
     },
     dogrula: [
       { ad: "sevkiyat DISPATCHED, dispatchedAt dolu", sql: `SELECT status::text s, "dispatchedAt" IS NOT NULL b FROM shipments WHERE id=$1`, params: () => [olc.sevkId], oku: (r) => `${r[0]?.s}:${r[0]?.b}`, beklenen: "DISPATCHED:true" },
+      { ad: "K15: yurtiçi içerik panelinde Gümrük/İhracat No satırı ve '(varsayılan)' yok", sql: `SELECT 1`, oku: () => `${olc.gumrukSatiri}:${olc.varsayilanYazisi}`, beklenen: "0:0" },
       { ad: "top sevkiyata bağlı", sql: `SELECT count(*)::int n FROM rolls WHERE barcode=$1 AND "shipmentId"=$2`, params: () => [olc.sack.barkod, olc.sevkId], oku: (r) => r[0].n, beklenen: 1 },
     ],
   },

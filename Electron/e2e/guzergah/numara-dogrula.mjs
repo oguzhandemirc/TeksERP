@@ -228,7 +228,8 @@ await madde("K11", "12 seri art arda aç/kapat (okutulan + okutulmayan karışı
   const a = agKayitlari("K11 · 12 seri art arda aç/kapat (okutulan + okutulmayan karışık)");
   const diyalogHatasi = k.olcum.acilan.filter((x) => !/hata=-$/.test(x) && !/pasif/.test(x));
   k.olcum.diyalogHatasi = diyalogHatasi;
-  return a.toast.length === 0 && a.ag.length === 0 && diyalogHatasi.length === 0;
+  // Ölçüt: HATA toast'ı ve BEYANSIZ 4xx yok (başarı toast'ı ve şifre protokolü sayılmaz).
+  return a.toast.filter((t) => /^\[error\]/.test(t)).length === 0 && a.ag.filter((x) => !/\(beyanlı\)/.test(x)).length === 0 && diyalogHatasi.length === 0;
 });
 
 // ── K1: iş emri — sayaç ve kaynak kaydedilir, toast yok ──────────────────────
@@ -261,7 +262,7 @@ await madde("K1", "iş emri: açılış + tuş vuruşu toast'sız · sayaç ve k
   k.olcum.kaynakGeriDb = (await sql(`SELECT "numberSource"::text s FROM number_series WHERE key='workOrder'`))[0].s;
   const a = agKayitlari("K1 · iş emri: açılış + tuş vuruşu toast'sız · sayaç ve kaynak kaydedilir · geri alınır");
   return s1.kapandi && Number(k.olcum.dbMax) === 99999999 && s2.kapandi && k.olcum.dbMaxGeri === null
-    && s3.kapandi && k.olcum.kaynakDb === hedef && k.olcum.kaynakGeriDb === orj && a.toast.filter((t) => /\[error\]/.test(t)).length === 0 && a.ag.length === 0;
+    && s3.kapandi && k.olcum.kaynakDb === hedef && k.olcum.kaynakGeriDb === orj && a.toast.filter((t) => /\[error\]/.test(t)).length === 0 && a.ag.filter((x) => !/\(beyanlı\)/.test(x)).length === 0;
 });
 
 // ── K2: kilit rozeti · diyalog cümlesi · açılma koşulu aynı, jargon yok ───────

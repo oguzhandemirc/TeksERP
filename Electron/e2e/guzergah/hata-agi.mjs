@@ -20,6 +20,13 @@ const YAVAS_MS = 2000;
 // Backend logunda hata/uyarı sayılan satırlar: morgan 4xx/5xx, logger seviyeleri, yığın izi.
 const BACKEND_HATA = /\s[45]\d\d\s|\b(HATA|UYARI|ERROR|WARN|Error:|Unhandled|TypeError|ReferenceError|PrismaClient\w*Error)\b|^\s+at\s/;
 // ANSI renk kodu (ESC = 0x1b) — kurucuyla: düz regex literalinde kontrol karakteri lint kuralına takılır.
+// BİLİNEN, ÖLÇÜLÜP BEYAN EDİLMİŞ altyapı uyarıları — kırmızı sayılmaz, raporda ayrı listelenir. Yeni satır
+// yalnız ölçümle (kök + sınıf) ve sahibinin kararıyla eklenir; tahminle susturma yasak.
+const BILINEN_BACKEND = [
+  // K14 (2026-09-23): Prisma sorgu yorumlayıcısı iç içe select'te aynı pg istemcisine paralel sorgu yolluyor;
+  // ürün kodunda paralel tx.* yok (sonda: 13 çağrı, ürün çerçevesi 0). pg@9 notu: docs/standart/KUTUPHANELER-TABLO.md.
+  { ad: "K14 pg eşzamanlı sorgu (Prisma içi)", desen: /client is already executing a query is deprecated/ },
+];
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
 /** Rol değişince uygulama yeniden açılır: aynı `durum` nesnesi yeni örneğe verilir, kayıt ve adım sürer. */
@@ -137,6 +144,7 @@ export async function hataAgiKur({ app, page, cikti, backendLog, apiUrl, durum =
   const esit = (a, b) => a.split("?")[0] === b.split("?")[0];
   const backendSinifi = (x) => {
     if (x.beklenen) return "beklenen";
+    if (BILINEN_BACKEND.some((b) => b.desen.test(x.metin))) return "bilinen";
     if (!x.http) return "kirmizi";
     if (kayitlar.ag.some((a) => a.status === x.http.status && esit(a.url, x.http.url))) return "panel-yansimasi";
     if (kayitlar.surucu.some((a) => a.status === x.http.status && esit(a.url, x.http.url))) return "surucu-sondasi";
@@ -201,6 +209,7 @@ export async function hataAgiKur({ app, page, cikti, backendLog, apiUrl, durum =
       tablo("Konsol — warning", kayitlar.konsol.filter((x) => x.tur === "warning"), ["adim", "metin"]);
       tablo("Main process", kirmizi.main, ["adim", "metin"]);
       tablo("Backend logu — beyansız hata/uyarı (KIRMIZI)", kirmizi.backend, ["adim", "metin"]);
+      tablo("Backend logu — BİLİNEN beyanlı altyapı uyarısı (kırmızı değil)", kayitlar.backend.filter((x) => backendSinifi(x) === "bilinen"), ["adim", "metin"]);
       tablo("Backend logu — sürücü sondası yansıması (kırmızı değil)", kayitlar.backend.filter((x) => backendSinifi(x) === "surucu-sondasi"), ["adim", "metin"]);
       tablo(`Yavaş istekler (> ${YAVAS_MS} ms)`, kayitlar.yavas, ["adim", "yontem", "url", "status", "ms"]);
       fs.writeFileSync(path.join(cikti, "hata-agi.md"), md.join("\n"));
