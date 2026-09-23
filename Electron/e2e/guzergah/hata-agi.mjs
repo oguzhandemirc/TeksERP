@@ -31,7 +31,7 @@ const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
 /** Rol değişince uygulama yeniden açılır: aynı `durum` nesnesi yeni örneğe verilir, kayıt ve adım sürer. */
 export function hataAgiDurumu() {
-  return { simdiki: "başlangıç", beklenenler: [], kayitlar: { toast: [], ag: [], yavas: [], konsol: [], main: [], backend: [], surucu: [] }, gorNo: 0 };
+  return { simdiki: "başlangıç", beklenenler: [], kayitlar: { toast: [], ag: [], yavas: [], konsol: [], main: [], backend: [], surucu: [] }, gorNo: 0, istek: { toplam: 0, get: 0, adim: {} } };
 }
 
 export async function hataAgiKur({ app, page, cikti, backendLog, apiUrl, durum = hataAgiDurumu() }) {
@@ -74,6 +74,8 @@ export async function hataAgiKur({ app, page, cikti, backendLog, apiUrl, durum =
     const ms = t && t.responseEnd > 0 ? Math.round(t.responseEnd) : null;
     const status = res?.status() ?? 0;
     const satir = { adim: D.simdiki, yontem: req.method(), url: u.replace(/^https?:\/\/[^/]+/, ""), status, ms, zaman: new Date().toISOString() };
+    // Önbellek politikası ölçümü (K21): toplam API isteği, GET sayısı, adım başına dağılım.
+    D.istek.toplam++; if (satir.yontem === "GET") D.istek.get++; D.istek.adim[D.simdiki] = (D.istek.adim[D.simdiki] ?? 0) + 1;
     if (ms !== null && ms > YAVAS_MS) kayitlar.yavas.push(satir);
     if (status >= 400) {
       const govde = await res.text().catch(() => "");
@@ -184,6 +186,7 @@ export async function hataAgiKur({ app, page, cikti, backendLog, apiUrl, durum =
         backend: kayitlar.backend.filter((x) => backendSinifi(x) === "kirmizi"),
       };
       const ozet = {
+        istekToplam: D.istek.toplam, istekGet: D.istek.get,
         surucuSondasi: kayitlar.surucu.length,
         toast: kayitlar.toast.length, toastHata: kirmizi.toastHata.length,
         ag4xx5xx: kayitlar.ag.length, agBeklenmedik: kirmizi.ag.length,

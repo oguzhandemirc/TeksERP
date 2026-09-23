@@ -19,6 +19,7 @@ import { TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
 import { BOSS_PATH } from "@/lib/boss-path";
 import { useHashPath } from "@/lib/use-hash-path";
 import { loadScanSeries } from "@/lib/scanner/barcode-kind";
+import { DEFAULT_STALE_MS, applyQueryFreshness } from "@/lib/query-freshness";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,10 +33,12 @@ const queryClient = new QueryClient({
         return failureCount < 1;
       },
       refetchOnWindowFocus: false,
-      staleTime: 5 * 60 * 1000,
+      // K21: başka istemcinin kaydı en geç 30 sn'de görünür; para/katalog istisnaları `query-freshness`ta.
+      staleTime: DEFAULT_STALE_MS,
     },
   },
 });
+applyQueryFreshness(queryClient);
 
 function AuthHydrator() {
   const setUser = useAuthStore((s) => s.setUser);

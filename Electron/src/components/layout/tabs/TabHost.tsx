@@ -1,4 +1,5 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTabsStore, type TabItem } from "@/store/tabs";
@@ -16,6 +17,7 @@ export function TabHost() {
   const tabs = useTabsStore((s) => s.tabs);
   const activeId = useTabsStore((s) => s.activeId);
   const openTab = useTabsStore((s) => s.openTab);
+  useRefetchStaleOnTabActivate(activeId);
 
   // İlk açılış: sekme yoksa mevcut hash yolundan (yoksa Anasayfa) bir sekme aç.
   useEffect(() => {
@@ -93,4 +95,20 @@ function EmptyTabs({ onOpen }: { onOpen: () => void }) {
       </button>
     </div>
   );
+}
+
+/**
+ * SEKMEYE DÖNÜŞ = SAYFAYA DÖNÜŞ (K21, 2026-09-23): sekmeler kapanana kadar bağlı kaldığı için
+ * `refetchOnMount` dönüşte hiç tetiklenmiyor; başka istemcinin kaydı sekme açık kaldıkça
+ * görünmüyordu (e2e TZ sondası). Etkin sekme değişince BAYAT (tazelik süresini aşmış) ve etkin
+ * sorgular yeniden çekilir — taze olanlar çekilmez, yani 30 sn içindeki gidip gelmeler bedelsiz.
+ */
+function useRefetchStaleOnTabActivate(activeId: string | null): void {
+  const qc = useQueryClient();
+  const prevId = useRef(activeId);
+  useEffect(() => {
+    if (prevId.current === activeId) return;
+    prevId.current = activeId;
+    void qc.refetchQueries({ type: "active", stale: true });
+  }, [activeId, qc]);
 }
