@@ -70,6 +70,27 @@ async function main(): Promise<void> {
   check("§2 kapsam dışı seri için ölçüm HİÇ koşmaz (boş döner)",
     (await labelWidthFindings("swatch", "KRT2309260001")).length === 0);
 
+  // ⚠️ §2c BEYANI ÖLÇÜLEBİLİR KILAR (1e'nin sorusu: belge/kart numarayı barkod
+  // olarak basıyor mu?). Ölçüldü: refakat kartı da belge katmanı da yalnız
+  // KAREKOD üretir; karekod SVG'si kendi kutusuna `width:100%` ile sığar, yani
+  // sabit genişlikli ÇİZGİSEL bir barkod alanı YOKTUR ve bu kapı oraya uzanmaz.
+  // Bu bir yorum olarak kalsaydı, biri belgeye Code128 eklediği gün kapsam
+  // SESSİZCE yalan olurdu — burada kırmızıya döner ve kapsam yeniden sorulur.
+  const belgeKaynaklari = [
+    "src/services/printed-document.service.ts",
+    "src/services/document-render/traveler-card.html.ts",
+    "src/services/traveler-card.service.ts",
+  ];
+  const cizgiselBasanlar = belgeKaynaklari.filter((yol) => {
+    const metin = readFileSync(join(__dirname, "..", yol), "utf-8");
+    return /bcid:\s*["'](?!qrcode|datamatrix)/.test(metin);
+  });
+  check(
+    "§2c ⭐ belge ve refakat kartı katmanı ÇİZGİSEL barkod basmaz (yalnız karekod) — kapsam dışılığın gerekçesi",
+    cizgiselBasanlar.length === 0,
+    cizgiselBasanlar.length ? `çizgisel basan: ${cizgiselBasanlar.join(", ")}` : "3 kaynak tarandı, hepsi qrcode",
+  );
+
   // ── §3/§4 FİKSTÜRLÜ: taşan ve okunamayan şablon ───────────────────────────
   console.log("\n── §3/§4 Şablon fikstürü ──");
   const tasan = await prisma.labelTemplate.create({

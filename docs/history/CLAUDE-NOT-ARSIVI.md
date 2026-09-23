@@ -52,6 +52,18 @@ katkısı hiç ölçülmüyordu. Barkodun rahat sığdığı (18 mm / 100 mm) am
 bir fikstür eklendi; sonda tekrarlandı ve şimdi ısırıyor. *Bir kapının iki terimi varsa, her terim
 İÇİN AYRI bir vaka gerekir; tek vaka ikisini birden "ölçüyor" gibi görünür.*
 
+**Kapsam dışı yüzeyler de ÖLÇÜLDÜ ve BEYAN edildi.** Soru şuydu: iş emri numarası refakat kartında,
+belge numaraları da irsaliye/çeki gibi şablonlarda barkod olarak basılıyorsa kapı oraya da uzanmalı
+mı? Ölçüm: her iki yüzey de yalnız **karekod** üretiyor (`bcid: "qrcode"` — `traveler-card.service`
+ve `printed-document.service`te tek `bwipjs` çağrısı), çizgisel Code128 basan tek bir belge şablonu
+yok. Karekod 2B bir matristir: numara uzayınca modül sayısı sürüm atlar ama SVG kendi kutusuna
+`width:100%` ile sığar ⇒ sabit genişlikli bir barkod ALANI yoktur, taşma da yoktur. ⚠️ Kalan risk
+BAŞKA BİR SINIFTIR ve bu kapının işi değildir: QR sürümü büyüdükçe modül yazıcı noktasının altına
+inebilir (okunurluk/baskı yoğunluğu). *Bir yüzeyi kapsam dışı bırakmak, onu ölçmemekle aynı şey
+değildir* — ve gerekçe yorumda kalsaydı, biri belgeye çizgisel barkod eklediği gün kapsam SESSİZCE
+yalan olurdu; bu yüzden §2c kaynak taraması olarak indi (negatif sonda: `printed-document`
+`qrcode`→`code128` → ❌1).
+
 ---
 
 ## 2026-09-23 — Emekli biçimler İSTEMCİDE de tüketiliyor: "alan var" ≠ "davranış var" [ÇEKİRDEK]

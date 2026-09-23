@@ -32,6 +32,19 @@ import { AppError } from "../../utils/app-error";
 import { readCanvasLayout, type LabelElement } from "../../config/label-elements";
 import { readDefaultLabelMedia } from "../system-setting.service";
 
+// ⚠️ KAPSAM DIŞI KALANLAR DA ÖLÇÜLDÜ (2026-09-24) — "barkod basılıyor" ile
+// "ÇİZGİSEL barkod SABİT genişlikte basılıyor" aynı şey değil ve bu kapı yalnız
+// ikincisini çözer:
+//   · REFAKAT KARTI iş emri numarasını KAREKOD olarak basar (`bcid: "qrcode"`,
+//     `traveler-card.service.ts`), Code128 olarak değil. QR 2B bir matristir:
+//     numara uzayınca modül sayısı SÜRÜM atlar ama SVG `.qr-img` kutusuna
+//     `width:100%` ile sığar ⇒ TAŞMA YOK, kutu sabit kalır, modüller küçülür.
+//   · BELGE şablonları (irsaliye · çeki · fatura…) da yalnız karekod üretir
+//     (`printed-document.service.ts`, tek `bwipjs` çağrısı, `bcid: "qrcode"`);
+//     hiçbir belge çizgisel barkod basmıyor ⇒ sabit genişlikli barkod ALANI YOK.
+// ⇒ Bu iki yüzey "taşma yok" diye BEYANLIDIR, unutulduğu için değil. Kalan risk
+//   BAŞKA BİR SINIFTIR ve bu kapının işi değildir: QR sürümü büyüdükçe modül
+//   yazıcı noktasının altına inebilir (okunurluk/baskı yoğunluğu sorusu).
 /** Etiket barkodu olarak GERÇEKTEN basılan seriler — ölçüldü, tahmin değil. */
 const ETIKETE_BASILAN_SERILER = new Set(["roll", "sack"]);
 
