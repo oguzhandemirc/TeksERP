@@ -21,6 +21,10 @@
 // NEGATİF SONDALAR (2026-09-23): numaralandırma sayaç çağrısından sarmalayıcı kaldırıldı → §1 ❌ ·
 //   `/source` ucundan `requireSettingsPassword` kaldırıldı → §3b (ölü sarmalayıcı) ❌ ·
 //   `router.use(requireSettingsPassword)` eklendi → §4 ÖLÇÜLEMEDİ ❌.
+// KOŞULLU KAPI (2026-09-23, ca D6 config-bundle apply): BEYANLI (`CONDITIONAL_GATES`) ve yapısal doğrulanan
+//   yerel fonksiyon route'a takılıysa uç kapılı (koşullu) sayılır — panel çağıranı yine sarmalayıcıdan geçer
+//   (sunucu içeriğe göre isteyebilir; istemezse sarmalayıcı sıfır fark). Sondalar: ara fonksiyondan çağrı
+//   kaldırıldı → §3b + §3c ❌ · beyan silindi → §4 ÖLÇÜLEMEDİ + §3b ❌.
 // DB'siz — yalnız dosya okur.
 // =============================================================================
 import * as fs from "node:fs";
@@ -40,10 +44,18 @@ const REPO = path.resolve(BACKEND, "..");
 const GATE = "requireSettingsPassword";
 const WRAPPER = "withSettingsPassword";
 const METHODS = new Set(["get", "post", "put", "patch", "delete"]);
+/**
+ * İÇERİĞE BAĞLI (koşullu) kapılar — BEYANLI: `<routes dosyası>#<yerel fonksiyon>` → gerekçe. İçeriğe bağlı
+ * kapı şifreyi ATLAYAN bir yoldur (belge-only muafiyetinin `.every`→`.some` kaçağı emsali), yenisi sessiz
+ * kabul edilmez. Beyan YAPISAL doğrulanır: fonksiyon o dosyada var, gövdesi `requireSettingsPassword(`
+ * çağırıyor ve bir route'a middleware olarak takılı — biri tutmazsa kırmızı. Beyansız ama çağrı içeren
+ * ara fonksiyon §4 ÖLÇÜLEMEDİ.
+ */
+const CONDITIONAL_GATES: Record<string, string> = {};
 /** Kapılı ama panelden çağrılmayan uç — gerekçeli, iki yönlü (kullanılmayan muaf da kırmızı). */
 const NO_CALLER_EXEMPT: Record<string, string> = {};
 
-interface GatedRoute { method: string; path: string; where: string }
+interface GatedRoute { method: string; path: string; where: string; conditional: boolean }
 interface ClientCall { method: string; pattern: string[] | null; raw: string; where: string; wrapped: boolean; passesHeaders: boolean; wrapperId: number | null; mobile: boolean }
 
 const unmeasurable: string[] = [];
@@ -89,18 +101,21 @@ function gatedRoutes(): GatedRoute[] {
     if (!fs.readFileSync(file, "utf8").includes(GATE)) continue;
     const sf = parse(file);
     const accounted = new Set<ts.Node>();
+    const conditional = conditionalGates(sf, accounted, path.relative(path.join(BACKEND, "src/routes"), file));
     const visit = (n: ts.Node): void => {
       if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) {
         const m = n.expression.name.text;
-        const gateArg = n.arguments.find((a) => ts.isIdentifier(a) && a.text === GATE);
-        if (gateArg) {
+        const gateArg = n.arguments.find((a) => ts.isIdentifier(a) && (a.text === GATE || conditional.has(a.text)));
+        if (gateArg && ts.isIdentifier(gateArg)) {
           accounted.add(gateArg);
+          const isConditional = gateArg.text !== GATE;
+          if (isConditional) conditionalAttached.add(`${path.relative(path.join(BACKEND, "src/routes"), file)}#${gateArg.text}`);
           const [first] = n.arguments;
           const pre = prefixes.get(file);
           if (!METHODS.has(m)) unmeasurable.push(`kapı router düzeyinde (${m}): ${lineOf(sf, n)}`);
           else if (!first || !ts.isStringLiteral(first)) unmeasurable.push(`kapılı yol sabit değil: ${lineOf(sf, n)}`);
           else if (!pre?.length) unmeasurable.push(`router app.ts'te bağlı değil/çözülemedi: ${path.relative(REPO, file)}`);
-          else for (const p of pre) out.push({ method: m, path: joinPath(p, first.text), where: lineOf(sf, n) });
+          else for (const p of pre) out.push({ method: m, path: joinPath(p, first.text), where: lineOf(sf, n), conditional: isConditional });
         }
       }
       ts.forEachChild(n, visit);
@@ -108,10 +123,51 @@ function gatedRoutes(): GatedRoute[] {
     visit(sf);
     // Kapının başka biçimde kullanımı (dizi, sarmalayıcı, koşullu) → ölçülemez.
     const scanRefs = (n: ts.Node): void => {
-      if (ts.isIdentifier(n) && n.text === GATE && !accounted.has(n) && !ts.isImportSpecifier(n.parent)) unmeasurable.push(`kapının tanınmayan kullanımı: ${lineOf(sf, n)}`);
+      const isGateName = n.kind === ts.SyntaxKind.Identifier && ((n as ts.Identifier).text === GATE || conditional.has((n as ts.Identifier).text));
+      const isDeclName = conditional.get((n as ts.Identifier).text) === n;
+      if (isGateName && !accounted.has(n) && !isDeclName && !ts.isImportSpecifier(n.parent)) unmeasurable.push(`kapının tanınmayan kullanımı: ${lineOf(sf, n)}`);
       ts.forEachChild(n, scanRefs);
     };
     scanRefs(sf);
+  }
+  return out;
+}
+
+/**
+ * İÇERİĞE BAĞLI kapı — aynı dosyada tanımlı, gövdesinde `requireSettingsPassword(` ÇAĞRISI olan yerel
+ * fonksiyon (ad değil YAPI): route'a middleware olarak takılınca uç "şifre kapılı (koşullu)" sayılır.
+ * Gövdedeki çağrı hesaba yazılır; fonksiyonun başka biçimde kullanımı `scanRefs`te ÖLÇÜLEMEDİ olur.
+ */
+const conditionalSeen = new Set<string>();
+const conditionalAttached = new Set<string>();
+function conditionalGates(sf: ts.SourceFile, accounted: Set<ts.Node>, relFile: string): Map<string, ts.Identifier> {
+  const out = new Map<string, ts.Identifier>();
+  const callsGate = (body: ts.Node): ts.Identifier[] => {
+    const found: ts.Identifier[] = [];
+    const walk = (n: ts.Node): void => {
+      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === GATE) found.push(n.expression);
+      ts.forEachChild(n, walk);
+    };
+    walk(body);
+    return found;
+  };
+  const consider = (name: ts.Identifier, body: ts.Node | undefined): void => {
+    if (!body) return;
+    const calls = callsGate(body);
+    if (calls.length === 0) return;
+    const key = `${relFile}#${name.text}`;
+    if (!CONDITIONAL_GATES[key]) return; // beyansız: çağrı hesaba yazılmaz → scanRefs ÖLÇÜLEMEDİ der
+    conditionalSeen.add(key);
+    out.set(name.text, name);
+    for (const c of calls) accounted.add(c);
+  };
+  for (const st of sf.statements) {
+    if (ts.isFunctionDeclaration(st) && st.name) consider(st.name, st.body);
+    if (ts.isVariableStatement(st)) {
+      for (const d of st.declarationList.declarations) {
+        if (ts.isIdentifier(d.name) && d.initializer && (ts.isArrowFunction(d.initializer) || ts.isFunctionExpression(d.initializer))) consider(d.name, d.initializer.body);
+      }
+    }
   }
   return out;
 }
@@ -210,7 +266,7 @@ function main(): void {
   const all = [...panel.calls, ...tablet.calls];
 
   console.log("── §0 Körlük zemini ──");
-  check("§0a kapılı uç keşfedildi (≥ 5)", routes.length >= 5, routes.map((r) => `${r.method.toUpperCase()} ${r.path}`).join(" · "));
+  check("§0a kapılı uç keşfedildi (≥ 5)", routes.length >= 5, routes.map((r) => `${r.method.toUpperCase()} ${r.path}${r.conditional ? " (koşullu)" : ""}`).join(" · "));
   check("§0b panel apiClient çağrısı tarandı (≥ 300)", panel.calls.length >= 300, `${panel.calls.length} çağrı / ${panel.files} dosya`);
   check("§0c tablet apiClient çağrısı tarandı (≥ 50)", tablet.calls.length >= 50, `${tablet.calls.length} çağrı / ${tablet.files} dosya`);
 
@@ -236,6 +292,12 @@ function main(): void {
   check("§3a' muaf listesi bayat değil", staleExempt.length === 0, staleExempt.join(" · "));
   const deadWrappers = [...panel.wrappers.entries()].filter(([id]) => !panel.calls.some((c) => c.wrapperId === id && routes.some((r) => matches(r, c)))).map(([, w]) => w);
   check("§3b ⭐ her sarmalayıcı kapılı bir uca gidiyor (ölü sarmalayıcı yok)", deadWrappers.length === 0, deadWrappers.join(" · "));
+
+  const declared = Object.keys(CONDITIONAL_GATES);
+  const notFound = declared.filter((k) => !conditionalSeen.has(k));
+  const notAttached = declared.filter((k) => conditionalSeen.has(k) && !conditionalAttached.has(k));
+  check("§3c ⭐ her koşullu kapı beyanı yapısal olarak doğru (fonksiyon var + gövdesi kapıyı çağırıyor)", notFound.length === 0, notFound.join(" · "));
+  check("§3c' her koşullu kapı bir route'a middleware olarak takılı (ölü beyan yok)", notAttached.length === 0, notAttached.join(" · "));
 
   console.log("\n── §4 ÖLÇÜLEMEDİ ──");
   check("§4 ⭐ ölçülemeyen durum YOK (varsa kırmızı — sessiz 'temiz' değil)", unmeasurable.length === 0, unmeasurable.join("\n     "));
