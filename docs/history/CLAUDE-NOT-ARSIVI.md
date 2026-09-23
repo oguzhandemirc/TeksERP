@@ -11431,3 +11431,46 @@ CASCADE` · `DO UPDATE SET` · `BEFORE INSERT OR UPDATE ON`) — yalnız önceki
 yetmedi, ölçüt ifadenin kuyruğundaki `SET`. Kapsam beyanı: tablolar + görünümler; enum tipi, fonksiyon
 ve uzantı kapsam DIŞI. CI bu sınıfı zaten yakalıyordu (servis konteyneri her koşumda taze `teks_ci` +
 `migrate deploy`), ama CI push'tan SONRA konuşur; mandal commit kapısında konuşur.
+
+## 2026-09-23 — Numaralandırma ekranı Faz E1: hayalet çakışma mesajı, çelişen kilit cümleleri, bölüm bölüm hata [ÇEKİRDEK]
+
+**Saha/ölçüm:** Kullanıcı Numaralandırma ekranında iki mesaj gördü: iş emri serisinde "…ön ek Faz B
+inmeden açılmaz" (BAYAT — Faz B indi) ve "'KK' ön eki 'Kartela kabul belge no' serisinin 'KK' ön
+ekiyle çakışıyor". İkincisinin kökü d3'ün gerçek panel turunda bulundu ve burada kod okumasıyla
+doğrulandı: diyalog sayfada SÜREKLİ BAĞLI kalıyor, `row` değişince taslağı sıfırlayan effect ile
+önizlemeyi çağıran effect AYNI commit'te koşuyor ve önizleme isteği YENİ serinin anahtarıyla ESKİ
+serinin biçimini gönderiyordu. Sunucu haklı olarak çakışma diyordu; yalan olan İSTEKTİ. Kapının
+kendisi doğru kurulmuştu: ön ek çakışması yalnız TARAMA UZAYINDA küresel (ölçüldü: 52 serinin
+okutulmayan 43'ü × okutulan ön ekler = 215 deneme, ÇAKIŞMA REDDİ 0).
+
+**Kilit tablosu (ölçüldü, 52 seri):** YAPISAL 3 · SAYAC 44 · ISTEMCI 2 · açık 3 (`packingLotCode` ·
+`packingLotName` · `returnDoc`). Yani bugün HİÇBİR okutulan seri düzenlenebilir değil.
+
+**Kararlar:**
+① `workOrder`un YAPISAL kilidi KALDIRILDI (`returnDoc` emsali: gerekçesi çürüyen kilit, kilit değil
+kalıntıdır). Eski gerekçe iki şey diyordu, ikisi de bugün yanlış: "Faz B inmeden açılmaz" (Faz B
+indi, o engel artık `ISTEMCI` kilidinin işi) ve "kart no = iş emri no, `RK` kartları sahada" (tek
+seri iki yüzeyi de besler, `RK` zaten emekli ön ek). Seri yine düzenlenemez — ama doğru gerekçeyle.
+YAPISAL küme artık KAPALI ve iki üyeli: `roll` (faz harfi) · `batchDaily` (P01…P99 plaka seti).
+② Kilit cümlesinin TEK KAYNAĞI sunucu: `SeriesLock` üç alan taşır — `reason` (neden) · `acilma` (ne
+zaman, ölçülebilir koşul) · `kimde` (kimse/biz/siz). Panelde yalnız rozet ve vurgu kaldı. Eskiden
+tablo panelin metnini, diyalog sunucununkini gösteriyordu ve ikisi ÇELİŞİYORDU.
+③ `seriesLock` artık `scanningClientsMissingPhases()` okuyor (Faz B **ve** D) — yazma kapısıyla aynı
+yüklem. İki eşik ayrı ayrı yükselebildiği için soru gerçekten ayrışabilirdi (panel açık gösterir, uç
+400 döner).
+④ Kilitli seride biçim alanları GİZLENMİYOR, PASİFLEŞİYOR; o seride önizleme ucuna İSTEK ATILMIYOR.
+Hata artık BÖLÜMÜNE ait: biçim hatası yalnız biçim kaydını bağlar, sayaç ve numara kaynağı bağımsız
+kaydedilir (44 seride sayaç ayarı bu yüzden hiç kaydedilemiyordu — motoru ve izni olan, çıkış yüzeyi
+kapalı bir yetenek).
+⑤ Önizleme `suppressErrorToast` taşıyor (her tuş vuruşunda kırmızı toast yağıyordu ve diyaloğun
+iptal bayrağıyla bastırdığı BAYAT yanıt bile ekrana düşüyordu); sayaç değer kuralları alanın yanında
+Türkçe uyarı veriyor ve Kaydet'i bağlıyor; route Zod şemalarının her kısıtı artık Türkçe ("Çok
+büyük: beklenen number <=8" yerine "Hane sayısı en fazla 8 olabilir").
+
+**Kalıcı kapılar ve sondalar (hepsi ölçüldü):** `test_number_series_panel §3b/§3c` (+7 kontrol; dört
+sonda: `acilma` düşünce · yüklem tek faza dönünce · `workOrder`a kilit geri konunca · liste ucundan
+`lockUnlock` düşünce KIRMIZI) · `NumberingFormDialog.bolum.test` (dört sonda) ·
+`NumberingFormDialog.bayat.test` (iki sonda) · `lockText.test` yeniden yazıldı (üç sonda). ⚠️ Ders:
+`lockText.test`in yüzey iddiası `toContain("kilitCumlesi")` ile yazılınca sonda ISIRMADI — IMPORT
+SATIRI eşleşiyordu; yüklem ÇAĞRIYA çevrildi (`/kilitCumlesi\s*\(\s*row\s*\)/`). "Sınırsız eşleşme"
+ailesinin bir üyesi daha.

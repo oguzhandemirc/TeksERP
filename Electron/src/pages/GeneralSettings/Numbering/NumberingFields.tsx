@@ -15,19 +15,35 @@ const SEGMENTLER: Array<{ value: SeriesDateSegment; label: string }> = [
   { value: "NONE", label: "Tarihsiz (sayaç hiç sıfırlanmaz)" },
 ];
 
+/**
+ * ⚠️ KİLİTLİ SERİDE ALANLAR ÇİZİLİR AMA PASİFTİR (2026-09-23): gizlenince
+ * kullanıcı bugünkü biçimi göremiyor ve "ne açılacak" sorusunun ekranda karşılığı
+ * kalmıyordu. Pasif alan hem bugünkü değeri gösterir hem de kilidin neyi
+ * kapattığını.
+ *
+ * ⚠️ HATA ALANIN YANINDA: sunucunun Türkçe doğrulama mesajı bölümün ALTINDA
+ * gösterilir, global bir toast'ta değil — kullanıcı sebebi aradığı yerde bulur.
+ */
 export function NumberingFields({
   fmt,
   onChange,
+  disabled = false,
+  hata = null,
 }: {
   fmt: SeriesFormatInput;
   onChange: (next: SeriesFormatInput) => void;
+  disabled?: boolean;
+  /** Sunucudan gelen biçim hatası (önizleme ya da kaydetme). */
+  hata?: string | null;
 }) {
   return (
+    <div className="space-y-2">
     <div className="grid grid-cols-2 gap-3">
       <div className="space-y-1">
         <Label htmlFor="ns-prefix">Ön ek</Label>
         <Input
           id="ns-prefix"
+          disabled={disabled}
           value={fmt.prefix}
           maxLength={6}
           onChange={(e) => onChange({ ...fmt, prefix: e.target.value.toUpperCase() })}
@@ -37,6 +53,7 @@ export function NumberingFields({
         <Label htmlFor="ns-digits">Hane</Label>
         <Input
           id="ns-digits"
+          disabled={disabled}
           type="number"
           min={1}
           max={8}
@@ -48,6 +65,7 @@ export function NumberingFields({
         <Label htmlFor="ns-segment">Tarih</Label>
         <select
           id="ns-segment"
+          disabled={disabled}
           className="h-9 w-full rounded-md border bg-background px-2 text-sm"
           value={fmt.dateSegment}
           onChange={(e) => onChange({ ...fmt, dateSegment: e.target.value as SeriesDateSegment })}
@@ -61,6 +79,7 @@ export function NumberingFields({
         <Label htmlFor="ns-sep">Ayraç (ön ek ile tarih arası)</Label>
         <Input
           id="ns-sep"
+          disabled={disabled}
           value={fmt.separator}
           maxLength={2}
           onChange={(e) => onChange({ ...fmt, separator: e.target.value })}
@@ -77,6 +96,7 @@ export function NumberingFields({
           <Label htmlFor="ns-sep2">Ayraç 2 (tarih ile sayaç arası)</Label>
           <Input
             id="ns-sep2"
+            disabled={disabled}
             value={fmt.separator2 ?? ""}
             maxLength={2}
             placeholder={fmt.separator === "" ? "(ayraçsız)" : fmt.separator}
@@ -84,6 +104,8 @@ export function NumberingFields({
           />
         </div>
       )}
+    </div>
+    {hata && <p className="text-sm font-medium text-destructive">{hata}</p>}
     </div>
   );
 }

@@ -23,11 +23,19 @@ export const numberingService = {
     return r.data?.data ?? [];
   },
 
+  /**
+   * ⚠️ `suppressErrorToast`: önizleme KULLANICI YAZARKEN koşar ve hatası ALANIN
+   * YANINDA gösterilir. Global toast burada iki kez zarar veriyordu (d3 ölçtü
+   * 2026-09-23, gerçek panel): her tuş vuruşunda kırmızı bir toast yağıyor ve
+   * diyaloğun kendi iptal bayrağıyla bastırdığı BAYAT yanıt bile ekrana
+   * düşüyordu. Hatayı gösteren yüzey diyalogdur.
+   */
   async preview(key: string, fmt: SeriesFormatInput): Promise<string> {
-    const r = await apiClient.post<{ data: { preview: string } }>("/api/number-series/preview", {
-      key,
-      ...fmt,
-    });
+    const r = await apiClient.post<{ data: { preview: string } }>(
+      "/api/number-series/preview",
+      { key, ...fmt },
+      { suppressErrorToast: true },
+    );
     return r.data?.data?.preview ?? "";
   },
 

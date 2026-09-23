@@ -1,5 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { counterFieldError, type CounterFieldError } from "./counterRules";
 import type { NumberSeriesRow, SeriesCounterInput, SeriesExhaustion } from "./types";
 
 /**
@@ -30,23 +31,56 @@ function Tukenme({ exhaustion }: { exhaustion: SeriesExhaustion | null }) {
   );
 }
 
+/**
+ * Tek sayaç alanı — BOŞ KUTU = "ayarlanmamış" (`null`), "0" değil. Hata mesajı
+ * alanın hemen altında durur; kullanıcı sebebi aradığı yerde bulur (K5/K10).
+ */
+function CounterField({
+  id, etiket, yer, deger, hata, onChange,
+}: {
+  id: string;
+  etiket: string;
+  yer: string;
+  deger: number | null;
+  hata: string | null;
+  onChange: (v: number | null) => void;
+}) {
+  const readInt = (v: string): number | null => {
+    const n = Number(v.trim());
+    return v.trim() === "" || !Number.isFinite(n) ? null : Math.trunc(n);
+  };
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs">{etiket}</Label>
+      <Input
+        id={id}
+        inputMode="numeric"
+        placeholder={yer}
+        value={deger ?? ""}
+        aria-invalid={hata !== null}
+        onChange={(e) => onChange(readInt(e.target.value))}
+      />
+      {hata && <p className="text-xs font-medium text-destructive">{hata}</p>}
+    </div>
+  );
+}
+
 export function NumberingCounterFields({
   row,
   counter,
   exhaustion,
   onChange,
+  hatalar = [],
 }: {
   row: NumberSeriesRow;
   counter: SeriesCounterInput;
   /** `null` = henüz okunmadı; `percent === null` = ÖLÇÜLEMEDİ (yüzde yazılmaz). */
   exhaustion: SeriesExhaustion | null;
   onChange: (a: SeriesCounterInput) => void;
+  /** Değer hataları — ALANIN YANINDA gösterilir, Kaydet'i de bağlar (K10). */
+  hatalar?: CounterFieldError[];
 }) {
   const locked = !row.counter.startValue;
-  const readInt = (v: string): number | null => {
-    const n = Number(v.trim());
-    return v.trim() === "" || !Number.isFinite(n) ? null : Math.trunc(n);
-  };
 
   return (
     <div className="space-y-3 rounded-md border p-3">
@@ -61,36 +95,21 @@ export function NumberingCounterFields({
       ) : (
         <>
           <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="ns-start" className="text-xs">Başlangıç</Label>
-              <Input
-                id="ns-start"
-                inputMode="numeric"
-                placeholder="1"
-                value={counter.startValue ?? ""}
-                onChange={(e) => onChange({ ...counter, startValue: readInt(e.target.value) })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ns-step" className="text-xs">Artış adımı</Label>
-              <Input
-                id="ns-step"
-                inputMode="numeric"
-                placeholder="1"
-                value={counter.step ?? ""}
-                onChange={(e) => onChange({ ...counter, step: readInt(e.target.value) })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ns-max" className="text-xs">Üst sınır</Label>
-              <Input
-                id="ns-max"
-                inputMode="numeric"
-                placeholder="yok"
-                value={counter.maxValue ?? ""}
-                onChange={(e) => onChange({ ...counter, maxValue: readInt(e.target.value) })}
-              />
-            </div>
+            <CounterField
+              id="ns-start" etiket="Başlangıç" yer="1"
+              deger={counter.startValue} hata={counterFieldError(hatalar, "startValue")}
+              onChange={(v) => onChange({ ...counter, startValue: v })}
+            />
+            <CounterField
+              id="ns-step" etiket="Artış adımı" yer="1"
+              deger={counter.step} hata={counterFieldError(hatalar, "step")}
+              onChange={(v) => onChange({ ...counter, step: v })}
+            />
+            <CounterField
+              id="ns-max" etiket="Üst sınır" yer="yok"
+              deger={counter.maxValue} hata={counterFieldError(hatalar, "maxValue")}
+              onChange={(v) => onChange({ ...counter, maxValue: v })}
+            />
           </div>
 
           {/* ⚠️ Q3 BEYANI — kullanıcı "4 hane" görüp 9999'da duracağını sanmasın. */}

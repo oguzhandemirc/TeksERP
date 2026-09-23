@@ -73,6 +73,10 @@ export interface NumberSeriesRow {
   editable: boolean;
   lockedReason?: string;
   lockKind?: SeriesLockKind;
+  /** Kilit NE ZAMAN kalkar — SUNUCUDAN; panel cümle yazmaz (2026-09-23). */
+  lockUnlock?: string;
+  /** Eylem kimde; rozet vurgusu buradan. Eski backend'de `undefined`. */
+  lockActor?: "kimse" | "biz" | "siz";
   /**
    * Bölüm anahtarı. ⚠️ Panel bu kümeyi DARALTMAZ: backend yeni bir grup
    * eklediğinde burada `string` olduğu için satır DÜŞMEZ, bilinmeyen grup kendi

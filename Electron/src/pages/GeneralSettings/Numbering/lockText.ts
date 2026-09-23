@@ -1,48 +1,49 @@
 // =============================================================================
-// KİLİT CÜMLELERİ — üç sınıf, üç FARKLI cümle (saf, 2026-09-22)
+// KİLİT ROZETİ — sınıfın ADI panelde, CÜMLESİ sunucuda (2026-09-23)
 // =============================================================================
-// ⚠️ ÜÇÜ AYNI CÜMLEYE İNDİRGENEMEZ çünkü üçü FARKLI GÜN kalkıyor ve yalnız
-// BİRİ kullanıcının kendi çözebileceği şey:
-//   · YAPISAL  → hiç açılmayabilir           (kimsenin işi değil)
-//   · SAYAC    → biz hazırlayınca açılır     (BİZİM işimiz)
-//   · ISTEMCI  → saha güncellenince açılır   (KULLANICININ işi)
-// "Bu seri kilitli" diye tek cümle yazmak, kullanıcıyı kendi yapabileceği tek
-// şeyden habersiz bırakırdı — `uc-sonuc-iki-degil` kuralının yüzeydeki karşılığı.
+// ⚠️ CÜMLELER BURADAN KALDIRILDI ve gerekçesi ÖLÇÜLDÜ: tablo satırı panelin
+// kendi metnini ("Bu serinin biçimi yapısal olarak değişemez"), diyalog ise
+// sunucunun metnini ("… ön ek Faz B inmeden açılmaz") gösteriyordu — aynı kilit,
+// İKİ FARKLI ve ÇELİŞEN cümle (d3 ölçtü, gerçek panel). Kilit gerekçesi bir
+// KARARDIR ve kararın tek kaynağı katalogla servistir; panel onu OKUR.
+//
+// Panelde kalan iki şey SUNUM: ① rozetin tek kelimelik sınıf adı, ② eylemin
+// kimde olduğuna göre vurgu. İkisi de cümle değil, bu yüzden kopya sayılmaz.
 // =============================================================================
-import type { SeriesLockKind } from "./types";
+import type { NumberSeriesRow, SeriesLockKind } from "./types";
 
-export interface KilitMetni {
-  /** Rozet — kısa sınıf adı. */
-  rozet: string;
-  /** Ne zaman açılacağı; kullanıcı kendi yapabileceğini buradan ayırt eder. */
-  neZaman: string;
-  /** Eylem KİMDE: kullanıcı yalnız "siz"de bir şey yapabilir. */
-  kimde: "kimse" | "biz" | "siz";
-}
-
-const METINLER: Record<SeriesLockKind, KilitMetni> = {
-  YAPISAL: {
-    rozet: "Değiştirilemez",
-    neZaman: "Bu serinin biçimi yapısal olarak değişemez.",
-    kimde: "kimse",
-  },
-  SAYAC: {
-    rozet: "Hazırlanmadı",
-    neZaman: "Bu seri biçim değişimine henüz hazırlanmadı; sonraki sürümlerde açılacak.",
-    kimde: "biz",
-  },
-  ISTEMCI: {
-    rozet: "Güncelleme bekliyor",
-    neZaman: "Sahadaki panel ve tabletler güncellenince açılır.",
-    kimde: "siz",
-  },
+/** Rozet — tek kelimelik SINIF ADI (cümle değil). */
+const ROZET: Record<SeriesLockKind, string> = {
+  YAPISAL: "Değiştirilemez",
+  SAYAC: "Hazırlanmadı",
+  ISTEMCI: "Güncelleme bekliyor",
 };
 
-export function kilitMetni(kind: SeriesLockKind): KilitMetni {
-  return METINLER[kind];
+/**
+ * Eylem KİMDE — sunucudan gelir (`lockActor`). Alan yoksa (backend eski) sınıfa
+ * göre türetilir: backend ÖNCE çıkar, ama panelin eski backend'e karşı sessizce
+ * yanlış vurgu vermesi de kabul edilemez.
+ */
+const ACTOR_FALLBACK: Record<SeriesLockKind, "kimse" | "biz" | "siz"> = {
+  YAPISAL: "kimse",
+  SAYAC: "biz",
+  ISTEMCI: "siz",
+};
+
+export function lockBadge(kind: SeriesLockKind): string {
+  return ROZET[kind];
 }
 
-/** Kullanıcının KENDİ çözebileceği kilit mi? (Ekranda ayrı vurgulanır.) */
-export function kullaniciCozebilir(kind: SeriesLockKind): boolean {
-  return METINLER[kind].kimde === "siz";
+/** Kullanıcının KENDİ çözebileceği kilit mi? (Rozet vurgulu çizilir.) */
+export function userCanResolve(row: Pick<NumberSeriesRow, "lockKind" | "lockActor">): boolean {
+  if (!row.lockKind) return false;
+  return (row.lockActor ?? ACTOR_FALLBACK[row.lockKind]) === "siz";
+}
+
+/**
+ * Ekranda gösterilecek kilit cümlesi — NEDEN + NE ZAMAN, ikisi de sunucudan.
+ * Panel burada yalnız BİRLEŞTİRİR; hiçbir metni kendisi yazmaz.
+ */
+export function lockSentence(row: Pick<NumberSeriesRow, "lockedReason" | "lockUnlock">): string {
+  return [row.lockedReason, row.lockUnlock].filter(Boolean).join(" ");
 }

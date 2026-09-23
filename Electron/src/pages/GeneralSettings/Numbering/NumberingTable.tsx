@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { kilitMetni, kullaniciCozebilir } from "./lockText";
+import { lockSentence, lockBadge, userCanResolve } from "./lockText";
 import type { NumberSeriesRow } from "./types";
 
 /**
@@ -44,7 +44,7 @@ function NumberingRow({
   row: NumberSeriesRow;
   onEdit: (row: NumberSeriesRow) => void;
 }) {
-  const kilit = row.lockKind ? kilitMetni(row.lockKind) : null;
+  const kilit = row.lockKind ? lockSentence(row) : null;
   return (
     <tr className="border-t">
       <td className="p-2">
@@ -53,12 +53,12 @@ function NumberingRow({
           <div className="mt-0.5 flex items-center gap-1.5">
             {/* Kullanıcının KENDİ çözebileceği kilit vurgulu rozet alır. */}
             <Badge
-              variant={kullaniciCozebilir(row.lockKind) ? "default" : "secondary"}
+              variant={userCanResolve(row) ? "default" : "secondary"}
               className="px-1 py-0 text-[10px]"
             >
-              {kilit.rozet}
+              {lockBadge(row.lockKind)}
             </Badge>
-            <span className="text-xs text-muted-foreground">{kilit.neZaman}</span>
+            <span className="text-xs text-muted-foreground">{kilit}</span>
           </div>
         )}
       </td>

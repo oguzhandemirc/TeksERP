@@ -41,12 +41,26 @@ const router = Router();
 router.use(verifyToken, requirePermission("settings:numbering"));
 
 /** Biçim gövdesi — okuma uçlarında da aynı şema (tek kaynak). */
+// ⚠️ HER KISITIN TÜRKÇE MESAJI VAR ve bu bir üslup tercihi DEĞİL: mesajsız Zod
+// kullanıcıya "Çok büyük: beklenen number <=8" diyordu (ölçüldü 2026-09-23,
+// gerçek panelde) — yarı İngilizce, alanın adını bile söylemiyor. Doğrulama
+// mesajları Türkçe (kök CLAUDE.md) ve panel bunları ALANIN YANINDA gösterir.
 const formatSchema = z
   .object({
-    prefix: z.string().trim().min(1).max(6),
-    dateSegment: z.nativeEnum(NumberSeriesDateSegment),
-    digits: z.number().int().min(1).max(8),
-    separator: z.string().max(2),
+    prefix: z
+      .string()
+      .trim()
+      .min(1, "Ön ek boş olamaz.")
+      .max(6, "Ön ek en fazla 6 karakter olabilir."),
+    dateSegment: z.nativeEnum(NumberSeriesDateSegment, {
+      message: "Tarih biçimi tanınmadı; listeden bir seçenek seçin.",
+    }),
+    digits: z
+      .number({ message: "Hane sayısı bir sayı olmalı." })
+      .int("Hane sayısı tam sayı olmalı.")
+      .min(1, "Hane sayısı en az 1 olabilir.")
+      .max(8, "Hane sayısı en fazla 8 olabilir."),
+    separator: z.string().max(2, "Ayraç en fazla 2 karakter olabilir."),
     /**
      * İKİNCİ AYRAÇ — `null` = `separator`a düş (bugünkü davranış).
      *
@@ -60,7 +74,7 @@ const formatSchema = z
      * pencerede alanı kurabilen bir yüzey yoktur (değer her yerde zaten null).
      * Panel indikten SONRA alan her kaydetmede açıkça gönderilir.
      */
-    separator2: z.string().max(2).nullable().default(null),
+    separator2: z.string().max(2, "İkinci ayraç en fazla 2 karakter olabilir.").nullable().default(null),
   })
   .strict();
 
@@ -75,9 +89,21 @@ const formatSchema = z
  */
 const counterSchema = z
   .object({
-    startValue: z.number().int().min(1).nullable(),
-    step: z.number().int().min(1).nullable(),
-    maxValue: z.number().int().min(1).nullable(),
+    startValue: z
+      .number({ message: "Başlangıç değeri bir sayı olmalı." })
+      .int("Başlangıç değeri tam sayı olmalı.")
+      .min(1, "Başlangıç değeri en az 1 olabilir.")
+      .nullable(),
+    step: z
+      .number({ message: "Artış adımı bir sayı olmalı." })
+      .int("Artış adımı tam sayı olmalı.")
+      .min(1, "Artış adımı en az 1 olabilir.")
+      .nullable(),
+    maxValue: z
+      .number({ message: "Üst sınır bir sayı olmalı." })
+      .int("Üst sınır tam sayı olmalı.")
+      .min(1, "Üst sınır en az 1 olabilir.")
+      .nullable(),
   })
   .strict();
 
