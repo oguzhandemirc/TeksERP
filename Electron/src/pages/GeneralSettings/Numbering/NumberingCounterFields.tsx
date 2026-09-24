@@ -1,5 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LockInfo } from "./LockInfo";
 import { counterFieldError, type CounterFieldError } from "./counterRules";
 import type { NumberSeriesRow, SeriesCounterInput, SeriesExhaustion } from "./types";
 
@@ -91,7 +92,10 @@ export function NumberingCounterFields({
       <Tukenme exhaustion={exhaustion} />
 
       {locked ? (
-        <p className="text-sm text-muted-foreground">{row.counter.lockedReason}</p>
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          Sayaç ayarları bu seride kapalı
+          <LockInfo text={row.counter.lockedReason ?? ""} />
+        </p>
       ) : (
         <>
           <div className="grid grid-cols-3 gap-3">

@@ -11,7 +11,9 @@ import { NumberingEffectiveFromField } from "./NumberingEffectiveFromField";
 import { useNumberingActions } from "./useNumberingActions";
 import { useNumberingDraft } from "./useNumberingDraft";
 import { counterErrors } from "./counterRules";
-import { lockSentence } from "./lockText";
+import { Badge } from "@/components/ui/badge";
+import { lockBadge, lockSentence, userCanResolve } from "./lockText";
+import { LockInfo } from "./LockInfo";
 import type {
   NumberSeriesRow,
   NumberSourceMode,
@@ -20,6 +22,22 @@ import type {
   SeriesFormatInput,
 } from "./types";
 
+
+/** Kilit rozeti + ⓘ — cümle SUNUCUDAN, tooltip'te (satırı taşırmasın). */
+function LockRow({ row }: { row: NumberSeriesRow }) {
+  if (!row.lockKind) return null;
+  return (
+    <div className="flex items-center gap-1.5">
+      <Badge
+        variant={userCanResolve(row) ? "default" : "secondary"}
+        className="shrink-0 whitespace-nowrap"
+      >
+        {lockBadge(row.lockKind)}
+      </Badge>
+      <LockInfo text={lockSentence(row)} />
+    </div>
+  );
+}
 
 /**
  * ETKİ CÜMLESİ — HER ZAMAN görünür. Sayı SUNUCUDA ölçülür; kaynağı yoksa
@@ -124,7 +142,7 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
             Sebebin alanın YANINDA olması, hata mesajının alanın yanında olmasıyla
             aynı kuraldır. */}
         {row.lockKind && (!row.editable || (row.lockedAxes?.length ?? 0) > 0) && (
-          <p className="rounded-md border p-3 text-sm text-muted-foreground">{lockSentence(row)}</p>
+          <LockRow row={row} />
         )}
         <NumberingFields
           fmt={fmt}

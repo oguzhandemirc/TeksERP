@@ -190,13 +190,14 @@ describe("Numaralandırma diyaloğu — ALAN bazında kilit (E4)", () => {
       }),
     );
     // Cümle SUNUCUDAN gelir; panel yalnız birleştirir (`lockSentence`).
-    expect(screen.getByText(/ön ek değişimini okutamıyor/i)).toBeInTheDocument();
-    expect(screen.getByText(/1\.0\.8 ya da üstü/i)).toBeInTheDocument();
+    // Cümle ⓘ arkasında (tooltip) — erişilebilir adı olarak taşınır.
+    expect(screen.getByLabelText(/ön ek değişimini okutamıyor/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/1\.0\.8 ya da üstü/i)).toBeInTheDocument();
   });
 
   it("§2c kilitsiz seride gerekçe cümlesi ÇİZİLMEZ (kapı fazla geniş değil)", () => {
     ciz(row({ key: "order", editable: true, lockKind: undefined, lockedAxes: undefined }));
-    expect(screen.queryByText(/okutamıyor/i)).toBeNull();
+    expect(screen.queryByLabelText(/okutamıyor/i)).toBeNull();
   });
 
   it("§3 tam kilitte (tüm eksenler) her alan pasif", () => {

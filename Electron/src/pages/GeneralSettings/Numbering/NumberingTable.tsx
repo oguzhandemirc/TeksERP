@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { lockSentence, lockBadge, userCanResolve } from "./lockText";
+import { LockInfo } from "./LockInfo";
 import type { NumberSeriesRow } from "./types";
 
 /**
@@ -15,25 +16,25 @@ export function NumberingTable({
   onEdit: (row: NumberSeriesRow) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-md border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-xs text-muted-foreground">
-          <tr>
-            <th className="p-2 text-left">Seri</th>
-            <th className="p-2 text-left">Ön ek</th>
-            <th className="hidden p-2 text-left sm:table-cell">Tarih</th>
-            <th className="hidden p-2 text-left sm:table-cell">Hane</th>
-            <th className="p-2 text-left">Örnek</th>
-            <th className="p-2 text-right">Düzenle</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <NumberingRow key={r.key} row={r} onEdit={onEdit} />
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <table className="w-full table-fixed text-sm">
+      <thead className="text-xs text-muted-foreground">
+        <tr className="border-b">
+          <th className="px-4 py-2 text-left font-medium">Seri</th>
+          <th className="w-24 px-3 py-2 text-left font-medium">Ön ek</th>
+          <th className="hidden w-24 px-3 py-2 text-left font-medium sm:table-cell">Tarih</th>
+          <th className="hidden w-16 px-3 py-2 text-left font-medium sm:table-cell">Hane</th>
+          <th className="w-52 px-3 py-2 text-left font-medium">Örnek</th>
+          <th className="w-28 px-4 py-2 text-right font-medium">
+            <span className="sr-only">Düzenle</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody className="divide-y">
+        {rows.map((r) => (
+          <NumberingRow key={r.key} row={r} onEdit={onEdit} />
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -46,26 +47,28 @@ function NumberingRow({
 }) {
   const kilit = row.lockKind ? lockSentence(row) : null;
   return (
-    <tr className="border-t">
-      <td className="p-2">
-        <div className="font-medium">{row.label}</div>
-        {kilit && row.lockKind && (
-          <div className="mt-0.5 flex items-center gap-1.5">
-            {/* Kullanıcının KENDİ çözebileceği kilit vurgulu rozet alır. */}
-            <Badge
-              variant={userCanResolve(row) ? "default" : "secondary"}
-              className="px-1 py-0 text-[10px]"
-            >
-              {lockBadge(row.lockKind)}
-            </Badge>
-            <span className="text-xs text-muted-foreground">{kilit}</span>
-          </div>
-        )}
+    <tr className="hover:bg-muted/30">
+      <td className="px-4 py-2.5 align-top">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-medium">{row.label}</span>
+          {kilit && row.lockKind && (
+            <span className="inline-flex items-center gap-1">
+              {/* Kullanıcının KENDİ çözebileceği kilit vurgulu rozet alır. */}
+              <Badge
+                variant={userCanResolve(row) ? "default" : "secondary"}
+                className="shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px]"
+              >
+                {lockBadge(row.lockKind)}
+              </Badge>
+              <LockInfo text={kilit} />
+            </span>
+          )}
+        </div>
       </td>
-      <td className="p-2 font-mono text-xs">{row.prefix}</td>
-      <td className="hidden p-2 text-xs sm:table-cell">{row.dateSegment}</td>
-      <td className="hidden p-2 text-xs sm:table-cell">{row.digits}</td>
-      <td className="p-2 font-mono text-xs">
+      <td className="px-3 py-2.5 align-top font-mono text-xs">{row.prefix}</td>
+      <td className="hidden px-3 py-2.5 align-top text-xs sm:table-cell">{row.dateSegment}</td>
+      <td className="hidden px-3 py-2.5 align-top text-xs sm:table-cell">{row.digits}</td>
+      <td className="px-3 py-2.5 align-top font-mono text-xs">
         {row.preview}
         {/* TÜKENME LİSTEDE de görünür (K8): biçimi kilitli seride (top barkodu)
             kullanıcı kapasitenin dolduğunu başka hiçbir yerde göremiyordu. */}
@@ -80,7 +83,7 @@ function NumberingRow({
           </div>
         )}
       </td>
-      <td className="p-2 text-right">
+      <td className="px-4 py-2 text-right align-top">
         {/* ⚠️ BİÇİM kilidi satırı kapatmaz: sayaç ayarları AYRI bir kilide tabi
             ve biçimi kilitli 46 seride AÇIK. Yalnız `editable`a bakan bir düğme,
             motoru olan ama çıkış yüzeyi olmayan bir yetenek üretirdi. */}

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
+import { RefreshButton } from "@/components/RefreshButton";
 import { NumberingFormDialog } from "./NumberingFormDialog";
 import { NumberingTable } from "./NumberingTable";
 import { numberingService } from "./service";
@@ -58,21 +60,19 @@ export function NumberingPage() {
 
   return (
     <PageShell>
-      <PageBody>
-        <div className="space-y-4">
-          <div>
-            <h1 className="text-lg font-semibold">Numaralandırma</h1>
-            <p className="text-sm text-muted-foreground">
-              Belge, kart ve kod serilerinin numara biçimi. Değişiklik yalnız BUNDAN SONRA
-              açılacak kayıtları etkiler; geçmiş numaralar ve basılmış belgeler değişmez.
-            </p>
-          </div>
-
+      <PageHeader
+        title="Numaralandırma"
+        description="Belge, kart ve kod serilerinin numara biçimi. Değişiklik yalnız bundan sonra açılacak kayıtları etkiler; geçmiş numaralar ve basılmış belgeler değişmez."
+        actions={<RefreshButton queryKey={[...NUMBERING_KEY]} successMessage="Seriler yenilendi" />}
+      />
+      <PageBody className="p-6">
+        <div className="space-y-5">
           {bolumler.map((b) => (
-            <section key={b.key} className="space-y-2">
-              <h2 className="text-sm font-medium text-muted-foreground">
-                {b.label} <span className="font-normal">({b.rows.length})</span>
-              </h2>
+            <section key={b.key} className="overflow-hidden rounded-lg border bg-card">
+              <header className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2.5">
+                <h2 className="text-sm font-semibold">{b.label}</h2>
+                <span className="text-xs text-muted-foreground">{b.rows.length} seri</span>
+              </header>
               <NumberingTable rows={b.rows} onEdit={setSecili} />
             </section>
           ))}
