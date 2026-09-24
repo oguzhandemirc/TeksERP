@@ -66,15 +66,31 @@ function CounterField({
   );
 }
 
+/**
+ * Hane/sınır açıklaması — TASLAĞA göre seçilir: sınırlı seride "hane genişler"
+ * cümlesi yanlış olur, sarmalı seride sarma kutusunun kendi açıklaması yeter.
+ */
+function paddingNote(counter: SeriesCounterInput, digits: number): string | null {
+  if (counter.maxValue === null) {
+    const padLimit = (10 ** digits - 1).toLocaleString("tr-TR");
+    return `Hane sayısı yalnız görünümdür (dolgu). Üst sınır boşken numara ${padLimit}'u aşınca hane genişler, başa sarmaz.`;
+  }
+  if (!counter.wrap) return "Hane sayısı yalnız görünümdür (dolgu); sayacı üst sınır durdurur.";
+  return null;
+}
+
 export function NumberingCounterFields({
   row,
   counter,
+  digits,
   exhaustion,
   onChange,
   hatalar = [],
 }: {
   row: NumberSeriesRow;
   counter: SeriesCounterInput;
+  /** Taslağın hanesi — açıklamadaki dolgu sınırı buradan. */
+  digits: number;
   /** `null` = henüz okunmadı; `percent === null` = ÖLÇÜLEMEDİ (yüzde yazılmaz). */
   exhaustion: SeriesExhaustion | null;
   onChange: (a: SeriesCounterInput) => void;
@@ -142,13 +158,13 @@ export function NumberingCounterFields({
           )}
 
           {/* ⚠️ Q3 BEYANI — kullanıcı "4 hane" görüp 9999'da duracağını sanmasın. */}
-          <p className="text-xs text-muted-foreground">
-            Hane sayısı yalnız GÖRÜNÜMDÜR (dolgu); sayacı durduran tek şey üst sınırdır.
-            Sınır yoksa numara 9999'u aştığında hane genişler, başa sarmaz.
-          </p>
+          {paddingNote(counter, digits) && (
+            <p className="text-xs text-muted-foreground">{paddingNote(counter, digits)}</p>
+          )}
 
-          {/* SIFIRLAMA: yok değil, GEREKÇESİYLE kapalı. */}
-          <p className="text-xs text-muted-foreground">{row.counter.resetReason}</p>
+          {/* SIFIRLAMA: yok değil, GEREKÇESİYLE kapalı. Sarmalı seride çizilmez:
+              "1'e döndürülse bile ilerler" cümlesi başa dönen seriyle çelişir. */}
+          {!counter.wrap && <p className="text-xs text-muted-foreground">{row.counter.resetReason}</p>}
         </>
       )}
     </div>

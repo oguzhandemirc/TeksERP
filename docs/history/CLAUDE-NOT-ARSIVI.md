@@ -12333,3 +12333,23 @@ Düzeltme ürün kodunu değil TARAYICIYI güçlendirdi:
 **Yedekler notu.** `system:backups` yedek almayı, zamanlamayı ve dış kopya durumunu açar; yedek LİSTESİ/İNDİRME ve dış kopya hedefini değiştirme yine `admin:users` da ister (dump tüm kullanıcıların düz PIN'ini taşır — `test_offsite_sweep` gerekçesi değişmedi).
 
 **Bekçiler.** `test_settings_scopes` (22; tablo · anahtar-kapsamlı kapı · ham ayar · karo uçları · süperadmin ekranları; iki negatif sonda) · Electron `settings-scope-mirror.test.ts` (kategori satırları ↔ backend tablosu, iki yön; iki sonda) · `settings-surface.test.ts` §6 (kategori `admin:settings` + tek dar izin; ekran kapısı = sekmelerin birleşimi; route/karo aynı küme; hub kapsar) · `legacy-settings.test.ts`.
+
+## 2026-09-24 — "Sıradaki numara" ve tükenme ÜRETECİN hesabını gösterir; taslak bir biçim DEĞİLDİR [ÇEKİRDEK]
+
+**Tetik (kullanıcı ekran görüntüsü).** Numaralandırma → "Parti no (kısa, dönen)": ekran "Sıradaki numara `P2207260003`" ve "2.207.260.002 / 99 kullanıldı (%2229555558) — sınıra yaklaşıldı" gösterdi; hane 2, üst sınır 99, "başa dön" işaretli.
+
+**Ölçüm (fabrika 23 Eylül dökümünün KOPYASI, salt okuma).** Gerçek üreteç (`generateBatchNumberTx`, geri alınan tx) `P08` üretti — sahada numara doğru. Yanlış olan ekrandı ve üç ayrı İKİNCİ HESAP vardı:
+- ① Önizleme ucu panelin TASLAĞINI biçim diye kullanıyordu (`{ ...taslak, retiredPrefixes }`): üst sınır, sarma, başlangıç/adım ve kapsam damgası düşüyordu. Sınır düşünce hane eşlemesi esnekleşti (`\d{2,}`) ve aynı kolonu paylaşan günlük parti kodu (`P2207260002`) kısa serinin sayacına girdi.
+- ② Taslaksız önizleme de yanlıştı (`P88`): sarmalı seride sayacın kaynağı "en son doğan kod"dur ama satırlar sırasız okunuyordu.
+- ③ Tükenme kendi taramasını yapıyordu (süzgeçsiz, kapsamsız) ve sarmalı seride — tanım gereği tükenmez — uyarı verdi.
+- Kural satırının bekçi atfı (`test_number_series_geri_uyumluluk L2 (f)`) önizlemeyi HİÇ çağırmıyordu: kural "ölçülüyor" diyordu, ölçen yoktu.
+
+**Düzeltme.**
+- `candidateSeriesFormat`: aday biçim = yürürlükteki biçim + taslak EKSENLERİ; eksen değiştiyse kapsam ŞİMDİ başlar (yazma yolu `formatChangedAt`i kayıt anında yazar). `previewNextNumber` artık yalnız eksen alır — tip, tam biçim geçirmeyi engeller.
+- Önizleme yükleyicisi `createdAt desc` okur.
+- `seriesUsedMaxFrom` üreteçle aynı kapsam (`scopeSeriesRows`) ve aynı süzgeçten (`codeCountsForCounter`) geçer; sarmalı seride tükenme üçüncü sonuç döner ("başa döner; numara tükenmez").
+- Panel: sayaç açıklamaları taslağa göre ("geriye alınamaz" sarmalı seride çizilmez; dolgu sınırı sabit 9999 değil haneden).
+
+**Etki (önce/sonra, 53 seri, fabrika kopyası).** Sıradaki numara YALNIZ `batchShort`ta değişti (`P2207260003` → `P08` = üreteç); diğer 52 seri birebir aynı. Tükenme yalnız `batchShort`ta değişti; diğerlerinde yalnız gerekçe cümlesindeki sabit 9999 gerçek haneye döndü. Üretim yoluna dokunulmadı.
+
+**Bekçi.** `test_number_series_siradaki` (9 kontrol), dört mutasyon kolu ısırıyor ve ekrandaki değerlerin aynısını basıyor (`P2207260003` · `P51` · `%2229555558`).

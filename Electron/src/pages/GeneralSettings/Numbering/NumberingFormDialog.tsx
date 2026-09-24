@@ -159,6 +159,7 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
         <NumberingCounterFields
           row={row}
           counter={counter}
+          digits={fmt.digits}
           exhaustion={exhaustion}
           onChange={setCounter}
           hatalar={counterErrorList}

@@ -329,6 +329,32 @@ function scanOverlapLabel(key: string, fmt: NumberSeriesFormat): string | null {
   return null;
 }
 
+/** Panelin önizlemeye gönderdiği TASLAK — yalnız biçim eksenleri. */
+export type SeriesDraftAxes = Pick<NumberSeriesFormat, SeriesFormatAxis>;
+
+const DRAFT_AXES: readonly SeriesFormatAxis[] = ["prefix", "dateSegment", "digits", "separator", "separator2"];
+
+/**
+ * ADAY BİÇİM — yürürlükteki biçimin ÜSTÜNE taslak eksenleri.
+ *
+ * ⚠️ Taslak TEK BAŞINA bir biçim DEĞİLDİR: sayaç ayarlarını (başlangıç · adım ·
+ * üst sınır · sarma), kapsam damgasını, emekli biçimleri ve `infix`i taşımaz.
+ * Önizleme eskiden taslağı biçim diye kullanıyordu ve kısa parti noda üst sınır
+ * ile sarma düşüyordu: ekran `P2207260003` dedi, üreteç `P08` üretti.
+ * ⚠️ Eksen değiştiyse kapsam ŞİMDİ başlar — kaydedilince yazma yolu
+ * (`updateSeriesFormat`) `formatChangedAt`i o an yazar; önizleme aynısını varsayar.
+ */
+export function candidateSeriesFormat(key: string, draft: SeriesDraftAxes | undefined, at: Date): NumberSeriesFormat {
+  const current = resolveSeriesFormat(key);
+  if (!draft) return current;
+  const changed = DRAFT_AXES.some((a) => (current[a] ?? null) !== (draft[a] ?? null));
+  return {
+    ...current,
+    ...draft,
+    formatChangedAt: changed ? at : (current.formatChangedAt ?? null),
+  };
+}
+
 /**
  * SIRADAKİ NUMARA — sayacı TÜKETMEDEN, üretim yolunun KENDİ hesabıyla (K19).
  *
@@ -343,10 +369,7 @@ function scanOverlapLabel(key: string, fmt: NumberSeriesFormat): string | null {
  * ⚠️ ÖNİZLEMEDİR, REZERVASYON DEĞİL: numara üretim anında tx içinde belirlenir;
  * arada doğan bir kayıt sıradakini alabilir. Yazma yapmaz.
  */
-export async function previewNextNumber(
-  key: string,
-  fmtOverride?: NumberSeriesFormat,
-): Promise<string | null> {
+export async function previewNextNumber(key: string, draft?: SeriesDraftAxes): Promise<string | null> {
   const e = numberSeriesCatalogEntry(key);
   if (e.ownCounter || !e.countTable) return null;
   const delegate = (prisma as unknown as Record<string, { findMany: (a?: unknown) => Promise<unknown[]> }>)[
@@ -354,6 +377,7 @@ export async function previewNextNumber(
   ];
   if (!delegate) return null;
   const alan = e.countTable.field;
+  const now = new Date();
   try {
     return await nextSeriesNo(
       key,
@@ -361,6 +385,10 @@ export async function previewNextNumber(
         const rows = (await delegate.findMany({
           where: { [alan]: { gte: fullPrefix, startsWith: fullPrefix } },
           select: { [alan]: true, createdAt: true },
+          // ⚠️ SARMALI seride sayacın kaynağı EN SON DOĞAN koddur ve çekirdek
+          // "ilk satır en yenidir" varsayar; sırasız okuma rastgele bir koddan
+          // sürdürüyordu (ölçüldü: üreteç `P08`, önizleme `P88`).
+          orderBy: { createdAt: "desc" },
         })) as Array<Record<string, unknown>>;
         // ⚠️ `{ code, createdAt }` biçimine ÇEVİRİLİR: kapsam damgası (createdAt)
         // olmadan sayaç eski rejimin kodlarını da sayardı — üretim yolunun aynı
@@ -376,9 +404,9 @@ export async function previewNextNumber(
           }))
           .filter((r) => r.code === null || codeCountsForCounter(fmt, r.code));
       },
-      new Date(),
-      fmtOverride,
-    ).then((kod) => kod);
+      now,
+      candidateSeriesFormat(key, draft, now),
+    );
   } catch {
     // Sıra tükenmesi gibi hâller ÖNİZLEMEYİ düşürmez: "—" gösterilir.
     return null;

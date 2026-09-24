@@ -190,7 +190,9 @@ router.post("/preview", async (req: Request, res: Response, next: NextFunction) 
     // ⚠️ İKİ SATIR, İKİ SORU (K19): "biçim örneği" kod neye benzeyecek, "sıradaki
     // numara" bir sonraki kayıt hangi numarayı alacak. Ekran eskiden yalnız ilkini
     // gösteriyordu ve kullanıcı onu sıradaki numara sanıyordu.
-    const next = await previewNextNumber(key, { ...fmt, retiredPrefixes: current.retiredPrefixes });
+    // Taslak YALNIZ eksenleri taşır; sayaç ayarları ve kapsam yürürlükteki
+    // biçimden gelir (`candidateSeriesFormat`).
+    const next = await previewNextNumber(key, fmt);
     const ornek = previewSeriesCode({ ...fmt, retiredPrefixes: [], infix: current.infix });
     // ⚠️ ÖNİZLEMEDE ENGEL DEĞİL UYARI: kullanıcı biçimi YAZARKEN etiketin taşacağını
     // görmeli, ama önizleme bir KAYDETME değildir — burada 409 atmak, henüz karar

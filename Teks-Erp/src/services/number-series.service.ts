@@ -32,6 +32,7 @@ export type { NumberSeriesFormat };
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import {
+  codeCountsForCounter,
   formatSeriesCode,
   matchesSeries,
   previewSeriesCode,
@@ -366,20 +367,31 @@ function sonDoganSeq(fmt: NumberSeriesFormat, rows: Array<SeriesCodeRow>): numbe
   return 0;
 }
 
+/**
+ * KAPSAM: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğanlara bakar.
+ * Tarih segmenti düşünce sabit baş kısalır (`CV220926` → `CV`) ve eski rejimin
+ * kodları sayaca girer; ölçüldü: `CV2209260001` varken sıra 2.209.260.004 olur.
+ * Sıradaki numara da kullanılan sıra (tükenme) da BURADAN süzülür.
+ */
+function scopeSeriesRows(
+  fmt: NumberSeriesFormat,
+  rows: Array<SeriesCodeRow>,
+): { scoped: Array<SeriesCodeRow>; since: Date | null; hasCreatedAt: boolean } {
+  const since = fmt.formatChangedAt ?? null;
+  const hasCreatedAt = rows.some((r) => typeof r === "object" && r !== null);
+  const scoped = since && hasCreatedAt
+    ? rows.filter((r) => typeof r === "object" && r !== null && r.createdAt >= since)
+    : rows;
+  return { scoped, since, hasCreatedAt };
+}
+
 function scopedNextSeq(
   key: string,
   fmt: NumberSeriesFormat,
   fullPrefix: string,
   rows: Array<SeriesCodeRow>,
 ): number {
-  // ── KAPSAM: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğanlara bakar ──
-  // Tarih segmenti düşünce sabit baş kısalır (`CV220926` → `CV`) ve eski rejimin
-  // kodları sayaca girer; ölçüldü: `CV2209260001` varken sıra 2.209.260.004 olur.
-  const since = fmt.formatChangedAt ?? null;
-  const hasCreatedAt = rows.some((r) => typeof r === "object" && r !== null);
-  const scoped = since && hasCreatedAt
-    ? rows.filter((r) => typeof r === "object" && r !== null && r.createdAt >= since)
-    : rows;
+  const { scoped, since, hasCreatedAt } = scopeSeriesRows(fmt, rows);
 
   // ⚠️ SAYACIN KAYNAĞI SERİYE GÖRE DEĞİŞİR ve yüklem TEK YERDE (`series-counter`):
   // sarmalı seride (plaka seti) en büyük numara "en son" DEĞİLDİR — P99'dan sonra
@@ -464,7 +476,17 @@ export function seriesSeqFrom(
  * "tükenme durumu" sorusu cevap yerine HATA döndürürdü. Kullanılan sıra bir
  * GÖZLEMDİR, bir talep değil; ayarlardan ve sınırdan bağımsız okunur.
  */
-export function seriesUsedMaxFrom(codes: Array<string | null | undefined>, fullPrefix: string): number {
+export function seriesUsedMaxFrom(
+  fmt: NumberSeriesFormat,
+  rows: Array<SeriesCodeRow>,
+  fullPrefix: string,
+): number {
+  // Üreteçle AYNI kapsam ve AYNI süzgeç: başka bir serinin (ör. aynı kolonu
+  // paylaşan ikiz rejimin) ya da eski biçimin kodu kullanım sayılmaz.
+  const { scoped } = scopeSeriesRows(fmt, rows);
+  const codes = scoped
+    .map(rowCode)
+    .filter((c): c is string => typeof c === "string" && codeCountsForCounter(fmt, c));
   return Math.max(0, nextDailySeq(codes, fullPrefix) - 1);
 }
 

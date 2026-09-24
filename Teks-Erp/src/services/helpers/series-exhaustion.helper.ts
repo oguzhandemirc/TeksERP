@@ -24,6 +24,7 @@ import prisma from "../../lib/prisma";
 import { resolveSeriesFormat, seriesUsedMaxFrom } from "../number-series.service";
 import { ddmmyy } from "../../utils/code-format";
 import { seriesPrefix } from "./series-format.helper";
+import { seriesCounterReadsLastBorn } from "./series-counter.helper";
 
 /** %90 ve üstü uyarı üretir. Eşik burada, iki yüzey de buradan okur. */
 export const EXHAUSTION_WARN_RATIO = 0.9;
@@ -82,9 +83,18 @@ export async function seriesExhaustion(key: string, at: Date = new Date()): Prom
   const fmt = resolveSeriesFormat(key);
   const limit = fmt.maxValue ?? null;
   if (limit === null) {
+    const paddingLimit = (10 ** fmt.digits - 1).toLocaleString("tr-TR");
     return {
       key, label: entry.label, limit: null, used: null, percent: null, warn: false, source: null,
-      reason: "Bu seride üst sınır tanımlı değil; numara 9999'u aşınca hane genişler, sayaç dolmaz.",
+      reason: `Bu seride üst sınır tanımlı değil; numara ${paddingLimit}'u aşınca hane genişler, sayaç dolmaz.`,
+    };
+  }
+  // Sarmalı seri sınırda BAŞA DÖNER: "doluluk" yüzdesi tanımsızdır ve uyarı
+  // yanlış alarm olurdu — üçüncü sonuç gerekçesiyle döner.
+  if (seriesCounterReadsLastBorn(fmt)) {
+    return {
+      key, label: entry.label, limit, used: null, percent: null, warn: false, source: "maxValue",
+      reason: "Bu seri üst sınıra varınca başa döner; numara tükenmez.",
     };
   }
   if (!entry.countTable) {
@@ -106,12 +116,18 @@ export async function seriesExhaustion(key: string, at: Date = new Date()): Prom
   const alan = entry.countTable.field;
   const rows = await delegate.findMany({
     where: { [alan]: { gte: full, startsWith: full } },
-    select: { [alan]: true },
+    select: { [alan]: true, createdAt: true },
   });
   // ⚠️ `seriesSeqFrom` DEĞİL: o SIRADAKİNİ verir ve sınır dolduğunda 409 fırlatır,
   // yani tam %100'de bu uç cevap yerine hata döndürürdü. Kullanılan sıra bir
   // GÖZLEMDİR, bir talep değil.
-  const used = seriesUsedMaxFrom(rows.map((r) => r[alan] as string | null), full);
+  // ⚠️ `createdAt` KAPSAM içindir: aynı kolonu paylaşan başka rejimin kodu
+  // (günlük parti `P2207260002`) kısa serinin kullanımı sayılıyordu.
+  const used = seriesUsedMaxFrom(
+    fmt,
+    rows.map((r) => ({ code: (r[alan] as string | null) ?? null, createdAt: r.createdAt as Date })),
+    full,
+  );
   const percent = used / limit;
   return {
     key, label: entry.label, limit, used, percent,
@@ -123,13 +139,16 @@ export async function seriesExhaustion(key: string, at: Date = new Date()): Prom
  * `/api/admin/health` yüzeyi — YALNIZ uyarı üretenler.
  *
  * ⚠️ Maliyet ölçülü: sorgu YALNIZ sınırı olan serilere gider (bugün `roll` ve
- * fabrikanın elle sınır koyduğu seriler). Sınırsız seri tek bir senkron okumayla
- * elenir, DB'ye hiç gidilmez.
+ * fabrikanın elle sınır koyduğu seriler). Sınırsız ve sarmalı seri tek bir
+ * senkron okumayla elenir, DB'ye hiç gidilmez.
  */
 export async function seriesExhaustionWarnings(at: Date = new Date()): Promise<SeriesExhaustion[]> {
   const out: SeriesExhaustion[] = [];
   for (const e of NUMBER_SERIES_CATALOG) {
-    if (e.key !== "roll" && (resolveSeriesFormat(e.key).maxValue ?? null) === null) continue;
+    if (e.key !== "roll") {
+      const fmt = resolveSeriesFormat(e.key);
+      if ((fmt.maxValue ?? null) === null || seriesCounterReadsLastBorn(fmt)) continue;
+    }
     const d = await seriesExhaustion(e.key, at);
     if (d.warn) out.push(d);
   }
