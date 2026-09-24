@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, Download, History, Merge, RefreshCw, Search, Undo2, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell } from "@/components/layout/PageShell";
+import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { downloadBlob } from "@/lib/file-save";
+import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { MergeDialog } from "@/components/merge/MergeDialog";
 import { MergeHistoryDialog } from "./MergeHistoryDialog";
@@ -243,229 +244,232 @@ export function DuplicatesPage() {
         }
       />
 
-      {/* SEKMELER */}
-      <div className="flex flex-wrap items-center gap-2">
-        {MERGE_ENTITIES.map((e) => (
-          <Button
-            key={e}
-            size="sm"
-            variant={e === tab ? "default" : "outline"}
-            onClick={() => {
-              setTab(e);
-              setSelected([]);
-            }}
-          >
-            {MERGE_ENTITY_LABEL[e]}
-          </Button>
-        ))}
-        <Button
-          size="sm"
-          variant={tab === "roll" ? "default" : "outline"}
-          onClick={() => setTab("roll")}
-        >
-          Toplar (hayalet kayıt)
-        </Button>
-      </div>
+      <PageBody className="space-y-4 p-6">
+        {/* SEKMELER — segment kontrol */}
+        <div className="inline-flex flex-wrap items-center gap-1 rounded-lg bg-muted p-1">
+          {MERGE_ENTITIES.map((e) => (
+            <TabButton
+              key={e}
+              active={e === tab}
+              onClick={() => {
+                setTab(e);
+                setSelected([]);
+              }}
+            >
+              {MERGE_ENTITY_LABEL[e]}
+            </TabButton>
+          ))}
+          <TabButton active={tab === "roll"} onClick={() => setTab("roll")}>
+            Toplar (hayalet kayıt)
+          </TabButton>
+        </div>
 
-      {tab === "roll" && <RollDuplicatesTab />}
+        {tab === "roll" && <RollDuplicatesTab />}
 
-      {tab !== "roll" && (
-        <>
-          {/* ARAÇ ÇUBUĞU */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-0 flex-1 sm:max-w-xs">
-              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="pl-8"
-                placeholder={`${MERGE_ENTITY_LABEL[entity]} ara — ad veya kod`}
-                value={rawSearch}
-                onChange={(e) => setRawSearch(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-1 rounded-md border p-0.5">
-              <Button
-                size="sm"
-                variant={onlySuspect ? "default" : "ghost"}
-                className="h-7"
-                onClick={() => setOnlySuspect(true)}
-              >
-                Şüpheliler{list ? ` (${list.suspectTotal})` : ""}
-              </Button>
-              <Button
-                size="sm"
-                variant={onlySuspect ? "ghost" : "default"}
-                className="h-7"
-                onClick={() => setOnlySuspect(false)}
-              >
-                Tümü
-              </Button>
-            </div>
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Checkbox
-                checked={includeInactive}
-                onCheckedChange={(v) => setIncludeInactive(v === true)}
-              />
-              Pasifleri de göster
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Checkbox
-                checked={showNotDuplicate}
-                onCheckedChange={(v) => setShowNotDuplicate(v === true)}
-              />
-              “Mükerrer değil” denilenler
-            </label>
+        {tab !== "roll" && (
+          <>
+            {/* ARAÇ KARTI — arama + süzgeçler üst satır, özet + seçim alt satır */}
+            <div className="rounded-lg border bg-card shadow-sm">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-3">
+                <div className="relative w-full sm:w-72">
+                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-8"
+                    placeholder={`${MERGE_ENTITY_LABEL[entity]} ara — ad veya kod`}
+                    value={rawSearch}
+                    onChange={(e) => setRawSearch(e.target.value)}
+                  />
+                </div>
+                <div className="inline-flex items-center gap-1 rounded-md bg-muted p-1">
+                  <TabButton active={onlySuspect} onClick={() => setOnlySuspect(true)}>
+                    Şüpheliler
+                    {list ? (
+                      <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[11px]">
+                        {list.suspectTotal}
+                      </Badge>
+                    ) : null}
+                  </TabButton>
+                  <TabButton active={!onlySuspect} onClick={() => setOnlySuspect(false)}>
+                    Tümü
+                  </TabButton>
+                </div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={includeInactive}
+                      onCheckedChange={(v) => setIncludeInactive(v === true)}
+                    />
+                    Pasifleri de göster
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={showNotDuplicate}
+                      onCheckedChange={(v) => setShowNotDuplicate(v === true)}
+                    />
+                    “Mükerrer değil” denilenler
+                  </label>
+                </div>
+              </div>
 
-            <div className="ml-auto flex items-center gap-2">
-              {selected.length > 0 && (
-                <>
-                  <span className="text-xs text-muted-foreground">{selected.length} seçili</span>
-                  <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
-                    Temizle
+              <div className="flex flex-wrap items-center gap-3 border-t bg-muted/30 px-3 py-2">
+                {list && (
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">{list.total}</span> kayıt ·{" "}
+                    <span className="font-medium text-foreground">{list.suspectTotal}</span> şüpheli
+                    · benzer ad:{" "}
+                    {list.fuzzyEnabled ? `açık, eşik %${list.thresholdPct}` : "kapalı"} (Ayarlar →
+                    Müşteriler → Mükerrer kayıtlar)
+                  </p>
+                )}
+                <div className="ml-auto flex items-center gap-2">
+                  {selected.length > 0 && (
+                    <>
+                      <Badge variant="outline">{selected.length} seçili</Badge>
+                      <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
+                        Temizle
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    size="sm"
+                    disabled={selected.length < 2}
+                    onClick={() => openMerge(selected)}
+                  >
+                    <Merge className="mr-2 h-4 w-4" />
+                    Birleştir
                   </Button>
-                </>
-              )}
-              <Button size="sm" disabled={selected.length < 2} onClick={() => openMerge(selected)}>
-                <Merge className="mr-2 h-4 w-4" />
-                Birleştir
-              </Button>
+                </div>
+              </div>
             </div>
-          </div>
 
-          {list && (
-            <div className="text-xs text-muted-foreground">
-              {list.total} kayıt gösteriliyor · {list.suspectTotal} şüpheli · benzer ad:{" "}
-              {list.fuzzyEnabled ? `açık, eşik %${list.thresholdPct}` : "kapalı"} (Ayarlar →
-              Müşteriler → Mükerrer kayıtlar)
-            </div>
-          )}
-
-          {listQuery.isLoading ? (
-            <Skeleton className="h-64 w-full" />
-          ) : listQuery.isError ? (
-            <Callout tone="danger" title="Liste alınamadı">
-              {(listQuery.error as Error).message}
-            </Callout>
-          ) : rows.length === 0 ? (
-            <Callout tone="success" title={onlySuspect ? "Şüpheli kayıt yok" : "Kayıt bulunamadı"}>
-              {onlySuspect
-                ? `${MERGE_ENTITY_LABEL[entity]} listesinde aynı/benzer ad ya da kimlik çakışması taşıyan kayıt yok. Kendin birleştirmek istersen “Tümü”ne geç.`
-                : "Arama sonucu boş."}
-            </Callout>
-          ) : (
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10" />
-                    <TableHead className="w-40">Kod</TableHead>
-                    <TableHead>Ad</TableHead>
-                    <TableHead className="w-28 text-right">Kullanım</TableHead>
-                    <TableHead className="w-24">Durum</TableHead>
-                    <TableHead className="w-48">Şüphe</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((r) => {
-                    const isSel = selected.includes(r.id);
-                    return (
-                      <TableRow
-                        key={r.id}
-                        className={isSel ? "bg-muted/50" : undefined}
-                        onClick={() => toggle(r.id)}
-                      >
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <Checkbox checked={isSel} onCheckedChange={() => toggle(r.id)} />
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {r.code ?? "—"}
-                        </TableCell>
-                        <TableCell className="font-medium">{r.name}</TableCell>
-                        <TableCell className="text-right">
-                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                            <Users className="h-3 w-3" />
-                            {r.refCount === null ? "?" : r.refCount.toLocaleString("tr-TR")}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {r.isActive ? "aktif" : "pasif"}
-                        </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          {r.suspect ? (
-                            <button
-                              type="button"
-                              className="flex flex-wrap items-center gap-1 text-left"
-                              onClick={() => selectGroup(r)}
-                              title={`${r.suspect.details.join("\n")}\n\nTıkla: bu grubun tümünü seç`}
-                            >
-                              {r.suspect.rules.map((rule) => (
-                                <Badge
-                                  key={rule}
-                                  variant={rule === "FUZZY_NAME" ? "outline" : "secondary"}
-                                >
-                                  {DUPLICATE_RULE_LABEL[rule]}
-                                  {rule === "FUZZY_NAME" && r.suspect!.maxScore !== null
-                                    ? ` %${Math.round(r.suspect!.maxScore * 100)}`
-                                    : ""}
-                                </Badge>
+            {listQuery.isLoading ? (
+              <Skeleton className="h-64 w-full rounded-lg" />
+            ) : listQuery.isError ? (
+              <Callout tone="danger" title="Liste alınamadı">
+                {(listQuery.error as Error).message}
+              </Callout>
+            ) : rows.length === 0 ? (
+              <Callout tone="success" title={onlySuspect ? "Şüpheli kayıt yok" : "Kayıt bulunamadı"}>
+                {onlySuspect
+                  ? `${MERGE_ENTITY_LABEL[entity]} listesinde aynı/benzer ad ya da kimlik çakışması taşıyan kayıt yok. Kendin birleştirmek istersen “Tümü”ne geç.`
+                  : "Arama sonucu boş."}
+              </Callout>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10" />
+                      <TableHead className="w-40">Kod</TableHead>
+                      <TableHead>Ad</TableHead>
+                      <TableHead className="w-28 text-right">Kullanım</TableHead>
+                      <TableHead className="w-24">Durum</TableHead>
+                      <TableHead className="w-48">Şüphe</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((r) => {
+                      const isSel = selected.includes(r.id);
+                      return (
+                        <TableRow
+                          key={r.id}
+                          className={isSel ? "bg-muted/50" : undefined}
+                          onClick={() => toggle(r.id)}
+                        >
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Checkbox checked={isSel} onCheckedChange={() => toggle(r.id)} />
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {r.code ?? "—"}
+                          </TableCell>
+                          <TableCell className="font-medium">{r.name}</TableCell>
+                          <TableCell className="text-right">
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                              <Users className="h-3 w-3" />
+                              {r.refCount === null ? "?" : r.refCount.toLocaleString("tr-TR")}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {r.isActive ? "aktif" : "pasif"}
+                          </TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            {r.suspect ? (
+                              <button
+                                type="button"
+                                className="flex flex-wrap items-center gap-1 text-left"
+                                onClick={() => selectGroup(r)}
+                                title={`${r.suspect.details.join("\n")}\n\nTıkla: bu grubun tümünü seç`}
+                              >
+                                {r.suspect.rules.map((rule) => (
+                                  <Badge
+                                    key={rule}
+                                    variant={rule === "FUZZY_NAME" ? "outline" : "secondary"}
+                                  >
+                                    {DUPLICATE_RULE_LABEL[rule]}
+                                    {rule === "FUZZY_NAME" && r.suspect!.maxScore !== null
+                                      ? ` %${Math.round(r.suspect!.maxScore * 100)}`
+                                      : ""}
+                                  </Badge>
+                                ))}
+                              </button>
+                            ) : null}
+                            {/* Verilmiş karar + geri açma. Kararı görünür kılmayan
+                                liste "mükerrer değil"i TEK YÖNLÜ kapıya çevirirdi. */}
+                            {r.suspect?.reviews
+                              .filter((rv) => rv.decision !== "MERGED")
+                              .map((rv) => (
+                                <span key={rv.id} className="mt-1 flex items-center gap-1">
+                                  <Badge variant="outline" className="text-xs">
+                                    {rv.decision === "NOT_DUPLICATE" ? "mükerrer değil" : "ertelendi"}
+                                    {rv.decidedBy ? ` — ${rv.decidedBy}` : ""}
+                                  </Badge>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 px-1.5 text-xs"
+                                    title={rv.note ?? undefined}
+                                    onClick={() => reopenMutation.mutate(rv.id)}
+                                  >
+                                    <Undo2 className="mr-1 h-3 w-3" />
+                                    Geri aç
+                                  </Button>
+                                </span>
                               ))}
-                            </button>
-                          ) : null}
-                          {/* Verilmiş karar + geri açma. Kararı görünür kılmayan
-                              liste "mükerrer değil"i TEK YÖNLÜ kapıya çevirirdi. */}
-                          {r.suspect?.reviews
-                            .filter((rv) => rv.decision !== "MERGED")
-                            .map((rv) => (
-                              <span key={rv.id} className="mt-1 flex items-center gap-1">
-                                <Badge variant="outline" className="text-xs">
-                                  {rv.decision === "NOT_DUPLICATE" ? "mükerrer değil" : "ertelendi"}
-                                  {rv.decidedBy ? ` — ${rv.decidedBy}` : ""}
-                                </Badge>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-6 px-1.5 text-xs"
-                                  title={rv.note ?? undefined}
-                                  onClick={() => reopenMutation.mutate(rv.id)}
-                                >
-                                  <Undo2 className="mr-1 h-3 w-3" />
-                                  Geri aç
-                                </Button>
-                              </span>
-                            ))}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
 
-          {list && totalPages > 1 && (
-            <div className="flex items-center justify-end gap-2 text-xs">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Önceki
-              </Button>
-              <span className="text-muted-foreground">
-                {page} / {totalPages}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Sonraki
-              </Button>
-            </div>
-          )}
-        </>
-      )}
+            {list && totalPages > 1 && (
+              <div className="flex items-center justify-end gap-2 pt-1 text-xs">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Önceki
+                </Button>
+                <span className="text-muted-foreground">
+                  {page} / {totalPages}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Sonraki
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </PageBody>
 
       {/* KARAR DİYALOĞU */}
       <Dialog open={Boolean(decideFor)} onOpenChange={(v) => !v && setDecideFor(null)}>
@@ -557,5 +561,31 @@ export function DuplicatesPage() {
       />
 
     </PageShell>
+  );
+}
+
+/** Segment kontrol düğmesi — sekme ve Şüpheliler/Tümü anahtarı aynı görünümü paylaşır. */
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-7 items-center rounded-md px-3 text-sm font-medium transition-colors",
+        active
+          ? "bg-background text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }

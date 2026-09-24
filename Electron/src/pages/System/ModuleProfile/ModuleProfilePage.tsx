@@ -192,213 +192,215 @@ export function ModuleProfilePage() {
         title="Modüller"
         actions={<RefreshButton queryKey={["module-profile"]} successMessage="Profil yenilendi" />}
       />
-      <PageBody className="max-w-4xl space-y-8 p-6">
-        {!canWrite && (
-          <Callout tone="warning" title="Salt-okunur görünüm">
-            Modül anahtarlarını yalnız sistem yöneticisi (satıcı hesabı) değiştirir. Bu sayfa size
-            kurulumun hangi modülleri kullandığını gösterir; açma/kapatma talebiniz için yazılım
-            firmanıza başvurun.
-          </Callout>
-        )}
-
-        {warnings.map((w) => (
-          <Callout key={w} tone="warning" title="Tutarsızlık">
-            {w}
-          </Callout>
-        ))}
-
-        {/* ── ① MODÜL ANAHTARLARI ──────────────────────────────────────── */}
-        <Section
-          title="Modüller"
-          description={MODULES_CATEGORY?.description}
-        >
-          {MODULES_CATEGORY?.flags ? (
-            <FeatureFlagSection flags={MODULES_CATEGORY.flags} superadminOnly />
-          ) : null}
-
-          {/* Yer tutucular — Genel Ayarlar'da BİLEREK yok ("açtım, hiçbir şey
-              olmadı"), ama burası kurulumun TAM fotoğrafı: profil tablosunda
-              yedi sütun varken beşini göstermek satıcıyı yanıltırdı. */}
-          <div className="rounded-md border border-dashed p-3">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">
-              Anahtarı olan ama henüz yüzeyi olmayan modüller
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {MODULE_PLACEHOLDERS.map((k) => (
-                <Badge key={k} variant="muted">
-                  {MODULE_LABELS[k]} · yüzeyi yok
-                </Badge>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Bu anahtarlar profillerde taşınır ve kurulumda yazılır, ama arkalarında henüz ekran
-              yok — açmak bugün hiçbir şeyi değiştirmez.
-            </p>
-          </div>
-        </Section>
-
-        {/* ── ①b RAPOR GÖRÜNÜRLÜĞÜ (Raporlar K6) — tek liste, modül anahtarı değil ── */}
-        <Section
-          title="Raporlar"
-          description="Hangi raporlar bu fabrikada açık — kapalı rapor karoda, menüde ve adres çubuğunda çizilmez; sunucu da vermez. Yeni doğan rapor açık doğar."
-        >
-          <ReportVisibilitySection canWrite={canWrite} />
-        </Section>
-        {/* ── ② BAĞIMLILIK + KAPATMA ETKİSİ ─────────────────────────────── */}
-        <Section
-          title="Bağımlılıklar ve kapatma etkisi"
-          description="Hangi modül hangisine bağlı ve kapatınca hangi ekranlar çizilmez."
-        >
-          {screensQ.isError && (
-            <Callout tone="warning" title="Ekran listesi okunamadı">
-              “Kapatırsan gizlenir” önizlemesi çizilemiyor. Boş liste göstermek “hiçbir şey
-              gizlenmeyecek” anlamına gelirdi — bu yüzden hiç gösterilmiyor.
+      <PageBody className="p-6">
+        <div className="max-w-4xl space-y-8">
+          {!canWrite && (
+            <Callout tone="warning" title="Salt-okunur görünüm">
+              Modül anahtarlarını yalnız sistem yöneticisi (satıcı hesabı) değiştirir. Bu sayfa size
+              kurulumun hangi modülleri kullandığını gösterir; açma/kapatma talebiniz için yazılım
+              firmanıza başvurun.
             </Callout>
           )}
-          <div className="space-y-2">
-            {MODULE_FLAG_KEYS.map((key: ModuleFlagKey) => {
-              const requires = moduleRequires(key);
-              const dependents = modulesThatDependOn(key);
-              const hidden = screensQ.isError ? null : screensHiddenByModule(screens, key);
-              return (
-                <div key={key} className="rounded-md border p-3 text-xs">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium">{MODULE_LABELS[key]}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-xs"
-                      onClick={() => setHistoryKey(key)}
-                    >
-                      <History className="h-3.5 w-3.5" /> Geçmiş
-                    </Button>
-                  </div>
-                  {requires && (
-                    <p className="mt-1 text-muted-foreground">
-                      Açılabilmesi için önce <strong>{MODULE_LABELS[requires]}</strong> açık olmalı.
-                    </p>
-                  )}
-                  {dependents.length > 0 && (
-                    <p className="mt-1 text-muted-foreground">
-                      Kapatılırsa birlikte kapanır:{" "}
-                      <strong>{dependents.map((d) => MODULE_LABELS[d]).join(", ")}</strong>
-                    </p>
-                  )}
-                  {hidden === null ? null : hidden.desktop.length + hidden.mobile.length > 0 ? (
-                    <>
-                      {hidden.desktop.length > 0 && (
-                        <p className="mt-1 text-muted-foreground">
-                          Kapatılırsa gizlenen masaüstü ekranları ({hidden.desktop.length}):{" "}
-                          {hidden.desktop.join(" · ")}
-                        </p>
-                      )}
-                      {hidden.mobile.length > 0 && (
-                        <p className="mt-1 text-muted-foreground">
-                          Kapatılırsa <strong>tablette duran</strong> ekranlar (
-                          {hidden.mobile.length}): {hidden.mobile.join(" · ")}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="mt-1 text-muted-foreground">
-                      Bu modüle bağlı bir ekran beyan edilmemiş.
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Section>
 
-        {/* ── ③ KURULUM PROFİLLERİ ──────────────────────────────────────── */}
-        <Section
-          title="Kurulum profilleri"
-          description="Müşterinin satın aldığı ürüne göre hazır anahtar setleri. Fark sunucuda hesaplanır."
-        >
-          {profileQ.isLoading ? (
-            <Skeleton className="h-24 w-full" />
-          ) : profileQ.isError || !state ? (
-            <Callout tone="warning" title="Profiller okunamadı">
-              Sunucudan profil listesi alınamadı; sayfayı yenilemeyi deneyin.
+          {warnings.map((w) => (
+            <Callout key={w} tone="warning" title="Tutarsızlık">
+              {w}
             </Callout>
-          ) : (
-            <>
-              <p className="text-xs text-muted-foreground">
-                Bu kurulum:{" "}
-                <strong>
-                  {state.current.closest === "ozel"
-                    ? "Özel (hiçbir profille tam eşleşmiyor)"
-                    : (state.profiles.find((p) => p.id === state.current.closest)?.ad ??
-                      state.current.closest)}
-                </strong>
-                {state.current.appliedProfile ? (
-                  <>
-                    {" "}
-                    · kurulumda uygulanan profil: <strong>{String(state.current.appliedProfile)}</strong>{" "}
-                    <span className="text-muted-foreground/80">
-                      (doğuş damgası — bugünkü durumu söylemez)
-                    </span>
-                  </>
-                ) : null}
+          ))}
+
+          {/* ── ① MODÜL ANAHTARLARI ──────────────────────────────────────── */}
+          <Section
+            title="Modüller"
+            description={MODULES_CATEGORY?.description}
+          >
+            {MODULES_CATEGORY?.flags ? (
+              <FeatureFlagSection flags={MODULES_CATEGORY.flags} superadminOnly />
+            ) : null}
+
+            {/* Yer tutucular — Genel Ayarlar'da BİLEREK yok ("açtım, hiçbir şey
+                olmadı"), ama burası kurulumun TAM fotoğrafı: profil tablosunda
+                yedi sütun varken beşini göstermek satıcıyı yanıltırdı. */}
+            <div className="rounded-md border border-dashed p-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                Anahtarı olan ama henüz yüzeyi olmayan modüller
               </p>
-              <div className="space-y-2">
-                {state.profiles.map((p) => {
-                  const rows = state.diffs[p.id] ?? [];
-                  return (
-                    <div key={p.id} className="rounded-md border p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium">{p.ad}</p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{p.aciklama}</p>
+              <div className="flex flex-wrap gap-2">
+                {MODULE_PLACEHOLDERS.map((k) => (
+                  <Badge key={k} variant="muted">
+                    {MODULE_LABELS[k]} · yüzeyi yok
+                  </Badge>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Bu anahtarlar profillerde taşınır ve kurulumda yazılır, ama arkalarında henüz ekran
+                yok — açmak bugün hiçbir şeyi değiştirmez.
+              </p>
+            </div>
+          </Section>
+
+          {/* ── ①b RAPOR GÖRÜNÜRLÜĞÜ (Raporlar K6) — tek liste, modül anahtarı değil ── */}
+          <Section
+            title="Raporlar"
+            description="Hangi raporlar bu fabrikada açık — kapalı rapor karoda, menüde ve adres çubuğunda çizilmez; sunucu da vermez. Yeni doğan rapor açık doğar."
+          >
+            <ReportVisibilitySection canWrite={canWrite} />
+          </Section>
+          {/* ── ② BAĞIMLILIK + KAPATMA ETKİSİ ─────────────────────────────── */}
+          <Section
+            title="Bağımlılıklar ve kapatma etkisi"
+            description="Hangi modül hangisine bağlı ve kapatınca hangi ekranlar çizilmez."
+          >
+            {screensQ.isError && (
+              <Callout tone="warning" title="Ekran listesi okunamadı">
+                “Kapatırsan gizlenir” önizlemesi çizilemiyor. Boş liste göstermek “hiçbir şey
+                gizlenmeyecek” anlamına gelirdi — bu yüzden hiç gösterilmiyor.
+              </Callout>
+            )}
+            <div className="space-y-2">
+              {MODULE_FLAG_KEYS.map((key: ModuleFlagKey) => {
+                const requires = moduleRequires(key);
+                const dependents = modulesThatDependOn(key);
+                const hidden = screensQ.isError ? null : screensHiddenByModule(screens, key);
+                return (
+                  <div key={key} className="rounded-md border p-3 text-xs">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium">{MODULE_LABELS[key]}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 px-2 text-xs"
+                        onClick={() => setHistoryKey(key)}
+                      >
+                        <History className="h-3.5 w-3.5" /> Geçmiş
+                      </Button>
+                    </div>
+                    {requires && (
+                      <p className="mt-1 text-muted-foreground">
+                        Açılabilmesi için önce <strong>{MODULE_LABELS[requires]}</strong> açık olmalı.
+                      </p>
+                    )}
+                    {dependents.length > 0 && (
+                      <p className="mt-1 text-muted-foreground">
+                        Kapatılırsa birlikte kapanır:{" "}
+                        <strong>{dependents.map((d) => MODULE_LABELS[d]).join(", ")}</strong>
+                      </p>
+                    )}
+                    {hidden === null ? null : hidden.desktop.length + hidden.mobile.length > 0 ? (
+                      <>
+                        {hidden.desktop.length > 0 && (
+                          <p className="mt-1 text-muted-foreground">
+                            Kapatılırsa gizlenen masaüstü ekranları ({hidden.desktop.length}):{" "}
+                            {hidden.desktop.join(" · ")}
+                          </p>
+                        )}
+                        {hidden.mobile.length > 0 && (
+                          <p className="mt-1 text-muted-foreground">
+                            Kapatılırsa <strong>tablette duran</strong> ekranlar (
+                            {hidden.mobile.length}): {hidden.mobile.join(" · ")}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="mt-1 text-muted-foreground">
+                        Bu modüle bağlı bir ekran beyan edilmemiş.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Section>
+
+          {/* ── ③ KURULUM PROFİLLERİ ──────────────────────────────────────── */}
+          <Section
+            title="Kurulum profilleri"
+            description="Müşterinin satın aldığı ürüne göre hazır anahtar setleri. Fark sunucuda hesaplanır."
+          >
+            {profileQ.isLoading ? (
+              <Skeleton className="h-24 w-full" />
+            ) : profileQ.isError || !state ? (
+              <Callout tone="warning" title="Profiller okunamadı">
+                Sunucudan profil listesi alınamadı; sayfayı yenilemeyi deneyin.
+              </Callout>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Bu kurulum:{" "}
+                  <strong>
+                    {state.current.closest === "ozel"
+                      ? "Özel (hiçbir profille tam eşleşmiyor)"
+                      : (state.profiles.find((p) => p.id === state.current.closest)?.ad ??
+                        state.current.closest)}
+                  </strong>
+                  {state.current.appliedProfile ? (
+                    <>
+                      {" "}
+                      · kurulumda uygulanan profil: <strong>{String(state.current.appliedProfile)}</strong>{" "}
+                      <span className="text-muted-foreground/80">
+                        (doğuş damgası — bugünkü durumu söylemez)
+                      </span>
+                    </>
+                  ) : null}
+                </p>
+                <div className="space-y-2">
+                  {state.profiles.map((p) => {
+                    const rows = state.diffs[p.id] ?? [];
+                    return (
+                      <div key={p.id} className="rounded-md border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">{p.ad}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">{p.aciklama}</p>
+                          </div>
+                          {rows.length === 0 ? (
+                            <Badge variant="secondary">Uygulanmış</Badge>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!canWrite || applyMut.isPending}
+                              onClick={() => setPendingProfile(p.id)}
+                            >
+                              {applyMut.isPending && pendingProfile === p.id ? (
+                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                              ) : null}
+                              Uygula ({rows.length} değişiklik)
+                            </Button>
+                          )}
                         </div>
-                        {rows.length === 0 ? (
-                          <Badge variant="secondary">Uygulanmış</Badge>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={!canWrite || applyMut.isPending}
-                            onClick={() => setPendingProfile(p.id)}
-                          >
-                            {applyMut.isPending && pendingProfile === p.id ? (
-                              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                            ) : null}
-                            Uygula ({rows.length} değişiklik)
-                          </Button>
+                        {rows.length > 0 && (
+                          <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+                            {rows.map((r) => (
+                              <li key={r.key}>· {describeDiffRow(r)}</li>
+                            ))}
+                          </ul>
                         )}
                       </div>
-                      {rows.length > 0 && (
-                        <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
-                          {rows.map((r) => (
-                            <li key={r.key}>· {describeDiffRow(r)}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </Section>
-
-        {/* ── ④ KURULUM BEYANI (demo) ───────────────────────────────────── */}
-        {DEMO_CATEGORY?.flags ? (
-          <Section title={DEMO_CATEGORY.label} description={DEMO_CATEGORY.description}>
-            {/* ⚠️ `superadminOnly` BİLEREK YOK: o bayrak bir KİLİT iddiasıdır ve
-                backend `flagWriteGuard`ın süperadmin dalı YALNIZ modül
-                anahtarlarını kapsar (`MODULE_FLAG_KEYS`) — `demoModeEnabled`
-                onda değil. Kilit çizseydik panel, sunucuda olmayan bir kapıyı
-                varmış gibi anlatırdı. Demo'yu fabrikadan uzak tutan şey bu
-                SAYFANIN kimlik kapısıdır. */}
-            <FeatureFlagSection flags={DEMO_CATEGORY.flags} />
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </Section>
-        ) : null}
 
-        {/* ── ⑤ AYAR ŞİFRESİ ────────────────────────────────────────────── */}
-        {/* Kart kendi kimlik kapısını uygular (backend uçları başka kimlikte 404
-            döner); Genel Ayarlar → Modüller sekmesiyle birlikte buraya taşındı. */}
-        <SettingsPasswordCard />
+          {/* ── ④ KURULUM BEYANI (demo) ───────────────────────────────────── */}
+          {DEMO_CATEGORY?.flags ? (
+            <Section title={DEMO_CATEGORY.label} description={DEMO_CATEGORY.description}>
+              {/* ⚠️ `superadminOnly` BİLEREK YOK: o bayrak bir KİLİT iddiasıdır ve
+                  backend `flagWriteGuard`ın süperadmin dalı YALNIZ modül
+                  anahtarlarını kapsar (`MODULE_FLAG_KEYS`) — `demoModeEnabled`
+                  onda değil. Kilit çizseydik panel, sunucuda olmayan bir kapıyı
+                  varmış gibi anlatırdı. Demo'yu fabrikadan uzak tutan şey bu
+                  SAYFANIN kimlik kapısıdır. */}
+              <FeatureFlagSection flags={DEMO_CATEGORY.flags} />
+            </Section>
+          ) : null}
+
+          {/* ── ⑤ AYAR ŞİFRESİ ────────────────────────────────────────────── */}
+          {/* Kart kendi kimlik kapısını uygular (backend uçları başka kimlikte 404
+              döner); Genel Ayarlar → Modüller sekmesiyle birlikte buraya taşındı. */}
+          <SettingsPasswordCard />
+        </div>
       </PageBody>
 
       {/* Onay — "N kayıt etkilenecek" gibi SOYUT bir sayı yetmez; her satır
