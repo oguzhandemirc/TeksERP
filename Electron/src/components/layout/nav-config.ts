@@ -8,12 +8,15 @@ import {
   Calculator,
   type LucideIcon,
 } from "lucide-react";
+import { SYSTEM_HUB_ACCESS } from "@/lib/permissions";
 
 export interface NavItem {
   label: string;
   to: string;
   icon: LucideIcon;
   permission?: string;
+  /** İzinlerden BİRİ yeter — route'un `requireAnyPermission`ıyla AYNI küme. */
+  permissionAny?: string[];
   adminOnly?: boolean;
   /** Opsiyonel sayısal rozet (bekleyen iş / uyarı). Veri bağlandığında dolar. */
   badge?: number;
@@ -81,10 +84,12 @@ export const navGroups: NavGroup[] = [
         adminOnly: true,
       },
       {
+        // Karolarından birini açabilen herkes (ekran başına ayar izni taşıyan
+        // personel dahil) — route kapısıyla aynı küme.
         label: "Sistem",
         to: "/system",
         icon: ServerCog,
-        adminOnly: true,
+        permissionAny: SYSTEM_HUB_ACCESS,
       },
     ],
   },

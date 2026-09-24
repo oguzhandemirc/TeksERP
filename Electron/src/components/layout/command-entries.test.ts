@@ -42,6 +42,7 @@ const EXEMPT: Record<string, string> = {
   "/operations/kursun-queue": "eski adres → /operations/kursun-dagitim'e yönlendirir",
   "/operations/sack-search": "eski adres → /operations/sack-content-edit'e yönlendirir",
   "/operations/scan-dispatch": "eski adres → /operations/sack-store'a yönlendirir",
+  "/system/settings": "eski Genel Ayarlar adresi → üç ayar ekranına yönlendirir (`LegacySettingsRedirect`)",
   "/definitions/label-templates": "Etiketler ekranının 'Düzenler' sekmesi olarak listelenir",
   "/access/devices/:id": "detay yolu",
 };

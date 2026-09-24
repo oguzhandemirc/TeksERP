@@ -16,6 +16,7 @@ import {
   DEFAULT_COMPANY_LETTERHEAD,
   type CompanyLetterhead,
 } from "@/services/featureFlagService";
+import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
 
 /**
  * Şirket bilgileri paneli — firma adı + belge künyesi (adres/telefon/vergi).
@@ -24,7 +25,11 @@ import {
  * (ilgili belgede "Firma künyesini bas" açıksa — Belge Şablonları sekmesi).
  * Refakat kartının kendi firma adından/künyesinden bağımsızdır (kart snapshot'ı ayrı).
  */
-export function CompanySettingsSection() {
+export function CompanySettingsSection({
+  writePermissions = [SETTINGS_ADMIN_PERMISSION],
+}: {
+  writePermissions?: string[];
+}) {
   const qc = useQueryClient();
   const flagsQ = useFeatureFlags();
   const currentName = flagsQ.data?.data?.companyName ?? DEFAULT_COMPANY_NAME;
@@ -74,7 +79,7 @@ export function CompanySettingsSection() {
 
   return (
     <PermissionGate
-      permission="admin:settings"
+      anyOf={writePermissions}
       fallback={
         <div className="text-sm text-muted-foreground">
           Bu ayarı değiştirmek için yetkin yok.

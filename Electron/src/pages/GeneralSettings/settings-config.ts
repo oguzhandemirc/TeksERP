@@ -312,8 +312,14 @@ export type SettingsSectionId =
  *                    düzenlediği DAVRANIŞ bayrakları)
  *   • `"vendor"`   → Sistem → **Modüller** (satın alınan modül anahtarları +
  *                    kurulum beyanı; satıcı ekranı)
- *   • `"settings"` → Sistem → **Genel Ayarlar** ("geri kalanlar": şirket,
- *                    oturum, cihaz, etiket baskısı, bu bilgisayar)
+ *   • `"printing"`    → Sistem → **Baskı & Cihazlar** (etiket baskısı, cihaz eşleştirme)
+ *   • `"workstation"` → Sistem → **Bu Bilgisayar** (yazıcı, kantar, tabanca,
+ *                       sunucu adresi — yerel, sunucuya yazmaz)
+ *   • `"company"`     → Sistem → **Şirket & Güvenlik** (şirket bilgileri, oturum)
+ *
+ * 2026-09-24: eski tek "Genel Ayarlar" ekranı bu üçüne bölündü (kullanıcı
+ * isteği: her biri ayrı ekran, ayrı yetkiyle). Eski adres `/system/settings`
+ * yalnız yönlendirir (`LegacySettingsRedirect`).
  *
  * ⚠️ AYRIM `kind`İN İKİZİ DEĞİL: `kind` satırların NASIL çizildiğini söyler
  * (flags/device/session/…), `surface` HANGİ EKRANDA çizildiklerini. İkisini
@@ -326,7 +332,7 @@ export type SettingsSectionId =
  * ("Kurşun Sırası" dersinin ayar ekranındaki ikizi). Bekçi:
  * `settings-surface.test.ts`.
  */
-export type SettingsSurface = "settings" | "flags" | "vendor";
+export type SettingsSurface = "flags" | "vendor" | "printing" | "workstation" | "company";
 
 /**
  * Bölüm → yüzey. **Kategorinin yüzeyi BÖLÜMÜNDEN TÜRETİLİR** (`categorySurface`);
@@ -341,17 +347,22 @@ export const SECTION_SURFACE: Record<SettingsSectionId, SettingsSurface> = {
   sales: "flags",
   production: "flags",
   trade: "flags",
-  printing: "settings",
-  workstation: "settings",
-  system: "settings",
+  printing: "printing",
+  workstation: "workstation",
+  system: "company",
 };
 
 /** Yüzeyin adresi — palet/derin bağlantı ve route TEK yerden okur. */
 export const SURFACE_PATH: Record<SettingsSurface, string> = {
-  settings: "/system/settings",
   flags: "/system/feature-flags",
   vendor: "/system/module-profile",
+  printing: "/system/printing",
+  workstation: "/system/workstation",
+  company: "/system/company",
 };
+
+/** Eski "Genel Ayarlar" adresi — yalnız yeni ekranlara yönlendirir. */
+export const LEGACY_SETTINGS_PATH = "/system/settings";
 
 /**
  * Yüzeyin EKRAN ADI — sayfa başlığı, Sistem karosu ve palet girişleri aynı
@@ -359,9 +370,11 @@ export const SURFACE_PATH: Record<SettingsSurface, string> = {
  * başka bir ekrana atarsa arama sonucu yalan söyler. Bekçi: `settings-surface.test.ts`.
  */
 export const SURFACE_LABEL: Record<SettingsSurface, string> = {
-  settings: "Genel Ayarlar",
   flags: "Özellik Anahtarları",
   vendor: "Modüller",
+  printing: "Baskı & Cihazlar",
+  workstation: "Bu Bilgisayar",
+  company: "Şirket & Güvenlik",
 };
 
 /**
@@ -506,9 +519,11 @@ export interface SettingsCategory {
    */
   moduleKey?: SettingsModuleKey;
   /**
-   * Bu kategoriyi GÖRMEK için yeterli izinlerden herhangi biri. Verilmezse
-   * `admin:settings` gerekir — yeni kategori eklerken varsayılan DAR olsun diye
-   * (izin unutulursa kategori gizlenir; ters kurgu sistem ayarını sızdırırdı).
+   * Bu kategoriyi GÖRMEK ve YAZMAK için yeterli izinlerden herhangi biri.
+   * Verilmezse `admin:settings` gerekir — yeni kategori eklerken varsayılan DAR
+   * olsun diye (izin unutulursa kategori gizlenir; ters kurgu sistem ayarını
+   * sızdırırdı). Dar izin backend `constants/settings-scopes.ts`teki aynı kodla
+   * yalnız bu kategorinin anahtarlarını yazar (bekçi: `test_settings_scopes`).
    */
   permissionAny?: string[];
   /**
@@ -676,6 +691,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "müşteri şube sevk noktası branch ihracat kodu kart firma tedarikçi sevk yeri gizle mükerrer birleştirme benzer ad bulanık eşik duplicate",
     kind: "flags",
     section: "sales",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:customers"],
     flags: [
       {
         key: "customerBranchesEnabled",
@@ -716,6 +732,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "tolerans eksik sevk tamamlandı kapanma metre karşılanma",
     kind: "flags",
     section: "sales",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:orders"],
     flags: [
       {
         key: "pricingEnabled",
@@ -763,6 +780,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "sevk onayı adımı çıkış sevkiyat planlı sevk kapısı iade kalite grading depo çuval kodu şablon otomatik isimlendirme numara",
     kind: "flags",
     section: "sales",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:shipping"],
     flags: [
       {
         key: "shipmentConfirmationEnabled",
@@ -1079,6 +1097,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "iş emri hedef metraj parti kodu batch otomatik üretim miktarı termin planlama süre gün varsayılan deadline plan parti no kısa dönen 99 plaka numara",
     kind: "flags",
     section: "production",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:work-orders"],
     // ÜRETİM MODÜLÜ — KİLİT (gizleme DEĞİL). Beş satırın beşi de iş emri/parti
     // nesnesine ait: üretim kapalıyken iş emri açılamaz (`workorder.routes` →
     // `requireProductionEnabled`), yani parti no biçimi ya da planlama süresi
@@ -1163,6 +1182,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "kurşun dağıtım bypass makine atama kağıt fason dönüş tambur onay kurşun sırası top iptal sebep zorunlu gerekçe",
     kind: "flags",
     section: "production",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:production"],
     flags: [
       {
         key: "rawWidthEnabled",
@@ -1318,6 +1338,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     keywords: "kartela örnek kart swatch ölçü uzunluk cm ağırlık kg boy en adet stok",
     kind: "flags",
     section: "production",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:kartela"],
     flags: [
       {
         key: "kartelaMeasurementEnabled",
@@ -1338,6 +1359,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     keywords: "devere levent lot iplik lotu bobin çözgü sarım mal kabul",
     kind: "flags",
     section: "production",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:devere"],
     moduleKey: "devereEnabled",
     flags: [
       {
@@ -1394,6 +1416,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     keywords: "dokuma işi tezgah koşum sipariş satırı bağ zincir levent",
     kind: "flags",
     section: "production",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:dokuma"],
     moduleKey: "dokumaEnabled",
     flags: [
       {
@@ -1442,6 +1465,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "birim fiyat zorunlu maliyet ticaret",
     kind: "flags",
     section: "trade",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:warehouse"],
     // TİCARET MODÜLÜ — KİLİT. İki satırın da enforcement'ı
     // `goods-receipt.service.confirm`tedir ve o servise giden router
     // 2026-09-02'den beri `requireTicaretEnabled` taşır: ticaret kapalıyken mal
@@ -1483,6 +1507,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "iplik kg stok bakiye eksi negatif çıkış sayım düzeltme depo yarn lot kalite bekletme karantina bloke serbest",
     kind: "flags",
     section: "trade",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:yarn"],
     moduleKey: "iplikEnabled",
     flags: [
       {
@@ -1516,6 +1541,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "numune bedelsiz ileri tarih çek keşide iplik stok düşme",
     kind: "flags",
     section: "trade",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:finance"],
     // ⚠️ REJİM KAPILI OLAN TEK KATEGORİ — ve bu ÖLÇÜLDÜ, varsayılmadı: dokuz
     // satırın enforcement'ının hepsi `finance.enabled` kapalıyken ULAŞILAMAZ.
     // Sekiz tanesi `requireFinanceEnabled` taşıyan router'ların arkasındaki
@@ -1641,6 +1667,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "etiket label baskı yazdır kopya adet çift üst alt yapıştır tambur native gönderim varsayılan medya boyut ölçü mm dpi eni boyu boşluk pay",
     kind: "label",
     section: "printing",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:label"],
   },
   {
     id: "devices",
@@ -1650,6 +1677,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     keywords: "cihaz eşleştirme tablet telefon pairing onay zorunlu allowlist mobil",
     kind: "device",
     section: "printing",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:devices"],
   },
   // ═══════════════════════════════════════════════════════════════════════════
   // BU BİLGİSAYAR — dört YEREL kategori (2026-09-04: alt sekmeler raya taşındı)
@@ -1725,6 +1753,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     keywords: "şirket firma ad kurum işletme marka isim başlık panel",
     kind: "company",
     section: "system",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:company"],
   },
   {
     id: "session",
@@ -1735,6 +1764,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "oturum süre süresi token jwt giriş çıkış logout otomatik hareketsizlik idle zaman aşımı timeout güvenlik session ömür dakika saat çalışma oturumu makine yer onayı saha work session kart personel kartı qr login pin giriş yöntemi token dolunca otomatik çıkış autoLogout aynı hesap ikinci oturum eşzamanlı politika kick notify eskiyi düşür sınırsız başka bilgisayar mobil hareketsizlik kilidi kilit ekranı tablet telefon",
     kind: "session",
     section: "system",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:session"],
   },
   {
     // ═══════════════════════════════════════════════════════════════════════
@@ -1804,7 +1834,7 @@ export const WORKSTATION_SECTION: SettingsSectionId = "workstation";
  */
 export function workstationEntryPath(): string {
   const first = SETTINGS_CATEGORIES.find((c) => c.section === WORKSTATION_SECTION);
-  return first ? settingsCategoryPath(first) : SURFACE_PATH.settings;
+  return first ? settingsCategoryPath(first) : SURFACE_PATH.workstation;
 }
 
 /**

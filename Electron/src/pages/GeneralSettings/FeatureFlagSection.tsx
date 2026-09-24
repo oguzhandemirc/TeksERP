@@ -24,6 +24,7 @@ import { SettingsGroupCard } from "./SettingsGroupCard";
 import { useRegisterSettingsDirty } from "./settings-dirty";
 import { isSettingRowVisible, type SettingsSearchHit } from "./settings-groups";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
+import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
 
 /**
  * Bir kategorinin özellik anahtarlarını config'ten render eder — TEK kaydetme
@@ -45,6 +46,7 @@ export function FeatureFlagSection({
   textFlags = [],
   settingFields = [],
   superadminOnly = false,
+  writePermissions = [SETTINGS_ADMIN_PERMISSION],
   moduleClosed = false,
   moduleLabel,
   searchHit,
@@ -64,6 +66,8 @@ export function FeatureFlagSection({
   /** Kategori yalnız satıcı (süperadmin) hesabına YAZILIR — bkz.
    *  `SettingsCategory.superadminOnly`. Görünürlüğü etkilemez. */
   superadminOnly?: boolean;
+  /** Yazma izni — kategorinin `permissionAny`si; verilmezse `admin:settings`. */
+  writePermissions?: string[];
   /**
    * Bu kategorinin MODÜLÜ bu kurulumda kapalı → satırlar salt-okunur (bkz.
    * `SettingsCategory.moduleKey`).
@@ -85,7 +89,7 @@ export function FeatureFlagSection({
   searchQuery?: string;
 }) {
   const qc = useQueryClient();
-  const { hasPermission } = useRoleAccess();
+  const { hasAnyPermission } = useRoleAccess();
   const isSystemAccount = useAuthStore((s) => s.isSystemAccount);
   const systemAccountExists = useAuthStore((s) => s.systemAccountExists);
   // ⚠️ İZİN ve KİMLİK ÇARPILIR, birinin yerine geçmez: satıcı hesabı zaten
@@ -98,7 +102,7 @@ export function FeatureFlagSection({
   // her kurulum, kendi modüllerini bir daha açamayacak şekilde KİLİTLENİRDİ.
   // Ayrışırlarsa arıza sessizdir (panel yazılabilir çizer, sunucu 403 verir).
   const superadminGateOpen = isSuperadminGateOpen({ isSystemAccount, systemAccountExists });
-  const hasSettingsPermission = hasPermission("admin:settings");
+  const hasSettingsPermission = hasAnyPermission(writePermissions);
   const canEdit = hasSettingsPermission && (!superadminOnly || superadminGateOpen) && !moduleClosed;
   /** Salt-okunur SEBEBİ kimlik kapısı mı (izin eksikliği değil)? */
   const lockedBySuperadmin = superadminOnly && !superadminGateOpen && hasSettingsPermission;

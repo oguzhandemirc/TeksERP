@@ -812,6 +812,36 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Belge önizlemesindeki örnek numaralar artık serinin kendi ayarından üretiliyor; ön ek değiştirildiğinde önizleme ile basılan belge ayrışmıyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Ayarlar artık ekran ekran yetkilendiriliyor: Özellik Anahtarları'nın her sekmesi (Sevkiyat, Üretim, Muhasebe…), Baskı & Cihazlar, Şirket & Güvenlik ve Sistem ekranlarının her biri ayrı bir yetkiyle açılır. Bir personele yalnız ihtiyacı olan ayar ekranını verebilirsiniz; tam ayar yetkisi olan yöneticiler her şeyi eskisi gibi görür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Genel Ayarlar üç ayrı ekrana bölündü: Baskı & Cihazlar, Bu Bilgisayar ve Şirket & Güvenlik (Sistem sayfasında). Eski bağlantılar doğru ekrana yönlenir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Veritabanı Geri Yükleme, sunucu performans ekranı, Aktivite Arşivi ve Modüller yalnız en yetkili hesaba (sistem yöneticisi) açık."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sürüm Notları sayfası: geçmiş güncellemeleri sürüm sürüm seçip okuyabilir, notlarda arayabilir, panel/tablet notlarını ayırabilirsiniz (Sistem → Sürüm Notları ya da sol alttaki sürüm yazısı)."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Profil menüsündeki \"Ayarlar\" sayfasının adı \"Kullanıcı Tercihleri\" oldu (tema, favoriler, kişisel tercihler)."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Mükerrer Kayıtlar ekranı yenilendi: süzgeçler ve seçim tek bir araç kartında, bölümler arasında boşluk var."
         }
       ]
     },

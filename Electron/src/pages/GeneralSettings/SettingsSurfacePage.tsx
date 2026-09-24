@@ -282,6 +282,7 @@ export function SettingsSurfacePage({
                     textFlags={rows.textFlags}
                     settingFields={rows.settingFields}
                     superadminOnly={cat.superadminOnly}
+                    writePermissions={cat.permissionAny}
                     moduleClosed={isCategoryModuleClosed(cat, modules)}
                     moduleLabel={cat.moduleKey ? settingsModuleLabel(cat.moduleKey) : undefined}
                     // Arama açıkken isabetsiz kategori BOŞ isabet alır: aksi
@@ -293,7 +294,7 @@ export function SettingsSurfacePage({
                     searchQuery={query}
                   />
                 )}
-                {cat.kind === "device" && <DevicePairingSection />}
+                {cat.kind === "device" && <DevicePairingSection writePermissions={cat.permissionAny} />}
                 {/* BU BİLGİSAYARA ÖZEL YEREL DONANIM — dördü de raydan seçilir.
                     ⚠️ İç içe sekme (eski `WorkstationTabs`) 2026-09-04'te
                     kaldırıldı: kendi `SettingsDirtyProvider`ını kurup üste de
@@ -303,9 +304,9 @@ export function SettingsSurfacePage({
                 {cat.kind === "scale" && <ScaleDeviceSettings />}
                 {cat.kind === "scanner" && <ScannerSettingsSection />}
                 {cat.kind === "server" && <ApiEndpointSection />}
-                {cat.kind === "company" && <CompanySettingsSection />}
-                {cat.kind === "session" && <SessionSettingsSection />}
-                {cat.kind === "label" && <LabelSettingsSection />}
+                {cat.kind === "company" && <CompanySettingsSection writePermissions={cat.permissionAny} />}
+                {cat.kind === "session" && <SessionSettingsSection writePermissions={cat.permissionAny} />}
+                {cat.kind === "label" && <LabelSettingsSection writePermissions={cat.permissionAny} />}
               </TabsContent>
             );
           })}

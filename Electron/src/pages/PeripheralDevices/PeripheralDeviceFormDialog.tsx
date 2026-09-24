@@ -204,7 +204,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
 
             {/* Adres/Port yalnız anlamlı olduğu bağlantıda: TCP=IP+port, BT=MAC,
                 BLE=UUID, Seri=COM yolu. USB'de HİÇ gösterilmez — USB cihazın gerçek
-                hedefi (kuyruk/port) basan bilgisayarda seçilir (Genel Ayarlar →
+                hedefi (kuyruk/port) basan bilgisayarda seçilir (Sistem →
                 Bu Bilgisayar), cihaz kartında adres tutulmaz. */}
             {(() => {
               const ct = form.watch("connectionType");
@@ -212,7 +212,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                 return (
                   <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
                     USB cihazda adres gerekmez — hangi bilgisayardan kullanılacaksa
-                    kuyruk/port orada seçilir (Genel Ayarlar → Bu Bilgisayar → Yazıcı).
+                    kuyruk/port orada seçilir (Sistem → Bu Bilgisayar → Yazıcı).
                   </p>
                 );
               }

@@ -17,7 +17,7 @@ import { renderWithProviders } from "@/test/render";
 import { useAuthStore } from "@/store/auth";
 
 vi.mock("@/hooks/useRoleAccess", () => ({
-  useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true }),
+  useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true, hasAnyPermission: () => true }),
 }));
 vi.mock("@/hooks/useFavorites", () => ({
   useFavorites: () => ({

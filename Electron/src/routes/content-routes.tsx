@@ -1,6 +1,19 @@
 import { Navigate, type RouteObject } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { DOCUMENT_DESIGN_READ } from "@/lib/permissions";
+import {
+  DOCUMENT_DESIGN_READ,
+  SETTINGS_COMPANY_ACCESS,
+  SETTINGS_FLAGS_ACCESS,
+  SETTINGS_PRINTING_ACCESS,
+  SETTINGS_WORKSTATION_ACCESS,
+  SYSTEM_ACTIVITY_ACCESS,
+  SYSTEM_BACKUPS_ACCESS,
+  SYSTEM_CLIENTS_ACCESS,
+  SYSTEM_HUB_ACCESS,
+  SYSTEM_ROLL_ARCHIVE_ACCESS,
+  SYSTEM_SERVER_STATUS_ACCESS,
+  SYSTEM_WORK_SESSIONS_ACCESS,
+} from "@/lib/permissions";
 import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { DashboardPage } from "@/pages/Dashboard/DashboardPage";
 import { BossPage } from "@/pages/Boss/BossPage";
@@ -72,7 +85,8 @@ import { StationCapabilitiesPage } from "@/pages/StationCapabilities/StationCapa
 import { SystemHubPage } from "@/pages/System/SystemHubPage";
 import { ModuleProfilePage } from "@/pages/System/ModuleProfile/ModuleProfilePage";
 import { ActivityPage } from "@/pages/System/Activity/ActivityPage";
-import { GeneralSettingsPage } from "@/pages/GeneralSettings/GeneralSettingsPage";
+import { SettingsSurfacePage } from "@/pages/GeneralSettings/SettingsSurfacePage";
+import { LegacySettingsRedirect } from "@/pages/GeneralSettings/LegacySettingsRedirect";
 import { FeatureFlagsPage } from "@/pages/GeneralSettings/FeatureFlagsPage";
 import { NumberingPage } from "@/pages/GeneralSettings/Numbering/NumberingPage";
 import { UpdatePage } from "@/pages/System/UpdatePage";
@@ -661,7 +675,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "system",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={SYSTEM_HUB_ACCESS}>
         <SystemHubPage />
       </ProtectedRoute>
     ),
@@ -669,7 +683,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "system/activity",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={SYSTEM_ACTIVITY_ACCESS}>
         <ActivityPage />
       </ProtectedRoute>
     ),
@@ -677,7 +691,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "system/perf",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requirePermission="admin:settings" requireSystemAccount>
         <PerfPage />
       </ProtectedRoute>
     ),
@@ -685,7 +699,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "system/server-status",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={SYSTEM_SERVER_STATUS_ACCESS}>
         <ServerStatusPage />
       </ProtectedRoute>
     ),
@@ -695,7 +709,7 @@ export const contentRoutes: RouteObject[] = [
     // Ayrışırsa kullanıcı kartı görür, tıklar, /forbidden'a düşer.
     path: "system/clients",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={SYSTEM_CLIENTS_ACCESS}>
         <ClientsPage />
       </ProtectedRoute>
     ),
@@ -703,7 +717,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "system/work-sessions",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={SYSTEM_WORK_SESSIONS_ACCESS}>
         <WorkSessionsPage />
       </ProtectedRoute>
     ),
@@ -731,7 +745,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "system/backups",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={SYSTEM_BACKUPS_ACCESS}>
         <BackupsPage />
       </ProtectedRoute>
     ),
@@ -739,21 +753,39 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "system/db-restore",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requirePermission="admin:settings" requireSystemAccount>
         <DbRestorePage />
       </ProtectedRoute>
     ),
   },
   {
-    // Sayfanın kapısı GENİŞ, içerik DAR: `settings:workstation` taşıyan personel
-    // girer ama yalnız "Bu Bilgisayar" bölümünün DÖRT yerel kategorisini görür
-    // (yazıcı · kantar · tabanca · sunucu adresi; sayfa kategorileri
-    // `visibleSettingsCategories` ile süzer). Sistem geneli ayarlar hâlâ
-    // `admin:settings` ister ve listeye bile girmez.
+    // Eski "Genel Ayarlar" adresi — üç ekrana bölündü (2026-09-24); yer imi /
+    // palet geçmişi `?tab=` ile doğru ekrana yönlenir. Kapısız: hedefler kapılı.
     path: "system/settings",
+    element: <LegacySettingsRedirect />,
+  },
+  {
+    path: "system/printing",
     element: (
-      <ProtectedRoute requireAnyPermission={[SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION]}>
-        <GeneralSettingsPage />
+      <ProtectedRoute requireAnyPermission={SETTINGS_PRINTING_ACCESS}>
+        <SettingsSurfacePage surface="printing" title="Baskı & Cihazlar" />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Kapı DAR içerik DAR: yalnız yerel donanım (sunucuya yazmaz).
+    path: "system/workstation",
+    element: (
+      <ProtectedRoute requireAnyPermission={SETTINGS_WORKSTATION_ACCESS}>
+        <SettingsSurfacePage surface="workstation" title="Bu Bilgisayar" />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "system/company",
+    element: (
+      <ProtectedRoute requireAnyPermission={SETTINGS_COMPANY_ACCESS}>
+        <SettingsSurfacePage surface="company" title="Şirket & Güvenlik" />
       </ProtectedRoute>
     ),
   },
@@ -776,7 +808,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "system/feature-flags",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={SETTINGS_FLAGS_ACCESS}>
         <FeatureFlagsPage />
       </ProtectedRoute>
     ),
@@ -809,7 +841,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "system/logs",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={SYSTEM_ACTIVITY_ACCESS}>
         <SystemEventsPage />
       </ProtectedRoute>
     ),
@@ -817,7 +849,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "system/archive",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requirePermission="admin:settings" requireSystemAccount>
         <ActivityArchivePage />
       </ProtectedRoute>
     ),
@@ -828,7 +860,7 @@ export const contentRoutes: RouteObject[] = [
     // daralttı, bu bilinçli.
     path: "system/roll-archive",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={SYSTEM_ROLL_ARCHIVE_ACCESS}>
         <RollArchivePage />
       </ProtectedRoute>
     ),
@@ -836,7 +868,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "system/archive/search",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requireAnyPermission={SYSTEM_ACTIVITY_ACCESS}>
         <ArchiveSearchPage />
       </ProtectedRoute>
     ),

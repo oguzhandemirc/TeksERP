@@ -41,7 +41,10 @@ vi.mock("@/hooks/usePricingEnabled", () => ({
 
 const perm = vi.fn();
 vi.mock("@/hooks/useRoleAccess", () => ({
-  useRoleAccess: () => ({ hasPermission: (p: string) => perm(p) }),
+  useRoleAccess: () => ({
+    hasPermission: (p: string) => perm(p),
+    hasAnyPermission: (ps: string[]) => ps.some((p) => perm(p)),
+  }),
 }));
 
 import { FeatureFlagSection } from "./FeatureFlagSection";

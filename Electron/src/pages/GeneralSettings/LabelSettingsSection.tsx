@@ -8,6 +8,7 @@ import { featureFlagService, type DefaultLabelMedia, type FeatureFlags } from "@
 import { FieldLabel, FlagToggle } from "./SettingRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
+import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
 
 const DEFAULT_COPIES = 2;
 const MAX_COPIES = 5;
@@ -36,10 +37,14 @@ const mediaToStr = (m: DefaultLabelMedia): Record<keyof DefaultLabelMedia, strin
  * alanları TEK istekte yazar (eskiden 3 ayrı davranış vardı: Kaydet / Medyayı
  * Kaydet / anında toggle).
  */
-export function LabelSettingsSection() {
+export function LabelSettingsSection({
+  writePermissions = [SETTINGS_ADMIN_PERMISSION],
+}: {
+  writePermissions?: string[];
+}) {
   const qc = useQueryClient();
-  const { hasPermission } = useRoleAccess();
-  const canEdit = hasPermission("admin:settings");
+  const { hasAnyPermission } = useRoleAccess();
+  const canEdit = hasAnyPermission(writePermissions);
   const flagsQ = useFeatureFlags();
 
   const currentCopies = flagsQ.data?.data?.labelCopies ?? DEFAULT_COPIES;

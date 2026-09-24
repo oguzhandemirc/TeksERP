@@ -12,7 +12,12 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { systemSettingService, SHIPPING_SACK_SEQ_PREFIX_WRITE_RE } from "../services/system-setting.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import {
+  requirePermission,
+  requireAnyPermission,
+  requirePermissionForEachKey,
+} from "../middlewares/rbac.middleware";
+import { flagKeyWriters } from "../constants/settings-scopes";
 import {
   DOCUMENT_DESIGN_FLAG_KEYS,
   DOCUMENT_DESIGN_WRITE,
@@ -145,10 +150,23 @@ function belgeVeAdminDallari(
 ): void {
   const onlyDocumentKeys =
     keys.length > 0 && keys.every((k) => DOCUMENT_DESIGN_FLAG_KEYS.has(k));
-  const guard = onlyDocumentKeys
-    ? requireAnyPermission(...DOCUMENT_DESIGN_WRITE)
-    : requirePermission("admin:settings");
-  guard(req, res, next);
+  if (onlyDocumentKeys) {
+    requireAnyPermission(...DOCUMENT_DESIGN_WRITE)(req, res, next);
+    return;
+  }
+  // Boş gövde hiçbir ekrana ait değil → şemsiye izin (fail-closed).
+  if (keys.length === 0) {
+    requirePermission("admin:settings")(req, res, next);
+    return;
+  }
+  // ③ EKRAN KAPSAMLI: her anahtar kendi ekran iznini ister; `admin:settings`
+  // her anahtarı açar. Tabloda olmayan anahtar yalnız `admin:settings`.
+  requirePermissionForEachKey(keys, flagWriteScope)(req, res, next);
+}
+
+/** Bir feature-flag anahtarını yazabilen izinler — belge anahtarı kendi dar kümesini taşır. */
+function flagWriteScope(key: string): readonly string[] {
+  return DOCUMENT_DESIGN_FLAG_KEYS.has(key) ? DOCUMENT_DESIGN_WRITE : flagKeyWriters(key);
 }
 
 // Tek tablo hücresi — göster + boyut + kalınlık (default'larla tam nesne üretir).
@@ -794,14 +812,12 @@ router.get(
  *       400: { description: Format/boyut hatası }
  */
 // ⚠️ BİLEREK `admin:settings` — `document-template:write` buraya EKLENMEDİ.
-// Logo firmanın KİMLİĞİDİR, bir şablon ayarı değil; ayrıca onu yazan tek ekran
-// (Genel Ayarlar → Firma) zaten `admin:settings` arkasında, yani dar izinli
-// kullanıcının bu uca ulaşacağı bir yol yok. Aynı gerekçe `companyName` ve
-// `companyLetterhead` için de geçerli (bkz. constants/document-design.ts).
+// Logo firmanın KİMLİĞİDİR, bir şablon ayarı değil — belge tasarım izni
+// açmaz; yazan ekran Şirket Bilgileri, izni `companyName` ile aynı.
 router.put(
   "/documents-logo",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "settings:company"),
   // Firma kimliği de ayar şifresine tabidir (gövde belge-tasarım anahtarı
   // TAŞIMAZ → muafiyet dalına düşmez; `{ dataUrl }` yabancı anahtardır).
   requireSettingsPassword,

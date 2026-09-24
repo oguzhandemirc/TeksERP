@@ -1,4 +1,16 @@
-import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
+import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
+import {
+  SETTINGS_COMPANY_ACCESS,
+  SETTINGS_FLAGS_ACCESS,
+  SETTINGS_PRINTING_ACCESS,
+  SETTINGS_WORKSTATION_ACCESS,
+  SYSTEM_ACTIVITY_ACCESS,
+  SYSTEM_BACKUPS_ACCESS,
+  SYSTEM_CLIENTS_ACCESS,
+  SYSTEM_ROLL_ARCHIVE_ACCESS,
+  SYSTEM_SERVER_STATUS_ACCESS,
+  SYSTEM_WORK_SESSIONS_ACCESS,
+} from "@/lib/permissions";
 
 export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
 
@@ -108,6 +120,7 @@ export const systemTiles: SystemTile[] = [
     icon: Activity,
     to: "/system/activity",
     group: "activity",
+    permissionAny: SYSTEM_ACTIVITY_ACCESS,
   },
   {
     key: "logs",
@@ -116,7 +129,7 @@ export const systemTiles: SystemTile[] = [
     icon: FileCode2,
     to: "/system/logs",
     group: "activity",
-    adminOnly: true,
+    permissionAny: SYSTEM_ACTIVITY_ACCESS,
   },
   {
     key: "work-sessions",
@@ -125,7 +138,7 @@ export const systemTiles: SystemTile[] = [
     icon: MapPin,
     to: "/system/work-sessions",
     group: "activity",
-    adminOnly: true,
+    permissionAny: SYSTEM_WORK_SESSIONS_ACCESS,
   },
   {
     // 2026-08-05: Envanter sekme şeridinden buraya taşındı. Başlık "TOP
@@ -137,7 +150,7 @@ export const systemTiles: SystemTile[] = [
     icon: Archive,
     to: "/system/roll-archive",
     group: "archive",
-    adminOnly: true,
+    permissionAny: SYSTEM_ROLL_ARCHIVE_ACCESS,
   },
   {
     key: "archive",
@@ -146,7 +159,8 @@ export const systemTiles: SystemTile[] = [
     icon: Archive,
     to: "/system/archive",
     group: "archive",
-    adminOnly: true,
+    permission: "admin:settings",
+    superadminOnly: true,
   },
   {
     key: "archive-search",
@@ -155,7 +169,7 @@ export const systemTiles: SystemTile[] = [
     icon: Search,
     to: "/system/archive/search",
     group: "archive",
-    adminOnly: true,
+    permissionAny: SYSTEM_ACTIVITY_ACCESS,
   },
   {
     key: "perf",
@@ -164,7 +178,8 @@ export const systemTiles: SystemTile[] = [
     icon: Gauge,
     to: "/system/perf",
     group: "monitoring",
-    adminOnly: true,
+    permission: "admin:settings",
+    superadminOnly: true,
   },
   {
     key: "server-status",
@@ -173,6 +188,7 @@ export const systemTiles: SystemTile[] = [
     icon: Cpu,
     to: "/system/server-status",
     group: "monitoring",
+    permissionAny: SYSTEM_SERVER_STATUS_ACCESS,
   },
   {
     // Bağlı İstemciler — "hangi panel/tablet hangi sürümde, en son ne zaman
@@ -185,6 +201,7 @@ export const systemTiles: SystemTile[] = [
     icon: MonitorSmartphone,
     to: "/system/clients",
     group: "monitoring",
+    permissionAny: SYSTEM_CLIENTS_ACCESS,
   },
   {
     key: "backups",
@@ -193,6 +210,7 @@ export const systemTiles: SystemTile[] = [
     icon: DatabaseBackup,
     to: "/system/backups",
     group: "config",
+    permissionAny: SYSTEM_BACKUPS_ACCESS,
   },
   {
     key: "db-restore",
@@ -201,6 +219,8 @@ export const systemTiles: SystemTile[] = [
     icon: DatabaseZap,
     to: "/system/db-restore",
     group: "config",
+    permission: "admin:settings",
+    superadminOnly: true,
   },
   {
     // SATICI EKRANI — modül anahtarlarının TEK evi (2026-09-04). Eskiden aynı
@@ -243,6 +263,7 @@ export const systemTiles: SystemTile[] = [
     icon: SlidersHorizontal,
     to: "/system/feature-flags",
     group: "config",
+    permissionAny: SETTINGS_FLAGS_ACCESS,
   },
   {
     // Eskiden Genel Ayarlar → Bu Bilgisayar → Güncelleme alt-sekmesiydi.
@@ -274,12 +295,31 @@ export const systemTiles: SystemTile[] = [
     public: true,
   },
   {
-    key: "settings",
-    title: "Genel Ayarlar",
-    description: "Şirket bilgileri, oturum & güvenlik, cihaz eşleştirme, etiket baskısı ve bu bilgisayar",
-    icon: SettingsIcon,
-    to: "/system/settings",
+    key: "printing",
+    title: "Baskı & Cihazlar",
+    description: "Etiket baskısı (kopya, ortam, gönderim) ve tablet eşleştirme zorunluluğu",
+    icon: Printer,
+    to: "/system/printing",
     group: "config",
+    permissionAny: SETTINGS_PRINTING_ACCESS,
+  },
+  {
+    key: "workstation",
+    title: "Bu Bilgisayar",
+    description: "Bu bilgisayara bağlı yazıcı, kantar, barkod tabancası ve sunucu adresi",
+    icon: Monitor,
+    to: "/system/workstation",
+    group: "config",
+    permissionAny: SETTINGS_WORKSTATION_ACCESS,
+  },
+  {
+    key: "company",
+    title: "Şirket & Güvenlik",
+    description: "Şirket bilgileri (ad, antet, logo) ve oturum & güvenlik politikası",
+    icon: Building2,
+    to: "/system/company",
+    group: "config",
+    permissionAny: SETTINGS_COMPANY_ACCESS,
   },
 ];
 

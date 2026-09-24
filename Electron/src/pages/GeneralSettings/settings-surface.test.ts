@@ -1,5 +1,6 @@
 // =============================================================================
-// BEKÇİ — AYARLARIN ÜÇ YÜZEYİ (2026-09-04 kullanıcı kararı)
+// BEKÇİ — AYARLARIN YÜZEYLERİ (2026-09-04 kullanıcı kararı; 2026-09-24'te
+// "Genel Ayarlar" üç ekrana bölündü ve her kategori kendi iznini aldı — §6)
 // =============================================================================
 // İSTEK (kullanıcının kendi cümleleri): "modül flaglarını ayrı bir yere
 // taşıyalım sistem menüsüne tıklayınca açılan yerde bir yerde olsun. firmadaki
@@ -42,6 +43,13 @@ import {
 } from "./settings-config";
 import { MODULE_FLAG_KEYS } from "@/lib/module-flags";
 import { systemTiles } from "@/pages/System/tile-config";
+import {
+  SETTINGS_COMPANY_ACCESS,
+  SETTINGS_FLAGS_ACCESS,
+  SETTINGS_PRINTING_ACCESS,
+  SETTINGS_WORKSTATION_ACCESS,
+  SYSTEM_HUB_ACCESS,
+} from "@/lib/permissions";
 
 const ROUTES_SRC = readFileSync(
   resolve(__dirname, "../../routes/content-routes.tsx"),
@@ -63,7 +71,7 @@ describe("§0 körlük zemini", () => {
     expect(ROUTES_SRC.length).toBeGreaterThan(5000);
     // Üç yüzeyin üçü de DOLU — biri boşalırsa aşağıdaki "içinde yok" kontrolleri
     // vakumen yeşil kalırdı.
-    for (const s of ["settings", "flags", "vendor"] as const) {
+    for (const s of ["flags", "vendor", "printing", "workstation", "company"] as const) {
       expect(idsOf(s).length, s).toBeGreaterThan(0);
     }
   });
@@ -91,19 +99,10 @@ describe("§1 üç yüzeyin dağılımı", () => {
     ]);
   });
 
-  it("“geri kalanlar durabilir” — Genel Ayarlar'da kalanlar", () => {
-    // ⚠️ 2026-09-04 (2. tur): tek "system" kategorisi (iç içe cihaz sekmeleri)
-    // DÖRDE ayrıldı — yazıcı · kantar · tabanca · sunucu adresi.
-    expect(idsOf("settings")).toEqual([
-      "company",
-      "devices",
-      "label",
-      "printer",
-      "scale",
-      "scanner",
-      "server",
-      "session",
-    ]);
+  it("eski Genel Ayarlar üç ekrana bölündü (2026-09-24)", () => {
+    expect(idsOf("printing")).toEqual(["devices", "label"]);
+    expect(idsOf("workstation")).toEqual(["printer", "scale", "scanner", "server"]);
+    expect(idsOf("company")).toEqual(["company", "session"]);
   });
 
   it("her bölümün yüzeyi tanımlı (yeni bölüm eklerken tablo zorunlu)", () => {
@@ -114,10 +113,9 @@ describe("§1 üç yüzeyin dağılımı", () => {
 });
 
 describe("§2 SIZINTI — satıcı anahtarları fabrika ekranlarına düşemez", () => {
-  const factory = [
-    ...visibleSettingsCategories(ALL, "settings"),
-    ...visibleSettingsCategories(ALL, "flags"),
-  ];
+  const factory = (["flags", "printing", "workstation", "company"] as const).flatMap((s) =>
+    visibleSettingsCategories(ALL, s),
+  );
 
   it("körlük zemini: fabrika yüzeylerinde satır VAR", () => {
     expect(factory.length).toBeGreaterThan(8);
@@ -171,13 +169,13 @@ describe("§3 KOPUK DERİN BAĞLANTI — adres tek kaynaktan", () => {
 
   it("Sistem karoları yüzey adlarıyla birebir konuşuyor", () => {
     const byPath = new Map(systemTiles.map((t) => [t.to, t.title]));
-    expect(byPath.get(SURFACE_PATH.settings)).toBe(SURFACE_LABEL.settings);
-    expect(byPath.get(SURFACE_PATH.flags)).toBe(SURFACE_LABEL.flags);
-    expect(byPath.get(SURFACE_PATH.vendor)).toBe(SURFACE_LABEL.vendor);
+    for (const surface of Object.keys(SURFACE_PATH) as SettingsSurface[]) {
+      expect(byPath.get(SURFACE_PATH[surface]), surface).toBe(SURFACE_LABEL[surface]);
+    }
   });
 });
 
-describe("§4 karolar — üç ayrı yer", () => {
+describe("§4 karolar — her yüzey ayrı yer", () => {
   it("⭐ Modüller karosu YALNIZ satıcıya (üçüncü kapı karoda)", () => {
     const t = systemTiles.find((x) => x.to === SURFACE_PATH.vendor);
     expect(t?.superadminOnly).toBe(true);
@@ -186,9 +184,8 @@ describe("§4 karolar — üç ayrı yer", () => {
   it("⭐ Özellik Anahtarları karosu satıcıya BAĞLI DEĞİL (fabrikanın ekranı)", () => {
     const t = systemTiles.find((x) => x.to === SURFACE_PATH.flags);
     expect(t?.superadminOnly).toBeUndefined();
-    // Kapı `admin:settings` (karo kendi iznini taşımıyorsa hub varsayılanı) —
-    // route ile hizası `tile-route-permission.test`te ölçülüyor.
-    expect(t?.permission ?? "admin:settings").toBe("admin:settings");
+    // Kapı: sekmelerinden birini açabilen herkes (§6 kümesi).
+    expect(t?.permissionAny).toEqual(SETTINGS_FLAGS_ACCESS);
   });
 
   it("⭐ Güncelleme kendi karosunda ve `settings:workstation` da yetiyor", () => {
@@ -230,7 +227,71 @@ describe("§5 KİLİTLENME — satıcı yüzeyinin kapısı SUPAPLI", () => {
   it("⭐ modül anahtarlarının BAŞKA bir yazma yüzeyi kalmadı (supap tek koruma)", () => {
     // Bu kontrol §5'in ilk maddesinin GEREKÇESİDİR: ikinci bir yazma yüzeyi
     // doğarsa supap zorunlu olmaktan çıkar ve karar yeniden açılabilir.
-    expect(idsOf("settings")).not.toContain("modules");
-    expect(idsOf("flags")).not.toContain("modules");
+    for (const s of ["flags", "printing", "workstation", "company"] as const) {
+      expect(idsOf(s), s).not.toContain("modules");
+    }
+  });
+});
+
+describe("§6 EKRAN BAŞINA İZİN — her kategori kendi iznini taşır", () => {
+  const SURFACE_ACCESS: Record<Exclude<SettingsSurface, "vendor">, string[]> = {
+    flags: SETTINGS_FLAGS_ACCESS,
+    printing: SETTINGS_PRINTING_ACCESS,
+    workstation: SETTINGS_WORKSTATION_ACCESS,
+    company: SETTINGS_COMPANY_ACCESS,
+  };
+  const factoryCats = SETTINGS_CATEGORIES.filter((c) => categorySurface(c) !== "vendor");
+
+  it("körlük zemini: fabrika kategorileri var", () => {
+    expect(factoryCats.length).toBeGreaterThanOrEqual(19);
+  });
+
+  it("⭐ her fabrika kategorisi `admin:settings` + TEK dar izin taşır", () => {
+    for (const c of factoryCats) {
+      expect(c.permissionAny?.[0], c.id).toBe("admin:settings");
+      expect(c.permissionAny?.length, c.id).toBe(2);
+    }
+  });
+
+  it("⭐ ekran kapısı = sekmelerinin izinlerinin birleşimi (fazla da eksik de yok)", () => {
+    for (const [surface, access] of Object.entries(SURFACE_ACCESS)) {
+      const union = [
+        ...new Set(
+          SETTINGS_CATEGORIES.filter((c) => categorySurface(c) === surface).flatMap((c) => c.permissionAny ?? []),
+        ),
+      ].sort();
+      expect([...access].sort(), surface).toEqual(union);
+    }
+  });
+
+  it("⭐ her yüzeyin route'u ve karosu kendi kümesini kullanır", () => {
+    const names: Record<string, string> = {
+      flags: "SETTINGS_FLAGS_ACCESS",
+      printing: "SETTINGS_PRINTING_ACCESS",
+      workstation: "SETTINGS_WORKSTATION_ACCESS",
+      company: "SETTINGS_COMPANY_ACCESS",
+    };
+    for (const [surface, access] of Object.entries(SURFACE_ACCESS)) {
+      const path = SURFACE_PATH[surface as SettingsSurface].replace(/^\//, "");
+      const idx = ROUTES_SRC.indexOf(`path: "${path}"`);
+      const block = ROUTES_SRC.slice(idx, ROUTES_SRC.indexOf('path: "', idx + 10));
+      expect(block, surface).toContain(`requireAnyPermission={${names[surface]}}`);
+      const tile = systemTiles.find((t) => t.to === SURFACE_PATH[surface as SettingsSurface]);
+      expect(tile?.permissionAny, surface).toEqual(access);
+    }
+  });
+
+  it("⭐ Sistem hub'ı her ayar ekranının iznini kapsar (dar izinli kişi hub'a girebilir)", () => {
+    const missing = Object.values(SURFACE_ACCESS)
+      .flat()
+      .filter((p) => !SYSTEM_HUB_ACCESS.includes(p));
+    expect(missing).toEqual([]);
+  });
+
+  it("eski Genel Ayarlar adresi yalnız yönlendirir", () => {
+    const idx = ROUTES_SRC.indexOf('path: "system/settings"');
+    const block = ROUTES_SRC.slice(idx, ROUTES_SRC.indexOf('path: "', idx + 10));
+    expect(block).toContain("LegacySettingsRedirect");
+    expect(systemTiles.some((t) => t.to === "/system/settings")).toBe(false);
   });
 });

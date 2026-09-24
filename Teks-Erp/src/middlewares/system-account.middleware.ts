@@ -34,6 +34,10 @@ import { NextFunction, Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "../services/audit.service";
+import {
+  refreshSystemAccountRegistry,
+  systemAccountLockActive,
+} from "../services/helpers/system-account.registry";
 import "../types/express-augment";
 
 const UUID_RE =
@@ -134,4 +138,37 @@ export function requireSystemAccountOr404(
     return;
   }
   next();
+}
+
+function systemAccountOnly(req: Request, next: NextFunction): void {
+  if (req.isSystemAccount === true) {
+    next();
+    return;
+  }
+  next(
+    AppError.forbidden("Bu ekran yalnız en yetkili hesaba (sistem yöneticisi) açıktır.", {
+      code: "SUPERADMIN_ONLY",
+    }),
+  );
+}
+
+/**
+ * Süperadmin EKRANI kapısı (DB geri yükleme · endpoint performansı · log arşivleme).
+ * Sistem hesabı VARSA yalnız o geçer; hiç doğmamışsa SUPAP: kapı geçirir ve
+ * zincirdeki izin kapıları karar verir — yoksa hesapsız kurulum bu ekranları
+ * hiç açamazdı (modül anahtarı kilidiyle aynı supap, `flagWriteGuard`).
+ * İzin kapısının YERİNE geçmez, ÖNÜNE takılır.
+ */
+export function requireSystemAccountWhenPresent(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
+  if (systemAccountLockActive()) {
+    systemAccountOnly(req, next);
+    return;
+  }
+  void refreshSystemAccountRegistry()
+    .then((exists) => (exists ? systemAccountOnly(req, next) : next()))
+    .catch(next);
 }

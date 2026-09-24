@@ -61,8 +61,7 @@ export function WarehouseFormDialog({ open, onOpenChange, initial, onSubmit, isS
             <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
               <b>Çoklu depo modülü kapalı.</b> İkinci aktif depo tanımlayabilirsiniz ama depo
               seçicileri, listelerdeki depo kolonu ve Depo Transferi ekranı görünmez; transfer
-              uçları da 403 verir. Açmak için: Sistem → Sistem Profili (ya da Genel Ayarlar →
-              Modüller).
+              uçları da 403 verir. Açmak için: Sistem → Modüller.
             </div>
           )}
           {initial?.isDefault && (

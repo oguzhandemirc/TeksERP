@@ -15,6 +15,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireSystemAccountWhenPresent } from "../middlewares/system-account.middleware";
 import { AuditService } from "../services/audit.service";
 import {
   dropCopy,
@@ -48,6 +49,7 @@ const router = Router();
 router.get(
   "/",
   verifyToken,
+  requireSystemAccountWhenPresent,
   requirePermission("admin:settings"),
   requirePermission("admin:users"),
   async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -77,6 +79,7 @@ router.get(
 router.post(
   "/",
   verifyToken,
+  requireSystemAccountWhenPresent,
   requirePermission("admin:settings"),
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -108,6 +111,7 @@ router.post(
 router.post(
   "/:name/verify",
   verifyToken,
+  requireSystemAccountWhenPresent,
   requirePermission("admin:settings"),
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -142,6 +146,7 @@ router.post(
 router.delete(
   "/:name",
   verifyToken,
+  requireSystemAccountWhenPresent,
   requirePermission("admin:settings"),
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -177,6 +182,7 @@ router.delete(
 router.get(
   "/:name/swap-command",
   verifyToken,
+  requireSystemAccountWhenPresent,
   requirePermission("admin:settings"),
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {

@@ -109,7 +109,7 @@ export function TemplatePrintDialog({ template, open, onOpenChange, standalone }
           ok: false,
           text: lpCfg?.peripheralId
             ? `Aktif dil (${p.language}) HTML — seçili Cihaz Kaydı yazıcısının dili native değil (Tanımlar → Donanım'dan PPLA/PPLB/ZPL seçin) — veya "Tarayıcı (HTML)" hedefini kullanın.`
-            : `Aktif dil (${p.language}) HTML — Genel Ayarlar → Bu Bilgisayar → Yazıcı → "Cihaz Kaydı yazıcısı" seçilmemiş; native baskı için seçin — veya "Tarayıcı (HTML)" hedefini kullanın.`,
+            : `Aktif dil (${p.language}) HTML — Sistem → Bu Bilgisayar → Yazıcı → "Cihaz Kaydı yazıcısı" seçilmemiş; native baskı için seçin — veya "Tarayıcı (HTML)" hedefini kullanın.`,
         });
         return;
       }
@@ -239,7 +239,7 @@ export function TemplatePrintDialog({ template, open, onOpenChange, standalone }
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     Yerel yazıcı: <span className="font-mono">{lpCfg?.path}</span> (
-                    {lpCfg?.transport ?? "serial"}). Genel Ayarlar → Etiket Yazıcısı'ndan değişir.
+                    {lpCfg?.transport ?? "serial"}). Sistem → Bu Bilgisayar → Yazıcı'dan değişir.
                   </p>
                   <Button type="button" disabled={!canPrint}
                     onClick={() => void doSendNative(lpCfg?.transport ?? "serial", lpCfg!.path!, lpCfg?.baudRate)}
@@ -249,7 +249,7 @@ export function TemplatePrintDialog({ template, open, onOpenChange, standalone }
                 </div>
               ) : (
                 <p className="text-xs text-amber-600 dark:text-amber-500">
-                  Bu PC'de etiket yazıcısı ayarlı değil. Genel Ayarlar → Etiket Yazıcısı'ndan aç + kuyruğu/portu
+                  Bu PC'de etiket yazıcısı ayarlı değil. Sistem → Bu Bilgisayar → Yazıcı'dan aç + kuyruğu/portu
                   seç — veya "Tarayıcı (HTML)" hedefiyle normal yazıcıya bas.
                 </p>
               ))}

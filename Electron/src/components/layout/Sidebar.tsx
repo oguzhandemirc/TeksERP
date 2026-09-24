@@ -51,6 +51,7 @@ export function Sidebar({ collapsed }: Props) {
   const visible = (item: NavItem) => {
     if (item.adminOnly && !isAdmin && !hasAnyPermission(ADMIN_PERMISSION_LIST)) return false;
     if (item.permission && !hasPermission(item.permission)) return false;
+    if (item.permissionAny && !hasAnyPermission(item.permissionAny)) return false;
     // Belirsizken düşülecek taraf BAYRAĞA GÖRE değişir ve kararı bağlam verir:
     // "Muhasebe" belirsizken çizilmez (fabrikada bir an belirip kaybolmasın),
     // üretim belirsizken çizilir (fabrikada bir an kaybolup gelmesin).
@@ -68,6 +69,7 @@ export function Sidebar({ collapsed }: Props) {
       to: e.to,
       icon: e.icon,
       permission: e.permission,
+      permissionAny: e.permissionAny,
       adminOnly: e.adminOnly,
     }))
     .filter(visible);

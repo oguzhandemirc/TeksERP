@@ -96,13 +96,13 @@ describe("§1 yerleşim — dört kategori, iç içe sekme yok", () => {
     expect(SHELL_SRC).not.toContain("<WorkstationTabs");
   });
 
-  it("dördü de Genel Ayarlar yüzeyinde (Özellik Anahtarları'na kaymadı)", () => {
-    for (const c of local()) expect(categorySurface(c), c.id).toBe("settings");
+  it("dördü de kendi ekranında — Bu Bilgisayar (Özellik Anahtarları'na kaymadı)", () => {
+    for (const c of local()) expect(categorySurface(c), c.id).toBe("workstation");
   });
 
   it("dar izinli personelin rayı TEK bölüm — seçilecek başka başlık yok", () => {
     const groups = groupSettingsCategories(
-      visibleSettingsCategories(NARROW, "settings", true),
+      visibleSettingsCategories(NARROW, "workstation", true),
       REGIME,
     );
     expect(groups.map((g) => g.section.id)).toEqual([WORKSTATION_SECTION]);
@@ -137,7 +137,7 @@ describe("§2 izin hizası — dar izin bölümün İÇİNDE kalır", () => {
   it("`admin:settings` dördünü DE görmeye devam ediyor (daralma yok)", () => {
     const ids = visibleSettingsCategories(
       (p) => p.includes(SETTINGS_ADMIN_PERMISSION),
-      "settings",
+      "workstation",
       true,
     ).map((c) => c.id);
     for (const c of local()) expect(ids, c.id).toContain(c.id);
@@ -146,13 +146,13 @@ describe("§2 izin hizası — dar izin bölümün İÇİNDE kalır", () => {
 
 describe("§3 ortam kapısı — sunucu adresi yalnız masaüstünde", () => {
   it("⭐ web'de 'Sunucu Adresi' çizilmez", () => {
-    const web = visibleSettingsCategories(ALL, "settings", false).map((c) => c.id);
+    const web = visibleSettingsCategories(ALL, "workstation", false).map((c) => c.id);
     expect(web).not.toContain("server");
   });
 
   it("⭐ masaüstünde çizilir ve DÜŞEN TEK ŞEY odur", () => {
-    const desktop = visibleSettingsCategories(ALL, "settings", true).map((c) => c.id);
-    const web = visibleSettingsCategories(ALL, "settings", false).map((c) => c.id);
+    const desktop = visibleSettingsCategories(ALL, "workstation", true).map((c) => c.id);
+    const web = visibleSettingsCategories(ALL, "workstation", false).map((c) => c.id);
     expect(desktop).toContain("server");
     expect(desktop.filter((id) => !web.includes(id))).toEqual(["server"]);
   });
@@ -173,7 +173,9 @@ describe("§3 ortam kapısı — sunucu adresi yalnız masaüstünde", () => {
 });
 
 describe("§4 sessiz düşüş — eski `?tab=system` yer imi", () => {
-  const cats = visibleSettingsCategories(ALL, "settings", true);
+  // Tüm kategoriler: "Bu Bilgisayar" ekranında yazıcı zaten ilk sekme olduğundan
+  // orada ölçmek takma adı SINAMAZDI.
+  const cats = visibleSettingsCategories(ALL, undefined, true);
 
   it("⭐ eski kimlik 'Yazıcı'ya yönlenir (ilk sekmeye DÜŞMEZ)", () => {
     expect(resolveActiveSettingsCategory(cats, "system")).toBe("printer");
@@ -229,6 +231,6 @@ describe("§6 hub kartı — adres tek kaynaktan", () => {
 
   it("⭐ giriş adresi bölümün İLK kategorisinin gerçek adresi", () => {
     expect(workstationEntryPath()).toBe(settingsCategoryPath(local()[0]!));
-    expect(workstationEntryPath()).toBe("/system/settings?tab=printer");
+    expect(workstationEntryPath()).toBe("/system/workstation?tab=printer");
   });
 });

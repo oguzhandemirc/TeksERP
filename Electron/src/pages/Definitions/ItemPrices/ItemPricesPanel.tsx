@@ -144,8 +144,8 @@ export function ItemPricesPanel({ itemId, itemLabel, unit, hideResolveCheck }: P
     // kurulumda kapalı — Sistem → Modüller").
     return (
       <Callout tone="muted" title="Fiyat tanımları bu kurulumda kapalı">
-        Kalem fiyatı TİCARET modülünün bir parçasıdır (ön muhasebeden bağımsız). Genel Ayarlar →
-        Modüller bölümünden açılabilir.
+        Kalem fiyatı TİCARET modülünün bir parçasıdır (ön muhasebeden bağımsız). Sistem → Modüller
+        ekranından açılabilir.
       </Callout>
     );
   }

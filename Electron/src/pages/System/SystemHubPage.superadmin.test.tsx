@@ -73,7 +73,7 @@ describe("Modüller karosu (satıcı yüzeyi)", () => {
     renderWithProviders(<SystemHubPage />);
     expect(screen.queryByText(MODUL_KAROSU)).toBeNull();
     // Regresyon: fabrikanın KENDİ ekranları yerinde.
-    expect(screen.getByText("Genel Ayarlar")).toBeTruthy();
+    expect(screen.getByText("Baskı & Cihazlar")).toBeTruthy();
     expect(screen.getByText("Özellik Anahtarları")).toBeTruthy();
     expect(screen.getByText("Güncelleme")).toBeTruthy();
   });

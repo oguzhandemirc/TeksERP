@@ -10,7 +10,7 @@ export function MethodDisabledNotice({ label }: { label: string }) {
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <span>
         <b>{label}</b> giriş yöntemi şu an kapalı — sahadaki giriş ekranında kullanılmaz.
-        Genel Ayarlar → Oturum &amp; Güvenlik'ten açabilirsiniz. Buradan yine de kimlik
+        Sistem → Şirket &amp; Güvenlik → Oturum &amp; Güvenlik'ten açabilirsiniz. Buradan yine de kimlik
         atayabilirsiniz (yöntem açılınca hazır olur).
       </span>
     </div>

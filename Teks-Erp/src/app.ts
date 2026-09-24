@@ -108,7 +108,7 @@ import masterDataMergeRoutes from "./routes/master-data-merge.routes";
 import configBundleRoutes from "./routes/config-bundle.routes";
 import adminRoutes from "./routes/admin.routes";
 import { verifyToken } from "./middlewares/auth.middleware";
-import { requirePermission } from "./middlewares/rbac.middleware";
+import { requireAnyPermission } from "./middlewares/rbac.middleware";
 import dbCopyRoutes from "./routes/db-copy.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import reportsRoutes from "./routes/reports.routes";
@@ -963,7 +963,7 @@ app.use("/api/admin/db-copies", dbCopyRoutes);
 app.get(
   "/api/admin/health",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:server-status"),
   async (_req: Request, res: Response) => {
     res.status(200).json(await buildRichHealth());
   },

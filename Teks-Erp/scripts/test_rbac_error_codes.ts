@@ -16,7 +16,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Request, Response } from "express";
-import { RBAC_DENIED_CODE, requireAnyPermission, requirePermission } from "../src/middlewares/rbac.middleware";
+import { RBAC_DENIED_CODE, requireAnyPermission, requirePermission, requirePermissionForEachKey } from "../src/middlewares/rbac.middleware";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
@@ -59,13 +59,17 @@ function main(): void {
   check("§2a hiçbiri yok → 403 PERMISSION_DENIED + requiredAny [shipping:invoice, finance:write]", r2.err?.statusCode === 403 && ayrinti(r2.err).code === "PERMISSION_DENIED" && JSON.stringify(ayrinti(r2.err).requiredAny) === JSON.stringify(["shipping:invoice", "finance:write"]), JSON.stringify(ayrinti(r2.err)));
   check("§2b biri varsa geçer", kos(requireAnyPermission("shipping:invoice", "finance:write"), ["finance:write"]).gecti);
   check("§2c tekil `required` alanı requiredAny reddinde YOK (iki şekil karışmaz)", ayrinti(r2.err).required === undefined);
+  const yazici = (k: string): string[] => (k === "a" ? ["x:a"] : ["x:b"]);
+  const r2d = kos(requirePermissionForEachKey(["a", "b"], yazici), ["x:a"]);
+  check("§2d anahtar-kapsamlı red: PERMISSION_DENIED + reddedilen anahtarlar + requiredAny", r2d.err?.statusCode === 403 && ayrinti(r2d.err).code === "PERMISSION_DENIED" && JSON.stringify(ayrinti(r2d.err).keys) === JSON.stringify(["b"]) && JSON.stringify(ayrinti(r2d.err).requiredAny) === JSON.stringify(["x:b"]), JSON.stringify(ayrinti(r2d.err)));
+  check("§2e her anahtarın izni varsa geçer", kos(requirePermissionForEachKey(["a", "b"], yazici), ["x:a", "x:b"]).gecti);
 
   console.log("\n── §3 Statik ──");
   const auth = readFileSync(path.join(ROOT, "src/services/auth.service.ts"), "utf8");
   const kanal = auth.slice(auth.indexOf("masaüstü paneline erişimi yok"), auth.indexOf("masaüstü paneline erişimi yok") + 200);
   check("§3a ⭐ kanal reddi AYRI kod: CHANNEL_DENIED + channel: desktop (PERMISSION_DENIED DEĞİL)", /code: "CHANNEL_DENIED"/.test(kanal) && /channel: "desktop"/.test(kanal) && !/PERMISSION_DENIED/.test(kanal));
   const rbac = readFileSync(path.join(ROOT, "src/middlewares/rbac.middleware.ts"), "utf8");
-  check("§3b rbac middleware kodu YALNIZ details nesnesine koyar (iki red yolu da), gövdeye `.code =` yazmaz", !/\.code\s*=[^=]/.test(rbac) && (rbac.match(/code: RBAC_DENIED_CODE/g) ?? []).length === 2);
+  check("§3b rbac middleware kodu YALNIZ details nesnesine koyar (üç red yolu da), gövdeye `.code =` yazmaz", !/\.code\s*=[^=]/.test(rbac) && (rbac.match(/code: RBAC_DENIED_CODE/g) ?? []).length === 3);
   const errMw = readFileSync(path.join(ROOT, "src/middlewares/error.middleware.ts"), "utf8");
   check("§3c hata gövdesi `details`i geçirir (kod istemciye ulaşır)", /details: err\.details/.test(errMw));
   const swagger = readFileSync(path.join(ROOT, "src/config/swagger.ts"), "utf8");

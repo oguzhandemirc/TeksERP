@@ -5,7 +5,12 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { SCREEN_CATALOG, permissionsWithoutScreen } from "../constants/screen-catalog";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import {
+  requirePermission,
+  requireAnyPermission,
+  requirePermissionForEachKey,
+} from "../middlewares/rbac.middleware";
+import { RAW_SETTING_SCOPE_PERMISSIONS, settingKeyWriters } from "../constants/settings-scopes";
 import { AuditService } from "../services/audit.service";
 import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
@@ -21,6 +26,7 @@ import { requireSettingsPassword } from "../middlewares/settings-password.middle
 import {
   protectSystemAccountTarget,
   requireSystemAccountOr404,
+  requireSystemAccountWhenPresent,
 } from "../middlewares/system-account.middleware";
 import {
   setSettingsPassword,
@@ -996,6 +1002,7 @@ router.delete(
 router.get(
   "/perf",
   verifyToken,
+  requireSystemAccountWhenPresent,
   requirePermission("admin:settings"),
   (_req: Request, res: Response, next: NextFunction): void => {
     try {
@@ -1032,7 +1039,7 @@ router.get(
 router.get(
   "/clients",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:clients"),
   async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       res.status(200).json({ success: true, data: await ClientRegistryService.snapshot() });
@@ -1061,6 +1068,7 @@ const perfHistoryQuerySchema = z.object({
 router.get(
   "/perf/history",
   verifyToken,
+  requireSystemAccountWhenPresent,
   requirePermission("admin:settings"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -1088,6 +1096,7 @@ router.get(
 router.post(
   "/perf/reset",
   verifyToken,
+  requireSystemAccountWhenPresent,
   requirePermission("admin:settings"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -1169,6 +1178,7 @@ const archiveSchema = z.object({
 router.post(
   "/system-logs/archive",
   verifyToken,
+  requireSystemAccountWhenPresent,
   requirePermission("admin:settings"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -1200,6 +1210,7 @@ router.post(
 router.get(
   "/system-logs/stats",
   verifyToken,
+  requireSystemAccountWhenPresent,
   requirePermission("admin:settings"),
   async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -1272,7 +1283,7 @@ export const systemLogListQuerySchema = z.object({
 router.get(
   "/system-logs",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:activity"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const params = systemLogListQuerySchema.parse(req.query);
@@ -1295,7 +1306,7 @@ router.get(
 router.get(
   "/system-logs/users",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:activity"),
   async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const data = await SystemLogService.listActiveUsers();
@@ -1317,7 +1328,7 @@ router.get(
 router.get(
   "/system-logs/tables",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:activity"),
   async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const data = await SystemLogService.listActiveTables();
@@ -1339,7 +1350,7 @@ router.get(
 router.get(
   "/system-logs/archive",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:activity"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const params = systemLogListQuerySchema.parse(req.query);
@@ -1362,7 +1373,7 @@ router.get(
 router.get(
   "/system-logs/archive/:id",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:activity"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await SystemLogService.findArchiveById(req.params.id as string);
@@ -1384,7 +1395,7 @@ router.get(
 router.get(
   "/system-logs/:id",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:activity"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await SystemLogService.findById(req.params.id as string);
@@ -1426,7 +1437,8 @@ const STRUCTURED_SETTING_KEYS = new Set<string>([
 router.get(
   "/settings",
   verifyToken,
-  requirePermission("admin:settings"),
+  // Ham anahtarı olan ekranlar (Siparişler · İş Emirleri) kendi değerini okur.
+  requireAnyPermission("admin:settings", ...RAW_SETTING_SCOPE_PERMISSIONS),
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await systemSettingService.list();
@@ -1465,7 +1477,10 @@ router.get(
 router.put(
   "/settings/:key",
   verifyToken,
-  requirePermission("admin:settings"),
+  // Anahtar-kapsamlı: ekranın dar izni yalnız kendi ham anahtarını yazar;
+  // tabloda olmayan anahtar yalnız `admin:settings` (fail-closed).
+  (req: Request, res: Response, next: NextFunction) =>
+    requirePermissionForEachKey([req.params.key as string], settingKeyWriters)(req, res, next),
   // ⚠️ İZİNDEN SONRA (2026-09-03 / P3): niyet kapısı yetki kapısının YERİNE
   // geçmez, ARDINA takılır. Ters sırada yetkisiz bir kullanıcı da şifre
   // denemesi yaparak kilit sayacını doldurabilir (meşru yöneticiye DoS).
@@ -1583,6 +1598,7 @@ router.get(
   "/settings-password",
   verifyToken,
   requireSystemAccountOr404,
+  requireSystemAccountWhenPresent,
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
       res
@@ -1618,6 +1634,7 @@ router.put(
   "/settings-password",
   verifyToken,
   requireSystemAccountOr404,
+  requireSystemAccountWhenPresent,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { password } = settingsPasswordSchema.parse(req.body);
@@ -1646,6 +1663,7 @@ router.delete(
   "/settings-password",
   verifyToken,
   requireSystemAccountOr404,
+  requireSystemAccountWhenPresent,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { removed } = await revokeSettingsPassword(req.user?.userId);
@@ -1679,7 +1697,7 @@ router.delete(
 router.post(
   "/backup",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:backups"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = triggerManualBackup();
@@ -1715,7 +1733,7 @@ router.get(
   // F287: pg_dump .dump TÜM kullanıcıların düz quickPin/cardToken'ını içerir →
   // admin:users da ZORUNLU (zincir = AND). admin:* her ikisini karşılar; yalnız
   // salt-admin:settings aktör 403 alır (mobil giriş sırlarını yedekten harvest edemez).
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:backups"),
   requirePermission("admin:users"),
   async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -1746,7 +1764,7 @@ router.get(
   "/backups/:name/download",
   verifyToken,
   // F287: yedek düz-metin giriş sırları içerir → admin:settings + admin:users (AND).
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:backups"),
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -1801,7 +1819,7 @@ router.get(
   // her ikisine sahip aktör zaten geri yükleyebilir; ayrı bir eşik bırakmak
   // "önizleme görünüyor ama komut kurulamıyor" gibi kafa karıştırıcı bir
   // kısmi-erişim durumu üretir.
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:backups"),
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -1850,7 +1868,7 @@ router.get(
 router.get(
   "/backups/offsite",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:backups"),
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const [health, remote, dir] = await Promise.all([
@@ -1904,7 +1922,7 @@ const offsiteConfigSchema = z
 router.patch(
   "/backups/offsite",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:backups"),
   requirePermission("admin:users"), // ← yukarıdaki gerekçe: hedef = yedeklerin gideceği yer
   // ⚠️ AYAR ŞİFRESİ KAPISI (2026-09-03 / P3 düzeltme turu — D2 bulgusu #1).
   // Bu uç `systemSettingService.set()` ile `system_settings`e YAZAR, yani spec'in
@@ -1947,7 +1965,7 @@ router.patch(
 router.post(
   "/backups/offsite/test",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:backups"),
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
       res.status(200).json({ success: true, data: await testOffsiteRemote() });
@@ -1961,7 +1979,7 @@ router.post(
 router.post(
   "/backups/offsite/sweep",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:backups"),
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
       await runOffsiteSweepNow();
@@ -1987,7 +2005,7 @@ const offsiteTokenSchema = z.object({
 router.post(
   "/backups/offsite/authorize",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:backups"),
   requirePermission("admin:users"),
   // ⚠️ Kardeş uçla AYNI gerekçe (yukarıdaki PATCH bloğu): Drive yenileme
   // anahtarını yazmak, yedeklerin gideceği hesabı belirlemektir. Gövde

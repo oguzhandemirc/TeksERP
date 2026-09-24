@@ -161,6 +161,7 @@ const CAP_LABEL: Record<string, string> = {
   "report:sales": "Satış raporu görebilir",
   "document-template:write": "Belge tasarımını değiştirebilir",
   "settings:workstation": "Bu bilgisayarın donanım ayarlarını değiştirebilir",
+  "system:backups": "Yedek alabilir",
   // Depo mal kabul + ön muhasebe (2026-09-01) — kutunun yanında NE yapabildiği
   // yazmazsa yönetici atama ekranında ham kodu okur.
   "goods-receipt:write": "Mal kabul fişi açıp düzenleyebilir",
@@ -212,13 +213,14 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "access/users", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Kullanıcılar", requires: ["admin:users"], capabilities: [] },
   { key: "access/templates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yetki Şablonları", requires: ["admin:users"], capabilities: [] },
   { key: "access/permissions", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yetki Kataloğu", requires: ["admin:users"], capabilities: [] },
-  { key: "system", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/activity", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Günlüğü", requires: ["admin:settings"], capabilities: [] },
+  // Sistem hub'ı: karolarından BİRİNİ açabilen herkes girer (Electron `SYSTEM_HUB_ACCESS` aynası).
+  { key: "system", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem", requires: ["admin:settings", "data:import", "master-data:merge", "settings:numbering", "settings:workstation", "settings:customers", "settings:orders", "settings:shipping", "settings:work-orders", "settings:production", "settings:kartela", "settings:devere", "settings:dokuma", "settings:warehouse", "settings:yarn", "settings:finance", "settings:label", "settings:devices", "settings:company", "settings:session", "system:activity", "system:work-sessions", "system:server-status", "system:clients", "system:backups"], capabilities: [] },
+  { key: "system/activity", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Günlüğü", requires: ["admin:settings", "system:activity"], capabilities: [] },
   { key: "system/perf", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Endpoint Performansı", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/server-status", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sunucu Durumu", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/clients", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bağlı İstemciler", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/work-sessions", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Çalışma Oturumları", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/backups", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yedekler", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/server-status", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sunucu Durumu", requires: ["admin:settings", "system:server-status"], capabilities: ["system:backups"] },
+  { key: "system/clients", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bağlı İstemciler", requires: ["admin:settings", "system:clients"], capabilities: [] },
+  { key: "system/work-sessions", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Çalışma Oturumları", requires: ["admin:settings", "system:work-sessions"], capabilities: [] },
+  { key: "system/backups", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yedekler", requires: ["admin:settings", "system:backups"], capabilities: [] },
   // Veri Aktarımı — `admin:settings` DEĞİL: toplu yükleme sistem yönetimi değil
   // VERİ yönetimidir ve ayrı atanır. Ekranın kendisi `data:import` ile açılır;
   // hangi varlığa yazılabileceği ayrıca o varlığın write izniyle sınırlıdır
@@ -240,7 +242,12 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // ait değil, modüllerin ÜSTÜNDE duran ayar yüzeyidir — satırları üretim,
   // ticaret, iplik ve muhasebe kategorilerine dağılır ve kategori bazında
   // KİLİTLENİR (`SettingsCategory.moduleKey`), gizlenmez.
-  { key: "system/feature-flags", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Özellik Anahtarları", requires: ["admin:settings"], capabilities: [] },
+  // Her sekme kendi izniyle açılır (`constants/settings-scopes.ts`); ekran, sekmelerden birini açabilene görünür.
+  { key: "system/feature-flags", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Özellik Anahtarları", requires: ["admin:settings", "settings:customers", "settings:orders", "settings:shipping", "settings:work-orders", "settings:production", "settings:kartela", "settings:devere", "settings:dokuma", "settings:warehouse", "settings:yarn", "settings:finance"], capabilities: [] },
+  // Genel Ayarlar 2026-09-24'te üç ekrana bölündü; her biri kendi sekmelerinin izinleriyle açılır.
+  { key: "system/printing", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Baskı & Cihazlar", requires: ["admin:settings", "settings:label", "settings:devices"], capabilities: [] },
+  { key: "system/workstation", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bu Bilgisayar", requires: ["admin:settings", "settings:workstation"], capabilities: [] },
+  { key: "system/company", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Şirket & Güvenlik", requires: ["admin:settings", "settings:company", "settings:session"], capabilities: [] },
   // Numaralandırma — numara BİÇİMİ veri olduğundan panelden yönetilir (Faz C).
   // Çekirdek: her kurulumda numara üretilir, kapatılabilir bir modüle ait değil.
   { key: "system/numbering", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Numaralandırma", requires: ["settings:numbering"], capabilities: [] },
@@ -248,9 +255,10 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // DE yeter (yerel donanımını kuran personel); route çoklu kapılı olduğu için
   // bekçinin route çözücüsü bu satırı zaten göremez, giriş TAMLIK için var.
   { key: "system/update", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Güncelleme", requires: ["admin:settings", "settings:workstation"], capabilities: [] },
-  { key: "system/logs", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem Kayıtları", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/archive", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Arşivi", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/roll-archive", app: "desktop", modul: "cekirdek:stok-giris", title: "Top Arşivi", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/logs", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem Kayıtları", requires: ["admin:settings", "system:activity"], capabilities: [] },
+  // Arşive TAŞIMA süperadmin ekranıdır (karo `superadminOnly`); alt yol Arşiv Tarama okuma iznini de kabul eder.
+  { key: "system/archive", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Arşivi", requires: ["admin:settings", "system:activity"], capabilities: [] },
+  { key: "system/roll-archive", app: "desktop", modul: "cekirdek:stok-giris", title: "Top Arşivi", requires: ["admin:settings", "roll:read"], capabilities: [] },
   { key: "operations/orders", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Siparişler", requires: ["order:read"], capabilities: ["customer-alias:read", "order:write", "shipping:read", "workorder:write"] },
   { key: "operations/allocation-repair", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Siparişe yazılamayan sevkiyatlar", requires: ["shipping:repair-allocation"], capabilities: [] },
   { key: "operations/work-orders", app: "desktop", modul: "productionEnabled", title: "İş Emirleri", requires: ["workorder:read"], capabilities: ["order:write", "property:write", "roll:manual-adjust", "workorder:write"] },
@@ -279,16 +287,14 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "reports/subcontract", app: "desktop", modul: "planlanan:fason", title: "Fason", requires: ["report:subcontract"], capabilities: [] },
   { key: "reports/customer", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Müşteri", requires: ["report:customer"], capabilities: [] },
   { key: "reports/audit", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Denetim", requires: ["report:audit"], capabilities: [] },
-  // ⚠️ AŞAĞIDAKİ BEŞİ ELLE EKLENDİ — route tarayıcısı bunları GÖREMEZ:
-  // dördü `requireAnyPermission={DOCUMENT_DESIGN_READ}` gibi SABİT REFERANSLA
-  // korunuyor (satır içi dizi değil), beşincisi ise route değil Genel Ayarlar
-  // İÇİNDEKİ bir sekme. Bekçi bu iki biçimi de çözer; yeni bir sabit-referanslı
-  // route eklenirse test kırmızı verir.
+  // ⚠️ AŞAĞIDAKİ DÖRDÜ ELLE EKLENDİ — route tarayıcısı bunları GÖREMEZ:
+  // `requireAnyPermission={DOCUMENT_DESIGN_READ}` gibi SABİT REFERANSLA
+  // korunuyorlar (satır içi dizi değil). Yeni bir sabit-referanslı route
+  // eklenirse test kırmızı verir.
   { key: "definitions/document-templates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
   { key: "definitions/traveler-card", app: "desktop", modul: "productionEnabled", title: "Refakat Kartı", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
   { key: "definitions/traveler-card-studio", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
   { key: "definitions/free-documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
-  { key: "settings", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Genel Ayarlar", requires: ["admin:settings", "settings:workstation"], capabilities: ["settings:workstation"] },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DEPO MAL KABUL + ÖN MUHASEBE (2026-09-01, birleştirme onarımı)

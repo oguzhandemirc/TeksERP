@@ -178,7 +178,8 @@ function sourceContract(): void {
 
   // ── İZİN ZİNCİRİ — yedek dışa sızdırma yolu ───────────────────────────────
   // ⚠️ Hedefi DEĞİŞTİREBİLEN uç, `/backups` indirmesiyle AYNI zinciri taşımalı
-  // (`admin:settings` VE `admin:users`). `.dump` TÜM kullanıcıların düz
+  // (ayar izni — `admin:settings` ya da ekran izni `system:backups` — VE
+  // `admin:users`). `.dump` TÜM kullanıcıların düz
   // quickPin/cardToken'ını içerdiği için indirme iki izin ister; hedefi tek
   // izinle değiştirebilen biri, indirmeye hiç dokunmadan aynı dosyaların KENDİ
   // bulutuna teslim edilmesini sağlar — kapatılmış kapının yanına ikinci kapı.
@@ -192,6 +193,8 @@ function sourceContract(): void {
    * GET'i ölçtü ve tek izinli (doğru) GET yüzünden kırmızı verdi. Ters yönü
    * daha tehlikeli: PATCH tek izne düşürülse bekçi GET'i okuyup YEŞİL kalırdı.
    */
+  // Yedekler ekranının kapısı: şemsiye `admin:settings` ya da ekran izni `system:backups`.
+  const AYAR_KAPISI = /requireAnyPermission\("admin:settings", "system:backups"\)/;
   const blockOf = (method: string, routePath: string): string => {
     const needle = `router.${method}(`;
     let from = 0;
@@ -211,9 +214,9 @@ function sourceContract(): void {
   ] as const) {
     const b = blockOf(method, routePath);
     check(
-      `${label} İKİ izin birden taşıyor (admin:settings + admin:users)`,
+      `${label} İKİ izin birden taşıyor (ayar/yedek izni + admin:users)`,
       b.length > 0 &&
-        /requirePermission\("admin:settings"\)/.test(b) &&
+        AYAR_KAPISI.test(b) &&
         /requirePermission\("admin:users"\)/.test(b),
       b ? "" : "route bulunamadı — yol/metot değiştiyse bekçiyi güncelle",
     );
@@ -226,8 +229,8 @@ function sourceContract(): void {
   ] as const) {
     const b = blockOf(method, routePath);
     check(
-      `${label} kimlik doğrulaması + admin:settings taşıyor`,
-      b.length > 0 && /verifyToken/.test(b) && /requirePermission\("admin:settings"\)/.test(b),
+      `${label} kimlik doğrulaması + ayar/yedek izni taşıyor`,
+      b.length > 0 && /verifyToken/.test(b) && AYAR_KAPISI.test(b),
       b ? "" : "route bulunamadı",
     );
   }

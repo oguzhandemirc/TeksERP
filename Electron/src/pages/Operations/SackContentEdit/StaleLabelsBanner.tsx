@@ -55,7 +55,7 @@ export function StaleLabelsBanner({
       const ids = stale.map((r) => r.id);
       if (!directEnabled) {
         toast.error("Bu bilgisayarda etiket yazıcısı yapılandırılmamış", {
-          description: "Genel Ayarlar → Bu Bilgisayar → Yazıcı'dan seçin.",
+          description: "Sistem → Bu Bilgisayar → Yazıcı'dan seçin.",
         });
         return;
       }

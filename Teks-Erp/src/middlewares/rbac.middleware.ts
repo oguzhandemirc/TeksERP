@@ -102,3 +102,31 @@ export const requireAnyPermission = (...requiredPermissions: string[]) => {
     next();
   };
 };
+
+/**
+ * Anahtar-kapsamlı kapı: gövdedeki HER anahtar kendi yazıcı kümesinden birini
+ * ister (anahtar içinde OR, anahtarlar arasında AND). Düz OR'a çevrilmez —
+ * yoksa tek dar izin, karma gövdedeki bütün anahtarları açardı.
+ */
+export const requirePermissionForEachKey = (
+  keys: readonly string[],
+  writersOf: (key: string) => readonly string[],
+) => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      return next(AppError.unauthorized("Kimlik doğrulama gerekli."));
+    }
+    const perms = req.user.permissions;
+    const denied = keys.filter((k) => !writersOf(k).some((p) => matchesPermission(perms, p)));
+    if (denied.length > 0) {
+      const requiredAny = [...writersOf(denied[0]!)];
+      return next(
+        AppError.forbidden(
+          `Bu ayarları değiştirme yetkiniz yok: ${denied.join(", ")} (gereken: ${requiredAny.join(" veya ")})`,
+          { code: RBAC_DENIED_CODE, requiredAny, keys: denied },
+        ),
+      );
+    }
+    next();
+  };
+};

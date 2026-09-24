@@ -119,8 +119,8 @@ export function ItemPricesPage() {
           <p className="text-sm text-muted-foreground">Yükleniyor…</p>
         ) : !access.ticaretEnabled ? (
           <Callout tone="muted" title="Fiyat tanımları bu kurulumda kapalı">
-            Kalem fiyatı TİCARET modülünün bir parçasıdır (ön muhasebeden bağımsız). Genel Ayarlar
-            → Modüller bölümünden açılabilir.
+            Kalem fiyatı TİCARET modülünün bir parçasıdır (ön muhasebeden bağımsız). Sistem →
+            Modüller ekranından açılabilir.
           </Callout>
         ) : !access.canRead ? (
           <Callout tone="warning" title="Bu ekranı görme yetkiniz yok">

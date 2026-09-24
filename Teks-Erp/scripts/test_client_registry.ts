@@ -238,8 +238,8 @@ check("servis `activeWindowMs`i yanıtta döndürüyor (eşik SUNUCUDAN gider)",
 // Katman kuralı: DB okuması route'ta DEĞİL serviste (eslint no-restricted-imports).
 check("uç ince — defter yükünü servisten alıyor",
   adminRoutes.includes("ClientRegistryService.snapshot()"));
-check("uç `admin:settings` arkasında (yeni izin kodu AÇILMADI)",
-  /"\/clients",\s*\n\s*verifyToken,\s*\n\s*requirePermission\("admin:settings"\)/.test(adminRoutes));
+check("uç `admin:settings` ∨ ekran izni `system:clients` arkasında",
+  /"\/clients",\s*\n\s*verifyToken,\s*\n\s*requireAnyPermission\("admin:settings", "system:clients"\)/.test(adminRoutes));
 
 // Ekran kendi eşiğini YAZMAMALI — sunucudan gelen değeri basmalı.
 const EL = path.resolve(__dirname, "../../Electron/src/pages/System/Clients");

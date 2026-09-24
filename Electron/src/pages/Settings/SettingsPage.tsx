@@ -24,7 +24,7 @@ export function SettingsPage() {
   const { hasAnyPermission } = useRoleAccess();
   const [resetOpen, setResetOpen] = useState(false);
 
-  // "Bu Bilgisayar" (yerel donanım) ayarları Genel Ayarlar sayfasında yaşar ama
+  // "Bu Bilgisayar" (yerel donanım) ayarları Sistem → Bu Bilgisayar ekranında yaşar ama
   // oraya götüren tek yol Sistem hub'ıydı ve o hub `admin:settings` ister →
   // `settings:workstation` taşıyan personelin ekrana ULAŞACAK bir kapısı olmazdı.
   // Herkesin topbar'dan girebildiği bu sayfa o kapı. (İzni verip yolu vermemek,
@@ -54,7 +54,7 @@ export function SettingsPage() {
         {/* KİŞİSEL ÇALIŞMA TERCİHLERİ (2026-08-09) — sistem geneli ayarlarla
             KARIŞTIRMA: buradakiler yalnız BU kullanıcıyı etkiler ve
             `UserPreference` blob'unda yaşar (audit'ten muaf kişisel UI durumu).
-            Sistem geneli ayarlar Genel Ayarlar ekranında ve `admin:settings`
+            Sistem geneli ayarlar Sistem ekranlarında ve ekran izinlerinin
             arkasındadır. */}
         <Card>
           <CardHeader>

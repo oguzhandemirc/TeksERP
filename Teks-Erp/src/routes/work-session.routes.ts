@@ -12,7 +12,7 @@ import { Router } from "express";
 import { WorkSessionController } from "../controllers/work-session.controller";
 import { MOBILE_SESSION_PERMS } from "../services/work-session.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const router = Router();
 
@@ -77,7 +77,12 @@ router.get("/places", verifyToken, requireAnyPermission(...MOBILE_SESSION_PERMS)
  *     security: [{ bearerAuth: [] }]
  *     responses: { 200: { description: Aktif oturum listesi } }
  */
-router.get("/active", verifyToken, requirePermission("admin:settings"), WorkSessionController.listActive);
+router.get(
+  "/active",
+  verifyToken,
+  requireAnyPermission("admin:settings", "system:work-sessions"),
+  WorkSessionController.listActive,
+);
 
 /**
  * @openapi
@@ -92,7 +97,7 @@ router.get("/active", verifyToken, requirePermission("admin:settings"), WorkSess
 router.get(
   "/",
   verifyToken,
-  requireAnyPermission("admin:settings", "admin:users"),
+  requireAnyPermission("admin:settings", "admin:users", "system:work-sessions"),
   WorkSessionController.history,
 );
 
@@ -116,7 +121,7 @@ router.get(
 router.get(
   "/:id/activity",
   verifyToken,
-  requireAnyPermission("admin:settings", "admin:users"),
+  requireAnyPermission("admin:settings", "admin:users", "system:work-sessions"),
   WorkSessionController.activity,
 );
 
@@ -134,7 +139,7 @@ router.get(
 router.post(
   "/:id/force-close",
   verifyToken,
-  requirePermission("admin:settings"),
+  requireAnyPermission("admin:settings", "system:work-sessions"),
   WorkSessionController.forceClose,
 );
 

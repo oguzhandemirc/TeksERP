@@ -12316,3 +12316,20 @@ Düzeltme ürün kodunu değil TARAYICIYI güçlendirdi:
   - dokuz kalıcı sentetik sonda
   - gerçek ağaçta iki negatif sonda
 - Muaf: `test_superadmin` (modül anahtarına mevcut değeri yazar, durum değişmez).
+
+## 2026-09-24 — Ayarlar EKRAN BAŞINA izne bölündü; Genel Ayarlar üç ekrana ayrıldı; dört süperadmin ekranı [ÇEKİRDEK]
+
+**İstek (kullanıcı).** "Sistem ayarlarında her şeyi bir yetki yapmayalım, her bir ekranı ayrı bir yetki yapalım. Bazı şeyler sadece süperadmine özel olmalı; fabrikadan bazı personellere ayarlarda yetkiler vermek istiyorum ama her personelde farklı yetkiler olabilir." Ardından: "Genel Ayarlar'da Bu Bilgisayar, Baskı & Cihazlar, Sistem hepsi tek yerde — ayrı ekran yap, ayrı yetkiyle açılsın." Profil menüsündeki "Ayarlar" sayfasının adı "Kullanıcı Tercihleri" oldu; sürüm notları penceresi ayrı bir sayfaya taşındı.
+
+**Karar.**
+- [ÇEKİRDEK] `admin:settings` ŞEMSİYE olarak kalır ve her ayar ekranını/anahtarını açmaya devam eder — bugünkü yöneticiler hiçbir şey kaybetmez (varsayılan = bugünkü davranış).
+- [ÇEKİRDEK] Her ayar kategorisi kendi dar iznini taşır (`settings:<kategori>` — 15 kod) ve her Sistem karosu kendi iznini (`system:activity` · `work-sessions` · `server-status` · `clients` · `backups`). Top Arşivi `roll:read` ile açılır (veri kaynağı zaten o).
+- [ÇEKİRDEK] Anahtar ↔ izin tablosu TEK KAYNAK: backend `constants/settings-scopes.ts`. `PATCH /api/feature-flags`in üçüncü dalı artık anahtar-kapsamlıdır (`requirePermissionForEachKey`): gövdedeki HER anahtar kendi yazıcı kümesinden birini ister (anahtar içinde OR, anahtarlar arasında AND); tabloda olmayan anahtar yalnız `admin:settings` (fail-closed). Aynı tablo `PUT /api/admin/settings/:key` ham anahtarlarını da kapsar.
+- [ÇEKİRDEK] Süperadmin EKRANLARI (kimlik, izin değil): Modüller (zaten) + Veritabanı Geri Yükleme + Endpoint Performansı + Aktivite Arşivi (arşive taşıma). Backend `requireSystemAccountWhenPresent` — sistem hesabı VARSA yalnız o; hiç doğmamışsa SUPAP (zincirdeki izin kapıları karar verir, modül anahtarı kilidiyle aynı gerekçe). Sistem Kayıtları ve Arşiv Tarama `system:activity` ile açılır (aynı veri kaynağı).
+- [PROFİL] Yeni kodlar yalnız `WEB_SYSTEM_ADMIN` rol şablonuna girdi; alan rollerine (Muhasebe, Sevkiyat…) dağıtılmadı — atama panelden yapılır.
+- Genel Ayarlar kalktı: Baskı & Cihazlar (`/system/printing`) · Bu Bilgisayar (`/system/workstation`) · Şirket & Güvenlik (`/system/company`). Eski `/system/settings?tab=` yalnız yönlendirir (`LegacySettingsRedirect`).
+- Sistem hub'ı ve kenar çubuğundaki "Sistem" artık `SYSTEM_HUB_ACCESS` ile açılır (karolarından birini açabilen herkes; `roll:read` bilerek yok). Önceki hâlde `data:import`/`master-data:merge` taşıyan ama `admin:settings` taşımayan kullanıcı hub'a hiç giremiyordu.
+
+**Yedekler notu.** `system:backups` yedek almayı, zamanlamayı ve dış kopya durumunu açar; yedek LİSTESİ/İNDİRME ve dış kopya hedefini değiştirme yine `admin:users` da ister (dump tüm kullanıcıların düz PIN'ini taşır — `test_offsite_sweep` gerekçesi değişmedi).
+
+**Bekçiler.** `test_settings_scopes` (22; tablo · anahtar-kapsamlı kapı · ham ayar · karo uçları · süperadmin ekranları; iki negatif sonda) · Electron `settings-scope-mirror.test.ts` (kategori satırları ↔ backend tablosu, iki yön; iki sonda) · `settings-surface.test.ts` §6 (kategori `admin:settings` + tek dar izin; ekran kapısı = sekmelerin birleşimi; route/karo aynı küme; hub kapsar) · `legacy-settings.test.ts`.

@@ -197,6 +197,30 @@ export const PERMISSION_CATALOG = [
   // taşıyan kişi "Yönetim" menüsünü ve Sistem hub'ını GÖRMEZ).
   { code: "settings:workstation", module: "ADMIN", category: "web", description: "Bu bilgisayarın yerel ayarları (etiket yazıcısı / kantar / tabanca / sunucu adresi) — sistem geneli ayarlar HARİÇ" },
   { code: "settings:numbering", module: "ADMIN", category: "web", description: "Numara serisi biçimi (ön ek · tarih segmenti · hane · ayraç) — ayar şifresi ayrıca sorulur" },
+  // 2026-09-24: EKRAN BAŞINA AYAR İZİNLERİ — `admin:settings` şemsiye olarak
+  // her ekranı açmaya devam eder; bu kodlar tek bir ekranı (ve yalnız o ekranın
+  // ayar anahtarlarını) açar. Anahtar ↔ izin tablosu `constants/settings-scopes.ts`.
+  { code: "settings:customers", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Müşteriler (şube, benzer ad eşiği)" },
+  { code: "settings:orders", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Siparişler (fiyat, termin, tamamlanma toleransı)" },
+  { code: "settings:shipping", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Sevkiyat & İade" },
+  { code: "settings:work-orders", module: "ADMIN", category: "web", description: "Özellik Anahtarları → İş Emirleri (parti no, plan süresi)" },
+  { code: "settings:production", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Üretim — Saha (KK1, fason, kurşun, tambur)" },
+  { code: "settings:kartela", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Kartela" },
+  { code: "settings:devere", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Devere / Levent" },
+  { code: "settings:dokuma", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Dokuma" },
+  { code: "settings:warehouse", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Mal Kabul & Alış" },
+  { code: "settings:yarn", module: "ADMIN", category: "web", description: "Özellik Anahtarları → İplik" },
+  { code: "settings:finance", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Muhasebe (KDV, fatura toleransı, kasa/risk kuralları)" },
+  { code: "settings:label", module: "ADMIN", category: "web", description: "Baskı & Cihazlar → Etiket Baskısı (kopya, ortam, gönderim)" },
+  { code: "settings:devices", module: "ADMIN", category: "web", description: "Baskı & Cihazlar → Cihazlar (tablet eşleştirme zorunluluğu)" },
+  { code: "settings:company", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → Şirket Bilgileri (ad, antet, logo)" },
+  { code: "settings:session", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → Oturum & Güvenlik (oturum süreleri, giriş yöntemleri, PIN kilidi) — güvenliği gevşetebilir" },
+  // Sistem ekranları — her karo kendi izniyle açılır.
+  { code: "system:activity", module: "ADMIN", category: "web", description: "Sistem → Aktivite Günlüğü · Sistem Kayıtları · Arşiv Tarama (okuma)" },
+  { code: "system:work-sessions", module: "ADMIN", category: "web", description: "Sistem → Çalışma Oturumları (canlı görünüm, geçmiş, zorla kapatma)" },
+  { code: "system:server-status", module: "ADMIN", category: "web", description: "Sistem → Sunucu Durumu" },
+  { code: "system:clients", module: "ADMIN", category: "web", description: "Sistem → Bağlı İstemciler" },
+  { code: "system:backups", module: "ADMIN", category: "web", description: "Sistem → Yedekler (yedek al, zamanlama, dış kopya durumu) — yedek listesi/indirme ayrıca admin:users ister" },
   // 2026-08-05: Tanımlar → Çıktılar altındaki belge/kart TASARIM ekranları
   // (Belge Şablonları, Refakat Kartı, Refakat Kartı Şablonları, Serbest
   // Belgeler). `admin:settings`ten AYRI olması ürün kararıdır — `settings:

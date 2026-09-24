@@ -131,6 +131,10 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // katalogla karşılaştırır ve registry boşalırsa körlük zemini düşer.
   // Bu yüzden burada delegasyon beyan ediyoruz — muafiyet DEĞİL, devir.
   "src/routes/import.routes.ts": [`${DELEGE}scripts/test_import_framework.ts`],
+  // Ekran başına ayar izinleri `constants/settings-scopes.ts` tablosundan
+  // gelir (`...RAW_SETTING_SCOPE_PERMISSIONS`, anahtar → izin). Tablodaki her
+  // kodun katalogda olduğunu `test_settings_scopes.ts` §1b MEKANİK doğrular.
+  "src/routes/admin.routes.ts": [`${DELEGE}scripts/test_settings_scopes.ts`],
   // GERİ SARMA (2026-09-12): `assertEntityPermission` ikinci kapıyı yine
   // `adapter.writePermission`den çözüyor — varlık KOŞUMUN KENDİSİNDEN
   // (`ImportRun.entity`) bulunuyor, `:entity` parametresinden değil. Desen ve

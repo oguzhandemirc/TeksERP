@@ -506,6 +506,28 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Numara serisi biçimi: nadir, ayar şifresi kapılı ve geri alınamaz
       // nitelikte bir SİSTEM ayarı — sysadmin tanımının içinde.
       "settings:numbering",
+      // Ekran başına ayar/sistem izinleri — `admin:settings` bunları zaten
+      // kapsar; rolde durmaları, şablondan tek tek çıkarılabilmeleri içindir.
+      "settings:customers",
+      "settings:orders",
+      "settings:shipping",
+      "settings:work-orders",
+      "settings:production",
+      "settings:kartela",
+      "settings:devere",
+      "settings:dokuma",
+      "settings:warehouse",
+      "settings:yarn",
+      "settings:finance",
+      "settings:label",
+      "settings:devices",
+      "settings:company",
+      "settings:session",
+      "system:activity",
+      "system:work-sessions",
+      "system:server-status",
+      "system:clients",
+      "system:backups",
       "report:audit",
       // Toplu içe aktarım: kurulum/veri taşıma işini yapan kişi sistem
       // yöneticisidir. Tek başına yetmez — aktarılacak varlığın write izni de

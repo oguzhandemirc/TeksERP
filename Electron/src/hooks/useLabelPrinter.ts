@@ -36,7 +36,7 @@ export function useLabelPrinter() {
       return {
         ok: false,
         error: native.language === "RASTER_HTML" || !native.language
-          ? "Bu bilgisayara Cihaz Kaydı yazıcısı seçilmemiş — Genel Ayarlar → Bu Bilgisayar → Yazıcı'dan seçin."
+          ? "Bu bilgisayara Cihaz Kaydı yazıcısı seçilmemiş — Sistem → Bu Bilgisayar → Yazıcı'dan seçin."
           : `Desteklenmeyen yazıcı dili: ${native.language}`,
       };
     }

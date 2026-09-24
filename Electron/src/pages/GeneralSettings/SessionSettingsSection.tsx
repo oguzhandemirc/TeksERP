@@ -25,6 +25,7 @@ import {
   MAX_PIN_LOCKOUT_LONG_PENALTY_MIN,
   useSessionSettingsForm,
 } from "./useSessionSettingsForm";
+import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
 
 /**
  * Oturum & Güvenlik paneli — TEKDÜZE dakika modeli (durum/mantık
@@ -41,7 +42,11 @@ import {
 const POLICY_DESC =
   "Aynı kullanıcı aynı tip cihazda (ör. iki bilgisayar ya da iki telefon) ikinci kez giriş yaptığında ne olacağı. Farklı tipler (1 bilgisayar + 1 telefon) her zaman serbesttir. Değişiklik sonraki girişlerde geçerli olur.";
 
-export function SessionSettingsSection() {
+export function SessionSettingsSection({
+  writePermissions = [SETTINGS_ADMIN_PERMISSION],
+}: {
+  writePermissions?: string[];
+}) {
   const s = useSessionSettingsForm();
   useRegisterSettingsDirty(s.dirty);
   // Açıklamalar her yerde (i) info balonunda gösterilir.
@@ -50,7 +55,7 @@ export function SessionSettingsSection() {
 
   return (
     <PermissionGate
-      permission="admin:settings"
+      anyOf={writePermissions}
       fallback={
         <SessionSettingsReadOnly
           sessionMinutes={s.current.sessionMin}

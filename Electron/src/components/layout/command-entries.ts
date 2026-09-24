@@ -42,6 +42,7 @@ export const commandSections: CommandSection[] = [
       icon: item.icon,
       to: item.to,
       permission: item.permission,
+      permissionAny: item.permissionAny,
       adminOnly: item.adminOnly,
       // ⚠️ MODÜL BAYRAĞI DA TAŞINIR (2026-09-03). Eskiden yalnız izin/adminOnly
       // kopyalanıyordu: menüde bayrakla gizlenen satır PALETTE DURUYORDU. Bugün

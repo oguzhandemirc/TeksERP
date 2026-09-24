@@ -180,7 +180,7 @@ export function ModuleProfilePage() {
     if (!loginMethods.includes("pin")) {
       out.push(
         "Giriş yöntemlerinde PIN kapalı — saha personeli tablete hızlı PIN ile giremez " +
-          "(Genel Ayarlar → Oturum & Güvenlik).",
+          "(Sistem → Şirket & Güvenlik → Oturum & Güvenlik).",
       );
     }
     return out;
