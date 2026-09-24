@@ -6,6 +6,7 @@ import { DashboardPage } from "@/pages/Dashboard/DashboardPage";
 import { BossPage } from "@/pages/Boss/BossPage";
 import { BOSS_PATH } from "@/lib/boss-path";
 import { SettingsPage } from "@/pages/Settings/SettingsPage";
+import { ReleaseNotesPage } from "@/pages/ReleaseNotes/ReleaseNotesPage";
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
 import { WarpSpecsPage } from "@/pages/WarpSpecs/WarpSpecsPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
@@ -158,6 +159,8 @@ import { ReturnsPage } from "@/pages/Operations/Returns/ReturnsPage";
 export const contentRoutes: RouteObject[] = [
   { index: true, element: <DashboardPage /> },
   { path: "settings", element: <SettingsPage /> },
+  // Kapısız: sürüm notlarını operatör de okur (`system/*` altı `admin:settings` ister).
+  { path: "release-notes", element: <ReleaseNotesPage /> },
   // PATRON ÖZETİ — `BossShell`in açılış sayfası, ama içerik rotası olarak
   // burada yaşıyor ki detaya iniş (Envanter/Karşılanma/Kanban) AYNI router'da
   // kalsın ve geri oku çalışsın.

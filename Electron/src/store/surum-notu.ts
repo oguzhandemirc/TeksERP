@@ -1,28 +1,18 @@
 import { create } from "zustand";
 
 /**
- * Sürüm notları penceresinin açılış durumu.
- *
- * Neden store: aynı pencereyi ÜÇ ayrı yer açıyor — açılıştaki otomatik tetik
- * (AppShell), Ayarlar sayfasındaki kart ve sidebar'daki sürüm yazısı. Üçü de
- * aynı bileşene basmalı ki pencere tek bir yerde yaşasın.
+ * "Bu güncellemede neler değişti" penceresinin açılış durumu. Açılıştaki
+ * otomatik tetik (`useSurumNotuAcilis`) açar, pencere (`SurumNotlariDialog`)
+ * kapatır. Geçmişin tamamı pencerede değil Sürüm Notları SAYFASINDA okunur.
  */
-export type SurumNotuKip =
-  /** Açılışta otomatik: yalnız bu makinede HENÜZ GÖRÜLMEMİŞ yayınlar. */
-  | "yeni"
-  /** Ayarlar'dan elle: bu ürünü ilgilendiren TÜM geçmiş. */
-  | "tumu";
-
 interface SurumNotuStore {
   acik: boolean;
-  kip: SurumNotuKip;
-  ac: (kip: SurumNotuKip) => void;
+  ac: () => void;
   kapat: () => void;
 }
 
 export const useSurumNotuStore = create<SurumNotuStore>((set) => ({
   acik: false,
-  kip: "tumu",
-  ac: (kip) => set({ acik: true, kip }),
+  ac: () => set({ acik: true }),
   kapat: () => set({ acik: false }),
 }));

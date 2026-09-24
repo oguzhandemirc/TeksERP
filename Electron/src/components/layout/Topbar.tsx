@@ -111,7 +111,7 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => navigateActive("/settings")}>
-              <Settings className="mr-2 h-4 w-4" /> Ayarlar
+              <Settings className="mr-2 h-4 w-4" /> Kullanıcı Tercihleri
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

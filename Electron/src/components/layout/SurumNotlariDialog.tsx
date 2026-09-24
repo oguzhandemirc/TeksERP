@@ -13,13 +13,14 @@ import {
   SURUM_NOTLARI,
   damgalanacakId,
   gosterilecekYayinlar,
-  tumYayinlar,
   type NotKapsam,
   type NotTip,
   type SurumNotuYayini,
 } from "@/lib/surum-notlari";
 import { SON_GORULEN_ANAHTAR, sonGorulenOku, sonGorulenYaz } from "@/lib/surum-notu-isaret";
 import { useSurumNotuStore } from "@/store/surum-notu";
+import { useTabsStore } from "@/store/tabs";
+import { RELEASE_NOTES_PATH } from "@/pages/ReleaseNotes/release-notes-path";
 
 const dateFmt = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 
@@ -86,19 +87,16 @@ function YayinKarti({ yayin }: { yayin: SurumNotuYayini }) {
 }
 
 /**
- * "Neler değişti" penceresi — iki kiple çalışır (bkz. `useSurumNotuStore`).
- *
- * ⚠️ Bu bir ROUTE değil, dialog. Sebep: `system/*` route'larının hepsi
- * `admin:settings` istiyor ve `tile-route-permission.test.ts` karo↔route izin
- * hizasını mekanik kilitliyor. Herkese açık bir `system/*` sayfası o kuralı
- * delerdi; dialog izin yüzeyine hiç dokunmadan aynı işi görüyor
- * (`ShortcutsDialog` ile aynı desen).
+ * "Bu güncellemede neler değişti" penceresi — yeni sürüm kurulunca bir kez,
+ * yalnız bu makinede HENÜZ GÖRÜLMEMİŞ yayınlarla açılır. Geçmişin tamamı
+ * Sürüm Notları sayfasındadır (`RELEASE_NOTES_PATH`).
  *
  * ⚠️ `z-[90]`: güncelleme kapısı (`UpdateGate`) `z-[100]` kullanıyor ve
  * AppShell onu açıkken bu pencereyi zaten render etmiyor — bu sınıf ikinci hat.
  */
 export function SurumNotlariDialog({ kuruluSurum }: { kuruluSurum: string | null }) {
-  const { acik, kip, kapat } = useSurumNotuStore();
+  const { acik, kapat } = useSurumNotuStore();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const [gosterilen, setGosterilen] = useState<{ liste: SurumNotuYayini[]; gizlenen: number }>({
     liste: [],
     gizlenen: 0,
@@ -106,21 +104,20 @@ export function SurumNotlariDialog({ kuruluSurum }: { kuruluSurum: string | null
 
   useEffect(() => {
     if (!acik) return;
-    if (kip === "tumu") {
-      setGosterilen({ liste: tumYayinlar("panel"), gizlenen: 0 });
-      return;
-    }
     setGosterilen(gosterilecekYayinlar(SURUM_NOTLARI, sonGorulenOku(), kuruluSurum, "panel"));
-  }, [acik, kip, kuruluSurum]);
+  }, [acik, kuruluSurum]);
 
   // Damga KAPANIŞTA yazılır, açılışta değil: açıkken çöken uygulama notu
   // tekrar göstersin (sessizce yutulmasındansa iki kez görünmesi iyidir).
   const kapatVeDamgala = () => {
-    if (kip === "yeni") {
-      const id = damgalanacakId(SURUM_NOTLARI, kuruluSurum, "panel");
-      if (id) sonGorulenYaz(id);
-    }
+    const id = damgalanacakId(SURUM_NOTLARI, kuruluSurum, "panel");
+    if (id) sonGorulenYaz(id);
     kapat();
+  };
+
+  const openAllNotes = () => {
+    kapatVeDamgala();
+    navigateActive(RELEASE_NOTES_PATH);
   };
 
   const bos = gosterilen.liste.length === 0;
@@ -129,14 +126,8 @@ export function SurumNotlariDialog({ kuruluSurum }: { kuruluSurum: string | null
     <Dialog open={acik} onOpenChange={(o) => !o && kapatVeDamgala()}>
       <DialogContent className="z-[90] flex h-[85vh] max-h-[85vh] max-w-2xl flex-col gap-3">
         <DialogHeader className="shrink-0">
-          <DialogTitle>
-            {kip === "yeni" ? "Bu güncellemede neler değişti" : "Sürüm notları"}
-          </DialogTitle>
-          <DialogDescription>
-            {kip === "yeni"
-              ? "Programın yeni sürümü kuruldu. Değişenler aşağıda."
-              : `Kurulu sürüm ${kuruluSurum ?? "—"}. Geçmiş güncellemelerin tamamı.`}
-          </DialogDescription>
+          <DialogTitle>Bu güncellemede neler değişti</DialogTitle>
+          <DialogDescription>Programın yeni sürümü kuruldu. Değişenler aşağıda.</DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
@@ -149,12 +140,15 @@ export function SurumNotlariDialog({ kuruluSurum }: { kuruluSurum: string | null
           )}
           {gosterilen.gizlenen > 0 && (
             <p className="pb-1 text-center text-xs text-muted-foreground">
-              …ve {gosterilen.gizlenen} eski not daha — Ayarlar → Sürüm Notları
+              …ve {gosterilen.gizlenen} eski not daha — Sürüm Notları sayfasında
             </p>
           )}
         </div>
 
-        <div className="flex shrink-0 justify-end">
+        <div className="flex shrink-0 justify-between gap-2">
+          <Button variant="outline" onClick={openAllNotes}>
+            Tüm sürüm notları
+          </Button>
           <Button onClick={kapatVeDamgala}>Tamam</Button>
         </div>
       </DialogContent>

@@ -45,14 +45,29 @@ describe("sistem karoları ↔ route izinleri", () => {
     expect(routePermission("/system/data-import")).toBe("data:import");
   });
 
-  it.each(systemTiles.map((t) => [t.key, t] as const))(
+  const guarded = systemTiles.filter((t) => !t.public);
+  const publicTiles = systemTiles.filter((t) => t.public);
+
+  it.each(guarded.map((t) => [t.key, t] as const))(
     "%s karosunun route'u var",
     (_key, tile) => {
       expect(routePermission(tile.to), `${tile.to} content-routes.tsx'te YOK`).not.toBeNull();
     },
   );
 
-  it.each(systemTiles.map((t) => [t.key, t] as const))(
+  // Kapısız karo: route VAR ama hiçbir izin istemiyor. Route bir gün kapı
+  // alırsa karo herkese görünüp tıklayanı /forbidden'a düşürürdü.
+  it.each(publicTiles.map((t) => [t.key, t] as const))(
+    "%s kapısız karosunun route'u var ve izin istemiyor",
+    (_key, tile) => {
+      const rel = tile.to.replace(/^\//, "");
+      expect(ROUTES_SRC.includes(`path: "${rel}"`), `${tile.to} content-routes.tsx'te YOK`).toBe(true);
+      expect(routePermission(tile.to)).toBeNull();
+      expect(tile.permission ?? tile.permissionAny ?? tile.superadminOnly ?? tile.adminOnly).toBeUndefined();
+    },
+  );
+
+  it.each(guarded.map((t) => [t.key, t] as const))(
     "%s karosu route ile AYNI izni istiyor",
     (_key, tile) => {
       const routePerm = routePermission(tile.to);

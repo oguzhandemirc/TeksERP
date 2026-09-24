@@ -1,4 +1,4 @@
-import { Settings as SettingsIcon, FilePlus2 } from "lucide-react";
+import { Settings as SettingsIcon, FilePlus2, ScrollText } from "lucide-react";
 import { navGroups } from "./nav-config";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
@@ -134,7 +134,7 @@ export const commandSections: CommandSection[] = [
   },
   {
     heading: "Sistem",
-    entries: systemTiles.map((tile) => ({
+    entries: systemTiles.filter((tile) => !tile.public).map((tile) => ({
       key: `sys:${tile.key}`,
       label: tile.title,
       description: tile.description,
@@ -184,11 +184,19 @@ export const commandSections: CommandSection[] = [
     entries: [
       {
         key: "personal:settings",
-        label: "Ayarlar",
+        label: "Kullanıcı Tercihleri",
         description: "Tema, vurgu rengi, yoğunluk, favoriler ve kayıtlı görünümler",
         icon: SettingsIcon,
         to: "/settings",
         keywords: "ayar tercih tema koyu açık renk yoğunluk favori kayıtlı görünüm sıfırla kişisel profil",
+      },
+      {
+        key: "personal:release-notes",
+        label: "Sürüm Notları",
+        description: "Geçmiş güncellemelerde neler değişti — sürüm sürüm",
+        icon: ScrollText,
+        to: "/release-notes",
+        keywords: "sürüm notu güncelleme yenilik değişiklik changelog versiyon",
       },
     ],
   },

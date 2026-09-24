@@ -41,7 +41,7 @@ export function useSurumNotuAcilis(): { kuruluSurum: string | null } {
     const isaret = sonGorulenOku();
     const { liste } = gosterilecekYayinlar(SURUM_NOTLARI, isaret, kuruluSurum, "panel");
     if (liste.length > 0) {
-      ac("yeni");
+      ac();
       return;
     }
     // Gösterilecek bir şey yoksa işareti sessizce güncelle: ilk kurulumda not

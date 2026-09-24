@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import logoUrl from "@/assets/teks-logo-fullsize.png";
 import { useCompanyName } from "@/hooks/usePricingEnabled";
 import { useUpdater } from "@/hooks/useUpdater";
 import { guncellemeRozeti } from "@/lib/updater-durum";
-import { useSurumNotuStore } from "@/store/surum-notu";
+import { RELEASE_NOTES_PATH } from "@/pages/ReleaseNotes/release-notes-path";
+import { useAppVersion } from "@/hooks/useAppVersion";
+import { useTabsStore } from "@/store/tabs";
 import { useServerClock } from "@/hooks/useServerClock";
 
 // Sunucu saatini yerel TZ'de biçimlendiren sabit formatlayıcılar (tek-site'de
@@ -62,19 +63,6 @@ function SidebarServerStatus() {
 const PRODUCT_NAME = "TeksERP";
 
 /** Uygulama sürümünü main process'ten okur (window.api.appInfo.version). */
-function useAppVersion(): string | null {
-  const [version, setVersion] = useState<string | null>(null);
-  useEffect(() => {
-    let active = true;
-    const p = window.api?.appInfo?.version?.();
-    if (p) void p.then((v) => active && setVersion(v)).catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
-  return version;
-}
-
 /** Marka başlığı — gradient accent bandı + logo; genişken firma adı (dinamik) + canlı "Sistem aktif" nabzı. */
 export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
   const companyName = useCompanyName();
@@ -112,7 +100,7 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
 export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
   const version = useAppVersion();
   const { status } = useUpdater();
-  const acSurumNotu = useSurumNotuStore((s) => s.ac);
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   // ⚠️ Eşleme tek kaynaktan (`@/lib/updater-durum`) — eskiden bu dosyada ve
   // `SurumRozeti`de BİREBİR kopyalanmıştı; kopyalar ayrışsa aynı makine aynı
   // anda iki farklı şey derdi.
@@ -144,7 +132,7 @@ export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
           doğal yol. */}
       <button
         type="button"
-        onClick={() => acSurumNotu("tumu")}
+        onClick={() => navigateActive(RELEASE_NOTES_PATH)}
         title="Sürüm notları — bu sürümde neler değişti"
         className="block w-full truncate text-left text-[10px] font-semibold leading-tight text-muted-foreground transition-colors hover:text-foreground"
       >

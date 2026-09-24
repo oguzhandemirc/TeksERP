@@ -1,4 +1,4 @@
-import { Activity, Archive, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
+import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
 
 export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
 
@@ -10,6 +10,12 @@ export interface SystemTile {
   to: string;
   group: SystemTileGroup;
   adminOnly?: boolean;
+  /**
+   * Kapısız karo — hub'ı açabilen herkes görür, route da `ProtectedRoute`
+   * taşımaz (`tile-route-permission.test` bunu ölçer). Palete ayrıca konmaz:
+   * kapısız hedefin palet girişi kendi bölümünde yaşar.
+   */
+  public?: boolean;
   /**
    * Karo/palet görünürlüğü için gereken izin — route guard'ıyla AYNI kod olmalı.
    * Ayrışırsa kullanıcı kartı görür, tıklar, /forbidden'a düşer ("Kurşun Sırası"
@@ -257,6 +263,15 @@ export const systemTiles: SystemTile[] = [
     to: "/system/update",
     group: "config",
     permissionAny: ["admin:settings", "settings:workstation"],
+  },
+  {
+    key: "release-notes",
+    title: "Sürüm Notları",
+    description: "Geçmiş güncellemelerde neler değişti — sürüm sürüm, aranabilir",
+    icon: ScrollText,
+    to: "/release-notes",
+    group: "config",
+    public: true,
   },
   {
     key: "settings",

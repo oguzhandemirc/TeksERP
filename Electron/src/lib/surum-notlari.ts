@@ -132,3 +132,10 @@ export function damgalanacakId(
 export function tumYayinlar(kapsam: "panel" | "tablet"): SurumNotuYayini[] {
   return SURUM_NOTLARI.map((y) => kapsamaGoreSuz(y, kapsam)).filter((y) => y.maddeler.length > 0);
 }
+
+/** İngilizce adlar — yeni kod bu takma adları kullanır (tanımlayıcı dili kuralı). */
+export type ReleaseEntry = SurumNotuYayini;
+export type ReleaseItem = SurumNotuMaddesi;
+export type ReleaseItemType = NotTip;
+export type ReleaseItemScope = NotKapsam;
+export const RELEASE_ENTRIES: ReleaseEntry[] = SURUM_NOTLARI;

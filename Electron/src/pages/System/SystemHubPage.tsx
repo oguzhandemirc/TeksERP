@@ -27,6 +27,7 @@ export function SystemHubPage() {
   // sahip kullanıcıya görünür, yoksa varsayılan `admin:settings` kapısı geçerli
   // (Sistem hub'ı zaten onun arkasında). Ayrışırsa kart görünür ama sayfa açılmaz.
   const visibleTiles = systemTiles.filter((t) => {
+    if (t.public) return true;
     if (t.superadminOnly && !superadminGateOpen) return false;
     if (t.adminOnly && !isAdmin) return false;
     if (t.permissionAny) return hasAnyPermission(t.permissionAny);

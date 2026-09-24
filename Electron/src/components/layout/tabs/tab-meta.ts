@@ -27,7 +27,8 @@ export interface TabMeta {
 // command-entries kataloğunda olmayan hub / sistem sayfaları için sabit eşleme.
 const STATIC: Record<string, TabMeta> = {
   "/": { title: "Anasayfa", icon: LayoutDashboard },
-  "/settings": { title: "Ayarlar", icon: Settings },
+  "/settings": { title: "Kullanıcı Tercihleri", icon: Settings },
+  "/release-notes": { title: "Sürüm Notları", icon: FileText },
   "/forbidden": { title: "Yetki yok", icon: ShieldAlert },
   "/definitions": { title: "Tanımlar", icon: Library },
   "/operations": { title: "Operasyon", icon: ClipboardList },

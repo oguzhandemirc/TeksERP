@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Monitor, RotateCcw, Trash2 } from "lucide-react";
+import { Monitor, RotateCcw, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,8 +16,6 @@ import {
   workstationEntryPath,
 } from "@/pages/GeneralSettings/settings-config";
 import { usePreferences } from "@/providers/PreferencesProvider";
-import { SURUM_NOTLARI } from "@/lib/surum-notlari";
-import { useSurumNotuStore } from "@/store/surum-notu";
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -25,7 +23,6 @@ export function SettingsPage() {
   const { prefs, setPreference, resetPreferences } = usePreferences();
   const { hasAnyPermission } = useRoleAccess();
   const [resetOpen, setResetOpen] = useState(false);
-  const acSurumNotu = useSurumNotuStore((st) => st.ac);
 
   // "Bu Bilgisayar" (yerel donanım) ayarları Genel Ayarlar sayfasında yaşar ama
   // oraya götüren tek yol Sistem hub'ıydı ve o hub `admin:settings` ister →
@@ -41,7 +38,7 @@ export function SettingsPage() {
 
   return (
     <PageShell>
-      <PageHeader title="Ayarlar" />
+      <PageHeader title="Kullanıcı Tercihleri" />
 
       <PageBody className="grid gap-6 p-6 lg:grid-cols-2">
         <Card className="border-t-2 border-t-primary/50">
@@ -51,32 +48,6 @@ export function SettingsPage() {
           </CardHeader>
           <CardContent>
             <AppearanceControls />
-          </CardContent>
-        </Card>
-
-        {/* SÜRÜM NOTLARI — herkese açık, izin yok. Bu sayfanın route'u guard'sız
-            olduğu için sürüm notlarının doğal kapısı burası; `system/*` altına
-            konsaydı `admin:settings` arkasında kalır, yani operatör kendi
-            programında ne değiştiğini okuyamazdı. Pencerenin kendisi bir dialog
-            (route DEĞİL) — bkz. SurumNotlariDialog başlığı. */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Sürüm Notları</CardTitle>
-            <CardDescription>
-              Güncellemelerde neyin değiştiği. Yeni sürüm kurulduğunda bu liste bir kez
-              kendiliğinden açılır.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center justify-between gap-4">
-            <p className="text-xs text-muted-foreground">
-              {SURUM_NOTLARI.length > 0
-                ? `Kayıtlı ${SURUM_NOTLARI.length} güncelleme notu`
-                : "Henüz not yok"}
-            </p>
-            <Button variant="outline" className="gap-1.5" onClick={() => acSurumNotu("tumu")}>
-              <FileText className="h-4 w-4" />
-              Tümünü gör
-            </Button>
           </CardContent>
         </Card>
 
