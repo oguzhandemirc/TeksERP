@@ -17,61 +17,51 @@
   ],
   "yayinlar": [
     {
-      "id": "2026-09-13",
-      "baslik": "Yanlış işlemler geri alınabiliyor (kartela, sayım, çek, toplu aktarım, fason kabulü); depo defteri kesimi, fasonu, transferi ve kartelayı görüyor; sipariş kalemine birim geldi; sevk irsaliyesi tek pencerede",
+      "id": "2026-09-25",
+      "baslik": "Numaralandırma ayardan yönetiliyor; sevk partisi; sevk yönü cariden geliyor; cari kartı rollerle; dokuma ve devere modülleri; yanlış işlemler geri alınabiliyor, depo defteri tamamlandı",
       "surumler": {
         "panel": "1.3.2",
-        "tablet": "1.0.7"
+        "tablet": "1.0.8"
       },
       "maddeler": [
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Numara biçimini değiştirirken barkodun etiketE SIĞIP SIĞMADIĞI artık kontrol ediliyor. Top ve çuval barkodu uzadığında (ön ek büyüdü, hane arttı) basılan barkod etiketin dışına taşabiliyordu; taşan barkod hata vermez, yalnız okunmaz ve bu sahada ancak okutma sırasında fark edilirdi. Artık kaydetmeden önce her etkin etiket şablonu ölçülüyor: sığmayan varsa kaydetme DURUR ve hangi şablonların taştığı adıyla ve kaç mm taştığıyla birlikte yazılır. Numaralandırma ekranındaki önizleme de aynı ölçümü yapıyor, yani sorunu yazarken görüyorsunuz. Bir şablonun tasarımı okunamazsa ölçüm yapılamadığı SÖYLENİR — sessizce “sığıyor” denmez.",
+          "metin": "Numara biçimini değiştirirken barkodun etikete SIĞIP SIĞMADIĞI kontrol ediliyor. Top ve çuval barkodu uzarsa (ön ek büyür, hane artar) basılan barkod etiketin dışına taşabilir; taşan barkod hata vermez, yalnız okunmaz ve sahada ancak okutma sırasında fark edilir. Bu yüzden kaydetmeden önce her etkin etiket şablonu ölçülüyor: sığmayan varsa kaydetme DURUR ve hangi şablonların taştığı adıyla ve kaç mm taştığıyla birlikte yazılır. Numaralandırma ekranındaki önizleme de aynı ölçümü yapıyor, yani sorunu yazarken görüyorsunuz. Bir şablonun tasarımı okunamazsa ölçüm yapılamadığı SÖYLENİR — sessizce “sığıyor” denmez.",
           "dene": "Ayarlar → Numaralandırma → “Top barkodu”nda hane sayısını çok artırın: sığmayan etiket şablonları varsa kaydetme durur ve şablon adlarını listeler."
         },
         {
           "kapsam": "her-ikisi",
-          "tip": "duzeltme",
-          "metin": "Barkod biçimi değiştirildikten sonra ESKİ etiketler de okutulmaya devam ediyor. Önceden: bir serinin ön eki, tarih bölümü ya da hane sayısı değiştirilince panel ve tablet eski barkodu TANIYOR ama “aç/okut” adımında sessizce hiçbir şey yapmıyordu — operatör okutuyor, ekran kımıldamıyordu, hata da çıkmıyordu. Artık her iki cihaz da serinin emekli biçimlerini kendi hane ve tarih düzenleriyle deniyor, yani dünkü etiket de bugünkü etiket de açılıyor. Biçimi hiç değişmemiş serilerde davranış aynı.",
+          "tip": "yeni",
+          "metin": "Barkod biçimi değiştirildikten sonra ESKİ etiketler de okutulmaya devam eder: panel ve tablet, serinin emekli biçimlerini de kendi hane ve tarih düzenleriyle dener, yani dünkü etiket de bugünkü etiket de açılır. Biçimi hiç değişmemiş serilerde davranış aynı.",
           "dene": "Ayarlar → Numaralandırma'da bir serinin hane sayısını değiştirin, sonra o seriden ESKİ biçimle basılmış bir etiketi okutun: kayıt açılmalı."
         },
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Top barkodu artık Genel Ayarlar → Numaralandırma ekranından ayarlanıyor: ön ek, tarih bölümü, hane sayısı ve ayraçlar değiştirilebiliyor. HİÇBİR ŞEY DEĞİŞMEDEN AYNI ÇALIŞIR — kurulum bugünkü düzenle gelir. İki yenilik var. Birincisi GÜNLÜK KAPASİTE: bugüne kadar bir günde aynı türden en çok 9.999 top barkodu üretilebiliyordu ve bu sınır yazılıma gömülüydü; artık serinin “üst sınır” ayarı ve gerektiğinde yükseltilebiliyor (boş bırakılırsa sınır kalkar). İkincisi BAŞTAKİ SIFIRLAR: hane sayısını 1 yaparsanız numara dolgusuz büyür (…H5, …H10, …H100) — sıfırlar yazılmaz. Hane yalnız GÖRÜNÜMDÜR; kapasiteyi üst sınır belirler, ikisi birbirinden bağımsızdır. ⚠️ Ön ek, tarih bölümü, hane ve ayraç değişiklikleri sahadaki eski panel ve tabletlerin barkodu okumasını bozar; bu alanlar panel ve tabletler güncellenene kadar kilitli kalır ve ekran sebebini yazar. Tarih bölümü tamamen kaldırılamaz: top barkodunda ham/final harfi var ve tarih kalkınca kod okuyucunun ayırt edemeyeceği bir şekle giriyor. GEÇMİŞ ASLA YENİDEN NUMARALANMAZ; basılmış etiketler okunmaya devam eder.",
+          "metin": "Top barkodu artık Sistem → Numaralandırma ekranından ayarlanıyor: ön ek, tarih bölümü, hane sayısı ve ayraçlar değiştirilebiliyor. HİÇBİR ŞEY DEĞİŞMEDEN AYNI ÇALIŞIR — kurulum bugünkü düzenle gelir. İki yenilik var. Birincisi GÜNLÜK KAPASİTE: bugüne kadar bir günde aynı türden en çok 9.999 top barkodu üretilebiliyordu ve bu sınır yazılıma gömülüydü; artık serinin “üst sınır” ayarı ve gerektiğinde yükseltilebiliyor (boş bırakılırsa sınır kalkar). İkincisi BAŞTAKİ SIFIRLAR: hane sayısını 1 yaparsanız numara dolgusuz büyür (…H5, …H10, …H100) — sıfırlar yazılmaz. Hane yalnız GÖRÜNÜMDÜR; kapasiteyi üst sınır belirler, ikisi birbirinden bağımsızdır. ⚠️ Ön ek, tarih bölümü, hane ve ayraç değişiklikleri sahadaki eski panel ve tabletlerin barkodu okumasını bozar; bu alanlar panel ve tabletler güncellenene kadar kilitli kalır ve ekran sebebini yazar. Tarih bölümü tamamen kaldırılamaz: top barkodunda ham/final harfi var ve tarih kalkınca kod okuyucunun ayırt edemeyeceği bir şekle giriyor. GEÇMİŞ ASLA YENİDEN NUMARALANMAZ; basılmış etiketler okunmaya devam eder.",
           "dene": "Genel Ayarlar → Numaralandırma → “Top barkodu” satırını açın: sayaç bölümünde üst sınırın 9999 olduğunu görün, hane sayısını 1 yapıp örnek numaranın dolgusuz hâle geldiğini izleyin, sonra geri alın."
         },
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Parti numarasının kısa biçimi (bugün P01'den P99'a gidip başa dönen plaka düzeni) artık Genel Ayarlar → Numaralandırma ekranından ayarlanıyor: “Parti no (kısa, dönen)” serisinde ön ek, hane sayısı, başlangıç, üst sınır ve “Üst sınıra varınca başa dön” seçeneği ayrı ayrı değiştirilebiliyor. HİÇBİR ŞEY DEĞİŞMEDEN AYNI ÇALIŞIR: kurulum bugünkü düzenle gelir (P, iki hane, 1–99, başa dönme açık) ve fabrikanın plaka seti değişmedikçe dokunmanıza gerek yok. Plakalar değişirse ayarı siz güncellersiniz. Parti numarası hâlâ benzersiz DEĞİLDİR ve başa döndüğünde tekrar eder — partinin kimliği numara değil kaydın kendisidir; eski partiler yeniden numaralanmaz. Uzun biçim (bayrak kapalıyken kullanılan “Parti no (günlük biçim)” serisi) de artık düzenlenebilir; önceden kilitliydi.",
+          "metin": "Parti numarasının kısa biçimi (bugün P01'den P99'a gidip başa dönen plaka düzeni) artık Sistem → Numaralandırma ekranından ayarlanıyor: “Parti no (kısa, dönen)” serisinde ön ek, hane sayısı, başlangıç, üst sınır ve “Üst sınıra varınca başa dön” seçeneği ayrı ayrı değiştirilebiliyor. HİÇBİR ŞEY DEĞİŞMEDEN AYNI ÇALIŞIR: kurulum bugünkü düzenle gelir (P, iki hane, 1–99, başa dönme açık) ve fabrikanın plaka seti değişmedikçe dokunmanıza gerek yok. Plakalar değişirse ayarı siz güncellersiniz. Parti numarası hâlâ benzersiz DEĞİLDİR ve başa döndüğünde tekrar eder — partinin kimliği numara değil kaydın kendisidir; eski partiler yeniden numaralanmaz. Uzun biçim (bayrak kapalıyken kullanılan “Parti no (günlük biçim)” serisi) de aynı ekrandan düzenlenebilir.",
           "dene": "Genel Ayarlar → Numaralandırma → “Parti no (kısa, dönen)” satırını açın: üst sınırı 99 yerine 50 yapıp kaydedin, aynı ekrandaki “Sıradaki numara” örneğinin değiştiğini görün; sonra 99'a geri alın."
         },
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Numaralandırma: artık BÜTÜN numara serileri Genel Ayarlar → Numaralandırma ekranından düzenlenebiliyor. Önceki sürümde yalnız birkaç seri açıktı; bu sürümle fatura, tahsilat, ödeme, kasa fişi, çek ve senet, çek teslim bordrosu, mutabakat mektubu, iş emri / refakat kartı, kartela kartı, fason ve kartela sevk/kabul belgeleri, doğrudan sevk ve doğrudan sevk dışındaki bütün belgeler de listede. Her seride ön ek, tarih bölümü, hane sayısı, iki ayraç, sayaç (başlangıç, adım, üst sınır) ve numara kaynağı ayrı ayrı ayarlanıyor. GEÇMİŞ ASLA YENİDEN NUMARALANMAZ: değişiklik yalnız bundan sonra doğan kayıtları etkiler, eski ön ek emekliye ayrılır ve eski barkodlar okunmaya devam eder. Ekran, kaydetmeden önce kaydetmeden önce önizlemeyi ve kaç kaydın numarasının değişmeyeceğini gösterir."
+          "metin": "Numaralandırma: belge, kart ve barkod numaralarının biçimi artık ayardan yönetiliyor — Sistem → Numaralandırma'da BÜTÜN seriler listede: fatura, tahsilat, ödeme, kasa fişi, çek ve senet, çek teslim bordrosu, mutabakat mektubu, iş emri / refakat kartı, kartela kartı, fason ve kartela sevk/kabul belgeleri, doğrudan sevk ve öteki bütün belgeler ile kart kodları. Her seride ön ek, tarih bölümü, hane sayısı, iki ayraç, sayaç (başlangıç, adım, üst sınır) ve numara kaynağı ayrı ayrı ayarlanıyor. Düzenleme penceresindeki iki kutudan “Biçim örneği” kodun şeklini, “Sıradaki numara” kaydettiğinizde açılacak bir sonraki kaydın gerçek numarasını gösterir; ekran kaydetmeden önce kaç kaydın numarasının değişmeyeceğini de söyler. GEÇMİŞ ASLA YENİDEN NUMARALANMAZ: değişiklik yalnız bundan sonra doğan kayıtları etkiler, eski ön ek emekliye ayrılır ve eski barkodlar okunmaya devam eder."
         },
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Numaralandırma: barkotla okutulan seriler (top, çuval, iş emri / refakat kartı, kartela kartı, fason ve kartela sevk/kabul) artık TAMAMEN kilitli değil — yalnız eski panel ve tabletlerin okuyamayacağı ALANLAR kilitli. Örneğin kartela sevk belge numarasının tarih bölümü, hane sayısı ve ayraçları şimdi değiştirilebiliyor; yalnız ön eki kilitli. Kilitli alanın üstünde sebebi ve ne zaman açılacağı yazıyor: bu alanlar panel 1.3.2 ve tablet 1.0.8 ya da üstü bu bilgisayarlara ve tabletlere kurulunca açılır."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Numaralandırma: bir serinin ön ekini değiştirdikten sonra ESKİ ön ekine geri dönülemiyordu (program, üretilecek kodun başka bir belgeyle karışacağını söyleyip reddediyordu). Artık serinin daha önce kullandığı ya da programla birlikte gelen biçimine geri dönülebiliyor; gerçekten yeni bir karışıklık doğuran biçimler yine reddediliyor."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Numaralandırma: ayar yedeğini (yapılandırma paketi) içe aktarırken önizleme bazı numara serileri için uygulanacak diyor, uygulama ise aynı kalemi reddediyordu. Önizleme artık uygulamayla aynı kontrollerden geçiyor; engellenecek kalem önizlemede de engellenmiş görünüyor."
+          "metin": "Numaralandırma: barkodla okutulan serilerde (top, çuval, sevkiyat, iş emri / refakat kartı, kartela kartı, fason ve kartela sevk/kabul belgeleri) yalnız sahadaki eski panel ve tabletlerin okuyamayacağı ALANLAR kilitlidir, gerisi değiştirilebilir — örneğin kartela sevk belge numarasının tarih bölümü, hane sayısı ve ayraçları değiştirilebilir, yalnız ön eki kilitlidir. Kilitli seride “Güncelleme bekliyor” yazar; sebebi ve gereken en düşük sürüm yanındaki ⓘ işaretinin üzerine gelince görünür: bu alanlar panel 1.3.2 ve tablet 1.0.8 ya da üstü bütün bilgisayarlara ve tabletlere kurulunca açılır. Kilidin sebebi: yeni biçimi tanımayan eski bir tablet kodu okutmaya devam edip sessizce yanlış türe çözebilir."
         },
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Sevk partisi: Paketleme / Çuvallar ekranında cariyi seçince partiler liste olarak gelir (üstte özet kartları: açık parti, havuzdaki çuval/top/metraj/kg; ilk satır her zaman “Partisiz çuvallar (havuz)”). “Sevk Partisi Oluştur” diyorsunuz; parti boş açılır, çuvallar partinin içinde “Yeni Çuval” ile açılır ve her çuval parti içinde bir ambalaj numarası alır (1'den başlar; ayarla 0'dan başlatılabilir, elle yazılabilir ya da tamamen elle verilebilir). Partiden istediğiniz çuvalları seçip sevk edersiniz, kalanlar partide kalır; son çuvalı da gidince parti kendiliğinden “sevk edildi” olur, listeden düşer ve aynı ad/numara yeni bir partiye yeniden verilebilir. Sevk edilen çuvallar bu ekranda görünmez; carinin sevkiyatlarına “Sevkiyatlar” düğmesiyle geçilir. Partiler durum (Açık / Sevk edilmiş), ad/not araması ve başlık tıklamasıyla süzülüp sıralanır. Çuvalı başka partiye taşıyınca yeni numara alır; hiç çuvalı olmamış parti silinebilir. Genel Ayarlar’da “Paketleme grubu davranışı” ayarı “Sevk partisi” seçilince açılır (“Paketleme grubu” anahtarı da açık olmalı) — kapalıyken paketleme grubu bugünkü gibi çalışır. İsteğe bağlı: irsaliye ve çeki listesine parti adı + ambalaj no kolonu, çuval etiketine “Ambalaj No” ve “Sevk Partisi” alanı. Yeni yetki: “Sevk partisi silebilir, ambalaj no ezebilir” (Depo & Sevkiyat rolünde). Tablet bu sürümde partiyi grup gibi görüp seçer."
+          "metin": "Sevk partisi: Paketleme / Çuvallar ekranında cariyi seçince partiler liste olarak gelir (üstte özet kartları: açık parti, havuzdaki çuval/top/metraj/kg; ilk satır her zaman “Partisiz çuvallar (havuz)”). “Sevk Partisi Oluştur” diyorsunuz; parti boş açılır, çuvallar partinin içinde “Yeni Çuval” ile açılır ve her çuval parti içinde bir ambalaj numarası alır (1'den başlar; ayarla 0'dan başlatılabilir, elle yazılabilir ya da tamamen elle verilebilir). Partiden istediğiniz çuvalları seçip sevk edersiniz, kalanlar partide kalır; son çuvalı da gidince parti kendiliğinden “sevk edildi” olur, listeden düşer ve aynı ad/numara yeni bir partiye yeniden verilebilir. Sevk edilen çuvallar bu ekranda görünmez; carinin sevkiyatlarına “Sevkiyatlar” düğmesiyle geçilir. Partiler durum (Açık / Sevk edilmiş), ad/not araması ve başlık tıklamasıyla süzülüp sıralanır. Çuvalı başka partiye taşıyınca yeni numara alır; hiç çuvalı olmamış parti silinebilir. Sistem → Özellik Anahtarları → Sevkiyat & İade’de “Paketleme grubu davranışı” ayarı “Sevk partisi” seçilince açılır (“Paketleme grubu” anahtarı da açık olmalı) — kapalıyken paketleme grubu bugünkü gibi çalışır. İsteğe bağlı: irsaliye ve çeki listesine parti adı + ambalaj no kolonu, çuval etiketine “Ambalaj No” ve “Sevk Partisi” alanı. Yeni yetki: “Sevk partisi silebilir, ambalaj no ezebilir” (Depo & Sevkiyat rolünde). Tablet bu sürümde partiyi grup gibi görüp seçer."
         },
         {
           "kapsam": "panel",
@@ -90,8 +80,8 @@
         },
         {
           "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Raporlarda müşteri, kumaş, renk, fasoncu, iptal sebebi ve sevk hedefi süzgeçleri artık gerçekten uygulanıyor: Sipariş Karnesi, Talep Analizi, Sipariş→Teslim, İptal Karnesi, Müşteri ve Fason karneleri ile üretim karnelerinde seçilen süzgeç sunucuya gitmiyor, ekran süzgeç satırını yazarken rakamlar herkesin toplamı çıkıyordu. Ayrıca bir süzgeç sunucuda uygulanmazsa süzgeç satırı bunu açıkça söyler. Finans ve dokuma raporları zaten doğru çalışıyordu."
+          "tip": "iyilestirme",
+          "metin": "Raporlarda müşteri, kumaş, renk, fasoncu, iptal sebebi ve sevk hedefi süzgeçleri sunucuda uygulanır: Sipariş Karnesi, Talep Analizi, Sipariş→Teslim, İptal Karnesi, Müşteri ve Fason karneleri ile üretim karnelerinde seçilen süzgeç rakamları da süzer. Ayrıca bir süzgeç sunucuda uygulanmazsa süzgeç satırı bunu açıkça söyler."
         },
         {
           "kapsam": "panel",
@@ -121,12 +111,12 @@
         {
           "kapsam": "panel",
           "tip": "iyilestirme",
-          "metin": "Sevkiyat önizlemesi emanet malı önceden söyler: seçilen çuvallarda başka müşteriye ait emanet top varsa önizleme uyarı şeridinde topun barkodu ve sahibiyle listeler; sevk yine sahibi dışındaki müşteriye kapalıdır (önceki sürümde uyarı yalnız Sevk Et'e basınca geliyordu)."
+          "metin": "Sevkiyat önizlemesi emanet malı önceden söyler: seçilen çuvallarda başka müşteriye ait emanet top varsa önizleme uyarı şeridinde topun barkodu ve sahibiyle listeler; sevk yine sahibi dışındaki müşteriye kapalıdır."
         },
         {
           "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "İş emri birden çok siparişe bağlıyken Müşteri sütununda ilk görünen ad artık iş emrinin ilk bağlandığı siparişin müşterisi (önceki sürümde alfabetik sıra öne geçiyor, sonradan bağlanan sipariş birincil görünebiliyordu); iş emri detayındaki sipariş bağları da aynı sırada listelenir."
+          "tip": "iyilestirme",
+          "metin": "İş emri birden çok siparişe bağlıyken Müşteri sütununda ilk görünen ad, iş emrinin ilk bağlandığı siparişin müşterisidir (alfabetik sıra değil); iş emri detayındaki sipariş bağları da aynı sırada listelenir."
         },
         {
           "kapsam": "panel",
@@ -140,23 +130,23 @@
         },
         {
           "kapsam": "tablet",
-          "tip": "duzeltme",
-          "metin": "Levent Sarım ekranındaki pencereler (Yeni levent · SAR · Tezgaha tak · Sil / İptal) artık düzgün bir kart içinde açılır: beyaz zemin, geniş sütun, başlık şeridi ve alt düğmeler kartın içinde — form gri perdenin üstünde yüzmüyor, düğmeler sayfanın “Yeni levent” çubuğuyla çakışmıyor. “Yeni levent” penceresinde “Köken” seçenekleri kesilmeden tam adıyla okunur. Tezgah ekranındaki pencereler (koşum aç/kapat, duruş bildir ve sebep ata, geri alma, levent sök/tüket/bitir, çakışma uyarıları) artık düzgün bir kart içinde açılır: zemin, kenar boşluğu ve düğmeler kartın içinde sabit; “Koşum aç” üç sayfalı oldu (İş & Desen · Ayarlar · Özet) ve eksik bir değer İleri’ye basınca aynı sayfada yazılır; ölçüm kaynağı düğmelerinin yazıları kesilmez. Fason Dokuma Kabul pencereleri düzgün kart içinde açılır: “Top kabul et” sayfalı oldu (İrsaliye · her top ayrı sayfa · Özet) — hücreler kırılmaz, eksik metre İleri’ye basınca aynı sayfada yazılır, kalite serbest yazı yerine kalite listesinden seçilir; “Levent döndü” tek kart. Ham Giriş’teki “Hangi indirmeden?” listesi de standart seçme penceresine döndü (üstte “Bağsız kaydet”). Tezgahta indirme (doff) sırasında o hatta TEK açık koşum varsa kendiliğinden seçili gelir ve indirilen parça sayısı 1 olarak dolu başlar; tek parça indirmede hiç dokunmadan İndir’e basılır, çok parçalı ya da başka koşumda değiştirilir (Koşumsuz da seçilebilir). Ayrıca dokuma modülü açık kurulumlarda Yeni levent penceresine (ve tezgah koşumuna) “Dokuma işi” alanı geldi: açık bir dokuma işi seçilince levent o işe bağlanır (tek açık iş varsa kendiliğinden seçili gelir), sarım da aynı işe yazılır; iş bir çözgü kartına bağlıysa ve levent farklı kartla planlanırsa kayıt engellenmez, kaydettikten sonra sarı bir uyarı çıkar. Levent–iş bağını zorunlu tutan ayar açıkken iş seçilmeden levent planlanamaz (sunucu da reddeder). Eski sunucuya bağlı tablette bu alan hiç görünmez."
+          "tip": "iyilestirme",
+          "metin": "Levent Sarım ekranındaki pencereler (Yeni levent · SAR · Tezgaha tak · Sil / İptal) tek düzende, kart içinde açılır: beyaz zemin, geniş sütun, başlık şeridi ve alt düğmeler kartın içinde. “Yeni levent” penceresinde “Köken” seçenekleri kesilmeden tam adıyla okunur. Tezgah ekranındaki pencereler (koşum aç/kapat, duruş bildir ve sebep ata, geri alma, levent sök/tüket/bitir, çakışma uyarıları) de kart içinde açılır; “Koşum aç” üç sayfalıdır (İş & Desen · Ayarlar · Özet) ve eksik bir değer İleri’ye basınca aynı sayfada yazılır; ölçüm kaynağı düğmelerinin yazıları kesilmez. Fason Dokuma Kabul pencereleri de kart içinde açılır: “Top kabul et” sayfalıdır (İrsaliye · her top ayrı sayfa · Özet) — eksik metre İleri’ye basınca aynı sayfada yazılır, kalite listeden seçilir; “Levent döndü” tek kart. Ham Giriş’teki “Hangi indirmeden?” listesi standart seçme penceresinde açılır (üstte “Bağsız kaydet”). Tezgahta indirme (doff) sırasında o hatta TEK açık koşum varsa kendiliğinden seçili gelir ve indirilen parça sayısı 1 olarak dolu başlar; tek parça indirmede hiç dokunmadan İndir’e basılır, çok parçalı ya da başka koşumda değiştirilir (Koşumsuz da seçilebilir). Ayrıca dokuma modülü açık kurulumlarda Yeni levent penceresine (ve tezgah koşumuna) “Dokuma işi” alanı geldi: açık bir dokuma işi seçilince levent o işe bağlanır (tek açık iş varsa kendiliğinden seçili gelir), sarım da aynı işe yazılır; iş bir çözgü kartına bağlıysa ve levent farklı kartla planlanırsa kayıt engellenmez, kaydettikten sonra sarı bir uyarı çıkar. Levent–iş bağını zorunlu tutan ayar açıkken iş seçilmeden levent planlanamaz (sunucu da reddeder). Eski sunucuya bağlı tablette bu alan hiç görünmez."
         },
         {
           "kapsam": "tablet",
-          "tip": "duzeltme",
-          "metin": "Uzun SAR penceresi kaydırmalı tek sayfa yerine ADIMLI oldu: üstte adım şeridi, altta “Geri · İleri”, son adımda “Sarımı Kaydet” — 1) sarılan metre · adet · kg kaynağı, 2) devere makinesi + brüt iplik çıkışı, 3) dip iadesi · kopuş ve kaydetmeden önce ÖZET (metre, adet, kg kaynağı, nominal kg, makine, çıkış/iade toplamı). Eksik alan “İleri”yi kilitlemez; basılınca eksik olan o adımda kırmızı yazılır ve adım değişmez; adım şeridinden geriye dönülür. Fason / hazır alınan leventte makine ve iplik adımı hiç çizilmez (ölçü → özet). Devere makinesi tanımlı değilse alan gizlenmez, altında kurulum yolu yazar. İki küçük düzeltme: bir alanı doğrulama hatasından sonra düzeltip yeniden kaydedince eski kırmızı satır artık ekranda kalmaz (alan değişince ve doğrulama geçince silinir); “Metal levent no” yazılırken aynı gövde numarasında hazır, fasonda ya da tezgahta bir levent varsa alanın altında sarı uyarı çıkar (hangi gövdede hangi leventin durduğu ve sarımın reddedileceği yazılır) — Planla kapanmaz, kayıt yine sunucuda reddedilir; aynı uyarı SAR özetinde de yazılır ve plan kaydında sunucudan dönen gövde uyarısı kayıt sonrası sarı bildirimle gösterilir. Küçük kolaylıklar: tek devere makinesi varsa SAR penceresinde makine kendiliğinden seçili gelir; yeni levent planlarken çözgü kartı en son planlanan kartla dolu başlar (değiştirilebilir); Planlı listesinde gövde numarası dolu bir levent, o gövdede canlı başka bir levent varsa satırda kırmızı “Gövde dolu” rozetiyle işaretlenir (SAR açmadan görülür)."
+          "tip": "iyilestirme",
+          "metin": "Uzun SAR penceresi ADIMLIDIR: üstte adım şeridi, altta “Geri · İleri”, son adımda “Sarımı Kaydet” — 1) sarılan metre · adet · kg kaynağı, 2) devere makinesi + brüt iplik çıkışı, 3) dip iadesi · kopuş ve kaydetmeden önce ÖZET (metre, adet, kg kaynağı, nominal kg, makine, çıkış/iade toplamı). Eksik alan “İleri”yi kilitlemez; basılınca eksik olan o adımda kırmızı yazılır ve adım değişmez; adım şeridinden geriye dönülür. Fason / hazır alınan leventte makine ve iplik adımı hiç çizilmez (ölçü → özet). Devere makinesi tanımlı değilse alan gizlenmez, altında kurulum yolu yazar. Doğrulama hatası veren alan düzeltilince kırmızı satır silinir (alan değişince ve doğrulama geçince); “Metal levent no” yazılırken aynı gövde numarasında hazır, fasonda ya da tezgahta bir levent varsa alanın altında sarı uyarı çıkar (hangi gövdede hangi leventin durduğu ve sarımın reddedileceği yazılır) — Planla kapanmaz, kayıt yine sunucuda reddedilir; aynı uyarı SAR özetinde de yazılır ve plan kaydında sunucudan dönen gövde uyarısı kayıt sonrası sarı bildirimle gösterilir. Küçük kolaylıklar: tek devere makinesi varsa SAR penceresinde makine kendiliğinden seçili gelir; yeni levent planlarken çözgü kartı en son planlanan kartla dolu başlar (değiştirilebilir); Planlı listesinde gövde numarası dolu bir levent, o gövdede canlı başka bir levent varsa satırda kırmızı “Gövde dolu” rozetiyle işaretlenir (SAR açmadan görülür)."
         },
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Bir alış faturası artık birden çok mal kabul fişini kapatabilir: fatura formunda “Mal kabul fişleri” alanından aynı tedarikçinin henüz faturalanmamış fişleri seçilir, kalemler fişlerden kendiliğinden dolar (aynı ürün ve fiyattaki satırlar toplanır) ve fatura seçilen fişlerin hepsine bağlanır; bir fiş yalnız bir açık faturaya bağlanabilir, fatura iptal edilince fiş yeniden seçilebilir. Fatura ile fişlerin miktar ve tutar toplamları karşılaştırılır: Ayarlar → Özellik Anahtarları → Muhasebe’de “Fatura onayında mal kabul fişleriyle karşılaştır” açılırsa (varsayılan kapalı) ve fark miktar ya da tutar toleransını (yüzde, varsayılan 0) aşarsa onay Türkçe bir fark listesiyle reddedilir; taslakta fark sarı uyarı olarak görünür, kayıt engellenmez. Tek fişten fatura kesme yolu ve mevcut faturalar olduğu gibi kalır."
+          "metin": "Bir alış faturası artık birden çok mal kabul fişini kapatabilir: fatura formunda “Mal kabul fişleri” alanından aynı tedarikçinin henüz faturalanmamış fişleri seçilir, kalemler fişlerden kendiliğinden dolar (aynı ürün ve fiyattaki satırlar toplanır) ve fatura seçilen fişlerin hepsine bağlanır; bir fiş yalnız bir açık faturaya bağlanabilir, fatura iptal edilince fiş yeniden seçilebilir. Fatura ile fişlerin miktar ve tutar toplamları karşılaştırılır: Sistem → Özellik Anahtarları → Muhasebe’de “Fatura onayında mal kabul fişleriyle karşılaştır” açılırsa (varsayılan kapalı) ve fark miktar ya da tutar toleransını (yüzde, varsayılan 0) aşarsa onay Türkçe bir fark listesiyle reddedilir; taslakta fark sarı uyarı olarak görünür, kayıt engellenmez. Tek fişten fatura kesme yolu ve mevcut faturalar olduğu gibi kalır."
         },
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
-          "metin": "Üretim belgeleri birbirini görür: dokuma işi sipariş satırlarına bağlanabilir (bir iş birden çok satırı besleyebilir, satır başına planlanan metre isteğe bağlı), levent hangi dokuma işi için sarıldığını taşıyabilir ve tezgahta koşum açılırken takılı leventin işi kendiliğinden önerilir (operatör onaylar ya da değiştirir). Üç bağ da isteğe bağlıdır ve varsayılan davranış değişmez: stoka dokuma, serbest levent ve işsiz koşum eskisi gibi kaydedilir. İsteyen kurulum Ayarlar → Özellik Anahtarları’ndan üç ayrı kuralı açar: “Levent sarımında dokuma işi zorunlu olsun” (Devere / Levent), “Tezgah koşumu dokuma işine bağlı açılsın” ve “Dokuma işi sipariş satırına bağlı olsun” (yeni Dokuma bölümü); açıkken eksik bağ kaydı Türkçe bir uyarıyla reddeder. Leventin çözgü kartı işin kartından farklıysa kayıt reddedilmez, uyarı verilir. Tezgahtan inen top hangi dokuma işinden geldiğini indirme kaydından bilir; ayrıca sorulmaz. Panelde bu bağlar ilgili formlarda görünür: Dokuma İşi penceresinde Sipariş satırları bölümü (mevcut açık satırlardan seçilir, iş listesinde Sipariş sütunu ve süzgeci), Leventler'de plan ve sarım pencerelerinde Dokuma işi alanı (listede sütun ve süzgeç), top detayında Dokuma İşi satırı; kural açıksa alan zorunlu işaretlenir ve nedeni altında yazar. Mevcut kayıtlar olduğu gibi kalır."
+          "metin": "Üretim belgeleri birbirini görür: dokuma işi sipariş satırlarına bağlanabilir (bir iş birden çok satırı besleyebilir, satır başına planlanan metre isteğe bağlı), levent hangi dokuma işi için sarıldığını taşıyabilir ve tezgahta koşum açılırken takılı leventin işi kendiliğinden önerilir (operatör onaylar ya da değiştirir). Üç bağ da isteğe bağlıdır ve varsayılan davranış değişmez: stoka dokuma, serbest levent ve işsiz koşum eskisi gibi kaydedilir. İsteyen kurulum Sistem → Özellik Anahtarları’ndan üç ayrı kuralı açar: “Levent sarımında dokuma işi zorunlu olsun” (Devere / Levent), “Tezgah koşumu dokuma işine bağlı açılsın” ve “Dokuma işi sipariş satırına bağlı olsun” (yeni Dokuma bölümü); açıkken eksik bağ kaydı Türkçe bir uyarıyla reddeder. Leventin çözgü kartı işin kartından farklıysa kayıt reddedilmez, uyarı verilir. Tezgahtan inen top hangi dokuma işinden geldiğini indirme kaydından bilir; ayrıca sorulmaz. Panelde bu bağlar ilgili formlarda görünür: Dokuma İşi penceresinde Sipariş satırları bölümü (mevcut açık satırlardan seçilir, iş listesinde Sipariş sütunu ve süzgeci), Leventler'de plan ve sarım pencerelerinde Dokuma işi alanı (listede sütun ve süzgeç), top detayında Dokuma İşi satırı; kural açıksa alan zorunlu işaretlenir ve nedeni altında yazar. Mevcut kayıtlar olduğu gibi kalır."
         },
         {
           "kapsam": "her-ikisi",
@@ -166,7 +156,7 @@
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
-          "metin": "İplik lotlarına kalite bekletme geldi (Ayarlar → Özellik Anahtarları → İplik → “Mal kabulde doğan iplik lotu kalite bekletmede doğsun”, varsayılan kapalı; yalnız ticaret ve iplik modülü açık kurulumlarda etkili). Açıkken mal kabulde doğan iplik lotu kalite bekletmede doğar ve serbest bırakılmadan levent sarımına, iplik çıkışına ve fasona iplik sevkine giremez; giriş, iade ve fiş iptalleri serbest kalır, elle açılan lot serbest doğar. Karar (serbest bırak, bekletmeye al, bloke et) kalite yetkisiyle lot üstünden verilir; kararın tarihi ve veren kişi lotta kalır. Tablet Levent Sarım ekranındaki lot listesi lotun durumunu taşır; bekletmedeki ya da bloke lot seçilirse sunucu sarımı reddeder ve sebebi yazar. Kapalıyken hiçbir davranış değişmez."
+          "metin": "İplik lotlarına kalite bekletme geldi (Sistem → Özellik Anahtarları → İplik → “Mal kabulde doğan iplik lotu kalite bekletmede doğsun”, varsayılan kapalı; yalnız ticaret ve iplik modülü açık kurulumlarda etkili). Açıkken mal kabulde doğan iplik lotu kalite bekletmede doğar ve serbest bırakılmadan levent sarımına, iplik çıkışına ve fasona iplik sevkine giremez; giriş, iade ve fiş iptalleri serbest kalır, elle açılan lot serbest doğar. Karar (serbest bırak, bekletmeye al, bloke et) kalite yetkisiyle lot üstünden verilir; kararın tarihi ve veren kişi lotta kalır. Tablet Levent Sarım ekranındaki lot listesi lotun durumunu taşır; bekletmedeki ya da bloke lot seçilirse sunucu sarımı reddeder ve sebebi yazar. Kapalıyken hiçbir davranış değişmez."
         },
         {
           "kapsam": "her-ikisi",
@@ -196,7 +186,7 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Mal Kabul ve Alış Siparişleri gibi modül ekranları sayfa yenilendiğinde ya da ilk girişte ara sıra “Erişim engellendi” gösteriyor, menüden tekrar girince açılıyordu — panel modül anahtarlarını sunucudan almadan karar veriyordu; artık anahtarlar gelene kadar bekler, kapalı modülün ekranı yine engellenir. Operasyon, Tanımlar ve Raporlar ana sayfaları da anahtarlar gelene kadar gri yer tutucu kutular gösterir — kutular sonradan belirip kaybolmaz."
+          "metin": "Operasyon, Tanımlar ve Raporlar ana sayfaları modül anahtarları sunucudan gelene kadar gri yer tutucu kutular gösterir — anahtara bağlı karolar sonradan belirip kaybolmaz. Modül ekranları da anahtarlar gelene kadar bekler; kapalı modülün ekranı engellenir."
         },
         {
           "kapsam": "panel",
@@ -241,7 +231,7 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Mal kabulde “Devere — lot zorunlu” ayarı açıkken lot yazılmamış iplik satırı sunucuda düşüyor, fiş yine de açılıyor ve pencere “1 satır atlandı” diyerek kapanıyordu — içi boş fiş kalıyordu. Artık lot, bobin adedi, pasif ya da yanlış türde ürün gibi doğrulama hataları hiçbir satır yazılmadan reddedilir: eksik alan satırda kırmızı işaretlenir, “Fişi Oluştur” düzelene kadar kapalı kalır ve pencere açık kalır; sunucudan dönen aynı sınıf hata da ilgili satıra yazılır."
+          "metin": "Mal kabulde lot, bobin adedi, pasif ya da yanlış türde ürün gibi doğrulama hataları hiçbir satır yazılmadan reddedilir (“Devere — lot zorunlu” ayarı açıkken lotsuz iplik satırı da): eksik alan satırda kırmızı işaretlenir, “Fişi Oluştur” düzelene kadar kapalı kalır ve pencere açık kalır; sunucudan dönen aynı sınıf hata da ilgili satıra yazılır."
         },
         {
           "kapsam": "panel",
@@ -256,7 +246,7 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Tanımlar → Üretim İstasyonları: “Dokuma Tezgahı” ve “Sevkiyat / Tartı” görev türüyle kaydedilen istasyon sayfada görünmüyordu ve Excel/PDF dışa aktarımına girmiyordu (istasyon kaydediliyor, kart çizilmiyor, tezgah eklenemiyordu). Artık formda seçilebilen her görev türü listelenir ve dışa aktarılır; dokuma tezgahı yalnız dokuma modülü kapalıyken gizlenir (kayıt korunur). Yeni İstasyon formunda “Görev Türü” listesinde “Diğer” en alta alındı; görev türü seçilince Yetenekler kutuları o türün önerilen düzeniyle ön-işaretli gelir (Kurşun + KK2 kalite kontrol, fason renk + özellik, dokuma tezgahı levent tüketir) — öneri değiştirilebilir; mevcut istasyon düzenlenirken yetenekler kendiliğinden değişmez."
+          "metin": "Tanımlar → Üretim İstasyonları: “Sevkiyat / Tartı” görev türüyle kaydedilen istasyon sayfada görünmüyordu ve Excel/PDF dışa aktarımına girmiyordu (istasyon kaydediliyor, kart çizilmiyordu). Artık formda seçilebilen her görev türü listelenir ve dışa aktarılır; dokuma tezgahı yalnız dokuma modülü kapalıyken gizlenir (kayıt korunur). Yeni İstasyon formunda “Görev Türü” listesinde “Diğer” en alta alındı; görev türü seçilince Yetenekler kutuları o türün önerilen düzeniyle ön-işaretli gelir (Kurşun + KK2 kalite kontrol, fason renk + özellik, dokuma tezgahı levent tüketir) — öneri değiştirilebilir; mevcut istasyon düzenlenirken yetenekler kendiliğinden değişmez."
         },
         {
           "kapsam": "panel",
@@ -341,7 +331,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Yeni rapor: Raporlar → Sipariş & Sevkiyat Raporları → “Yurtiçi / Yurtdışı Satış”. Seçilen dönemde sevk edilen malı sevkiyatın sevk anındaki yönüne göre üç kartta gösterir: Yurtiçi, Yurtdışı ve fasondan doğrudan sevk (bunların yön kaydı yoktur, ayrı kartta durur, yurtiçine katılmaz). Her kartta metre, sevk sayısı, kilo (tartılmamış çuval 0 sayılmaz, “tartılı N / M çuval” yazar), iade (brüt metreden düşülmez, ayrı yazar) ve tutar vardır. Tutar sipariş satırının fiyatından, para birimleri ayrı hesaplanır; fiyatı girilmemiş satır 0 sayılmaz, kapsam “fiyatlı N / M” olarak yazılır. TL karşılığı yalnız sevk gününün kayıtlı kuruyla verilir, kuru olmayan satır ayrıca söylenir. Sekmelerde müşteri, ülke ve ürün kırılımı ile açık sipariş ve termin durumu (siparişin bugünkü cari/şube yönüne göre) bulunur; önceki dönemle karşılaştırma ve Excel/PDF çıktısı var. Sevk & Termin Karnesi ile İade Karnesi'ne de “Sevkiyat yönü (sevk anında)” süzgeci geldi."
+          "metin": "Yeni rapor: Raporlar → Sipariş & Sevkiyat Raporları → “Yurtiçi / Yurtdışı Satış”. Seçilen dönemde sevk edilen malı sevkiyatın sevk anındaki yönüne göre üç kartta gösterir: Yurtiçi, Yurtdışı ve fasondan doğrudan sevk (bunların yön kaydı yoktur, ayrı kartta durur, yurtiçine katılmaz). Her kartta metre, sevk sayısı, kilo (tartılmamış çuval 0 sayılmaz, “tartılı N / M çuval” yazar), iade (brüt metreden düşülmez, ayrı yazar) ve tutar vardır. Tutar sipariş satırının fiyatından, para birimleri ayrı hesaplanır; fiyatı girilmemiş satır 0 sayılmaz, kapsam “fiyatlı N / M” olarak yazılır. TL karşılığı yalnız sevk gününün kayıtlı kuruyla verilir, kuru olmayan satır ayrıca söylenir. Sekmelerde müşteri, ülke ve ürün kırılımı ile açık sipariş ve termin durumu (siparişin açıldığı andaki yönüne göre; cari kartı sonradan değişse de değişmez) bulunur; önceki dönemle karşılaştırma ve Excel/PDF çıktısı var. Sevk & Termin Karnesi ile İade Karnesi'ne de “Sevkiyat yönü (sevk anında)” süzgeci geldi."
         },
         {
           "kapsam": "her-ikisi",
@@ -425,8 +415,8 @@
         },
         {
           "kapsam": "her-ikisi",
-          "tip": "duzeltme",
-          "metin": "Depoda kesilmiş bir top tabletten geri alındığında Depo Hareketleri ile topun metrajı artık aynı sayıyı söylüyor. Önceden geri alma yalnız yeni topun giriş satırını tersliyor, ana topun kesim çıkışı defterde açık kalıyordu: top listesinde 100 metre görünen ana top defterde 60 sayılıyordu. Şimdi kesim çıkışı da terslenir — ama yalnız metraj gerçekten ana topa geri konuyorsa. Geri alma sırasında “kayıt yanlıştı” seçeneğini seçip kaynak topu arşivde bırakırsanız kaynak metrajı eskisi gibi değişmez ve defter de buna uyar; yeni topun satırı düzeltme kaydı olarak kalır. Tambur kapanışında “fire” seçilen kalan parça ise tek başına geri alınamaz: o parçada yalnız “Tüm işlemi geri al” sunulur, “Tek parça iptali” ve “İş emrine geri al” görünmez; eski ekrandan denenirse “kapanışın fire kalanıdır, kapanışı tümden geri alın” uyarısıyla reddedilir — kapanışın kendi fire/artık çıkışı parça geri almasında terslenmez. Sıradan kesim parçalarında değişiklik yok. Bu sürümden önce yarım geri alınmış kesimler kendiliğinden düzelmez; tutarlılık kontrolü bunları “31) Yarım geri alınmış kesim” bölümünde ayrı sayar."
+          "tip": "iyilestirme",
+          "metin": "Depoda kesilmiş bir top tabletten geri alındığında Depo Hareketleri ile topun metrajı aynı sayıyı söyler: yeni topun giriş satırıyla birlikte ana topun kesim çıkışı da terslenir — ama yalnız metraj gerçekten ana topa geri konuyorsa. Geri alma sırasında “kayıt yanlıştı” seçeneğini seçip kaynak topu arşivde bırakırsanız kaynak metrajı eskisi gibi değişmez ve defter de buna uyar; yeni topun satırı düzeltme kaydı olarak kalır. Tambur kapanışında “fire” seçilen kalan parça ise tek başına geri alınamaz: o parçada yalnız “Tüm işlemi geri al” sunulur, “Tek parça iptali” ve “İş emrine geri al” görünmez; eski ekrandan denenirse “kapanışın fire kalanıdır, kapanışı tümden geri alın” uyarısıyla reddedilir — kapanışın kendi fire/artık çıkışı parça geri almasında terslenmez. Sıradan kesim parçalarında değişiklik yok. Bu sürümden önce yarım geri alınmış kesimler kendiliğinden düzelmez; tutarlılık kontrolü bunları “31) Yarım geri alınmış kesim” bölümünde ayrı sayar."
         },
         {
           "kapsam": "tablet",
@@ -456,12 +446,12 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Sevk irsaliyesinde çuval ve çeki listelerinin başına “Sevk Edilen Firma” · “İrsaliye No” ve tarihten oluşan bir kimlik şeridi konabiliyor. Önceden bu bilgiler yalnız ilk sayfanın antetinde vardı; ürün listesinden sonraki sayfalar çıplak tablo olarak çıkıyor ve kâğıda bakan kimin malı olduğunu göremiyordu. Şerit tablonun kendi başlığına girdiği için liste sayfayı taşarsa devam sayfasında da tekrar eder. İlk basılan listeye konmaz — o sayfada zaten tam antet vardır. Ayar KAPALI gelir: Genel Ayarlar → Belge Kişiselleştirme → Sevk İrsaliyesi → “Liste sayfalarında kimlik şeridi (firma · irsaliye no · tarih)”. Kapalı kaldığı sürece hiçbir belgenin çıktısı değişmez; açmak daha önce oluşturulmuş irsaliyelerin yeniden baskısını da etkiler. Listeler tek sayfada birleştirilerek basıldığında şerit çıkmaz."
+          "metin": "Sevk irsaliyesinde çuval ve çeki listelerinin başına “Sevk Edilen Firma” · “İrsaliye No” ve tarihten oluşan bir kimlik şeridi konabiliyor. Önceden bu bilgiler yalnız ilk sayfanın antetinde vardı; ürün listesinden sonraki sayfalar çıplak tablo olarak çıkıyor ve kâğıda bakan kimin malı olduğunu göremiyordu. Şerit tablonun kendi başlığına girdiği için liste sayfayı taşarsa devam sayfasında da tekrar eder. İlk basılan listeye konmaz — o sayfada zaten tam antet vardır. Ayar KAPALI gelir: Tanımlar → Çıktılar → Belge Şablonları → Sevk İrsaliyesi → “Liste sayfalarında kimlik şeridi (firma · irsaliye no · tarih)”. Kapalı kaldığı sürece hiçbir belgenin çıktısı değişmez; açmak daha önce oluşturulmuş irsaliyelerin yeniden baskısını da etkiler. Listeler tek sayfada birleştirilerek basıldığında şerit çıkmaz."
         },
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Belge baskı penceresinde A4/A5 kâğıt boyu seçici var — yalnız o baskı için, ayara dokunmadan. Saha şikâyeti şuydu: liste çıktıları kâğıdın küçük bir bölümüne basılıyor ve yazılar küçük kalıyordu. Sebebi Belge Kişiselleştirme'de sayfa boyutunun A5 seçili olmasıydı; A5 sayfa A4 kâğıda büyütülmeden ortalanıyor, üstelik A5'te punto da küçültülüyordu. Kâğıt boyu belgeye oluşturulduğu anda donduğu için ayarı sonradan A4 yapmak eski irsaliyeleri düzeltmiyordu — seçici tam bu yüzden var: donmuş belgeyi doğru kâğıda bastırır. Ayrıca Belge Kişiselleştirme'de sayfa boyutu A5 seçilirse artık uyarı çıkıyor."
+          "metin": "Belge baskı penceresinde A4/A5 kâğıt boyu seçici var — yalnız o baskı için, ayara dokunmadan. Saha şikâyeti şuydu: liste çıktıları kâğıdın küçük bir bölümüne basılıyor ve yazılar küçük kalıyordu. Sebebi Belge Şablonları'nda sayfa boyutunun A5 seçili olmasıydı; A5 sayfa A4 kâğıda büyütülmeden ortalanıyor, üstelik A5'te punto da küçültülüyordu. Kâğıt boyu belgeye oluşturulduğu anda donduğu için ayarı sonradan A4 yapmak eski irsaliyeleri düzeltmiyordu — seçici tam bu yüzden var: donmuş belgeyi doğru kâğıda bastırır. Ayrıca Belge Şablonları'nda sayfa boyutu A5 seçilirse artık uyarı çıkıyor."
         },
         {
           "kapsam": "panel",
@@ -486,7 +476,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Paketleme → Çuvallar ekranında çuvallar sevk hazırlığına göre gruplanabiliyor. Aynı carinin farklı günlerde çıkacak iki hazırlığı tek havuzda bekliyordu ve “Hemen Sevk Et” içi dolu her çuvalı alıyordu; salı tırı için basılan düğme gelecek haftanın çuvallarını da gönderiyordu. Artık listenin üstünde grup şeridi (P1 · P2 · Gruplanmamış, sayaçlarıyla) ve satırda grup sütunu var; seçili çuvallar “Parti Ata” ile bir gruba yaftalanır, şeritten tıklanınca liste yalnız o grubu gösterir ve döküm yalnız o grubu basar. Grup bir yaftadır: stok düşmez, çuvalı kilitlemez, başka bir sevkin o çuvalı almasını engellemez; çuval havuzdan çıkınca gruptan kendiliğinden düşer, grup boşalınca numarası yeniden kullanılır. Grup adı hiçbir belgeye basılmaz; döküm kâğıdının başlığında cari adı, grup adı ve basım anı yazar. Bu özellik KAPALI gelir: Genel Ayarlar → Sevkiyat → Paketleme grubu."
+          "metin": "Paketleme → Çuvallar ekranında çuvallar sevk hazırlığına göre gruplanabiliyor. Aynı carinin farklı günlerde çıkacak iki hazırlığı tek havuzda bekliyordu ve “Hemen Sevk Et” içi dolu her çuvalı alıyordu; salı tırı için basılan düğme gelecek haftanın çuvallarını da gönderiyordu. Artık listenin üstünde grup şeridi (P1 · P2 · Gruplanmamış, sayaçlarıyla) ve satırda grup sütunu var; seçili çuvallar “Parti Ata” ile bir gruba yaftalanır, şeritten tıklanınca liste yalnız o grubu gösterir ve döküm yalnız o grubu basar. Grup bir yaftadır: stok düşmez, çuvalı kilitlemez, başka bir sevkin o çuvalı almasını engellemez; çuval havuzdan çıkınca gruptan kendiliğinden düşer, grup boşalınca numarası yeniden kullanılır. Grup adı hiçbir belgeye basılmaz; döküm kâğıdının başlığında cari adı, grup adı ve basım anı yazar. Bu özellik KAPALI gelir: Sistem → Özellik Anahtarları → Sevkiyat & İade → Paketleme grubu."
         },
         {
           "kapsam": "panel",
@@ -535,8 +525,8 @@
         },
         {
           "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Sistem → Sistem Kayıtları ekranında geriye dönük veri düzeltmelerinin (örneğin eski topların depo bağının doldurulması) bıraktığı kayıtlar artık “Top depo bağı geriye dönük dolduruldu (betik)” gibi okunur bir ifadeyle listeleniyor; önceden bu satırlar ham kodla basılacaktı."
+          "tip": "iyilestirme",
+          "metin": "Sistem → Sistem Kayıtları ekranında geriye dönük veri düzeltmelerinin (örneğin eski topların depo bağının doldurulması) bıraktığı kayıtlar “Top depo bağı geriye dönük dolduruldu (betik)” gibi okunur bir ifadeyle listelenir."
         },
         {
           "kapsam": "tablet",
@@ -631,7 +621,7 @@
         {
           "kapsam": "panel",
           "tip": "iyilestirme",
-          "metin": "İş emrinin sipariş kalemi bağı artık silinmiyor, koparılıyor: iş emri iptal edildiğinde, sipariş kalemi iptal/silindiğinde ya da bağ değiştirildiğinde eski bağ “koparıldı” damgasıyla (ne zaman, hangi sebeple) kayıtta kalır; iş emri detayında “hangi sipariş için açıldı” izi görünmeye devam eder. Sipariş karşılaması, açık miktarlar ve iş emri tipi yalnız açık bağları sayar — koparılmış bağ hiçbir rakama girmez. Tutarlılık kontrolünde iş emri tipini sipariş bağıyla karşılaştıran bölüm ve iş emri tipi onarım aracı da yalnız açık bağa bakar; önceden koparılmış bağlı bir stok iş emrini yanlışlıkla “siparişe özel”e çevirebiliyorlardı. Hiçbir rakam değişmez."
+          "metin": "İş emrinin sipariş kalemi bağı artık silinmiyor, koparılıyor: iş emri iptal edildiğinde, sipariş kalemi iptal/silindiğinde ya da bağ değiştirildiğinde eski bağ “koparıldı” damgasıyla (ne zaman, hangi sebeple) kayıtta kalır; iş emri detayında “hangi sipariş için açıldı” izi görünmeye devam eder. Sipariş karşılaması, açık miktarlar ve iş emri tipi yalnız açık bağları sayar — koparılmış bağ hiçbir rakama girmez. Tutarlılık kontrolünde iş emri tipini sipariş bağıyla karşılaştıran bölüm ve iş emri tipi onarım aracı da yalnız açık bağa bakar. Hiçbir rakam değişmez."
         },
         {
           "kapsam": "panel",
@@ -640,8 +630,8 @@
         },
         {
           "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Tezgah Duruşları ekranından amirin elle girdiği duruş başlangıç/bitiş zamanı izin verilen aralığın dışındaysa (en fazla 7 gün geriye, en fazla 5 dakika ileriye) kayıt artık sessizce sunucu saatine çekilmiyor; reddediliyor ve ekran aralığı söylüyor. Önceden cuma gecesinin duruşu pazartesi girildiğinde defter sessizce pazartesi saatini yazıyor, vardiya bağı ve süre yanlış doğuyordu. Tabletten bildirilen duruşta davranış değişmedi: tabletin saati küçük sapmada eskisi gibi düzeltilir ve uyarı gösterilir. Elle giriş diyalogları sınırı baştan söyler (“en fazla 7 gün geriye, 5 dakika ileriye”) ve reddi alanın yanında gösterir. Aralık içindeki elle girişte hiçbir şey değişmez."
+          "tip": "iyilestirme",
+          "metin": "Tezgah Duruşları ekranından amirin elle girdiği duruş başlangıç/bitiş zamanı izin verilen aralığın dışındaysa (en fazla 7 gün geriye, en fazla 5 dakika ileriye) kayıt sunucu saatine çekilmez, reddedilir ve ekran aralığı söyler. Tabletten bildirilen duruşta davranış değişmedi: tabletin saati küçük sapmada eskisi gibi düzeltilir ve uyarı gösterilir. Elle giriş diyalogları sınırı baştan söyler (“en fazla 7 gün geriye, 5 dakika ileriye”) ve reddi alanın yanında gösterir. Aralık içindeki elle girişte hiçbir şey değişmez."
         },
         {
           "kapsam": "panel",
@@ -661,12 +651,12 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "İplik LOTU izlemesi geldi (devere modülü açık kurulumlar için; lot kaydı her kurulumda mümkündür). Mal kabulde iplik satırına irsaliyedeki lot numarası ve bobin adedi yazılır — lot, kalem içinde o numarayla kendiliğinden açılır, ikinci fişte aynı lota eklenir; fiş detayında lot görünür. Leventte sarım girerken her iplik çıkış satırında lot seçilir (bakiyesiyle listelenir); lotsuz satır yazılabilir ama uyarı verir ve o levent lot izlemesine girmez; levent listesinde “Lot” sütunu tek lotu adıyla, birden çok lotu sayıyla, lotsuz sarımı “Lot yok” diye gösterir. Sarım iptali ipliği lot bazında geri döndürür. Lot etiketli çıkış, o lotun o depodaki bakiyesini aşamaz (eksi iplik bakiyesi ayarından bağımsız). İplik Kg-Stok sayfasına “Lotlar” sekmesi geldi: lot bakiyeleri hareketlerden hesaplanır, elle lot açılabilir, lot pasife alınır (silinmez); hareket dökümünde lot sütunu ve elle harekette lot seçimi var. Genel Ayarlar › Devere / Levent’te “İplik lotu zorunlu olsun” ayarı (varsayılan kapalı): açıkken içeride sarımda lotsuz iplik çıkışı panelde de tabletten de kabul edilmez, mal kabulde de lotsuz iplik satırı kabul edilmez (mal kabul yalnız panelde yapılır). Devere modülü kapalı kurulumda ayar görünmez; mevcut hareketler lotsuz kalır, hiçbir kayıt değişmez."
+          "metin": "İplik LOTU izlemesi geldi (devere modülü açık kurulumlar için; lot kaydı her kurulumda mümkündür). Mal kabulde iplik satırına irsaliyedeki lot numarası ve bobin adedi yazılır — lot, kalem içinde o numarayla kendiliğinden açılır, ikinci fişte aynı lota eklenir; fiş detayında lot görünür. Leventte sarım girerken her iplik çıkış satırında lot seçilir (bakiyesiyle listelenir); lotsuz satır yazılabilir ama uyarı verir ve o levent lot izlemesine girmez; levent listesinde “Lot” sütunu tek lotu adıyla, birden çok lotu sayıyla, lotsuz sarımı “Lot yok” diye gösterir. Sarım iptali ipliği lot bazında geri döndürür. Lot etiketli çıkış, o lotun o depodaki bakiyesini aşamaz (eksi iplik bakiyesi ayarından bağımsız). İplik Kg-Stok sayfasına “Lotlar” sekmesi geldi: lot bakiyeleri hareketlerden hesaplanır, elle lot açılabilir, lot pasife alınır (silinmez); hareket dökümünde lot sütunu ve elle harekette lot seçimi var. Sistem → Özellik Anahtarları › Devere / Levent’te “İplik lotu zorunlu olsun” ayarı (varsayılan kapalı): açıkken içeride sarımda lotsuz iplik çıkışı panelde de tabletten de kabul edilmez, mal kabulde de lotsuz iplik satırı kabul edilmez (mal kabul yalnız panelde yapılır). Devere modülü kapalı kurulumda ayar görünmez; mevcut hareketler lotsuz kalır, hiçbir kayıt değişmez."
         },
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Levent TEZGAH BAĞI defteri geldi (devere modülü açık kurulumlar için; Genel Ayarlar › Devere / Levent › “Levent tezgah bağı defteri” açılınca). Leventler ekranında hazır levent sağ tık menüsünden bir tezgahın yuvasına takılır (tezgah listesi istasyon kartında “levent tüketir” işaretli istasyonların makineleri; yuva sayısı makine kartında “Levent yuva sayısı”, dolu yuva reddedilir; bağlama yöntemi düğüm/tahar/takım, kurulum başlangıcı ve süresi, tezgah sayacı isteğe bağlı — “Bağlamada yöntem ve başlangıç saati zorunlu olsun” ayarı açılırsa zorunlu), tezgahtan sökülür (ölçülen kalan girilirse fark önce tüketim ya da ölçüm farkı olarak yazılır), elle tüketim yazılır (tezgah sayacı / çap / tartı / tahmin kaynağıyla; kalan eksiye düşemez), kalan sebep kataloğuyla düzeltilir (Sebep Kataloğu › “Levent Kalan Düzeltmesi”), bitirilir (artık ölçülen metre, tartı ya da yok; artık dispozisyonu isteğe bağlı) ya da hurdaya ayrılır (önizlemeli, sebep zorunlu — Sebep Kataloğu › “Levent Hurda / Artık”; ayrı yetki: sarım iptaliyle aynı). Liste “Tezgah / yuva” sütunu ve kalan metreyi gösterir; yeni durumlar Tezgahta · Bitti · Hurda. Geri alma en son tezgah kaydından başlar (LIFO), tüketimler tek tek geri alınır; hiçbir kayıt silinmez, ters satır yazılır. Açık koşumu olan tezgahtaki son levent sökülemez; koşum leventsiz açılırsa uyarı verilir. Ayar kapalıyken (varsayılan) ekran ve menüler eskisiyle birebir aynıdır, sunucu bu işlemleri reddeder; hiçbir mevcut kayıt değişmez. Bu ayarı açmadan ÖNCE panel güncellenmelidir: bu sürümden eski panel yeni durumları (Tezgahta · Bitti · Hurda) tanımaz ve Leventler listesi açılmaz; bu sürümden itibaren panel tanımadığı durumu “Bilinmeyen durum” diye, ham adını parantez içinde ekleyerek gösterir, çökmez."
+          "metin": "Levent TEZGAH BAĞI defteri geldi (devere modülü açık kurulumlar için; Sistem → Özellik Anahtarları › Devere / Levent › “Levent tezgah bağı defteri” açılınca). Leventler ekranında hazır levent sağ tık menüsünden bir tezgahın yuvasına takılır (tezgah listesi istasyon kartında “levent tüketir” işaretli istasyonların makineleri; yuva sayısı makine kartında “Levent yuva sayısı”, dolu yuva reddedilir; bağlama yöntemi düğüm/tahar/takım, kurulum başlangıcı ve süresi, tezgah sayacı isteğe bağlı — “Bağlamada yöntem ve başlangıç saati zorunlu olsun” ayarı açılırsa zorunlu), tezgahtan sökülür (ölçülen kalan girilirse fark önce tüketim ya da ölçüm farkı olarak yazılır), elle tüketim yazılır (tezgah sayacı / çap / tartı / tahmin kaynağıyla; kalan eksiye düşemez), kalan sebep kataloğuyla düzeltilir (Sebep Kataloğu › “Levent Kalan Düzeltmesi”), bitirilir (artık ölçülen metre, tartı ya da yok; artık dispozisyonu isteğe bağlı) ya da hurdaya ayrılır (önizlemeli, sebep zorunlu — Sebep Kataloğu › “Levent Hurda / Artık”; ayrı yetki: sarım iptaliyle aynı). Liste “Tezgah / yuva” sütunu ve kalan metreyi gösterir; yeni durumlar Tezgahta · Bitti · Hurda. Geri alma en son tezgah kaydından başlar (LIFO), tüketimler tek tek geri alınır; hiçbir kayıt silinmez, ters satır yazılır. Açık koşumu olan tezgahtaki son levent sökülemez; koşum leventsiz açılırsa uyarı verilir. Ayar kapalıyken (varsayılan) ekran ve menüler eskisiyle birebir aynıdır, sunucu bu işlemleri reddeder; hiçbir mevcut kayıt değişmez. Bu ayarı açmadan ÖNCE panel güncellenmelidir: bu sürümden eski panel yeni durumları (Tezgahta · Bitti · Hurda) tanımaz ve Leventler listesi açılmaz; bu sürümden itibaren panel tanımadığı durumu “Bilinmeyen durum” diye, ham adını parantez içinde ekleyerek gösterir, çökmez."
         },
         {
           "kapsam": "tablet",
@@ -681,7 +671,7 @@
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
-          "metin": "Tezgahtan inen topun çözgüsü leventten kendiliğinden düşer (devere modülü, tezgah bağı defteri ve Genel Ayarlar › Devere / Levent › “Tezgahtan inen top leventten otomatik düşsün” ayarı açık kurulumlar için; varsayılan kapalı). KK1'de indirme bağıyla kaydedilen topun metresi, indirme anında o tezgahta bağlı her levente ayrı bir çözgü tüketimi olarak yazılır: çözgü metre = kumaş metre ÷ (1 − take-up); take-up Çözgü Kartları formundaki yeni “Take-up (%)” alanından, boşsa çözgü = kumaş sayılır ve KK1 kaydında uyarı verilir; çok hatlı tezgahta top metresi hat payı olarak düşer (uyarıda söylenir). Leventte kalan yetmezse kalana kadar yazılır, kayıt engellenmez, açık miktar uyarıda görünür. İndirme anında tezgahta bağlı levent yoksa tüketim YAZILMAZ ve uyarı verilir; o topun çözgüsü elle düşülür. Top iptal edilince tüketim ters kayıtla geri döner, iptal geri alınınca yeniden düşer; fire (hurda) topta geri dönmez. Levent detayında tüketim satırı topun barkodunu gösterir. Uyarılar kaydın hemen ardından görünür — tablette KK1 kaydından sonra, panelde elle top eklemede; kayıt başarılıdır, uyarı yalnız bilgilendirir. Çevrimdışıyken yazılıp sonra gönderilen kayıtta uyarı topun barkoduyla gelir. Ayar kapalıyken KK1 kaydı eskisiyle birebir aynıdır, tüketim yalnız elle yazılır; hiçbir mevcut kayıt değişmez."
+          "metin": "Tezgahtan inen topun çözgüsü leventten kendiliğinden düşer (devere modülü, tezgah bağı defteri ve Sistem → Özellik Anahtarları › Devere / Levent › “Tezgahtan inen top leventten otomatik düşsün” ayarı açık kurulumlar için; varsayılan kapalı). KK1'de indirme bağıyla kaydedilen topun metresi, indirme anında o tezgahta bağlı her levente ayrı bir çözgü tüketimi olarak yazılır: çözgü metre = kumaş metre ÷ (1 − take-up); take-up Çözgü Kartları formundaki yeni “Take-up (%)” alanından, boşsa çözgü = kumaş sayılır ve KK1 kaydında uyarı verilir; çok hatlı tezgahta top metresi hat payı olarak düşer (uyarıda söylenir). Leventte kalan yetmezse kalana kadar yazılır, kayıt engellenmez, açık miktar uyarıda görünür. İndirme anında tezgahta bağlı levent yoksa tüketim YAZILMAZ ve uyarı verilir; o topun çözgüsü elle düşülür. Top iptal edilince tüketim ters kayıtla geri döner, iptal geri alınınca yeniden düşer; fire (hurda) topta geri dönmez. Levent detayında tüketim satırı topun barkodunu gösterir. Uyarılar kaydın hemen ardından görünür — tablette KK1 kaydından sonra, panelde elle top eklemede; kayıt başarılıdır, uyarı yalnız bilgilendirir. Çevrimdışıyken yazılıp sonra gönderilen kayıtta uyarı topun barkoduyla gelir. Ayar kapalıyken KK1 kaydı eskisiyle birebir aynıdır, tüketim yalnız elle yazılır; hiçbir mevcut kayıt değişmez."
         },
         {
           "kapsam": "panel",
@@ -701,7 +691,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Dokuma modülü açık kurulumlarda fabrika kendi tezgah duruş sebebini ekleyebiliyor: Hazır Sebepler'deki “Tezgah Duruşu” sekmesi artık dokuma modülüyle görünür (önceden yalnız tezgah izleme anahtarına bağlıydı ve dokumada gizli kalıyordu), yeni sebep eklerken ve çoğaltırken kayıp sınıfı seçilir (plansız / kurulum / planlı / çalışma dışı — zorunlu; mikro kopuş sebep değildir, seçilemez), listede her sebebin sınıfı rozetle görünür. Sınıf, duruş açılırken sebepten kopyalanıp o duruşa donar: katalogda sonradan değiştirmek geçmiş duruşları ve raporları değiştirmez."
+          "metin": "Dokuma modülü açık kurulumlarda fabrika kendi tezgah duruş sebebini ekleyebiliyor: Hazır Sebepler'deki “Tezgah Duruşu” sekmesi dokuma modülüyle görünür, yeni sebep eklerken ve çoğaltırken kayıp sınıfı seçilir (plansız / kurulum / planlı / çalışma dışı — zorunlu; mikro kopuş sebep değildir, seçilemez), listede her sebebin sınıfı rozetle görünür. Sınıf, duruş açılırken sebepten kopyalanıp o duruşa donar: katalogda sonradan değiştirmek geçmiş duruşları ve raporları değiştirmez."
         },
         {
           "kapsam": "panel",
@@ -726,7 +716,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Emanet (konsinye mülkiyet) modülü geldi — Genel Ayarlar → Modüller'den açılır, varsayılan kapalıdır ve kapalı kurulumda hiçbir şey değişmez. Açıkken müşterinin işlenmek üzere bıraktığı kumaş KK1 elle girişte “sahibi” seçilerek girilir, müşterinin gönderdiği levent “Müşterinin emanet leventi” köken seçeneğiyle planlanır, müşterinin ipliği lot açılırken sahibiyle kaydedilir; o iplikten sarılan levent ve fasona dokutulan işten doğan top sahibini kendiliğinden alır (iki müşterinin ipliği aynı levente sarılamaz). Emanet mal fabrikanın malı sayılmaz: başka müşteriye sevk edilemez — sevkiyat ve fasondan doğrudan sevk engellenir ve etkilenen toplar barkoduyla listelenir; sevkiyattan üretilen fatura taslağı emanet topu uyarır (satır yine yazılır, işçilik faturası elle düzeltilir). Sahiplik doğumda yazılır, sonradan düzenlenmez; levent ve lot listelerinde sahibi müşterinin adıyla görünür."
+          "metin": "Emanet (konsinye mülkiyet) modülü geldi — Sistem → Modüller'den açılır, varsayılan kapalıdır ve kapalı kurulumda hiçbir şey değişmez. Açıkken müşterinin işlenmek üzere bıraktığı kumaş KK1 elle girişte “sahibi” seçilerek girilir, müşterinin gönderdiği levent “Müşterinin emanet leventi” köken seçeneğiyle planlanır, müşterinin ipliği lot açılırken sahibiyle kaydedilir; o iplikten sarılan levent ve fasona dokutulan işten doğan top sahibini kendiliğinden alır (iki müşterinin ipliği aynı levente sarılamaz). Emanet mal fabrikanın malı sayılmaz: başka müşteriye sevk edilemez — sevkiyat ve fasondan doğrudan sevk engellenir ve etkilenen toplar barkoduyla listelenir; sevkiyattan üretilen fatura taslağı emanet topu uyarır (satır yine yazılır, işçilik faturası elle düzeltilir). Sahiplik doğumda yazılır, sonradan düzenlenmez; levent ve lot listelerinde sahibi müşterinin adıyla görünür."
         },
         {
           "kapsam": "tablet",
@@ -751,7 +741,7 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Yeni Mal Kabul: bir fiş kaydedilip sipariş kapandıktan hemen sonra yeni fiş açılınca kapanmış sipariş seçicide hâlâ görünüyor, bekleyen kalemlerin “Gelen” sütunu eski kalanla (0) geliyor ve satırlar yeniden doluyordu. Artık fiş kaydı ve fiş iptali sipariş listesini ve bekleyen kalemleri tazeler; sipariş seçici her açılışta güncel listeyi okur; kalemlerin kendiliğinden dolması bekleyen kalemler güncel okunana kadar bekler."
+          "metin": "Yeni Mal Kabul: bir fiş kaydedilip sipariş kapandıktan hemen sonra yeni fiş açılınca kapanmış sipariş seçicide hâlâ görünüyor, bekleyen kalemlerin “Gelen” sütunu eski kalanla (0) geliyordu. Artık fiş kaydı ve fiş iptali sipariş listesini ve bekleyen kalemleri tazeler; sipariş seçici her açılışta güncel listeyi okur; kalemlerin kendiliğinden dolması bekleyen kalemler güncel okunana kadar bekler."
         },
         {
           "kapsam": "tablet",
@@ -766,11 +756,6 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Numaralandırma: belge ve kart numaralarının biçimi artık ayardan yönetiliyor. Ayarlar → Numaralandırma'da her seri için ön ek, tarih parçası, hane sayısı ve ayraçlar seçiliyor; ekranın üstündeki örnek, kaydettiğinizde üretilecek numaranın birebir aynısını gösteriyor. Geçmiş numaralar ASLA yeniden numaralanmaz — eski ön ek emekliye ayrılır ve okutulmaya devam eder."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "yeni",
           "metin": "Numaralandırma: tarih parçası için yeni seçenekler eklendi — GGAAYYYY (23092026), AAYY (0926) ve YYYYAAGG (20260923). Sonuncusu numaraları alfabetik sıraladığınızda kronolojik sıra verir."
         },
         {
@@ -781,7 +766,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Numaralandırma: sayaç ayarları. Her seri için başlangıç numarası, artış adımı ve üst sınır verilebiliyor; sınıra yaklaşınca ekran uyarıyor. Hane sayısı bir DOLGU ayarıdır: numara hanenin üstüne çıkarsa kod uzar, başa dönmez."
+          "metin": "Numaralandırma: sayaç ayarları. Her seri için başlangıç numarası, artış adımı ve üst sınır verilebiliyor; üst sınırı olan seride pencere yürürlükteki dönemde kaç numaranın kullanıldığını yazar, %90'a gelince “sınıra yaklaşıldı” uyarısı pencerede ve listede çıkar. Üst sınıra varınca başa dönen seri (kısa parti no gibi) tükenmez. Hane sayısı bir DOLGU ayarıdır: numara hanenin üstüne çıkarsa kod uzar, başa dönmez."
         },
         {
           "kapsam": "panel",
@@ -791,7 +776,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Numaralandırma: ileri tarihli geçiş. “1 Ocak'tan itibaren şu biçim” diyebiliyorsunuz; biçim o güne kadar değişmiyor, vadesi gelince kendiliğinden yürürlüğe giriyor. Geçmiş bir tarihe yazılamaz — o tarihte üretilmiş numaraların hangi biçimde doğduğu bir kayıttır, düzeltilmez."
+          "metin": "Numaralandırma: ileri tarihli geçiş. “1 Ocak'tan itibaren şu biçim” diyebiliyorsunuz; biçim o güne kadar değişmiyor, vadesi gelince kendiliğinden yürürlüğe giriyor. Bekleyen değişiklik pencerede tarihi ve örnek koduyla görünür, “İptal et” ile geri çekilebilir; aynı tarihe yeniden kaydetmek onu değiştirir. Geçmiş bir tarihe yazılamaz — o tarihte üretilmiş numaraların hangi biçimde doğduğu bir kayıttır, düzeltilmez."
         },
         {
           "kapsam": "panel",
@@ -801,17 +786,12 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Numaralandırma: ayar şifresi tanımlı kurulumlarda yapılandırma paketi numara serisi taşıyorsa uygulama sırasında şifre soruluyor. Yalnız şablon taşıyan paketlerde sorulmuyor."
-        },
-        {
-          "kapsam": "her-ikisi",
-          "tip": "duzeltme",
-          "metin": "Okutulan serilerin (çuval · sevkiyat · kartela · fason belgesi · refakat kartı) biçimi, sahadaki panel ve tabletler güncellenmeden değiştirilemiyor; ekran gereken en düşük sürümü yazıyor. Eski bir tablet yeni biçimi tanımadan okutmaya devam edip kodu sessizce yanlış türe çözebilirdi."
+          "metin": "Numaralandırma: ayar şifresi tanımlı kurulumlarda Numaralandırma'da kaydederken şifre soruluyor — biçim, sayaç ve numara kaynağı birlikte değişse de tek Kaydet'te bir kez. Yapılandırma paketi numara serisi taşıyorsa uygulama sırasında da soruluyor; yalnız şablon taşıyan paketlerde sorulmuyor."
         },
         {
           "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Belge önizlemesindeki örnek numaralar artık serinin kendi ayarından üretiliyor; ön ek değiştirildiğinde önizleme ile basılan belge ayrışmıyor."
+          "tip": "iyilestirme",
+          "metin": "Belge önizlemesindeki örnek numaralar serinin kendi ayarından üretilir; bir serinin ön ekini değiştirirseniz önizleme de basılacak belgeyle aynı biçimi gösterir."
         },
         {
           "kapsam": "panel",
@@ -841,7 +821,57 @@
         {
           "kapsam": "panel",
           "tip": "iyilestirme",
-          "metin": "Mükerrer Kayıtlar ekranı yenilendi: süzgeçler ve seçim tek bir araç kartında, bölümler arasında boşluk var."
+          "metin": "Mükerrer Kayıtlar ekranı yenilendi: süzgeçler ve seçim tek bir araç kartında, bölümler arasında boşluk var. Modüller ekranında kaydırma çubuğu artık içeriğin yanında değil, pencerenin sağ kenarında."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Paketleme / Çuvallar'daki “Çeki Listesi” (saha arama kâğıdı) artık numaralı basılıyor: “Yazdır”a basınca kâğıdın sağ üst köşesine küçük harfle “Çeki Listesi No” ve numarası yazılır. Numara ilk basımda verilir; aynı çuvallar aynı içerikle yeniden basılırsa aynı numara gelir, içerik değiştiyse yeni numara alınır. Pencereyi açıp basmadan kapatmak numara harcamaz — numara önizlemede görünmez, yalnız basılan kâğıtta çıkar. Numaranın biçimi Sistem → Numaralandırma'dan ayarlanır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sevk partisinin KODU irsaliyenin çuval listesine ve çeki listesine kolon olarak basılabiliyor: Tanımlar → Çıktılar → Belge Şablonları'nda “Parti kodu” kolonunu açın (varsayılan kapalı). Aynı cari için iki parti aynı adı taşıyabildiğinden kâğıtta onları kod ayırt eder. Kolon, açıldıktan sonra sevk edilen sevkiyatların belgesinde çıkar; daha önce sevk edilmiş sevkiyatın belgesi değişmez. Ayrıca belge şablonunda her kolon başlığı kutusunun yanına küçük bir onay kutusu geldi (üzerine gelince “Başlık basma” yazar): işaretlenen kolonun başlığı basılmaz, yalnız hücre değerleri yazılır. Başlık kutusunu boşaltmak eskisi gibi varsayılan başlığa döner."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "İade Takibi listesinde iade belge numarası satırın başında kendi sütununda (“Belge No”) görünüyor; üstteki arama kutusuna belge numarasını yazınca liste süzülür — müşteri telefonda numarayı söyleyince iadeleri tek tek açmak gerekmiyor. Yeni iade belgeleri sıralı numara alır (IADE-230926-000001 gibi) ve biçimi Sistem → Numaralandırma'daki “İade belge no” serisinden ayarlanır; eski iade belgelerinin numarası aynen kalır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Yeni açılan fason firmasının ve fason kategorisinin kodunu artık program, öteki kart kodları gibi numara serisinden verir: biçim Sistem → Numaralandırma'daki “Fason firma kodu” ve “Fason kategori kodu” serilerinden gelir (bugünkü ayarla FSN-260922-4831 yerine FSN2209260001 gibi). Önceden panel bu iki kodu numara ayarlarından bağımsız, sonu rastgele sayılı üretiyordu. Var olan fason firması ve kategori kodları değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "İş emri formunda “Parti Kodu” elle yazılırsa artık refakat kartı barkodunun biçimine uymak zorunda: serinin ön ekiyle başlayıp tarih ve sıra numarasıyla devam eden, yalnız İngiliz alfabesinin büyük harfleri ve rakamlardan oluşan bir kod (sistemin kendi ürettiği kodlar gibi; biçim Sistem → Numaralandırma → “İş emri / refakat kartı no”). Uymayan kod kaydederken sebebiyle reddedilir; başka bir okutulan belgenin koduna benziyorsa hangi seriye ait göründüğü de yazılır. Sebep: iş emri numarası refakat kartına barkod olarak basılıp okutuluyor — tireli ya da küçük harfli bir kod okutulduğunda tanınmaz, başka bir ön ekle başlayan kod başka bir kaydın ekranını açabilirdi. Var olan iş emirleri etkilenmez; kural yalnız yeni açılan iş emrinde uygulanır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Sevk Kapısı'nda ve sevkiyat detayında “Gümrük/İhracat No” artık cari ya da şube kodundan uydurulmuyor: satır yalnız yurtdışı sevkte görünür ve yalnız kayıtlı numarayı gösterir; içerik panelinde ve sevkiyat detayında numara girilmemişse “girilmedi” yazar. Önceden numara boşken yerine carinin ya da şubenin kodu varsayılan diye gösteriliyordu; bu değer hiçbir yere kaydedilmiyordu ve basılan belgede de yoktu. Sevkiyat kartında cari/şube kodu kimlik olarak görünmeye devam eder."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Sevkiyatlar (Muhasebe) ekranında “Yön” süzgeci seçiliyken Excel çıktısı artık listeyle aynı satırları taşıyor. Önceden “İhracat” seçen muhasebecinin Excel'ine fasondan müşteriye doğrudan sevkler de giriyor ve yurtiçi yazılıyordu, liste ise onları göstermiyordu. Doğrudan sevkin yön kaydı yoktur: yön süzgeci seçiliyken ne listede ne Excel'de çıkar; süzgeçsiz Excel'de yön sütununda “Yön kaydı yok (doğrudan sevk)” yazar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Bir modül kapatıldığında o modülün açık kalmış sekmeleri artık ekrana art arda “Bu işlem için yetkiniz bulunmuyor” uyarısı yağdırmıyor. Önceden örneğin ön muhasebe kapatılıp panel yenilenince açık kalan fatura ve kasa sekmeleri arka planda veri istemeye devam ediyor, ekranda bu uyarı defalarca çıkıyordu — oysa sebep yetki değil kurulumdu. Artık bu sekmelerde “Modül kapalı” yazar ve modülün kapalı olduğunu söyleyen uyarı yalnız bir kez çıkar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Başka bir bilgisayarın ya da tabletin açtığı kayıt, o ekranın sekmesine geri döndüğünüzde artık listede görünüyor: panel, sekmeye dönüşte 30 saniyeden eski listeleri kendiliğinden tazeler; para, bakiye ve kasa ekranları her dönüşte tazelenir. Önceden açık kalan sekmeye geri dönmek listeyi yenilemiyordu ve yeni kayıt çoğu ekranda ancak sekme kapatılıp yeniden açılınca görünüyordu."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Tanımlar → Üretim İstasyonları listesinde ve kartlarında istasyon kodu adın yanında görünüyor; önceden yalnız düzenleme penceresinde ve Excel çıktısında vardı."
         }
       ]
     },
