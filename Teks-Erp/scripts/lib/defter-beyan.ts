@@ -442,6 +442,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // satır güncellenmez/silinmez, UNSEAL → yeni kuşak → yeni satırlar; eski kuşak durur ve
   // okuma helper'ı son kuşağı alır. Ters yolu kuşağın (Seal defterinin) ters yoludur.
   SATIR("MachineShiftStopBreakdown", "MachineShiftStatSeal", "sebep × kayıp sınıfı kırılımı, mühür KUŞAĞI başına; ters yol = YENİ KUŞAK (UNSEAL/RESEAL), satır kendi başına terslenmez; ham unique `machine_shift_stop_breakdowns_uq` sınıflandırılmamış kovayı (reasonCode NULL) COALESCE ile tekil tutar"),
+  SATIR("WorkOrderCloseSnapshot", "WorkOrderEvent", "kapanış künyesi — COMPLETED geçişinin (STATUS_CHANGED satırı) aynı tx'te donan üretim çıktısı fotoğrafı; ters yol = yeniden açma KARŞI KAYDI (WorkOrderEvent), künye silinmez/güncellenmez (`defter_block_tamper`), sonraki kapanış yeni `version`; yazan tek dosya `helpers/workorder-close-snapshot.helper.ts` (test_workorder_event_yazar §6b)"),
+  SATIR("WorkOrderCloseSnapshotLine", "WorkOrderEvent", "künyenin top başına kalemi — başlığıyla (`WorkOrderCloseSnapshot`) aynı iç içe yazımda doğar; ters yolu başlığınınkiyle aynı: yeniden açma KARŞI KAYDI, kalem değişmez"),
   SATIR("SwatchStockReductionItem", "SwatchStockReduction", "düşümün iptal kümesi; storno kalemden okur"),
   SATIR("MergeOperationSource", "MergeOperation", "birleştirmenin kaynak kaydı"),
   SATIR("MergeOperationRef", "MergeOperation", "taşınan satırın kimlik fotoğrafı"),

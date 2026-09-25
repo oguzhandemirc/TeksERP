@@ -14,6 +14,9 @@
 //      DÜŞER (artış sert, çürüme `curumeKolu`).
 //   §4 ÖLÇÜLEMEDİ — `data` nesne literali değilse (değişken/spread) yazılan
 //      anahtarlar görülemez; üçüncü sonuç sessizce "uyumlu" sayılmaz.
+//   §6 KÜNYE — `claimWorkOrderStatusTx(... to: COMPLETED)` çağıran fonksiyon
+//      `freezeCloseSnapshotTx` da çağırır (kapanış künyesiz olamaz) ve
+//      `workOrderCloseSnapshot.create` YALNIZ künye helper'ında yazılır. Sert.
 // Sondalar (§5) her koşumda SAF tarayıcı üzerinde koşar: ihlal eklenince sayı
 // ARTAR, düzeltilince DÜŞER — ikinci yön olmadan tabanı düşüremeyen bir cırcır
 // yazılabilirdi.
@@ -40,6 +43,7 @@ const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 const SRC = join(__dirname, "..", "src");
 const HELPER_REL = ["services", "helpers", "workorder-event.helper.ts"].join("/");
+const KUNYE_REL = ["services", "helpers", "workorder-close-snapshot.helper.ts"].join("/");
 
 /** §3 izlenen plan alanları — `constants`teki katalogla D2'de birleşir. */
 export const IZLENEN_ALANLAR = new Set([
@@ -57,6 +61,9 @@ export interface Olcum {
   dogusIhlal: string[];
   alanIhlal: string[];
   olculemedi: string[];
+  kunyesizKapanis: string[];
+  kunyeYazariDisi: string[];
+  kapanisSayisi: number;
   dogusSayisi: number;
   yazimSayisi: number;
 }
@@ -101,10 +108,32 @@ function dataAnahtarlari(arg: ts.Expression | undefined): string[] | null {
 
 /** SAF TARAYICI — bir kaynak metni ölçer; sondalar da bunu çağırır. */
 export function olc(rel: string, kod: string): Olcum {
-  const o: Olcum = { statuIhlal: [], dogusIhlal: [], alanIhlal: [], olculemedi: [], dogusSayisi: 0, yazimSayisi: 0 };
+  const o: Olcum = {
+    statuIhlal: [], dogusIhlal: [], alanIhlal: [], olculemedi: [], kunyesizKapanis: [], kunyeYazariDisi: [],
+    kapanisSayisi: 0, dogusSayisi: 0, yazimSayisi: 0,
+  };
   const sf = ts.createSourceFile(rel, kod, ts.ScriptTarget.Latest, true);
   const helperMi = rel === HELPER_REL;
   const gez = (n: ts.Node): void => {
+    // §6 COMPLETED claim'i künyesiz olamaz
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "claimWorkOrderStatusTx") {
+      const opts = n.arguments[2];
+      const to = opts && ts.isObjectLiteralExpression(opts)
+        ? opts.properties.find((p) => ts.isPropertyAssignment(p) && p.name.getText(sf) === "to")
+        : undefined;
+      if (to && ts.isPropertyAssignment(to) && /\bCOMPLETED$/.test(to.initializer.getText(sf))) {
+        o.kapanisSayisi++;
+        if (!enYakinFonksiyonlar(n).some((f) => cagiriyor(f, "freezeCloseSnapshotTx"))) {
+          o.kunyesizKapanis.push(`${rel}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`);
+        }
+      }
+    }
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)
+      && /(^|\.)workOrderCloseSnapshot$/.test(n.expression.expression.getText(sf))
+      && ["create", "createMany", "update", "updateMany", "upsert"].includes(n.expression.name.text)
+      && rel !== KUNYE_REL) {
+      o.kunyeYazariDisi.push(`${rel}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`);
+    }
     if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) {
       const yontem = n.expression.name.text;
       const hedef = n.expression.expression.getText(sf);
@@ -145,10 +174,16 @@ function birlestir(parcalar: Olcum[]): Olcum {
       dogusIhlal: [...a.dogusIhlal, ...b.dogusIhlal],
       alanIhlal: [...a.alanIhlal, ...b.alanIhlal],
       olculemedi: [...a.olculemedi, ...b.olculemedi],
+      kunyesizKapanis: [...a.kunyesizKapanis, ...b.kunyesizKapanis],
+      kunyeYazariDisi: [...a.kunyeYazariDisi, ...b.kunyeYazariDisi],
+      kapanisSayisi: a.kapanisSayisi + b.kapanisSayisi,
       dogusSayisi: a.dogusSayisi + b.dogusSayisi,
       yazimSayisi: a.yazimSayisi + b.yazimSayisi,
     }),
-    { statuIhlal: [], dogusIhlal: [], alanIhlal: [], olculemedi: [], dogusSayisi: 0, yazimSayisi: 0 },
+    {
+      statuIhlal: [], dogusIhlal: [], alanIhlal: [], olculemedi: [], kunyesizKapanis: [], kunyeYazariDisi: [],
+      kapanisSayisi: 0, dogusSayisi: 0, yazimSayisi: 0,
+    },
   );
 }
 
@@ -172,6 +207,11 @@ if (agac.alanIhlal.length) console.log(`   borç (D2): ${agac.alanIhlal.join("\n
 check("§4 ölçülemeyen yazım yok (data nesne literali)", agac.olculemedi.length === 0,
   agac.olculemedi.length ? `ÖLÇÜLEMEDİ: ${agac.olculemedi.join(" · ")}` : "0");
 
+check("§6 her COMPLETED claim'i künye dondurur", agac.kapanisSayisi >= 2 && agac.kunyesizKapanis.length === 0,
+  agac.kunyesizKapanis.length ? `künyesiz kapanış: ${agac.kunyesizKapanis.join(" · ")}` : `${agac.kapanisSayisi} kapanış yolu`);
+check("§6b künye yalnız kendi helper'ında yazılır", agac.kunyeYazariDisi.length === 0,
+  agac.kunyeYazariDisi.length ? `helper DIŞINDA: ${agac.kunyeYazariDisi.join(" · ")}` : "0");
+
 // ── §5 SONDALAR — saf tarayıcı, iki yön ──────────────────────────────────────
 const s = (kod: string, rel = "services/x.service.ts") => olc(rel, kod);
 const STATU = `async function f(tx){ await tx.workOrder.updateMany({ where:{id}, data:{ status: "COMPLETED" } }); }`;
@@ -188,6 +228,15 @@ const SPREAD = `async function f(tx){ await tx.workOrder.updateMany({ where:{id}
 check("§5g sonda: spread'li data ÖLÇÜLEMEDİ sayılır (uyumlu değil)", s(SPREAD).olculemedi.length === 1);
 const ICICE = `async function f(tx){ await prisma.$transaction(async (t) => { await t.workOrder.update({ where:{id}, data:{ width: 1 } }); }); await recordWorkOrderFieldChangesTx(tx, id, [], ctx); }`;
 check("§5h sonda: yazıcı DIŞ fonksiyonda da sayılır (tx sarmalı)", s(ICICE).alanIhlal.length === 0);
+const KAPANIS = `async function f(tx){ await claimWorkOrderStatusTx(tx, id, { from: [], to: WorkOrderStatus.COMPLETED, ctx }); }`;
+const KAPANIS_TAMAM = `async function f(tx){ await claimWorkOrderStatusTx(tx, id, { from: [], to: WorkOrderStatus.COMPLETED, ctx }); await freezeCloseSnapshotTx(tx, id, o); }`;
+const IPTAL = `async function f(tx){ await claimWorkOrderStatusTx(tx, id, { from: [], to: WorkOrderStatus.CANCELLED, ctx }); }`;
+check("§5i sonda: künyesiz COMPLETED claim'i YAKALANIR", s(KAPANIS).kunyesizKapanis.length === 1);
+check("§5j sonda: künye eklenince serbest; iptal claim'i künye istemez",
+  s(KAPANIS_TAMAM).kunyesizKapanis.length === 0 && s(IPTAL).kunyesizKapanis.length === 0);
+check("§5k sonda: helper dışında künye yazımı YAKALANIR",
+  s(`async function f(tx){ await tx.workOrderCloseSnapshot.create({ data:{} }); }`).kunyeYazariDisi.length === 1
+    && s(`async function f(tx){ await tx.workOrderCloseSnapshot.create({ data:{} }); }`, KUNYE_REL).kunyeYazariDisi.length === 0);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 process.exit(fail > 0 ? 1 : 0);

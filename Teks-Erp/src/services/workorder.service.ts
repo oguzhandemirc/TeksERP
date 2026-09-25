@@ -93,6 +93,8 @@ import {
   ensureWorkOrderInProgress,
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
+import { producedOutputWhere } from "./helpers/produced-output.helper";
+import { freezeCloseSnapshotTx, loadCloseSnapshotView } from "./helpers/workorder-close-snapshot.helper";
 import {
   claimWorkOrderStatusTx,
   createWorkOrderTx,
@@ -1794,55 +1796,6 @@ export class WorkOrderService {
   }
 
   /**
-   * WO ÜRETİM ÇIKTISI küme tanımı — liste (withProductionMeters) ve detay
-   * (producedRolls) AYNI kümeyi kullanır (drift = iki ekranda farklı sayı).
-   *
-   * 2026-07-27 düzeltmesi: eski tanım `parent.entrySource=SUBCONTRACTOR_RETURN`
-   * şartıyla YALNIZ fason-dönüşü açık kumaştan kesilen çocukları sayıyordu —
-   * fasonsuz rota (stok top → KK1→KK2→Tambur) ve Tambur'suz biten rota
-   * ("her rotanın son adımı final üretir": Kurşun/fason finalize) ÇIKAN=0
-   * görünüyordu. Yeni küme iki daldan oluşur:
-   *   a) Tambur birinci-nesil çocukları (entrySource=TAMBUR_SPLIT, bu WO'nun
-   *      adımında doğmuş). AYNI WO içi re-cut torunları çift sayım nedeniyle
-   *      hariç; ama BAŞKA WO'nun deposundan tüketilen TAMBUR_SPLIT parent'ın
-   *      çocukları meşru çıktıdır (parent.producedInStepId kapsam şartı).
-   *      Snapshot: sonradan TAMBUR_CONSUMED/CANCELLED olan çocuk listede kalır
-   *      (detay rozet basar).
-   *   b) Çocuğa bölünmeden nihai-ürün statüsüne ulaşan finalize çıktıları —
-   *      rota Kurşun/QC2 veya fasonla bitti. Ara-tüketilenler
-   *      (TAMBUR_CONSUMED/SUBCONTRACTOR_CONSUMED) ve canlı üretim bu dala giremez.
-   */
-  private producedOutputWhere(stepIds: string[]): Prisma.RollWhereInput {
-    return {
-      producedInStepId: { in: stepIds },
-      OR: [
-        {
-          entrySource: RollEntrySource.TAMBUR_SPLIT,
-          NOT: {
-            parent: {
-              entrySource: RollEntrySource.TAMBUR_SPLIT,
-              producedInStepId: { in: stepIds },
-            },
-          },
-        },
-        {
-          entrySource: { not: RollEntrySource.TAMBUR_SPLIT },
-          status: {
-            in: [
-              RollStatus.WAREHOUSE,
-              RollStatus.A1_STOCK,
-              RollStatus.SCRAP,
-              RollStatus.SHIPPED,
-              RollStatus.AT_KARTELA,
-              RollStatus.KARTELA_CONSUMED,
-            ],
-          },
-        },
-      ],
-    };
-  }
-
-  /**
    * Liste WO'larına ÜRETİLEN METRAJI ekler (ilerleme kolonu için). Detay
    * sayfasının `producedRolls.totalMeters` tanımıyla aynı küme
    * (`producedOutputWhere`); YALNIZ fire (katalogda `targetStatus=SCRAP`) olan
@@ -2031,7 +1984,7 @@ export class WorkOrderService {
       by: ["producedInStepId"],
       where: {
         AND: [
-          this.producedOutputWhere(stepIds),
+          producedOutputWhere(stepIds),
           // Postgres `NOT IN` NULL-hostile: null kalite (kaliteye bakılmadı) sağlam
           // üretim sayılmalı; düz notIn onu dışlardı → null VEYA (fire değil).
           // Katalogda hiç fire kodu yoksa süzgeç HİÇ yazılmaz (`notIn: []` üretme).
@@ -2384,7 +2337,7 @@ export class WorkOrderService {
       // CANCELLED olanlar listede kalır (rozetle işaretlenir). Metraj initialQty
       // (production anı), currentQty değil — re-cut sonrası sıfırlanmaz, snapshot sabit.
       const producedRollRows = await prisma.roll.findMany({
-        where: this.producedOutputWhere(stepIds),
+        where: producedOutputWhere(stepIds),
         select: {
           id: true,
           barcode: true,
@@ -2463,6 +2416,8 @@ export class WorkOrderService {
     // Düzenleme kilitleri — frontend formu bu bilgi ile input'ları disable
     // eder, kullanıcıya niye değiştirilemediğini gösterir.
     const locks = await computeWorkOrderLocks(prisma, id);
+    // Kapanıştaki hâl (künye) — canlı `producedRolls` ile yan yana gösterilir.
+    const closeSnapshot = await loadCloseSnapshotView(prisma, id);
 
     return {
       success: true,
@@ -2473,6 +2428,7 @@ export class WorkOrderService {
         producedRolls,
         inputRolls,
         locks,
+        closeSnapshot,
       },
     };
   }
@@ -4452,6 +4408,8 @@ export class WorkOrderService {
         // ACTIVE refakat kartları COMPLETED (otomatik-tamamlama yollarıyla aynı).
         await setWorkOrderCardStatusesTx(tx, id, "ACTIVE", "COMPLETED");
 
+        // Kapanış künyesi dispozisyonlardan SONRA donar: kapanışta depoya inen top da çıktıdır.
+        await freezeCloseSnapshotTx(tx, id, { closeKind: "MANUAL", ctx: { trigger: "MANUAL_COMPLETE", userId, reason: reason || null } });
         const done = await tx.workOrder.findUnique({ where: { id } });
         return {
           updated: done!,

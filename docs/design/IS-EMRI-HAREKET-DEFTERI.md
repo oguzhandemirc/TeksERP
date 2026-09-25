@@ -280,34 +280,45 @@ Katalog dışı alanı diff'e sokan yol kırmızı (bekçi §8.4).
 
 ## 5. (c) KAPANIŞ KÜNYESİ
 
-### 5.1 Şema (yalnız EKLER)
+### 5.1 Şema (yalnız EKLER) — UYGULANDI (D3)
 
-**`WorkOrderCloseSnapshot`** (başlık): `id · workOrderId (FK Restrict) · version (1..n) · closedAt ·
-closedById? · closeKind (AUTO_LAST_STEP | MANUAL) · trigger · rollCount · warehouseM · a1M · scrapM ·
-totalKg · inputRollCount · inputM · yieldPct · shrinkagePct · scrapPct · durationSec · supersededAt? ·
-supersededByEventId? · createdAt`. Tekillik: `(workOrderId, version)` ve PARTIAL `(workOrderId) WHERE
-supersededAt IS NULL` (canlı künye tek).
+**`WorkOrderCloseSnapshot`** (başlık, `work_order_close_snapshots`): `id · workOrderId (FK Cascade) · version
+(1..n) · closeKind (AUTO_LAST_STEP | MANUAL | BACKFILL, CHECK) · trigger · closedById? · rollCount · warehouseM ·
+a1M · scrapM · outputM (CHECK = üç kova toplamı) · totalKg? · weighedRollCount · inputRollCount · inputM ·
+yieldPct? · shrinkagePct? · scrapPct? · startedAt? · durationSec? · createdAt (= kapanış anı)`. Tekillik
+`(workOrderId, version)`.
 
-**`WorkOrderCloseSnapshotLine`** (kalem, append-only): `snapshotId · rollId (FK) · barcode · qtyM · weightKg
-· width · colorId · colorLabel · qualityGrade · qualityLabel · bucket (WAREHOUSE|A1|SCRAP) · batchId ·
-batchLabel · status · foldType · itemLabel · createdAt`.
+**`WorkOrderCloseSnapshotLine`** (kalem, `work_order_close_snapshot_lines`): `snapshotId (FK Cascade) ·
+rollId (FK'SIZ) · barcode? · producedQtyM (initialQty) · qtyM (currentQty) · weightKg · width · colorId ·
+colorLabel · qualityGrade · bucket (WAREHOUSE|A1|SCRAP, CHECK) · batchId · batchLabel · status · foldType ·
+itemLabel · createdAt`.
 
-Sınıf: kalem SATIR olarak donar (`Manifest.snapshot` emsali, `snapshot-kolonlari.ts` `MUAF/BELGE_DEFTERI`
-"kolon değil satır donar"); başlık `supersededAt` DAMGASI taşır (`defter-beyan.ts` `DAMGA`, `yari`).
+**Tasarım değişikliği (uygulamada, 2026-09-25): `supersededAt` damgası YOK.** Künye tabloları
+`defter_block_tamper` mühürlüdür (1e kararı) — UPDATE her zaman reddedilir, yani başlığa sonradan damga
+yazılamaz. Eskime TÜRETİLİR: "canlı" künye en yüksek `version`dır; iş emri bugün COMPLETED değilse o künye
+"son kapanıştaki" hâldir (ekran bunu böyle yazar); yeniden açılmanın izi `WorkOrderEvent` karşı kaydıdır.
+Beyan: ikisi de `SATIR_EBEVEYN`, ebeveyn `WorkOrderEvent` (ters yol = yeniden açma karşı kaydı).
 
-### 5.2 Ne zaman yazılır
+### 5.2 Ne zaman yazılır — UYGULANDI (D3)
 
-- COMPLETED geçişiyle **aynı tx'te**: `completeWorkOrderIfStepsDone` (otomatik) ve `completeWorkOrder`
-  (elle). Küme TEK KAYNAK `producedOutputWhere` — künye ile canlı başlık aynı soruyu sorar.
-- Yeniden açılma (`reopenWorkOrderTx`) canlı künyeyi **silmez, değiştirmez**: `supersededAt` +
-  `supersededByEventId` damgası. Sonraki kapanış `version = n+1` yazar; eski sürümler okunabilir kalır.
+- Tek yazar `helpers/workorder-close-snapshot.helper.ts` → `freezeCloseSnapshotTx`; `workOrderCloseSnapshot`
+  başka dosyadan yazılamaz (`test_workorder_event_yazar` §6b).
+- COMPLETED geçişiyle **aynı tx'te**: `completeWorkOrderIfStepsDone` (otomatik, claim kazanıldıysa) ve
+  `completeWorkOrder` (elle — kapanış dispozisyonlarından SONRA; depoya inen top da çıktıdır). Her
+  `claimWorkOrderStatusTx(… to: COMPLETED)` çağıran fonksiyon künyeyi de dondurur (§6, AST).
+- Küme TEK KAYNAK `producedOutputWhere` — `helpers/produced-output.helper.ts`e taşındı; liste ÇIKAN
+  metriği, detay başlığı ve künye aynı yüklemi çağırır.
+- Yeniden açılma künyeyi silmez/değiştirmez; sonraki kapanış `version = n+1` yazar.
 - İptal edilen iş emri künye YAZMAZ (üretim çıktısı kapanışı değil).
 
 ### 5.3 Toplamlar (verim/fire)
 
-- **Giren ham metre** = iş emrine giren her topun EN ERKEN aktif `RollMovement.qtyIn`i (giriş noktası
-  kuralıyla aynı tanım; `qtyIn` yerinde değiştirilmiyor — ölçüldü, yalnız `qtyOut` null'lanıyor, §8.5).
-- **Çıkan** = depo + A1 + fire metresi (künye kalemlerinden).
+- **Giren ham metre** = `computeWoInput` tek kaynağı (kök top sayısı + kök `initialQty` + fasondan-sevk
+  charge-split çocuğu; normal ve tebdil iş emrinde doğru — liste/detay `inputRolls` ile aynı). *(Önceki
+  taslak "en erken aktif `RollMovement.qtyIn`" diyordu; ayrı bir tanım kurmak yerine mevcut tek kaynak
+  kullanıldı.)*
+- **Çıkan** = depo + A1 + fire metresi — kova toplamları üretim metresinden (`initialQty`), canlı başlıkla
+  aynı ölçü; kalemde ayrıca kapanıştaki `currentQty` durur.
 - **Verim %** = çıkan ÷ giren · **çekme %** = (giren − çıkan) ÷ giren · **fire %** = fire ÷ giren ·
   **süre** = ilk `STATUS_CHANGED → IN_PROGRESS` (yoksa ilk giriş hareketi) → kapanış.
 - Tanım kullanıcı onayına bağlı (§9 S8).

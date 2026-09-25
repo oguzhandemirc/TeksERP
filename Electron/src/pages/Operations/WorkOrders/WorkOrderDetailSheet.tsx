@@ -88,7 +88,8 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
     () => summarizeLinkedFulfillment(wo?.orderLinks ?? []),
     [wo?.orderLinks],
   );
-  const hasProduced = (wo?.producedRolls?.count ?? 0) > 0;
+  // Kapanmış iş emrinde künye, canlı küme boşalsa da gösterilir (kapanıştaki hâl).
+  const hasProduced = (wo?.producedRolls?.count ?? 0) > 0 || !!wo?.closeSnapshot;
   const showOrders = hasOrders || wo?.type === "STOCK_PRODUCTION";
 
   const canEdit = Boolean(wo && onEdit && (wo.status === "PLANNED" || wo.status === "IN_PROGRESS"));

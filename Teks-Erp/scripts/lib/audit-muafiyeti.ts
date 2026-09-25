@@ -48,6 +48,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "oturum kaydı; giriş/çıkış/iptal audit'in AUTH kategorisinde zaten yazılır, satırın kendi CUD'u ikinci bir iz üretmez" },
   { model: "ShipmentEvent", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "sevkiyat olay defteri satırını `helpers/shipment-event.helper` yazar; audit sevk eyleminde (`shipping.service`)" },
+  { model: "WorkOrderCloseSnapshot", sinif: "EBEVEYN_EYLEMDE",
+    gerekce: "kapanış künyesini `helpers/workorder-close-snapshot.helper` COMPLETED claim'iyle aynı tx'te yazar; audit kapanışı yapan eylemde (elle Kapat · tambur/fason/kurşun son adım)" },
   { model: "WorkOrderEvent", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "iş emri hareket satırını `helpers/workorder-event.helper` yazar; audit değişikliği yapan eylemde (workorder · workorder-link · tambur · fason · kurşun); otomatik geçişlerin audit'i yoktu, defter onların TEK izidir" },
   { model: "WarehouseMovement", sinif: "EBEVEYN_EYLEMDE",

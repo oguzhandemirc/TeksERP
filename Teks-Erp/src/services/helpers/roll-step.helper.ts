@@ -25,6 +25,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { setWorkOrderCardStatusesTx } from "./traveler-card-fanout.helper";
 import { claimWorkOrderStatusTx, type WorkOrderEventCtx } from "./workorder-event.helper";
+import { freezeCloseSnapshotTx } from "./workorder-close-snapshot.helper";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -217,11 +218,12 @@ export async function completeWorkOrderIfStepsDone(
   if (remaining !== 0) return;
   // Yalnız canlı statüden: CANCELLED/SUPERSEDED (tebdille devredilmiş) terminaldir,
   // recompute onları COMPLETED'e diriltmez.
-  await claimWorkOrderStatusTx(tx, workOrderId, {
+  const closedFrom = await claimWorkOrderStatusTx(tx, workOrderId, {
     from: [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS],
     to: WorkOrderStatus.COMPLETED,
     ctx,
   });
+  if (closedFrom) await freezeCloseSnapshotTx(tx, workOrderId, { closeKind: "AUTO_LAST_STEP", ctx });
   await setWorkOrderCardStatusesTx(tx, workOrderId, "ACTIVE", "COMPLETED");
 }
 

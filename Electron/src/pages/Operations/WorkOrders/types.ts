@@ -217,6 +217,44 @@ export interface WorkOrder {
     }>;
   };
   /**
+   * Sadece findById response'unda — iş emrinin EN SON kapanış künyesi (kapanış anında
+   * donan üretim çıktısı). Hiç kapanmadıysa null. Canlı `producedRolls` ile yan yana.
+   */
+  closeSnapshot?: {
+    version: number;
+    versionCount: number;
+    closedAt: string;
+    closeKind: string;
+    trigger: string;
+    closedBy: { id: string; fullName: string | null; username: string } | null;
+    rollCount: number;
+    warehouseM: number;
+    a1M: number;
+    scrapM: number;
+    outputM: number;
+    totalKg: number | null;
+    weighedRollCount: number;
+    inputRollCount: number;
+    inputM: number;
+    yieldPct: number | null;
+    shrinkagePct: number | null;
+    scrapPct: number | null;
+    durationSec: number | null;
+    lines: Array<{
+      rollId: string;
+      barcode: string | null;
+      producedQtyM: number;
+      qtyM: number;
+      weightKg: number | null;
+      width: number | null;
+      colorLabel: string | null;
+      qualityGrade: string | null;
+      bucket: string;
+      batchLabel: string | null;
+      status: string;
+    }>;
+  } | null;
+  /**
    * Sadece findById response'unda — bu WO'ya üretime giren ham toplar (girdi).
    * attachRolls ile ilk adıma bağlanan orijinal stok topları; tambur çıktısı ve
    * fason açık kumaşı hariç. totalMeters = giriş anı (initialQty) toplamı.

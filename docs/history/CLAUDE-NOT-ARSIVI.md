@@ -12425,3 +12425,22 @@ artık §3e'de taranır (beyansız yeni değer kırmızı) — CREATED ve BATCH_
 `test_workorder_event_yazar` (AST): statü yalnız helper'da · her doğuş deftere · plan alanı yazımı
 cırcırı (taban 10, D2 sıfırlar) · ölçülemeyen yazım 0. `test_workorder_event_ledger` (DB, gerçek
 yollar, 15 kontrol); negatif sonda: helper'daki defter yazımı susturulunca 8 kırmızı.
+
+## 2026-09-25 — İş emri kapanış künyesi (D3): kapanıştaki hâl donar, "bugün" yanında durur [ÇEKİRDEK]
+
+**Ölçüm.** "Üretilen Nihai Toplar" canlı hesaplanıyordu: küme statü süzgeçli (sonradan yeniden kesilen ya
+da iptal edilen top düşüyordu), kova bugünkü kaliteden (kalite değişince metre başlıktan kayıyordu),
+`initialQty` aşım bump'ıyla büyüyebiliyordu; renk/en/kg canlı. İş emri bittiği ANDAKİ toplar hiçbir yerde
+durmuyordu (kullanıcı, 2026-09-25).
+
+**Karar.** `work_order_close_snapshots` + `_lines`: COMPLETED geçişiyle aynı tx'te, `producedOutputWhere`
+(tek kaynak, `helpers/produced-output.helper.ts`e taşındı) kümesinin top başına fotoğrafı + kova toplamları
+(üretim metresi, canlı başlıkla aynı ölçü) + giren (`computeWoInput`) + metre bazlı verim/çekme/fire
+(kullanıcı S8) + süre. Elle kapanışta dispozisyonlardan SONRA donar. Tablolar `defter_block_tamper`
+mühürlü ⇒ `supersededAt` damgası tasarımdan düştü: eskime türetilir (en yüksek `version` canlı; iş emri
+yeniden açıksa "son kapanıştaki"), izi `WorkOrderEvent` karşı kaydıdır. Panel `ProducedV3`: başlık
+"Kapanışta: …", bugün farklıysa tek satır "Bugün: … (−1 top, −19 m)" + isteğe bağlı top başına fark.
+
+**Kapı.** `test_workorder_close_snapshot` (DB, gerçek attach → kapanış dispozisyonu yolu; §1–§6, negatif
+sonda: elle kapanıştaki donma susturulunca 8 kırmızı) · `test_workorder_event_yazar` §6 (her COMPLETED
+claim'i künye dondurur) + §6b (künye tek yazar) · panel `closeSnapshotDiff.test.ts`.

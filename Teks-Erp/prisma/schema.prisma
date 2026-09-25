@@ -3856,6 +3856,7 @@ model WorkOrder {
   splitChildren    WorkOrder[]               @relation("WorkOrderSplitLineage")
   kursunBypasses   KursunBypassAssignment[] // Kurşun bypass atamaları (append-only)
   events           WorkOrderEvent[] // Durum/plan değişim defteri (append-only)
+  closeSnapshots   WorkOrderCloseSnapshot[] // Kapanış künyesi sürümleri (append-only)
 
   /// İPTAL İZİ (2026-08-17). Sebep şimdiye kadar YALNIZ audit'e yazılıyordu ve
   /// `SystemLog` 6 ayda bir ARŞİVLENİYOR → "bu iş emri neden iptal edildi, kim
@@ -4003,6 +4004,86 @@ model WorkOrderEvent {
   @@index([type, createdAt])
   @@index([groupId])
   @@map("work_order_events")
+}
+
+/// Kapanış künyesi — iş emri COMPLETED'e geçtiği tx'te üretim çıktısının (`producedOutputWhere`) o anki
+/// fotoğrafı donar; kalemler `WorkOrderCloseSnapshotLine`. APPEND-ONLY, `defter_block_tamper` mühürlü:
+/// yeniden açılma künyeyi silmez/güncellemez (izi `WorkOrderEvent` karşı kaydı), sonraki kapanış yeni
+/// `version` yazar — "canlı" künye en yüksek sürümdür. Tasarım: docs/design/IS-EMRI-HAREKET-DEFTERI.md §5.
+model WorkOrderCloseSnapshot {
+  id          String @id @default(uuid()) @db.Uuid
+  workOrderId String @db.Uuid
+  /// 1..n — aynı iş emrinin kaçıncı kapanışı.
+  version     Int
+  /// AUTO_LAST_STEP (son adım bitti) · MANUAL (Kapat) · BACKFILL (geçmiş iş emri, yaklaşık) — VarChar + CHECK.
+  closeKind   String  @db.VarChar(20)
+  /// Kapanışı tetikleyen işlem (TAMBUR_FINALIZE · FASON_RECEIPT · MANUAL_COMPLETE …).
+  trigger     String  @db.VarChar(40)
+  closedById  String? @db.Uuid
+
+  rollCount        Int
+  /// Kova toplamları üretim metresinden (`Roll.initialQty`) — canlı başlıkla AYNI tanım.
+  warehouseM       Decimal  @db.Decimal(14, 3)
+  a1M              Decimal  @db.Decimal(14, 3)
+  scrapM           Decimal  @db.Decimal(14, 3)
+  outputM          Decimal  @db.Decimal(14, 3)
+  /// Yalnız tartılmış topların kg toplamı; `weighedRollCount` kaçının tartıldığını söyler.
+  totalKg          Decimal? @db.Decimal(14, 3)
+  weighedRollCount Int
+  /// Giren ham malzeme — `computeWoInput` tek kaynağından (kök top sayısı + metre).
+  inputRollCount   Int
+  inputM           Decimal  @db.Decimal(14, 3)
+  /// Metre bazlı (kullanıcı kararı S8): verim = çıkan ÷ giren · çekme = (giren − çıkan) ÷ giren · fire = fire ÷ giren.
+  yieldPct         Decimal? @db.Decimal(9, 3)
+  shrinkagePct     Decimal? @db.Decimal(9, 3)
+  scrapPct         Decimal? @db.Decimal(9, 3)
+  /// Üretime başlama (ilk IN_PROGRESS geçişi; yoksa iş emrinin açılışı) ve kapanışa kadar geçen süre.
+  startedAt        DateTime? @db.Timestamptz
+  durationSec      Int?
+
+  /// ⚠️ `Cascade` BİLİNÇLİ (`WorkOrderEvent` ile aynı gerekçe): üretim iş emrini fiziksel silmez.
+  workOrder WorkOrder                    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  lines     WorkOrderCloseSnapshotLine[]
+
+  /// Kapanış anı.
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([workOrderId, version])
+  @@map("work_order_close_snapshots")
+}
+
+/// Kapanış künyesinin top başına kalemi — kapanıştaki metre/kg/en/renk/kalite/parti/statü satır olarak
+/// donar. `rollId` FK'SIZ: kalem topun o anki kimliğini taşır, topun sonraki yaşamı onu değiştirmez.
+model WorkOrderCloseSnapshotLine {
+  id           String   @id @default(uuid()) @db.Uuid
+  snapshotId   String   @db.Uuid
+  rollId       String   @db.Uuid
+  /// Barkodsuz top (açık kumaş) olabilir.
+  barcode      String?  @db.VarChar(64)
+  /// Üretim metresi (`initialQty`) — kova toplamlarının kaynağı.
+  producedQtyM Decimal  @db.Decimal(12, 3)
+  /// Kapanışta rafta kalan metre (`currentQty`).
+  qtyM         Decimal  @db.Decimal(12, 3)
+  weightKg     Decimal? @db.Decimal(12, 3)
+  width        Decimal? @db.Decimal(12, 3)
+  colorId      String?  @db.Uuid
+  colorLabel   String?  @db.VarChar(200)
+  qualityGrade String?  @db.VarChar(32)
+  /// WAREHOUSE · A1 · SCRAP — kalitenin katalogdaki hedef statüsünden (VarChar + CHECK).
+  bucket       String   @db.VarChar(16)
+  batchId      String?  @db.Uuid
+  batchLabel   String?  @db.VarChar(64)
+  status       String   @db.VarChar(32)
+  foldType     String?  @db.VarChar(64)
+  itemLabel    String?  @db.VarChar(200)
+
+  snapshot WorkOrderCloseSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([snapshotId])
+  @@index([rollId])
+  @@map("work_order_close_snapshot_lines")
 }
 
 /// KAPALI küme — tasarım gereği büyümez: yeni statü geçişi STATUS_CHANGED'e, yeni alan FIELD_CHANGED'in

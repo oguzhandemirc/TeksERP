@@ -729,6 +729,12 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "work_order_events", name: "work_order_events_channel_known" },
   { table: "work_order_events", name: "work_order_events_field_required" },
   { table: "work_order_events", name: "work_order_events_birth_has_no_from" },
+  // Kapanış künyesi (D3, migration 20260926010000): kapanış türü kapalı küme, sürüm 1'den,
+  // çıkan = depo + A1 + fire (üç kova toplamı başlıkta yeniden türetilmez, burada sabitlenir).
+  { table: "work_order_close_snapshots", name: "work_order_close_snapshots_close_kind_known" },
+  { table: "work_order_close_snapshots", name: "work_order_close_snapshots_version_pos" },
+  { table: "work_order_close_snapshots", name: "work_order_close_snapshots_output_sum" },
+  { table: "work_order_close_snapshot_lines", name: "work_order_close_snapshot_lines_bucket_known" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -837,6 +843,18 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     // doğrudan (pg_trigger_depth) reddedilir — iş emrinden gelen kaskat silme geçer.
     timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
     why: "iş emri hareket defteri append-only — geri alma karşı kayıttır, satır değişmez/silinmez",
+  },
+  {
+    table: "work_order_close_snapshots",
+    trigger: "work_order_close_snapshots_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
+    why: "kapanış künyesi donmuş belge — yeniden açılma onu değiştirmez, yeni kapanış yeni sürüm yazar",
+  },
+  {
+    table: "work_order_close_snapshot_lines",
+    trigger: "work_order_close_snapshot_lines_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
+    why: "künye kalemi başlığıyla donar; kaskat silme (iş emri teardown'u) geçer",
   },
   {
     table: "machine_stop_events",
