@@ -295,6 +295,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   CASH_LEDGER_PAYMENT_BACKFILL: "Kasa defteri geçmiş satırları dolduruldu (betik)",
   ORDER_DESTINATION_BACKFILL: "Sipariş yönü geriye dönük dolduruldu (betik)",
   ROLL_STATUS_EVENTS_BACKFILL: "Top durum defterine eski iptaller dolduruldu (betik)",
+  WORK_ORDER_EVENTS_BACKFILL: "İş emri hareket defterine geçmiş dolduruldu (betik)",
 
   // ── SYSTEM · servis keşfi (kurulum kimliği) ──
   INSTALLATION_ID_CREATED: "Kurulum kimliği oluşturuldu",

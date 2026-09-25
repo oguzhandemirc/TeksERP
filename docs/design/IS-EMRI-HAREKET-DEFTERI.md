@@ -520,6 +520,16 @@ ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (s
 - **Türetilemeyen** (dürüstlük kaydı): otomatik başlama/tamamlanma/yeniden açılma — hiçbir yerde yok.
   Tamamlanma için `max(WorkOrderStep.completedAt)` YAKLAŞIK olarak yazılabilir (S5 ile birlikte karar).
 - (B) katmanı backfill istemez.
+- **Uygulama (D7, 2026-09-25):** türetme SAF modülde (`scripts/lib/workorder-backfill-derive.ts`, bekçi
+  `test_backfill_workorder_events`), betik okur/yazar. Audit biçimleri 23 Eylül kopyasında ölçüldü (1.132
+  WORK_ORDER satırı; `changes` 2026-08-19'dan beri, öncesinde değiştir-yaz yalnız SONRAKİ değerleri taşır →
+  açılış audit'inden tohumlanan durumla ZİNCİR farkı). Olaylar geçmiş anlarıyla, `channel=BACKFILL`;
+  kimlik alanlarının etiketi bugünkü ad (yaklaşık). Tamamlanma: elle kapanış audit'i varsa o an, yoksa son
+  adım bitişi (`APPROX_LAST_STEP`); künye `closeKind=BACKFILL` o anla (`freezeCloseSnapshotTx` `closedAt` /
+  `startedAt` alır), panel "Kapanışta (yaklaşık · sonradan türetildi)", çizelge "Kapanış künyesi (yaklaşık)".
+  Otomatik başlama ve yeniden açılma YAZILMAZ (hiçbir yerde yok). İdempotent: CREATED'lı iş emri atlanır,
+  canlı defterin ilk satırından sonrası yazılmaz, iş emri başına tek tx. Prova (23 Eylül kopyası):
+  525 iş emri · 1.550 olay · 359 künye · kayıp 0 · ikinci koşum 0.
 
 ### 8.2 Migration ve geriye dönüklük
 
@@ -542,7 +552,7 @@ ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (s
 | D5 | Tablet düzeltme menüsü + `mobile:is-emri-duzelt` + önizleme uçları — **D5a (backend) + D5b (tablet menüsü) UYGULANDI**: izin + uç kapıları, renk önizlemesi, `WORK_ORDER_PLAN_CHANGE` sebep kataloğu, panel yetkisiz iptal yalnız dokunulmamış iş emrinde; tablette genel Düzenle kalktı, "Düzelt" menüsü (Top Çıkar D6 ile eklenecek) | D2, S1–S3/S7 cevapları |
 | D6 | Top Çıkar ucu (ledger ters yollarıyla) + tablet tuşu — **UYGULANDI** (§6.2 notu) | D1 |
 | **D8** | **Parti Ekle** (§6.5): `addBatchToWorkOrderTx` tek boğaz + uç + dört çağıranın bağlanması + R1–R7 + tablet/panel tuşu + `is-emri.md` kural değişimi + arşiv GEÇERSİZ notu | D1 (olay tipi), 9b S2+S3 |
-| D7 | Backfill script (kuru koşum) | D1–D3; `--apply` kullanıcıda |
+| D7 | Backfill script (kuru koşum) — **UYGULANDI** (§8.1 notu); `--apply` kullanıcıda | D1–D3; `--apply` kullanıcıda |
 | B-RM | `RollMovement` kapanış damgası borcu (§8.5) | 1e sahip atar |
 
 ### 8.4 Bekçiler

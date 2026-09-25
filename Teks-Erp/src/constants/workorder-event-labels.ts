@@ -86,6 +86,11 @@ export const WORK_ORDER_TRIGGER_LABEL: Record<string, string> = {
   ORDER_DELETE: "Sipariş silme",
   STEP_PLAN: "Adım planlama",
   ROLL_ATTRIBUTES: "Toplara uygula",
+  ROLL_DETACH: "Top Çıkar",
+  // Geçmiş doldurma (D7) tetikleri — yalnız `channel=BACKFILL` satırlarında.
+  APPROX_LAST_STEP: "Son adım bitişi (yaklaşık)",
+  TYPE_DERIVED_FROM_LINKS: "Tip siparişten türetildi (toplu düzeltme)",
+  OPS_SQL: "Veritabanı düzeltmesi",
 };
 
 export const WORK_ORDER_CHANNEL_LABEL: Record<string, string> = {

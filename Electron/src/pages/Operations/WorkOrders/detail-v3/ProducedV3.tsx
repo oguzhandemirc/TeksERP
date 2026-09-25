@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { formatNumber } from "@/lib/format";
 import type { WorkOrder } from "../types";
-import { diffCloseSnapshot, totalsDelta } from "./closeSnapshotDiff";
+import { closeSnapshotLabel, diffCloseSnapshot, totalsDelta } from "./closeSnapshotDiff";
 
 /**
  * v3 üretilen nihai toplar — çıkan yoksa boş kutu (nerede işlendiği ipucuyla),
@@ -51,7 +51,7 @@ function ClosedProduced({ wo }: { wo: WorkOrder }) {
   const delta = totalsDelta({ count: snap.rollCount, meters: snapMeters }, { count: liveCount, meters: liveMeters });
   const changes = diffCloseSnapshot(snap.lines, p?.items ?? []);
   const reopened = wo.status !== "COMPLETED";
-  const label = reopened ? `Son kapanışta (${snap.version}. kapanış)` : snap.versionCount > 1 ? `Kapanışta (${snap.version}. kapanış)` : "Kapanışta";
+  const label = closeSnapshotLabel(snap, reopened);
   return (
     <div className="card info">
       <div className="wc-sum">

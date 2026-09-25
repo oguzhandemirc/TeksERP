@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffCloseSnapshot, totalsDelta, type CloseSnapshotLine, type LiveProducedItem } from "./closeSnapshotDiff";
+import { closeSnapshotLabel, diffCloseSnapshot, totalsDelta, type CloseSnapshotLine, type LiveProducedItem } from "./closeSnapshotDiff";
 
 const line = (o: Partial<CloseSnapshotLine> = {}): CloseSnapshotLine => ({
   rollId: "r1", barcode: "B1", producedQtyM: 100, qtyM: 100, colorLabel: "Lacivert",
@@ -42,5 +42,16 @@ describe("totalsDelta", () => {
     expect(totalsDelta({ count: 13, meters: 499 }, { count: 13, meters: 499 })).toBeNull();
     expect(totalsDelta({ count: 13, meters: 499 }, { count: 12, meters: 480 })).toBe("−1 top, −19 m");
     expect(totalsDelta({ count: 2, meters: 220 }, { count: 2, meters: 250.5 })).toBe("+30,5 m");
+  });
+});
+
+describe("closeSnapshotLabel", () => {
+  it("BACKFILL künyesi yaklaşık ve sonradan türetildi diye söylenir", () => {
+    expect(closeSnapshotLabel({ version: 1, versionCount: 1, closeKind: "BACKFILL" }, false)).toBe("Kapanışta (yaklaşık · sonradan türetildi)");
+  });
+  it("canlı künye: tek sürüm, çok sürüm, yeniden açılmış", () => {
+    expect(closeSnapshotLabel({ version: 1, versionCount: 1, closeKind: "AUTO_LAST_STEP" }, false)).toBe("Kapanışta");
+    expect(closeSnapshotLabel({ version: 2, versionCount: 2, closeKind: "MANUAL" }, false)).toBe("Kapanışta (2. kapanış)");
+    expect(closeSnapshotLabel({ version: 2, versionCount: 2, closeKind: "MANUAL" }, true)).toBe("Son kapanışta (2. kapanış)");
   });
 });

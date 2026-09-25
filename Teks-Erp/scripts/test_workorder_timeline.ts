@@ -106,6 +106,9 @@ async function main(): Promise<void> {
     check("§2c parti doğuşu (Batch) ve kapanış künyesi kaynaklarından",
       sayfa.data.some((x) => x.group === "PARTI" && x.id.startsWith("batch:"))
         && sayfa.data.some((x) => x.group === "KAPANIS" && x.id.startsWith("snap:")));
+    const kunye = sayfa.data.find((x) => x.id.startsWith("snap:"));
+    check("§2c2 künye ayrıntısı Türkçe (\"N top · M m\" + verim), kod adı sızmaz",
+      /^\d+ top · .+ m/.test(kunye?.detail ?? "") && !/yield/i.test(kunye?.detail ?? ""), kunye?.detail ?? "-");
     const kapanis = sayfa.data.find((x) => x.detail === "Devam Ediyor → Tamamlandı");
     check("§2d tetik ve kanal Türkçe, sebep satırda, aktör adı çözüldü",
       kapanis?.trigger === "Elle kapatma" && kapanis?.channel === "Sistem" && kapanis?.reason === "TST-WOT" && !!kapanis?.actor,

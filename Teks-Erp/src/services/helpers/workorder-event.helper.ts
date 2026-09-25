@@ -97,6 +97,52 @@ async function writeWorkOrderEventsTx(tx: Tx, rows: EventRow[], ctx: WorkOrderEv
   });
 }
 
+/** Geçmiş doldurma satırı — kanal BACKFILL, zaman olayın GERÇEK (geçmiş) anı. */
+export interface BackfillEventRow {
+  workOrderId: string;
+  type: WorkOrderEventType;
+  field?: string | null;
+  fromValue?: string | null;
+  toValue?: string | null;
+  fromLabel?: string | null;
+  toLabel?: string | null;
+  trigger: string;
+  reason?: string | null;
+  createdById?: string | null;
+  deviceId?: string | null;
+  groupId: string;
+  createdAt: Date;
+  payload?: Prisma.InputJsonValue;
+}
+
+/**
+ * Bir kerelik göçün yazıcısı (`scripts/backfill_workorder_events.ts`): satırlar `BACKFILL`
+ * kanalıyla ve olayın geçmiş anıyla doğar — ekranda "sonradan türetildi" rozeti buradan.
+ */
+export async function recordBackfillEventsTx(tx: Tx, rows: BackfillEventRow[]): Promise<number> {
+  if (rows.length === 0) return 0;
+  const res = await tx.workOrderEvent.createMany({
+    data: rows.map((r) => ({
+      workOrderId: r.workOrderId,
+      type: r.type,
+      groupId: r.groupId,
+      field: r.field ?? null,
+      fromValue: r.fromValue ?? null,
+      toValue: r.toValue ?? null,
+      fromLabel: r.fromLabel ?? null,
+      toLabel: r.toLabel ?? null,
+      trigger: r.trigger,
+      channel: "BACKFILL",
+      reason: r.reason ?? null,
+      ...(r.payload !== undefined ? { payload: r.payload } : {}),
+      createdById: r.createdById ?? null,
+      deviceId: r.deviceId ?? null,
+      createdAt: r.createdAt,
+    })),
+  });
+  return res.count;
+}
+
 /**
  * İş emrini DOĞURAN tek yol — satır ve CREATED defter satırı aynı tx'te.
  * `args` `tx.workOrder.create`e aynen gider; `select` kullanılmaz (doğuş satırı

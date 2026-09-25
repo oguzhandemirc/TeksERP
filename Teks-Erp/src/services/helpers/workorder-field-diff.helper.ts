@@ -53,7 +53,17 @@ async function nameMap(tx: Tx, kind: "color" | "item" | "route", ids: string[]):
 }
 
 /** Satırın o anki okunur adı — kimlik alanlarında ad sonradan değişse de defterde donar. */
-async function labelChanges(tx: Tx, changes: (WorkOrderFieldChange & { field: WorkOrderTrackedField })[]): Promise<WorkOrderFieldChange[]> {
+/** İzlenen alan farkı — `after`ta verilen (undefined olmayan) alanlardan kanonik değeri değişenler. Yazmaz. */
+export function diffTrackedFields(
+  before: WorkOrderFieldValues,
+  after: WorkOrderFieldValues,
+): (WorkOrderFieldChange & { field: WorkOrderTrackedField })[] {
+  return WORK_ORDER_TRACKED_FIELDS.filter((f) => after[f] !== undefined)
+    .map((field) => ({ field, from: canonicalValue(field, before[field]), to: canonicalValue(field, after[field]) }))
+    .filter((c) => c.from !== c.to);
+}
+
+export async function labelChanges(tx: Tx, changes: (WorkOrderFieldChange & { field: WorkOrderTrackedField })[]): Promise<WorkOrderFieldChange[]> {
   const idsOf = (k: string) =>
     [...new Set(changes.filter((c) => WORK_ORDER_FIELD_KIND[c.field] === k).flatMap((c) => [c.from, c.to]).filter((x): x is string => !!x))];
   const names = {
@@ -84,10 +94,7 @@ export async function recordWorkOrderFieldDiffTx(
   rows: { before: WorkOrderFieldValues; after: WorkOrderFieldValues },
   ctx: WorkOrderEventCtx,
 ): Promise<number> {
-  const { before, after } = rows;
-  const changes = WORK_ORDER_TRACKED_FIELDS.filter((f) => after[f] !== undefined)
-    .map((field) => ({ field, from: canonicalValue(field, before[field]), to: canonicalValue(field, after[field]) }))
-    .filter((c) => c.from !== c.to);
+  const changes = diffTrackedFields(rows.before, rows.after);
   if (changes.length === 0) return 0;
   await recordWorkOrderFieldChangesTx(tx, workOrderId, await labelChanges(tx, changes), ctx);
   return changes.length;

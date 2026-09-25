@@ -198,13 +198,16 @@ async function sourcedItems(workOrderId: string, stepIds: string[]): Promise<Pen
   }
   const snaps = await prisma.workOrderCloseSnapshot.findMany({
     where: { workOrderId },
-    select: { id: true, version: true, rollCount: true, warehouseM: true, a1M: true, yieldPct: true, closedById: true, createdAt: true },
+    select: { id: true, version: true, closeKind: true, rollCount: true, warehouseM: true, a1M: true, yieldPct: true, closedById: true, createdAt: true },
   });
   for (const s of snaps) {
-    const yieldText = s.yieldPct != null ? ` · yieldText %${Number(s.yieldPct).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}` : "";
+    const yieldText = s.yieldPct != null ? ` · verim %${Number(s.yieldPct).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}` : "";
+    const backfill = s.closeKind === "BACKFILL";
     out.push({
-      ...NO_META, id: `snap:${s.id}`, at: s.createdAt.toISOString(), group: "KAPANIS", title: `Kapanış künyesi (${s.version}. kapanış)`,
+      ...NO_META, id: `snap:${s.id}`, at: s.createdAt.toISOString(), group: "KAPANIS",
+      title: backfill ? "Kapanış künyesi (yaklaşık)" : `Kapanış künyesi (${s.version}. kapanış)`,
       detail: `${s.rollCount} top · ${m(Number(s.warehouseM) + Number(s.a1M))}${yieldText}`, actorId: s.closedById,
+      derived: backfill, channel: backfill ? WORK_ORDER_CHANNEL_LABEL.BACKFILL : null,
     });
   }
   return out;

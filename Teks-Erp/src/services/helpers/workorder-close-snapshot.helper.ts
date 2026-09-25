@@ -18,7 +18,7 @@ import type { WorkOrderEventCtx } from "./workorder-event.helper";
 type Tx = Prisma.TransactionClient;
 type ReadDb = Tx | PrismaClient;
 
-export type CloseKind = "AUTO_LAST_STEP" | "MANUAL";
+export type CloseKind = "AUTO_LAST_STEP" | "MANUAL" | "BACKFILL";
 
 const BUCKET = { warehouse: "WAREHOUSE", a1: "A1", fire: "SCRAP" } as const;
 const D0 = () => new Prisma.Decimal(0);
@@ -88,13 +88,21 @@ function buildLines(rolls: CloseInputs["rolls"], buckets: CloseInputs["buckets"]
 export async function freezeCloseSnapshotTx(
   tx: Tx,
   workOrderId: string,
-  opts: { closeKind: CloseKind; ctx: WorkOrderEventCtx },
+  opts: {
+    closeKind: CloseKind;
+    ctx: WorkOrderEventCtx;
+    /** Yalnız geçmiş doldurma (BACKFILL): kapanış ve başlangıç anı geçmişten verilir. */
+    closedAt?: Date;
+    startedAt?: Date;
+  },
 ): Promise<{ id: string; version: number }> {
-  const { startedAt, version, rolls, buckets, input } = await readCloseInputsTx(tx, workOrderId);
+  const read = await readCloseInputsTx(tx, workOrderId);
+  const { version, rolls, buckets, input } = read;
+  const startedAt = opts.startedAt ?? read.startedAt;
   const { lines, sum, totalKg, weighed } = buildLines(rolls, buckets);
   const outputM = sum.warehouse.plus(sum.a1).plus(sum.fire);
   const inputM = input?.meters ?? D0();
-  const closedAt = new Date();
+  const closedAt = opts.closedAt ?? new Date();
   return tx.workOrderCloseSnapshot.create({
     data: {
       workOrderId,

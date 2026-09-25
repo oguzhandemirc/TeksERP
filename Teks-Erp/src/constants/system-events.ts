@@ -147,6 +147,8 @@ const REPAIR_EVENTS = {
   ORDER_DESTINATION_BACKFILL: "ORDER_DESTINATION_BACKFILL",
   /** Top durum defteri eski iptaller (K-A3, 2026-09-25) — `scripts/backfill_roll_status_events.ts`. */
   ROLL_STATUS_EVENTS_BACKFILL: "ROLL_STATUS_EVENTS_BACKFILL",
+  /** İş emri hareket defteri geçmiş doldurma (D7, 2026-09-25) — `scripts/backfill_workorder_events.ts`. */
+  WORK_ORDER_EVENTS_BACKFILL: "WORK_ORDER_EVENTS_BACKFILL",
 } as const;
 
 /**

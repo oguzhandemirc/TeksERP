@@ -72,3 +72,16 @@ export function totalsDelta(
   if (dm !== 0) parts.push(`${dm > 0 ? "+" : "−"}${fmt(Math.abs(dm))} m`);
   return parts.length ? parts.join(", ") : null;
 }
+
+/**
+ * Künye başlığı. Geçmiş doldurmayla (BACKFILL) yazılan künye kapanış anında değil sonradan,
+ * o günkü toplardan türetildi — "yaklaşık" diye söylenir (S5 = A).
+ */
+export function closeSnapshotLabel(
+  snap: { version: number; versionCount: number; closeKind: string },
+  reopened: boolean,
+): string {
+  if (snap.closeKind === "BACKFILL") return "Kapanışta (yaklaşık · sonradan türetildi)";
+  if (reopened) return `Son kapanışta (${snap.version}. kapanış)`;
+  return snap.versionCount > 1 ? `Kapanışta (${snap.version}. kapanış)` : "Kapanışta";
+}
