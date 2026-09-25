@@ -4,11 +4,18 @@
 // test saymaz.
 import type { PrintedDocSnapshot } from "../../src/services/printed-document.service";
 import type { DocumentConfig } from "../../src/services/system-setting.service";
-import { SAMPLE_PRINTED_DOCS } from "../../src/services/document-render/sample-data";
+import { SAMPLE_PRINTED_DOCS, setSampleClock } from "../../src/services/document-render/sample-data";
 
 type Meta = Record<string, unknown>;
 
 const ISO = "2026-09-25T08:30:00.000Z";
+
+/**
+ * Örnek belgelerin SAATİ sabit: örnek numaranın tarih segmenti ve tarih alanları
+ * saatten gelir; sabitlenmezse altın kopya her gün dönümünde kırmızıya düşer.
+ * Altın bu tarihle yazıldı — değiştirmek altını da yeniden yazmayı gerektirir.
+ */
+setSampleClock(() => new Date(ISO));
 
 /** Sevk partisi + ambalaj no + sıra + müşteri adı + eksik alanlar (null barkod/parti, kg=0, en yok). */
 const ZENGIN_DOC = {

@@ -35,7 +35,17 @@ const ISO = "2026-06-07T10:30:00.000Z";
  * üretecinden gelmelidir, yoksa türetme sessiz bir yanlış üretir.
  */
 function ornekNo(key: string, seq: number): string {
-  return previewSeriesCode(resolveSeriesFormat(key), seq);
+  return previewSeriesCode(resolveSeriesFormat(key), seq, sampleClock());
+}
+
+/**
+ * Örnek belgelerin SAATİ — varsayılan bugün (panel önizlemesi). Örnek numaranın
+ * tarih segmenti ve tarih alanları buradan okunur; altın kopya bekçileri SABİT saat
+ * verir, yoksa gün dönümünde hash'ler değişir.
+ */
+let sampleClock: () => Date = () => new Date();
+export function setSampleClock(clock: (() => Date) | null): void {
+  sampleClock = clock ?? (() => new Date());
 }
 
 /** docType → renderHtml'in okuduğu örnek `doc`. Gerçek sevk verisi DEĞİL. */
@@ -250,8 +260,8 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   INVOICE_INTERNAL: {
     header: {
       documentNo: "FTR1408260001",
-      date: new Date().toISOString(),
-      dueDate: new Date(Date.now() + 30 * 864e5).toISOString(),
+      get date() { return sampleClock().toISOString(); },
+      get dueDate() { return new Date(sampleClock().getTime() + 30 * 864e5).toISOString(); },
       type: "SALES",
       typeLabel: "Satış Faturası",
       partyName: "Örnek Tekstil Ltd. Şti.",
@@ -276,7 +286,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   PAYMENT_RECEIPT: {
     header: {
       documentNo: "THS1408260001",
-      date: new Date().toISOString(),
+      get date() { return sampleClock().toISOString(); },
       direction: "IN",
       directionLabel: "Tahsilat Makbuzu",
       partyName: "Örnek Tekstil Ltd. Şti.",
@@ -300,8 +310,8 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   RECONCILIATION_LETTER: {
     header: {
       get documentNo() { return ornekNo("reconciliationLetter", 1); },
-      date: new Date().toISOString(),
-      asOf: new Date().toISOString(),
+      get date() { return sampleClock().toISOString(); },
+      get asOf() { return sampleClock().toISOString(); },
       partyName: "Örnek Tekstil Ltd. Şti.",
       partyCode: "CR-000148",
       partyTaxInfo: "Merkez V.D. · 1234567890",
@@ -317,7 +327,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   CHEQUE_DELIVERY_NOTE: {
     header: {
       get documentNo() { return ornekNo("chequeDeliveryNote", 1); },
-      date: new Date().toISOString(),
+      get date() { return sampleClock().toISOString(); },
       kind: "RECEIVED",
       kindLabel: "Alınan",
       targetName: "Ziraat Bankası — TL Vadesiz",
@@ -327,19 +337,19 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     lines: [
       {
         get docNo() { return ornekNo("chequeReceived", 1); }, serialNo: "0034512", issueDate: ISO,
-        dueDate: new Date(Date.now() + 45 * 864e5).toISOString(),
+        get dueDate() { return new Date(sampleClock().getTime() + 45 * 864e5).toISOString(); },
         drawerName: "Yıldız Konfeksiyon A.Ş.", bankName: "Garanti BBVA",
         currency: "TRY", amount: "42500.00",
       },
       {
         get docNo() { return ornekNo("chequeReceived", 2); }, serialNo: "0034513", issueDate: ISO,
-        dueDate: new Date(Date.now() + 60 * 864e5).toISOString(),
+        get dueDate() { return new Date(sampleClock().getTime() + 60 * 864e5).toISOString(); },
         drawerName: "Yıldız Konfeksiyon A.Ş.", bankName: "Garanti BBVA",
         currency: "TRY", amount: "18750.50",
       },
       {
         get docNo() { return ornekNo("noteReceived", 3); }, serialNo: null, issueDate: ISO,
-        dueDate: new Date(Date.now() + 30 * 864e5).toISOString(),
+        get dueDate() { return new Date(sampleClock().getTime() + 30 * 864e5).toISOString(); },
         drawerName: "Delta Tekstil Ltd.", bankName: null,
         currency: "USD", amount: "5000.00",
       },
