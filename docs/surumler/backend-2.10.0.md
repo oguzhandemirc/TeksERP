@@ -494,3 +494,12 @@ $env:PGPASSWORD = ""
   `migrate_partner_roles` 5 yeni kart · `backfill_roll_warehouse` 4.551 top Merkez Depo'ya,
   2 ihlalli top atlandı · `remove_sack_note_element` 1 varyant. `backfill_order_destination`
   koşulmadı (carilerin yönü girildikten sonra).
+- **Sahada elle yama (2026-09-25 06:5x) — paketten FARKLI:** panelden elle yedek her seferinde
+  "DOĞRULANAMADI (pg_restore --list: unknown)" ile düşüyordu; `runProcess` okunmayan stdout'u
+  boşaltmıyordu ve 103 KB'lık TOC pipe'ı doldurup `pg_restore`u 30 sn zaman aşımına soktu.
+  Düzeltme `bb914927` repoda; sahada `C:\TeksERP\app` ve `C:\TeksERP-test\app` altındaki
+  `dist\services\helpers\pg-tool.helper.js` aynı satırla elle yamalandı (orijinali
+  `….js.2.10.0-orijinal`), gerçek dump'ta doğrulama 0,1 sn. Bir sonraki paket bu farkı kapatır.
+- Aynı sabah: yönetici şifresi değişince panel yedeğinin kullandığı `.env` `BACKUP_PG_PASSWORD`
+  eski kaldı ("password authentication failed for user postgres"); `superpass.txt`ten
+  güncellendi. ⇒ `postgres` şifresi değişirse `.env`teki `BACKUP_PG_PASSWORD` da değişir.
