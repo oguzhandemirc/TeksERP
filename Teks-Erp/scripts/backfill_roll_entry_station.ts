@@ -20,7 +20,7 @@
 //  3) `producedInStepId` → **YALNIZ DAR KOŞULLA**.
 //
 // ⚠️ 3. KAYNAK NEDEN TEHLİKELİ: `producedInStepId` bir DOĞUM İZİ DEĞİLDİR.
-// `attachRolls` onu iş emrinin İLK adımıyla EZER, `detachRolls` NULL'lar.
+// `attachRolls` onu iş emrinin İLK adımıyla EZER, Top Çıkar (`detachTx`) NULL'lar.
 // Ölçüldü (dev DB): KK1'den ve Electron panelinden girilmiş 5 top, bu alan
 // üzerinden bakılırsa "Boyahane (Fason)"da doğmuş görünüyor. Bu yüzden yalnız
 // `entrySource ∈ {TAMBUR_SPLIT, SUBCONTRACTOR_RETURN}` VE hedef istasyonun

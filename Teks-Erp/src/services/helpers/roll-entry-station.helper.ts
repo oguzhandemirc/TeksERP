@@ -33,7 +33,7 @@
 // ⚠️ `producedInStepId` DE BİR KAYNAK DEĞİLDİR
 // -----------------------------------------------------------------------------
 // Doğum izi sanılır ama değildir: `attachRolls` onu iş emrinin İLK adımıyla
-// EZER, `detachRolls` NULL'lar. Ölçüldü (dev DB): KK1'den ve panelden girilmiş
+// EZER, Top Çıkar (`detachTx`) NULL'lar. Ölçüldü (dev DB): KK1'den ve panelden girilmiş
 // 5 top, `producedInStepId` üzerinden bakılırsa "Boyahane (Fason)"da doğmuş
 // görünüyor. Geriye doldurma script'i bu yüzden onu YALNIZ dar bir koşulla
 // (entrySource + beklenen istasyon türü) kullanır.

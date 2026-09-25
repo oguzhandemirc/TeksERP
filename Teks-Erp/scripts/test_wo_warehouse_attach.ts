@@ -9,6 +9,7 @@
 import prisma from "../src/lib/prisma";
 import { roleGrade } from "./fixture-quality-grade";
 import { WorkOrderService } from "../src/services/workorder.service";
+import { workOrderRollDetachService } from "../src/services/workorder-roll-detach.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus } from "@prisma/client";
 
@@ -78,24 +79,24 @@ const statusOf = async (id: string): Promise<RollStatus> =>
 async function main(): Promise<void> {
   await fixtures();
   try {
-    // 1) WAREHOUSE (renkli) → attach → IN_PRODUCTION → detach → WAREHOUSE
+    // 1) WAREHOUSE (renkli) → attach → IN_PRODUCTION → Top Çıkar → WAREHOUSE
     {
       const wo = await makeWo();
       const r = await makeRoll(RollStatus.WAREHOUSE, COLOR);
       await svc.attachRolls(wo, [r.barcode], ADMIN);
       check("1a: WAREHOUSE top attach → IN_PRODUCTION", (await statusOf(r.id)) === RollStatus.IN_PRODUCTION, await statusOf(r.id));
-      await svc.detachRolls(wo, [r.id], ADMIN);
-      check("1b: detach → WAREHOUSE'a döndü (F1: renkli→depo)", (await statusOf(r.id)) === RollStatus.WAREHOUSE, await statusOf(r.id));
+      await workOrderRollDetachService.detachRoll(wo, r.id, "bekçi: yanlış okutma", ADMIN);
+      check("1b: Top Çıkar → geldiği yere, WAREHOUSE'a döndü", (await statusOf(r.id)) === RollStatus.WAREHOUSE, await statusOf(r.id));
     }
 
-    // 2) STOCK (renksiz/ham) → attach → IN_PRODUCTION → detach → STOCK
+    // 2) STOCK (renksiz/ham) → attach → IN_PRODUCTION → Top Çıkar → STOCK
     {
       const wo = await makeWo();
       const r = await makeRoll(RollStatus.STOCK, null);
       await svc.attachRolls(wo, [r.barcode], ADMIN);
       check("2a: STOCK top attach → IN_PRODUCTION", (await statusOf(r.id)) === RollStatus.IN_PRODUCTION, await statusOf(r.id));
-      await svc.detachRolls(wo, [r.id], ADMIN);
-      check("2b: detach → STOCK'a döndü (F1: renksiz→ham)", (await statusOf(r.id)) === RollStatus.STOCK, await statusOf(r.id));
+      await workOrderRollDetachService.detachRoll(wo, r.id, "bekçi: yanlış okutma", ADMIN);
+      check("2b: Top Çıkar → geldiği yere, STOCK'a döndü", (await statusOf(r.id)) === RollStatus.STOCK, await statusOf(r.id));
     }
 
     // 3) Çuvaldaki WAREHOUSE top → attach REDDEDİLİR (F5)

@@ -606,8 +606,8 @@ export class WorkOrderController {
   }
 
   // K6 (2026-06-12): attachRolls/detachRolls/findAvailableForAttach controller
-  // metodları kaldırıldı — HTTP uçları ölüydü (frontend çağırmıyor). Servis
-  // metodları (workorder.service attachRolls/detachRolls) içeriden kullanılıyor.
+  // metodları kaldırıldı — HTTP uçları ölüydü (frontend çağırmıyor). `attachRolls`
+  // içeriden kullanılıyor; top çıkarma `workorder-roll-detach.service`te.
 
   /**
    * PATCH /api/work-orders/:id

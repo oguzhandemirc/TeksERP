@@ -12,10 +12,11 @@
 //   §2 STOCK topu da çıkış yazar — fromStatus topun GERÇEK önceki statüsüdür
 //   §3 Deposuz top satır YAZMAZ
 //   §4 ⭐ Satır claim ÖNCESİ durumu taşır: fromStatus IN_PRODUCTION DEĞİLDİR
-//   §5 ⭐ İş emrinden ÇIKARMA (detach) GİRİŞ yazar — çıkışın karşılığı
-//   §6 ⭐ Giriş metrajı ÇIKARMA ANINDAKİ metrajdır (ters kayıt olsaydı eski
-//      metraj geri yazılır ve üretimde eriyen mal stoğa fazla girerdi)
-//   §7 Çıkarmada deposuz top DAMGALANIR (terfi); §3 ile karıştırma — o ÇIKIŞtır
+//   §5 ⭐ İş emri İPTALİ çıkışı BAĞLI tersle kapatır (net 0), top GELDİĞİ YERE döner
+//   §6 ⭐ Üretimde değişen metraj AYRI satırdır (PRODUCTION_VARIANCE): 120 → 90 dönüşte
+//      ters +120 · fark −30 · stoğa dönen net +90
+//   §7 Metraj değişmediyse (stoktan alınan top) fark satırı DOĞMAZ
+//   §8 Satırsız (deposuz) top STOCK'a döner, DAMGALANIR, satır doğmaz — beyanlı borç
 // =============================================================================
 import { RollStatus, WarehouseEventType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -38,7 +39,10 @@ let itemId = "";
 async function rowsOf(rollId: string) {
   return prisma.warehouseMovement.findMany({
     where: { rollId },
-    select: { eventType: true, qty: true, fromWarehouseId: true, toWarehouseId: true, fromStatus: true, reasonCode: true, workOrderStepId: true },
+    select: {
+      id: true, eventType: true, qty: true, fromWarehouseId: true, toWarehouseId: true, fromStatus: true, toStatus: true,
+      reasonCode: true, workOrderStepId: true, reversesMovementId: true,
+    },
   });
 }
 
@@ -90,47 +94,46 @@ async function main(): Promise<void> {
   check("§2 STOCK topu da çıkış yazdı ve fromStatus STOCK", stockRows.length === 1 && stockRows[0]?.fromStatus === RollStatus.STOCK, `satır=${stockRows.length} statü=${String(stockRows[0]?.fromStatus)}`);
   check("§3 Deposuz top satır YAZMADI", (await rowsOf(rNoWh.id)).length === 0);
 
-  // ── §5..§7 — İŞ EMRİNDEN ÇIKARMA (detach) ─────────────────────────────────
-  // Çıkışın karşılığı yazılmazsa iş emrinden çıkarılan top defterde sonsuza dek
-  // "üretimde" kalır ve depo bakiyesi eksik görünür.
-  // ⚠️ Metraj üretimde ERİTİLİYOR: ters kayıt yazılsaydı 120 m geri konurdu,
-  // oysa rafa dönen 90 m. Bu, "detach ters kayıt değil yeni ileri satırdır"
-  // kararının ölçülebilir gerekçesi.
+  // ── §5..§8 — İŞ EMRİ İPTALİ: toplar geldiği yere döner ─────────────────────
+  // Üretimde metraj ERİYEBİLİR: bağlı ters ileri satırın metrajını geri koyar (120),
+  // fark (−30) ayrı olgu olarak yazılır — "top döndü" ile "metraj değişti" iki satır.
   await prisma.roll.update({ where: { id: rWh.id }, data: { currentQty: 90 } });
-  const det = await svc.detachRolls(woId, [rWh.id, rNoWh.id]);
-  check("§5a Kurulum: iki top iş emrinden çıkarıldı", det.data?.detached === 2, `çıkarılan=${det.data?.detached} hata=${(det.data?.errors ?? []).join("|")}`);
+  await svc.softDelete(woId);
 
   const whAfter = await rowsOf(rWh.id);
-  const giris = whAfter.find((r) => r.toWarehouseId !== null);
-  check(
-    "§5b ⭐ Çıkarma GİRİŞ satırı yazdı — yön, hedef depo ve sebep doğru",
-    whAfter.length === 2 && giris?.toWarehouseId === warehouse.id &&
-      giris?.fromWarehouseId === null && giris?.reasonCode === STOCK_MOVE_REASON.WO_DETACH &&
-      giris?.eventType === WarehouseEventType.PRODUCTION,
-    `satır=${whAfter.length} sebep=${String(giris?.reasonCode)}`,
-  );
-  check(
-    "§6 ⭐ Giriş metrajı ÇIKARMA anındaki metraj (120 değil 90)",
-    Number(giris?.qty) === 90,
-    `qty=${String(giris?.qty)}`,
-  );
-  const netWh = whAfter.reduce((a, r) => a + (r.toWarehouseId ? Number(r.qty) : 0) - (r.fromWarehouseId ? Number(r.qty) : 0), 0);
-  check("§6b Net = üretimde eriyen fark (−120 + 90 = −30)", netWh === -30, `net=${netWh}`);
-  // ⚠️ §7 2026-09-13'te TERS ÇEVRİLDİ. ÇIKARMA (detach) topu STOK KÜMESİNE geri
-  // sokar, yani bir TERFİdir ve artık depo damgalar (`warehouseStampManyTx`).
-  // ⚠️ §3 ile karıştırma: o İŞ EMRİNE ALMA, yani stoktan ÇIKIŞ — terfi değil,
-  // damga oraya uygulanmaz ve deposuz topun çıkışı hâlâ satırsızdır. Aynı bekçide
-  // iki yön, iki farklı doğru cevap.
-  const detachNoWhRows = await rowsOf(rNoWh.id);
-  const detachNoWhRoll = await prisma.roll.findUnique({
-    where: { id: rNoWh.id }, select: { warehouseId: true },
-  });
-  check(
-    "§7 ⭐ Çıkarmada deposuz top DAMGALANDI ve GİRİŞ satırı yazıldı",
-    detachNoWhRoll?.warehouseId !== null && detachNoWhRows.length === 1 &&
-      detachNoWhRows[0]?.toWarehouseId === detachNoWhRoll?.warehouseId,
-    `damgalandı=${detachNoWhRoll?.warehouseId !== null} satır=${detachNoWhRows.length}`,
-  );
+  const ileri = whRows[0];
+  const ters = whAfter.find((r) => r.reversesMovementId !== null);
+  const fark = whAfter.find((r) => r.reasonCode === STOCK_MOVE_REASON.PRODUCTION_VARIANCE);
+  const whRoll = await prisma.roll.findUnique({ where: { id: rWh.id }, select: { status: true, warehouseId: true, currentQty: true } });
+  check("§5a ⭐ Depodan alınan top iptalde DEPOYA döndü (ham stoğa değil)",
+    whRoll?.status === RollStatus.WAREHOUSE && whRoll?.warehouseId === warehouse.id, `${whRoll?.status}`);
+  check("§5b ⭐ Çıkış BAĞLI tersle kapandı — ileri satıra bağlı, ROLL_DETACH, depoya giriş, tam metraj",
+    ters?.reversesMovementId === ileri?.id && ters?.reasonCode === STOCK_MOVE_REASON.ROLL_DETACH &&
+      ters?.toWarehouseId === warehouse.id && ters?.toStatus === RollStatus.WAREHOUSE && Number(ters?.qty) === 120,
+    `bağ=${ters?.reversesMovementId === ileri?.id} sebep=${String(ters?.reasonCode)} qty=${String(ters?.qty)}`);
+  check("§6a ⭐ Üretim farkı AYRI satır: ADJUST, depodan ÇIKIŞ, 30 m",
+    whAfter.length === 3 && fark?.eventType === WarehouseEventType.ADJUST && fark?.fromWarehouseId === warehouse.id &&
+      fark?.toWarehouseId === null && Number(fark?.qty) === 30,
+    `satır=${whAfter.length} fark=${String(fark?.qty)}`);
+  const net = (rows: typeof whAfter) => rows.reduce((a, r) => a + (r.toWarehouseId ? Number(r.qty) : 0) - (r.fromWarehouseId ? Number(r.qty) : 0), 0);
+  check("§6b Stoğa dönen net +90 (ters +120 · fark −30), top 90 m",
+    net(whAfter.filter((r) => r.id !== ileri?.id)) === 90 && Number(whRoll?.currentQty) === 90,
+    `dönüş neti=${net(whAfter.filter((r) => r.id !== ileri?.id))} top=${String(whRoll?.currentQty)}`);
+
+  const stAfter = await rowsOf(rStock.id);
+  const stRoll = await prisma.roll.findUnique({ where: { id: rStock.id }, select: { status: true } });
+  check("§7 ⭐ Metraj değişmeyen top: yalnız bağlı ters, fark satırı YOK, STOCK'a döndü",
+    stAfter.length === 2 && stAfter.some((r) => r.reversesMovementId === stockRows[0]?.id) &&
+      !stAfter.some((r) => r.reasonCode === STOCK_MOVE_REASON.PRODUCTION_VARIANCE) && stRoll?.status === RollStatus.STOCK,
+    `satır=${stAfter.length} durum=${stRoll?.status}`);
+
+  // §3 ile karıştırma: o ALMA anında satırsızdı; iptalde bu top STOK KÜMESİNE girer
+  // (terfi) ve depo damgalanır, ama bağlanacak ileri satır olmadığı için satır doğmaz.
+  const noWhRows = await rowsOf(rNoWh.id);
+  const noWhRoll = await prisma.roll.findUnique({ where: { id: rNoWh.id }, select: { status: true, warehouseId: true } });
+  check("§8 Satırsız top STOCK'a döndü, DAMGALANDI, satır doğmadı (beyanlı borç)",
+    noWhRoll?.status === RollStatus.STOCK && noWhRoll?.warehouseId !== null && noWhRows.length === 0,
+    `durum=${noWhRoll?.status} damga=${noWhRoll?.warehouseId !== null} satır=${noWhRows.length}`);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
@@ -151,7 +154,11 @@ async function cleanup(): Promise<void> {
     }
     if (itemId) await prisma.item.deleteMany({ where: { id: itemId } });
     console.log("(test verisi temizlendi)");
-  } catch (e) { console.error("cleanup hata:", e instanceof Error ? e.message : e); }
+  } catch (e) {
+    // Yutulan temizlik hatası kalıntı bırakır: bekçi kırmızı verir.
+    fail++;
+    console.error("❌ TEMİZLİK HATASI — kalıntı kaldı:", e instanceof Error ? e.message.split("\n").map((l) => l.trim()).filter(Boolean).pop() : e);
+  }
 }
 
 main()

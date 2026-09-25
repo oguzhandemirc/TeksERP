@@ -4,13 +4,12 @@
 // Saha ihtiyacı: bir iş emrinin TEK partisi iptal olur (yanlış açıldı, müşteri o
 // kalemden vazgeçti, mal başka işe kaydı) ama iş emri diğer partileriyle devam eder.
 // Bugün bunun yolu yoktu: iş emri iptali hepsini birden alır, `splitBatch` partinin
-// TÜM toplarını ayırmayı reddeder (`batch.service.ts:906`), `detachRolls` doğru
-// semantiği taşır ama HTTP ucu K6'da kaldırılmıştır.
+// TÜM toplarını ayırmayı reddeder (`batch.service.ts:906`) ve Top Çıkar yalnız işlem
+// görmemiş tek topu alır.
 //
-// ⚠️ `detachRolls` ÇAĞRILMAZ, deseni ve yardımcıları YENİDEN KULLANILIR. Sebep: o
-// fonksiyonun gerekçe/karar kavramı yok, refakat kartını bayat işaretlemiyor, boşalan
-// partiyi temizlemiyor ve `errors[]` ile parçalı sonuç dönüyor — oysa tek partinin
-// düşürülmesi ya bütün olur ya hiç.
+// ⚠️ Parti düşürme kendi tx'ini taşır: gerekçe/karar kavramı, refakat kartının bayat
+// işaretlenmesi, boşalan partinin temizliği gerekir ve tek partinin düşürülmesi ya
+// bütün olur ya hiç.
 //
 // ⚠️ İŞ EMRİ DURUMU DEĞİŞMEZ. Son parti de düşse `COMPLETED` yapılmaz — o "bunu
 // ÜRETTİK" demektir ve olan bunun tam tersidir. Yanıttaki `noLiveRollsRemain`
@@ -122,7 +121,7 @@ interface DropPreviewRoll {
   canReturnToStock: boolean;
   /**
    * `STOCK` seçilirse topun GERÇEKTEN gideceği statü. Renkli top ham stoğa değil
-   * kaliteden çözülen rafa döner (`detachRolls` F1 kuralı) — etiket "Ham stok"
+   * kaliteden çözülen rafa döner (F1 kuralı) — etiket "Ham stok"
    * derken topun depoya gitmesi kullanıcıyı yanıltırdı.
    */
   revertStatus: RollStatus;
@@ -372,7 +371,7 @@ class WorkOrderBatchDropService {
             })
           : [];
 
-        // 2) KALAN TOPLAR → varsayılan geri çekme, RENGE DUYARLI (`detachRolls` F1).
+        // 2) KALAN TOPLAR → varsayılan geri çekme, RENGE DUYARLI (F1).
         //    Renksiz (ham) → STOCK; renkli (işlenmiş) → kaliteden çözülen final raf.
         //    Körlemesine STOCK yazmak, boyanmış bir topu ham stoğa düşürürdü.
         const decidedIds = new Set(decided.map((d) => d.rollId));
@@ -428,7 +427,7 @@ class WorkOrderBatchDropService {
         }
 
         // 2c) `producedInStepId` yalnız BU iş emrinin adımını gösteriyorsa temizlenir
-        //     (`detachRolls` 1b). İptal edilen toplarda üretim izi KORUNUR —
+        //     İptal edilen toplarda üretim izi KORUNUR —
         //     `inventory.softDelete` de dokunmaz.
         const residualIds = residual.map((r) => r.id);
         if (residualIds.length > 0 && stepIds.length > 0) {
@@ -439,7 +438,7 @@ class WorkOrderBatchDropService {
         }
 
         // 3) Kalan topların açık hareketleri — "mal bu istasyondan geçti" semantiği
-        //    (`detachRolls` ile aynı), gerekçe notta.
+        //    gerekçe notta.
         if (residualIds.length > 0 && stepIds.length > 0) {
           const note = `BATCH_DROP_STOCK: ${reason}`.slice(0, 400);
           await tx.$executeRaw`

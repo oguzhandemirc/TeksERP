@@ -17,6 +17,7 @@ import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
+import { findOpenProductionIssueTx } from "./helpers/production-issue-ledger.helper";
 import { recomputeStepStatus } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
@@ -85,16 +86,6 @@ async function detachBlockers(db: Db, roll: DetachRoll, wo: WoSteps): Promise<st
   return out;
 }
 
-/** Üretime giriş satırı: önce bu adıma damgalı, yoksa damgasız (geçiş dönemi) — `reverseLatestScopedStockMove` sırası. */
-async function findIssueRow(tx: Prisma.TransactionClient, rollId: string, firstStepId: string) {
-  const base = { rollId, reasonCode: STOCK_MOVE_REASON.PRODUCTION_ISSUE, reversesMovementId: null, reversedBy: { none: {} } };
-  const select = { id: true, fromStatus: true, fromWarehouseId: true } as const;
-  return (
-    (await tx.warehouseMovement.findFirst({ where: { ...base, workOrderStepId: firstStepId }, orderBy: { createdAt: "desc" }, select })) ??
-    (await tx.warehouseMovement.findFirst({ where: { ...base, workOrderStepId: null }, orderBy: { createdAt: "desc" }, select }))
-  );
-}
-
 /** Defter satırı yoksa (depo/stok dışı top) önceki durum, üretime girişin durum olayından. */
 async function statusBeforeEntry(tx: Prisma.TransactionClient, rollId: string): Promise<RollStatus | null> {
   const ev = await tx.rollStatusEvent.findFirst({
@@ -157,7 +148,7 @@ export class WorkOrderRollDetachService {
         blockers,
       });
     }
-    const issue = await findIssueRow(tx, rollId, first.id);
+    const issue = await findOpenProductionIssueTx(tx, rollId, [first.id]);
     const backStatus = issue?.fromStatus ?? (await statusBeforeEntry(tx, rollId));
     if (!backStatus) throw AppError.conflict("Topun iş emrinden önceki durumu bulunamadı — panelden Konumu Düzelt kullanın.");
     const claim = await tx.roll.updateMany({

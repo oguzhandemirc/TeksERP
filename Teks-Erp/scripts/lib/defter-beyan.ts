@@ -207,6 +207,11 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     // açık borç listesinde durması listeyi ağırlıksızlaştırır (`RETURN` emsali).
     // ⚠️ Ters yol da KAPALI: kartela iptali `reverseStockMove` ile BAĞLI ters satır
     // yazıyor; fason sevkinin tersi ise fason KABULÜdür (ayrı olay, `ENTRY`).
+    { borc: [{
+      ne: "İş emri iptalinde üretime alma satırı OLMAYAN ham top (defter ufku öncesi bağlanmış · üretimde doğmuş · deposuz) stok kümesine SATIRSIZ döner (STOCK)",
+      kanit: "workorder.service `returnRawRollsOnCancelTx` satırsız dalı; test_stock_ledger_issue §8 satır doğmadığını ölçer; prova4b'de iptal iş emri topu STOCK'ta 0",
+      sahibi: "iş emri alanı",
+    }] },
   ),
 
   D("CariTransaction", "cari borç/alacak defteri", { tur: "TERS_BAG", kolon: "reversesTxnId" },
@@ -523,7 +528,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
 //
 // NEDEN AD KALIBI DEĞİL: "her ileriye bir `*_CANCEL`" kuralı burada da yanlıştır.
 // `SCRAP` terminaldir, `ENTRY_RECEIPT`in tersi `ROLL_CANCEL`dır, `PRODUCTION_ISSUE`un
-// tersi `WO_DETACH`tır — hiçbirinin adında `CANCEL` geçmez. ⇒ "`_CANCEL` yok" ile
+// tersi `ROLL_DETACH`tır — hiçbirinin adında `CANCEL` geçmez. ⇒ "`_CANCEL` yok" ile
 // "geri alınamıyor" AYRI ŞEYLERDİR ve liste grep'le üretilemez; beyan gerekir.
 //
 // ⚠️ KAPSAM — BU TABLO DEFTERİN TAMAMINI KONUŞMAZ. Sebep kodu TAŞIYAN satırları
@@ -542,8 +547,8 @@ export type OlayTersYolu =
    */
   | { tur: "KARSI_OLAY"; kod: string | string[]; gerekce: string; tersYazan: TersYazan[] }
   // ↑ `kod` küme olabilir: bir karşı olay birden çok ileriyi karşılar (ölçüldü 2026-09-13:
-  //   PRODUCTION_ISSUE hem WO_DETACH'ın hem DISPOSITION'ın karşısı — raftan üretime giriş,
-  //   iki farklı çıkışın ortak geri yolu). TAMBUR_UNDO.ileri kümesiyle aynı ders.
+  //   PRODUCTION_ISSUE birden çok çıkışın karşısı olabilir — raftan üretime giriş,
+  //   farklı çıkışların ortak geri yolu). TAMBUR_UNDO.ileri kümesiyle aynı ders.
   /**
    * Tersi `reversesMovementId` ile BAĞLI yazılır. `tersYazan`: ters satırı yazan
    * fonksiyon(lar) — §13f onu kodda arar. NEDEN (1c ölçtü 2026-09-13): `CUT_DISCARD`ı
@@ -567,16 +572,18 @@ export type OlayTersYolu =
   | { tur: "BORC"; ne: string; kanit: string; sahibi: string };
 
 export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
-  // D6 (2026-09-25): Top Çıkar üretime girişi BAĞLI tersle kapatır (`ROLL_DETACH`); detach ·
-  // dispozisyon · kurtarma bağsız karşı yön olarak kalır (§13d KARSI_OLAY → BAGLI_TERS'i kabul eder).
-  PRODUCTION_ISSUE: { tur: "BAGLI_TERS", kod: "ROLL_DETACH", tersYazan: [{ dosya: "src/services/workorder-roll-detach.service.ts", sembol: "detachTx" }] },
+  // Üretime giriş BAĞLI tersle kapanır (`ROLL_DETACH`): Top Çıkar (D6) ve iş emri iptali — iki
+  // yolda da top iş emrinden çıkıp kaynağına döner, hareketin anlamı aynı. Rapor ayrımı ileride
+  // gerekirse ayrı kod enum reçetesiyle ayrışır. Dispozisyon · kurtarma bağsız karşı yön kalır.
+  PRODUCTION_ISSUE: { tur: "BAGLI_TERS", kod: "ROLL_DETACH", tersYazan: [
+    { dosya: "src/services/workorder-roll-detach.service.ts", sembol: "detachTx" },
+    { dosya: "src/services/workorder.service.ts", sembol: "returnRawRollsOnCancelTx" },
+  ] },
   ROLL_DETACH: { tur: "TERS_KODU", ileri: "PRODUCTION_ISSUE" },
-  // WO_DETACH TERS_KODU DEĞİL (ölçüldü 2026-09-13): yazıcısı `detachRolls` `postStockMove` ile
-  // İLERİ satır yazar (eventType PRODUCTION, reasonCode WO_DETACH), `reverseStockMove` ile
-  // bağlı ters DEĞİL — 1e'nin işaret ettiği tutarsızlık. Karşı olay çifti SİMETRİKTİR:
-  // attach'ın karşısı detach, detach'ın karşısı attach.
-  WO_DETACH: { tur: "KARSI_OLAY", kod: "PRODUCTION_ISSUE", gerekce: "detachRolls ↔ attachRolls — karşı yön, ileri satır (postStockMove), bağ yok",
-    tersYazan: [{ dosya: "src/services/helpers/production-issue-ledger.helper.ts", sembol: "postProductionIssuesTx" }] },
+  // Üretim farkı iş emri iptalinde dönen topun metraj değişimidir — dönüşün bağlı tersi net 0
+  // kapanır, fark AYRI olgudur. MANUAL_ADJUST değil (SoD izni taşır, el işi değil); SHRINK değil
+  // (fason dönüşünde ölçülen çekme). Yön from/to'dan okunur.
+  PRODUCTION_VARIANCE: { tur: "TERMINAL", gerekce: "üretimde değişen metrajın kaydı — iş emri iptali geri alınamaz, farkın tersi yok; yön from/to'dan" },
   PRODUCTION_RECEIPT: { tur: "BAGLI_TERS", kod: "KURSUN_REOPEN", tersYazan: [{ dosya: "src/services/kursun-qc.service.ts", sembol: "reopenStep" }] },
   KURSUN_REOPEN: { tur: "TERS_KODU", ileri: "PRODUCTION_RECEIPT" },
   TAMBUR_FINALIZE: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "applySingle" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingleRestore" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" }] },

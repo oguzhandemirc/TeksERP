@@ -289,8 +289,8 @@ export async function createBatchTx(
  * koşullu: (a) partinin AT_SUBCONTRACTOR statülü topu VARSA ('Konum' ile aynı
  * kaynak) VEYA (b) partiye bağlı, iptal edilmemiş + fasondan-sevk-edilmemiş ve
  * hâlâ OUTSTANDING (dönmemiş kalemi olan) sevk kaydı VARSA — mal FİİLEN
- * DIŞARIDAYKEN parti düzenlenemez (K8 guard'ı). (b) şart: AT_SUB top detach
- * edilirse (workorder detachRolls buna izin verir) partide AT_SUB top kalmaz
+ * DIŞARIDAYKEN parti düzenlenemez (K8 guard'ı). (b) şart: AT_SUB top partiden
+ * ayrılırsa partide AT_SUB top kalmaz
  * ama açık sevk outstanding kalır; yalnız-roll-türevli kilit bu "zombi" sevkli
  * partiyi serbest sanıp aynı (parti, adım)'da İKİNCİ açık sevke kapı açardı
  * (firma çözümünün bire-bir varsayımı kırılırdı). Mal tamamen döndüyse iki

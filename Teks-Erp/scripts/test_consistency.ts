@@ -432,7 +432,7 @@ WHERE rm."exitedAt" IS NOT NULL
       //                     dönerdi (roll-disposition.helper.ts başlığına bak).
       //   WO_CANCELLED    → iş emri iptalinin toplu hareket süpürmesi; kalan metraj
       //                     yazılır, giren değil (workorder.service.ts süpürme SQL'i)
-      //   DETACHED_FROM_WO→ topu iş emrinden ayırma; aynı gerekçe (detachRolls)
+      //   DETACHED_FROM_WO→ eski toplu sökümün notu (artık yazılmıyor, eski satırlar); aynı gerekçe
       //   MANUAL_MOVE_OUT → manuel taşımada hayalet movement kapatılır, ölçüm yok
       //                     (workorder-manual-move.service.ts:628)
       //   REDYE_REWIND    → redye/parti geri sarmada movement iptal edilir

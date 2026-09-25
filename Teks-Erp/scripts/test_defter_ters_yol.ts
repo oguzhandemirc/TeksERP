@@ -785,11 +785,12 @@ console.log("\n=== §13 OLAY DÜZEYİ — her sebep kodunun ters yolu beyanlı m
   const kodlar = Object.values(STOCK_MOVE_REASON) as string[];
   const beyanlilar = Object.keys(STOK_OLAY_BEYANI);
   // Kullanım taraması KATALOĞUN KENDİSİNİ dışlar — tanım bir kullanım değildir
-  // (aksi hâlde her kod "kullanılıyor" görünür ve §13e hiçbir şey ölçmez).
+  // (aksi hâlde her kod "kullanılıyor" görünür ve §13e hiçbir şey ölçmez). Bekçi ve
+  // fikstür de sayılmaz: sabite atıf yazar değildir, yazıcısı silinen kodu yeşil tutardı.
   const katalogYolu = join(KOK, "src/constants/stock-move-reasons.ts");
   const kodKullanimi = new Set<string>();
   for (const dosya of tsDosyalar) {
-    if (dosya === katalogYolu) continue;
+    if (dosya === katalogYolu || fiksturMu(relative(KOK, dosya))) continue;
     const metin = readFileSync(dosya, "utf8");
     for (const k of kodlar) if (metin.includes(`STOCK_MOVE_REASON.${k}`)) kodKullanimi.add(k);
   }

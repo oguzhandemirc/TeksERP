@@ -93,7 +93,7 @@ async function main() {
     check("F1a: fasonda mal varken kilitli", locked === true);
 
     // Detach'i simüle et: AT_SUB toplar partiden koparılıp stok/steplesse düşer
-    // (workorder detachRolls DETACHABLE_STATUSES bunu gerçek akışta yapabiliyor).
+    // (eski toplu söküm bunu yapabiliyordu; guard o dönemden kalan veriye karşı durur).
     await prisma.roll.updateMany({
       where: { id: { in: [r1.id, r2.id] } },
       data: { batchId: null, status: RollStatus.STOCK, currentStepId: null },

@@ -22,7 +22,8 @@ import {
 import { ACTIVE_ORDER_LINK, unlinkOrderLinesTx, withActiveOrderLinks } from "./helpers/order-link.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
-import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
+import { findOpenProductionIssueTx, postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
+import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { warehouseStampManyTx, warehouseStampWhereTx } from "./helpers/warehouse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import prisma from "../lib/prisma";
@@ -3460,7 +3461,8 @@ export class WorkOrderService {
    *    veya boyanmış-dönmüş IN_PRODUCTION açık kumaş = SUBCONTRACTOR_RETURN.)
    * 1. İş Emri iptal edilir.
    * 2. Yalnız GERÇEKTEN HAM (entrySource ≠ SUBCONTRACTOR_RETURN), halen üretimdeki
-   *    (currentStepId + IN_PRODUCTION) toplar STOCK'a çekilir; producedInStepId
+   *    (currentStepId + IN_PRODUCTION) toplar geri döner — üretime alma satırı varsa
+   *    alındıkları yere (bağlı tersle), yoksa STOCK'a; producedInStepId
    *    (üretim izi) KORUNUR. Bitmiş depo malları (WAREHOUSE/
    *    TAMBUR_CONSUMED) dokunulmaz.
    * 3. ACTIVE refakat kartları VOIDED'a düşer.
@@ -3648,6 +3650,67 @@ export class WorkOrderService {
       residualRollIds: residual.map((r) => r.id),
       remainderClosed,
     };
+  }
+
+  /**
+   * İptalde üretimdeki ham toplar geri döner. Üretime alma satırı olan top GELDİĞİ YERE
+   * (depo/durum) döner ve satır bağlı tersle kapanır — Top Çıkar (D6) ile aynı hareket.
+   * Satırı olmayan top (defter ufku öncesi bağlanmış ya da üretimde doğmuş) bugünkü gibi STOCK.
+   */
+  private async returnRawRollsOnCancelTx(
+    tx: Prisma.TransactionClient,
+    args: { hamTopWhere: Prisma.RollWhereInput; stepIds: string[]; workOrderNumber: string; userId?: string },
+  ): Promise<void> {
+    const { hamTopWhere, stepIds, workOrderNumber, userId } = args;
+    const rawRolls = await tx.roll.findMany({ where: hamTopWhere, select: { id: true, currentQty: true }, orderBy: { id: "asc" } });
+    type CancelReturn = { rollId: string; status: RollStatus; warehouseId: string | null; currentQty: Prisma.Decimal; issue: NonNullable<Awaited<ReturnType<typeof findOpenProductionIssueTx>>> };
+    const returns: CancelReturn[] = [];
+    for (const r of rawRolls) {
+      const issue = await findOpenProductionIssueTx(tx, r.id, stepIds);
+      if (issue?.fromStatus) returns.push({ rollId: r.id, status: issue.fromStatus, warehouseId: issue.fromWarehouseId, currentQty: r.currentQty, issue });
+    }
+    const groups = new Map<string, { status: RollStatus; warehouseId: string | null; ids: string[] }>();
+    for (const d of returns) {
+      const key = `${d.status}|${d.warehouseId ?? ""}`;
+      const g = groups.get(key) ?? { status: d.status, warehouseId: d.warehouseId, ids: [] };
+      g.ids.push(d.rollId);
+      groups.set(key, g);
+    }
+    for (const g of groups.values()) {
+      const claim = await tx.roll.updateMany({
+        where: { AND: [hamTopWhere, { id: { in: g.ids } }] },
+        data: { status: g.status, currentStepId: null, ...(g.warehouseId ? { warehouseId: g.warehouseId } : {}) },
+      });
+      if (claim.count !== g.ids.length) throw AppError.conflict("Toplardan biri bu sırada değişti — tekrar deneyin.");
+    }
+    const note = `İş emri iptali ${workOrderNumber}`;
+    for (const d of returns) {
+      await reverseStockMove(tx, d.issue.id, { reasonCode: STOCK_MOVE_REASON.ROLL_DETACH, userId: userId ?? null, notes: note });
+      // Üretimde metraj değiştiyse fark AYRI olgudur: ters net 0 kapanır, fark kendi satırıyla.
+      const diff = new Prisma.Decimal(d.currentQty).minus(d.issue.qty);
+      if (d.warehouseId !== null && qtyYazilabilir(diff.abs())) {
+        const end = { warehouseId: d.warehouseId, status: d.status };
+        await postStockMove(tx, {
+          rollId: d.rollId,
+          eventType: WarehouseEventType.ADJUST,
+          qty: diff.abs(),
+          ...(diff.isNegative() ? { from: end } : { to: end }),
+          reasonCode: STOCK_MOVE_REASON.PRODUCTION_VARIANCE,
+          workOrderStepId: d.issue.workOrderStepId,
+          userId: userId ?? null,
+          notes: note,
+        });
+      }
+    }
+    // ⚠️ DAMGA STATÜ FLIP'İNDEN ÖNCE: deposuz top stok kümesine "hangi depoda belli
+    // değil" hâlinde düşerdi; flip'ten sonra aynı yüklem eşleşmez. Mevcut depoyu EZMEZ.
+    const unmatchedIds = rawRolls.map((r) => r.id).filter((id) => !returns.some((d) => d.rollId === id));
+    if (unmatchedIds.length > 0) {
+      const unmatchedWhere = { AND: [hamTopWhere, { id: { in: unmatchedIds } }] } satisfies Prisma.RollWhereInput;
+      await warehouseStampWhereTx(tx, unmatchedWhere);
+      const claim = await tx.roll.updateMany({ where: unmatchedWhere, data: { status: RollStatus.STOCK, currentStepId: null } });
+      if (claim.count !== unmatchedIds.length) throw AppError.conflict("Toplardan biri bu sırada değişti — tekrar deneyin.");
+    }
   }
 
   async softDelete(
@@ -3907,33 +3970,21 @@ export class WorkOrderService {
 
       if (stepIds.length > 0) {
         // Yalnız GERÇEKTEN HAM (entrySource ≠ SUBCONTRACTOR_RETURN), halen
-        // üretimdeki topları STOCK'a geri çek. `producedInStepId` (üretim izi)
-        // KORUNUR. Bitmiş depo malları (WAREHOUSE/TAMBUR_CONSUMED) ve
-        // fason ürünleri (yukarıda bloklandı) DOKUNULMAZ.
-        // ⚠️ DAMGA STATÜ FLIP'İNDEN ÖNCE: terfi topu STOK KÜMESİNE sokuyor ve
-        // deposuz bir top orada "depoda ama hangi depoda belli değil" hâline
-        // düşerdi (defter kapısı onu sessizce atlardı). Flip'ten SONRA aynı yüklem
-        // artık eşleşmez — `status` ve `currentStepId` değişmiş olur. Damga mevcut
-        // depoyu EZMEZ, yalnız NULL'u doldurur.
+        // üretimdeki toplar geri döner. `producedInStepId` (üretim izi) KORUNUR.
+        // Bitmiş depo malları (WAREHOUSE/TAMBUR_CONSUMED) ve fason ürünleri
+        // (yukarıda bloklandı) DOKUNULMAZ.
         const hamTopWhere = {
           currentStepId: { in: stepIds },
           status: RollStatus.IN_PRODUCTION,
           entrySource: { not: RollEntrySource.SUBCONTRACTOR_RETURN },
         } satisfies Prisma.RollWhereInput;
-        await warehouseStampWhereTx(tx, hamTopWhere);
-        await tx.roll.updateMany({
-          where: hamTopWhere,
-          data: {
-            status: RollStatus.STOCK,
-            currentStepId: null,
-          },
-        });
+        await this.returnRawRollsOnCancelTx(tx, { hamTopWhere, stepIds, workOrderNumber: existing.workOrderNumber, userId });
       }
 
       // M-12: iptal edilen WO'nun adımlarındaki TÜM açık movement'ları kapat —
       // yoksa süresiz açık kalır: dashboard WIP sayacı kalıcı şişer, açık-kart
       // partial index'i ölü adımlarla dolar, serbest STOCK top "istasyonda
-      // aktif" görünür. qtyOut topun son metrajından (detachRolls deseni).
+      // aktif" görünür. qtyOut topun son metrajından.
       if (stepIds.length > 0) {
         await tx.$executeRaw`
           UPDATE roll_movements m
@@ -6451,219 +6502,6 @@ export class WorkOrderService {
     });
 
     return { success: true, data: updated, message: "Adım planlaması güncellendi" };
-  }
-
-  /**
-   * Topları İş Emrinden (Sepetten) Çıkarma
-   * Sepet mantığı için eklendi: Yanlış bağlanan stok topların rotasını ve durumunu temizler.
-   */
-  async detachRolls(workOrderId: string, rollIds: string[], userId?: string): Promise<ApiResponse<{ detached: number; errors: string[] }>> {
-    const wo = await prisma.workOrder.findUnique({
-      where: { id: workOrderId },
-      include: { steps: true },
-    });
-
-    if (!wo) {
-      throw AppError.notFound("İş emri bulunamadı");
-    }
-
-    // Tamamlanmış/iptal edilmiş WO'da değişiklik yapılamaz; diğer durumlarda
-    // planlamacının kontrolünde top çıkarılabilir (örn. yanlış bağlanmış top
-    // boyahaneye gönderildikten sonra fark edildi → çıkar, sevki iptal et).
-    if (
-      wo.status === WorkOrderStatus.COMPLETED ||
-      wo.status === WorkOrderStatus.CANCELLED ||
-      wo.status === WorkOrderStatus.SUPERSEDED
-    ) {
-      throw AppError.conflict(
-        `Tamamlanmış/iptal edilmiş iş emrinden top çıkarılamaz (durum: ${wo.status}).`,
-      );
-    }
-
-    const stepIds = wo.steps.map(s => s.id);
-    if (stepIds.length === 0) {
-      throw AppError.badRequest("İş emrinin adımları bulunamadı.");
-    }
-
-    // Çıkarılabilir statüler: bu WO'da üretimde olan + (bilinçli kurtarma akışı)
-    // fasona gitmiş/dönmüş toplar. WAREHOUSE/SHIPPED/CANCELLED/CONSUMED toplar
-    // "STOCK'a diriltilemez" — bayat UI/yanlış istek sessizce depo-sevk
-    // muhasebesini bozamaz (attachRolls'taki claim deseninin simetriği).
-    const DETACHABLE_STATUSES: RollStatus[] = [
-      RollStatus.IN_PRODUCTION,
-      RollStatus.AT_SUBCONTRACTOR,
-      RollStatus.RETURNED_FROM_SUBCONTRACTOR,
-    ];
-
-    const detached: { id: string; barcode: string | null; prevStatus: RollStatus }[] = [];
-    const errorMessages: string[] = [];
-
-    await prisma.$transaction(async (tx) => {
-      // TOPLU (eski kod top başına findUnique+update+updateMany = N+1).
-      const found = await tx.roll.findMany({
-        where: { id: { in: rollIds } },
-        select: { id: true, barcode: true, status: true, currentStepId: true, colorId: true, qualityGrade: true },
-      });
-      const foundIds = new Set(found.map((r) => r.id));
-      for (const reqId of rollIds) {
-        if (!foundIds.has(reqId)) errorMessages.push(`${reqId}: top bulunamadı`);
-      }
-
-      // ÜYELİK + STATÜ GUARD'I: top BU iş emrinin bir adımında olmalı ve
-      // çıkarılabilir statüde olmalı. Başka WO'nun topu / depodaki / sevk
-      // edilmiş / iptal top sessizce sıfırlanamaz — sebep belirtilerek raporlanır.
-      const stepIdSet = new Set(stepIds);
-      const detachable = found.filter(
-        (r) =>
-          r.currentStepId !== null &&
-          stepIdSet.has(r.currentStepId) &&
-          DETACHABLE_STATUSES.includes(r.status),
-      );
-      const detachableIds = detachable.map((r) => r.id);
-      for (const r of found) {
-        if (detachableIds.includes(r.id)) continue;
-        const ref = r.barcode ?? r.id;
-        if (!r.currentStepId || !stepIdSet.has(r.currentStepId)) {
-          errorMessages.push(`${ref}: top bu iş emrine bağlı değil`);
-        } else {
-          errorMessages.push(`${ref}: top çıkarılabilir durumda değil (${r.status})`);
-        }
-      }
-      if (detachableIds.length === 0) return;
-
-      // 1) Toplar → STOCK + pointer/dal kimliği temizle (currentQty'ye
-      //    dokunulmaz). ATOMİK CLAIM: aynı koşullar WHERE'de — okuma ile
-      //    update arasına başka işlem girerse count uyuşmaz → 409 + rollback.
-      // F1: detach RESTORE — attach ÖNCESİ duruma en yakın hale getir. prevStatus saklanmadığından
-      // colorId tek doğruluk kaynağı (createInitialEntry hüristiğinin aynası): renksiz (ham) → STOCK;
-      // renkli (işlenmiş) → kaliteden çözülen final durum (varsayılan WAREHOUSE). Aksi halde WAREHOUSE
-      // bir top attach→detach ile sessizce STOCK'a (ham) düşerdi. currentQty'ye dokunulmaz.
-      // Parti (Batch) üyeliği de koparılır (batchId=null); boşalan parti izsizse sonra temizlenir.
-      const { statusByCode } = await loadQualityTargetMaps(tx, detachable.map((r) => r.qualityGrade));
-      const idsByTarget = new Map<RollStatus, string[]>();
-      for (const r of detachable) {
-        const target = r.colorId == null ? RollStatus.STOCK : resolveFinalStatus(r.qualityGrade, statusByCode);
-        const arr = idsByTarget.get(target);
-        if (arr) arr.push(r.id);
-        else idsByTarget.set(target, [r.id]);
-      }
-      // Hedef duruma göre gruplanmış ATOMİK claim'ler (aynı WHERE guard'ı; toplam count kontrolü).
-      let claimedCount = 0;
-      for (const [target, ids] of idsByTarget) {
-        // Hedef STOK KÜMESİNDEYSE depo damgası terfinin parçası (flip'ten ÖNCE —
-        // sonra yüklem eşleşmez). Damga mevcut depoyu EZMEZ.
-        if (WAREHOUSE_STOCK_STATUSES.includes(target)) {
-          await warehouseStampManyTx(tx, ids);
-        }
-        const res = await tx.roll.updateMany({
-          where: {
-            id: { in: ids },
-            currentStepId: { in: stepIds },
-            status: { in: DETACHABLE_STATUSES },
-          },
-          data: {
-            status: target,
-            currentStepId: null,
-            batchId: null,
-          },
-        });
-        claimedCount += res.count;
-      }
-      if (claimedCount !== detachableIds.length) {
-        throw AppError.conflict(
-          "Toplardan biri bu sırada başka bir işlemle değişti. Listeyi yenileyip tekrar deneyin.",
-        );
-      }
-
-      // DEPO DEFTERİ — top üretimden çıkıp stoğa döndü: GİRİŞ satırı. Bu yol
-      // `attachRolls`ın ÇIKIŞ satırının karşılığıdır; yazılmazsa iş emrinden
-      // çıkarılan top defterde sonsuza dek "üretimde" kalır.
-      //
-      // ⚠️ TERS KAYIT DEĞİL, yeni bir İLERİ satır — iki ölçülebilir sebeple:
-      //   (a) çıkıştan bu yana metraj üretimde değişmiş olabilir; ters kayıt
-      //       miktarı ileri satırdan kopyalar ve bugün olmayan metrajı stoğa yazardı,
-      //   (b) detach hedef statüyü renk/kaliteden YENİDEN çözüyor (attach öncesi
-      //       statü saklanmıyor), yani mal eski rafa değil bugün hesaplanan rafa
-      //       dönüyor. Defter topun gerçekte gittiği yeri söylemeli.
-      // Statü/metraj claim'den SONRA taze okunur.
-      const defterIcin = await tx.roll.findMany({
-        where: { id: { in: detachableIds } },
-        select: { id: true, warehouseId: true, currentQty: true, status: true },
-      });
-      for (const f of defterIcin) {
-        if (!f.warehouseId || !WAREHOUSE_STOCK_STATUSES.includes(f.status)) continue;
-        if (!qtyYazilabilir(f.currentQty)) continue;
-        await postStockMove(tx, {
-          rollId: f.id,
-          eventType: WarehouseEventType.PRODUCTION,
-          qty: f.currentQty,
-          to: { warehouseId: f.warehouseId, status: f.status },
-          reasonCode: STOCK_MOVE_REASON.WO_DETACH,
-        });
-      }
-
-      // 1b) producedInStepId yalnız BU WO'nun adımını gösteriyorsa temizlenir
-      //     (attachRolls'un set ettiği işaretin geri alınması). Başka WO'da
-      //     üretilmiş topun soy izi korunur.
-      await tx.roll.updateMany({
-        where: { id: { in: detachableIds }, producedInStepId: { in: stepIds } },
-        data: { producedInStepId: null },
-      });
-
-      // 2) Açık RollMovement'ları DETACH notuyla kapat. qtyOut/weightOut her top
-      //    için KENDİ currentQty/weightKg'sinden (join) gelir — satır-bazlı farklı
-      //    değer olduğu için tek raw UPDATE (Prisma updateMany tek değer yazardı).
-      //    Tek sorgu = O(1) (eski per-roll updateMany yerine).
-      await tx.$executeRaw`
-        UPDATE roll_movements m
-        -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
-        SET "exitedAt" = now(),
-            "qtyOut" = r."currentQty",
-            "weightOut" = r."weightKg",
-            notes = 'DETACHED_FROM_WO'
-        FROM rolls r
-        WHERE m."rollId" = r.id
-          AND m."rollId" = ANY(${detachableIds}::uuid[])
-          AND m."workOrderStepId" = ANY(${stepIds}::uuid[])
-          AND m."exitedAt" IS NULL
-          AND m."revokedAt" IS NULL
-      `;
-
-      // 3) Boşalan adımların durumunu yeniden hesapla (tüm toplar çıkarıldıysa
-      //    adım ACTIVE kalmasın).
-      const affectedStepIds = [
-        ...new Set(detachable.map((r) => r.currentStepId!).filter(Boolean)),
-      ];
-      for (const sid of affectedStepIds) {
-        await recomputeStepStatus(tx, sid);
-      }
-
-      detached.push(
-        ...detachable.map((r) => ({ id: r.id, barcode: r.barcode, prevStatus: r.status })),
-      );
-    });
-
-    // R8 fix: audit recordId = UUID. oldData GERÇEK önceki statü (hardcode değil).
-    // TEK createMany (eski sıralı for-loop INSERT yerine).
-    await AuditService.logMany(
-      detached.map((r) => ({
-        userId,
-        action: "UPDATE" as const,
-        tableName: "ROLL",
-        recordId: r.id,
-        oldData: { status: r.prevStatus, workOrderId },
-        newData: { status: "STOCK", workOrderId: null, barcode: r.barcode },
-      }))
-    );
-
-    return {
-      success: true,
-      data: { detached: detached.length, errors: errorMessages },
-      message:
-        errorMessages.length > 0
-          ? `${detached.length} top çıkarıldı, ${errorMessages.length} top çıkarılamadı.`
-          : `${detached.length} top iş emrinden başarıyla çıkarıldı.`,
-    };
   }
 
   /**

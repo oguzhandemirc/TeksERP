@@ -13,6 +13,7 @@
 import prisma from "../src/lib/prisma";
 import { roleGrade } from "./fixture-quality-grade";
 import { WorkOrderService } from "../src/services/workorder.service";
+import { workOrderRollDetachService } from "../src/services/workorder-roll-detach.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { computeWoMaterial } from "../src/services/helpers/coverage.helper";
 import { RollStatus } from "@prisma/client";
@@ -91,7 +92,7 @@ async function main(): Promise<void> {
       await svc.attachRolls(X.woId, [r.barcode], ADMIN);
       check("X attach: committed=100", await committedOf(X.woId) === 100, `committed=${await committedOf(X.woId)}`);
 
-      await svc.detachRolls(X.woId, [r.id], ADMIN);
+      await workOrderRollDetachService.detachRoll(X.woId, r.id, "bekçi: yanlış okutma", ADMIN);
       check("X detach sonrası: committed=0", await committedOf(X.woId) === 0, `committed=${await committedOf(X.woId)}`);
 
       const Y = await makeWo(ST_KURSUN);
@@ -110,7 +111,7 @@ async function main(): Promise<void> {
       const r2 = await makeStockRoll(100);
       await svc.attachRolls(X2.woId, [r2.barcode], ADMIN); // M1 açık @ X2.fs
       // İlerleme + WO'dan ayrılma simülasyonu: M1'i DETACHED OLMAYAN bir notla kapat,
-      // topu serbest stoka düşür (detachRolls çağırmadan — DETACHED notu oluşmasın).
+      // topu serbest stoka düşür (Top Çıkar çağırmadan — onun izi oluşmasın).
       await prisma.rollMovement.updateMany({
         where: { rollId: r2.id, workOrderStepId: X2.stepIds[0] },
         data: { exitedAt: new Date(), notes: "ADVANCE_SIM" },
@@ -130,7 +131,7 @@ async function main(): Promise<void> {
       const r3 = await makeStockRoll(100);
       await svc.attachRolls(X3.woId, [r3.barcode], ADMIN); // movement YOK, currentStepId=Boyahane (B_set)
       check("X3 attach (EXTERNAL): committed=100", await committedOf(X3.woId) === 100, `committed=${await committedOf(X3.woId)}`);
-      await svc.detachRolls(X3.woId, [r3.id], ADMIN);
+      await workOrderRollDetachService.detachRoll(X3.woId, r3.id, "bekçi: sevk öncesi çıkarma", ADMIN);
       check("X3 detach sonrası: committed=0", await committedOf(X3.woId) === 0, `committed=${await committedOf(X3.woId)}`);
     }
   } finally {

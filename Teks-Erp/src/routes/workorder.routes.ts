@@ -61,8 +61,8 @@ router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:faso
 
 // K6 (2026-06-12): GET /available-for-attach, PATCH /:id/attach-rolls ve
 // PATCH /:id/detach-rolls HTTP uçları kaldırıldı — hiçbir frontend çağırmıyordu
-// (Electron+mobil grep'le doğrulandı). attachRolls/detachRolls SERVİS metodları
-// yaşıyor: quick-start ve seed scriptleri içeriden çağırır.
+// (Electron+mobil grep'le doğrulandı). attachRolls SERVİS metodu yaşıyor:
+// quick-start ve seed scriptleri içeriden çağırır. Top çıkarma: workorder-roll-detach.service.
 
 /**
  * @openapi

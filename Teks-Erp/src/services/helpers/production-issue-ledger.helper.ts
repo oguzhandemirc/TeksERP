@@ -57,3 +57,16 @@ export async function postProductionIssuesTx(
   }
   return written;
 }
+
+/**
+ * Topun geri alınmamış üretime alma satırı: önce verilen adımlara damgalı, yoksa damgasız
+ * (geçiş dönemi). Top Çıkar ve iş emri iptali AYNI satırı bulur; tersi bu satıra bağlanır.
+ */
+export async function findOpenProductionIssueTx(tx: Tx, rollId: string, stepIds: readonly string[]) {
+  const base = { rollId, reasonCode: STOCK_MOVE_REASON.PRODUCTION_ISSUE, reversesMovementId: null, reversedBy: { none: {} } };
+  const select = { id: true, fromStatus: true, fromWarehouseId: true, qty: true, workOrderStepId: true } as const;
+  return (
+    (await tx.warehouseMovement.findFirst({ where: { ...base, workOrderStepId: { in: [...stepIds] } }, orderBy: { createdAt: "desc" }, select })) ??
+    (await tx.warehouseMovement.findFirst({ where: { ...base, workOrderStepId: null }, orderBy: { createdAt: "desc" }, select }))
+  );
+}

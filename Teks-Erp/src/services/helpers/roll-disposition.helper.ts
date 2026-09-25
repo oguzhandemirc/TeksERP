@@ -161,7 +161,6 @@ function groupKey(row: RollDispositionRow): string {
  * GRUPLU çalışır (aksiyon + kalite başına tek `updateMany`), per-top döngü DEĞİL:
  * iptal yolunun bugün satır sınırı yok ve 800 toplu bir iş emrini per-top döngüden
  * geçirmek tek tx'te ~2400 ifade demekti (perf kuralı 10 + `statement_timeout=50s`).
- * Emsal `detachRolls`'un `idsByTarget` haritası.
  */
 export async function applyRollDispositionsTx(
   tx: TxClient,

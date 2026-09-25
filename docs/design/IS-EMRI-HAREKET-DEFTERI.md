@@ -362,7 +362,7 @@ Beyan: ikisi de `SATIR_EBEVEYN`, ebeveyn `WorkOrderEvent` (ters yol = yeniden a�
 | **Belgeler → Refakat kartını yeniden bas** | **KONUR** (kısayol) | kart bayatsa ("renk değişti") tek dokunuşla yeni sürüm |
 | Kapat | KONMAZ | dispozisyon + `roll:manual-adjust` ister — süpervizör işi, panelde |
 | İptal Et | **Soru S3** | bugün tablette VAR; öneri: yalnız HİÇ işlem görmemiş iş emrinde kalsın |
-| (yeni) **Top Çıkar** | **KONUR — yeni backend** | yanlış okutma; bugün uç yok (`detachRolls` S:6364 ölü kod, defter yazmıyor) |
+| (yeni) **Top Çıkar** | **KONUR — yeni backend** | yanlış okutma; bugün uç yok (`detachRolls` ölü koddu, 2026-09-25'te silindi) |
 | (yeni) **Parti Ekle** | **KONUR — S4 kararı (2026-09-25)**, tablet + panel | açık iş emrine okutulan toplar YENİ PARTİ olur ve ilk adımdan başlar; mevcut partiye ekleme yok; tamamlanmış iş emrine yok (§6.5) |
 | (yeni) Hedef metre / kg | Soru S1 | bugün yalnız genel Düzenle'de; tek amaçlı tuş olarak taşınabilir |
 
@@ -389,12 +389,12 @@ panelden Konumu Düzelt / Parti Düşür".
 aynı engel yüklemiyle). İşlem görmemiş = ilk adımda · en fazla bir AÇIK giriş hareketi (dış ilk adımda sıfır) ·
 bu iş emrinin adımlarında aktif `RollOperation` yok · çocuk top yok · iptal edilmemiş fason sevk kalemi yok ·
 çuval/sevk yok · bu iş emrinde `RollVariance` yok. Stok defterinde yeni ters kod `ROLL_DETACH`
-(`PRODUCTION_ISSUE` artık `BAGLI_TERS`; `WO_DETACH`/`DISPOSITION`/`RESCUE` bağsız karşı yön olarak kalır).
+(`PRODUCTION_ISSUE` artık `BAGLI_TERS`; `DISPOSITION`/`RESCUE` bağsız karşı yön olarak kalır; `WO_DETACH` yazıcısıyla birlikte silindi).
 Önceki durum/depo ileri satırın `from` ucundan; satır yoksa (depo/stok dışı top) son `RollStatusEvent`ten.
 **Sapma:** Hareketler satırı `RollMovement` damgası yerine stok defterinin tipli ters satırından okunur
 (damga sebebi serbest metin, ters satır tipli kod + aktör + not taşır); depo defteri satırı olmayan topun
 çıkarılması bu yüzden çizelgede görünmez (ölçülecek; saha yolu stok topudur). Boş parti `deleteIfEmptyAndTracelessTx`
-ile düşer; iş emri PLANNED'a yalnız top kalmaz VE hiçbir adım başlamamışsa döner. Ölü `detachRolls` dokunulmadı.
+ile düşer; iş emri PLANNED'a yalnız top kalmaz VE hiçbir adım başlamamışsa döner. Ölü `detachRolls` sonraki dilimde silindi; iş emri iptali aynı bağlı tersi yazar (arşiv 2026-09-25 "iptal").
 
 ### 6.3 Genel "Düzenle" ve iş emri numarası — öneri
 
