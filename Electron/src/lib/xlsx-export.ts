@@ -12,8 +12,9 @@ export interface SheetColumn {
   /** rows[]/totalRow içindeki alan adı. */
   key: string;
   width?: number;
-  /** Sayı/tarih biçimi — örn "#,##0.0" (metre/kg), "#,##0" (adet), "dd.mm.yyyy hh:mm". */
-  numFmt?: string;
+  /** Sayı/tarih biçimi — örn "#,##0.0" (metre/kg), "#,##0" (adet), "dd.mm.yyyy hh:mm".
+   *  Fonksiyon verilirse HÜCRE BAŞINA seçilir (ör. tam sayıda ondalık ayırıcı görünmesin). */
+  numFmt?: string | ((value: unknown) => string | undefined);
   /** Veri hücrelerinin yatay hizası — belgedeki kolon hizasının aynısı. */
   align?: "left" | "right" | "center";
 }
@@ -34,6 +35,18 @@ export interface SheetSpec {
   /** Tablonun ÜSTÜNE basılan belge başlığı satırları (ör. [etiket, değer]) — tek
    *  hücreli satır kalın basılır. Verilmezse sayfa bugünkü gibi başlık satırıyla açılır. */
   preamble?: Array<Array<string | number | null>>;
+  /** Ana tablonun ALTINA (boş satırdan sonra) basılan ek tablolar — başlık satırı +
+   *  kolon başlıkları + satırlar. Aynı sayfada ikinci liste (ör. çuvalın kartelaları). */
+  subTables?: Array<{ title: string; columns: Array<Omit<SheetColumn, "key" | "width">>; rows: unknown[][] }>;
+}
+
+type CellLike = { value: unknown; numFmt: string; alignment: unknown };
+
+/** Hücreye kolonun biçimini ve hizasını uygular (fonksiyon biçim hücre değerine bakar). */
+function styleCell(cell: CellLike, col: Pick<SheetColumn, "numFmt" | "align">): void {
+  const fmt = typeof col.numFmt === "function" ? col.numFmt(cell.value) : col.numFmt;
+  if (fmt) cell.numFmt = fmt;
+  if (col.align) cell.alignment = { horizontal: col.align };
 }
 
 const HEADER_FILL = "FFEFEFEF"; // açık gri başlık zemini
@@ -74,21 +87,42 @@ export async function buildWorkbook(sheets: SheetSpec[]): Promise<Blob> {
     const alignRow = (row: { getCell: (n: number) => { alignment: unknown } }) => {
       for (const c of aligned) row.getCell(c.idx).alignment = { horizontal: c.align };
     };
+    const cellFmt = spec.columns.map((c, idx) => ({ idx: idx + 1, c })).filter(({ c }) => typeof c.numFmt === "function");
+    const fmtRow = (row: { getCell: (n: number) => CellLike }) => {
+      for (const { idx, c } of cellFmt) styleCell(row.getCell(idx), c);
+    };
 
-    for (const r of spec.rows) alignRow(ws.addRow(r));
+    for (const r of spec.rows) {
+      const row = ws.addRow(r);
+      alignRow(row);
+      fmtRow(row);
+    }
 
     spec.columns.forEach((c, idx) => {
-      if (c.numFmt) ws.getColumn(idx + 1).numFmt = c.numFmt;
+      if (typeof c.numFmt === "string") ws.getColumn(idx + 1).numFmt = c.numFmt;
     });
 
     if (spec.totalRow) {
       const tr = ws.addRow(spec.totalRow);
       tr.font = { bold: true };
       alignRow(tr);
+      fmtRow(tr);
       spec.columns.forEach((c, idx) => {
         const fmt = spec.totalNumFmt?.[c.key];
         if (fmt) tr.getCell(idx + 1).numFmt = fmt;
       });
+    }
+
+    for (const st of spec.subTables ?? []) {
+      ws.addRow([]);
+      ws.addRow([st.title]).font = { bold: true };
+      const hr = ws.addRow(st.columns.map((c) => c.header));
+      hr.font = { bold: true };
+      hr.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
+      for (const r of st.rows) {
+        const row = ws.addRow(r);
+        st.columns.forEach((c, i) => styleCell(row.getCell(i + 1), c));
+      }
     }
 
     if (spec.notes?.length) {

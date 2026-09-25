@@ -1,4 +1,3 @@
-import type { SackDumpNameMode } from "@/lib/shipping-flags";
 // =============================================================================
 // Çuval İÇERİK DÖKÜMÜ — yazdırılabilir HTML (yazdır VE PDF aynı stringi kullanır)
 // =============================================================================
@@ -6,124 +5,55 @@ import type { SackDumpNameMode } from "@/lib/shipping-flags";
 // aynı statü). Bu yüzden `printed-document` kayıt defterine girmez; antet/kaşe
 // katmanı da yok.
 // Her çuval kendi bölümünde başlar ve çuvallar arasına sayfa sonu konur — Excel'in
-// "çuval başına sayfa" davranışının kağıt karşılığı.
+// "çuval başına sayfa" davranışının kağıt karşılığı. Kolon, başlık ve hücre metni
+// `dumpModel`den gelir (Excel aynı modeli okur); burada yalnız yerleşim yaşar.
 // =============================================================================
 
-import { dumpTotalQty, type SackDump, type SackDumpOptions, type SackDumpRoll } from "./types";
+import {
+  buildSackDumpModel,
+  dumpCellText,
+  EMPTY_SACK_TEXT,
+  type DumpKind,
+  type DumpSackSection,
+  type DumpTable,
+} from "./dumpModel";
+import type { SackDump, SackDumpOptions } from "./types";
 
 const esc = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-const fmtNum = (n: number): string => n.toLocaleString("tr-TR", { maximumFractionDigits: 3 });
+const NUMERIC: ReadonlySet<DumpKind> = new Set<DumpKind>(["qty", "int", "cm"]);
+/** Barkod / çuval no gibi kod kolonları eş aralıklı yazılır. */
+const MONO_KEYS: ReadonlySet<string> = new Set(["barcode", "sackNo"]);
 
-const dash = (s: string | null | undefined): string => (s && s.trim() ? esc(s) : "—");
-
-/** Çuval başlığı meta satırı — müşteri/şube/ihracat kodu/kg/sevkiyat. */
-function metaLine(d: SackDump): string {
-  const parts: string[] = [];
-  parts.push(d.customerName ? esc(d.customerName) : "Müşterisiz (genel stok)");
-  if (d.branchName) parts.push(esc(d.branchName));
-  if (d.branchCode) parts.push(`İhracat Kodu: ${esc(d.branchCode)}`);
-  parts.push(`${d.rolls.length} top`);
-  parts.push(`${fmtNum(dumpTotalQty(d))} m`);
-  parts.push(d.weightKg != null ? `${fmtNum(d.weightKg)} kg` : "tartılmadı");
-  if (d.swatches.length > 0) parts.push(`${d.swatches.length} kartela`);
-  if (d.shipmentNo) parts.push(`Sevkiyat: ${esc(d.shipmentNo)}`);
-  return parts.join(" · ");
-}
-
-
-/**
- * Bizdeki ad + (varsa) müşterideki karşılık, alt alta.
- * ⚠️ Karşılık YOKSA alt satır HİÇ basılmaz — bizim adımızı oraya koymak
- * "müşteri bunu böyle çağırıyor" yalanını üretirdi (2026-09-06 düzeltmesi).
- */
-function adHucresi(
-  bizdeki: string,
-  musterideki: string | null | undefined,
-  mode: SackDumpNameMode,
-): string {
-  // `musterideki`: karşılık yoksa hücre BOŞ — bizim adımız müşterininmiş gibi
-  // basılmaz (ayar açıklamasındaki söz burada tutulur).
-  if (mode === "musterideki") return musterideki ? esc(musterideki) : "";
-  const ust = dash(bizdeki);
-  if (mode === "bizdeki" || !musterideki) return ust;
-  return `${ust}<div class="alt">↳ ${esc(musterideki)}</div>`;
-}
-
-
-/**
- * Topun ÜSTÜNDEKİ kâğıtta yazan. Üç hâl ayrı ayrı görünür:
- * basılmamış · bayat (kayıtla ayrışmış) · güncel.
- */
-function etiketHucresi(r: SackDumpRoll): string {
-  if (!r.etiketBasildi) return `<span class="alt">basılmamış</span>`;
-  const ad = r.etiketAd ? esc(r.etiketAd) : `<span class="alt">(ad kayıtlı değil)</span>`;
-  return r.etiketBayat ? `<strong>BAYAT</strong><div class="alt">${ad}</div>` : ad;
-}
-
-
-function rollTable(d: SackDump, mode: SackDumpNameMode): string {
-  if (d.rolls.length === 0) {
-    return `<p class="empty">Çuval boş — top yok.</p>`;
-  }
-  const body = d.rolls
-    .map(
-      (r) => `<tr>
-        <td class="mono">${r.barcode ? esc(r.barcode) : "Açık Kumaş"}</td>
-        <td>${adHucresi(r.itemName, r.musteriItemName, mode)}</td>
-        <td>${adHucresi(r.colorName ?? "Ham", r.musteriColorName, mode)}</td>
-        <td>${etiketHucresi(r)}</td>
-        <td class="num">${r.width != null ? `${fmtNum(r.width)} cm` : "—"}</td>
-        <td class="num">${fmtNum(r.qty)}</td>
-        <td>${dash(r.qualityGrade)}</td>
-      </tr>`,
-    )
+/** Modelin tablosu — kolon, başlık, hücre metni ve toplam Excel'le AYNI kaynaktan. */
+function tableHtml(t: DumpTable): string {
+  const cls = (i: number) => {
+    const c = t.columns[i]!;
+    return [NUMERIC.has(c.kind) ? "num" : "", MONO_KEYS.has(c.key) ? "mono" : ""].filter(Boolean).join(" ");
+  };
+  const cell = (tag: "th" | "td", i: number, text: string) => {
+    const k = cls(i);
+    return `<${tag}${k ? ` class="${k}"` : ""}>${text}</${tag}>`;
+  };
+  const head = t.columns.map((c, i) => cell("th", i, esc(c.label))).join("");
+  const body = t.rows
+    .map((r) => `<tr>${r.map((v, i) => cell("td", i, esc(dumpCellText(t.columns[i]!.kind, v)))).join("")}</tr>`)
     .join("");
-  return `<table>
-    <thead><tr>
-      <th>Barkod</th><th>Kumaş</th><th>Renk</th><th>Etikette</th>
-      <th class="num">En</th><th class="num">Metre</th><th>Kalite</th>
-    </tr></thead>
-    <tbody>${body}</tbody>
-    <tfoot><tr>
-      <td colspan="5"><strong>ARA TOPLAM — ${d.rolls.length} top</strong></td>
-      <td class="num"><strong>${fmtNum(dumpTotalQty(d))}</strong></td>
-      <td></td>
-    </tr></tfoot>
-  </table>`;
+  const foot = t.foot
+    ? `<tfoot><tr>${t.foot.map((v, i) => cell("td", i, `<strong>${esc(dumpCellText(t.columns[i]!.kind, v))}</strong>`)).join("")}</tr></tfoot>`
+    : "";
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table>`;
 }
 
-function swatchBlock(d: SackDump, mode: SackDumpNameMode): string {
-  if (d.swatches.length === 0) return "";
-  const items = d.swatches
-    .map(
-      (s) =>
-        // Kartela satırı da AYNI ad rejiminden geçer — top tablosu müşteri adını
-        // basarken kartelanın bizim adımızı basması tek kâğıtta iki dil olurdu.
-        `<li><span class="mono">${s.barcode ? esc(s.barcode) : "Kartela"}</span> — ${
-          adHucresi(s.itemName, s.musteriItemName, mode) || "—"
-        }${s.colorName || s.musteriColorName ? ` · ${adHucresi(s.colorName ?? "Ham", s.musteriColorName, mode)}` : ""}</li>`,
-    )
-    .join("");
-  return `<div class="swatches">
-    <div class="sub">KARTELALAR · ${d.swatches.length}</div>
-    <ul>${items}</ul>
-  </div>`;
-}
-
-function noteBlock(d: SackDump, withNotes: boolean): string {
-  if (!withNotes || !d.notes) return "";
-  return `<div class="note"><strong>Not:</strong> ${esc(d.notes)}</div>`;
-}
-
-function sackSection(d: SackDump, withNotes: boolean, mode: SackDumpNameMode): string {
+function sackSection(s: DumpSackSection): string {
+  const meta = s.meta.map(([l, v]) => `${esc(l)}: ${esc(v)}`).join(" · ");
   return `<section class="sack">
-    <h2>${esc(d.sackNo)}</h2>
-    <div class="meta">${metaLine(d)}</div>
-    ${noteBlock(d, withNotes)}
-    ${rollTable(d, mode)}
-    ${swatchBlock(d, mode)}
+    <h2>${esc(s.sackNo)}</h2>
+    <div class="meta">${meta}</div>
+    ${s.note ? `<div class="note"><strong>Not:</strong> ${esc(s.note)}</div>` : ""}
+    ${s.rolls ? tableHtml(s.rolls) : `<p class="empty">${esc(EMPTY_SACK_TEXT)}</p>`}
+    ${s.swatches ? `<div class="swatches"><div class="sub">KARTELALAR · ${s.swatches.rows.length}</div>${tableHtml(s.swatches)}</div>` : ""}
   </section>`;
 }
 
@@ -131,44 +61,10 @@ function sackSection(d: SackDump, withNotes: boolean, mode: SackDumpNameMode): s
  * Tam HTML belge üretir — `printHtmlString` (yazıcı) ve `window.api.pdf.save`
  * (PDF dosyası) ikisi de bunu tüketir; tek kaynak, iki çıktı birebir aynı görünür.
  */
-export function buildSackDumpHtml(dumps: SackDump[], opts: SackDumpOptions = {}): string {
-  const withNotes = !!opts.withNotes;
-  const mode: SackDumpNameMode = opts.nameMode ?? "ikisi";
-  const totalRolls = dumps.reduce((a, d) => a + d.rolls.length, 0);
-  const totalQty = dumps.reduce((a, d) => a + dumpTotalQty(d), 0);
-  const totalSwatches = dumps.reduce((a, d) => a + d.swatches.length, 0);
-  const weighed = dumps.filter((d) => d.weightKg != null);
-  const totalKg = weighed.reduce((a, d) => a + (d.weightKg ?? 0), 0);
+export function buildSackDumpHtml(dumps: SackDump[], opts: SackDumpOptions = {}, now?: Date): string {
+  const m = buildSackDumpModel(dumps, opts, now);
 
-  // Kapsam etiketi verilmişse başlık ONU söyler (grup dökümünde "ACME — P2").
-  // Grup numarası geri kullanılabilir olduğu için kâğıdın hangi gruba ait
-  // olduğunu YAZMASI, aşağıdaki basım anıyla birlikte, tek ayırt edicidir.
-  // Kapsam etiketi tek cariye aitse cari adı BAŞLIĞA girer — çağıranın adı
-  // ayrıca taşımasına gerek yok ve "hangi carinin P2'si" sorusu kâğıtta cevaplı.
-  const cariler = [...new Set(dumps.map((d) => d.customerName).filter((v): v is string => !!v))];
-  const kapsam =
-    opts.scopeLabel && cariler.length === 1
-      ? `${cariler[0]} — ${opts.scopeLabel}`
-      : opts.scopeLabel;
-  const title = kapsam
-    ? `ÇUVAL İÇERİK DÖKÜMÜ — ${kapsam}`
-    : dumps.length === 1
-      ? `ÇUVAL İÇERİK DÖKÜMÜ — ${dumps[0]!.sackNo}`
-      : `ÇUVAL İÇERİK DÖKÜMÜ — ${dumps.length} çuval`;
-
-  // Genel toplam yalnız çok çuvalda anlamlı (tek çuvalda ara toplamla aynı olurdu).
-  const grand =
-    dumps.length > 1
-      ? `<div class="grand">
-          GENEL TOPLAM — ${dumps.length} çuval · ${totalRolls} top · ${fmtNum(totalQty)} m${
-            weighed.length > 0
-              ? ` · ${fmtNum(totalKg)} kg${weighed.length < dumps.length ? ` (${dumps.length - weighed.length} çuval tartılmadı)` : ""}`
-              : " · tartılmadı"
-          }${totalSwatches > 0 ? ` · ${totalSwatches} kartela` : ""}
-        </div>`
-      : "";
-
-  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>${esc(m.title)}</title><style>
     @page { size: A4 portrait; margin: 14mm; }
     /* Belge KENDİ zeminini taşır: printToPDF printBackground:true ile çalışıyor ve
        koyu zeminli bir pencerede render edilirse zemin devralınıp koyu-üstüne-koyu
@@ -199,16 +95,12 @@ export function buildSackDumpHtml(dumps: SackDump[], opts: SackDumpOptions = {})
     /* Müşterideki ad / etiket ayrıntısı — ana adın altında, sönük. */
     .alt { font-size: 9px; color: #666; }
     .swatches { margin-top: 8px; }
-    .swatches .sub { font-size: 10px; font-weight: 700; color: #444; letter-spacing: .04em; margin-bottom: 2px; }
-    .swatches ul { margin: 0; padding-left: 16px; font-size: 10px; }
-    .grand { margin-top: 10px; padding-top: 6px; border-top: 2px solid #333; font-weight: 700; font-size: 11px; }
+    .sub { font-size: 10px; font-weight: 700; color: #444; letter-spacing: .04em; margin-bottom: 2px; }
+    .summary { margin-bottom: 14px; }
   </style></head><body>
-    <h1>${esc(title)}</h1>
-    <div class="doc-meta">
-      ${dumps.length} çuval · ${totalRolls} top · ${fmtNum(totalQty)} m · Basım: ${esc(new Date().toLocaleString("tr-TR"))}
-      ${withNotes ? " · çuval notları dahil" : ""}
-    </div>
-    ${dumps.map((d) => sackSection(d, withNotes, mode)).join("")}
-    ${grand}
+    <h1>${esc(m.title)}</h1>
+    <div class="doc-meta">${esc(m.docMeta)}</div>
+    ${m.summary ? `<section class="summary"><div class="sub">ÖZET</div>${tableHtml(m.summary)}</section>` : ""}
+    ${m.sacks.map(sackSection).join("")}
   </body></html>`;
 }

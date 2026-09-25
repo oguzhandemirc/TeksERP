@@ -177,11 +177,12 @@ describe("§9 grup çıktısı çalışma kâğıdıdır", () => {
     expect(html).toContain("Basım:");
   });
 
-  it("Excel özetinde Kapsam sütunu YALNIZ grup dökümünde çizilir", () => {
-    const ile = buildSackDumpSheets([dump()], { scopeLabel: "P2" }).find((s) => s.name === "Özet")!;
-    const siz = buildSackDumpSheets([dump()], {}).find((s) => s.name === "Özet")!;
-    expect(ile.columns.map((c) => c.header)).toContain("Kapsam");
-    expect(siz.columns.map((c) => c.header)).not.toContain("Kapsam");
+  it("Excel de kapsamı ve basım anını PDF'le AYNI başlıkta taşır", () => {
+    const ilk = buildSackDumpSheets([dump()], { scopeLabel: "P2" })[0]!;
+    expect(ilk.preamble?.[0]?.[0]).toContain("ACME — P2");
+    expect(ilk.preamble?.[1]?.[0]).toContain("Basım:");
+    const siz = buildSackDumpSheets([dump()], {})[0]!;
+    expect(siz.preamble?.[0]?.[0]).not.toContain("P2");
   });
 
   it("kapsam etiketi yoksa başlık bugünkü haliyle kalır (regresyon)", () => {

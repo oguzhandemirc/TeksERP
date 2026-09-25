@@ -26,88 +26,90 @@ function makeDump(over: Partial<SackDump> = {}): SackDump {
 const sheet = (sheets: ReturnType<typeof buildSackDumpSheets>, name: string) =>
   sheets.find((s) => s.name === name);
 
+type Sheet = ReturnType<typeof buildSackDumpSheets>[number];
+/** Satırın/toplamın BAŞLIK adına göre değeri (anahtarlar kolon sırasıdır). */
+const cell = (s: Sheet, row: Record<string, unknown> | undefined, header: string): unknown =>
+  row?.[s.columns.find((c) => c.header === header)!.key];
+
 describe("buildSackDumpSheets", () => {
-  it("Özet + çuval başına sayfa üretir", () => {
+  it("Özet YALNIZ çok çuvallı dökümde (PDF'teki ÖZET gibi) + çuval başına sayfa", () => {
     const sheets = buildSackDumpSheets([
       makeDump(),
       makeDump({ sackNo: "CV3007260007", customerName: null, branchName: null, branchCode: null, weightKg: null }),
     ]);
     expect(sheets.map((s) => s.name)).toEqual(["Özet", "CV3007260003", "CV3007260007"]);
+    expect(buildSackDumpSheets([makeDump()]).map((s) => s.name)).toEqual(["CV3007260003"]);
   });
 
   it("Özet satırları ve TOPLAM doğru toplanır", () => {
-    const sheets = buildSackDumpSheets([makeDump(), makeDump({ sackNo: "CV2", weightKg: 100 })]);
-    const ozet = sheet(sheets, "Özet")!;
+    const ozet = sheet(buildSackDumpSheets([makeDump(), makeDump({ sackNo: "CV2", weightKg: 100 })]), "Özet")!;
     expect(ozet.rows).toHaveLength(2);
-    expect(ozet.totalRow).toMatchObject({
-      sackNo: "TOPLAM (2 çuval)",
-      rollCount: 4,
-      qty: 2681, // (700 + 640.5) * 2
-      weightKg: 512.5,
-    });
+    expect(cell(ozet, ozet.totalRow, "Çuval No")).toBe("TOPLAM (2 çuval)");
+    expect(cell(ozet, ozet.totalRow, "Top")).toBe(4);
+    expect(cell(ozet, ozet.totalRow, "Metre")).toBe(2681); // (700 + 640.5) * 2
+    expect(cell(ozet, ozet.totalRow, "Kg")).toBe(512.5);
   });
 
-  it("müşterisiz çuval Özet'te açıkça yazılır, tartılmamış kg BOŞ kalır (0 değil)", () => {
-    const sheets = buildSackDumpSheets([
-      makeDump({ customerName: null, branchName: null, branchCode: null, weightKg: null }),
-    ]);
-    expect(sheet(sheets, "Özet")!.rows[0]).toMatchObject({
-      customer: "Müşterisiz (genel stok)",
-      branch: "",
-      weightKg: "",
-    });
+  it("müşterisiz çuval Özet'te açıkça yazılır, tartılmamış kg 'tartılmadı' (0 değil)", () => {
+    const ozet = sheet(
+      buildSackDumpSheets([makeDump(), makeDump({ sackNo: "CV2", customerName: null, branchName: null, branchCode: null, weightKg: null })]),
+      "Özet",
+    )!;
+    expect(cell(ozet, ozet.rows[1], "Müşteri")).toBe("Müşterisiz (genel stok)");
+    expect(cell(ozet, ozet.rows[1], "Şube")).toBe("—");
+    expect(cell(ozet, ozet.rows[1], "Kg")).toBe("tartılmadı");
   });
 
-  it("çuval sayfası top satırlarını + TOPLAM'ı sayı olarak taşır", () => {
-    const sheets = buildSackDumpSheets([makeDump()]);
-    const s = sheet(sheets, "CV3007260003")!;
+  it("çuval sayfası top satırlarını + TOPLAM'ı sayı olarak taşır; tam sayıda ondalık ayırıcı yok", () => {
+    const s = sheet(buildSackDumpSheets([makeDump()]), "CV3007260003")!;
     expect(s.rows).toHaveLength(2);
-    expect(s.rows[0]).toMatchObject({ barcode: "T300726F0235", item: "PATOS", color: "Mavi", width: 280, qty: 700 });
-    expect(s.totalRow).toMatchObject({ barcode: "TOPLAM (2 top)", qty: 1340.5 });
-    // Metre/kg kolonları sayı biçimli olmalı (Excel'de toplanabilsin).
-    expect(s.columns.find((c) => c.key === "qty")?.numFmt).toBeTruthy();
+    expect(cell(s, s.rows[0], "Barkod")).toBe("T300726F0235");
+    expect(cell(s, s.rows[0], "En")).toBe(280);
+    expect(cell(s, s.rows[0], "Metre")).toBe(700);
+    expect(cell(s, s.totalRow, "Barkod")).toBe("TOPLAM (2 top)");
+    expect(cell(s, s.totalRow, "Metre")).toBe(1340.5);
+    const fmt = s.columns.find((c) => c.header === "Metre")!.numFmt as (v: unknown) => string | undefined;
+    // "#,##0.###" 700'ü "700," gösterirdi — PDF "700" basar.
+    expect([fmt(700), fmt(640.5), fmt("—")]).toEqual(["#,##0", "#,##0.0##", undefined]);
   });
 
-  it("boş çuvalda TOPLAM satırı basılmaz (tek başına '0' yanıltıcı)", () => {
-    const sheets = buildSackDumpSheets([makeDump({ rolls: [] })]);
-    expect(sheet(sheets, "CV3007260003")!.totalRow).toBeUndefined();
+  it("boş çuvalda TOPLAM satırı basılmaz, PDF'teki 'Çuval boş' yazılır", () => {
+    const s = sheet(buildSackDumpSheets([makeDump({ rolls: [] })]), "CV3007260003")!;
+    expect(s.totalRow).toBeUndefined();
+    expect(s.notes).toEqual(["Çuval boş — top yok."]);
   });
 
-  it("barkodsuz top 'Açık Kumaş', renksiz top 'Ham' yazılır", () => {
-    const sheets = buildSackDumpSheets([
-      makeDump({
-        rolls: [{ barcode: null, itemName: "PATOS", colorName: null, width: null, qty: 120, qualityGrade: null }],
-      }),
+  it("barkodsuz top 'Açık Kumaş', renksiz top 'Ham', boş en/kalite '—'", () => {
+    const s = sheet(
+      buildSackDumpSheets([
+        makeDump({ rolls: [{ barcode: null, itemName: "PATOS", colorName: null, width: null, qty: 120, qualityGrade: null }] }),
+      ]),
+      "CV3007260003",
+    )!;
+    expect([cell(s, s.rows[0], "Barkod"), cell(s, s.rows[0], "Renk"), cell(s, s.rows[0], "En"), cell(s, s.rows[0], "Kalite")]).toEqual([
+      "Açık Kumaş",
+      "Ham",
+      "—",
+      "—",
     ]);
-    expect(sheet(sheets, "CV3007260003")!.rows[0]).toMatchObject({
-      barcode: "Açık Kumaş",
-      color: "Ham",
-      width: "",
-      quality: "",
-    });
   });
 
-  it("kartela sayfası YALNIZ kartela varsa üretilir", () => {
-    expect(sheet(buildSackDumpSheets([makeDump()]), "Kartelalar")).toBeUndefined();
-    const withSwatch = buildSackDumpSheets([
-      makeDump({ swatches: [{ barcode: "SW-1", itemName: "PATOS", colorName: "Mavi" }] }),
-    ]);
-    const k = sheet(withSwatch, "Kartelalar")!;
-    expect(k.rows).toEqual([{ sackNo: "CV3007260003", barcode: "SW-1", item: "PATOS", color: "Mavi" }]);
+  it("kartela tablosu YALNIZ kartela varsa, çuvalın kendi sayfasında ve ad rejimiyle", () => {
+    expect(sheet(buildSackDumpSheets([makeDump()]), "CV3007260003")!.subTables).toBeUndefined();
+    const sw = [{ barcode: "SW-1", itemName: "PATOS", colorName: "Mavi", musteriItemName: "BS-1", musteriColorName: null }];
+    const ikisi = sheet(buildSackDumpSheets([makeDump({ swatches: sw })]), "CV3007260003")!.subTables![0]!;
+    expect(ikisi.title).toBe("KARTELALAR · 1");
+    expect(ikisi.rows).toEqual([["SW-1", "PATOS", "Mavi", "BS-1", ""]]);
+    // Eskiden Excel kartela sayfası rejimi YOK sayıyordu (hep bizim adımız).
+    const musteri = sheet(buildSackDumpSheets([makeDump({ swatches: sw })], { nameMode: "musterideki" }), "CV3007260003")!.subTables![0]!;
+    expect(musteri.columns.map((c) => c.header)).toEqual(["Barkod", "Müşteri kumaş", "Müşteri renk"]);
+    expect(musteri.rows).toEqual([["SW-1", "BS-1", ""]]);
   });
 
-  it("çuval notu varsayılan KAPALI — Özet'te not kolonu YOK", () => {
-    const sheets = buildSackDumpSheets([makeDump({ notes: "iç not" })]);
-    const ozet = sheet(sheets, "Özet")!;
-    expect(ozet.columns.some((c) => c.key === "notes")).toBe(false);
-    expect(JSON.stringify(ozet.rows)).not.toContain("iç not");
-  });
-
-  it("withNotes açıkken not kolonu eklenir", () => {
-    const sheets = buildSackDumpSheets([makeDump({ notes: "iç not" })], { withNotes: true });
-    const ozet = sheet(sheets, "Özet")!;
-    expect(ozet.columns.some((c) => c.key === "notes")).toBe(true);
-    expect(ozet.rows[0]).toMatchObject({ notes: "iç not" });
+  it("çuval notu varsayılan KAPALI; withNotes açıkken çuvalın başlığında", () => {
+    expect(JSON.stringify(buildSackDumpSheets([makeDump({ notes: "iç not" })]))).not.toContain("iç not");
+    const s = buildSackDumpSheets([makeDump({ notes: "iç not" })], { withNotes: true })[0]!;
+    expect(s.preamble).toContainEqual(["Not", "iç not"]);
   });
 
   // exceljs'i GERÇEKTEN çalıştır: geçersiz sayfa adı / desteklenmeyen hücre değeri
@@ -146,9 +148,11 @@ describe("buildSackDumpHtml", () => {
     expect(html).toContain("&lt;script&gt;");
   });
 
-  it("tek çuvalda genel toplam yok, çok çuvalda var", () => {
-    expect(buildSackDumpHtml([makeDump()])).not.toContain("GENEL TOPLAM");
-    expect(buildSackDumpHtml([makeDump(), makeDump({ sackNo: "CV2" })])).toContain("GENEL TOPLAM");
+  it("tek çuvalda ÖZET yok, çok çuvalda ÖZET tablosu + TOPLAM var (Excel'deki gibi)", () => {
+    expect(buildSackDumpHtml([makeDump()])).not.toContain("ÖZET");
+    const cok = buildSackDumpHtml([makeDump(), makeDump({ sackNo: "CV2" })]);
+    expect(cok).toContain("ÖZET");
+    expect(cok).toContain("TOPLAM (2 çuval)");
   });
 
   it("tartılmamış çuval 'tartılmadı' yazar", () => {
