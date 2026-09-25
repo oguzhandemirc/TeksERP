@@ -44,8 +44,8 @@ const HERHANGI_KAYIT = /findFirst(OrThrow)?\(\{\s*where:\s*\{\s*isActive:\s*true
 const HAM_ADMIN = /username:\s*"admin"/;
 
 /** ÖLÇÜLDÜ 2026-09-06. İKİSİ DE YALNIZ DÜŞER. */
-const TAVAN_HERHANGI_KAYIT = 109;
-const TAVAN_HAM_ADMIN = 129;
+const TAVAN_HERHANGI_KAYIT = 105;
+const TAVAN_HAM_ADMIN = 128;
 
 let pass = 0;
 let fail = 0;
