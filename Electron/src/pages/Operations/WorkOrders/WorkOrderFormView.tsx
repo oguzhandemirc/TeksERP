@@ -872,7 +872,11 @@ export function WorkOrderFormView({
                 required={partyCodeEditable}
                 error={form.formState.errors.batchNumber}
                 hintTone="muted"
-                hint={partyCodeEditable ? "Takip kodu — benzersiz olmalı." : undefined}
+                hint={
+                  partyCodeEditable
+                    ? "Refakat kartına barkod olarak basılır: benzersiz, iş emri no biçiminde (Sistem → Numaralandırma), yalnız büyük harf ve rakam."
+                    : undefined
+                }
               >
                 <div className="relative">
                   <Input
@@ -880,7 +884,7 @@ export function WorkOrderFormView({
                     readOnly={!partyCodeEditable}
                     placeholder={
                       partyCodeEditable
-                        ? "örn: P-260605-001"
+                        ? "örn: IE2509260001"
                         : "Otomatik oluşturulur — kendiniz girmek için tıklayın."
                     }
                     className={cn(!partyCodeEditable && "cursor-pointer bg-muted/40 pr-9")}
