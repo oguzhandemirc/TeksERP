@@ -138,3 +138,21 @@ export function assertDoffReplayAlive(existing: { id: string; revokedAt: Date | 
     { code: "DOFF_REVOKED", doffEventId: existing.id, revokedAt: existing.revokedAt },
   );
 }
+
+/**
+ * Token'la bulunan çek teslim bordrosu hâlâ geçerli mi — iptal edilmişse 409
+ * `DELIVERY_NOTE_CANCELLED`. İptal edilmiş BRD'yi "düzenlendi" diye döndürmek,
+ * kullanıcıya geçersiz bir belgenin numarasını imzalatırdı.
+ */
+export function assertChequeDeliveryNoteReplayAlive(existing: {
+  id: string;
+  docNo: string;
+  status: string;
+}): void {
+  if (existing.status !== "CANCELLED") return;
+  throw AppError.conflict(
+    `Bu form daha önce kaydedilmiş ve bordro İPTAL edilmiş (${existing.docNo}) — aynı gönderim ` +
+      "tekrar edilemez. Yeni bordro için formu kapatıp yeniden açın.",
+    { code: "DELIVERY_NOTE_CANCELLED", noteId: existing.id, docNo: existing.docNo },
+  );
+}

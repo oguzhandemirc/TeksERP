@@ -27,6 +27,15 @@ import {
   docCopyBadge, docBlocksHtml, docPrintNoteHtml, docStampsBar,
 } from "./doc-style";
 import { buildDocTable } from "./doc-table";
+import {
+  resolveDocTable,
+  toHtmlCols,
+  type DocCellKind,
+  type DocCellValue,
+  type DocColSpec,
+  type DocFmtKit,
+  type DocTablesPayload,
+} from "./doc-model";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize, scaleW } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import type { PrintedDocSnapshot } from "../printed-document.service";
@@ -178,6 +187,11 @@ function fmtQty(v: string | null | undefined): string {
 const sectionOn = (sections: Record<string, boolean> | undefined, key: string): boolean =>
   sections?.[key] !== false;
 
+/** Belge başlığı — PDF ile Excel aynı metni basar. */
+function financeDocTitle(override: string | undefined, fallback: string): string {
+  return (override?.trim() || fallback).toUpperCase();
+}
+
 function renderFinanceDoc(
   snapshot: PrintedDocSnapshot,
   meta: RenderMeta,
@@ -214,7 +228,7 @@ function renderFinanceDoc(
   const company = snapshot.company;
   const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
 
-  const title = (cfg.titleOverride?.trim() || opts.defaultTitle).toUpperCase();
+  const title = financeDocTitle(cfg.titleOverride, opts.defaultTitle);
   const showLetterhead = cfg.showLetterhead !== false;
   const showSignatures = cfg.showSignatures !== false;
   const sigLabels = cfg.signatureLabels?.length ? cfg.signatureLabels : opts.signatureLabels;
@@ -525,11 +539,11 @@ export function renderReconciliationLetterHtml(
 // =============================================================================
 // ÇEK / SENET TESLİM BORDROSU (2026-08-15)
 // =============================================================================
-// H6'nın ANLIK Electron çıktısının (`Electron/src/pages/Finance/Cheques/
-// chequeBordro.ts`) donmuş resmi sürümü. Kolon kümesi ORADAN aynalanır:
-// karşı taraf hangi kâğıdı aldığını (belge/seri no), ne zaman paraya döneceğini
-// (keşide/vade), kimin borçlandığını (keşideci/banka) ve ne kadar için imza
-// attığını (para birimi + tutar) görmeli.
+// Bordronun TEK kâğıdı (K1, 2026-09-26): resmî BRD de numarasız taslak da buradan
+// basılır; Excel aynı kolon tanımından (`chequeTableCols`) türer. Karşı taraf hangi
+// kâğıdı aldığını (belge/seri no), ne zaman paraya döneceğini (keşide/vade), kimin
+// borçlandığını (keşideci/banka) ve ne kadar için imza attığını (para birimi +
+// tutar) görmeli.
 //
 // ⚠️ FARKLI PARA BİRİMLERİ TOPLANMAZ (H6 kuralı birebir): tek TOPLAM yalnız
 // liste tek para birimindeyken yazılır; her durumda para birimi bazlı ara
@@ -540,53 +554,64 @@ export function renderReconciliationLetterHtml(
 // seçmişti; resmi belge zinciri ortak A4 dikey chrome'unu kullanır (kâğıt boyu
 // zaten `?pageSize=` ve şablon ayarıyla değiştirilebilir).
 
-export function renderChequeDeliveryNoteHtml(
-  snapshot: PrintedDocSnapshot,
-  meta: RenderMeta = {},
-): string {
+/** `fmtMoney`ın sayı biçimi — PDF hücresi ve Excel'in geri okuduğu değer aynı metinden. */
+const fmtTr = (n: number | null | undefined, dec: number): string =>
+  n == null || !Number.isFinite(n)
+    ? ""
+    : n.toLocaleString("tr-TR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+const FMT_KIT: DocFmtKit = { esc, fmtTr };
+
+const TEXT: DocCellKind = { t: "text" };
+const INT: DocCellKind = { t: "int" };
+const MONEY: DocCellKind = { t: "num", dec: 2 };
+
+/** Tutarın ham değeri — `fmtMoney` ile aynı hâller: boş "—", sayı, çözülemeyen metin olduğu gibi. */
+function moneyValue(v: string | null | undefined): DocCellValue {
+  if (v == null || v === "") return "—";
+  const n = Number(v);
+  return Number.isFinite(n) ? n : v;
+}
+
+const CHEQUE_TABLE_CAPTION = "TESLİM EDİLEN ÇEK / SENETLER";
+
+/** Çek tablosunun TEK kolon tanımı — PDF (`toHtmlCols`) ve Excel (`resolveDocTable`) buradan türer. */
+function chequeTableCols(single: ChequeDeliveryTotal | null): DocColSpec<ChequeDeliveryLine>[] {
+  return [
+    { key: "no", label: "SIRA", align: "c", width: "40px", kind: INT, value: (_r, i) => i + 1 },
+    { key: "docNo", label: "BELGE NO", align: "l", cellClass: "mono", kind: TEXT, value: (r) => r.docNo },
+    { key: "serialNo", label: "SERİ NO", align: "l", cellClass: "mono", kind: TEXT, value: (r) => r.serialNo ?? "—" },
+    { key: "issueDate", label: "KEŞİDE", align: "c", width: "80px", kind: TEXT, value: (r) => fmtDate(r.issueDate, "—") },
+    { key: "dueDate", label: "VADE", align: "c", width: "80px", kind: TEXT, value: (r) => fmtDate(r.dueDate, "—") },
+    { key: "drawer", label: "KEŞİDECİ", align: "l", kind: TEXT, value: (r) => r.drawerName ?? "—" },
+    { key: "bank", label: "BANKA", align: "l", kind: TEXT, value: (r) => r.bankName ?? "—" },
+    { key: "currency", label: "PARA", align: "c", width: "50px", kind: TEXT, value: (r) => r.currency },
+    {
+      key: "amount", label: "TUTAR", align: "r", width: "100px", kind: MONEY,
+      value: (r) => moneyValue(r.amount),
+      // Karışık para biriminde hücre BOŞ — kırılım ara toplam kutusunda.
+      foot: { value: single ? moneyValue(single.amount) : null },
+    },
+  ];
+}
+
+/**
+ * Bordronun İÇERİK kararları — TEK ÇÖZÜCÜ. HTML (`renderChequeDeliveryNoteHtml`) ve
+ * Excel (`renderChequeDeliveryNoteTables`) buradan türer; kolon, taraf satırı, toplam
+ * ve beyan ikinci bir yerde yeniden kurulmaz.
+ */
+function chequeDeliveryParts(snapshot: PrintedDocSnapshot) {
   const doc = snapshot.doc as unknown as ChequeDeliveryNoteDoc;
   const h = doc.header;
   const cfg = snapshot.docConfigOverride ?? {};
   const lines = doc.lines ?? [];
   const totals = doc.totals ?? [];
-  const single = totals.length === 1 ? totals[0] : null;
+  const single = totals.length === 1 ? totals[0]! : null;
 
-  const table = sectionOn(cfg.sections, "chequeTable")
-    ? buildDocTable<ChequeDeliveryLine>({
-        className: "sec",
-        caption: "TESLİM EDİLEN ÇEK / SENETLER",
-        colCfg: cfg.columns?.chequeTable,
-        rows: lines,
-        footLabel: `TOPLAM (${lines.length} adet)`,
-        cols: [
-          { key: "no", label: "SIRA", align: "c", width: "40px", cell: (_r, i) => String(i + 1) },
-          { key: "docNo", label: "BELGE NO", align: "l", cellClass: "mono", cell: (r) => esc(r.docNo) },
-          { key: "serialNo", label: "SERİ NO", align: "l", cellClass: "mono", cell: (r) => esc(r.serialNo ?? "—") },
-          { key: "issueDate", label: "KEŞİDE", align: "c", width: "80px", cell: (r) => esc(fmtDate(r.issueDate, "—")) },
-          { key: "dueDate", label: "VADE", align: "c", width: "80px", cell: (r) => esc(fmtDate(r.dueDate, "—")) },
-          { key: "drawer", label: "KEŞİDECİ", align: "l", cell: (r) => esc(r.drawerName ?? "—") },
-          { key: "bank", label: "BANKA", align: "l", cell: (r) => esc(r.bankName ?? "—") },
-          { key: "currency", label: "PARA", align: "c", width: "50px", cell: (r) => esc(r.currency) },
-          {
-            key: "amount", label: "TUTAR", align: "r", width: "100px",
-            cell: (r) => esc(fmtMoney(r.amount)),
-            // Karışık para biriminde hücre BOŞ — kırılım aşağıdaki kutuda.
-            foot: single ? esc(fmtMoney(single.amount)) : "",
-          },
-        ],
-      })
-    : "";
-
-  const totalsBox = totals.length
-    ? `<div class="tot">
-        ${totals
-          .map(
-            (t) =>
-              `<div class="row"><span>${esc(t.currency)} (${t.count} adet)</span><b>${esc(fmtMoney(t.amount))} ${esc(t.currency)}</b></div>`,
-          )
-          .join("")}
-      </div>`
-    : "";
+  const party: Array<[string, string]> = [
+    ...(h.targetName ? [[h.targetKindLabel ?? "Teslim Edilen", h.targetName] as [string, string]] : []),
+    ["Adet", String(lines.length)],
+    ...(sectionOn(cfg.sections, "createdBy") && h.createdBy ? [["Düzenleyen", h.createdBy] as [string, string]] : []),
+  ];
 
   const declaration =
     (h.kind === "RECEIVED"
@@ -597,29 +622,110 @@ export function renderChequeDeliveryNoteHtml(
       : "") +
     "\nİki nüsha düzenlenir; bir nüsha teslim alan tarafta kalır.";
 
-  return renderFinanceDoc(snapshot, meta, {
+  return {
+    doc,
+    h,
+    cfg,
+    lines,
+    totals,
+    party,
+    declaration,
+    cols: chequeTableCols(single),
+    tableOn: sectionOn(cfg.sections, "chequeTable"),
+    footLabel: `TOPLAM (${lines.length} adet)`,
     // Başlık YÖNDEN gelir: aldığımız kıymetlerin teslimi ile kendi borç
     // senetlerimizin teslimi aynı kâğıt değildir (H6 tek-yön kuralının başlıktaki
     // karşılığı) — tek "TESLİM BORDROSU" başlığı iki zıt olayı aynı görürdü.
     defaultTitle: `${h.kindLabel} Çek / Senet Teslim Bordrosu`,
+  };
+}
+
+export function renderChequeDeliveryNoteHtml(
+  snapshot: PrintedDocSnapshot,
+  meta: RenderMeta = {},
+): string {
+  const p = chequeDeliveryParts(snapshot);
+
+  const table = p.tableOn
+    ? buildDocTable<ChequeDeliveryLine>({
+        className: "sec",
+        caption: CHEQUE_TABLE_CAPTION,
+        colCfg: p.cfg.columns?.chequeTable,
+        rows: p.lines,
+        footLabel: p.footLabel,
+        cols: toHtmlCols(p.cols, FMT_KIT),
+      })
+    : "";
+
+  const totalsBox = p.totals.length
+    ? `<div class="tot">
+        ${p.totals
+          .map(
+            (t) =>
+              `<div class="row"><span>${esc(t.currency)} (${t.count} adet)</span><b>${esc(fmtMoney(t.amount))} ${esc(t.currency)}</b></div>`,
+          )
+          .join("")}
+      </div>`
+    : "";
+
+  return renderFinanceDoc(snapshot, meta, {
+    defaultTitle: p.defaultTitle,
     configKey: "cekTeslimBordrosu",
     headerLines: [],
-    partyLines: [
-      h.targetName
-        ? `<div class="row"><span>${esc(h.targetKindLabel ?? "Teslim Edilen")}:</span><b>${esc(h.targetName)}</b></div>`
-        : "",
-      `<div class="row"><span>Adet:</span><b>${lines.length}</b></div>`,
-      sectionOn(cfg.sections, "createdBy") && h.createdBy
-        ? `<div class="row"><span>Düzenleyen:</span><b>${esc(h.createdBy)}</b></div>`
-        : "",
-    ].filter(Boolean),
-    caption: "TESLİM EDİLEN ÇEK / SENETLER",
+    partyLines: p.party.map(([l, v]) => `<div class="row"><span>${esc(l)}:</span><b>${esc(v)}</b></div>`),
+    caption: CHEQUE_TABLE_CAPTION,
     signatureLabels: ["Teslim Eden", "Teslim Alan"],
-    notes: doc.notes,
+    notes: p.doc.notes,
     table,
     totalsBox,
-    declaration,
-    documentNo: h.documentNo,
-    date: h.date,
+    declaration: p.declaration,
+    documentNo: p.h.documentNo,
+    date: p.h.date,
   });
+}
+
+/**
+ * Excel'in içeriği — HTML ile AYNI çözücüden (`chequeDeliveryParts`): başlık bloğu,
+ * çek tablosu (şablonun gizle/sırala/başlık ayarı dahil), ara toplamlar ve beyan.
+ */
+export function renderChequeDeliveryNoteTables(
+  snapshot: PrintedDocSnapshot,
+  meta: RenderMeta = {},
+): DocTablesPayload {
+  const p = chequeDeliveryParts(snapshot);
+  const wm = meta.draft ? "TASLAK" : meta.status === "VOIDED" ? "İPTAL" : meta.status === "SUPERSEDED" ? "ESKİ KOPYA" : null;
+  const header: Array<[string, string | null]> = [
+    ...(wm ? [[wm, null] as [string, null]] : []),
+    [financeDocTitle(p.cfg.titleOverride, p.defaultTitle), null],
+    ...(snapshot.company?.name ? [[snapshot.company.name, null] as [string, null]] : []),
+    ...(sectionOn(p.cfg.sections, "documentNo") ? [["Belge No", p.h.documentNo] as [string, string]] : []),
+    ...(sectionOn(p.cfg.sections, "date") ? [["Tarih", fmtDate(p.h.date, "—")] as [string, string]] : []),
+    ...p.party,
+  ];
+  const notes = [
+    ...p.totals.map((t) => `${t.currency} (${t.count} adet): ${fmtMoney(t.amount)} ${t.currency}`),
+    ...(sectionOn(p.cfg.sections, "declaration") ? p.declaration.split("\n") : []),
+    ...(p.doc.notes ? [`Not: ${p.doc.notes}`] : []),
+    ...(p.cfg.footerNote ? [p.cfg.footerNote] : []),
+    ...(meta.printNote?.trim() ? [meta.printNote] : []),
+  ];
+  return {
+    docType: "CHEQUE_DELIVERY_NOTE",
+    documentNo: p.h.documentNo,
+    header,
+    tables: p.tableOn
+      ? [
+          resolveDocTable({
+            key: "chequeTable",
+            caption: CHEQUE_TABLE_CAPTION,
+            cols: p.cols,
+            rows: p.lines,
+            colCfg: p.cfg.columns?.chequeTable,
+            footLabel: p.footLabel,
+            kit: FMT_KIT,
+          }),
+        ]
+      : [],
+    notes,
+  };
 }

@@ -10247,6 +10247,10 @@ model ChequeDeliveryNote {
   /// BRD + GGAAYY + NNNN (teslim günü).
   docNo String @unique @db.VarChar(32)
 
+  /// İstemcinin mantıksal deneme kimliği — ağ zaman aşımından sonraki ikinci
+  /// gönderim ikinci BRD açmaz (`token-replay.helper`). Eski satırlarda NULL.
+  clientToken String? @unique @db.Uuid
+
   /// Bordronun yönü — satırlardaki çeklerin `kind`i ile AYNI olmak zorunda.
   kind ChequeKind
 

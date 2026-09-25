@@ -645,9 +645,9 @@ async function main(): Promise<void> {
   // ── §10 "ZATEN AKTİF BİR BORDRODA" ONAYLATMASI ──────────────────────────
   // ⚠️ ENGEL DEĞİL ONAY: aynı çek meşru olarak yeniden teslim edilebilir
   // (tahsile ver → karşılıksız dön → ciro et). Kapatılan şey SESSİZLİK:
-  // `clientToken` yok, yani zaman aşımı sonrası ikinci basış SESSİZCE ikinci bir
-  // resmi belge doğururdu; düzeltmek isteyen kullanıcı da eski bordroyu ACTIVE
-  // bırakıp aynı çekler için ikinci bir tutanak imzalatırdı.
+  // düzeltmek isteyen kullanıcı eski bordroyu ACTIVE bırakıp aynı çekler için
+  // ikinci bir tutanak imzalatırdı (aynı denemenin tekrarını `clientToken` tek
+  // bordroya indirir — `test_cek_bordro_taslak_token`).
   const dupErr = await expectReject(() =>
     chequeDeliveryNoteService.create({ chequeIds: [o1.id] }, actor.id),
   );

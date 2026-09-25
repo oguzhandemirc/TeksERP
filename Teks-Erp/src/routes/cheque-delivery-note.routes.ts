@@ -42,6 +42,18 @@ const statusEnum = z.enum(["ACTIVE", "CANCELLED"]);
  * OLAY ANIDIR — `Payment.paymentDate` emsali; gün-yalnız gelirse o günün başı
  * meşru bir okumadır ve belge yalnız GÜNÜ basar.)
  */
+/** Kayıt ve taslağın ORTAK gövdesi — taslak, kaydın göreceği alanların aynısıyla çizilir. */
+const noteBody = z.object({
+  // ⚠️ TAVAN 500: tek bir teslim tutanağı için fazlasıyla geniş, ama
+  // sınırsız bırakmak tek istekle on binlerce pivot satırı yazdırırdı.
+  chequeIds: z.array(z.string().uuid()).min(1).max(500),
+  deliveryDate: isoDate.optional(),
+  bankAccountId: z.string().uuid().nullable().optional(),
+  cariId: z.string().uuid().nullable().optional(),
+  targetLabel: z.string().max(200).nullable().optional(),
+  notes: z.string().max(500).nullable().optional(),
+});
+
 const endBoundary = (v: string | undefined): Date | undefined =>
   v === undefined ? undefined : resolveRangeEnd(v);
 const startBoundary = (v: string | undefined): Date | undefined =>
@@ -142,31 +154,55 @@ router.get("/:id", requirePermission("finance:read"), async (req, res, next) => 
  *               targetLabel: { type: string, maxLength: 200, nullable: true }
  *               notes: { type: string, maxLength: 500, nullable: true }
  *               confirmDuplicate: { type: boolean, description: "Aktif bordro uyarısını onayla" }
+ *               clientToken: { type: string, format: uuid, description: "Mantıksal deneme kimliği — aynı token ikinci BRD açmaz" }
  *     responses:
  *       201: { description: Bordro düzenlendi (belge v1 ACTIVE) }
  *       400: { description: Boş seçim / bulunamayan çek / iptal edilmiş kayıt / karışık yön / çift hedef }
- *       409: { description: "Seçimdeki kıymet(ler) zaten aktif bir bordroda — confirmDuplicate ile geçilir" }
+ *       200: { description: "Aynı clientToken ile daha önce düzenlenmiş bordro (idempotent tekrar)" }
+ *       409: { description: "Zaten aktif bir bordroda (confirmDuplicate ile geçilir) · CLIENT_TOKEN_COLLISION · DELIVERY_NOTE_CANCELLED" }
  */
 router.post("/", requirePermission("finance:write"), async (req, res, next) => {
   try {
-    const b = z
-      .object({
-        // ⚠️ TAVAN 500: tek bir teslim tutanağı için fazlasıyla geniş, ama
-        // sınırsız bırakmak tek istekle on binlerce pivot satırı yazdırırdı.
-        chequeIds: z.array(z.string().uuid()).min(1).max(500),
-        deliveryDate: isoDate.optional(),
-        bankAccountId: z.string().uuid().nullable().optional(),
-        cariId: z.string().uuid().nullable().optional(),
-        targetLabel: z.string().max(200).nullable().optional(),
-        notes: z.string().max(500).nullable().optional(),
+    const b = noteBody
+      .extend({
         // "Zaten aktif bir bordroda" uyarısını gördüm, yine de kes.
         confirmDuplicate: z.boolean().optional(),
+        clientToken: z.string().uuid().optional(),
       })
       .strict()
       .parse(req.body);
 
-    res.status(201).json(
-      await chequeDeliveryNoteService.create(
+    const result = await chequeDeliveryNoteService.create(
+      { ...b, deliveryDate: b.deliveryDate ? new Date(b.deliveryDate) : undefined },
+      req.user?.userId,
+    );
+    // Aynı denemenin tekrarı yeni kayıt açmadı → 201 değil 200.
+    res.status(result.data?.replayed ? 200 : 201).json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/cheque-delivery-notes/draft:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Bordro TASLAĞI — kayıtsız seçimden numarasız önizleme (HTML + Excel tabloları)
+ *     description: >
+ *       Kayıtla aynı seçim ve hedef kuralları (tek yön · iptal edilmiş kayıt yok · tek
+ *       hedef) ve aynı belge çözücüsü; HİÇBİR ŞEY YAZMAZ. Okuma işidir (`finance:read`),
+ *       POST çünkü seçim 500 kimliğe kadar çıkar.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "`{ html, tables }` — TASLAK filigranlı HTML ve PDF ile aynı kolonlu tablolar" }
+ *       400: { description: Boş seçim / bulunamayan çek / iptal edilmiş kayıt / karışık yön / çift hedef }
+ */
+router.post("/draft", requirePermission("finance:read"), async (req, res, next) => {
+  try {
+    const b = noteBody.strict().parse(req.body);
+    res.json(
+      await chequeDeliveryNoteService.draft(
         { ...b, deliveryDate: b.deliveryDate ? new Date(b.deliveryDate) : undefined },
         req.user?.userId,
       ),

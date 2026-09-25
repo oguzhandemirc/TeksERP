@@ -745,6 +745,27 @@ export class PrintedDocumentService {
   }
 
   /**
+   * TASLAK HTML + TABLOLAR — `renderDraftHtml`in Excel'li ikizi: TEK snapshot zarfı ve
+   * TEK meta ile hem PDF'in HTML'ini hem Excel'in tablolarını üretir, böylece taslakta
+   * da PDF = Excel. Hiçbir şey persist edilmez.
+   */
+  async renderDraftWithTables(
+    docType: PrintedDocType,
+    doc: Record<string, unknown>,
+  ): Promise<{ html: string; tables: DocTablesPayload }> {
+    const entry = requireBuilder(docType);
+    if (!entry.renderHtml || !entry.renderTables) {
+      throw AppError.badRequest(
+        `Bu belge tipi için taslak HTML/tablo çıktısı tanımlı değil: ${docType}`,
+      );
+    }
+    const snapshot = await buildSnapshotEnvelope(prisma, docType, doc);
+    const extras = await buildRenderExtras(snapshot, {});
+    const meta = { draft: true, ...extras };
+    return { html: entry.renderHtml(snapshot, meta), tables: entry.renderTables(snapshot, meta) };
+  }
+
+  /**
    * ÖRNEK HTML — "Belge Şablonları" panelindeki canlı önizleme. Donmuş belge YOK:
    * sabit örnek `doc` (SAMPLE_PRINTED_DOCS) + admin'in DÜZENLEDİĞİ taslak config
    * override + güncel firma/künye ile gerçek renderHtml çağrılır → önizleme baskıyla
