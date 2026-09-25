@@ -230,6 +230,7 @@ Index: `(workOrderId, createdAt)` · `(type, createdAt)` · `(groupId)`. Defter 
 | `FIELD_CHANGED` | renk · en · hedef metre · hedef kg · kat · hedef kumaş · plan tarihleri · rota · tip (bağın aynası) | **KARŞI KAYIT** — "geri almak" aynı alanı eski değere çeviren YENİ satırdır (`MachineStopReclass` emsali; ileri yazan = ters yazan, aynı helper) |
 | `STEP_PLAN_CHANGED` | adım notu / fason firması / planlanan firma | **KARŞI KAYIT** |
 | `ROLL_ATTRIBUTES_APPLIED` | "toplara uygula" (renk/en) | **KARŞI KAYIT** — payload top başına eski değeri taşır; toplara geri uygulama yeni satırdır |
+| `BATCH_ADDED` | "Parti Ekle" (§6.5) | **DOĞUŞ** (partinin doğuşu) — geri alma = toplarına Top Çıkar, her top kendi defterinde |
 
 `STATUS_CHANGED` tek tip + from/to tercih edildi (her geçişe ayrı enum değeri yerine): yeniden açılma ile
 tamamlanma aynı olayın iki yönüdür ve KARŞI KAYIT kapısı (§3k) bunu yapısal olarak ölçer; yeni bir statü
@@ -334,7 +335,7 @@ Sınıf: kalem SATIR olarak donar (`Manifest.snapshot` emsali, `snapshot-kolonla
 | Kapat | KONMAZ | dispozisyon + `roll:manual-adjust` ister — süpervizör işi, panelde |
 | İptal Et | **Soru S3** | bugün tablette VAR; öneri: yalnız HİÇ işlem görmemiş iş emrinde kalsın |
 | (yeni) **Top Çıkar** | **KONUR — yeni backend** | yanlış okutma; bugün uç yok (`detachRolls` S:6364 ölü kod, defter yazmıyor) |
-| (yeni) Top Ekle | **Soru S4** — öneri KONMAZ | `is-emri.md`: "mevcut iş emrine top EKLEME YOK (2026-06-12), rework ayrı emirdir" |
+| (yeni) **Parti Ekle** | **KONUR — S4 kararı (2026-09-25)**, tablet + panel | açık iş emrine okutulan toplar YENİ PARTİ olur ve ilk adımdan başlar; mevcut partiye ekleme yok; tamamlanmış iş emrine yok (§6.5) |
 | (yeni) Hedef metre / kg | Soru S1 | bugün yalnız genel Düzenle'de; tek amaçlı tuş olarak taşınabilir |
 
 ### 6.2 Her tuşun kalıbı (tek iskelet)
@@ -376,6 +377,62 @@ panelden Konumu Düzelt / Parti Düşür".
 ile "açılmış iş emrini değiştirebilen" ayrı sorumluluktur; bugün `mobile:hizli-is-emri` PATCH `/:id` ile
 her ikisini birden veriyor. Tuşların uçları bu kodu `requireAnyPermission(... "workorder:write")` ile kabul
 eder; SoD üçlüsü değişmez. Uyumsuz sipariş bağı (`order-links/override`) tablete GELMEZ.
+
+### 6.5 "Parti Ekle" — tasarım (S4 kararı, 2026-09-25)
+
+**Kullanıcı kararı:** açık iş emrine top eklenebilir; eklenen toplar aynı iş emri altında **YENİ PARTİ** olur
+(P02…) ve rotanın **ilk adımından** başlar. Mevcut partiye top eklenmez. **Tamamlanmış iş emrine parti
+EKLENMEZ** — yeni iş emri açılır, kapanış künyesi donmuş kalır. Hedef metre ya da sipariş miktarı aşılırsa
+kısa uyarı, engel yok. "Tek iş emri tek kumaş" KESİN kuraldır. Bu karar `is-emri.md`'nin "mevcut iş emrine
+top EKLEME YOK" kuralını DEĞİŞTİRİR (kural satırı + arşivde "GEÇERSİZ → 2026-09-25" uygulama dilimiyle).
+
+**Tek boğaz:** `addBatchToWorkOrderTx(tx, workOrderId, rolls, ctx)` — `attachRolls`un yerini alır; dört
+çağıranı olur ve dördü AYNI kuralı uygular:
+1. yeni uç `POST /work-orders/:id/batches` (tablet + panel "Parti Ekle"),
+2. `quickStart` (ilk parti — bugünkü `attachRolls` çağrısı),
+3. fason sevk otomatik bağlama (`subcontractor.service.ts:1173-1188` — bugün tek partiye KATILIYOR),
+4. Tambur "Topu Buraya Al" (`manualMove`) ve "Manuel Top Ekle" (`tambur-manual.service.ts:1166-1178` —
+   bugün açık partiye KATILIYOR; `:399-410` tamamlanmış iş emrini sessizce YENİDEN AÇIYOR — kalkar).
+Tamamlanmış iş emrine her yoldan 409 `WO_COMPLETED_NO_ADD` — *"Tamamlanmış iş emrine top eklenemez — yeni
+iş emri açın."* ⚠️ Saha davranış değişikliği (Tambur'un yeniden açması kalkar): sürüm notunda AYRI madde.
+
+**Uç sözleşmesi** (`POST /work-orders/:id/batches`): gövde `{ clientToken, rollBarcodes[], reason? }`;
+tx'in İLK ifadesi 8022 (parti numarası), sonra `touchWorkOrderTx` + taze durum claim'i (`PLANNED |
+IN_PROGRESS` — COMPLETED dahil diğer her durum 409, bugünkü S:4801 açığı kapanır); top kabul kümesi
+`quickStart.attachable` + çuval/sevkiyat reddi (tablet `scanClassify` ile birebir); kumaş iş emrinin
+`targetItemId`sine EŞİT değilse 400 `ITEM_MISMATCH`; renk/özellik rota kapsaması quickStart'la ORTAK
+helper'dan (`warnings`); hedef aşımı `warnings` (*"Hedef 1.000 m, girilen toplam 1.240 m"* · *"Sipariş
+kalemi 800 m, iş emrindeki toplam 1.040 m"*); `clientToken @unique` replay (kayıt yaratan uç kuralı).
+
+**R1–R7'nin kapanışı (aynı dilim, kabul kapıları):**
+- **R1 (kabul kapısı):** ilk adımda bekleyen (sevk edilmemiş) yeni parti varken ilk adım COMPLETED kalamaz
+  ve iş emri KAPANAMAZ — `recomputeStepStatus` ilk adımın aday kümesine `currentStepId = ilk adım`
+  topları da alır (giriş sayımı `test_wo_input_attach_window` bu birleşimi zaten kullanıyor).
+  Bekçi negatif sondayla kırmızı verir (aday kümesinden `currentStepId` dalı düşürülünce iş emri kapanır).
+- **R2:** ekleme sonrası TÜM adımlar recompute (sonraki COMPLETED adımlar bayat kalmaz).
+- **R3:** kumaş kesin, renk/özellik uyarı, hedef/sipariş aşımı uyarı — hepsi ortak helper.
+- **R4:** `clientToken`. **R7:** 8022 ilk ifade.
+- **R5 — yeni parti kimliği korunur (öneri):** (a) sevk: K11 değişmez (tek sevk = tek parti); `MULTI_BATCH`
+  modalında varsayılan AYRI sevk, `MERGE` açık seçim olarak kalır ve iz `Batch.mergedIntoId`de durur —
+  Hareketler'de "P07, P02 ile birleştirildi" satırı; (b) kabul: doğan toplar partiyi `sourceLotRolls.find`
+  (ilk bulunan, `subcontractor.service.ts:3324-3330`) ile DEĞİL, kabul edilen SEVKİN partisinden alır; bir
+  kabul birden çok partinin açık sevkini kapsıyorsa ekran partiyi sorar (tek dokunuş, varsayılan en eski
+  açık sevk) — tek partide bugünkü akış +0 dokunuş. *Karar gerekirse: (b)'deki soru, tartışmalı tek UX adımı.*
+- **R6 — parti no çakışması:** P01…P99 global körlemesine sarma aynı iş emrinde iki canlı P05 üretebilir.
+  Öneri: sarma, AYNI iş emrinde canlı olan numarayı atlar (`parti.md` profil kuralına ek; karar 1e).
+- **R8** kararla kapsam dışı (tamamlanmışa ekleme yok).
+
+**Ekran (tek iskelet):** tablet `ModuleSheet` — tarayıcı (`trigger="tap"`, çok top okutan ekran kuralı) +
+okutulanlar şeridi + etki önizlemesi (*"Yeni parti açılacak · 5 top · 240 m · ilk adım: Boyahane (fason)"*
++ varsa hedef aşımı uyarısı) + isteğe bağlı sebep + Kaydet. Dokunuş: tuş → okut ×N → Kaydet. Panel: yan
+panelde "Parti Ekle" → `RollPickerModal` emsali seçici (Ham Stok · Bitmiş Depo sekmeleri) + aynı önizleme.
+İzin: panel `workorder:write`; tablet S7 kararına bağlı.
+
+**Deftere olay:** `WorkOrderEvent` tipi `BATCH_ADDED` (field=`batch`, `toValue`=batchId, `toLabel`=parti no,
+payload=top id'leri, sebep, kanal). Ters yol: partiyi geri almak = partinin toplarına "Top Çıkar" (her top
+kendi defterinde — `RollMovement` damgası + stok defteri bağlı ters satırı); `BATCH_ADDED` bu yüzden
+çift-dışı **DOĞUŞ** sınıfındadır (partinin doğuşu; `ShipmentEvent.PLANNED` emsali). Refakat kartı: ACTIVE
+kart bayat işaretlenir (bugün de öyle), tablet menüsünde "Kartı yeniden bas" görünür.
 
 ## 7. (e) HAREKETLER EKRANI
 
@@ -426,7 +483,8 @@ eder; SoD üçlüsü değişmez. Uyumsuz sipariş bağı (`order-links/override`
 | D3 | Kapanış künyesi (şema + yazım + ProducedV3 karşılaştırma) | D1 |
 | D4 | Hareketler ucu (A+B) + panel Sheet + ayrı ekran + Excel | D1 (D2 ile zenginleşir) |
 | D5 | Tablet düzeltme menüsü + `mobile:is-emri-duzelt` + önizleme uçları | D2, S1–S3/S7 cevapları |
-| D6 | Top Çıkar ucu (ledger ters yollarıyla) + tablet tuşu | D1, S4 |
+| D6 | Top Çıkar ucu (ledger ters yollarıyla) + tablet tuşu | D1 |
+| **D8** | **Parti Ekle** (§6.5): `addBatchToWorkOrderTx` tek boğaz + uç + dört çağıranın bağlanması + R1–R7 + tablet/panel tuşu + `is-emri.md` kural değişimi + arşiv GEÇERSİZ notu | D1 (olay tipi), 9b S2+S3 |
 | D7 | Backfill script (kuru koşum) | D1–D3; `--apply` kullanıcıda |
 | B-RM | `RollMovement` kapanış damgası borcu (§8.5) | 1e sahip atar |
 
@@ -464,9 +522,9 @@ eder; SoD üçlüsü değişmez. Uyumsuz sipariş bağı (`order-links/override`
 
 ## 9. (g) KULLANICIYA SORULAR — her biri şıklı, ⭐ önerilen
 
-**Cevap durumu (2026-09-25, 1e aracılığıyla):** S1 = A · S2 = A · S3 = A · **S4 AÇIK** — kullanıcının
-karşı sorusu: *"o iş emrine yeni top eklenirse aynı iş emrinde yeni parti olamaz mı?"* (ölçümü §11) ·
-S5–S9 sorulmadı.
+**Cevap durumu (2026-09-25, 1e aracılığıyla):** S1 = A · S2 = A · S3 = A · **S4 = "Parti Ekle"** (kullanıcının
+karşı sorusundan doğdu: *"o iş emrine yeni top eklenirse aynı iş emrinde yeni parti olamaz mı?"* — ölçüm §11,
+tasarım §6.5; aşağıdaki S4 şıkları tarihsel) · S5–S9 soruluyor.
 
 **S1 — Tablet düzeltme menüsünde hangi tuşlar olsun?**
 - ⭐ **A:** Rengi Değiştir · Eni Değiştir · Sipariş Bağla/Çöz · Refakat Kartını Yeniden Bas · Top Çıkar
@@ -520,8 +578,6 @@ depo + A1 + fire; verim = çıkan ÷ giren; çekme = (giren − çıkan) ÷ gire
 - order.service `CANCEL_WO` dalı iş emri iptalinde sebep geçirmiyor (`cancelReason` NULL) — D1'de kapanır.
 - `defter.md` envanteri `RollPlanDeviation` satırı "damga kolonu bile yok" diyor; şemada `revokedAt` var ve
   `defter-beyan.ts:280-290` borcu 2026-09-13'te kapalı sayıyor — belge bayat (satır :138 ve kural :93).
-- Kök `CLAUDE.md` advisory envanteri 8032'de bitiyor; kodda 8033 · 8034 · 8035 var
-  (`helpers/period-guard.helper.ts:46-60`).
 - `changeWidth` claim'i tx dışında, kart bayat işareti ayrı (L:678/686).
 - Tablet `mobil/src/services/workOrder.service.ts:241` yorumu ("online") bayat; mutasyon `networkMode:'always'`.
 - Hızlı iş emri `clientToken`ı kesin 4xx'te de yapışıyor (`H/useQuickWorkOrder.ts:162`) — 4xx iş emri
@@ -562,6 +618,8 @@ Refakat kartı sorunsuz: kartta top listesi değil "PARTİLER" tablosu var, bask
 (`traveler-card.html.ts:419-483`); `createBatchTx` ACTIVE kartı bayat işaretler (`batch.service.ts:283`).
 Sipariş bağı: `allocatedQty` top miktarına bağlı değil (tavan yok), kapsama onu okumuyor
 (`coverage.helper.ts:9-15`); `committed/inputRolls` hareketten türer ⇒ eklenen parti kendiliğinden sayılır.
+
+**KARAR (2026-09-25): A** — tasarımı §6.5. Aşağıdaki şıklar karar kaydı olarak durur.
 
 **S4 için yeni şıklar (öneri 1e'ye):**
 - ⭐ **A — "Parti Ekle" açılsın, yalnız TAMAMLANMAMIŞ iş emrine:** tablet/panel tek tuş, okutulan toplar
@@ -637,6 +695,7 @@ enum WorkOrderEventType {
   FIELD_CHANGED           // field ∈ WORK_ORDER_EVENT_FIELDS
   STEP_PLAN_CHANGED       // field="step:<sequence>:<notes|subcontractorId>"
   ROLL_ATTRIBUTES_APPLIED // field ∈ {colorId, width}; payload top başına eski değer
+  BATCH_ADDED             // "Parti Ekle" (§6.5) — field="batch", toValue=batchId; DOĞUŞ (ters yol: Top Çıkar)
 }
 ```
 
@@ -656,7 +715,7 @@ enum WorkOrderEventType {
 
 DO $$ BEGIN
   CREATE TYPE "WorkOrderEventType" AS ENUM
-    ('CREATED', 'STATUS_CHANGED', 'FIELD_CHANGED', 'STEP_PLAN_CHANGED', 'ROLL_ATTRIBUTES_APPLIED');
+    ('CREATED', 'STATUS_CHANGED', 'FIELD_CHANGED', 'STEP_PLAN_CHANGED', 'ROLL_ATTRIBUTES_APPLIED', 'BATCH_ADDED');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS "work_order_events" (
@@ -709,9 +768,13 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 ```
 
-Açık teknik soru (1e): append-only'yi DB'de de mühürlemek için `BEFORE UPDATE` trigger'ı
-(`work_order_events_no_update`, RAISE) — emsal `machine_stop_events_block_classified_delete`. DELETE kapsam
-dışı (Cascade bekçi temizliği). Öneri: EVET, D1'de.
+**Append-only DB mührü — KARAR (1e, 2026-09-25): D1'de, 37'nin ortak kalıbıyla.** Cascade FK + tamper
+trigger: UPDATE HER ZAMAN reddedilir; DELETE yalnız `pg_trigger_depth() = 0` iken (doğrudan silme)
+reddedilir — ebeveynden gelen kaskat silme geçer, bekçi teardown'ları kırılmaz. Trigger FONKSİYONU
+tablodan bağımsızdır ve 37'nin `roll_status_events` diliminde doğar (adı 37'den gelecek); D1 yalnız
+`CREATE TRIGGER work_order_events_tamper BEFORE UPDATE OR DELETE ON "work_order_events" FOR EACH ROW
+EXECUTE FUNCTION <ortak_fonksiyon>()` yazar — ikinci kopya fonksiyon YAZILMAZ. Aynı trigger kapanış künyesi
+tablolarına (D3) da takılır. D1, 37'nin fonksiyonu indikten sonra uygulanır (sıra bağımlılığı).
 
 ### 12.3 Beyanlar (aynı commit)
 
@@ -726,12 +789,14 @@ D("WorkOrderEvent", "iş emrinin KENDİ durum/plan değişim defteri (SAP deği�
 
 - §3k2 yeşil doğar: ters yazan = ileri yazan (tek dosya, tek sembol). §5 yazar kümesi = yalnız helper
   dosyası — satırı başka bir dosya `create` ederse kırmızı (tek yazar kuralının kapısı).
-- **Kapı borcu (1e onayı gerekir, kapı sahibi 82/d9):** KARŞI KAYIT mekanizması enum TAŞIMADIĞI için §3e
-  `WorkOrderEventType`i TARAMAZ; `CREATED`i `CIFT_DISI_DEGERLER`e DOĞUŞ diye yazmak da §3e4'te "mekanizmasız
-  enum" kırmızısı verir. Öneri: `KARSI_KAYIT`e isteğe bağlı `enumAdi` + `kendiTersi: string[]` (karşı kaydı
-  AYNI tip olan değerler); §3e bu enum'u da tarar — her değer `kendiTersi`nde ya da çift-dışı listede
-  (`CREATED` → DOGUS). Aksi hâlde enum'a gelecekte eklenecek bir ileri değer kapıyı uyandırmaz (§3e'nin
-  kapattığı körlüğün aynısı).
+- **Kapı eki — KARAR (1e, 2026-09-25): D1'de, 9f yazar, iki sondayla.** KARŞI KAYIT mekanizması enum
+  TAŞIMADIĞI için §3e `WorkOrderEventType`i TARAMAZ; `CREATED`i çift-dışı yazmak da §3e4'te "mekanizmasız
+  enum" kırmızısı verir. Ek: `KARSI_KAYIT`e isteğe bağlı `enumAdi` + `kendiTersi: string[]` (karşı kaydı
+  AYNI tip olan değerler); §3e bu enum'u da tarar — her değer `kendiTersi`nde ya da çift-dışı listede.
+  Beyan: `kendiTersi: ["STATUS_CHANGED", "FIELD_CHANGED", "STEP_PLAN_CHANGED", "ROLL_ATTRIBUTES_APPLIED"]`;
+  çift-dışı: `CREATED` → DOGUS (iş emrinin doğuşu), `BATCH_ADDED` → DOGUS (partinin doğuşu; ters yol Top
+  Çıkar, top defterlerinde). Sondalar: (1) enum'a beyansız değer eklenince §3e kırmızı · (2) değer
+  `kendiTersi`ne yazılınca yeşile döner — ikisi saf fonksiyon üzerinde her koşumda.
 
 `scripts/lib/audit-muafiyeti.ts`:
 
@@ -741,14 +806,16 @@ D("WorkOrderEvent", "iş emrinin KENDİ durum/plan değişim defteri (SAP deği�
 ```
 
 `scripts/test_db_invariants.ts`: CHECK listesine üç satır (`work_order_events_channel_known` ·
-`_field_required` · `_birth_has_no_from`) + trigger listesine `work_order_events_no_update` (kabul edilirse).
+`_field_required` · `_birth_has_no_from`) + trigger listesine `work_order_events_tamper` (fonksiyon satırı
+37'nin diliminde — tekrar yazılmaz).
 
 `docs/kurallar/defter.md` envanter tablosuna satır: `WorkOrderEvent` · iş emrinin durum/plan değişimi ·
 ✅ (`updatedAt` yok) · ✅ KARŞI KAYIT (yazan tek dosya `workorder-event.helper.ts`).
 
 ### 12.4 D1'in kod kapsamı (sıra)
 
-1. Şema + migration + `prisma generate` + dört beyan (yukarıda).
+1. Şema + migration + `prisma generate` + dört beyan (yukarıda) + tamper trigger (37'nin ortak fonksiyonu) +
+   `test_defter_ters_yol` KARŞI KAYIT `enumAdi`/`kendiTersi` eki (iki sonda).
 2. `helpers/workorder-event.helper.ts`: `writeWorkOrderEventsTx` · `statusEventTx(tx, wo, from, to, ctx)`.
 3. Durum boğazları: `ensureWorkOrderInProgress` · `completeWorkOrderIfStepsDone` (+ `ctx`, 10 çağıran) ·
    `completeWorkOrder` · `softDelete` · order.service `CANCEL_WO` (sebep geçer) · split SUPERSEDED · arşiv ·
