@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { accountingDispatchService } from "./service";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { toastServerSuccess } from "@/lib/serverNotes";
 
 /**
  * Dialog'un ihtiyaç duyduğu MİNİMUM satır şekli — `DispatchListItem` değil.
@@ -59,9 +59,9 @@ export function InvoiceDialog({ row, onClose, queryKey }: Props): React.ReactEle
   const mut = useMutation({
     mutationFn: (body: { invoiceNo: string | null; invoicedAt?: string | null }) =>
       accountingDispatchService.setInvoice(row!, body),
-    onSuccess: (_res, body) => {
+    onSuccess: (res, body) => {
       void qc.invalidateQueries({ queryKey: [queryKey] });
-      toast.success(body.invoiceNo ? "Fatura bilgisi kaydedildi." : "Fatura işareti kaldırıldı.");
+      toastServerSuccess(res, body.invoiceNo ? "Fatura bilgisi kaydedildi." : "Fatura işareti kaldırıldı.");
       onClose();
     },
     // onError YOK — apiClient interceptor backend mesajını zaten toast'lar (duplicate olurdu).

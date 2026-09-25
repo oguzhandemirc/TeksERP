@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { Keyboard } from "lucide-react";
 import {
   Dialog,
@@ -14,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
+import { toastServerSuccess } from "@/lib/serverNotes";
 
 interface Props {
   /** Tartılacak çuval — null ise dialog kapalı. */
@@ -61,8 +61,8 @@ export function WeighSackDialog({ sack, onOpenChange }: Props) {
     // MUAFTIR (operatör değeri kendi yazdı; kantarın simüle olması onu ilgilendirmez).
     // Kantarsız/arızalı durumun kaçış yolu budur.
     mutationFn: () => sackHubService.weighSack(sack!.id, weightKg!, "MANUAL"),
-    onSuccess: () => {
-      toast.success(`Çuval ${sack!.sackNo} tartıldı`);
+    onSuccess: (res) => {
+      toastServerSuccess(res, `Çuval ${sack!.sackNo} tartıldı`);
       invalidateSackHub(qc);
       onOpenChange(false);
     },

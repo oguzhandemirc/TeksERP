@@ -16,6 +16,7 @@ import {
   OFFSITE_QUERY_KEY,
 } from "./service";
 import { useOffsiteStatus } from "./hooks";
+import { SERVER_WARNINGS_HANDLED } from "@/lib/serverNotes";
 
 /**
  * OFFSITE YEDEK KARTI — "yedeklerim başka bir yerde mi" sorusunun tek yüzeyi.
@@ -58,6 +59,8 @@ export function OffsiteBackupCard() {
   });
 
   const sweep = useMutation({
+    // Süpürme sonucunun `warnings`i (zarf değil, soyulmuş alan) başarısızlıkta hata olarak gösterilir.
+    meta: SERVER_WARNINGS_HANDLED,
     mutationFn: sweepOffsiteNow,
     onSuccess: (r) => {
       invalidate();

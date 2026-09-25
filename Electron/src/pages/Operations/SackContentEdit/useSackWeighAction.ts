@@ -5,6 +5,7 @@ import { useMachineScale } from "@/hooks/useMachineScale";
 import { readWeightFromScale, type WeighSource } from "@/lib/scale-read";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
+import { toastServerSuccess } from "@/lib/serverNotes";
 
 /**
  * Çuval tartısı — TEK DOKUNUŞ (mobil `hooks/useSackWeigh.ts` deseninin masaüstü
@@ -41,8 +42,8 @@ export function useSackWeighAction() {
       // eskiden buradaydı, yani uydurma değer ÖNCE DB'ye yazılıp SONRA uyarılıyordu.
       // Backend `shipping.simulatedWeightEnabled` kapalıyken bu çağrıyı 400'ler ve
       // Türkçe mesajı aşağıdaki catch gösterir.
-      await mut.mutateAsync({ sackId: sack.id, kg: read.kg, source: read.source });
-      toast.success(`${sack.sackNo} tartıldı — ${read.kg.toLocaleString("tr-TR")} kg`);
+      const res = await mut.mutateAsync({ sackId: sack.id, kg: read.kg, source: read.source });
+      toastServerSuccess(res, `${sack.sackNo} tartıldı — ${read.kg.toLocaleString("tr-TR")} kg`);
     } catch (e) {
       // 409 = çuval bu sırada bir sevkiyata atandı (touchWarehouseSackTx guard'ı).
       // 400 = simüle kantar reddi (backend'in Türkçe yönlendirmesi gösterilir).

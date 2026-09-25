@@ -7,13 +7,13 @@
 // =============================================================================
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { ChevronsUpDown, FileStack } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { createDraftFromGoodsReceipts, type InvoiceGoodsReceiptRef } from "./service";
 import { GoodsReceiptsPickerModal } from "./GoodsReceiptsPickerModal";
 import { receiptLabel, receiptsErrorText, receiptsTriggerText } from "./invoiceReceipts";
+import { toastServerSuccess } from "@/lib/serverNotes";
 
 interface Props {
   mode: "create" | "edit";
@@ -33,7 +33,7 @@ export function InvoiceReceiptsSection({ mode, supplierId, value, onChange, link
   const draftM = useMutation({
     mutationFn: (ids: string[]) => createDraftFromGoodsReceipts(ids),
     onSuccess: (r) => {
-      toast.success(r.message ?? "Taslak fişlerin kalemleriyle oluşturuldu.");
+      toastServerSuccess(r, "Taslak fişlerin kalemleriyle oluşturuldu.");
       onDraftCreated?.(r.data.id);
     },
     onError: (e) => setError(receiptsErrorText(e)),

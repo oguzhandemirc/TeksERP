@@ -20,6 +20,7 @@ import { workOrderService } from "./service";
 import { TebdilWizard } from "./tebdil/TebdilWizard";
 import type { RollAttributeTarget, WorkOrder } from "./types";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { showServerWarnings } from "@/lib/serverNotes";
 
 type Mode = "color" | "width";
 /** Renkle uyuşmayan bağlı sipariş için karar: uyar (bağ kalır) · bağı kopar · siparişi de düzelt. */
@@ -277,7 +278,7 @@ export function ChangeTargetDialog({
     onSuccess: (res) => {
       if (!res.done) return; // onay / kapalı — diyalog açık kalır
       toast.success(res.message ?? (selectedRolls.size > 0 ? "Toplar güncellendi" : "Güncellendi"));
-      for (const w of res.warnings) toast.warning(w);
+      showServerWarnings(res); // özel sonuç nesnesi (zarf değil) — genel basım görmez
       // ⚠️ Anahtarlar EKRANLARIN kullandığıyla birebir olmalı (2026-08-17 dersi).
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });

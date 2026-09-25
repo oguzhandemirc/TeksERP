@@ -39,6 +39,7 @@ import { invalidateDestinationLock, useDestinationLock } from "@/pages/Operation
 import { DestinationLockField } from "@/pages/Operations/SackContentEdit/DestinationLockField";
 import type { ShipmentDestination } from "@/pages/Operations/SackContentEdit/types";
 import { Callout } from "@/components/ui/callout";
+import { toastServerSuccess } from "@/lib/serverNotes";
 
 interface Props {
   open: boolean;
@@ -118,7 +119,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], onShipp
         clientToken: crypto.randomUUID(),
       }),
     onSuccess: (res) => {
-      toast.success(res.message ?? "Sevk edildi.");
+      toastServerSuccess(res, "Sevk edildi.");
       void qc.invalidateQueries({ queryKey: ["rolls"] });
       void qc.invalidateQueries({ queryKey: ["shipments"] });
       invalidateDestinationLock(qc);

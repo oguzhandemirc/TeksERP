@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toastServerSuccess } from "@/lib/serverNotes";
 import type { ApiResponse } from "@/types/api";
 import { WEAVING_ORDERS_QUERY_KEY } from "../useWeavingOrderMutations";
 import { fasonWeavingService, type FasonDispatchBody, type FasonReceiptBody, type FasonYarnReturnBody } from "./service";
@@ -10,8 +10,7 @@ export const FASON_QUERY_KEY = "weaving-fason";
 export function useFasonMutations(weavingOrderId: string, onDone: () => void) {
   const qc = useQueryClient();
   const settle = (res: ApiResponse<unknown>, fallback: string) => {
-    toast.success(res.message ?? fallback);
-    for (const w of res.warnings ?? []) toast.warning(w, { duration: 8000 });
+    toastServerSuccess(res, fallback); // uyarılar genel basımdan (App.tsx MutationCache)
     onDone();
     void qc.invalidateQueries({ queryKey: [FASON_QUERY_KEY, weavingOrderId] });
     void qc.invalidateQueries({ queryKey: [FASON_QUERY_KEY, "yarn-balance"] });

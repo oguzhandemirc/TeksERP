@@ -23,6 +23,7 @@ import { orderService } from "@/pages/Operations/Orders/service";
 import type { Order } from "@/pages/Operations/Orders/types";
 import { workOrderService } from "./service";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { showServerWarnings } from "@/lib/serverNotes";
 
 interface Props {
   open: boolean;
@@ -82,7 +83,7 @@ export function LinkOrderDialog({
       toast.success(res.message ?? "Sipariş bağlandı");
       // Uyarılar ayrı basılır: bağ KURULDU ama planlamacının bilmesi gereken
       // bir fark var (bugün: en). Başarı toast'ına gömmek onu görünmez yapardı.
-      for (const w of res.data.warnings) toast.warning(w);
+      showServerWarnings({ warnings: res.data.warnings });
       // ⚠️ Anahtarlar EKRANLARIN kullandığıyla birebir olmalı. İlk yazımda
       // `["work-order", id]` invalidate ediliyordu — böyle bir sorgu YOK:
       // liste tazeleniyor, yan panel ve detay sayfası ESKİ rengi göstermeye
@@ -121,8 +122,9 @@ export function LinkOrderDialog({
       } as unknown as Partial<Order>);
       const lineId = (created.data as unknown as { lines?: { id: string }[] })?.lines?.[0]?.id;
       if (!lineId) throw new Error("Sipariş oluştu ama kalem okunamadı — listeden bağlayın.");
-      await workOrderService.linkOrderLines(workOrderId, [lineId]);
-      return created;
+      const linked = await workOrderService.linkOrderLines(workOrderId, [lineId]);
+      // Bağlama adımının uyarıları (bugün: en farkı) yanıtta kalsın — genel basım gösterir.
+      return { ...created, warnings: [...(created.warnings ?? []), ...(linked.warnings ?? []), ...(linked.data?.warnings ?? [])] };
     },
     onSuccess: () => {
       toast.success("Sipariş oluşturuldu ve bağlandı");

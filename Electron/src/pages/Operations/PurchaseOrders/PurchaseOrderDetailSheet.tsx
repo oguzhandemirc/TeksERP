@@ -59,6 +59,7 @@ import {
 import { FIFO_HINT, FULFILLMENT_TONE, fulfillmentOf, orderProgress, remainingText } from "./fulfillment";
 import { PO_STATUS_BADGE, PO_STATUS_HINT, PO_STATUS_LABEL, RECEIPT_STATUS_LABEL } from "./labels";
 import { EXPECTED_TONE_CLASS, expectedHint, expectedTone, fmtDate } from "./dates";
+import { toastServerSuccess } from "@/lib/serverNotes";
 
 interface Props {
   id: string | null;
@@ -105,7 +106,7 @@ export function PurchaseOrderDetailSheet({ id, onOpenChange, onEdit, onCancel, o
   const resyncM = useMutation({
     mutationFn: () => resyncPurchaseOrder(id as string),
     onSuccess: (res) => {
-      toast.success(res.message ?? "Rakamlar yeniden hesaplandı.");
+      toastServerSuccess(res, "Rakamlar yeniden hesaplandı.");
       invalidate();
     },
   });

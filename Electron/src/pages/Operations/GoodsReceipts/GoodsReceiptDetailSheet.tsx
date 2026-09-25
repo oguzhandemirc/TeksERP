@@ -26,6 +26,7 @@ import { PO_STATUS_LABEL } from "../PurchaseOrders/labels";
 // oradaki karşı bağ geri çağrı ile (`onOpenReceipt`) sayfa katmanından kurulur.
 // İki bileşen birbirini import etseydi modül döngüsü doğardı.
 import { PurchaseOrderDetailSheet } from "../PurchaseOrders/PurchaseOrderDetailSheet";
+import { toastServerSuccess } from "@/lib/serverNotes";
 
 /** Decimal JSON'da string gelir — görüntü için sayıya çevirip TR biçimler. */
 const fmt = (v: string | number | null | undefined): string =>
@@ -69,7 +70,7 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
     // `id` sheet kapalıyken null; mutation yalnız açıkken tetiklenir.
     mutationFn: () => createInvoiceFromReceipt(id as string),
     onSuccess: (res) => {
-      toast.success(res.message ?? `${res.data.docNo} taslağı oluşturuldu.`);
+      toastServerSuccess(res, `${res.data.docNo} taslağı oluşturuldu.`);
       void qc.invalidateQueries({ queryKey: ["finance"] });
       setDraftInvoiceId(res.data.id);
     },

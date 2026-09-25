@@ -12,6 +12,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { toastServerSuccess } from "@/lib/serverNotes";
 import type { AxiosError } from "axios";
 import { machineStopService, type OpenStopPayload } from "./service";
 
@@ -33,8 +34,7 @@ export function useMachineStopMutations(onDone: () => void) {
   const qc = useQueryClient();
   const [stampError, setStampError] = useState<string | null>(null);
   const settle = (res: { message?: string; warnings?: string[] }, fallback: string) => {
-    toast.success(res.message ?? fallback);
-    for (const w of res.warnings ?? []) toast.warning(w, { duration: 8000 });
+    toastServerSuccess(res, fallback); // uyarılar genel basımdan (App.tsx MutationCache)
     setStampError(null);
     onDone();
     void qc.invalidateQueries({ queryKey: [MACHINE_STOPS_QUERY_KEY] });

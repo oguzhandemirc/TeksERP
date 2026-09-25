@@ -5,7 +5,7 @@
 // 409 iplik eksi bakiye adıyla). `warnings` basılır.
 // =============================================================================
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toastServerSuccess } from "@/lib/serverNotes";
 import type { ApiResponse } from "@/types/api";
 import { warpBeamService, type WarpBeamPlanPayload, type WindPayload } from "./service";
 import type { WarpBeam } from "./types";
@@ -15,8 +15,7 @@ export const WARP_BEAMS_QUERY_KEY = "warp-beams";
 export function useWarpBeamMutations(onDone: () => void) {
   const qc = useQueryClient();
   const settle = (res: { message?: string; warnings?: string[] }, fallback: string) => {
-    toast.success(res.message ?? fallback);
-    for (const w of res.warnings ?? []) toast.warning(w, { duration: 8000 });
+    toastServerSuccess(res, fallback); // uyarılar genel basımdan (App.tsx MutationCache)
     onDone();
     void qc.invalidateQueries({ queryKey: [WARP_BEAMS_QUERY_KEY] });
     void qc.invalidateQueries({ queryKey: ["yarn-stock"] });

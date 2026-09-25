@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { fireConfetti } from "@/lib/confetti";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -15,6 +14,7 @@ import { buildPayload, type CreatePayload } from "./workOrderPayload";
 import type { WoSeedTarget } from "./workOrderPrefill";
 import type { PickedOrderLine } from "./OrderPickerDialog";
 import type { WorkOrder } from "./types";
+import { toastServerSuccess } from "@/lib/serverNotes";
 
 const LIST_PATH = "/operations/work-orders";
 
@@ -103,7 +103,7 @@ export function WorkOrderFormPage() {
       // ⚠️ Tercih KAPALIYKEN de yazılır — anahtarı sonra çeviren kullanıcı boş
       // bir hafızayla karşılaşmasın. Okuma tarafı `pickDefaultFirmId`.
       rememberLastSubcontractors(payload);
-      toast.success("İş emri oluşturuldu.");
+      toastServerSuccess(res, "İş emri oluşturuldu.");
       fireConfetti();
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       // Siparişten üretim emri açıldı → sipariş listesindeki "İş Emri" rollup
@@ -118,8 +118,8 @@ export function WorkOrderFormPage() {
   const replaceMut = useMutation({
     mutationFn: (payload: CreatePayload) =>
       workOrderService.replace(id!, payload as unknown as Partial<WorkOrder>),
-    onSuccess: () => {
-      toast.success("İş emri güncellendi.");
+    onSuccess: (res) => {
+      toastServerSuccess(res, "İş emri güncellendi.");
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       void qc.invalidateQueries({ queryKey: ["work-order-detail", id] });
       // Tebdil/güncelleme bağları değiştirebilir → sipariş rollup rozetini tazele.

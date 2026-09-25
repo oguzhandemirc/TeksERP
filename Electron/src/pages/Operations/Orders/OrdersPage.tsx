@@ -189,14 +189,6 @@ function buildCreatePayload(
   };
 }
 
-/**
- * Sunucu `warnings` (engel değil): kg/adet satırda karşılama ölçülmüyor.
- * Sessiz kalırsa kullanıcı siparişin neden kendiliğinden kapanmadığını anlayamaz.
- */
-function showUnitWarnings(res: unknown): void {
-  const w = (res as { warnings?: string[] } | null | undefined)?.warnings ?? [];
-  for (const msg of w) toast.warning(msg, { duration: 8000 });
-}
 
 function buildUpdatePayload(
   v: OrderFormValues,
@@ -361,9 +353,9 @@ export function OrdersPage() {
   const createMut = useMutation({
     mutationFn: (payload: CreatePayload) =>
       orderService.create(payload as unknown as Partial<Order>),
-    onSuccess: (res) => {
+    // Sunucu `warnings` (kg/adet satırda karşılama ölçülmüyor) genel basımdan gelir.
+    onSuccess: () => {
       toast.success("Sipariş oluşturuldu.");
-      showUnitWarnings(res);
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
       setFormOpen(false);
     },
@@ -372,9 +364,8 @@ export function OrdersPage() {
   const updateMut = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdatePayload }) =>
       orderService.update(id, payload as unknown as Partial<Order>),
-    onSuccess: (res) => {
+    onSuccess: () => {
       toast.success("Sipariş güncellendi.");
-      showUnitWarnings(res);
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
       setFormOpen(false);
       setEditing(null);

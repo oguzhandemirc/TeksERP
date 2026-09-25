@@ -6,7 +6,7 @@
 // (mühürde P > 100 uyarısı vb.). Başarıda liste ve üç rapor tazelenir.
 // =============================================================================
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toastServerSuccess } from "@/lib/serverNotes";
 import { dokumaReportsApi, type ShiftTermsCorrection } from "./service";
 
 export const KARNE_QUERY_KEY = ["reports", "dokuma"] as const;
@@ -14,8 +14,7 @@ export const KARNE_QUERY_KEY = ["reports", "dokuma"] as const;
 export function useKarneMutations(onDone: () => void) {
   const qc = useQueryClient();
   const settle = (res: { message?: string; warnings?: string[] }, fallback: string) => {
-    toast.success(res.message ?? fallback);
-    for (const w of res.warnings ?? []) toast.warning(w, { duration: 8000 });
+    toastServerSuccess(res, fallback); // uyarılar genel basımdan (App.tsx MutationCache)
     onDone();
     void qc.invalidateQueries({ queryKey: KARNE_QUERY_KEY });
   };

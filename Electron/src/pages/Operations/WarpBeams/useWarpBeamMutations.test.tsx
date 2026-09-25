@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createServerNotesMutationCache } from "@/lib/serverNotes";
 import { useWarpBeamMutations } from "./useWarpBeamMutations";
 
 const toastSuccess = vi.fn();
@@ -21,7 +22,7 @@ const W1 = "\"T1\" gövdesinde LV1809260001 canlı (TAKILI) — bu levent ancak 
 const W2 = "\"T1\" için 2 planlı levent var: LV1809260005 ve bu levent — sırayla sarılır.";
 
 function wrapper({ children }: { children: ReactNode }) {
-  const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+  const qc = new QueryClient({ mutationCache: createServerNotesMutationCache(), defaultOptions: { mutations: { retry: false } } });
   return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 }
 

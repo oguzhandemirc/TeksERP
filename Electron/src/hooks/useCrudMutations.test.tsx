@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createServerNotesMutationCache } from "@/lib/serverNotes";
 import { useCrudMutations } from "./useCrudMutations";
 import type { CrudService } from "@/services/crudService";
 
@@ -37,7 +38,9 @@ function makeService() {
 }
 
 function renderCrud(service: CrudService<Widget>) {
+  // Uygulamanın genel basımı (App.tsx ile aynı kurulum) — uyarılar oradan gelir.
   const qc = new QueryClient({
+    mutationCache: createServerNotesMutationCache(),
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
@@ -155,10 +158,11 @@ describe("useCrudMutations — sunucu uyarıları", () => {
 
   it("update/restore/hardRemove de warnings'i basar (her uyarı ayrı tost)", async () => {
     const { service, fns } = makeService();
-    const res = { success: true, data: { id: "w1", name: "x" }, warnings: ["u1", "u2"] };
-    fns.update.mockResolvedValueOnce(res);
-    fns.restore.mockResolvedValueOnce(res);
-    fns.hardRemove.mockResolvedValueOnce(res);
+    // Her çağrı AYRI yanıt nesnesi (gerçekte de öyle) — aynı nesne tek kez basılır (serverNotes WeakSet).
+    const res = () => ({ success: true, data: { id: "w1", name: "x" }, warnings: ["u1", "u2"] });
+    fns.update.mockResolvedValueOnce(res());
+    fns.restore.mockResolvedValueOnce(res());
+    fns.hardRemove.mockResolvedValueOnce(res());
     const { result } = renderCrud(service);
 
     result.current.updateMutation.mutate({ id: "w1", data: { name: "x" } });

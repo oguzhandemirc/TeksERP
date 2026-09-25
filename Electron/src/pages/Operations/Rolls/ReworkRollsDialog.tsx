@@ -22,6 +22,7 @@ import { loadAllForPicker } from "@/lib/picker-loader";
 import type { ProductionRoute } from "@/pages/Routes/types";
 import { workOrderService } from "@/pages/Operations/WorkOrders/service";
 import type { Roll } from "./types";
+import { serverSuccessText } from "@/lib/serverNotes";
 
 const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
@@ -204,7 +205,8 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
       if (d.batch) parts.push(`parti ${d.batch.batchNumber}`);
       if (d.dispatch) parts.push(`sevk ${d.dispatch.dispatchNo}`);
       toast.success(`${d.attached} top ${isRework ? "yeniden üretime" : "üretime"} alındı`, {
-        description: parts.join(" · "),
+        // Sunucu cümlesi "N top bağlanamadı"yı ve sevk uyarısını taşır — varsa o.
+        description: serverSuccessText(res, parts.join(" · ")),
         duration: 10_000,
       });
       void qc.invalidateQueries({ queryKey: ["rolls"] });

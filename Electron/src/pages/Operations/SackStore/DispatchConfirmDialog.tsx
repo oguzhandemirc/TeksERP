@@ -1,6 +1,5 @@
 import { useState, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { CheckCircle2, Loader2, PackageCheck, Printer, ScanLine } from "lucide-react";
 import {
   Dialog,
@@ -18,6 +17,7 @@ import { printHtmlString } from "@/lib/print";
 import { printedDocumentService } from "@/services/printedDocumentService";
 import { sackStoreService } from "./service";
 import { invalidateSackHub } from "@/pages/Operations/SackContentEdit/useSackData";
+import { toastServerSuccess } from "@/lib/serverNotes";
 
 const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
@@ -105,8 +105,9 @@ export function DispatchConfirmDialog({
         driverName: driverName.trim() || null,
         carrier: carrier.trim() || null,
       }),
-    onSuccess: () => {
-      toast.success(`Sevk edildi: ${shipment!.shipmentNo}`);
+    onSuccess: (res) => {
+      // Sunucu cümlesi otomatik fatura taslağı notunu taşır — varsa o.
+      toastServerSuccess(res, `Sevk edildi: ${shipment!.shipmentNo}`);
       const id = shipment!.id;
       // Dispatch stok düşürür (toplar SHIPPED) ve sevkiyat/sipariş durumlarını
       // değiştirir — dokunan tüm ekranların cache'i TEK yerden tazelenir (O1).

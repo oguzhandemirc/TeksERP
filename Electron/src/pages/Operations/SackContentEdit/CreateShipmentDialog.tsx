@@ -31,6 +31,7 @@ import { resolveDestination, useDestinationLock } from "./destinationDefault";
 import { DestinationLockField } from "./DestinationLockField";
 import { shipmentService } from "@/pages/Operations/Shipments/service";
 import { ShipmentSackCountField } from "./ShipmentSackCountField";
+import { SERVER_WARNINGS_HANDLED, serverSuccessText } from "@/lib/serverNotes";
 
 /**
  * Diyaloğun GERÇEKTEN okuduğu çuval alanları.
@@ -127,6 +128,8 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
     manualSackText.trim() !== "" && (!Number.isFinite(manualSack) || manualSack! < 1 || manualSack! > 9999);
 
   const createMut = useMutation({
+    // Uyarılar diyalogda LİSTE olarak gösterilir (aşağıda) — genel tost basımı atlanır.
+    meta: SERVER_WARNINGS_HANDLED,
     mutationFn: () =>
       sackHubService.createShipment({
         sackIds,
@@ -153,9 +156,12 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
       // Sevk onayı KAPALIYKEN (varsayılan) backend oluşturur oluşturmaz sevk eder
       // (dispatched=true, stok düştü); AÇIKKEN yalnız PLANNED kurulur.
       toast.success(
-        res.data.dispatched
-          ? `Sevk edildi: ${res.data.shipmentNo}`
-          : `Sevkiyat kuruldu — onay bekliyor: ${res.data.shipmentNo}`,
+        serverSuccessText(
+          res,
+          res.data.dispatched
+            ? `Sevk edildi: ${res.data.shipmentNo}`
+            : `Sevkiyat kuruldu — onay bekliyor: ${res.data.shipmentNo}`,
+        ),
       );
       invalidateSackHub(qc, { shipment: true });
       onCreated();
