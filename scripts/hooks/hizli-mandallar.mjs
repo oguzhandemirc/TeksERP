@@ -67,6 +67,7 @@ const MANDALLAR = [
   "test_seri_modul_yuklemesi", // numara serisi çağrısı modül yüklenirken koşmaz (AST) · DB'siz · ~0,9 sn · taban 0 sert (25., 2026-09-23)
   "test_p2002_hedef_tek_kaynak", // P2002 hedefi (`meta.target`) yalnız src/utils/p2002.ts'te okunur (AST; takma ad + yapı çözme; yorum sayılmaz) · DB'siz · ~1 sn · taban 0 sert (26., 2026-09-23)
   "test_bekci_ayar_geri_alma", // global ayar (sistem ayarı · modül bayrağı · numara serisi) yazan bekçi geri almayı `finally`de yapar (AST · sınıf + anahtar düzeyi) · DB'siz · ~1,5 sn · taban 0 sert (27., 2026-09-24)
+  "test_audit_okuma_kaynagi", // audit yalnız ayak izi: system_logs okuyan backend işlevi + audit ucu çağıran istemci dosyası beyanlı, borç cırcırı (AST) · src + scripts/lib + Electron/src + mobil/src · ağaç · ~1 sn · §2/§6b sert (28., 2026-09-25)
 ];
 
 function izoleAgacMi() {

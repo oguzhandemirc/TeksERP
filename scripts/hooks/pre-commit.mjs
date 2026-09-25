@@ -198,7 +198,9 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
 // `Teks-Erp/prisma/` (2026-09-23, migration_order ile): bekçi YALNIZ `prisma/migrations/`i okur ve
 // yalnız MIGRATION ekleyen bir commit hiçbir tetiğe girmiyordu — yani kapı o sınıfı hiç görmezdi.
 // Tetik bekçinin okuduğu dizinden dar kalamaz. Bedel: migration commit'ine +~0,3 sn.
-if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/|Teks-Erp\/prisma\/|Electron\/src\/|docs\/)/.test(f))) {
+// `mobil/src/` (1e hükmü 2026-09-25, audit_okuma_kaynagi ile): bekçi audit ucu çağıran istemci
+// dosyasını panelde VE tablette arar; yalnız tablete dokunan commit de mandal görmeli. Bedel +~1 sn.
+if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/|Teks-Erp\/prisma\/|Electron\/src\/|mobil\/src\/|docs\/)/.test(f))) {
   adimlar.push({ ad: "hızlı mandallar", cwd: ".", cmd: ["node", ["scripts/hooks/hizli-mandallar.mjs"]] });
 }
 
