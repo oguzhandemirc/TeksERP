@@ -17,6 +17,8 @@ import {
   TIMELINE_GROUP_LABEL,
   WORK_ORDER_CHANNEL_LABEL,
   WORK_ORDER_FIELD_LABEL,
+  WORK_ORDER_ROLL_ATTRIBUTE_LABEL,
+  WORK_ORDER_STEP_FIELD_LABEL,
   WORK_ORDER_TRIGGER_LABEL,
   type TimelineGroup,
 } from "../constants/workorder-event-labels";
@@ -52,7 +54,7 @@ type Pending = Omit<TimelineItem, "actor"> & { actorId: string | null };
 function woEventItem(e: {
   id: string; type: WorkOrderEventType; field: string | null; fromValue: string | null; toValue: string | null;
   fromLabel: string | null; toLabel: string | null; trigger: string | null; channel: string; reason: string | null;
-  createdById: string | null; createdAt: Date;
+  payload?: Prisma.JsonValue | null; createdById: string | null; createdAt: Date;
 }): Pending {
   const from = e.fromLabel ?? e.fromValue ?? "—";
   const to = e.toLabel ?? e.toValue ?? "—";
@@ -69,8 +71,18 @@ function woEventItem(e: {
       return { ...base, group: "DURUM", title: "Durum değişti", detail: `${from} → ${to}` };
     case WorkOrderEventType.BATCH_ADDED:
       return { ...base, group: "PARTI", title: "Parti eklendi", detail: e.toLabel };
+    case WorkOrderEventType.STEP_PLAN_CHANGED: {
+      const station = (e.payload as { stationName?: string } | null)?.stationName;
+      const label = WORK_ORDER_STEP_FIELD_LABEL[e.field ?? ""] ?? e.field ?? "Adım";
+      return { ...base, group: "PLAN", title: `${station ? `${station}: ` : ""}${label} değişti`, detail: `${from} → ${to}` };
+    }
+    case WorkOrderEventType.ROLL_ATTRIBUTES_APPLIED: {
+      const n = (e.payload as { rolls?: unknown[] } | null)?.rolls?.length ?? 0;
+      const label = WORK_ORDER_ROLL_ATTRIBUTE_LABEL[e.field ?? ""] ?? e.field ?? "değer";
+      return { ...base, group: "PLAN", title: `Toplara ${label} uygulandı`, detail: `${to} · ${n} top` };
+    }
     default: {
-      const fieldLabel = e.field ? (WORK_ORDER_FIELD_LABEL[e.field] ?? e.field) : "Alan";
+      const fieldLabel = e.field ? ((WORK_ORDER_FIELD_LABEL as Record<string, string>)[e.field] ?? e.field) : "Alan";
       return { ...base, group: e.field === "isActive" ? "DURUM" : "PLAN", title: `${fieldLabel} değişti`, detail: `${from} → ${to}` };
     }
   }

@@ -16,15 +16,18 @@
 //   §9 tablet isteği → kanal TABLET
 //   §10 replace rota: istasyon sırası tek "route" satırı, adım notu adım başına; hepsi alan satırlarıyla tek grup
 //   §11 toplara uygula: ROLL_ATTRIBUTES_APPLIED yükü top başına ESKİ renk/en (ters yolun dayanağı)
+//   §12 Hareketler çizelgesi D2 satırlarını Türkçe başlık ve tetik adıyla basar (ham kod yok)
 // NEGATİF SONDA (elle, 2026-09-25): `recordWorkOrderFieldDiffTx` gövdesi erken
 // `return 0` yapıldı → 10 kırmızı (§1–§1d/§2/§4/§5/§8/§9/§10c); `recordStepDiffTx` susturuldu →
 // §7/§10/§10b/§10c; top yükü boşaltıldı → §11; replace'teki sıra park satırı silindi → §10
-// P2002 (araya adım ekleme 500 veriyordu). Hepsi yedek kopyadan geri alındı.
+// P2002 (araya adım ekleme 500 veriyordu); iki tetik etiketi silindi → §12/§12e. Hepsi
+// yedek kopyadan geri alındı.
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { WorkOrderLinkService } from "../src/services/workorder-link.service";
+import { WorkOrderTimelineService } from "../src/services/workorder-timeline.service";
 import { setWorkOrderTypeTx } from "../src/services/helpers/workorder-event.helper";
 import { runWithRequestContext } from "../src/lib/request-context";
 import { factoryDateTr } from "../src/constants/time";
@@ -139,7 +142,7 @@ async function main(): Promise<void> {
       en?.fromValue === "200" && en?.toValue === "210" && en?.reason === "en ölçüm testi" && en?.trigger === "WIDTH_CHANGE");
 
     const tip = (w: Parameters<typeof setWorkOrderTypeTx>[3]["where"], to: WorkOrderType) =>
-      prisma.$transaction((tx) => setWorkOrderTypeTx(tx, a, to, { where: w, ctx: { trigger: "TEST_TYPE", userId: ADMIN } }));
+      prisma.$transaction((tx) => setWorkOrderTypeTx(tx, a, to, { where: w, ctx: { trigger: "ORDER_LINK", userId: ADMIN } }));
     const t1 = await tip(undefined, WorkOrderType.ORDER_PRODUCTION);
     const t2 = await tip(undefined, WorkOrderType.ORDER_PRODUCTION);
     const t3 = await tip({ status: WorkOrderStatus.CANCELLED }, WorkOrderType.STOCK_PRODUCTION);
@@ -176,6 +179,8 @@ async function main(): Promise<void> {
     check("§8b replace numara kilidi 409", rNo === "WORK_ORDER_NUMBER_FROZEN", `${rNo}`);
 
     await rotaVeTopSenaryolari(a, b, govde);
+
+    await cizelgeBasliklari(a, b);
 
     await tabletIstegi(() => svc.update(b, { targetWeight: 42 }, ADMIN));
     const tab = (await alanOlaylari(b)).find((e) => e.field === "targetWeight");
@@ -226,6 +231,19 @@ async function rotaVeTopSenaryolari(
     uyg?.field === "rollWidth" && uyg.toValue === "295" && yuk?.rolls?.length === 1
       && yuk.rolls[0].rollId === roll.id && Number(yuk.rolls[0].fromWidth) === 300 && yuk.rolls[0].fromColorId === COLOR,
     JSON.stringify(yuk?.rolls?.[0] ?? null));
+}
+
+async function cizelgeBasliklari(a: string, b: string): Promise<void> {
+  const tl = new WorkOrderTimelineService();
+  const satirlar = [...(await tl.list(a, { limit: 200 })).data, ...(await tl.list(b, { limit: 200 })).data]
+    .filter((x) => x.id.startsWith("woe:"));
+  const baslik = (t: string) => satirlar.find((x) => x.title === t);
+  check("§12 en satırı 'En (cm) değişti', tetik 'Eni Değiştir'", satirlar.some((x) => x.title === "En (cm) değişti" && x.trigger === "Eni Değiştir"));
+  check("§12b rota satırı 'Rota değişti'", !!baslik("Rota değişti"), baslik("Rota değişti")?.detail ?? "-");
+  check("§12c adım satırı istasyon önekli ('…: Sevk rengi değişti')", satirlar.some((x) => /: Sevk rengi değişti$/.test(x.title)));
+  check("§12d toplara uygula 'Toplara en uygulandı', ayrıntıda top sayısı", baslik("Toplara en uygulandı")?.detail === "295 · 1 top", baslik("Toplara en uygulandı")?.detail ?? "-");
+  const hamKod = satirlar.filter((x) => x.trigger !== null && /^[A-Z_]+$/.test(x.trigger)).map((x) => x.trigger);
+  check("§12e hiçbir tetik ham kodla basılmaz", hamKod.length === 0, hamKod.join(","));
 }
 
 async function temizle(): Promise<void> {

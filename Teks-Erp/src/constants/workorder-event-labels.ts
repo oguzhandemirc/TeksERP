@@ -1,6 +1,8 @@
 // İş emri Hareketler ekranının Türkçe etiketleri — TEK KAYNAK (panel ve tablet
 // satırın başlığını sunucudan hazır alır; istemcide ikinci sözlük tutulmaz).
 
+import type { WorkOrderTrackedField } from "./workorder-event-fields";
+
 /** Olay grupları — süzgeç çipleri bu sırayla basılır. */
 export const TIMELINE_GROUPS = ["DURUM", "PLAN", "SIPARIS", "PARTI", "FASON", "TAMBUR", "KAPANIS"] as const;
 export type TimelineGroup = (typeof TIMELINE_GROUPS)[number];
@@ -15,8 +17,8 @@ export const TIMELINE_GROUP_LABEL: Record<TimelineGroup, string> = {
   KAPANIS: "Kapanış künyesi",
 };
 
-/** `WorkOrderEvent.field` → okunur ad. Tanınmayan alan ham adıyla basılır. */
-export const WORK_ORDER_FIELD_LABEL: Record<string, string> = {
+/** `WorkOrderEvent.field` → okunur ad; izlenen her alanın adı ZORUNLU (tip ölçer). */
+export const WORK_ORDER_FIELD_LABEL: Record<WorkOrderTrackedField, string> = {
   targetColorId: "Hedef renk",
   width: "En (cm)",
   targetQuantity: "Hedef metre",
@@ -28,6 +30,21 @@ export const WORK_ORDER_FIELD_LABEL: Record<string, string> = {
   routeTemplateId: "Rota",
   type: "İş emri tipi",
   isActive: "Arşiv",
+};
+
+/** Fason adımı planının alanları (STEP_PLAN_CHANGED; "route" rotanın bütünü). */
+export const WORK_ORDER_STEP_FIELD_LABEL: Record<string, string> = {
+  route: "Rota",
+  notes: "Adım notu",
+  requiredCategoryId: "Fason kategorisi",
+  plannedSubcontractorId: "Planlanan fasoncu",
+  dispatchWithoutColor: "Sevk rengi",
+};
+
+/** Toplara uygulanan plan düzeltmesi (ROLL_ATTRIBUTES_APPLIED). */
+export const WORK_ORDER_ROLL_ATTRIBUTE_LABEL: Record<string, string> = {
+  rollColor: "renk",
+  rollWidth: "en",
 };
 
 /** Olayı tetikleyen işlem (`WorkOrderEvent.trigger`) → okunur ad. */
@@ -58,6 +75,17 @@ export const WORK_ORDER_TRIGGER_LABEL: Record<string, string> = {
   RESCUE_STUCK_ROLL: "Takılı top kurtarma",
   MANUAL_MOVE: "Konum düzeltme",
   REDYE_SAME_COLOR: "Aynı renge redye",
+  WO_UPDATE: "Düzenle (tablet / hızlı)",
+  WO_REPLACE: "Düzenle",
+  COLOR_CHANGE: "Rengi Değiştir",
+  WIDTH_CHANGE: "Eni Değiştir",
+  FASON_RECEIPT_WIDTH: "Fason kabulünde ölçülen en",
+  ORDER_LINK: "Sipariş bağla",
+  ORDER_UNLINK: "Sipariş bağını kaldır",
+  ORDER_LINE_CANCEL: "Sipariş kalemi iptali",
+  ORDER_DELETE: "Sipariş silme",
+  STEP_PLAN: "Adım planlama",
+  ROLL_ATTRIBUTES: "Toplara uygula",
 };
 
 export const WORK_ORDER_CHANNEL_LABEL: Record<string, string> = {
