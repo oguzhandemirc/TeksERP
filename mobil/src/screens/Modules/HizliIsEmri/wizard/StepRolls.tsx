@@ -8,6 +8,7 @@ import type { useQuickWorkOrder } from '../useQuickWorkOrder';
 import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 import { useCameraUnusable } from '../../../../hooks/useCameraUnusable';
 import { colors, spacing, radius } from '../../../../theme';
+import { ITEM_LIFECYCLE_LABEL } from '../../../../lib/item-lifecycle';
 import { batchService } from '../../../../services/batch.service';
 
 interface Props {
@@ -63,6 +64,7 @@ export default function StepRolls({
                 <Text style={styles.itemLockText} numberOfLines={1}>
                   {wo.lockedItemName}
                 </Text>
+                {wo.lockedItemPhaseOut ? <Text style={styles.phaseOutText}>{ITEM_LIFECYCLE_LABEL.PHASE_OUT}</Text> : null}
               </View>
             ) : null}
             <Text style={styles.lastScan} numberOfLines={1}>
@@ -230,6 +232,7 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   itemLockText: { color: colors.brand, fontWeight: '700', fontSize: 13, flexShrink: 1 },
+  phaseOutText: { color: colors.warningText, fontWeight: '700', fontSize: 12, marginLeft: 6 },
   reworkNote: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -18,6 +18,8 @@ import { useOpenSequence } from '../../../hooks/useOpenSequence';
 import { itemService } from '../../../services/item.service';
 import { colorService } from '../../../services/color.service';
 import { colors } from '../../../theme';
+import { usePickableLifecycle } from '../../../hooks/useFeatureFlags';
+import { lifecycleBadge } from '../../../lib/item-lifecycle';
 import { prefillFromOrder, validateRunOpen } from './runPayload';
 import type { RunPanelState } from './useRunPanel';
 
@@ -41,9 +43,11 @@ export default function RunOpenModal({ state }: { state: RunPanelState }) {
   const [picker, setPicker] = useState<PickerKind>(null);
   const openSeq = useOpenSequence(state.openModal);
   const orderOptions = useOrderOptions(state);
+  // İşsiz koşum = yeni üretim planı (A3): Tükenene kadar kart ayara bağlı listelenir.
+  const lifecycle = usePickableLifecycle('plan');
   const itemsQuery = useQuery({
-    queryKey: ['items', 'dokuma', 'FABRIC'],
-    queryFn: () => itemService.getAll({ page: 1, pageSize: 500, sortBy: 'code', sortOrder: 'asc', filters: { isActive: 'true', itemType: 'FABRIC' } }),
+    queryKey: ['items', 'dokuma', 'FABRIC', lifecycle],
+    queryFn: () => itemService.getAll({ page: 1, pageSize: 500, sortBy: 'code', sortOrder: 'asc', filters: { isActive: 'true', itemType: 'FABRIC', lifecycleStatus: lifecycle } }),
     enabled: picker === 'item',
     staleTime: 5 * 60_000,
   });
@@ -55,7 +59,7 @@ export default function RunOpenModal({ state }: { state: RunPanelState }) {
   });
   useTruncationWarning(itemsQuery.data?.pagination, 'Desen');
   useTruncationWarning(colorsQuery.data?.pagination, 'Renk');
-  const itemOptions: PickerOption[] = (itemsQuery.data?.data ?? []).map((i) => ({ value: i.id, label: i.name, sublabel: i.code }));
+  const itemOptions: PickerOption[] = (itemsQuery.data?.data ?? []).map((i) => ({ value: i.id, label: i.name, sublabel: i.code, badge: lifecycleBadge(i, colors.warningText) }));
   const colorOptions: PickerOption[] = (colorsQuery.data?.data ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: c.code }));
   const f = state.form;
   const orderLabel = state.orders.find((o) => o.id === f.weavingOrderId)?.weavingOrderNumber ?? '';

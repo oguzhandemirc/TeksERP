@@ -702,15 +702,16 @@ export default function KK1Screen() {
   }, [compact, manualMode, numpadTarget]);
 
   // ── Items: kumaş (Variant kaldırıldı; RAW/DYED ayrımı yok artık) ──
+  // Belgesiz stok girişi (sınıf C) yalnız Aktif karta — Tükenene kadar kart listelenmez (§9).
   const itemsQuery = useQuery({
-    queryKey: ['items', 'kk1', 'FABRIC'],
+    queryKey: ['items', 'kk1', 'FABRIC', 'ACTIVE'],
     queryFn: () =>
       itemService.getAll({
         page: 1,
         pageSize: 500,
         sortBy: 'code',
         sortOrder: 'asc',
-        filters: { isActive: 'true', itemType: 'FABRIC' },
+        filters: { isActive: 'true', itemType: 'FABRIC', lifecycleStatus: 'ACTIVE' },
       }),
   });
 

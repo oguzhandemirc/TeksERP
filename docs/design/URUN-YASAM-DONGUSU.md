@@ -309,6 +309,17 @@ kopya kalmaz.
   PHASE_OUT → akar (küçük bilgi etiketi); ARCHIVED → kırmızı, açık metin (D1 gereği beklenmez ama
   fail-closed).
 - KK1 ürün seçicisi yalnız `ACTIVE`; hata metinleri `details.code`'dan Türkçe ve eylem söyler.
+- **Uygulama (S7):**
+  - Seçiciler `usePickableLifecycle`:
+    - KK1: yalnız Aktif
+    - sipariş kalemi: "Yeni sipariş" ayarına bağlı
+    - işsiz tezgah koşumu: "Yeni üretim planı" ayarına bağlı
+    - Tambur manuel: süzülmez (sınıf E), rozetle
+  - Hızlı iş emri kilit çipi Tükenene kadar kartı okutma anında gösterir; Pasif kartın topu
+    `classifyScannedRoll`da red.
+  - Sunucu hata metni zaten Türkçe ve eylem söylediği için olduğu gibi gösterilir; ayrı kod
+    eşlemesi eklenmedi.
+  - Mobil `ItemLifecycleStatus` ayna bekçisinde (`test_mobil_enum_aynasi`).
 
 ## 10. Gözlem ve bekçiler
 

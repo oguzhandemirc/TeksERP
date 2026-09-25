@@ -142,6 +142,11 @@ export interface FeatureFlags {
    *  sipariş formu şube alanını hiç göstermez. Yalnız UI rehberi — backend
    *  `branchId` gönderilirse yine doğrular. */
   customerBranchesEnabled: boolean;
+  /** "Tükenene kadar" karta yeni sipariş (backend `itemLifecycle.phaseOutNewOrder`):
+   *  OKUTULAN_TOPLAR (varsayılan) · KAPALI · SERBEST. Yalnız seçici kapsamı — kararı sunucu verir. */
+  itemPhaseOutNewOrder: 'OKUTULAN_TOPLAR' | 'KAPALI' | 'SERBEST';
+  /** "Tükenene kadar" karta yeni üretim planı (varsayılan açık). Yalnız seçici kapsamı. */
+  itemPhaseOutNewPlan: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -207,6 +212,9 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   shippingManualWeightRestrictedEnabled: false,
   // Backend/Electron ile aynı yön: şube kullanımı varsayılan AÇIK.
   customerBranchesEnabled: true,
+  // Backend varsayılanları (URUN-YASAM-DONGUSU §4.1).
+  itemPhaseOutNewOrder: 'OKUTULAN_TOPLAR',
+  itemPhaseOutNewPlan: true,
 };
 
 export const featureFlagService = {

@@ -15,6 +15,8 @@ import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { emptyOrProblemText } from '../../../utils/queryState';
 import { colors, spacing, radius } from '../../../theme';
+import { usePickableLifecycle } from '../../../hooks/useFeatureFlags';
+import { lifecycleBadge } from '../../../lib/item-lifecycle';
 import type { DraftLine } from './useNewOrder';
 
 // =============================================================================
@@ -68,15 +70,17 @@ export default function OrderLineSheet({ target, customerId, onDismiss, onSave, 
   }, [open, editing?.clientId]);
 
   // ── Kumaş listesi (KK1 ile aynı desen: tek seferde çek, picker in-memory arar) ──
+  // Yeni sipariş kalemi (A1): Tükenene kadar kart yalnız "Serbest" ayarında listelenir (§4.1).
+  const lifecycle = usePickableLifecycle('order');
   const itemsQuery = useQuery({
-    queryKey: ['items', 'order-line', 'FABRIC'],
+    queryKey: ['items', 'order-line', 'FABRIC', lifecycle],
     queryFn: () =>
       itemService.getAll({
         page: 1,
         pageSize: 500,
         sortBy: 'name',
         sortOrder: 'asc',
-        filters: { isActive: 'true', itemType: 'FABRIC' },
+        filters: { isActive: 'true', itemType: 'FABRIC', lifecycleStatus: lifecycle },
       }),
     enabled: open,
   });
@@ -89,7 +93,7 @@ export default function OrderLineSheet({ target, customerId, onDismiss, onSave, 
   const selectedItem = useMemo(() => items.find((i) => i.id === itemId) ?? null, [items, itemId]);
 
   const itemOptions = useMemo<PickerOption[]>(
-    () => items.map((i) => ({ value: i.id, label: i.name, sublabel: i.code })),
+    () => items.map((i) => ({ value: i.id, label: i.name, sublabel: i.code, badge: lifecycleBadge(i, colors.warningText) })),
     [items],
   );
 

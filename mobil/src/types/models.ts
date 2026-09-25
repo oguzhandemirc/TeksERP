@@ -15,6 +15,8 @@
 export type QualityGradeRole = 'FIRST' | 'SECOND' | 'SCRAP';
 
 export type CompanyType = 'CUSTOMER' | 'SUPPLIER' | 'BOTH';
+/** Ürün kartı yaşam döngüsü (backend `ItemLifecycleStatus`): Aktif · Tükenene kadar · Pasif. */
+export type ItemLifecycleStatus = 'ACTIVE' | 'PHASE_OUT' | 'ARCHIVED';
 // ⚠️ BACKEND `enum StationType` İLE ELLE SENKRON (schema.prisma). 2026-09-03
 // drift taraması: dört değerin ÜÇÜ hayaletti ('PROCESS', 'PROCESS_QC',
 // 'WAREHOUSE' — backend'de YOK) ve gerçek değer 'INTERNAL' EKSİKTİ. Hayalet
@@ -241,6 +243,8 @@ export interface Item {
   /** Kalem kartının birimi (MT/KG/ADET) — sipariş satırı buradan kopyalanır. */
   unit?: string;
   isActive?: boolean;
+  /** Yaşam döngüsü — eski sunucuda yok (`itemLifecycleOf` isActive'ten türetir). */
+  lifecycleStatus?: ItemLifecycleStatus;
   /** Saha (KK1) "yeni desen" olarak açtı → admin gözden geçirmesi bekleniyor. */
   pendingReview?: boolean;
   /** M:N pivot satırları — `GET /items` `include: { allowedColors: { include: { color } } }`
@@ -426,7 +430,8 @@ export interface Roll {
   /** Kaç kat sarıldığı ("2-KAT" | "4-KAT"); NULL = kayıtlı değil. */
   foldType?: string | null;
   parentReceiptId?: string | null;
-  item?: { id: string; code: string; name: string };
+  /** Barkod okumasında (`/rolls/barcode`) kartın tamamı gelir; listelerde yalnız kimlik. */
+  item?: { id: string; code: string; name: string; lifecycleStatus?: ItemLifecycleStatus };
   color?: Color | null;
   properties?: RollProperty[];
   producedInStep?: {

@@ -17,7 +17,8 @@ import type { AvailableOrderLine } from '../../../services/order.service';
 import { generateClientUuid } from '../../../offline/barcode';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
-import type { Roll } from '../../../types/models';
+import type { ItemLifecycleStatus, Roll } from '../../../types/models';
+import { itemLifecycleOf } from '../../../lib/item-lifecycle';
 import { colors } from '../../../theme';
 import { useReasonPresets } from '../../../hooks/useReasonPresets';
 import {
@@ -50,6 +51,8 @@ export interface ScannedRoll {
    * kesin olarak geçersizleşir. Onay adımındaki uyarı bunu okur.
    */
   labelPrintedAt: string | null;
+  /** Kartın yaşam döngüsü okutma anında (`/rolls/barcode` tam kart döner) — kilit çipi rozeti. */
+  itemLifecycle: ItemLifecycleStatus;
 }
 
 /** Okutma geri bildirimi ortak hook'ta (`hooks/useScanFeedback`) — Fason Sevk de
@@ -237,6 +240,8 @@ export function useQuickWorkOrder() {
 
   const lockedItemId = orderDerivedItemId ?? scanned[0]?.itemId ?? null;
   const lockedItemName = scanned[0]?.itemName ?? null;
+  // Tükenene kadar kartın mevcut malı iş emrine GİRER (sınıf E); operatör durumu okutma anında görür.
+  const lockedItemPhaseOut = scanned[0]?.itemLifecycle === 'PHASE_OUT';
   const totalQty = useMemo(() => scanned.reduce((s, r) => s + r.qty, 0), [scanned]);
   const orderLinked = orderLineIds.length > 0;
 
@@ -589,6 +594,7 @@ export function useQuickWorkOrder() {
           status: decision.status,
           colorName: roll.color?.name ?? null,
           labelPrintedAt: roll.labelPrintedAt ?? null,
+          itemLifecycle: itemLifecycleOf(roll.item),
         });
       }
 
@@ -963,6 +969,7 @@ export function useQuickWorkOrder() {
     totalQty,
     lockedItemId,
     lockedItemName,
+    lockedItemPhaseOut,
     addRolls,
     // iptalli okutma teşhisi — panel açılır, geri alınırsa top listeye girer
     cancelledScan,

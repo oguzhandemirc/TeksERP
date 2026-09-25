@@ -101,6 +101,7 @@ import {
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList, usePressScale, AnimatedEntrance } from '../../../components/motion';
 import { colors, spacing, radius, shadow } from '../../../theme';
+import { lifecycleBadge } from '../../../lib/item-lifecycle';
 import { MANUAL_MIN_REASON } from '../../../constants/manualReasons';
 import Sortable, {
   type SortableGridRenderItem,
@@ -897,6 +898,8 @@ export default function TamburScreen() {
         value: i.id,
         label: i.name,
         sublabel: i.code,
+        // Mevcut malı yürüten iş (sınıf E): Tükenene kadar kart seçilebilir, rozetle ayrılır.
+        badge: lifecycleBadge(i, colors.warningText),
       })),
     [manualItemsQuery.data],
   );

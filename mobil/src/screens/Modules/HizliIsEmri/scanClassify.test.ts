@@ -16,6 +16,12 @@ const roll = (over: Record<string, unknown> = {}) =>
   ({ status: 'STOCK', itemId: 'i1', sackId: null, shipmentId: null, ...over }) as never;
 
 describe('classifyScannedRoll', () => {
+  it('⭐ Tükenene kadar kartın topu AKAR (sınıf E); Pasif kartın topu okutma anında RED ve çıkış yolunu söyler', () => {
+    const item = (lifecycleStatus: string) => ({ id: 'i1', code: 'K', name: 'PATOS', lifecycleStatus });
+    expect(classifyScannedRoll(roll({ item: item('PHASE_OUT') }), null)).toEqual({ kind: 'accept', status: 'STOCK' });
+    expect(classifyScannedRoll(roll({ item: item('ARCHIVED') }), null)).toEqual({ kind: 'reject', reason: "Kartı Pasif — önce kartı 'Tükenene kadar'a alın" });
+  });
+
   it('ham stok kabul', () => {
     expect(classifyScannedRoll(roll(), null)).toEqual({ kind: 'accept', status: 'STOCK' });
   });

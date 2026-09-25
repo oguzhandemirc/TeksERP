@@ -39,7 +39,7 @@ export type ScanDecision =
   | { kind: 'reject'; reason: string };
 
 export function classifyScannedRoll(
-  roll: Pick<Roll, 'status' | 'itemId'> & { sackId?: string | null; shipmentId?: string | null },
+  roll: Pick<Roll, 'status' | 'itemId'> & { sackId?: string | null; shipmentId?: string | null; item?: Roll['item'] },
   lockedItemId: string | null,
 ): ScanDecision {
   if (roll.status === 'CANCELLED') return { kind: 'cancelled' };
@@ -60,6 +60,12 @@ export function classifyScannedRoll(
 
   if (lockedItemId && roll.itemId !== lockedItemId) {
     return { kind: 'reject', reason: 'Farklı ürün' };
+  }
+
+  // Pasif kartta canlı top olamaz (D1) — yine de gelirse okutma anında söylenir (fail-closed).
+  // Tükenene kadar kartın malı AKAR (sınıf E); durum kilit çipinde görünür.
+  if (roll.item?.lifecycleStatus === 'ARCHIVED') {
+    return { kind: 'reject', reason: "Kartı Pasif — önce kartı 'Tükenene kadar'a alın" };
   }
 
   return { kind: 'accept', status: roll.status as AttachableStatus };

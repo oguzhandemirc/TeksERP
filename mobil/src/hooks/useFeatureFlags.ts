@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { DEFAULT_FEATURE_FLAGS, featureFlagService } from '../services/featureFlag.service';
 import { useAuthStore } from '../store/authStore';
+import { pickableLifecycle, type ItemPickUse } from '../lib/item-lifecycle';
 
 // Feature flag'ler app genelinde tek query — React Query cache'i AsyncStorage'a
 // persist edildiği için (App.tsx) son bilinen değer offline'da da uygulanır.
@@ -51,6 +52,11 @@ export function useDokumaRunWeavingRequired(): boolean {
 
 export function useDevereBeamWeavingRequired(): boolean {
   return useFeatureFlags().data?.devereBeamWeavingLinkRequired ?? DEFAULT_FEATURE_FLAGS.devereBeamWeavingLinkRequired;
+}
+
+/** Ürün seçicisinin listeleyeceği yaşam döngüsü durumları (`filter[lifecycleStatus]`, §4.1 ayarları). */
+export function usePickableLifecycle(use: ItemPickUse): string {
+  return pickableLifecycle(use, useFeatureFlags().data ?? DEFAULT_FEATURE_FLAGS);
 }
 
 export function useEmanetEnabled(): boolean {
