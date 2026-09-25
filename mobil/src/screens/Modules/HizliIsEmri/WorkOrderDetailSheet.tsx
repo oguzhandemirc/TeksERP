@@ -300,6 +300,9 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                 <Button mode="contained-tonal" icon="printer" onPress={() => setFix('reprint')} style={styles.fixBtn} contentStyle={styles.btnContent}>
                   Kartı Yeniden Bas
                 </Button>
+                <Button mode="contained-tonal" icon="tray-remove" onPress={() => setFix('detach')} style={styles.fixBtn} contentStyle={styles.btnContent}>
+                  Top Çıkar
+                </Button>
               </View>
             </View>
           ) : null}

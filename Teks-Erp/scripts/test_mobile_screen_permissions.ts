@@ -423,6 +423,16 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     path: "PATCH /work-orders/:p/width",
     why: "Eni Değiştir — `mobile:is-emri-duzelt` yeteneği; menü yeteneksiz operatörde çizilmez (WorkOrderDetailSheet `canFix`).",
   },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "GET /work-orders/:p/detach-candidates",
+    why: "Top Çıkar'ın YAN ETKİSİZ önizlemesi — aynı kartta, `mobile:is-emri-duzelt` yeteneğiyle (menü `canFix`).",
+  },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "POST /work-orders/:p/rolls/:p/detach",
+    why: "Top Çıkar (hareket defteri D6) — `mobile:is-emri-duzelt` yeteneği; menü yeteneksiz operatörde çizilmez (WorkOrderDetailSheet `canFix`).",
+  },
 ];
 
 function main(): void {

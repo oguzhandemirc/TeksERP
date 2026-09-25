@@ -204,6 +204,16 @@ export interface TargetColorPreview {
   cardWillBeStale: boolean;
 }
 
+/** `GET /work-orders/:id/detach-candidates` satırı. */
+export interface DetachCandidate {
+  id: string;
+  barcode: string | null;
+  currentQty: number;
+  status: string;
+  detachable: boolean;
+  blockers: string[];
+}
+
 export const workOrderService = {
   // withOrderDetail=true → orderLinks (customer + ürün), targetColor, dispatchedTotalQty
   // alanları zenginleştirilir. Fason Sevk picker'ı için kullanılır.
@@ -374,6 +384,16 @@ export const workOrderService = {
         reason: data.reason,
         ...(data.reasonCode ? { reasonCode: data.reasonCode } : {}),
       })
+      .then((r) => r.data),
+
+  /** Top Çıkar önizlemesi — iş emrindeki her top çıkarılabilir mi, değilse neden. Yazmaz. */
+  getDetachCandidates: (id: string): Promise<ApiResponse<DetachCandidate[]>> =>
+    apiClient.get<ApiResponse<DetachCandidate[]>>(`/work-orders/${id}/detach-candidates`).then((r) => r.data),
+
+  /** Top Çıkar — işlem görmemiş topu iş emrinden geri alır; sebep zorunlu. */
+  detachRoll: (id: string, rollId: string, reason: string): Promise<ApiResponse<{ workOrderReverted: boolean }>> =>
+    apiClient
+      .post<ApiResponse<{ workOrderReverted: boolean }>>(`/work-orders/${id}/rolls/${rollId}/detach`, { reason })
       .then((r) => r.data),
 
   /** Refakat kartını yeniden bas — yeni sürüm doğar, eski kart geçersizleşir. */

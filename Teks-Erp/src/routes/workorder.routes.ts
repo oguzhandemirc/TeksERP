@@ -677,6 +677,44 @@ router.delete(
  */
 /**
  * @swagger
+ * /api/work-orders/{id}/detach-candidates:
+ *   get:
+ *     summary: Top Çıkar önizlemesi (yazmaz) — iş emrindeki her top çıkarılabilir mi, değilse neden
+ *     tags: [WorkOrders]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Aday toplar }
+ */
+router.get(
+  "/:id/detach-candidates",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"),
+  controller.detachCandidates,
+);
+
+/**
+ * @swagger
+ * /api/work-orders/{id}/rolls/{rollId}/detach:
+ *   post:
+ *     summary: Top Çıkar — işlem görmemiş topu iş emrinden geri alır (giriş damgalanır, stok defteri bağlı ters)
+ *     tags: [WorkOrders]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string } }
+ *       - { in: path, name: rollId, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Top çıkarıldı }
+ *       409: { description: Top işlem görmüş (ROLL_DETACH_PROCESSED) }
+ */
+router.post(
+  "/:id/rolls/:rollId/detach",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"),
+  controller.detachRoll,
+);
+
+/**
+ * @swagger
  * /api/work-orders/{id}/target-color/preview:
  *   get:
  *     summary: Rengi Değiştir önizlemesi (yazmaz) — engel, kısmi boya, sipariş uyarıları, kart bayatlığı

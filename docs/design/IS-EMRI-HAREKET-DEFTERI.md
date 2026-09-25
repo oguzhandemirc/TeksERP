@@ -385,6 +385,16 @@ stok defterindeki `PRODUCTION_ISSUE` bağlı ters satırla kapanır, top önceki
 Hareketler'de bu olay (B) katmanından — `RollMovement` damgasından — okunur, `WorkOrderEvent`e kopyalanmaz;
 iş emrinde top kalmazsa ayrıca `STATUS_CHANGED` yazılır. İşlem görmüş top için cevap: "Bu top işlem gördü —
 panelden Konumu Düzelt / Parti Düşür".
+**Uygulama (D6, 2026-09-25):** `workorder-roll-detach.service.ts` (`detachTx` tek boğaz; önizleme `listCandidates`
+aynı engel yüklemiyle). İşlem görmemiş = ilk adımda · en fazla bir AÇIK giriş hareketi (dış ilk adımda sıfır) ·
+bu iş emrinin adımlarında aktif `RollOperation` yok · çocuk top yok · iptal edilmemiş fason sevk kalemi yok ·
+çuval/sevk yok · bu iş emrinde `RollVariance` yok. Stok defterinde yeni ters kod `ROLL_DETACH`
+(`PRODUCTION_ISSUE` artık `BAGLI_TERS`; `WO_DETACH`/`DISPOSITION`/`RESCUE` bağsız karşı yön olarak kalır).
+Önceki durum/depo ileri satırın `from` ucundan; satır yoksa (depo/stok dışı top) son `RollStatusEvent`ten.
+**Sapma:** Hareketler satırı `RollMovement` damgası yerine stok defterinin tipli ters satırından okunur
+(damga sebebi serbest metin, ters satır tipli kod + aktör + not taşır); depo defteri satırı olmayan topun
+çıkarılması bu yüzden çizelgede görünmez (ölçülecek; saha yolu stok topudur). Boş parti `deleteIfEmptyAndTracelessTx`
+ile düşer; iş emri PLANNED'a yalnız top kalmaz VE hiçbir adım başlamamışsa döner. Ölü `detachRolls` dokunulmadı.
 
 ### 6.3 Genel "Düzenle" ve iş emri numarası — öneri
 
@@ -530,7 +540,7 @@ ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (s
 | D3 | Kapanış künyesi (şema + yazım + ProducedV3 karşılaştırma) | D1 |
 | D4 | Hareketler ucu (A+B) + panel Sheet + ayrı ekran + Excel | D1 (D2 ile zenginleşir) |
 | D5 | Tablet düzeltme menüsü + `mobile:is-emri-duzelt` + önizleme uçları — **D5a (backend) + D5b (tablet menüsü) UYGULANDI**: izin + uç kapıları, renk önizlemesi, `WORK_ORDER_PLAN_CHANGE` sebep kataloğu, panel yetkisiz iptal yalnız dokunulmamış iş emrinde; tablette genel Düzenle kalktı, "Düzelt" menüsü (Top Çıkar D6 ile eklenecek) | D2, S1–S3/S7 cevapları |
-| D6 | Top Çıkar ucu (ledger ters yollarıyla) + tablet tuşu | D1 |
+| D6 | Top Çıkar ucu (ledger ters yollarıyla) + tablet tuşu — **UYGULANDI** (§6.2 notu) | D1 |
 | **D8** | **Parti Ekle** (§6.5): `addBatchToWorkOrderTx` tek boğaz + uç + dört çağıranın bağlanması + R1–R7 + tablet/panel tuşu + `is-emri.md` kural değişimi + arşiv GEÇERSİZ notu | D1 (olay tipi), 9b S2+S3 |
 | D7 | Backfill script (kuru koşum) | D1–D3; `--apply` kullanıcıda |
 | B-RM | `RollMovement` kapanış damgası borcu (§8.5) | 1e sahip atar |

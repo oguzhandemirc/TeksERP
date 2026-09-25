@@ -52,3 +52,11 @@ export function tabletCancelAllowed(
   if (hasPanelWrite) return true;
   return wo.status === 'PLANNED' && !wo.locks?.materialCommitted;
 }
+
+/** Top Çıkar toplu sonucu: kaçı çıktı, kaçı reddedildi (ilk sebep), iş emri Planlandı'ya döndü mü. */
+export function detachResultMessage(ok: number, failed: string[], reverted: boolean): { type: 'success' | 'error'; text: string } {
+  const head = ok > 0 ? `${ok} top iş emrinden çıkarıldı` : 'Hiçbir top çıkarılamadı';
+  const tail = failed.length > 0 ? ` · ${failed.length} top çıkarılamadı: ${failed[0]}` : '';
+  const rev = reverted ? ' · iş emrinde top kalmadı, Planlandı\'ya döndü' : '';
+  return { type: failed.length > 0 ? 'error' : 'success', text: head + rev + tail };
+}

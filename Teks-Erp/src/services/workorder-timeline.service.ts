@@ -12,6 +12,7 @@ import { Prisma, RollEntrySource, WorkOrderEventType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { normalizeScanCode } from "../utils/code-format";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import {
   TIMELINE_GROUPS,
   TIMELINE_GROUP_LABEL,
@@ -125,6 +126,14 @@ async function sourcedItems(workOrderId: string, stepIds: string[]): Promise<Pen
   });
   for (const b of batches) {
     out.push({ ...NO_META, id: `batch:${b.id}`, at: b.createdAt.toISOString(), group: "PARTI", title: "Parti açıldı", detail: b.batchNumber, actorId: b.createdById });
+  }
+  // Top Çıkar: üretime giriş satırının bağlı tersi (stok defteri) — sebep satırın notunda.
+  const detached = await prisma.warehouseMovement.findMany({
+    where: { reasonCode: STOCK_MOVE_REASON.ROLL_DETACH, workOrderStepId: { in: stepIds } },
+    select: { id: true, createdAt: true, userId: true, notes: true, qty: true, roll: { select: { barcode: true } } },
+  });
+  for (const d of detached) {
+    out.push({ ...NO_META, id: `detach:${d.id}`, at: d.createdAt.toISOString(), group: "PARTI", title: "Top çıkarıldı", detail: `${d.roll?.barcode ?? "—"} · ${m(d.qty)}`, reason: d.notes, actorId: d.userId });
   }
   const dispatches = await prisma.subcontractorDispatch.findMany({
     where: { workOrderId },

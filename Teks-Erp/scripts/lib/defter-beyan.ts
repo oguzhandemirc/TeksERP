@@ -567,8 +567,10 @@ export type OlayTersYolu =
   | { tur: "BORC"; ne: string; kanit: string; sahibi: string };
 
 export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
-  PRODUCTION_ISSUE: { tur: "KARSI_OLAY", kod: ["WO_DETACH", "DISPOSITION", "RESCUE"], gerekce: "raftan üretime giriş — üç çıkışın (detach · dispozisyon · kurtarma) ortak karşı yönü; üçü de PRODUCTION olayı, bağ yok",
-    tersYazan: [{ dosya: "src/services/workorder.service.ts", sembol: "detachRolls" }] },
+  // D6 (2026-09-25): Top Çıkar üretime girişi BAĞLI tersle kapatır (`ROLL_DETACH`); detach ·
+  // dispozisyon · kurtarma bağsız karşı yön olarak kalır (§13d KARSI_OLAY → BAGLI_TERS'i kabul eder).
+  PRODUCTION_ISSUE: { tur: "BAGLI_TERS", kod: "ROLL_DETACH", tersYazan: [{ dosya: "src/services/workorder-roll-detach.service.ts", sembol: "detachTx" }] },
+  ROLL_DETACH: { tur: "TERS_KODU", ileri: "PRODUCTION_ISSUE" },
   // WO_DETACH TERS_KODU DEĞİL (ölçüldü 2026-09-13): yazıcısı `detachRolls` `postStockMove` ile
   // İLERİ satır yazar (eventType PRODUCTION, reasonCode WO_DETACH), `reverseStockMove` ile
   // bağlı ters DEĞİL — 1e'nin işaret ettiği tutarsızlık. Karşı olay çifti SİMETRİKTİR:

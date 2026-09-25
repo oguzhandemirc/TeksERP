@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
-import { Button, Checkbox, Text, TextInput, TouchableRipple } from 'react-native-paper';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Checkbox, Text, TextInput, TouchableRipple } from 'react-native-paper';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
-import * as Haptics from 'expo-haptics';
 
 import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
 import ColorSelectField from '../../../components/ColorSelectField';
@@ -12,16 +11,11 @@ import { useReasonPresets } from '../../../hooks/useReasonPresets';
 import { workOrderService, type TargetColorPreview } from '../../../services/workOrder.service';
 import { printTravelerCardForWorkOrder } from '../../../services/travelerCardPrint';
 import { colorSaveGate, parseWidth, reasonPayload, reasonReady } from './workOrderFix';
+import { errorText, Footer, useAfterSave, type FixWo } from './fixSheetParts';
+import WorkOrderDetachSheet from './WorkOrderDetachSheet';
 
-export type FixKind = 'color' | 'width' | 'reprint';
+export type FixKind = 'color' | 'width' | 'reprint' | 'detach';
 
-interface FixWo {
-  id: string;
-  workOrderNumber: string;
-  targetColorId?: string | null;
-  targetColor?: { name?: string | null } | null;
-  width?: number | null;
-}
 
 interface Props {
   kind: FixKind | null;
@@ -31,36 +25,6 @@ interface Props {
 }
 
 const EMPTY_REASON: ReasonPresetValue = { code: null, text: '' };
-
-function errorText(err: unknown): string | undefined {
-  const e = err as { response?: { data?: { message?: string } }; message?: string };
-  return e?.response?.data?.message ?? e?.message;
-}
-
-/** Kaydet sonrası ortak adımlar: titreşim, tost, uyarılar, sorgu tazeleme. */
-function useAfterSave(woId: string, onDone: () => void) {
-  const qc = useQueryClient();
-  return (title: string, warnings: readonly string[] = []) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    Toast.show({ type: 'success', text1: title });
-    for (const w of warnings) Toast.show({ type: 'info', text1: 'Dikkat', text2: w, visibilityTime: 6000 });
-    void qc.invalidateQueries({ queryKey: ['work-order', woId] });
-    void qc.invalidateQueries({ queryKey: ['work-order-events', woId] });
-    void qc.invalidateQueries({ queryKey: ['work-orders'] });
-    onDone();
-  };
-}
-
-function Footer({ onCancel, onSave, busy, disabled, label = 'Kaydet' }: {
-  onCancel: () => void; onSave: () => void; busy: boolean; disabled: boolean; label?: string;
-}) {
-  return (
-    <>
-      <Button mode="text" onPress={onCancel} disabled={busy}>Vazgeç</Button>
-      <Button mode="contained" onPress={onSave} loading={busy} disabled={disabled || busy}>{label}</Button>
-    </>
-  );
-}
 
 /** Rengi Değiştir — önizleme aynı kartta: engel, kısmi boya onayı, sipariş uyarıları, kart bayatlığı. */
 function ColorFix({ wo, onDismiss, onDone }: { wo: FixWo; onDismiss: () => void; onDone: () => void }) {
@@ -198,5 +162,6 @@ export default function WorkOrderFixSheet({ kind, wo, onDismiss, onDone }: Props
   if (!kind || !wo) return null;
   if (kind === 'color') return <ColorFix wo={wo} onDismiss={onDismiss} onDone={onDone} />;
   if (kind === 'width') return <WidthFix wo={wo} onDismiss={onDismiss} onDone={onDone} />;
+  if (kind === 'detach') return <WorkOrderDetachSheet wo={wo} onDismiss={onDismiss} onDone={onDone} />;
   return <ReprintFix wo={wo} onDismiss={onDismiss} onDone={onDone} />;
 }

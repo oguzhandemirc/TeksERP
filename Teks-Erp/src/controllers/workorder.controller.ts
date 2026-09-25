@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { WorkOrderService } from "../services/workorder.service";
 import { workOrderLinkService } from "../services/workorder-link.service";
+import { workOrderRollDetachService } from "../services/workorder-roll-detach.service";
 import { workOrderFasonQuickService } from "../services/workorder-fason-quick.service";
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
@@ -251,6 +252,8 @@ const changeTargetColorSchema = z.object({
   // `apply-attribute-to-rolls` ile yapar; burada yalnız UYUM HESABI için.
   recolorRollIds: z.array(z.string().uuid()).max(5000).optional(),
 });
+// Top Çıkar: sebep zorunlu (yanlış okutma iz bırakır).
+const detachRollSchema = z.object({ reason: z.string().trim().min(3, "Sebep yazmalısınız").max(300) });
 // Önizleme: `colorId` boş/yok = "renksiz yap".
 const previewTargetColorSchema = z.object({
   colorId: z.union([z.string().uuid("Geçersiz renk ID"), z.literal("")]).optional(),
@@ -394,6 +397,8 @@ export class WorkOrderController {
     this.unlinkOrderLine = this.unlinkOrderLine.bind(this);
     this.changeTargetColor = this.changeTargetColor.bind(this);
     this.previewTargetColor = this.previewTargetColor.bind(this);
+    this.detachCandidates = this.detachCandidates.bind(this);
+    this.detachRoll = this.detachRoll.bind(this);
     this.changeWidth = this.changeWidth.bind(this);
     this.fasonQuickPreview = this.fasonQuickPreview.bind(this);
     this.fasonQuickApply = this.fasonQuickApply.bind(this);
@@ -794,6 +799,27 @@ export class WorkOrderController {
       const q = previewTargetColorSchema.parse(req.query);
       const result = await workOrderLinkService.previewTargetColorChange(req.params.id as string, q.colorId || null);
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/work-orders/:id/detach-candidates — Top Çıkar önizlemesi (yazmaz) */
+  async detachCandidates(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.status(200).json(await workOrderRollDetachService.listCandidates(req.params.id as string));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/work-orders/:id/rolls/:rollId/detach — Top Çıkar */
+  async detachRoll(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = detachRollSchema.parse(req.body);
+      res.status(200).json(
+        await workOrderRollDetachService.detachRoll(req.params.id as string, req.params.rollId as string, body.reason, req.user?.userId),
+      );
     } catch (error) {
       next(error);
     }

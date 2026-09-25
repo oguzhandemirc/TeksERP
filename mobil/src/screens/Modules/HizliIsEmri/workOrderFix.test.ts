@@ -1,4 +1,4 @@
-import { colorSaveGate, parseWidth, reasonPayload, reasonReady, tabletCancelAllowed } from './workOrderFix';
+import { colorSaveGate, detachResultMessage, parseWidth, reasonPayload, reasonReady, tabletCancelAllowed } from './workOrderFix';
 import type { ReasonPreset } from '../../../services/reasonPreset.service';
 
 const preset = (code: string, label: string, fullText: string | null, requiresText = false): ReasonPreset => ({
@@ -59,5 +59,16 @@ describe('tabletCancelAllowed', () => {
     expect(tabletCancelAllowed({ status: 'PLANNED', locks: { materialCommitted: false } }, false)).toBe(true);
     expect(tabletCancelAllowed({ status: 'PLANNED', locks: { materialCommitted: true } }, false)).toBe(false);
     expect(tabletCancelAllowed({ status: 'IN_PROGRESS', locks: { materialCommitted: false } }, false)).toBe(false);
+  });
+});
+
+describe('detachResultMessage', () => {
+  it('hepsi çıktı: başarı; iş emri boşaldıysa söyler', () => {
+    expect(detachResultMessage(2, [], true)).toEqual({ type: 'success', text: "2 top iş emrinden çıkarıldı · iş emrinde top kalmadı, Planlandı'ya döndü" });
+  });
+  it('kısmi: hata türü, ilk sebep yazılır', () => {
+    const m = detachResultMessage(1, ['Bu top işlem gördü (kesildi)', 'x'], false);
+    expect(m.type).toBe('error');
+    expect(m.text).toBe('1 top iş emrinden çıkarıldı · 2 top çıkarılamadı: Bu top işlem gördü (kesildi)');
   });
 });
