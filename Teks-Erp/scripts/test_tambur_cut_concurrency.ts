@@ -25,6 +25,11 @@
 //                      bağımsız; defter payı bayat metrajdan yazılırsa bozulur)
 // §6 BAYAT OKUMA     — pencere elle açılır: ön okuma bayat (100), kilit altındaki kalan
 //                      40 → normal niyetli 80 m kesim AŞIMA DÖNMEZ, 409 alır
+// §7 AÇIK KUMAŞ      — cutOpenFabric aynı niyet kuralı: eşzamanlı 60+60 → biri 409 ·
+//                      eşzamanlı aşım 120+120 → biri 409 (240 m yok) · 0'da ardışık aşım serbest.
+//                      Orijinal kod (tren 8 tabanı, S5 tetikleyicisiyle): §7a 20/20 ve §7b
+//                      20/20 KIRMIZI — iş emri kilidi kesimleri sıraladığı için DETERMİNİSTİK.
+//                      Negatif sonda: niyet kuralı kaldırılınca §7a/§7b 20/20 kırmızı.
 //
 // ⭐ NİYET KORUNUR (2026-09-25, 1e kararı (A); BULGU-T1-002'nin kapsamı DARALDI):
 //    Eskiden karar tx içindeki KİLİTSİZ "taze okuma"dan veriliyordu ve §6 bayat ekranda
@@ -47,7 +52,7 @@
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
-import { RollStatus, RollVarianceKind } from "@prisma/client";
+import { RollEntrySource, RollStatus, RollVarianceKind, StationKind, StationType, StepStatus } from "@prisma/client";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { fixtureWarehouseId } from "./fixture-warehouse";
@@ -70,6 +75,11 @@ const rollIds: string[] = [];
 let itemId = "";
 let userId = "";
 let bayrakEski: unknown = undefined;
+// §7 açık kumaş fikstürü — kendi iş emri/adımı; istasyon ve kalite yalnız YOKSA yaratılır.
+const woIds: string[] = [];
+let olusanIstasyon: string | null = null;
+let olusanKalite: string | null = null;
+let kaliteKodu = "";
 
 async function depoTopu(tag: string, qty: number): Promise<string> {
   const r = await prisma.roll.create({
@@ -103,6 +113,45 @@ async function cocuklar(parentId: string): Promise<number> {
   const rows = await prisma.roll.findMany({ where: { parentRollId: parentId }, select: { id: true, currentQty: true } });
   rows.forEach((r) => rollIds.push(r.id));
   return rows.reduce((t, r) => t + Number(r.currentQty), 0);
+}
+
+/** Açık kumaş (barkodsuz) — kendi iş emrinin Tambur adımında IN_PRODUCTION (cutOpenFabric). */
+async function acikKumas(tag: string, qty: number): Promise<string> {
+  let istasyon = await prisma.station.findFirst({ where: { kind: StationKind.TAMBUR }, select: { id: true } });
+  if (!istasyon) {
+    istasyon = await prisma.station.create({
+      data: { code: `TST-TCC-TMB-${ts}`, name: "TST Tambur", type: StationType.INTERNAL, kind: StationKind.TAMBUR },
+      select: { id: true },
+    });
+    olusanIstasyon = istasyon.id;
+  }
+  if (!kaliteKodu) {
+    const k = await prisma.qualityGrade.findFirst({ where: { role: "FIRST", isActive: true }, select: { code: true } });
+    if (k) kaliteKodu = k.code;
+    else {
+      const y = await prisma.qualityGrade.create({
+        data: { code: `TST-TCC-K1-${ts}`, name: `TST-TCC 1. Kalite ${ts}`, role: "FIRST", targetStatus: RollStatus.WAREHOUSE },
+        select: { id: true, code: true },
+      });
+      olusanKalite = y.id;
+      kaliteKodu = y.code;
+    }
+  }
+  const wo = await prisma.workOrder.create({ data: { workOrderNumber: `TST-TCC-WO-${tag}-${ts}`, status: "IN_PROGRESS" }, select: { id: true } });
+  woIds.push(wo.id);
+  const adim = await prisma.workOrderStep.create({
+    data: { workOrderId: wo.id, stationId: istasyon.id, stepSequence: 1, status: StepStatus.ACTIVE },
+    select: { id: true },
+  });
+  const r = await prisma.roll.create({
+    data: {
+      barcode: null, itemId, width: 150, initialQty: qty, currentQty: qty, status: RollStatus.IN_PRODUCTION,
+      qualityGrade: kaliteKodu, entrySource: RollEntrySource.SUBCONTRACTOR_RETURN, currentStepId: adim.id,
+    },
+    select: { id: true },
+  });
+  rollIds.push(r.id);
+  return r.id;
 }
 
 async function main(): Promise<void> {
@@ -368,6 +417,41 @@ async function main(): Promise<void> {
     Math.abs(cocuk5 + kalan5 - asim5 - 100) < 0.001,
     `${cocuk5} + ${kalan5} − ${asim5} = ${cocuk5 + kalan5 - asim5}`,
   );
+
+  // ═══ §7 — AÇIK KUMAŞ (cutOpenFabric): aynı NİYET kuralı (K-KES2, 2026-09-25) ═══
+  // Eşzamanlı kesimler İŞ EMRİ satır kilidinde (touchWorkOrderTx) zaten SIRALANIR; kural
+  // yokken ikinci kesim HER SEFERİNDE azalmış kalanı görüp aşıma dönüyordu (sha mesajında ölçüm).
+  console.log("\n=== §7: açık kumaş — eşzamanlı kesim aşıma dönmez ===");
+  const of1 = await acikKumas("OF1", 100);
+  const s7 = await Promise.allSettled([
+    tambur.cutOpenFabric(of1, { lengthMeters: 60, status: "WAREHOUSE" }),
+    tambur.cutOpenFabric(of1, { lengthMeters: 60, status: "WAREHOUSE" }),
+  ]);
+  const ok7 = s7.filter((r) => r.status === "fulfilled").length;
+  const red7 = s7.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+  const cocuk7 = await cocuklar(of1);
+  const kalan7 = Number((await prisma.roll.findUnique({ where: { id: of1 }, select: { currentQty: true } }))?.currentQty ?? 0);
+  check("§7a ⭐ açık kumaş 60+60 (100 m): YALNIZ BİRİ geçti, kaybeden 409 ROLL_CHANGED_DURING_CUT",
+    ok7 === 1 && (red7?.reason as { statusCode?: number; details?: { code?: string } })?.details?.code === "ROLL_CHANGED_DURING_CUT",
+    `${ok7} başarılı · ${(red7?.reason as Error | undefined)?.message?.slice(0, 60) ?? "-"}`);
+  check("§7a metraj korundu — Σçocuk + kalan = 100, aşım yok", Math.abs(cocuk7 + kalan7 - 100) < 0.001 && cocuk7 <= 100,
+    `${cocuk7} + ${kalan7}`);
+
+  const of2 = await acikKumas("OF2", 100);
+  const s7b = await Promise.allSettled([
+    tambur.cutOpenFabric(of2, { lengthMeters: 120, status: "WAREHOUSE" }),
+    tambur.cutOpenFabric(of2, { lengthMeters: 120, status: "WAREHOUSE" }),
+  ]);
+  const ok7b = s7b.filter((r) => r.status === "fulfilled").length;
+  const cocuk7b = await cocuklar(of2);
+  check("§7b açık kumaş eşzamanlı aşım 120+120: yalnız biri geçti, YOKTAN KUMAŞ DOĞMADI (120 m)", ok7b === 1 && cocuk7b === 120,
+    `${ok7b} başarılı · ${cocuk7b} m çocuk`);
+  let ardisik = false;
+  try {
+    await tambur.cutOpenFabric(of2, { lengthMeters: 30, status: "WAREHOUSE" });
+    ardisik = true;
+  } catch { /* aşağıda raporlanır */ }
+  check("§7c 0'a inmiş açık kumaşta ARDIŞIK aşım kesimi hâlâ serbest", ardisik);
 }
 
 async function cleanup(): Promise<void> {
@@ -405,6 +489,14 @@ async function cleanup(): Promise<void> {
     console.error(`❌ Temizlik YARIDA KALDI — deposuz fikstür topu bırakıldı: ${kalan}`);
   }
   if (itemId) await prisma.item.deleteMany({ where: { id: itemId } }).catch(() => {});
+  if (woIds.length) {
+    const adimIds = (await prisma.workOrderStep.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } }).catch(() => [])).map((x) => x.id);
+    await prisma.rollOperation.deleteMany({ where: { workOrderStepId: { in: adimIds } } }).catch(() => {});
+    await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
+    await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } }).catch(() => {});
+  }
+  if (olusanIstasyon) await prisma.station.deleteMany({ where: { id: olusanIstasyon } }).catch(() => {});
+  if (olusanKalite) await prisma.qualityGrade.deleteMany({ where: { id: olusanKalite } }).catch(() => {});
 }
 
 main()
