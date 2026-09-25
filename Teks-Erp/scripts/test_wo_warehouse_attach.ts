@@ -111,15 +111,26 @@ async function main(): Promise<void> {
       check("3c: top hâlâ WAREHOUSE (çuvalda)", (await statusOf(r.id)) === RollStatus.WAREHOUSE, await statusOf(r.id));
     }
   } finally {
-    await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
-    await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { sackId: null } }).catch(() => {});
-    await prisma.sack.deleteMany({ where: { id: { in: sackIds } } }).catch(() => {});
-    const cardRows = await prisma.travelerCard.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } });
-    await prisma.travelerCardScan.deleteMany({ where: { cardId: { in: cardRows.map((c) => c.id) } } }).catch(() => {});
-    await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
-    await prisma.roll.deleteMany({ where: { id: { in: rollIds } } }).catch(() => {});
-    await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
-    await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } }).catch(() => {});
+    // Her adım koşar; hata YUTULMAZ, sonda kırmızı sayılır (yutulan silme kalıntı bırakıyordu).
+    const temizlikHatalari: string[] = [];
+    const temizleAdim = async (ad: string, fn: () => Promise<unknown>): Promise<void> => {
+      try { await fn(); } catch (e) { temizlikHatalari.push(`${ad}: ${String((e as Error).message ?? e).split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? e}`); }
+    };
+    await temizleAdim("hareket", () => prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }));
+    await temizleAdim("operasyon", () => prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } }));
+    await temizleAdim("depo satırı", () => prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } }));
+    await temizleAdim("çuval bağı", () => prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { sackId: null } }));
+    await temizleAdim("çuval", () => prisma.sack.deleteMany({ where: { id: { in: sackIds } } }));
+    await temizleAdim("kart okutması", () => prisma.travelerCardScan.deleteMany({ where: { card: { workOrderId: { in: woIds } } } }));
+    await temizleAdim("refakat kartı", () => prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } }));
+    await temizleAdim("top", () => prisma.roll.deleteMany({ where: { id: { in: rollIds } } }));
+    await temizleAdim("parti", () => prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } }));
+    await temizleAdim("adım", () => prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } }));
+    await temizleAdim("iş emri", () => prisma.workOrder.deleteMany({ where: { id: { in: woIds } } }));
+    if (temizlikHatalari.length > 0) {
+      fail++;
+      console.error(`❌ TEMİZLİK HATASI — kalıntı kaldı: ${temizlikHatalari.join(" · ")}`);
+    }
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

@@ -223,10 +223,14 @@ async function cleanup(): Promise<void> {
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...dispatchIds, ...createdWoIds] } } });
+    // Hızlı başlatma iş emrine partiyi kendisi açar (batch.autoCreateEnabled).
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: createdWoIds } } });
     console.log("\n(test verisi temizlendi)");
   } catch (e) {
-    console.error("cleanup hata:", e instanceof Error ? e.message : e);
+    // Yutulan temizlik hatası kalıntı bırakıyordu: bekçi kırmızı verir.
+    fail++;
+    console.error("❌ TEMİZLİK HATASI — kalıntı kaldı:", e instanceof Error ? e.message.split("\n").map((l) => l.trim()).filter(Boolean).pop() : e);
   }
 }
 

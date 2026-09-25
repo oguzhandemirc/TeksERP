@@ -487,6 +487,7 @@ async function main(): Promise<void> {
       adminId,
     );
     const cocuk = (kesim.data as { childRoll: { id: string } }).childRoll;
+    created.push(cocuk.id); // kesimin doğurduğu parça da temizlenir — izlenmezse kalıntı kalıyordu
 
     await new TamburUndoService().applyUndo(cocuk.id, adminId, { mode: "SINGLE" });
 
@@ -565,9 +566,14 @@ main()
     fail++;
   })
   .finally(async () => {
-    // Test kendi yarattığını siler.
+    // Test kendi yarattığını siler; hata YUTULMAZ, kalıntı bırakan koşum kırmızıdır.
     if (created.length) {
-      await prisma.roll.deleteMany({ where: { id: { in: created } } }).catch(() => {});
+      try {
+        await prisma.roll.deleteMany({ where: { id: { in: created } } });
+      } catch (e) {
+        fail++;
+        console.error("❌ TEMİZLİK HATASI — kalıntı kaldı:", String((e as Error).message ?? e).split("\n").map((l) => l.trim()).filter(Boolean).pop());
+      }
     }
     await prisma.$disconnect().catch(() => {});
     await pool.end().catch(() => {});
