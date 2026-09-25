@@ -8,8 +8,10 @@ import RollPickerModal from '../../../components/RollPickerModal';
 import { printFasonCeki } from '../../../services/fasonCekiPrint';
 import { printTravelerCardForWorkOrder } from '../../../services/travelerCardPrint';
 import Toast from 'react-native-toast-message';
+import * as Haptics from 'expo-haptics';
 
 import { useQuickWorkOrder } from './useQuickWorkOrder';
+import { blockingForStep, summarizeMissing } from './quickWorkOrderIssues';
 import { useOnlineStatus } from '../../../hooks/useOnlineStatus';
 import WizardSteps, { STEP_TITLES } from './wizard/WizardSteps';
 import StepRolls from './wizard/StepRolls';
@@ -57,6 +59,8 @@ export default function NewWorkOrderView({
   const [orderPickerOpen, setOrderPickerOpen] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [printingCeki, setPrintingCeki] = useState(false);
+  // İLERİ/BAŞLAT'a eksikle basıldığı adım — alan altı kırmızı notlar o zaman açılır.
+  const [triedStep, setTriedStep] = useState<number | null>(null);
   const online = useOnlineStatus();
   // Ayarlar → "Kamera arızalı" — listeden seçim kaçış yollarının tek kaynağı.
   const cameraUnusable = useCameraUnusable();
@@ -68,25 +72,29 @@ export default function NewWorkOrderView({
   }, [hasResult, onResultChange]);
 
   const goTo = useCallback(
-    (i: number) => onStepChange(Math.max(0, Math.min(STEP_TITLES.length - 1, i))),
+    (i: number) => {
+      setTriedStep(null);
+      onStepChange(Math.max(0, Math.min(STEP_TITLES.length - 1, i)));
+    },
     [onStepChange],
   );
 
-  // Adım geçiş engeli — o adımda karar verilmesi gereken şey eksikse ileri gidilmez.
-  const stepBlock =
-    step === 0
-      ? wo.scanned.length === 0
-        ? 'En az bir top okutun veya listeden seçin.'
-        : null
-      : step === 1
-        ? !wo.routeTemplateId
-          ? 'Bir rota seçmelisiniz.'
-          : !wo.foldType
-            ? 'Kat tipi seçmelisiniz.'
-            : wo.applyMissing
-              ? `Seçili rota ${wo.applyMissing} uygulayacak bir fason adımı içermiyor.`
-              : null
-        : wo.blockingReason;
+  // Adım engeli TEK kaynaktan (`quickWorkOrderIssues`); ara adım kendi eksiğini,
+  // ONAY adımı hepsini görür. İLERİ kilitlenmez: basınca eksikler işaretlenir.
+  const stepIssues = blockingForStep(wo.issues.blocking, step, STEP_TITLES.length - 1);
+  const showErrors = triedStep === step;
+  const stepHint =
+    stepIssues.length === 1 ? stepIssues[0].message : summarizeMissing(stepIssues);
+
+  const onPrimary = () => {
+    if (stepIssues.length > 0) {
+      setTriedStep(step);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      return;
+    }
+    if (step === STEP_TITLES.length - 1) wo.submit();
+    else goTo(step + 1);
+  };
 
   const printResult = async () => {
     if (!wo.result) return;
@@ -164,6 +172,11 @@ export default function NewWorkOrderView({
           {r.errors.length > 0 ? (
             <Text style={styles.successWarn}>{r.errors.length} top bağlanamadı</Text>
           ) : null}
+          {r.warnings.map((w) => (
+            <Text key={w} style={styles.successWarn}>
+              {w}
+            </Text>
+          ))}
           {r.dispatch ? (
             <Text style={styles.successDispatch}>
               Fasona sevk edildi · İrsaliye {r.dispatch.dispatchNo}
@@ -212,6 +225,7 @@ export default function NewWorkOrderView({
   }
 
   const isLast = step === STEP_TITLES.length - 1;
+  const primaryDisabled = isLast && (wo.isPending || !online);
 
   return (
     <View style={styles.root}>
@@ -243,7 +257,7 @@ export default function NewWorkOrderView({
             onOrderPickerOpenChange={setOrderPickerOpen}
           />
         ) : step === 1 ? (
-          <StepProduction wo={wo} />
+          <StepProduction wo={wo} showErrors={showErrors} />
         ) : (
           <StepConfirm wo={wo} onGoTo={goTo} />
         )}
@@ -257,9 +271,9 @@ export default function NewWorkOrderView({
             <Icon source="alert-circle" size={18} color={colors.dangerDark} />
             <Text style={styles.errorBannerText}>{wo.submitError}</Text>
           </View>
-        ) : stepBlock ? (
-          <Text style={styles.hint} numberOfLines={2}>
-            {stepBlock}
+        ) : stepHint ? (
+          <Text style={[styles.hint, showErrors && styles.hintError]} numberOfLines={2}>
+            {stepHint}
           </Text>
         ) : null}
 
@@ -279,12 +293,12 @@ export default function NewWorkOrderView({
           ) : null}
 
           <TouchableRipple
-            onPress={() => (isLast ? wo.submit() : goTo(step + 1))}
-            disabled={!!stepBlock || (isLast && (!wo.canSubmit || !online))}
+            onPress={onPrimary}
+            disabled={primaryDisabled}
             style={[
               styles.navBtn,
               styles.navBtnPrimary,
-              (!!stepBlock || (isLast && (!wo.canSubmit || !online))) && styles.navBtnDisabled,
+              (primaryDisabled || stepIssues.length > 0) && styles.navBtnDisabled,
             ]}
             rippleColor="rgba(255,255,255,0.25)"
             accessibilityLabel={isLast ? 'İş emrini başlat' : 'Sonraki adım'}
@@ -457,6 +471,7 @@ const styles = StyleSheet.create({
   },
   errorBannerText: { flex: 1, color: colors.dangerText, fontSize: 13, fontWeight: '600', lineHeight: 18 },
   hint: { fontSize: 12, color: colors.textMuted, fontWeight: '600', textAlign: 'center' },
+  hintError: { color: colors.dangerDark, fontWeight: '700' },
 
   navRow: { flexDirection: 'row', gap: spacing.sm },
   navBtn: {

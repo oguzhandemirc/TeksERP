@@ -26,6 +26,7 @@ import {
   type AttachableStatus,
 } from './scanClassify';
 import { buildReworkPlan } from './reworkPayload';
+import { collectQuickWoIssues, parsePositiveNumber } from './quickWorkOrderIssues';
 
 export interface ScannedRoll {
   id: string;
@@ -81,12 +82,10 @@ export interface QuickWoResult {
   itemName: string | null;
   width: number | null;
   totalQty: number;
+  /** Engel olmayan sunucu notları (rota kapsaması, yapılamayan otomatik sevk) —
+   *  sonuç ekranında KALICI basılır; tost birkaç saniyede kaybolur. */
+  warnings: string[];
 }
-
-const toPositiveNum = (s: string): number | null => {
-  const n = parseFloat(s);
-  return Number.isFinite(n) && n > 0 ? n : null;
-};
 
 const errMessage = (err: unknown): string => {
   const e = err as { response?: { data?: { message?: string } }; message?: string };
@@ -741,9 +740,13 @@ export function useQuickWorkOrder() {
   const mutation = useMutation({
     networkMode: 'always',
     mutationFn: (payload: QuickStartRequest) => workOrderService.quickStart(payload),
-    onSuccess: (res) => {
+    onSuccess: (res, variables) => {
       const data = res.data;
       if (!data) return;
+      const warnings = [...(res.warnings ?? [])];
+      if (variables.dispatchFirstStep && !data.dispatch) {
+        warnings.push('Otomatik fason sevki yapılamadı — Fason Sevk ekranından gönderin.');
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       // Son kullanılan rotayı cihaza yaz (sonraki açılışta hazır gelsin).
       void setLastRouteTemplateId(routeTemplateId);
@@ -765,8 +768,9 @@ export function useQuickWorkOrder() {
         woId: data.workOrder.id,
         dispatch: data.dispatch ?? null,
         itemName: data.workOrder.targetItem?.name ?? lockedItemName,
-        width: data.workOrder.width ?? toPositiveNum(width),
+        width: data.workOrder.width ?? parsePositiveNumber(width),
         totalQty,
+        warnings,
       });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
       qc.invalidateQueries({ queryKey: ['rolls'] });
@@ -781,20 +785,37 @@ export function useQuickWorkOrder() {
     },
   });
 
-  /** Adım geçiş / başlatma engeli — neden yoksa null. */
-  const blockingReason = useMemo(() => {
-    if (scanned.length === 0) return 'En az bir top okutun veya listeden seçin.';
-    if (!routeTemplateId) return 'Bir rota şablonu seçmelisiniz.';
-    // Kat yalnız Tambur'lu rotada zorunlu (Electron ile aynı sözleşme).
-    if (hasTambur && !foldType) {
-      return foldNotConfigured
-        ? 'Kat değeri tanımlı değil — panelden Kumaş Özellikleri → KAT ekleyin.'
-        : 'Kat tipi seçmelisiniz.';
-    }
-    if (applyMissing)
-      return `Seçili rota ${applyMissing} uygulayacak bir fason adımı içermiyor. Uygun bir rota seçin.`;
-    return null;
-  }, [scanned.length, routeTemplateId, foldType, hasTambur, foldNotConfigured, applyMissing]);
+  /** Eksik (engel) ve boş bırakılmış (bilgi) alanlar — TEK kaynak `quickWorkOrderIssues`. */
+  const issues = useMemo(
+    () =>
+      collectQuickWoIssues({
+        rollCount: scanned.length,
+        routeTemplateId,
+        hasTambur,
+        foldType,
+        foldNotConfigured,
+        applyMissing,
+        width,
+        canApplyColor,
+        hasColor: !!(targetColorId || orderColorName),
+        orderLinked,
+      }),
+    [
+      scanned.length,
+      routeTemplateId,
+      hasTambur,
+      foldType,
+      foldNotConfigured,
+      applyMissing,
+      width,
+      canApplyColor,
+      targetColorId,
+      orderColorName,
+      orderLinked,
+    ],
+  );
+  /** Başlatma engeli — neden yoksa null. */
+  const blockingReason = issues.blocking[0]?.message ?? null;
 
   const canSubmit = !blockingReason && !mutation.isPending;
 
@@ -863,7 +884,7 @@ export function useQuickWorkOrder() {
       rollBarcodes: scanned.map((s) => s.barcode),
       routeTemplateId,
       targetColorId: canApplyColor ? targetColorId : null,
-      width: toPositiveNum(width),
+      width: parsePositiveNumber(width),
       foldType,
       orderLineIds: orderLineIds.length ? orderLineIds : undefined,
       targetPropertyIds:
@@ -1015,6 +1036,7 @@ export function useQuickWorkOrder() {
     submitError,
     setSubmitError,
     blockingReason,
+    issues,
     canSubmit,
     isPending: mutation.isPending,
     submit,

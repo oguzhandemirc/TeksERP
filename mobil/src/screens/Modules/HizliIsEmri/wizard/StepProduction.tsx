@@ -11,6 +11,8 @@ import { colors, spacing, radius } from '../../../../theme';
 
 interface Props {
   wo: ReturnType<typeof useQuickWorkOrder>;
+  /** İLERİ'ye eksikle basıldı — zorunlu alanların altına kırmızı not düşer. */
+  showErrors?: boolean;
 }
 
 /**
@@ -21,7 +23,7 @@ interface Props {
  * alanlar hep açıktı ve operatör seçtikten sonra "bu rotada renk uygulayacak adım
  * yok" uyarısını yerdi — hataya girilebilen yolu kapatmak uyarı basmaktan iyidir.
  */
-export default function StepProduction({ wo }: Props) {
+export default function StepProduction({ wo, showErrors = false }: Props) {
   const [routePickerOpen, setRoutePickerOpen] = useState(false);
   const [routeStepsOpen, setRouteStepsOpen] = useState(false);
   const [propertyPickerOpen, setPropertyPickerOpen] = useState(false);
@@ -30,6 +32,11 @@ export default function StepProduction({ wo }: Props) {
   const selectedPropNames = wo.targetPropertyIds
     .map((id) => wo.propertyNameById[id])
     .filter(Boolean);
+  // Eksik alan notu basışa kadar gizli; geçersiz en ise yazıldığı an görünür.
+  const issueOf = (field: string) => wo.issues.blocking.find((b) => b.field === field);
+  const routeIssue = showErrors ? issueOf('route') : undefined;
+  const foldIssue = showErrors ? issueOf('fold') : undefined;
+  const widthIssue = issueOf('width');
 
   return (
     <View style={styles.root}>
@@ -61,7 +68,7 @@ export default function StepProduction({ wo }: Props) {
       <View style={styles.rowGap}>
         <TouchableRipple
           onPress={() => setRoutePickerOpen(true)}
-          style={styles.selectFieldFlex}
+          style={[styles.selectFieldFlex, routeIssue && styles.fieldError]}
           borderless
           rippleColor="rgba(79,70,229,0.12)"
         >
@@ -79,6 +86,8 @@ export default function StepProduction({ wo }: Props) {
           style={styles.infoBtn}
         />
       </View>
+
+      {routeIssue ? <Text style={styles.errorText}>{routeIssue.message}</Text> : null}
 
       {/* Adım şeridi — ⓘ açmadan ne olacağı görünsün. */}
       {wo.routeStepNames.length > 0 ? (
@@ -130,11 +139,13 @@ export default function StepProduction({ wo }: Props) {
                 );
               })}
             </View>
-            {wo.foldNotConfigured && (
+            {foldIssue ? (
+              <Text style={styles.errorText}>{foldIssue.message}</Text>
+            ) : wo.foldNotConfigured ? (
               <Text style={styles.applyWarnText}>
                 Kat değeri tanımlı değil — panelden Kumaş Özellikleri → KAT ekleyin.
               </Text>
-            )}
+            ) : null}
           </View>
         )}
         <View style={styles.col}>
@@ -147,7 +158,9 @@ export default function StepProduction({ wo }: Props) {
             onChangeText={(t) => wo.setWidth(t.replace(',', '.'))}
             placeholder="örn. 150"
             style={styles.input}
+            error={!!widthIssue}
           />
+          {widthIssue ? <Text style={styles.errorText}>{widthIssue.message}</Text> : null}
           {/* En sipariş kaleminden ön-dolar ama KİLİTLİ DEĞİL — backend açılışta
               en'i kaleme karşı doğrulamaz (yalnız ürün + renk). Değiştirildiyse
               sessiz kalmayalım. */}
@@ -304,6 +317,8 @@ const styles = StyleSheet.create({
   },
 
   fieldHint: { fontSize: 11, color: colors.textMuted, fontWeight: '600', marginTop: 3 },
+  fieldError: { borderColor: colors.danger, borderWidth: 2 },
+  errorText: { fontSize: 12, color: colors.dangerDark, fontWeight: '700', marginTop: 3 },
   fieldHintWarn: { color: colors.warningDark },
   lockHint: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs },
   lockHintText: { fontSize: 11, color: colors.textMuted, fontWeight: '600', flex: 1 },

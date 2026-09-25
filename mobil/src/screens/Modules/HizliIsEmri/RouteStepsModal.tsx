@@ -113,6 +113,8 @@ export default function RouteStepsModal({
                       dense
                       value={notes[s.sequence] ?? ''}
                       onChangeText={(t) => onChangeNote(s.sequence, t)}
+                      // Sunucu notu 500 karakterde keser (400) — hata gönderimde değil yazarken görünsün.
+                      maxLength={500}
                       placeholder={
                         s.defaultNotes
                           ? `Varsayılan: ${s.defaultNotes}`

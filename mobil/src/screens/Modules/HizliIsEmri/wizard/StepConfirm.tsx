@@ -116,6 +116,30 @@ export default function StepConfirm({ wo, onGoTo }: Props) {
         ) : null}
       </Surface>
 
+      {/* Boş bırakılan isteğe bağlı alanlar — engel DEĞİL, başlatmadan önce son bakış.
+          Sonradan en sık düzeltilen üçü (en · renk · sipariş); satır ilgili adıma götürür. */}
+      {wo.issues.empty.length > 0 ? (
+        <View style={styles.emptyWarn} testID="bos-alanlar">
+          <View style={styles.labelWarnHead}>
+            <Icon source="alert-circle-outline" size={18} color={colors.warningDark} />
+            <Text style={styles.labelWarnTitle}>Boş bırakılanlar</Text>
+          </View>
+          {wo.issues.empty.map((e) => (
+            <TouchableRipple
+              key={e.field}
+              onPress={() => onGoTo(e.step)}
+              borderless
+              rippleColor="rgba(0,0,0,0.06)"
+            >
+              <View style={styles.emptyRow}>
+                <Text style={styles.emptyText}>{e.message}</Text>
+                <Icon source="chevron-right" size={18} color={colors.warningDark} />
+              </View>
+            </TouchableRipple>
+          ))}
+        </View>
+      ) : null}
+
       {/* ── ÖLÜ ETİKET (2026-08-25) ────────────────────────────────────────
           Burada geçersizleşme OLASILIK DEĞİL KESİN: fason kabulünde orijinal top
           `SUBCONTRACTOR_CONSUMED` olur ve mal YENİ barkodla döner ("top fasona
@@ -184,6 +208,16 @@ const styles = StyleSheet.create({
   labelWarnTitle: { fontSize: 14, fontWeight: '800', color: colors.warningDark, flexShrink: 1 },
   labelWarnBody: { fontSize: 12, color: colors.warningDark, lineHeight: 17 },
   labelWarnCodes: { fontFamily: 'monospace', fontSize: 11, color: colors.warningDark },
+  emptyWarn: {
+    backgroundColor: colors.warningContainer,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+    gap: 2,
+  },
+  emptyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 8 },
+  emptyText: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.warningDark },
   reworkCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
