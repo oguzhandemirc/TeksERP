@@ -19,6 +19,8 @@
 // sarmalamasıyla aynı gerekçe).
 // =============================================================================
 import apiClient from "@/services/apiClient";
+import type { DocTablesPayload } from "@/lib/doc-tables-export";
+import type { DeliveryNoteBody, DeliveryNoteDraftBody } from "./chequeDeliveryNote";
 import type { Currency } from "../service";
 
 export type ChequeKind = "RECEIVED" | "ISSUED";
@@ -306,7 +308,7 @@ export async function chequeCancel(id: string, reason?: string): Promise<Mutatio
 }
 
 // -----------------------------------------------------------------------------
-// RESMÎ TESLİM BORDROSU (2026-08-15, J2 #18)
+// TESLİM BORDROSU — resmî kayıt + taslak (2026-08-15 J2 #18 · K1 2026-09-26)
 // -----------------------------------------------------------------------------
 // ⚠️ AYRI KAYNAK, AYRI YOL: `/api/finance/cheque-delivery-notes` — `…/cheques`
 // ile çakışmaz (Express tam segment eşler). Gövdeyi ekran ELLE KURMAZ,
@@ -317,18 +319,22 @@ export async function chequeCancel(id: string, reason?: string): Promise<Mutatio
 // "teslim tutanağı bastır" isteyen kişiye çek tahsil etme yetkisi vermek olurdu
 // (backend rotasındaki gerekçenin aynısı; iki taraf hizalı kalmalı).
 
-export async function createChequeDeliveryNote(body: {
-  chequeIds: string[];
-  deliveryDate?: string;
-  bankAccountId?: string | null;
-  cariId?: string | null;
-  targetLabel?: string;
-  notes?: string;
-  /** "Zaten aktif bir bordroda" uyarısı onaylandı (409'u geçer). */
-  confirmDuplicate?: boolean;
-}): Promise<{ data?: { id: string; docNo: string; count: number }; message?: string }> {
+export async function createChequeDeliveryNote(
+  body: DeliveryNoteBody,
+): Promise<{ data?: { id: string; docNo: string; count: number; replayed?: true }; message?: string }> {
   const res = await apiClient.post("/api/finance/cheque-delivery-notes", body);
-  return res.data as { data?: { id: string; docNo: string; count: number }; message?: string };
+  return res.data as { data?: { id: string; docNo: string; count: number; replayed?: true }; message?: string };
+}
+
+/**
+ * TASLAK — kayıtsız seçimden numarasız önizleme: PDF'in HTML'i + Excel'in tabloları
+ * (backend'in resmî bordroyu basan AYNI çözücüsünden). Hiçbir şey yazmaz; okuma izni.
+ */
+export async function draftChequeDeliveryNote(
+  body: DeliveryNoteDraftBody,
+): Promise<{ html: string; tables: DocTablesPayload }> {
+  const res = await apiClient.post("/api/finance/cheque-delivery-notes/draft", body);
+  return (res.data as { data: { html: string; tables: DocTablesPayload } }).data;
 }
 
 /**

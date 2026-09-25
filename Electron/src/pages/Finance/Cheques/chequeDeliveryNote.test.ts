@@ -10,8 +10,8 @@
 //     boş metin alanı HİÇ gönderilmez, id'ler tekilleştirilir.
 //  §4 SIRA — seçim hatası, tarih hatasından ÖNCE söylenir (backend ile aynı).
 //  §5 EKRAN DİKİŞİ (körlük zemini) — "yazıldı ama mount edilmedi" sınıfı:
-//     sayfa düğmeyi çiziyor, diyaloğu mount ediyor, saf katmanı ÇAĞIRIYOR ve
-//     ANLIK çıktı da yerinde duruyor (iki ayrı iş, biri diğerini yemedi).
+//     sayfa TEK düğmeyi çiziyor, diyaloğu mount ediyor, diyalog saf katmanı ve
+//     iki ucu (taslak · kayıt) ÇAĞIRIYOR; eski ikinci diyalog geri gelmedi (K1).
 //  §6 "ZATEN AKTİF BİR BORDRODA" ONAYI (2026-08-15) — 409 uyarısı GERÇEK
 //     hatadan ayrılır, `confirmDuplicate` yalnız onaylandığında gövdeye girer.
 //  §7 BELGEYE DÖNÜŞ YOLU (2026-08-15) — kesilen `BRD…` kaydına ulaşan bir liste
@@ -39,7 +39,11 @@
 //      (uçlara bağlı mı, izin kapısı doğru mu) ölçer, sayfaya mount edilip
 //      edilmediğini değil. İki soru ayrı; tek kontrole indirilirse "yazıldı ama
 //      mount edilmedi" ile "mount edildi ama yanlış uca bağlı" ayrımı kaybolur.
-// Bu dosyayı değiştirirsen aynı yedisini TEKRARLA — kırmızı verdiği kanıtlanmamış
+//  §8 TASLAK + TOKEN (K1, 2026-09-26) — taslak gövdesi kaydınkinin alt kümesi;
+//     token yalnız belirsiz hatada yapışır; diyalog token'ı gövdeye koyar.
+//   ⑧ `tokenAfterFailure` koşulsuz yeni token üretti → 1 kırmızı: §8c.
+//   ⑨ diyalog `clientToken`ı gövdeye koymadı → 1 kırmızı: §8d.
+// Bu dosyayı değiştirirsen aynı sondaları TEKRARLA — kırmızı verdiği kanıtlanmamış
 // bekçi, bekçi değil süstür.
 // =============================================================================
 
@@ -51,8 +55,10 @@ import {
   ALREADY_IN_ACTIVE_NOTE,
   DELIVERY_DATE_ERROR,
   buildDeliveryNoteBody,
+  buildDraftBody,
   deliveryNoteBlockReason,
   duplicateNoteWarning,
+  tokenAfterFailure,
   type DeliveryNoteDraft,
 } from "./chequeDeliveryNote";
 import type { ChequeRow } from "./service";
@@ -169,31 +175,49 @@ describe("§4 hata SIRASI backend ile aynı", () => {
 });
 
 describe("§5 ekran dikişi — yazıldı ve BAĞLANDI", () => {
-  it("§5a diyalog saf katmanı çağırır ve donmuş belgeyi ORTAK bileşenle açar", () => {
-    const dialog = src("./ChequeOfficialBordroDialog.tsx");
+  it("§5a diyalog saf katmanı ve İKİ ucu çağırır; resmî belgeyi ORTAK bileşenle açar", () => {
+    const dialog = src("./ChequeBordroDialog.tsx");
     expect(dialog.length).toBeGreaterThan(1500);
+    expect(dialog).toContain("buildDraftBody");
     expect(dialog).toContain("buildDeliveryNoteBody");
     expect(dialog).toContain("deliveryNoteBlockReason");
+    expect(dialog).toContain("draftChequeDeliveryNote");
     expect(dialog).toContain("createChequeDeliveryNote");
-    // Belge kâğıdı burada ÜRETİLMEZ — backend render eder, PrintedDocDialog basar.
-    expect(dialog).toContain("PrintedDocDialog");
-    expect(dialog).toContain("CHEQUE_DELIVERY_NOTE");
+    // Kâğıt burada ÜRETİLMEZ — backend render eder; kayıttan sonra ORTAK görüntüleyici.
+    expect(dialog).toContain("<ChequeNoteDocDialog");
     expect(dialog).not.toContain("<!doctype");
+    const viewer = src("./ChequeNoteDocDialog.tsx");
+    expect(viewer).toContain("PrintedDocDialog");
+    expect(viewer).toContain("CHEQUE_DELIVERY_NOTE");
+    // Excel backend'in `/tables`inden — kolon listesi panelde YAZILMAZ.
+    expect(viewer).toContain("getTables");
+    expect(viewer).toContain("docTablesToSheets");
   });
 
-  it("§5b sayfa düğmeyi çizer ve diyaloğu MOUNT eder", () => {
-    const page = src("./ChequesPage.tsx");
-    expect(page).toContain("ChequeOfficialBordroDialog");
-    expect(page).toContain("<ChequeOfficialBordroDialog");
-    expect(page).toContain("Resmî Bordro");
-  });
-
-  it("§5c ANLIK bordro KALDIRILMADI — ikisi ayrı iştir", () => {
-    // Resmî bordro anlık çıktının YERİNE geçseydi, "hızlıca bakayım" diyen
-    // kullanıcı her tıklamada iptal edilmesi gereken bir kayıt açardı.
+  it("§5b sayfa TEK düğmeyi çizer ve diyaloğu MOUNT eder; ikinci diyalog yok (K1)", () => {
     const page = src("./ChequesPage.tsx");
     expect(page).toContain("<ChequeBordroDialog");
     expect(page).toContain("Teslim Bordrosu");
+    expect(page).not.toContain("ChequeOfficialBordroDialog");
+    expect(page).not.toContain("Resmî Bordro");
+  });
+
+  it("§5c taslak OKUMA izniyle açılır, kayıt diyaloğun İÇİNDE `finance:write` ile kapılı", () => {
+    // Sayfadaki düğme bir izin kapısının arkasında DEĞİL: önizleme kayıt açmaz ve
+    // eski anlık bordroyu basan kullanıcı yetki kaybetmemeli.
+    const page = src("./ChequesPage.tsx");
+    const at = page.indexOf("onClick={() => setBordroOpen(true)}");
+    expect(at).toBeGreaterThan(-1);
+    const btn = page.slice(page.lastIndexOf("<Button", at), at);
+    expect(page.slice(page.lastIndexOf("{/*", at), at)).not.toContain("<PermissionGate");
+    expect(btn).not.toContain("PermissionGate");
+    // `lastIndexOf` — aynı ifade düğmenin ÜSTÜNDEKİ yorumda da geçebilir.
+    const dialog = src("./ChequeBordroDialog.tsx");
+    const saveAt = dialog.lastIndexOf("createM.mutate(undefined)");
+    expect(saveAt).toBeGreaterThan(-1);
+    const gateAt = dialog.slice(0, saveAt).lastIndexOf("PermissionGate permission=");
+    expect(gateAt).toBeGreaterThan(-1);
+    expect(dialog.slice(gateAt, gateAt + 60)).toContain('"finance:write"');
   });
 
   it("§5e liste düğmesi SEÇİMDEN BAĞIMSIZ (aranan şey bir BELGE, bir kıymet değil)", () => {
@@ -207,20 +231,6 @@ describe("§5 ekran dikişi — yazıldı ve BAĞLANDI", () => {
     expect(btn).not.toContain("selectedRows.length === 0");
   });
 
-  it("§5d yazma kapısı `finance:write` (backend rotasıyla hizalı)", () => {
-    // `finance:cheque` çekin DURUM MAKİNESİNİ oynatan geçişler içindir; bordro
-    // yalnız kâğıt üretir. Hiza koparsa düğme görünür ve uç 403 verir — sessiz
-    // ve sebebi hiçbir yerde yazmayan bir hata.
-    const page = src("./ChequesPage.tsx");
-    // `lastIndexOf` — aynı ifade düğmenin ÜSTÜNDEKİ gerekçe yorumunda da geçiyor
-    // ve ilk eşleşme oraya düşerdi (yorumun önünde `PermissionGate` yok).
-    const at = page.lastIndexOf("Resmî Bordro");
-    expect(at).toBeGreaterThan(-1);
-    const before = page.slice(0, at);
-    const gateAt = before.lastIndexOf("PermissionGate permission=");
-    expect(gateAt).toBeGreaterThan(-1);
-    expect(before.slice(gateAt, gateAt + 60)).toContain('"finance:write"');
-  });
 });
 
 describe("§6 'zaten aktif bir bordroda' ONAYI (engel değil)", () => {
@@ -272,7 +282,7 @@ describe("§6 'zaten aktif bir bordroda' ONAYI (engel değil)", () => {
   });
 
   it("§6e ekran onayı AYRI bir düğmeye bağlar (refleksle geçilmesin)", () => {
-    const dialog = src("./ChequeOfficialBordroDialog.tsx");
+    const dialog = src("./ChequeBordroDialog.tsx");
     expect(dialog).toContain("duplicateNoteWarning");
     expect(dialog).toContain("createM.mutate(true)");
     expect(dialog).toContain("Yine de Bordro Kes");
@@ -292,8 +302,10 @@ describe("§7 belgeye DÖNÜŞ YOLU (kesilen bordroya ulaşılabiliyor)", () => 
     const list = src("./ChequeDeliveryNoteListDialog.tsx");
     expect(list).toContain("listChequeDeliveryNotes");
     expect(list).toContain("cancelChequeDeliveryNote");
-    expect(list).toContain("PrintedDocDialog");
-    expect(list).toContain("CHEQUE_DELIVERY_NOTE");
+    expect(list).toContain("<ChequeNoteDocDialog");
+    // K2: liste bir RAPORDUR — Excel/PDF liste motorundan.
+    expect(list).toContain("ReportExportBar");
+    expect(list).toContain("deliveryNoteListSpec");
   });
 
   it("§7c iptal düğmesi `finance:write` ile kapılı, LİSTE değil", () => {
@@ -320,5 +332,41 @@ describe("§7 belgeye DÖNÜŞ YOLU (kesilen bordroya ulaşılabiliyor)", () => 
     expect(at).toBeGreaterThan(-1);
     expect(list.slice(at, at + 120)).not.toContain("status:");
     expect(list).toContain("OFFICIAL_DOC_STATUS_LABEL");
+  });
+});
+
+describe("§8 taslak gövdesi + deneme token'ı (K1)", () => {
+  it("§8a taslak gövdesi kayıt gövdesinin ALT KÜMESİ — taslak ne gösterdiyse kayıt onu yazar", () => {
+    const d = draft({ targetLabel: " Ziraat ", notes: " not ", confirmDuplicate: true, clientToken: "t-1" });
+    const taslak = buildDraftBody(d);
+    const kayit = buildDeliveryNoteBody(d);
+    expect(Object.keys(taslak).sort()).toEqual(["chequeIds", "deliveryDate", "notes", "targetLabel"]);
+    for (const [k, v] of Object.entries(taslak)) expect(kayit[k as keyof typeof kayit]).toEqual(v);
+    expect(kayit.confirmDuplicate).toBe(true);
+    expect(kayit.clientToken).toBe("t-1");
+  });
+
+  it("§8b taslak da fail-closed: karışık yön / bozuk tarih gövde üretmez", () => {
+    expect(() => buildDraftBody(draft({ rows: [received("c1"), issued("c2")] }))).toThrow(BORDRO_MIXED_KIND_ERROR);
+    expect(() => buildDraftBody(draft({ dateYmd: "" }))).toThrow(DELIVERY_DATE_ERROR);
+  });
+
+  it("§8c token YALNIZ belirsiz hatada yapışır; kesin 4xx'te yenilenir", () => {
+    const gen = () => "YENI";
+    const axios = (status?: number) => Object.assign(new Error("x"), status ? { response: { status } } : {});
+    expect(tokenAfterFailure("ESKI", axios(), gen)).toBe("ESKI"); // ağ / zaman aşımı
+    expect(tokenAfterFailure("ESKI", axios(502), gen)).toBe("ESKI");
+    expect(tokenAfterFailure("ESKI", axios(400), gen)).toBe("YENI");
+    expect(tokenAfterFailure("ESKI", axios(409), gen)).toBe("YENI");
+    expect(tokenAfterFailure("ESKI", axios(403), gen)).toBe("YENI");
+  });
+
+  it("§8d diyalog token'ı gövdeye koyar ve hatada `tokenAfterFailure`dan geçirir", () => {
+    const dialog = src("./ChequeBordroDialog.tsx");
+    expect(dialog).toMatch(/buildDeliveryNoteBody\(\{[^}]*clientToken/);
+    expect(dialog).toContain("tokenAfterFailure(t, e)");
+    // Token mutationFn İÇİNDE üretilmez (her tıklama yeni token = korumasız).
+    const fnAt = dialog.indexOf("mutationFn: (confirmDuplicate");
+    expect(dialog.slice(fnAt, fnAt + 200)).not.toContain("randomUUID");
   });
 });

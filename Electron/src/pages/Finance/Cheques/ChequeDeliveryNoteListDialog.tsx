@@ -25,7 +25,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { PermissionGate } from "@/components/PermissionGate";
-import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
+import { ReportExportBar } from "@/pages/Reports/_components";
+import type { ReportExportSpec } from "@/pages/Reports/_components/reportExport";
+import { ChequeNoteDocDialog } from "./ChequeNoteDocDialog";
 import {
   OFFICIAL_DOC_STATUS_LABEL,
   officialDocCancelBlockReason,
@@ -49,6 +51,38 @@ const targetOf = (r: DeliveryNoteRow): string => {
   const party = r.cari?.customer?.name ?? r.cari?.subcontractor?.name ?? null;
   return [r.bankAccount?.name ?? party, r.targetLabel].filter(Boolean).join(" — ") || "—";
 };
+
+/**
+ * Liste RAPORDUR, belge değil (K2): Excel/PDF liste motorundan, ekranda görünen
+ * kolonlarla. Sayfa dışında kalan bordro varsa bu da dosyaya yazılır.
+ */
+export function deliveryNoteListSpec(rows: DeliveryNoteRow[], total: number): ReportExportSpec {
+  return {
+    title: "Teslim Bordroları",
+    meta: total > rows.length ? [`En yeni ${rows.length} bordro (toplam ${total}).`] : [`${rows.length} bordro.`],
+    tables: [
+      {
+        name: "Bordrolar",
+        columns: [
+          { header: "Belge No", key: "docNo", width: 18 },
+          { header: "Teslim", key: "deliveryDate", width: 12 },
+          { header: "Yön", key: "kind", width: 12 },
+          { header: "Teslim Edilen", key: "target", width: 36 },
+          { header: "Adet", key: "count", width: 8, numFmt: "#,##0", align: "right" },
+          { header: "Durum", key: "status", width: 12 },
+        ],
+        rows: rows.map((r) => ({
+          docNo: r.docNo,
+          deliveryDate: dt(r.deliveryDate),
+          kind: KIND_LABEL[r.kind],
+          target: targetOf(r),
+          count: r._count.items,
+          status: OFFICIAL_DOC_STATUS_LABEL[r.status],
+        })),
+      },
+    ],
+  };
+}
 
 export function ChequeDeliveryNoteListDialog({ open, onOpenChange }: Props) {
   const qc = useQueryClient();
@@ -78,19 +112,16 @@ export function ChequeDeliveryNoteListDialog({ open, onOpenChange }: Props) {
   // çıkmaz yok — bu ekranın var oluş sebebi tam olarak o çıkmazdı).
   if (openDocId) {
     return (
-      <PrintedDocDialog
-        docType="CHEQUE_DELIVERY_NOTE"
-        sourceId={openDocId}
-        open
-        onOpenChange={(o) => !o && setOpenDocId(null)}
-        title="Çek / Senet Teslim Bordrosu"
+      <ChequeNoteDocDialog
+        noteId={openDocId}
+        onClose={() => setOpenDocId(null)}
         description="Resmî bordro — sürüm geçmişi ve revizyon burada. İptal edilmiş bordro “İPTAL” filigranıyla basılır; çeklerin durumu bu belgeyle DEĞİŞMEZ."
-        writePermission="finance:write"
       />
     );
   }
 
   const rows = q.data?.data ?? [];
+  const total = q.data?.pagination.total ?? rows.length;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onOpenChange(false)}>
@@ -118,8 +149,8 @@ export function ChequeDeliveryNoteListDialog({ open, onOpenChange }: Props) {
           </div>
         ) : rows.length === 0 ? (
           <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-            Henüz resmî teslim bordrosu kesilmemiş. Portföyden kıymet seçip “Resmî Bordro” ile
-            kesebilirsiniz.
+            Henüz resmî teslim bordrosu kesilmemiş. Portföyden kıymet seçip “Teslim Bordrosu” →
+            “Kaydet” ile kesebilirsiniz.
           </p>
         ) : (
           <div className="max-h-[55vh] overflow-auto rounded-md border">
@@ -219,7 +250,11 @@ export function ChequeDeliveryNoteListDialog({ open, onOpenChange }: Props) {
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="items-center sm:justify-between">
+          <ReportExportBar
+            disabled={q.isLoading || q.isError || rows.length === 0}
+            buildSpec={() => deliveryNoteListSpec(rows, total)}
+          />
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Kapat
           </Button>

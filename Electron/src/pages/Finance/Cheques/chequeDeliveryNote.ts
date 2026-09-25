@@ -1,20 +1,11 @@
 // =============================================================================
-// RESMÎ ÇEK / SENET TESLİM BORDROSU — istek gövdesi + kapı yüklemi (saf katman)
+// ÇEK / SENET TESLİM BORDROSU — istek gövdeleri + kapı yüklemi + token (saf katman)
 // =============================================================================
-// NE ÜRETİR: `POST /api/finance/cheque-delivery-notes` gövdesi. Kâğıdı bu dosya
-// ÜRETMEZ — belge backend'de `PrintedDocument` olarak DONAR ve ekrana mevcut
-// `PrintedDocDialog` ile gelir (sürüm geçmişi, revizyon, PDF hepsi orada).
-//
-// ⚠️ `chequeBordro.ts` İLE İKİSİ AYRI İŞTİR, biri diğerinin yerine geçmez:
-//   • `chequeBordro.ts`  → ANLIK çıktı. Hiçbir şey kaydetmez, belge numarası ve
-//     sürümü yoktur, aynı seçimle iki kez basmak iki olay üretmez. Vardiya
-//     ortasında hızlı kâğıt lazım olduğunda doğru araç odur.
-//   • bu dosya           → RESMÎ kayıt. `BRD…` numarası alır, donar, iptal
-//     edilebilir, sürüm geçmişi tutar. Karşı tarafa imzalatılan nüsha budur.
-// İkisini tek düğmede birleştirmek, "hızlıca bakayım" diyen kullanıcıya her
-// tıklamada iptal edilmesi gereken resmi bir kayıt açtırırdı; anlık çıktıyı
-// kaldırmak ise resmi kaydı istemeyen kişiyi belge numarası üretmeye zorlardı.
-// Bu yüzden EKRANDA İKİ DÜĞME durur ve metinleri farkı söyler.
+// TEK BELGE (K1, 2026-09-26): bordronun resmî kaydı (`BRD…`) ile numarasız
+// taslağı AYNI backend çözücüsünden gelir. Akış: seç → Önizle (`/draft`, yazmaz,
+// okuma izni) → Kaydet (`finance:write`, BRD doğar ve donar) → resmî PDF/Excel.
+// Kâğıdı bu dosya ÜRETMEZ; yalnız iki gövdeyi (`buildDraftBody` ·
+// `buildDeliveryNoteBody`) ve deneme token'ının kuralını taşır.
 //
 // ⚠️ KAPI YÜKLEMİ KOPYALANMAZ, `bordroBlockReason` AYNEN ÇAĞRILIR. Backend
 // aynı üç kuralı (tek yön · iptal edilmiş kayıt · boş seçim) fail-closed
@@ -28,6 +19,7 @@
 // düşmek yanlış numaralı bir resmi belge üretirdi.
 // =============================================================================
 
+import { isAmbiguousFailure } from "@/lib/fasonReceiveAttempt";
 import { bordroBlockReason, type SelectableCheque } from "./chequeBordro";
 import { dayStartIso } from "./dates";
 
@@ -49,15 +41,22 @@ export interface DeliveryNoteDraft {
    * onayladı. Yalnız `true` iken gövdeye girer (bkz. `buildDeliveryNoteBody`).
    */
   confirmDuplicate?: boolean;
+  /** Mantıksal denemenin kimliği (uuid) — bkz. `tokenAfterFailure`. */
+  clientToken?: string;
 }
 
-/** `POST /api/finance/cheque-delivery-notes` gövdesi (backend Zod `.strict()`). */
-export interface DeliveryNoteBody {
+/** `POST /api/finance/cheque-delivery-notes/draft` gövdesi — kaydın alanlarının aynısı. */
+export interface DeliveryNoteDraftBody {
   chequeIds: string[];
   deliveryDate: string;
   targetLabel?: string;
   notes?: string;
+}
+
+/** `POST /api/finance/cheque-delivery-notes` gövdesi (backend Zod `.strict()`). */
+export interface DeliveryNoteBody extends DeliveryNoteDraftBody {
   confirmDuplicate?: boolean;
+  clientToken?: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -130,18 +129,17 @@ export function deliveryNoteBlockReason(draft: DeliveryNoteDraft): string | null
 }
 
 /**
- * İstek gövdesi.
+ * Taslak (önizleme) gövdesi — kayıt gövdesi bunun üstüne kurulur.
  *
- * ⚠️ FAIL-CLOSED: kabul edilemez taslakta `null` DÖNMEZ, FIRLATIR
- * (`buildChequeBordro` ile aynı gerekçe — `null` çağıran tarafta sessizce
- * "hiçbir şey yapmayan düğme"ye dönüşür). Çağıran ekran zaten aynı yüklemi
- * kullanıp düğmeyi kapatır ve sebebi yazar; burası son settir.
+ * ⚠️ FAIL-CLOSED: kabul edilemez taslakta `null` DÖNMEZ, FIRLATIR — `null`
+ * çağıran tarafta sessizce "hiçbir şey yapmayan düğme"ye dönüşür. Çağıran ekran
+ * zaten aynı yüklemi kullanıp düğmeyi kapatır ve sebebi yazar; burası son settir.
  *
  * ⚠️ BOŞ METİN ALANI HİÇ GÖNDERİLMEZ. Backend `.strict()` şemada bu alanlar
  * `nullable().optional()`; boş string göndermek reddedilmez ama kayda `""`
  * yazar ve kâğıtta "Teslim Edilen: " diye BAŞLIKSIZ bir satır doğururdu.
  */
-export function buildDeliveryNoteBody(draft: DeliveryNoteDraft): DeliveryNoteBody {
+export function buildDraftBody(draft: DeliveryNoteDraft): DeliveryNoteDraftBody {
   const blocked = bordroBlockReason(draft.rows);
   if (blocked) throw new Error(blocked);
 
@@ -160,10 +158,30 @@ export function buildDeliveryNoteBody(draft: DeliveryNoteDraft): DeliveryNoteBod
     deliveryDate,
     ...(targetLabel ? { targetLabel } : {}),
     ...(notes ? { notes } : {}),
-    // ⚠️ YALNIZ `true` iken gönderilir. `confirmDuplicate: false` göndermek
-    // sözleşmeyi bozmaz ama gövdeyi her istekte "onay taşıyormuş" gibi gösterir;
-    // asıl tehlike ise bu alanı VARSAYILAN `true` yapmaktır — o an uyarı hiç
-    // görünmez ve tam da önlenmek istenen sessiz ikinci belge geri gelir.
-    ...(draft.confirmDuplicate === true ? { confirmDuplicate: true } : {}),
   };
+}
+
+/** Kayıt gövdesi — taslağın gövdesi + onay + deneme token'ı (taslak ne gösterdiyse kayıt onu yazar). */
+export function buildDeliveryNoteBody(draft: DeliveryNoteDraft): DeliveryNoteBody {
+  return {
+    ...buildDraftBody(draft),
+    // ⚠️ YALNIZ `true` iken gönderilir. Asıl tehlike bu alanı VARSAYILAN `true`
+    // yapmaktır — o an uyarı hiç görünmez ve sessiz ikinci belge geri gelir.
+    ...(draft.confirmDuplicate === true ? { confirmDuplicate: true } : {}),
+    ...(draft.clientToken ? { clientToken: draft.clientToken } : {}),
+  };
+}
+
+/**
+ * Kayıt denemesi düştükten sonra hangi token'la devam edilir. Token yalnız sonucu
+ * BELİRSİZ bırakan hatada (ağ · zaman aşımı · 5xx) yapışır — sunucu ilk denemeyi
+ * yazmış olabilir ve aynı token ikinci BRD'yi önler. Kesin 4xx'te hiçbir şey
+ * yazılmamıştır: yeni deneme yeni token alır.
+ */
+export function tokenAfterFailure(
+  token: string,
+  error: unknown,
+  gen: () => string = () => crypto.randomUUID(),
+): string {
+  return isAmbiguousFailure(error) ? token : gen();
 }
