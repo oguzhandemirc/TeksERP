@@ -17,6 +17,8 @@ export interface TimelineItem {
   trigger: string | null;
   /** Geçmişten sonradan türetildi (backfill) — rozetle ayrılır. */
   derived: boolean;
+  /** Belge düzeyi satırın topları (iş emri iptali dönüşü); yoksa alan gelmez. */
+  rolls?: Array<{ barcode: string | null; qty: number; to: string | null }>;
 }
 
 export interface TimelinePageResponse {

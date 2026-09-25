@@ -13,6 +13,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { normalizeScanCode } from "../utils/code-format";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
+import { cancelReturnNote } from "./helpers/production-issue-ledger.helper";
 import {
   TIMELINE_GROUPS,
   TIMELINE_GROUP_LABEL,
@@ -37,6 +38,8 @@ export interface TimelineItem {
   trigger: string | null;
   /** Geçmişten sonradan türetilmiş satır (backfill) — ekranda rozetle ayrılır. */
   derived: boolean;
+  /** Belge düzeyi satırın topları (iptal dönüşü) — eski istemci yok sayar. */
+  rolls?: Array<{ barcode: string | null; qty: number; to: string | null }>;
 }
 
 export interface TimelinePage {
@@ -128,12 +131,25 @@ async function sourcedItems(workOrderId: string, stepIds: string[]): Promise<Pen
     out.push({ ...NO_META, id: `batch:${b.id}`, at: b.createdAt.toISOString(), group: "PARTI", title: "Parti açıldı", detail: b.batchNumber, actorId: b.createdById });
   }
   // Top Çıkar: üretime giriş satırının bağlı tersi (stok defteri) — sebep satırın notunda.
+  // İş emri iptalinin dönüşleri belge düzeyinde TEK satırdır (S6); anahtar iptalin notu.
   const detached = await prisma.warehouseMovement.findMany({
     where: { reasonCode: STOCK_MOVE_REASON.ROLL_DETACH, workOrderStepId: { in: stepIds } },
-    select: { id: true, createdAt: true, userId: true, notes: true, qty: true, roll: { select: { barcode: true } } },
+    select: { id: true, createdAt: true, userId: true, notes: true, qty: true, toStatus: true, roll: { select: { barcode: true } } },
+    orderBy: { createdAt: "asc" },
   });
-  for (const d of detached) {
+  const wo = await prisma.workOrder.findUnique({ where: { id: workOrderId }, select: { workOrderNumber: true } });
+  const cancelNote = wo ? cancelReturnNote(wo.workOrderNumber) : null;
+  const cancelReturns = detached.filter((d) => d.notes === cancelNote);
+  for (const d of detached.filter((x) => x.notes !== cancelNote)) {
     out.push({ ...NO_META, id: `detach:${d.id}`, at: d.createdAt.toISOString(), group: "PARTI", title: "Top çıkarıldı", detail: `${d.roll?.barcode ?? "—"} · ${m(d.qty)}`, reason: d.notes, actorId: d.userId });
+  }
+  if (cancelReturns.length > 0) {
+    const total = cancelReturns.reduce((s, d) => s + Number(d.qty), 0);
+    out.push({
+      ...NO_META, id: `cancel-return:${workOrderId}`, at: cancelReturns[0]!.createdAt.toISOString(), group: "PARTI",
+      title: `İş emri iptali — ${cancelReturns.length} top kaynağına döndü`, detail: m(total), actorId: cancelReturns[0]!.userId,
+      rolls: cancelReturns.map((d) => ({ barcode: d.roll?.barcode ?? null, qty: Number(d.qty), to: d.toStatus })),
+    });
   }
   const dispatches = await prisma.subcontractorDispatch.findMany({
     where: { workOrderId },

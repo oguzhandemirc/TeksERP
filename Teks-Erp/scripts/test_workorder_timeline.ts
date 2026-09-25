@@ -9,6 +9,8 @@
 //      iki statü geçişi, parti doğuşu (kaynak: Batch) ve kapanış künyesi (kaynak:
 //      künye) var; tetik ve kanal Türkçe; aktör adı çözüldü
 //   §3 grup süzgeci yalnız o grubu döndürür, sayılar değişmez
+//   §5 iş emri iptalinin dönüşleri TEK satır ("İş emri iptali — N top kaynağına döndü" + `rolls`);
+//      Top Çıkar satırı ayrı kalır
 //   §4 arama: iş emri no (büyük/küçük harf fark etmez) → o iş emri; top barkodu →
 //      topun geçtiği iş emri; 2 karakterden kısa sorgu reddedilir
 // NEGATİF SONDA (elle, 2026-09-25): servisteki künye kaynağı (`workOrderCloseSnapshot`
@@ -18,6 +20,7 @@
 import prisma from "../src/lib/prisma";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { WorkOrderTimelineService, pageTimeline, type TimelineItem } from "../src/services/workorder-timeline.service";
+import { workOrderRollDetachService } from "../src/services/workorder-roll-detach.service";
 import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { RollStatus } from "@prisma/client";
@@ -124,6 +127,43 @@ async function main(): Promise<void> {
     try { await timeline.lookup("I"); } catch { kisa = true; }
     check("§4c 2 karakterden kısa sorgu reddedilir", kisa);
     check("§4d bulunamayan sorgu boş liste (hata değil)", (await timeline.lookup("TST-YOK-XYZ")).length === 0);
+
+    // §5 iptal dönüşü belge düzeyinde tek satır (S6); Top Çıkar tekil kalır
+    const depo = await prisma.warehouse.findFirst({ where: { isDefault: true }, select: { id: true } });
+    if (!depo) throw new Error("Fikstür eksik: varsayılan depo");
+    const res2 = await svc.create(
+      { type: "STOCK_PRODUCTION", targetItemId: item.id, width: 180, steps: [{ stationId: kursun.id }, { stationId: tambur.id }] },
+      admin.id,
+    );
+    const wo2 = (res2.data as { id: string }).id;
+    woIds.push(wo2);
+    await svc.lockWorkOrder(wo2, admin.id);
+    const damga = Date.now().toString(36).toUpperCase();
+    const toplar = [];
+    for (const i of [0, 1, 2]) {
+      const t = await prisma.roll.create({
+        data: { barcode: `TST-WOT-C${i}-${damga}`, itemId: item.id, initialQty: 100, currentQty: 100, status: RollStatus.STOCK,
+          warehouseId: depo.id, qualityGrade: grade.code, qualityGradeId: grade.id, width: 180, createdById: admin.id },
+        select: { id: true, barcode: true },
+      });
+      rollIds.push(t.id);
+      toplar.push(t);
+    }
+    await svc.attachRolls(wo2, toplar.map((t) => t.barcode!), admin.id);
+    await workOrderRollDetachService.detachRoll(wo2, toplar[0]!.id, "bekçi: yanlış okutma", admin.id);
+    await svc.softDelete(wo2, admin.id);
+    const sayfa2 = await timeline.list(wo2, { limit: 50 });
+    const donus = sayfa2.data.filter((x) => x.id.startsWith("cancel-return:"));
+    const cikan = sayfa2.data.filter((x) => x.title === "Top çıkarıldı");
+    check("§5 iptal dönüşü TEK satır, sayı ve toplam doğru",
+      donus.length === 1 && donus[0]!.title === "İş emri iptali — 2 top kaynağına döndü" && donus[0]!.detail === "200 m",
+      donus.map((x) => `${x.title} · ${x.detail}`).join(" | ") || "satır yok");
+    check("§5b satır topları taşıyor (barkod · metre · döndüğü durum)",
+      donus[0]?.rolls?.length === 2 && donus[0].rolls.every((r) => r.qty === 100 && r.to === "STOCK") &&
+        [toplar[1]!.barcode, toplar[2]!.barcode].every((b) => donus[0]!.rolls!.some((r) => r.barcode === b)),
+      JSON.stringify(donus[0]?.rolls ?? null));
+    check("§5c Top Çıkar satırı ayrı ve tekil — iptalle dönen toplar tek tek yazılmaz",
+      cikan.length === 1 && (cikan[0]!.detail ?? "").startsWith(toplar[0]!.barcode!), cikan.map((x) => x.detail).join(" | "));
   } finally {
     await temizle();
   }

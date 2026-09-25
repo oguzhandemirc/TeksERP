@@ -58,6 +58,11 @@ export async function postProductionIssuesTx(
   return written;
 }
 
+/** İş emri iptalinde dönüş satırlarının notu — zaman çizelgesi aynı eylemi bu notla gruplar. */
+export function cancelReturnNote(workOrderNumber: string): string {
+  return `İş emri iptali ${workOrderNumber}`;
+}
+
 /**
  * Topun geri alınmamış üretime alma satırı: önce verilen adımlara damgalı, yoksa damgasız
  * (geçiş dönemi). Top Çıkar ve iş emri iptali AYNI satırı bulur; tersi bu satıra bağlanır.

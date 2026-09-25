@@ -22,7 +22,7 @@ import {
 import { ACTIVE_ORDER_LINK, unlinkOrderLinesTx, withActiveOrderLinks } from "./helpers/order-link.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
-import { findOpenProductionIssueTx, postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
+import { cancelReturnNote, findOpenProductionIssueTx, postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
 import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { warehouseStampManyTx, warehouseStampWhereTx } from "./helpers/warehouse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
@@ -3683,7 +3683,7 @@ export class WorkOrderService {
       });
       if (claim.count !== g.ids.length) throw AppError.conflict("Toplardan biri bu sırada değişti — tekrar deneyin.");
     }
-    const note = `İş emri iptali ${workOrderNumber}`;
+    const note = cancelReturnNote(workOrderNumber);
     for (const d of returns) {
       await reverseStockMove(tx, d.issue.id, { reasonCode: STOCK_MOVE_REASON.ROLL_DETACH, userId: userId ?? null, notes: note });
       // Üretimde metraj değiştiyse fark AYRI olgudur: ters net 0 kapanır, fark kendi satırıyla.
