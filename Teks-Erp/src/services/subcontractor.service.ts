@@ -86,6 +86,7 @@ import {
   // elle yazıyordu ve üçünde de guard yoktu (denetim 2026-08-09, F-FAS-ESZ-001).
   completeWorkOrderIfStepsDone,
 } from "./helpers/roll-step.helper";
+import { reopenWorkOrderTx } from "./helpers/workorder-event.helper";
 import { generateRollBarcodeTx, reserveRollBarcodesTx } from "./helpers/roll-barcode.helper";
 import { recomputeOrderStatusForOrdersTx, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
@@ -2350,7 +2351,7 @@ export class SubcontractorService {
             // Bu adım WO'nun son eksik adımıysa WO'yu tamamla (receive'daki
             // kontrolün aynası — iptal sonrası WO IN_PROGRESS'te takılmasın).
             // Adım sayımı + kart geçişi helper'ın İÇİNDE; burada elle tekrarlama.
-            await completeWorkOrderIfStepsDone(tx, dispatch.workOrderId);
+            await completeWorkOrderIfStepsDone(tx, dispatch.workOrderId, { trigger: "FASON_DISPATCH_CANCEL" });
           } else {
             // Hiç kabul yok → sevk öncesi duruma (PENDING) dön.
             await tx.workOrderStep.update({
@@ -3288,7 +3289,7 @@ export class SubcontractorService {
       // Son step + hepsi tamamlandıysa WO COMPLETED (adım sayımı + kart geçişi
       // helper'ın içinde; terminal guard da orada).
       if (!nextStep && stillAtSubcontractor === 0) {
-        await completeWorkOrderIfStepsDone(tx, data.workOrderId);
+        await completeWorkOrderIfStepsDone(tx, data.workOrderId, { trigger: "FASON_RECEIPT" });
       }
 
       // 5) newRolls açık kumaş Roll'larını burada doğur. Controller seviyesinde
@@ -3851,11 +3852,7 @@ export class SubcontractorService {
       // kabul iptali 409 verir, kart okutulamaz).
       await recomputeStepStatus(tx, data.stepId);
       await ensureWorkOrderInProgress(tx, closedDispatch.workOrderId);
-      const reopen = await tx.workOrder.updateMany({
-        where: { id: closedDispatch.workOrderId, status: WorkOrderStatus.COMPLETED },
-        data: { status: WorkOrderStatus.IN_PROGRESS },
-      });
-      if (reopen.count > 0) {
+      if (await reopenWorkOrderTx(tx, closedDispatch.workOrderId, { trigger: "FASON_REOPEN_REMAINDER" })) {
         await setWorkOrderCardStatusesTx(
           tx,
           closedDispatch.workOrderId,
@@ -4046,7 +4043,7 @@ export class SubcontractorService {
             ? allSteps.slice(idx + 1).find((s) => s.status !== StepStatus.SKIPPED) ?? null
             : null;
         if (!nextStep) {
-          await completeWorkOrderIfStepsDone(tx, step.workOrderId);
+          await completeWorkOrderIfStepsDone(tx, step.workOrderId, { trigger: "FASON_CLOSE_REMAINDER" });
         }
       }
 
@@ -6959,7 +6956,7 @@ export class SubcontractorService {
           });
 
           // Adım sayımı + kart geçişi helper'ın içinde; terminal guard da orada.
-          await completeWorkOrderIfStepsDone(tx, dispatch.workOrderId);
+          await completeWorkOrderIfStepsDone(tx, dispatch.workOrderId, { trigger: "FASON_DIRECT_SHIP" });
         }
       }
 

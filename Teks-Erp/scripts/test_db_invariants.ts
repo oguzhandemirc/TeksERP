@@ -724,6 +724,11 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // Ürün yaşam döngüsü (URUN-YASAM-DONGUSU.md §3.1 D3) — migration 20260925100000_urun_yasam_dongusu:
   // isActive = (lifecycleStatus <> ARCHIVED); çift yüklem seddi, tek yazar item-lifecycle.helper.
   { table: "items", name: "items_lifecycle_isactive_ck" },
+  // İş emri hareket defteri (D1, migration 20260926000000): kanal kapalı küme, doğuş
+  // satırının önceki değeri yok, doğuş dışı her satır bir alana aittir.
+  { table: "work_order_events", name: "work_order_events_channel_known" },
+  { table: "work_order_events", name: "work_order_events_field_required" },
+  { table: "work_order_events", name: "work_order_events_birth_has_no_from" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -824,6 +829,14 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     trigger: "order_lines_item_not_archived",
     timing: ["BEFORE INSERT OR UPDATE OF", "FOR EACH ROW"],
     why: "D1 — Pasif kartta açık sipariş kalemi olamaz (iptal kalem/kapalı sipariş tarihçedir, geçer)",
+  },
+  {
+    table: "work_order_events",
+    trigger: "work_order_events_block_tamper",
+    // Ortak fonksiyon `defter_block_tamper` (K-A3): UPDATE her zaman, DELETE yalnız
+    // doğrudan (pg_trigger_depth) reddedilir — iş emrinden gelen kaskat silme geçer.
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
+    why: "iş emri hareket defteri append-only — geri alma karşı kayıttır, satır değişmez/silinmez",
   },
   {
     table: "machine_stop_events",

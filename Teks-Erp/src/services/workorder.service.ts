@@ -93,6 +93,11 @@ import {
   ensureWorkOrderInProgress,
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
+import {
+  claimWorkOrderStatusTx,
+  createWorkOrderTx,
+  recordWorkOrderFieldChangesTx,
+} from "./helpers/workorder-event.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { assertTargetColorChange } from "./helpers/workorder-target-color.helper";
 import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
@@ -338,6 +343,8 @@ export type CancelDisposition = "STOCK" | "SCRAP" | "CANCELLED";
 export interface CancelWorkOrderInput {
   /** Yeni uçta ZORUNLU (min 3). Eski gövdesiz `DELETE /:id` bunu taşımaz. */
   reason?: string;
+  /** Hareket defterindeki tetik — varsayılan `WO_CANCEL`; sipariş iptali `ORDER_CANCEL` geçirir. */
+  trigger?: string;
   /**
    * Sebebin KATALOG KODU (ReasonPreset ROLL_CANCEL, 2026-08-21) — opsiyonel;
    * CANCELLED kararındaki topların `cancelReasonCode`'una yazılır. Verilmezse
@@ -1102,7 +1109,7 @@ export class WorkOrderService {
         data.plannedEndDate,
       );
 
-      const wo = await tx.workOrder.create({
+      const wo = await createWorkOrderTx(tx, { trigger: "WO_CREATE", userId }, {
         data: {
           // Künye (Faz A2) — "iş emrini KİM AÇTI" bilgisi bugüne kadar HİÇ
           // yoktu; yalnız audit'ten okunabiliyordu ve audit 6 ayda arşivlenir.
@@ -3704,23 +3711,21 @@ export class WorkOrderService {
       const claimBlocked = fasonPlan.remainderClosed
         ? [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED]
         : [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED];
-      const cancelClaim = await tx.workOrder.updateMany({
-        where: {
-          id,
-          status: { notIn: claimBlocked },
-        },
+      const cancelFrom = await claimWorkOrderStatusTx(tx, id, {
+        from: Object.values(WorkOrderStatus).filter((st) => !(claimBlocked as WorkOrderStatus[]).includes(st)),
+        to: WorkOrderStatus.CANCELLED,
         // İptal izi KOLONDA (2026-08-17): audit 6 ayda bir arşivleniyor, sebep
         // orada kalırsa "bu iş emri neden iptal edildi" sorusu sessizce
         // cevapsız kalırdı. Audit yine yazılır — ikisi farklı soruları
         // cevaplıyor ("her değişiklik" ↔ "son karar").
         data: {
-          status: WorkOrderStatus.CANCELLED,
           cancelledAt: new Date(),
           cancelledById: userId ?? null,
           cancelReason: reason || null,
         },
+        ctx: { trigger: input.trigger ?? "WO_CANCEL", userId, reason: reason || null },
       });
-      if (cancelClaim.count === 0) {
+      if (!cancelFrom) {
         const fresh = await tx.workOrder.findUnique({
           where: { id },
           select: { status: true },
@@ -4239,11 +4244,12 @@ export class WorkOrderService {
         // ATOMİK CLAIM ÖNCE: WO satırını IN_PROGRESS→COMPLETED koşullu kilitle.
         // Eşzamanlı son-top finalize (tambur/kursun) ya da iptal WO'yu başka duruma
         // çekmişse count===0 → 409 (çift geçiş önlenir).
-        const claim = await tx.workOrder.updateMany({
-          where: { id, status: WorkOrderStatus.IN_PROGRESS },
-          data: { status: WorkOrderStatus.COMPLETED },
+        const claimed = await claimWorkOrderStatusTx(tx, id, {
+          from: [WorkOrderStatus.IN_PROGRESS],
+          to: WorkOrderStatus.COMPLETED,
+          ctx: { trigger: "MANUAL_COMPLETE", userId, reason: reason || null },
         });
-        if (claim.count === 0) {
+        if (!claimed) {
           const fresh = await tx.workOrder.findUnique({ where: { id }, select: { status: true } });
           throw AppError.conflict(
             `İş emri bu sırada ${
@@ -4731,13 +4737,20 @@ export class WorkOrderService {
       // bırakmasın (softDelete'teki bloğun simetriği).
       await setWorkOrderCardStatusesTx(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_ARCHIVED" });
 
-      return tx.workOrder.update({
+      const archivedRow = await tx.workOrder.update({
         where: { id },
         // clientToken serbest bırakılır: zero-attach telafisi sonrası operatör
         // AYNI form oturumundan (aynı token) düzeltip tekrar denediğinde taze
         // create arşivli WO'nun token'ına çarpmasın.
         data: { isActive: false, clientToken: null },
       });
+      await recordWorkOrderFieldChangesTx(
+        tx,
+        id,
+        [{ field: "isActive", from: "true", to: "false", fromLabel: "Aktif", toLabel: "Arşivlendi" }],
+        { trigger: "WO_ARCHIVE", userId },
+      );
+      return archivedRow;
     });
 
     await AuditService.log({
@@ -6623,11 +6636,14 @@ export class WorkOrderService {
     // ATOMİK CLAIM (check-then-act DEĞİL): PLANNED→IN_PROGRESS geçişini status-koşullu
     // updateMany ile sahiplen. İki paralel kilitle / kilitle+iptal yarışında yalnız biri
     // kazanır; üst ön-kontrol (4082) UX, asıl koruma bu claim.
-    const claim = await prisma.workOrder.updateMany({
-      where: { id: workOrderId, status: WorkOrderStatus.PLANNED },
-      data: { status: WorkOrderStatus.IN_PROGRESS },
-    });
-    if (claim.count === 0) {
+    const claimed = await prisma.$transaction((tx) =>
+      claimWorkOrderStatusTx(tx, workOrderId, {
+        from: [WorkOrderStatus.PLANNED],
+        to: WorkOrderStatus.IN_PROGRESS,
+        ctx: { trigger: "WO_LOCK", userId },
+      }),
+    );
+    if (!claimed) {
       const fresh = await prisma.workOrder.findUnique({
         where: { id: workOrderId },
         select: { status: true },

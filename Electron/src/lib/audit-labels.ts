@@ -395,6 +395,13 @@ export const ENUM_LABELS: Record<string, string> = {
   // WeavingExecutionKind — dokuma işini KİM koşuyor (2026-09-13).
   IN_HOUSE: "Kendi tezgahımızda",
   SUBCONTRACTED: "Fasonda dokunuyor",
+  // WorkOrderEventType — iş emri hareket defteri olay tipi (2026-09-25).
+  CREATED: "İş emri açıldı",
+  STATUS_CHANGED: "Durum değişti",
+  FIELD_CHANGED: "Plan alanı değişti",
+  STEP_PLAN_CHANGED: "Adım planı değişti",
+  ROLL_ATTRIBUTES_APPLIED: "Toplara uygulandı",
+  BATCH_ADDED: "Parti eklendi",
   // OrderStatus / WorkOrderStatus / StepStatus (ortak durumlar dahil)
   PENDING: "Bekliyor",
   APPROVED: "Onaylandı",

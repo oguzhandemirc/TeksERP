@@ -91,6 +91,7 @@ import {
   manualMoveWoBlockReason,
 } from "./workorder-manual-move.service";
 import { ensureWorkOrderInProgress, recomputeStepStatus } from "./helpers/roll-step.helper";
+import { reopenWorkOrderTx } from "./helpers/workorder-event.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
@@ -1228,11 +1229,8 @@ export class TamburManualService {
       await touchWorkOrderTx(tx, step.workOrderId);
       await recomputeStepStatus(tx, step.id);
       await ensureWorkOrderInProgress(tx, step.workOrderId);
-      const reopen = await tx.workOrder.updateMany({
-        where: { id: step.workOrderId, status: WorkOrderStatus.COMPLETED },
-        data: { status: WorkOrderStatus.IN_PROGRESS },
-      });
-      if (reopen.count > 0) {
+      const reopened = await reopenWorkOrderTx(tx, step.workOrderId, { trigger: "TAMBUR_MANUAL_ROLL" });
+      if (reopened) {
         await setWorkOrderCardStatusesTx(
           tx,
           step.workOrderId,
@@ -1240,7 +1238,7 @@ export class TamburManualService {
           TravelerCardStatus.ACTIVE,
         );
       }
-      return { alreadyAttached: false, reopened: reopen.count > 0 };
+      return { alreadyAttached: false, reopened };
     });
 
     // GERÇEKÇİLİK EŞİĞİ — UYARI, blok DEĞİL (ağırlık tarafıyla aynı gerekçe:

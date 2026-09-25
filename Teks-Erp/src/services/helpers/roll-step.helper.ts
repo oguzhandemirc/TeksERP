@@ -24,6 +24,7 @@ import { Prisma, RollStatus, StationKind, StepStatus, WorkOrderStatus } from "@p
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { setWorkOrderCardStatusesTx } from "./traveler-card-fanout.helper";
+import { claimWorkOrderStatusTx, type WorkOrderEventCtx } from "./workorder-event.helper";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -168,7 +169,7 @@ export async function recomputeStepStatus(
   // Step ACTIVE ise iş emri PLANNED'dan IN_PROGRESS'e çekilmeli — idempotent.
   // (step.status zaten ACTIVE olsa bile WO henüz güncellenmemiş olabilir.)
   if (nextStatus === StepStatus.ACTIVE) {
-    await ensureWorkOrderInProgress(tx, step.workOrderId);
+    await ensureWorkOrderInProgress(tx, step.workOrderId, { trigger: "STEP_ACTIVE", refType: "WORK_ORDER_STEP", refId: step.id });
   }
 
   return nextStatus;
@@ -184,11 +185,13 @@ export async function recomputeStepStatus(
  */
 export async function ensureWorkOrderInProgress(
   tx: TxClient,
-  workOrderId: string
+  workOrderId: string,
+  ctx: WorkOrderEventCtx = { trigger: "AUTO_START" },
 ): Promise<void> {
-  await tx.workOrder.updateMany({
-    where: { id: workOrderId, status: WorkOrderStatus.PLANNED },
-    data: { status: WorkOrderStatus.IN_PROGRESS },
+  await claimWorkOrderStatusTx(tx, workOrderId, {
+    from: [WorkOrderStatus.PLANNED],
+    to: WorkOrderStatus.IN_PROGRESS,
+    ctx,
   });
 }
 
@@ -201,7 +204,9 @@ export async function ensureWorkOrderInProgress(
  */
 export async function completeWorkOrderIfStepsDone(
   tx: TxClient,
-  workOrderId: string
+  workOrderId: string,
+  /** Kapanışı tetikleyen işlem — hareket defterine `trigger` olarak düşer. */
+  ctx: WorkOrderEventCtx,
 ): Promise<void> {
   const remaining = await tx.workOrderStep.count({
     where: {
@@ -210,13 +215,12 @@ export async function completeWorkOrderIfStepsDone(
     },
   });
   if (remaining !== 0) return;
-  await tx.workOrder.updateMany({
-    where: {
-      id: workOrderId,
-      // SUPERSEDED (tebdil ile devredilmiş) de terminal — recompute onu COMPLETED'e çevirmesin.
-      status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
-    },
-    data: { status: WorkOrderStatus.COMPLETED },
+  // Yalnız canlı statüden: CANCELLED/SUPERSEDED (tebdille devredilmiş) terminaldir,
+  // recompute onları COMPLETED'e diriltmez.
+  await claimWorkOrderStatusTx(tx, workOrderId, {
+    from: [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS],
+    to: WorkOrderStatus.COMPLETED,
+    ctx,
   });
   await setWorkOrderCardStatusesTx(tx, workOrderId, "ACTIVE", "COMPLETED");
 }

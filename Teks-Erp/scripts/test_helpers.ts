@@ -307,11 +307,14 @@ function makeStepTx(opts: {
         })),
     },
     workOrder: {
+      // Statü claim'i önce mevcut statüyü okur (workorder-event.helper) — sahte WO PLANNED.
+      findUnique: async () => ({ status: "PLANNED" }),
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         woUpdates.push(args);
         return { count: 1 };
       },
     },
+    workOrderEvent: { createMany: async (args: { data: unknown[] }) => ({ count: args.data.length }) },
   } as unknown as Parameters<typeof recomputeStepStatus>[0];
   return { tx, stepUpdates, woUpdates };
 }
@@ -405,22 +408,35 @@ async function testCanGoBack() {
   }
 }
 
-// ensureWorkOrderInProgress — sadece PLANNED filtresiyle updateMany çağırmalı
+// ensureWorkOrderInProgress — yalnız PLANNED'dan IN_PROGRESS'e, statü claim'i o statüye
+// karşı; geçiş olursa hareket defterine satır, olmazsa (zaten IN_PROGRESS) hiçbir yazım.
 async function testEnsureInProgress() {
-  const calls: { where: Record<string, unknown>; data: Record<string, unknown> }[] = [];
-  const tx = {
-    workOrder: {
-      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
-        calls.push(args);
-        return { count: 0 };
+  const makeTx = (status: string) => {
+    const calls: { where: Record<string, unknown>; data: Record<string, unknown> }[] = [];
+    const events: unknown[] = [];
+    const tx = {
+      workOrder: {
+        findUnique: async () => ({ status }),
+        updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+          calls.push(args);
+          return { count: 1 };
+        },
       },
-    },
-  } as unknown as Parameters<typeof ensureWorkOrderInProgress>[0];
-  await ensureWorkOrderInProgress(tx, "wo-x");
+      workOrderEvent: { createMany: async (args: { data: unknown[] }) => { events.push(...args.data); return { count: args.data.length }; } },
+    } as unknown as Parameters<typeof ensureWorkOrderInProgress>[0];
+    return { tx, calls, events };
+  };
+  const planned = makeTx("PLANNED");
+  await ensureWorkOrderInProgress(planned.tx, "wo-x");
   check(
-    "ensureInProgress: yalnız PLANNED→IN_PROGRESS updateMany (idempotent filtre)",
-    calls.length === 1 && calls[0].where.id === "wo-x" && calls[0].where.status === "PLANNED" && calls[0].data.status === "IN_PROGRESS",
+    "ensureInProgress: PLANNED→IN_PROGRESS claim'i PLANNED'a karşı + tek defter satırı",
+    planned.calls.length === 1 && planned.calls[0].where.id === "wo-x" && planned.calls[0].where.status === "PLANNED"
+      && planned.calls[0].data.status === "IN_PROGRESS" && planned.events.length === 1,
   );
+  const running = makeTx("IN_PROGRESS");
+  await ensureWorkOrderInProgress(running.tx, "wo-x");
+  check("ensureInProgress: zaten IN_PROGRESS → yazım ve satır YOK (idempotent)",
+    running.calls.length === 0 && running.events.length === 0);
 }
 
 // =============================================================================

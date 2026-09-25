@@ -107,6 +107,7 @@ import { factoryDayStart } from "../constants/time";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { recomputeStepStatus } from "./helpers/roll-step.helper";
+import { reopenWorkOrderTx } from "./helpers/workorder-event.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { InventoryService } from "./inventory.service";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
@@ -1780,12 +1781,8 @@ export class TamburUndoService {
       let woRevivedCount = 0;
       if (stepId && step) {
         await recomputeStepStatus(tx, stepId);
-        const woRevived = await tx.workOrder.updateMany({
-          where: { id: step.workOrder.id, status: WorkOrderStatus.COMPLETED },
-          data: { status: WorkOrderStatus.IN_PROGRESS },
-        });
-        woRevivedCount = woRevived.count;
-        if (woRevived.count > 0) {
+        woRevivedCount = (await reopenWorkOrderTx(tx, step.workOrder.id, { trigger: "TAMBUR_UNDO" })) ? 1 : 0;
+        if (woRevivedCount > 0) {
           await setWorkOrderCardStatusesTx(tx, step.workOrder.id, "COMPLETED", "ACTIVE");
         }
       }
@@ -2155,12 +2152,8 @@ export class TamburUndoService {
       let woRevivedCount = 0;
       if (stepId && step) {
         await recomputeStepStatus(tx, stepId);
-        const woRevived = await tx.workOrder.updateMany({
-          where: { id: step.workOrder.id, status: WorkOrderStatus.COMPLETED },
-          data: { status: WorkOrderStatus.IN_PROGRESS },
-        });
-        woRevivedCount = woRevived.count;
-        if (woRevived.count > 0) {
+        woRevivedCount = (await reopenWorkOrderTx(tx, step.workOrder.id, { trigger: "TAMBUR_UNDO" })) ? 1 : 0;
+        if (woRevivedCount > 0) {
           await setWorkOrderCardStatusesTx(tx, step.workOrder.id, "COMPLETED", "ACTIVE");
         }
       }

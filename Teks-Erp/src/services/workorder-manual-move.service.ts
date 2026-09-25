@@ -29,6 +29,7 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { createBatchTx, deleteIfEmptyAndTracelessTx, isBatchLockedTx, K18_DEAD_STATUSES } from "./batch.service";
 import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-step.helper";
+import { reopenWorkOrderTx } from "./helpers/workorder-event.helper";
 import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
@@ -874,11 +875,7 @@ export class WorkOrderManualMoveService {
         for (const sid of affected) await recomputeStepStatus(tx, sid);
         await ensureWorkOrderInProgress(tx, workOrderId);
         let reopened = false;
-        const res = await tx.workOrder.updateMany({
-          where: { id: workOrderId, status: WorkOrderStatus.COMPLETED },
-          data: { status: WorkOrderStatus.IN_PROGRESS },
-        });
-        if (res.count > 0) {
+        if (await reopenWorkOrderTx(tx, workOrderId, { trigger: "MANUAL_MOVE", userId })) {
           await setWorkOrderCardStatusesTx(tx, workOrderId, TravelerCardStatus.COMPLETED, TravelerCardStatus.ACTIVE);
           reopened = true;
         }

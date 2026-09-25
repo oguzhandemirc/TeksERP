@@ -3855,6 +3855,7 @@ model WorkOrder {
   splitFrom        WorkOrder?                @relation("WorkOrderSplitLineage", fields: [splitFromId], references: [id])
   splitChildren    WorkOrder[]               @relation("WorkOrderSplitLineage")
   kursunBypasses   KursunBypassAssignment[] // Kurşun bypass atamaları (append-only)
+  events           WorkOrderEvent[] // Durum/plan değişim defteri (append-only)
 
   /// İPTAL İZİ (2026-08-17). Sebep şimdiye kadar YALNIZ audit'e yazılıyordu ve
   /// `SystemLog` 6 ayda bir ARŞİVLENİYOR → "bu iş emri neden iptal edildi, kim
@@ -3950,6 +3951,69 @@ model Batch {
   /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
   @@index([batchNumber(ops: raw("gin_trgm_ops"))], map: "batches_batchNumber_trgm_idx", type: Gin)
   @@map("batches")
+}
+
+/// İş emrinin KENDİ durum/plan değişim defteri (SAP değişiklik belgesi kalıbı): bir kullanıcı eylemi =
+/// bir `groupId`, her değişen alan = bir from→to satırı. APPEND-ONLY — `updatedAt` YOK; UPDATE ve doğrudan
+/// DELETE `defter_block_tamper` trigger'ıyla reddedilir. Kendi defteri olan olaylar (sipariş bağı, hedef
+/// özellik, fason, Tambur) buraya KOPYALANMAZ; Hareketler ucu onları kaynağından okur. Ters yol KARŞI
+/// KAYITTIR: geri almak aynı alanı eski değere çeviren YENİ satırdır. Tek yazar `helpers/workorder-event.helper`.
+/// Tasarım: docs/design/IS-EMRI-HAREKET-DEFTERI.md §4, §12.
+model WorkOrderEvent {
+  id          String             @id @default(uuid()) @db.Uuid
+  workOrderId String             @db.Uuid
+  type        WorkOrderEventType
+  /// Tek kullanıcı eylemi (CDHDR karşılığı) — üç alan değiştiren eylem üç satır, tek grup.
+  groupId     String             @db.Uuid
+  /// Alan anahtarı; STATUS_CHANGED'de "status". VarChar (enum DEĞİL): alan kümesi büyür.
+  field       String?            @db.VarChar(40)
+  /// Makine değeri (id · sayı · ISO tarih · statü). Doğuşta (CREATED) fromValue null.
+  fromValue   String?            @db.VarChar(1000)
+  toValue     String?            @db.VarChar(1000)
+  /// O ANKİ görünen ad — ad sonradan değişse de satır o günkü gerçeği söyler.
+  fromLabel   String?            @db.VarChar(200)
+  toLabel     String?            @db.VarChar(200)
+  /// Olayı tetikleyen işlem (TAMBUR_FINALIZE · FASON_RECEIPT · TAMBUR_UNDO_SINGLE · MANUAL_COMPLETE …).
+  trigger     String?            @db.VarChar(40)
+  /// PANEL · TABLET · SYSTEM · BACKFILL — istek bağlamındaki cihazdan türer, `clientType`ten DEĞİL.
+  /// VarChar + CHECK (enum DEĞİL): kanal kümesi büyüyebilir, ALTER TYPE geri alınamaz.
+  channel     String             @db.VarChar(16)
+  reason      String?            @db.VarChar(300)
+  /// `ReasonPreset.code` — FK'sız (emsal `Roll.cancelReasonCode`): kod asla değişmez.
+  reasonCode  String?            @db.VarChar(64)
+  /// İlgili belge — FK'sız tür + id; yalnız gezinme içindir.
+  refType     String?            @db.VarChar(40)
+  refId       String?            @db.Uuid
+  /// Yalnız GÖSTERİM ayrıntısı; buradan SAYI hesaplanmaz.
+  payload     Json?
+  /// Aktör kolonları FK'SIZ ve index'siz (emsal `SystemLogArchive`): `ON DELETE SET NULL` bir UPDATE'tir
+  /// ve tamper trigger'ıyla çarpışır (kullanıcı silen bekçi teardown'ları).
+  createdById String?            @db.Uuid
+  /// İstek bağlamındaki cihaz kimliği (x-device-id; `SystemLog.deviceId` ile aynı değer).
+  deviceId    String?            @db.VarChar(128)
+
+  /// ⚠️ `Cascade` BİLİNÇLİ (FK emsali `ShipmentEvent`): üretim kodu `WorkOrder`ı fiziksel silmez;
+  /// `Restrict` yalnız bekçi teardown'larını kilitlerdi. Kaskat silme tamper trigger'ından geçer
+  /// (DELETE yalnız `pg_trigger_depth() = 0` iken reddedilir).
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([workOrderId, createdAt])
+  @@index([type, createdAt])
+  @@index([groupId])
+  @@map("work_order_events")
+}
+
+/// KAPALI küme — tasarım gereği büyümez: yeni statü geçişi STATUS_CHANGED'e, yeni alan FIELD_CHANGED'in
+/// `field`ına gider ("altıncı enum değeri" sınıfından kaçış); bu yüzden pg enum meşru.
+enum WorkOrderEventType {
+  CREATED // doğuş — fromValue null
+  STATUS_CHANGED // field="status"; yeniden açılma = COMPLETED→IN_PROGRESS satırı
+  FIELD_CHANGED // field ∈ WORK_ORDER_EVENT_FIELDS
+  STEP_PLAN_CHANGED // field="step:<sequence>:<alan>"
+  ROLL_ATTRIBUTES_APPLIED // field ∈ {colorId, width}; payload top başına eski değer
+  BATCH_ADDED // "Parti Ekle" — partinin doğuşu; ters yol toplarına Top Çıkar
 }
 
 model WorkOrderStep {

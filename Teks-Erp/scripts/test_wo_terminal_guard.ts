@@ -178,17 +178,21 @@ function main(): void {
   const fnAt = helperSrc.indexOf(`export async function ${HELPER}`);
   check(`${HELPER} roll-step.helper içinde bulundu`, fnAt !== -1);
   const helperBody = fnAt === -1 ? "" : helperSrc.slice(fnAt, helperSrc.indexOf("\n}\n", fnAt));
-  const helperBlock = extractCalls(helperBody, "updateMany").find((b) => /\bstatus\s*:/.test(b));
-  const helperWhere = helperBlock ? whereClauseOf(helperBlock) : null;
-  // ⚠️ YORUMLAR SÖKÜLÜR — ilk yazımda sökülmüyordu ve kontrol KÖRDÜ: guard'ın
-  // içinden SUPERSEDED silindiğinde bile hemen üstündeki `// SUPERSEDED ... de
-  // terminal` açıklama satırı eşleşiyor ve test YEŞİL kalıyordu (negatif sondayla
-  // yakalandı). Bir bekçi kodu ölçmeli, kodun yanındaki cümleyi değil.
-  const helperWhereCode = (helperWhere ?? "").replace(/\/\/[^\n]*/g, "");
+  // 2026-09-25 (iş emri hareket defteri D1): statü artık `claimWorkOrderStatusTx`e İZİNLİ
+  // ÇIKIŞ listesiyle (`from: [...]`) yazılır — yasak listesinden (notIn) SIKI: listede
+  // olmayan her statü (CANCELLED · SUPERSEDED · ileride eklenecek terminal) dirilmez.
+  const claimAt = helperBody.indexOf("claimWorkOrderStatusTx(");
+  const claimBlock = claimAt === -1 ? "" : helperBody.slice(claimAt, helperBody.indexOf("});", claimAt));
+  // ⚠️ YORUMLAR SÖKÜLÜR — ilk yazımda sökülmüyordu ve kontrol KÖRDÜ: guard'dan
+  // SUPERSEDED silindiğinde üstündeki açıklama satırı eşleşiyor ve test YEŞİL
+  // kalıyordu (negatif sondayla yakalandı). Bir bekçi kodu ölçmeli, cümleyi değil.
+  const claimCode = claimBlock.replace(/\/\/[^\n]*/g, "");
+  const fromList = /from:\s*\[([^\]]*)\]/.exec(claimCode)?.[1] ?? null;
   check(
-    "roll-step.helper terminal guard'ı CANCELLED + SUPERSEDED'i dışlıyor",
-    Boolean(helperWhere && /CANCELLED/.test(helperWhereCode) && /SUPERSEDED/.test(helperWhereCode)),
-    helperWhere ? `where(kod): ${helperWhereCode.replace(/\s+/g, " ").trim()}` : "where bulunamadı",
+    "roll-step.helper terminal guard'ı CANCELLED + SUPERSEDED'i dışlıyor (izinli çıkış yalnız PLANNED/IN_PROGRESS)",
+    Boolean(fromList && /PLANNED/.test(fromList) && /IN_PROGRESS/.test(fromList)
+      && !/CANCELLED|SUPERSEDED|COMPLETED/.test(fromList) && /to:\s*WorkOrderStatus\.COMPLETED/.test(claimCode)),
+    fromList !== null ? `from: [${fromList.replace(/\s+/g, " ").trim()}]` : "claimWorkOrderStatusTx çağrısı / from listesi bulunamadı",
   );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

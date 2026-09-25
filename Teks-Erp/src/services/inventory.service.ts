@@ -5372,7 +5372,7 @@ export class InventoryService {
 
       // Kapanan movement "geçti" → adım/WO oto-COMPLETE olabilir.
       for (const sid of affectedStepIds) await recomputeStepStatus(tx, sid);
-      if (woId) await completeWorkOrderIfStepsDone(tx, woId);
+      if (woId) await completeWorkOrderIfStepsDone(tx, woId, { trigger: "RESCUE_STUCK_ROLL" });
 
       return tx.roll.findUniqueOrThrow({ where: { id: rollId } });
     });
@@ -5735,7 +5735,7 @@ export class InventoryService {
       // F162: rota PROCESS_QC ile bitiyorsa (nextStep yok) ve tüm adımlar bittiyse
       // WO + refakat kartı COMPLETED'a çekilir — 'sonsuza-dek IN_PROGRESS' bug'ı kapanır.
       if (!nextStep) {
-        await completeWorkOrderIfStepsDone(tx, woId);
+        await completeWorkOrderIfStepsDone(tx, woId, { trigger: "KURSUN_FINISH" });
       }
     });
     } catch (e) {

@@ -28,6 +28,7 @@ import {
 } from "./batch.service";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-step.helper";
+import { claimWorkOrderStatusTx, reopenWorkOrderTx } from "./helpers/workorder-event.helper";
 import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
@@ -285,11 +286,12 @@ export class WorkOrderSplitService {
       },
     });
     if (liveRolls > 0) return false;
-    const res = await tx.workOrder.updateMany({
-      where: { id: workOrderId, status: { in: [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS] } },
-      data: { status: WorkOrderStatus.SUPERSEDED },
+    const superseded = await claimWorkOrderStatusTx(tx, workOrderId, {
+      from: [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS],
+      to: WorkOrderStatus.SUPERSEDED,
+      ctx: { trigger: "WO_SPLIT_SUPERSEDE" },
     });
-    if (res.count === 0) return false;
+    if (!superseded) return false;
     await setWorkOrderCardStatusesTx(
       tx,
       workOrderId,
@@ -400,11 +402,7 @@ export class WorkOrderSplitService {
         for (const sid of affected) await recomputeStepStatus(tx, sid);
         await ensureWorkOrderInProgress(tx, ctx.workOrderId);
         // Depo-tebdili: WO tümüyle tamamlanmış olabilir (tüm toplar depodaydı) — geri aç.
-        const reopened = await tx.workOrder.updateMany({
-          where: { id: ctx.workOrderId, status: WorkOrderStatus.COMPLETED },
-          data: { status: WorkOrderStatus.IN_PROGRESS },
-        });
-        if (reopened.count > 0) {
+        if (await reopenWorkOrderTx(tx, ctx.workOrderId, { trigger: "REDYE_SAME_COLOR" })) {
           await setWorkOrderCardStatusesTx(tx, ctx.workOrderId, TravelerCardStatus.COMPLETED, TravelerCardStatus.ACTIVE);
         }
 

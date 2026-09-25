@@ -49,7 +49,7 @@
 // =============================================================================
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { CIFT_DISI_DEGERLER, DEFTER_BEYANI, STOK_OLAY_BEYANI, type CiftDisiDeger, type DefterBeyani } from "./lib/defter-beyan";
+import { CIFT_DISI_DEGERLER, DEFTER_BEYANI, STOK_OLAY_BEYANI, type CiftDisiDeger, type DefterBeyani, type TersMekanizma } from "./lib/defter-beyan";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { SILEN, defterYazimlariniTara, sembolReferanslari, tipliProgram } from "./lib/defter-yazim-tarama";
 import { SILME_BAGLAMI_ISARETI, SILME_BAGLAMI_SINIFLARI, TEARDOWN_ADLARI, TEMIZLIK_SCRIPTI_ISARETI, satirBaglami, silmeleriTara, sondaSinifla, temizlikScriptiMi } from "./lib/silme-bagi";
@@ -215,6 +215,13 @@ for (const b of defterler) {
         : tersler.length === 0 ? "ters yazan beyan edilmemiş — karşı kaydın yazarı ileri yoldur, boş kalamaz"
         : disarida.length ? `ileri yazan kümesinde YOK: ${disarida.map((t) => `${t.sembol}@${t.dosya}`).join(" · ")}`
           : `${tersler.map((t) => t.sembol).join(", ")} — ileri yazan dosyada`);
+    // ③ Tip enum'u beyan edildiyse `kendiTersi` değerleri şemada gerçek.
+    if (m.enumAdi) {
+      const degerler = enumDegerleri.get(m.enumAdi) ?? [];
+      const eksik = (m.kendiTersi ?? []).filter((v) => !degerler.includes(v));
+      check(`§3k3 ${b.model} ${m.enumAdi} kendi-tersi değerleri şemada`, degerler.length > 0 && eksik.length === 0,
+        eksik.length ? `eksik değer: ${eksik.join(", ")}` : `${(m.kendiTersi ?? []).length} değer`);
+    }
   }
 }
 
@@ -253,6 +260,18 @@ export function dbYazarOlcumu(
 // kuralın ihlal edildiği yöndü — enum'a yeni bir İLERİ değer eklemek kapıyı hiç
 // uyandırmıyordu.
 interface CiftDisiOlcum { beyansiz: string[]; oluMuaf: string[]; gereksizMuaf: string[]; sahipsizBorc: string[] }
+/**
+ * Mekanizmanın enum kapsamı: çiftli mekanizmada çiftler; KARŞI KAYITTA tip enum'u
+ * beyan edildiyse `kendiTersi` değerleri kendisiyle eşlenir (karşı kaydı aynı tiptir).
+ * Enum'suz mekanizma null — §3e onu taramaz.
+ */
+function enumKapsami(m: TersMekanizma): { enumAdi: string; ciftler: [string, string][] } | null {
+  if (m.tur === "ENUM_CIFTI" || m.tur === "KARSI_OLAY") return { enumAdi: m.enumAdi, ciftler: m.ciftler };
+  if (m.tur === "KARSI_KAYIT" && m.enumAdi) {
+    return { enumAdi: m.enumAdi, ciftler: (m.kendiTersi ?? []).map((v) => [v, v] as [string, string]) };
+  }
+  return null;
+}
 function ciftDisiOlcum(degerler: string[], ciftler: [string, string][], muaflar: CiftDisiDeger[]): CiftDisiOlcum {
   const ciftte = new Set(ciftler.flat());
   const muafKume = new Set(muaflar.map((m) => m.deger));
@@ -267,9 +286,8 @@ function ciftDisiOlcum(degerler: string[], ciftler: [string, string][], muaflar:
 }
 {
   const enumluMekanizmalar = defterler
-    .map((b) => ({ b, m: b.mekanizma! }))
-    .filter((x): x is { b: DefterBeyani; m: { tur: "ENUM_CIFTI" | "KARSI_OLAY"; enumAdi: string; ciftler: [string, string][] } } =>
-      x.m.tur === "ENUM_CIFTI" || x.m.tur === "KARSI_OLAY");
+    .map((b) => ({ b, m: b.mekanizma ? enumKapsami(b.mekanizma) : null }))
+    .filter((x): x is { b: DefterBeyani; m: { enumAdi: string; ciftler: [string, string][] } } => x.m !== null);
   check("§3e0 körlük zemini: enum mekanizmalı defter var", enumluMekanizmalar.length > 0,
     `${enumluMekanizmalar.length} defter · ${CIFT_DISI_DEGERLER.length} çift-dışı beyan`);
   const gorulenEnumlar = new Set<string>();
@@ -319,6 +337,17 @@ function ciftDisiOlcum(degerler: string[], ciftler: [string, string][], muaflar:
     ciftDisiOlcum(["A", "A_CANCEL"], ciftler, [D2("B", "TERMINAL")]).oluMuaf.join() === "B");
   check("§3e-s4 çifte giren muaf değer → GEREKSİZ MUAF",
     ciftDisiOlcum(["A", "A_CANCEL"], ciftler, [D2("A_CANCEL", "TERMINAL")]).gereksizMuaf.join() === "A_CANCEL");
+  // ⑥ KARŞI KAYIT tip enum'u da taranır — iki yön: beyansız değer ARTAR, kendi-tersine
+  //    yazılınca DÜŞER; enum'suz karşı kayıt taranmaz (null).
+  const kk = (kendiTersi: string[]): TersMekanizma =>
+    ({ tur: "KARSI_KAYIT", ciftler: [["fromValue", "toValue"]], enumAdi: "X", kendiTersi });
+  const kkOlc = (kendiTersi: string[]) =>
+    ciftDisiOlcum(["DOGUM", "DEGISTI", "YENI"], enumKapsami(kk(kendiTersi))!.ciftler, [D2("DOGUM", "DOGUS")]);
+  check("§3e-s6 ⭐ KARŞI KAYIT enum'unda beyansız değer YAKALANIR", kkOlc(["DEGISTI"]).beyansiz.join() === "YENI",
+    `gelen: ${kkOlc(["DEGISTI"]).beyansiz.join() || "(boş)"}`);
+  check("§3e-s7 ⭐ değer kendi-tersine yazılınca SUSAR", kkOlc(["DEGISTI", "YENI"]).beyansiz.length === 0);
+  check("§3e-s8 enum'suz KARŞI KAYIT taranmaz",
+    enumKapsami({ tur: "KARSI_KAYIT", ciftler: [["a", "b"]] }) === null);
   check("§3e-s5 sahipsiz BORC yakalanır",
     ciftDisiOlcum(["A", "A_CANCEL", "B"], ciftler, [D2("B", "BORC")]).sahipsizBorc.join() === "B"
     && ciftDisiOlcum(["A", "A_CANCEL", "B"], ciftler, [D2("B", "BORC", "9b")]).sahipsizBorc.length === 0);

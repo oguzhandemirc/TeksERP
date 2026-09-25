@@ -3356,7 +3356,11 @@ export class OrderService extends BaseService {
       const { WorkOrderService } = await import("./workorder.service");
       const woService = new WorkOrderService();
       for (const woId of cancelWoIds) {
-        await woService.softDelete(woId, userId);
+        await woService.softDelete(woId, userId, {
+          // Sebep kolonu boş kalmasın: iş emri siparişle birlikte iptal edildi.
+          reason: cancelReasonText ? `Sipariş iptali: ${cancelReasonText}` : "Sipariş iptali",
+          trigger: "ORDER_CANCEL",
+        });
       }
     }
 

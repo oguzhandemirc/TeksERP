@@ -45,6 +45,8 @@ export interface RequestOrigin {
   ipAddress: string | null;
   deviceId: string | null;
   machineId: string | null;
+  /// TABLET / PHONE / DESKTOP — defter satırının kanalı (panel mi tablet mi) buradan türer.
+  deviceKind: string | null;
   userId: string | null;
   /// İŞLEM GRUPLAMA (SAP `CDHDR` karşılığı): aynı istekte yazılan tüm audit
   /// satırları bu id'yi paylaşır. Bağlam yoksa (job/script) null — uydurmak
@@ -55,7 +57,7 @@ export interface RequestOrigin {
 export function currentOrigin(): RequestOrigin {
   const ctx = storage.getStore();
   if (!ctx) {
-    return { ipAddress: null, deviceId: null, machineId: null, userId: null, requestId: null };
+    return { ipAddress: null, deviceId: null, machineId: null, deviceKind: null, userId: null, requestId: null };
   }
   const { req } = ctx;
   return {
@@ -63,6 +65,7 @@ export function currentOrigin(): RequestOrigin {
     ipAddress: req.ip ?? null,
     deviceId: req.device?.deviceId ?? null,
     machineId: req.device?.machineId ?? null,
+    deviceKind: req.device?.kind ?? null,
     userId: req.user?.userId ?? null,
     requestId: ctx.requestId,
   };

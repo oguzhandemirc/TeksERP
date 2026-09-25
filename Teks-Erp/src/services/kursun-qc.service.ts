@@ -35,6 +35,7 @@ import {
   WorkOrderStatus,
 } from "@prisma/client";
 import { assertWoAtStepKind } from "./helpers/roll-step.helper";
+import { reopenWorkOrderTx } from "./helpers/workorder-event.helper";
 import {
   QUALITY_STATION_WHERE,
   QUALITY_STEP_ERROR,
@@ -958,7 +959,7 @@ export class KursunQcService {
 
       if (!nextStep) {
         // F162: kursunFinish ile ORTAK yardımcı (drift önlenir; davranış birebir).
-        await completeWorkOrderIfStepsDone(tx, step.workOrderId);
+        await completeWorkOrderIfStepsDone(tx, step.workOrderId, { trigger: "KURSUN_QC_FINISH" });
       }
 
       return { moved: closed.length };
@@ -1191,10 +1192,7 @@ export class KursunQcService {
         // demektir. Sayı audit yüküne yazılır (aşağıda) — yeni kayıt açılmaz.
         ledgerSummary = ledgerResult;
         // finishStep son-adım dalı WO/kartı COMPLETED yapmış olabilir → geri al.
-        await tx.workOrder.updateMany({
-          where: { id: step.workOrderId, status: WorkOrderStatus.COMPLETED },
-          data: { status: WorkOrderStatus.IN_PROGRESS },
-        });
+        await reopenWorkOrderTx(tx, step.workOrderId, { trigger: "KURSUN_QC_REOPEN" });
         await setWorkOrderCardStatusesTx(tx, step.workOrderId, "COMPLETED", "ACTIVE");
       }
 

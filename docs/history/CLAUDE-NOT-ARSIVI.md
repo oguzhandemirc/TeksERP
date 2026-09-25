@@ -12401,3 +12401,27 @@ Düzeltme ürün kodunu değil TARAYICIYI güçlendirdi:
 
 **K-A3b (2026-09-25, 1e kararı) — eski iptallerin göçüne audit geçişi.** Prova ölçümü (fabrikanın 23 Eylül kopyası) kolonlardan göçün 268 aktörsüz iptali dışarıda bıraktığını, bunların 52'sinin eski audit tabanlı dökümde GÖRÜNDÜĞÜNÜ gösterdi — yani geçmiş kaybı. Kuralın "bir kez aktaran göç" istisnasıyla `backfill_roll_status_events.ts` iki geçişli oldu: ① topun iptal kolonları · ② kolonda aktör yoksa `system_logs ∪ system_log_archives`ta `ROLL · newData.status=CANCELLED · userId dolu` satırlarının EN SONUNCUSU (eski dökümün yüklemiyle aynı; iptal → geri alma → yeniden iptalde güncel iptal). Satır kaynağı yeni `preEpochSource` kolonunda (`ROLL_COLUMNS`/`AUDIT`, CHECK: yalnız preEpoch satırında; migration `20260925180000`). `--onay` = ① + ② ve çıktı ikisini ayrı basar. KAPSAM DAR: 105 TAMBUR_GERI_ALMA parçası (aktörü ebeveynin TAMBUR_UNDO_* satırında) bu geçişe girmez — eski dökümde de görünmüyorlardı; B-RM dilimine not.
 
+## 2026-09-25 — İş emri hareket defteri (D1): statü tek yazardan geçer, her geçiş deftere düşer [ÇEKİRDEK]
+
+**Ölçüm.** İş emrinin otomatik geçişleri hiçbir yerde iz bırakmıyordu — audit dahil:
+`completeWorkOrderIfStepsDone` (10 çağıran) ve `ensureWorkOrderInProgress` yalnız `status`
+yazıyordu; tamamlanmış iş emrini yeniden açan YEDİ yol (tambur geri alma ×2 · fason kalan açma ·
+Tambur elle top · kurşun yeniden açma · konum düzeltme · aynı renge redye) kendi `updateMany`sini
+yazıyordu. `WorkOrder`da `completedAt` yok; "ne zaman, kim, hangi işlemle kapandı/açıldı" sorusunun
+cevabı yoktu. Kullanıcı kuralı: audit yalnız ayak izidir, iş emri kendi hareket tablosuyla ilişkilenir.
+
+**Karar.** `work_order_events` (tasarım `docs/design/IS-EMRI-HAREKET-DEFTERI.md` §4, §12): bir eylem =
+bir `groupId`, her değişen alan = bir from→to satırı, o anki görünen ad donar, kanal istek bağlamındaki
+cihazdan (TABLET/PANEL/SYSTEM), tetik çağırandan. Statüyü değiştiren TEK yol
+`claimWorkOrderStatusTx` (okuma + tam statüye karşı atomik claim, satır kilidi ALINMAZ — eski
+`updateMany WHERE status` eşleşmeyen satırı kilitlemiyordu, kilit sırası değişmesin); yeniden açma
+`reopenWorkOrderTx` (tamamlanma satırının KARŞI KAYDI). Doğuş `createWorkOrderTx` (create +
+klon), arşiv `FIELD_CHANGED isActive`. Sipariş iptalinin iş emri dalı artık sebep geçirir
+(`cancelReason` NULL kalmıyordu). Defter append-only: `defter_block_tamper` trigger'ı (37'nin ortak
+fonksiyonu) UPDATE'i ve doğrudan DELETE'i reddeder, iş emrinden kaskat silme geçer.
+
+**Kapı.** `test_defter_ters_yol` KARŞI KAYIT mekanizmasına `enumAdi` + `kendiTersi` eki: tip enum'u
+artık §3e'de taranır (beyansız yeni değer kırmızı) — CREATED ve BATCH_ADDED çift-dışı DOĞUŞ.
+`test_workorder_event_yazar` (AST): statü yalnız helper'da · her doğuş deftere · plan alanı yazımı
+cırcırı (taban 10, D2 sıfırlar) · ölçülemeyen yazım 0. `test_workorder_event_ledger` (DB, gerçek
+yollar, 15 kontrol); negatif sonda: helper'daki defter yazımı susturulunca 8 kırmızı.

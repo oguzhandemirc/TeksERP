@@ -42,7 +42,17 @@ export type TersMekanizma =
    * yazanın ileri yazan dosyada olduğunu ölçer (ayrı dosyadaysa mekanizma karşı kayıt
    * DEĞİL, ayrı bir geri alma ucudur ve sınıf yanlıştır).
    */
-  | { tur: "KARSI_KAYIT"; ciftler: [string, string][] }
+  | {
+      tur: "KARSI_KAYIT";
+      ciftler: [string, string][];
+      /**
+       * Satır TİPİ bir enum ise onun adı — §3e o enum'u da tarar: her değer ya
+       * `kendiTersi`nde (karşı kaydı AYNI tipte yazılan değer) ya çift-dışı listede.
+       * Verilmezse enum'a eklenen yeni ileri değer kapıyı uyandırmaz.
+       */
+      enumAdi?: string;
+      kendiTersi?: string[];
+    }
   /** Ters yolu YOK — yalnız `borc` ile birlikte meşrudur (muafiyet DEĞİL, borç). */
   | { tur: "YOK" };
 
@@ -149,6 +159,10 @@ export const CIFT_DISI_DEGERLER: CiftDisiDeger[] = [
     gerekce: "sevkiyatın DOĞUŞ olayı — `fromStatus: null` (shipping.service, kaynak şerhi \"DOĞUŞ OLAYI\"); tersi `CANCELLED`, karşı olay değil terminal" },
   { enumAdi: "ShipmentEventType", deger: "CANCELLED", sinif: "TERMINAL",
     gerekce: "`toStatus: CANCELLED` — değerin KENDİSİ geri yön; sevkiyat iptali terminaldir, PLANNED'a dönmez" },
+  { enumAdi: "WorkOrderEventType", deger: "CREATED", sinif: "DOGUS",
+    gerekce: "iş emrinin DOĞUŞ satırı — `fromValue: null` (DB CHECK `work_order_events_birth_has_no_from`; yazan `createWorkOrderTx`); tersi karşı kayıt değil iş emrinin kendi iptali (`STATUS_CHANGED` → CANCELLED)" },
+  { enumAdi: "WorkOrderEventType", deger: "BATCH_ADDED", sinif: "DOGUS",
+    gerekce: "partinin DOĞUŞ satırı (\"Parti Ekle\", tasarım §6.5) — geri alma partinin toplarına Top Çıkar'dır ve her topun kendi defterine (RollMovement damgası · stok defteri bağlı ters) yazılır; yazıcı D8 diliminde doğar" },
 ];
 
 const D = (
@@ -271,6 +285,12 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     { tur: "KARSI_OLAY", enumAdi: "ShipmentEventType", ciftler: [["DISPATCHED", "UNDISPATCHED"], ["INVOICED", "INVOICE_CLEARED"]] },
     [{ dosya: "src/services/helpers/shipment-event.helper.ts", sembol: "writeShipmentEvent" }],
     ["src/services/helpers/shipment-event.helper.ts"]),
+
+  D("WorkOrderEvent", "iş emrinin KENDİ durum/plan değişim defteri (SAP değişiklik belgesi kalıbı): bir eylem = bir groupId, her alan = bir from→to satırı; kendi defteri olan olaylar (bağ, özellik, fason, Tambur) KOPYALANMAZ, Hareketler ucunda kaynaklarından okunur. Ters yol karşı kayıttır — geri almak aynı alanı eski değere çeviren YENİ satırdır (yeniden açılma = COMPLETED→IN_PROGRESS satırı), damga değil. DB mührü `defter_block_tamper` (UPDATE ve doğrudan DELETE reddedilir)",
+    { tur: "KARSI_KAYIT", ciftler: [["fromValue", "toValue"]], enumAdi: "WorkOrderEventType",
+      kendiTersi: ["STATUS_CHANGED", "FIELD_CHANGED", "STEP_PLAN_CHANGED", "ROLL_ATTRIBUTES_APPLIED"] },
+    [{ dosya: "src/services/helpers/workorder-event.helper.ts", sembol: "claimWorkOrderStatusTx" }],
+    ["src/services/helpers/workorder-event.helper.ts"]),
 
   D("SackWeighing", "çuval tartı ölçümü", { tur: "KARSI_OLAY", enumAdi: "SackWeighingKind", ciftler: [["WEIGHED", "CLEARED"], ["REWEIGHED", "CLEARED"]] },
     [{ dosya: "src/services/shipping.service.ts", sembol: "markSackContentChangedTx" }],

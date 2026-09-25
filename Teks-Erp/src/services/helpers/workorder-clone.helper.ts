@@ -21,6 +21,7 @@ import { AppError } from "../../utils/app-error";
 import { TravelerCardService } from "../traveler-card.service";
 import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
+import { createWorkOrderTx } from "./workorder-event.helper";
 
 const travelerCardService = new TravelerCardService();
 
@@ -118,7 +119,9 @@ export async function cloneWorkOrderTx(
   const S = params.reEntryStepSequence;
   const newType = params.orderMode === "keep" ? src.type : "STOCK_PRODUCTION";
 
-  const newWo = await tx.workOrder.create({
+  const newWo = await createWorkOrderTx(tx, {
+    trigger: "WO_SPLIT_CLONE", userId: params.userId, refType: "WORK_ORDER", refId: src.id,
+  }, {
     data: {
       workOrderNumber: await generateWorkOrderNumberTx(tx, now),
       type: newType,

@@ -722,6 +722,14 @@ export function snapshotAdaylari(semaMetni?: string): SemaAlani[] {
 // YAZICI TARAMASI (tip denetleyicisiz AST + şema ilişki çözümü)
 // ─────────────────────────────────────────────────────────────────────────────
 const YAZAN_METOD = new Set(["create", "createMany", "createManyAndReturn", "update", "updateMany", "upsert"]);
+/**
+ * Delegate çağrısını SARAN tek-yazar fonksiyonlar: `createWorkOrderTx(tx, ctx, { data })` ≡
+ * `tx.workOrder.create({ data })` (iş emri doğuşu + hareket defteri aynı tx'te). Tanınmazsa sarılan
+ * her iç içe yazım "çağrısız" düşer ve kolonun yazıcı kümesi sessizce eksilir.
+ */
+export const SARMALAYICI_DELEGATE: Record<string, { delegate: string; metod: string }> = {
+  createWorkOrderTx: { delegate: "workOrder", metod: "create" },
+};
 /** Yazım gövdesini taşıyan anahtarlar — bunlardan birinin altındaki `alan:` yazımdır. */
 const YAZIM_ANAHTARI = new Set(["data", "create", "update", "createMany", "connectOrCreate", "upsert"]);
 /** Bunlardan birinin altındaki `alan:` yazım DEĞİLDİR (süzgeç/projeksiyon). */
@@ -841,6 +849,10 @@ export function kolonYazicilari(
             // `{ success, data: … }` — ApiResponse yükü; kardeş anahtar `success` ile tanınır
             if (ad === "data" && ts.isObjectLiteralExpression(p.parent) &&
               p.parent.properties.some((q) => q.name && ts.isIdentifier(q.name) && q.name.text === "success")) { apiYuku = true; break; }
+          }
+          if (ts.isCallExpression(p) && ts.isIdentifier(p.expression) && SARMALAYICI_DELEGATE[p.expression.text]) {
+            ({ delegate, metod } = SARMALAYICI_DELEGATE[p.expression.text]!);
+            break;
           }
           if (ts.isCallExpression(p) && ts.isPropertyAccessExpression(p.expression)) {
             const m = p.expression.name.text;

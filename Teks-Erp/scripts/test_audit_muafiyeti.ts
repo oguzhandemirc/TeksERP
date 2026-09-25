@@ -144,7 +144,13 @@ function main(): void {
   // etiketini bayatlatan TEK YAZAR (`ShippingService`ten ayrıldı, tx İÇİNDE çağrılır);
   // audit'i çağıran eylem basar (sevk partisi havuza çıkarma · cari değiştirme) —
   // EBEVEYN_EYLEMDE kalıbı, dosya düzeyinde. Model beyanı DEĞİL (Sack uç katmanında audit'li).
-  const AUDITSIZ_YAZICI_TABAN = 31;
+  // 31 → 32 (2026-09-25, 1e onayı): `helpers/workorder-event.helper.ts` — iş emri STATÜSÜNÜN
+  // tek yazarı (`claimWorkOrderStatusTx`, tx İÇİNDE) + hareket defteri satırı; audit'i çağıran
+  // eylem basar (workorder · link · tambur · fason · kurşun) — EBEVEYN_EYLEMDE kalıbı, dosya
+  // düzeyinde. Ölçüldü: `roll-step.helper` WorkOrderStep/RollMovement/Roll yazdığı için listede
+  // KALDI (yalnız WorkOrder düştü) ⇒ net +1. Dürüstlük notu: otomatik geçişlerin audit izi
+  // taşımadan ÖNCE de yoktu; artık WorkOrderEvent defterinde izleri var (audit eklemek ayrı borç).
+  const AUDITSIZ_YAZICI_TABAN = 32;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

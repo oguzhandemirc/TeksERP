@@ -16,9 +16,8 @@
 > program `SystemLog`tan hiçbir karar, sayı, durum ya da join türetmez; bu belgedeki defter, Hareketler
 > ekranı ve kapanış künyesi audit'i HİÇ okumaz (tek istisna §8.1'deki bir kerelik göç script'i).
 >
-> **Durum:** KARAR BELGESİ (Faz 0). K1 (tablet boş alan uyarısı) dışında kod yok; §9'daki sorular
-> cevaplanmadan dilim açılmaz. Backend dilimleri 9b'nin S2+S3'ü (workorder.service create/update/replace/
-> quickStart) indikten SONRA başlar.
+> **Durum: ONAYLI 2026-09-25** — dokuz sorunun hepsi cevaplandı (§9), R5/R6 ve D1 teknik kararları 1e'den
+> (§6.5, §12). K1 indi. İniş sırası: 9b S2+S3 → 37 K-A3 (`defter_block_tamper`) → 9f D1.
 
 ## 0. Yöntem ve kapsam beyanı
 
@@ -194,7 +193,7 @@ yol, ayrışma riski.
 
 **Audit ile ilişki:** audit yazımı olduğu gibi kalır (ayak izi); defter, künye ve Hareketler ucu audit
 okumaz. `WorkOrderEvent` kendi CUD'unu audit'e yazmaz — ebeveyn eylem (iş emri değişikliği) zaten audit'li
-⇒ `AUDIT_EXEMPT_MODELS`te `EBEVEYN_EYLEMDE` sınıfı (`ShipmentEvent` emsali).
+⇒ `AUDIT_EXEMPT_MODELS`te `EBEVEYN_EYLEMDE` sınıfı (sınıf emsali `ShipmentEvent`).
 
 ## 4. (b) `WorkOrderEvent` DEFTERİ
 
@@ -253,8 +252,12 @@ geçişi enum'a değer eklemeyi gerektirmez ("altıncı enum değeri" sınıfın
 
 ### 4.3 Yazıcı boğazları (tek yazar)
 
-Yeni helper `services/helpers/workorder-event.helper.ts`: `writeWorkOrderEventsTx(tx, events[])` ve
-`diffWorkOrderFieldsTx(before, after, ctx)` (alan kataloğundan satır üretir, etiketleri tx içinde çözer).
+Yeni helper `services/helpers/workorder-event.helper.ts` (UYGULANDI, D1): statüyü değiştiren TEK yol
+`claimWorkOrderStatusTx(tx, id, {from[], to, where?, data?, ctx})` (mevcut statüyü okur, claim'i TAM o statüye
+karşı koşar, satır kilidi almaz, `count === 0`da taze okumayla bir kez daha dener, geçişi yazar) ·
+`reopenWorkOrderTx` (COMPLETED→IN_PROGRESS, tamamlanmanın karşı kaydı) · `createWorkOrderTx` (iş emrini ve CREATED satırını aynı tx'te doğuran tek yol) ·
+`recordWorkOrderFieldChangesTx` (alan başına satır, tek grup; D2'nin kalanı buna bağlanır). Kanal/cihaz/aktör
+`lib/request-context` (`currentOrigin` + `deviceKind`) üzerinden — çağıran yalnız `trigger` verir.
 Çağıran yerler:
 
 - **Durum:** `ensureWorkOrderInProgress` · `completeWorkOrderIfStepsDone` (imzasına `ctx {userId, trigger,
@@ -519,12 +522,21 @@ kart bayat işaretlenir (bugün de öyle), tablet menüsünde "Kartı yeniden ba
   sayımı (ilk adımda distinct rollId — yeni satır aynı adımda ⇒ değişmez), WIP karnesi.
 - Bekçi: beş yolun her birinde "kapalı satırın `qtyOut`u geri almadan sonra aynı" + `test_defter_ters_yol`
   damga-null taramasına `qtyOut/exitedAt` eklenmesi.
+- **Aynı dilime eklendi (37'nin notu, 2026-09-25):** `restoreCancelledRoll` `Roll.cancelledAt/cancelledById`i
+  null'luyor; `roll_status_events` (37, K-A3) geçmişi koruduğu için orada değişmedi. 5 iptal yolunun (arşiv ·
+  tambur geri alma ×3 · fason ×2) `cancelledById` yazmasıyla aynı borç diliminde ele alınır. ⇒ B-RM TEK borç
+  dilimidir: `qtyOut` null'lama + `restoreCancelledRoll` + beş yolun aktörü; sahibini 1e atar.
 
 ## 9. (g) KULLANICIYA SORULAR — her biri şıklı, ⭐ önerilen
 
-**Cevap durumu (2026-09-25, 1e aracılığıyla):** S1 = A · S2 = A · S3 = A · **S4 = "Parti Ekle"** (kullanıcının
-karşı sorusundan doğdu: *"o iş emrine yeni top eklenirse aynı iş emrinde yeni parti olamaz mı?"* — ölçüm §11,
-tasarım §6.5; aşağıdaki S4 şıkları tarihsel) · S5–S9 soruluyor.
+**CEVAPLANDI (2026-09-25, kullanıcı; 1e aracılığıyla):** S1 = A · S2 = A · S3 = A · **S4 = "Parti Ekle"**
+(kullanıcının karşı sorusundan doğdu: *"o iş emrine yeni top eklenirse aynı iş emrinde yeni parti olamaz mı?"* —
+ölçüm §11, tasarım §6.5; aşağıdaki S4 şıkları tarihsel) · S5 = A (yaklaşık künye, "sonradan türetildi") ·
+S6 = A (belge başına tek satır) · S7 = A (tek yeni izin `mobile:is-emri-duzelt`) · S8 = A (metre bazlı) ·
+S9 = A (tam liste, arama ve Excel panelde; tablette iş emri detayında son 5 hareketin salt-okunur özeti).
+1e kararları: R5 soru adımı ONAYLI (çok partili kabulde tek dokunuşla parti sorulur, varsayılan en eski;
+sessiz birleşme her yoldan kalkar) · R6 ONAYLI (sarma aynı iş emrinde canlı numarayı atlar — `parti.md`'ye
+ÇEKİRDEK ek, sarmanın kendisi profil; bekçi: aynı iş emrinde iki canlı aynı numara → kırmızı).
 
 **S1 — Tablet düzeltme menüsünde hangi tuşlar olsun?**
 - ⭐ **A:** Rengi Değiştir · Eni Değiştir · Sipariş Bağla/Çöz · Refakat Kartını Yeniden Bas · Top Çıkar
@@ -652,8 +664,8 @@ model WorkOrderEvent {
   /// VarChar (enum DEĞİL): alan kümesi büyür, katalog TS sabiti `constants/workorder-event-fields.ts`.
   field       String?            @db.VarChar(40)
   /// Makine değeri (id · sayı · ISO tarih · statü). Doğuşta (CREATED) fromValue null.
-  fromValue   String?
-  toValue     String?
+  fromValue   String?            @db.VarChar(1000)
+  toValue     String?            @db.VarChar(1000)
   /// O ANKİ görünen ad — ad sonradan değişse de satır o günkü gerçeği söyler.
   fromLabel   String?            @db.VarChar(200)
   toLabel     String?            @db.VarChar(200)
@@ -670,11 +682,14 @@ model WorkOrderEvent {
   refId       String?            @db.Uuid
   /// Yalnız GÖSTERİM ayrıntısı (etkilenen top id'leri, adım listesi). Buradan SAYI hesaplanmaz.
   payload     Json?
-  /// Künye FK'ları — index YOK ([DB-11]), FK YOK (emsal `ShipmentEvent.createdById`).
+  /// Aktör kolonları FK'SIZ ve index'siz (emsal `SystemLogArchive`): `ON DELETE SET NULL` bir UPDATE'tir ve
+  /// tamper trigger'ıyla çarpışır — kullanıcı silen 42 bekçi teardown'ı var (37 ölçtü, 2026-09-25).
   createdById String?            @db.Uuid
-  deviceId    String?            @db.Uuid
+  /// İstek bağlamındaki cihaz kimliği (x-device-id; `SystemLog.deviceId` ile aynı değer — UUID değil).
+  deviceId    String?            @db.VarChar(128)
 
-  /// ⚠️ `Cascade` BİLİNÇLİ (emsal `ShipmentEvent`): üretim kodu `WorkOrder`ı hiç fiziksel silmez
+  /// ⚠️ `Cascade` BİLİNÇLİ (Cascade FK emsali `ShipmentEvent`; mühür yeni ortak `defter_block_tamper`):
+  /// üretim kodu `WorkOrder`ı hiç fiziksel silmez
   /// (ölçüldü: `src`de `workOrder.delete*` 0; "Kalıcı sil" `isActive:false`), `Restrict` yalnız
   /// bekçi temizliklerini kilitlerdi (ölçüldü 2026-09-25: `scripts`te iş emri silen 172 dosya).
   workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
@@ -724,8 +739,8 @@ CREATE TABLE IF NOT EXISTS "work_order_events" (
   "type"        "WorkOrderEventType" NOT NULL,
   "groupId"     UUID NOT NULL,
   "field"       VARCHAR(40),
-  "fromValue"   TEXT,
-  "toValue"     TEXT,
+  "fromValue"   VARCHAR(1000),
+  "toValue"     VARCHAR(1000),
   "fromLabel"   VARCHAR(200),
   "toLabel"     VARCHAR(200),
   "trigger"     VARCHAR(40),
@@ -736,7 +751,7 @@ CREATE TABLE IF NOT EXISTS "work_order_events" (
   "refId"       UUID,
   "payload"     JSONB,
   "createdById" UUID,
-  "deviceId"    UUID,
+  "deviceId"    VARCHAR(128),
   "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "work_order_events_pkey" PRIMARY KEY ("id")
 );
@@ -768,12 +783,13 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 ```
 
-**Append-only DB mührü — KARAR (1e, 2026-09-25): D1'de, 37'nin ortak kalıbıyla.** Cascade FK + tamper
+**Append-only DB mührü — KARAR (1e, 2026-09-25): D1'de, 37'nin ortak fonksiyonuyla.** Cascade FK + tamper
 trigger: UPDATE HER ZAMAN reddedilir; DELETE yalnız `pg_trigger_depth() = 0` iken (doğrudan silme)
-reddedilir — ebeveynden gelen kaskat silme geçer, bekçi teardown'ları kırılmaz. Trigger FONKSİYONU
-tablodan bağımsızdır ve 37'nin `roll_status_events` diliminde doğar (adı 37'den gelecek); D1 yalnız
-`CREATE TRIGGER work_order_events_tamper BEFORE UPDATE OR DELETE ON "work_order_events" FOR EACH ROW
-EXECUTE FUNCTION <ortak_fonksiyon>()` yazar — ikinci kopya fonksiyon YAZILMAZ. Aynı trigger kapanış künyesi
+reddedilir — ebeveynden gelen kaskat silme geçer, bekçi teardown'ları kırılmaz. (ShipmentEvent'te trigger
+YOK — yalnız Cascade FK emsalidir.) Fonksiyon `"defter_block_tamper"()` tablodan bağımsızdır ve 37'nin
+K-A3 migration'ında doğar; D1 yalnız `CREATE TRIGGER "work_order_events_block_tamper" BEFORE UPDATE OR
+DELETE ON "work_order_events" FOR EACH ROW EXECUTE FUNCTION "defter_block_tamper"()` yazar — fonksiyon
+YENİDEN TANIMLANMAZ; migration zaman damgası 37'ninkinden SONRA. Aynı trigger kapanış künyesi
 tablolarına (D3) da takılır. D1, 37'nin fonksiyonu indikten sonra uygulanır (sıra bağımlılığı).
 
 ### 12.3 Beyanlar (aynı commit)
@@ -782,8 +798,9 @@ tablolarına (D3) da takılır. D1, 37'nin fonksiyonu indikten sonra uygulanır 
 
 ```ts
 D("WorkOrderEvent", "iş emrinin KENDİ durum/plan değişim defteri (SAP değişiklik belgesi kalıbı): bir eylem = bir groupId, her alan = bir from→to satırı; kendi defteri olan olaylar (bağ, özellik, fason, Tambur) KOPYALANMAZ, Hareketler ucunda kaynaklarından okunur. Ters yol karşı kayıttır — geri almak aynı alanı eski değere çeviren YENİ satırdır, damga değil",
-  { tur: "KARSI_KAYIT", ciftler: [["fromValue", "toValue"]] },
-  [{ dosya: "src/services/helpers/workorder-event.helper.ts", sembol: "writeWorkOrderEventsTx" }],
+  { tur: "KARSI_KAYIT", ciftler: [["fromValue", "toValue"]], enumAdi: "WorkOrderEventType",
+    kendiTersi: ["STATUS_CHANGED", "FIELD_CHANGED", "STEP_PLAN_CHANGED", "ROLL_ATTRIBUTES_APPLIED"] },
+  [{ dosya: "src/services/helpers/workorder-event.helper.ts", sembol: "claimWorkOrderStatusTx" }],
   ["src/services/helpers/workorder-event.helper.ts"]),
 ```
 
@@ -806,7 +823,7 @@ D("WorkOrderEvent", "iş emrinin KENDİ durum/plan değişim defteri (SAP deği�
 ```
 
 `scripts/test_db_invariants.ts`: CHECK listesine üç satır (`work_order_events_channel_known` ·
-`_field_required` · `_birth_has_no_from`) + trigger listesine `work_order_events_tamper` (fonksiyon satırı
+`_field_required` · `_birth_has_no_from`) + trigger listesine `work_order_events_block_tamper` (fonksiyon satırı
 37'nin diliminde — tekrar yazılmaz).
 
 `docs/kurallar/defter.md` envanter tablosuna satır: `WorkOrderEvent` · iş emrinin durum/plan değişimi ·
@@ -816,7 +833,8 @@ D("WorkOrderEvent", "iş emrinin KENDİ durum/plan değişim defteri (SAP deği�
 
 1. Şema + migration + `prisma generate` + dört beyan (yukarıda) + tamper trigger (37'nin ortak fonksiyonu) +
    `test_defter_ters_yol` KARŞI KAYIT `enumAdi`/`kendiTersi` eki (iki sonda).
-2. `helpers/workorder-event.helper.ts`: `writeWorkOrderEventsTx` · `statusEventTx(tx, wo, from, to, ctx)`.
+2. `helpers/workorder-event.helper.ts`: `claimWorkOrderStatusTx` · `reopenWorkOrderTx` · `createWorkOrderTx` (iş emrini ve CREATED satırını aynı tx'te doğuran tek yol) ·
+   `recordWorkOrderFieldChangesTx` (§4.3).
 3. Durum boğazları: `ensureWorkOrderInProgress` · `completeWorkOrderIfStepsDone` (+ `ctx`, 10 çağıran) ·
    `completeWorkOrder` · `softDelete` · order.service `CANCEL_WO` (sebep geçer) · split SUPERSEDED · arşiv ·
    `lockWorkOrder` · YENİ `reopenWorkOrderTx` (yedi yol ona taşınır) · `create`/`quickStart` → `CREATED`.

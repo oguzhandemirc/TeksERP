@@ -1413,7 +1413,7 @@ export class KursunBypassService {
         workOrderStepId: a.workOrderStepId,
       });
       await recomputeStepStatus(tx, a.workOrderStepId);
-      await completeWorkOrderIfStepsDone(tx, a.workOrderId);
+      await completeWorkOrderIfStepsDone(tx, a.workOrderId, { trigger: "KURSUN_BYPASS_FINISH" });
 
       return { alreadyDone: false, finalized };
     });

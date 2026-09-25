@@ -1360,7 +1360,7 @@ export class TamburService {
       // COMPLETED/SKIPPED ise WO kapanır. (Tartı/paket/sevkiyat artık step değil,
       // fulfillment akışı — WO'yu tutmaz.) Terminal-durum guard'lı ORTAK helper:
       // CANCELLED/SUPERSEDED buradan COMPLETED'a DİRİLMEZ (kart fanout helper içinde).
-      await completeWorkOrderIfStepsDone(tx, wo.id);
+      await completeWorkOrderIfStepsDone(tx, wo.id, { trigger: "TAMBUR_FINALIZE" });
 
       return updated;
     }).catch((e) => {
@@ -3797,7 +3797,7 @@ export class TamburService {
       // WO completion check — Tambur production'ın son istasyonu (paketleme/sevk
       // fulfillment, WO step değil). Terminal-durum guard'lı ORTAK helper:
       // CANCELLED/SUPERSEDED buradan COMPLETED'a dirilmez.
-      await completeWorkOrderIfStepsDone(tx, woId);
+      await completeWorkOrderIfStepsDone(tx, woId, { trigger: "TAMBUR_FINALIZE_OPEN_FABRIC" });
 
       return { remainingChildId, remainingQty, wantChild };
     });
