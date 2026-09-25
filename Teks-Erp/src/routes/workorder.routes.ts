@@ -651,7 +651,7 @@ router.post(
 router.delete(
   "/:id/order-links/:orderLineId",
   verifyToken,
-  requirePermission("workorder:write"),
+  requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"),
   controller.unlinkOrderLine,
 );
 
@@ -675,10 +675,29 @@ router.delete(
  *     responses:
  *       200: { description: Renk güncellendi }
  */
+/**
+ * @swagger
+ * /api/work-orders/{id}/target-color/preview:
+ *   get:
+ *     summary: Rengi Değiştir önizlemesi (yazmaz) — engel, kısmi boya, sipariş uyarıları, kart bayatlığı
+ *     tags: [WorkOrders]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string } }
+ *       - { in: query, name: colorId, required: false, schema: { type: string } }
+ *     responses:
+ *       200: { description: Önizleme }
+ */
+router.get(
+  "/:id/target-color/preview",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"),
+  controller.previewTargetColor,
+);
+
 router.patch(
   "/:id/target-color",
   verifyToken,
-  requirePermission("workorder:write"),
+  requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"),
   controller.changeTargetColor,
 );
 
@@ -747,7 +766,7 @@ router.post(
 router.patch(
   "/:id/width",
   verifyToken,
-  requireAnyPermission("workorder:write", "mobile:fason-kabul"),
+  requireAnyPermission("workorder:write", "mobile:fason-kabul", "mobile:is-emri-duzelt"),
   controller.changeWidth,
 );
 

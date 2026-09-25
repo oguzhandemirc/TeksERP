@@ -241,6 +241,8 @@ const linkOrderLineOverrideSchema = z.object({
 const changeTargetColorSchema = z.object({
   colorId: z.string().uuid("Geçersiz renk ID").nullable().optional(),
   reason: z.string().trim().min(3, "Sebep yazmalısınız").max(500),
+  // Hazır sebep kodu (WORK_ORDER_PLAN_CHANGE kataloğu); tanınmayan kod 400.
+  reasonCode: z.string().trim().min(1).max(64).optional(),
   // Kısmi-boya onayı: ilk istek 409 `COLOR_PARTIAL_CONFIRM` dönerse istemci aynı
   // isteği bu bayrakla tekrarlar (Tambur plan kapısındaki `confirmMismatch` deseni).
   confirmPartial: z.boolean().optional(),
@@ -248,6 +250,10 @@ const changeTargetColorSchema = z.object({
   // düzeltiliyorsa kayıt düzeltmesi serbest geçer). Uygulamayı istemci ayrıca
   // `apply-attribute-to-rolls` ile yapar; burada yalnız UYUM HESABI için.
   recolorRollIds: z.array(z.string().uuid()).max(5000).optional(),
+});
+// Önizleme: `colorId` boş/yok = "renksiz yap".
+const previewTargetColorSchema = z.object({
+  colorId: z.union([z.string().uuid("Geçersiz renk ID"), z.literal("")]).optional(),
 });
 // `colorId`/`width` OPSİYONEL ama en az biri gelmeli — servis de doğruluyor.
 // `.optional()` ile `null` FARKLI anlamlar taşır: alan yoksa dokunma, null ise temizle.
@@ -275,6 +281,7 @@ const changeWidthSchema = z.object({
   width: z.number().positive("En pozitif olmalı").max(1000, "En en fazla 1000 cm").nullable().optional(),
   reason: z.string().trim().min(3, "Sebep yazmalısınız").max(500),
   source: z.enum(["MANUAL", "FASON_RECEIPT"]).optional().default("MANUAL"),
+  reasonCode: z.string().trim().min(1).max(64).optional(),
 });
 
 const timelineService = new WorkOrderTimelineService();
@@ -386,6 +393,7 @@ export class WorkOrderController {
     this.linkOrderLineWithOverride = this.linkOrderLineWithOverride.bind(this);
     this.unlinkOrderLine = this.unlinkOrderLine.bind(this);
     this.changeTargetColor = this.changeTargetColor.bind(this);
+    this.previewTargetColor = this.previewTargetColor.bind(this);
     this.changeWidth = this.changeWidth.bind(this);
     this.fasonQuickPreview = this.fasonQuickPreview.bind(this);
     this.fasonQuickApply = this.fasonQuickApply.bind(this);
@@ -772,8 +780,19 @@ export class WorkOrderController {
         body.colorId ?? null,
         body.reason,
         req.user?.userId,
-        { confirmPartial: body.confirmPartial, recolorRollIds: body.recolorRollIds },
+        { confirmPartial: body.confirmPartial, recolorRollIds: body.recolorRollIds, reasonCode: body.reasonCode },
       );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/work-orders/:id/target-color/preview?colorId= — yazmaz */
+  async previewTargetColor(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const q = previewTargetColorSchema.parse(req.query);
+      const result = await workOrderLinkService.previewTargetColorChange(req.params.id as string, q.colorId || null);
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -789,7 +808,7 @@ export class WorkOrderController {
         body.width ?? null,
         body.reason,
         req.user?.userId,
-        body.source,
+        { source: body.source, reasonCode: body.reasonCode },
       );
       res.status(200).json(result);
     } catch (error) {
@@ -966,10 +985,9 @@ export class WorkOrderController {
    */
   async softDelete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.softDelete(
-        req.params.id as string,
-        req.user?.userId
-      );
+      const result = await this.service.softDelete(req.params.id as string, req.user?.userId, {
+        untouchedOnly: !matchesPermission(req.user?.permissions ?? [], "workorder:write"),
+      });
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -1002,11 +1020,10 @@ export class WorkOrderController {
           "Fire / hatalı kayıt kararı için 'roll:manual-adjust' yetkisi gerekli."
         );
       }
-      const result = await this.service.softDelete(
-        req.params.id as string,
-        req.user?.userId,
-        body
-      );
+      const result = await this.service.softDelete(req.params.id as string, req.user?.userId, {
+        ...body,
+        untouchedOnly: !matchesPermission(req.user?.permissions ?? [], "workorder:write"),
+      });
       res.status(200).json(result);
     } catch (error) {
       next(error);

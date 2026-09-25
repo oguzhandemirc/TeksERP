@@ -180,6 +180,9 @@ enum ReasonPresetKind {
   /// G1: fasona giden ipliğin DÖNÜŞ sebebi (`YarnMovement.reasonCode`, `SUBCONTRACT_RETURN` satırında ZORUNLU, CHECK;
   /// `defter.md:17` "iade ayrı satır + sebep kodu" ipliğe de uygulanır). Metin saklamaz.
   YARN_SUBCONTRACT_RETURN
+  /// İş emri plan düzeltmesi (Rengi/Eni Değiştir) — kod `WorkOrderEvent.reasonCode`a, görünen metin
+  /// `reason`a düşer (hareket defteri D5).
+  WORK_ORDER_PLAN_CHANGE
 }
 
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.

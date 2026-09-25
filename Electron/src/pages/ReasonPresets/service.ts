@@ -21,7 +21,8 @@ export type ReasonPresetKind =
   | "WARP_BEAM_ADJUST"
   | "WARP_BEAM_SCRAP"
   // Fason G1 (iplik): fasondan iplik dönüş sebebi
-  | "YARN_SUBCONTRACT_RETURN";
+  | "YARN_SUBCONTRACT_RETURN"
+  | "WORK_ORDER_PLAN_CHANGE";
 
 export interface ReasonPreset {
   id: string;
@@ -74,6 +75,7 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   WARP_BEAM_ADJUST: false,
   WARP_BEAM_SCRAP: false,
   YARN_SUBCONTRACT_RETURN: false,
+  WORK_ORDER_PLAN_CHANGE: true,
 };
 
 /**
@@ -145,6 +147,11 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; m
     title: "Fasondan İplik Dönüşü",
     hint: "Fasona giden iplik geri dönerken sebep ZORUNLUDUR: kalan iplik, kalite, iş iptali. Çıkış brüt yazılır, dönüş ayrı satırla kapanır.",
     modul: "iplikEnabled",
+  },
+  {
+    kind: "WORK_ORDER_PLAN_CHANGE",
+    title: "İş Emri Plan Düzeltmesi",
+    hint: "Tablette iş emrinin rengi ya da eni değiştirilirken seçilen sebep. Seçilen metin iş emrinin Hareketler listesinde görünür.",
   },
 ];
 

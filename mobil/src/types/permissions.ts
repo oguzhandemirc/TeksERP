@@ -32,6 +32,8 @@ export type MobilePermission =
   // panelden SEÇİLİ Tambur operatörüne verilir. Backend uçları bunu ya da
   // süpervizör yetkisi `roll:manual-adjust`'ı kabul eder (requireAnyPermission).
   | 'mobile:tambur-duzelt'
+  // Hızlı İş Emri içi yetenek (hareket defteri D5): açılmış iş emrini düzeltme menüsü.
+  | 'mobile:is-emri-duzelt'
   // Dokuma (2026-09-14): TEZGAH ekranı + geri alma yeteneği (ayrı yetki, `mobile:tambur-duzelt` emsali).
   | 'mobile:dokuma'
   | 'mobile:dokuma-geri-al'

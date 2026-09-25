@@ -280,6 +280,9 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:sevkiyat", module: "MOBILE", category: "mobile", description: "Sevkiyat yönetimi ekranı" },
   { code: "mobile:iade", module: "MOBILE", category: "mobile", description: "İade girişi ekranı" },
   { code: "mobile:hizli-is-emri", module: "MOBILE", category: "mobile", description: "Hızlı İş Emri ekranı (stok topu okut → iş emri başlat + iş emri yönetimi)" },
+  // Ekran değil, Hızlı İş Emri içi yetenek (hareket defteri D5): AÇILMIŞ iş emrini değiştirmek
+  // (renk · en · sipariş bağla/çöz · refakat kartı yeniden basımı) iş emri açmaktan ayrı sorumluluktur.
+  { code: "mobile:is-emri-duzelt", module: "MOBILE", category: "mobile", description: "İş emri düzeltme — tablet (renk · en · sipariş bağı · refakat kartı yeniden basımı)" },
   // Telefondan sipariş LİSTELEME + AÇMA (satış/planlama). `order:read` +
   // `order:write`'ın DAR mobil ikizi: yalnız okuma ve yaratma. Düzenleme /
   // iptal / manuel-kapatma / silme uçları hâlâ `order:write` ister — satış

@@ -354,6 +354,11 @@ export interface CancelWorkOrderInput {
   /** Hareket defterindeki tetik — varsayılan `WO_CANCEL`; sipariş iptali `ORDER_CANCEL` geçirir. */
   trigger?: string;
   /**
+   * Yalnız tablet yetkisiyle (panel `workorder:write` YOK) gelen iptal: üretimi başlamış iş emri
+   * reddedilir — dispozisyonlu iptal panelin işi (hareket defteri S3).
+   */
+  untouchedOnly?: boolean;
+  /**
    * Sebebin KATALOG KODU (ReasonPreset ROLL_CANCEL, 2026-08-21) — opsiyonel;
    * CANCELLED kararındaki topların `cancelReasonCode`'una yazılır. Verilmezse
    * sunucu `reason` metninden türetir (`resolveReasonCode`, tx DIŞINDA).
@@ -670,6 +675,20 @@ function assertWorkOrderNumberUnchanged(current: string, sent: string | null | u
   const v = sent?.trim();
   if (v && v !== current) {
     throw AppError.conflict("İş emri numarası değiştirilemez.", { code: "WORK_ORDER_NUMBER_FROZEN" });
+  }
+}
+
+/**
+ * Hiç işlem görmemiş iş emri: statü PLANNED ve hiçbir adım başlamamış / açık sevk yok. Tabletten
+ * iptal yalnız bu durumda ("yanlış açıldı"); gerisi panelden dispozisyonla.
+ */
+async function assertWorkOrderUntouched(id: string, status: WorkOrderStatus): Promise<void> {
+  const started = status !== WorkOrderStatus.PLANNED || (await computeWorkOrderLocks(prisma, id)).materialCommitted;
+  if (started) {
+    throw AppError.conflict(
+      "Bu iş emrinde üretim başladı — tabletten iptal edilemez. Panelden iptal edin (toplar için karar ve sebep sorulur).",
+      { code: "WO_CANCEL_PANEL_ONLY" },
+    );
   }
 }
 
@@ -3657,6 +3676,7 @@ export class WorkOrderService {
     if (existing.status === WorkOrderStatus.COMPLETED) {
       throw AppError.conflict("Tamamlanmış iş emri iptal edilemez");
     }
+    if (input.untouchedOnly) await assertWorkOrderUntouched(existing.id, existing.status);
 
     const stepIds = existing.steps.map((step) => step.id);
 

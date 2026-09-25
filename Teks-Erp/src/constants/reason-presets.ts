@@ -79,6 +79,8 @@ export const KIND_STORES_TEXT = {
   WARP_BEAM_SCRAP: false,
   // G1: fasondan iplik dönüşünde satıra YALNIZ KOD (`YarnMovement.reasonCode`, CHECK zorunlu); metin yok.
   YARN_SUBCONTRACT_RETURN: false,
+  // İş emri plan düzeltmesinde görünen metin hareket satırının `reason`ına, kod `reasonCode`una.
+  WORK_ORDER_PLAN_CHANGE: true,
   // `as const satisfies` — değerler LİTERAL kalsın (true/false), ama eksik kind
   // yine derlemede düşsün. `Record<..., boolean>` yazılsaydı literaller boolean'a
   // genişler ve `TextReasonKind` bu tablodan TÜRETİLEMEZDİ (aşağıdaki nota bak).
@@ -97,6 +99,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   WARP_BEAM_ADJUST: "Levent kalan düzeltmesi sebepleri",
   WARP_BEAM_SCRAP: "Levent hurda / artık dispozisyonu",
   YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebepleri",
+  WORK_ORDER_PLAN_CHANGE: "İş emri plan düzeltme sebepleri",
 };
 
 /**
@@ -294,6 +297,15 @@ export const YARN_SUBCONTRACT_RETURN_REASONS: readonly ReasonPresetSeed[] = [
   { code: "IPTAL", label: "İş iptal edildi (iplik kullanılmadan döndü)" },
 ] as const;
 
+/** İŞ EMRİ PLAN DÜZELTMESİ — tabletteki "Rengi Değiştir" / "Eni Değiştir" (hareket defteri D5). */
+export const WORK_ORDER_PLAN_CHANGE_REASONS: readonly ReasonPresetSeed[] = [
+  { code: "MUSTERI_DEGISTIRDI", label: "Müşteri değiştirdi", fullText: "Müşteri isteği değiştirdi" },
+  { code: "YANLIS_GIRILMIS", label: "Yanlış girilmişti", fullText: "İş emri yanlış değerle açılmıştı" },
+  { code: "OLCUMDE_FARKLI", label: "Ölçümde farklı çıktı", fullText: "Mal ölçüldüğünde plandan farklı çıktı" },
+  { code: "SIPARIS_DEGISTI", label: "Sipariş değişti", fullText: "Bağlı sipariş kalemi değişti" },
+  { code: "DIGER", label: "Diğer", requiresText: true },
+] as const;
+
 /** Kind → sistem satırları. Sıra ANLAMLIDIR (dizideki sıra `sortOrder` olur). */
 export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPresetSeed[]> = {
   ROLL_SCRAP: SCRAP_REASONS,
@@ -307,6 +319,7 @@ export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPres
   WARP_BEAM_ADJUST: WARP_BEAM_ADJUST_REASONS,
   WARP_BEAM_SCRAP: WARP_BEAM_SCRAP_REASONS,
   YARN_SUBCONTRACT_RETURN: YARN_SUBCONTRACT_RETURN_REASONS,
+  WORK_ORDER_PLAN_CHANGE: WORK_ORDER_PLAN_CHANGE_REASONS,
 };
 
 export const REASON_PRESET_KINDS = Object.keys(REASON_PRESET_CATALOG) as ReasonPresetKind[];

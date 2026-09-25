@@ -354,7 +354,7 @@ const mobile: ScreenEntry[] = [
   { key: "KartelaSevk", app: "mobile", modul: "planlanan:kartela", title: "Kartela Sevk", requires: ["mobile:kartela-sevk"], capabilities: [] },
   { key: "KartelaKabul", app: "mobile", modul: "planlanan:kartela", title: "Kartela Kabul", requires: ["mobile:kartela-kabul"], capabilities: [] },
   { key: "IadeGirisi", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: "İade Girişi", requires: ["mobile:iade"], capabilities: [] },
-  { key: "HizliIsEmri", app: "mobile", modul: "productionEnabled", title: "Hızlı İş Emri", requires: ["mobile:hizli-is-emri"], capabilities: [{ code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }] },
+  { key: "HizliIsEmri", app: "mobile", modul: "productionEnabled", title: "Hızlı İş Emri", requires: ["mobile:hizli-is-emri"], capabilities: [{ code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }, { code: "mobile:is-emri-duzelt", label: "Açılmış iş emrini düzeltebilir (renk · en · sipariş bağı · kartı yeniden bas)" }] },
   { key: "Siparis", app: "mobile", modul: "cekirdek:siparis-musteri", title: "Sipariş", requires: ["mobile:siparis"], capabilities: [] },
   { key: "Kumas", app: "mobile", modul: "cekirdek:ana-veri", title: "Kumaş Ekle", requires: ["mobile:kumas"], capabilities: [] },
   { key: "KursunDagitim", app: "mobile", modul: "productionEnabled", title: "Kurşun Dağıtım", requires: ["mobile:kursun-dagitim"], capabilities: [] },

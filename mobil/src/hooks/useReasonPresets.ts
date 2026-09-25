@@ -92,6 +92,9 @@ function builtin(kind: ReasonPresetKind): ReasonPreset[] {
       // Devere tablet ekranı (2026-09-14) sebep kodunu katalogdan seçer; sunucusuzken sarım/söküm
       // zaten yapılamaz (online-only, kuyruk yok) — gömülü zemin bir karar korumaz, BOŞ kalır.
       return [];
+    case 'WORK_ORDER_PLAN_CHANGE':
+      // İş emri renk/en düzeltmesi sunucusuz yapılamaz (online-only) — zemin bilerek BOŞ.
+      return [];
   }
 }
 
@@ -107,6 +110,7 @@ const BUILTIN: Record<ReasonPresetKind, ReasonPreset[]> = {
   WARP_BEAM_ADJUST: builtin('WARP_BEAM_ADJUST'),
   WARP_BEAM_SCRAP: builtin('WARP_BEAM_SCRAP'),
   YARN_SUBCONTRACT_RETURN: builtin('YARN_SUBCONTRACT_RETURN'),
+  WORK_ORDER_PLAN_CHANGE: builtin('WORK_ORDER_PLAN_CHANGE'),
 };
 
 /** Gömülü satır düzenlenemez — henüz sunucudan okunmamış bir zemindir. */

@@ -688,6 +688,8 @@ export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
     "Ekran değil, KK1-içi yetenek: inline yeni desen açma. Yalnız seçili ham giriş operatörlerine verilir (permission-catalog.ts).",
   "mobile:dokuma-geri-al":
     "Ekran değil, Tezgah-içi yetenek (2026-09-14): top indirmeyi geri alır — defterden satır düşürür (`loom:doff-revoke` tablet eşi, `shipping:undo-dispatch` sınıfı). Varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
+  "mobile:is-emri-duzelt":
+    "Ekran değil, Hızlı İş Emri içi yetenek (hareket defteri D5): açılmış iş emrinin rengini/enini/sipariş bağını değiştirir ve kartı yeniden basar. İş emri açmaktan ayrı sorumluluk → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
   "mobile:kk1-yari-mamul":
     "Ekran değil, KK1-içi yetenek (2026-08-17): dışarıdan alınan yarı mamul kabulü. Renkli mal kabulü açar; yanlışlıkla kullanılırsa top ham stoğa 'boyalı' düşer → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
   // 2026-08-14: goods-receipt:* muafları KALDIRILDI — artık dar bir rol

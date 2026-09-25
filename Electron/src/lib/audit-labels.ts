@@ -702,6 +702,7 @@ export const ENUM_LABELS: Record<string, string> = {
   SUBCONTRACT_RETURN: "Fasondan iplik dönüşü",
   SUBCONTRACT_RETURN_CANCEL: "Fasondan iplik dönüşü iptali",
   YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebebi",
+  WORK_ORDER_PLAN_CHANGE: "İş emri plan düzeltme sebebi",
   // ───────────────────────────────────────────────────────────────────────
   // TİCARET PAKETİ ENUM DEĞERLERİ (merge, 2026-09-01)
   // Bekçi `test_audit_labels` §4 her Prisma enum değerinin Türkçesini ister;

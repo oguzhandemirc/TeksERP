@@ -3633,7 +3633,7 @@ export class SubcontractorService {
           Number(measuredWidth),
           `Fason kabulünde ölçüldü (${result!.receiptNo})`,
           userId,
-          "FASON_RECEIPT",
+          { source: "FASON_RECEIPT" },
         );
       } catch (err) {
         uyari("fason-kabul", `İş emri eni güncellenemedi (WO ${data.workOrderId}):`,

@@ -77,7 +77,7 @@ workOrderTravelerRouter.post(
 workOrderTravelerRouter.post(
   "/reprint",
   verifyToken,
-  requirePermission("workorder:write"),
+  requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"),
   controller.reprint
 );
 

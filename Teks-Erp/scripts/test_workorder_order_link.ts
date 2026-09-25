@@ -357,7 +357,7 @@ async function main(): Promise<void> {
     const widthNoReason = await expectError(() => workOrderLinkService.changeWidth(wo.id, 295, ""));
     check("sebepsiz en değişimi reddedildi", widthNoReason !== null);
 
-    const widthRes = await workOrderLinkService.changeWidth(wo.id, 295, "Kabulde ölçüldü", undefined, "FASON_RECEIPT");
+    const widthRes = await workOrderLinkService.changeWidth(wo.id, 295, "Kabulde ölçüldü", undefined, { source: "FASON_RECEIPT" });
     const afterWidth = await prisma.workOrder.findUnique({
       where: { id: wo.id },
       select: { width: true },

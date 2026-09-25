@@ -29,7 +29,7 @@
 // (dry-run varsayılan). Sipariş iptali de aynı kuralı uygular (order.service).
 // =============================================================================
 
-import { Prisma, OrderStatus, RollStatus, WorkOrderStatus, WorkOrderType } from "@prisma/client";
+import { Prisma, OrderStatus, ReasonPresetKind, RollStatus, WorkOrderStatus, WorkOrderType } from "@prisma/client";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -38,6 +38,7 @@ import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { recordRollAttributesAppliedTx, setWorkOrderTypeTx } from "./helpers/workorder-event.helper";
+import { resolveReasonCode } from "./reason-preset.service";
 import { recordWorkOrderFieldDiffTx } from "./helpers/workorder-field-diff.helper";
 import { InventoryService } from "./inventory.service";
 import { matchesPermission } from "../middlewares/rbac.middleware";
@@ -137,6 +138,28 @@ async function loadWo(
   });
   if (!wo) throw AppError.notFound("İş emri bulunamadı");
   return wo;
+}
+
+/** Bağlı siparişlerden yeni renkle çelişenler — engel değil uyarı (karar müşterinin). */
+async function orderColorWarnings(workOrderId: string, colorId: string | null): Promise<string[]> {
+  const links = await prisma.workOrderToOrderLine.findMany({
+    where: { workOrderId, ...ACTIVE_ORDER_LINK },
+    select: {
+      orderLine: { select: { colorId: true, color: { select: { name: true } }, order: { select: { orderNumber: true } } } },
+    },
+  });
+  return links
+    .filter((l) => l.orderLine.colorId !== colorId)
+    .map((l) => `${l.orderLine.order.orderNumber} siparişi "${l.orderLine.color?.name ?? "renksiz"}" istiyor.`);
+}
+
+/**
+ * Plan düzeltmesinin sebebi: kod verildiyse katalogda olmalı (tanınmayan 400), verilmediyse metinden
+ * türetilir; görünen metin çağıranınki, boşsa satırın metni.
+ */
+async function planChangeReason(reason: string, reasonCode?: string | null): Promise<{ text: string; code: string | null }> {
+  const r = await resolveReasonCode(ReasonPresetKind.WORK_ORDER_PLAN_CHANGE, { reasonCode, reasonText: reason });
+  return { text: (r.text ?? reason).trim(), code: r.code };
 }
 
 /** Toplara uygulanan plan düzeltmesi deftere tek grupta düşer; değişmeyen toplar yükte. */
@@ -556,12 +579,13 @@ export class WorkOrderLinkService {
     colorId: string | null,
     reason: string,
     userId?: string,
-    opts: { confirmPartial?: boolean; recolorRollIds?: readonly string[] } = {},
+    opts: { confirmPartial?: boolean; recolorRollIds?: readonly string[]; reasonCode?: string | null } = {},
   ): Promise<ApiResponse<{ warnings: string[]; partial: { dyedCount: number; pendingCount: number } | null }>> {
-    const trimmed = (reason ?? "").trim();
-    if (trimmed.length < MIN_REASON_LENGTH) {
+    if ((reason ?? "").trim().length < MIN_REASON_LENGTH) {
       throw AppError.badRequest("Renk değişikliği için sebep yazmalısınız.");
     }
+    const why = await planChangeReason(reason, opts.reasonCode);
+    const trimmed = why.text;
     const wo = await loadWo(workOrderId);
     if (wo.targetColorId === colorId) {
       throw AppError.badRequest("İş emri zaten bu renkte.");
@@ -617,7 +641,7 @@ export class WorkOrderLinkService {
           tx,
           workOrderId,
           { before: { targetColorId: tazeWo.targetColorId }, after: { targetColorId: colorId } },
-          { trigger: "COLOR_CHANGE", userId, reason: trimmed },
+          { trigger: "COLOR_CHANGE", userId, reason: trimmed, reasonCode: why.code },
         );
       }
       return { gate: g, claimCount: c.count };
@@ -637,27 +661,7 @@ export class WorkOrderLinkService {
       newColorName = color?.name ?? null;
     }
 
-    const links = await prisma.workOrderToOrderLine.findMany({
-      where: { workOrderId, ...ACTIVE_ORDER_LINK },
-      select: {
-        orderLine: {
-          select: {
-            colorId: true,
-            color: { select: { name: true } },
-            order: { select: { orderNumber: true } },
-          },
-        },
-      },
-    });
-    const warnings = [
-      ...gate.warnings,
-      ...links
-        .filter((l) => l.orderLine.colorId !== colorId)
-        .map(
-          (l) =>
-            `${l.orderLine.order.orderNumber} siparişi "${l.orderLine.color?.name ?? "renksiz"}" istiyor.`,
-        ),
-    ];
+    const warnings = [...gate.warnings, ...(await orderColorWarnings(workOrderId, colorId))];
 
 
     await AuditService.log({
@@ -685,6 +689,35 @@ export class WorkOrderLinkService {
   }
 
   /**
+   * "Rengi Değiştir" ÖNİZLEMESİ — yazmaz. Aynı bekçi kuru koşar: engel (boyanmış mal ·
+   * donmuş plan · izinli renk dışı) `blocked`da, kısmi boya `partial`da (tablet onayı kartta
+   * seçimle alır, 409 tostuna düşmez), sipariş çelişkisi `warnings`te; açık refakat kartı
+   * bayatlayacaksa `cardWillBeStale`.
+   */
+  async previewTargetColorChange(
+    workOrderId: string,
+    colorId: string | null,
+  ): Promise<ApiResponse<{
+    blocked: { code: string | null; message: string } | null;
+    partial: { dyedCount: number; pendingCount: number } | null;
+    warnings: string[];
+    cardWillBeStale: boolean;
+  }>> {
+    const wo = await loadWo(workOrderId);
+    if (wo.targetColorId === colorId) throw AppError.badRequest("İş emri zaten bu renkte.");
+    const cardWillBeStale = (await prisma.travelerCard.count({ where: { workOrderId, status: "ACTIVE" } })) > 0;
+    try {
+      const gate = await assertTargetColorChange(prisma, wo, colorId, { confirmPartial: true });
+      const warnings = [...gate.warnings, ...(await orderColorWarnings(workOrderId, colorId))];
+      return { success: true, data: { blocked: null, partial: gate.partial, warnings, cardWillBeStale } };
+    } catch (e) {
+      if (!(e instanceof AppError) || e.statusCode >= 500) throw e;
+      const code = (e.details as { code?: string } | undefined)?.code ?? null;
+      return { success: true, data: { blocked: { code, message: e.message }, partial: null, warnings: [], cardWillBeStale } };
+    }
+  }
+
+  /**
    * EN (cm) DEĞİŞTİR (madde 12) — "Rengi Değiştir" ile aynı aile.
    *
    * `source` çağrının nereden geldiğini işaretler: `MANUAL` (planlamacı düzeltti)
@@ -697,12 +730,14 @@ export class WorkOrderLinkService {
     width: number | null,
     reason: string,
     userId?: string,
-    source: "MANUAL" | "FASON_RECEIPT" = "MANUAL",
+    opts: { source?: "MANUAL" | "FASON_RECEIPT"; reasonCode?: string | null } = {},
   ): Promise<ApiResponse<{ previousWidth: number | null }>> {
-    const trimmed = (reason ?? "").trim();
-    if (trimmed.length < MIN_REASON_LENGTH) {
+    const source = opts.source ?? "MANUAL";
+    if ((reason ?? "").trim().length < MIN_REASON_LENGTH) {
       throw AppError.badRequest("En değişikliği için sebep yazmalısınız.");
     }
+    const why = await planChangeReason(reason, opts.reasonCode);
+    const trimmed = why.text;
     if (width != null && (!Number.isFinite(width) || width <= 0 || width > 1000)) {
       throw AppError.badRequest("En 0 ile 1000 cm arasında olmalı.");
     }
@@ -729,6 +764,7 @@ export class WorkOrderLinkService {
         trigger: source === "FASON_RECEIPT" ? "FASON_RECEIPT_WIDTH" : "WIDTH_CHANGE",
         userId,
         reason: trimmed,
+        reasonCode: why.code,
       });
     });
 
@@ -1038,7 +1074,7 @@ export class WorkOrderLinkService {
       warnings.push(...res.data.warnings);
     }
     if (widthDiff) {
-      await this.changeWidth(workOrderId, lineWidth, trimmed, userId, "MANUAL");
+      await this.changeWidth(workOrderId, lineWidth, trimmed, userId, { source: "MANUAL" });
     }
 
     // ② Düzeltilebilir topları eşitle; kısmi başarı normaldir (failed[] rapora düşer).
