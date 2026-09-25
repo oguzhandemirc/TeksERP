@@ -175,6 +175,15 @@ export interface ItemLifecycleTransitionResult {
   name: string;
 }
 
+export interface ItemLifecycleTransitionInput {
+  itemId: string;
+  to: ItemLifecycleStatus;
+  reason?: string | null;
+  userId?: string | null;
+  /** Yalnız bu durumlardan geçilir; kart başka durumdaysa yazmadan döner (kilit altında karar). */
+  onlyFrom?: ItemLifecycleStatus[];
+}
+
 /**
  * TEK YAZAR. Kilit: 8030 SHARED (ilk ifade) → kart FOR UPDATE. Arşivde D1 ihlali 409
  * `ITEM_HAS_LIVE_REFERENCES` (+ `details.references`, önizlemeyle aynı biçim). Hedef
@@ -182,7 +191,7 @@ export interface ItemLifecycleTransitionResult {
  */
 export async function transitionItemLifecycleTx(
   tx: Prisma.TransactionClient,
-  input: { itemId: string; to: ItemLifecycleStatus; reason?: string | null; userId?: string | null },
+  input: ItemLifecycleTransitionInput,
 ): Promise<ItemLifecycleTransitionResult> {
   await lockAgainstMergeTx(tx);
   const rows = await tx.$queryRaw<Array<{ name: string; status: ItemLifecycleStatus; mergedIntoId: string | null }>>`
@@ -191,6 +200,7 @@ export async function transitionItemLifecycleTx(
   if (!cur) throw AppError.notFound("Ürün bulunamadı");
   const base = { itemId: input.itemId, from: cur.status, to: input.to, name: cur.name };
   if (cur.status === input.to) return { ...base, idempotent: true };
+  if (input.onlyFrom && !input.onlyFrom.includes(cur.status)) return { ...base, to: cur.status, idempotent: true };
   if (cur.mergedIntoId) {
     throw AppError.badRequest(
       "Bu kayıt başka bir kayda birleştirildi ve yeniden aktifleştirilemez. " +
@@ -227,7 +237,7 @@ export async function transitionItemLifecycleTx(
  * hedef-durum idempotent tekrar audit yazmaz.
  */
 export async function transitionItemLifecycle(
-  input: { itemId: string; to: ItemLifecycleStatus; reason?: string | null; userId?: string | null },
+  input: ItemLifecycleTransitionInput,
 ): Promise<ItemLifecycleTransitionResult> {
   const result = await prisma.$transaction((tx) => transitionItemLifecycleTx(tx, input));
   if (!result.idempotent) {

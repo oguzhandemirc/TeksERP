@@ -318,7 +318,9 @@ kopya kalmaz.
 - Sıra: backend önce (mesai dışı), sonra panel ve tablet. `minVersion` gerekmez.
 - **Eski panel:** "Sil" → canlı referans varsa 409 → genel hata tostu mesajı gösterir (bugün
   "silindi" diyordu; artık durdurur — kasıtlı). Canlı referans yoksa bugünkü gibi pasif.
-  "Aktifleştir" / "Geri al" (`PATCH {isActive:true}`) çalışmaya devam eder. Eski panel
+  "Aktifleştir" / "Geri al" (`PATCH {isActive:true}`) çalışmaya devam eder. `isActive:true` yalnız
+  Pasif kartı Aktif'e döndürür; form her kayıtta `true` gönderdiği için Tükenene kadar kartta
+  yazmaz (karar yazıcının kilidi altında, `onlyFrom`) — ad düzeltmesi kartı Aktif'e döndürmez. Eski panel
   "Tükenene kadar"ı seçemez; PHASE_OUT kartları yeni sipariş seçicisinde görür, kayıtta sunucu açık
   mesajla reddeder.
 - **Eski tablet:** PHASE_OUT kartın topuyla hızlı iş emri artık çalışır (sunucu gevşer); KK1

@@ -34,6 +34,7 @@ import {
   totalLiveRefs,
   transitionItemLifecycle,
   transitionItemLifecycleTx,
+  type ItemLifecycleTransitionInput,
   type ItemLifecycleTransitionResult,
 } from "./helpers/item-lifecycle.helper";
 import { itemBirthLifecycleData } from "./helpers/item-lifecycle-data.helper";
@@ -432,16 +433,17 @@ export class ItemService extends BaseService {
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     // `isActive` genel güncellemenin skaler geçişinden ÇIKAR (BaseController'da yeni
-    // skaler = yazılabilir alan kuralı): false = "Pasif'e geç" (kapılı), true = "Aktif'e dön".
+    // skaler = yazılabilir alan kuralı): false = "Pasif'e geç" (kapılı), true = yalnız Pasif
+    // kartı Aktif'e döndürür — form her kayıtta true gönderir, Tükenene kadar kart değişmemeli.
     const { isActive, ...data } = (rawData ?? {}) as Record<string, unknown>;
     if (isActive !== undefined) {
       if (typeof isActive !== "boolean") throw AppError.badRequest("'isActive' true/false olmalı");
-      const res = await this.transitionLifecycle(
-        id,
-        isActive ? ItemLifecycleStatus.ACTIVE : ItemLifecycleStatus.ARCHIVED,
-        null,
-        userId,
-      );
+      const res = await this.runTransition({
+        itemId: id,
+        to: isActive ? ItemLifecycleStatus.ACTIVE : ItemLifecycleStatus.ARCHIVED,
+        userId: userId ?? null,
+        ...(isActive ? { onlyFrom: [ItemLifecycleStatus.ARCHIVED] } : {}),
+      });
       if (Object.keys(data).length === 0) return res;
     }
     const FORBIDDEN = ["code", "itemType"];
@@ -705,14 +707,15 @@ export class ItemService extends BaseService {
     reason: string | null,
     userId?: string,
   ): Promise<ApiResponse<unknown> & { idempotent?: boolean }> {
-    const result: ItemLifecycleTransitionResult = await transitionItemLifecycle({
-      itemId: id,
-      to,
-      reason,
-      userId: userId ?? null,
-    });
+    return this.runTransition({ itemId: id, to, reason, userId: userId ?? null });
+  }
+
+  private async runTransition(
+    input: ItemLifecycleTransitionInput,
+  ): Promise<ApiResponse<unknown> & { idempotent?: boolean }> {
+    const result: ItemLifecycleTransitionResult = await transitionItemLifecycle(input);
     const item = await prisma.item.findUnique({
-      where: { id },
+      where: { id: input.itemId },
       ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
     });
     return {
@@ -720,8 +723,8 @@ export class ItemService extends BaseService {
       data: item,
       idempotent: result.idempotent,
       message: result.idempotent
-        ? `Kart zaten '${ITEM_LIFECYCLE_LABEL[to]}' durumunda`
-        : `Kart '${ITEM_LIFECYCLE_LABEL[to]}' durumuna alındı`,
+        ? `Kart zaten '${ITEM_LIFECYCLE_LABEL[result.to]}' durumunda`
+        : `Kart '${ITEM_LIFECYCLE_LABEL[result.to]}' durumuna alındı`,
     };
   }
 

@@ -90,6 +90,13 @@ async function main(): Promise<void> {
   const t2 = await itemService.transitionLifecycle(Z, ItemLifecycleStatus.PHASE_OUT, "tekrar", ADMIN);
   const auditN2 = await prisma.systemLog.count({ where: { recordId: Z, action: "UPDATE" } });
   check("aynı hedefe ikinci istek idempotent — yazım ve audit yok", t1.idempotent === false && t2.idempotent === true && auditN2 === auditN, `audit ${auditN}→${auditN2}`);
+  // Panel formu her kayıtta isActive:true gönderir; Tükenene kadar kartın adını düzeltmek
+  // onu Aktif'e döndürmemeli (true yalnız Pasif kartı diriltir).
+  const f1 = await itemService.update(Z, { isActive: true, name: `${TAG} FORM` }, ADMIN);
+  const sf = await prisma.item.findUniqueOrThrow({ where: { id: Z }, select: { lifecycleStatus: true, name: true } });
+  check("⭐ form kaydı (isActive:true + ad) Tükenene kadar kartı Aktif'e DÖNDÜRMEZ, ad güncellenir", sf.lifecycleStatus === "PHASE_OUT" && sf.name === `${TAG} FORM`, `${sf.lifecycleStatus} · ${String(f1.message ?? "")}`);
+  const f2 = (await itemService.update(Z, { isActive: true }, ADMIN)) as { idempotent?: boolean; message?: string };
+  check("yalnız isActive:true → yazım yok, mesaj gerçek durumu söyler", (await state(Z)).lifecycleStatus === "PHASE_OUT" && f2.idempotent === true && String(f2.message).includes("Tükenene kadar"), String(f2.message));
 
   console.log("\n=== 4) Kalan 0 → Pasif ===");
   // Fikstür: topu iptal edilmiş say (gerçek iptal akışı bu bekçinin konusu değil).
