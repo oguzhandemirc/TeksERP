@@ -12353,3 +12353,22 @@ Düzeltme ürün kodunu değil TARAYICIYI güçlendirdi:
 **Etki (önce/sonra, 53 seri, fabrika kopyası).** Sıradaki numara YALNIZ `batchShort`ta değişti (`P2207260003` → `P08` = üreteç); diğer 52 seri birebir aynı. Tükenme yalnız `batchShort`ta değişti; diğerlerinde yalnız gerekçe cümlesindeki sabit 9999 gerçek haneye döndü. Üretim yoluna dokunulmadı.
 
 **Bekçi.** `test_number_series_siradaki` (9 kontrol), dört mutasyon kolu ısırıyor ve ekrandaki değerlerin aynısını basıyor (`P2207260003` · `P51` · `%2229555558`).
+
+## 2026-09-25 — Audit YALNIZ AYAK İZİDİR: okuma kapısı (`test_audit_okuma_kaynagi`) [ÇEKİRDEK]
+
+**Tetik (kullanıcı kuralı).** "Audit sadece bir ayak izi, programın hiçbir yerinde audit'ten join etmemeliyiz; iş emri tablosu ↔ iş emri hareketleri tablosu gibi kendi hareket tablolarımızla ilişkilendirilmeli." Kullanıcı bunu GARANTİ olarak istedi: kural bir kapıyla korunur.
+
+**Tanım.** Çalışan programda `SystemLog`/`SystemLogArchive`i yalnız ayak izini bir İNSANA gösteren yüzeyler okur: denetim ekranı · denetim raporu · kayıt geçmişi/künye · yedek etki tanısı · audit'in kendi yaşam döngüsü (arşive taşıma, boyut göstergesi). Audit'ten karar, hesaplanan iş sayısı, durum, geri alma ya da join türetilmez; böyle bir ihtiyaç bir defter eksikliğidir. Tek istisna: geçmişi yeni bir deftere BİR KEZ aktaran, beyanlı ve tarihli göç script'i (çalışan program değil; `scripts/` kapının kapsamı dışında).
+
+**Ölçüm (origin `b1894b04`, AST).** Backend 624 dosyada 17 işlev / 24 okuma noktası. Allowlist 13 işlev / 19 nokta: `system-log.service` 6 · `reports/audit.report.service` 2 (4 ham SQL) · `record-info.service` künye (sıcak + arşiv, 4) · `backup-impact.service` 2 (3) · `audit.service` arşivleme + boyut (2). İş okuması (BORÇ) 4 işlev / 5 nokta:
+- K-A1 `InventoryService.readManualEntryReason` — elle açılan topun sebebi; `Roll.entryReason` kolonu 2026-08-04'ten beri var, audit dalı kolonsuz eski toplar için "geçiş".
+- K-A2 `InventoryService.isUndoSourcedByAudit` — iptalin geri alınabilirlik kararı, damgasız eski kayıtlarda iki ham SQL (biri tam tarama).
+- K-A3 `WorkSessionActivityService.list` — operatör aktivitesindeki "top iptali" satırları.
+- K-A4 `ImportService.getRunRecords` — koşumun dokunduğu kayıtlar (10 dk'lık pencere); panelde çağıranı YOK. Geri sarma zaten `ImportRunLine`dan okuyor — `ImportRevertDialog` bu borcun istemci ayağı DEĞİL.
+İstemci: Electron 18 dosya audit ucu çağırıyor ya da audit istemci modülünü içe aktarıyor (aktivite/arşiv/olay ekranları · son aktivite zili · kayıt geçmişi · ⓘ künye · denetim raporları + iki Excel çıktısı · yedek etki · rapor kataloğu); mobil 0. `AuditDataBlock`/`AuditChangeList`/`RestoreAuditDelta` sunum bileşenidir, uç çağırmaz.
+
+**Kapı.** `scripts/test_audit_okuma_kaynagi.ts` + beyan `scripts/lib/audit-okuma-beyan.ts`. Kimlik `dosya#işlev`, adet EŞİTLİK (fazlası beyansız okuma, eksiği ölü beyan); istemci dosya düzeyi, iki yönlü; borç cırcırı taban 5 (artış sert, çürüme commit kapısında uyarı / CI'da sert). Sınıf kümesi KAPALI; yeni allowlist satırı yalnız yönetici onayıyla. Sondalar: ✓K13 saf yüklem + ✓B5 (yeni Prisma okuması · beyanlı işleve ikinci ham SQL · beyansız istemci literali → kırmızı; borç kapanınca çürüme kırmızısı; satır düşüp taban 5→4 → yeşil).
+
+**Beyanlı sınır.** İstemci taraması uç adresini literalden tanır; yeni bir audit ucu açılırsa backend okuması kırmızı verir ama ucun istemci deseni eklenmeden çağıran ekran görünmez.
+
+**Ezdiği cümle.** `docs/kurallar/defter.md` "Audit teknik izdir … iş kaynağı OLARAK OKUNAMAZ" satırı (bekçi: YOK, çapa ölü) bu kuralla değişti; import geçmişi allowlist adayından borca geçti. Kök `CLAUDE.md`deki "Kalıcı sayaç/rapor `SystemLog`tan değil KALICI kolondan okunur…" cümlesinin yerine geçecek taslak yöneticiye verildi (kök dosya iniş treninde değişir).
