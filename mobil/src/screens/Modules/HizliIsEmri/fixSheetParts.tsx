@@ -12,6 +12,10 @@ export interface FixWo {
   targetColorId?: string | null;
   targetColor?: { name?: string | null } | null;
   width?: number | null;
+  /** Parti Ekle: kumaş kilidi ve ilk adım adı. */
+  targetItemId?: string | null;
+  targetItem?: { name?: string | null } | null;
+  steps?: { stepSequence: number; station?: { name?: string | null } | null }[];
 }
 
 export function errorText(err: unknown): string | undefined {

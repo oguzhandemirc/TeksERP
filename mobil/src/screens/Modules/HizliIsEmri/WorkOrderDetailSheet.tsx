@@ -303,6 +303,9 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                 <Button mode="contained-tonal" icon="tray-remove" onPress={() => setFix('detach')} style={styles.fixBtn} contentStyle={styles.btnContent}>
                   Top Çıkar
                 </Button>
+                <Button mode="contained-tonal" icon="tray-plus" onPress={() => setFix('addBatch')} style={styles.fixBtn} contentStyle={styles.btnContent}>
+                  Parti Ekle
+                </Button>
               </View>
             </View>
           ) : null}

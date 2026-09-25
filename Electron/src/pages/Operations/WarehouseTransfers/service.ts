@@ -1,4 +1,5 @@
 import apiClient from "@/services/apiClient";
+import { listPickableRolls, type PickedRoll } from "@/components/operations/roll-picker/pickable-rolls";
 
 export interface TransferListRow {
   id: string;
@@ -122,15 +123,7 @@ export async function lookupRollsByBarcodes(barcodes: string[]): Promise<
  * (Eskiden `TransferFormDialog` içinde yerel bir kopyaydı; ikinci yol
  * eklenince iki tanım kaçınılmaz olarak ayrışırdı.)
  */
-export interface PickedRoll {
-  id: string;
-  barcode: string | null;
-  itemName: string;
-  colorName: string | null;
-  qty: number;
-  warehouseId: string | null;
-  status: string;
-}
+export type { PickedRoll } from "@/components/operations/roll-picker/pickable-rolls";
 
 export interface PickedSack {
   id: string;
@@ -171,30 +164,15 @@ export async function listWarehouseRolls(params: {
   search?: string;
   limit?: number;
 }): Promise<PickedRoll[]> {
-  const res = await apiClient.get("/api/rolls", {
-    params: {
-      page: 1,
-      pageSize: params.limit ?? 100,
+  return listPickableRolls(
+    {
       "filter[warehouseId]": params.warehouseId,
       // ⚠️ Statü süzgeci `TRANSFERABLE_STATUSES` ile — okutma yolunun kullandığı
       // AYNI sabit. Ayrı yazılsaydı liste, transferin reddedeceği topu önerirdi.
       "filter[statusIn]": TRANSFERABLE_STATUSES.join(","),
-      ...(params.search ? { search: params.search } : {}),
     },
-  });
-  type Row = {
-    id: string; barcode: string | null; status: string; currentQty: string | number; warehouseId: string | null;
-    item?: { name: string }; color?: { name: string } | null;
-  };
-  return ((res.data.data ?? []) as Row[]).map((r) => ({
-    id: r.id,
-    barcode: r.barcode,
-    itemName: r.item?.name ?? "—",
-    colorName: r.color?.name ?? null,
-    qty: Number(r.currentQty),
-    warehouseId: r.warehouseId,
-    status: r.status,
-  }));
+    { search: params.search, limit: params.limit },
+  );
 }
 
 /**

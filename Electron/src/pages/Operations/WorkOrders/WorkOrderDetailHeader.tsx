@@ -18,6 +18,7 @@ import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { LinkOrderDialog } from "./LinkOrderDialog";
 import { ChangeTargetDialog } from "./ChangeTargetDialog";
+import { AddBatchButton } from "./AddBatchButton";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import type { WorkOrder } from "./types";
 
@@ -152,6 +153,7 @@ export function WorkOrderDetailHeader({
                   <PackageCheck className="h-3.5 w-3.5" /> Fason Kabul
                 </Button>
               </PermissionGate>
+              <AddBatchButton wo={wo} look="header" />
               <Button
                 type="button"
                 size="sm"

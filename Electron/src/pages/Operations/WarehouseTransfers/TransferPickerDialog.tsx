@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { listWarehouseRolls, listWarehouseSacks, type PickedRoll, type PickedSack } from "./service";
+import { RollChecklist, toggleInSet } from "@/components/operations/roll-picker/RollChecklist";
 
 interface Props {
   open: boolean;
@@ -54,12 +55,6 @@ export function TransferPickerDialog({
 
   const rolls = (rollsQ.data ?? []).filter((r) => !alreadyRollIds.includes(r.id));
   const sacks = (sacksQ.data ?? []).filter((s) => !alreadySackIds.includes(s.id));
-  const toggle = (set: Set<string>, id: string): Set<string> => {
-    const next = new Set(set);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    return next;
-  };
   const total = rollSel.size + sackSel.size;
 
   const confirm = () => {
@@ -103,34 +98,13 @@ export function TransferPickerDialog({
           </TabsList>
 
           <TabsContent value="rolls">
-            <div className="max-h-[42vh] overflow-auto rounded-md border">
-              {rollsQ.isLoading ? (
-                <p className="p-6 text-center text-sm text-muted-foreground">Yükleniyor…</p>
-              ) : rolls.length === 0 ? (
-                <p className="p-6 text-center text-sm text-muted-foreground">
-                  Bu depoda transfer edilebilir top bulunamadı.
-                </p>
-              ) : (
-                rolls.map((r) => (
-                  <label
-                    key={r.id}
-                    className="flex cursor-pointer items-center gap-3 border-b px-3 py-2 text-sm last:border-0 hover:bg-muted/50"
-                  >
-                    <Checkbox
-                      checked={rollSel.has(r.id)}
-                      onCheckedChange={() => setRollSel((s) => toggle(s, r.id))}
-                    />
-                    <span className="min-w-0 flex-1 truncate">
-                      {r.itemName}
-                      {r.colorName ? ` · ${r.colorName}` : ""}
-                    </span>
-                    {/* Barkodsuz top MEŞRU — etiket basmayan kullanıcıda olağan. */}
-                    <span className="font-mono text-xs text-muted-foreground">{r.barcode ?? "—"}</span>
-                    <span className="w-20 text-right tabular-nums">{r.qty} m</span>
-                  </label>
-                ))
-              )}
-            </div>
+            <RollChecklist
+              rolls={rolls}
+              selected={rollSel}
+              onToggle={(id) => setRollSel((s) => toggleInSet(s, id))}
+              loading={rollsQ.isLoading}
+              emptyText="Bu depoda transfer edilebilir top bulunamadı."
+            />
           </TabsContent>
 
           <TabsContent value="sacks">
@@ -149,7 +123,7 @@ export function TransferPickerDialog({
                   >
                     <Checkbox
                       checked={sackSel.has(s.id)}
-                      onCheckedChange={() => setSackSel((x) => toggle(x, s.id))}
+                      onCheckedChange={() => setSackSel((x) => toggleInSet(x, s.id))}
                     />
                     <span className="font-mono">{s.sackNo}</span>
                     <span className="min-w-0 flex-1 truncate text-muted-foreground">

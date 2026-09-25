@@ -77,6 +77,17 @@ export const workOrderService = {
       )
       .then((r) => r.data),
 
+  /** Parti Ekle (hareket defteri D8) — seçilen stok topları YENİ parti olur, ilk adımdan başlar.
+   *  Ret listesi diyalogda satır satır gösterildiği için genel hata tostu kapalı. */
+  addBatch: (workOrderId: string, payload: { clientToken: string; rollBarcodes: string[]; reason?: string }) =>
+    apiClient
+      .post<ApiResponse<{ batch: { id: string; batchNumber: string } | null; rollCount: number; warnings: string[]; replay: boolean }>>(
+        `/api/work-orders/${workOrderId}/batches`,
+        payload,
+        { suppressErrorToast: true },
+      )
+      .then((r) => r.data),
+
   /** Kapatmayı engelleyen açık fason sevkleri (kabul önizlemesi, 2026-08-17). */
   getFasonQuickReceive: (id: string) =>
     apiClient
@@ -577,9 +588,8 @@ export const workOrderService = {
    * Bu yüzden "bitmiş bir topu yeniden üretime al / tekrar boyahaneye gönder"
    * masaüstünden yapılamıyordu (2026-08-25 saha sorusu).
    *
-   * ⚠️ Mevcut bir iş emrine top EKLEME ucu YOK: `PATCH /:id/attach-rolls`
-   * 2026-06-12'de kaldırıldı (hiçbir istemci çağırmıyordu). Bugün tek yol YENİ
-   * iş emri açmaktır — bu uç tam olarak onu yapar.
+   * Açık bir iş emrine top eklemek ayrı uçtur (`addBatch` — YENİ parti, ilk adımdan);
+   * bu uç YENİ iş emri açar.
    *
    * Backend kuralları (istemci onları TEKRARLAMAZ, yalnız önceden gösterir):
    * yalnız STOCK/WAREHOUSE/A1_STOCK · çuvalda/sevkiyatta olmayan · TEK kumaş.

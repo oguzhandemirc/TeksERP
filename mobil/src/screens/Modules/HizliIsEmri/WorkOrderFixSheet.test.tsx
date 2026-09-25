@@ -6,6 +6,8 @@ import { renderWithPaper } from '../../../test/render';
 const mockPreview = jest.fn();
 const mockColor = jest.fn();
 const mockWidth = jest.fn();
+// Parti Ekle kartı okutma geri bildirimini (expo-audio) yükler — jest'te ses modülü yok.
+jest.mock('../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 jest.mock('../../../services/workOrder.service', () => ({
   workOrderService: {
     previewTargetColor: (...a: unknown[]) => mockPreview(...a),

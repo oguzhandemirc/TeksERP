@@ -42,8 +42,8 @@ const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFraction
  * topun 4'ü iki iş emrinden geçmiş ve dördü de HAM top — bitmiş malı geri üretime
  * alma yolu sahada hiç kullanılmamış.
  *
- * ⚠️ MEVCUT bir iş emrine top EKLENEMEZ: o uç 2026-06-12'de kaldırıldı. Bu diyalog
- * bilinçli olarak YENİ iş emri açar; başlık da bunu söyler.
+ * Bu diyalog bilinçli olarak YENİ iş emri açar; açık iş emrine top, o iş emrinin
+ * "Parti Ekle" tuşuyla (yeni parti, ilk adımdan) eklenir.
  */
 interface Props {
   open: boolean;

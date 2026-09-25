@@ -14,6 +14,7 @@ import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
 import { LinkOrderDialog } from "./LinkOrderDialog";
 import { ChangeTargetDialog } from "./ChangeTargetDialog";
+import { AddBatchButton } from "./AddBatchButton";
 import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { summarizeLinkedFulfillment } from "./order-fulfillment";
 import { V3Section } from "./detail-v3/V3Section";
@@ -195,6 +196,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                         <PackageCheck className="h-3.5 w-3.5" /> Fason Kabul
                       </button>
                     </PermissionGate>
+                    <AddBatchButton wo={wo} look="sheet" />
 
                     <button type="button" className="btn" onClick={() => setDocumentsOpen(true)}>
                       <FileText className="h-3.5 w-3.5" /> Belgeler
