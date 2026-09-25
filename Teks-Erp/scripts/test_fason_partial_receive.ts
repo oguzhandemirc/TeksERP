@@ -20,6 +20,7 @@
 //
 // Çalıştır: npx tsx scripts/test_fason_partial_receive.ts
 import prisma from "../src/lib/prisma";
+import { kapaliHareketFotografi, tersKayitIddialari } from "./lib/hareket-ters-kayit";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
@@ -417,7 +418,9 @@ async function main(): Promise<void> {
     );
 
     // ⭐ GERİ ALMA YOLU VAR.
+    const fotoKalan = await kapaliHareketFotografi(prisma, { rollId: sc.rollId, workOrderStepId: sc.boyaStep });
     await sub.reopenRemainder({ stepId: sc.boyaStep, rollId: sc.rollId }, ADMIN);
+    for (const [e, ok, d] of await tersKayitIddialari(prisma, fotoKalan, "FASON_REOPEN_REMAINDER")) check(`P12 hareket: ${e}`, ok, d);
     const geriTop = await prisma.roll.findUnique({
       where: { id: sc.rollId },
       select: { status: true },

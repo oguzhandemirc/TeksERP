@@ -69,6 +69,8 @@ import {
   type Prisma,
 } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { ensureTestAdmin } from "./fixture-test-user";
+import { iptalAktoruIddiasi } from "./lib/hareket-ters-kayit";
 import { InventoryService } from "../src/services/inventory.service";
 import { collectRollStepScopeTx } from "../src/services/helpers/roll-step-scope.helper";
 import { ensureWorkOrderInProgress } from "../src/services/helpers/roll-step.helper";
@@ -457,7 +459,9 @@ async function main(): Promise<void> {
 
     check("ön koşul: STOCK topun currentStepId'si NULL (eski dal hiç koşmazdı)",
       (await legacyScopeSize(rE)) === 0);
-    await inventory.hardDelete(rE);
+    const adminId = (await ensureTestAdmin()).id;
+    await inventory.hardDelete(rE, adminId);
+    { const [e, ok, d] = await iptalAktoruIddiasi(prisma, [rE], adminId); check(`arşivleme: ${e}`, ok, d); }
     check("arşivleme kapalı hareketli adımı da düzeltti",
       (await stepStatus(e1)) === StepStatus.PENDING, await stepStatus(e1));
 

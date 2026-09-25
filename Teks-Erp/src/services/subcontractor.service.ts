@@ -17,7 +17,7 @@ import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY, inheritRollPropertiesTx, revokeRollProperties } from "./helpers/property-revoke.helper";
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
-import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
+import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -3836,14 +3836,16 @@ export class SubcontractorService {
       // (Kapama damgası YUKARIDA kaldırıldı — claim'in kendisi o.)
 
       // Movement'ı yeniden AÇ — mal tekrar bu istasyonda bekliyor.
-      await tx.$executeRaw`
-        UPDATE "roll_movements"
-        SET "qtyOut" = NULL, "weightOut" = NULL, "exitedAt" = NULL, "notes" = 'REMAINDER_REOPENED'
-        WHERE "workOrderStepId" = ${data.stepId}::uuid
-          AND "rollId" = ${data.rollId}::uuid
-          AND "notes" LIKE 'REMAINDER_CLOSED%'
-          AND "revokedAt" IS NULL
-      `;
+      await reopenClosedMovementsTx(tx, {
+        where: {
+          workOrderStepId: data.stepId,
+          rollId: data.rollId,
+          notes: { startsWith: "REMAINDER_CLOSED" },
+        },
+        reason: "FASON_REOPEN_REMAINDER",
+        notes: "REMAINDER_REOPENED",
+        userId: userId ?? null,
+      });
 
       // Adım + İŞ EMRİ + REFAKAT KARTI diriltme sözleşmesi (emsal: manuel taşıma
       // `tambur-manual` / `manualMove`). Elle adım flip'i YETMEZ: son adımı fason
@@ -5545,6 +5547,8 @@ export class SubcontractorService {
             currentStepId: null,
             cancelReasonCode: FASON_RECEIPT_CANCEL_CODE,
             cancelReason: FASON_RECEIPT_CANCEL_TEXT,
+            cancelledAt: new Date(),
+            cancelledById: userId ?? null,
           },
         });
         // Nextstep recompute (cascade roll'lar oradan çıktı, status değişebilir)
@@ -5576,19 +5580,15 @@ export class SubcontractorService {
 
       // 2) Bu adım için kapatılmış RollMovement'ları geri aç (RETURNED_VIA_RECEIPT
       //    notuyla kapatılmıştı)
-      await tx.rollMovement.updateMany({
+      await reopenClosedMovementsTx(tx, {
         where: {
-          ...ACTIVE_MOVEMENT,
           workOrderStepId: receipt.stepId,
           rollId: { in: rollIds },
           notes: `RETURNED_VIA_RECEIPT:${receipt.receiptNo}`,
         },
-        data: {
-          qtyOut: null,
-          weightOut: null,
-          exitedAt: null,
-          notes: `REOPENED_FROM_RECEIPT:${receipt.receiptNo}`,
-        },
+        reason: "FASON_KABUL_IPTAL",
+        notes: `REOPENED_FROM_RECEIPT:${receipt.receiptNo}`,
+        userId: userId ?? null,
       });
 
       // 2.5) K14 parti-tutarlılık guard'ı: kabul iptali orijinalleri yeniden
@@ -6088,7 +6088,7 @@ export class SubcontractorService {
           currentStepId: targetStep.id,
           batchId: dispatch.batchId,
         },
-        data: { status: RollStatus.CANCELLED, currentStepId: null },
+        data: { status: RollStatus.CANCELLED, currentStepId: null, cancelledAt: new Date(), cancelledById: userId ?? null },
       });
       if (cancelledBorn.count !== bornRollIds.length) {
         throw AppError.conflict(
@@ -6134,19 +6134,15 @@ export class SubcontractorService {
         }
 
         // Kapatılmış dönüş movement'larını geri aç (RETURNED_VIA_RECEIPT notuyla).
-        await tx.rollMovement.updateMany({
+        await reopenClosedMovementsTx(tx, {
           where: {
-            ...ACTIVE_MOVEMENT,
             workOrderStepId: receipt.stepId,
             rollId: { in: origRollIds },
             notes: `RETURNED_VIA_RECEIPT:${receipt.receiptNo}`,
           },
-          data: {
-            qtyOut: null,
-            weightOut: null,
-            exitedAt: null,
-            notes: `REOPENED_FROM_RECEIPT:${receipt.receiptNo}`,
-          },
+          reason: "FASON_TRANSFER_GERI_AL",
+          notes: `REOPENED_FROM_RECEIPT:${receipt.receiptNo}`,
+          userId: userId ?? null,
         });
 
         // Dirilme: kart Pasif olamaz (S5) — DB seddinin uygulama ikizi, çıkış yolunu söyler.

@@ -245,8 +245,10 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     ["src/services/helpers/warp-beam-event.helper.ts"]),
 
   D("RollMovement", "topun adım içi giriş/çıkışı; açık satır çıkışta kapanır", { tur: "DAMGA", kolon: "revokedAt" },
-    [{ dosya: "src/services/helpers/roll-movement.helper.ts", sembol: "revokeRollMovements" }],
+    [{ dosya: "src/services/helpers/roll-movement.helper.ts", sembol: "revokeRollMovements" },
+     { dosya: "src/services/helpers/roll-movement.helper.ts", sembol: "reopenClosedMovementsTx" }],
     [
+      "src/services/helpers/roll-movement.helper.ts",
       "src/services/helpers/roll-step.helper.ts", "src/services/inventory.service.ts",
       "src/services/kursun-bypass.service.ts", "src/services/kursun-qc.service.ts",
       "src/services/subcontractor.service.ts", "src/services/tambur-manual.service.ts",
@@ -682,3 +684,62 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   ENTRY_CORRECTION: { tur: "KARSI_OLAY", kod: "ENTRY_CORRECTION", gerekce: "giriş ölçümü düzeltmesinin tersi ters yönde ikinci bir düzeltmedir — aynı kod, ters işaret, rollVarianceId ile sapma defterine bağlı; geri alma ucu yok (operatör kararı, damga değil olgu)",
     tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "applyManualProperties" }] },
 };
+
+// =============================================================================
+// DAMGA NULL'LAMA BEYANI (§14) — ileri damgayı yerinde null'layan HER site beyanlıdır
+// =============================================================================
+// Kural (`docs/kurallar/defter.md`): geri alma ileri kaydı değiştirmez, damgayı null'lamak
+// ters kayıt değildir. Null'layan site ya DURUM_KOLONU'dur (kolon "şu an ne"yi tutar,
+// tarihçe `tarihce` alanındaki defterde yaşar) ya da BORC'tur. Beyan site başına
+// (dosya · fonksiyon · alan · adet) ve iki yönlüdür: beyansız isabet de, isabetsiz beyan
+// da kırmızı — borç kapanınca beyan silinmek ZORUNDADIR.
+
+/** Taranan damga alanları: defter.md'nin saydığı ileri damgalar + hareket kapanışı + iptal/geri alma damgaları. */
+export const DAMGA_ALANLARI = [
+  "dispatchedAt", "weighedAt", "invoicedAt", "remainderClosedAt", "closedTermsAt", "finalizedAt",
+  "exitedAt", "qtyOut", "weightOut",
+  "cancelledAt", "cancelledById", "revokedAt", "reversedAt", "voidedAt",
+] as const;
+
+export type DamgaNullSinifi = "DURUM_KOLONU" | "BORC";
+
+export interface DamgaNullBeyani {
+  dosya: string;
+  fonksiyon: string;
+  alan: (typeof DAMGA_ALANLARI)[number];
+  /** O fonksiyonda o alana kaç null yazımı var (ölçülür, eşit olmalı). */
+  adet: number;
+  sinif: DamgaNullSinifi;
+  /** "Ne oldu" bilgisinin yaşadığı defter. */
+  tarihce: string;
+  gerekce: string;
+}
+
+const KULLANICI_KARARI_AB = "karar bekliyor: kullanıcı (A/B) — ayrı defteri olan bu damga DURUM kolonu sayılsın mı (A), BORC kalsın mı (B)";
+
+export const DAMGA_NULL_BEYANI: DamgaNullBeyani[] = [
+  { dosya: "src/services/inventory.service.ts", fonksiyon: "restoreCancelledRoll", alan: "cancelledAt", adet: 1, sinif: "DURUM_KOLONU",
+    tarihce: "roll_status_events (DB trigger'ı; CANCELLED → önceki durum satırı)",
+    gerekce: "kolon topun ŞU ANKİ iptal hâlidir; iptalin ve geri alınmasının tarihçesi durum defterinde. \"Kim geri aldı\" bugün hiçbir iş kararına/rapora girmiyor — rapor ihtiyacı doğarsa şemalı ayrı dilim (restoredById)" },
+  { dosya: "src/services/inventory.service.ts", fonksiyon: "restoreCancelledRoll", alan: "cancelledById", adet: 1, sinif: "DURUM_KOLONU",
+    tarihce: "roll_status_events (iptal satırının actorId'si bu kolondan donmuştur)",
+    gerekce: "cancelledAt ile aynı — iptalin aktörü iptal satırında kalıcı; kolon şu anki hâl" },
+  { dosya: "src/services/stock-count-reversal.service.ts", fonksiyon: "reverseTx", alan: "cancelledAt", adet: 1, sinif: "DURUM_KOLONU",
+    tarihce: "roll_status_events + sayım stornosu defteri",
+    gerekce: "sayım stornosu sayımın iptal ettiği topu diriltir — restoreCancelledRoll ile aynı sınıf" },
+  { dosya: "src/services/stock-count-reversal.service.ts", fonksiyon: "reverseTx", alan: "cancelledById", adet: 1, sinif: "DURUM_KOLONU",
+    tarihce: "roll_status_events (iptal satırının actorId'si)",
+    gerekce: "cancelledAt ile aynı" },
+  { dosya: "src/services/kartela.service.ts", fonksiyon: "reverseStockReductionTx", alan: "cancelledAt", adet: 1, sinif: "BORC",
+    tarihce: "SwatchStockReduction.reversedAt (düşüm stornosu damgası)",
+    gerekce: KULLANICI_KARARI_AB },
+  { dosya: "src/services/shipping.service.ts", fonksiyon: "markSackContentChangedTx", alan: "weighedAt", adet: 1, sinif: "BORC",
+    tarihce: "SackWeighing (CLEARED olayı; önceki kg ile)",
+    gerekce: KULLANICI_KARARI_AB },
+  { dosya: "src/services/subcontractor.service.ts", fonksiyon: "reopenRemainder", alan: "remainderClosedAt", adet: 1, sinif: "BORC",
+    tarihce: "RollVariance SUBCONTRACTOR_REMAINDER reversedAt + hareketin ters kaydı",
+    gerekce: KULLANICI_KARARI_AB },
+  { dosya: "src/services/invoice.service.ts", fonksiyon: "cancel", alan: "invoicedAt", adet: 2, sinif: "BORC",
+    tarihce: "Invoice belgesinin iptali (Shipment ve DirectShipment kaynak damgası)",
+    gerekce: KULLANICI_KARARI_AB },
+];

@@ -4135,6 +4135,8 @@ export class InventoryService {
         where: { id, status: RollStatus.STOCK },
         data: {
           status: RollStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancelledById: userId ?? null,
           currentStepId: null,
           shipmentId: null,
           sackId: null,

@@ -492,27 +492,38 @@ async function main(): Promise<void> {
 }
 
 async function cleanup(): Promise<void> {
-  const tumToplar = await prisma.roll
-    .findMany({ where: { OR: [{ id: { in: rollIds } }, { parentReceipt: { workOrderId: { in: woIds } } }] }, select: { id: true } })
-    .catch(() => []);
+  // Her adım koşar; hata YUTULMAZ, sonda kırmızı sayılır (yutulan silme kalıntı bırakıyordu).
+  const hatalar: string[] = [];
+  const temizleAdim = async (ad: string, fn: () => Promise<unknown>): Promise<void> => {
+    try { await fn(); } catch (e) { hatalar.push(`${ad}: ${String((e as Error).message ?? e).split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? e}`); }
+  };
+  const tumToplar = await prisma.roll.findMany({
+    where: { OR: [{ id: { in: rollIds } }, { parentReceipt: { workOrderId: { in: woIds } } }] }, select: { id: true },
+  });
   const ids = [...new Set([...rollIds, ...tumToplar.map((r) => r.id)])];
   if (ids.length) {
     // FK sırası: ters satır → hareket → sapma → top.
-    await prisma.warehouseMovement.deleteMany({ where: { reversesMovement: { rollId: { in: ids } } } }).catch(() => {});
-    await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids } } }).catch(() => {});
-    await prisma.rollVariance.deleteMany({ where: { rollId: { in: ids } } }).catch(() => {});
-    await prisma.rollMovement.deleteMany({ where: { rollId: { in: ids } } }).catch(() => {});
-    await prisma.rollProperty.deleteMany({ where: { rollId: { in: ids } } }).catch(() => {});
+    await temizleAdim("depo ters satırı", () => prisma.warehouseMovement.deleteMany({ where: { reversesMovement: { rollId: { in: ids } } } }));
+    await temizleAdim("depo satırı", () => prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids } } }));
+    await temizleAdim("sapma", () => prisma.rollVariance.deleteMany({ where: { rollId: { in: ids } } }));
+    await temizleAdim("hareket", () => prisma.rollMovement.deleteMany({ where: { rollId: { in: ids } } }));
+    await temizleAdim("operasyon", () => prisma.rollOperation.deleteMany({ where: { rollId: { in: ids } } }));
+    await temizleAdim("özellik", () => prisma.rollProperty.deleteMany({ where: { rollId: { in: ids } } }));
   }
   if (woIds.length) {
-    await prisma.subcontractorReceipt.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
-    await prisma.subcontractorDispatch.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
+    await temizleAdim("kabul", () => prisma.subcontractorReceipt.deleteMany({ where: { workOrderId: { in: woIds } } }));
+    await temizleAdim("sevk", () => prisma.subcontractorDispatch.deleteMany({ where: { workOrderId: { in: woIds } } }));
   }
-  if (ids.length) await prisma.roll.deleteMany({ where: { id: { in: ids } } }).catch(() => {});
+  if (ids.length) await temizleAdim("top", () => prisma.roll.deleteMany({ where: { id: { in: ids } } }));
   if (woIds.length) {
-    await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
-    await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
-    await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } }).catch(() => {});
+    await temizleAdim("parti", () => prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } }));
+    await temizleAdim("refakat kartı", () => prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } }));
+    await temizleAdim("adım", () => prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } }));
+    await temizleAdim("iş emri", () => prisma.workOrder.deleteMany({ where: { id: { in: woIds } } }));
+  }
+  if (hatalar.length > 0) {
+    fail++;
+    console.error(`❌ TEMİZLİK HATASI — kalıntı kaldı: ${hatalar.join(" · ")}`);
   }
 }
 

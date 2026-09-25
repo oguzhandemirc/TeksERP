@@ -24,6 +24,7 @@
 // =============================================================================
 import { RollOperationType, RollStatus, StationKind, StepStatus, WarehouseEventType, WorkOrderStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { kapaliHareketFotografi, tersKayitIddialari } from "./lib/hareket-ters-kayit";
 import { KursunQcService } from "../src/services/kursun-qc.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { postStockMove } from "../src/services/helpers/warehouse-ledger.helper";
@@ -154,7 +155,9 @@ async function main(): Promise<void> {
   );
 
   // ── §2..§4 — birinci reopen ───────────────────────────────────────────────
+  const fotoKursun = await kapaliHareketFotografi(prisma, { rollId: roll.id, workOrderStepId: stepId });
   await svc.reopenStep({ stepId });
+  for (const [e, ok, d] of await tersKayitIddialari(prisma, fotoKursun, "KURSUN_REOPEN")) check(`§2h hareket: ${e}`, ok, d);
   const tur2 = await satirlar(roll.id);
   const tersler1 = tur2.filter((r) => r.reversesMovementId !== null);
   check(

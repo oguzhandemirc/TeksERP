@@ -76,7 +76,7 @@ import {
   revokePlanDeviationsTx,
   findPlanDeviationConfirmationsTx,
 } from "./helpers/tambur-plan-gate.helper";
-import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
+import { ACTIVE_MOVEMENT, reopenClosedMovementsTx } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { reverseAllRollStockMoves, reverseStockMove, reverseTransformGroupsOf } from "./helpers/warehouse-ledger-reverse.helper";
 import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
@@ -1400,6 +1400,8 @@ export class TamburUndoService {
           currentQty: 0,
           cancelReasonCode: TAMBUR_UNDO_CANCEL_CODE,
           cancelReason: TAMBUR_UNDO_CANCEL_TEXT,
+          cancelledAt: new Date(),
+          cancelledById: userId ?? null,
         },
       });
       if (cancelled.count !== 1) {
@@ -1647,6 +1649,8 @@ export class TamburUndoService {
           currentQty: 0,
           cancelReasonCode: TAMBUR_UNDO_CANCEL_CODE,
           cancelReason: TAMBUR_UNDO_CANCEL_TEXT,
+          cancelledAt: new Date(),
+          cancelledById: userId ?? null,
         },
       });
       if (cancelled.count !== 1) {
@@ -1694,9 +1698,12 @@ export class TamburUndoService {
           select: { id: true },
         });
         if (closedMove) {
-          await tx.rollMovement.update({
-            where: { id: closedMove.id, ...ACTIVE_MOVEMENT },
-            data: { exitedAt: null, qtyOut: null, weightOut: null, notes: "TAMBUR_UNDO_REOPEN" },
+          await reopenClosedMovementsTx(tx, {
+            where: { id: closedMove.id },
+            reason: "TAMBUR_UNDO_REOPEN",
+            notes: "TAMBUR_UNDO_REOPEN",
+            userId,
+            expectCount: 1,
           });
         } else {
           await tx.rollMovement.create({
@@ -1912,6 +1919,8 @@ export class TamburUndoService {
           currentQty: 0,
           cancelReasonCode: TAMBUR_UNDO_CANCEL_CODE,
           cancelReason: TAMBUR_UNDO_CANCEL_TEXT,
+          cancelledAt: new Date(),
+          cancelledById: userId ?? null,
         },
       });
       if (cancelled.count !== ids.length) {
@@ -1971,9 +1980,12 @@ export class TamburUndoService {
           select: { id: true },
         });
         if (closedMove) {
-          await tx.rollMovement.update({
-            where: { id: closedMove.id, ...ACTIVE_MOVEMENT },
-            data: { exitedAt: null, qtyOut: null, weightOut: null, notes: "TAMBUR_UNDO_REOPEN" },
+          await reopenClosedMovementsTx(tx, {
+            where: { id: closedMove.id },
+            reason: "TAMBUR_UNDO_REOPEN",
+            notes: "TAMBUR_UNDO_REOPEN",
+            userId,
+            expectCount: 1,
           });
         } else {
           await tx.rollMovement.create({

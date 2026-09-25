@@ -45,11 +45,13 @@
 // =============================================================================
 import { RollStatus, WarehouseEventType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { ensureTestAdmin } from "./fixture-test-user";
 import { TamburService } from "../src/services/tambur.service";
 import { TamburUndoService } from "../src/services/tambur-undo.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { roleGrade } from "./fixture-quality-grade";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
+import { iptalAktoruIddiasi, kapaliHareketFotografi, tersKayitIddialari } from "./lib/hareket-ters-kayit";
 
 let pass = 0;
 let fail = 0;
@@ -59,6 +61,16 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 
 const TAG = `TEST-SLTU-${Date.now()}`;
+
+/** Tambur kapanışının kapattığı adım — geri alma yalnız onu yeniden açar. */
+async function sonKapaliAdim(rollId: string): Promise<string> {
+  const m = await prisma.rollMovement.findFirst({
+    where: { rollId, revokedAt: null, exitedAt: { not: null } },
+    orderBy: { exitedAt: "desc" },
+    select: { workOrderStepId: true },
+  });
+  return m?.workOrderStepId ?? "";
+}
 const rollIds: string[] = [];
 const stepIds: string[] = [];
 const woIds: string[] = [];
@@ -137,6 +149,7 @@ async function main(): Promise<void> {
   const gScrap = await prisma.qualityGrade.create({ data: { code: `${TAG}-S`, name: "Test fire kalitesi", targetStatus: RollStatus.SCRAP }, select: { id: true, code: true } });
   gradeIds.push(gWh.id, gScrap.id);
 
+  const adminId = (await ensureTestAdmin()).id;
   // ── SENARYO A — tek çocuk geri alma (SINGLE / SINGLE_RESTORE) ─────────────
   const parentA = await senaryo("A", warehouse.id, station.id, 300);
   // Ebeveyne bir özellik yaz — finalize'ın ebeveyn retire'ı ÖZELLİĞİ SİLMEMELİ
@@ -177,7 +190,8 @@ async function main(): Promise<void> {
   check("§1 Finalize depo çocuğuna tek PRODUCTION girişi yazdı", ileriA.length === 1 && net(ileriA) === 200, `satır=${ileriA.length} net=${net(ileriA)}`);
   const ileriIdA = ileriA[0]?.id;
 
-  await undo.applyUndo(whA.id, undefined, { reason: "bekçi: geri alma defter ölçümü" });
+  await undo.applyUndo(whA.id, adminId, { reason: "bekçi: geri alma defter ölçümü" });
+  { const [e, ok, d] = await iptalAktoruIddiasi(prisma, [whA.id], adminId); check(`§3b SINGLE: ${e}`, ok, d); }
 
   const sonraA = await satirlar(whA.id);
   const tersA = sonraA.find((r) => r.reversesMovementId !== null);
@@ -221,7 +235,10 @@ async function main(): Promise<void> {
   check("§6a Kurulum: iki depo çocuğu ve iki giriş satırı", depoB.length === 2 && ileriB.length === 2, `çocuk=${depoB.length} satır=${ileriB.length}`);
 
   // FULL: `permissions` verilmiyor → F221 deseni, yetki kapısı atlanır (dahili çağrı).
-  await undo.applyUndo(depoB[0]!.id, undefined, { mode: "FULL", reason: "bekçi: tümden geri alma" });
+  const fotoB = await kapaliHareketFotografi(prisma, { rollId: parentB, workOrderStepId: await sonKapaliAdim(parentB) });
+  await undo.applyUndo(depoB[0]!.id, adminId, { mode: "FULL", reason: "bekçi: tümden geri alma" });
+  { const [e, ok, d] = await iptalAktoruIddiasi(prisma, depoB.map((c) => c.id), adminId); check(`§6d FULL: ${e}`, ok, d); }
+  for (const [e, ok, d] of await tersKayitIddialari(prisma, fotoB, "TAMBUR_UNDO_REOPEN")) check(`§6c FULL: ${e}`, ok, d);
 
   const sonraB = await Promise.all(depoB.map((c) => satirlar(c.id)));
   const netler = sonraB.map(net);
@@ -256,7 +273,10 @@ async function main(): Promise<void> {
     const ileri = await satirlar(cocuk.id);
     if (net(ileri) !== 200) throw new Error(`tur ${tur}: giriş satırı beklenen +200 değil (${net(ileri)})`);
     // SINGLE_RESTORE: parçayı iptal et, metrajı KAYNAK TOPA geri koy.
-    await undo.applyUndo(cocuk.id, undefined, { mode: "SINGLE_RESTORE", reason: `bekçi: tur ${tur}` });
+    const fotoC = await kapaliHareketFotografi(prisma, { rollId: parentC, workOrderStepId: await sonKapaliAdim(parentC) });
+    await undo.applyUndo(cocuk.id, adminId, { mode: "SINGLE_RESTORE", reason: `bekçi: tur ${tur}` });
+    { const [e, ok, d] = await iptalAktoruIddiasi(prisma, [cocuk.id], adminId); check(`§8c SINGLE_RESTORE tur ${tur}: ${e}`, ok, d); }
+    for (const [e, ok, d] of await tersKayitIddialari(prisma, fotoC, "TAMBUR_UNDO_REOPEN")) check(`§8b SINGLE_RESTORE tur ${tur}: ${e}`, ok, d);
     turNetleri.push(net(await satirlar(cocuk.id)));
   }
   check(

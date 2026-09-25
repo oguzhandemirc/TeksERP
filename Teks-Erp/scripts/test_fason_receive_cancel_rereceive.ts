@@ -11,6 +11,7 @@
 // Rota: [1] BOYA_FASON (EXTERNAL) → [2] KURSUN_KK2 (INTERNAL)
 // Çalıştır: npx tsx scripts/test_fason_receive_cancel_rereceive.ts
 import prisma from "../src/lib/prisma";
+import { iptalAktoruIddiasi, kapaliHareketFotografi, tersKayitIddialari } from "./lib/hareket-ters-kayit";
 import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
@@ -144,7 +145,10 @@ async function main(): Promise<void> {
   const born1PropsBefore = await prisma.rollProperty.count({ where: { rollId: born1.id } });
   check("ön koşul — born1'de özellik satırı var", born1PropsBefore >= 1, `n=${born1PropsBefore}`);
 
+  const fotoKabul = await kapaliHareketFotografi(prisma, { rollId: a.rollIds[0], workOrderStepId: a.boyaStep });
   await sub.cancelReceipt(born1.parentReceiptId!, "saha testi: kabul iptali", ADMIN, [born1.id]);
+  for (const [e, ok, d] of await tersKayitIddialari(prisma, fotoKabul, "FASON_KABUL_IPTAL")) check(`CR1: hareket: ${e}`, ok, d);
+  { const [e, ok, d] = await iptalAktoruIddiasi(prisma, [born1.id], ADMIN); check(`CR1: ${e}`, ok, d); }
   const born1PropsAfterRows = await prisma.rollProperty.findMany({ where: { rollId: born1.id }, select: { revokedAt: true, revokeReason: true } });
   check("CR1: ⭐ iptal born'un ÖZELLİK satırını SİLMEDİ (ölü topta kalır)", born1PropsAfterRows.length === born1PropsBefore, `önce=${born1PropsBefore} sonra=${born1PropsAfterRows.length}`);
   check("CR1: ⭐ özellik satırı DAMGALI, sebep kardeş hareketle aynı (FASON_RECEIPT_CANCEL)",

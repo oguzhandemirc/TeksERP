@@ -127,6 +127,10 @@ export async function createManualMoveFixture(
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: allRollIds } } });
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: allRollIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: allRollIds } } });
+    // Tambur kapanışı plan sapması yazabilir; satırı kalırsa top silinmez (FK).
+    await prisma.rollPlanDeviation.deleteMany({
+      where: { OR: [{ rollId: { in: allRollIds } }, { childRollId: { in: allRollIds } }] },
+    });
     await prisma.roll.deleteMany({ where: { id: { in: allRollIds } } });
     // ⚠️ PARTİ SİLME İŞ EMRİ KAPSAMLIDIR, "fixture'ın açtığı parti" DEĞİL.
     // Fixture tek parti açar ama bu WO'ya SONRADAN başka partiler doğabilir —

@@ -512,25 +512,36 @@ async function main(): Promise<void> {
       );
     }
   } finally {
-    await systemSettingService
-      .setFeatureFlags(
-        { qualityGradeRequiredEnabled: oncekiGrade, batchAutoCreateEnabled: oncekiBatch },
-        admin.id,
-      )
-      .catch(() => {});
-    // Sıra FK zinciri: hareket → operasyon → özellik → top → parti → fixture.
-    await prisma.rollMovement.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
-    await prisma.rollOperation.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
-    await prisma.rollProperty.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
-    await prisma.rollVariance.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
-    await prisma.roll.updateMany({
+    // Her adım koşar; hata YUTULMAZ, sonda kırmızı sayılır (yutulan silme kalıntı bırakıyordu).
+    const temizlikHatalari: string[] = [];
+    const temizleAdim = async (ad: string, fn: () => Promise<unknown>): Promise<void> => {
+      try { await fn(); } catch (e) { temizlikHatalari.push(`${ad}: ${String((e as Error).message ?? e).split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? e}`); }
+    };
+    await temizleAdim("bayraklar", () => systemSettingService.setFeatureFlags(
+      { qualityGradeRequiredEnabled: oncekiGrade, batchAutoCreateEnabled: oncekiBatch },
+      admin.id,
+    ));
+    // Sıra FK zinciri: hareket → operasyon → özellik → sapma/plan sapması → top → parti → fixture.
+    await temizleAdim("hareket", () => prisma.rollMovement.deleteMany({ where: { rollId: { in: createdRolls } } }));
+    await temizleAdim("operasyon", () => prisma.rollOperation.deleteMany({ where: { rollId: { in: createdRolls } } }));
+    await temizleAdim("özellik", () => prisma.rollProperty.deleteMany({ where: { rollId: { in: createdRolls } } }));
+    await temizleAdim("sapma", () => prisma.rollVariance.deleteMany({ where: { rollId: { in: createdRolls } } }));
+    await temizleAdim("plan sapması", () => prisma.rollPlanDeviation.deleteMany({
+      where: { OR: [{ rollId: { in: createdRolls } }, { childRollId: { in: createdRolls } }] },
+    }));
+    await temizleAdim("top bağları", () => prisma.roll.updateMany({
       where: { id: { in: createdRolls } },
       data: { currentStepId: null, batchId: null, parentRollId: null },
-    }).catch(() => {});
-    await prisma.roll.deleteMany({ where: { id: { in: createdRolls } } }).catch(() => {});
-    await prisma.batch.deleteMany({ where: { id: { in: createdBatches } } }).catch(() => {});
-    for (const t of teardowns.reverse()) await t().catch(() => {});
-    console.log("\n(temizlendi)");
+    }));
+    await temizleAdim("top", () => prisma.roll.deleteMany({ where: { id: { in: createdRolls } } }));
+    await temizleAdim("parti", () => prisma.batch.deleteMany({ where: { id: { in: createdBatches } } }));
+    for (const [i, t] of teardowns.reverse().entries()) await temizleAdim(`fikstür #${i + 1}`, t);
+    if (temizlikHatalari.length > 0) {
+      fail++;
+      console.error(`❌ TEMİZLİK HATASI — kalıntı kaldı: ${temizlikHatalari.join(" · ")}`);
+    } else {
+      console.log("\n(temizlendi)");
+    }
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

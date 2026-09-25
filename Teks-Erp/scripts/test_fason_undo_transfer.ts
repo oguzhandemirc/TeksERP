@@ -3,6 +3,7 @@
 // korunarak) AT_SUBCONTRACTOR döner; born toplar CANCELLED; dallar temiz.
 // Çalıştır: npx tsx scripts/test_fason_undo_transfer.ts
 import prisma from "../src/lib/prisma";
+import { iptalAktoruIddiasi, kapaliHareketFotografi, tersKayitIddialari } from "./lib/hareket-ters-kayit";
 import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
@@ -128,7 +129,10 @@ async function main(): Promise<void> {
   check("ön koşul — born'larda özellik satırı var", bornPropsBefore >= bornBefore.length, `n=${bornPropsBefore}`);
 
   // Geri al
+  const fotoAktarim = await kapaliHareketFotografi(prisma, { rollId: { in: [A, B] }, workOrderStepId: zimparaStep });
   await sub.undoTransfer(boyaDispatchId, "yanlış aktarım — geri alma testi", ADMIN);
+  for (const [e, ok, d] of await tersKayitIddialari(prisma, fotoAktarim, "FASON_TRANSFER_GERI_AL")) check(`hareket: ${e}`, ok, d);
+  { const [e, ok, d] = await iptalAktoruIddiasi(prisma, bornBefore.map((r) => r.id), ADMIN); check(e, ok, d); }
   const bornPropsAfterRows = await prisma.rollProperty.findMany({ where: { rollId: { in: bornBefore.map((r) => r.id) } }, select: { revokedAt: true, revokeReason: true } });
   check("⭐ Geri alma born'ların ÖZELLİK satırını SİLMEDİ (ölü topta kalır)", bornPropsAfterRows.length === bornPropsBefore, `önce=${bornPropsBefore} sonra=${bornPropsAfterRows.length}`);
   check("⭐ özellik satırları DAMGALI, sebep kardeş hareketle aynı (FASON_TRANSFER_GERI_AL)",

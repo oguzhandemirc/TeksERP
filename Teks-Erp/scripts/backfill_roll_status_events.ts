@@ -15,11 +15,17 @@
 //      SONUNCUSU (iptal → geri alma → yeniden iptalde güncel iptal): actorId=userId ·
 //      createdAt=o anı · fromStatus=preCancelStatus ?? oldData.status. Eski dökümün yüklemiyle
 //      AYNI; kuralın beyanlı "bir kez aktaran göç" istisnası (lib/audit-okuma-beyan.ts).
+//   ③ AUDIT ebeveyn (B-RM, 1e kararı 2026-09-25) — tambur geri alma parçayı iptal ederken aktörü
+//      ne kolona ne parçanın audit'ine yazıyordu; iz EBEVEYNİN `TAMBUR_UNDO_*` satırında
+//      (`cancelledChildId`/`cancelledChildIds` + userId, sıcak ∪ arşiv): actorId=userId ·
+//      createdAt=o anı · fromStatus=preCancelStatus. ①/②'nin bulamadığı toplar için.
+//      Defter sütunu `preEpochSource=AUDIT` (kaynak audit); dökümde `AUDIT_EBEVEYN` diye ayrışır.
+//      ③ K-A2'den bağımsızdır: topun satırına (cancelReasonCode dahil) yazmaz, yalnız deftere ekler.
 //
 // ⚠️ BEYANLI KAYIP: iki geçişte de kaynağı bulunamayan iptal (aktör hiçbir yerde yok) ve
 // iptali sonradan GERİ ALINMIŞ eski toplar doldurulamaz; sayıları basılır.
 //
-// KAPI: `--apply` iki teyit ister — `--onay=<N>` (N = kuru koşumdaki ①+② toplamı, birebir)
+// KAPI: `--apply` iki teyit ister — `--onay=<N>` (N = kuru koşumdaki ①+②+③ toplamı, birebir)
 // ve `--hedef=<db-adı>` (DATABASE_URL'den çözülen adla birebir). Biri tutmazsa yazma YOK.
 // İdempotent: defterde CANCELLED satırı olan top atlanır; ikinci koşum 0 yazar.
 // =============================================================================
@@ -46,7 +52,7 @@ function dokumYolu(db: string): string {
   return resolve(__dirname, "out", `backfill_roll_status_events-${db}-${damga}.csv`);
 }
 
-type Kaynak = "ROLL_COLUMNS" | "AUDIT";
+type Kaynak = "ROLL_COLUMNS" | "AUDIT" | "AUDIT_EBEVEYN";
 interface Aday {
   id: string;
   barcode: string | null;
@@ -101,6 +107,36 @@ async function auditAdaylari(): Promise<Aday[]> {
   }));
 }
 
+/** ③ Tambur geri alma parçası: ebeveynin `TAMBUR_UNDO_*` audit satırı (sıcak ∪ arşiv), EN SONUNCUSU. */
+async function ebeveynAuditAdaylari(haric: Set<string>): Promise<Aday[]> {
+  const rows = await prisma.$queryRaw<Array<{ id: string; barcode: string | null; preCancelStatus: string | null; userId: string; createdAt: Date }>>`
+    SELECT r.id, r.barcode, r."preCancelStatus"::text AS "preCancelStatus", a."userId", a."createdAt"
+      FROM rolls r
+      CROSS JOIN LATERAL (
+        SELECT u."userId", u."createdAt" FROM (
+          SELECT l."userId", l."createdAt", l."newData"
+            FROM system_logs l
+           WHERE l."tableName" = 'ROLL' AND l."recordId" = r."parentRollId"::text AND l."userId" IS NOT NULL
+          UNION ALL
+          SELECT l."userId", l."createdAt", l."newData"
+            FROM system_log_archives l
+           WHERE l."tableName" = 'ROLL' AND l."recordId" = r."parentRollId"::text AND l."userId" IS NOT NULL
+        ) u
+        WHERE starts_with(u."newData" ->> 'event', 'TAMBUR_UNDO')
+          AND ((u."newData" ->> 'cancelledChildId') = r.id::text OR (u."newData" -> 'cancelledChildIds') @> to_jsonb(r.id::text))
+        ORDER BY u."createdAt" DESC
+        LIMIT 1
+      ) a
+     WHERE r.status = 'CANCELLED' AND r."cancelledById" IS NULL AND r."parentRollId" IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM roll_status_events e WHERE e."rollId" = r.id AND e."toStatus" = 'CANCELLED')
+     ORDER BY a."createdAt", r.id
+  `;
+  return rows.filter((r) => !haric.has(r.id)).map((r) => ({
+    id: r.id, barcode: r.barcode, fromStatus: statusOf(r.preCancelStatus),
+    actorId: r.userId, at: r.createdAt, kaynak: "AUDIT_EBEVEYN",
+  }));
+}
+
 async function main(): Promise<void> {
   const db = hedefDbAdi();
   console.log(`=== Top durum defteri — eski iptaller — ${APPLY ? `UYGULAMA (onay=${ONAY}, hedef=${HEDEF})` : "KURU ANLATIM"} ===`);
@@ -108,7 +144,8 @@ async function main(): Promise<void> {
 
   const kolon = await kolonAdaylari();
   const audit = await auditAdaylari();
-  const liste = [...kolon, ...audit];
+  const ebeveyn = await ebeveynAuditAdaylari(new Set([...kolon, ...audit].map((r) => r.id)));
+  const liste = [...kolon, ...audit, ...ebeveyn];
   const total = liste.length;
   const dokunulmayan = await prisma.$queryRaw<Array<{ n: bigint }>>`
     SELECT count(*) AS n FROM rolls r
@@ -116,13 +153,17 @@ async function main(): Promise<void> {
        AND NOT EXISTS (SELECT 1 FROM roll_status_events e WHERE e."rollId" = r.id AND e."toStatus" = 'CANCELLED')`;
   const kaynaksiz = Number(dokunulmayan[0]?.n ?? 0) - total;
 
-  for (const [baslik, grup] of [["① topun iptal kolonlarından (ROLL_COLUMNS)", kolon], ["② audit'in son CANCELLED satırından (AUDIT)", audit]] as const) {
+  for (const [baslik, grup] of [
+    ["① topun iptal kolonlarından (ROLL_COLUMNS)", kolon],
+    ["② audit'in son CANCELLED satırından (AUDIT)", audit],
+    ["③ ebeveynin TAMBUR_UNDO_* audit satırından (AUDIT_EBEVEYN)", ebeveyn],
+  ] as const) {
     console.log(`${baslik}: ${grup.length} top`);
     for (const r of grup) {
       console.log(`  ${r.barcode ?? r.id} · ${r.fromStatus ?? "?"} → CANCELLED · ${r.at.toISOString()} · kullanıcı ${r.actorId}`);
     }
   }
-  console.log(`Doldurulacak iptal: ${total} top (① ${kolon.length} + ② ${audit.length})`);
+  console.log(`Doldurulacak iptal: ${total} top (① ${kolon.length} + ② ${audit.length} + ③ ${ebeveyn.length})`);
   console.log(`\nBEYANLI KAYIP: kaynağı bulunamayan ${kaynaksiz} iptal edilmiş top doldurulmaz (aktör ne kolonda ne audit'te);` +
     " iptali sonradan geri alınmış eski toplar da doldurulamaz.");
 
@@ -134,11 +175,11 @@ async function main(): Promise<void> {
   console.log(`Döküm: ${yol}`);
 
   if (!APPLY) {
-    console.log(`\nKURU ANLATIM — hiçbir şey yazılmadı. Uygulamak için (kullanıcı onayıyla, HEDEF adı birebir; onay = ① + ②):\n  npx tsx scripts/backfill_roll_status_events.ts --apply --onay=${total} --hedef=${db}`);
+    console.log(`\nKURU ANLATIM — hiçbir şey yazılmadı. Uygulamak için (kullanıcı onayıyla, HEDEF adı birebir; onay = ① + ② + ③):\n  npx tsx scripts/backfill_roll_status_events.ts --apply --onay=${total} --hedef=${db}`);
     return;
   }
   if (!HEDEF || HEDEF !== db) { console.error(`❌ --hedef=${HEDEF || "(yok)"} ≠ çözülen veritabanı "${db}". Yazma YOK.`); process.exitCode = 1; return; }
-  if (!Number.isFinite(ONAY) || ONAY !== total) { console.error(`❌ ONAY UYUŞMUYOR: kuru koşum ${total} top (① ${kolon.length} + ② ${audit.length}), --onay=${ONAY}. Yazma YOK.`); process.exitCode = 1; return; }
+  if (!Number.isFinite(ONAY) || ONAY !== total) { console.error(`❌ ONAY UYUŞMUYOR: kuru koşum ${total} top (① ${kolon.length} + ② ${audit.length} + ③ ${ebeveyn.length}), --onay=${ONAY}. Yazma YOK.`); process.exitCode = 1; return; }
 
   let written = 0;
   for (let i = 0; i < liste.length; i += BATCH) {
@@ -150,15 +191,18 @@ async function main(): Promise<void> {
         toStatus: RollStatus.CANCELLED,
         actorId: r.actorId,
         preEpoch: true,
-        preEpochSource: r.kaynak,
+        preEpochSource: r.kaynak === "ROLL_COLUMNS" ? "ROLL_COLUMNS" : "AUDIT",
         createdAt: r.at,
       })),
     });
     written += res.count;
     console.log(`  ${written}/${total}`);
   }
-  const kalan = (await kolonAdaylari()).length + (await auditAdaylari()).length;
-  console.log(`\n✅ ${written} satır yazıldı (① ${kolon.length} + ② ${audit.length}). Yeniden koşumda yazılacak: ${kalan} (beklenen 0).`);
+  const kalanKolon = await kolonAdaylari();
+  const kalanAudit = await auditAdaylari();
+  const kalan = kalanKolon.length + kalanAudit.length
+    + (await ebeveynAuditAdaylari(new Set([...kalanKolon, ...kalanAudit].map((r) => r.id)))).length;
+  console.log(`\n✅ ${written} satır yazıldı (① ${kolon.length} + ② ${audit.length} + ③ ${ebeveyn.length}). Yeniden koşumda yazılacak: ${kalan} (beklenen 0).`);
 
   // İZ: bir kerelik göçün kendisi audit'e düşer (ayak izi; iş verisi defterde).
   const izOnce = AuditService.getHealth().failureCount;
@@ -166,7 +210,7 @@ async function main(): Promise<void> {
     category: "SYSTEM",
     action: "ROLL_STATUS_EVENTS_BACKFILL",
     tableName: "ROLL",
-    payload: { source: "scripts/backfill_roll_status_events.ts", veritabani: db, yazilan: written, kolondan: kolon.length, auditten: audit.length, kaynaksizAtlanan: kaynaksiz, dokum: yol },
+    payload: { source: "scripts/backfill_roll_status_events.ts", veritabani: db, yazilan: written, kolondan: kolon.length, auditten: audit.length, ebeveynAuditten: ebeveyn.length, kaynaksizAtlanan: kaynaksiz, dokum: yol },
   });
   if (AuditService.getHealth().failureCount !== izOnce) {
     console.error(`\n⚠️  AUDIT SATIRI YAZILAMADI — dökümü (${yol}) ve bu çıktıyı göçün izi olarak saklayın.`);

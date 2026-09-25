@@ -7,9 +7,10 @@
 //   §1 nesneler var · §2 doğuş · §3 geçiş (durum dışı dokunuş satır DOĞURMAZ) · §4 iptal/
 //   fire aktörü · §5 geri alma = karşı kayıt, ileri satır değişmez · §6 mühür (doğrudan
 //   UPDATE/DELETE RED) · §7 top silinince kaskad (bekçi temizlikleri) · §8 statik: kodda
-//   bu deftere yazan 0 (1e şartı) · §9 göç script'i uçtan uca, iki geçiş ayrı (① kolonlar ·
-//   ② audit'in EN SON CANCELLED satırı, sıcak + arşiv) + kaynak CHECK'i (kuru → uygula → 0) ·
-//   §10 aktörsüz iptal satırı sayısı basılır (borç: 5 yol cancelledById yazmıyor).
+//   bu deftere yazan 0 (1e şartı) · §9 göç script'i uçtan uca, üç geçiş ayrı (① kolonlar ·
+//   ② audit'in EN SON CANCELLED satırı, sıcak + arşiv · ③ tambur geri alma parçasında
+//   ebeveynin EN SON TAMBUR_UNDO_* satırı) + kaynak CHECK'i (kuru → uygula → 0) ·
+//   §10 aktörsüz (defter sonrası) iptal satırı sayısı basılır.
 //
 // NEGATİF SONDA ✓B3 (koşuldu 2026-09-25, izole ağaç, geri alındı):
 //   S1 trigger DISABLE → §2/§3/§4/§5 ❌ (satır doğmadı) · S2 mühür fonksiyonunda UPDATE
@@ -168,12 +169,32 @@ async function main(): Promise<void> {
     const eskiTop = (b: string, ek: object) => prisma.roll.create({
       data: { barcode: b, itemId: item.id, status: RollStatus.CANCELLED, initialQty: 5, currentQty: 5,
         preCancelStatus: RollStatus.STOCK, ...ek }, select: { id: true } });
+    const ebeveynId = (await prisma.roll.create({
+      data: { barcode: `TEST-RSE-EB-${ts}`, itemId: item.id, status: RollStatus.STOCK, initialQty: 5, currentQty: 5 },
+      select: { id: true } })).id;
     const eskiId = (await eskiTop(eski, { cancelledAt: eskiAn, cancelledById: user.id })).id;
     const ikiId = (await eskiTop(iki, {})).id;
     const arsId = (await eskiTop(ars, { preCancelStatus: null })).id;
+    const parca = `TEST-RSE-PARCA-${ts}`;
+    const parcaId = (await eskiTop(parca, { preCancelStatus: null, parentRollId: ebeveynId })).id;
     await prisma.$executeRawUnsafe(`ALTER TABLE rolls ENABLE TRIGGER rolls_write_status_event`);
     tetikKapali = false;
-    rollIds.push(eskiId, ikiId, arsId);
+    rollIds.push(parcaId, eskiId, ikiId, arsId, ebeveynId);
+    // ③ ebeveynin izi: eski TAMBUR_UNDO_SINGLE · yeni TAMBUR_UNDO_FULL (seçilmeli) · daha yeni ama
+    // TAMBUR_UNDO olmayan bir olay (seçilmemeli).
+    const undoEski = new Date(Date.now() - 5 * 86_400_000);
+    const undoYeni = new Date(Date.now() - 4 * 86_400_000);
+    for (const [at, newData] of [
+      [undoEski, { event: "TAMBUR_UNDO_SINGLE", cancelledChildId: parcaId }],
+      [undoYeni, { event: "TAMBUR_UNDO_FULL", cancelledChildIds: [parcaId] }],
+      [new Date(Date.now() - 3.5 * 86_400_000), { event: "TAMBUR_FINALIZE", cancelledChildId: parcaId }],
+    ] as const) {
+      const l = await prisma.systemLog.create({
+        data: { userId: user.id, category: "DOMAIN", action: "UPDATE", tableName: "ROLL", recordId: ebeveynId,
+          newData, createdAt: at },
+        select: { id: true } });
+      logIds.push(l.id);
+    }
     for (const [at, status] of [[ilkIptal, "CANCELLED"], [geriAlma, "STOCK"], [sonIptal, "CANCELLED"]] as const) {
       const l = await prisma.systemLog.create({
         data: { userId: user.id, category: "DOMAIN", action: "UPDATE", tableName: "ROLL", recordId: ikiId,
@@ -189,11 +210,15 @@ async function main(): Promise<void> {
 
     const kuru = kosScript([]);
     const n = Number(kuru.cikti.match(/Doldurulacak iptal: (\d+) top/)?.[1] ?? NaN);
-    const ikiBolum = kuru.cikti.split("② audit")[1] ?? "";
-    check("§9a kuru koşum yazmaz; ① ve ② AYRI basılır, fikstürler doğru geçişte",
-      kuru.kod === 0 && n >= 3 && /① topun iptal kolonlarından \(ROLL_COLUMNS\): \d+ top/.test(kuru.cikti) &&
-        /② audit'in son CANCELLED satırından \(AUDIT\): \d+ top/.test(kuru.cikti) && /\(① \d+ \+ ② \d+\)/.test(kuru.cikti) &&
-        ikiBolum.includes(iki) && ikiBolum.includes(ars) && !ikiBolum.includes(eski) && (await olaylar(eskiId)).length === 0,
+    const ikiBolum = (kuru.cikti.split("② audit")[1] ?? "").split("③ ebeveyn")[0] ?? "";
+    const ucBolum = kuru.cikti.split("③ ebeveyn")[1] ?? "";
+    check("§9a kuru koşum yazmaz; ①, ② ve ③ AYRI basılır, fikstürler doğru geçişte",
+      kuru.kod === 0 && n >= 4 && /① topun iptal kolonlarından \(ROLL_COLUMNS\): \d+ top/.test(kuru.cikti) &&
+        /② audit'in son CANCELLED satırından \(AUDIT\): \d+ top/.test(kuru.cikti) &&
+        /③ ebeveynin TAMBUR_UNDO_\* audit satırından \(AUDIT_EBEVEYN\): \d+ top/.test(kuru.cikti) &&
+        /\(① \d+ \+ ② \d+ \+ ③ \d+\)/.test(kuru.cikti) &&
+        ikiBolum.includes(iki) && ikiBolum.includes(ars) && !ikiBolum.includes(eski) && !ikiBolum.includes(parca) &&
+        ucBolum.includes(parca) && !ucBolum.includes(iki) && (await olaylar(eskiId)).length === 0,
       `çıkış ${kuru.kod} · aday ${n}`);
     const uygula = kosScript(["--apply", `--onay=${n}`, `--hedef=${hedefDbAdi()}`]);
     const ev = await olaylar(eskiId);
@@ -210,6 +235,11 @@ async function main(): Promise<void> {
     check("§9b3 ② yalnız arşivde izi olan iptal de aktarılır (fromStatus oldData'dan)",
       evArs.length === 1 && evArs[0]!.preEpochSource === "AUDIT" && evArs[0]!.createdAt.getTime() === arsivAn.getTime() &&
         evArs[0]!.fromStatus === RollStatus.A1_STOCK, evArs.map((x) => `${x.fromStatus}:${x.preEpochSource}`).join(",") || "satır yok");
+    const evParca = await olaylar(parcaId);
+    check("§9b4 ⭐ ③ tambur geri alma parçasında ebeveynin EN SON TAMBUR_UNDO_* satırı (başka olay seçilmez), kaynak AUDIT",
+      evParca.length === 1 && evParca[0]!.preEpochSource === "AUDIT" && evParca[0]!.actorId === user.id &&
+        evParca[0]!.createdAt.getTime() === undoYeni.getTime() && evParca[0]!.fromStatus === null,
+      evParca.map((x) => `${x.createdAt.toISOString()}:${x.preEpochSource}`).join(",") || "satır yok");
     const ikinci = kosScript([]);
     check("§9c ikinci kuru koşum 0 aday (idempotent)", /Doldurulacak iptal: 0 top/.test(ikinci.cikti));
     const yanlisHedef = kosScript(["--apply", "--onay=0", "--hedef=baska_db"]);
@@ -220,7 +250,7 @@ async function main(): Promise<void> {
 
     // §10 bilgi
     const aktorsuz = await prisma.rollStatusEvent.count({ where: { toStatus: RollStatus.CANCELLED, actorId: null, preEpoch: false } });
-    console.log(`   ⓘ aktörsüz iptal satırı: ${aktorsuz} (arşiv · tambur geri alma ×3 · fason ×2 cancelledById yazmıyor — ayrı dilim)`);
+    console.log(`   ⓘ aktörsüz iptal satırı (defter sonrası): ${aktorsuz}`);
   } finally {
     if (tetikKapali) await prisma.$executeRawUnsafe(`ALTER TABLE rolls ENABLE TRIGGER rolls_write_status_event`).catch(() => {});
     // Test DB'de audit koruması (teks.audit_guard) kapalı; açıksa satır kalır, zararsız.

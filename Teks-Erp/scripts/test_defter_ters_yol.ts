@@ -49,7 +49,8 @@
 // =============================================================================
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { CIFT_DISI_DEGERLER, DEFTER_BEYANI, STOK_OLAY_BEYANI, type CiftDisiDeger, type DefterBeyani, type TersMekanizma } from "./lib/defter-beyan";
+import { CIFT_DISI_DEGERLER, DAMGA_ALANLARI, DAMGA_NULL_BEYANI, DEFTER_BEYANI, STOK_OLAY_BEYANI, type CiftDisiDeger, type DefterBeyani, type TersMekanizma } from "./lib/defter-beyan";
+import { damgaNullTaraDizin, damgaNullTaraKaynak } from "./lib/damga-null-tarama";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { SILEN, defterYazimlariniTara, sembolReferanslari, tipliProgram } from "./lib/defter-yazim-tarama";
 import { SILME_BAGLAMI_ISARETI, SILME_BAGLAMI_SINIFLARI, TEARDOWN_ADLARI, TEMIZLIK_SCRIPTI_ISARETI, satirBaglami, silmeleriTara, sondaSinifla, temizlikScriptiMi } from "./lib/silme-bagi";
@@ -877,6 +878,38 @@ console.log("ℹ️  hiçbir şey söylemez. (Sayı DAMGALIDIR: kapı statiktir,
 for (const [kod, b] of olayBorclari) {
   if (b.tur !== "BORC") continue;
   console.log(`  • ${kod}: ${b.ne}\n      kanıt: ${b.kanit}\n      sahibi: ${b.sahibi}`);
+}
+
+// §14 — İLERİ DAMGAYI NULL'LAYAN SİTE. Geri alma ileri kaydı değiştirmez; damgayı yerinde
+// null'lamak ters kayıt değildir. Her isabet site başına beyanlı olmalı (DURUM_KOLONU ya da
+// BORC), beyan iki yönlü ölçülür: beyansız isabet kırmızı, isabetsiz (ölü) beyan kırmızı.
+console.log("\n=== §14 İleri damgayı null'layan siteler ===");
+{
+  // §14s SONDALAR — tarayıcının kendisi yanlışlanır: yazım bağlamı yakalanır, süzgeç yakalanmaz.
+  const sonda = (kaynak: string): number => damgaNullTaraKaynak(kaynak, "sonda.ts", DAMGA_ALANLARI).length;
+  check("§14s prisma data'da null yakalanır", sonda("async function f(){ await tx.m.updateMany({ where: { id }, data: { exitedAt: null, qtyOut: null } }); }") === 2);
+  check("§14s where süzgecindeki null YAKALANMAZ", sonda("async function f(){ await tx.m.findMany({ where: { exitedAt: null, AND: [{ qtyOut: null }] } }); }") === 0);
+  check("§14s upsert update'indeki null yakalanır, create'teki yakalanmaz", sonda("async function f(){ await tx.m.upsert({ where: { id }, create: { invoicedAt: null }, update: { invoicedAt: null } }); }") === 1);
+  check("§14s ham SQL SET'teki NULL yakalanır, WHERE'deki yakalanmaz",
+    sonda("async function f(){ await tx.$executeRaw`UPDATE t SET \"exitedAt\" = NULL WHERE \"qtyOut\" = NULL`; }") === 1);
+
+  const isabetler = damgaNullTaraDizin(KOK, join(KOK, "src"), DAMGA_ALANLARI);
+  const anahtar = (d: string, f: string, a: string): string => `${d} · ${f} · ${a}`;
+  const olculen = new Map<string, number[]>();
+  for (const i of isabetler) olculen.set(anahtar(i.dosya, i.fonksiyon, i.alan), [...(olculen.get(anahtar(i.dosya, i.fonksiyon, i.alan)) ?? []), i.satir]);
+  const beyan = new Map(DAMGA_NULL_BEYANI.map((b) => [anahtar(b.dosya, b.fonksiyon, b.alan), b]));
+  const beyansiz = [...olculen].filter(([k, satirlar]) => beyan.get(k)?.adet !== satirlar.length)
+    .map(([k, satirlar]) => `${k} :${satirlar.join(",")} (ölçülen ${satirlar.length}, beyan ${beyan.get(k)?.adet ?? "YOK"})`);
+  check("§14a her damga null'lama sitesi beyanlı (adet eşit)", beyansiz.length === 0,
+    beyansiz.length ? `BEYANSIZ/ADET FARKLI: ${beyansiz.join(" · ")} — ters kayda çevir ya da scripts/lib/defter-beyan.ts DAMGA_NULL_BEYANI'na sınıfıyla yaz` : `${isabetler.length} isabet, ${olculen.size} site`);
+  const olu = [...beyan.keys()].filter((k) => !olculen.has(k));
+  check("§14b ölü beyan YOK (borç kapanınca beyan da silinir)", olu.length === 0,
+    olu.length ? `İSABETSİZ BEYAN: ${olu.join(" · ")}` : `${beyan.size} beyan, hepsi ölçüldü`);
+  const eksik = DAMGA_NULL_BEYANI.filter((b) => !b.tarihce.trim() || !b.gerekce.trim()).map((b) => anahtar(b.dosya, b.fonksiyon, b.alan));
+  check("§14c her beyan tarihçenin yaşadığı defteri ve gerekçeyi söylüyor", eksik.length === 0, eksik.join(" · "));
+  const borclar = DAMGA_NULL_BEYANI.filter((b) => b.sinif === "BORC");
+  console.log(`ℹ️  DAMGA NULL'LAMA BORÇLARI (${borclar.length}/${DAMGA_NULL_BEYANI.length}):`);
+  for (const b of borclar) console.log(`  • ${anahtar(b.dosya, b.fonksiyon, b.alan)} ×${b.adet} — tarihçe: ${b.tarihce}`);
 }
 
 const acikBorclar = DEFTER_BEYANI.flatMap((b) => (b.borc ?? []).map((x) => ({ model: b.model, ...x })));

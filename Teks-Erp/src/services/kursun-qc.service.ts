@@ -15,7 +15,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
-import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
+import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
 import { randomUUID } from "crypto";
@@ -1198,9 +1198,11 @@ export class KursunQcService {
 
       // Bu step'in kapatılmış movement'lerini geri aç — id'ler tx DIŞINDA okundu;
       // arada geri alınmış bir satır yeniden AÇILMAZ.
-      await tx.rollMovement.updateMany({
-        where: { ...ACTIVE_MOVEMENT, id: { in: movementIds } },
-        data: { qtyOut: null, weightOut: null, exitedAt: null, notes: null },
+      await reopenClosedMovementsTx(tx, {
+        where: { id: { in: movementIds } },
+        reason: "KURSUN_REOPEN",
+        notes: null,
+        userId: userId ?? null,
       });
 
       // QC2_COMPLETED / KURSUN_APPLIED işaretleri ve RollProperty kayıtları
