@@ -82,7 +82,7 @@ export const AYAK_IZI_OKUYUCULARI: readonly AyakIziBeyani[] = [
 export const AUDIT_OKUMA_BORCU: readonly AuditOkumaBorcu[] = [];
 
 /** Borç okuma noktası sayısı (Σ adet) — yalnız 1e düşürür. */
-export const AUDIT_OKUMA_BORC_TABANI = 2;
+export const AUDIT_OKUMA_BORC_TABANI = 0;
 
 // ── GÖÇ İSTİSNASI (scripts/) ──────────────────────────────────────────────────
 /**
