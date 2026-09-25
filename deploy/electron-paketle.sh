@@ -41,6 +41,10 @@ echo "$musteri" | grep -qE '^[a-z0-9][a-z0-9-]{1,30}$' \
 
 cd "$electron_dir"
 
+# Sembolik bağlı node_modules'te electron-builder bağımlılık ağacını eksik toplar ve
+# paket açılışta ERR_MODULE_NOT_FOUND ile düşer (1.3.2: electron-store → conf eksikti).
+[ -L node_modules ] && hata "Electron/node_modules sembolik bağ — paket bağımlılıkları eksik toplanır. Bu ağaçta gerçek 'npm ci' koş."
+
 # --- 0) SÜRÜM NUMARASI ----------------------------------------------------
 # Sürüm verilmediyse YAMA hanesi otomatik artar (1.1.0 → 1.1.1 → 1.1.2).
 #

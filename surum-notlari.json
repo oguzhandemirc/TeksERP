@@ -17,6 +17,20 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-25b",
+      "baslik": "Kararlılık iyileştirmeleri",
+      "surumler": {
+        "panel": "1.3.3"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Genel kararlılık iyileştirmeleri ve hata düzeltmeleri."
+        }
+      ]
+    },
+    {
       "id": "2026-09-25",
       "baslik": "Numaralandırma ayardan yönetiliyor; sevk partisi; sevk yönü cariden geliyor; cari kartı rollerle; dokuma ve devere modülleri; yanlış işlemler geri alınabiliyor, depo defteri tamamlandı",
       "surumler": {
