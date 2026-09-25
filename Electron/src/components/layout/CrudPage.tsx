@@ -71,6 +71,9 @@ interface Props<T extends { id: string }> {
    *  genel onay diyaloğunu açmaz, satırı buraya verir; `removeLabel` düğmenin adı. */
   onRemove?: (row: T) => void;
   removeLabel?: string;
+  /** Pasif satırdaki ⟲ için sayfanın KENDİ akışı (ürün: aynı durum diyaloğu); `restoreLabel` düğmenin adı. */
+  onRestore?: (row: T) => void;
+  restoreLabel?: string;
   /** Çok-sekmeli DÜZENLEME formları için: mevcut kaydı güncelleyince dialog
    * kapanmaz, güncel kayıtla düzenlemeye devam edilir — böylece kullanıcı aynı
    * oturumda şube/alias/şablon sekmeleri arasında çalışmaya devam edebilir.
@@ -106,6 +109,8 @@ export function CrudPage<T extends { id: string }>({
   permanentDelete,
   onRemove,
   removeLabel,
+  onRestore,
+  restoreLabel,
   actionsPortal,
   keepFormOpenAfterSave,
 }: Props<T>) {
@@ -178,11 +183,13 @@ export function CrudPage<T extends { id: string }>({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 text-primary"
-                    title="Aktifleştir"
+                    title={restoreLabel ?? "Aktifleştir"}
+                    aria-label={restoreLabel}
                     disabled={restoreMutation.isPending}
                     onClick={(e) => {
                       e.stopPropagation();
-                      restoreMutation.mutate(row.original.id);
+                      if (onRestore) onRestore(row.original);
+                      else restoreMutation.mutate(row.original.id);
                     }}
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
@@ -210,7 +217,7 @@ export function CrudPage<T extends { id: string }>({
     ],
     // restoreMutation.isPending → aktifleştir butonunun `disabled`'ı; state
     // setter'ları ve restoreMutation.mutate referans olarak kararlı.
-    [columns, writePermission, permanentDelete, onRemove, removeLabel, restoreMutation.isPending],
+    [columns, writePermission, permanentDelete, onRemove, removeLabel, onRestore, restoreLabel, restoreMutation.isPending],
   );
 
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<T>({

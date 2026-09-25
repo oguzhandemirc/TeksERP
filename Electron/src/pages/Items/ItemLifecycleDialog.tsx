@@ -20,6 +20,7 @@ import {
   defaultLifecycleChoice,
   itemLifecycleOf,
   lifecycleChoices,
+  lifecycleDialogVerb,
   type ItemLifecycleStatus,
   type LifecycleChoice,
 } from "@/lib/item-lifecycle";
@@ -82,7 +83,7 @@ export function ItemLifecycleDialog({ item, onClose }: Props) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Kullanımdan kaldır — {item.name}</DialogTitle>
+          <DialogTitle>{lifecycleDialogVerb(current)} — {item.name}</DialogTitle>
           <DialogDescription>
             Kart şu an <strong>{ITEM_LIFECYCLE_LABEL[current]}</strong>. Geçmiş kayıtlar hiçbir seçenekte değişmez.
           </DialogDescription>
@@ -95,7 +96,7 @@ export function ItemLifecycleDialog({ item, onClose }: Props) {
           <div className="space-y-3">
             <ChoiceList choices={choices} value={to} onChange={setTo} />
             <LiveReferencesList references={p.references} />
-            {p.similarActive.length > 0 && (
+            {current !== "ARCHIVED" && p.similarActive.length > 0 && (
               <p className="text-xs text-muted-foreground">
                 Bu kart aslında {p.similarActive.map((s) => `"${s.name}"`).join(", ")} kartının kopyasıysa Birleştir kullanın
                 (listede iki satırı işaretleyin).

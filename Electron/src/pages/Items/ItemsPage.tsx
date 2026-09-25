@@ -82,6 +82,8 @@ export function ItemsPage() {
       extraFilters={extraFilters}
       onRemove={setLifecycleItem}
       removeLabel="Kullanımdan kaldır"
+      onRestore={setLifecycleItem}
+      restoreLabel="Yeniden kullanıma al"
       filterBar={
         <>
           {/* Sıra kullanıcı listesi: Tür · Durum · Birim · Renk · Özellik. */}

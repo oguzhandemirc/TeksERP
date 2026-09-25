@@ -7,6 +7,7 @@ import {
   foldRollsByStatus,
   itemLifecycleOf,
   lifecycleChoices,
+  lifecycleDialogVerb,
   pickableLifecycle,
 } from "./item-lifecycle";
 
@@ -42,8 +43,15 @@ describe("lifecycleChoices", () => {
     expect(c.find((x) => x.to === "ARCHIVED")!.blockedBy).not.toBeNull();
     expect(defaultLifecycleChoice(c)).toBe("ACTIVE");
   });
-  it("Pasif kart diyalog seçeneği taşımaz (Aktifleştir satır düğmesidir)", () => {
-    expect(lifecycleChoices("ARCHIVED", 0)).toEqual([]);
+  it("⭐ Pasif kart: geri alma mesajının çıkış yolu tek adımda — varsayılan Tükenene kadar, ikinci seçenek Aktif'e döndür", () => {
+    const c = lifecycleChoices("ARCHIVED", 0);
+    expect(c.map((x) => [x.to, x.action])).toEqual([
+      ["PHASE_OUT", "Tükenene kadar'a al"],
+      ["ACTIVE", "Aktif'e döndür"],
+    ]);
+    expect(defaultLifecycleChoice(c)).toBe("PHASE_OUT");
+    expect(lifecycleDialogVerb("ARCHIVED")).toBe("Yeniden kullanıma al");
+    expect(lifecycleDialogVerb("ACTIVE")).toBe("Kullanımdan kaldır");
   });
 });
 

@@ -5,6 +5,7 @@
 //    yazılı; kayıtlar TEK TEK listelenir (toplar duruma göre katlanır); onay POST /lifecycle.
 // ⭐ §2 Tükenene kadar kart, kalan 0: varsayılan "Pasif".
 // ⭐ §3 Benzer aktif kart yalnız bilgi satırı (birleştirme otomatik değil).
+// ⭐ §4 Pasif kart: "Yeniden kullanıma al", varsayılan "Tükenene kadar'a al" (geri alma mesajının çıkış yolu).
 // =============================================================================
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
@@ -64,6 +65,17 @@ describe("ItemLifecycleDialog", () => {
     renderWithProviders(<ItemLifecycleDialog item={item({ lifecycleStatus: "PHASE_OUT" })} onClose={() => {}} />);
     expect(await screen.findByRole("radio", { name: /Pasif/ })).toBeChecked();
     expect(screen.getByRole("button", { name: "Pasife al" })).toBeEnabled();
+  });
+
+  it("⭐ §4 Pasif kart: başlık 'Yeniden kullanıma al', varsayılan Tükenene kadar, onay PHASE_OUT yollar", async () => {
+    preview.mockResolvedValue(previewData(0, "ARCHIVED") as never);
+    transition.mockResolvedValue({ success: true, data: item(), message: "Kart 'Tükenene kadar' durumuna alındı" } as never);
+    renderWithProviders(<ItemLifecycleDialog item={item({ lifecycleStatus: "ARCHIVED", isActive: false })} onClose={() => {}} />);
+    expect(await screen.findByRole("radio", { name: /Tükenene kadar/ })).toBeChecked();
+    expect(screen.getByText(/Yeniden kullanıma al — PATOS/)).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Aktif'e döndür/ })).toBeEnabled();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Tükenene kadar'a al" }));
+    await waitFor(() => expect(transition).toHaveBeenCalledWith("i1", "PHASE_OUT", null));
   });
 
   it("⭐ §3 benzer aktif kart yalnız bilgi satırı", async () => {

@@ -65,7 +65,22 @@ export interface LifecycleChoice {
   blockedBy: string | null;
 }
 
-/** "Kullanımdan kaldır" diyaloğunun seçenekleri — kartın bugünkü durumu ve kalan canlı kayıt sayısından. */
+const PHASE_OUT_CHOICE: LifecycleChoice = {
+  to: "PHASE_OUT",
+  label: "Tükenene kadar",
+  action: "Tükenene kadar'a al",
+  hint: "Eldeki mal iş emri, fason ve sevkte akmaya devam eder; yeni stok girişi ve alım açılmaz.",
+  blockedBy: null,
+};
+const ACTIVE_CHOICE: LifecycleChoice = {
+  to: "ACTIVE",
+  label: "Aktif'e döndür",
+  action: "Aktif'e döndür",
+  hint: "Kart yeniden her işlemde seçilebilir.",
+  blockedBy: null,
+};
+
+/** Durum diyaloğunun seçenekleri — kartın bugünkü durumu ve kalan canlı kayıt sayısından. */
 export function lifecycleChoices(current: ItemLifecycleStatus, liveTotal: number): LifecycleChoice[] {
   const archive: LifecycleChoice = {
     to: "ARCHIVED",
@@ -74,25 +89,17 @@ export function lifecycleChoices(current: ItemLifecycleStatus, liveTotal: number
     hint: "Kart hiçbir yeni işlemde seçilemez; geçmiş kayıtlar olduğu gibi kalır.",
     blockedBy: liveTotal > 0 ? `Kartta ${liveTotal} canlı kayıt var — önce kapanmalı.` : null,
   };
-  if (current === "ACTIVE") {
-    return [
-      {
-        to: "PHASE_OUT",
-        label: "Tükenene kadar",
-        action: "Tükenene kadar'a al",
-        hint: "Eldeki mal iş emri, fason ve sevkte akmaya devam eder; yeni stok girişi ve alım açılmaz.",
-        blockedBy: null,
-      },
-      archive,
-    ];
-  }
-  if (current === "PHASE_OUT") {
-    return [archive, { to: "ACTIVE", label: "Aktif'e döndür", action: "Aktif'e döndür", hint: "Kart yeniden her işlemde seçilebilir.", blockedBy: null }];
-  }
-  return [];
+  if (current === "ACTIVE") return [PHASE_OUT_CHOICE, archive];
+  if (current === "PHASE_OUT") return [archive, ACTIVE_CHOICE];
+  // Pasif kart: geri alma mesajının söylediği çıkış yolu ("önce Tükenene kadar'a alın") tek adımda.
+  return [PHASE_OUT_CHOICE, ACTIVE_CHOICE];
 }
 
-/** Varsayılan seçim: seçilebilen ilk seçenek (Aktif kartta "Tükenene kadar", Tükenene kadar kartta hazırsa "Pasif"). */
+/** Diyalog başlığının fiili — Pasif kartta kullanıma geri alınır, diğerlerinde kullanımdan kaldırılır. */
+export const lifecycleDialogVerb = (current: ItemLifecycleStatus): string =>
+  current === "ARCHIVED" ? "Yeniden kullanıma al" : "Kullanımdan kaldır";
+
+/** Varsayılan seçim: seçilebilen ilk seçenek (Aktif ve Pasif kartta "Tükenene kadar", Tükenene kadar kartta hazırsa "Pasif"). */
 export function defaultLifecycleChoice(choices: LifecycleChoice[]): ItemLifecycleStatus | null {
   return choices.find((c) => c.blockedBy === null)?.to ?? null;
 }

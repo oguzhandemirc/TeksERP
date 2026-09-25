@@ -287,9 +287,10 @@ kopya kalmaz.
 - Diğer ana veri sayfaları: 409 kayıt listesini okunur diyalogda gösterir.
 - **Uygulama (S6):**
   - "Kullanımdan kaldır" diyaloğu (`ItemLifecycleDialog`) Aktif ve Tükenene kadar satırda açılır.
-    Pasif satırda "Aktifleştir" kalır.
-  - Ürün formundaki "Aktif" onay kutusu kalktı; form `isActive` göndermez. Durum yalnız diyalog ve
-    Aktifleştir ile değişir.
+    Pasif satırda ⟲ "Yeniden kullanıma al" aynı diyaloğu açar (S6b): varsayılan "Tükenene kadar'a al",
+    ikinci seçenek "Aktif'e döndür". Geri alma mesajının söylediği çıkış yolu böylece tek adımdadır.
+  - Ürün formundaki "Aktif" onay kutusu kalktı; form `isActive` göndermez. Durum yalnız bu diyalogla
+    değişir (Aktif/Tükenene kadar satırda ⏻, Pasif satırda ⟲).
   - Durum süzgeci: "Aktif" bugünkü gibi kullanımdaki kartlardır (Tükenene kadar dahil, rozetle
     ayrılır); "Tükenene kadar" yalnız o durumdur.
   - Rozet sayısı `GET /items/lifecycle-summary?ids=` ucundan gelir.
