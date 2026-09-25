@@ -6131,8 +6131,15 @@ model Swatch {
 
   // Soft delete — kartela fason kabulü iptal edilince doğan kartelalar geri alınır
   // (fiziksel DELETE yok). Listeler default cancelledAt: null filtreler.
+  // DURUM kolonu (`status` REDUCED/VOIDED iken dolu); kim/neden `swatch_events` satırında.
   cancelledAt  DateTime? @db.Timestamptz
   cancelReason String?
+
+  /// Kartelanın ŞU ANKİ yeri — "ne oldu" `SwatchEvent` defterinde. `status`, `statusChangedAt`,
+  /// `sackId`, `shipmentId`, `cancelledAt` YALNIZ `helpers/swatch-event.helper.ts` ile yazılır
+  /// (`test_swatch_event_yazar`). NULL `statusChangedAt` = defter öncesi, an bilinmiyor.
+  status          SwatchStatus @default(IN_STOCK)
+  statusChangedAt DateTime?    @db.Timestamptz
 
   // Relations
   item          Item            @relation(fields: [itemId], references: [id])
@@ -6143,6 +6150,7 @@ model Swatch {
   shipment      Shipment?       @relation(fields: [shipmentId], references: [id])
   sack          Sack?           @relation(fields: [sackId], references: [id])
   stockReductionItems SwatchStockReductionItem[]
+  events              SwatchEvent[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -6159,6 +6167,84 @@ model Swatch {
   // 20260607030000). Prisma 7 partial predicate'i drift saymaz.
   @@index([createdAt])
   @@map("swatches")
+}
+
+/// Kartelanın şu anki yeri. Stok = IN_STOCK; REDUCED düşümle çıktı (storno IN_STOCK'a
+/// döndürür); VOIDED kabulü iptal edildi (terminal — kabul yeniden açılmaz).
+enum SwatchStatus {
+  IN_STOCK
+  IN_SACK
+  IN_SHIPMENT
+  SHIPPED
+  REDUCED
+  VOIDED
+}
+
+/// Kartela olay tipi — her tip TEK bir (from → to) geçişidir; eşli ters tipler.
+/// Geçiş tablosu `SWATCH_TRANSITIONS` (helper) ile DB CHECK'i `swatch_events_transition_known`
+/// boğaz-ikizdir, birlikte değişir.
+enum SwatchEventType {
+  BORN // kabulde doğdu: — → IN_STOCK
+  VOIDED // kabul iptali (BORN'un bağlı tersi): IN_STOCK → VOIDED
+  SACKED // IN_STOCK → IN_SACK
+  UNSACKED // IN_SACK → IN_STOCK (çuvallar arası taşıma = UNSACKED + SACKED, tek grup)
+  SHIPMENT_ADDED // IN_SACK → IN_SHIPMENT
+  SHIPMENT_REMOVED // IN_SHIPMENT → IN_SACK
+  SHIPPED // IN_SHIPMENT → SHIPPED (sevkiyat çıktı)
+  SHIP_UNDONE // SHIPPED → IN_SHIPMENT (sevk stornosu; SHIPPED'ın bağlı tersi)
+  REDUCED // IN_STOCK → REDUCED (stok düşümü)
+  REDUCTION_REVERSED // REDUCED → IN_STOCK (düşüm stornosu; REDUCED'ın bağlı tersi)
+}
+
+/// KARTELA OLAY DEFTERİ (docs/design/KARTELA-HAREKET-DEFTERI.md) — append-only, ADET birimli:
+/// bir satır = bir kartelanın bir geçişi. Satır YALNIZ `helpers/swatch-event.helper.ts`ten
+/// doğar ve kartelanın durum claim'iyle aynı tx'tedir. UPDATE ve doğrudan DELETE
+/// `defter_block_tamper` ile reddedilir. Geçmiş aktarılmadı: defter yayından sonra başlar.
+model SwatchEvent {
+  id         String          @id @default(uuid()) @db.Uuid
+  swatchId   String          @db.Uuid
+  type       SwatchEventType
+  /// Doğuşta (BORN) null; diğer her satırda dolu.
+  fromStatus SwatchStatus?
+  toStatus   SwatchStatus
+  /// Tek kullanıcı eylemi — 40 kartelalık okutma 40 satır, tek grup.
+  groupId    String          @db.Uuid
+  /// Olayı başlatan işlem kodu (KARTELA_RECEIVE · SACK_SCAN · SHIPMENT_DISPATCH …).
+  trigger    String          @db.VarChar(40)
+  /// PANEL · TABLET · SYSTEM — istek bağlamındaki cihazdan türer.
+  channel    String          @db.VarChar(16)
+  reason     String?         @db.VarChar(300)
+  reasonCode String?         @db.VarChar(64)
+
+  /// Referanslar FK'SIZ ve numaraları DONUK: çuval sert silinebilir (boş çuval silme) ve
+  /// `ON DELETE SET NULL` bir UPDATE'tir — mühürle çarpışır. Satır o günkü numarayı söyler.
+  sackId      String? @db.Uuid
+  sackNo      String? @db.VarChar(64)
+  shipmentId  String? @db.Uuid
+  shipmentNo  String? @db.VarChar(64)
+  receiptId   String? @db.Uuid
+  reductionId String? @db.Uuid
+
+  /// BAĞLI TERS: VOIDED → BORN · SHIP_UNDONE → SHIPPED · REDUCTION_REVERSED → REDUCED.
+  /// UNIQUE: bir ileri satır en çok bir kez terslenir. Null = ileri kayıt defter öncesinde.
+  reversesEventId String?      @unique @db.Uuid
+  reverses        SwatchEvent? @relation("SwatchEventReversal", fields: [reversesEventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversedBy      SwatchEvent? @relation("SwatchEventReversal")
+
+  /// Aktör FK'SIZ (emsal `WorkOrderEvent`): kullanıcı silen teardown'da SET NULL mühre çarpardı.
+  createdById String? @db.Uuid
+  deviceId    String? @db.VarChar(128)
+
+  /// `Cascade` BİLİNÇLİ: üretim kodu kartelayı silmez; kaskat silme mühürden geçer
+  /// (DELETE yalnız `pg_trigger_depth() = 0` iken reddedilir).
+  swatch Swatch @relation(fields: [swatchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([swatchId, createdAt])
+  @@index([type, createdAt])
+  @@index([groupId])
+  @@map("swatch_events")
 }
 
 /// Kartela stok düşüm OLAYI — reduceStock'un doğal kaydı + idempotency çapası.

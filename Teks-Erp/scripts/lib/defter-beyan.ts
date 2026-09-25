@@ -277,6 +277,14 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/kartela.service.ts", sembol: "reverseStockReductionTx" }],
     ["src/services/kartela.service.ts"]),
 
+  D("SwatchEvent", "kartelanın KENDİ olay defteri (ADET, satır = bir kartelanın bir geçişi): her tip tek bir from→to geçişidir (DB CHECK `swatch_events_transition_known`), ters yol eşli tiptir; VOIDED/SHIP_UNDONE/REDUCTION_REVERSED ileri satıra `reversesEventId` ile BAĞLI (UNIQUE: çift ters imkânsız). Durum claim'i ile satır aynı tx'te, tek yazar `helpers/swatch-event.helper.ts`; DB mührü `defter_block_tamper`",
+    { tur: "KARSI_OLAY", enumAdi: "SwatchEventType", ciftler: [
+      ["BORN", "VOIDED"], ["SACKED", "UNSACKED"], ["SHIPMENT_ADDED", "SHIPMENT_REMOVED"],
+      ["SHIPPED", "SHIP_UNDONE"], ["REDUCED", "REDUCTION_REVERSED"],
+    ] },
+    [{ dosya: "src/services/helpers/swatch-event.helper.ts", sembol: "transitionSwatchesTx" }],
+    ["src/services/helpers/swatch-event.helper.ts"]),
+
   D("PaymentAllocation", "fatura kapama defteri; negatif satır CHECK ile yasak", { tur: "DAMGA", kolon: "revokedAt" },
     [
       { dosya: "src/services/payment-allocation.service.ts", sembol: "releaseRowsTx" },
@@ -739,6 +747,9 @@ export const DAMGA_NULL_BEYANI: DamgaNullBeyani[] = [
   { dosya: "src/services/stock-count-reversal.service.ts", fonksiyon: "reverseTx", alan: "cancelledById", adet: 1, sinif: "DURUM_KOLONU",
     tarihce: "roll_status_events (iptal satırının actorId'si)",
     gerekce: "cancelledAt ile aynı" },
+  { dosya: "src/services/helpers/swatch-event.helper.ts", fonksiyon: "transitionSwatchesTx", alan: "cancelledAt", adet: 1, sinif: "DURUM_KOLONU",
+    tarihce: "swatch_events (REDUCED satırı ve ona bağlı REDUCTION_REVERSED satırı)",
+    gerekce: "kolon kartelanın ŞU ANKİ düşülmüş/iptal hâlidir (status REDUCED/VOIDED iken dolu); düşüm, stornosu, kim ve neden kartela olay defterinde (kullanıcı kararı S2, 2026-09-26)" },
   { dosya: "src/services/kartela.service.ts", fonksiyon: "reverseStockReductionTx", alan: "cancelledAt", adet: 1, sinif: "BORC",
     tarihce: "SwatchStockReduction.reversedAt (düşüm stornosu damgası)",
     gerekce: KULLANICI_KARARI_AB },

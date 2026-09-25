@@ -358,6 +358,18 @@ export const ENUM_LABELS: Record<string, string> = {
   SUBCONTRACTOR_CONSUMED: "Fasonda Kapandı",
   AT_KARTELA: "Kartelada",
   KARTELA_CONSUMED: "Kartelada Kapandı",
+  // ── Kartela olay defteri (2026-09-26) — SwatchStatus · SwatchEventType
+  IN_STOCK: "Stokta",
+  IN_SACK: "Çuvalda",
+  IN_SHIPMENT: "Sevkiyatta",
+  REDUCED: "Stoktan düşüldü",
+  BORN: "Kabulde doğdu",
+  SACKED: "Çuvala girdi",
+  UNSACKED: "Çuvaldan çıktı",
+  SHIPMENT_ADDED: "Sevkiyata eklendi",
+  SHIPMENT_REMOVED: "Sevkiyattan çıkarıldı",
+  SHIP_UNDONE: "Sevk geri alındı",
+  REDUCTION_REVERSED: "Düşüm geri alındı",
   // QualityGradeRole (2026-09-13) — "bu fabrikada 1./2./fire kalitesi HANGİ
   // KATALOG SATIRI". `RollStatus`taki `SCRAP` ile AYNI anahtarı paylaşır ve
   // paylaşması sorun değil: iki enum da o değere "Fire" der. `FIRST`/`SECOND`
@@ -980,7 +992,9 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "iş emri / dokuma işi / sevkiyat / sevkiyat olayı / planlı duruş (MachineStopLossClass) — beşi de 'Planlandı'",
   SUPERSEDED: "iş emri ve basılı belge — ikisi de 'Eski Versiyon'",
   ACTIVE: "sekiz durum enum'u (ürün yaşam döngüsü dahil) — hepsinde 'Aktif'",
-  VOIDED: "refakat kartı ve basılı belge — ikisi de 'İptal'",
+  VOIDED: "refakat kartı, basılı belge ve kartela (durum + kabul iptali olayı) — hepsinde 'İptal'",
+  SHIPPED: "top durumu, kartela durumu ve kartela olayı — üçü de 'Sevk Edildi'",
+  REDUCED: "kartela durumu ve kartela olayı — ikisi de 'Stoktan düşüldü'",
   DISPATCHED: "sevkiyat ve sevkiyat olayı — ikisi de 'Sevk Edildi'",
   PARTIAL: "içe aktarım ve alış siparişi — ikisi de 'Kısmi'",
   DRAFT: "fatura ve sayım — ikisi de 'Taslak'",

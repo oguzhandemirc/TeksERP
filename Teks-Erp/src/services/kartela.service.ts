@@ -48,6 +48,7 @@ import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
 import { lowerTr } from "../utils/tr-case";
 import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
+import { createSwatchesTx, type SwatchBirthInput } from "./helpers/swatch-event.helper";
 
 // Liste filtre/sayfalama parametreleri — hem offset (mobil) hem cursor (admin)
 // modunu besler. cursor||mode==="cursor" → cursor response; aksi halde offset.
@@ -739,7 +740,7 @@ export class KartelaService {
         let seqCounter = kartBas;
 
         const receiptItemData: Prisma.KartelaReceiptItemCreateManyInput[] = [];
-        const swatchData: Prisma.SwatchCreateManyInput[] = [];
+        const swatchData: SwatchBirthInput[] = [];
         const consumedRollIds: string[] = [];
 
         for (const ret of data.returns) {
@@ -794,7 +795,7 @@ export class KartelaService {
             "Toplardan biri bu sırada başka bir işlemle (kabul/iptal) değişmiş. Listeyi yenileyip tekrar deneyin."
           );
         }
-        await tx.swatch.createMany({ data: swatchData });
+        await createSwatchesTx(tx, swatchData, { trigger: "KARTELA_RECEIVE", userId: userId ?? null });
 
         return { receipt, totalSwatches: swatchData.length };
       })

@@ -729,6 +729,13 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "work_order_events", name: "work_order_events_channel_known" },
   { table: "work_order_events", name: "work_order_events_field_required" },
   { table: "work_order_events", name: "work_order_events_birth_has_no_from" },
+  // Kartela olay defteri (K1, migration 20260926100000): kanal kapalı küme, her tip tek
+  // geçiş (helper'daki SWATCH_TRANSITIONS ile boğaz-ikiz), satır geçişin belgesini taşır,
+  // bağlı ters yalnız ters tiplerde.
+  { table: "swatch_events", name: "swatch_events_channel_known" },
+  { table: "swatch_events", name: "swatch_events_transition_known" },
+  { table: "swatch_events", name: "swatch_events_ref_present" },
+  { table: "swatch_events", name: "swatch_events_reversal_type" },
   // Kapanış künyesi (D3, migration 20260926010000): kapanış türü kapalı küme, sürüm 1'den,
   // çıkan = depo + A1 + fire (üç kova toplamı başlıkta yeniden türetilmez, burada sabitlenir).
   { table: "work_order_close_snapshots", name: "work_order_close_snapshots_close_kind_known" },
@@ -843,6 +850,12 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     // doğrudan (pg_trigger_depth) reddedilir — iş emrinden gelen kaskat silme geçer.
     timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
     why: "iş emri hareket defteri append-only — geri alma karşı kayıttır, satır değişmez/silinmez",
+  },
+  {
+    table: "swatch_events",
+    trigger: "swatch_events_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
+    why: "kartela olay defteri append-only — geri alma eşli ters tiptir, satır değişmez/silinmez; kartelanın kaskat silmesi geçer",
   },
   {
     table: "work_order_close_snapshots",

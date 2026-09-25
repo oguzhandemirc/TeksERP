@@ -19,7 +19,7 @@ export interface DamgaNullIsabeti {
 const YAZIM_ANAHTARI = new Set(["data", "update"]);
 const DURAK_ANAHTARI = new Set(["where", "select", "include", "orderBy", "create", "data", "update"]);
 
-function fonksiyonAdi(n: ts.Node): string {
+export function fonksiyonAdi(n: ts.Node): string {
   for (let p: ts.Node | undefined = n; p; p = p.parent) {
     if ((ts.isMethodDeclaration(p) || ts.isFunctionDeclaration(p)) && p.name) return p.name.getText();
     const ok = (i: ts.Expression | undefined): boolean => !!i && (ts.isArrowFunction(i) || ts.isFunctionExpression(i));

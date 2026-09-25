@@ -1,6 +1,6 @@
 # KARTELA HAREKET DEFTERİ — Faz 0 (tasarım, kod yok)
 
-> **Durum:** TASLAK — kullanıcı kararı bekliyor (§6). 9b, 2026-09-26.
+> **Durum:** KARAR VERİLDİ (kullanıcı, 2026-09-26: S1=A · S2=A · S3=b · S4=a · S5=a · S6=a — §6). K1 uygulandı (şema + tek yazar + doğuş sitesi); K2 ile aynı trende iner. Uygulamadaki farklar §5.7. 9b, 2026-09-26.
 > **Kullanıcının sorusu:** *"Kartela ve kartela hareketleri ayrı tablo olsa daha mı iyi olur … anlık değil
 > profesyonel bir çözüm üretelim."*
 > **Tetik:** B-RM taraması (`test_defter_ters_yol` §14) `reverseStockReductionTx`in geri almada
@@ -167,7 +167,7 @@ bir nesnedir. Gerekçe §4.
   - `sackId?`, `shipmentId?`, `receiptId?`, `reductionId?`.
   - `reversesEventId?`: BAĞLI ters.
   - `groupId`: tek kullanıcı eylemi.
-  - `actorId?`, `channel?`, `reason?`, `preEpoch Boolean` (göç satırı), `createdAt`.
+  - `createdById?`, `deviceId?`, `trigger`, `channel`, `reason?`, `reasonCode?`, `createdAt` (S3=b: göç satırı yok, `preEpoch` kolonu yok).
   - Ortak mühür `defter_block_tamper` (K-A3/D1 emsali).
 - `cancelledAt`/`cancelReason` KALIR ama DURUM KOLONUNA iner: yalnız tek yazar yazar,
   `REDUCED`/`VOIDED`ta dolu.
@@ -234,12 +234,33 @@ bir nesnedir. Gerekçe §4.
 ### 5.6 Dilimler (öneri)
 
 - **K0** bu belge + kullanıcı kararları.
-- **K1** şema: enum + `status` + `SwatchEvent` + mühür + CHECK çifti + durum backfill'i, yalnız ekler.
-  Tek yazar ve AST kapısı. Bekçiler `test_swatch_event_yazar`, `test_db_invariants`.
+- **K1** şema: enum + `status` + `SwatchEvent` + mühür + olay CHECK'leri + durum backfill'i, yalnız ekler.
+  Tek yazar, AST kapısı, doğuş sitesi (`receive`). Bekçiler `test_swatch_event_yazar`, `test_swatch_event_ledger`,
+  `test_db_invariants`. status↔kolon CHECK çifti K2'de (§5.7).
 - **K2** yazım yolları bağlanır: ~10 site, §5.2. `defter-beyan` satırları eklenir, §14 BORÇ satırı düşer.
   Bekçi `test_swatch_event_ledger` (DB, gerçek yollar, ters çiftler).
 - **K3** okuyucular: stok/istatistik `status`tan, Kartela Hareketleri ekranı + Excel.
-- **K4** geçmiş aktarımı, S3'e göre.
+- ~~K4 geçmiş aktarımı~~ — S3 = b, dilim YOK.
+
+### 5.7 Uygulamada netleşenler (K1, 2026-09-26 — 1e onaylı)
+
+- **Geçiş tablosu.** Her olay tipi TEK bir from→to geçişidir: BORN —→IN_STOCK · VOIDED IN_STOCK→VOIDED ·
+  SACKED IN_STOCK→IN_SACK · UNSACKED IN_SACK→IN_STOCK · SHIPMENT_ADDED IN_SACK→IN_SHIPMENT ·
+  SHIPMENT_REMOVED IN_SHIPMENT→IN_SACK · SHIPPED IN_SHIPMENT→SHIPPED · SHIP_UNDONE SHIPPED→IN_SHIPMENT ·
+  REDUCED IN_STOCK→REDUCED · REDUCTION_REVERSED REDUCED→IN_STOCK. Tablo (`SWATCH_TRANSITIONS`) ile DB CHECK'i
+  (`swatch_events_transition_known`) boğaz-ikizdir. Çağıran kolon yazmaz; hangi kolonun ne olacağına tip karar verir.
+- **Çuvallar arası taşıma** iki satırdır (UNSACKED + SACKED, tek `groupId`): çuval başına net sayım ve
+  from = önceki satırın to'su zinciri korunur.
+- **Referanslar FK'sız, numaralar donuk** (`sackNo`, `shipmentNo`): boş çuval sert silinir ve `SET NULL` mühürle
+  çarpışırdı. `reversesEventId` FK + UNIQUE (NULL = ileri kayıt defter öncesinde).
+- **CHECK çifti K2'de.** status ↔ (sackId, shipmentId, cancelledAt) seddi, eski yazarlar tek yazara bağlanmadan
+  her çuval okutmasını kırardı. K2 migration'ı durumu aynı kuralla yeniden türetir, CHECK'i NOT VALID ekler,
+  anomali 0 ise VALIDATE eder; değilse NOTICE + dry-run script adı basar. Validate edilmemiş hâl bir bekçide görünür.
+- **Backfill önceliği düzeltildi.** Canlı (stornosuz) düşüm kalemi olan iptalli kartela REDUCED'dır, kabulü sonradan
+  iptal edilse bile: kabul iptali yalnız iptal edilmemiş kartelaları iptal eder. §5.4'teki "önce VOIDED" sırası
+  düşülmüş kartelayı yanlış sınıflardı. `statusChangedAt` backfill'de NULL kalır (an bilinmiyor).
+- **Prova.** Fabrika 23 Eylül dökümünde 0 kartela, 0 kabul, 0 sevk, 0 düşüm. adnansahin kartela akışını hiç
+  kullanmamış; backfill boş küme.
 
 ## 6. Kullanıcıya sorulacaklar (şıklı, önerili)
 

@@ -162,6 +162,15 @@ async function run(): Promise<void> {
   check("grup (item, colorB) === NB", (await stockCount(ITEM, COLOR_B)) === NB);
   check("grup (item, renksiz=null) === NN", (await stockCount(ITEM, null)) === NN);
 
+  // Kartela olay defteri: kabulde doğan her kartela IN_STOCK doğar ve BORN satırı kabule bağlıdır.
+  const dogan = await prisma.swatch.findMany({ where: { parentReceiptId: { in: receiptIds } }, select: { id: true, status: true, parentReceiptId: true } });
+  const born = await prisma.swatchEvent.findMany({ where: { swatchId: { in: dogan.map((s) => s.id) } }, select: { swatchId: true, type: true, trigger: true, receiptId: true } });
+  check("kabul: doğan her kartela IN_STOCK + tek BORN satırı (KARTELA_RECEIVE, kabul kimliğiyle)",
+    dogan.length === NA + NB + NN && dogan.every((s) => s.status === "IN_STOCK")
+      && born.length === dogan.length
+      && born.every((e) => e.type === "BORN" && e.trigger === "KARTELA_RECEIVE" && e.receiptId === dogan.find((s) => s.id === e.swatchId)?.parentReceiptId),
+    `${dogan.length} kartela · ${born.length} BORN`);
+
   console.log("\n=== addKartelaToSack: happy + stok düşümü (çuvala giren stok değil) ===");
   const happySack = (await shippingService.openSack({ customerId: CUSTOMER }, ADMIN)).data as { id: string };
   sackIds.push(happySack.id);
