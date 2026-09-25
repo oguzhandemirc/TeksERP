@@ -460,6 +460,8 @@ hareket (S9).
 barkod topun geçtiği tüm iş emirlerini verir, birden çoksa seçim kullanıcıda) + yan panelle AYNI gövde
 (`WorkOrderEventsPanel`) + Excel. Ekrandaki sütunlar = Excel sütunları: ikisi de `EVENT_COLUMNS`ten türer; Excel
 ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (sınırı aşarsa sessizce kırpmaz, durur).
+**D4c UYGULANDI (2026-09-25):** tablet iş emri detayında "Son Hareketler" — aynı uç `limit=5`, salt-okunur,
+"hata" ≠ "kayıt yok"; tam liste ve Excel panelde (S9). Cihazda henüz görülmedi.
 
 - **Uç:** `GET /work-orders/:id/events?types=…&cursor=…` — (A) `WorkOrderEvent` + (B) kaynak defterler,
   `createdAt` sıralı, cursor'lu; süzme SUNUCUDA (liste + cursor + özet tek where). `GET /work-orders/events/

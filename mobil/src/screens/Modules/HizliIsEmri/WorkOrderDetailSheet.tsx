@@ -10,6 +10,7 @@ import * as Haptics from 'expo-haptics';
 import AppModal from '../../../components/AppModal';
 import WorkOrderHeaderFields, { type WoHeaderFieldValues } from './WorkOrderHeaderFields';
 import WorkOrderDocumentsSheet from './WorkOrderDocumentsSheet';
+import WorkOrderRecentEvents from './WorkOrderRecentEvents';
 import { workOrderService } from '../../../services/workOrder.service';
 import {
   WORK_ORDER_STATUS_LABEL,
@@ -304,6 +305,8 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
               </View>
             ))}
           </View>
+
+          <WorkOrderRecentEvents workOrderId={wo.id} />
 
           {/* Bağlı toplar */}
           <View style={styles.section}>

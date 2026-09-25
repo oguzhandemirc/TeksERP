@@ -182,6 +182,20 @@ export interface WorkOrderCursorParams {
   withTotal?: boolean;
 }
 
+/** İş emri hareketi — başlık ve Türkçe etiketler sunucuda kurulur. */
+export interface WorkOrderTimelineItem {
+  id: string;
+  at: string;
+  group: string;
+  title: string;
+  detail: string | null;
+  reason: string | null;
+  actor: string | null;
+  channel: string | null;
+  trigger: string | null;
+  derived: boolean;
+}
+
 export const workOrderService = {
   // withOrderDetail=true → orderLinks (customer + ürün), targetColor, dispatchedTotalQty
   // alanları zenginleştirilir. Fason Sevk picker'ı için kullanılır.
@@ -237,6 +251,12 @@ export const workOrderService = {
 
   getById: (id: string): Promise<ApiResponse<WorkOrder>> =>
     apiClient.get<ApiResponse<WorkOrder>>(`/work-orders/${id}`).then((r) => r.data),
+
+  /** Son hareketler (salt-okunur özet) — tam liste ve Excel panelde. */
+  getRecentEvents: (id: string, limit = 5): Promise<WorkOrderTimelineItem[]> =>
+    apiClient
+      .get<{ data: WorkOrderTimelineItem[] }>(`/work-orders/${id}/events`, { params: { limit } })
+      .then((r) => r.data.data),
 
   /**
    * Hızlı başlangıç: okutulan stok toplarını doğrula → WO oluştur → bağla (tek
