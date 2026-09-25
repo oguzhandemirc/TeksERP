@@ -14,8 +14,12 @@
 //   §7 adım planı: STEP_PLAN_CHANGED, adım yükte
 //   §8 replace: değişen alanlar WO_REPLACE ile; numara kilidi burada da
 //   §9 tablet isteği → kanal TABLET
+//   §10 replace rota: istasyon sırası tek "route" satırı, adım notu adım başına; hepsi alan satırlarıyla tek grup
+//   §11 toplara uygula: ROLL_ATTRIBUTES_APPLIED yükü top başına ESKİ renk/en (ters yolun dayanağı)
 // NEGATİF SONDA (elle, 2026-09-25): `recordWorkOrderFieldDiffTx` gövdesi erken
-// `return 0` yapıldı → §1–§1d/§2/§4/§5/§8/§9 kırmızı (9); yedek kopyadan geri alındı.
+// `return 0` yapıldı → 10 kırmızı (§1–§1d/§2/§4/§5/§8/§9/§10c); `recordStepDiffTx` susturuldu →
+// §7/§10/§10b/§10c; top yükü boşaltıldı → §11; replace'teki sıra park satırı silindi → §10
+// P2002 (araya adım ekleme 500 veriyordu). Hepsi yedek kopyadan geri alındı.
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
@@ -37,9 +41,11 @@ function check(label: string, cond: boolean, extra = ""): void {
   else { fail++; console.log(`  ✗ FAIL: ${label}${extra ? ` — ${extra}` : ""}`); }
 }
 
-let ITEM = "", ADMIN = "", ST_FASON = "", ST_TAMBUR = "", COLOR = "", COLOR_NAME = "";
+let ITEM = "", ADMIN = "", ST_FASON = "", ST_TAMBUR = "", ST_KURSUN = "", COLOR = "", COLOR_NAME = "";
 const woIds: string[] = [];
 const colorIds: string[] = [];
+const rollIds: string[] = [];
+const batchIds: string[] = [];
 
 async function fikstur(): Promise<void> {
   const need = <T,>(v: T | null, label: string): T => {
@@ -50,6 +56,7 @@ async function fikstur(): Promise<void> {
   ADMIN = (await ensureTestAdmin()).id;
   ST_FASON = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON").id;
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1").id;
+  ST_KURSUN = need(await prisma.station.findFirst({ where: { code: "KURSUN_KK2" }, select: { id: true } }), "KURSUN_KK2").id;
   // Renk koşuma özgü: ortamdaki "herhangi bir aktif renk"e yaslanmaz (etiket donması bu adla ölçülür).
   const tag = `TST-WOEF-${Date.now()}`;
   const color = await prisma.color.create({ data: { code: tag, name: `${tag} RENK` }, select: { id: true, name: true } });
@@ -168,6 +175,8 @@ async function main(): Promise<void> {
     const rNo = await hataKodu(() => svc.replace(b, { ...govde, batchNumber: `${bNo}X` }, ADMIN));
     check("§8b replace numara kilidi 409", rNo === "WORK_ORDER_NUMBER_FROZEN", `${rNo}`);
 
+    await rotaVeTopSenaryolari(a, b, govde);
+
     await tabletIstegi(() => svc.update(b, { targetWeight: 42 }, ADMIN));
     const tab = (await alanOlaylari(b)).find((e) => e.field === "targetWeight");
     check("§9 tablet isteği → kanal TABLET, cihaz bağlamdan", tab?.channel === "TABLET" && tab?.deviceId === "TST-WOE-FIELDS",
@@ -181,7 +190,52 @@ async function main(): Promise<void> {
   process.exit(fail > 0 ? 1 : 0);
 }
 
+async function rotaVeTopSenaryolari(
+  a: string,
+  b: string,
+  govde: { plannedStartDate?: string; plannedEndDate?: string; [k: string]: unknown },
+): Promise<void> {
+  const eski = await prisma.workOrderStep.findMany({ where: { workOrderId: b }, orderBy: { stepSequence: "asc" }, select: { id: true, stationId: true } });
+  const onceki = new Set((await alanOlaylari(b)).map((e) => e.id));
+  await svc.replace(b, {
+    ...govde, width: 195,
+    steps: [{ id: eski[0].id, stationId: eski[0].stationId, notes: "boyahane notu" }, { stationId: ST_KURSUN }, { id: eski[1].id, stationId: eski[1].stationId }],
+  } as Parameters<typeof svc.replace>[1], ADMIN);
+  const yeni = (await alanOlaylari(b)).filter((e) => !onceki.has(e.id));
+  const rota = yeni.find((e) => e.field === "route");
+  const not = yeni.find((e) => e.field === "notes");
+  check("§10 rota: tek route satırı, adım yükü yok, yeni sıra etikette",
+    rota?.type === "STEP_PLAN_CHANGED" && rota.payload === null && (rota.toLabel ?? "").split(" → ").length === 3
+      && (rota.fromLabel ?? "").split(" → ").length === 2, `${rota?.fromLabel} ⇒ ${rota?.toLabel}`);
+  check("§10b adım notu adım başına, adım kimliği yükte",
+    not?.toValue === "boyahane notu" && (not.payload as { stepId?: string } | null)?.stepId === eski[0].id);
+  check("§10c route · not · en satırları TEK grup (tek eylem)",
+    yeni.length === 3 && new Set(yeni.map((e) => e.groupId)).size === 1, yeni.map((e) => e.field).join(","));
+
+  const batch = await prisma.batch.create({ data: { batchNumber: `TST-WOEF-${Date.now()}`, workOrderId: a }, select: { id: true } });
+  batchIds.push(batch.id);
+  const roll = await prisma.roll.create({
+    data: { itemId: ITEM, colorId: COLOR, initialQty: 100, currentQty: 100, width: 300, status: "STOCK", batchId: batch.id },
+    select: { id: true },
+  });
+  rollIds.push(roll.id);
+  await link.applyAttributeToRolls(a, { rollIds: [roll.id], width: 295, reason: "kabulde ölçüldü" }, ADMIN, ["roll:manual-adjust"]);
+  const uyg = await prisma.workOrderEvent.findFirst({ where: { workOrderId: a, type: "ROLL_ATTRIBUTES_APPLIED" } });
+  const yuk = uyg?.payload as { rolls?: { rollId: string; fromColorId: string | null; fromWidth: string | null }[] } | null;
+  check("§11 toplara uygula: satır rollWidth→295, yükte top başına ESKİ en ve renk",
+    uyg?.field === "rollWidth" && uyg.toValue === "295" && yuk?.rolls?.length === 1
+      && yuk.rolls[0].rollId === roll.id && Number(yuk.rolls[0].fromWidth) === 300 && yuk.rolls[0].fromColorId === COLOR,
+    JSON.stringify(yuk?.rolls?.[0] ?? null));
+}
+
 async function temizle(): Promise<void> {
+  await prisma.systemLog.deleteMany({ where: { recordId: { in: rollIds } } });
+  await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
+  await prisma.batch.deleteMany({ where: { id: { in: batchIds } } });
   const cards = await prisma.travelerCard.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } });
   const cardIds = cards.map((c) => c.id);
   await prisma.travelerCardScan.deleteMany({ where: { cardId: { in: cardIds } } });

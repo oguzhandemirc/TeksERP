@@ -1,5 +1,5 @@
 // =============================================================================
-// İş emri PLAN ALANLARININ deftere yazımı — önce/sonra satırından alan diff'i
+// İş emri PLANININ deftere yazımı — önce/sonra satırından alan ve rota diff'i
 // =============================================================================
 // Satırı `workorder-event.helper`ın yazıcısı yazar; burası neyin değiştiğini ve
 // okunur etiketini çözer. İzlenen alan kümesi `constants/workorder-event-fields.ts`.
@@ -14,6 +14,7 @@ import {
 } from "../../constants/workorder-event-fields";
 import {
   WORK_ORDER_TYPE_LABEL,
+  recordStepPlanChangesTx,
   recordWorkOrderFieldChangesTx,
   type WorkOrderEventCtx,
   type WorkOrderFieldChange,
@@ -90,4 +91,89 @@ export async function recordWorkOrderFieldDiffTx(
   if (changes.length === 0) return 0;
   await recordWorkOrderFieldChangesTx(tx, workOrderId, await labelChanges(tx, changes), ctx);
   return changes.length;
+}
+
+/** Adımın deftere giren planı — istasyon/kategori/fasoncu adları okuma anında donar. */
+export interface StepSnapshot {
+  id: string;
+  stepSequence: number;
+  stationName: string;
+  notes: string | null;
+  requiredCategoryId: string | null;
+  categoryName: string | null;
+  plannedSubcontractorId: string | null;
+  subcontractorName: string | null;
+  dispatchWithoutColor: boolean;
+}
+
+/** İş emrinin (ya da tek adımın) plan anlık görüntüsü, sıra düzeninde. */
+export async function readStepSnapshotsTx(tx: Tx, workOrderId: string, stepId?: string): Promise<StepSnapshot[]> {
+  const rows = await tx.workOrderStep.findMany({
+    where: { workOrderId, ...(stepId ? { id: stepId } : {}) },
+    orderBy: { stepSequence: "asc" },
+    select: {
+      id: true, stepSequence: true, notes: true, requiredCategoryId: true,
+      plannedSubcontractorId: true, dispatchWithoutColor: true,
+      station: { select: { name: true } },
+      requiredCategory: { select: { name: true } },
+      plannedSubcontractor: { select: { name: true } },
+    },
+  });
+  return rows.map((r) => ({
+    id: r.id, stepSequence: r.stepSequence, stationName: r.station.name, notes: r.notes,
+    requiredCategoryId: r.requiredCategoryId, categoryName: r.requiredCategory?.name ?? null,
+    plannedSubcontractorId: r.plannedSubcontractorId, subcontractorName: r.plannedSubcontractor?.name ?? null,
+    dispatchWithoutColor: r.dispatchWithoutColor,
+  }));
+}
+
+const routeLabel = (steps: StepSnapshot[]) => steps.map((s) => s.stationName).join(" → ").slice(0, 1000);
+const sendLabel = (v: boolean) => (v ? "Renksiz sevk" : "Renkli sevk");
+
+/** Aynı adımın iki hâli arasındaki plan alanı farkları. */
+function stepFieldChanges(a: StepSnapshot, b: StepSnapshot): WorkOrderFieldChange[] {
+  const out: WorkOrderFieldChange[] = [];
+  if ((a.notes ?? null) !== (b.notes ?? null)) {
+    const [from, to] = [a.notes?.slice(0, 1000) ?? null, b.notes?.slice(0, 1000) ?? null];
+    out.push({ field: "notes", from, to, fromLabel: from, toLabel: to });
+  }
+  if (a.requiredCategoryId !== b.requiredCategoryId) {
+    out.push({ field: "requiredCategoryId", from: a.requiredCategoryId, to: b.requiredCategoryId, fromLabel: a.categoryName, toLabel: b.categoryName });
+  }
+  if (a.plannedSubcontractorId !== b.plannedSubcontractorId) {
+    out.push({ field: "plannedSubcontractorId", from: a.plannedSubcontractorId, to: b.plannedSubcontractorId, fromLabel: a.subcontractorName, toLabel: b.subcontractorName });
+  }
+  if (a.dispatchWithoutColor !== b.dispatchWithoutColor) {
+    out.push({ field: "dispatchWithoutColor", from: String(a.dispatchWithoutColor), to: String(b.dispatchWithoutColor),
+      fromLabel: sendLabel(a.dispatchWithoutColor), toLabel: sendLabel(b.dispatchWithoutColor) });
+  }
+  return out;
+}
+
+/**
+ * Rota planının deftere düşen yarısı: istasyon sırası değiştiyse tek "route" satırı
+ * (eski → yeni sıra), iki hâlde de bulunan adımın not/kategori/fasoncu/renksiz sevk
+ * farkları adım başına. Dönüş: yazılan satır.
+ */
+export async function recordStepDiffTx(
+  tx: Tx,
+  workOrderId: string,
+  rows: { before: StepSnapshot[]; after: StepSnapshot[] },
+  ctx: WorkOrderEventCtx,
+): Promise<number> {
+  let written = 0;
+  const [from, to] = [routeLabel(rows.before), routeLabel(rows.after)];
+  if (from !== to) {
+    await recordStepPlanChangesTx(tx, workOrderId, { step: null, changes: [{ field: "route", from, to, fromLabel: from, toLabel: to }] }, ctx);
+    written++;
+  }
+  const beforeById = new Map(rows.before.map((s) => [s.id, s]));
+  for (const b of rows.after) {
+    const a = beforeById.get(b.id);
+    const changes = a ? stepFieldChanges(a, b) : [];
+    if (changes.length === 0) continue;
+    await recordStepPlanChangesTx(tx, workOrderId, { step: { id: b.id, stepSequence: b.stepSequence, stationName: b.stationName }, changes }, ctx);
+    written += changes.length;
+  }
+  return written;
 }

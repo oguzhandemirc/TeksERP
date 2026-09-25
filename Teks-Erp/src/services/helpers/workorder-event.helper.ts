@@ -259,11 +259,11 @@ export async function setWorkOrderTypeTx(
   return already > 0 ? "ALREADY" : "NO_MATCH";
 }
 
-/** Fason adımının planı (kategori · planlanan firma · renksiz sevk) — adım başına tek grup. */
+/** Rota/adım planı değişimi; `step` null ise satır rotanın bütününe aittir (istasyon sırası). */
 export async function recordStepPlanChangesTx(
   tx: Tx,
   workOrderId: string,
-  plan: { step: { id: string; stepSequence: number; stationName: string }; changes: WorkOrderFieldChange[] },
+  plan: { step: { id: string; stepSequence: number; stationName: string } | null; changes: WorkOrderFieldChange[] },
   ctx: WorkOrderEventCtx,
 ): Promise<void> {
   const { step, changes } = plan;
@@ -279,19 +279,22 @@ export async function recordStepPlanChangesTx(
         toValue: c.to,
         fromLabel: c.fromLabel ?? null,
         toLabel: c.toLabel ?? null,
-        payload: { stepId: step.id, stepSequence: step.stepSequence, stationName: step.stationName },
+        ...(step ? { payload: { stepId: step.id, stepSequence: step.stepSequence, stationName: step.stationName } } : {}),
       })),
     ctx,
   );
 }
 
-/** Plan düzeltmesinin toplara uygulanması — değer başına bir satır, topların listesi yükte. */
+/**
+ * Plan düzeltmesinin toplara uygulanması — değer başına bir satır. Yük top başına
+ * ESKİ değeri taşır: geri alma o değerleri toplara yeniden uygulayan yeni satırdır.
+ */
 export async function recordRollAttributesAppliedTx(
   tx: Tx,
   workOrderId: string,
   result: {
     applied: { field: "rollColor" | "rollWidth"; to: string | null; toLabel?: string | null }[];
-    rollIds: string[];
+    rolls: { rollId: string; fromColorId: string | null; fromWidth: string | null }[];
     failedRollIds: string[];
   },
   ctx: WorkOrderEventCtx,
@@ -304,7 +307,7 @@ export async function recordRollAttributesAppliedTx(
       field: a.field,
       toValue: a.to,
       toLabel: a.toLabel ?? null,
-      payload: { rollIds: result.rollIds, failedRollIds: result.failedRollIds },
+      payload: { rolls: result.rolls, failedRollIds: result.failedRollIds },
     })),
     ctx,
   );

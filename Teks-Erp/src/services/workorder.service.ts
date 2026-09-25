@@ -9,6 +9,7 @@
 //   - Rolls attached to a WO change status from STOCK → IN_PRODUCTION.
 // =============================================================================
 
+import { randomUUID } from "crypto";
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
@@ -98,11 +99,13 @@ import { freezeCloseSnapshotTx, loadCloseSnapshotView } from "./helpers/workorde
 import {
   claimWorkOrderStatusTx,
   createWorkOrderTx,
-  recordStepPlanChangesTx,
   recordWorkOrderFieldChangesTx,
-  type WorkOrderFieldChange,
 } from "./helpers/workorder-event.helper";
-import { recordWorkOrderFieldDiffTx } from "./helpers/workorder-field-diff.helper";
+import {
+  readStepSnapshotsTx,
+  recordStepDiffTx,
+  recordWorkOrderFieldDiffTx,
+} from "./helpers/workorder-field-diff.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { assertTargetColorChange } from "./helpers/workorder-target-color.helper";
 import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
@@ -698,41 +701,6 @@ function plannedFieldsFromPatch(data: {
     targetColorId: data.targetColorId,
     foldType: data.foldType,
   };
-}
-
-/** Fason adımı planının değişen alanları, o anki kategori/firma adıyla. */
-async function stepPlanChanges(
-  tx: Prisma.TransactionClient,
-  before: {
-    requiredCategoryId: string | null;
-    plannedSubcontractorId: string | null;
-    dispatchWithoutColor: boolean;
-    requiredCategory: { name: string } | null;
-    plannedSubcontractor: { name: string } | null;
-  },
-  data: { requiredCategoryId?: string | null; plannedSubcontractorId?: string | null; dispatchWithoutColor?: boolean },
-): Promise<WorkOrderFieldChange[]> {
-  const out: WorkOrderFieldChange[] = [];
-  if (data.requiredCategoryId !== undefined && data.requiredCategoryId !== before.requiredCategoryId) {
-    const to = data.requiredCategoryId
-      ? await tx.subcontractorCategory.findUnique({ where: { id: data.requiredCategoryId }, select: { name: true } })
-      : null;
-    out.push({ field: "requiredCategoryId", from: before.requiredCategoryId, to: data.requiredCategoryId,
-      fromLabel: before.requiredCategory?.name ?? null, toLabel: to?.name ?? null });
-  }
-  if (data.plannedSubcontractorId !== undefined && data.plannedSubcontractorId !== before.plannedSubcontractorId) {
-    const to = data.plannedSubcontractorId
-      ? await tx.subcontractor.findUnique({ where: { id: data.plannedSubcontractorId }, select: { name: true } })
-      : null;
-    out.push({ field: "plannedSubcontractorId", from: before.plannedSubcontractorId, to: data.plannedSubcontractorId,
-      fromLabel: before.plannedSubcontractor?.name ?? null, toLabel: to?.name ?? null });
-  }
-  if (data.dispatchWithoutColor !== undefined && data.dispatchWithoutColor !== before.dispatchWithoutColor) {
-    const yn = (v: boolean) => (v ? "Renksiz sevk" : "Renkli sevk");
-    out.push({ field: "dispatchWithoutColor", from: String(before.dispatchWithoutColor), to: String(data.dispatchWithoutColor),
-      fromLabel: yn(before.dispatchWithoutColor), toLabel: yn(data.dispatchWithoutColor) });
-  }
-  return out;
 }
 
 export class WorkOrderService {
@@ -5806,6 +5774,7 @@ export class WorkOrderService {
       }
 
       // ── Step diff (smart merge) ─────────────────────────────────────────
+      const stepsBefore = await readStepSnapshotsTx(tx, id);
       // Mevcut step'leri çek + bağlı kayıt sayılarını topla.
       const existingStepRows = await tx.workOrderStep.findMany({
         where: { workOrderId: id },
@@ -5898,8 +5867,10 @@ export class WorkOrderService {
       }
 
       // 2) Step'leri güncelle veya ekle. stepSequence yeni listedeki indeks
-      //    bazlı yeniden numaralandırılır. (workOrderId, stepSequence)
-      //    üzerinde unique kısıtı olmadığı için iki-aşamalı güncelleme gerekmez.
+      //    bazlı yeniden numaralandırılır. (workOrderId, stepSequence) TEKİL
+      //    (ertelenemez) — kalan adımlar önce negatif sıraya park edilir, yoksa
+      //    araya adım eklemek ya da bekleyen adımları sıralamak P2002 verir.
+      await tx.workOrderStep.updateMany({ where: { workOrderId: id }, data: { stepSequence: { multiply: -1 } } });
       for (const [index, incoming] of finalSteps.entries()) {
         const stepSequence = index + 1;
         if (incoming.id && existingStepById.has(incoming.id)) {
@@ -5946,6 +5917,9 @@ export class WorkOrderService {
           });
         }
       }
+
+      const eventCtx = { trigger: "WO_REPLACE", userId, groupId: randomUUID() };
+      await recordStepDiffTx(tx, id, { before: stepsBefore, after: await readStepSnapshotsTx(tx, id) }, eventCtx);
 
       // ── orderLinks FARK bazlı + damgalı (③a, WOTOL-BAG-DAMGA-PLAN S2): bağ SİLİNMEZ ──
       //    Çıkan bağ `WO_REPLACE` ile damgalanır, giren yeni satır, kalanın `allocatedQty`si
@@ -6034,7 +6008,7 @@ export class WorkOrderService {
       // `replace` rotayı, sipariş bağlarını ve hedef özellikleri baştan yazar —
       // kart snapshot'ındaki adım listesi/sipariş tablosu topluca yanlışlanır.
       await markTravelerCardDirtyTx(tx, id);
-      await recordWorkOrderFieldDiffTx(tx, id, { before, after: wo }, { trigger: "WO_REPLACE", userId });
+      await recordWorkOrderFieldDiffTx(tx, id, { before, after: wo }, eventCtx);
 
       return wo;
     });
@@ -6374,16 +6348,7 @@ export class WorkOrderService {
     // F66: ATOMİK CLAIM (check-then-act DEĞİL) — WO terminal-durum kontrolünü yazmanın
     // WHERE'ine koy; eşzamanlı finalize WO'yu COMPLETED yaptıktan sonra planlama sızmasın.
     await prisma.$transaction(async (tx) => {
-      const before = await tx.workOrderStep.findUnique({
-        where: { id: stepId },
-        select: {
-          requiredCategoryId: true,
-          plannedSubcontractorId: true,
-          dispatchWithoutColor: true,
-          requiredCategory: { select: { name: true } },
-          plannedSubcontractor: { select: { name: true } },
-        },
-      });
+      const before = await readStepSnapshotsTx(tx, workOrderId, stepId);
       const claim = await tx.workOrderStep.updateMany({
         where: {
           id: stepId,
@@ -6395,22 +6360,15 @@ export class WorkOrderService {
           dispatchWithoutColor: data.dispatchWithoutColor,
         },
       });
-      if (claim.count === 0 || !before) {
+      if (claim.count === 0) {
         throw AppError.conflict(
           "İş emri bu sırada tamamlandı/iptal edildi — adım planlaması güncellenemedi. Sayfayı yenileyin.",
         );
       }
       // Planlanan fasoncu kartın OPERASYON tablosunda basılı ("Boyahane (Fason) — Yıldız Boyahane").
       await markTravelerCardDirtyTx(tx, workOrderId);
-      await recordStepPlanChangesTx(
-        tx,
-        workOrderId,
-        {
-          step: { id: stepId, stepSequence: step.stepSequence, stationName: step.station.name },
-          changes: await stepPlanChanges(tx, before, data),
-        },
-        { trigger: "STEP_PLAN", userId },
-      );
+      const after = await readStepSnapshotsTx(tx, workOrderId, stepId);
+      await recordStepDiffTx(tx, workOrderId, { before, after }, { trigger: "STEP_PLAN", userId });
     });
 
     const updated = await prisma.workOrderStep.findUnique({

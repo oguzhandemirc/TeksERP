@@ -286,6 +286,11 @@ indiği için; birleşince etiket haritası `Record<WorkOrderTrackedField, strin
 (fason adımı: `requiredCategoryId` · `plannedSubcontractorId` · `dispatchWithoutColor`) · `recordRollAttributesAppliedTx`
 (`rollColor` · `rollWidth`). `changeWidth` ve `updateStepPlanning` tek tx'e alındı (claim + kart işareti + olay).
 `replace` tarihsiz gelirse `resolvePlanDates` tarihleri "şimdi"ye çeker — davranış eskisi gibi, artık deftere düşer.
+**D2a-2:** adım planı tek diff'ten (`readStepSnapshotsTx` + `recordStepDiffTx`): istasyon sırası değiştiyse tek
+`route` satırı (eski → yeni sıra), iki hâlde de bulunan adımın not/kategori/fasoncu/renksiz sevk farkı adım başına;
+`replace`in alan ve rota satırları tek `groupId`de. `ROLL_ATTRIBUTES_APPLIED` yükü `rolls[{rollId, fromColorId,
+fromWidth}]`. Ölçülen hata: `replace` araya adım eklerken `(workOrderId, stepSequence)` tekilliğine çarpıp 500
+veriyordu (kod yorumu kısıtın olmadığını sanıyordu) — kalan adımlar önce negatif sıraya park edilir.
 
 ## 5. (c) KAPANIŞ KÜNYESİ
 
@@ -515,7 +520,7 @@ ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (s
 |---|---|---|
 | **K1** | Tablet boş alan uyarısı + B1 düzeltmesi + B2/B3 | yok — hemen |
 | D1 | Şema + `workorder-event.helper` + durum boğazları (başla/tamamla/yeniden aç/iptal/devir) + beyan + bekçi | 9b S2+S3 indikten sonra |
-| D2 | Alan değişiklikleri → `FIELD_CHANGED` (update/replace/renk/en/adım/toplara uygula/tip) + numara kilidi (§6.3) — **D2a UYGULANDI** (§4.4 notu); D2b (başlamış iş emrinde genel Düzenle'nin daraltılması) sırada | D1 |
+| D2 | Alan değişiklikleri → `FIELD_CHANGED` (update/replace/renk/en/adım/toplara uygula/tip) + numara kilidi (§6.3) — **D2a + D2a-2 UYGULANDI** (§4.4 notu); D2b (§6.3, seçenek A) sırada | D1 |
 | D3 | Kapanış künyesi (şema + yazım + ProducedV3 karşılaştırma) | D1 |
 | D4 | Hareketler ucu (A+B) + panel Sheet + ayrı ekran + Excel | D1 (D2 ile zenginleşir) |
 | D5 | Tablet düzeltme menüsü + `mobile:is-emri-duzelt` + önizleme uçları | D2, S1–S3/S7 cevapları |
@@ -748,8 +753,8 @@ enum WorkOrderEventType {
   CREATED                 // doğuş — fromValue null
   STATUS_CHANGED          // field="status", from/to WorkOrderStatus; yeniden açılma = COMPLETED→IN_PROGRESS satırı
   FIELD_CHANGED           // field ∈ WORK_ORDER_EVENT_FIELDS
-  STEP_PLAN_CHANGED       // field="step:<sequence>:<notes|subcontractorId>"
-  ROLL_ATTRIBUTES_APPLIED // field ∈ {colorId, width}; payload top başına eski değer
+  STEP_PLAN_CHANGED       // field="route" (istasyon sırası, adım yükü yok) | "notes"/"requiredCategoryId"/"plannedSubcontractorId"/"dispatchWithoutColor" (payload.stepId)
+  ROLL_ATTRIBUTES_APPLIED // field ∈ {rollColor, rollWidth}; payload.rolls[] top başına eski renk/en
   BATCH_ADDED             // "Parti Ekle" (§6.5) — field="batch", toValue=batchId; DOĞUŞ (ters yol: Top Çıkar)
 }
 ```

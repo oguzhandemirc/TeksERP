@@ -143,7 +143,10 @@ async function loadWo(
 async function recordRollsApplied(
   workOrderId: string,
   data: { colorId?: string | null; width?: number | null },
-  result: { updatedIds: string[]; failed: { rollId: string }[] },
+  result: {
+    updated: { id: string; colorId: string | null; width: Prisma.Decimal | null }[];
+    failed: { rollId: string }[];
+  },
   ctx: { userId?: string; reason: string },
 ): Promise<void> {
   const applied: Parameters<typeof recordRollAttributesAppliedTx>[2]["applied"] = [];
@@ -157,7 +160,11 @@ async function recordRollsApplied(
   await recordRollAttributesAppliedTx(
     prisma,
     workOrderId,
-    { applied, rollIds: result.updatedIds, failedRollIds: result.failed.map((f) => f.rollId) },
+    {
+      applied,
+      rolls: result.updated.map((r) => ({ rollId: r.id, fromColorId: r.colorId, fromWidth: r.width?.toString() ?? null })),
+      failedRollIds: result.failed.map((f) => f.rollId),
+    },
     { trigger: "ROLL_ATTRIBUTES", userId: ctx.userId, reason: ctx.reason },
   );
 }
@@ -866,7 +873,7 @@ export class WorkOrderLinkService {
           : undefined;
 
     const failed: { rollId: string; barcode: string | null; message: string }[] = [];
-    const updatedIds: string[] = [];
+    const updatedRolls: typeof rolls = [];
     for (const roll of rolls) {
       try {
         await inventoryService.applyManualProperties(
@@ -883,7 +890,7 @@ export class WorkOrderLinkService {
           userId,
           engineOpts,
         );
-        updatedIds.push(roll.id);
+        updatedRolls.push(roll);
       } catch (err) {
         failed.push({
           rollId: roll.id,
@@ -893,8 +900,8 @@ export class WorkOrderLinkService {
       }
     }
 
-    const updated = updatedIds.length;
-    if (updated > 0) await recordRollsApplied(workOrderId, data, { updatedIds, failed }, { userId, reason });
+    const updated = updatedRolls.length;
+    if (updated > 0) await recordRollsApplied(workOrderId, data, { updated: updatedRolls, failed }, { userId, reason });
 
     await AuditService.log({
       userId,
