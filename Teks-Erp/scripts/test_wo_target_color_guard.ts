@@ -237,8 +237,9 @@ async function main(): Promise<void> {
     const c = await catchErr(() => workOrderLinkService.changeTargetColor(wo.id, MAVI, "müşteri istedi", ADMIN));
     check("mal boyandı, boyanacak yok: Rengi Değiştir 409", c?.statusCode === 409, c?.message);
     check("kod COLOR_DYED_BLOCKED", c?.code === COLOR_DYED_BLOCKED_CODE, String(c?.code));
+    // Başlamış iş emrinde renk genel Düzenle'den değişmez (D2b, seçenek A) — yol "Rengi Değiştir".
     const u = await catchErr(() => workOrderService.update(wo.id, { targetColorId: MAVI }, ADMIN));
-    check("Düzenle (PATCH) de 409 COLOR_DYED_BLOCKED", u?.statusCode === 409 && u?.code === COLOR_DYED_BLOCKED_CODE, u?.message);
+    check("Düzenle (PATCH) başlamış iş emrinde 409 WO_STARTED_USE_ACTION", u?.statusCode === 409 && u?.code === "WO_STARTED_USE_ACTION", u?.message);
     // Yarısı düzeltilse bile bir top eski renkte kalır → yine kapalı.
     const half = await catchErr(() =>
       workOrderLinkService.changeTargetColor(wo.id, MAVI, "kayıt yanlış", ADMIN, { recolorRollIds: [r1] }),
@@ -300,7 +301,8 @@ async function main(): Promise<void> {
       res.data.warnings.some((w) => w.includes("renk veren adım")),
       res.data.warnings.join(" | "),
     );
-    const noDye2 = await mkWo({ tag: "S4B", targetColorId: null, steps: [{ stationId: ST_KURSUN }] });
+    // Genel Düzenle'nin renk yolu yalnız başlamamış iş emrinde açık (D2b) → PLANNED.
+    const noDye2 = await mkWo({ tag: "S4B", status: "PLANNED", targetColorId: null, steps: [{ stationId: ST_KURSUN }] });
     const upd = await workOrderService.update(noDye2.id, { targetColorId: MAVI }, ADMIN);
     check(
       "boyasız rota: Düzenle (PATCH) de uyarı döndü",
@@ -343,17 +345,19 @@ async function main(): Promise<void> {
     const dyedAfter = await prisma.roll.findUnique({ where: { id: dyed }, select: { colorId: true } });
     check("kısmi: boyanmış topa DOKUNULMADI", dyedAfter?.colorId === KIRMIZI);
 
-    // Düzenle (PATCH) yolu da aynı onayı ister — şimdi hedef MAVİ, boyanmış top yok (kırmızıydı) → geçer;
-    // topu MAVİ yapınca tekrar kısmi olur.
+    // Başlamış iş emrinde Düzenle (PATCH) renk yolunu kapatır (D2b); kısmi onay ikinci
+    // tur da "Rengi Değiştir"den ölçülür — şimdi hedef MAVİ, topu MAVİ yapınca tekrar kısmi olur.
     await prisma.roll.update({ where: { id: dyed }, data: { colorId: MAVI } });
-    const u = await catchErr(() => workOrderService.update(wo.id, { targetColorId: YESIL }, ADMIN));
-    check("kısmi: Düzenle (PATCH) de 409 COLOR_PARTIAL_CONFIRM", u?.statusCode === 409 && u?.code === COLOR_PARTIAL_CONFIRM_CODE, u?.message);
-    const u2 = await catchErr(() => workOrderService.update(wo.id, { targetColorId: YESIL }, ADMIN, { confirmPartial: true }));
-    check("kısmi: Düzenle onaylı geçer", u2 === null, u2?.message);
+    const u = await catchErr(() => workOrderService.update(wo.id, { targetColorId: YESIL }, ADMIN, { confirmPartial: true }));
+    check("kısmi: Düzenle (PATCH) başlamış iş emrinde onaylı da 409 WO_STARTED_USE_ACTION", u?.statusCode === 409 && u?.code === "WO_STARTED_USE_ACTION", u?.message);
+    const c2 = await catchErr(() => workOrderLinkService.changeTargetColor(wo.id, YESIL, "ikinci tur", ADMIN));
+    check("kısmi: ikinci turda onaysız 409 COLOR_PARTIAL_CONFIRM", c2?.statusCode === 409 && c2?.code === COLOR_PARTIAL_CONFIRM_CODE, c2?.message);
+    const u2 = await catchErr(() => workOrderLinkService.changeTargetColor(wo.id, YESIL, "ikinci tur", ADMIN, { confirmPartial: true }));
+    check("kısmi: onaylı geçer", u2 === null, u2?.message);
 
     // Ölü top (iptal) sayılmaz.
     await prisma.roll.update({ where: { id: dyed }, data: { colorId: YESIL, status: RollStatus.CANCELLED } });
-    const u3 = await catchErr(() => workOrderService.update(wo.id, { targetColorId: MAVI }, ADMIN));
+    const u3 = await catchErr(() => workOrderLinkService.changeTargetColor(wo.id, MAVI, "ölü top", ADMIN));
     check("kısmi: ölü top sayılmaz (onay istenmez)", u3 === null, u3?.message);
   }
 

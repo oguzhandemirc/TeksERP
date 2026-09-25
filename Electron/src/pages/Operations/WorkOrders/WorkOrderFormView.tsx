@@ -374,8 +374,16 @@ export function WorkOrderFormView({
   // (subcontractor.service receive → bornWidth, tambur.service finalize), ham
   // top en'siz girdiği için fason dönüşünün eni buradan belirlenir. Yalnız
   // backend hard lock'u (malzeme bağlandı / sevk yapıldı) alanı kilitler.
-  const widthFullyLocked = Boolean(locks?.width);
-  const widthTooltip = locks?.reasons.width ?? "";
+  // Üretim başladıysa renk · en · sipariş bağı yalnız tek amaçlı tuşlarla değişir
+  // (backend genel Düzenle'de 409 WO_STARTED_USE_ACTION verir).
+  const started = isEdit && workOrder?.status === "IN_PROGRESS";
+  const linkLockedReason = started
+    ? "Üretim başladı — sipariş bağı detaydaki 'Sipariş Bağla' tuşuyla ya da bağı kaldırarak değişir."
+    : undefined;
+  const widthFullyLocked = Boolean(locks?.width) || started;
+  const widthTooltip = started
+    ? "Üretim başladı — en detaydaki 'Eni Değiştir' tuşuyla değişir."
+    : (locks?.reasons.width ?? "");
   // Sipariş eninden farklı en girildi mi? (boyahane override uyarısı için)
   const watchedWidth = form.watch("width");
   const widthOverridden =
@@ -553,6 +561,7 @@ export function WorkOrderFormView({
                 onChange={handleLinesChange}
                 onPickerConfirm={handlePickerConfirm}
                 excludeWorkOrderId={workOrder?.id}
+                lockedReason={linkLockedReason}
                 requiredItemId={
                   locks?.materialCommitted ? workOrder?.targetItemId : null
                 }
@@ -582,6 +591,7 @@ export function WorkOrderFormView({
                       onChange={handleLinesChange}
                       onPickerConfirm={handlePickerConfirm}
                       excludeWorkOrderId={workOrder?.id}
+                      lockedReason={linkLockedReason}
                     />
                   </div>
                   {/* Üretim kapsama — "ne kadar üretmeliyim" (sevk/WO/stok kovaları) */}
@@ -597,6 +607,7 @@ export function WorkOrderFormView({
                   onChange={handleLinesChange}
                   onPickerConfirm={handlePickerConfirm}
                   excludeWorkOrderId={workOrder?.id}
+                  lockedReason={linkLockedReason}
                 />
               )}
             </FormSection>
@@ -784,7 +795,8 @@ export function WorkOrderFormView({
                   propertyIds: form.watch("targetPropertyIds") ?? [],
                   onColor: (id) => form.setValue("targetColorId", id),
                   onProperties: (ids) => form.setValue("targetPropertyIds", ids),
-                  colorLocked: Boolean(locks?.targetColor),
+                  colorLocked: Boolean(locks?.targetColor) || started,
+                  colorLockedReason: started ? "Üretim başladı — renk detaydaki 'Rengi Değiştir' tuşuyla değişir." : undefined,
                   lockedPropertyIds: locks?.lockedPropertyIds,
                   customerId: pickedLines[0]?.customerId ?? null,
                 }}

@@ -673,6 +673,26 @@ function assertWorkOrderNumberUnchanged(current: string, sent: string | null | u
   }
 }
 
+const STARTED_EDIT_MESSAGE = {
+  color: "Üretim başlamış iş emrinde renk genel Düzenle'den değişmez — 'Rengi Değiştir' tuşunu kullanın (sebep ve boyanmış top kontrolüyle).",
+  width: "Üretim başlamış iş emrinde en genel Düzenle'den değişmez — 'Eni Değiştir' tuşunu kullanın.",
+  orderLinks: "Üretim başlamış iş emrinde sipariş bağı genel Düzenle'den değişmez — 'Sipariş Bağla' tuşunu ya da bağı kaldır düğmesini kullanın.",
+} as const;
+
+/**
+ * Başlamış iş emrinde tek amaçlı yolu olan alan (renk · en · sipariş bağı) genel
+ * Düzenle'den değişmez (IS-EMRI-HAREKET-DEFTERI §6.3, seçenek A); rota/kumaş/kat/
+ * özellik fiziksel kilitlerle Düzenle'de kalır. `status` kilit altında taze okunur.
+ */
+function assertStartedEditAllowed(
+  status: WorkOrderStatus,
+  changed: Partial<Record<keyof typeof STARTED_EDIT_MESSAGE, boolean>>,
+): void {
+  if (status !== WorkOrderStatus.IN_PROGRESS) return;
+  const field = (Object.keys(STARTED_EDIT_MESSAGE) as (keyof typeof STARTED_EDIT_MESSAGE)[]).find((k) => changed[k]);
+  if (field) throw AppError.conflict(STARTED_EDIT_MESSAGE[field], { code: "WO_STARTED_USE_ACTION", field });
+}
+
 interface PlannedFieldsPatch {
   width?: number | null;
   targetQuantity?: number | null;
@@ -5088,6 +5108,10 @@ export class WorkOrderService {
       );
     }
     assertWorkOrderNumberUnchanged(wo.workOrderNumber, data.batchNumber);
+    assertStartedEditAllowed(wo.status, {
+      color: data.targetColorId !== undefined && (wo.targetColorId ?? null) !== (data.targetColorId ?? null),
+      width: data.width !== undefined && normNum(wo.width) !== normNum(data.width),
+    });
     // Renk gerçekten değişiyor mu — TEK BEKÇİ yalnız gerçek değişiklikte koşar
     // (PATCH kısmi semantiği: aynı değeri yeniden göndermek serbesttir).
     const colorChanging =
@@ -5197,6 +5221,12 @@ export class WorkOrderService {
       // WO satırını kilitlediğinden ara-adım geçişleri de bu kilitle serileşir.
       await touchWorkOrderTx(tx, id);
       const before = await tx.workOrder.findUnique({ where: { id } });
+      if (before) {
+        assertStartedEditAllowed(before.status, {
+          color: data.targetColorId !== undefined && (before.targetColorId ?? null) !== (data.targetColorId ?? null),
+          width: data.width !== undefined && normNum(before.width) !== normNum(data.width),
+        });
+      }
       const freshLocks = await computeWorkOrderLocks(tx, id);
       // F59: tx-içi taze kilit kontrolü de `!== undefined` (NULL'a çekme kilide çarpsın).
       if (data.width !== undefined && normNum(wo.width) !== normNum(data.width) && freshLocks.width) {
@@ -5639,6 +5669,10 @@ export class WorkOrderService {
     assertWorkOrderNumberUnchanged(existing.workOrderNumber, data.batchNumber);
     // Renk değişiyorsa "Rengi Değiştir" ile AYNI bekçi (mal–plan uyumu, kısmi boya).
     const colorChanging = (existing.targetColorId ?? null) !== resolvedTargetColorId;
+    assertStartedEditAllowed(existing.status, {
+      color: colorChanging,
+      width: normNum(existing.width) !== normNum(data.width ?? null),
+    });
     if (colorChanging) await assertTargetColorChange(prisma, existing, resolvedTargetColorId);
 
     // ── Transaction: smart merge (steps id-bazlı diff) ───────────────────────
@@ -5665,6 +5699,10 @@ export class WorkOrderService {
           }, düzenlenemez. Sayfayı yenileyin.`
         );
       }
+      assertStartedEditAllowed(before.status, {
+        color: (before.targetColorId ?? null) !== resolvedTargetColorId,
+        width: normNum(before.width) !== normNum(data.width ?? null),
+      });
       // Kilit altında taze bekçi: arada fason kabul / adım bitişi olduysa karar değişmiş olabilir.
       if (colorChanging) await assertTargetColorChange(tx, before, resolvedTargetColorId);
 
@@ -5932,6 +5970,7 @@ export class WorkOrderService {
       const leavingLinks = freshLinks.filter((l) => !wantedAlloc.has(l.orderLineId));
       const keptLinks = freshLinks.filter((l) => wantedAlloc.has(l.orderLineId));
       const enteringAlloc = allocations.filter((a) => !freshLinks.some((l) => l.orderLineId === a.orderLineId));
+      assertStartedEditAllowed(before.status, { orderLinks: leavingLinks.length > 0 || enteringAlloc.length > 0 });
       if (leavingLinks.length > 0) {
         await unlinkOrderLinesTx(tx, {
           pairs: leavingLinks.map((l) => ({ workOrderId: id, orderLineId: l.orderLineId })),

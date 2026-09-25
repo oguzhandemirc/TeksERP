@@ -27,6 +27,8 @@ export interface RouteTargetBinding {
   onColor: (id: string | null) => void;
   onProperties: (ids: string[]) => void;
   colorLocked?: boolean;
+  /** Kilidin nedeni — verilmezse sipariş satırı kilidi varsayılır. */
+  colorLockedReason?: string;
   lockedPropertyIds?: string[];
   /** Bağlı sipariş(ler) tek müşteriye çözülüyorsa o müşteri — renk picker'da
    *  müşterinin renkleri üstte/vurgulu gösterilir. */
@@ -249,7 +251,7 @@ export function RouteStepDetail({
                   onChange={(id) => target.onColor(id)}
                   customerId={target.customerId}
                   disabled={target.colorLocked}
-                  lockedTooltip="Renk kilitli (bağlı sipariş satırından geliyor)"
+                  lockedTooltip={target.colorLockedReason ?? "Renk kilitli (bağlı sipariş satırından geliyor)"}
                   triggerClassName="h-8 text-xs"
                   placeholder="Renk seç..."
                 />

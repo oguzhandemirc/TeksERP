@@ -396,6 +396,12 @@ panelden Konumu Düzelt / Parti Düşür".
 - **Başlamış (IN_PROGRESS) iş emrinde genel Düzenle yalnız yıkıcı olmayan alanlarla sınırlanır:** plan
   tarihleri · hedef metre/kg · notlar. Renk, en, rota, kumaş, sipariş → tek amaçlı tuşlar (bugün panelde
   zaten var). PLANNED (hiç top almamış) iş emrinde tam `replace` kalır.
+  **Ölçüm ve karar (D2b, 2026-09-25, 4b — seçenek A):** "tuşlar zaten var" yalnız renk · en · sipariş bağı
+  için doğru çıktı; rota adımı ekle/çıkar, kumaş, kat ve hedef özelliğin genel Düzenle dışında yolu yok
+  (özelliğin ucu var, panelde çağıranı yok). UYGULANAN: başlamış iş emrinde renk · en · sipariş bağı değişimi
+  409 `WO_STARTED_USE_ACTION` (`details.field`: color · width · orderLinks), panel formu bu alanları kilitler;
+  rota/kumaş/kat/özellik Düzenle'de kalır (fiziksel kilitler + deftere düşer). **B (eksik tek amaçlı tuşlar:
+  rota adımı ekle/çıkar · kumaş · kat · özellik) sonraki faz.** C (tuşsuz kapatma) çıkışsız kapı, reddedildi.
 - `replace` renk değiştiriyorsa `assertTargetColorChange`den geçer (bugün atlıyor).
 - Bayat yorumlar (`E/service.ts:213`, controller :292/:607) koda hizalanır.
 
@@ -520,7 +526,7 @@ ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (s
 |---|---|---|
 | **K1** | Tablet boş alan uyarısı + B1 düzeltmesi + B2/B3 | yok — hemen |
 | D1 | Şema + `workorder-event.helper` + durum boğazları (başla/tamamla/yeniden aç/iptal/devir) + beyan + bekçi | 9b S2+S3 indikten sonra |
-| D2 | Alan değişiklikleri → `FIELD_CHANGED` (update/replace/renk/en/adım/toplara uygula/tip) + numara kilidi (§6.3) — **D2a + D2a-2 UYGULANDI** (§4.4 notu); D2b (§6.3, seçenek A) sırada | D1 |
+| D2 | Alan değişiklikleri → `FIELD_CHANGED` (update/replace/renk/en/adım/toplara uygula/tip) + numara kilidi (§6.3) — **D2a + D2a-2 + D2b UYGULANDI** (§4.4 notu, §6.3 kararı) | D1 |
 | D3 | Kapanış künyesi (şema + yazım + ProducedV3 karşılaştırma) | D1 |
 | D4 | Hareketler ucu (A+B) + panel Sheet + ayrı ekran + Excel | D1 (D2 ile zenginleşir) |
 | D5 | Tablet düzeltme menüsü + `mobile:is-emri-duzelt` + önizleme uçları | D2, S1–S3/S7 cevapları |

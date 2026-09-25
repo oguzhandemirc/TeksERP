@@ -29,6 +29,8 @@ interface Props {
   requiredWidth?: number | null;
   /** Kalem yokken tam panel yerine slim "Sipariş Bağla" çubuğu göster (stoğa üretim). */
   compact?: boolean;
+  /** Verilirse bağ bu formdan değişmez (başlamış iş emri): seçici ve kaldır düğmeleri gizlenir, neden yazılır. */
+  lockedReason?: string;
 }
 
 const fmt = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false });
@@ -46,6 +48,7 @@ export function LinkedOrderLinesField({
   requiredItemId,
   requiredWidth,
   compact,
+  lockedReason,
 }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -78,23 +81,25 @@ export function LinkedOrderLinesField({
         <div className="flex items-center gap-2 rounded-md border bg-muted/10 px-3 py-2 text-xs">
           <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="text-muted-foreground">
-            Sipariş kalemi bağlanmazsa stoğa üretim yapılır.
+            {lockedReason ?? "Sipariş kalemi bağlanmazsa stoğa üretim yapılır."}
           </span>
-          <motion.div
-            whileHover={{ y: -1 }}
-            whileTap={{ scale: 0.96 }}
-            transition={springSnappy}
-            className="ml-auto shrink-0"
-          >
-            <Button
-              type="button"
-              size="sm"
-              className="h-7 gap-1 bg-gradient-to-b from-primary to-primary/80 text-xs text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-inset ring-white/10 hover:from-primary hover:to-primary hover:shadow-md hover:shadow-primary/40"
-              onClick={() => setPickerOpen(true)}
+          {!lockedReason && (
+            <motion.div
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.96 }}
+              transition={springSnappy}
+              className="ml-auto shrink-0"
             >
-              <Link2 className="h-3 w-3" /> Sipariş Bağla
-            </Button>
-          </motion.div>
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 gap-1 bg-gradient-to-b from-primary to-primary/80 text-xs text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-inset ring-white/10 hover:from-primary hover:to-primary hover:shadow-md hover:shadow-primary/40"
+                onClick={() => setPickerOpen(true)}
+              >
+                <Link2 className="h-3 w-3" /> Sipariş Bağla
+              </Button>
+            </motion.div>
+          )}
         </div>
         {picker}
       </>
@@ -119,24 +124,26 @@ export function LinkedOrderLinesField({
               </div>
             </div>
           </div>
-          <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={springSnappy}>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 gap-1 bg-gradient-to-b from-primary to-primary/80 text-xs text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-inset ring-white/10 hover:from-primary hover:to-primary hover:shadow-md hover:shadow-primary/40"
-              onClick={() => setPickerOpen(true)}
-            >
-              {lines.length > 0 ? (
-                <>
-                  <Pencil className="h-3 w-3" /> Düzenle
-                </>
-              ) : (
-                <>
-                  <Link2 className="h-3 w-3" /> Seç
-                </>
-              )}
+          {!lockedReason && (
+            <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={springSnappy}>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 gap-1 bg-gradient-to-b from-primary to-primary/80 text-xs text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-inset ring-white/10 hover:from-primary hover:to-primary hover:shadow-md hover:shadow-primary/40"
+                onClick={() => setPickerOpen(true)}
+              >
+                {lines.length > 0 ? (
+                  <>
+                    <Pencil className="h-3 w-3" /> Düzenle
+                  </>
+                ) : (
+                  <>
+                    <Link2 className="h-3 w-3" /> Seç
+                  </>
+          )}
             </Button>
           </motion.div>
+)}
         </div>
 
         {lines.length > 0 && (
@@ -147,6 +154,10 @@ export function LinkedOrderLinesField({
           </div>
         )}
       </div>
+
+      {lockedReason && (
+        <div className="shrink-0 border-b bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">{lockedReason}</div>
+      )}
 
       {/* Kalem listesi */}
       <div className="flex-1 overflow-y-auto p-2">
@@ -167,7 +178,7 @@ export function LinkedOrderLinesField({
                 <LineCard
                   key={line.lineId}
                   line={line}
-                  onRemove={() => handleRemove(line.lineId)}
+                  onRemove={lockedReason ? undefined : () => handleRemove(line.lineId)}
                 />
               ))}
             </AnimatePresence>
@@ -221,7 +232,7 @@ function LineCard({
   onRemove,
 }: {
   line: PickedOrderLine;
-  onRemove: () => void;
+  onRemove?: () => void;
 }) {
   return (
     <motion.div
@@ -250,14 +261,16 @@ function LineCard({
               </div>
             )}
           </div>
-          <button
-            type="button"
-            onClick={onRemove}
-            className="-mr-1 -mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground opacity-60 transition-opacity hover:bg-destructive/10 hover:text-destructive hover:opacity-100 group-hover:opacity-100"
-            aria-label={`${line.orderNumber} kaldır`}
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          {onRemove && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="-mr-1 -mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground opacity-60 transition-opacity hover:bg-destructive/10 hover:text-destructive hover:opacity-100 group-hover:opacity-100"
+              aria-label={`${line.orderNumber} kaldır`}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Kumaş + renk */}
