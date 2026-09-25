@@ -47,7 +47,7 @@
 // DB GEREKTİRMEZ: statik analiz (AST + tip denetleyicisi). Prisma istemcisi
 // açılmaz, havuz kurulmaz.
 // =============================================================================
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { CIFT_DISI_DEGERLER, DEFTER_BEYANI, STOK_OLAY_BEYANI, type CiftDisiDeger, type DefterBeyani } from "./lib/defter-beyan";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
@@ -83,6 +83,9 @@ const SCRIPT_SINIFI: Record<string, "SEED" | "DEMO" | "DENETIM_REPRO" | "GECMIS_
   // Geçmiş doldurma (tek yazar dilimi, 2026-09-18): satırsız eski ödemelere kasa defteri satırı; dry-run varsayılan, --apply,
   // bakiyeye dokunmaz, paymentId @unique ile idempotent (funnel'ı BİLEREK atlar: bakiye zaten eski yazar tarafından işlenmiş).
   "scripts/migrate_cash_ledger_backfill.ts": "GECMIS_DOLDURMA",
+  // Geçmiş doldurma (K-A3, 2026-09-25): top durum defteri doğmadan önceki iptaller, topun iptal kolonlarından
+  // (status=CANCELLED ∧ cancelledById); dry-run varsayılan, --apply --onay --hedef, NOT EXISTS ile idempotent, preEpoch=true.
+  "scripts/backfill_roll_status_events.ts": "GECMIS_DOLDURMA",
   "scripts/seed-demo-shipments.ts": "SEED",
   "scripts/seed-kk2-test.ts": "SEED",
   "scripts/seed-load-scale.ts": "SEED",
@@ -205,11 +208,44 @@ for (const b of defterler) {
     // ayrı bir geri alma ucudur (damga/ters bağ) ve SINIF yanlıştır.
     const tersler = b.tersYazan ?? [];
     const disarida = tersler.filter((t) => !(b.yazan ?? []).includes(t.dosya));
-    check(`§3k2 ${b.model} karşı kaydı İLERİ yol yazıyor`, tersler.length > 0 && disarida.length === 0,
-      tersler.length === 0 ? "ters yazan beyan edilmemiş — karşı kaydın yazarı ileri yoldur, boş kalamaz"
+    // DB trigger yazarı: ileri yol da karşı kayıt da trigger'dır; kod yazarı olmamalı.
+    const triggerYazar = !!b.dbYazar && tersler.length === 0 && (b.yazan ?? []).length === 0;
+    check(`§3k2 ${b.model} karşı kaydı İLERİ yol yazıyor`, triggerYazar || (tersler.length > 0 && disarida.length === 0),
+      triggerYazar ? `DB trigger'ı ${b.dbYazar!.tetik} → ${b.dbYazar!.fonksiyon} (ileri + karşı kayıt)`
+        : tersler.length === 0 ? "ters yazan beyan edilmemiş — karşı kaydın yazarı ileri yoldur, boş kalamaz"
         : disarida.length ? `ileri yazan kümesinde YOK: ${disarida.map((t) => `${t.sembol}@${t.dosya}`).join(" · ")}`
           : `${tersler.map((t) => t.sembol).join(", ")} — ileri yazan dosyada`);
   }
+}
+
+// §3t — DB TRIGGER YAZARI beyanı migration SQL'inde gerçek mi: fonksiyon tanımlı, tetik
+// beyanlı tabloda o fonksiyonu çağırıyor ve fonksiyon gövdesi beyanlı modelin tablosuna
+// INSERT ediyor. Ölü beyan (yeniden adlandırılmış fonksiyon/tetik) kırmızıdır.
+export function dbYazarOlcumu(
+  sqlMetni: string, y: { fonksiyon: string; tetik: string; tablo: string }, hedefTablo: string,
+): { fonksiyon: boolean; tetik: boolean; insert: boolean } {
+  const fnRe = new RegExp(`CREATE OR REPLACE FUNCTION "${y.fonksiyon}"\\(\\)[\\s\\S]*?\\$\\$ LANGUAGE`, "i");
+  const fn = sqlMetni.match(fnRe)?.[0] ?? "";
+  const tetikRe = new RegExp(`CREATE TRIGGER "${y.tetik}"[\\s\\S]*?ON "${y.tablo}"[\\s\\S]*?EXECUTE FUNCTION "${y.fonksiyon}"\\(\\)`, "i");
+  return { fonksiyon: fn.length > 0, tetik: tetikRe.test(sqlMetni), insert: fn.includes(`INSERT INTO "${hedefTablo}"`) };
+}
+{
+  const migDir = join(KOK, "prisma", "migrations");
+  const tumSql = readdirSync(migDir).filter((d) => existsSync(join(migDir, d, "migration.sql")))
+    .map((d) => readFileSync(join(migDir, d, "migration.sql"), "utf8")).join("\n");
+  const sema = readFileSync(join(KOK, "prisma", "schema.prisma"), "utf8");
+  for (const b of defterler.filter((x) => x.dbYazar)) {
+    const blok = sema.match(new RegExp(`^model ${b.model} \\{[\\s\\S]*?^\\}`, "m"))?.[0] ?? "";
+    const tablo = blok.match(/@@map\("([^"]+)"\)/)?.[1] ?? "";
+    const o = dbYazarOlcumu(tumSql, b.dbYazar!, tablo);
+    check(`§3t ${b.model} DB trigger yazarı migration'da gerçek`, o.fonksiyon && o.tetik && o.insert,
+      `fonksiyon ${o.fonksiyon ? "✓" : "YOK"} · tetik ${o.tetik ? "✓" : "YOK"} · INSERT INTO "${tablo}" ${o.insert ? "✓" : "YOK"}`);
+  }
+  const sahte = 'CREATE OR REPLACE FUNCTION "f"() RETURNS trigger AS $$ BEGIN INSERT INTO "t" VALUES (1); END; $$ LANGUAGE plpgsql;\nCREATE TRIGGER "g" AFTER INSERT ON "u" FOR EACH ROW EXECUTE FUNCTION "f"();';
+  const iyi = dbYazarOlcumu(sahte, { fonksiyon: "f", tetik: "g", tablo: "u" }, "t");
+  const kotu = dbYazarOlcumu(sahte, { fonksiyon: "f", tetik: "g", tablo: "baska" }, "t");
+  check("§3t-s negatif sonda: yanlış tablo/ad beyanı yakalanır, doğru beyan geçer",
+    iyi.fonksiyon && iyi.tetik && iyi.insert && !kotu.tetik && !dbYazarOlcumu(sahte, { fonksiyon: "f", tetik: "g", tablo: "u" }, "x").insert);
 }
 
 // §3e — İKİNCİ YÖN. §3 beyandan şemaya bakar; bu kol ŞEMADAN BEYANA bakar: enum'un

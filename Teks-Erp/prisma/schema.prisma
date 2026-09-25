@@ -3266,6 +3266,7 @@ model Roll {
   /// SET NULL gerekçesi kolonun kendi yorumunda (iz ≠ defter).
   purchaseOrderLine    PurchaseOrderLine?          @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
   warehouseMovements   WarehouseMovement[]
+  statusEvents         RollStatusEvent[]
   labelCustomer        Customer?                   @relation("RollLabelCustomer", fields: [labelCustomerId], references: [id])
   /// G3 EMANET — topun sahibi (müşterinin işlenmek üzere bıraktığı kumaş); `labelCustomerId` (etiket adı) DEĞİL.
   /// Doğum niteliği: KK1 elle giriş seçicisi ya da fason dokuma makbuzunda leventlerden kalıtım; PATCH'ten yazılamaz.
@@ -4627,6 +4628,39 @@ model RollOperation {
 // eksi, OVERAGE artı). İşaretli sayı saklamak "SUM(qty)" yazan her raporu sessiz
 // biçimde yanlışlar — biri işareti dikkate alır, diğeri almaz.
 // =============================================================================
+/// TOP DURUM DEFTERİ (K-A3, 2026-09-25) — topun her durum geçişi bir satır.
+/// "Top ne zaman hangi durumdan hangisine geçti, iptali kim yaptı" sorusunun KALICI
+/// cevabı; audit yalnız ayak izidir ve iş kaynağı olarak okunmaz.
+///
+/// ⚠️ YAZAN DB TRIGGER'I (`rolls_write_status_event`), uygulama kodu DEĞİL: topu
+/// CANCELLED yapan 11 yol ölçüldü, servis içi yazım aynı eksikliği tekrar üretirdi.
+/// Kodda bu modele create/update/delete YAZILMAZ (bekçi ölçer); tek istisna beyanlı
+/// göç script'i (`preEpoch=true`).
+/// ⚠️ MÜHÜR `defter_block_tamper`: UPDATE her zaman, DELETE doğrudan geldiğinde RED;
+/// üst top silinince FK kaskadı geçer (üretimde top silen yol yok, bekçi temizlikleri
+/// siler). Emsal `WarehouseMovement.roll` Cascade.
+model RollStatusEvent {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rollId     String      @db.Uuid
+  /// Doğuş satırında (INSERT) null.
+  fromStatus RollStatus?
+  toStatus   RollStatus
+  /// v1: yalnız CANCELLED/SCRAP satırında dolu; kaynağı `Roll.cancelledById`.
+  /// FK'SIZ (SystemLogArchive emsali): kullanıcı silinse de iz kalır; SET NULL eylemi
+  /// bir UPDATE olup mühürle çarpışırdı.
+  actorId    String?     @db.Uuid
+  /// Bir kerelik göçle (Roll iptal kolonlarından) yazılmış satır — trigger'dan değil.
+  preEpoch   Boolean     @default(false)
+
+  roll Roll @relation(fields: [rollId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([rollId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("roll_status_events")
+}
+
 model RollVariance {
   id              String           @id @default(uuid()) @db.Uuid
   rollId          String           @db.Uuid

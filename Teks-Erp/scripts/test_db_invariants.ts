@@ -846,6 +846,20 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     timing: ["BEFORE DELETE OR UPDATE OR TRUNCATE", "FOR EACH STATEMENT"],
     why: "Arşiv de audit'tir — koruma yalnız sıcak tabloda olsaydı 6 aylık gecikmeyle beklenen kurcalama yolu açık kalırdı",
   },
+  {
+    table: "rolls",
+    trigger: "rolls_write_status_event",
+    // AFTER: satır rolls'a yazıldıktan sonra FK'lı defter satırı doğar. `UPDATE OF status`
+    // durum dışı dokunuşları (etiket, not) hiç tetiklemez; gövde eşitliği ayrıca süzer.
+    timing: ["AFTER INSERT OR UPDATE OF status", "FOR EACH ROW"],
+    why: "top durum defterinin (roll_status_events) TEK yazarı — 11 iptal yolunun hepsi; operatör aktivitesi iptali buradan okur (K-A3, 2026-09-25)",
+  },
+  {
+    table: "roll_status_events",
+    trigger: "roll_status_events_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
+    why: "defter mührü: UPDATE her zaman, doğrudan DELETE RED; üst top silinince FK kaskadı geçer (ortak fonksiyon defter_block_tamper)",
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -871,6 +885,18 @@ const REQUIRED_EXTENSIONS: Array<{ name: string; why: string }> = [
 const TOLERATED_EXTENSIONS = new Set(["unaccent"]);
 
 const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragments: string[]; why: string }> = [
+  {
+    name: "defter_block_tamper",
+    volatility: "v",
+    bodyFragments: ["TG_OP = 'UPDATE'", "pg_trigger_depth() <= 1", "RAISE EXCEPTION"],
+    why: "ortak defter mührü: UPDATE koşulsuz red, DELETE yalnız doğrudan ifadede red (kaskad derinlik ≥ 2 geçer)",
+  },
+  {
+    name: "roll_write_status_event",
+    volatility: "v",
+    bodyFragments: ['IS NOT DISTINCT FROM OLD."status"', 'INSERT INTO "roll_status_events"', 'NEW."cancelledById"'],
+    why: "top durum defterinin yazarı: yalnız gerçek durum değişiminde satır; aktör iptal/fire anındaki cancelledById",
+  },
   {
     name: "machine_stop_block_classified_delete",
     volatility: "v",

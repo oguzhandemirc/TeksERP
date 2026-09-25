@@ -15,8 +15,9 @@
 //      başka operatör → yok
 //  11. summary doğru + truncated=false; 11b-c ROLL_CREATED (KK1 kumaş girişi):
 //      pencere+makine/operatör → görünür (metre+kaynak+MACHINE); pencere dışı/başka → yok
-//  11d-e. ROLL_CANCELLED (audit'ten iptal): doğru top+operatör, başka operatör/iptal-değil
-//      hariç; aynı top için giriş+iptal iki ayrı kronolojik satır
+//  11d-e. ROLL_CANCELLED (top durum defterinden iptal): doğru top+operatör, başka
+//      operatör/iptal-değil hariç; aynı top için giriş+iptal iki ayrı kronolojik satır
+//  11f. GERÇEK iptal (status UPDATE → DB trigger'ı defter satırı yazar) canlı oturumda görünür
 //  12. history({deviceId}) yalnız o cihazın; history({userId}) kullanıcının TÜM
 //      cihazlardaki oturumları (başka kullanıcı hariç)
 //  13. DeviceService.detail: hardware dedup + etiket medyası + lastSession
@@ -122,7 +123,6 @@ async function main() {
   const woIds: string[] = [];
   const sessionIds: string[] = [];
   const peripheralIds: string[] = [];
-  const logIds: string[] = [];
 
   const now = new Date();
   const base = new Date(now.getTime() - min(240));
@@ -248,17 +248,17 @@ async function main() {
         createdById: user2.id, createdMachineId: machineB.id, createdAt: at(185) }, select: { id: true } });
     rollIds.push(rollOther.id);
 
-    // --- İPTAL/SİLME audit'leri (ROLL_CANCELLED kaynağı) — sessionKK1 (180..200) ---
-    const mkLog = async (userId: string, newData: object, createdAt: Date, recordId = rollKK1.id) => {
-      const l = await prisma.systemLog.create({
-        data: { userId, category: "DOMAIN", action: "UPDATE", tableName: "ROLL", recordId, newData, createdAt },
-        select: { id: true },
+    // --- İPTAL defter satırları (ROLL_CANCELLED kaynağı) — sessionKK1 (180..200) ---
+    // Geçmiş pencere için satır DOĞRUDAN yazılır (trigger `now()` damgalar); gerçek
+    // trigger yolu 11f'de canlı oturumla ölçülür. Satırlar top silinince kaskadla gider.
+    const mkIptal = async (actorId: string, toStatus: RollStatus, createdAt: Date) => {
+      await prisma.rollStatusEvent.create({
+        data: { rollId: rollKK1.id, fromStatus: RollStatus.STOCK, toStatus, actorId, createdAt },
       });
-      logIds.push(l.id);
     };
-    await mkLog(user.id, { status: "CANCELLED", cancelled: true }, at(190)); // görünmeli
-    await mkLog(user2.id, { status: "CANCELLED" }, at(191)); // başka operatör → görünmemeli
-    await mkLog(user.id, { status: "STOCK", relabel: true }, at(192)); // iptal değil → görünmemeli
+    await mkIptal(user.id, RollStatus.CANCELLED, at(190)); // görünmeli
+    await mkIptal(user2.id, RollStatus.CANCELLED, at(191)); // başka operatör → görünmemeli
+    await mkIptal(user.id, RollStatus.A1_STOCK, at(192)); // iptal değil → görünmemeli
 
     // ================= Senaryolar =================
     const list = (id: string) => WorkSessionActivityService.list(id);
@@ -340,7 +340,7 @@ async function main() {
     check("11c. pencere dışı + başka makine/operatör girişleri LİSTELENMEZ",
       !KK1.data.events.some((e) => e.id === rollOut.id || e.id === rollOther.id) &&
         KK1.data.summary.rollCreatedCount === 1);
-    // 11d: ROLL_CANCELLED — iptal olayı ayrı satır (audit'ten)
+    // 11d: ROLL_CANCELLED — iptal olayı ayrı satır (top durum defterinden)
     const kk1Cancel = KK1.data.events.filter((e) => e.kind === "ROLL_CANCELLED");
     check("11d. iptal olayı ROLL_CANCELLED: doğru top (barkod+kumaş adı) + operatör; başka operatör/iptal-değil hariç (1 adet)",
       kk1Cancel.length === 1 && kk1Cancel[0].roll.id === rollKK1.id &&
@@ -352,6 +352,22 @@ async function main() {
     const kk1Seq = KK1.data.events.filter((e) => e.roll.id === rollKK1.id).map((e) => e.kind);
     check("11e. aynı top: önce ROLL_CREATED sonra ROLL_CANCELLED (kronolojik iki olay)",
       kk1Seq.join(">") === "ROLL_CREATED>ROLL_CANCELLED", kk1Seq.join(">"));
+
+    // 11f: GERÇEK iptal — status UPDATE'i trigger'la defter satırı doğurur, aktör
+    // `cancelledById`; canlı oturumun penceresinde (şimdi) görünür.
+    const rollLive = await prisma.roll.create({
+      data: { barcode: `TEST-LIVE-${ts}`, itemId: item.id, status: RollStatus.STOCK, currentQty: 10, initialQty: 10,
+        qualityGrade: grade.code, qualityGradeId: grade.id, entrySource: "SUPPLIER_RECEIPT", createdById: user2.id },
+      select: { id: true } });
+    rollIds.push(rollLive.id);
+    await prisma.roll.update({
+      where: { id: rollLive.id },
+      data: { status: RollStatus.CANCELLED, cancelledAt: new Date(), cancelledById: user.id },
+    });
+    const LiveCancel = (await list(sessionLive.id)).data.events.filter(
+      (e) => e.kind === "ROLL_CANCELLED" && e.roll.id === rollLive.id);
+    check("11f. GERÇEK iptal (trigger'ın yazdığı defter satırı) canlı oturumda ROLL_CANCELLED + operatör",
+      LiveCancel.length === 1 && LiveCancel[0].operator?.id === user.id, `adet=${LiveCancel.length}`);
 
     // 12: history filtreleri (cihaz + kullanıcı ayak izi)
     const otherUserSession = await prisma.workSession.create({
@@ -479,7 +495,6 @@ async function main() {
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } }).catch(() => {});
     await prisma.workSession.deleteMany({ where: { id: { in: sessionIds } } }).catch(() => {});
-    await prisma.systemLog.deleteMany({ where: { id: { in: logIds } } }).catch(() => {});
     await prisma.device.deleteMany({ where: { id: { in: devIds } } }).catch(() => {});
     await prisma.machine.deleteMany({ where: { id: { in: [machineA.id, machineB.id, machineC.id, machineD.id] } } }).catch(() => {});
     await prisma.user.deleteMany({ where: { id: { in: [user.id, user2.id] } } }).catch(() => {});

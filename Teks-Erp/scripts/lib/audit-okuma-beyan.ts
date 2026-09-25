@@ -84,12 +84,10 @@ export const AUDIT_OKUMA_BORCU: readonly AuditOkumaBorcu[] = [
     hedef: "elle açılan topun sebebi `Roll.entryReason` kolonundan; kolonsuz eski toplar bir kerelik göçle" },
   { yer: "src/services/inventory.service.ts#InventoryService.isUndoSourcedByAudit", adet: 2, dilim: "K-A2",
     hedef: "iptalin geri alma kaynağı topun kalıcı damgasından (`cancelReasonCode`); damgasız eski kayıtlar dry-run backfill" },
-  { yer: "src/services/work-session-activity.service.ts#WorkSessionActivityService.list", adet: 1, dilim: "K-A3",
-    hedef: "operatör iptal olayı topun iptal kolonlarından (`cancelledById`/`statusChangedAt`) ya da ROLL_CANCEL depo hareketinden" },
 ];
 
 /** Borç okuma noktası sayısı (Σ adet) — yalnız 1e düşürür. */
-export const AUDIT_OKUMA_BORC_TABANI = 4;
+export const AUDIT_OKUMA_BORC_TABANI = 3;
 
 // ── İSTEMCİ (Electron/src · mobil/src) ────────────────────────────────────────
 /**

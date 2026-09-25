@@ -18,10 +18,9 @@
 //   2. RollError           (detectedAt) — hata girişi (kaçıncı metre, hangi tür)
 //   3. RollOperation       (createdAt)  — Kurşun / KK2 / Tambur / fason
 //   4. RollMovement ÇIKIŞ  (exitedAt)   — istasyondan çıkış
-//   5. SystemLog           (createdAt)  — TOP İPTALİ/SİLME. İptal fiziksel silme DEĞİL
-//      (status→CANCELLED, satır kalır) ama "silme olayı"nı zaman çizelgesinde ayrı
-//      göstermek için audit satırından (kim+ne zaman) okunur — tekil kayıt-aksiyonu
-//      için audit doğru kaynak (makine yok → OPERATOR_WINDOW).
+//   5. RollStatusEvent     (createdAt)  — TOP İPTALİ. Top durum defterinden (DB
+//      trigger'ı yazar); aktör geçiş anındaki `cancelledById`. Audit OKUNMAZ — yalnız
+//      ayak izidir (test_audit_okuma_kaynagi). Makine yok → OPERATOR_WINDOW.
 //
 // SIRA GARANTİSİ: Kurşun+KK2 (ve açık-kumaş akışında hata+kurşun+KK2) AYNI
 // transaction'da yazıldığından createdAt/detectedAt BİREBİR AYNIDIR (Postgres
@@ -45,7 +44,7 @@ import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { SESSION_INCLUDE } from "./work-session.service";
-import type { Prisma } from "@prisma/client";
+import { RollStatus, type Prisma } from "@prisma/client";
 
 export type ActivityEventKind =
   | "ROLL_CREATED"
@@ -210,7 +209,7 @@ export class WorkSessionActivityService {
         }
       : { createdMachineId: null, createdById: session.userId };
 
-    const [rolls, ops, moveIns, moveOuts, errors, cancelLogs] = await Promise.all([
+    const [rolls, ops, moveIns, moveOuts, errors, cancelEvents] = await Promise.all([
       // KK1 kumaş girişi (top oluşturma) — [createdMachineId]/[createdById] index'li.
       prisma.roll.findMany({
         where: { AND: [{ createdAt: window }, rollAttribution] },
@@ -297,39 +296,23 @@ export class WorkSessionActivityService {
           defectType: { select: { name: true } },
         },
       }),
-      // İPTAL/SİLME: top iptali audit'e yazılır (newData.status=CANCELLED). Bu tekil
-      // kayıt-aksiyonu için audit DOĞRU kaynak (kim+ne zaman). SystemLog'da makineId
-      // YOK → yalnız operatör dalı (userId), atıf OPERATOR_WINDOW. [userId,createdAt]
-      // index'i eşitlik+aralığı daraltır. KRİTİK: CANCELLED süzmesi DB'de yapılır —
-      // aksi halde her ROLL CUD'u (KK1 create/attach/tambur…) take bütçesini yer,
-      // GEÇ yapılan iptal 1001-satır kesitinin dışında kalıp sessizce düşerdi
-      // (truncated yalanı). JSON path predicate index-daraltılmış küçük kümede ucuz.
-      prisma.systemLog.findMany({
+      // İPTAL: top durum defterinden (`roll_status_events`, DB trigger'ı her durum
+      // geçişinde yazar — 11 iptal yolunun hepsi). Audit okunmaz: yalnız ayak izidir.
+      // Aktör geçiş anındaki `cancelledById`; makine atfı yok → OPERATOR_WINDOW.
+      // [actorId, createdAt] index'i eşitlik+aralığı daraltır.
+      prisma.rollStatusEvent.findMany({
         where: {
           AND: [
-            { tableName: "ROLL" },
-            { userId: session.userId },
+            { toStatus: RollStatus.CANCELLED },
+            { actorId: session.userId },
             { createdAt: window },
-            { newData: { path: ["status"], equals: "CANCELLED" } },
           ],
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         take,
-        select: {
-          id: true,
-          recordId: true,
-          createdAt: true,
-          user: OPERATOR_SELECT,
-        },
+        select: { id: true, createdAt: true, roll: ROLL_SELECT },
       }),
     ]);
-
-    // cancelLogs zaten yalnız iptaller (DB süzdü). Top adlarını toplu çek.
-    const cancelRollIds = [...new Set(cancelLogs.map((l) => l.recordId))];
-    const cancelRolls = cancelRollIds.length
-      ? await prisma.roll.findMany({ where: { id: { in: cancelRollIds } }, select: ROLL_FIELDS })
-      : [];
-    const cancelRollById = new Map(cancelRolls.map((r) => [r.id, r]));
 
     const attributionOf = (machineId: string | null): ActivityAttribution =>
       machineId && machineId === session.machineId ? "MACHINE" : "OPERATOR_WINDOW";
@@ -421,21 +404,16 @@ export class WorkSessionActivityService {
           errorType: er.errorType ?? er.defectType?.name ?? null,
         }),
       ),
-      ...cancelLogs.map((l): SessionActivityEvent => {
-        const r = cancelRollById.get(l.recordId);
-        return {
-          kind: "ROLL_CANCELLED",
-          id: l.id, // audit satırının id'si (aynı top farklı zamanlarda tekil kalır)
-          at: l.createdAt,
-          attribution: "OPERATOR_WINDOW", // audit'te makine yok
-          roll: r
-            ? mapRoll(r)
-            : { id: l.recordId, barcode: null, itemName: null, colorName: null },
-          station: sessionStation,
-          operator: l.user,
-          machine: null,
-        };
-      }),
+      ...cancelEvents.map((ev): SessionActivityEvent => ({
+        kind: "ROLL_CANCELLED",
+        id: ev.id, // defter satırının id'si (aynı top farklı zamanlarda tekil kalır)
+        at: ev.createdAt,
+        attribution: "OPERATOR_WINDOW", // defterde makine yok
+        roll: mapRoll(ev.roll),
+        station: sessionStation,
+        operator: session.user,
+        machine: null,
+      })),
     ].sort(cmpAsc);
 
     const truncated = events.length > MAX_ACTIVITY_EVENTS;

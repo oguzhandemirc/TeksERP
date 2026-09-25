@@ -92,6 +92,13 @@ export interface DefterBeyani {
   tersYazan?: TersYazan[];
   /** Satır YARATAN yazıcı dosyalar — keşfedilen kümeyle BİREBİR eşleşmeli. */
   yazan?: string[];
+  /**
+   * Satırı UYGULAMA KODU değil bir DB trigger'ı yazıyorsa (K-A3 `RollStatusEvent`):
+   * ileri yol da karşı kayıt da o trigger'dır, `yazan`/`tersYazan` boş kalır. Kapı
+   * fonksiyonu ve tetiği migration SQL'inde ölçer (§3t); DB'deki varlığını
+   * `test_db_invariants` TRIGGERS/EXPECTED_FUNCTIONS ölçer.
+   */
+  dbYazar?: { fonksiyon: string; tetik: string; tablo: string };
   ebeveyn?: string;
   borc?: DefterBorcu[];
   /** TELEMETRI: budamanın sınırı — hangi KARARI besliyor. */
@@ -384,6 +391,18 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     { tur: "KARSI_KAYIT", ciftler: [["fromReasonCode", "toReasonCode"], ["fromLossClass", "toLossClass"]] },
     [{ dosya: "src/services/machine-stop.service.ts", sembol: "reclassifyStop" }],
     ["src/services/machine-stop.service.ts"]),
+
+  // ── TOP DURUM DEFTERİ (K-A3, 37, 2026-09-25) ────────────────────────────────
+  // Yazar UYGULAMA KODU DEĞİL, DB trigger'ı (`rolls_write_status_event`): topun her durum
+  // geçişi bir satır — 11 iptal yolunun hepsi, yarınki yollar da. Ters yol karşı kayıttır:
+  // iptalin geri alınması (CANCELLED→STOCK) aynı trigger'ın from↔to takaslı yeni satırıdır;
+  // ileri satır ne silinir ne değişir (mühür `defter_block_tamper`). `tersYazan`/`yazan`
+  // BOŞ ve bu ölçülmüş: src'de bu modele yazan 0 (test_roll_status_events §6).
+  D("RollStatusEvent", "top durum geçiş defteri — \"top ne zaman hangi durumdan hangisine geçti, iptali kim yaptı\"; yazarı DB trigger'ı, ters yolu aynı trigger'ın from↔to takaslı karşı kaydı",
+    { tur: "KARSI_KAYIT", ciftler: [["fromStatus", "toStatus"]] },
+    [],
+    [],
+    { dbYazar: { fonksiyon: "roll_write_status_event", tetik: "rolls_write_status_event", tablo: "rolls" } }),
 
   // ── VARDİYA KARNESİ (dokuma raporları Dilim 1, 01, 2026-09-14) — yazma yüzeyi HENÜZ YOK ──
   // `MachineShiftStat` DURUM'dur (`updatedAt` VAR, güncel gerçek o satır) ve §1c gereği

@@ -145,6 +145,8 @@ const REPAIR_EVENTS = {
   CASH_LEDGER_PAYMENT_BACKFILL: "CASH_LEDGER_PAYMENT_BACKFILL",
   /** Sipariş yönü geri doldurma (2026-09-23) — `scripts/backfill_order_destination.ts`. */
   ORDER_DESTINATION_BACKFILL: "ORDER_DESTINATION_BACKFILL",
+  /** Top durum defteri eski iptaller (K-A3, 2026-09-25) — `scripts/backfill_roll_status_events.ts`. */
+  ROLL_STATUS_EVENTS_BACKFILL: "ROLL_STATUS_EVENTS_BACKFILL",
 } as const;
 
 /**
