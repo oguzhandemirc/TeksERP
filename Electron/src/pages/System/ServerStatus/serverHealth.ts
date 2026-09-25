@@ -46,6 +46,26 @@ export interface HealthResponse {
   diskUsedPct: number | null;
   activeUsers: number;
   activeDevices: number;
+  /** Pasif ana veride canlı referans (URUN-YASAM-DONGUSU §10). `null` = henüz ölçülmedi
+   *  (sunucu 10 dk önbellekli ölçer) — 0 ile karıştırılmaz; eski backend alanı göndermez. */
+  masterDataArchive?: { total: number; archivedWithLiveRefs: Record<string, number>; stale: boolean } | null;
+}
+
+const MASTER_DATA_LABEL: Record<string, string> = {
+  item: "ürün",
+  color: "renk",
+  fabricProperty: "kumaş özelliği",
+  customer: "müşteri",
+  warehouse: "depo",
+  subcontractor: "fasoncu",
+};
+
+/** "3 ürün, 1 renk" — yalnız sıfırdan büyük varlıklar. */
+function masterDataSummary(counts: Record<string, number>): string {
+  return Object.entries(counts)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${n} ${MASTER_DATA_LABEL[k] ?? k}`)
+    .join(", ");
 }
 
 export type Level = "ok" | "warn" | "crit";
@@ -203,6 +223,14 @@ export function evaluateAlerts(d: HealthResponse | undefined): Alert[] {
 
   if (d.auditWriteFailures > 0)
     out.push({ level: "warn", message: "Denetim (audit) log yazımı başarısız oluyor." });
+
+  // Beklenen 0: kapı yeni yazımı tutar, bu sayı kapıdan önce doğmuş ya da kaçmış bağı gösterir.
+  const md = d.masterDataArchive;
+  if (md && md.total > 0)
+    out.push({
+      level: "warn",
+      message: `Pasif ana veride canlı kayıt var (${masterDataSummary(md.archivedWithLiveRefs)}) — kayıtları kapatın ya da kartı yeniden kullanıma alın.`,
+    });
 
   // Yedek bayatlığı: 24sa üstü uyarı, 48sa üstü kritik.
   const ageH = d.lastBackup ? (Date.now() - new Date(d.lastBackup.time).getTime()) / 3_600_000 : null;

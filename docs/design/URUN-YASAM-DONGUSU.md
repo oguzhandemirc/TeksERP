@@ -323,9 +323,19 @@ kopya kalmaz.
 
 ## 10. Gözlem ve bekçiler
 
-- `/api/admin/health` → `masterData.archivedWithLiveRefs` (beklenen 0) ve PHASE_OUT kartların
-  kalan referans sayısı. Sayaç DB seddinin göremediği iki yolu da kapsar (§7): tetikleyiciden önce
-  doğmuş satır ve kapalıdan açığa dönen siparişin Pasif karttaki kalemi (1e 2026-09-25).
+- `/api/admin/health` → `masterDataArchive` (S8):
+  - Alanlar: `archivedWithLiveRefs` {item · color · fabricProperty · customer · warehouse ·
+    subcontractor}, `total` (beklenen 0), `phaseOut` {cards · withLiveRefs · readyToArchive},
+    `measuredAt`, `stale`.
+  - Yüklemler kapıyla aynıdır: `countItemLiveRefs` ve `ArchiveSpec.live`.
+  - Uç 5 sn'de bir sorulur, ölçüm 10 dk önbellekten döner. Hiç ölçülmediyse `null` =
+    ÖLÇÜLEMEDİ; 0 ile karıştırılmaz.
+  - Panel Sunucu Durumu `total > 0` iken uyarır ve varlıkları adıyla sayar.
+  - Sayaç DB seddinin göremediği yolları da kapsar (§7): tetikleyiciden önce doğmuş satır ve
+    kapalıdan açığa dönen siparişin Pasif karttaki kalemi (1e 2026-09-25). Diğer ana verideki
+    en iyi çaba kilidinin kaçırdığı yarışı da sayar (§6).
+  - Prova (23 Eylül dökümü, 2026-09-25): ölçüm 1,4 sn, `total` 0, Tükenene kadar 1 kart
+    (kaydı var).
 - Bekçiler (yeni; iki sonda kuralıyla):
   1. **kullanım politikası** — sınıf × durum × §4.1 ayar seçeneği tablosu, servis çağrılarıyla
      (DB'li); her ayar değişikliği `try` içinde, geri alma `finally`de.
@@ -338,8 +348,28 @@ kopya kalmaz.
   7. **DB seddi** — `test_item_archive_db_guard`: Pasif kartta canlı top/açık kalem DB'de 409;
      ölü top ve kapalı kalem geçer; dirilme uygulama katmanında aynı mesajla durur; ölü küme
      TS ↔ SQL ikizi.
+  8. **sağlık sayacı** — `test_master_data_archive_health`: kapıyı atlayan satır sayaca düşer
+     (ürün · açığa dönen sipariş · renk), önbellek boşken `null`.
 - Uçtan uca: panel diyaloğu (gerçek Electron) ve tablet okutması (gerçek cihaz), senaryoya
-  "kullanımdan kaldır → stok akar → pasife hazır → pasif" dalı eklenir.
+  "kullanımdan kaldır → stok akar → pasife hazır → pasif" dalı eklenir (§10.1).
+
+### 10.1 Kullanıcı testi güzergâhı — "kullanımdan kaldır → stok akar → pasife hazır → pasif"
+
+Ön koşul: depoda en az bir topu olan bir kumaş kartı (örn. "X") ve o kartta açık sipariş satırı yok.
+
+| # | Nerede | Ne yapılır | Beklenen |
+|---|---|---|---|
+| 1 | Panel · Tanımlar → Ürünler | "X" satırında ⏻ **Kullanımdan kaldır** | Diyalog: "Tükenene kadar" seçili gelir; "Pasif" kilitli, sebebi "Kartta N canlı kayıt var"; toplar "Depoda · N" başlığı altında tek tek |
+| 2 | aynı diyalog | **Tükenene kadar'a al** | Tost "Kart 'Tükenene kadar' durumuna alındı"; satırda sarı rozet "Tükenene kadar · N top kaldı" |
+| 3 | Ürünler → Durum süzgeci "Tükenene kadar" | süz | Yalnız "X" (ve diğer Tükenene kadar kartlar) listelenir |
+| 4 | Panel · Operasyonlar → Kumaş Stoğu → **Manuel Top Ekle** → Kumaş | "X"i ara | "X" listede YOK (belgesiz stok girişi yalnız Aktif karta) |
+| 5 | Panel · Siparişler → Yeni → kalem → Kumaş seç | "X"i ara | Varsayılan ayarda "X" YOK. Ayarlar → Siparişler → Ürün yaşam döngüsü → "Yeni sipariş" = **Serbest** yapılınca listede sarı rozetle var, satırda sarı not |
+| 6 | Tablet · Hızlı İş Emri | "X"in topunu okut | Top kabul; kilit çipinde ad + sarı "Tükenene kadar" |
+| 7 | Tablet · KK1 → Desen Seç | "X"i ara | "X" YOK |
+| 8 | (mal akar) Tambur/Sevkiyat | "X"in bütün toplarını sevk et ya da tüket | Panelde rozet "Tükenene kadar · Pasife hazır" |
+| 9 | Panel · Ürünler → "X" → **Kullanımdan kaldır** | "Pasif" artık seçili gelir → **Pasife al** | Tost "Kart 'Pasif' durumuna alındı"; satır "Pasif", ⟲ Aktifleştir görünür |
+| 10 | Panel · Tanımlar → Renkler | canlı topu olan bir rengi sil | "Pasife alınamaz" diyaloğu: engelleyen toplar tek tek; genel hata tostu ÇIKMAZ |
+| 11 | Panel · Sistem → Sunucu Durumu | bak | Uyarılar arasında "Pasif ana veride canlı kayıt var" YOK (sayaç 0) |
 
 ## 11. Sözleşme ve dağıtım — eski istemci ne yapar
 
@@ -424,8 +454,8 @@ katı seçeneklerin çıkışsız kapı ölçümü (§4.1, S3).
 - **Her soru için ayrı boolean yığını** — seçenekler birbirini dışlar; tek seçimli ayar (enum) üç
   anlamsız birleşimi baştan imkânsız kılar.
 
-## 17. Belge borcu (S8'de kapanır)
+## 17. Belge borcu (S8'de KAPANDI)
 
 - ~~`deactivate-impact.helper.ts` başlığı bayat~~ — S4'te helper silindi (uyar-ama-bırak kalktı).
-- `docs/design/MUKERRER-PANELI-TASARIM.md`: "geri alma bilinçli yok" cümlesi bayat (geri alma var).
-- `docs/standart/MASTER-VERI-TASARIMI.md`: MV-06.
+- ~~`docs/design/MUKERRER-PANELI-TASARIM.md`: "geri alma bilinçli yok"~~ — S8'de düzeltildi.
+- ~~`docs/standart/MASTER-VERI-TASARIMI.md`: MV-06~~ — S8'de indi (kapı sayısı altı).

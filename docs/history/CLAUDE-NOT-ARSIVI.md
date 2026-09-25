@@ -12482,4 +12482,29 @@ hücre metnini birebir ölçer. Excel ekranda yüklenmiş sayfayla sınırlı de
 (20.000) aşarsa sessizce kırpmaz, hata verir.
 **K-KES2 — açık kumaş kesimi de niyeti korur (2026-09-25, 1e onayı).** `cutOpenFabric` aynı kilitsiz taze okuma + aşıma dönüş kalıbını taşıyordu ve orada iş emri satır kilidi (`touchWorkOrderTx`) eşzamanlı kesimleri SIRALADIĞI için hata DETERMİNİSTİKTİ: tren 8 tabanında, S5 tetikleyicisiyle, 20 koşumda eşzamanlı 60+60 (100 m) 20/20 iki kesimi de geçirdi (120 m çocuk), eşzamanlı aşım 120+120 20/20 **240 m çocuk** doğurdu — BULGU-T1-002'nin kapattığı sanılan "yoktan kumaş" bu yolda sahadaki 2.10.0'da AÇIK. İyimser guard (`currentQty: tazeKalan`) yalnız gerçek eş-anlı UPDATE'te korur; sıralı tx'te ikinci kesim sıfırı "taze" okuyup guard'ı da geçer. Düzeltme depo kesimindeki (A) semantiği: kilit sırası WO → roll, açık kumaş satırı çocuk `create`inden önce `FOR UPDATE`, niyet ön okumadan, 409 `ROLL_CHANGED_DURING_CUT`; tekrar oynatma iki yolda ortak `findCutReplay`. Ölçüm: düzeltme 20/20 yeşil · niyet kuralı kaldırılınca §7a/§7b 20/20 kırmızı.
 **Tespit (salt okuma, `scripts/sorgu_hayalet_kumas.sql`):** aşım satırı çocuğa ZAMANLA bağlanır (aynı tx; `sourceRollId` eski satırlarda boş, eşit zaman damgası tutmaz — Prisma istemci damgası; ölçülen fark 0,004–0,280 sn). Fabrikanın 23 Eylül kopyasında 128 aşım satırından 4'ü önceki kesimden ≤ 60 sn sonra (53,1 m), ≤ 2 sn olan 0 — farklar 8,8–51 sn, operatörün ardışık kesim hızına uyuyor; eşzamanlı gönderim izi yok. Fabrikada koşulması kullanıcı kararı.
+## 2026-09-25 — Ürün kartı yaşam döngüsü ve ana veri arşiv kapısı (MV-06) [ÇEKİRDEK] / [PROFİL]
+
+**Tetik.** [ÇEKİRDEK] 2026-09-25 mesaisinde canlı topu olan bir kumaş kartı "Sil" ile pasife alındı. Uyar-ama-bırak kapısı bunu geçirdi; kart seçicilerden düştüğü için eldeki mal akamadı. Kök neden ve tasarım: `docs/design/URUN-YASAM-DONGUSU.md`.
+
+**Kararlar.** [ÇEKİRDEK]
+- Ürün kartı üç durumludur (Aktif · Tükenene kadar · Pasif). Canlı referanslı ana veri pasife alınmaz. Kapı her kurulumda bayraksızdır; çıkışı olduğu için (Tükenene kadar / birleştirme) çıkışsız kapı değildir.
+- Kapı beş ana veriye de uygulanır. Üç durum şimdilik yalnız ürün kartındadır.
+- Ürün kartında DB seddi vardır (1e kararı (b): tetikleyici `status` kolunu da izler, dirilme dahil). Diğer ana verilerde kilit en iyi çabadır; kaçanı sağlık sayacı gösterir.
+
+**Kararlar.** [PROFİL] "Tükenene kadar" kartın yeni sipariş, açık satırda miktar ve yeni üretim planı davranışı üç kurulum ayarıdır. Varsayılanlar kullanıcı kararıdır (§14). Göç, pasif ama canlı referanslı kartları Tükenene kadar'a taşır (fabrikada 10 kart, ölçüldü 2026-09-25).
+
+**Dilimler.**
+- S0–S8, 9b oturumu, 1e denetimi.
+- Sahada ilk görülen: S5 (DB seddi) ve S5b. S5b'de form kaydı Tükenene kadar kartı Aktif'e döndürüyordu; hem eski hem yeni panelde vardı.
+- Prova ölçümleri (23 Eylül dökümü):
+  - Tetikleyici 1,5–15 µs/satır.
+  - 8.381 top / 610 kalemde 0 ret.
+  - Sağlık sayacı 1,4 sn, `total` 0.
+- Yan bulgu (dokunulmadı, kullanıcıya bildirildi): iki barkodsuz fason dönüş topu NOT VALID `rolls_qty_le_initial`i ihlal ediyor.
+
+**Bilinen sınırlar.**
+- Tetikleyici mevcut satırları yeniden denetlemez.
+- Sipariş kapalıdan açığa dönerse kalem tetikleyicisi koşmaz.
+- Diğer ana verilerde kilit en iyi çabadır.
+- Üçünü de `masterDataArchive` sayacı gösterir.
 

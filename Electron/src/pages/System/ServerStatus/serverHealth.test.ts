@@ -42,6 +42,22 @@ const base = (over: Partial<HealthResponse> = {}): HealthResponse =>
   }) as HealthResponse;
 
 const msgs = (d: HealthResponse): string[] => evaluateAlerts(d).map((a) => a.message);
+
+describe("evaluateAlerts — pasif ana veride canlı kayıt (URUN-YASAM-DONGUSU §10)", () => {
+  const md = (counts: Record<string, number>) => ({
+    total: Object.values(counts).reduce((a, b) => a + b, 0),
+    archivedWithLiveRefs: counts,
+    stale: false,
+  });
+  it("⭐ toplam > 0 → uyarı, varlıklar adıyla; 0 ya da ölçülmedi (null/eski backend) → uyarı YOK", () => {
+    expect(msgs(base({ masterDataArchive: md({ item: 2, color: 1, customer: 0 }) }))).toContain(
+      "Pasif ana veride canlı kayıt var (2 ürün, 1 renk) — kayıtları kapatın ya da kartı yeniden kullanıma alın.",
+    );
+    expect(msgs(base({ masterDataArchive: md({ item: 0, color: 0 }) })).some((m) => m.includes("Pasif ana veri"))).toBe(false);
+    expect(msgs(base({ masterDataArchive: null })).some((m) => m.includes("Pasif ana veri"))).toBe(false);
+    expect(msgs(base()).some((m) => m.includes("Pasif ana veri"))).toBe(false);
+  });
+});
 const poolAlerts = (d: HealthResponse) => evaluateAlerts(d).filter((a) => a.message.includes("havuz"));
 
 describe("evaluateAlerts — bağlantı havuzu", () => {

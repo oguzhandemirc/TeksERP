@@ -5,7 +5,7 @@
 //
 // Kullanıcı kuralı (2026-09-17): *"master veri sektör standardında olmalı; ilk
 // fason tablosunda düşünemedik, geriye dönüp böyle problem yaşamayalım."*
-// Beş kapı `docs/standart/MASTER-VERI-TASARIMI.md`te; bu bekçi onlardan MEKANİK
+// Altı kapı `docs/standart/MASTER-VERI-TASARIMI.md`te; bu bekçi onlardan MEKANİK
 // ölçülebilen üçünü ölçer ([MV-01] · [MV-02] · [MV-04]).
 //
 // TEK SORU: *aynı gerçek nesne iki master tabloda yaşıyor mu — ya da yaşayacağı

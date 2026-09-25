@@ -18,6 +18,11 @@
 - **[ÇEKİRDEK]** Survivorship'te (P2) seçim DEĞER değil KAYIT üzerindendir (`fieldPicks[alan]=kayıtId`) — serbest metin uçu sınırsız alan düzenleme API'sine çevirirdi; `code` ve kimlik alanları seçilemez. ⚠️ SIRA LOAD-BEARING: survivor alan yazımı ATOMİK CLAIM'DEN SONRA, yoksa ad taşıma P2002 verir. · bekçi: `test_merge_field_picks` <sub>(CLAUDE.md:80)</sub>
 - **[ÇEKİRDEK]** Mükerrer TOP birleştirilmez, İPTAL edilir (`MUKERRER`): top işlem kaydıdır, birleştirmek metrajı toplamak olurdu. İptal topun KENDİ ucundan yapılır (etiket/çuval/sevk guard'ları atlanmasın), toplu iptal ucu BİLİNÇLİ YOK; 'asıl' = etiketi BASILAN top; tespit `duplicate-rolls.service`te. · bekçi: `test_duplicate_rolls` <sub>(CLAUDE.md:80)</sub>
 
+- **[ÇEKİRDEK]** Canlı referanslı ana veri pasife ALINMAZ (MV-06): ürün · renk · özellik · müşteri · depo · fasoncu arşivi 409 + engelleyen kayıtlar tek tek döner, "uyar ama bırak" yazılmaz; çıkış yolu kaydı kapatmak, birleştirmek ya da ürün kartında "Tükenene kadar"dır. · bekçi: `test_item_archive_gate`, `test_master_data_archive_gate` <sub>(arşiv:2026-09-25)</sub>
+- **[ÇEKİRDEK]** Ürün kartı üç durumludur (Aktif · Tükenene kadar · Pasif); `isActive` durumdan türer (CHECK), durum yalnız yaşam döngüsü yazıcısından değişir ve kartın bir işte kullanılıp kullanılamayacağını yalnız `assertItemUsable` söyler — Item üzerinde çıplak `isActive` kontrolü yazılmaz. · bekçi: `test_item_lifecycle_single_writer`, `test_item_usage_single_source` <sub>(arşiv:2026-09-25)</sub>
+- **[ÇEKİRDEK]** Pasif kartta canlı top ve açık siparişte açık kalem DB'de de doğamaz (tetikleyici, 23514 → 409); ölü statüden canlıya yazan her geri alma yolu önce `assertRollsRevivable` çağırır. · bekçi: `test_item_archive_db_guard`, `test_item_usage_single_source` <sub>(arşiv:2026-09-25)</sub>
+- **[ÇEKİRDEK]** Kapının göremediğini (kapıdan önceki satır · en iyi çaba kilidinin kaçırdığı yarış · açığa dönen sipariş) `/api/admin/health` → `masterDataArchive` sayar; beklenen 0, ölçülemediyse `null`. · bekçi: `test_master_data_archive_health` <sub>(arşiv:2026-09-25)</sub>
+
 ### Yasaklar
 
 - **[ÇEKİRDEK]** Renge DÜZ `nameFold` seddi KOYMA: renk mükerreri ayraç ve sayı-sırası bağımsızdır (`foldColorNameForCompare`), düz kısıt uygulama kuralından zayıf kalıp yanlış güven verir. Sed `tr_fold_color(name)` İFADESİ üzerinde partial UNIQUE'tir (`colors_nameFoldColor_key`). · bekçi: `test_db_invariants EXPRESSION_UNIQUES (test_db_invariants.ts:473-477)` <sub>(CLAUDE.md:84)</sub>
@@ -25,6 +30,7 @@
 ### Kararlar
 
 - **[ÇEKİRDEK]** Enforce bekleyen kurulumda `test_db_invariants` §1 / EXPRESSION_UNIQUES satırının KIRMIZI kalması BİLİNÇLİDİR ('enforce bekliyor' sinyali, unutulmasın diye) — bekçiyi bu yüzden daraltma; ad mükerrerini temizlemek mükerrer panelinin ve iş kararının işidir, toplu UPDATE'in değil. · bekçi: `test_db_invariants §1` <sub>(CLAUDE.md:78, CLAUDE.md:81)</sub>
+- **[PROFİL]** "Tükenene kadar" kartın yeni sipariş · açık satırda miktar · yeni üretim planı davranışı kurulum ayarıdır (varsayılan: okutulan toplar · serbest uyarılı · açık); pasif kartta canlı kayıt olmaması (D1) ayara bağlanmaz. · bekçi: `test_item_lifecycle_policy`, `test_item_lifecycle_exit_gate` <sub>(arşiv:2026-09-25)</sub>
 - **[ÇEKİRDEK]** Kimlik alanına (VKN vb.) DB seddi BİLİNÇLİ KONULMAZ: aynı tüzel kişiye ikinci cari kart meşru bir iş kararı olabilir; kimlik alanı sektörde EŞLEŞTİRME SİNYALİDİR, tekillik kısıtı değil — aday kuyruğa düşer, yazma engellenmez. <sub>(CLAUDE.md:80)</sub>
 
 ## Backend
@@ -63,7 +69,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_color_name_dup`, `test_tr_case`, `test_consistency`, `test_data_integrity_gaps`, `test_db_invariants`, `test_duplicate_detection`, `test_duplicate_rolls`, `test_fold_contract`, `test_item_code_case_uniqueness`, `test_master_data_merge`, `test_master_data_merge_conflicts`, `test_master_data_merge_fk_coverage`, `test_master_data_merge_race`, `test_master_data_merge_revert`, `test_master_data_name_dup`, `test_merge_field_picks`, `test_name_normalization`, `test_name_uppercase_storage`, `test_similar_names`, `test_subcontractor_management`, `test_turkish_search_fold`, `test_master_data_kimlik_tekilligi`
+Backend: `test_color_name_dup`, `test_tr_case`, `test_consistency`, `test_data_integrity_gaps`, `test_db_invariants`, `test_duplicate_detection`, `test_duplicate_rolls`, `test_fold_contract`, `test_item_code_case_uniqueness`, `test_master_data_merge`, `test_master_data_merge_conflicts`, `test_master_data_merge_fk_coverage`, `test_master_data_merge_race`, `test_master_data_merge_revert`, `test_master_data_name_dup`, `test_merge_field_picks`, `test_name_normalization`, `test_name_uppercase_storage`, `test_similar_names`, `test_subcontractor_management`, `test_turkish_search_fold`, `test_master_data_kimlik_tekilligi`, `test_item_archive_gate`, `test_master_data_archive_gate`, `test_item_lifecycle_single_writer`, `test_item_usage_single_source`, `test_item_lifecycle_policy`, `test_item_lifecycle_exit_gate`, `test_item_lifecycle_race`, `test_item_lifecycle_migration`, `test_item_archive_db_guard`, `test_master_data_archive_health`
 
 İstemci: `SimilarNamesWarning.test.tsx`⚠️, `similar-names-coverage.test.ts`⚠️, `searchFold.test.ts`
 
@@ -74,3 +80,4 @@ Backend: `test_color_name_dup`, `test_tr_case`, `test_consistency`, `test_data_i
 - 2026-08-22 · 2026-08-22 — MÜKERRER PANELİ v2 P1 UYGULANDI — `CLAUDE-NOT-ARSIVI.md:481-484`
 - 2026-08-25 · 2026-08-25 — Prod oturumunun üç "dev'de yapılacaklar" notu teyit edildi ve uygulandı (kur.ps1 · renk seddi · d — `CLAUDE-NOT-ARSIVI.md:810-839`
 - 2026-09-17 · 2026-09-17 — Master veri kimlik tekilliği: tekillik TABLOLAR ARASI sorulur [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-17 master veri
+- 2026-09-25 · 2026-09-25 — Ürün kartı yaşam döngüsü ve ana veri arşiv kapısı (MV-06) — `CLAUDE-NOT-ARSIVI.md` §2026-09-25 ürün yaşam döngüsü

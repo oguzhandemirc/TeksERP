@@ -131,6 +131,7 @@ import clientPolicyRoutes from "./routes/client-policy.routes";
 import bossRoutes from "./routes/boss.routes";
 import { NIGHTLY_PREFIX } from "./services/helpers/backup-naming.helper";
 import { seriesExhaustionWarnings } from "./services/helpers/series-exhaustion.helper";
+import { masterDataArchiveHealthSnapshot } from "./services/helpers/master-data-health.helper";
 const app: Express = express();
 
 // =============================================================================
@@ -726,6 +727,9 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
     restoreCopyBytes, // bu kopyaların toplam disk kullanımı
     // Numara serisi tükenmesi: `[]` uyarı yok · dolu uyarı var · `null` okunamadı.
     numberSeriesExhaustion,
+    // Pasif ana veride canlı referans (URUN-YASAM-DONGUSU §10): `total` beklenen 0 · `null` ölçülemedi.
+    // Ölçüm 10 dk önbellekli (bu uç 5 sn'de bir sorulur); `stale` = arkada tazeleniyor.
+    masterDataArchive: masterDataArchiveHealthSnapshot(),
     lastBackup: latestBackupInfo(),
     // Ham veri değil HÜKÜM: "gece yedeği çalışıyor mu". `lastBackup` bilerek
     // olduğu gibi bırakıldı (eski panel sözleşmesi), bu alan EK'tir.
