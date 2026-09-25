@@ -498,6 +498,8 @@ const PARTIAL_INDEXES: Array<{
 // yalnız burada yazılıdır. Temizlik bitince girdiyi sil, `VALIDATE` et.
 const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string; onarim?: string }> = [
   { table: "rolls", name: "rolls_currentQty_nonneg" },
+  // K-A3b (2026-09-25): göç satırının kaynağı yalnız preEpoch satırında ve kapalı kümeden.
+  { table: "roll_status_events", name: "roll_status_events_pre_epoch_source_check" },
   { table: "rolls", name: "rolls_initialQty_nonneg" },
   { table: "rolls", name: "rolls_weightKg_nonneg" },
   { table: "order_lines", name: "order_lines_quantity_pos" },

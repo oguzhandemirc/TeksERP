@@ -4640,17 +4640,20 @@ model RollOperation {
 /// üst top silinince FK kaskadı geçer (üretimde top silen yol yok, bekçi temizlikleri
 /// siler). Emsal `WarehouseMovement.roll` Cascade.
 model RollStatusEvent {
-  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  rollId     String      @db.Uuid
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rollId         String      @db.Uuid
   /// Doğuş satırında (INSERT) null.
-  fromStatus RollStatus?
-  toStatus   RollStatus
+  fromStatus     RollStatus?
+  toStatus       RollStatus
   /// v1: yalnız CANCELLED/SCRAP satırında dolu; kaynağı `Roll.cancelledById`.
   /// FK'SIZ (SystemLogArchive emsali): kullanıcı silinse de iz kalır; SET NULL eylemi
   /// bir UPDATE olup mühürle çarpışırdı.
-  actorId    String?     @db.Uuid
-  /// Bir kerelik göçle (Roll iptal kolonlarından) yazılmış satır — trigger'dan değil.
-  preEpoch   Boolean     @default(false)
+  actorId        String?     @db.Uuid
+  /// Bir kerelik göçle yazılmış satır — trigger'dan değil.
+  preEpoch       Boolean     @default(false)
+  /// Göç satırının kaynağı: `ROLL_COLUMNS` (topun iptal kolonları) · `AUDIT` (kolonda aktör
+  /// yokken audit'in son CANCELLED satırı — beyanlı göç istisnası). CHECK: yalnız preEpoch'ta.
+  preEpochSource String?     @db.VarChar(16)
 
   roll Roll @relation(fields: [rollId], references: [id], onDelete: Cascade)
 
