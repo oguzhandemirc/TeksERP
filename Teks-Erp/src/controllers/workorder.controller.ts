@@ -395,6 +395,7 @@ export class WorkOrderController {
     this.getAttachedRolls = this.getAttachedRolls.bind(this);
     this.getDocuments = this.getDocuments.bind(this);
     this.getEvents = this.getEvents.bind(this);
+    this.lookupEvents = this.lookupEvents.bind(this);
     this.getTravelCard = this.getTravelCard.bind(this);
     this.getManifest = this.getManifest.bind(this);
     this.createManifest = this.createManifest.bind(this);
@@ -828,6 +829,16 @@ export class WorkOrderController {
     try {
       const result = await this.service.getDocuments(req.params.id as string);
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Hareketler ekranının araması — iş emri no ya da top barkodu. */
+  async lookupEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { q } = z.object({ q: z.string().max(64) }).parse(req.query);
+      res.status(200).json({ success: true, data: await timelineService.lookup(q) });
     } catch (error) {
       next(error);
     }

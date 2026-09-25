@@ -111,6 +111,29 @@ router.get(
  *       404:
  *         description: İş emri bulunamadı
  */
+/**
+ * @openapi
+ * /api/work-orders/events/lookup:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Hareketler ekranı araması (iş emri no ya da top barkodu)
+ *     description: |
+ *       Önce tam iş emri no eşleşmesi; yoksa top barkodu → topun geçtiği tüm iş emirleri
+ *       (hareket adımları ∪ bugünkü adım ∪ doğduğu adım). En az 2 karakter.
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema: { type: string, maxLength: 64 }
+ *     responses:
+ *       200:
+ *         description: Eşleşen iş emirleri (boş dizi = bulunamadı)
+ *       400:
+ *         description: Sorgu çok kısa
+ */
+// ⚠️ `/:id`'DEN ÖNCE: sonra kaydedilseydi Express "events"i bir iş emri id'si sanırdı.
+router.get("/events/lookup", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.lookupEvents);
+
 router.get("/:id", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.findById);
 
 /**

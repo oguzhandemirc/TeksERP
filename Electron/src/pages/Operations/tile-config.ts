@@ -4,6 +4,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Factory,
+  History,
   Package,
   PackageOpen,
   PackagePlus,
@@ -224,6 +225,17 @@ export const operationsTiles: OperationsTile[] = [
     // `requireProductionEnabled` taşıyordu; karo bayraksızdı → modül kapalı bir
     // kurulumda kart görünür, tıklayınca 403. Yüklem SAF modülden DOĞRUDAN
     // geçirilir (sarmalayan ok fonksiyonu YAZILMAZ — palet kimlik testi).
+    visibleWhen: isWorkOrdersVisible,
+  },
+  {
+    key: "work-order-events",
+    title: "İş Emri Hareketleri",
+    description: "İş emri no ya da top barkoduyla bütün hareketler",
+    icon: History,
+    to: "/operations/work-order-events",
+    group: "production",
+    permission: "workorder:read",
+    // İş emirleriyle aynı modül kapısı — üretim kapalı kurulumda karo çizilmez.
     visibleWhen: isWorkOrdersVisible,
   },
   {

@@ -455,6 +455,11 @@ iki katman, cursor'lu, grup süzgeci fail-closed, satır başlığı sunucuda T�
 `constants/workorder-event-labels.ts`) + panel `WorkOrderEventsSheet` (yan panel ve detay başlığında
 "Hareketler" tuşu). Kalan: D4b ayrı ekran (iş emri no / barkod arama + Excel) · D4c tablet detayında son 5
 hareket (S9).
+**D4b UYGULANDI (2026-09-25):** Operasyon → "İş Emri Hareketleri" ekranı (`/operations/work-order-events`,
+`workorder:read`, üretim modülü kapısı): iş emri no ya da top barkodu (`GET /work-orders/events/lookup` —
+barkod topun geçtiği tüm iş emirlerini verir, birden çoksa seçim kullanıcıda) + yan panelle AYNI gövde
+(`WorkOrderEventsPanel`) + Excel. Ekrandaki sütunlar = Excel sütunları: ikisi de `EVENT_COLUMNS`ten türer; Excel
+ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (sınırı aşarsa sessizce kırpmaz, durur).
 
 - **Uç:** `GET /work-orders/:id/events?types=…&cursor=…` — (A) `WorkOrderEvent` + (B) kaynak defterler,
   `createdAt` sıralı, cursor'lu; süzme SUNUCUDA (liste + cursor + özet tek where). `GET /work-orders/events/

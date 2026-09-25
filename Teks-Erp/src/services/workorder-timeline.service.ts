@@ -11,6 +11,7 @@
 import { Prisma, RollEntrySource, WorkOrderEventType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { normalizeScanCode } from "../utils/code-format";
 import {
   TIMELINE_GROUPS,
   TIMELINE_GROUP_LABEL,
@@ -197,7 +198,50 @@ export function pageTimeline(
   return { data, hasMore, nextCursor: hasMore ? encodeCursor(data[data.length - 1]!) : null, groups };
 }
 
+export interface TimelineLookupHit {
+  id: string;
+  workOrderNumber: string;
+  status: string;
+  createdAt: string;
+  /** Neyle bulundu — iş emri no mu, topun geçtiği iş emri mi. */
+  via: "WORK_ORDER_NUMBER" | "ROLL_BARCODE";
+}
+
 export class WorkOrderTimelineService {
+  /**
+   * Hareketler ekranının araması: önce iş emri no (tam eşleşme), yoksa top
+   * barkodu → topun geçtiği TÜM iş emirleri (hareket adımları ∪ bugünkü adım ∪
+   * doğduğu adım). Yeni → eski.
+   */
+  async lookup(query: string): Promise<TimelineLookupHit[]> {
+    const code = normalizeScanCode(query);
+    if (code.length < 2) throw AppError.badRequest("En az 2 karakter girin (iş emri no ya da top barkodu)");
+    const select = { id: true, workOrderNumber: true, status: true, createdAt: true } as const;
+    const byNumber = await prisma.workOrder.findMany({ where: { workOrderNumber: code }, select });
+    if (byNumber.length > 0) {
+      return byNumber.map((w) => ({ ...w, createdAt: w.createdAt.toISOString(), via: "WORK_ORDER_NUMBER" as const }));
+    }
+    const roll = await prisma.roll.findFirst({
+      where: { barcode: code },
+      select: {
+        id: true,
+        currentStep: { select: { workOrderId: true } },
+        producedInStep: { select: { workOrderId: true } },
+      },
+    });
+    if (!roll) return [];
+    const moves = await prisma.rollMovement.findMany({
+      where: { rollId: roll.id },
+      select: { step: { select: { workOrderId: true } } },
+    });
+    const ids = new Set<string>(moves.map((mv) => mv.step.workOrderId));
+    if (roll.currentStep) ids.add(roll.currentStep.workOrderId);
+    if (roll.producedInStep) ids.add(roll.producedInStep.workOrderId);
+    if (ids.size === 0) return [];
+    const wos = await prisma.workOrder.findMany({ where: { id: { in: [...ids] } }, select, orderBy: { createdAt: "desc" } });
+    return wos.map((w) => ({ ...w, createdAt: w.createdAt.toISOString(), via: "ROLL_BARCODE" as const }));
+  }
+
   async list(
     workOrderId: string,
     opts: { groups?: TimelineGroup[]; cursor?: string; limit: number },

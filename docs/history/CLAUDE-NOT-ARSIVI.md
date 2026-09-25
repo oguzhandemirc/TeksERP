@@ -12470,3 +12470,13 @@ istemci ikinci sözlük tutmaz. Cursor `(at, id)` üzerinde kararlı; grup süzg
 sayıları süzgeçten bağımsız. Panel `WorkOrderEventsSheet` depo hareket dökümünün sözleşmesini izler (salt-okunur,
 "hata" ≠ "kayıt yok", kırpma altbilgide). İzin: mevcut `GET /:id` kümesi (yeni kod yok). Kapı:
 `test_workorder_timeline` (negatif sonda: künye kaynağı susturulunca 2 kırmızı).
+
+## 2026-09-25 — İş Emri Hareketleri ayrı ekranı (D4b): tek sütun modeli, Excel listenin tamamı [ÇEKİRDEK]
+
+**Karar.** Operasyon → "İş Emri Hareketleri" (`/operations/work-order-events`, `workorder:read`, üretim modülü
+kapısı; karo ↔ route aynı izin, `route-modules` + `screen-catalog` satırı). Arama `GET /work-orders/events/lookup`:
+önce tam iş emri no, yoksa top barkodu → topun geçtiği tüm iş emirleri (hareket adımları ∪ bugünkü ∪ doğduğu
+adım); tek sonuç doğrudan açılır, çok sonuçta seçim kullanıcıda. Gövde yan panelle ORTAK (`WorkOrderEventsPanel`).
+**Ekrandaki sütunlar = Excel sütunları** (d8 kuralı): ikisi de `EVENT_COLUMNS`ten türer, panel testi başlık ve
+hücre metnini birebir ölçer. Excel ekranda yüklenmiş sayfayla sınırlı değil — süzgeçteki listenin TAMAMI; sınırı
+(20.000) aşarsa sessizce kırpmaz, hata verir.

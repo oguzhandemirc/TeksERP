@@ -178,6 +178,7 @@ describe("karo bağlantıları", () => {
     // sessizce karo eklenmesin diye kurulmuş. 2026-08-14'te iki karo eklendi
     // (Paket D, ticaret paketi); 2026-09-03'te DÖRT karo daha (P5):
     // `goods-receipts` (ticaret — canlı ayrışma düzeltmesi) ve üç üretim karosu.
+    // 2026-09-25: `work-order-events` (İş Emri Hareketleri) — iş emirleriyle AYNI üretim kapısı.
     expect(conditional.sort()).toEqual([
       "goods-receipts",
       "kursun-dagitim",
@@ -189,6 +190,7 @@ describe("karo bağlantıları", () => {
       "warehouse-transfers",
       "warp-beams",
       "weaving-orders",
+      "work-order-events",
       "work-orders",
       "yarn-stock",
     ]);

@@ -262,6 +262,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/orders", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Siparişler", requires: ["order:read"], capabilities: ["customer-alias:read", "order:write", "shipping:read", "workorder:write"] },
   { key: "operations/allocation-repair", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Siparişe yazılamayan sevkiyatlar", requires: ["shipping:repair-allocation"], capabilities: [] },
   { key: "operations/work-orders", app: "desktop", modul: "productionEnabled", title: "İş Emirleri", requires: ["workorder:read"], capabilities: ["order:write", "property:write", "roll:manual-adjust", "workorder:write"] },
+  { key: "operations/work-order-events", app: "desktop", modul: "productionEnabled", title: "İş Emri Hareketleri", requires: ["workorder:read"], capabilities: [] },
   { key: "operations/rolls", app: "desktop", modul: "cekirdek:stok-giris", title: "Kumaş Stoğu", requires: ["roll:read"], capabilities: ["kartela:write", "label:print", "label:read", "roll:history", "roll:manual-adjust", "roll:write"] },
   { key: "operations/kursun-dagitim", app: "desktop", modul: "productionEnabled", title: "Kurşun Planlama", requires: ["quality:write", "workorder:distribute"], capabilities: [] },
   { key: "operations/product-balance", app: "desktop", modul: "productionEnabled", title: "Kumaş Dengesi", requires: ["workorder:read"], capabilities: ["workorder:write"] },

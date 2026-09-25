@@ -147,6 +147,7 @@ import { UserActivityPage } from "@/pages/Reports/Audit/UserActivityPage";
 import { OrdersPage } from "@/pages/Operations/Orders/OrdersPage";
 import { AllocationRepairPage } from "@/pages/Operations/AllocationRepair/AllocationRepairPage";
 import { WorkOrdersPage } from "@/pages/Operations/WorkOrders/WorkOrdersPage";
+import { WorkOrderEventsPage } from "@/pages/Operations/WorkOrderEvents/WorkOrderEventsPage";
 import { WorkOrderDetailPage } from "@/pages/Operations/WorkOrders/WorkOrderDetailPage";
 import { WorkOrderFormPage } from "@/pages/Operations/WorkOrders/WorkOrderFormPage";
 import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
@@ -899,6 +900,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="workorder:read">
         <WorkOrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Karo ile AYNI izin (tile-config `work-order-events`).
+    path: "operations/work-order-events",
+    element: (
+      <ProtectedRoute requirePermission="workorder:read">
+        <WorkOrderEventsPage />
       </ProtectedRoute>
     ),
   },

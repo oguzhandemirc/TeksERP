@@ -9,6 +9,8 @@
 //      iki statü geçişi, parti doğuşu (kaynak: Batch) ve kapanış künyesi (kaynak:
 //      künye) var; tetik ve kanal Türkçe; aktör adı çözüldü
 //   §3 grup süzgeci yalnız o grubu döndürür, sayılar değişmez
+//   §4 arama: iş emri no (büyük/küçük harf fark etmez) → o iş emri; top barkodu →
+//      topun geçtiği iş emri; 2 karakterden kısa sorgu reddedilir
 // NEGATİF SONDA (elle, 2026-09-25): servisteki künye kaynağı (`workOrderCloseSnapshot`
 // okuması) yoruma alındı → §2c kırmızı; md5 ile geri alındı.
 // =============================================================================
@@ -111,6 +113,17 @@ async function main(): Promise<void> {
     const yalniz = await timeline.list(woId, { limit: 50, groups: ["KAPANIS"] });
     check("§3 grup süzgeci yalnız KAPANIS, sayılar değişmez",
       yalniz.data.length === 1 && yalniz.groups.find((g) => g.key === "DURUM")?.count === sayfa.groups.find((g) => g.key === "DURUM")?.count);
+
+    // §4 arama
+    const no = (await prisma.workOrder.findUniqueOrThrow({ where: { id: woId }, select: { workOrderNumber: true } })).workOrderNumber;
+    const noIle = await timeline.lookup(` ${no.toLowerCase()} `);
+    check("§4 iş emri no ile bulunur (boşluk ve küçük harf tolere)", noIle.length === 1 && noIle[0]!.id === woId && noIle[0]!.via === "WORK_ORDER_NUMBER");
+    const barkodla = await timeline.lookup(barcode);
+    check("§4b top barkoduyla topun geçtiği iş emri bulunur", barkodla.some((h) => h.id === woId && h.via === "ROLL_BARCODE"));
+    let kisa = false;
+    try { await timeline.lookup("I"); } catch { kisa = true; }
+    check("§4c 2 karakterden kısa sorgu reddedilir", kisa);
+    check("§4d bulunamayan sorgu boş liste (hata değil)", (await timeline.lookup("TST-YOK-XYZ")).length === 0);
   } finally {
     await temizle();
   }
