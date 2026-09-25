@@ -9,6 +9,7 @@ import { BaseController } from "../controllers/base.controller";
 import { ItemService } from "../services/item.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { readFilterList } from "../utils/query-parser";
 import "../types/express-augment";
 
 export const itemService = new ItemService({
@@ -39,6 +40,12 @@ const lifecycleBody = z.object({
   reason: z.string().trim().max(500, "Gerekçe en fazla 500 karakter olabilir").optional().nullable(),
 });
 const lifecyclePreviewQuery = z.object({ to: z.nativeEnum(ItemLifecycleStatus) });
+const lifecycleSummaryQuery = z.object({
+  ids: z
+    .string()
+    .transform((v) => readFilterList(v))
+    .pipe(z.array(z.string().uuid("Geçersiz ürün ID")).min(1, "En az bir ürün ID").max(200, "En fazla 200 ürün")),
+});
 
 const addAllowedColorBody = z.object({
   colorId: z.string().uuid("Geçersiz renk ID"),
@@ -134,6 +141,44 @@ router.get("/", verifyToken, requireAnyPermission("item:read", "mobile:kk1", "mo
 // ⚠️ İzin WRITE: bu uç var olan adları listeler ve yalnız KAYIT AÇAN kişiye
 // lazımdır; okuma iznine bakmak görünürlüğü gereksiz genişletirdi.
 router.get("/similar-names", verifyToken, requirePermission("item:write"), controller.similarNames);
+
+/**
+ * @openapi
+ * /api/items/lifecycle-summary:
+ *   get:
+ *     tags: [Items]
+ *     summary: Kartların kalan canlı referans sayısı (liste rozeti)
+ *     description: >
+ *       Her kart için kalan canlı referans toplamı ve canlı top sayısı — "Tükenene kadar ·
+ *       N top kaldı" / "Pasife hazır" rozeti. Kayıtların tek tek listesi önizleme ucundadır.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: ids
+ *         required: true
+ *         description: Virgülle ayrılmış ürün ID'leri (en fazla 200)
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: "[{ id, liveTotal, rolls }]"
+ *       400:
+ *         description: Geçersiz ID listesi
+ */
+// ⚠️ `/:id`den ÖNCE: sonra gelirse Express "lifecycle-summary"yi id sanar.
+router.get(
+  "/lifecycle-summary",
+  verifyToken,
+  requirePermission("item:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { ids } = lifecycleSummaryQuery.parse(req.query);
+      res.json(await itemService.lifecycleSummary(ids));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"), controller.findById);
 

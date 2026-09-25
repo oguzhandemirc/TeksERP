@@ -285,6 +285,23 @@ kopya kalmaz.
 - **Genel düzeltme (ayrı dilim, bağımsız inebilir):** `useCrudMutations` sunucunun
   `warnings`/`message` alanını gösterir — bütün CRUD sayfaları.
 - Diğer ana veri sayfaları: 409 kayıt listesini okunur diyalogda gösterir.
+- **Uygulama (S6):**
+  - "Kullanımdan kaldır" diyaloğu (`ItemLifecycleDialog`) Aktif ve Tükenene kadar satırda açılır.
+    Pasif satırda "Aktifleştir" kalır.
+  - Ürün formundaki "Aktif" onay kutusu kalktı; form `isActive` göndermez. Durum yalnız diyalog ve
+    Aktifleştir ile değişir.
+  - Durum süzgeci: "Aktif" bugünkü gibi kullanımdaki kartlardır (Tükenene kadar dahil, rozetle
+    ayrılır); "Tükenene kadar" yalnız o durumdur.
+  - Rozet sayısı `GET /items/lifecycle-summary?ids=` ucundan gelir.
+  - Seçici kapsamı `pickableLifecycle`:
+    - sipariş kalemi: ayar "Serbest" ise Tükenene kadar kart da listelenir
+    - iş emri hedefi ve dokuma işi: yeni plan ayarına bağlı
+    - alış, elle giriş, reçete, çözgü ipliği: yalnız Aktif
+    - mal kabul: süzülmez, çünkü PO satırlı kabul C′ sınıfıdır ve sunucu karar verir
+  - Arşiv 409'u (`ITEM_HAS_LIVE_REFERENCES` / `MASTER_DATA_HAS_LIVE_REFERENCES`) genel toast yerine
+    App düzeyindeki tek diyalogda kayıt kayıt gösterilir; bu, bütün ana veri sayfalarını kapsar.
+  - Ayarlar grubu seçenekleri alt alta, her birinin altında tek cümleyle çizilir. Kaydetteki
+    sunucu uyarısını (KAPALI + sipariş zorunlu) `apiClient` yanıt interceptor'ı basar.
 
 ## 9. Tablet
 

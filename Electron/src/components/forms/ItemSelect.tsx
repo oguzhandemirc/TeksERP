@@ -28,11 +28,13 @@ interface Props {
   /** Kapsam: mal kabul `["YARN","FABRIC"]` (fiş sarf almaz — sarf hiç listelenmez, 400 yerine), alış siparişi üçü (varsayılan),
    *  satış siparişi `["FABRIC"]` (tek tür: Tür seçicisi çizilmez, başlık "Kumaş seç"). */
   allowedTypes?: AllowedItemTypes;
+  /** Seçilebilir yaşam döngüsü durumları (`pickableLifecycle`, URUN-YASAM-DONGUSU §8). */
+  lifecycle?: string;
   /** Tetik düğmesine ek sınıf (satış siparişi: amber halka / nabız — çağıranın geçici uyarısı). */
   triggerClassName?: string;
 }
 
-export function ItemSelect({ value, onChange, selected, placeholder = "Ürün seç…", disabled, className, "aria-label": ariaLabel, allowedTypes, triggerClassName }: Props) {
+export function ItemSelect({ value, onChange, selected, placeholder = "Ürün seç…", disabled, className, "aria-label": ariaLabel, allowedTypes, lifecycle, triggerClassName }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
   const [picked, setPicked] = useState<ItemPickerRow | null>(null);
   const known = picked?.id === value ? picked : selected?.id === value ? selected : null;
@@ -71,6 +73,7 @@ export function ItemSelect({ value, onChange, selected, placeholder = "Ürün se
         open={modalOpen}
         onOpenChange={setModalOpen}
         allowedTypes={allowedTypes}
+        lifecycle={lifecycle}
         onPick={(r) => {
           setPicked(r);
           onChange(r.id, r);

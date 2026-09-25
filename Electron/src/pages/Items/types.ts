@@ -1,4 +1,5 @@
 import type { ItemType } from "@/types/enums";
+import type { ItemLifecycleStatus } from "@/lib/item-lifecycle";
 
 export interface ItemColorLite {
   id: string;
@@ -24,6 +25,8 @@ export interface Item {
   itemType: ItemType;
   unit: string;
   isActive: boolean;
+  /** Yaşam döngüsü (eski sunucuda yok → `itemLifecycleOf` isActive'ten türetir). */
+  lifecycleStatus?: ItemLifecycleStatus;
   /** İplik inceliği (denye). Yalnız YARN'da dolu; çözgü kartı bunu ister. */
   linearDensityDen: string | null;
   /** KUMAŞ → varsayılan çözgü kartı (E4, 2026-09-18): dokuma işi formu ve sunucu ön-dolum kaynağı; yalnız FABRIC. */

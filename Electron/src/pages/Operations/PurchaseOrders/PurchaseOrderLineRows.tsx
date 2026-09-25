@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { ItemSelect } from "@/components/forms/ItemSelect";
 import { itemService } from "@/pages/Items/service";
 import { cn } from "@/lib/utils";
+import { pickableLifecycle } from "@/lib/item-lifecycle";
 import { useItemPriceSuggestion, describeSuggestion } from "@/hooks/useItemPriceSuggestion";
 import type { SupplierParty } from "@/components/forms/supplierParty";
 
@@ -226,6 +227,7 @@ export function PurchaseOrderLineRows({ lines, onChange, disabled, supplier, cur
               <ItemSelect
                 value={l.itemId || null}
                 onChange={(v) => patch(l.key, { itemId: v ?? "" })}
+                lifecycle={pickableLifecycle("purchase")}
                 placeholder="Ürün ara..."
                 disabled={disabled}
                 triggerClassName={warn ? "ring-2 ring-amber-500 ring-offset-1" : undefined}

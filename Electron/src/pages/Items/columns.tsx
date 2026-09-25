@@ -8,6 +8,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { itemTypeLabels } from "@/types/enums";
 import { itemCarriesAllowedLists } from "./itemPayload.helper";
+import { ItemLifecycleBadge, itemLifecycleExportText } from "./ItemLifecycleBadge";
 
 /** İplik/sarf satırında renk/özellik hücresi BOŞ — "Tümü" yazmak iplikte anlamsız (yalnız kumaş liste taşır). */
 const NOT_APPLICABLE = <span className="text-xs text-muted-foreground">—</span>;
@@ -144,6 +145,7 @@ export const itemColumns: ColumnDef<Item>[] = [
   {
     accessorKey: "isActive",
     header: () => <SortableHeader field="isActive" label="Durum" />,
-    cell: ({ row }) => (row.original.isActive ? <Badge>Aktif</Badge> : <Badge variant="muted">Pasif</Badge>),
+    meta: { exportValue: itemLifecycleExportText },
+    cell: ({ row }) => <ItemLifecycleBadge item={row.original} />,
   },
 ];

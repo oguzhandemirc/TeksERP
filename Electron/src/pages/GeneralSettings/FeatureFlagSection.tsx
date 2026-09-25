@@ -25,6 +25,7 @@ import { useRegisterSettingsDirty } from "./settings-dirty";
 import { isSettingRowVisible, type SettingsSearchHit } from "./settings-groups";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
+import { EnumRadioOptions } from "./EnumRadioOptions";
 
 /**
  * Bir kategorinin özellik anahtarlarını config'ten render eder — TEK kaydetme
@@ -500,7 +501,15 @@ export function FeatureFlagSection({
           </div>
           <p className="text-xs text-muted-foreground"><Vurgu text={f.summary} query={searchQuery} /></p>
         </div>
-        {canEdit ? (
+        {canEdit && f.display === "radio" ? (
+          <EnumRadioOptions
+            name={f.title}
+            value={value}
+            options={f.options}
+            disabled={mut.isPending}
+            onChange={(v) => setEnumDraft((d) => ({ ...d, [f.enumKey]: v }))}
+          />
+        ) : canEdit ? (
           <select
             value={value}
             disabled={mut.isPending}

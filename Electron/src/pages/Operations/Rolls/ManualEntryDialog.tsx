@@ -40,6 +40,8 @@ import { rollService, type InitialEntryPayload } from "./service";
 
 // Radix Select boş string value kabul etmez → "Belirsiz" için sentinel.
 const QUALITY_NONE = "__none__";
+/** Belgesiz stok girişi (sınıf C) yalnız Aktif karta — Tükenene kadar kart listelenmez (URUN-YASAM-DONGUSU §8). */
+const MANUAL_ENTRY_ITEM_FILTERS = { lifecycleStatus: "ACTIVE" };
 
 /**
  * Backend mükerrer tuzağının 409'unu tanır → var olan topun barkodu (yoksa null).
@@ -322,6 +324,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
                   onChange={(v) => field.onChange(v ?? "")}
                   service={itemService}
                   queryKey="items"
+                  extraFilters={MANUAL_ENTRY_ITEM_FILTERS}
                   getLabel={(it) => `${it.code} — ${it.name}`}
                   placeholder="Kumaş ara..."
                 />

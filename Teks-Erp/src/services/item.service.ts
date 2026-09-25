@@ -761,9 +761,17 @@ export class ItemService extends BaseService {
     };
   }
 
-  /** Kartın kalan canlı referans sayısı (liste rozeti "Tükenene kadar · N top kaldı" / "Pasife hazır"). */
-  async liveRefCounts(id: string) {
-    return countItemLiveRefs(prisma, id);
+  /**
+   * Liste rozeti ("Tükenene kadar · N top kaldı" / "Pasife hazır") — kart başına kalan canlı
+   * referans. Sıralı sayım (tx dışı ama tek istemci; kart sayısı sayfa boyuyla sınırlı).
+   */
+  async lifecycleSummary(ids: string[]): Promise<ApiResponse<Array<{ id: string; liveTotal: number; rolls: number }>>> {
+    const rows: Array<{ id: string; liveTotal: number; rolls: number }> = [];
+    for (const id of [...new Set(ids)]) {
+      const counts = await countItemLiveRefs(prisma, id);
+      rows.push({ id, liveTotal: totalLiveRefs(counts), rolls: counts.find((c) => c.kind === "ROLL")?.count ?? 0 });
+    }
+    return { success: true, data: rows };
   }
 
   /**

@@ -35,7 +35,6 @@ export const makeItemFormSchema = (isEdit: boolean) =>
       .string()
       .min(1, "Birim boş bırakılamaz")
       .max(10, "Birim en fazla 10 karakter olabilir"),
-    isActive: z.boolean(),
     /**
      * İplik inceliği (denye) — `Item.linearDensityDen`, DB `Decimal(10,4)`.
      * Çözgü kartı bunu ZORUNLU ister (kg = uç × denye × metre / 9.000.000) ama
@@ -67,7 +66,6 @@ export const itemFormDefaults: ItemFormValues = {
   name: "",
   itemType: ItemType.FABRIC,
   unit: "MT",
-  isActive: true,
   linearDensityDen: "",
   warpSpecId: "",
   allowedColorIds: [],

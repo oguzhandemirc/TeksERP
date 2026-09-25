@@ -90,6 +90,8 @@ async function main(): Promise<void> {
   const t2 = await itemService.transitionLifecycle(Z, ItemLifecycleStatus.PHASE_OUT, "tekrar", ADMIN);
   const auditN2 = await prisma.systemLog.count({ where: { recordId: Z, action: "UPDATE" } });
   check("aynı hedefe ikinci istek idempotent — yazım ve audit yok", t1.idempotent === false && t2.idempotent === true && auditN2 === auditN, `audit ${auditN}→${auditN2}`);
+  const sum = (await itemService.lifecycleSummary([Z, Z])).data ?? [];
+  check("liste rozeti özeti: kalan canlı top ve toplam (tekrarlı id tek satır)", sum.length === 1 && sum[0]?.id === Z && sum[0]?.rolls === 1 && (sum[0]?.liveTotal ?? 0) >= 1, JSON.stringify(sum));
   // Panel formu her kayıtta isActive:true gönderir; Tükenene kadar kartın adını düzeltmek
   // onu Aktif'e döndürmemeli (true yalnız Pasif kartı diriltir).
   const f1 = await itemService.update(Z, { isActive: true, name: `${TAG} FORM` }, ADMIN);

@@ -30,6 +30,7 @@ vi.mock("sonner", () => ({
 import apiClient from "./apiClient";
 import { useServerStatusStore } from "@/store/serverStatus";
 import { tokenStore } from "@/lib/secure-token"; // vi.mock'lu — spy'lara erişim
+import { registerLiveReferencesPresenter } from "@/lib/live-references";
 
 type Handler = {
   fulfilled: (r: AxiosResponse) => unknown;
@@ -236,6 +237,19 @@ describe("apiClient interceptor", () => {
         getInterceptor().rejected(makeError(400, { body: { message: "Çuval boş olamaz" } })),
       ).rejects.toBeDefined();
       expect(toastError).toHaveBeenCalledWith("Çuval boş olamaz");
+    });
+
+    it("⭐ 409 arşiv kapısı (kayıt listeli) → toast YOK, kayıtlar diyaloğa gider; gösterici yoksa toast kalır", async () => {
+      const refs = [{ kind: "ROLL", label: "Canlı top", count: 1, records: [{ id: "r1", title: "B1", detail: "WAREHOUSE · 5 m" }] }];
+      const body = { message: "pasife alınamaz", details: { code: "MASTER_DATA_HAS_LIVE_REFERENCES", entity: "color", references: refs } };
+      const shown = vi.fn();
+      registerLiveReferencesPresenter(shown);
+      await expect(getInterceptor().rejected(makeError(409, { body }))).rejects.toBeDefined();
+      expect(toastError).not.toHaveBeenCalled();
+      expect(shown).toHaveBeenCalledWith({ message: "pasife alınamaz", references: refs });
+      registerLiveReferencesPresenter(null);
+      await expect(getInterceptor().rejected(makeError(409, { body }))).rejects.toBeDefined();
+      expect(toastError).toHaveBeenCalledWith("pasife alınamaz");
     });
 
     it("5xx: genel sunucu hatası mesajı (body.message'ı sızdırmaz)", async () => {

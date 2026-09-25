@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { itemLifecycleOf, pickableLifecycle } from "@/lib/item-lifecycle";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
 import { colorService } from "@/pages/Colors/service";
@@ -42,6 +44,8 @@ function useItemWarpSpecPrefill(form: Form, enabled: boolean): void {
 
 export function FabricFields({ form, devereEnabled }: { form: Form; devereEnabled: boolean }) {
   useItemWarpSpecPrefill(form, devereEnabled);
+  // Yeni dokuma işi = yeni üretim planı (A3): Tükenene kadar kart ayara bağlı listelenir.
+  const flags = useFeatureFlags().data?.data;
   const err = form.formState.errors;
   return (
     <>
@@ -55,9 +59,9 @@ export function FabricFields({ form, devereEnabled }: { form: Form; devereEnable
               onChange={(id) => field.onChange(id ?? "")}
               service={itemService}
               queryKey="items-weaving-fabric"
-              filters={{ itemType: "FABRIC" }}
+              filters={{ itemType: "FABRIC", lifecycleStatus: pickableLifecycle("plan", flags) }}
               getLabel={(i) => i.name}
-              getSubLabel={(i) => i.code}
+              getSubLabel={(i) => (itemLifecycleOf(i) === "PHASE_OUT" ? `${i.code} · Tükenene kadar` : i.code)}
               icon={Package}
               title="Dokunacak kumaşı seç"
               placeholder="Kumaş seç"

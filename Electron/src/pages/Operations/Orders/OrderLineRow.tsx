@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ItemSelect } from "@/components/forms/ItemSelect";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { pickableLifecycle } from "@/lib/item-lifecycle";
 import type { AllowedItemTypes } from "@/components/forms/itemPicker";
 import { cn } from "@/lib/utils";
 import { LineRequiredPropertiesEditor } from "./LineRequiredPropertiesEditor";
@@ -16,6 +18,7 @@ import { OrderLineAliasFields } from "./OrderLineAliasFields";
 import { OrderLineAtpHint } from "./OrderLineAtpHint";
 import { OrderLinePriceField } from "./OrderLinePriceField";
 import { OrderLineQuantityField } from "./OrderLineQuantityField";
+import { PhaseOutLineNote } from "./PhaseOutLineNote";
 import type { OrderLineFormValues } from "./schema";
 
 export const ITEM_WARNING_TEXT = "Önce kumaş seçin";
@@ -53,6 +56,8 @@ export interface OrderLineRowProps {
 export function OrderLineRow(p: OrderLineRowProps) {
   const { line, index, pricingEnabled, customerId, currency, itemError, quantityError, itemWarning, onWarnItem, pulseClass, onPatch } = p;
   const cols = lineGridCols(pricingEnabled);
+  // Yeni satırda seçilebilir kartlar "Yeni sipariş" ayarından (§4.1); sunucu kayıtta yine karar verir.
+  const lifecycle = pickableLifecycle("order", useFeatureFlags().data?.data);
   return (
     <li className="rounded-md border p-2" data-testid="order-line">
       <div className={cols}>
@@ -66,6 +71,7 @@ export function OrderLineRow(p: OrderLineRowProps) {
             value={line.itemId || null}
             onChange={(v) => onPatch({ itemId: v ?? "", colorId: null, requiredPropertyIds: [], unit: undefined })}
             allowedTypes={ORDER_LINE_ITEM_TYPES}
+            lifecycle={lifecycle}
             aria-label="Kumaş seç"
             placeholder="Kumaş seç..."
             triggerClassName={cn("h-9", itemError && "border-destructive", itemWarning ? "ring-2 ring-amber-500 ring-offset-1" : pulseClass(!line.itemId))}
@@ -74,6 +80,7 @@ export function OrderLineRow(p: OrderLineRowProps) {
           <p role="status" aria-live="polite" className={cn("text-xs text-amber-700 transition-opacity duration-300 dark:text-amber-400", itemWarning ? "opacity-100" : "sr-only opacity-0")}>
             {itemWarning ? ITEM_WARNING_TEXT : ""}
           </p>
+          <PhaseOutLineNote itemId={line.itemId || null} />
         </div>
         <div className="relative z-10 min-w-0">
           <OrderLineColorPicker

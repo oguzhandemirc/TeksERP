@@ -67,6 +67,10 @@ interface Props<T extends { id: string }> {
    * ayrıca Trash2 = kalıcı sil (DELETE /:id/permanent) eklenir. Backend'i deletedAt
    * damgalı modellerde kayıt gizlenir ama veri bütünlüğü için DB'de durur. */
   permanentDelete?: { description: (row: T) => string };
+  /** Sayfanın KENDİ kaldırma akışı (ürün: "Kullanımdan kaldır" diyaloğu): verilirse düğme
+   *  genel onay diyaloğunu açmaz, satırı buraya verir; `removeLabel` düğmenin adı. */
+  onRemove?: (row: T) => void;
+  removeLabel?: string;
   /** Çok-sekmeli DÜZENLEME formları için: mevcut kaydı güncelleyince dialog
    * kapanmaz, güncel kayıtla düzenlemeye devam edilir — böylece kullanıcı aynı
    * oturumda şube/alias/şablon sekmeleri arasında çalışmaya devam edebilir.
@@ -100,6 +104,8 @@ export function CrudPage<T extends { id: string }>({
   hideHeader,
   renderForm,
   permanentDelete,
+  onRemove,
+  removeLabel,
   actionsPortal,
   keepFormOpenAfterSave,
 }: Props<T>) {
@@ -157,13 +163,15 @@ export function CrudPage<T extends { id: string }>({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 text-destructive"
-                    title={permanentDelete ? "Pasife Al (geri alınabilir)" : undefined}
+                    title={removeLabel ?? (permanentDelete ? "Pasife Al (geri alınabilir)" : undefined)}
+                    aria-label={removeLabel}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setRemovingId(row.original.id);
+                      if (onRemove) onRemove(row.original);
+                      else setRemovingId(row.original.id);
                     }}
                   >
-                    {permanentDelete ? <PowerOff className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    {permanentDelete || onRemove ? <PowerOff className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
                   </Button>
                 ) : (
                   <Button
@@ -202,7 +210,7 @@ export function CrudPage<T extends { id: string }>({
     ],
     // restoreMutation.isPending → aktifleştir butonunun `disabled`'ı; state
     // setter'ları ve restoreMutation.mutate referans olarak kararlı.
-    [columns, writePermission, permanentDelete, restoreMutation.isPending],
+    [columns, writePermission, permanentDelete, onRemove, removeLabel, restoreMutation.isPending],
   );
 
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<T>({

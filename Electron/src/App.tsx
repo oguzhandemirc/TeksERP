@@ -10,6 +10,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { BossShell } from "@/components/layout/BossShell";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SettingsPasswordDialog } from "@/components/settings/SettingsPasswordDialog";
+import { LiveReferencesDialog } from "@/components/LiveReferencesDialog";
 import { authRouter } from "./router";
 import { useAuthStore } from "@/store/auth";
 import { tokenStore } from "@/lib/secure-token";
@@ -153,6 +154,7 @@ export function App() {
               tetikler; bu yüzden yazma yüzeylerinin yanında değil burada durur
               (iki yüzeyden iki diyalog üst üste binmesin). */}
           <SettingsPasswordDialog />
+          <LiveReferencesDialog />
         </QueryClientProvider>
       </ThemeProvider>
     </ErrorBoundary>

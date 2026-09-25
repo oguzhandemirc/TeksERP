@@ -8,6 +8,7 @@
 // =============================================================================
 import { itemTypeLabels, type ItemType } from "@/types/enums";
 import type { Item } from "@/pages/Items/types";
+import { itemLifecycleOf, type ItemLifecycleStatus } from "@/lib/item-lifecycle";
 
 export const ITEM_PICKER_PAGE = 50;
 export type ItemTypeFilter = "ALL" | ItemType;
@@ -46,12 +47,14 @@ export const itemTypeFilterOptions = (allowed?: AllowedItemTypes) => {
 };
 
 /** Sunucu süzgeci: `isActive:"true"` taban; diğerleri YALNIZ seçiliyse (seçilmeyen anahtar gönderilmez — istek bayt bayt
- *  eski). Kapsam daralmışsa "Tümü" = izinli türlerin CSV'si (`filter[itemType]=YARN,FABRIC` → sunucuda `in`). */
-export function itemPickerFilters(f: ItemPickerFilterState, allowed?: AllowedItemTypes): Record<string, string> {
+ *  eski). Kapsam daralmışsa "Tümü" = izinli türlerin CSV'si (`filter[itemType]=YARN,FABRIC` → sunucuda `in`).
+ *  `lifecycle` = formun seçebileceği durumlar (`pickableLifecycle`); verilmezse kullanımdaki her kart. */
+export function itemPickerFilters(f: ItemPickerFilterState, allowed?: AllowedItemTypes, lifecycle?: string): Record<string, string> {
   const types = normalizeAllowedTypes(allowed);
   const all: Record<string, string> = types.length === ALL_TYPES.length ? {} : { itemType: types.join(",") };
   return {
     isActive: "true",
+    ...(lifecycle ? { lifecycleStatus: lifecycle } : {}),
     ...(f.type !== "ALL" ? { itemType: f.type } : all),
     ...(f.colorId ? { allowedColorId: f.colorId } : {}),
     ...(f.propertyId ? { allowedPropertyId: f.propertyId } : {}),
@@ -85,6 +88,7 @@ export interface ItemPickerRow {
   properties: string[];
   propertyMore: number;
   isActive: boolean;
+  lifecycle: ItemLifecycleStatus;
 }
 
 const SHOWN = 3;
@@ -103,6 +107,7 @@ export function itemPickerRow(it: Item): ItemPickerRow {
     properties: properties.slice(0, SHOWN),
     propertyMore: Math.max(0, properties.length - SHOWN),
     isActive: it.isActive !== false,
+    lifecycle: itemLifecycleOf(it),
   };
 }
 

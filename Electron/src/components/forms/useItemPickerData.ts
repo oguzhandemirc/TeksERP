@@ -18,10 +18,11 @@ interface Args {
   search: string;
   filter: ItemPickerFilterState;
   allowedTypes?: AllowedItemTypes;
+  lifecycle?: string;
 }
 
-export function useItemPickerData({ open, search, filter, allowedTypes }: Args) {
-  const filters = itemPickerFilters(filter, allowedTypes);
+export function useItemPickerData({ open, search, filter, allowedTypes, lifecycle }: Args) {
+  const filters = itemPickerFilters(filter, allowedTypes, lifecycle);
   const q = useInfiniteQuery({
     queryKey: ["item-picker", search, filters],
     queryFn: async ({ pageParam }) => {

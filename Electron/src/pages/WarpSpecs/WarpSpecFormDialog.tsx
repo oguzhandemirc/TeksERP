@@ -83,7 +83,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, onSubmit, isSu
                   onChange={(id) => field.onChange(id ?? "")}
                   service={itemService}
                   queryKey="items-warp-yarn"
-                  filters={{ itemType: "YARN" }}
+                  filters={{ itemType: "YARN", lifecycleStatus: "ACTIVE" }}
                   getLabel={(i) => i.name}
                   getSubLabel={(i) => i.code}
                   icon={Package}

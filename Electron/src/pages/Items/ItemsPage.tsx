@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { LabeledSelect } from "@/components/forms/LabeledSelect";
@@ -7,6 +7,7 @@ import { useItemPickerCatalogs } from "@/components/forms/useItemPickerData";
 import { itemColumns } from "./columns";
 import { itemService } from "./service";
 import { ItemFormDialog } from "./ItemFormDialog";
+import { ItemLifecycleDialog } from "./ItemLifecycleDialog";
 import {
   ITEM_FILTER_ALL,
   ITEM_STATUS_DEFAULT,
@@ -31,6 +32,7 @@ export function ItemsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const status = parseItemStatus(searchParams.get(ITEM_STATUS_PARAM));
   const extraFilters = useMemo(() => itemStatusFilters(status), [status]);
+  const [lifecycleItem, setLifecycleItem] = useState<Item | null>(null);
   // Renk/Özellik kataloğu ürün seçici modalıyla aynı sorgu anahtarından (tek yükleyici).
   const catalogFilters = itemCatalogFilterDefs(useItemPickerCatalogs(true));
   // Renk ekseni yalnız Kumaş/Tümü (modalla aynı yüklem). Paylaşılan bağlantı iplik + renk taşıyorsa
@@ -64,6 +66,7 @@ export function ItemsPage() {
     />
   );
   return (
+    <>
     <CrudPage<Item>
       title="Ürünler"
       description="Ürün kataloğu (kumaş · iplik · sarf) — izinli renk ve özellik listesi opsiyoneldir."
@@ -77,6 +80,8 @@ export function ItemsPage() {
       searchPlaceholder="Kod veya ad ara..."
       inactiveToggle={false}
       extraFilters={extraFilters}
+      onRemove={setLifecycleItem}
+      removeLabel="Kullanımdan kaldır"
       filterBar={
         <>
           {/* Sıra kullanıcı listesi: Tür · Durum · Birim · Renk · Özellik. */}
@@ -101,5 +106,7 @@ export function ItemsPage() {
         />
       )}
     />
+    {lifecycleItem && <ItemLifecycleDialog item={lifecycleItem} onClose={() => setLifecycleItem(null)} />}
+    </>
   );
 }

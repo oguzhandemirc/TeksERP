@@ -60,6 +60,8 @@ describe("itemsFilters (saf)", () => {
   it("⭐ Durum → backend süzgeci: aktif/pasif = isActive, onay = pendingReview (isActive'e dokunmaz), tümü = boş", () => {
     expect(itemStatusFilters("active")).toEqual({ isActive: "true" });
     expect(itemStatusFilters("inactive")).toEqual({ isActive: "false" });
+    // Aktif = kullanımdaki kartlar (Tükenene kadar dahil, rozetle ayrılır); ayrı seçenek yalnız o durumu süzer.
+    expect(itemStatusFilters("phaseOut")).toEqual({ lifecycleStatus: "PHASE_OUT" });
     expect(itemStatusFilters("pending")).toEqual({ pendingReview: "true" });
     expect(itemStatusFilters("all")).toEqual({});
   });
@@ -168,6 +170,9 @@ describe("ItemsPage — ad + süzgeç şeridi", () => {
     await user.click(await screen.findByRole("option", { name: "Pasif" }));
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "false" }));
     expect(durum).toHaveTextContent("Durum: Pasif");
+    await user.click(durum);
+    await user.click(await screen.findByRole("option", { name: "Tükenene kadar" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ lifecycleStatus: "PHASE_OUT" }));
     await user.click(durum);
     await user.click(await screen.findByRole("option", { name: "Onay bekleyen" }));
     await waitFor(() => expect(lastFilters()).toEqual({ pendingReview: "true" }));

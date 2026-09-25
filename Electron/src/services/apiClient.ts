@@ -6,6 +6,7 @@ import { useServerStatusStore } from "@/store/serverStatus";
 import { recordNetSample } from "@/services/netStats";
 import { applyClientInfoHeaders } from "@/lib/client-info";
 import { shouldToastWarnings, showServerWarnings } from "@/lib/serverNotes";
+import { presentLiveReferences } from "@/lib/live-references";
 
 /** İstek süresi ölçümü için config'e damgalanan başlangıç zamanı. */
 interface TimedConfig {
@@ -236,6 +237,10 @@ apiClient.interceptors.response.use(
       }
 
       if (!suppressToast) {
+        // Arşiv kapısının kayıt listeli 409'u diyalogda (kayıtlar tek tek); toast yalnız cümleyi taşırdı.
+        if (status === 409 && presentLiveReferences(body)) {
+          return Promise.reject(error);
+        }
         if (status && status >= 400 && status < 500) {
           toast.error(buildErrorMessage(body));
         } else if (status && status >= 500) {

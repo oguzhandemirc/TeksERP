@@ -153,6 +153,8 @@ export interface EnumFlagDef {
   options: ReadonlyArray<{ value: string; label: string; hint: string }>;
   audience: SettingAudience[];
   group?: string;
+  /** "radio" = seçenekler alt alta, her birinin altında tek cümle (açılır liste yerine). */
+  display?: "radio";
 }
 
 /** FeatureFlags'in SERBEST METİN anahtarları — `textFlags` satırları (enum DEĞİL). */
@@ -762,6 +764,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: PHASE_OUT_NEW_ORDER_OPTIONS,
         audience: ["Planlamacı", "Sevkiyat"],
         group: "Ürün yaşam döngüsü",
+        display: "radio",
         desc: "“Yalnız okutulan toplar” (varsayılan): yeni sipariş yalnız toplardan hızlı siparişle açılır. “Kapalı”: hiç yeni sipariş açılmaz — sevkte sipariş zorunluysa mal yalnız “Siparişsiz devam et” ile sevk edilir. “Serbest”: normal kart gibi.",
       },
       {
@@ -772,6 +775,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: PHASE_OUT_LINE_QTY_OPTIONS,
         audience: ["Planlamacı"],
         group: "Ürün yaşam döngüsü",
+        display: "radio",
         desc: "“Serbest, uyarılı” (varsayılan): artırma ve azaltma serbest, kısa bir stok uyarısı görünür. “Yalnız azaltma”: artırma reddedilir. “Kilitli”: miktar değişmez.",
       },
     ],

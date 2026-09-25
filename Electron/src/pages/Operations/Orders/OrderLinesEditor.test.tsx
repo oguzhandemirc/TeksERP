@@ -14,7 +14,7 @@ import { OrderLinesEditor } from "./OrderLinesEditor";
 import { ITEM_WARNING_TEXT } from "./OrderLineRow";
 import type { OrderLineFormValues } from "./schema";
 
-vi.mock("@/hooks/usePricingEnabled", () => ({ usePricingEnabled: () => false, useCustomerBranchesEnabled: () => false }));
+vi.mock("@/hooks/usePricingEnabled", () => ({ usePricingEnabled: () => false, useCustomerBranchesEnabled: () => false, useFeatureFlags: () => ({ data: undefined }) }));
 vi.mock("@/hooks/usePulseSync", () => ({ usePulseSync: () => false }));
 // Kumaş seçici artık ürün MODALI (`ItemSelect`, 2026-09-17 EK 1) — kapsam FABRIC kilitli; test halkayı `triggerClassName` ile ölçer.
 vi.mock("@/components/forms/ItemSelect", () => ({

@@ -52,6 +52,11 @@ describe("buildItemPayload", () => {
     expect(p).toMatchObject({ allowedColorIds: [], allowedPropertyIds: [] });
   });
 
+  it("⭐ isActive HİÇ gitmez (create + edit): kartın durumu yalnız Kullanımdan kaldır / Aktifleştir ile değişir", () => {
+    expect("isActive" in buildItemPayload(values(), false)).toBe(false);
+    expect("isActive" in buildItemPayload(values(), true)).toBe(false);
+  });
+
   it("edit: code ve itemType payload'a girmez (backend FORBIDDEN)", () => {
     const p = buildItemPayload(values({ code: "PATOS" }), true);
     expect("code" in p).toBe(false);

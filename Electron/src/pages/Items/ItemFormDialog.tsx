@@ -66,7 +66,6 @@ export function ItemFormDialog({
         name: initial.name,
         itemType: initial.itemType,
         unit: initial.unit,
-        isActive: initial.isActive,
         linearDensityDen: initial.linearDensityDen ?? "",
         warpSpecId: initial.warpSpecId ?? "",
         allowedColorIds: initial.allowedColors?.map((c) => c.colorId) ?? [],
@@ -318,10 +317,6 @@ export function ItemFormDialog({
               {itemTypeLabels[itemType]} kartında renk/özellik listesi tutulmaz, kaydedince kaldırılır.
             </p>
           )}
-
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" {...form.register("isActive")} /> Aktif
-          </label>
 
           <StockCodeRow
             isEdit={isEdit}

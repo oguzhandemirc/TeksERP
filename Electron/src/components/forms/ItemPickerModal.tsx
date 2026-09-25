@@ -42,6 +42,8 @@ interface Props {
   onPick: (row: ItemPickerRow) => void;
   /** Çağıranın kapsamı: listelenen ve Tür seçicisinde sunulan türler (mal kabul iplik + kumaş; alış siparişi üçü). */
   allowedTypes?: AllowedItemTypes;
+  /** Formun seçebileceği yaşam döngüsü durumları (`pickableLifecycle`); yoksa kullanımdaki her kart. */
+  lifecycle?: string;
 }
 
 function typeBadgeVariant(t: ItemPickerRow["itemType"]): "default" | "secondary" | "muted" {
@@ -70,7 +72,14 @@ function PickerRow({ r, onPick }: { r: ItemPickerRow; onPick: (row: ItemPickerRo
   return (
     <TableRow className={cn("cursor-pointer", !r.isActive && "opacity-60")} onClick={() => onPick(r)}>
       <TableCell className="py-1.5 font-mono text-xs">{r.code}</TableCell>
-      <TableCell className="py-1.5 font-medium">{r.name}</TableCell>
+      <TableCell className="py-1.5 font-medium">
+        {r.name}
+        {r.lifecycle === "PHASE_OUT" && (
+          <Badge variant="outline" className="ml-2 border-amber-500 text-[10px] font-normal text-amber-700 dark:text-amber-300">
+            Tükenene kadar
+          </Badge>
+        )}
+      </TableCell>
       <TableCell className="py-1.5">
         <Badge variant={typeBadgeVariant(r.itemType)}>{ITEM_TYPE_LABEL[r.itemType]}</Badge>
       </TableCell>
@@ -125,11 +134,11 @@ function StatusLine({ count, hasMore, isFetchingNext, isError }: { count: number
   );
 }
 
-export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes }: Props) {
+export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes, lifecycle }: Props) {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), 250);
   const [filter, setFilter] = useState<ItemPickerFilterState>(ITEM_PICKER_INITIAL);
-  const data = useItemPickerData({ open, search, filter, allowedTypes });
+  const data = useItemPickerData({ open, search, filter, allowedTypes, lifecycle });
   const typeOptions = itemTypeFilterOptions(allowedTypes);
   const locked = lockedItemType(allowedTypes);
   const title = locked ? `${ITEM_TYPE_LABEL[locked]} seç` : "Ürün seç";

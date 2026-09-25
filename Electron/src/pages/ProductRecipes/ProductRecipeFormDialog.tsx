@@ -202,6 +202,7 @@ export function ProductRecipeFormDialog({
             <FormField label="Hedef Kumaş" required error={form.formState.errors.targetItemId}>
               <TargetItemPicker
                 control={woControl}
+                use="definition"
                 onItemChange={() => {
                   form.setValue("targetColorId", null);
                   form.setValue("targetPropertyIds", []);

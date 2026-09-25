@@ -12,7 +12,7 @@ import { ITEM_TYPE_FILTER_OPTIONS, colorAxisApplies, type ItemTypeFilter } from 
 import type { CatalogOption } from "@/components/forms/useItemPickerData";
 import { ITEM_UNIT_CODES, ITEM_UNIT_LABEL } from "@/lib/item-unit";
 
-export type ItemStatusFilter = "active" | "inactive" | "pending" | "all";
+export type ItemStatusFilter = "active" | "phaseOut" | "inactive" | "pending" | "all";
 
 export const ITEM_STATUS_PARAM = "status";
 /** Bugünkü davranış: pasifler gizli (eski "Pasifleri göster" anahtarı kapalı). */
@@ -20,6 +20,7 @@ export const ITEM_STATUS_DEFAULT: ItemStatusFilter = "active";
 
 export const ITEM_STATUS_OPTIONS: readonly { value: ItemStatusFilter; label: string }[] = [
   { value: "active", label: "Aktif" },
+  { value: "phaseOut", label: "Tükenene kadar" },
   { value: "inactive", label: "Pasif" },
   { value: "pending", label: "Onay bekleyen" },
   { value: "all", label: "Tümü" },
@@ -29,11 +30,14 @@ export function parseItemStatus(raw: string | null): ItemStatusFilter {
   return ITEM_STATUS_OPTIONS.some((o) => o.value === raw) ? (raw as ItemStatusFilter) : ITEM_STATUS_DEFAULT;
 }
 
-/** Durum → backend süzgeci. "Onay bekleyen" `isActive`e dokunmaz: sahadan açılıp pasife alınmış desen de görünür. */
+/** Durum → backend süzgeci. "Aktif" bugünkü gibi `isActive` = kullanımdaki kartlar (Tükenene kadar
+ *  dahil, rozetle ayrılır); "Tükenene kadar" yalnız o durum. "Onay bekleyen" `isActive`e dokunmaz. */
 export function itemStatusFilters(s: ItemStatusFilter): Record<string, string> {
   switch (s) {
     case "active":
       return { isActive: "true" };
+    case "phaseOut":
+      return { lifecycleStatus: "PHASE_OUT" };
     case "inactive":
       return { isActive: "false" };
     case "pending":

@@ -10,6 +10,8 @@ import type { ItemFormValues } from "./schema";
  * - Create: kod boşsa payload'a GİRMEZ — backend STK-NNNNNN otomatik üretir;
  *   doluysa manuel kod olarak gönderilir. Admin create'i asla pendingReview
  *   göndermez → backend default false.
+ * - `isActive` GİTMEZ: kartın durumu yalnız "Kullanımdan kaldır" / "Aktifleştir" ile değişir
+ *   (URUN-YASAM-DONGUSU §8) — formdaki onay kutusu Tükenene kadar kartı Aktif'e döndürüyordu.
  * - İzinli renk/özellik YALNIZ KUMAŞ taşır (kullanıcı kararı 2026-09-17): iplik/sarf
  *   create'inde anahtar HİÇ gitmez; edit'inde `[]` gider — eski iplik kartında kalmış
  *   liste kaydedince KALDIRILIR (backend `undefined` = dokunma, `[]` = temizle).
@@ -23,7 +25,6 @@ export function buildItemPayload(
   const base = {
     name: v.name.trim(),
     unit: unitForItemType[v.itemType] ?? v.unit,
-    isActive: v.isActive,
     // Boş alan `null` gider: "" Decimal kolonunda geçersizdir ve kolonu
     // temizlemenin tek yolu budur (alan yalnız YARN'da çizilir, diğer
     // tiplerde zaten boş kalır).

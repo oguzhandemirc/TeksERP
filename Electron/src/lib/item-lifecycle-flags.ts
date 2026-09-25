@@ -25,6 +25,16 @@ export const PHASE_OUT_NEW_ORDER_OPTIONS: ReadonlyArray<{ value: PhaseOutNewOrde
   },
 ] as const;
 
+/** Ayar okunamadığında (henüz yüklenmedi) backend varsayılanı. */
+export const DEFAULT_PHASE_OUT_LINE_QTY: PhaseOutLineQty = "SERBEST_UYARILI";
+
+/** Sipariş satırındaki not (§4.1) — `SERBEST_UYARILI` metni backend `PHASE_OUT_LINE_QTY_WARNING` ile BİREBİR. */
+export const PHASE_OUT_LINE_NOTE: Record<PhaseOutLineQty, string> = {
+  SERBEST_UYARILI: "Bu ürün tükenene kadar satılıyor. Stokta yeterli top olduğunu kontrol edin.",
+  AZALTMA_SERBEST: "Bu ürün tükenene kadar satılıyor — açık satırda miktar yalnız azaltılabilir.",
+  KILITLI: "Bu ürün tükenene kadar satılıyor — açık satırda miktar değiştirilemez.",
+};
+
 export const PHASE_OUT_LINE_QTY_OPTIONS: ReadonlyArray<{ value: PhaseOutLineQty; label: string; hint: string }> = [
   {
     value: "SERBEST_UYARILI",

@@ -3,6 +3,8 @@ import { Package } from "lucide-react";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { itemLifecycleOf, pickableLifecycle } from "@/lib/item-lifecycle";
 import type { WorkOrderFormValues } from "./schema";
 
 /**
@@ -14,6 +16,7 @@ export function TargetItemPicker({
   onItemChange,
   disabled,
   lockedTooltip,
+  use = "plan",
 }: {
   control: Control<WorkOrderFormValues>;
   /** Kumaş değiştiğinde renk ve özellikleri sıfırlamak için. */
@@ -22,7 +25,11 @@ export function TargetItemPicker({
   disabled?: boolean;
   /** disabled true ise neden — hover'da tooltip. */
   lockedTooltip?: string;
+  /** İş emri = yeni üretim planı (A3, ayara bağlı) · reçete = tanım (B, yalnız Aktif). */
+  use?: "plan" | "definition";
 }) {
+  const flags = useFeatureFlags().data?.data;
+  const lifecycleStatus = use === "plan" ? pickableLifecycle("plan", flags) : "ACTIVE";
   return (
     <Controller
       control={control}
@@ -36,8 +43,9 @@ export function TargetItemPicker({
           }}
           service={itemService}
           queryKey="items-wo-target"
+          filters={{ lifecycleStatus }}
           getLabel={(i) => i.name}
-          getSubLabel={(i) => i.code}
+          getSubLabel={(i) => (itemLifecycleOf(i) === "PHASE_OUT" ? `${i.code} · Tükenene kadar` : i.code)}
           nullable
           noneLabel="Atanmadı"
           disabled={disabled}
