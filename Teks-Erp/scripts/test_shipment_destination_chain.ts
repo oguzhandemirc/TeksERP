@@ -115,7 +115,8 @@ async function main() {
     check("5h saf: exportCodeForDestination yalnız EXPORT", exportCodeForDestination("DOMESTIC", { customerExportCode: "C" }) === null && exportCodeForDestination("EXPORT", { customerExportCode: "C" }) === "C");
 
     // 6) tek çözüm — iki belge render'ı ihracat kodunu yardımcıdan alır, elle `??` zinciri yok
-    for (const f of ["shipment-dispatch.html.ts", "fason-direct-ship.html.ts"]) {
+    // Doğrudan sevkin içerik kararları (müşteri kutusu dahil) `.model.ts`te yaşar.
+    for (const f of ["shipment-dispatch.html.ts", "fason-direct-ship.model.ts"]) {
       // Yorumlar ayıklanır: açıklama metnindeki `branchCode ?? customerExportCode` kod değildir.
       const src = readFileSync(join(__dirname, "../src/services/document-render", f), "utf8")
         .replace(/\/\*[\s\S]*?\*\//g, "")

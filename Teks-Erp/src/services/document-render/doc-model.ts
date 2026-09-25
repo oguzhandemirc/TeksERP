@@ -32,8 +32,9 @@ export interface DocColSpec<R> {
   defaultHidden?: boolean;
   kind: DocCellKind;
   value: (row: R, index: number) => DocCellValue | undefined;
-  /** Toplam satırı hücresi — nesne VAR ise kolon "toplamlı" sayılır (değer boş olsa da). */
-  foot?: { value: DocCellValue | undefined };
+  /** Toplam satırı hücresi — nesne VAR ise kolon "toplamlı" sayılır (değer boş olsa da).
+   *  `kind` verilirse toplam hücresi kolondan farklı biçimlenir (ör. yalnız toplamda "m" eki). */
+  foot?: { value: DocCellValue | undefined; kind?: DocCellKind };
 }
 
 /** Renderer'ın kendi kaçırma/biçim fonksiyonları — bayt kimliği için dışarıdan verilir. */
@@ -52,6 +53,18 @@ export function docCellHtml(kind: DocCellKind, v: DocCellValue | undefined, kit:
   return `${kit.esc(kit.fmtTr(v, kind.dec))}${suffix}`;
 }
 
+/**
+ * Excel'e giden değer. Sayı PDF'te basılan HANEYE yuvarlanır — değer PDF metninden
+ * (`kit.fmtTr`) geri okunur: tablo programı 112,35'i 1 hanede 112,4 gösterirken PDF
+ * 112,3 basıyorsa ikisi ayrışırdı; Excel kâğıttaki rakamı taşır.
+ */
+function excelValue(kind: DocCellKind, v: DocCellValue | undefined, kit: DocFmtKit): DocCellValue {
+  if (v == null) return null;
+  if (kind.t !== "num" || typeof v !== "number") return v;
+  const shown = kit.fmtTr(v, kind.dec);
+  return shown ? Number(shown.replace(/\./g, "").replace(",", ".")) : null;
+}
+
 /** Kolon tanımlarını HTML tablo motorunun kolonlarına çevirir. */
 export function toHtmlCols<R>(cols: DocColSpec<R>[], kit: DocFmtKit): DocCol<R>[] {
   return cols.map((c) => ({
@@ -62,7 +75,7 @@ export function toHtmlCols<R>(cols: DocColSpec<R>[], kit: DocFmtKit): DocCol<R>[
     ...(c.cellClass ? { cellClass: c.cellClass } : {}),
     ...(c.defaultHidden ? { defaultHidden: true } : {}),
     cell: (row: R, i: number) => docCellHtml(c.kind, c.value(row, i), kit),
-    ...(c.foot ? { foot: docCellHtml(c.kind, c.foot.value, kit) } : {}),
+    ...(c.foot ? { foot: docCellHtml(c.foot.kind ?? c.kind, c.foot.value, kit) } : {}),
   }));
 }
 
@@ -75,6 +88,8 @@ export interface DocTableModel {
   rows: DocCellValue[][];
   /** Toplam satırı (`columns` sırasıyla) — HTML'deki gibi yalnız toplamlı kolon görünürse. */
   foot: DocCellValue[] | null;
+  /** Toplam hücrelerinin türü (`columns` sırasıyla) — çoğunlukla kolonun türü. */
+  footKinds: DocCellKind[] | null;
 }
 
 /** Başlık override'ı HTML için kaçırılmış gelir; Excel ham metni ister. */
@@ -105,18 +120,20 @@ export function resolveDocTable<R>(opts: {
   const byKey = new Map(opts.cols.map((c) => [c.key, c]));
   const cols = visibleKeys.map((h) => ({ spec: byKey.get(h.key)!, label: h.label }));
 
-  const rows = opts.rows.map((r, i) => cols.map(({ spec }) => spec.value(r, i) ?? null));
+  const rows = opts.rows.map((r, i) => cols.map(({ spec }) => excelValue(spec.kind, spec.value(r, i), opts.kit)));
 
   let foot: DocCellValue[] | null = null;
+  let footKinds: DocCellKind[] | null = null;
   if (opts.footLabel && cols.some(({ spec }) => spec.foot !== undefined)) {
     let labelPlaced = false;
+    footKinds = cols.map(({ spec }) => spec.foot?.kind ?? spec.kind);
     foot = cols.map(({ spec }) => {
-      const html = spec.foot ? docCellHtml(spec.kind, spec.foot.value, opts.kit) : "";
+      const html = spec.foot ? docCellHtml(spec.foot.kind ?? spec.kind, spec.foot.value, opts.kit) : "";
       if (!html && !labelPlaced) {
         labelPlaced = true;
         return opts.footLabel as string;
       }
-      return spec.foot ? (spec.foot.value ?? null) : null;
+      return spec.foot ? excelValue(spec.foot.kind ?? spec.kind, spec.foot.value, opts.kit) : null;
     });
   }
 
@@ -131,6 +148,7 @@ export function resolveDocTable<R>(opts: {
     })),
     rows,
     foot,
+    footKinds,
   };
 }
 

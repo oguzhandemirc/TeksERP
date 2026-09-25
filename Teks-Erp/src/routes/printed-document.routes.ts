@@ -272,13 +272,13 @@ router.get(
  *   get:
  *     tags: [PrintedDocuments]
  *     summary: Belgenin Excel tabloları (JSON) — PDF ile AYNI kolon/satır/değer çözücüsü
- *     description: "`/html` ile aynı izin ve aynı sorgu parametreleri (sections, rowNotes, rowTags, currentTemplate, version, draft). Bugün yalnız SHIPMENT_DISPATCH; tanımsız belge tipi 400."
+ *     description: "`/html` ile aynı izin ve aynı sorgu parametreleri (sections, rowNotes, rowTags, currentTemplate, version, draft). Bugün SHIPMENT_DISPATCH ve SUBCONTRACTOR_DIRECT_SHIP; tanımsız belge tipi 400."
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: docType
  *         required: true
- *         schema: { type: string, enum: [SHIPMENT_DISPATCH] }
+ *         schema: { type: string, enum: [SHIPMENT_DISPATCH, SUBCONTRACTOR_DIRECT_SHIP] }
  *       - in: path
  *         name: sourceId
  *         required: true

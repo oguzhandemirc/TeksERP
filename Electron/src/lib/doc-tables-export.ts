@@ -19,6 +19,8 @@ export interface DocTableModel {
   columns: Array<{ key: string; label: string; align: "l" | "r" | "c"; kind: DocCellKind }>;
   rows: DocCellValue[][];
   foot: DocCellValue[] | null;
+  /** Toplam hücrelerinin türü — kolondan farklı olabilir (ör. yalnız toplamda "m" eki). */
+  footKinds?: DocCellKind[] | null;
 }
 
 export interface DocTablesPayload {
@@ -62,12 +64,18 @@ export function docTablesToSheets(payload: DocTablesPayload, extraNotes: string[
   const preamble = payload.header.map(([label, value]) => (value == null ? [label] : [label, value]));
   const notes = [...payload.notes, ...extraNotes];
   const used = new Set<string>();
+  // Bütün kolonları şablonda gizlenmiş liste PDF'te tablo çizmez; Excel'de de sayfa açmaz.
+  const tables = payload.tables.filter((t) => t.columns.length > 0);
 
-  if (payload.tables.length === 0) {
+  if (tables.length === 0) {
     return [{ name: uniqueName(payload.documentNo, used), columns: [], rows: [], preamble, notes }];
   }
 
-  return payload.tables.map((t, ti) => {
+  // Başlık bloğunun etiketi ilk kolonda durur ve yanındaki hücre dolu olduğu için
+  // taşamaz — ilk kolon en uzun etiketi göstermeye yetmeli ("#" kolonu 8 karakterdir).
+  const labelWidth = Math.min(30, payload.header.reduce((m, [l, v]) => (v == null ? m : Math.max(m, l.length + 2)), 0));
+
+  return tables.map((t, ti) => {
     const keys = t.columns.map((_, i) => `c${i}`);
     const toRecord = (vals: DocCellValue[]) => Object.fromEntries(keys.map((k, i) => [k, vals[i] ?? null]));
     return {
@@ -75,12 +83,15 @@ export function docTablesToSheets(payload: DocTablesPayload, extraNotes: string[
       columns: t.columns.map((c, i) => ({
         header: c.label,
         key: keys[i]!,
-        width: widthOf(c.label, t.rows.map((r) => r[i] ?? null)),
+        width: Math.max(widthOf(c.label, t.rows.map((r) => r[i] ?? null)), i === 0 ? labelWidth : 0),
         numFmt: numFmtOf(c.kind),
         align: ALIGN[c.align],
       })),
       rows: t.rows.map(toRecord),
       ...(t.foot ? { totalRow: toRecord(t.foot) } : {}),
+      ...(t.foot && t.footKinds
+        ? { totalNumFmt: Object.fromEntries(keys.map((k, i) => [k, numFmtOf(t.footKinds![i] ?? t.columns[i]!.kind)])) }
+        : {}),
       preamble,
       ...(ti === 0 && notes.length ? { notes } : {}),
     };

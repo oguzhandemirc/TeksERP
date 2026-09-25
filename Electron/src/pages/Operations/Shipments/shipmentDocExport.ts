@@ -86,11 +86,9 @@ export async function buildDispatchWorkbook(
   report?: DispatchReport | null,
 ): Promise<Blob | null> {
   const rep = report ?? (await reportOf(t)).data ?? null;
-  if (!t.isDirect) {
-    const tables = await fetchDocTables(t, opts);
-    if (tables !== "legacy") {
-      return buildWorkbook(docTablesToSheets(tables, rep ? dispatchReportNotes(rep) : []));
-    }
+  const tables = await fetchDocTables(t, opts);
+  if (tables !== "legacy") {
+    return buildWorkbook(docTablesToSheets(tables, rep ? dispatchReportNotes(rep) : []));
   }
   return rep ? buildWorkbook(buildDispatchReportSheets(rep)) : null;
 }

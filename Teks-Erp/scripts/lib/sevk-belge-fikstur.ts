@@ -168,6 +168,105 @@ export function sevkBelgeKombinasyonlari(): SevkBelgeKombinasyon[] {
   return out;
 }
 
+// ── Fasondan DOĞRUDAN sevk irsaliyesi (SUBCONTRACTOR_DIRECT_SHIP) ──────────────
+
+/** Kaçış gerektiren adlar, barkodsuz/ensiz/kg'sız top, sıfır toplam kg, çok sipariş. */
+const DOGRUDAN_ZENGIN = {
+  directShip: true,
+  shipmentNo: "SVK-2609-0101",
+  dispatchNo: "FSN-2609-0042",
+  directShippedAt: ISO,
+  directShipReason: "Acil <müşteri> talebi",
+  directShippedBy: "Ayşe Kaya",
+  dispatchedAt: ISO,
+  driverName: null,
+  plateNumber: "16 FSN 16",
+  notes: "Rampa 2 & kapı 3",
+  batchNumber: "P0925009",
+  customer: { id: "c1", name: "Örnek & Konfeksiyon", code: "MUS-9", taxNumber: "5556667778", branchName: "Bursa", branchCode: null, exportCode: "EXP-5" },
+  workOrder: { id: "w1", workOrderNumber: "IE-2609-0007", type: "ORDER_PRODUCTION" },
+  subcontractor: { id: "s1", name: "Yıldız Boyahane", code: null },
+  step: { id: "st1", stepSequence: 3, station: { name: "Boyahane (Fason)", code: "DYE" } },
+  rolls: [
+    { sequence: 1, barcode: "R0101", itemCode: "K1", itemName: "Linen", colorCode: "E", colorName: "Ekru", dispatchedQty: 1234.56, dispatchedWeight: 38.25, qualityGrade: "A", width: 329.6 },
+    { sequence: 2, barcode: null, itemCode: "K1", itemName: "Linen <x>", colorCode: null, colorName: null, dispatchedQty: 100, dispatchedWeight: null, qualityGrade: "A", width: null },
+    { sequence: 3, barcode: "R0103", itemCode: "K2", itemName: "Saten", colorCode: "S", colorName: "Siyah", dispatchedQty: 40.05, dispatchedWeight: 0, qualityGrade: "B", width: 150 },
+  ],
+  allocations: [
+    { orderNumber: "SIP-1", itemCode: "K1", itemName: "Linen", colorName: "Ekru", qty: 1000 },
+    { orderNumber: "SIP-2 & B", itemCode: "K2", itemName: "Saten", colorName: null, qty: 374.61 },
+  ],
+  totals: { rollCount: 3, totalQty: 1374.61, totalWeight: 38.25 },
+};
+
+/** Alanları taşımayan ESKİ snapshot (müşteri/sevk no/parti yok, sipariş yok, toplam kg 0). */
+const DOGRUDAN_ESKI = {
+  ...DOGRUDAN_ZENGIN,
+  shipmentNo: undefined,
+  batchNumber: undefined,
+  customer: undefined,
+  allocations: [],
+  rolls: [DOGRUDAN_ZENGIN.rolls[1]],
+  totals: { rollCount: 1, totalQty: 100, totalWeight: 0 },
+};
+
+export const DOGRUDAN_DOCS: Record<string, Record<string, unknown>> = {
+  ornek: SAMPLE_PRINTED_DOCS.SUBCONTRACTOR_DIRECT_SHIP as Record<string, unknown>,
+  zengin: DOGRUDAN_ZENGIN,
+  eski: DOGRUDAN_ESKI,
+};
+
+export const DOGRUDAN_CFGS: Record<string, DocumentConfig | null> = {
+  yok: null,
+  bos: {},
+  tamKolon: {
+    columns: {
+      allocations: { hidden: ["seq"], order: ["qty", "orderNumber"], labels: { orderNumber: "SİPARİŞ <#>" }, blankLabels: ["itemColor"] },
+      rollTable: { hidden: ["itemColor"], order: ["kg", "meters", "barcode"], labels: { barcode: "BARKOD & NO" }, blankLabels: ["width"] },
+    },
+  },
+  tumuGizli: { columns: { rollTable: { hidden: ["seq", "barcode", "itemColor", "width", "meters", "kg"] } } },
+  bolumKapali: {
+    sections: {
+      allocations: false, subcontractorInfo: false, directShipInfo: false, vehicleInfo: false,
+      fasonDispatchNo: false, batchInfo: false, exportCode: false, branchName: false, taxNo: false, notes: false,
+    },
+    footerNote: "gizli not",
+  },
+  topsuz: { sections: { rollTable: false }, titleOverride: "Doğrudan Sevk", footerNote: "not <b>", showSignatures: false },
+};
+
+export const DOGRUDAN_METAS: Record<string, Meta> = {
+  yok: {},
+  taslak: { draft: true },
+  iptal: { status: "VOIDED", voidReason: "hata" },
+  eskiKopya: { status: "SUPERSEDED" },
+  notDamga: { printNote: "baskı <notu>", printedAtText: "25.09.2026 11:30", printedBy: "admin" },
+};
+
+/** Üç doc × altı config × beş meta = 90 kombinasyon; ad `dogrudan/` önekli. */
+export function dogrudanKombinasyonlari(): SevkBelgeKombinasyon[] {
+  const out: SevkBelgeKombinasyon[] = [];
+  for (const [docAd, doc] of Object.entries(DOGRUDAN_DOCS)) {
+    for (const [cfgAd, cfg] of Object.entries(DOGRUDAN_CFGS)) {
+      for (const [metaAd, meta] of Object.entries(DOGRUDAN_METAS)) {
+        out.push({
+          ad: `dogrudan/${docAd}/${cfgAd}/${metaAd}`,
+          snapshot: {
+            schemaVersion: 1,
+            frozenAt: ISO,
+            company: { name: "Deneme Tekstil", letterhead: { addressLine: "Organize San.", phone: "0232", taxInfo: "VD 1" }, logoHash: null },
+            docConfigOverride: cfg,
+            doc,
+          } as unknown as PrintedDocSnapshot,
+          meta,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 /** Altın karşılaştırmanın tek normalizasyonu: boşluk dizileri tek boşluğa iner. */
 export function normalizeHtml(html: string): string {
   return html.replace(/\s+/g, " ").trim();

@@ -24,6 +24,8 @@ export interface SheetSpec {
   rows: Array<Record<string, unknown>>;
   /** Opsiyonel kalın TOPLAM satırı (kolon key'lerine göre). */
   totalRow?: Record<string, unknown>;
+  /** TOPLAM hücresinin kolondan farklı sayı biçimi (kolon key'ine göre). */
+  totalNumFmt?: Record<string, string | undefined>;
   /** Tablonun ALTINA (boş satırdan sonra) basılan açıklama satırları — italik/gri.
    *  Sayı değil BAĞLAM taşır: "bu rakamlar sevk anına aittir, iade düşülmemiştir"
    *  gibi. Rakamın nasıl okunacağını söyleyen not, rakamla aynı dosyada durmalı —
@@ -83,6 +85,10 @@ export async function buildWorkbook(sheets: SheetSpec[]): Promise<Blob> {
       const tr = ws.addRow(spec.totalRow);
       tr.font = { bold: true };
       alignRow(tr);
+      spec.columns.forEach((c, idx) => {
+        const fmt = spec.totalNumFmt?.[c.key];
+        if (fmt) tr.getCell(idx + 1).numFmt = fmt;
+      });
     }
 
     if (spec.notes?.length) {

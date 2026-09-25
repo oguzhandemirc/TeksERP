@@ -125,6 +125,52 @@ describe("docTablesToSheets — kolonu sunucu seçer, dönüştürücü yalnız 
   });
 });
 
+describe("toplam satırının kendi biçimi ve kolonsuz liste", () => {
+  const DIRECT: DocTablesPayload = {
+    docType: "SUBCONTRACTOR_DIRECT_SHIP",
+    documentNo: "SVK-9",
+    header: [["FASONDAN SEVK İRSALİYESİ", null]],
+    tables: [
+      { key: "allocations", caption: "Karşılanan Siparişler (1)", columns: [], rows: [[]], foot: null },
+      {
+        key: "rollTable",
+        caption: "Sevk Edilen Toplar (1)",
+        columns: [
+          { key: "seq", label: "#", align: "c", kind: { t: "int" } },
+          { key: "meters", label: "METRE", align: "r", kind: { t: "num", dec: 1 } },
+          { key: "kg", label: "KG", align: "r", kind: { t: "num", dec: 1 } },
+        ],
+        rows: [[1, 120.5, "—"]],
+        foot: ["TOPLAM", 120.5, "—"],
+        footKinds: [{ t: "int" }, { t: "num", dec: 1, suffix: " m" }, { t: "num", dec: 1, suffix: " kg" }],
+      },
+    ],
+    notes: [],
+  };
+
+  it("ilk kolon başlık bloğunun en uzun etiketine yetecek genişlikte ('#' kolonu dar kalmaz)", () => {
+    const withLabels = { ...DIRECT, header: [...DIRECT.header, ["Customs/Export No", "GTIP-1"] as [string, string]] };
+    expect(docTablesToSheets(withLabels)[0]!.columns[0]!.width).toBe("Customs/Export No".length + 2);
+  });
+
+  it("bütün kolonları gizli liste sayfa açmaz (PDF'te tablo çizilmediği gibi)", () => {
+    expect(docTablesToSheets(DIRECT).map((s) => s.name)).toEqual(["Sevk Edilen Toplar (1)"]);
+  });
+
+  it("toplam hücresi kolondan farklı biçimi taşır (metre 'm', kg 'kg')", async () => {
+    const [sheet] = docTablesToSheets(DIRECT);
+    expect(Object.values(sheet!.totalNumFmt!)).toEqual(["0", '#,##0.0" m"', '#,##0.0" kg"']);
+    const { default: ExcelJS } = await import("exceljs");
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await blobBytes(await buildWorkbook([sheet!])));
+    const ws = wb.worksheets[0]!;
+    // 1 başlık satırı + boş satır → kolon başlığı 3. satır, veri 4, toplam 5.
+    expect(ws.getRow(4).getCell(2).numFmt).toBe("#,##0.0");
+    expect(ws.getRow(5).getCell(2).numFmt).toBe('#,##0.0" m"');
+    expect(ws.getRow(5).getCell(3).value).toBe("—");
+  });
+});
+
 describe("sevk Excel'i elle kolon listesi kurmaz (tek çözücü)", () => {
   const read = (p: string) => readFileSync(resolve(__dirname, "..", p), "utf8");
   const exportSrc = read("pages/Operations/Shipments/shipmentDocExport.ts");

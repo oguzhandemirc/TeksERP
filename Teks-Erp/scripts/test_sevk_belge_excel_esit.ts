@@ -1,5 +1,5 @@
 // =============================================================================
-// Bekçi: SEVK İRSALİYESİNİN PDF'İ İLE EXCEL'İ AYNI KOLONU, SATIRI, DEĞERİ TAŞIR — DB gerekmez
+// Bekçi: SEVK BELGELERİNİN PDF'İ İLE EXCEL'İ AYNI KOLONU, SATIRI, DEĞERİ TAŞIR — DB gerekmez
 // Çalıştır: npx tsx scripts/test_sevk_belge_excel_esit.ts
 // =============================================================================
 // Saha şikâyeti (2026-09-25, fabrikadan telefon): "Sevk irsaliyesinde PDF ve Excel
@@ -8,9 +8,9 @@
 // kurulmuş SABİT bir kolon listesinden. Kural (kullanıcı): aynı belgenin PDF'i ve
 // Excel'i aynı kolon/değer çözücüsünden türer.
 //
-// Ölçüm: fikstürün (`lib/sevk-belge-fikstur.ts`) her kombinasyonunda
-// `renderShipmentDispatchHtml` çıktısındaki tablolar ayrıştırılır ve
-// `renderShipmentDispatchTables` modeliyle karşılaştırılır — tablo sayısı + başlık,
+// Ölçüm: fikstürün (`lib/sevk-belge-fikstur.ts`) her kombinasyonunda sevk
+// irsaliyesinin ve fasondan doğrudan sevk irsaliyesinin HTML tabloları ayrıştırılır
+// ve aynı belgenin `render…Tables` modeliyle karşılaştırılır — tablo sayısı + başlık,
 // kolon başlıkları (sıra dahil), satır sayısı, HER HÜCRE, toplam satırı. Excel
 // değeri, PDF'in metnine BAĞIMSIZ bir biçimleyiciyle çevrilir (modelin kendi
 // `docCellHtml`i kullanılmaz; o, ölçülen şeyin parçasıdır).
@@ -23,8 +23,18 @@ import {
   renderShipmentDispatchHtml,
   renderShipmentDispatchTables,
 } from "../src/services/document-render/shipment-dispatch.html";
-import type { DocCellKind, DocCellValue } from "../src/services/document-render/doc-model";
-import { normalizeHtml, sevkBelgeKombinasyonlari } from "./lib/sevk-belge-fikstur";
+import {
+  renderFasonDirectShipHtml,
+  renderFasonDirectShipTables,
+} from "../src/services/document-render/fason-direct-ship.html";
+import type { DocCellKind, DocCellValue, DocTablesPayload } from "../src/services/document-render/doc-model";
+import type { PrintedDocSnapshot } from "../src/services/printed-document.service";
+import {
+  dogrudanKombinasyonlari,
+  normalizeHtml,
+  sevkBelgeKombinasyonlari,
+  type SevkBelgeKombinasyon,
+} from "./lib/sevk-belge-fikstur";
 
 let pass = 0;
 let fail = 0;
@@ -61,13 +71,14 @@ interface HtmlTable {
   foot: string[] | null;
 }
 
-/** Normalize edilmiş HTML'den `.sec` tablolarını çıkarır. */
+/** Normalize edilmiş HTML'den `.sec` tablolarını çıkarır — başlık tablo içinde
+ *  (`th.caption`, sevk irsaliyesi) ya da hemen önündeki `div.tbl-cap`ta (doğrudan sevk). */
 function parseTables(html: string): HtmlTable[] {
   const out: HtmlTable[] = [];
-  for (const m of html.matchAll(/<table class="sec[^"]*">([\s\S]*?)<\/table>/g)) {
-    const body = m[1]!;
+  for (const m of html.matchAll(/(?:<div class="tbl-cap">([^<]*)<\/div>\s*)?<table class="sec[^"]*">([\s\S]*?)<\/table>/g)) {
+    const body = m[2]!;
     const thead = /<thead>([\s\S]*?)<\/thead>/.exec(body)?.[1] ?? "";
-    const caption = /<th class="caption"[^>]*>([\s\S]*?)<\/th>/.exec(thead)?.[1] ?? "";
+    const caption = /<th class="caption"[^>]*>([\s\S]*?)<\/th>/.exec(thead)?.[1] ?? m[1] ?? "";
     const headRows = [...thead.matchAll(/<tr( class="ident")?>([\s\S]*?)<\/tr>/g)].filter((r) => !r[1]);
     const lastHead = headRows[headRows.length - 1]?.[2] ?? "";
     const headers = lastHead.includes('class="caption"')
@@ -86,16 +97,26 @@ function parseTables(html: string): HtmlTable[] {
   return out;
 }
 
+type Render = (s: PrintedDocSnapshot, m: Record<string, unknown>) => string;
+type Tables = (s: PrintedDocSnapshot, m: Record<string, unknown>) => DocTablesPayload;
+
 const kombinasyonlar = sevkBelgeKombinasyonlari();
+const dogrudan = dogrudanKombinasyonlari();
 let tablo = 0;
 let hucre = 0;
+const sayac = { sevk: 0, dogrudan: 0 };
 const gorulenBaslik = new Set<string>();
 const hatalar: string[] = [];
 
-for (const k of kombinasyonlar) {
-  const html = normalizeHtml(renderShipmentDispatchHtml(k.snapshot, k.meta));
+const uzay: Array<[keyof typeof sayac, SevkBelgeKombinasyon[], Render, Tables]> = [
+  ["sevk", kombinasyonlar, renderShipmentDispatchHtml as Render, renderShipmentDispatchTables as Tables],
+  ["dogrudan", dogrudan, renderFasonDirectShipHtml as Render, renderFasonDirectShipTables as Tables],
+];
+for (const [tur, liste, renderHtml, renderTables] of uzay)
+for (const k of liste) {
+  const html = normalizeHtml(renderHtml(k.snapshot, k.meta));
   const htmlTables = parseTables(html);
-  const model = renderShipmentDispatchTables(k.snapshot, k.meta);
+  const model = renderTables(k.snapshot, k.meta);
   // Bütün kolonları gizlenmiş tablo HTML'de hiç çizilmez; modelde kolonsuz durur.
   const modelTables = model.tables.filter((t) => t.columns.length > 0);
   if (htmlTables.length !== modelTables.length) {
@@ -105,6 +126,7 @@ for (const k of kombinasyonlar) {
   modelTables.forEach((mt, ti) => {
     const ht = htmlTables[ti]!;
     tablo++;
+    sayac[tur]++;
     const yer = `${k.ad} [${mt.caption}]`;
     if (ht.caption !== esc(mt.caption)) hatalar.push(`${yer}: başlık ${ht.caption} ≠ ${mt.caption}`);
     const modelHeaders = mt.columns.map((c) => esc(c.label));
@@ -126,22 +148,24 @@ for (const k of kombinasyonlar) {
       });
     });
     const htmlFoot = ht.foot?.join("|") ?? null;
-    const modelFoot = mt.foot ? mt.foot.map((v, ci) => asPdfText(mt.columns[ci]!.kind, v)).join("|") : null;
+    const modelFoot = mt.foot ? mt.foot.map((v, ci) => asPdfText(mt.footKinds?.[ci] ?? mt.columns[ci]!.kind, v)).join("|") : null;
     if (htmlFoot !== modelFoot) hatalar.push(`${yer}: toplam PDF ${htmlFoot} ≠ Excel ${modelFoot}`);
   });
 }
 
 console.log("§1 Körlük zemini");
-check("kombinasyon ≥ 300", kombinasyonlar.length >= 300, `${kombinasyonlar.length}`);
+check("sevk irsaliyesi kombinasyonu ≥ 300", kombinasyonlar.length >= 300, `${kombinasyonlar.length}`);
+check("doğrudan sevk kombinasyonu ≥ 80", dogrudan.length >= 80, `${dogrudan.length}`);
 check("karşılaştırılan tablo ≥ 700", tablo >= 700, `${tablo}`);
+check("doğrudan sevk tablosu ≥ 100", sayac.dogrudan >= 100, `${sayac.dogrudan}`);
 check("karşılaştırılan hücre ≥ 10.000", hucre >= 10_000, `${hucre}`);
 // Saha şikâyetinin kolonları uzayda GERÇEKTEN görünüyor mu (görünmüyorsa eşitlik boştur).
-for (const b of ["AMBALAJ NO", "SEVK PARTİSİ", "PARTİ KODU", "PARTİ NO", "SIRA", "EN", "PKG #", "LOT", "AÇIKLAMA", "İZ", "MÜŞTERİ VARYANT"]) {
+for (const b of ["AMBALAJ NO", "SEVK PARTİSİ", "PARTİ KODU", "PARTİ NO", "SIRA", "EN", "PKG #", "LOT", "AÇIKLAMA", "İZ", "MÜŞTERİ VARYANT", "SİPARİŞ NO", "MİKTAR", "BARKOD", "ÜRÜN / RENK"]) {
   check(`uzayda "${b}" kolonu ölçüldü`, gorulenBaslik.has(b));
 }
 
 console.log("§2 ⭐ Her kombinasyonda PDF tabloları = Excel tabloları (kolon · sıra · başlık · satır · hücre · toplam)");
-check(`${kombinasyonlar.length} kombinasyonda fark yok`, hatalar.length === 0, hatalar.length ? `${hatalar.length} fark:\n      ${hatalar.slice(0, 10).join("\n      ")}` : "");
+check(`${kombinasyonlar.length + dogrudan.length} kombinasyonda fark yok`, hatalar.length === 0, hatalar.length ? `${hatalar.length} fark:\n      ${hatalar.slice(0, 10).join("\n      ")}` : "");
 
 console.log("§3 ⭐ Saha vakası — ambalaj no + sevk partisi + parti no Excel'de");
 const saha = kombinasyonlar.find((k) => k.ad === "zengin/bos/packingLot")!;
@@ -164,6 +188,45 @@ const hdr = new Map(sahaModel.header.filter(([, v]) => v != null) as Array<[stri
 check("başlıkta irsaliye no · tarih · müşteri · V.No · yön · araç", hdr.get("İrsaliye No") === "SVK-2609-0007" && hdr.has("Tarih") && hdr.get("SAYIN") === "Örnek Konfeksiyon <Ltd>" && hdr.get("V.No") === "9876543210" && hdr.get("Yön") === "Yurtdışı" && hdr.get("Plaka") === "35 ZZ 350");
 const en = renderShipmentDispatchTables(kombinasyonlar.find((k) => k.ad === "zengin/otoDil/packingLot")!.snapshot, { packingLot: true });
 check("ihracatta (auto) Excel başlıkları İngilizce", en.tables.map((t) => t.caption).join("|") === "PRODUCT LIST|PACKAGE LIST|PACKING LIST" && en.header.some(([l]) => l === "Delivery Note No"));
+
+console.log("§5 ⭐ Fasondan doğrudan sevk — Excel PDF'in iki tablosunu ve kutularını taşır");
+const dz = renderFasonDirectShipTables(dogrudan.find((k) => k.ad === "dogrudan/zengin/yok/yok")!.snapshot, {});
+check("iki tablo: Karşılanan Siparişler + Sevk Edilen Toplar", dz.tables.map((t) => t.caption).join("|") === "Karşılanan Siparişler (2)|Sevk Edilen Toplar (3)");
+const toplar = dz.tables[1]!;
+check("toplam satırı: metre 'm', kg 'kg' ekiyle (kolondan farklı tür)",
+  JSON.stringify(toplar.footKinds?.slice(-2)) === '[{"t":"num","dec":1,"suffix":" m"},{"t":"num","dec":1,"suffix":" kg"}]' && toplar.foot?.slice(-2).join("|") === "1374.6|38.3");
+check("kg'sız top '—', ensiz top '—' (PDF'teki gibi)", toplar.rows[1]!.slice(-3).join("|") === "—|100|—");
+const dhdr = dz.header.map(([l, v]) => (v == null ? l : `${l}=${v}`));
+check("başlık bloğu: irsaliye no · fason sevk no · parti · müşteri/fason/araç kutuları",
+  ["İrsaliye No=SVK-2609-0101", "Fason Sevk No=FSN-2609-0042", "Parti No=P0925009", "MÜŞTERİ (Malın Gittiği)", "Adı=Örnek & Konfeksiyon", "FASON FİRMA (Malın Geldiği)", "ARAÇ / SEVKİYAT", "Not=Rampa 2 & kapı 3"].every((x) => dhdr.includes(x)), dhdr.join(" · "));
+const deski = renderFasonDirectShipTables(dogrudan.find((k) => k.ad === "dogrudan/eski/yok/yok")!.snapshot, {});
+check("eski snapshot: sipariş tablosu yok, toplam kg '—'", deski.tables.length === 1 && deski.tables[0]!.foot?.at(-1) === "—");
+
+console.log("§6 ⭐ Excel sayısı PDF'te BASILAN haneyi taşır (yarım değerde tablo programının yuvarlamasına bırakılmaz)");
+// Veri 3 ondalık (Decimal(12,3)); PDF `toFixed` ile basar ve ikili kayan noktada 112,35 → "112,3",
+// 1,005 → "1,00" olur. Ham değer Excel'e gitseydi tablo programı "112,4" / "1,01" gösterirdi.
+{
+  const base = dogrudan.find((k) => k.ad === "dogrudan/zengin/yok/yok")!;
+  const doc = base.snapshot.doc as { rolls: Array<Record<string, unknown>>; totals: Record<string, number> };
+  const snap = { ...base.snapshot, doc: { ...doc, rolls: [{ ...doc.rolls[0], dispatchedQty: 112.35, dispatchedWeight: 1.25 }], totals: { rollCount: 1, totalQty: 112.35, totalWeight: 1.25 } } } as PrintedDocSnapshot;
+  const t = renderFasonDirectShipTables(snap, {}).tables.find((x) => x.key === "rollTable")!;
+  const pdf = parseTables(normalizeHtml(renderFasonDirectShipHtml(snap, {}))).find((x) => x.caption.startsWith("Sevk Edilen"))!;
+  const mi = t.columns.findIndex((c) => c.key === "meters");
+  check("doğrudan sevk 112,35 (1 hane): PDF '112,3' ve Excel değeri 112.3", pdf.rows[0]![mi] === "112,3" && t.rows[0]![mi] === 112.3, `${pdf.rows[0]![mi]} / ${t.rows[0]![mi]}`);
+  check("toplam da aynı kuralla (112.3 'm')", t.foot?.[mi] === 112.3);
+}
+{
+  const base = kombinasyonlar.find((k) => k.ad === "zengin/bos/yok")!;
+  const doc = base.snapshot.doc as { cekiRows: Array<Record<string, unknown>> };
+  const snap = { ...base.snapshot, doc: { ...doc, cekiRows: [{ ...doc.cekiRows[0], meters: 1.005, kg: 2.675 }] } } as PrintedDocSnapshot;
+  const t = renderShipmentDispatchTables(snap, {}).tables.find((x) => x.key === "ceki")!;
+  const pdf = parseTables(normalizeHtml(renderShipmentDispatchHtml(snap, {}))).find((x) => x.caption === "ÇEKİ LİSTESİ")!;
+  const mi = t.columns.findIndex((c) => c.label === "METRE");
+  const ki = t.columns.findIndex((c) => c.label === "KG");
+  check("sevk irsaliyesi 1,005 / 2,675 (2 hane): Excel değeri PDF'in bastığı hane",
+    pdf.rows[0]![mi] === asPdfText(t.columns[mi]!.kind, t.rows[0]![mi]!) && pdf.rows[0]![ki] === asPdfText(t.columns[ki]!.kind, t.rows[0]![ki]!) && t.rows[0]![mi] === Number((1.005).toFixed(2)),
+    `PDF ${pdf.rows[0]![mi]} · ${pdf.rows[0]![ki]} / Excel ${t.rows[0]![mi]} · ${t.rows[0]![ki]}`);
+}
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

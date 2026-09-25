@@ -70,7 +70,7 @@ import { resolveDispatchCancelBlockReason } from "./helpers/subcontractor-cancel
 import { cancelWarpBeamItemsTx, countReturnedBeamItems, dispatchWarpBeamItemsTx } from "./subcontractor-beam.service";
 import { cancelYarnItemsTx, countReturnedYarnItems, dispatchYarnItemsTx, listYarnItems, type YarnDispatchLineInput } from "./subcontractor-yarn.service";
 import { assertOwnerMatchesTx } from "./helpers/emanet-owner.helper";
-import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
+import { renderFasonDirectShipHtml, renderFasonDirectShipTables } from "./document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml, type FasonReceiptDoc } from "./document-render/fason-receipt.html";
 import { buildPagination, buildTextSearch } from "../utils/query-parser";
 import {
@@ -7487,6 +7487,8 @@ registerPrintedDocBuilder(PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP, {
   fresh: buildFasonDirectShipDoc,
   // Tek-kaynak "DOĞRUDAN SEVK İRSALİYESİ" HTML — getHtml her cihazda aynı çıktıyı verir.
   renderHtml: renderFasonDirectShipHtml,
+  // Excel'in tabloları — irsaliyeyi çizen AYNI kolon çözücüsünden (PDF ↔ Excel eşit).
+  renderTables: renderFasonDirectShipTables,
   // Belge şablon profili: malın gittiği MÜŞTERİNİN profili (irsaliyenin muhatabı).
   resolveProfileId: async (db, sourceId) => {
     const ds = await db.directShipment.findUnique({

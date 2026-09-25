@@ -93,16 +93,13 @@ export function ShipmentDocDialog({
     try {
       const blob = await buildDispatchWorkbook(
         { id: shipmentId, shipmentNo: report.header.shipmentNo, isDirect },
-        isDirect
-          ? undefined
-          : {
-              version: view.version,
-              currentTemplate: view.currentTemplate,
-              draft: status !== "DISPATCHED",
-              sections: sectionParam,
-              rowNotes,
-              rowTags,
-            },
+        {
+          version: view.version,
+          currentTemplate: view.currentTemplate,
+          draft: status !== "DISPATCHED",
+          // Liste seçimi ve not/iz yalnız çuval sevkiyatının baskı seçenekleri.
+          ...(isDirect ? {} : { sections: sectionParam, rowNotes, rowTags }),
+        },
         report,
       );
       if (!blob) throw new Error("fiş verisi yok");
