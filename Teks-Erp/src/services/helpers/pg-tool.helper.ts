@@ -243,6 +243,10 @@ export function runProcess(
       child.stdout?.on("data", (d) => {
         if (stdout.length < 64 * 1024) stdout += d.toString();
       });
+    } else {
+      // stdout da tüketilmek ZORUNDA: okunmayan pipe dolunca child yazarken bloke olur
+      // (`pg_restore --list` TOC'u 64 KB'ı aşınca doğrulama 30 sn'de "unknown" düşüyordu).
+      child.stdout?.resume();
     }
     child.on("error", (err) =>
       resolve({ code: -1, stderr, spawnError: err.message, ...(opts.captureStdout ? { stdout } : {}) }),

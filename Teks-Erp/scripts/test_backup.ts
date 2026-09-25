@@ -129,8 +129,23 @@ async function temizleYedekSaati(prisma: typeof import("../src/lib/prisma").defa
   } else await prisma.systemSetting.deleteMany({ where: { key: "backup.hour" } });
 }
 
+// OKUNMAYAN BÜYÜK STDOUT — davranış testi (DB gerekmez). `pg_restore --list` TOC'u
+// 64 KB'ı aşınca child pipe'a yazarken bloke oluyor, doğrulama 30 sn'de "unknown"
+// düşüp sağlam dump'ı siliyordu (2.10.0 sahası, TOC 103 KB). Çıktı istenmeden
+// çağrılan süreç de sonuna kadar koşmalı.
+async function testLargeStdoutDrain(): Promise<void> {
+  console.log("\n[0b] runProcess — okunmayan büyük stdout süreci bloke etmez");
+  const { runProcess } = await import("../src/services/helpers/pg-tool.helper");
+  const t0 = Date.now();
+  const r = await runProcess(process.execPath, ["-e", "process.stdout.write('x'.repeat(512 * 1024))"], { timeoutMs: 10_000 });
+  const ms = Date.now() - t0;
+  check("512 KB stdout üreten süreç zaman aşımına düşmeden biter", r.timedOut !== true && r.code === 0, `code=${r.code} timedOut=${r.timedOut} ${ms} ms`);
+  check("…ve hızlı biter (< 5 sn)", ms < 5_000, `${ms} ms`);
+}
+
 async function main(): Promise<void> {
   await testNaming();
+  await testLargeStdoutDrain();
 
   if (!process.env.DATABASE_URL) {
     console.log("⏭️  DATABASE_URL yok — kalan testler atlandı.");
