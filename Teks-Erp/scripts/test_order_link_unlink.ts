@@ -173,13 +173,15 @@ async function main(): Promise<void> {
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 
-/** Süzülmeyen okur BEKLENMİYOR — istisna kümesi boş; yeni istisna kırmızı. */
-const BEKLENEN_ISTISNA_DOSYALARI = new Set<string>([]);
+/** Süzülmeyen okur yalnız geçmişi GÖSTEREN yüzeydir; yeni istisna ve ölü istisna kırmızı. */
+const BEKLENEN_ISTISNA_DOSYALARI = new Set<string>([
+  "src/services/workorder-timeline.service.ts", // iş emri Hareketler çizelgesi: geçmiş gösterilir, karar/sayı üretmez,
+]);
 
 function astKontrolleri(): void {
   const kok = join(__dirname, "..");
   const r = aktifYuklemTara(kok, [{
-    delegate: "workOrderToOrderLine", model: "WorkOrderToOrderLine", sabit: "ACTIVE_ORDER_LINK",
+    delegate: "workOrderToOrderLine", model: "WorkOrderToOrderLine", sabit: "ACTIVE_ORDER_LINK", damga: "unlinkedAt",
     tablo: "work_order_to_order_lines", helper: join("src", "services", "helpers", "order-link.helper.ts"),
   }]).get("workOrderToOrderLine")!;
   // Zeminler BU tablo için ölçüldü (2026-09-14): çağrı 15 · ilişki 24 · ham SQL 0 (=== 0).
@@ -189,7 +191,9 @@ function astKontrolleri(): void {
   check("§13d ham SQL başvurusu YOK (=== 0)", r.sqlSayisi === 0 && r.sqlIhlal.length === 0, `sql=${r.sqlSayisi}`);
   const istisnaDosyalari = new Set(r.istisnalar.map((y) => y.split(":")[0]));
   const beklenmeyen = [...istisnaDosyalari].filter((d) => !BEKLENEN_ISTISNA_DOSYALARI.has(d));
-  check("§13e istisna kümesi boş (sessiz yeni muaf yok)", beklenmeyen.length === 0 && r.istisnalar.length === 0, `beklenmeyen=[${beklenmeyen.join(", ")}]`);
+  const olu = [...BEKLENEN_ISTISNA_DOSYALARI].filter((d) => !istisnaDosyalari.has(d));
+  check("§13e istisna kümesi iki yönlü: sessiz yeni muaf yok, ölü muaf yok", beklenmeyen.length === 0 && olu.length === 0,
+    `beklenmeyen=[${beklenmeyen.join(", ")}] ölü=[${olu.join(", ")}] n=${r.istisnalar.length}`);
 }
 
 async function cleanup(): Promise<void> {

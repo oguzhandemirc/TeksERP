@@ -353,6 +353,7 @@ const BEKLENEN_SILME_DOSYALARI = new Set<string>([]);
 const BEKLENEN_ISTISNA_DOSYALARI = new Set<string>([
   "src/services/fabric-property.service.ts", // tip dönüşümü kilidi (O24 · T15)
   "src/services/tambur-undo.service.ts", // geri kurulum donörü: doğum-anı satırı, sonradan damgalanmış olsa da (§3.1)
+  "src/services/workorder-timeline.service.ts", // iş emri Hareketler çizelgesi: geçmiş gösterilir, karar/sayı üretmez,
 ]);
 
 function astKontrolleri(): void {
@@ -403,8 +404,8 @@ function astKontrolleri(): void {
   const istisnaDosyalari = new Set(tumIstisna.map((y) => y.split(":")[0]));
   const beklenmeyen = [...istisnaDosyalari].filter((d) => !BEKLENEN_ISTISNA_DOSYALARI.has(d));
   const olu = [...BEKLENEN_ISTISNA_DOSYALARI].filter((d) => !istisnaDosyalari.has(d));
-  check("§13f istisna kümesi iki yönlü: sessiz yeni muaf yok, ölü muaf yok; üç istisna (O24 + T15 + donör)",
-    beklenmeyen.length === 0 && olu.length === 0 && tumIstisna.length === 3,
+  check("§13f istisna kümesi iki yönlü: sessiz yeni muaf yok, ölü muaf yok; dört istisna (O24 + T15 + donör + çizelge)",
+    beklenmeyen.length === 0 && olu.length === 0 && tumIstisna.length === 4,
     `beklenmeyen=[${beklenmeyen.join(", ")}] ölü=[${olu.join(", ")}] n=${tumIstisna.length}`);
 }
 

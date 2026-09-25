@@ -298,6 +298,7 @@ const BEKLENEN_ISTISNA_DOSYALARI = new Set<string>([
   "src/services/helpers/guarded-hard-remove.ts", // kalıcı silme guard'ı — üretim kanıtı
   "src/services/backup-impact.service.ts", // yedekten beri YAZILAN satır hacmi
   "src/services/workorder.service.ts", // rota düzenleme: adımın defter geçmişi + RESTRICT FK
+  "src/services/workorder-timeline.service.ts", // topun uğradığı iş emirleri (Hareketler araması): geçmiş gösterilir, karar/sayı üretmez,
   "src/services/helpers/workorder-clone.helper.ts", // bölmede iz topla birlikte taşınır
 ]);
 

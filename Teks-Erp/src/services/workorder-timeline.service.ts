@@ -81,6 +81,7 @@ const NO_META = { reason: null, channel: null, trigger: null, derived: false } a
 /** (B) katmanı — kendi defteri olan olaylar, kaynaklarından. */
 async function sourcedItems(workOrderId: string, stepIds: string[]): Promise<Pending[]> {
   const out: Pending[] = [];
+  // `unlinkedAt` SÜZÜLMEZ — geçmiş çizelgesi: koparılmış bağ da satırdır; karar/sayı üretmez.
   const links = await prisma.workOrderToOrderLine.findMany({
     where: { workOrderId },
     select: {
@@ -95,6 +96,7 @@ async function sourcedItems(workOrderId: string, stepIds: string[]): Promise<Pen
       out.push({ ...NO_META, id: `link-out:${l.id}`, at: l.unlinkedAt.toISOString(), group: "SIPARIS", title: "Sipariş bağı koparıldı", detail: label, reason: l.unlinkReason, actorId: l.unlinkedById });
     }
   }
+  // `revokedAt` SÜZÜLMEZ — geçmiş çizelgesi: geri çekilen hedef özellik de satırdır.
   const props = await prisma.workOrderTargetProperty.findMany({
     where: { workOrderId },
     select: { id: true, createdAt: true, revokedAt: true, revokedById: true, revokeReason: true, property: { select: { name: true } } },
@@ -230,6 +232,7 @@ export class WorkOrderTimelineService {
       },
     });
     if (!roll) return [];
+    // `revokedAt` SÜZÜLMEZ — topun uğradığı iş emirleri: geri alınmış hareket de geçmiştir.
     const moves = await prisma.rollMovement.findMany({
       where: { rollId: roll.id },
       select: { step: { select: { workOrderId: true } } },
