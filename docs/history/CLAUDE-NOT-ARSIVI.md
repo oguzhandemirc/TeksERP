@@ -12444,3 +12444,15 @@ yeniden açıksa "son kapanıştaki"), izi `WorkOrderEvent` karşı kaydıdır. 
 **Kapı.** `test_workorder_close_snapshot` (DB, gerçek attach → kapanış dispozisyonu yolu; §1–§6, negatif
 sonda: elle kapanıştaki donma susturulunca 8 kırmızı) · `test_workorder_event_yazar` §6 (her COMPLETED
 claim'i künye dondurur) + §6b (künye tek yazar) · panel `closeSnapshotDiff.test.ts`.
+## 2026-09-25 — Depo kesimi yarışı: karar NİYETİ korur, eşzamanlı eksilme aşıma dönmez [ÇEKİRDEK]
+
+> **BULGU-T1-002 (denetim 2026-08-29) — GEÇERSİZ → 2026-09-25 (kısmen):** "aşım kararı tx içinde TAZE okumayla" ilkesi depo kesiminde (`cutWarehouseRoll`) DARALDI. Taze değer kilit altında okunur ama KARARI değiştirmez; yalnız araya giren yazımı tespit eder. 240 m'lik yoktan kumaş kapısı (iyimser guard) aynen durur.
+
+**Tetik.** `test_tambur_cut_concurrency` §4 origin/main'de 8 koşumda 2 kez kırmızıydı (9f ölçtü; bu dilimde 20 koşumda 4). Kök neden (9b teşhisi, 37 ölçtü): tx içindeki "taze okuma" KİLİTSİZDİ; 100 m'lik topta eşzamanlı iki 60 m kesimde ikincinin okuması ilk commit'ten SONRA düşerse 40 m görüp aşım dalına giriyor, 60 m çocuk + 20 m aşım doğuyordu. Aynı dosyada §6 ise bu dönüşü BEKLİYORDU (bayat ekran → aşım) — iki kalem çelişkiliydi; üretimde ön okuma isteğin başında yapıldığı için "bayat" ancak eşzamanlı bir yazımla doğar, yani §6 yarışın kendisiydi.
+
+**Karar (1e, seçenek A).** Ebeveyn `SELECT … FOR UPDATE` ile tx'in İLK ifadesinde (çocuk `create`inden önce) alınır; niyet ön okumadan belirlenir (`exceedsRemaining`); normal niyette kilitli kalan yetmiyorsa ya da aşım niyetinde kilitli kalan ön okumadan farklıysa 409 `ROLL_CHANGED_DURING_CUT` ("Bu top siz keserken başka bir işlemle değişti — ekranı yenileyip tekrar deneyin."). Normal niyette kalan hâlâ yetiyorsa (30+30) geçer. İdempotent tekrar (aynı `clientToken`) kilitten ÖNCE yanıtlanır — ilk deneme ebeveyni eksilttiği için tekrar 409'a düşmesin. Kapanış damgası `preTamburCloseQty` kilit altındaki kalandan.
+
+**Ölçüm (20'şer koşum):** düzeltme 20/20 yeşil · orijinal kod §4'ü 4/20 kırdı · kilit VAR niyet kuralı YOK → 20/20 kırmızı (yalnız kilit §4'ü kalıcı kırar) · niyet kuralı VAR kilit YOK → 20/20 yeşil ⇒ taşıyıcı parça niyet kuralı (+ iyimser WHERE guard'ları), kilit okuma-karar-yazmayı atomik yapan savunma katmanı.
+
+**Açık (kapsam dışı, 1e'ye bildirildi):** `cutOpenFabric` aynı kilitsiz taze okuma + aşıma dönüş kalıbını taşıyor; orada iş emri satır kilidi eşzamanlı kesimleri zaten SIRALADIĞI için dönüş aralıklı değil her seferinde olabilir.
+

@@ -2078,6 +2078,39 @@ export class TamburService {
   //    step'inin parçası değil)
   // ===========================================================================
 
+  /**
+   * İdempotent tekrar: aynı `clientToken`la doğmuş çocuk varsa ilk kesimin sonucu döner.
+   * Hem kilitten ÖNCE (ilk deneme ebeveyni eksilttiği için tekrar "top değişti" 409'una
+   * düşmesin) hem eşzamanlı aynı-token yarışında (P2002) çağrılır.
+   */
+  private async cutWarehouseReplay(
+    rollId: string,
+    clientToken: string,
+    cutLength: number,
+  ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }> | null> {
+    const existing = await prisma.roll.findUnique({ where: { clientToken } });
+    if (!existing) return null;
+    const freshParent = await prisma.roll.findUnique({ where: { id: rollId } });
+    if (!freshParent) return null;
+    // ⚠️ AYNI TOKEN, FARKLI GÖVDE (BULGU-T4-003): operatör 40 m kesip zaman aşımına
+    // düşer, yeniden ölçüp 25 m yazar, aynı token gider — düzeltme sessizce yutulmasın;
+    // yabancı bir ebeveyn/çocuk çifti de dönmesin.
+    assertReplayPayloadMatches(
+      [
+        { ad: "parentRollId", mevcut: existing.parentRollId, gelen: rollId },
+        { ad: "cutLength", mevcut: existing.initialQty, gelen: cutLength },
+      ],
+      "Bu istemci anahtarı FARKLI bir kesim için kullanılmış. Ekranı yenileyip " +
+        "kesimi tekrar girin — önceki kesim zaten kayıtlı olabilir.",
+      { childBarcode: existing.barcode },
+    );
+    return {
+      success: true,
+      data: { childRoll: existing, parentRoll: freshParent, parentRemainingQty: Number(freshParent.currentQty) },
+      message: "Kesim zaten kaydedilmiş (idempotent retry)",
+    };
+  }
+
   async cutWarehouseRoll(
     rollId: string,
     data: {
@@ -2119,6 +2152,10 @@ export class TamburService {
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
     if (!(data.cutLength > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
+    }
+    if (data.clientToken) {
+      const replay = await this.cutWarehouseReplay(rollId, data.clientToken, data.cutLength);
+      if (replay) return replay;
     }
 
     // Kat katalog doğrulaması — `undefined` korunur (parent'tan miras dalı ona bakar).
@@ -2233,6 +2270,26 @@ export class TamburService {
     };
     try {
       result = await prisma.$transaction(async (tx) => {
+      // ── KİLİT tx'in İLK ifadesi, NİYET KORUNUR (2026-09-25, BULGU-T1-002 daraltıldı) ──
+      // Ebeveyn satır kilidiyle alınır, kalan kilit ALTINDA okunur. Karar ÖN OKUMADAKİ
+      // niyete göre verilir: normal niyette kalan artık yetmiyorsa ya da aşım niyetinde
+      // kalan ön okumadan farklıysa araya başka bir yazım girmiştir (eşzamanlı kesim,
+      // çift gönderim) → 409. Eşzamanlı eksilme sessizce AŞIMA DÖNMEZ: iki tablet aynı
+      // topu aynı anda kesemez, onu aşım diye yazmak yoktan kumaş yazmaktır.
+      const kilitli = await tx.$queryRaw<Array<{ currentQty: Prisma.Decimal }>>`
+        SELECT "currentQty" FROM rolls WHERE id = ${parent.id}::uuid FOR UPDATE`;
+      if (kilitli.length === 0) throw AppError.conflict("Top bu sırada silindi — listeyi yenileyin");
+      const tazeKalan = new Prisma.Decimal(kilitli[0]!.currentQty);
+      const tazeAsim = exceedsRemaining;
+      const degisti = tazeAsim
+        ? !tazeKalan.equals(new Prisma.Decimal(parent.currentQty))
+        : tazeKalan.lessThan(data.cutLength);
+      if (degisti) {
+        throw AppError.conflict("Bu top siz keserken başka bir işlemle değişti — ekranı yenileyip tekrar deneyin.", {
+          code: "ROLL_CHANGED_DURING_CUT",
+        });
+      }
+
       const child = await tx.roll.create({
         data: {
           barcode: childBarcode,
@@ -2346,35 +2403,10 @@ export class TamburService {
       // updateMany {id, sackId:null}) araya girerse WHERE eşleşmez → P2025 → 409.
       // `sackId: null` şart: çuvaldaki topun metrajını eksiltmek çuval içeriğini
       // sessizce bozar (2026-07-30 hayalet-içerik bulgusu).
-      // ── AŞIM KARARI TX İÇİNDE, TAZE OKUMAYLA (2026-08-29 / BULGU-T1-002) ──
-      // `exceedsRemaining` tx'ten ÖNCE, HAVUZ bağlantısıyla okunmuş metrajdan
-      // hesaplanıyordu ve aşım dalının WHERE'inde METRAJ ŞARTI YOKTU. İki tablet
-      // 100 m'lik topu aynı anda 120 m okutup keserse ikisi de "aşım" der, ikisi
-      // de WHERE'e uyar, ikisi de commit eder: 240 m çocuk doğar, deftere gerçek
-      // 140 m yerine 2×20 = 40 m yazılır. Envantere yoktan 140 m kumaş girer ve
-      // iki barkodlu top da sevk edilebilir. Üstelik hata kendi izini siler.
-      //
-      // İKİ ŞEY birlikte gerekiyor: (1) kararın TAZE metrajdan verilmesi,
-      // (2) aşım dalının WHERE'ine `currentQty: <okunan taze değer>` iyimser
-      // guard'ı. PostgreSQL kilitte bekleyen UPDATE'i, önceki tx commit edince
-      // YENİ satır sürümüne göre yeniden değerlendirir → ikinci istek eşleşme
-      // bulamaz ve 409 alır. Guard olmadan yeniden değerlendirme geçer.
+      // Aşım dalının WHERE'indeki `currentQty: tazeKalan` guard'ı KİLİTLE birlikte kalır
+      // (savunma katmanı): kilit altında okunan değerden başka bir değere yazılamaz.
       // ⚠️ `currentQty > 0` ŞARTI YİNE YOK: 0'a inmiş topta ikinci aşım kesimi
       //    MEŞRU (mal fiziksel olarak elde, 2026-08-12 saha vakası).
-      const tazeParent = await tx.roll.findUnique({
-        where: { id: parent.id },
-        select: { currentQty: true },
-      });
-      if (!tazeParent) throw AppError.conflict("Top bu sırada silindi — listeyi yenileyin");
-      const tazeKalan = new Prisma.Decimal(tazeParent.currentQty);
-      const tazeAsim = tazeKalan.lessThan(data.cutLength);
-      if (tazeAsim && !asimIzinli) {
-        throw AppError.conflict(
-          `Kesim metresi (${data.cutLength}) topun kalan metresinden (${tazeKalan}) büyük — ` +
-            "top bu sırada başka bir kesimle eksildi. Listeyi yenileyip tekrar deneyin.",
-        );
-      }
-
       let updatedParent;
       try {
         updatedParent = tazeAsim
@@ -2405,9 +2437,9 @@ export class TamburService {
         throw err;
       }
       const newParentQty = Number(updatedParent.currentQty);
-      // Kapanış öncesi metraj = kesimden ÖNCEKİ kalan (claim kilidi altında
-      // okunan `parent.currentQty`), çocukların toplamı DEĞİL.
-      const kesimOncesiQty = Number(parent.currentQty);
+      // Kapanış öncesi metraj = kesimden ÖNCEKİ kalan (satır KİLİDİ altında okunan
+      // `tazeKalan`; normal niyette ön okumadan küçük olabilir), çocukların toplamı DEĞİL.
+      const kesimOncesiQty = Number(tazeKalan);
 
       // AŞIM DEFTERİ — `cutOpenFabric` ikizi. Depo kesimi adıma bağlı DEĞİL.
       const overageQty = tazeAsim ? overageOf(data.cutLength, tazeKalan) : new Prisma.Decimal(0);
@@ -2537,34 +2569,8 @@ export class TamburService {
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === "P2002"
       ) {
-        const existing = await prisma.roll.findUnique({ where: { clientToken: data.clientToken } });
-        const freshParent = await prisma.roll.findUnique({ where: { id: rollId } });
-        if (existing && freshParent) {
-          // ⚠️ AYNI TOKEN, FARKLI GÖVDE (BULGU-T4-003). Eskiden burada hiçbir
-          // karşılaştırma yoktu: operatör 40 m kesip zaman aşımına düşer, yeniden
-          // ölçüp 25 m yazar, aynı token gider ve sunucu ilk kesimin çocuğunu
-          // "Kesim zaten kaydedilmiş" diye döndürürdü — düzeltme SESSİZCE yutulur.
-          // Üstelik `existing` token'la, `freshParent` gelen `rollId` ile
-          // bulunduğu için YABANCI bir ebeveyn/çocuk çifti de dönebiliyordu.
-          assertReplayPayloadMatches(
-            [
-              { ad: "parentRollId", mevcut: existing.parentRollId, gelen: rollId },
-              { ad: "cutLength", mevcut: existing.initialQty, gelen: data.cutLength },
-            ],
-            "Bu istemci anahtarı FARKLI bir kesim için kullanılmış. Ekranı yenileyip " +
-              "kesimi tekrar girin — önceki kesim zaten kayıtlı olabilir.",
-            { childBarcode: existing.barcode },
-          );
-          return {
-            success: true,
-            data: {
-              childRoll: existing,
-              parentRoll: freshParent,
-              parentRemainingQty: Number(freshParent.currentQty),
-            },
-            message: "Kesim zaten kaydedilmiş (idempotent retry)",
-          };
-        }
+        const replay = await this.cutWarehouseReplay(rollId, data.clientToken, data.cutLength);
+        if (replay) return replay;
       }
       throw err;
     }

@@ -23,7 +23,23 @@
 // §4 REGRESYON       — normal (aşımsız) eşzamanlı kesimler stok aşırtmıyor
 // §5 DEĞİŞMEZ        — Σçocuk + kalan − Σaşım = giriş metrajı (zamanlamadan
 //                      bağımsız; defter payı bayat metrajdan yazılırsa bozulur)
-// §6 BAYAT OKUMA     — pencere elle açılır: karar + defter payı TAZE metrajdan
+// §6 BAYAT OKUMA     — pencere elle açılır: ön okuma bayat (100), kilit altındaki kalan
+//                      40 → normal niyetli 80 m kesim AŞIMA DÖNMEZ, 409 alır
+//
+// ⭐ NİYET KORUNUR (2026-09-25, 1e kararı (A); BULGU-T1-002'nin kapsamı DARALDI):
+//    Eskiden karar tx içindeki KİLİTSİZ "taze okuma"dan veriliyordu ve §6 bayat ekranda
+//    aşıma DÖNMEYİ bekliyordu. Oysa üretimde ön okuma isteğin başında yapılır; "bayat"
+//    ancak istek sürerken başka bir yazım araya girerse doğar — yani yarışın TA KENDİSİ.
+//    §4 aynı durumu (60+60, 100 m) 409 bekliyordu ve kilitsiz okumanın zamanlamasına göre
+//    8 koşumda 2 kez kırmızıydı. Şimdi: ebeveyn `SELECT … FOR UPDATE` ile tx'in İLK
+//    ifadesinde alınır; normal niyette kalan yetmiyorsa, aşım niyetinde kalan ön
+//    okumadan farklıysa 409 ("Bu top siz keserken başka bir işlemle değişti"). İki
+//    tablet aynı topu aynı anda kesemez; eşzamanlı eksilmeyi aşım yazmak yoktan kumaştır.
+//    NEGATİF SONDA (2026-09-25, 20'şer koşum): düzeltmeyle 20/20 yeşil · N3 orijinal kod
+//    §4'ü 4/20 kırdı (aralıklı) · N2 kilit VAR niyet kuralı YOK → 20/20 kırmızı (kilit
+//    tek başına §4'ü kalıcı kırar: kilitten sonra da azalmış kalan okunur) · N1 niyet
+//    kuralı VAR kilit YOK → 20/20 yeşil. ⇒ Taşıyıcı parça NİYET kuralıdır (+ iyimser WHERE
+//    guard'ları); kilit okuma-karar-yazmayı atomik yapan savunma katmanıdır.
 //
 // ⚠️ §4 ve §5'e AYNI PENCEREYİ EKLEMEYİN: o ikisi SONUÇ değil DEĞİŞMEZ ölçüyor
 // (`Σçocuk ≤ giriş`, `Σçocuk + kalan − Σaşım = giriş`) ve değişmez zamanlamadan
@@ -304,13 +320,10 @@ async function main(): Promise<void> {
     `${toplamCocuk} + ${kalan1} − ${asim1} = ${toplamCocuk + kalan1 - asim1}`,
   );
 
-  // ═══ §6 — BAYAT OKUMA: karar ve defter payı TAZE metrajdan gelmeli ═══
-  // İyimser guard, bayat değerle yazan yolu pratikte erişilemez kılıyor — yani
-  // "taze okuma" tek başına ölçülemiyor (ölçüldü: sondası yeşil kalıyor). Bu
-  // yüzden pencere ELLE açılır: tx ÖNCESİ okuma kandırılır (ekran bayat), tx
-  // İÇİNDEKİ okuma gerçeği görür. Doğru davranış: karar da defter payı da TAZE
-  // metrajdan verilir. Bayat mantıkta bu kesim ya yanlış dala gider ya da aşımı
-  // 0 yazar — iki durumda da §5'in değişmezi bozulur.
+  // ═══ §6 — BAYAT OKUMA: eşzamanlı eksilme AŞIMA DÖNMEZ (niyet korunur) ═══
+  // Pencere ELLE açılır: tx ÖNCESİ okuma kandırılır (ekran 100 m gösteriyor), tx İÇİNDE
+  // satır kilidi altındaki gerçek kalan 40 m. Operatörün niyeti NORMAL kesimdir (80 ≤ 100);
+  // kalan artık yetmediği için kesim 409 alır — aşım satırı yazılmaz, değişmez korunur.
   console.log("\n=== §6: bayat ekran okuması (pencere elle açıldı) ===");
   const p5 = await depoTopu("E", 100);
   await tambur.cutWarehouseRoll(p5, { cutLength: 60 }, userId); // gerçek kalan: 40
@@ -326,12 +339,17 @@ async function main(): Promise<void> {
     }
     return row;
   };
+  let red6: { statusCode?: number; details?: { code?: string } } | null = null;
   try {
     await tambur.cutWarehouseRoll(p5, { cutLength: 80 }, userId);
+  } catch (e) {
+    red6 = e as { statusCode?: number; details?: { code?: string } };
   } finally {
     (prisma.roll as unknown as { findUnique: FindUniqueFn }).findUnique = gercek;
   }
   check("§6: sonda bayat okumayı gerçekten enjekte etti", kandirildi);
+  check("§6: ⭐ normal niyetli kesim AŞIMA DÖNMEDİ — 409 ROLL_CHANGED_DURING_CUT",
+    red6?.statusCode === 409 && red6?.details?.code === "ROLL_CHANGED_DURING_CUT", JSON.stringify(red6?.details ?? null));
   const cocuk5 = await cocuklar(p5);
   const kalan5 = Number(
     (await prisma.roll.findUnique({ where: { id: p5 }, select: { currentQty: true } }))?.currentQty ?? 0,
@@ -344,11 +362,7 @@ async function main(): Promise<void> {
       })
     )._sum.qty ?? 0,
   );
-  check(
-    "§6: aşım TAZE kalandan hesaplandı (80 − 40 = 40 m)",
-    Math.abs(asim5 - 40) < 0.001,
-    `defterde ${asim5} m`,
-  );
+  check("§6: aşım satırı YAZILMADI, ikinci çocuk DOĞMADI", asim5 === 0 && cocuk5 === 60, `aşım ${asim5} m · çocuk ${cocuk5} m`);
   check(
     "§6: değişmez korundu — Σçocuk + kalan − Σaşım = 100",
     Math.abs(cocuk5 + kalan5 - asim5 - 100) < 0.001,
