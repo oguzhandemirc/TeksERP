@@ -6,7 +6,13 @@ import { useCrudMutations } from "./useCrudMutations";
 import type { CrudService } from "@/services/crudService";
 
 const toastSuccess = vi.fn();
-vi.mock("sonner", () => ({ toast: { success: (...a: unknown[]) => toastSuccess(...a) } }));
+const toastWarning = vi.fn();
+vi.mock("sonner", () => ({
+  toast: {
+    success: (...a: unknown[]) => toastSuccess(...a),
+    warning: (...a: unknown[]) => toastWarning(...a),
+  },
+}));
 
 interface Widget {
   id: string;
@@ -46,7 +52,10 @@ function renderCrud(service: CrudService<Widget>) {
 }
 
 describe("useCrudMutations", () => {
-  beforeEach(() => toastSuccess.mockClear());
+  beforeEach(() => {
+    toastSuccess.mockClear();
+    toastWarning.mockClear();
+  });
 
   it("create → service.create(data) + başarı toast'ı + liste invalidate", async () => {
     const { service, fns } = makeService();
@@ -101,5 +110,65 @@ describe("useCrudMutations", () => {
 
     await waitFor(() => expect(result.current.createMutation.isError).toBe(true));
     expect(toastSuccess).not.toHaveBeenCalled();
+  });
+});
+
+// Sunucunun `warnings` alanı (ör. pasife alınan kartta canlı top) ayrı uyarı tostuyla basılır.
+describe("useCrudMutations — sunucu uyarıları", () => {
+  beforeEach(() => {
+    toastSuccess.mockClear();
+    toastWarning.mockClear();
+  });
+
+  it("remove → sunucu warnings'i ayrı uyarı tostu olarak basar; 'Geri al' korunur", async () => {
+    const { service, fns } = makeService();
+    const uyari = "Bu kayda bağlı canlı kayıtlar var: 3 top, 1 açık sipariş kalemi.";
+    fns.remove.mockResolvedValueOnce({
+      success: true,
+      data: { id: "w1", name: "x" },
+      message: `Kayıt pasife alındı. ${uyari}`,
+      warnings: [uyari],
+    });
+    const { result } = renderCrud(service);
+
+    result.current.removeMutation.mutate("w1");
+
+    await waitFor(() => expect(result.current.removeMutation.isSuccess).toBe(true));
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+    expect(toastWarning).toHaveBeenCalledWith(uyari, { duration: 8000 });
+    const silindi = toastSuccess.mock.calls.find((c) => c[0] === "Widget silindi.");
+    expect((silindi?.[1] as { action: { label: string } }).action.label).toBe("Geri al");
+  });
+
+  it("warnings yoksa uyarı tostu yok — bugünkü başarı tostu aynen", async () => {
+    const { service } = makeService();
+    const { result } = renderCrud(service);
+
+    result.current.removeMutation.mutate("w1");
+    result.current.createMutation.mutate({ name: "yeni" });
+
+    await waitFor(() => expect(result.current.removeMutation.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.createMutation.isSuccess).toBe(true));
+    expect(toastWarning).not.toHaveBeenCalled();
+    expect(toastSuccess).toHaveBeenCalledWith("Widget oluşturuldu.");
+  });
+
+  it("update/restore/hardRemove de warnings'i basar (her uyarı ayrı tost)", async () => {
+    const { service, fns } = makeService();
+    const res = { success: true, data: { id: "w1", name: "x" }, warnings: ["u1", "u2"] };
+    fns.update.mockResolvedValueOnce(res);
+    fns.restore.mockResolvedValueOnce(res);
+    fns.hardRemove.mockResolvedValueOnce(res);
+    const { result } = renderCrud(service);
+
+    result.current.updateMutation.mutate({ id: "w1", data: { name: "x" } });
+    result.current.restoreMutation.mutate("w1");
+    result.current.hardRemoveMutation.mutate("w1");
+
+    await waitFor(() => expect(result.current.hardRemoveMutation.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.restoreMutation.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.updateMutation.isSuccess).toBe(true));
+    expect(toastWarning).toHaveBeenCalledTimes(6);
+    expect(toastWarning).toHaveBeenCalledWith("u2", { duration: 8000 });
   });
 });
