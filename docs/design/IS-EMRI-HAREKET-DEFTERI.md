@@ -84,7 +84,8 @@ KULLANMIYOR (tek sayfa + kendi sihirbazı).
 - Rota değişirse eski adımlar "kaldırılan" sayılır; PENDING ve bağsız olanlar **fiziksel silinir**
   (S:5801); başlamış adım 409 verir (S:5788, S:5856).
 - Gövdede olmayan sipariş bağları koparılır (S:5902), hedef özellikler geri çekilir (S:5922).
-- **İş emri numarası yeniden yazılır** — gövdedeki `batchNumber` `workOrderNumber`a gider (S:5944), form
+- **İş emri numarası (`WorkOrder.workOrderNumber`) yeniden yazılır** — gövdedeki `batchNumber` ANAHTARI
+  (adı yanıltıcı: parti değil, iş emri no taşır; controller :278) `workOrderNumber`a yazılır (S:5944), form
   alanı düzenlemede açık (`E/WorkOrderFormView.tsx:139`). "Numara DOĞUŞTA materyalize edilir" çekirdek
   kuralıyla çelişir.
 - **Renk bekçisi atlanır:** `replace` `assertTargetColorChange`i çağırmaz (yalnız `locks.targetColor`);
@@ -358,10 +359,11 @@ panelden Konumu Düzelt / Parti Düşür".
 
 ### 6.3 Genel "Düzenle" ve iş emri numarası — öneri
 
-- **Numara doğuşta donar, hiçbir uçtan yazılamaz.** `update` ve `replace` şemalarından `batchNumber`
-  kalkar. Eski istemci uyumu: gövdede numara gelirse ve mevcutla AYNIYSA sessizce kabul (panel formu bugün
-  mevcut değeri geri gönderiyor), FARKLIYSA 409 "İş emri numarası değiştirilemez". Panel formunda alan
-  salt-okunur olur.
+- **İş emri numarası (`WorkOrder.workOrderNumber`) doğuşta donar, hiçbir uçtan yazılamaz.** Bugün onu
+  yazan tek kanal, `update` ve `replace` Zod şemalarındaki yanıltıcı adlı `batchNumber` anahtarıdır
+  (controller :278; S:5944) — bu anahtar iki şemadan kalkar. Eski istemci uyumu: gövdede anahtar gelirse ve
+  değeri mevcut `workOrderNumber`la AYNIYSA sessizce kabul (panel formu bugün mevcut değeri geri
+  gönderiyor), FARKLIYSA 409 "İş emri numarası değiştirilemez". Panel formunda alan salt-okunur olur.
 - **Başlamış (IN_PROGRESS) iş emrinde genel Düzenle yalnız yıkıcı olmayan alanlarla sınırlanır:** plan
   tarihleri · hedef metre/kg · notlar. Renk, en, rota, kumaş, sipariş → tek amaçlı tuşlar (bugün panelde
   zaten var). PLANNED (hiç top almamış) iş emrinde tam `replace` kalır.
@@ -462,6 +464,10 @@ eder; SoD üçlüsü değişmez. Uyumsuz sipariş bağı (`order-links/override`
 
 ## 9. (g) KULLANICIYA SORULAR — her biri şıklı, ⭐ önerilen
 
+**Cevap durumu (2026-09-25, 1e aracılığıyla):** S1 = A · S2 = A · S3 = A · **S4 AÇIK** — kullanıcının
+karşı sorusu: *"o iş emrine yeni top eklenirse aynı iş emrinde yeni parti olamaz mı?"* (ölçümü §11) ·
+S5–S9 sorulmadı.
+
 **S1 — Tablet düzeltme menüsünde hangi tuşlar olsun?**
 - ⭐ **A:** Rengi Değiştir · Eni Değiştir · Sipariş Bağla/Çöz · Refakat Kartını Yeniden Bas · Top Çıkar
   (yanlış okutma)
@@ -522,3 +528,235 @@ depo + A1 + fire; verim = çıkan ÷ giren; çekme = (giren − çıkan) ÷ gire
   yaratmadığı için zararsız ama kök kuralın lafzına aykırı.
 - Panel "kayıt geçmişi" (`RecordHistoryDialog`) `admin:settings`/`system:activity` ister — planlamacı 403
   alır; Hareketler ekranı (§7) bu ihtiyacı `workorder:read` ile, audit'e uzanmadan karşılar.
+
+## 11. S4 ÖLÇÜMÜ — "aynı iş emrine yeni top = yeni parti" (kullanıcının karşı sorusu, ölçüldü 2026-09-25)
+
+**Kısa cevap:** motor bunu zaten biliyor — `attachRolls` (S:4728) her çağrıda YENİ PARTİ doğurur
+(`createBatchTx` S:4925; bekçi `test_batch_multibatch_dispatch.ts:49-50` aynı iş emrine iki dalga = iki parti
+ölçüyor). Uç 2026-06-12'de ALAN KARARIYLA değil ÖLÜ UÇ TEMİZLİĞİYLE kalktı ("hiçbir frontend çağırmıyordu",
+R:62-65); "rework ayrı emirdir" gerekçesi 2026-08-25'te eklendi. `PARTI-MODELI-TASARIM.md` K3 ("her ekleme
+yeni parti") ve K4 ("sevksiz partiye `targetBatchId` ile ekleme", hiç yazılmadı) tam bu isteği öngörüyordu.
+
+**⚠️ Kural bugün zaten üç yan kapıdan deliniyor** (`is-emri.md` "mevcut iş emrine top EKLEME YOK" cümlesi
+koda göre YANLIŞ — S4'ün cevabı ne olursa olsun düzeltilmeli):
+1. **Fason Sevk otomatik bağlama:** serbest `STOCK` top açık iş emrinin fason adımına bağlanır
+   (`subcontractor.service.ts:1022`, :1173-1188) — tek parti varsa ona katılır, yoksa yeni parti.
+2. **Tambur "Topu Buraya Al"** (`manualMove`, `rollIds`) → yeni parti; TAMAMLANMIŞ iş emrini de yeniden açar
+   (`tambur-manual.service.ts:399-410`, :565).
+3. **Tambur "Manuel Top Ekle"** — tek açık partiye katılır / birden çoksa `BATCH_REQUIRED` / yoksa açar (:1166-1178).
+
+**Bugünkü motorla "Parti Ekle" açılsaydı sessizce bozulacaklar:**
+
+| # | Durum | Ölçüm | Gereken düzeltme |
+|---|---|---|---|
+| R1 | İlk adım FASON (EXTERNAL) | hareket açılmaz, `recomputeStepStatus` çağrılmaz (S:4901, :4936) ⇒ ilk adım COMPLETED kalır, yeni toplar adım hesabında görünmez (aday = hareket şartı, `roll-step.helper.ts:104-107`); eski parti bitince iş emri KAPANIR, yeni parti sevksiz kalır, kapalı iş emrine sevk reddedilir | ilk adım aday kümesi `currentStepId = ilk adım` topları da sayar (giriş sayımı `test_wo_input_attach_window` bu birleşimi zaten kullanıyor) |
+| R2 | Sonraki COMPLETED adımlar | yeniden hesaplanmaz, top ulaşana dek bayat COMPLETED (İÇ ilk adımda iş emri yine de kapanmaz — ilk adım ACTIVE) | ekleme sonrası tüm adımlar recompute |
+| R3 | Kumaş/renk/özellik kapsaması · hedef metre | yalnız `quickStart`ta (S:1342-1388); `attachRolls` atlar; `targetQuantity` hiçbir yerde uyarmaz | quickStart doğrulaması ortak helper'a; hedef aşımı `warnings` |
+| R4 | İdempotency | `attachRolls`ta `clientToken` YOK | uç `clientToken @unique` ile doğar (kayıt yaratan uç kuralı) |
+| R5 | Fason K10/K11 (tek sevk = tek parti) | ikinci parti "tümünü gönder"de 409 `MULTI_BATCH`; `MERGE` yeni partiyi en eskiye YUTAR; çok partili makbuzda doğan toplar ilk partiyi alır (`subcontractor.service.ts:3324-3330`) | eklenen partide varsayılan AYRI sevk; birleştirme bilinçli seçim |
+| R6 | Parti numarası | `generateBatchNumberTx` (`batch.service.ts:117`) 8022 + `nextSeriesNo("batchShort")` P01…P99 GLOBAL ve körlemesine sarar ⇒ uzun iş emrinde yeni parti canlı eski partiyle AYNI numarayı alabilir (kartta iki P05) | aynı iş emrinde canlı numarayı atlayan sarma (parti.md profil kuralına ek — karar) |
+| R7 | Kilit sırası | `attachRolls` tx'inde 8022 kilidi iş emri kilidi + claim'DEN SONRA — "advisory kilit tx'in İLK ifadesi" lafzına aykırı | uçta 8022 ilk ifade |
+| R8 | Tamamlanmış iş emri | tx içi kontrol COMPLETED'ı kapsamıyor (S:4801); `completeWorkOrder` kalan adımları SKIPPED yapar ve SKIPPED asla geri açılmaz; COMPLETED kart bayat işaretlenmez (yalnız ACTIVE, `traveler-card-dirty.helper.ts:39`) ⇒ kart açılmazsa tablet okutamaz | tamamlanmışa ekleme = önce `reopenWorkOrderTx` + kart, SONRA parti; SKIPPED adım sorunu ayrı tasarım |
+
+Refakat kartı sorunsuz: kartta top listesi değil "PARTİLER" tablosu var, baskıda canlı çözülür
+(`traveler-card.html.ts:419-483`); `createBatchTx` ACTIVE kartı bayat işaretler (`batch.service.ts:283`).
+Sipariş bağı: `allocatedQty` top miktarına bağlı değil (tavan yok), kapsama onu okumuyor
+(`coverage.helper.ts:9-15`); `committed/inputRolls` hareketten türer ⇒ eklenen parti kendiliğinden sayılır.
+
+**S4 için yeni şıklar (öneri 1e'ye):**
+- ⭐ **A — "Parti Ekle" açılsın, yalnız TAMAMLANMAMIŞ iş emrine:** tablet/panel tek tuş, okutulan toplar
+  YENİ PARTİ olur; R1–R7 aynı dilimde kapanır; tamamlanmış iş emri için cevap "yeni iş emri aç". Yeni uç
+  `POST /work-orders/:id/batches` (`clientToken`, 8022 ilk ifade, quickStart doğrulaması ortak). Hareketler'de
+  "Parti P07 eklendi · 5 top · 240 m" — (B) katmanı `Batch` doğuşundan okur.
+- B — A + tamamlanmış iş emrine de (yeniden açarak): R8 + SKIPPED adım tasarımı gerekir — büyük iş, sonraya.
+- C — Kural kalsın (ekleme yok): üç yan kapı yine de ya kapanmalı ya da kural metni "yalnız bu üç yoldan"
+  diye daraltılmalı.
+
+Yan kapıların kaderi (A seçilirse): üçü de aynı ortak ekleme helper'ına bağlanır (tek boğaz — R1–R7 bir
+yerde kapanır); seçilmezse `is-emri.md` cümlesi koda hizalanır.
+
+## 12. D1 TASLAĞI — şema · migration · beyan (KOD DEĞİL; D1 açılınca birebir uygulanacak metin)
+
+### 12.1 Prisma
+
+```prisma
+/// İş emrinin KENDİ durum/plan değişim defteri (SAP değişiklik belgesi kalıbı). Bir kullanıcı eylemi = bir
+/// `groupId`; her değişen alan = bir from→to satırı. APPEND-ONLY: `updatedAt` YOK. Kendi defteri olan olaylar
+/// (sipariş bağı, hedef özellik, fason, Tambur) buraya KOPYALANMAZ — Hareketler ucu onları kaynağından okur.
+/// Ters yol KARŞI KAYITTIR: geri almak aynı alanı eski değere çeviren YENİ satırdır.
+model WorkOrderEvent {
+  id          String             @id @default(uuid()) @db.Uuid
+  workOrderId String             @db.Uuid
+  type        WorkOrderEventType
+  /// Tek kullanıcı eylemi (CDHDR karşılığı) — "Düzenle" üç alan değiştirdiyse üç satır, tek grup.
+  groupId     String             @db.Uuid
+  /// FIELD_CHANGED / STEP_PLAN_CHANGED / ROLL_ATTRIBUTES_APPLIED'de alan anahtarı; STATUS_CHANGED'de "status".
+  /// VarChar (enum DEĞİL): alan kümesi büyür, katalog TS sabiti `constants/workorder-event-fields.ts`.
+  field       String?            @db.VarChar(40)
+  /// Makine değeri (id · sayı · ISO tarih · statü). Doğuşta (CREATED) fromValue null.
+  fromValue   String?
+  toValue     String?
+  /// O ANKİ görünen ad — ad sonradan değişse de satır o günkü gerçeği söyler.
+  fromLabel   String?            @db.VarChar(200)
+  toLabel     String?            @db.VarChar(200)
+  /// Olayı tetikleyen işlem (TAMBUR_FINALIZE · FASON_RECEIPT · TAMBUR_UNDO_SINGLE · MANUAL_COMPLETE …).
+  trigger     String?            @db.VarChar(40)
+  /// PANEL · TABLET · SYSTEM · BACKFILL — `req.device.kind`ten türer, `clientType`ten DEĞİL.
+  /// VarChar + CHECK (enum DEĞİL): kanal kümesi büyüyebilir (API, IMPORT), ALTER TYPE geri alınamaz.
+  channel     String             @db.VarChar(16)
+  reason      String?            @db.VarChar(300)
+  /// `ReasonPreset.code` — FK'sız (emsal `Roll.cancelReasonCode`): kod asla değişmez.
+  reasonCode  String?            @db.VarChar(64)
+  /// İlgili belge (fason makbuzu · top · kapanış künyesi) — FK'sız tür + id; yalnız gezinme içindir.
+  refType     String?            @db.VarChar(40)
+  refId       String?            @db.Uuid
+  /// Yalnız GÖSTERİM ayrıntısı (etkilenen top id'leri, adım listesi). Buradan SAYI hesaplanmaz.
+  payload     Json?
+  /// Künye FK'ları — index YOK ([DB-11]), FK YOK (emsal `ShipmentEvent.createdById`).
+  createdById String?            @db.Uuid
+  deviceId    String?            @db.Uuid
+
+  /// ⚠️ `Cascade` BİLİNÇLİ (emsal `ShipmentEvent`): üretim kodu `WorkOrder`ı hiç fiziksel silmez
+  /// (ölçüldü: `src`de `workOrder.delete*` 0; "Kalıcı sil" `isActive:false`), `Restrict` yalnız
+  /// bekçi temizliklerini kilitlerdi (ölçüldü 2026-09-25: `scripts`te iş emri silen 172 dosya).
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([workOrderId, createdAt])
+  @@index([type, createdAt])
+  @@index([groupId])
+  @@map("work_order_events")
+}
+
+/// KAPALI küme — tasarım gereği büyümez: yeni statü geçişi STATUS_CHANGED'e, yeni alan FIELD_CHANGED'in
+/// `field`ına gider (altıncı enum değeri sınıfından kaçış). Bu yüzden pg enum meşru ([DB-15]).
+enum WorkOrderEventType {
+  CREATED                 // doğuş — fromValue null
+  STATUS_CHANGED          // field="status", from/to WorkOrderStatus; yeniden açılma = COMPLETED→IN_PROGRESS satırı
+  FIELD_CHANGED           // field ∈ WORK_ORDER_EVENT_FIELDS
+  STEP_PLAN_CHANGED       // field="step:<sequence>:<notes|subcontractorId>"
+  ROLL_ATTRIBUTES_APPLIED // field ∈ {colorId, width}; payload top başına eski değer
+}
+```
+
+`WorkOrder` modeline yalnız ilişki satırı eklenir: `events WorkOrderEvent[]` (kolon değişmez).
+
+### 12.2 Migration (`prisma migrate dev --create-only` çıktısı elle, idempotent)
+
+```sql
+-- =============================================================================
+-- D1 — İş emri hareket defteri (defter doktrini; docs/design/IS-EMRI-HAREKET-DEFTERI.md)
+-- =============================================================================
+-- GÜVENLİ / ADDITIVE: bir YENİ tablo + bir YENİ enum tipi + üç CHECK. Mevcut tabloya ve
+-- satıra dokunulmaz. Geriye dönük satır ÜRETİLMEZ — geçmiş, ayrı ve kuru-koşumlu
+-- `scripts/backfill_workorder_events.ts` ile (kullanıcı kararıyla) doldurulur.
+-- ⚠️ Enum YENİ tip (`CREATE TYPE`) — ADD VALUE aynı-tx kısıtı burada geçerli değil.
+-- =============================================================================
+
+DO $$ BEGIN
+  CREATE TYPE "WorkOrderEventType" AS ENUM
+    ('CREATED', 'STATUS_CHANGED', 'FIELD_CHANGED', 'STEP_PLAN_CHANGED', 'ROLL_ATTRIBUTES_APPLIED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS "work_order_events" (
+  "id"          UUID NOT NULL,
+  "workOrderId" UUID NOT NULL,
+  "type"        "WorkOrderEventType" NOT NULL,
+  "groupId"     UUID NOT NULL,
+  "field"       VARCHAR(40),
+  "fromValue"   TEXT,
+  "toValue"     TEXT,
+  "fromLabel"   VARCHAR(200),
+  "toLabel"     VARCHAR(200),
+  "trigger"     VARCHAR(40),
+  "channel"     VARCHAR(16) NOT NULL,
+  "reason"      VARCHAR(300),
+  "reasonCode"  VARCHAR(64),
+  "refType"     VARCHAR(40),
+  "refId"       UUID,
+  "payload"     JSONB,
+  "createdById" UUID,
+  "deviceId"    UUID,
+  "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "work_order_events_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "work_order_events_workOrderId_createdAt_idx"
+  ON "work_order_events" ("workOrderId", "createdAt");
+CREATE INDEX IF NOT EXISTS "work_order_events_type_createdAt_idx"
+  ON "work_order_events" ("type", "createdAt");
+CREATE INDEX IF NOT EXISTS "work_order_events_groupId_idx"
+  ON "work_order_events" ("groupId");
+
+DO $$ BEGIN
+  ALTER TABLE "work_order_events" ADD CONSTRAINT "work_order_events_workOrderId_fkey"
+    FOREIGN KEY ("workOrderId") REFERENCES "work_orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- DB seddi (şema-dışı → test_db_invariants envanterine AYNI commit'te):
+DO $$ BEGIN
+  ALTER TABLE "work_order_events" ADD CONSTRAINT "work_order_events_channel_known"
+    CHECK ("channel" IN ('PANEL', 'TABLET', 'SYSTEM', 'BACKFILL'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE "work_order_events" ADD CONSTRAINT "work_order_events_field_required"
+    CHECK ("type" = 'CREATED' OR "field" IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE "work_order_events" ADD CONSTRAINT "work_order_events_birth_has_no_from"
+    CHECK ("type" <> 'CREATED' OR "fromValue" IS NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+```
+
+Açık teknik soru (1e): append-only'yi DB'de de mühürlemek için `BEFORE UPDATE` trigger'ı
+(`work_order_events_no_update`, RAISE) — emsal `machine_stop_events_block_classified_delete`. DELETE kapsam
+dışı (Cascade bekçi temizliği). Öneri: EVET, D1'de.
+
+### 12.3 Beyanlar (aynı commit)
+
+`scripts/lib/defter-beyan.ts`:
+
+```ts
+D("WorkOrderEvent", "iş emrinin KENDİ durum/plan değişim defteri (SAP değişiklik belgesi kalıbı): bir eylem = bir groupId, her alan = bir from→to satırı; kendi defteri olan olaylar (bağ, özellik, fason, Tambur) KOPYALANMAZ, Hareketler ucunda kaynaklarından okunur. Ters yol karşı kayıttır — geri almak aynı alanı eski değere çeviren YENİ satırdır, damga değil",
+  { tur: "KARSI_KAYIT", ciftler: [["fromValue", "toValue"]] },
+  [{ dosya: "src/services/helpers/workorder-event.helper.ts", sembol: "writeWorkOrderEventsTx" }],
+  ["src/services/helpers/workorder-event.helper.ts"]),
+```
+
+- §3k2 yeşil doğar: ters yazan = ileri yazan (tek dosya, tek sembol). §5 yazar kümesi = yalnız helper
+  dosyası — satırı başka bir dosya `create` ederse kırmızı (tek yazar kuralının kapısı).
+- **Kapı borcu (1e onayı gerekir, kapı sahibi 82/d9):** KARŞI KAYIT mekanizması enum TAŞIMADIĞI için §3e
+  `WorkOrderEventType`i TARAMAZ; `CREATED`i `CIFT_DISI_DEGERLER`e DOĞUŞ diye yazmak da §3e4'te "mekanizmasız
+  enum" kırmızısı verir. Öneri: `KARSI_KAYIT`e isteğe bağlı `enumAdi` + `kendiTersi: string[]` (karşı kaydı
+  AYNI tip olan değerler); §3e bu enum'u da tarar — her değer `kendiTersi`nde ya da çift-dışı listede
+  (`CREATED` → DOGUS). Aksi hâlde enum'a gelecekte eklenecek bir ileri değer kapıyı uyandırmaz (§3e'nin
+  kapattığı körlüğün aynısı).
+
+`scripts/lib/audit-muafiyeti.ts`:
+
+```ts
+{ model: "WorkOrderEvent", sinif: "EBEVEYN_EYLEMDE",
+  gerekce: "iş emri hareket satırını `helpers/workorder-event.helper` yazar; audit değişikliği yapan eylemde (workorder · workorder-link · roll-step helper'ı · tambur · fason · kurşun)" },
+```
+
+`scripts/test_db_invariants.ts`: CHECK listesine üç satır (`work_order_events_channel_known` ·
+`_field_required` · `_birth_has_no_from`) + trigger listesine `work_order_events_no_update` (kabul edilirse).
+
+`docs/kurallar/defter.md` envanter tablosuna satır: `WorkOrderEvent` · iş emrinin durum/plan değişimi ·
+✅ (`updatedAt` yok) · ✅ KARŞI KAYIT (yazan tek dosya `workorder-event.helper.ts`).
+
+### 12.4 D1'in kod kapsamı (sıra)
+
+1. Şema + migration + `prisma generate` + dört beyan (yukarıda).
+2. `helpers/workorder-event.helper.ts`: `writeWorkOrderEventsTx` · `statusEventTx(tx, wo, from, to, ctx)`.
+3. Durum boğazları: `ensureWorkOrderInProgress` · `completeWorkOrderIfStepsDone` (+ `ctx`, 10 çağıran) ·
+   `completeWorkOrder` · `softDelete` · order.service `CANCEL_WO` (sebep geçer) · split SUPERSEDED · arşiv ·
+   `lockWorkOrder` · YENİ `reopenWorkOrderTx` (yedi yol ona taşınır) · `create`/`quickStart` → `CREATED`.
+4. Bekçiler: `test_workorder_event_ledger` (her boğaz satır yazar; negatif sonda: bir boğazda yazıcı
+   susturulunca kırmızı) · `test_workorder_event_yazar` (AST cırcırı, iki sonda: ihlal → taban ARTAR,
+   düzeltme → taban DÜŞER) · mevcut `test_defter_ters_yol` · `test_audit_muafiyeti` · `test_db_invariants` ·
+   `test_schema_drift` · `test_timestamptz_contract` · `test_migration_hygiene` · kapanışa dokunan mevcut
+   aile (`test_wo_terminal_guard` · `test_wo_terminal_race` · `test_tambur_undo` · `test_wo_manual_complete` ·
+   `test_finalize_last_step` · `test_manual_move_field_continuity` · `test_p2_kk2reopen`).
+5. Alan değişiklikleri (FIELD_CHANGED) D2'ye kalır — D1 yalnız durum.
