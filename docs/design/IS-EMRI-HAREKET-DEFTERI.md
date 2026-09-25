@@ -529,7 +529,7 @@ ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (s
 | D2 | Alan değişiklikleri → `FIELD_CHANGED` (update/replace/renk/en/adım/toplara uygula/tip) + numara kilidi (§6.3) — **D2a + D2a-2 + D2b UYGULANDI** (§4.4 notu, §6.3 kararı) | D1 |
 | D3 | Kapanış künyesi (şema + yazım + ProducedV3 karşılaştırma) | D1 |
 | D4 | Hareketler ucu (A+B) + panel Sheet + ayrı ekran + Excel | D1 (D2 ile zenginleşir) |
-| D5 | Tablet düzeltme menüsü + `mobile:is-emri-duzelt` + önizleme uçları — **D5a (backend) UYGULANDI**: izin + uç kapıları, renk önizlemesi, `WORK_ORDER_PLAN_CHANGE` sebep kataloğu, panel yetkisiz iptal yalnız dokunulmamış iş emrinde; D5b (tablet menüsü) sırada | D2, S1–S3/S7 cevapları |
+| D5 | Tablet düzeltme menüsü + `mobile:is-emri-duzelt` + önizleme uçları — **D5a (backend) + D5b (tablet menüsü) UYGULANDI**: izin + uç kapıları, renk önizlemesi, `WORK_ORDER_PLAN_CHANGE` sebep kataloğu, panel yetkisiz iptal yalnız dokunulmamış iş emrinde; tablette genel Düzenle kalktı, "Düzelt" menüsü (Top Çıkar D6 ile eklenecek) | D2, S1–S3/S7 cevapları |
 | D6 | Top Çıkar ucu (ledger ters yollarıyla) + tablet tuşu | D1 |
 | **D8** | **Parti Ekle** (§6.5): `addBatchToWorkOrderTx` tek boğaz + uç + dört çağıranın bağlanması + R1–R7 + tablet/panel tuşu + `is-emri.md` kural değişimi + arşiv GEÇERSİZ notu | D1 (olay tipi), 9b S2+S3 |
 | D7 | Backfill script (kuru koşum) | D1–D3; `--apply` kullanıcıda |

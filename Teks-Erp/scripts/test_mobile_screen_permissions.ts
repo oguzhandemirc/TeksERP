@@ -406,6 +406,23 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     path: "POST /tambur/manual/send-to-dye-preview",
     why: "Yukarıdakinin YAN ETKİSİZ önizlemesi — aynı ekranda, aynı düğmenin arkasında, aynı yetkiyle çağrılır. Önizlemeyi ayrı (daha gevşek) bir kapıya koymak, kararı verecek bilgiyi yetkisiz kişiye açardı.",
   },
+  // Hızlı İş Emri düzeltme menüsü (hareket defteri D5): açılmış iş emrini değiştirmek ayrı yetenek
+  // (`mobile:is-emri-duzelt`); menü yalnız bu yetenek (ya da `workorder:write`) varken çizilir.
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "PATCH /work-orders/:p/target-color",
+    why: "Rengi Değiştir — `mobile:is-emri-duzelt` yeteneği; menü yeteneksiz operatörde çizilmez (WorkOrderDetailSheet `canFix`).",
+  },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "GET /work-orders/:p/target-color/preview",
+    why: "Rengi Değiştir'in YAN ETKİSİZ önizlemesi — aynı kartta, aynı yetenekle; kararı verecek bilgi yetkisiz kişiye açılmaz.",
+  },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "PATCH /work-orders/:p/width",
+    why: "Eni Değiştir — `mobile:is-emri-duzelt` yeteneği; menü yeteneksiz operatörde çizilmez (WorkOrderDetailSheet `canFix`).",
+  },
 ];
 
 function main(): void {

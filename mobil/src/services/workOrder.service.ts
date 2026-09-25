@@ -196,6 +196,14 @@ export interface WorkOrderTimelineItem {
   derived: boolean;
 }
 
+/** `GET /work-orders/:id/target-color/preview` yanıtı. */
+export interface TargetColorPreview {
+  blocked: { code: string | null; message: string } | null;
+  partial: { dyedCount: number; pendingCount: number } | null;
+  warnings: string[];
+  cardWillBeStale: boolean;
+}
+
 export const workOrderService = {
   // withOrderDetail=true → orderLinks (customer + ürün), targetColor, dispatchedTotalQty
   // alanları zenginleştirilir. Fason Sevk picker'ı için kullanılır.
@@ -333,6 +341,44 @@ export const workOrderService = {
     apiClient
       .delete<ApiResponse<{ removed: boolean; typeChanged?: boolean }>>(`/work-orders/${id}/order-links/${orderLineId}`)
       .then((r) => r.data),
+
+  // ── Düzeltme menüsü (hareket defteri D5; `mobile:is-emri-duzelt` ∨ `workorder:write`) ──
+  /** Rengi Değiştir önizlemesi — yazmaz: engel · kısmi boya · sipariş uyarıları · kart bayatlığı. */
+  previewTargetColor: (id: string, colorId: string | null): Promise<ApiResponse<TargetColorPreview>> =>
+    apiClient
+      .get<ApiResponse<TargetColorPreview>>(`/work-orders/${id}/target-color/preview`, { params: { colorId: colorId ?? '' } })
+      .then((r) => r.data),
+
+  /** Rengi değiştir — sebep zorunlu; kısmi boyada `confirmPartial` önizlemedeki onayla gelir. */
+  changeTargetColor: (
+    id: string,
+    data: { colorId: string | null; reason: string; reasonCode?: string | null; confirmPartial?: boolean },
+  ): Promise<ApiResponse<{ warnings: string[] }>> =>
+    apiClient
+      .patch<ApiResponse<{ warnings: string[] }>>(`/work-orders/${id}/target-color`, {
+        colorId: data.colorId,
+        reason: data.reason,
+        ...(data.reasonCode ? { reasonCode: data.reasonCode } : {}),
+        ...(data.confirmPartial ? { confirmPartial: true } : {}),
+      })
+      .then((r) => r.data),
+
+  /** Eni değiştir — sebep zorunlu. */
+  changeWidth: (
+    id: string,
+    data: { width: number | null; reason: string; reasonCode?: string | null },
+  ): Promise<ApiResponse<{ previousWidth: number | null }>> =>
+    apiClient
+      .patch<ApiResponse<{ previousWidth: number | null }>>(`/work-orders/${id}/width`, {
+        width: data.width,
+        reason: data.reason,
+        ...(data.reasonCode ? { reasonCode: data.reasonCode } : {}),
+      })
+      .then((r) => r.data),
+
+  /** Refakat kartını yeniden bas — yeni sürüm doğar, eski kart geçersizleşir. */
+  reprintTravelerCard: (id: string, reason: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/work-orders/${id}/traveler-cards/reprint`, { reason }).then((r) => r.data),
 
   /**
    * UYUMSUZ satırı onayla-düzelt-bağla zinciri (süpervizör): plan siparişe

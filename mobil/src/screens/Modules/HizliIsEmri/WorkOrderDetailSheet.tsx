@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Text, Button, TouchableRipple, Icon, ActivityIndicator } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -8,8 +7,11 @@ import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 
 import AppModal from '../../../components/AppModal';
-import WorkOrderHeaderFields, { type WoHeaderFieldValues } from './WorkOrderHeaderFields';
 import WorkOrderDocumentsSheet from './WorkOrderDocumentsSheet';
+import WorkOrderFixSheet, { type FixKind } from './WorkOrderFixSheet';
+import TamburOrderLinkSheet from '../Tambur/TamburOrderLinkSheet';
+import { tabletCancelAllowed } from './workOrderFix';
+import { usePermissions } from '../../../hooks/usePermission';
 import WorkOrderRecentEvents from './WorkOrderRecentEvents';
 import { workOrderService } from '../../../services/workOrder.service';
 import {
@@ -30,13 +32,15 @@ interface Props {
   onChanged: () => void;
 }
 
-type Mode = 'detail' | 'edit' | 'cancel';
+type Mode = 'detail' | 'cancel';
 
 export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }: Props) {
   const qc = useQueryClient();
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('detail');
-  const [edit, setEdit] = useState<WoHeaderFieldValues | null>(null);
+  const [fix, setFix] = useState<FixKind | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const { has } = usePermissions();
 
   const visible = !!workOrderId;
 
@@ -71,37 +75,16 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
   // gizlenir — özellikle tamamlanan WO'da parent kayıtları karışıklık yaratıyordu.
   const rolls = (rollsQuery.data?.data ?? []).filter((r) => !isRetiredRoll(r.status));
   const editable = wo && wo.status !== 'COMPLETED' && wo.status !== 'CANCELLED';
-
-  // ── Düzenle: PATCH update ──────────────────────────────────────────────────
-  const updateMut = useMutation({
-    networkMode: 'always',
-    mutationFn: (vals: WoHeaderFieldValues) =>
-      workOrderService.update(workOrderId as string, {
-        batchNumber: vals.batchNumber.trim() || undefined,
-        targetColorId: vals.targetColorId,
-        width: vals.width ? Number(vals.width) : null,
-        targetQuantity: vals.targetQuantity ? Number(vals.targetQuantity) : null,
-        targetWeight: vals.targetWeight ? Number(vals.targetWeight) : null,
-        foldType: vals.foldType,
-      }),
-    onSuccess: (res) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      Toast.show({ type: 'success', text1: 'Güncellendi' });
-      // Engel olmayan notlar (örn. "rotada renk veren adım yok — toplar bu rengi
-      // almayacak"): kayıt yazıldı ama operatör görsün (2026-08-21, uyar-reddetme).
-      for (const w of (res as { warnings?: string[] } | undefined)?.warnings ?? []) {
-        Toast.show({ type: 'info', text1: 'Dikkat', text2: w, visibilityTime: 6000 });
-      }
-      qc.invalidateQueries({ queryKey: ['work-order', workOrderId] });
-      qc.invalidateQueries({ queryKey: ['work-orders'] });
-      onChanged();
-      setMode('detail');
-    },
-    onError: (err: unknown) => {
-      const e = err as { response?: { data?: { message?: string } }; message?: string };
-      Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: e?.response?.data?.message ?? e?.message });
-    },
-  });
+  // Düzeltme menüsü ayrı yetenek (S7); panel yetkisi de açar.
+  const canFix = !!editable && (has('mobile:is-emri-duzelt') || has('workorder:write'));
+  // İptal yalnız hiç işlem görmemiş iş emrinde (S3); panel yetkisi her durumda.
+  const canCancel = !!wo && !!editable && tabletCancelAllowed(wo, has('workorder:write'));
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['work-order', workOrderId] });
+    void qc.invalidateQueries({ queryKey: ['work-order-rolls', workOrderId] });
+    void qc.invalidateQueries({ queryKey: ['work-order-events', workOrderId] });
+    onChanged();
+  };
 
   // ── İptal: DELETE (CANCELLED) ──────────────────────────────────────────────
   const cancelMut = useMutation({
@@ -119,20 +102,6 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       Toast.show({ type: 'error', text1: 'İptal edilemedi', text2: e?.response?.data?.message ?? e?.message });
     },
   });
-
-  const startEdit = () => {
-    if (!wo) return;
-    setEdit({
-      targetColorId: wo.targetColorId ?? null,
-      width: wo.width != null ? String(wo.width) : '',
-      targetQuantity: wo.targetQuantity != null ? String(wo.targetQuantity) : '',
-      // Önceden sabit '' idi → düzenle/kaydet'te Hedef Kg sessizce siliniyordu. Mevcut değeri yükle.
-      targetWeight: wo.targetWeight != null ? String(wo.targetWeight) : '',
-      foldType: wo.foldType ?? null,
-      batchNumber: wo.workOrderNumber,
-    });
-    setMode('edit');
-  };
 
   const statusColor = wo ? WORK_ORDER_STATUS_COLOR[wo.status] ?? colors.textMuted : colors.textMuted;
   const impact = impactQuery.data?.data;
@@ -190,36 +159,6 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.brand} />
         </View>
-      ) : mode === 'edit' && edit ? (
-        // ── DÜZENLE ──────────────────────────────────────────────────────────
-        // KeyboardAwareScrollView: İş Emri No / Hedef metraj-kg gibi alt alanlar
-        // klavye açılınca altında kalmasın (AppModal bottom lift %90 sheet'te
-        // clamp'li kalır; odaklı input'u klavye üstüne bu scroll çeker).
-        <KeyboardAwareScrollView
-          contentContainerStyle={styles.body}
-          keyboardShouldPersistTaps="handled"
-          bottomOffset={16}
-        >
-          <Text style={styles.note}>
-            Renk, en, metraj, kat tipi ve parti kodu güncellenir. Fason talimatları rota adımlarında, rota / sipariş bağı değişimi masaüstünden yapılır.
-          </Text>
-          <WorkOrderHeaderFields value={edit} onChange={(p) => setEdit((e) => (e ? { ...e, ...p } : e))} showBatchNumber />
-          <View style={styles.actionsCol}>
-            <Button
-              mode="contained"
-              icon="content-save"
-              onPress={() => edit && updateMut.mutate(edit)}
-              loading={updateMut.isPending}
-              disabled={updateMut.isPending}
-              contentStyle={styles.btnContent}
-            >
-              Kaydet
-            </Button>
-            <Button mode="text" onPress={() => setMode('detail')} disabled={updateMut.isPending}>
-              Vazgeç
-            </Button>
-          </View>
-        </KeyboardAwareScrollView>
       ) : mode === 'cancel' ? (
         // ── İPTAL ÖNİZLEME ───────────────────────────────────────────────────
         <ScrollView contentContainerStyle={styles.body}>
@@ -344,13 +283,30 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
             >
               Belgeler
             </Button>
-            {editable ? (
-              <Button mode="contained-tonal" icon="pencil" onPress={startEdit} style={styles.actionBtn} contentStyle={styles.btnContent}>
-                Düzenle
-              </Button>
-            ) : null}
           </View>
-          {editable ? (
+          {canFix ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Düzelt</Text>
+              <View style={styles.fixGrid}>
+                <Button mode="contained-tonal" icon="palette" onPress={() => setFix('color')} style={styles.fixBtn} contentStyle={styles.btnContent}>
+                  Rengi Değiştir
+                </Button>
+                <Button mode="contained-tonal" icon="arrow-expand-horizontal" onPress={() => setFix('width')} style={styles.fixBtn} contentStyle={styles.btnContent}>
+                  Eni Değiştir
+                </Button>
+                <Button mode="contained-tonal" icon="link-variant" onPress={() => setLinkOpen(true)} style={styles.fixBtn} contentStyle={styles.btnContent}>
+                  Sipariş Bağla / Çöz
+                </Button>
+                <Button mode="contained-tonal" icon="printer" onPress={() => setFix('reprint')} style={styles.fixBtn} contentStyle={styles.btnContent}>
+                  Kartı Yeniden Bas
+                </Button>
+              </View>
+            </View>
+          ) : null}
+          {editable && !canCancel ? (
+            <Text style={styles.note}>Bu iş emrinde üretim başladı — iptal panelden yapılır (toplar için karar ve sebep sorulur).</Text>
+          ) : null}
+          {canCancel ? (
             <Button
               mode="outlined"
               icon="cancel"
@@ -373,6 +329,19 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
         üstte kalır ve detay arkada açık durur (kapatınca detaya dönülür).
         İç içe yerleştirme kod tabanında hiç emsali olmayan bir kurulumdu —
         `RemoteListSheet` bugüne dek hep AppModal DIŞINDA kullanıldı. */}
+    {/* Düzeltme kartları detayın KARDEŞİ (Belgeler emsali): kapanınca detaya dönülür. */}
+    <WorkOrderFixSheet
+      kind={fix}
+      wo={wo ?? null}
+      onDismiss={() => setFix(null)}
+      onDone={() => {
+        setFix(null);
+        refresh();
+      }}
+    />
+    {wo ? (
+      <TamburOrderLinkSheet visible={linkOpen} onDismiss={() => setLinkOpen(false)} workOrderId={wo.id} onLinked={refresh} />
+    ) : null}
     <WorkOrderDocumentsSheet
       visible={documentsOpen}
       onDismiss={() => setDocumentsOpen(false)}
@@ -431,6 +400,8 @@ const styles = StyleSheet.create({
   warnText: { flex: 1, color: colors.dangerText, fontSize: 13, lineHeight: 18, fontWeight: '600' },
 
   actionGrid: { flexDirection: 'row', gap: spacing.md },
+  fixGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  fixBtn: { flexGrow: 1, flexBasis: '45%', borderRadius: radius.md },
   actionBtn: { flex: 1, borderRadius: radius.md },
   cancelBtn: { borderRadius: radius.md, borderColor: colors.danger },
   actionsCol: { gap: spacing.sm, marginTop: spacing.md },

@@ -30,7 +30,7 @@ interface Props {
  * gelen müşteri-özel renk) tek-renk fallback sorgusu adını çeker — yoksa alan
  * boş "seç" görünür ve operatör rengin kaybolduğunu sanır.
  *
- * WorkOrderHeaderFields (Düzenle formu) ve Hızlı İş Emri sihirbazı ortak kullanır.
+ * Hızlı İş Emri sihirbazı ve iş emri düzeltme menüsü (Rengi Değiştir) ortak kullanır.
  */
 export default function ColorSelectField({
   value,

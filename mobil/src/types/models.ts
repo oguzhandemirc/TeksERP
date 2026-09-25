@@ -335,6 +335,8 @@ export interface WorkOrder {
   batches?: { id: string; batchNumber: string }[];
   /** Liste response'unda — canlı parti toplamı ("+N" için). */
   _count?: { batches: number };
+  /** `GET /work-orders/:id` ekler — fiziksel taahhüt; tablet iptal kapısı `materialCommitted`ı okur. */
+  locks?: { materialCommitted: boolean } | null;
 }
 
 // =============================================================================
