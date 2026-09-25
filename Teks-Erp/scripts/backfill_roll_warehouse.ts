@@ -115,6 +115,18 @@ async function main(): Promise<void> {
   );
   console.log(`\nDÖKÜM: ${hepsi.length} topun tamamı → ${yol}`);
 
+  // `rolls_qty_le_initial` NOT VALID durur: eski ihlal satırı taransa da UPDATE edilen HER satır
+  // yeniden denetlenir ve tek ihlalli satır 500'lük parçanın tamamını düşürür. Bu satırlar
+  // atlanır; miktarlarının onarımı ayrı karardır (`fix_tambur_undo_full_asim.ts`).
+  const ihlal = await prisma.$queryRaw<Array<{ id: string; barcode: string | null; status: string; currentQty: string; initialQty: string }>>`
+    SELECT id, barcode, status::text AS status, "currentQty"::text AS "currentQty", "initialQty"::text AS "initialQty"
+    FROM rolls WHERE "warehouseId" IS NULL AND "currentQty" > "initialQty" ORDER BY "createdAt"
+  `;
+  if (ihlal.length > 0) {
+    console.log(`\nATLANACAK ${ihlal.length} top — "currentQty > initialQty" (rolls_qty_le_initial ihlali), bu betik dokunmaz:`);
+    for (const r of ihlal) console.log(`  ${(r.barcode ?? r.id).padEnd(38)} ${r.status.padEnd(14)} ${r.currentQty} > ${r.initialQty}`);
+  }
+
   if (!APPLY) {
     console.log(`\nKURU ANLATIM — hiçbir şey yazılmadı. Uygulamak için (kullanıcı onayıyla, HEDEF adı birebir):\n  npx tsx scripts/backfill_roll_warehouse.ts --apply --onay=${total} --hedef=${db}`);
     return;
@@ -128,7 +140,7 @@ async function main(): Promise<void> {
     // Ham SQL + LIMIT'li alt sorgu: `updatedAt` TAZELENMEZ.
     const rows = await prisma.$queryRaw<Array<{ n: bigint }>>`
       WITH batch AS (
-        SELECT id FROM rolls WHERE "warehouseId" IS NULL LIMIT ${BATCH}
+        SELECT id FROM rolls WHERE "warehouseId" IS NULL AND "currentQty" <= "initialQty" LIMIT ${BATCH}
       )
       UPDATE rolls r SET "warehouseId" = ${target.id}::uuid
       FROM batch b WHERE r.id = b.id
@@ -140,7 +152,10 @@ async function main(): Promise<void> {
   }
 
   const left = await prisma.roll.count({ where: { warehouseId: null } });
-  console.log(`\n✅ ${written} kayıt güncellendi. Kalan deposuz top: ${left}`);
+  console.log(
+    `\n✅ ${written} kayıt güncellendi. Kalan deposuz top: ${left}` +
+      (ihlal.length > 0 ? ` (${ihlal.length}'i kısıt ihlali yüzünden bilerek atlandı)` : ""),
+  );
 
   // ── HALKAYI KAPAT — bu betik bir KAPININ ön koşuludur, kapıyı da ölçer ────
   // `assertRollsHaveWarehouse` (sevk · iade) deposuz topu 409 ile durduruyor ve
