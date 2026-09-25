@@ -12372,3 +12372,6 @@ Düzeltme ürün kodunu değil TARAYICIYI güçlendirdi:
 **Beyanlı sınır.** İstemci taraması uç adresini literalden tanır; yeni bir audit ucu açılırsa backend okuması kırmızı verir ama ucun istemci deseni eklenmeden çağıran ekran görünmez.
 
 **Ezdiği cümle.** `docs/kurallar/defter.md` "Audit teknik izdir … iş kaynağı OLARAK OKUNAMAZ" satırı (bekçi: YOK, çapa ölü) bu kuralla değişti; import geçmişi allowlist adayından borca geçti. Kök `CLAUDE.md`deki "Kalıcı sayaç/rapor `SystemLog`tan değil KALICI kolondan okunur…" cümlesinin yerine geçecek taslak yöneticiye verildi (kök dosya iniş treninde değişir).
+
+**K-A4 kapandı (2026-09-25, 1e kararı).** `ImportService.getRunRecords` koşumun satır defterinden (`ImportRunLine`) okur; uç SİLİNMEDİ (tasarım belgesinde panele çıkacak yetenek). Satır defteri öncesi koşumda liste boş + `legacy: true`, göç yok. `legacy` tarihten değil VERİDEN türer (kayıt yok ∧ koşum bir şey yazmış): satır defterinin doğduğu an migration adı değil kurulumun o sürümü aldığı gündür, sabit bir tarih fabrikada yanlış ayrım yapardı. Yanıttan `archivedAfterMonths` düştü (tüketicisi yok). Borç tabanı 5 → 4.
+

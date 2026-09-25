@@ -279,6 +279,8 @@ Yapılandırma paketi türleri (5): `LABEL_TEMPLATE` · `TRAVELER_TEMPLATE` ·
    `system_logs`u `newData.importRunId` + ±10 dk penceresiyle okuyor ve dönüşünde
    `archivedAfterMonths: 6` taşıyor (`import.service.ts:733-779`). Kök kuralın tanımı:
    *audit'e uzanma ihtiyacı bir defter eksikliğinin işaretidir.*
+   → **KAPANDI 2026-09-25 (K-A4):** `getRunRecords` artık `ImportRunLine`dan okur;
+   satır defteri öncesi koşumda liste boş + `legacy: true` (göç yok).
 4. `/api/import/runs/:id/records` ucu VAR ama panelde tüketicisi YOK → "motor var,
    çıkış yüzeyi yok" ⇒ o yetenek bugün **VAR SAYILMAZ**. Geri sarma önizlemesi bu ucu
    yüzeye çıkarır, yeni bir per-record kavramı icat etmez.

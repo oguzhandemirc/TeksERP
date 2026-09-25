@@ -308,7 +308,7 @@ function main(): void {
   check("§7j ⭐ istemci: uç literali yakalanır", auditUcuCagirir("api.get(`/api/record-info/${t}/${id}`)", desenler));
   check("§7k ⭐ istemci: rapor anahtarı `audit/…` yakalanır, panel yolu yakalanmaz",
     auditUcuCagirir("reportsClient.get('audit/user-activity', p)", desenler) && !auditUcuCagirir("navigate('/reports/audit/user-activity')", desenler));
-  check("§7l ⭐ istemci: import koşum kayıtları şablonu yakalanır", auditUcuCagirir("api.get(`${base}/runs/${id}/records`)", desenler));
+  check("§7l ⭐ istemci: şablonlu uç (yedek etki) yakalanır", auditUcuCagirir("api.get(`/api/admin/backups/${n}/restore-impact`)", desenler));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);

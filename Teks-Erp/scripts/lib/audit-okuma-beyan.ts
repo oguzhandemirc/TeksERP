@@ -18,8 +18,12 @@ export const AYAK_IZI_SINIFLARI = [
   "DENETIM_RAPORU",     // Raporlar › Denetim
   "KAYIT_GECMISI",      // ⓘ künye (kim oluşturdu/son değiştirdi) · kayıt geçmişi penceresi
   "YEDEK_ETKI_TANISI",  // geri yüklemede kaybolacak ayak izinin dökümü
-  "AUDIT_ALTYAPISI",    // audit'in KENDİ yaşam döngüsü: arşive taşıma · boyut göstergesi
-  "KATALOG_BEYANI",     // istemci: uç adresini yalnız katalogda taşır, çağırmaz
+  // Audit'in KENDİ yaşam döngüsü (arşive taşıma · sağlıktaki boyut göstergesi): satırı
+  // taşır ya da sayar, hiçbir iş bilgisi türetmez (1e onayı 2026-09-25).
+  "AUDIT_ALTYAPISI",
+  // İstemci: uç adresini yalnız katalogda taşır (rapor kataloğu), çağırmaz ve veri
+  // okumaz (1e onayı 2026-09-25).
+  "KATALOG_BEYANI",
 ] as const;
 export type AyakIziSinifi = (typeof AYAK_IZI_SINIFLARI)[number];
 
@@ -82,12 +86,10 @@ export const AUDIT_OKUMA_BORCU: readonly AuditOkumaBorcu[] = [
     hedef: "iptalin geri alma kaynağı topun kalıcı damgasından (`cancelReasonCode`); damgasız eski kayıtlar dry-run backfill" },
   { yer: "src/services/work-session-activity.service.ts#WorkSessionActivityService.list", adet: 1, dilim: "K-A3",
     hedef: "operatör iptal olayı topun iptal kolonlarından (`cancelledById`/`statusChangedAt`) ya da ROLL_CANCEL depo hareketinden" },
-  { yer: "src/services/import/import.service.ts#ImportService.getRunRecords", adet: 1, dilim: "K-A4",
-    hedef: "koşumun dokunduğu kayıtlar koşumun kendi satır defterinden (`ImportRunLine`)" },
 ];
 
 /** Borç okuma noktası sayısı (Σ adet) — yalnız 1e düşürür. */
-export const AUDIT_OKUMA_BORC_TABANI = 5;
+export const AUDIT_OKUMA_BORC_TABANI = 4;
 
 // ── İSTEMCİ (Electron/src · mobil/src) ────────────────────────────────────────
 /**
@@ -99,7 +101,6 @@ export const AUDIT_UCLARI: readonly { desen: RegExp; backendDosya: string; backe
   { desen: /\/api\/record-info\b/, backendDosya: "src/routes/record-info.routes.ts", backendYol: "\"/:table/:id\"" },
   { desen: /^audit\/[a-z-]+$|\/api\/reports\/audit\//, backendDosya: "src/routes/reports/audit.routes.ts", backendYol: "\"/system-log-summary\"" },
   { desen: /\/restore-impact\b/, backendDosya: "src/routes/admin.routes.ts", backendYol: "\"/backups/:name/restore-impact\"" },
-  { desen: /\/runs\/\$\{\}\/records\b/, backendDosya: "src/routes/import.routes.ts", backendYol: "\"/runs/:id/records\"" },
 ];
 
 /** Yalnız audit ucu saran istemci modülleri — onları içe aktaran dosya da okuyucudur. */

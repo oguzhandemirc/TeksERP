@@ -746,59 +746,39 @@ export class ImportService {
   }
 
   /**
-   * Bir koşumda DOKUNULAN kayıtlar — audit'ten (`newData.importRunId`).
+   * Bir koşumda DOKUNULAN kayıtlar — koşumun KENDİ satır defterinden (`ImportRunLine`).
    *
-   * ⚠️ KAPSAM SINIRI, sessiz değil: koşum ÖZETİ kalıcıdır (`import_runs`), ama
-   * satır bazlı iz AUDIT'tedir ve audit 6 ayda arşive taşınır. Yani "hangi
-   * kayıtlar oluştu" sorusu 6 ay boyunca cevaplanır; sonrasında yanıt BOŞ döner
-   * ve çağıran bunu `archivedAfterMonths` ile bilir (boş liste "hiçbir şey
-   * oluşmadı" DEĞİLDİR — özetteki sayılara bak).
+   * Audit'ten OKUNMAZ: audit yalnız ayak izidir ve 6 ayda arşive taşınır. Satır
+   * defteri 2026-09-12'de doğdu; daha eski koşumda liste boştur ve
+   * `legacy` bunu söyler (boş liste "hiçbir şey yazılmadı" DEĞİLDİR).
    */
   static async getRunRecords(id: string): Promise<{
     runId: string;
-    records: Array<{ action: string; tableName: string; recordId: string; createdAt: Date }>;
-    archivedAfterMonths: number;
+    records: Array<{
+      action: string;
+      tableName: string;
+      recordId: string;
+      rowNo: number;
+      createdAt: Date;
+      revertedAt: Date | null;
+    }>;
+    legacy: boolean;
   }> {
     const run = await prisma.importRun.findUnique({
       where: { id },
-      // TARİH SEDDİ için okunuyor (aşağıya bak) — `id` tek başına yetmiyordu.
-      select: { id: true, createdAt: true, finishedAt: true },
+      select: { id: true, created: true, updated: true },
     });
     if (!run) throw AppError.notFound("İçe aktarım kaydı bulunamadı");
-    // TARİH SEDDİ (2026-09-05 perf turu). jsonb path yüklemi indexlenemez →
-    // sorgu system_logs'u baştan sona tarayıp sonucu ayrıca SIRALIYORDU:
-    // ölçüldü 11,48 ms / 2.497 buffer (Seq Scan + Sort, 51.163 satır elendi).
-    // Koşumun kendi penceresi doğal sınırdır: satır audit'i koşum başlamadan
-    // yazılamaz, bittikten sonra da yalnız `logMany` gecikmesi kadar sürer.
-    // ⚠️ ±10 dk pay ZORUNLU: `finishedAt` Node saatinden, `createdAt` DB
-    // saatinden gelir (ölçüldü: token'sız koşumda finishedAt createdAt'ten 1-2 ms
-    // ÖNCE) ve `logMany` damgadan SONRA koşar. `finishedAt` NULL = koşum sürüyor
-    // → üst sınır bugün. Ölçüm: 1,33 ms / 1.529 buffer, Index Scan
-    // (system_logs_createdAt_idx), Sort düğümü kayboldu; 75 audit satırının
-    // 75'i pencerede kaldı (sonuç kümesi DEĞİŞMEDİ).
-    const WINDOW_MS = 10 * 60_000;
-    const rows = await prisma.systemLog.findMany({
-      where: {
-        category: "DOMAIN",
-        createdAt: {
-          gte: new Date(run.createdAt.getTime() - WINDOW_MS),
-          lte: new Date((run.finishedAt ?? new Date()).getTime() + WINDOW_MS),
-        },
-        newData: { path: ["importRunId"], equals: id },
-      },
-      select: { action: true, tableName: true, recordId: true, createdAt: true },
-      orderBy: { createdAt: "asc" },
+    const records = await prisma.importRunLine.findMany({
+      where: { importRunId: id },
+      select: { action: true, tableName: true, recordId: true, rowNo: true, createdAt: true, revertedAt: true },
+      orderBy: [{ rowNo: "asc" }, { createdAt: "asc" }],
       take: 10000,
     });
     return {
       runId: id,
-      records: rows.map((r) => ({
-        action: r.action,
-        tableName: r.tableName,
-        recordId: r.recordId ?? "",
-        createdAt: r.createdAt,
-      })),
-      archivedAfterMonths: 6,
+      records,
+      legacy: records.length === 0 && run.created + run.updated > 0,
     };
   }
 

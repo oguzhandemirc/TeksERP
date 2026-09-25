@@ -175,10 +175,10 @@ router.get(
  * /api/import/runs/{id}/records:
  *   get:
  *     tags: [Import]
- *     summary: Koşumda dokunulan kayıtlar (audit izinden)
+ *     summary: Koşumda dokunulan kayıtlar (koşumun satır defterinden)
  *     description: >
- *       Koşum ÖZETİ kalıcıdır, satır bazlı iz audit'tedir ve 6 ayda arşive
- *       taşınır — sonrasında boş liste döner ("hiçbir şey oluşmadı" DEĞİL).
+ *       Kaynak `ImportRunLine` (kalıcı); audit okunmaz. Satır defterinden önceki
+ *       koşumda liste boştur ve `legacy: true` döner.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Kayıt listesi }

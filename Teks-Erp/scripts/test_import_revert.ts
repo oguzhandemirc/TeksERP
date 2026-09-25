@@ -213,6 +213,15 @@ async function main(): Promise<void> {
     colorCode = (await prisma.color.findUnique({ where: { id: colorId }, select: { code: true } }))?.code ?? "";
     check("defter satırı gerçek kaydı gösteriyor (recordId → renk)", colorCode.length > 0, colorId);
 
+    // Koşum kayıtları ucu satır defterinden okur, audit'ten DEĞİL (test_audit_okuma_kaynagi K-A4).
+    // Negatif sonda (2026-09-25): sorgu boş kümeye çevrildi → üç kontrol ❌, geri alındı.
+    const kayitlar = await ImportService.getRunRecords(createRun.runId);
+    check("koşum kayıtları = satır defteri (1 kayıt, aynı recordId · CREATE · COLOR)",
+      kayitlar.records.length === 1 && kayitlar.records[0]?.recordId === colorId
+        && kayitlar.records[0]?.action === "CREATE" && kayitlar.records[0]?.tableName === "COLOR",
+      JSON.stringify(kayitlar.records));
+    check("satır defterli koşum 'defter öncesi' sayılmaz", kayitlar.legacy === false);
+
     if (!revert) {
       check("geri sarma servisi yüklenebiliyor (DB dalları koşabilsin)", false, "modül yok");
     } else {
@@ -230,6 +239,8 @@ async function main(): Promise<void> {
       const after = await prisma.importRunLine.findMany({ where: { importRunId: createRun.runId } });
       check("ileri defter satırı DURUYOR (silinmedi)", after.length === 1);
       check("satıra geri sarma damgası yazıldı", after[0]?.revertedAt !== null);
+      const kayitlarSonra = await ImportService.getRunRecords(createRun.runId);
+      check("koşum kayıtları geri sarma damgasını gösterir", kayitlarSonra.records[0]?.revertedAt != null);
       const run = await prisma.importRun.findUnique({ where: { id: createRun.runId } });
       check("koşum satırı damgalandı, status DEĞİŞMEDİ", run?.revertedAt !== null && run?.status === "APPLIED");
       check("koşum gerekçesi saklandı", (run?.revertReason ?? "").includes("bekçi"));
