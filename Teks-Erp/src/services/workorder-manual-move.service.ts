@@ -18,21 +18,20 @@
 // workorder-split.service.ts (redye rewind + repoint + recompute).
 // =============================================================================
 
+import { completedNoAddError, WO_COMPLETED_NO_ADD_MESSAGE } from "./workorder-batch-add.service";
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { Prisma, RollStatus, WorkOrderStatus, TravelerCardStatus, RollOperationType, StepStatus } from "@prisma/client";
+import { Prisma, RollStatus, WorkOrderStatus, RollOperationType, StepStatus } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { createBatchTx, deleteIfEmptyAndTracelessTx, isBatchLockedTx, K18_DEAD_STATUSES } from "./batch.service";
 import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-step.helper";
-import { reopenWorkOrderTx } from "./helpers/workorder-event.helper";
 import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
-import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { ApiResponse } from "../types/api.types";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
@@ -367,12 +366,10 @@ export class WorkOrderManualMoveService {
     if (anyQcVoid) {
       warnings.push("Bazı topların hedef-sonrası kalite/kurşun kararı geri alınacak (grade → Belirsiz).");
     }
-    if (ctx.woStatus === WorkOrderStatus.COMPLETED) {
-      warnings.push("Tamamlanmış iş emri — taşıma ile yeniden açılacak (refakat kartı yeniden aktifleşir).");
-    }
-    // İptal/devredilmiş WO → HARD-BLOCK (uyarı değil). colorBlocked ile aynı sözleşme:
+    // İptal/devredilmiş/tamamlanmış WO → HARD-BLOCK (uyarı değil). colorBlocked ile aynı sözleşme:
     // frontend kırmızı blok + submit engeli gösterir; manualMove ayrıca 409 atar.
-    const woBlockReason = manualMoveWoBlockReason(ctx.woStatus);
+    const woBlockReason = manualMoveWoBlockReason(ctx.woStatus)
+      ?? (ctx.woStatus === WorkOrderStatus.COMPLETED ? WO_COMPLETED_NO_ADD_MESSAGE : null);
     if (t.type === "EXTERNAL") {
       warnings.push("Fason adımına taşınıyor — mal orada üretimde bekler, sevki ayrıca (Fason Sevk) yapılır.");
       // YANLIŞ İŞ EMRİNE KABUL uyarısı: mal fiziksel olarak fasondayken kabul yanlış
@@ -553,6 +550,7 @@ export class WorkOrderManualMoveService {
     // geri diriltilemez — CANCELLED/SUPERSEDED terminaldir).
     const woBlock = manualMoveWoBlockReason(ctx.woStatus);
     if (woBlock) throw AppError.conflict(woBlock);
+    if (ctx.woStatus === WorkOrderStatus.COMPLETED) throw completedNoAddError();
 
     const t = ctx.targetStep;
     const partyMode: PartyMode = input.partyMode ?? (ctx.isWholeParty ? "keep" : "new");
@@ -625,6 +623,8 @@ export class WorkOrderManualMoveService {
             code: "WORKORDER_TERMINAL_DURING_MOVE",
           });
         }
+        // Tamamlanmış iş emri künyesi donmuştur — taşıma onu artık YENİDEN AÇMAZ (D8, 4b kararı A).
+        if (woFresh.status === WorkOrderStatus.COMPLETED) throw completedNoAddError();
 
         // 1) ATOMİK CLAIM — hedef adıma taşı, IN_PRODUCTION yap (fason adımı da awaiting).
         //    Movability invariant'ları where'de → arada değişirse count uyuşmaz → 409.
@@ -866,19 +866,14 @@ export class WorkOrderManualMoveService {
         });
 
         // 4) Etkilenen adımları recompute (hedef + kaynak + geri alınan movement'lı sonraki adımlar)
-        //    + WO'yu üretime çek. B1: WO COMPLETED ise topun statüsünden BAĞIMSIZ geri aç —
-        //    top artık IN_PRODUCTION @ ACTIVE adım; kart flip olmazsa operatör okutamaz, kilitlenir.
-        //    SKIPPED damgalanan ara adımları recompute'a SOKMA (recompute dokunmaz ama gereksiz).
+        //    + WO'yu üretime çek. SKIPPED damgalanan ara adımları recompute'a SOKMA.
         const affected = [...new Set<string>([t.id, ...sourceStepIds, ...laterStepIds])].filter(
           (id) => !skippedStepIds.includes(id),
         );
         for (const sid of affected) await recomputeStepStatus(tx, sid);
         await ensureWorkOrderInProgress(tx, workOrderId);
-        let reopened = false;
-        if (await reopenWorkOrderTx(tx, workOrderId, { trigger: "MANUAL_MOVE", userId })) {
-          await setWorkOrderCardStatusesTx(tx, workOrderId, TravelerCardStatus.COMPLETED, TravelerCardStatus.ACTIVE);
-          reopened = true;
-        }
+        // Yanıt alanı eski istemci için kalır; tamamlanmış iş emri yukarıda 409 aldığından hep false.
+        const reopened = false;
 
         // 5) Kurşun bypass: taşıma sonrası BAYAT kalan dağıtım atamalarını iptal et.
         //    `force` YOK — kapsamı adımın TAZE durumu belirlesin (bu yüzden recompute

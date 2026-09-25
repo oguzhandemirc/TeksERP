@@ -7,6 +7,7 @@ import { z } from "zod";
 import { WorkOrderService } from "../services/workorder.service";
 import { workOrderLinkService } from "../services/workorder-link.service";
 import { workOrderRollDetachService } from "../services/workorder-roll-detach.service";
+import { addBatch } from "../services/workorder-batch-add.service";
 import { workOrderFasonQuickService } from "../services/workorder-fason-quick.service";
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
@@ -254,6 +255,11 @@ const changeTargetColorSchema = z.object({
 });
 // Top Çıkar: sebep zorunlu (yanlış okutma iz bırakır).
 const detachRollSchema = z.object({ reason: z.string().trim().min(3, "Sebep yazmalısınız").max(300) });
+const addBatchSchema = z.object({
+  clientToken: z.string().uuid("İstek anahtarı geçersiz"),
+  rollBarcodes: z.array(z.string().trim().min(1)).min(1, "En az bir top okutmalısınız").max(500),
+  reason: z.string().trim().max(300).optional(),
+});
 // Önizleme: `colorId` boş/yok = "renksiz yap".
 const previewTargetColorSchema = z.object({
   colorId: z.union([z.string().uuid("Geçersiz renk ID"), z.literal("")]).optional(),
@@ -399,6 +405,7 @@ export class WorkOrderController {
     this.previewTargetColor = this.previewTargetColor.bind(this);
     this.detachCandidates = this.detachCandidates.bind(this);
     this.detachRoll = this.detachRoll.bind(this);
+    this.addBatch = this.addBatch.bind(this);
     this.changeWidth = this.changeWidth.bind(this);
     this.fasonQuickPreview = this.fasonQuickPreview.bind(this);
     this.fasonQuickApply = this.fasonQuickApply.bind(this);
@@ -820,6 +827,16 @@ export class WorkOrderController {
       res.status(200).json(
         await workOrderRollDetachService.detachRoll(req.params.id as string, req.params.rollId as string, body.reason, req.user?.userId),
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/work-orders/:id/batches — Parti Ekle */
+  async addBatch(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = addBatchSchema.parse(req.body);
+      res.status(201).json(await addBatch(req.params.id as string, body, req.user?.userId));
     } catch (error) {
       next(error);
     }

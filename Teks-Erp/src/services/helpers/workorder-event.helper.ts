@@ -331,6 +331,12 @@ export async function recordStepPlanChangesTx(
   );
 }
 
+/** "Parti Ekle" — açık iş emrine yeni parti doğdu (DOĞUŞ; geri yolu toplarına Top Çıkar). */
+export async function recordBatchAddedTx(tx: Tx, workOrderId: string, batch: { id: string; batchNumber: string; rollIds: string[]; totalQty: number }, ctx: WorkOrderEventCtx): Promise<void> {
+  const payload = { rollIds: batch.rollIds, rollCount: batch.rollIds.length, totalQty: batch.totalQty };
+  await writeWorkOrderEventsTx(tx, [{ workOrderId, type: WorkOrderEventType.BATCH_ADDED, field: "batch", toValue: batch.id, toLabel: batch.batchNumber, payload }], ctx);
+}
+
 /**
  * Plan düzeltmesinin toplara uygulanması — değer başına bir satır. Yük top başına
  * ESKİ değeri taşır: geri alma o değerleri toplara yeniden uygulayan yeni satırdır.

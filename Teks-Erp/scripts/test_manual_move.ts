@@ -1,6 +1,6 @@
 // TEST (2026-07-15): Manuel Konum Düzeltme (süpervizör override).
 //   Parti/top rotada ileri-geri taşıma + parti kararı (keep/new/join) + guard'lar
-//   (fasonda/çuval/downstream-işlem engel) + WAREHOUSE reopen + önizleme.
+//   (fasonda/çuval/downstream-işlem engel) + tamamlanmış iş emri 409 (yeniden açma yok, D8a) + önizleme.
 // Çalıştır: npx tsx scripts/test_manual_move.ts
 import prisma from "../src/lib/prisma";
 import { roleGrade } from "./fixture-quality-grade";
@@ -220,38 +220,23 @@ async function main(): Promise<void> {
     await prisma.roll.delete({ where: { id: child.id } });
   }
 
-  // ═══ WAREHOUSE topu üretime geri al → WO reopen ═══
-  console.log("\n── Depo topunu üretime al (WO reopen) ──");
-  {
-    // Önce IN_PROGRESS'te attach (COMPLETED'a top bağlanamaz), sonra depoya + WO'yu tamamla.
+  // ═══ Tamamlanmış iş emrine taşıma → 409, yeniden açma YOK (D8a, 4b kararı A) ═══
+  console.log("\n── Tamamlanmış iş emrine taşıma reddedilir (WAREHOUSE · STOCK) ──");
+  for (const status of [RollStatus.WAREHOUSE, RollStatus.STOCK]) {
+    // Önce IN_PROGRESS'te attach, sonra top depoya/stoğa + WO'yu tamamla.
     const wo = await mkWo(c, [{ stationId: c.ST_INT }, { stationId: c.ST_TAMBUR }]);
     const [s1, s2] = wo.stepIds;
     const { batchId, rollIds } = await mkParty(c, wo.id, s2, 1);
     await prisma.rollMovement.updateMany({ where: { ...ACTIVE_MOVEMENT, rollId: { in: rollIds }, exitedAt: null }, data: { exitedAt: new Date() } });
-    await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { status: RollStatus.WAREHOUSE, currentStepId: null, producedInStepId: s2 } });
+    await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { status, currentStepId: null, producedInStepId: s2 } });
     await prisma.workOrder.update({ where: { id: wo.id }, data: { status: WorkOrderStatus.COMPLETED } });
 
-    await svc.manualMove(wo.id, { batchId, targetStepId: s1, reason: "depodan üretime" }, c.ADMIN);
-    const roll = await prisma.roll.findUnique({ where: { id: rollIds[0] }, select: { status: true, currentStepId: true } });
-    check("depo: top IN_PRODUCTION @ 1. adım", roll?.status === RollStatus.IN_PRODUCTION && roll?.currentStepId === s1);
-    check("depo: WO COMPLETED→IN_PROGRESS", (await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { status: true } }))?.status === "IN_PROGRESS");
-  }
-
-  // ═══ B1: STOCK top (WAREHOUSE değil) COMPLETED WO'da → üretime al reopen ═══
-  console.log("\n── STOCK topu üretime al (COMPLETED WO reopen · B1) ──");
-  {
-    // Tambur ham parçayı STOCK'a (üretime devam) kesmiş → tüm adım COMPLETED → WO COMPLETED.
-    const wo = await mkWo(c, [{ stationId: c.ST_INT }, { stationId: c.ST_TAMBUR }]);
-    const [s1, s2] = wo.stepIds;
-    const { batchId, rollIds } = await mkParty(c, wo.id, s2, 1);
-    await prisma.rollMovement.updateMany({ where: { ...ACTIVE_MOVEMENT, rollId: { in: rollIds }, exitedAt: null }, data: { exitedAt: new Date() } });
-    await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { status: RollStatus.STOCK, currentStepId: null, producedInStepId: s2 } });
-    await prisma.workOrder.update({ where: { id: wo.id }, data: { status: WorkOrderStatus.COMPLETED } });
-
-    await svc.manualMove(wo.id, { batchId, targetStepId: s1, reason: "stok üretime" }, c.ADMIN);
-    const roll = await prisma.roll.findUnique({ where: { id: rollIds[0] }, select: { status: true, currentStepId: true } });
-    check("B1: STOCK top IN_PRODUCTION @ 1. adım", roll?.status === RollStatus.IN_PRODUCTION && roll?.currentStepId === s1);
-    check("B1: STOCK topu da COMPLETED WO'yu yeniden açtı", (await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { status: true } }))?.status === "IN_PROGRESS");
+    const preview = await svc.getManualMovePreview(wo.id, { batchId, targetStepId: s1 });
+    check(`${status}: önizleme tamamlanmış iş emrini KIRMIZI blok gösterir`, (preview.data as { woBlocked?: boolean }).woBlocked === true);
+    await expectReject(`${status}: taşıma 409`, () => svc.manualMove(wo.id, { batchId, targetStepId: s1, reason: "depodan üretime" }, c.ADMIN), "Tamamlanmış iş emrine top eklenemez");
+    const roll = await prisma.roll.findUnique({ where: { id: rollIds[0] }, select: { status: true } });
+    const woNow = await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { status: true } });
+    check(`${status}: top yerinde, iş emri COMPLETED kaldı`, roll?.status === status && woNow?.status === WorkOrderStatus.COMPLETED, `${roll?.status} · ${woNow?.status}`);
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

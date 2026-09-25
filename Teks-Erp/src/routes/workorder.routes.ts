@@ -715,6 +715,26 @@ router.post(
 
 /**
  * @swagger
+ * /api/work-orders/{id}/batches:
+ *   post:
+ *     summary: Parti Ekle — okutulan stok topları açık iş emrinde YENİ parti olur, rotanın ilk adımından başlar
+ *     tags: [WorkOrders]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string } }
+ *     responses:
+ *       201: { description: Parti eklendi (aynı clientToken ile tekrar → önceki sonuç, replay=true) }
+ *       400: { description: Uygun olmayan top (BATCH_ADD_REJECTED) ya da farklı kumaş (ITEM_MISMATCH) }
+ *       409: { description: Tamamlanmış iş emri (WO_COMPLETED_NO_ADD) · iptal/devredilmiş · başka iş emrinin anahtarı }
+ */
+router.post(
+  "/:id/batches",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"),
+  controller.addBatch,
+);
+
+/**
+ * @swagger
  * /api/work-orders/{id}/target-color/preview:
  *   get:
  *     summary: Rengi Değiştir önizlemesi (yazmaz) — engel, kısmi boya, sipariş uyarıları, kart bayatlığı

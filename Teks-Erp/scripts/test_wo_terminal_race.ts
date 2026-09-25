@@ -207,9 +207,22 @@ async function main(): Promise<void> {
       txMarker: "const result = await prisma.$transaction(async (tx) => {",
       kilit: "await this.lockAndAssertWorkOrderLive(",
     },
+    // Top bağlama (T1-004) 2026-09-26'dan beri Parti Ekle boğazında: tx'i çağıran açar
+    // (`attachRolls` · `addBatch`), boğazın ilk işi kilitleyen yükleyici, yükleyicinin ilk işi kilit.
     {
-      dosya: "../src/services/workorder.service.ts",
-      txMarker: "const { attached, errorMessages, batchRes } = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {",
+      dosya: "../src/services/workorder-batch-add.service.ts",
+      txMarker: "export async function addBatchToWorkOrderTx(tx: Tx, input: AddBatchInput): Promise<AddBatchResult> {",
+      kilit: "await loadOpenWorkOrderTx(",
+    },
+    {
+      dosya: "../src/services/workorder-batch-add.service.ts",
+      txMarker: "async function loadOpenWorkOrderTx(tx: Tx, workOrderId: string): Promise<WoForAdd> {",
+      kilit: "await touchWorkOrderTx(",
+    },
+    // Manuel Top Ekle FAZ 2: iş emri kilidi parti numarası kilidinden (8022) ÖNCE.
+    {
+      dosya: "../src/services/tambur-manual.service.ts",
+      txMarker: "const attach = await prisma.$transaction(async (tx) => {",
       kilit: "await touchWorkOrderTx(",
     },
     {

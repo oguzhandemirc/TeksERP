@@ -3911,6 +3911,8 @@ model Batch {
   /// Yarış koruması artık kısıt değil, `generateBatchNumberTx`'teki advisory lock.
   batchNumber String @db.VarChar(64)
   workOrderId String @db.Uuid
+  /// "Parti Ekle" ucunun idempotency anahtarı (hareket defteri D8) — istemci mantıksal deneme başına üretir.
+  clientToken String? @unique @db.Uuid
 
   /// Parti soy bağı — kısmi sevk kalanı / elle bölme / redye'da kaynak parti.
   /// NULL = doğrudan ekleme dalgasıyla doğan kök parti.

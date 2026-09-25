@@ -73,8 +73,10 @@ function woEventItem(e: {
       return { ...base, group: "DURUM", title: "İş emri açıldı", detail: e.toLabel };
     case WorkOrderEventType.STATUS_CHANGED:
       return { ...base, group: "DURUM", title: "Durum değişti", detail: `${from} → ${to}` };
-    case WorkOrderEventType.BATCH_ADDED:
-      return { ...base, group: "PARTI", title: "Parti eklendi", detail: e.toLabel };
+    case WorkOrderEventType.BATCH_ADDED: {
+      const p = e.payload as { rollCount?: number; totalQty?: number } | null;
+      return { ...base, group: "PARTI", title: "Parti eklendi", detail: `${e.toLabel ?? "—"} · ${p?.rollCount ?? "?"} top · ${m(p?.totalQty ?? 0)}` };
+    }
     case WorkOrderEventType.STEP_PLAN_CHANGED: {
       const station = (e.payload as { stationName?: string } | null)?.stationName;
       const label = WORK_ORDER_STEP_FIELD_LABEL[e.field ?? ""] ?? e.field ?? "Adım";
@@ -127,7 +129,10 @@ async function sourcedItems(workOrderId: string, stepIds: string[]): Promise<Pen
     where: { workOrderId },
     select: { id: true, batchNumber: true, createdAt: true, createdById: true },
   });
-  for (const b of batches) {
+  // "Parti Ekle" doğuşu hareket defterinde (sebep · kanal ile) — aynı partiyi ikinci kez "açıldı" diye basma.
+  const added = await prisma.workOrderEvent.findMany({ where: { workOrderId, type: WorkOrderEventType.BATCH_ADDED }, select: { toValue: true } });
+  const addedIds = new Set(added.map((a) => a.toValue));
+  for (const b of batches.filter((x) => !addedIds.has(x.id))) {
     out.push({ ...NO_META, id: `batch:${b.id}`, at: b.createdAt.toISOString(), group: "PARTI", title: "Parti açıldı", detail: b.batchNumber, actorId: b.createdById });
   }
   // Top Çıkar: üretime giriş satırının bağlı tersi (stok defteri) — sebep satırın notunda.

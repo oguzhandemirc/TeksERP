@@ -472,6 +472,13 @@ okutulanlar şeridi + etki önizlemesi (*"Yeni parti açılacak · 5 top · 240 
 panelde "Parti Ekle" → `RollPickerModal` emsali seçici (Ham Stok · Bitmiş Depo sekmeleri) + aynı önizleme.
 İzin: panel `workorder:write`; tablet S7 kararına bağlı.
 
+**Uygulama (D8a, 2026-09-26; 4b kararı A):** "Topu Buraya Al" ve "Manuel Top Ekle" YENİ top ekleme değil
+saha DÜZELTME araçlarıdır — kendi adımlarında kalır, parti seçimi operatörde; tek ortak kural tamamlanmış iş
+emrine 409 `WO_COMPLETED_NO_ADD` (sessiz yeniden açma kalktı). Fason otomatik bağlama zaten `PLANNED |
+IN_PROGRESS` allowlist'inde; R5 D8b. **R7'den sapma:** kilit sırası iş emri satırı → 8022 (`createBatchTx`
+çağıran dokuz yolla aynı; yalnız bu uçta ters sıra aynı iş emrinde ABBA doğururdu, 8022 sayaç kilidi olduğundan
+geç alınması TOCTOU açmaz); Manuel Top Ekle'nin ters sırası düzeltildi.
+
 **Deftere olay:** `WorkOrderEvent` tipi `BATCH_ADDED` (field=`batch`, `toValue`=batchId, `toLabel`=parti no,
 payload=top id'leri, sebep, kanal). Ters yol: partiyi geri almak = partinin toplarına "Top Çıkar" (her top
 kendi defterinde — `RollMovement` damgası + stok defteri bağlı ters satırı); `BATCH_ADDED` bu yüzden
@@ -551,7 +558,7 @@ ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (s
 | D4 | Hareketler ucu (A+B) + panel Sheet + ayrı ekran + Excel | D1 (D2 ile zenginleşir) |
 | D5 | Tablet düzeltme menüsü + `mobile:is-emri-duzelt` + önizleme uçları — **D5a (backend) + D5b (tablet menüsü) UYGULANDI**: izin + uç kapıları, renk önizlemesi, `WORK_ORDER_PLAN_CHANGE` sebep kataloğu, panel yetkisiz iptal yalnız dokunulmamış iş emrinde; tablette genel Düzenle kalktı, "Düzelt" menüsü (Top Çıkar D6 ile eklenecek) | D2, S1–S3/S7 cevapları |
 | D6 | Top Çıkar ucu (ledger ters yollarıyla) + tablet tuşu — **UYGULANDI** (§6.2 notu) | D1 |
-| **D8** | **Parti Ekle** (§6.5): `addBatchToWorkOrderTx` tek boğaz + uç + dört çağıranın bağlanması + R1–R7 + tablet/panel tuşu + `is-emri.md` kural değişimi + arşiv GEÇERSİZ notu | D1 (olay tipi), 9b S2+S3 |
+| **D8** | **Parti Ekle** (§6.5): `addBatchToWorkOrderTx` tek boğaz + uç + dört çağıranın bağlanması + R1–R7 + tablet/panel tuşu + `is-emri.md` kural değişimi + arşiv GEÇERSİZ notu — **D8a (backend) UYGULANDI** (§6.5 notu); D8b R5+R6, D8c tablet/panel tuşu | D1 (olay tipi), 9b S2+S3 |
 | D7 | Backfill script (kuru koşum) — **UYGULANDI** (§8.1 notu); `--apply` kullanıcıda | D1–D3; `--apply` kullanıcıda |
 | B-RM | `RollMovement` kapanış damgası borcu (§8.5) | 1e sahip atar |
 

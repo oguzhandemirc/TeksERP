@@ -22,7 +22,7 @@ import {
 import { ACTIVE_ORDER_LINK, unlinkOrderLinesTx, withActiveOrderLinks } from "./helpers/order-link.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
-import { cancelReturnNote, findOpenProductionIssueTx, postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
+import { cancelReturnNote, findOpenProductionIssueTx } from "./helpers/production-issue-ledger.helper";
 import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { warehouseStampManyTx, warehouseStampWhereTx } from "./helpers/warehouse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
@@ -135,8 +135,8 @@ import {
   createBatchTx,
   deleteIfEmptyAndTracelessTx,
   K18_DEAD_STATUSES,
-  type CreateBatchResult,
 } from "./batch.service";
+import { addBatchToWorkOrderTx, auditBatchAdd } from "./workorder-batch-add.service";
 import { WorkOrderSplitService } from "./workorder-split.service";
 import { WorkOrderManualMoveService, type PartyMode } from "./workorder-manual-move.service";
 import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
@@ -4871,271 +4871,23 @@ export class WorkOrderService {
   }
 
   /**
-   * Attach rolls to a work order by barcode scan.
-   * Business Rule: Rolls must be in STOCK status.
-   * Changes status to IN_PRODUCTION and links to first step.
+   * Barkodla top bağlar — Parti Ekle boğazının (`addBatchToWorkOrderTx`) HOŞGÖRÜLÜ kipi:
+   * uygun olmayan barkod ret listesine düşer, kalanlar YENİ parti olarak ilk adıma girer.
+   * Yalnız quickStart (iş emrinin ilk partisi) ve bekçi fikstürleri çağırır; yeni parti ucu `addBatch`.
    */
   async attachRolls(
     workOrderId: string,
     rawBarcodes: string[],
     userId?: string
   ): Promise<ApiResponse<{ attached: number; errors: string[]; batch: { id: string; batchNumber: string } | null }>> {
-    // Okutulan kod DEPOLANMIŞ biçime çekilir — el tarayıcısı küçük harf
-    // gönderebiliyor (2026-08-17 saha vakası; bkz. normalizeScanCode).
     const barcodes = rawBarcodes.map(normalizeScanCode).filter(Boolean);
-    const wo = await prisma.workOrder.findUnique({
-      where: { id: workOrderId },
-      include: {
-        steps: {
-          orderBy: { stepSequence: "asc" },
-          include: { station: { select: { type: true } } },
-        },
-      },
-    });
-
-    if (!wo) {
-      throw AppError.notFound("İş emri bulunamadı");
-    }
-
-    if (
-      wo.status === WorkOrderStatus.COMPLETED ||
-      wo.status === WorkOrderStatus.CANCELLED ||
-      wo.status === WorkOrderStatus.SUPERSEDED
-    ) {
-      throw AppError.conflict(
-        "Tamamlanmış veya iptal edilmiş iş emrine top bağlanamaz.",
-      );
-    }
-
-    if (wo.steps.length === 0) {
-      throw AppError.badRequest("İş emrinde rota adımı tanımlanmamış");
-    }
-
-    const firstStep = wo.steps[0];
-    const firstStepId = firstStep.id;
-    // EXTERNAL ilk step (boyahane/fason): roller commit edilir ama henüz fiziksel
-    // olarak orada değiller — sevk belgesi oluşturulduğunda RollMovement açılır.
-    // INTERNAL ilk step: roller fabrikada, bağlama anında ilk adıma giriş yaparlar.
-    const firstStepIsExternal = firstStep.station.type === "EXTERNAL";
-
-    // Envanterdeki serbest + satılabilir toplar üretime bağlanabilir: ham (STOCK) VE
-    // bitmiş depo malı (WAREHOUSE / A1_STOCK). "Her işlem final üretir" modelinde bir depo
-    // topu yeni bir WO'ya (örn. zımpara, ya da WAREHOUSE açık kumaşı Tambur'a) sokulabilir;
-    // bitince finalize depoya geri döndürür. Çuval/sevkiyattaki top hariç (F5: aşağıdaki
-    // doğrulama + atomik claim'de sackId/shipmentId null guard'ı).
-    const acceptedRollStatuses: RollStatus[] = [RollStatus.STOCK, RollStatus.WAREHOUSE, RollStatus.A1_STOCK];
-
-    // Faz 1.1: tx withBarcodeRetry ile sarıldı — bugün içeride @unique üretimi yok
-    // (no-op); parti modeli geçişinde tx'e P (parti) + RK (kart) sequence üretimi
-    // girecek, "sequence okuma closure İÇİNDE" iskeleti şimdiden hazır. Sonuç dizileri
-    // closure İÇİNDE tanımlı — retry mükerrer biriktirmesin.
-    const { attached, errorMessages, batchRes } = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
-      // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-004): iş emri satırını KİLİTLE
-      // ve durumunu TAZE doğrula. Statü tx DIŞINDA okunuyordu: planlamacı iş
-      // emrini iptal ederken operatör "Yeniden Üretime Al" basarsa 3 top
-      // İPTAL EDİLMİŞ iş emrinin adımına IN_PRODUCTION olarak bağlanıyor,
-      // hareket açılıyor, parti doğuyor ve `ensureWorkOrderInProgress` sessiz
-      // no-op yapıyordu — İKİ istek de success. Satılabilir bitmiş depo malı
-      // hiçbir yüzeyde bulunamaz hâle geliyordu (depo ekranında yok, tablette
-      // okutulamaz çünkü kart VOIDED, iş emri iptal göründüğü için kimse
-      // aramaz). CLAUDE.md'nin `manualMove` için BİLEREK engellediği "canlı ama
-      // kimsenin okutamadığı top" çıkmazının aynısı.
-      // Kilit ayrıca sırayı fason ailesiyle hizalar (ABBA kolu kapanır).
-      await touchWorkOrderTx(tx, workOrderId);
-      const woFresh = await tx.workOrder.findUnique({
-        where: { id: workOrderId },
-        select: { status: true, workOrderNumber: true },
-      });
-      if (
-        woFresh &&
-        (woFresh.status === WorkOrderStatus.CANCELLED || woFresh.status === WorkOrderStatus.SUPERSEDED)
-      ) {
-        throw AppError.conflict(
-          `${woFresh.workOrderNumber} iş emri bu sırada ${
-            woFresh.status === WorkOrderStatus.CANCELLED ? "iptal edildi" : "devredildi"
-          } — top bağlanamaz. Listeyi yenileyin.`,
-          { code: "WORKORDER_TERMINAL_DURING_ATTACH" },
-        );
-      }
-      const attached: { id: string; barcode: string | null; prevStatus: RollStatus; qtyIn: number }[] = [];
-      const errorMessages: string[] = [];
-      // Bu attach dalgasının doğurduğu parti (K3) — succeeded>0 ise dolar.
-      // Retry mükerrer biriktirmesin diye closure İÇİNDE tanımlı (Faz 1.1 deseni).
-      let batchRes: CreateBatchResult | null = null;
-      // 1) Tüm rulolar tek query'de — N round-trip yerine 1.
-      const rolls = await tx.roll.findMany({
-        where: { barcode: { in: barcodes } },
-      });
-      const byBarcode = new Map(rolls.map((r) => [r.barcode, r]));
-
-      // 2) Per-barkod validation — bellek üstünde, query yok.
-      const candidates: typeof rolls = [];
-      for (const barcode of barcodes) {
-        const roll = byBarcode.get(barcode);
-        if (!roll) {
-          errorMessages.push(`${barcode}: Barkod bulunamadı`);
-          continue;
-        }
-        if (!acceptedRollStatuses.includes(roll.status)) {
-          errorMessages.push(
-            `${barcode}: Top uygun durumda değil (mevcut: ${roll.status}, beklenen: ${acceptedRollStatuses.join("/")})`
-          );
-          continue;
-        }
-        // F5: WAREHOUSE/A1 topu bir çuvalda/sevkiyatta olabilir → üretime alınamaz.
-        if (roll.sackId != null || roll.shipmentId != null) {
-          errorMessages.push(`${barcode}: Top bir çuvalda/sevkiyatta — önce oradan çıkarın`);
-          continue;
-        }
-        candidates.push(roll);
-      }
-
-      if (candidates.length > 0) {
-        const candidateIds = candidates.map((r) => r.id);
-
-        // 3) Atomik bulk claim — status guard race condition'ı yakalar. RETURNING
-        //    ile FİİLEN BİZİM kazandığımız id'ler döner.
-        //
-        //    NEDEN updateManyAndReturn (yeniden-sorgu DEĞİL): eskiden count
-        //    beklenenden azsa kazanan küme `{id in candidateIds, status:
-        //    IN_PRODUCTION, producedInStepId: firstStepId}` ile TAHMİN ediliyordu.
-        //    Bu filtre eşzamanlı ikinci bir attach çağrısının AYNI adıma commit
-        //    ettiği topu bizden ayırt edemez (READ COMMITTED'de commit'li satır
-        //    görünür) → başkasının topu bizim kümemize sızardı. Sonuç: aşağıdaki
-        //    rollMovement.createMany `roll_movements_one_open_per_roll_step_uq`
-        //    partial unique'ine çarpar (P2002) ve TÜM tx düşer — operatör temiz
-        //    "başka işlemde değişti" mesajı yerine 500 görürdü; ayrıca
-        //    createBatchTx sahibi olmadığımız topa batchId damgalardı.
-        const claimed = await tx.roll.updateManyAndReturn({
-          where: {
-            id: { in: candidateIds },
-            status: { in: acceptedRollStatuses },
-            sackId: null,
-            shipmentId: null,
-          },
-          data: {
-            status: RollStatus.IN_PRODUCTION,
-            producedInStepId: firstStepId,
-            currentStepId: firstStepId,
-          },
-          select: { id: true },
-        });
-
-        // 4) Kaybedilen toplar (varsa) tek tek raporlanır.
-        const claimedIds = new Set(claimed.map((r) => r.id));
-        const succeeded =
-          claimedIds.size === candidates.length
-            ? candidates
-            : candidates.filter((r) => claimedIds.has(r.id));
-
-        // DEPO DEFTERİ — üretime alma bir ÇIKIŞTIR: mal raftan iniyor. Yön ve
-        // metraj claim ÖNCESİ durumdan okunur (`candidates` tx içinde tazedir);
-        // claim sonrası statü artık IN_PRODUCTION'dır ve "nereden çıktı"yı söylemez.
-        // Yazıcı TEK (`production-issue-ledger.helper`): manuel taşıma · elle top ·
-        // redye ayırma aynı yüklemi ve aynı satırı yazar (2026-09-13, hüküm §5).
-        await postProductionIssuesTx(tx, succeeded, { workOrderStepId: firstStepId, userId: userId ?? null });
-        if (claimedIds.size !== candidates.length) {
-          for (const r of candidates) {
-            if (!claimedIds.has(r.id)) {
-              errorMessages.push(
-                `${r.barcode}: Top başka bir işlemde değişti, tekrar deneyin`
-              );
-            }
-          }
-        }
-
-        if (succeeded.length > 0) {
-          // 5) Bulk movement insert — sadece INTERNAL ilk step için.
-          //    EXTERNAL'da fiziksel sevk olmadan step'in ACTIVE olması yanlış
-          //    ("Boyahane'de" gibi görünür) → movement dispatch anında açılır.
-          if (!firstStepIsExternal) {
-            await tx.rollMovement.createMany({
-              data: succeeded.map((r) => ({
-                rollId: r.id,
-                workOrderStepId: firstStepId,
-                qtyIn: r.currentQty,
-                weightIn: r.weightKg,
-                operatorId: userId ?? null,
-              })),
-            });
-          }
-
-          for (const r of succeeded) {
-            attached.push({
-              id: r.id,
-              barcode: r.barcode,
-              prevStatus: r.status,
-              qtyIn: Number(r.currentQty),
-            });
-          }
-
-          // Parti doğuşu (K3): bu attach dalgası YENİ bir parti oluşturur; sahiplenilen
-          // toplara batchId damgalanır + refakat kartı (RK) basılır. (Faz 2: her attach =
-          // yeni parti; K4 "mevcut sevksiz partiye ekle" Faz 4'te targetBatchId ile gelir.)
-          batchRes = await createBatchTx(tx, {
-            workOrderId,
-            rollIds: succeeded.map((r) => r.id),
-            userId,
-          });
-        }
-      }
-
-      // INTERNAL ilk step: bağlama = üretim başlangıcı → step ACTIVE + WO IN_PROGRESS.
-      // EXTERNAL ilk step: roller henüz fasona gönderilmedi → step PENDING + WO PLANNED
-      //                    olarak kalmalı; dispatch oluşturulunca ikisi de güncellenir.
-      if (attached.length > 0 && !firstStepIsExternal) {
-        await recomputeStepStatus(tx, firstStepId);
-        await ensureWorkOrderInProgress(tx, workOrderId);
-      }
-
-      return { attached, errorMessages, batchRes };
-    }));
-
-    // Audit log'lar tx dışında, TEK createMany ile (eski N ayrı INSERT yerine).
-    // R8 fix: recordId roll.id (UUID), barcode newData'ya meta olarak gidiyor.
-    await AuditService.logMany(
-      attached.map((r) => ({
-        userId,
-        action: "UPDATE" as const,
-        tableName: "ROLL",
-        recordId: r.id,
-        oldData: { status: r.prevStatus },
-        newData: {
-          status: "IN_PRODUCTION",
-          workOrderId,
-          firstStepId,
-          barcode: r.barcode,
-          qtyIn: r.qtyIn,
-        },
-      }))
-    );
-
-    // Parti + kart audit'i tx DIŞINDA (F273): bu dalga bir parti doğurduysa yaz.
-    if (batchRes) {
-      await AuditService.log({
-        userId,
-        action: "CREATE",
-        tableName: "BATCH",
-        recordId: batchRes.batch.id,
-        newData: {
-          batchNumber: batchRes.batch.batchNumber,
-          workOrderId,
-          rollCount: attached.length,
-        },
-      });
-      // Kart audit'i YOK — kart parti doğuşunda değil, iş emri açılışında üretilir.
-    }
-
+    const res = await withBarcodeRetry(() => prisma.$transaction((tx) =>
+      addBatchToWorkOrderTx(tx, { workOrderId, barcodes, userId, mode: "LENIENT", recordEvent: false })));
+    await auditBatchAdd(workOrderId, res, userId);
     return {
       success: true,
-      data: {
-        attached: attached.length,
-        errors: errorMessages,
-        batch: batchRes
-          ? { id: batchRes.batch.id, batchNumber: batchRes.batch.batchNumber }
-          : null,
-      },
-      message: `${attached.length} top iş emrine bağlandı`,
+      data: { attached: res.attached.length, errors: res.errors, batch: res.batch },
+      message: `${res.attached.length} top iş emrine bağlandı`,
     };
   }
 

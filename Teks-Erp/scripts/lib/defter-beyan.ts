@@ -257,8 +257,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       "src/services/helpers/roll-step.helper.ts", "src/services/inventory.service.ts",
       "src/services/kursun-bypass.service.ts", "src/services/kursun-qc.service.ts",
       "src/services/subcontractor.service.ts", "src/services/tambur-manual.service.ts",
-      "src/services/tambur-undo.service.ts", "src/services/workorder-manual-move.service.ts",
-      "src/services/workorder-split.service.ts", "src/services/workorder.service.ts",
+      "src/services/tambur-undo.service.ts", "src/services/workorder-batch-add.service.ts",
+      "src/services/workorder-manual-move.service.ts", "src/services/workorder-split.service.ts",
     ], { yari: true }),
 
   D("RollOperation", "kurşun/QC2/tambur/fason kanıtı", { tur: "DAMGA", kolon: "revokedAt" },

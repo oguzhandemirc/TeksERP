@@ -17,7 +17,7 @@ Envanterin tek kaynağı `Teks-Erp/src/services/helpers/period-guard.helper.ts` 
 | Numara | Sabit | Dosya | Amaç |
 |---|---|---|---|
 | 8021 | `DUPLICATE_GUARD_LOCK_NS` | `helpers/duplicate-guard.helper.ts:33` | KK1 mükerrer top tuzağı |
-| 8022 | `BATCH_NUMBER_LOCK_NS` | `batch.service.ts:96` | parti numarası üreteci (tek global anahtar) |
+| 8022 | `BATCH_NUMBER_LOCK_NS` | `batch.service.ts:96` | parti numarası üreteci (tek global anahtar); sayaç kilidi — iş emri satır kilidinden SONRA alınır (`createBatchTx` çağıran 9 yol aynı sıra) |
 | 8023 | `SHIPMENT_LOCK_NS` | `helpers/shipment-locks.helper.ts:27` | sevkiyat kapsamı |
 | 8024 | `SESSION_REGISTRY_LOCK_NS` | `session-registry.service.ts:31` | oturum kayıt defteri |
 | 8025 | `PERM_ADMIN_LOCK_NS` | `permission-management.service.ts:21` | yetki (son-admin) guard'ı |

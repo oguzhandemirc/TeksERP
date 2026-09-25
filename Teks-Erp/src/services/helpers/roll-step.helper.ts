@@ -129,7 +129,19 @@ export async function recomputeStepStatus(
       },
     },
   });
-  const pendingRolls = candidates.filter((r) => {
+  // R1 (hareket defteri D8): dış ilk adımda sevk bekleyen yeni parti henüz hiçbir adıma
+  // GİRMEDİ (hareketi sevkte açılır) — yukarıdaki küme onu görmez ve adım erken COMPLETED olur.
+  // Giriş noktası bu topların bulunduğu adımdır.
+  const unentered = await tx.roll.findMany({
+    where: {
+      currentStep: { workOrderId: step.workOrderId },
+      NOT: { movements: { some: { ...ACTIVE_MOVEMENT, step: { workOrderId: step.workOrderId } } } },
+      status: RollStatus.IN_PRODUCTION,
+    },
+    select: { currentStep: { select: { stepSequence: true } } },
+  });
+  const pendingUnentered = unentered.filter((r) => (r.currentStep?.stepSequence ?? 0) <= step.stepSequence).length;
+  const pendingRolls = pendingUnentered + candidates.filter((r) => {
     const entrySeq = r.movements[0]?.step?.stepSequence;
     // Giriş noktası çözülemiyorsa (veri tuhaflığı) ESKİ davranış: bekleyen say.
     // Fail-safe yön bilinçli — adımı erken COMPLETED yapmak, geç yapmaktan kötüdür.

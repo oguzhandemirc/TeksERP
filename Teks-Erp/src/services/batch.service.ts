@@ -253,6 +253,8 @@ export async function createBatchTx(
     splitFromId?: string | null;
     userId?: string;
     date?: Date;
+    /** "Parti Ekle" idempotency anahtarı — tekil; yarışta P2002 çağıranın replay dalına düşer. */
+    clientToken?: string | null;
   },
 ): Promise<CreateBatchResult> {
   const now = params.date ?? new Date();
@@ -263,6 +265,7 @@ export async function createBatchTx(
       batchNumber,
       workOrderId: params.workOrderId,
       splitFromId: params.splitFromId ?? null,
+      clientToken: params.clientToken ?? null,
     },
     select: { id: true, batchNumber: true, workOrderId: true, splitFromId: true },
   });

@@ -18,8 +18,7 @@
 // -----------------------------------------------------------------------------
 // "Buraya al" tek satır bile taşıma kodu yazmaz: `WorkOrderManualMoveService`e
 // delege eder (movement kapatma/açma, hedef-sonrası hayalet movement'ın geri alınması,
-// kalite VOID'i, parti kararı, adım recompute, COMPLETED WO + refakat kartı
-// diriltme). Paralel bir taşıma yolu yazmak, iki yolun zamanla ayrışması demekti;
+// kalite VOID'i, parti kararı, adım recompute; tamamlanmış iş emrine 409). Paralel bir taşıma yolu yazmak, iki yolun zamanla ayrışması demekti;
 // saha yolu sessizce eksik guard'lı kalırdı. Bu dosyanın işi yalnız ÜÇ şey:
 //   • bağlamı çözmek (hangi Tambur adımı, oturum hangi istasyonda),
 //   • saha operatörüne uygun DAR guard'ları koymak (aşağıda),
@@ -73,7 +72,6 @@ import {
   RollEntrySource,
   RollStatus,
   StationKind,
-  TravelerCardStatus,
   WorkOrderStatus,
 } from "@prisma/client";
 import { AppError } from "../utils/app-error";
@@ -91,9 +89,8 @@ import {
   manualMoveWoBlockReason,
 } from "./workorder-manual-move.service";
 import { ensureWorkOrderInProgress, recomputeStepStatus } from "./helpers/roll-step.helper";
-import { reopenWorkOrderTx } from "./helpers/workorder-event.helper";
+import { completedNoAddError } from "./workorder-batch-add.service";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
-import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
@@ -294,6 +291,8 @@ export class TamburManualService {
         workOrderNumber: step.workOrder.workOrderNumber,
       });
     }
+    // Topu Buraya Al / Manuel Top Ekle tamamlanmış iş emrini artık yeniden AÇMAZ (D8, 4b kararı A).
+    if (step.workOrder.status === WorkOrderStatus.COMPLETED) throw completedNoAddError();
     return step;
   }
 
@@ -426,7 +425,7 @@ export class TamburManualService {
   /**
    * Ne olacağını SOMUT söyler; hiçbir şeyi değiştirmez. Taşımanın gerçek etkileri
    * (hangi adımdan gelecek, kalite kararı VOID olacak mı, hangi adımlar atlanacak,
-   * yeni parti doğacak mı, tamamlanmış iş emri yeniden açılacak mı) panel taşıma
+   * yeni parti doğacak mı) panel taşıma
    * servisinin ÖNİZLEMESİNDEN okunur — saha ekranı ayrı bir tahmin yürütmez.
    */
   async getBringPreview(
@@ -1128,8 +1127,15 @@ export class TamburManualService {
     );
     const roll = created.data;
 
-    // FAZ 2 — Tambur adımına bağla.
+    // FAZ 2 — Tambur adımına bağla. İLK iş iş emri satır kilidi + taze durum (parti numarası
+    // kilidi 8022 bundan SONRA — Parti Ekle boğazı ve diğer parti doğuranlarla aynı sıra).
     const attach = await prisma.$transaction(async (tx) => {
+      await touchWorkOrderTx(tx, step.workOrderId);
+      const woNow = await tx.workOrder.findUnique({ where: { id: step.workOrderId }, select: { status: true } });
+      if (woNow?.status === WorkOrderStatus.COMPLETED) throw completedNoAddError();
+      if (!woNow || manualMoveWoBlockReason(woNow.status)) {
+        throw AppError.conflict("İş emri bu sırada kapandı ya da iptal edildi — listeyi yenileyin.", { code: "WORKORDER_DEAD" });
+      }
       const fresh = await tx.roll.findUnique({
         where: { id: roll.id },
         select: {
@@ -1163,7 +1169,7 @@ export class TamburManualService {
             },
           });
         }
-        return { alreadyAttached: true, reopened: false };
+        return { alreadyAttached: true };
       }
 
       // Atomik claim — createInitialEntry topu renkliyse WAREHOUSE, renksizse
@@ -1223,22 +1229,10 @@ export class TamburManualService {
         },
       });
 
-      // Adım/WO durumu: yeni açık hareket adımı ACTIVE'e çeker; PLANNED WO üretime
-      // girer; COMPLETED WO (mal geri geldi) yeniden açılır + refakat kartı canlanır
-      // — `manualMove` ile birebir aynı diriltme sözleşmesi.
-      await touchWorkOrderTx(tx, step.workOrderId);
+      // Adım/WO durumu: yeni açık hareket adımı ACTIVE'e çeker; PLANNED WO üretime girer.
       await recomputeStepStatus(tx, step.id);
       await ensureWorkOrderInProgress(tx, step.workOrderId);
-      const reopened = await reopenWorkOrderTx(tx, step.workOrderId, { trigger: "TAMBUR_MANUAL_ROLL" });
-      if (reopened) {
-        await setWorkOrderCardStatusesTx(
-          tx,
-          step.workOrderId,
-          TravelerCardStatus.COMPLETED,
-          TravelerCardStatus.ACTIVE,
-        );
-      }
-      return { alreadyAttached: false, reopened };
+      return { alreadyAttached: false };
     });
 
     // GERÇEKÇİLİK EŞİĞİ — UYARI, blok DEĞİL (ağırlık tarafıyla aynı gerekçe:
@@ -1274,7 +1268,6 @@ export class TamburManualService {
         machineId: ctx.machineId ?? null,
         sessionStationId: ctx.stationId ?? null,
         alreadyAttached: attach.alreadyAttached,
-        reopenedWorkOrder: attach.reopened,
         batchId: resolvedBatchId,
         batchNumber: resolvedBatchNumber,
         // Parti OPERATÖRÜN seçimi mi, sistemin tek-seçenekten türettiği mi?
@@ -1301,7 +1294,7 @@ export class TamburManualService {
         targetStepId: step.id,
         workOrderNumber: step.workOrder.workOrderNumber,
         alreadyAttached: attach.alreadyAttached,
-        reopenedWorkOrder: attach.reopened,
+        reopenedWorkOrder: false,
         // Parti operatöre GERİ SÖYLENİR. Tek açık parti varsa backend onu
         // SORMADAN bağlar (sürtünmesiz doğru cevap) — ama sessiz kalırsa
         // operatör topun partisiz gittiğini sanır; ekranda PARTİSİZ grubunu
