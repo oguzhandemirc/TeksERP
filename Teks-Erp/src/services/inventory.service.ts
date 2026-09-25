@@ -2645,59 +2645,8 @@ export class InventoryService {
    * edilmiş top okutma vakalarının çok küçük bir azınlığıdır.
    */
 
-  /**
-   * ESKİ (damgasız) geri alma iptallerini AUDIT'ten tanır — BULGU-T1-011.
-   *
-   * 2026-08-29'dan sonraki geri almalar izi satıra yazıyor; öncekiler yazmadı ve
-   * satırdan ayırt edilemiyor. Bu sorgu o boşluğu kapatır ve HİÇBİR SATIRI
-   * DEĞİŞTİRMEZ (kullanıcı kararı: eski kayıtlara dokunma).
-   *
-   * ⚠️ Kısa devre: satırda zaten damga varsa audit'e HİÇ BAKILMAZ — yeni
-   * kayıtlar için bedel sıfır. Sorgu yalnız damgasız iptallerde koşar.
-   * ⚠️ Kalıcı değil (audit 6 ayda arşivlenir) — bkz. helper'daki not.
-   */
-  private async isUndoSourcedByAudit(
-    rollId: string,
-    cancelReasonCode: string | null,
-    statusChangedAt: Date | null,
-  ): Promise<boolean> {
-    if (cancelReasonCode) return false;
-    // TARİH SEDDİ (2026-09-05 perf turu). jsonb yüklemi indexlenemez → sorgu
-    // system_logs'u BAŞTAN SONA tarıyordu: ölçüldü 7,95 ms / 2.499 buffer, 51.163
-    // satır elendi. Çıpa topun KENDİ `statusChangedAt`i: geri alma satırı, topun
-    // CANCELLED'a geçtiği anla aynı olaydan doğar (ölçüm: 23 geri alma satırının
-    // hepsi damgadan 2–9 ms SONRA yazılmış). ±10 dk pay iki kaynağı da kapsar —
-    // audit tx DIŞINDA yazıldığı için commit gecikmesi, geriye doldurulmuş
-    // damgalar içinse (backfill_roll_production_timestamps) iki audit satırı
-    // arasındaki saniyeler. Ölçüm: 0,56 ms / 713 buffer, Index Scan
-    // (system_logs_createdAt_idx); 44 iptal topun 44'ünde karar DEĞİŞMEDİ.
-    // ⚠️ Damga yoksa (2026-08-09 migration'ından önce doğup geriye doldurulmamış
-    // kayıt) çıpa da yok → eski tam tarama korunur; sessizce "geri alınabilir"
-    // demek yerine yavaş ama doğru cevap verilir.
-    const rows = statusChangedAt
-      ? await prisma.$queryRaw<Array<{ n: bigint }>>`
-          SELECT count(*) AS n FROM system_logs
-          WHERE "createdAt" >= ${statusChangedAt}::timestamptz - INTERVAL '10 minutes'
-            AND "createdAt" <= ${statusChangedAt}::timestamptz + INTERVAL '10 minutes'
-            AND "newData" ->> 'event' LIKE 'TAMBUR_UNDO%'
-            AND (
-              ("newData" ->> 'cancelledChildId') = ${rollId}
-              OR ("newData" -> 'cancelledChildIds') @> to_jsonb(${rollId}::text)
-            )
-        `
-      : await prisma.$queryRaw<Array<{ n: bigint }>>`
-          SELECT count(*) AS n FROM system_logs
-          WHERE "newData" ->> 'event' LIKE 'TAMBUR_UNDO%'
-            AND (
-              ("newData" ->> 'cancelledChildId') = ${rollId}
-              OR ("newData" -> 'cancelledChildIds') @> to_jsonb(${rollId}::text)
-            )
-        `;
-    return Number(rows[0]?.n ?? 0) > 0;
-  }
-
   private async buildCancelDiagnostics(
-    roll: { id: string; status: RollStatus; preCancelStatus: RollStatus | null; batchId: string | null; sackId: string | null; shipmentId: string | null; currentStepId: string | null; cancelReasonCode: string | null; statusChangedAt: Date | null },
+    roll: { id: string; status: RollStatus; preCancelStatus: RollStatus | null; batchId: string | null; sackId: string | null; shipmentId: string | null; currentStepId: string | null; cancelReasonCode: string | null },
   ): Promise<{ canRestore: boolean; restoreBlockReason: string | null } | null> {
     if (roll.status !== RollStatus.CANCELLED) return null;
     const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
@@ -2718,11 +2667,6 @@ export class InventoryService {
       shipmentId: roll.shipmentId,
       currentStepId: roll.currentStepId,
       cancelReasonCode: roll.cancelReasonCode,
-      undoSourcedByAudit: await this.isUndoSourcedByAudit(
-        roll.id,
-        roll.cancelReasonCode,
-        roll.statusChangedAt,
-      ),
       movementCount,
       operationCount,
       childCount,
@@ -3935,9 +3879,6 @@ export class InventoryService {
         currentStepId: true,
         cancelReason: true,
         cancelReasonCode: true,
-        // Audit tarih seddinin çıpası (isUndoSourcedByAudit) — bu alan olmadan
-        // sorgu system_logs'u baştan sona tarar (2.499 buffer → 713).
-        statusChangedAt: true,
       },
     });
     if (!existing) throw AppError.notFound("Top bulunamadı");
@@ -3962,11 +3903,6 @@ export class InventoryService {
       shipmentId: existing.shipmentId,
       currentStepId: existing.currentStepId,
       cancelReasonCode: existing.cancelReasonCode,
-      undoSourcedByAudit: await this.isUndoSourcedByAudit(
-        existing.id,
-        existing.cancelReasonCode,
-        existing.statusChangedAt,
-      ),
       movementCount,
       operationCount,
       childCount,

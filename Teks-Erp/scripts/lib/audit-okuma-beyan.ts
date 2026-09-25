@@ -79,10 +79,7 @@ export const AYAK_IZI_OKUYUCULARI: readonly AyakIziBeyani[] = [
  * Allowlist DIŞI iş okumaları — BORÇ. Her satır bir defter eksikliğidir; hedef 0.
  * Borç kapatıldığında satır düşer ve `AUDIT_OKUMA_BORC_TABANI` iner (tabanı 1e yazar).
  */
-export const AUDIT_OKUMA_BORCU: readonly AuditOkumaBorcu[] = [
-  { yer: "src/services/inventory.service.ts#InventoryService.isUndoSourcedByAudit", adet: 2, dilim: "K-A2",
-    hedef: "iptalin geri alma kaynağı topun kalıcı damgasından (`cancelReasonCode`); damgasız eski kayıtlar dry-run backfill" },
-];
+export const AUDIT_OKUMA_BORCU: readonly AuditOkumaBorcu[] = [];
 
 /** Borç okuma noktası sayısı (Σ adet) — yalnız 1e düşürür. */
 export const AUDIT_OKUMA_BORC_TABANI = 2;
@@ -107,9 +104,9 @@ export const AUDIT_GOC_ISTISNALARI: readonly GocIstisnasi[] = [
   { dosya: "scripts/backfill_roll_status_events.ts", tarih: "2026-09-25", durum: "ONAYLI",
     hedef: "RollStatusEvent iptal satırları, ② + ③ geçiş (K-A3b · B-RM)",
     gerekce: "kolonda aktörü olmayan eski iptallerin aktör + anı yalnız audit'te (② topun kendi satırı · ③ tambur geri almada ebeveynin TAMBUR_UNDO_* satırı); preEpochSource=AUDIT ile ayrışır, yayın günü bir kez. ③ K-A2'den bağımsız; eski satıra yazmaz (yalnız append-only defter)" },
-  { dosya: "scripts/fix_tambur_undo_cancel_marker.ts", tarih: "2026-09-25", durum: "KARAR_BEKLIYOR",
+  { dosya: "scripts/fix_tambur_undo_cancel_marker.ts", tarih: "2026-09-26", durum: "ONAYLI",
     hedef: "Roll.cancelReasonCode = TAMBUR_GERI_ALMA (K-A2)",
-    gerekce: "damgasız eski tambur geri alma parçaları yalnız audit'ten tanınıyor; 2026-08-29 kullanıcı kararı 'uygulanmayacak' — K-A2 kararı kullanıcıda" },
+    gerekce: "damgasız eski tambur geri alma parçaları yalnız audit'ten (sıcak ∪ arşiv) tanınıyor; kullanıcı kararı 2026-09-26 (K-A2 = a): yayın günü bir kez işaret yazılır, geri alma kapısının audit dalı kalktı" },
 ];
 
 // ── İSTEMCİ (Electron/src · mobil/src) ────────────────────────────────────────

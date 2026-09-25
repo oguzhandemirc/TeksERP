@@ -2302,6 +2302,7 @@ demek, ikisini yanlış yerden onarır.
 ---
 > ⚠️ **GEÇERSİZ/KISMEN (anlama turu 2026-09-05)** — bu notun bazı kuralları sonraki kararlarla ezildi; güncel kural için `docs/kurallar/`:
 > - KISMİ → `kod:94b937c0 (2026-08-29, BULGU-T1-011 — NOTU YOK)`: 08-25 'kalan BEŞ kural' → 2026-08-29'da ALTINCI sinyal: Tambur geri almasıyla iptal edilen parça (cancelReasonCode=TAMBUR_GERI_ALMA ∨ audit izi) diriltilemez — metrajı kaynak topa iade edildiği için dirilme çift sayım üretiyordu. Parça satırına iz + currentQty=0 yazılır. HİÇBİR NOTA GİRMEMİŞ.
+> - **GEÇERSİZ → 2026-09-26 (kullanıcı: bir kez işaret)** — altıncı sinyalin "∨ audit izi" ayağı KALKTI ve 2026-08-29'un "eski kayda dokunulmasın, işaret yazılmasın" kararı ezildi: eski damgasız parçalara iz yayın günü BİR KEZ yazılır (`fix_tambur_undo_cancel_marker.ts`) → bkz. "2026-09-26 — K-A2: tambur geri alma izi bir kez yazılır".
 >
 
 ## 2026-08-25 — Saha deploy sonrası üç arıza: "kutu var, uç yok" · "soru var, süreç yok" · "ölçek var, sınır yok"
@@ -12566,3 +12567,11 @@ hücre metnini birebir ölçer. Excel ekranda yüklenmiş sayfayla sınırlı de
 **Karar (kullanıcı, 1e aracılığıyla).** `test_defter_ters_yol` §14 ileri damgayı yerinde null'layan dört siteyi "karar bekliyor" notuyla BORC diye beyan etmişti. Üçünün tarihçesi ayrı bir append-only defterde yaşıyor: `Sack.weighedAt` → `SackWeighing` (CLEARED olayı, önceki kg ile) · `Shipment/DirectShipment.invoicedAt` → fatura belgesi (CANCELLED + `cancelledAt/ById/Reason`) ve cari ters kaydı · `SubcontractorDispatchItem.remainderClosedAt` → `RollVariance(SUBCONTRACTOR_REMAINDER)` `reversedAt` + hareketin ters kaydı. Kullanıcı üçünü DURUM kolonu saydı (şık A). Kolon "şu an ne"yi tutar, "ne oldu" o defterdedir; null'a dönmesi geri almanın o defterdeki ters satırıyla birlikte meşrudur.
 
 **Sonuç.** §14 borcu 4 → 1. Kalan `Swatch.cancelledAt` soruda yoktu; ayrıca sorulacak. `defter.md` "DURUM BAYRAĞI ≠ DAMGA" satırının ölçütü "kim/neden/miktar taşımıyorsa" idi; "ne oldu ayrı bir defterde satırsa" diye düzeltildi. Aksi hâlde `weighedById`/`invoicedById` taşıyan kolonlar kuralın kendisiyle çelişirdi. Yasak cümlesinin örnekleri `dispatchedAt` ailesine daraltıldı. Kök `CLAUDE.md`'deki liste 1e'de.
+
+## 2026-09-26 — K-A2: tambur geri alma izi bir kez yazılır, geri alma kapısı audit'e bakmaz [ÇEKİRDEK]
+
+**Karar (kullanıcı, 1e aracılığıyla; K-A2 = a).** 2026-08-29'da (BULGU-T1-011) tambur geri almasıyla iptal edilen ESKİ parçalar satırdan ayırt edilemiyordu ve kullanıcı "eski kayda dokunulmasın" demişti. Koruma bu yüzden audit'ten geliyordu: `InventoryService.isUndoSourcedByAudit`, iki ham SQL, biri tam tarama. Bu kararla ezildi. Audit yalnız ayak izidir (2026-09-25 kuralı) ve 6 ayda arşivlenince bu koruma sessizce açılırdı. İz satıra BİR KEZ yazılır, kapının audit dalı silinir; `test_audit_okuma_kaynagi` borcu 2 → 0.
+
+**Yayın sırası bağlayıcı.** Yeni sunucu audit'e bakmadığı için işaretlenmemiş eski parça "geri alınabilir" görünür. `fix_tambur_undo_cancel_marker.ts` sunucu güncellemesiyle AYNI pencerede koşulur: deneme → onay → `--apply --onay=<N> --hedef=<db>` → ikinci deneme 0. Script sertleştirildi: audit'i sıcak ∪ ARŞİV okur (arşivlenmiş iz de bulunur) ve iki teyit ister (hedef DB adı + deneme sayısı).
+
+**Ölçüm.** Prova kopyası (`tekserp_37p_test` ← `tekserp_prova4b_test`): deneme 110 parça · 5.570,1 m → yanlış hedef reddedildi → uygulama 110 → ikinci deneme 0. 2026-08-29'daki "88" o günün saha kopyasıydı; kopya daha yeni. Bekçi `test_tambur_undo_marker_backfill`: sıcak + arşiv izli parça aday, izsiz ya da başka olayla anılan parça değil; yanlış hedef/onay yazmaz; iz sonrası kapı diriltmez (öncesinde diriltiyordu, pencere ölçülü); idempotent. Sonda: arşiv kolu çıkarılınca §1/§3 ❌.

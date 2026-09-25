@@ -5538,8 +5538,7 @@ export class SubcontractorService {
         //    işi var — izi satırın KENDİSİNDE bırakmak (audit 6 ayda arşivlenir) ve
         //    restore guard'ının yedinci dalını beslemek.
         //    ⚠️ Engeli getiren şey bu KOD değil guard'ın DALI; kod tek başına hiçbir
-        //    engel getirmez (`isUndoSourcedByAudit` ilk satırı kodu görünce `false`
-        //    döner). İkisini karıştırmak kusuru "kapatılmış sanmaya" yol açar.
+        //    engel getirmez. İkisini karıştırmak kusuru "kapatılmış sanmaya" yol açar.
         await tx.roll.updateMany({
           where: { id: { in: bornRollIds } },
           data: {

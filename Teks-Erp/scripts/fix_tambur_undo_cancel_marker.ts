@@ -1,16 +1,16 @@
 // =============================================================================
 // ONARIM — Tambur geri almasıyla iptal edilmiş ESKİ parçaları damgala (T1-011)
 // =============================================================================
-// KURU KOŞUM VARSAYILAN. Yazmak için: --apply
-//   npx tsx scripts/fix_tambur_undo_cancel_marker.ts            # yalnız rapor
-//   npx tsx scripts/fix_tambur_undo_cancel_marker.ts --apply    # yazar
+// KURU KOŞUM VARSAYILAN. Yazmak için iki teyit:
+//   npx tsx scripts/fix_tambur_undo_cancel_marker.ts                                  # yalnız rapor
+//   npx tsx scripts/fix_tambur_undo_cancel_marker.ts --apply --onay=<N> --hedef=<db>  # yazar
 //
-// ⚠️ DURUM: KULLANICI KARARI — BU ARAÇ ŞU AN UYGULANMAYACAK (2026-08-29).
-// Eski kayıtların korunması artık AUDIT KAPISINDAN geliyor
-// (`inventory.isUndoSourcedByAudit`) ve hiçbir satıra dokunmuyor. Bu araç
-// yalnız TEK bir iş için duruyor: audit 6 ayda arşivlenince o koruma sessizce
-// açılır; damga kalıcıdır. Yani bu, "pencere kapanmadan izi satıra taşı"
-// seçeneğidir — zorunlu değil, kalıcılık tercihi.
+// ⚠️ DURUM: KULLANICI KARARI 2026-09-26 (K-A2 = a) — YAYIN GÜNÜ BİR KEZ KOŞULUR.
+// Geri alma kapısının audit'e bakan dalı kaldırıldı (audit yalnız ayak izidir);
+// eski damgasız parçaların TEK koruması artık bu araçla yazılan iz. Sıra: bu araç
+// (kuru → onay → --apply) yeni backend'den ÖNCE ya da aynı pencerede koşulur —
+// aksi hâlde aradaki sürede o parçalar diriltilebilir. Bir kez aktaran göç
+// istisnası: `scripts/lib/audit-okuma-beyan.ts` AUDIT_GOC_ISTISNALARI.
 //
 // NEDEN GEREKLİ
 // 2026-08-29'dan itibaren Tambur geri alması iptal ettiği parçaya iki şey
@@ -36,10 +36,14 @@
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { RollStatus } from "@prisma/client";
+import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 import { TAMBUR_UNDO_CANCEL_CODE, TAMBUR_UNDO_CANCEL_TEXT } from "../src/constants/reason-presets";
 import { izDustuUyarisi, onarimIziYaz } from "./lib/onarim-izi";
 
-const APPLY = process.argv.includes("--apply");
+const argv = process.argv.slice(2);
+const APPLY = argv.includes("--apply");
+const ONAY = Number((argv.find((a) => a.startsWith("--onay=")) ?? "").split("=")[1] ?? NaN);
+const HEDEF = (argv.find((a) => a.startsWith("--hedef=")) ?? "").split("=")[1] ?? "";
 
 type Aday = {
   id: string;
@@ -51,20 +55,20 @@ type Aday = {
 };
 
 async function main(): Promise<void> {
-  console.log(`\n=== Tambur geri alması izi — ${APPLY ? "UYGULAMA" : "KURU KOŞUM"} ===\n`);
+  const db = hedefDbAdi();
+  console.log(`\n=== Tambur geri alması izi — ${APPLY ? `UYGULAMA (onay=${ONAY}, hedef=${HEDEF})` : "KURU KOŞUM"} ===`);
+  console.log(`HEDEF VERİTABANI: ${db}\n`);
 
-  // Audit'te "bu parçayı geri alma iptal etti" diyen olaylar.
+  // Audit'te (sıcak ∪ arşiv) "bu parçayı geri alma iptal etti" diyen olaylar.
   const adaylar = await prisma.$queryRaw<Aday[]>`
-    WITH undo AS (
-      SELECT DISTINCT ("newData" ->> 'cancelledChildId')::uuid AS child
-      FROM system_logs
-      WHERE "newData" ->> 'event' LIKE 'TAMBUR_UNDO%'
-        AND "newData" ? 'cancelledChildId'
+    WITH olay AS (
+      SELECT "newData" FROM system_logs WHERE starts_with("newData" ->> 'event', 'TAMBUR_UNDO')
+      UNION ALL
+      SELECT "newData" FROM system_log_archives WHERE starts_with("newData" ->> 'event', 'TAMBUR_UNDO')
+    ), undo AS (
+      SELECT DISTINCT ("newData" ->> 'cancelledChildId')::uuid AS child FROM olay WHERE "newData" ? 'cancelledChildId'
       UNION
-      SELECT DISTINCT jsonb_array_elements_text("newData" -> 'cancelledChildIds')::uuid
-      FROM system_logs
-      WHERE "newData" ->> 'event' LIKE 'TAMBUR_UNDO%'
-        AND "newData" ? 'cancelledChildIds'
+      SELECT DISTINCT jsonb_array_elements_text("newData" -> 'cancelledChildIds')::uuid FROM olay WHERE "newData" ? 'cancelledChildIds'
     )
     SELECT r.id, r.barcode, r."currentQty", r."initialQty", r."cancelledAt",
            p.barcode AS "parentBarcode"
@@ -99,9 +103,11 @@ async function main(): Promise<void> {
   );
 
   if (!APPLY) {
-    console.log("KURU KOŞUM — hiçbir şey yazılmadı. Yazmak için: --apply\n");
+    console.log(`KURU KOŞUM — hiçbir şey yazılmadı. Yazmak için (kullanıcı onayıyla):\n  npx tsx scripts/fix_tambur_undo_cancel_marker.ts --apply --onay=${adaylar.length} --hedef=${db}\n`);
     return;
   }
+  if (!HEDEF || HEDEF !== db) { console.error(`❌ --hedef=${HEDEF || "(yok)"} ≠ çözülen veritabanı "${db}". Yazma YOK.`); process.exitCode = 1; return; }
+  if (!Number.isFinite(ONAY) || ONAY !== adaylar.length) { console.error(`❌ ONAY UYUŞMUYOR: kuru koşum ${adaylar.length} parça, --onay=${ONAY}. Yazma YOK.`); process.exitCode = 1; return; }
 
   const res = await prisma.roll.updateMany({
     where: {

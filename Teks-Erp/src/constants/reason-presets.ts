@@ -152,10 +152,8 @@ export const TAMBUR_UNDO_CANCEL_TEXT = "Tambur geri alması — metraj kaynak to
  *   2) restore guard'ın YENİ DALINI besler.
  *
  * ⚠️ AMA ENGELİ GETİREN ŞEY BU KOD DEĞİL, GUARD'IN DALIDIR. Sebep kodu yazmak
- * tek başına hiçbir engel getirmez — `isUndoSourcedByAudit` ilk satırı
- * `if (cancelReasonCode) return false;` olduğu için kod DOLU olduğu an audit
- * dalı da kapanır (ölçüldü 2026-09-13). İkisini karıştırmak kusuru "kapatılmış
- * sanmaya" yol açar.
+ * tek başına hiçbir engel getirmez; engel `resolveRollRestoreBlockReason`un bu
+ * koda bakan dalından gelir. İkisini karıştırmak kusuru "kapatılmış sanmaya" yol açar.
  */
 export const FASON_RECEIPT_CANCEL_CODE = "FASON_KABUL_IPTAL";
 export const FASON_RECEIPT_CANCEL_TEXT =
