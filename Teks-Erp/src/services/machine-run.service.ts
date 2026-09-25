@@ -33,7 +33,8 @@ import { assertProductionLineFree, resolveOpenContext, resolveRunStamp } from ".
 import { runOpenBeamWarning } from "./helpers/warp-beam-mount.helper";
 import { markWeavingOrderInProgressTx } from "./helpers/weaving-order.helper";
 import { assertRunWeavingOrderGate } from "./helpers/production-chain-gates.helper";
-import type { ApiResponse } from "../types/api.types";
+import type { ApiResponse } from "../types/api.types";import { assertItemUsableTx } from "./helpers/item-usage.helper";
+
 
 const TABLE = "MACHINE_RUN";
 
@@ -151,7 +152,7 @@ export async function openMachineRun(
     }
   }
 
-  const { machine, itemId, colorId } = await resolveOpenContext(input);
+  const { machine, itemId, colorId, itemUsage } = await resolveOpenContext(input);
   // Z1: `dokuma.runWeavingOrderRequired` açıkken işsiz koşum 400; kapalıyken bağsız koşum bugünkü gibi meşru.
   await assertRunWeavingOrderGate(prisma, input.weavingOrderId ?? null);
   const started = resolveRunStamp(input.startedAt, "başlangıç zamanı");
@@ -164,6 +165,8 @@ export async function openMachineRun(
   let orderTransitioned = false;
   try {
     created = await prisma.$transaction(async (tx) => {
+      // İLK ifade: kart kilidi (açık koşum D1 referansıdır) — dokuma işi claim'inden ÖNCE.
+      if (itemId) await assertItemUsableTx(tx, itemId, itemUsage);
       // İş emri PLANNED → IN_PROGRESS geçişinin TEK yazarı iş emri helper'ıdır;
       // tetikleyici koşumdur. Claim satır kilidi alır ve INSERT'ten ÖNCE koşar ki
       // eşzamanlı kapatma/iptal claim'iyle serileşsin (1e hükmü 2026-09-13).

@@ -4,6 +4,7 @@
 
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
+import { ItemLifecycleStatus } from "@prisma/client";
 import { BaseController } from "../controllers/base.controller";
 import { ItemService } from "../services/item.service";
 import { verifyToken } from "../middlewares/auth.middleware";
@@ -30,6 +31,14 @@ export const itemService = new ItemService({
 
 const controller = new BaseController(itemService);
 const router = Router();
+
+// Yaşam döngüsü (URUN-YASAM-DONGUSU.md §5). `clientToken` şemada YOK: geçiş hedef-durum
+// idempotenttir (aynı hedefe ikinci istek yazmadan 200 döner), saklanmayacak alan kabul edilmez.
+const lifecycleBody = z.object({
+  to: z.nativeEnum(ItemLifecycleStatus),
+  reason: z.string().trim().max(500, "Gerekçe en fazla 500 karakter olabilir").optional().nullable(),
+});
+const lifecyclePreviewQuery = z.object({ to: z.nativeEnum(ItemLifecycleStatus) });
 
 const addAllowedColorBody = z.object({
   colorId: z.string().uuid("Geçersiz renk ID"),
@@ -236,8 +245,10 @@ router.patch("/:id", verifyToken, requirePermission("item:write"), controller.up
  * /api/items/{id}:
  *   delete:
  *     tags: [Items]
- *     summary: Stok kartını pasife al
- *     description: Fiziksel silme yapılmaz, isActive=false yapılır.
+ *     summary: Stok kartını pasife al (Pasif'e geç)
+ *     description: >
+ *       Fiziksel silme yapılmaz; yaşam döngüsü yazıcısıyla ARCHIVED olur. Canlı referans
+ *       varsa 409 `ITEM_HAS_LIVE_REFERENCES` + kayıt listesi (çıkış: Tükenene kadar / Birleştir).
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -250,6 +261,95 @@ router.patch("/:id", verifyToken, requirePermission("item:write"), controller.up
  *         description: Pasife alındı
  */
 router.delete("/:id", verifyToken, requirePermission("item:write"), controller.remove);
+
+/**
+ * @openapi
+ * /api/items/{id}/lifecycle-preview:
+ *   get:
+ *     tags: [Items]
+ *     summary: Yaşam döngüsü geçiş önizlemesi
+ *     description: >
+ *       Kartın canlı referanslarını (top, açık iş emri, açık sipariş/alış kalemi, dokuma işi,
+ *       tezgah koşumu, fason iplik sevki, iplik bakiyesi) TEK TEK listeler. `to=ARCHIVED`
+ *       için `canTransition` yalnız canlı referans 0 iken true. Benzer adlı aktif kartlar
+ *       yalnız bilgidir (birleştirme otomatik değildir).
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: to
+ *         required: true
+ *         schema: { type: string, enum: [ACTIVE, PHASE_OUT, ARCHIVED] }
+ *     responses:
+ *       200:
+ *         description: Önizleme
+ *       404:
+ *         description: Kart bulunamadı
+ */
+router.get(
+  "/:id/lifecycle-preview",
+  verifyToken,
+  requirePermission("item:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { to } = lifecyclePreviewQuery.parse(req.query);
+      res.json(await itemService.lifecyclePreview(String(req.params.id), to));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/items/{id}/lifecycle:
+ *   post:
+ *     tags: [Items]
+ *     summary: Yaşam döngüsü geçişi (Aktif / Tükenene kadar / Pasif)
+ *     description: >
+ *       Tek yazar. Pasif'e geçişte canlı referans varsa 409 `ITEM_HAS_LIVE_REFERENCES`
+ *       (`details.references` önizlemeyle aynı biçim). Kart zaten hedef durumdaysa yazmadan
+ *       200 + `idempotent:true`.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [to]
+ *             properties:
+ *               to: { type: string, enum: [ACTIVE, PHASE_OUT, ARCHIVED] }
+ *               reason: { type: string, maxLength: 500 }
+ *     responses:
+ *       200:
+ *         description: Geçiş yapıldı (ya da kart zaten hedefteydi)
+ *       409:
+ *         description: Canlı referans var / durum bu sırada değişti
+ */
+router.post(
+  "/:id/lifecycle",
+  verifyToken,
+  requirePermission("item:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { to, reason } = lifecycleBody.parse(req.body);
+      res.json(await itemService.transitionLifecycle(String(req.params.id), to, reason ?? null, req.user?.userId));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /**
  * @openapi

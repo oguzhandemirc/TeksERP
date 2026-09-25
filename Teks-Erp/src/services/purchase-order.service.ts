@@ -97,6 +97,7 @@ import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { receiptQtyByRollTx, receiptQtyWarning } from "./helpers/receipt-qty.helper";
 import type { ApiResponse } from "../types/api.types";
 import { uyari } from "../lib/logger";
+import { runItemUsageChecks, runItemUsageChecksTx, type ItemUsageCheck } from "./helpers/item-usage.helper";
 
 /**
  * Alış siparişi senkronunun `pg_advisory_xact_lock` NAMESPACE'i (2 argümanlı form).
@@ -110,6 +111,17 @@ import { uyari } from "../lib/logger";
  * karşılaştırma yazıldığında TS2367 ile derlemeyi kırardı (SHIPMENT_LOCK_NS emsali).
  */
 export const PURCHASE_ORDER_LOCK_NS: number = 8027;
+
+/** Alış kalemi kart kullanımı: yeni kalem A4 (yeni alım); siparişte zaten duran kalem mevcut belgeyi yürütür (E). */
+function purchaseLineUsageChecks(
+  lines: ReadonlyArray<{ itemId: string }>,
+  existingItemIds: ReadonlySet<string>,
+): ItemUsageCheck[] {
+  return [...new Set(lines.map((l) => l.itemId))].map((itemId) => ({
+    itemId,
+    usage: existingItemIds.has(itemId) ? "EXISTING_GOODS" : "NEW_PURCHASE",
+  }));
+}
 
 /** Belge numarası ön eki — AS + GGAAYY + NNNN. */
 const PO_PREFIX = "AS";
@@ -549,7 +561,8 @@ export class PurchaseOrderService {
   }
 
   /** Kalem ürünleri var + aktif mi; miktar pozitif mi. Tek sorguda toplu kontrol. */
-  private async assertLines(lines: PurchaseOrderLineInput[]): Promise<void> {
+  /** `existingItemIds`: düzenlenen siparişte ZATEN duran kalemler (yeniden kaydı yeni alım değildir). */
+  private async assertLines(lines: PurchaseOrderLineInput[], existingItemIds: ReadonlySet<string> = new Set()): Promise<void> {
     if (lines.length === 0) throw AppError.badRequest("Alış siparişi en az bir kalem içermeli.");
 
     for (const [idx, line] of lines.entries()) {
@@ -559,14 +572,7 @@ export class PurchaseOrderService {
       }
     }
 
-    const ids = [...new Set(lines.map((l) => l.itemId))];
-    const items = await prisma.item.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, isActive: true } });
-    const byId = new Map(items.map((i) => [i.id, i]));
-    for (const id of ids) {
-      const item = byId.get(id);
-      if (!item) throw AppError.badRequest("Sipariş kalemindeki ürün bulunamadı.");
-      if (!item.isActive) throw AppError.badRequest(`"${item.name}" pasif durumda — siparişe eklenemez.`);
-    }
+    await runItemUsageChecks(prisma, purchaseLineUsageChecks(lines, existingItemIds));
   }
 
   // ---------------------------------------------------------------------------
@@ -615,6 +621,8 @@ export class PurchaseOrderService {
       created = await withBarcodeRetry(
         () =>
           prisma.$transaction(async (tx) => {
+            // İLK ifade: kart kilitleri (8030 SHARED → FOR SHARE) — alış satırı D1 referansıdır.
+            await runItemUsageChecksTx(tx, purchaseLineUsageChecks(input.lines, new Set()));
             const orderNo = await nextPurchaseOrderNo(tx, orderDate);
             return tx.purchaseOrder.create({
               data: {
@@ -727,12 +735,12 @@ export class PurchaseOrderService {
     // gönderilmezse tedarikçiye dokunulmaz (`hasSupplierPartyInput`).
     const partyTouched = hasSupplierPartyInput(input);
     const party = partyTouched ? await this.assertSupplierParty(input) : null;
-    if (input.lines) await this.assertLines(input.lines);
-
     const before = await prisma.purchaseOrder.findUnique({
       where: { id },
-      select: { id: true, orderNo: true, status: true, lines: { select: { receivedQty: true } } },
+      select: { id: true, orderNo: true, status: true, lines: { select: { receivedQty: true, itemId: true } } },
     });
+    const existingItemIds = new Set(before?.lines.map((l) => l.itemId) ?? []);
+    if (input.lines) await this.assertLines(input.lines, existingItemIds);
     if (!before) throw AppError.notFound("Alış siparişi bulunamadı.");
     if (before.status !== PurchaseOrderStatus.OPEN) {
       throw AppError.conflict(
@@ -747,6 +755,8 @@ export class PurchaseOrderService {
     await prisma.$transaction(async (tx) => {
       // ⚠️ SIRA LOAD-BEARING: kilit HER SORGUDAN ÖNCE (senkron/iptal ile aynı).
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PURCHASE_ORDER_LOCK_NS}::int, hashtext(${id}))`;
+      // Kart kilitleri 8027'den SONRA, satır yazımlarından ÖNCE (advisory → kart satırı).
+      if (input.lines) await runItemUsageChecksTx(tx, purchaseLineUsageChecks(input.lines, existingItemIds));
 
       // Kilit altında TAZE kontrol: dış okuma kilitten önce yapıldığı için
       // yalnız mesajı üretir; kararı bu satır verir.

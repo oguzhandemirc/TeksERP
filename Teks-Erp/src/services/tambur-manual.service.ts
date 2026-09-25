@@ -1108,6 +1108,8 @@ export class TamburManualService {
         // değil mi) topun `currentStep`/iş emri bağından ZATEN okunuyor, ayrıca
         // audit olayları da ayrı (`TAMBUR_MANUAL_ROLL` ↔ `TAMBUR_MANUAL_PRODUCE`).
         forcedEntrySource: RollEntrySource.TAMBUR_MANUAL,
+        // Açık iş emrinin ürettiği top — mevcut malı yürütür (E): "Tükenene kadar" kartta da akar.
+        itemUsage: "EXISTING_GOODS",
         // Sebep artık TOPUN ÜZERİNDE kalıcı kolonda (audit'e ek olarak): audit
         // 6 ayda bir arşivleniyor, oradan okumak sebebi zamanla kaybettiriyordu.
         entryReason: reason,
@@ -1471,6 +1473,8 @@ export class TamburManualService {
           // bu iki satırda (yukarıdaki iz #1).
           forcedStatus: RollStatus.WAREHOUSE,
           forcedEntrySource: RollEntrySource.TAMBUR_MANUAL,
+          // Açık iş emrinin ürettiği top — mevcut malı yürütür (E): "Tükenene kadar" kartta da akar.
+          itemUsage: "EXISTING_GOODS",
           // Sebep kalıcı kolonda (audit'e EK olarak — audit arşivleniyor).
           entryReason: reason,
           entryReasonCode: reasonCode,

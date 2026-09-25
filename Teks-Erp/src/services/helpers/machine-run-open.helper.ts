@@ -10,7 +10,8 @@ import { WeavingExecutionKind, WeavingOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { assertProductionLineValid } from "./production-line.helper";
-import { resolveEntryStamp } from "./duplicate-guard.helper";
+import { resolveEntryStamp } from "./duplicate-guard.helper";import { assertItemUsable, type ItemUsage } from "./item-usage.helper";
+
 
 /** Koşumun açılabildiği dokuma işi durumları — kapanmış/iptal işe koşum açılmaz. */
 export const RUN_OPENABLE_ORDER_STATUSES: readonly WeavingOrderStatus[] = [
@@ -58,6 +59,8 @@ export interface OpenContext {
   machine: { id: string; code: string };
   itemId: string | null;
   colorId: string | null;
+  /** Kart kullanımı: dokuma işine bağlı koşum açık belgeyi yürütür (C′), işsiz koşum yeni plandır (A3). */
+  itemUsage: ItemUsage;
 }
 
 /**
@@ -103,15 +106,13 @@ export async function resolveOpenContext(input: {
     itemId = itemId ?? order.itemId;
     colorId = colorId ?? order.colorId;
   }
-  if (itemId) {
-    const item = await prisma.item.findFirst({ where: { id: itemId, isActive: true }, select: { id: true } });
-    if (!item) throw AppError.badRequest("Ürün bulunamadı veya pasif", { itemId });
-  }
+  const itemUsage: ItemUsage = input.weavingOrderId ? "DOC_COMPLETION" : "NEW_PLAN";
+  if (itemId) await assertItemUsable(prisma, itemId, itemUsage);
   if (colorId) {
     const color = await prisma.color.findFirst({ where: { id: colorId, isActive: true }, select: { id: true } });
     if (!color) throw AppError.badRequest("Renk bulunamadı veya pasif", { colorId });
   }
-  return { machine: { id: machine.id, code: machine.code }, itemId, colorId };
+  return { machine: { id: machine.id, code: machine.code }, itemId, colorId, itemUsage };
 }
 
 /**

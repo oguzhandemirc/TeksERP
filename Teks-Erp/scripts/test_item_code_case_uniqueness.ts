@@ -329,7 +329,7 @@ async function main(): Promise<void> {
 
     // ── [4] Reactivate YALNIZ TAM EŞLEŞMEDE ─────────────────────────────────
     console.log("\n[4] Reactivate — tam eşleşme dirilir, harf farkı 409");
-    await prisma.item.update({ where: { id: a1.id }, data: { isActive: false } });
+    await prisma.item.update({ where: { id: a1.id }, data: { isActive: false, lifecycleStatus: "ARCHIVED" } });
 
     // 4a) HARF FARKI → diriltme YOK. Diriltme yolu adı/birimi ezer, M:N'leri
     //     siler ve `itemType`'ı yazmaz → yanlış kaydı canlandırmak sessizce
@@ -395,6 +395,7 @@ async function main(): Promise<void> {
           itemType: "FABRIC",
           unit: "MT",
           isActive: false,
+          lifecycleStatus: "ARCHIVED",
         },
         select: { id: true },
       });
@@ -453,6 +454,7 @@ async function main(): Promise<void> {
             itemType: "FABRIC",
             unit: "MT",
             isActive: false,
+            lifecycleStatus: "ARCHIVED",
           },
           select: { id: true },
         });

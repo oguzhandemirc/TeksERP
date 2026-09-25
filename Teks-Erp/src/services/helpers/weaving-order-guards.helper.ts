@@ -4,18 +4,24 @@
 import { ItemType, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
-import { OPEN_RUN_WHERE, WEAVING_ORDER_STATUS_LABEL } from "./weaving-order-input.helper";
+import { OPEN_RUN_WHERE, WEAVING_ORDER_STATUS_LABEL } from "./weaving-order-input.helper";import { assertItemUsable, type ItemUsage } from "./item-usage.helper";
+
 
 /** Referansların varlığı ve türü — FK 500'ü yerine operatör dilinde 400. */
-export async function assertRefs(f: {
-  itemId: string;
-  colorId: string | null;
-  warpSpecId: string | null;
-  subcontractorId: string | null;
-}): Promise<void> {
-  const item = await prisma.item.findUnique({ where: { id: f.itemId }, select: { itemType: true, isActive: true } });
-  if (!item || !item.isActive) throw AppError.badRequest("Kumaş kartı bulunamadı ya da pasif");
+export async function assertRefs(
+  f: {
+    itemId: string;
+    colorId: string | null;
+    warpSpecId: string | null;
+    subcontractorId: string | null;
+  },
+  /** Kart kullanımı: yeni dokuma işi A3 (NEW_PLAN); kartı değişmeyen güncellemede `null` (kontrol yok). */
+  itemUsage: ItemUsage | null = "NEW_PLAN",
+): Promise<void> {
+  const item = await prisma.item.findUnique({ where: { id: f.itemId }, select: { itemType: true } });
+  if (!item) throw AppError.badRequest("Kumaş kartı bulunamadı");
   if (item.itemType !== ItemType.FABRIC) throw AppError.badRequest("Dokuma işi yalnız KUMAŞ kartına açılır");
+  if (itemUsage) await assertItemUsable(prisma, f.itemId, itemUsage);
   if (f.colorId) {
     const n = await prisma.color.count({ where: { id: f.colorId, isActive: true } });
     if (n === 0) throw AppError.badRequest("Renk bulunamadı ya da pasif");

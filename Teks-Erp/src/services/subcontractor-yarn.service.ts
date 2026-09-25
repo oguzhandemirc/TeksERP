@@ -23,7 +23,8 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
-import { applyYarnMovementTx } from "./yarn.service";
+import { applyYarnMovementTx } from "./yarn.service";import { assertItemUsableTx } from "./helpers/item-usage.helper";
+
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -88,9 +89,10 @@ export async function dispatchYarnItemsTx(
   let totalKg = D(0);
   for (const line of sorted) {
     const qty = kg(line.qtyKg, "İplik kg");
-    const item = await tx.item.findUnique({ where: { id: line.itemId }, select: { id: true, code: true, itemType: true, isActive: true } });
+    const item = await tx.item.findUnique({ where: { id: line.itemId }, select: { id: true, code: true, itemType: true } });
     if (!item || item.itemType !== ItemType.YARN) throw AppError.badRequest("Fasona yalnız İPLİK stok kartı gönderilir", { code: "YARN_ITEM_TYPE", itemId: line.itemId });
-    if (!item.isActive) throw AppError.badRequest(`${item.code} pasif — fasona gönderilemez`, { code: "YARN_ITEM_INACTIVE" });
+    // Mevcut ipliği yürütür (E): "Tükenene kadar" kartta da gider; Pasif kart reddedilir (kart kilidi altında).
+    await assertItemUsableTx(tx, item.id, "EXISTING_GOODS");
     const wh = await tx.warehouse.findUnique({ where: { id: line.warehouseId }, select: { id: true, isActive: true } });
     if (!wh || !wh.isActive) throw AppError.badRequest("Çıkış deposu yok ya da pasif", { code: "WAREHOUSE_INVALID", warehouseId: line.warehouseId });
     const created = await tx.subcontractorDispatchItem.create({

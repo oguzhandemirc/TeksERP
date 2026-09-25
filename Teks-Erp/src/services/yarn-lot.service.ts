@@ -14,7 +14,8 @@ import type { CursorPaginatedResponse } from "./base.service";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { ensureYarnLotTx, normalizeLotNo, yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
-import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
+import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";import { assertItemUsable } from "./helpers/item-usage.helper";
+
 
 export interface YarnLotDto {
   id: string;
@@ -80,9 +81,10 @@ export class YarnLotService {
   async create(input: { itemId: string; lotNo: string; supplierId?: string | null; notes?: string | null; ownerCustomerId?: string | null }, userId?: string): Promise<ApiResponse<YarnLotDto>> {
     const lotNo = normalizeLotNo(input.lotNo);
     if (!lotNo) throw AppError.badRequest("Lot numarası boş olamaz", { code: "YARN_LOT_NO_REQUIRED" });
-    const item = await prisma.item.findUnique({ where: { id: input.itemId }, select: { itemType: true, isActive: true, name: true } });
+    const item = await prisma.item.findUnique({ where: { id: input.itemId }, select: { itemType: true } });
     if (!item || item.itemType !== "YARN") throw AppError.badRequest("Lot yalnız iplik kalemine açılır", { code: "YARN_LOT_ITEM_NOT_YARN" });
-    if (!item.isActive) throw AppError.badRequest(`"${item.name}" kalemi pasif — lot açılamaz`);
+    // Elle lot açma karta yeni stok tanımı ekler (C) — "Tükenene kadar" kartta kapalı.
+    await assertItemUsable(prisma, input.itemId, "NEW_STOCK");
     const created = await prisma.$transaction(async (tx) => {
       // G3 emanet: sahip verildiyse modül açık olmalı (403); sahip doğum niteliğidir — `update` yolu almaz (E2b).
       await assertEmanetWritableTx(tx, input.ownerCustomerId ?? null, "iplik lotu");

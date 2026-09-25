@@ -41,6 +41,16 @@ import {
 import { resolveSectionOrder, type TravelerSection } from "./document-render/traveler-card.sections";
 import { resolveSeriesFormat } from "./number-series.service";
 import { updateSeriesNumberSource } from "./helpers/series-write.helper";
+import {
+  DEFAULT_PHASE_OUT_LINE_QTY,
+  DEFAULT_PHASE_OUT_NEW_ORDER,
+  DEFAULT_PHASE_OUT_NEW_PLAN_ENABLED,
+  PHASE_OUT_LINE_QTY_VALUES,
+  PHASE_OUT_NEW_ORDER_VALUES,
+  phaseOutExitWarning,
+  type PhaseOutLineQty,
+  type PhaseOutNewOrder,
+} from "./helpers/item-lifecycle-settings.helper";
 
 /**
  * SystemSetting.value bir JsonValue. Reader yardımcıları: gelen değer
@@ -378,6 +388,16 @@ export const SETTING_KEYS = {
    *  kilitlenirse mal bina içinde kalır (tasarım §11 "geçmişe etki eden bayrak
    *  yok"). ENFORCE edilir (backend). */
   SHIPPING_ORDER_REQUIREMENT: "shipping.orderRequirement",
+  /** "Tükenene kadar" karta yeni sipariş: OKUTULAN_TOPLAR (default) / KAPALI / SERBEST
+   *  (URUN-YASAM-DONGUSU.md §4.1). KAPALI ↔ `shipping.orderRequirement=block` çapraz
+   *  kapıyla birlikte kurulamaz (mal çıkamaz). ENFORCE edilir (backend). */
+  ITEM_LIFECYCLE_PHASE_OUT_NEW_ORDER: "itemLifecycle.phaseOutNewOrder",
+  /** "Tükenene kadar" kartın açık sipariş satırında miktar: SERBEST_UYARILI (default) /
+   *  AZALTMA_SERBEST / KILITLI. ENFORCE edilir (backend). */
+  ITEM_LIFECYCLE_PHASE_OUT_LINE_QTY: "itemLifecycle.phaseOutLineQty",
+  /** "Tükenene kadar" karta yeni üretim planı (topsuz+siparişsiz iş emri, hedef ürün
+   *  değişimi, dokuma işi). Default true. ENFORCE edilir (backend). */
+  ITEM_LIFECYCLE_PHASE_OUT_NEW_PLAN: "itemLifecycle.phaseOutNewPlan",
   /** Sevk öncesi TÜM çuvallar tartılmalı mı. Default false = BUGÜNKÜ davranış
    *  (yalnız `destination = EXPORT` tartı ister). Açıkken yurtiçi sevk de tartı
    *  ister ve hızlı sevk (`from-rolls`) KOMPLE kapanır — orada çuval operatöre
@@ -1636,6 +1656,12 @@ export interface FeatureFlags {
   /** Sevkiyat siparişe bağlanmalı mı: 'off' | 'warn' (default) | 'block'.
    *  Backend ENFORCE eder — kapı YALNIZ kurulumda (dispatch'e konmaz). */
   shippingOrderRequirement: ShipmentOrderRequirement;
+  /** "Tükenene kadar" karta yeni sipariş (default OKUTULAN_TOPLAR). */
+  itemPhaseOutNewOrder: PhaseOutNewOrder;
+  /** "Tükenene kadar" kartın açık satırında miktar (default SERBEST_UYARILI). */
+  itemPhaseOutLineQty: PhaseOutLineQty;
+  /** "Tükenene kadar" karta yeni üretim planı açık mı (default true). */
+  itemPhaseOutNewPlan: boolean;
   /** Sevk öncesi TÜM çuvallar tartılmalı mı (default false → yalnız ihracat).
    *  Backend ENFORCE eder; ihracat kuralı bayraktan bağımsız her zaman geçerli. */
   shippingWeighRequiredEnabled: boolean;
@@ -2067,6 +2093,9 @@ export class SystemSettingService {
       shipmentManualSackCountEnabled: await readShipmentManualSackCountEnabled(cacheClient),
       shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
       shippingOrderRequirement: await readShippingOrderRequirement(cacheClient),
+      itemPhaseOutNewOrder: await readItemPhaseOutNewOrder(cacheClient),
+      itemPhaseOutLineQty: await readItemPhaseOutLineQty(cacheClient),
+      itemPhaseOutNewPlan: await readItemPhaseOutNewPlan(cacheClient),
       shippingWeighRequiredEnabled: await readShippingWeighRequiredEnabled(cacheClient),
       shippingManualWeightRestrictedEnabled:
         await readShippingManualWeightRestrictedEnabled(cacheClient),
@@ -2868,6 +2897,43 @@ export class SystemSettingService {
         SETTING_KEYS.SHIPPING_ORDER_REQUIREMENT,
         v,
         "Sevkiyat siparişe bağlansın mı: off (sorma) / warn (uyar) / block (zorunlu)",
+        userId
+      );
+    }
+
+    // ── ÜRÜN YAŞAM DÖNGÜSÜ — "Tükenene kadar" davranışı (URUN-YASAM-DONGUSU.md §4.1) ──
+    if (Object.prototype.hasOwnProperty.call(input, "itemPhaseOutNewOrder")) {
+      const v = input.itemPhaseOutNewOrder;
+      if (typeof v !== "string" || !PHASE_OUT_NEW_ORDER_VALUES.includes(v as PhaseOutNewOrder)) {
+        throw AppError.badRequest("Yeni sipariş seçeneği 'OKUTULAN_TOPLAR', 'KAPALI' veya 'SERBEST' olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.ITEM_LIFECYCLE_PHASE_OUT_NEW_ORDER,
+        v,
+        "Tükenene kadar karta yeni sipariş: OKUTULAN_TOPLAR / KAPALI / SERBEST",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "itemPhaseOutLineQty")) {
+      const v = input.itemPhaseOutLineQty;
+      if (typeof v !== "string" || !PHASE_OUT_LINE_QTY_VALUES.includes(v as PhaseOutLineQty)) {
+        throw AppError.badRequest("Açık satırda miktar seçeneği 'SERBEST_UYARILI', 'AZALTMA_SERBEST' veya 'KILITLI' olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.ITEM_LIFECYCLE_PHASE_OUT_LINE_QTY,
+        v,
+        "Tükenene kadar kartın açık sipariş satırında miktar: SERBEST_UYARILI / AZALTMA_SERBEST / KILITLI",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "itemPhaseOutNewPlan")) {
+      if (typeof input.itemPhaseOutNewPlan !== "boolean") {
+        throw AppError.badRequest("itemPhaseOutNewPlan boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.ITEM_LIFECYCLE_PHASE_OUT_NEW_PLAN,
+        input.itemPhaseOutNewPlan,
+        "Tükenene kadar karta yeni üretim planı (topsuz+siparişsiz iş emri, dokuma işi) açılabilsin",
         userId
       );
     }
@@ -3804,7 +3870,16 @@ export class SystemSettingService {
       );
     }
 
-    return this.getFeatureFlags();
+    const flags = await this.getFeatureFlags();
+    // Çıkış uyarısı — iki ayardan biri bu kayıtta yazıldıysa ETKİN birleşim ölçülür (iki yön).
+    if (
+      Object.prototype.hasOwnProperty.call(input, "itemPhaseOutNewOrder") ||
+      Object.prototype.hasOwnProperty.call(input, "shippingOrderRequirement")
+    ) {
+      const w = phaseOutExitWarning(await readItemPhaseOutNewOrder(), await readShippingOrderRequirement());
+      if (w) return { ...flags, warnings: [...(flags.warnings ?? []), w] };
+    }
+    return flags;
   }
 }
 
@@ -4656,6 +4731,49 @@ export async function readShippingOrderRequirement(
     return v as ShipmentOrderRequirement;
   }
   return DEFAULT_SHIPMENT_ORDER_REQUIREMENT;
+}
+
+/** "Tükenene kadar" karta yeni sipariş. Kayıt yok / kümede değil → OKUTULAN_TOPLAR (kod sigortası). */
+export async function readItemPhaseOutNewOrder(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<PhaseOutNewOrder> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.ITEM_LIFECYCLE_PHASE_OUT_NEW_ORDER },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return typeof v === "string" && PHASE_OUT_NEW_ORDER_VALUES.includes(v as PhaseOutNewOrder)
+    ? (v as PhaseOutNewOrder)
+    : DEFAULT_PHASE_OUT_NEW_ORDER;
+}
+
+/** "Tükenene kadar" kartın açık satırında miktar. Kayıt yok / kümede değil → SERBEST_UYARILI. */
+export async function readItemPhaseOutLineQty(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<PhaseOutLineQty> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.ITEM_LIFECYCLE_PHASE_OUT_LINE_QTY },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return typeof v === "string" && PHASE_OUT_LINE_QTY_VALUES.includes(v as PhaseOutLineQty)
+    ? (v as PhaseOutLineQty)
+    : DEFAULT_PHASE_OUT_LINE_QTY;
+}
+
+/** "Tükenene kadar" karta yeni üretim planı. Kayıt yok → true (kullanıcının seçtiği varsayılan). */
+export async function readItemPhaseOutNewPlan(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.ITEM_LIFECYCLE_PHASE_OUT_NEW_PLAN },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_PHASE_OUT_NEW_PLAN_ENABLED;
+  return asBoolean(setting.value);
 }
 
 /**

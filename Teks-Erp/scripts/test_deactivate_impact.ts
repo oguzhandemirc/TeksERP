@@ -17,10 +17,16 @@
 // §2 BAĞIMLILIK YOKKEN uyarı YOK (vakumen dolu değil)
 // §3 ÖLÜ satırlar sayılmaz (gürültü uyarıyı değersizleştirir)
 // §4 Pasife alma HÂLÂ ÇALIŞIYOR (esneklik korundu)
+//
+// ⚠️ ÜRÜN KARTI BU BEKÇİDEN ÇIKTI (2026-09-25, URUN-YASAM-DONGUSU.md §14/2): kullanıcı
+// kararıyla üründe "uyar ama bırak" bilerek değişti — canlı referanslı kart artık Pasif'e
+// ALINAMAZ (409 + kayıt listesi; ölçen `test_item_archive_gate`). Bu bekçi bugün hâlâ
+// uyar-ama-bırak yolundaki ana veriyi (RENK) ölçer; S4 bu kapıyı diğer ana verilere de
+// getirdiğinde bu dosya arşiv kapısı bekçisine katlanır.
 // =============================================================================
 import { ItemType, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { ItemService } from "../src/services/item.service";
+import { colorService } from "../src/routes/color.routes";
 
 let pass = 0;
 let fail = 0;
@@ -35,23 +41,28 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 
 const STAMP = `TSTDEA${Date.now().toString().slice(-7)}`;
-const svc = new ItemService({
-  modelName: "item",
-  tableName: "ITEM",
-  searchFields: ["name", "code"],
-  codeSearchFields: ["code"],
-  dateFields: ["createdAt"],
-});
+const svc = colorService;
 const itemIds: string[] = [];
+const colorIds: string[] = [];
 const rollIds: string[] = [];
+let kumasId = "";
 
+/** Pasife alınacak kayıt: RENK (bkz. başlık — ürün arşiv kapısına geçti). */
 async function mkItem(tag: string): Promise<string> {
-  const it = await prisma.item.create({
-    data: { code: `${STAMP}${tag}`.slice(0, 30), name: `${STAMP} ${tag}`, itemType: ItemType.FABRIC },
+  if (!kumasId) {
+    const it = await prisma.item.create({
+      data: { code: `${STAMP}K`.slice(0, 30), name: `${STAMP} KUMAS`, itemType: ItemType.FABRIC },
+      select: { id: true },
+    });
+    itemIds.push(it.id);
+    kumasId = it.id;
+  }
+  const c = await prisma.color.create({
+    data: { code: `${STAMP}${tag}`.slice(0, 30), name: `${STAMP} RENK ${tag}` },
     select: { id: true },
   });
-  itemIds.push(it.id);
-  return it.id;
+  colorIds.push(c.id);
+  return c.id;
 }
 
 async function main(): Promise<void> {
@@ -63,7 +74,8 @@ async function main(): Promise<void> {
   const canliTop = await prisma.roll.create({
     data: {
       barcode: `${STAMP}-R1`.slice(0, 30),
-      itemId: bagli,
+      itemId: kumasId,
+      colorId: bagli,
       initialQty: 100,
       currentQty: 100,
       status: RollStatus.WAREHOUSE,
@@ -80,7 +92,7 @@ async function main(): Promise<void> {
     (r1.message ?? "").slice(0, 95),
   );
   const iz = await prisma.systemLog.findFirst({
-    where: { tableName: "ITEM", recordId: bagli, action: "DELETE" },
+    where: { tableName: "COLOR", recordId: bagli, action: "DELETE" },
     orderBy: { createdAt: "desc" },
     select: { newData: true },
   });
@@ -107,7 +119,8 @@ async function main(): Promise<void> {
   const oluTop = await prisma.roll.create({
     data: {
       barcode: `${STAMP}-R2`.slice(0, 30),
-      itemId: oluBagli,
+      itemId: kumasId,
+      colorId: oluBagli,
       initialQty: 100,
       currentQty: 0,
       // ⚠️ İptal edilmiş top pasife almayı sorunlu KILMAZ; sayılsaydı uyarı
@@ -133,7 +146,8 @@ main()
   .finally(async () => {
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => undefined);
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } }).catch(() => undefined);
-    await prisma.systemLog.deleteMany({ where: { recordId: { in: itemIds } } }).catch(() => undefined);
+    await prisma.systemLog.deleteMany({ where: { recordId: { in: [...itemIds, ...colorIds] } } }).catch(() => undefined);
+    await prisma.color.deleteMany({ where: { id: { in: colorIds } } }).catch(() => undefined);
     await prisma.item.deleteMany({ where: { id: { in: itemIds } } }).catch(() => undefined);
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();

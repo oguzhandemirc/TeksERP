@@ -48,7 +48,8 @@ import { assertLotMatchesItemTx, assertLotQualityReleasedTx, normalizeLotNo, yar
 import { readIplikEnabled } from "./system-setting.service";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
-import type { ApiResponse } from "../types/api.types";
+import type { ApiResponse } from "../types/api.types";import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
+
 
 
 type Tx = Prisma.TransactionClient;
@@ -414,12 +415,9 @@ export class YarnService {
       throw AppError.badRequest("Miktar sıfırdan büyük olmalı. Çıkış için miktarı eksi yazmayın — işlem türünü (Çıkış) seçin.");
     }
 
-    const item = await prisma.item.findUnique({
-      where: { id: input.itemId },
-      select: { id: true, name: true, code: true, itemType: true, isActive: true },
-    });
-    if (!item) throw AppError.badRequest("Kalem bulunamadı.");
-    if (!item.isActive) throw AppError.badRequest(`"${item.name}" pasif durumda.`);
+    // Elle GİRİŞ karta yeni stok ekler (C); çıkış ve sayım düzeltmesi mevcut stoğu yürütür (E).
+    const itemUsage: ItemUsage = input.kind === YarnMovementKind.IN ? "NEW_STOCK" : "EXISTING_GOODS";
+    const item = await assertItemUsable(prisma, input.itemId, itemUsage);
     if (item.itemType !== ItemType.YARN) {
       // Sessizce yazmak, aynı kalem için biri `Roll` biri kg olmak üzere İKİ
       // stok rakamı doğururdu ve hangisinin doğru olduğu sorulamazdı.
@@ -436,8 +434,10 @@ export class YarnService {
     if (!wh) throw AppError.badRequest("Depo bulunamadı.");
     if (!wh.isActive) throw AppError.badRequest(`"${wh.name}" deposu pasif — bu depoya stok hareketi yazılamaz.`);
 
-    const res = await prisma.$transaction((tx) =>
-      applyYarnMovementTx(tx, {
+    const res = await prisma.$transaction(async (tx) => {
+      // İLK ifade: kart kilidi (iplik bakiyesi D1 referansıdır).
+      await assertItemUsableTx(tx, input.itemId, itemUsage);
+      return applyYarnMovementTx(tx, {
         itemId: input.itemId,
         warehouseId: input.warehouseId,
         kind: input.kind,
@@ -445,8 +445,8 @@ export class YarnService {
         reason: input.reason ?? null,
         userId: userId ?? null,
         lotId: input.lotId ?? null,
-      }),
-    );
+      });
+    });
 
     void AuditService.log({
       userId,

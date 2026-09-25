@@ -17,6 +17,7 @@ import {
   CustomerColorAlias,
   Prisma,
 } from "@prisma/client";
+import { assertItemUsable } from "./helpers/item-usage.helper";
 
 const TABLE_ITEM = "CUSTOMER_ITEM_ALIAS";
 const TABLE_COLOR = "CUSTOMER_COLOR_ALIAS";
@@ -257,13 +258,9 @@ async function assertCustomer(customerId: string): Promise<void> {
   if (!c.isActive) throw AppError.badRequest("Müşteri pasif durumda");
 }
 
+/** Müşteri ürün adı karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı. */
 async function assertItem(itemId: string): Promise<void> {
-  const i = await prisma.item.findUnique({
-    where: { id: itemId },
-    select: { id: true, isActive: true },
-  });
-  if (!i) throw AppError.notFound("Ürün bulunamadı");
-  if (!i.isActive) throw AppError.badRequest("Ürün pasif durumda");
+  await assertItemUsable(prisma, itemId, "DEFINITION");
 }
 
 async function assertColor(colorId: string): Promise<void> {

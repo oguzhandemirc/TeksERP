@@ -51,7 +51,8 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { buildWhereClause, buildTurkishSearch, isEnumMember, readIdCondition } from "../utils/query-parser";
-import type { ApiResponse } from "../types/api.types";
+import type { ApiResponse } from "../types/api.types";import { assertItemUsable } from "./helpers/item-usage.helper";
+
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -345,9 +346,8 @@ export class ItemPriceService {
     const customerId = input.customerId ?? null;
 
     // ── Dış referanslar: var mı + AKTİF mi ────────────────────────────────
-    const item = await prisma.item.findUnique({ where: { id: input.itemId }, select: { id: true, name: true, isActive: true } });
-    if (!item) throw AppError.badRequest("Kalem bulunamadı.");
-    if (!item.isActive) throw AppError.badRequest(`"${item.name}" pasif durumda — fiyat tanımlanamaz.`);
+    // Fiyat karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı.
+    const item = await assertItemUsable(prisma, input.itemId, "DEFINITION");
 
     if (customerId) {
       const cust = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, isActive: true } });

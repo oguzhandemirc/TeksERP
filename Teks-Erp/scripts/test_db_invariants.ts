@@ -719,6 +719,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // (`updateSeriesFormat`) DB ikizi — ön eki deneyip geri alan kullanıcı bu
   // satırı gerçekten üretiyordu (ölçüldü, d3 panel turu).
   { table: "number_series", name: "number_series_retired_not_current" },
+  // Ürün yaşam döngüsü (URUN-YASAM-DONGUSU.md §3.1 D3) — migration 20260925100000_urun_yasam_dongusu:
+  // isActive = (lifecycleStatus <> ARCHIVED); çift yüklem seddi, tek yazar item-lifecycle.helper.
+  { table: "items", name: "items_lifecycle_isactive_ck" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

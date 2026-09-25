@@ -68,6 +68,14 @@ enum RollOperationType {
   SUBCONTRACTOR_RETURNED // SUBCONTRACTOR: fasondan döndü
 }
 
+/// Ürün kartı yaşam döngüsü (docs/design/URUN-YASAM-DONGUSU.md §3). `Item.isActive` bundan TÜRER:
+/// isActive = (lifecycleStatus <> ARCHIVED).
+enum ItemLifecycleStatus {
+  ACTIVE // Aktif — her şey açık
+  PHASE_OUT // Tükenene kadar — karta yeni talep/stok eklenmez; mevcut mal ve açık işler akar
+  ARCHIVED // Pasif — karta yeni kayıt bağlanamaz; üstünde canlı referans OLAMAZ
+}
+
 enum ItemType {
   YARN
   FABRIC
@@ -528,6 +536,7 @@ model User {
   updatedFabricPropertys   FabricProperty[]   @relation("FabricPropertyUpdatedBy")
   createdItems             Item[]             @relation("ItemCreatedBy")
   updatedItems             Item[]             @relation("ItemUpdatedBy")
+  lifecycleChangedItems    Item[]             @relation("ItemLifecycleChangedBy")
   createdMachines          Machine[]          @relation("MachineCreatedBy")
   updatedMachines          Machine[]          @relation("MachineUpdatedBy")
   createdMachineSpecs      MachineSpec[]      @relation("MachineSpecCreatedBy")
@@ -2654,6 +2663,15 @@ model Item {
   /// geçirmesi/tamamlaması bekleniyor. Aktif ve kullanılabilir; yalnız işaret.
   /// Admin normal düzenleme/onay ile temizler. Normal admin create'te false kalır.
   pendingReview Boolean  @default(false)
+
+  /// Yaşam döngüsü — tek yazar `services/helpers/item-lifecycle.helper.ts`; `isActive` ile BİRLİKTE yazılır
+  /// (CHECK `items_lifecycle_isactive_ck`). Son geçiş kalıcı kolonda donar; ayrı defter yok — satır silinince
+  /// raporlanan hiçbir sayı değişmez (denetim sınıfı, URUN-YASAM-DONGUSU.md §3.2).
+  lifecycleStatus      ItemLifecycleStatus @default(ACTIVE)
+  lifecycleChangedAt   DateTime?           @db.Timestamptz
+  lifecycleChangedById String?             @db.Uuid
+  lifecycleChangedBy   User?               @relation("ItemLifecycleChangedBy", fields: [lifecycleChangedById], references: [id])
+  lifecycleReason      String?             @db.VarChar(500)
 
   /// İPLİK NUMARASI — denye (`ItemType.YARN`). Devere formülünün girdisi:
   /// `kg = tel × denye × metre / 9.000.000` (denye = 9.000 m'nin gramı).
@@ -4983,6 +5001,9 @@ model MergeOperationSource {
   nameBefore  String  @db.VarChar(255)
   codeBefore  String? @db.VarChar(64)
   isActiveBefore Boolean
+  /// Yalnız ürün birleştirmesinde: kaynağın tombstone ÖNCESİ yaşam döngüsü durumu (geri alma bunu yazar).
+  /// Eski operasyonlarda NULL → geri alma `isActiveBefore`dan eşler (true→ACTIVE, false→ARCHIVED).
+  lifecycleBefore ItemLifecycleStatus?
   /// Geri almada ad hayattaki kayıtla çakıştığı için yeni ad verildiyse.
   renamedTo   String? @db.VarChar(255)
 

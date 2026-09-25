@@ -13,7 +13,7 @@
 import prisma from "../lib/prisma";
 import { Request } from "express";
 import { parseQueryParams, readIdCondition } from "../utils/query-parser";
-import { ItemUnit } from "@prisma/client";
+import { ItemLifecycleStatus, ItemUnit } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
@@ -28,11 +28,22 @@ import { codeCountsForCounter } from "./helpers/series-format.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import {
+  ITEM_LIFECYCLE_LABEL,
+  countItemLiveRefs,
+  listItemLiveRefs,
+  totalLiveRefs,
+  transitionItemLifecycle,
+  transitionItemLifecycleTx,
+  type ItemLifecycleTransitionResult,
+} from "./helpers/item-lifecycle.helper";
+import { itemBirthLifecycleData } from "./helpers/item-lifecycle-data.helper";
+import {
   decideCodeUniqueness,
   lockCodeScopeTx,
   type CodeCandidate,
   type CodeUniquenessTexts,
 } from "./helpers/code-unique.helper";
+import { assertItemUsable } from "./helpers/item-usage.helper";
 
 export interface ItemCreateInput {
   /** Boş/verilmezse backend `STK-NNNNNN` üretir; doluysa manuel kod kabul edilir. */
@@ -81,6 +92,8 @@ const ITEM_CODE_TEXTS: CodeUniquenessTexts = {
   entityLabel: "ürün",
 };
 const ITEM_CODE_LOCK_SCOPE = "item";
+/** Yaşam döngüsü kolonları — genel PATCH gövdesinden yazılamaz (tek yazar). */
+const LIFECYCLE_COLUMNS = ["lifecycleStatus", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason"] as const;
 /** Kod çakışması araması: tüm ürünler tek select ile çekilir, katlama JS'te yapılır
  *  (assertNameNotDuplicate emsali — `items` master tablosu birkaç yüz satır). */
 const ITEM_CODE_CANDIDATE_SELECT = {
@@ -284,13 +297,15 @@ export class ItemService extends BaseService {
             );
           }
           if (target) {
-            // Atomik claim: diriltme yalnız hâlâ pasifse — eşzamanlı ikinci istek
-            // count=0 görüp 409 alır (findFirst→if→update check-then-act yasağı).
-            const claimed = await tx.item.updateMany({
-              where: { id: target.id, isActive: false },
-              data: { isActive: true },
+            // Diriltme bir DURUM GEÇİŞİDİR (Pasif → Aktif) ve tek yazardan geçer: atomik
+            // claim + eşzamanlı ikinci istek hedefi zaten ACTIVE görür → 409.
+            const tr = await transitionItemLifecycleTx(tx, {
+              itemId: target.id,
+              to: ItemLifecycleStatus.ACTIVE,
+              reason: "Aynı kodla yeniden oluşturuldu",
+              userId,
             });
-            if (claimed.count === 0) {
+            if (tr.idempotent) {
               throw AppError.conflict("Bu kod ile aktif ürün zaten var");
             }
             // Reactivate: M:N'leri replace + güncel veri.
@@ -331,7 +346,8 @@ export class ItemService extends BaseService {
               name: input.name.trim(),
               itemType: input.itemType as never,
               unit: (input.unit ?? "MT") as ItemUnit,
-              isActive: input.isActive ?? true,
+              // Doğuş durumu tek kaynaktan (`isActive` durumdan türer — CHECK).
+              ...itemBirthLifecycleData(input.isActive),
               // Denye YALNIZ gönderildiğinde yazılır: `undefined` kolonu olduğu
               // gibi bırakır, `null` bilinçli temizlemedir (metin → Decimal).
               ...(input.linearDensityDen !== undefined
@@ -407,14 +423,27 @@ export class ItemService extends BaseService {
   }
 
   /**
-   * Item update — code/itemType değişmez. name, unit, isActive ve allowed
-   * listeler (replace semantiği) güncellenebilir.
+   * Item update — code/itemType değişmez. name, unit ve allowed listeler (replace
+   * semantiği) güncellenebilir; `isActive` yaşam döngüsü yazıcısına gider.
    */
   async update(
     id: string,
-    data: Record<string, unknown>,
+    rawData: Record<string, unknown>,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
+    // `isActive` genel güncellemenin skaler geçişinden ÇIKAR (BaseController'da yeni
+    // skaler = yazılabilir alan kuralı): false = "Pasif'e geç" (kapılı), true = "Aktif'e dön".
+    const { isActive, ...data } = (rawData ?? {}) as Record<string, unknown>;
+    if (isActive !== undefined) {
+      if (typeof isActive !== "boolean") throw AppError.badRequest("'isActive' true/false olmalı");
+      const res = await this.transitionLifecycle(
+        id,
+        isActive ? ItemLifecycleStatus.ACTIVE : ItemLifecycleStatus.ARCHIVED,
+        null,
+        userId,
+      );
+      if (Object.keys(data).length === 0) return res;
+    }
     const FORBIDDEN = ["code", "itemType"];
     for (const k of FORBIDDEN) {
       if (Object.prototype.hasOwnProperty.call(data, k)) {
@@ -561,11 +590,9 @@ export class ItemService extends BaseService {
     colorId: string,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
-    const [item, color, existing] = await Promise.all([
-      prisma.item.findUnique({
-        where: { id: itemId },
-        select: { id: true, isActive: true },
-      }),
+    // İzinli renk karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı.
+    await assertItemUsable(prisma, itemId, "DEFINITION");
+    const [color, existing] = await Promise.all([
       prisma.color.findUnique({
         where: { id: colorId },
         select: { id: true, name: true, isActive: true },
@@ -576,9 +603,6 @@ export class ItemService extends BaseService {
       }),
     ]);
 
-    if (!item || !item.isActive) {
-      throw AppError.notFound("Ürün bulunamadı veya pasif");
-    }
     if (!color) {
       throw AppError.notFound("Renk bulunamadı");
     }
@@ -617,11 +641,9 @@ export class ItemService extends BaseService {
     propertyId: string,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
-    const [item, property, existing] = await Promise.all([
-      prisma.item.findUnique({
-        where: { id: itemId },
-        select: { id: true, isActive: true },
-      }),
+    // İzinli özellik karta yeni TANIM ekler (B).
+    await assertItemUsable(prisma, itemId, "DEFINITION");
+    const [property, existing] = await Promise.all([
       prisma.fabricProperty.findUnique({
         where: { id: propertyId },
         select: { id: true, name: true, isActive: true },
@@ -632,9 +654,6 @@ export class ItemService extends BaseService {
       }),
     ]);
 
-    if (!item || !item.isActive) {
-      throw AppError.notFound("Ürün bulunamadı veya pasif");
-    }
     if (!property) {
       throw AppError.notFound("Özellik bulunamadı");
     }
@@ -663,6 +682,83 @@ export class ItemService extends BaseService {
     });
 
     return { success: true, data: created, message: "Özellik dahil edildi" };
+  }
+
+  /** Yaşam döngüsü kolonları gövdeden YAZILAMAZ — tek yazar `transitionLifecycle`. */
+  protected sanitizeWriteData(data: Record<string, unknown>): Record<string, unknown> {
+    const out = super.sanitizeWriteData(data);
+    for (const k of LIFECYCLE_COLUMNS) delete out[k];
+    return out;
+  }
+
+  /** `DELETE /items/:id` = "Pasif'e geç" (kapılı: canlı referans varsa 409 + kayıt listesi). */
+  async softDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    return this.transitionLifecycle(id, ItemLifecycleStatus.ARCHIVED, null, userId);
+  }
+
+  /** Durum geçişi — tek yazar + audit. Hedef durumdaki karta ikinci istek yazmadan döner. */
+  async transitionLifecycle(
+    id: string,
+    to: ItemLifecycleStatus,
+    reason: string | null,
+    userId?: string,
+  ): Promise<ApiResponse<unknown> & { idempotent?: boolean }> {
+    const result: ItemLifecycleTransitionResult = await transitionItemLifecycle({
+      itemId: id,
+      to,
+      reason,
+      userId: userId ?? null,
+    });
+    const item = await prisma.item.findUnique({
+      where: { id },
+      ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
+    });
+    return {
+      success: true,
+      data: item,
+      idempotent: result.idempotent,
+      message: result.idempotent
+        ? `Kart zaten '${ITEM_LIFECYCLE_LABEL[to]}' durumunda`
+        : `Kart '${ITEM_LIFECYCLE_LABEL[to]}' durumuna alındı`,
+    };
+  }
+
+  /**
+   * Geçiş önizlemesi — canlı referansları TEK TEK döner (yıkıcı işlem kuralı). Arşivde
+   * `canTransition` = canlı referans 0. Benzer adlı AKTİF kartlar yalnız BİLGİDİR (D4:
+   * birleştirme asla otomatik değildir).
+   */
+  async lifecyclePreview(id: string, to: ItemLifecycleStatus): Promise<ApiResponse<unknown>> {
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: { id: true, code: true, name: true, lifecycleStatus: true, mergedIntoId: true },
+    });
+    if (!item) throw AppError.notFound("Ürün bulunamadı");
+    const references = await listItemLiveRefs(prisma, id);
+    const liveTotal = totalLiveRefs(references);
+    const similar = (await this.findSimilarNames(item.name, { excludeId: id, limit: 5 }))
+      .filter((s) => s.isActive && !s.mergedIntoName);
+    const canTransition =
+      item.mergedIntoId === null &&
+      item.lifecycleStatus !== to &&
+      (to !== ItemLifecycleStatus.ARCHIVED || liveTotal === 0);
+    return {
+      success: true,
+      data: {
+        item: { ...item, lifecycleLabel: ITEM_LIFECYCLE_LABEL[item.lifecycleStatus] },
+        to,
+        toLabel: ITEM_LIFECYCLE_LABEL[to],
+        canTransition,
+        liveTotal,
+        references,
+        similarActive: similar.map((s) => ({ id: s.id, code: s.code, name: s.name, score: s.score })),
+      },
+    };
+  }
+
+  /** Kartın kalan canlı referans sayısı (liste rozeti "Tükenene kadar · N top kaldı" / "Pasife hazır"). */
+  async liveRefCounts(id: string) {
+    return countItemLiveRefs(prisma, id);
   }
 
   /**

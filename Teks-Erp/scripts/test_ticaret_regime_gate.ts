@@ -102,6 +102,14 @@ const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
 // Geçişli dokunuş (InventoryService) orada da burada da AYNI olgudur.
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/item.routes.ts",
+    neden:
+      "ÜRÜN KARTI (çekirdek, her kurulumda). Ticaret dokunuşu SALT-OKUMADIR: yaşam döngüsü önizlemesi ve " +
+      "Pasif'e geçiş kapısı (URUN-YASAM-DONGUSU.md D1) kartın canlı referanslarını SAYAR — purchase_order_lines (açık alış kalemi) " +
+      "bunlardan biri. ticaret kapalı kurulumda tablo boştur, sayı 0 döner; router bu tabloya hiçbir satır yazmaz. " +
+      "Kapı takılsaydı ürün kartı ticaretsiz fabrikada yönetilemezdi.",
+  },
+  {
     dosya: "routes/subcontractor-weaving.routes.ts",
     neden:
       "FASON DOKUMA (G2, 2026-09-14). Kendi rejim kapısını taşır (`requireDokumaEnabled`); ticaret dokunuşu " +

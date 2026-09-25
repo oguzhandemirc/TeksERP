@@ -11,7 +11,8 @@ import { BaseService } from "./base.service";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
-import type { ApiResponse } from "../types/api.types";
+import type { ApiResponse } from "../types/api.types";import { assertItemUsable } from "./helpers/item-usage.helper";
+
 
 /** properties[] dizisinden BENZERSİZ propertyId'leri çıkar (dedup). */
 function recipePropertyIds(properties: unknown): string[] {
@@ -31,11 +32,8 @@ export class ProductRecipeService extends BaseService {
    *  quality-grade desenleriyle aynı hijyen). Yalnız GÖNDERİLEN alanlar denetlenir. */
   private async validateRefs(data: Record<string, unknown>, recipeId?: string): Promise<void> {
     if (typeof data.itemId === "string" && data.itemId) {
-      const item = await prisma.item.findFirst({
-        where: { id: data.itemId, isActive: true },
-        select: { id: true },
-      });
-      if (!item) throw AppError.badRequest("Reçete ürünü bulunamadı veya pasif");
+      // Reçete karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı.
+      await assertItemUsable(prisma, data.itemId, "DEFINITION");
     }
     if (typeof data.colorId === "string" && data.colorId) {
       const color = await prisma.color.findFirst({

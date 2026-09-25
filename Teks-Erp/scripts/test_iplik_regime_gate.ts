@@ -69,6 +69,14 @@ const IPLIK_MODELLERI = new Set(["yarnStock", "yarnMovement"]);
 // -----------------------------------------------------------------------------
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/item.routes.ts",
+    neden:
+      "ÜRÜN KARTI (çekirdek, her kurulumda). İplik dokunuşu SALT-OKUMADIR: yaşam döngüsü önizlemesi ve " +
+      "Pasif'e geçiş kapısı (URUN-YASAM-DONGUSU.md D1) kartın canlı referanslarını SAYAR — yarn_stocks (iplik bakiyesi) " +
+      "bunlardan biri. iplik kapalı kurulumda tablo boştur, sayı 0 döner; router bu tabloya hiçbir satır yazmaz. " +
+      "Kapı takılsaydı ürün kartı ipliksiz fabrikada yönetilemezdi.",
+  },
+  {
     dosya: "routes/demo.routes.ts",
     neden:
       "DEMO senaryo üreticileri. İplik modeline dokunuş GEÇİŞLİ ve YANILTICI (InventoryService " +

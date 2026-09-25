@@ -17,7 +17,8 @@ import { ItemType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { BaseService } from "./base.service";
 import { AppError } from "../utils/app-error";
-import { ApiResponse } from "../types/api.types";
+import { ApiResponse } from "../types/api.types";import { assertItemUsable } from "./helpers/item-usage.helper";
+
 
 export class WarpSpecService extends BaseService {
   /**
@@ -48,15 +49,14 @@ export class WarpSpecService extends BaseService {
     if (typeof yarnItemId === "string" && yarnItemId.length > 0) {
       const item = await prisma.item.findUnique({
         where: { id: yarnItemId },
-        select: { id: true, name: true, itemType: true, isActive: true, linearDensityDen: true },
+        select: { id: true, name: true, itemType: true, linearDensityDen: true },
       });
       if (!item) throw AppError.badRequest("Çözgü ipliği bulunamadı.");
       if (item.itemType !== ItemType.YARN) {
         throw AppError.badRequest("Çözgü ipliği bir İPLİK kalemi olmalı — kumaş ya da sarf kalemi seçilemez.");
       }
-      if (!item.isActive) {
-        throw AppError.badRequest("Seçilen iplik kalemi pasif; aktif bir iplik seçin.");
-      }
+      // Çözgü kartı karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif iplik seçilemez.
+      await assertItemUsable(prisma, item.id, "DEFINITION");
       if (item.linearDensityDen === null) {
         throw AppError.badRequest(
           `"${item.name}" kaleminin denye değeri boş. Devere hesabı (tel × denye × metre ÷ 9.000.000) ` +

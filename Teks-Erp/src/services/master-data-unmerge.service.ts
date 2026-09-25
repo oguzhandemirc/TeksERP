@@ -23,7 +23,8 @@
 // silinmiş ya da anahtarı yeniden doğmuş satır geri yazılamaz; sayısı yanıtta ve
 // audit'te AYRI alan olarak durur ("hepsi döndü" yalanı yok).
 // =============================================================================
-import { MergeRefKind, Prisma } from "@prisma/client";
+import { ItemLifecycleStatus, MergeRefKind, Prisma } from "@prisma/client";
+import { itemLifecycleWriteData } from "./helpers/item-lifecycle-data.helper";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -209,11 +210,16 @@ async function liftTombstonesTx(
   tx: Prisma.TransactionClient,
   op: Awaited<ReturnType<typeof loadOperationTx>>,
   table: string,
-  renames: Record<string, string>,
+  ctx: { renames: Record<string, string>; userId?: string },
 ): Promise<Array<{ sourceId: string; name: string; isActive: boolean }>> {
+  const { renames, userId } = ctx;
   const out: Array<{ sourceId: string; name: string; isActive: boolean }> = [];
   for (const src of op.sources) {
     const name = (renames[src.sourceId]?.trim() || src.nameBefore).slice(0, 255);
+    if (table === "items") {
+      out.push(await liftItemTombstoneTx(tx, { survivorId: op.survivorId, src, name, userId }));
+      continue;
+    }
     const done = await tx.$executeRawUnsafe(
       `UPDATE "${table}"
           SET "mergedIntoId" = NULL, "mergedAt" = NULL, "mergedById" = NULL,
@@ -230,6 +236,38 @@ async function liftTombstonesTx(
     out.push({ sourceId: src.sourceId, name, isActive: src.isActiveBefore });
   }
   return out;
+}
+
+/**
+ * Ürün mezar taşı: yaşam döngüsü ÖNCEKİ durumuna döner (`isActive` ondan türer — CHECK).
+ * Eski operasyonda `lifecycleBefore` yok → `isActiveBefore`dan eşlenir (true→ACTIVE, false→ARCHIVED).
+ */
+async function liftItemTombstoneTx(
+  tx: Prisma.TransactionClient,
+  p: {
+    survivorId: string;
+    src: { sourceId: string; isActiveBefore: boolean; lifecycleBefore: ItemLifecycleStatus | null };
+    name: string;
+    userId?: string;
+  },
+): Promise<{ sourceId: string; name: string; isActive: boolean }> {
+  const { survivorId, src, name, userId } = p;
+  const before =
+    src.lifecycleBefore ?? (src.isActiveBefore ? ItemLifecycleStatus.ACTIVE : ItemLifecycleStatus.ARCHIVED);
+  const claim = await tx.item.updateMany({
+    where: { id: src.sourceId, mergedIntoId: survivorId },
+    data: {
+      mergedIntoId: null,
+      mergedAt: null,
+      mergedById: null,
+      name,
+      ...itemLifecycleWriteData(before, userId, "Birleştirme geri alındı"),
+    },
+  });
+  if (claim.count !== 1) {
+    throw AppError.conflict("Kaynak kayıt bu sırada değişti — geri alma geri sarıldı.");
+  }
+  return { sourceId: src.sourceId, name, isActive: before !== ItemLifecycleStatus.ARCHIVED };
 }
 
 /** Survivor'a yazılan alan seçimleri: yalnız DEĞER HÂLÂ birleştirmenin yazdığıysa geri alınır. */
@@ -288,7 +326,7 @@ async function revertTx(input: RevertInput) {
   const entity = plan.entity;
   const table = TABLE_OF[entity];
   const counts = await restoreRefsTx(tx, op);
-  const auditSources = await liftTombstonesTx(tx, op, table, renames);
+  const auditSources = await liftTombstonesTx(tx, op, table, { renames, userId });
   const pickSkipped = await restoreFieldPicksTx(tx, op, table);
 
   return {

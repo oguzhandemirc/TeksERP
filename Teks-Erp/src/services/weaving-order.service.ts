@@ -50,7 +50,8 @@ import {
   toWeavingOrderDto,
   weavingOrderAuditView,
 } from "./helpers/weaving-order-input.helper";
-import { p2002OnField } from "../utils/p2002";
+import { p2002OnField } from "../utils/p2002";import { assertItemUsableTx } from "./helpers/item-usage.helper";
+
 
 export type { WeavingOrderCreateInput, WeavingOrderDto, WeavingOrderUpdateInput };
 // Koşum-açma ucu (machine-run.service) `IN_PROGRESS` geçişini buradan çağırır — tek yazar.
@@ -192,6 +193,8 @@ export async function createWeavingOrder(
       prisma.$transaction(async (tx) => {
         // Kilit üretecin ilk ifadesi; bundan önce tx'te başka ifade YOK.
         const weavingOrderNumber = await nextWeavingOrderNumberTx(tx, new Date());
+        // Kart kilidi advisory'den (8032) SONRA: 8030 SHARED → FOR SHARE (dokuma işi D1 referansıdır).
+        await assertItemUsableTx(tx, fields.itemId, "NEW_PLAN");
         const row = await tx.weavingOrder.create({
           data: {
             ...fields,
@@ -254,9 +257,12 @@ export async function updateWeavingOrder(
   };
   assertWeavingParty(merged.executionKind, merged.subcontractorId);
   assertWeavingDateOrder(merged.plannedStartDate, merged.plannedEndDate);
-  await assertRefs(merged);
+  const retarget = merged.itemId !== before.itemId;
+  await assertRefs(merged, retarget ? "NEW_PLAN" : null);
 
   const updated = await prisma.$transaction(async (tx) => {
+    // İLK ifade (dokuma işi satır claim'inden ÖNCE — birleştirme 8030 EXCL tutup o satırı ister).
+    if (retarget) await assertItemUsableTx(tx, merged.itemId, "NEW_PLAN");
     const claim = await tx.weavingOrder.updateMany({
       where: { id, status: { in: [...WEAVING_ORDER_OPEN_STATUSES] } },
       data: { ...patch, updatedById: userId ?? null },

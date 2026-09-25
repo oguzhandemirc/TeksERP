@@ -18,7 +18,8 @@ import { ItemType, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { normalizeLotNo } from "./yarn-lot.helper";
-import { readDevereLotRequired } from "../system-setting.service";
+import { readDevereLotRequired } from "../system-setting.service";import { assertItemUsable } from "./item-usage.helper";
+
 
 export interface PreflightLine {
   itemId: string;
@@ -47,11 +48,15 @@ export interface PreflightContext {
   /** `purchase.blockOverReceiptEnabled` açık ve fiş siparişe bağlıysa bağlam; yoksa null/verilmez. */
   overReceipt?: OverReceiptView | null;
   currency?: string;
+  /** Fişin bağlı olduğu alış siparişinde KALANI olan kalemler — o kalemin kabulü C′ (açık belgeyi tamamlar). */
+  docItemIds?: ReadonlySet<string>;
 }
 
 export type ReceiptLineIssueCode =
   | "ITEM_NOT_FOUND"
   | "ITEM_INACTIVE"
+  | "ITEM_PHASE_OUT"
+  | "ITEM_MERGED"
   | "ITEM_TYPE_NOT_ALLOWED"
   | "QTY_INVALID"
   | "YARN_LOT_REQUIRED"
@@ -101,8 +106,23 @@ export const YARN_LOT_REQUIRED_MESSAGE = `İplik satırında lot numarası zorun
 export async function collectReceiptLineIssues(lines: PreflightLine[], ctx: PreflightContext = {}): Promise<ReceiptLineIssue[]> {
   if (lines.length === 0) return [];
   const ids = [...new Set(lines.map((l) => l.itemId))];
-  const rows = await prisma.item.findMany({ where: { id: { in: ids } }, select: { id: true, itemType: true, isActive: true, name: true, unit: true } });
+  const rows = await prisma.item.findMany({ where: { id: { in: ids } }, select: { id: true, itemType: true, name: true, unit: true } });
   const info = new Map(rows.map((r) => [r.id, r]));
+  // Kart kullanımı TEK kural motorundan (`assertItemUsable`); karar satır ihlaline çevrilir.
+  const usageIssue = new Map<string, { code: ReceiptLineIssueCode; message: string }>();
+  for (const id of ids) {
+    if (!info.has(id)) continue;
+    try {
+      await assertItemUsable(prisma, id, ctx.docItemIds?.has(id) ? "DOC_COMPLETION" : "NEW_STOCK");
+    } catch (e) {
+      if (!(e instanceof AppError)) throw e;
+      const code = e.details?.code;
+      usageIssue.set(id, {
+        code: code === "ITEM_PHASE_OUT" || code === "ITEM_MERGED" ? code : "ITEM_INACTIVE",
+        message: e.message,
+      });
+    }
+  }
   const hasYarn = lines.some((l) => info.get(l.itemId)?.itemType === ItemType.YARN);
   const lotRequired = hasYarn ? await readDevereLotRequired() : false;
   const catalog = await loadFabricCatalog(lines, info);
@@ -116,7 +136,8 @@ export async function collectReceiptLineIssues(lines: PreflightLine[], ctx: Pref
     const lineNo = i + 1;
     const it = info.get(l.itemId);
     if (!it) return issues.push({ lineNo, code: "ITEM_NOT_FOUND", message: "Ürün bulunamadı." });
-    if (!it.isActive) return issues.push({ lineNo, code: "ITEM_INACTIVE", message: `"${it.name}" pasif (silinmiş) — fişe alınamaz.` });
+    const usage = usageIssue.get(l.itemId);
+    if (usage) return issues.push({ lineNo, ...usage });
     if (it.itemType === ItemType.CONSUMABLE) return issues.push({ lineNo, code: "ITEM_TYPE_NOT_ALLOWED", message: `"${it.name}" sarf malzeme — mal kabul fişi yalnız kumaş ve iplik alır.` });
     if (!(Number(l.initialQty) > 0)) return issues.push({ lineNo, code: "QTY_INVALID", message: "Miktar sıfırdan büyük olmalı." });
     if (it.itemType === ItemType.YARN) {

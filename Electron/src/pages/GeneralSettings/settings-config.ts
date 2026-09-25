@@ -23,6 +23,7 @@ import type { ComponentType } from "react";
 import type { FeatureFlags } from "@/services/featureFlagService";
 import { SETTING_KEYS as RAW_SETTING_KEYS } from "@/services/systemSettingService";
 import { BatchNumberHint } from "./BatchNumberHint";
+import { PHASE_OUT_LINE_QTY_OPTIONS, PHASE_OUT_NEW_ORDER_OPTIONS } from "@/lib/item-lifecycle-flags";
 import {
   SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
   SHIPPING_DOC_CEKI_NAME_MODE_OPTIONS,
@@ -741,6 +742,37 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Planlamacı", "Muhasebeci"],
         desc: "Kapalıyken sipariş ekranlarında para birimi, birim fiyat ve toplam tutar gizlenir. Mevcut değerler korunur; veri kaybı yok.",
+      },
+      {
+        key: "itemPhaseOutNewPlan",
+        title: "Tükenene kadar karta yeni üretim planı",
+        summary: "Tükenene kadar karta topsuz ve siparişsiz iş emri ya da dokuma işi açılabilsin mi.",
+        defaultOn: true,
+        audience: ["Planlamacı"],
+        group: "Ürün yaşam döngüsü",
+        desc: "Açıkken (varsayılan) Tükenene kadar karta yeni iş emri açılabilir ama yalnız mevcut stok tüketilir — belgesiz yeni stok girişi yine kapalıdır. Kapalıyken yalnız mevcut topları okutarak iş emri açılır. Kartı yeniden doldurmak isteyen fabrika kartı Aktif'e döndürür.",
+      },
+    ],
+    enumFlags: [
+      {
+        enumKey: "itemPhaseOutNewOrder",
+        title: "Tükenene kadar karta yeni sipariş",
+        summary: "Kullanımdan kaldırılan (Tükenene kadar) karta yeni sipariş satırı nasıl açılsın.",
+        defaultValue: "OKUTULAN_TOPLAR",
+        options: PHASE_OUT_NEW_ORDER_OPTIONS,
+        audience: ["Planlamacı", "Sevkiyat"],
+        group: "Ürün yaşam döngüsü",
+        desc: "“Yalnız okutulan toplar” (varsayılan): yeni sipariş yalnız toplardan hızlı siparişle açılır. “Kapalı”: hiç yeni sipariş açılmaz — sevkte sipariş zorunluysa mal yalnız “Siparişsiz devam et” ile sevk edilir. “Serbest”: normal kart gibi.",
+      },
+      {
+        enumKey: "itemPhaseOutLineQty",
+        title: "Tükenene kadar kartın açık satırında miktar",
+        summary: "Açık sipariş satırında miktar değiştirilebilsin mi.",
+        defaultValue: "SERBEST_UYARILI",
+        options: PHASE_OUT_LINE_QTY_OPTIONS,
+        audience: ["Planlamacı"],
+        group: "Ürün yaşam döngüsü",
+        desc: "“Serbest, uyarılı” (varsayılan): artırma ve azaltma serbest, kısa bir stok uyarısı görünür. “Yalnız azaltma”: artırma reddedilir. “Kilitli”: miktar değişmez.",
       },
     ],
     settingFields: [

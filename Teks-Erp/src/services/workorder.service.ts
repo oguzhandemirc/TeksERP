@@ -159,6 +159,7 @@ import { workOrderBoundOnly, workOrderStepIdOf } from "./helpers/dispatch-header
 import { hata } from "../lib/logger";
 import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
+import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -827,15 +828,10 @@ export class WorkOrderService {
       );
     }
 
-    if (resolvedTargetItemId) {
-      const targetItem = await prisma.item.findUnique({
-        where: { id: resolvedTargetItemId },
-        select: { id: true, isActive: true },
-      });
-      if (!targetItem || !targetItem.isActive) {
-        throw AppError.badRequest("Hedef ürün bulunamadı veya pasif");
-      }
-    }
+    // Kart kullanımı (URUN-YASAM-DONGUSU.md §4): okutulan toplar ya da açık sipariş
+    // satırı = mevcut malı/belgeyi yürütür (E); topsuz+siparişsiz iş emri = yeni plan (A3).
+    const woItemUsage: ItemUsage = goods || allocations.length > 0 ? "EXISTING_GOODS" : "NEW_PLAN";
+    if (resolvedTargetItemId) await assertItemUsable(prisma, resolvedTargetItemId, woItemUsage);
 
     // ORDER_PRODUCTION'da hedef ürün+renk+özellikleri orderLine'lardan otomatik
     // türet/doğrula. Tüm bağlı satırların aynı item+color olması beklenir.
@@ -1041,16 +1037,16 @@ export class WorkOrderService {
     // ONUN üzerinden karar verilir (alan adı `batchNumber`, anlamı iş emri no).
     assertManualNumberAllowed("workOrder", manualWorkOrderNumber);
 
-    // Otomatik iş emri no sequence çakışırsa (P2002) tx'i baştan dene.
+    // Otomatik iş emri no sequence çakışırsa (P2002) tx'i baştan dene. Tx'in İLK ifadesi
+    // kart kilidi: 8030 SHARED → FOR SHARE (eşzamanlı "Pasif'e geç" bu iş emrini görür).
     const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
+      if (resolvedTargetItemId) await assertItemUsableTx(tx, resolvedTargetItemId, woItemUsage);
       const workOrderNumber = manualWorkOrderNumber ?? (await this.generateWorkOrderNumber());
       // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK. Sipariş bağı yalnız
       // "bu iş emri hangi siparişler için" niyetidir (metraj taşımaz); fazla
       // üretim Tambur'da stoğa düşer. Yalnız satırların varlığını doğrula.
       if (allocations.length > 0) {
-        const found = await tx.orderLine.count({
-          where: { id: { in: allocations.map((a) => a.orderLineId) } },
-        });
+        const found = await tx.orderLine.count({ where: { id: { in: allocations.map((a) => a.orderLineId) } } });
         if (found !== allocations.length) {
           throw AppError.badRequest("Bazı sipariş satırları bulunamadı");
         }
@@ -5085,15 +5081,10 @@ export class WorkOrderService {
         "Stoğa üretim iş emrinde hedef ürün boş bırakılamaz."
       );
     }
-    if (data.targetItemId) {
-      const targetItem = await prisma.item.findUnique({
-        where: { id: data.targetItemId },
-        select: { id: true, isActive: true },
-      });
-      if (!targetItem || !targetItem.isActive) {
-        throw AppError.badRequest("Hedef ürün bulunamadı veya pasif");
-      }
-    }
+    // Hedef ürünü bu karta ÇEVİRMEK yeni üretim planıdır (A3); değişmeyen hedef kontrol edilmez.
+    const retargetItemId =
+      data.targetItemId && data.targetItemId !== (wo.targetItemId ?? null) ? data.targetItemId : null;
+    if (retargetItemId) await assertItemUsable(prisma, retargetItemId, "NEW_PLAN");
     if (data.targetColorId) {
       const color = await prisma.color.findUnique({
         where: { id: data.targetColorId },
@@ -5143,6 +5134,8 @@ export class WorkOrderService {
     // koy. tx-DIŞI ön-kontrol (2815-2822) UX; eşzamanlı finalize WO'yu COMPLETED
     // yaparsa bu updateMany count===0 → 409 (terminal WO'ya alan yazımı engellenir).
     await prisma.$transaction(async (tx) => {
+      // İLK ifade (WO satır kilidinden ÖNCE — birleştirme 8030 EXCL tutup WO satırı ister).
+      if (retargetItemId) await assertItemUsableTx(tx, retargetItemId, "NEW_PLAN");
       // F58: WO satırını kilitle → locks'u kilit ALTINDA taze hesapla ve kilit
       // guard'larını yeniden doğrula. 3085'teki tx-DIŞI locks eşzamanlı adım-tamamlama/
       // sevkle bayatlayabilir; bu turda finishStep/finalize/createOpenFabric/cutOpenFabric
@@ -5447,15 +5440,12 @@ export class WorkOrderService {
       );
     }
 
-    if (resolvedTargetItemId) {
-      const targetItem = await prisma.item.findUnique({
-        where: { id: resolvedTargetItemId },
-        select: { id: true, isActive: true },
-      });
-      if (!targetItem || !targetItem.isActive) {
-        throw AppError.badRequest("Hedef ürün bulunamadı veya pasif");
-      }
-    }
+    // Değişmeyen hedef mevcut işi yürütür (E); yeni hedef create ile aynı kural.
+    const replaceItemUsage: ItemUsage =
+      resolvedTargetItemId === (existing.targetItemId ?? null) || allocations.length > 0
+        ? "EXISTING_GOODS"
+        : "NEW_PLAN";
+    if (resolvedTargetItemId) await assertItemUsable(prisma, resolvedTargetItemId, replaceItemUsage);
 
     let resolvedTargetColorId: string | null = data.targetColorId ?? null;
     if (type === "ORDER_PRODUCTION" && allocations.length > 0) {
@@ -5616,6 +5606,8 @@ export class WorkOrderService {
 
     // ── Transaction: smart merge (steps id-bazlı diff) ───────────────────────
     const updated = await prisma.$transaction(async (tx) => {
+      // İLK ifade: 8030 SHARED → kart FOR SHARE (WO satır claim'inden önce, kilit sırası).
+      if (resolvedTargetItemId) await assertItemUsableTx(tx, resolvedTargetItemId, replaceItemUsage);
       // ATOMİK CLAIM: tx başında (yıkıcı drop-and-recreate'ten ÖNCE) WO satırını
       // write-kilitle + COMPLETED/CANCELLED'e geçmediğini iddia et. tx-DIŞI
       // ön-kontrol (2978-2985) UX; eşzamanlı son-top finalize bu satırı tx süresince

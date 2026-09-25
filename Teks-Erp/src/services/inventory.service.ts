@@ -31,7 +31,8 @@ import { assertRollsHaveWarehouse, WAREHOUSE_STOCK_STATUSES } from "./helpers/wa
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { AppError } from "../utils/app-error";
 import { resolveDefaultDefectTypeTx } from "./helpers/default-defect-type.helper";
-import { assertMasterDataLiveTx, lockAgainstMergeTx } from "./helpers/master-data-live.helper";
+import { assertMasterDataLiveTx } from "./helpers/master-data-live.helper";
+import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { assertRollReplayAlive } from "./helpers/token-replay.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
@@ -832,6 +833,13 @@ export class InventoryService {
        */
       purchaseOrderLineId?: string | null;
       /**
+       * Kartın KULLANIM SINIFI (URUN-YASAM-DONGUSU.md §4). Verilmezse belge bağından
+       * türer: doff ya da alış satırı = açık belgeyi tamamlayan giriş (C′), değilse
+       * belgesiz yeni stok (C — "Tükenene kadar" kartta kapalı, fail-closed).
+       * Mevcut malı yürüten dahili yollar (tambur) `EXISTING_GOODS` verir.
+       */
+      itemUsage?: Extract<ItemUsage, "NEW_STOCK" | "DOC_COMPLETION" | "EXISTING_GOODS">;
+      /**
        * KK1 AĞIRLIK POLİTİKASINDAN MUAFİYET (saha planı A1, 2026-08-15).
        *
        * `kk1.weightEntryEnabled` bir KK1 İSTASYON politikasıdır: o istasyonda
@@ -908,17 +916,11 @@ export class InventoryService {
       throw AppError.badRequest("Ağırlık (kg) girişi bu istasyonda kapalı");
     }
 
-    // Ürün var VE aktif olmalı. Soft-delete (isActive=false) edilmiş ürünle
-    // giriş yapılamaz — picker pasifleri gizler ama önceden seçili/persist
-    // edilmiş itemId backend'e kadar gelebiliyordu (renk/özellik kontrolleriyle
-    // aynı sertlik).
-    const item = await prisma.item.findUnique({
-      where: { id: data.itemId },
-      select: { id: true, isActive: true, itemType: true },
-    });
-    if (!item || !item.isActive) {
-      throw AppError.notFound("Ürün bulunamadı veya pasif (silinmiş)");
-    }
+    // Kart kullanılabilir mi (yaşam döngüsü, §4) — ön kontrol; nihai karar tx içinde
+    // kilit altında tekrarlanır (aşağıda `assertItemUsableTx`).
+    const itemUsage: ItemUsage =
+      opts?.itemUsage ?? (opts?.doffEventId || opts?.purchaseOrderLineId ? "DOC_COMPLETION" : "NEW_STOCK");
+    const item = await assertItemUsable(prisma, data.itemId, itemUsage);
     // `Roll` yalnız KUMAŞ doğurur. Kapı FAIL-CLOSED: "CONSUMABLE değilse geç"
     // değil, "FABRIC ise geç" — enuma dördüncü tür eklendiği gün sessizce
     // barkodlu top doğurmasın. İplik kg defterine gider (`YarnMovement`).
@@ -1159,8 +1161,8 @@ export class InventoryService {
         // ⚠️ SIRA LOAD-BEARING: önce PAYLAŞIMLI kilit, sonra taze okuma. Kilit
         // olmadan taze okuma da yetmez — ölçüldü: repro §2, 12 turun 3'ünde
         // hâlâ mezar taşına yazıyordu (birleştirme henüz commit etmemişti).
-        await lockAgainstMergeTx(tx);
-        await assertMasterDataLiveTx(tx, { itemId: data.itemId, colorId: data.colorId ?? null });
+        await assertItemUsableTx(tx, data.itemId, itemUsage);
+        await assertMasterDataLiveTx(tx, { colorId: data.colorId ?? null });
 
         // DOFF BAĞI — satır kilidi (FOR UPDATE) ile; düz okuma eşzamanlı DOFF_CANCEL'e
         // pencere açar. Sıra: advisory kilit (yukarıda) → doff satırı → barkod sayacı;

@@ -152,7 +152,7 @@ async function main(): Promise<void> {
   });
   itemIds.push(itemNoPrice.id);
   const passiveItem = await prisma.item.create({
-    data: { code: `${TAG}-K3`, name: `${TAG} Pasif Kumaş`, itemType: ItemType.FABRIC, isActive: false },
+    data: { code: `${TAG}-K3`, name: `${TAG} Pasif Kumaş`, itemType: ItemType.FABRIC, isActive: false, lifecycleStatus: "ARCHIVED" },
     select: { id: true },
   });
   itemIds.push(passiveItem.id);

@@ -190,7 +190,7 @@ async function main(): Promise<void> {
     select: { id: true },
   });
   const yarnPassive = await prisma.item.create({
-    data: { code: `${TAG}-IPP`, name: `${TAG} İplik Pasif`, itemType: ItemType.YARN, unit: ItemUnit.KG, isActive: false },
+    data: { code: `${TAG}-IPP`, name: `${TAG} İplik Pasif`, itemType: ItemType.YARN, unit: ItemUnit.KG, isActive: false, lifecycleStatus: "ARCHIVED" },
     select: { id: true },
   });
   const fabric = await prisma.item.create({

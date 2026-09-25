@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   const yarn = await prisma.item.create({ data: { code: `${TAG}-IP`, name: `${TAG} iplik`, itemType: "YARN", unit: "KG", linearDensityDen: 300 }, select: { id: true } });
   const fabric = await prisma.item.create({ data: { code: `${TAG}-KM`, name: `${TAG} kumaş`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
   const sarf = await prisma.item.create({ data: { code: `${TAG}-SF`, name: `${TAG} sarf`, itemType: "CONSUMABLE", unit: "ADET" }, select: { id: true } });
-  const pasif = await prisma.item.create({ data: { code: `${TAG}-PS`, name: `${TAG} pasif`, itemType: "FABRIC", unit: "MT", isActive: false }, select: { id: true } });
+  const pasif = await prisma.item.create({ data: { code: `${TAG}-PS`, name: `${TAG} pasif`, itemType: "FABRIC", unit: "MT", isActive: false, lifecycleStatus: "ARCHIVED" }, select: { id: true } });
   const wh = await prisma.warehouse.create({ data: { code: `${TAG}-D`, name: `${TAG} depo` }, select: { id: true } });
   // §8–§12 fikstürleri: izinli renk listesi olan kumaş, pasif renk, izinli olmayan renk, pasif özellik, 100 m'lik sipariş.
   const fabricAllowed = await prisma.item.create({ data: { code: `${TAG}-KA`, name: `${TAG} kumaş izinli`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });

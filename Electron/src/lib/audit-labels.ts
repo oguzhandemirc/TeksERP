@@ -403,6 +403,9 @@ export const ENUM_LABELS: Record<string, string> = {
   PLANNED: "Planlandı",
   IN_PROGRESS: "Devam Ediyor",
   ACTIVE: "Aktif",
+  // ItemLifecycleStatus (ürün kartı yaşam döngüsü — ACTIVE yukarıda ortak)
+  PHASE_OUT: "Tükenene kadar",
+  ARCHIVED: "Pasif",
   SKIPPED: "Atlandı",
   // WorkOrderType
   ORDER_PRODUCTION: "Siparişe Özel",
@@ -966,7 +969,7 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   PLANNED:
     "iş emri / dokuma işi / sevkiyat / sevkiyat olayı / planlı duruş (MachineStopLossClass) — beşi de 'Planlandı'",
   SUPERSEDED: "iş emri ve basılı belge — ikisi de 'Eski Versiyon'",
-  ACTIVE: "yedi durum enum'u — hepsinde 'Aktif'",
+  ACTIVE: "sekiz durum enum'u (ürün yaşam döngüsü dahil) — hepsinde 'Aktif'",
   VOIDED: "refakat kartı ve basılı belge — ikisi de 'İptal'",
   DISPATCHED: "sevkiyat ve sevkiyat olayı — ikisi de 'Sevk Edildi'",
   PARTIAL: "içe aktarım ve alış siparişi — ikisi de 'Kısmi'",

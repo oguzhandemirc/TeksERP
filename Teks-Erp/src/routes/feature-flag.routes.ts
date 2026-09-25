@@ -360,6 +360,11 @@ export const updateSchema = z.strictObject({
   // shipping.orderRequirement — sevkiyat siparişe bağlansın mı (default warn = bugünkü).
   // ENFORCE edilir ama YALNIZ kurulumda; `block` sahadaki APK güncellenmeden AÇILMAZ.
   shippingOrderRequirement: z.enum(["off", "warn", "block"]).optional(),
+  // itemLifecycle.* — "Tükenene kadar" kartın davranışı (URUN-YASAM-DONGUSU.md §4.1).
+  // KAPALI ↔ shippingOrderRequirement=block çapraz kapıyla reddedilir (servis, 409).
+  itemPhaseOutNewOrder: z.enum(["OKUTULAN_TOPLAR", "KAPALI", "SERBEST"]).optional(),
+  itemPhaseOutLineQty: z.enum(["SERBEST_UYARILI", "AZALTMA_SERBEST", "KILITLI"]).optional(),
+  itemPhaseOutNewPlan: z.boolean().optional(),
   // shipping.weighRequiredEnabled — sevk öncesi tüm çuvallar tartılı olsun (default false).
   // İhracat kuralı bu bayraktan BAĞIMSIZ ve her zaman geçerli.
   shippingWeighRequiredEnabled: z.boolean().optional(),

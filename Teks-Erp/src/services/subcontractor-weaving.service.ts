@@ -270,6 +270,8 @@ export async function receiveForWeaving(input: WeavingReceiptInput, userId?: str
         {
           forcedEntrySource: RollEntrySource.WEAVING,
           parentReceiptId: header.receipt.id,
+          // Açık fason dokuma işini tamamlayan kabul (C′) — "Tükenene kadar" kartta da açık.
+          itemUsage: "DOC_COMPLETION",
           entryStationId: null,
           skipKk1WeightPolicy: true,
           ownerCustomerId,

@@ -68,8 +68,13 @@
 
 - **D1 — Pasif kartta canlı referans yoktur.** Canlı referans: ölü kümede olmayan top
   (`K18_DEAD_STATUSES` + sevk edilmiş + fire), açık iş emri (PLANNED/IN_PROGRESS), açık sipariş
-  satırı, açık alış siparişi satırı, açık dokuma işi, açık fason sevk kalemi. Tanım TEK helper'da
-  yaşar (bugünkü `deactivate-impact.helper` genişletilir), elle kopya yasak.
+  satırı, açık alış siparişi satırı, açık dokuma işi, açık (kapanmamış, geri alınmamış) tezgah
+  koşumu, açık fason iplik sevk kalemi, sıfırdan farklı iplik bakiyesi (`yarn_stocks.balanceKg ≠ 0`,
+  eksi bakiye de canlıdır — son ikisi 1e kararı 2026-09-25). Tanım TEK helper'da yaşar
+  (`item-lifecycle.helper` → `ITEM_LIVE_REF_KINDS`); SQL ikizi yalnız göç migration'ındadır ve
+  ikisinin aynı kartları saydığı `test_item_lifecycle_migration` ile ölçülür. Fason iplik kalemi
+  için "açık" = sevk iptal değil ∧ `remainderClosedAt` boş (`OUTSTANDING_ITEM` rollsuz iplik
+  kalemini eşleyemez; dar tanım bilerek fazla sayar — fail-closed).
 - **D2 — Durumu tek yazar değiştirir** (yaşam döngüsü yazıcısı). `DELETE`, `PATCH isActive`,
   birleştirme ve geri alma bu yazıcıyı çağırır; hiçbir yol `isActive`i doğrudan yazmaz.
 - **D3 — `isActive` türetilir:** `isActive = (lifecycleStatus <> 'ARCHIVED')`, DB `CHECK` seddiyle
@@ -111,13 +116,16 @@ yoksa karta YENİ bir talep, stok ya da tanım mı ekliyor?***
 | **E — Mevcut malı yürüten** | hızlı iş emri (okutulan toplar) · mevcut sipariş satırına iş emri · tambur kesim/finalize · fason sevk/kabul · split · kartela · çuval/sevk · iade · etiket · iptal/fire/düzeltme | ✔ | ✔ | ✖ (D1 gereği olamaz) |
 | **R — Okuma** | liste · rapor · arama · belge yeniden basımı | ✔ | ✔ | ✔ |
 
-- Her kontrol noktası `assertItemUsable(tx, itemId, sınıf)` çağırır; hata kodları `details.code`
-  altında: `ITEM_PHASE_OUT` (A/B/C'de) · `ITEM_ARCHIVED` · `ITEM_MERGED` (bugünkü).
+- Her kontrol noktası `assertItemUsable(db, itemId, sınıf)` çağırır (referans yazan tx'te
+  `assertItemUsableTx`); hata kodları `details.code` altında: `ITEM_PHASE_OUT` (A/B/C'de) ·
+  `ITEM_INACTIVE` (Pasif — bugünkü kod KORUNUR, sözleşme değişmez; ekrandaki "Pasif" ile aynı ada
+  düşer) · `ITEM_MERGED` (bugünkü). Ayrı bir `ITEM_ARCHIVED` kodu doğmaz (1e kararı 2026-09-25).
 - Mesaj operatöre NE YAPACAĞINI söyler: kart adı + durumu + yol ("Bu kumaş 'tükenene kadar'
   modunda — yeni sipariş açılamaz; mevcut stoktan sevk edebilirsiniz").
-- Bugünkü 20+ dağınık `isActive` kontrolü bu helper'a taşınır; AST bekçisi Item üzerinde çıplak
-  `isActive` kontrolünü yasaklar (§10). Taşıma listesi Faz 1'de ölçülerek kesinleşir; bugünkü
-  envanter: iş emri `create`/`update`/`replace` + `quickStart`, sipariş `validateLineItems`,
+- Bugünkü dağınık `isActive` kontrolü bu helper'a taşınır; AST bekçisi Item üzerinde çıplak
+  `isActive` kontrolünü yasaklar (§10). Ölçülen taban: **20 nokta** (AST, `97e9d8a1`) → bu sürümde 0.
+  A1 `OKUTULAN_TOPLAR` modunda satır miktarını SUNUCU okutulan topların metrajından hesaplar;
+  istemcinin gönderdiği miktara güvenilmez. Taşıma öncesi envanter: iş emri `create`/`update`/`replace` + `quickStart`, sipariş `validateLineItems`,
   `createInitialEntry` (KK1 · elle giriş · mal kabul · tambur elle top · fason dokuma kabulü),
   mal kabul ön kontrolü, alış siparişi, iplik hareketi/lotu, fason iplik sevki, çözgü kartı, dokuma
   işi, tezgah koşumu, reçete, fiyat, müşteri adı, izinli renk/özellik.
@@ -147,6 +155,10 @@ döngüsü" altında TEK grup.
   "mal bu karttan başka hangi yoldan çıkar" ölçülür (açık siparişe sevk · siparişsiz sevk). Ölçüm
   yeşil olmadan o seçenek panelde seçilebilir DOĞMAZ (kök `CLAUDE.md`: çıkışsız kapı üreten bayrak
   yazılır ama açılmaz).
+  KAPALI + sevkte sipariş zorunlu birleşiminde çıkış 'Siparişsiz devam et' beyanıdır; ayar kaydında
+  uyarı verilir, çıkışı matris bekçisi ölçer (`test_item_lifecycle_exit_gate`: 54 birleşimin
+  her birinde çıkış gerçek yüklemlerle — `assertItemUsable` + `assertOrderLinkAllowed` — sayılır;
+  `KILITLI` ve plan kapalı çıkışı etkilemez).
 - **"Varsayılan = bugünkü davranış" kuralıyla ilişki (ölçüldü):** "Tükenene kadar" yeni bir durumdur;
   bugün bu durumda bir davranış YOKTUR, yani ayarların varsayılanı kimsenin bugününü değiştirmez.
   Bugün pasif olan ve göçle Tükenene kadar'a geçecek kartlar (adnansahin'de 10) bugün TAMAMEN
@@ -161,12 +173,18 @@ döngüsü" altında TEK grup.
    **tek tek** döner: toplar (barkod · durum · konum), açık iş emirleri (no · durum), açık sipariş
    satırları (sipariş no · müşteri · kalan), açık alış/dokuma/fason kalemleri. Yanıtta
    `canArchive` ve benzer adlı AKTİF kart adayları (mükerrer eşlemesinden; yalnız BİLGİ).
-2. **Geçiş:** `POST /api/items/:id/lifecycle` `{ to, reason, clientToken }`. Arşivde D1 ihlali →
-   409 `ITEM_HAS_LIVE_REFERENCES`, `details.references` önizlemeyle aynı biçimde.
-3. **Kilit:** geçiş tx'inin İLK ifadesi kart satırında `FOR UPDATE`; referans doğuran her yol
-   `assertItemUsable` içinde kart satırını `FOR SHARE` ile okur ⇒ sayım ile yazım arası TOCTOU
-   kapanır. Yeni advisory uzayı açılmaz (satır kilidi yeterince dar; 8030'u KK1'in sıcak yoluna
-   sokmak reddedildi). Kilit sırası: yolun kendi advisory kilidi → kart satırı.
+2. **Geçiş:** `POST /api/items/:id/lifecycle` `{ to, reason }`. Arşivde D1 ihlali →
+   409 `ITEM_HAS_LIVE_REFERENCES`, `details.references` önizlemeyle aynı biçimde. `clientToken`
+   YOKTUR: geçiş kayıt yaratmaz ve hedef-durum idempotenttir — atomik claim
+   (`updateMany WHERE {id, lifecycleStatus: <tx içinde okunan>}`), count 0 ise taze okuma: kart
+   zaten hedefteyse 200 + `idempotent:true` (yazım/audit yok), değilse 409 "durum bu sırada değişti".
+3. **Kilit:** her yolda aynı sıra — **8030 SHARED → kart satırı** (1e düzeltmesi 2026-09-25).
+   Yazıcı: tx'in ilk ifadesi 8030 SHARED, sonra kart `FOR UPDATE`; referans doğuran her yol
+   `assertItemUsableTx` içinde 8030 SHARED + kart `FOR SHARE` ⇒ sayım ile yazım arası TOCTOU
+   kapanır. Birleştirme 8030 EXCLUSIVE tuttuğu için döngü kurulamaz; yolun kendi advisory kilidi
+   varsa (8027 alış · 8032 dokuma no) ondan SONRA, satır claim'lerinden (iş emri, dokuma işi)
+   ÖNCE alınır. Yeni advisory uzayı açılmaz. Ölçüm: `test_item_lifecycle_race` (FOR SHARE
+   kaldırılınca 24 turun 3'ünde Pasif kartta canlı top doğdu).
 4. **Eski uçlar aynı yazıcıya bağlanır** (sözleşme korunur): `DELETE /api/items/:id` = "Pasif'e
    geç" (kapılı) · `PATCH {isActive:false}` = aynı · `PATCH {isActive:true}` = "Aktif'e dön".
    `isActive` genel güncellemenin skaler geçişinden çıkarılır (BaseController'da yeni skaler =

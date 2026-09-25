@@ -36,8 +36,8 @@ import { MERGE_LOCK_KEY, MERGE_LOCK_NS } from "../master-data-merge.service";
 /** `prisma` ya da bir `$transaction` istemcisi. */
 type Istemci = Prisma.TransactionClient;
 
+/** Ürün kartı BURADA DEĞİL: kullanım kuralı + kilidi `item-usage.helper` → `assertItemUsableTx`. */
 export interface CanliAnaVeriRefs {
-  itemId?: string | null;
   colorId?: string | null;
 }
 
@@ -81,32 +81,6 @@ export async function assertMasterDataLiveTx(
   tx: Istemci,
   refs: CanliAnaVeriRefs,
 ): Promise<void> {
-  if (refs.itemId) {
-    const item = await tx.item.findUnique({
-      where: { id: refs.itemId },
-      select: {
-        name: true,
-        isActive: true,
-        mergedIntoId: true,
-        mergedInto: { select: { name: true } },
-      },
-    });
-    if (!item) throw AppError.notFound("Kumaş bulunamadı");
-    if (item.mergedIntoId) {
-      throw AppError.conflict(
-        `"${item.name}" kumaşı, "${item.mergedInto?.name ?? "başka bir kayıt"}" ile ` +
-          "birleştirildi. Kaydı o kumaşla yeniden girin.",
-        { code: "ITEM_MERGED", survivorName: item.mergedInto?.name ?? null },
-      );
-    }
-    if (!item.isActive) {
-      throw AppError.conflict(
-        `"${item.name}" kumaşı pasif duruma alındı — bu kumaşla yeni kayıt açılamaz.`,
-        { code: "ITEM_INACTIVE" },
-      );
-    }
-  }
-
   if (refs.colorId) {
     const color = await tx.color.findUnique({
       where: { id: refs.colorId },

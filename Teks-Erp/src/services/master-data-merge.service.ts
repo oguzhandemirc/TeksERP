@@ -44,7 +44,8 @@ import {
   type MergeEntity,
   type MoveRule,
 } from "../constants/merge-map";
-import { MergeRefKind } from "@prisma/client";
+import { ItemLifecycleStatus, MergeRefKind } from "@prisma/client";
+import { itemLifecycleWriteData } from "./helpers/item-lifecycle-data.helper";
 import {
   deleteCapturingTx,
   movePerSourceTx,
@@ -609,6 +610,14 @@ export class MasterDataMergeService {
             throw AppError.conflict(`'${s.name}' bu sırada başka bir kayda birleştirilmiş.`);
           }
         }
+        // Ürün: hedef ACTIVE olmalı — Tükenene kadar/Pasif karta mal ve açık iş taşımak D1'i
+        // (pasifte canlı referans olamaz) ya da "karta yeni talep eklenmez" kuralını deler.
+        if (entity === "item" && survivor.lifecycleStatus !== ItemLifecycleStatus.ACTIVE) {
+          throw AppError.conflict(
+            `Hedef kart '${survivor.name}' Aktif değil — birleştirmenin hedefi Aktif bir kart olmalı.`,
+            { code: "ITEM_MERGE_TARGET_NOT_ACTIVE" },
+          );
+        }
         for (const idf of meta.identityFields) {
           const bad = sources.find((s) => s[idf.field] !== survivor[idf.field]);
           if (bad) {
@@ -663,6 +672,7 @@ export class MasterDataMergeService {
             nameBefore: String(src.name).slice(0, 255),
             codeBefore: src.code ? String(src.code).slice(0, 64) : null,
             isActiveBefore: Boolean(src.isActive),
+            lifecycleBefore: entity === "item" ? (src.lifecycleStatus as ItemLifecycleStatus) : null,
           })),
         });
 
@@ -759,7 +769,10 @@ export class MasterDataMergeService {
             mergedIntoId: survivor.id,
             mergedAt: new Date(),
             mergedById: params.userId ?? null,
-            isActive: false,
+            // Ürünün `isActive`i yaşam döngüsünden türer (CHECK) — mezar taşı ARCHIVED yazılır.
+            ...(entity === "item"
+              ? itemLifecycleWriteData(ItemLifecycleStatus.ARCHIVED, params.userId, `Birleştirildi → ${String(survivor.name)}`)
+              : { isActive: false }),
           },
         });
         if (claimed.count !== sourceIds.length) {

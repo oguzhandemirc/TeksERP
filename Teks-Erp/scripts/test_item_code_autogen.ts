@@ -107,7 +107,7 @@ async function main(): Promise<void> {
     check("eşzamanlı create'ler farklı kod aldı", d1.code !== d2.code);
 
     // E: manuel kodla reactivate korunur
-    await prisma.item.update({ where: { id: c1.id }, data: { isActive: false } });
+    await prisma.item.update({ where: { id: c1.id }, data: { isActive: false, lifecycleStatus: "ARCHIVED" } });
     const e1res = await service.create({ name: `TEST STKAUTO E1 ${ts}`, itemType: "FABRIC", code: manualCode });
     const e1 = e1res.data as { id: string; code: string };
     check("pasif kayıt aynı manuel kodla dirildi", e1.id === c1.id, e1.code);

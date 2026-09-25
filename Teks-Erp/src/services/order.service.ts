@@ -94,6 +94,7 @@ import { hata } from "../lib/logger";
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx, withActiveOrderLinks } from "./helpers/order-link.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
+import { runItemUsageChecks, runItemUsageChecksTx, type ItemUsageCheck } from "./helpers/item-usage.helper";
 
 // ─── Cancel Akışı Karar Matrisi ─────────────────────────────────────────────
 //
@@ -303,6 +304,12 @@ export interface OrderShipmentsResult {
   /** PLANNED çuval (bekleyen, henüz sevk edilmemiş). */
   plannedTotal: number;
   shipments: OrderShipmentRow[];
+}
+
+/** Kart kullanım uyarılarını (ör. "Tükenene kadar" A2) yanıtın `warnings`ine ekler. */
+function withExtraWarnings<T>(res: ApiResponse<T>, extra: string[]): ApiResponse<T> {
+  if (extra.length === 0) return res;
+  return { ...res, warnings: [...(res.warnings ?? []), ...extra] };
 }
 
 export class OrderService extends BaseService {
@@ -866,9 +873,22 @@ export class OrderService extends BaseService {
    * Satır kalemlerini doğrular ve `itemId → Item.unit` haritasını döner: satır
    * birimi buradan kopyalanır (ikinci bir okuma doğmasın diye aynı sorgu).
    */
-  private async validateLineItems(lines: unknown): Promise<Map<string, ItemUnit>> {
+  /**
+   * Satır ürünleri: var mı · kullanım kuralı (URUN-YASAM-DONGUSU.md §4) · izinli renk/özellik.
+   * Yeni satır (ya da ürünü değişen satır) = A1 yeni sipariş; ürünü aynı kalan mevcut
+   * satırın miktarı = A2. Dönen `checks` tx içinde kilit altında TEKRARLANIR.
+   */
+  private async validateLineItems(
+    lines: unknown,
+    ctx: {
+      fromScannedRolls?: boolean;
+      current?: ReadonlyArray<{ id: string; itemId: string; quantity: Prisma.Decimal | number }>;
+    } = {},
+  ): Promise<{ unitByItem: Map<string, ItemUnit>; checks: ItemUsageCheck[]; warnings: string[] }> {
     const unitByItem = new Map<string, ItemUnit>();
-    if (!Array.isArray(lines)) return unitByItem;
+    const checks: ItemUsageCheck[] = [];
+    if (!Array.isArray(lines)) return { unitByItem, checks, warnings: [] };
+    const currentById = new Map((ctx.current ?? []).map((l) => [l.id, l]));
 
     const itemIds = new Set<string>();
     const propertyIds = new Set<string>();
@@ -887,6 +907,12 @@ export class OrderService extends BaseService {
       if (itemId) {
         itemIds.add(itemId);
         pairs.push({ itemId, colorId, propIds });
+        const prev = typeof line.id === "string" ? currentById.get(line.id) : undefined;
+        if (!prev || prev.itemId !== itemId) {
+          checks.push({ itemId, usage: "NEW_ORDER", opts: { fromScannedRolls: ctx.fromScannedRolls === true } });
+        } else if (Number(prev.quantity) !== Number(line.quantity)) {
+          checks.push({ itemId, usage: "LINE_QTY", opts: { oldQty: Number(prev.quantity), newQty: Number(line.quantity) } });
+        } // değişmeyen satır yeni referans doğurmaz — kontrol yok (iptal satırı Pasif kartta kalabilir)
       }
       if (colorId) colorIds.add(colorId);
       for (const p of propIds) propertyIds.add(p);
@@ -898,7 +924,7 @@ export class OrderService extends BaseService {
       // zaten uyguladığı kuralın simetriği. Yoksa üretilemez renkte satır MRP
       // talebi yaratıyor, hata ancak KK1/üretimde patlıyordu.
       const live = await prisma.item.findMany({
-        where: { id: { in: [...itemIds] }, isActive: true },
+        where: { id: { in: [...itemIds] } },
         select: {
           id: true,
           name: true,
@@ -908,7 +934,7 @@ export class OrderService extends BaseService {
         },
       });
       if (live.length !== itemIds.size) {
-        throw AppError.badRequest("Sipariş kaleminde bulunmayan veya pasif ürün var");
+        throw AppError.badRequest("Sipariş kaleminde bulunmayan ürün var");
       }
       const itemById = new Map(live.map((i) => [i.id, i]));
       for (const i of live) unitByItem.set(i.id, i.unit);
@@ -933,8 +959,9 @@ export class OrderService extends BaseService {
       }
     }
 
+    const warnings = await runItemUsageChecks(prisma, checks);
     await this.assertLineRefsLive(colorIds, propertyIds);
-    return unitByItem;
+    return { unitByItem, checks, warnings };
   }
 
   /** Satırın renk/özellik referansları var ve aktif mi (M-23 / denetim Q2). */
@@ -1906,14 +1933,17 @@ export class OrderService extends BaseService {
 
   async create(
     data: Record<string, unknown>,
-    userId?: string
+    userId?: string,
+    /** Yalnız iç çağrı (hızlı sipariş): satırlar okutulan toplardan doğdu — gövdeden GELMEZ. */
+    opts?: { fromScannedRolls?: boolean },
   ): Promise<ApiResponse<unknown>> {
     // F154: satırsız sipariş = ölü kayıt (coverage/MRP işleyemez, wo-picker düşürür).
     if (!Array.isArray(data.lines) || data.lines.length === 0) {
       throw AppError.badRequest("Sipariş en az bir kalem içermeli.");
     }
     this.validateLines(data.lines);
-    const unitByItem = await this.validateLineItems(data.lines);
+    const lineCheck = await this.validateLineItems(data.lines, { fromScannedRolls: opts?.fromScannedRolls });
+    const unitByItem = lineCheck.unitByItem;
 
     if (data.customerId) {
       await this.validateCustomer(data.customerId as string);
@@ -2068,11 +2098,13 @@ export class OrderService extends BaseService {
           throw AppError.conflict(`'${manualOrderNumber}' numaralı sipariş zaten var`);
         }
         // `destination` data literalinde: donmuş kolonun yazıcısı AST ile ölçülür (`test_snapshot_kolonlari`).
-        return this.delegate.create({
-          data: { ...prismaData, orderNumber: manualOrderNumber, destination },
-          ...(this.config.defaultInclude
-            ? { include: this.config.defaultInclude }
-            : {}),
+        // Kart kilitleri tx'in İLK ifadeleri (8030 SHARED → FOR SHARE): eşzamanlı "Pasif'e geç" satırı görür.
+        return prisma.$transaction(async (tx) => {
+          await runItemUsageChecksTx(tx, lineCheck.checks);
+          return tx.order.create({
+            data: { ...prismaData, orderNumber: manualOrderNumber, destination } as Prisma.OrderUncheckedCreateInput,
+            ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
+          });
         });
       }
       // collation-güvenli: eski `lt: prefix+"￿"` üst sınırı glibc'de (U+FFFF
@@ -2095,11 +2127,12 @@ export class OrderService extends BaseService {
         today,
         fmt,
       );
-      return this.delegate.create({
-        data: { ...prismaData, orderNumber, destination },
-        ...(this.config.defaultInclude
-          ? { include: this.config.defaultInclude }
-          : {}),
+      return prisma.$transaction(async (tx) => {
+        await runItemUsageChecksTx(tx, lineCheck.checks);
+        return tx.order.create({
+          data: { ...prismaData, orderNumber, destination } as Prisma.OrderUncheckedCreateInput,
+          ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
+        });
       });
     }, undefined, (err) =>
       // İdempotent replay: clientToken P2002'si retry EDİLMEZ (retry hep aynı
@@ -2139,7 +2172,10 @@ export class OrderService extends BaseService {
       userId
     );
 
-    return this.withUnitWarnings({ success: true, data: record, message: "Sipariş oluşturuldu" });
+    return withExtraWarnings(
+      this.withUnitWarnings({ success: true, data: record, message: "Sipariş oluşturuldu" }),
+      lineCheck.warnings,
+    );
   }
 
   /**
@@ -2276,7 +2312,7 @@ export class OrderService extends BaseService {
     // validateLineItems fırlatırsa toplar WAREHOUSE'da yetim kalırdı (rollback yok).
     await this.validateCustomer(data.customerId);
     if (data.branchId) await this.validateBranch(data.branchId, data.customerId);
-    await this.validateLineItems(lines);
+    await this.validateLineItems(lines, { fromScannedRolls: true });
     await this.validateLineColors(lines, data.customerId);
 
     const stockRollIds = rolls.filter((r) => r.status === RollStatus.STOCK).map((r) => r.id);
@@ -2308,9 +2344,11 @@ export class OrderService extends BaseService {
     // clientToken create'e akar: timeout-replay'de toplar zaten WAREHOUSE olduğundan
     // claim bloğu atlanır ve TEK koruma bu token'dır (create cached siparişi döner) —
     // token'sız replay birebir aynı satırlı İKİNCİ siparişi açardı.
+    // Miktar SUNUCUDA okutulan topların toplamından (yukarıda) — istemci miktarı yok (A1 OKUTULAN_TOPLAR).
     const created = await this.create(
       { customerId: data.customerId, branchId: data.branchId ?? null, lines, clientToken: data.clientToken ?? null },
       userId,
+      { fromScannedRolls: true },
     );
     const order = created.data as { id: string; orderNumber: string };
 
@@ -2364,6 +2402,8 @@ export class OrderService extends BaseService {
           select: {
             id: true,
             itemId: true,
+            // A2 (açık satırda miktar) kararı eski ↔ yeni miktarı karşılaştırır.
+            quantity: true,
             // ⚠️ LOAD-BEARING: aşağıdaki `cancelledAt !== null` süzgeci bu alan
             // seçilmezse `undefined !== null` ile TÜM kalemleri iptal sayar ve
             // hiçbir kalem güncellenemez olurdu (sessiz felç).
@@ -2500,6 +2540,7 @@ export class OrderService extends BaseService {
 
     // Lines payload geldiyse: WO bağı kontrolü + diff uygula.
     let unitByItem: Map<string, ItemUnit> = new Map();
+    let lineCheck: Awaited<ReturnType<OrderService["validateLineItems"]>> | null = null;
     if (incomingLines) {
       // CANCELLED WO bağları sayılmaz (iptal edilmiş, kalem serbest).
       const hasActiveWoLink = current.lines.some((line) =>
@@ -2511,7 +2552,8 @@ export class OrderService extends BaseService {
         );
       }
       this.validateLines(incomingLines);
-      unitByItem = await this.validateLineItems(incomingLines);
+      lineCheck = await this.validateLineItems(incomingLines, { current: current.lines });
+      unitByItem = lineCheck.unitByItem;
 
       const effectiveCustomerId = customerChanging
         ? (cleanData.customerId as string | null)
@@ -2528,6 +2570,8 @@ export class OrderService extends BaseService {
 
     // Tek transaction: lines diff + header update + final fetch.
     const updated = await prisma.$transaction(async (tx) => {
+      // İLK ifade: satır kartlarının kilidi (8030 SHARED → FOR SHARE, itemId sırasıyla).
+      if (lineCheck) await runItemUsageChecksTx(tx, lineCheck.checks);
       if (incomingLines) {
         // F144: WO-bağı guard'ını tx İÇİNDE TAZE re-check et — pre-tx (1362) okuma
         // ile deleteMany arasında eşzamanlı WO create (orderLinks INSERT) araya
@@ -2736,7 +2780,10 @@ export class OrderService extends BaseService {
       await this.promoteCustomerAliases(finalCustomerId, incomingLines, userId);
     }
 
-    return this.withUnitWarnings({ success: true, data: updated, message: "Sipariş güncellendi" });
+    return withExtraWarnings(
+      this.withUnitWarnings({ success: true, data: updated, message: "Sipariş güncellendi" }),
+      lineCheck?.warnings ?? [],
+    );
   }
 
   /**

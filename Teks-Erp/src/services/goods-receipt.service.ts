@@ -81,7 +81,8 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { nextSeriesNo } from "./number-series.service";
 import { applyDateRange, buildWhereClause } from "../utils/query-parser";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
-import type { ApiResponse } from "../types/api.types";
+import type { ApiResponse } from "../types/api.types";import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
+
 
 const inventory = new InventoryService();
 
@@ -615,7 +616,11 @@ async function buildPreflightContext(
   const blockOverReceipt = p.purchaseOrderId ? await resolvePurchaseBlockOverReceiptEnabled() : false;
   const orderCtx = p.purchaseOrderId ? await loadPurchaseOrderContext(p.purchaseOrderId) : null;
   const overReceipt = blockOverReceipt && orderCtx ? { orderNo: orderCtx.orderNo, ordered: orderCtx.ordered, received: orderCtx.received } : null;
-  return { ctx: { requirePrice, priceFor, currency: p.currency, overReceipt }, priceFor, contract, orderCtx, blockOverReceipt, requirePrice };
+  // Siparişte KALANI olan kalem = açık belgeyi tamamlayan kabul (C′) — `claimStampLine` ile aynı ölçüt.
+  const docItemIds = new Set(
+    orderCtx ? [...orderCtx.capacity.entries()].filter(([, ls]) => ls.some((l) => l.remaining.gt(0))).map(([id]) => id) : [],
+  );
+  return { ctx: { requirePrice, priceFor, currency: p.currency, overReceipt, docItemIds }, priceFor, contract, orderCtx, blockOverReceipt, requirePrice };
 }
 
 /**
@@ -950,22 +955,19 @@ export class GoodsReceiptService {
     // ELENMEZ: hata üretmeyi `createInitialEntry`'ye bırakırız ki mevcut
     // `failed[]` mesajı bayt-bayt aynı kalsın.
     //
-    // ⚠️ `isActive` DE OKUNUR ve iplik dalında ARANIR. Kumaş yolunda pasif
-    // kalemi `createInitialEntry` zaten reddediyor ("Ürün bulunamadı veya
-    // pasif"); iplik dalı onu atladığı için AYNI fişte pasif bir kalem
-    // kumaşsa reddediliyor, iplikse SESSİZCE deftere yazılıyordu — üstelik
-    // `POST /api/yarn/movements` aynı kalemi reddederken. Aynı verinin iki
-    // kapısı farklı cevap veriyorsa hangisinin doğru olduğu sorulamaz.
+    // ⚠️ Kartın kullanılabilirliği (yaşam döngüsü) iki dalda da AYNI kuraldan geçer:
+    // kumaşta `createInitialEntry`, iplikte aşağıdaki `assertItemUsable` — aynı fişte
+    // pasif kalem kumaşsa reddedilip iplikse deftere yazılamaz.
     // ⚠️ `unit` de okunur: guard mesajları miktarı BİRİMİYLE basar (kumaş m,
     // iplik kg) — aynı sorgu, ek maliyet yok.
-    const itemInfo = new Map<string, { itemType: ItemType; isActive: boolean; name: string; unit: ItemUnit }>();
+    const itemInfo = new Map<string, { itemType: ItemType; name: string; unit: ItemUnit }>();
     const ids = [...new Set(lines.map((l) => l.itemId))];
     if (ids.length > 0) {
       const rows = await prisma.item.findMany({
         where: { id: { in: ids } },
-        select: { id: true, itemType: true, isActive: true, name: true, unit: true },
+        select: { id: true, itemType: true, name: true, unit: true },
       });
-      for (const r of rows) itemInfo.set(r.id, { itemType: r.itemType, isActive: r.isActive, name: r.name, unit: r.unit });
+      for (const r of rows) itemInfo.set(r.id, { itemType: r.itemType, name: r.name, unit: r.unit });
     }
 
     // ── J1 BAYRAKLARI (ikisi de varsayılan KAPALI — blok yorumu yukarıda) ───
@@ -1077,10 +1079,10 @@ export class GoodsReceiptService {
         // ipliği ayırmak istendiğinde doğru çözüm ayrı bir DEPO (ya da
         // `YarnLot`) olur, buraya sessiz bir bayrak eklemek değil.
         if (info?.itemType === ItemType.YARN) {
-          // Pasif kalem: kumaş yolundaki `createInitialEntry` guard'ının ikizi.
-          // Mesaj bilerek o yolla AYNI cümleyi kurar — operatör aynı hatayı
-          // fişin iki farklı satırında iki farklı şekilde okumasın.
-          if (!info.isActive) throw AppError.notFound("Ürün bulunamadı veya pasif (silinmiş)");
+          // Kart kullanımı kumaş yoluyla AYNI kural (`createInitialEntry`): alış satırını
+          // karşılayan kabul C′, belgesiz kabul C (URUN-YASAM-DONGUSU.md §4).
+          const yarnUsage: ItemUsage = claim ? "DOC_COMPLETION" : "NEW_STOCK";
+          await assertItemUsable(prisma, line.itemId, yarnUsage);
           // Fiyat ÖN-DOLUMU kumaşla AYNI zincir (D2): satırın kendi fiyatı
           // kazanır; yoksa kalem kartının alış fiyatı; o da yoksa NULL.
           // ⚠️ İPLİK DAMGA TAŞIMAZ (`Roll` doğmuyor) ama kapasiteyi TÜKETİR:
@@ -1089,7 +1091,7 @@ export class GoodsReceiptService {
           // yani bugün no-op'tur — ama defteri yarım tutmak, ileride aynı
           // kalemden hem top hem kg doğuran bir yol eklenirse sessizce yanlış
           // damga üretirdi.
-          createdYarn.push(await this.addYarnLine(receipt, line, priceFor(line), userId));
+          createdYarn.push(await this.addYarnLine(receipt, line, priceFor(line), { userId, itemUsage: yarnUsage }));
           noteAccepted(line, claim);
           continue;
         }
@@ -1201,7 +1203,7 @@ export class GoodsReceiptService {
     line: GoodsReceiptLineInput,
     /** D2 zinciriyle ÇÖZÜLMÜŞ birim fiyat (satır > kart > null) — fişin para biriminde. */
     unitPrice: Prisma.Decimal.Value | null,
-    userId?: string,
+    { userId, itemUsage = "NEW_STOCK" }: { userId?: string; itemUsage?: ItemUsage } = {},
   ): Promise<string> {
     const qtyKg = new Prisma.Decimal(line.initialQty);
     if (line.weightKg != null && !new Prisma.Decimal(line.weightKg).equals(qtyKg)) {
@@ -1252,6 +1254,8 @@ export class GoodsReceiptService {
       // satır kilidinde bekler; iptal önce commit'lendiyse count=0 → 409 ve
       // CANCELLED fişe iplik satırı DOĞMAZ.
       await this.claimActiveReceiptTx(tx, receipt.id, receipt.receiptNo);
+      // Kart kilidi (8030 SHARED → FOR SHARE) — iplik bakiyesi D1 referansıdır; lot kilidinden (8029) önce.
+      await assertItemUsableTx(tx, line.itemId, itemUsage);
       // Lot doğuşu tek kapı: `[kalem, lotNo]` upsert, 8029 kilidi (tedarikçi yalnız ilk doğuşta yazılır).
       const lot = lotNo ? await ensureYarnLotTx(tx, { itemId: line.itemId, lotNo, source: "RECEIPT", supplierId: receipt.supplierId, userId }) : null;
       const applied = await applyYarnMovementTx(tx, {

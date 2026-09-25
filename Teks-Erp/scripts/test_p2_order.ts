@@ -104,7 +104,7 @@ async function main(): Promise<void> {
     });
     f143RollId = f143Roll.id;
     // Ürünü PASİFLE → create() içindeki validateLineItems fırlatır (soft-delete guard).
-    await prisma.item.update({ where: { id: f143Item.id }, data: { isActive: false } });
+    await prisma.item.update({ where: { id: f143Item.id }, data: { isActive: false, lifecycleStatus: "ARCHIVED" } });
     let f143Threw = false;
     try {
       await svc.quickOrderFromRolls({ customerId: customer.id, rollIds: [f143Roll.id] }, admin.id);

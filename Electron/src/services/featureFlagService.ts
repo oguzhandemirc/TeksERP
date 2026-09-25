@@ -1,6 +1,7 @@
 import apiClient from "./apiClient";
 import { withSettingsPassword } from "@/lib/settings-password";
 import type { ApiResponse } from "@/types/api";
+import type { PhaseOutLineQty, PhaseOutNewOrder } from "@/lib/item-lifecycle-flags";
 import type { SameTypeSessionPolicy } from "@/types/auth";
 import type {
   PackingPoolPackageNo,
@@ -377,6 +378,13 @@ export interface FeatureFlags {
    *  bayrak açılmadan kurulmuş PLANNED sevkiyatların çıkışı kilitlenmez.
    *  `orderless: true` (Siparişsiz devam et) 'block'ta da MUAF. */
   shippingOrderRequirement: ShipmentOrderRequirement;
+  /** "Tükenene kadar" karta yeni sipariş (default OKUTULAN_TOPLAR). Backend ENFORCE eder;
+   *  KAPALI + shippingOrderRequirement=block kaydı `warnings` döner (çıkış "Siparişsiz devam et"). */
+  itemPhaseOutNewOrder: PhaseOutNewOrder;
+  /** "Tükenene kadar" kartın açık sipariş satırında miktar (default SERBEST_UYARILI). */
+  itemPhaseOutLineQty: PhaseOutLineQty;
+  /** "Tükenene kadar" karta yeni üretim planı açılabilir mi (default true). */
+  itemPhaseOutNewPlan: boolean;
   /** Sevk öncesi TÜM çuvallar tartılmış olsun mu (false=default → yalnız yurtdışı
    *  sevk tartı ister). Açıkken Hızlı Sevk KOMPLE kapanır (çuval görünmeden
    *  doğduğu için tartılamaz). Backend ENFORCE eder; ihracat kuralı bayraktan
