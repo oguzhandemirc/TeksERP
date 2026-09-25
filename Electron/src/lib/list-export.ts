@@ -5,7 +5,8 @@
 // `reportExport.ts` orada tek spec'e indirilmişti).
 
 import { toast } from "sonner";
-import { buildWorkbook, saveWorkbook } from "./xlsx-export";
+import { buildWorkbook, saveWorkbook, type SheetSpec } from "./xlsx-export";
+import { upTo3ExcelNumFmt, upTo3Text } from "./number-format";
 import { saveTextAs } from "./file-save";
 
 /** Tek sütun tarifi: başlık + satırdan değer çıkaran fonksiyon. */
@@ -130,19 +131,17 @@ function totalsOf<T>(cols: ExportColumn<T>[], rows: T[]): Array<string | number 
 
 // --- üç çıktı ----------------------------------------------------------------
 
-/** Satırları .xlsx olarak kaydeder (biçimli tek sayfa + TOPLAM satırı). */
-export async function exportRowsToXlsx<T>(
-  cols: ExportColumn<T>[],
-  rows: T[],
-  filename: string,
-  notes?: string[],
-): Promise<boolean> {
+/**
+ * Liste → Excel sayfası (PDF'le aynı başlık, "N kayıt", kolon, hiza ve görünen metin).
+ * Sayı biçimi PDF metnini izler (`upTo3Text`, ≤3 hane — metre/kg Decimal(x,3)):
+ * tam sayıda ondalık ayırıcı görünmez ("#,##0.###" 40'ı "40," gösteriyordu).
+ */
+export function buildListSheet<T>(cols: ExportColumn<T>[], rows: T[], filename: string, notes?: string[]): SheetSpec {
   const columns = cols.map((c, i) => ({
     header: c.label,
     key: `c${i}`,
     width: 20,
-    // 3 ondalık: metre/kg alanları backend'de Decimal(x,3); 2 hane kırpardı.
-    numFmt: c.summable ? "#,##0.###" : undefined,
+    ...(c.summable ? { numFmt: upTo3ExcelNumFmt(), align: "right" as const } : {}),
   }));
   const dataRows = rows.map((r) =>
     Object.fromEntries(cols.map((c, i) => [`c${i}`, c.summable ? cellNumber(c.value(r)) : cellText(c.value(r))])),
@@ -151,9 +150,24 @@ export async function exportRowsToXlsx<T>(
   const totalRow = t
     ? Object.fromEntries(t.map((v, i) => [`c${i}`, v]).filter(([, v]) => v !== undefined))
     : undefined;
-  const blob = await buildWorkbook([
-    { name: filename.slice(0, 31) || "Liste", columns, rows: dataRows, totalRow, notes },
-  ]);
+  return {
+    name: filename.slice(0, 31) || "Liste",
+    preamble: [[filename], [`${rows.length} kayıt`]],
+    columns,
+    rows: dataRows,
+    totalRow,
+    notes,
+  };
+}
+
+/** Satırları .xlsx olarak kaydeder (biçimli tek sayfa + TOPLAM satırı). */
+export async function exportRowsToXlsx<T>(
+  cols: ExportColumn<T>[],
+  rows: T[],
+  filename: string,
+  notes?: string[],
+): Promise<boolean> {
+  const blob = await buildWorkbook([buildListSheet(cols, rows, filename, notes)]);
   return saveWorkbook(blob, filename);
 }
 
@@ -185,7 +199,7 @@ export function buildListHtml<T>(
             c.summable
               ? // summable kolonlar gövdede de TR yerel biçimiyle — TOPLAM satırıyla AYNI
                 // biçim; aksi halde sütun içinde '.' iki farklı anlam taşırdı.
-                `<td class="num">${htmlEsc(cellNumber(c.value(row)).toLocaleString("tr-TR"))}</td>`
+                `<td class="num">${htmlEsc(upTo3Text(cellNumber(c.value(row))))}</td>`
               : `<td>${htmlEsc(cellText(c.value(row)))}</td>`,
           )
           .join("")}</tr>`,
@@ -197,7 +211,7 @@ export function buildListHtml<T>(
     ? `<tfoot><tr>${t
         .map((v) =>
           typeof v === "number"
-            ? `<td class="num"><strong>${htmlEsc(v.toLocaleString("tr-TR"))}</strong></td>`
+            ? `<td class="num"><strong>${htmlEsc(upTo3Text(v))}</strong></td>`
             : v
               ? `<td><strong>${htmlEsc(String(v))}</strong></td>`
               : "<td></td>",

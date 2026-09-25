@@ -103,8 +103,9 @@ describe("cari ekstre dışa aktarımı", () => {
 
   it("§1b notlar HER iki çıktıda da taşınır (bağlam rakamla aynı dosyada durur)", () => {
     const spec = buildStatementExport(INPUT());
-    const sheetNotes = toSheets(spec)[0]!.notes ?? [];
-    // Başlık meta'sı + tablo notları Excel sayfasına birlikte düşer.
+    const sheet = toSheets(spec)[0]!;
+    const sheetNotes = [...(sheet.preamble ?? []).map((r) => String(r[0])), ...(sheet.notes ?? [])];
+    // Başlık meta'sı (üstte, PDF'teki gibi) + tablo notları (altta) Excel sayfasında birlikte.
     expect(sheetNotes.some((n) => n.includes("Para birimi: TRY"))).toBe(true);
     expect(sheetNotes.some((n) => n.includes("Dönem devri"))).toBe(true);
     expect(buildReportHtml(spec)).toContain("Dönem devri");

@@ -242,13 +242,13 @@ describe("çek/senet teslim bordrosu", () => {
     expect(notes.some((n) => n.startsWith("Teslim Alan"))).toBe(true);
     expect(spec.meta?.some((m) => m.includes("ANLIK"))).toBe(true);
     expect(spec.meta?.some((m) => m.includes("belge numarası"))).toBe(true);
-    // Üç çıktının hepsinde görünmeli (Excel `toSheets` meta+notes'u birleştirir).
+    // Üç çıktının hepsinde görünmeli — Excel'de meta PDF'teki gibi ÜSTTE, imza notları ALTTA.
     const html = buildReportHtml(spec);
     expect(html).toContain("Teslim Eden");
     expect(html).toContain("ANLIK");
-    const sheetNotes = toSheets(spec)[0]!.notes ?? [];
-    expect(sheetNotes.some((n) => n.includes("ANLIK"))).toBe(true);
-    expect(sheetNotes.some((n) => n.startsWith("Teslim Alan"))).toBe(true);
+    const sheet = toSheets(spec)[0]!;
+    expect((sheet.preamble ?? []).some((r) => String(r[0]).includes("ANLIK"))).toBe(true);
+    expect((sheet.notes ?? []).some((n) => n.startsWith("Teslim Alan"))).toBe(true);
   });
 
   it("§7b başlık yönü ve tarihi söyler; çok kolonlu çıktı YATAY basılır", () => {

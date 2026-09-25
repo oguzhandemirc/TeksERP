@@ -82,11 +82,14 @@ describe("rapor dışa aktarım — tek spec, iki çıktı", () => {
     expect(buildReportHtml(SPEC)).toContain("TOPLAM");
   });
 
-  it("başlık notları HER Excel sayfasına düşer (sayfa tek başına paylaşılabiliyor)", () => {
-    const notes = toSheets(SPEC)[0]!.notes ?? [];
-    expect(notes).toContain("Oranlar METRAJ ağırlıklıdır.");
-    expect(notes).toContain("Karşılaştırma dönemi: Haziran");
-    expect(notes).toContain("Fire dahildir."); // tablonun kendi notu da korunur
+  it("başlık notları HER Excel sayfasının ÜSTÜNE düşer (PDF'teki gibi; sayfa tek başına paylaşılabiliyor)", () => {
+    const sheets = toSheets(SPEC);
+    for (const s of sheets) {
+      const ust = (s.preamble ?? []).map((r) => String(r[0]));
+      expect(ust).toContain("Oranlar METRAJ ağırlıklıdır.");
+      expect(ust).toContain("Karşılaştırma dönemi: Haziran");
+    }
+    expect(sheets[0]!.notes ?? []).toContain("Fire dahildir."); // tablonun kendi notu altta korunur
   });
 
   it("HTML kaçırma: serbest metin kumaş adı belgeyi bozmaz", () => {

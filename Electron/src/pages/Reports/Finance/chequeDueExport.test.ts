@@ -117,8 +117,8 @@ describe("çek vade takvimi dışa aktarımı", () => {
   it("§1c backend'in kapsam notları OLDUĞU GİBİ taşınır (burada yeniden yazılmaz)", () => {
     const spec = buildChequeDueExport(BASE);
     for (const n of BASE.notes) expect(spec.meta).toContain(n);
-    // Notlar Excel sayfasına da düşer — kırılım tek başına paylaşılıyor.
-    expect(toSheets(spec)[0]!.notes ?? []).toEqual(expect.arrayContaining(BASE.notes));
+    // Notlar Excel sayfasına da düşer (PDF'teki gibi başlığın altında) — kırılım tek başına paylaşılıyor.
+    expect((toSheets(spec)[0]!.preamble ?? []).map((r) => String(r[0]))).toEqual(expect.arrayContaining(BASE.notes));
   });
 
   // ---------------------------------------------------------------------------

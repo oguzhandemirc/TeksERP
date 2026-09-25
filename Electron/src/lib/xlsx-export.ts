@@ -6,6 +6,7 @@
 // uygulama açılışı şişmez.
 
 import { saveBlobAs, downloadBlob } from "./file-save";
+import type { ExcelNumFmt } from "./number-format";
 
 export interface SheetColumn {
   header: string;
@@ -14,7 +15,7 @@ export interface SheetColumn {
   width?: number;
   /** Sayı/tarih biçimi — örn "#,##0.0" (metre/kg), "#,##0" (adet), "dd.mm.yyyy hh:mm".
    *  Fonksiyon verilirse HÜCRE BAŞINA seçilir (ör. tam sayıda ondalık ayırıcı görünmesin). */
-  numFmt?: string | ((value: unknown) => string | undefined);
+  numFmt?: ExcelNumFmt;
   /** Veri hücrelerinin yatay hizası — belgedeki kolon hizasının aynısı. */
   align?: "left" | "right" | "center";
 }

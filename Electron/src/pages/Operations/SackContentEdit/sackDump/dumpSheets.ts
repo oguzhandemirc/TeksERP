@@ -8,20 +8,16 @@
 // Her sayfa belge başlığıyla açılır: Excel'de sayfalar tek tek dolaşır.
 // =============================================================================
 
+import { upTo3ExcelNumFmt } from "@/lib/number-format";
 import type { SheetColumn, SheetSpec } from "@/lib/xlsx-export";
 import { buildSackDumpModel, EMPTY_SACK_TEXT, type DumpKind, type DumpTable } from "./dumpModel";
 import type { SackDump, SackDumpOptions } from "./types";
 
-/**
- * PDF metnini izleyen sayı biçimi — tam sayıda ondalık ayırıcı GÖRÜNMEZ
- * ("#,##0.###" 40'ı "40," gösterirdi); ondalıkta en çok 3 hane (PDF: tr-TR, ≤3).
- */
+/** PDF metnini izleyen sayı biçimi (`dumpCellText` ile aynı kural, `lib/number-format`). */
 function numFmtOf(kind: DumpKind): SheetColumn["numFmt"] {
   if (kind === "text") return undefined;
   if (kind === "int") return "0";
-  const suffix = kind === "cm" ? '" cm"' : "";
-  return (v: unknown) =>
-    typeof v === "number" ? `${Number.isInteger(v) ? "#,##0" : "#,##0.0##"}${suffix}` : undefined;
+  return upTo3ExcelNumFmt(kind === "cm" ? " cm" : "");
 }
 
 const alignOf = (kind: DumpKind): SheetColumn["align"] => (kind === "text" ? undefined : "right");

@@ -7,6 +7,7 @@ import type { SackDumpNameMode } from "@/lib/shipping-flags";
 // metni YALNIZ burada kurulur; `dumpHtml` ve `dumpSheets` yalnız biçimler.
 // =============================================================================
 
+import { upTo3Text } from "@/lib/number-format";
 import { dumpTotalQty, type SackDump, type SackDumpOptions, type SackDumpRoll } from "./types";
 
 /** Hücre türü — HTML metnini ve Excel sayı biçimini BİRLİKTE belirler. */
@@ -58,7 +59,7 @@ export function dumpCellText(kind: DumpKind, v: DumpCell): string {
   if (v == null) return "";
   if (typeof v === "string") return v;
   if (kind === "int") return String(v);
-  const s = v.toLocaleString("tr-TR", { maximumFractionDigits: 3 });
+  const s = upTo3Text(v);
   return kind === "cm" ? `${s} cm` : s;
 }
 

@@ -18,6 +18,7 @@
 // =============================================================================
 
 import type { SheetSpec } from "@/lib/xlsx-export";
+import { reportCellText, reportExcelNumFmt } from "@/lib/number-format";
 
 export interface ReportColumn {
   header: string;
@@ -55,37 +56,40 @@ export interface ReportExportSpec {
 // ---------- Excel ------------------------------------------------------------
 
 /**
- * `SheetSpec` ile alan adları bilinçli olarak aynı → dönüşüm neredeyse kimlik.
- * `align` Excel'e geçmez (orada hizayı `numFmt` ve hücre tipi belirler).
+ * Excel sayfaları — PDF'le AYNI başlık, kolon, hiza ve GÖRÜNEN metin.
+ *
+ * Başlık + dönem + bağlam satırları HER sayfanın ÜSTÜNE düşer: Excel'de sayfalar tek
+ * tek kopyalanıp paylaşılıyor ve dönem bilgisi olmayan bir tablo yanlış okunur.
+ * Sayı biçimi PDF'in kuralından türer (`reportExcelNumFmt`); biçimsiz kolondaki kesirli
+ * sayı PDF'te ham `String(v)` basıldığı için Excel'e de o metin gider.
  */
 export function toSheets(spec: ReportExportSpec): SheetSpec[] {
-  return spec.tables.map((t) => ({
-    name: t.name,
-    columns: t.columns.map((c) => ({ header: c.header, key: c.key, width: c.width, numFmt: c.numFmt })),
-    rows: t.rows,
-    totalRow: t.totalRow,
-    // Başlıktaki bağlam HER sayfaya düşer: Excel'de sayfalar tek tek kopyalanıp
-    // paylaşılıyor ve dönem bilgisi olmayan bir tablo yanlış okunur.
-    notes: [...(spec.meta ?? []), ...(t.notes ?? [])],
-  }));
+  const preamble = [[spec.title], ...(spec.subtitle ? [[spec.subtitle]] : []), ...(spec.meta ?? []).map((m) => [m])];
+  return spec.tables.map((t) => {
+    const cell = (c: ReportColumn, v: unknown) =>
+      !c.numFmt && typeof v === "number" && !Number.isInteger(v) ? String(v) : v;
+    const row = (r: Record<string, unknown>) => Object.fromEntries(t.columns.map((c) => [c.key, cell(c, r[c.key])]));
+    return {
+      name: t.name,
+      preamble,
+      columns: t.columns.map((c) => ({
+        header: c.header,
+        key: c.key,
+        width: c.width,
+        ...(c.numFmt ? { numFmt: reportExcelNumFmt(c.numFmt) } : {}),
+        ...(c.align ? { align: c.align } : {}),
+      })),
+      rows: t.rows.map(row),
+      ...(t.totalRow ? { totalRow: row(t.totalRow) } : {}),
+      ...(t.notes?.length ? { notes: t.notes } : {}),
+    };
+  });
 }
 
 // ---------- PDF / Yazdır -----------------------------------------------------
 
-/**
- * `numFmt` taşıyan kolonun PDF/Yazdır hücresi tr-TR ile biçimlenir (2026-08-14
- * H3 dikişi). Eskiden ham `String(v)` basılıyordu → "12500.5" (binliksiz, nokta
- * ondalıklı) — Excel hücresi doğruyken kâğıt çıktısı çıplaktı. Ondalık hane
- * sayısı `numFmt`ten okunur ("#,##0.00" → 2, "#,##0" → 0). Sayı OLMAYAN değer
- * (boş hücre, metin) aynen geçer — "—" veya "" sayıya zorlanmaz.
- */
-const fmtCell = (v: unknown, numFmt?: string): string => {
-  if (numFmt === undefined || v === null || v === undefined || v === "") return String(v ?? "");
-  const n = typeof v === "number" ? v : Number(v);
-  if (!Number.isFinite(n)) return String(v);
-  const decimals = /\.([0#]+)/.exec(numFmt)?.[1]?.length ?? 0;
-  return n.toLocaleString("tr-TR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-};
+/** PDF/Yazdır hücresi — Excel'le ortak kural (`lib/number-format`). */
+const fmtCell = reportCellText;
 
 const esc = (v: unknown): string =>
   String(v ?? "")
