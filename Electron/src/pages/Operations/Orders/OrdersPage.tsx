@@ -353,7 +353,7 @@ export function OrdersPage() {
   const createMut = useMutation({
     mutationFn: (payload: CreatePayload) =>
       orderService.create(payload as unknown as Partial<Order>),
-    // Sunucu `warnings` (kg/adet satırda karşılama ölçülmüyor) genel basımdan gelir.
+    // Sunucu `warnings` (kg/adet satırda karşılama ölçülmüyor) apiClient interceptor'ında basılır.
     onSuccess: () => {
       toast.success("Sipariş oluşturuldu.");
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });

@@ -92,7 +92,7 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
   const d = useNumberingDraft(row);
   const {
     fmt, setFmt, counter, setCounter, source, setSource, effectiveFrom, setEffectiveFrom,
-    onizleme, siradaki, bicimHatasi, setBicimHatasi, genelHata, setGenelHata,
+    onizleme, siradaki, onizlemeUyarilari, bicimHatasi, setBicimHatasi, genelHata, setGenelHata,
   } = d;
 
   const { kaydediliyor, kaydet, iptalEt } = useNumberingActions({
@@ -129,7 +129,7 @@ export function NumberingFormDialog({ row, etkiSayisi, birim, exhaustion, onClos
         </DialogHeader>
 
         {/* Önizleme EN ÜSTTE ve BÜYÜK — kullanıcı ne üreteceğini önce görür. */}
-        <NumberingPreviewBoxes preview={onizleme} next={siradaki} />
+        <NumberingPreviewBoxes preview={onizleme} next={siradaki} warnings={onizlemeUyarilari} />
 
         <NumberingPendingBlock row={row} busy={kaydediliyor} onCancel={() => void iptalEt()} />
 

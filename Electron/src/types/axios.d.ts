@@ -6,5 +6,11 @@ import "axios";
 declare module "axios" {
   export interface AxiosRequestConfig {
     suppressErrorToast?: boolean;
+    /**
+     * Başarılı yazım yanıtının `warnings`i genel TOSTA basılmasın (lib/serverNotes.ts):
+     * `handled` — ekran uyarıyı kendi gösterir (satır içi / liste) · `silent` — istek
+     * kullanıcı eylemi olmadan ya da yazarken gider (önizleme, heartbeat, otomatik kayıt).
+     */
+    serverWarnings?: "handled" | "silent";
   }
 }

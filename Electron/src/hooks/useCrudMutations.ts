@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { CrudService } from "@/services/crudService";
-import { showServerWarnings } from "@/lib/serverNotes";
 
 interface Options<T> {
   service: CrudService<T>;
@@ -12,8 +11,7 @@ interface Options<T> {
 export function useCrudMutations<T>({ service, queryKey, entityName }: Options<T>) {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: [queryKey] });
-  // Uyarılar genel basımdan (App.tsx MutationCache) gelir; geri-al tostundaki `restore`
-  // bir mutation DEĞİL, orada açık çağrı şart.
+  // Sunucu uyarıları (`warnings`) apiClient interceptor'ında genel basılır — burada değil.
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<T>) => service.create(data),
@@ -38,9 +36,8 @@ export function useCrudMutations<T>({ service, queryKey, entityName }: Options<T
         action: {
           label: "Geri al",
           onClick: () => {
-            void service.restore(id).then((restored) => {
+            void service.restore(id).then(() => {
               toast.success(`${entityName} geri alındı.`);
-              showServerWarnings(restored);
               invalidate();
             });
           },

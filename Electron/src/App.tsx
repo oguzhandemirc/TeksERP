@@ -20,12 +20,8 @@ import { BOSS_PATH } from "@/lib/boss-path";
 import { useHashPath } from "@/lib/use-hash-path";
 import { loadScanSeries } from "@/lib/scanner/barcode-kind";
 import { DEFAULT_STALE_MS, applyQueryFreshness } from "@/lib/query-freshness";
-import { createServerNotesMutationCache } from "@/lib/serverNotes";
 
 const queryClient = new QueryClient({
-  // Sunucunun engel olmayan notu (`warnings`) HER mutation yanıtında basılır — site
-  // site hatırlanmaz; kendi gösteren mutation `meta: SERVER_WARNINGS_HANDLED` taşır.
-  mutationCache: createServerNotesMutationCache(),
   defaultOptions: {
     queries: {
       // L fix: deterministik 4xx'i (401/403/404/validasyon) yeniden DENEME —

@@ -123,8 +123,10 @@ export function LinkOrderDialog({
       const lineId = (created.data as unknown as { lines?: { id: string }[] })?.lines?.[0]?.id;
       if (!lineId) throw new Error("Sipariş oluştu ama kalem okunamadı — listeden bağlayın.");
       const linked = await workOrderService.linkOrderLines(workOrderId, [lineId]);
-      // Bağlama adımının uyarıları (bugün: en farkı) yanıtta kalsın — genel basım gösterir.
-      return { ...created, warnings: [...(created.warnings ?? []), ...(linked.warnings ?? []), ...(linked.data?.warnings ?? [])] };
+      // Bağlama adımının ALAN uyarıları (bugün: en farkı) zarfta değil `data`da — açıkça basılır;
+      // iki isteğin zarf uyarılarını apiClient interceptor'ı zaten bastı.
+      showServerWarnings({ warnings: linked.data?.warnings ?? [] });
+      return created;
     },
     onSuccess: () => {
       toast.success("Sipariş oluşturuldu ve bağlandı");

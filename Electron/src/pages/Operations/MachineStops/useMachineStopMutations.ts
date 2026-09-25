@@ -34,7 +34,7 @@ export function useMachineStopMutations(onDone: () => void) {
   const qc = useQueryClient();
   const [stampError, setStampError] = useState<string | null>(null);
   const settle = (res: { message?: string; warnings?: string[] }, fallback: string) => {
-    toastServerSuccess(res, fallback); // uyarılar genel basımdan (App.tsx MutationCache)
+    toastServerSuccess(res, fallback); // uyarılar apiClient interceptor'ında genel basılır
     setStampError(null);
     onDone();
     void qc.invalidateQueries({ queryKey: [MACHINE_STOPS_QUERY_KEY] });

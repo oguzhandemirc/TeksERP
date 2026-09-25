@@ -490,6 +490,10 @@ export const sackHubService = {
         // false varsayılan). `orderless: true` uyarıyı susturur ve `block`
         // rejiminde kapıdan geçirir.
         ...(body.orderless ? { orderless: true } : {}),
+      }, {
+        // Uyarılar (bugün: "bu sevkiyat hiçbir siparişe yazılmadı") diyalogda LİSTE olarak
+        // gösterilir — genel tost basımı atlanır (CreateShipmentDialog).
+        serverWarnings: "handled",
       })
       .then((r) => r.data),
 };

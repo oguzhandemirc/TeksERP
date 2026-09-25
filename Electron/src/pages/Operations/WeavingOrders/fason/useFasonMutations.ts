@@ -10,7 +10,7 @@ export const FASON_QUERY_KEY = "weaving-fason";
 export function useFasonMutations(weavingOrderId: string, onDone: () => void) {
   const qc = useQueryClient();
   const settle = (res: ApiResponse<unknown>, fallback: string) => {
-    toastServerSuccess(res, fallback); // uyarılar genel basımdan (App.tsx MutationCache)
+    toastServerSuccess(res, fallback); // uyarılar apiClient interceptor'ında genel basılır
     onDone();
     void qc.invalidateQueries({ queryKey: [FASON_QUERY_KEY, weavingOrderId] });
     void qc.invalidateQueries({ queryKey: [FASON_QUERY_KEY, "yarn-balance"] });

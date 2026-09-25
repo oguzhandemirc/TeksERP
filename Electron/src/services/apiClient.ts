@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/auth";
 import { useServerStatusStore } from "@/store/serverStatus";
 import { recordNetSample } from "@/services/netStats";
 import { applyClientInfoHeaders } from "@/lib/client-info";
+import { shouldToastWarnings, showServerWarnings } from "@/lib/serverNotes";
 
 /** İstek süresi ölçümü için config'e damgalanan başlangıç zamanı. */
 interface TimedConfig {
@@ -118,6 +119,9 @@ apiClient.interceptors.response.use(
     );
     // Her başarılı yanıt = backend ulaşılabilir + sunucu saati (Date header).
     useServerStatusStore.getState().markReachable(readDateHeader(response.headers));
+    // Sunucunun engel olmayan notu (`warnings`) her yazım yanıtında GENEL basılır —
+    // servis zarfı soysa da; ekranı kendi gösteren/otomatik istek `serverWarnings` taşır.
+    if (shouldToastWarnings(response.config, response.data)) showServerWarnings(response.data as { warnings?: unknown });
     return response;
   },
   async (error) => {

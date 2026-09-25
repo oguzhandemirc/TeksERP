@@ -30,13 +30,17 @@ export const numberingService = {
    * diyaloğun kendi iptal bayrağıyla bastırdığı BAYAT yanıt bile ekrana
    * düşüyordu. Hatayı gösteren yüzey diyalogdur.
    */
-  async preview(key: string, fmt: SeriesFormatInput): Promise<{ preview: string; next: string | null }> {
-    const r = await apiClient.post<{ data: { preview: string; next: string | null } }>(
+  /**
+   * Yazarken çağrılır: sunucunun `warnings`i (etikete SIĞMIYOR) TOST OLMAZ — önizlemenin
+   * altında satır içi gösterilir (`serverWarnings: "handled"`).
+   */
+  async preview(key: string, fmt: SeriesFormatInput): Promise<{ preview: string; next: string | null; warnings: string[] }> {
+    const r = await apiClient.post<{ data: { preview: string; next: string | null }; warnings?: string[] }>(
       "/api/number-series/preview",
       { key, ...fmt },
-      { suppressErrorToast: true },
+      { suppressErrorToast: true, serverWarnings: "handled" },
     );
-    return { preview: r.data?.data?.preview ?? "", next: r.data?.data?.next ?? null };
+    return { preview: r.data?.data?.preview ?? "", next: r.data?.data?.next ?? null, warnings: r.data?.warnings ?? [] };
   },
 
   /** `null` = bu seride sayım kaynağı yok ⇒ ekran SAYI YAZMAZ ("0" demez). */

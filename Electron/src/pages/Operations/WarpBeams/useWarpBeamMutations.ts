@@ -15,7 +15,7 @@ export const WARP_BEAMS_QUERY_KEY = "warp-beams";
 export function useWarpBeamMutations(onDone: () => void) {
   const qc = useQueryClient();
   const settle = (res: { message?: string; warnings?: string[] }, fallback: string) => {
-    toastServerSuccess(res, fallback); // uyarılar genel basımdan (App.tsx MutationCache)
+    toastServerSuccess(res, fallback); // uyarılar apiClient interceptor'ında genel basılır
     onDone();
     void qc.invalidateQueries({ queryKey: [WARP_BEAMS_QUERY_KEY] });
     void qc.invalidateQueries({ queryKey: ["yarn-stock"] });

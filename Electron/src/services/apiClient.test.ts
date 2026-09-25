@@ -21,7 +21,10 @@ vi.mock("@/store/auth", () => ({
 }));
 
 const toastError = vi.fn();
-vi.mock("sonner", () => ({ toast: { error: (...a: unknown[]) => toastError(...a) } }));
+const toastWarning = vi.fn();
+vi.mock("sonner", () => ({
+  toast: { error: (...a: unknown[]) => toastError(...a), warning: (...a: unknown[]) => toastWarning(...a) },
+}));
 
 // serverStatus GERÇEK store — offset/online davranışını uçtan uca doğrulamak için.
 import apiClient from "./apiClient";
@@ -264,3 +267,25 @@ describe("apiClient interceptor", () => {
     });
   });
 });
+
+// Sunucunun engel olmayan notu (`warnings`) her YAZIM yanıtında genel basılır (lib/serverNotes.ts).
+describe("apiClient interceptor — sunucu uyarıları", () => {
+  beforeEach(() => toastWarning.mockClear());
+  const yanit = (method: string, data: unknown, ek: Record<string, unknown> = {}) =>
+    makeResponse({ data, config: { headers: new AxiosHeaders(), method, ...ek } as never });
+
+  it("POST zarfının her uyarısı ayrı tost (8 sn) — servis zarfı soysa da burada görünür", () => {
+    getInterceptor().fulfilled(yanit("post", { success: true, data: {}, warnings: ["İ-1 yazım notu", "İ-2 yazım notu"] }));
+    expect(toastWarning).toHaveBeenCalledTimes(2);
+    expect(toastWarning).toHaveBeenCalledWith("İ-1 yazım notu", { duration: 8000 });
+  });
+
+  it("GET kapsam dışı; `serverWarnings` bayraklı istek ve zarf olmayan gövde basılmaz", () => {
+    getInterceptor().fulfilled(yanit("get", { success: true, data: {}, warnings: ["İ-3 okuma notu"] }));
+    getInterceptor().fulfilled(yanit("patch", { success: true, data: {}, warnings: ["İ-4 ekran notu"] }, { serverWarnings: "handled" }));
+    getInterceptor().fulfilled(yanit("post", { success: true, data: {}, warnings: ["İ-5 otomatik not"] }, { serverWarnings: "silent" }));
+    getInterceptor().fulfilled(yanit("delete", { ok: false, warnings: ["İ-6 alan verisi"] }));
+    expect(toastWarning).not.toHaveBeenCalled();
+  });
+});
+

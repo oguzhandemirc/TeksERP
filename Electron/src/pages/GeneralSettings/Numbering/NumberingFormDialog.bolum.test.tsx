@@ -75,7 +75,7 @@ const kaydet = (): HTMLElement => screen.getByRole("button", { name: "Kaydet" })
 describe("Numaralandırma diyaloğu — bölüm bölüm hata", () => {
   beforeEach(() => {
     vi.mocked(numberingService.preview).mockReset();
-    vi.mocked(numberingService.preview).mockResolvedValue({ preview: "IE2309230001", next: "IE2309230004" });
+    vi.mocked(numberingService.preview).mockResolvedValue({ preview: "IE2309230001", next: "IE2309230004", warnings: [] });
   });
 
   it("⭐ §1 kilitli seride önizleme ucuna İSTEK GİTMEZ", () => {
@@ -154,7 +154,7 @@ describe("Numaralandırma diyaloğu — bölüm bölüm hata", () => {
 describe("Numaralandırma diyaloğu — ALAN bazında kilit (E4)", () => {
   beforeEach(() => {
     vi.mocked(numberingService.preview).mockReset();
-    vi.mocked(numberingService.preview).mockResolvedValue({ preview: "FS2309230001", next: "FS2309230002" });
+    vi.mocked(numberingService.preview).mockResolvedValue({ preview: "FS2309230001", next: "FS2309230002", warnings: [] });
   });
 
   // ⭐ ÖLÇÜLDÜ (d3'ün eski istemci simülasyonu): okutulan sekiz serinin altısında

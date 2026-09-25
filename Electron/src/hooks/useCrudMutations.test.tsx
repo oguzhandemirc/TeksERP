@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createServerNotesMutationCache } from "@/lib/serverNotes";
 import { useCrudMutations } from "./useCrudMutations";
 import type { CrudService } from "@/services/crudService";
 
@@ -38,9 +37,7 @@ function makeService() {
 }
 
 function renderCrud(service: CrudService<Widget>) {
-  // Uygulamanın genel basımı (App.tsx ile aynı kurulum) — uyarılar oradan gelir.
   const qc = new QueryClient({
-    mutationCache: createServerNotesMutationCache(),
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
@@ -116,14 +113,15 @@ describe("useCrudMutations", () => {
   });
 });
 
-// Sunucunun `warnings` alanı (ör. pasife alınan kartta canlı top) ayrı uyarı tostuyla basılır.
-describe("useCrudMutations — sunucu uyarıları", () => {
+// Sunucunun `warnings` alanı apiClient interceptor'ında GENEL basılır (apiClient.test "sunucu uyarıları").
+// Kanca onu KENDİSİ basmaz — basarsa kullanıcı aynı notu iki kez görür.
+describe("useCrudMutations — sunucu uyarıları kancada basılmaz", () => {
   beforeEach(() => {
     toastSuccess.mockClear();
     toastWarning.mockClear();
   });
 
-  it("remove → sunucu warnings'i ayrı uyarı tostu olarak basar; 'Geri al' korunur", async () => {
+  it("remove → uyarılı yanıtta kanca uyarı tostu BASMAZ; 'Geri al' korunur", async () => {
     const { service, fns } = makeService();
     const uyari = "Bu kayda bağlı canlı kayıtlar var: 3 top, 1 açık sipariş kalemi.";
     fns.remove.mockResolvedValueOnce({
@@ -137,28 +135,13 @@ describe("useCrudMutations — sunucu uyarıları", () => {
     result.current.removeMutation.mutate("w1");
 
     await waitFor(() => expect(result.current.removeMutation.isSuccess).toBe(true));
-    expect(toastWarning).toHaveBeenCalledTimes(1);
-    expect(toastWarning).toHaveBeenCalledWith(uyari, { duration: 8000 });
+    expect(toastWarning).not.toHaveBeenCalled();
     const silindi = toastSuccess.mock.calls.find((c) => c[0] === "Widget silindi.");
     expect((silindi?.[1] as { action: { label: string } }).action.label).toBe("Geri al");
   });
 
-  it("warnings yoksa uyarı tostu yok — bugünkü başarı tostu aynen", async () => {
-    const { service } = makeService();
-    const { result } = renderCrud(service);
-
-    result.current.removeMutation.mutate("w1");
-    result.current.createMutation.mutate({ name: "yeni" });
-
-    await waitFor(() => expect(result.current.removeMutation.isSuccess).toBe(true));
-    await waitFor(() => expect(result.current.createMutation.isSuccess).toBe(true));
-    expect(toastWarning).not.toHaveBeenCalled();
-    expect(toastSuccess).toHaveBeenCalledWith("Widget oluşturuldu.");
-  });
-
-  it("update/restore/hardRemove de warnings'i basar (her uyarı ayrı tost)", async () => {
+  it("update/restore/hardRemove de uyarıyı kancada basmaz — başarı tostları aynen", async () => {
     const { service, fns } = makeService();
-    // Her çağrı AYRI yanıt nesnesi (gerçekte de öyle) — aynı nesne tek kez basılır (serverNotes WeakSet).
     const res = () => ({ success: true, data: { id: "w1", name: "x" }, warnings: ["u1", "u2"] });
     fns.update.mockResolvedValueOnce(res());
     fns.restore.mockResolvedValueOnce(res());
@@ -172,7 +155,7 @@ describe("useCrudMutations — sunucu uyarıları", () => {
     await waitFor(() => expect(result.current.hardRemoveMutation.isSuccess).toBe(true));
     await waitFor(() => expect(result.current.restoreMutation.isSuccess).toBe(true));
     await waitFor(() => expect(result.current.updateMutation.isSuccess).toBe(true));
-    expect(toastWarning).toHaveBeenCalledTimes(6);
-    expect(toastWarning).toHaveBeenCalledWith("u2", { duration: 8000 });
+    expect(toastWarning).not.toHaveBeenCalled();
+    expect(toastSuccess).toHaveBeenCalledWith("Widget güncellendi.");
   });
 });

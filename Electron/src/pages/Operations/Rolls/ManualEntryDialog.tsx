@@ -193,7 +193,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
       const roll = res.data;
       setDupWarn(null);
       toast.success(`Top oluşturuldu: ${roll?.barcode ?? "-"}`);
-      // Devere Faz 4 levent tüketimi uyarıları (take-up yok · kalan yetmedi) genel basımdan gelir.
+      // Devere Faz 4 levent tüketimi uyarıları (take-up yok · kalan yetmedi) apiClient interceptor'ında genel basılır.
       // Y1 fix: ["rolls:STOCK"] ölü key'di (STOCK sekmesi RAW/FINISHED'a bölündü)
       // — liste hiç tazelenmiyordu. ["rolls"] tüm sekme tablolarını + stats'ı kapsar.
       qc.invalidateQueries({ queryKey: ["rolls"] });

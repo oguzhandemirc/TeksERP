@@ -14,7 +14,7 @@ export const KARNE_QUERY_KEY = ["reports", "dokuma"] as const;
 export function useKarneMutations(onDone: () => void) {
   const qc = useQueryClient();
   const settle = (res: { message?: string; warnings?: string[] }, fallback: string) => {
-    toastServerSuccess(res, fallback); // uyarılar genel basımdan (App.tsx MutationCache)
+    toastServerSuccess(res, fallback); // uyarılar apiClient interceptor'ında genel basılır
     onDone();
     void qc.invalidateQueries({ queryKey: KARNE_QUERY_KEY });
   };

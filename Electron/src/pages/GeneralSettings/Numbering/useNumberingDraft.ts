@@ -20,9 +20,10 @@ function useOnizleme(
     setOnizleme: (v: string) => void;
     setSiradaki: (v: string | null) => void;
     setBicimHatasi: (v: string | null) => void;
+    setOnizlemeUyarilari: (v: string[]) => void;
   },
 ): void {
-  const { setOnizleme, setSiradaki, setBicimHatasi } = yaz;
+  const { setOnizleme, setSiradaki, setBicimHatasi, setOnizlemeUyarilari } = yaz;
   useEffect(() => {
     if (!row || !fmt) return;
     // ⚠️ KİLİTLİ SERİDE ÖNİZLEME İSTENMEZ (2026-09-23, d3 ölçtü): uç biçim
@@ -34,7 +35,13 @@ function useOnizleme(
     let iptal = false;
     void numberingService
       .preview(row.key, fmt)
-      .then((p) => { if (!iptal) { setOnizleme(p.preview); setSiradaki(p.next); setBicimHatasi(null); } })
+      .then((p) => {
+        if (iptal) return;
+        setOnizleme(p.preview);
+        setSiradaki(p.next);
+        setBicimHatasi(null);
+        setOnizlemeUyarilari(p.warnings);
+      })
       .catch((e: unknown) => {
         if (iptal) return;
         // ⚠️ ALAN MESAJI KAYBOLMASIN: `message` tek başına "Validasyon hatası"
@@ -44,12 +51,13 @@ function useOnizleme(
         // kullanıcı reddedilen biçimin çalıştığını sanır. Örnek "—" olur.
         setOnizleme("");
         setSiradaki(null);
+        setOnizlemeUyarilari([]);
         setBicimHatasi(apiErrorMessage(e, "Bu biçim kullanılamıyor."));
       });
     return () => { iptal = true; };
     // `useState` setter'ları KARARLIDIR; bağımlılığa eklemek susturmadan daha
     // dürüst — susturma, kuralın bir gün gerçekten bir şey yakalamasını da engeller.
-  }, [row, fmt, setOnizleme, setSiradaki, setBicimHatasi]);
+  }, [row, fmt, setOnizleme, setSiradaki, setBicimHatasi, setOnizlemeUyarilari]);
 }
 
 /**
@@ -84,6 +92,8 @@ export function useNumberingDraft(row: NumberSeriesRow | null) {
   // varken önizlemeden gelen bir hata Kaydet'i tamamen kapatıyor ve kullanıcı
   // ilgisiz bir bölümü (sayaç · numara kaynağı) kaydedemiyordu.
   const [bicimHatasi, setBicimHatasi] = useState<string | null>(null);
+  /** Sunucunun önizleme notu (etikete SIĞMIYOR) — engel değil, satır içi uyarı. */
+  const [onizlemeUyarilari, setOnizlemeUyarilari] = useState<string[]>([]);
   const [genelHata, setGenelHata] = useState<string | null>(null);
 
   useEffect(() => {
@@ -104,12 +114,13 @@ export function useNumberingDraft(row: NumberSeriesRow | null) {
     setOnizleme(row.preview);
     setSiradaki(null);
     setBicimHatasi(null);
+    setOnizlemeUyarilari([]);
     setGenelHata(null);
   }, [row]);
 
-  useOnizleme(row, fmt, { setOnizleme, setSiradaki, setBicimHatasi });
+  useOnizleme(row, fmt, { setOnizleme, setSiradaki, setBicimHatasi, setOnizlemeUyarilari });
   return {
     fmt, setFmt, counter, setCounter, source, setSource, effectiveFrom, setEffectiveFrom,
-    onizleme, siradaki, bicimHatasi, setBicimHatasi, genelHata, setGenelHata,
+    onizleme, siradaki, onizlemeUyarilari, bicimHatasi, setBicimHatasi, genelHata, setGenelHata,
   };
 }
