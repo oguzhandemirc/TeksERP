@@ -1,8 +1,8 @@
 # Backend `2.10.0`
 
-**Paket:** _(paketleme doldurur)_
-**SHA256:** _(paketleme doldurur)_
-**Commit:** _(paketleme doldurur)_
+**Paket:** `tekserp-backend-20260925_032832-63b50d78.zip`
+**SHA256:** `5E2760838D315534716BE20E82EA6174F86EB0A319074B30490DD8421C2D224F`
+**Commit:** `63b50d78`
 **Önceki saha sürümü:** **2.9.8** (etiket `backend-v2.9.8` = `97d891c2`, 2026-09-07; kurulum 2026-09-07 07:51). Sahada **238** migration uygulanmış, son uygulanan `20260905172000_kapsanan_fazla_indexler`, sorunlu (yarım/geri alınmış) migration **0** — fabrika DB'sinde 2026-09-25 02:4x ölçüldü.
 
 **2.9.9 hiç sahaya çıkmadı** — bu belgenin ilk hâli o numarayla yazılmıştı (`7910da55`); o
@@ -473,3 +473,24 @@ $env:PGPASSWORD = ""
 - yayın günü veri adımlarının dry-run çıktıları ve (yapıldıysa) `--apply` sonuçları; deposuz top kararı
 - `[offsite]` açılış uyarısı ÇIKMAMALI; çıkıyorsa hedef gerçekten tanımsızdır
 - ölçülen kesinti (bir sonraki belgeye taban olur)
+
+**Kurulum kaydı — 2026-09-25 (SAHINSRV):**
+
+- `[1/9]`–`[6/9]` 03:31:46–03:34:05; `premigrate_20260925_033143.dump` (8,42 MB, doğrulandı);
+  eski kurulum `C:\TeksERP\app.eski-20260925_033143` (2.9.8).
+- ⚠️ `[7/9]` başlarken betik KESİLDİ, DB'ye dokunulmadı (238 · 0 yarım). Sebep kurulum
+  yöntemiydi, paket değil: `kur.ps1` bir sarmalayıcıdan `*> log` ile koşturuldu; PowerShell 5.1
+  yönlendirilmiş native stderr'i `ErrorActionPreference=Stop` altında sonlandırıcı hataya
+  çeviriyor ve `& node $prismaCli migrate deploy` ilk stderr satırında düştü. Kalan üç adım
+  (`[7/9]` · `[8/9]` · `[9/9]`) aynı komutlarla elle tamamlandı, çıktı `cmd /c … > log 2>&1`
+  ile alındı. ⇒ `kur.ps1` çıktısı PowerShell yönlendirmesiyle (`*>`, `2>&1`) ALINMAZ.
+- `[7/9]` 109 migration 3,4 sn; `migrate status` güncel; NOTICE/WARNING satırı CLI çıktısında
+  görünmedi (§7 SQL ölçtü: stokta deposuz top önce 452, sonra 0 · `rolls_qty_le_initial` f ·
+  iki `warehouse_movements_*` t · MT-dışı satır 0 · kalite rolleri ve index var · üç modül
+  kapalı · izin 128 · numara serisi 53).
+- `[8/9]`/`[9/9]` 03:37:53 ayakta, `/health` 2.10.0 UP, pm2 restart 0. **API kesintisi: 03:31:46
+  → 03:37:55, ≈6 dk** (planlanan ~2 dk; fark `[7/9]` kesintisi ve teşhisi).
+- Yayın günü veri adımları (tünelden, dry-run → `--apply` → ikinci koşum 0):
+  `migrate_partner_roles` 5 yeni kart · `backfill_roll_warehouse` 4.551 top Merkez Depo'ya,
+  2 ihlalli top atlandı · `remove_sack_note_element` 1 varyant. `backfill_order_destination`
+  koşulmadı (carilerin yönü girildikten sonra).
