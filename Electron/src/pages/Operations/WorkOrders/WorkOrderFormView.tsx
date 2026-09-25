@@ -884,7 +884,7 @@ export function WorkOrderFormView({
                     readOnly={!partyCodeEditable}
                     placeholder={
                       partyCodeEditable
-                        ? "örn: IE2509260001"
+                        ? "İş emri no biçiminde (Sistem → Numaralandırma)"
                         : "Otomatik oluşturulur — kendiniz girmek için tıklayın."
                     }
                     className={cn(!partyCodeEditable && "cursor-pointer bg-muted/40 pr-9")}
