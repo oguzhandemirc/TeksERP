@@ -16,6 +16,8 @@ import { BaseService } from "./base.service";
 import { AppError } from "../utils/app-error";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import type { ApiResponse } from "../types/api.types";
+import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
+import { WAREHOUSE_ARCHIVE } from "./helpers/archive-gate/warehouse-archive.helper";
 
 // =============================================================================
 // DEPO HAREKET DEFTERİ — OKUMA YÜZEYİ
@@ -113,7 +115,12 @@ class WarehouseService extends BaseService {
         );
       }
     }
-    return super.update(id, data, userId);
+    // Varsayılan kapısından SONRA canlı referans kapısı (depodaki top, iplik bakiyesi).
+    return gatedUpdate(WAREHOUSE_ARCHIVE, id, data, {
+      userId,
+      write: (tx) => tx.warehouse.update({ where: { id }, data: { isActive: false } }),
+      next: (rest) => super.update(id, rest, userId),
+    });
   }
 
   /** Soft-delete de pasifleştirmedir → aynı guard (controller.remove buraya gelir). */
@@ -124,7 +131,9 @@ class WarehouseService extends BaseService {
         `"${w.name}" VARSAYILAN depodur — silinemez. Önce başka bir depoyu varsayılan yapın.`,
       );
     }
-    return super.softDelete(id, userId);
+    return gatedSoftDelete(WAREHOUSE_ARCHIVE, id, userId, (tx) =>
+      tx.warehouse.update({ where: { id }, data: { isActive: false } }),
+    );
   }
 
   /**

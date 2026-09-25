@@ -21,6 +21,8 @@ import {
   normalizeColorName,
   foldColorNameForCompare,
 } from "./helpers/name-normalize.helper";
+import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
+import { COLOR_ARCHIVE } from "./helpers/archive-gate/color-archive.helper";
 
 const TABLE_ALIAS = "CUSTOMER_COLOR_ALIAS";
 
@@ -158,7 +160,24 @@ export class ColorService extends BaseService {
    * atamalara DOKUNULMAZ (restore'un `{ isActive: true }` PATCH'i atamaları
    * silmesin diye kritik).
    */
+  /** `DELETE` = pasife al — arşiv kapısından (URUN-YASAM-DONGUSU.md §6). */
+  async softDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    return gatedSoftDelete(COLOR_ARCHIVE, id, userId, (tx) => tx.color.update({ where: { id }, data: { isActive: false } }));
+  }
+
   async update(
+    id: string,
+    data: Record<string, unknown>,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    return gatedUpdate(COLOR_ARCHIVE, id, data, {
+      userId,
+      write: (tx) => tx.color.update({ where: { id }, data: { isActive: false } }),
+      next: (rest) => this.updateFields(id, rest, userId),
+    });
+  }
+
+  private async updateFields(
     id: string,
     data: Record<string, unknown>,
     userId?: string,

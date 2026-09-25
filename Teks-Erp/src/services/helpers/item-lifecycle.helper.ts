@@ -16,30 +16,29 @@
 // satırı. Yazıcı kart satırını FOR UPDATE, referans doğuran yollar FOR SHARE alır
 // (`item-usage.helper` → `assertItemUsableTx`) ⇒ sayım ile yazım arasında doğan referans görünür.
 // =============================================================================
-import {
-  ItemLifecycleStatus,
-  OrderStatus,
-  Prisma,
-  PurchaseOrderStatus,
-  RollStatus,
-  WeavingOrderStatus,
-  WorkOrderStatus,
-} from "@prisma/client";
+import { ItemLifecycleStatus, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
-import { K18_DEAD_STATUSES } from "../batch.service";
 import { lockAgainstMergeTx } from "./master-data-live.helper";
 import { itemLifecycleWriteData } from "./item-lifecycle-data.helper";
 import { lowerTr } from "../../utils/tr-case";
-import { ACTIVE_LINE, MEASURED_LINE, openLineWhere } from "./order-line-scope.helper";
+import {
+  DEAD_ROLL_STATUSES,
+  LIVE_ROLL,
+  OPEN_MACHINE_RUN,
+  OPEN_PURCHASE_ORDER,
+  OPEN_WEAVING_ORDER,
+  OPEN_WORK_ORDER,
+  openDemandLineWhere,
+} from "./live-ref-where.helper";
 import { AuditService } from "../audit.service";
 
 export { ITEM_LIFECYCLE_LABEL, itemLifecycleWriteData } from "./item-lifecycle-data.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
-/** Topun canlı OLMADIĞI statüler: K18 ölü kümesi + sevk edilmiş + fire. */
-export const ITEM_DEAD_ROLL_STATUSES: RollStatus[] = [...K18_DEAD_STATUSES, RollStatus.SHIPPED, RollStatus.SCRAP];
+/** Topun canlı OLMADIĞI statüler — ortak tanım `live-ref-where.helper` (geriye uyum adı). */
+export const ITEM_DEAD_ROLL_STATUSES = DEAD_ROLL_STATUSES;
 
 export type ItemLiveRefKind =
   | "ROLL" | "WORK_ORDER" | "ORDER_LINE" | "PURCHASE_ORDER_LINE"
@@ -70,22 +69,16 @@ interface LiveRefWhere {
 /** Her türün Prisma yüklemi — migration D1 bloğunun birebir ikizi. */
 function liveRefWhere(itemId: string, db: Db): LiveRefWhere {
   return {
-    ROLL: { itemId, status: { notIn: ITEM_DEAD_ROLL_STATUSES } },
-    WORK_ORDER: { targetItemId: itemId, status: { in: [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS] } },
-    // Açık kalem tek kaynaktan: iptal edilmemiş ∧ (metre dışı birim ∨ istenen > sevk edilen).
-    ORDER_LINE: {
-      itemId,
-      ...ACTIVE_LINE,
-      order: { status: { in: [OrderStatus.PENDING, OrderStatus.APPROVED, OrderStatus.PARTIAL_SHIPPED] } },
-      OR: [{ NOT: MEASURED_LINE }, openLineWhere(db.orderLine.fields)],
-    },
+    ROLL: { itemId, ...LIVE_ROLL },
+    WORK_ORDER: { targetItemId: itemId, ...OPEN_WORK_ORDER },
+    ORDER_LINE: { itemId, ...openDemandLineWhere(db) },
     PURCHASE_ORDER_LINE: {
       itemId,
-      purchaseOrder: { status: { in: [PurchaseOrderStatus.OPEN, PurchaseOrderStatus.PARTIAL] } },
+      purchaseOrder: OPEN_PURCHASE_ORDER,
       qty: { gt: db.purchaseOrderLine.fields.receivedQty },
     },
-    WEAVING_ORDER: { itemId, status: { in: [WeavingOrderStatus.PLANNED, WeavingOrderStatus.IN_PROGRESS] } },
-    MACHINE_RUN: { itemId, endedAt: null, revokedAt: null },
+    WEAVING_ORDER: { itemId, ...OPEN_WEAVING_ORDER },
+    MACHINE_RUN: { itemId, ...OPEN_MACHINE_RUN },
     // Rollsuz iplik kalemi `OUTSTANDING_ITEM`le eşleşmez (roll ilişki süzgeci) — dar
     // tanım bilerek fazla sayar: arşivi yalnız fazladan reddeder (fail-closed, 1e 2026-09-25).
     FASON_YARN_DISPATCH: {

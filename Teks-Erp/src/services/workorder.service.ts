@@ -537,6 +537,40 @@ const TARGET_PROP_MUTABLE_STATUSES: RollStatus[] = [
 ];
 
 /**
+ * ESKİ VERİ UYARISI (1e kararı Q1 revize, 2026-09-25): arşiv kapısı artık aktif rotanın
+ * planladığı rengi/özelliği pasife aldırmıyor (kaynakta durur). Kapıdan önce bozulmuş rota
+ * iş emri açılışında ENGELLENMEZ — sahada bugünkü olayı yeniden üretirdi; açık uyarı verir.
+ * Fasoncu için mevcut engel (`assertRouteRefsActive`) aynen kalır.
+ */
+function passivePlanWarnings(route: {
+  name: string;
+  steps: Array<{
+    sequence: number;
+    plannedColor: { name: string; isActive: boolean } | null;
+    plannedProperties: Array<{ property: { name: string; isActive: boolean } }>;
+  }>;
+}): string[] {
+  const out: string[] = [];
+  for (const s of route.steps) {
+    if (s.plannedColor && !s.plannedColor.isActive) {
+      out.push(
+        `Rota '${route.name}' adım ${s.sequence} pasif rengi (${s.plannedColor.name}) planlıyor — ` +
+          "fason kabulünde uygulanan rengi seçin; rotayı düzeltmesi için yöneticinize bildirin.",
+      );
+    }
+    for (const p of s.plannedProperties) {
+      if (!p.property.isActive) {
+        out.push(
+          `Rota '${route.name}' adım ${s.sequence} pasif özelliği (${p.property.name}) planlıyor — ` +
+            "fason kabulünde uygulanan özelliği seçin; rotayı düzeltmesi için yöneticinize bildirin.",
+        );
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Rota adımlarındaki istasyon/kategori/firma referanslarının var + aktif olduğunu
  * doğrular (soft-delete guard, SEC-3). create() ve replace() ortak kullanır —
  * pasife alınmış (isActive=false) kayıt DB FK kontrolünü geçer ama WorkOrderStep
@@ -732,6 +766,8 @@ export class WorkOrderService {
       dispatchWithoutColor?: boolean;
     }[] = [];
 
+    // Eski veride aktif rota pasif renk/özellik planlıyor olabilir — engel değil UYARI.
+    const planWarnings: string[] = [];
     if (data.routeTemplateId) {
       if (data.steps && data.steps.length > 0) {
         throw AppError.badRequest(
@@ -740,11 +776,20 @@ export class WorkOrderService {
       }
       const template = await prisma.route.findUnique({
         where: { id: data.routeTemplateId },
-        include: { steps: { orderBy: { sequence: "asc" } } },
+        include: {
+          steps: {
+            orderBy: { sequence: "asc" },
+            include: {
+              plannedColor: { select: { name: true, isActive: true } },
+              plannedProperties: { select: { property: { select: { name: true, isActive: true } } } },
+            },
+          },
+        },
       });
       if (!template) {
         throw AppError.notFound("Rota şablonu bulunamadı");
       }
+      planWarnings.push(...passivePlanWarnings(template));
       if (!template.isActive) {
         throw AppError.badRequest("Pasif bir rota şablonu kullanılamaz");
       }
@@ -888,7 +933,7 @@ export class WorkOrderService {
     // 4) targetProperties dolu ise, rotada appliesProperty=true en az bir adım olmalı
     //    (simetrik kural — özellik asla uygulanmaz aksi halde).
     /** Engel olmayan planlama notları — yanıtta `warnings` olarak döner. */
-    const routeWarnings: string[] = [];
+    const routeWarnings: string[] = [...planWarnings];
     let targetPropertyIds = [...new Set(data.targetPropertyIds ?? [])];
     if (
       targetPropertyIds.length === 0 &&

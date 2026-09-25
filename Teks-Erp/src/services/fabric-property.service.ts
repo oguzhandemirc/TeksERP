@@ -26,6 +26,8 @@ import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { deriveCapabilityFlags } from "./station-capability.service";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
+import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
+import { FABRIC_PROPERTY_ARCHIVE } from "./helpers/archive-gate/fabric-property-archive.helper";
 
 /** Özellik kodu prefix'i — tek-tip kod formatı: `OZL + GGAAYY + NNNN`. */
 const PROPERTY_CODE_PREFIX = "OZL";
@@ -267,7 +269,26 @@ export class FabricPropertyService extends BaseService {
    * `values` için aynı sözleşme: gönderilmezse dokunulmaz, gönderilirse replace
    * (listede olmayan kod PASİFLEŞİR, silinmez — bkz. `replaceValuesTx`).
    */
+  /** `DELETE` = pasife al — arşiv kapısından (URUN-YASAM-DONGUSU.md §6). */
+  async softDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    return gatedSoftDelete(FABRIC_PROPERTY_ARCHIVE, id, userId, (tx) =>
+      tx.fabricProperty.update({ where: { id }, data: { isActive: false } }),
+    );
+  }
+
   async update(
+    id: string,
+    data: Record<string, unknown>,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    return gatedUpdate(FABRIC_PROPERTY_ARCHIVE, id, data, {
+      userId,
+      write: (tx) => tx.fabricProperty.update({ where: { id }, data: { isActive: false } }),
+      next: (rest) => this.updateFields(id, rest, userId),
+    });
+  }
+
+  private async updateFields(
     id: string,
     data: Record<string, unknown>,
     userId?: string,

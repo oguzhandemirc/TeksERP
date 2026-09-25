@@ -102,6 +102,21 @@ const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
 // Geçişli dokunuş (InventoryService) orada da burada da AYNI olgudur.
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/customer.routes.ts",
+    neden:
+      "CARİ KART (çekirdek, her kurulumda). Ticaret dokunuşu SALT-OKUMADIR: cari kart arşiv kapısı (URUN-YASAM-DONGUSU.md §6) açık alış siparişini canlı referans olarak SAYAR. Ticaret kapalı kurulumda `purchase_orders` boştur, sayı 0 döner; router satır yazmaz. Kapı takılsaydı müşteri kartı ticaretsiz fabrikada yönetilemezdi.",
+  },
+  {
+    dosya: "routes/subcontractor-management.routes.ts",
+    neden:
+      "FASON PROFİLİ (çekirdek). Ticaret dokunuşu SALT-OKUMADIR: fasoncu arşiv kapısı (URUN-YASAM-DONGUSU.md §6) açık alış siparişini canlı referans olarak SAYAR. Ticaret kapalı kurulumda tablo boştur, sayı 0 döner; router satır yazmaz.",
+  },
+  {
+    dosya: "routes/master-data-merge.routes.ts",
+    neden:
+      "ANA VERİ BİRLEŞTİRME (çekirdek). Ticaret dokunuşu birleştirmenin kendi işidir: MERGE_MAP müşteri/fasoncu kaynağının alış siparişi satırlarını survivor'a TAŞIR (ham SQL ile — tarayıcı 2026-09-25'e dek görmüyordu, fasoncu arşiv kapısının içe aktarılmasıyla görünür oldu). Ticaret kapalı kurulumda tablo boştur, taşınacak satır yoktur; birleştirme ticaretsiz fabrikada da çalışmak zorunda.",
+  },
+  {
     dosya: "routes/item.routes.ts",
     neden:
       "ÜRÜN KARTI (çekirdek, her kurulumda). Ticaret dokunuşu SALT-OKUMADIR: yaşam döngüsü önizlemesi ve " +

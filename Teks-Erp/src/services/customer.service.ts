@@ -11,7 +11,7 @@ import { AppError } from "../utils/app-error";
 import { validateName, validateCode } from "../lib/string-validators";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import prisma from "../lib/prisma";
-import { OrderStatus, Prisma, ShipmentDestination } from "@prisma/client";
+import { Prisma, ShipmentDestination } from "@prisma/client";
 import { nextSeriesNo } from "./number-series.service";
 import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { parseQueryParams, readFilterList } from "../utils/query-parser";
@@ -21,6 +21,8 @@ import { AuditService } from "./audit.service";
 import { validateAndShapeBranches } from "./helpers/customer-inline-branches.helper";
 import { bornCariAccountTx, readCustomerFinance, writeCustomerFinanceTerms, type CustomerFinanceInput } from "./helpers/customer-finance-bridge.helper";
 import type { Request } from "express";
+import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
+import { CUSTOMER_ARCHIVE } from "./helpers/archive-gate/customer-archive.helper";
 
 /**
  * VKN (10 hane), TCKN (11 hane) ve yabancı VAT/EIN (12-15 hane) için ortak
@@ -323,32 +325,22 @@ export class CustomerService extends BaseService {
         await this.assertTaxNumberAvailable(validated, id);
       }
     }
-    return super.update(id, data, userId);
+    return gatedUpdate(CUSTOMER_ARCHIVE, id, data, {
+      userId,
+      write: (tx) => tx.customer.update({ where: { id }, data: { isActive: false } }),
+      next: (rest) => super.update(id, rest, userId),
+    });
   }
 
   /**
-   * M-26: AÇIK siparişi olan müşteri pasifleştirilemez — yoksa pasif müşterinin
-   * siparişleri MRP'de talep olarak yaşamaya devam eder, planlamacı pasif
-   * müşteri için üretim açar, sevkiyat FIFO bu satırlara tahsis eder.
-   * "Yıkıcı işlemde somut liste" kuralı: bloklanırken sipariş no'ları döner.
+   * `DELETE` = pasife al — arşiv kapısından (URUN-YASAM-DONGUSU.md §6). Eski M-26 "açık
+   * sipariş" kapısı ve cari bakiye kapısı `CUSTOMER_ARCHIVE` haritasına katlandı; PATCH
+   * `isActive:false` da aynı kapıdan geçer (eskiden atlıyordu).
    */
   async softDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
-    const openOrders = await prisma.order.findMany({
-      where: {
-        customerId: id,
-        status: { in: [OrderStatus.PENDING, OrderStatus.APPROVED, OrderStatus.PARTIAL_SHIPPED] },
-      },
-      select: { orderNumber: true },
-      take: 20,
-    });
-    if (openOrders.length > 0) {
-      const list = openOrders.map((o) => o.orderNumber).join(", ");
-      throw AppError.conflict(
-        `Müşterinin açık siparişleri var: ${list}${openOrders.length === 20 ? ", …" : ""}. ` +
-          `Önce siparişleri kapatın/iptal edin, sonra müşteriyi pasife alın.`
-      );
-    }
-    return super.softDelete(id, userId);
+    return gatedSoftDelete(CUSTOMER_ARCHIVE, id, userId, (tx) =>
+      tx.customer.update({ where: { id }, data: { isActive: false } }),
+    );
   }
 
   /**

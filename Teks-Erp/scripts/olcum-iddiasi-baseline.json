@@ -6,7 +6,6 @@
     "test_audit_labels.ts",
     "test_backup.ts",
     "test_cash_negative_guard.ts",
-    "test_deactivate_impact.ts",
     "test_defter_ters_yol.ts",
     "test_devralinan_tavan.ts",
     "test_discovery_advertiser.ts",

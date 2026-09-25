@@ -31,6 +31,8 @@ import {
 } from "../utils/query-parser";
 import { Request } from "express";
 import { p2002OnField } from "../utils/p2002";
+import { assertArchivableTx } from "./helpers/master-data-archive.helper";
+import { SUBCONTRACTOR_ARCHIVE } from "./helpers/archive-gate/subcontractor-archive.helper";
 
 // =============================================================================
 // FASON = CARİNİN ROLÜ (kullanıcı kararı 2026-09-17, SAP BP kalıbı)
@@ -824,6 +826,8 @@ export class SubcontractorManagementService {
     }
 
     const sub = await prisma.$transaction(async (tx) => {
+      // Pasife alma (aktif → pasif) arşiv kapısından: tx'in İLK ifadesi satır kilidi + sayım.
+      if (rest.isActive === false && before?.isActive === true) await assertArchivableTx(tx, SUBCONTRACTOR_ARCHIVE, id);
       await tx.subcontractor.update({ where: { id }, data: { ...rest, updatedById: userId ?? null } });
       // Rol modeli: eski ve yeni bağın kartları profil gerçeğinden yeniden türetilir (aynı tx).
       await syncSubcontractorRoleTx(tx, [before?.customerId, rest.customerId]);
@@ -871,6 +875,7 @@ export class SubcontractorManagementService {
       select: { code: true, name: true, taxNumber: true, phone: true, address: true, isActive: true, isFavorite: true, customerId: true },
     });
     const sub = await prisma.$transaction(async (tx) => {
+      if (before?.isActive === true) await assertArchivableTx(tx, SUBCONTRACTOR_ARCHIVE, id);
       const r = await tx.subcontractor.update({ where: { id }, data: { isActive: false } });
       // Rol modeli: pasif profil fason rolü değildir.
       await syncSubcontractorRoleTx(tx, [before?.customerId]);

@@ -610,6 +610,14 @@ export class MasterDataMergeService {
             throw AppError.conflict(`'${s.name}' bu sırada başka bir kayda birleştirilmiş.`);
           }
         }
+        // Hedef pasif olamaz (dört varlık): pasif karta canlı referans taşımak arşiv kapısını
+        // arka kapıdan deler (URUN-YASAM-DONGUSU.md §5.5, §6).
+        if (!survivor.isActive && entity !== "item") {
+          throw AppError.conflict(
+            `Hedef kayıt '${survivor.name}' pasif — birleştirmenin hedefi aktif bir kayıt olmalı.`,
+            { code: "MERGE_TARGET_INACTIVE" },
+          );
+        }
         // Ürün: hedef ACTIVE olmalı — Tükenene kadar/Pasif karta mal ve açık iş taşımak D1'i
         // (pasifte canlı referans olamaz) ya da "karta yeni talep eklenmez" kuralını deler.
         if (entity === "item" && survivor.lifecycleStatus !== ItemLifecycleStatus.ACTIVE) {

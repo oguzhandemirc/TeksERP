@@ -28,7 +28,7 @@
 ## 2. Kök neden — BUGÜN (ölçüldü 2026-09-25)
 
 1. **Pasife almada kapı yok.** `BaseService.softDelete` canlı bağımlılığı sayar
-   (`Teks-Erp/src/services/helpers/deactivate-impact.helper.ts`) ama bilerek engellemez
+   (o günkü `deactivate-impact.helper` — S4'te silindi) ama bilerek engellemez
    (`Teks-Erp/src/services/base.service.ts`, "ENGELLEMİYOR — bilinçli"); uyarı yalnız yanıtın
    `message`/`warnings` alanına yazılır. İkinci yol (`PATCH {isActive:false}`, ürün formundaki
    "Aktif" kutusu — `Electron/src/pages/Items/ItemFormDialog.tsx`) sayımı hiç yapmaz ve audit'e
@@ -202,6 +202,30 @@ fasoncu desteklenir) ya da açık kayıtları kapatmak. Canlı referans tanımı
 Müşteride mevcut "açık sipariş" kapısı ve cari hesaptaki bakiye kapısı bu haritaya katlanır, ikinci
 kopya kalmaz.
 
+**Uygulama (S4, 1e kararları 2026-09-25):**
+- Hata `409 MASTER_DATA_HAS_LIVE_REFERENCES` + `details.entity` + `details.references` (ürünle aynı
+  biçim, kayıtlar tek tek); ürün `ITEM_HAS_LIVE_REFERENCES`te kalır. Tanım varlık başına
+  `helpers/archive-gate/<varlık>-archive.helper.ts`, ortak "açık/canlı" yüklemleri `live-ref-where.helper`.
+- **Aktif rotanın planı ENGELLER (Q1 revize):** aktif rota adımının planlı rengi, planlı özelliği ve
+  planlı fasoncusu canlı referanstır; rota·adım listelenir, çıkış rotayı düzeltmek ya da pasife
+  almak. Gerekçe: bugünkü olayın dersi — yıkıcı değişiklik KAYNAKTA durur, kullanıldığı yerde değil
+  (yoksa yükü tabletteki operatör taşır). İş emri açılışında otomatik uygulanan başka yapılandırma
+  YOK (ölçüldü: reçete 2026-08-02'de kaldırıldı; müşteri rotası seçicide yalnız öne çıkar).
+- **Yalnız uyarı:** ürünün izinli renk/özellik listesi, aktif reçete, müşteri rotası — pasif kayıt
+  seçilemediği için operasyonu kırmaz; başarı yanıtının `warnings`inde KAYIT ADIYLA listelenir.
+- **Eski veri:** kapıdan önce bozulmuş rota (pasif planlı renk/özellik) iş emri açılışında ENGELLENMEZ,
+  açık uyarı verir ("Rota 'X' adım N pasif rengi (Y) planlıyor — fason kabulünde uygulanan rengi
+  seçin; rotayı düzeltmesi için yöneticinize bildirin."). Açılışta engellemek yayından sonra sahada
+  bugünkü olayın aynısını üretirdi. Fasoncu için mevcut engel aynen kalır.
+- Tarihçe/defter tabloları (fason kabul, iade, mal kabul fişi, kartela kabul, levent/lot tedarikçisi)
+  arşivi ENGELLEMEZ (Q3).
+- Birleştirmenin hedefi pasif olamaz (`409 MERGE_TARGET_INACTIVE`, dört varlık).
+- Zaten pasif kayıtta düzenleme kapıdan geçmez (form `isActive:false`ı yeniden gönderir).
+- **Bilinen sınır (Q2):** kilit EN İYİ ÇABADIR — tx içinde ana veri satırı `FOR UPDATE` + sayım;
+  üründeki gibi referans yazan yollar ana veri satırını `FOR SHARE` almaz, sayım ile pasife alma
+  arasında doğan referans kaçabilir. İzleme: S8 health sayacı beş varlığı da kapsar ("arşivlenmiş ana
+  veride canlı referans", beklenen 0).
+
 ## 7. Şema ve göç
 
 - Enum `ItemLifecycleStatus { ACTIVE, PHASE_OUT, ARCHIVED }` (enum reçetesi, `docs/RECETELER.md`).
@@ -345,7 +369,6 @@ katı seçeneklerin çıkışsız kapı ölçümü (§4.1, S3).
 
 ## 17. Belge borcu (S8'de kapanır)
 
-- `Teks-Erp/src/services/helpers/deactivate-impact.helper.ts` başlığı: "panel uyarıyı gösteriyor"
-  cümlesi bayat.
+- ~~`deactivate-impact.helper.ts` başlığı bayat~~ — S4'te helper silindi (uyar-ama-bırak kalktı).
 - `docs/design/MUKERRER-PANELI-TASARIM.md`: "geri alma bilinçli yok" cümlesi bayat (geri alma var).
 - `docs/standart/MASTER-VERI-TASARIMI.md`: MV-06.

@@ -124,6 +124,11 @@ const TICARET_MODELLERI = new Set([
 
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/customer.routes.ts",
+    neden:
+      "CARİ KART (çekirdek, her kurulumda). Finans dokunuşu SALT-OKUMADIR: cari kart arşiv kapısı (URUN-YASAM-DONGUSU.md §6) sıfırdan farklı cari bakiyeyi canlı referans olarak SAYAR (cari.service'teki bakiye kapısının kart ikizi). Ön muhasebe kapalı kurulumda `cari_balances` boştur, sayı 0 döner; router satır yazmaz. Kapı takılsaydı müşteri kartı ön muhasebesiz fabrikada yönetilemezdi.",
+  },
+  {
     dosya: "routes/return.routes.ts",
     neden:
       "İade FABRİKANIN ana akışıdır (mobil iade ekranı + RollReturn) → rejim kapısı KONULAMAZ. " +

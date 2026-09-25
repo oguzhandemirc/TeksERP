@@ -69,6 +69,11 @@ const IPLIK_MODELLERI = new Set(["yarnStock", "yarnMovement"]);
 // -----------------------------------------------------------------------------
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/warehouse.routes.ts",
+    neden:
+      "DEPO (çekirdek, her kurulumda). İplik dokunuşu SALT-OKUMADIR: depo arşiv kapısı (URUN-YASAM-DONGUSU.md §6) depodaki iplik bakiyesini canlı referans olarak SAYAR. İplik kapalı kurulumda `yarn_stocks` boştur, sayı 0 döner; router bu tabloya satır yazmaz. Kapı takılsaydı depo ipliksiz fabrikada yönetilemezdi.",
+  },
+  {
     dosya: "routes/item.routes.ts",
     neden:
       "ÜRÜN KARTI (çekirdek, her kurulumda). İplik dokunuşu SALT-OKUMADIR: yaşam döngüsü önizlemesi ve " +

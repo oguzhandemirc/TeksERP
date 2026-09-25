@@ -487,6 +487,8 @@ export class ItemService extends BaseService {
     if (!hasListReplace) {
       return super.update(id, restData, userId);
     }
+    // İzinli renk/özellik listesi karta TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı (1e (k)).
+    await assertItemUsable(prisma, id, "DEFINITION");
 
     // Ad-mükerrer koruması: bu dal super.update'i atladığından base kancası elle —
     // yalnız ad gerçekten değişiyorsa (tarihsel mükerrer kayıt düzenlenebilir kalsın).
