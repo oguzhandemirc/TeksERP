@@ -98,8 +98,11 @@ import { freezeCloseSnapshotTx, loadCloseSnapshotView } from "./helpers/workorde
 import {
   claimWorkOrderStatusTx,
   createWorkOrderTx,
+  recordStepPlanChangesTx,
   recordWorkOrderFieldChangesTx,
+  type WorkOrderFieldChange,
 } from "./helpers/workorder-event.helper";
+import { recordWorkOrderFieldDiffTx } from "./helpers/workorder-field-diff.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { assertTargetColorChange } from "./helpers/workorder-target-color.helper";
 import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
@@ -654,6 +657,82 @@ function assertOrderLinesLinkable(
       `İptal edilmiş siparişe iş emri bağlanamaz: ${cancelled.join(", ")}`,
     );
   }
+}
+
+/**
+ * İş emri numarası doğuşta donar (IS-EMRI-HAREKET-DEFTERI §6.3). Eski istemci
+ * formdaki mevcut numarayı `batchNumber` anahtarıyla geri gönderir: aynıysa yok sayılır.
+ */
+function assertWorkOrderNumberUnchanged(current: string, sent: string | null | undefined): void {
+  const v = sent?.trim();
+  if (v && v !== current) {
+    throw AppError.conflict("İş emri numarası değiştirilemez.", { code: "WORK_ORDER_NUMBER_FROZEN" });
+  }
+}
+
+interface PlannedFieldsPatch {
+  width?: number | null;
+  targetQuantity?: number | null;
+  targetWeight?: number | null;
+  plannedStartDate?: Date | null;
+  plannedEndDate?: Date | null;
+  targetItemId?: string | null;
+  targetColorId?: string | null;
+  foldType?: string | null;
+}
+
+/** Gövdedeki plan alanları yazım biçiminde: gönderilmeyen = undefined, null = temizle. */
+function plannedFieldsFromPatch(data: {
+  width?: number | null; targetQuantity?: number | null; targetWeight?: number | null;
+  plannedStartDate?: string | null; plannedEndDate?: string | null;
+  targetItemId?: string | null; targetColorId?: string | null; foldType?: string | null;
+}): PlannedFieldsPatch {
+  const date = (v: string | null | undefined) => (v ? new Date(v) : v === null ? null : undefined);
+  return {
+    width: data.width,
+    targetQuantity: data.targetQuantity,
+    targetWeight: data.targetWeight,
+    plannedStartDate: date(data.plannedStartDate),
+    plannedEndDate: date(data.plannedEndDate),
+    targetItemId: data.targetItemId,
+    targetColorId: data.targetColorId,
+    foldType: data.foldType,
+  };
+}
+
+/** Fason adımı planının değişen alanları, o anki kategori/firma adıyla. */
+async function stepPlanChanges(
+  tx: Prisma.TransactionClient,
+  before: {
+    requiredCategoryId: string | null;
+    plannedSubcontractorId: string | null;
+    dispatchWithoutColor: boolean;
+    requiredCategory: { name: string } | null;
+    plannedSubcontractor: { name: string } | null;
+  },
+  data: { requiredCategoryId?: string | null; plannedSubcontractorId?: string | null; dispatchWithoutColor?: boolean },
+): Promise<WorkOrderFieldChange[]> {
+  const out: WorkOrderFieldChange[] = [];
+  if (data.requiredCategoryId !== undefined && data.requiredCategoryId !== before.requiredCategoryId) {
+    const to = data.requiredCategoryId
+      ? await tx.subcontractorCategory.findUnique({ where: { id: data.requiredCategoryId }, select: { name: true } })
+      : null;
+    out.push({ field: "requiredCategoryId", from: before.requiredCategoryId, to: data.requiredCategoryId,
+      fromLabel: before.requiredCategory?.name ?? null, toLabel: to?.name ?? null });
+  }
+  if (data.plannedSubcontractorId !== undefined && data.plannedSubcontractorId !== before.plannedSubcontractorId) {
+    const to = data.plannedSubcontractorId
+      ? await tx.subcontractor.findUnique({ where: { id: data.plannedSubcontractorId }, select: { name: true } })
+      : null;
+    out.push({ field: "plannedSubcontractorId", from: before.plannedSubcontractorId, to: data.plannedSubcontractorId,
+      fromLabel: before.plannedSubcontractor?.name ?? null, toLabel: to?.name ?? null });
+  }
+  if (data.dispatchWithoutColor !== undefined && data.dispatchWithoutColor !== before.dispatchWithoutColor) {
+    const yn = (v: boolean) => (v ? "Renksiz sevk" : "Renkli sevk");
+    out.push({ field: "dispatchWithoutColor", from: String(before.dispatchWithoutColor), to: String(data.dispatchWithoutColor),
+      fromLabel: yn(before.dispatchWithoutColor), toLabel: yn(data.dispatchWithoutColor) });
+  }
+  return out;
 }
 
 export class WorkOrderService {
@@ -5040,6 +5119,7 @@ export class WorkOrderService {
         "Tamamlanmış veya iptal edilmiş iş emri düzenlenemez.",
       );
     }
+    assertWorkOrderNumberUnchanged(wo.workOrderNumber, data.batchNumber);
     // Renk gerçekten değişiyor mu — TEK BEKÇİ yalnız gerçek değişiklikte koşar
     // (PATCH kısmi semantiği: aynı değeri yeniden göndermek serbesttir).
     const colorChanging =
@@ -5137,18 +5217,9 @@ export class WorkOrderService {
       }
     }
 
-    // Parti kodu değiştiriliyorsa benzersizliğini doğrula (kendini hariç tut).
-    if (
-      data.batchNumber &&
-      data.batchNumber.trim().length > 0 &&
-      data.batchNumber.trim() !== wo.workOrderNumber
-    ) {
-      await this.assertWorkOrderNumberUnique(data.batchNumber.trim(), id);
-    }
-
+    const patch = plannedFieldsFromPatch(data);
     // ATOMİK CLAIM (check-then-act DEĞİL): terminal-durum reddini yazmanın WHERE'ine
-    // koy. tx-DIŞI ön-kontrol (2815-2822) UX; eşzamanlı finalize WO'yu COMPLETED
-    // yaparsa bu updateMany count===0 → 409 (terminal WO'ya alan yazımı engellenir).
+    // koy; eşzamanlı finalize WO'yu COMPLETED yaparsa count===0 → 409.
     await prisma.$transaction(async (tx) => {
       // İLK ifade (WO satır kilidinden ÖNCE — birleştirme 8030 EXCL tutup WO satırı ister).
       if (retargetItemId) await assertItemUsableTx(tx, retargetItemId, "NEW_PLAN");
@@ -5157,6 +5228,7 @@ export class WorkOrderService {
       // sevkle bayatlayabilir; bu turda finishStep/finalize/createOpenFabric/cutOpenFabric
       // WO satırını kilitlediğinden ara-adım geçişleri de bu kilitle serileşir.
       await touchWorkOrderTx(tx, id);
+      const before = await tx.workOrder.findUnique({ where: { id } });
       const freshLocks = await computeWorkOrderLocks(tx, id);
       // F59: tx-içi taze kilit kontrolü de `!== undefined` (NULL'a çekme kilide çarpsın).
       if (data.width !== undefined && normNum(wo.width) !== normNum(data.width) && freshLocks.width) {
@@ -5190,32 +5262,22 @@ export class WorkOrderService {
           status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
         },
         data: {
-          workOrderNumber: data.batchNumber?.trim() || undefined,
-          // F59: null'ı gerçek NULL olarak yaz (gönderilmeyen=undefined ile ayrış);
-          // `?? undefined` null'ı sessizce yutup temizlemeyi kaçırıyordu.
-          width: data.width === undefined ? undefined : data.width,
-          targetQuantity: data.targetQuantity === undefined ? undefined : data.targetQuantity,
-          targetWeight: data.targetWeight === undefined ? undefined : data.targetWeight,
-          plannedStartDate: data.plannedStartDate
-            ? new Date(data.plannedStartDate)
-            : data.plannedStartDate === null
-              ? null
-              : undefined,
-          plannedEndDate: data.plannedEndDate
-            ? new Date(data.plannedEndDate)
-            : data.plannedEndDate === null
-              ? null
-              : undefined,
-          targetItemId: data.targetItemId === undefined ? undefined : data.targetItemId,
-          targetColorId: data.targetColorId === undefined ? undefined : data.targetColorId,
-          foldType: data.foldType === undefined ? undefined : data.foldType,
+          width: patch.width,
+          targetQuantity: patch.targetQuantity,
+          targetWeight: patch.targetWeight,
+          plannedStartDate: patch.plannedStartDate,
+          plannedEndDate: patch.plannedEndDate,
+          targetItemId: patch.targetItemId,
+          targetColorId: patch.targetColorId,
+          foldType: patch.foldType,
         },
       });
-      if (updateClaim.count === 0) {
+      if (updateClaim.count === 0 || !before) {
         throw AppError.conflict(
           "İş emri bu sırada tamamlandı veya iptal edildi, düzenlenemez. Sayfayı yenileyin."
         );
       }
+      await recordWorkOrderFieldDiffTx(tx, id, { before, after: patch }, { trigger: "WO_UPDATE", userId });
       // Kart snapshot'ı bu alanları DONDURUYOR (ürün/renk/en/miktar/kat/tarihler) —
       // WO değişince eldeki kâğıt yanlışlanır. Snapshot yalnız `reprint` ile tazelenir.
       await markTravelerCardDirtyTx(tx, id);
@@ -5606,19 +5668,10 @@ export class WorkOrderService {
       }
     }
 
-    // Parti kodu değiştiriliyorsa benzersizliğini doğrula (kendini hariç tut).
-    if (
-      data.batchNumber &&
-      data.batchNumber.trim().length > 0 &&
-      data.batchNumber.trim() !== existing.workOrderNumber
-    ) {
-      await this.assertWorkOrderNumberUnique(data.batchNumber.trim(), id);
-    }
-
-    const workOrderNumber =
-      data.batchNumber && data.batchNumber.trim().length > 0
-        ? data.batchNumber.trim()
-        : existing.workOrderNumber;
+    assertWorkOrderNumberUnchanged(existing.workOrderNumber, data.batchNumber);
+    // Renk değişiyorsa "Rengi Değiştir" ile AYNI bekçi (mal–plan uyumu, kısmi boya).
+    const colorChanging = (existing.targetColorId ?? null) !== resolvedTargetColorId;
+    if (colorChanging) await assertTargetColorChange(prisma, existing, resolvedTargetColorId);
 
     // ── Transaction: smart merge (steps id-bazlı diff) ───────────────────────
     const updated = await prisma.$transaction(async (tx) => {
@@ -5636,17 +5689,16 @@ export class WorkOrderService {
         },
         data: { updatedAt: new Date() },
       });
-      if (replaceClaim.count === 0) {
-        const fresh = await tx.workOrder.findUnique({
-          where: { id },
-          select: { status: true },
-        });
+      const before = await tx.workOrder.findUnique({ where: { id } });
+      if (replaceClaim.count === 0 || !before) {
         throw AppError.conflict(
           `İş emri bu sırada ${
-            fresh?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
+            before?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
           }, düzenlenemez. Sayfayı yenileyin.`
         );
       }
+      // Kilit altında taze bekçi: arada fason kabul / adım bitişi olduysa karar değişmiş olabilir.
+      if (colorChanging) await assertTargetColorChange(tx, before, resolvedTargetColorId);
 
       // F58: locks'u WO satır kilidi (replaceClaim) ALTINDA taze hesapla ve kilit
       // guard'larını yeniden doğrula — 3295'teki tx-DIŞI locks eşzamanlı adım-
@@ -5949,7 +6001,6 @@ export class WorkOrderService {
       const wo = await tx.workOrder.update({
         where: { id },
         data: {
-          workOrderNumber,
           type,
           width: data.width ?? null,
           targetQuantity: data.targetQuantity ?? null,
@@ -5983,6 +6034,7 @@ export class WorkOrderService {
       // `replace` rotayı, sipariş bağlarını ve hedef özellikleri baştan yazar —
       // kart snapshot'ındaki adım listesi/sipariş tablosu topluca yanlışlanır.
       await markTravelerCardDirtyTx(tx, id);
+      await recordWorkOrderFieldDiffTx(tx, id, { before, after: wo }, { trigger: "WO_REPLACE", userId });
 
       return wo;
     });
@@ -6321,26 +6373,45 @@ export class WorkOrderService {
 
     // F66: ATOMİK CLAIM (check-then-act DEĞİL) — WO terminal-durum kontrolünü yazmanın
     // WHERE'ine koy; eşzamanlı finalize WO'yu COMPLETED yaptıktan sonra planlama sızmasın.
-    const claim = await prisma.workOrderStep.updateMany({
-      where: {
-        id: stepId,
-        workOrder: { status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } },
-      },
-      data: {
-        requiredCategoryId: data.requiredCategoryId,
-        plannedSubcontractorId: data.plannedSubcontractorId,
-        dispatchWithoutColor: data.dispatchWithoutColor,
-      },
-    });
-    if (claim.count === 0) {
-      throw AppError.conflict(
-        "İş emri bu sırada tamamlandı/iptal edildi — adım planlaması güncellenemedi. Sayfayı yenileyin.",
+    await prisma.$transaction(async (tx) => {
+      const before = await tx.workOrderStep.findUnique({
+        where: { id: stepId },
+        select: {
+          requiredCategoryId: true,
+          plannedSubcontractorId: true,
+          dispatchWithoutColor: true,
+          requiredCategory: { select: { name: true } },
+          plannedSubcontractor: { select: { name: true } },
+        },
+      });
+      const claim = await tx.workOrderStep.updateMany({
+        where: {
+          id: stepId,
+          workOrder: { status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } },
+        },
+        data: {
+          requiredCategoryId: data.requiredCategoryId,
+          plannedSubcontractorId: data.plannedSubcontractorId,
+          dispatchWithoutColor: data.dispatchWithoutColor,
+        },
+      });
+      if (claim.count === 0 || !before) {
+        throw AppError.conflict(
+          "İş emri bu sırada tamamlandı/iptal edildi — adım planlaması güncellenemedi. Sayfayı yenileyin.",
+        );
+      }
+      // Planlanan fasoncu kartın OPERASYON tablosunda basılı ("Boyahane (Fason) — Yıldız Boyahane").
+      await markTravelerCardDirtyTx(tx, workOrderId);
+      await recordStepPlanChangesTx(
+        tx,
+        workOrderId,
+        {
+          step: { id: stepId, stepSequence: step.stepSequence, stationName: step.station.name },
+          changes: await stepPlanChanges(tx, before, data),
+        },
+        { trigger: "STEP_PLAN", userId },
       );
-    }
-    // Planlanan fasoncu kartın OPERASYON tablosunda basılı ("Boyahane (Fason) —
-    // Yıldız Boyahane"). Bu metodun tx'i YOK (tek atomik claim); helper `prisma`
-    // ile de çalışır — işaret bağımsız ve idempotent, claim'e bağlı değil.
-    await markTravelerCardDirtyTx(prisma, workOrderId);
+    });
 
     const updated = await prisma.workOrderStep.findUnique({
       where: { id: stepId },

@@ -9,6 +9,7 @@
 
 import prisma from "../lib/prisma";
 import { ACTIVE_SACK_ALLOCATION } from "./helpers/sack-allocation.helper";
+import { setWorkOrderTypeTx } from "./helpers/workorder-event.helper";
 import type { ItemUnit } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { BaseService, BaseServiceConfig, CursorPaginatedResponse } from "./base.service";
@@ -552,9 +553,8 @@ export class OrderService extends BaseService {
         // (`unlinkOrderLine` ile aynı atomik desen).
         const remaining = await activeOrderLinkCount(tx, woId);
         if (remaining === 0) {
-          await tx.workOrder.updateMany({
-            where: { id: woId, type: WorkOrderType.ORDER_PRODUCTION },
-            data: { type: WorkOrderType.STOCK_PRODUCTION },
+          await setWorkOrderTypeTx(tx, woId, WorkOrderType.STOCK_PRODUCTION, {
+            ctx: { trigger: "ORDER_LINE_CANCEL", userId, refType: "ORDER_LINE", refId: lineId },
           });
         }
         await markTravelerCardDirtyTx(tx, woId);
@@ -3043,16 +3043,14 @@ export class OrderService extends BaseService {
           // Atomik: `updateMany WHERE type=ORDER_PRODUCTION` — zaten STOK'sa dokunmaz,
           // iptal/devredilmiş atlanır. `targetItemId: { not: null }` STOK'un değişmezi:
           // hedef kumaşı olmayan iş emri çevrilemez (sessizce ORDER kalır, count=0).
-          const flipped = await tx.workOrder.updateMany({
+          const flipped = await setWorkOrderTypeTx(tx, wid, WorkOrderType.STOCK_PRODUCTION, {
             where: {
-              id: wid,
-              type: "ORDER_PRODUCTION",
               status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
               targetItemId: { not: null },
             },
-            data: { type: "STOCK_PRODUCTION" },
+            ctx: { trigger: "ORDER_DELETE", userId, refType: "ORDER", refId: id },
           });
-          if (flipped.count > 0) typeChangedWorkOrderIds.push(wid);
+          if (flipped === "CHANGED") typeChangedWorkOrderIds.push(wid);
         }
       }
       const order = await tx.order.findUnique({ where: { id } });
@@ -3437,11 +3435,11 @@ export class OrderService extends BaseService {
       for (const wo of preview.affectedWorkOrders) {
         const action = actionByWO.get(wo.id)!;
         if (action === "CONVERT_TO_STOCK") {
-          const conv = await tx.workOrder.updateMany({
-            where: { id: wo.id, status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } },
-            data: { type: "STOCK_PRODUCTION" },
+          const conv = await setWorkOrderTypeTx(tx, wo.id, WorkOrderType.STOCK_PRODUCTION, {
+            where: { status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } },
+            ctx: { trigger: "ORDER_CANCEL", userId, refType: "ORDER", refId: orderId },
           });
-          if (conv.count === 0) {
+          if (conv === "NO_MATCH") {
             throw AppError.conflict("İş emri bu sırada iptal edildi, stoğa çevrilemedi. Sayfayı yenileyin.");
           }
         }
@@ -3464,15 +3462,13 @@ export class OrderService extends BaseService {
         if (action === "UNLINK_ONLY") {
           const remaining = await activeOrderLinkCount(tx, wo.id);
           if (remaining === 0) {
-            await tx.workOrder.updateMany({
+            await setWorkOrderTypeTx(tx, wo.id, WorkOrderType.STOCK_PRODUCTION, {
               where: {
-                id: wo.id,
-                type: "ORDER_PRODUCTION",
                 status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
                 // STOK'un değişmezi: hedef kumaş dolu (unlinkOrderLine aynası).
                 targetItemId: { not: null },
               },
-              data: { type: "STOCK_PRODUCTION" },
+              ctx: { trigger: "ORDER_CANCEL", userId, refType: "ORDER", refId: orderId },
             });
           }
         }

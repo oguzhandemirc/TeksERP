@@ -37,6 +37,8 @@ import { ACTIVE_LINE, isMeasuredLine } from "./helpers/order-line-scope.helper";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
+import { recordRollAttributesAppliedTx, setWorkOrderTypeTx } from "./helpers/workorder-event.helper";
+import { recordWorkOrderFieldDiffTx } from "./helpers/workorder-field-diff.helper";
 import { InventoryService } from "./inventory.service";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { whereRollsOfWorkOrder } from "./helpers/workorder-rolls.helper";
@@ -135,6 +137,29 @@ async function loadWo(
   });
   if (!wo) throw AppError.notFound("İş emri bulunamadı");
   return wo;
+}
+
+/** Toplara uygulanan plan düzeltmesi deftere tek grupta düşer; değişmeyen toplar yükte. */
+async function recordRollsApplied(
+  workOrderId: string,
+  data: { colorId?: string | null; width?: number | null },
+  result: { updatedIds: string[]; failed: { rollId: string }[] },
+  ctx: { userId?: string; reason: string },
+): Promise<void> {
+  const applied: Parameters<typeof recordRollAttributesAppliedTx>[2]["applied"] = [];
+  if (data.colorId !== undefined) {
+    const color = data.colorId
+      ? await prisma.color.findUnique({ where: { id: data.colorId }, select: { name: true } })
+      : null;
+    applied.push({ field: "rollColor", to: data.colorId, toLabel: color?.name ?? null });
+  }
+  if (data.width !== undefined) applied.push({ field: "rollWidth", to: data.width == null ? null : String(data.width) });
+  await recordRollAttributesAppliedTx(
+    prisma,
+    workOrderId,
+    { applied, rollIds: result.updatedIds, failedRollIds: result.failed.map((f) => f.rollId) },
+    { trigger: "ROLL_ATTRIBUTES", userId: ctx.userId, reason: ctx.reason },
+  );
 }
 
 /**
@@ -393,11 +418,10 @@ export class WorkOrderLinkService {
           skipDuplicates: true,
         });
         if (wo.type === WorkOrderType.STOCK_PRODUCTION) {
-          const flipped = await tx.workOrder.updateMany({
-            where: { id: workOrderId, type: WorkOrderType.STOCK_PRODUCTION },
-            data: { type: WorkOrderType.ORDER_PRODUCTION },
+          const flipped = await setWorkOrderTypeTx(tx, workOrderId, WorkOrderType.ORDER_PRODUCTION, {
+            ctx: { trigger: "ORDER_LINK", userId },
           });
-          typeChanged = flipped.count > 0;
+          typeChanged = flipped === "CHANGED";
         }
         // Refakat kartında sipariş bloğu + tip basılı → kâğıt bayatladı.
         await markTravelerCardDirtyTx(tx, workOrderId);
@@ -478,11 +502,10 @@ export class WorkOrderLinkService {
         // tek yazmaya indirir.
         const remaining = await activeOrderLinkCount(tx, workOrderId);
         if (remaining === 0) {
-          const flipped = await tx.workOrder.updateMany({
-            where: { id: workOrderId, type: WorkOrderType.ORDER_PRODUCTION },
-            data: { type: WorkOrderType.STOCK_PRODUCTION },
+          const flipped = await setWorkOrderTypeTx(tx, workOrderId, WorkOrderType.STOCK_PRODUCTION, {
+            ctx: { trigger: "ORDER_UNLINK", userId, refType: "ORDER_LINE", refId: orderLineId },
           });
-          typeChanged = flipped.count > 0;
+          typeChanged = flipped === "CHANGED";
         }
       }
       await markTravelerCardDirtyTx(tx, workOrderId);
@@ -581,7 +604,15 @@ export class WorkOrderLinkService {
         },
         data: { targetColorId: colorId },
       });
-      if (c.count > 0) await markTravelerCardDirtyTx(tx, workOrderId);
+      if (c.count > 0) {
+        await markTravelerCardDirtyTx(tx, workOrderId);
+        await recordWorkOrderFieldDiffTx(
+          tx,
+          workOrderId,
+          { before: { targetColorId: tazeWo.targetColorId }, after: { targetColorId: colorId } },
+          { trigger: "COLOR_CHANGE", userId, reason: trimmed },
+        );
+      }
       return { gate: g, claimCount: c.count };
     });
     if (claimCount === 0) {
@@ -675,15 +706,24 @@ export class WorkOrderLinkService {
     const previousWidth = num(wo.width);
     if (previousWidth === width) throw AppError.badRequest("İş emrinin eni zaten bu değerde.");
 
-    const claim = await prisma.workOrder.updateMany({
-      where: { id: workOrderId, status: { notIn: PLAN_CHANGE_FROZEN_STATUSES } },
-      data: { width: width == null ? null : new Prisma.Decimal(width) },
+    await prisma.$transaction(async (tx) => {
+      await touchWorkOrderTx(tx, workOrderId);
+      const fresh = await tx.workOrder.findUnique({ where: { id: workOrderId }, select: { width: true } });
+      const claim = await tx.workOrder.updateMany({
+        where: { id: workOrderId, status: { notIn: PLAN_CHANGE_FROZEN_STATUSES } },
+        data: { width: width == null ? null : new Prisma.Decimal(width) },
+      });
+      if (claim.count === 0) {
+        throw AppError.conflict("İş emri bu sırada iptal edildi — en değiştirilemedi.");
+      }
+      // En, fason çekisindeki TEK "EN" değerinin kaynağı → kâğıt bayatladı.
+      await markTravelerCardDirtyTx(tx, workOrderId);
+      await recordWorkOrderFieldDiffTx(tx, workOrderId, { before: { width: fresh?.width ?? null }, after: { width } }, {
+        trigger: source === "FASON_RECEIPT" ? "FASON_RECEIPT_WIDTH" : "WIDTH_CHANGE",
+        userId,
+        reason: trimmed,
+      });
     });
-    if (claim.count === 0) {
-      throw AppError.conflict("İş emri bu sırada iptal edildi — en değiştirilemedi.");
-    }
-    // En, fason çekisindeki TEK "EN" değerinin kaynağı → kâğıt bayatladı.
-    await markTravelerCardDirtyTx(prisma, workOrderId);
 
     await AuditService.log({
       userId,
@@ -826,7 +866,7 @@ export class WorkOrderLinkService {
           : undefined;
 
     const failed: { rollId: string; barcode: string | null; message: string }[] = [];
-    let updated = 0;
+    const updatedIds: string[] = [];
     for (const roll of rolls) {
       try {
         await inventoryService.applyManualProperties(
@@ -843,7 +883,7 @@ export class WorkOrderLinkService {
           userId,
           engineOpts,
         );
-        updated++;
+        updatedIds.push(roll.id);
       } catch (err) {
         failed.push({
           rollId: roll.id,
@@ -852,6 +892,9 @@ export class WorkOrderLinkService {
         });
       }
     }
+
+    const updated = updatedIds.length;
+    if (updated > 0) await recordRollsApplied(workOrderId, data, { updatedIds, failed }, { userId, reason });
 
     await AuditService.log({
       userId,

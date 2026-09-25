@@ -9,7 +9,7 @@
 // =============================================================================
 
 import { randomUUID } from "crypto";
-import { Prisma, WorkOrderEventType, WorkOrderStatus } from "@prisma/client";
+import { Prisma, WorkOrderEventType, WorkOrderStatus, WorkOrderType } from "@prisma/client";
 import { currentOrigin } from "../../lib/request-context";
 
 type Tx = Prisma.TransactionClient;
@@ -23,6 +23,12 @@ export const WORK_ORDER_STATUS_LABEL: Record<WorkOrderStatus, string> = {
   COMPLETED: "Tamamlandı",
   CANCELLED: "İptal",
   SUPERSEDED: "Devredildi",
+};
+
+/** Panelin `workOrderTypeLabels` ile aynı metin. */
+export const WORK_ORDER_TYPE_LABEL: Record<WorkOrderType, string> = {
+  ORDER_PRODUCTION: "Siparişe Özel",
+  STOCK_PRODUCTION: "Stok",
 };
 
 export interface WorkOrderEventCtx {
@@ -217,4 +223,89 @@ export async function reopenWorkOrderTx(
     ctx,
   });
   return from !== null;
+}
+
+const OTHER_TYPE: Record<WorkOrderType, WorkOrderType> = {
+  ORDER_PRODUCTION: WorkOrderType.STOCK_PRODUCTION,
+  STOCK_PRODUCTION: WorkOrderType.ORDER_PRODUCTION,
+};
+
+/**
+ * İş emri TİPİNİ çeviren tek yol (tip = sipariş bağının aynası). Claim karşı
+ * tipe koşar; `count === 0` tanısı aynı tx'te taze sayımla: zaten hedef tipteyse
+ * `ALREADY`, `where` tutmuyorsa (iptal/devredildi/kumaşsız) `NO_MATCH`.
+ */
+export async function setWorkOrderTypeTx(
+  tx: Tx,
+  workOrderId: string,
+  to: WorkOrderType,
+  opts: { where?: Prisma.WorkOrderWhereInput; ctx: WorkOrderEventCtx },
+): Promise<"CHANGED" | "ALREADY" | "NO_MATCH"> {
+  const from = OTHER_TYPE[to];
+  const claim = await tx.workOrder.updateMany({
+    where: { ...opts.where, id: workOrderId, type: from },
+    data: { type: to },
+  });
+  if (claim.count === 1) {
+    await recordWorkOrderFieldChangesTx(
+      tx,
+      workOrderId,
+      [{ field: "type", from, to, fromLabel: WORK_ORDER_TYPE_LABEL[from], toLabel: WORK_ORDER_TYPE_LABEL[to] }],
+      opts.ctx,
+    );
+    return "CHANGED";
+  }
+  const already = await tx.workOrder.count({ where: { ...opts.where, id: workOrderId, type: to } });
+  return already > 0 ? "ALREADY" : "NO_MATCH";
+}
+
+/** Fason adımının planı (kategori · planlanan firma · renksiz sevk) — adım başına tek grup. */
+export async function recordStepPlanChangesTx(
+  tx: Tx,
+  workOrderId: string,
+  plan: { step: { id: string; stepSequence: number; stationName: string }; changes: WorkOrderFieldChange[] },
+  ctx: WorkOrderEventCtx,
+): Promise<void> {
+  const { step, changes } = plan;
+  await writeWorkOrderEventsTx(
+    tx,
+    changes
+      .filter((c) => c.from !== c.to)
+      .map((c) => ({
+        workOrderId,
+        type: WorkOrderEventType.STEP_PLAN_CHANGED,
+        field: c.field,
+        fromValue: c.from,
+        toValue: c.to,
+        fromLabel: c.fromLabel ?? null,
+        toLabel: c.toLabel ?? null,
+        payload: { stepId: step.id, stepSequence: step.stepSequence, stationName: step.stationName },
+      })),
+    ctx,
+  );
+}
+
+/** Plan düzeltmesinin toplara uygulanması — değer başına bir satır, topların listesi yükte. */
+export async function recordRollAttributesAppliedTx(
+  tx: Tx,
+  workOrderId: string,
+  result: {
+    applied: { field: "rollColor" | "rollWidth"; to: string | null; toLabel?: string | null }[];
+    rollIds: string[];
+    failedRollIds: string[];
+  },
+  ctx: WorkOrderEventCtx,
+): Promise<void> {
+  await writeWorkOrderEventsTx(
+    tx,
+    result.applied.map((a) => ({
+      workOrderId,
+      type: WorkOrderEventType.ROLL_ATTRIBUTES_APPLIED,
+      field: a.field,
+      toValue: a.to,
+      toLabel: a.toLabel ?? null,
+      payload: { rollIds: result.rollIds, failedRollIds: result.failedRollIds },
+    })),
+    ctx,
+  );
 }

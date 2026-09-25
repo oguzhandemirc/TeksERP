@@ -8,10 +8,11 @@
 //      Sert kapı: ihlal 0.
 //   §2 DOĞUŞ — `workOrder.create` YALNIZ helper'da (`createWorkOrderTx` satırı ve
 //      CREATED'ı aynı tx'te yazar). Sert kapı: ihlal 0.
-//   §3 ALAN (CIRCIR) — izlenen plan alanını (renk · en · metre · kg · kat · kumaş ·
-//      tarih · rota · tip · no · aktiflik) yazan fonksiyon
-//      `recordWorkOrderFieldChangesTx` çağırır. Borç D2'de kapanır; taban yalnız
-//      DÜŞER (artış sert, çürüme `curumeKolu`).
+//   §3 ALAN — izlenen plan alanını (`WORK_ORDER_TRACKED_FIELDS`: renk · en · metre ·
+//      kg · kat · kumaş · tarih · rota · tip · aktiflik) yazan fonksiyon bir alan
+//      yazıcısı (`recordWorkOrderFieldChangesTx` / `recordWorkOrderFieldDiffTx`)
+//      çağırır. Sert kapı: ihlal 0 (D2'de 10 → 0).
+//   §3c NUMARA — `workOrderNumber` doğuşta donar: hiçbir update gövdesinde yazılmaz.
 //   §4 ÖLÇÜLEMEDİ — `data` nesne literali değilse (değişken/spread) yazılan
 //      anahtarlar görülemez; üçüncü sonuç sessizce "uyumlu" sayılmaz.
 //   §6 KÜNYE — `claimWorkOrderStatusTx(... to: COMPLETED)` çağıran fonksiyon
@@ -25,7 +26,7 @@ import { readFileSync } from "fs";
 import { join, relative, sep } from "path";
 import * as ts from "typescript";
 import { walkTs } from "./lib/ts-tarama";
-import { curumeKolu } from "./lib/circir-kolu";
+import { WORK_ORDER_TRACKED_FIELDS } from "../src/constants/workorder-event-fields";
 import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0;
@@ -45,14 +46,9 @@ const SRC = join(__dirname, "..", "src");
 const HELPER_REL = ["services", "helpers", "workorder-event.helper.ts"].join("/");
 const KUNYE_REL = ["services", "helpers", "workorder-close-snapshot.helper.ts"].join("/");
 
-/** §3 izlenen plan alanları — `constants`teki katalogla D2'de birleşir. */
-export const IZLENEN_ALANLAR = new Set([
-  "targetColorId", "width", "targetQuantity", "targetWeight", "foldType", "targetItemId",
-  "plannedStartDate", "plannedEndDate", "routeTemplateId", "type", "workOrderNumber", "isActive",
-]);
-
-/** §3 CIRCIR TABANI — D2 bu sayıyı sıfıra indirir; yalnız düşer. */
-const ALAN_TABAN = 10;
+/** §3 izlenen plan alanları — tek kaynak `constants/workorder-event-fields.ts`. */
+export const IZLENEN_ALANLAR = new Set<string>(WORK_ORDER_TRACKED_FIELDS);
+const ALAN_YAZICILARI = ["recordWorkOrderFieldChangesTx", "recordWorkOrderFieldDiffTx"];
 
 const YAZIM = new Set(["update", "updateMany", "updateManyAndReturn", "upsert"]);
 
@@ -60,6 +56,7 @@ export interface Olcum {
   statuIhlal: string[];
   dogusIhlal: string[];
   alanIhlal: string[];
+  numaraIhlal: string[];
   olculemedi: string[];
   kunyesizKapanis: string[];
   kunyeYazariDisi: string[];
@@ -109,8 +106,8 @@ function dataAnahtarlari(arg: ts.Expression | undefined): string[] | null {
 /** SAF TARAYICI — bir kaynak metni ölçer; sondalar da bunu çağırır. */
 export function olc(rel: string, kod: string): Olcum {
   const o: Olcum = {
-    statuIhlal: [], dogusIhlal: [], alanIhlal: [], olculemedi: [], kunyesizKapanis: [], kunyeYazariDisi: [],
-    kapanisSayisi: 0, dogusSayisi: 0, yazimSayisi: 0,
+    statuIhlal: [], dogusIhlal: [], alanIhlal: [], numaraIhlal: [], olculemedi: [], kunyesizKapanis: [],
+    kunyeYazariDisi: [], kapanisSayisi: 0, dogusSayisi: 0, yazimSayisi: 0,
   };
   const sf = ts.createSourceFile(rel, kod, ts.ScriptTarget.Latest, true);
   const helperMi = rel === HELPER_REL;
@@ -153,8 +150,9 @@ export function olc(rel: string, kod: string): Olcum {
             o.olculemedi.push(yer);
           } else {
             if (keys.includes("status")) o.statuIhlal.push(yer);
+            if (keys.includes("workOrderNumber")) o.numaraIhlal.push(yer);
             const alan = keys.filter((k) => IZLENEN_ALANLAR.has(k));
-            if (alan.length > 0 && !cagrili("recordWorkOrderFieldChangesTx")) {
+            if (alan.length > 0 && !ALAN_YAZICILARI.some(cagrili)) {
               o.alanIhlal.push(`${yer} (${alan.join(",")})`);
             }
           }
@@ -173,6 +171,7 @@ function birlestir(parcalar: Olcum[]): Olcum {
       statuIhlal: [...a.statuIhlal, ...b.statuIhlal],
       dogusIhlal: [...a.dogusIhlal, ...b.dogusIhlal],
       alanIhlal: [...a.alanIhlal, ...b.alanIhlal],
+      numaraIhlal: [...a.numaraIhlal, ...b.numaraIhlal],
       olculemedi: [...a.olculemedi, ...b.olculemedi],
       kunyesizKapanis: [...a.kunyesizKapanis, ...b.kunyesizKapanis],
       kunyeYazariDisi: [...a.kunyeYazariDisi, ...b.kunyeYazariDisi],
@@ -181,8 +180,8 @@ function birlestir(parcalar: Olcum[]): Olcum {
       yazimSayisi: a.yazimSayisi + b.yazimSayisi,
     }),
     {
-      statuIhlal: [], dogusIhlal: [], alanIhlal: [], olculemedi: [], kunyesizKapanis: [], kunyeYazariDisi: [],
-      kapanisSayisi: 0, dogusSayisi: 0, yazimSayisi: 0,
+      statuIhlal: [], dogusIhlal: [], alanIhlal: [], numaraIhlal: [], olculemedi: [], kunyesizKapanis: [],
+      kunyeYazariDisi: [], kapanisSayisi: 0, dogusSayisi: 0, yazimSayisi: 0,
     },
   );
 }
@@ -194,16 +193,16 @@ const agac = birlestir(
 
 console.log("\n=== İş emri hareket defteri — yazar kümesi ===");
 check("§0 körlük zemini: iş emri yazımı ve doğuşu görülüyor",
-  agac.yazimSayisi >= 10 && agac.dogusSayisi >= 1,
+  agac.yazimSayisi >= 5 && agac.dogusSayisi >= 1,
   `${agac.yazimSayisi} yazım · ${agac.dogusSayisi} doğuş`);
 check("§1 statü yalnız workorder-event.helper'da yazılır", agac.statuIhlal.length === 0,
   agac.statuIhlal.length ? `helper DIŞINDA statü yazımı: ${agac.statuIhlal.join(" · ")}` : "0 ihlal");
 check("§2 workOrder.create yalnız helper'da (doğuş CREATED'la aynı tx)", agac.dogusIhlal.length === 0,
   agac.dogusIhlal.length ? `helper DIŞINDA doğuş: ${agac.dogusIhlal.join(" · ")}` : `${agac.dogusSayisi} doğuş, hepsi helper'da`);
-check(`§3 alan yazımı cırcırı: taban ${ALAN_TABAN} AŞILMAZ`, agac.alanIhlal.length <= ALAN_TABAN,
-  `gerçek ${agac.alanIhlal.length}${agac.alanIhlal.length > ALAN_TABAN ? ` — YENİ: ${agac.alanIhlal.join(" · ")}` : ""}`);
-curumeKolu(check, ATLAMA.atla, `§3b alan cırcırı tabanı çürümemiş (taban ${ALAN_TABAN})`, agac.alanIhlal.length, ALAN_TABAN);
-if (agac.alanIhlal.length) console.log(`   borç (D2): ${agac.alanIhlal.join("\n              ")}`);
+check("§3 izlenen alanı yazan her yol deftere yazar", agac.alanIhlal.length === 0,
+  agac.alanIhlal.length ? `yazıcısız alan yazımı: ${agac.alanIhlal.join(" · ")}` : "0 ihlal");
+check("§3c iş emri numarası hiçbir update gövdesinde yazılmaz", agac.numaraIhlal.length === 0,
+  agac.numaraIhlal.length ? `numara yazımı: ${agac.numaraIhlal.join(" · ")}` : "0 ihlal");
 check("§4 ölçülemeyen yazım yok (data nesne literali)", agac.olculemedi.length === 0,
   agac.olculemedi.length ? `ÖLÇÜLEMEDİ: ${agac.olculemedi.join(" · ")}` : "0");
 
@@ -221,6 +220,11 @@ const ALAN_IHLAL = `async function f(tx){ await tx.workOrder.update({ where:{id}
 const ALAN_DUZELTILDI = `async function f(tx){ await tx.workOrder.update({ where:{id}, data:{ width: 1 } }); await recordWorkOrderFieldChangesTx(tx, id, [], ctx); }`;
 check("§5c sonda ⬆: yazıcısız alan yazımı sayıyı ARTIRIR", s(ALAN_IHLAL).alanIhlal.length === 1);
 check("§5d sonda ⬇: yazıcı eklenince sayı DÜŞER", s(ALAN_DUZELTILDI).alanIhlal.length === 0);
+check("§5d2 sonda: diff yazıcısı da yazıcı sayılır",
+  s(ALAN_IHLAL.replace("} }); }", "} }); await recordWorkOrderFieldDiffTx(tx, id, b, a, ctx); }")).alanIhlal.length === 0);
+const NUMARA = `async function f(tx){ await tx.workOrder.update({ where:{id}, data:{ workOrderNumber: "X" } }); }`;
+check("§5l sonda ⬆: numara yazımı YAKALANIR; ⬇ kaldırılınca düşer",
+  s(NUMARA).numaraIhlal.length === 1 && s(NUMARA.replace("workOrderNumber", "notes")).numaraIhlal.length === 0);
 const DOGUS = `async function f(tx){ const wo = await tx.workOrder.create({ data:{} }); }`;
 check("§5e sonda: helper dışında doğuş YAKALANIR", s(DOGUS).dogusIhlal.length === 1);
 check("§5f sonda: aynı doğuş helper'da serbest", s(DOGUS, HELPER_REL).dogusIhlal.length === 0);

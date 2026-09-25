@@ -278,6 +278,15 @@ karşı koşar, satır kilidi almaz, `count === 0`da taze okumayla bir kez daha 
 routeTemplateId, type }`. **`workOrderNumber` katalogda YOK** — numara hiçbir uçtan değişmez (§6.3).
 Katalog dışı alanı diff'e sokan yol kırmızı (bekçi §8.4).
 
+**Uygulama (D2a, 2026-09-25):** katalog `constants/workorder-event-fields.ts`te alan listesi + değer TÜRÜ
+(`WORK_ORDER_FIELD_KIND`) olarak durur; okunur alan adları D4'ün `WORK_ORDER_FIELD_LABEL`inde (iki dal ayrı
+indiği için; birleşince etiket haritası `Record<WorkOrderTrackedField, string>`e bağlanır). Kimlik alanlarının
+(renk · kumaş · rota) etiketi yazım anındaki ADdır, tarih etiketi fabrika günü. Yazıcılar: `recordWorkOrderFieldDiffTx`
+(önce/sonra satırından diff) · `setWorkOrderTypeTx` (tip, CHANGED/ALREADY/NO_MATCH) · `recordStepPlanChangesTx`
+(fason adımı: `requiredCategoryId` · `plannedSubcontractorId` · `dispatchWithoutColor`) · `recordRollAttributesAppliedTx`
+(`rollColor` · `rollWidth`). `changeWidth` ve `updateStepPlanning` tek tx'e alındı (claim + kart işareti + olay).
+`replace` tarihsiz gelirse `resolvePlanDates` tarihleri "şimdi"ye çeker — davranış eskisi gibi, artık deftere düşer.
+
 ## 5. (c) KAPANIŞ KÜNYESİ
 
 ### 5.1 Şema (yalnız EKLER) — UYGULANDI (D3)
@@ -506,7 +515,7 @@ ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (s
 |---|---|---|
 | **K1** | Tablet boş alan uyarısı + B1 düzeltmesi + B2/B3 | yok — hemen |
 | D1 | Şema + `workorder-event.helper` + durum boğazları (başla/tamamla/yeniden aç/iptal/devir) + beyan + bekçi | 9b S2+S3 indikten sonra |
-| D2 | Alan değişiklikleri → `FIELD_CHANGED` (update/replace/renk/en/adım/toplara uygula/tip) + numara kilidi (§6.3) | D1 |
+| D2 | Alan değişiklikleri → `FIELD_CHANGED` (update/replace/renk/en/adım/toplara uygula/tip) + numara kilidi (§6.3) — **D2a UYGULANDI** (§4.4 notu); D2b (başlamış iş emrinde genel Düzenle'nin daraltılması) sırada | D1 |
 | D3 | Kapanış künyesi (şema + yazım + ProducedV3 karşılaştırma) | D1 |
 | D4 | Hareketler ucu (A+B) + panel Sheet + ayrı ekran + Excel | D1 (D2 ile zenginleşir) |
 | D5 | Tablet düzeltme menüsü + `mobile:is-emri-duzelt` + önizleme uçları | D2, S1–S3/S7 cevapları |

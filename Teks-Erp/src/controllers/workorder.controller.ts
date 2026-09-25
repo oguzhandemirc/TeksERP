@@ -285,6 +285,7 @@ const eventsQuerySchema = z.object({
 });
 
 const updateWorkOrderSchema = z.object({
+  // Eski anahtar: iş emri numarası donar — yalnız mevcut numarayla AYNIYSA kabul, farklısı 409.
   batchNumber: z.string().trim().min(1).max(64).optional(),
   width: z.number().positive().nullable().optional(),
   targetQuantity: z.number().positive().nullable().optional(),
@@ -299,10 +300,11 @@ const updateWorkOrderSchema = z.object({
 });
 
 /**
- * Full replace: createSchema ile aynı yapı. Sadece PLANNED + üretime başlanmamış
- * iş emirlerinde çalışır. Rota, kalemler, hedef ürün/özellikler hepsi değişebilir.
+ * Full replace: createSchema ile aynı yapı. Tamamlanmış/iptal/devredilmiş iş
+ * emrinde 409; başlamış iş emrinde fiziksel kilitler (en · kumaş · renk · kat) ayrıca 409.
  */
 const replaceWorkOrderSchema = z.object({
+  // Eski anahtar: iş emri numarası donar — yalnız mevcut numarayla AYNIYSA kabul, farklısı 409.
   batchNumber:       z.string().trim().min(1).max(64, "Parti kodu en fazla 64 karakter olabilir").optional().nullable(),
   type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).optional(),
   width:             z.number().positive("En değeri pozitif olmalı").max(999_999_999, "En çok büyük").optional().nullable(),
@@ -616,7 +618,7 @@ export class WorkOrderController {
   /**
    * PUT /api/work-orders/:id
    * Tam replace: rota/kalem/hedef ürün/özellikler dahil tüm WO yeniden yazılır.
-   * Sadece PLANNED + üretime başlanmamış WO'lar.
+   * Terminal iş emrinde ve kilitli alanda 409; değişen plan alanları hareket defterine düşer.
    */
   async replace(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

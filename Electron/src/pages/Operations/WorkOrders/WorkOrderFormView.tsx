@@ -136,7 +136,8 @@ export function WorkOrderFormView({
   const partyCodeGizli = !isEdit && partyCodeHal === "hidden";
   // Parti kodu alanı düzenlenebilir + zorunlu mu? Otomatik modda yeni kayıtta
   // override kapalıysa alan kilitli ve boş kalır → backend otomatik üretir.
-  const partyCodeEditable = isEdit || partyCodeHal === "required" || overrideParty;
+  // Düzenlemede kilitli: iş emri numarası doğuşta donar (backend farklısını 409'lar).
+  const partyCodeEditable = !isEdit && (partyCodeHal === "required" || overrideParty);
 
   const form = useForm<WorkOrderFormValues>({
     resolver: zodResolver(workOrderFormSchema) as Resolver<WorkOrderFormValues>,
@@ -859,7 +860,7 @@ export function WorkOrderFormView({
             >
               {/* Parti Kodu — takip için. Otomatik modda KİLİTLİ görünür; tıklanınca
                   manuel girişe açılır. Boş bırakılıp alandan çıkılırsa (blur) otomatik
-                  moda geri döner. Manuel modda + düzenlemede her zaman açık + zorunlu. */}
+                  moda geri döner. Manuel modda açık + zorunlu; düzenlemede salt-okunur. */}
               {/* Rozet input'un ÜSTÜNDE (2026-08-17 talebi): altta kalınca
                   operatör yazmaya başladıktan sonra görüyordu. */}
               {!isEdit && !partyCodeGizli && <LastBatchBadge className="mb-1" />}
@@ -875,7 +876,9 @@ export function WorkOrderFormView({
                 hint={
                   partyCodeEditable
                     ? "Refakat kartına barkod olarak basılır: benzersiz, iş emri no biçiminde (Sistem → Numaralandırma), yalnız büyük harf ve rakam."
-                    : undefined
+                    : isEdit
+                      ? "İş emri numarası açılışta verilir, sonradan değiştirilemez."
+                      : undefined
                 }
               >
                 <div className="relative">

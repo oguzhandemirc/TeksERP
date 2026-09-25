@@ -210,8 +210,8 @@ export const workOrderService = {
       .then((r) => r.data),
 
   /**
-   * İş emrini tüm ilişkileri ile birlikte yeniden yaz. Backend tarafı PLANNED +
-   * üretime başlanmamış WO'lara izin verir; aksi halde 409 döner.
+   * İş emrini tüm ilişkileri ile birlikte yeniden yaz. Tamamlanmış/iptal edilmiş
+   * iş emrinde ve kilitli alanda (en · kumaş · renk · kat) backend 409 döner.
    */
   replace: (id: string, payload: Partial<WorkOrder>) =>
     apiClient
