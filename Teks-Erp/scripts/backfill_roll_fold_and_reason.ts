@@ -21,6 +21,11 @@
 //
 // ⚠️ ASLA ÜZERİNE YAZMAZ: kolonu zaten DOLU olan top atlanır. Script birden çok
 // kez koşulabilir (idempotent).
+//
+// ⚠️ AUDIT GÖÇ İSTİSNASI (K-A1, 1e onayı 2026-09-25): "audit yalnız ayak izidir"
+// kuralının beyanlı istisnası (`lib/audit-okuma-beyan.ts` AUDIT_GOC_ISTISNALARI).
+// Servisin audit dalı SİLİNDİ — sebep artık YALNIZ kolondan okunur; bu script o
+// sürümün YAYIN GÜNÜ adımıdır (kuru → liste → kullanıcı onayı → --apply).
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { normalizeFoldType } from "../src/services/helpers/fold-type";

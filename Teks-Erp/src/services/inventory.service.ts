@@ -2476,15 +2476,10 @@ export class InventoryService {
    * Get a single roll by ID with all relations.
    */
   /**
-   * ELLE EKLENEN TOPUN SEBEBİ — KOLONDAN okunur, audit yalnız geçiş fallback'i.
-   *
-   * ⚠️ Bu başlık 2026-08-04'te bir kez YANLIŞ yazıldı ("sebep şemada kolon
-   * DEĞİL") ve aynı yanlış cümle Electron'daki iki dosyaya da kopyalandı.
-   * Doğrusu: `Roll.entryReason` ŞEMADA KOLONDUR (`schema.prisma`, migration
-   * `20260804210000`) ve asıl kaynak odur. Sebebin yalnız audit'te durması
-   * kabul edilemezdi çünkü `archive-scheduler` 6 ayda bir (MONTHS_TO_KEEP=6)
-   * SystemLog satırlarını `system_log_archives`'e TAŞIR — altı ay sonra
-   * "bu top nereden geldi" sorusunun cevabı sessizce kaybolurdu.
+   * ELLE EKLENEN TOPUN SEBEBİ — YALNIZ kolondan (`Roll.entryReason`, migration
+   * `20260804210000`). Audit OKUNMAZ: yalnız ayak izidir ve 6 ayda arşivlenir
+   * (test_audit_okuma_kaynagi). Kolondan önce doğmuş toplar yayın günü
+   * `scripts/backfill_roll_fold_and_reason.ts` ile bir kez doldurulur.
    *
    * Yalnız elle doğan iki kaynakta sorgulanır — diğer toplarda ek sorgu KOŞMAZ.
    */
@@ -2498,37 +2493,11 @@ export class InventoryService {
     ) {
       return null;
     }
-    // Önce KOLON — asıl kaynak burasıdır (2026-08-04'ten sonra doğan toplar).
     const own = await prisma.roll.findUnique({
       where: { id: rollId },
       select: { entryReason: true },
     });
-    if (own?.entryReason?.trim()) return own.entryReason.trim();
-
-    // GEÇİŞ DÖNEMİ: kolondan ÖNCE doğmuş toplar için audit'e düş. Bu dal geriye
-    // doldurma script'i koştuktan sonra pratikte boş döner ama KALIR — audit
-    // arşivlenmemiş eski kayıtlar için son şans (arşive BAKMAZ; oraya düşmüş
-    // sebep zaten geri getirilemez, doğrusu backfill'i zamanında koşmaktır).
-    // ⚠️ EN ESKİ CREATE'İ ALMA — o satırda sebep YOKTUR. Elle ekleme İKİ audit
-    // kaydı doğurur: önce `createInitialEntry`'nin generic CREATE'i (sebep
-    // taşımaz), milisaniyeler sonra `TAMBUR_MANUAL_ROLL` olayı (sebep ONDA).
-    // `orderBy: asc` + `findFirst` her seferinde SEBEPSİZ olanı seçiyordu, yani
-    // fallback pratikte ÖLÜYDÜ ve hep null dönüyordu (dev DB'de dört topta
-    // birebir ölçüldü). Doğrusu: CREATE kayıtlarını gez, sebebi TAŞIYANI bul.
-    // Aynı tuzak `scripts/backfill_roll_fold_and_reason.ts`de de yaşandı ve
-    // orada düzeltilmişti; bu, o düzeltmenin servise taşınmış hâlidir.
-    const logs = await prisma.systemLog.findMany({
-      where: { tableName: "ROLL", recordId: rollId, action: "CREATE" },
-      orderBy: { createdAt: "asc" },
-      select: { newData: true },
-      take: 10,
-    });
-    for (const log of logs) {
-      const data = (log.newData ?? null) as Record<string, unknown> | null;
-      const r = data?.reason;
-      if (typeof r === "string" && r.trim()) return r.trim();
-    }
-    return null;
+    return own?.entryReason?.trim() || null;
   }
 
   async findRollById(id: string): Promise<ApiResponse<Roll | null>> {

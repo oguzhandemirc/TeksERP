@@ -80,14 +80,34 @@ export const AYAK_IZI_OKUYUCULARI: readonly AyakIziBeyani[] = [
  * Borç kapatıldığında satır düşer ve `AUDIT_OKUMA_BORC_TABANI` iner (tabanı 1e yazar).
  */
 export const AUDIT_OKUMA_BORCU: readonly AuditOkumaBorcu[] = [
-  { yer: "src/services/inventory.service.ts#InventoryService.readManualEntryReason", adet: 1, dilim: "K-A1",
-    hedef: "elle açılan topun sebebi `Roll.entryReason` kolonundan; kolonsuz eski toplar bir kerelik göçle" },
   { yer: "src/services/inventory.service.ts#InventoryService.isUndoSourcedByAudit", adet: 2, dilim: "K-A2",
     hedef: "iptalin geri alma kaynağı topun kalıcı damgasından (`cancelReasonCode`); damgasız eski kayıtlar dry-run backfill" },
 ];
 
 /** Borç okuma noktası sayısı (Σ adet) — yalnız 1e düşürür. */
-export const AUDIT_OKUMA_BORC_TABANI = 3;
+export const AUDIT_OKUMA_BORC_TABANI = 2;
+
+// ── GÖÇ İSTİSNASI (scripts/) ──────────────────────────────────────────────────
+/**
+ * Kuralın TEK istisnası: geçmişi yeni bir deftere/kalıcı kolona BİR KEZ aktaran,
+ * beyanlı ve tarihli göç script'i (çalışan program değil). Yeni satır yalnız 1e
+ * onayıyla; bekçi dosyanın var olduğunu ve GERÇEKTEN audit okuduğunu ölçer.
+ */
+export interface GocIstisnasi {
+  dosya: string;
+  tarih: string;
+  durum: "ONAYLI" | "KARAR_BEKLIYOR";
+  hedef: string;
+  gerekce: string;
+}
+export const AUDIT_GOC_ISTISNALARI: readonly GocIstisnasi[] = [
+  { dosya: "scripts/backfill_roll_fold_and_reason.ts", tarih: "2026-09-25", durum: "ONAYLI",
+    hedef: "Roll.entryReason (K-A1)",
+    gerekce: "kolondan (2026-08-04) önce elle doğan topların sebebi yalnız audit'te; yayın günü kuru → onay → --apply, sonra servis kolondan okur" },
+  { dosya: "scripts/fix_tambur_undo_cancel_marker.ts", tarih: "2026-09-25", durum: "KARAR_BEKLIYOR",
+    hedef: "Roll.cancelReasonCode = TAMBUR_GERI_ALMA (K-A2)",
+    gerekce: "damgasız eski tambur geri alma parçaları yalnız audit'ten tanınıyor; 2026-08-29 kullanıcı kararı 'uygulanmayacak' — K-A2 kararı kullanıcıda" },
+];
 
 // ── İSTEMCİ (Electron/src · mobil/src) ────────────────────────────────────────
 /**

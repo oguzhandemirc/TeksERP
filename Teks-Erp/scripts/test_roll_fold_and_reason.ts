@@ -51,6 +51,7 @@ async function main(): Promise<void> {
     select: { id: true },
   });
   const created: string[] = [];
+  const auditLogIds: string[] = [];
 
   const mkRoll = async (n: number, fold: string | null, reason: string | null) => {
     const r = await prisma.roll.create({
@@ -157,6 +158,23 @@ async function main(): Promise<void> {
       String(chainDetail.data?.manualReason),
     );
 
+    // ── 3b) AUDIT OKUNMAZ (K-A1, 2026-09-25) — kolon boşsa audit'teki sebep de gösterilmez.
+    // Audit yalnız ayak izidir; kolondan önce doğmuş toplar göç script'iyle doldurulur.
+    // Negatif sonda (2026-09-25): servise audit dalı geri konunca bu kontrol ❌, geri alındı.
+    console.log("\n[3b] kolon boş + audit'te sebep var → sebep GÖSTERİLMEZ (audit okunmaz)");
+    const auditRoll = await mkRoll(5, null, null);
+    const log = await prisma.systemLog.create({
+      data: { category: "DOMAIN", action: "CREATE", tableName: "ROLL", recordId: auditRoll,
+        newData: { event: "TAMBUR_MANUAL_ROLL", reason: "AUDITTEN OKUNMAMALI" } },
+      select: { id: true },
+    });
+    auditLogIds.push(log.id);
+    const auditDetail = (await inventoryService.findRollById(auditRoll)) as unknown as {
+      data: { manualReason?: string | null } | null;
+    };
+    check("audit'teki sebep detayda GÖRÜNMEZ (kaynak yalnız kolon)", auditDetail.data?.manualReason == null,
+      String(auditDetail.data?.manualReason));
+
     // ── 4) KOLON GERÇEKTEN KALICI ────────────────────────────────────────────
     console.log("\n[4] Kolonlar şemada ve yazılabilir");
     const row = await prisma.roll.findUniqueOrThrow({
@@ -167,6 +185,8 @@ async function main(): Promise<void> {
     check("entryReason kolonu ayrı (bu topta null)", row.entryReason === null);
     check("entryReasonCode kolonu şemada (bu topta null)", row.entryReasonCode === null);
   } finally {
+    // Test DB'de audit koruması (teks.audit_guard) kapalı; açıksa satır kalır, zararsız.
+    await prisma.systemLog.deleteMany({ where: { id: { in: auditLogIds } } }).catch(() => {});
     await prisma.roll.deleteMany({ where: { id: { in: created } } });
     await prisma.item.delete({ where: { id: item.id } }).catch(() => {});
     console.log("\n(temizlendi — TEST-FLD fixture'ları silindi)");

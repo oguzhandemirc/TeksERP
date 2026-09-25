@@ -44,6 +44,7 @@ import {
   AUDIT_OKUMA_BORCU,
   AUDIT_UCLARI,
   AYAK_IZI_OKUYUCULARI,
+  AUDIT_GOC_ISTISNALARI,
   AYAK_IZI_SINIFLARI,
   ISTEMCI_AYAK_IZI,
 } from "./lib/audit-okuma-beyan";
@@ -253,6 +254,17 @@ function main(): void {
   const kotuBorc = AUDIT_OKUMA_BORCU.filter((b) => !/^K-A\d+$/.test(b.dilim) || b.hedef.trim().length < 10);
   check("§5 beyan biçimi: sınıf kapalı kümeden, gerekçe/hedef dolu", kotu.length === 0 && kotuBorc.length === 0,
     [...kotu.map((b) => b.yer), ...kotuBorc.map((b) => b.yer)].join(" · ") || `${AYAK_IZI_SINIFLARI.length} sınıf`);
+
+  // §5b göç istisnaları: var, GERÇEKTEN audit okuyor, beyanı tam (ölü istisna kırmızı).
+  const gocSorunlu = AUDIT_GOC_ISTISNALARI.flatMap((g) => {
+    const p = join(KOK, g.dosya);
+    if (!existsSync(p)) return [`${g.dosya}: YOK`];
+    const okuma = okumaNoktalari(readFileSync(p, "utf8"), g.dosya).length;
+    const eksik = !/^\d{4}-\d{2}-\d{2}$/.test(g.tarih) || g.gerekce.trim().length < 20 || !g.hedef.trim();
+    return [...(okuma === 0 ? [`${g.dosya}: audit OKUMUYOR (ölü istisna)`] : []), ...(eksik ? [`${g.dosya}: beyan eksik`] : [])];
+  });
+  check("§5b göç istisnaları canlı ve beyanlı (yeni satır yalnız 1e onayıyla)", gocSorunlu.length === 0,
+    gocSorunlu.join(" · ") || AUDIT_GOC_ISTISNALARI.map((g) => `${g.dosya.replace("scripts/", "")}:${g.durum}`).join(" · "));
 
   // ── İstemci ────────────────────────────────────────────────────────────────
   const istemciKokleri = [
