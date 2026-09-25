@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Ban, CheckCircle2, FileText, Link2, PackageCheck, Palette, Pencil, Ruler } from "lucide-react";
+import { Ban, CheckCircle2, FileText, History, Link2, PackageCheck, Palette, Pencil, Ruler } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -10,6 +10,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useTabsStore } from "@/store/tabs";
 import { WorkOrderDocumentsDialog } from "./WorkOrderDocumentsDialog";
+import { WorkOrderEventsSheet } from "./WorkOrderEventsSheet";
 import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
@@ -39,6 +40,7 @@ export function WorkOrderDetailHeader({
   const qc = useQueryClient();
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
   const [travelerCardOpen, setTravelerCardOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
@@ -158,6 +160,9 @@ export function WorkOrderDetailHeader({
               >
                 <FileText className="h-3.5 w-3.5" /> Belgeler
               </Button>
+              <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setEventsOpen(true)}>
+                <History className="h-3.5 w-3.5" /> Hareketler
+              </Button>
               {canComplete && (
                 <PermissionGate permission="workorder:write">
                   <Button
@@ -187,6 +192,8 @@ export function WorkOrderDetailHeader({
           ) : undefined
         }
       />
+
+      <WorkOrderEventsSheet workOrder={eventsOpen && wo ? wo : null} onClose={() => setEventsOpen(false)} />
 
       <WorkOrderDocumentsDialog
         open={documentsOpen}

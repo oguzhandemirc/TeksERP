@@ -450,6 +450,12 @@ kart bayat işaretlenir (bugün de öyle), tablet menüsünde "Kartı yeniden ba
 
 ## 7. (e) HAREKETLER EKRANI
 
+**Durum (2026-09-25): D4a UYGULANDI** — uç `GET /api/work-orders/:id/events` (`workorder-timeline.service.ts`;
+iki katman, cursor'lu, grup süzgeci fail-closed, satır başlığı sunucuda Türkçe —
+`constants/workorder-event-labels.ts`) + panel `WorkOrderEventsSheet` (yan panel ve detay başlığında
+"Hareketler" tuşu). Kalan: D4b ayrı ekran (iş emri no / barkod arama + Excel) · D4c tablet detayında son 5
+hareket (S9).
+
 - **Uç:** `GET /work-orders/:id/events?types=…&cursor=…` — (A) `WorkOrderEvent` + (B) kaynak defterler,
   `createdAt` sıralı, cursor'lu; süzme SUNUCUDA (liste + cursor + özet tek where). `GET /work-orders/events/
   lookup?q=<iş emri no | top barkodu>` — barkod topun bağlı olduğu iş emirlerini döndürür. İzin

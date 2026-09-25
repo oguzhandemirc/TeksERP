@@ -775,6 +775,46 @@ router.get("/:id/rolls", verifyToken, requireAnyPermission("workorder:read", "mo
 // LİSTE izni okuma seviyesindedir; asıl kapı baskı ucundaki belge-tipi bazlı
 // `requireDocPermission`'dır (bir belgeyi GÖRMEK ile BASMAK ayrı sorular değil,
 // ama liste tek uçtan geldiği için tip-bazlı gate baskı tarafında kalır).
+/**
+ * @openapi
+ * /api/work-orders/{id}/events:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: İş emri hareketleri (zaman çizelgesi)
+ *     description: |
+ *       İş emrinin kendi hareket defteri (`work_order_events`) ile kendi defteri olan
+ *       olaylar (sipariş bağı, hedef özellik, parti, fason sevk/kabul, Tambur kesimi,
+ *       kapanış künyesi) tek çizelgede, yeniden eskiye, cursor'lu. Salt-okunur; audit
+ *       OKUNMAZ. `group` CSV süzgeci tanınmayan değerde 400 döner.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: group
+ *         schema: { type: string, example: "DURUM,FASON" }
+ *       - in: query
+ *         name: cursor
+ *         schema: { type: string }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+ *     responses:
+ *       200:
+ *         description: Sayfa + grup sayıları
+ *       400:
+ *         description: Tanınmayan grup ya da bozuk imleç
+ *       404:
+ *         description: İş emri bulunamadı
+ */
+router.get(
+  "/:id/events",
+  verifyToken,
+  requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"),
+  controller.getEvents,
+);
+
 router.get(
   "/:id/documents",
   verifyToken,

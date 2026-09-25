@@ -12459,3 +12459,14 @@ claim'i künye dondurur) + §6b (künye tek yazar) · panel `closeSnapshotDiff.t
 **İkinci dilim (aynı gün): fasondan doğrudan sevk + yuvarlama.** `SUBCONTRACTOR_DIRECT_SHIP` aynı kalıba geçti (`directShipParts` → HTML + `renderFasonDirectShipTables`); eski Excel'i çuval sevkiyatının üç sayfasını (Kumaş/boş Çuval/Çeki) basıyordu, PDF ise sipariş tablosu + top tablosu — artık Excel de iki tabloyu ve bilgi kutularını taşır. Toplam hücresi kolondan farklı biçimlenebilir (`foot.kind`: metre toplamı "m", kg toplamı "kg" ekiyle; Excel'de hücre bazlı sayı biçimi). Altın kopya 90 yeni kombinasyonla (refactor'dan ÖNCE) 426/426 birebir. Gerçek senaryoda ölçülen fark: veri 3 ondalık (`Decimal(12,3)`), PDF `toFixed` ile basar ve ikili kayan noktada 112,35 → 1 hanede "112,3" olur; ham değer Excel'e gidince tablo programı "112,4" gösteriyordu (yarım değerlerin %40'ında; ölçüm: 0,00–999,99 aralığında x,x5 değerler). Karar: PDF DEĞİŞMEZ, Excel'e PDF'te basılan hane gider (`excelValue` değeri PDF metninden geri okur). PDF'in kendi yuvarlamasının (half-up değil) düzeltilmesi ayrı bir karardır, bu işte açılmadı.
 
 **Bekleyen uygulama (aynı kural).** Çuval İçerik Dökümü (panel içi, `SackContentEdit/sackDump`: `dumpHtml` ↔ `dumpSheets`) de ayrışıyor (ad kolonları farklı; ikisinde de ambalaj/parti yok) — kapsam kararı kullanıcıda.
+
+## 2026-09-25 — İş emri Hareketler (D4a): iki katman tek çizelge, audit okunmaz [ÇEKİRDEK]
+
+**Karar.** `GET /api/work-orders/:id/events` — (A) `work_order_events` + (B) kendi defteri olan olaylar
+kaynaklarından (sipariş bağı `WorkOrderToOrderLine` · hedef özellik · `Batch` doğuşu · fason sevk/kabul ·
+Tambur kesimi kaynak top başına tek satır (kullanıcı S6) · kapanış künyesi). Kopya yok; audit okunmaz
+(kullanıcı kuralı "audit yalnız ayak izi"). Satır başlığı ve etiketler sunucuda (`workorder-event-labels.ts`),
+istemci ikinci sözlük tutmaz. Cursor `(at, id)` üzerinde kararlı; grup süzgeci bilinmeyen değerde 400; grup
+sayıları süzgeçten bağımsız. Panel `WorkOrderEventsSheet` depo hareket dökümünün sözleşmesini izler (salt-okunur,
+"hata" ≠ "kayıt yok", kırpma altbilgide). İzin: mevcut `GET /:id` kümesi (yeni kod yok). Kapı:
+`test_workorder_timeline` (negatif sonda: künye kaynağı susturulunca 2 kırmızı).

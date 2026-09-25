@@ -10,6 +10,9 @@ import { workOrderFasonQuickService } from "../services/workorder-fason-quick.se
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
+import { WorkOrderTimelineService } from "../services/workorder-timeline.service";
+import { TIMELINE_GROUPS, type TimelineGroup } from "../constants/workorder-event-labels";
+import { readFilterList } from "../utils/query-parser";
 import "../types/express-augment";
 
 // Create + quick-start ortak alan şeması. refine'siz tutuluyor ki spread ile
@@ -274,6 +277,13 @@ const changeWidthSchema = z.object({
   source: z.enum(["MANUAL", "FASON_RECEIPT"]).optional().default("MANUAL"),
 });
 
+const timelineService = new WorkOrderTimelineService();
+const eventsQuerySchema = z.object({
+  group: z.union([z.string(), z.array(z.string())]).optional(),
+  cursor: z.string().max(400).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
 const updateWorkOrderSchema = z.object({
   batchNumber: z.string().trim().min(1).max(64).optional(),
   width: z.number().positive().nullable().optional(),
@@ -384,6 +394,7 @@ export class WorkOrderController {
     this.lockWorkOrder = this.lockWorkOrder.bind(this);
     this.getAttachedRolls = this.getAttachedRolls.bind(this);
     this.getDocuments = this.getDocuments.bind(this);
+    this.getEvents = this.getEvents.bind(this);
     this.getTravelCard = this.getTravelCard.bind(this);
     this.getManifest = this.getManifest.bind(this);
     this.createManifest = this.createManifest.bind(this);
@@ -817,6 +828,30 @@ export class WorkOrderController {
     try {
       const result = await this.service.getDocuments(req.params.id as string);
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** İş emri hareketleri — defter + kaynak defterler tek çizelgede (audit okunmaz). */
+  async getEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const q = eventsQuerySchema.parse(req.query);
+      const groups = readFilterList(q.group as string | string[] | undefined);
+      // Fail-closed: tanınmayan grup sessizce "hepsi" sayılmaz.
+      const bilinmeyen = groups.filter((g) => !(TIMELINE_GROUPS as readonly string[]).includes(g));
+      if (bilinmeyen.length) throw AppError.badRequest(`Tanınmayan olay grubu: ${bilinmeyen.join(", ")}`);
+      const page = await timelineService.list(req.params.id as string, {
+        groups: groups as TimelineGroup[],
+        cursor: q.cursor,
+        limit: q.limit,
+      });
+      res.status(200).json({
+        success: true,
+        data: page.data,
+        pagination: { nextCursor: page.nextCursor, hasMore: page.hasMore, limit: q.limit },
+        groups: page.groups,
+      });
     } catch (error) {
       next(error);
     }

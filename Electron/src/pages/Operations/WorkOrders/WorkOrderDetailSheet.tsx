@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, CheckCircle2, FileText, Link2, Maximize2, PackageCheck, Palette, Pencil, Ruler } from "lucide-react";
+import { Ban, CheckCircle2, FileText, History, Link2, Maximize2, PackageCheck, Palette, Pencil, Ruler } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
 import { workOrderService } from "./service";
 import { WorkOrderDocumentsDialog } from "./WorkOrderDocumentsDialog";
+import { WorkOrderEventsSheet } from "./WorkOrderEventsSheet";
 import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
@@ -51,6 +52,7 @@ const STATUS_PILL: Record<string, string> = {
  */
 export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: Props) {
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
   const [linkOrderOpen, setLinkOrderOpen] = useState(false);
   // Fason Kabul (2026-08-19): ince ayarlı kabul (kısmi teslimat + kalan-kapama).
   const [fasonReceiveOpen, setFasonReceiveOpen] = useState(false);
@@ -198,6 +200,10 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       <FileText className="h-3.5 w-3.5" /> Belgeler
                     </button>
 
+                    <button type="button" className="btn" onClick={() => setEventsOpen(true)}>
+                      <History className="h-3.5 w-3.5" /> Hareketler
+                    </button>
+
                     {canComplete && (
                       <PermissionGate permission="workorder:write">
                         <button
@@ -256,6 +262,8 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
             )}
           </div>
         </div>
+
+        <WorkOrderEventsSheet workOrder={eventsOpen && wo ? wo : null} onClose={() => setEventsOpen(false)} />
 
         <WorkOrderDocumentsDialog
           open={documentsOpen}
