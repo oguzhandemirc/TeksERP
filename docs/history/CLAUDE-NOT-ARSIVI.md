@@ -5941,6 +5941,8 @@ web'e de taşır.
 
 ## 2026-09-10 — DEFTER-ÖNCELİKLİ MİMARİ: hard delete yok · izlenebilirlik defterle · geri alma ters kayıttır [ÇEKİRDEK]
 
+> ⚠️ **KISMEN GEÇERSİZ (2026-09-26, kullanıcı)** — aynı cümlenin `weighedAt` ve `invoicedAt` örnekleri de DÜŞTÜ: ayrı defteri olan (tartı defteri · fatura belgesi) damga DURUM kolonudur → bkz. "2026-09-26 — Ayrı defteri olan damga durum kolonudur".
+>
 > ⚠️ **KISMEN GEÇERSİZ (2026-09-12)** — "ileri damgayı null'lamak yasaktır" cümlesinin `remainderClosedAt` örneği DÜŞTÜ: o kolon damga değil DURUM bayrağıdır (defteri `RollVariance(SUBCONTRACTOR_REMAINDER)`), null'a dönebilir → bkz. "2026-09-12 — DURUM BAYRAĞI ≠ DAMGA: `remainderClosedAt` yasak listesinden çıktı".
 
 Kullanıcı üç ilke koydu ve bunlar tek bir doktrinin üç yüzüdür:
@@ -12558,3 +12560,9 @@ hücre metnini birebir ölçer. Excel ekranda yüklenmiş sayfayla sınırlı de
 **Kapı kör noktası (aynı dilim).** `test_defter_ters_yol` §13e "beyanlı kodun yazarı var" kullanımı `src` ∪ `scripts` içinde arıyordu; bekçinin sabite atfı "yazar" sayılıyordu. Sonda: fark yazıcısı silindi, §13e YEŞİL kaldı. Daraltıldı: bekçi/fikstür sayılmaz (`fiksturMu`), script yazıcıları sayılır (`OPENING` yalnız `acilis_fotografi_stok_defteri.ts`te yazılıyor). Aynı sonda artık kırmızı.
 
 **Geçmiş.** Onarım yok. Prova kopyasında `PRODUCTION_ISSUE` satırı 0; iptal iş emri topu STOCK'ta 0. Salt okuma sayım `scripts/sorgu_iptal_eslesmesiz_giris.sql`, fabrikada koşmak kullanıcıda.
+
+## 2026-09-26 — Ayrı defteri olan damga durum kolonudur: tartı · fatura · fason kalan kapanışı [ÇEKİRDEK]
+
+**Karar (kullanıcı, 1e aracılığıyla).** `test_defter_ters_yol` §14 ileri damgayı yerinde null'layan dört siteyi "karar bekliyor" notuyla BORC diye beyan etmişti. Üçünün tarihçesi ayrı bir append-only defterde yaşıyor: `Sack.weighedAt` → `SackWeighing` (CLEARED olayı, önceki kg ile) · `Shipment/DirectShipment.invoicedAt` → fatura belgesi (CANCELLED + `cancelledAt/ById/Reason`) ve cari ters kaydı · `SubcontractorDispatchItem.remainderClosedAt` → `RollVariance(SUBCONTRACTOR_REMAINDER)` `reversedAt` + hareketin ters kaydı. Kullanıcı üçünü DURUM kolonu saydı (şık A). Kolon "şu an ne"yi tutar, "ne oldu" o defterdedir; null'a dönmesi geri almanın o defterdeki ters satırıyla birlikte meşrudur.
+
+**Sonuç.** §14 borcu 4 → 1. Kalan `Swatch.cancelledAt` soruda yoktu; ayrıca sorulacak. `defter.md` "DURUM BAYRAĞI ≠ DAMGA" satırının ölçütü "kim/neden/miktar taşımıyorsa" idi; "ne oldu ayrı bir defterde satırsa" diye düzeltildi. Aksi hâlde `weighedById`/`invoicedById` taşıyan kolonlar kuralın kendisiyle çelişirdi. Yasak cümlesinin örnekleri `dispatchedAt` ailesine daraltıldı. Kök `CLAUDE.md`'deki liste 1e'de.
