@@ -29,6 +29,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { lockAgainstMergeTx } from "./master-data-live.helper";
 import { PHASE_OUT_LINE_QTY_WARNING } from "./item-lifecycle-settings.helper";
+import { ROLL_ON_ARCHIVED_ITEM_MESSAGE } from "../../constants/item-archive-messages";
 import {
   readItemPhaseOutLineQty,
   readItemPhaseOutNewOrder,
@@ -62,6 +63,8 @@ export interface ItemUsageOpts {
   /** A2: satırın eski ve yeni miktarı (değişmiyorsa kontrol koşmaz). */
   oldQty?: Prisma.Decimal | number | string;
   newQty?: Prisma.Decimal | number | string;
+  /** Pasif kartta söylenecek metin (ör. top dirilmesi: çıkış yolunu söyler). Kod aynı: ITEM_INACTIVE. */
+  archivedMessage?: string;
 }
 
 export interface ItemUsageResult {
@@ -133,6 +136,7 @@ async function decide(row: Row | null, usage: ItemUsage, opts: ItemUsageOpts, db
   }
   const base = { id: row.id, code: row.code, name: row.name, itemType: row.itemType, lifecycleStatus: row.lifecycleStatus };
   if (row.lifecycleStatus === ItemLifecycleStatus.ARCHIVED) {
+    if (opts.archivedMessage) throw AppError.conflict(opts.archivedMessage, { code: "ITEM_INACTIVE" });
     throw AppError.conflict(
       `"${row.name}" ${TYPE_NOUN[row.itemType]} pasif durumda — bu kartla yeni kayıt açılamaz. Kartı Aktif'e döndürün ya da doğru kartı seçin.`,
       { code: "ITEM_INACTIVE" },
@@ -220,4 +224,19 @@ export async function runItemUsageChecks(db: Db, checks: ItemUsageCheck[]): Prom
 export async function runItemUsageChecksTx(tx: Prisma.TransactionClient, checks: ItemUsageCheck[]): Promise<void> {
   const sorted = [...checks].sort((a, b) => (a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0));
   for (const c of sorted) await assertItemUsableTx(tx, c.itemId, c.usage, c.opts);
+}
+
+/**
+ * DİRİLME kapısı (S5, 1e kararı (b)): ölü top canlıya dönerken (iptal/storno/kabul iptali/
+ * geri alma) kartı Pasif olamaz — mevcut malı yürütür (E), "Tükenene kadar" kartta serbest.
+ * DB seddi (`rolls_item_not_archived`) ikinci hattır; bu kontrol DB'ye gitmeden ÇIKIŞ YOLUNU
+ * söyler. Dirilme yolları `test_item_usage_single_source` §3'te listelidir.
+ */
+export async function assertRollsRevivable(db: Db, rolls: string[] | Prisma.RollWhereInput): Promise<void> {
+  if (Array.isArray(rolls) && rolls.length === 0) return;
+  const where: Prisma.RollWhereInput = Array.isArray(rolls) ? { id: { in: rolls } } : rolls;
+  const rows = await db.roll.findMany({ where, select: { itemId: true }, distinct: ["itemId"] });
+  for (const itemId of [...new Set(rows.map((r) => r.itemId))].sort()) {
+    await assertItemUsable(db, itemId, "EXISTING_GOODS", { archivedMessage: ROLL_ON_ARCHIVED_ITEM_MESSAGE });
+  }
 }

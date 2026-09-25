@@ -50,6 +50,7 @@ import {
   type ReversalRollPlan,
   type ReversalYarnPlan,
 } from "./helpers/stock-count-reversal-plan.helper";
+import { assertRollsRevivable } from "./helpers/item-usage.helper";
 
 export type { ReversalPlan, ReversalRollAction, ReversalRollPlan, ReversalYarnPlan };
 
@@ -150,6 +151,8 @@ async function reverseTx(tx: Prisma.TransactionClient, stockCountId: string, rea
 
   // Yalnız RESTORE dalı statüye dokunur; hedef statü topa göre değiştiği için gruplu claim.
   const restoring = plan.rolls.filter((r) => r.action === "RESTORE");
+  // Dirilme: kart Pasif olamaz (S5) — DB seddinin uygulama ikizi, çıkış yolunu söyler.
+  await assertRollsRevivable(tx, restoring.map((r) => r.rollId));
   const groups = new Map<RollStatus, string[]>();
   for (const r of restoring) groups.set(r.targetStatus as RollStatus, [...(groups.get(r.targetStatus as RollStatus) ?? []), r.rollId]);
   for (const [target, ids] of groups) {

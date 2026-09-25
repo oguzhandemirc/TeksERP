@@ -109,6 +109,7 @@ import { ApiResponse } from "../types/api.types";
 import { recomputeStepStatus } from "./helpers/roll-step.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { InventoryService } from "./inventory.service";
+import { assertRollsRevivable } from "./helpers/item-usage.helper";
 
 /**
  * Elle eklenen topu geri alırken İKİNCİ BİR İPTAL MOTORU YAZILMAZ.
@@ -1716,6 +1717,8 @@ export class TamburUndoService {
       if (WAREHOUSE_STOCK_STATUSES.includes(revivedStatus)) {
         await warehouseStampManyTx(tx, [parentId]);
       }
+      // Dirilme: kart Pasif olamaz (S5) — DB seddinin uygulama ikizi, çıkış yolunu söyler.
+      await assertRollsRevivable(tx, [parentId]);
       const revived = await tx.roll.updateMany({
         where: { id: parentId, status: RollStatus.TAMBUR_CONSUMED },
         data: {
@@ -1998,6 +2001,8 @@ export class TamburUndoService {
       if (WAREHOUSE_STOCK_STATUSES.includes(revivedStatus)) {
         await warehouseStampManyTx(tx, [parentId]);
       }
+      // Dirilme: kart Pasif olamaz (S5) — DB seddinin uygulama ikizi, çıkış yolunu söyler.
+      await assertRollsRevivable(tx, [parentId]);
       const revived = await tx.roll.updateMany({
         where: { id: parentId, status: RollStatus.TAMBUR_CONSUMED },
         data: {

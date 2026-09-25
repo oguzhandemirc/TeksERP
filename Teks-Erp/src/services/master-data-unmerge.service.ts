@@ -325,8 +325,10 @@ async function revertTx(input: RevertInput) {
 
   const entity = plan.entity;
   const table = TABLE_OF[entity];
-  const counts = await restoreRefsTx(tx, op);
+  // SIRA: mezar taşı ÖNCE kalkar, satırlar SONRA döner — ürün DB seddi (S5) Pasif karta
+  // canlı satır yazdırmaz; kaynak önceki durumuna dönmeden satır dönüşü sedde takılırdı.
   const auditSources = await liftTombstonesTx(tx, op, table, { renames, userId });
+  const counts = await restoreRefsTx(tx, op);
   const pickSkipped = await restoreFieldPicksTx(tx, op, table);
 
   return {

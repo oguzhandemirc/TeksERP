@@ -49,6 +49,8 @@ import {
   buildNextDynamicCursor,
 } from "../utils/cursor";
 import { lockShipmentScopeTx } from "./helpers/shipment-locks.helper";
+import { assertRollsRevivable } from "./helpers/item-usage.helper";
+import { DEAD_ROLL_STATUSES } from "./helpers/live-ref-where.helper";
 
 const D0 = () => new Prisma.Decimal(0);
 
@@ -534,6 +536,8 @@ export class ReturnService {
 
       const createdIds: string[] = [];
       let totalQty = new Prisma.Decimal(0);
+      // Dirilme (iade canlı rafa dönüyorsa): kart Pasif olamaz (S5) — DB seddinin uygulama ikizi.
+      if (!DEAD_ROLL_STATUSES.includes(appliedStatus)) await assertRollsRevivable(tx, orderedRolls.map((r) => r.id));
       // `tx` içinde Promise.all YASAK (pg adapter tek bağlantı) → seri döngü.
       for (const r of orderedRolls) {
         // Top iade rafına — appliedStatus (override yoksa WAREHOUSE; FİRE→SCRAP vb.).

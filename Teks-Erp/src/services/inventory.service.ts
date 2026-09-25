@@ -194,6 +194,7 @@ import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { uyari } from "../lib/logger";
 import { upperTr } from "../utils/tr-case";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
+import { assertRollsRevivable } from "./helpers/item-usage.helper";
 
 export interface RollStats {
   totalCount: number;
@@ -3940,6 +3941,8 @@ export class InventoryService {
       },
     });
     if (!existing) throw AppError.notFound("Top bulunamadı");
+    // Dirilme: kart Pasif olamaz (S5) — DB seddinin uygulama ikizi, çıkış yolunu söyler.
+    await assertRollsRevivable(prisma, [id]);
 
     // Sinyaller tek turda toplanır; yüklem hiçbir şey okumaz.
     const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =

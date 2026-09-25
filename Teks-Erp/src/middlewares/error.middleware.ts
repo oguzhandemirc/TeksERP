@@ -16,6 +16,7 @@ import { AuditService } from "../services/audit.service";
 import { classifyPoolTimeout, recordPoolTimeout, getPoolHealth } from "../lib/pool-health";
 import "../types/express-augment";
 import { hata, uyari } from "../lib/logger";
+import { ORDER_LINE_ON_ARCHIVED_ITEM_MESSAGE, ROLL_ON_ARCHIVED_ITEM_MESSAGE } from "../constants/item-archive-messages";
 
 /**
  * Prisma P2003 FK kolonunu farklı versiyon formatlarından çıkarır.
@@ -256,6 +257,9 @@ export function extractCheckConstraint(err: unknown): string | null {
  */
 const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   rolls_currentQty_nonneg: "Top metrajı negatif olamaz.",
+  // Ürün arşivinin DB seddi (tetikleyici, 23514) — URUN-YASAM-DONGUSU.md §7; mesaj çıkış yolunu söyler.
+  rolls_item_not_archived: ROLL_ON_ARCHIVED_ITEM_MESSAGE,
+  order_lines_item_not_archived: ORDER_LINE_ON_ARCHIVED_ITEM_MESSAGE,
   rolls_initialQty_nonneg: "Topun giriş metrajı negatif olamaz.",
   rolls_weightKg_nonneg: "Top ağırlığı negatif olamaz.",
   sacks_weightKg_nonneg: "Çuval tartısı negatif olamaz.",
@@ -312,6 +316,11 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   reason_presets_machine_class_chk:
     "Tezgah duruş sebebi bir kayıp sınıfı taşımalı (plansız / kurulum / planlı / çalışma dışı) — 'mikro duruş' bir sebep sınıfı değildir.",
 };
+
+/** Kısıt adı → Türkçe mesaj (bekçiler eşlemeyi ÜRÜNDEN okur, kopya tutmaz). */
+export function checkConstraintMessage(name: string): string | undefined {
+  return CHECK_CONSTRAINT_MESSAGES[name];
+}
 
 // =============================================================================
 // Geçici PG çakışması — SQLSTATE sınıf 40 → 409 (Sınıf 3 güvenlik ağı, 2026-08-14)

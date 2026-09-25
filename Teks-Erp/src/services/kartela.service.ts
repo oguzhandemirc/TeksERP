@@ -47,6 +47,7 @@ import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
 import { lowerTr } from "../utils/tr-case";
 import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
+import { assertRollsRevivable } from "./helpers/item-usage.helper";
 
 // Liste filtre/sayfalama parametreleri — hem offset (mobil) hem cursor (admin)
 // modunu besler. cursor||mode==="cursor" → cursor response; aksi halde offset.
@@ -959,6 +960,8 @@ export class KartelaService {
       // Tüketilen toplar AT_KARTELA'ya döner (firma hâlâ malı işlemiş sayılır).
       // ATOMİK CLAIM: beklenen statüde değilse (eşzamanlı işlem) 409 + rollback.
       if (rollIds.length > 0) {
+        // Dirilme: kart Pasif olamaz (S5) — DB seddinin uygulama ikizi, çıkış yolunu söyler.
+        await assertRollsRevivable(tx, rollIds);
         const reverted = await tx.roll.updateMany({
           where: { id: { in: rollIds }, status: RollStatus.KARTELA_CONSUMED },
           data: { status: RollStatus.AT_KARTELA },

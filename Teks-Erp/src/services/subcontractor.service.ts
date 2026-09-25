@@ -128,6 +128,7 @@ import {
 import { p2002Mentions } from "../utils/p2002";
 import { hata, uyari } from "../lib/logger";
 import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
+import { assertRollsRevivable } from "./helpers/item-usage.helper";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -3804,6 +3805,8 @@ export class SubcontractorService {
         );
       }
 
+      // Dirilme: kart Pasif olamaz (S5) — DB seddinin uygulama ikizi, çıkış yolunu söyler.
+      await assertRollsRevivable(tx, [data.rollId]);
       const claimed = await tx.roll.updateMany({
         where: {
           id: data.rollId,
@@ -5625,6 +5628,8 @@ export class SubcontractorService {
       const fullItems = receipt.items.filter((it) => !it.isPartial);
       const partialItems = receipt.items.filter((it) => it.isPartial);
       if (fullItems.length > 0) {
+        // Dirilme: kart Pasif olamaz (S5) — DB seddinin uygulama ikizi, çıkış yolunu söyler.
+        await assertRollsRevivable(tx, fullItems.map((it) => it.newRollId));
         const revertedRolls = await tx.roll.updateMany({
           where: {
             id: { in: fullItems.map((it) => it.newRollId) },
@@ -6147,6 +6152,8 @@ export class SubcontractorService {
           },
         });
 
+        // Dirilme: kart Pasif olamaz (S5) — DB seddinin uygulama ikizi, çıkış yolunu söyler.
+        await assertRollsRevivable(tx, origRollIds);
         const revertedOrig = await tx.roll.updateMany({
           where: { id: { in: origRollIds }, status: RollStatus.SUBCONTRACTOR_CONSUMED },
           data: { status: RollStatus.AT_SUBCONTRACTOR, currentStepId: receipt.stepId },

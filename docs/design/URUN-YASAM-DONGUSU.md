@@ -238,9 +238,32 @@ kopya kalmaz.
 - ⚠️ **Sıra şartı:** PHASE_OUT kartlarda `isActive` true'ya döndüğü için eski çıplak kontroller
   onlara YENİ sipariş açtırır ⇒ §4'teki taşıma aynı backend sürümünde tamamlanmış olmalı; AST
   bekçisi taşınmamış kontrol kalırken sürümü durdurur.
-- **DB seddi (öneri):** `rolls` ve `order_lines` üzerinde `BEFORE INSERT OR UPDATE OF "itemId"`
-  tetikleyicisi, hedef kart ARCHIVED ise RAISE. Tuzak: geri alma satırları kaynağa geri yazarken
-  kaynak henüz ARCHIVED olabilir — mezar taşı kaldırma, satır dönüşünden ÖNCE koşmalı; provada ölçülür.
+- **DB seddi (S5, 1e kararı (b) 2026-09-25):** migration `20260925200000_urun_arsiv_db_seddi`.
+  - `rolls`: `BEFORE INSERT OR UPDATE OF "itemId", "status"` → yeni satır CANLI ve kartı ARCHIVED ise
+    RAISE. Ölü top (K18 + SHIPPED + SCRAP; TS ikizi `DEAD_ROLL_STATUSES`) geçer — tarihçedir.
+    Kart değişmeyen canlı→canlı güncelleme kart okumadan geçer (sıcak yol).
+  - `order_lines`: `BEFORE INSERT OR UPDATE OF "itemId", "cancelledAt"` → kalem iptal değil, kart
+    ARCHIVED ve sipariş açıksa (`OPEN_ORDER` kümesi) RAISE.
+  - Neden `status` da: (a) yalnız `itemId` dirilmeyi (ölü → canlı: iptal geri alma, sevk geri alma,
+    iade, tambur/fason/kartela/sayım geri alması) görmez; Pasif kartta canlı top doğurmanın asıl
+    kapısız yolu dirilmedir.
+  - Hata SQLSTATE 23514 + kısıt adı → `error.middleware` 409 + Türkçe:
+    **"Bu topun kartı Pasif — geri almak için kartı önce 'Tükenene kadar'a alın."**
+  - Uygulama katmanı birinci hattır: her dirilme yolu `assertRollsRevivable` (sınıf E, aynı mesaj,
+    `ITEM_INACTIVE`) çağırır; bugün 11 yol (envanter iptal geri alma · sayım geri alma · sevk geri
+    alma · iade · tambur tekli/tam geri alma · fason kalan açma/kabul iptali/transfer geri alma ·
+    kartela kabul iptali · kurşun adım yeniden açma). `roll-finalize` ve `roll-step` canlı→canlı
+    geçiştir, dirilme değil. Cırcır: `test_item_usage_single_source` §3.
+  - Geri alma sırası: `master-data-unmerge` mezar taşını satırları geri yazmadan ÖNCE kaldırır.
+  - Bilinen sınırlar: tetikleyici mevcut satırları yeniden denetlemez (ADDITIVE); sipariş statüsü
+    kapalıdan açığa dönerse kalem tetikleyicisi koşmaz. İkisini de S8 health sayacı izler.
+  - **Prova (tekserp_prova9b_test, 23 Eylül dökümü, 2026-09-25):** ① ilk uygulama temiz, ikinci
+    uygulama idempotent · ② 8.381 top / 610 kalemin hiçbiri tetikleyiciye takılmaz; D1 ihlali 0 ·
+    ③ gerçek kartta birleştirme (275 top) 180 ms, geri alma 74 ms, kaynak ACTIVE'e döner · ④ maliyet
+    (EXPLAIN ANALYZE): canlı→canlı statü ~3 µs/satır · kart değişimi ~1,7 µs · dirilme ve INSERT
+    ~15 µs/satır (EXISTS okuması) · kalem ~1,5 µs; aynı işlemlerde K-A3 AFTER tetikleyicisi
+    ~2–20 kat daha pahalı. Yan bulgu: 2 top NOT VALID `rolls_qty_le_initial`i ihlal ediyor
+    (bu dilimle ilgisiz, öncesinden).
 - **Prova:** fabrikanın son dump'ının kopyasında restore → `migrate deploy` → 10 kartın PHASE_OUT'a
   geçtiği ve "Pasif kartta canlı referans = 0" sorgusu → bekçiler → profil boot. Canlı DB'de değil.
 
@@ -273,7 +296,8 @@ kopya kalmaz.
 ## 10. Gözlem ve bekçiler
 
 - `/api/admin/health` → `masterData.archivedWithLiveRefs` (beklenen 0) ve PHASE_OUT kartların
-  kalan referans sayısı.
+  kalan referans sayısı. Sayaç DB seddinin göremediği iki yolu da kapsar (§7): tetikleyiciden önce
+  doğmuş satır ve kapalıdan açığa dönen siparişin Pasif karttaki kalemi (1e 2026-09-25).
 - Bekçiler (yeni; iki sonda kuralıyla):
   1. **kullanım politikası** — sınıf × durum × §4.1 ayar seçeneği tablosu, servis çağrılarıyla
      (DB'li); her ayar değişikliği `try` içinde, geri alma `finally`de.
@@ -283,6 +307,9 @@ kopya kalmaz.
   4. **yarış** — eşzamanlı "Pasif'e geç" ile top girişi: biri kazanır, D1 hiç çiğnenmez.
   5. **göç sondası** — prova DB'sinde backfill sonrası D1 sorgusu 0.
   6. **tek yazar** — `items."isActive"`e yaşam döngüsü yazıcısı dışında yazan yol yok (AST).
+  7. **DB seddi** — `test_item_archive_db_guard`: Pasif kartta canlı top/açık kalem DB'de 409;
+     ölü top ve kapalı kalem geçer; dirilme uygulama katmanında aynı mesajla durur; ölü küme
+     TS ↔ SQL ikizi.
 - Uçtan uca: panel diyaloğu (gerçek Electron) ve tablet okutması (gerçek cihaz), senaryoya
   "kullanımdan kaldır → stok akar → pasife hazır → pasif" dalı eklenir.
 

@@ -58,6 +58,7 @@ import {
 } from "./helpers/kursun-bypass-eligibility.helper";
 import { resolveKursunBypassEnabled } from "./system-setting.service";
 import { uyari } from "../lib/logger";
+import { assertRollsRevivable } from "./helpers/item-usage.helper";
 
 /**
  * "Açık (pending) bypass ataması" yüklemi — `kursun-bypass-guard.helper`
@@ -1149,6 +1150,8 @@ export class KursunQcService {
         // A1_STOCK/SCRAP, kaliteye göre) çekiyor. Bunun TERSİ: topları IN_PRODUCTION'a ve
         // bu adıma geri çek (atomik claim: biri sevk edildi / çuvala girdi / tüketildiyse
         // count uyuşmaz → 409). Barkod/form GERİ ALINMAZ (kalıcı kimlik; re-finalize idempotent).
+        // Dirilme (SCRAP → IN_PRODUCTION dahil): kart Pasif olamaz (S5) — DB seddinin uygulama ikizi.
+        await assertRollsRevivable(tx, rollIds);
         const pulledBack = await tx.roll.updateMany({
           where: {
             id: { in: rollIds },

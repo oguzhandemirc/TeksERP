@@ -194,5 +194,52 @@ if (!process.env.ITEM_USAGE_SCAN_ROOT) {
   for (const k of Object.keys(EXEMPT)) check(`muaf hâlâ canlı: ${k.split("::")[0]}`, exemptUsed.has(k), "ölü muaf — sil");
 }
 
+console.log("\n=== 3) Dirilme yolları kart kapısından geçiyor (S5) ===");
+// Ölü statüyü BEKLEYİP canlı (ya da hesaplanan) statü YAZAN her `roll.update*` bir dirilmedir;
+// kapsayan fonksiyon `assertRollsRevivable` çağırmalı (DB seddi ikinci hat, çıkış yolunu bu söyler).
+const DEAD = ["SUBCONTRACTOR_CONSUMED", "TAMBUR_CONSUMED", "KARTELA_CONSUMED", "CANCELLED", "SHIPPED", "SCRAP"];
+const hasDead = (t: string) => DEAD.some((d) => new RegExp(`\\b${d}\\b`).test(t));
+function reviveSites(files: string[]): Array<{ at: string; fn: string; ok: boolean }> {
+  const out: Array<{ at: string; fn: string; ok: boolean }> = [];
+  for (const abs of files) {
+    const rel = path.relative(SRC, abs).split(path.sep).join("/");
+    const src = fs.readFileSync(abs, "utf8");
+    if (!/\.roll\.update/.test(src)) continue;
+    const sf = ts.createSourceFile(rel, src, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && /^update(Many)?$/.test(node.expression.name.text)
+        && ts.isPropertyAccessExpression(node.expression.expression) && node.expression.expression.name.text === "roll") {
+        const arg = node.arguments[0];
+        if (arg && ts.isObjectLiteralExpression(arg)) {
+          const where = objGet(arg, "where");
+          const data = objGet(arg, "data");
+          const whereStatus = where && ts.isObjectLiteralExpression(where) ? objGet(where, "status") : undefined;
+          const dataStatus = data && ts.isObjectLiteralExpression(data) ? objGet(data, "status") : undefined;
+          const dataDead = dataStatus && /^RollStatus\.[A-Z_]+$/.test(dataStatus.getText(sf)) && hasDead(dataStatus.getText(sf));
+          if (whereStatus && dataStatus && hasDead(whereStatus.getText(sf)) && !dataDead) {
+            let fnNode: ts.Node | undefined = node.parent;
+            while (fnNode && !(ts.isFunctionDeclaration(fnNode) || ts.isMethodDeclaration(fnNode) || ts.isArrowFunction(fnNode) || ts.isFunctionExpression(fnNode))) fnNode = fnNode.parent;
+            // Kapsayan EN DIŞ fonksiyon (tx ok fonksiyonu içindeyse servis metoduna kadar çık).
+            let outer: ts.Node | undefined = fnNode;
+            for (let n = fnNode?.parent; n; n = n.parent) if (ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n)) outer = n;
+            const body = outer ? outer.getText(sf) : "";
+            const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
+            out.push({ at: `${rel}:${line + 1}`, fn: enclosingFn(node), ok: /assertRollsRevivable\(/.test(body) });
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+  return out;
+}
+if (!process.env.ITEM_USAGE_SCAN_ROOT) {
+  const sites = reviveSites(FILES);
+  for (const s2 of sites.filter((x) => !x.ok)) console.log(`   · KAPISIZ dirilme: ${s2.at} (${s2.fn})`);
+  check(`körlük zemini: dirilme yolu bulundu — ${sites.length} (≥ 11, 2026-09-25 ölçümü)`, sites.length >= 11);
+  check("⭐ her dirilme yolu assertRollsRevivable çağırıyor", sites.every((x) => x.ok), `${sites.filter((x) => !x.ok).length} kapısız`);
+}
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

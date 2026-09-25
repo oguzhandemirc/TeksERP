@@ -170,6 +170,7 @@ import {
 import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-owner.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
+import { assertRollsRevivable } from "./helpers/item-usage.helper";
 
 // Re-export saf primitifler (geriye uyum — eskiden bu dosyada tanımlıydı).
 export {
@@ -4075,6 +4076,8 @@ export class ShippingService {
       // Toplar sevk ÖNCESİ rafına — `preShipStatus` yoksa (bu karardan önce sevk
       // edilmiş sevkiyat) WAREHOUSE. Statü bazında gruplu yazım; `tx` içinde
       // Promise.all YASAK olduğu için seri döngü.
+      // Dirilme: kart Pasif olamaz (S5) — DB seddinin uygulama ikizi, çıkış yolunu söyler.
+      await assertRollsRevivable(tx, { shipmentId, status: RollStatus.SHIPPED });
       const groups = await tx.roll.groupBy({
         by: ["preShipStatus"],
         where: { shipmentId, status: RollStatus.SHIPPED },

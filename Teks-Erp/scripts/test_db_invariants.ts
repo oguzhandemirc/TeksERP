@@ -812,6 +812,20 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
 // ─────────────────────────────────────────────────────────────────────────────
 const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: string }> = [
   {
+    table: "rolls",
+    trigger: "rolls_item_not_archived",
+    // Ürün arşivinin DB seddi (URUN-YASAM-DONGUSU.md §7, S5): Pasif kartta CANLI top doğamaz ve
+    // ölü top Pasif kartta dirilemez (UPDATE OF status — 1e kararı (b)). Tarihçe (ölü top) geçer.
+    timing: ["BEFORE INSERT OR UPDATE OF", "FOR EACH ROW"],
+    why: "D1 — Pasif kartta canlı top olamaz; kapıyı atlayan yol da durur (23514 → 409)",
+  },
+  {
+    table: "order_lines",
+    trigger: "order_lines_item_not_archived",
+    timing: ["BEFORE INSERT OR UPDATE OF", "FOR EACH ROW"],
+    why: "D1 — Pasif kartta açık sipariş kalemi olamaz (iptal kalem/kapalı sipariş tarihçedir, geçer)",
+  },
+  {
     table: "machine_stop_events",
     trigger: "machine_stop_events_block_classified_delete",
     // İnsan kararlı duruş (classifiedById dolu ∨ reasonSource ∈ {OPERATOR,SUPERVISOR}) DEFTERDİR:
@@ -898,6 +912,18 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     volatility: "v",
     bodyFragments: ['IS NOT DISTINCT FROM OLD."status"', 'INSERT INTO "roll_status_events"', 'NEW."cancelledById"'],
     why: "top durum defterinin yazarı: yalnız gerçek durum değişiminde satır; aktör iptal/fire anındaki cancelledById",
+  },
+  {
+    name: "rolls_archived_item_guard",
+    volatility: "v",
+    bodyFragments: ["'SUBCONTRACTOR_CONSUMED', 'TAMBUR_CONSUMED', 'KARTELA_CONSUMED', 'CANCELLED', 'SHIPPED', 'SCRAP'", "'ARCHIVED'", "rolls_item_not_archived", "23514"],
+    why: "ürün arşiv seddinin top gövdesi: ölü küme TS `DEAD_ROLL_STATUSES` ile aynı (bekçi test_item_archive_db_guard kıyaslar)",
+  },
+  {
+    name: "order_lines_archived_item_guard",
+    volatility: "v",
+    bodyFragments: ['"cancelledAt" IS NOT NULL', "'PENDING', 'APPROVED', 'PARTIAL_SHIPPED'", "order_lines_item_not_archived", "23514"],
+    why: "ürün arşiv seddinin kalem gövdesi: yalnız açık siparişin iptal edilmemiş kalemi engellenir",
   },
   {
     name: "machine_stop_block_classified_delete",
