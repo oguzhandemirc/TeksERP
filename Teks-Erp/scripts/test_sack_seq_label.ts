@@ -42,7 +42,15 @@ check("§1 seq null (havuz) → boş", formatSackSeqLabel(null, 5, { prefix: "SP
 check("§1 toplam 0 ise '/0' basılmaz", formatSackSeqLabel(1, 0, { prefix: "", showTotal: true }) === "1");
 check("§1 ⭐ ön ek temizliği: 9+ karakter / yasak karakter / yalnız boşluk → boş (sayı yine basılır)",
   sanitizeSackSeqPrefix("ABCDEFGHI") === "" && sanitizeSackSeqPrefix("<b>") === "" && sanitizeSackSeqPrefix("   ") === "" && sanitizeSackSeqPrefix("P-") === "P-");
-check("§1 ön ek HTML kaçışından geçer (html `esc(formatSackSeqLabel`)", /esc\(formatSackSeqLabel\(/.test(readFileSync(join(SRC, "services/document-render/shipment-dispatch.html.ts"), "utf-8")));
+// Sıra etiketi ön eki serbest metindir → HTML'e kaçışsız giremez. Hücreler tablo
+// modelinden çizilir: `seq` kolonu TEXT türünde ve TEXT hücresi `docCellHtml`de kaçırılır.
+{
+  const dispatchSrc = readFileSync(join(SRC, "services/document-render/shipment-dispatch.html.ts"), "utf-8");
+  const modelSrc = readFileSync(join(SRC, "services/document-render/doc-model.ts"), "utf-8");
+  check("§1 ön ek HTML kaçışından geçer (seq kolonu TEXT + TEXT hücresi `kit.esc`)",
+    (dispatchSrc.match(/key: "seq", label: L\.sira, align: "r" as const, kind: TEXT, value:/g) ?? []).length === 2 &&
+    /if \(kind\.t === "text"\) return kit\.esc\(v \?\? ""\);/.test(modelSrc));
+}
 
 // §2
 const html = readFileSync(join(SRC, "services/document-render/shipment-dispatch.html.ts"), "utf-8");

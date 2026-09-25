@@ -151,7 +151,7 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
  * iade DÜŞÜLMEZ. Dosya elden ele dolaştığında bu bağlam kaybolmasın diye not
  * rakamla aynı sayfada durur — "501 mi 452 mi" sorusunun cevabı burada.
  */
-function dispatchReportNotes(report: DispatchReport): string[] {
+export function dispatchReportNotes(report: DispatchReport): string[] {
   const notes: string[] = [];
   // Alanlar HTTP'den gelir: eski bir yanıt ya da yeni bir üretici (fasondan doğrudan
   // sevk fişi gibi) bunları taşımayabilir. Not BASILMAMASI kabul edilebilir, muhasebe

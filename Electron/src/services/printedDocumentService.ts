@@ -9,6 +9,7 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { CompanyLetterhead, DocumentConfig } from "@/services/documentConfig";
+import type { DocTablesPayload } from "@/lib/doc-tables-export";
 
 export type PrintedDocType =
   | "SHIPMENT_DISPATCH"
@@ -172,6 +173,39 @@ export const printedDocumentService = {
         },
         responseType: "text",
         headers: { Accept: "text/html" },
+      })
+      .then((r) => r.data),
+
+  /**
+   * Excel'in tabloları — PDF'i çizen AYNI kolon çözücüsünden (backend `/tables`).
+   * Parametreler `getHtml` ile aynı: aynı seçimle alınan PDF ve Excel aynı kolonu,
+   * satırı ve değeri taşır. data=null → belge TASLAK. Eski sunucuda uç yoktur (404) —
+   * çağıran eski Excel kurucusuna düşer; bu yüzden genel hata toast'ı bastırılır.
+   */
+  getTables: (
+    docType: PrintedDocType,
+    sourceId: string,
+    opts?: {
+      /** Önizlenen sürüm (null/undefined = güncel). */
+      version?: number | null;
+      draft?: boolean;
+      currentTemplate?: boolean;
+      rowNotes?: boolean;
+      rowTags?: boolean;
+      sections?: string[];
+    },
+  ): Promise<ApiResponse<DocTablesPayload | null>> =>
+    apiClient
+      .get<ApiResponse<DocTablesPayload | null>>(`${base}/${docType}/${sourceId}/tables`, {
+        params: {
+          ...(opts?.version != null ? { version: opts.version } : {}),
+          ...(opts?.currentTemplate ? { currentTemplate: 1 } : {}),
+          ...(opts?.draft ? { draft: 1 } : {}),
+          ...(opts?.rowNotes ? { rowNotes: 1 } : {}),
+          ...(opts?.rowTags ? { rowTags: 1 } : {}),
+          ...(opts?.sections?.length ? { sections: opts.sections.join(",") } : {}),
+        },
+        suppressErrorToast: true,
       })
       .then((r) => r.data),
 

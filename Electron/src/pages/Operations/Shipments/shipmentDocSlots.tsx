@@ -40,8 +40,9 @@ export function ReturnsNotice({ returns }: { returns: { count: number; meters: n
 
 /**
  * "İndir ▾" içindeki Excel kalemi. Menü AÇILDIĞINDA mount olur ve raporu ancak
- * o an ister — yapılandırılmış veri seti (3 bölüm + top id'leri) her belge
- * açılışında değil, gerçekten indirilecekse çekilir.
+ * o an ister — yapılandırılmış veri seti her belge açılışında değil, gerçekten
+ * indirilecekse çekilir. Sayfa sayısı yazılmaz: Excel PDF'te basılan listeleri
+ * taşır ve o sayı şablona/baskı seçeneğine göre değişir.
  */
 export function DispatchExcelItem({
   ready,
@@ -59,7 +60,7 @@ export function DispatchExcelItem({
   return (
     <DropdownMenuItem disabled={!ready} onSelect={onExport} className="gap-2">
       <FileSpreadsheet className="h-4 w-4" />
-      {ready ? "Excel (3 sayfa)" : "Excel (hazırlanıyor…)"}
+      {ready ? "Excel" : "Excel (hazırlanıyor…)"}
     </DropdownMenuItem>
   );
 }

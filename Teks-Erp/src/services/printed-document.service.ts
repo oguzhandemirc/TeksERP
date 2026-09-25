@@ -38,6 +38,7 @@ import {
 import { readSackSeqFormat, type SackSeqFormat } from "./helpers/sack-seq.helper";
 import { ApiResponse } from "../types/api.types";
 import { SAMPLE_PRINTED_DOCS } from "./document-render/sample-data";
+import type { DocTablesPayload } from "./document-render/doc-model";
 
 /** Builder'ların aldığı istemci — tx içinden (freeze) veya dışından (reissue/lazy) çalışır. */
 export type PrintedDocDb = Prisma.TransactionClient | typeof prisma;
@@ -202,6 +203,14 @@ export interface BuilderEntry {
       packingLot?: boolean;
     },
   ) => string;
+  /**
+   * Aynı snapshot + meta'dan Excel'in TABLOLARINI üretir — renderer'ın kolon
+   * çözücüsünü kullanmak ZORUNDA (PDF ↔ Excel eşitliği). Verilmezse `getTables` 400.
+   */
+  renderTables?: (
+    snapshot: PrintedDocSnapshot,
+    meta: DocRenderMeta,
+  ) => DocTablesPayload;
 }
 
 const builders = new Map<PrintedDocType, BuilderEntry>();
@@ -387,6 +396,44 @@ async function buildRenderExtras(
   };
 }
 
+/** Tek seferlik baskı seçenekleri — HTML ve Excel (tablo) uçları aynısını alır. */
+export interface DocRenderOpts {
+  allowDraft?: boolean;
+  useCurrentConfig?: boolean;
+  /** Basan kullanıcı (damga için) — controller req.user'dan geçirir. */
+  printedBy?: string | null;
+  /** Tek seferlik baskı notu — persist edilmez, yalnız bu render'a girer. */
+  printNote?: string | null;
+  /**
+   * Tek seferlik "satır notlarını bu baskıda göster" (?rowNotes=1). Kalıcı kolon
+   * ayarını EZER (OR); persist EDİLMEZ — ne ayara ne snapshot'a yazılır, yeni
+   * belge versiyonu doğurmaz.
+   */
+  forceRowNotes?: boolean;
+  /**
+   * Tek seferlik "çuval izlerini bu baskıda göster" (?rowTags=1). `forceRowNotes`
+   * ile BİNDİRİLMEZ — ikisi farklı hassasiyette veri (bkz. `resolveLiveRowTags`).
+   */
+  forceRowTags?: boolean;
+  /**
+   * Tek seferlik LİSTE seçimi (?sections=) — "sadece çuval listesi bas".
+   * Kalıcı bölüm ayarını EZER, persist EDİLMEZ. Belge tipi tanımıyorsa
+   * renderer bunu sessizce yok sayar.
+   */
+  listSections?: string[];
+  /** Üç listeyi aynı sayfada akıt (?merge=1). Varsayılan: ayrı sayfalar. */
+  mergeSections?: boolean;
+  /**
+   * TEK SEFERLİK kâğıt boyu (?pageSize=A4|A5). Kalıcı ayarı VE donmuş
+   * snapshot'ın kendi boyunu EZER; hiçbir yere yazılmaz, yeni versiyon
+   * doğurmaz — `forceRowNotes`/`listSections` ile aynı sözleşme.
+   */
+  pageSize?: "A4" | "A5";
+}
+
+/** Renderer'a giden meta — `renderHtml` ve `renderTables` AYNI nesneyi alır. */
+export type DocRenderMeta = Parameters<NonNullable<BuilderEntry["renderHtml"]>>[1];
+
 export class PrintedDocumentService {
   /**
    * FREEZE — sevk olayı anında v1 belgeyi dondurur. Domain servisin sevk
@@ -512,55 +559,18 @@ export class PrintedDocumentService {
   }
 
   /**
-   * Baskı-hazır HTML — güncel belgeyi alır, docType'a kayıtlı renderHtml ile
-   * tek-kaynak HTML üretir. data:null → kaynak TASLAK (henüz donmuş belge yok).
-   * allowDraft + builder'da buildPreview varsa, donmuş belge yoksa canlı veriden
-   * TASLAK filigranlı HTML üretilir (kaydedilmez) — sevk öncesi önizleme.
+   * Bir baskının GİRDİLERİ — güncel/versiyonlu snapshot + canlı meta (ad rejimi,
+   * bayraklar, notlar, tek seferlik seçimler). HTML (`getHtml`) ve Excel tabloları
+   * (`getTables`) BU çözücüden geçer: ikisi ayrı yoldan kurulsaydı aynı belgenin
+   * PDF'i ile Excel'i yine sessizce ayrışırdı. null → kaynak TASLAK.
    */
-  async getHtml(
+  private async resolveRenderInputs(
     docType: PrintedDocType,
     sourceId: string,
-    version?: number,
-    opts?: {
-      allowDraft?: boolean;
-      useCurrentConfig?: boolean;
-      /** Basan kullanıcı (damga için) — controller req.user'dan geçirir. */
-      printedBy?: string | null;
-      /** Tek seferlik baskı notu — persist edilmez, yalnız bu render'a girer. */
-      printNote?: string | null;
-      /**
-       * Tek seferlik "satır notlarını bu baskıda göster" (?rowNotes=1). Kalıcı kolon
-       * ayarını EZER (OR); persist EDİLMEZ — ne ayara ne snapshot'a yazılır, yeni
-       * belge versiyonu doğurmaz.
-       */
-      forceRowNotes?: boolean;
-      /**
-       * Tek seferlik "çuval izlerini bu baskıda göster" (?rowTags=1). `forceRowNotes`
-       * ile BİNDİRİLMEZ — ikisi farklı hassasiyette veri (bkz. `resolveLiveRowTags`).
-       */
-      forceRowTags?: boolean;
-      /**
-       * Tek seferlik LİSTE seçimi (?sections=) — "sadece çuval listesi bas".
-       * Kalıcı bölüm ayarını EZER, persist EDİLMEZ. Belge tipi tanımıyorsa
-       * renderer bunu sessizce yok sayar.
-       */
-      listSections?: string[];
-      /** Üç listeyi aynı sayfada akıt (?merge=1). Varsayılan: ayrı sayfalar. */
-      mergeSections?: boolean;
-      /**
-       * TEK SEFERLİK kâğıt boyu (?pageSize=A4|A5). Kalıcı ayarı VE donmuş
-       * snapshot'ın kendi boyunu EZER; hiçbir yere yazılmaz, yeni versiyon
-       * doğurmaz — `forceRowNotes`/`listSections` ile aynı sözleşme.
-       */
-      pageSize?: "A4" | "A5";
-    },
-  ): Promise<ApiResponse<{ html: string } | null>> {
+    version: number | undefined,
+    opts: DocRenderOpts | undefined,
+  ): Promise<{ snapshot: PrintedDocSnapshot; meta: DocRenderMeta } | null> {
     const entry = requireBuilder(docType);
-    if (!entry.renderHtml) {
-      throw AppError.badRequest(
-        `Bu belge tipi için HTML çıktısı tanımlı değil: ${docType}`,
-      );
-    }
 
     // Kayıtlı not (annotation) tanımlıysa ephemeral ?printNote='ı EZER — donmuş
     // çekirdeğe girmeden canlı çözülür (tekrar baskıda da çıkar). Yoksa ephemeral.
@@ -640,13 +650,10 @@ export class PrintedDocumentService {
         printedBy: opts?.printedBy,
         printNote: liveNote,
       });
-      const html = entry.renderHtml(snapshot, {
-        status: rec.status,
-        voidReason: rec.voidReason,
-        ...extras,
-        ...noteMeta,
-      });
-      return { success: true, data: { html } };
+      return {
+        snapshot,
+        meta: { status: rec.status, voidReason: rec.voidReason, ...extras, ...noteMeta },
+      };
     }
 
     // Donmuş belge yok → istenmişse canlı TASLAK önizlemesi (kaydedilmez).
@@ -664,11 +671,55 @@ export class PrintedDocumentService {
           printedBy: opts?.printedBy,
           printNote: liveNote,
         });
-        const html = entry.renderHtml(snapshot, { draft: true, ...extras, ...noteMeta });
-        return { success: true, data: { html } };
+        return { snapshot, meta: { draft: true, ...extras, ...noteMeta } };
       }
     }
-    return { success: true, data: null };
+    return null;
+  }
+
+  /**
+   * Baskı-hazır HTML — güncel belgeyi alır, docType'a kayıtlı renderHtml ile
+   * tek-kaynak HTML üretir. data:null → kaynak TASLAK (henüz donmuş belge yok).
+   * allowDraft + builder'da buildPreview varsa, donmuş belge yoksa canlı veriden
+   * TASLAK filigranlı HTML üretilir (kaydedilmez) — sevk öncesi önizleme.
+   */
+  async getHtml(
+    docType: PrintedDocType,
+    sourceId: string,
+    version?: number,
+    opts?: DocRenderOpts,
+  ): Promise<ApiResponse<{ html: string } | null>> {
+    const entry = requireBuilder(docType);
+    if (!entry.renderHtml) {
+      throw AppError.badRequest(
+        `Bu belge tipi için HTML çıktısı tanımlı değil: ${docType}`,
+      );
+    }
+    const inputs = await this.resolveRenderInputs(docType, sourceId, version, opts);
+    if (!inputs) return { success: true, data: null };
+    return { success: true, data: { html: entry.renderHtml(inputs.snapshot, inputs.meta) } };
+  }
+
+  /**
+   * Excel'in TABLOLARI — `getHtml` ile AYNI girdilerden (`resolveRenderInputs`) ve
+   * renderer'ın AYNI kolon çözücüsünden: PDF'te görünen kolon/satır/değer burada da
+   * görünür, opt-in kolon ikisinde birden kapalı doğar. data:null → TASLAK.
+   */
+  async getTables(
+    docType: PrintedDocType,
+    sourceId: string,
+    version?: number,
+    opts?: DocRenderOpts,
+  ): Promise<ApiResponse<DocTablesPayload | null>> {
+    const entry = requireBuilder(docType);
+    if (!entry.renderTables) {
+      throw AppError.badRequest(
+        `Bu belge tipi için tablo (Excel) çıktısı tanımlı değil: ${docType}`,
+      );
+    }
+    const inputs = await this.resolveRenderInputs(docType, sourceId, version, opts);
+    if (!inputs) return { success: true, data: null };
+    return { success: true, data: entry.renderTables(inputs.snapshot, inputs.meta) };
   }
 
   /**

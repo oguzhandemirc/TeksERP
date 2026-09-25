@@ -8,7 +8,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { PrintedDocType } from "@prisma/client";
-import { printedDocumentService } from "../services/printed-document.service";
+import { printedDocumentService, type DocRenderOpts } from "../services/printed-document.service";
 import "../types/express-augment";
 
 const docTypeSchema = z.nativeEnum(PrintedDocType);
@@ -135,10 +135,77 @@ function parseParams(req: Request): { docType: PrintedDocType; sourceId: string 
   };
 }
 
+/**
+ * Baskı sorgu parametreleri — HTML (`/html`) ve Excel tabloları (`/tables`) AYNI
+ * çözümü kullanır: aynı `?sections/rowNotes/rowTags/currentTemplate/version`
+ * iki çıkışta aynı belgeyi üretir.
+ */
+function parseRenderQuery(req: Request): { version: number | undefined; opts: DocRenderOpts } {
+  const version =
+    req.query.version != null
+      ? versionSchema.parse(req.query.version)
+      : undefined;
+  // ?draft=1 → donmuş belge yoksa canlı TASLAK önizlemesi (sevk öncesi baskı).
+  const allowDraft = req.query.draft === "1" || req.query.draft === "true";
+  // ?currentTemplate=1 → içerik donuk kalır, görünüm (şablon+künye) güncel
+  // ayardan çözülür (yeniden baskıda "güncel şablonla" seçeneği).
+  const useCurrentConfig =
+    req.query.currentTemplate === "1" || req.query.currentTemplate === "true";
+  // ?printNote= → tek seferlik baskı notu (persist edilmez, yalnız bu render).
+  const printNote =
+    typeof req.query.printNote === "string" ? req.query.printNote.slice(0, 300) : null;
+  // ?rowNotes=1 → satır notlarını (çuval yorumu) BU baskıda göster. Kalıcı kolon
+  // ayarını EZER (OR); ayara da snapshot'a da YAZILMAZ, yeni versiyon doğurmaz.
+  const forceRowNotes = req.query.rowNotes === "1" || req.query.rowNotes === "true";
+  // ?rowTags=1 → çuval İZLERİNİ (etiket) BU baskıda göster. Aynı sözleşme, AYRI
+  // bayrak: `?rowNotes=1`e BİNDİRİLMEZ — iz ile yorum farklı hassasiyette veridir
+  // ve tek bayrak, "notu bas" diyene sessizce izleri de bastırırdı (ve tersi).
+  const forceRowTags = req.query.rowTags === "1" || req.query.rowTags === "true";
+  // ?sections=urun,cuval → yalnız seçili listeleri bas (tek seferlik; kalıcı
+  // bölüm ayarını EZER, hiçbir yere yazılmaz). Boş/geçersiz → yok sayılır ve
+  // kalıcı ayar geçerli kalır; "hiçbirini basma" bilinçli olarak MÜMKÜN DEĞİL
+  // (gövdesiz belge üretmesin — renderer da aynı kuralı uygular).
+  const listSections =
+    typeof req.query.sections === "string" && req.query.sections.trim()
+      ? req.query.sections
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 10)
+      : undefined;
+  // ?merge=1 → listeleri aynı sayfada akıt. Varsayılan AYRI sayfa.
+  const mergeSections = req.query.merge === "1" || req.query.merge === "true";
+  // ?pageSize=A4|A5 → TEK SEFERLİK kâğıt boyu ezmesi (2026-08-09).
+  // Refakat kartındaki (`traveler-card.controller`) sözleşmenin AYNISI:
+  // kalıcı ayara da donmuş snapshot'a da YAZILMAZ, yeni versiyon DOĞURMAZ.
+  // Meşruiyeti: kâğıt boyu SUNUM kararıdır, belgenin içeriği değil — aynı
+  // belge A4 yazıcıdan da A5 yazıcıdan da çıkabilmeli.
+  // ⚠️ Geçersiz değer SESSİZCE yok sayılır, 400'e düşülmez: yazım hatası
+  // yüzünden sahayı kâğıtsız bırakmak, kalıcı ayarla basmaktan kötüdür.
+  const rawPageSize = req.query.pageSize;
+  const pageSize =
+    rawPageSize === "A4" || rawPageSize === "A5" ? rawPageSize : undefined;
+  return {
+    version,
+    opts: {
+      allowDraft,
+      useCurrentConfig,
+      printedBy: req.user?.username ?? null,
+      printNote,
+      forceRowNotes,
+      forceRowTags,
+      listSections,
+      mergeSections,
+      pageSize,
+    },
+  };
+}
+
 export class PrintedDocumentController {
   constructor() {
     this.getCurrent = this.getCurrent.bind(this);
     this.getHtml = this.getHtml.bind(this);
+    this.getTables = this.getTables.bind(this);
     this.getSampleHtml = this.getSampleHtml.bind(this);
     this.listVersions = this.listVersions.bind(this);
     this.getVersion = this.getVersion.bind(this);
@@ -166,61 +233,8 @@ export class PrintedDocumentController {
   async getHtml(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { docType, sourceId } = parseParams(req);
-      const version =
-        req.query.version != null
-          ? versionSchema.parse(req.query.version)
-          : undefined;
-      // ?draft=1 → donmuş belge yoksa canlı TASLAK önizlemesi (sevk öncesi baskı).
-      const allowDraft = req.query.draft === "1" || req.query.draft === "true";
-      // ?currentTemplate=1 → içerik donuk kalır, görünüm (şablon+künye) güncel
-      // ayardan çözülür (yeniden baskıda "güncel şablonla" seçeneği).
-      const useCurrentConfig =
-        req.query.currentTemplate === "1" || req.query.currentTemplate === "true";
-      // ?printNote= → tek seferlik baskı notu (persist edilmez, yalnız bu render).
-      const printNote =
-        typeof req.query.printNote === "string" ? req.query.printNote.slice(0, 300) : null;
-      // ?rowNotes=1 → satır notlarını (çuval yorumu) BU baskıda göster. Kalıcı kolon
-      // ayarını EZER (OR); ayara da snapshot'a da YAZILMAZ, yeni versiyon doğurmaz.
-      const forceRowNotes = req.query.rowNotes === "1" || req.query.rowNotes === "true";
-      // ?rowTags=1 → çuval İZLERİNİ (etiket) BU baskıda göster. Aynı sözleşme, AYRI
-      // bayrak: `?rowNotes=1`e BİNDİRİLMEZ — iz ile yorum farklı hassasiyette veridir
-      // ve tek bayrak, "notu bas" diyene sessizce izleri de bastırırdı (ve tersi).
-      const forceRowTags = req.query.rowTags === "1" || req.query.rowTags === "true";
-      // ?sections=urun,cuval → yalnız seçili listeleri bas (tek seferlik; kalıcı
-      // bölüm ayarını EZER, hiçbir yere yazılmaz). Boş/geçersiz → yok sayılır ve
-      // kalıcı ayar geçerli kalır; "hiçbirini basma" bilinçli olarak MÜMKÜN DEĞİL
-      // (gövdesiz belge üretmesin — renderer da aynı kuralı uygular).
-      const listSections =
-        typeof req.query.sections === "string" && req.query.sections.trim()
-          ? req.query.sections
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-              .slice(0, 10)
-          : undefined;
-      // ?merge=1 → listeleri aynı sayfada akıt. Varsayılan AYRI sayfa.
-      const mergeSections = req.query.merge === "1" || req.query.merge === "true";
-      // ?pageSize=A4|A5 → TEK SEFERLİK kâğıt boyu ezmesi (2026-08-09).
-      // Refakat kartındaki (`traveler-card.controller`) sözleşmenin AYNISI:
-      // kalıcı ayara da donmuş snapshot'a da YAZILMAZ, yeni versiyon DOĞURMAZ.
-      // Meşruiyeti: kâğıt boyu SUNUM kararıdır, belgenin içeriği değil — aynı
-      // belge A4 yazıcıdan da A5 yazıcıdan da çıkabilmeli.
-      // ⚠️ Geçersiz değer SESSİZCE yok sayılır, 400'e düşülmez: yazım hatası
-      // yüzünden sahayı kâğıtsız bırakmak, kalıcı ayarla basmaktan kötüdür.
-      const rawPageSize = req.query.pageSize;
-      const pageSize =
-        rawPageSize === "A4" || rawPageSize === "A5" ? rawPageSize : undefined;
-      const result = await printedDocumentService.getHtml(docType, sourceId, version, {
-        allowDraft,
-        useCurrentConfig,
-        printedBy: req.user?.username ?? null,
-        printNote,
-        forceRowNotes,
-        forceRowTags,
-        listSections,
-        mergeSections,
-        pageSize,
-      });
+      const { version, opts } = parseRenderQuery(req);
+      const result = await printedDocumentService.getHtml(docType, sourceId, version, opts);
       const data = result.data as { html: string } | null;
       if (!data) {
         res
@@ -229,6 +243,28 @@ export class PrintedDocumentController {
         return;
       }
       res.type("html").send(data.html);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /api/printed-documents/:docType/:sourceId/tables
+   * Excel'in tabloları (JSON) — `/html` ile AYNI parametreler ve AYNI kolon çözücüsü:
+   * PDF'te görünen kolon/satır/değer Excel'de de görünür. Kaynak henüz taslaksa 409.
+   */
+  async getTables(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { docType, sourceId } = parseParams(req);
+      const { version, opts } = parseRenderQuery(req);
+      const result = await printedDocumentService.getTables(docType, sourceId, version, opts);
+      if (!result.data) {
+        res
+          .status(409)
+          .json({ success: false, message: "Belge henüz hazır değil (taslak)." });
+        return;
+      }
+      res.json(result);
     } catch (err) {
       next(err);
     }

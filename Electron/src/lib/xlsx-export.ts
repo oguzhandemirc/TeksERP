@@ -14,6 +14,8 @@ export interface SheetColumn {
   width?: number;
   /** Sayı/tarih biçimi — örn "#,##0.0" (metre/kg), "#,##0" (adet), "dd.mm.yyyy hh:mm". */
   numFmt?: string;
+  /** Veri hücrelerinin yatay hizası — belgedeki kolon hizasının aynısı. */
+  align?: "left" | "right" | "center";
 }
 
 export interface SheetSpec {
@@ -27,6 +29,9 @@ export interface SheetSpec {
    *  gibi. Rakamın nasıl okunacağını söyleyen not, rakamla aynı dosyada durmalı —
    *  aksi halde Excel elden ele dolaşırken bağlam kaybolur. */
   notes?: string[];
+  /** Tablonun ÜSTÜNE basılan belge başlığı satırları (ör. [etiket, değer]) — tek
+   *  hücreli satır kalın basılır. Verilmezse sayfa bugünkü gibi başlık satırıyla açılır. */
+  preamble?: Array<Array<string | number | null>>;
 }
 
 const HEADER_FILL = "FFEFEFEF"; // açık gri başlık zemini
@@ -42,14 +47,33 @@ export async function buildWorkbook(sheets: SheetSpec[]): Promise<Blob> {
 
   for (const spec of sheets) {
     const ws = wb.addWorksheet(sanitizeSheetName(spec.name));
-    ws.columns = spec.columns.map((c) => ({ header: c.header, key: c.key, width: c.width ?? 16 }));
+    const preamble = spec.preamble ?? [];
+    let headerRowNo = 1;
+    if (preamble.length) {
+      // Başlık bloğu önce; kolon başlığı satırı bloktan sonra elle yazılır.
+      ws.columns = spec.columns.map((c) => ({ key: c.key, width: c.width ?? 16 }));
+      for (const line of preamble) {
+        const pr = ws.addRow(line);
+        if (line.length === 1) pr.font = { bold: true };
+        else pr.getCell(1).font = { bold: true };
+      }
+      ws.addRow([]);
+      headerRowNo = ws.addRow(spec.columns.map((c) => c.header)).number;
+    } else {
+      ws.columns = spec.columns.map((c) => ({ header: c.header, key: c.key, width: c.width ?? 16 }));
+    }
 
-    const headerRow = ws.getRow(1);
+    const headerRow = ws.getRow(headerRowNo);
     headerRow.font = { bold: true };
     headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
     headerRow.alignment = { vertical: "middle" };
 
-    for (const r of spec.rows) ws.addRow(r);
+    const aligned = spec.columns.map((c, idx) => ({ idx: idx + 1, align: c.align })).filter((c) => c.align);
+    const alignRow = (row: { getCell: (n: number) => { alignment: unknown } }) => {
+      for (const c of aligned) row.getCell(c.idx).alignment = { horizontal: c.align };
+    };
+
+    for (const r of spec.rows) alignRow(ws.addRow(r));
 
     spec.columns.forEach((c, idx) => {
       if (c.numFmt) ws.getColumn(idx + 1).numFmt = c.numFmt;
@@ -58,6 +82,7 @@ export async function buildWorkbook(sheets: SheetSpec[]): Promise<Blob> {
     if (spec.totalRow) {
       const tr = ws.addRow(spec.totalRow);
       tr.font = { bold: true };
+      alignRow(tr);
     }
 
     if (spec.notes?.length) {
@@ -68,8 +93,10 @@ export async function buildWorkbook(sheets: SheetSpec[]): Promise<Blob> {
       }
     }
 
-    ws.views = [{ state: "frozen", ySplit: 1 }];
-    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: spec.columns.length } };
+    ws.views = [{ state: "frozen", ySplit: headerRowNo }];
+    if (spec.columns.length > 0) {
+      ws.autoFilter = { from: { row: headerRowNo, column: 1 }, to: { row: headerRowNo, column: spec.columns.length } };
+    }
   }
 
   const buf = await wb.xlsx.writeBuffer();

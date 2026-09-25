@@ -33,7 +33,15 @@ import {
   docPrintNoteHtml,
   docStampsBar,
 } from "./doc-style";
-import { buildDocTable } from "./doc-table";
+import { buildDocTable, type DocColumnCfg } from "./doc-table";
+import {
+  resolveDocTable,
+  toHtmlCols,
+  type DocCellKind,
+  type DocColSpec,
+  type DocFmtKit,
+  type DocTablesPayload,
+} from "./doc-model";
 import {
   DOC_DENSITY,
   docChromeCss,
@@ -368,10 +376,6 @@ function fmtTr(n: number | null | undefined, dec: number): string {
   return (neg ? "-" : "") + grouped + (dec > 0 && frac ? `,${frac}` : "");
 }
 
-/** Metre/kg: 2 ondalık (mevcut muhasebe fişiyle aynı görünüm). */
-const fmtQty = (n: number | null | undefined): string => fmtTr(n, 2);
-/** Adet (top/paket): tam sayı. */
-const fmtCount = (n: number | null | undefined): string => fmtTr(n, 0);
 
 /** Bir bölüm açık mı — yalnız açıkça false ise gizle (varsayılan: göster). */
 function sectionOn(sections: Record<string, boolean> | undefined, key: string): boolean {
@@ -407,20 +411,44 @@ function listSectionOn(
   return sectionOn(cfg.sections, key);
 }
 
-export function renderShipmentDispatchHtml(
-  snapshot: PrintedDocSnapshot,
-  meta: RenderMeta = {},
-): string {
+const TEXT: DocCellKind = { t: "text" };
+/** Metre/kg: 2 ondalık (muhasebe fişiyle aynı görünüm). */
+const QTY: DocCellKind = { t: "num", dec: 2 };
+/** Adet (top/paket): tam sayı. */
+const COUNT: DocCellKind = { t: "num", dec: 0 };
+/** Ambalaj no — gruplamasız tam sayı. */
+const INT: DocCellKind = { t: "int" };
+/** En — yuvarlanmış tam sayı + " cm". */
+const WIDTH_CM: DocCellKind = { t: "int", suffix: " cm" };
+
+const FMT_KIT: DocFmtKit = { esc, fmtTr };
+
+/** Başlık bloğunun bir satırı — HTML ve Excel aynı listeyi basar. */
+interface HeaderItem {
+  key: string;
+  label: string;
+  value: string;
+}
+
+const item = (key: string, label: string, value: string): HeaderItem => ({ key, label, value });
+
+/** Bir liste bölümünün tanımı — HTML `buildDocTable`a, Excel `resolveDocTable`a gider. */
+interface DispatchSection<R> {
+  key: DispatchListSection;
+  caption: string;
+  colCfg: DocColumnCfg | undefined;
+  rows: R[];
+  cols: DocColSpec<R>[];
+}
+
+/**
+ * Sevk irsaliyesinin İÇERİK kararları — TEK ÇÖZÜCÜ. HTML (`renderShipmentDispatchHtml`)
+ * ve Excel (`renderShipmentDispatchTables`) buradan türer; hangi kolonun, hangi
+ * başlıkla, hangi değerle basılacağı ikinci bir yerde yeniden kurulmaz.
+ */
+function shipmentDispatchParts(snapshot: PrintedDocSnapshot, meta: RenderMeta) {
   const doc = snapshot.doc as unknown as ShipmentDispatchDoc;
   const cfg = snapshot.docConfigOverride ?? {};
-  // Yoğunluk profili sayfa boyutundan çözülür; ortak chrome CSS'i oradan beslenir.
-  const pageSize = resolveDocPageSize(cfg.style?.pageSize);
-  const d = DOC_DENSITY[pageSize];
-  const style = resolveDocStyle(cfg.style, { marginMm: 9 });
-  const logo = docLogoHtml(meta.logoDataUrl, cfg);
-  const company = snapshot.company;
-  const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
-
   const h = doc.header;
   const t = doc.totals;
   // Enler boş bırakılsın mı (kolon durur, değer gelmez — elle doldurma).
@@ -430,33 +458,10 @@ export function renderShipmentDispatchHtml(
       ? "en"
       : "tr";
   const L = LABELS[lang];
-
   const title = (cfg.titleOverride?.trim() || L.title).toUpperCase();
-  const showLetterhead = cfg.showLetterhead !== false;
-  const showSignatures = cfg.showSignatures !== false;
-  const sigLabels =
-    cfg.signatureLabels && cfg.signatureLabels.length
-      ? cfg.signatureLabels
-      : [...L.sigDefaults];
   const products = doc.products ?? [];
   const sacks = doc.sacks ?? [];
   const cekiRows = doc.cekiRows ?? [];
-
-  // Antet (gönderen) satırları — sadece dolu olanlar.
-  const lhLines = showLetterhead
-    ? [lh.addressLine, lh.phone, lh.taxInfo ? `V.D./No: ${lh.taxInfo}` : "", ...(lh.extraLines ?? [])]
-        .filter((s) => s && s.trim())
-        .map((s) => `<div class="lh-line">${esc(s)}</div>`)
-        .join("")
-    : "";
-
-  const watermark = meta.draft
-    ? `<div class="wm wm-draft">${L.wmDraft}</div>`
-    : meta.status === "VOIDED"
-      ? `<div class="wm">${L.wmVoid}</div>`
-      : meta.status === "SUPERSEDED"
-        ? `<div class="wm wm-old">${L.wmOld}</div>`
-        : "";
 
   // İhracat Kodu — TEK satır: şube kodu doluysa onu, yoksa müşteri ihracat kodunu
   // bas (branchCode ?? customerExportCode). "exportCode" section toggle'ıyla açılıp
@@ -473,24 +478,22 @@ export function renderShipmentDispatchHtml(
   const showOrders = sectionOn(cfg.sections, "orders");
   const shipCode =
     h.exportCode !== undefined ? h.exportCode : pickExportCode({ branchCode: h.branchCode, customerExportCode: h.customerExportCode });
-  const customerSub = [
-    showTaxNo && h.customerTaxNumber ? `${L.taxNo}: ${esc(h.customerTaxNumber)}` : "",
-    showBranchName && h.branchName ? `${L.branch}: ${esc(h.branchName)}` : "",
-    showExportCode && shipCode ? `${L.exportCode}: ${esc(shipCode)}` : "",
-    showCustomerCode && h.customerCode ? `${L.code}: ${esc(h.customerCode)}` : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const customerSub: HeaderItem[] = [
+    showTaxNo && h.customerTaxNumber ? item("taxNo", L.taxNo, h.customerTaxNumber) : null,
+    showBranchName && h.branchName ? item("branchName", L.branch, h.branchName) : null,
+    showExportCode && shipCode ? item("exportCode", L.exportCode, shipCode) : null,
+    showCustomerCode && h.customerCode ? item("customerCode", L.code, h.customerCode) : null,
+  ].filter((x): x is HeaderItem => x !== null);
 
   const yon = h.destination === "EXPORT" ? L.export : L.domestic;
-  const headRight = [
-    showDocNo ? `<div class="ln">${L.docNo}: <b>${esc(h.shipmentNo)}</b></div>` : "",
-    showDate ? `<div class="ln">${L.date}: <b>${esc(fmtDate(h.date))}</b></div>` : "",
-    showDirection ? `<div class="ln">${L.direction}: <b>${esc(yon)}</b></div>` : "",
+  const headRight: HeaderItem[] = [
+    showDocNo ? item("docNo", L.docNo, h.shipmentNo) : null,
+    showDate ? item("date", L.date, fmtDate(h.date)) : null,
+    showDirection ? item("direction", L.direction, yon) : null,
     showProcedure && procedureCodeForDestination(h.destination, h.procedureCode)
-      ? `<div class="ln">${L.customsNo}: <b>${esc(h.procedureCode as string)}</b></div>`
-      : "",
-    showOrders && h.orderNos ? `<div class="ln sub">${L.orders}: ${esc(h.orderNos)}</div>` : "",
+      ? item("procedureCode", L.customsNo, h.procedureCode as string)
+      : null,
+    showOrders && h.orderNos ? item("orders", L.orders, h.orderNos) : null,
     // ÇUVAL ADEDİ — yalnız operatör BEYAN ETTİYSE basılır.
     //
     // ⚠️ Beyan yokken tek bayt bile eklenmez: bugüne kadar basılmış her irsaliye
@@ -500,61 +503,16 @@ export function renderShipmentDispatchHtml(
     // Beyan varsa İKİ rakam birlikte çıkar: fiziksel adet büyük, sistemin
     // saydığı kayıt adedi parantezde. Biri diğerinin yerine geçmez — sahada
     // 10 çuval tek çuval kaydına yazıldığı için fark meşrudur ve fark bilgidir.
-    t.manualSackCount != null
-      ? `<div class="ln">${L.sackTotal}: <b>${t.manualSackCount}</b> <span class="sub">(${t.sackCount} ${L.sackSystem})</span></div>`
-      : "",
-  ]
-    .filter(Boolean)
-    .join("");
+    t.manualSackCount != null ? item("sackTotal", L.sackTotal, `${t.manualSackCount}`) : null,
+  ].filter((x): x is HeaderItem => x !== null);
 
-  const vehicleBits = sectionOn(cfg.sections, "vehicleInfo")
+  const vehicle: HeaderItem[] = sectionOn(cfg.sections, "vehicleInfo")
     ? [
-        h.plateNumber ? `${L.plate}: <b>${esc(h.plateNumber)}</b>` : "",
-        h.driverName ? `${L.driver}: <b>${esc(h.driverName)}</b>` : "",
-        h.carrier ? `${L.carrier}: <b>${esc(h.carrier)}</b>` : "",
-      ].filter(Boolean)
+        h.plateNumber ? item("plate", L.plate, h.plateNumber) : null,
+        h.driverName ? item("driver", L.driver, h.driverName) : null,
+        h.carrier ? item("carrier", L.carrier, h.carrier) : null,
+      ].filter((x): x is HeaderItem => x !== null)
     : [];
-  const vehicleRow = vehicleBits.length
-    ? `<div class="meta-row">${vehicleBits.join(" &nbsp;·&nbsp; ")}</div>`
-    : "";
-
-  // Sayfa ayrımı: BASILAN listelerin ilki hariç hepsi yeni sayfadan başlar.
-  // Sayaç yalnız gerçekten render edilen bölümde artar (kapalı bölüm sayfa
-  // açmaz) — üç bölüm kaynak sırasıyla değerlendirildiği için sıra garantili.
-  const splitPages = meta.mergeSections !== true;
-
-  // ── KİMLİK ŞERİDİ (`sections.listHeader`, 2026-09-10) ─────────────────────
-  // OPT-IN: `sectionOn` blocklist'i (anahtar yoksa AÇIK) burada YANLIŞ olurdu —
-  // bugüne kadar donmuş her irsaliyenin yeniden baskısı sormadan değişirdi.
-  // Bu yüzden açık `=== true`.
-  //
-  // Şerit İLK basılan listeye KONMAZ: o listenin sayfasında zaten tam antet var
-  // ve aynı bilgiyi iki kez basmak sahanın istemediği tekrarı üretirdi. Sonraki
-  // listeler kendi sayfalarında antetsiz kaldıkları için şeridi alırlar.
-  //
-  // `splitPages` koşulu da load-bearing: ?merge=1 ile listeler tek sayfada
-  // aktığında hiçbiri antetten kopmuyor, şerit yalnız gürültü olurdu.
-  const showListHeader = cfg.sections?.listHeader === true;
-  const identityRow = {
-    left: [
-      `${L.identTo}: <b>${esc(h.customerName)}</b>`,
-      showDocNo ? `${L.docNo}: <b>${esc(h.shipmentNo)}</b>` : "",
-    ]
-      .filter(Boolean)
-      .join(" &nbsp;·&nbsp; "),
-    right: showDate ? esc(fmtDate(h.date)) : "",
-  };
-
-  let renderedSections = 0;
-  /** Bir liste tablosunun sayfa/şerit ayarları — `...secOpts()` ile yayılır. */
-  const secOpts = (): { className: string; identityRow?: { left: string; right: string } } => {
-    const first = renderedSections === 0;
-    renderedSections++;
-    return {
-      className: splitPages && !first ? "sec pgb" : "sec",
-      ...(showListHeader && splitPages && !first ? { identityRow } : {}),
-    };
-  };
 
   // ── ÜRÜN ADI REJİMİ (`shipping.docItemNameMode`, 2026-09-04) ───────────────
   // Varsayılan `bizdeki` → aşağıdaki üç dalın hiçbiri bugünkü çıktıya dokunmaz
@@ -568,9 +526,6 @@ export function renderShipmentDispatchHtml(
   // içerik basılsaydı Belge Kişiselleştirme'de "Stok adı"nı gizleyen fabrika,
   // ayarı değiştirdiği an müşteri adını da gizlemiş olurdu.
   // ⚠️ KARAR BURADA VERİLMEZ — `resolveDocNameMode` tek karar yeridir (2026-09-10).
-  // Muhasebe fişinin Excel'i AYNI helper'ı kullanır; rejim burada inline
-  // hesaplandığı sürece iki yüzey sessizce ayrışıyordu (sahada ayrıştı da:
-  // aynı sevkiyatın PDF'i müşteri adını, Excel'i bizim adımızı bastı).
   //
   // ÇEKİ BÖLÜMÜ AYRI REJİM (2026-09-06). Çeki listesi tek başına da basılabiliyor
   // (`DispatchPrintOptions`) ve ambar elemanının kontrol listesi olarak kullanılıyor;
@@ -591,33 +546,35 @@ export function renderShipmentDispatchHtml(
   /** Müşteri adı yoksa bizimkine düş — tek kaynak (üç hücre de bunu çağırır). */
   const custOr = customerNameOr;
 
+  const sections: DispatchSection<never>[] = [];
+  const add = <R,>(s: DispatchSection<R>) => sections.push(s as unknown as DispatchSection<never>);
+
   // 1) ÜRÜN LİSTESİ — kolonlar cfg.columns.urun ile aç/kapa + sıralanır.
-  const urunSection = listSectionOn(cfg, meta, "urun")
-    ? buildDocTable<ShipmentDocProduct>({
-        ...secOpts(),
-        caption: L.urunCaption,
-        colCfg: cfg.columns?.urun,
-        footLabel: L.toplam,
-        rows: products,
-        cols: [
-          ...(showOurName
-            ? [{ key: "name", label: L.stokAdi, align: "l" as const, cell: (p: ShipmentDocProduct) => esc(p.name) }]
-            : []),
-          ...(showCustName
-            ? colorSplit
-              ? [
-                  // AYRIK KİPTE iki kolon: yarı çevrilmiş ad basılmaz, okuyucu hangi
-                  // yarının kimin olduğunu görür (çeki listesindeki düzenin aynısı).
-                  { key: "customerName", label: L.musteriStokAdi, align: "l" as const, cell: (p: ShipmentDocProduct) => esc(custOr(p.customerItemOnly ?? p.customerName, p.name)) },
-                  { key: "customerColor", label: L.musteriVaryant, align: "l" as const, cell: (p: ShipmentDocProduct) => esc(p.customerColorOnly ?? "") },
-                ]
-              : [{ key: "customerName", label: L.musteriStokAdi, align: "l" as const, cell: (p: ShipmentDocProduct) => esc(custOr(p.customerName, p.name)) }]
-            : []),
-          { key: "rollCount", label: L.topAdedi, align: "r", cell: (p) => esc(fmtCount(p.rollCount)), foot: esc(fmtCount(t.totalRolls)) },
-          { key: "totalMeters", label: L.toplamMetre, align: "r", cell: (p) => esc(fmtQty(p.totalMeters)), foot: esc(fmtQty(t.totalMeters)) },
-        ],
-      })
-    : "";
+  if (listSectionOn(cfg, meta, "urun")) {
+    add<ShipmentDocProduct>({
+      key: "urun",
+      caption: L.urunCaption,
+      colCfg: cfg.columns?.urun,
+      rows: products,
+      cols: [
+        ...(showOurName
+          ? [{ key: "name", label: L.stokAdi, align: "l" as const, kind: TEXT, value: (p: ShipmentDocProduct) => p.name }]
+          : []),
+        ...(showCustName
+          ? colorSplit
+            ? [
+                // AYRIK KİPTE iki kolon: yarı çevrilmiş ad basılmaz, okuyucu hangi
+                // yarının kimin olduğunu görür (çeki listesindeki düzenin aynısı).
+                { key: "customerName", label: L.musteriStokAdi, align: "l" as const, kind: TEXT, value: (p: ShipmentDocProduct) => custOr(p.customerItemOnly ?? p.customerName, p.name) },
+                { key: "customerColor", label: L.musteriVaryant, align: "l" as const, kind: TEXT, value: (p: ShipmentDocProduct) => p.customerColorOnly ?? "" },
+              ]
+            : [{ key: "customerName", label: L.musteriStokAdi, align: "l" as const, kind: TEXT, value: (p: ShipmentDocProduct) => custOr(p.customerName, p.name) }]
+          : []),
+        { key: "rollCount", label: L.topAdedi, align: "r", kind: COUNT, value: (p) => p.rollCount, foot: { value: t.totalRolls } },
+        { key: "totalMeters", label: L.toplamMetre, align: "r", kind: QTY, value: (p) => p.totalMeters, foot: { value: t.totalMeters } },
+      ],
+    });
+  }
 
   // 2) ÇUVAL LİSTESİ
   //
@@ -646,112 +603,271 @@ export function renderShipmentDispatchHtml(
     ? { ...cfg.columns?.cuval, shown: [...(cfg.columns?.cuval?.shown ?? []), ...forcedShown] }
     : cfg.columns?.cuval;
 
-  const cuvalSection = listSectionOn(cfg, meta, "cuval")
-    ? buildDocTable<ShipmentDocSack>({
-        ...secOpts(),
-        caption: L.cuvalCaption,
-        colCfg: cuvalColCfg,
-        footLabel: L.toplam,
-        rows: sacks,
-        cols: [
-          { key: "code", label: L.ambalajKodu, align: "l", cell: (s) => esc(s.code) },
-          ...(meta.sackSeq
-            ? [{ key: "seq", label: L.sira, align: "r" as const, cell: (s: ShipmentDocSack) => esc(formatSackSeqLabel(s.seq, sacks.length, meta.sackSeq!)) }]
-            : []),
-          ...(meta.packingLot
-            ? [
-                { key: "packageNo", label: L.ambalajNo, align: "r" as const, cell: (s: ShipmentDocSack) => esc(s.packageNo != null ? String(s.packageNo) : "") },
-                { key: "packingGroupName", label: L.sevkPartisi, align: "l" as const, cell: (s: ShipmentDocSack) => esc(s.packingGroupName ?? "") },
-              ]
-            : []),
-          // ⚠️ TEK KAPI (1e kararı 2026-09-23): parti KODU yalnız belge tasarımından
-          // yönetilir (`defaultHidden` + `columns.sacks.shown`); `meta.packingLot`
-          // GLOBAL anahtarına BAĞLANMAZ. İkinci bir anahtar, kullanıcının belgeden
-          // açtığı kolonu sessizce yutardı ve sebebi hiçbir ekranda görünmezdi.
-          // İç veri olduğu için varsayılan KAPALI (opt-in kuralı).
-          { key: "packingGroupCode", label: L.partiKodu, align: "l", defaultHidden: true,
-            cell: (s: ShipmentDocSack) => esc(s.packingGroupCode ?? "") },
-          { key: "totalMeters", label: L.metreToplami, align: "r", cell: (s) => esc(fmtQty(s.totalMeters)), foot: esc(fmtQty(t.totalMeters)) },
-          { key: "totalKg", label: L.kgToplami, align: "r", cell: (s) => esc(fmtQty(s.totalKg)), foot: esc(fmtQty(t.totalKg)) },
-          { key: "packageCount", label: L.paketSayisi, align: "r", cell: (s) => esc(fmtCount(s.packageCount)), foot: esc(fmtCount(t.totalRolls)) },
-          // Kolon açık AMA hiçbir çuvalda yorum yoksa boş sütun basmayalım:
-          // `defaultHidden` + shown zinciri açsa da hasAnyRowNote false ise düşürülür.
-          ...(hasAnyRowNote
-            ? [
-                {
-                  key: "note",
-                  label: L.aciklama,
-                  align: "l" as const,
-                  width: "32%",
-                  cellClass: "wrap",
-                  defaultHidden: true,
-                  cell: (s: ShipmentDocSack) => esc(rowNotes[s.code] ?? ""),
-                },
-              ]
-            : []),
-          // İZ kolonu — aynı boş-sütun bastırması. ⚠️ `defaultHidden: true`
-          // LOAD-BEARING: naif (blocklist) yazımda kolon VARSAYILAN GÖRÜNÜR doğar
-          // ve iç iz müşteriye giden irsaliyeye sızar.
-          ...(hasAnyRowTag
-            ? [
-                {
-                  key: "tag",
-                  label: L.iz,
-                  align: "l" as const,
-                  width: "22%",
-                  cellClass: "wrap",
-                  defaultHidden: true,
-                  cell: (s: ShipmentDocSack) => esc(rowTags[s.code] ?? ""),
-                },
-              ]
-            : []),
-        ],
-      })
-    : "";
+  if (listSectionOn(cfg, meta, "cuval")) {
+    add<ShipmentDocSack>({
+      key: "cuval",
+      caption: L.cuvalCaption,
+      colCfg: cuvalColCfg,
+      rows: sacks,
+      cols: [
+        { key: "code", label: L.ambalajKodu, align: "l", kind: TEXT, value: (s) => s.code },
+        ...(meta.sackSeq
+          ? [{ key: "seq", label: L.sira, align: "r" as const, kind: TEXT, value: (s: ShipmentDocSack) => formatSackSeqLabel(s.seq, sacks.length, meta.sackSeq!) }]
+          : []),
+        ...(meta.packingLot
+          ? [
+              { key: "packageNo", label: L.ambalajNo, align: "r" as const, kind: INT, value: (s: ShipmentDocSack) => s.packageNo ?? null },
+              { key: "packingGroupName", label: L.sevkPartisi, align: "l" as const, kind: TEXT, value: (s: ShipmentDocSack) => s.packingGroupName ?? "" },
+            ]
+          : []),
+        // ⚠️ TEK KAPI (1e kararı 2026-09-23): parti KODU yalnız belge tasarımından
+        // yönetilir (`defaultHidden` + `columns.sacks.shown`); `meta.packingLot`
+        // GLOBAL anahtarına BAĞLANMAZ. İkinci bir anahtar, kullanıcının belgeden
+        // açtığı kolonu sessizce yutardı ve sebebi hiçbir ekranda görünmezdi.
+        // İç veri olduğu için varsayılan KAPALI (opt-in kuralı).
+        { key: "packingGroupCode", label: L.partiKodu, align: "l", defaultHidden: true,
+          kind: TEXT, value: (s: ShipmentDocSack) => s.packingGroupCode ?? "" },
+        { key: "totalMeters", label: L.metreToplami, align: "r", kind: QTY, value: (s) => s.totalMeters, foot: { value: t.totalMeters } },
+        { key: "totalKg", label: L.kgToplami, align: "r", kind: QTY, value: (s) => s.totalKg, foot: { value: t.totalKg } },
+        { key: "packageCount", label: L.paketSayisi, align: "r", kind: COUNT, value: (s) => s.packageCount, foot: { value: t.totalRolls } },
+        // Kolon açık AMA hiçbir çuvalda yorum yoksa boş sütun basmayalım:
+        // `defaultHidden` + shown zinciri açsa da hasAnyRowNote false ise düşürülür.
+        ...(hasAnyRowNote
+          ? [
+              {
+                key: "note",
+                label: L.aciklama,
+                align: "l" as const,
+                width: "32%",
+                cellClass: "wrap",
+                defaultHidden: true,
+                kind: TEXT,
+                value: (s: ShipmentDocSack) => rowNotes[s.code] ?? "",
+              },
+            ]
+          : []),
+        // İZ kolonu — aynı boş-sütun bastırması. ⚠️ `defaultHidden: true`
+        // LOAD-BEARING: naif (blocklist) yazımda kolon VARSAYILAN GÖRÜNÜR doğar
+        // ve iç iz müşteriye giden irsaliyeye sızar.
+        ...(hasAnyRowTag
+          ? [
+              {
+                key: "tag",
+                label: L.iz,
+                align: "l" as const,
+                width: "22%",
+                cellClass: "wrap",
+                defaultHidden: true,
+                kind: TEXT,
+                value: (s: ShipmentDocSack) => rowTags[s.code] ?? "",
+              },
+            ]
+          : []),
+      ],
+    });
+  }
 
   // 3) ÇEKİ LİSTESİ
-  const cekiSection = listSectionOn(cfg, meta, "ceki")
-    ? buildDocTable<ShipmentDocCeki>({
-        ...secOpts(),
-        caption: L.cekiCaption,
-        colCfg: cfg.columns?.ceki,
-        footLabel: L.toplam,
-        rows: cekiRows,
-        cols: [
-          { key: "sackCode", label: L.cuvalNo, align: "l", cell: (c) => esc(c.sackCode) },
-          ...(meta.sackSeq
-            ? [{ key: "seq", label: L.sira, align: "r" as const, cell: (c: ShipmentDocCeki) => esc(formatSackSeqLabel(c.seq, sacks.length, meta.sackSeq!)) }]
-            : []),
-          ...(meta.packingLot
-            ? [
-                { key: "packageNo", label: L.ambalajNo, align: "r" as const, cell: (c: ShipmentDocCeki) => esc(c.packageNo != null ? String(c.packageNo) : "") },
-                { key: "packingGroupName", label: L.sevkPartisi, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(c.packingGroupName ?? "") },
-              ]
-            : []),
-          { key: "packingGroupCode", label: L.partiKodu, align: "l", defaultHidden: true,
-            cell: (c: ShipmentDocCeki) => esc(c.packingGroupCode ?? "") },
-          { key: "barcode", label: L.barkodNo, align: "l", cell: (c) => esc(c.barcode ?? "—") },
-          // Varsayılan GÖRÜNÜR (2026-08-05 ürün kararı — lot no müşterinin de
-          // sorduğu bilgi). Normal blocklist: `columns.ceki.hidden` ile kapatılır.
-          { key: "batchNumber", label: L.parti, align: "l", cell: (c) => esc(c.batchNumber ?? "—") },
-          ...(cekiShowOurName
-            ? [
-                { key: "desen", label: L.desen, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(c.desen) },
-                { key: "varyant", label: L.varyant, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(c.varyant) },
-              ]
-            : []),
-          ...(cekiShowCustName
-            ? [
-                { key: "customerDesen", label: L.musteriDesen, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(custOr(c.customerDesen, c.desen)) },
-                { key: "customerVaryant", label: L.musteriVaryant, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(custOr(c.customerVaryant, c.varyant)) },
-              ]
-            : []),
-          { key: "width", label: L.en, align: "c", cell: (c) => (blankWidths ? "" : c.width != null ? `${esc(Math.round(c.width))} cm` : "—") },
-          { key: "meters", label: L.metre, align: "r", cell: (c) => esc(fmtQty(c.meters)), foot: esc(fmtQty(t.totalMeters)) },
-          { key: "kg", label: L.kg, align: "r", cell: (c) => (c.kg > 0 ? esc(fmtQty(c.kg)) : ""), foot: esc(fmtQty(t.totalKg)) },
-        ],
-      })
+  if (listSectionOn(cfg, meta, "ceki")) {
+    add<ShipmentDocCeki>({
+      key: "ceki",
+      caption: L.cekiCaption,
+      colCfg: cfg.columns?.ceki,
+      rows: cekiRows,
+      cols: [
+        { key: "sackCode", label: L.cuvalNo, align: "l", kind: TEXT, value: (c) => c.sackCode },
+        ...(meta.sackSeq
+          ? [{ key: "seq", label: L.sira, align: "r" as const, kind: TEXT, value: (c: ShipmentDocCeki) => formatSackSeqLabel(c.seq, sacks.length, meta.sackSeq!) }]
+          : []),
+        ...(meta.packingLot
+          ? [
+              { key: "packageNo", label: L.ambalajNo, align: "r" as const, kind: INT, value: (c: ShipmentDocCeki) => c.packageNo ?? null },
+              { key: "packingGroupName", label: L.sevkPartisi, align: "l" as const, kind: TEXT, value: (c: ShipmentDocCeki) => c.packingGroupName ?? "" },
+            ]
+          : []),
+        { key: "packingGroupCode", label: L.partiKodu, align: "l", defaultHidden: true,
+          kind: TEXT, value: (c: ShipmentDocCeki) => c.packingGroupCode ?? "" },
+        { key: "barcode", label: L.barkodNo, align: "l", kind: TEXT, value: (c) => c.barcode ?? "—" },
+        // Varsayılan GÖRÜNÜR (2026-08-05 ürün kararı — lot no müşterinin de
+        // sorduğu bilgi). Normal blocklist: `columns.ceki.hidden` ile kapatılır.
+        { key: "batchNumber", label: L.parti, align: "l", kind: TEXT, value: (c) => c.batchNumber ?? "—" },
+        ...(cekiShowOurName
+          ? [
+              { key: "desen", label: L.desen, align: "l" as const, kind: TEXT, value: (c: ShipmentDocCeki) => c.desen },
+              { key: "varyant", label: L.varyant, align: "l" as const, kind: TEXT, value: (c: ShipmentDocCeki) => c.varyant },
+            ]
+          : []),
+        ...(cekiShowCustName
+          ? [
+              { key: "customerDesen", label: L.musteriDesen, align: "l" as const, kind: TEXT, value: (c: ShipmentDocCeki) => custOr(c.customerDesen, c.desen) },
+              { key: "customerVaryant", label: L.musteriVaryant, align: "l" as const, kind: TEXT, value: (c: ShipmentDocCeki) => custOr(c.customerVaryant, c.varyant) },
+            ]
+          : []),
+        { key: "width", label: L.en, align: "c", kind: WIDTH_CM, value: (c) => (blankWidths ? null : c.width != null ? Math.round(c.width) : "—") },
+        { key: "meters", label: L.metre, align: "r", kind: QTY, value: (c) => c.meters, foot: { value: t.totalMeters } },
+        // Top başına kg yalnız çuvalın ilk satırında dolu; 0 = BOŞ hücre (0,00 değil).
+        { key: "kg", label: L.kg, align: "r", kind: QTY, value: (c) => (c.kg > 0 ? c.kg : null), foot: { value: t.totalKg } },
+      ],
+    });
+  }
+
+  const watermark: "draft" | "void" | "old" | null = meta.draft
+    ? "draft"
+    : meta.status === "VOIDED"
+      ? "void"
+      : meta.status === "SUPERSEDED"
+        ? "old"
+        : null;
+
+  return { cfg, lang, L, h, t, title, customerSub, headRight, vehicle, sections, watermark };
+}
+
+/**
+ * Sevk irsaliyesinin EXCEL karşılığı — HTML ile AYNI çözücüden (`shipmentDispatchParts`).
+ * Kolon kümesi, sırası, başlığı ve hücre değeri PDF'tekidir; yalnız sayılar metin
+ * değil gerçek sayı olarak gider (biçimi `kind` taşır).
+ */
+export function renderShipmentDispatchTables(
+  snapshot: PrintedDocSnapshot,
+  meta: RenderMeta = {},
+): DocTablesPayload {
+  const p = shipmentDispatchParts(snapshot, meta);
+  const wm = p.watermark === "draft" ? p.L.wmDraft : p.watermark === "void" ? p.L.wmVoid : p.watermark === "old" ? p.L.wmOld : null;
+  const sackTotal = p.headRight.find((i) => i.key === "sackTotal");
+  const header: Array<[string, string | null]> = [
+    ...(wm ? [[wm, null] as [string, null]] : []),
+    [p.title, null],
+    ...(snapshot.company?.name ? [[snapshot.company.name, null] as [string, null]] : []),
+    [p.L.to, p.h.customerName],
+    ...p.customerSub.map((i): [string, string] => [i.label, i.value]),
+    ...p.headRight.map((i): [string, string] =>
+      i === sackTotal ? [i.label, `${i.value} (${p.t.sackCount} ${p.L.sackSystem})`] : [i.label, i.value],
+    ),
+    ...p.vehicle.map((i): [string, string] => [i.label, i.value]),
+  ];
+  const notes = [p.cfg.footerNote, meta.printNote].filter((n): n is string => !!n && !!n.trim());
+  return {
+    docType: "SHIPMENT_DISPATCH",
+    documentNo: p.h.shipmentNo,
+    header,
+    tables: p.sections.map((s) =>
+      resolveDocTable({ key: s.key, caption: s.caption, cols: s.cols, rows: s.rows, colCfg: s.colCfg, footLabel: p.L.toplam, kit: FMT_KIT }),
+    ),
+    notes,
+  };
+}
+
+export function renderShipmentDispatchHtml(
+  snapshot: PrintedDocSnapshot,
+  meta: RenderMeta = {},
+): string {
+  const { cfg, lang, L, h, title, customerSub: subItems, headRight: rightItems, vehicle, sections, watermark: wmKind } =
+    shipmentDispatchParts(snapshot, meta);
+  const t = (snapshot.doc as unknown as ShipmentDispatchDoc).totals;
+  // Yoğunluk profili sayfa boyutundan çözülür; ortak chrome CSS'i oradan beslenir.
+  const pageSize = resolveDocPageSize(cfg.style?.pageSize);
+  const d = DOC_DENSITY[pageSize];
+  const style = resolveDocStyle(cfg.style, { marginMm: 9 });
+  const logo = docLogoHtml(meta.logoDataUrl, cfg);
+  const company = snapshot.company;
+  const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
+
+  const showLetterhead = cfg.showLetterhead !== false;
+  const showSignatures = cfg.showSignatures !== false;
+  const sigLabels =
+    cfg.signatureLabels && cfg.signatureLabels.length
+      ? cfg.signatureLabels
+      : [...L.sigDefaults];
+
+  // Antet (gönderen) satırları — sadece dolu olanlar.
+  const lhLines = showLetterhead
+    ? [lh.addressLine, lh.phone, lh.taxInfo ? `V.D./No: ${lh.taxInfo}` : "", ...(lh.extraLines ?? [])]
+        .filter((s) => s && s.trim())
+        .map((s) => `<div class="lh-line">${esc(s)}</div>`)
+        .join("")
     : "";
+
+  const watermark =
+    wmKind === "draft"
+      ? `<div class="wm wm-draft">${L.wmDraft}</div>`
+      : wmKind === "void"
+        ? `<div class="wm">${L.wmVoid}</div>`
+        : wmKind === "old"
+          ? `<div class="wm wm-old">${L.wmOld}</div>`
+          : "";
+
+  const customerSub = subItems.map((i) => `${i.label}: ${esc(i.value)}`).join(" · ");
+
+  const headRight = rightItems
+    .map((i) =>
+      i.key === "orders"
+        ? `<div class="ln sub">${i.label}: ${esc(i.value)}</div>`
+        : i.key === "sackTotal"
+          ? `<div class="ln">${i.label}: <b>${i.value}</b> <span class="sub">(${t.sackCount} ${L.sackSystem})</span></div>`
+          : `<div class="ln">${i.label}: <b>${esc(i.value)}</b></div>`,
+    )
+    .join("");
+
+  const vehicleRow = vehicle.length
+    ? `<div class="meta-row">${vehicle.map((i) => `${i.label}: <b>${esc(i.value)}</b>`).join(" &nbsp;·&nbsp; ")}</div>`
+    : "";
+
+  // Sayfa ayrımı: BASILAN listelerin ilki hariç hepsi yeni sayfadan başlar.
+  // Sayaç yalnız gerçekten render edilen bölümde artar (kapalı bölüm sayfa
+  // açmaz) — üç bölüm kaynak sırasıyla değerlendirildiği için sıra garantili.
+  const splitPages = meta.mergeSections !== true;
+
+  // ── KİMLİK ŞERİDİ (`sections.listHeader`, 2026-09-10) ─────────────────────
+  // OPT-IN: `sectionOn` blocklist'i (anahtar yoksa AÇIK) burada YANLIŞ olurdu —
+  // bugüne kadar donmuş her irsaliyenin yeniden baskısı sormadan değişirdi.
+  // Bu yüzden açık `=== true`.
+  //
+  // Şerit İLK basılan listeye KONMAZ: o listenin sayfasında zaten tam antet var
+  // ve aynı bilgiyi iki kez basmak sahanın istemediği tekrarı üretirdi. Sonraki
+  // listeler kendi sayfalarında antetsiz kaldıkları için şeridi alırlar.
+  //
+  // `splitPages` koşulu da load-bearing: ?merge=1 ile listeler tek sayfada
+  // aktığında hiçbiri antetten kopmuyor, şerit yalnız gürültü olurdu.
+  const showListHeader = cfg.sections?.listHeader === true;
+  const showDocNo = sectionOn(cfg.sections, "docNo");
+  const showDate = sectionOn(cfg.sections, "date");
+  const identityRow = {
+    left: [
+      `${L.identTo}: <b>${esc(h.customerName)}</b>`,
+      showDocNo ? `${L.docNo}: <b>${esc(h.shipmentNo)}</b>` : "",
+    ]
+      .filter(Boolean)
+      .join(" &nbsp;·&nbsp; "),
+    right: showDate ? esc(fmtDate(h.date)) : "",
+  };
+
+  let renderedSections = 0;
+  /** Bir liste tablosunun sayfa/şerit ayarları — `...secOpts()` ile yayılır. */
+  const secOpts = (): { className: string; identityRow?: { left: string; right: string } } => {
+    const first = renderedSections === 0;
+    renderedSections++;
+    return {
+      className: splitPages && !first ? "sec pgb" : "sec",
+      ...(showListHeader && splitPages && !first ? { identityRow } : {}),
+    };
+  };
+
+  // Üç liste AYNI tanımdan çizilir (Excel de onu okur); kapalı bölüm listede yoktur.
+  const tableHtml = (key: DispatchListSection): string => {
+    const s = sections.find((x) => x.key === key);
+    if (!s) return "";
+    return buildDocTable({
+      ...secOpts(),
+      caption: s.caption,
+      colCfg: s.colCfg,
+      footLabel: L.toplam,
+      rows: s.rows,
+      cols: toHtmlCols(s.cols, FMT_KIT),
+    });
+  };
+  const urunSection = tableHtml("urun");
+  const cuvalSection = tableHtml("cuval");
+  const cekiSection = tableHtml("ceki");
 
   const noteBlock = cfg.footerNote
     ? `<div class="note">${esc(cfg.footerNote)}</div>`

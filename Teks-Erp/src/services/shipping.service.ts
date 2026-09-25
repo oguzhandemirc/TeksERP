@@ -50,6 +50,7 @@ import {
 } from "./printed-document.service";
 import {
   renderShipmentDispatchHtml,
+  renderShipmentDispatchTables,
   type ShipmentDispatchDoc,
 } from "./document-render/shipment-dispatch.html";
 import { renderQualityCertificateHtml, type QualityCertificateDoc } from "./document-render/quality-certificate.html";
@@ -5756,6 +5757,8 @@ async function buildShipmentDispatchPreview(db: PrintedDocDb, shipmentId: string
 registerPrintedDocBuilder(PrintedDocType.SHIPMENT_DISPATCH, {
   fresh: buildShipmentDispatchDoc,
   renderHtml: renderShipmentDispatchHtml,
+  // Excel'in tabloları — irsaliyeyi çizen AYNI kolon çözücüsünden (PDF ↔ Excel eşit).
+  renderTables: renderShipmentDispatchTables,
   buildPreview: buildShipmentDispatchPreview,
   // Belge şablon profili: sevkiyatın müşterisine atanmış profil (yoksa genel ayar).
   resolveProfileId: async (db, sourceId) => {

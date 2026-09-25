@@ -162,7 +162,7 @@ describe("ShipmentDocDialog — tek belge yüzeyi", () => {
     expect(await screen.findByText("Excel (hazırlanıyor…)")).toHaveAttribute("aria-disabled", "true");
 
     resolveReport?.(REPORT);
-    await waitFor(() => expect(screen.getByText("Excel (3 sayfa)")).not.toHaveAttribute("aria-disabled", "true"));
+    await waitFor(() => expect(screen.getByText("Excel")).not.toHaveAttribute("aria-disabled", "true"));
   });
 
   it("§3 slot'suz PrintedDocDialog hiçbir sevkiyat kalemi çizmez (negatif sonda)", async () => {

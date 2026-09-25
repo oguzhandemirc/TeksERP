@@ -268,6 +268,40 @@ router.get(
 
 /**
  * @openapi
+ * /api/printed-documents/{docType}/{sourceId}/tables:
+ *   get:
+ *     tags: [PrintedDocuments]
+ *     summary: Belgenin Excel tabloları (JSON) — PDF ile AYNI kolon/satır/değer çözücüsü
+ *     description: "`/html` ile aynı izin ve aynı sorgu parametreleri (sections, rowNotes, rowTags, currentTemplate, version, draft). Bugün yalnız SHIPMENT_DISPATCH; tanımsız belge tipi 400."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: docType
+ *         required: true
+ *         schema: { type: string, enum: [SHIPMENT_DISPATCH] }
+ *       - in: path
+ *         name: sourceId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: sections
+ *         required: false
+ *         description: "Tek seferlik liste seçimi (CSV) — `/html` ile aynı."
+ *         schema: { type: string, example: "cuval,ceki" }
+ *     responses:
+ *       200: { description: "Başlık satırları + tablolar (kolon anahtarı, başlık, tür, satır değerleri, toplam) + dipnotlar" }
+ *       400: { description: Bu belge tipi için tablo çıktısı tanımlı değil }
+ *       409: { description: Kaynak henüz taslak (donmuş belge yok) }
+ */
+router.get(
+  "/:docType/:sourceId/tables",
+  verifyToken,
+  requireDocPermission("read"),
+  controller.getTables
+);
+
+/**
+ * @openapi
  * /api/printed-documents/{docType}/{sourceId}/versions:
  *   get:
  *     tags: [PrintedDocuments]

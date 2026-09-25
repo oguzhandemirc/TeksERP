@@ -57,14 +57,24 @@ interface Props {
   reissueOnlyWhenReconstructed?: boolean;
   /** "Yazdır ▾" menüsüne ek kalemler. */
   toolbarPrintMenu?: ReactNode;
-  /** "İndir ▾" menüsüne ek kalemler. */
-  toolbarDownloads?: ReactNode;
+  /**
+   * "İndir ▾" menüsüne ek kalemler. Fonksiyon verilirse önizlenen görünümü alır
+   * (seçili sürüm + "güncel şablonla") — ek indirme (ör. Excel) PDF'le aynı belgeyi taşısın.
+   */
+  toolbarDownloads?: ReactNode | ((view: PrintedDocView) => ReactNode);
   /** "Baskı seçenekleri ▾" popover'ına ek gövde. */
   optionsExtras?: ReactNode;
   /** Önizlemenin üstündeki bilgi şeridi (iade uyarısı, belge notu…). */
   infoBar?: ReactNode;
   /** Sayfa katmanının sürdüğü ek tek-seferlik render parametreleri. */
   printParams?: PrintedDocPrintParams;
+}
+
+/** Önizlenen belge görünümü — PDF ile aynı belgeyi indiren ek kalemlere geçer. */
+export interface PrintedDocView {
+  /** null = güncel sürüm. */
+  version: number | null;
+  currentTemplate: boolean;
 }
 
 export function PrintedDocDialog({
@@ -234,7 +244,11 @@ export function PrintedDocDialog({
             fileName={`${title}-${shownMeta?.documentNo ?? ""}`}
             fetching={htmlQuery.isFetching}
             printMenu={toolbarPrintMenu}
-            downloads={toolbarDownloads}
+            downloads={
+              typeof toolbarDownloads === "function"
+                ? toolbarDownloads({ version: selectedVersion, currentTemplate })
+                : toolbarDownloads
+            }
             optionsContent={optionsContent}
             pageSize={pageSize}
             onPageSizeChange={setPageSize}

@@ -1,11 +1,10 @@
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
+import { PrintedDocDialog, type PrintedDocView } from "@/components/print/PrintedDocDialog";
 import { BulkRollLabelButton } from "@/components/print/BulkRollLabelButton";
-import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
+import { saveWorkbook } from "@/lib/xlsx-export";
 import { accountingDispatchService } from "../AccountingDispatch/service";
-import { buildDispatchReportSheets } from "../AccountingDispatch/accounting-export";
 import { DispatchNoteEditor } from "./DispatchNoteEditor";
 import {
   DispatchPrintOptionsContent,
@@ -14,6 +13,7 @@ import {
   type DispatchPrintOpts,
 } from "./DispatchPrintOptions";
 import { DispatchExcelItem, ReturnsNotice, RollLabelItem } from "./shipmentDocSlots";
+import { buildDispatchWorkbook } from "./shipmentDocExport";
 
 // =============================================================================
 // SEVK İRSALİYESİ — TEK BELGE YÜZEYİ (2026-09-10 birleştirme)
@@ -86,10 +86,26 @@ export function ShipmentDocDialog({
 
   const [labelOpen, setLabelOpen] = useState(false);
 
-  const exportExcel = async () => {
-    if (!report) return;
+  // Excel = önizlemedeki PDF: aynı belge ucu, aynı tek seferlik seçimler (liste ·
+  // not · iz) ve taslakta aynı TASLAK. Kolonlar burada seçilmez.
+  const exportExcel = async (view: PrintedDocView) => {
+    if (!report || !shipmentId) return;
     try {
-      const blob = await buildWorkbook(buildDispatchReportSheets(report));
+      const blob = await buildDispatchWorkbook(
+        { id: shipmentId, shipmentNo: report.header.shipmentNo, isDirect },
+        isDirect
+          ? undefined
+          : {
+              version: view.version,
+              currentTemplate: view.currentTemplate,
+              draft: status !== "DISPATCHED",
+              sections: sectionParam,
+              rowNotes,
+              rowTags,
+            },
+        report,
+      );
+      if (!blob) throw new Error("fiş verisi yok");
       await saveWorkbook(blob, `Sevk_Fisi_${report.header.shipmentNo}`);
     } catch {
       toast.error("Excel oluşturulamadı");
@@ -134,13 +150,13 @@ export function ShipmentDocDialog({
             onOpen={() => setLabelOpen(true)}
           />
         }
-        toolbarDownloads={
+        toolbarDownloads={(view) => (
           <DispatchExcelItem
             ready={Boolean(report)}
             onNeedReport={needReport}
-            onExport={() => void exportExcel()}
+            onExport={() => void exportExcel(view)}
           />
-        }
+        )}
         infoBar={
           <>
             {!isDirect && returns && returns.count > 0 && <ReturnsNotice returns={returns} />}
