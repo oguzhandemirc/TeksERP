@@ -23,11 +23,12 @@
 ### A0b. İskeleti kur (SIFIRDAN kurulumda — `ilk-kurulum.ps1`)
 
 ```powershell
+# Yürütme ilkesi: çıplak `.\ilk-kurulum.ps1` Restricted/RemoteSigned makinede KOŞMAZ.
 # Sıfırdan (veritabanı da yok) + fabrika yedeğini yükle:
-.\ilk-kurulum.ps1 -DbParola <app-parolası> -PostgresParola <postgres-parolası> -Dump "<dump>"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbParola <app-parolası> -PostgresParola <postgres-parolası> -Dump "<dump>"
 
 # Veritabanı ZATEN varsa: -PostgresParola gerekmez.
-.\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbParola <p> -DbKullanici postgres
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbParola <p> -DbKullanici postgres
 ```
 
 Klasör iskeletini (`app` · `backups` · `logs` · `pg-setup` · `pm2-home`), pg

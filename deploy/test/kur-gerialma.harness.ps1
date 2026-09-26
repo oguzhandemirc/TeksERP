@@ -18,7 +18,9 @@ if ($errors.Count -gt 0) {
   exit 99
 }
 $fns = $ast.FindAll({ $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)
-foreach ($name in @('Adim', 'Ok', 'Uyar', 'KokeDon', 'GeriAlOtomatik')) {
+# `TasiIsrarla` 2026-09-07'den beri GeriAlOtomatik'in tasiyicisi; listede olmayinca
+# S2/S3 "komut yok" ile YARIDA KALIYORDU ve harness 8/4 kirmizi veriyordu.
+foreach ($name in @('Adim', 'Ok', 'Uyar', 'KokeDon', 'TasiIsrarla', 'GeriAlOtomatik')) {
   $f = $fns | Where-Object { $_.Name -eq $name }
   if (-not $f) { if ($name -eq 'KokeDon') { continue }; Write-Host "fonksiyon yok: $name"; exit 98 }
   Invoke-Expression $f.Extent.Text

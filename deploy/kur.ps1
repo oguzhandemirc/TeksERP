@@ -5,6 +5,12 @@
 #   C:\TeksERP\kur.ps1 -Paket D:\tekserp-backend-20260801_120000-abc1234.zip
 #   C:\TeksERP\kur.ps1 -GeriAl          # son kuruluma geri don
 #
+# ⚠ YURUTME ILKESI: Windows 11 istemcide varsayilan `Restricted`, Server'da
+#   `RemoteSigned` (zip'ten cikan dosya "internetten geldi" isaretli). Iki durumda
+#   da cipla `C:\TeksERP\kur.ps1` KOSMAZ. Daima:
+#     powershell -NoProfile -ExecutionPolicy Bypass -File C:\TeksERP\kur.ps1 -Paket <zip>
+#   Ilke yalniz bu surec icin gevser; makinenin ayari degismez.
+#
 # ⚠ PAKETLENMIS KURULUMDA `npm run <script>` KULLANMA - `node <tam yol>` kullan.
 #   Paket `node_modules\.bin` TASIMAZ ve bu BILINCLIDIR: npm o klasordeki
 #   shim'leri KURULUM ANINDA, kendi platformunda uretir (Windows'ta `.cmd`,
@@ -173,6 +179,8 @@ $pgbin     = "$kok\pgsql\bin"
 $backupDir = "$kok\backups"
 $credFile  = "$kok\pg-setup\db-credentials.json"
 $uygulama  = $UygulamaAdi
+# Operatore basilan komutlar: cipla `kur.ps1` yurutme ilkesine takilir (baslik).
+$kurKomut  = "powershell -NoProfile -ExecutionPolicy Bypass -File $kok\kur.ps1"
 $env:PM2_HOME = "$kok\pm2-home"
 
 # cwd app\ icinde BIRAKILMAZ: script [5/9] sonrasi Set-Location $appDir yapar; oradan
@@ -610,7 +618,8 @@ if (-not (Test-Path $prismaCli)) { GeriAlOtomatik "prisma CLI bulunamadi: $prism
 # --- [6/9] Bagimliliklar (pakette yoksa) ------------------------------------
 if (-not $nmVar) {
   Adim "[6/9] Uretim bagimliliklari kuruluyor (npm ci --omit=dev)..."
-  npm ci --omit=dev --no-audit --no-fund
+  # `npm.cmd`: cipla `npm` once `npm.ps1`e cozulur ve yurutme ilkesine takilir.
+  & npm.cmd ci --omit=dev --no-audit --no-fund
   if ($LASTEXITCODE -ne 0) { GeriAlOtomatik "npm ci basarisiz (internet erisimi var mi?)" }
   & node $prismaCli generate
   if ($LASTEXITCODE -ne 0) { GeriAlOtomatik "prisma generate basarisiz" }
@@ -633,7 +642,7 @@ if ($LASTEXITCODE -ne 0) {
   Write-Host "    DB kismi degismis OLABILIR. Otomatik geri alinmiyor - karar senin." -ForegroundColor Yellow
   Write-Host ""
   Write-Host "    Durumu gor :  cd $appDir ; node node_modules\prisma\build\index.js migrate status"
-  Write-Host "    Kodu geri al:  $kok\kur.ps1 -GeriAl"
+  Write-Host "    Kodu geri al:  $kurKomut -GeriAl"
   Write-Host "    DB'yi geri al: pg_restore ... $dump   (KURULUM dokumanina bak)"
   KokeDon
   exit 1
@@ -648,7 +657,7 @@ Adim "[8/9] pm2 baslatiliyor..."
 #   ve ikisi ayrisinca ayni porta ikinci uygulama kalkiyordu.
 $env:TEKSERP_PM2_AD = $uygulama
 & $pm2 start ecosystem.config.js
-if ($LASTEXITCODE -ne 0) { Fail "pm2 start basarisiz. Geri donus: $kok\kur.ps1 -GeriAl" }
+if ($LASTEXITCODE -ne 0) { Fail "pm2 start basarisiz. Geri donus: $kurKomut -GeriAl" }
 & $pm2 save    # ZORUNLU: reboot'ta dogru klasor kalksin (dump.pm2 tazelenir)
 Ok "baslatildi ve kaydedildi (pm2 save)"
 
@@ -734,7 +743,7 @@ $h = Saglik 120
 if (-not $h) {
   Write-Host "  X /health 120 sn icinde cevap vermedi." -ForegroundColor Red
   Write-Host "    Loglar :  `$env:PM2_HOME='$kok\pm2-home'; & '$pm2' logs $uygulama --lines 80"
-  Write-Host "    Geri al:  $kok\kur.ps1 -GeriAl"
+  Write-Host "    Geri al:  $kurKomut -GeriAl"
   KokeDon
   exit 1
 }

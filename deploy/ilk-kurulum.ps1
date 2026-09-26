@@ -3,14 +3,20 @@
 # =============================================================================
 # NEREDE CALISIR: YENI SUNUCUDA, YONETICI PowerShell'de.
 #
+# ⚠ YURUTME ILKESI: Windows 11 istemcide varsayilan `Restricted`, Server'da
+#   `RemoteSigned` (+ zip'ten cikan dosyada "internetten geldi" isareti). Ikisinde
+#   de `.\ilk-kurulum.ps1` HIC KOSMAZ. Script daima su bicimde cagrilir - ilke
+#   yalniz bu surec icin gevser, makinenin ayari degismez:
+#     powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 <parametreler>
+#
 #   # Sifirdan (veritabani da yok):
-#   .\ilk-kurulum.ps1 -DbParola <app-parolasi> -PostgresParola <postgres-parolasi>
+#   ... -File .\ilk-kurulum.ps1 -DbParola <app-parolasi> -PostgresParola <postgres-parolasi>
 #
 #   # Fabrika yedegini de yukle (tek komut):
-#   .\ilk-kurulum.ps1 -DbParola <p> -PostgresParola <pp> -Dump "C:\yol\son.dump"
+#   ... -File .\ilk-kurulum.ps1 -DbParola <p> -PostgresParola <pp> -Dump "C:\yol\son.dump"
 #
 #   # Veritabani ZATEN varsa (elle olusturulmus): -PostgresParola gerekmez.
-#   .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbParola <p> -DbKullanici postgres
+#   ... -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbParola <p> -DbKullanici postgres
 #
 # NE YAPAR: `kur.ps1`in BEKLEDIGI iskeleti kurar - klasorler, pg baglantisi,
 #   veritabani + rol, db-credentials.json, .env, pm2. Kendisi SURUM KURMAZ;
@@ -52,11 +58,28 @@ function Dur($m)  { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; Wri
 
 # psql'i belirli bir kimlikle kosturur; PGPASSWORD cagri BASINA set/temizlenir
 # (surec boyunca acik birakilirsa bu kabuktan calisan her sey onu miras alir).
+#
+# ⚠ PowerShell 5.1'de EAP="Stop" altinda native komutun stderr'ini YONLENDIRMEK
+#   (`2>&1`) o satiri OLUMCUL yapar - komut basarili olsa bile (kur.ps1 `Pm2Kos`
+#   basligi). [3/8]'in ILK baglanti denemesi BEKLENEN bir hatadir (rol/DB henuz
+#   yok): yeni makinede 5.1 ile adim hic gecemiyordu. Cikti yakalanmak ZORUNDA
+#   (hata metni kullaniciya basilir), o yuzden yonlendirme kalir ve cagri suresince
+#   EAP "Continue"ya cekilir; stderr satirlari ErrorRecord gelir, METNE cevrilir.
 function Psql($kullanici, $parola, $veritabani, $sorgu) {
+  $eskiEAP = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
   $env:PGPASSWORD = $parola
-  try   { $c = & (Join-Path $script:pgsqlBin "psql.exe") -h localhost -p $DbPort -U $kullanici -d $veritabani -v ON_ERROR_STOP=1 -tAc $sorgu 2>&1
-          return [pscustomobject]@{ kod = $LASTEXITCODE; cikti = ($c | Out-String).Trim() } }
-  finally { $env:PGPASSWORD = "" }
+  try {
+    $c = & (Join-Path $script:pgsqlBin "psql.exe") -h localhost -p $DbPort -U $kullanici -d $veritabani -v ON_ERROR_STOP=1 -tAc $sorgu 2>&1
+    $kod = $LASTEXITCODE
+    $satirlar = @($c | ForEach-Object {
+      if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+    })
+    return [pscustomobject]@{ kod = $kod; cikti = ($satirlar -join "`n").Trim() }
+  } finally {
+    $env:PGPASSWORD = ""
+    $ErrorActionPreference = $eskiEAP
+  }
 }
 
 Write-Host ""
@@ -234,13 +257,15 @@ $pm2 = "$Kok\pm2\node_modules\.bin\pm2.cmd"
 if (Test-Path $pm2) {
   Uyar "zaten var: $pm2"
 } else {
-  if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { Dur "npm bulunamadi - once Node.js 22 kur." }
+  # `npm.cmd`, `npm` DEGIL: PowerShell `npm`i once `npm.ps1`e cozer ve o bir
+  # SCRIPT'tir - yurutme ilkesi Restricted ise bu satir kosmaz. `.cmd` ilkeye tabi degil.
+  if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { Dur "npm.cmd bulunamadi - once Node.js 22 kur." }
   New-Item -ItemType Directory -Path "$Kok\pm2" -Force | Out-Null
   Push-Location "$Kok\pm2"
   # Global degil YEREL kurulum: `kur.ps1` pm2'yi bu tam yoldan cagirir ve
   # global PATH'e (ve baska bir hesabin global klasorune) bagimli olmaz.
-  & npm init -y --silent | Out-Null
-  & npm install pm2 --no-audit --no-fund --silent
+  & npm.cmd init -y --silent | Out-Null
+  & npm.cmd install pm2 --no-audit --no-fund --silent
   Pop-Location
   if (-not (Test-Path $pm2)) { Dur "pm2 kurulamadi: $pm2" }
   Ok "kuruldu: $pm2"
@@ -257,8 +282,8 @@ Write-Host "================================================================" -F
 Write-Host "  ISKELET HAZIR" -ForegroundColor Green
 Write-Host "================================================================"
 Write-Host "  Sonraki adim - surumu kur:"
-Write-Host "      .\kur.ps1 -Kok `"$Kok`" -Paket <tekserp-backend-....zip>"
+Write-Host "      powershell -NoProfile -ExecutionPolicy Bypass -File .\kur.ps1 -Kok `"$Kok`" -Paket <tekserp-backend-....zip>"
 Write-Host ""
 Write-Host "  Sonra - satici (superadmin) hesabi:"
-Write-Host "      cd $Kok\app ; npm run superadmin:kur    (GERCEK terminal sart)"
+Write-Host "      cd $Kok\app ; node dist\tools\superadmin-olustur.cjs    (GERCEK terminal sart)"
 Write-Host ""

@@ -1,0 +1,86 @@
+// =============================================================================
+// BEKÇİ — SUNUCUDA KOŞAN BETİKLER Windows PowerShell 5.1'de KOŞABİLİR Mİ
+// Çalıştır: npx tsx scripts/run-all-tests.ts sunucu_betikleri   (DB'siz)
+// =============================================================================
+// `kur.ps1` bu sözleşmelerin bir kısmını `test_deploy_log_rotation` §6'da
+// taşıyordu; `ilk-kurulum.ps1` hiçbirini taşımıyordu ve 2026-09-27 thinkpad-1
+// provası (yeni Windows 11, PowerShell 5.1) üçünü de ısırdı:
+//   §1 stderr YÖNLENDİRMESİ yalnız EAP="Continue" yardımcısında. 5.1'de
+//      EAP=Stop altında `2>&1` satırı ÖLÜMCÜL yapar; ilk bağlantı denemesinin
+//      BEKLENEN hatası [3/8]'i hiç geçirmiyordu.
+//   §2 yorum DIŞI metin ASCII. Dosyalar BOM'suz UTF-8; 5.1 onları ANSI okur ve
+//      string içindeki Türkçe harf sessizce başka bir bayta döner (taslak ⑦'nin
+//      `'Sürüm göçü%'` sorgusu tam bu yüzden 0 döndü).
+//   §3 çıplak `npm` çağrısı YOK. `npm` → `npm.ps1` bir SCRIPT'tir ve yürütme
+//      ilkesi Restricted'ta koşmaz; `npm.cmd` ilkeye tabi değil.
+// Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
+// =============================================================================
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { psTara, kapsayanFonksiyon } from "./lib/ps-tarama";
+
+const KOK = join(__dirname, "..", "..");
+let pass = 0;
+let fail = 0;
+function check(label: string, ok: boolean, detay = ""): void {
+  if (ok) pass++;
+  else fail++;
+  console.log(`${ok ? "✅" : "❌"} ${label}${detay ? ` — ${detay}` : ""}`);
+}
+
+/** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç). */
+const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1"];
+
+const YONLENDIRME = /(?:^|\s)2>(?:&1|\$null)/;
+const CIPLAK_NPM = /(?:^|[\s&(;|])npm(?=\s|$)/;
+
+console.log("=== Sunucu betikleri — PowerShell 5.1 sözleşmesi ===\n");
+
+for (const yol of SUNUCU_PS1) {
+  const tam = join(KOK, yol);
+  check(`§0 ${yol} var`, existsSync(tam));
+  if (!existsSync(tam)) continue;
+  const t = psTara(readFileSync(tam, "utf8"));
+  const son = t.satirlar[t.satirlar.length - 1];
+  check(`§0 ${yol} tarandı (körlük zemini: satır + fonksiyon + dengeli parantez)`,
+    t.satirlar.length > 100 && t.fonksiyonlar.length >= 3 && son?.derinlik === 0,
+    `${t.satirlar.length} satır · ${t.fonksiyonlar.length} fonksiyon · son derinlik ${son?.derinlik}`);
+
+  // §1 — yönlendirme yalnız EAP=Continue + finally'de geri koyan yardımcıda
+  const ihlal: string[] = [];
+  let yonlendirmeSayisi = 0;
+  for (const s of t.satirlar) {
+    if (!YONLENDIRME.test(s.ciplak)) continue;
+    yonlendirmeSayisi++;
+    const f = kapsayanFonksiyon(t, s.no);
+    if (!f) { ihlal.push(`${s.no} (fonksiyon dışı)`); continue; }
+    const govde = t.satirlar.filter((x) => x.no >= f.bas && x.no <= f.son);
+    const onceContinue = govde.some((x) => x.no < s.no && /\$ErrorActionPreference\s*=\s*"Continue"/.test(x.kod));
+    const geriKoyar = govde.some((x) => /finally/.test(x.ciplak)) &&
+      govde.some((x) => /\$ErrorActionPreference\s*=\s*\$eskiEAP/.test(x.kod));
+    if (!onceContinue || !geriKoyar) ihlal.push(`${s.no} (${f.ad}: ${!onceContinue ? "EAP Continue yok" : "finally'de geri konmuyor"})`);
+  }
+  check(`§1 ⭐ ${yol}: stderr yönlendirmesi yalnız EAP="Continue" yardımcısında`, ihlal.length === 0,
+    ihlal.length ? `satır ${ihlal.join(", ")}` : `${yonlendirmeSayisi} yönlendirme, hepsi yardımcıda`);
+
+  // §2 — yorum dışı metin ASCII
+  const asciiDisi = t.satirlar.filter((s) => /[^\x00-\x7F]/.test(s.kod)).map((s) => s.no);
+  check(`§2 ⭐ ${yol}: yorum dışı metin ASCII (BOM'suz dosya 5.1'de ANSI okunur)`, asciiDisi.length === 0,
+    asciiDisi.length ? `satır ${asciiDisi.slice(0, 10).join(", ")}` : "temiz");
+
+  // §3 — çıplak npm yok
+  const npmSatir = t.satirlar.filter((s) => CIPLAK_NPM.test(s.ciplak)).map((s) => s.no);
+  check(`§3 ⭐ ${yol}: çıplak \`npm\` çağrısı YOK (\`npm.cmd\` — npm.ps1 yürütme ilkesine takılır)`, npmSatir.length === 0,
+    npmSatir.length ? `satır ${npmSatir.join(", ")}` : "temiz");
+}
+
+// §1 körlük zemini: ölçülen yardımcı gerçekten yönlendiriyor ve kural onu geçiriyor.
+{
+  const t = psTara(readFileSync(join(KOK, "deploy/ilk-kurulum.ps1"), "utf8"));
+  const psql = t.fonksiyonlar.find((f) => f.ad === "Psql");
+  const yonlendirir = !!psql && t.satirlar.some((s) => s.no >= psql.bas && s.no <= psql.son && YONLENDIRME.test(s.ciplak));
+  check("§1 körlük zemini: ilk-kurulum `Psql` yardımcısı çıktıyı yakalamak için YÖNLENDİRİYOR (kural boşa ölçmüyor)", yonlendirir);
+}
+
+console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+process.exit(fail > 0 ? 1 : 0);

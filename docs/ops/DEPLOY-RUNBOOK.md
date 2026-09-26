@@ -78,6 +78,15 @@ Deploy akışı: **§3 (paket tabanlı)** + `deploy/README.md`. Yedek/geri yükl
 > **Not:** `package.json`'da `engines` alanı tanımlı değil — Node 22 bir
 > operasyonel gerekliliktir, paket düzeyinde zorlanmaz.
 
+> **⚠ Yürütme ilkesi (execution policy).** Windows 11 istemcide varsayılan
+> `Restricted`, Windows Server'da `RemoteSigned`; zip'ten çıkan dosya ayrıca
+> "internetten geldi" işareti taşır. Üçünde de `.\ilk-kurulum.ps1` ve
+> `.\kur.ps1` **hiç koşmaz** (2026-09-27 prova: thinkpad-1). Script'ler daima
+> `powershell -NoProfile -ExecutionPolicy Bypass -File <script> <parametreler>`
+> ile çağrılır — ilke yalnız o süreç için gevşer, makinenin ayarı değişmez.
+> Script'lerin içindeki npm çağrıları `npm.cmd`dir (`npm` → `npm.ps1` de ilkeye
+> takılır).
+
 > **⚠ PG major sürümü ve `PG_BIN_DIR` aynı majoru göstermeli.** Yedekleme
 > `PG_BIN_DIR` altındaki `pg_dump`/`pg_restore`'u çalıştırır; bu ikili sunucudaki
 > PostgreSQL'den **eski** bir majorsa dump alınamaz. Sahada ikisi de 16.9
@@ -285,7 +294,7 @@ pwsh -NoProfile -File deploy/paketle.ps1 -Cikti <cikti-klasoru>   # → tekserp-
 #    repo deploy\kur.ps1  →  C:\TeksERP\kur.ps1
 
 # 3) Zip'i sunucuya kopyala, sonra kur — sırayı script yapar (aşağıda)
-C:\TeksERP\kur.ps1 -Kok C:\TeksERP -Paket <zip yolu>
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\TeksERP\kur.ps1 -Kok C:\TeksERP -Paket <zip yolu>
 
 # 3) Sürüme özel notta yazan tek seferlik adımlar (backfill, izin, ayar) — SURUM-*-DEPLOY.md
 ```
@@ -667,7 +676,7 @@ süreç listesini geri yükler.
 > **`prisma migrate deploy` GERİ ALINMAZ.** Prisma down-migration üretmez.
 > Tek güvenli geri dönüş = **migration öncesi yedeğinden restore**.
 
-**Kod:** `C:\TeksERP\kur.ps1 -GeriAl` — en yeni `app.eski-<damga>`'yı `app\`'a
+**Kod:** `powershell -NoProfile -ExecutionPolicy Bypass -File C:\TeksERP\kur.ps1 -GeriAl` — en yeni `app.eski-<damga>`'yı `app\`'a
 geri koyar (mevcut `app\` → `app.basarisiz-<damga>`), pm2'yi başlatır, `/health`'i bekler.
 Taşıma takılırsa (açık kilit) mevcut kurulumu yeniden başlatıp durur. **DB'ye dokunmaz**
 ve bunu ekrana yazar: eski kod yeni şemayla koşuyor olur.
