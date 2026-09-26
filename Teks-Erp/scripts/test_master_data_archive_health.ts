@@ -75,9 +75,11 @@ async function main(): Promise<void> {
 
   console.log("\n=== 2) Renk: pasif renkte canlı top ===");
   const K = await mkItem("RENKLI");
-  const color = await prisma.color.create({ data: { code: `${T}CL`.slice(0, 32), name: `${T} RENK`, isActive: false }, select: { id: true } });
+  const color = await prisma.color.create({ data: { code: `${T}CL`.slice(0, 32), name: `${T} RENK` }, select: { id: true } });
   colorIds.push(color.id);
   await liveRoll(K, color.id);
+  // Kapıyı atlayan yazım (§1 emsali): renk seddi rolls'ta, colors'ta değil — canlı top önce, renk sonra pasif.
+  await prisma.$executeRawUnsafe(`UPDATE "colors" SET "isActive" = false WHERE id = $1::uuid`, color.id);
 
   console.log("\n=== 3) Tükenene kadar kartlar ===");
   const P1 = await mkItem("TK-CANLI");

@@ -828,7 +828,7 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6) TRIGGER'lar (3) — 20260809090000 (roll damgası) + 20260819161000 (audit guard)
+// 6) TRIGGER'lar — 20260809090000 (roll damgası) + 20260819161000 (audit guard)
 //    Prisma trigger modelleyemez → şema-dışı ve DİĞERLERİNDEN DAHA KRİTİK:
 //    partial index kaybolursa sorgu yavaşlar (sonuç doğru kalır), trigger
 //    kaybolursa kolon HİÇ yazılmaz ve tüm dönem raporları sessizce boşalır.
@@ -841,6 +841,20 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     // ölü top Pasif kartta dirilemez (UPDATE OF status — 1e kararı (b)). Tarihçe (ölü top) geçer.
     timing: ["BEFORE INSERT OR UPDATE OF", "FOR EACH ROW"],
     why: "D1 — Pasif kartta canlı top olamaz; kapıyı atlayan yol da durur (23514 → 409)",
+  },
+  {
+    table: "rolls",
+    trigger: "rolls_color_not_archived",
+    // Renk arşivinin DB seddi (MV-06): pasif renkte canlı top doğamaz / dirilemez / canlı top pasif renge taşınamaz.
+    timing: ["BEFORE INSERT OR UPDATE OF", "FOR EACH ROW"],
+    why: "MV-06 — pasif renkte canlı top olamaz; kapıyı atlayan yol da durur (23514 → 409)",
+  },
+  {
+    table: "swatches",
+    trigger: "swatches_master_not_archived",
+    // Kartela × ürün ve kartela × renk seddi: canlı kümeye GİRİŞ ve canlıyken kart/renk değişimi denetlenir.
+    timing: ["BEFORE INSERT OR UPDATE OF", "FOR EACH ROW"],
+    why: "MV-06 — Pasif kartta / pasif renkte canlı kartela olamaz; tek yazarı atlayan yol da durur (23514 → 409)",
   },
   {
     table: "order_lines",
@@ -967,6 +981,18 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     volatility: "v",
     bodyFragments: ["'SUBCONTRACTOR_CONSUMED', 'TAMBUR_CONSUMED', 'KARTELA_CONSUMED', 'CANCELLED', 'SHIPPED', 'SCRAP'", "'ARCHIVED'", "rolls_item_not_archived", "23514"],
     why: "ürün arşiv seddinin top gövdesi: ölü küme TS `DEAD_ROLL_STATUSES` ile aynı (bekçi test_item_archive_db_guard kıyaslar)",
+  },
+  {
+    name: "rolls_archived_color_guard",
+    volatility: "v",
+    bodyFragments: ["'SUBCONTRACTOR_CONSUMED', 'TAMBUR_CONSUMED', 'KARTELA_CONSUMED', 'CANCELLED', 'SHIPPED', 'SCRAP'", 'NOT c."isActive"', "rolls_color_not_archived", "23514"],
+    why: "renk arşiv seddinin top gövdesi: ölü küme TS `DEAD_ROLL_STATUSES` ile aynı (bekçi test_arsiv_seddi_kartela_renk kıyaslar)",
+  },
+  {
+    name: "swatches_archived_master_guard",
+    volatility: "v",
+    bodyFragments: ["'IN_STOCK', 'IN_SACK', 'IN_SHIPMENT'", "'ARCHIVED'", 'NOT c."isActive"', "swatches_item_not_archived", "swatches_color_not_archived", "23514"],
+    why: "kartela × ürün ve kartela × renk seddinin gövdesi: canlı küme TS `LIVE_SWATCH` ile aynı (bekçi test_arsiv_seddi_kartela_renk kıyaslar)",
   },
   {
     name: "order_lines_archived_item_guard",

@@ -29,7 +29,12 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { lockAgainstMergeTx } from "./master-data-live.helper";
 import { PHASE_OUT_LINE_QTY_WARNING } from "./item-lifecycle-settings.helper";
-import { ROLL_ON_ARCHIVED_ITEM_MESSAGE, SWATCH_ON_ARCHIVED_ITEM_MESSAGE } from "../../constants/item-archive-messages";
+import {
+  ROLL_ON_ARCHIVED_COLOR_MESSAGE,
+  ROLL_ON_ARCHIVED_ITEM_MESSAGE,
+  SWATCH_ON_ARCHIVED_COLOR_MESSAGE,
+  SWATCH_ON_ARCHIVED_ITEM_MESSAGE,
+} from "../../constants/item-archive-messages";
 import {
   readItemPhaseOutLineQty,
   readItemPhaseOutNewOrder,
@@ -232,20 +237,33 @@ export async function runItemUsageChecksTx(tx: Prisma.TransactionClient, checks:
  * DB seddi (`rolls_item_not_archived`) ikinci hattır; bu kontrol DB'ye gitmeden ÇIKIŞ YOLUNU
  * söyler. Dirilme yolları `test_item_usage_single_source` §3'te listelidir.
  */
-/** Düşülmüş kartela stoğa dönerken kartı Pasif olamaz (S4; top dirilmesinin ikizi). */
+/**
+ * Renk ayağı — arşivli (pasif) renk canlı kayda dönemez; renk arşiv kapısının (`COLOR_ARCHIVE`) canlı
+ * kümesinin dirilme ikizi. DB seddi (`rolls_color_not_archived` · `swatches_color_not_archived`) ikinci hat.
+ */
+async function assertColorsRevivable(db: Db, colorIds: Array<string | null>, message: string): Promise<void> {
+  const ids = [...new Set(colorIds.filter((c): c is string => c !== null))];
+  if (ids.length === 0) return;
+  const pasif = await db.color.findFirst({ where: { id: { in: ids }, isActive: false }, select: { id: true } });
+  if (pasif) throw AppError.conflict(message, { code: "COLOR_INACTIVE" });
+}
+
+/** Düşülmüş / sevk edilmiş kartela canlı kümeye dönerken kartı Pasif, rengi pasif olamaz (S4; top dirilmesinin ikizi). */
 export async function assertSwatchesRevivable(db: Db, swatchIds: string[]): Promise<void> {
   if (swatchIds.length === 0) return;
-  const rows = await db.swatch.findMany({ where: { id: { in: swatchIds } }, select: { itemId: true }, distinct: ["itemId"] });
+  const rows = await db.swatch.findMany({ where: { id: { in: swatchIds } }, select: { itemId: true, colorId: true } });
   for (const itemId of [...new Set(rows.map((r) => r.itemId))].sort()) {
     await assertItemUsable(db, itemId, "EXISTING_GOODS", { archivedMessage: SWATCH_ON_ARCHIVED_ITEM_MESSAGE });
   }
+  await assertColorsRevivable(db, rows.map((r) => r.colorId), SWATCH_ON_ARCHIVED_COLOR_MESSAGE);
 }
 
 export async function assertRollsRevivable(db: Db, rolls: string[] | Prisma.RollWhereInput): Promise<void> {
   if (Array.isArray(rolls) && rolls.length === 0) return;
   const where: Prisma.RollWhereInput = Array.isArray(rolls) ? { id: { in: rolls } } : rolls;
-  const rows = await db.roll.findMany({ where, select: { itemId: true }, distinct: ["itemId"] });
+  const rows = await db.roll.findMany({ where, select: { itemId: true, colorId: true } });
   for (const itemId of [...new Set(rows.map((r) => r.itemId))].sort()) {
     await assertItemUsable(db, itemId, "EXISTING_GOODS", { archivedMessage: ROLL_ON_ARCHIVED_ITEM_MESSAGE });
   }
+  await assertColorsRevivable(db, rows.map((r) => r.colorId), ROLL_ON_ARCHIVED_COLOR_MESSAGE);
 }

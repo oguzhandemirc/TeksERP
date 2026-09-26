@@ -12889,6 +12889,31 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 **Aynı sınıfta ikinci açık (ölçüldü, kapsam dışı — rapor).** Dirilme kapıları (`assertRollsRevivable` · `assertSwatchesRevivable`) yalnız ÜRÜN kartına bakıyor. Renk arşiv kapısı ise canlı topu ve canlı kartelayı da referans sayıyor (`COLOR_ARCHIVE`). Renk arşivlendikten sonra top/kartela dirilmesi arşivli rengi canlı referansa döndürür (MV-06, renk). Renk için DB seddi de yok.
 
+## 2026-09-26 — Arşiv seddi kartela × ürün, top × renk, kartela × renk; dirilme kapıları rengi de sorar [ÇEKİRDEK]
+
+**Karar (4b, 06 denetiminin devamı).** Kartela DB seddi onaylandı: ham SQL ve script açığını kök kuralın "DB CHECK seddi" deseni kapatır. Renk açığı aynı sınıfta ve düzeltilir, çünkü MV-06 rengi de kapsar. Renk arşiv kapısı (`COLOR_ARCHIVE`) canlı top ve kartelayı referans sayıyordu; dirilme kapıları ise yalnız ürünü soruyordu.
+
+**Ölçüm (prova kopyaları `tekserp_prova0925_test` · `tekserp_prova4b_test` · `tekserp_9fprova_test`, `default_transaction_read_only=on`):**
+- 7 pasif renk, 8.381–9.025 top: pasif renkte canlı top 0.
+- Fabrikada kartela 0.
+- `items.lifecycleStatus` prova şemasında henüz yok: ARCHIVED durumu göçle doğar ve ilk anda 0'dır.
+- ⇒ Mevcut ihlal yok. Tetikleyici yalnız yeni yazımı denetler (NOT VALID kalıbı gerekmedi).
+- `rolls.colorId` ve `swatches.colorId` nullable; renksiz kayıt sedde girmez.
+
+**Uygulama.**
+- Migration `20260926190000_arsiv_seddi_kartela_renk` (yalnız ekler, idempotent):
+  - `rolls_color_not_archived` (top × renk);
+  - `swatches_master_not_archived` (kartela × ürün + kartela × renk, iki kısıt adı).
+  - Tetik yalnız kayıt canlı kümeye GİRERKEN ya da canlıyken kart/renk değişirken koşar. Tarihçe (ölü kayıt) geçer.
+  - Birleştirme geri alması mezar taşını ÖNCE kaldırdığı için sedde takılmaz.
+- `assertRollsRevivable` / `assertSwatchesRevivable` tek renk ayağından geçer (`assertColorsRevivable`) → 409 `COLOR_INACTIVE` + "rengi önce aktifleştirin".
+- `SWATCH_ON_ARCHIVED_ITEM_MESSAGE` "düşümü geri almak için" yerine "geri almak için" oldu, çünkü sevk stornosu da aynı metni söyler.
+- error.middleware üç kısıt adını eşler. `test_db_invariants` envanteri güncellendi.
+
+**Bekçi.** `test_arsiv_seddi_kartela_renk` 19/19.
+- Sondalar: S1 tetikleyiciler DISABLE → 9 ❌; S2 uygulama renk ayağı yok → 2 ❌.
+- Yan etki: `test_master_data_archive_health` §2 fikstürü pasif renkte canlı top YARATIYORDU; sed bunu doğru olarak reddetti. Fikstür §1 emsaline çevrildi: canlı top önce, renk ham yazımla sonra pasif.
+
 ## 2026-09-26 — Token replay D5b: üretim nesneleri tek boğazda; yarışta ham P2002 kalktı; borç 11 → 5 [ÇEKİRDEK]
 
 **Kapsam.** Levent planı (R) · dokuma işi · fason dokuma kabulü · top indirme (R + K′). K′ ilk ifade kilidinin arkasında: dokuma işinde 8032, fason kabulde iş emri satır claim'i, indirmede 8029; numaralar maksimumdan türediği için kilidin arkasında erken dönen deneme numara sarf etmez. Ayrım `fresh: true/false as const` (D3 paketleme grubu kalıbı).

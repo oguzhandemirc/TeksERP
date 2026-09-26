@@ -16,7 +16,13 @@ import { AuditService } from "../services/audit.service";
 import { classifyPoolTimeout, recordPoolTimeout, getPoolHealth } from "../lib/pool-health";
 import "../types/express-augment";
 import { hata, uyari } from "../lib/logger";
-import { ORDER_LINE_ON_ARCHIVED_ITEM_MESSAGE, ROLL_ON_ARCHIVED_ITEM_MESSAGE } from "../constants/item-archive-messages";
+import {
+  ORDER_LINE_ON_ARCHIVED_ITEM_MESSAGE,
+  ROLL_ON_ARCHIVED_COLOR_MESSAGE,
+  ROLL_ON_ARCHIVED_ITEM_MESSAGE,
+  SWATCH_ON_ARCHIVED_COLOR_MESSAGE,
+  SWATCH_ON_ARCHIVED_ITEM_MESSAGE,
+} from "../constants/item-archive-messages";
 
 /**
  * Prisma P2003 FK kolonunu farklı versiyon formatlarından çıkarır.
@@ -260,6 +266,9 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   // Ürün arşivinin DB seddi (tetikleyici, 23514) — URUN-YASAM-DONGUSU.md §7; mesaj çıkış yolunu söyler.
   rolls_item_not_archived: ROLL_ON_ARCHIVED_ITEM_MESSAGE,
   order_lines_item_not_archived: ORDER_LINE_ON_ARCHIVED_ITEM_MESSAGE,
+  swatches_item_not_archived: SWATCH_ON_ARCHIVED_ITEM_MESSAGE,
+  rolls_color_not_archived: ROLL_ON_ARCHIVED_COLOR_MESSAGE,
+  swatches_color_not_archived: SWATCH_ON_ARCHIVED_COLOR_MESSAGE,
   rolls_initialQty_nonneg: "Topun giriş metrajı negatif olamaz.",
   rolls_weightKg_nonneg: "Top ağırlığı negatif olamaz.",
   sacks_weightKg_nonneg: "Çuval tartısı negatif olamaz.",
