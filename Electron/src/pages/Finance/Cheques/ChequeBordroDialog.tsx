@@ -8,15 +8,16 @@
 //   • Kaydet — `BRD…` numaralı kayıt doğar ve belgesi donar (`finance:write`);
 //     ardından resmî belge (sürüm, revizyon, PDF, Excel) açılır.
 //
-// ⚠️ ÇEKİN DURUMU DEĞİŞMEZ ("belge-only", 2026-08-15 kararı yürürlükte): bordro
-// kesmek "bankaya verdim" demek değildir; ekran bunu açıkça yazar.
+// ⚠️ Bayrak `financeChequeNoteMovementEnabled` KAPALIYKEN çekin durumu DEĞİŞMEZ (belge-only) ve
+// ekran bugünküyle aynıdır. AÇIKKEN aldığımız çeklerde teslim türü sorulur (K3): bankaya →
+// bankaya verme, cariye → ciro; önizleme backend'in planını ve engelli satırlarını gösterir.
 //
 // ⚠️ DENEME TOKEN'I diyalog başına bir kez üretilir ve yalnız sonucu belirsiz
 // bırakan hatada korunur (`tokenAfterFailure`): zaman aşımından sonra ikinci
 // "Kaydet" ikinci BRD açmaz.
 // =============================================================================
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Eye, FileDown, FileSpreadsheet, Printer } from "lucide-react";
 import {
@@ -30,7 +31,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { printHtmlString } from "@/lib/print";
 import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
-import { docTablesToSheets, type DocTablesPayload } from "@/lib/doc-tables-export";
+import { docTablesToSheets } from "@/lib/doc-tables-export";
 import {
   buildDeliveryNoteBody,
   buildDraftBody,
@@ -45,6 +46,20 @@ import { ymd } from "./dates";
 import { createChequeDeliveryNote, draftChequeDeliveryNote, type ChequeRow } from "./service";
 import { money, type Currency } from "../service";
 import { ChequeNoteDocDialog } from "./ChequeNoteDocDialog";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { BordroTargetFields } from "./BordroTargetFields";
+import { BordroMovementPlan } from "./BordroMovementPlan";
+import {
+  movementApplies,
+  planBlockReason,
+  targetBlockReason,
+  rowIssuesError,
+  type DeliveryTarget,
+  type NoteMovementType,
+  type RowIssue,
+} from "./chequeNoteMovement";
+import type { DeliveryNoteDraftResult } from "./service";
 
 interface Props {
   /** SEÇİLİ satırlar — ekrandaki listeden gelir. */
@@ -54,18 +69,36 @@ interface Props {
 }
 
 const DRAFT_FILE = "Teslim Bordrosu TASLAK";
+const NO_TARGET: DeliveryTarget = { targetKind: null, bankAccountId: null, cariId: null };
+const MOVE_PERMISSION = "Çeki hareket ettiren bordro için çek/senet portföyü yetkisi (finance:cheque) gerekir.";
+const MOVED_TEXT: Record<NoteMovementType, string> = {
+  DEPOSIT: "Çekler bu bordroyla bankaya verildi; bordroyu iptal etmek bunu geri alır.",
+  ENDORSE: "Çekler bu bordroyla ciro edildi; bordroyu iptal etmek bunu geri alır.",
+};
 
 export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
   const [dateYmd, setDateYmd] = useState(() => ymd(new Date()));
   const [targetLabel, setTargetLabel] = useState("");
   const [notes, setNotes] = useState("");
-  const [preview, setPreview] = useState<{ html: string; tables: DocTablesPayload } | null>(null);
-  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<DeliveryNoteDraftResult | null>(null);
+  const [created, setCreated] = useState<{ id: string; movement: NoteMovementType | null } | null>(null);
+  const [target, setTarget] = useState<DeliveryTarget>(NO_TARGET);
+  const [issues, setIssues] = useState<RowIssue[] | null>(null);
+  const qc = useQueryClient();
+  const { hasPermission } = useRoleAccess();
+  const movementOn = useFeatureFlags().data?.data?.financeChequeNoteMovementEnabled === true;
+  const applies = movementApplies(movementOn, rows[0]?.kind ?? null);
   const [dupWarning, setDupWarning] = useState<DuplicateNoteWarning | null>(null);
   const [clientToken, setClientToken] = useState<string>(() => crypto.randomUUID());
 
-  const draft = { rows, dateYmd, targetLabel, notes };
+  const draft = { rows, dateYmd, targetLabel, notes, ...(applies ? { target } : {}) };
   const blocked = deliveryNoteBlockReason(draft);
+  const moving = applies && (target.targetKind === "BANK" || target.targetKind === "CARI");
+  // Teslim türü eksikliği seçim hatası değildir — toplamları gizlemez, türün altında söylenir.
+  const targetBlocked = applies ? targetBlockReason(target) : null;
+  const saveBlocked =
+    blocked ?? planBlockReason(preview?.movement) ?? (moving && !hasPermission("finance:cheque") ? MOVE_PERMISSION : null);
+  const currencies = [...new Set(rows.map((r) => r.currency))];
   const buckets = totalsByCurrency(rows);
   const kindLabel = rows[0] ? KIND_LABEL[rows[0].kind] : "";
 
@@ -74,6 +107,7 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
     set(v);
     setPreview(null);
     setDupWarning(null);
+    setIssues(null);
   };
 
   const draftM = useMutation({
@@ -87,10 +121,13 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
     onSuccess: (r) => {
       // Mesaj BACKEND'İN cümlesidir (belge numarasını o biliyor) — ezme.
       toast.success(r.message ?? "Teslim bordrosu düzenlendi.");
-      if (r.data?.id) setCreatedId(r.data.id);
+      // Hareketli bordro çeklerin durumunu değiştirdi — portföy listesi ve özet tazelenir.
+      if (r.data?.movement) void qc.invalidateQueries({ queryKey: ["finance", "cheques"] });
+      if (r.data?.id) setCreated({ id: r.data.id, movement: r.data.movement ?? null });
     },
     onError: (e) => {
       setClientToken((t) => tokenAfterFailure(t, e));
+      setIssues(rowIssuesError(e)?.rows ?? null);
       // Yalnız `ALREADY_IN_ACTIVE_NOTE` onay bandına döner; diğer hatalar interceptor toast'ıyla gider.
       setDupWarning(duplicateNoteWarning(e));
     },
@@ -116,12 +153,14 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
     }
   };
 
-  if (createdId) {
+  if (created) {
     return (
       <ChequeNoteDocDialog
-        noteId={createdId}
+        noteId={created.id}
         onClose={() => onOpenChange(false)}
-        description="Resmî bordro — belge numarası, sürümü ve revizyon geçmişi vardır. Çeklerin durumu bu belgeyle DEĞİŞMEZ."
+        description={`Resmî bordro — belge numarası, sürümü ve revizyon geçmişi vardır. ${
+          created.movement ? MOVED_TEXT[created.movement] : "Çeklerin durumu bu belgeyle DEĞİŞMEZ."
+        }`}
       />
     );
   }
@@ -136,12 +175,14 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
           <DialogDescription>
             {rows.length} kayıt seçili{kindLabel ? ` · ${kindLabel} çek/senet` : ""}. Önizleme
             numarasız bir TASLAKTIR ve hiçbir kayıt açmaz; “Kaydet” belge numaralı (BRD…) resmî
-            bordroyu düzenler. Çeklerin durumu DEĞİŞMEZ: bankaya verdiyseniz ayrıca satır
-            menüsünden “Bankaya Ver” işlemini yapın.
+            bordroyu düzenler.{" "}
+            {applies
+              ? "Bankaya kesilen bordro çekleri bankaya verir, cariye kesilen bordro ciro eder; “yalnız belge” çeki değiştirmez."
+              : "Çeklerin durumu DEĞİŞMEZ: bankaya verdiyseniz ayrıca satır menüsünden “Bankaya Ver” işlemini yapın."}
           </DialogDescription>
         </DialogHeader>
 
-        {blocked ? (
+        {blocked && blocked !== targetBlocked ? (
           <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
             {blocked}
           </div>
@@ -171,6 +212,18 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
               Kaydedilirse belge numarasının günü de budur (BRD + gün + sıra).
             </p>
           </div>
+          {applies ? (
+            <div className="col-span-2">
+              <BordroTargetFields
+                target={target}
+                onTargetChange={edit(setTarget)}
+                targetLabel={targetLabel}
+                onTargetLabelChange={edit(setTargetLabel)}
+                currency={currencies.length === 1 ? (currencies[0] ?? null) : null}
+              />
+              {targetBlocked && <p className="mt-1 text-xs text-muted-foreground">{targetBlocked}</p>}
+            </div>
+          ) : (
           <div>
             <Label>Teslim edilen yer / firma (opsiyonel)</Label>
             <Input
@@ -184,7 +237,10 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
               Serbest metindir. Boş bırakılırsa o satır hiç basılmaz.
             </p>
           </div>
+          )}
         </div>
+
+        {(preview?.movement || issues) && <BordroMovementPlan plan={preview?.movement} issues={issues ?? undefined} />}
 
         {!preview && (
           <div>
@@ -262,7 +318,11 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
                   {createM.isPending ? "Düzenleniyor…" : "Yine de Bordro Kes"}
                 </Button>
               ) : (
-                <Button disabled={blocked !== null || busy} onClick={() => createM.mutate(undefined)}>
+                <Button
+                  disabled={saveBlocked !== null || busy}
+                  title={saveBlocked ?? undefined}
+                  onClick={() => createM.mutate(undefined)}
+                >
                   {createM.isPending ? "Düzenleniyor…" : "Kaydet (BRD)"}
                 </Button>
               )}

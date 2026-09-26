@@ -16,29 +16,20 @@
 // ⚠️ İPTAL EDİLMİŞ SATIR GİZLENMEZ (donmuş belge kuralı) — rozet ayırır.
 // =============================================================================
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ReportExportBar } from "@/pages/Reports/_components";
 import type { ReportExportSpec } from "@/pages/Reports/_components/reportExport";
 import { ChequeNoteDocDialog } from "./ChequeNoteDocDialog";
-import {
-  OFFICIAL_DOC_STATUS_LABEL,
-  officialDocCancelBlockReason,
-  officialDocCancelSummary,
-} from "../officialDocs";
+import { OFFICIAL_DOC_STATUS_LABEL, officialDocCancelBlockReason } from "../officialDocs";
+import { DeliveryNoteCancelPanel } from "./DeliveryNoteCancelPanel";
 import { KIND_LABEL } from "./labels";
-import {
-  cancelChequeDeliveryNote,
-  listChequeDeliveryNotes,
-  type DeliveryNoteRow,
-} from "./service";
+import { listChequeDeliveryNotes, type DeliveryNoteRow } from "./service";
 
 interface Props {
   open: boolean;
@@ -85,27 +76,13 @@ export function deliveryNoteListSpec(rows: DeliveryNoteRow[], total: number): Re
 }
 
 export function ChequeDeliveryNoteListDialog({ open, onOpenChange }: Props) {
-  const qc = useQueryClient();
   const [openDocId, setOpenDocId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<DeliveryNoteRow | null>(null);
-  const [reason, setReason] = useState("");
 
   const q = useQuery({
     queryKey: ["finance", "cheque-delivery-notes"],
     queryFn: () => listChequeDeliveryNotes({ page: 1, pageSize: 50 }),
     enabled: open,
-  });
-
-  const cancelM = useMutation({
-    mutationFn: (row: DeliveryNoteRow) =>
-      cancelChequeDeliveryNote(row.id, reason.trim() || undefined),
-    onSuccess: (r) => {
-      toast.success(r.message ?? "Teslim bordrosu iptal edildi.");
-      setCancelTarget(null);
-      setReason("");
-      void qc.invalidateQueries({ queryKey: ["finance", "cheque-delivery-notes"] });
-      void qc.invalidateQueries({ queryKey: ["printed-doc"] });
-    },
   });
 
   // Belge önizlemesi ÜSTE açılır; kapanınca listeye dönülür (tek belgelik
@@ -115,7 +92,7 @@ export function ChequeDeliveryNoteListDialog({ open, onOpenChange }: Props) {
       <ChequeNoteDocDialog
         noteId={openDocId}
         onClose={() => setOpenDocId(null)}
-        description="Resmî bordro — sürüm geçmişi ve revizyon burada. İptal edilmiş bordro “İPTAL” filigranıyla basılır; çeklerin durumu bu belgeyle DEĞİŞMEZ."
+        description="Resmî bordro — sürüm geçmişi ve revizyon burada. İptal edilmiş bordro “İPTAL” filigranıyla basılır."
       />
     );
   }
@@ -130,8 +107,8 @@ export function ChequeDeliveryNoteListDialog({ open, onOpenChange }: Props) {
           <DialogTitle>Resmî Teslim Bordroları</DialogTitle>
           <DialogDescription>
             Kesilmiş `BRD…` numaralı bordrolar (en yeniden eskiye). Satıra tıklayınca belge sürüm
-            geçmişiyle açılır; yanlış kesilen bordro iptal edilebilir — kayıt silinmez, çeklerin
-            durumu zaten hiç değişmemişti.
+            geçmişiyle açılır; yanlış kesilen bordro iptal edilebilir — kayıt silinmez. Çek
+            hareketi taşıyan bordroda iptal, seçtiğiniz kıymetlerin hareketini geri alır.
           </DialogDescription>
         </DialogHeader>
 
@@ -200,10 +177,7 @@ export function ChequeDeliveryNoteListDialog({ open, onOpenChange }: Props) {
                             className="text-destructive hover:text-destructive"
                             disabled={blocked !== null}
                             title={blocked ?? "Bordroyu iptal et"}
-                            onClick={() => {
-                              setCancelTarget(r);
-                              setReason("");
-                            }}
+                            onClick={() => setCancelTarget(r)}
                           >
                             İptal
                           </Button>
@@ -217,37 +191,9 @@ export function ChequeDeliveryNoteListDialog({ open, onOpenChange }: Props) {
           </div>
         )}
 
-        {/* YIKICI İŞLEM ONAYI — etkilenen kayıt SOMUT olarak yazılır. */}
+        {/* YIKICI İŞLEM ONAYI — etkilenen kayıtlar SOMUT olarak listelenir (önizlemeden). */}
         {cancelTarget && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-            <p>
-              {officialDocCancelSummary(
-                cancelTarget.docNo,
-                `${cancelTarget._count.items} kıymet · ${dt(cancelTarget.deliveryDate)}`,
-              )}
-            </p>
-            <Textarea
-              className="mt-2"
-              rows={2}
-              maxLength={300}
-              placeholder="İptal sebebi (opsiyonel — belgede ve denetim kaydında görünür)"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
-            <div className="mt-2 flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setCancelTarget(null)}>
-                Vazgeç
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={cancelM.isPending}
-                onClick={() => cancelM.mutate(cancelTarget)}
-              >
-                {cancelM.isPending ? "İptal ediliyor…" : "Bordroyu İptal Et"}
-              </Button>
-            </div>
-          </div>
+          <DeliveryNoteCancelPanel key={cancelTarget.id} note={cancelTarget} onClose={() => setCancelTarget(null)} />
         )}
 
         <DialogFooter className="items-center sm:justify-between">

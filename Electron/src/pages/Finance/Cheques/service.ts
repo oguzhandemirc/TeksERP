@@ -21,6 +21,7 @@
 import apiClient from "@/services/apiClient";
 import type { DocTablesPayload } from "@/lib/doc-tables-export";
 import type { DeliveryNoteBody, DeliveryNoteDraftBody } from "./chequeDeliveryNote";
+import type { CancelPreview, MovementPlan, NoteMovementType } from "./chequeNoteMovement";
 import type { Currency } from "../service";
 
 export type ChequeKind = "RECEIVED" | "ISSUED";
@@ -146,7 +147,14 @@ type Paged<T> = {
 };
 
 /** Geçiş uçlarının ortak yanıtı — mesaj BACKEND'İN cümlesidir, ezme. */
-type MutationResult = { data?: { id: string; docNo: string }; message?: string };
+/**
+ * Geçiş cevabı. Bayrak `financeChequeNoteMovementEnabled` açıkken tekil bankaya verme / ciro ve
+ * bağlı stornoları tek satırlı teslim bordrosunu da döner (`deliveryNote`, yalnız ekler).
+ */
+type MutationResult = {
+  data?: { id: string; docNo: string; deliveryNote?: { id: string; docNo: string } };
+  message?: string;
+};
 
 // -----------------------------------------------------------------------------
 // OKUMA
@@ -314,27 +322,39 @@ export async function chequeCancel(id: string, reason?: string): Promise<Mutatio
 // ile çakışmaz (Express tam segment eşler). Gövdeyi ekran ELLE KURMAZ,
 // `chequeDeliveryNote.buildDeliveryNoteBody` üretir (kurallar orada).
 //
-// ⚠️ İZİN `finance:write`, `finance:cheque` DEĞİL — bordro çekin DURUM
-// MAKİNESİNE dokunmaz, yalnız kâğıt üretir. Yazmayı `finance:cheque`e bağlamak
-// "teslim tutanağı bastır" isteyen kişiye çek tahsil etme yetkisi vermek olurdu
-// (backend rotasındaki gerekçenin aynısı; iki taraf hizalı kalmalı).
+// ⚠️ İZİN `finance:write` — belge-only bordro yalnız kâğıt üretir. Hareketli bordro (bayrak
+// açık, K3) çeki oynattığı için backend AYRICA `finance:cheque` ister (backend rotasıyla hizalı).
+
+export interface CreatedDeliveryNote {
+  id: string;
+  docNo: string;
+  count: number;
+  replayed?: true;
+  /** Yalnız bayrak açıkken döner: bordronun yaptığı hareket (`null` = belge-only). */
+  movement?: NoteMovementType | null;
+}
 
 export async function createChequeDeliveryNote(
   body: DeliveryNoteBody,
-): Promise<{ data?: { id: string; docNo: string; count: number; replayed?: true }; message?: string }> {
+): Promise<{ data?: CreatedDeliveryNote; message?: string }> {
   const res = await apiClient.post("/api/finance/cheque-delivery-notes", body);
-  return res.data as { data?: { id: string; docNo: string; count: number; replayed?: true }; message?: string };
+  return res.data as { data?: CreatedDeliveryNote; message?: string };
 }
 
 /**
  * TASLAK — kayıtsız seçimden numarasız önizleme: PDF'in HTML'i + Excel'in tabloları
  * (backend'in resmî bordroyu basan AYNI çözücüsünden). Hiçbir şey yazmaz; okuma izni.
  */
-export async function draftChequeDeliveryNote(
-  body: DeliveryNoteDraftBody,
-): Promise<{ html: string; tables: DocTablesPayload }> {
+export interface DeliveryNoteDraftResult {
+  html: string;
+  tables: DocTablesPayload;
+  /** Yalnız bayrak açıkken: kaydedince her çeke ne olacağı (engelli satır nedeniyle). */
+  movement?: MovementPlan;
+}
+
+export async function draftChequeDeliveryNote(body: DeliveryNoteDraftBody): Promise<DeliveryNoteDraftResult> {
   const res = await apiClient.post("/api/finance/cheque-delivery-notes/draft", body);
-  return (res.data as { data: { html: string; tables: DocTablesPayload } }).data;
+  return (res.data as { data: DeliveryNoteDraftResult }).data;
 }
 
 /**
@@ -371,10 +391,24 @@ export async function listChequeDeliveryNotes(params: {
   return res.data as { data: DeliveryNoteRow[]; pagination: { total: number } };
 }
 
+/**
+ * İptal. Belge-only bordroda yalnız `reason` (opsiyonel). Hareketli bordroda `chequeIds` (önizlemeden
+ * seçim) ve `reason` ZORUNLU; seçimsiz istek 409 `DELIVERY_NOTE_HAS_MOVEMENTS` alır.
+ */
 export async function cancelChequeDeliveryNote(
   id: string,
   reason?: string,
+  chequeIds?: string[],
 ): Promise<{ message?: string }> {
-  const res = await apiClient.post(`/api/finance/cheque-delivery-notes/${id}/cancel`, { reason });
+  const res = await apiClient.post(`/api/finance/cheque-delivery-notes/${id}/cancel`, {
+    reason,
+    ...(chequeIds && chequeIds.length > 0 ? { chequeIds } : {}),
+  });
   return res.data as { message?: string };
+}
+
+/** İptal önizlemesi — etkilenen HER kıymet, hareketi ve geri alınabilirliği (yazmaz, okuma izni). */
+export async function getDeliveryNoteCancelPreview(id: string): Promise<CancelPreview> {
+  const res = await apiClient.get(`/api/finance/cheque-delivery-notes/${id}/cancel-preview`);
+  return (res.data as { data: CancelPreview }).data;
 }

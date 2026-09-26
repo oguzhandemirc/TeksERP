@@ -22,6 +22,7 @@
 import { isAmbiguousFailure } from "@/lib/fasonReceiveAttempt";
 import { bordroBlockReason, type SelectableCheque } from "./chequeBordro";
 import { dayStartIso } from "./dates";
+import { targetBlockReason, targetBodyFields, type DeliveryTarget } from "./chequeNoteMovement";
 
 export const DELIVERY_DATE_ERROR =
   "Teslim tarihi gerekli — hem kâğıdın günü hem de belge numarasının çıpası odur.";
@@ -43,12 +44,20 @@ export interface DeliveryNoteDraft {
   confirmDuplicate?: boolean;
   /** Mantıksal denemenin kimliği (uuid) — bkz. `tokenAfterFailure`. */
   clientToken?: string;
+  /**
+   * Hareket fişi (K3) teslim türü — YALNIZ bayrak açık ve aldığımız çeklerde verilir; yoksa
+   * gövde bugünkü gibi (belge-only) kalır. Bkz. `chequeNoteMovement.ts`.
+   */
+  target?: DeliveryTarget;
 }
 
 /** `POST /api/finance/cheque-delivery-notes/draft` gövdesi — kaydın alanlarının aynısı. */
 export interface DeliveryNoteDraftBody {
   chequeIds: string[];
   deliveryDate: string;
+  /** Hareket fişi hedefi — yalnız biri, yalnız teslim türü seçildiyse. */
+  bankAccountId?: string;
+  cariId?: string;
   targetLabel?: string;
   notes?: string;
 }
@@ -125,7 +134,7 @@ export function deliveryNoteBlockReason(draft: DeliveryNoteDraft): string | null
   const blocked = bordroBlockReason(draft.rows);
   if (blocked) return blocked;
   if (!dayStartIso(draft.dateYmd)) return DELIVERY_DATE_ERROR;
-  return null;
+  return draft.target ? targetBlockReason(draft.target) : null;
 }
 
 /**
@@ -145,6 +154,9 @@ export function buildDraftBody(draft: DeliveryNoteDraft): DeliveryNoteDraftBody 
 
   const deliveryDate = dayStartIso(draft.dateYmd);
   if (!deliveryDate) throw new Error(DELIVERY_DATE_ERROR);
+  // Eksik teslim türü SESSİZCE belge-only gövdeye düşmesin — hareket bekleyen kullanıcı kâğıt alırdı.
+  const targetBlocked = draft.target ? targetBlockReason(draft.target) : null;
+  if (targetBlocked) throw new Error(targetBlocked);
 
   // ⚠️ TEKİLLEŞTİR: aynı çek iki kez giderse backend pivotun `@@unique`ine
   // çarpardı. Backend de dedup ediyor (iki katman), ama istemcinin gönderdiği
@@ -156,6 +168,7 @@ export function buildDraftBody(draft: DeliveryNoteDraft): DeliveryNoteDraftBody 
   return {
     chequeIds,
     deliveryDate,
+    ...(draft.target ? targetBodyFields(draft.target) : {}),
     ...(targetLabel ? { targetLabel } : {}),
     ...(notes ? { notes } : {}),
   };

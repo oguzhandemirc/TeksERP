@@ -82,6 +82,8 @@ describe("§3 kural ekranda değil BU katmanda (iki liste de çağırır)", () =
   it("§3b bordro listesi AYNI yüklemi çağırır (ikinci bir yorum yazılmamış)", () => {
     const list = src("./Cheques/ChequeDeliveryNoteListDialog.tsx");
     expect(list).toContain("officialDocCancelBlockReason");
-    expect(list).toContain("officialDocCancelSummary");
+    // Onay metni K3'te iptal paneline taşındı (liste onu mount eder).
+    expect(list).toContain("<DeliveryNoteCancelPanel");
+    expect(src("./Cheques/DeliveryNoteCancelPanel.tsx")).toContain("officialDocCancelSummary(");
   });
 });

@@ -43,6 +43,9 @@
 //     token yalnız belirsiz hatada yapışır; diyalog token'ı gövdeye koyar.
 //   ⑧ `tokenAfterFailure` koşulsuz yeni token üretti → 1 kırmızı: §8c.
 //   ⑨ diyalog `clientToken`ı gövdeye koymadı → 1 kırmızı: §8d.
+//   ⑩ (K3, 2026-09-26) iptal onayı `DeliveryNoteCancelPanel`e taşındı; panelin
+//      `cancelChequeDeliveryNote(` çağrısı sahte bir Promise'le değiştirildi → §7b ❌.
+//      Önce çıplak ad aranıyordu ve import satırı yüzünden YEŞİL kaldı; çağrıya daraltıldı.
 // Bu dosyayı değiştirirsen aynı sondaları TEKRARLA — kırmızı verdiği kanıtlanmamış
 // bekçi, bekçi değil süstür.
 // =============================================================================
@@ -301,7 +304,11 @@ describe("§7 belgeye DÖNÜŞ YOLU (kesilen bordroya ulaşılabiliyor)", () => 
   it("§7b liste belgeyi AÇAR ve İPTALİ backend ucuna bağlar", () => {
     const list = src("./ChequeDeliveryNoteListDialog.tsx");
     expect(list).toContain("listChequeDeliveryNotes");
-    expect(list).toContain("cancelChequeDeliveryNote");
+    // İptal onayı K3'te kendi paneline taşındı (önizleme + satır seçimi): liste paneli MOUNT eder,
+    // panel backend ucuna bağlıdır — dikiş bir kat aşağı indi, kopmadı.
+    expect(list).toContain("<DeliveryNoteCancelPanel");
+    // ÇAĞRI aranır (ad değil): import satırı adı taşıdığı için çıplak ad bağlanmamış paneli de geçirirdi.
+    expect(src("./DeliveryNoteCancelPanel.tsx")).toContain("cancelChequeDeliveryNote(");
     expect(list).toContain("<ChequeNoteDocDialog");
     // K2: liste bir RAPORDUR — Excel/PDF liste motorundan.
     expect(list).toContain("ReportExportBar");
