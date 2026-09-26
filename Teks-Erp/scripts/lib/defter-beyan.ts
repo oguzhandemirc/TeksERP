@@ -732,8 +732,6 @@ export interface DamgaNullBeyani {
   gerekce: string;
 }
 
-const KULLANICI_KARARI_AB = "karar bekliyor: kullanıcı (A/B) — ayrı defteri olan bu damga DURUM kolonu sayılsın mı (A), BORC kalsın mı (B)";
-
 export const DAMGA_NULL_BEYANI: DamgaNullBeyani[] = [
   { dosya: "src/services/inventory.service.ts", fonksiyon: "restoreCancelledRoll", alan: "cancelledAt", adet: 1, sinif: "DURUM_KOLONU",
     tarihce: "roll_status_events (DB trigger'ı; CANCELLED → önceki durum satırı)",
@@ -750,9 +748,6 @@ export const DAMGA_NULL_BEYANI: DamgaNullBeyani[] = [
   { dosya: "src/services/helpers/swatch-event.helper.ts", fonksiyon: "transitionSwatchesTx", alan: "cancelledAt", adet: 1, sinif: "DURUM_KOLONU",
     tarihce: "swatch_events (REDUCED satırı ve ona bağlı REDUCTION_REVERSED satırı)",
     gerekce: "kolon kartelanın ŞU ANKİ düşülmüş/iptal hâlidir (status REDUCED/VOIDED iken dolu); düşüm, stornosu, kim ve neden kartela olay defterinde (kullanıcı kararı S2, 2026-09-26)" },
-  { dosya: "src/services/kartela.service.ts", fonksiyon: "reverseStockReductionTx", alan: "cancelledAt", adet: 1, sinif: "BORC",
-    tarihce: "SwatchStockReduction.reversedAt (düşüm stornosu damgası)",
-    gerekce: KULLANICI_KARARI_AB },
   { dosya: "src/services/shipping.service.ts", fonksiyon: "markSackContentChangedTx", alan: "weighedAt", adet: 1, sinif: "DURUM_KOLONU",
     tarihce: "SackWeighing (CLEARED olayı; önceki kg ile)",
     gerekce: "kolon çuvalın ŞU ANKİ tartısıdır; her tartı ve sıfırlama tartı defterinde (kullanıcı kararı 2026-09-26: ayrı defteri olan damga durum kolonudur)" },

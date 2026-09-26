@@ -10,9 +10,9 @@
 //      (`swatches: { connect … }`) yazım da sayılır.
 //   §4 ÖLÇÜLEMEDİ — `data` nesne literali değilse (değişken/spread) yazılan anahtar
 //      görülemez; üçüncü sonuç sessizce "uyumlu" sayılmaz.
-//   §6 K2 BORCU — bugünkü eski yazım siteleri `K2_BAGLANACAK`ta site başına beyanlı;
-//      beyan İKİ YÖNLÜ: beyansız yeni site kırmızı, isabetsiz (ölü) beyan kırmızı. K2
-//      her siteyi tek yazara bağlayınca liste boşalır ve kapı sert 0 olur.
+// Kapsam `src/` + `scripts/` (bakım/düzeltme script'i de tek yazardan geçer); bekçi ve
+// fikstür dosyaları (`test_*` · `fixture-*`) hariç — onlar kurgu durum kurar.
+// K1'deki eski site beyanı (14 → 13) K2'de 0'a indi ve silindi; kapı sert 0.
 // Sondalar (§5) her koşumda SAF tarayıcı üzerinde koşar: ihlal eklenince sayı ARTAR,
 // helper'a taşınınca DÜŞER.
 // =============================================================================
@@ -37,6 +37,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 const SRC = join(__dirname, "..", "src");
+const SCRIPTS = __dirname;
 const HELPER_REL = ["services", "helpers", "swatch-event.helper.ts"].join("/");
 
 /** Kartelanın yerini anlatan kolonlar — yalnız tek yazar değiştirir. */
@@ -44,26 +45,8 @@ export const YER_KOLONLARI = new Set(["status", "statusChangedAt", "sackId", "sh
 const GUNCELLE = new Set(["update", "updateMany", "updateManyAndReturn", "upsert"]);
 const YARAT = new Set(["create", "createMany", "createManyAndReturn"]);
 const OLAY_YAZIM = new Set([...GUNCELLE, ...YARAT, "delete", "deleteMany"]);
+const TEK_YAZAR = new Set(["transitionSwatchesTx", "createSwatchesTx"]);
 const ILISKI_YAZIM = new Set(["connect", "connectOrCreate", "disconnect", "set", "create", "createMany", "update", "updateMany", "upsert", "delete", "deleteMany"]);
-
-/**
- * K2'de tek yazara bağlanacak eski siteler — dosya · fonksiyon → site sayısı.
- * Sayı ÖLÇÜLENE eşit olmalı; site bağlanınca satır SİLİNİR (ölü beyan kırmızıdır).
- */
-export const K2_BAGLANACAK: Record<string, number> = {
-  "services/kartela.service.ts · cancelReceipt": 1,
-  "services/kartela.service.ts · reduceStock": 1,
-  "services/kartela.service.ts · reverseStockReductionTx": 1,
-  "services/shipping.service.ts · scanIntoSack": 2,
-  "services/shipping.service.ts · addKartelaToSack": 1,
-  "services/shipping.service.ts · removeSwatchFromSack": 1,
-  "services/shipping.service.ts · distributeSackContents": 1,
-  "services/shipping.service.ts · removeSack": 1,
-  "services/shipping.service.ts · createShipmentCoreTx": 1,
-  "services/shipping.service.ts · addSacksToShipment": 1,
-  "services/shipping.service.ts · removeSackFromShipment": 1,
-  "services/shipping.service.ts · cancelPlannedShipmentTx": 1,
-};
 
 export interface Olcum {
   /** "dosya · fonksiyon" başına yer/doğuş ihlali (K2 borcuyla karşılaştırılır). */
@@ -72,6 +55,8 @@ export interface Olcum {
   olculemedi: string[];
   yazimSayisi: number;
   dogusSayisi: number;
+  /** Tek yazar çağrıları (helper dışı) — körlük zemini. */
+  cagriSayisi: number;
 }
 
 function dataAnahtarlari(arg: ts.Expression | undefined, anahtar: string): string[] | null {
@@ -91,7 +76,7 @@ function dataAnahtarlari(arg: ts.Expression | undefined, anahtar: string): strin
 
 /** SAF TARAYICI — bir kaynak metni ölçer; sondalar da bunu çağırır. */
 export function olc(rel: string, kod: string): Olcum {
-  const o: Olcum = { yerVeDogus: new Map(), olayIhlal: [], olculemedi: [], yazimSayisi: 0, dogusSayisi: 0 };
+  const o: Olcum = { yerVeDogus: new Map(), olayIhlal: [], olculemedi: [], yazimSayisi: 0, dogusSayisi: 0, cagriSayisi: 0 };
   const sf = ts.createSourceFile(rel, kod, ts.ScriptTarget.Latest, true);
   if (rel === HELPER_REL) return o;
   const yer = (n: ts.Node) => `${rel}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`;
@@ -100,6 +85,7 @@ export function olc(rel: string, kod: string): Olcum {
     o.yerVeDogus.set(k, [...(o.yerVeDogus.get(k) ?? []), yer(n)]);
   };
   const gez = (n: ts.Node): void => {
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && TEK_YAZAR.has(n.expression.text)) o.cagriSayisi++;
     if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) {
       const yontem = n.expression.name.text;
       const hedef = n.expression.expression.getText(sf);
@@ -136,47 +122,43 @@ export function olc(rel: string, kod: string): Olcum {
 }
 
 function birlestir(parcalar: Olcum[]): Olcum {
-  const out: Olcum = { yerVeDogus: new Map(), olayIhlal: [], olculemedi: [], yazimSayisi: 0, dogusSayisi: 0 };
+  const out: Olcum = { yerVeDogus: new Map(), olayIhlal: [], olculemedi: [], yazimSayisi: 0, dogusSayisi: 0, cagriSayisi: 0 };
   for (const p of parcalar) {
     for (const [k, v] of p.yerVeDogus) out.yerVeDogus.set(k, [...(out.yerVeDogus.get(k) ?? []), ...v]);
     out.olayIhlal.push(...p.olayIhlal);
     out.olculemedi.push(...p.olculemedi);
     out.yazimSayisi += p.yazimSayisi;
     out.dogusSayisi += p.dogusSayisi;
+    out.cagriSayisi += p.cagriSayisi;
   }
   return out;
 }
 
-/** §6 — ölçülen siteler ile K2 borcu arasındaki fark (iki yönlü). */
-export function borcFarki(o: Olcum, borc: Record<string, number>): { beyansiz: string[]; olu: string[] } {
-  const beyansiz = [...o.yerVeDogus]
-    .filter(([k, satirlar]) => borc[k] !== satirlar.length)
-    .map(([k, satirlar]) => `${k} :${satirlar.map((s) => s.split(":").pop()).join(",")} (ölçülen ${satirlar.length}, beyan ${borc[k] ?? "YOK"})`);
-  const olu = Object.keys(borc).filter((k) => !o.yerVeDogus.has(k));
-  return { beyansiz, olu };
-}
-
 // ── Gerçek ağaç ──────────────────────────────────────────────────────────────
-const agac = birlestir(
-  walkTs(SRC).map((abs) => olc(relative(SRC, abs).split(sep).join("/"), readFileSync(abs, "utf8"))),
-);
+/** Bekçi ve fikstür dosyaları kurgu durum kurar; bakım script'leri ise tek yazardan geçer. */
+export function scriptTaranirMi(ad: string): boolean {
+  return !/^(test_|fixture-)/.test(ad);
+}
+const agac = birlestir([
+  ...walkTs(SRC).map((abs) => olc(relative(SRC, abs).split(sep).join("/"), readFileSync(abs, "utf8"))),
+  ...walkTs(SCRIPTS)
+    .filter((abs) => scriptTaranirMi(relative(SCRIPTS, abs).split(sep).pop()!))
+    .map((abs) => olc(`scripts/${relative(SCRIPTS, abs).split(sep).join("/")}`, readFileSync(abs, "utf8"))),
+]);
 const helperKodu = readFileSync(join(SRC, HELPER_REL), "utf8");
 
 console.log("\n=== Kartela olay defteri — yazar kümesi ===");
-check("§0 körlük zemini: kartela yazımı ve doğuşu görülüyor",
-  agac.yazimSayisi >= 1 && helperKodu.includes("tx.swatch.updateManyAndReturn") && helperKodu.includes("tx.swatch.createManyAndReturn"),
-  `helper dışı ${agac.yazimSayisi} güncelleme · ${agac.dogusSayisi} doğuş`);
-const fark = borcFarki(agac, K2_BAGLANACAK);
-check("§1/§2 helper DIŞINDA yer/doğuş yazımı yalnız beyanlı K2 sitelerinde", fark.beyansiz.length === 0,
-  fark.beyansiz.length ? `BEYANSIZ: ${fark.beyansiz.join(" · ")} — transitionSwatchesTx/createSwatchesTx kullan` : `${agac.yerVeDogus.size} site, hepsi beyanlı`);
-check("§6 ölü K2 beyanı yok (bağlanan site listeden silinir)", fark.olu.length === 0,
-  fark.olu.length ? `İSABETSİZ BEYAN: ${fark.olu.join(" · ")}` : `${Object.keys(K2_BAGLANACAK).length} beyan, hepsi ölçüldü`);
+// Zemin: bugün 17 tek yazar çağrısı (15 geçiş sitesi, taşıma iki çağrı, doğuş bir).
+check("§0 körlük zemini: tek yazar çağrıları ve helper'ın kendi yazımları görülüyor",
+  agac.cagriSayisi >= 17 && helperKodu.includes("tx.swatch.updateManyAndReturn") && helperKodu.includes("tx.swatch.createManyAndReturn"),
+  `${agac.cagriSayisi} tek yazar çağrısı · helper dışı ${agac.yazimSayisi} güncelleme · ${agac.dogusSayisi} doğuş`);
+const siteler = [...agac.yerVeDogus].map(([k, satirlar]) => `${k} :${satirlar.map((x) => x.split(":").pop()).join(",")}`);
+check("§1/§2 helper DIŞINDA yer/doğuş yazımı YOK (sert 0)", siteler.length === 0,
+  siteler.length ? `helper DIŞINDA: ${siteler.join(" · ")} — transitionSwatchesTx/createSwatchesTx kullan` : "0 site");
 check("§3 olay satırı yalnız helper'da yazılır", agac.olayIhlal.length === 0,
   agac.olayIhlal.length ? `helper DIŞINDA: ${agac.olayIhlal.join(" · ")}` : "0 ihlal");
 check("§4 ölçülemeyen kartela yazımı yok (data nesne literali)", agac.olculemedi.length === 0,
   agac.olculemedi.length ? `ÖLÇÜLEMEDİ: ${agac.olculemedi.join(" · ")}` : "0");
-const borcToplam = Object.values(K2_BAGLANACAK).reduce((a, b) => a + b, 0);
-console.log(`ℹ️  K2 BORCU: ${borcToplam} site / ${Object.keys(K2_BAGLANACAK).length} fonksiyon`);
 
 // ── §5 SONDALAR — saf tarayıcı, iki yön ──────────────────────────────────────
 const s = (kod: string, rel = "services/x.service.ts") => olc(rel, kod);
@@ -200,12 +182,9 @@ check("§5h sonda: ham SQL SET yer kolonu YAKALANIR, WHERE'deki sayılmaz",
 check("§5i sonda: helper dışında olay satırı YAKALANIR (Prisma + ham SQL)",
   s(`async function f(tx){ await tx.swatchEvent.createMany({ data: [] }); }`).olayIhlal.length === 1
     && s('async function f(tx){ await tx.$executeRaw`INSERT INTO "swatch_events" ("id") VALUES (${id})`; }').olayIhlal.length === 1);
-const borcSonda = borcFarki(s(YER), { "services/x.service.ts · f": 1 });
-const borcOlu = borcFarki(s(YER_TASINDI), { "services/x.service.ts · f": 1 });
-check("§5j sonda: beyanlı site yeşil; site bağlanınca beyan ÖLÜ kırmızı olur",
-  borcSonda.beyansiz.length === 0 && borcSonda.olu.length === 0 && borcOlu.olu.length === 1);
-check("§5k sonda: aynı fonksiyonda ikinci site beyan sayısını AŞAR",
-  borcFarki(s(YER.replace("} }); }", "} }); await tx.swatch.updateMany({ where:{id}, data:{ shipmentId: null } }); }")), { "services/x.service.ts · f": 1 }).beyansiz.length === 1);
+check("§5j sonda: bakım script'i taranır, bekçi/fikstür dosyası taranmaz",
+  scriptTaranirMi("kartela_durum_anomali.ts") && !scriptTaranirMi("test_x.ts") && !scriptTaranirMi("fixture-x.ts")
+    && say(s(YER, "scripts/kartela_durum_anomali.ts")) === 1);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 process.exit(fail > 0 ? 1 : 0);

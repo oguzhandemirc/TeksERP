@@ -20,7 +20,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
-import { Prisma, PrintedDocType, RollStatus, WarehouseEventType } from "@prisma/client";
+import { Prisma, PrintedDocType, RollStatus, SwatchEventType, WarehouseEventType } from "@prisma/client";
 import { postStockMoves } from "./helpers/warehouse-ledger.helper";
 import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
@@ -48,7 +48,7 @@ import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
 import { lowerTr } from "../utils/tr-case";
 import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
-import { createSwatchesTx, type SwatchBirthInput } from "./helpers/swatch-event.helper";
+import { createSwatchesTx, transitionSwatchesTx, type SwatchBirthInput } from "./helpers/swatch-event.helper";
 
 // Liste filtre/sayfalama parametreleri — hem offset (mobil) hem cursor (admin)
 // modunu besler. cursor||mode==="cursor" → cursor response; aksi halde offset.
@@ -932,11 +932,12 @@ export class KartelaService {
         );
       }
       if (liveSwatches.length > 0) {
-        const cancelledSwatches = await tx.swatch.updateMany({
-          where: { id: { in: liveSwatches.map((s) => s.id) }, shipmentId: null, sackId: null, cancelledAt: null },
-          data: { cancelledAt: new Date(), cancelReason: trimmed },
+        const cancelledSwatches = await transitionSwatchesTx(tx, SwatchEventType.VOIDED, {
+          scope: { ids: liveSwatches.map((s) => s.id) },
+          where: { parentReceiptId: receiptId },
+          ctx: { trigger: "KARTELA_RECEIPT_CANCEL", userId, reason: trimmed },
         });
-        if (cancelledSwatches.count !== liveSwatches.length) {
+        if (cancelledSwatches.length !== liveSwatches.length) {
           // Kısmi claim TANISI TAZE OKUMAYLA: claim'in WHERE'i üç koşul taşıyor
           // (sevkiyat · çuval · zaten iptal), yani "sevkiyata bağlandı" demek
           // körlemesine suçlamaktır — başka bir yol iptal etmiş de olabilir.
@@ -956,7 +957,7 @@ export class KartelaService {
             { code: "SWATCH_RACE" }
           );
         }
-        cancelledSwatchCount = cancelledSwatches.count;
+        cancelledSwatchCount = cancelledSwatches.length;
       }
       // Tüketilen toplar AT_KARTELA'ya döner (firma hâlâ malı işlemiş sayılır).
       // ATOMİK CLAIM: beklenen statüde değilse (eşzamanlı işlem) 409 + rollback.
@@ -1535,11 +1536,12 @@ export class KartelaService {
           );
         }
         const claimIds = candidates.map((c) => c.id);
-        const claimed = await tx.swatch.updateMany({
-          where: { id: { in: claimIds }, shipmentId: null, sackId: null, cancelledAt: null },
-          data: { cancelledAt: new Date(), cancelReason: reason },
+        const claimed = await transitionSwatchesTx(tx, SwatchEventType.REDUCED, {
+          scope: { ids: claimIds },
+          reductionId: reduction.id,
+          ctx: { trigger: "KARTELA_STOCK_REDUCE", userId, reason },
         });
-        if (claimed.count !== data.count) {
+        if (claimed.length !== data.count) {
           // Kısmi claim: aralarından biri az önce sevkiyata girdi/iptal oldu → tüm tx
           // rollback (reduction kaydı dahil — yarım olay kaydı kalmaz, token boşa gitmez).
           throw AppError.conflict("Kartelalardan biri az önce değişti — tekrar deneyin.");
@@ -1791,14 +1793,16 @@ async function reverseStockReductionTx(
   }
 
   const swatchIds = reduction.items.map((i) => i.swatchId);
-  const restored = await tx.swatch.updateMany({
-    where: { id: { in: swatchIds }, ...RESTORABLE_REDUCED_SWATCH },
-    data: { cancelledAt: null, cancelReason: null },
+  const restored = await transitionSwatchesTx(tx, SwatchEventType.REDUCTION_REVERSED, {
+    scope: { ids: swatchIds },
+    where: RESTORABLE_REDUCED_SWATCH,
+    reductionId,
+    ctx: { trigger: "KARTELA_REDUCTION_REVERSE", userId, reason },
   });
-  if (restored.count !== swatchIds.length) {
+  if (restored.length !== swatchIds.length) {
     throw AppError.conflict("Kartelalardan biri az önce değişti — tekrar deneyin.");
   }
-  return { restored: restored.count, itemId: reduction.itemId, colorId: reduction.colorId, count: reduction.count, swatchIds };
+  return { restored: restored.length, itemId: reduction.itemId, colorId: reduction.colorId, count: reduction.count, swatchIds };
 }
 
 export interface StockReductionRow {

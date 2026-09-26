@@ -128,6 +128,8 @@ async function main(): Promise<void> {
       data: {
         cardNumber: `TST-CD-${ts}`, barcode: `TST-CDSW-${ts}`,
         itemId: item.id, colorId: color?.id ?? null, sackId: sackA.id,
+        // Durum seddi (swatches_status_shape): çuvalda doğan fikstür IN_SACK'tir.
+        status: "IN_SACK",
       },
       select: { id: true },
     });
@@ -261,7 +263,8 @@ async function main(): Promise<void> {
     );
   } finally {
     // Cleanup — test kendi yarattığını siler. Sıra: sack↔shipment bağını çöz, sonra sil.
-    if (swatchIds.length) await prisma.swatch.updateMany({ where: { id: { in: swatchIds } }, data: { sackId: null, shipmentId: null } });
+    // Kartela önce silinir: bağını çözmek durum seddini (status ↔ sackId) bozardı.
+    if (swatchIds.length) await prisma.swatch.deleteMany({ where: { id: { in: swatchIds } } });
     if (sackIds.length) await prisma.sack.updateMany({ where: { id: { in: sackIds } }, data: { shipmentId: null, seq: null } });
     if (rollIds.length) await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { sackId: null, shipmentId: null } });
     if (swatchIds.length) await prisma.swatch.deleteMany({ where: { id: { in: swatchIds } } });

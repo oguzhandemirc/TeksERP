@@ -54,10 +54,10 @@ export type SwatchScope = { ids: string[] } | { sackIds: string[] } | { shipment
 
 export interface SwatchTransitionOpts {
   scope: SwatchScope;
-  /** SACKED: girilen çuval · UNSACKED: çıkılan çuval. Numara satırda donar. */
-  sack?: { id: string; sackNo: string };
+  /** SACKED: girilen çuval · UNSACKED: çıkılan çuval. Numara satırda donar (verilmezse okunur). */
+  sack?: { id: string; sackNo?: string };
   /** SHIPMENT_ADDED: girilen · SHIPMENT_REMOVED/SHIPPED/SHIP_UNDONE: içinde bulunulan sevkiyat. */
-  shipment?: { id: string; shipmentNo: string };
+  shipment?: { id: string; shipmentNo?: string };
   /** REDUCED / REDUCTION_REVERSED: düşüm belgesi. */
   reductionId?: string;
   /** Claim'e eklenen atomik şart (ör. kabul kimliği). */
@@ -150,8 +150,8 @@ interface GecisPlani {
   kolonlar: Prisma.SwatchUncheckedUpdateManyInput;
   /** Claim'e eklenen yer şartı — eski yazarların WHERE'iyle aynı sıkılık. */
   kapsamSarti: Prisma.SwatchWhereInput;
-  sack: { id: string; sackNo: string } | null;
-  shipment: { id: string; shipmentNo: string } | null;
+  sack: { id: string; sackNo?: string } | null;
+  shipment: { id: string; shipmentNo?: string } | null;
 }
 
 /** Tip → yazılan kolonlar, yer şartı ve zorunlu belge. */
@@ -201,9 +201,10 @@ function gecisPlani(type: SwatchEventType, opts: SwatchTransitionOpts, now: Date
 /** Sevkiyat olayında kartelanın o anki çuvalı da satırda donar ("hangi çuvalla gitti"). */
 async function cuvalNolariTx(tx: Tx, plan: GecisPlani, sackIds: (string | null)[]): Promise<Map<string, string>> {
   const nolar = new Map<string, string>();
-  if (plan.sack) nolar.set(plan.sack.id, plan.sack.sackNo);
-  const eksik = [...new Set(sackIds.filter((id): id is string => !!id && !nolar.has(id)))];
-  if (plan.shipment && eksik.length > 0) {
+  if (plan.sack?.sackNo) nolar.set(plan.sack.id, plan.sack.sackNo);
+  const aranan = plan.shipment ? sackIds : plan.sack ? [plan.sack.id] : [];
+  const eksik = [...new Set(aranan.filter((id): id is string => !!id && !nolar.has(id)))];
+  if (eksik.length > 0) {
     const cuvallar = await tx.sack.findMany({ where: { id: { in: eksik } }, select: { id: true, sackNo: true } });
     for (const c of cuvallar) nolar.set(c.id, c.sackNo);
   }
@@ -261,6 +262,11 @@ export async function transitionSwatchesTx(
   if (claimed.length === 0) return [];
 
   const sackNoById = await cuvalNolariTx(tx, plan, claimed.map((c) => c.sackId));
+  const shipmentNo = plan.shipment
+    ? plan.shipment.shipmentNo
+      ?? (await tx.shipment.findUnique({ where: { id: plan.shipment.id }, select: { shipmentNo: true } }))?.shipmentNo
+      ?? null
+    : null;
   const reversesBySwatch = await terslenenlerTx(tx, type, claimed.map((c) => c.id), {
     reductionId: opts.reductionId, shipmentId: plan.shipment?.id,
   });
@@ -274,7 +280,7 @@ export async function transitionSwatchesTx(
         sackId: cuvalId,
         sackNo: cuvalId ? sackNoById.get(cuvalId) ?? null : null,
         shipmentId: plan.shipment?.id ?? null,
-        shipmentNo: plan.shipment?.shipmentNo ?? null,
+        shipmentNo,
         receiptId: type === SwatchEventType.VOIDED ? c.parentReceiptId : null,
         reductionId: opts.reductionId ?? null,
         reversesEventId: reversesBySwatch.get(c.id) ?? null,

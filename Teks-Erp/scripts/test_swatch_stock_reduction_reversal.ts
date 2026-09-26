@@ -274,16 +274,18 @@ async function main(): Promise<void> {
     return DELETE_DESENLERI.some((re) => re.test(t));
   });
   check("§9a `src/`de düşüm defterini silen çağrı YOK (delegate · ham SQL · ilişki)", deleters.length === 0, deleters.map((f) => f.replace(SRC, "src")).join(", "));
-  // §9b TÜM `src/` taranır: diriltme yazımı başka bir servise kopyalanırsa da yakalanır.
-  const restoreSites = files.flatMap((f) => {
+  // §9b TÜM `src/` taranır: diriltme = REDUCTION_REVERSED geçişi (kolonu yalnız tek yazar
+  // `swatch-event.helper` boşaltır — `test_swatch_event_yazar`). Geçiş başka bir servise
+  // kopyalanırsa ya da yüklemi düşerse yakalanır.
+  const restoreCalls = files.flatMap((f) => {
     const t = readFileSync(f, "utf8");
-    return (t.match(/data:\s*\{\s*cancelledAt:\s*null/g) ?? []).map(() => f.replace(SRC, "src"));
+    return [...t.matchAll(/transitionSwatchesTx\(\s*tx,\s*SwatchEventType\.REDUCTION_REVERSED,[\s\S]*?\}\);/g)]
+      .map((m) => ({ dosya: f.replace(SRC, "src"), yuklemli: /where:\s*RESTORABLE_REDUCED_SWATCH\b/.test(m[0]) }));
   });
-  const svc = readFileSync(join(SRC, "services", "kartela.service.ts"), "utf8");
   check(
-    "§9b Kartelayı dirilten TEK yazım `src/`de var ve `RESTORABLE_REDUCED_SWATCH` yüklemini taşıyor",
-    restoreSites.length === 1 && restoreSites[0] === "src/services/kartela.service.ts" && /\.\.\.RESTORABLE_REDUCED_SWATCH\s*\}/.test(svc),
-    `diriltme=${restoreSites.length} → ${restoreSites.join(", ")}`,
+    "§9b Kartelayı dirilten TEK geçiş `src/`de var ve `RESTORABLE_REDUCED_SWATCH` yüklemini taşıyor",
+    restoreCalls.length === 1 && restoreCalls[0].dosya === "src/services/kartela.service.ts" && restoreCalls[0].yuklemli,
+    `diriltme=${restoreCalls.length} → ${restoreCalls.map((c) => `${c.dosya}${c.yuklemli ? "" : " (YÜKLEMSİZ)"}`).join(", ")}`,
   );
 
   // §10 — YARIŞ (iki yön, açık tutulan tx ile)
@@ -324,7 +326,7 @@ async function raceCancelFirst(): Promise<void> {
       })).count;
       await tx.swatch.updateMany({
         where: { parentReceiptId: receiptId, cancelledAt: null },
-        data: { cancelledAt: new Date(), cancelReason: "yarış iptali" },
+        data: { cancelledAt: new Date(), cancelReason: "yarış iptali", status: "VOIDED" },
       });
       await gate;
     },
@@ -365,7 +367,7 @@ async function raceReverseFirst(): Promise<void> {
   const holder = prisma.$transaction(
     async (tx) => {
       await tx.$queryRaw`SELECT id FROM kartela_receipts WHERE id = ${receiptId}::uuid FOR SHARE`;
-      await tx.swatch.updateMany({ where: { id: { in: swatchIds } }, data: { cancelledAt: null, cancelReason: null } });
+      await tx.swatch.updateMany({ where: { id: { in: swatchIds } }, data: { cancelledAt: null, cancelReason: null, status: "IN_STOCK" } });
       await gate;
     },
     { timeout: 30_000 },

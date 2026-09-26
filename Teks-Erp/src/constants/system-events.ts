@@ -141,6 +141,8 @@ const REPAIR_EVENTS = {
   ROLL_PRODUCTION_TIMESTAMPS_BACKFILL: "ROLL_PRODUCTION_TIMESTAMPS_BACKFILL",
   ROLL_WAREHOUSE_BACKFILL: "ROLL_WAREHOUSE_BACKFILL",
   TAMBUR_UNDO_CANCEL_MARKER_BACKFILL: "TAMBUR_UNDO_CANCEL_MARKER_BACKFILL",
+  /** Kartela durum anomalisi düzeltme (K2, 2026-09-26) — `scripts/kartela_durum_anomali.ts`. */
+  SWATCH_STATUS_ANOMALY_FIX: "SWATCH_STATUS_ANOMALY_FIX",
   /** Kasa defteri geçmiş doldurma (tek yazar dilimi, 2026-09-18) — `scripts/migrate_cash_ledger_backfill.ts`. */
   CASH_LEDGER_PAYMENT_BACKFILL: "CASH_LEDGER_PAYMENT_BACKFILL",
   /** Sipariş yönü geri doldurma (2026-09-23) — `scripts/backfill_order_destination.ts`. */

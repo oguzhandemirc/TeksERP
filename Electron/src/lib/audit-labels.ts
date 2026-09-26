@@ -292,6 +292,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   ROLL_PRODUCTION_TIMESTAMPS_BACKFILL: "Top üretim damgaları geriye dönük dolduruldu (betik)",
   ROLL_WAREHOUSE_BACKFILL: "Top depo bağı geriye dönük dolduruldu (betik)",
   TAMBUR_UNDO_CANCEL_MARKER_BACKFILL: "Tambur geri alma iptal işareti dolduruldu (betik)",
+  SWATCH_STATUS_ANOMALY_FIX: "Kartela durum anomalisi düzeltildi (betik)",
   CASH_LEDGER_PAYMENT_BACKFILL: "Kasa defteri geçmiş satırları dolduruldu (betik)",
   ORDER_DESTINATION_BACKFILL: "Sipariş yönü geriye dönük dolduruldu (betik)",
   ROLL_STATUS_EVENTS_BACKFILL: "Top durum defterine eski iptaller dolduruldu (betik)",

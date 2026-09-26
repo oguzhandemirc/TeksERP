@@ -1,6 +1,6 @@
 # KARTELA HAREKET DEFTERİ — Faz 0 (tasarım, kod yok)
 
-> **Durum:** KARAR VERİLDİ (kullanıcı, 2026-09-26: S1=A · S2=A · S3=b · S4=a · S5=a · S6=a — §6). K1 uygulandı (şema + tek yazar + doğuş sitesi); K2 ile aynı trende iner. Uygulamadaki farklar §5.7. 9b, 2026-09-26.
+> **Durum:** KARAR VERİLDİ (kullanıcı, 2026-09-26: S1=A · S2=A · S3=b · S4=a · S5=a · S6=a — §6). K1 (şema + tek yazar + doğuş) ve K2 (15 yazım sitesi + durum seddi) uygulandı, aynı trende iner; K3 (okuyucular + Kartela Hareketleri ekranı) sırada. Uygulamadaki farklar §5.7. 9b, 2026-09-26.
 > **Kullanıcının sorusu:** *"Kartela ve kartela hareketleri ayrı tablo olsa daha mı iyi olur … anlık değil
 > profesyonel bir çözüm üretelim."*
 > **Tetik:** B-RM taraması (`test_defter_ters_yol` §14) `reverseStockReductionTx`in geri almada
@@ -237,8 +237,9 @@ bir nesnedir. Gerekçe §4.
 - **K1** şema: enum + `status` + `SwatchEvent` + mühür + olay CHECK'leri + durum backfill'i, yalnız ekler.
   Tek yazar, AST kapısı, doğuş sitesi (`receive`). Bekçiler `test_swatch_event_yazar`, `test_swatch_event_ledger`,
   `test_db_invariants`. status↔kolon CHECK çifti K2'de (§5.7).
-- **K2** yazım yolları bağlanır: ~10 site, §5.2. `defter-beyan` satırları eklenir, §14 BORÇ satırı düşer.
-  Bekçi `test_swatch_event_ledger` (DB, gerçek yollar, ters çiftler).
+- **K2** yazım yolları bağlanır: 15 site (§5.2 + sevk/geri alma ayakları), durum seddi, anomali aracı, sağlık
+  alanı; §14 BORÇ satırı düştü. Bekçiler `test_swatch_event_paths` (gerçek servis yolları),
+  `test_kartela_durum_anomali`, `test_swatch_event_ledger` §11b/§11c/§13.
 - **K3** okuyucular: stok/istatistik `status`tan, Kartela Hareketleri ekranı + Excel.
 - ~~K4 geçmiş aktarımı~~ — S3 = b, dilim YOK.
 
@@ -261,6 +262,19 @@ bir nesnedir. Gerekçe §4.
   düşülmüş kartelayı yanlış sınıflardı. `statusChangedAt` backfill'de NULL kalır (an bilinmiyor).
 - **Prova.** Fabrika 23 Eylül dökümünde 0 kartela, 0 kabul, 0 sevk, 0 düşüm. adnansahin kartela akışını hiç
   kullanmamış; backfill boş küme.
+- **K2 durum seddi** `swatches_status_shape`: IN_STOCK hepsi boş · IN_SACK çuval var, sevkiyat/iptal yok ·
+  IN_SHIPMENT/SHIPPED çuval ve sevkiyat var, iptal yok · REDUCED/VOIDED iptal var, çuval/sevkiyat yok.
+  Migration durumu K1 kuralıyla yeniden türetir (statüsü değişen satırın `statusChangedAt`ı NULL'a çekilir —
+  göç anı basılmaz; swatches'ta damga tetikleyicisi YOK, damgayı tek yazar yazar), seddi NOT VALID ekler,
+  ihlal 0 ise VALIDATE eder; değilse NOTICE `scripts/kartela_durum_anomali.ts`i adlar (kuru varsayılan;
+  `--apply` yalnız iptal sevkiyata bağlı kartelayı SHIPMENT_REMOVED olayıyla çuvalına indirir) ve
+  `/api/admin/health` → `unvalidatedConstraints` hâli gösterir.
+- **Bileşik FK tuzağı.** `(sackId, shipmentId) → sacks(id, shipmentId) ON UPDATE CASCADE` referans eylemi
+  ertelenmez: çuvalın `shipmentId`si boşalınca kartelanınki durum değişmeden anında boşalır ve sed reddeder.
+  Kartelayı sevkiyattan çıkaran her yolda kartela geçişi çuvaldan ÖNCE yazılır.
+- **Kilit sırası** her yolda çuval → kartela (sevkiyat yollarında sevkiyat → çuval → kartela): depo-çuvalı
+  yolları `touchWarehouseSackTx` ile, sevkiyattan çıkaran iki yol `FOR UPDATE` ile çuvalı karteladan önce
+  kilitler; çuvallar arası taşıma iki çuvalı id sırasıyla kilitler.
 
 ## 6. Kullanıcıya sorulacaklar (şıklı, önerili)
 

@@ -14,7 +14,9 @@
 //   §8 boğaz-ikiz: DB CHECK'inin kabul ettiği (tip, from, to) kümesi = SWATCH_TRANSITIONS
 //   §9 DB seddi: belgesiz satır, ileri tipte ters bağ, çift ters REDDEDİLİR
 //   §10 mühür: UPDATE ve doğrudan DELETE reddedilir; kartela silinince kaskat geçer
-//   §11 backfill: migration'ın durum türetmesi yedi kolon hâlinde doğru durumu verir
+//   §11 backfill: K1 türetmesi ve K2'nin yeniden türetmesi yedi kolon hâlinde doğru durumu
+//       verir; K2 statüsü değişen satırın anını NULL'lar; iki migration'ın türetmesi AYNI
+//   §13 durum seddi (K2): durumla çelişen kolon yazımı 23514
 // =============================================================================
 
 import { readFileSync } from "fs";
@@ -42,6 +44,14 @@ function check(label: string, cond: boolean, extra = ""): void {
 class GeriAl extends Error {}
 
 const MIGRATION = join(__dirname, "..", "prisma", "migrations", "20260926100000_kartela_olay_defteri", "migration.sql");
+const MIGRATION_K2 = join(__dirname, "..", "prisma", "migrations", "20260926110000_kartela_durum_seddi", "migration.sql");
+
+/** Migration'daki türetme ifadesi (CASE … END), takma ad ve boşluk normalize. */
+function turetme(sql: string): string {
+  const bas = sql.indexOf("(CASE");
+  const son = sql.indexOf('END)::"SwatchStatus"', bas);
+  return sql.slice(bas, son).replace(/\bsw?\."/g, 'X."').replace(/\s+/g, " ").trim();
+}
 
 /** Savepoint içinde dener; DB hatası SQLSTATE'iyle döner, başarı null. */
 async function dene(tx: Tx, fn: () => Promise<unknown>): Promise<string | null> {
@@ -230,10 +240,19 @@ async function main(): Promise<void> {
     const kalan = await tx.swatchEvent.count({ where: { swatchId: c } });
     check("§10c kartela silinince olay satırları kaskatla gider", kaskat === null && kalan === 0, `${kaskat} · ${kalan}`);
 
-    // §11 backfill — migration'daki türetme, kolon hâlleri elle kurulmuş kartelalarda.
-    const sql = readFileSync(MIGRATION, "utf8");
-    const bas = sql.indexOf('UPDATE "swatches" sw');
-    const backfill = sql.slice(bas, sql.indexOf(";", bas) + 1);
+    // §13 durum seddi — tek yazarı atlayan kolon yazımı durumla çelişirse DB reddeder.
+    const seddeCarp = await dene(tx, () => tx.$executeRaw`UPDATE "swatches" SET "cancelledAt" = now() WHERE "id" = ${a}::uuid`);
+    const voidedaCuval = await dene(tx, () => tx.$executeRaw`UPDATE "swatches" SET "sackId" = ${sackA.id}::uuid WHERE "id" = ${d}::uuid`);
+    check("§13 durum seddi: IN_SACK kartelaya iptal damgası ve VOIDED kartelaya çuval → 23514",
+      seddeCarp === "23514" && voidedaCuval === "23514", `${seddeCarp} · ${voidedaCuval}`);
+
+    // §11 backfill — kolon hâlleri elle kurulur; sed bu tx'te geçici kaldırılır (tx geri alınır).
+    // Ertelenmiş bileşik FK olayları bekliyorken ALTER TABLE reddedilir (55006): önce işlet.
+    await tx.$executeRawUnsafe("SET CONSTRAINTS ALL IMMEDIATE");
+    await tx.$executeRawUnsafe(`ALTER TABLE "swatches" DROP CONSTRAINT "swatches_status_shape"`);
+    const k1 = readFileSync(MIGRATION, "utf8");
+    const k2 = readFileSync(MIGRATION_K2, "utf8");
+    const ifade = (sql: string) => { const b = sql.indexOf('UPDATE "swatches" sw'); return b < 0 ? "" : sql.slice(b, sql.indexOf(";", b) + 1); };
     const liveRed = await tx.swatchStockReduction.create({ data: { itemId: item.id, count: 1, reason: "test" } });
     const deadRed = await tx.swatchStockReduction.create({ data: { itemId: item.id, count: 1, reason: "test", reversedAt: new Date() } });
     const cikan = await tx.shipment.create({ data: { shipmentNo: `TST-SV2-${ts}`, customerId: customer.id, status: ShipmentStatus.DISPATCHED } });
@@ -252,12 +271,28 @@ async function main(): Promise<void> {
     ];
     await tx.swatchStockReductionItem.create({ data: { reductionId: liveRed.id, swatchId: hallar[0][0] } });
     await tx.swatchStockReductionItem.create({ data: { reductionId: deadRed.id, swatchId: hallar[1][0] } });
-    await tx.$executeRawUnsafe(backfill);
-    const sonuc = await tx.swatch.findMany({ where: { id: { in: hallar.map((h) => h[0]) } }, select: { id: true, status: true } });
-    const yanlis = hallar.filter(([id, bek]) => sonuc.find((s) => s.id === id)?.status !== bek)
-      .map(([id, bek]) => `${hallar.findIndex((h) => h[0] === id) + 1}: ${sonuc.find((s) => s.id === id)?.status} ≠ ${bek}`);
-    check("§11 backfill yedi kolon hâlinde doğru durumu türetir (düşüm · stornolu düşüm · iptal · çuval · sevkiyat · çıkmış · stok)",
-      bas > 0 && yanlis.length === 0, yanlis.length ? yanlis.join(" · ") : "7/7");
+    const ids = hallar.map((h) => h[0]);
+    const olc = async () => {
+      const sonuc = await tx.swatch.findMany({ where: { id: { in: ids } }, select: { id: true, status: true, statusChangedAt: true } });
+      return {
+        sonuc,
+        yanlis: hallar.filter(([id, bek]) => sonuc.find((x) => x.id === id)?.status !== bek)
+          .map(([id, bek]) => `${ids.indexOf(id) + 1}: ${sonuc.find((x) => x.id === id)?.status} ≠ ${bek}`),
+      };
+    };
+    await tx.$executeRawUnsafe(ifade(k1));
+    const r1 = await olc();
+    check("§11 K1 backfill yedi kolon hâlinde doğru durumu türetir (düşüm · stornolu düşüm · iptal · çuval · sevkiyat · çıkmış · stok)",
+      ifade(k1) !== "" && r1.yanlis.length === 0, r1.yanlis.length ? r1.yanlis.join(" · ") : "7/7");
+    // K1→K2 sapması: eski yazar durumu güncellemeden kolon yazmış → K2 yeniden türetir.
+    await tx.swatch.updateMany({ where: { id: { in: ids } }, data: { status: SwatchStatus.IN_STOCK, statusChangedAt: simdi } });
+    await tx.$executeRawUnsafe(ifade(k2));
+    const r2 = await olc();
+    const anSifir = r2.sonuc.filter((x) => x.status !== SwatchStatus.IN_STOCK).every((x) => x.statusChangedAt === null)
+      && r2.sonuc.find((x) => x.id === hallar[6][0])?.statusChangedAt?.getTime() === simdi.getTime();
+    check("§11b K2 yeniden türetmesi aynı sonucu verir; statüsü değişen satırın anı NULL, değişmeyene dokunulmaz",
+      ifade(k2) !== "" && r2.yanlis.length === 0 && anSifir, r2.yanlis.length ? r2.yanlis.join(" · ") : `7/7 · an ${anSifir ? "doğru" : "YANLIŞ"}`);
+    check("§11c K1 ve K2 türetme ifadesi birebir aynı (boğaz-ikiz)", turetme(k1) !== "" && turetme(k1) === turetme(k2));
 
     throw new GeriAl("fikstür geri alınır");
   };

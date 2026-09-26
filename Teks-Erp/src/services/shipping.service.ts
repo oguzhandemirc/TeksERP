@@ -31,7 +31,9 @@ import {
   WarehouseEventType,
   ShipmentEventType,
   SackWeighingKind,
+  SwatchEventType,
 } from "@prisma/client";
+import { randomUUID } from "crypto";
 import prisma from "../lib/prisma";
 import { postStockMove, postStockMoves } from "./helpers/warehouse-ledger.helper";
 import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
@@ -171,6 +173,7 @@ import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-owner.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
+import { transitionSwatchesTx } from "./helpers/swatch-event.helper";
 
 // Re-export saf primitifler (geriye uyum — eskiden bu dosyada tanımlıydı).
 export {
@@ -831,9 +834,16 @@ export class ShippingService {
       }
       const fromSackId = swatch.sackId;
       await prisma.$transaction(async (tx) => {
-        await touchWarehouseSackTx(tx, data.sackId);
-        const moved = await tx.swatch.updateMany({ where: { id: swatch.id, sackId: fromSackId, shipmentId: null }, data: { sackId: data.sackId } });
-        if (moved.count !== 1) throw AppError.conflict("Kartela bu sırada taşınmış/çıkarılmış — tekrar deneyin");
+        // Kilit sırası çuval → kartela: iki çuval da karteladan ÖNCE, id sırasıyla (ters yönlü
+        // eşzamanlı taşıma ve çuvaldan çıkarma 40P01 üretmesin).
+        for (const id of [fromSackId, data.sackId].sort()) await touchWarehouseSackTx(tx, id);
+        // Taşıma iki olaydır (A'dan çıktı · B'ye girdi), tek grup: çuval başına net sayım korunur.
+        const moveCtx = { trigger: "SACK_MOVE", userId, groupId: randomUUID() };
+        const left = await transitionSwatchesTx(tx, SwatchEventType.UNSACKED, { scope: { ids: [swatch.id] }, sack: { id: fromSackId }, ctx: moveCtx });
+        const entered = left.length === 1
+          ? await transitionSwatchesTx(tx, SwatchEventType.SACKED, { scope: { ids: [swatch.id] }, sack: { id: data.sackId }, ctx: moveCtx })
+          : [];
+        if (entered.length !== 1) throw AppError.conflict("Kartela bu sırada taşınmış/çıkarılmış — tekrar deneyin");
         await this.markSackContentChangedTx(tx, [fromSackId, data.sackId]);
       });
       await AuditService.log({ userId, action: "UPDATE", tableName: "SWATCH", recordId: swatch.id, newData: { kind: "SACK_MOVE", sackId: data.sackId, fromSackId, barcode: swatch.barcode } });
@@ -842,8 +852,8 @@ export class ShippingService {
     if (swatch.shipmentId) throw AppError.conflict("Kartela bir sevkiyatta");
     await prisma.$transaction(async (tx) => {
       await touchWarehouseSackTx(tx, data.sackId);
-      const claimed = await tx.swatch.updateMany({ where: { id: swatch.id, shipmentId: null, sackId: null, cancelledAt: null }, data: { sackId: data.sackId } });
-      if (claimed.count === 0) throw AppError.conflict("Kartela az önce başka bir akışa girdi — tekrar deneyin.");
+      const claimed = await transitionSwatchesTx(tx, SwatchEventType.SACKED, { scope: { ids: [swatch.id] }, sack: { id: data.sackId }, ctx: { trigger: "SACK_SCAN", userId } });
+      if (claimed.length === 0) throw AppError.conflict("Kartela az önce başka bir akışa girdi — tekrar deneyin.");
       await this.markSackContentChangedTx(tx, [data.sackId]);
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SWATCH", recordId: swatch.id, newData: { kind: "SACK_SCAN", sackId: data.sackId, barcode: swatch.barcode } });
@@ -877,8 +887,8 @@ export class ShippingService {
         throw AppError.conflict(`Yeterli kartela stoğu yok — istenen ${data.count}, mevcut ${candidates.length}. Listeyi yenileyin.`);
       }
       const claimIds = candidates.map((c) => c.id);
-      const claimed = await tx.swatch.updateMany({ where: { id: { in: claimIds }, shipmentId: null, sackId: null, cancelledAt: null }, data: { sackId: data.sackId } });
-      if (claimed.count !== data.count) throw AppError.conflict("Kartelalardan biri az önce başka bir akışa girdi — tekrar deneyin.");
+      const claimed = await transitionSwatchesTx(tx, SwatchEventType.SACKED, { scope: { ids: claimIds }, sack: { id: data.sackId }, ctx: { trigger: "KARTELA_SELECT_ADD", userId } });
+      if (claimed.length !== data.count) throw AppError.conflict("Kartelalardan biri az önce başka bir akışa girdi — tekrar deneyin.");
       await this.markSackContentChangedTx(tx, [data.sackId]);
       return claimIds;
     });
@@ -928,8 +938,8 @@ export class ShippingService {
     const sackId = swatch.sackId;
     await prisma.$transaction(async (tx) => {
       await touchWarehouseSackTx(tx, sackId);
-      const removed = await tx.swatch.updateMany({ where: { id: data.swatchId, sackId, shipmentId: null }, data: { sackId: null } });
-      if (removed.count !== 1) throw AppError.conflict("Kartela bu sırada çıkarılmış/taşınmış — tekrar deneyin");
+      const removed = await transitionSwatchesTx(tx, SwatchEventType.UNSACKED, { scope: { ids: [data.swatchId] }, sack: { id: sackId }, ctx: { trigger: "SACK_UNSCAN", userId } });
+      if (removed.length !== 1) throw AppError.conflict("Kartela bu sırada çıkarılmış/taşınmış — tekrar deneyin");
       await this.markSackContentChangedTx(tx, [sackId]);
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SWATCH", recordId: data.swatchId, newData: { kind: "SACK_UNSCAN", sackId: null } });
@@ -1002,10 +1012,11 @@ export class ShippingService {
         removedRolls = (await tx.roll.updateMany({ where: rollWhere, data: { sackId: null } })).count;
       }
       if (all || swatchSel) {
-        const swatchWhere: Prisma.SwatchWhereInput = all
-          ? { sackId: data.sackId, shipmentId: null }
-          : { id: { in: swatchSel! }, sackId: data.sackId, shipmentId: null };
-        removedSwatches = (await tx.swatch.updateMany({ where: swatchWhere, data: { sackId: null } })).count;
+        removedSwatches = (await transitionSwatchesTx(tx, SwatchEventType.UNSACKED, {
+          scope: all ? { sackIds: [data.sackId] } : { ids: swatchSel! },
+          sack: { id: data.sackId, sackNo: sack.sackNo },
+          ctx: { trigger: "SACK_DISTRIBUTE", userId },
+        })).length;
       }
       await this.markSackContentChangedTx(tx, [data.sackId]);
     });
@@ -1690,7 +1701,8 @@ export class ShippingService {
         throw AppError.conflict("Dolu çuval silinemez — önce içindeki top/kartelaları başka çuvala aktar veya depoya çıkar");
       }
       await tx.roll.updateMany({ where: { sackId }, data: { sackId: null } });
-      await tx.swatch.updateMany({ where: { sackId }, data: { sackId: null } });
+      // Çuval satırı silinir; olay satırı çuval numarasını donuk taşır.
+      await transitionSwatchesTx(tx, SwatchEventType.UNSACKED, { scope: { sackIds: [sackId] }, sack: { id: sackId, sackNo: sack.sackNo }, ctx: { trigger: "SACK_REMOVE", userId } });
       await tx.sack.delete({ where: { id: sackId } });
     });
     await AuditService.log({
@@ -2478,7 +2490,7 @@ export class ShippingService {
     await autoCloseLotsForSacksTx(tx, p.sackIds, lot.mode === "sevk-partisi", p.userId);
     // İçerik shipmentId açıkça (composite FK deferred → commit'te doğrulanır).
     await tx.roll.updateMany({ where: { sackId: { in: p.sackIds } }, data: { shipmentId: created.id } });
-    await tx.swatch.updateMany({ where: { sackId: { in: p.sackIds } }, data: { shipmentId: created.id } });
+    await transitionSwatchesTx(tx, SwatchEventType.SHIPMENT_ADDED, { scope: { sackIds: p.sackIds }, shipment: { id: created.id }, ctx: { trigger: "SHIPMENT_CREATE", userId: p.userId } });
     // Sipariş kümesi (kullanıcı seçimi) + spec-FIFO tahsis.
     await this.setShipmentOrdersTx(tx, created.id, p.orderIds);
     let iz: AllocationAuditTrail | null = await this.writeShipmentAllocationsTx(
@@ -3079,7 +3091,7 @@ export class ShippingService {
       }
       await autoCloseLotsForSacksTx(tx, sackIds, lot.mode === "sevk-partisi", userId);
       await tx.roll.updateMany({ where: { sackId: { in: sackIds } }, data: { shipmentId } });
-      await tx.swatch.updateMany({ where: { sackId: { in: sackIds } }, data: { shipmentId } });
+      await transitionSwatchesTx(tx, SwatchEventType.SHIPMENT_ADDED, { scope: { sackIds }, shipment: { id: shipmentId }, ctx: { trigger: "SHIPMENT_ADD_SACKS", userId } });
       const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
       izAdd = await this.writeShipmentAllocationsTx(tx, shipmentId, orderRows.map((o) => o.orderId), branchId);
     });
@@ -3098,12 +3110,17 @@ export class ShippingService {
     let izRemove: AllocationAuditTrail | null = null;
     await prisma.$transaction(async (tx) => {
       await touchShipmentPlannedTx(tx, shipmentId);
+      // Kilit sırası sevkiyat → çuval → kartela (öteki çuval yollarıyla aynı); claim aşağıda.
+      await tx.$queryRaw`SELECT id FROM sacks WHERE id = ${sackId}::uuid FOR UPDATE`;
+      // Kartela ÇUVALDAN ÖNCE: bileşik FK (sackId, shipmentId) → sacks ON UPDATE CASCADE
+      // anında işler; çuvalın shipmentId'si önce boşalırsa kartelanınki durum değişmeden
+      // boşalır ve durum seddi (swatches_status_shape) reddeder.
+      await transitionSwatchesTx(tx, SwatchEventType.SHIPMENT_REMOVED, { scope: { sackIds: [sackId] }, shipment: { id: shipmentId }, ctx: { trigger: "SHIPMENT_REMOVE_SACK", userId } });
       const claimed = await tx.sack.updateMany({ where: { id: sackId, shipmentId }, data: { shipmentId: null, seq: null } });
       if (claimed.count !== 1) throw AppError.conflict("Çuval bu sırada çıkarıldı — yenileyin");
       const lot = await readPackingLotSettings(tx);
       await reopenLotsForSacksTx(tx, [sackId], lot.mode === "sevk-partisi");
       await tx.roll.updateMany({ where: { sackId }, data: { shipmentId: null } });
-      await tx.swatch.updateMany({ where: { sackId }, data: { shipmentId: null } });
       const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
       izRemove = await this.writeShipmentAllocationsTx(tx, shipmentId, orderRows.map((o) => o.orderId), branchId);
     });
@@ -3444,6 +3461,8 @@ export class ShippingService {
       toStatus: ShipmentStatus.DISPATCHED,
       userId,
     });
+    // Kartela bedelsiz çıkıştır (S5): "sevk edildi" artık kartelanın kendi durumu.
+    await transitionSwatchesTx(tx, SwatchEventType.SHIPPED, { scope: { shipmentId }, shipment: { id: shipmentId }, ctx: { trigger: "SHIPMENT_DISPATCH", userId } });
 
     // HAYALET GUARD'I — tx İÇİ, sevkiyat satır kilidi ALINDIKTAN sonra, flip'ten ÖNCE.
     // Aşağıdaki flip `status: { not: SHIPPED }` ile ÇUVALDAKİ HER TOPU SHIPPED'e çeker;
@@ -3757,9 +3776,15 @@ export class ShippingService {
     await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
     await clearShipmentAllocationsTx(tx, shipmentId, opts?.userId ?? null);
     await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
-    // Çuvallar depoya döner; içerik shipmentId null.
+    // Çuvallar depoya döner; içerik shipmentId null. Kilit sırası sevkiyat → çuval → içerik;
+    // kartela çuvaldan ÖNCE yazılır (bileşik FK ON UPDATE CASCADE — removeSackFromShipment şerhi).
+    await tx.$queryRaw`SELECT id FROM sacks WHERE "shipmentId" = ${shipmentId}::uuid ORDER BY id FOR UPDATE`;
     await tx.roll.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
-    await tx.swatch.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
+    await transitionSwatchesTx(tx, SwatchEventType.SHIPMENT_REMOVED, {
+      scope: { shipmentId },
+      shipment: { id: shipmentId },
+      ctx: { trigger: "SHIPMENT_CANCEL", userId: opts?.userId, reason: opts?.reason, reasonCode: opts?.reasonCode },
+    });
     const returning = await tx.sack.findMany({ where: { shipmentId }, select: { id: true } });
     await tx.sack.updateMany({ where: { shipmentId }, data: { shipmentId: null, seq: null } });
     // Sevk partisi: geri gelen çuvalın kapalı partisi kendiliğinden açılır (operatör görsün).
@@ -4060,6 +4085,7 @@ export class ShippingService {
         reason: trimmed,
         userId,
       });
+      await transitionSwatchesTx(tx, SwatchEventType.SHIP_UNDONE, { scope: { shipmentId }, shipment: { id: shipmentId }, ctx: { trigger: "SHIPMENT_UNDO_DISPATCH", userId, reason: trimmed } });
 
       // `isActive` şemada "sevkiyat PLANNED mı" denormudur (dispatch/cancel false yapar).
       await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: true } });
@@ -4120,7 +4146,7 @@ export class ShippingService {
       let freedSacks = 0;
       if (releaseSacks) {
         freedSacks = await tx.sack.count({ where: { shipmentId } });
-        await this.cancelPlannedShipmentTx(tx, shipmentId, ShipmentStatus.PLANNED);
+        await this.cancelPlannedShipmentTx(tx, shipmentId, ShipmentStatus.PLANNED, { userId });
       }
       return { restored, voidedDocs, orderIds, freedSacks };
     });

@@ -132,6 +132,7 @@ import bossRoutes from "./routes/boss.routes";
 import { NIGHTLY_PREFIX } from "./services/helpers/backup-naming.helper";
 import { seriesExhaustionWarnings } from "./services/helpers/series-exhaustion.helper";
 import { masterDataArchiveHealthSnapshot } from "./services/helpers/master-data-health.helper";
+import { readUnvalidatedConstraints } from "./lib/constraint-health";
 const app: Express = express();
 
 // =============================================================================
@@ -644,6 +645,15 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
   // DB okunamazsa null kalır — "kapalı" DEMEK DEĞİL, "bilinmiyor". İkisini
   // aynı değere indirgemek, DB düştüğünde sahte bir "koruma kapalı" alarmı üretirdi.
   let auditGuard: "on" | "off" | null = null;
+  // Validate edilmemiş (NOT VALID) kısıtlar — `[]` yok · ad listesi var · `null` okunamadı.
+  // Migration ihlalli eski satır bulunca kısıtı NOT VALID bırakır (ör. `swatches_status_shape`);
+  // o hâl sessiz kalmasın diye burada.
+  let unvalidatedConstraints: string[] | null = null;
+  try {
+    unvalidatedConstraints = await readUnvalidatedConstraints();
+  } catch {
+    unvalidatedConstraints = null;
+  }
   try {
     // Tek round-trip: DB canlılığı + boyut + bağlantı + ucuz sağlık metrikleri
     // (cache isabeti, rolls ölü-satır oranı, en uzun aktif sorgu süresi). Hepsi
@@ -730,6 +740,8 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
     // Pasif ana veride canlı referans (URUN-YASAM-DONGUSU §10): `total` beklenen 0 · `null` ölçülemedi.
     // Ölçüm 10 dk önbellekli (bu uç 5 sn'de bir sorulur); `stale` = arkada tazeleniyor.
     masterDataArchive: masterDataArchiveHealthSnapshot(),
+    // Validate edilmemiş DB kısıtı: `[]` beklenen · dolu = eski veri ihlalde (kuru script adı NOTICE'ta) · `null` okunamadı.
+    unvalidatedConstraints,
     lastBackup: latestBackupInfo(),
     // Ham veri değil HÜKÜM: "gece yedeği çalışıyor mu". `lastBackup` bilerek
     // olduğu gibi bırakıldı (eski panel sözleşmesi), bu alan EK'tir.

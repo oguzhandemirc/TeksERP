@@ -38,6 +38,7 @@
 // Koşum: npx tsx scripts/test_db_invariants.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { readUnvalidatedConstraints } from "../src/lib/constraint-health";
 
 let pass = 0,
   fail = 0;
@@ -736,6 +737,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "swatch_events", name: "swatch_events_transition_known" },
   { table: "swatch_events", name: "swatch_events_ref_present" },
   { table: "swatch_events", name: "swatch_events_reversal_type" },
+  // Kartela durum seddi (K2, migration 20260926110000): status ↔ (sackId, shipmentId,
+  // cancelledAt) çift yüklemi — tek yazarın DB ikizi. İhlalli eski veride NOT VALID kalır
+  // (aşağıdaki "validate edilmemiş kısıt" kolu ve `/api/admin/health` gösterir).
+  { table: "swatches", name: "swatches_status_shape" },
   // Kapanış künyesi (D3, migration 20260926010000): kapanış türü kapalı küme, sürüm 1'den,
   // çıkan = depo + A1 + fire (üç kova toplamı başlıkta yeniden türetilmez, burada sabitlenir).
   { table: "work_order_close_snapshots", name: "work_order_close_snapshots_close_kind_known" },
@@ -1464,6 +1469,27 @@ async function main(): Promise<void> {
         "kurulum script'i (`npm run superadmin:kur`) İLK satırı çözer; rotasyon " +
         "hangisini güncelleyeceğini SIRAYA bırakır — fazlalık satır elle silinmeli"
   );
+
+  // VALIDATE EDİLMEMİŞ KISIT — migration ihlalli eski satır bulunca kısıtı NOT VALID bırakır;
+  // ölçüm `/api/admin/health`in okuduğu helper'ın KENDİSİYLE yapılır.
+  class GeriAl extends Error {}
+  let sondaGordu = false;
+  await prisma
+    .$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`CREATE TEMP TABLE kapi_sonda_nv (x int) ON COMMIT DROP`);
+      await tx.$executeRawUnsafe(`ALTER TABLE kapi_sonda_nv ADD CONSTRAINT kapi_sonda_nv_ck CHECK (x > 0) NOT VALID`);
+      // Temp tablo pg_temp şemasında: public süzgeci onu GÖRMEMELİ.
+      const temp = await readUnvalidatedConstraints(tx);
+      await tx.$executeRawUnsafe(`ALTER TABLE "swatches" DROP CONSTRAINT "swatches_status_shape"`);
+      await tx.$executeRawUnsafe(`ALTER TABLE "swatches" ADD CONSTRAINT "swatches_status_shape" CHECK (true) NOT VALID`);
+      sondaGordu = !temp.includes("kapi_sonda_nv_ck") && (await readUnvalidatedConstraints(tx)).includes("swatches_status_shape");
+      throw new GeriAl();
+    }, { timeout: 30_000 })
+    .catch((e) => { if (!(e instanceof GeriAl)) throw e; });
+  check("sonda: NOT VALID bırakılan public kısıt helper'da görünür, temp şema görünmez", sondaGordu);
+  const nv = await readUnvalidatedConstraints();
+  check("validate edilmemiş (NOT VALID) kısıt YOK", nv.length === 0,
+    nv.length ? `NOT VALID: ${nv.join(", ")} — ihlalli eski satır var; kuru döküm: scripts/kartela_durum_anomali.ts (swatches_status_shape)` : "0");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   if (fail > 0) {
