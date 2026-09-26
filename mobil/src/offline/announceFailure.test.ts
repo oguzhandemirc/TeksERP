@@ -27,7 +27,8 @@ describe('shouldAnnounceFailure', () => {
   it('⭐ çakışma 409ları DUYURULMAZ — ekran zaten modalla soruyor', () => {
     // Toast basmak aynı kararı ikinci kez, üstelik cevaplanamaz biçimde
     // sordururdu; kutu döneminin asıl karışıklığı buydu.
-    for (const code of ['POSSIBLE_DUPLICATE', 'CLIENT_TOKEN_COLLISION']) {
+    // MULTI_BATCH: Fason Sevk "Birden çok parti" kartıyla sorar (D8b; emülatör turunda çift mesaj yakalandı).
+    for (const code of ['POSSIBLE_DUPLICATE', 'CLIENT_TOKEN_COLLISION', 'MULTI_BATCH']) {
       expect(
         shouldAnnounceFailure(KK1, err('Bu top az önce girilmiş olabilir', {
           status: 409,

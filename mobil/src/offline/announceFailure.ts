@@ -22,7 +22,7 @@
 // =============================================================================
 
 /** Sunucunun SORU sorduğu 409'lar — cevabı ekranın kendi modalıdır. */
-const CONFLICT_CODES = new Set(['POSSIBLE_DUPLICATE', 'CLIENT_TOKEN_COLLISION']);
+const CONFLICT_CODES = new Set(['POSSIBLE_DUPLICATE', 'CLIENT_TOKEN_COLLISION', 'MULTI_BATCH']);
 
 interface FailureLike {
   message?: string;
