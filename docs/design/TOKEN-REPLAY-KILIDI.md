@@ -1,6 +1,6 @@
 # Token replay kilidi — kilitsiz ön-okuma sınıfı ve kapatma planı
 
-> **Durum:** KARAR BEKLİYOR (2026-09-26). Kod yok; sorular §6'da, karar kullanıcıda, dağıtım 1e/4b'de.
+> **Durum:** KARARLANDI (kullanıcı, 2026-09-26 sabah): planın TAMAMI — §6 S1–S5 hepsi (A). Uygulama sırası D1 → D2 → D3 → D4, her dilim ayrı tren; D1 uygulamada.
 > **Ölçüm tabanı:** origin `c7e5c059`, statik okuma. Üç ölçüm ajanı 19 yolun sunucu + panel + tablet
 > akışını okudu; kritik iddialar elle doğrulandı (#6, #10, #11, §5'in 1–2. maddeleri). Satır
 > numaraları bu tabandadır.

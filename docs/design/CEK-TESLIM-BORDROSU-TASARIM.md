@@ -1,6 +1,6 @@
 # Çek/Senet Teslim Bordrosu — sektör kalıbı ve tek belge önerisi
 
-> **Durum:** KARAR BEKLİYOR (Faz 0, 2026-09-26). Kod yok. Karar 1e'de, K3 kullanıcıda.
+> **Durum:** K1 + K2 İNDİ (2026-09-26). **K3 KARARLANDI (kullanıcı, 2026-09-26 sabah): bordro = hareket fişi**, kök kurallar gereği bir davranış bayrağı arkasında — varsayılan KAPALI (bugünkü belge-only), bu fabrika için yayın günü panelden açılır. K3 spec'i uygulamada; iniş commit'i `finans.md` satırını değiştirir.
 > **Soru:** Bugün iki ayrı bordro var: kayıtsız "Teslim Bordrosu" (anlık) ve kayıtlı "Resmî Bordro"
 > (`CHEQUE_DELIVERY_NOTE`). İkisi aynı kâğıdın iki biçimi ve ayrışıyorlar. Kullanıcının PDF↔Excel
 > kuralı (`docs/kurallar/belge-etiket.md`) ile kullanıcının 2026-09-26 isteği ("sektörün önde gelen
