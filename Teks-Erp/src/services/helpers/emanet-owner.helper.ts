@@ -49,7 +49,8 @@ export async function resolveOwnerFromLotsTx(tx: Pick<Tx, "yarnLot">, lotIds: st
   return singleOwner(lots.map((l) => l.ownerCustomerId), "Levent");
 }
 
-/** ② Fason dokuma makbuzu: iş adına iptal edilmemiş sevklerdeki leventlerin owner'ı → doğan topun owner'ı. */
+/** ② Fason dokuma makbuzu: iş adına iptal edilmemiş sevklerdeki leventlerin owner'ı → doğan topun owner'ı. Çağıran makbuz
+ *  başlığını yazmadan ÖNCE çağırır (iş emri claim'i tx'in ilk ifadesi kalır): karışık sahip 409'u başlıksız düşer. */
 export async function resolveOwnerFromBeamsTx(tx: Pick<Tx, "subcontractorDispatchItem">, weavingOrderId: string): Promise<string | null> {
   const items = await tx.subcontractorDispatchItem.findMany({
     where: { kind: "WARP_BEAM", dispatch: { weavingOrderId, cancelledAt: null } },

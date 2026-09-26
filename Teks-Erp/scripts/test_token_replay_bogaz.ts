@@ -29,7 +29,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 /** Boğaza henüz girmemiş (borç) birim sayısı — YALNIZ DÜŞER; sabiti entegratör trende düşürür. */
-const BORC_TABANI = 11; // D5a sonu (2026-09-26): D5 16 → 11 (finans dört yol + ön kontrol okuyucusu muafa)
+const BORC_TABANI = 5; // D5b sonu (2026-09-26): D5 11 → 5 (levent planı · dokuma işi · fason dokuma kabulü · top indirme)
 
 const KOK = path.resolve(__dirname, "..");
 const KIP_CAGRISI: Record<Kip, string> = { R: "run", K: "inTx", "K′": "behindLock" };

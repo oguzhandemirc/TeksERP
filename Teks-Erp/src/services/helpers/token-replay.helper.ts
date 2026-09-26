@@ -223,6 +223,13 @@ export function assertWarpBeamReplayAlive(existing: { id: string; beamNo: string
   throw AppError.conflict(`${existing.beamNo} sarımı iptal edilmiş — yeniden planlamak için formu yeniden açın (aynı gönderim tekrar edilemez).`, { code: "WARP_BEAM_CANCELLED", beamId: existing.id });
 }
 
+/** Levent PLANI replay'i: iptal edilmiş ya da hurdaya ayrılmış (`SCRAPPED`, topun SCRAP'ının ikizi) levent ölüdür. */
+export function assertWarpBeamPlanReplayAlive(existing: { id: string; beamNo: string; status: string }): void {
+  assertWarpBeamReplayAlive(existing);
+  if (existing.status !== "SCRAPPED") return;
+  throw AppError.conflict(`${existing.beamNo} hurdaya ayrılmış — yeniden planlamak için formu yeniden açın (aynı gönderim tekrar edilemez).`, { code: "WARP_BEAM_SCRAPPED", beamId: existing.id });
+}
+
 /** Token'la bulunan levent tüketimi geri alınmışsa (`CONSUMED_CANCEL` ters bağı) 409 `WARP_BEAM_CONSUME_REVOKED` — ölü hâl ters bağdır. */
 export function assertWarpBeamConsumeReplayAlive(existing: { reversal: { id: string } | null }): void {
   if (!existing.reversal) return;

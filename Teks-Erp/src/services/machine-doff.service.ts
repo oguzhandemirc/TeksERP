@@ -27,10 +27,9 @@ import { MachineDataSource, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
+import { p2002Mentions } from "../utils/p2002";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { assertDoffReplayAlive } from "./helpers/token-replay.helper";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { assertDoffReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { resolveDoffStamp } from "./helpers/machine-run-open.helper";
 import { assertProductionLineValid } from "./helpers/production-line.helper";
 import { deriveRunWarnings, nextDoffCodeTx, WARN_RUN_WITHOUT_ORDER } from "./helpers/machine-doff-open.helper";
@@ -78,32 +77,30 @@ export interface OpenDoffInput {
   clientToken?: string | null;
 }
 
-async function findByToken(clientToken: string): Promise<DoffEventDto | null> {
-  return prisma.doffEvent.findUnique({ where: { clientToken }, select: DOFF_SELECT });
-}
-
-/**
- * Replay cevabı — özgün sonuç + koşum uyarısı YENİDEN türetilir (kayıttaki
- * `machineRunId`den). Kimlik alanları: makine · hat · adet; `machineRunId`/
- * `counterAtDoff`/`doffedAt` kimlik DEĞİL (aynı form, düzeltilmiş sayaç
- * yeniden gönderilebilir).
- */
 /** `idempotent: true` = bu çağrıda YENİ indirme doğmadı (`InitialEntryResult` emsali; istemci METNE bakmaz). */
 export type OpenDoffResult = ApiResponse<DoffEventDto> & { idempotent?: true };
 
-async function resolveReplay(existing: DoffEventDto, input: OpenDoffInput): Promise<OpenDoffResult> {
-  assertDoffReplayAlive(existing);
-  assertReplayPayloadMatches(
-    [
+/**
+ * İndirme replay'i — özgün sonuç + koşum uyarısı YENİDEN türetilir (kayıttaki `machineRunId`den). Kimlik: makine · hat ·
+ * adet; `machineRunId`/`counterAtDoff`/`doffedAt` kimlik DEĞİL (aynı form, düzeltilmiş sayaç yeniden gönderilebilir).
+ * 4. durum: geri alınmış indirme → `DOFF_REVOKED`.
+ */
+function doffReplay(input: OpenDoffInput) {
+  return tokenReplay<DoffEventDto, OpenDoffResult>({
+    find: (db, clientToken) => db.doffEvent.findUnique({ where: { clientToken }, select: DOFF_SELECT }),
+    alive: (existing) => assertDoffReplayAlive(existing),
+    identity: (existing) => [
       { ad: "machineId", mevcut: existing.machineId, gelen: input.machineId },
       { ad: "productionLineNo", mevcut: existing.productionLineNo, gelen: input.productionLineNo },
       { ad: "pieceCount", mevcut: existing.pieceCount, gelen: input.pieceCount },
     ],
-    "Bu form daha önce başka bir indirme için kaydedilmiş — yeni indirme için formu yeniden açın.",
-    { doffEventId: existing.id },
-  );
-  const warnings = await deriveRunWarnings(existing.machineRunId);
-  return { success: true, data: existing, message: REPLAY_MESSAGE, idempotent: true, ...(warnings.length ? { warnings } : {}) };
+    collision: "Bu form daha önce başka bir indirme için kaydedilmiş — yeni indirme için formu yeniden açın.",
+    collisionEk: (existing) => ({ doffEventId: existing.id }),
+    respond: async (existing) => {
+      const warnings = await deriveRunWarnings(existing.machineRunId);
+      return { success: true, data: existing, message: REPLAY_MESSAGE, idempotent: true, ...(warnings.length ? { warnings } : {}) };
+    },
+  });
 }
 
 /** Makine aktif · hat aralıkta · koşum (verildiyse) aynı makinede ve canlı. */
@@ -141,26 +138,27 @@ async function resolveDoffContext(input: OpenDoffInput): Promise<{ machineCode: 
 }
 
 export async function openDoff(input: OpenDoffInput, userId?: string): Promise<OpenDoffResult> {
-  // ① Replay — yaratmadan ÖNCE.
-  if (input.clientToken) {
-    const existing = await findByToken(input.clientToken);
-    if (existing) return resolveReplay(existing, input);
-  }
+  return doffReplay(input).run(input.clientToken, () => openDoffFresh(input, userId));
+}
+
+async function openDoffFresh(input: OpenDoffInput, userId?: string): Promise<OpenDoffResult> {
   // ② Bağlam (tx dışı okuma) · ③ damga.
   const ctx = await resolveDoffContext(input);
   const stamp = await resolveDoffStamp(input.doffedAt);
   const warnings = [...ctx.warnings, ...(stamp.warning ? [stamp.warning] : [])];
 
-  let created: DoffEventDto;
-  try {
-    // ④ Kod sunucuda, günlük sıra, 8029 kilidi tx'in İLK ifadesi (`nextDoffCodeTx`);
-    // ⑤ tek INSERT. Retry yalnız `code_key` P2002 kemeri — token P2002'si retry'a
-    // GİRMEZ, aşağıda replay'e döner.
-    created = await withBarcodeRetry(
-      () =>
-        prisma.$transaction(async (tx) => {
-          const code = await nextDoffCodeTx(tx, stamp.value);
-          return tx.doffEvent.create({
+  // ④ Kod sunucuda, günlük sıra, 8029 kilidi tx'in İLK ifadesi (`nextDoffCodeTx`); ⑤ tek INSERT. Retry yalnız
+  // `code_key` P2002 kemeri — token P2002'si boğaza (`run` yeniden okur).
+  const outcome = await withBarcodeRetry(
+    () =>
+      prisma.$transaction(async (tx) => {
+        const code = await nextDoffCodeTx(tx, stamp.value);
+        // K′: aynı token'ın kaybedeni 8029'da bekler, token'ı kilidin arkasında okur (kod maksimumdan türer, sarf yok).
+        const replay = input.clientToken ? await doffReplay(input).behindLock(tx, input.clientToken) : null;
+        if (replay) return { fresh: false as const, replay };
+        return {
+          fresh: true as const,
+          row: await tx.doffEvent.create({
             data: {
               machineId: input.machineId,
               productionLineNo: input.productionLineNo,
@@ -175,20 +173,15 @@ export async function openDoff(input: OpenDoffInput, userId?: string): Promise<O
               createdById: userId ?? null,
             },
             select: DOFF_SELECT,
-          });
-        }),
-      undefined,
-      (err) => p2002Mentions(err, /doff_events_code_key/),
-      "İndirme kodu",
-    );
-  } catch (e) {
-    // ⑥ Aynı token iki paralel istekte: ikinci INSERT token unique'ine çarpar → replay.
-    if (input.clientToken && isClientTokenP2002(e)) {
-      const existing = await findByToken(input.clientToken);
-      if (existing) return resolveReplay(existing, input);
-    }
-    throw e;
-  }
+          }),
+        };
+      }),
+    undefined,
+    (err) => p2002Mentions(err, /doff_events_code_key/),
+    "İndirme kodu",
+  );
+  if (!outcome.fresh) return outcome.replay;
+  const created = outcome.row;
   // ⑦ Audit tx DIŞINDA, best-effort.
   await AuditService.log({
     userId,

@@ -20,11 +20,11 @@
 // =============================================================================
 import { Prisma, RollEntrySource, RollStatus, WeavingExecutionKind } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { tokenReplay } from "./helpers/token-replay.helper";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { formatSeriesCode } from "./number-series.service";
 import { AuditService } from "./audit.service";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { InventoryService } from "./inventory.service";
 import { nextSubcontractorDocNoTx } from "./subcontractor.service";
 import { cancelWarpBeamItemsTx, countReturnedBeamItems, dispatchWarpBeamItemsTx } from "./subcontractor-beam.service";
@@ -196,39 +196,53 @@ export async function cancelWeavingDispatch(dispatchId: string, reason: string, 
 
 // ── Makbuz (TOP doğar) ──────────────────────────────────────────────────────
 
-/** Makbuz replay'i (dört durum): token yoksa null; iptal edilmiş 409; farklı gövde 409; aynı gövde → önceki sonuç. */
-async function findReceiptReplay(input: WeavingReceiptInput): Promise<ApiResponse<unknown> | null> {
-  if (!input.clientToken) return null;
-  const hit = await prisma.subcontractorReceipt.findUnique({
-    where: { clientToken: input.clientToken },
-    select: { id: true, receiptNo: true, cancelledAt: true, weavingOrderId: true, manifestNo: true },
-  });
-  if (hit) {
-    if (hit.cancelledAt) {
+/**
+ * Fason dokuma makbuzu replay'i. Kimlik: dokuma işi · irsaliye no (boş ≡ ""); toplar kimliğe girmez (kendi token'ları,
+ * kısmi düşebilir). 4. durum: iptal edilmiş makbuz → 409 `RECEIPT_CANCELLED`. Token kolonu iş emri fason kabulüyle
+ * ortak: öbür uçtan gelen token dokuma işi kıyasında düşer. Yanıt ilk başarının biçiminde (toplar `initialQty` ile).
+ */
+function weavingReceiptReplay(input: WeavingReceiptInput) {
+  const select = { id: true, receiptNo: true, weavingOrderId: true, subcontractorId: true, receivedAt: true, cancelledAt: true, manifestNo: true } as const;
+  type Hit = Prisma.SubcontractorReceiptGetPayload<{ select: typeof select }>;
+  return tokenReplay<Hit, ApiResponse<unknown>>({
+    find: (db, clientToken) => db.subcontractorReceipt.findUnique({ where: { clientToken }, select }),
+    alive: (hit) => {
+      if (!hit.cancelledAt) return;
       throw AppError.conflict("Bu kabul denemesi daha önce kaydedilmiş ve İPTAL edilmiş — yeniden deneme yerine yeni kabul açın", {
         code: "RECEIPT_CANCELLED",
       });
-    }
-    // Gövde kapısı: aynı token BAŞKA bir işe/irsaliyeye gelirse 409 (dört durumlu replay).
-    assertReplayPayloadMatches(
-      [
-        { ad: "weavingOrderId", mevcut: hit.weavingOrderId, gelen: input.weavingOrderId },
-        { ad: "manifestNo", mevcut: hit.manifestNo ?? "", gelen: input.manifestNo ?? "" },
-      ],
-      "Bu istemci anahtarı BAŞKA bir kabulle kullanılmış — formu yenileyip yeniden deneyin.",
-    );
-    const rolls = await prisma.roll.findMany({ where: { parentReceiptId: hit.id }, select: { id: true, barcode: true } });
-    return { success: true, data: { receipt: hit, rolls, failed: [] }, message: `Kabul zaten yapılmış (idempotent). Makbuz: ${hit.receiptNo}` };
-  }
-  return null;
+    },
+    identity: (hit) => [
+      { ad: "weavingOrderId", mevcut: hit.weavingOrderId, gelen: input.weavingOrderId },
+      { ad: "manifestNo", mevcut: hit.manifestNo ?? "", gelen: input.manifestNo ?? "" },
+    ],
+    collision: "Bu istemci anahtarı BAŞKA bir kabulle kullanılmış — formu yenileyip yeniden deneyin.",
+    collisionEk: (hit) => ({ receiptId: hit.id }),
+    respond: async (hit) => {
+      const rows = await prisma.roll.findMany({ where: { parentReceiptId: hit.id }, select: { id: true, barcode: true, initialQty: true }, orderBy: { createdAt: "asc" } });
+      const { cancelledAt: _c, manifestNo: _m, ...receipt } = hit;
+      return {
+        success: true,
+        data: { receipt, rolls: rows.map((r) => ({ id: r.id, barcode: r.barcode, initialQty: Number(r.initialQty) })), failed: [] },
+        message: `Kabul zaten yapılmış (idempotent). Makbuz: ${hit.receiptNo}`,
+      };
+    },
+  });
 }
 
 export async function receiveForWeaving(input: WeavingReceiptInput, userId?: string): Promise<ApiResponse<unknown>> {
   if (input.rolls.length === 0) throw AppError.badRequest("Makbuzda en az bir top olmalı", { code: "WEAVING_RECEIPT_EMPTY" });
-  const replay = await findReceiptReplay(input);
-  if (replay) return replay;
-  const header = await prisma.$transaction(async (tx) => {
+  return weavingReceiptReplay(input).run(input.clientToken, () => receiveForWeavingFresh(input, userId));
+}
+
+async function receiveForWeavingFresh(input: WeavingReceiptInput, userId?: string): Promise<ApiResponse<unknown>> {
+  const outcome = await prisma.$transaction(async (tx) => {
     const wo = await claimSubcontractedWeavingOrderTx(tx, input.weavingOrderId, userId);
+    // K′: aynı token'ın kaybedeni iş emri satır kilidinde bekler, token'ı kilidin arkasında okur.
+    const replay = input.clientToken ? await weavingReceiptReplay(input).behindLock(tx, input.clientToken) : null;
+    if (replay) return { fresh: false as const, replay };
+    // G3 emanet kalıtımı BAŞLIKTAN ÖNCE: karışık sahip 409'u başlıksız düşer (eskiden başlık topsuz kalıyordu).
+    const ownerCustomerId = await resolveOwnerFromBeamsTx(tx, input.weavingOrderId);
     const now = new Date();
     const receiptNo = await nextSubcontractorDocNoTx(tx, "subcontractorReceipt", now);
     const receipt = await tx.subcontractorReceipt.create({
@@ -243,14 +257,14 @@ export async function receiveForWeaving(input: WeavingReceiptInput, userId?: str
       },
       select: { id: true, receiptNo: true, weavingOrderId: true, subcontractorId: true, receivedAt: true },
     });
-    return { receipt, wo };
+    return { fresh: true as const, header: { receipt, wo }, ownerCustomerId };
   });
+  if (!outcome.fresh) return outcome.replay;
+  const { header, ownerCustomerId } = outcome;
   // Toplar birer birer, her biri kendi tx'inde (mal kabul emsali): satır hatası
   // makbuzu düşürmez, `failed[]`e düşer — operatör satırı düzeltip yeniden gönderir.
   const rolls: { id: string; barcode: string | null; initialQty: number }[] = [];
   const failed: { index: number; message: string }[] = [];
-  // G3 emanet kalıtımı: sevkteki leventlerin sahibi tek ise doğan top onu alır (karışık → 409, makbuz açılmaz).
-  const ownerCustomerId = await resolveOwnerFromBeamsTx(prisma, input.weavingOrderId);
   for (const [index, line] of input.rolls.entries()) {
     try {
       const res = await inventory.createInitialEntry(

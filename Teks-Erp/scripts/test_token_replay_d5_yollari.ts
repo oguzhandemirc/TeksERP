@@ -7,9 +7,11 @@
 //   · sıralı tekrar, arada master veri değişti: cevap TOKEN'DAN gelir, iş kuralından değil;
 //   · 4. durum (iptal edilmiş kayıt) → yolun kodu · başka gövde → CLIENT_TOKEN_COLLISION · sahte 409 düzeltmeleri.
 //   §1 tahsilat/ödeme · §2 çek/senet · §3 alış siparişi · §4 mal kabul fişi (D5a)
-// ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
+//   §5 levent planı · §6 dokuma işi (K′ 8032) · §7 fason dokuma kabulü (K′ iş emri claim'i) · §8 top indirme (K′ 8029) (D5b)
+// ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Dokunulan ayarlar FOTOĞRAFINA döndürülür.
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { MachineDataSource, Prisma, WarpBeamOrigin, WarpBeamStatus, WeavingExecutionKind, WeavingOrderStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { SIRA_ZORLANDI, sonucKodu, zorlanmisSira, type KapiNoktasi, type ZorlanmisSiraSonucu } from "./lib/zorlanmis-sira";
@@ -17,6 +19,11 @@ import { paymentService } from "../src/services/payment.service";
 import { chequeService } from "../src/services/cheque.service";
 import { purchaseOrderService } from "../src/services/purchase-order.service";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { createWarpBeam } from "../src/services/warp-beam.service";
+import { createWeavingOrder } from "../src/services/weaving-order.service";
+import { receiveForWeaving } from "../src/services/subcontractor-weaving.service";
+import { openDoff, revokeDoff } from "../src/services/machine-doff.service";
 
 let pass = 0;
 let fail = 0;
@@ -41,7 +48,11 @@ const TAG = `TRD5${Date.now().toString(36).toUpperCase()}`;
 const o = {
   customerIds: [] as string[], subIds: [] as string[], itemIds: [] as string[], cashBoxIds: [] as string[], warehouseIds: [] as string[],
   paymentIds: [] as string[], chequeIds: [] as string[], orderIds: [] as string[], receiptIds: [] as string[],
+  specIds: [] as string[], beamIds: [] as string[], weavingIds: [] as string[], subReceiptIds: [] as string[], stationIds: [] as string[],
+  machineIds: [] as string[], doffIds: [] as string[], dispatchIds: [] as string[],
 };
+const AYARLAR = [SETTING_KEYS.DEVERE_ENABLED];
+let foto: Array<{ key: string; value: Prisma.JsonValue }> | null = null;
 
 async function musteri(ek: string): Promise<string> {
   const c = await prisma.customer.create({ data: { code: `${TAG}-${ek}`, name: `${TAG} ${ek}` }, select: { id: true } });
@@ -145,6 +156,113 @@ async function malKabul(): Promise<void> {
   }
 }
 
+async function leventDokuma(): Promise<void> {
+  console.log("§5 Levent planı · §6 dokuma işi");
+  await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.DEVERE_ENABLED }, create: { key: SETTING_KEYS.DEVERE_ENABLED, value: "true" }, update: { value: "true" } });
+  const yarn = await prisma.item.create({ data: { code: `${TAG}-IP`, name: `${TAG} iplik`, itemType: "YARN", unit: "KG", linearDensityDen: 300 }, select: { id: true } });
+  o.itemIds.push(yarn.id);
+  const spec = await prisma.warpSpec.create({ data: { code: `${TAG}-CK`, name: `${TAG} çözgü`, yarnItemId: yarn.id, endsCount: 3500 }, select: { id: true } });
+  o.specIds.push(spec.id);
+  const sub = await prisma.subcontractor.create({ data: { code: `${TAG}-F`, name: `${TAG} fasoncu` }, select: { id: true } });
+  o.subIds.push(sub.id);
+  {
+    const t = randomUUID();
+    const planla = (fiziksel: string | null) => () => createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 500, originKind: WarpBeamOrigin.SUBCONTRACT, subcontractorId: sub.id, physicalBeamNo: fiziksel, clientToken: t });
+    // B satırı yazmadan hemen önce bekler; A planlar. Eski kodda retry yüklemi yalnız beamNo — token P2002'si ham 409'du.
+    await ikisiBasarili("⑤a levent planı", { model: "warpBeam", metod: "create" }, planla("G-1"), async () => (await prisma.warpBeam.count({ where: { clientToken: t } })) === 1);
+    const b = await prisma.warpBeam.findUnique({ where: { clientToken: t }, select: { id: true } });
+    if (b) o.beamIds.push(b.id);
+    check("⑤b aynı token + başka fiziksel levent no → 409 CLIENT_TOKEN_COLLISION (eskiden kıyaslanmıyordu)", (await kodu(planla("G-2"))) === "CLIENT_TOKEN_COLLISION");
+    if (b) await prisma.warpBeam.update({ where: { id: b.id }, data: { status: WarpBeamStatus.SCRAPPED } });
+    check("⑤c hurdaya ayrılmış leventin token'ı → 409 WARP_BEAM_SCRAPPED (eskiden 'zaten planlanmış')", (await kodu(planla("G-1"))) === "WARP_BEAM_SCRAPPED");
+  }
+  {
+    const kumasId = await kumas("DK");
+    const t = randomUUID();
+    const ac = (warpSpecId?: string) => () => createWeavingOrder({ itemId: kumasId, executionKind: WeavingExecutionKind.IN_HOUSE, plannedM: 1000, ...(warpSpecId ? { warpSpecId } : {}), clientToken: t });
+    // B 8032'yi tutarken INSERT'ten önce bekler; A kilitte bekler, sonra token'ı kilidin arkasında okur (K′).
+    // Eski kodda A tx'ten önce token'ı boş görür, kilitten sonra INSERT eder → token P2002'si ham 409.
+    await ikisiBasarili("⑥a dokuma işi", { model: "weavingOrder", metod: "create" }, ac(), async () => (await prisma.weavingOrder.count({ where: { clientToken: t } })) === 1);
+    const w = await prisma.weavingOrder.findUnique({ where: { clientToken: t }, select: { id: true } });
+    if (w) o.weavingIds.push(w.id);
+    check("⑥b aynı token + başka çözgü kartı → 409 CLIENT_TOKEN_COLLISION (eskiden kıyaslanmıyordu)", (await kodu(ac(spec.id))) === "CLIENT_TOKEN_COLLISION");
+  }
+  {
+    const kumasId = await kumas("FD");
+    const is = await prisma.weavingOrder.create({
+      data: { weavingOrderNumber: `${TAG}-FD`, itemId: kumasId, executionKind: WeavingExecutionKind.SUBCONTRACTED, subcontractorId: sub.id, status: WeavingOrderStatus.PLANNED },
+      select: { id: true },
+    });
+    o.weavingIds.push(is.id);
+    console.log("§7 Fason dokuma kabulü");
+    const t = randomUUID();
+    const kabul = (irsaliye: string) => () => receiveForWeaving({ weavingOrderId: is.id, manifestNo: irsaliye, clientToken: t, rolls: [{ initialQty: 480, clientToken: randomUUID() }] });
+    // B iş emri satırını claim'leyip INSERT'ten önce bekler; A claim'de bekler, sonra token'ı kilidin arkasında okur (K′).
+    // Eski kodda catch yoktu: A'nın INSERT'i token P2002'siyle ham 409 alırdı.
+    await ikisiBasarili("⑦a fason dokuma kabulü", { model: "subcontractorReceipt", metod: "create" }, kabul(`${TAG}-I1`), async () => (await prisma.subcontractorReceipt.count({ where: { clientToken: t } })) === 1);
+    const r = await prisma.subcontractorReceipt.findUnique({ where: { clientToken: t }, select: { id: true } });
+    if (r) o.subReceiptIds.push(r.id);
+    const [rp] = await Promise.allSettled([kabul(`${TAG}-I1`)()]);
+    const rolls = rp.status === "fulfilled" ? ((rp.value as { data?: { rolls?: Array<{ initialQty?: unknown }> } }).data?.rolls ?? []) : [];
+    check("⑦b ⭐ replay yanıtı ilk başarının biçiminde: toplar initialQty taşır (eskiden eksikti)", rolls.length === 1 && rolls[0]!.initialQty === 480, JSON.stringify(rolls));
+    check("⑦c aynı token + başka irsaliye → 409 CLIENT_TOKEN_COLLISION", (await kodu(kabul(`${TAG}-I2`))) === "CLIENT_TOKEN_COLLISION");
+    // Makbuz iptali önce topların iptalini ister; ölü hâl burada doğrudan damgayla kurulur (4. durumun okuduğu tek alan).
+    if (r) await prisma.subcontractorReceipt.update({ where: { id: r.id }, data: { cancelledAt: new Date() } });
+    check("⑦d iptal edilmiş makbuzun token'ı → 409 RECEIPT_CANCELLED", (await kodu(kabul(`${TAG}-I1`))) === "RECEIPT_CANCELLED");
+  }
+  {
+    // Sevkte iki farklı müşterinin emanet leventi: sahip çözümü 409 OWNER_MISMATCH. Başlıktan ÖNCE koştuğu için makbuz
+    // doğmaz (eskiden başlık yazılıp topsuz kalıyordu ve aynı token'ın tekrarı "0 top" replay'i dönüyordu).
+    const kumasId = await kumas("FE");
+    const is = await prisma.weavingOrder.create({
+      data: { weavingOrderNumber: `${TAG}-FE`, itemId: kumasId, executionKind: WeavingExecutionKind.SUBCONTRACTED, subcontractorId: sub.id, status: WeavingOrderStatus.PLANNED },
+      select: { id: true },
+    });
+    o.weavingIds.push(is.id);
+    const emanet = async (ek: string) => {
+      const b = await prisma.warpBeam.create({
+        data: { beamNo: `${TAG}-${ek}`, warpSpecId: spec.id, status: WarpBeamStatus.SHIPPED_OUT, plannedLengthM: 500, originKind: WarpBeamOrigin.CONSIGNED, ownerCustomerId: await musteri(`E${ek}`) },
+        select: { id: true },
+      });
+      o.beamIds.push(b.id);
+      return b.id;
+    };
+    const sevk = await prisma.subcontractorDispatch.create({ data: { dispatchNo: `${TAG}-SD`, subcontractorId: sub.id, weavingOrderId: is.id }, select: { id: true } });
+    o.dispatchIds.push(sevk.id);
+    for (const beamId of [await emanet("B1"), await emanet("B2")]) {
+      await prisma.subcontractorDispatchItem.create({ data: { dispatchId: sevk.id, kind: "WARP_BEAM", warpBeamId: beamId, dispatchedQty: 500 } });
+    }
+    const t = randomUUID();
+    const sonuc = await kodu(() => receiveForWeaving({ weavingOrderId: is.id, clientToken: t, rolls: [{ initialQty: 100, clientToken: randomUUID() }] }));
+    const baslik = await prisma.subcontractorReceipt.count({ where: { clientToken: t } });
+    check("⑦e ⭐ karışık emanet sahibi → 409 OWNER_MISMATCH ve makbuz başlığı DOĞMAZ (eskiden topsuz başlık kalıyordu)", sonuc === "OWNER_MISMATCH" && baslik === 0, `${sonuc} · başlık ${baslik}`);
+    const kalan = await prisma.subcontractorReceipt.findMany({ where: { weavingOrderId: is.id }, select: { id: true } });
+    o.subReceiptIds.push(...kalan.map((r) => r.id));
+  }
+}
+
+async function indirme(): Promise<void> {
+  console.log("§8 Top indirme");
+  const st = await prisma.station.create({ data: { name: `${TAG}-DF`, code: `${TAG}-DF`.slice(0, 32), type: "INTERNAL", isActive: true }, select: { id: true } });
+  o.stationIds.push(st.id);
+  const mk = await prisma.machine.create({ data: { stationId: st.id, name: `${TAG}-M1`, code: `${TAG}-M1`.slice(0, 32), isActive: true, productionLineCount: 1 }, select: { id: true } });
+  o.machineIds.push(mk.id);
+  const t = randomUUID();
+  const indir = (adet: number) => () => openDoff({ machineId: mk.id, productionLineNo: 1, pieceCount: adet, counterSource: MachineDataSource.OPERATOR, clientToken: t });
+  // B 8029'u tutarken INSERT'ten önce bekler; A kilitte bekler, sonra token'ı kilidin arkasında okur (K′).
+  await ikisiBasarili("⑧a top indirme", { model: "doffEvent", metod: "create" }, indir(2), async () => (await prisma.doffEvent.count({ where: { clientToken: t } })) === 1);
+  const d = await prisma.doffEvent.findUnique({ where: { clientToken: t }, select: { id: true } });
+  if (d) o.doffIds.push(d.id);
+  await prisma.machine.update({ where: { id: mk.id }, data: { isActive: false } });
+  const [rp] = await Promise.allSettled([indir(2)()]);
+  check("⑧b sıralı tekrar, makine arada pasif → replay, `idempotent: true` korunur (tablet okuyor)",
+    rp.status === "fulfilled" && (rp.value as { idempotent?: boolean }).idempotent === true, sonucKodu(rp));
+  await prisma.machine.update({ where: { id: mk.id }, data: { isActive: true } });
+  check("⑧c aynı token + başka adet → 409 CLIENT_TOKEN_COLLISION", (await kodu(indir(3))) === "CLIENT_TOKEN_COLLISION");
+  if (d) await revokeDoff(d.id, `${TAG} geri al`);
+  check("⑧d geri alınmış indirmenin token'ı → 409 DOFF_REVOKED", (await kodu(indir(2))) === "DOFF_REVOKED");
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) {
@@ -153,9 +271,12 @@ async function main(): Promise<void> {
     return;
   }
   console.log("=== Token replay — D5 yolları ===\n");
+  foto = await prisma.systemSetting.findMany({ where: { key: { in: AYARLAR } }, select: { key: true, value: true } });
   await odemeCek();
   await alisSiparisi();
   await malKabul();
+  await leventDokuma();
+  await indirme();
 }
 
 async function temizlik(): Promise<void> {
@@ -167,6 +288,38 @@ async function temizlik(): Promise<void> {
       console.error(`  ❌ temizlik "${ad}" düştü: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
+  if (foto) {
+    for (const key of AYARLAR) {
+      const eski = foto.find((f) => f.key === key);
+      await adim(`ayar ${key}`, () =>
+        eski ? prisma.systemSetting.update({ where: { key }, data: { value: eski.value as Prisma.InputJsonValue } }) : prisma.systemSetting.deleteMany({ where: { key } }),
+      );
+    }
+  }
+  const dokumaToplari = o.subReceiptIds.length ? (await prisma.roll.findMany({ where: { parentReceiptId: { in: o.subReceiptIds } }, select: { id: true } })).map((r) => r.id) : [];
+  await adim("dokuma topları", async () => {
+    await prisma.rollOperation.deleteMany({ where: { rollId: { in: dokumaToplari } } });
+    await prisma.rollMovement.deleteMany({ where: { rollId: { in: dokumaToplari } } });
+    await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: dokumaToplari } } });
+    await prisma.roll.deleteMany({ where: { id: { in: dokumaToplari } } });
+  });
+  await adim("fason makbuzları", () => prisma.subcontractorReceipt.deleteMany({ where: { id: { in: o.subReceiptIds } } }));
+  await adim("fason sevkleri", async () => {
+    await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: o.dispatchIds } } });
+    await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: o.dispatchIds } } });
+  });
+  await adim("dokuma işleri", async () => {
+    await prisma.weavingOrderToOrderLine.deleteMany({ where: { weavingOrderId: { in: o.weavingIds } } });
+    await prisma.weavingOrder.deleteMany({ where: { id: { in: o.weavingIds } } });
+  });
+  await adim("leventler", async () => {
+    await prisma.warpBeamEvent.deleteMany({ where: { beamId: { in: o.beamIds } } });
+    await prisma.warpBeam.deleteMany({ where: { id: { in: o.beamIds } } });
+  });
+  await adim("çözgü kartı", () => prisma.warpSpec.deleteMany({ where: { id: { in: o.specIds } } }));
+  await adim("indirmeler", () => prisma.doffEvent.deleteMany({ where: { id: { in: o.doffIds } } }));
+  await adim("makineler", () => prisma.machine.deleteMany({ where: { id: { in: o.machineIds } } }));
+  await adim("istasyonlar", () => prisma.station.deleteMany({ where: { id: { in: o.stationIds } } }));
   const kartlar = [...o.customerIds];
   const cariler = (await prisma.cariAccount.findMany({ where: { OR: [{ customerId: { in: kartlar } }, { subcontractorId: { in: o.subIds } }] }, select: { id: true } })).map((c) => c.id);
   await adim("belgeler", () => prisma.printedDocument.deleteMany({ where: { sourceId: { in: [...o.paymentIds, ...o.chequeIds, ...o.receiptIds] } } }));

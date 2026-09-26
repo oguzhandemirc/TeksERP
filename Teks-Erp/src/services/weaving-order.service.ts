@@ -29,8 +29,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildTextSearch } from "../utils/query-parser";
 import { buildNextDynamicCursor, decodeDynamicCursor, dynamicCursorWhere } from "../utils/cursor";
 import { AuditService } from "./audit.service";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
-import { assertWeavingOrderReplayAlive } from "./helpers/token-replay.helper";
+import { assertWeavingOrderReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { markWeavingOrderInProgressTx, nextWeavingOrderNumberTx } from "./helpers/weaving-order.helper";
 import { assertOrderLinesLinkableTx, normalizeOrderLineLinks, type NormalizedOrderLineLink } from "./helpers/weaving-order-links.helper";
 import { assertOrderLineLinkGate } from "./helpers/production-chain-gates.helper";
@@ -146,6 +145,39 @@ export async function createWeavingOrder(
   input: WeavingOrderCreateInput,
   userId?: string,
 ): Promise<ApiResponse<WeavingOrderDto>> {
+  return weavingOrderReplay(input).run(input.clientToken, () => createWeavingOrderFresh(input, userId));
+}
+
+/**
+ * Dokuma işi replay'i. Kimlik: kumaş · yürütme · fasoncu · plan metresi · renk · sipariş satırı kümesi; çözgü kartı
+ * YALNIZ gönderildiyse (verilmezse kartın varsayılanı türetilir — türetilen alan kimlik olmaz). 4. durum: iptal →
+ * `assertWeavingOrderReplayAlive`; tamamlanmış iş canlıdır.
+ */
+function weavingOrderReplay(input: WeavingOrderCreateInput) {
+  type Row = Prisma.WeavingOrderGetPayload<{ select: typeof WEAVING_ORDER_SELECT }>;
+  return tokenReplay<Row, ApiResponse<WeavingOrderDto>>({
+    find: (db, clientToken) => db.weavingOrder.findUnique({ where: { clientToken }, select: WEAVING_ORDER_SELECT }),
+    alive: (r) => assertWeavingOrderReplayAlive(r),
+    identity: (r) => {
+      const f = normalizeWeavingOrderFields(input);
+      const lines = normalizeOrderLineLinks(input.orderLines ?? []);
+      return [
+        { ad: "itemId", mevcut: r.itemId, gelen: input.itemId },
+        { ad: "executionKind", mevcut: r.executionKind, gelen: input.executionKind },
+        { ad: "subcontractorId", mevcut: r.subcontractorId, gelen: f.subcontractorId ?? null },
+        { ad: "plannedM", mevcut: r.plannedM, gelen: f.plannedM ?? null },
+        { ad: "colorId", mevcut: r.colorId, gelen: f.colorId ?? null },
+        { ad: "sipariş satırları", mevcut: r.orderLineLinks.map((l) => l.orderLineId).sort().join(","), gelen: lines.map((l) => l.orderLineId).sort().join(",") },
+        ...(input.warpSpecId !== undefined ? [{ ad: "warpSpecId", mevcut: r.warpSpecId, gelen: f.warpSpecId ?? null }] : []),
+      ];
+    },
+    collision: "Bu istemci anahtarı BAŞKA bir dokuma işiyle kullanılmış — formu yenileyip yeniden deneyin.",
+    collisionEk: (r) => ({ weavingOrderId: r.id }),
+    respond: (r) => ({ success: true, data: toWeavingOrderDto(r), message: "Dokuma işi zaten oluşturulmuş" }),
+  });
+}
+
+async function createWeavingOrderFresh(input: WeavingOrderCreateInput, userId?: string): Promise<ApiResponse<WeavingOrderDto>> {
   const f = normalizeWeavingOrderFields(input);
   const fields = {
     itemId: input.itemId,
@@ -164,35 +196,17 @@ export async function createWeavingOrder(
   const orderLines = normalizeOrderLineLinks(input.orderLines ?? []);
   await assertOrderLineLinkGate(prisma, orderLines.length);
 
-  if (input.clientToken) {
-    const replay = await prisma.weavingOrder.findUnique({
-      where: { clientToken: input.clientToken },
-      select: WEAVING_ORDER_SELECT,
-    });
-    if (replay) {
-      // Gövde kapısı: aynı token BAŞKA bir yükle gelirse cached kayıt yanlış cevaptır.
-      assertReplayPayloadMatches(
-        [
-          { ad: "itemId", mevcut: replay.itemId, gelen: fields.itemId },
-          { ad: "executionKind", mevcut: replay.executionKind, gelen: fields.executionKind },
-          { ad: "subcontractorId", mevcut: replay.subcontractorId, gelen: fields.subcontractorId },
-          { ad: "plannedM", mevcut: replay.plannedM, gelen: fields.plannedM },
-        ],
-        "Bu istemci anahtarı BAŞKA bir dokuma işiyle kullanılmış — formu yenileyip yeniden deneyin.",
-      );
-      assertWeavingOrderReplayAlive(replay);
-      return { success: true, data: toWeavingOrderDto(replay), message: "Dokuma işi zaten oluşturulmuş" };
-    }
-  }
-
   await assertRefs(fields);
   await assertOrderLinesLinkableTx(prisma, orderLines);
 
-  const created = await withBarcodeRetry(
+  const outcome = await withBarcodeRetry(
     () =>
       prisma.$transaction(async (tx) => {
         // Kilit üretecin ilk ifadesi; bundan önce tx'te başka ifade YOK.
         const weavingOrderNumber = await nextWeavingOrderNumberTx(tx, new Date());
+        // K′: aynı token'ın kaybedeni 8032'de bekler, token'ı kilidin arkasında okur (numara maksimumdan türer, sarf yok).
+        const replay = input.clientToken ? await weavingOrderReplay(input).behindLock(tx, input.clientToken) : null;
+        if (replay) return { fresh: false as const, replay };
         // Kart kilidi advisory'den (8032) SONRA: 8030 SHARED → FOR SHARE (dokuma işi D1 referansıdır).
         await assertItemUsableTx(tx, fields.itemId, "NEW_PLAN");
         const row = await tx.weavingOrder.create({
@@ -207,12 +221,14 @@ export async function createWeavingOrder(
           select: { id: true },
         });
         await replaceOrderLineLinksTx(tx, row.id, orderLines);
-        return tx.weavingOrder.findUniqueOrThrow({ where: { id: row.id }, select: WEAVING_ORDER_SELECT });
+        return { fresh: true as const, row: await tx.weavingOrder.findUniqueOrThrow({ where: { id: row.id }, select: WEAVING_ORDER_SELECT }) };
       }),
     undefined,
-    // Yalnız numara çakışması retry'a girer; `clientToken` çakışması kalıcıdır.
+    // Yalnız numara çakışması retry'a girer; `clientToken` çakışması boğaza.
     (err) => p2002OnField(err, "weavingOrderNumber"),
   );
+  if (!outcome.fresh) return outcome.replay;
+  const created = outcome.row;
 
   await AuditService.log({
     userId,

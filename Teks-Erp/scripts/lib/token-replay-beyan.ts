@@ -75,13 +75,15 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}purchase-order.service.ts::createFresh`]: { giris: { [`${S}purchase-order.service.ts::create`]: "R" } },
   [`${S}goods-receipt.service.ts::createFresh`]: { giris: { [`${S}goods-receipt.service.ts::create`]: "R" } },
 
+  // ── Boğazda: D5b (üretim nesneleri) — ilk ifade kilidi olanlarda R + K′ (hız yolu) ─────────────────────
+  // Levent planı yalnız R. Emanet kapısı 8029'dan önce koşar ama 8029'un koruduğu gün önekli numarayı OKUMAZ (yalnız
+  // emanet ayarı + sahip müşteri) → TOCTOU yok, kilit sırası değişmedi (4b kararı; arşiv D5b).
+  [`${S}warp-beam.service.ts::createWarpBeamFresh`]: { giris: { [`${S}warp-beam.service.ts::createWarpBeam`]: "R" } },
+  [`${S}weaving-order.service.ts::createWeavingOrderFresh`]: { giris: { [`${S}weaving-order.service.ts::createWeavingOrder`]: "R", [`${S}weaving-order.service.ts::createWeavingOrderFresh`]: "K′" } },
+  [`${S}subcontractor-weaving.service.ts::receiveForWeavingFresh`]: { giris: { [`${S}subcontractor-weaving.service.ts::receiveForWeaving`]: "R", [`${S}subcontractor-weaving.service.ts::receiveForWeavingFresh`]: "K′" } },
+  [`${S}machine-doff.service.ts::openDoffFresh`]: { giris: { [`${S}machine-doff.service.ts::openDoff`]: "R", [`${S}machine-doff.service.ts::openDoffFresh`]: "K′" } },
+
   // ── Borç: D5 (4. durum eksikleri · ham P2002 · predicate'siz retry · boğaza taşıma) ─────
-  [`${S}warp-beam.service.ts::createWarpBeam`]: { borc: "D5", not: "yarışta ham P2002 (retry yalnız beamNo)" },
-  [`${S}weaving-order.service.ts::createWeavingOrder`]: { borc: "D5", not: "yarışta ham P2002 (§5-1)" },
-  [`${S}subcontractor-weaving.service.ts::receiveForWeaving`]: { borc: "D5", not: "yarışta ham P2002 (§5-1)" },
-  [`${S}subcontractor-weaving.service.ts::findReceiptReplay`]: { borc: "D5", not: "fason dokuma kabul okuyucusu" },
-  [`${S}machine-doff.service.ts::openDoff`]: { borc: "D5", not: "boğaza taşıma" },
-  [`${S}machine-doff.service.ts::findByToken`]: { borc: "D5", not: "doff okuyucusu" },
   [`${S}inventory.service.ts::createInitialEntry`]: { borc: "D5", not: "sınıf dışı (ön-okuma yok, P2002 yeniden okur); boğaza taşıma" },
   [`${S}inventory.service.ts::createOpenFabric`]: { borc: "D5", not: "sınıf dışı; boğaza taşıma" },
   [`${S}tambur-manual.service.ts::createManualRoll`]: { borc: "D5", not: "ön-okuma yalnız 4. durum; createInitialEntry'ye iletir" },

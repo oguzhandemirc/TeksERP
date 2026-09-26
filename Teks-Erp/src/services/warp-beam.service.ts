@@ -22,8 +22,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildTextSearch } from "../utils/query-parser";
 import { buildNextDynamicCursor, decodeDynamicCursor, dynamicCursorWhere } from "../utils/cursor";
 import { AuditService } from "./audit.service";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
-import { assertWarpBeamReplayAlive } from "./helpers/token-replay.helper";
+import { assertWarpBeamPlanReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { WARP_BEAM_EVENT_KINDS } from "../constants/warp-beam";
 import {
   WARP_BEAM_EVENT_SELECT,
@@ -176,25 +175,49 @@ function normalizePlanned(v: number | string): Prisma.Decimal {
 }
 
 export async function createWarpBeam(input: WarpBeamCreateInput, userId?: string): Promise<ApiResponse<WarpBeamDto>> {
+  return warpBeamReplay(input).run(input.clientToken, () => createWarpBeamFresh(input, userId));
+}
+
+/**
+ * Levent planı replay'i. Kimlik: çözgü kartı · köken · plan metresi · taraf (karta ÇÖZÜLMÜŞ) · dokuma işi · fiziksel
+ * levent no. 4. durum: iptal → `WARP_BEAM_CANCELLED`, hurda → `WARP_BEAM_SCRAPPED`. Yalnız R: yarışı yeniden okuma kapatır.
+ */
+function warpBeamReplay(input: WarpBeamCreateInput) {
+  type Beam = Prisma.WarpBeamGetPayload<{ select: typeof WARP_BEAM_SELECT }>;
+  type Party = Awaited<ReturnType<typeof resolveCreateParty>>;
+  return tokenReplay<{ beam: Beam; party: Party; plannedLengthM: Prisma.Decimal }, ApiResponse<WarpBeamDto>>({
+    find: async (db, clientToken) => {
+      const beam = await db.warpBeam.findUnique({ where: { clientToken }, select: WARP_BEAM_SELECT });
+      return beam ? { beam, party: await resolveCreateParty(input), plannedLengthM: normalizePlanned(input.plannedLengthM) } : null;
+    },
+    alive: (p) => assertWarpBeamPlanReplayAlive(p.beam),
+    identity: (p) => [
+      { ad: "warpSpecId", mevcut: p.beam.warpSpecId, gelen: input.warpSpecId },
+      { ad: "originKind", mevcut: p.beam.originKind, gelen: p.party.originKind },
+      { ad: "plannedLengthM", mevcut: p.beam.plannedLengthM, gelen: p.plannedLengthM },
+      { ad: "subcontractorId", mevcut: p.beam.subcontractorId, gelen: p.party.subcontractorId },
+      { ad: "supplierId", mevcut: p.beam.supplierId, gelen: p.party.supplierId },
+      { ad: "ownerCustomerId", mevcut: p.beam.ownerCustomerId, gelen: p.party.ownerCustomerId },
+      { ad: "weavingOrderId", mevcut: p.beam.weavingOrderId, gelen: input.weavingOrderId ?? null },
+      { ad: "physicalBeamNo", mevcut: p.beam.physicalBeamNo, gelen: input.physicalBeamNo?.trim() || null },
+    ],
+    collision: "Bu istemci anahtarı BAŞKA bir leventle kullanılmış — formu yenileyip yeniden deneyin.",
+    collisionEk: (p) => ({ beamId: p.beam.id }),
+    respond: (p) => ({ success: true, data: toWarpBeamDto(p.beam), message: "Levent zaten planlanmış" }),
+  });
+}
+
+function resolveCreateParty(input: WarpBeamCreateInput) {
+  return resolvePurchasedPartyToCard(
+    resolveOriginParty({ originKind: input.originKind, subcontractorId: input.subcontractorId ?? null, supplierId: input.supplierId ?? null, ownerCustomerId: input.ownerCustomerId ?? null }),
+  );
+}
+
+async function createWarpBeamFresh(input: WarpBeamCreateInput, userId?: string): Promise<ApiResponse<WarpBeamDto>> {
   const party = await resolvePurchasedPartyToCard(
     resolveOriginParty({ originKind: input.originKind, subcontractorId: input.subcontractorId ?? null, supplierId: input.supplierId ?? null, ownerCustomerId: input.ownerCustomerId ?? null }),
   );
   const plannedLengthM = normalizePlanned(input.plannedLengthM);
-  if (input.clientToken) {
-    const replay = await prisma.warpBeam.findUnique({ where: { clientToken: input.clientToken }, select: WARP_BEAM_SELECT });
-    if (replay) {
-      assertReplayPayloadMatches(
-        [
-          { ad: "warpSpecId", mevcut: replay.warpSpecId, gelen: input.warpSpecId },
-          { ad: "originKind", mevcut: replay.originKind, gelen: party.originKind },
-          { ad: "plannedLengthM", mevcut: replay.plannedLengthM, gelen: plannedLengthM },
-        ],
-        "Bu istemci anahtarı BAŞKA bir leventle kullanılmış — formu yenileyip yeniden deneyin.",
-      );
-      assertWarpBeamReplayAlive(replay);
-      return { success: true, data: toWarpBeamDto(replay), message: "Levent zaten planlanmış" };
-    }
-  }
   await assertSpecActive(input.warpSpecId);
   await assertParties(party);
   const weavingOrderId = input.weavingOrderId ?? null;
@@ -224,7 +247,7 @@ export async function createWarpBeam(input: WarpBeamCreateInput, userId?: string
         });
       }),
     undefined,
-    // Yalnız numara çakışması retry'a girer (hedef pg adaptöründe `meta.target`te değil — tek yardımcı).
+    // Yalnız numara çakışması retry'a girer (hedef pg adaptöründe `meta.target`te değil — tek yardımcı); token P2002'si boğaza.
     (err) => p2002OnField(err, "beamNo"),
   );
   await AuditService.log({ userId, action: "CREATE", tableName: WARP_BEAM_TABLE, recordId: created.id, newData: { beamNo: created.beamNo, warpSpecId: created.warpSpecId, originKind: created.originKind, plannedLengthM: Number(created.plannedLengthM) } });

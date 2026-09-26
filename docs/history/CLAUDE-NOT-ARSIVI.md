@@ -12797,3 +12797,17 @@ Statik okuma (Explore taraması, 2026-09-26), ÖLÇÜLMEDİ — zorlanmış sır
 - `ChequeEvent`: çek başına tx'te tek olay. "Para nereden geri çekilir" okuyucusu eşitlik bozucusuz. Düşük (aynı tipte çift yazılırsa yüksek).
 - Düşük/görünüm: `CashTransaction` · `YarnMovement` · `RollMovement` (`enteredAt`) · `ShipmentEvent` (okuyucu yok) · dokuma defterleri.
 - Emsal tek: `WarpBeamEvent` (DB saati + varlık başına +1 ms).
+
+## 2026-09-26 — Token replay D5b: üretim nesneleri tek boğazda; yarışta ham P2002 kalktı; borç 11 → 5 [ÇEKİRDEK]
+
+**Kapsam.** Levent planı (R) · dokuma işi · fason dokuma kabulü · top indirme (R + K′). K′ ilk ifade kilidinin arkasında: dokuma işinde 8032, fason kabulde iş emri satır claim'i, indirmede 8029; numaralar maksimumdan türediği için kilidin arkasında erken dönen deneme numara sarf etmez. Ayrım `fresh: true/false as const` (D3 paketleme grubu kalıbı).
+
+**§5-1 doğrulandı.** Eski kodda levent planı ve dokuma işinin retry yüklemi yalnız numara çakışmasıydı, fason kabulde catch yoktu: zorlanmış sırada kaybeden ham P2002 (kodsuz 409) aldı — üç yolda da ölçüldü. Top indirme eskiden de catch'le kurtarıyordu; boğaza taşıma orada davranış değiştirmez (regresyon koruması).
+
+**Kararlar (4b).** Hurdaya ayrılmış levent planın ölü hâlidir → `WARP_BEAM_SCRAPPED` (topun SCRAP'ının ikizi; sarım politikası değişmedi: hurda levent sarımı geri almaz). Fason dokuma kabulünde emanet sahibi çözümü makbuz BAŞLIĞINDAN ÖNCE, iş emri claim'inden sonra aynı tx'te: karışık sahip 409'u artık başlıksız düşer (eskiden başlık yazılıp topsuz kalıyor, aynı token'ın tekrarı "0 top" replay'i dönüyordu — ölçüldü: eski kodda başlık 1, yeni 0). Replay yanıtı ilk başarının biçiminde (toplar `initialQty` ile; tablet tipi bekliyordu).
+
+**Levent planı kilit sırası (ölçüm, 4b sorusu).** Levent planında 8029 (gün önekli numara) tx'in ilk ifadesi değil: önce emanet kapısı koşar. Kapı yalnız emanet ayarını ve sahip müşterinin aktifliğini okur, 8029'un koruduğu numaraya ya da `warp_beams`e dokunmaz → 8029 alanında TOCTOU yok, kilit sırası değişmedi. Levent planı yalnız R (yarışı yeniden okuma kapatır).
+
+**Kimlik.** Levent planına çözülmüş taraf (subcontractor/supplier/owner), dokuma işi ve fiziksel levent no; dokuma işine renk, çözgü kartı (YALNIZ gönderildiyse — verilmezse kartın varsayılanı türetilir) ve sipariş satırı kümesi eklendi.
+
+**Ölçüm.** `test_token_replay_d5_yollari` §5–§8 (37/37). Yarış kapısı iki sürümde de var olan INSERT'e kondu: yeni kodda A kilitte bekler (K′), eski kodda ham P2002 alır. D5b servisleri D5a hâline döndürülünce 7 kırmızı. Borç 11 → 5.
