@@ -21,8 +21,8 @@
 //   3. yazıcı kuyruğu — "top KAYITLI, etiketi çıkmadı" ayrı ve kalıcı yüzey.
 // =============================================================================
 
-/** Sunucunun SORU sorduğu 409'lar — cevabı ekranın kendi modalıdır. */
-const CONFLICT_CODES = new Set(['POSSIBLE_DUPLICATE', 'CLIENT_TOKEN_COLLISION', 'MULTI_BATCH']);
+/** Sunucunun SORU sorduğu 409'lar — cevabı ekranın kendi modalıdır (ITEM_MISMATCH/ROUTE_SKIP: Fason Sevk onay modalı). */
+const CONFLICT_CODES = new Set(['POSSIBLE_DUPLICATE', 'CLIENT_TOKEN_COLLISION', 'MULTI_BATCH', 'ITEM_MISMATCH', 'ROUTE_SKIP']);
 
 interface FailureLike {
   message?: string;

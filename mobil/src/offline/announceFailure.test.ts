@@ -38,6 +38,14 @@ describe('shouldAnnounceFailure', () => {
     }
   });
 
+  // Fason Sevk kendi modalıyla "yine de gönder?" diye soruyor; toast aynı anda "KAYIT GİTMEDİ" demesin.
+  it.each(['ITEM_MISMATCH', 'ROUTE_SKIP'])('⭐ Fason Sevk uyarı-onay kodu %s ekranda DUYURULMAZ, ekransız replay\'de DUYURULUR', (code) => {
+    const FASON = ['station', 'fason-sevk-dispatch'] as const;
+    const e = err('Onay gerekiyor', { status: 409, details: { code } });
+    expect(shouldAnnounceFailure(FASON, e)).toBe(false);
+    expect(shouldAnnounceFailure(FASON, e, true)).toBe(true);
+  });
+
   it('çakışma DIŞI 409 duyurulur (örn. WORK_SESSION_REQUIRED)', () => {
     // Bu tam da eskiden TAM SESSİZ kaybolan sınıftı — muafiyet listesi dar olmalı.
     expect(
