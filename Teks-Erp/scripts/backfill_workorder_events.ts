@@ -29,6 +29,7 @@ import { labelChanges } from "../src/services/helpers/workorder-field-diff.helpe
 import { freezeCloseSnapshotTx } from "../src/services/helpers/workorder-close-snapshot.helper";
 import type { WorkOrderTrackedField } from "../src/constants/workorder-event-fields";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
+import { ciktiDizini, kosumKomutu } from "./lib/kosum-komutu";
 import { deriveWorkOrder, type BackfillAudit, type BackfillExisting, type BackfillWo, type Derived, type DerivedEvent } from "./lib/workorder-backfill-derive";
 
 const argv = process.argv.slice(2);
@@ -134,7 +135,7 @@ function summarize(list: { wo: BackfillWo; d: Derived }[]) {
 
 function writeDump(db: string, touched: { wo: BackfillWo; d: Derived }[]): string {
   const damga = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15);
-  const yol = DOKUM ? resolve(DOKUM) : resolve(__dirname, "out", `backfill_workorder_events-${db}-${damga}.csv`);
+  const yol = DOKUM ? resolve(DOKUM) : resolve(ciktiDizini(), `backfill_workorder_events-${db}-${damga}.csv`);
   mkdirSync(dirname(yol), { recursive: true });
   const lines = ["workOrderId;workOrderNumber;status;olay;alan;tetik;an;kunye;kayip"];
   for (const { wo, d } of touched) {
@@ -166,7 +167,7 @@ async function main(): Promise<void> {
   const yol = writeDump(db, s.touched);
   console.log(`Döküm: ${yol}`);
   if (!APPLY) {
-    console.log(`\nKURU ANLATIM — hiçbir şey yazılmadı. Uygulamak için (kullanıcı onayıyla, HEDEF adı birebir; onay = olay + künye):\n  npx tsx scripts/backfill_workorder_events.ts --apply --onay=${s.total} --hedef=${db}`);
+    console.log(`\nKURU ANLATIM — hiçbir şey yazılmadı. Uygulamak için (kullanıcı onayıyla, HEDEF adı birebir; onay = olay + künye):\n  ${kosumKomutu("backfill_workorder_events")} --apply --onay=${s.total} --hedef=${db}`);
     return;
   }
   if (!HEDEF || HEDEF !== db) { console.error(`❌ --hedef=${HEDEF || "(yok)"} ≠ çözülen veritabanı "${db}". Yazma YOK.`); process.exitCode = 1; return; }

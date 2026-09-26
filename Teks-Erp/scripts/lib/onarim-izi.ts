@@ -28,8 +28,9 @@
 import { AuditService } from "../../src/services/audit.service";
 import { hedefDbAdi } from "./hedef-db-kapisi";
 import type { SystemEventName } from "../../src/constants/system-events";
-
-const pkg = require("../../package.json") as { version?: string };
+// Sürüm çalışma anında cwd'deki package.json'dan: `dist/tools/*.cjs` derlemesinde
+// `require("../../package.json")` derleme anının sürümünü gömerdi.
+import { APP_VERSION } from "../../src/lib/app-version";
 
 export interface OnarimIzi {
   /** Betiğin repo içi yolu — `scripts/x.ts`. */
@@ -66,7 +67,7 @@ export async function onarimIziYaz(iz: OnarimIzi): Promise<boolean> {
     payload: {
       source: iz.script,
       veritabani: hedefDbAdi(),
-      surum: pkg.version ?? "(okunamadı)",
+      surum: APP_VERSION,
       kosulanAt: new Date().toISOString(),
       ...iz.olcum,
       ...(iz.hamSql

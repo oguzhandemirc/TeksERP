@@ -301,6 +301,8 @@ pwsh -NoProfile -File deploy/paketle.ps1 -Cikti <cikti-klasoru>   # → tekserp-
 powershell -NoProfile -ExecutionPolicy Bypass -File C:\TeksERP\kur.ps1 -Kok C:\TeksERP -Paket <zip yolu>
 
 # 3) Sürüme özel notta yazan tek seferlik adımlar (backfill, izin, ayar) — SURUM-*-DEPLOY.md
+#    Veri adımlarının araçları PAKETTE: cd C:\TeksERP\app ; node dist\tools\<ad>.cjs (deneme)
+#    — repo ağacı / tsx / internet gerekmez; hedef app\.env. kur.ps1 sonunda araç adlarını basar.
 ```
 
 `kur.ps1` dokuz adımı sırayla yürütür ve **migration öncesi her hatada otomatik geri

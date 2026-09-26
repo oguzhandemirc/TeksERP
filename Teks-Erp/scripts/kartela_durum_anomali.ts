@@ -26,6 +26,7 @@ import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 import { izDustuUyarisi, onarimIziYaz } from "./lib/onarim-izi";
 import { transitionSwatchesTx } from "../src/services/helpers/swatch-event.helper";
 import { readUnvalidatedConstraints } from "../src/lib/constraint-health";
+import { kosumKomutu } from "./lib/kosum-komutu";
 
 const SCRIPT = "scripts/kartela_durum_anomali.ts";
 const KISIT = "swatches_status_shape";
@@ -110,7 +111,7 @@ async function main(): Promise<void> {
   console.log(`\nDüzeltilecek (B, mekanik): ${aday.length}`);
 
   if (!APPLY) {
-    console.log(`\nKURU KOŞUM — hiçbir şey yazılmadı.${aday.length || nv.includes(KISIT) ? ` Uygulamak için (kullanıcı onayıyla):\n  npx tsx ${SCRIPT} --apply --onay=${aday.length} --hedef=${db}` : ""}\n`);
+    console.log(`\nKURU KOŞUM — hiçbir şey yazılmadı.${aday.length || nv.includes(KISIT) ? ` Uygulamak için (kullanıcı onayıyla):\n  ${kosumKomutu("kartela_durum_anomali")} --apply --onay=${aday.length} --hedef=${db}` : ""}\n`);
     return;
   }
   if (!HEDEF || HEDEF !== db) { console.error(`❌ --hedef=${HEDEF || "(yok)"} ≠ çözülen veritabanı "${db}". Yazma YOK.`); process.exitCode = 1; return; }

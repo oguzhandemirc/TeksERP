@@ -24,7 +24,7 @@
 #   .\paketle.ps1 -WebPanelHaric      # web panelini pakete KOYMA (asagidaki nota bak)
 #   .\paketle.ps1 -Prova              # PROVA paketi: etiket/push YOK, repo DEGISMEZ (asagida)
 #
-# PROVA KIPI (-Prova, 2026-09-27 thinkpad-1 provasi): yayin provasi icin paket.
+# PROVA KIPI (-Prova): yayin provasi icin paket (bkz. arsiv 2026-09-27 thinkpad-1 provasi).
 #   Normal kosum `backend-v<surum>` etiketini atar ve UZAGA ITER, repodaki
 #   `package.json`a surumu yazar ve surum belgesini doldurur - yani provanin kendisi
 #   bir YAYIN kaydi birakiyordu (belgesi olmayan bir surum icin etiket). Prova kipinde:
@@ -207,6 +207,14 @@ if ($LASTEXITCODE -ne 0) { Fail "Arac derlemesi basarisiz - paket uretilmedi." }
 if (-not (Test-Path "$proj\dist\tools\superadmin-olustur.cjs")) {
   Fail "dist\tools\superadmin-olustur.cjs uretilmedi - bu paketle satici hesabi KURULAMAZ."
 }
+# Yayin gunu araclari dahil HER arac: liste build-araclar.mjs'in yazdigi araclar.json'dan.
+$aracListesi = Join-Path (Join-Path (Join-Path $proj "dist") "tools") "araclar.json"
+if (-not (Test-Path $aracListesi)) { Fail "dist/tools/araclar.json yok - arac listesi dogrulanamadi." }
+$araclar = @(Get-Content $aracListesi -Raw | ConvertFrom-Json)
+foreach ($a in $araclar) {
+  if (-not (Test-Path (Join-Path (Join-Path $proj "dist") $a.dosya))) { Fail "Arac uretilmedi: dist/$($a.dosya)" }
+}
+Write-Host "  araclar (dist/tools): $(($araclar | ForEach-Object { $_.ad }) -join ', ')"
 
 # --- Web paneli (Electron/dist-web) -----------------------------------------
 # Ayni React kaynagi, Electron kabugu OLMADAN (Electron\vite.config.web.ts).
@@ -288,6 +296,8 @@ Copy-Item "$proj\ecosystem.config.js" "$stage\"
 #     alir) - yani operator zip ile script'i ayni klasore koyup ORADAN kosar.
 #     `C:\<kok>\kur.ps1` artik zorunlu degil, yalnizca kolaylik kopyasi.
 Copy-Item "$repo\deploy\kur.ps1" "$stage\"
+# Sifirdan kurulumun iskeleti de ayni zip'te: sunucuya repo agaci tasinmaz.
+Copy-Item "$repo\deploy\ilk-kurulum.ps1" "$stage\"
 
 # Prisma yapilandirmasi: TS DEGIL, seed kancasi OLMAYAN JS surumu
 $prodCfg = "$proj\deploy\prisma.config.prod.js"
@@ -401,6 +411,8 @@ $manifest = [ordered]@{
   prova           = [bool]$Prova
   migrationSayisi = $migSayi
   nodeModulesDahil= (-not $NodeModulesHaric)
+  # Paketteki sunucu araclari (dist/tools); kur.ps1 kurulum sonunda basar.
+  araclar         = @($araclar | ForEach-Object { $_.ad })
   # PAKET.json'in KENDISI bu sayiya dahil DEGILDIR (henuz yazilmadi). Zip'te
   # tam olarak $dosyalar.Count + 1 girdi olmasi beklenir - kapi bunu olcer.
   dosyaSayisi     = $dosyalar.Count
@@ -470,7 +482,7 @@ Remove-Item $stage -Recurse -Force
 # ⚠ Paket DOGRULANDIKTAN sonra atilir: kapilardan gecmemis bir zip icin numara
 #   harcamak, bir sonraki turu bir sayi ileri kaydirirdi. Backend'in yayin
 #   sunucusu YOK - paket elden tasiniyor - o yuzden "yayin ani" budur.
-# ⚠ KOSULSUZ DEGIL (2026-09-27): etiket `git push origin` ile UZAGA da gider; prova
+# ⚠ KOSULSUZ DEGIL: etiket `git push origin` ile UZAGA da gider; prova
 #   kipinde ve kirli agactan uretilen pakette atilmaz (baslik "PROVA KIPI").
 if ($Prova) {
   Write-Host "  ! PROVA: etiket atilmadi (backend-v$yeniSurum), push yapilmadi." -ForegroundColor Yellow

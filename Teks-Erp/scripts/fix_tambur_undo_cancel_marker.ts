@@ -39,6 +39,7 @@ import { RollStatus } from "@prisma/client";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 import { TAMBUR_UNDO_CANCEL_CODE, TAMBUR_UNDO_CANCEL_TEXT } from "../src/constants/reason-presets";
 import { izDustuUyarisi, onarimIziYaz } from "./lib/onarim-izi";
+import { kosumKomutu } from "./lib/kosum-komutu";
 
 const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
@@ -103,7 +104,7 @@ async function main(): Promise<void> {
   );
 
   if (!APPLY) {
-    console.log(`KURU KOŞUM — hiçbir şey yazılmadı. Yazmak için (kullanıcı onayıyla):\n  npx tsx scripts/fix_tambur_undo_cancel_marker.ts --apply --onay=${adaylar.length} --hedef=${db}\n`);
+    console.log(`KURU KOŞUM — hiçbir şey yazılmadı. Yazmak için (kullanıcı onayıyla):\n  ${kosumKomutu("fix_tambur_undo_cancel_marker")} --apply --onay=${adaylar.length} --hedef=${db}\n`);
     return;
   }
   if (!HEDEF || HEDEF !== db) { console.error(`❌ --hedef=${HEDEF || "(yok)"} ≠ çözülen veritabanı "${db}". Yazma YOK.`); process.exitCode = 1; return; }

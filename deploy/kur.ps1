@@ -774,6 +774,11 @@ $geceYedegi = Get-ChildItem $backupDir -Filter "tekserp_*.dump" -ErrorAction Sil
 if ($geceYedegi) { Write-Host "  Son gece yedegi: $($geceYedegi.Name)  ($($geceYedegi.LastWriteTime.ToString('yyyy-MM-dd HH:mm')))" }
 else             { Write-Host "  Son gece yedegi: YOK - $backupDir icinde tekserp_*.dump bulunamadi (Gorev Zamanlayici TeksERP-DB-Backup'a bak)" -ForegroundColor Yellow }
 Write-Host "  Kurulum  : $appDir"
+if ($m -and $m.araclar) {
+  # Surum notunun YAYIN GUNU adimlari buradan kosulur (pakette tsx/scripts yok).
+  Write-Host "  Araclar  : cd $appDir ; node dist\tools\<ad>.cjs   (deneme; --apply surum notundaki gibi)"
+  Write-Host "             $(@($m.araclar) -join ', ')"
+}
 Write-Host "  Geri donus noktalari:"
 Write-Host "     kod : $eskiAd        ->  kur.ps1 -GeriAl"
 Write-Host "     veri: $dump"

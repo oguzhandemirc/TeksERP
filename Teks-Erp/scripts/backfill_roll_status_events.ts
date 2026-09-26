@@ -35,6 +35,7 @@ import { RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
+import { ciktiDizini, kosumKomutu } from "./lib/kosum-komutu";
 
 const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
@@ -49,7 +50,7 @@ function dbHost(): string {
 function dokumYolu(db: string): string {
   if (DOKUM) return resolve(DOKUM);
   const damga = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15);
-  return resolve(__dirname, "out", `backfill_roll_status_events-${db}-${damga}.csv`);
+  return resolve(ciktiDizini(), `backfill_roll_status_events-${db}-${damga}.csv`);
 }
 
 type Kaynak = "ROLL_COLUMNS" | "AUDIT" | "AUDIT_EBEVEYN";
@@ -175,7 +176,7 @@ async function main(): Promise<void> {
   console.log(`Döküm: ${yol}`);
 
   if (!APPLY) {
-    console.log(`\nKURU ANLATIM — hiçbir şey yazılmadı. Uygulamak için (kullanıcı onayıyla, HEDEF adı birebir; onay = ① + ② + ③):\n  npx tsx scripts/backfill_roll_status_events.ts --apply --onay=${total} --hedef=${db}`);
+    console.log(`\nKURU ANLATIM — hiçbir şey yazılmadı. Uygulamak için (kullanıcı onayıyla, HEDEF adı birebir; onay = ① + ② + ③):\n  ${kosumKomutu("backfill_roll_status_events")} --apply --onay=${total} --hedef=${db}`);
     return;
   }
   if (!HEDEF || HEDEF !== db) { console.error(`❌ --hedef=${HEDEF || "(yok)"} ≠ çözülen veritabanı "${db}". Yazma YOK.`); process.exitCode = 1; return; }

@@ -13,9 +13,13 @@
 //      `'Sürüm göçü%'` sorgusu tam bu yüzden 0 döndü).
 //   §3 çıplak `npm` çağrısı YOK. `npm` → `npm.ps1` bir SCRIPT'tir ve yürütme
 //      ilkesi Restricted'ta koşmaz; `npm.cmd` ilkeye tabi değil.
+//   §4 `paketle.ps1 -Prova` yayın kaydı bırakmaz (etiket/push/`--uygula`/belge) ve
+//      `kur.ps1` prova paketini `-ProvaKabul`suz kurmaz.
+//   §5 son taslağın YAYIN GÜNÜ betikleri pakette derleniyor (`dist/tools`), paket
+//      `ilk-kurulum.ps1`i taşıyor — sunucuya repo ağacı ve `tsx` gitmez.
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { psTara, kapsayanFonksiyon } from "./lib/ps-tarama";
 
@@ -112,6 +116,41 @@ for (const yol of SUNUCU_PS1) {
   check("§4e ⭐ kur.ps1 prova paketini `-ProvaKabul` olmadan kurmaz (Fail)",
     provaIdx >= 0 && kur.satirlar.slice(provaIdx, provaIdx + 4).some((s) => /-not\s+\$ProvaKabul/.test(s.ciplak)) &&
       kur.satirlar.slice(provaIdx, provaIdx + 5).some((s) => /^\s*Fail\b/.test(s.ciplak)));
+}
+
+// §5 — yayın günü araçları PAKETTE (bulgu 7). Pakette `scripts/` ve `tsx` yok; sürüm
+//   notunun YAYIN GÜNÜ adımları `dist/tools/<ad>.cjs` derlemesinden koşar. En yüksek
+//   sürümlü taslağın YAYIN GÜNÜ bölümünde adı geçen her `<ad>.ts`, build-araclar'ın
+//   ARACLAR listesinde olmalı; eski taslaklar kapsam dışı (araç listesi küçülebilsin).
+{
+  const build = readFileSync(join(KOK, "Teks-Erp/scripts/build-araclar.mjs"), "utf8");
+  const araclar = new Set([...build.matchAll(/giris:\s*"scripts\/([\w-]+)\.ts"/g)].map((m) => m[1]!));
+  const dizin = join(KOK, "docs/surumler");
+  const surumNo = (ad: string) => (/^(\d+)\.(\d+)\.(\d+)-taslak\.md$/.exec(ad) ?? []).slice(1).map(Number);
+  const taslaklar = readdirSync(dizin).filter((f) => surumNo(f).length === 3).map((f) => {
+    const metin = readFileSync(join(dizin, f), "utf8");
+    const bas = metin.search(/^## YAYIN GÜNÜ/m);
+    const govde = bas < 0 ? "" : metin.slice(bas, (() => { const s = metin.slice(bas + 3).search(/^## /m); return s < 0 ? metin.length : bas + 3 + s; })());
+    const adlar = [...new Set([...govde.matchAll(/`(?:scripts\/)?([a-z][a-z0-9_]+)\.ts`/g)].map((m) => m[1]!))];
+    return { f, v: surumNo(f), adlar };
+  }).filter((t) => t.adlar.length > 0)
+    .sort((a, b) => b.v[0]! - a.v[0]! || b.v[1]! - a.v[1]! || b.v[2]! - a.v[2]!);
+  const hedef = taslaklar[0];
+  check("§5 körlük zemini: YAYIN GÜNÜ'nde betik anan taslak bulundu ve ARACLAR okundu",
+    !!hedef && araclar.size >= 2, hedef ? `${hedef.f}: ${hedef.adlar.length} betik · ARACLAR ${araclar.size}` : "taslak yok");
+  if (hedef) {
+    const eksik = hedef.adlar.filter((a) => !araclar.has(a));
+    const kaynaksiz = hedef.adlar.filter((a) => !existsSync(join(KOK, "Teks-Erp/scripts", `${a}.ts`)));
+    check(`§5a ⭐ ${hedef.f} YAYIN GÜNÜ betiklerinin hepsi pakette derleniyor (build-araclar ARACLAR)`, eksik.length === 0,
+      eksik.length ? `eksik: ${eksik.join(", ")}` : hedef.adlar.join(", "));
+    check("§5b taslakta anılan betiklerin kaynağı var (ad yanlış yazılmamış)", kaynaksiz.length === 0, kaynaksiz.join(", ") || "hepsi var");
+  }
+  const pk = psTara(readFileSync(join(KOK, "deploy/paketle.ps1"), "utf8"));
+  check("§5c ⭐ paketle.ps1 araç listesini (araclar.json) doğruluyor ve eksikte Fail",
+    pk.satirlar.some((s) => /araclar\.json/.test(s.kod)) &&
+      pk.satirlar.some((s) => /Fail\s+"Arac uretilmedi/.test(s.kod)));
+  check("§5d paketle.ps1 `ilk-kurulum.ps1`i pakete koyuyor (sunucuya repo ağacı taşınmaz)",
+    pk.satirlar.some((s) => /^\s*Copy-Item\s+"\$repo\\deploy\\ilk-kurulum\.ps1"\s+"\$stage\\"/.test(s.kod)));
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
