@@ -23,6 +23,9 @@
 //       komşudan 42–70'i aynı ms, zincir 53–74 kez koptu — ölçüldü 2026-09-26)
 //   NEGATİF SONDA (2026-09-26, md5 ile geri alındı): yazar damgayı vermez (Prisma varsayılanı) → §14 ❌ ·
 //       "son olay + 1 ms" terimi kalkar → §14 ❌
+//   §14c toplu yazımda gelecek satırı yalnız bir kartelada · §14d damga önce/sonra DB saati aralığında.
+//   06 DENETİMİ (md5 ile geri alındı; eski paket ikisinde 30/0): saat `to_timestamp(0)`a çekildi → §14d ❌ ·
+//       son olay yalnız İLK kartelaya bakıldı → §14c ❌.
 // =============================================================================
 
 import { readFileSync } from "fs";
@@ -269,6 +272,34 @@ async function main(): Promise<void> {
     const hepsiA = await olaylar(a);
     check("§14b A kartelasının bütün olayları kesin artan damgalı (çuvallar arası taşıma dahil)",
       hepsiA.every((x, i) => i === 0 || x.createdAt.getTime() > hepsiA[i - 1]!.createdAt.getTime()), `${hepsiA.length} olay`);
+
+    // §14c toplu yazım: damga satırdaki kartelaların HEPSİNİN son olayından sonra. Gelecek satırı yalnız birinde; o kartela
+    // ne ilk yazılan ne en küçük id — "yalnız ilk kartela" okuyan bozuk damga, dönüş sırası id ya da yazım olsa da yakalanır.
+    const uc = await createSwatchesTx(tx, [0, 1, 2].map((i) => ({ cardNumber: `TST-KDEF-${ts}-T${i}`, barcode: `TST-KDEFB-${ts}-T${i}`, itemId: item.id, parentReceiptId: receipt.id })), { trigger: "TEST_BORN" });
+    const enKucuk = uc.map((x) => x.id).sort()[0];
+    const gelecekli = uc.slice(1).find((x) => x.id !== enKucuk)!;
+    const [{ gelecek }] = await tx.$queryRaw<Array<{ gelecek: Date }>>`
+      INSERT INTO "swatch_events" ("id","swatchId","type","fromStatus","toStatus","groupId","trigger","channel","sackId","createdAt")
+      VALUES (${randomUUID()}::uuid, ${gelecekli.id}::uuid, 'UNSACKED', 'IN_SACK', 'IN_STOCK', ${randomUUID()}::uuid, 'TEST_FUTURE', 'SYSTEM', ${sackA.id}::uuid,
+        now() + interval '1 hour') -- tz-ok: timestamptz, sonda olayı bilerek gelecekte
+      RETURNING "createdAt" AS gelecek`;
+    await transitionSwatchesTx(tx, SwatchEventType.SACKED, { scope: { ids: uc.map((x) => x.id) }, sack: { id: sackA.id, sackNo: sackA.sackNo }, ctx: { trigger: "TEST_SACK_TOPLU" } });
+    const topluSon = (await olaylar(gelecekli.id)).at(-1);
+    check("§14c ⭐ toplu yazım: gelecek satırı YALNIZ bir kartelada — yeni damga ondan sonra (bütün kartelaların son olayı sayılır)",
+      topluSon?.trigger === "TEST_SACK_TOPLU" && topluSon.createdAt.getTime() > gelecek.getTime(),
+      `${topluSon?.createdAt.toISOString()} > ${gelecek.toISOString()}`);
+
+    // §14d damga DB SAATİNDEN: yazımdan önce ve sonra okunan saat damgayı çevreler (önce ≤ damga ≤ sonra + 1 ms).
+    // Önceki olayın +1 ms'i aralığa taşmasın diye kısa bekleme; saat sabite ya da geçmişe çekilirse aralık dışında kalır.
+    const [tek] = await createSwatchesTx(tx, [{ cardNumber: `TST-KDEF-${ts}-C`, barcode: `TST-KDEFB-${ts}-C`, itemId: item.id, parentReceiptId: receipt.id }], { trigger: "TEST_BORN" });
+    await tx.$executeRaw`SELECT pg_sleep(0.005)`;
+    const [{ t: saatOnce }] = await tx.$queryRaw<Array<{ t: Date }>>`SELECT clock_timestamp() AS t -- tz-ok: sonda saati, timestamptz`;
+    await transitionSwatchesTx(tx, SwatchEventType.SACKED, { scope: { ids: [tek.id] }, sack: { id: sackA.id, sackNo: sackA.sackNo }, ctx: { trigger: "TEST_SACK_SAAT" } });
+    const [{ t: saatSonra }] = await tx.$queryRaw<Array<{ t: Date }>>`SELECT clock_timestamp() AS t -- tz-ok: sonda saati, timestamptz`;
+    const damga = (await olaylar(tek.id)).at(-1)!.createdAt;
+    check("§14d ⭐ damga DB saatinden: önce ≤ damga ≤ sonra + 1 ms",
+      damga.getTime() >= saatOnce.getTime() && damga.getTime() <= saatSonra.getTime() + 1,
+      `${saatOnce.toISOString()} ≤ ${damga.toISOString()} ≤ ${saatSonra.toISOString()}+1ms`);
 
     // §11 backfill — kolon hâlleri elle kurulur; sed bu tx'te geçici kaldırılır (tx geri alınır).
     // Ertelenmiş bileşik FK olayları bekliyorken ALTER TABLE reddedilir (55006): önce işlet.
