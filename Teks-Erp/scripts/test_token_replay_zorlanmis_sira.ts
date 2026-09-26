@@ -7,6 +7,7 @@
 // yarışı yükle değil ZORLANMIŞ SIRAYLA açar (`scripts/lib/zorlanmis-sira.ts`): B token'ı okuyup kuralda
 // bekletilir, A koşar. Her durumda önce "sıra gerçekten zorlandı mı" ölçülür (kapı A bitince ya da A PG
 // kilidinde beklerken açılmalı), sonra cevabın token'dan geldiği.
+//   §0 ARAÇ: komşu oturumun B'yle ilgisiz kilit beklemesi kapıyı açmaz; A B'nin tuttuğu kilitte bekleyince açılır.
 //   §1 levent tüketimi (#6, R): aynı token → replay (kalan kuralı da, token P2002'si de) · başka metre → 409
 //      CLIENT_TOKEN_COLLISION · geri alınmış → 409 WARP_BEAM_CONSUME_REVOKED · §5-6: FARKLI token'lı iki
 //      tüketim kalanı aşamaz (levent satır kilidi).
@@ -472,6 +473,45 @@ async function hareketliBordro(): Promise<void> {
     !!ids[0] && ids[0] === ids[1] && (await prisma.chequeDeliveryNote.count({ where: { clientToken: t } })) === 1 && depozit === 1, `${ozet(s)} · DEPOSIT=${depozit}`);
 }
 
+// ═══ §0 — ARACIN KENDİSİ: "A kilitte bekliyor" yalnız B'nin TUTTUĞU kilidi bekleyen oturumdur ═══
+// DB genelinde herhangi bir kilit beklemesini saymak, komşu oturum ya da paralel koşumla kapıyı erken açıp
+// "sıra zorlandı" diye sahte yeşil veriyordu. Anahtar uzayı 8999 yalnız bu bekçinindir (src envanterinde yok).
+async function aracKalibrasyonu(): Promise<void> {
+  console.log("§0 Araç kalibrasyonu — kapının açılış sebebi");
+  const K = 8999;
+  const n = Math.floor(Math.random() * 1e9);
+  const tutan = await pool.connect();
+  const komsu = await pool.connect();
+  try {
+    await tutan.query("SELECT pg_advisory_lock($1::int, $2::int)", [K, n]);
+    const komsuBekler = komsu.query("SELECT pg_advisory_lock($1::int, $2::int)", [K, n]);
+    const komsuPid = (komsu as unknown as { processID: number }).processID;
+    let beklemede = false;
+    for (let i = 0; i < 200 && !beklemede; i++) {
+      const [r] = await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid = ${komsuPid}::int AND wait_event_type = 'Lock'`;
+      beklemede = (r?.n ?? 0) > 0;
+      if (!beklemede) await new Promise((r2) => setTimeout(r2, 10));
+    }
+    check("§0 zemin: komşu oturum ilgisiz bir kilitte bekliyor", beklemede);
+    const bTx = () => prisma.$transaction(async (tx) => { await tx.systemSetting.findFirst({ select: { key: true } }); });
+    const s1 = await zorlanmisSira({ model: "systemSetting", metod: "findFirst" }, bTx, () => new Promise((r2) => setTimeout(r2, 300)));
+    check("§0a ⭐ komşunun ilgisiz kilit beklemesi kapıyı AÇMAZ (kapı A bitince açılır)", s1.kapi === "A bitti", s1.kapi);
+    await tutan.query("SELECT pg_advisory_unlock($1::int, $2::int)", [K, n]);
+    await komsuBekler;
+    await komsu.query("SELECT pg_advisory_unlock($1::int, $2::int)", [K, n]);
+    const m = n + 1;
+    const kilitli = () => prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${K}::int, ${m}::int)`;
+      await tx.systemSetting.findFirst({ select: { key: true } });
+    });
+    const s2 = await zorlanmisSira({ model: "systemSetting", metod: "findFirst" }, kilitli, kilitli);
+    check("§0b ⭐ A B'nin tuttuğu kilitte bekleyince kapı açılır", s2.kapi === "A kilitte bekliyor", ozet(s2));
+  } finally {
+    tutan.release();
+    komsu.release();
+  }
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) {
@@ -485,6 +525,7 @@ async function main(): Promise<void> {
   await setFlag(SETTING_KEYS.DEVERE_MOUNT_TRACKING, true);
   await setFlag(SETTING_KEYS.IPLIK_ENABLED, false);
   await setFlag(SETTING_KEYS.DOKUMA_ENABLED, false);
+  await aracKalibrasyonu();
   await levent();
   await hizliSiparis();
   await elleNumara();

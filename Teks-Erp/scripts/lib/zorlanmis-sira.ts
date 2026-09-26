@@ -3,7 +3,7 @@
 // =============================================================================
 // NEDEN: yükle ölçen yarış testi pencereyi şansa bırakır (bordroda aynı hata 10 koşumda 0 kez
 // yakalandı). Burada B'nin `prisma.$transaction`ı sarılır ve B'nin tx'indeki İLK `<model>.<metod>`
-// çağrısı kapıda bekler; A o sırada koşar. Kapı A bitince, A bir PG kilidinde beklemeye düşünce ya
+// çağrısı kapıda bekler; A o sırada koşar. Kapı A bitince, A B'nin tuttuğu bir PG kilidinde beklemeye düşünce ya
 // da zaman aşımında açılır — hangisiyle açıldığı döner ki bekçi "B kapıya vardı mı" diye ölçebilsin.
 // Kalıp: `docs/design/TOKEN-REPLAY-KILIDI.md` §4 (ilk kullanıcı `test_cek_bordro_taslak_token` ③c).
 // =============================================================================
@@ -32,10 +32,10 @@ export interface ZorlanmisSiraSonucu {
 /** Kapının GERÇEKTEN sırayı zorladığı açılışlar — bekçi sonucu yorumlamadan önce bunu ölçer. */
 export const SIRA_ZORLANDI: ReadonlySet<KapiAcilisi> = new Set<KapiAcilisi>(["A bitti", "A kilitte bekliyor"]);
 
-const kapiDeposu = new AsyncLocalStorage<() => Promise<unknown>>();
+const kapiDeposu = new AsyncLocalStorage<(tx?: object) => Promise<unknown>>();
 type TxFn = (fn: unknown, opts?: unknown) => Promise<unknown>;
 
-function kapiliTx(tx: object, nokta: KapiNoktasi, bekle: () => Promise<unknown>): object {
+function kapiliTx(tx: object, nokta: KapiNoktasi, bekle: (tx?: object) => Promise<unknown>): object {
   const bagla = (t: object, p: string | symbol) => {
     const v = Reflect.get(t, p) as unknown;
     return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(t) : v;
@@ -46,7 +46,7 @@ function kapiliTx(tx: object, nokta: KapiNoktasi, bekle: () => Promise<unknown>)
     get: (t, p) =>
       p === nokta.metod
         ? async (...a: unknown[]) => {
-            await bekle();
+            await bekle(tx);
             return (Reflect.get(t, p) as (...x: unknown[]) => unknown).apply(t, a);
           }
         : bagla(t, p),
@@ -81,6 +81,9 @@ export async function zorlanmisSira(
     };
   }
   let aBitti = false;
+  // "A kilitte bekliyor" yalnız B'nin TUTTUĞU bir kilidi bekleyen oturumdur (DB genelindeki komşu bekleme sahte açılış verirdi);
+  // B tx dışındaysa kilit tutmaz ve kapı yalnız A bitince ya da zaman aşımında açılır.
+  let bPid: number | null = null;
   let kapidaSinyal!: () => void;
   const kapida = new Promise<void>((r) => (kapidaSinyal = r));
   let acilis: Promise<KapiAcilisi> | null = null;
@@ -89,15 +92,22 @@ export async function zorlanmisSira(
       kapidaSinyal();
       for (const son = Date.now() + zamanAsimiMs; Date.now() < son; ) {
         if (aBitti) return "A bitti";
-        const [r] = await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
-        if ((r?.n ?? 0) > 0) return "A kilitte bekliyor";
+        if (bPid !== null) {
+          const [r] = await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND ${bPid}::int = ANY(pg_blocking_pids(pid))`;
+          if ((r?.n ?? 0) > 0) return "A kilitte bekliyor";
+        }
         await new Promise((r2) => setTimeout(r2, 10));
       }
       return "zaman aşımı";
     })());
   let gecen = 0;
-  const kapi = async (): Promise<void> => {
-    if (++gecen > (nokta.atla ?? 0)) await bekle();
+  const kapi = async (tx?: object): Promise<void> => {
+    if (++gecen <= (nokta.atla ?? 0)) return;
+    if (tx && bPid === null) {
+      const q = Reflect.get(tx, "$queryRawUnsafe") as (sql: string) => Promise<Array<{ pid: number }>>;
+      bPid = (await q.call(tx, "SELECT pg_backend_pid() AS pid"))[0]?.pid ?? null;
+    }
+    await bekle();
   };
   try {
     const bSoz = kapiDeposu.run(kapi, b);

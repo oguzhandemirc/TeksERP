@@ -24,7 +24,7 @@ import { chequeDeliveryNoteService } from "../src/services/cheque-delivery-note.
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
-import { zorlanmisSira } from "./lib/zorlanmis-sira";
+import { SIRA_ZORLANDI, zorlanmisSira } from "./lib/zorlanmis-sira";
 
 let pass = 0;
 let fail = 0;
@@ -241,6 +241,7 @@ async function main(): Promise<void> {
       () => chequeDeliveryNoteService.create({ chequeIds: [cekId], deliveryDate: asOf, clientToken: t }, admin.id),
       () => chequeDeliveryNoteService.create({ chequeIds: [cekId], deliveryDate: aGunu, clientToken: t }, admin.id),
     );
+    check(`③c zorlanmış sıra, ${ad}: sıra zorlandı (B kapıda bekledi)`, SIRA_ZORLANDI.has(s.kapi), s.kapi);
     const kodlar = s.sonuclar.map(kodOf);
     const ok = s.sonuclar.filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<Awaited<ReturnType<typeof chequeDeliveryNoteService.create>>>).value.data!);
     const beklenen = ad === "aynı gövde"
