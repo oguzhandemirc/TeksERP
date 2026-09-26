@@ -11,6 +11,8 @@
 //   §2 muaf satırları kapalı sınıftan; her satır tam `adet` üretimi örter; EZILEN_VARSAYILAN'ın ezeni ölçülür.
 //   §3 P3 BORÇ CIRCIRI: token tutan ama politika yardımcısına bağlı olmayan birim beyanlı; yalnız DÜŞER (iki yönlü).
 //   §4 körlük: iki istemci de taranıyor, politika kökleri dışa açık, uyumlu tutucu tanınıyor.
+// KALAN RİSK (beyanlı kör nokta): uyum BİRİM düzeyinde ölçülür — politika yardımcısını kullanan bir birime
+// eklenen ikinci, ayrı bir ham tutucu (`useState(() => üret())`) P3'e düşmez ve görülmez.
 // =============================================================================
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
