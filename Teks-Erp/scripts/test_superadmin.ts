@@ -300,6 +300,16 @@ let fixtureId: string | null = null;
 let fixtureTamAdi: string | null = null;
 /** §L'nin sentetik arşiv satırı — `finally`de silinir (arşiv kolu maskesi ölçümü). */
 let arsivSondaId: string | null = null;
+/**
+ * HTTP (4)'ün yazdığı modül satırının ÖNCEKİ hâli — `finally` onu geri kurar. "Aynı değeri yaz"
+ * satır YOKKEN satır doğurur ve geçmişsiz kurulum sözleşmesini (`test_module_grandfathering` §2b) bozar.
+ */
+const TEZGAH_ANAHTARI = "tezgah.enabled";
+/** Metin olarak saklanır: `updatedAt` µs taşır, JS `Date`e çevrilirse ms'ye kırpılır. */
+let tezgahOnce:
+  | { vardi: false }
+  | { vardi: true; value: string; updatedAt: string; updatedById: string | null }
+  | null = null;
 
 /**
  * Fixture sistem hesabı — DOĞUM YOLU burada ölçülmez (bkz. §I başlığı); hesap
@@ -967,12 +977,16 @@ async function main(): Promise<void> {
       `${kimlik.status}`,
     );
 
-    // (4) Modül anahtarı: süperadmin YAZAR — gerçek değeri DEĞİŞTİRMEDEN
-    //     (mevcut değeri okuyup AYNISINI yazarız; bekçi durum bozmaz).
+    // (4) Modül anahtarı: süperadmin YAZAR — mevcut değeri okuyup AYNISINI yazarız; satırın
+    //     önceki hâli (YOKLUĞU dahil) saklanır ve `finally` geri kurar.
     const bayraklar = (await (await fetch(`${BASE}/api/feature-flags`, { headers: auth })).json()) as {
       data?: Record<string, unknown>;
     };
     const mevcut = bayraklar.data?.tezgahEnabled;
+    const [onceki] = await prisma.$queryRaw<Array<{ value: string; updatedAt: string; updatedById: string | null }>>`
+      SELECT value::text AS value, "updatedAt"::text AS "updatedAt", "updatedById"::text AS "updatedById"
+      FROM system_settings WHERE key = ${TEZGAH_ANAHTARI}`;
+    tezgahOnce = onceki ? { vardi: true, ...onceki } : { vardi: false };
     const yaz = await fetch(`${BASE}/api/feature-flags`, {
       method: "PATCH",
       headers: auth,
@@ -1157,6 +1171,15 @@ main()
   .finally(async () => {
     // Temizlik — fixture sistem hesabı SİLİNİR ("sistem hesabı ≤ 1" invariantı).
     try {
+      // Modül satırı fixture kullanıcısından ÖNCE: PATCH `updatedById`e onu yazdı.
+      if (tezgahOnce?.vardi === false) {
+        await prisma.systemSetting.deleteMany({ where: { key: TEZGAH_ANAHTARI } });
+      } else if (tezgahOnce?.vardi) {
+        await prisma.$executeRaw`
+          UPDATE system_settings SET value = ${tezgahOnce.value}::jsonb, "updatedAt" = ${tezgahOnce.updatedAt}::timestamptz,
+            "updatedById" = ${tezgahOnce.updatedById}::uuid
+          WHERE key = ${TEZGAH_ANAHTARI}`;
+      }
       if (fixtureId) {
         // ⚠️ `users`a RESTRICT ile bağlı üç tablo bu koşumda satır doğurur:
         // `sessions` (HTTP girişi) · `system_logs` (giriş + engellenen erişim +
