@@ -15,11 +15,16 @@
 //   §8 hedef aşımı UYARIDIR (engel değil)
 //   §9 Hareketler: "Parti eklendi · N top · M" tek satır; aynı parti ikinci kez "Parti açıldı" diye basılmaz
 //   §10 R6 numara doluluğu: boş parti ve canlı topu olan parti DOLU; topları hepsi ölü ve birleşmiş parti BOŞTA
+//   §11 ⭐ BATCH_ADD_RACE (zorlanmış sıra, `lib/zorlanmis-sira`): B (iş emri 1'e Parti Ekle) topu okur, claim'inde
+//       (`roll.updateManyAndReturn`) kapıda bekler; A aynı topu iş emri 2'ye bağlar. B 409 BATCH_ADD_RACE alır ve
+//       hiçbir şey yazmaz (yeni parti · olay · defter satırı yok); top A'nın partisinde. 06 denetimi: kod hiçbir
+//       bekçide geçmiyordu — satır devre dışıyken 11/0 idi.
 // NEGATİF SONDA (elle, 2026-09-26): `recomputeStepStatus`un sevk bekleyen dalı sıfırlanınca §6 kırmızı;
 // boğaz yalnız ilk adımı yeniden hesaplayınca §7 kırmızı; boğazın tamamlanmış kapısı kaldırılınca §5 kırmızı
 // (kod WORKORDER_TERMINAL_DURING_ATTACH'a düşer); elle taşımanın iki kapısı kaldırılınca §5 kırmızı (taşıma geçer).
 // §10 (2026-09-26): yüklemden boş-parti dalı düşürülünce kırmızı. §9b: BATCH_ADD etiketi silinince ya da
 // createBatchTx açanı yazmayınca kırmızı. Yedek kopyadan geri alındı.
+// §11 (06 denetimi, md5 ile geri alındı): STRICT kipte `BATCH_ADD_RACE` satırı devre dışı → §11 ❌ (B sessizce 0 topla döner).
 // =============================================================================
 
 import { randomUUID } from "node:crypto";
@@ -32,6 +37,7 @@ import { recomputeStepStatus } from "../src/services/helpers/roll-step.helper";
 import { WorkOrderTimelineService } from "../src/services/workorder-timeline.service";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { SIRA_ZORLANDI, zorlanmisSira } from "./lib/zorlanmis-sira";
 
 const svc = new WorkOrderService();
 const TAG = `TST-WOBA-${Date.now()}`;
@@ -205,6 +211,31 @@ async function bolum10(): Promise<void> {
     dolu.length === 3 && [bos, canli, karma].every((id) => dolu.includes(id)) && !dolu.includes(olu) && !dolu.includes(yutulan), `${dolu.length} dolu`);
 }
 
+async function bolum11(): Promise<void> {
+  const { wo: wo1 } = await isEmri([ST_KURSUN, ST_TAMBUR], ["R1"]);
+  const { wo: wo2 } = await isEmri([ST_KURSUN, ST_TAMBUR], ["R2"]);
+  await top("RY");
+  const kod = `${TAG}-RY`;
+  const oncePartiler1 = await prisma.batch.count({ where: { workOrderId: wo1 } });
+  const s = await zorlanmisSira(
+    { model: "roll", metod: "updateManyAndReturn" },
+    () => addBatch(wo1, { clientToken: randomUUID(), rollBarcodes: [kod] }, ADMIN),
+    () => addBatch(wo2, { clientToken: randomUUID(), rollBarcodes: [kod] }, ADMIN),
+  );
+  const [b, a] = s.sonuclar;
+  const bHata = b.status === "rejected" ? (b.reason as { statusCode?: number; details?: { code?: string } }) : null;
+  const ry = await rollOf("RY");
+  const ryParti = ry.batchId ? await prisma.batch.findUnique({ where: { id: ry.batchId }, select: { workOrderId: true } }) : null;
+  const sonraPartiler1 = await prisma.batch.count({ where: { workOrderId: wo1 } });
+  const olay1 = await prisma.workOrderEvent.count({ where: { workOrderId: wo1, type: "BATCH_ADDED" } });
+  const defter = await prisma.warehouseMovement.count({ where: { rollId: ry.id, reasonCode: STOCK_MOVE_REASON.PRODUCTION_ISSUE } });
+  check("§11 sıra zorlandı (B claim'de bekledi, A önce bitti)", SIRA_ZORLANDI.has(s.kapi), s.kapi);
+  check("§11 ⭐ yarışı kaybeden Parti Ekle 409 BATCH_ADD_RACE, hiçbir şey yazmaz; top kazananın partisinde",
+    bHata?.statusCode === 409 && bHata.details?.code === "BATCH_ADD_RACE" && a.status === "fulfilled"
+      && ryParti?.workOrderId === wo2 && sonraPartiler1 === oncePartiler1 && olay1 === 0 && defter === 1,
+    `B ${b.status === "rejected" ? `${bHata?.statusCode} ${bHata?.details?.code}` : "başarılı"} · A ${a.status} · parti1 ${oncePartiler1}→${sonraPartiler1} · olay1 ${olay1} · defter ${defter}`);
+}
+
 async function main(): Promise<void> {
   console.log("=== Parti Ekle ===");
   await fikstur();
@@ -213,6 +244,7 @@ async function main(): Promise<void> {
     await bolum5();
     await bolum6to8();
     await bolum10();
+    await bolum11();
   } finally {
     await temizle();
   }
