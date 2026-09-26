@@ -773,7 +773,7 @@ async function main() {
       `⚠️  ATLANAN KONTROL: ${skippedFiles.length} dosyada toplam ${total} — yeşil ≠ kapsandı`,
     );
     for (const f of skippedFiles) console.log(`  ⚠️  ${f.file} — ${f.skipped} atlandı`);
-    console.log("     (HTTP ayaklı bekçiler kendi portunda sunucu ister: 4100/4101/4104/4112/4122)");
+    console.log("     (HTTP ayaklı bekçiler sunucu ister — kendi sunucusunu açan koşucu: npx tsx scripts/bekci-http.ts [--tam])");
     // STRICT: "yeşil = kapsandı" iddiası ancak SIFIR atlamayla kurulur. Anahtarın
     // anlamı [TD-10c]'de tanımlı; burada yalnız ATLAMA sayısına bakılır — "sunucu
     // ayakta ama başka DB'ye bakıyor" sınıfı zaten hedef kapısında, strict'i

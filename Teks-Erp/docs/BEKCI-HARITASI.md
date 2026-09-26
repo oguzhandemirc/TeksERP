@@ -85,6 +85,7 @@ sistem hesabı VAR → 126 / 0 / 16   (bekçinin kendi başlığındaki ölçüm
 Hesap VAR rejimi `npm run superadmin:kur` ister — **TTY ister ve sır hijyeni alanına girer**, o yüzden bir bekçi koşumu olarak kurulmaz; kullanıcı kararıdır.
 
 ### Nasıl koşulur (port bekçileri)
+**Tek komut (tercih edilen):** `cd Teks-Erp && DATABASE_URL='postgresql://…/<ad>_test?schema=public' node ../scripts/agir-is.mjs -- npx tsx scripts/bekci-http.ts [--tam] [süzgeç…]` — boş bir portta KENDİ sunucusunu açar (yalnız `_test` hedef, `.env` okunmaz), `httpBekciKapisi` çağıran bekçileri ya da `--tam` ile bütün paketi `TEST_API_URL`le koşar, atlamaları beyanlı/genel diye sebebiyle basar, yalnız kendi süreç grubunu kapatıp portun kapandığını ölçer. Elle yol:
 ```bash
 cd Teks-Erp
 PORT=<port> npx tsx src/server.ts &          # kendi PID'in
