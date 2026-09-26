@@ -35,7 +35,7 @@ async function readCloseInputsTx(tx: Tx, workOrderId: string) {
   const previous = await tx.workOrderCloseSnapshot.count({ where: { workOrderId } });
   const firstStart = await tx.workOrderEvent.findFirst({
     where: { workOrderId, type: WorkOrderEventType.STATUS_CHANGED, toValue: WorkOrderStatus.IN_PROGRESS },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: { createdAt: true },
   });
   const stepIds = steps.map((s) => s.id);
