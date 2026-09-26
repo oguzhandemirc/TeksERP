@@ -13,6 +13,7 @@ import { AppError } from "../utils/app-error";
 import { normalizeScanCode } from "../utils/code-format";
 import { resolveRangeEnd, resolveRangeStart } from "../constants/time";
 import { WORK_ORDER_CHANNEL_LABEL } from "../constants/workorder-event-labels";
+import { SWATCH_EVENT_DESC } from "./helpers/swatch-event.helper";
 import {
   SWATCH_EVENT_GROUP,
   SWATCH_EVENT_GROUPS,
@@ -113,7 +114,7 @@ export class KartelaTimelineService {
 
     const rows = await prisma.swatchEvent.findMany({
       where: opts.groups?.length ? { AND: [where, { type: { in: typesOfGroups(opts.groups) } }] } : where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: SWATCH_EVENT_DESC,
       // Prisma imleci (createdAt, id) karşılaştırmasını DB'de kurar: tek ifadenin satırları (farklı
       // kartelalar) aynı damgayı paylaşır — kimlikli imleç eşitliği kırpmaz. Kartela başına damga kesin artandır.
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),

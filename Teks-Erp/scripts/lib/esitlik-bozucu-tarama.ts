@@ -128,8 +128,11 @@ const tekSatir = (e: ts.Expression | null): boolean => {
   return ts.isPrefixUnaryExpression(x) && x.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(x.operand) && x.operand.text === "1";
 };
 
-/** Kaynak metinden tek satır okuyucuları, üç sonuçla. SAF: dosya okuma `oku` ile enjekte. */
-export function okuyuculariTara(dosya: string, metin: string, sema: Sema, oku: Okuyan): Okuyucu[] {
+/**
+ * Kaynak metinden tek satır okuyucuları, üç sonuçla. SAF: dosya okuma `oku` ile enjekte. `hepsi`: `take`siz
+ * `findMany` de sayılır (listeden "kayıt başına en son"u JS'te seçen okuyucu — tek defterlik dar kapılar için).
+ */
+export function okuyuculariTara(dosya: string, metin: string, sema: Sema, oku: Okuyan, opts: { hepsi?: boolean } = {}): Okuyucu[] {
   const sf = ts.createSourceFile(dosya, metin, ts.ScriptTarget.Latest, true);
   const out: Okuyucu[] = [];
   const degerlendir = (arg: ts.ObjectLiteralExpression, model: string, bicim: string, tekMi: boolean, dugum: ts.Node) => {
@@ -159,7 +162,7 @@ export function okuyuculariTara(dosya: string, metin: string, sema: Sema, oku: O
       const model = delegeModeli(sema, n.expression.expression.name.text);
       const arg = n.arguments[0] ? soy(n.arguments[0]) : null;
       if (model && arg && ts.isObjectLiteralExpression(arg) && ["findFirst", "findFirstOrThrow", "findMany"].includes(yontem)) {
-        degerlendir(arg, model, yontem, yontem !== "findMany" || tekSatir(ozellik(arg, "take")), n);
+        degerlendir(arg, model, yontem, yontem !== "findMany" || opts.hepsi === true || tekSatir(ozellik(arg, "take")), n);
       }
     }
     ts.forEachChild(n, gez);

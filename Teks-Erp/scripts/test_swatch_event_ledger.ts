@@ -26,6 +26,8 @@
 //   §14c toplu yazımda gelecek satırı yalnız bir kartelada · §14d damga önce/sonra DB saati aralığında.
 //   06 DENETİMİ (md5 ile geri alındı; eski paket ikisinde 30/0): saat `to_timestamp(0)`a çekildi → §14d ❌ ·
 //       son olay yalnız İLK kartelaya bakıldı → §14c ❌.
+//   §14e statik (06 denetimi 11): kartela olayı okuyan her sorgu `id` bozucusu taşır — düzeltmeden önce ❌
+//       (`findReversedEventsTx`); `SWATCH_EVENT_DESC`ten `id` düşünce ❌ (md5 ile geri alındı).
 // =============================================================================
 
 import { readFileSync } from "fs";
@@ -41,6 +43,8 @@ import {
   transitionSwatchesTx,
 } from "../src/services/helpers/swatch-event.helper";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { diskOkuyucu, okuyuculariTara, semaOku } from "./lib/esitlik-bozucu-tarama";
+import { walkTs } from "./lib/ts-tarama";
 
 type Tx = Prisma.TransactionClient;
 
@@ -300,6 +304,15 @@ async function main(): Promise<void> {
     check("§14d ⭐ damga DB saatinden: önce ≤ damga ≤ sonra + 1 ms",
       damga.getTime() >= saatOnce.getTime() && damga.getTime() <= saatSonra.getTime() + 1,
       `${saatOnce.toISOString()} ≤ ${damga.toISOString()} ≤ ${saatSonra.toISOString()}+1ms`);
+
+    // §14e statik: kartela olayını okuyan HER sorgu (kayıt başına "en son"u listeden seçen dahil) `id` eşitlik bozucusu taşır.
+    const sema = semaOku(readFileSync(join(__dirname, "..", "prisma", "schema.prisma"), "utf8"));
+    const disk = diskOkuyucu();
+    const bozucusuz = walkTs(join(__dirname, "..", "src"))
+      .flatMap((d) => okuyuculariTara(d, readFileSync(d, "utf8"), sema, disk, { hepsi: true }))
+      .filter((o) => o.model === "SwatchEvent" && o.sonuc !== "UYUMLU");
+    check("§14e ⭐ statik: src'de kartela olayını createdAt ile okuyan her sorgu `id` bozucusu taşır (sabitten ya da satır içi)",
+      bozucusuz.length === 0, bozucusuz.map((o) => `${o.dosya.split("/src/")[1]}:${o.satir} ${o.bicim}`).join(" · "));
 
     // §11 backfill — kolon hâlleri elle kurulur; sed bu tx'te geçici kaldırılır (tx geri alınır).
     // Ertelenmiş bileşik FK olayları bekliyorken ALTER TABLE reddedilir (55006): önce işlet.

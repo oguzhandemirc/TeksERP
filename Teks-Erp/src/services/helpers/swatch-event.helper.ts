@@ -22,6 +22,9 @@ type Tx = Prisma.TransactionClient;
  * Tip → geçiş. DB CHECK'i `swatch_events_transition_known` ile boğaz-ikizdir: biri
  * değişirse öteki de değişir (`test_swatch_event_ledger` ikisini karşılaştırır).
  */
+/** Kartela olay defterinin TEK sırası — an, eşitlikte id (yeni satırda damga zaten kesin artan; eski eşitler belirlenimli). */
+export const SWATCH_EVENT_DESC = [{ createdAt: "desc" }, { id: "desc" }] satisfies Prisma.SwatchEventOrderByWithRelationInput[];
+
 export const SWATCH_TRANSITIONS: Record<SwatchEventType, { from: SwatchStatus | null; to: SwatchStatus }> = {
   BORN: { from: null, to: SwatchStatus.IN_STOCK },
   VOIDED: { from: SwatchStatus.IN_STOCK, to: SwatchStatus.VOIDED },
@@ -238,7 +241,7 @@ async function findReversedEventsTx(
       ...(doc.reductionId ? { reductionId: doc.reductionId } : {}),
       ...(doc.shipmentId ? { shipmentId: doc.shipmentId } : {}),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: SWATCH_EVENT_DESC,
     select: { id: true, swatchId: true },
   });
   for (const e of forward) if (!links.has(e.swatchId)) links.set(e.swatchId, e.id);
