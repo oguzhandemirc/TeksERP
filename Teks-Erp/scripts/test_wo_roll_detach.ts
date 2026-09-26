@@ -15,6 +15,8 @@
 //   §9 iş emri DEVRİ: taşınan açık üretime alma satırı yeni iş emrinin adımına bağlanır (eski satır bağlı
 //      ters `PRODUCTION_ISSUE_TRANSFER`le kapanır, yeni ileri satır, net 0); yeni iş emrinden Top Çıkar
 //      tersini yazar, açık satır kalmaz (ölçüldü 2026-09-26: devirden sonra Top Çıkar tersi YAZMIYORDU)
+//   §11 engel KATALOĞU: sekiz engelin her biri kendi fikstürüyle TEK BAŞINA — önizleme yalnız o sebebi söyler,
+//      çıkarma 409 ROLL_DETACH_PROCESSED, top yerinde
 //   §10 zorlanmış sıra: Top Çıkar claim'e kadar okudu, rakip yazar (iş emri kilidini almayan) topu
 //      taşıdı → claim'in beklenen-durum koşulu 409 verir, top rakibin bıraktığı yerde, ters satır yok
 //   §9c Hareketler: eski iş emrinde "İş emrine devredildi → yeni", yenide "Devirle üretime alındı ← eski";
@@ -25,6 +27,9 @@
 // §9c kırmızı; çizelgenin devir satırları kaldırılınca §9c kırmızı.
 // (06 denetimi, md5 ile geri alındı) claim WHERE `{ id }`e indirilince §10 kırmızı (B geçti, rakibin taşıdığı top STOCK'a
 // döndü, ters satır yazıldı) — eski paket bu mutasyonda 8/0 yeşildi.
+// (06 denetimi, md5 ile geri alındı) sekiz engelin HER BİRİ tek tek kaldırıldı → §11 ❌ (her seferinde yalnız o engel;
+// "istasyonda işlem gördü"de §7 de) · depo geri yüklemesi kaldırıldı → §2 ❌. Eskiden yedisi fikstürsüzdü, depo
+// yüklemesi fikstürce maskeleniyordu (top üretimde deposunu kaybetmiyordu).
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
@@ -35,6 +40,7 @@ import { WorkOrderTimelineService } from "../src/services/workorder-timeline.ser
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { SIRA_ZORLANDI, zorlanmisSira } from "./lib/zorlanmis-sira";
+import { ensureTestKartela } from "./fixture-subcontractor";
 
 const svc = new WorkOrderService();
 const detach = new WorkOrderRollDetachService();
@@ -49,6 +55,8 @@ function check(label: string, cond: boolean, extra = ""): void {
 let ITEM = "", ADMIN = "", ST_KURSUN = "", ST_TAMBUR = "", WAREHOUSE = "";
 const woIds: string[] = [];
 const rollIds: string[] = [];
+const sackIds: string[] = [];
+const dispatchIds: string[] = [];
 
 async function fikstur(): Promise<void> {
   const need = <T,>(v: T | null, label: string): T => {
@@ -86,7 +94,35 @@ async function hata(fn: () => Promise<unknown>): Promise<{ status?: number; code
   catch (e) { const x = e as { statusCode?: number; details?: { code?: string } }; return { status: x.statusCode, code: x.details?.code }; }
 }
 
-const durum = (id: string) => prisma.roll.findUniqueOrThrow({ where: { id }, select: { status: true, currentStepId: true, batchId: true } });
+const durum = (id: string) => prisma.roll.findUniqueOrThrow({ where: { id }, select: { status: true, currentStepId: true, batchId: true, warehouseId: true } });
+
+/** Engel kataloğu — `detachBlockers`in sekiz sebebi, her biri en küçük fikstürle (ham yazım: sebep tek başına doğsun). */
+type Fikstur = (rollId: string, stepIds: string[], woId: string) => Promise<unknown>;
+const KATALOG: Array<[string, Fikstur]> = [
+  ["üretimde değil", (r) => prisma.roll.update({ where: { id: r }, data: { status: RollStatus.AT_SUBCONTRACTOR } })],
+  ["ilk adımı geçti", (r, st) => prisma.roll.update({ where: { id: r }, data: { currentStepId: st[1] } })],
+  ["çuvalda / sevkte", async (r) => {
+    const sack = await prisma.sack.create({ data: { sackNo: `${TAG}-S${sackIds.length}` }, select: { id: true } });
+    sackIds.push(sack.id);
+    await prisma.roll.update({ where: { id: r }, data: { sackId: sack.id } });
+  }],
+  ["istasyonda işlem gördü", (r) => prisma.rollMovement.updateMany({ where: { rollId: r, revokedAt: null }, data: { exitedAt: new Date() } })],
+  ["işlem kaydı var", (r, st) => prisma.rollOperation.create({ data: { rollId: r, workOrderStepId: st[0]!, operationType: "KURSUN_APPLIED" } })],
+  ["kesildi", async (r) => {
+    const c = await prisma.roll.create({ data: { barcode: `${TAG}-K${rollIds.length}`, itemId: ITEM, initialQty: 10, currentQty: 10, status: RollStatus.WAREHOUSE, warehouseId: WAREHOUSE, parentRollId: r }, select: { id: true } });
+    rollIds.push(c.id);
+  }],
+  ["fasona sevk edildi", async (r, st, wo) => {
+    const { batchId } = await prisma.roll.findUniqueOrThrow({ where: { id: r }, select: { batchId: true } });
+    const d = await prisma.subcontractorDispatch.create({
+      data: { dispatchNo: `${TAG}-F${dispatchIds.length}`, subcontractorId: (await ensureTestKartela()).id, workOrderId: wo, stepId: st[0]!, batchId: batchId! },
+      select: { id: true },
+    });
+    dispatchIds.push(d.id);
+    await prisma.subcontractorDispatchItem.create({ data: { dispatchId: d.id, rollId: r, dispatchedQty: 10 } });
+  }],
+  ["sapma kaydı var", (r, st) => prisma.rollVariance.create({ data: { rollId: r, kind: "RECORD_CORRECTION", qty: 1, source: "TEST", workOrderStepId: st[0]! } })],
+];
 
 async function main(): Promise<void> {
   console.log("=== Top Çıkar ===");
@@ -96,10 +132,13 @@ async function main(): Promise<void> {
     const aday = (await detach.listCandidates(wo)).data;
     check("§1 önizleme: iki yeni top çıkarılabilir", aday.length === 2 && aday.every((x) => x.detachable && x.blockers.length === 0), JSON.stringify(aday.map((x) => x.blockers)));
 
+    // Depo defterin `from` ucundan döner: fikstür topun deposunu üretimde boşaltır ki geri yükleme ölçülsün.
+    await prisma.roll.update({ where: { id: a }, data: { warehouseId: null } });
     const res = await detach.detachRoll(wo, a, "Yanlış okutuldu", ADMIN);
     const aSon = await durum(a);
-    check("§2 top önceki durumuna döndü (STOCK), adım ve parti bağı düştü",
-      aSon.status === RollStatus.STOCK && aSon.currentStepId === null && aSon.batchId === null && res.data.workOrderReverted === false, JSON.stringify(aSon));
+    check("§2 top önceki durumuna ve deposuna döndü (STOCK, defterin from ucu), adım ve parti bağı düştü",
+      aSon.status === RollStatus.STOCK && aSon.warehouseId === WAREHOUSE && aSon.currentStepId === null && aSon.batchId === null
+        && res.data.workOrderReverted === false, JSON.stringify(aSon));
     const defter = await prisma.warehouseMovement.findMany({ where: { rollId: a }, orderBy: { createdAt: "asc" } });
     const ileri = defter.find((x) => x.reasonCode === STOCK_MOVE_REASON.PRODUCTION_ISSUE);
     const ters = defter.find((x) => x.reasonCode === STOCK_MOVE_REASON.ROLL_DETACH);
@@ -178,6 +217,19 @@ async function main(): Promise<void> {
         && eSon.status === RollStatus.IN_PRODUCTION && eSon.currentStepId === adimlar[1]!.id && eTers === 0,
       `kapı ${yaris.kapi} · B ${bHata} · top ${eSon.status}@${eSon.currentStepId === adimlar[1]!.id ? "2. adım" : eSon.currentStepId ?? "adımsız"} · ters ${eTers}`);
 
+    const katalogHata: string[] = [];
+    for (const [sebep, kur] of KATALOG) {
+      const { wo: w, rolls: [r] } = await isEmriVeToplar([[`G${KATALOG.findIndex(([x]) => x === sebep)}`, RollStatus.STOCK]]);
+      const st = (await prisma.workOrderStep.findMany({ where: { workOrderId: w }, orderBy: { stepSequence: "asc" }, select: { id: true } })).map((x) => x.id);
+      await kur(r!, st, w);
+      const aday = (await detach.listCandidates(w)).data.find((x) => x.id === r);
+      const e = await hata(() => detach.detachRoll(w, r!, "katalog sondası", ADMIN));
+      const tek = aday?.blockers.length === 1 && aday.blockers[0] === sebep && aday.detachable === false;
+      if (!tek || e?.status !== 409 || e.code !== "ROLL_DETACH_PROCESSED") katalogHata.push(`${sebep}: ${JSON.stringify(aday?.blockers)} · ${e?.status}/${e?.code}`);
+    }
+    check("§11 ⭐ engel kataloğu: sekiz engelin her biri tek başına önizlemede o sebep, çıkarma 409 ROLL_DETACH_PROCESSED",
+      katalogHata.length === 0, katalogHata.join(" · ") || `${KATALOG.length} engel`);
+
     const ikinci = await hata(() => detach.detachRoll(wo, a, "tekrar", ADMIN));
     const sebepsiz = await hata(() => detach.detachRoll(wo2, c, " ", ADMIN));
     check("§8 aynı top ikinci kez 404, sebepsiz 400", ikinci?.status === 404 && sebepsiz?.status === 400, `${ikinci?.status}/${sebepsiz?.status}`);
@@ -190,6 +242,12 @@ async function main(): Promise<void> {
 }
 
 async function temizle(): Promise<void> {
+  await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
+  await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
+  await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { sackId: null, parentRollId: null } });
+  await prisma.sack.deleteMany({ where: { id: { in: sackIds } } });
   const cards = await prisma.travelerCard.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } });
   const cardIds = cards.map((x) => x.id);
   const stepIds = (await prisma.workOrderStep.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } })).map((x) => x.id);
