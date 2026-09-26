@@ -17,6 +17,7 @@ import { AuditService } from "../audit.service";
 import { readDevereEnabled } from "../system-setting.service";
 import type { WarpBeamEventKind } from "../../constants/warp-beam";
 import { WARP_BEAM_EVENT_SELECT, type WarpBeamEventRow } from "./warp-beam.helper";
+import { warpBeamEventStampTx } from "./ledger-stamp.helper";
 
 export const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
 
@@ -57,19 +58,7 @@ export async function applyWarpBeamEventTx(
     if (!fresh) throw AppError.notFound("Levent bulunamadı");
     throw AppError.conflict(`${fresh.beamNo} durumu ${fresh.status} — bu işlem yalnız ${input.from} durumunda yapılır`, { code: "WARP_BEAM_STATE", status: fresh.status });
   }
-  const createdAt = await eventStampTx(tx, input.beamId);
+  const createdAt = await warpBeamEventStampTx(tx, input.beamId);
   return tx.warpBeamEvent.create({ data: { beamId: input.beamId, kind: input.kind, fromStatus: input.from, toStatus: input.to, ...input.data, createdAt }, select: WARP_BEAM_EVENT_SELECT });
 }
 
-/**
- * Olay damgası — DB saati, ms'ye YUKARI yuvarlanır (Date ms taşır; aşağı kesmek µs'lik doff damgasının
- * önüne düşürebilirdi) ve leventin son olayından en az 1 ms sonra (aynı ms'deki iki olayın sırası korunur).
- */
-async function eventStampTx(tx: Prisma.TransactionClient, beamId: string): Promise<Date> {
-  const rows = await tx.$queryRaw<Array<{ at: Date }>>`
-    SELECT GREATEST(
-      to_timestamp(ceil(extract(epoch FROM clock_timestamp()) * 1000) / 1000), -- tz-ok: timestamptz, doff damgasıyla aynı DB saati; tx başı değil ŞU AN
-      (SELECT max("createdAt") + interval '1 millisecond' FROM warp_beam_events WHERE "beamId" = ${beamId}::uuid)
-    ) AS at`;
-  return rows[0]!.at;
-}
