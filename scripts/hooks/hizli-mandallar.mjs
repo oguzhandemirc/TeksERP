@@ -41,6 +41,7 @@ const MANDALLAR = [
   "test_kapi_kapsami", // 3 proje kapı config · ağaç · 2,7–4,8 sn
   "test_belge_ticari_yuvarlama", // belge sayı biçimi: ticari yuvarlama tek biçimleyiciden, PDF = Excel (DB'siz) · src/services/document-render · ağaç · ~3 sn (29., 4b kararı 2026-09-26)
   "test_token_replay_bogaz", // clientToken yolları tek boğaz (`tokenReplay`) ya da beyanlı; kip · gövde kapısı · borç cırcırı (AST, DB'siz) · src + scripts/lib · ağaç · ~2 sn (30., 4b kararı 2026-09-26)
+  "test_istemci_token_uretimi", // istemci clientToken deneme başına: satır içi / mutationFn içi üretim yok · P3 borç cırcırı (AST, DB'siz) · Electron/src + mobil/src + scripts/lib · ağaç · ~2 sn (31., 4b kararı 2026-09-26)
   "test_borc_notu_bicimi", // docs/kurallar · INDEX
   "test_kural_bekci_atfi", // docs/kurallar + scripts · INDEX
   "test_identity_ledger", // scripts + src + docs · INDEX
