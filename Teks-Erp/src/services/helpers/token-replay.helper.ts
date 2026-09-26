@@ -167,6 +167,18 @@ export function assertOrderReplayAlive(existing: {
 }
 
 /**
+ * Token'la bulunan iş emri İPTAL edilmiş ya da arşivlenmişse 409 `WORK_ORDER_CANCELLED` — "zaten oluşturulmuş"
+ * demek, operatörü kapanmış bir iş emrinin açık olduğu sanrısına sokardı.
+ */
+export function assertWorkOrderReplayAlive(existing: { workOrderNumber: string; isActive: boolean; status: string }): void {
+  if (existing.isActive && existing.status !== "CANCELLED") return;
+  throw AppError.conflict(
+    `Bu form daha önce kaydedilmiş ama iş emri (${existing.workOrderNumber}) İPTAL edilmiş ya da arşivlenmiş — aynı gönderim tekrar edilemez. Yeni iş emri için formu kapatıp yeniden açın.`,
+    { code: "WORK_ORDER_CANCELLED", workOrderNumber: existing.workOrderNumber },
+  );
+}
+
+/**
  * Token'la bulunan dokuma işi hâlâ canlı mı — değilse 409 `WEAVING_ORDER_CANCELLED`.
  *
  * Üçüncü ayrı kod: dokuma işi ne top ne sipariştir; istemci "formu yeniden aç"
@@ -215,6 +227,15 @@ export function assertWarpBeamReplayAlive(existing: { id: string; beamNo: string
 export function assertWarpBeamConsumeReplayAlive(existing: { reversal: { id: string } | null }): void {
   if (!existing.reversal) return;
   throw AppError.conflict("Bu tüketim daha önce kaydedilip geri alınmış — yeniden kaydetmek için formu yeniden açın (aynı gönderim tekrar edilemez).", { code: "WARP_BEAM_CONSUME_REVOKED" });
+}
+
+/**
+ * Token'la bulunan levent olayı (takma · fason dönüşü) sonradan ters kayıtla GERİ ALINMIŞSA 409 `WARP_BEAM_EVENT_REVOKED`.
+ * "Zaten kayıtlı" demek, geri alınmış bir işlemi olmuş gibi gösterirdi.
+ */
+export function assertWarpBeamEventReplayAlive(existing: { reversal: { id: string } | null }, ne: string): void {
+  if (!existing.reversal) return;
+  throw AppError.conflict(`Bu ${ne} daha önce kaydedilmiş ama sonra GERİ ALINMIŞ — aynı gönderim tekrar edilemez. İşlemi yeniden yapmak için formu kapatıp yeniden açın.`, { code: "WARP_BEAM_EVENT_REVOKED" });
 }
 
 /**

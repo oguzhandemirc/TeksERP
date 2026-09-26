@@ -52,7 +52,7 @@ const KALAN_OKUYAN_YAZARLAR = new Set([
   "src/services/helpers/warp-beam-ledger.helper.ts::closeToMeasuredTx",
   "src/services/warp-beam-auto-consume.service.ts::autoConsumeForRollTx",
   "src/services/subcontractor-beam.service.ts::dispatchWarpBeamItemsTx",
-  "src/services/warp-beam-mount.service.ts::mountBeam",
+  "src/services/warp-beam-mount.service.ts::mountBeamFresh",
 ]);
 
 type Birim = { anahtar: string; dugum: ts.Node; cagrilar: Array<{ ad: string; satir: number }>; elleToplama: number[] };

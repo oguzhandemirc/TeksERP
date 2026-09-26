@@ -28,7 +28,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 /** Boğaza henüz girmemiş (borç) birim sayısı — YALNIZ DÜŞER; sabiti entegratör trende düşürür. */
-const BORC_TABANI = 35;
+const BORC_TABANI = 16; // D3 sonu (2026-09-26): D3 0 · D5 16
 
 const KOK = path.resolve(__dirname, "..");
 const KIP_CAGRISI: Record<Kip, string> = { R: "run", K: "inTx", "K′": "behindLock" };
@@ -93,7 +93,7 @@ function main(): void {
     }
   }
   check("⭐ her giriş birimi beyan ettiği kipi çağırır; K'de inTx tx'in ilk await'i", kipHatasi.length === 0, kipHatasi.join(" · "));
-  check("kip beyanı kör değil (≥ 9 giriş)", kipSayisi >= 9, `${kipSayisi} giriş`);
+  check("kip beyanı kör değil (≥ 20 giriş)", kipSayisi >= 20, `${kipSayisi} giriş`);
 
   console.log("§4 Politika literali");
   const ZORUNLU = ["find", "alive", "identity", "collision", "respond"];
@@ -125,7 +125,7 @@ function main(): void {
     }
   }
   check("⭐ her tokenReplay literali beş alanı taşır; gövde kapısı (identity) boş değil", politikaHatasi.length === 0, politikaHatasi.join(" · "));
-  check("politika taraması kör değil (≥ 8 politika)", tarama.politikalar.length >= 8, `${tarama.politikalar.length} politika`);
+  check("politika taraması kör değil (≥ 18 politika)", tarama.politikalar.length >= 18, `${tarama.politikalar.length} politika`);
 
   console.log("§5 Muaf sınıfı");
   const muafHatasi = Object.entries(TOKEN_YOLLARI).filter(([, y]) => "muaf" in y && !(y.muaf in MUAF_SINIFLARI)).map(([k]) => k);

@@ -42,7 +42,7 @@ import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
 import { writeShipmentEvent } from "./helpers/shipment-event.helper";
 import { weightWarning } from "./helpers/measurement-threshold.helper";
 import { AppError } from "../utils/app-error";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { tokenReplay } from "./helpers/token-replay.helper";
 import { AuditService } from "./audit.service";
 import {
   printedDocumentService,
@@ -400,46 +400,77 @@ function onarimKalemleriniKur(
     .sort((a2, b2) => b2.yazilacak - a2.yazilacak);
 }
 
-export class ShippingService {
-  // =========================================================================
-  // ÇUVAL DEPO HAVUZU — çuval aç / okut / tart (sevkiyattan bağımsız)
-  // =========================================================================
+type ShipmentReplayRow = {
+  id: string; shipmentNo: string; status: ShipmentStatus; customerId: string; branchId: string | null;
+  sacks: Array<{ id: string }>; rolls: Array<{ id: string }>;
+};
 
-  /** A4 replay: token'la daha önce açılmış çuvalı openSack yanıt şekliyle döner. */
-  private async readOpenSackReplay(
-    clientToken: string,
-    gelen: { customerId?: string | null; branchId?: string | null; packingGroupId?: string | null },
-  ): Promise<ApiResponse<unknown> | null> {
-    const s = await prisma.sack.findUnique({
-      where: { clientToken },
-      select: {
-        id: true, sackNo: true, weightKg: true, customerId: true, branchId: true, packingGroupId: true, packageNo: true,
-        customer: { select: { name: true } },
-        branch: { select: { name: true, code: true } },
-        packingGroup: { select: { name: true } },
-      },
-    });
-    if (!s) return null;
-    // ⚠️ AYNI TOKEN, FARKLI GÖVDE (BULGU-T4-003). Eskiden token'la bulunan çuval
-    // KOŞULSUZ dönüyordu: A müşterisi için açılan çuval belirsiz düşer, operatör
-    // B müşterisini seçip tekrar dener, sunucu A'nın çuvalını "Çuval açıldı"
-    // diyerek döndürür ve toplar YANLIŞ MÜŞTERİNİN çuvalına okutulurdu.
-    // ⚠️ Müşterisiz çuval MEŞRUDUR (genel stok, depo havuzu modeli) — `null` ile
-    // `null` aynı sayılır; kapı yalnız GERÇEK farkta kapanır.
-    assertReplayPayloadMatches(
-      [
-        { ad: "customerId", mevcut: s.customerId, gelen: gelen.customerId },
-        { ad: "branchId", mevcut: s.branchId, gelen: gelen.branchId },
-        // Parti farkı da gerçek farktır: A partisi için açılan çuval B'ye okutulmasın.
-        ...(gelen.packingGroupId !== undefined
-          ? [{ ad: "packingGroupId", mevcut: s.packingGroupId, gelen: gelen.packingGroupId }]
-          : []),
-      ],
-      "Bu istemci anahtarı FARKLI bir müşteri/şube için açılmış bir çuvala ait. " +
-        "Ekranı yenileyip çuvalı tekrar açın.",
-      { sackNo: s.sackNo },
-    );
-    return {
+/**
+ * Sevkiyat replay'i (A4). 4. durum (BULGU-T3-010): tablet "Hemen Sevk Et" der, sunucu kurar ve çıkarır ama yanıt
+ * ağda kaybolur; bu arada masaüstünden storno + kapatma yapılırsa aynı token'a "Sevkiyat kuruldu" demek, mal
+ * çıkmamışken operatörü evrak beklemeye gönderirdi → 409 `SHIPMENT_CANCELLED` (kesin hata: tablet token'ı bırakır).
+ * Gövde kapısı: müşteri + şube + çuval (sevkiyat) ya da top (hızlı sevk) kümesi.
+ */
+function shipmentReplay(ident: { customerId: string; branchId: string | null; sackIds?: string[]; rollIds?: string[] }) {
+  const idSet = (ids: string[]) => [...new Set(ids)].sort().join(",");
+  return tokenReplay<ShipmentReplayRow, ApiResponse<unknown>>({
+    find: (db, clientToken) =>
+      db.shipment.findUnique({
+        where: { clientToken },
+        select: { id: true, shipmentNo: true, status: true, customerId: true, branchId: true, sacks: { select: { id: true } }, rolls: { select: { id: true } } },
+      }),
+    alive: (p) => {
+      if (p.status !== ShipmentStatus.CANCELLED) return;
+      throw AppError.conflict(`Bu sevkiyat (${p.shipmentNo}) kurulmuş ama İPTAL EDİLMİŞ — mal çıkmadı. Sevkiyatı yeniden kurun.`, {
+        code: "SHIPMENT_CANCELLED",
+        shipmentNo: p.shipmentNo,
+      });
+    },
+    identity: (p) => [
+      { ad: "customerId", mevcut: p.customerId, gelen: ident.customerId },
+      { ad: "branchId", mevcut: p.branchId, gelen: ident.branchId },
+      ident.rollIds
+        ? { ad: "toplar", mevcut: idSet(p.rolls.map((r) => r.id)), gelen: idSet(ident.rollIds) }
+        : { ad: "cuvallar", mevcut: idSet(p.sacks.map((x) => x.id)), gelen: idSet(ident.sackIds ?? []) },
+    ],
+    collision: (p) => `Bu form daha önce ${p.shipmentNo} sevkiyatı olarak kaydedilmiş — yeni sevkiyat için ekranı kapatıp yeniden açın.`,
+    collisionEk: (p) => ({ shipmentNo: p.shipmentNo }),
+    respond: (p) => {
+      const dispatched = p.status === ShipmentStatus.DISPATCHED;
+      return {
+        success: true,
+        data: { id: p.id, shipmentNo: p.shipmentNo, status: p.status, dispatched },
+        message: dispatched ? `Sevk edildi: ${p.shipmentNo}` : `Sevkiyat kuruldu: ${p.shipmentNo}`,
+      };
+    },
+  });
+}
+
+const SACK_REPLAY_SELECT = {
+  id: true, sackNo: true, weightKg: true, customerId: true, branchId: true, packingGroupId: true, packageNo: true,
+  customer: { select: { name: true } },
+  branch: { select: { name: true, code: true } },
+  packingGroup: { select: { name: true } },
+} satisfies Prisma.SackSelect;
+
+/**
+ * Çuval açma replay'i (A4). ⚠️ AYNI TOKEN, FARKLI GÖVDE (BULGU-T4-003): A müşterisi için açılan çuval belirsiz
+ * düşer, operatör B'yi seçip tekrar dener — A'nın çuvalını "Çuval açıldı" diye döndürmek topları YANLIŞ müşterinin
+ * çuvalına okuttururdu. Müşterisiz çuval meşrudur (`null` = `null`). Parti ve elle ambalaj no da kimliktir.
+ */
+function sackReplay(gelen: { customerId?: string | null; branchId?: string | null; packingGroupId: string | null; packageNo: number | null }) {
+  return tokenReplay<Prisma.SackGetPayload<{ select: typeof SACK_REPLAY_SELECT }>, ApiResponse<unknown>>({
+    find: (db, clientToken) => db.sack.findUnique({ where: { clientToken }, select: SACK_REPLAY_SELECT }),
+    alive: { neverDies: "çuval ölü hâl taşımaz; boş çuval silinince token da gider" },
+    identity: (s) => [
+      { ad: "customerId", mevcut: s.customerId, gelen: gelen.customerId },
+      { ad: "branchId", mevcut: s.branchId, gelen: gelen.branchId },
+      { ad: "packingGroupId", mevcut: s.packingGroupId, gelen: gelen.packingGroupId },
+      ...(gelen.packageNo != null ? [{ ad: "packageNo", mevcut: s.packageNo, gelen: gelen.packageNo }] : []),
+    ],
+    collision: "Bu istemci anahtarı FARKLI bir müşteri/şube/parti için açılmış bir çuvala ait. Ekranı yenileyip çuvalı tekrar açın.",
+    collisionEk: (s) => ({ sackNo: s.sackNo }),
+    respond: (s) => ({
       success: true,
       data: {
         id: s.id, sackNo: s.sackNo, weightKg: s.weightKg, customerId: s.customerId, branchId: s.branchId,
@@ -447,8 +478,14 @@ export class ShippingService {
         packingGroupId: s.packingGroupId, packageNo: s.packageNo, packingGroupName: s.packingGroup?.name ?? null,
       },
       message: "Çuval açıldı",
-    };
-  }
+    }),
+  });
+}
+
+export class ShippingService {
+  // =========================================================================
+  // ÇUVAL DEPO HAVUZU — çuval aç / okut / tart (sevkiyattan bağımsız)
+  // =========================================================================
 
   /**
    * Yeni çuval aç (depoda). shipmentId NULL, seq NULL. Müşteri OPSİYONEL — bilinen sipariş
@@ -511,14 +548,17 @@ export class ShippingService {
     } else if (data.packageNo != null) {
       throw AppError.badRequest("Ambalaj numarası yalnız bir sevk partisinde açılan çuvala verilir");
     }
-    // İdempotent replay (A4): aynı token'la tekrar gelen istek (timeout-retry /
-    // çift dokunuş) yeni BOŞ çuval açmaz — ilk denemede açılan çuvalı döner.
-    if (data.clientToken) {
-      const cached = await this.readOpenSackReplay(data.clientToken, {
-        customerId: data.customerId, branchId: data.branchId, packingGroupId: data.packingGroupId ?? null,
-      });
-      if (cached) return cached;
-    }
+    // İdempotent replay (A4, R): aynı token'la tekrar gelen istek (timeout-retry / çift dokunuş) yeni BOŞ çuval
+    // açmaz — ilk denemede açılan çuvalı döner. Kimlik parti kapısından SONRA (cari partiden çözülür).
+    const replay = sackReplay({ customerId: data.customerId, branchId: data.branchId, packingGroupId: data.packingGroupId ?? null, packageNo: data.packageNo ?? null });
+    return replay.run(data.clientToken, () => this.openSackFresh(data, { lot, lotGroup }, userId));
+  }
+
+  private async openSackFresh(
+    data: Parameters<ShippingService["openSack"]>[0],
+    { lot, lotGroup }: { lot: Awaited<ReturnType<typeof readPackingLotSettings>>; lotGroup: { id: string; customerId: string; name: string } | null },
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
     if (data.weightKg != null && !(data.weightKg > 0)) {
       throw AppError.badRequest("Geçerli bir kg girilmeli");
     }
@@ -558,82 +598,71 @@ export class ShippingService {
       id: string; sackNo: string; weightKg: Prisma.Decimal | null; customerId: string | null; branchId: string | null;
       packingGroupId: string | null; packageNo: number | null;
     };
-    try {
-      sack = await withBarcodeRetry(() =>
-      prisma.$transaction(async (tx) => {
-        const sackNo = manualSackNo ?? (await nextSackNo(tx));
-        // Çuval doğduğu yerde damgalanır (createInitialEntry'nin top için yaptığının
-        // çuval karşılığı). Tek depolu fabrikada varsayılan depo yazılır ve hiçbir
-        // yüzey okumaz — sıfır görünür fark; çok depoluda "bu depoda hangi çuvallar"
-        // ve çuval-bütün transferin guard'ı buradan beslenir.
-        const sackWarehouseId = await resolveTargetWarehouseId(tx, null);
-        // Ambalaj no ÇUVALDAN ÖNCE ayrılır ama AYNI tx'te: sackNo yarışı tx'i geri
-        // sararsa sayaç da geri sarar (boşluk kalmaz). Kilit (8033, ezmede) tx'in
-        // bu partiye dokunan İLK ifadesidir — üstteki okumalar sequence/depo.
-        let packageNo: number | null = null;
-        if (lotGroup) {
-          if (data.packageNo != null) {
-            await assertPackageNoFreeTx(tx, { groupId: lotGroup.id, packageNo: data.packageNo, exceptSackId: null });
-            packageNo = data.packageNo;
-          } else {
-            [packageNo] = await reservePackageNosTx(tx, {
-              groupId: lotGroup.id, count: 1, numbering: lot.numbering, startsAtZero: lot.startsAtZero,
-            });
-          }
+    sack = await withBarcodeRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const sackNo = manualSackNo ?? (await nextSackNo(tx));
+      // Çuval doğduğu yerde damgalanır (createInitialEntry'nin top için yaptığının
+      // çuval karşılığı). Tek depolu fabrikada varsayılan depo yazılır ve hiçbir
+      // yüzey okumaz — sıfır görünür fark; çok depoluda "bu depoda hangi çuvallar"
+      // ve çuval-bütün transferin guard'ı buradan beslenir.
+      const sackWarehouseId = await resolveTargetWarehouseId(tx, null);
+      // Ambalaj no ÇUVALDAN ÖNCE ayrılır ama AYNI tx'te: sackNo yarışı tx'i geri
+      // sararsa sayaç da geri sarar (boşluk kalmaz). Kilit (8033, ezmede) tx'in
+      // bu partiye dokunan İLK ifadesidir — üstteki okumalar sequence/depo.
+      let packageNo: number | null = null;
+      if (lotGroup) {
+        if (data.packageNo != null) {
+          await assertPackageNoFreeTx(tx, { groupId: lotGroup.id, packageNo: data.packageNo, exceptSackId: null });
+          packageNo = data.packageNo;
         } else {
-          // Partisiz çuval: `packing.poolPackageNo = acilista` ise carinin havuz sayacından
-          // (8035); `sevkte` (varsayılan) null kalır, numara sevkte `seq` olarak doğar.
-          packageNo = await nextPoolPackageNoTx(tx, customerId);
+          [packageNo] = await reservePackageNosTx(tx, {
+            groupId: lotGroup.id, count: 1, numbering: lot.numbering, startsAtZero: lot.startsAtZero,
+          });
         }
-        return tx.sack.create({
-          data: {
-            packingGroupId: lotGroup?.id ?? null,
-            packageNo,
-            sackNo,
-            clientToken: data.clientToken ?? null,
-            customerId,
-            branchId,
-            warehouseId: sackWarehouseId,
-            shipmentId: null,
-            seq: null,
-            weightKg: data.weightKg != null ? new Prisma.Decimal(data.weightKg) : null,
-            // Açılışta kg verilirse kaynağı MANUAL sayılır: bu yol bir kantar okuması
-            // DEĞİL (operatörün formda yazdığı değer) ve simüle guard'ından geçmez.
-            // Kaynağı boş bırakmak "tartılmış ama kaynağı bilinmiyor" satırı üretirdi.
-            // NOT: bugün hiçbir istemci burada weightKg göndermiyor (mobil/Electron
-            // tartıyı ayrı `weighSack` ucundan yazıyor) — yol geri uyum için duruyor.
-            ...(data.weightKg != null
-              ? { weightSource: SackWeightSource.MANUAL, weighedById: userId ?? null, weighedAt: new Date() }
-              : {}),
-          },
-          select: { id: true, sackNo: true, weightKg: true, customerId: true, branchId: true, packingGroupId: true, packageNo: true },
-        });
-      }),
-      undefined,
-      (err) => {
-        // clientToken P2002'si retry EDİLMEZ (retry hep aynı token'ı yazar) —
-        // propagate edilir, aşağıdaki catch replay yanıtına çevirir (WO create emsali).
-        if (p2002Mentions(err, /clientToken/i)) return false;
-        // F61 emsali: manuel sackNo P2002'si retry EDİLMEZ (retry hep aynı sabit
-        // değeri yazar; 5 tur sonra yanıltıcı "Barkod üretimi 5 denemede başarısız"
-        // dönerdi) — doğrudan anlamlı 409. Otomatik modda sackNo sequence yarışı
-        // taze nextSackNo ile retry edilir (mevcut davranış).
-        if (manualSackNo && p2002Mentions(err, /sackNo/i)) {
-          throw AppError.conflict(`Bu çuval kodu zaten kullanılıyor: ${manualSackNo}`);
-        }
-        return true;
-      },
-    );
-    } catch (err) {
-      // Yarış replay'i: pre-check ile create arası aynı token'lı ikinci istek kazandıysa.
-      if (data.clientToken && p2002Mentions(err, /clientToken/i)) {
-        const cached = await this.readOpenSackReplay(data.clientToken, {
-          customerId: data.customerId, branchId: data.branchId, packingGroupId: data.packingGroupId ?? null,
-        });
-        if (cached) return cached;
+      } else {
+        // Partisiz çuval: `packing.poolPackageNo = acilista` ise carinin havuz sayacından
+        // (8035); `sevkte` (varsayılan) null kalır, numara sevkte `seq` olarak doğar.
+        packageNo = await nextPoolPackageNoTx(tx, customerId);
       }
-      throw err;
-    }
+      return tx.sack.create({
+        data: {
+          packingGroupId: lotGroup?.id ?? null,
+          packageNo,
+          sackNo,
+          clientToken: data.clientToken ?? null,
+          customerId,
+          branchId,
+          warehouseId: sackWarehouseId,
+          shipmentId: null,
+          seq: null,
+          weightKg: data.weightKg != null ? new Prisma.Decimal(data.weightKg) : null,
+          // Açılışta kg verilirse kaynağı MANUAL sayılır: bu yol bir kantar okuması
+          // DEĞİL (operatörün formda yazdığı değer) ve simüle guard'ından geçmez.
+          // Kaynağı boş bırakmak "tartılmış ama kaynağı bilinmiyor" satırı üretirdi.
+          // NOT: bugün hiçbir istemci burada weightKg göndermiyor (mobil/Electron
+          // tartıyı ayrı `weighSack` ucundan yazıyor) — yol geri uyum için duruyor.
+          ...(data.weightKg != null
+            ? { weightSource: SackWeightSource.MANUAL, weighedById: userId ?? null, weighedAt: new Date() }
+            : {}),
+        },
+        select: { id: true, sackNo: true, weightKg: true, customerId: true, branchId: true, packingGroupId: true, packageNo: true },
+      });
+    }),
+    undefined,
+    (err) => {
+      // clientToken P2002'si retry EDİLMEZ (retry hep aynı token'ı yazar) —
+      // propagate edilir, boğaz (`sackReplay.run`) replay yanıtına çevirir.
+      if (p2002Mentions(err, /clientToken/i)) return false;
+      // F61 emsali: manuel sackNo P2002'si retry EDİLMEZ (retry hep aynı sabit
+      // değeri yazar; 5 tur sonra yanıltıcı "Barkod üretimi 5 denemede başarısız"
+      // dönerdi) — doğrudan anlamlı 409. Otomatik modda sackNo sequence yarışı
+      // taze nextSackNo ile retry edilir (mevcut davranış).
+      if (manualSackNo && p2002Mentions(err, /sackNo/i)) {
+        throw AppError.conflict(`Bu çuval kodu zaten kullanılıyor: ${manualSackNo}`);
+      }
+      return true;
+    },
+  );
     await AuditService.log({
       userId,
       action: "CREATE",
@@ -2248,51 +2277,20 @@ export class ShippingService {
    * (müşterisiz çuvala backfill). Seçili siparişlere (opsiyonel) spec-FIFO tahsis yazılır;
    * shippedQty yalnız DISPATCH'te terfi eder. Fazla/eşleşmeyen/siparişsiz sevk edilebilir.
    */
-  /** A4 replay: token'la daha önce kurulmuş sevkiyatı createShipment yanıt şekliyle döner. */
-  private async readCreateShipmentReplay(clientToken: string): Promise<ApiResponse<unknown> | null> {
-    const sh = await prisma.shipment.findUnique({
-      where: { clientToken },
-      select: { id: true, shipmentNo: true, status: true },
-    });
-    if (!sh) return null;
-    // ⚠️ 4. DURUM — "yazıldı ama SONRADAN İPTAL EDİLDİ" (BULGU-T3-010).
-    // Tablet "Hemen Sevk Et" der, sunucu kurar ve çıkarır ama yanıt ağda
-    // kaybolur; mobil sözleşmesi gereği token YAPIŞIR. Bu arada masaüstünden
-    // storno + kapatma yapılır (sevkiyat CANCELLED, çuvallar havuza döner,
-    // irsaliye VOIDED). Tablet yeniden bağlanıp aynı token'la gönderdiğinde
-    // eskiden `success:true` + "Sevkiyat kuruldu" dönüyordu: operatör yeşili
-    // görüp evrak beklemeye geçiyor, oysa MAL ÇIKMAMIŞTIR ve o sevkiyat artık
-    // hiçbir ekranda yok. KK1/sipariş/fason ile aynı aile
-    // (`token-replay.helper`, ENTRY_CANCELLED / ORDER_CANCELLED / RECEIPT_CANCELLED).
-    // ⚠️ 409 = KESİN hata → mobil kuyruk token'ı BIRAKIR (entryAttempt sözleşmesi)
-    // ve operatör sevkiyatı yeniden kurar. 5xx dönseydi token yapışır, aynı ölü
-    // sevkiyat sonsuza dek yeniden sorulurdu.
-    if (sh.status === ShipmentStatus.CANCELLED) {
-      throw AppError.conflict(
-        `Bu sevkiyat (${sh.shipmentNo}) kurulmuş ama İPTAL EDİLMİŞ — mal çıkmadı. ` +
-          "Sevkiyatı yeniden kurun.",
-        { code: "SHIPMENT_CANCELLED", shipmentNo: sh.shipmentNo },
-      );
-    }
-    const dispatched = sh.status === ShipmentStatus.DISPATCHED;
-    return {
-      success: true,
-      data: { id: sh.id, shipmentNo: sh.shipmentNo, status: sh.status, dispatched },
-      message: dispatched ? `Sevk edildi: ${sh.shipmentNo}` : `Sevkiyat kuruldu: ${sh.shipmentNo}`,
-    };
+  /** Sevkiyat kur (R): token her kuraldan önce okunur, kurulum hangi hatayla düşerse düşsün yeniden okunur. */
+  async createShipment(
+    ...args: Parameters<ShippingService["createShipmentInner"]>
+  ): ReturnType<ShippingService["createShipmentInner"]> {
+    const [data] = args;
+    return shipmentReplay({ customerId: data.customerId, branchId: data.branchId ?? null, sackIds: data.sackIds }).run(data.clientToken, () =>
+      this.createShipmentInner(...args),
+    );
   }
 
-  async createShipment(
+  private async createShipmentInner(
     data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; orderless?: boolean; destination?: ShipmentDestination; destinationChosen?: boolean; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
-    // İdempotent replay (A4): timeout-retry aynı token'la gelir — çuvallar ilk
-    // (başarılı ama yanıtı kaybolmuş) denemede claim'lendiği için token'sız retry
-    // kör 409 alıyordu; artık kurulmuş sevkiyatın kendisi döner.
-    if (data.clientToken) {
-      const cached = await this.readCreateShipmentReplay(data.clientToken);
-      if (cached) return cached;
-    }
     const sackIds = [...new Set(data.sackIds)];
     if (sackIds.length === 0) throw AppError.badRequest("En az bir çuval seçilmeli");
     if (!data.customerId) throw AppError.badRequest("Müşteri seçilmeli");
@@ -2313,47 +2311,39 @@ export class ShippingService {
     let tahsisIzi: AllocationAuditTrail | null = null;
     /** Kapsama kapısının `warn` metni — tx içinde üretilir, yanıtta taşınır. */
     let kapsamaNotu: string | null = null;
-    try {
-      result = await withBarcodeRetry(() =>
-      prisma.$transaction(async (tx) => {
-        const core = await this.createShipmentCoreTx(tx, {
-          sackIds,
-          customerId: data.customerId,
-          branchId,
-          orderIds,
-          requestedDestination: data.destination, destinationChosen: data.destinationChosen === true,
-          assertDestination: (d) => assertSacksWeighed(sacks, d, weighRequired),
-          procedureCode: data.procedureCode,
-          plateNumber: data.plateNumber,
-          driverName: data.driverName,
-          carrier: data.carrier,
-          clientToken: data.clientToken,
-          confirmationEnabled,
-          orderless: data.orderless,
-          userId,
-        });
+    result = await withBarcodeRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const core = await this.createShipmentCoreTx(tx, {
+        sackIds,
+        customerId: data.customerId,
+        branchId,
+        orderIds,
+        requestedDestination: data.destination, destinationChosen: data.destinationChosen === true,
+        assertDestination: (d) => assertSacksWeighed(sacks, d, weighRequired),
+        procedureCode: data.procedureCode,
+        plateNumber: data.plateNumber,
+        driverName: data.driverName,
+        carrier: data.carrier,
+        clientToken: data.clientToken,
+        confirmationEnabled,
+        orderless: data.orderless,
+        userId,
+      });
 
-        // Tahsis izi çekirdekten TAŞINIR (tx dışında `flushAllocationAudit`e
-        // gider). Çekirdek onu döndürmeseydi audit sessizce boş kalırdı.
-        tahsisIzi = core.iz;
-        kapsamaNotu = core.kapsamaUyarisi;
-        return { id: core.id, shipmentNo: core.shipmentNo, yon: core.yon };
-      }),
-      undefined,
-      (err) => {
-        // clientToken P2002'si retry EDİLMEZ (retry hep aynı token'ı yazar) —
-        // propagate edilir, catch replay'e çevirir; shipmentNo yarışı retry edilir.
-        if (p2002Mentions(err, /clientToken/i)) return false;
-        return true;
-      },
-    );
-    } catch (err) {
-      if (data.clientToken && p2002Mentions(err, /clientToken/i)) {
-        const cached = await this.readCreateShipmentReplay(data.clientToken);
-        if (cached) return cached;
-      }
-      throw err;
-    }
+      // Tahsis izi çekirdekten TAŞINIR (tx dışında `flushAllocationAudit`e
+      // gider). Çekirdek onu döndürmeseydi audit sessizce boş kalırdı.
+      tahsisIzi = core.iz;
+      kapsamaNotu = core.kapsamaUyarisi;
+      return { id: core.id, shipmentNo: core.shipmentNo, yon: core.yon };
+    }),
+    undefined,
+    (err) => {
+      // clientToken P2002'si retry EDİLMEZ (retry hep aynı token'ı yazar) —
+      // propagate edilir, boğaz (`shipmentReplay.run`) replay'e çevirir; shipmentNo yarışı retry edilir.
+      if (p2002Mentions(err, /clientToken/i)) return false;
+      return true;
+    },
+  );
     await this.flushAllocationAudit(tahsisIzi, userId);
     await this.logFirstShipmentDestination(result.yon, result.id, userId);
     const dispatched = !confirmationEnabled;
@@ -2691,7 +2681,17 @@ export class ShippingService {
     };
   }
 
+  /** Toplardan hızlı sevk (R) — `createShipment` ile aynı boğaz; gövde kimliği top kümesi. */
   async createShipmentFromRolls(
+    ...args: Parameters<ShippingService["createShipmentFromRollsInner"]>
+  ): ReturnType<ShippingService["createShipmentFromRollsInner"]> {
+    const [data] = args;
+    return shipmentReplay({ customerId: data.customerId, branchId: data.branchId ?? null, rollIds: data.rollIds }).run(data.clientToken, () =>
+      this.createShipmentFromRollsInner(...args),
+    );
+  }
+
+  private async createShipmentFromRollsInner(
     data: {
       rollIds: string[];
       customerId: string;
@@ -2709,10 +2709,6 @@ export class ShippingService {
     },
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
-    if (data.clientToken) {
-      const cached = await this.readCreateShipmentReplay(data.clientToken);
-      if (cached) return cached;
-    }
     const rollIds = [...new Set(data.rollIds)];
     if (rollIds.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
     if (!data.customerId) throw AppError.badRequest("Müşteri seçilmeli");
@@ -2779,62 +2775,54 @@ export class ShippingService {
 
     // `iz` = tahsis iz defteri (çekirdekten taşınır, tx DIŞINDA flush edilir).
     let result: { id: string; shipmentNo: string; iz: AllocationAuditTrail | null; yon: ShipmentDestinationDecision };
-    try {
-      result = await withBarcodeRetry(
-        () =>
-          prisma.$transaction(async (tx) => {
-            // 1) Çuval doğar (operatöre görünmez) — konumu topların deposu.
-            const sackNo = await nextSackNo(tx);
-            const sack = await tx.sack.create({
-              data: {
-                sackNo,
-                customerId: data.customerId,
-                branchId,
-                warehouseId: rolls[0]?.warehouseId ?? null,
-              },
-              select: { id: true },
-            });
-            // 2) Toplar ATOMİK claim ile bağlanır (barkod değil id ile).
-            const claimed = await tx.roll.updateMany({
-              where: { id: { in: rollIds }, ...SHIPPABLE_ROLL_WHERE },
-              data: { sackId: sack.id },
-            });
-            if (claimed.count !== rollIds.length) {
-              throw AppError.conflict(
-                `Toplar bu sırada başka bir akışa girdi (${claimed.count}/${rollIds.length}) — sevkiyat kurulmadı, yenileyip tekrar deneyin.`,
-              );
-            }
-            // 3) Normal sevkiyat çekirdeği — TAHSİS/İRSALİYE/İADE zinciri birebir aynı.
-            return this.createShipmentCoreTx(tx, {
-              sackIds: [sack.id],
+    result = await withBarcodeRetry(
+      () =>
+        prisma.$transaction(async (tx) => {
+          // 1) Çuval doğar (operatöre görünmez) — konumu topların deposu.
+          const sackNo = await nextSackNo(tx);
+          const sack = await tx.sack.create({
+            data: {
+              sackNo,
               customerId: data.customerId,
               branchId,
-              orderIds,
-              requestedDestination: data.destination,
-              destinationChosen: data.destinationChosen === true,
-              assertDestination: assertQuickShipAllowed,
-              procedureCode: data.procedureCode,
-              plateNumber: data.plateNumber,
-              driverName: data.driverName,
-              carrier: data.carrier,
-              clientToken: data.clientToken,
-              confirmationEnabled: await readShipmentConfirmationEnabled(),
-              userId,
-            });
-          }),
-        undefined,
-        (err) => {
-          if (p2002Mentions(err, /clientToken/i)) return false;
-          return true;
-        },
-      );
-    } catch (err) {
-      if (data.clientToken && p2002Mentions(err, /clientToken/i)) {
-        const cached = await this.readCreateShipmentReplay(data.clientToken);
-        if (cached) return cached;
-      }
-      throw err;
-    }
+              warehouseId: rolls[0]?.warehouseId ?? null,
+            },
+            select: { id: true },
+          });
+          // 2) Toplar ATOMİK claim ile bağlanır (barkod değil id ile).
+          const claimed = await tx.roll.updateMany({
+            where: { id: { in: rollIds }, ...SHIPPABLE_ROLL_WHERE },
+            data: { sackId: sack.id },
+          });
+          if (claimed.count !== rollIds.length) {
+            throw AppError.conflict(
+              `Toplar bu sırada başka bir akışa girdi (${claimed.count}/${rollIds.length}) — sevkiyat kurulmadı, yenileyip tekrar deneyin.`,
+            );
+          }
+          // 3) Normal sevkiyat çekirdeği — TAHSİS/İRSALİYE/İADE zinciri birebir aynı.
+          return this.createShipmentCoreTx(tx, {
+            sackIds: [sack.id],
+            customerId: data.customerId,
+            branchId,
+            orderIds,
+            requestedDestination: data.destination,
+            destinationChosen: data.destinationChosen === true,
+            assertDestination: assertQuickShipAllowed,
+            procedureCode: data.procedureCode,
+            plateNumber: data.plateNumber,
+            driverName: data.driverName,
+            carrier: data.carrier,
+            clientToken: data.clientToken,
+            confirmationEnabled: await readShipmentConfirmationEnabled(),
+            userId,
+          });
+        }),
+      undefined,
+      (err) => {
+        if (p2002Mentions(err, /clientToken/i)) return false;
+        return true;
+      },
+    );
 
     const dispatched = !(await readShipmentConfirmationEnabled());
     // ⚠️ TAHSİS İZİ BURADA DA YAZILIR (merge, 2026-09-01). Hızlı Sevk yalnız

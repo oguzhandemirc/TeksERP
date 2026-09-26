@@ -12,7 +12,7 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { readDevereLotRequired } from "./system-setting.service";
 import { applyYarnMovementTx } from "./yarn.service";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { assertWarpBeamReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { resolveDenier, warpTheoreticalKg } from "../constants/warp-beam";
 import { WARP_BEAM_SELECT } from "./helpers/warp-beam.helper";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "./helpers/warp-beam-event.helper";
@@ -104,16 +104,29 @@ async function assertDevereMachineTx(tx: Prisma.TransactionClient, machineId: st
 }
 
 
+/** Sarım replay'i: aynı levent + WOUND + aynı metre; sarımı iptal edilmiş levent 409 `WARP_BEAM_CANCELLED`. */
+const windReplay = (id: string, input: WindWarpBeamInput) =>
+  tokenReplay<{ beamId: string; kind: string; lengthM: Prisma.Decimal | null; beam: { id: string; beamNo: string; status: string; setKey: string | null } }, ApiResponse<WindResultDto>>({
+    find: (db, clientToken) =>
+      db.warpBeamEvent.findUnique({ where: { clientToken }, select: { beamId: true, kind: true, lengthM: true, beam: { select: { id: true, beamNo: true, status: true, setKey: true } } } }),
+    alive: (p) => assertWarpBeamReplayAlive(p.beam),
+    identity: (p) => [
+      { ad: "beamId", mevcut: p.beamId, gelen: id },
+      { ad: "kind", mevcut: p.kind, gelen: "WOUND" },
+      { ad: "lengthM", mevcut: p.lengthM, gelen: kg(input.lengthM, "Sarılan metre") },
+    ],
+    collision: "Bu istemci anahtarı BAŞKA bir sarımla (farklı levent ya da metre) kullanılmış — formu yenileyip yeniden deneyin.",
+    respond: (p) => windResult(id, p.beam.setKey, `${p.beam.beamNo} zaten sarılmış (yeniden gönderim)`, []),
+  });
+
+/** Levent sarımı (R): token her kuraldan önce okunur, sarım hangi hatayla düşerse düşsün yeniden okunur. */
 export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?: string): Promise<ApiResponse<WindResultDto>> {
+  return windReplay(id, input).run(input.clientToken, () => windWarpBeamFresh(id, input, userId));
+}
+
+async function windWarpBeamFresh(id: string, input: WindWarpBeamInput, userId?: string): Promise<ApiResponse<WindResultDto>> {
   const beam = await prisma.warpBeam.findUnique({ where: { id }, select: WARP_BEAM_SELECT });
   if (!beam) throw AppError.notFound("Levent bulunamadı");
-  if (input.clientToken) {
-    const replay = await prisma.warpBeamEvent.findUnique({ where: { clientToken: input.clientToken }, select: { beamId: true, kind: true, beam: { select: { setKey: true } } } });
-    if (replay) {
-      assertReplayPayloadMatches([{ ad: "beamId", mevcut: replay.beamId, gelen: id }, { ad: "kind", mevcut: replay.kind, gelen: "WOUND" }], "Bu istemci anahtarı BAŞKA bir sarımla kullanılmış — formu yenileyip yeniden deneyin.");
-      return windResult(id, replay.beam.setKey, `${beam.beamNo} zaten sarılmış (yeniden gönderim)`, []);
-    }
-  }
   // RAŞEL TAKIMI (#23): N adet → aynı tx'te N−1 kardeş doğar ve sarılır; iplik payı ÷ N. DEFAULT 1 = bugün.
   const count = input.count ?? 1;
   if (!Number.isInteger(count) || count < 1 || count > 24) throw AppError.badRequest("Adet 1..24 olmalı");
@@ -158,7 +171,7 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
   const setKey = count > 1 ? crypto.randomUUID() : null;
   const issueShares = lineShares(issuesSorted, count);
   const returnShares = lineShares(returnsSorted, count);
-  const ctx = { input, lengthM, denier, theoreticalKg, yarnItemId, userId, clientToken: input.clientToken ?? null };
+  const ctx = { input, lengthM, denier, theoreticalKg, yarnItemId, userId, clientToken: null };
 
   // G3 EMANET KALITIMI: çıkış lotlarının sahibi tek ise levent (ve takım kardeşleri) onu alır — doğum yolu, PATCH değil;
   // leventin kendi sahibiyle çelişirse 409. Ownersız lotlar sahibi düşürmez; bayrak kapalıyken owner'lı lot zaten doğamaz.
@@ -173,7 +186,8 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
     if (setKey || firstPhysical !== beam.physicalBeamNo || ownerCustomerId !== beam.ownerCustomerId || weavingOrderId !== beam.weavingOrderId) {
       await tx.warpBeam.updateMany({ where: { id, status: WarpBeamStatus.PLANNED }, data: { setKey, physicalBeamNo: firstPhysical, ownerCustomerId, weavingOrderId } });
     }
-    const first = await writeWoundTx(tx, { id, endsCount: beam.warpSpec.endsCount }, ctx, { issues: issueShares[0], returns: returnShares[0] });
+    // Token yalnız ilk leventin WOUND'unda (raşel kardeşleri token'sız); yazım yerinde açık alan — tarama görsün.
+    const first = await writeWoundTx(tx, { id, endsCount: beam.warpSpec.endsCount }, { ...ctx, clientToken: input.clientToken ?? null }, { issues: issueShares[0], returns: returnShares[0] });
     for (let k = 2; k <= count; k++) {
       const physicalBeamNo = siblingPhysicalNo(prefix, k, null);
       await assertPhysicalBeamFreeTx(tx, null, physicalBeamNo, `${beam.beamNo} takımı ${k}. levent`);

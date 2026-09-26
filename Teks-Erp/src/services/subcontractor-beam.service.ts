@@ -23,7 +23,7 @@ import type { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "./helpers/warp-beam-event.helper";
 import { remainingMTx } from "./helpers/warp-beam-ledger.helper";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { assertWarpBeamEventReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
@@ -156,21 +156,46 @@ export interface WarpBeamReturnDto {
   status: WarpBeamStatus;
 }
 
-/** Fasondan DÖNÜŞ — RETURNED_IN (SHIPPED_OUT → READY). Replay `clientToken`la (kimlik: kalem + tür). */
+type ReturnReplayRow = {
+  id: string; kind: string; beamId: string; lengthM: Prisma.Decimal | null; reversal: { id: string } | null;
+  beam: { beamNo: string }; dispatchItem: { dispatchId: string; dispatch: { dispatchNo: string } } | null;
+};
+
+/** Fason levent dönüşü replay'i: aynı sevk + levent + RETURNED_IN + aynı metre; geri alınmış dönüş 409. */
+const returnReplay = (dispatchId: string, input: ReturnWarpBeamInput) =>
+  tokenReplay<ReturnReplayRow, ApiResponse<WarpBeamReturnDto>>({
+    find: (db, clientToken) =>
+      db.warpBeamEvent.findUnique({
+        where: { clientToken },
+        select: {
+          id: true, kind: true, beamId: true, lengthM: true, reversal: { select: { id: true } }, beam: { select: { beamNo: true } },
+          dispatchItem: { select: { dispatchId: true, dispatch: { select: { dispatchNo: true } } } },
+        },
+      }),
+    alive: (p) => assertWarpBeamEventReplayAlive(p, "levent dönüşü"),
+    identity: (p) => [
+      { ad: "kind", mevcut: p.kind, gelen: "RETURNED_IN" },
+      { ad: "dispatchId", mevcut: p.dispatchItem?.dispatchId ?? null, gelen: dispatchId },
+      { ad: "warpBeamId", mevcut: p.beamId, gelen: input.warpBeamId },
+      { ad: "lengthM", mevcut: p.lengthM, gelen: metre(input.lengthM, "Dönen metre") },
+    ],
+    collision: "Bu istemci anahtarı BAŞKA bir levent işlemiyle (farklı sevk, levent ya da metre) kullanılmış — formu yenileyip yeniden deneyin.",
+    respond: (p) => ({
+      success: true,
+      data: { eventId: p.id, beamNo: p.beam.beamNo, dispatchNo: p.dispatchItem?.dispatch.dispatchNo ?? "", lengthM: Number(p.lengthM ?? 0), status: WarpBeamStatus.READY },
+      message: `${p.beam.beamNo} dönüşü zaten kaydedilmiş (yeniden gönderim)`,
+    }),
+  });
+
+/** Fasondan DÖNÜŞ — RETURNED_IN (SHIPPED_OUT → READY). Replay boğazda (R; kimlik: sevk + levent + metre). */
 export async function returnWarpBeam(dispatchId: string, input: ReturnWarpBeamInput, userId?: string): Promise<ApiResponse<WarpBeamReturnDto>> {
+  return returnReplay(dispatchId, input).run(input.clientToken, () => returnWarpBeamFresh(dispatchId, input, userId));
+}
+
+async function returnWarpBeamFresh(dispatchId: string, input: ReturnWarpBeamInput, userId?: string): Promise<ApiResponse<WarpBeamReturnDto>> {
   const lengthM = metre(input.lengthM, "Dönen metre");
   const result = await prisma.$transaction(async (tx) => {
     const item = await loadBeamItem(tx, dispatchId, input.warpBeamId);
-    if (input.clientToken) {
-      const replay = await tx.warpBeamEvent.findUnique({ where: { clientToken: input.clientToken }, select: { id: true, kind: true, dispatchItemId: true, lengthM: true, reversesEventId: true } });
-      if (replay) {
-        assertReplayPayloadMatches(
-          [{ ad: "dispatchItemId", mevcut: replay.dispatchItemId, gelen: item.id }, { ad: "kind", mevcut: replay.kind, gelen: "RETURNED_IN" }],
-          "Bu istemci anahtarı BAŞKA bir levent işlemiyle kullanılmış — formu yenileyip yeniden deneyin.",
-        );
-        return { ev: replay, item, replayed: true };
-      }
-    }
     const shipOut = shipOutOf(item);
     if (openReturnOf(item)) throw AppError.conflict(`${item.warpBeam?.beamNo} bu sevkten zaten dönmüş`, { code: "WARP_BEAM_ALREADY_RETURNED" });
     if (shipOut.lengthM && lengthM.gt(shipOut.lengthM)) {
@@ -183,18 +208,16 @@ export async function returnWarpBeam(dispatchId: string, input: ReturnWarpBeamIn
       to: WarpBeamStatus.READY,
       data: { dispatchItemId: item.id, lengthM, clientToken: input.clientToken ?? null, createdById: userId ?? null },
     });
-    return { ev, item, replayed: false };
+    return { ev, item };
   });
-  if (!result.replayed) {
-    await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: "RETURNED_IN", data: { dispatchId, warpBeamId: input.warpBeamId, lengthM: Number(lengthM) } });
-    // Sevk belgesinin kendi izinde de görünür (panel denetim ekranı sevk kaydını okur; `cancel()` emsali).
-    await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: dispatchId, newData: { warpBeamReturned: result.item.warpBeam?.beamNo ?? input.warpBeamId, lengthM: Number(lengthM), eventId: result.ev.id } });
-  }
+  await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: "RETURNED_IN", data: { dispatchId, warpBeamId: input.warpBeamId, lengthM: Number(lengthM) } });
+  // Sevk belgesinin kendi izinde de görünür (panel denetim ekranı sevk kaydını okur; `cancel()` emsali).
+  await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: dispatchId, newData: { warpBeamReturned: result.item.warpBeam?.beamNo ?? input.warpBeamId, lengthM: Number(lengthM), eventId: result.ev.id } });
   const beamNo = result.item.warpBeam?.beamNo ?? "";
   return {
     success: true,
     data: { eventId: result.ev.id, beamNo, dispatchNo: result.item.dispatch.dispatchNo, lengthM: Number(result.ev.lengthM ?? lengthM), status: WarpBeamStatus.READY },
-    message: result.replayed ? `${beamNo} dönüşü zaten kaydedilmiş (yeniden gönderim)` : `${beamNo} fasondan döndü — ${Number(lengthM)} m`,
+    message: `${beamNo} fasondan döndü — ${Number(lengthM)} m`,
   };
 }
 

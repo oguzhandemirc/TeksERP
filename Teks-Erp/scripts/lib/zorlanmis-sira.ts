@@ -10,10 +10,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import prisma from "../../src/lib/prisma";
 
-/** B'nin tx'inde bekletilecek ilk delegate çağrısı (ör. `{ model: "cheque", metod: "findMany" }`). */
+/** B'nin bekletilecek ilk delegate çağrısı (ör. `{ model: "cheque", metod: "findMany" }`). */
 export interface KapiNoktasi {
   model: string;
   metod: string;
+  /** "tx" (varsayılan): B'nin tx'indeki ilk çağrı · "dis": B'nin tx DIŞI (genel istemci) ilk çağrısı — tx'ten önce koşan kural. */
+  kapsam?: "tx" | "dis";
 }
 
 /** Kapının açılış sebebi; son ikisi "B kapıya vardı ama sıra zorlanamadı" demektir. */
@@ -60,11 +62,22 @@ export async function zorlanmisSira(
   const kanca = prisma as unknown as { $transaction: TxFn };
   const onceki = kanca.$transaction;
   const asil = onceki.bind(prisma);
-  kanca.$transaction = (fn, opts) => {
-    const bekle = kapiDeposu.getStore();
-    if (!bekle || typeof fn !== "function") return asil(fn, opts);
-    return asil((tx: object) => (fn as (t: object) => unknown)(kapiliTx(tx, nokta, bekle)), opts);
-  };
+  const disDelegate = nokta.kapsam === "dis" ? (Reflect.get(prisma, nokta.model) as Record<string, unknown> | undefined) : undefined;
+  const disOnceki = disDelegate?.[nokta.metod] as ((...a: unknown[]) => unknown) | undefined;
+  if (nokta.kapsam === "dis") {
+    if (!disDelegate || typeof disOnceki !== "function") throw new Error(`zorlanmisSira: genel istemcide '${nokta.model}.${nokta.metod}' yok`);
+    disDelegate[nokta.metod] = async (...a: unknown[]) => {
+      const bekle = kapiDeposu.getStore();
+      if (bekle) await bekle();
+      return disOnceki.apply(disDelegate, a);
+    };
+  } else {
+    kanca.$transaction = (fn, opts) => {
+      const bekle = kapiDeposu.getStore();
+      if (!bekle || typeof fn !== "function") return asil(fn, opts);
+      return asil((tx: object) => (fn as (t: object) => unknown)(kapiliTx(tx, nokta, bekle)), opts);
+    };
+  }
   let aBitti = false;
   let kapidaSinyal!: () => void;
   const kapida = new Promise<void>((r) => (kapidaSinyal = r));
@@ -88,6 +101,7 @@ export async function zorlanmisSira(
     return { sonuclar: [bs, as], kapi: acilis ? await acilis : "B kapıya varmadı" };
   } finally {
     kanca.$transaction = onceki;
+    if (disDelegate && disOnceki) disDelegate[nokta.metod] = disOnceki;
   }
 }
 

@@ -18,6 +18,7 @@ import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { createBatchTx, K18_DEAD_STATUSES } from "./batch.service";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { tokenReplay } from "./helpers/token-replay.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
 import { ensureWorkOrderInProgress, recomputeStepStatus } from "./helpers/roll-step.helper";
 import { recordBatchAddedTx } from "./helpers/workorder-event.helper";
@@ -206,36 +207,58 @@ export async function auditBatchAdd(workOrderId: string, res: AddBatchResult, us
   }
 }
 
-/** `POST /work-orders/:id/batches` — Parti Ekle (tablet + panel). Aynı jetonla tekrar: önceki sonuç. */
-export async function addBatch(workOrderId: string, body: { clientToken: string; rollBarcodes: string[]; reason?: string }, userId?: string) {
-  const replay = async () => {
-    const b = await prisma.batch.findUnique({ where: { clientToken: body.clientToken }, select: { id: true, batchNumber: true, workOrderId: true, _count: { select: { rolls: true } } } });
-    if (!b) return null;
-    if (b.workOrderId !== workOrderId) throw AppError.conflict("Bu istek başka bir iş emri için kullanıldı.", { code: "CLIENT_TOKEN_COLLISION" });
-    return { success: true, data: { batch: { id: b.id, batchNumber: b.batchNumber }, rollCount: b._count.rolls, warnings: [] as string[], replay: true } };
-  };
-  const cached = await replay();
-  if (cached) return cached;
+type AddBatchResponse = {
+  success: boolean;
+  data: { batch: { id: string; batchNumber: string } | null; rollCount: number; warnings: string[]; replay: boolean };
+  message?: string;
+  warnings?: string[];
+};
+
+/**
+ * Parti ekle replay'i: aynı iş emri + okutulan her top o partide ("eksik top yok"). Küme EŞİTLİĞİ değil: partiye
+ * sonradan doğan çocuk toplar eklenir ve meşru tekrarı sahte 409'a düşürürdü. Parti durum taşımaz (boş parti silinir).
+ */
+const batchReplay = (workOrderId: string, barcodes: string[]) =>
+  tokenReplay<{ id: string; batchNumber: string; workOrderId: string; rolls: Array<{ barcode: string | null }> }, AddBatchResponse>({
+    find: (db, clientToken) =>
+      db.batch.findUnique({ where: { clientToken }, select: { id: true, batchNumber: true, workOrderId: true, rolls: { select: { barcode: true } } } }),
+    alive: { neverDies: "parti durum taşımaz; boş parti silinince token da gider" },
+    identity: (b) => {
+      const inBatch = new Set(b.rolls.map((r) => r.barcode));
+      return [
+        { ad: "workOrderId", mevcut: b.workOrderId, gelen: workOrderId },
+        { ad: "missingRolls", mevcut: barcodes.filter((x) => !inBatch.has(x)).join(","), gelen: "" },
+      ];
+    },
+    collision: "Bu istek başka bir iş emri ya da başka toplar için kullanıldı — formu yenileyip yeniden deneyin.",
+    respond: (b) => ({ success: true, data: { batch: { id: b.id, batchNumber: b.batchNumber }, rollCount: b.rolls.length, warnings: [], replay: true } }),
+  });
+
+/** `POST /work-orders/:id/batches` — Parti Ekle (tablet + panel). R + K′: token iş emri satır kilidinin arkasında okunur. */
+export async function addBatch(workOrderId: string, body: { clientToken: string; rollBarcodes: string[]; reason?: string }, userId?: string): Promise<AddBatchResponse> {
   const barcodes = [...new Set(body.rollBarcodes.map(normalizeScanCode).filter(Boolean))];
-  let res: AddBatchResult;
-  try {
-    res = await withBarcodeRetry(
-      () => prisma.$transaction((tx) => addBatchToWorkOrderTx(tx, { workOrderId, barcodes, userId, clientToken: body.clientToken, mode: "STRICT", recordEvent: true, reason: body.reason })),
+  const replay = batchReplay(workOrderId, barcodes);
+  return replay.run(body.clientToken, async () => {
+    const outcome = await withBarcodeRetry(
+      () =>
+        prisma.$transaction(async (tx) => {
+          // K′: iş emri satır kilidi (addBatchToWorkOrderTx'in ilk kilidiyle aynı) — aynı token'lı ikinci deneme burada bekler.
+          await touchWorkOrderTx(tx, workOrderId);
+          const replayed = await replay.behindLock(tx, body.clientToken);
+          if (replayed) return { fresh: false as const, replayed };
+          return { fresh: true as const, res: await addBatchToWorkOrderTx(tx, { workOrderId, barcodes, userId, clientToken: body.clientToken, mode: "STRICT", recordEvent: true, reason: body.reason }) };
+        }),
       undefined,
       (e) => !isClientTokenP2002(e),
     );
-  } catch (e) {
-    if (isClientTokenP2002(e)) {
-      const again = await replay();
-      if (again) return again;
-    }
-    throw e;
-  }
-  await auditBatchAdd(workOrderId, res, userId);
-  return {
-    success: true,
-    data: { batch: res.batch, rollCount: res.attached.length, warnings: res.warnings, replay: false },
-    message: `${res.batch?.batchNumber} partisi eklendi · ${res.attached.length} top`,
-    ...(res.warnings.length ? { warnings: res.warnings } : {}),
-  };
+    if (!outcome.fresh) return outcome.replayed;
+    const res = outcome.res;
+    await auditBatchAdd(workOrderId, res, userId);
+    return {
+      success: true,
+      data: { batch: res.batch, rollCount: res.attached.length, warnings: res.warnings, replay: false },
+      message: `${res.batch?.batchNumber} partisi eklendi · ${res.attached.length} top`,
+      ...(res.warnings.length ? { warnings: res.warnings } : {}),
+    };
+  });
 }

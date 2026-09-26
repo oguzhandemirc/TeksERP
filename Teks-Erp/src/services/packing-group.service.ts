@@ -52,7 +52,7 @@ import {
   readPackingGroupNumbering,
   readPackingGroupsEnabled,
 } from "./system-setting.service";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { tokenReplay, type TokenReplay } from "./helpers/token-replay.helper";
 import { markLotLabelsStale } from "./packing-lot.service";
 import {
   assertGroupNameFreeTx,
@@ -89,44 +89,101 @@ async function assertPackingGroupsEnabled(): Promise<void> {
 export type PackingGroupListStatus = "OPEN" | "CLOSED" | "ALL";
 
 /**
- * `createWithSacks` replay'i (clientToken). GÖVDE KAPISI (F117): aynı token BAŞKA bir
- * yükle gelirse cached kaydı dönmek YANLIŞ cevaptır — operatör "atadım" sanır, seçtiği
- * çuvallar gruplanmamış kalır. Kimlik: cari + ÇUVAL KÜMESİ. REPLAY'İN DÖRDÜNCÜ DURUMU:
- * token'lı grup bu arada BOŞALMIŞSA (grup modu) cached kaydı dönmek yanlış cevaptır —
- * operatöre boş bir grup gösterirdi; parti modunda boş parti MEŞRUDUR, kapı yok.
+ * `createWithSacks` replay'i (clientToken). GÖVDE KAPISI (F117): aynı token BAŞKA bir yükle gelirse cached kaydı
+ * dönmek YANLIŞ cevaptır — operatör "atadım" sanır, seçtiği çuvallar gruplanmamış kalır. Kimlik: cari + grubun
+ * BÜTÜN çuvalları (sevk edilmiş çuval da gruptadır; yalnız havuzdakileri kıyaslamak meşru tekrarı 409'a düşürürdü).
+ * 4. DURUM: grup modunda havuz çuvalı kalmamış grup ölüdür — cached kaydı dönmek operatöre boş grup gösterirdi;
+ * parti modunda boş parti MEŞRUDUR, kapı yok.
  */
-async function replayCreateWithSacks(
-  clientToken: string,
-  customerId: string,
-  sackIds: string[],
-  lotMode: boolean,
-): Promise<ApiResponse<PackingGroupDto> | null> {
-  const replay = await prisma.packingGroup.findUnique({
-    where: { clientToken },
-    select: { id: true, customerId: true, sacks: { where: { shipmentId: null }, select: { id: true } } },
-  });
-  if (!replay) return null;
-  assertReplayPayloadMatches(
-    [
-      { ad: "customerId", mevcut: replay.customerId, gelen: customerId },
-      {
-        ad: "sackIds",
-        mevcut: [...replay.sacks.map((sk) => sk.id)].sort().join(","),
-        gelen: [...sackIds].sort().join(","),
-      },
+function groupReplay(customerId: string, sackIds: string[], lotMode: boolean) {
+  return tokenReplay<{ id: string; customerId: string; sacks: Array<{ id: string; shipmentId: string | null }> }, ApiResponse<PackingGroupDto>>({
+    find: (db, clientToken) =>
+      db.packingGroup.findUnique({ where: { clientToken }, select: { id: true, customerId: true, sacks: { select: { id: true, shipmentId: true } } } }),
+    alive: (p) => {
+      if (lotMode || p.sacks.some((sk) => sk.shipmentId === null)) return;
+      throw AppError.conflict(
+        "Bu grup daha önce oluşturulmuş ama içinde havuz çuvalı kalmamış — çuvalları yeniden seçip yeni bir grup oluşturun.",
+        { code: "PACKING_GROUP_REPLAY_EMPTY" },
+      );
+    },
+    identity: (p) => [
+      { ad: "customerId", mevcut: p.customerId, gelen: customerId },
+      { ad: "sackIds", mevcut: p.sacks.map((sk) => sk.id).sort().join(","), gelen: [...sackIds].sort().join(",") },
     ],
-    "Bu istemci anahtarı BAŞKA bir çuval kümesiyle kullanılmış — listeyi yenileyip yeniden deneyin.",
-  );
-  if (replay.sacks.length === 0 && !lotMode) {
-    throw AppError.conflict(
-      "Bu grup daha önce oluşturulmuş ama içinde havuz çuvalı kalmamış — " +
-        "çuvalları yeniden seçip yeni bir grup oluşturun.",
-      { code: "PACKING_GROUP_REPLAY_EMPTY" },
-    );
-  }
-  return { success: true, data: (await loadPackingGroupDto(prisma, replay.id))!, message: "Grup zaten oluşturulmuş" };
+    collision: "Bu istemci anahtarı BAŞKA bir çuval kümesiyle kullanılmış — listeyi yenileyip yeniden deneyin.",
+    respond: async (p) => ({ success: true, data: (await loadPackingGroupDto(prisma, p.id))!, message: "Grup zaten oluşturulmuş" }),
+  });
 }
 
+type GroupCreateInput = { customerId: string; sackIds: string[]; name?: string | null; note?: string | null; clientToken?: string | null; userId?: string };
+
+/** `createWithSacks`in yazan yarısı (R'nin iş gövdesi); K′ okuması 8034'ün arkasında. */
+async function createGroupFresh(
+  input: GroupCreateInput,
+  { lot, lotMode, sackIds, replay }: { lot: Awaited<ReturnType<typeof readPackingLotSettings>>; lotMode: boolean; sackIds: string[]; replay: TokenReplay<ApiResponse<PackingGroupDto>> },
+): Promise<ApiResponse<PackingGroupDto>> {
+
+  const mode = await readPackingGroupNumbering();
+  const manualName = input.name?.trim() || null;
+  // ⚠️ Bu seri OKUTULMUYOR: kapı yalnız MODA bakar, biçim sınaması yapmaz —
+  // grup adı sahanın kendi kelimesidir ("P3"), barkod değil.
+  assertManualNumberAllowed("packingLotName", manualName);
+
+  const outcome = await prisma.$transaction(async (tx) => {
+    // KOD KİLİDİ tx'in İLK ifadesi (8034, kurulum-geneli) — sonra ad sayacı (8031).
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PACKING_GROUP_CODE_LOCK_NS}::int, 0)`;
+    // K′: aynı token'lı ikinci deneme bu kilitte bekler, kazananın grubunu burada görür.
+    if (input.clientToken) {
+      const replayed = await replay.behindLock(tx, input.clientToken);
+      if (replayed) return { fresh: false as const, replayed };
+    }
+    const code = await nextPackingGroupCodeTx(tx);
+    // Elle ad verildiyse sayaç HİÇ ÇALIŞMAZ: "Cuma tırı" bir sıra numarası değildir
+    // ve sonraki otomatik numarayı zıplatmamalı.
+    const seq = manualName ? null : await nextPackingGroupSeqTx(tx, input.customerId, mode, lot.mode);
+    const name = manualName ?? formatPackingGroupName(seq as number, lot.mode);
+
+    await assertGroupNameFreeTx(tx, input.customerId, name, { exceptId: null, groupMode: lot.mode });
+
+    const group = await tx.packingGroup.create({
+      data: {
+        customerId: input.customerId,
+        code,
+        name,
+        seq,
+        note: input.note?.trim() || null,
+        clientToken: input.clientToken ?? null,
+        createdById: input.userId ?? null,
+        updatedById: input.userId ?? null,
+        // Sayaç ilk çuvalın numarasından başlar (K3); grup modunda okunmaz.
+        nextPackageNo: packageNoStart(lot.startsAtZero),
+      },
+      select: { id: true },
+    });
+
+    if (sackIds.length > 0) {
+      await claimSacksIntoGroupTx(tx, {
+        customerId: input.customerId,
+        sackIds,
+        groupId: group.id,
+        lot: lotMode ? { numbering: lot.numbering, startsAtZero: lot.startsAtZero } : null,
+      });
+    }
+
+    return { fresh: true as const, dto: (await loadPackingGroupDto(tx, group.id))! };
+  });
+  if (!outcome.fresh) return outcome.replayed;
+  const created = outcome.dto;
+
+  await AuditService.log({
+    userId: input.userId,
+    action: "CREATE",
+    tableName: GROUP_TABLE,
+    recordId: created.id,
+    newData: { code: created.code, name: created.name, seq: created.seq, sackCount: created.sackCount },
+  });
+  return { success: true, data: created, message: `${created.name} oluşturuldu` };
+}
 
 export const PackingGroupService = {
   /**
@@ -171,14 +228,7 @@ export const PackingGroupService = {
    * doğsaydı tanımı gereği "ölü" olurdu (havuzda çuvalı yok) — yani doğar
    * doğmaz görünmez olurdu ve operatör "grup kayboldu" derdi.
    */
-  async createWithSacks(input: {
-    customerId: string;
-    sackIds: string[];
-    name?: string | null;
-    note?: string | null;
-    clientToken?: string | null;
-    userId?: string;
-  }): Promise<ApiResponse<PackingGroupDto>> {
+  async createWithSacks(input: GroupCreateInput): Promise<ApiResponse<PackingGroupDto>> {
     await assertPackingGroupsEnabled();
     const lot = await readPackingLotSettings();
     const lotMode = lot.mode === "sevk-partisi";
@@ -186,64 +236,9 @@ export const PackingGroupService = {
     // Parti modunda BOŞ PARTİ MEŞRUDUR (K5: "sevk partisi oluştur" → içine çuval açılır).
     if (sackIds.length === 0 && !lotMode) throw AppError.badRequest("En az bir çuval seçin");
 
-    if (input.clientToken) {
-      const cached = await replayCreateWithSacks(input.clientToken, input.customerId, sackIds, lotMode);
-      if (cached) return cached;
-    }
-
-    const mode = await readPackingGroupNumbering();
-    const manualName = input.name?.trim() || null;
-    // ⚠️ Bu seri OKUTULMUYOR: kapı yalnız MODA bakar, biçim sınaması yapmaz —
-    // grup adı sahanın kendi kelimesidir ("P3"), barkod değil.
-    assertManualNumberAllowed("packingLotName", manualName);
-
-    const created = await prisma.$transaction(async (tx) => {
-      // KOD KİLİDİ tx'in İLK ifadesi (8034, kurulum-geneli) — sonra ad sayacı (8031).
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PACKING_GROUP_CODE_LOCK_NS}::int, 0)`;
-      const code = await nextPackingGroupCodeTx(tx);
-      // Elle ad verildiyse sayaç HİÇ ÇALIŞMAZ: "Cuma tırı" bir sıra numarası değildir
-      // ve sonraki otomatik numarayı zıplatmamalı.
-      const seq = manualName ? null : await nextPackingGroupSeqTx(tx, input.customerId, mode, lot.mode);
-      const name = manualName ?? formatPackingGroupName(seq as number, lot.mode);
-
-      await assertGroupNameFreeTx(tx, input.customerId, name, { exceptId: null, groupMode: lot.mode });
-
-      const group = await tx.packingGroup.create({
-        data: {
-          customerId: input.customerId,
-          code,
-          name,
-          seq,
-          note: input.note?.trim() || null,
-          clientToken: input.clientToken ?? null,
-          createdById: input.userId ?? null,
-          updatedById: input.userId ?? null,
-          // Sayaç ilk çuvalın numarasından başlar (K3); grup modunda okunmaz.
-          nextPackageNo: packageNoStart(lot.startsAtZero),
-        },
-        select: { id: true },
-      });
-
-      if (sackIds.length > 0) {
-        await claimSacksIntoGroupTx(tx, {
-          customerId: input.customerId,
-          sackIds,
-          groupId: group.id,
-          lot: lotMode ? { numbering: lot.numbering, startsAtZero: lot.startsAtZero } : null,
-        });
-      }
-
-      return (await loadPackingGroupDto(tx, group.id))!;
-    });
-
-    await AuditService.log({
-      userId: input.userId,
-      action: "CREATE",
-      tableName: GROUP_TABLE,
-      recordId: created.id,
-      newData: { code: created.code, name: created.name, seq: created.seq, sackCount: created.sackCount },
-    });
-    return { success: true, data: created, message: `${created.name} oluşturuldu` };
+    // R + K′: tx öncesi kurallar için boğaz sarar; tx içinde token 8034'ün ARKASINDA okunur (aynı kilit).
+    const replay = groupReplay(input.customerId, sackIds, lotMode);
+    return replay.run(input.clientToken, () => createGroupFresh(input, { lot, lotMode, sackIds, replay }));
   },
 
   /** Var olan CANLI gruba çuval ekler. */

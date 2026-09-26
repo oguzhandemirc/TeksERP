@@ -26,9 +26,8 @@ import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
-import { assertMachineRunReplayAlive } from "./helpers/token-replay.helper";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { p2002Mentions } from "../utils/p2002";
+import { assertMachineRunReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { assertProductionLineFree, resolveOpenContext, resolveRunStamp } from "./helpers/machine-run-open.helper";
 import { runOpenBeamWarning } from "./helpers/warp-beam-mount.helper";
 import { markWeavingOrderInProgressTx } from "./helpers/weaving-order.helper";
@@ -86,27 +85,23 @@ export interface CloseMachineRunInput {
   observedSecAtClose?: number | null;
 }
 
-async function findByToken(clientToken: string): Promise<MachineRunDto | null> {
-  return prisma.machineRun.findUnique({ where: { clientToken }, select: MACHINE_RUN_SELECT });
-}
-
 /**
- * Token replay'inin dört durumu: ① yok → null · ② aynı yük → kaydı döndür ·
- * ③ başka yük → 409 `CLIENT_TOKEN_COLLISION` · ④ geri alınmış → 409 `RUN_REVOKED`.
+ * Koşum replay'inin dört durumu: ① yok → iş koşar · ② aynı yük → kaydı döndür · ③ başka yük → 409
+ * `CLIENT_TOKEN_COLLISION` · ④ geri alınmış → 409 `RUN_REVOKED`.
  */
-function resolveOpenReplay(existing: MachineRunDto, input: OpenMachineRunInput): MachineRunDto {
-  assertMachineRunReplayAlive(existing);
-  assertReplayPayloadMatches(
-    [
-      { ad: "machineId", mevcut: existing.machineId, gelen: input.machineId },
-      { ad: "productionLineNo", mevcut: existing.productionLineNo, gelen: input.productionLineNo },
-      { ad: "weavingOrderId", mevcut: existing.weavingOrderId, gelen: input.weavingOrderId ?? null },
+const runReplay = (input: OpenMachineRunInput) =>
+  tokenReplay<MachineRunDto, ApiResponse<MachineRunDto>>({
+    find: (db, clientToken) => db.machineRun.findUnique({ where: { clientToken }, select: MACHINE_RUN_SELECT }),
+    alive: assertMachineRunReplayAlive,
+    identity: (p) => [
+      { ad: "machineId", mevcut: p.machineId, gelen: input.machineId },
+      { ad: "productionLineNo", mevcut: p.productionLineNo, gelen: input.productionLineNo },
+      { ad: "weavingOrderId", mevcut: p.weavingOrderId, gelen: input.weavingOrderId ?? null },
     ],
-    "Bu form daha önce başka bir koşum için kaydedilmiş — yeni koşum için formu yeniden açın.",
-    { runId: existing.id },
-  );
-  return existing;
-}
+    collision: "Bu form daha önce başka bir koşum için kaydedilmiş — yeni koşum için formu yeniden açın.",
+    collisionEk: (p) => ({ runId: p.id }),
+    respond: (p) => ({ success: true, data: p, message: "Koşum zaten kayıtlı (yeniden gönderim)" }),
+  });
 
 /** Audit tx DIŞINDA, best-effort; iş emri geçişi de koşumdan tetiklendiği için buradan yazılır. */
 async function auditRunOpened(created: MachineRunDto, userId: string | undefined, transitionedOrderId: string | null): Promise<void> {
@@ -136,21 +131,15 @@ async function auditRunOpened(created: MachineRunDto, userId: string | undefined
   }).catch(() => undefined);
 }
 
-export async function openMachineRun(
+/** Koşum aç (R): token her kuraldan önce okunur, açılış hangi hatayla (hat dolu, yarış) düşerse düşsün yeniden okunur. */
+export async function openMachineRun(input: OpenMachineRunInput, userId?: string): Promise<ApiResponse<MachineRunDto>> {
+  return runReplay(input).run(input.clientToken, () => openMachineRunFresh(input, userId));
+}
+
+async function openMachineRunFresh(
   input: OpenMachineRunInput,
   userId?: string,
 ): Promise<ApiResponse<MachineRunDto>> {
-  // ① Replay — yaratmadan ÖNCE: aynı token ikinci kez gelirse özgün sonuç döner.
-  if (input.clientToken) {
-    const existing = await findByToken(input.clientToken);
-    if (existing) {
-      return {
-        success: true,
-        data: resolveOpenReplay(existing, input),
-        message: "Koşum zaten kayıtlı (yeniden gönderim)",
-      };
-    }
-  }
 
   const { machine, itemId, colorId, itemUsage } = await resolveOpenContext(input);
   // Z1: `dokuma.runWeavingOrderRequired` açıkken işsiz koşum 400; kapalıyken bağsız koşum bugünkü gibi meşru.
@@ -190,13 +179,7 @@ export async function openMachineRun(
       });
     });
   } catch (e) {
-    // Aynı token iki paralel istekte: ikinci create token unique'ine çarpar → replay.
-    if (input.clientToken && isClientTokenP2002(e)) {
-      const existing = await findByToken(input.clientToken);
-      if (existing) {
-        return { success: true, data: resolveOpenReplay(existing, input), message: "Koşum zaten kayıtlı (yeniden gönderim)" };
-      }
-    }
+    // Token P2002'si boğazda (`runReplay.run`) replay'e döner; hat seddi yarışı Türkçe 409.
     if (p2002Mentions(e, /machine_runs_(one_open_per_prod_line|natural)_uq/)) {
       throw AppError.conflict(
         "Bu hatta az önce başka bir koşum açıldı — tekrar deneyin.",

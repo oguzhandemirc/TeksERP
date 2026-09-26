@@ -9,6 +9,7 @@
 // =============================================================================
 import { Prisma, WarpBeamStatus, type WarpBeamMountMethod, type WarpLengthSource } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { assertWarpBeamEventReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { AppError } from "../utils/app-error";
 import { p2002Mentions } from "../utils/p2002";
 import { ApiResponse } from "../types/api.types";
@@ -61,13 +62,28 @@ function slotRaceTo409(e: unknown, machineCode: string, position: number): never
   throw e;
 }
 
+/** Bağlama replay'i (tabletten çift basış): aynı levent + MOUNTED + aynı makine/yuva; geri alınmış bağlama 409. */
+const mountReplay = (id: string, input: MountBeamInput) =>
+  tokenReplay<{ beamId: string; kind: string; machineId: string | null; mountPosition: number | null; reversal: { id: string } | null }, ApiResponse<WarpBeamDto>>({
+    find: (db, clientToken) =>
+      db.warpBeamEvent.findUnique({ where: { clientToken }, select: { beamId: true, kind: true, machineId: true, mountPosition: true, reversal: { select: { id: true } } } }),
+    alive: (p) => assertWarpBeamEventReplayAlive(p, "bağlama"),
+    identity: (p) => [
+      { ad: "beamId", mevcut: p.beamId, gelen: id },
+      { ad: "kind", mevcut: p.kind, gelen: "MOUNTED" },
+      { ad: "machineId", mevcut: p.machineId, gelen: input.machineId },
+      { ad: "mountPosition", mevcut: p.mountPosition, gelen: input.position },
+    ],
+    collision: "Bu form daha önce başka bir bağlama olarak kaydedilmiş (farklı levent, makine ya da yuva) — yeni bağlama için formu kapatıp yeniden açın.",
+    respond: async () => ({ success: true, data: await freshDto(id), message: "Bağlama zaten kayıtlı (yeniden gönderim)" }),
+  });
+
+/** Levent bağlama (R): token her kuraldan önce okunur, bağlama hangi hatayla düşerse düşsün yeniden okunur. */
 export async function mountBeam(id: string, input: MountBeamInput, userId?: string): Promise<ApiResponse<WarpBeamDto>> {
-  // Replay: aynı token aynı MOUNTED satırı (tabletten çift basış).
-  if (input.clientToken) {
-    const seen = await prisma.warpBeamEvent.findUnique({ where: { clientToken: input.clientToken }, select: { beamId: true, kind: true } });
-    if (seen && seen.beamId === id && seen.kind === "MOUNTED") return { success: true, data: await freshDto(id), message: "Bağlama zaten kayıtlı (yeniden gönderim)" };
-    if (seen) throw AppError.conflict("Bu istemci anahtarı başka bir olaya ait", { code: "CLIENT_TOKEN_COLLISION" });
-  }
+  return mountReplay(id, input).run(input.clientToken, () => mountBeamFresh(id, input, userId));
+}
+
+async function mountBeamFresh(id: string, input: MountBeamInput, userId?: string): Promise<ApiResponse<WarpBeamDto>> {
   const warnings: string[] = [];
   const result = await prisma.$transaction(async (tx) => {
     await assertMountTrackingOnTx(tx);

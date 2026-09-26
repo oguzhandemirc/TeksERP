@@ -89,7 +89,7 @@ import {
 } from "./goods-receipt.service";
 import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { tokenReplay } from "./helpers/token-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 import { unitLabel } from "../constants/item-unit";
 
@@ -274,6 +274,7 @@ const INVOICE_REPLAY_SELECT = {
   id: true,
   docNo: true,
   type: true,
+  status: true,
   // ⚠️ `Invoice`ta customerId/subcontractorId KOLONU YOK — taraf `cariId` ile
   // bağlanır ve onu servis girdiden ÇÖZER. Girdiyi saklanan cariId ile
   // kıyaslamak iki farklı şeyi karşılaştırmak olurdu; kimlik `type` + SATIR
@@ -293,22 +294,30 @@ function faturaSatirIzi(
     .join("¬");
 }
 
-function assertInvoiceReplay(
-  existing: {
-    id: string;
-    type: InvoiceType;
-    lines: Array<{ description: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal }>;
-  },
-  input: CreateInvoiceInput,
-): void {
-  assertReplayPayloadMatches(
-    [
-      { ad: "type", mevcut: existing.type, gelen: input.type },
-      { ad: "satırlar", mevcut: faturaSatirIzi(existing.lines), gelen: faturaSatirIzi(input.lines) },
+type InvoiceReplayRow = Prisma.InvoiceGetPayload<{ select: typeof INVOICE_REPLAY_SELECT }>;
+
+/**
+ * Fatura taslağı replay'i: kimlik `type` + SATIR İZİ (para riskini taşıyan alan satırdır; taraf `cariId`den
+ * çözülür, girdiyle kıyaslanamaz). 4. durum: iptal edilmiş fatura → 409 `INVOICE_CANCELLED`.
+ */
+function invoiceReplay(input: CreateInvoiceInput) {
+  return tokenReplay<InvoiceReplayRow, ApiResponse<{ id: string; docNo: string }>>({
+    find: (db, clientToken) => db.invoice.findUnique({ where: { clientToken }, select: INVOICE_REPLAY_SELECT }),
+    alive: (p) => {
+      if (p.status !== InvoiceStatus.CANCELLED) return;
+      throw AppError.conflict(
+        `Bu fatura (${p.docNo}) daha önce kaydedilmiş ama sonra İPTAL edilmiş — aynı gönderim tekrar edilemez. Yeni fatura için formu kapatıp yeniden açın.`,
+        { code: "INVOICE_CANCELLED", docNo: p.docNo },
+      );
+    },
+    identity: (p) => [
+      { ad: "type", mevcut: p.type, gelen: input.type },
+      { ad: "satırlar", mevcut: faturaSatirIzi(p.lines), gelen: faturaSatirIzi(input.lines) },
     ],
-    "Bu istemci anahtarı FARKLI bir fatura için kullanılmış. Ekranı yenileyip tekrar deneyin.",
-    { invoiceId: existing.id },
-  );
+    collision: "Bu istemci anahtarı FARKLI bir fatura için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+    collisionEk: (p) => ({ invoiceId: p.id }),
+    respond: (p) => ({ success: true, data: { id: p.id, docNo: p.docNo }, message: "Fatura zaten oluşturulmuş." }),
+  });
 }
 
 export class InvoiceService {
@@ -326,19 +335,12 @@ export class InvoiceService {
    */
   async createDraft(input: CreateInvoiceInput, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
     if (input.lines.length === 0) throw AppError.badRequest("Fatura en az bir satır içermeli.");
+    // İdempotency (R): aynı token ile ikinci POST MEVCUT faturayı döner, ikincisini AÇMAZ (timeout-retry'de çift
+    // taslak doğmasın); kaynak/fiş kuralı hangi hatayla düşürürse düşürsün cevap token'dan gelir.
+    return invoiceReplay(input).run(input.clientToken, () => this.createDraftFresh(input, userId));
+  }
 
-    // İdempotency: aynı token ile ikinci POST MEVCUT faturayı döner, ikincisini
-    // AÇMAZ (timeout-retry'de çift taslak doğmasın).
-    if (input.clientToken) {
-      const existing = await prisma.invoice.findUnique({
-        where: { clientToken: input.clientToken },
-        select: INVOICE_REPLAY_SELECT,
-      });
-      if (existing) {
-        assertInvoiceReplay(existing, input);
-        return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Fatura zaten oluşturulmuş." };
-      }
-    }
+  private async createDraftFresh(input: CreateInvoiceInput, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
 
     const issueDate = input.issueDate ?? new Date();
     const currency = input.currency ?? Currency.TRY;
@@ -365,116 +367,99 @@ export class InvoiceService {
     // `clientToken` unique'ine çarpar. O P2002 RETRY EDİLMEZ (retry aynı
     // token'ı 5 tur boşa yazardı → yanıltıcı "Barkod üretimi ... başarısız"
     // 409'u); aşağıdaki catch onu cached yanıta çevirir (purchase-order emsali).
-    try {
-      return await withBarcodeRetry(async () => {
-      const result = await prisma.$transaction(async (tx) => {
-        const cari = await ensureCariAccountTx(tx, {
-          customerId: input.customerId ?? null,
-          subcontractorId: input.subcontractorId ?? null,
-        });
-
-        // KUR: açıkça verildiyse o, verilmediyse tablodan çözülür.
-        // ⚠️ Çözülemezse 400 — sessizce 1'e düşmek 1000 USD'lik faturayı
-        // 1000 TL olarak deftere yazardı (bakiye ~30 kat yanlış, hata yok).
-        let rate = input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, currency, issueDate);
-        if (rate == null) {
-          throw AppError.badRequest(
-            `${currency} için ${issueDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin veya faturada elle belirtin.`,
-          );
-        }
-        if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
-
-        await this.assertSourceFree(tx, input);
-        // n irsaliye → 1 fatura: fişler kilitlenir, cari/para birimi/açık-fiş kapıları; pivot yazımı create'ten sonra.
-        const receiptIds = normalizeInvoiceReceiptIds(input) ?? [];
-        await lockReceiptsTx(tx, receiptIds);
-        if (receiptIds.length > 0) {
-          const cariRow = await tx.cariAccount.findUniqueOrThrow({ where: { id: cari.id }, select: { customerId: true, subcontractorId: true } });
-          await assertReceiptsLinkableTx(tx, { receiptIds, invoiceId: null, type: input.type, currency, cari: cariRow });
-        }
-
-        const docNo = await nextInvoiceNoTx(tx, input.type, issueDate);
-        const totals = computeInvoiceTotals(input.lines);
-
-        const invoice = await tx.invoice.create({
-          data: {
-            docNo,
-            type: input.type,
-            status: InvoiceStatus.DRAFT,
-            cariId: cari.id,
-            currency,
-            exchangeRate: rate,
-            issueDate,
-            dueDate: input.dueDate ?? null,
-            externalNo: input.externalNo ?? null,
-            notes: input.notes ?? null,
-            subtotal: totals.subtotal,
-            discountTotal: totals.discountTotal,
-            vatTotal: totals.vatTotal,
-            withholdingTotal: totals.withholdingTotal,
-            grandTotal: totals.grandTotal,
-            grandTotalTry: totals.grandTotal.mul(rate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP),
-            shipmentId: input.shipmentId ?? null,
-            directShipmentId: input.directShipmentId ?? null,
-            returnGroupId: input.returnGroupId ?? null,
-            subcontractorReceiptId: input.subcontractorReceiptId ?? null,
-            goodsReceiptId: input.goodsReceiptId ?? null,
-            createdById: userId ?? null,
-            clientToken: input.clientToken ?? null,
-            lines: {
-              create: input.lines.map((l, i) => {
-                const a = computeLineAmounts(l);
-                return {
-                  lineNo: i + 1,
-                  itemId: l.itemId ?? null,
-                  description: l.description,
-                  qty: D(l.qty),
-                  unit: l.unit,
-                  unitPrice: D(l.unitPrice),
-                  discountRate: D(l.discountRate ?? 0),
-                  vatRate: D(l.vatRate ?? 0),
-                  withholdingRate: D(l.withholdingRate ?? 0),
-                  lineTotal: a.lineTotal,
-                  vatAmount: a.vatAmount,
-                };
-              }),
-            },
-          },
-          select: { id: true, docNo: true },
-        });
-        if (receiptIds.length > 0) await writeInvoiceReceiptsTx(tx, invoice.id, receiptIds);
-        return invoice;
+    return await withBarcodeRetry(async () => {
+    const result = await prisma.$transaction(async (tx) => {
+      const cari = await ensureCariAccountTx(tx, {
+        customerId: input.customerId ?? null,
+        subcontractorId: input.subcontractorId ?? null,
       });
 
-      void AuditService.log({
-        userId,
-        action: "CREATE",
-        tableName: "INVOICE",
-        recordId: result.id,
-        newData: { docNo: result.docNo, type: input.type },
-      });
-      return { success: true, data: result, message: `${result.docNo} taslağı oluşturuldu.` };
-      },
-      undefined,
-      // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
-      // P2002'si retry EDİLMEZ — catch cached yanıta çevirir.
-      (err) => !isClientTokenP2002(err));
-    } catch (err) {
-      // Catch tx DIŞINDA (aborted-transaction tuzağı). Cached yanıt ön
-      // kontroldekiyle AYNI şekil + AYNI mesaj — replay ayırt edilemez.
-      if (input.clientToken && isClientTokenP2002(err)) {
-        const existing = await prisma.invoice.findUnique({
-          where: { clientToken: input.clientToken },
-          select: INVOICE_REPLAY_SELECT,
-        });
-        if (existing) {
-          // Ön kontrolle AYNI kapı: yarışı kaybeden istek de farklı gövdeyse 409 alır.
-          assertInvoiceReplay(existing, input);
-          return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Fatura zaten oluşturulmuş." };
-        }
+      // KUR: açıkça verildiyse o, verilmediyse tablodan çözülür.
+      // ⚠️ Çözülemezse 400 — sessizce 1'e düşmek 1000 USD'lik faturayı
+      // 1000 TL olarak deftere yazardı (bakiye ~30 kat yanlış, hata yok).
+      let rate = input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, currency, issueDate);
+      if (rate == null) {
+        throw AppError.badRequest(
+          `${currency} için ${issueDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin veya faturada elle belirtin.`,
+        );
       }
-      throw err;
-    }
+      if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
+
+      await this.assertSourceFree(tx, input);
+      // n irsaliye → 1 fatura: fişler kilitlenir, cari/para birimi/açık-fiş kapıları; pivot yazımı create'ten sonra.
+      const receiptIds = normalizeInvoiceReceiptIds(input) ?? [];
+      await lockReceiptsTx(tx, receiptIds);
+      if (receiptIds.length > 0) {
+        const cariRow = await tx.cariAccount.findUniqueOrThrow({ where: { id: cari.id }, select: { customerId: true, subcontractorId: true } });
+        await assertReceiptsLinkableTx(tx, { receiptIds, invoiceId: null, type: input.type, currency, cari: cariRow });
+      }
+
+      const docNo = await nextInvoiceNoTx(tx, input.type, issueDate);
+      const totals = computeInvoiceTotals(input.lines);
+
+      const invoice = await tx.invoice.create({
+        data: {
+          docNo,
+          type: input.type,
+          status: InvoiceStatus.DRAFT,
+          cariId: cari.id,
+          currency,
+          exchangeRate: rate,
+          issueDate,
+          dueDate: input.dueDate ?? null,
+          externalNo: input.externalNo ?? null,
+          notes: input.notes ?? null,
+          subtotal: totals.subtotal,
+          discountTotal: totals.discountTotal,
+          vatTotal: totals.vatTotal,
+          withholdingTotal: totals.withholdingTotal,
+          grandTotal: totals.grandTotal,
+          grandTotalTry: totals.grandTotal.mul(rate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP),
+          shipmentId: input.shipmentId ?? null,
+          directShipmentId: input.directShipmentId ?? null,
+          returnGroupId: input.returnGroupId ?? null,
+          subcontractorReceiptId: input.subcontractorReceiptId ?? null,
+          goodsReceiptId: input.goodsReceiptId ?? null,
+          createdById: userId ?? null,
+          clientToken: input.clientToken ?? null,
+          lines: {
+            create: input.lines.map((l, i) => {
+              const a = computeLineAmounts(l);
+              return {
+                lineNo: i + 1,
+                itemId: l.itemId ?? null,
+                description: l.description,
+                qty: D(l.qty),
+                unit: l.unit,
+                unitPrice: D(l.unitPrice),
+                discountRate: D(l.discountRate ?? 0),
+                vatRate: D(l.vatRate ?? 0),
+                withholdingRate: D(l.withholdingRate ?? 0),
+                lineTotal: a.lineTotal,
+                vatAmount: a.vatAmount,
+              };
+            }),
+          },
+        },
+        select: { id: true, docNo: true },
+      });
+      if (receiptIds.length > 0) await writeInvoiceReceiptsTx(tx, invoice.id, receiptIds);
+      return invoice;
+    });
+
+    void AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "INVOICE",
+      recordId: result.id,
+      newData: { docNo: result.docNo, type: input.type },
+    });
+    return { success: true, data: result, message: `${result.docNo} taslağı oluşturuldu.` };
+    },
+    undefined,
+    // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
+    // P2002'si retry EDİLMEZ — boğaz (`invoiceReplay.run`) replay'e çevirir.
+    (err) => !isClientTokenP2002(err));
   }
 
   /**

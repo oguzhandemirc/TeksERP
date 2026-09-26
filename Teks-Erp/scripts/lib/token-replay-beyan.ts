@@ -45,26 +45,24 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}shipping.service.ts::createShipmentCoreTx`]: { helper: "sevkiyat çekirdek yazarı" },
   [`${S}batch.service.ts::createBatchTx`]: { helper: "parti yazarı" },
 
-  // ── Borç: D3 (plan §4 — kalan (a) yolları) ──────────────────────────────────
-  [`${S}shipping.service.ts::createShipment`]: { borc: "D3", not: "#1" },
-  [`${S}shipping.service.ts::readCreateShipmentReplay`]: { borc: "D3", not: "#1/#2 okuyucu" },
-  [`${S}shipping.service.ts::createShipmentFromRolls`]: { borc: "D3", not: "#2" },
-  [`${S}warp-beam-mount.service.ts::mountBeam`]: { borc: "D3", not: "#3" },
-  [`${S}warp-beam-wind.service.ts::windWarpBeam`]: { borc: "D3", not: "#4" },
-  [`${S}subcontractor-beam.service.ts::returnWarpBeam`]: { borc: "D3", not: "#5" },
-  [`${S}machine-run.service.ts::openMachineRun`]: { borc: "D3", not: "#7" },
-  [`${S}machine-run.service.ts::findByToken`]: { borc: "D3", not: "#7 okuyucu" },
-  [`${S}workorder.service.ts::create`]: { borc: "D3", not: "#12 (quickStart iş emri doğumu)" },
-  [`${S}workorder.service.ts::quickStart`]: { borc: "D3", not: "#12" },
-  [`${S}workorder.service.ts::resolveCreateTokenReplay`]: { borc: "D3", not: "#12 okuyucu; 4. durum yalnız isActive" },
-  [`${S}workorder-batch-add.service.ts::addBatch`]: { borc: "D3", not: "#13" },
-  [`${S}workorder-batch-add.service.ts::addBatchToWorkOrderTx`]: { borc: "D3", not: "#13 yazar" },
-  [`${S}packing-group.service.ts::createWithSacks`]: { borc: "D3", not: "#14" },
-  [`${S}packing-group.service.ts::replayCreateWithSacks`]: { borc: "D3", not: "#14 okuyucu" },
-  [`${S}shipping.service.ts::openSack`]: { borc: "D3", not: "#15" },
-  [`${S}shipping.service.ts::readOpenSackReplay`]: { borc: "D3", not: "#15 okuyucu" },
-  [`${S}warehouse-transfer.service.ts::create`]: { borc: "D3", not: "#16; predicate'siz retry (§5-2)" },
-  [`${S}invoice.service.ts::createDraft`]: { borc: "D3", not: "#17; 4. durum yok" },
+  // ── Boğazda: D3 (plan §4 — kalan (a) yolları) ───────────────────────────────
+  [`${S}shipping.service.ts::createShipmentInner`]: { giris: { [`${S}shipping.service.ts::createShipment`]: "R" } },
+  [`${S}shipping.service.ts::createShipmentFromRollsInner`]: { giris: { [`${S}shipping.service.ts::createShipmentFromRolls`]: "R" } },
+  // #15: 8033/8035 yalnız parti ya da "açılışta" modunda — koşullu kilide K′ kurulmaz, yalnız R (4b onayı).
+  [`${S}shipping.service.ts::openSackFresh`]: { giris: { [`${S}shipping.service.ts::openSack`]: "R" } },
+  [`${S}warp-beam-mount.service.ts::mountBeamFresh`]: { giris: { [`${S}warp-beam-mount.service.ts::mountBeam`]: "R" } },
+  [`${S}warp-beam-wind.service.ts::windWarpBeamFresh`]: { giris: { [`${S}warp-beam-wind.service.ts::windWarpBeam`]: "R" } },
+  [`${S}subcontractor-beam.service.ts::returnWarpBeamFresh`]: { giris: { [`${S}subcontractor-beam.service.ts::returnWarpBeam`]: "R" } },
+  [`${S}machine-run.service.ts::openMachineRunFresh`]: { giris: { [`${S}machine-run.service.ts::openMachineRun`]: "R" } },
+  // #12: quickStart create'i çağırır (iç boğaz) ve kendi boğazıyla sarar; kimlikte top kümesi YOK (kısmi bağlama).
+  [`${S}workorder.service.ts::createFresh`]: { giris: { [`${S}workorder.service.ts::create`]: "R" } },
+  // #13/#14 K′ HIZ YOLUDUR, kapı değil: kaldırılınca R yedeği aynı yarışı kapatır (sonda 2026-09-26) — kaybeden
+  // kilitte bekleyip replay'i doğrudan alır, iş kuralını boşa koşmaz.
+  [`${S}workorder-batch-add.service.ts::addBatch`]: { giris: { [`${S}workorder-batch-add.service.ts::addBatch`]: "K′" } },
+  [`${S}workorder-batch-add.service.ts::addBatchToWorkOrderTx`]: { giris: { [`${S}workorder-batch-add.service.ts::addBatch`]: "K′" } },
+  [`${S}packing-group.service.ts::createGroupFresh`]: { giris: { [`${S}packing-group.service.ts::createWithSacks`]: "R", [`${S}packing-group.service.ts::createGroupFresh`]: "K′" } },
+  [`${S}warehouse-transfer.service.ts::createFresh`]: { giris: { [`${S}warehouse-transfer.service.ts::create`]: "R" } },
+  [`${S}invoice.service.ts::createDraftFresh`]: { giris: { [`${S}invoice.service.ts::createDraft`]: "R" } },
 
   // ── Borç: D5 (4. durum eksikleri · ham P2002 · predicate'siz retry · boğaza taşıma) ─────
   [`${S}payment.service.ts::create`]: { borc: "D5", not: "4. durum yok (CANCELLED)" },

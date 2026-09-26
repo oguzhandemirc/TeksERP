@@ -17,7 +17,8 @@ import { printedDocumentService, registerPrintedDocBuilder } from "./printed-doc
 import { renderWarehouseTransferHtml, type WarehouseTransferDoc } from "./document-render/warehouse-doc.html";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { tokenReplay } from "./helpers/token-replay.helper";
+import { isClientTokenP2002 } from "../utils/p2002";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { nextSeriesNo } from "./number-series.service";
@@ -102,48 +103,58 @@ export class WarehouseTransferService {
     if (!to) throw AppError.badRequest("Hedef depo bulunamadı.");
     if (!to.isActive) throw AppError.badRequest(`"${to.name}" deposu pasif — mal bu depoya taşınamaz.`);
 
-    // İdempotent tekrar (ağ kopması / çift tıklama).
-    if (input.clientToken) {
-      const dupe = await prisma.warehouseTransfer.findUnique({
-        where: { clientToken: input.clientToken },
-        select: {
-          id: true, transferNo: true, fromWarehouseId: true, toWarehouseId: true,
-          // ⚠️ SATIR TABLOSU YOK (dosya başlığı): transferin kalemleri
-          // `WarehouseMovement` satırlarıdır. Top başına İKİ satır doğar
-          // (çıkış + giriş) → aşağıda Set ile tekilleştirilir.
-          movements: { select: { rollId: true } },
-        },
-      });
-      if (dupe) {
-        // AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01). Gerekçe:
-        // `cash-transaction.service.ts` → `assertCashTxnReplay` başlığı. Burada
-        // riski TOP KÜMESİ taşır: kullanıcı seçimi düzeltip aynı token'la tekrar
-        // gönderdiğinde eski transfer "zaten yapılmış" diye dönüyordu ve
-        // eklediği toplar HİÇ taşınmamış oluyordu.
-        // ⚠️ Küme SIRASIZ kıyaslanır — istemcinin seçim sırası anlam taşımaz.
-        // ⚠️ ÇUVALLAR AÇILIR: transfer çuvalı BÜTÜN olarak taşır, yani hareket
-        // defterinde çuvalın ÜYE TOPLARI da vardır ama `input.rollIds` onları
-        // İÇERMEZ. Sadece `rollIds` ile kıyaslamak, çuval taşıyan her meşru
-        // tekrarı 409'a düşürürdü (kapının kendisi arıza olurdu).
-        const cuvalToplari = sackIds.length
-          ? await prisma.roll.findMany({ where: { sackId: { in: sackIds } }, select: { id: true } })
-          : [];
-        const izMevcut = [...new Set(dupe.movements.map((m) => m.rollId))].sort().join(",");
-        const izGelen = [...new Set([...input.rollIds, ...cuvalToplari.map((r) => r.id)])].sort().join(",");
-        assertReplayPayloadMatches(
-          [
-            { ad: "fromWarehouseId", mevcut: dupe.fromWarehouseId, gelen: input.fromWarehouseId },
-            { ad: "toWarehouseId", mevcut: dupe.toWarehouseId, gelen: input.toWarehouseId },
-            { ad: "toplar", mevcut: izMevcut, gelen: izGelen },
-          ],
-          "Bu istemci anahtarı FARKLI bir depo transferi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
-          { warehouseTransferId: dupe.id },
-        );
-        return { success: true, data: await this.loadDetail(dupe.id), message: `Bu transfer zaten yapılmış (${dupe.transferNo}).` };
-      }
-    }
+    // İdempotent tekrar (ağ kopması / çift tıklama) — R: transfer hangi hatayla düşerse düşsün token yeniden okunur.
+    return this.transferReplay(input, sackIds).run(input.clientToken, () => this.createFresh(input, { sackIds, from, to }, userId));
+  }
 
+  /**
+   * Transfer replay'i. AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01): kullanıcı seçimi düzeltip aynı token'la tekrar
+   * gönderdiğinde eski transfer "zaten yapılmış" dönüp eklediği toplar HİÇ taşınmamış oluyordu. Küme SIRASIZ ve
+   * ÇUVALLAR AÇILIR (transfer çuvalı bütün taşır; hareket defterinde üye topları da vardır). 4. durum: iptal edilmiş
+   * transfer → 409 `TRANSFER_CANCELLED`.
+   */
+  private transferReplay(input: TransferCreateInput, sackIds: string[]) {
+    type P = { id: string; transferNo: string; status: WarehouseTransferStatus; fromWarehouseId: string; toWarehouseId: string; movedRollIds: string; incomingRollIds: string };
+    return tokenReplay<P, ApiResponse<unknown>>({
+      find: async (db, clientToken) => {
+        // ⚠️ SATIR TABLOSU YOK: kalemler `WarehouseMovement` satırlarıdır, top başına İKİ satır (çıkış + giriş).
+        const t = await db.warehouseTransfer.findUnique({
+          where: { clientToken },
+          select: { id: true, transferNo: true, status: true, fromWarehouseId: true, toWarehouseId: true, movements: { select: { rollId: true } } },
+        });
+        if (!t) return null;
+        const sackRolls = sackIds.length ? await db.roll.findMany({ where: { sackId: { in: sackIds } }, select: { id: true } }) : [];
+        return {
+          id: t.id, transferNo: t.transferNo, status: t.status, fromWarehouseId: t.fromWarehouseId, toWarehouseId: t.toWarehouseId,
+          movedRollIds: [...new Set(t.movements.map((m) => m.rollId))].sort().join(","),
+          incomingRollIds: [...new Set([...input.rollIds, ...sackRolls.map((r) => r.id)])].sort().join(","),
+        };
+      },
+      alive: (p) => {
+        if (p.status !== WarehouseTransferStatus.CANCELLED) return;
+        throw AppError.conflict(
+          `Bu transfer (${p.transferNo}) daha önce yapılmış ama sonra İPTAL edilmiş — aynı gönderim tekrar edilemez. Malı yeniden taşımak için transfer formunu kapatıp yeniden açın.`,
+          { code: "TRANSFER_CANCELLED", transferNo: p.transferNo },
+        );
+      },
+      identity: (p) => [
+        { ad: "fromWarehouseId", mevcut: p.fromWarehouseId, gelen: input.fromWarehouseId },
+        { ad: "toWarehouseId", mevcut: p.toWarehouseId, gelen: input.toWarehouseId },
+        { ad: "toplar", mevcut: p.movedRollIds, gelen: p.incomingRollIds },
+      ],
+      collision: "Bu istemci anahtarı FARKLI bir depo transferi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+      collisionEk: (p) => ({ warehouseTransferId: p.id }),
+      respond: async (p) => ({ success: true, data: await this.loadDetail(p.id), message: `Bu transfer zaten yapılmış (${p.transferNo}).` }),
+    });
+  }
+
+  private async createFresh(
+    input: TransferCreateInput,
+    { sackIds, from, to }: { sackIds: string[]; from: { id: string; name: string }; to: { id: string; name: string } },
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
     const uniqueIds = [...new Set(input.rollIds)];
+    // Token P2002'si retry EDİLMEZ (§5-2: her deneme aynı token'ı yazar; 5 tur sonra "barkod" 409'u) — boğaz replay'e çevirir.
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const rolls = await tx.roll.findMany({
@@ -319,6 +330,8 @@ export class WarehouseTransferService {
 
         return { id: transfer.id, transferNo: transfer.transferNo, count: rolls.length + sackRollIds.length, sackCount: sacks.length };
       }),
+      undefined,
+      (e) => !isClientTokenP2002(e),
     );
 
     void AuditService.log({

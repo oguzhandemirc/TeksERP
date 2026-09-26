@@ -162,6 +162,7 @@ import {
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { nextManifestNo } from "./helpers/manifest-number.helper";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
+import { assertWorkOrderReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { normalizeScanCode } from "../utils/code-format";
 import { formatSeriesCode, nextSeriesNo, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
@@ -743,6 +744,24 @@ function plannedFieldsFromPatch(data: {
   };
 }
 
+const WO_REPLAY_INCLUDE = {
+  steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
+  orderLinks: {
+    where: ACTIVE_ORDER_LINK,
+    orderBy: { createdAt: "asc" },
+    include: { orderLine: { include: { order: { include: { customer: true } }, item: true, color: true } } },
+  },
+  routeTemplate: true,
+} satisfies Prisma.WorkOrderInclude;
+type WorkOrderReplayRow = Prisma.WorkOrderGetPayload<{ include: typeof WO_REPLAY_INCLUDE }>;
+
+/** Gövdedeki sipariş satırları (tahsis ya da düz liste) — replay kimliği; boşsa "". */
+function inputOrderLineIds(data: WorkOrderCreateInput): string {
+  const ids = [...(data.orderLineAllocations ?? []).map((a) => a.orderLineId), ...(data.orderLineIds ?? [])];
+  return [...new Set(ids)].sort().join(",");
+}
+const activeOrderLineIds = (wo: WorkOrderReplayRow): string => [...new Set(wo.orderLinks.map((l) => l.orderLineId))].sort().join(",");
+
 export class WorkOrderService {
   /**
    * Auto-generate an iş emri numarası (workOrderNumber): "IE" + GGAAYY + NNNN
@@ -834,7 +853,15 @@ export class WorkOrderService {
    *   - batchNumber (Parti Kodu) verilmezse otomatik üretilir (P+GGAAYY+NNNN);
    *     verilirse benzersizliği doğrulanır.
    */
+  /** İş emri oluştur (R): token her kuraldan önce okunur, oluşturma hangi hatayla düşerse düşsün yeniden okunur. */
   async create(
+    ...args: Parameters<WorkOrderService["createFresh"]>
+  ): ReturnType<WorkOrderService["createFresh"]> {
+    const [data] = args;
+    return this.woReplay(data).run(data.clientToken, () => this.createFresh(...args));
+  }
+
+  private async createFresh(
     data: WorkOrderCreateInput,
     userId?: string,
     /**
@@ -1278,8 +1305,7 @@ export class WorkOrderService {
       return wo;
     }), undefined, (err) => {
       // İdempotent replay: clientToken P2002'si retry EDİLMEZ (retry hep aynı
-      // token'ı yazar) — false ile propagate edilir, aşağıdaki catch cached
-      // (idempotent retry) yanıtına çevirir.
+      // token'ı yazar) — false ile propagate edilir, boğaz (`woReplay.run`) replay'e çevirir.
       if (isClientTokenP2002(err)) return false;
       // F61: workOrderNumber P2002'si MANUEL modda retry EDİLMEZ (hep aynı numarayı
       // yazar) — doğrudan anlaşılır 409. (Auto modda taze numarayla retry edilir.)
@@ -1287,20 +1313,7 @@ export class WorkOrderService {
         throw AppError.conflict(`Bu iş emri numarası zaten kullanılıyor: ${manualWorkOrderNumber}`);
       }
       return true;
-    }).catch(async (err) => ({
-      replayOf: await this.resolveCreateTokenReplay(err, data.clientToken, type, resolvedTargetItemId),
-    }));
-
-    if ("replayOf" in workOrder) {
-      // İlk commit refakat kartı dahil her şeyi yazdı; audit yalnız gerçek
-      // create yolunda (inventory emsali — cached yol audit'i atlar).
-      return {
-        success: true,
-        data: workOrder.replayOf,
-        message: `İş emri zaten oluşturulmuş (idempotent retry): ${workOrder.replayOf.workOrderNumber}`,
-        idempotentReplay: true,
-      };
-    }
+    });
 
     await AuditService.log({
       userId,
@@ -1333,60 +1346,59 @@ export class WorkOrderService {
   }
 
   /**
-   * create() tx'i clientToken P2002 ile düştüyse idempotent replay çözümlemesi:
-   * aynı token'lı mevcut WO'yu bulur; payload kimliği (type + targetItemId)
-   * uyuşuyorsa onu döner (çağıran cached yanıt üretir). Uyuşmuyorsa veya WO
-   * arşivliyse 409. Token replay'i değilse orijinal hata aynen fırlar.
+   * create() replay'i: iptal/arşivlenmiş iş emri 409 `WORK_ORDER_CANCELLED`; kimlik YALNIZ gövdede verilen alanlar —
+   * sipariş satırı kümesi (her zaman), hedef kumaş ve tip (verildiyse). Türetilmiş tip kimlik olmaz: `WorkOrder.type`
+   * bağın aynasıdır. İlk commit refakat kartı dahil her şeyi yazdı; audit yalnız gerçek create yolunda.
    */
-  private async resolveCreateTokenReplay(
-    err: unknown,
-    clientToken: string | null | undefined,
-    type: WorkOrder["type"],
-    targetItemId: string | null,
-  ): Promise<WorkOrder> {
-    if (!clientToken || !isClientTokenP2002(err)) throw err;
-    const existing = await prisma.workOrder.findUnique({
-      where: { clientToken },
-      include: {
-        steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
-        orderLinks: {
-          where: ACTIVE_ORDER_LINK,
-          orderBy: { createdAt: "asc" },
-          include: {
-            orderLine: {
-              include: {
-                order: { include: { customer: true } },
-                item: true,
-                color: true,
-              },
-            },
-          },
-        },
-        routeTemplate: true,
-      },
+  private woReplay(data: WorkOrderCreateInput) {
+    const lineIds = inputOrderLineIds(data);
+    return tokenReplay<WorkOrderReplayRow, ApiResponse<WorkOrder> & { idempotentReplay?: boolean }>({
+      find: (db, clientToken) => db.workOrder.findUnique({ where: { clientToken }, include: WO_REPLAY_INCLUDE }),
+      alive: assertWorkOrderReplayAlive,
+      identity: (p) => [
+        { ad: "orderLines", mevcut: activeOrderLineIds(p), gelen: lineIds },
+        ...(data.targetItemId != null ? [{ ad: "targetItemId", mevcut: p.targetItemId, gelen: data.targetItemId }] : []),
+        ...(data.type && !lineIds ? [{ ad: "type", mevcut: p.type, gelen: data.type }] : []),
+      ],
+      collision: (p) => `Bu form daha önce kaydedilmiş: ${p.workOrderNumber}. Yeni iş emri için formu kapatıp yeniden açın.`,
+      collisionEk: (p) => ({ workOrderNumber: p.workOrderNumber }),
+      respond: (p) => ({ success: true, data: p, message: `İş emri zaten oluşturulmuş (idempotent retry): ${p.workOrderNumber}`, idempotentReplay: true }),
     });
-    if (!existing) throw err;
-    if (!existing.isActive) {
-      // quickStart zero-attach telafisi token'ı NULL'ladığından buraya pratikte
-      // düşülmez (savunma guard'ı): arşivli WO'ya cached dönmek operatörü
-      // "iş emri açık" sanrısına sokar.
-      throw AppError.conflict(
-        `Bu formun önceki denemesi arşivlenmiş (${existing.workOrderNumber}) — formu yenileyip tekrar deneyin.`,
-      );
-    }
-    // Hafif payload-özdeşlik (F117 emsali): kimlik-kilit alanları uyuşmalı.
-    if (existing.type === type && existing.targetItemId === targetItemId) {
-      return existing;
-    }
-    throw AppError.conflict(
-      `Bu form daha önce kaydedilmiş: ${existing.workOrderNumber}. Yeni iş emri için formu kapatıp yeniden açın.`,
-      {
-        code: "CLIENT_TOKEN_COLLISION",
-        workOrderNumber: existing.workOrderNumber,
-        existing: { id: existing.id, type: existing.type, targetItemId: existing.targetItemId },
-        incoming: { type, targetItemId },
+  }
+
+  /**
+   * quickStart replay'i: kimlik hedef kumaş (verildiyse o, yoksa okutulan topların tek kumaşı) + sipariş satırları.
+   * ⚠️ TOP KÜMESİ BİLEREK YOK: hızlı iş emri kısmi bağlayabilir (bağlanamayan toplar `errors`ta) — küme eşitliği
+   * meşru zaman aşımı tekrarını sahte 409'a düşürürdü.
+   */
+  private quickStartReplay(data: WorkOrderCreateInput, barcodes: string[]) {
+    type P = { wo: WorkOrderReplayRow; rollItemIds: string[] };
+    return tokenReplay<P, Awaited<ReturnType<WorkOrderService["quickStartFresh"]>>>({
+      find: async (db, clientToken) => {
+        const wo = await db.workOrder.findUnique({ where: { clientToken }, include: WO_REPLAY_INCLUDE });
+        if (!wo) return null;
+        const rolls = await db.roll.findMany({ where: { barcode: { in: barcodes } }, select: { itemId: true }, distinct: ["itemId"] });
+        return { wo, rollItemIds: rolls.map((r) => r.itemId) };
       },
-    );
+      alive: (p) => assertWorkOrderReplayAlive(p.wo),
+      identity: (p) => [
+        { ad: "targetItemId", mevcut: p.wo.targetItemId, gelen: data.targetItemId ?? (p.rollItemIds.length === 1 ? p.rollItemIds[0] : null) },
+        { ad: "orderLines", mevcut: activeOrderLineIds(p.wo), gelen: inputOrderLineIds(data) },
+      ],
+      collision: (p) => `Bu okutma daha önce ${p.wo.workOrderNumber} iş emri olarak başlatılmış — yeni iş emri için ekranı kapatıp yeniden açın.`,
+      collisionEk: (p) => ({ workOrderNumber: p.wo.workOrderNumber }),
+      respond: async (p) => ({
+        success: true,
+        data: {
+          workOrder: p.wo,
+          attached: await prisma.roll.count({ where: { barcode: { in: barcodes }, currentStep: { workOrderId: p.wo.id } } }),
+          errors: [],
+          dispatch: null,
+          batch: await resolveQuickStartBatch(p.wo.id),
+        },
+        message: `İş emri zaten başlatılmış (idempotent retry): ${p.wo.workOrderNumber}`,
+      }),
+    });
   }
 
   /**
@@ -1403,7 +1415,16 @@ export class WorkOrderService {
    * aynı request içinde milisaniyeler olduğundan ön-doğrulama + telafi yaklaşımı,
    * iki metodu tek tx'e zorlayan riskli refactor'a tercih edildi.
    */
+  /** Hızlı iş emri (R): create'in boğazı içeride de koşar; dıştaki boğaz ön-doğrulama hatalarını da kapsar. */
   async quickStart(
+    ...args: Parameters<WorkOrderService["quickStartFresh"]>
+  ): ReturnType<WorkOrderService["quickStartFresh"]> {
+    const [data] = args;
+    const barcodes = [...new Set(data.rollBarcodes.map(normalizeScanCode).filter(Boolean))];
+    return this.quickStartReplay(data, barcodes).run(data.clientToken, () => this.quickStartFresh(...args));
+  }
+
+  private async quickStartFresh(
     data: WorkOrderCreateInput & { rollBarcodes: string[]; dispatchFirstStep?: boolean },
     userId?: string,
   ): Promise<
@@ -1422,38 +1443,6 @@ export class WorkOrderService {
     const barcodes = [...new Set(rollBarcodes.map(normalizeScanCode).filter(Boolean))];
     if (barcodes.length === 0) {
       throw AppError.badRequest("En az bir top barkodu okutmalısınız.");
-    }
-
-    // ── 0) İdempotent replay kısa-devresi ───────────────────────────────────
-    // Bu clientToken'la WO zaten açılmışsa (manuel tekrar / timeout-replay), aşağıdaki
-    // ön-doğrulamaya HİÇ girme: toplar İLK istekte bağlandığından artık IN_PRODUCTION
-    // ve pre-validation yanlışlıkla "toplar envanterde değil" 400'ü atardı. Cached WO'yu
-    // dön (create()'in idempotentReplay guard'ının pre-validation-öncesi ikizi).
-    if (woInput.clientToken) {
-      const existing = await prisma.workOrder.findUnique({
-        where: { clientToken: woInput.clientToken },
-        include: {
-          steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
-          orderLinks: { where: ACTIVE_ORDER_LINK, orderBy: { createdAt: "asc" }, include: { orderLine: { include: { order: { include: { customer: true } }, item: true, color: true } } } },
-          routeTemplate: true,
-        },
-      });
-      if (existing && existing.isActive) {
-        const attached = await prisma.roll.count({
-          where: { barcode: { in: barcodes }, currentStep: { workOrderId: existing.id } },
-        });
-        return {
-          success: true,
-          data: {
-            workOrder: existing,
-            attached,
-            errors: [],
-            dispatch: null,
-            batch: await resolveQuickStartBatch(existing.id),
-          },
-          message: `İş emri zaten başlatılmış (idempotent retry): ${existing.workOrderNumber}`,
-        };
-      }
     }
 
     // ── 1) Ön-doğrulama: var + STOCK + aynı ürün ────────────────────────────
