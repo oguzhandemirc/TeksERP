@@ -330,6 +330,15 @@ export async function ensureCariAccountTx(
 }
 
 /**
+ * Cari defterin TEK sıra tanımları — ekstre (ekran · PDF · Excel aynı satırları okur) ve "en son
+ * terslenmemiş satır" okuyucuları. Yazar tek değil (4 servis, 7 yer) ama satırlar arası ≥ 3 ifade
+ * var ve ölçülen aynı-an eşitliği 0 (2026-09-26); yapısal garanti olmadığı için okuyucu belirlenimli:
+ * eşitlikte `id`. Eşitlik bir gün ölçülürse yazar tek damgaya bağlanır.
+ */
+export const CARI_STATEMENT_ORDER = [{ txnDate: "asc" }, { createdAt: "asc" }, { id: "asc" }] satisfies Prisma.CariTransactionOrderByWithRelationInput[];
+export const CARI_TXN_LATEST_FIRST = [{ createdAt: "desc" }, { id: "desc" }] satisfies Prisma.CariTransactionOrderByWithRelationInput[];
+
+/**
  * Cari bakiyesini ATOMİK olarak günceller (defter satırıyla AYNI tx'te).
  *
  * ⚠️ `upsert` + `increment`: okuyup-yazmak (read → compute → update) iki

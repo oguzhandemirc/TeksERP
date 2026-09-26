@@ -12,7 +12,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ensureCariAccountTx, resolveCariAccountByCustomerTx } from "./helpers/finance.helper";
 import { AuditService } from "./audit.service";
-import { D0, D, applyCariBalanceTx } from "./helpers/finance.helper";
+import { D0, D, applyCariBalanceTx, CARI_STATEMENT_ORDER, CARI_TXN_LATEST_FIRST } from "./helpers/finance.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import { assertPeriodOpenTx, lockCariPeriodScopeTx } from "./helpers/period-guard.helper";
 import { periodCloseService } from "./period-close.service";
@@ -555,7 +555,7 @@ export class CariService {
           sourceType: CariTxnSource.ADJUSTMENT,
           reversedBy: { is: null },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: CARI_TXN_LATEST_FIRST,
         select: { id: true, txnDate: true, debit: true, credit: true, amountTry: true, exchangeRate: true },
       });
       if (!original) {
@@ -728,10 +728,9 @@ export class CariService {
         currency: params.currency,
         txnDate: { gte: params.from, lte: params.to },
       },
-      // ⚠️ İkincil anahtar `createdAt`: aynı gün tarihli iki hareketin sırası
-      // yoksa yürüyen bakiye her sorguda farklı çıkabilir (ekstre "oynak"
-      // görünür ve kimse ona güvenmez).
-      orderBy: [{ txnDate: "asc" }, { createdAt: "asc" }],
+      // ⚠️ İkincil anahtar `createdAt`, eşitlikte `id`: aynı gün tarihli iki hareketin
+      // sırası yoksa yürüyen bakiye her sorguda farklı çıkabilir (ekstre "oynak" görünür).
+      orderBy: CARI_STATEMENT_ORDER,
       select: {
         id: true,
         txnDate: true,

@@ -12910,3 +12910,20 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Davranış değişikliği.** Kesin 4xx'ten sonra form düzeltilip yeniden gönderilince YENİ token → yeni kayıt; bugün aynı token'la takılı kalınıyordu (belirsiz hatadan sonra form değişirse 409 çakışma, form yeniden açılana kadar). P3 borç listesi ve cırcırı kalktı: kapı sert (taban 0); kk1.md'deki "istemci borcu" cümlesi silindi, kural ile kod aynı.
 
 **Sırada (4b onaylı, ayrı dilim).** İstemciler kesin 4xx'te yenilediği için hızlı iş emri telafisi de token'ı tutabilir (kendi kodu) — D5c'deki `releaseToken` son beyanlı istisnadır.
+
+## 2026-09-26 — Defter damgaları: iş emri ve depo defterinde damga varlık başına kesin artan, cari ekstre okuyucusu belirlenimli [ÇEKİRDEK]
+
+**Karar (kullanıcı: kural + riskli defterler; 1e/4b dağıttı).** Kartela damgasının (9b, `f43f8c38`) ölçtüğü sınıf — Prisma `@default(now())` ms'lik istemci saatidir, aynı tx'te art arda yazılan iki satır aynı ms'e düşer ve okuyucunun `(createdAt, id)` sırası rastgele UUID'e kalır — üç orta riskli defterde ölçüldü. Her biri ayrı commit; eski satırlara dokunulmadı (ileriye dönük). Kök kural cümlesi 9b'de.
+
+**Ölçüm (sıcak tek tx, iki koşum, tx geri alındı).**
+- *WorkOrderEvent:* statü döngüsünde (COMPLETED ↔ yeniden açma, 601 olay) 0 eşitlik, en kısa aralık 1 ms — claim üç ifade. Düzenleme yolunda ardışık yazım (alan değişimi + `recordStepDiffTx` döngüsü) 600 komşudan 108 / 212'si aynı ms. Zaman çizelgesi `(an, id)` sıralı ⇒ sıra rastgeleydi.
+- *WarehouseMovement:* tek topta ileri + bağlı ters döngüsünde 599 komşudan 113 / 188'i aynı ms; `(createdAt, id)` sırasında ters satır ilerisinden önce 5 / 15 kez. 17 okuyucunun 16'sı eşitlik bozucusuzdu (aralarında "en son terslenmemiş ileri satır" findFirst'leri).
+- *CariTransaction:* 4 serviste 7 yazım yeri, hepsi eylem başına tek satır ve satırlar arası ≥ 3 ifade (dönem kilidi okuması · bakiye güncellemesi · çek olayı). En dar gerçek yol bordro cirosu (300 çek tek cariye): 299 komşuda 0 eşitlik, en kısa 1 ms.
+
+**Düzeltme.**
+- `helpers/ledger-stamp.helper.ts` defter damgasının ortak yeri: `GREATEST(clock_timestamp() ms'ye yukarı, varlığın son satırı + 1 ms)`; tek çağrının satırları aynı anı paylaşır.
+- İş emri: `writeWorkOrderEventsTx` açık `createdAt` verir. Sonrası 0 eşitlik. Bekçi `test_workorder_event_ledger` §10.
+- Depo: dört yazar (`writeWarehouseMovement` · `writeWarehouseMovements` · `postStockMove` · `postStockMoves`) damgalı; stok kapısında an, satırı kuran tek map'e (`stockMoveRow`) parametre olarak girer. Okuyucular tek sıra tanımından (`MOVEMENT_ASC`/`MOVEMENT_DESC` = an, eşitlikte `id`). Sonrası 0 eşitlik, ters satır ilerisinden önce 0. Bekçi `test_depo_defteri_damgasi` (saat + AST).
+- Cari (1e/4b kararı a): yazar birleştirilmedi. Okuyucular `CARI_STATEMENT_ORDER` / `CARI_TXN_LATEST_FIRST`ten (eşitlikte `id`). Ekstre ekranı, PDF'i ve Excel'i aynı sunucu satırlarını okur. Beyan: yapısal garanti yok, okuyucu belirlenimli; eşitlik bir gün ölçülürse yazar tek damgaya bağlanır (seçenek b). Bekçi `test_cari_ekstre_sirasi`.
+
+**Sonraki adım (4b).** Kartela (`swatch-event.helper`) ve levent (`warp-beam-event.helper`) damgaları aynı algoritmanın elle kopyası; ortak yardımcıya bağlanır, "defter damgası yalnız bu yardımcıdan" AST kolu eklenir. Top durum defterinin çözümü DB tetikleyicisi (9b), beyanla muaf.

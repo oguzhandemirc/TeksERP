@@ -888,6 +888,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_cari_ekstre_sirasi.ts` | Cari ekstre sırası belirlenimli: §1 AST — `src/` altında `cariTransaction.find*` sıralaması yalnız `CARI_STATEMENT_ORDER`/`CARI_TXN_LATEST_FIRST` (eşitlikte `id`), körlük zemini ≥ 3 · §2 aynı tarih + AYNI AN altı satır id'nin TERSİ sırayla yazılır, ekstre id sırasıyla ve iki sorguda aynı ara bakiyeyle döner; başlıkta beyan: yazar tek değil, ölçülen eşitlik 0, yapısal garanti yok | ✓ | ✓B2 (bu commit) — sabitten `id` çıkar → ❌2 · ekstre okuyucusu elle `[txnDate, createdAt]` → ❌2 | 2026-09-26 |
 | `Electron/src/components/forms/supplierParty.test.ts` | Tedarikçi tarafı XOR: gövdede tek bacak dolu, diğeri NULL'lanır; sorgu anahtarı boş gitmez; kimlik anahtarı TÜR+id (ilk ':' böler); okuma önceliği sup |  |  | ⚠️ düşük: backend Excel öncelik sırası ve 400 kuralı ELLE aynalanıyor, mekanik kıyas yok |
 | `Electron/src/hooks/useItemPriceSuggestion.test.ts` | Fiyat/vade önerisi saf katmanı: boş tanımı (0 boş, çevrilemeyen metin DOLU), sameSuggestionValue string↔number, öneri boşken yazar / kullanıcı yazmışk |  | ✓ | ⚠️ yok |
 | `Electron/src/lib/audit-labels.trade.test.ts` | Sözlük TAMLIĞI: TABLE/FIELD/ENUM haritalarında ticaret + kaçak fabrika anahtarları; WAREHOUSE iki haritada FARKLI anlam; enum'ların tam üye kümesi; Pr |  |  | ⚠️ orta: anahtar listeleri 2026-08-15 taramasından ELLE çıkarıldı; yeni tablo/enum eklenince  |

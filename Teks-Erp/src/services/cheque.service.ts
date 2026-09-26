@@ -59,7 +59,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { nextSeriesNo } from "./number-series.service";
 import { factoryDaySql, factoryYmd } from "../constants/time";
-import { D, D0, applyCariBalanceTx, ensureCariAccountTx, resolveExchangeRateTx } from "./helpers/finance.helper";
+import { D, D0, applyCariBalanceTx, CARI_TXN_LATEST_FIRST, ensureCariAccountTx, resolveExchangeRateTx } from "./helpers/finance.helper";
 import { assertPeriodOpenTx, assertPeriodsOpenTx } from "./helpers/period-guard.helper";
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
@@ -637,7 +637,7 @@ async function loadReversibleTxnTx(
       reversedBy: { is: null },
       ...(ref.side === "debit" ? { debit: { gt: 0 } } : { credit: { gt: 0 } }),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: CARI_TXN_LATEST_FIRST,
     select: REVERSIBLE_TXN_SELECT,
   });
   if (!txn) {
