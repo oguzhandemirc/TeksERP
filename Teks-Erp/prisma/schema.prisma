@@ -9721,16 +9721,23 @@ model ChequeEvent {
   bankAccountId String? @db.Uuid
   cashBoxId     String? @db.Uuid
 
+  /// Olayı doğuran teslim bordrosu (K3, `finance.chequeNoteMovementEnabled`): bordronun
+  /// DEPOSIT/ENDORSE'u ve iptalinin ters olayı aynı bordroyu taşır. NULL = bordrosuz olay.
+  deliveryNoteId String? @db.Uuid
+
   notes       String? @db.VarChar(300)
   createdById String? @db.Uuid
 
-  cheque      Cheque       @relation(fields: [chequeId], references: [id], onDelete: Restrict)
-  counterCari CariAccount? @relation("ChequeEventCounterCari", fields: [counterCariId], references: [id], onDelete: Restrict)
-  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
-  cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
+  cheque       Cheque              @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+  counterCari  CariAccount?        @relation("ChequeEventCounterCari", fields: [counterCariId], references: [id], onDelete: Restrict)
+  bankAccount  BankAccount?        @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  cashBox      CashBox?            @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
+  deliveryNote ChequeDeliveryNote? @relation(fields: [deliveryNoteId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
 
+  // Bir bordro bir çeke bir ileri olay ve en çok bir ters olay yazar; NULL'lar çakışmaz.
+  @@unique([deliveryNoteId, chequeId, type])
   @@index([chequeId, eventDate])
   // Kasa defteri (C4): "dönemde tahsil edilen çekler" — tür + tarih aralığı.
   @@index([type, eventDate])
@@ -10362,6 +10369,7 @@ model ChequeDeliveryNote {
   bankAccount BankAccount?             @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
   cari        CariAccount?             @relation(fields: [cariId], references: [id], onDelete: Restrict)
   items       ChequeDeliveryNoteItem[]
+  events      ChequeEvent[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz

@@ -134,6 +134,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   financeInvoiceMatchTolerance: "financeEnabled",
   financeInvoiceQtyTolerancePct: "financeEnabled",
   financeInvoicePriceTolerancePct: "financeEnabled",
+  financeChequeNoteMovementEnabled: "financeEnabled",
   financeBlockNegativeCashEnabled: "financeEnabled",
   financeRiskLimitBlockEnabled: "financeEnabled",
   financeAllowZeroPriceLineEnabled: "financeEnabled",

@@ -127,6 +127,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
     flagKeys: [
       "financeInvoiceMatchTolerance",
       "financeInvoiceQtyTolerancePct",
+      "financeChequeNoteMovementEnabled",
       "financeBlockNegativeCashEnabled",
       "financeRiskLimitBlockEnabled",
       "financeAllowZeroPriceLineEnabled",

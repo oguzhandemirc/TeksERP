@@ -236,6 +236,8 @@ export const updateSchema = z.strictObject({
   financeInvoiceMatchTolerance: z.boolean().optional(),
   financeInvoiceQtyTolerancePct: z.number().min(0).max(100).nullable().optional(),
   financeInvoicePriceTolerancePct: z.number().min(0).max(100).nullable().optional(),
+  // finance.chequeNoteMovementEnabled — çek teslim bordrosu hareket fişi (default KAPALI = belge-only).
+  financeChequeNoteMovementEnabled: z.boolean().optional(),
   // ---------------------------------------------------------------------------
   // TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1 — yalnız KAYIT)
   // ---------------------------------------------------------------------------

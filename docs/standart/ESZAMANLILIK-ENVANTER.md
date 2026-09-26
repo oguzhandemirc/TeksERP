@@ -21,7 +21,7 @@ Envanterin tek kaynağı `Teks-Erp/src/services/helpers/period-guard.helper.ts` 
 | 8023 | `SHIPMENT_LOCK_NS` | `helpers/shipment-locks.helper.ts:27` | sevkiyat kapsamı |
 | 8024 | `SESSION_REGISTRY_LOCK_NS` | `session-registry.service.ts:31` | oturum kayıt defteri |
 | 8025 | `PERM_ADMIN_LOCK_NS` | `permission-management.service.ts:21` | yetki (son-admin) guard'ı |
-| 8026 | `PERIOD_CLOSE_LOCK_NS` | `helpers/period-guard.helper.ts:81` | cari dönem kapanışı |
+| 8026 | `PERIOD_CLOSE_LOCK_NS` | `helpers/period-guard.helper.ts:81` | cari dönem kapanışı — sıra: çek yolları satır claim → 8026; bordro 8036 → çek claim'leri (CHEQUE_ORDER) → docNo → 8026 |
 | 8027 | `PURCHASE_ORDER_LOCK_NS` | `purchase-order.service.ts:109` | alış siparişi senkronu |
 | 8028 | `CASH_PERIOD_CLOSE_LOCK_NS` | `helpers/cash-period-guard.helper.ts:53` | kasa/banka dönem kapanışı |
 | 8029 | `CODE_UNIQUE_LOCK_NS` | `helpers/code-unique.helper.ts:55` | kod tekilliği |

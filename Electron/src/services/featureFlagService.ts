@@ -251,6 +251,8 @@ export interface FeatureFlags {
   financeInvoiceMatchTolerance: boolean;
   financeInvoiceQtyTolerancePct: number;
   financeInvoicePriceTolerancePct: number;
+  /** Çek teslim bordrosu HAREKET FİŞİ (K3; varsayılan kapalı = belge-only): banka hedefi bankaya verir, cari hedefi ciro eder. */
+  financeChequeNoteMovementEnabled: boolean;
   // --- TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1) --------------
   // ⚠️ Dokuzu da default FALSE ve backend'de bugün HİÇBİR servis okumuyor
   // (bilinçli ara durum): dört kapı önce kurulur, guard/otomasyon sonraki

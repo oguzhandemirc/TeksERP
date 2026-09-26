@@ -17,7 +17,9 @@
 //   §2 ⭐ Belge OLUŞTURMADA dondu (v1 ACTIVE) ve snapshot bakiyeyi TAŞIYOR
 //   §3 İptal → belge VOIDED (kayıt SİLİNMEZ) + ikinci iptal 409
 //   §4 ⭐ Bordro: pivot satırları + donmuş belgede çeklerin docNo'ları
-//   §5 ⭐ Bordro ÇEKİN DURUMUNA DOKUNMADI (ve olay defterine satır yazmadı)
+//   §5 ⭐ Bordro ÇEKİN DURUMUNA DOKUNMADI (ve olay defterine satır yazmadı) — bayrak
+//        `finance.chequeNoteMovementEnabled` KAPALI kolu (açıkça yazılır, geri yüklenir);
+//        AÇIK kolu (hareket fişi, K3) `test_cek_bordro_hareket`
 //   §6 Belge numaraları MBT/BRD + GGAAYY + NNNN biçiminde
 //   §7 MEKANİK HİZA: DOC_PERMISSIONS (read ⊇ write) · DOC_CONFIG_KEYS (var +
 //      BENZERSİZ) · builder kaydı + renderHtml · örnek veri (panel önizlemesi)
@@ -71,6 +73,7 @@ import {
 import { factoryDayEnd, factoryDayKeyUtcMidnight, factoryYmd, resolveRangeEnd } from "../src/constants/time";
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
+import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
 let fail = 0;
@@ -120,8 +123,23 @@ interface SnapBalance {
   balance: string;
 }
 
+// Bayrak yalnız modül açıkken etkindir (`finance && bayrak`): kapalı kolu ölçmek için modül AÇIK, bayrak KAPALI.
+const PINNED: ReadonlyArray<[string, boolean]> = [["finance.enabled", true], ["finance.chequeNoteMovementEnabled", false]];
+const ayarYedek = new Map<string, { value: unknown } | null>();
+
 async function main(): Promise<void> {
+  const engel = hedefDbEngeli();
+  if (engel) {
+    console.error(`\n❌ ${engel}\n`);
+    fail++;
+    return;
+  }
   console.log("=== Resmi ön muhasebe belgeleri bekçisi ===\n");
+  // §5 belge-only kolu ölçer: bordro hareket fişi bayrağı açıkça KAPALI (bugünkü davranış).
+  for (const [key, value] of PINNED) {
+    ayarYedek.set(key, await prisma.systemSetting.findUnique({ where: { key }, select: { value: true } }));
+    await prisma.systemSetting.upsert({ where: { key }, update: { value }, create: { key, value } });
+  }
 
   const actor = await prisma.user.findFirstOrThrow({
     where: { isActive: true },
@@ -823,6 +841,15 @@ main()
     fail++;
   })
   .finally(async () => {
+    for (const [key, eski] of ayarYedek) {
+      await (eski
+        ? prisma.systemSetting.update({ where: { key }, data: { value: eski.value as never } })
+        : prisma.systemSetting.delete({ where: { key } })
+      ).catch((e: unknown) => {
+        fail++;
+        console.error(`  ❌ temizlik "${key} geri" düştü: ${e instanceof Error ? e.message : String(e)}`);
+      });
+    }
     // ⚠️ TEMİZLİK FİKSTÜRDEN TÜRETİLİR, test gövdesindeki id defterinden DEĞİL.
     // Sebep ölçüldü: negatif sonda koşarken (tek-yön guard'ı kaldırılmış hâlde)
     // "reddedilmeli" denen çağrı BAŞARILI oldu ve doğan bordronun id'si hiçbir

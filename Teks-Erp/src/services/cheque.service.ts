@@ -67,6 +67,7 @@ import { buildTurkishSearch } from "../utils/query-parser";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 import { moveAccountBalanceTx as moveLedgerAccountBalanceTx } from "./helpers/cash-ledger.helper";
+import { resolveChequeNoteMovementEnabled } from "./system-setting.service";
 
 // -----------------------------------------------------------------------------
 // BELGE NUMARASI
@@ -166,6 +167,65 @@ const DOCTYPE_LABEL: Record<ChequeDocType, string> = {
   PROMISSORY_NOTE: "Senet",
 };
 
+/** Bankaya vermenin ve cironun kaynak durumları — tekil uç ile bordro satır kapısı (K3) AYNI listeyi okur. */
+export const DEPOSIT_FROM: readonly ChequeStatus[] = [ChequeStatus.PORTFOLIO];
+export const ENDORSE_FROM: readonly ChequeStatus[] = [ChequeStatus.PORTFOLIO, ChequeStatus.AT_BANK];
+
+/** Geçişin reddi — atmadan döner ki bordro satır kapısı bütün satırları tek listede gösterebilsin. */
+export interface ChequeRejection {
+  status: 400 | 409;
+  message: string;
+}
+
+export function throwRejection(r: ChequeRejection): never {
+  throw r.status === 400 ? AppError.badRequest(r.message) : AppError.conflict(r.message);
+}
+
+/** Yön + kaynak durum kapısı; `loadForTransition` ile bordro satır kapısının TEK yüklemi. */
+export function transitionRejection(
+  row: { docNo: string; kind: ChequeKind; docType: ChequeDocType; status: ChequeStatus },
+  allowedFrom: readonly ChequeStatus[],
+  kind: ChequeKind | null,
+  action: string,
+): ChequeRejection | null {
+  if (kind !== null && row.kind !== kind) {
+    return {
+      status: 400,
+      message:
+        row.kind === ChequeKind.RECEIVED
+          ? `${row.docNo} ALINAN bir ${DOCTYPE_LABEL[row.docType].toLowerCase()} — "${action}" yalnız verdiğimiz çek/senet için yapılır.`
+          : `${row.docNo} VERDİĞİMİZ bir ${DOCTYPE_LABEL[row.docType].toLowerCase()} — "${action}" yalnız aldığımız çek/senet için yapılır.`,
+    };
+  }
+  if (!allowedFrom.includes(row.status)) {
+    // Terminal ile "sırası değil" ayrı mesajlar: ilki geri dönüşü olmayan bir
+    // durumu, ikincisi eksik bir adımı anlatır. Tek mesaj kullanıcıyı yanlış
+    // yöne (destek çağırmaya) gönderirdi.
+    const isTerminal = TERMINAL_STATUSES.includes(row.status);
+    const hint = REVERSAL_HINT[row.status];
+    const hintText = hint ? ` Kayıt HATALIYSA önce ${hint} yapın.` : "";
+    return {
+      status: 409,
+      message: isTerminal
+        ? `${row.docNo} zaten ${CHEQUE_STATUS_LABEL[row.status]} — bu kayıt kapanmıştır, "${action}" yapılamaz.${hintText}`
+        : `${row.docNo} şu an ${CHEQUE_STATUS_LABEL[row.status]}; "${action}" bu durumda yapılamaz.${hintText}`,
+    };
+  }
+  return null;
+}
+
+/** Kasa tek para birimlidir; USD çeki TL hesabına işlemek "hesapta ne var" sorusunu cevaplanamaz yapardı. */
+export function accountCurrencyRejection(name: string, accountCurrency: Currency, chequeCurrency: Currency): string | null {
+  if (accountCurrency === chequeCurrency) return null;
+  return `"${name}" ${accountCurrency} hesabıdır — ${chequeCurrency} çek/senet bu hesaba işlenemez. Aynı para biriminde bir kasa/hesap seçin.`;
+}
+
+/** Çeki veren cariye geri vermek CİRO değil İADEdir; defter etkisi de terstir. */
+export function endorseDrawerRejection(row: { docNo: string; cariId: string }, toCariId: string): string | null {
+  if (toCariId !== row.cariId) return null;
+  return `${row.docNo} çeki veren cariye geri veriliyorsa bu bir ciro değil İADE'dir — "Sahibine İade" işlemini kullanın.`;
+}
+
 /** Bir geçişte okunması gereken asgari başlık alanları. */
 const TRANSITION_SELECT = {
   id: true,
@@ -183,6 +243,37 @@ const TRANSITION_SELECT = {
 } satisfies Prisma.ChequeSelect;
 
 type TransitionRow = Prisma.ChequeGetPayload<{ select: typeof TRANSITION_SELECT }>;
+
+/** Geçiş çekirdeklerinin taşıdığı başlık — teslim bordrosu (K3) aynı şekli kullanır. */
+export type ChequeTransitionRow = TransitionRow;
+
+/** Bordroya bağlanabilen ileri geçişin HEDEFİ (çözülmemiş) — ikisi de çekin fiziksel teslimidir. */
+export type ForwardTarget =
+  | { type: typeof ChequeEventType.DEPOSIT; bankAccountId: string }
+  | {
+      type: typeof ChequeEventType.ENDORSE;
+      toCariId?: string | null;
+      toCustomerId?: string | null;
+      toSubcontractorId?: string | null;
+    };
+
+/** Çözülmüş ileri geçiş — ciroda hedef cari artık kesin. */
+export type ForwardMove =
+  | { type: typeof ChequeEventType.DEPOSIT; bankAccountId: string }
+  | { type: typeof ChequeEventType.ENDORSE; toCariId: string };
+
+/** İleri teslim olayının tipli tersi. */
+const REVERSE_OF = {
+  DEPOSIT: ChequeEventType.DEPOSIT_CANCEL,
+  ENDORSE: ChequeEventType.ENDORSE_CANCEL,
+} as const satisfies Record<ForwardMove["type"], ChequeEventType>;
+
+/** Tekil geçiş cevabı — bayrak açıkken kesilen tek satırlı bordro `deliveryNote`ta döner (yalnız ekler). */
+export interface ChequeMoveResult {
+  id: string;
+  docNo: string;
+  deliveryNote?: { id: string; docNo: string };
+}
 
 /** Cari referansı — ad, bağlı olduğu taraftan okunur (`partyName` sözleşmesi). */
 const CARI_REF_SELECT = {
@@ -313,13 +404,8 @@ async function loadAccountTx(
     name = acc.name;
   }
 
-  // Kasa tek para birimlidir; USD çeki TL kasasına tahsil etmek "kasada ne var"
-  // sorusunu cevaplanamaz yapardı (bakiye iki birimin toplamı olurdu).
-  if (currency !== expectedCurrency) {
-    throw AppError.badRequest(
-      `"${name}" ${currency} hesabıdır — ${expectedCurrency} çek/senet bu hesaba işlenemez. Aynı para biriminde bir kasa/hesap seçin.`,
-    );
-  }
+  const mismatch = accountCurrencyRejection(name, currency, expectedCurrency);
+  if (mismatch) throw AppError.badRequest(mismatch);
   return { name };
 }
 
@@ -425,6 +511,8 @@ async function writeEventTx(
     counterCariId?: string | null;
     bankAccountId?: string | null;
     cashBoxId?: string | null;
+    /** Olayı doğuran teslim bordrosu (K3); bordrosuz olayda yok. */
+    deliveryNoteId?: string | null;
     notes?: string | null;
     userId?: string;
   },
@@ -439,7 +527,8 @@ async function writeEventTx(
       counterCariId: input.counterCariId ?? null,
       bankAccountId: input.bankAccountId ?? null,
       cashBoxId: input.cashBoxId ?? null,
-      notes: input.notes?.trim() || null,
+      deliveryNoteId: input.deliveryNoteId ?? null,
+      notes: input.notes?.trim().slice(0, 300) || null,
       createdById: input.userId ?? null,
     },
   });
@@ -465,18 +554,54 @@ async function loadForwardEventTx(
   row: TransitionRow,
   type: ChequeEventType,
   label: string,
-): Promise<{ fromStatus: ChequeStatus; counterCariId: string | null; cashBoxId: string | null; bankAccountId: string | null }> {
+): Promise<ForwardEvent> {
   const event = await tx.chequeEvent.findFirst({
     where: { chequeId: row.id, type },
     orderBy: { createdAt: "desc" },
-    select: { fromStatus: true, counterCariId: true, cashBoxId: true, bankAccountId: true },
+    select: {
+      fromStatus: true, counterCariId: true, cashBoxId: true, bankAccountId: true,
+      deliveryNoteId: true, deliveryNote: { select: { docNo: true } },
+    },
   });
   if (!event?.fromStatus) {
     throw AppError.conflict(
       `${row.docNo} için geri alınacak olay kaydı bulunamadı — ${label} otomatik yapılamaz, kaydı süpervizörle inceleyin.`,
     );
   }
-  return { ...event, fromStatus: event.fromStatus };
+  return {
+    fromStatus: event.fromStatus,
+    counterCariId: event.counterCariId,
+    cashBoxId: event.cashBoxId,
+    bankAccountId: event.bankAccountId,
+    deliveryNoteId: event.deliveryNoteId,
+    deliveryNoteDocNo: event.deliveryNote?.docNo ?? null,
+  };
+}
+
+/** Terslenecek ileri olay — `deliveryNoteId` olayı doğuran bordrodur (K3). */
+export interface ForwardEvent {
+  fromStatus: ChequeStatus;
+  counterCariId: string | null;
+  cashBoxId: string | null;
+  bankAccountId: string | null;
+  deliveryNoteId: string | null;
+  deliveryNoteDocNo: string | null;
+}
+
+/**
+ * Ters yolu BAYRAK değil olayın bağı seçer: bordronun yazdığı olay yalnız o bordrodan, bordrosuz olay
+ * yalnız tekil yoldan geri alınır. Bordro yolunda bu, "en yeni ileri olay bu bordronun mu" kapısıdır.
+ */
+function assertForwardEventOwner(row: { docNo: string }, event: ForwardEvent, noteId: string | null): void {
+  if (event.deliveryNoteId === noteId) return;
+  if (noteId === null) {
+    throw AppError.conflict(
+      `${row.docNo} ${event.deliveryNoteDocNo ?? "bir"} teslim bordrosuyla hareket etti — geri alma o bordro üzerinden yapılır. Ekranı yenileyip tekrar deneyin.`,
+    );
+  }
+  throw AppError.conflict(
+    `${row.docNo} bu bordrodan sonra ${event.deliveryNoteDocNo ? `${event.deliveryNoteDocNo} bordrosuyla` : "bordrosuz bir işlemle"} yeniden hareket etti — önce o işlemi geri alın.`,
+  );
 }
 
 const REVERSIBLE_TXN_SELECT = {
@@ -484,6 +609,17 @@ const REVERSIBLE_TXN_SELECT = {
 } satisfies Prisma.CariTransactionSelect;
 
 type ReversibleTxn = Prisma.CariTransactionGetPayload<{ select: typeof REVERSIBLE_TXN_SELECT }>;
+
+/** Ters yolun ön koşullarından geçmiş plan — ciroda terslenecek cari satırı ve ciro carisi taşınır. */
+export type ReversalPlan =
+  | { type: typeof ChequeEventType.DEPOSIT; row: TransitionRow; event: ForwardEvent }
+  | {
+      type: typeof ChequeEventType.ENDORSE;
+      row: TransitionRow;
+      event: ForwardEvent;
+      original: ReversibleTxn;
+      endorsee: string;
+    };
 
 /** İleri olayın cari satırı: terslenmemiş, beklenen tarafta, en yenisi. FAIL-CLOSED. */
 async function loadReversibleTxnTx(
@@ -905,28 +1041,8 @@ export class ChequeService {
   ): Promise<TransitionRow> {
     const row = await tx.cheque.findUnique({ where: { id }, select: TRANSITION_SELECT });
     if (!row) throw AppError.notFound("Çek/senet bulunamadı.");
-
-    if (kind !== null && row.kind !== kind) {
-      throw AppError.badRequest(
-        row.kind === ChequeKind.RECEIVED
-          ? `${row.docNo} ALINAN bir ${DOCTYPE_LABEL[row.docType].toLowerCase()} — "${action}" yalnız verdiğimiz çek/senet için yapılır.`
-          : `${row.docNo} VERDİĞİMİZ bir ${DOCTYPE_LABEL[row.docType].toLowerCase()} — "${action}" yalnız aldığımız çek/senet için yapılır.`,
-      );
-    }
-
-    if (!allowedFrom.includes(row.status)) {
-      // Terminal ile "sırası değil" ayrı mesajlar: ilki geri dönüşü olmayan bir
-      // durumu, ikincisi eksik bir adımı anlatır. Tek mesaj kullanıcıyı yanlış
-      // yöne (destek çağırmaya) gönderirdi.
-      const isTerminal = TERMINAL_STATUSES.includes(row.status);
-      const hint = REVERSAL_HINT[row.status];
-      const hintText = hint ? ` Kayıt HATALIYSA önce ${hint} yapın.` : "";
-      throw AppError.conflict(
-        isTerminal
-          ? `${row.docNo} zaten ${CHEQUE_STATUS_LABEL[row.status]} — bu kayıt kapanmıştır, "${action}" yapılamaz.${hintText}`
-          : `${row.docNo} şu an ${CHEQUE_STATUS_LABEL[row.status]}; "${action}" bu durumda yapılamaz.${hintText}`,
-      );
-    }
+    const rejection = transitionRejection(row, allowedFrom, kind, action);
+    if (rejection) throwRejection(rejection);
     return row;
   }
 
@@ -997,6 +1113,187 @@ export class ChequeService {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // TESLİM ÇEKİRDEKLERİ — bankaya verme ve ciro (tekil uç + teslim bordrosu, K3)
+  // ---------------------------------------------------------------------------
+  // Hazırla → claim → yaz AYRI adımlar: bordro önce BÜTÜN satırları claim'ler, sonra dönem kilidini
+  // (8026) alır, sonra yazar. Her çek yolu "çek satırı → 8026" sırasındadır; satırların arasına 8026
+  // girerse aynı çeki aynı cariye tekil ciro eden istekle kilitlenme döngüsü doğar. Tekil uç üç adımı
+  // arka arkaya çağırır — bayrak kapalıyken davranışı, mesajları ve sırası değişmez.
+
+  /** Ön koşullar — tekil uçla aynı sıra ve mesaj; ciroda hedef cari burada çözülür (gerekirse açılır). */
+  async prepareForwardTx(
+    tx: Prisma.TransactionClient,
+    id: string,
+    target: ForwardTarget,
+  ): Promise<{ row: ChequeTransitionRow; move: ForwardMove }> {
+    if (target.type === ChequeEventType.DEPOSIT) {
+      const row = await this.loadForTransition(tx, id, DEPOSIT_FROM, ChequeKind.RECEIVED, "bankaya verme");
+      await loadAccountTx(tx, { bankAccountId: target.bankAccountId }, row.currency);
+      return { row, move: target };
+    }
+    const row = await this.loadForTransition(tx, id, ENDORSE_FROM, ChequeKind.RECEIVED, "ciro");
+    const cari = await resolveCariTx(
+      tx,
+      { cariId: target.toCariId, customerId: target.toCustomerId, subcontractorId: target.toSubcontractorId },
+      "Ciro edilen taraf",
+    );
+    const drawer = endorseDrawerRejection(row, cari.id);
+    if (drawer) throw AppError.badRequest(drawer);
+    return { row, move: { type: ChequeEventType.ENDORSE, toCariId: cari.id } };
+  }
+
+  /** Atomik claim — bankaya verme başlığa bankayı, ciro "çek şu an kimde" işaretçisini yazar. */
+  async claimForwardTx(tx: Prisma.TransactionClient, row: ChequeTransitionRow, move: ForwardMove): Promise<void> {
+    if (move.type === ChequeEventType.DEPOSIT) {
+      await this.claimTx(tx, row, ChequeStatus.AT_BANK, { bankAccountId: move.bankAccountId });
+      return;
+    }
+    await this.claimTx(tx, row, ChequeStatus.ENDORSED, { endorsedToCariId: move.toCariId });
+  }
+
+  /**
+   * Defter + olay. Bankaya verme PARA ve CARİ oynatmaz (çek henüz tahsil edilmedi); ciro yalnız CİRO
+   * EDİLEN cariye BORÇ yazar — çeki veren cariye dokunulmaz (onun borcu çek alındığında kapandı).
+   */
+  async writeForwardTx(
+    tx: Prisma.TransactionClient,
+    row: ChequeTransitionRow,
+    move: ForwardMove,
+    ctx: { eventDate: Date; notes: string | null; deliveryNoteId: string | null; userId?: string },
+  ): Promise<void> {
+    if (move.type === ChequeEventType.ENDORSE) {
+      await writeChequeLedgerTx(tx, {
+        cariId: move.toCariId,
+        currency: row.currency,
+        txnDate: ctx.eventDate,
+        side: "debit",
+        amount: D(row.amount),
+        amountTry: D(row.amountTry),
+        exchangeRate: D(row.exchangeRate),
+        sourceType: CariTxnSource.CHEQUE_ENDORSE,
+        chequeId: row.id,
+        description: `${row.docNo} ciro`,
+        userId: ctx.userId,
+      });
+    }
+    await writeEventTx(tx, {
+      chequeId: row.id,
+      type: move.type,
+      fromStatus: row.status,
+      toStatus: move.type === ChequeEventType.DEPOSIT ? ChequeStatus.AT_BANK : ChequeStatus.ENDORSED,
+      eventDate: ctx.eventDate,
+      bankAccountId: move.type === ChequeEventType.DEPOSIT ? move.bankAccountId : null,
+      counterCariId: move.type === ChequeEventType.ENDORSE ? move.toCariId : null,
+      deliveryNoteId: ctx.deliveryNoteId,
+      notes: ctx.notes,
+      userId: ctx.userId,
+    });
+  }
+
+  /**
+   * Ters yolun ön koşulları — durum ileri olayın `toStatus`u VE o tipteki en yeni ileri olay `noteId`nin
+   * (bordrosuz yolda `null`). Ciro satırı claim'den ÖNCE okunur (FAIL-CLOSED: bulunamazsa 409).
+   */
+  async prepareReversalTx(
+    tx: Prisma.TransactionClient,
+    id: string,
+    type: ForwardMove["type"],
+    noteId: string | null,
+  ): Promise<ReversalPlan> {
+    if (type === ChequeEventType.DEPOSIT) {
+      const label = "bankaya verme stornosu";
+      const row = await this.loadForTransition(tx, id, [ChequeStatus.AT_BANK], ChequeKind.RECEIVED, label);
+      const event = await loadForwardEventTx(tx, row, ChequeEventType.DEPOSIT, label);
+      assertForwardEventOwner(row, event, noteId);
+      return { type, row, event };
+    }
+    const label = "ciro stornosu";
+    const row = await this.loadForTransition(tx, id, [ChequeStatus.ENDORSED], ChequeKind.RECEIVED, label);
+    if (!row.endorsedToCariId) {
+      throw AppError.conflict(`${row.docNo} ciro edilmiş görünüyor ama ciro carisi yok — kaydı süpervizörle inceleyin.`);
+    }
+    const endorsee = row.endorsedToCariId;
+    const event = await loadForwardEventTx(tx, row, ChequeEventType.ENDORSE, label);
+    assertForwardEventOwner(row, event, noteId);
+    const original = await loadReversibleTxnTx(
+      tx, row, { sourceType: CariTxnSource.CHEQUE_ENDORSE, cariId: endorsee, side: "debit" }, label,
+    );
+    return { type, row, event, original, endorsee };
+  }
+
+  /** Durum ileri olayın `fromStatus`una döner; bankaya vermede başlık bankası, ciroda ciro carisi düşer. */
+  async claimReversalTx(tx: Prisma.TransactionClient, plan: ReversalPlan): Promise<void> {
+    const extra = plan.type === ChequeEventType.DEPOSIT ? { bankAccountId: null } : { endorsedToCariId: null };
+    await this.claimTx(tx, plan.row, plan.event.fromStatus, extra);
+  }
+
+  /** Ters kayıt BUGÜNE yazılır; bankaya verme para oynatmamıştı (dönem/8028 kilidi yok), ciro ters ALACAK yazar. */
+  async writeReversalTx(
+    tx: Prisma.TransactionClient,
+    plan: ReversalPlan,
+    ctx: { why: string; now: Date; deliveryNoteId: string | null; userId?: string },
+  ): Promise<void> {
+    const { row, event } = plan;
+    if (plan.type === ChequeEventType.ENDORSE) {
+      await writeChequeReversalTx(tx, plan.original, {
+        sourceType: CariTxnSource.CHEQUE_ENDORSE_CANCEL,
+        chequeId: row.id,
+        txnDate: ctx.now,
+        description: `${row.docNo} ciro stornosu — ${ctx.why}`,
+        userId: ctx.userId,
+      });
+    }
+    const isDeposit = plan.type === ChequeEventType.DEPOSIT;
+    await writeEventTx(tx, {
+      chequeId: row.id,
+      type: isDeposit ? ChequeEventType.DEPOSIT_CANCEL : ChequeEventType.ENDORSE_CANCEL,
+      fromStatus: isDeposit ? ChequeStatus.AT_BANK : ChequeStatus.ENDORSED,
+      toStatus: event.fromStatus,
+      eventDate: ctx.now,
+      // Hangi bankadan / kimden geri alındığı defterde kalsın — başlıktan silindi.
+      bankAccountId: isDeposit ? event.bankAccountId : null,
+      counterCariId: plan.type === ChequeEventType.ENDORSE ? plan.endorsee : null,
+      deliveryNoteId: ctx.deliveryNoteId,
+      notes: ctx.why,
+      userId: ctx.userId,
+    });
+  }
+
+  /** Bayrak açıkken tekil bankaya verme/ciro tek satırlı teslim bordrosu keser (K3 "tek yol"). */
+  private async viaDeliveryNote(
+    id: string,
+    target: ForwardTarget,
+    input: ChequeEventInput,
+    userId?: string,
+  ): Promise<ApiResponse<ChequeMoveResult>> {
+    // Dinamik: bordro servisi bu dosyayı statik import eder; ters yön döngü kurardı.
+    const { chequeDeliveryNoteService } = await import("./cheque-delivery-note.service");
+    return chequeDeliveryNoteService.moveSingleCheque(id, target, input, userId);
+  }
+
+  /** İleri olay bir bordronunsa geri alma o bordrodan yürür (bayrağa değil bağa bakılır); değilse `null`. */
+  private async reverseViaDeliveryNote(
+    id: string,
+    type: ForwardMove["type"],
+    why: string,
+    userId?: string,
+  ): Promise<ApiResponse<ChequeMoveResult> | null> {
+    const last = await prisma.chequeEvent.findFirst({
+      where: { chequeId: id, type },
+      orderBy: { createdAt: "desc" },
+      select: { deliveryNoteId: true },
+    });
+    if (!last?.deliveryNoteId) return null;
+    // Bordro o kalemi zaten geri aldıysa tekil yolun kendi reddi (durum uygun değil) döner.
+    const reversed = await prisma.chequeEvent.count({
+      where: { chequeId: id, deliveryNoteId: last.deliveryNoteId, type: REVERSE_OF[type] },
+    });
+    if (reversed > 0) return null;
+    const { chequeDeliveryNoteService } = await import("./cheque-delivery-note.service");
+    return chequeDeliveryNoteService.reverseSingleCheque(last.deliveryNoteId, id, why, userId);
+  }
+
   /**
    * TAHSİLE / TEMİNATA VERME — portföyden bankaya.
    *
@@ -1008,28 +1305,14 @@ export class ChequeService {
     id: string,
     input: { bankAccountId: string } & ChequeEventInput,
     userId?: string,
-  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+  ): Promise<ApiResponse<ChequeMoveResult>> {
+    const target: ForwardTarget = { type: ChequeEventType.DEPOSIT, bankAccountId: input.bankAccountId };
+    if (await resolveChequeNoteMovementEnabled()) return this.viaDeliveryNote(id, target, input, userId);
     const eventDate = input.eventDate ?? new Date();
     const result = await prisma.$transaction(async (tx) => {
-      const row = await this.loadForTransition(
-        tx,
-        id,
-        [ChequeStatus.PORTFOLIO],
-        ChequeKind.RECEIVED,
-        "bankaya verme",
-      );
-      await loadAccountTx(tx, { bankAccountId: input.bankAccountId }, row.currency);
-      await this.claimTx(tx, row, ChequeStatus.AT_BANK, { bankAccountId: input.bankAccountId });
-      await writeEventTx(tx, {
-        chequeId: row.id,
-        type: ChequeEventType.DEPOSIT,
-        fromStatus: row.status,
-        toStatus: ChequeStatus.AT_BANK,
-        eventDate,
-        bankAccountId: input.bankAccountId,
-        notes: input.notes ?? null,
-        userId,
-      });
+      const { row, move } = await this.prepareForwardTx(tx, id, target);
+      await this.claimForwardTx(tx, row, move);
+      await this.writeForwardTx(tx, row, move, { eventDate, notes: input.notes ?? null, deliveryNoteId: null, userId });
       return { id: row.id, docNo: row.docNo };
     });
 
@@ -1243,55 +1526,19 @@ export class ChequeService {
     id: string,
     input: EndorseInput,
     userId?: string,
-  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+  ): Promise<ApiResponse<ChequeMoveResult>> {
+    const target: ForwardTarget = {
+      type: ChequeEventType.ENDORSE,
+      toCariId: input.toCariId,
+      toCustomerId: input.toCustomerId,
+      toSubcontractorId: input.toSubcontractorId,
+    };
+    if (await resolveChequeNoteMovementEnabled()) return this.viaDeliveryNote(id, target, input, userId);
     const eventDate = input.eventDate ?? new Date();
     const result = await prisma.$transaction(async (tx) => {
-      const row = await this.loadForTransition(
-        tx,
-        id,
-        [ChequeStatus.PORTFOLIO, ChequeStatus.AT_BANK],
-        ChequeKind.RECEIVED,
-        "ciro",
-      );
-      const target = await resolveCariTx(
-        tx,
-        { cariId: input.toCariId, customerId: input.toCustomerId, subcontractorId: input.toSubcontractorId },
-        "Ciro edilen taraf",
-      );
-      if (target.id === row.cariId) {
-        // Çeki veren kişiye geri vermek CİRO değil İADEdir; defter etkisi de
-        // terstir (ciro üçüncü tarafa borç kapatır, iade alacağı geri açar).
-        throw AppError.badRequest(
-          `${row.docNo} çeki veren cariye geri veriliyorsa bu bir ciro değil İADE'dir — "Sahibine İade" işlemini kullanın.`,
-        );
-      }
-
-      await this.claimTx(tx, row, ChequeStatus.ENDORSED, { endorsedToCariId: target.id });
-
-      await writeChequeLedgerTx(tx, {
-        cariId: target.id,
-        currency: row.currency,
-        txnDate: eventDate,
-        side: "debit",
-        amount: D(row.amount),
-        amountTry: D(row.amountTry),
-        exchangeRate: D(row.exchangeRate),
-        sourceType: CariTxnSource.CHEQUE_ENDORSE,
-        chequeId: row.id,
-        description: `${row.docNo} ciro`,
-        userId,
-      });
-
-      await writeEventTx(tx, {
-        chequeId: row.id,
-        type: ChequeEventType.ENDORSE,
-        fromStatus: row.status,
-        toStatus: ChequeStatus.ENDORSED,
-        eventDate,
-        counterCariId: target.id,
-        notes: input.notes ?? null,
-        userId,
-      });
+      const { row, move } = await this.prepareForwardTx(tx, id, target);
+      await this.claimForwardTx(tx, row, move);
+      await this.writeForwardTx(tx, row, move, { eventDate, notes: input.notes ?? null, deliveryNoteId: null, userId });
       return { id: row.id, docNo: row.docNo };
     });
 
@@ -1313,39 +1560,16 @@ export class ChequeService {
    * işaretçisidir. Ciro gerçeği defterde kalır — ENDORSE ve ENDORSE_CANCEL
    * satırlarının ikisi de `counterCariId` taşır.
    */
-  async cancelEndorse(id: string, reason: string, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
+  async cancelEndorse(id: string, reason: string, userId?: string): Promise<ApiResponse<ChequeMoveResult>> {
     const why = requireReversalReason(reason, "Ciro stornosu");
+    const viaNote = await this.reverseViaDeliveryNote(id, ChequeEventType.ENDORSE, why, userId);
+    if (viaNote) return viaNote;
     const now = new Date();
     const result = await prisma.$transaction(async (tx) => {
-      const row = await this.loadForTransition(tx, id, [ChequeStatus.ENDORSED], ChequeKind.RECEIVED, "ciro stornosu");
-      if (!row.endorsedToCariId) {
-        throw AppError.conflict(`${row.docNo} ciro edilmiş görünüyor ama ciro carisi yok — kaydı süpervizörle inceleyin.`);
-      }
-      const endorsee = row.endorsedToCariId;
-      const event = await loadForwardEventTx(tx, row, ChequeEventType.ENDORSE, "ciro stornosu");
-      const original = await loadReversibleTxnTx(
-        tx, row, { sourceType: CariTxnSource.CHEQUE_ENDORSE, cariId: endorsee, side: "debit" }, "ciro stornosu",
-      );
-
-      await this.claimTx(tx, row, event.fromStatus, { endorsedToCariId: null });
-      await writeChequeReversalTx(tx, original, {
-        sourceType: CariTxnSource.CHEQUE_ENDORSE_CANCEL,
-        chequeId: row.id,
-        txnDate: now,
-        description: `${row.docNo} ciro stornosu — ${why}`,
-        userId,
-      });
-      await writeEventTx(tx, {
-        chequeId: row.id,
-        type: ChequeEventType.ENDORSE_CANCEL,
-        fromStatus: ChequeStatus.ENDORSED,
-        toStatus: event.fromStatus,
-        eventDate: now,
-        counterCariId: endorsee,
-        notes: why,
-        userId,
-      });
-      return { id: row.id, docNo: row.docNo, backTo: event.fromStatus };
+      const plan = await this.prepareReversalTx(tx, id, ChequeEventType.ENDORSE, null);
+      await this.claimReversalTx(tx, plan);
+      await this.writeReversalTx(tx, plan, { why, now, deliveryNoteId: null, userId });
+      return { id: plan.row.id, docNo: plan.row.docNo, backTo: plan.event.fromStatus };
     });
 
     void AuditService.log({
@@ -1776,26 +2000,16 @@ export class ChequeService {
    * claim'den doğar (COLLECT → COLLECTED); COLLECT_CANCEL ile AT_BANK'a dönen çek için
    * en yeni DEPOSIT olayı okunur ve storno MEŞRUDUR.
    */
-  async cancelDeposit(id: string, reason: string, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
+  async cancelDeposit(id: string, reason: string, userId?: string): Promise<ApiResponse<ChequeMoveResult>> {
     const why = requireReversalReason(reason, "Bankaya verme stornosu");
+    const viaNote = await this.reverseViaDeliveryNote(id, ChequeEventType.DEPOSIT, why, userId);
+    if (viaNote) return viaNote;
     const now = new Date();
-    const label = "bankaya verme stornosu";
     const result = await prisma.$transaction(async (tx) => {
-      const row = await this.loadForTransition(tx, id, [ChequeStatus.AT_BANK], ChequeKind.RECEIVED, label);
-      const event = await loadForwardEventTx(tx, row, ChequeEventType.DEPOSIT, label);
-      await this.claimTx(tx, row, event.fromStatus, { bankAccountId: null });
-      await writeEventTx(tx, {
-        chequeId: row.id,
-        type: ChequeEventType.DEPOSIT_CANCEL,
-        fromStatus: ChequeStatus.AT_BANK,
-        toStatus: event.fromStatus,
-        eventDate: now,
-        // Hangi bankadan geri alındığı defterde kalsın — başlıktan silindi.
-        bankAccountId: event.bankAccountId,
-        notes: why,
-        userId,
-      });
-      return { id: row.id, docNo: row.docNo, backTo: event.fromStatus };
+      const plan = await this.prepareReversalTx(tx, id, ChequeEventType.DEPOSIT, null);
+      await this.claimReversalTx(tx, plan);
+      await this.writeReversalTx(tx, plan, { why, now, deliveryNoteId: null, userId });
+      return { id: plan.row.id, docNo: plan.row.docNo, backTo: plan.event.fromStatus };
     });
 
     void AuditService.log({

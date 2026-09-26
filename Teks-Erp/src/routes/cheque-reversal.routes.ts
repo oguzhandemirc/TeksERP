@@ -28,7 +28,9 @@ const reversalBody = z
  *     summary: Ciro stornosu (yanlış ciro geri alınır)
  *     description: >
  *       Ciro carisine ters ALACAK (CHEQUE_ENDORSE_CANCEL, reversesTxnId bağlı),
- *       durum ENDORSE öncesine (PORTFOLIO/AT_BANK) döner. Sebep ZORUNLU.
+ *       durum ENDORSE öncesine (PORTFOLIO/AT_BANK) döner. Sebep ZORUNLU. Ciro bir
+ *       teslim bordrosuyla yapıldıysa geri alma o bordronun kalemini geri alır (son
+ *       kalemse bordro iptal olur); cevapta `data.deliveryNote`.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Storno yapıldı }
@@ -119,7 +121,9 @@ router.post("/:id/pay-cancel", requirePermission("finance:cheque"), async (req, 
  *     description: >
  *       Para OYNAMAZ (DEPOSIT de oynatmamıştı); DEPOSIT_CANCEL olayı hangi bankadan geri
  *       alındığını taşır, başlık bankası düşer, durum PORTFOLIO'ya döner. Sebep ZORUNLU.
- *       Tahsil edilmiş çekte 409 (önce tahsil stornosu).
+ *       Tahsil edilmiş çekte 409 (önce tahsil stornosu). Bankaya verme bir teslim
+ *       bordrosuyla yapıldıysa geri alma o bordronun kalemini geri alır (son kalemse
+ *       bordro iptal olur); cevapta `data.deliveryNote`.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Storno yapıldı }

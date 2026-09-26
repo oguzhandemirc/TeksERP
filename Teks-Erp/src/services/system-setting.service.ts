@@ -101,6 +101,10 @@ export const SETTING_KEYS = {
   FINANCE_INVOICE_MATCH_TOLERANCE: "finance.invoiceMatchTolerance",
   FINANCE_INVOICE_QTY_TOLERANCE_PCT: "finance.invoiceQtyTolerancePct",
   FINANCE_INVOICE_PRICE_TOLERANCE_PCT: "finance.invoicePriceTolerancePct",
+  /** Çek teslim bordrosu HAREKET FİŞİ (K3, 2026-09-26; default FALSE = belge-only). Açıkken bankaya
+   *  kesilen bordro çeki bankaya verir, cariye kesilen ciro eder; tek-çek bankaya verme/ciro tek satırlı
+   *  bordro keser. Ters yolu bayrak değil kaydın bağı seçer (`ChequeEvent.deliveryNoteId`). */
+  FINANCE_CHEQUE_NOTE_MOVEMENT_ENABLED: "finance.chequeNoteMovementEnabled",
   // ===========================================================================
   // TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1 — YALNIZ KAYIT)
   // ===========================================================================
@@ -1524,6 +1528,8 @@ export interface FeatureFlags {
   /** Miktar / tutar sapma üst sınırı (%; 0 = fark kabul edilmez). Yalnız bayrak açıkken anlamlı. */
   financeInvoiceQtyTolerancePct: number;
   financeInvoicePriceTolerancePct: number;
+  /** Çek teslim bordrosu çeki hareket ettirir mi (varsayılan KAPALI = belge-only). HAM; etkin `finance && bayrak`. */
+  financeChequeNoteMovementEnabled: boolean;
   // --- TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1) --------------
   // ⚠️ Dokuzu da default FALSE ve bugün HİÇBİR servis okumuyor (bilinçli ara
   // durum — bkz. SETTING_KEYS bloğundaki gerekçe). Davranışı bağlayan dalga
@@ -2035,6 +2041,7 @@ export class SystemSettingService {
       financeInvoiceMatchTolerance: await readFinanceInvoiceMatchTolerance(cacheClient),
       financeInvoiceQtyTolerancePct: await readFinanceInvoiceQtyTolerancePct(cacheClient),
       financeInvoicePriceTolerancePct: await readFinanceInvoicePriceTolerancePct(cacheClient),
+      financeChequeNoteMovementEnabled: await readFinanceChequeNoteMovementEnabled(cacheClient),
       financeRiskLimitBlockEnabled: await readFinanceRiskLimitBlockEnabled(cacheClient),
       financeAutoDraftFromShipmentEnabled:
         await readFinanceAutoDraftFromShipmentEnabled(cacheClient),
@@ -2352,6 +2359,12 @@ export class SystemSettingService {
         throw AppError.badRequest("financeInvoiceMatchTolerance boolean olmalı");
       }
       await this.set(SETTING_KEYS.FINANCE_INVOICE_MATCH_TOLERANCE, input.financeInvoiceMatchTolerance, "Muhasebe: fatura onayında bağlı mal kabul fişleriyle miktar/tutar toleransı", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeChequeNoteMovementEnabled")) {
+      if (typeof input.financeChequeNoteMovementEnabled !== "boolean") {
+        throw AppError.badRequest("financeChequeNoteMovementEnabled boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.FINANCE_CHEQUE_NOTE_MOVEMENT_ENABLED, input.financeChequeNoteMovementEnabled, "Muhasebe: çek teslim bordrosu çeki hareket ettirir (bankaya verme · ciro)", userId);
     }
     // `0` geçerli ("fark kabul edilmez"); `null` = alanı temizledim → fabrika varsayılanı (0).
     if (Object.prototype.hasOwnProperty.call(input, "financeInvoiceQtyTolerancePct")) {
@@ -3979,6 +3992,13 @@ export async function readFinanceDefaultVatRate(
   return parsed;
 }
 
+/** Çek teslim bordrosu hareket fişi bayrağı. Default FALSE (satır yoksa belge-only — bugünkü davranış). HAM değer. */
+export async function readFinanceChequeNoteMovementEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.FINANCE_CHEQUE_NOTE_MOVEMENT_ENABLED }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
 /** n irsaliye → 1 fatura: tolerans kontrolü bayrağı. Default FALSE (satır yoksa kontrol YOK — bugünkü davranış). HAM değer. */
 export async function readFinanceInvoiceMatchTolerance(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const client = tx ?? prisma;
@@ -5296,6 +5316,12 @@ export async function resolvePurchaseBlockOverReceiptEnabled(
 export async function resolveInvoiceMatchToleranceEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   if (!(await readFinanceEnabled(tx))) return false;
   return readFinanceInvoiceMatchTolerance(tx);
+}
+
+/** Çek teslim bordrosu hareket fişi ETKİN mi (`finance && bayrak`). Ters yol bunu değil kaydın bağını okur. */
+export async function resolveChequeNoteMovementEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readFinanceEnabled(tx))) return false;
+  return readFinanceChequeNoteMovementEnabled(tx);
 }
 
 /** İptalde sebep zorunluluğu ETKİN mi (`üretim && bayrak`) — top iptal kapısı ve önizleme `reasonRequired` bunu okur. */

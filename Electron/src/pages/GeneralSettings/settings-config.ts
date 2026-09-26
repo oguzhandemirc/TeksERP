@@ -1629,6 +1629,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         },
       },
       {
+        key: "financeChequeNoteMovementEnabled",
+        group: "Çek & Senet",
+        title: "Teslim bordrosu çeki hareket ettirsin",
+        summary:
+          "Bankaya kesilen teslim bordrosu çekleri bankaya verir, cariye kesilen bordro çekleri o cariye ciro eder.",
+        defaultOn: false,
+        audience: ["Muhasebeci"],
+        desc: "Açıkken teslim bordrosu bir hareket fişidir: banka hesabına kesilen bordro seçili çekleri bankaya verir, cariye kesilen bordro çekleri ciro eder ve carinin hesabına işler; tek çeki bankaya verme ya da ciro etme de tek satırlık bir bordro numarası üretir. Bordro iptalinde geri alınacak çekler tek tek listelenir. Kapalıyken (varsayılan) bordro yalnız kâğıttır, çekin durumunu değiştirmez. Panel güncellendikten sonra açın.",
+      },
+      {
         key: "financeBlockNegativeCashEnabled",
         group: "Kasa & Risk",
         title: "Kasa eksi bakiyeye düşemesin",

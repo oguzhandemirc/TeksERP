@@ -295,7 +295,10 @@ router.post("/", requirePermission("finance:cheque"), async (req, res, next) => 
  *   post:
  *     tags: [Finance]
  *     summary: Tahsile/teminata bankaya verme
- *     description: PARA HAREKETİ YOK — çek henüz tahsil edilmedi.
+ *     description: >
+ *       PARA HAREKETİ YOK — çek henüz tahsil edilmedi. Bayrak
+ *       `finance.chequeNoteMovementEnabled` açıkken tek satırlı teslim bordrosu keser;
+ *       cevapta ek alan `data.deliveryNote {id, docNo}` (yalnız ekler).
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Bankaya verildi }
@@ -391,7 +394,10 @@ router.post("/:id/collect-cancel", requirePermission("finance:cheque"), async (r
  *   post:
  *     tags: [Finance]
  *     summary: Ciro (borcumuzu bu çekle kapatırız)
- *     description: Ciro edilen cariye BORÇ satırı yazılır; çeki veren cariye dokunulmaz.
+ *     description: >
+ *       Ciro edilen cariye BORÇ satırı yazılır; çeki veren cariye dokunulmaz. Bayrak
+ *       `finance.chequeNoteMovementEnabled` açıkken tek satırlı teslim bordrosu keser;
+ *       cevapta ek alan `data.deliveryNote {id, docNo}` (yalnız ekler).
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Ciro edildi }

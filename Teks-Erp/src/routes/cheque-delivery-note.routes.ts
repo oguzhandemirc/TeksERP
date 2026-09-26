@@ -4,12 +4,10 @@
 // ⚠️ HER uç İKİ kapıdan geçer: `requireFinanceEnabled` + `requirePermission`.
 //
 // ⚠️ İZİN AYRIMI — okuma `finance:read`, yazma `finance:write` (`finance:cheque`
-// DEĞİL) ve bu bilinçli: `finance:cheque` çekin DURUM MAKİNESİNİ oynatan
-// geçişler içindir (tahsil · ciro · karşılıksız — cari deftere VE banka/kasa
-// bakiyesine yazarlar, geri alınamazlar). Bordro yalnız KÂĞIT üretir; çekin
-// durumuna, deftere ve bakiyeye DOKUNMAZ. Yazmayı `finance:cheque`e bağlamak,
-// "teslim tutanağı bastırmak" isteyen kişiye çek tahsil etme yetkisi vermek
-// olurdu — görev ayrılığının tersi.
+// DEĞİL): belge-only bordro yalnız KÂĞIT üretir; yazmayı `finance:cheque`e bağlamak,
+// "teslim tutanağı bastırmak" isteyen kişiye çek oynatma yetkisi vermek olurdu.
+// Hareketli bordro (bayrak `finance.chequeNoteMovementEnabled`, K3) çeki oynattığı için
+// servis AYRICA `finance:cheque` ister — iki izin birlikte; tekil çek uçları değişmez.
 //
 // ⚠️ AYRI ROUTER, mount `/api/finance/cheque-delivery-notes`
 // (`cheque.routes` emsali). `/api/finance/cheques` prefix'iyle ÇAKIŞMAZ:
@@ -20,7 +18,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireFinanceEnabled } from "../middlewares/finance.middleware";
 import { chequeDeliveryNoteService } from "../services/cheque-delivery-note.service";
 import { resolveRangeEnd, resolveRangeStart } from "../constants/time";
@@ -53,6 +51,10 @@ const noteBody = z.object({
   targetLabel: z.string().max(200).nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
 });
+
+/** Hareketli bordro çeki oynatır — `finance:write`in ÜSTÜNE `finance:cheque` (servis sorar, burada ölçülür). */
+const canMoveCheques = (perms: readonly string[] | undefined): boolean =>
+  matchesPermission(perms ?? [], "finance:cheque");
 
 const endBoundary = (v: string | undefined): Date | undefined =>
   v === undefined ? undefined : resolveRangeEnd(v);
@@ -126,8 +128,11 @@ router.get("/:id", requirePermission("finance:read"), async (req, res, next) => 
  *     tags: [Finance]
  *     summary: Teslim bordrosu düzenle (belge OLUŞTURMADA donar)
  *     description: >
- *       ⚠️ ÇEKİN DURUMUNA DOKUNMAZ (v1 belge-only): "bankaya verdim" / "ciro
- *       ettim" olayları kendi uçlarından geçer. Üç kural fail-closed uygulanır:
+ *       Bayrak `finance.chequeNoteMovementEnabled` KAPALIYKEN çekin durumuna dokunmaz
+ *       (belge-only). AÇIKKEN hareket fişidir: aldığımız çek + `bankAccountId` → bankaya
+ *       verme, + `cariId` → ciro (ek izin `finance:cheque`); serbest metin hedef geçiş
+ *       üretmez; verdiğimiz çek + banka 400. Bir satır bile geçemezse hiçbir şey yazılmaz:
+ *       409 `DELIVERY_ROWS_BLOCKED`, `details.rows`. Üç kural fail-closed uygulanır:
  *       bir bordro TEK YÖN taşır (aldığımız ⊻ verdiğimiz) · iptal edilmiş kayıt
  *       giremez · hedef banka VEYA cari olabilir (ikisi birden değil, ikisi de
  *       opsiyonel; serbest metin `targetLabel` yanlarına yazılır).
@@ -159,7 +164,8 @@ router.get("/:id", requirePermission("finance:read"), async (req, res, next) => 
  *       201: { description: Bordro düzenlendi (belge v1 ACTIVE) }
  *       400: { description: Boş seçim / bulunamayan çek / iptal edilmiş kayıt / karışık yön / çift hedef }
  *       200: { description: "Aynı clientToken ile daha önce düzenlenmiş bordro (idempotent tekrar)" }
- *       409: { description: "Zaten aktif bir bordroda (confirmDuplicate ile geçilir) · CLIENT_TOKEN_COLLISION · DELIVERY_NOTE_CANCELLED" }
+ *       403: { description: "Hareketli bordroda `finance:cheque` yok (PERMISSION_DENIED)" }
+ *       409: { description: "Zaten aktif bir bordroda (confirmDuplicate ile geçilir) · CLIENT_TOKEN_COLLISION · DELIVERY_NOTE_CANCELLED · DELIVERY_ROWS_BLOCKED" }
  */
 router.post("/", requirePermission("finance:write"), async (req, res, next) => {
   try {
@@ -175,6 +181,7 @@ router.post("/", requirePermission("finance:write"), async (req, res, next) => {
     const result = await chequeDeliveryNoteService.create(
       { ...b, deliveryDate: b.deliveryDate ? new Date(b.deliveryDate) : undefined },
       req.user?.userId,
+      { canMoveCheques: canMoveCheques(req.user?.permissions) },
     );
     // Aynı denemenin tekrarı yeni kayıt açmadı → 201 değil 200.
     res.status(result.data?.replayed ? 200 : 201).json(result);
@@ -219,23 +226,56 @@ router.post("/draft", requirePermission("finance:read"), async (req, res, next) 
  *     tags: [Finance]
  *     summary: Bordroyu iptal et (kayıt ve satırlar silinmez, belge VOIDED)
  *     description: >
- *       Çekin durumu bordro kesilirken DEĞİŞMEMİŞTİ → iptalde geri alınacak bir
- *       şey yok. Pivot satırları KALIR: "hangi çekler bu bordrodaydı" sorusunun
- *       cevabı iptalden sonra da gerekir.
+ *       Belge-only bordroda çekin durumu değişmemişti → iptal yalnız belgeyi VOID eder.
+ *       Hareketli bordroda (olayı bağlı) iptal çekleri geri alır: `reason` ve
+ *       `chequeIds` ZORUNLU (önizlemeden seçim), ek izin `finance:cheque`; seçim
+ *       yoksa 409 `DELIVERY_NOTE_HAS_MOVEMENTS`, sonradan ilerlemiş kıymet varsa 409
+ *       `DELIVERY_ITEMS_ADVANCED` (hiçbir şey yazılmaz). Bütün canlı kalemler geri
+ *       alınırsa bordro CANCELLED; alt kümede bordro ve donmuş belge değişmez.
+ *       Pivot satırları KALIR.
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: İptal edildi }
+ *       200: { description: İptal edildi / seçilen kalemler geri alındı }
+ *       403: { description: "Hareketli bordroda `finance:cheque` yok" }
  *       404: { description: Bulunamadı }
- *       409: { description: Zaten iptal edilmiş }
+ *       409: { description: "Zaten iptal edilmiş · DELIVERY_NOTE_HAS_MOVEMENTS · DELIVERY_ITEMS_ADVANCED" }
  */
 router.post("/:id/cancel", requirePermission("finance:write"), async (req, res, next) => {
   try {
-    const { reason } = z
-      .object({ reason: z.string().max(300).optional() })
+    const { reason, chequeIds } = z
+      .object({
+        reason: z.string().max(300).optional(),
+        chequeIds: z.array(z.string().uuid()).min(1).max(500).optional(),
+      })
       .parse(req.body ?? {});
     res.json(
-      await chequeDeliveryNoteService.cancel(req.params.id as string, reason, req.user?.userId),
+      await chequeDeliveryNoteService.cancel(req.params.id as string, reason, req.user?.userId, {
+        chequeIds,
+        canMoveCheques: canMoveCheques(req.user?.permissions),
+      }),
     );
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/cheque-delivery-notes/{id}/cancel-preview:
+ *   get:
+ *     tags: [Finance]
+ *     summary: İptal önizlemesi — etkilenen HER kıymet, hareketi ve geri alınabilirliği
+ *     description: >
+ *       Yazmaz. Her kalem için bordronun yaptığı hareket (`DEPOSIT`/`ENDORSE`/null),
+ *       geri alınmış mı, geri alınabilir mi ve değilse nedeni (iptalin kapısıyla aynı yol).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "`{ hasMovements, items[] }`" }
+ *       404: { description: Bulunamadı }
+ */
+router.get("/:id/cancel-preview", requirePermission("finance:read"), async (req, res, next) => {
+  try {
+    res.json(await chequeDeliveryNoteService.cancelPreview(req.params.id as string));
   } catch (e) {
     next(e);
   }
