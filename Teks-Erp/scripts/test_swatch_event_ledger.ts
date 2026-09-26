@@ -17,6 +17,12 @@
 //   §11 backfill: K1 türetmesi ve K2'nin yeniden türetmesi yedi kolon hâlinde doğru durumu
 //       verir; K2 statüsü değişen satırın anını NULL'lar; iki migration'ın türetmesi AYNI
 //   §13 durum seddi (K2): durumla çelişen kolon yazımı 23514
+//   §14 saat: aynı kartelanın olayları KESİN ARTAN damga taşır — kartelanın son olayı gelecekte olsa da
+//       yenisi ondan sonra damgalanır (Prisma'nın ms'lik istemci saatinde aynı tx'teki iki olay aynı ms'e
+//       düşüp rastgele UUID sırasına kalıyordu: §2b paket içinde aralıklı kırmızıydı, sıcak tx'te 601
+//       komşudan 42–70'i aynı ms, zincir 53–74 kez koptu — ölçüldü 2026-09-26)
+//   NEGATİF SONDA (2026-09-26, md5 ile geri alındı): yazar damgayı vermez (Prisma varsayılanı) → §14 ❌ ·
+//       "son olay + 1 ms" terimi kalkar → §14 ❌
 // =============================================================================
 
 import { readFileSync } from "fs";
@@ -245,6 +251,24 @@ async function main(): Promise<void> {
     const voidedaCuval = await dene(tx, () => tx.$executeRaw`UPDATE "swatches" SET "sackId" = ${sackA.id}::uuid WHERE "id" = ${d}::uuid`);
     check("§13 durum seddi: IN_SACK kartelaya iptal damgası ve VOIDED kartelaya çuval → 23514",
       seddeCarp === "23514" && voidedaCuval === "23514", `${seddeCarp} · ${voidedaCuval}`);
+
+    // §14 saat — damga kartela başına KESİN ARTAN. Gelecekteki bir olay elle konur: yeni olay ondan SONRA damgalanmalı.
+    // Prisma'nın istemci saati (ya da yalnız clock_timestamp()) yeni olayı ondan ÖNCEYE koyardı ve zincir koparDI.
+    const [e] = await createSwatchesTx(tx, [{ cardNumber: `TST-KDEF-${ts}-S`, barcode: `TST-KDEFB-${ts}-S`, itemId: item.id, parentReceiptId: receipt.id }], { trigger: "TEST_BORN" });
+    await tx.$executeRaw`
+      INSERT INTO "swatch_events" ("id","swatchId","type","fromStatus","toStatus","groupId","trigger","channel","sackId","createdAt")
+      VALUES (${randomUUID()}::uuid, ${e.id}::uuid, 'UNSACKED', 'IN_SACK', 'IN_STOCK', ${randomUUID()}::uuid, 'TEST_FUTURE', 'SYSTEM', ${sackA.id}::uuid,
+        now() + interval '1 hour') -- tz-ok: timestamptz, sonda olayı bilerek gelecekte
+    `;
+    await transitionSwatchesTx(tx, SwatchEventType.SACKED, { scope: { ids: [e.id] }, sack: { id: sackA.id, sackNo: sackA.sackNo }, ctx: { trigger: "TEST_SACK" } });
+    const evE = await olaylar(e.id);
+    const artan = evE.every((x, i) => i === 0 || x.createdAt.getTime() > evE[i - 1]!.createdAt.getTime());
+    check("§14 ⭐ damga kartela başına KESİN ARTAN: yeni olay kartelanın son olayından (gelecekte olsa da) sonra",
+      evE.length === 3 && evE[2]?.type === SwatchEventType.SACKED && evE[2]?.trigger === "TEST_SACK" && artan,
+      evE.map((x) => `${x.type}@${x.createdAt.toISOString()}`).join(" · "));
+    const hepsiA = await olaylar(a);
+    check("§14b A kartelasının bütün olayları kesin artan damgalı (çuvallar arası taşıma dahil)",
+      hepsiA.every((x, i) => i === 0 || x.createdAt.getTime() > hepsiA[i - 1]!.createdAt.getTime()), `${hepsiA.length} olay`);
 
     // §11 backfill — kolon hâlleri elle kurulur; sed bu tx'te geçici kaldırılır (tx geri alınır).
     // Ertelenmiş bileşik FK olayları bekliyorken ALTER TABLE reddedilir (55006): önce işlet.

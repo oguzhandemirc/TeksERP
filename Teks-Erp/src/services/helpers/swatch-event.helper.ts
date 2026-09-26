@@ -6,6 +6,8 @@
 // ölçer). Her olay tipi TEK bir geçiştir; çağıran yalnız tipi, kapsamı ve belgeyi verir,
 // hangi kolonun ne olacağına tip karar verir. Kanal/cihaz/aktör istek bağlamından türer.
 // Audit'ten okunmaz; audit yazımı çağıran eylemde kalır.
+// SAAT: `createdAt` DB saatinden ve kartela başına KESİN ARTAN (`eventStampTx`) — Prisma varsayılanı ms'lik
+// istemci saatidir; aynı tx'te art arda yazılan iki olay aynı ms'e düşer ve sıra rastgele UUID'e kalırdı.
 // =============================================================================
 
 import { randomUUID } from "crypto";
@@ -83,11 +85,27 @@ interface EventRow {
   reversesEventId?: string | null;
 }
 
+/**
+ * Olay damgası — DB saati (`clock_timestamp()`, tx başı değil ŞU AN), ms'ye YUKARI yuvarlanır ve satırdaki
+ * kartelaların son olayından en az 1 ms sonra: kronoloji `createdAt` olduğu için aynı kartelanın iki olayı
+ * aynı damgayı alamaz. Tek ifadenin satırları FARKLI kartelalardır, aynı damgayı paylaşır.
+ * Emsal: `warp-beam-event.helper` `eventStampTx`.
+ */
+async function eventStampTx(tx: Tx, swatchIds: string[]): Promise<Date> {
+  const rows = await tx.$queryRaw<Array<{ at: Date }>>`
+    SELECT GREATEST(
+      to_timestamp(ceil(extract(epoch FROM clock_timestamp()) * 1000) / 1000), -- tz-ok: timestamptz, tx başı değil ŞU AN
+      (SELECT max("createdAt") + interval '1 millisecond' FROM swatch_events WHERE "swatchId" = ANY(${swatchIds}::uuid[]))
+    ) AS at`;
+  return rows[0]!.at;
+}
+
 async function writeSwatchEventsTx(tx: Tx, rows: EventRow[], ctx: SwatchEventCtx): Promise<void> {
   if (rows.length === 0) return;
   const origin = currentOrigin();
   const channel = resolveWorkOrderEventChannel();
   const groupId = ctx.groupId ?? randomUUID();
+  const createdAt = await eventStampTx(tx, [...new Set(rows.map((r) => r.swatchId))]);
   await tx.swatchEvent.createMany({
     data: rows.map((r) => ({
       swatchId: r.swatchId,
@@ -108,6 +126,7 @@ async function writeSwatchEventsTx(tx: Tx, rows: EventRow[], ctx: SwatchEventCtx
       reversesEventId: r.reversesEventId ?? null,
       createdById: ctx.userId ?? origin.userId ?? null,
       deviceId: origin.deviceId,
+      createdAt,
     })),
   });
 }

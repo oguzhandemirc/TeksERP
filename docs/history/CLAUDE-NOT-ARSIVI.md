@@ -12771,3 +12771,29 @@ Statik okuma (Explore taraması, 2026-09-26), ÖLÇÜLMEDİ — zorlanmış sır
 **ON_KONTROL_OKUYUCUSU (kapalı muaf kümesinin dördüncü sınıfı).** Mal kabul ön kontrolünün toplu token okuması cevap üretmez; yalnız aşım toplamından tekrar edilen satırı düşer (satırın cevabı `createInitialEntry`'den). Dar tanım bekçide yapıdan ölçülür: okuma yalnız `clientToken`ı seçer (kayıt içeriği hiçbir yola akamaz) ve birim boğaz çağırmaz; seçim genişletilince `test_token_replay_bogaz` kırmızı.
 
 **Ölçüm.** YENİ `test_token_replay_d5_yollari` §1–§4 19/19; dört servis D5a öncesine döndürülünce 12 kırmızı — eski ödemede zorlanmış sırada denemelerden biri P2039 ile düştü (kök nedeni kovalanmadı; yeni yolda ikisi de başarılı), mal kabulde yanıltıcı barkod mesajı. Borç 16 → 11.
+
+
+## 2026-09-26 — Kartela olay defterinde damga kartela başına kesin artan; defter kronolojisinde eşitlik sınıfı ölçüldü [ÇEKİRDEK]
+
+**Arıza (d8 paketlerinde iki kez, 1e/4b iş verdi).** `test_swatch_event_ledger` §2b ("çuvallar arası taşıma: UNSACKED(A) + SACKED(B), tek grup, zincir kopmaz") tam pakette aralıklı kırmızıydı, tek başına yeşildi.
+
+**Kök neden (ölçüldü, ÜRÜN hatası).** Kartela olayının `createdAt`i Prisma `@default(now())`dan geliyordu: ifade başına ms hassasiyetli istemci saati (DB'de değerler …000 µs). Tek yazar aynı tx'te art arda iki ifade yazınca (çuvallar arası taşıma: UNSACKED + SACKED) iki satır aynı ms'e düşebiliyor ve `(createdAt, id)` sırası rastgele UUID'e kalıyordu.
+- İzole ölçüm (yüklü makine, 300 koşum): fark min 1 ms · medyan 2 ms · eşitlik 0.
+- SICAK tek tx, bir kartela 300 kez taşındı: 601 komşudan 42–70'i aynı ms, zincir 53–74 kez koptu (iki koşum).
+- Paket bağlamındaki aralıklılık sıcak bağlantı ve yükle açılıp kapanan bu 1 ms kenarıdır. Kendi paket koşumumda (691/692) §2b yeşil kaldı; kırmızıyı sıcak tx sondası üretti.
+- Zarar test ile sınırlı değil. Kartela Hareketleri ve "en son ileri olay" okuyucuları aynı sırayı kullanır.
+
+**Düzeltme.** Tek yazar (`helpers/swatch-event.helper` `eventStampTx`) damgayı açıkça verir: `GREATEST(clock_timestamp() ms'ye YUKARI, satırdaki kartelaların son olayı + 1 ms)`. Emsal levent defteri (`warp-beam-event.helper` `eventStampTx`). Claim satırı kilitledikten sonra koşar. Tek ifadenin satırları farklı kartelalardır ve aynı damgayı paylaşır.
+- Sonrası: sıcak tx sondası iki koşumda 0 eşitlik, 0 kopuk zincir.
+- Okuyucular değişmedi. Zaman çizelgesinin imleç yorumu düzeltildi.
+
+**Bekçi.** `test_swatch_event_ledger` §14/§14b: kartelanın son olayı elle GELECEĞE konur; yeni olay ondan sonra damgalanmalı (belirlenimli; aralıklı sonda gerekmez). Çuvallar arası taşıma dahil A'nın bütün olayları kesin artan. İki sonda kırmızı, md5 ile geri alındı: yazar damgayı vermez → §14 ❌ · "son olay + 1 ms" kalkar → §14 ❌. Kartela bekçileri (8 dosya) + `raw_sql_hygiene` · `timestamptz_contract` · `defter_ters_yol` yeşil.
+
+**Sınıf — öteki defterler (yalnız ölçüldü, düzeltilmedi; karar kullanıcıda, 4b sunar).** Statik okuma, kaynaklar satır numarasıyla Explore raporunda:
+- `RollStatusEvent`: tetikleyici `CURRENT_TIMESTAMP` = tx BAŞI, aynı tx'teki iki durum değişikliği TAM eşit. Top Çıkar okuyucusu (`workorder-roll-detach.service`) "en son IN_PRODUCTION"ı eşitlik bozucusuz `createdAt desc` ile alıp topun döneceği durumu ondan okur. En ağır aday.
+- `WorkOrderEvent`: Prisma varsayılanı. Aynı tx'te PLANNED→IN_PROGRESS→COMPLETED ayrı ifadeler (`inventory.service`). Zaman çizelgesi ms + rastgele id ile sıralar. Orta.
+- `WarehouseMovement`: Prisma varsayılanı. Tek tx'te N ters satır. "En son terslenmemiş ileri satır" okuyucuları `createdAt desc`. Orta (aynı kapsamda iki ileri satır bulunmadı).
+- `CariTransaction`: Prisma varsayılanı. Bordro ciro döngüsü tek cariye N satır. Ekstre `[txnDate, createdAt]` (ara bakiye satırı). Orta (görünüm).
+- `ChequeEvent`: çek başına tx'te tek olay. "Para nereden geri çekilir" okuyucusu eşitlik bozucusuz. Düşük (aynı tipte çift yazılırsa yüksek).
+- Düşük/görünüm: `CashTransaction` · `YarnMovement` · `RollMovement` (`enteredAt`) · `ShipmentEvent` (okuyucu yok) · dokuma defterleri.
+- Emsal tek: `WarpBeamEvent` (DB saati + varlık başına +1 ms).

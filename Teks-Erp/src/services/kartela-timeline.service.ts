@@ -114,8 +114,8 @@ export class KartelaTimelineService {
     const rows = await prisma.swatchEvent.findMany({
       where: opts.groups?.length ? { AND: [where, { type: { in: typesOfGroups(opts.groups) } }] } : where,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      // Prisma imleci (createdAt, id) karşılaştırmasını DB'de kurar: bir eylemin satırları aynı
-      // tx anını taşır ve ISO damgası mikrosaniyeyi kırpardı — kimlikli imleç kırpmaz.
+      // Prisma imleci (createdAt, id) karşılaştırmasını DB'de kurar: tek ifadenin satırları (farklı
+      // kartelalar) aynı damgayı paylaşır — kimlikli imleç eşitliği kırpmaz. Kartela başına damga kesin artandır.
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
       take: opts.limit + 1,
       include: {
