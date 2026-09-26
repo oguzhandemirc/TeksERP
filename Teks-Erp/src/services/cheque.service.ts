@@ -64,7 +64,8 @@ import { assertPeriodOpenTx, assertPeriodsOpenTx } from "./helpers/period-guard.
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { tokenReplay } from "./helpers/token-replay.helper";
+import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import type { ApiResponse } from "../types/api.types";
 import { moveAccountBalanceTx as moveLedgerAccountBalanceTx } from "./helpers/cash-ledger.helper";
 import { resolveChequeNoteMovementEnabled } from "./system-setting.service";
@@ -829,37 +830,6 @@ function weekStartYmd(ymd: string): string {
   return utcMsToYmd(ms - back * DUE_DAY_MS);
 }
 
-/**
- * AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01). Gerekçe:
- * `cash-transaction.service.ts` → `assertCashTxnReplay` başlığı.
- * ⚠️ `currency`/`issueDate`/`postingDate` varsayılan alır → kıyaslamaya GİRMEZ.
- */
-const CHEQUE_REPLAY_SELECT = {
-  // ⚠️ customerId/subcontractorId KOLONU YOK — taraf `cariId` ile bağlanır.
-  id: true, docNo: true, kind: true, amount: true, cariId: true,
-} as const;
-
-function assertChequeReplay(
-  existing: {
-    id: string; kind: ChequeKind; amount: Prisma.Decimal;
-    cariId: string | null;
-  },
-  input: CreateChequeInput,
-): void {
-  assertReplayPayloadMatches(
-    [
-      { ad: "kind", mevcut: existing.kind, gelen: input.kind },
-      { ad: "amount", mevcut: existing.amount, gelen: input.amount },
-      // `cariId` YALNIZ girdide de doğrudan verilmişse kıyaslanır; müşteri/fason
-      // üzerinden lazy çözülen hâlde girdi `undefined`dır ve o durumda bu alan
-      // kıyaslamaya girmez (null ≡ undefined kuralı).
-      { ad: "cariId", mevcut: input.cariId == null ? null : existing.cariId, gelen: input.cariId },
-    ],
-    "Bu istemci anahtarı FARKLI bir çek/senet için kullanılmış. Ekranı yenileyip tekrar deneyin.",
-    { chequeId: existing.id },
-  );
-}
-
 export class ChequeService {
   // ---------------------------------------------------------------------------
   // DOĞUŞ
@@ -875,17 +845,63 @@ export class ChequeService {
     const amount = D(input.amount);
     if (amount.lte(0)) throw AppError.badRequest("Tutar sıfırdan büyük olmalı.");
 
-    if (input.clientToken) {
-      const existing = await prisma.cheque.findUnique({
-        where: { clientToken: input.clientToken },
-        select: CHEQUE_REPLAY_SELECT,
-      });
-      if (existing) {
-        assertChequeReplay(existing, input);
-        return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Kayıt zaten oluşturulmuş." };
-      }
-    }
+    return this.chequeReplay(input).run(input.clientToken, () => this.createFresh(input, amount, userId));
+  }
 
+  /**
+   * Çek/senet replay'i. Kimlik: yön · tutar · vade · taraf (cari id verildiyse o, yoksa karta ÇÖZÜLMÜŞ taraf) ·
+   * belge türü · para birimi · seri no; kur, keşide ve işlem tarihi YALNIZ gönderildiyse (varsayılan alırlar). Tarihler
+   * GÜNDÜR — fabrika günüyle kıyaslanır (aynı günün farklı anı aynı vadedir).
+   * 4. durum yalnız kayıt stornosu (`CANCELLED`) → 409 `CHEQUE_CANCELLED`; tahsil/ciro/karşılıksız yaşam döngüsüdür.
+   */
+  private chequeReplay(input: CreateChequeInput) {
+    type P = {
+      id: string; docNo: string; status: ChequeStatus; kind: ChequeKind; docType: ChequeDocType; amount: Prisma.Decimal;
+      currency: Currency; exchangeRate: Prisma.Decimal; dueDate: Date; issueDate: Date; postingDate: Date;
+      serialNo: string | null; storedParty: string; incomingParty: string;
+    };
+    return tokenReplay<P, ApiResponse<{ id: string; docNo: string }>>({
+      find: async (db, clientToken) => {
+        const c = await db.cheque.findUnique({
+          where: { clientToken },
+          select: {
+            id: true, docNo: true, status: true, kind: true, docType: true, amount: true, currency: true, exchangeRate: true,
+            dueDate: true, issueDate: true, postingDate: true, serialNo: true, cariId: true,
+            cari: { select: { customerId: true, subcontractorId: true } },
+          },
+        });
+        if (!c) return null;
+        const { cari, cariId, ...rest } = c;
+        if (input.cariId) return { ...rest, storedParty: `cari:${cariId}`, incomingParty: `cari:${input.cariId}` };
+        const incoming = await resolvePartyToCardTx(db, { customerId: input.customerId, subcontractorId: input.subcontractorId });
+        return { ...rest, storedParty: `${cari.customerId ?? ""}|${cari.subcontractorId ?? ""}`, incomingParty: `${incoming.customerId ?? ""}|${incoming.subcontractorId ?? ""}` };
+      },
+      alive: (p) => {
+        if (p.status !== ChequeStatus.CANCELLED) return;
+        throw AppError.conflict(
+          `Bu form daha önce kaydedilmiş ve ${p.docNo} İPTAL edilmiş — aynı gönderim tekrar edilemez. Yeni kayıt için formu kapatıp yeniden açın.`,
+          { code: "CHEQUE_CANCELLED", chequeId: p.id, docNo: p.docNo },
+        );
+      },
+      identity: (p) => [
+        { ad: "kind", mevcut: p.kind, gelen: input.kind },
+        { ad: "amount", mevcut: p.amount, gelen: input.amount },
+        { ad: "dueDate", mevcut: factoryYmd(p.dueDate), gelen: factoryYmd(input.dueDate) },
+        { ad: "taraf", mevcut: p.storedParty, gelen: p.incomingParty },
+        { ad: "docType", mevcut: p.docType, gelen: input.docType ?? ChequeDocType.CHEQUE },
+        { ad: "currency", mevcut: p.currency, gelen: input.currency ?? Currency.TRY },
+        { ad: "serialNo", mevcut: p.serialNo, gelen: input.serialNo?.trim() || null },
+        ...(input.exchangeRate != null ? [{ ad: "exchangeRate", mevcut: p.exchangeRate, gelen: input.exchangeRate }] : []),
+        ...(input.issueDate ? [{ ad: "issueDate", mevcut: factoryYmd(p.issueDate), gelen: factoryYmd(input.issueDate) }] : []),
+        ...(input.postingDate ? [{ ad: "postingDate", mevcut: factoryYmd(p.postingDate), gelen: factoryYmd(input.postingDate) }] : []),
+      ],
+      collision: "Bu istemci anahtarı FARKLI bir çek/senet için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+      collisionEk: (p) => ({ chequeId: p.id }),
+      respond: (p) => ({ success: true, data: { id: p.id, docNo: p.docNo }, message: "Kayıt zaten oluşturulmuş." }),
+    });
+  }
+
+  private async createFresh(input: CreateChequeInput, amount: Prisma.Decimal, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
     const kind = input.kind;
     const docType = input.docType ?? ChequeDocType.CHEQUE;
     const issueDate = input.issueDate ?? new Date();
@@ -902,16 +918,8 @@ export class ChequeService {
     // ⚠️ `postingDate` ile `dueDate` arasında da KISIT YOK: ileri keşideli çek
     // BUGÜNE işlenir, vadesi gelecektedir — meşru ve olağan.
 
-    // ⚠️ ÖN KONTROL (yukarıdaki findUnique) TEK BAŞINA YETMEZ (check-then-act):
-    // aynı token'la İKİ PARALEL istek ikisi de "token yok" görür, ikisi de
-    // INSERT eder ve biri `clientToken` unique'ine çarpar. O P2002 RETRY
-    // EDİLMEZ — retry her turda AYNI token'ı yazacağı için 5 tur boşa döner ve
-    // kullanıcı yanıltıcı "Barkod üretimi 5 denemede başarısız" 409'u alırdı.
-    // Doğru cevap, çarpan tarafın İLK kaydı cached yanıt olarak dönmesidir
-    // (purchase-order.create emsali; kural kaynağı `utils/p2002.ts`).
-    let result: { id: string; docNo: string };
-    try {
-      result = await withBarcodeRetry(
+    // Yarışı kaybedenin token P2002'si RETRY EDİLMEZ (aynı token'ı 5 tur boşa yazardı); boğazın `run`ı cevabı token'dan verir.
+    const result = await withBarcodeRetry(
         async () =>
           prisma.$transaction(async (tx) => {
             const cari = await resolveCariTx(tx, input, "Çek/senet");
@@ -986,29 +994,8 @@ export class ChequeService {
         return cheque;
           }),
         undefined,
-        // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR — sonraki tur taze
-        // sırayı okur. `clientToken` P2002'si retry EDİLMEZ, aşağıdaki catch
-        // onu cached yanıta çevirir.
         (err) => !isClientTokenP2002(err),
       );
-    } catch (err) {
-      // Catch tx DIŞINDA — PG'nin "aborted transaction" tuzağına girilmez
-      // (purchase-order.create emsali). Cached yanıt ön kontroldekiyle AYNI
-      // ŞEKİL ve AYNI MESAJ taşır: istemci, ardışık ve eşzamanlı replay'i
-      // ayırt edemez (sözleşme bozulmaz).
-      if (input.clientToken && isClientTokenP2002(err)) {
-        const existing = await prisma.cheque.findUnique({
-          where: { clientToken: input.clientToken },
-          select: CHEQUE_REPLAY_SELECT,
-        });
-        if (existing) {
-          // Ön kontrolle AYNI kapı: yarışı kaybeden istek de farklı gövdeyse 409 alır.
-          assertChequeReplay(existing, input);
-          return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Kayıt zaten oluşturulmuş." };
-        }
-      }
-      throw err;
-    }
 
     void AuditService.log({
       userId,

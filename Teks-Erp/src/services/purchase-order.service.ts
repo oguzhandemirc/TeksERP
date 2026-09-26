@@ -90,10 +90,12 @@ import { PURCHASE_ORDER_STATUS_TR } from "../constants/status-labels";
 // XOR + varlık + aktiflik TEK kapıdan sorulur (mal kabul ile ORTAK).
 import {
   hasSupplierPartyInput,
+  resolveStoredSupplierParty,
   resolveSupplierParty,
   type ResolvedSupplierParty,
 } from "./helpers/supplier-party.helper";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { tokenReplay } from "./helpers/token-replay.helper";
+import { factoryYmd } from "../constants/time";
 import { receiptQtyByRollTx, receiptQtyWarning } from "./helpers/receipt-qty.helper";
 import type { ApiResponse } from "../types/api.types";
 import { uyari } from "../lib/logger";
@@ -486,49 +488,16 @@ const LIST_SELECT = {
   _count: { select: { lines: true, goodsReceipts: true } },
 } as const;
 
-/**
- * AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01). Gerekçe:
- * `cash-transaction.service.ts` → `assertCashTxnReplay` başlığı.
- * ⚠️ `currency`/`orderDate` varsayılan alır → kıyaslamaya GİRMEZ.
- */
-const PO_REPLAY_SELECT = {
-  id: true,
-  orderNo: true,
-  supplierId: true,
-  subcontractorId: true,
-  lines: { select: { itemId: true, qty: true, unitPrice: true }, orderBy: { lineNo: "asc" } },
-} as const;
-
 /** Satır izi — Decimal/sayı/metin karışımı TEK biçime indirgenir. */
 function poSatirIzi(
-  satirlar: ReadonlyArray<{ itemId: string; qty: Prisma.Decimal.Value; unitPrice?: Prisma.Decimal.Value | null }>,
+  lineKey: ReadonlyArray<{ itemId: string; qty: Prisma.Decimal.Value; unitPrice?: Prisma.Decimal.Value | null }>,
 ): string {
-  return satirlar
+  return lineKey
     .map(
       (l) =>
         `${l.itemId}|${new Prisma.Decimal(l.qty).toFixed(4)}|${l.unitPrice == null ? "-" : new Prisma.Decimal(l.unitPrice).toFixed(4)}`,
     )
     .join("¬");
-}
-
-function assertPoReplay(
-  existing: {
-    id: string;
-    supplierId: string | null;
-    subcontractorId: string | null;
-    lines: Array<{ itemId: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal | null }>;
-  },
-  input: PurchaseOrderCreateInput,
-): void {
-  assertReplayPayloadMatches(
-    [
-      { ad: "supplierId", mevcut: existing.supplierId, gelen: input.supplierId },
-      { ad: "subcontractorId", mevcut: existing.subcontractorId, gelen: input.subcontractorId },
-      { ad: "satırlar", mevcut: poSatirIzi(existing.lines), gelen: poSatirIzi(input.lines) },
-    ],
-    "Bu istemci anahtarı FARKLI bir alış siparişi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
-    { purchaseOrderId: existing.id },
-  );
 }
 
 /** Liste ucunun okuduğu süzgeç adları — çıplak (`?status=`) gelirse 400 (`assertNoBareFilterParams`); okuyucu + kapı aynı liste. */
@@ -596,29 +565,61 @@ export class PurchaseOrderService {
    * cevap, çarpan tarafın ilk siparişi cached yanıt olarak dönmesidir.
    */
   async create(input: PurchaseOrderCreateInput, userId?: string): Promise<ApiResponse<Record<string, unknown>>> {
+    return this.poReplay(input).run(input.clientToken, () => this.createFresh(input, userId));
+  }
+
+  /**
+   * Alış siparişi replay'i — ön-okuma tedarikçi/kalem kapılarından ÖNCE: tedarikçi sonradan pasife alınsa da
+   * tekrarın cevabı token'dan gelir. Kimlik: taraf (girdi KARTA ÇÖZÜLÜR; saklanan taraf zaten kart kimliğidir —
+   * bağlı fasoncu id'siyle kıyas meşru tekrarı 409'a düşürürdü) · satırlar · para birimi; tarihler yalnız
+   * gönderildiyse (fabrika günüyle). 4. durum: iptal edilmiş sipariş → 409 `PURCHASE_ORDER_CANCELLED` (kapanmış sipariş canlıdır).
+   */
+  private poReplay(input: PurchaseOrderCreateInput) {
+    type P = {
+      id: string; orderNo: string; status: PurchaseOrderStatus; currency: Currency; orderDate: Date; expectedDate: Date | null;
+      storedParty: string; incomingParty: string; lineKey: string;
+    };
+    return tokenReplay<P, ApiResponse<Record<string, unknown>>>({
+      find: async (db, clientToken) => {
+        const po = await db.purchaseOrder.findUnique({
+          where: { clientToken },
+          select: {
+            id: true, orderNo: true, status: true, currency: true, orderDate: true, expectedDate: true, supplierId: true, subcontractorId: true,
+            lines: { select: { itemId: true, qty: true, unitPrice: true }, orderBy: { lineNo: "asc" } },
+          },
+        });
+        if (!po) return null;
+        const incoming = await resolveStoredSupplierParty({ supplierId: input.supplierId ?? null, subcontractorId: input.subcontractorId ?? null }, db);
+        const { supplierId, subcontractorId, lines, ...rest } = po;
+        return { ...rest, storedParty: `${supplierId ?? ""}|${subcontractorId ?? ""}`, incomingParty: `${incoming.supplierId ?? ""}|${incoming.subcontractorId ?? ""}`, lineKey: poSatirIzi(lines) };
+      },
+      alive: (p) => {
+        if (p.status !== PurchaseOrderStatus.CANCELLED) return;
+        throw AppError.conflict(
+          `Bu form daha önce kaydedilmiş ve sipariş İPTAL edilmiş (${p.orderNo}) — aynı gönderim tekrar edilemez. Yeni sipariş için formu kapatıp yeniden açın.`,
+          { code: "PURCHASE_ORDER_CANCELLED", purchaseOrderId: p.id, orderNo: p.orderNo },
+        );
+      },
+      identity: (p) => [
+        { ad: "taraf", mevcut: p.storedParty, gelen: p.incomingParty },
+        { ad: "satırlar", mevcut: p.lineKey, gelen: poSatirIzi(input.lines) },
+        { ad: "currency", mevcut: p.currency, gelen: input.currency ?? "TRY" },
+        ...(input.orderDate ? [{ ad: "orderDate", mevcut: factoryYmd(p.orderDate), gelen: factoryYmd(input.orderDate) }] : []),
+        ...(input.expectedDate !== undefined ? [{ ad: "expectedDate", mevcut: p.expectedDate ? factoryYmd(p.expectedDate) : null, gelen: input.expectedDate ? factoryYmd(input.expectedDate) : null }] : []),
+      ],
+      collision: "Bu istemci anahtarı FARKLI bir alış siparişi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+      collisionEk: (p) => ({ purchaseOrderId: p.id }),
+      respond: async (p) => ({ success: true, data: await this.getById(p.id), message: `Bu sipariş zaten açılmış (${p.orderNo}).` }),
+    });
+  }
+
+  private async createFresh(input: PurchaseOrderCreateInput, userId?: string): Promise<ApiResponse<Record<string, unknown>>> {
     const party = await this.assertSupplierParty(input);
     await this.assertLines(input.lines);
-
-    if (input.clientToken) {
-      const existing = await prisma.purchaseOrder.findUnique({
-        where: { clientToken: input.clientToken },
-        select: PO_REPLAY_SELECT,
-      });
-      if (existing) {
-        assertPoReplay(existing, input);
-        return {
-          success: true,
-          data: await this.getById(existing.id),
-          message: `Bu sipariş zaten açılmış (${existing.orderNo}).`,
-        };
-      }
-    }
-
     const orderDate = input.orderDate ?? new Date();
 
-    let created: { id: string; orderNo: string };
-    try {
-      created = await withBarcodeRetry(
+    // Yarışı kaybedenin token P2002'si RETRY EDİLMEZ (aynı token'ı 5 tur boşa yazardı); boğazın `run`ı cevabı token'dan verir.
+    const created = await withBarcodeRetry(
         () =>
           prisma.$transaction(async (tx) => {
             // İLK ifade: kart kilitleri (8030 SHARED → FOR SHARE) — alış satırı D1 referansıdır.
@@ -650,31 +651,8 @@ export class PurchaseOrderService {
             });
           }),
         undefined,
-        // Belge numarası yarışı (P2002 `orderNo`) RETRY EDİLİR — bir sonraki tur
-        // taze sırayı okur. `clientToken` P2002'si retry EDİLMEZ ve aşağıdaki
-        // catch onu cached yanıta çevirir.
         (err) => !isClientTokenP2002(err),
       );
-    } catch (err) {
-      // Catch tx DIŞINDA — PG'nin "aborted transaction" tuzağına girilmez
-      // (`inventory.service` açık-kumaş emsali).
-      if (input.clientToken && isClientTokenP2002(err)) {
-        const existing = await prisma.purchaseOrder.findUnique({
-          where: { clientToken: input.clientToken },
-          select: PO_REPLAY_SELECT,
-        });
-        if (existing) {
-          // Ön kontrolle AYNI kapı: yarışı kaybeden istek de farklı gövdeyse 409 alır.
-          assertPoReplay(existing, input);
-          return {
-            success: true,
-            data: await this.getById(existing.id),
-            message: `Bu sipariş zaten açılmış (${existing.orderNo}).`,
-          };
-        }
-      }
-      throw err;
-    }
 
     void AuditService.log({
       userId,

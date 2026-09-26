@@ -9,7 +9,8 @@
 //   §2 ölü beyan satırı yok.
 //   §3 kip doğrulaması: giriş birimi kipini çağırır (R `run` · K `inTx` · K′ `behindLock`); K'de `inTx` tx'in İLK await'i.
 //   §4 her `tokenReplay({…})` literali find · alive · identity · collision · respond taşır; identity ≥1 alanlı dizi.
-//   §5 muaf sınıfı KAPALI kümeden; §6 borç CIRCIR (yalnız düşer — iki yönlü, `circir-kolu`).
+//   §5 muaf sınıfı KAPALI kümeden; ON_KONTROL_OKUYUCUSU yanıt üretemez (okuma yalnız `clientToken`ı seçer, boğaz yok).
+//   §6 borç CIRCIR (yalnız düşer — iki yönlü, `circir-kolu`).
 // =============================================================================
 import * as path from "node:path";
 import * as ts from "typescript";
@@ -28,7 +29,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 /** Boğaza henüz girmemiş (borç) birim sayısı — YALNIZ DÜŞER; sabiti entegratör trende düşürür. */
-const BORC_TABANI = 16; // D3 sonu (2026-09-26): D3 0 · D5 16
+const BORC_TABANI = 11; // D5a sonu (2026-09-26): D5 16 → 11 (finans dört yol + ön kontrol okuyucusu muafa)
 
 const KOK = path.resolve(__dirname, "..");
 const KIP_CAGRISI: Record<Kip, string> = { R: "run", K: "inTx", "K′": "behindLock" };
@@ -130,6 +131,32 @@ function main(): void {
   console.log("§5 Muaf sınıfı");
   const muafHatasi = Object.entries(TOKEN_YOLLARI).filter(([, y]) => "muaf" in y && !(y.muaf in MUAF_SINIFLARI)).map(([k]) => k);
   check("muaf satırları kapalı sınıf kümesinden", muafHatasi.length === 0, muafHatasi.join(" · "));
+  // ON_KONTROL_OKUYUCUSU dar tanımı: token okuması YALNIZ `clientToken`ı seçer (kayıt içeriği hiçbir yola akamaz) ve
+  // birim boğaz çağırmaz — yanıt üretemeyen okuyucu olduğu yapıdan ölçülür.
+  const onKontrol = Object.entries(TOKEN_YOLLARI).filter(([, y]) => "muaf" in y && y.muaf === "ON_KONTROL_OKUYUCUSU").map(([k]) => k);
+  const onKontrolHatasi = onKontrol.flatMap((k) => {
+    const b = tarama.hepsi.get(k);
+    if (!b) return [`${k}: birim yok`];
+    if (b.cagrilar.some((c) => c.ad === "tokenReplay")) return [`${k}: boğaz çağırıyor (yanıt üretebilir)`];
+    const hatalar: string[] = [];
+    let okuma = 0;
+    const gez = (n: ts.Node) => {
+      if (ts.isObjectLiteralExpression(n)) {
+        const alan = (ad: string) => n.properties.find((pr): pr is ts.PropertyAssignment => ts.isPropertyAssignment(pr) && pr.name.getText() === ad);
+        const where = alan("where");
+        if (where && ts.isObjectLiteralExpression(where.initializer) && where.initializer.properties.some((pr) => pr.name?.getText() === "clientToken")) {
+          okuma++;
+          const sel = alan("select");
+          const secilen = sel && ts.isObjectLiteralExpression(sel.initializer) ? sel.initializer.properties.map((pr) => pr.name?.getText() ?? "?") : null;
+          if (!secilen || secilen.length !== 1 || secilen[0] !== "clientToken") hatalar.push(`${k}: token okuması yalnız clientToken seçmiyor (${secilen?.join(",") ?? "select yok"})`);
+        }
+      }
+      ts.forEachChild(n, gez);
+    };
+    gez(b.dugum);
+    return okuma === 0 ? [`${k}: token okuması bulunamadı (ölü sınıf satırı)`] : hatalar;
+  });
+  check("⭐ ON_KONTROL_OKUYUCUSU yanıt üretemez: okuma yalnız clientToken'ı seçer, boğaz çağrısı yok", onKontrolHatasi.length === 0, onKontrolHatasi.join(" · "));
 
   console.log("§6 Borç cırcırı");
   const borc = Object.values(TOKEN_YOLLARI).filter((y) => "borc" in y).length;

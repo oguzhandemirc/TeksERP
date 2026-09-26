@@ -32,7 +32,9 @@ import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 // B4 — liste filtreleri: CSV çoklu seçim tek kaynaktan çözülür (ham CSV bir
 // uuid kolonuna giderse P2007 → 400; CLAUDE.md 2026-08-06).
 import { buildTurkishSearch, isEnumMember, readFilterList, readIdCondition } from "../utils/query-parser";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { tokenReplay } from "./helpers/token-replay.helper";
+import { factoryYmd } from "../constants/time";
+import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import type { ApiResponse } from "../types/api.types";
 import { applyCashTxTx, cancelCashTxTx, moveAccountBalanceTx } from "./helpers/cash-ledger.helper";
 
@@ -111,50 +113,6 @@ async function autoAllocateNoteAfterPayment(
   }
 }
 
-/**
- * AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01). Gerekçenin tamamı
- * `cash-transaction.service.ts` → `assertCashTxnReplay` başlığında.
- *
- * ⚠️ YALNIZ ZORUNLU (varsayılansız) alanlar: `currency` ve `paymentDate`
- * servis tarafında varsayılan alır → saklanan dolu, gelen `undefined` olur ve
- * kıyaslamaya konursa MEŞRU tekrar 409'a düşerdi.
- */
-const REPLAY_SELECT = {
-  id: true,
-  docNo: true,
-  direction: true,
-  method: true,
-  amount: true,
-  // ⚠️ customerId/subcontractorId KOLONU YOK — taraf `cariId` ile bağlanır ve
-  // servis onu girdiden çözer; girdiyi saklanan cariId ile kıyaslayamayız.
-  cashBoxId: true,
-  bankAccountId: true,
-} as const;
-
-function assertPaymentReplay(
-  existing: {
-    id: string;
-    direction: PaymentDirection;
-    method: PaymentMethod;
-    amount: Prisma.Decimal;
-    cashBoxId: string | null;
-    bankAccountId: string | null;
-  },
-  input: CreatePaymentInput,
-): void {
-  assertReplayPayloadMatches(
-    [
-      { ad: "direction", mevcut: existing.direction, gelen: input.direction },
-      { ad: "method", mevcut: existing.method, gelen: input.method },
-      { ad: "amount", mevcut: existing.amount, gelen: input.amount },
-      { ad: "cashBoxId", mevcut: existing.cashBoxId, gelen: input.cashBoxId },
-      { ad: "bankAccountId", mevcut: existing.bankAccountId, gelen: input.bankAccountId },
-    ],
-    "Bu istemci anahtarı FARKLI bir tahsilat/ödeme için kullanılmış. Ekranı yenileyip tekrar deneyin.",
-    { paymentId: existing.id },
-  );
-}
-
 export class PaymentService {
   /**
    * Tahsilat (IN) / ödeme (OUT) kaydeder.
@@ -173,28 +131,70 @@ export class PaymentService {
       throw AppError.badRequest("Kasa VEYA banka hesabı seçilmeli (ikisi birden değil).");
     }
 
-    if (input.clientToken) {
-      const existing = await prisma.payment.findUnique({
-        where: { clientToken: input.clientToken },
-        select: REPLAY_SELECT,
-      });
-      if (existing) {
-        assertPaymentReplay(existing, input);
-        return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Kayıt zaten oluşturulmuş." };
-      }
-    }
+    return this.paymentReplay(input).run(input.clientToken, () => this.createFresh(input, { amount, hasCash }, userId));
+  }
 
+  /**
+   * Tahsilat/ödeme replay'i. Kimlik: yön · yöntem · tutar · kasa/banka · taraf (karta ÇÖZÜLMÜŞ; saklanan cari de
+   * kart kimliğidir) · para birimi; kur ve tarih YALNIZ gönderildiyse (varsayılan alırlar, gelen boşsa saklanan
+   * doludur; tarih fabrika günüyle). 4. durum: iptal edilmiş tahsilat/ödeme → 409 `PAYMENT_CANCELLED`. Replay FIFO
+   * kapama kancasını koşmaz.
+   */
+  private paymentReplay(input: CreatePaymentInput) {
+    type P = {
+      id: string; docNo: string; status: PaymentStatus; direction: PaymentDirection; method: PaymentMethod;
+      amount: Prisma.Decimal; currency: Currency; exchangeRate: Prisma.Decimal; paymentDate: Date;
+      cashBoxId: string | null; bankAccountId: string | null; storedParty: string; incomingParty: string;
+    };
+    return tokenReplay<P, ApiResponse<{ id: string; docNo: string }>>({
+      find: async (db, clientToken) => {
+        const p = await db.payment.findUnique({
+          where: { clientToken },
+          select: {
+            id: true, docNo: true, status: true, direction: true, method: true, amount: true, currency: true,
+            exchangeRate: true, paymentDate: true, cashBoxId: true, bankAccountId: true,
+            cari: { select: { customerId: true, subcontractorId: true } },
+          },
+        });
+        if (!p) return null;
+        const incoming = await resolvePartyToCardTx(db, { customerId: input.customerId, subcontractorId: input.subcontractorId });
+        const { cari, ...rest } = p;
+        return { ...rest, storedParty: `${cari.customerId ?? ""}|${cari.subcontractorId ?? ""}`, incomingParty: `${incoming.customerId ?? ""}|${incoming.subcontractorId ?? ""}` };
+      },
+      alive: (p) => {
+        if (p.status !== PaymentStatus.CANCELLED) return;
+        throw AppError.conflict(
+          `Bu form daha önce kaydedilmiş ve ${p.docNo} İPTAL edilmiş — aynı gönderim tekrar edilemez. Yeni kayıt için formu kapatıp yeniden açın.`,
+          { code: "PAYMENT_CANCELLED", paymentId: p.id, docNo: p.docNo },
+        );
+      },
+      identity: (p) => [
+        { ad: "direction", mevcut: p.direction, gelen: input.direction },
+        { ad: "method", mevcut: p.method, gelen: input.method },
+        { ad: "amount", mevcut: p.amount, gelen: input.amount },
+        { ad: "cashBoxId", mevcut: p.cashBoxId, gelen: input.cashBoxId },
+        { ad: "bankAccountId", mevcut: p.bankAccountId, gelen: input.bankAccountId },
+        { ad: "taraf", mevcut: p.storedParty, gelen: p.incomingParty },
+        { ad: "currency", mevcut: p.currency, gelen: input.currency ?? Currency.TRY },
+        ...(input.exchangeRate != null ? [{ ad: "exchangeRate", mevcut: p.exchangeRate, gelen: input.exchangeRate }] : []),
+        ...(input.paymentDate ? [{ ad: "paymentDate", mevcut: factoryYmd(p.paymentDate), gelen: factoryYmd(input.paymentDate) }] : []),
+      ],
+      collision: "Bu istemci anahtarı FARKLI bir tahsilat/ödeme için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+      collisionEk: (p) => ({ paymentId: p.id }),
+      respond: (p) => ({ success: true, data: { id: p.id, docNo: p.docNo }, message: "Kayıt zaten oluşturulmuş." }),
+    });
+  }
+
+  private async createFresh(
+    input: CreatePaymentInput,
+    { amount, hasCash }: { amount: Prisma.Decimal; hasCash: boolean },
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
     const paymentDate = input.paymentDate ?? new Date();
     const currency = input.currency ?? Currency.TRY;
 
-    // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
-    // PARALEL istek ikisi de "token yok" görür, ikisi de INSERT eder ve biri
-    // `clientToken` unique'ine çarpar. O P2002 RETRY EDİLMEZ (retry aynı
-    // token'ı 5 tur boşa yazardı → yanıltıcı "Barkod üretimi ... başarısız"
-    // 409'u); aşağıdaki catch onu cached yanıta çevirir (purchase-order emsali).
-    let result: { id: string; docNo: string };
-    try {
-      result = await withBarcodeRetry(
+    // Yarışı kaybedenin token P2002'si RETRY EDİLMEZ (aynı token'ı 5 tur boşa yazardı); boğazın `run`ı cevabı token'dan verir.
+    const result = await withBarcodeRetry(
         async () =>
           prisma.$transaction(async (tx) => {
         const cari = await ensureCariAccountTx(tx, {
@@ -326,26 +326,8 @@ export class PaymentService {
         return payment;
           }),
         undefined,
-        // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
-        // P2002'si retry EDİLMEZ — catch cached yanıta çevirir.
         (err) => !isClientTokenP2002(err),
       );
-    } catch (err) {
-      // Catch tx DIŞINDA (aborted-transaction tuzağı). Cached yanıt ön
-      // kontroldekiyle AYNI şekil + AYNI mesaj — replay ayırt edilemez.
-      if (input.clientToken && isClientTokenP2002(err)) {
-        const existing = await prisma.payment.findUnique({
-          where: { clientToken: input.clientToken },
-          select: REPLAY_SELECT,
-        });
-        if (existing) {
-          // Ön kontrolle AYNI kapı: yarışı kaybeden istek de farklı gövdeyse 409 alır.
-          assertPaymentReplay(existing, input);
-          return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Kayıt zaten oluşturulmuş." };
-        }
-      }
-      throw err;
-    }
 
     void AuditService.log({
       userId,

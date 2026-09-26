@@ -7,6 +7,9 @@
 //   borc   — henüz boğazda değil; dilim adıyla (`docs/design/TOKEN-REPLAY-KILIDI.md` §4). CIRCIR: yalnız düşer.
 //   muaf   — KAPALI sınıf kümesi (`MUAF_SINIFLARI`), gerekçeli
 // `tokenReplay({ find })` politikası ve politikanın çağırdığı okuyucu kendiliğinden beyanlıdır.
+// Kapalı kümenin dördüncü sınıfı ON_KONTROL_OKUYUCUSU (D5a, 4b onayı): token'ı yalnız bir HESAPTAN (aşım toplamı)
+// tekrar satırını düşmek için okuyan, replay YANITI ÜRETMEYEN birim. Dar tanım bekçide ölçülür: okuma yalnız
+// `clientToken`ı seçer (kayıt içeriği hiçbir yola akamaz) ve birim boğaz çağırmaz.
 // =============================================================================
 
 export const MUAF_SINIFLARI = {
@@ -16,6 +19,8 @@ export const MUAF_SINIFLARI = {
   TOKEN_CLAIM_ONCE: "token işten önce claim edilir",
   /** Yalnız token'sız yolun dalı (token gelirse satır zaten vardır). */
   TOKENSIZ_DAL: "token'sız dal",
+  /** Token'ı yalnız bir hesaptan tekrar satırını düşmek için okur; yanıt üretmez (okuma yalnız `clientToken`ı seçer). */
+  ON_KONTROL_OKUYUCUSU: "yanıt üretmeyen ön kontrol okuyucusu",
 } as const;
 
 export type Kip = "R" | "K" | "K′";
@@ -64,12 +69,13 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}warehouse-transfer.service.ts::createFresh`]: { giris: { [`${S}warehouse-transfer.service.ts::create`]: "R" } },
   [`${S}invoice.service.ts::createDraftFresh`]: { giris: { [`${S}invoice.service.ts::createDraft`]: "R" } },
 
+  // ── Boğazda: D5a (finans) — ön-okuma iş kurallarından ÖNCE; taraf karta çözülmüş hâliyle ────────────────
+  [`${S}payment.service.ts::createFresh`]: { giris: { [`${S}payment.service.ts::create`]: "R" } },
+  [`${S}cheque.service.ts::createFresh`]: { giris: { [`${S}cheque.service.ts::create`]: "R" } },
+  [`${S}purchase-order.service.ts::createFresh`]: { giris: { [`${S}purchase-order.service.ts::create`]: "R" } },
+  [`${S}goods-receipt.service.ts::createFresh`]: { giris: { [`${S}goods-receipt.service.ts::create`]: "R" } },
+
   // ── Borç: D5 (4. durum eksikleri · ham P2002 · predicate'siz retry · boğaza taşıma) ─────
-  [`${S}payment.service.ts::create`]: { borc: "D5", not: "4. durum yok (CANCELLED)" },
-  [`${S}cheque.service.ts::create`]: { borc: "D5", not: "4. durum yok" },
-  [`${S}purchase-order.service.ts::create`]: { borc: "D5", not: "4. durum yok" },
-  [`${S}goods-receipt.service.ts::create`]: { borc: "D5", not: "4. durum yok; predicate'siz retry (§5-2)" },
-  [`${S}helpers/goods-receipt-preflight.helper.ts::replayedTokens`]: { borc: "D5", not: "mal kabul ön kontrol okuyucusu" },
   [`${S}warp-beam.service.ts::createWarpBeam`]: { borc: "D5", not: "yarışta ham P2002 (retry yalnız beamNo)" },
   [`${S}weaving-order.service.ts::createWeavingOrder`]: { borc: "D5", not: "yarışta ham P2002 (§5-1)" },
   [`${S}subcontractor-weaving.service.ts::receiveForWeaving`]: { borc: "D5", not: "yarışta ham P2002 (§5-1)" },
@@ -84,5 +90,6 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
 
   // ── Muaf (kapalı küme) ──────────────────────────────────────────────────────
   [`${S}kartela.service.ts::reduceStock`]: { muaf: "ILK_YAZIM_TOKEN", neden: "SwatchStockReduction satırı tx'in ilk yazımı (plan §1 sınıf dışı)" },
+  [`${S}helpers/goods-receipt-preflight.helper.ts::replayedTokens`]: { muaf: "ON_KONTROL_OKUYUCUSU", neden: "aşım toplamından tekrar edilen satırı düşer; satırın cevabı createInitialEntry'den" },
   [`${S}import/import.service.ts::apply`]: { muaf: "TOKEN_CLAIM_ONCE", neden: "ImportRun satırı koşumdan önce claim edilir (plan §1 sınıf dışı)" },
 };

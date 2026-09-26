@@ -80,7 +80,8 @@ import { describeContractPricing, loadContractPrices } from "./helpers/contract-
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { nextSeriesNo } from "./number-series.service";
 import { applyDateRange, buildWhereClause } from "../utils/query-parser";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { tokenReplay } from "./helpers/token-replay.helper";
+import { isClientTokenP2002 } from "../utils/p2002";
 import type { ApiResponse } from "../types/api.types";import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 
 
@@ -670,6 +671,63 @@ export class GoodsReceiptService {
    * sormaz; sözleşme yine de açıktır).
    */
   async create(input: GoodsReceiptCreateInput, userId?: string): Promise<ApiResponse<unknown>> {
+    return this.receiptReplay(input).run(input.clientToken, () => this.createFresh(input, userId));
+  }
+
+  /**
+   * Mal kabul fişi replay'i — ön-okuma ön-uçuş, depo ve tedarikçi kapılarından ÖNCE (kapılar sonradan değişse de
+   * tekrarın cevabı token'dan). Kimlik: depo · sipariş · irsaliye no (saklandığı gibi trim'li) · ham stok · para birimi ·
+   * taraf YALNIZ girdi taraf taşıyorsa (boşsa saklanan taraf siparişten miras olabilir) ve KARTA ÇÖZÜLMÜŞ hâliyle.
+   * Satırlar başlık kimliğine girmez (kendi token'ları var). 4. durum: iptal edilmiş fiş → 409 `GOODS_RECEIPT_CANCELLED`.
+   * Yanıt ilk başarıyla aynı biçim (`failed` · `purchaseOrder` senkron alanı); kısmi ilk denemenin satırları devam
+   * ettirilmez (iplik satırı idempotent değil).
+   */
+  private receiptReplay(input: GoodsReceiptCreateInput) {
+    type P = {
+      id: string; receiptNo: string; status: GoodsReceiptStatus; warehouseId: string; purchaseOrderId: string | null;
+      deliveryNoteNo: string | null; rawStockEntry: boolean; currency: string; storedParty: string; incomingParty: string | null;
+    };
+    return tokenReplay<P, ApiResponse<unknown>>({
+      find: async (db, clientToken) => {
+        const r = await db.goodsReceipt.findUnique({
+          where: { clientToken },
+          select: {
+            id: true, receiptNo: true, status: true, warehouseId: true, purchaseOrderId: true, deliveryNoteNo: true,
+            rawStockEntry: true, currency: true, supplierId: true, subcontractorId: true,
+          },
+        });
+        if (!r) return null;
+        const { supplierId, subcontractorId, ...rest } = r;
+        const hasParty = Boolean(input.supplierId || input.subcontractorId);
+        const incoming = hasParty ? await resolveStoredSupplierParty({ supplierId: input.supplierId ?? null, subcontractorId: input.subcontractorId ?? null }, db) : null;
+        return { ...rest, storedParty: `${supplierId ?? ""}|${subcontractorId ?? ""}`, incomingParty: incoming ? `${incoming.supplierId ?? ""}|${incoming.subcontractorId ?? ""}` : null };
+      },
+      alive: (p) => {
+        if (p.status !== GoodsReceiptStatus.CANCELLED) return;
+        throw AppError.conflict(
+          `Bu form daha önce kaydedilmiş ve fiş İPTAL edilmiş (${p.receiptNo}) — aynı gönderim tekrar edilemez. Yeni fiş için formu kapatıp yeniden açın.`,
+          { code: "GOODS_RECEIPT_CANCELLED", goodsReceiptId: p.id, receiptNo: p.receiptNo },
+        );
+      },
+      identity: (p) => [
+        { ad: "warehouseId", mevcut: p.warehouseId, gelen: input.warehouseId },
+        { ad: "purchaseOrderId", mevcut: p.purchaseOrderId, gelen: input.purchaseOrderId ?? null },
+        { ad: "deliveryNoteNo", mevcut: p.deliveryNoteNo, gelen: input.deliveryNoteNo?.trim() || null },
+        { ad: "rawStockEntry", mevcut: p.rawStockEntry, gelen: input.rawStockEntry === true },
+        { ad: "currency", mevcut: p.currency, gelen: input.currency ?? "TRY" },
+        ...(p.incomingParty !== null ? [{ ad: "taraf", mevcut: p.storedParty, gelen: p.incomingParty }] : []),
+      ],
+      collision: "Bu istemci anahtarı FARKLI bir mal kabul fişi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+      collisionEk: (p) => ({ goodsReceiptId: p.id }),
+      respond: async (p) => ({
+        success: true,
+        data: { ...(await this.loadDetail(p.id)), failed: [], purchaseOrder: null },
+        message: `Bu fiş zaten açılmış (${p.receiptNo}).`,
+      }),
+    });
+  }
+
+  private async createFresh(input: GoodsReceiptCreateInput, userId?: string): Promise<ApiResponse<unknown>> {
     // ÖN-UÇUŞ (C8, 2026-09-17; beş sınıf daha 2026-09-18): doğrulama sınıfı satır hataları fiş BAŞLIĞI açılmadan 400 —
     // içi boş fiş doğmaz. Bağlam (fiyat zinciri · sipariş ordered/received) GİRDİDEN kurulur; `addLines` başlık açıldıktan
     // sonra aynı kurucuyu bir kez daha çağırır (iki küçük okuma; doğruluk > tasarruf). `failed[]` yalnız koşu anı (yarış/kilit).
@@ -693,51 +751,7 @@ export class GoodsReceiptService {
       { required: false },
     );
 
-    // İdempotent tekrar: aynı fiş iki kez açılmaz (ağ kopması / çift tıklama).
-    if (input.clientToken) {
-      const dupe = await prisma.goodsReceipt.findUnique({
-        where: { clientToken: input.clientToken },
-        select: {
-          id: true, receiptNo: true, warehouseId: true, supplierId: true,
-          subcontractorId: true, purchaseOrderId: true, deliveryNoteNo: true,
-        },
-      });
-      if (dupe) {
-        // AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01). Gerekçe:
-        // `cash-transaction.service.ts` → `assertCashTxnReplay` başlığı. Kapı
-        // olmadan, kullanıcı depoyu/tedarikçiyi düzeltip aynı token'la tekrar
-        // gönderdiğinde ESKİ fiş "zaten açılmış" diye dönüyordu.
-        // ⚠️ `currency` varsayılan alır → kıyaslamaya GİRMEZ.
-        // ⚠️ TÜRETİLEN ALAN, GİRDİ VERMEDİYSE KIYASLANMAZ (2026-09-01 düzeltmesi).
-        // `supplierId`/`subcontractorId` girdide OPSİYONELDİR ve verilmezse
-        // servis onları ALIŞ SİPARİŞİNDEN türetir ("tek kaynak"). Saklanan
-        // türetilmiş değeri, meşruen boş gelen girdiyle kıyaslamak replay'i
-        // YANLIŞ 409'a düşürür — `seed-ticaret-demo` tam bu yüzden ikinci
-        // koşumda kırıldı ve deploy durdu (ölçüldü, canlı sunucuda).
-        // Kural: kıyaslama yalnız girdinin GERÇEKTEN taşıdığı alanlar üzerinden.
-        assertReplayPayloadMatches(
-          [
-            { ad: "warehouseId", mevcut: dupe.warehouseId, gelen: input.warehouseId },
-            ...(input.supplierId !== undefined
-              ? [{ ad: "supplierId", mevcut: dupe.supplierId, gelen: input.supplierId }]
-              : []),
-            ...(input.subcontractorId !== undefined
-              ? [{ ad: "subcontractorId", mevcut: dupe.subcontractorId, gelen: input.subcontractorId }]
-              : []),
-            { ad: "purchaseOrderId", mevcut: dupe.purchaseOrderId, gelen: input.purchaseOrderId },
-            { ad: "deliveryNoteNo", mevcut: dupe.deliveryNoteNo, gelen: input.deliveryNoteNo },
-          ],
-          "Bu istemci anahtarı FARKLI bir mal kabul fişi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
-          { goodsReceiptId: dupe.id },
-        );
-        return {
-          success: true,
-          data: await this.loadDetail(dupe.id),
-          message: `Bu fiş zaten açılmış (${dupe.receiptNo}).`,
-        };
-      }
-    }
-
+    // Yarışı kaybedenin token P2002'si RETRY EDİLMEZ (fiş no yarışı edilir); boğazın `run`ı cevabı token'dan verir.
     const receipt = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         // ── D3: ALIŞ SİPARİŞİ BAĞI ────────────────────────────────────────
@@ -810,6 +824,8 @@ export class GoodsReceiptService {
           select: { id: true, receiptNo: true },
         });
       }),
+      undefined,
+      (err) => !isClientTokenP2002(err),
     );
 
     void AuditService.log({

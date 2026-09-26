@@ -1,6 +1,6 @@
 # Token replay kilidi — kilitsiz ön-okuma sınıfı ve kapatma planı
 
-> **Durum:** KARARLANDI (kullanıcı, 2026-09-26 sabah): planın TAMAMI — §6 S1–S5 hepsi (A). Uygulama sırası D1 → D2 → D3 → D4, her dilim ayrı tren. **D1 İNDİ** (tren 22: #6 levent tüketimi R + tek kilitli kalan okuyucu · #10 hızlı sipariş K · #11 elle sipariş no R); **D2 ve D3 İNDİ** (tek boğaz + 12 kalan yol); D4 istemci dilimi.
+> **Durum:** KARARLANDI (kullanıcı, 2026-09-26 sabah): planın TAMAMI — §6 S1–S5 hepsi (A). Uygulama sırası D1 → D2 → D3 → D4, her dilim ayrı tren. **D1 İNDİ** (tren 22: #6 levent tüketimi R + tek kilitli kalan okuyucu · #10 hızlı sipariş K · #11 elle sipariş no R); **D2, D3 ve D4 İNDİ** (tek boğaz + 12 kalan yol + istemci token'ı); D5 üç dilimde (D5a finans · D5b üretim nesneleri · D5c top doğumu, çeki, iş emri arşivi).
 > **Ölçüm tabanı:** origin `c7e5c059`, statik okuma. Üç ölçüm ajanı 19 yolun sunucu + panel + tablet
 > akışını okudu; kritik iddialar elle doğrulandı (#6, #10, #11, §5'in 1–2. maddeleri). Satır
 > numaraları bu tabandadır.
