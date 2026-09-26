@@ -1,6 +1,7 @@
 // İş emri Hareketler — saf katman (sorgu parametresi · altbilgi). Satır başlığı
 // ve Türkçe etiketler SUNUCUDAN gelir; burada ikinci bir sözlük tutulmaz.
 import apiClient from "@/services/apiClient";
+import { fetchAllTimeline, timelineFooterText } from "@/components/timeline/EventTimeline";
 import type { ExportColumn } from "@/lib/list-export";
 
 export type TimelineGroup = "DURUM" | "PLAN" | "SIPARIS" | "PARTI" | "FASON" | "TAMBUR" | "KAPANIS";
@@ -50,12 +51,8 @@ export async function getWorkOrderEvents(
   return { data: body.data, nextCursor: body.pagination.nextCursor, hasMore: body.pagination.hasMore, groups: body.groups };
 }
 
-/** Kırpma sessiz değil: altbilgi listenin bitip bitmediğini HER ZAMAN söyler. */
-export function eventsFooterText(shown: number, hasMore: boolean): string {
-  if (shown === 0) return "";
-  const head = `${shown} hareket gösteriliyor (en yeniden eskiye).`;
-  return hasMore ? `${head} Liste KIRPILDI — devamı için “Daha fazla yükle”.` : `${head} Bu süzgeçte başka hareket yok.`;
-}
+/** Kırpma sessiz değil — ortak zaman çizelgesinin altbilgisi (geriye uyum adı). */
+export const eventsFooterText = timelineFooterText;
 
 export const formatEventInstant = (iso: string) =>
   new Date(iso).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -75,17 +72,8 @@ export const EVENT_COLUMNS: ExportColumn<TimelineItem>[] = [
 ];
 
 /** Dışa aktarım listenin TAMAMINI alır — ekranda yüklenmiş sayfalarla sınırlı değil. */
-export async function fetchAllWorkOrderEvents(workOrderId: string, group: TimelineGroup | ""): Promise<TimelineItem[]> {
-  const all: TimelineItem[] = [];
-  let cursor: string | undefined;
-  for (let i = 0; i < 100; i++) {
-    const page = await getWorkOrderEvents(workOrderId, { group, cursor, limit: 200 });
-    all.push(...page.data);
-    if (!page.hasMore || !page.nextCursor) return all;
-    cursor = page.nextCursor;
-  }
-  // Kırpılmış bir Excel "tam liste" sanılır — sessizce kesmek yerine dur.
-  throw new Error("Hareket listesi dışa aktarım sınırını aşıyor (20.000 satır); süzgeçle daraltın.");
+export function fetchAllWorkOrderEvents(workOrderId: string, group: TimelineGroup | ""): Promise<TimelineItem[]> {
+  return fetchAllTimeline((o) => getWorkOrderEvents(workOrderId, { group, cursor: o.cursor, limit: o.limit }), group);
 }
 
 export interface LookupHit {

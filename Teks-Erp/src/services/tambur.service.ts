@@ -62,12 +62,16 @@ import type { PlanMismatchItem } from "../constants/tambur-plan-gate";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 
 export interface SwatchStats {
+  /** Filtreye uyan STOKTAKİ kartela sayısı (`getStock` ile aynı yüklem). */
   count: number;
-  /** Filtreye uyan tüm kartelaların `length` toplamı — cm. */
+  /** Stoktaki kartelaların `length` toplamı — cm. */
   totalLength: number;
+  /** Filtreye uyan kartelaların durum kırılımı (çuvalda · sevkiyatta · sevk edildi …). */
+  byStatus: Record<SwatchStatus, number>;
 }
 import {
   Prisma,
+  SwatchStatus,
   Roll,
   RollStatus,
   RollError,
@@ -83,6 +87,7 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { SWATCH_IN_STOCK_WHERE } from "./helpers/swatch-event.helper";
 import { buildIntentSnapshot } from "./label.service";
 import { resolveLabelIntent, labelCustomerIdOf } from "./helpers/label-intent.helper";
 import { generateRollBarcodeTx, reserveRollBarcodesInOrderTx } from "./helpers/roll-barcode.helper";
@@ -1641,9 +1646,13 @@ export class TamburService {
     search?: string;
     /** Cursor mode ilk fetch'te totalEstimate doldur. */
     withTotal?: boolean;
+    /** Durum süzgeci — verilmezse iptal/düşüm dışındakiler (eski varsayılan). */
+    statuses?: SwatchStatus[];
   }): Promise<ApiResponse<Swatch[]> | CursorPaginatedResponse<Swatch>> {
-    // Soft-delete: iptal edilmiş kartela kabulünden gelen kartelalar listelenmez.
-    const where: Prisma.SwatchWhereInput = { cancelledAt: null };
+    // Varsayılan: iptal edilmiş ve düşülmüş kartela listelenmez; durum süzgeci verilirse o geçer.
+    const where: Prisma.SwatchWhereInput = params?.statuses?.length
+      ? { status: { in: params.statuses } }
+      : { cancelledAt: null };
     if (params?.itemId) where.itemId = params.itemId;
     const search = params?.search?.trim();
     if (search) {
@@ -1746,7 +1755,9 @@ export class TamburService {
     itemId?: string;
     search?: string;
   }): Promise<ApiResponse<SwatchStats>> {
-    const where: Prisma.SwatchWhereInput = { cancelledAt: null };
+    // Süzgeç (ürün + arama) tek; sayı stoktakini, kırılım bütün durumları sayar. Eskiden
+    // `cancelledAt: null` çuvaldaki/sevkiyattaki/SEVK EDİLMİŞ kartelayı da "toplam" sayıyordu.
+    const where: Prisma.SwatchWhereInput = {};
     if (params?.itemId) where.itemId = params.itemId;
     const search = params?.search?.trim();
     if (search) {
@@ -1767,16 +1778,21 @@ export class TamburService {
     }
 
     const aggregate = await prisma.swatch.aggregate({
-      where,
+      where: { ...where, ...SWATCH_IN_STOCK_WHERE },
       _count: { _all: true },
       _sum: { length: true },
     });
+    const perStatus = await prisma.swatch.groupBy({ by: ["status"], where, _count: { _all: true } });
+    const byStatus = Object.fromEntries(
+      Object.values(SwatchStatus).map((st) => [st, perStatus.find((p) => p.status === st)?._count._all ?? 0]),
+    ) as Record<SwatchStatus, number>;
 
     return {
       success: true,
       data: {
         count: aggregate._count._all,
         totalLength: Number(aggregate._sum.length ?? 0),
+        byStatus,
       },
     };
   }

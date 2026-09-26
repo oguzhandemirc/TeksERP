@@ -5,6 +5,10 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { KartelaService } from "../services/kartela.service";
+import { kartelaTimelineService } from "../services/kartela-timeline.service";
+import { SWATCH_EVENT_GROUPS, type SwatchEventGroup } from "../constants/swatch-event-labels";
+import { readFilterList } from "../utils/query-parser";
+import { AppError } from "../utils/app-error";
 import "../types/express-augment";
 
 const dispatchSchema = z.object({
@@ -61,6 +65,16 @@ const reduceStockSchema = z.object({
 
 const reverseReductionSchema = z.object({
   reason: z.string().trim().min(3, "Gerekçe en az 3 karakter").max(500),
+});
+
+const eventsQuerySchema = z.object({
+  search: z.string().max(100).optional(),
+  dateFrom: z.string().max(40).optional(),
+  dateTo: z.string().max(40).optional(),
+  swatchId: z.string().max(40).optional(),
+  group: z.union([z.string(), z.array(z.string())]).optional(),
+  cursor: z.string().max(40).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
 const qStr = (v: unknown): string | undefined =>
@@ -126,6 +140,7 @@ export class KartelaController {
     this.listStockReductions = this.listStockReductions.bind(this);
     this.reverseStockReduction = this.reverseStockReduction.bind(this);
     this.setRollMarked = this.setRollMarked.bind(this);
+    this.listEvents = this.listEvents.bind(this);
   }
 
   /** POST /api/kartela/dispatch */
@@ -238,6 +253,29 @@ export class KartelaController {
           typeof req.query.subcontractorId === "string" ? req.query.subcontractorId : undefined,
       });
       res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/kartela/events — Kartela Hareketleri (olay defteri; liste + imleç + grup sayaçları tek süzgeçten). */
+  async listEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const q = eventsQuerySchema.parse(req.query);
+      const groups = readFilterList(q.group as string | string[] | undefined);
+      // Fail-closed: tanınmayan grup sessizce "hepsi" sayılmaz.
+      const unknownGroups = groups.filter((g) => !(SWATCH_EVENT_GROUPS as readonly string[]).includes(g));
+      if (unknownGroups.length) throw AppError.badRequest(`Tanınmayan olay grubu: ${unknownGroups.join(", ")}`);
+      const page = await kartelaTimelineService.list(
+        { search: q.search, dateFrom: q.dateFrom, dateTo: q.dateTo, swatchId: q.swatchId },
+        { groups: groups as SwatchEventGroup[], cursor: q.cursor, limit: q.limit },
+      );
+      res.status(200).json({
+        success: true,
+        data: page.data,
+        pagination: { nextCursor: page.nextCursor, hasMore: page.hasMore, limit: q.limit },
+        groups: page.groups,
+      });
     } catch (err) {
       next(err);
     }

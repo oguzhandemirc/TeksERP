@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useKartelaMeasurementEnabled } from "@/hooks/usePricingEnabled";
 import type { Swatch } from "./swatchService";
+import { SwatchEventsSection } from "../Kartela/KartelaEventsTab";
 
 interface Props {
   swatch: Swatch | null;
@@ -141,6 +142,8 @@ export function SwatchDetailSheet({ swatch, open, onOpenChange }: Props) {
             <div className="text-[11px] text-muted-foreground">
               Oluşturma: {safeFormat(swatch.createdAt, "dd.MM.yyyy HH:mm")}
             </div>
+
+            <SwatchEventsSection swatch={swatch} />
           </div>
         )}
       </SheetContent>

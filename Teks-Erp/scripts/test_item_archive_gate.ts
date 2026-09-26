@@ -14,6 +14,7 @@ import { ensureTestAdmin } from "./fixture-test-user";
 import { itemService } from "../src/routes/item.routes";
 import { InventoryService } from "../src/services/inventory.service";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
+import { ITEM_LIVE_REF_KINDS } from "../src/services/helpers/item-lifecycle.helper";
 
 let pass = 0;
 let fail = 0;
@@ -66,7 +67,10 @@ async function main(): Promise<void> {
   const rollRef = pv.references.find((x) => x.kind === "ROLL");
   check("canlı topta Pasif'e geçiş önizlemede KAPALI", pv.canTransition === false && pv.liveTotal === 1, `liveTotal=${pv.liveTotal}`);
   check("top barkoduyla listelendi", rollRef?.records[0]?.title === roll.barcode, rollRef?.records[0]?.title);
-  check("önizleme sekiz türün hepsini döner (0 olanlar dahil)", pv.references.length === 8);
+  // Tür sayısı sabit yazılmaz: katalog büyüdükçe (S4 kartela 2026-09-26) bekçi kendiliğinden izler.
+  check("önizleme katalogdaki her türü döner (0 olanlar dahil)",
+    JSON.stringify(pv.references.map((x) => x.kind)) === JSON.stringify(ITEM_LIVE_REF_KINDS.map((k) => k.kind)),
+    `${pv.references.length}/${ITEM_LIVE_REF_KINDS.length}`);
 
   console.log("\n=== 2) Üç giriş yolu da 409 + kayıt listesi ===");
   for (const [ad, fn] of [

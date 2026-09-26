@@ -1,6 +1,6 @@
 // Renk arşiv kapısı — URUN-YASAM-DONGUSU.md §6. Canlı: mal, açık belge, aktif rota planı.
 import type { ArchiveSpec } from "../master-data-archive.helper";
-import { LIVE_ROLL, OPEN_MACHINE_RUN, OPEN_WEAVING_ORDER, OPEN_WORK_ORDER, openDemandLineWhere } from "../live-ref-where.helper";
+import { LIVE_ROLL, LIVE_SWATCH, OPEN_MACHINE_RUN, OPEN_WEAVING_ORDER, OPEN_WORK_ORDER, openDemandLineWhere } from "../live-ref-where.helper";
 import { plannedColorStep } from "./route-plan-refs.helper";
 
 const NOT_ARCHIVED_ITEM = { lifecycleStatus: { not: "ARCHIVED" as const } };
@@ -18,6 +18,15 @@ export const COLOR_ARCHIVE: ArchiveSpec = {
       list: async (db, id, take) =>
         (await db.roll.findMany({ where: { colorId: id, ...LIVE_ROLL }, take, orderBy: { barcode: "asc" }, select: { id: true, barcode: true, status: true } }))
           .map((r) => ({ id: r.id, title: r.barcode ?? r.id, detail: r.status })),
+    },
+    {
+      // Kullanıcı kararı S4 (2026-09-26): stoktaki/çuvaldaki/sevkiyattaki kartela canlıdır.
+      kind: "SWATCH",
+      label: "Canlı kartela",
+      count: (db, id) => db.swatch.count({ where: { colorId: id, ...LIVE_SWATCH } }),
+      list: async (db, id, take) =>
+        (await db.swatch.findMany({ where: { colorId: id, ...LIVE_SWATCH }, take, orderBy: { cardNumber: "asc" }, select: { id: true, cardNumber: true, status: true } }))
+          .map((x) => ({ id: x.id, title: x.cardNumber, detail: x.status })),
     },
     {
       kind: "ORDER_LINE",

@@ -29,7 +29,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { lockAgainstMergeTx } from "./master-data-live.helper";
 import { PHASE_OUT_LINE_QTY_WARNING } from "./item-lifecycle-settings.helper";
-import { ROLL_ON_ARCHIVED_ITEM_MESSAGE } from "../../constants/item-archive-messages";
+import { ROLL_ON_ARCHIVED_ITEM_MESSAGE, SWATCH_ON_ARCHIVED_ITEM_MESSAGE } from "../../constants/item-archive-messages";
 import {
   readItemPhaseOutLineQty,
   readItemPhaseOutNewOrder,
@@ -232,6 +232,15 @@ export async function runItemUsageChecksTx(tx: Prisma.TransactionClient, checks:
  * DB seddi (`rolls_item_not_archived`) ikinci hattır; bu kontrol DB'ye gitmeden ÇIKIŞ YOLUNU
  * söyler. Dirilme yolları `test_item_usage_single_source` §3'te listelidir.
  */
+/** Düşülmüş kartela stoğa dönerken kartı Pasif olamaz (S4; top dirilmesinin ikizi). */
+export async function assertSwatchesRevivable(db: Db, swatchIds: string[]): Promise<void> {
+  if (swatchIds.length === 0) return;
+  const rows = await db.swatch.findMany({ where: { id: { in: swatchIds } }, select: { itemId: true }, distinct: ["itemId"] });
+  for (const itemId of [...new Set(rows.map((r) => r.itemId))].sort()) {
+    await assertItemUsable(db, itemId, "EXISTING_GOODS", { archivedMessage: SWATCH_ON_ARCHIVED_ITEM_MESSAGE });
+  }
+}
+
 export async function assertRollsRevivable(db: Db, rolls: string[] | Prisma.RollWhereInput): Promise<void> {
   if (Array.isArray(rolls) && rolls.length === 0) return;
   const where: Prisma.RollWhereInput = Array.isArray(rolls) ? { id: { in: rolls } } : rolls;

@@ -78,7 +78,13 @@ async function main(): Promise<void> {
   const sqlSet = new Set(sqlRows.map((r) => r.id));
   const all = await prisma.item.findMany({ select: { id: true } });
   const tsSet = new Set<string>();
-  for (const it of all) if (totalLiveRefs(await countItemLiveRefs(prisma, it.id)) > 0) tsSet.add(it.id);
+  // Göçten SONRA eklenen türler (kullanıcı kararıyla): göç SQL'i dondurulmuş tarihtir, onları
+  // tanımaz. Kıyas bu türleri ADIYLA dışarıda tutar — sessiz fark değil, beyan.
+  const GOC_SONRASI_TURLER = new Set<string>(["SWATCH"]); // S4, 2026-09-26: canlı kartela
+  for (const it of all) {
+    const sayim = (await countItemLiveRefs(prisma, it.id)).filter((c) => !GOC_SONRASI_TURLER.has(c.kind));
+    if (totalLiveRefs(sayim) > 0) tsSet.add(it.id);
+  }
   const sadeceSql = [...sqlSet].filter((x) => !tsSet.has(x));
   const sadeceTs = [...tsSet].filter((x) => !sqlSet.has(x));
   console.log(`   · ${all.length} kart tarandı · SQL ${sqlSet.size} canlı · TS ${tsSet.size} canlı`);

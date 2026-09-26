@@ -10,6 +10,10 @@
 //      (`swatches: { connect … }`) yazım da sayılır.
 //   §4 ÖLÇÜLEMEDİ — `data` nesne literali değilse (değişken/spread) yazılan anahtar
 //      görülemez; üçüncü sonuç sessizce "uyumlu" sayılmaz.
+//   §7 TETİK — tek yazara verilen her `trigger` Türkçe sözlükte (`SWATCH_TRIGGER_LABEL`);
+//      iki yönlü: sözlükte olup hiçbir yerde verilmeyen tetik de kırmızı.
+//   §8 STOK YÜKLEMİ — "stokta kartela" sorgusu `SWATCH_IN_STOCK_WHERE`den; kartela okuma
+//      sorgusunda elle `sackId: null` + `shipmentId: null` üçlüsü kırmızı.
 // Kapsam `src/` + `scripts/` (bakım/düzeltme script'i de tek yazardan geçer); bekçi ve
 // fikstür dosyaları (`test_*` · `fixture-*`) hariç — onlar kurgu durum kurar.
 // K1'deki eski site beyanı (14 → 13) K2'de 0'a indi ve silindi; kapı sert 0.
@@ -22,6 +26,7 @@ import * as ts from "typescript";
 import { walkTs } from "./lib/ts-tarama";
 import { fonksiyonAdi } from "./lib/damga-null-tarama";
 import { atlamaDefteri } from "./lib/atlama";
+import { SWATCH_TRIGGER_LABEL } from "../src/constants/swatch-event-labels";
 
 let pass = 0;
 let fail = 0;
@@ -46,6 +51,7 @@ const GUNCELLE = new Set(["update", "updateMany", "updateManyAndReturn", "upsert
 const YARAT = new Set(["create", "createMany", "createManyAndReturn"]);
 const OLAY_YAZIM = new Set([...GUNCELLE, ...YARAT, "delete", "deleteMany"]);
 const TEK_YAZAR = new Set(["transitionSwatchesTx", "createSwatchesTx"]);
+const OKUMA = new Set(["findMany", "findFirst", "findFirstOrThrow", "count", "groupBy", "aggregate"]);
 const ILISKI_YAZIM = new Set(["connect", "connectOrCreate", "disconnect", "set", "create", "createMany", "update", "updateMany", "upsert", "delete", "deleteMany"]);
 
 export interface Olcum {
@@ -57,6 +63,10 @@ export interface Olcum {
   dogusSayisi: number;
   /** Tek yazar çağrıları (helper dışı) — körlük zemini. */
   cagriSayisi: number;
+  /** Tek yazar çağıran dosyalarda verilen `trigger` dizgeleri. */
+  tetikler: Set<string>;
+  /** Elle yazılmış stok üçlüsü (kartela okuma sorgusu). */
+  stokUclusu: string[];
 }
 
 function dataAnahtarlari(arg: ts.Expression | undefined, anahtar: string): string[] | null {
@@ -76,7 +86,8 @@ function dataAnahtarlari(arg: ts.Expression | undefined, anahtar: string): strin
 
 /** SAF TARAYICI — bir kaynak metni ölçer; sondalar da bunu çağırır. */
 export function olc(rel: string, kod: string): Olcum {
-  const o: Olcum = { yerVeDogus: new Map(), olayIhlal: [], olculemedi: [], yazimSayisi: 0, dogusSayisi: 0, cagriSayisi: 0 };
+  const o: Olcum = { yerVeDogus: new Map(), olayIhlal: [], olculemedi: [], yazimSayisi: 0, dogusSayisi: 0, cagriSayisi: 0, tetikler: new Set(), stokUclusu: [] };
+  const tekYazarCagriyor = /\b(transitionSwatchesTx|createSwatchesTx)\s*\(/.test(kod);
   const sf = ts.createSourceFile(rel, kod, ts.ScriptTarget.Latest, true);
   if (rel === HELPER_REL) return o;
   const yer = (n: ts.Node) => `${rel}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`;
@@ -86,6 +97,22 @@ export function olc(rel: string, kod: string): Olcum {
   };
   const gez = (n: ts.Node): void => {
     if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && TEK_YAZAR.has(n.expression.text)) o.cagriSayisi++;
+    if (tekYazarCagriyor && ts.isPropertyAssignment(n) && n.name.getText(sf) === "trigger" && ts.isStringLiteral(n.initializer)) {
+      o.tetikler.add(n.initializer.text);
+    }
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && /(^|\.)swatch$/.test(n.expression.expression.getText(sf))
+      && OKUMA.has(n.expression.name.text)) {
+      const arg = n.arguments[0];
+      const w = arg && ts.isObjectLiteralExpression(arg)
+        ? arg.properties.find((p) => ts.isPropertyAssignment(p) && p.name.getText(sf) === "where")
+        : undefined;
+      if (w && ts.isPropertyAssignment(w) && ts.isObjectLiteralExpression(w.initializer)) {
+        const nulls = new Set(w.initializer.properties
+          .filter((p) => ts.isPropertyAssignment(p) && p.initializer.kind === ts.SyntaxKind.NullKeyword)
+          .map((p) => p.name!.getText(sf)));
+        if (nulls.has("sackId") && nulls.has("shipmentId")) o.stokUclusu.push(yer(n));
+      }
+    }
     if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) {
       const yontem = n.expression.name.text;
       const hedef = n.expression.expression.getText(sf);
@@ -122,7 +149,7 @@ export function olc(rel: string, kod: string): Olcum {
 }
 
 function birlestir(parcalar: Olcum[]): Olcum {
-  const out: Olcum = { yerVeDogus: new Map(), olayIhlal: [], olculemedi: [], yazimSayisi: 0, dogusSayisi: 0, cagriSayisi: 0 };
+  const out: Olcum = { yerVeDogus: new Map(), olayIhlal: [], olculemedi: [], yazimSayisi: 0, dogusSayisi: 0, cagriSayisi: 0, tetikler: new Set(), stokUclusu: [] };
   for (const p of parcalar) {
     for (const [k, v] of p.yerVeDogus) out.yerVeDogus.set(k, [...(out.yerVeDogus.get(k) ?? []), ...v]);
     out.olayIhlal.push(...p.olayIhlal);
@@ -130,6 +157,8 @@ function birlestir(parcalar: Olcum[]): Olcum {
     out.yazimSayisi += p.yazimSayisi;
     out.dogusSayisi += p.dogusSayisi;
     out.cagriSayisi += p.cagriSayisi;
+    for (const t of p.tetikler) out.tetikler.add(t);
+    out.stokUclusu.push(...p.stokUclusu);
   }
   return out;
 }
@@ -157,6 +186,13 @@ check("§1/§2 helper DIŞINDA yer/doğuş yazımı YOK (sert 0)", siteler.lengt
   siteler.length ? `helper DIŞINDA: ${siteler.join(" · ")} — transitionSwatchesTx/createSwatchesTx kullan` : "0 site");
 check("§3 olay satırı yalnız helper'da yazılır", agac.olayIhlal.length === 0,
   agac.olayIhlal.length ? `helper DIŞINDA: ${agac.olayIhlal.join(" · ")}` : "0 ihlal");
+const sozluk = new Set(Object.keys(SWATCH_TRIGGER_LABEL));
+const sozluksuz = [...agac.tetikler].filter((t) => !sozluk.has(t));
+const oluTetik = [...sozluk].filter((t) => !agac.tetikler.has(t));
+check("§7 her tetiğin Türkçesi var; sözlükte ölü tetik yok (iki yönlü)", sozluksuz.length === 0 && oluTetik.length === 0 && agac.tetikler.size >= 15,
+  `${agac.tetikler.size} tetik${sozluksuz.length ? ` · SÖZLÜKSÜZ: ${sozluksuz.join(", ")}` : ""}${oluTetik.length ? ` · ÖLÜ: ${oluTetik.join(", ")}` : ""}`);
+check("§8 stokta-kartela sorgusu tek yükleme bağlı (elle sackId/shipmentId null üçlüsü yok)", agac.stokUclusu.length === 0,
+  agac.stokUclusu.length ? `ELLE: ${agac.stokUclusu.join(" · ")} — SWATCH_IN_STOCK_WHERE kullan` : "0");
 check("§4 ölçülemeyen kartela yazımı yok (data nesne literali)", agac.olculemedi.length === 0,
   agac.olculemedi.length ? `ÖLÇÜLEMEDİ: ${agac.olculemedi.join(" · ")}` : "0");
 
@@ -185,6 +221,13 @@ check("§5i sonda: helper dışında olay satırı YAKALANIR (Prisma + ham SQL)"
 check("§5j sonda: bakım script'i taranır, bekçi/fikstür dosyası taranmaz",
   scriptTaranirMi("kartela_durum_anomali.ts") && !scriptTaranirMi("test_x.ts") && !scriptTaranirMi("fixture-x.ts")
     && say(s(YER, "scripts/kartela_durum_anomali.ts")) === 1);
+
+check("§5k sonda: tek yazar çağıran dosyadaki tetik toplanır, çağırmayanınki toplanmaz",
+  s(`async function f(tx){ await transitionSwatchesTx(tx, T, { ctx: { trigger: "YENI_TETIK" } }); }`).tetikler.has("YENI_TETIK")
+    && !s(`async function f(tx){ await x({ trigger: "BASKA" }); }`).tetikler.has("BASKA"));
+const UCLU = `async function f(tx){ return tx.swatch.count({ where: { itemId, shipmentId: null, sackId: null, cancelledAt: null } }); }`;
+check("§5l sonda ⬆: elle stok üçlüsü YAKALANIR; ⬇ tek yükleme geçince düşer",
+  s(UCLU).stokUclusu.length === 1 && s(UCLU.replace("shipmentId: null, sackId: null, cancelledAt: null", "...SWATCH_IN_STOCK_WHERE")).stokUclusu.length === 0);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 process.exit(fail > 0 ? 1 : 0);

@@ -12642,3 +12642,15 @@ hücre metnini birebir ölçer. Excel ekranda yüklenmiş sayfayla sınırlı de
 **Ölçüm.** Bekçiye ③c "zorlanmış sıra" eklendi: `prisma.$transaction` yalnız B için sarılır, B'nin seçim okuması kapıda bekler, A koşar; kapı A bitince ya da A PG kilidinde beklemeye düşünce açılır. Kilitsiz kodda 10/10 kırmızı. Yükle ölçen ③b yük ~6/10 çekirdekte 0/10 yakaladı: pencere yüke bağlı, ③c değil. Kilitli kodda 20/20 yeşil (45/45).
 
 **Açık.** Aynı sınıf (kilitsiz token ön-okuması + kazananın yazdığını okuyan iş kuralı) öteki `clientToken` modellerinde ölçüldü, düzeltilmedi. Liste 4b'nin raporunda; sonraki dilim aynı yardımcıyı kullanır.
+
+## 2026-09-26 — Kartela olay defteri (K3): okuma yüzeyi, tek stok yüklemi, arşiv kapısı [ÇEKİRDEK]
+
+**Karar (1e onaylı tanım; S4 kullanıcıda).** Defterin çıkış yüzeyi olmadan yetenek "VAR" sayılmaz. `GET /api/kartela/events` ve panelde Kartela → Hareketler sekmesi (+ kartela detayında bölüm) eklendi. Liste, imleç ve grup sayaçları TEK süzgeçten doğar (`kartelaEventsWhere`, 1e şartı); bekçi dört süzgeçte sayaç = liste ölçer. Sayacın koşulu ayrılınca kırmızı veriyor (sonda). İmleç olay kimliğidir (Prisma imleci): bir eylemin satırları aynı tx anını paylaşır ve ISO damgası mikrosaniyeyi kırpar; zaman damgalı imleç aynı anı paylaşan satırları kaybederdi.
+
+**İkinci zaman çizelgesi yazılmadı (1e şartı).** İş Emri Hareketleri'nin tablo/Excel/çip/altbilgi gövdesi sütun modeli parametreli `components/timeline/EventTimeline`e çıkarıldı. Genelleştirmeden ÖNCE yazılan karakterizasyon testi (satır sırası, başlıklar, hücreler, çipler, altbilgi, boş/hata, Excel başlık+satır+tüm sayfalar) önce 9/9, sonra 9/9.
+
+**Stok yüklemi tek kaynak.** `SWATCH_IN_STOCK_WHERE` dört elle yazılmış üçlünün yerine geçti; yazar kapısı §8 elle üçlüyü kırmızı sayar. `getSwatchStats.count` eskiden `cancelledAt: null` ile çuvaldaki, sevkiyattaki ve SEVK EDİLMİŞ kartelayı da sayıyordu. Ucun istemcisi yok, sahada görünür sayı değişmedi; sürüm notunda HATA maddesi yazılmadı (1e kararı), backend özetinde tek satır var.
+
+**Arşiv kapısı (S4, MV-06).** `LIVE_SWATCH` (stok · çuval · sevkiyat) ürün ve renk kapısına "Canlı kartela" olarak girdi. Kartı Pasif kartelanın düşüm stornosu 409 verir (top dirilmesinin ikizi; top emsali gibi renk denetlenmez). Ürün göçünün D1 SQL'i S4'ten önce koştu. İkiz kıyası (`test_item_lifecycle_migration`) SWATCH'ı adıyla dışarıda tutar. `test_item_archive_gate`teki sabit "sekiz tür" katalogdan ölçülür oldu.
+
+**[IL-16] düzeltmesi.** K1 helper'ında ASCII yazılmış Türkçe tanımlayıcılar (`gecisPlani`, `kolonlar`, `kapsamSarti`…) `test_identifier_language` sözlüğüne takılmamıştı. Hepsi İngilizceye çevrildi. Kapının sözlük tabanlı ölçümü bu adları görmüyor; kör nokta kapı sahibine bildirildi.

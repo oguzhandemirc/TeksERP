@@ -11,6 +11,9 @@ import { matchesPermission } from "../middlewares/rbac.middleware";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import "../types/express-augment";
+import { SwatchStatus } from "@prisma/client";
+import { readFilterList } from "../utils/query-parser";
+import { AppError } from "../utils/app-error";
 
 // Tambur finalize — yeni model (cumulative length-based):
 //   cuts[]: operatörün tambur makinesinde yaptığı kesim sıralı listesi.
@@ -544,7 +547,12 @@ export class TamburController {
   /** GET /api/swatches */
   async listSwatches(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      // Durum süzgeci CSV; tanınmayan değer sessizce "hepsi" sayılmaz (fail-closed).
+      const statuses = readFilterList(req.query.status as string | string[] | undefined);
+      const unknownStatuses = statuses.filter((s) => !(Object.values(SwatchStatus) as string[]).includes(s));
+      if (unknownStatuses.length) throw AppError.badRequest(`Tanınmayan kartela durumu: ${unknownStatuses.join(", ")}`);
       const result = await this.service.listSwatches({
+        statuses: statuses as SwatchStatus[],
         itemId:      typeof req.query.itemId === "string" ? req.query.itemId : undefined,
         limit:       typeof req.query.limit === "string" ? Number(req.query.limit) : undefined,
         cursor:      typeof req.query.cursor === "string" ? req.query.cursor : undefined,

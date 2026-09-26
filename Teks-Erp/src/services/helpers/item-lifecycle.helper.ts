@@ -25,6 +25,7 @@ import { lowerTr } from "../../utils/tr-case";
 import {
   DEAD_ROLL_STATUSES,
   LIVE_ROLL,
+  LIVE_SWATCH,
   OPEN_MACHINE_RUN,
   OPEN_PURCHASE_ORDER,
   OPEN_WEAVING_ORDER,
@@ -42,7 +43,7 @@ export const ITEM_DEAD_ROLL_STATUSES = DEAD_ROLL_STATUSES;
 
 export type ItemLiveRefKind =
   | "ROLL" | "WORK_ORDER" | "ORDER_LINE" | "PURCHASE_ORDER_LINE"
-  | "WEAVING_ORDER" | "MACHINE_RUN" | "FASON_YARN_DISPATCH" | "YARN_STOCK";
+  | "WEAVING_ORDER" | "MACHINE_RUN" | "FASON_YARN_DISPATCH" | "YARN_STOCK" | "SWATCH";
 
 export const ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ItemLiveRefKind; label: string }> = [
   { kind: "ROLL", label: "Canlı top" },
@@ -53,6 +54,9 @@ export const ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ItemLiveRefKind; label: 
   { kind: "MACHINE_RUN", label: "Açık tezgah koşumu" },
   { kind: "FASON_YARN_DISPATCH", label: "Açık fason iplik sevki" },
   { kind: "YARN_STOCK", label: "İplik bakiyesi" },
+  // Kullanıcı kararı S4 (2026-09-26): stoktaki/çuvaldaki/sevkiyattaki kartela canlı referanstır.
+  // Göç D1 SQL'i bu karardan ÖNCE koştu; ikiz kıyası bu türü adıyla dışarıda tutar.
+  { kind: "SWATCH", label: "Canlı kartela" },
 ];
 
 interface LiveRefWhere {
@@ -64,6 +68,7 @@ interface LiveRefWhere {
   MACHINE_RUN: Prisma.MachineRunWhereInput;
   FASON_YARN_DISPATCH: Prisma.SubcontractorDispatchItemWhereInput;
   YARN_STOCK: Prisma.YarnStockWhereInput;
+  SWATCH: Prisma.SwatchWhereInput;
 }
 
 /** Her türün Prisma yüklemi — migration D1 bloğunun birebir ikizi. */
@@ -87,6 +92,7 @@ function liveRefWhere(itemId: string, db: Db): LiveRefWhere {
       dispatch: { cancelledAt: null, directShippedAt: null },
     },
     YARN_STOCK: { itemId, balanceKg: { not: 0 } },
+    SWATCH: { itemId, ...LIVE_SWATCH },
   };
 }
 
@@ -105,6 +111,7 @@ export async function countItemLiveRefs(db: Db, itemId: string): Promise<ItemLiv
     MACHINE_RUN: await db.machineRun.count({ where: w.MACHINE_RUN }),
     FASON_YARN_DISPATCH: await db.subcontractorDispatchItem.count({ where: w.FASON_YARN_DISPATCH }),
     YARN_STOCK: await db.yarnStock.count({ where: w.YARN_STOCK }),
+    SWATCH: await db.swatch.count({ where: w.SWATCH }),
   };
   return ITEM_LIVE_REF_KINDS.map(({ kind, label }) => ({ kind, label, count: counts[kind] }));
 }
@@ -163,6 +170,9 @@ export async function listItemLiveRefs(
     YARN_STOCK: (await db.yarnStock.findMany({
       where: w.YARN_STOCK, take, select: { id: true, balanceKg: true, warehouse: { select: { name: true } } },
     })).map((x) => ({ id: x.id, title: x.warehouse.name, detail: `${x.balanceKg.toString()} kg` })),
+    SWATCH: (await db.swatch.findMany({
+      where: w.SWATCH, take, orderBy: { cardNumber: "asc" }, select: { id: true, cardNumber: true, status: true },
+    })).map((x) => ({ id: x.id, title: x.cardNumber, detail: x.status })),
   };
   return counts.map((c) => ({ ...c, records: rec[c.kind] }));
 }

@@ -173,7 +173,7 @@ import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-owner.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
-import { transitionSwatchesTx } from "./helpers/swatch-event.helper";
+import { SWATCH_IN_STOCK_WHERE, transitionSwatchesTx } from "./helpers/swatch-event.helper";
 
 // Re-export saf primitifler (geriye uyum — eskiden bu dosyada tanımlıydı).
 export {
@@ -878,7 +878,7 @@ export class ShippingService {
     const ids = await prisma.$transaction(async (tx) => {
       await touchWarehouseSackTx(tx, data.sackId);
       const candidates = await tx.swatch.findMany({
-        where: { itemId: data.itemId, colorId: data.colorId, shipmentId: null, sackId: null, cancelledAt: null },
+        where: { itemId: data.itemId, colorId: data.colorId, ...SWATCH_IN_STOCK_WHERE },
         select: { id: true },
         orderBy: { createdAt: "asc" },
         take: data.count,

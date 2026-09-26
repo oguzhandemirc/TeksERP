@@ -47,8 +47,8 @@ import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
 import { lowerTr } from "../utils/tr-case";
 import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
-import { assertRollsRevivable } from "./helpers/item-usage.helper";
-import { createSwatchesTx, transitionSwatchesTx, type SwatchBirthInput } from "./helpers/swatch-event.helper";
+import { assertRollsRevivable, assertSwatchesRevivable } from "./helpers/item-usage.helper";
+import { SWATCH_IN_STOCK_WHERE, createSwatchesTx, transitionSwatchesTx, type SwatchBirthInput } from "./helpers/swatch-event.helper";
 
 // Liste filtre/sayfalama parametreleri — hem offset (mobil) hem cursor (admin)
 // modunu besler. cursor||mode==="cursor" → cursor response; aksi halde offset.
@@ -1413,11 +1413,9 @@ export class KartelaService {
     const colorCond = readIdCondition(params?.colorId);
     const groups = await prisma.swatch.groupBy({
       by: ["itemId", "colorId"],
-      // sackId:null: çuvala girmiş kartela stokta sayılmaz (havuz rezervi).
+      // Çuvala girmiş kartela stokta sayılmaz (havuz rezervi) — yüklem tek kaynaktan.
       where: {
-        shipmentId: null,
-        sackId: null,
-        cancelledAt: null,
+        ...SWATCH_IN_STOCK_WHERE,
         ...(itemCond && { itemId: itemCond }),
         ...(colorCond && { colorId: colorCond }),
       },
@@ -1522,9 +1520,7 @@ export class KartelaService {
           where: {
             itemId: data.itemId,
             colorId: data.colorId, // null → colorId IS NULL ("renksiz" grubu)
-            shipmentId: null,
-            sackId: null, // çuvaldaki kartela stok değil
-            cancelledAt: null,
+            ...SWATCH_IN_STOCK_WHERE, // çuvaldaki kartela stok değil
           },
           select: { id: true },
           orderBy: { createdAt: "asc" },
@@ -1793,6 +1789,8 @@ async function reverseStockReductionTx(
   }
 
   const swatchIds = reduction.items.map((i) => i.swatchId);
+  // Dirilme: kartı Pasif kartela stoğa dönemez (S4) — çıkış yolunu söyler.
+  await assertSwatchesRevivable(tx, swatchIds);
   const restored = await transitionSwatchesTx(tx, SwatchEventType.REDUCTION_REVERSED, {
     scope: { ids: swatchIds },
     where: RESTORABLE_REDUCED_SWATCH,

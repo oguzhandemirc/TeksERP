@@ -32,6 +32,12 @@ export const SWATCH_TRANSITIONS: Record<SwatchEventType, { from: SwatchStatus | 
   REDUCTION_REVERSED: { from: SwatchStatus.REDUCED, to: SwatchStatus.IN_STOCK },
 };
 
+/**
+ * "Stokta kartela" yüklemi — TEK kaynak (stok listesi, istatistik, çuvala/düşüme aday seçimi).
+ * Durum seddi (`swatches_status_shape`) IN_STOCK'u "çuvalsız · sevkiyatsız · iptalsiz"e bağlar.
+ */
+export const SWATCH_IN_STOCK_WHERE = { status: SwatchStatus.IN_STOCK } satisfies Prisma.SwatchWhereInput;
+
 /** Bağlı ters → terslediği ileri tip. Ters satır ileri satırın id'sini taşır. */
 export const SWATCH_REVERSAL_OF: Partial<Record<SwatchEventType, SwatchEventType>> = {
   VOIDED: SwatchEventType.BORN,
@@ -140,56 +146,56 @@ function scopeWhere(scope: SwatchScope): Prisma.SwatchWhereInput {
   return { shipmentId: scope.shipmentId };
 }
 
-function requireRef<T>(ref: T | undefined, type: SwatchEventType, ad: string): T {
-  if (ref === undefined) throw new Error(`transitionSwatchesTx(${type}): '${ad}' zorunlu`);
+function requireRef<T>(ref: T | undefined, type: SwatchEventType, name: string): T {
+  if (ref === undefined) throw new Error(`transitionSwatchesTx(${type}): '${name}' zorunlu`);
   return ref;
 }
 
-interface GecisPlani {
+interface TransitionPlan {
   /** Tipin yazdığı kolonlar (REDUCTION_REVERSED hariç — o boşaltmayı claim'de açıkça yazar). */
-  kolonlar: Prisma.SwatchUncheckedUpdateManyInput;
+  columns: Prisma.SwatchUncheckedUpdateManyInput;
   /** Claim'e eklenen yer şartı — eski yazarların WHERE'iyle aynı sıkılık. */
-  kapsamSarti: Prisma.SwatchWhereInput;
+  placeWhere: Prisma.SwatchWhereInput;
   sack: { id: string; sackNo?: string } | null;
   shipment: { id: string; shipmentNo?: string } | null;
 }
 
 /** Tip → yazılan kolonlar, yer şartı ve zorunlu belge. */
-function gecisPlani(type: SwatchEventType, opts: SwatchTransitionOpts, now: Date): GecisPlani {
-  const p: GecisPlani = { kolonlar: {}, kapsamSarti: {}, sack: null, shipment: null };
+function planTransition(type: SwatchEventType, opts: SwatchTransitionOpts, now: Date): TransitionPlan {
+  const p: TransitionPlan = { columns: {}, placeWhere: {}, sack: null, shipment: null };
   switch (type) {
     case SwatchEventType.SACKED:
       p.sack = requireRef(opts.sack, type, "sack");
-      p.kolonlar = { sackId: p.sack.id };
-      p.kapsamSarti = { sackId: null, shipmentId: null, cancelledAt: null };
+      p.columns = { sackId: p.sack.id };
+      p.placeWhere = { sackId: null, shipmentId: null, cancelledAt: null };
       break;
     case SwatchEventType.UNSACKED:
       p.sack = requireRef(opts.sack, type, "sack");
-      p.kolonlar = { sackId: null };
-      p.kapsamSarti = { sackId: p.sack.id, shipmentId: null };
+      p.columns = { sackId: null };
+      p.placeWhere = { sackId: p.sack.id, shipmentId: null };
       break;
     case SwatchEventType.SHIPMENT_ADDED:
       p.shipment = requireRef(opts.shipment, type, "shipment");
-      p.kolonlar = { shipmentId: p.shipment.id };
-      p.kapsamSarti = { shipmentId: null };
+      p.columns = { shipmentId: p.shipment.id };
+      p.placeWhere = { shipmentId: null };
       break;
     case SwatchEventType.SHIPMENT_REMOVED:
       p.shipment = requireRef(opts.shipment, type, "shipment");
-      p.kolonlar = { shipmentId: null };
-      p.kapsamSarti = { shipmentId: p.shipment.id };
+      p.columns = { shipmentId: null };
+      p.placeWhere = { shipmentId: p.shipment.id };
       break;
     case SwatchEventType.SHIPPED:
     case SwatchEventType.SHIP_UNDONE:
       p.shipment = requireRef(opts.shipment, type, "shipment");
-      p.kapsamSarti = { shipmentId: p.shipment.id };
+      p.placeWhere = { shipmentId: p.shipment.id };
       break;
     case SwatchEventType.REDUCED:
     case SwatchEventType.VOIDED:
-      p.kolonlar = { cancelledAt: now, cancelReason: opts.ctx.reason ?? null };
-      p.kapsamSarti = { sackId: null, shipmentId: null, cancelledAt: null };
+      p.columns = { cancelledAt: now, cancelReason: opts.ctx.reason ?? null };
+      p.placeWhere = { sackId: null, shipmentId: null, cancelledAt: null };
       break;
     case SwatchEventType.REDUCTION_REVERSED:
-      p.kapsamSarti = { cancelledAt: { not: null } };
+      p.placeWhere = { cancelledAt: { not: null } };
       break;
   }
   if (type === SwatchEventType.REDUCED || type === SwatchEventType.REDUCTION_REVERSED) {
@@ -199,38 +205,38 @@ function gecisPlani(type: SwatchEventType, opts: SwatchTransitionOpts, now: Date
 }
 
 /** Sevkiyat olayında kartelanın o anki çuvalı da satırda donar ("hangi çuvalla gitti"). */
-async function cuvalNolariTx(tx: Tx, plan: GecisPlani, sackIds: (string | null)[]): Promise<Map<string, string>> {
-  const nolar = new Map<string, string>();
-  if (plan.sack?.sackNo) nolar.set(plan.sack.id, plan.sack.sackNo);
-  const aranan = plan.shipment ? sackIds : plan.sack ? [plan.sack.id] : [];
-  const eksik = [...new Set(aranan.filter((id): id is string => !!id && !nolar.has(id)))];
-  if (eksik.length > 0) {
-    const cuvallar = await tx.sack.findMany({ where: { id: { in: eksik } }, select: { id: true, sackNo: true } });
-    for (const c of cuvallar) nolar.set(c.id, c.sackNo);
+async function resolveSackNumbersTx(tx: Tx, plan: TransitionPlan, sackIds: (string | null)[]): Promise<Map<string, string>> {
+  const numbers = new Map<string, string>();
+  if (plan.sack?.sackNo) numbers.set(plan.sack.id, plan.sack.sackNo);
+  const wanted = plan.shipment ? sackIds : plan.sack ? [plan.sack.id] : [];
+  const missing = [...new Set(wanted.filter((id): id is string => !!id && !numbers.has(id)))];
+  if (missing.length > 0) {
+    const sacks = await tx.sack.findMany({ where: { id: { in: missing } }, select: { id: true, sackNo: true } });
+    for (const c of sacks) numbers.set(c.id, c.sackNo);
   }
-  return nolar;
+  return numbers;
 }
 
 /** Bağlı ters: kartela başına terslenmemiş en son ileri satır (aynı belgeye ait). */
-async function terslenenlerTx(
-  tx: Tx, type: SwatchEventType, swatchIds: string[], belge: { reductionId?: string; shipmentId?: string },
+async function findReversedEventsTx(
+  tx: Tx, type: SwatchEventType, swatchIds: string[], doc: { reductionId?: string; shipmentId?: string },
 ): Promise<Map<string, string>> {
-  const bag = new Map<string, string>();
-  const ileriTip = SWATCH_REVERSAL_OF[type];
-  if (!ileriTip) return bag;
-  const ileri = await tx.swatchEvent.findMany({
+  const links = new Map<string, string>();
+  const forwardType = SWATCH_REVERSAL_OF[type];
+  if (!forwardType) return links;
+  const forward = await tx.swatchEvent.findMany({
     where: {
       swatchId: { in: swatchIds },
-      type: ileriTip,
+      type: forwardType,
       reversedBy: null,
-      ...(belge.reductionId ? { reductionId: belge.reductionId } : {}),
-      ...(belge.shipmentId ? { shipmentId: belge.shipmentId } : {}),
+      ...(doc.reductionId ? { reductionId: doc.reductionId } : {}),
+      ...(doc.shipmentId ? { shipmentId: doc.shipmentId } : {}),
     },
     orderBy: { createdAt: "desc" },
     select: { id: true, swatchId: true },
   });
-  for (const e of ileri) if (!bag.has(e.swatchId)) bag.set(e.swatchId, e.id);
-  return bag;
+  for (const e of forward) if (!links.has(e.swatchId)) links.set(e.swatchId, e.id);
+  return links;
 }
 
 /**
@@ -245,40 +251,40 @@ export async function transitionSwatchesTx(
   opts: SwatchTransitionOpts,
 ): Promise<{ id: string }[]> {
   if (type === SwatchEventType.BORN) throw new Error("BORN yalnız createSwatchesTx ile yazılır");
-  const gecis = SWATCH_TRANSITIONS[type];
+  const transition = SWATCH_TRANSITIONS[type];
   const now = new Date();
-  const plan = gecisPlani(type, opts, now);
+  const plan = planTransition(type, opts, now);
 
   const claimed = await tx.swatch.updateManyAndReturn({
-    where: { ...opts.where, ...scopeWhere(opts.scope), ...plan.kapsamSarti, status: gecis.from as SwatchStatus },
+    where: { ...opts.where, ...scopeWhere(opts.scope), ...plan.placeWhere, status: transition.from as SwatchStatus },
     data: {
-      status: gecis.to,
+      status: transition.to,
       statusChangedAt: now,
       // Düşüm stornosu durum kolonunu boşaltır; kim/neden REDUCTION_REVERSED satırında.
-      ...(type === SwatchEventType.REDUCTION_REVERSED ? { cancelledAt: null, cancelReason: null } : plan.kolonlar),
+      ...(type === SwatchEventType.REDUCTION_REVERSED ? { cancelledAt: null, cancelReason: null } : plan.columns),
     },
     select: { id: true, sackId: true, parentReceiptId: true },
   });
   if (claimed.length === 0) return [];
 
-  const sackNoById = await cuvalNolariTx(tx, plan, claimed.map((c) => c.sackId));
+  const sackNoById = await resolveSackNumbersTx(tx, plan, claimed.map((c) => c.sackId));
   const shipmentNo = plan.shipment
     ? plan.shipment.shipmentNo
       ?? (await tx.shipment.findUnique({ where: { id: plan.shipment.id }, select: { shipmentNo: true } }))?.shipmentNo
       ?? null
     : null;
-  const reversesBySwatch = await terslenenlerTx(tx, type, claimed.map((c) => c.id), {
+  const reversesBySwatch = await findReversedEventsTx(tx, type, claimed.map((c) => c.id), {
     reductionId: opts.reductionId, shipmentId: plan.shipment?.id,
   });
   await writeSwatchEventsTx(
     tx,
     claimed.map((c) => {
-      const cuvalId = plan.sack?.id ?? c.sackId;
+      const rowSackId = plan.sack?.id ?? c.sackId;
       return {
         swatchId: c.id,
         type,
-        sackId: cuvalId,
-        sackNo: cuvalId ? sackNoById.get(cuvalId) ?? null : null,
+        sackId: rowSackId,
+        sackNo: rowSackId ? sackNoById.get(rowSackId) ?? null : null,
         shipmentId: plan.shipment?.id ?? null,
         shipmentNo,
         receiptId: type === SwatchEventType.VOIDED ? c.parentReceiptId : null,

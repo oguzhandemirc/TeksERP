@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { Send, PackageCheck, Package, Palette } from "lucide-react";
+import { Send, PackageCheck, Package, Palette, History } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -25,17 +25,19 @@ import type { Roll } from "@/pages/Operations/Rolls/types";
 import { useFoldValues } from "@/hooks/useFoldValues";
 import { KartelaDetailSheet, type KartelaSelection } from "./KartelaDetailSheet";
 import { DispatchesTab, ReceiptsTab } from "./KartelaTabs";
+import { KartelaEventsTab } from "./KartelaEventsTab";
 
 // Tek kokpit: belge akışı (Sevkler/Kabuller) + envanter (Kartelada Toplar =
 // AT_KARTELA rulolar, Üretilen Kartelalar = swatch'lar). Kumaş Stoğu görünümleri
 // Toplar sayfasından buraya taşındı — kartela tek yerden yönetilir.
-type Tab = "dispatches" | "receipts" | "rolls" | "swatches";
+type Tab = "dispatches" | "receipts" | "rolls" | "swatches" | "events";
 
 const TABS: { key: Tab; label: string; Icon: typeof Send }[] = [
   { key: "dispatches", label: "Sevkler", Icon: Send },
   { key: "receipts", label: "Kabuller", Icon: PackageCheck },
   { key: "rolls", label: "Kartelada Toplar", Icon: Package },
   { key: "swatches", label: "Kartela Stoğu", Icon: Palette },
+  { key: "events", label: "Hareketler", Icon: History },
 ];
 
 function KartelaTabBar({
@@ -154,6 +156,7 @@ export function KartelaPage() {
         : tab === "rolls"
           ? "rolls:KARTELA_SENT"
           : "kartela";
+  // "kartela" anahtarı Hareketler sekmesinin sorgularını da kapsar (["kartela", "events", …]).
 
   return (
     <PageShell>
@@ -210,6 +213,8 @@ export function KartelaPage() {
             hideFilterBar
           />
         </>
+      ) : tab === "events" ? (
+        <KartelaEventsTab />
       ) : (
         <SwatchesPanel onScanSwatch={openSwatch} swatchLookupPending={swatchLookup.isPending} />
       )}

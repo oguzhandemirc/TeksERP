@@ -113,6 +113,33 @@ router.get(
 
 /**
  * @openapi
+ * /api/kartela/events:
+ *   get:
+ *     tags: [Kartela]
+ *     summary: Kartela Hareketleri — olay defteri (en yeniden eskiye, imleçli)
+ *     description: Liste, imleç ve grup sayaçları aynı süzgeçten doğar. Arama TAM eşleşmedir (kartela barkodu/kart no · çuval no · sevkiyat no · kabul no).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: search, schema: { type: string } }
+ *       - { in: query, name: dateFrom, schema: { type: string }, description: "YYYY-MM-DD (fabrika günü başı) ya da ISO" }
+ *       - { in: query, name: dateTo, schema: { type: string }, description: "YYYY-MM-DD (fabrika günü sonu) ya da ISO" }
+ *       - { in: query, name: swatchId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: group, schema: { type: string }, description: "CSV — KABUL,CUVAL,SEVKIYAT,DUSUM" }
+ *       - { in: query, name: cursor, schema: { type: string, format: uuid } }
+ *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+ *     responses:
+ *       200: { description: Sayfa + grup sayıları }
+ *       400: { description: Tanınmayan grup ya da bozuk imleç/kimlik }
+ */
+router.get(
+  "/events",
+  verifyToken,
+  requireAnyPermission("kartela:read", "quality:read"),
+  controller.listEvents
+);
+
+/**
+ * @openapi
  * /api/kartela/stock:
  *   get:
  *     tags: [Kartela]

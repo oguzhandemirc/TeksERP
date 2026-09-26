@@ -12,6 +12,7 @@ import {
   PurchaseOrderStatus,
   RollStatus,
   StepStatus,
+  SwatchStatus,
   WarpBeamStatus,
   WeavingOrderStatus,
   WorkOrderStatus,
@@ -22,6 +23,10 @@ import { ACTIVE_LINE, MEASURED_LINE, openLineWhere } from "./order-line-scope.he
 /** Topun canlı OLMADIĞI statüler: K18 ölü kümesi + sevk edilmiş + fire. */
 export const DEAD_ROLL_STATUSES: RollStatus[] = [...K18_DEAD_STATUSES, RollStatus.SHIPPED, RollStatus.SCRAP];
 export const LIVE_ROLL: Prisma.RollWhereInput = { status: { notIn: DEAD_ROLL_STATUSES } };
+/** Canlı kartela: stokta · çuvalda · sevkiyatta (S4). Sevk edilmiş, düşülmüş, iptal canlı değil. */
+export const LIVE_SWATCH: Prisma.SwatchWhereInput = {
+  status: { in: [SwatchStatus.IN_STOCK, SwatchStatus.IN_SACK, SwatchStatus.IN_SHIPMENT] },
+};
 
 export const OPEN_WORK_ORDER: Prisma.WorkOrderWhereInput = {
   status: { in: [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS] },

@@ -36,14 +36,19 @@ export interface Swatch {
   item?: { id: string; code: string; name: string } | null;
   color?: { id: string; code: string; name: string; hex: string | null } | null;
   parentRoll?: SwatchParentRoll | null;
+  /** Kartelanın şu anki yeri — geçmişi Kartela Hareketleri'nde. Eski sunucu göndermez. */
+  status?: "IN_STOCK" | "IN_SACK" | "IN_SHIPMENT" | "SHIPPED" | "REDUCED" | "VOIDED";
   createdAt: string;
   updatedAt: string;
 }
 
 export interface SwatchStats {
+  /** Filtreye uyan STOKTAKİ kartela sayısı. */
   count: number;
-  /** Filtreye uyan tüm kartelaların `length` toplamı — cm. */
+  /** Stoktaki kartelaların `length` toplamı — cm. */
   totalLength: number;
+  /** Durum kırılımı — eski sunucu göndermez. */
+  byStatus?: Record<string, number>;
 }
 
 export interface SwatchListParams {

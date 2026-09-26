@@ -20,6 +20,9 @@ const router = Router();
  *       Legacy mode (default): `{ success, data: [] }` — `take: limit ?? 100`.
  *       Cursor mode: `?cursor=...` veya `?mode=cursor` → `{ success, data, pagination: { nextCursor, hasMore, limit } }`.
  *       Mobil infinite scroll cursor mode kullanır; mevcut Electron/tartı-paket çağrıları legacy moddadır.
+ *       Her satır `status` taşır (IN_STOCK · IN_SACK · IN_SHIPMENT · SHIPPED · REDUCED · VOIDED).
+ *     parameters:
+ *       - { in: query, name: status, schema: { type: string }, description: "CSV durum süzgeci; verilmezse iptal/düşüm dışındakiler. Tanınmayan değer 400." }
  *     security: [{ bearerAuth: [] }]
  */
 router.get("/", verifyToken, requireAnyPermission("quality:read", "kartela:read", "mobile:tambur", "mobile:tarti-paket", "mobile:depo"), controller.listSwatches);

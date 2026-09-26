@@ -1,6 +1,6 @@
 # KARTELA HAREKET DEFTERİ — Faz 0 (tasarım, kod yok)
 
-> **Durum:** KARAR VERİLDİ (kullanıcı, 2026-09-26: S1=A · S2=A · S3=b · S4=a · S5=a · S6=a — §6). K1 (şema + tek yazar + doğuş) ve K2 (15 yazım sitesi + durum seddi) uygulandı, aynı trende iner; K3 (okuyucular + Kartela Hareketleri ekranı) sırada. Uygulamadaki farklar §5.7. 9b, 2026-09-26.
+> **Durum:** KARAR VERİLDİ (kullanıcı, 2026-09-26: S1=A · S2=A · S3=b · S4=a · S5=a · S6=a — §6). K1 (şema + tek yazar + doğuş), K2 (15 yazım sitesi + durum seddi) ve K3 (okuyucular + Kartela Hareketleri + arşiv kapısı) uygulandı. Uygulamadaki farklar §5.7. 9b, 2026-09-26.
 > **Kullanıcının sorusu:** *"Kartela ve kartela hareketleri ayrı tablo olsa daha mı iyi olur … anlık değil
 > profesyonel bir çözüm üretelim."*
 > **Tetik:** B-RM taraması (`test_defter_ters_yol` §14) `reverseStockReductionTx`in geri almada
@@ -272,6 +272,17 @@ bir nesnedir. Gerekçe §4.
 - **Bileşik FK tuzağı.** `(sackId, shipmentId) → sacks(id, shipmentId) ON UPDATE CASCADE` referans eylemi
   ertelenmez: çuvalın `shipmentId`si boşalınca kartelanınki durum değişmeden anında boşalır ve sed reddeder.
   Kartelayı sevkiyattan çıkaran her yolda kartela geçişi çuvaldan ÖNCE yazılır.
+- **K3 okuma yüzeyi.** `GET /api/kartela/events`: arama TAM eşleşme (kartela barkodu/kart no · çuval no ·
+  sevkiyat no · kabul no), tarih (fabrika günü), grup (Kabul · Çuval · Sevkiyat · Düşüm); liste, imleç ve grup
+  sayaçları tek `kartelaEventsWhere`den. İmleç olay kimliğidir (Prisma imleci): bir eylemin satırları aynı tx
+  anını taşır ve ISO damgası mikrosaniyeyi kırpardı. Panel gövdesi İş Emri Hareketleri'nin ortak zaman
+  çizelgesidir (`components/timeline/EventTimeline`); ekran sütunları = Excel sütunları, PDF yok.
+- **K3 stok yüklemi tek kaynak** `SWATCH_IN_STOCK_WHERE` (stok listesi, istatistik, çuvala/düşüme aday).
+  `getSwatchStats.count` artık yalnız stok; eskiden çuvaldaki/sevkiyattaki/sevk edilmiş kartelayı da sayıyordu,
+  ama ucu hiçbir istemci çağırmıyordu (sahada görünür sayı değişmedi).
+- **K3 arşiv kapısı (S4, MV-06).** `LIVE_SWATCH` = IN_STOCK · IN_SACK · IN_SHIPMENT; ürün ve renk kapısında
+  "Canlı kartela". Düşüm stornosu kartı Pasif kartelayı diriltemez (top emsali: renk denetlenmez). Göç D1 SQL'i
+  S4'ten önce koştu; ikiz kıyası bu türü adıyla dışarıda tutar.
 - **Kilit sırası** her yolda çuval → kartela (sevkiyat yollarında sevkiyat → çuval → kartela): depo-çuvalı
   yolları `touchWarehouseSackTx` ile, sevkiyattan çıkaran iki yol `FOR UPDATE` ile çuvalı karteladan önce
   kilitler; çuvallar arası taşıma iki çuvalı id sırasıyla kilitler.
