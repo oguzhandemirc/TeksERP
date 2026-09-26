@@ -9,6 +9,9 @@
 //   §2 ⭐ damgasız belge "Güncel şablonla bas" (`useCurrentConfig`) yolunda da eski haneyi
 //      basar — o yol görünüm katmanını (şablon + firma) canlı çözer, damgayı TAZELEMEZ
 //   §3 damgalı belge iki yolda da ticari yuvarlar
+//   §4 ⭐ damga YAZARI: gerçek `freezeForSource` (sevk anındaki dondurma) yarım değerli belgeyi damgalı dondurur
+//      (`numberRounding = HALF_UP`) ve belge "112,35" basar — yalnız kaynak okuyucusu (`fresh`) fikstüre
+//      çevrilir, zarf/dondurma/baskı yolu gerçektir (06 denetimi: `...envelopeHead()` kalkınca §1–§3 yeşildi)
 // DB'siz çekirdek (yardımcı, renderer'lar, AST kapıları): `test_belge_ticari_yuvarlama.ts`.
 //
 // Fikstür: iki `PrintedDocument` satırı (kaynağı olmayan rastgele `sourceId`, belge no
@@ -16,14 +19,16 @@
 // Gerekli mi: §2 doğduğu gün gerçek bir kusuru ölçüyordu — `useCurrentConfig` taze zarfı
 // olduğu gibi kullanıyordu; damga eklenince eski belgeyi yeni kurala taşırdı. Düzeltme
 // aynı commit'te.
-// Sonda (✓B1, bu commit; md5 ile geri alındı): `resolveRenderInputs`te eski satır
+// Sonda (✓B1, `36cf2f71`; md5 ile geri alındı): `resolveRenderInputs`te eski satır
 // (`snapshot = { ...fresh, frozenAt: snapshot.frozenAt }`) geri kondu → §2 2 ❌.
+// Sonda (✓B1, bu commit; md5 ile geri alındı): `buildSnapshotEnvelope` başı elle kurulup `...envelopeHead()` kalkınca
+// → §4 ❌2 (06 denetiminin mutasyonu; düzeltmeden önce 6/0 yeşildi).
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { PrintedDocType, Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import "../src/services/shipping.service";
-import { printedDocumentService } from "../src/services/printed-document.service";
+import { getRegisteredDocBuilders, printedDocumentService, registerPrintedDocBuilder } from "../src/services/printed-document.service";
 import { SAMPLE_PRINTED_DOCS, setSampleClock } from "../src/services/document-render/sample-data";
 import { NUMBER_ROUNDING_HALF_UP } from "../src/services/document-render/fmt-num";
 import { fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -65,8 +70,31 @@ async function fikstur(damgali: boolean): Promise<string> {
   return sourceId;
 }
 
+const dondurulan: string[] = [];
+
 async function temizle(): Promise<void> {
   if (olusan.length) await prisma.printedDocument.deleteMany({ where: { id: { in: olusan } } });
+  if (dondurulan.length) await prisma.printedDocument.deleteMany({ where: { docType: TYPE, sourceId: { in: dondurulan } } });
+}
+
+/** §4 — gerçek dondurma yolu; yalnız kaynak okuyucusu (`fresh`) fikstüre çevrilir, gerisi gerçek kayıt. */
+async function gercekDondurma(): Promise<void> {
+  console.log("§4 ⭐ Damga yazarı — gerçek `freezeForSource` damgalı dondurur");
+  const gercek = getRegisteredDocBuilders().get(TYPE)!;
+  const doc = (belge(false) as unknown as { doc: Record<string, unknown> }).doc;
+  registerPrintedDocBuilder(TYPE, { ...gercek, fresh: async () => ({ documentNo: `TEST-YUV-${TS}-F`, doc }) });
+  const sourceId = randomUUID();
+  dondurulan.push(sourceId);
+  try {
+    await prisma.$transaction((tx) => printedDocumentService.freezeForSource(tx, TYPE, sourceId));
+  } finally {
+    registerPrintedDocBuilder(TYPE, gercek);
+  }
+  const row = await prisma.printedDocument.findFirst({ where: { docType: TYPE, sourceId }, select: { snapshot: true } });
+  const damga = (row?.snapshot as { numberRounding?: unknown } | null)?.numberRounding;
+  check("dondurulan zarf damgalı (numberRounding = HALF_UP)", damga === NUMBER_ROUNDING_HALF_UP, String(damga));
+  const b = await basilan(sourceId, false);
+  check("dondurulan belge PDF '112,35' · Excel 112.35", b.html.includes(">112,35<") && !b.html.includes(">112,34<") && b.hucre.includes(112.35));
 }
 
 async function basilan(sourceId: string, guncel: boolean): Promise<{ html: string; hucre: unknown[] }> {
@@ -107,6 +135,8 @@ async function main(): Promise<void> {
     check("PDF '112,35' · Excel 112.35", b.html.includes(">112,35<") && !b.html.includes(">112,34<") && b.hucre.includes(112.35));
     check("\"Güncel şablonla bas\": PDF '112,35' · Excel 112.35", g.html.includes(">112,35<") && !g.html.includes(">112,34<") && g.hucre.includes(112.35));
   }
+
+  await gercekDondurma();
 }
 
 main()

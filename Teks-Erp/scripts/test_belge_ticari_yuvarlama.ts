@@ -18,7 +18,9 @@
 // Gerekli mi: doğduğu gün tabanda (`6591101d`) belge dizininde 17 `toFixed` vardı — 8'i
 // görünen sayı (sevk · doğrudan sevk · kartela · iade · depo · kalite · fason çeki ·
 // mutabakat), 9'u CSS ölçüsü; düzeltme aynı commit'te.
-// Sonda (✓B3, bu commit; md5 ile geri alındı): ① `kartela-ceki.html.ts`e çıplak `toFixed`
+// Sonda (✓B1, 06 denetimi sonrası): `buildSnapshotEnvelope` başı elle kurulup `...envelopeHead()` kalkınca
+// §6 ❌2 (yaymayan zarf · elle baş).
+// Sonda (✓B3, `36cf2f71`; md5 ile geri alındı): ① `kartela-ceki.html.ts`e çıplak `toFixed`
 // → §5 1 ❌, ihlal kaldırılınca 49/0 (pozitif) · ② `docNum` başka damga adı okur → 14 ❌
 // (§2 · §3 · §4 · §6) · ③ `cssFixed` `toFixed`siz → §5 ölü muafiyet 1 ❌.
 // =============================================================================
@@ -245,6 +247,29 @@ console.log("§6 ⭐ Yuvarlama damgası: TEK yazar (zarf kurucusu), TEK okur (`d
   }
   check("tek yazar: printed-document.service#envelopeHead", yazan.length === 1 && yazan[0] === "src/services/printed-document.service.ts#envelopeHead", yazan.join(" · "));
   check("tek okur: fmt-num#docNum", okuyan.length === 1 && okuyan[0] === `${FMT_NUM}#docNum`, okuyan.join(" · "));
+
+  // Her yeni zarf başını `envelopeHead()`ten alır: `company` + `docConfigOverride` + `doc` taşıyan nesne
+  // literali onu YAYAR; zarf başını (`schemaVersion` · `frozenAt`) elle kuran literal yoktur (06 denetimi:
+  // `...envelopeHead()` kalkıp baş elle yazılınca damgasız belge sessizce doğuyordu).
+  const PDS = "src/services/printed-document.service.ts";
+  const zarflar: string[] = [];
+  const yaymayan: string[] = [];
+  const elleBas: string[] = [];
+  ziyaret(kaynak(join(ROOT, PDS)), (n) => {
+    if (!ts.isObjectLiteralExpression(n)) return;
+    const adlar = n.properties.map((p) => (p.name && ts.isIdentifier(p.name) ? p.name.text : ""));
+    const satir = `${PDS}:${n.getSourceFile().getLineAndCharacterOfPosition(n.getStart()).line + 1}`;
+    if (["company", "docConfigOverride", "doc"].every((k) => adlar.includes(k))) {
+      zarflar.push(satir);
+      const yayar = n.properties.some((p) => ts.isSpreadAssignment(p) && ts.isCallExpression(p.expression)
+        && ts.isIdentifier(p.expression.expression) && p.expression.expression.text === "envelopeHead");
+      if (!yayar) yaymayan.push(satir);
+    }
+    if ((adlar.includes("schemaVersion") || adlar.includes("frozenAt")) && sahibi(n) !== "envelopeHead") elleBas.push(satir);
+  });
+  check("körlük zemini: ≥ 2 zarf kurucusu (dondurma/taslak · örnek önizleme)", zarflar.length >= 2, `${zarflar.length}`);
+  check("her zarf `...envelopeHead()` yayar", yaymayan.length === 0, yaymayan.join(" · "));
+  check("zarf başı (`schemaVersion`/`frozenAt`) yalnız envelopeHead'de kurulur", elleBas.length === 0, elleBas.join(" · "));
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
