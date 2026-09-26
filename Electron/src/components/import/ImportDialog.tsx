@@ -59,6 +59,7 @@ import { QuickCreateLookup } from "./QuickCreateLookup";
 import { replaceCellValue } from "@/lib/import/overrides";
 import { foldSearchText } from "@/lib/search-fold";
 import type { CreatedLookup } from "@/lib/import/lookup-create";
+import { useAttemptToken } from "@/lib/attemptToken";
 
 // Sunucu tavanıyla hizalı (import-coerce.MAX_IMPORT_ROWS). Panelde de kontrol
 // edilir ki kullanıcı 40.000 satırlık bir dosyayı yükleyip 30 sn bekledikten
@@ -115,7 +116,7 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // İdempotency: AYNI deneme yeniden gönderilirse sunucu ikinci kez YAZMAZ.
   // Deneme başına bir kez üretilir (her tıkta yenilemek korumayı boşa düşürür).
-  const attemptToken = useRef<string>(crypto.randomUUID());
+  const attempt = useAttemptToken();
 
   // ⚠️ `rows` STATE DEĞİL TÜRETİMDİR: parsed → applyMapping → applyOverrides.
   // Düzeltme yoksa `applyOverrides` GİRDİ DİZİSİNİ AYNEN döndürür (referans
@@ -157,11 +158,11 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     setResult(null);
     setSkipErrors(false);
     setMode("upsert");
-    attemptToken.current = crypto.randomUUID();
+    attempt.renew();
     // ⚠️ `entity` de bağımlılıkta: aynı diyalog başka varlıkla açılırsa
     // `rowNo`+sütun anahtarına göre tutulan bir düzeltme, sessizce yanlış
     // varlığın yüküne sızardı.
-  }, [open, entity]);
+  }, [open, entity, attempt]);
 
   /** Kaynağı (dosya) tamamen unut — reddedilen dosya eskisini diriltmesin. */
   const resetSource = (): void => {
@@ -345,13 +346,15 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
       const res = await importService.apply(entity, rows, {
         mode,
         onError: skipErrors ? "skip" : "abort",
-        clientToken: attemptToken.current,
+        clientToken: attempt.token(),
         fileName: sourceName ?? file?.name,
       });
+      attempt.onSuccess();
       setResult(res.data);
       setStep("result");
       onDone?.();
     } catch (e) {
+      attempt.onFailure(e);
       // Doğrulama 400'ü satır raporunu GÖVDEDE taşır — önizleme tablosunu
       // güncelleyip kullanıcıyı aynı ekranda tutuyoruz (hiçbir şey yazılmadı).
       const details = (e as { response?: { data?: { details?: ImportPreviewResult } } })?.response?.data

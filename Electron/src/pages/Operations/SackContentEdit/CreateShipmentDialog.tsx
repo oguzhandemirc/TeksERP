@@ -32,6 +32,7 @@ import { DestinationLockField } from "./DestinationLockField";
 import { shipmentService } from "@/pages/Operations/Shipments/service";
 import { ShipmentSackCountField } from "./ShipmentSackCountField";
 import { serverSuccessText } from "@/lib/serverNotes";
+import { useAttemptToken } from "@/lib/attemptToken";
 
 /**
  * Diyaloğun GERÇEKTEN okuduğu çuval alanları.
@@ -89,9 +90,9 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   const [orderIds, setOrderIds] = useState<Set<string>>(new Set());
   /** Yalnız zincir boşken (ilk sevk) operatörün seçimi; kilitliyken yok sayılır. */
   const [picked, setPicked] = useState<ShipmentDestination | null>(null);
-  // İdempotency (A4) — ManualEntryDialog emsali: açılış başına taze token, deneme
-  // içinde sabit → timeout-retry kurulmuş sevkiyatı geri alır (kör 409 yerine).
-  const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
+  // İdempotency (A4) — token mantıksal deneme başına (kk1.md), deneme içinde sabit
+  // → timeout-retry kurulmuş sevkiyatı geri alır (kör 409 yerine).
+  const attempt = useAttemptToken();
 
   useEffect(() => {
     if (!open) return;
@@ -101,7 +102,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
     setOrderIds(new Set());
     setPicked(null);
     setPostWarnings([]);
-    setClientToken(crypto.randomUUID()); // yeni açılış = yeni mantıksal deneme
+    attempt.renew(); // yeni açılış = yeni mantıksal deneme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sackKey]);
 
@@ -136,10 +137,12 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
         orderIds: activeOrderIds,
         destination: destination ?? undefined,
         ...(chosen ? { destinationChosen: true as const } : {}),
-        clientToken,
+        clientToken: attempt.token(),
         orderless,
       }),
+    onError: (e) => attempt.onFailure(e),
     onSuccess: async (res) => {
+      attempt.onSuccess();
       // Beyan AYRI uçtan yazılır: `createShipment` sözleşmesine alan eklemek
       // Zod'un iki ucunu birden değiştirmeyi gerektirirdi ve bu alan bir
       // ANNOTATION'dır (belge çekirdeğine girmez, sürüm doğurmaz). Kurulum

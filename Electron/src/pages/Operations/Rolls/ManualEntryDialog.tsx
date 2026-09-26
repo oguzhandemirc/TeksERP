@@ -31,6 +31,7 @@ import { itemService } from "@/pages/Items/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { customerService } from "@/pages/Customers/service";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { useEmanetEnabled, useKk1WeightEntryEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import type { Item } from "@/pages/Items/types";
@@ -156,19 +157,19 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
     defaultValues: defaults,
   });
 
-  // İdempotency anahtarı — dialog açılışı bir form-oturumudur. Timeout sonrası
+  // İdempotency anahtarı — mantıksal deneme başına (kk1.md). Timeout sonrası
   // tekrar basış aynı token'ı gönderir → backend cached top döner (hayalet stok
-  // önlenir). Dialog her açılışta + başarıda yenilenir (yeni oturum).
-  const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
+  // önlenir). Açılışta, başarıda ve kesin 4xx'te yenilenir.
+  const attempt = useAttemptToken();
   // Mükerrer tuzağı 409 verdiyse var olan topun barkodu — satır-içi onay yolunu
   // açar. Dialog her açılışta temizlenir (yeni form oturumu = temiz sayfa).
   const [dupWarn, setDupWarn] = useState<string | null>(null);
   useEffect(() => {
     if (open) {
-      setClientToken(crypto.randomUUID());
+      attempt.renew();
       setDupWarn(null);
     }
-  }, [open]);
+  }, [open, attempt]);
 
   const grades = useMemo(() => gradesQ.data?.data ?? [], [gradesQ.data?.data]);
 
@@ -192,6 +193,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
       printCtx?: LabelCustomerContext;
     }) => rollService.createInitialEntry(args.payload),
     onSuccess: (res, vars) => {
+      attempt.onSuccess(); // yeni giriş → yeni token
       const roll = res.data;
       setDupWarn(null);
       toast.success(`Top oluşturuldu: ${roll?.barcode ?? "-"}`);
@@ -200,7 +202,6 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
       // — liste hiç tazelenmiyordu. ["rolls"] tüm sekme tablolarını + stats'ı kapsar.
       qc.invalidateQueries({ queryKey: ["rolls"] });
       form.reset(defaults);
-      setClientToken(crypto.randomUUID()); // yeni giriş → yeni token
       onOpenChange(false);
       if (vars.printAfter && roll?.id) onCreatedForPrint?.(roll.id, vars.printCtx);
     },
@@ -208,6 +209,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
     // Burada yalnız mükerrer tuzağının 409'unu tanıyıp satır-içi onay yolunu
     // açarız: kullanıcı çıkışsız kalmasın, ama "yine de kaydet" AÇIK bir eylem olsun.
     onError: (err) => {
+      attempt.onFailure(err);
       setDupWarn(readDuplicateConflict(err));
     },
   });
@@ -240,7 +242,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
           ...(isSemiFinished ? { semiFinished: true } : {}),
           // G3 emanet: yalnız modül açıkken gövdeye girer (kapalıda alan yok — bayt bayt eski gövde).
           ...(emanetEnabled && v.ownerCustomerId ? { ownerCustomerId: v.ownerCustomerId } : {}),
-          clientToken,
+          clientToken: attempt.token(),
           ...(confirmDuplicate ? { confirmDuplicate: true } : {}),
         },
         printAfter,

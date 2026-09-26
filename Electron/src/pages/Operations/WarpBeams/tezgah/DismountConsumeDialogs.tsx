@@ -3,9 +3,10 @@
 // =============================================================================
 // Söküm: ölçülen kalan verilirse fark sunucuda ÖNCE kapanır (fazla tüketim → CONSUMED, eksik →
 // ADJUST_IN "ölçüm farkı"); boş bırakılırsa türetilen kalan olduğu gibi kalır. Tüketim kalanı
-// aşamaz (409 adıyla); token mantıksal deneme başına.
+// aşamaz (409 adıyla); token mantıksal deneme başına (`useAttemptToken`).
 // =============================================================================
 import { useState } from "react";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { type ConsumePayload, type DismountPayload } from "../service";
 import { formatM, type WarpBeam, type WarpLengthSource } from "../types";
 import { BeamDialogShell, NumField, ReasonField, SourceSelect, num } from "./BeamDialogShell";
@@ -48,11 +49,12 @@ interface ConsumeProps {
   target: WarpBeam;
   isPending: boolean;
   onClose: () => void;
-  onConfirm: (body: ConsumePayload) => void;
+  /** Sonuç diyaloğa döner: token belirsiz hatada yapışır, kesin 4xx'te yenilenir (kk1.md). */
+  onConfirm: (body: ConsumePayload) => Promise<unknown>;
 }
 
 export function ConsumeDialog({ target, isPending, onClose, onConfirm }: ConsumeProps) {
-  const [clientToken] = useState(() => crypto.randomUUID());
+  const attempt = useAttemptToken();
   const [lengthM, setLengthM] = useState("");
   const [source, setSource] = useState<WarpLengthSource>("LOOM_COUNTER");
   const [counter, setCounter] = useState("");
@@ -68,7 +70,10 @@ export function ConsumeDialog({ target, isPending, onClose, onConfirm }: Consume
       ok={ok}
       isPending={isPending}
       onClose={onClose}
-      onConfirm={() => onConfirm({ lengthM: m ?? 0, lengthSource: source, machineCounter: num(counter), fabricLengthM: num(fabric), reason: reason.trim() || null, clientToken })}
+      onConfirm={() =>
+        void onConfirm({ lengthM: m ?? 0, lengthSource: source, machineCounter: num(counter), fabricLengthM: num(fabric), reason: reason.trim() || null, clientToken: attempt.token() })
+          .then(() => attempt.onSuccess(), (e: unknown) => attempt.onFailure(e))
+      }
     >
       <div className="grid grid-cols-2 gap-3">
         <NumField id="wb-cs-len" label="Tüketilen metre" value={lengthM} onChange={setLengthM} hint={m != null && m > target.remainingM ? `Kalanı (${formatM(target.remainingM)}) aşıyor — önce kalanı düzeltin.` : undefined} />

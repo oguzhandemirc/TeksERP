@@ -1,5 +1,5 @@
 // =============================================================================
-// ELLE DURUŞ GİRİŞİ (vardiya amiri) — kimlik `clientToken` (diyalog başına bir kez)
+// ELLE DURUŞ GİRİŞİ (vardiya amiri) — kimlik `clientToken` (mantıksal deneme başına bir kez)
 // =============================================================================
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { machineService } from "@/pages/Machines/service";
 import type { ReasonPreset } from "@/pages/ReasonPresets/service";
 import type { OpenStopPayload } from "./service";
@@ -19,13 +20,14 @@ interface Props {
   presets: ReasonPreset[];
   isPending: boolean;
   onClose: () => void;
-  onConfirm: (body: OpenStopPayload) => void;
+  /** Sonuç diyaloğa döner: token belirsiz hatada yapışır, kesin 4xx'te yenilenir (kk1.md). */
+  onConfirm: (body: OpenStopPayload) => Promise<unknown>;
   /** Sunucunun aralık dışı damga hatası (alan altında, toast değil). */
   stampError?: string | null;
 }
 
 export function StopEntryDialog({ presets, isPending, onClose, onConfirm, stampError }: Props) {
-  const [clientToken] = useState(() => crypto.randomUUID());
+  const attempt = useAttemptToken();
   const [machineId, setMachineId] = useState("");
   const [startedAt, setStartedAt] = useState(nowLocalInput());
   const [code, setCode] = useState("");
@@ -89,7 +91,10 @@ export function StopEntryDialog({ presets, isPending, onClose, onConfirm, stampE
           </Button>
           <Button
             disabled={!ok || isPending}
-            onClick={() => onConfirm({ machineId, startedAt: localInputToIso(startedAt), reasonCode: code || null, reasonNote: note.trim() || null, clientToken })}
+            onClick={() =>
+              void onConfirm({ machineId, startedAt: localInputToIso(startedAt), reasonCode: code || null, reasonNote: note.trim() || null, clientToken: attempt.token() })
+                .then(() => attempt.onSuccess(), (e: unknown) => attempt.onFailure(e))
+            }
           >
             Duruşu Aç
           </Button>

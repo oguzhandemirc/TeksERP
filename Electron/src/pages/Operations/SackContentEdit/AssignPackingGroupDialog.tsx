@@ -19,6 +19,7 @@ import { invalidateSackHub, PACKING_LOT_STALE_MS } from "./useSackData";
 import type { PackingGroup, SackSearchRow } from "./types";
 import { featureFlagService } from "@/services/featureFlagService";
 import { manualFieldState, numberSourceOf, type ManualFieldState } from "@/lib/number-source";
+import { useAttemptToken } from "@/lib/attemptToken";
 
 const MAX_NOTE = 500;
 
@@ -58,16 +59,16 @@ function useAssignGroup(sacks: AssignableSack[] | null, onOpenChange: (o: boolea
   const [hedef, setHedef] = useState<"yeni" | string>("yeni");
   const [ad, setAd] = useState("");
   const [not, setNot] = useState("");
-  /** İdempotency — pencere her açılışta BİR token üretir (mantıksal deneme). */
-  const [token, setToken] = useState(() => crypto.randomUUID());
+  /** İdempotency — token mantıksal deneme başına; pencerenin her açılışı yeni deneme. */
+  const attempt = useAttemptToken();
 
   useEffect(() => {
     if (!open) return;
     setHedef("yeni");
     setAd("");
     setNot("");
-    setToken(crypto.randomUUID());
-  }, [open]);
+    attempt.renew();
+  }, [open, attempt]);
 
   const gruplar = useQuery({
     queryKey: ["packing-groups", tekCari],
@@ -85,10 +86,12 @@ function useAssignGroup(sacks: AssignableSack[] | null, onOpenChange: (o: boolea
             sackIds: rows.map((r) => r.id),
             ...(ad.trim() ? { name: ad.trim() } : {}),
             ...(not.trim() ? { note: not.trim() } : {}),
-            clientToken: token,
+            clientToken: attempt.token(),
           })
         : sackHubService.addSacksToPackingGroup(hedef, rows.map((r) => r.id)),
+    onError: (e) => attempt.onFailure(e),
     onSuccess: (res) => {
+      attempt.onSuccess();
       toast.success(`${rows.length} çuval "${res.data.name}" grubuna alındı.`);
       invalidateSackHub(qc);
       void qc.invalidateQueries({ queryKey: ["packing-groups"] });

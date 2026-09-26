@@ -36,6 +36,7 @@ import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
 import { type OrderFormValues } from "./schema";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { OrdersStats, type OrderStatsView } from "./OrdersStats";
 import { useOrderStats } from "./useOrderStats";
@@ -246,14 +247,14 @@ export function OrdersPage() {
   const [cancelOrder, setCancelOrder] = useState<Order | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
-  // İdempotency anahtarı — create form-oturumu kimliği. Form create modunda her
-  // açılışta ve başarılı create'te yenilenir; hata sonrası SABİT kalır → timeout
-  // sonrası kullanıcının elle tekrar göndermesi aynı token'ı taşır (mükerrer önlenir).
+  // İdempotency anahtarı — create mantıksal deneme kimliği (kk1.md). Form create modunda
+  // her açılışta, başarılı create'te ve kesin 4xx'te yenilenir; belirsiz hatada SABİT kalır
+  // → timeout sonrası elle tekrar gönderim aynı token'ı taşır (mükerrer önlenir).
   // Update yoluna GİRMEZ (PATCH doğal idempotent).
-  const [createToken, setCreateToken] = useState(() => crypto.randomUUID());
+  const createAttempt = useAttemptToken();
   useEffect(() => {
-    if (formOpen && !editing) setCreateToken(crypto.randomUUID());
-  }, [formOpen, editing]);
+    if (formOpen && !editing) createAttempt.renew();
+  }, [formOpen, editing, createAttempt]);
 
   // Deep-link: `?focus=<orderId>` (İE detayından "bağlı sipariş" tıklaması, Dashboard
   // yaklaşan siparişler vb.) → siparişi çekip detay panelini otomatik aç. Param sonra
@@ -354,7 +355,9 @@ export function OrdersPage() {
     mutationFn: (payload: CreatePayload) =>
       orderService.create(payload as unknown as Partial<Order>),
     // Sunucu `warnings` (kg/adet satırda karşılama ölçülmüyor) apiClient interceptor'ında basılır.
+    onError: (e) => createAttempt.onFailure(e),
     onSuccess: () => {
+      createAttempt.onSuccess();
       toast.success("Sipariş oluşturuldu.");
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
       setFormOpen(false);
@@ -543,7 +546,7 @@ export function OrdersPage() {
               payload: buildUpdatePayload(v, pricingEnabled, editing),
             });
           } else {
-            await createMut.mutateAsync(buildCreatePayload(v, pricingEnabled, createToken));
+            await createMut.mutateAsync(buildCreatePayload(v, pricingEnabled, createAttempt.token()));
           }
         }}
         isSubmitting={createMut.isPending || updateMut.isPending}

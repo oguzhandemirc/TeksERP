@@ -11,12 +11,12 @@
 // transfer bir KUR İŞLEMİDİR ve virman diye kaydedilirse kur farkı sessizce
 // yok sayılır. Yüklem saf katmanda (`transferBlockReason`) ve bekçide.
 //
-// ⚠️ TEK MOUNT = TEK MANTIKSAL DENEME (`clientToken`) — `CashTxnFormDialog`
+// ⚠️ TEK MANTIKSAL DENEME = TEK `clientToken` (`useAttemptToken`) — `CashTxnFormDialog`
 // dosya başındaki notun aynısı. Virmanda karşılığı daha da kritik: belirsiz
 // hatadan sonraki ikinci basış, İKİ BACAKLI ikinci bir virman doğurabilirdi.
 // =============================================================================
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowRight } from "lucide-react";
@@ -33,6 +33,7 @@ import { dayStartIso, ymd } from "../Cheques/dates";
 import { cashTxnErrorText, transferCash } from "./service";
 import { amountHint, parseAmount, transferBlockReason, transferReady } from "./cashTxnRules";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { useAttemptToken } from "@/lib/attemptToken";
 
 interface Props {
   open: boolean;
@@ -48,7 +49,7 @@ export function CashTransferDialog({ open, onOpenChange, onCreated }: Props) {
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const tokenRef = useRef(crypto.randomUUID());
+  const attempt = useAttemptToken();
 
   const parsed = parseAmount(amount);
   const blockReason = transferBlockReason(from, to);
@@ -64,14 +65,18 @@ export function CashTransferDialog({ open, onOpenChange, onCreated }: Props) {
         ...(to?.kind === "BANK_ACCOUNT" ? { toBankAccountId: to.id } : {}),
         txnDate: dayStartIso(txnDate),
         description: description.trim() || null,
-        clientToken: tokenRef.current,
+        clientToken: attempt.token(),
       }),
     onSuccess: (r) => {
+      attempt.onSuccess();
       toast.success(r.message ?? "Virman kaydedildi.");
       onCreated();
       onOpenChange(false);
     },
-    onError: (e) => setError(cashTxnErrorText(e, "Virman kaydedilemedi. Lütfen tekrar deneyin.")),
+    onError: (e) => {
+      attempt.onFailure(e);
+      setError(cashTxnErrorText(e, "Virman kaydedilemedi. Lütfen tekrar deneyin."));
+    },
   });
 
   return (

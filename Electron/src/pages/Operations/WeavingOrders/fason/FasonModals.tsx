@@ -43,12 +43,12 @@ export function FasonModals({ order, modal, m, failed, onFailed, onClose }: Prop
         isPending={m.receive.isPending}
         failed={failed}
         onClose={onClose}
-        onConfirm={(b) => m.receive.mutateAsync(b).then((res) => onFailed(res.data.failed), swallow)}
+        onConfirm={(b) => m.receive.mutateAsync(b).then((res) => onFailed(res.data.failed))}
       />
     );
   }
   if (modal.kind === "return-beam") {
-    return <FasonBeamReturnDialog target={modal.target} isPending={m.returnBeam.isPending} onClose={onClose} onConfirm={(b) => m.returnBeam.mutateAsync(b).then(swallow, swallow)} />;
+    return <FasonBeamReturnDialog target={modal.target} isPending={m.returnBeam.isPending} onClose={onClose} onConfirm={(b) => m.returnBeam.mutateAsync(b)} />;
   }
   if (modal.kind === "return-yarn") {
     return <FasonYarnReturnDialog target={modal.target} isPending={m.returnYarn.isPending} onClose={onClose} onConfirm={(b) => m.returnYarn.mutateAsync(b).then(swallow, swallow)} />;

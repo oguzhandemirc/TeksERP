@@ -15,6 +15,7 @@ import type { WoSeedTarget } from "./workOrderPrefill";
 import type { PickedOrderLine } from "./OrderPickerDialog";
 import type { WorkOrder } from "./types";
 import { toastServerSuccess } from "@/lib/serverNotes";
+import { useAttemptToken } from "@/lib/attemptToken";
 
 const LIST_PATH = "/operations/work-orders";
 
@@ -60,11 +61,10 @@ export function WorkOrderFormPage() {
   const targetQuantityEnabled = useTargetQuantityEnabled();
   // Başlık satırındaki sağ slot — form "Şablon seç" butonunu buraya portal'lar.
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
-  // İdempotency anahtarı — bu sayfa (sekme) bir create form-oturumudur. Mount'ta
-  // üretilir; timeout sonrası tekrar basış aynı token'ı taşır → backend cached WO
-  // döner (mükerrer İE + refakat kartı önlenir). Başarıda sayfa navigate ile
-  // unmount olduğundan yenileme gerekmez; yalnız create yolunda kullanılır.
-  const [clientToken] = useState(() => crypto.randomUUID());
+  // İdempotency anahtarı — create mantıksal deneme başına (kk1.md); timeout sonrası
+  // tekrar basış aynı token'ı taşır → backend cached WO döner (mükerrer İE + refakat
+  // kartı önlenir), kesin 4xx'te yenilenir. Yalnız create yolunda kullanılır.
+  const createAttempt = useAttemptToken();
 
   // Create: seed gezinme state'inden (siparişten WO / Denge "stoğa üret").
   const seed = location.state as {
@@ -98,7 +98,9 @@ export function WorkOrderFormPage() {
   const createMut = useMutation({
     mutationFn: (payload: CreatePayload) =>
       workOrderService.create(payload as unknown as Partial<WorkOrder>),
+    onError: (e) => createAttempt.onFailure(e),
     onSuccess: (res, payload) => {
+      createAttempt.onSuccess();
       // KİŞİSEL HAFIZA (2026-08-09): kategori → en son seçilen fason firma.
       // ⚠️ Tercih KAPALIYKEN de yazılır — anahtarı sonra çeviren kullanıcı boş
       // bir hafızayla karşılaşmasın. Okuma tarafı `pickDefaultFirmId`.
@@ -173,7 +175,7 @@ export function WorkOrderFormPage() {
             onSubmit={async (v, meta) => {
               const payload = buildPayload(v, meta, targetQuantityEnabled);
               if (isEdit) await replaceMut.mutateAsync(payload);
-              else await createMut.mutateAsync({ ...payload, clientToken });
+              else await createMut.mutateAsync({ ...payload, clientToken: createAttempt.token() });
             }}
             isSubmitting={isEdit ? replaceMut.isPending : createMut.isPending}
             onCancel={handleCancel}

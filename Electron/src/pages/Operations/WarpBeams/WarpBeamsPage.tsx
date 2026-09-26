@@ -41,7 +41,6 @@ const FILTERS: FilterDef[] = [
   { kind: "lookup", key: "weavingOrderId", label: "Dokuma işi", service: weavingOrderPickerService, queryKey: "weaving-orders-beam-filter", getLabel: (w) => (w as unknown as WeavingOrder).weavingOrderNumber },
 ];
 
-const swallow = () => undefined;
 const BEAM_ACTION_KINDS = new Set<string>(["mount", "dismount", "consume", "adjust", "exhaust", "scrap", "undo"]);
 
 export function WarpBeamsPage() {
@@ -95,17 +94,15 @@ export function WarpBeamsPage() {
           initial={formTarget}
           isSubmitting={save.isPending}
           onSubmit={(v, clientToken) =>
-            save
-              .mutateAsync({
-                id: formTarget?.id ?? null,
-                clientToken,
-                body: toPlanPayload(v, { forUpdate: Boolean(formTarget) }),
-              })
-              .then(swallow, swallow)
+            save.mutateAsync({
+              id: formTarget?.id ?? null,
+              clientToken,
+              body: toPlanPayload(v, { forUpdate: Boolean(formTarget) }),
+            })
           }
         />
       )}
-      {dialog?.kind === "wind" && <WindDialog target={dialog.target} isPending={wind.isPending} onClose={() => setDialog(null)} onConfirm={(body) => wind.mutate({ id: dialog.target.id, body })} />}
+      {dialog?.kind === "wind" && <WindDialog target={dialog.target} isPending={wind.isPending} onClose={() => setDialog(null)} onConfirm={(body) => wind.mutateAsync({ id: dialog.target.id, body })} />}
       {dialog && BEAM_ACTION_KINDS.has(dialog.kind) && "target" in dialog && <BeamActionDialogs kind={dialog.kind as BeamActionKind} target={dialog.target} act={act} onClose={() => setDialog(null)} />}
       {dialog?.kind === "cancel" && <CancelDialog target={dialog.target} isPending={cancel.isPending} onClose={() => setDialog(null)} onConfirm={(reason) => cancel.mutate({ id: dialog.target.id, reason })} />}
       {dialog?.kind === "delete" && (

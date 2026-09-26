@@ -306,7 +306,8 @@ describe("§5 hata yüzeyi borcu — suppressErrorToast'ın karşılığı", () 
     for (const file of WRITE_DIALOGS) {
       const src = read(`./${file}`);
       expect(src, `${file}: cashTxnErrorText kullanılmıyor`).toContain("cashTxnErrorText");
-      expect(src, `${file}: onError hatayı duruma yazmıyor`).toMatch(/onError:\s*\(e\)\s*=>\s*setError\(/);
+      // Gövde bloğu da olabilir (önce deneme token'ı: `attempt.onFailure(e);`) — ölçülen şey setError'un onError'da olması.
+      expect(src, `${file}: onError hatayı duruma yazmıyor`).toMatch(/onError:\s*\(e\)\s*=>\s*(\{[^{}]*)?setError\(/);
       expect(src, `${file}: hata ekranda BASILMIYOR — sessiz başarısızlık`).toMatch(/\{error &&/);
     }
   });

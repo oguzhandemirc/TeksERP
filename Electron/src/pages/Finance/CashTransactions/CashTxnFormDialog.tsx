@@ -7,12 +7,11 @@
 // dövizde günün kuru sunucuda çözülür ve kur yoksa gelen 400 YOL GÖSTERİR
 // ("Kurlar ekranından girin") — o cümle bu diyalogda basılır.
 //
-// ⚠️ TEK MOUNT = TEK MANTIKSAL DENEME. `clientToken` diyalog açılırken BİR KEZ
-// üretilir ve tekrar denemede AYNISI gider: belirsiz sonuçlu bir hatadan
-// (timeout/5xx) sonra ikinci basış mükerrer fiş DEĞİL, aynı kaydın onayını
-// döndürür ("Kayıt zaten oluşturulmuş."). Her `mutate` çağrısında yeni token
-// üretmek korumayı tamamen boşa düşürür (2026-08-03 KK1 dersi) — sayfa
-// diyaloğu KOŞULLU mount eder, başarıdan sonra yeni token doğar.
+// ⚠️ TEK MANTIKSAL DENEME = TEK `clientToken` (`useAttemptToken`, kk1.md). Belirsiz
+// sonuçlu bir hatadan (timeout/5xx) sonra ikinci basış AYNI token'ı taşır ve
+// mükerrer fiş DEĞİL, aynı kaydın onayını döndürür ("Kayıt zaten oluşturulmuş.");
+// kesin 4xx'te hiçbir şey yazılmamıştır, düzeltilen form yeni token alır. Her
+// `mutate` çağrısında yeni token üretmek korumayı tamamen boşa düşürür.
 //
 // ⚠️ AÇILIŞ HESAP BAŞINA TEKTİR ve bu ekranda ÖNCEDEN SÖYLENİR. Backend 409'u
 // da ("… zaten girilmiş (KH…). Düzeltmek için önce onu iptal edin.") burada,
@@ -20,7 +19,7 @@
 // birkaç saniyede kaybeder.
 // =============================================================================
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
@@ -36,6 +35,7 @@ import { CashAccountPicker, type CashAccountOption } from "../PeriodClose/CashAc
 import { dayStartIso, ymd } from "../Cheques/dates";
 import { cashTxnErrorText, createCashTxn } from "./service";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { useAttemptToken } from "@/lib/attemptToken";
 import {
   ENTRY_KINDS, ENTRY_KIND_DIRECTION, KIND_LABEL, amountHint, entryBlockReason, entryReady,
   parseAmount, type EntryKind,
@@ -58,7 +58,7 @@ export function CashTxnFormDialog({ open, onOpenChange, onCreated }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   // Mantıksal deneme kimliği — dosya başındaki nota bak.
-  const tokenRef = useRef(crypto.randomUUID());
+  const attempt = useAttemptToken();
 
   const parsed = parseAmount(amount);
   const blockReason = entryBlockReason(account);
@@ -77,14 +77,18 @@ export function CashTxnFormDialog({ open, onOpenChange, onCreated }: Props) {
         category: category.trim() || null,
         description: description.trim() || null,
         reference: reference.trim() || null,
-        clientToken: tokenRef.current,
+        clientToken: attempt.token(),
       }),
     onSuccess: (r) => {
+      attempt.onSuccess();
       toast.success(r.message ?? "Fiş kaydedildi.");
       onCreated();
       onOpenChange(false);
     },
-    onError: (e) => setError(cashTxnErrorText(e, "Fiş kaydedilemedi. Lütfen tekrar deneyin.")),
+    onError: (e) => {
+      attempt.onFailure(e);
+      setError(cashTxnErrorText(e, "Fiş kaydedilemedi. Lütfen tekrar deneyin."));
+    },
   });
 
   return (

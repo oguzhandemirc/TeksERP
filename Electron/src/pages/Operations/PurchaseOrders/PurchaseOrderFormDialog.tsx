@@ -12,8 +12,8 @@
 // edilmez, yenisi açılır. Diyalog bunu kapalı bir düğmeyle değil, AÇIK BİR
 // CÜMLEYLE söyler.
 //
-// ⚠️ `clientToken` DİYALOG OTURUMU BAŞINA BİR KEZ üretilir, `mutate()` başına
-// DEĞİL (proje kuralı; iki kez sahada ısırdı). Zaman aşımı "yazılmadı" DEMEK
+// ⚠️ `clientToken` MANTIKSAL DENEME BAŞINA BİR KEZ üretilir (`useAttemptToken`,
+// kk1.md), `mutate()` başına DEĞİL. Zaman aşımı "yazılmadı" DEMEK
 // DEĞİLDİR: sunucu commit etmiş, yanıt kaybolmuş olabilir. Her basışta yeni
 // token üretmek İKİNCİ bir sipariş ve İKİNCİ bir belge numarası doğurur; satın
 // almacı aynı malı iki kez ısmarladığını sanar.
@@ -26,8 +26,8 @@
 // ⚠️ HATA TOAST'I YAZILMAZ — apiClient interceptor'ı backend'in yol gösterici
 // cümlesini zaten basıyor ("… artık düzenlenemez (durum: PARTIAL). Mal görmüş
 // sipariş revize edilmez; yeni sipariş açın."). İkinci bir toast, aynı şeyi iki
-// kez ve daha kötü kelimelerle söylemek olurdu. Diyalog AÇIK KALIR ki kullanıcı
-// düzeltip AYNI token'la tekrar denesin.
+// kez ve daha kötü kelimelerle söylemek olurdu. Diyalog AÇIK KALIR: belirsiz
+// hatada tekrar AYNI token'la, kesin 4xx'te düzeltilen form yeni token'la gider.
 // =============================================================================
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -42,6 +42,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SupplierSelect } from "@/components/forms/SupplierSelect";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { useTransientFlag } from "@/hooks/useTransientFlag";
+import { useAttemptToken } from "@/lib/attemptToken";
 import {
   sameSupplierParty, supplierOptionLabel, supplierPartyOf, supplierPartyPayload, supplierRefOf,
   type SupplierParty,
@@ -84,8 +85,8 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<PoDraftLine[]>([emptyPoLine()]);
   const [initialLinesKey, setInitialLinesKey] = useState<string | null>(null);
-  // Diyalog açılışı = bir form oturumu (çağıran koşullu mount ediyor).
-  const [clientToken] = useState(() => crypto.randomUUID());
+  // Çağıran koşullu mount ediyor: her açılış yeni deneme (token yalnız yeni siparişte gider).
+  const attempt = useAttemptToken();
 
   const detailQ = useQuery({
     queryKey: ["purchase-order", orderId],
@@ -186,11 +187,13 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
         orderDate: orderIso,
         expectedDate: expectedIso,
         notes: notes.trim() || null,
-        clientToken,
+        clientToken: attempt.token(),
         lines: payloadLines,
       });
     },
+    onError: (e) => attempt.onFailure(e),
     onSuccess: (res) => {
+      attempt.onSuccess();
       toast.success(res.message ?? "Sipariş kaydedildi.");
       void qc.invalidateQueries({ queryKey: ["purchase-orders"] });
       void qc.invalidateQueries({ queryKey: ["purchase-order"] });

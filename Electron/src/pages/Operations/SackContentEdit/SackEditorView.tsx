@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronDown, Keyboard, Layers, Loader2, Lock, MoreVertical, PackageOpen, PackagePlus, RefreshCw, Scale, Tag, Trash2, Truck, X } from "lucide-react";
@@ -36,6 +36,7 @@ import { SackIdentityStrip, SackNoBox } from "./SackIdentityStrip";
 import { SackLabelDialog } from "@/components/labels/SackLabelDialog";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { usePackingGroupMode, usePackingGroupsEnabled, useShippingManualWeightRestrictedEnabled } from "@/hooks/usePricingEnabled";
+import { useAttemptToken } from "@/lib/attemptToken";
 import type { EditorTarget } from "./types";
 
 /** Editör hedefine geri yazılan yama — müşteri/şube (ReassignCustomerDialog) ya da parti/ambalaj no. */
@@ -111,10 +112,10 @@ export function SackEditorView({
   // carilerde ikinci çuvalı şubesiz doğururdu — sevk belgesinde "İhracat Kodu"
   // satırı sessizce düşerdi.
   //
-  // ⚠️ İdempotency (A4): token DENEME başına sabit — başarıda yenilenir, kesin
-  // 4xx'te de yenilenir (orada hiçbir şey yazılmadığı kesin), ağ/5xx'te YAPIŞIR
+  // ⚠️ İdempotency (A4): token DENEME başına sabit (`useAttemptToken`) — başarıda ve
+  // kesin 4xx'te yenilenir (orada hiçbir şey yazılmadığı kesin), ağ/5xx'te YAPIŞIR
   // (timeout "yazılmadı" demek DEĞİLDİR → aynı token replay'e düşer).
-  const nextSackToken = useRef(crypto.randomUUID());
+  const nextSackAttempt = useAttemptToken();
   // Sevk partisi (2026-09-21): çuval bir partideyse "Yeni Çuval" AYNI partiye açılır ve
   // sıradaki ambalaj numarasını alır ("yeni çuvala geç" — K6 senaryosu). Cari partiden.
   const newSackMut = useMutation({
@@ -122,11 +123,11 @@ export function SackEditorView({
       sackHubService.openSack({
         customerId: target.packingGroupId ? null : target.customerId,
         branchId: target.packingGroupId ? null : target.branchId,
-        clientToken: nextSackToken.current,
+        clientToken: nextSackAttempt.token(),
         packingGroupId: target.packingGroupId ?? null,
       }),
     onSuccess: (res) => {
-      nextSackToken.current = crypto.randomUUID();
+      nextSackAttempt.onSuccess();
       invalidateSackHub(qc);
       toast.success(
         res.data.packageNo != null && res.data.packingGroupName
@@ -148,10 +149,7 @@ export function SackEditorView({
         packageNo: res.data.packageNo ?? null,
       });
     },
-    onError: (e: unknown) => {
-      const status = (e as { response?: { status?: number } }).response?.status;
-      if (status && status >= 400 && status < 500) nextSackToken.current = crypto.randomUUID();
-    },
+    onError: (e: unknown) => nextSackAttempt.onFailure(e),
   });
 
   const removeSwatchMut = useMutation({

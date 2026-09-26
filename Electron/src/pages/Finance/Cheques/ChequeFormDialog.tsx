@@ -28,14 +28,13 @@
 // ⚠️ VADESİ GEÇMİŞ ÇEK GİRİLEBİLİR (backend `dueDate >= issueDate` DAYATMAZ):
 // gecikmiş müşteri elindeki eski çeki verir. Burada da engellemiyoruz.
 //
-// ⚠️ `clientToken` DİYALOG OTURUMU BAŞINA BİR KEZ üretilir, `mutate()` başına
-// DEĞİL. Sebep proje kuralı ve iki kez sahada ısırdı (2026-07-27 Tambur kesimi,
-// 2026-08-03 KK1 ham girişi): zaman aşımı "yazılmadı" DEMEK DEĞİLDİR — sunucu
-// commit etmiş, yanıt kaybolmuş olabilir. Her basışta yeni token üretmek, o
-// durumda İKİNCİ bir çek ve İKİNCİ bir cari defter satırı doğurur; carinin
+// ⚠️ `clientToken` MANTIKSAL DENEME BAŞINA BİR KEZ üretilir (`useAttemptToken`,
+// kk1.md), `mutate()` başına DEĞİL: zaman aşımı "yazılmadı" DEMEK DEĞİLDİR —
+// sunucu commit etmiş, yanıt kaybolmuş olabilir. Her basışta yeni token üretmek,
+// o durumda İKİNCİ bir çek ve İKİNCİ bir cari defter satırı doğurur; carinin
 // bakiyesi çek tutarı kadar yanlışlanır ve hata/log çıkmaz. Aynı token ise
-// backend'in `@unique` tuzağına takılır ve ilk kaydı geri döner
-// (`ManualEntryDialog` emsali: açılışta + başarıda yenilenir).
+// backend'in `@unique` tuzağına takılır ve ilk kaydı geri döner. Kesin 4xx'te
+// hiçbir şey yazılmamıştır: düzeltilen form yeni token alır.
 // =============================================================================
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
@@ -53,6 +52,7 @@ import type { Currency } from "../service";
 import { createCheque, type ChequeDocType, type ChequeKind } from "./service";
 import { dayStartIso, ymd } from "./dates";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { useAttemptToken } from "@/lib/attemptToken";
 
 const CURRENCIES: Currency[] = ["TRY", "USD", "EUR", "GBP", "RUB"];
 
@@ -85,9 +85,8 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
   const [bankName, setBankName] = useState("");
   const [branchName, setBranchName] = useState("");
   const [notes, setNotes] = useState("");
-  // Diyalog açılışı = bir form oturumu (çağıran koşullu mount ediyor, yani her
-  // açılış yeni token). Dosya başlığındaki gerekçeye bak.
-  const [clientToken] = useState(() => crypto.randomUUID());
+  // Çağıran koşullu mount ediyor: her açılış yeni deneme. Dosya başlığındaki gerekçeye bak.
+  const attempt = useAttemptToken();
 
   // Boş/bozuk tarih `undefined` döner (bkz. dates.ts) — vade zorunlu olduğu için
   // düğmeyi kapatır; keşide ve işlem tarihi ise hiç gönderilmez ve backend
@@ -119,16 +118,17 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
         bankName: bankName.trim() || null,
         branchName: branchName.trim() || null,
         notes: notes.trim() || null,
-        clientToken,
+        clientToken: attempt.token(),
       }),
     onSuccess: (r) => {
+      attempt.onSuccess();
       toast.success(r.message ?? "Kaydedildi.");
       onCreated();
       onOpenChange(false);
     },
-    // Hata toast'ı YOK — interceptor backend'in cümlesini zaten basıyor
-    // (proje kuralı, `ManualEntryDialog` emsali). Diyalog açık kalır ki
-    // kullanıcı düzeltip AYNI token'la tekrar denesin.
+    // Hata toast'ı YOK — interceptor backend'in cümlesini zaten basıyor. Diyalog
+    // açık kalır; belirsiz hatada tekrar AYNI token'la, kesin 4xx'te yenisiyle gider.
+    onError: (e) => attempt.onFailure(e),
   });
 
   const received = kind === "RECEIVED";

@@ -23,6 +23,7 @@ import type { ProductionRoute } from "@/pages/Routes/types";
 import { workOrderService } from "@/pages/Operations/WorkOrders/service";
 import type { Roll } from "./types";
 import { serverSuccessText } from "@/lib/serverNotes";
+import { useAttemptToken } from "@/lib/attemptToken";
 
 const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
@@ -64,11 +65,10 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
   const [dispatchFirstStep, setDispatchFirstStep] = useState(true);
   /** İlk fason adımının firması — rotada planlı olan ön-dolu gelir, operatör değiştirir. */
   const [firmId, setFirmId] = useState<string | null>(null);
-  // İdempotency: bu diyalog bir gönderim OTURUMUdur. Zaman aşımından sonra
+  // İdempotency: token mantıksal deneme başına (kk1.md). Zaman aşımından sonra
   // yeniden basış aynı token'ı taşır → backend cached WO döner (mükerrer iş emri
-  // + refakat kartı önlenir). Her mutate'te yeni token üretmek korumayı boşa
-  // düşürürdü (2026-07-27 Tambur / 2026-08-03 KK1 dersi).
-  const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
+  // + refakat kartı önlenir). Her mutate'te yeni token üretmek korumayı boşa düşürürdü.
+  const attempt = useAttemptToken();
 
   const routes = useQuery({
     queryKey: ["routes", "rework-picker"],
@@ -129,10 +129,14 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
     setFoldType((cur) => cur ?? foldValues[0]?.code ?? null);
   }, [hasTambur, foldValues]);
 
+  // Yeni açılış = yeni mantıksal deneme. `rolls`a bağlanmaz: çağıran seçimi her render'da
+  // yeni dizi olarak kurar; belirsiz hatadan sonraki bir render token'ı düşürmesin.
+  useEffect(() => {
+    if (open) attempt.renew();
+  }, [open, attempt]);
   // Açılışta seçili topların ortak enini öner (hepsi aynıysa).
   useEffect(() => {
     if (!open) return;
-    setClientToken(crypto.randomUUID());
     const widths = new Set(rolls.map((r) => r.width ?? null));
     setWidth(widths.size === 1 && rolls[0]?.width != null ? String(rolls[0].width) : "");
   }, [open, rolls]);
@@ -179,7 +183,7 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
   const mutation = useMutation({
     mutationFn: () =>
       workOrderService.quickStart({
-        clientToken,
+        clientToken: attempt.token(),
         rollBarcodes: rolls.map((r) => r.barcode).filter((b): b is string => !!b),
         routeTemplateId: routeId!,
         targetColorId: canApplyColor ? colorId : null,
@@ -200,6 +204,7 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
         dispatchFirstStep: willDispatch,
       }),
     onSuccess: (res) => {
+      attempt.onSuccess();
       const d = res.data;
       const parts = [`İş emri ${d.workOrder.workOrderNumber}`];
       if (d.batch) parts.push(`parti ${d.batch.batchNumber}`);
@@ -214,7 +219,8 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
       onDone?.();
       onOpenChange(false);
     },
-    // onError YOK: apiClient interceptor'ı backend mesajını zaten toast'lar.
+    // Toast YOK: apiClient interceptor'ı backend mesajını zaten toast'lar.
+    onError: (e) => attempt.onFailure(e),
   });
 
   /**

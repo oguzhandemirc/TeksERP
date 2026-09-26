@@ -7,6 +7,7 @@ import { Callout } from "@/components/ui/callout";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAttemptToken } from "@/lib/attemptToken";
 import type { WeavingOrder } from "../types";
 import { EMPTY_ROW, rowToPayload, validateReceiptRow } from "./fason-summary";
 import { FasonReceiptRows } from "./FasonReceiptRows";
@@ -19,15 +20,16 @@ interface Props {
   /** Son kabulden dönen düşen satırlar (amber şerit) — diyalog açık kalırken gösterilir. */
   failed: { index: number; message: string }[];
   onClose: () => void;
-  onConfirm: (body: FasonReceiptBody) => void;
+  /** Sonuç diyaloğa döner: token belirsiz hatada yapışır, kesin 4xx'te yenilenir (kk1.md). */
+  onConfirm: (body: FasonReceiptBody) => Promise<unknown>;
 }
 
 export function FasonReceiptDialog({ order, isPending, failed, onClose, onConfirm }: Props) {
   const [rows, setRows] = useState<FasonReceiptRow[]>([{ ...EMPTY_ROW }]);
   const [manifestNo, setManifestNo] = useState("");
   const [notes, setNotes] = useState("");
-  // `clientToken` mantıksal deneme başına bir kez: diyalog koşullu mount edilir, her açılış taze.
-  const [clientToken] = useState(() => crypto.randomUUID());
+  // `clientToken` mantıksal deneme başına bir kez: diyalog koşullu mount edilir, her açılış yeni deneme.
+  const attempt = useAttemptToken();
   const ok = rows.length > 0 && rows.every((r) => validateReceiptRow(r).ok);
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -62,7 +64,10 @@ export function FasonReceiptDialog({ order, isPending, failed, onClose, onConfir
           <Button variant="outline" onClick={onClose} disabled={isPending}>Vazgeç</Button>
           <Button
             disabled={!ok || isPending}
-            onClick={() => onConfirm({ weavingOrderId: order.id, manifestNo: manifestNo.trim() || null, notes: notes.trim() || null, clientToken, rolls: rows.map(rowToPayload) })}
+            onClick={() =>
+              void onConfirm({ weavingOrderId: order.id, manifestNo: manifestNo.trim() || null, notes: notes.trim() || null, clientToken: attempt.token(), rolls: rows.map(rowToPayload) })
+                .then(() => attempt.onSuccess(), (e: unknown) => attempt.onFailure(e))
+            }
           >
             {rows.length} topu kabul et
           </Button>

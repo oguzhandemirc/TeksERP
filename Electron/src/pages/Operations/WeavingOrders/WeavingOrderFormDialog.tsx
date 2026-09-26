@@ -1,16 +1,16 @@
 // =============================================================================
 // DOKUMA İŞİ FORMU — oluştur / düzenle (yalnız AÇIK durumda)
 // =============================================================================
-// ⚠️ TEK MOUNT = TEK MANTIKSAL DENEME: `clientToken` diyalog açılırken BİR KEZ
-// üretilir (`useRef`); ağ hatasında aynı token yeniden gider (replay özgün
-// kaydı döner). Backend aynı yükü replay, farklı yükü CLIENT_TOKEN_COLLISION
-// sayar — o yüzden sayfa diyaloğu KOŞULLU mount eder (her açılış taze token).
+// ⚠️ TEK MANTIKSAL DENEME = TEK `clientToken` (`useAttemptToken`, kk1.md): ağ
+// hatasında aynı token yeniden gider (replay özgün kaydı döner), kesin 4xx'te ve
+// başarıda yenilenir. Backend aynı yükü replay, farklı yükü CLIENT_TOKEN_COLLISION
+// sayar — o yüzden sayfa diyaloğu KOŞULLU mount eder (her açılış yeni deneme).
 // Alan grupları `WeavingOrderFormFields.tsx`te.
 // =============================================================================
-import { useRef } from "react";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { useOperationsVisibilityContext } from "../useOperationsVisibility";
 import { useDokumaOrderLineLinkRequired } from "@/hooks/usePricingEnabled";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { weavingOrderFormDefaults, weavingOrderFormSchema, type WeavingOrderFormValues } from "./schema";
 import { FabricFields, PartyFields, PlanFields } from "./WeavingOrderFormFields";
 import { WeavingOrderLinesSection } from "./WeavingOrderLinesSection";
@@ -20,7 +20,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: WeavingOrder | null;
-  onSubmit: (values: WeavingOrderFormValues, clientToken: string) => void | Promise<void>;
+  /** Sonuç (reddedilen söz dahil) diyaloğa döner: token belirsiz hatada yapışır, kesin 4xx'te yenilenir. */
+  onSubmit: (values: WeavingOrderFormValues, clientToken: string) => Promise<unknown>;
   isSubmitting?: boolean;
 }
 
@@ -41,7 +42,7 @@ function buildDefaults(initial?: WeavingOrder | null): WeavingOrderFormValues {
 }
 
 export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
-  const tokenRef = useRef(crypto.randomUUID());
+  const attempt = useAttemptToken();
   const { devereEnabled } = useOperationsVisibilityContext();
   const orderLineRequired = useDokumaOrderLineLinkRequired();
   return (
@@ -52,7 +53,7 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
       description="Ne dokunacak, ne kadar, kim dokuyacak. Numara sunucuda üretilir (DK+GGAAYY+NNNN)."
       schema={weavingOrderFormSchema}
       defaultValues={buildDefaults(initial)}
-      onSubmit={(v) => onSubmit(v, tokenRef.current)}
+      onSubmit={(v) => onSubmit(v, attempt.token()).then(() => attempt.onSuccess(), (e: unknown) => attempt.onFailure(e))}
       isSubmitting={isSubmitting}
     >
       {(form) => (

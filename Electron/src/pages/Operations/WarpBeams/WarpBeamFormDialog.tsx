@@ -1,7 +1,6 @@
 // =============================================================================
 // LEVENT PLANLA / PLANI DÜZENLE — köken AKSİYON ANINDA seçilir (varsayılan içeride, KİLİTLİ DEĞİL)
 // =============================================================================
-import { useRef } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { Layers, Handshake, Building2 } from "lucide-react";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
@@ -20,6 +19,7 @@ import type { Customer } from "@/pages/Customers/types";
 import { warpBeamPlanDefaults, warpBeamPlanSchema, type WarpBeamPlanValues } from "./schema";
 import { WARP_BEAM_ORIGIN_LABEL, type WarpBeam, type WarpBeamOrigin } from "./types";
 import { useDevereBeamWeavingLinkRequired, useEmanetEnabled } from "@/hooks/usePricingEnabled";
+import { useAttemptToken } from "@/lib/attemptToken";
 
 type Form = UseFormReturn<WarpBeamPlanValues>;
 
@@ -107,12 +107,13 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: WarpBeam | null;
-  onSubmit: (values: WarpBeamPlanValues, clientToken: string) => void | Promise<void>;
+  /** Sonuç (reddedilen söz dahil) diyaloğa döner: token belirsiz hatada yapışır, kesin 4xx'te yenilenir (kk1.md). */
+  onSubmit: (values: WarpBeamPlanValues, clientToken: string) => Promise<unknown>;
   isSubmitting?: boolean;
 }
 
 export function WarpBeamFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
-  const tokenRef = useRef(crypto.randomUUID());
+  const attempt = useAttemptToken();
   const weavingLinkRequired = useDevereBeamWeavingLinkRequired();
   return (
     <EntityFormDialog<WarpBeamPlanValues>
@@ -122,7 +123,7 @@ export function WarpBeamFormDialog({ open, onOpenChange, initial, onSubmit, isSu
       description="Hangi çözgü kartından, kaç metre, nereden. Numara sunucuda üretilir (LV+GGAAYY+NNNN); sarım ayrı adımdır."
       schema={warpBeamPlanSchema}
       defaultValues={buildDefaults(initial)}
-      onSubmit={(v) => onSubmit(v, tokenRef.current)}
+      onSubmit={(v) => onSubmit(v, attempt.token()).then(() => attempt.onSuccess(), (e: unknown) => attempt.onFailure(e))}
       isSubmitting={isSubmitting}
     >
       {(form) => (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -24,6 +24,7 @@ import {
 } from "@/hooks/usePricingEnabled";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { sackHubService } from "./service";
 import { invalidateSackHub, PACKING_LOT_STALE_MS } from "./useSackData";
 import { isLotMode, newSackLotTarget, packageNoField, parsePackageNoInput, singleCustomerFromFilter } from "./packingLotUi";
@@ -56,9 +57,9 @@ export function NewSackDialog({ open, onOpenChange, onCreated, prefillCustomer =
   // Sevk partisi (2026-09-21) — durum ve kurallar `useNewSackLot`ta.
   const lot = useNewSackLot(open, customerId, searchParams, prefillCustomer);
   const { lotMode, noField, target, noParse, noMissing } = lot;
-  // İdempotency (A4) — ManualEntryDialog emsali: her açılışta taze token, deneme
-  // içinde sabit → retry mükerrer boş çuval açmaz (backend replay).
-  const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
+  // İdempotency (A4) — token mantıksal deneme başına (kk1.md), deneme içinde sabit
+  // → retry mükerrer boş çuval açmaz (backend replay).
+  const attempt = useAttemptToken();
   const branchesEnabled = useCustomerBranchesEnabled();
 
   // Liste TEK cariye süzülmüşse (kapıdan cari seçildi) çuval o cariye açılır —
@@ -69,7 +70,7 @@ export function NewSackDialog({ open, onOpenChange, onCreated, prefillCustomer =
       setCustomerId(null);
       setBranchId(null);
     } else {
-      setClientToken(crypto.randomUUID()); // yeni açılış = yeni mantıksal deneme
+      attempt.renew(); // yeni açılış = yeni mantıksal deneme
       setCustomerId(urlCustomerId);
     }
     // `urlCustomerId` yalnız açılış anında okunur (pencere açıkken süzgeç değişmez).
@@ -81,11 +82,13 @@ export function NewSackDialog({ open, onOpenChange, onCreated, prefillCustomer =
       sackHubService.openSack({
         customerId: target.packingGroupId ? null : customerId,
         branchId: target.packingGroupId ? null : branchId,
-        clientToken,
+        clientToken: attempt.token(),
         packingGroupId: target.packingGroupId,
         packageNo: target.packingGroupId && noField.shown ? noParse.value : null,
       }),
+    onError: (e) => attempt.onFailure(e),
     onSuccess: (res) => {
+      attempt.onSuccess();
       invalidateSackHub(qc);
       toast.success(res.message ?? `Çuval açıldı: ${res.data.sackNo}`);
       onOpenChange(false);
@@ -165,11 +168,12 @@ export function openedToTarget(d: OpenedSack): EditorTarget {
 export function useOpenSackInLot(lotId: string | null, onCreated: (t: EditorTarget) => void): { open: () => void; pending: boolean } | null {
   const qc = useQueryClient();
   const noField = packageNoField(usePackageNoMode());
-  const token = useRef(crypto.randomUUID());
+  const attempt = useAttemptToken();
   const mut = useMutation({
-    mutationFn: () => sackHubService.openSack({ customerId: null, branchId: null, clientToken: token.current, packingGroupId: lotId, packageNo: null }),
+    mutationFn: () => sackHubService.openSack({ customerId: null, branchId: null, clientToken: attempt.token(), packingGroupId: lotId, packageNo: null }),
+    onError: (e) => attempt.onFailure(e),
     onSuccess: (res) => {
-      token.current = crypto.randomUUID(); // yeni mantıksal deneme
+      attempt.onSuccess(); // yeni mantıksal deneme
       invalidateSackHub(qc);
       toast.success(res.message ?? `Çuval açıldı: ${res.data.sackNo}${res.data.packageNo != null ? ` · Ambalaj No ${res.data.packageNo}` : ""}`);
       onCreated(openedToTarget(res.data));

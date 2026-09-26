@@ -114,7 +114,7 @@ export function WeavingOrdersPage() {
           initial={formTarget === "new" ? null : formTarget}
           isSubmitting={save.isPending}
           onSubmit={(values, clientToken) =>
-            save.mutateAsync({ id: formTarget === "new" ? null : formTarget.id, values, clientToken }).then(swallow, swallow)
+            save.mutateAsync({ id: formTarget === "new" ? null : formTarget.id, values, clientToken })
           }
         />
       )}

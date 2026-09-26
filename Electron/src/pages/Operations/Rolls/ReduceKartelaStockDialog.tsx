@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { swatchService, type KartelaStockGroup } from "./swatchService";
 
 interface Props {
@@ -34,15 +35,16 @@ export function ReduceKartelaStockDialog({ group, open, onOpenChange }: Props) {
   // ⚠️ İDEMPOTENCY ANAHTARI MANTIKSAL DENEME BAŞINA ÜRETİLİR (mobil ikizi
   // `KartelaStockReduceModal`). Token gövdede gitmezse 15 sn zaman aşımında
   // operatör tekrar basar ve FIFO BAŞKA N kartelayı iptal eder: ikinci düşüm satırı.
-  const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
+  const attempt = useAttemptToken();
 
+  // Yeni açılış / başka grup = yeni mantıksal deneme.
   useEffect(() => {
     if (open) {
       setCount("1");
       setReason("");
-      setClientToken(crypto.randomUUID());
+      attempt.renew();
     }
-  }, [open, group?.itemId, group?.colorId]);
+  }, [open, group?.itemId, group?.colorId, attempt]);
 
   const max = group?.count ?? 0;
   const parsedCount = Number.parseInt(count.trim(), 10);
@@ -57,9 +59,11 @@ export function ReduceKartelaStockDialog({ group, open, onOpenChange }: Props) {
         colorId: group!.colorId,
         count: parsedCount,
         reason: reason.trim(),
-        clientToken,
+        clientToken: attempt.token(),
       }),
+    onError: (e) => attempt.onFailure(e),
     onSuccess: (res) => {
+      attempt.onSuccess();
       toast.success(res.message ?? `${res.data.reduced} kartela düşüldü`);
       void qc.invalidateQueries({ queryKey: ["kartela", "stock"] });
       void qc.invalidateQueries({ queryKey: ["kartela", "stock-reductions"] });

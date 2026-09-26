@@ -29,7 +29,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 /** Politika yardımcısına bağlı olmayan token tutucu birim sayısı — YALNIZ DÜŞER; sabiti entegratör trende düşürür. */
-const P3_TABANI = 29; // D4 (2026-09-26): panel 23 · tablet 6
+const P3_TABANI = 6; // D4b-a (2026-09-26): panel 23 → 0 · tablet 6
 
 const HER_YERDE_SERBEST = new Set<Uretim["bicim"]>(["TUTUCU", "TEMBEL", "YENILEME", "ENJEKSIYON", "SATIR_ANAHTARI"]);
 const MUTATIONFN_SERBEST = new Set<Uretim["bicim"]>(["TEMBEL", "ENJEKSIYON"]);

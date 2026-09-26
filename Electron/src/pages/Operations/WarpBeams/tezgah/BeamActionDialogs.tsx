@@ -23,14 +23,16 @@ interface Props {
 export function BeamActionDialogs({ kind, target, act, onClose }: Props) {
   const id = target.id;
   const go = (run: () => Promise<ApiResponse<WarpBeam>>, fallback: string) => act.mutate({ run, fallback });
+  // Token taşıyan diyalog (tak · tüket) sonucu bekler: belirsiz hatada token yapışır, kesin 4xx'te yenilenir.
+  const send = (run: () => Promise<ApiResponse<WarpBeam>>, fallback: string) => act.mutateAsync({ run, fallback });
   const common = { target, isPending: act.isPending, onClose };
   switch (kind) {
     case "mount":
-      return <MountDialog {...common} onConfirm={(b) => go(() => warpBeamService.mount(id, b), "Takıldı.")} />;
+      return <MountDialog {...common} onConfirm={(b) => send(() => warpBeamService.mount(id, b), "Takıldı.")} />;
     case "dismount":
       return <DismountDialog {...common} onConfirm={(b) => go(() => warpBeamService.dismount(id, b), "Söküldü.")} />;
     case "consume":
-      return <ConsumeDialog {...common} onConfirm={(b) => go(() => warpBeamService.consume(id, b), "Tüketim yazıldı.")} />;
+      return <ConsumeDialog {...common} onConfirm={(b) => send(() => warpBeamService.consume(id, b), "Tüketim yazıldı.")} />;
     case "adjust":
       return <AdjustDialog {...common} onConfirm={(b) => go(() => warpBeamService.adjust(id, b), "Kalan düzeltildi.")} />;
     case "exhaust":

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { useDevereBeamWeavingLinkRequired, useDevereLotRequired } from "@/hooks/usePricingEnabled";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { listYarnLots } from "@/pages/Operations/Yarn/service";
 import { reasonPresetService } from "@/pages/ReasonPresets/service";
 import { warpBeamService, type WindPayload } from "./service";
@@ -23,7 +24,8 @@ interface Props {
   target: WarpBeam;
   isPending: boolean;
   onClose: () => void;
-  onConfirm: (body: WindPayload) => void;
+  /** Sonuç diyaloğa döner: token belirsiz hatada yapışır, kesin 4xx'te yenilenir (kk1.md). */
+  onConfirm: (body: WindPayload) => Promise<unknown>;
 }
 
 function toLines(lines: YarnLineDraft[], withReason: boolean) {
@@ -50,7 +52,7 @@ export function buildWindPayload(d: WindDraft): WindPayload {
 }
 
 export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
-  const [clientToken] = useState(() => crypto.randomUUID());
+  const attempt = useAttemptToken();
   const inHouse = target.originKind === "IN_HOUSE";
   const [lengthM, setLengthM] = useState(String(target.plannedLengthM));
   const [kgSource, setKgSource] = useState<WarpKgSource>(inHouse ? "WEIGHED" : "THEORETICAL");
@@ -114,7 +116,8 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
           <Button
             disabled={!ok || isPending}
             onClick={() =>
-              onConfirm(buildWindPayload({ lengthM, kgSource, inHouse, machineId, issues, returns, breakCount, clientToken, weavingOrderId, count, prefix }))
+              void onConfirm(buildWindPayload({ lengthM, kgSource, inHouse, machineId, issues, returns, breakCount, clientToken: attempt.token(), weavingOrderId, count, prefix }))
+                .then(() => attempt.onSuccess(), (e: unknown) => attempt.onFailure(e))
             }
           >
             Sar

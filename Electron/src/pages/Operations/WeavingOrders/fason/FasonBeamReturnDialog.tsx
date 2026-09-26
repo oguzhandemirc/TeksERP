@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { FasonDispatch } from "./types";
 
@@ -13,7 +14,8 @@ interface Props {
   target: FasonDispatch;
   isPending: boolean;
   onClose: () => void;
-  onConfirm: (body: { dispatchId: string; warpBeamId: string; lengthM: number; clientToken: string }) => void;
+  /** Sonuç diyaloğa döner: token belirsiz hatada yapışır, kesin 4xx'te yenilenir (kk1.md). */
+  onConfirm: (body: { dispatchId: string; warpBeamId: string; lengthM: number; clientToken: string }) => Promise<unknown>;
 }
 
 /** Sevkteki, henüz dönmemiş leventler (RETURNED_IN olayı olmayan kalemler). */
@@ -25,7 +27,7 @@ export function FasonBeamReturnDialog({ target, isPending, onClose, onConfirm }:
   const beams = openBeams(target);
   const [beamId, setBeamId] = useState(beams[0]?.id ?? "");
   const [lengthM, setLengthM] = useState("");
-  const [clientToken] = useState(() => crypto.randomUUID());
+  const attempt = useAttemptToken();
   const n = Number(lengthM);
   const ok = Boolean(beamId) && lengthM.trim() !== "" && Number.isFinite(n) && n >= 0;
   return (
@@ -58,7 +60,15 @@ export function FasonBeamReturnDialog({ target, isPending, onClose, onConfirm }:
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>Vazgeç</Button>
-          <Button disabled={!ok || isPending} onClick={() => onConfirm({ dispatchId: target.id, warpBeamId: beamId, lengthM: n, clientToken })}>Dönüşü kaydet</Button>
+          <Button
+            disabled={!ok || isPending}
+            onClick={() =>
+              void onConfirm({ dispatchId: target.id, warpBeamId: beamId, lengthM: n, clientToken: attempt.token() })
+                .then(() => attempt.onSuccess(), (e: unknown) => attempt.onFailure(e))
+            }
+          >
+            Dönüşü kaydet
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
