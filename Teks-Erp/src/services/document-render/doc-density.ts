@@ -35,6 +35,7 @@
 // =============================================================================
 
 import { DOC_PAGINATION_CSS } from "./doc-style";
+import { cssFixed } from "./fmt-num";
 
 export type DocPageSize = "A4" | "A5";
 
@@ -210,7 +211,7 @@ export function scaleW(d: DocDensity, a4px: number): number {
 
 /** Belgeye ÖZEL bir YAZI BOYUNU profile göre ölçekler (A4'te kimlik). */
 export function scaleF(d: DocDensity, a4px: number): number {
-  return Number((a4px * d.fontK).toFixed(2));
+  return Number(cssFixed(a4px * d.fontK, 2));
 }
 
 /**

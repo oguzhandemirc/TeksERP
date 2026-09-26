@@ -51,6 +51,7 @@ import {
 } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import { fmtDate } from "./fmt-date";
+import { docNum } from "./fmt-num";
 import { formatSackSeqLabel, type SackSeqFormat } from "../helpers/sack-seq.helper";
 import { pickExportCode, procedureCodeForDestination } from "../helpers/shipment-destination.helper";
 
@@ -366,16 +367,6 @@ function esc(v: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Türkçe sayı: binlik "." ondalık "," (sunucu ICU'suna bağımlı değil). */
-function fmtTr(n: number | null | undefined, dec: number): string {
-  if (n == null || Number.isNaN(n)) return "";
-  const neg = n < 0;
-  const fixed = Math.abs(n).toFixed(dec);
-  const [int, frac] = fixed.split(".");
-  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return (neg ? "-" : "") + grouped + (dec > 0 && frac ? `,${frac}` : "");
-}
-
 
 /** Bir bölüm açık mı — yalnız açıkça false ise gizle (varsayılan: göster). */
 function sectionOn(sections: Record<string, boolean> | undefined, key: string): boolean {
@@ -421,7 +412,8 @@ const INT: DocCellKind = { t: "int" };
 /** En — yuvarlanmış tam sayı + " cm". */
 const WIDTH_CM: DocCellKind = { t: "int", suffix: " cm" };
 
-const FMT_KIT: DocFmtKit = { esc, fmtTr };
+/** Hücre biçimi — sayı biçimi snapshot'ın yuvarlama damgasından (`docNum`). */
+const fmtKit = (snapshot: PrintedDocSnapshot): DocFmtKit => ({ esc, fmtTr: docNum(snapshot).tr });
 
 /** Başlık bloğunun bir satırı — HTML ve Excel aynı listeyi basar. */
 interface HeaderItem {
@@ -751,7 +743,7 @@ export function renderShipmentDispatchTables(
     documentNo: p.h.shipmentNo,
     header,
     tables: p.sections.map((s) =>
-      resolveDocTable({ key: s.key, caption: s.caption, cols: s.cols, rows: s.rows, colCfg: s.colCfg, footLabel: p.L.toplam, kit: FMT_KIT }),
+      resolveDocTable({ key: s.key, caption: s.caption, cols: s.cols, rows: s.rows, colCfg: s.colCfg, footLabel: p.L.toplam, kit: fmtKit(snapshot) }),
     ),
     notes,
   };
@@ -862,7 +854,7 @@ export function renderShipmentDispatchHtml(
       colCfg: s.colCfg,
       footLabel: L.toplam,
       rows: s.rows,
-      cols: toHtmlCols(s.cols, FMT_KIT),
+      cols: toHtmlCols(s.cols, fmtKit(snapshot)),
     });
   };
   const urunSection = tableHtml("urun");

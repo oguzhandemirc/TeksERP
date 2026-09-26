@@ -17,6 +17,7 @@ import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize, scaleW } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import { fmtDate } from "./fmt-date";
+import { docNum } from "./fmt-num";
 
 interface ReturnLine {
   barcode: string | null;
@@ -57,17 +58,15 @@ interface RenderMeta {
 function esc(v: unknown): string {
   return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function fmtQty(n: number | null | undefined): string {
-  if (n == null || Number.isNaN(n)) return "";
-  const [int, frac] = Math.abs(n).toFixed(2).split(".");
-  return (n < 0 ? "-" : "") + int.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (frac ? `,${frac}` : "");
-}
+/** Metre/kg: 2 ondalık; yuvarlama snapshot'ın damgasından (`docNum`). */
+const qtyFmt = (snapshot: PrintedDocSnapshot) => (n: number | null | undefined): string => docNum(snapshot).tr(n, 2);
 function sectionOn(sections: Record<string, boolean> | undefined, key: string): boolean {
   return sections?.[key] !== false;
 }
 
 export function renderReturnDispatchHtml(snapshot: PrintedDocSnapshot, meta: RenderMeta = {}): string {
   const doc = snapshot.doc as unknown as ReturnDispatchDoc;
+  const fmtQty = qtyFmt(snapshot);
   const cfg = snapshot.docConfigOverride ?? {};
   const pageSize = resolveDocPageSize(cfg.style?.pageSize);
   const d = DOC_DENSITY[pageSize];

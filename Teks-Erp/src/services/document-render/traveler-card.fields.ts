@@ -45,6 +45,7 @@
 
 import { DOC_FIELD_WEIGHTS, type DocFieldStyle, type DocFieldWeight } from "./doc-style";
 import type { TravelerDensity } from "./traveler-card.density";
+import { cssFixed } from "./fmt-num";
 
 /**
  * Kartın alan ayarı — `DocFieldStyle`'a **görünürlük** ekler.
@@ -150,7 +151,7 @@ export const TRAVELER_FIELD_SIZE_MIN = 5;
 export const TRAVELER_FIELD_SIZE_MAX = 48;
 
 /** px'i 2 haneye yuvarla; tam sayıysa ".00" ekleme (parmak izi gürültüsü olmasın). */
-const px = (n: number): number => Number(n.toFixed(2));
+const px = (n: number): number => Number(cssFixed(n, 2));
 
 /**
  * İstemciden gelen ham alan haritasını güvenli tipe indirger (saklama öncesi).

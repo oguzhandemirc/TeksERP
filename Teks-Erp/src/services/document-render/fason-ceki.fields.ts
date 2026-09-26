@@ -37,6 +37,7 @@ import {
   type DocFieldWeight,
 } from "./doc-style";
 import type { FasonDensity } from "./fason-ceki.density";
+import { cssFixed } from "./fmt-num";
 
 export interface FasonFieldDef {
   /** Config anahtarı — Electron paneli aynı anahtarı yazar. */
@@ -131,7 +132,7 @@ export function fasonFieldCss(
     const decls: string[] = [];
     if (cfg.size != null) {
       // Düz px — calc()/var() YASAK (kural 2).
-      decls.push(`font-size: ${Number(cfg.size.toFixed(2))}px`);
+      decls.push(`font-size: ${Number(cssFixed(cfg.size, 2))}px`);
     }
     if (cfg.weight != null) {
       decls.push(`font-weight: ${DOC_FIELD_WEIGHTS[cfg.weight]}`);

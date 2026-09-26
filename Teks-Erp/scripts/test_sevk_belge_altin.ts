@@ -10,6 +10,8 @@
 // irsaliyesi (şablon kolonları · bölümler · filigran · not) kombinasyonları, her biri
 // KENDİ refactor'undan ÖNCE `scripts/lib/sevk-belge-altin.json`a sha256 olarak
 // yazıldı; çıktı boşluk normalizasyonu dışında bayt bayt aynı kalmalı.
+// Uzay iki yuvarlama rejimini taşır: damgasız ad = ticari yuvarlamadan önce donmuş belge
+// (altını 2026-09-26'da değişmedi), `/ticari` ekli ad = `numberRounding` damgalı zarf.
 //
 // Bilinçli bir görünüm değişikliği bu dosyayı kırmızıya düşürür: değişikliği
 // gözle doğrula, sonra `--yaz` ile altını yenile ve commit mesajına NEDEN'ini yaz.

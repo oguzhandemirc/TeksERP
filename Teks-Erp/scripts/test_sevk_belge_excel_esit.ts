@@ -13,7 +13,9 @@
 // ve aynı belgenin `render…Tables` modeliyle karşılaştırılır — tablo sayısı + başlık,
 // kolon başlıkları (sıra dahil), satır sayısı, HER HÜCRE, toplam satırı. Excel
 // değeri, PDF'in metnine BAĞIMSIZ bir biçimleyiciyle çevrilir (modelin kendi
-// `docCellHtml`i kullanılmaz; o, ölçülen şeyin parçasıdır).
+// `docCellHtml`i kullanılmaz; o, ölçülen şeyin parçasıdır). Uzay iki yuvarlama
+// rejimini de taşır: damgasız (eski) zarf `toFixed`le, `numberRounding` damgalı zarf
+// ticari yuvarlamayla basılır — bağımsız biçimleyici damgaya göre ikisinden birini seçer.
 //
 // Negatif sonda (commit mesajında, ✓B2): ① renderer'da çuval tablosuna YALNIZ
 // HTML'e bir kolon eklendi → kırmızı · ② modelden (Excel) çeki tablosunun bir
@@ -48,21 +50,32 @@ function check(label: string, ok: boolean, extra = ""): void {
 const esc = (v: string) =>
   v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** TR sayı biçimi — renderer'dan bağımsız: binlik ".", ondalık ",". */
-function trNum(n: number, dec: number): string {
-  const [int, frac] = Math.abs(n).toFixed(dec).split(".");
+/**
+ * TR sayı biçimi — renderer'dan bağımsız: binlik ".", ondalık ",". Ticari rejimde
+ * yuvarlamayı ICU yapar (halfExpand, `fmt-num.ts`ten ayrı bir gerçekleme); eski
+ * rejimde damgasız belgenin `toFixed`i.
+ */
+function trNum(n: number, dec: number, ticari: boolean): string {
+  const abs = ticari
+    ? Math.abs(n).toLocaleString("en-US", { useGrouping: false, minimumFractionDigits: dec, maximumFractionDigits: dec })
+    : Math.abs(n).toFixed(dec);
+  const [int, frac] = abs.split(".");
   const grouped = int!.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return (n < 0 ? "-" : "") + grouped + (frac ? `,${frac}` : "");
+  const neg = n < 0 && (!ticari || /[1-9]/.test(abs));
+  return (neg ? "-" : "") + grouped + (frac ? `,${frac}` : "");
 }
 
-/** Excel hücresi PDF'te nasıl okunur — değer + tür → görünen metin. */
-function asPdfText(kind: DocCellKind, v: DocCellValue): string {
+/** Excel hücresi PDF'te nasıl okunur — değer + tür (+ yuvarlama rejimi) → görünen metin. */
+function asPdfText(kind: DocCellKind, v: DocCellValue, ticari = false): string {
   if (v == null) return "";
   if (typeof v === "string") return esc(v);
   if (kind.t === "text") return esc(String(v));
-  const body = kind.t === "int" ? String(v) : trNum(v, kind.dec);
+  const body = kind.t === "int" ? String(v) : trNum(v, kind.dec, ticari);
   return body + (kind.suffix ?? "");
 }
+
+/** Zarf ticari yuvarlama damgası taşıyor mu — fikstürün `/ticari` kombinasyonları. */
+const ticariMi = (s: PrintedDocSnapshot): boolean => (s as { numberRounding?: unknown }).numberRounding === "HALF_UP";
 
 interface HtmlTable {
   caption: string;
@@ -112,8 +125,11 @@ const uzay: Array<[keyof typeof sayac, SevkBelgeKombinasyon[], Render, Tables]> 
   ["sevk", kombinasyonlar, renderShipmentDispatchHtml as Render, renderShipmentDispatchTables as Tables],
   ["dogrudan", dogrudan, renderFasonDirectShipHtml as Render, renderFasonDirectShipTables as Tables],
 ];
+const rejimSayac = { eski: 0, ticari: 0 };
 for (const [tur, liste, renderHtml, renderTables] of uzay)
 for (const k of liste) {
+  const ticari = ticariMi(k.snapshot);
+  rejimSayac[ticari ? "ticari" : "eski"]++;
   const html = normalizeHtml(renderHtml(k.snapshot, k.meta));
   const htmlTables = parseTables(html);
   const model = renderTables(k.snapshot, k.meta);
@@ -142,13 +158,13 @@ for (const k of liste) {
     mt.rows.forEach((row, ri) => {
       row.forEach((v, ci) => {
         hucre++;
-        const beklenen = asPdfText(mt.columns[ci]!.kind, v);
+        const beklenen = asPdfText(mt.columns[ci]!.kind, v, ticari);
         const pdf = ht.rows[ri]![ci];
         if (pdf !== beklenen) hatalar.push(`${yer} satır ${ri + 1} "${mt.columns[ci]!.label}": PDF "${pdf}" ≠ Excel "${beklenen}"`);
       });
     });
     const htmlFoot = ht.foot?.join("|") ?? null;
-    const modelFoot = mt.foot ? mt.foot.map((v, ci) => asPdfText(mt.footKinds?.[ci] ?? mt.columns[ci]!.kind, v)).join("|") : null;
+    const modelFoot = mt.foot ? mt.foot.map((v, ci) => asPdfText(mt.footKinds?.[ci] ?? mt.columns[ci]!.kind, v, ticari)).join("|") : null;
     if (htmlFoot !== modelFoot) hatalar.push(`${yer}: toplam PDF ${htmlFoot} ≠ Excel ${modelFoot}`);
   });
 }
@@ -159,6 +175,7 @@ check("doğrudan sevk kombinasyonu ≥ 80", dogrudan.length >= 80, `${dogrudan.l
 check("karşılaştırılan tablo ≥ 700", tablo >= 700, `${tablo}`);
 check("doğrudan sevk tablosu ≥ 100", sayac.dogrudan >= 100, `${sayac.dogrudan}`);
 check("karşılaştırılan hücre ≥ 10.000", hucre >= 10_000, `${hucre}`);
+check("iki yuvarlama rejimi de uzayda (eski ≥ 400 · ticari ≥ 400)", rejimSayac.eski >= 400 && rejimSayac.ticari >= 400, JSON.stringify(rejimSayac));
 // Saha şikâyetinin kolonları uzayda GERÇEKTEN görünüyor mu (görünmüyorsa eşitlik boştur).
 for (const b of ["AMBALAJ NO", "SEVK PARTİSİ", "PARTİ KODU", "PARTİ NO", "SIRA", "EN", "PKG #", "LOT", "AÇIKLAMA", "İZ", "MÜŞTERİ VARYANT", "SİPARİŞ NO", "MİKTAR", "BARKOD", "ÜRÜN / RENK"]) {
   check(`uzayda "${b}" kolonu ölçüldü`, gorulenBaslik.has(b));
@@ -203,8 +220,10 @@ const deski = renderFasonDirectShipTables(dogrudan.find((k) => k.ad === "dogruda
 check("eski snapshot: sipariş tablosu yok, toplam kg '—'", deski.tables.length === 1 && deski.tables[0]!.foot?.at(-1) === "—");
 
 console.log("§6 ⭐ Excel sayısı PDF'te BASILAN haneyi taşır (yarım değerde tablo programının yuvarlamasına bırakılmaz)");
-// Veri 3 ondalık (Decimal(12,3)); PDF `toFixed` ile basar ve ikili kayan noktada 112,35 → "112,3",
-// 1,005 → "1,00" olur. Ham değer Excel'e gitseydi tablo programı "112,4" / "1,01" gösterirdi.
+// Veri 3 ondalık (Decimal(12,3)). Damgasız (eski) belge `toFixed` ile basar ve ikili kayan
+// noktada 112,35 → "112,3", 1,005 → "1,00" olur; aslı öyle basıldığı için yeniden baskı da
+// öyle kalır. Damgalı belge ticari yuvarlar: "112,4" / "1,01". İki rejimde de Excel PDF'in
+// bastığı haneyi taşır.
 {
   const base = dogrudan.find((k) => k.ad === "dogrudan/zengin/yok/yok")!;
   const doc = base.snapshot.doc as { rolls: Array<Record<string, unknown>>; totals: Record<string, number> };
@@ -225,6 +244,28 @@ console.log("§6 ⭐ Excel sayısı PDF'te BASILAN haneyi taşır (yarım değer
   const ki = t.columns.findIndex((c) => c.label === "KG");
   check("sevk irsaliyesi 1,005 / 2,675 (2 hane): Excel değeri PDF'in bastığı hane",
     pdf.rows[0]![mi] === asPdfText(t.columns[mi]!.kind, t.rows[0]![mi]!) && pdf.rows[0]![ki] === asPdfText(t.columns[ki]!.kind, t.rows[0]![ki]!) && t.rows[0]![mi] === Number((1.005).toFixed(2)),
+    `PDF ${pdf.rows[0]![mi]} · ${pdf.rows[0]![ki]} / Excel ${t.rows[0]![mi]} · ${t.rows[0]![ki]}`);
+}
+{
+  const base = dogrudan.find((k) => k.ad === "dogrudan/zengin/yok/yok/ticari")!;
+  const doc = base.snapshot.doc as { rolls: Array<Record<string, unknown>>; totals: Record<string, number> };
+  const snap = { ...base.snapshot, doc: { ...doc, rolls: [{ ...doc.rolls[0], dispatchedQty: 112.35, dispatchedWeight: 1.25 }], totals: { rollCount: 1, totalQty: 112.35, totalWeight: 1.25 } } } as PrintedDocSnapshot;
+  const t = renderFasonDirectShipTables(snap, {}).tables.find((x) => x.key === "rollTable")!;
+  const pdf = parseTables(normalizeHtml(renderFasonDirectShipHtml(snap, {}))).find((x) => x.caption.startsWith("Sevk Edilen"))!;
+  const mi = t.columns.findIndex((c) => c.key === "meters");
+  check("damgalı doğrudan sevk 112,35 (1 hane): PDF '112,4' ve Excel değeri 112.4", pdf.rows[0]![mi] === "112,4" && t.rows[0]![mi] === 112.4, `${pdf.rows[0]![mi]} / ${t.rows[0]![mi]}`);
+  check("damgalı toplam da aynı kuralla (112.4 'm')", t.foot?.[mi] === 112.4);
+}
+{
+  const base = kombinasyonlar.find((k) => k.ad === "zengin/bos/yok/ticari")!;
+  const doc = base.snapshot.doc as { cekiRows: Array<Record<string, unknown>> };
+  const snap = { ...base.snapshot, doc: { ...doc, cekiRows: [{ ...doc.cekiRows[0], meters: 1.005, kg: 2.675 }] } } as PrintedDocSnapshot;
+  const t = renderShipmentDispatchTables(snap, {}).tables.find((x) => x.key === "ceki")!;
+  const pdf = parseTables(normalizeHtml(renderShipmentDispatchHtml(snap, {}))).find((x) => x.caption === "ÇEKİ LİSTESİ")!;
+  const mi = t.columns.findIndex((c) => c.label === "METRE");
+  const ki = t.columns.findIndex((c) => c.label === "KG");
+  check("damgalı sevk irsaliyesi 1,005 / 2,675: PDF '1,01' · '2,68', Excel 1.01 · 2.68",
+    pdf.rows[0]![mi] === "1,01" && pdf.rows[0]![ki] === "2,68" && t.rows[0]![mi] === 1.01 && t.rows[0]![ki] === 2.68,
     `PDF ${pdf.rows[0]![mi]} · ${pdf.rows[0]![ki]} / Excel ${t.rows[0]![mi]} · ${t.rows[0]![ki]}`);
 }
 

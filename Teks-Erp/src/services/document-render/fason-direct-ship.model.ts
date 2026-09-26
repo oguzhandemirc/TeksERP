@@ -19,6 +19,7 @@ import {
   type DocTablesPayload,
 } from "./doc-model";
 import { fmtDate } from "./fmt-date";
+import { docNum } from "./fmt-num";
 import { docTitle } from "./doc-style";
 
 interface DirectShipRoll {
@@ -104,16 +105,6 @@ export function esc(v: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Türkçe sayı: binlik "." ondalık "," (sunucu ICU'suna bağımlı değil). */
-function fmtTr(n: number | null | undefined, dec: number): string {
-  if (n == null || Number.isNaN(n)) return "";
-  const neg = n < 0;
-  const fixed = Math.abs(n).toFixed(dec);
-  const [int, frac] = fixed.split(".");
-  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return (neg ? "-" : "") + grouped + (dec > 0 && frac ? `,${frac}` : "");
-}
-
 
 /** Bir bölüm açık mı — yalnız açıkça false ise gizle (varsayılan: göster). */
 function sectionOn(sections: Record<string, boolean> | undefined, key: string): boolean {
@@ -130,7 +121,8 @@ const QTY: DocCellKind = { t: "num", dec: 1 };
 const QTY_M: DocCellKind = { t: "num", dec: 1, suffix: " m" };
 const QTY_KG: DocCellKind = { t: "num", dec: 1, suffix: " kg" };
 
-export const FMT_KIT: DocFmtKit = { esc, fmtTr };
+/** Hücre biçimi — sayı biçimi snapshot'ın yuvarlama damgasından (`docNum`). */
+export const fmtKit = (snapshot: PrintedDocSnapshot): DocFmtKit => ({ esc, fmtTr: docNum(snapshot).tr });
 
 interface HeaderItem {
   key: string;
@@ -322,7 +314,7 @@ export function renderFasonDirectShipTables(
     documentNo: p.doc.shipmentNo ?? p.doc.dispatchNo,
     header,
     tables: p.sections.map((s) =>
-      resolveDocTable({ key: s.key, caption: s.caption, cols: s.cols, rows: s.rows, colCfg: s.colCfg, footLabel: s.footLabel, kit: FMT_KIT }),
+      resolveDocTable({ key: s.key, caption: s.caption, cols: s.cols, rows: s.rows, colCfg: s.colCfg, footLabel: s.footLabel, kit: fmtKit(snapshot) }),
     ),
     notes,
   };

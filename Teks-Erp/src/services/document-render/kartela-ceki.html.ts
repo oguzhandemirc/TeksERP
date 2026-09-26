@@ -32,6 +32,7 @@ import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import { fmtDate } from "./fmt-date";
+import { docNum } from "./fmt-num";
 
 interface KartelaCekiRoll {
   sequence: number;
@@ -83,18 +84,8 @@ function esc(v: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Türkçe sayı: binlik "." ondalık "," (sunucu ICU'suna bağımlı değil). */
-function fmtTr(n: number | null | undefined, dec: number): string {
-  if (n == null || Number.isNaN(n)) return "";
-  const neg = n < 0;
-  const fixed = Math.abs(n).toFixed(dec);
-  const [int, frac] = fixed.split(".");
-  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return (neg ? "-" : "") + grouped + (dec > 0 && frac ? `,${frac}` : "");
-}
-
-/** Metre/kg: 1 ondalık (mevcut kartela çeki görünümüyle aynı). */
-const fmtQty = (n: number | null | undefined): string => fmtTr(n, 1);
+/** Metre/kg: 1 ondalık (mevcut kartela çeki görünümüyle aynı); yuvarlama snapshot'ın damgasından. */
+const qtyFmt = (snapshot: PrintedDocSnapshot) => (n: number | null | undefined): string => docNum(snapshot).tr(n, 1);
 
 /** Bir bölüm açık mı — yalnız açıkça false ise gizle (varsayılan: göster). */
 function sectionOn(sections: Record<string, boolean> | undefined, key: string): boolean {
@@ -107,6 +98,7 @@ export function renderKartelaCekiHtml(
 ): string {
   const doc = snapshot.doc as unknown as KartelaCekiDoc;
   const cfg = snapshot.docConfigOverride ?? {};
+  const fmtQty = qtyFmt(snapshot);
   // Yoğunluk profili sayfa boyutundan çözülür; ortak chrome CSS'i oradan beslenir.
   const pageSize = resolveDocPageSize(cfg.style?.pageSize);
   const d = DOC_DENSITY[pageSize];

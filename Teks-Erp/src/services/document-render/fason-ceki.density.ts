@@ -34,6 +34,8 @@
 // profil "taban", ayar "ince ayar"dır — ikisi çarpışmaz.
 // =============================================================================
 
+import { cssFixed } from "./fmt-num";
+
 export type FasonPageSize = "A4" | "A5";
 
 /** Fiziksel sayfa ölçüsü (mm) — Electron önizlemesi sayfayı gerçek boyunda çizer. */
@@ -300,7 +302,7 @@ export function gridColWidths(
   showWidth: boolean,
 ): { top: string; met: string; cm: string } {
   const k = 5 / groups;
-  const fmt = (n: number): string => String(Number((n * k).toFixed(3)));
+  const fmt = (n: number): string => String(Number(cssFixed(n * k, 3)));
   return {
     top: `${fmt(BASE_COL.top)}%`,
     met: `${fmt(showWidth ? BASE_COL.met : MET_NO_CM)}%`,

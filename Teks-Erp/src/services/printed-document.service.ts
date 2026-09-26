@@ -39,6 +39,7 @@ import { readSackSeqFormat, type SackSeqFormat } from "./helpers/sack-seq.helper
 import { ApiResponse } from "../types/api.types";
 import { SAMPLE_PRINTED_DOCS } from "./document-render/sample-data";
 import type { DocTablesPayload } from "./document-render/doc-model";
+import { NUMBER_ROUNDING_HALF_UP, type NumberRounding } from "./document-render/fmt-num";
 
 /** Builder'ların aldığı istemci — tx içinden (freeze) veya dışından (reissue/lazy) çalışır. */
 export type PrintedDocDb = Prisma.TransactionClient | typeof prisma;
@@ -92,7 +93,14 @@ export interface PrintedDocSnapshot {
    *  diye (4. manuel senkron noktası açmamak için) ham saklanır. */
   docConfigOverride: DocumentConfig | null;
   doc: Record<string, unknown>;
+  /** Yuvarlama rejimi — zarf kurucusu damgalar, yalnız `docNum` okur. Damgasız (eski)
+   *  belge eski yuvarlamayla basılır ki yeniden baskı aslının aynısı kalsın. */
+  numberRounding?: NumberRounding;
 }
+
+/** Her yeni zarfın başı — damganın TEK yazıldığı yer. */
+const envelopeHead = () =>
+  ({ schemaVersion: 1, frozenAt: new Date().toISOString(), numberRounding: NUMBER_ROUNDING_HALF_UP }) as const;
 
 /** Builder çıktısı — domain servisin freeze/reissue için ürettiği içerik. */
 export interface BuiltDocContent {
@@ -286,8 +294,7 @@ async function buildSnapshotEnvelope(
   }
 
   return {
-    schemaVersion: 1,
-    frozenAt: new Date().toISOString(),
+    ...envelopeHead(),
     company: { name: companyName, letterhead, logoHash: logo.current },
     docConfigOverride: docCfg,
     doc,
@@ -637,9 +644,10 @@ export class PrintedDocumentService {
       // "Güncel şablonla bas" — belge İÇERİĞİ donuk kalır, yalnız görünüm katmanı
       // (şablon override + firma/künye) canlı ayardan yeniden çözülür. Yeni versiyon
       // ÜRETMEZ, snapshot'a yazmaz; sadece bu render için geçici zarf kurulur.
+      // Yuvarlama damgası içeriğe aittir: donmuş zarftan gelir, tazelenmez.
       if (opts?.useCurrentConfig) {
         const fresh = await buildSnapshotEnvelope(prisma, docType, snapshot.doc, sourceId);
-        snapshot = { ...fresh, frozenAt: snapshot.frozenAt };
+        snapshot = { ...snapshot, company: fresh.company, docConfigOverride: fresh.docConfigOverride };
       }
       // Kâğıt boyu ezmesi EN SONDA: "güncel şablonla bas" taze config getirse
       // bile operatörün bu baskı için seçtiği boy kazanmalı.
@@ -789,8 +797,7 @@ export class PrintedDocumentService {
       await readDocumentsLogo(prisma),
     ];
     const snapshot: PrintedDocSnapshot = {
-      schemaVersion: 1,
-      frozenAt: new Date().toISOString(),
+      ...envelopeHead(),
       company: { name: companyName, letterhead, logoHash: logo.current },
       docConfigOverride: configOverride,
       doc,

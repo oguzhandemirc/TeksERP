@@ -26,6 +26,7 @@
 
 import { DOC_FIELD_WEIGHTS, type DocFieldStyle } from "./doc-style";
 import type { DocDensity } from "./doc-density";
+import { cssFixed } from "./fmt-num";
 
 export interface DocFieldDef {
   key: string;
@@ -108,7 +109,7 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
   shipmentDispatch: [
     ...COMMON,
     SEC_CAPTION,
-    { key: "wrapCell", label: "Açıklama hücresi (çuval yorumu)", group: "table", selector: ".sec td.wrap", base: (d) => Number((10 * d.fontK).toFixed(2)), weight: 400 },
+    { key: "wrapCell", label: "Açıklama hücresi (çuval yorumu)", group: "table", selector: ".sec td.wrap", base: (d) => Number(cssFixed(10 * d.fontK, 2)), weight: 400 },
   ],
   fasonDirectShip: [...COMMON, ...BOXES, TBL_CAP],
   fasonKabul: [...COMMON, ...BOXES, TBL_CAP],
@@ -153,7 +154,7 @@ export function docFieldCss(
     const cfg = fields[def.key];
     if (!cfg) continue;
     const decls: string[] = [];
-    if (cfg.size != null) decls.push(`font-size: ${Number(cfg.size.toFixed(2))}px`); // düz px — calc() YASAK
+    if (cfg.size != null) decls.push(`font-size: ${Number(cssFixed(cfg.size, 2))}px`); // düz px — calc() YASAK
     if (cfg.weight != null) decls.push(`font-weight: ${DOC_FIELD_WEIGHTS[cfg.weight]}`);
     if (!decls.length) continue;
     const sel = def.selector

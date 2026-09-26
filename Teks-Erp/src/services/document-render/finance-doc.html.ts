@@ -40,6 +40,7 @@ import { DOC_DENSITY, docChromeCss, resolveDocPageSize, scaleW } from "./doc-den
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import type { PrintedDocSnapshot } from "../printed-document.service";
 import { fmtDate } from "./fmt-date";
+import { docNum, type DocNum } from "./fmt-num";
 import { upperTr } from "../../utils/tr-case";
 
 /** Fatura kalemi — tutarlar STRING (Decimal serileştirmesi; float'a çevrilmez). */
@@ -461,9 +462,9 @@ function balanceSideLabel(balance: string): string {
 }
 
 /** Mutlak tutar — işaret DURUM kolonunda yazıyor, sayıda tekrar edilmez. */
-function fmtAbsMoney(v: string): string {
+function fmtAbsMoney(v: string, num: DocNum): string {
   const n = Number(v);
-  return Number.isFinite(n) ? fmtMoney(Math.abs(n).toFixed(2)) : fmtMoney(v);
+  return Number.isFinite(n) ? fmtMoney(num.absDec2(n)) : fmtMoney(v);
 }
 
 export function renderReconciliationLetterHtml(
@@ -474,6 +475,7 @@ export function renderReconciliationLetterHtml(
   const h = doc.header;
   const cfg = snapshot.docConfigOverride ?? {};
   const rows = doc.balances ?? [];
+  const num = docNum(snapshot);
 
   const table = sectionOn(cfg.sections, "balanceTable")
     ? buildDocTable<ReconciliationBalanceRow>({
@@ -485,7 +487,7 @@ export function renderReconciliationLetterHtml(
           { key: "currency", label: "PARA", align: "c", width: "60px", cell: (r) => esc(r.currency) },
           { key: "debit", label: "BORÇ", align: "r", width: "110px", cell: (r) => esc(fmtMoney(r.debit)) },
           { key: "credit", label: "ALACAK", align: "r", width: "110px", cell: (r) => esc(fmtMoney(r.credit)) },
-          { key: "balance", label: "BAKİYE", align: "r", width: "110px", cell: (r) => esc(fmtAbsMoney(r.balance)) },
+          { key: "balance", label: "BAKİYE", align: "r", width: "110px", cell: (r) => esc(fmtAbsMoney(r.balance, num)) },
           { key: "side", label: "DURUM", align: "c", width: "90px", cell: (r) => esc(balanceSideLabel(r.balance)) },
         ],
       })

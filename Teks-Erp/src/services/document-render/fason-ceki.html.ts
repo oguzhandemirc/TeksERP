@@ -63,6 +63,7 @@ import {
 import { fasonFieldCss } from "./fason-ceki.fields";
 import { buildDocTable } from "./doc-table";
 import { fmtDate } from "./fmt-date";
+import { docNum, type DocNum } from "./fmt-num";
 
 interface FasonCekiRoll {
   sequence: number;
@@ -173,12 +174,6 @@ function esc(v: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
-/** 1 ondalık; tam sayıysa ondalıksız (115.0→"115", 100.5→"100.5"). Boş/0 → "". */
-function fmtMetre(n: number | null | undefined): string {
-  if (n == null || n === 0) return "";
-  const r = Math.round(n * 10) / 10;
-  return Number.isInteger(r) ? String(r) : r.toFixed(1);
-}
 
 function fmtCm(n: number | null | undefined): string {
   if (n == null) return "";
@@ -218,6 +213,7 @@ function renderGridPage(
   showWidth: boolean,
   groups: GridGroups,
   rows: number,
+  fmtMetre: DocNum["metreDot"],
 ): string {
   const head =
     "<tr>" +
@@ -251,6 +247,8 @@ export function renderFasonCekiHtml(
 ): string {
   const doc = snapshot.doc as unknown as FasonCekiDoc;
   const cfg = snapshot.docConfigOverride ?? {};
+  // 1 ondalık; tam sayıysa ondalıksız (115.0→"115", 100.5→"100.5"). Boş/0 → "".
+  const fmtMetre = docNum(snapshot).metreDot;
   // Yoğunluk profili sayfa boyutundan çözülür; belgenin varsayılan kenar boşluğu
   // da oradan gelir (kullanıcı `style.margins` ile kenar kenar ezebilir).
   const pageSize = resolveFasonPageSize(cfg.style?.pageSize);
@@ -315,7 +313,7 @@ export function renderFasonCekiHtml(
   const pageCount = Math.max(1, Math.ceil(doc.rolls.length / slotsPerPage));
   let grids = "";
   for (let p = 0; p < pageCount; p++) {
-    grids += renderGridPage(doc.rolls, p * slotsPerPage, showGridWidth, groups, rows);
+    grids += renderGridPage(doc.rolls, p * slotsPerPage, showGridWidth, groups, rows, fmtMetre);
   }
 
   // Antet (gönderen) satırları — sadece dolu olanlar.

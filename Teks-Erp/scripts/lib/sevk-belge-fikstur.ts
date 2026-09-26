@@ -5,6 +5,7 @@
 import type { PrintedDocSnapshot } from "../../src/services/printed-document.service";
 import type { DocumentConfig } from "../../src/services/system-setting.service";
 import { SAMPLE_PRINTED_DOCS, setSampleClock } from "../../src/services/document-render/sample-data";
+import { NUMBER_ROUNDING_HALF_UP } from "../../src/services/document-render/fmt-num";
 
 type Meta = Record<string, unknown>;
 
@@ -68,11 +69,37 @@ const ESKI_DOC = {
   totals: { totalRolls: 2, totalMeters: 200, totalKg: 20, sackCount: 1 },
 };
 
+/** Yarım değerler (x,xx5): `toFixed` çoğunu aşağı yuvarlar (212,345 → "212,34"), ticari yuvarlama yukarı. */
+const YARIM_DOC = {
+  header: ESKI_DOC.header,
+  products: [{ name: "Linen 330cm.", rollCount: 3, totalMeters: 312.35 }],
+  sacks: [
+    { code: "C-1", seq: 1, totalMeters: 212.345, totalKg: 7.555, packageCount: 2 },
+    { code: "C-2", seq: 2, totalMeters: 100.005, totalKg: 1.005, packageCount: 1 },
+  ],
+  cekiRows: [
+    { sackCode: "C-1", barcode: "B1", desen: "Linen", varyant: "Ekru", meters: 112.345, kg: 0.045, width: 150.5 },
+    { sackCode: "C-1", barcode: "B2", desen: "Linen", varyant: "Ekru", meters: 100, kg: 7.51 },
+    { sackCode: "C-2", barcode: "B3", desen: "Linen", varyant: "Ekru", meters: 100.005, kg: 1.005 },
+  ],
+  totals: { totalRolls: 3, totalMeters: 312.35, totalKg: 8.56, sackCount: 2 },
+};
+
 export const SEVK_BELGE_DOCS: Record<string, Record<string, unknown>> = {
   ornek: SAMPLE_PRINTED_DOCS.SHIPMENT_DISPATCH as Record<string, unknown>,
   zengin: ZENGIN_DOC,
   eski: ESKI_DOC,
+  yarim: YARIM_DOC,
 };
+
+/**
+ * Yuvarlama rejimi — damgasız zarf ticari yuvarlamadan ÖNCE donmuş belgedir (eski ad,
+ * altını değişmez), `/ticari` ekli kombinasyon yeni zarfın damgasını taşır.
+ */
+const REJIMLER: Array<[string, Record<string, unknown>]> = [
+  ["", {}],
+  ["/ticari", { numberRounding: NUMBER_ROUNDING_HALF_UP }],
+];
 
 const TAM_KOLON: NonNullable<DocumentConfig["columns"]> = {
   urun: { order: ["totalMeters", "customerName", "name"], labels: { name: "ÜRÜN" }, hidden: ["rollCount"] },
@@ -148,27 +175,30 @@ export interface SevkBelgeKombinasyon {
   meta: Meta;
 }
 
-/** Üç doc × sekiz config × on dört meta = 336 kombinasyon, sıra deterministik. */
+/** Dört doc × sekiz config × on dört meta × iki yuvarlama rejimi = 896 kombinasyon, sıra deterministik. */
 export function sevkBelgeKombinasyonlari(): SevkBelgeKombinasyon[] {
   const out: SevkBelgeKombinasyon[] = [];
-  for (const [docAd, doc] of Object.entries(SEVK_BELGE_DOCS)) {
-    for (const [cfgAd, cfg] of Object.entries(SEVK_BELGE_CFGS)) {
-      for (const [metaAd, meta] of Object.entries(SEVK_BELGE_METAS)) {
-        out.push({
-          ad: `${docAd}/${cfgAd}/${metaAd}`,
-          snapshot: {
-            schemaVersion: 1,
-            frozenAt: ISO,
-            company: {
-              name: "Deneme Tekstil",
-              letterhead: { addressLine: "Organize San.", phone: "0232", taxInfo: "VD 1" },
-              logoHash: null,
-            },
-            docConfigOverride: cfg,
-            doc,
-          } as unknown as PrintedDocSnapshot,
-          meta,
-        });
+  for (const [rejimAd, rejim] of REJIMLER) {
+    for (const [docAd, doc] of Object.entries(SEVK_BELGE_DOCS)) {
+      for (const [cfgAd, cfg] of Object.entries(SEVK_BELGE_CFGS)) {
+        for (const [metaAd, meta] of Object.entries(SEVK_BELGE_METAS)) {
+          out.push({
+            ad: `${docAd}/${cfgAd}/${metaAd}${rejimAd}`,
+            snapshot: {
+              schemaVersion: 1,
+              frozenAt: ISO,
+              company: {
+                name: "Deneme Tekstil",
+                letterhead: { addressLine: "Organize San.", phone: "0232", taxInfo: "VD 1" },
+                logoHash: null,
+              },
+              docConfigOverride: cfg,
+              doc,
+              ...rejim,
+            } as unknown as PrintedDocSnapshot,
+            meta,
+          });
+        }
       }
     }
   }
@@ -251,23 +281,26 @@ export const DOGRUDAN_METAS: Record<string, Meta> = {
   notDamga: { printNote: "baskı <notu>", printedAtText: "25.09.2026 11:30", printedBy: "admin" },
 };
 
-/** Üç doc × altı config × beş meta = 90 kombinasyon; ad `dogrudan/` önekli. */
+/** Üç doc × altı config × beş meta × iki yuvarlama rejimi = 180 kombinasyon; ad `dogrudan/` önekli. */
 export function dogrudanKombinasyonlari(): SevkBelgeKombinasyon[] {
   const out: SevkBelgeKombinasyon[] = [];
-  for (const [docAd, doc] of Object.entries(DOGRUDAN_DOCS)) {
-    for (const [cfgAd, cfg] of Object.entries(DOGRUDAN_CFGS)) {
-      for (const [metaAd, meta] of Object.entries(DOGRUDAN_METAS)) {
-        out.push({
-          ad: `dogrudan/${docAd}/${cfgAd}/${metaAd}`,
-          snapshot: {
-            schemaVersion: 1,
-            frozenAt: ISO,
-            company: { name: "Deneme Tekstil", letterhead: { addressLine: "Organize San.", phone: "0232", taxInfo: "VD 1" }, logoHash: null },
-            docConfigOverride: cfg,
-            doc,
-          } as unknown as PrintedDocSnapshot,
-          meta,
-        });
+  for (const [rejimAd, rejim] of REJIMLER) {
+    for (const [docAd, doc] of Object.entries(DOGRUDAN_DOCS)) {
+      for (const [cfgAd, cfg] of Object.entries(DOGRUDAN_CFGS)) {
+        for (const [metaAd, meta] of Object.entries(DOGRUDAN_METAS)) {
+          out.push({
+            ad: `dogrudan/${docAd}/${cfgAd}/${metaAd}${rejimAd}`,
+            snapshot: {
+              schemaVersion: 1,
+              frozenAt: ISO,
+              company: { name: "Deneme Tekstil", letterhead: { addressLine: "Organize San.", phone: "0232", taxInfo: "VD 1" }, logoHash: null },
+              docConfigOverride: cfg,
+              doc,
+              ...rejim,
+            } as unknown as PrintedDocSnapshot,
+            meta,
+          });
+        }
       }
     }
   }

@@ -36,7 +36,7 @@ import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import {
   directShipParts,
   esc,
-  FMT_KIT,
+  fmtKit,
   type DirectShipRenderMeta,
   type DirectShipSection,
   type InfoBox,
@@ -99,7 +99,7 @@ export function renderFasonDirectShipHtml(
         colCfg: s.colCfg,
         ...(s.footLabel ? { footLabel: s.footLabel } : {}),
         rows: s.rows,
-        cols: toHtmlCols(s.cols, FMT_KIT),
+        cols: toHtmlCols(s.cols, fmtKit(snapshot)),
       })
     );
   };

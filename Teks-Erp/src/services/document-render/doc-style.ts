@@ -11,6 +11,7 @@
 // donar (docConfigOverride) — eski belge her zaman kendi görünümüyle basılır.
 // =============================================================================
 import { upperTr } from "../../utils/tr-case";
+import { cssFixed } from "./fmt-num";
 
 /** Ham (kısmi) stil ayarı — DocumentConfig.style. Tüm alanlar opsiyonel. */
 export interface DocStyleConfig {
@@ -444,7 +445,7 @@ export function scaleDocCss(css: string, s: ResolvedDocStyle): string {
   if (s.fontScale !== 1) {
     out = out.replace(
       /font-size:\s*([\d.]+)px/g,
-      (_m, n: string) => `font-size: ${Number((Number(n) * s.fontScale).toFixed(2))}px`,
+      (_m, n: string) => `font-size: ${Number(cssFixed(Number(n) * s.fontScale, 2))}px`,
     );
   }
   if (s.weightDelta !== 0) {

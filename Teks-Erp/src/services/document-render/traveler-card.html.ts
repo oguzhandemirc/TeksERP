@@ -27,6 +27,7 @@ import { docBlankGridCss, docBlankGridHtml } from "./doc-style";
 import { travelerFieldCss } from "./traveler-card.fields";
 import { renderRawTemplate, buildRawContext, wrapRawDocument } from "./traveler-card-raw";
 import { fmtDate, fmtDateTime } from "./fmt-date";
+import { cssFixed } from "./fmt-num";
 
 interface SnapStep {
   id: string;
@@ -292,7 +293,7 @@ export function renderTravelerCardHtml(
   const of = (cfg.orderFields ?? {}) as Record<string, unknown>;
   // Spec grid satır başına sütun (1–4, default 3) → hücre genişliği %.
   const specCols = Math.min(4, Math.max(1, Math.round(Number(cfg.specColumns)) || 3));
-  const cellWidthPct = (100 / specCols).toFixed(4);
+  const cellWidthPct = cssFixed(100 / specCols, 4);
 
   const steps = [...(snapshot.steps ?? [])].sort((a, b) => a.stepSequence - b.stepSequence);
   const orderLinks = snapshot.orderLinks ?? [];
@@ -731,7 +732,7 @@ ${sectionsHtml}
   if (fontScale !== 1) {
     out = out.replace(
       /font-size:\s*([\d.]+)px/g,
-      (_m, n: string) => `font-size: ${Number((Number(n) * fontScale).toFixed(2))}px`,
+      (_m, n: string) => `font-size: ${Number(cssFixed(Number(n) * fontScale, 2))}px`,
     );
   }
   if (weightDelta !== 0) {
