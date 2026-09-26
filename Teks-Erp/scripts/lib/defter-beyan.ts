@@ -564,7 +564,10 @@ export type OlayTersYolu =
    * arasında hiçbir bağ ölçülmüyordu, yalan söyleyen yeşil. Sembol adı bir çapadır:
    * yeniden adlandırılır ya da silinirse kapı düşer.
    */
-  | { tur: "BAGLI_TERS"; kod: string; tersYazan: TersYazan[] }
+  | { tur: "BAGLI_TERS"; kod: string | string[]; tersYazan: TersYazan[] }
+  // ↑ `kod` küme olabilir: aynı ileri satır anlamı farklı iki tersle kapanabilir ve okuyucu
+  //   ayırmak zorundadır (PRODUCTION_ISSUE: Top Çıkar `ROLL_DETACH` ↔ iş emri devri
+  //   `PRODUCTION_ISSUE_TRANSFER` — İE zaman çizelgesi ilkini "Top çıkarıldı" diye basar).
   /**
    * Bu kodun KENDİSİ bir ters kayıttır; hangi ilerinin tersi olduğunu söyler.
    * Birden çok ileri kod AYNI ters kodla terslenebilir (ölçüldü 2026-09-13:
@@ -580,14 +583,18 @@ export type OlayTersYolu =
   | { tur: "BORC"; ne: string; kanit: string; sahibi: string };
 
 export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
-  // Üretime giriş BAĞLI tersle kapanır (`ROLL_DETACH`): Top Çıkar (D6) ve iş emri iptali — iki
-  // yolda da top iş emrinden çıkıp kaynağına döner, hareketin anlamı aynı. Rapor ayrımı ileride
-  // gerekirse ayrı kod enum reçetesiyle ayrışır. Dispozisyon · kurtarma bağsız karşı yön kalır.
-  PRODUCTION_ISSUE: { tur: "BAGLI_TERS", kod: "ROLL_DETACH", tersYazan: [
+  // Üretime giriş İKİ bağlı tersle kapanır. `ROLL_DETACH`: Top Çıkar (D6) ve iş emri iptali — top
+  // iş emrinden çıkıp kaynağına döner. `PRODUCTION_ISSUE_TRANSFER`: devir · renk ayırma · fason
+  // taşıma — top üretimde kalır, açık satır eski adımda terslenir ve yeni iş emrinin adımına yeni
+  // ileri satır yazılır (net 0). Ayrı kod çünkü `ROLL_DETACH`ı kodla okuyan İE zaman çizelgesi onu
+  // "Top çıkarıldı" diye basar. Dispozisyon · kurtarma bağsız karşı yön kalır.
+  PRODUCTION_ISSUE: { tur: "BAGLI_TERS", kod: ["ROLL_DETACH", "PRODUCTION_ISSUE_TRANSFER"], tersYazan: [
     { dosya: "src/services/workorder-roll-detach.service.ts", sembol: "detachTx" },
     { dosya: "src/services/workorder.service.ts", sembol: "returnRawRollsOnCancelTx" },
+    { dosya: "src/services/helpers/production-issue-ledger.helper.ts", sembol: "rebindProductionIssuesTx" },
   ] },
   ROLL_DETACH: { tur: "TERS_KODU", ileri: "PRODUCTION_ISSUE" },
+  PRODUCTION_ISSUE_TRANSFER: { tur: "TERS_KODU", ileri: "PRODUCTION_ISSUE" },
   // Üretim farkı iş emri iptalinde dönen topun metraj değişimidir — dönüşün bağlı tersi net 0
   // kapanır, fark AYRI olgudur. MANUAL_ADJUST değil (SoD izni taşır, el işi değil); SHRINK değil
   // (fason dönüşünde ölçülen çekme). Yön from/to'dan okunur.

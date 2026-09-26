@@ -489,7 +489,7 @@ export class WorkOrderSplitService {
         await postProductionIssuesTx(tx, selected, { workOrderStepId: newReEntryStepId, userId: userId ?? null });
 
         // 3) Partinin ayak izini yeni WO adımlarına repoint (movement dahil — R1).
-        await repointRollsTx(tx, selectedIds, oldToNew);
+        await repointRollsTx(tx, selectedIds, oldToNew, { note: `Renk ayırma → ${newWo.workOrderNumber}`, userId: userId ?? null });
 
         // 4) Yeni WO boyahane adımına geri sar: açık movement kapat + taze aç.
         await tx.rollMovement.updateMany({
@@ -671,7 +671,7 @@ export class WorkOrderSplitService {
         }
 
         // 3) Ayak izini repoint (açık fason movement'i yeni adıma taşınır, AÇIK kalır).
-        await repointRollsTx(tx, selectedIds, oldToNew);
+        await repointRollsTx(tx, selectedIds, oldToNew, { note: `Fason taşıma → ${newWo.workOrderNumber}`, userId: userId ?? null });
 
         // 4) Parti + açık sevk bütünüyle yeni WO'ya (batchId değişmez → receive F74 tutarlı).
         await tx.batch.update({ where: { id: ctx.batchId }, data: { workOrderId: newWo.id } });

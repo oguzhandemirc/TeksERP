@@ -4677,7 +4677,7 @@ export class WorkOrderService {
 
     // Ayak izi (movement/operation/error) yeni WO'nun adımlarına repoint — aksi hâlde
     // kaynak WO'nun adımları "hâlâ bekleyen top var" sanır.
-    await repointRollsTx(tx, rollIds, oldToNew);
+    await repointRollsTx(tx, rollIds, oldToNew, { note: `İş emri devri → ${newWo.workOrderNumber}`, userId: userId ?? null });
 
     // Kurşun bypass ataması da MALLA BİRLİKTE taşınır: mal fiziksel olarak hâlâ
     // aynı kurşun makinesinde, yalnız iş emri değişti. `stepMap` TAŞINAN topların

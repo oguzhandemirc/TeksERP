@@ -967,6 +967,22 @@ WHERE e.kind = 'CONSUMED'
     kapsam: { ne: "toplu levent tüketimi", sql: `SELECT COUNT(*)::int AS n FROM warp_beam_events WHERE kind = 'CONSUMED' AND "rollId" IS NOT NULL` },
   },
   {
+    id: "46",
+    // Üretime alınan topun stoğa dönüşü bir KAYIT ister (bağlı ters · karşı olay · sonraki hareket). İş emri
+    // devrinden sonra Top Çıkar açık satırı bulamayıp tersini yazmıyordu (ölçüldü 2026-09-26, `rebindProductionIssuesTx`).
+    title: "Stok kümesindeki topun SON defter satırı açık üretime alma (`PRODUCTION_ISSUE`, bağlı tersi yok) — rafa kayıtsız dönüş",
+    sql: `
+SELECT r.id::text AS kayit, r.barcode, r.status::text AS durum, i."createdAt"::text AS giris
+FROM rolls r
+JOIN warehouse_movements i ON i."rollId" = r.id AND i."reasonCode" = 'PRODUCTION_ISSUE' AND i."reversesMovementId" IS NULL
+WHERE r.status IN ('STOCK', 'WAREHOUSE', 'A1_STOCK', 'RETURNED_FROM_SUBCONTRACTOR')
+  AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = i.id)
+  AND NOT EXISTS (SELECT 1 FROM warehouse_movements m2 WHERE m2."rollId" = r.id AND m2.id <> i.id AND m2."createdAt" >= i."createdAt")
+ORDER BY i."createdAt" DESC
+LIMIT 50`,
+    kapsam: { ne: "üretime alma satırı olan top", sql: `SELECT COUNT(DISTINCT "rollId")::int AS n FROM warehouse_movements WHERE "reasonCode" = 'PRODUCTION_ISSUE'` },
+  },
+  {
     id: "27",
     // `YarnStock.balanceKg`, DB seddi (CHECK/trigger) OLMAYAN denormalize bir
     // alandır — `CariBalance` ile birebir aynı sınıf. Tek yazar `yarn.service`

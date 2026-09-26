@@ -22,6 +22,7 @@ import { TravelerCardService } from "../traveler-card.service";
 import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
 import { createWorkOrderTx } from "./workorder-event.helper";
+import { rebindProductionIssuesTx } from "./production-issue-ledger.helper";
 
 const travelerCardService = new TravelerCardService();
 
@@ -208,12 +209,16 @@ export async function cloneWorkOrderTx(
  * adımlarından yeni WO'nun aynı sıradaki adımlarına repoint eder. recomputeStepStatus
  * WO üyeliğini movement üzerinden okuduğundan bu ŞARTTIR — aksi hâlde kaynak WO'nun
  * adımları "hâlâ bekleyen top var" sanır ve asla COMPLETED olmaz (R1).
+ * Stok defteri repoint EDİLMEZ (ileri satır değişmez): açık üretime alma satırı bağlı ters + yeni
+ * ileri satırla yeni adıma bağlanır (`rebindProductionIssuesTx`).
  */
 export async function repointRollsTx(
   tx: Prisma.TransactionClient,
   rollIds: string[],
   oldToNew: Map<string, string>,
+  ctx: { note: string; userId?: string | null },
 ): Promise<void> {
+  await rebindProductionIssuesTx(tx, rollIds, oldToNew, ctx);
   for (const [oldId, newId] of oldToNew) {
     await tx.roll.updateMany({
       where: { id: { in: rollIds }, currentStepId: oldId },

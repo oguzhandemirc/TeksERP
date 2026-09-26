@@ -806,7 +806,7 @@ console.log("\n=== §13 OLAY DÜZEYİ — her sebep kodunun ters yolu beyanlı m
   const oluAtif: string[] = [];
   for (const [kod, b] of Object.entries(STOK_OLAY_BEYANI)) {
     // TERS_KODU.ileri tek kod ya da küme — her üye ayrı atıftır, hepsi katalogda olmalı.
-    const hedefler: string[] = b.tur === "BAGLI_TERS" ? [b.kod] : b.tur === "KARSI_OLAY" ? ([] as string[]).concat(b.kod) : b.tur === "TERS_KODU" ? ([] as string[]).concat(b.ileri) : [];
+    const hedefler: string[] = b.tur === "BAGLI_TERS" || b.tur === "KARSI_OLAY" ? ([] as string[]).concat(b.kod) : b.tur === "TERS_KODU" ? ([] as string[]).concat(b.ileri) : [];
     for (const hedef of hedefler) if (!kodlar.includes(hedef)) oluAtif.push(`${kod} → ${hedef}`);
   }
   check("§13c ters yol atıfları katalogda var", oluAtif.length === 0,
@@ -816,11 +816,12 @@ console.log("\n=== §13 OLAY DÜZEYİ — her sebep kodunun ters yolu beyanlı m
   // Tek yönlü beyan, ters yolun yanlış koda bağlanmasını SESSİZCE geçirir.
   const asimetri: string[] = [];
   for (const [kod, b] of Object.entries(STOK_OLAY_BEYANI)) {
-    if (b.tur === "BAGLI_TERS" && b.kod !== kod) {
-      const karsi = STOK_OLAY_BEYANI[b.kod];
+    // `kod` küme olabilir (PRODUCTION_ISSUE'nun iki tersi) — her ters kod ayrı ayrı simetrik olmalı.
+    if (b.tur === "BAGLI_TERS") for (const tersKod of ([] as string[]).concat(b.kod).filter((k) => k !== kod)) {
+      const karsi = STOK_OLAY_BEYANI[tersKod];
       // `ileri` tek kod ya da küme: bir ters kod birden çok ileriyi tersleyebilir (TAMBUR_UNDO).
       if (!karsi || karsi.tur !== "TERS_KODU" || !([] as string[]).concat(karsi.ileri).includes(kod)) {
-        asimetri.push(`${kod} → ${b.kod} (karşı beyan: ${karsi ? karsi.tur : "YOK"})`);
+        asimetri.push(`${kod} → ${tersKod} (karşı beyan: ${karsi ? karsi.tur : "YOK"})`);
       }
     }
     // KARSI_OLAY da simetriktir: A'nın karşısı B ise B ya "karşım A" der (KARSI_OLAY) ya A'nın

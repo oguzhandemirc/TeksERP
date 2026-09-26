@@ -545,5 +545,20 @@ LEFT JOIN doff_events d ON d.id = r."doffEventId"
 WHERE e.kind = 'CONSUMED'
   AND (r."entrySource" <> 'WEAVING' OR r."doffEventId" IS NULL OR e."machineId" IS DISTINCT FROM d."machineId");
 
+\echo '== 46) STOK KÜMESİNDE top ama SON defter satırı AÇIK üretime alma (bağlı tersi yazılmamış; beklenen 0) =='
+-- Üretime alınan top stok kümesine yalnız bir KAYITLA döner: bağlı ters (`ROLL_DETACH`), karşı olay
+-- (`DISPOSITION` · `RESCUE` · `PRODUCTION_RECEIPT`) ya da sonraki bir hareket. Son satırı hâlâ açık
+-- `PRODUCTION_ISSUE` olan stok topu tersi yazılmadan rafa dönmüştür ve defter Σ'sı onu "üretimde" sayar
+-- (ölçüldü 2026-09-26: iş emri devrinden sonra Top Çıkar). Eşit damgalı başka satır varsa sıra belirsizdir,
+-- "son" sayılmaz (yanlış kırmızı yerine sessizlik).
+SELECT r.id::text AS kayit, r.barcode, r.status::text AS durum, i."createdAt"::text AS giris
+FROM rolls r
+JOIN warehouse_movements i ON i."rollId" = r.id AND i."reasonCode" = 'PRODUCTION_ISSUE' AND i."reversesMovementId" IS NULL
+WHERE r.status IN ('STOCK', 'WAREHOUSE', 'A1_STOCK', 'RETURNED_FROM_SUBCONTRACTOR')
+  AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = i.id)
+  AND NOT EXISTS (SELECT 1 FROM warehouse_movements m2 WHERE m2."rollId" = r.id AND m2.id <> i.id AND m2."createdAt" >= i."createdAt")
+ORDER BY i."createdAt" DESC
+LIMIT 50;
+
 \echo ''
 \echo '== Tutarlılık kontrolü bitti. §30b BİLGİ (miras sayısı) dışında yukarıda hiç satır YOKSA sistem sağlıklı. =='

@@ -12798,6 +12798,36 @@ Statik okuma (Explore taraması, 2026-09-26), ÖLÇÜLMEDİ — zorlanmış sır
 - Düşük/görünüm: `CashTransaction` · `YarnMovement` · `RollMovement` (`enteredAt`) · `ShipmentEvent` (okuyucu yok) · dokuma defterleri.
 - Emsal tek: `WarpBeamEvent` (DB saati + varlık başına +1 ms).
 
+## 2026-09-26 — İş emri devrinde açık üretime alma satırı yeni adıma bağlanır; devir tersi ayrı kod `PRODUCTION_ISSUE_TRANSFER` [ÇEKİRDEK]
+
+**Arıza (ölçüldü; RollStatusEvent turunun yan bulgusu, kullanıcı kararı: 2.11.0'a girer).** `repointRollsTx` (devir · renk ayırma · fason taşıma) topu, adımını ve hareketlerini yeni iş emrine taşıyordu. Ama stok defterindeki açık `PRODUCTION_ISSUE` satırı eski iş emrinin adımına damgalı kalıyordu.
+- Yeni iş emrindeki Top Çıkar ve iptal açık satırı yeni adımlarda aradı, bulamadı ve ters yazmadı.
+- Top rafa döndü ama defter onu "üretimde" saydı. Sonda: devir → Top Çıkar → top STOCK, giriş satırı açık.
+
+**Düzeltme.** İleri satır değişmez. Tek yazar `rebindProductionIssuesTx` (`repointRollsTx`in ilk işi) aynı tx'te iki satır yazar, net 0:
+- eski adıma damgalı açık satırın bağlı tersi;
+- yeni iş emrinin adımına yeni ileri satır.
+
+Damgasız (geçiş dönemi) satır adımdan bağımsız bulunduğu için dokunulmaz. Mevcut veri onarılmadı (karar); mutabakat §46 onları gösterir.
+
+**Neden ayrı kod (ölçüm, 4b ölçütü).** `ROLL_DETACH`ı kodla okuyan tek yer İE zaman çizelgesi: eski iş emrinin adımına damgalı her satırı "Top çıkarıldı" diye basar. Rapor, karne, Excel, mutabakat ve panel/tablet etiketi kodla okumuyor.
+- ⇒ Devir tersi `PRODUCTION_ISSUE_TRANSFER` (TERS_KODU → `PRODUCTION_ISSUE`); `ROLL_DETACH` yalnız "top iş emrinden çıktı" anlamını taşır.
+- Beyan tipi: BAGLI_TERS `kod` küme olabilir (KARSI_OLAY emsali); `test_defter_ters_yol` §13c/§13d kümeyi okur.
+- Depo hareketleri ekranındaki Türkçe etiket o ekranın sahibinde.
+
+**Çizelge.** `listIssueTransfers` devir çiftini okur: ters + aynı topun tersten sonra yazılan ilk eşlenmemiş `PRODUCTION_ISSUE`i. Eşit ms'de "sonra" `>=` ile okunur, tersin kendi ileri satırı dışlanır. Yalnız görünümdür.
+- Eski iş emrinde: "İş emrine devredildi · barkod → IE…".
+- Yeni iş emrinde: "Devirle üretime alındı · barkod ← IE…".
+
+**Bekçi.** Yeni kapılar:
+- `test_wo_roll_detach` §9/§9b/§9c.
+- `test_consistency` §46 (+ `consistency-check.sql` §46): stok kümesindeki topun son defter satırı açık üretime alma ise kırmızı. Temiz DB'de kapsam 0 → ⏭.
+
+Negatif sondalar (md5 ile geri alındı):
+- bağlama çağrısı kaldırılınca §46 ❌ (1 drift) + §9/§9b ❌;
+- devir tersi `ROLL_DETACH` yazınca §9/§9b/§9c ❌ (eski iş emri devri "Top çıkarıldı" diye bastı — ayrı kodun gerekçesi sondada görüldü);
+- çizelgenin devir satırları kaldırılınca §9c ❌.
+
 ## 2026-09-26 — Token replay D5b: üretim nesneleri tek boğazda; yarışta ham P2002 kalktı; borç 11 → 5 [ÇEKİRDEK]
 
 **Kapsam.** Levent planı (R) · dokuma işi · fason dokuma kabulü · top indirme (R + K′). K′ ilk ifade kilidinin arkasında: dokuma işinde 8032, fason kabulde iş emri satır claim'i, indirmede 8029; numaralar maksimumdan türediği için kilidin arkasında erken dönen deneme numara sarf etmez. Ayrım `fresh: true/false as const` (D3 paketleme grubu kalıbı).

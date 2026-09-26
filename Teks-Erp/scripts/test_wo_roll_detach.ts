@@ -12,8 +12,15 @@
 //   §6 son top da çıkınca adım PENDING'e, iş emri Planlandı'ya döner (STATUS_CHANGED, tetik ROLL_DETACH)
 //   §7 işlem görmüş top (kapanmış hareket) önizlemede sebebiyle görünür; çıkarma 409 ROLL_DETACH_PROCESSED, top yerinde
 //   §8 aynı top ikinci kez çıkarılamaz (404); sebepsiz çıkarma 400
+//   §9 iş emri DEVRİ: taşınan açık üretime alma satırı yeni iş emrinin adımına bağlanır (eski satır bağlı
+//      ters `PRODUCTION_ISSUE_TRANSFER`le kapanır, yeni ileri satır, net 0); yeni iş emrinden Top Çıkar
+//      tersini yazar, açık satır kalmaz (ölçüldü 2026-09-26: devirden sonra Top Çıkar tersi YAZMIYORDU)
+//   §9c Hareketler: eski iş emrinde "İş emrine devredildi → yeni", yenide "Devirle üretime alındı ← eski";
+//      devir hiçbir iş emrinde "Top çıkarıldı" DEĞİLDİR (yalnız gerçek Top Çıkar)
 // NEGATİF SONDA (elle, 2026-09-25): `detachBlockers` boş dizi dönünce §7 kırmızı; ters satır yazımı
-// kaldırılınca §3 kırmızı. Yedek kopyadan geri alındı.
+// kaldırılınca §3 kırmızı. Yedek kopyadan geri alındı. (2026-09-26, md5 ile geri alındı) `repointRollsTx`teki
+// `rebindProductionIssuesTx` çağrısı kaldırılınca §9 + §9b kırmızı; devir tersi `ROLL_DETACH` yazınca §9 + §9b +
+// §9c kırmızı; çizelgenin devir satırları kaldırılınca §9c kırmızı.
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
@@ -119,6 +126,39 @@ async function main(): Promise<void> {
       aday2?.detachable === false && aday2.blockers.includes("istasyonda işlem gördü")
         && islenmis?.code === "ROLL_DETACH_PROCESSED" && (await durum(c)).status === RollStatus.IN_PRODUCTION,
       `${JSON.stringify(aday2?.blockers)} · ${islenmis?.code}`);
+
+    const { wo: wo3, rolls: [d] } = await isEmriVeToplar([["D", RollStatus.STOCK]]);
+    await svc.completeWorkOrder(wo3, { reason: "devir sondası", dispositions: [{ rollId: d, action: "TRANSFER" }], transferOrderMode: "stock" }, ADMIN);
+    const wo4 = await prisma.workOrder.findFirstOrThrow({
+      where: { splitFromId: wo3 },
+      select: { id: true, workOrderNumber: true, splitFrom: { select: { workOrderNumber: true } }, steps: { orderBy: { stepSequence: "asc" }, select: { id: true } } },
+    });
+    woIds.push(wo4.id);
+    const acik = (rollId: string) => prisma.warehouseMovement.findMany({
+      where: { rollId, reasonCode: STOCK_MOVE_REASON.PRODUCTION_ISSUE, reversesMovementId: null, reversedBy: { none: {} } },
+      select: { workOrderStepId: true },
+    });
+    const devirSonrasi = await acik(d);
+    const devirTersi = await prisma.warehouseMovement.findFirst({ where: { rollId: d, reasonCode: STOCK_MOVE_REASON.PRODUCTION_ISSUE_TRANSFER }, select: { notes: true } });
+    const devirDetach = await prisma.warehouseMovement.count({ where: { rollId: d, reasonCode: STOCK_MOVE_REASON.ROLL_DETACH } });
+    check("§9 devir: açık üretime alma satırı YENİ iş emrinin ilk adımına bağlandı, eskisi devir tersiyle (ROLL_DETACH değil) kapandı",
+      devirSonrasi.length === 1 && devirSonrasi[0]?.workOrderStepId === wo4.steps[0]?.id && (devirTersi?.notes ?? "").startsWith("İş emri devri") && devirDetach === 0,
+      `${devirSonrasi.length} açık · ${devirTersi?.notes} · ROLL_DETACH ${devirDetach}`);
+    const cikar = await detach.detachRoll(wo4.id, d, "Devirden sonra yanlış", ADMIN);
+    const dSon = await prisma.roll.findUniqueOrThrow({ where: { id: d }, select: { status: true, warehouseId: true } });
+    const tersSayisi = await prisma.warehouseMovement.count({ where: { rollId: d, reasonCode: STOCK_MOVE_REASON.ROLL_DETACH } });
+    check("§9b ⭐ devirden sonra Top Çıkar tersini yazar: açık üretime alma satırı KALMAZ, top rafında (STOCK, depo)",
+      cikar.data.status === RollStatus.STOCK && dSon.status === RollStatus.STOCK && dSon.warehouseId === WAREHOUSE
+        && tersSayisi === 1 && (await acik(d)).length === 0,
+      `${dSon.status} · ters ${tersSayisi} · açık ${(await acik(d)).length}`);
+    const cizelge = async (id: string) => (await new WorkOrderTimelineService().list(id, { limit: 200 })).data
+      .filter((x) => (x.detail ?? "").startsWith(`${TAG}-D`)).map((x) => `${x.title}|${x.detail}`);
+    const [eski, yeni] = [await cizelge(wo3), await cizelge(wo4.id)];
+    check("§9c ⭐ Hareketler: eskide 'İş emrine devredildi → yeni', yenide 'Devirle üretime alındı ← eski'; devir 'Top çıkarıldı' sayılmaz",
+      eski.length === 1 && eski[0]!.startsWith("İş emrine devredildi|") && eski[0]!.endsWith(`→ ${wo4.workOrderNumber}`)
+        && yeni.length === 2 && yeni.some((x) => x.startsWith("Devirle üretime alındı|") && x.endsWith(`← ${wo4.splitFrom?.workOrderNumber}`))
+        && yeni.some((x) => x.startsWith("Top çıkarıldı|")),
+      `eski ${JSON.stringify(eski)} · yeni ${JSON.stringify(yeni)}`);
 
     const ikinci = await hata(() => detach.detachRoll(wo, a, "tekrar", ADMIN));
     const sebepsiz = await hata(() => detach.detachRoll(wo2, c, " ", ADMIN));

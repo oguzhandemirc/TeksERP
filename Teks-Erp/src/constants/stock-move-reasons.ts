@@ -36,6 +36,12 @@ export const STOCK_MOVE_REASON = {
   /** Top iş emrinden kaynağına döner (Top Çıkar · iş emri iptali) — üretime giriş satırının BAĞLI TERSİ. */
   ROLL_DETACH: "ROLL_DETACH",
   /**
+   * Üretimdeki top iş emri değiştirdi (devir · renk ayırma · fason taşıma) — eski adıma bağlı
+   * üretime giriş satırının BAĞLI TERSİ; aynı tx'te yeni adıma yeni `PRODUCTION_ISSUE` yazılır.
+   * `ROLL_DETACH`tan ayrı: top kaynağına dönmedi, İE zaman çizelgesi onu "Top çıkarıldı" saymaz.
+   */
+  PRODUCTION_ISSUE_TRANSFER: "PRODUCTION_ISSUE_TRANSFER",
+  /**
    * Üretim farkı — iş emri iptalinde dönen topun metrajı üretime alınandan farklıysa farkın
    * kendisi (eksikse çıkış, fazlaysa giriş ucu). Dönüş bağlı tersle net 0 kapanır, fark ayrı olgudur.
    */

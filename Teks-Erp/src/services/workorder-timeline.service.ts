@@ -3,7 +3,7 @@
 // =============================================================================
 // İki katman tek çizelgede: (A) iş emrinin KENDİ defteri `work_order_events`;
 // (B) kendi defteri olan olaylar KAYNAKLARINDAN okunur — sipariş bağı, hedef
-// özellik, parti doğuşu, fason sevk/kabul, Tambur kesimi, kapanış künyesi.
+// özellik, parti doğuşu, Top Çıkar / devir (stok defteri), fason sevk/kabul, Tambur kesimi, kapanış künyesi.
 // Kopya yok (tek kaynak) ve audit OKUNMAZ (audit yalnız ayak izidir).
 // Satır başlığı burada Türkçe kurulur; istemci ikinci sözlük tutmaz.
 // =============================================================================
@@ -13,7 +13,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { normalizeScanCode } from "../utils/code-format";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
-import { cancelReturnNote } from "./helpers/production-issue-ledger.helper";
+import { cancelReturnNote, listIssueTransfers } from "./helpers/production-issue-ledger.helper";
 import {
   TIMELINE_GROUPS,
   TIMELINE_GROUP_LABEL,
@@ -155,6 +155,17 @@ async function sourcedItems(workOrderId: string, stepIds: string[]): Promise<Pen
       title: `İş emri iptali — ${cancelReturns.length} top kaynağına döndü`, detail: m(total), actorId: cancelReturns[0]!.userId,
       rolls: cancelReturns.map((d) => ({ barcode: d.roll?.barcode ?? null, qty: Number(d.qty), to: d.toStatus })),
     });
+  }
+  // Devir · renk ayırma · fason taşıma: top üretimde kalır, iş emri değişir — "Top çıkarıldı" DEĞİL.
+  const stepSet = new Set(stepIds);
+  for (const x of await listIssueTransfers(prisma, stepIds)) {
+    const top = `${x.barcode ?? "—"} · ${m(x.qty)}`;
+    if (x.outStepId && stepSet.has(x.outStepId)) {
+      out.push({ ...NO_META, id: `xfer-out:${x.reversalId}`, at: x.outAt.toISOString(), group: "PARTI", title: "İş emrine devredildi", detail: `${top} → ${x.toWorkOrderNumber ?? "—"}`, reason: x.notes, actorId: x.userId });
+    }
+    if (x.inStepId && x.inAt && stepSet.has(x.inStepId)) {
+      out.push({ ...NO_META, id: `xfer-in:${x.reversalId}`, at: x.inAt.toISOString(), group: "PARTI", title: "Devirle üretime alındı", detail: `${top} ← ${x.fromWorkOrderNumber ?? "—"}`, reason: x.notes, actorId: x.userId });
+    }
   }
   const dispatches = await prisma.subcontractorDispatch.findMany({
     where: { workOrderId },
