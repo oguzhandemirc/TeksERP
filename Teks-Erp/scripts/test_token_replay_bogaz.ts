@@ -9,6 +9,8 @@
 //   §2 ölü beyan satırı yok.
 //   §3 kip doğrulaması: giriş birimi kipini çağırır (R `run` · K `inTx` · K′ `behindLock`); K'de `inTx` tx'in İLK await'i.
 //   §4 her `tokenReplay({…})` literali find · alive · identity · collision · respond taşır; identity ≥1 alanlı dizi.
+//   §4b identity'nin alan adları KİMLİK BEYANI'yla birebir (silinen/beyansız eklenen alan kırmızı).
+//   §4c öz-kıyas yok: `gelen`, aynı identity'de bir `mevcut`in okuduğu prior alanını okumaz ve `mevcut`le aynı ifade değildir.
 //   §5 muaf sınıfı KAPALI kümeden; ON_KONTROL_OKUYUCUSU yanıt üretemez (okuma yalnız `clientToken`ı seçer, boğaz yok).
 //   §6 borç CIRCIR (yalnız düşer — iki yönlü, `circir-kolu`).
 // =============================================================================
@@ -16,7 +18,7 @@ import * as path from "node:path";
 import * as ts from "typescript";
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
-import { MUAF_SINIFLARI, TOKEN_YOLLARI, type Kip } from "./lib/token-replay-beyan";
+import { KIMLIK_BEYANI, MUAF_SINIFLARI, TOKEN_YOLLARI, type Kip } from "./lib/token-replay-beyan";
 import { tokenBirimleri, type TokenBirimi } from "./lib/token-yazim-tarama";
 
 let pass = 0;
@@ -127,6 +129,70 @@ function main(): void {
   }
   check("⭐ her tokenReplay literali beş alanı taşır; gövde kapısı (identity) boş değil", politikaHatasi.length === 0, politikaHatasi.join(" · "));
   check("politika taraması kör değil (≥ 18 politika)", tarama.politikalar.length >= 18, `${tarama.politikalar.length} politika`);
+
+  console.log("§4b Kimlik beyanı");
+  const alanOf = (lit: ts.ObjectLiteralExpression, ad: string) =>
+    lit.properties.find((x): x is ts.PropertyAssignment => ts.isPropertyAssignment(x) && x.name.getText() === ad)?.initializer;
+  const kimlikElemanlari = (idn: ts.Node): ts.ObjectLiteralExpression[] => {
+    const out: ts.ObjectLiteralExpression[] = [];
+    const gez = (n: ts.Node) => {
+      if (ts.isObjectLiteralExpression(n) && alanOf(n, "ad") && alanOf(n, "gelen")) out.push(n);
+      ts.forEachChild(n, gez);
+    };
+    gez(idn);
+    return out;
+  };
+  const kimlikHatasi: string[] = [];
+  const beyanliPolitika = new Set<string>();
+  for (const p of tarama.politikalar) {
+    const idn = p.literal && alanOf(p.literal, "identity");
+    if (!idn || !p.birim) continue;
+    const anahtar = p.birim;
+    beyanliPolitika.add(anahtar);
+    const kod = kimlikElemanlari(idn).map((e) => (ts.isStringLiteral(alanOf(e, "ad")!) ? (alanOf(e, "ad") as ts.StringLiteral).text : "?")).sort();
+    const beyan = KIMLIK_BEYANI[anahtar];
+    if (!beyan) {
+      kimlikHatasi.push(`${anahtar}: kimlik beyanı yok (kod: ${kod.join(",")})`);
+      continue;
+    }
+    const b = [...beyan].sort();
+    const eksik = b.filter((x) => !kod.includes(x));
+    const fazla = kod.filter((x) => !b.includes(x));
+    if (eksik.length || fazla.length) kimlikHatasi.push(`${anahtar}: koddan silinen [${eksik.join(",")}] · beyansız eklenen [${fazla.join(",")}]`);
+  }
+  const oluKimlik = Object.keys(KIMLIK_BEYANI).filter((k) => !beyanliPolitika.has(k));
+  check("⭐ her politikanın kimlik alanları beyanla birebir", kimlikHatasi.length === 0, kimlikHatasi.join(" · "));
+  check("kimlik beyanında ölü satır yok", oluKimlik.length === 0, oluKimlik.join(" · "));
+
+  console.log("§4c Öz-kıyas yasağı");
+  const ozKiyas: string[] = [];
+  for (const p of tarama.politikalar) {
+    const idn = p.literal && alanOf(p.literal, "identity");
+    if (!idn || !(ts.isArrowFunction(idn) || ts.isFunctionExpression(idn))) continue;
+    const prm = idn.parameters[0]?.name;
+    const onceki = prm && ts.isIdentifier(prm) ? prm.text : null;
+    if (!onceki) continue;
+    // `p.X` biçimindeki okumalar (X = prior'ın alanı); `p.X.Y` de X sayılır.
+    const okunanlar = (n: ts.Node): Set<string> => {
+      const out = new Set<string>();
+      const gez = (k: ts.Node) => {
+        if (ts.isPropertyAccessExpression(k) && ts.isIdentifier(k.expression) && k.expression.text === onceki) out.add(k.name.text);
+        ts.forEachChild(k, gez);
+      };
+      gez(n);
+      return out;
+    };
+    const elemanlar = kimlikElemanlari(idn.body);
+    const mevcutOkur = new Set(elemanlar.flatMap((e) => [...okunanlar(alanOf(e, "mevcut") ?? e)]));
+    for (const e of elemanlar) {
+      const g = alanOf(e, "gelen")!;
+      const m = alanOf(e, "mevcut");
+      const ad = alanOf(e, "ad")!.getText();
+      const cakisan = [...okunanlar(g)].filter((x) => mevcutOkur.has(x));
+      if (cakisan.length || (m && m.getText() === g.getText())) ozKiyas.push(`${p.yer} ${ad}: gelen saklanan alanı okuyor (${cakisan.join(",") || g.getText()})`);
+    }
+  }
+  check("⭐ gelen değer saklanan kayıttan okunmaz (öz-kıyas yok)", ozKiyas.length === 0, ozKiyas.join(" · "));
 
   console.log("§5 Muaf sınıfı");
   const muafHatasi = Object.entries(TOKEN_YOLLARI).filter(([, y]) => "muaf" in y && !(y.muaf in MUAF_SINIFLARI)).map(([k]) => k);

@@ -99,3 +99,45 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}helpers/goods-receipt-preflight.helper.ts::replayedTokens`]: { muaf: "ON_KONTROL_OKUYUCUSU", neden: "aşım toplamından tekrar edilen satırı düşer; satırın cevabı createInitialEntry'den" },
   [`${S}import/import.service.ts::apply`]: { muaf: "TOKEN_CLAIM_ONCE", neden: "ImportRun satırı koşumdan önce claim edilir (plan §1 sınıf dışı)" },
 };
+
+/**
+ * KİMLİK BEYANI — her `tokenReplay` politikasının gövde kapısındaki alanlar (`identity`in `ad`leri), politikayı kuran
+ * birimin adıyla. `test_token_replay_bogaz` §4b iki kümeyi BİREBİR kıyaslar: koddan alan silinir ya da beyansız eklenirse
+ * kırmızı. ⚠️ Kimlik beyanından alan ÇIKARMAK 1e onayı ister ve gerekçesi commit mesajında yazılır (muaf listesiyle aynı
+ * kural): alanı hem koddan hem beyandan silen değişiklik kapıdan geçer, gözden geçirmede görünür olmalıdır.
+ */
+export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
+  [`${S}cash-transaction.service.ts::cashTxnReplay`]: ["kind", "amount", "cashBoxId", "bankAccountId"],
+  [`${S}cash-transaction.service.ts::transferReplay`]: ["fromCashBoxId", "fromBankAccountId", "toCashBoxId", "toBankAccountId", "amount"],
+  [`${S}cheque-delivery-note.service.ts::noteReplay`]: ["chequeIds", "bankAccountId", "cariId", "targetLabel", "notes", "deliveryDate"],
+  [`${S}cheque.service.ts::chequeReplay`]: ["kind", "amount", "dueDate", "taraf", "docType", "currency", "serialNo", "exchangeRate", "issueDate", "postingDate"],
+  [`${S}goods-receipt.service.ts::receiptReplay`]: ["warehouseId", "purchaseOrderId", "deliveryNoteNo", "rawStockEntry", "currency", "taraf"],
+  [`${S}inventory.service.ts::initialEntryReplay`]: ["itemId", "colorId", "initialQty"],
+  [`${S}inventory.service.ts::openFabricReplay`]: ["parentReceiptId", "producedInStepId"],
+  [`${S}invoice.service.ts::invoiceReplay`]: ["type", "taraf", "currency", "satırlar"],
+  [`${S}machine-doff.service.ts::doffReplay`]: ["machineId", "productionLineNo", "pieceCount"],
+  [`${S}machine-run.service.ts::runReplay`]: ["machineId", "productionLineNo", "weavingOrderId"],
+  [`${S}order.service.ts::orderReplay`]: ["customerId", "branchId", "satırlar", "orderNumber"],
+  [`${S}order.service.ts::quickOrderReplay`]: ["customerId", "branchId", "lines"],
+  [`${S}packing-group.service.ts::groupReplay`]: ["customerId", "sackIds"],
+  [`${S}payment.service.ts::paymentReplay`]: ["direction", "method", "amount", "cashBoxId", "bankAccountId", "taraf", "currency", "exchangeRate", "paymentDate"],
+  [`${S}purchase-order.service.ts::poReplay`]: ["taraf", "satırlar", "currency", "orderDate", "expectedDate"],
+  [`${S}sack-search.service.ts::pickListReplay`]: ["çuvallar"],
+  [`${S}shipping.service.ts::sackReplay`]: ["customerId", "branchId", "packingGroupId", "packageNo"],
+  [`${S}shipping.service.ts::shipmentReplay`]: ["customerId", "branchId", "toplar", "cuvallar"],
+  [`${S}subcontractor-beam.service.ts::returnReplay`]: ["kind", "dispatchId", "warpBeamId", "lengthM"],
+  [`${S}subcontractor-weaving.service.ts::weavingReceiptReplay`]: ["weavingOrderId", "manifestNo"],
+  [`${S}subcontractor.service.ts::receiptReplay`]: ["workOrderId", "stepId", "subcontractorId", "toplar", "metrajlar", "yeniToplar"],
+  [`${S}tambur-manual.service.ts::finishedRollReplay`]: ["itemId", "colorId", "initialQty"],
+  [`${S}tambur-manual.service.ts::manualRollAttachedReplay`]: ["initialQty", "itemId", "colorId"],
+  [`${S}tambur.service.ts::cutReplay`]: ["parentRollId", "cutLength"],
+  [`${S}warehouse-transfer.service.ts::transferReplay`]: ["fromWarehouseId", "toWarehouseId", "toplar"],
+  [`${S}warp-beam-consume.service.ts::consumeReplay`]: ["beamId", "kind", "lengthM"],
+  [`${S}warp-beam-mount.service.ts::mountReplay`]: ["beamId", "kind", "machineId", "mountPosition"],
+  [`${S}warp-beam-wind.service.ts::windReplay`]: ["beamId", "kind", "lengthM"],
+  [`${S}warp-beam.service.ts::warpBeamReplay`]: ["warpSpecId", "originKind", "plannedLengthM", "subcontractorId", "supplierId", "ownerCustomerId", "weavingOrderId", "physicalBeamNo"],
+  [`${S}weaving-order.service.ts::weavingOrderReplay`]: ["itemId", "executionKind", "subcontractorId", "plannedM", "colorId", "sipariş satırları", "warpSpecId"],
+  [`${S}workorder-batch-add.service.ts::batchReplay`]: ["workOrderId", "missingRolls"],
+  [`${S}workorder.service.ts::quickStartReplay`]: ["targetItemId", "orderLines"],
+  [`${S}workorder.service.ts::woReplay`]: ["orderLines", "targetItemId", "type"],
+};

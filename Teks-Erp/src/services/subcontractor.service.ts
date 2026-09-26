@@ -728,16 +728,22 @@ async function nextDirectShipmentNo(tx: Prisma.TransactionClient): Promise<strin
 }
 
 type ReceiptReplayRow = Prisma.SubcontractorReceiptGetPayload<{
-  include: { subcontractor: true; step: { include: { station: true } }; items: { include: { newRoll: true } } };
+  include: { subcontractor: true; step: { include: { station: true } }; items: { include: { newRoll: true } }; bornRolls: { select: { initialQty: true } } };
 }>;
 
 /**
  * Fason kabul replay'i (R). Aynı fişin ikinci kopyası yarışı kaybettiğinde üç ayrı noktada düşebilir (tx öncesi
  * kural · tx içi claim · token P2002) ve operatör için üçü de "kabul zaten yapıldı"dır: cevap hata türüne değil
  * token KİMLİĞİNE bakar (BULGU-T1-005). Gövde kapısı: iş emri + adım + fasoncu + dönen top kümesi + elle verilen
- * metrajlar; iptal edilmiş kabulün token'ı 409 `RECEIPT_CANCELLED`.
+ * metrajlar + doğan yeni topların metrajları (sırasız); iptal edilmiş kabulün token'ı 409 `RECEIPT_CANCELLED`.
  */
-function receiptReplay(data: { workOrderId: string; stepId: string; subcontractorId: string; returns: Array<{ rollId: string; receivedQty?: number | null }> }) {
+function receiptReplay(data: {
+  workOrderId: string;
+  stepId: string;
+  subcontractorId: string;
+  returns: Array<{ rollId: string; receivedQty?: number | null }>;
+  newRolls?: Array<{ qty: number }>;
+}) {
   const explicit = data.returns.filter((r) => r.receivedQty != null);
   const qtyKey = (rows: Array<{ rollId: string; qty: Prisma.Decimal.Value | null }>) =>
     rows.map((r) => `${r.rollId}:${r.qty == null ? "" : new Prisma.Decimal(r.qty).toFixed(3)}`).sort().join(",");
@@ -745,7 +751,7 @@ function receiptReplay(data: { workOrderId: string; stepId: string; subcontracto
     find: (db, clientToken) =>
       db.subcontractorReceipt.findUnique({
         where: { clientToken },
-        include: { subcontractor: true, step: { include: { station: true } }, items: { include: { newRoll: true } } },
+        include: { subcontractor: true, step: { include: { station: true } }, items: { include: { newRoll: true } }, bornRolls: { select: { initialQty: true } } },
       }),
     alive: (p) => {
       if (!p.cancelledAt) return;
@@ -763,6 +769,11 @@ function receiptReplay(data: { workOrderId: string; stepId: string; subcontracto
         ad: "metrajlar",
         mevcut: qtyKey(explicit.map((r) => ({ rollId: r.rollId, qty: p.items.find((i) => i.newRollId === r.rollId)?.receivedQty ?? null }))),
         gelen: qtyKey(explicit.map((r) => ({ rollId: r.rollId, qty: r.receivedQty ?? null }))),
+      },
+      {
+        ad: "yeniToplar",
+        mevcut: p.bornRolls.map((r) => new Prisma.Decimal(r.initialQty).toFixed(3)).sort().join(","),
+        gelen: (data.newRolls ?? []).map((r) => new Prisma.Decimal(r.qty).toFixed(3)).sort().join(","),
       },
     ],
     collision: (p) => `Bu form daha önce başka bir kabul olarak kaydedilmiş (makbuz ${p.receiptNo}) — yeni kabul için ekranı kapatıp yeniden açın.`,

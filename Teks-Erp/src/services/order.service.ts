@@ -333,6 +333,13 @@ function withExtraWarnings<T>(res: ApiResponse<T>, extra: string[]): ApiResponse
   return { ...res, warnings: [...(res.warnings ?? []), ...extra] };
 }
 
+type SiparisSatiri = { itemId: unknown; colorId?: unknown; width?: unknown; quantity: unknown };
+/** Sipariş replay'inin satır izi (create + hızlı sipariş TEK kaynak): ürün · renk · en · miktar, Decimal 3 hane, sırasız. */
+function siparisSatirIzi(satirlar: ReadonlyArray<SiparisSatiri>): string {
+  const d3 = (v: unknown) => (v == null || v === "" ? "" : new Prisma.Decimal(v as Prisma.Decimal.Value).toFixed(3));
+  return satirlar.map((l) => `${l.itemId}|${l.colorId ?? ""}|${d3(l.width)}|${d3(l.quantity)}`).sort().join(";");
+}
+
 export class OrderService extends BaseService {
   private aliasService = new CustomerAliasService();
 
@@ -2188,9 +2195,9 @@ export class OrderService extends BaseService {
 
   /**
    * create() replay'i (Roll emsali): önce 4. durum (iptal edilmiş sipariş "başarılı" dönmesin — müşteriye söz
-   * verilen metraj listede görünmezdi), sonra kimlik-kilit alanları. Derin satır karşılaştırması bilinçli yok
-   * (Decimal/alias-terfisi kırılgan): müşteri + şube + satır sayısı + elle verilmişse sipariş no "farklı form
-   * oturumu"nu yakalar; aynı formda numarayı değiştirip göndermek eski siparişi "oluşturuldu" diye döndürmez.
+   * verilen metraj listede görünmezdi), sonra kimlik: müşteri + şube + SATIR İZİ (ürün · renk · en · miktar; Decimal
+   * 3 hane) + elle verilmişse sipariş no. Satır izi olmadan düzeltilmiş miktarın aynı token'la tekrarı eski
+   * siparişi "oluşturuldu" diye döndürüp düzeltmeyi yutardı.
    */
   private orderReplay(data: Record<string, unknown>) {
     const manualOrderNumber = parseManualOrderNumber(data.orderNumber);
@@ -2200,7 +2207,7 @@ export class OrderService extends BaseService {
       identity: (p) => [
         { ad: "customerId", mevcut: p.customerId, gelen: data.customerId },
         { ad: "branchId", mevcut: p.branchId, gelen: data.branchId },
-        { ad: "lineCount", mevcut: Array.isArray(p.lines) ? p.lines.length : null, gelen: Array.isArray(data.lines) ? data.lines.length : 0 },
+        { ad: "satırlar", mevcut: siparisSatirIzi(Array.isArray(p.lines) ? (p.lines as SiparisSatiri[]) : []), gelen: siparisSatirIzi(Array.isArray(data.lines) ? (data.lines as SiparisSatiri[]) : []) },
         { ad: "orderNumber", mevcut: manualOrderNumber === null ? null : p.orderNumber, gelen: manualOrderNumber },
       ],
       collision: (p) => `Bu form daha önce kaydedilmiş: ${p.orderNumber}. Yeni sipariş için formu kapatıp yeniden açın.`,
@@ -2378,22 +2385,19 @@ export class OrderService extends BaseService {
     lines: Array<{ itemId: string; colorId: string | null; width: number | null; quantity: number }>,
     rollCount: number,
   ): TokenReplay<ApiResponse<unknown>> {
-    const lineKey = (l: { itemId: unknown; colorId: unknown; width: unknown; quantity: unknown }) =>
-      `${l.itemId}|${l.colorId ?? ""}|${l.width == null ? "" : Number(l.width)}|${Number(l.quantity)}`;
-    const linesOf = (p: Record<string, unknown>) => (Array.isArray(p.lines) ? (p.lines as Array<Parameters<typeof lineKey>[0]>) : []);
     return tokenReplay<Record<string, unknown>, ApiResponse<unknown>>({
       find: (db, clientToken) => this.findOrderByToken(db, clientToken),
       alive: (p) => assertOrderReplayAlive({ id: String(p.id), status: p.status as OrderStatus, orderNumber: (p.orderNumber as string | null) ?? null }),
       identity: (p) => [
         { ad: "customerId", mevcut: p.customerId, gelen: data.customerId },
         { ad: "branchId", mevcut: p.branchId, gelen: data.branchId },
-        { ad: "lines", mevcut: linesOf(p).map(lineKey).sort().join(";"), gelen: lines.map(lineKey).sort().join(";") },
+        { ad: "lines", mevcut: siparisSatirIzi(Array.isArray(p.lines) ? (p.lines as SiparisSatiri[]) : []), gelen: siparisSatirIzi(lines) },
       ],
       collision: (p) => `Bu okutma daha önce ${p.orderNumber} siparişi olarak kaydedilmiş — yeni sipariş için ekranı kapatıp yeniden açın.`,
       collisionEk: (p) => ({ orderNumber: p.orderNumber }),
       respond: (p) => ({
         success: true,
-        data: { order: p, lineCount: linesOf(p).length, rollCount, preparedToWarehouse: 0 },
+        data: { order: p, lineCount: Array.isArray(p.lines) ? p.lines.length : 0, rollCount, preparedToWarehouse: 0 },
         message: `Hızlı sipariş zaten açılmış (yeniden gönderim): ${p.orderNumber}`,
       }),
     });

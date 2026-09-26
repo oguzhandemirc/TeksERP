@@ -63,8 +63,8 @@ export interface TokenTaramasi {
   token: TokenBirimi[];
   /** Bütün fonksiyon birimleri (kip doğrulaması giriş birimini buradan bulur). */
   hepsi: Map<string, TokenBirimi>;
-  /** `tokenReplay(` politika literalleri (dosya::satır → nesne literali). */
-  politikalar: Array<{ yer: string; literal: ts.ObjectLiteralExpression | null }>;
+  /** `tokenReplay(` politika literalleri (dosya::satır → nesne literali; birim = politikayı kuran dış fonksiyon). */
+  politikalar: Array<{ yer: string; birim: string | null; literal: ts.ObjectLiteralExpression | null }>;
 }
 
 export function tokenBirimleri(kok: string): TokenTaramasi {
@@ -103,7 +103,7 @@ export function tokenBirimleri(kok: string): TokenTaramasi {
       }
       if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "tokenReplay" && !rel.endsWith("token-replay.helper.ts")) {
         const a0 = n.arguments[0];
-        politikalar.push({ yer: `${rel}:${satir(n)}`, literal: a0 && ts.isObjectLiteralExpression(a0) ? a0 : null });
+        politikalar.push({ yer: `${rel}:${satir(n)}`, birim: b ? `${rel}::${birimAdi(b)}` : null, literal: a0 && ts.isObjectLiteralExpression(a0) ? a0 : null });
       }
       ts.forEachChild(n, (k) => ziyaret(k, b));
     };

@@ -275,10 +275,10 @@ const INVOICE_REPLAY_SELECT = {
   docNo: true,
   type: true,
   status: true,
-  // ⚠️ `Invoice`ta customerId/subcontractorId KOLONU YOK — taraf `cariId` ile
-  // bağlanır ve onu servis girdiden ÇÖZER. Girdiyi saklanan cariId ile
-  // kıyaslamak iki farklı şeyi karşılaştırmak olurdu; kimlik `type` + SATIR
-  // İZİdir (para riskini taşıyan alan zaten satırdır).
+  currency: true,
+  // Taraf `cariId` ile bağlıdır: saklanan kart kimliği (cari.customerId/subcontractorId) ile girdinin KARTA ÇÖZÜLMÜŞ
+  // hâli kıyaslanır (ödeme/çek emsali).
+  cari: { select: { customerId: true, subcontractorId: true } },
   lines: { select: { description: true, qty: true, unitPrice: true }, orderBy: { lineNo: "asc" } },
 } as const;
 
@@ -297,12 +297,17 @@ function faturaSatirIzi(
 type InvoiceReplayRow = Prisma.InvoiceGetPayload<{ select: typeof INVOICE_REPLAY_SELECT }>;
 
 /**
- * Fatura taslağı replay'i: kimlik `type` + SATIR İZİ (para riskini taşıyan alan satırdır; taraf `cariId`den
- * çözülür, girdiyle kıyaslanamaz). 4. durum: iptal edilmiş fatura → 409 `INVOICE_CANCELLED`.
+ * Fatura taslağı replay'i: kimlik tür + taraf (karta çözülmüş) + para birimi + SATIR İZİ. 4. durum: iptal edilmiş
+ * fatura → 409 `INVOICE_CANCELLED`.
  */
 function invoiceReplay(input: CreateInvoiceInput) {
-  return tokenReplay<InvoiceReplayRow, ApiResponse<{ id: string; docNo: string }>>({
-    find: (db, clientToken) => db.invoice.findUnique({ where: { clientToken }, select: INVOICE_REPLAY_SELECT }),
+  return tokenReplay<InvoiceReplayRow & { incomingParty: string }, ApiResponse<{ id: string; docNo: string }>>({
+    find: async (db, clientToken) => {
+      const p = await db.invoice.findUnique({ where: { clientToken }, select: INVOICE_REPLAY_SELECT });
+      if (!p) return null;
+      const incoming = await resolvePartyToCardTx(db, { customerId: input.customerId, subcontractorId: input.subcontractorId });
+      return { ...p, incomingParty: `${incoming.customerId ?? ""}|${incoming.subcontractorId ?? ""}` };
+    },
     alive: (p) => {
       if (p.status !== InvoiceStatus.CANCELLED) return;
       throw AppError.conflict(
@@ -312,6 +317,8 @@ function invoiceReplay(input: CreateInvoiceInput) {
     },
     identity: (p) => [
       { ad: "type", mevcut: p.type, gelen: input.type },
+      { ad: "taraf", mevcut: `${p.cari?.customerId ?? ""}|${p.cari?.subcontractorId ?? ""}`, gelen: p.incomingParty },
+      { ad: "currency", mevcut: p.currency, gelen: input.currency ?? Currency.TRY },
       { ad: "satırlar", mevcut: faturaSatirIzi(p.lines), gelen: faturaSatirIzi(input.lines) },
     ],
     collision: "Bu istemci anahtarı FARKLI bir fatura için kullanılmış. Ekranı yenileyip tekrar deneyin.",
