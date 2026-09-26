@@ -27,7 +27,7 @@ import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 import { openLineWhere } from "./helpers/order-line-scope.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId, warehouseStampManyTx } from "./helpers/warehouse.helper";
-import { postStockMoves } from "./helpers/warehouse-ledger.helper";
+import { postStockMoves, MOVEMENT_DESC } from "./helpers/warehouse-ledger.helper";
 import { reverseLatestScopedStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { assertRollsHaveWarehouse, WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
@@ -2348,7 +2348,7 @@ export class SubcontractorService {
             reversesMovementId: null,
             reversedBy: { none: {} },
           },
-          orderBy: { createdAt: "desc" },
+          orderBy: MOVEMENT_DESC,
           select: { id: true },
         });
         if (!ileri) continue;

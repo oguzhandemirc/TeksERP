@@ -19,12 +19,23 @@
 //
 // BEST-EFFORT DEĞİL: defter yazımı çağıranın transaction'ı İÇİNDE koşar. Sevk
 // commit olup defter satırı düşerse "mal gitti ama defterde yok" durumu doğardı.
+//
+// SAAT: satırın anını yazar verir, top başına KESİN ARTAN (`ledger-stamp.helper`);
+// okuyucular TEK sıra tanımını kullanır (`MOVEMENT_ASC`/`MOVEMENT_DESC`).
 // =============================================================================
 import { WarehouseEventType, type Prisma, type RollStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
+import { warehouseMovementStampTx } from "./ledger-stamp.helper";
 
 type Tx = Prisma.TransactionClient;
+
+/**
+ * Defter satırlarının TEK sıra tanımı — an, eşitlikte id. Yeni satırlar top başına kesin artan
+ * damgalıdır; damgadan önceki satırlarda aynı ms olabilir ve eşitlik bozucu sırayı belirlenimli yapar.
+ */
+export const MOVEMENT_ASC = [{ createdAt: "asc" }, { id: "asc" }] satisfies Prisma.WarehouseMovementOrderByWithRelationInput[];
+export const MOVEMENT_DESC = [{ createdAt: "desc" }, { id: "desc" }] satisfies Prisma.WarehouseMovementOrderByWithRelationInput[];
 
 /**
  * Satır yazılabilir mi — ÜÇ kapının ORTAK eşiği ve DB seddinin ikizi
@@ -132,6 +143,7 @@ export async function writeWarehouseMovement(
 
   await tx.warehouseMovement.create({
     data: {
+      createdAt: await warehouseMovementStampTx(tx, [entry.rollId]),
       rollId: entry.rollId,
       eventType: entry.eventType,
       qty: entry.qty as Prisma.Decimal,
@@ -196,7 +208,8 @@ export async function writeWarehouseMovements(
       notes: e.notes ?? null,
     }));
   if (rows.length === 0) return 0;
-  const res = await tx.warehouseMovement.createMany({ data: rows });
+  const createdAt = await warehouseMovementStampTx(tx, [...new Set(rows.map((r) => r.rollId))]);
+  const res = await tx.warehouseMovement.createMany({ data: rows.map((r) => ({ ...r, createdAt })) });
   return res.count;
 }
 
@@ -282,7 +295,7 @@ export interface StockMoveInput {
  * kullanır; ikisine ayrı map yazılırsa `writeWarehouseMovements`in 2026-08-14'te
  * `sackId`i sessizce düşüren allowlist hatası stok defterinde tekrarlanır.
  */
-function stockMoveRow(input: StockMoveInput): Prisma.WarehouseMovementCreateManyInput {
+function stockMoveRow(input: StockMoveInput, createdAt: Date): Prisma.WarehouseMovementCreateManyInput {
   if (!qtyYazilabilir(input.qty)) {
     throw AppError.internal(`Stok hareketi metrajı pozitif olmalı (gelen: ${String(input.qty)})`);
   }
@@ -304,6 +317,7 @@ function stockMoveRow(input: StockMoveInput): Prisma.WarehouseMovementCreateMany
     );
   }
   return {
+    createdAt,
     rollId: input.rollId,
     eventType: input.eventType,
     qty: input.qty as Prisma.Decimal,
@@ -330,7 +344,7 @@ function stockMoveRow(input: StockMoveInput): Prisma.WarehouseMovementCreateMany
 /** Tek satır yazar ve id'sini döner. Anlamsız satırda ATLAMAZ, FIRLATIR. */
 export async function postStockMove(tx: Tx, input: StockMoveInput): Promise<string> {
   const row = await tx.warehouseMovement.create({
-    data: stockMoveRow(input),
+    data: stockMoveRow(input, await warehouseMovementStampTx(tx, [input.rollId])),
     select: { id: true },
   });
   return row.id;
@@ -350,7 +364,8 @@ export async function postStockMove(tx: Tx, input: StockMoveInput): Promise<stri
  */
 export async function postStockMoves(tx: Tx, inputs: StockMoveInput[]): Promise<number> {
   if (inputs.length === 0) return 0;
-  const rows = inputs.map(stockMoveRow);
+  const createdAt = await warehouseMovementStampTx(tx, [...new Set(inputs.map((i) => i.rollId))]);
+  const rows = inputs.map((i) => stockMoveRow(i, createdAt));
   const res = await tx.warehouseMovement.createMany({ data: rows });
   return res.count;
 }

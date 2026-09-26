@@ -35,7 +35,7 @@ import {
 } from "@prisma/client";
 import { randomUUID } from "crypto";
 import prisma from "../lib/prisma";
-import { postStockMove, postStockMoves } from "./helpers/warehouse-ledger.helper";
+import { postStockMove, postStockMoves, MOVEMENT_ASC } from "./helpers/warehouse-ledger.helper";
 import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
@@ -3989,7 +3989,7 @@ export class ShippingService {
           reversesMovementId: null,
           reversedBy: { none: {} },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: MOVEMENT_ASC,
         select: { id: true, fromStatus: true, toStatus: true },
       });
       const ters = {

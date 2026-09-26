@@ -18,6 +18,7 @@ import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import type { ApiResponse } from "../types/api.types";
 import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
 import { WAREHOUSE_ARCHIVE } from "./helpers/archive-gate/warehouse-archive.helper";
+import { MOVEMENT_DESC } from "./helpers/warehouse-ledger.helper";
 
 // =============================================================================
 // DEPO HAREKET DEFTERİ — OKUMA YÜZEYİ
@@ -268,7 +269,7 @@ class WarehouseService extends BaseService {
 
     const rows = await prisma.warehouseMovement.findMany({
       where: and.length > 0 ? { AND: and } : {},
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: MOVEMENT_DESC,
       take: limit + 1,
       // Perf kuralı 7 — `include` değil `select`: defter satırının kendisi
       // küçüktür, ilişkiler şişirir. Yalnız ekranda BASILAN alanlar çekilir.

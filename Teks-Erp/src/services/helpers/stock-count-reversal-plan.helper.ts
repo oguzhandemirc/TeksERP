@@ -20,6 +20,7 @@ import { resolveRestoreTargetStatus } from "./roll-cancel-restore.helper";
 import { VARIANCE_SOURCES } from "../../constants/variance-reasons";
 import { ROLL_STATUS_TR } from "../../constants/status-labels";
 import { stockCountCancelReason } from "../stock-count.service";
+import { MOVEMENT_ASC } from "./warehouse-ledger.helper";
 
 export type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -150,7 +151,7 @@ async function planRolls(db: Db, count: CountHead): Promise<ReversalRollPlan[]> 
     },
     // Sıra TANIMLI olmalı: aşağıdaki Map'te "son kazanır" ve sırasız okuma aynı
     // girdide farklı satır seçebilirdi (top başına birden çok ileri satır olabilir).
-    orderBy: { createdAt: "asc" },
+    orderBy: MOVEMENT_ASC,
   });
   // ⚠️ TOP BAŞINA BİRDEN ÇOK ileri satır olabilir (eski veri · elle eklenmiş satır).
   // Seçim kuralı: TERSLENMEMİŞ olanı al; hiçbiri terslenmemişse dal ALREADY_REVERSED.

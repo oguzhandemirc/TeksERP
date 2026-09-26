@@ -80,7 +80,7 @@ import { ACTIVE_MOVEMENT, reopenClosedMovementsTx } from "./helpers/roll-movemen
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { reverseAllRollStockMoves, reverseStockMove, reverseTransformGroupsOf } from "./helpers/warehouse-ledger-reverse.helper";
 import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
-import { postStockMove } from "./helpers/warehouse-ledger.helper";
+import { postStockMove, MOVEMENT_ASC } from "./helpers/warehouse-ledger.helper";
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
@@ -414,7 +414,7 @@ export class TamburUndoService {
     const boundRows = await tx.warehouseMovement.findMany({
       where: { rollVarianceId: { in: varianceIds }, reversesMovementId: null, reversedBy: { none: {} } },
       select: { id: true },
-      orderBy: { createdAt: "asc" },
+      orderBy: MOVEMENT_ASC,
     });
     for (const m of boundRows) {
       await reverseStockMove(tx, m.id, {
@@ -454,7 +454,7 @@ export class TamburUndoService {
         reversedBy: { none: {} },
       },
       select: { id: true },
-      orderBy: { createdAt: "asc" },
+      orderBy: MOVEMENT_ASC,
     });
     for (const m of openMembers) {
       await reverseStockMove(tx, m.id, {

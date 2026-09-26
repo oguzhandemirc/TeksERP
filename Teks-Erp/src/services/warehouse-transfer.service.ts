@@ -24,7 +24,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { nextSeriesNo } from "./number-series.service";
 import { applyDateRange, buildWhereClause } from "../utils/query-parser";
 import { ROLL_STATUS_TR } from "../constants/status-labels";
-import { postStockMoves } from "./helpers/warehouse-ledger.helper";
+import { postStockMoves, MOVEMENT_ASC } from "./helpers/warehouse-ledger.helper";
 import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
@@ -685,7 +685,7 @@ export class WarehouseTransferService {
     // Kalemler defterden okunur (satır tablosu YOK — tek kaynak).
     const lines = await prisma.warehouseMovement.findMany({
       where: { transferId: id, eventType: WarehouseEventType.TRANSFER },
-      orderBy: { createdAt: "asc" },
+      orderBy: MOVEMENT_ASC,
       select: {
         qty: true,
         roll: {
@@ -727,7 +727,7 @@ registerPrintedDocBuilder(PrintedDocType.TRANSFER_DISPATCH, {
 
     const lines = await db.warehouseMovement.findMany({
       where: { transferId: sourceId, eventType: WarehouseEventType.TRANSFER },
-      orderBy: { createdAt: "asc" },
+      orderBy: MOVEMENT_ASC,
       select: {
         qty: true,
         roll: {

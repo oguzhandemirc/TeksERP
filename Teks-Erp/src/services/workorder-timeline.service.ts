@@ -24,6 +24,7 @@ import {
   WORK_ORDER_TRIGGER_LABEL,
   type TimelineGroup,
 } from "../constants/workorder-event-labels";
+import { MOVEMENT_ASC } from "./helpers/warehouse-ledger.helper";
 
 export interface TimelineItem {
   /** Kaynak önekli tekil kimlik (`woe:<id>`, `link-in:<id>` …) — cursor bunun üstünde kurulur. */
@@ -140,7 +141,7 @@ async function sourcedItems(workOrderId: string, stepIds: string[]): Promise<Pen
   const detached = await prisma.warehouseMovement.findMany({
     where: { reasonCode: STOCK_MOVE_REASON.ROLL_DETACH, workOrderStepId: { in: stepIds } },
     select: { id: true, createdAt: true, userId: true, notes: true, qty: true, toStatus: true, roll: { select: { barcode: true } } },
-    orderBy: { createdAt: "asc" },
+    orderBy: MOVEMENT_ASC,
   });
   const wo = await prisma.workOrder.findUnique({ where: { id: workOrderId }, select: { workOrderNumber: true } });
   const cancelNote = wo ? cancelReturnNote(wo.workOrderNumber) : null;

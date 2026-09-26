@@ -13,7 +13,7 @@
 // =============================================================================
 import { Prisma, WarehouseEventType, type RollStatus } from "@prisma/client";
 import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
-import { postStockMove, qtyYazilabilir } from "./warehouse-ledger.helper";
+import { postStockMove, qtyYazilabilir, MOVEMENT_ASC, MOVEMENT_DESC } from "./warehouse-ledger.helper";
 import { reverseStockMove } from "./warehouse-ledger-reverse.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
 
@@ -72,8 +72,8 @@ export async function findOpenProductionIssueTx(tx: Tx, rollId: string, stepIds:
   const base = { rollId, reasonCode: STOCK_MOVE_REASON.PRODUCTION_ISSUE, reversesMovementId: null, reversedBy: { none: {} } };
   const select = { id: true, fromStatus: true, fromWarehouseId: true, qty: true, workOrderStepId: true } as const;
   return (
-    (await tx.warehouseMovement.findFirst({ where: { ...base, workOrderStepId: { in: [...stepIds] } }, orderBy: { createdAt: "desc" }, select })) ??
-    (await tx.warehouseMovement.findFirst({ where: { ...base, workOrderStepId: null }, orderBy: { createdAt: "desc" }, select }))
+    (await tx.warehouseMovement.findFirst({ where: { ...base, workOrderStepId: { in: [...stepIds] } }, orderBy: MOVEMENT_DESC, select })) ??
+    (await tx.warehouseMovement.findFirst({ where: { ...base, workOrderStepId: null }, orderBy: MOVEMENT_DESC, select }))
   );
 }
 
@@ -99,7 +99,7 @@ export async function rebindProductionIssuesTx(
       reversedBy: { none: {} },
       workOrderStepId: { in: [...oldToNew.keys()] },
     },
-    orderBy: [{ rollId: "asc" }, { createdAt: "asc" }],
+    orderBy: [{ rollId: "asc" }, ...MOVEMENT_ASC],
     select: { id: true, rollId: true, qty: true, fromWarehouseId: true, fromStatus: true, workOrderStepId: true },
   });
   for (const m of open) {
@@ -152,7 +152,7 @@ export async function listIssueTransfers(db: LedgerReader, stepIds: readonly str
   if (touching.length === 0) return [];
   const rows = await db.warehouseMovement.findMany({
     where: { rollId: { in: touching.map((t) => t.rollId) }, reasonCode: { in: reasons } },
-    orderBy: [{ rollId: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    orderBy: [{ rollId: "asc" }, ...MOVEMENT_ASC],
     select: {
       id: true, rollId: true, reasonCode: true, qty: true, createdAt: true, userId: true, notes: true,
       reversesMovementId: true, workOrderStepId: true,

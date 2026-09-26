@@ -21,7 +21,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { Prisma, PrintedDocType, RollStatus, SwatchEventType, WarehouseEventType } from "@prisma/client";
-import { postStockMoves } from "./helpers/warehouse-ledger.helper";
+import { postStockMoves, MOVEMENT_ASC } from "./helpers/warehouse-ledger.helper";
 import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import {
@@ -540,7 +540,7 @@ export class KartelaService {
             reversesMovementId: null,
             reversedBy: { none: {} },
           },
-          orderBy: { createdAt: "asc" },
+          orderBy: MOVEMENT_ASC,
           select: { id: true },
         });
         if (!ileri) continue;

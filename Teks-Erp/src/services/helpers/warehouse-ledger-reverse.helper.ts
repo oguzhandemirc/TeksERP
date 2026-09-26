@@ -12,7 +12,7 @@
 import { WarehouseEventType, type Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
-import { postStockMove, type StockMoveEnd } from "./warehouse-ledger.helper";
+import { postStockMove, type StockMoveEnd, MOVEMENT_ASC, MOVEMENT_DESC } from "./warehouse-ledger.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -221,7 +221,7 @@ export async function reverseAllRollStockMoves(
       reversesMovementId: null,
       reversedBy: { none: {} },
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: MOVEMENT_ASC,
     select: { id: true, fromStatus: true, toStatus: true },
   });
   let reversed = 0;
@@ -288,7 +288,7 @@ export async function reverseTransformGroupsOf(
       reversesMovementId: null,
       reversedBy: { none: {} },
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: MOVEMENT_ASC,
     select: { id: true, fromStatus: true, toStatus: true },
   });
   let reversed = 0;
@@ -355,14 +355,14 @@ export async function reverseLatestScopedStockMove(
     const selectFields = { id: true, fromStatus: true, toStatus: true };
     const stampedRow = await tx.warehouseMovement.findFirst({
       where: { ...baseWhere, workOrderStepId: scope.workOrderStepId },
-      orderBy: { createdAt: "desc" },
+      orderBy: MOVEMENT_DESC,
       select: selectFields,
     });
     const targetRow =
       stampedRow ??
       (await tx.warehouseMovement.findFirst({
         where: { ...baseWhere, workOrderStepId: null },
-        orderBy: { createdAt: "desc" },
+        orderBy: MOVEMENT_DESC,
         select: selectFields,
       }));
     if (!targetRow) {

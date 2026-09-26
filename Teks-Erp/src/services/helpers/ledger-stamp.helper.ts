@@ -21,3 +21,13 @@ export async function workOrderEventStampTx(tx: Tx, workOrderIds: string[]): Pro
     ) AS at`;
   return rows[0]!.at;
 }
+
+/** Depo/stok hareket defteri (`warehouse_movements`) — top başına. */
+export async function warehouseMovementStampTx(tx: Tx, rollIds: string[]): Promise<Date> {
+  const rows = await tx.$queryRaw<Array<{ at: Date }>>`
+    SELECT GREATEST(
+      to_timestamp(ceil(extract(epoch FROM clock_timestamp()) * 1000) / 1000), -- tz-ok: timestamptz, tx başı değil ŞU AN
+      (SELECT max("createdAt") + interval '1 millisecond' FROM warehouse_movements WHERE "rollId" = ANY(${rollIds}::uuid[]))
+    ) AS at`;
+  return rows[0]!.at;
+}

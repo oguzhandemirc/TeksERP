@@ -19,7 +19,7 @@
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { Prisma, RollStatus, OrderStatus, PrintedDocType, ShipmentStatus, WarehouseEventType } from "@prisma/client";
 import { ddmmyy, normalizeScanCode } from "../utils/code-format";
-import { postStockMove } from "./helpers/warehouse-ledger.helper";
+import { postStockMove, MOVEMENT_DESC } from "./helpers/warehouse-ledger.helper";
 import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { assertRollsHaveWarehouse, WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
@@ -1057,7 +1057,7 @@ export class ReturnService {
       // sevki geri almaz, malı tekrar "müşteride" sayar.
       const ileri = await tx.warehouseMovement.findFirst({
         where: { rollReturnId: rr.id, reversesMovementId: null, reversedBy: { none: {} } },
-        orderBy: { createdAt: "desc" },
+        orderBy: MOVEMENT_DESC,
         select: { id: true, fromStatus: true, toStatus: true },
       });
       if (ileri) {
