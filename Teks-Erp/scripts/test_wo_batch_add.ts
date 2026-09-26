@@ -14,10 +14,11 @@
 //   §7 R2 — sonraki bitmiş adımlar da yeniden hesaplanır (bayat COMPLETED kalmaz)
 //   §8 hedef aşımı UYARIDIR (engel değil)
 //   §9 Hareketler: "Parti eklendi · N top · M" tek satır; aynı parti ikinci kez "Parti açıldı" diye basılmaz
+//   §10 R6 numara doluluğu: boş parti ve canlı topu olan parti DOLU; topları hepsi ölü ve birleşmiş parti BOŞTA
 // NEGATİF SONDA (elle, 2026-09-26): `recomputeStepStatus`un sevk bekleyen dalı sıfırlanınca §6 kırmızı;
 // boğaz yalnız ilk adımı yeniden hesaplayınca §7 kırmızı; boğazın tamamlanmış kapısı kaldırılınca §5 kırmızı
 // (kod WORKORDER_TERMINAL_DURING_ATTACH'a düşer); elle taşımanın iki kapısı kaldırılınca §5 kırmızı (taşıma geçer).
-// Yedek kopyadan geri alındı.
+// §10 (2026-09-26): yüklemden boş-parti dalı düşürülünce kırmızı. Yedek kopyadan geri alındı.
 // =============================================================================
 
 import { randomUUID } from "node:crypto";
@@ -25,6 +26,7 @@ import prisma from "../src/lib/prisma";
 import { RollStatus, StepStatus } from "@prisma/client";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { addBatch } from "../src/services/workorder-batch-add.service";
+import { BATCH_NUMBER_TAKEN_WHERE } from "../src/services/batch.service";
 import { recomputeStepStatus } from "../src/services/helpers/roll-step.helper";
 import { WorkOrderTimelineService } from "../src/services/workorder-timeline.service";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
@@ -181,6 +183,24 @@ async function bolum6to8(): Promise<void> {
     `${eklendi.map((x) => x.detail).join(",")} · açıldı ${acildi.length}`);
 }
 
+async function bolum10(): Promise<void> {
+  const { wo } = await isEmri([ST_KURSUN, ST_TAMBUR], []);
+  const mk = async (n: string, mergedIntoId?: string) =>
+    (await prisma.batch.create({ data: { batchNumber: `${TAG}-${n}`, workOrderId: wo, mergedIntoId }, select: { id: true } })).id;
+  const [bos, canli, olu, karma] = [await mk("BOS"), await mk("CANLI"), await mk("OLU"), await mk("KARMA")];
+  const yutulan = await mk("YUTULAN", canli);
+  const bagla = async (suffix: string, batchId: string, status: RollStatus) =>
+    prisma.roll.update({ where: { id: await top(suffix) }, data: { batchId, status } });
+  await bagla("T1", canli, RollStatus.IN_PRODUCTION);
+  await bagla("T2", olu, RollStatus.CANCELLED);
+  await bagla("T3", karma, RollStatus.CANCELLED);
+  await bagla("T4", karma, RollStatus.WAREHOUSE);
+  await bagla("T5", yutulan, RollStatus.IN_PRODUCTION);
+  const dolu = (await prisma.batch.findMany({ where: { workOrderId: wo, ...BATCH_NUMBER_TAKEN_WHERE }, select: { id: true } })).map((b) => b.id);
+  check("§10 R6 doluluk: boş + canlı + karma DOLU; hepsi ölü ve birleşmiş BOŞTA",
+    dolu.length === 3 && [bos, canli, karma].every((id) => dolu.includes(id)) && !dolu.includes(olu) && !dolu.includes(yutulan), `${dolu.length} dolu`);
+}
+
 async function main(): Promise<void> {
   console.log("=== Parti Ekle ===");
   await fikstur();
@@ -188,6 +208,7 @@ async function main(): Promise<void> {
     await bolum1to4();
     await bolum5();
     await bolum6to8();
+    await bolum10();
   } finally {
     await temizle();
   }

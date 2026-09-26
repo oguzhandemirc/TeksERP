@@ -20,7 +20,7 @@
 
 import { Prisma, PrintedDocType, RollStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
-import { formatSeriesCode, nextSeriesNo, resolveSeriesFormat } from "./number-series.service";
+import { formatSeriesCode, nextSeriesNo, nextSeriesNoSkipping, resolveSeriesFormat } from "./number-series.service";
 import { seriesCodeSeq, seriesPosixRegex } from "./helpers/series-format.helper";
 import { nextCounterSeq, seriesCounterReadsLastBorn } from "./helpers/series-counter.helper";
 import { AuditService } from "./audit.service";
@@ -117,6 +117,7 @@ const BATCH_NUMBER_LOCK_KEY = 1;
 export async function generateBatchNumberTx(
   tx: Prisma.TransactionClient,
   date: Date,
+  workOrderId?: string,
 ): Promise<string> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BATCH_NUMBER_LOCK_NS}::int, ${BATCH_NUMBER_LOCK_KEY}::int)`;
 
@@ -125,7 +126,15 @@ export async function generateBatchNumberTx(
   // yalnız HANGİ SATIRLARI okuduklarıyla ayrışır, numarayı nasıl kurduklarıyla
   // değil (ikinci bir hesap "ayrışan yüzey" sınıfına girerdi).
   if (await resolveBatchShortNumberEnabled(tx)) {
-    return nextSeriesNo("batchShort", (_prefix, fmt) => readWrapRowsTx(tx, fmt), date);
+    // Sarma GLOBAL kalır; yalnız AYNI iş emrinde dolu numara atlanır (kartta iki P05 olmasın, D8 R6).
+    const taken = workOrderId ? await takenBatchNumbersTx(tx, workOrderId) : new Set<string>();
+    return nextSeriesNoSkipping("batchShort", (_prefix, fmt) => readWrapRowsTx(tx, fmt), date, {
+      taken,
+      onExhausted: () => AppError.conflict(
+        "Bu iş emrindeki bütün parti numaraları dolu — yeni parti açılamaz. Biten partileri kapatın ya da yeni iş emri açın.",
+        { code: "BATCH_NUMBER_WO_FULL", workOrderId },
+      ),
+    });
   }
 
   return nextSeriesNo(
@@ -139,6 +148,21 @@ export async function generateBatchNumberTx(
         .then((rows) => rows.map((b) => ({ code: b.batchNumber, createdAt: b.createdAt }))),
     date,
   );
+}
+
+/**
+ * Parti NUMARASI DOLU mu (numaralandırma sorusu) — kart gösterimiyle AYNI SORU DEĞİL: kart birleşmemiş
+ * her partiyi basar. Dolu = birleşmemiş VE "top almış ve hepsi ölü (K18)" olmayan; BOŞ parti doludur,
+ * çünkü sonradan top alır (takip teslimi yer tutucusu · levent sevki partisi · taşımada "katıl").
+ */
+export const BATCH_NUMBER_TAKEN_WHERE = {
+  mergedIntoId: null,
+  OR: [{ rolls: { none: {} } }, { rolls: { some: { status: { notIn: K18_DEAD_STATUSES } } } }],
+} satisfies Prisma.BatchWhereInput;
+
+async function takenBatchNumbersTx(tx: Prisma.TransactionClient, workOrderId: string): Promise<Set<string>> {
+  const rows = await tx.batch.findMany({ where: { workOrderId, ...BATCH_NUMBER_TAKEN_WHERE }, select: { batchNumber: true } });
+  return new Set(rows.map((r) => r.batchNumber));
 }
 
 /**
@@ -258,7 +282,7 @@ export async function createBatchTx(
   },
 ): Promise<CreateBatchResult> {
   const now = params.date ?? new Date();
-  const batchNumber = await generateBatchNumberTx(tx, now);
+  const batchNumber = await generateBatchNumberTx(tx, now, params.workOrderId);
 
   const batch = await tx.batch.create({
     data: {

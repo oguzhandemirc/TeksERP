@@ -15,6 +15,8 @@ const dispatchSchema = z.object({
   workOrderId: z.string().uuid(),
   stepId: z.string().uuid(),
   subcontractorId: z.string().uuid(),
+  /** K11: seçim 2+ partiye yayılıyorsa — SEPARATE parti başına ayrı sevk (tek tx), MERGE en eski partide birleştir; yoksa 409 MULTI_BATCH. */
+  multiBatchStrategy: z.enum(["MERGE", "SEPARATE"]).optional(),
   // F1: `rollIds` tek başına boş olabilir — levent-yalnız sevk; ikisi birden boşsa aşağıdaki refine (eski mesaj).
   rollIds: z.array(z.string().uuid()).max(500, "Tek seferde en fazla 500 top sevk edilebilir").default([]),
   /** F1: fasona verilen leventler (kalem `kind=WARP_BEAM`). Devere kapalıysa 403 (gövde kapısı). */
@@ -57,6 +59,8 @@ const beamReturnCancelSchema = z.object({ reason: z.string().trim().min(3).max(3
 const bulkDispatchSchema = z.object({
   workOrderId: z.string().uuid(),
   stepId: z.string().uuid(),
+  /** K11: seçim 2+ partiye yayılıyorsa — SEPARATE parti başına ayrı sevk (tek tx), MERGE en eski partide birleştir; yoksa 409 MULTI_BATCH. */
+  multiBatchStrategy: z.enum(["MERGE", "SEPARATE"]).optional(),
   /** Yoksa adımın plannedSubcontractorId'si kullanılır. */
   subcontractorId: z.string().uuid().optional(),
   /** Verilirse yalnız bu toplar sevk edilir; yoksa adımdaki bekleyen hepsi. */
@@ -163,6 +167,8 @@ const receiveSchema = z.object({
     .min(1, "En az bir dönüş kaydı girin")
     .max(300, "Tek seferde en fazla 300 dönüş kaydı girilebilir"),
   notes: z.string().max(1000).optional(),
+  // Doğan topların partisi — kabulün açık sevklerinden biri; verilmezse en eski açık sevk (D8 R5b).
+  batchId: z.string().uuid().nullish(),
   // İdempotency anahtarı — kısmi teslimatta replay'in tek kimliği (servis notu).
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").nullish(),
   // Receipt seviyesinde uygulanan kimlik (boyahane gibi açık kumaş döndüren
@@ -406,6 +412,7 @@ export class SubcontractorController {
           workOrderId: body.workOrderId,
           stepId: body.stepId,
           subcontractorId: body.subcontractorId,
+          batchId: body.batchId,
           manifestNo: body.manifestNo,
           notes: body.notes,
           clientToken: body.clientToken ?? null,

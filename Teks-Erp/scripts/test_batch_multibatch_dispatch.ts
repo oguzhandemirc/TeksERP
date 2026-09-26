@@ -1,6 +1,10 @@
 // TEST (Faz 3.2 / K11): çok-parti fason sevk.
 //   Seçim 2+ partiye yayılıyorsa: strateji yok → 409 MULTI_BATCH; MERGE → en eskide
 //   birleş (diğer kart VOID, boşalan silinir); SEPARATE → parti başına ayrı sevk.
+//   D8 R5a: SEPARATE tek istekte TEK tx (ya hep ya hiç) — ikinci grubun topuna geçici tetikleyici
+//   hata koydurur, birinci grup da geri sarılmalı; aynı SEPARATE isteği tekrar gelince aynı sevkler döner.
+//   NEGATİF SONDA (elle, 2026-09-26): grup döngüsü grup başına ayrı tx'e çevrilince "hiçbiri gitmedi"
+//   kırmızı. Yedek kopyadan geri alındı.
 // Çalıştır: npx tsx scripts/test_batch_multibatch_dispatch.ts
 import prisma from "../src/lib/prisma";
 import { roleGrade } from "./fixture-quality-grade";
@@ -80,6 +84,33 @@ async function main(): Promise<void> {
   const p3disp = await prisma.subcontractorDispatch.count({ where: { batchId: p3.batchId } });
   const p4disp = await prisma.subcontractorDispatch.count({ where: { batchId: p4.batchId } });
   check("SEPARATE: P3 ve P4 kendi sevkini aldı", p3disp === 1 && p4disp === 1, `P3=${p3disp} P4=${p4disp}`);
+
+  // ── SEPARATE tablet yolu (dispatch) + tekrar ──
+  const p5 = await attachWave(ITEM, GRADE, ADMIN, 2);
+  const p6 = await attachWave(ITEM, GRADE, ADMIN, 1);
+  const body = { workOrderId: woId, stepId: zimpara, subcontractorId: SUB, rollIds: [...p5.rollIds, ...p6.rollIds], multiBatchStrategy: "SEPARATE" as const };
+  const sep2 = (await sub.dispatch(body, ADMIN)).data as { separate?: boolean; dispatches?: { id: string; batchId: string | null }[] };
+  check("R5a dispatch() SEPARATE: 2 sevk, en eski parti önce", sep2.separate === true && sep2.dispatches?.length === 2 && sep2.dispatches[0].batchId === p5.batchId,
+    `${sep2.dispatches?.map((d) => d.batchId === p5.batchId ? "P5" : "P6").join(",")}`);
+  const again = (await sub.dispatch(body, ADMIN)).data as { separate?: boolean; dispatches?: { id: string }[] };
+  check("R5a aynı SEPARATE tekrarı: aynı iki sevk döner, yeni sevk yok",
+    again.separate === true && JSON.stringify(again.dispatches?.map((d) => d.id).sort()) === JSON.stringify(sep2.dispatches?.map((d) => d.id).sort()));
+
+  // ── ya hep ya hiç: ikinci grubun topu tx içinde patlar ──
+  const p7 = await attachWave(ITEM, GRADE, ADMIN, 2);
+  const p8 = await attachWave(ITEM, GRADE, ADMIN, 1);
+  await prisma.$executeRawUnsafe(`CREATE OR REPLACE FUNCTION tst_k11_patla() RETURNS trigger AS $f$ BEGIN RAISE EXCEPTION 'tst-k11 sonda'; END $f$ LANGUAGE plpgsql`);
+  await prisma.$executeRawUnsafe(`CREATE TRIGGER tst_k11_patla BEFORE UPDATE ON rolls FOR EACH ROW WHEN (OLD.id = '${p8.rollIds[0]}') EXECUTE FUNCTION tst_k11_patla()`);
+  try {
+    const err = await sub.dispatch({ ...body, rollIds: [...p7.rollIds, ...p8.rollIds] }, ADMIN).then(() => null, (e: Error) => e);
+    const p7disp = await prisma.subcontractorDispatch.count({ where: { batchId: p7.batchId } });
+    const p7status = await prisma.roll.findMany({ where: { id: { in: p7.rollIds } }, select: { status: true } });
+    check("R5a ya hep ya hiç: ikinci grup patlayınca birinci grup da gitmedi",
+      !!err && p7disp === 0 && p7status.every((r) => r.status === RollStatus.IN_PRODUCTION), `hata=${!!err} P7 sevk=${p7disp} ${p7status.map((r) => r.status).join(",")}`);
+  } finally {
+    await prisma.$executeRawUnsafe("DROP TRIGGER IF EXISTS tst_k11_patla ON rolls");
+    await prisma.$executeRawUnsafe("DROP FUNCTION IF EXISTS tst_k11_patla()");
+  }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

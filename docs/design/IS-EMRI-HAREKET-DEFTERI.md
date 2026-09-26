@@ -558,7 +558,7 @@ ekranda yüklenmiş sayfayla sınırlı değil, süzgeçteki listenin tamamı (s
 | D4 | Hareketler ucu (A+B) + panel Sheet + ayrı ekran + Excel | D1 (D2 ile zenginleşir) |
 | D5 | Tablet düzeltme menüsü + `mobile:is-emri-duzelt` + önizleme uçları — **D5a (backend) + D5b (tablet menüsü) UYGULANDI**: izin + uç kapıları, renk önizlemesi, `WORK_ORDER_PLAN_CHANGE` sebep kataloğu, panel yetkisiz iptal yalnız dokunulmamış iş emrinde; tablette genel Düzenle kalktı, "Düzelt" menüsü (Top Çıkar D6 ile eklenecek) | D2, S1–S3/S7 cevapları |
 | D6 | Top Çıkar ucu (ledger ters yollarıyla) + tablet tuşu — **UYGULANDI** (§6.2 notu) | D1 |
-| **D8** | **Parti Ekle** (§6.5): `addBatchToWorkOrderTx` tek boğaz + uç + dört çağıranın bağlanması + R1–R7 + tablet/panel tuşu + `is-emri.md` kural değişimi + arşiv GEÇERSİZ notu — **D8a (backend) + D8c (tablet "Düzelt → Parti Ekle" · panel "Parti Ekle", ortak top seçici) UYGULANDI** (§6.5 notu); D8b R5+R6 | D1 (olay tipi), 9b S2+S3 |
+| **D8** | **Parti Ekle** (§6.5): `addBatchToWorkOrderTx` tek boğaz + uç + dört çağıranın bağlanması + R1–R7 + tablet/panel tuşu + `is-emri.md` kural değişimi + arşiv GEÇERSİZ notu — **D8a (backend) + D8c (tablet "Düzelt → Parti Ekle" · panel "Parti Ekle", ortak top seçici) UYGULANDI** (§6.5 notu); **D8b (R5a çok partili sevk tek tx · R5b kabulde parti · R6 aynı iş emrinde numara atlama) UYGULANDI** | D1 (olay tipi), 9b S2+S3 |
 | D7 | Backfill script (kuru koşum) — **UYGULANDI** (§8.1 notu); `--apply` kullanıcıda | D1–D3; `--apply` kullanıcıda |
 | B-RM | `RollMovement` kapanış damgası borcu (§8.5) | 1e sahip atar |
 

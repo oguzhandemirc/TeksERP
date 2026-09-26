@@ -337,8 +337,32 @@ export async function nextSeriesNo(
   const fullPrefix = seriesPrefix(fmt, date);
   const rows = await loadCodes(fullPrefix, fmt);
   const seq = scopedNextSeq(key, fmt, fullPrefix, rows);
+  return renderSeq(fmt, fullPrefix, seq);
+}
+
+function renderSeq(fmt: NumberSeriesFormat, fullPrefix: string, seq: number): string {
   return `${fullPrefix}${String(seq).padStart(fmt.digits, "0")}`;
 }
+
+/**
+ * SARMALI seride "şu an kullanımda" olan kodu ATLAYAN üreteç — `nextSeriesNo` ile aynı çekirdek
+ * (`scopedNextSeq`), üstüne çağıranın dolu kümesi. Sarma serinin kendi adımıyla sürer; aralığın
+ * hepsi doluysa çağıranın hatası (fail-closed). Sarmasız seride davranış `nextSeriesNo` ile aynı.
+ */
+export async function nextSeriesNoSkipping(key: string, loadCodes: SeriesLoader, date: Date, skip: { taken: ReadonlySet<string>; onExhausted: () => Error }): Promise<string> {
+  const fmt = resolveSeriesFormat(key);
+  const fullPrefix = seriesPrefix(fmt, date);
+  let seq = scopedNextSeq(key, fmt, fullPrefix, await loadCodes(fullPrefix, fmt));
+  const code = () => renderSeq(fmt, fullPrefix, seq);
+  if (!seriesCounterReadsLastBorn(fmt)) return code();
+  const size = Math.floor(((fmt.maxValue ?? 10 ** fmt.digits - 1) - (fmt.startValue ?? 1)) / (fmt.step ?? 1)) + 1;
+  for (let tries = 1; skip.taken.has(code()); tries += 1) {
+    if (tries >= size) throw skip.onExhausted();
+    seq = nextCounterSeq(fmt, seq, key);
+  }
+  return code();
+}
+type SeriesLoader = (fullPrefix: string, fmt: NumberSeriesFormat) => Promise<Array<SeriesCodeRow>>;
 
 /**
  * KAPSAM + ÇAKIŞMA ATLAMASI — `nextSeriesNo` ile `nextSeriesSeq`in ORTAK çekirdeği.
@@ -407,9 +431,10 @@ function scopedNextSeq(
   // o kod ZATEN VAR olabilir. `@unique` P2002 verir ve `withBarcodeRetry` bunu
   // DETERMİNİSTİK olarak tekrarlayıp 409'la biter (`shipping.service.ts:230` bu
   // davranışı yazılı beyan ediyor) — yani kendi kendine onarmaz.
-  // ⚠️ SARMALI SERİDE ATLAMA YOK ve bu bir EKSİKLİK DEĞİL: sarma KÖRLEMESİNEDİR
-  // (2026-08-05 kullanıcı kararı) — numara o an başka bir canlı kayıtta kullanılıyor
-  // olabilir ve fabrika bunu bilerek istedi. Atlama döngüsü burada koşsaydı biçim
+  // ⚠️ SARMALI SERİDE BU ATLAMA YOK ve bu bir EKSİKLİK DEĞİL: sarma GLOBAL olarak
+  // körlemesinedir (2026-08-05 kullanıcı kararı) — numara başka bir kayıtta canlı
+  // olabilir. Tek istisna çağıranın dar kümesidir (`nextSeriesNoSkipping`: aynı iş
+  // emrinde dolu parti numarası, 2026-09-26). Atlama döngüsü burada koşsaydı biçim
   // değişiminden sonra sayaç "boştaki numarayı" arar, 99'u da doluysa 409 verir ve
   // üretimi durdururdu — reddedilen alternatifin ta kendisi.
   if (since && hasCreatedAt && !seriesCounterReadsLastBorn(fmt)) {
@@ -419,7 +444,7 @@ function scopedNextSeq(
     // 10 kat daralırdı). Atlama da ADIM kadar ilerler; 1'er ilerlemek serinin
     // kendi dizisinin DIŞINDA numara üretirdi.
     let deneme = 0;
-    while (taken.has(`${fullPrefix}${String(seq).padStart(fmt.digits, "0")}`)) {
+    while (taken.has(renderSeq(fmt, fullPrefix, seq))) {
       seq = nextCounterCandidate(fmt, seq);
       deneme += 1;
       if (deneme >= SKIP_LIMIT) {

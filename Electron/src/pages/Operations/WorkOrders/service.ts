@@ -541,6 +541,8 @@ export const workOrderService = {
     rollIds?: string[];
     /** Rota-atlama uyarısını bilinçli geç (ROUTE_SKIP override). */
     allowRouteSkip?: boolean;
+    /** Seçim 2+ partiden (409 MULTI_BATCH): parti başına ayrı sevk (tek işlem) ya da en eski partide birleştir. */
+    multiBatchStrategy?: "SEPARATE" | "MERGE";
     instruction?: string;
     plateNumber?: string;
     driverName?: string;

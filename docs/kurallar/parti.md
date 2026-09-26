@@ -20,7 +20,7 @@
 
 ### Kararlar
 
-- **[PROFİL]** Parti no biçimi PROFİL kararıdır: `batch.shortNumberEnabled` AÇIK (varsayılan; kayıt yoksa true) → kısa/dönen biçim (tohum `P01…P99`), üst sınırdan sonra KÖRLEMESİNE başa sarar (numara canlı mı diye BAKILMAZ); KAPALI → `P+GGAAYY+günlük sıra`. İki rejim iki AYRI seridir (`batchShort` · `batchDaily`) ve ön ek/hane/aralık/sarma panelden değiştirilir — varsayılanlar bugünkü davranışın birebir aynısıdır. · bekçi: `scripts/test_batch_number_format.ts §0/§0b/§0c/§1/§3 (tohum = bugünkü davranış + ayar değişince davranış değişiyor + hane 2→1→2 + iki rejim)` <sub>(CLAUDE.md:161)</sub>
+- **[PROFİL]** Parti no biçimi PROFİL kararıdır: `batch.shortNumberEnabled` AÇIK (varsayılan; kayıt yoksa true) → kısa/dönen biçim (tohum `P01…P99`), üst sınırdan sonra başa sarar — sarma GLOBAL, yalnız AYNI iş emrinde dolu numara atlanır (`BATCH_NUMBER_TAKEN_WHERE`: birleşmemiş ve topsuz ya da K18 dışı topu olan parti; aralığın hepsi o iş emrinde doluysa 409 `BATCH_NUMBER_WO_FULL`); KAPALI → `P+GGAAYY+günlük sıra`. İki rejim iki AYRI seridir (`batchShort` · `batchDaily`) ve ön ek/hane/aralık/sarma panelden değiştirilir — varsayılanlar bugünkü davranışın birebir aynısıdır. · bekçi: `scripts/test_batch_number_format.ts §0/§0b/§0c/§1/§3 (tohum = bugünkü davranış + ayar değişince davranış değişiyor + hane 2→1→2 + iki rejim) + R6` · `test_wo_batch_add §10` <sub>(CLAUDE.md:161, arşiv:2026-09-26 D8b)</sub>
 
 ## Backend
 

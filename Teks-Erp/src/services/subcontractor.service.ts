@@ -756,8 +756,8 @@ export class SubcontractorService {
       allowRouteSkip?: boolean;
       /**
        * K11: seçilen toplar 2+ partiye yayılıyorsa çözüm stratejisi. 'MERGE' = en eski
-       * partide birleştir (diğer kartlar VOID); yoksa 409 MULTI_BATCH döner. 'SEPARATE'
-       * bu core metotta işlenmez — bulkDispatchStep parti başına ayrı sevk döngüsü yapar.
+       * partide birleştir (diğer kartlar VOID); 'SEPARATE' = parti başına ayrı sevk, HEPSİ
+       * TEK tx'te (ya hep ya hiç, D8 R5a); verilmezse 409 MULTI_BATCH (eski istemci aynı yanıtı alır).
        */
       multiBatchStrategy?: "MERGE" | "SEPARATE";
       /**
@@ -852,6 +852,19 @@ export class SubcontractorService {
           success: true,
           data: open,
           message: `Fason sevki zaten oluşturulmuş (idempotent retry): ${open.dispatchNo}`,
+        };
+      }
+    }
+    // SEPARATE tekrarı: seçim, bu firmanın açık sevklerine TAM bölünmüşse o sevkler döner.
+    if (data.multiBatchStrategy === "SEPARATE" && incomingBeamIds.size === 0 && incomingRollIds.size > 0) {
+      const mine = openDispatches.filter((o) => o.subcontractorId === data.subcontractorId && o.items.length > 0
+        && o.items.every((i) => !!i.rollId && incomingRollIds.has(i.rollId)));
+      const covered = new Set(mine.flatMap((o) => o.items.map((i) => i.rollId)));
+      if (mine.length > 1 && covered.size === incomingRollIds.size) {
+        return {
+          success: true,
+          data: { separate: true, dispatchCount: mine.length, dispatches: mine },
+          message: `Fason sevkleri zaten oluşturulmuş (idempotent retry): ${mine.map((o) => o.dispatchNo).join(", ")}`,
         };
       }
     }
@@ -1100,7 +1113,7 @@ export class SubcontractorService {
       }
     }
 
-    if (existingBatchIds.length > 1 && data.multiBatchStrategy !== "MERGE") {
+    if (existingBatchIds.length > 1 && !data.multiBatchStrategy) {
       const picker = await prisma.batch.findMany({
         where: { id: { in: existingBatchIds } },
         select: { id: true, batchNumber: true, createdAt: true },
@@ -1115,6 +1128,13 @@ export class SubcontractorService {
       );
     }
 
+    const separate = existingBatchIds.length > 1 && data.multiBatchStrategy === "SEPARATE";
+    if (separate && (warpBeamIds.length > 0 || yarnLines.length > 0)) {
+      throw AppError.badRequest("Levent ya da iplik içeren sevk partilere bölünemez — birleştirin ya da ayrı sevk edin.", {
+        code: "SEPARATE_WITH_BEAM_OR_YARN",
+      });
+    }
+
     // Decimal aritmetik — float drift olmasın; sevk kaydında string'e dökeriz.
     const totalQty = rolls.reduce(
       (s, r) => s.plus(r.currentQty),
@@ -1124,8 +1144,13 @@ export class SubcontractorService {
     // withBarcodeRetry: dispatchNo (@unique) tx içinde nextPrefixedSequenceTx ile
     // üretiliyor; eşzamanlı iki sevk aynı FS+GGAAYY+NNNN'i hesaplarsa P2002
     // çakışmasında tx baştan denenir → sıra yeniden okunur (kartela/shipping deseni).
-    const result = await withBarcodeRetry(() =>
-      prisma.$transaction(async (tx) => {
+    // Bir sevkin tx gövdesi — tüm seçim için bir kez ya da (SEPARATE) parti başına AYNI tx'te sırayla.
+    type DispatchGroup = {
+      rolls: typeof rolls; autoAttachIds: Set<string>; existingBatchIds: string[];
+      totalQty: Prisma.Decimal; warpBeamIds: string[]; yarnLines: typeof yarnLines;
+    };
+    const runTx = async (tx: Prisma.TransactionClient, g: DispatchGroup) => {
+      const { rolls, autoAttachIds, existingBatchIds, totalQty, warpBeamIds, yarnLines } = g;
       // Fason completion yarışı (subcon #4): dispatch/receive/cancel/cancelReceipt/
       // directShip aynı WO satırını kilitlesin ki "tüm toplar döndü" sayımları
       // eşzamanlı dispatch'in commit'li AT_SUBCONTRACTOR toplarını görsün (yoksa
@@ -1528,9 +1553,11 @@ export class SubcontractorService {
       }
 
       return { dispatch, remainderBatches, beamLines, yarnItems };
-      })
-    );
+    };
+    const whole: DispatchGroup = { rolls, autoAttachIds, existingBatchIds, totalQty, warpBeamIds, yarnLines };
 
+    const auditDispatch = async (result: Awaited<ReturnType<typeof runTx>>, g: DispatchGroup) => {
+    const { rolls, autoAttachIds, totalQty } = g;
     await AuditService.log({
       userId,
       action: "CREATE",
@@ -1568,6 +1595,41 @@ export class SubcontractorService {
         },
       });
     }
+    };
+
+    // K11 SEPARATE: parti başına ayrı sevk (kendi FS no'su), serbest toplar ayrı grup; hepsi TEK tx.
+    if (separate) {
+      const order = (await prisma.batch.findMany({
+        where: { id: { in: existingBatchIds } }, select: { id: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      })).map((b) => b.id);
+      const groups: DispatchGroup[] = [...order, null]
+        .map((key) => rolls.filter((r) => (r.batchId ?? null) === key))
+        .filter((rs) => rs.length > 0)
+        .map((rs) => ({
+          rolls: rs,
+          autoAttachIds: new Set(rs.filter((r) => autoAttachIds.has(r.id)).map((r) => r.id)),
+          existingBatchIds: rs[0].batchId ? [rs[0].batchId] : [],
+          totalQty: rs.reduce((acc, r) => acc.plus(r.currentQty), new Prisma.Decimal(0)),
+          warpBeamIds: [],
+          yarnLines: [],
+        }));
+      const done = await withBarcodeRetry(() =>
+        prisma.$transaction(async (tx) => {
+          const out: { g: DispatchGroup; r: Awaited<ReturnType<typeof runTx>> }[] = [];
+          for (const g of groups) out.push({ g, r: await runTx(tx, g) });
+          return out;
+        }),
+      );
+      for (const { g, r } of done) await auditDispatch(r, g);
+      return {
+        success: true,
+        data: { separate: true, dispatchCount: done.length, dispatches: done.map((x) => x.r.dispatch) },
+        message: `${done.length} parti ayrı ayrı sevk edildi: ${done.map((x) => x.r.dispatch.dispatchNo).join(", ")}`,
+      };
+    }
+
+    const result = await withBarcodeRetry(() => prisma.$transaction((tx) => runTx(tx, whole)));
+    await auditDispatch(result, whole);
 
     const remainderNumbers = result.remainderBatches.map((b) => b.batchNumber);
     return {
@@ -1664,46 +1726,7 @@ export class SubcontractorService {
       );
     }
 
-    // K11 SEPARATE: seçilen toplar 2+ partiye yayılıyorsa PARTİ BAŞINA ayrı sevk
-    // (her birinin kendi FS no'su + kartı). Serbest (partisiz) toplar tek grup.
-    if (data.multiBatchStrategy === "SEPARATE") {
-      const rb = await prisma.roll.findMany({
-        where: { id: { in: rolls.map((r) => r.id) } },
-        select: { id: true, batchId: true },
-      });
-      const byBatch = new Map<string, string[]>();
-      for (const r of rb) {
-        const key = r.batchId ?? "__free__";
-        const arr = byBatch.get(key);
-        if (arr) arr.push(r.id);
-        else byBatch.set(key, [r.id]);
-      }
-      if (byBatch.size > 1) {
-        const dispatches: unknown[] = [];
-        for (const [, rollIds] of byBatch) {
-          const res = await this.dispatch(
-            {
-              workOrderId: data.workOrderId,
-              stepId: data.stepId,
-              subcontractorId,
-              rollIds,
-              allowRouteSkip: data.allowRouteSkip,
-              instruction: data.instruction,
-              plateNumber: data.plateNumber,
-              driverName: data.driverName,
-            },
-            userId,
-          );
-          dispatches.push(res.data);
-        }
-        return {
-          success: true,
-          data: { separate: true, dispatchCount: dispatches.length, dispatches },
-          message: `${dispatches.length} parti ayrı ayrı sevk edildi.`,
-        };
-      }
-    }
-
+    // K11 SEPARATE dahil strateji `dispatch`e aynen gider: parti başına ayrı sevk orada TEK tx'te.
     return this.dispatch(
       {
         workOrderId: data.workOrderId,
@@ -2570,6 +2593,8 @@ export class SubcontractorService {
       workOrderId: string;
       stepId: string;
       subcontractorId: string;
+      /** Doğan topların partisi — kabulün açık sevklerinden biri olmalı; yoksa en eski açık sevkin partisi (D8 R5b). */
+      batchId?: string | null;
       manifestNo?: string | null; // Opsiyonel — fason her zaman irsaliye vermeyebilir
       returns: Array<{
         rollId: string;         // Orijinal fasona gönderilmiş top
@@ -2926,10 +2951,20 @@ export class SubcontractorService {
             // hâlâ AÇIKTIR (ikinci teslimatın firma çözümü buradan geçer). Tanım
             // TEK KAYNAKTAN (`OPEN_OUTSTANDING`).
             where: { batchId: { in: srcBatchIds }, stepId: data.stepId, ...OPEN_OUTSTANDING },
-            select: { id: true, batchId: true, subcontractorId: true },
+            select: { id: true, batchId: true, subcontractorId: true, dispatchedAt: true },
+            orderBy: [{ dispatchedAt: "asc" }, { id: "asc" }],
           })
         : [];
     const firmByBatch = new Map(srcDispatches.map((d) => [d.batchId, d.subcontractorId]));
+    // Doğan topların partisi (D8 R5b): kabul EDİLEN sevkin partisi; birden çok partinin açık sevki
+    // varsa istemci seçer, seçmezse en eski açık sevk. Sıralamasız `find` belirlenimsizdi.
+    const openBatchIds = srcDispatches.map((d) => d.batchId).filter((b): b is string => !!b);
+    if (data.batchId && !openBatchIds.includes(data.batchId)) {
+      throw AppError.badRequest("Seçilen parti bu kabulün açık sevklerinden biri değil — listeyi yenileyin.", {
+        code: "RECEIPT_BATCH_NOT_OPEN",
+      });
+    }
+    const receiptBatchId = data.batchId ?? openBatchIds[0] ?? null;
     for (const r of returnedRolls) {
       const firmId = r.batchId ? firmByBatch.get(r.batchId) : undefined;
       if (!firmId) {
@@ -3329,7 +3364,7 @@ export class SubcontractorService {
           select: { batchId: true },
         });
         let bornBatchId =
-          sourceLotRolls.find((r) => r.batchId)?.batchId ?? null;
+          receiptBatchId ?? sourceLotRolls.find((r) => r.batchId)?.batchId ?? null;
         // TAKİP TESLİMATI → doğan toplar YENİ parti (K5 kalan-böl kuralının
         // dönüş aynası): aynı sevkin ikinci+ teslimatı farklı tarihte/kazanda
         // çıkmış maldır, ilk teslimatın partisiyle karışmaz. İlk teslimat giden

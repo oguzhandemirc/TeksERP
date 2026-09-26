@@ -5,6 +5,8 @@
 // İKİ REJİM var ve bekçi İKİSİNİ DE ölçer (`batch.shortNumberEnabled`):
 //   • AÇIK (varsayılan) → `P01 … P99`, 99'dan sonra P01'e SARAR. Tarih taşımaz,
 //     BENZERSİZ DEĞİLDİR (2026-08-05 kullanıcı kararı — numaralı fiziksel plaka).
+//     R6 (2026-09-26): sarma global kalır, AYNI iş emrinde dolu numara atlanır; 99'u da
+//     doluysa 409. Negatif sonda: atlama kapatılınca 5, atlama sarmadan ilerleyince 3 R6 ❌.
 //   • KAPALI            → eski `P + GGAAYY + SIRA` (dolgusuz günlük sıra).
 //
 // Kilitlenen sessiz bozulmalar:
@@ -73,6 +75,8 @@ function stubTx(opts: {
   lastShort?: string | null;
   /** Günlük rejimde `batch.findMany`'nin göreceği kodlar. */
   daily?: string[];
+  /** Aynı iş emrinde DOLU parti numaraları (R6 doluluk sorgusu). */
+  woTaken?: string[];
 }): {
   tx: Prisma.TransactionClient;
   calls: string[];
@@ -112,7 +116,12 @@ function stubTx(opts: {
       return sqlFilter(last) ? [{ batchNumber: last }] : [];
     },
     batch: {
-      findMany: async (args: { where: { batchNumber: { startsWith: string } } }) => {
+      findMany: async (args: { where: { workOrderId?: string; batchNumber?: { startsWith: string } } }) => {
+        if (args.where.workOrderId) {
+          calls.push("findTakenInWo");
+          return (opts.woTaken ?? []).map((batchNumber) => ({ batchNumber }));
+        }
+        if (!args.where.batchNumber) throw new Error("beklenmeyen batch.findMany");
         calls.push("findManyDaily");
         const p = args.where.batchNumber.startsWith;
         return (opts.daily ?? [])
@@ -248,6 +257,23 @@ async function main(): Promise<void> {
   const s3 = stubTx({ shortEnabled: true, lastShort: "P99" });
   const wrapped = await generateBatchNumberTx(s3.tx, D);
   check("P99 → P01 (SARMA)", wrapped === "P01", wrapped);
+
+  // R6 (2026-09-26): sarma GLOBAL kalır, yalnız AYNI iş emrinde dolu numara atlanır.
+  const r6a = stubTx({ shortEnabled: true, lastShort: "P04", woTaken: ["P05", "P06"] });
+  check("R6 aynı iş emrinde dolu P05/P06 atlanır → P07", (await generateBatchNumberTx(r6a.tx, D, "wo-1")) === "P07");
+  const r6b = stubTx({ shortEnabled: true, lastShort: "P98", woTaken: ["P99", "P01"] });
+  const r6bNo = await generateBatchNumberTx(r6b.tx, D, "wo-1");
+  check("R6 atlama da SARAR: P99 ve P01 doluyken P98'den sonra P02", r6bNo === "P02", r6bNo);
+  const r6c = stubTx({ shortEnabled: true, lastShort: "P04", woTaken: ["P05"] });
+  check("R6 iş emri verilmezse (önizleme) atlama yok, global sıra aynı → P05", (await generateBatchNumberTx(r6c.tx, D)) === "P05");
+  check("R6 iş emri verilmezse doluluk sorgusu HİÇ koşmaz", !r6c.calls.includes("findTakenInWo"), r6c.calls.join(" → "));
+  const hepsi = Array.from({ length: 99 }, (_, i) => `P${String(i + 1).padStart(2, "0")}`);
+  const r6d = stubTx({ shortEnabled: true, lastShort: "P10", woTaken: hepsi });
+  const dolu = await generateBatchNumberTx(r6d.tx, D, "wo-1").then(() => null, (e: { statusCode?: number; details?: { code?: string } }) => e);
+  check("R6 99 numaranın hepsi doluysa döngü yok: 409 BATCH_NUMBER_WO_FULL", dolu?.statusCode === 409 && dolu.details?.code === "BATCH_NUMBER_WO_FULL", `${dolu?.statusCode} ${dolu?.details?.code}`);
+  const r6e = stubTx({ shortEnabled: true, lastShort: "P10", woTaken: hepsi.filter((c) => c !== "P03") });
+  check("R6 98 dolu, tek boş P03 → P03 bulunur", (await generateBatchNumberTx(r6e.tx, D, "wo-1")) === "P03");
+  check("R6 kilit doluluk sorgusundan ÖNCE", r6a.calls.indexOf("lock(8022,1)") === 0 && r6a.calls.includes("findTakenInWo"), r6a.calls.join(" → "));
 
   // 1'inci sessiz bozulma: eski günlük kodlar sayaca sızarsa P01 yerine P29 doğar.
   const s4 = stubTx({ shortEnabled: true, lastShort: "P05082628", daily: [`${PFX}28`] });

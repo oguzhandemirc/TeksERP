@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { workOrderService } from "./service";
 import { FasonStepRollSelectModal } from "./FasonStepRollSelectModal";
 import { FasonCekiDraftDialog } from "./FasonCekiDraftDialog";
+import { MultiBatchDialog, type MultiBatchOption, type MultiBatchStrategy } from "./MultiBatchDialog";
 import type { WorkOrderStepLite } from "./types";
 
 /** Backend ROUTE_SKIP hata detayı (apiClient hata gövdesinden okunur). */
@@ -23,7 +24,7 @@ type RouteSkipError = {
   response?: {
     data?: {
       message?: string;
-      details?: { code?: string; skippedStep?: { stationName?: string } };
+      details?: { code?: string; skippedStep?: { stationName?: string }; batches?: MultiBatchOption[] };
     };
   };
   message?: string;
@@ -53,6 +54,8 @@ export function FasonStepActions({ step, steps, workOrderId, withStationLabel = 
   // ROUTE_SKIP uyarısı: backend rota-atlama tespit ederse buraya düşer; operatör
   // onaylarsa aynı toplar allowRouteSkip ile yeniden sevk edilir.
   const [routeSkip, setRouteSkip] = useState<{ rollIds: string[]; stationName: string } | null>(null);
+  // 409 MULTI_BATCH: aynı toplar seçilen stratejiyle yeniden gönderilir (varsayılan ayrı sevk).
+  const [multiBatch, setMultiBatch] = useState<{ rollIds: string[]; allowRouteSkip?: boolean; batches: MultiBatchOption[] } | null>(null);
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
@@ -63,24 +66,32 @@ export function FasonStepActions({ step, steps, workOrderId, withStationLabel = 
   };
 
   const bulkMut = useMutation({
-    mutationFn: (vars: { rollIds: string[]; allowRouteSkip?: boolean }) =>
+    mutationFn: (vars: { rollIds: string[]; allowRouteSkip?: boolean; multiBatchStrategy?: MultiBatchStrategy }) =>
       workOrderService.bulkDispatchStep({
         workOrderId,
         stepId: step.id,
         rollIds: vars.rollIds,
         allowRouteSkip: vars.allowRouteSkip,
+        multiBatchStrategy: vars.multiBatchStrategy,
       }),
     onSuccess: (res) => {
       toast.success(res.message ?? "Fasona sevk edildi.");
       invalidate();
       setBulkOpen(false);
       setRouteSkip(null);
+      setMultiBatch(null);
     },
     onError: (err: RouteSkipError, vars) => {
       const d = err.response?.data?.details;
       if (d?.code === "ROUTE_SKIP") {
         setBulkOpen(false);
         setRouteSkip({ rollIds: vars.rollIds, stationName: d.skippedStep?.stationName ?? "önceki fason" });
+        return;
+      }
+      if (d?.code === "MULTI_BATCH") {
+        setBulkOpen(false);
+        setRouteSkip(null);
+        setMultiBatch({ rollIds: vars.rollIds, allowRouteSkip: vars.allowRouteSkip, batches: d.batches ?? [] });
         return;
       }
       toast.error(err.response?.data?.message ?? err.message ?? "Sevk başarısız.");
@@ -240,6 +251,13 @@ export function FasonStepActions({ step, steps, workOrderId, withStationLabel = 
           stationName={stationName}
         />
       )}
+
+      <MultiBatchDialog
+        batches={multiBatch?.batches ?? null}
+        pending={bulkMut.isPending}
+        onCancel={() => setMultiBatch(null)}
+        onConfirm={(strategy) => multiBatch && bulkMut.mutate({ rollIds: multiBatch.rollIds, allowRouteSkip: multiBatch.allowRouteSkip, multiBatchStrategy: strategy })}
+      />
 
       {/* Rota-atlama uyarısı — backend ROUTE_SKIP döndü; bilinçli onayla geç. */}
       <Dialog open={routeSkip !== null} onOpenChange={(o) => !o && setRouteSkip(null)}>

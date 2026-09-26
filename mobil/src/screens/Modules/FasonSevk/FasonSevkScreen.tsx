@@ -60,7 +60,9 @@ import {
   DispatchRequest,
   type ItemMismatchDetails,
   type RouteSkipDetails,
+  type MultiBatchDetails,
 } from '../../../services/subcontractor.service';
+import MultiBatchSheet from './MultiBatchSheet';
 import { STATION_MUT } from '../../../offline/mutations';
 import { useFasonNoteMobileEntry } from '../../../hooks/useFeatureFlags';
 import SyncStatusChip from '../../../components/SyncStatusChip';
@@ -643,6 +645,8 @@ export default function FasonSevkScreen() {
   } | null>(null);
 
   // Rota-atlama uyarısı — backend "ROUTE_SKIP" döndüğünde set edilir; operatör
+  // Seçim birden çok partiden (409 MULTI_BATCH) → ayrı sevk (varsayılan) ya da birleştir, aynı payload ile retry.
+  const [multiBatch, setMultiBatch] = useState<{ details: MultiBatchDetails; originalVars: DispatchRequest } | null>(null);
   // onaylayınca allowRouteSkip ile retry. (ITEM_MISMATCH ile aynı warn-then-confirm.)
   const [routeSkip, setRouteSkip] = useState<{
     details: RouteSkipDetails;
@@ -722,6 +726,12 @@ export default function FasonSevkScreen() {
       if (details?.code === 'ROUTE_SKIP') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         setRouteSkip({ details, originalVars: vars });
+        return;
+      }
+      const multi = err.details as MultiBatchDetails | undefined;
+      if (multi?.code === 'MULTI_BATCH') {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setMultiBatch({ details: multi, originalVars: vars });
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -1621,6 +1631,18 @@ export default function FasonSevkScreen() {
         onDismiss={() => setRouteSkip(null)}
         onConfirm={handleRouteSkipOverride}
       />
+
+      {multiBatch ? (
+        <MultiBatchSheet
+          details={multiBatch.details}
+          onDismiss={() => setMultiBatch(null)}
+          onConfirm={(strategy) => {
+            const retry: DispatchRequest = { ...multiBatch.originalVars, multiBatchStrategy: strategy };
+            setMultiBatch(null);
+            dispatchMutation.mutate(retry);
+          }}
+        />
+      ) : null}
 
       {/* Okutma-anı kumaş uyuşmazlığı — top eklenirken WO hedef kumaşı ile
           topun kumaşı farklı. Operatör "Yine de Ekle" derse top listeye eklenir

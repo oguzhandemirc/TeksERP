@@ -62,6 +62,14 @@ export interface DispatchRequest {
    * onayla. Frontend ROUTE_SKIP uyarı modalında onayladıktan sonra true gönderir.
    */
   allowRouteSkip?: boolean;
+  /** Seçim 2+ partiye yayılıyorsa (409 MULTI_BATCH): parti başına ayrı sevk ya da en eski partide birleştir. */
+  multiBatchStrategy?: 'MERGE' | 'SEPARATE';
+}
+
+/** Backend `details.code === 'MULTI_BATCH'` — seçilen toplar birden çok partiden (eski önce). */
+export interface MultiBatchDetails {
+  code: 'MULTI_BATCH';
+  batches: { id: string; batchNumber: string; oldest: boolean }[];
 }
 
 /** Backend `details.code === 'ROUTE_SKIP'` durumunda dönen yapı. */
