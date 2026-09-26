@@ -12,7 +12,7 @@ Tutum, karar tablosu, bekçi yazımı, istemci tarafı, yanlış refleks listesi
 
 ## 3 · Kilit uzayı envanteri
 
-Envanterin tek kaynağı `Teks-Erp/src/services/helpers/period-guard.helper.ts` başlığıdır. Bugünkü fiilî durum **10 sabit / 8 numara**:
+Envanterin tek kaynağı `Teks-Erp/src/services/helpers/period-guard.helper.ts` başlığıdır. Bugünkü fiilî durum **16 sabit / 16 numara** (8021…8036):
 
 | Numara | Sabit | Dosya | Amaç |
 |---|---|---|---|
@@ -29,6 +29,9 @@ Envanterin tek kaynağı `Teks-Erp/src/services/helpers/period-guard.helper.ts` 
 | 8031 | `PACKING_GROUP_LOCK_NS` | `helpers/packing-group.helper.ts` | paketleme grubu / sevk partisi numara sayacı (cari başına) |
 | 8032 | `WEAVING_ORDER_LOCK_NS` | `helpers/weaving-order.helper.ts` | dokuma işi numara sayacı |
 | 8033 | `PACKAGE_NO_LOCK_NS` | `helpers/packing-group.helper.ts` | sevk partisi ambalaj no — yalnız ezme/elle/boşluk-doldur yolları (parti başına) |
+| 8034 | `PACKING_GROUP_CODE_LOCK_NS` | `helpers/packing-group.helper.ts` | parti kodu aylık sayacı (kurulum-geneli) |
+| 8035 | `POOL_PACKAGE_NO_LOCK_NS` | `helpers/sack-seq.helper.ts` | partisiz çuval ambalaj no (cari başına) |
+| 8036 | `CLIENT_TOKEN_LOCK_NS` | `helpers/token-replay.helper.ts` | `clientToken` replay serileştirme (token başına) — kilitsiz ön-okumada aynı token'lı kaybeden deneme kazananın commit'ini iş kuralında görüp replay yerine yanlış 409 dönüyordu |
 
 Bu tablo bir ÖZETTİR; kanonik envanter `period-guard.helper.ts` başlığındadır ve `test_advisory_lock_namespaces` ikisini birden ölçer.
 

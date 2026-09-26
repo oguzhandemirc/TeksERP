@@ -44,7 +44,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
-import { assertChequeDeliveryNoteReplayAlive } from "./helpers/token-replay.helper";
+import { assertChequeDeliveryNoteReplayAlive, lockClientTokenTx } from "./helpers/token-replay.helper";
 import { nextSeriesNo } from "./number-series.service";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { D, D0 } from "./helpers/finance.helper";
@@ -358,6 +358,15 @@ const REPLAY_SELECT = {
 type ReplayRow = Prisma.ChequeDeliveryNoteGetPayload<{ select: typeof REPLAY_SELECT }>;
 
 /**
+ * Token'lı önceki kayıt, token KİLİDİ altında — kilit tx'in İLK ifadesidir. Kilitsiz okuma
+ * yarışta token'ı kaçırır ve iş kuralı (②) kazananın commit'ini görüp replay yerine 409 döner.
+ */
+async function lockedPriorByTokenTx(tx: Prisma.TransactionClient, clientToken: string): Promise<ReplayRow | null> {
+  await lockClientTokenTx(tx, clientToken);
+  return tx.chequeDeliveryNote.findUnique({ where: { clientToken }, select: REPLAY_SELECT });
+}
+
+/**
  * Replay'in üç dalı (① hiç yazılmadıysa çağrılmaz): iptal edilmişse 409 · aynı yük →
  * aynı BRD · başka yük → 409 `CLIENT_TOKEN_COLLISION`. Aynı yük = aynı çek kümesi +
  * aynı hedef + aynı not; teslim tarihi YALNIZ istemci gönderdiyse karşılaştırılır
@@ -457,10 +466,7 @@ export class ChequeDeliveryNoteService {
             // ⚠️ TOKEN ÖNCE: ilk deneme yazıldıysa çekler artık AKTİF bir bordrodadır ve
             // mükerrer onayı (②) replay'i "zaten bordroda" 409'una çevirirdi.
             if (clientToken) {
-              const prior = await tx.chequeDeliveryNote.findUnique({
-                where: { clientToken },
-                select: REPLAY_SELECT,
-              });
+              const prior = await lockedPriorByTokenTx(tx, clientToken);
               if (prior) return { replay: true, ...resolveReplay(prior, input, chequeIds) };
             }
 
@@ -516,7 +522,7 @@ export class ChequeDeliveryNoteService {
         (err) => !isClientTokenP2002(err),
       );
     } catch (err) {
-      // Eşzamanlı iki aynı deneme: ikisi de ön kontrolü geçti, biri yazdı.
+      // Token kilidi aynı denemeleri serileştirir; bu dal kilidi atlayan bir yazara karşı savunmadır.
       if (!clientToken || !isClientTokenP2002(err)) throw err;
       const prior = await prisma.chequeDeliveryNote.findUnique({
         where: { clientToken },

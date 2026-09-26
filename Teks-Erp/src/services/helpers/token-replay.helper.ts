@@ -27,8 +27,25 @@
 // buradan geçmeli.
 // =============================================================================
 
-import { OrderStatus, RollStatus, WeavingOrderStatus } from "@prisma/client";
+import { OrderStatus, Prisma, RollStatus, WeavingOrderStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+
+/**
+ * Token başına replay serileştirmesinin advisory uzayı (2 argümanlı form).
+ * Envanter TEK KAYNAK: `period-guard.helper.ts` başlığı — bu uzay **8036**.
+ */
+export const CLIENT_TOKEN_LOCK_NS: number = 8036;
+
+/**
+ * Aynı `clientToken`lı eşzamanlı denemeleri serileştirir; çağrı tx'in kilit bloğunda, token
+ * okumasından ÖNCE yapılır. Kilitsiz ön-okumada kaybeden deneme token'ı kaçırıp kazananın
+ * commit'ini iş kuralında görür (ör. "zaten aktif bordroda") ve replay yerine yanlış 409 döner.
+ * Tx başka uzaylardan da kilit alıyorsa sıra ARTAN kalır (8036 en sonda), token okuması kilitlerden sonra.
+ * `hashtext` çakışması iki farklı token'ı yalnız serileştirir, yanlış sonuç üretmez.
+ */
+export async function lockClientTokenTx(tx: Prisma.TransactionClient, clientToken: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${CLIENT_TOKEN_LOCK_NS}::int, hashtext(${clientToken}))`;
+}
 
 /**
  * Replay'i GEÇERSİZ kılan top statüleri.

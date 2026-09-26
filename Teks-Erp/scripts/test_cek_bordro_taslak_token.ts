@@ -9,10 +9,12 @@
 //   §4 `clientToken` replay dört durumu: aynı token + aynı gövde → aynı BRD · aynı
 //      token + farklı gövde → 409 · token sürerken ikinci istek → tek BRD · kesin
 //      4xx sonrası aynı token → yapışmaz, düzeltilmiş gövdeyle kayıt açılır; ek olarak
-//      iptal edilmiş bordronun token'ı → 409 DELIVERY_NOTE_CANCELLED.
+//      iptal edilmiş bordronun token'ı → 409 DELIVERY_NOTE_CANCELLED. ③c: yarışın cevabı
+//      token'dan gelir, iş kuralından değil (token kilidi 8036; sıra zorlanarak ölçülür).
 //   §5 HTTP: taslak `finance:read` ile açılır (anlık bordroyu basan kullanıcı yetki
 //      kaybetmez), kayıt `finance:write` ister; replay 200, ilk kayıt 201.
 // =============================================================================
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import type { Server } from "http";
 import type { AddressInfo } from "net";
@@ -54,6 +56,69 @@ const olusan = {
   chequeIds: [] as string[],
   userIds: [] as string[],
 };
+// ── ZORLANMIŞ SIRA (③c) ──────────────────────────────────────────────────────
+// `prisma.$transaction` yalnız B'nin çağrısında sarılır: B'nin tx'inde İLK `cheque.findMany`
+// (seçim okuması — token okumasından sonra) kapıda bekler. Kapı A bitince, A bir kilitte
+// beklemeye düşünce ya da 5 sn'de açılır; hangisiyle açıldığı rapora yazılır.
+const kapiDeposu = new AsyncLocalStorage<() => Promise<string>>();
+type TxFn = (fn: unknown, opts?: unknown) => Promise<unknown>;
+
+function kapiliTx(tx: object, bekle: () => Promise<string>): object {
+  const bagla = (t: object, p: string | symbol) => {
+    const v = Reflect.get(t, p) as unknown;
+    return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(t) : v;
+  };
+  const cheque = Reflect.get(tx, "cheque") as object;
+  const kapiliCheque = new Proxy(cheque, {
+    get: (t, p) =>
+      p === "findMany"
+        ? async (...a: unknown[]) => {
+            await bekle();
+            return (Reflect.get(t, p) as (...x: unknown[]) => unknown).apply(t, a);
+          }
+        : bagla(t, p),
+  });
+  return new Proxy(tx, { get: (t, p) => (p === "cheque" ? kapiliCheque : bagla(t, p)) });
+}
+
+async function zorlanmisSira(
+  b: () => Promise<unknown>,
+  a: () => Promise<unknown>,
+): Promise<{ sonuclar: PromiseSettledResult<unknown>[]; kapi: string }> {
+  const kanca = prisma as unknown as { $transaction: TxFn };
+  const onceki = kanca.$transaction;
+  const asil = onceki.bind(prisma);
+  kanca.$transaction = (fn, opts) => {
+    const bekle = kapiDeposu.getStore();
+    if (!bekle || typeof fn !== "function") return asil(fn, opts);
+    return asil((tx: object) => (fn as (t: object) => unknown)(kapiliTx(tx, bekle)), opts);
+  };
+  let aBitti = false;
+  let kapidaSinyal!: () => void;
+  const kapida = new Promise<void>((r) => (kapidaSinyal = r));
+  let acilis: Promise<string> | null = null;
+  const bekle = () =>
+    (acilis ??= (async () => {
+      kapidaSinyal();
+      for (const son = Date.now() + 5000; Date.now() < son; ) {
+        if (aBitti) return "A bitti";
+        const [r] = await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+        if ((r?.n ?? 0) > 0) return "A kilitte bekliyor";
+        await new Promise((r2) => setTimeout(r2, 10));
+      }
+      return "zaman aşımı";
+    })());
+  try {
+    const bSoz = kapiDeposu.run(bekle, b);
+    await Promise.race([kapida, bSoz.catch(() => undefined)]);
+    const aSoz = a().finally(() => (aBitti = true));
+    const sonuclar = await Promise.allSettled([bSoz, aSoz]);
+    return { sonuclar, kapi: acilis ? await acilis : "B kapıya varmadı" };
+  } finally {
+    kanca.$transaction = onceki;
+  }
+}
+
 let flagSatiriVardi: { value: unknown } | null = null;
 let flagDokunuldu = false;
 let server: Server | null = null;
@@ -117,6 +182,9 @@ async function main(): Promise<void> {
   const c8 = await cek(R, 80);
   const c9 = await cek(R, 90);
   const c10 = await cek(R, 100);
+  const c11 = await cek(R, 110);
+  const c12 = await cek(R, 120);
+  const c13 = await cek(R, 130);
 
   const fixtureNoteCount = () =>
     prisma.chequeDeliveryNote.count({ where: { items: { some: { chequeId: { in: olusan.chequeIds } } } } });
@@ -202,20 +270,47 @@ async function main(): Promise<void> {
   check("③ ikisi AYNI BRD'yi döner", basarili.length === 2 && basarili[0]!.data!.id === basarili[1]!.data!.id);
   check("③ tek BRD yazıldı, biri replay", (await tokenNoteCount(t2)) === 1 && basarili.filter((b) => b.data!.replayed).length === 1);
 
-  // ③b Yarış token'da biter: gün farklı → seri farklı → `docNo` çarpışmaz, ikinci yazar
-  // `clientToken` UNIQUE'ine çarpar (P2002). O dal ham 500 değil replay kararı vermeli —
-  // gövde farklı olduğu için 409 CLIENT_TOKEN_COLLISION.
+  // ③b Aynı token'lı yarışın cevabı token'dan gelir, iş kuralından ("zaten aktif bordroda")
+  // DEĞİL: kaybeden 409 ALREADY_IN_ACTIVE_NOTE alırsa panel token'ı bırakır ve onay bandı
+  // aynı denemeden ikinci BRD kestirir. Farklı gövdede gün farklı → `docNo` çarpışmaz.
+  const kodOf = (r: PromiseSettledResult<unknown>) =>
+    r.status === "fulfilled" ? "ok" : String((r.reason as { details?: { code?: string } }).details?.code ?? (r.reason as Error).message.slice(0, 60));
+  const t2a = randomUUID();
+  const ayniYaris = await Promise.allSettled(
+    [1, 2, 3, 4].map(() => chequeDeliveryNoteService.create({ chequeIds: [c11], deliveryDate: asOf, clientToken: t2a }, admin.id)),
+  );
+  const ayniOk = ayniYaris.filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<Awaited<ReturnType<typeof chequeDeliveryNoteService.create>>>).value.data!);
+  check("③b aynı gövde, dört eşzamanlı: tek BRD, dördü başarılı (biri yeni, üçü replay)",
+    ayniOk.length === 4 && new Set(ayniOk.map((d) => d.id)).size === 1 && ayniOk.filter((d) => d.replayed).length === 3 && (await tokenNoteCount(t2a)) === 1,
+    ayniYaris.map(kodOf).join(" | "));
+
   const t2b = randomUUID();
   const gunler = [1, 2, 3, 4].map((k) => new Date(asOf.getTime() + k * DAY));
   const yaris = await Promise.allSettled(
     gunler.map((d) => chequeDeliveryNoteService.create({ chequeIds: [c10], deliveryDate: d, clientToken: t2b }, admin.id)),
   );
-  const yarisKod = yaris.map((r) =>
-    r.status === "fulfilled" ? "ok" : String((r.reason as { details?: { code?: string } }).details?.code ?? (r.reason as Error).message.slice(0, 60)),
-  );
-  check("③b dört eşzamanlı farklı-gövde: tek BRD, üçü 409 CLIENT_TOKEN_COLLISION (ham P2002 yok)",
+  const yarisKod = yaris.map(kodOf);
+  check("③b farklı gövde, dört eşzamanlı: tek BRD, üçü 409 CLIENT_TOKEN_COLLISION (ham P2002 yok)",
     yarisKod.filter((k) => k === "ok").length === 1 && yarisKod.filter((k) => k === "CLIENT_TOKEN_COLLISION").length === 3 && (await tokenNoteCount(t2b)) === 1,
     yarisKod.join(" | "));
+
+  // ③c ZORLANMIŞ SIRA — ③b'nin yükle açılan penceresi deterministik: B token'ı okuyup
+  // seçimde bekletilir, A koşar; B, A bitince ya da A bir kilitte beklerken devam eder.
+  for (const [ad, cekId, aGunu] of [["aynı gövde", c12, asOf], ["farklı gövde", c13, new Date(asOf.getTime() + DAY)]] as const) {
+    const t = randomUUID();
+    const s = await zorlanmisSira(
+      () => chequeDeliveryNoteService.create({ chequeIds: [cekId], deliveryDate: asOf, clientToken: t }, admin.id),
+      () => chequeDeliveryNoteService.create({ chequeIds: [cekId], deliveryDate: aGunu, clientToken: t }, admin.id),
+    );
+    const kodlar = s.sonuclar.map(kodOf);
+    const ok = s.sonuclar.filter((r) => r.status === "fulfilled").map((r) => (r as PromiseFulfilledResult<Awaited<ReturnType<typeof chequeDeliveryNoteService.create>>>).value.data!);
+    const beklenen = ad === "aynı gövde"
+      ? ok.length === 2 && ok[0]!.id === ok[1]!.id && ok.filter((d) => d.replayed).length === 1
+      : ok.length === 1 && kodlar.filter((k) => k === "CLIENT_TOKEN_COLLISION").length === 1;
+    check(`③c zorlanmış sıra, ${ad}: tek BRD, kaybeden ${ad === "aynı gövde" ? "replay" : "409 CLIENT_TOKEN_COLLISION"} (iş kuralı 409'u değil)`,
+      beklenen && (await tokenNoteCount(t)) === 1,
+      `B | A = ${kodlar.join(" | ")} · kapı: ${s.kapi}`);
+  }
 
   const t3 = randomUUID();
   const kesin = await hataOf(() => chequeDeliveryNoteService.create({ chequeIds: [c7, cIssued], clientToken: t3 }, admin.id));
