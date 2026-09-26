@@ -29,6 +29,8 @@ import { readUnvalidatedConstraints } from "../src/lib/constraint-health";
 
 const SCRIPT = "scripts/kartela_durum_anomali.ts";
 const KISIT = "swatches_status_shape";
+/** Tırnaklı kısıt adı — VALIDATE literali düz sabitle kurulur (`test_script_guards` "yalnız VALIDATE" muafiyeti). */
+const KISIT_Q = '"swatches_status_shape"';
 const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
 const ONAY = Number((argv.find((a) => a.startsWith("--onay=")) ?? "").split("=")[1] ?? NaN);
@@ -132,7 +134,7 @@ async function main(): Promise<void> {
   const kalanA = (await siniflar()).A.length;
   let dogrulandi = false;
   if (kalanA === 0 && (await readUnvalidatedConstraints()).includes(KISIT)) {
-    await prisma.$executeRawUnsafe(`ALTER TABLE "swatches" VALIDATE CONSTRAINT "${KISIT}"`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "swatches" VALIDATE CONSTRAINT ${KISIT_Q}`);
     dogrulandi = true;
     console.log(`✅ ${KISIT} VALIDATE edildi.`);
   } else if (kalanA > 0) {
