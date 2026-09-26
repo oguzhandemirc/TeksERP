@@ -19,6 +19,9 @@
 //       ZORLANMIŞ SIRA: çok satırlı ciro ‖ tekil ciro kilitlenme döngüsü kurmaz (satır → 8026).
 //   §11 Kapalı dönem (8026) teslim TARİHİYLE ölçülür → 409, hiçbir şey yazılmaz.
 //   §12 İzin + eski istemci (HTTP): hareket `finance:cheque` ister; seçimsiz iptal 409.
+// 06 DENETİMİ (md5 ile geri alındı; eski paket her birinde 74/0 yeşildi): ciro stornosunun olayı bordroya bağlanmadı →
+//   §6c2 ❌ · ciro cari satırında `amount` yerine `amountTry` → §3c ❌ (döviz çeki kuru artık 32,5; kur 1 maskeliyordu) ·
+//   ters kaydın tarihi geçmişe → §6e2 ❌.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -26,6 +29,7 @@ import path from "node:path";
 import type { Server } from "http";
 import type { AddressInfo } from "net";
 import ts from "typescript";
+import { factoryYmd } from "../src/constants/time";
 import {
   CariKind,
   CariTxnSource,
@@ -140,6 +144,8 @@ async function fikstur(adminId: string): Promise<Fikstur> {
   const cek: Fikstur["cek"] = async (o = {}) => {
     seq++;
     const amount = o.amount ?? 100 * seq;
+    // Döviz çekinde kur ≠ 1: kur 1 olsaydı `amount` ile `amountTry` karışması (döviz carisine TL tutarı) görünmezdi.
+    const kur = (o.currency ?? Currency.TRY) === Currency.TRY ? 1 : 32.5;
     const c = await prisma.cheque.create({
       data: {
         docNo: `${TAG}-${String(seq).padStart(3, "0")}`,
@@ -148,9 +154,9 @@ async function fikstur(adminId: string): Promise<Fikstur> {
         status: o.status ?? ChequeStatus.PORTFOLIO,
         cariId: o.cariId ?? cariA,
         currency: o.currency ?? Currency.TRY,
-        exchangeRate: 1,
+        exchangeRate: kur,
         amount,
-        amountTry: amount,
+        amountTry: amount * kur,
         issueDate: new Date(Date.now() - 3 * DAY),
         postingDate: new Date(Date.now() - 3 * DAY),
         dueDate: new Date(Date.now() + (10 + seq) * DAY),
@@ -320,9 +326,15 @@ async function tamIptal(f: Fikstur, bankNote: string, cari: Awaited<ReturnType<t
   await bayrak(true);
   const tersler = await prisma.cariTransaction.findMany({
     where: { chequeId: { in: cari.ids }, sourceType: CariTxnSource.CHEQUE_ENDORSE_CANCEL },
-    select: { reversesTxnId: true },
+    select: { reversesTxnId: true, txnDate: true },
   });
   check("§6e ⭐ bayrak KAPALIYKEN de hareketli bordro ters kayıtla döner (3 ters satır, reversesTxnId dolu)", tersler.length === 3 && tersler.every((t) => t.reversesTxnId));
+  check("§6e2 ⭐ ters kayıt BUGÜNE yazılır (ileri satır teslim tarihinde kalır)",
+    tersler.length === 3 && tersler.every((t) => factoryYmd(t.txnDate) === factoryYmd(new Date())), tersler.map((t) => factoryYmd(t.txnDate)).join(","));
+  const cariEv = await bagliOlaylar(cari.noteId);
+  check("§6c2 ⭐ ciro kolunda da ileri satırlar SİLİNMEDİ + ters olaylar bordroya bağlı (3 ENDORSE + 3 ENDORSE_CANCEL)",
+    cariEv.filter((e) => e.type === ChequeEventType.ENDORSE).length === 3 && cariEv.filter((e) => e.type === ChequeEventType.ENDORSE_CANCEL).length === 3,
+    cariEv.map((e) => e.type).join(","));
   check("§6f ciro carisi bakiyeleri eski yerinde", (await bakiye(f.cariB, Currency.TRY)) === cari.onceTry && (await bakiye(f.cariB, Currency.USD)) === cari.onceUsd);
   const s3 = await Promise.all(cari.ids.map((id) => durum(id)));
   check("§6g çekler ileri olayın fromStatus'una (PORTFOLIO/AT_BANK), ciro carisi düştü", s3[0]?.status === ChequeStatus.PORTFOLIO && s3[1]?.status === ChequeStatus.AT_BANK && s3.every((x) => x.endorsedToCariId === null));
