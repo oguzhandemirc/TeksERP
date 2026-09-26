@@ -26,7 +26,7 @@ import {
   loadLoomMachineTx,
   mountedBeamsOnMachineTx,
 } from "./helpers/warp-beam-mount.helper";
-import { closeToMeasuredTx, loadBeamTx, remainingMTx } from "./helpers/warp-beam-ledger.helper";
+import { closeToMeasuredTx, loadBeamTx, readRemainingM, remainingMTx } from "./helpers/warp-beam-ledger.helper";
 
 export interface MountBeamInput {
   machineId: string;
@@ -48,7 +48,7 @@ export interface DismountBeamInput {
 
 export async function freshBeamDto(id: string): Promise<WarpBeamDto> {
   const row = await prisma.warpBeam.findUniqueOrThrow({ where: { id }, select: WARP_BEAM_SELECT });
-  return toWarpBeamDto(row, Number(await remainingMTx(prisma, id)));
+  return toWarpBeamDto(row, Number(await readRemainingM(prisma, id)));
 }
 const freshDto = freshBeamDto;
 
@@ -200,7 +200,7 @@ export async function listMountedOnMachine(machineId: string): Promise<ApiRespon
   const out = [];
   for (const r of rows) {
     const spec = await prisma.warpSpec.findUniqueOrThrow({ where: { id: r.warpSpecId }, select: { code: true } });
-    out.push({ id: r.id, beamNo: r.beamNo, position: r.currentPosition, warpSpecCode: spec.code, remainingM: Number(await remainingMTx(prisma, r.id)) });
+    out.push({ id: r.id, beamNo: r.beamNo, position: r.currentPosition, warpSpecCode: spec.code, remainingM: Number(await readRemainingM(prisma, r.id)) });
   }
   return { success: true, data: out };
 }

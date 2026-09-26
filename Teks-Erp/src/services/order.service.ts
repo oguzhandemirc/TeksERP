@@ -20,7 +20,7 @@ import {
   buildNextDynamicCursor,
 } from "../utils/cursor";
 import { AppError } from "../utils/app-error";
-import { assertOrderReplayAlive } from "./helpers/token-replay.helper";
+import { assertOrderReplayAlive, lockClientTokenTx } from "./helpers/token-replay.helper";
 import { resolveShipmentDestination } from "./helpers/shipment-destination.helper";
 import {
   OrderStatus,
@@ -37,7 +37,7 @@ import { resolveReasonCode } from "./reason-preset.service";
 import { isMeasuredLine, openLineWhere, someOpenLine } from "./helpers/order-line-scope.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { validate as isUuidString } from "uuid";
-import { nextSeriesNo, resolveSeriesFormat, seriesPrefix } from "./number-series.service";
+import { nextSeriesNo, resolveSeriesFormat } from "./number-series.service";
 
 // MASS-ASSIGNMENT WHITELIST'leri (M-3): route'larda Zod yok (BaseController ham
 // body); muhasebe/kimlik alanları (status, shippedQty, completedAt,
@@ -308,6 +308,26 @@ export interface OrderShipmentsResult {
 }
 
 /** Kart kullanım uyarılarını (ör. "Tükenene kadar" A2) yanıtın `warnings`ine ekler. */
+/** `create`in tx dışı yarısının çıktısı — hızlı sipariş aynı kapılardan geçip kendi tx'inde yazsın diye. */
+interface PreparedOrderCreate {
+  prismaData: Record<string, unknown>;
+  lineCheck: { checks: ItemUsageCheck[]; warnings: string[] };
+  destination: Awaited<ReturnType<typeof resolveShipmentDestination>>["destination"];
+  manualOrderNumber: string | null;
+  today: Date;
+  fmt: ReturnType<typeof resolveSeriesFormat>;
+}
+
+/** İdempotency anahtarı (Roll emsali) — route-level zod yok (BaseController ham body), burada doğrulanır. */
+function parseOrderClientToken(raw: unknown): string | null {
+  const token = typeof raw === "string" && raw.trim() ? raw.trim() : null;
+  if (token && !isUuidString(token)) throw AppError.badRequest("Geçersiz istemci anahtarı");
+  return token;
+}
+
+const parseManualOrderNumber = (raw: unknown): string | null =>
+  typeof raw === "string" && raw.trim() ? raw.trim() : null;
+
 function withExtraWarnings<T>(res: ApiResponse<T>, extra: string[]): ApiResponse<T> {
   if (extra.length === 0) return res;
   return { ...res, warnings: [...(res.warnings ?? []), ...extra] };
@@ -1931,12 +1951,62 @@ export class OrderService extends BaseService {
     };
   }
 
-  async create(
+  async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    const clientToken = parseOrderClientToken(data.clientToken);
+    // Token HER iş kuralından (elle numara çakışması dahil) ÖNCE okunur: zaman aşımı sonrası sıralı tekrar
+    // "numara zaten var" 409'u değil önceki siparişi alır.
+    if (clientToken) {
+      const prior = await this.findOrderByToken(clientToken);
+      if (prior) return this.orderReplayResponse(this.resolveOrderReplay(prior, data));
+    }
+    let prepared: PreparedOrderCreate;
+    let record: Record<string, unknown>;
+    try {
+      prepared = await this.prepareOrderCreate(data, clientToken);
+      record = await this.insertPreparedOrder(prepared);
+    } catch (err) {
+      // Ön-okuma kilitsiz: eşzamanlı aynı-token denemenin kaybedeni kazananı numara kuralında ya da token
+      // P2002'sinde görür — hangi hatayla düşerse düşsün cevap token'dan gelir.
+      const prior = clientToken ? await this.findOrderByToken(clientToken) : null;
+      if (!prior) throw err;
+      return this.orderReplayResponse(this.resolveOrderReplay(prior, data));
+    }
+    const orderNumber = record.orderNumber as string;
+
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: this.config.tableName,
+      recordId: record.id as string,
+      newData: { ...data, orderNumber },
+    });
+
+    // Müşteriye-özel ad terfisi: girilen customerItemName/customerColorName,
+    // master alias yoksa kalıcı kaydedilir (sonraki siparişte otomatik gelir).
+    await this.promoteCustomerAliases(
+      data.customerId as string | undefined,
+      Array.isArray(data.lines)
+        ? (data.lines as Array<Record<string, unknown>>)
+        : null,
+      userId
+    );
+
+    return withExtraWarnings(
+      this.withUnitWarnings({ success: true, data: record, message: "Sipariş oluşturuldu" }),
+      prepared.lineCheck.warnings,
+    );
+  }
+
+  /**
+   * Sipariş doğuşunun tx DIŞI yarısı: doğrulamalar, varsayılanlar, whitelist'li gövde, donmuş yön ve elle numara
+   * kapısı. Yazmaz; `create` ve hızlı sipariş aynı kapılardan geçsin diye tek yerde.
+   */
+  private async prepareOrderCreate(
     data: Record<string, unknown>,
-    userId?: string,
-    /** Yalnız iç çağrı (hızlı sipariş): satırlar okutulan toplardan doğdu — gövdeden GELMEZ. */
+    clientToken: string | null,
+    /** Yalnız hızlı sipariş: satırlar okutulan toplardan doğdu — gövdeden GELMEZ. */
     opts?: { fromScannedRolls?: boolean },
-  ): Promise<ApiResponse<unknown>> {
+  ): Promise<PreparedOrderCreate> {
     // F154: satırsız sipariş = ölü kayıt (coverage/MRP işleyemez, wo-picker düşürür).
     if (!Array.isArray(data.lines) || data.lines.length === 0) {
       throw AppError.badRequest("Sipariş en az bir kalem içermeli.");
@@ -1996,7 +2066,6 @@ export class OrderService extends BaseService {
     // Sipariş no: SIP + GGAAYY + NNNN (örn SIP1207260001) — tek tip kod kalıbı.
     const today = new Date();
     const fmt = resolveSeriesFormat("order");
-    const prefix = seriesPrefix(fmt, today);
 
     // HEADER + SATIR WHITELIST (M-3): orderNumber/status/shippedQty gibi
     // muhasebe alanları istemciden yazılamaz; bilinmeyen anahtarlar atılır.
@@ -2045,27 +2114,12 @@ export class OrderService extends BaseService {
       }
     }
 
-    // İdempotency anahtarı (Roll emsali) — form-oturumu başına istemci üretir;
-    // timeout sonrası tekrar gönderim aynı token'la gelir → aşağıdaki catch
-    // mevcut siparişi cached döner. Route-level zod olmadığından (BaseController
-    // ham body) burada doğrulanır; whitelist'ten BİLEREK ayrı işlenir
-    // (manualOrderNumber gibi kontrollü kabul).
-    const clientToken =
-      typeof data.clientToken === "string" && data.clientToken.trim()
-        ? data.clientToken.trim()
-        : null;
-    if (clientToken && !isUuidString(clientToken)) {
-      throw AppError.badRequest("Geçersiz istemci anahtarı");
-    }
     if (clientToken) prismaData.clientToken = clientToken;
 
     // Saha #16: kullanıcı sipariş numarasını ELLE verebilir (override) —
     // whitelist'ten BİLEREK ayrı işlenir (mass-assignment koruması korunur;
     // yalnız bu alan kontrollü kabul edilir). Boş/verilmemiş → otomatik üretim.
-    const manualOrderNumber =
-      typeof data.orderNumber === "string" && data.orderNumber.trim()
-        ? data.orderNumber.trim()
-        : null;
+    const manualOrderNumber = parseManualOrderNumber(data.orderNumber);
     assertManualNumberAllowed("order", manualOrderNumber);
     if (manualOrderNumber) {
       if (manualOrderNumber.length > 40) {
@@ -2079,126 +2133,91 @@ export class OrderService extends BaseService {
         throw AppError.conflict(`'${manualOrderNumber}' numaralı sipariş zaten var`);
       }
     }
-
-    // orderNumber üretimi + create RETRY KAPSAMINDA (M-25): eşzamanlı iki POST
-    // aynı seq'i hesaplarsa kaybeden P2002 sonrası taze max ile yeniden dener
-    // (eskiden kullanıcıya 409 dönüyordu — koddaki eski yorum yarışı kabul
-    // ediyordu). startsWith yerine range: en_US.UTF-8 collation'da LIKE-prefix
-    // unique btree'yi KULLANAMAZ (her create'te seq scan — EXPLAIN ile
-    // doğrulandı); gte/lt range her collation'da index seek yapar.
-    // Manuel numarada retry'a gerek yok ama P2002 yarışına (aynı anda aynı
-    // manuel no) karşı yine sarılır — ikinci deneme clash kontrolünde 409'a düşer.
-    const record = (await withBarcodeRetry(async () => {
-      if (manualOrderNumber) {
-        const stillFree = await prisma.order.findUnique({
-          where: { orderNumber: manualOrderNumber },
-          select: { id: true },
-        });
-        if (stillFree) {
-          throw AppError.conflict(`'${manualOrderNumber}' numaralı sipariş zaten var`);
-        }
-        // `destination` data literalinde: donmuş kolonun yazıcısı AST ile ölçülür (`test_snapshot_kolonlari`).
-        // Kart kilitleri tx'in İLK ifadeleri (8030 SHARED → FOR SHARE): eşzamanlı "Pasif'e geç" satırı görür.
-        return prisma.$transaction(async (tx) => {
-          await runItemUsageChecksTx(tx, lineCheck.checks);
-          return tx.order.create({
-            data: { ...prismaData, orderNumber: manualOrderNumber, destination } as Prisma.OrderUncheckedCreateInput,
-            ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
-          });
-        });
-      }
-      // collation-güvenli: eski `lt: prefix+"￿"` üst sınırı glibc'de (U+FFFF
-      // ignorable) bugünün satırlarını dışlar → numara hep 1'den başlar → P2002.
-      // `gte` (index seek, bugün+sonrası) + `startsWith` (LIKE, collation-bağımsız
-      // tam-prefix; prefix'ten yüksek sıralanan manuel orderNumber'ları eler).
-      // ⚠️ C0 KAPSAMI (E2 üretim dilimi): sayaç yalnız BU BİÇİM yürürlüğe girdikten
-      // sonra doğan kodlara bakar; `nextSeriesNo` kapsamı, numeric-tail max'ı ve
-      // çakışma atlamasını tek yerde tutar. Biçim BİR KEZ okunmuş `fmt` olarak
-      // geçirilir ("iki okuma" sınıfı).
-      const orderNumber = await nextSeriesNo(
-        "order",
-        async (fullPrefix) =>
-          prisma.order
-            .findMany({
-              where: { orderNumber: { gte: fullPrefix, startsWith: fullPrefix } },
-              select: { orderNumber: true, createdAt: true },
-            })
-            .then((rows) => rows.map((r) => ({ code: r.orderNumber, createdAt: r.createdAt }))),
-        today,
-        fmt,
-      );
-      return prisma.$transaction(async (tx) => {
-        await runItemUsageChecksTx(tx, lineCheck.checks);
-        return tx.order.create({
-          data: { ...prismaData, orderNumber, destination } as Prisma.OrderUncheckedCreateInput,
-          ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
-        });
-      });
-    }, undefined, (err) =>
-      // İdempotent replay: clientToken P2002'si retry EDİLMEZ (retry hep aynı
-      // token'ı yazar) — aşağıdaki catch cached yanıta çevirir. Diğer P2002'ler
-      // (orderNumber seq yarışı) mevcut M-25 davranışıyla taze max ile retry.
-      !isClientTokenP2002(err),
-    ).catch(async (err) => ({
-      __replayOf: await this.resolveCreateTokenReplay(err, clientToken, data),
-    }))) as Record<string, unknown>;
-
-    if (record.__replayOf) {
-      const existing = record.__replayOf as Record<string, unknown>;
-      // Audit + alias terfisi yalnız gerçek create yolunda (ilk çağrıda yazıldı).
-      return this.withUnitWarnings({
-        success: true,
-        data: existing,
-        message: `Sipariş zaten oluşturulmuş (idempotent retry): ${existing.orderNumber}`,
-      });
-    }
-    const orderNumber = record.orderNumber as string;
-
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: this.config.tableName,
-      recordId: record.id as string,
-      newData: { ...data, orderNumber },
-    });
-
-    // Müşteriye-özel ad terfisi: girilen customerItemName/customerColorName,
-    // master alias yoksa kalıcı kaydedilir (sonraki siparişte otomatik gelir).
-    await this.promoteCustomerAliases(
-      data.customerId as string | undefined,
-      Array.isArray(data.lines)
-        ? (data.lines as Array<Record<string, unknown>>)
-        : null,
-      userId
-    );
-
-    return withExtraWarnings(
-      this.withUnitWarnings({ success: true, data: record, message: "Sipariş oluşturuldu" }),
-      lineCheck.warnings,
-    );
+    return { prismaData, lineCheck, destination, manualOrderNumber, today, fmt };
   }
 
   /**
-   * create() clientToken P2002 ile düştüyse idempotent replay çözümlemesi (Roll
-   * emsali): aynı token'lı mevcut siparişi bulur; payload kimliği (customerId +
-   * branchId + satır sayısı) uyuşuyorsa onu döner (çağıran cached yanıt üretir).
-   * Uyuşmuyorsa 409 CLIENT_TOKEN_COLLISION — token yenilenseydi sessizce ikinci
-   * sipariş açılırdı; 409 kullanıcıya ilk gönderimin kaydedildiğini ifşa eder.
-   * Token replay'i değilse orijinal hata aynen fırlar.
+   * orderNumber üretimi + create RETRY KAPSAMINDA (M-25): eşzamanlı iki POST aynı seq'i hesaplarsa kaybeden
+   * P2002 sonrası taze max ile yeniden dener. Manuel numarada retry'a gerek yok ama P2002 yarışına (aynı anda
+   * aynı manuel no) karşı yine sarılır — ikinci deneme çakışma kontrolünde 409'a düşer. clientToken P2002'si
+   * retry EDİLMEZ (her deneme aynı token'ı yazar); çağıran onu replay'e çevirir.
    */
-  private async resolveCreateTokenReplay(
-    err: unknown,
-    clientToken: string | null,
-    data: Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
-    if (!clientToken || !isClientTokenP2002(err)) throw err;
-    const existing = (await prisma.order.findUnique({
+  private insertPreparedOrder(p: PreparedOrderCreate): Promise<Record<string, unknown>> {
+    return withBarcodeRetry(async () => {
+      if (p.manualOrderNumber) {
+        const stillFree = await prisma.order.findUnique({
+          where: { orderNumber: p.manualOrderNumber },
+          select: { id: true },
+        });
+        if (stillFree) {
+          throw AppError.conflict(`'${p.manualOrderNumber}' numaralı sipariş zaten var`);
+        }
+      }
+      const orderNumber = p.manualOrderNumber ?? (await this.nextOrderNumber(prisma, p));
+      // Kart kilitleri tx'in İLK ifadeleri (8030 SHARED → FOR SHARE): eşzamanlı "Pasif'e geç" satırı görür.
+      return prisma.$transaction(async (tx) => {
+        await runItemUsageChecksTx(tx, p.lineCheck.checks);
+        return this.insertOrderTx(tx, p, orderNumber);
+      });
+    }, undefined, (err) => !isClientTokenP2002(err)) as Promise<Record<string, unknown>>;
+  }
+
+  /**
+   * Otomatik sipariş no. Collation-güvenli: eski `lt: prefix+"￿"` üst sınırı glibc'de (U+FFFF ignorable)
+   * bugünün satırlarını dışlar; `gte` (index seek) + `startsWith` (LIKE, collation-bağımsız tam-prefix).
+   * ⚠️ C0 KAPSAMI: sayaç yalnız BU BİÇİM yürürlüğe girdikten sonra doğan kodlara bakar; biçim BİR KEZ okunmuş
+   * `fmt` olarak geçirilir ("iki okuma" sınıfı).
+   */
+  private nextOrderNumber(db: Pick<Prisma.TransactionClient, "order">, p: PreparedOrderCreate): Promise<string> {
+    return nextSeriesNo(
+      "order",
+      async (fullPrefix) =>
+        db.order
+          .findMany({
+            where: { orderNumber: { gte: fullPrefix, startsWith: fullPrefix } },
+            select: { orderNumber: true, createdAt: true },
+          })
+          .then((rows) => rows.map((r) => ({ code: r.orderNumber, createdAt: r.createdAt }))),
+      p.today,
+      p.fmt,
+    );
+  }
+
+  /** Siparişin TEK insert'i. `destination` data literalinde: donmuş kolonun yazıcısı AST ile ölçülür (`test_snapshot_kolonlari`). */
+  private insertOrderTx(tx: Prisma.TransactionClient, p: PreparedOrderCreate, orderNumber: string): Promise<Record<string, unknown>> {
+    return tx.order.create({
+      data: { ...p.prismaData, orderNumber, destination: p.destination } as Prisma.OrderUncheckedCreateInput,
+      ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
+    }) as Promise<Record<string, unknown>>;
+  }
+
+  private async findOrderByToken(clientToken: string): Promise<Record<string, unknown> | null> {
+    return (await prisma.order.findUnique({
       where: { clientToken },
       ...(this.config.defaultInclude
         ? { include: this.config.defaultInclude as Prisma.OrderInclude }
         : {}),
     })) as Record<string, unknown> | null;
-    if (!existing) throw err;
+  }
+
+  private orderReplayResponse(existing: Record<string, unknown>): ApiResponse<unknown> {
+    // Audit + alias terfisi yalnız gerçek create yolunda (ilk çağrıda yazıldı).
+    return this.withUnitWarnings({
+      success: true,
+      data: existing,
+      message: `Sipariş zaten oluşturulmuş (idempotent retry): ${existing.orderNumber}`,
+    });
+  }
+
+  /**
+   * create() replay kararı (Roll emsali): token'lı mevcut sipariş canlı ve payload kimliği (müşteri + şube +
+   * satır sayısı + elle verilmişse sipariş no) uyuşuyorsa onu döner. Uyuşmuyorsa 409 CLIENT_TOKEN_COLLISION —
+   * aynı formda numarayı değiştirip tekrar göndermek eski siparişi "oluşturuldu" diye döndürmesin.
+   */
+  private resolveOrderReplay(
+    existing: Record<string, unknown>,
+    data: Record<string, unknown>,
+  ): Record<string, unknown> {
     // ⚠️ ÖNCE 4. DURUM (T1-006): sipariş yazıldı ama SONRADAN İPTAL EDİLDİ mi?
     // Özdeşlik kontrolünden ÖNCE — aksi hâlde iptal edilmiş sipariş "başarılı"
     // diye dönerdi ve müşteriye söz verilen metraj sipariş listesinde HİÇ
@@ -2213,11 +2232,13 @@ export class OrderService extends BaseService {
     // kırılgan) — müşteri + şube + satır sayısı "farklı form oturumu"nu yakalar.
     const existingLines = existing.lines;
     const incomingLineCount = Array.isArray(data.lines) ? data.lines.length : 0;
+    const manualOrderNumber = parseManualOrderNumber(data.orderNumber);
     const same =
       existing.customerId === data.customerId &&
       (existing.branchId ?? null) === ((data.branchId as string | null | undefined) ?? null) &&
       Array.isArray(existingLines) &&
-      existingLines.length === incomingLineCount;
+      existingLines.length === incomingLineCount &&
+      (manualOrderNumber === null || manualOrderNumber === existing.orderNumber);
     if (same) return existing;
     throw AppError.conflict(
       `Bu form daha önce kaydedilmiş: ${existing.orderNumber}. Yeni sipariş için formu kapatıp yeniden açın.`,
@@ -2229,11 +2250,13 @@ export class OrderService extends BaseService {
           customerId: existing.customerId,
           branchId: existing.branchId ?? null,
           lineCount: Array.isArray(existingLines) ? existingLines.length : null,
+          orderNumber: existing.orderNumber,
         },
         incoming: {
           customerId: data.customerId ?? null,
           branchId: (data.branchId as string | null | undefined) ?? null,
           lineCount: incomingLineCount,
+          orderNumber: manualOrderNumber,
         },
       },
     );
@@ -2248,6 +2271,9 @@ export class OrderService extends BaseService {
    * GEVŞEK MODEL KORUNUR: toplar siparişe BAĞLANMAZ — satırlar yalnız spec-toplam
    * talebi temsil eder; karşılanma yine spec-toplam üzerinden işler (sevkte). Top
    * okutmak burada yalnız "ne kadar/ne tür satır açılacağını" türetmek içindir.
+   *
+   * Top claim'i ile sipariş TEK tx'tir (biri düşerse ikisi de düşer); token kilidi (8036) tx'in ilk ifadesidir:
+   * aynı token'lı ikinci deneme kazananın commit'ini bekler, sonra onun siparişini görür.
    */
   async quickOrderFromRolls(
     data: { customerId: string; branchId?: string | null; rollIds: string[]; clientToken?: string | null },
@@ -2273,16 +2299,6 @@ export class OrderService extends BaseService {
     });
     if (rolls.length !== rollIds.length) throw AppError.notFound("Bazı toplar bulunamadı");
 
-    // Her top serbest + satılabilir statüde olmalı (STOCK ham veya WAREHOUSE, çuvalsız).
-    for (const r of rolls) {
-      if (r.shipmentId) throw AppError.conflict(`Top bir sevkiyatta: ${r.barcode ?? r.id}`);
-      if (r.sackId) throw AppError.conflict(`Top bir çuvalda: ${r.barcode ?? r.id}`);
-      if (r.currentStepId) throw AppError.conflict(`Top bir iş emri adımında: ${r.barcode ?? r.id}`);
-      if (r.status !== RollStatus.STOCK && r.status !== RollStatus.WAREHOUSE) {
-        throw AppError.badRequest(`Top satışa uygun değil (${r.status}): ${r.barcode ?? r.id}`);
-      }
-    }
-
     // Spec (ürün+renk+en) bazında grupla → satır metrajı = grup currentQty toplamı.
     const groups = new Map<
       string,
@@ -2303,55 +2319,27 @@ export class OrderService extends BaseService {
       quantity: Number(g.quantity),
     }));
 
-    // F143: CLAIM-FIRST. Eskiden sipariş create edilip SONRA topları claim ediyordu;
-    // claim.count HİÇ kontrol edilmiyordu → topların bir kısmı arada başka akışta
-    // tüketilse bile sipariş açılıyor ve preparedToWarehouse yalan söylüyordu.
-    // Artık: create-fail-after-claim'i önlemek için create()'in fırlatabileceği TÜM
-    // doğrulamaları (müşteri/şube + ürün/renk-atanabilirlik) claim'den ÖNCE koştur;
-    // sonra topları atomik claim et. Aksi halde create() içindeki validateLineColors/
-    // validateLineItems fırlatırsa toplar WAREHOUSE'da yetim kalırdı (rollback yok).
-    await this.validateCustomer(data.customerId);
-    if (data.branchId) await this.validateBranch(data.branchId, data.customerId);
-    await this.validateLineItems(lines, { fromScannedRolls: true });
-    await this.validateLineColors(lines, data.customerId);
-
-    const stockRollIds = rolls.filter((r) => r.status === RollStatus.STOCK).map((r) => r.id);
-    if (stockRollIds.length > 0) {
-      await prisma.$transaction(async (tx) => {
-        const claimed = await tx.roll.updateMany({
-          where: { id: { in: stockRollIds }, status: RollStatus.STOCK, shipmentId: null, currentStepId: null },
-          data: { status: RollStatus.WAREHOUSE },
-        });
-        // Depoya GİRİŞ yazan her yolun ortak damgası (bkz. `warehouseStampManyTx`).
-        await warehouseStampManyTx(tx, stockRollIds);
-        if (claimed.count !== stockRollIds.length) {
-          const escaped = await tx.roll.findMany({
-            where: {
-              id: { in: stockRollIds },
-              NOT: { status: RollStatus.WAREHOUSE, shipmentId: null, currentStepId: null },
-            },
-            select: { id: true, barcode: true },
-          });
-          const list = escaped.map((r) => r.barcode ?? r.id).join(", ");
-          throw AppError.conflict(
-            `Şu toplar işlem sırasında başka bir akışta tüketildi; hızlı sipariş açılmadı, lütfen tekrar okutup deneyin: ${list}`,
-          );
-        }
-      });
+    // clientToken ZORUNLU (route): tümü-WAREHOUSE yolunda claim atlanır ve TEK koruma token'dır.
+    // Sıralı tekrar (zaman aşımı sonrası) top kurallarından ÖNCE replay alır.
+    const clientToken = data.clientToken || null;
+    const replay = (prior: Record<string, unknown>) => this.quickOrderReplay(prior, data, lines, rolls.length);
+    if (clientToken) {
+      const prior = await this.findOrderByToken(clientToken);
+      if (prior) return replay(prior);
     }
 
-    // Sipariş aç (claim garanti; satırlar gerçek metrajı temsil eder).
-    // clientToken create'e akar: timeout-replay'de toplar zaten WAREHOUSE olduğundan
-    // claim bloğu atlanır ve TEK koruma bu token'dır (create cached siparişi döner) —
-    // token'sız replay birebir aynı satırlı İKİNCİ siparişi açardı.
-    // Miktar SUNUCUDA okutulan topların toplamından (yukarıda) — istemci miktarı yok (A1 OKUTULAN_TOPLAR).
-    const created = await this.create(
-      { customerId: data.customerId, branchId: data.branchId ?? null, lines, clientToken: data.clientToken ?? null },
-      userId,
-      { fromScannedRolls: true },
-    );
-    const order = created.data as { id: string; orderNumber: string };
+    const outcome = await this.quickOrderTx(data, rolls, lines, clientToken);
+    if ("prior" in outcome) return replay(outcome.prior);
+    const order = outcome.order as { id: string; orderNumber: string };
+    const stockRollIds = outcome.stockRollIds;
 
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: this.config.tableName,
+      recordId: order.id,
+      newData: { customerId: data.customerId, branchId: data.branchId ?? null, lines, clientToken, orderNumber: order.orderNumber },
+    });
     // Roll hareketini denetle (best-effort, tx DIŞI).
     if (stockRollIds.length > 0) {
       await AuditService.log({
@@ -2369,6 +2357,105 @@ export class OrderService extends BaseService {
       success: true,
       data: { order, lineCount: lines.length, rollCount: rolls.length, preparedToWarehouse: stockRollIds.length },
       message: `Hızlı sipariş açıldı: ${order.orderNumber} (${lines.length} satır, ${rolls.length} top)`,
+    };
+  }
+
+  /** Hızlı siparişin yazan yarısı: token kilidi (8036) + token → kart kilitleri (8030) → top claim'i → sipariş. */
+  private async quickOrderTx(
+    data: { customerId: string; branchId?: string | null },
+    rolls: Array<{ id: string; barcode: string | null; status: RollStatus; shipmentId: string | null; sackId: string | null; currentStepId: string | null }>,
+    lines: Array<{ itemId: string; colorId: string | null; width: number | null; quantity: number }>,
+    clientToken: string | null,
+  ): Promise<{ prior: Record<string, unknown> } | { order: Record<string, unknown>; stockRollIds: string[] }> {
+    // Her top serbest + satılabilir statüde olmalı (STOCK ham veya WAREHOUSE, çuvalsız).
+    for (const r of rolls) {
+      if (r.shipmentId) throw AppError.conflict(`Top bir sevkiyatta: ${r.barcode ?? r.id}`);
+      if (r.sackId) throw AppError.conflict(`Top bir çuvalda: ${r.barcode ?? r.id}`);
+      if (r.currentStepId) throw AppError.conflict(`Top bir iş emri adımında: ${r.barcode ?? r.id}`);
+      if (r.status !== RollStatus.STOCK && r.status !== RollStatus.WAREHOUSE) {
+        throw AppError.badRequest(`Top satışa uygun değil (${r.status}): ${r.barcode ?? r.id}`);
+      }
+    }
+    // Sipariş kapıları (müşteri/şube + ürün/renk-atanabilirlik) `create` ile AYNI yerden.
+    const prepared = await this.prepareOrderCreate(
+      { customerId: data.customerId, branchId: data.branchId ?? null, lines, clientToken },
+      clientToken,
+      { fromScannedRolls: true },
+    );
+    const stockRollIds = rolls.filter((r) => r.status === RollStatus.STOCK).map((r) => r.id);
+    return withBarcodeRetry(
+      () =>
+        prisma.$transaction(async (tx) => {
+          if (clientToken) {
+            await lockClientTokenTx(tx, clientToken);
+            const prior = await tx.order.findUnique({
+              where: { clientToken },
+              ...(this.config.defaultInclude ? { include: this.config.defaultInclude as Prisma.OrderInclude } : {}),
+            });
+            if (prior) return { prior: prior as Record<string, unknown> };
+          }
+          await runItemUsageChecksTx(tx, prepared.lineCheck.checks);
+          if (stockRollIds.length > 0) {
+            const claimed = await tx.roll.updateMany({
+              where: { id: { in: stockRollIds }, status: RollStatus.STOCK, shipmentId: null, currentStepId: null },
+              data: { status: RollStatus.WAREHOUSE },
+            });
+            // Depoya GİRİŞ yazan her yolun ortak damgası (bkz. `warehouseStampManyTx`).
+            await warehouseStampManyTx(tx, stockRollIds);
+            if (claimed.count !== stockRollIds.length) {
+              const escaped = await tx.roll.findMany({
+                where: {
+                  id: { in: stockRollIds },
+                  NOT: { status: RollStatus.WAREHOUSE, shipmentId: null, currentStepId: null },
+                },
+                select: { id: true, barcode: true },
+              });
+              const list = escaped.map((r) => r.barcode ?? r.id).join(", ");
+              throw AppError.conflict(
+                `Şu toplar işlem sırasında başka bir akışta tüketildi; hızlı sipariş açılmadı, lütfen tekrar okutup deneyin: ${list}`,
+              );
+            }
+          }
+          const orderNumber = await this.nextOrderNumber(tx, prepared);
+          return { order: await this.insertOrderTx(tx, prepared, orderNumber), stockRollIds };
+        }),
+      undefined,
+      (err) => !isClientTokenP2002(err),
+    );
+  }
+
+  /**
+   * Hızlı sipariş replay kararı: iptal edilmişse 409 `ORDER_CANCELLED`; müşteri + şube + satırlar (ürün · renk ·
+   * en · metraj — okutulan toplardan türeyen gövde) aynıysa önceki sipariş, değilse 409 CLIENT_TOKEN_COLLISION.
+   */
+  private quickOrderReplay(
+    existing: Record<string, unknown>,
+    data: { customerId: string; branchId?: string | null },
+    lines: Array<{ itemId: string; colorId: string | null; width: number | null; quantity: number }>,
+    rollCount: number,
+  ): ApiResponse<unknown> {
+    assertOrderReplayAlive({
+      id: String(existing.id),
+      status: existing.status as OrderStatus,
+      orderNumber: (existing.orderNumber as string | null) ?? null,
+    });
+    const lineKey = (l: { itemId: unknown; colorId: unknown; width: unknown; quantity: unknown }) =>
+      `${l.itemId}|${l.colorId ?? ""}|${l.width == null ? "" : Number(l.width)}|${Number(l.quantity)}`;
+    const existingLines = Array.isArray(existing.lines) ? (existing.lines as Array<Parameters<typeof lineKey>[0]>) : [];
+    const same =
+      existing.customerId === data.customerId &&
+      (existing.branchId ?? null) === (data.branchId ?? null) &&
+      JSON.stringify(existingLines.map(lineKey).sort()) === JSON.stringify(lines.map(lineKey).sort());
+    if (!same) {
+      throw AppError.conflict(
+        `Bu okutma daha önce ${existing.orderNumber} siparişi olarak kaydedilmiş — yeni sipariş için ekranı kapatıp yeniden açın.`,
+        { code: "CLIENT_TOKEN_COLLISION", orderNumber: existing.orderNumber },
+      );
+    }
+    return {
+      success: true,
+      data: { order: existing, lineCount: existingLines.length, rollCount, preparedToWarehouse: 0 },
+      message: `Hızlı sipariş zaten açılmış (yeniden gönderim): ${existing.orderNumber}`,
     };
   }
 

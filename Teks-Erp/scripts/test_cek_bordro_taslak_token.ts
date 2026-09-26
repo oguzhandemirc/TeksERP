@@ -14,7 +14,6 @@
 //   §5 HTTP: taslak `finance:read` ile açılır (anlık bordroyu basan kullanıcı yetki
 //      kaybetmez), kayıt `finance:write` ister; replay 200, ilk kayıt 201.
 // =============================================================================
-import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import type { Server } from "http";
 import type { AddressInfo } from "net";
@@ -25,6 +24,7 @@ import { chequeDeliveryNoteService } from "../src/services/cheque-delivery-note.
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { zorlanmisSira } from "./lib/zorlanmis-sira";
 
 let pass = 0;
 let fail = 0;
@@ -56,69 +56,6 @@ const olusan = {
   chequeIds: [] as string[],
   userIds: [] as string[],
 };
-// ── ZORLANMIŞ SIRA (③c) ──────────────────────────────────────────────────────
-// `prisma.$transaction` yalnız B'nin çağrısında sarılır: B'nin tx'inde İLK `cheque.findMany`
-// (seçim okuması — token okumasından sonra) kapıda bekler. Kapı A bitince, A bir kilitte
-// beklemeye düşünce ya da 5 sn'de açılır; hangisiyle açıldığı rapora yazılır.
-const kapiDeposu = new AsyncLocalStorage<() => Promise<string>>();
-type TxFn = (fn: unknown, opts?: unknown) => Promise<unknown>;
-
-function kapiliTx(tx: object, bekle: () => Promise<string>): object {
-  const bagla = (t: object, p: string | symbol) => {
-    const v = Reflect.get(t, p) as unknown;
-    return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(t) : v;
-  };
-  const cheque = Reflect.get(tx, "cheque") as object;
-  const kapiliCheque = new Proxy(cheque, {
-    get: (t, p) =>
-      p === "findMany"
-        ? async (...a: unknown[]) => {
-            await bekle();
-            return (Reflect.get(t, p) as (...x: unknown[]) => unknown).apply(t, a);
-          }
-        : bagla(t, p),
-  });
-  return new Proxy(tx, { get: (t, p) => (p === "cheque" ? kapiliCheque : bagla(t, p)) });
-}
-
-async function zorlanmisSira(
-  b: () => Promise<unknown>,
-  a: () => Promise<unknown>,
-): Promise<{ sonuclar: PromiseSettledResult<unknown>[]; kapi: string }> {
-  const kanca = prisma as unknown as { $transaction: TxFn };
-  const onceki = kanca.$transaction;
-  const asil = onceki.bind(prisma);
-  kanca.$transaction = (fn, opts) => {
-    const bekle = kapiDeposu.getStore();
-    if (!bekle || typeof fn !== "function") return asil(fn, opts);
-    return asil((tx: object) => (fn as (t: object) => unknown)(kapiliTx(tx, bekle)), opts);
-  };
-  let aBitti = false;
-  let kapidaSinyal!: () => void;
-  const kapida = new Promise<void>((r) => (kapidaSinyal = r));
-  let acilis: Promise<string> | null = null;
-  const bekle = () =>
-    (acilis ??= (async () => {
-      kapidaSinyal();
-      for (const son = Date.now() + 5000; Date.now() < son; ) {
-        if (aBitti) return "A bitti";
-        const [r] = await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
-        if ((r?.n ?? 0) > 0) return "A kilitte bekliyor";
-        await new Promise((r2) => setTimeout(r2, 10));
-      }
-      return "zaman aşımı";
-    })());
-  try {
-    const bSoz = kapiDeposu.run(bekle, b);
-    await Promise.race([kapida, bSoz.catch(() => undefined)]);
-    const aSoz = a().finally(() => (aBitti = true));
-    const sonuclar = await Promise.allSettled([bSoz, aSoz]);
-    return { sonuclar, kapi: acilis ? await acilis : "B kapıya varmadı" };
-  } finally {
-    kanca.$transaction = onceki;
-  }
-}
-
 let flagSatiriVardi: { value: unknown } | null = null;
 let flagDokunuldu = false;
 let server: Server | null = null;
@@ -298,7 +235,9 @@ async function main(): Promise<void> {
   // seçimde bekletilir, A koşar; B, A bitince ya da A bir kilitte beklerken devam eder.
   for (const [ad, cekId, aGunu] of [["aynı gövde", c12, asOf], ["farklı gövde", c13, new Date(asOf.getTime() + DAY)]] as const) {
     const t = randomUUID();
+    // B token'ı okuduktan sonra seçim okumasında (tx'teki ilk `cheque.findMany`) bekletilir.
     const s = await zorlanmisSira(
+      { model: "cheque", metod: "findMany" },
       () => chequeDeliveryNoteService.create({ chequeIds: [cekId], deliveryDate: asOf, clientToken: t }, admin.id),
       () => chequeDeliveryNoteService.create({ chequeIds: [cekId], deliveryDate: aGunu, clientToken: t }, admin.id),
     );

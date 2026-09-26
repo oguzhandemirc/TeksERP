@@ -37,10 +37,10 @@ import { AppError } from "../../utils/app-error";
 export const CLIENT_TOKEN_LOCK_NS: number = 8036;
 
 /**
- * Aynı `clientToken`lı eşzamanlı denemeleri serileştirir; çağrı tx'in kilit bloğunda, token
- * okumasından ÖNCE yapılır. Kilitsiz ön-okumada kaybeden deneme token'ı kaçırıp kazananın
- * commit'ini iş kuralında görür (ör. "zaten aktif bordroda") ve replay yerine yanlış 409 döner.
- * Tx başka uzaylardan da kilit alıyorsa sıra ARTAN kalır (8036 en sonda), token okuması kilitlerden sonra.
+ * Aynı `clientToken`lı eşzamanlı denemeleri serileştirir; token okumasından ÖNCE yapılır. Kilitsiz
+ * ön-okumada kaybeden deneme token'ı kaçırıp kazananın commit'ini iş kuralında görür (ör. "zaten
+ * aktif bordroda") ve replay yerine yanlış 409 döner.
+ * 8036 alınıyorsa tx'in İLK ifadesidir. K′ yolları 8036 ALMAZ; token okumasını yolun mevcut kilidinin arkasına koyar.
  * `hashtext` çakışması iki farklı token'ı yalnız serileştirir, yanlış sonuç üretmez.
  */
 export async function lockClientTokenTx(tx: Prisma.TransactionClient, clientToken: string): Promise<void> {
@@ -137,16 +137,22 @@ export function assertMachineRunReplayAlive(existing: {
   );
 }
 
-/**
- * Token'la bulunan top indirmesi hâlâ canlı mı — geri alınmışsa 409 `DOFF_REVOKED`.
- * `assertMachineRunReplayAlive` ikizi: "ölü" hâl statü değil DAMGADIR.
- */
 /** Token'la bulunan levent hâlâ canlı mı — sarımı iptal edilmişse 409 `WARP_BEAM_CANCELLED` (iptal edilen yeniden sarılmaz, yeni levent açılır). */
 export function assertWarpBeamReplayAlive(existing: { id: string; beamNo: string; status: string }): void {
   if (existing.status !== "CANCELLED") return;
   throw AppError.conflict(`${existing.beamNo} sarımı iptal edilmiş — yeniden planlamak için formu yeniden açın (aynı gönderim tekrar edilemez).`, { code: "WARP_BEAM_CANCELLED", beamId: existing.id });
 }
 
+/** Token'la bulunan levent tüketimi geri alınmışsa (`CONSUMED_CANCEL` ters bağı) 409 `WARP_BEAM_CONSUME_REVOKED` — ölü hâl ters bağdır. */
+export function assertWarpBeamConsumeReplayAlive(existing: { reversal: { id: string } | null }): void {
+  if (!existing.reversal) return;
+  throw AppError.conflict("Bu tüketim daha önce kaydedilip geri alınmış — yeniden kaydetmek için formu yeniden açın (aynı gönderim tekrar edilemez).", { code: "WARP_BEAM_CONSUME_REVOKED" });
+}
+
+/**
+ * Token'la bulunan top indirmesi hâlâ canlı mı — geri alınmışsa 409 `DOFF_REVOKED`.
+ * `assertMachineRunReplayAlive` ikizi: "ölü" hâl statü değil DAMGADIR.
+ */
 export function assertDoffReplayAlive(existing: { id: string; revokedAt: Date | null }): void {
   if (!existing.revokedAt) return;
   throw AppError.conflict(

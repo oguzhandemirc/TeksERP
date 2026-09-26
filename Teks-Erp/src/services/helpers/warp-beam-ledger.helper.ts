@@ -34,10 +34,19 @@ export async function loadBeamTx(tx: Pick<Tx, "warpBeam">, id: string): Promise<
   return b;
 }
 
-/** Türetilen kalan — TÜM olaylar, tek işaret tablosu. */
-export async function remainingMTx(tx: Pick<Tx, "warpBeamEvent">, beamId: string): Promise<Prisma.Decimal> {
-  const events = await tx.warpBeamEvent.findMany({ where: { beamId }, select: { kind: true, lengthM: true } });
+/** Türetilen kalan, YALNIZ GÖSTERİM — TÜM olaylar, tek işaret tablosu. Defter yazan yol bunu değil `remainingMTx`'i çağırır. */
+export async function readRemainingM(db: Pick<Tx, "warpBeamEvent">, beamId: string): Promise<Prisma.Decimal> {
+  const events = await db.warpBeamEvent.findMany({ where: { beamId }, select: { kind: true, lengthM: true } });
   return D(warpBeamRemainingM(events));
+}
+
+/**
+ * Defter yazımına giren kalan: önce levent satırı `FOR UPDATE`, sonra olaylar — kilitsiz okumada eşzamanlı iki yazım
+ * aynı eski kalanı görür ve kalan eksiye düşer. Kilit sırası: (varsa) 8036 token kilidi → levent satırı → defter yazımı.
+ */
+export async function remainingMTx(tx: Tx, beamId: string): Promise<Prisma.Decimal> {
+  await tx.$queryRaw`SELECT id FROM warp_beams WHERE id = ${beamId}::uuid FOR UPDATE`;
+  return readRemainingM(tx, beamId);
 }
 
 /** Pozitif metre girdisi (0 ve negatif 400). */

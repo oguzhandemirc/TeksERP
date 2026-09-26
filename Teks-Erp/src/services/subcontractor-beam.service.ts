@@ -22,7 +22,7 @@ import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "./helpers/warp-beam-event.helper";
-import { warpBeamRemainingM } from "./helpers/warp-beam.helper";
+import { remainingMTx } from "./helpers/warp-beam-ledger.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -79,13 +79,13 @@ export async function dispatchWarpBeamItemsTx(
     await tx.warpBeam.updateMany({ where: { id: beamId }, data: { updatedAt: new Date() } });
     const beam = await tx.warpBeam.findUnique({
       where: { id: beamId },
-      select: { id: true, beamNo: true, status: true, events: { select: { kind: true, lengthM: true } } },
+      select: { id: true, beamNo: true, status: true },
     });
     if (!beam) throw AppError.notFound(`Levent bulunamadı: ${beamId}`);
     if (beam.status !== WarpBeamStatus.READY) {
       throw AppError.conflict(`${beam.beamNo} durumu ${beam.status} — yalnız HAZIR levent fasona verilir`, { code: "WARP_BEAM_NOT_READY", status: beam.status, beamNo: beam.beamNo });
     }
-    const remaining = D(warpBeamRemainingM(beam.events));
+    const remaining = await remainingMTx(tx, beamId);
     if (remaining.lte(0)) throw AppError.conflict(`${beam.beamNo} kalan metresi 0 — fasona verilecek çözgü yok`, { code: "WARP_BEAM_EMPTY", beamNo: beam.beamNo });
     const item = await tx.subcontractorDispatchItem.create({
       data: { dispatchId: input.dispatchId, kind: SubcontractorDispatchItemKind.WARP_BEAM, warpBeamId: beamId, dispatchedQty: remaining, dispatchedWeight: null },

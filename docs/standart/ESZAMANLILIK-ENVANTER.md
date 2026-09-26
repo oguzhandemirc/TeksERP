@@ -31,7 +31,7 @@ Envanterin tek kaynağı `Teks-Erp/src/services/helpers/period-guard.helper.ts` 
 | 8033 | `PACKAGE_NO_LOCK_NS` | `helpers/packing-group.helper.ts` | sevk partisi ambalaj no — yalnız ezme/elle/boşluk-doldur yolları (parti başına) |
 | 8034 | `PACKING_GROUP_CODE_LOCK_NS` | `helpers/packing-group.helper.ts` | parti kodu aylık sayacı (kurulum-geneli) |
 | 8035 | `POOL_PACKAGE_NO_LOCK_NS` | `helpers/sack-seq.helper.ts` | partisiz çuval ambalaj no (cari başına) |
-| 8036 | `CLIENT_TOKEN_LOCK_NS` | `helpers/token-replay.helper.ts` | `clientToken` replay serileştirme (token başına) — kilitsiz ön-okumada aynı token'lı kaybeden deneme kazananın commit'ini iş kuralında görüp replay yerine yanlış 409 dönüyordu |
+| 8036 | `CLIENT_TOKEN_LOCK_NS` | `helpers/token-replay.helper.ts` | `clientToken` replay serileştirme (token başına) — kilitsiz ön-okumada aynı token'lı kaybeden deneme kazananın commit'ini iş kuralında görüp replay yerine yanlış 409 dönüyordu. 8036 alınıyorsa tx'in İLK ifadesidir; K′ yolları 8036 ALMAZ, token okumasını yolun mevcut kilidinin arkasına koyar |
 
 Bu tablo bir ÖZETTİR; kanonik envanter `period-guard.helper.ts` başlığındadır ve `test_advisory_lock_namespaces` ikisini birden ölçer.
 
