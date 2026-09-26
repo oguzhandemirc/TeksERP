@@ -10,7 +10,8 @@
 // kalsın diye yuvarlama rejimi zarfta DAMGALANIR — damgasız belge eski yuvarlamayla basılır.
 //
 // §1 yardımcının sınır değerleri · §2 fason çeki biçimi · §3 damganın tek okuyucusu ·
-// §4 her renderer iki rejimde (beklenen metin bağımsız biçimleyiciyle: ticari = ICU
+// §4 her renderer iki rejimde, BELGENİN HER YERİNDE (sayı token'ı: hücre · son ekli dip toplam · metin; fason çeki
+// rejim bağı negatif yarımla) (beklenen metin bağımsız biçimleyiciyle: ticari = ICU
 // halfExpand, eski = `toFixed`) · §5 belge yolunda çıplak `toFixed` yok (AST, muafiyet iki
 // yönlü) · §6 damgayı tek yer yazar, tek yer okur (AST).
 // "Güncel şablonla bas" yolu DB ister: `test_belge_yuvarlama_damgasi.ts`.
@@ -20,6 +21,8 @@
 // mutabakat), 9'u CSS ölçüsü; düzeltme aynı commit'te.
 // Sonda (✓B1, 06 denetimi sonrası): `buildSnapshotEnvelope` başı elle kurulup `...envelopeHead()` kalkınca
 // §6 ❌2 (yaymayan zarf · elle baş).
+// Sonda (✓B2, 06 denetimi madde 9; md5 ile geri alındı): fason çeki `docNum({})` → §4 ❌1 (negatif yarım vakası) ·
+// kartela dip toplamı eski rejim → §4 ❌1 ("112,3 m" son ekli hücre; eski `>X<` eşleşmesi görmüyordu, ikisi de 52/0 idi).
 // Sonda (✓B3, `36cf2f71`; md5 ile geri alındı): ① `kartela-ceki.html.ts`e çıplak `toFixed`
 // → §5 1 ❌, ihlal kaldırılınca 49/0 (pozitif) · ② `docNum` başka damga adı okur → 14 ❌
 // (§2 · §3 · §4 · §6) · ③ `cssFixed` `toFixed`siz → §5 ölü muafiyet 1 ❌.
@@ -131,6 +134,11 @@ function yamala(v: unknown, anahtar: RegExp, yeni: number, k = ""): unknown {
   }
   return v;
 }
+/** HTML'de sayı TOKEN'ı olarak kaç kez geçer — hücre, son ekli dip toplam ("112,4 m") ve metin dahil; komşu rakam/ayırıcı yok. */
+function tokenSay(html: string, sayi: string): number {
+  const k = sayi.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return (html.match(new RegExp(`(?<![\\d.,])${k}(?![\\d])`, "g")) ?? []).length;
+}
 const zarf = (doc: unknown, damga: object): PrintedDocSnapshot =>
   ({
     schemaVersion: 1,
@@ -161,15 +169,24 @@ for (const v of VAKALAR) {
   const bakiye = v.anahtar ? (s: string) => s.replace(/^-/, "") : (s: string) => s;
   const eHtml = v.html(zarf(doc, {}), {});
   const tHtml = v.html(zarf(doc, DAMGALI), {});
-  check(`${v.ad}: ${v.deger} damgasız '${bakiye(e)}', damgalı '${bakiye(t)}'`,
-    e !== t && eHtml.includes(`>${bakiye(e)}<`) && !eHtml.includes(`>${bakiye(t)}<`) && tHtml.includes(`>${bakiye(t)}<`) && !tHtml.includes(`>${bakiye(e)}<`));
+  // Belgenin HER yerinde (hücre · son ekli dip toplam · metin) tek rejim: öteki rejimin rakamı hiç geçmez.
+  const [eE, eT, tT, tE] = [tokenSay(eHtml, bakiye(e)), tokenSay(eHtml, bakiye(t)), tokenSay(tHtml, bakiye(t)), tokenSay(tHtml, bakiye(e))];
+  check(`${v.ad}: ${v.deger} damgasız '${bakiye(e)}', damgalı '${bakiye(t)}' — belgenin her yerinde`,
+    e !== t && eE > 0 && eT === 0 && tT === eE && tE === 0, `damgasız ${eE}/${eT} · damgalı ${tT}/${tE}`);
 }
 {
-  // Fason çeki pozitifte iki rejimde aynı basar (Math.round(n·10) 3 haneli veride doğru); rejimi damga seçer.
+  // Fason çeki pozitifte iki rejimde aynı basar (Math.round(n·10) 3 haneli veride doğru); rejimleri ayıran
+  // tek değer sınıfı negatif yarımdır (Math.round +∞'a yuvarlar) — renderer'ın rejim bağı onunla ölçülür.
   const doc = yamala(JSON.parse(JSON.stringify(SAMPLE_PRINTED_DOCS.SUBCONTRACTOR_DISPATCH)), MIKTAR, 112.35);
   const eHtml = renderFasonCekiHtml(zarf(doc, {}), {});
   const tHtml = renderFasonCekiHtml(zarf(doc, DAMGALI), {});
-  check("fason sevk çeki: 112,35 iki rejimde '112.4'", eHtml.includes(">112.4<") && tHtml.includes(">112.4<"));
+  check("fason sevk çeki: 112,35 iki rejimde '112.4'", tokenSay(eHtml, "112.4") > 0 && tokenSay(tHtml, "112.4") === tokenSay(eHtml, "112.4"));
+  const neg = yamala(JSON.parse(JSON.stringify(SAMPLE_PRINTED_DOCS.SUBCONTRACTOR_DISPATCH)), MIKTAR, -1.25);
+  const nE = renderFasonCekiHtml(zarf(neg, {}), {});
+  const nT = renderFasonCekiHtml(zarf(neg, DAMGALI), {});
+  check("fason sevk çeki rejim bağı: -1,25 damgasız '-1.2', damgalı '-1.3' — belgenin her yerinde",
+    tokenSay(nE, "-1.2") > 0 && tokenSay(nE, "-1.3") === 0 && tokenSay(nT, "-1.3") === tokenSay(nE, "-1.2") && tokenSay(nT, "-1.2") === 0,
+    `damgasız ${tokenSay(nE, "-1.2")}/${tokenSay(nE, "-1.3")} · damgalı ${tokenSay(nT, "-1.3")}/${tokenSay(nT, "-1.2")}`);
 }
 {
   // PDF = Excel: Excel değeri kâğıttaki haneyi taşır — iki rejimde.
