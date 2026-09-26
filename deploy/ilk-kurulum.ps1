@@ -56,21 +56,27 @@ function Ok($m)   { Write-Host "  + $m" -ForegroundColor Green }
 function Uyar($m) { Write-Host "  ! $m" -ForegroundColor Yellow }
 function Dur($m)  { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; Write-Host ""; exit 1 }
 
+# Native komuta, icinde cift tirnak olan TEK arguman. PowerShell 5.1 (ve 7.3 oncesi
+# "Legacy" kip) argumani tirnaklarken icerdeki `"`yi KACIRMAZ; psql `"updatedAt"`
+# yerine `updatedAt` alir ve kolonu bulamaz. Legacy kipte `"` -> `\"` (onundeki ters
+# bolular ikilenir); Standard kipte PowerShell bunu kendisi yapar, dokunulmaz.
+function NativeArg([string]$s) {
+  $pas = Get-Variable -Name PSNativeCommandArgumentPassing -ValueOnly -ErrorAction SilentlyContinue
+  if ($PSVersionTable.PSVersion.Major -ge 7 -and $pas -and $pas -ne "Legacy") { return $s }
+  return ($s -replace '(\\*)"', '$1$1\"')
+}
+
 # psql'i belirli bir kimlikle kosturur; PGPASSWORD cagri BASINA set/temizlenir
 # (surec boyunca acik birakilirsa bu kabuktan calisan her sey onu miras alir).
-#
-# ⚠ PowerShell 5.1'de EAP="Stop" altinda native komutun stderr'ini YONLENDIRMEK
-#   (`2>&1`) o satiri OLUMCUL yapar - komut basarili olsa bile (kur.ps1 `Pm2Kos`
-#   basligi). [3/8]'in ILK baglanti denemesi BEKLENEN bir hatadir (rol/DB henuz
-#   yok): yeni makinede 5.1 ile adim hic gecemiyordu. Cikti yakalanmak ZORUNDA
-#   (hata metni kullaniciya basilir), o yuzden yonlendirme kalir ve cagri suresince
-#   EAP "Continue"ya cekilir; stderr satirlari ErrorRecord gelir, METNE cevrilir.
+# ⚠ 5.1'de EAP="Stop" altinda stderr YONLENDIRMESI satiri olumcul yapar ve ilk
+#   baglanti denemesinin hatasi BEKLENEN bir hatadir: cagri suresince EAP
+#   "Continue", stderr satirlari (ErrorRecord) metne cevrilir (kur.ps1 `Pm2Kos`).
 function Psql($kullanici, $parola, $veritabani, $sorgu) {
   $eskiEAP = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   $env:PGPASSWORD = $parola
   try {
-    $c = & (Join-Path $script:pgsqlBin "psql.exe") -h localhost -p $DbPort -U $kullanici -d $veritabani -v ON_ERROR_STOP=1 -tAc $sorgu 2>&1
+    $c = & (Join-Path $script:pgsqlBin "psql.exe") -h localhost -p $DbPort -U $kullanici -d $veritabani -v ON_ERROR_STOP=1 -tAc (NativeArg $sorgu) 2>&1
     $kod = $LASTEXITCODE
     $satirlar = @($c | ForEach-Object {
       if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }

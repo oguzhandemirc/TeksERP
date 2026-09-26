@@ -1,12 +1,12 @@
 # =============================================================================
 # Sunucu betiklerinin SOZDIZIMI denetimi - pwsh 7 (macOS/Linux) ve Windows PowerShell 5.1
 #   pwsh -NoProfile -File deploy/test/sozdizimi.ps1                  # deploy/*.ps1 hepsi
-#   pwsh -NoProfile -File deploy/test/sozdizimi.ps1 -Dosyalar a.ps1,b.ps1
+#   pwsh -NoProfile -File deploy/test/sozdizimi.ps1 a.ps1 b.ps1
 # Betigi CALISTIRMAZ; PowerShell ayristiricisina verir. Hata varsa satiriyla basar,
 # cikis kodu 1. Davranis (5.1'e ozgu stderr/EAP, yurutme ilkesi) burada OLCULMEZ -
 # o sozlesmeler Teks-Erp/scripts/test_sunucu_betikleri.ts'te kaynaktan olculur.
 # =============================================================================
-param([string[]]$Dosyalar)
+param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Dosyalar)
 if (-not $Dosyalar) {
   $Dosyalar = @(Get-ChildItem (Join-Path $PSScriptRoot "..") -Filter "*.ps1" -File | ForEach-Object { $_.FullName })
 }

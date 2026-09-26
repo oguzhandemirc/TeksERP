@@ -76,6 +76,13 @@ for (const yol of SUNUCU_PS1) {
   const npmSatir = t.satirlar.filter((s) => CIPLAK_NPM.test(s.ciplak)).map((s) => s.no);
   check(`§3 ⭐ ${yol}: çıplak \`npm\` çağrısı YOK (\`npm.cmd\` — npm.ps1 yürütme ilkesine takılır)`, npmSatir.length === 0,
     npmSatir.length ? `satır ${npmSatir.join(", ")}` : "temiz");
+
+  // §6 — psql'e giden SQL `NativeArg`tan geçer: 5.1 (Legacy kip) argümandaki `"`yi
+  //   KAÇIRMAZ, psql `"updatedAt"` yerine `updatedAt` alır (deploy/test/native-arg.sh ölçer).
+  const psqlSql = t.satirlar.filter((s) => /psql\.exe/.test(s.kod) && /\s-(?:tA)?c\s/.test(s.ciplak));
+  const kacissiz = psqlSql.filter((s) => !/\(NativeArg\s/.test(s.ciplak)).map((s) => s.no);
+  check(`§6 ⭐ ${yol}: psql'e SQL veren her çağrı \`NativeArg\`tan geçiyor`, kacissiz.length === 0,
+    kacissiz.length ? `satır ${kacissiz.join(", ")}` : `${psqlSql.length} çağrı`);
 }
 
 // §1 körlük zemini: ölçülen yardımcı gerçekten yönlendiriyor ve kural onu geçiriyor.
