@@ -110,6 +110,7 @@ import { TAZELIK_ADIMLARI } from "./adimlar-tazelik.mjs";
 import { SIPARIS_YONU_ADIMLARI } from "./adimlar-siparis-yonu.mjs";
 import { SEVK_KAPISI_ADIMLARI } from "./adimlar-sevk-kapisi.mjs";
 import { SEVK_YONU_ADIMLARI } from "./adimlar-sevk-yonu.mjs";
+import { IS_EMRI_ADIMLARI } from "./adimlar-is-emri.mjs";
 
 export const ADIMLAR = [
   // ── A · HAZIRLIK ────────────────────────────────────────────────────────────
@@ -2016,5 +2017,6 @@ export const ADIMLAR = [
   ...MASTER_KOD_ADIMLARI,
   // ── TZ · başka istemcinin kaydı sayfaya dönünce görünür (K21) — ayrı dosyada.
   ...TAZELIK_ADIMLARI,
+  ...IS_EMRI_ADIMLARI,
   ...SIPARIS_YONU_ADIMLARI,
 ];
