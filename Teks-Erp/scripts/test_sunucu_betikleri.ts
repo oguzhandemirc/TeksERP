@@ -82,5 +82,37 @@ for (const yol of SUNUCU_PS1) {
   check("§1 körlük zemini: ilk-kurulum `Psql` yardımcısı çıktıyı yakalamak için YÖNLENDİRİYOR (kural boşa ölçmüyor)", yonlendirir);
 }
 
+// §4 — paketle.ps1 PROVA KİPİ: prova yayın kaydı bırakmaz (bulgu 3, 2026-09-27).
+//   Normal koşum etiketi atıp UZAĞA itiyor, repodaki package.json'a sürüm yazıyor ve
+//   sürüm belgesini dolduruyordu; prova kipi üçünü de yapmamalı, kur.ps1 de prova
+//   paketini açık izin olmadan kurmamalı.
+{
+  const t = psTara(readFileSync(join(KOK, "deploy/paketle.ps1"), "utf8"));
+  const satirIdx = (re: RegExp, alan: "ciplak" | "kod" = "ciplak") => t.satirlar.findIndex((s) => re.test(s[alan]));
+  /** Satırdan geriye `pencere` satır içinde, verilen koşulu açan bir `if/elseif` var mı. */
+  const korunur = (idx: number, kosul: RegExp, pencere = 14) =>
+    idx >= 0 && t.satirlar[idx]!.derinlik > 0 &&
+    t.satirlar.slice(Math.max(0, idx - pencere), idx).some((s) => kosul.test(s.kod));
+  check("§4 körlük zemini: paketle.ps1 `-Prova` parametresi tanımlı", t.satirlar.some((s) => /\[switch\]\$Prova\b/.test(s.kod)));
+  const etiket = satirIdx(/--etiketle/);
+  check("§4a ⭐ etiket çağrısı (`--etiketle`) prova ve kirli ağaç dalının ARDINDA (koşulsuz değil)",
+    korunur(etiket, /^\s*if\s*\(\$Prova\)/) && korunur(etiket, /^\s*\}\s*elseif\s*\(\$kirli\)/),
+    etiket >= 0 ? `satır ${t.satirlar[etiket]!.no}` : "etiket çağrısı YOK");
+  const uygula = satirIdx(/backend-surum\.mjs.*--uygula/, "kod");
+  check("§4b ⭐ repodaki package.json'a yazım (`--uygula`) yalnız `-not $Prova` dalında",
+    korunur(uygula, /^\s*if\s*\(-not\s+\$Prova\)/, 8), uygula >= 0 ? `satır ${t.satirlar[uygula]!.no}` : "YOK");
+  const belge = satirIdx(/^\s*Set-Content\s+\$surumBelgesi/);
+  check("§4c ⭐ sürüm belgesine yazım prova dalının ARDINDA",
+    korunur(belge, /^\s*if\s*\(\$Prova\)/, 10), belge >= 0 ? `satır ${t.satirlar[belge]!.no}` : "YOK");
+  check("§4d manifest `prova` alanını taşıyor ve sürümü PAKETTEKİ package.json'dan okuyor",
+    t.satirlar.some((s) => /^\s*prova\s*=\s*\[bool\]\$Prova/.test(s.kod)) &&
+      t.satirlar.some((s) => /uygulamaSurumu\s*=.*\$stage\\package\.json/.test(s.kod)));
+  const kur = psTara(readFileSync(join(KOK, "deploy/kur.ps1"), "utf8"));
+  const provaIdx = kur.satirlar.findIndex((s) => /if\s*\(\$m\.prova\)/.test(s.ciplak));
+  check("§4e ⭐ kur.ps1 prova paketini `-ProvaKabul` olmadan kurmaz (Fail)",
+    provaIdx >= 0 && kur.satirlar.slice(provaIdx, provaIdx + 4).some((s) => /-not\s+\$ProvaKabul/.test(s.ciplak)) &&
+      kur.satirlar.slice(provaIdx, provaIdx + 5).some((s) => /^\s*Fail\b/.test(s.ciplak)));
+}
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

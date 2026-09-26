@@ -97,7 +97,10 @@ param(
   #   tasirsa ikincisi birincisini pm2'den SILER (`pm2 delete` [4/9]) - eski
   #   surum sessizce durur ve operator bunu ancak fabrika calismayinca anlar.
   #   Ornek: -UygulamaAdi tekserp-backend-yeni
-  [string]$UygulamaAdi = "tekserp-backend-yeni"
+  [string]$UygulamaAdi = "tekserp-backend-yeni",
+  # PROVA paketini (paketle.ps1 -Prova: etiketsiz, surum belgesiz) kurmaya izin.
+  #   Verilmezse [1/9] durur - fabrikaya kazara prova kurulmasin.
+  [switch]$ProvaKabul
 )
 $ErrorActionPreference = "Stop"
 
@@ -324,6 +327,12 @@ if (Test-Path "$temp\PAKET.json") {
   Write-Host "  migration       : $($m.migrationSayisi)"
   Write-Host "  node_modules    : $(if ($m.nodeModulesDahil) {'pakette DAHIL'} else {'YOK - npm ci kosulacak'})"
   if (-not $m.calismaAgaciTemiz) { Uyar "Paket KIRLI calisma agacindan uretilmis (commit'lenmemis degisiklik icerir)." }
+  if ($m.prova) {
+    if (-not $ProvaKabul) {
+      Fail "Bu bir PROVA paketi (PAKET.json prova=true: etiketsiz, surum belgesiz). Fabrikaya KURULMAZ. Prova makinesindeysen -ProvaKabul ver."
+    }
+    Uyar "PROVA PAKETI kuruluyor (-ProvaKabul) - surum: $($m.uygulamaSurumu)"
+  }
 } else { Uyar "PAKET.json yok - eski surum paket." }
 
 $nmVar = Test-Path "$temp\node_modules"

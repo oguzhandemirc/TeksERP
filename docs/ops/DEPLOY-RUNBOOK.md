@@ -289,6 +289,10 @@ Veriler korunur; sadece kod + bekleyen migration uygulanır. **Yönetici PowerSh
 #    macOS/Linux: pwsh -NoProfile -File deploy/paketle.ps1
 git pull
 pwsh -NoProfile -File deploy/paketle.ps1 -Cikti <cikti-klasoru>   # → tekserp-backend-<damga>-<commit>.zip
+#    YAYIN PROVASI (test makinesi): -Prova ekle → etiket/push YOK, repodaki package.json
+#    ve sürüm belgesi DEĞİŞMEZ, paket sürümü <sürüm>-prova.<commit>, zip tekserp-backend-prova-…;
+#    kur.ps1 bu paketi yalnız -ProvaKabul ile kurar. Kirli ağaçtan üretilen normal pakette de
+#    etiket atılmaz (etiket HEAD'i gösterir, paket HEAD'de olmayanı taşır).
 
 # 2) kur.ps1 DEĞİŞTİYSE önce onu kopyala (script kendini güncelleyemez)
 #    repo deploy\kur.ps1  →  C:\TeksERP\kur.ps1

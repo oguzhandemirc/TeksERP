@@ -22,6 +22,21 @@
 #   .\paketle.ps1 -NodeModulesHaric    # ince paket; sunucu npm ci kosar (internet ister)
 #   .\paketle.ps1 -Cikti D:\paketler   # zip'in yazilacagi klasor
 #   .\paketle.ps1 -WebPanelHaric      # web panelini pakete KOYMA (asagidaki nota bak)
+#   .\paketle.ps1 -Prova              # PROVA paketi: etiket/push YOK, repo DEGISMEZ (asagida)
+#
+# PROVA KIPI (-Prova, 2026-09-27 thinkpad-1 provasi): yayin provasi icin paket.
+#   Normal kosum `backend-v<surum>` etiketini atar ve UZAGA ITER, repodaki
+#   `package.json`a surumu yazar ve surum belgesini doldurur - yani provanin kendisi
+#   bir YAYIN kaydi birakiyordu (belgesi olmayan bir surum icin etiket). Prova kipinde:
+#     * surum belgesi ISTENMEZ (uyari basilir), belgeye YAZILMAZ;
+#     * repodaki package.json DEGISMEZ - surum yalniz paketin icindeki kopyaya
+#       `<surum>-prova.<commit>` olarak yazilir (/health bunu basar, gercek surumle
+#       karismaz);
+#     * etiket ATILMAZ, push YAPILMAZ;
+#     * zip adi `tekserp-backend-prova-...`, PAKET.json `prova: true` - kur.ps1
+#       bu paketi `-ProvaKabul` verilmeden KURMAZ (fabrikaya kazara prova gitmesin).
+#   Kirli agactan uretilen NORMAL pakette de etiket atilmaz: etiket HEAD'i gosterir,
+#   paket ise HEAD'de olmayan degisiklik tasir - etiket yalan olurdu.
 #
 # TASARIM NOTLARI (degistirmeden once oku):
 #   * dist\*.js.map PAKETE GIRMEZ. Kaynak haritalar `../../src/...` yoluna atif
@@ -51,7 +66,9 @@ param(
   [string]$Cikti = "."
 ,
   # Kucuk/buyuk hane bir KARARDIR - elle verilir (ornek: -Surum 3.0.0).
-  [string]$Surum)
+  [string]$Surum,
+  # Yayin provasi paketi - baslik "PROVA KIPI".
+  [switch]$Prova)
 $ErrorActionPreference = "Stop"
 
 function Fail($m) { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; exit 1 }
@@ -110,22 +127,29 @@ if ($Surum) {
 #   2026-08-25'te oldu cunku hicbir kapi onu istemiyordu — insanin hatirlamasina
 #   birakilan disiplin olur.
 $surumBelgesi = Join-Path $repo "docs/surumler/backend-$yeniSurum.md"
-if (-not (Test-Path $surumBelgesi)) {
+if ($Prova) {
+  # Prova yayin DEGILDIR: belgesiz de uretilir ama bunu SOYLER.
+  $paketSurumu = "$yeniSurum-prova.$commit"
+  Write-Host "  ! PROVA KIPI: surum belgesi aranmadi, etiket atilmayacak, repo degismeyecek." -ForegroundColor Yellow
+  Write-Host "    paketin surumu: $paketSurumu" -ForegroundColor Yellow
+} elseif (-not (Test-Path $surumBelgesi)) {
   Write-Host ""
   Write-Host "  X Surum belgesi YOK: docs/surumler/backend-$yeniSurum.md" -ForegroundColor Red
   Write-Host "    Sablonu kopyala ve doldur:  docs/surumler/SABLON.md" -ForegroundColor Yellow
   Write-Host "    Belgeyi KURAN okur; paket onsuz uretilmez." -ForegroundColor Yellow
   Fail "Surum belgesi eksik -> paketleme durdu."
 }
-# Icerigin BOS olmadigini bekci olcer (scripts/test_surum_belgesi.ts); burada
-# yalnizca VARLIK kontrolu var - PowerShell'de markdown ayristirmak yanlis yer.
-Write-Host "  + surum belgesi: docs/surumler/backend-$yeniSurum.md" -ForegroundColor DarkGray
-
-& node (Join-Path $repo "scripts/backend-surum.mjs") --uygula --surum $yeniSurum | Out-Null
-if ($LASTEXITCODE -ne 0) { Fail "package.json > version yazilamadi." }
+if (-not $Prova) {
+  # Icerigin BOS olmadigini bekci olcer (scripts/test_surum_belgesi.ts); burada
+  # yalnizca VARLIK kontrolu var - PowerShell'de markdown ayristirmak yanlis yer.
+  Write-Host "  + surum belgesi: docs/surumler/backend-$yeniSurum.md" -ForegroundColor DarkGray
+  $paketSurumu = $yeniSurum
+  & node (Join-Path $repo "scripts/backend-surum.mjs") --uygula --surum $yeniSurum | Out-Null
+  if ($LASTEXITCODE -ne 0) { Fail "package.json > version yazilamadi." }
+}
 
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$ad    = "tekserp-backend-$stamp-$commit"
+$ad    = if ($Prova) { "tekserp-backend-prova-$stamp-$commit" } else { "tekserp-backend-$stamp-$commit" }
 # ⚠️ `$env:TEMP` YALNIZ Windows'ta tanimlidir; macOS/Linux'ta $null gelir ve
 # `Join-Path` "Cannot bind argument to parameter 'Path'" ile duser. Paket
 # ARTIK macOS'tan da uretiliyor (pwsh 7), o yuzden platform-bagimsiz API.
@@ -243,6 +267,16 @@ if (-not $WebPanelHaric) {
 
 # manifest / calistirici
 Copy-Item "$proj\package.json"        "$stage\"
+if ($Prova) {
+  # Prova surumu YALNIZ paketteki kopyaya yazilir; repodaki dosya degismez.
+  $pj  = Join-Path $stage "package.json"
+  $ham = [System.IO.File]::ReadAllText($pj)
+  $rx  = [regex]'("version"\s*:\s*)"[^"]+"'
+  $yeniPj = $rx.Replace($ham, { param($eslesme) $eslesme.Groups[1].Value + '"' + $paketSurumu + '"' }, 1)
+  if ($yeniPj -eq $ham) { Fail "paketteki package.json'a prova surumu yazilamadi." }
+  [System.IO.File]::WriteAllText($pj, $yeniPj)
+  Write-Host "  package.json (paketteki): version = $paketSurumu  (repo dosyasi degismedi)"
+}
 Copy-Item "$proj\package-lock.json"   "$stage\"
 Copy-Item "$proj\ecosystem.config.js" "$stage\"
 
@@ -361,7 +395,10 @@ $manifest = [ordered]@{
   paketleyenPlatform = if ($IsWindows) { "windows" } elseif ($IsMacOS) { "macos" } else { "linux" }
   nodeSurumu      = (& node --version).Trim()
   npmSurumu       = (& npm --version).Trim()
-  uygulamaSurumu  = (Get-Content "$proj\package.json" -Raw | ConvertFrom-Json).version
+  # Paketteki kopyadan okunur: prova kipinde repo dosyasi ESKI surumu tasir.
+  uygulamaSurumu  = (Get-Content "$stage\package.json" -Raw | ConvertFrom-Json).version
+  # true = yayin provasi (etiket yok, belge yok); kur.ps1 `-ProvaKabul` ister.
+  prova           = [bool]$Prova
   migrationSayisi = $migSayi
   nodeModulesDahil= (-not $NodeModulesHaric)
   # PAKET.json'in KENDISI bu sayiya dahil DEGILDIR (henuz yazilmadi). Zip'te
@@ -433,7 +470,16 @@ Remove-Item $stage -Recurse -Force
 # ⚠ Paket DOGRULANDIKTAN sonra atilir: kapilardan gecmemis bir zip icin numara
 #   harcamak, bir sonraki turu bir sayi ileri kaydirirdi. Backend'in yayin
 #   sunucusu YOK - paket elden tasiniyor - o yuzden "yayin ani" budur.
-& node (Join-Path $repo "scripts/backend-surum.mjs") --etiketle $yeniSurum
+# ⚠ KOSULSUZ DEGIL (2026-09-27): etiket `git push origin` ile UZAGA da gider; prova
+#   kipinde ve kirli agactan uretilen pakette atilmaz (baslik "PROVA KIPI").
+if ($Prova) {
+  Write-Host "  ! PROVA: etiket atilmadi (backend-v$yeniSurum), push yapilmadi." -ForegroundColor Yellow
+} elseif ($kirli) {
+  Write-Host "  ! Etiket ATILMADI: paket KIRLI agactan uretildi. backend-v$yeniSurum HEAD'i ($commit)" -ForegroundColor Yellow
+  Write-Host "    gosterirdi ama paket HEAD'de olmayan degisiklik tasiyor. Commit'le, TEMIZ agactan yeniden uret." -ForegroundColor Yellow
+} else {
+  & node (Join-Path $repo "scripts/backend-surum.mjs") --etiketle $yeniSurum
+}
 
 $zipMB = [math]::Round((Get-Item $zip).Length / 1MB, 1)
 $sha   = (Get-FileHash $zip -Algorithm SHA256).Hash
@@ -444,17 +490,22 @@ $sha   = (Get-FileHash $zip -Algorithm SHA256).Hash
 #   64 karakterlik bir ozet elle tasinirsa dogrulugu kimse fark etmeden bozulur
 #   ve kuran tarafta "SHA tutmuyor, DUR" kurali YANLIS sebeple tetiklenir.
 #   Belge boylece kendini dogrular: icindeki ozet, uretilen zip'in ozetidir.
-$belgeMetni = Get-Content $surumBelgesi -Raw
-$belgeMetni = $belgeMetni -replace '(?m)^\*\*Paket:\*\*.*$',  "**Paket:** ``$([System.IO.Path]::GetFileName($zip))``"
-$belgeMetni = $belgeMetni -replace '(?m)^\*\*SHA256:\*\*.*$', "**SHA256:** ``$sha``"
-$belgeMetni = $belgeMetni -replace '(?m)^\*\*Commit:\*\*.*$', "**Commit:** ``$commit``"
-Set-Content $surumBelgesi $belgeMetni -NoNewline
-Write-Host "  + surum belgesi guncellendi (paket adi + SHA256 + commit)" -ForegroundColor DarkGray
+if ($Prova) {
+  Write-Host "  ! PROVA: surum belgesine YAZILMADI (paket adi + SHA256 asagida)." -ForegroundColor Yellow
+} else {
+  $belgeMetni = Get-Content $surumBelgesi -Raw
+  $belgeMetni = $belgeMetni -replace '(?m)^\*\*Paket:\*\*.*$',  "**Paket:** ``$([System.IO.Path]::GetFileName($zip))``"
+  $belgeMetni = $belgeMetni -replace '(?m)^\*\*SHA256:\*\*.*$', "**SHA256:** ``$sha``"
+  $belgeMetni = $belgeMetni -replace '(?m)^\*\*Commit:\*\*.*$', "**Commit:** ``$commit``"
+  Set-Content $surumBelgesi $belgeMetni -NoNewline
+  Write-Host "  + surum belgesi guncellendi (paket adi + SHA256 + commit)" -ForegroundColor DarkGray
+}
 
 Set-Location $repo
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Green
-Write-Host "  PAKET HAZIR" -ForegroundColor Green
+if ($Prova) { Write-Host "  PROVA PAKETI HAZIR - fabrikaya KURULMAZ (kur.ps1 -ProvaKabul ister)" -ForegroundColor Yellow }
+else        { Write-Host "  PAKET HAZIR" -ForegroundColor Green }
 Write-Host "  $zip"
 Write-Host "  $zipMB MB  |  commit $commit  |  $migSayi migration"
 Write-Host "  SHA256: $sha"
