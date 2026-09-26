@@ -86,6 +86,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // ── Boğazda: D5c (top doğumu · çeki) ────────────────────────────────────────────────────────────────────
   // Top doğumunun 8021'i koşullu (yalnız mükerrer kapısı açıkken) → yalnız R. Tambur'un iki yolu token'ı faz 1'e iletir
   // (yazar/okuyucu değil): elle top (a′) bağlı-topta `replayIfAny` erken yolu, kartsız top tepede `run`.
+  // D4c (ertelendi): hızlı iş emri telafisi `hardDelete(…, { releaseToken })` token'ı bırakır — D4b'li istemciler sahada
+  // yaygınlaşınca kalkar (telafi token'ı tutar, 409 QUICK_START_ROLLED_BACK); plan §4.
   [`${S}inventory.service.ts::createInitialEntryFresh`]: { giris: { [`${S}inventory.service.ts::createInitialEntry`]: "R" } },
   [`${S}inventory.service.ts::createOpenFabricFresh`]: { giris: { [`${S}inventory.service.ts::createOpenFabric`]: "R", [`${S}inventory.service.ts::createOpenFabricFresh`]: "K′" } },
   [`${S}helpers/manifest-number.helper.ts::recordSackPickList`]: { helper: "çeki listesi yazarı (içerik tekilliği iş kuralı); replay printPickList'in boğazında" },
