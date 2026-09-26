@@ -65,7 +65,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 - Prisma'nın iki motoru var; şema motoru NATIVE — Windows paketi `PRISMA_CLI_BINARY_TARGETS=windows` + MZ kapısı. Commit edilmemiş migration prod'da sessiz eksiktir. Reçete: `docs/kurallar/deploy-kurulum.md`.
 
 ### Süreç, sır, donanım
-- Backend TEK process: `pkill -f "tsx src/server.ts"` YASAK (yalnız kendi PID'in), ikinci Node süreci yasak (uzak erişim iki dinleyiciyle). Seri port / donanım polling backend'e girmez; eski "Phase 1: gerçek donanım kodu yazma" yasağı 2026-09-05'te BACKEND'e daraltıldı — istemci sürücüleri (Electron IPC serialport/node-hid, mobil HAL BT-Classic) meşru; simülasyon per-cihaz VERİ bayrağı; uydurulmuş değer `source:'SIMULATED'` beyanıyla gider, kararı backend verir.
+- Backend TEK process: `pkill -f "tsx src/server.ts"` YASAK (yalnız kendi PID'in), ikinci Node süreci yasak (uzak erişim iki dinleyiciyle; tek istisna bekçi koşucusunun 127.0.0.1'deki kendi test sunucusu — `Teks-Erp/scripts/bekci-http.ts`, yalnız `_test` DB). Seri port / donanım polling backend'e girmez; eski "Phase 1: gerçek donanım kodu yazma" yasağı 2026-09-05'te BACKEND'e daraltıldı — istemci sürücüleri (Electron IPC serialport/node-hid, mobil HAL BT-Classic) meşru; simülasyon per-cihaz VERİ bayrağı; uydurulmuş değer `source:'SIMULATED'` beyanıyla gider, kararı backend verir.
 - Sır hijyeni: süperadmin parolası/PIN/TOTP ve ayar şifresi repoya, log'a, sürüm notuna, audit yüküne GİRMEZ; `.env` uyarısı yalnız anahtar adı basar. `quickPin` düz metin ve tek başına kimliktir — hiçbir yüzeyden sızdırılmaz.
 - Yeni paket eklemeden önce onay; Sonnet/ucuz model yalnız mekanik işte (kullanıcı tercihi).
 
