@@ -10,8 +10,12 @@
 //      kapı 409
 //   §3 kartelalar düşülünce (canlı değil) ürün Pasif'e alınabilir
 //   §4 Pasif kartın düşümü geri alınamaz (dirilme 409, çıkış yolu mesajda)
+//   §5a/§5b canlı küme IN_STOCK'la sınırlı değil: çuvaldaki (IN_SACK) ve sevkiyattaki (IN_SHIPMENT) kartela
+//      da ürünü Pasif'ten korur — 409 ITEM_HAS_LIVE_REFERENCES
 //   §5 sevk stornosu da dirilmedir (SHIPPED → IN_SHIPMENT): Pasif kartın sevk edilmiş kartelası
 //      geri alınamaz — 409 + çıkış yolu, kartela SHIPPED ve sevkiyat DISPATCHED kalır
+// NEGATİF SONDA (06 denetimi, md5 ile geri alındı): `LIVE_SWATCH` yalnız IN_STOCK'a indirildi → §5a/§5b ❌ (eski
+//   paket 5/0 yeşildi — canlı kümenin çuval/sevkiyat ayağını ölçen yoktu).
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
@@ -97,8 +101,15 @@ async function main(): Promise<void> {
     const sack = (await shippingService.openSack({ customerId: CUSTOMER }, admin.id)).data as { id: string };
     sackIds.push(sack.id);
     await shippingService.scanIntoSack({ sackId: sack.id, barcode: `TST-KAK2B-${TS}` }, admin.id);
+    const arsivle = () => hata(() => transitionItemLifecycle({ itemId: ITEM2, to: ItemLifecycleStatus.ARCHIVED, userId: admin.id }));
+    const e5s = await arsivle();
+    check("§5a çuvaldaki (IN_SACK) kartela canlıdır: ürün Pasif'e alınamaz",
+      e5s?.statusCode === 409 && e5s.details?.code === "ITEM_HAS_LIVE_REFERENCES", `${e5s?.statusCode ?? "GEÇTİ"} · ${e5s?.details?.code}`);
     const shp = (await shippingService.createShipment({ sackIds: [sack.id], customerId: CUSTOMER }, admin.id)).data as { id: string };
     shipmentIds.push(shp.id);
+    const e5p = await arsivle();
+    check("§5b sevkiyattaki (IN_SHIPMENT, PLANNED) kartela canlıdır: ürün Pasif'e alınamaz",
+      e5p?.statusCode === 409 && e5p.details?.code === "ITEM_HAS_LIVE_REFERENCES", `${e5p?.statusCode ?? "GEÇTİ"} · ${e5p?.details?.code}`);
     await shippingService.dispatchShipment(shp.id, {}, admin.id);
     const e5a = await hata(() => transitionItemLifecycle({ itemId: ITEM2, to: ItemLifecycleStatus.ARCHIVED, userId: admin.id }));
     const e5 = await hata(() => shippingService.undoDispatch(shp.id, "bekçi: storno", admin.id));
