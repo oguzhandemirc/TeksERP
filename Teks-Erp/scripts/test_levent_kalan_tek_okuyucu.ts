@@ -7,10 +7,12 @@
 // ölçüldü 2026-09-26: iki 60 m tüketim, kalan 100 → −20). Çare TEK okuyucu: `remainingMTx` önce levent satırını
 // `FOR UPDATE` kilitler, sonra okur. Bu bekçi kuralı YAPISAL ölçer (AST, fonksiyon birimi başına):
 //   §1 levent defterine yazan her fonksiyon birimi (`applyWarpBeamEventTx` / `closeToMeasuredTx` çağıran)
-//      kalanı yalnız `remainingMTx`ten okur — gösterim okuyucusu, toplayıcı ya da işaret tablosu çağırmaz,
-//      olay tablosunu elle toplamaz.
+//      kalanı yalnız `remainingMTx`ten okur — kalanı DOĞRUDAN ya da DOLAYLI okuyan hiçbir fonksiyonu (gösterim
+//      okuyucusu, toplayıcı, işaret tablosu ve bunları çağıran her fonksiyon — ör. `freshBeamDto`; takma adlar
+//      dahil, geçişli kapanış) yanıtın `data:` alanı dışında çağırmaz, olay tablosunu elle toplamaz.
 //   §2 toplayıcı (`warpBeamRemainingM`) ve işaret tablosu (`warpBeamLengthSign`) yalnız beyanlı birimlerde.
-//   §3 `remainingMTx` gövdesinde satır kilidi VAR ve okumadan ÖNCE.
+//   §3 `remainingMTx` gövdesi TAM iki ifade: aynı tx ile `SELECT id FROM warp_beams WHERE id = $beamId::uuid FOR UPDATE`
+//      (SKIP LOCKED / NOWAIT / başka istemci kırmızı), sonra `return readRemainingM(tx, beamId)`.
 //   §4 körlük: yazar birimleri ve kalan okuyan yazarlar adıyla bulunur — ad değişirse tarama kör kalmaz, kızarır.
 // Eşzamanlı sondası: `test_token_replay_zorlanmis_sira` ①e.
 // =============================================================================
@@ -55,13 +57,20 @@ const KALAN_OKUYAN_YAZARLAR = new Set([
   "src/services/warp-beam-mount.service.ts::mountBeamFresh",
 ]);
 
-type Birim = { anahtar: string; dugum: ts.Node; cagrilar: Array<{ ad: string; satir: number }>; elleToplama: number[] };
+type Birim = { anahtar: string; ad: string; dugum: ts.Node; cagrilar: Array<{ ad: string; satir: number; yanit: boolean }>; elleToplama: number[] };
+/** `const takma = asil` — dolaylı okuyucunun takma adı da okuyucudur. */
+const takmaAdlar: Array<[string, string]> = [];
 
 function birimAdi(n: ts.Node): string {
   if ((ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n)) && n.name) return n.name.getText();
   if (ts.isVariableDeclaration(n.parent) && ts.isIdentifier(n.parent.name)) return n.parent.name.text;
   if (ts.isPropertyAssignment(n.parent)) return n.parent.name.getText();
   return `<anonim:${n.getSourceFile().getLineAndCharacterOfPosition(n.getStart()).line + 1}>`;
+}
+/** Çağrı, birim içinde yanıt nesnesinin `data:` alanında mı (gösterim; karar değil). */
+function yanitAlaninda(n: ts.Node, birim: ts.Node): boolean {
+  for (let u: ts.Node | undefined = n.parent; u && u !== birim; u = u.parent) if (ts.isPropertyAssignment(u) && u.name.getText() === "data") return true;
+  return false;
 }
 const fonksiyonMu = (n: ts.Node) => ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n) || ts.isArrowFunction(n) || ts.isFunctionExpression(n);
 
@@ -73,11 +82,12 @@ function birimler(dosya: string): Birim[] {
   const satir = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart()).line + 1;
   const ziyaret = (n: ts.Node, dis: ts.Node | null) => {
     const birim = dis ?? (fonksiyonMu(n) ? n : null);
-    if (birim && !out.has(birim)) out.set(birim, { anahtar: `${rel}::${birimAdi(birim)}`, dugum: birim, cagrilar: [], elleToplama: [] });
+    if (birim && !out.has(birim)) out.set(birim, { anahtar: `${rel}::${birimAdi(birim)}`, ad: birimAdi(birim), dugum: birim, cagrilar: [], elleToplama: [] });
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && ts.isIdentifier(n.initializer)) takmaAdlar.push([n.name.text, n.initializer.text]);
     if (birim && ts.isCallExpression(n)) {
       const c = n.expression;
       const ad = ts.isIdentifier(c) ? c.text : ts.isPropertyAccessExpression(c) ? c.name.text : null;
-      if (ad) out.get(birim)!.cagrilar.push({ ad, satir: satir(n) });
+      if (ad) out.get(birim)!.cagrilar.push({ ad, satir: satir(n), yanit: yanitAlaninda(n, birim) });
       // `<x>.warpBeamEvent.aggregate/groupBy` — kalanı elle toplamanın SQL biçimi.
       if (ts.isPropertyAccessExpression(c) && (ad === "aggregate" || ad === "groupBy") && ts.isPropertyAccessExpression(c.expression) && c.expression.name.text === "warpBeamEvent") {
         out.get(birim)!.elleToplama.push(satir(n));
@@ -89,18 +99,50 @@ function birimler(dosya: string): Birim[] {
   return [...out.values()];
 }
 
+const KILIT_SQL = "SELECT id FROM warp_beams WHERE id = $::uuid FOR UPDATE";
+/** Kilitli okuyucunun biçimi; uyumluysa null, değilse sapmanın adı. Metin araması değil — `SKIP LOCKED`, `NOWAIT`, başka
+ *  istemci (`prisma`), sıra değişimi ya da araya giren ifade ayrı ayrı yakalanır. */
+function kilitliOkuyucuBicimi(fn: ts.Node): string | null {
+  if (!ts.isFunctionDeclaration(fn) || !fn.body) return "fonksiyon bildirimi değil";
+  const [tx, beamId] = fn.parameters.map((p) => p.name.getText());
+  const [s0, s1, ...fazla] = fn.body.statements;
+  if (!tx || !beamId) return "parametreler (tx, beamId) değil";
+  if (fazla.length) return `fazladan ${fazla.length} ifade`;
+  const kilit = s0 && ts.isExpressionStatement(s0) && ts.isAwaitExpression(s0.expression) ? s0.expression.expression : null;
+  if (!kilit || !ts.isTaggedTemplateExpression(kilit) || kilit.tag.getText() !== `${tx}.$queryRaw`) return "ilk ifade `await tx.$queryRaw` kilidi değil";
+  const t = kilit.template;
+  if (!ts.isTemplateExpression(t) || t.templateSpans.length !== 1 || t.templateSpans[0]!.expression.getText() !== beamId) return "kilit tek parametre (beamId) taşımıyor";
+  const sql = `${t.head.text}$${t.templateSpans[0]!.literal.text}`.replace(/\s+/g, " ").trim();
+  if (sql !== KILIT_SQL) return `kilit SQL'i farklı: "${sql}"`;
+  const don = s1 && ts.isReturnStatement(s1) && s1.expression && ts.isCallExpression(s1.expression) ? s1.expression : null;
+  if (!don || don.expression.getText() !== "readRemainingM" || don.arguments.map((a) => a.getText()).join(",") !== `${tx},${beamId}`) return "ikinci ifade `return readRemainingM(tx, beamId)` değil";
+  return null;
+}
+
 function main(): void {
   console.log("=== Levent kalanı — tek kilitli okuyucu (AST) ===\n");
   const hepsi = walkTs(SRC).flatMap(birimler);
   const cagirir = (b: Birim, adlar: Set<string>) => b.cagrilar.filter((c) => adlar.has(c.ad));
   const yazarlar = hepsi.filter((b) => cagirir(b, YAZARLAR).length > 0);
 
-  console.log("§1 Yazar birimi kalanı yalnız kilitli okuyucudan alır");
+  // Dolaylı okuyucular: kalanı okuyan çekirdekten geçişli kapanış (ad bazlı, muhafazakâr) — kilitli okuyucu hariç.
+  const dolayli = new Set(YAZARDA_YASAK);
+  for (let buyudu = true; buyudu; ) {
+    buyudu = false;
+    for (const b of hepsi) {
+      if (b.ad === KILITLI_OKUYUCU || dolayli.has(b.ad)) continue;
+      if (b.elleToplama.length || b.cagrilar.some((c) => !c.yanit && dolayli.has(c.ad))) (dolayli.add(b.ad), (buyudu = true));
+    }
+    for (const [takma, asil] of takmaAdlar) if (dolayli.has(asil) && !dolayli.has(takma)) (dolayli.add(takma), (buyudu = true));
+  }
+
+  console.log("§1 Yazar birimi kalanı yalnız kilitli okuyucudan alır (dolaylı okuyucular dahil)");
   const ihlal = yazarlar.flatMap((b) => [
-    ...cagirir(b, YAZARDA_YASAK).map((c) => `${b.anahtar}:${c.satir} ${c.ad}()`),
+    ...b.cagrilar.filter((c) => dolayli.has(c.ad) && !c.yanit).map((c) => `${b.anahtar}:${c.satir} ${c.ad}()`),
     ...b.elleToplama.map((s) => `${b.anahtar}:${s} warpBeamEvent.aggregate/groupBy`),
   ]);
-  check("⭐ defter yazan hiçbir birim kalanı kilitsiz/elle okumaz", ihlal.length === 0, ihlal.join(" · "));
+  check("⭐ defter yazan hiçbir birim kalanı kilitsiz/elle/dolaylı okumaz (yalnız yanıtın `data:` alanı gösterimdir)", ihlal.length === 0, ihlal.join(" · "));
+  check("dolaylı okuyucu kapanışı kör değil (freshBeamDto ve takma adı freshDto içeride)", dolayli.has("freshBeamDto") && dolayli.has("freshDto"), [...dolayli].filter((a) => !YAZARDA_YASAK.has(a)).join(", "));
 
   console.log("§2 Toplayıcı ve işaret tablosu yalnız beyanlı birimlerde");
   const toplayan = [...new Set(hepsi.filter((b) => cagirir(b, new Set(["warpBeamRemainingM", "warpBeamLengthSign"])).length > 0).map((b) => b.anahtar))];
@@ -111,10 +153,7 @@ function main(): void {
 
   console.log("§3 Kilitli okuyucunun gövdesi");
   const okuyucu = hepsi.find((b) => b.anahtar === `${LEDGER}::${KILITLI_OKUYUCU}`);
-  const govde = okuyucu ? okuyucu.dugum.getText() : "";
-  const kilit = govde.search(/SELECT[^`]*FROM\s+warp_beams[^`]*FOR UPDATE/);
-  const okuma = govde.indexOf("readRemainingM(");
-  check(`⭐ ${KILITLI_OKUYUCU} levent satırını FOR UPDATE kilitler, sonra okur`, !!okuyucu && kilit >= 0 && okuma > kilit, okuyucu ? `kilit@${kilit} okuma@${okuma}` : "birim bulunamadı");
+  check(`⭐ ${KILITLI_OKUYUCU} tam iki ifade: aynı tx ile levent satırı FOR UPDATE (bekler), sonra aynı tx'le okuma`, !!okuyucu && kilitliOkuyucuBicimi(okuyucu.dugum) === null, okuyucu ? (kilitliOkuyucuBicimi(okuyucu.dugum) ?? "") : "birim bulunamadı");
 
   console.log("§4 Körlük sondası");
   const kalanOkuyan = new Set(yazarlar.filter((b) => cagirir(b, new Set([KILITLI_OKUYUCU])).length > 0).map((b) => b.anahtar));
