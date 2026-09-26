@@ -179,7 +179,7 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
 
 // HIZLI MANDALLAR (1e hükmü 2026-09-13): kapı bekçi koşmaz, mandallar yalnız
 // CI'da ısırıyordu. DB'siz + ≤5 sn + `scripts/`/`docs/standart/`/`docs/kurallar/`ı
-// konu edinen 12 mandal, eşzamanlı 4, yalnız izole ağaçta (ortak ağaçta ⏭ beyanla).
+// konu edinen mandallar (küme ve sayı `hizli-mandallar.mjs` `MANDALLAR`da; 30, 2026-09-26), eşzamanlı 4, yalnız izole ağaçta (ortak ağaçta ⏭ beyanla).
 // Küme, gerekçe ve ölçüm `scripts/hooks/hizli-mandallar.mjs` başlığında.
 // Dördüncü tetik `Teks-Erp/docs/` (2026-09-14): harita satırı ve "Negatif sonda" hücresi orada;
 // identity_ledger ve harita_sonda_atfi onu okur — yalnız haritaya dokunan commit de mandal görsün.
