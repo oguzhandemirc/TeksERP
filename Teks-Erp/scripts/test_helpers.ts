@@ -315,6 +315,8 @@ function makeStepTx(opts: {
       },
     },
     workOrderEvent: { createMany: async (args: { data: unknown[] }) => ({ count: args.data.length }) },
+    // Defter damgası (`ledger-stamp.helper`) tek satırlık DB saati okur.
+    $queryRaw: async () => [{ at: new Date() }],
   } as unknown as Parameters<typeof recomputeStepStatus>[0];
   return { tx, stepUpdates, woUpdates };
 }
@@ -423,6 +425,7 @@ async function testEnsureInProgress() {
         },
       },
       workOrderEvent: { createMany: async (args: { data: unknown[] }) => { events.push(...args.data); return { count: args.data.length }; } },
+      $queryRaw: async () => [{ at: new Date() }],
     } as unknown as Parameters<typeof ensureWorkOrderInProgress>[0];
     return { tx, calls, events };
   };

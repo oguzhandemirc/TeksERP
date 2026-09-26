@@ -16,6 +16,12 @@
 //   §8 kanal: istek bağlamında tablet cihazı → TABLET + cihaz kimliği; bağlamsız → SYSTEM
 //   §9 mühür: satır UPDATE edilemez; iş emri silinince kaskat geçer (teardown).
 //      Doğrudan DELETE reddi: ortak fonksiyonun bekçisi + `test_db_invariants` zamanlaması
+//   §10 saat: iş emrinin olayları KESİN ARTAN damga taşır — son olay gelecekte olsa da yenisi ondan
+//       sonra damgalanır; aynı tx'te ardışık yazımlar da ayrışır (Prisma'nın ms'lik istemci saatinde
+//       ardışık iki yazımın 600 komşudan 108–212'si aynı ms'e düşüyordu; zaman çizelgesi (an, id)
+//       sıralı olduğu için sıra rastgele UUID'e kalıyordu — ölçüldü 2026-09-26). Tx geri alınır.
+//   NEGATİF SONDA (2026-09-26, md5 ile geri alındı): yazar damgayı vermez (Prisma varsayılanı) →
+//       §10 ❌ · "son olay + 1 ms" terimi kalkar → §10 ❌
 // NEGATİF SONDA (elle, 2026-09-25): `claimWorkOrderStatusTx` içindeki defter
 // yazımı yoruma alındı → §2/§3/§4/§5/§6/§8 kırmızı; md5 ile geri alındı.
 // =============================================================================
@@ -26,13 +32,19 @@ import {
   completeWorkOrderIfStepsDone,
   ensureWorkOrderInProgress,
 } from "../src/services/helpers/roll-step.helper";
-import { reopenWorkOrderTx } from "../src/services/helpers/workorder-event.helper";
+import { randomUUID } from "node:crypto";
+import {
+  claimWorkOrderStatusTx,
+  recordWorkOrderFieldChangesTx,
+  reopenWorkOrderTx,
+} from "../src/services/helpers/workorder-event.helper";
 import { runWithRequestContext } from "../src/lib/request-context";
 import { StepStatus, WorkOrderStatus } from "@prisma/client";
 import type { Request } from "express";
 import { ensureTestAdmin } from "./fixture-test-user";
 
 const svc = new WorkOrderService();
+class GeriAl extends Error {}
 
 let pass = 0, fail = 0;
 function check(label: string, cond: boolean, extra = ""): void {
@@ -162,6 +174,35 @@ async function main(): Promise<void> {
     // `defter_block_tamper`ın kendi bekçisinde, bu tabloya DELETE zamanlamasıyla
     // bağlı olduğu `test_db_invariants`te ölçülür (silme sondası cırcırı büyütmez).
     check("§9 defter satırı UPDATE edilemez (mühür bu tabloya bağlı)", !guncellendi);
+
+    // §10 saat — gelecekteki bir olay elle konur; yeni olay ondan SONRA damgalanmalı. Prisma'nın istemci
+    // saati (ya da yalnız clock_timestamp()) yeniyi ondan ÖNCEYE ya da AYNI ana koyardı. Tx geri alınır.
+    const d = await yeniWo();
+    let saat: { gelecek: Date; yeni: Date; ardisik: Date[] } | null = null;
+    await prisma.$transaction(async (tx) => {
+      const [gelecek] = await tx.$queryRaw<Array<{ at: Date }>>`
+        INSERT INTO "work_order_events" ("id","workOrderId","type","groupId","field","fromValue","toValue","trigger","channel","createdAt")
+        VALUES (${randomUUID()}::uuid, ${d}::uuid, 'FIELD_CHANGED', ${randomUUID()}::uuid, 'notes', 'a', 'b', 'TST_FUTURE', 'SYSTEM',
+          now() + interval '1 hour') -- tz-ok: timestamptz, sonda olayı bilerek gelecekte
+        RETURNING "createdAt" AS at`;
+      await claimWorkOrderStatusTx(tx, d, { from: [WorkOrderStatus.PLANNED], to: WorkOrderStatus.IN_PROGRESS, ctx: { trigger: "TST_SAAT" } });
+      for (let i = 0; i < 20; i++) {
+        await recordWorkOrderFieldChangesTx(tx, d, [{ field: "notes", from: `n${i}`, to: `n${i + 1}` }], { trigger: "TST_SAAT" });
+      }
+      const yazilan = await tx.workOrderEvent.findMany({ where: { workOrderId: d, trigger: "TST_SAAT" }, select: { type: true, createdAt: true } });
+      saat = {
+        gelecek: gelecek!.at,
+        yeni: yazilan.find((e) => e.type === "STATUS_CHANGED")!.createdAt,
+        ardisik: yazilan.filter((e) => e.type === "FIELD_CHANGED").map((e) => e.createdAt),
+      };
+      throw new GeriAl();
+    }).catch((e: unknown) => { if (!(e instanceof GeriAl)) throw e; });
+    const s10 = saat as { gelecek: Date; yeni: Date; ardisik: Date[] } | null;
+    check("§10 yeni olay iş emrinin son (gelecekteki) olayından SONRA damgalanır",
+      !!s10 && s10.yeni.getTime() > s10.gelecek.getTime(), s10 ? `${s10.gelecek.toISOString()} → ${s10.yeni.toISOString()}` : "-");
+    const sirali = s10 ? [s10.yeni, ...s10.ardisik].map((x) => x.getTime()).sort((x, y) => x - y) : [];
+    check("§10b aynı tx'te 21 ardışık olay KESİN ARTAN (eşit an yok)",
+      sirali.length === 21 && sirali.every((t, i) => i === 0 || t > sirali[i - 1]!), `${new Set(sirali).size} farklı an`);
   } finally {
     await temizle();
   }

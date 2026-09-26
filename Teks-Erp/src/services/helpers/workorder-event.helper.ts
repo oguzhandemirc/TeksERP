@@ -6,11 +6,14 @@
 // (`test_workorder_event_yazar` ölçer): statüyü değiştirip deftere yazmayan yol
 // açılamaz. Kanal/cihaz/aktör istek bağlamından türer — çağıran yalnız NEDENİ
 // (`trigger`) verir. Audit'ten okunmaz; audit yazımı çağıran eylemde kalır.
+// SAAT: `createdAt` DB saatinden ve iş emri başına KESİN ARTAN (`ledger-stamp.helper`) — Prisma varsayılanı
+// ms'lik istemci saatidir; aynı tx'te art arda yazılan iki olay aynı ms'e düşer ve sıra rastgele UUID'e kalırdı.
 // =============================================================================
 
 import { randomUUID } from "crypto";
 import { Prisma, WorkOrderEventType, WorkOrderStatus, WorkOrderType } from "@prisma/client";
 import { currentOrigin } from "../../lib/request-context";
+import { workOrderEventStampTx } from "./ledger-stamp.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -74,6 +77,7 @@ async function writeWorkOrderEventsTx(tx: Tx, rows: EventRow[], ctx: WorkOrderEv
   const origin = currentOrigin();
   const channel = resolveWorkOrderEventChannel();
   const groupId = ctx.groupId ?? randomUUID();
+  const createdAt = await workOrderEventStampTx(tx, [...new Set(rows.map((r) => r.workOrderId))]);
   await tx.workOrderEvent.createMany({
     data: rows.map((r) => ({
       workOrderId: r.workOrderId,
@@ -93,6 +97,7 @@ async function writeWorkOrderEventsTx(tx: Tx, rows: EventRow[], ctx: WorkOrderEv
       ...(r.payload !== undefined ? { payload: r.payload } : {}),
       createdById: ctx.userId ?? origin.userId ?? null,
       deviceId: origin.deviceId,
+      createdAt,
     })),
   });
 }
