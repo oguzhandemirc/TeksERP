@@ -41,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   adresiCoz,
+  bundleAdresOlcumu,
   feedUrl,
   guncellemeAdresiCoz,
   manifestUrl,
@@ -55,6 +56,15 @@ import {
   yayindakiTabletSurumu,
 } from '../../scripts/lib/surum.mjs';
 import { surumNotlariniOku, tavanUyarisi } from '../../scripts/lib/surum-notu-tavan.mjs';
+import {
+  KAYIT_REL,
+  Olculemedi,
+  TABLET_SABIT_DOSYALAR,
+  dosyalariOku,
+  erpAdresiEsit,
+  kanalCoz,
+  tabletSabitKimlikFarki,
+} from '../../scripts/lib/kanallar.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(HERE, '..');
@@ -119,6 +129,53 @@ function adresCoz() {
     );
   }
   return { deger, kaynak };
+}
+
+/* ------------------------------------------------------------------ *
+ * (a2) KANAL KAPISI — paket hangi kanalın ERP sunucusuna bağlanacak?
+ * ------------------------------------------------------------------ */
+
+/**
+ * ⚠️ BİÇİM DOĞRU DİYE ADRES DOĞRU DEĞİLDİR: `adresCoz` "bu bir ERP adresi mi" sorar,
+ * "bu KANALIN adresi mi" sormaz. Başka kanalın adresini taşıyan paket bu kanalın
+ * güncelleme adresleriyle üretilir, yüklenir ve o kanalın tabletlerini başka bir
+ * sunucuya yazdırır — hata vermeden. Beklenen değer kayıt defterinden, ağdan ÖNCE;
+ * eşit değilse kaçış YOK.
+ */
+function kanalKapisi(musteri, adres, kaynak) {
+  let kanal;
+  try {
+    ({ kanal } = kanalCoz(musteri));
+  } catch (e) {
+    if (e instanceof Olculemedi) dur(`KANAL KAYIT DEFTERİ ÖLÇÜLEMEDİ (${KAYIT_REL})`, e.message);
+    dur(e.message, ...(e.satirlar ?? []));
+  }
+  if (!erpAdresiEsit(adres, kanal.tablet.erpAdresi)) {
+    dur(
+      `ERP ADRESİ "${musteri}" KANALININ DEĞİL`,
+      `çözülen adres : ${adres}  (kaynak: ${kaynak})`,
+      `kanalın adresi: ${kanal.tablet.erpAdresi}  (${KAYIT_REL})`,
+      '',
+      'Bu paket bu kanalın tabletlerini BAŞKA bir sunucuya bağlardı — ve bu sessizdir.',
+      'Adres gerçekten değiştiyse önce kayıt defteri değişir (üretim kanalında bu bir GÖÇTÜR).',
+    );
+  }
+  let farklar;
+  try {
+    farklar = tabletSabitKimlikFarki(kanal, dosyalariOku(TABLET_SABIT_DOSYALAR));
+  } catch (e) {
+    if (e instanceof Olculemedi) dur('TABLET KİMLİĞİ ÖLÇÜLEMEDİ', e.message);
+    throw e;
+  }
+  if (farklar.length) {
+    dur(
+      `AĞAÇ "${musteri}" KANALININ TABLET KİMLİĞİNİ TAŞIMIYOR`,
+      ...farklar,
+      '',
+      'Bu kanalın paket adı / OTA sertifikası bu ağaçta yazılı değil; paket yanlış kimlikle imzalanırdı.',
+    );
+  }
+  bilgi(`Kanal             : ${musteri} (${kanal.tur}) — ERP adresi ve tablet kimliği kayıtla birebir`);
 }
 
 /* ------------------------------------------------------------------ *
@@ -331,9 +388,9 @@ function paketiDogrula(hedefDizin, beklenenAdres) {
   // BULUNAMAZ — bu yüzden aranan şey her zaman URL gibi ASCII bir sabittir).
   const metin = icerik.toString('latin1');
 
-  if (!metin.includes(beklenenAdres)) {
+  const { gecenSayi, bulunanlar } = bundleAdresOlcumu(metin, beklenenAdres);
+  if (gecenSayi === 0) {
     // Ne bulduğumuzu söyle — "yok" demek teşhis için yetmez.
-    const bulunanlar = [...new Set(metin.match(/https?:\/\/[\w.-]+(?::\d+)?\/api/g) ?? [])];
     dur(
       'PAKET BEKLENEN ADRESİ TAŞIMIYOR',
       `Beklenen : ${beklenenAdres}`,
@@ -387,6 +444,7 @@ async function main() {
       'Ağaç başka bir müşteri için yapılandırılmış; önce musteri.json + prebuild.',
     );
   }
+  kanalKapisi(musteri, adres, kaynak);
 
   const { deger: feed, kaynak: feedKaynak } = guncellemeAdresiCoz(
     arg('update-url') || feedUrl(musteri),

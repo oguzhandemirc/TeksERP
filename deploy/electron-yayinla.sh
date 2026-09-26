@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Electron panelinin yeni sürümünü güncelleme sunucusuna yayınlar (macOS/Linux).
-# Windows eşdeğeri: deploy/electron-yayinla.ps1
+# Electron panelinin yeni sürümünü güncelleme sunucusuna yayınlar (macOS/Linux;
+# Windows'ta Git Bash/WSL). Kapısız ikinci yol YOK: `deploy/electron-yayinla.ps1`
+# fail-closed saplamadır.
 #
 # Kullanım:
-#   ./deploy/electron-yayinla.sh              # paketin müşterisine + sürümüne yayınla
-#   ./deploy/electron-yayinla.sh 2.8.1        # belirli sürümü yayınla
-#   ./deploy/electron-yayinla.sh --dogrula    # YÜKLEME YOK — mevcut yayını denetle
+#   ./deploy/electron-yayinla.sh --musteri=adnansahin             # paketin sürümüne yayınla
+#   ./deploy/electron-yayinla.sh --musteri=adnansahin 2.8.1       # belirli sürümü yayınla
+#   ./deploy/electron-yayinla.sh --musteri=adnansahin --dogrula   # YÜKLEME YOK — yayını denetle
 # Reçete: docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md
 #
 # Script'in asıl işi YÜKLEME SIRASINI korumaktır: `latest.yml` EN SON gider.
 # Ters sırada, henüz yüklenmemiş bir .exe'yi işaret eden bir latest.yml yayında
 # kalır ve o aralıkta kontrol yapan paneller "sürüm dosyası bulunamadı" der.
+#
+# ⚠️ HEDEF PAKETİN KİMLİĞİNDEN ÇÖZÜLÜR: `--musteri` NİYETTİR, paketin gömülü
+# kimliği (app-update.yml adresi · updater önbelleği · exe adı) OTORİTEDİR; ikisi
+# aynı kanalı göstermezse ssh'tan ÖNCE durulur. Çalışma ağacındaki musteri.json
+# OKUNMAZ: o bir beyandır ve yarıda kalan bir paketleme onu başka kanalda bırakır.
 # =============================================================================
 set -euo pipefail
 
@@ -29,47 +35,72 @@ BASE_URL="${BASE_URL:-https://guncelleme.etkiliyazilim.com}"
 kok="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 electron_dir="$kok/Electron"
 
-# Müşteri, paketin KENDİ içinden okunur (`shared/musteri.json`) — elle yazılan
-# ikinci bir kopya yok. Böylece "adnansahin paketini yenifabrika klasörüne
-# yükleme" hatası yapısal olarak imkânsız: yüklenecek yer, paketin kimliğinden
-# türer.
-musteri="$(node -p "require('$electron_dir/shared/musteri.json').kod" 2>/dev/null)" \
-  || { echo "HATA: shared/musteri.json okunamadı" >&2; exit 1; }
+hata() { echo "HATA: $*" >&2; exit 1; }
+
+# --- Argümanlar ------------------------------------------------------------
+musteri=""
+denetim_kipi=0
+surum_arg=""
+for a in "$@"; do
+  case "$a" in
+    --musteri=*) musteri="${a#--musteri=}" ;;
+    --dogrula) denetim_kipi=1 ;;
+    -*) hata "Tanınmayan seçenek: $a" ;;
+    *)
+      [ -z "$surum_arg" ] || hata "Fazla argüman: $a"
+      surum_arg="$a"
+      ;;
+  esac
+done
+
+[ -n "$musteri" ] || hata "HANGİ KANALA YAYINLANIYOR? --musteri=<kod> zorunlu.
+  Hedef klasör paketin kimliğinden çözülür; argüman niyettir ve onunla birebir olmalı.
+  Örnek: ./deploy/electron-yayinla.sh --musteri=adnansahin"
+
+# Kanal kayıtlı mı (kayıt defteri kırmızıysa da DUR) — hiçbir ağ/ssh işinden ÖNCE.
+node "$kok/scripts/kanal-kapisi.mjs" kanal "$musteri" \
+  || hata "Kanal kapısı geçilmedi (kayıt defteri: deploy/kanallar.json)."
+
+rel=""
+if [ "$denetim_kipi" = "0" ]; then
+  surum="${surum_arg:-$(node -p "require('$electron_dir/package.json').version")}"
+  rel="$electron_dir/release/$musteri/$surum"
+  if [ ! -d "$rel" ]; then
+    if [ -d "$electron_dir/release/$surum" ]; then
+      hata "Paket ESKİ düzende: release/$surum (kanal ayrımından önce üretilmiş).
+  Yayıncı paketi release/<kanal>/<sürüm>/ altında arar ve kimliğini oradan okur.
+  Yeniden paketle: ./deploy/electron-paketle.sh $musteri"
+    fi
+    hata "Paket klasörü yok: $rel
+  Önce derle: ./deploy/electron-paketle.sh $musteri
+  Sürüm numarasını ARTIRMAYI unutma."
+  fi
+  # ARTEFAKT OTORİTESİ — paket gerçekten bu kanalın mı? (ssh'tan ÖNCE)
+  node "$kok/scripts/kanal-kapisi.mjs" panel-yayin "$musteri" "$rel" \
+    || hata "Paket '$musteri' kanalının değil ya da kimliği okunamadı — yükleme yapılmadı."
+fi
+
+# Hedef yalnız doğrulanmış kanal kodundan türer.
 UZAK_DIZIN="${UZAK_DIZIN:-$YAYIN_KOK/$musteri/electron}"
 YAYIN_URL="${YAYIN_URL:-$BASE_URL/$musteri/electron}"
-
-hata() { echo "HATA: $*" >&2; exit 1; }
 
 # --- Salt denetim kipi ---------------------------------------------------
 # `--dogrula [sürüm]` yükleme YAPMADAN mevcut yayını denetler. İki işi var:
 # ① "yayın hâlâ ayakta mı" sorusunun ucuz cevabı (elle tur sırasında, ya da
 #    bir makine güncelleme alamıyor diye şüphelenince);
 # ② aşağıdaki `dogrula()` dallarının ölü harf olmadığını sınayabilmek.
-if [ "${1:-}" = "--dogrula" ]; then
-  denetim_surum="${2:-}"
+if [ "$denetim_kipi" = "1" ]; then
+  denetim_surum="$surum_arg"
   if [ -z "$denetim_surum" ]; then
     denetim_surum=$(curl -fsS "$YAYIN_URL/latest.yml?onbellek-atla=$$" 2>/dev/null | grep "^version:" | awk '{print $2}') \
       || hata "Yayındaki latest.yml okunamadı: $YAYIN_URL/latest.yml"
     [ -n "$denetim_surum" ] || hata "Yayında latest.yml yok ya da sürüm satırı okunamadı."
   fi
   echo "Yayın denetleniyor: $musteri / $denetim_surum"
-fi
-
-
-# Denetim kipinde yerel paket klasörü aranmaz — sunucudaki yayın denetlenir.
-if [ "${1:-}" = "--dogrula" ]; then
-  denetim_kipi=1
   surum="$denetim_surum"
 else
-  denetim_kipi=0
-  surum="${1:-$(node -p "require('$electron_dir/package.json').version")}"
   echo "Müşteri: $musteri · Sürüm: $surum"
 fi
-
-rel="$electron_dir/release/$surum"
-[ "$denetim_kipi" = "1" ] || [ -d "$rel" ] || hata "Paket klasörü yok: $rel
-  Önce derle: ./deploy/electron-paketle.sh $musteri
-  Sürüm numarasını ARTIRMAYI unutma."
 
 setup="$rel/TeksERP-$surum-Setup.exe"
 blockmap="$setup.blockmap"
@@ -244,5 +275,5 @@ node --input-type=module -e "
   console.log(mesaj + (s.not ? ' — ' + s.not : ''));
 " || echo "  ⚠️ sürüm etiketi atılamadı (yayın etkilenmedi)"
 
-echo "Fabrikadaki paneller en geç 4 saat içinde görür."
+echo "Bu kanaldaki paneller en geç 15 dk içinde görür (açılışta 30 sn)."
 echo "Hemen denemek için: Genel Ayarlar > Bu Bilgisayar > Güncelleme > Şimdi kontrol et"

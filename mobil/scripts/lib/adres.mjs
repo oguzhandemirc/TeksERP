@@ -82,6 +82,25 @@ export function kokAdres(apiUrl) {
 /** Güncelleme manifest yolunun TEK yazımı — app.config.js ile eşleşmeli. */
 export const UPDATE_PATH = '/api/mobile/updates/manifest';
 
+/**
+ * Bir JS bundle'ının (Hermes; `latin1` okunmuş) taşıdığı ERP adresleri — "beklenen
+ * adres var mı, yanında BAŞKA bir sayısal-IP sunucu var mı" sorusunun TEK ölçümü.
+ * APK derlemesi, OTA üretimi ve yayın kapısı aynı yüklemi kullanır.
+ *
+ * ⚠️ Hermes dizeleri UÇ UCA paketler (sonlandırıcı yok): "/api'den sonra harf
+ * gelmesin" sondajı gerçek adresi bile eler — bu yüzden lookahead YOK.
+ * ⚠️ Yalnız ASCII aranır (Türkçe karakterli dizeler UTF-16 tablosuna gider).
+ */
+export function bundleAdresOlcumu(metin, beklenenAdres) {
+  const gecenSayi = beklenenAdres ? metin.split(beklenenAdres).length - 1 : 0;
+  const bulunanlar = [...new Set(metin.match(/https?:\/\/[A-Za-z0-9._-]+(?::\d{2,5})?\/api/g) ?? [])];
+  // Sayısal IP taşıyan FARKLI bir /api adresi = bayat ya da başka kanalın sunucusu.
+  const yabanciIp = bulunanlar.filter(
+    (u) => u !== beklenenAdres && /^https?:\/\/(?:\d{1,3}\.){3}\d{1,3}/.test(u),
+  );
+  return { gecenSayi, bulunanlar, yabanciIp };
+}
+
 /* ================================================================== *
  * GÜNCELLEME KANALI — API ADRESİNDEN AYRI
  * ================================================================== *

@@ -2,8 +2,13 @@
 /**
  * TeksERP Mobil — yayın yükleyici (VPS).
  *
- * `deploy/electron-yayinla.ps1`in ikizidir; Node yazılmıştır çünkü mobil paket
- * Mac'te üretilir (orada PowerShell yok).
+ * `deploy/electron-yayinla.sh`in ikizidir; Node yazılmıştır çünkü mobil paket
+ * Mac'te üretilir.
+ *
+ * ⚠️ HEDEF KANAL KAYIT DEFTERİNDEN, KİMLİK ARTEFAKTTAN: `--musteri`
+ * `deploy/kanallar.json`da kayıtlı olmalı; paketin gömülü güncelleme adresleri
+ * VE ERP adresi o kanalınkiyle birebir olmalı — ikisi de yüklemeden ÖNCE ölçülür,
+ * okunamazsa ÖLÇÜLEMEDİ = DUR (`scripts/lib/kanallar.mjs`).
  *
  * ⚠️ BU SCRIPT'İN VAR OLMA SEBEBİ — YÜKLEME SIRASI:
  * Manifest, paket dosyalarına İŞARET EDER. Manifest önce yüklenirse, henüz
@@ -18,19 +23,21 @@
  * gerçek bir HTTPS isteğiyle ölçer.
  *
  * Kullanım:
- *   node deploy/mobil-yayinla.mjs --paket=<ota-cikti/54.2/1787…>
- *   node deploy/mobil-yayinla.mjs --apk=<yol.apk> --surum=2.9.8 --vc=55
- *   node deploy/mobil-yayinla.mjs --paket=… --kuru      # yalnız ne yapacağını yaz
+ *   node deploy/mobil-yayinla.mjs --musteri=<kod> --paket=<ota-cikti/<kod>/54.2/1787…>
+ *   node deploy/mobil-yayinla.mjs --musteri=<kod> --apk=<yol.apk> --surum=2.9.8 --vc=55
+ *   node deploy/mobil-yayinla.mjs … --kuru     # yalnız ne yapacağını yaz (etiket de atılmaz)
  *   node deploy/mobil-yayinla.mjs --dogrula=<url>       # yükleme YOK, yayını denetle
  */
 
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
-import zlib from 'node:zlib';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { etiketAt, manifestGovdesindenSurum } from '../scripts/lib/surum.mjs';
+import { KAYIT_REL, Olculemedi, erpAdresiEsit, kanalCoz } from '../scripts/lib/kanallar.mjs';
+import { bundleAdresOlcumu } from '../mobil/scripts/lib/adres.mjs';
+import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MOBIL = path.resolve(HERE, '..', 'mobil');
@@ -119,6 +126,14 @@ if (!MUSTERI) {
     `Bu ağaç şu an "${AGAC_MUSTERISI.kod}" (${AGAC_MUSTERISI.ad}) için yapılandırılmış.`,
     `Örnek:  node deploy/mobil-yayinla.mjs --musteri=${AGAC_MUSTERISI.kod} --paket=…`,
   );
+}
+/** Kanal kayıt defterinden — bilinmeyen kod ya da kırmızı kayıt: hiçbir şey yüklenmeden DUR. */
+let KANAL;
+try {
+  ({ kanal: KANAL } = kanalCoz(MUSTERI));
+} catch (e) {
+  if (e instanceof Olculemedi) dur(`KANAL KAYIT DEFTERİ ÖLÇÜLEMEDİ (${KAYIT_REL})`, e.message);
+  dur(e.message, ...(e.satirlar ?? []));
 }
 const UZAK_KOK =
   arg('uzak-dizin') ||
@@ -253,6 +268,51 @@ async function iste(url, yontem = 'GET') {
 }
 
 /* ------------------------------------------------------------------ *
+ * ERP adresi kapısı (OTA + APK ortak)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Paket tabletleri HANGİ SUNUCUYA bağlayacak? Güncelleme adresleri doğru olan
+ * paket bile başka kanalın ERP adresini taşıyabilir (`--musteri=adnansahin` ile
+ * üretilmiş, test sunucusu adresli OTA): o kanalın tabletleri başka bir sunucuya
+ * yazar, hiçbir hata görünmez. Beklenen değer kayıt defterinden; bundle'da yoksa
+ * ya da yanında başka bir sayısal-IP sunucu varsa DUR.
+ */
+function erpKapisi(bundleMetni, kaynak, beyan) {
+  const beklenen = KANAL.tablet.erpAdresi;
+  if (beyan !== undefined && beyan !== null && !erpAdresiEsit(beyan, beklenen)) {
+    dur(
+      'PAKET BAŞKA BİR ERP SUNUCUSUNA BAĞLI (künye)',
+      `künyedeki adres: ${beyan}`,
+      `kanalın adresi : ${beklenen}  (${MUSTERI} · ${KAYIT_REL})`,
+      '',
+      'Bu paket kurulursa tabletler BAŞKA bir sunucuya bağlanır — ve bu sessizdir.',
+      `Yeniden üret:  cd mobil && npm run yayinla -- --musteri=${MUSTERI}`,
+    );
+  }
+  const { gecenSayi, bulunanlar, yabanciIp } = bundleAdresOlcumu(bundleMetni, beklenen);
+  if (gecenSayi === 0) {
+    dur(
+      'PAKET BU KANALIN ERP ADRESİNİ TAŞIMIYOR',
+      `kaynak  : ${kaynak}`,
+      `beklenen: ${beklenen}  (${MUSTERI} · ${KAYIT_REL})`,
+      `bulunan : ${bulunanlar.length ? bulunanlar.join(', ') : '(hiçbir /api adresi yok)'}`,
+      '',
+      'Bu paket kurulursa tabletler BAŞKA bir sunucuya bağlanır — ve bu sessizdir.',
+    );
+  }
+  if (yabanciIp.length) {
+    dur(
+      'PAKETTE BAŞKA BİR SUNUCU ADRESİ DE VAR',
+      `beklenen: ${beklenen}`,
+      `yabancı : ${yabanciIp.join(', ')}`,
+      'Bayat ya da başka kanalın adresi bundle içinde kalmış — paket GÜVENİLMEZ.',
+    );
+  }
+  bilgi(`  ERP adresi     : ${beklenen} — pakette ${gecenSayi} kez, yabancı sunucu yok`);
+}
+
+/* ------------------------------------------------------------------ *
  * OTA paketi
  * ------------------------------------------------------------------ */
 
@@ -319,6 +379,20 @@ async function paketiYayinla(paketDizin) {
     );
   }
   bilgi(`  paket adresleri: ${paketAdresleri.length} farklı ön ek, hepsi ${MUSTERI}`);
+
+  // ERP adresi — otorite bundle; künyedeki `adres` bir beyandır, varsa o da tutmalı.
+  let bundleMetni;
+  const bundleYol = kunye.bundle ? path.join(paketDizin, kunye.bundle) : null;
+  try {
+    bundleMetni = fs.readFileSync(bundleYol).toString('latin1');
+  } catch {
+    dur(
+      'ÖLÇÜLEMEDİ — paketin JS bundle\'ı okunamadı',
+      `künye bundle alanı: ${kunye.bundle ?? '(yok)'}`,
+      'ERP adresi ölçülemeyen paket yüklenmez.',
+    );
+  }
+  erpKapisi(bundleMetni, bundleYol, kunye.adres);
 
   baslik('OTA PAKETİ YAYINLANIYOR');
   bilgi(`Müşteri: ${MUSTERI}`);
@@ -415,34 +489,19 @@ async function paketiYayinla(paketDizin) {
  * koşmadığı için yayın adımına ulaşamadı. Artık YAYIN da soruyor.
  *
  * AndroidManifest.xml ikili biçimdedir; dize havuzu UTF-16LE olduğu için
- * adres düz metin olarak okunabilir (ölçüldü).
+ * adres düz metin olarak okunabilir (ölçüldü). Okuyucu build-apk ile ortak
+ * (`mobil/scripts/lib/zip.mjs`, merkezî dizin).
  */
 function apkicindekiAdres(apkYol) {
-  const buf = fs.readFileSync(apkYol);
-  // ZIP merkezi dizinini taramak yerine yerel başlıkları gez: dosya büyük ama
-  // AndroidManifest.xml her zaman başlarda durur.
-  const imza = Buffer.from('AndroidManifest.xml', 'latin1');
-  let i = buf.indexOf(imza);
-  while (i > 0) {
-    const bas = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x03, 0x04]), i);
-    if (bas < 0) break;
-    const yontem = buf.readUInt16LE(bas + 8);
-    const sikBoyut = buf.readUInt32LE(bas + 18);
-    const adUz = buf.readUInt16LE(bas + 26);
-    const ekUz = buf.readUInt16LE(bas + 28);
-    const veriBas = bas + 30 + adUz + ekUz;
-    try {
-      const ham = buf.subarray(veriBas, veriBas + sikBoyut);
-      const icerik = yontem === 8 ? zlib.inflateRawSync(ham) : ham;
-      const metin = icerik.toString('utf16le');
-      const m = /https?:\/\/[\x20-\x7E]{5,120}?manifest/.exec(metin);
-      if (m) return m[0];
-    } catch {
-      /* bu girdi değilse sonrakine bak */
-    }
-    i = buf.indexOf(imza, i + 1);
+  let r;
+  try {
+    r = zipGirdisiOku(apkYol, 'AndroidManifest.xml');
+  } catch (e) {
+    return { hata: String(e?.message ?? e) };
   }
-  return null;
+  if (r.hata || !r.veri) return { hata: r.hata ?? 'AndroidManifest.xml boş' };
+  const m = /https?:\/\/[\x20-\x7E]{5,120}?manifest/.exec(r.veri.toString('utf16le'));
+  return m ? { adres: m[0] } : { hata: 'AndroidManifest.xml güncelleme adresi (…/manifest) taşımıyor' };
 }
 
 async function apkYayinla(apkYol) {
@@ -451,6 +510,43 @@ async function apkYayinla(apkYol) {
   const vc = Number(arg('vc'));
   if (!surum || !Number.isFinite(vc)) {
     dur('APK yayını için --surum ve --vc gerekli', 'Örnek: --surum=2.9.8 --vc=55');
+  }
+
+  // ⚠️ ARTEFAKT KİMLİĞİ ÖNCE (ucuz, ağsız) ve FAIL-CLOSED: okunamayan adres
+  // "kapı atlandı" değil ÖLÇÜLEMEDİ'dir — adresi ölçülmemiş APK yüklenmez.
+  const { adres: apkAdres, hata: adresHatasi } = apkicindekiAdres(apkYol);
+  if (!apkAdres) {
+    dur(
+      'ÖLÇÜLEMEDİ — APK içindeki güncelleme adresi okunamadı',
+      adresHatasi,
+      'Adresi ölçülemeyen APK yüklenmez.',
+    );
+  }
+  if (!apkAdres.startsWith(normalizeFeed(feedUrl(MUSTERI)))) {
+    dur(
+      'APK YANLIŞ GÜNCELLEME ADRESİNİ TAŞIYOR',
+      `APK içinde : ${apkAdres}`,
+      `Beklenen   : ${normalizeFeed(FEED)}ota/<runtimeVersion>/manifest`,
+      '',
+      'Bu APK kurulan tablet güncelleme sorar, 404 alır ve bir daha HİÇ',
+      'güncelleme almaz — üstelik bu hiçbir yerde görünmez.',
+      '',
+      'Sebep neredeyse her zaman aynı: feed adresi derlemeden SONRA değişti.',
+      'Çözüm:  npx expo prebuild --platform android  &&  npm run build:apk',
+    );
+  }
+  bilgi(`  APK içindeki adres: ${apkAdres}`);
+  {
+    let r;
+    try {
+      r = zipGirdisiOku(apkYol, 'assets/index.android.bundle');
+    } catch (e) {
+      r = { hata: String(e?.message ?? e) };
+    }
+    if (r.hata || !r.veri) {
+      dur('ÖLÇÜLEMEDİ — APK içindeki JS bundle okunamadı', r.hata ?? '', 'ERP adresi ölçülemeyen APK yüklenmez.');
+    }
+    erpKapisi(r.veri.toString('latin1'), `${apkYol} › assets/index.android.bundle`, undefined);
   }
 
   // SÜRÜM NOTU KAPISI — sahaya çıkışın SON adımı da not ister (2026-09-14).
@@ -478,26 +574,6 @@ async function apkYayinla(apkYol) {
   if (!/^[\x20-\x7E]+$/.test(ad) || /\s/.test(ad)) {
     // Electron'da `Ş` + boşluk taşıyan dosya adı aktarımda bozulup 404 üretmişti.
     dur('APK dosya adı ASCII ve boşluksuz olmalı', ad);
-  }
-
-  // ⚠️ YÜKLEMEDEN ÖNCE: APK'nın taşıdığı adres ile bugünkü feed aynı mı?
-  const apkAdres = apkicindekiAdres(apkYol);
-  if (!apkAdres) {
-    uyari('APK içindeki güncelleme adresi OKUNAMADI — kapı atlandı, elle doğrula.');
-  } else if (!apkAdres.startsWith(normalizeFeed(feedUrl(MUSTERI)))) {
-    dur(
-      'APK YANLIŞ GÜNCELLEME ADRESİNİ TAŞIYOR',
-      `APK içinde : ${apkAdres}`,
-      `Beklenen   : ${normalizeFeed(FEED)}ota/<runtimeVersion>/manifest`,
-      '',
-      'Bu APK kurulan tablet güncelleme sorar, 404 alır ve bir daha HİÇ',
-      'güncelleme almaz — üstelik bu hiçbir yerde görünmez.',
-      '',
-      'Sebep neredeyse her zaman aynı: feed adresi derlemeden SONRA değişti.',
-      'Çözüm:  npx expo prebuild --platform android  &&  npm run build:apk',
-    );
-  } else {
-    bilgi(`  APK içindeki adres: ${apkAdres}`);
   }
 
   const icerik = fs.readFileSync(apkYol);
@@ -584,7 +660,12 @@ if (apk) await apkYayinla(path.resolve(apk));
 // ⚠️ OTA ve APK AYNI ÇİZGİDEDİR: `app.json > expo.version` hem paketin sürümü
 // hem APK'nın `versionName`idir. İki ayrı ön ek, aynı numarayı iki yerde
 // saydırıp çizgiyi ikiye bölerdi.
-{
+// ⚠️ `--kuru` ETİKET ATMAZ: hiçbir şey yayınlanmadı. Eskiden kuru koşum da
+// `tablet-v*` etiketini atıp origin'e itiyordu — sonraki turun tabanı yayınlanmamış
+// bir koda kayardı.
+if (KURU) {
+  bilgi('\n  [kuru] sürüm etiketi atılmadı (yayın yok).');
+} else {
   const etiketSurumu = paket ? yayinlananPaketSurumu(path.resolve(paket)) : arg('surum');
   if (etiketSurumu) {
     const t = etiketAt('tablet', etiketSurumu);

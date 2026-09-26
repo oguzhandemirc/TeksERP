@@ -54,8 +54,9 @@ uzantısı `no-cache` tarafına**, paket (`.apk`) uzun cache tarafına.
 
 ```bash
 ssh yenisunucu 'mkdir -p /opt/stack/apps/tekserp-guncelleme/html/<musteri>/electron'
-./deploy/electron-paketle.sh <musteri>     # adres pakete gömülür + kapı doğrular
-./deploy/electron-yayinla.sh               # hedefi paketin kimliğinden çözer
+# önce kanal deploy/kanallar.json'a (bütün kimlikler; bekçi: node scripts/check-kanallar.mjs)
+./deploy/electron-paketle.sh <musteri>                # adres pakete gömülür + kapı doğrular
+./deploy/electron-yayinla.sh --musteri=<musteri>      # hedefi paketin kimliğinden çözer; argüman niyettir
 ```
 
 DNS, sertifika, Traefik ya da servis değişikliği **yoktur**. Adresi elle

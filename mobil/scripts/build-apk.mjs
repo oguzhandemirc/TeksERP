@@ -52,15 +52,11 @@
  */
 
 import { spawnSync } from 'node:child_process';
-// Buffer açıkça import ediliyor: proje ESLint yapılandırması RN/tarayıcı
-// global'lerini varsayar, Node global'i `Buffer`'ı bilmez (no-undef).
-import { Buffer } from 'node:buffer';
 import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
-import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
@@ -71,7 +67,9 @@ import {
   manifestUrl,
   musteriOku,
   feedUrl,
+  bundleAdresOlcumu,
 } from './lib/adres.mjs';
+import { zipGirdisiOku } from './lib/zip.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(HERE, '..');
@@ -500,70 +498,7 @@ function gradleKos(adres) {
  * (e) DERLEME SONRASI DOĞRULAMA — APK içindeki bundle'ı aç ve adresi ara
  * ------------------------------------------------------------------ */
 
-/**
- * APK (=ZIP) içinden tek bir girdiyi saf Node ile çıkarır.
- * `unzip` ikilisine bağımlı olmuyoruz: komut bulunamazsa doğrulama SESSİZCE
- * atlanmış olurdu — düzeltmeye çalıştığımız hatanın ta kendisi.
- */
-function zipGirdisiOku(zipYolu, girdiAdi) {
-  const fd = fs.openSync(zipYolu, 'r');
-  try {
-    const boyut = fs.fstatSync(fd).size;
-    // EOCD (End Of Central Directory) son 64KB + 22 bayt içinde olmak zorunda.
-    const kuyrukUzunluk = Math.min(boyut, 0x10000 + 22);
-    const kuyruk = Buffer.alloc(kuyrukUzunluk);
-    fs.readSync(fd, kuyruk, 0, kuyrukUzunluk, boyut - kuyrukUzunluk);
-    let eocd = -1;
-    for (let i = kuyruk.length - 22; i >= 0; i--) {
-      if (kuyruk.readUInt32LE(i) === 0x06054b50) {
-        eocd = i;
-        break;
-      }
-    }
-    if (eocd < 0) return { hata: 'APK bir ZIP arşivi gibi okunamadı (EOCD bulunamadı).' };
-
-    const girdiSayisi = kuyruk.readUInt16LE(eocd + 10);
-    const cdBoyut = kuyruk.readUInt32LE(eocd + 12);
-    const cdOfset = kuyruk.readUInt32LE(eocd + 16);
-    if (cdOfset === 0xffffffff || cdBoyut === 0xffffffff) {
-      return { hata: 'APK ZIP64 biçiminde — bu okuyucu desteklemiyor.' };
-    }
-
-    const cd = Buffer.alloc(cdBoyut);
-    fs.readSync(fd, cd, 0, cdBoyut, cdOfset);
-
-    let p = 0;
-    for (let i = 0; i < girdiSayisi; i++) {
-      if (p + 46 > cd.length || cd.readUInt32LE(p) !== 0x02014b50) break;
-      const yontem = cd.readUInt16LE(p + 10);
-      const sikBoyut = cd.readUInt32LE(p + 20);
-      const adUzunluk = cd.readUInt16LE(p + 28);
-      const ekUzunluk = cd.readUInt16LE(p + 30);
-      const yorumUzunluk = cd.readUInt16LE(p + 32);
-      const yerelOfset = cd.readUInt32LE(p + 42);
-      const ad = cd.toString('utf8', p + 46, p + 46 + adUzunluk);
-
-      if (ad === girdiAdi) {
-        // Yerel başlıktaki ad/ek uzunlukları merkezî dizindekinden farklı olabilir.
-        const yb = Buffer.alloc(30);
-        fs.readSync(fd, yb, 0, 30, yerelOfset);
-        if (yb.readUInt32LE(0) !== 0x04034b50) {
-          return { hata: 'ZIP yerel başlığı bozuk.' };
-        }
-        const veriOfset = yerelOfset + 30 + yb.readUInt16LE(26) + yb.readUInt16LE(28);
-        const ham = Buffer.alloc(sikBoyut);
-        fs.readSync(fd, ham, 0, sikBoyut, veriOfset);
-        if (yontem === 0) return { veri: ham };
-        if (yontem === 8) return { veri: zlib.inflateRawSync(ham) };
-        return { hata: `Desteklenmeyen ZIP sıkıştırma yöntemi: ${yontem}` };
-      }
-      p += 46 + adUzunluk + ekUzunluk + yorumUzunluk;
-    }
-    return { hata: `APK içinde "${girdiAdi}" bulunamadı.` };
-  } finally {
-    fs.closeSync(fd);
-  }
-}
+// APK içinden tek girdi okuyucusu `./lib/zip.mjs`te (mobil-yayinla ile ortak).
 
 /**
  * Doğrulama başarısızsa APK'yı kanonik yolundan taşı: deploy notları
@@ -622,22 +557,13 @@ function apkDogrula(beklenenAdres, { derlemeBaslangici, apkYolu = APK_PATH } = {
   // üretir (2026-07-31 gecesi tam olarak bu yaşandı).
   const metin = veri.toString('latin1');
 
-  const gecenSayi = metin.split(beklenenAdres).length - 1;
+  // Ölçüm TEK yardımcıda (lib/adres.mjs) — OTA üretimi ve yayın kapısı da onu kullanır.
+  const { gecenSayi, bulunanlar, yabanciIp } = bundleAdresOlcumu(metin, beklenenAdres);
   bilgi(`Bundle boyutu   : ${(veri.length / 1024 / 1024).toFixed(1)} MB`);
   bilgi(`Aranan adres    : ${beklenenAdres}`);
   bilgi(`Bulunma sayısı  : ${gecenSayi}`);
 
-  // Bundle içindeki tüm ".../api" biçimli adresleri topla — hem teşhis hem
-  // "başka bir adres sızmış mı" kontrolü için.
-  // NOT: Hermes string tablosunda dizeler UÇ UCA paketlenir (sonlandırıcı bayt
-  // yok), yani "…/api" hemen ardından bambaşka bir dizenin harfleri gelebilir.
-  // Bu yüzden "/api'den sonra harf/rakam GELMESİN" gibi bir sondaj (lookahead)
-  // KULLANILMAZ — gerçek adresi bile eleyip "hiçbir adres yok" der (ilk
-  // denemede tam olarak bu oldu).
-  const bulunanlar = [
-    ...new Set(metin.match(/https?:\/\/[A-Za-z0-9._-]+(?::\d{2,5})?\/api/g) ?? []),
-  ];
-
+  // Hermes dizeleri uç uca paketler; lookahead YOK (gerekçe: bundleAdresOlcumu).
   if (gecenSayi === 0) {
     apkyiReddet(apkYolu);
     dur(
@@ -654,9 +580,6 @@ function apkDogrula(beklenenAdres, { derlemeBaslangici, apkYolu = APK_PATH } = {
 
   // Sayısal IP taşıyan FARKLI bir /api adresi = bayat sunucu adresi sızıntısı.
   // (Host adı taşıyanlar bilgi olarak basılır, engellemez.)
-  const yabanciIp = bulunanlar.filter(
-    (u) => u !== beklenenAdres && /^https?:\/\/(?:\d{1,3}\.){3}\d{1,3}/.test(u),
-  );
   if (yabanciIp.length) {
     apkyiReddet(apkYolu);
     dur(

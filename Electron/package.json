@@ -130,7 +130,7 @@
       "**/node_modules/bindings/**"
     ],
     "directories": {
-      "output": "release/${version}",
+      "output": "release/adnansahin/${version}",
       "buildResources": "resources"
     },
     "files": [

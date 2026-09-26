@@ -142,11 +142,14 @@ birbirini hiç görmez.
 # 1) Sunucuda klasör (DNS, sertifika, servis GEREKMEZ)
 ssh yenisunucu 'mkdir -p /opt/stack/apps/tekserp-guncelleme/html/yenifabrika/electron'
 
-# 2) O müşteri için paketle — adres pakete gömülür
+# 2) Kanalı kayıt defterine ekle — deploy/kanallar.json (bütün kimlikler; bekçi:
+#    node scripts/check-kanallar.mjs — iki kanal hiçbir kimliği paylaşamaz)
+
+# 3) O kanal için paketle — adres pakete gömülür, çıktı release/yenifabrika/<sürüm>/
 ./deploy/electron-paketle.sh yenifabrika
 
-# 3) Yayınla (hedef klasörü paketin kendi kimliğinden çözer)
-./deploy/electron-yayinla.sh
+# 4) Yayınla (hedef klasörü paketin kendi kimliğinden çözer; argüman niyettir)
+./deploy/electron-yayinla.sh --musteri=yenifabrika
 ```
 
 ⚠️ **Neden ayrı bir paketleme komutu var:** yayın adresi pakete **derleme
@@ -257,7 +260,7 @@ adresi okuyup doğru müşteriyi gösterdiğini doğrular.
 derler — yani bir önceki müşterinin adresiyle. Paketleme script'i tam olarak bu
 hatayı önlemek için var.
 
-Çıktı: `Electron/release/<sürüm>/` içinde **üç dosya**
+Çıktı: `Electron/release/<kanal>/<sürüm>/` içinde **üç dosya** (kanala ayrık: iki kanalın aynı sürümü aynı klasörde durmaz)
 
 | Dosya | Zorunlu | Ne işe yarar |
 |---|---|---|
@@ -284,23 +287,23 @@ hatayı önlemek için var.
 > sahaya yaymadan önce bir Windows makinesinde **Bu Bilgisayar → Yazıcı /
 > Kantar** sekmelerinde cihazların listelendiğini gör.
 
-### 3. Yayınla (aynı Windows makinesinden)
+### 3. Yayınla
 
-```powershell
-.\deploy\electron-yayinla.ps1
+```bash
+./deploy/electron-yayinla.sh --musteri=<kanal>     # macOS/Linux; Windows'ta Git Bash/WSL
 ```
 
-Script sürümü `package.json`dan okur, üç dosyanın varlığını ve `latest.yml`in
-gerçekten o sürümü gösterdiğini doğrular, **doğru sırada** yükler ve sonunda
-yayını dışarıdan kontrol eder. Elle yapmak istersen:
+`--musteri` NİYETTİR; hedef klasör paketin KENDİ kimliğinden çözülür
+(`release/<kanal>/<sürüm>/win-unpacked/resources/app-update.yml` adresi ·
+updater önbelleği · exe adı) ve ikisi aynı kanalı göstermezse ssh'tan ÖNCE durur.
+Kanal kodu `deploy/kanallar.json`da kayıtlı olmalıdır. Script üç dosyanın varlığını
+ve `latest.yml`in gerçekten o sürümü gösterdiğini doğrular, **doğru sırada** yükler
+ve sonunda yayını dışarıdan kontrol eder. **Elle `scp` YOK** — kanal kapısı,
+değişmezlik, sha512, yayın defteri ve etiket yalnız bu betikte.
 
-```powershell
-scp -P 2222 release\<sürüm>\TeksERP-<sürüm>-Setup.exe `
-            release\<sürüm>\TeksERP-<sürüm>-Setup.exe.blockmap `
-            oguzhan@91.217.119.138:/opt/stack/apps/tekserp-guncelleme/html/adnansahin/electron/
-scp -P 2222 release\<sürüm>\latest.yml `
-            oguzhan@91.217.119.138:/opt/stack/apps/tekserp-guncelleme/html/adnansahin/electron/
-```
+> ⚠️ `deploy/electron-yayinla.ps1` EMEKLİ (2026-09-27): eski sunucuya, sabit
+> `adnansahin` klasörüne ve kapısız yüklüyordu; artık hiçbir şey yüklemeden
+> sıfır-dışı çıkan bir saplamadır.
 
 > **`latest.yml` EN SON gider.** Önce giderse, henüz yüklenmemiş bir `.exe`yi
 > işaret eder ve o aralıkta kontrol yapan paneller "sürüm dosyası bulunamadı"
@@ -413,7 +416,7 @@ alana geçti.
 
 ```bash
 # 1) Önce panel yayına
-./deploy/electron-paketle.sh adnansahin 2.9.0 && ./deploy/electron-yayinla.sh
+./deploy/electron-paketle.sh adnansahin 2.9.0 && ./deploy/electron-yayinla.sh --musteri=adnansahin
 ```
 ```ts
 // 2) Sonra politika + backend deploy
@@ -517,7 +520,7 @@ tek bir istek gitmişse, dosya yüklendikten sonra bile bir hafta 404 döner.
 ikinci hattı eklendi (`deploy/guncelleme-sunucusu/nginx/default.conf`). Yeni
 sürümlerde tekrarlamaz.
 
-**Teşhis artık otomatik:** yayın script'leri (`electron-yayinla.sh` / `.ps1`)
+**Teşhis artık otomatik:** yayın script'i (`electron-yayinla.sh`)
 yükleme sonrası her dosyayı önce temiz URL, sorun varsa `?onbellek-atla=` ile
 dener. Origin 200 dönüp temiz URL dönmüyorsa **"ÖNBELLEK SORUNU"** diye bağırır
 ve tam Purge-by-URL adresini basar; ikisi de 404 ise "dosya gerçekten
@@ -540,8 +543,8 @@ bilmek için silinen sürümlerin listesini tutmak gerekirdi.
 **Yayını yükleme yapmadan denetlemek:**
 
 ```bash
-./deploy/electron-yayinla.sh --dogrula          # yayındaki sürümü bul ve denetle
-./deploy/electron-yayinla.sh --dogrula 2.8.1    # belirli sürümü bekle
+./deploy/electron-yayinla.sh --musteri=adnansahin --dogrula          # yayındaki sürümü bul ve denetle
+./deploy/electron-yayinla.sh --musteri=adnansahin --dogrula 2.8.1    # belirli sürümü bekle
 ```
 
 Elle turda "bu makine güncelleme alamıyor" şüphesi doğduğunda ilk bakılacak yer:
@@ -577,6 +580,7 @@ Farklıysa önbellek, ikisi de 404 ise dosya gerçekten yok.
 | `surum-notlari.json` + `scripts/check-surum-notlari.mjs` | Not kaynağı + bekçi |
 | `Electron/src/pages/GeneralSettings/UpdateSection.tsx` | Bu Bilgisayar → Güncelleme |
 | `Electron/src/test/update-feed-url.test.ts` | Adres + dosya adı bekçisi |
-| `deploy/electron-yayinla.ps1` | Yayınlama — Windows (sıra + doğrulama) |
-| `deploy/electron-yayinla.sh` | Yayınlama — macOS/Linux |
+| `deploy/electron-yayinla.ps1` | EMEKLİ saplama — hiçbir şey yüklemez, sıfır-dışı çıkar |
+| `deploy/electron-yayinla.sh` | Yayınlama — tek yol (Windows'ta Git Bash/WSL) |
+| `deploy/kanallar.json` + `scripts/check-kanallar.mjs` | Kanal kimliklerinin tek kaynağı + çakışma bekçisi |
 | `deploy/guncelleme-sunucusu/` | VPS servisinin kaynağı (compose + nginx) |

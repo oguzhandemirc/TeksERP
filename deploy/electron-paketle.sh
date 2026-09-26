@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Electron panelini BELİRLİ BİR MÜŞTERİ için paketler.
+# Electron panelini BELİRLİ BİR MÜŞTERİ (dağıtım kanalı) için paketler.
 # Reçete: docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md
 #
 #   ./deploy/electron-paketle.sh adnansahin             # yama hanesi OTOMATİK artar
 #   ./deploy/electron-paketle.sh yenifabrika 2.9.0     # haneyi elle ver
+#
+# Kod `deploy/kanallar.json`da kayıtlı olmalı; çıktı `Electron/release/<kod>/<sürüm>/`.
 #
 # NEDEN AYRI BİR KOMUT: yayın adresi pakete DERLEME ANINDA gömülür. Müşteri kodu
 # elle değiştirilseydi, unutulan tek bir düzenleme "yeni fabrikanın paneli başka
@@ -38,6 +40,14 @@ istenen_surum="${2:-}"
 # taşıyan bir kod, adresi aktarımda sessizce bozulan bir yayına çevirirdi.
 echo "$musteri" | grep -qE '^[a-z0-9][a-z0-9-]{1,30}$' \
   || hata "Müşteri kodu yalnız küçük harf, rakam ve tire içerebilir (2-31 karakter): '$musteri'"
+
+# --- KANAL KAPISI — HİÇBİR DOSYA YAZILMADAN ve ağdan ÖNCE ------------------
+# Kod `deploy/kanallar.json`da kayıtlı olmalı (yazım hatası → dur) ve ağaç bu
+# kanalın panel kimliğini taşımalı: bu betik appId/ürün adı/paket adı/pencere
+# kimliğini YAZMAZ, yazmadığı kimlikle derlenen panel aynı makinede başka
+# kanalın kurulumunun üstüne kurulur. Çıkış 2 = ÖLÇÜLEMEDİ, o da durdurur.
+node "$kok/scripts/kanal-kapisi.mjs" panel-paketle "$musteri" \
+  || hata "Kanal kapısı geçilmedi — yukarıdaki satırlara bak (kayıt defteri: deploy/kanallar.json)."
 
 cd "$electron_dir"
 
@@ -126,12 +136,16 @@ fs.writeFileSync(mPath, JSON.stringify(m, null, 2) + '\n');
 const pPath = './package.json';
 const p = JSON.parse(fs.readFileSync(pPath, 'utf8'));
 p.build.publish = [{ provider: 'generic', url: base + kod + '/electron/', channel: 'latest' }];
+// Çıktı KANALA ayrılır: iki kanalın aynı sürümü aynı klasörde dursaydı, düşen bir
+// paketleme sonrası yayıncı ÖBÜR kanalın derlemesini bulurdu (B3).
+p.build.directories = { ...(p.build.directories || {}), output: 'release/' + kod + '/\${version}' };
 if (surum) p.version = surum;
 fs.writeFileSync(pPath, JSON.stringify(p, null, 2) + '\n');
 " "$musteri" "$istenen_surum" "$BASE_URL"
 
 surum=$(node -p "require('./package.json').version")
 beklenen_url="${BASE_URL}${musteri}/electron/"
+rel="release/$musteri/$surum"
 echo "Müşteri: $musteri · Sürüm: $surum"
 echo "Yayın adresi: $beklenen_url"
 
@@ -157,7 +171,7 @@ node "$kok/scripts/check-surum-notlari.mjs" --panel="$surum" \
 
 # --- 3) Derle -------------------------------------------------------------
 echo "Derleniyor (bu birkaç dakika sürer)…"
-rm -rf "release/$surum"
+rm -rf "$rel"
 if [ "$(uname)" = "Darwin" ]; then
   npm run build:win:cross
 else
@@ -167,7 +181,7 @@ fi
 # --- 4) GÖMÜLÜ ADRES KAPISI (asıl koruma) ---------------------------------
 # Paketin içine gerçekten ne yazıldığını okur. Buraya kadarki her kontrol
 # KAYNAK dosyalara bakıyordu; bu, ÇIKTIYA bakan tek kontrol.
-gomulu_yml="release/$surum/win-unpacked/resources/app-update.yml"
+gomulu_yml="$rel/win-unpacked/resources/app-update.yml"
 [ -f "$gomulu_yml" ] || hata "Gömülü güncelleme yapılandırması bulunamadı: $gomulu_yml
   Derleme yarım kalmış olabilir."
 
@@ -180,11 +194,16 @@ if [ "$gomulu_url" != "$beklenen_url" ]; then
 fi
 echo "✓ Gömülü adres doğru: $gomulu_url"
 
-setup="release/$surum/TeksERP-$surum-Setup.exe"
+# Aynı yüklem yayıncıda da koşar: paket kimliği (adres · updater önbelleği · exe adı)
+# kanalla birebir mi — yayıncı hedefi bu kimlikten çözer, ağaçtaki musteri.json'dan değil.
+node "$kok/scripts/kanal-kapisi.mjs" panel-yayin "$musteri" "$electron_dir/$rel" \
+  || hata "Derlenen paketin kimliği '$musteri' kanalıyla birebir değil — yayınlama."
+
+setup="$rel/TeksERP-$surum-Setup.exe"
 [ -f "$setup" ] || hata "Kurulum paketi üretilmemiş: $setup"
-[ -f "release/$surum/latest.yml" ] || hata "latest.yml üretilmemiş — package.json > build.publish eksik olabilir."
+[ -f "$rel/latest.yml" ] || hata "latest.yml üretilmemiş — package.json > build.publish eksik olabilir."
 
 mb=$(( $(wc -c < "$setup") / 1024 / 1024 ))
 echo ""
-echo "HAZIR — $musteri / $surum (${mb} MB)"
-echo "Yayınlamak için: ./deploy/electron-yayinla.sh"
+echo "HAZIR — $musteri / $surum (${mb} MB) · $rel"
+echo "Yayınlamak için: ./deploy/electron-yayinla.sh --musteri=$musteri"
