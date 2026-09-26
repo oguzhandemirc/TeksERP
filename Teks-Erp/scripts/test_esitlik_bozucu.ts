@@ -33,7 +33,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 /** Kapsamdaki (defter) eşitlik bozucusuz ya da ölçülemeyen okuyucu sayısı — YALNIZ DÜŞER; sabiti entegratör trende düşürür. */
-const BORC_TABANI = 25;
+const BORC_TABANI = 15;
 
 const KAPSAM = ["DEFTER", "SATIR_EBEVEYN", "PIVOT_TICARI"] as const;
 type KapsamSinifi = (typeof KAPSAM)[number];
