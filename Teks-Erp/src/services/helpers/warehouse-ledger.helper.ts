@@ -38,6 +38,20 @@ export const MOVEMENT_ASC = [{ createdAt: "asc" }, { id: "asc" }] satisfies Pris
 export const MOVEMENT_DESC = [{ createdAt: "desc" }, { id: "desc" }] satisfies Prisma.WarehouseMovementOrderByWithRelationInput[];
 
 /**
+ * Toplu çağrının satır anları: ortak an, aynı top çağrıda birden çok kez geçiyorsa her tekrar +1 ms (dizi
+ * sırası) — aksi hâlde aynı topun iki satırı eşit damga alır (ör. transfer: çuval üyesi + serbest top).
+ */
+async function batchStampsTx(tx: Tx, rollIds: string[]): Promise<Date[]> {
+  const base = (await warehouseMovementStampTx(tx, [...new Set(rollIds)])).getTime();
+  const seen = new Map<string, number>();
+  return rollIds.map((id) => {
+    const k = seen.get(id) ?? 0;
+    seen.set(id, k + 1);
+    return new Date(base + k);
+  });
+}
+
+/**
  * Satır yazılabilir mi — ÜÇ kapının ORTAK eşiği ve DB seddinin ikizi
  * (`CHECK (qty > 0)`, VALIDATE edilmiş, tüm yazıcılar için canlı).
  *
@@ -208,8 +222,8 @@ export async function writeWarehouseMovements(
       notes: e.notes ?? null,
     }));
   if (rows.length === 0) return 0;
-  const createdAt = await warehouseMovementStampTx(tx, [...new Set(rows.map((r) => r.rollId))]);
-  const res = await tx.warehouseMovement.createMany({ data: rows.map((r) => ({ ...r, createdAt })) });
+  const ats = await batchStampsTx(tx, rows.map((r) => r.rollId));
+  const res = await tx.warehouseMovement.createMany({ data: rows.map((r, i) => ({ ...r, createdAt: ats[i] })) });
   return res.count;
 }
 
@@ -364,8 +378,8 @@ export async function postStockMove(tx: Tx, input: StockMoveInput): Promise<stri
  */
 export async function postStockMoves(tx: Tx, inputs: StockMoveInput[]): Promise<number> {
   if (inputs.length === 0) return 0;
-  const createdAt = await warehouseMovementStampTx(tx, [...new Set(inputs.map((i) => i.rollId))]);
-  const rows = inputs.map((i) => stockMoveRow(i, createdAt));
+  const ats = await batchStampsTx(tx, inputs.map((i) => i.rollId));
+  const rows = inputs.map((input, i) => stockMoveRow(input, ats[i]!));
   const res = await tx.warehouseMovement.createMany({ data: rows });
   return res.count;
 }

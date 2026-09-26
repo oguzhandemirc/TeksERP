@@ -8,7 +8,9 @@
 // ileri satır" findFirst'leri) eşitlik bozucusuzdu. Kök kural: olay anını yazar verir.
 //   §1 ⭐ saat: dört yazarın (`writeWarehouseMovement` · `writeWarehouseMovements` · `postStockMove` ·
 //      `postStockMoves`) ve ters yolun (`reverseStockMove`) satırı, topun son (gelecekteki) satırından
-//      SONRA damgalanır; aynı tx'te ardışık ileri + ters satırlar kesin artan
+//      SONRA damgalanır; aynı tx'te ardışık ileri + ters satırlar kesin artan · (c) satırsız topta damga DB saati
+//      aralığında · (d) toplu çağrıda BÜTÜN topların son satırından sonra · (e) aynı top toplu çağrıda iki kez →
+//      dizi sırasıyla kesin artan (06 denetimi: saat terimi sıfırlanınca ya da yalnız ilk top damgalanınca 9/0)
 //   §2 ⭐ tek sıra tanımı (AST, DB'siz): `src/` altında `warehouseMovement.find*` sıralaması yalnız
 //      `MOVEMENT_ASC`/`MOVEMENT_DESC`ten gelir — ya sabitin kendisi ya da öneki olan dizinin KUYRUĞU
 //      (`[{ rollId }, ...MOVEMENT_ASC]`, top başına gruplama); elle `{ createdAt }` yok; sabitler eşitlikte
@@ -16,6 +18,8 @@
 // Gerekli mi: doğduğu gün tabandaki 17 okuyucunun 16'sı eşitlik bozucusuzdu; düzeltme aynı commit'te.
 // Sonda (✓B3, bu commit; md5 ile geri alındı): ① `postStockMove` damgayı vermez → §1 ❌2 ·
 // ② "son satır + 1 ms" terimi kalkar → §1 ❌6 · ③ bir okuyucu elle `{ createdAt: "desc" }`e döner → §2 ❌1.
+// Sonda (✓B3, 06 denetimi madde 10; md5 ile geri alındı): saat terimi `to_timestamp(0)` → (c) ❌1 · toplu damga yalnız
+// ilk toptan → (d) ❌1 · aynı topun tekrar ofseti kalkar → (e) ❌1 (ilk ikisi düzeltmeden önce 9/0 idi).
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -49,6 +53,9 @@ async function saat(): Promise<void> {
   console.log("§1 ⭐ Saat — top başına kesin artan (tx geri alınır)");
   const TAG = `TST-DDD-${Date.now()}`;
   let olcum: { gelecek: number; yazar: Array<[string, number]>; ardisik: number[] } | null = null;
+  let aralik: { t0: number; t1: number; an: number } | null = null;
+  let kapsam: { gelecek: number; anlar: number[] } | null = null;
+  let ikiKez: number[] = [];
   await prisma.$transaction(async (tx) => {
     const wh = await tx.warehouse.findFirstOrThrow({ where: { isDefault: true }, select: { id: true } });
     const item = await tx.item.create({ data: { code: TAG, name: TAG, itemType: "FABRIC" }, select: { id: true } });
@@ -82,6 +89,36 @@ async function saat(): Promise<void> {
     }
     const hepsi = await tx.warehouseMovement.findMany({ where: { rollId: roll.id }, orderBy: MOVEMENT_ASC, select: { createdAt: true } });
     olcum = { gelecek: g!.at.getTime(), yazar, ardisik: hepsi.map((r) => r.createdAt.getTime()) };
+
+    // (c) saat aralığı: satırı hiç olmayan top — damga yazım anındaki DB saatidir (sabit/sıfır saat geçmez).
+    const yeniTop = async (ek: string) => (await tx.roll.create({
+      data: { barcode: `${TAG}-${ek}`, itemId: item.id, initialQty: 100, currentQty: 100, status: "WAREHOUSE", warehouseId: wh.id, entrySource: "SUPPLIER_RECEIPT" },
+      select: { id: true },
+    })).id;
+    const saatDb = async () => (await tx.$queryRaw<Array<{ t: Date }>>`SELECT clock_timestamp() AS t`)[0]!.t.getTime();
+    const bosTop = await yeniTop("C");
+    const t0 = await saatDb();
+    await postStockMove(tx, { ...stok, rollId: bosTop });
+    const t1 = await saatDb();
+    const cAn = (await tx.warehouseMovement.findFirstOrThrow({ where: { rollId: bosTop }, select: { createdAt: true } })).createdAt.getTime();
+    aralik = { t0, t1, an: cAn };
+    // (d) toplu kapsam: ilk top boş, ikincinin son satırı gelecekte — iki satır da o satırdan SONRA.
+    const [dTop, eTop] = [await yeniTop("D"), await yeniTop("E")];
+    const [eG] = await tx.$queryRaw<Array<{ at: Date; id: string }>>`
+      INSERT INTO "warehouse_movements" ("id","rollId","eventType","toWarehouseId","qty","reasonCode","createdAt")
+      VALUES (${randomUUID()}::uuid, ${eTop}::uuid, 'ENTRY', ${wh.id}::uuid, 100, 'TST_FUTURE',
+        now() + interval '2 hour') -- tz-ok: timestamptz, sonda satırı bilerek gelecekte
+      RETURNING "createdAt" AS at, "id"::text AS id`;
+    await postStockMoves(tx, [{ ...stok, rollId: dTop }, { ...stok, rollId: eTop }]);
+    await writeWarehouseMovements(tx, [{ ...giris, rollId: dTop }, { ...giris, rollId: eTop }], { onUnwritable: "throw" });
+    const toplu = await tx.warehouseMovement.findMany({ where: { rollId: { in: [dTop, eTop] }, id: { not: eG!.id } }, select: { createdAt: true } });
+    kapsam = { gelecek: eG!.at.getTime(), anlar: toplu.map((r) => r.createdAt.getTime()) };
+    // (e) aynı top bir toplu çağrıda iki kez: satırlar dizi sırasıyla KESİN artan.
+    const fTop = await yeniTop("F");
+    await postStockMoves(tx, [{ ...stok, rollId: fTop, notes: "1" }, { ...stok, rollId: fTop, notes: "2" }]);
+    await writeWarehouseMovements(tx, [{ ...giris, rollId: fTop, notes: "3" }, { ...giris, rollId: fTop, notes: "4" }], { onUnwritable: "throw" });
+    const fSatir = await tx.warehouseMovement.findMany({ where: { rollId: fTop }, select: { createdAt: true, notes: true } });
+    ikiKez = ["1", "2", "3", "4"].map((n) => fSatir.find((r) => r.notes === n)!.createdAt.getTime());
     throw new GeriAl();
   }).catch((e: unknown) => { if (!(e instanceof GeriAl)) throw e; });
   const o = olcum as { gelecek: number; yazar: Array<[string, number]>; ardisik: number[] } | null;
@@ -93,6 +130,15 @@ async function saat(): Promise<void> {
   }
   const a = o.ardisik;
   check(`aynı tx'te ${a.length} satır kesin artan (eşit an yok)`, a.every((t, i) => i === 0 || t > a[i - 1]!), `${new Set(a).size} farklı an`);
+  const r = aralik as { t0: number; t1: number; an: number } | null;
+  check("(c) satırsız topta damga yazım anındaki DB saati (aralıkta)", !!r && r.an >= r.t0 && r.an <= r.t1 + 1,
+    r ? `${new Date(r.t0).toISOString()} ≤ ${new Date(r.an).toISOString()} ≤ ${new Date(r.t1 + 1).toISOString()}` : "-");
+  const k = kapsam as { gelecek: number; anlar: number[] } | null;
+  check("(d) toplu çağrıda damga BÜTÜN topların son satırından sonra (ilk top boş, ikinci gelecekte)",
+    !!k && k.anlar.length === 4 && k.anlar.every((t) => t > k.gelecek), k ? `${k.anlar.filter((t) => t > k.gelecek).length}/4` : "-");
+  const f = ikiKez;
+  check("(e) aynı top bir toplu çağrıda iki kez: satırlar dizi sırasıyla kesin artan",
+    f.length === 4 && f.every((t, i) => i === 0 || t > f[i - 1]!), f.map((t) => new Date(t).toISOString().slice(17)).join(" < "));
 }
 
 function tekSiraTanimi(): void {
