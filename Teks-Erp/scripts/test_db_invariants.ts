@@ -959,8 +959,8 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
   {
     name: "roll_write_status_event",
     volatility: "v",
-    bodyFragments: ['IS NOT DISTINCT FROM OLD."status"', 'INSERT INTO "roll_status_events"', 'NEW."cancelledById"'],
-    why: "top durum defterinin yazarı: yalnız gerçek durum değişiminde satır; aktör iptal/fire anındaki cancelledById",
+    bodyFragments: ['IS NOT DISTINCT FROM OLD."status"', 'INSERT INTO "roll_status_events"', 'NEW."cancelledById"', "clock_timestamp()", "interval '1 millisecond'"],
+    why: "top durum defterinin yazarı: yalnız gerçek durum değişiminde satır; aktör iptal/fire anındaki cancelledById; damga top başına kesin artan (clock + son olay + 1 ms)",
   },
   {
     name: "rolls_archived_item_guard",

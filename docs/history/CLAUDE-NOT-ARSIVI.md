@@ -12828,6 +12828,36 @@ Negatif sondalar (md5 ile geri alındı):
 - devir tersi `ROLL_DETACH` yazınca §9/§9b/§9c ❌ (eski iş emri devri "Top çıkarıldı" diye bastı — ayrı kodun gerekçesi sondada görüldü);
 - çizelgenin devir satırları kaldırılınca §9c ❌.
 
+## 2026-09-26 — Top durum defterinde damga top başına kesin artan; "en son" okuyucusu eşitlik bozucuyla [ÇEKİRDEK]
+
+**Arıza (kartela notunun sınıf ölçümündeki "en ağır aday", kullanıcı kararı: düzelt).** `roll_status_events` yazarı (`roll_write_status_event` tetiği) damgayı kolon varsayılanından (`CURRENT_TIMESTAMP` = tx BAŞI) alıyordu. Aynı tx'teki iki durum geçişi TAM eşit damgalı doğuyordu. Top Çıkar'ın `statusBeforeEntry`i "en son IN_PRODUCTION"ı eşitlik bozucusuz `createdAt desc` ile alıp topun döneceği durumu ondan okuyordu. Sonda (eski gövde): aynı tx'te üç geçiş → iki satır aynı damga.
+
+**Düzeltme.**
+- Migration `20260926170000_roll_status_event_sira`: yalnız fonksiyon gövdesi değişti, forward-only ve idempotent. Damga = GREATEST(`clock_timestamp()` ms'ye yukarı, topun son olayı + 1 ms). Emsal: levent/kartela `eventStampTx`.
+- ms seçildi çünkü JS Date µs'yi göremez.
+- Eşzamanlılık: AFTER tetiği satır kilidini tutan tx'te koşar. Aynı topa yazan ikinci tx kilitte bekler, READ COMMITTED'de son olayı taze görür.
+- Mevcut satırlar değişmedi.
+
+**Okuyucular (listelendi, bağlandı).** `rollStatusEvent`i okuyan iki src yeri var:
+- ① `workorder-roll-detach.service` `statusBeforeEntry` — "en son" okuyucusu; `[createdAt desc, id desc]` oldu. Eski eşit satırda gerçek sıra bilinemez; `id` yalnız belirlenimlilik verir.
+- ② `work-session-activity.service` — liste; zaten `[createdAt, id]`.
+- Script'ler: göç script'i ve bekçiler; bekçi okuması zaten `[createdAt, id]`.
+
+**Bekçi.** `test_roll_status_events` (emsal kartela §14):
+- §11: aynı tx'te üç geçiş kesin artan, zincir kopmaz.
+- §11b: son olay gelecekteyse yeni olay son + 1 ms (belirlenimli). Mühür UPDATE'i reddettiği için gelecek satırı doğrudan INSERT'le kurulur.
+- §11c: src'de `createdAt` ile okuyan her yer `id` taşır (çağrının kendi parantezi; §11s saf sondalar).
+- `test_db_invariants` gövde parçaları: `clock_timestamp()` · `interval '1 millisecond'`.
+
+Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
+- S5 eski gövde → §11/§11b ❌;
+- S6 "+1 ms" yok → §11b ❌;
+- S7 bozucu yok → §11c ❌.
+
+**Kök CLAUDE.md cümlesi (öneri, 4b ekler):** "aynı tx'te çok satır yazan defterde kronoloji belirlenimli artar; 'en son' okuyucusu eşitlik bozucusuz yazılmaz".
+
+**Borç (ölçüldü, kapsam dışı).** src'de `createdAt` sıralı ama `id` bozucusuz 43 `findFirst` "en son" okuyucusu var. Defterler: WarehouseMovement 8 · RollOperation 6 · ChequeEvent 4 · CariTransaction 2 · WarpBeamEvent 2 (yazarı zaten kesin artan) · WorkOrderEvent 1; kalanı defter dışı. Genel bir cırcır bekçisi ayrı dilim.
+
 ## 2026-09-26 — Token replay D5b: üretim nesneleri tek boğazda; yarışta ham P2002 kalktı; borç 11 → 5 [ÇEKİRDEK]
 
 **Kapsam.** Levent planı (R) · dokuma işi · fason dokuma kabulü · top indirme (R + K′). K′ ilk ifade kilidinin arkasında: dokuma işinde 8032, fason kabulde iş emri satır claim'i, indirmede 8029; numaralar maksimumdan türediği için kilidin arkasında erken dönen deneme numara sarf etmez. Ayrım `fresh: true/false as const` (D3 paketleme grubu kalıbı).

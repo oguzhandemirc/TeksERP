@@ -86,11 +86,14 @@ async function detachBlockers(db: Db, roll: DetachRoll, wo: WoSteps): Promise<st
   return out;
 }
 
-/** Defter satırı yoksa (depo/stok dışı top) önceki durum, üretime girişin durum olayından. */
+/**
+ * Defter satırı yoksa (depo/stok dışı top) önceki durum, üretime girişin durum olayından. Yeni satırda
+ * damga top başına kesin artar; tetik düzeltmesinden önceki eşit damgalı satırı `id` belirlenimli seçer.
+ */
 async function statusBeforeEntry(tx: Prisma.TransactionClient, rollId: string): Promise<RollStatus | null> {
   const ev = await tx.rollStatusEvent.findFirst({
     where: { rollId, toStatus: RollStatus.IN_PRODUCTION },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { fromStatus: true },
   });
   return ev?.fromStatus ?? null;

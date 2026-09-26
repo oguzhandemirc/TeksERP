@@ -10,12 +10,16 @@
 //   bu deftere yazan 0 (1e şartı) · §9 göç script'i uçtan uca, üç geçiş ayrı (① kolonlar ·
 //   ② audit'in EN SON CANCELLED satırı, sıcak + arşiv · ③ tambur geri alma parçasında
 //   ebeveynin EN SON TAMBUR_UNDO_* satırı) + kaynak CHECK'i (kuru → uygula → 0) ·
-//   §10 aktörsüz (defter sonrası) iptal satırı sayısı basılır.
+//   §10 aktörsüz (defter sonrası) iptal satırı sayısı basılır · §11 kronoloji top başına KESİN
+//   ARTAN (aynı tx'te çok geçiş; son olay gelecekteyse yeni olay ondan sonra — belirlenimli) ·
+//   §11c statik: "en son" okuyucusu eşitlik bozucusuz yazılmaz.
 //
 // NEGATİF SONDA ✓B3 (koşuldu 2026-09-25, izole ağaç, geri alındı):
 //   S1 trigger DISABLE → §2/§3/§4/§5 ❌ (satır doğmadı) · S2 mühür fonksiyonunda UPDATE
 //   dalı silindi → §6a ❌ · S3 src'ye `prisma.rollStatusEvent.deleteMany` eklendi → §8 ❌.
 //   S4 (K-A3b) ② geçişte sıralama ASC'ye çevrildi (en ESKİ iptal) → §9b2 ❌, geri alındı.
+//   (2026-09-26, geri alındı) S5 tetik gövdesi eski hâline (tx başı damga) → §11/§11b ❌ · S6 "son olay
+//   + 1 ms" kaldırıldı → §11b ❌ · S7 `statusBeforeEntry`in `id` eşitlik bozucusu kaldırıldı → §11c ❌.
 // =============================================================================
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -56,6 +60,26 @@ export function defterYazimlari(kaynak: string): string[] {
   // Tablo boşaltma ifadesi desende BİLEREK yok (kapsam sınırı): kelimesi bu dosyada
   // geçerse test_script_guards dosyayı yıkıcı betik sayar.
   for (const m of temiz.matchAll(/\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+"?roll_status_events"?/gi)) out.push(m[1]!.toUpperCase());
+  return out;
+}
+
+/** `rollStatusEvent` okuyucusu `createdAt` ile sıralıyor ama `id` eşitlik bozucusu yok (ya da findFirst sırasız). SAF. */
+export function esitlikBozucusuzOkuyucular(kaynak: string): string[] {
+  const temiz = kaynak.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const out: string[] = [];
+  for (const m of temiz.matchAll(/\brollStatusEvent\s*\.\s*(findFirst|findFirstOrThrow|findMany)\s*\(/g)) {
+    // Pencere çağrının kendi parantezi — sonraki çağrının orderBy'ı sayılmaz.
+    let derinlik = 0;
+    let son = m.index! + m[0].length - 1;
+    for (; son < temiz.length; son++) {
+      if (temiz[son] === "(") derinlik++;
+      else if (temiz[son] === ")" && --derinlik === 0) break;
+    }
+    const pencere = temiz.slice(m.index!, son + 1);
+    const sira = pencere.match(/orderBy\s*:\s*(\[[^\]]*\]|\{[^}]*\})/)?.[1];
+    if (!sira) { if (m[1] !== "findMany") out.push(`${m[1]} sırasız`); continue; }
+    if (/createdAt/.test(sira) && !/\bid\s*:/.test(sira)) out.push(`${m[1]} ${sira.replace(/\s+/g, " ")}`);
+  }
   return out;
 }
 
@@ -247,6 +271,41 @@ async function main(): Promise<void> {
     const kaynaksizRed = await reddedilir(
       `INSERT INTO roll_status_events ("rollId","toStatus","preEpoch","preEpochSource") VALUES ('${eskiId}','CANCELLED',false,'AUDIT')`);
     check("§9e CHECK: kaynak yalnız preEpoch satırında", kaynaksizRed.includes("pre_epoch_source_check"), kaynaksizRed.slice(0, 80) || "GEÇTİ");
+
+    // §11 kronoloji: tetik damgası clock_timestamp() + topun son olayı + 1 ms (emsal kartela §14)
+    const s = await yeniTop("S");
+    await prisma.$transaction(async (tx) => {
+      await tx.roll.update({ where: { id: s }, data: { status: RollStatus.IN_PRODUCTION } });
+      await tx.roll.update({ where: { id: s }, data: { status: RollStatus.STOCK } });
+      await tx.roll.update({ where: { id: s }, data: { status: RollStatus.IN_PRODUCTION } });
+    });
+    const sEv = await olaylar(s);
+    const artan = sEv.every((e, i) => i === 0 || e.createdAt.getTime() > sEv[i - 1]!.createdAt.getTime());
+    const zincir = sEv.every((e, i) => i === 0 || e.fromStatus === sEv[i - 1]!.toStatus);
+    check("§11 ⭐ aynı tx'te üç geçiş: damgalar top başına KESİN artan, zincir from→to kopmaz",
+      sEv.length === 4 && artan && zincir, sEv.map((e) => `${e.toStatus}@${e.createdAt.toISOString()}`).join(" · "));
+    const f = await yeniTop("F");
+    const gelecek = new Date(Date.now() + 3_600_000);
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO roll_status_events ("rollId","fromStatus","toStatus","createdAt") VALUES ('${f}','STOCK','STOCK','${gelecek.toISOString()}')`);
+    await prisma.roll.update({ where: { id: f }, data: { status: RollStatus.IN_PRODUCTION } });
+    const fSon = (await olaylar(f)).at(-1);
+    check("§11b ⭐ son olay gelecekteyse yeni olay ondan SONRA damgalanır (son + 1 ms; belirlenimli)",
+      fSon?.toStatus === RollStatus.IN_PRODUCTION && fSon.createdAt.getTime() === gelecek.getTime() + 1,
+      `${fSon?.toStatus}@${fSon?.createdAt.toISOString()} · gelecek ${gelecek.toISOString()}`);
+    const bozucusuz: string[] = [];
+    for (const dosya of walkTs(join(KOK, "src"))) {
+      for (const x of esitlikBozucusuzOkuyucular(readFileSync(dosya, "utf8"))) bozucusuz.push(`${relative(KOK, dosya)}: ${x}`);
+    }
+    check("§11c ⭐ src'de roll_status_events'i createdAt ile okuyan her yer `id` eşitlik bozucusu taşır", bozucusuz.length === 0, bozucusuz.join(" · "));
+    // Sonda metni birleştirilerek kurulur: düz literal, keyfi-arama mandalına çağrı gibi görünür.
+    const ff = (arg: string) => `tx.${"rollStatusEvent"}.findFirst(${arg})`;
+    check("§11s sonda: bozucusuz sıra ve sırasız findFirst yakalanır, bozuculu sıra ve yorum geçer",
+      esitlikBozucusuzOkuyucular(ff(`{ where: { rollId }, orderBy: { createdAt: "desc" } }`)).length === 1 &&
+        esitlikBozucusuzOkuyucular(ff(`{ where: { rollId } }`)).length === 1 &&
+        esitlikBozucusuzOkuyucular(ff(`{ where: { rollId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] }`)).length === 0 &&
+        esitlikBozucusuzOkuyucular(`// ${ff(`{ orderBy: { createdAt: "desc" } }`)}`).length === 0 &&
+        esitlikBozucusuzOkuyucular(`${ff(`{ where: { rollId } }`)}; tx.x.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] })`).length === 1);
 
     // §10 bilgi
     const aktorsuz = await prisma.rollStatusEvent.count({ where: { toStatus: RollStatus.CANCELLED, actorId: null, preEpoch: false } });
