@@ -37,12 +37,17 @@
 // =============================================================================
 import { Prisma, ReasonPresetKind, StationType, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, YarnMovementKind } from "@prisma/client";
 import { yarnInboundKinds } from "../src/services/helpers/yarn-sign.helper";
+import { WAREHOUSE_STOCK_STATUSES } from "../src/services/helpers/warehouse-stock.helper";
 import { fixtureHedefEngeli } from "./lib/hedef-db-kapisi";
 /** İplik mutabakatı işareti TEK KAYNAKTAN (`yarnMovementSign`) — elle liste devere 1b'de kırılırdı (§4.9-1). */
 const YARN_INBOUND_SQL = yarnInboundKinds().map((k) => `'${k}'`).join(",");
+/** Stok kümesi TS tek kaynağından — §46 elle liste taşımaz (`consistency-check.sql` ikizi §46t ile ölçülür). */
+const STOK_KUMESI_SQL = WAREHOUSE_STOCK_STATUSES.map((st) => `'${st}'`).join(", ");
 import { notFixtureSql, notFixtureItemOfRollSql } from "./lib/fikstur-imzasi";
 import { atlamaDefteri } from "./lib/atlama";
 import prisma from "../src/lib/prisma";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { LEDGER_HORIZON_DAY } from "../src/constants/ledger-horizon";
 import { DISPOSITION_NOTE_PREFIXES } from "../src/services/helpers/roll-disposition.helper";
 import { chequeCashEventTypesSql, chequeCashInflowSql } from "../src/services/helpers/cheque-cash-events.helper";
@@ -975,9 +980,9 @@ WHERE e.kind = 'CONSUMED'
 SELECT r.id::text AS kayit, r.barcode, r.status::text AS durum, i."createdAt"::text AS giris
 FROM rolls r
 JOIN warehouse_movements i ON i."rollId" = r.id AND i."reasonCode" = 'PRODUCTION_ISSUE' AND i."reversesMovementId" IS NULL
-WHERE r.status IN ('STOCK', 'WAREHOUSE', 'A1_STOCK', 'RETURNED_FROM_SUBCONTRACTOR')
+WHERE r.status IN (${STOK_KUMESI_SQL})
   AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = i.id)
-  AND NOT EXISTS (SELECT 1 FROM warehouse_movements m2 WHERE m2."rollId" = r.id AND m2.id <> i.id AND m2."createdAt" >= i."createdAt")
+  AND NOT EXISTS (SELECT 1 FROM warehouse_movements m2 WHERE m2."rollId" = r.id AND (m2."createdAt", m2.id) > (i."createdAt", i.id))
 ORDER BY i."createdAt" DESC
 LIMIT 50`,
     kapsam: { ne: "üretime alma satırı olan top", sql: `SELECT COUNT(DISTINCT "rollId")::int AS n FROM warehouse_movements WHERE "reasonCode" = 'PRODUCTION_ISSUE'` },
@@ -1267,7 +1272,7 @@ WHERE EXISTS (
 // ─────────────────────────────────────────────────────────────────────────────
 const TAG = `TEST-CONS-${process.pid}`;
 /** Fikstürün DOLDURDUĞU bölümler — fikstür kipinde bu kümede kapsam 0 ⏭ değil ❌'dır. */
-const FIKSTUR_KAPSAR: ReadonlySet<string> = new Set(["34", "35", "36", "37", "38", "39", "40", "41"]);
+const FIKSTUR_KAPSAR: ReadonlySet<string> = new Set(["34", "35", "36", "37", "38", "39", "40", "41", "46"]);
 const FIKSTURSUZ_SONDA = process.env.TEKSERP_SONDA_CONS_FIKSTURSUZ === "1";
 
 /** Kurulan kimlikler — `finally` yalnız bunları siler; yarım kurulumda da eksiksiz koşar. */
@@ -1284,9 +1289,10 @@ interface LeventFiksturKimlikleri {
   cancelEvent: string[];
   yarnMovement: string[];
   yarnStock: string[];
+  roll: string[];
 }
 function bosKimlikler(): LeventFiksturKimlikleri {
-  return { station: [], machine: [], item: [], warpSpec: [], warehouse: [], reasonPreset: [], yarnLot: [], warpBeam: [], woundEvent: [], cancelEvent: [], yarnMovement: [], yarnStock: [] };
+  return { station: [], machine: [], item: [], warpSpec: [], warehouse: [], reasonPreset: [], yarnLot: [], warpBeam: [], woundEvent: [], cancelEvent: [], yarnMovement: [], yarnStock: [], roll: [] };
 }
 
 async function kurLeventFiksturu(k: LeventFiksturKimlikleri): Promise<void> {
@@ -1344,10 +1350,57 @@ async function kurLeventFiksturu(k: LeventFiksturKimlikleri): Promise<void> {
   // 1000 − 120 + 5 − 80 + 80 (§27 Σ ile birebir)
   const ys = await prisma.yarnStock.create({ data: { itemId: yarn.id, warehouseId: wh.id, balanceKg: 885 }, select: { id: true } });
   k.yarnStock.push(ys.id);
+
+  // §46 kapsamı: üretime alınıp Top Çıkar'la rafına dönen SAĞLIKLI top (giriş satırı + bağlı ters).
+  const kumas = await prisma.item.create({ data: { code: `${TAG}-KM`, name: `${TAG} kumaş`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+  k.item.push(kumas.id);
+  const top = await prisma.roll.create({ data: { barcode: `${TAG}-R46`, itemId: kumas.id, initialQty: 50, currentQty: 50, status: "STOCK", warehouseId: wh.id }, select: { id: true } });
+  k.roll.push(top.id);
+  const giris = await prisma.warehouseMovement.create({
+    data: { rollId: top.id, eventType: "PRODUCTION", qty: 50, fromWarehouseId: wh.id, fromStatus: "STOCK", reasonCode: "PRODUCTION_ISSUE", createdAt: new Date(Date.now() - 2000) },
+    select: { id: true },
+  });
+  await prisma.warehouseMovement.create({
+    data: { rollId: top.id, eventType: "PRODUCTION", qty: 50, toWarehouseId: wh.id, toStatus: "STOCK", reasonCode: "ROLL_DETACH", reversesMovementId: giris.id, createdAt: new Date(Date.now() - 1000) },
+  });
+}
+
+class GeriAl extends Error {}
+/**
+ * §46 sorgusunun KENDİSİ sondalanır (geri alınan tx): stoktaki topun son satırı açık üretime alma ve aynı ms'te
+ * daha KÜÇÜK kimlikli önceki bir satır var — bu satır açığı gizlememeli (kronoloji `(createdAt, id)`).
+ */
+async function sonda46(): Promise<void> {
+  const s = SECTIONS.find((x) => x.id === "46")!;
+  let bulundu = -1;
+  try {
+    await prisma.$transaction(async (tx) => {
+      const wh = await tx.warehouse.create({ data: { code: `${TAG}-S46`, name: `${TAG} sonda deposu` }, select: { id: true } });
+      const it = await tx.item.create({ data: { code: `${TAG}-S46`, name: `${TAG} sonda kumaş`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+      const top = await tx.roll.create({ data: { barcode: `${TAG}-S46`, itemId: it.id, initialQty: 50, currentQty: 50, status: "STOCK", warehouseId: wh.id }, select: { id: true } });
+      const an = new Date(Date.now() - 60_000);
+      await tx.warehouseMovement.create({ data: { id: "00000000-0000-4000-8000-000000000046", rollId: top.id, eventType: "ENTRY", qty: 50, toWarehouseId: wh.id, toStatus: "STOCK", reasonCode: "ENTRY_RECEIPT", createdAt: an } });
+      await tx.warehouseMovement.create({ data: { id: "ffffffff-ffff-4fff-bfff-ffffffffff46", rollId: top.id, eventType: "PRODUCTION", qty: 50, fromWarehouseId: wh.id, fromStatus: "STOCK", reasonCode: "PRODUCTION_ISSUE", createdAt: an } });
+      const rows = await tx.$queryRaw<Array<{ kayit: string }>>(Prisma.raw(s.sql));
+      bulundu = rows.filter((r) => r.kayit === top.id).length;
+      throw new GeriAl();
+    });
+  } catch (e) {
+    if (!(e instanceof GeriAl)) throw e;
+  }
+  check("§46s ⭐ sonda: stoktaki topun son satırı açık üretime alma — aynı ms'te küçük kimlikli önceki satır onu GİZLEMEZ", bulundu === 1, `bulunan ${bulundu}`);
+  const sqlDosya = readFileSync(join(__dirname, "consistency-check.sql"), "utf8");
+  const b46 = sqlDosya.slice(sqlDosya.indexOf("== 46)"));
+  const liste = /r\.status IN \(([^)]+)\)/.exec(b46)?.[1]?.split(",").map((x) => x.trim().replace(/'/g, "")) ?? [];
+  check("§46t consistency-check.sql §46 stok kümesi TS `WAREHOUSE_STOCK_STATUSES` ile aynı; kronoloji `(createdAt, id)`",
+    liste.length === WAREHOUSE_STOCK_STATUSES.length && WAREHOUSE_STOCK_STATUSES.every((x) => liste.includes(x)) && b46.includes('(m2."createdAt", m2.id) > (i."createdAt", i.id)'),
+    liste.join(","));
 }
 
 /** Yalnız kurulanı, kimlikle, FK sırasında siler (iptal olayı sardığı olaydan ÖNCE — Restrict). */
 async function temizleLeventFiksturu(k: LeventFiksturKimlikleri): Promise<void> {
+  await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: k.roll } } });
+  await prisma.roll.deleteMany({ where: { id: { in: k.roll } } });
   await prisma.yarnMovement.deleteMany({ where: { id: { in: k.yarnMovement } } });
   await prisma.yarnStock.deleteMany({ where: { id: { in: k.yarnStock } } });
   await prisma.warpBeamEvent.deleteMany({ where: { id: { in: k.cancelEvent } } });
@@ -1395,6 +1448,7 @@ async function main(): Promise<void> {
       console.log(`ℹ levent fikstürü kuruldu (${TAG}: 3 levent · ${kimlikler.yarnMovement.length} iplik satırı · 1 lot)\n`);
     }
     await bolumleriKos(fiksturKipi);
+    if (fiksturKipi) await sonda46();
   } finally {
     await temizleLeventFiksturu(kimlikler);
   }

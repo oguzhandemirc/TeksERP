@@ -549,14 +549,14 @@ WHERE e.kind = 'CONSUMED'
 -- Üretime alınan top stok kümesine yalnız bir KAYITLA döner: bağlı ters (`ROLL_DETACH`), karşı olay
 -- (`DISPOSITION` · `RESCUE` · `PRODUCTION_RECEIPT`) ya da sonraki bir hareket. Son satırı hâlâ açık
 -- `PRODUCTION_ISSUE` olan stok topu tersi yazılmadan rafa dönmüştür ve defter Σ'sı onu "üretimde" sayar
--- (ölçüldü 2026-09-26: iş emri devrinden sonra Top Çıkar). Eşit damgalı başka satır varsa sıra belirsizdir,
--- "son" sayılmaz (yanlış kırmızı yerine sessizlik).
+-- (ölçüldü 2026-09-26: iş emri devrinden sonra Top Çıkar). "Son" defterin kanonik sırasıyla `(createdAt, id)`:
+-- aynı ms'teki önceki satır açığı gizlemez. Stok kümesi TS `WAREHOUSE_STOCK_STATUSES` ikizi (test_consistency §46t).
 SELECT r.id::text AS kayit, r.barcode, r.status::text AS durum, i."createdAt"::text AS giris
 FROM rolls r
 JOIN warehouse_movements i ON i."rollId" = r.id AND i."reasonCode" = 'PRODUCTION_ISSUE' AND i."reversesMovementId" IS NULL
 WHERE r.status IN ('STOCK', 'WAREHOUSE', 'A1_STOCK', 'RETURNED_FROM_SUBCONTRACTOR')
   AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = i.id)
-  AND NOT EXISTS (SELECT 1 FROM warehouse_movements m2 WHERE m2."rollId" = r.id AND m2.id <> i.id AND m2."createdAt" >= i."createdAt")
+  AND NOT EXISTS (SELECT 1 FROM warehouse_movements m2 WHERE m2."rollId" = r.id AND (m2."createdAt", m2.id) > (i."createdAt", i.id))
 ORDER BY i."createdAt" DESC
 LIMIT 50;
 
