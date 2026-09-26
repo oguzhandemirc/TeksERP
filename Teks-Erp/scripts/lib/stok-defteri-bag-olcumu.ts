@@ -167,7 +167,8 @@ export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
   },
   {
     dosya: "src/services/tambur.service.ts",
-    fonksiyon: "cutOpenFabric",
+    // Gövde iç metotta; dış `cutOpenFabric` yalnız token boğazı sarmalayıcısı.
+    fonksiyon: "cutOpenFabricInner",
     ad: "üretim kesimi çocuğu (WAREHOUSE doğar, satır yok) — GİRİŞ",
   },
   {

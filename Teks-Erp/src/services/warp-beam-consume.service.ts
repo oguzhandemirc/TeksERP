@@ -13,7 +13,7 @@ import { ApiResponse } from "../types/api.types";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "./helpers/warp-beam-event.helper";
 import { assertDismountAllowedTx, assertMountTrackingOnTx, warpLengthFromWeight } from "./helpers/warp-beam-mount.helper";
 import { assertCoversRemaining, BEAM_TERMINAL, closeToMeasuredTx, loadBeamTx, positiveM, readRemainingM, remainingMTx } from "./helpers/warp-beam-ledger.helper";
-import { assertWarpBeamConsumeReplayAlive } from "./helpers/token-replay.helper";
+import { assertWarpBeamConsumeReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { freshBeamDto } from "./warp-beam-mount.service";
 import type { WarpBeamDto } from "./warp-beam.service";
 
@@ -49,30 +49,26 @@ export interface ConsumeInput {
 
 type ConsumePrior = { beamId: string; kind: string; lengthM: Prisma.Decimal | null; reversal: { id: string } | null };
 
-const priorConsume = (clientToken: string): Promise<ConsumePrior | null> =>
-  prisma.warpBeamEvent.findUnique({ where: { clientToken }, select: { beamId: true, kind: true, lengthM: true, reversal: { select: { id: true } } } });
-
-/** Replay kararı: başka olay → 409 çarpışma · geri alınmış → 409 · başka metre → 409 çarpışma · aynı gövde → önceki kayıt. */
-async function replayConsume(id: string, lengthM: Prisma.Decimal, prior: ConsumePrior): Promise<ApiResponse<WarpBeamDto>> {
-  if (prior.beamId !== id || prior.kind !== "CONSUMED") throw AppError.conflict("Bu istemci anahtarı başka bir olaya ait", { code: "CLIENT_TOKEN_COLLISION" });
-  assertWarpBeamConsumeReplayAlive(prior);
-  if (!prior.lengthM?.eq(lengthM)) {
-    throw AppError.conflict(`Bu form daha önce ${prior.lengthM} m tüketim olarak kaydedilmiş — yeni tüketim için formu kapatıp yeniden açın.`, { code: "CLIENT_TOKEN_COLLISION", existingLengthM: Number(prior.lengthM), incomingLengthM: Number(lengthM) });
-  }
-  return { success: true, data: await freshBeamDto(id), message: "Tüketim zaten kayıtlı (yeniden gönderim)" };
-}
+/** Tüketim replay'i: aynı levent + CONSUMED + aynı metre → önceki kayıt; geri alınmış → 409. */
+const consumeReplay = (id: string, lengthM: Prisma.Decimal) =>
+  tokenReplay<ConsumePrior, ApiResponse<WarpBeamDto>>({
+    find: (db, clientToken) => db.warpBeamEvent.findUnique({ where: { clientToken }, select: { beamId: true, kind: true, lengthM: true, reversal: { select: { id: true } } } }),
+    alive: assertWarpBeamConsumeReplayAlive,
+    identity: (p) => [
+      { ad: "beamId", mevcut: p.beamId, gelen: id },
+      { ad: "kind", mevcut: p.kind, gelen: "CONSUMED" },
+      { ad: "lengthM", mevcut: p.lengthM, gelen: lengthM },
+    ],
+    collision: "Bu form daha önce başka bir tüketim olarak kaydedilmiş — yeni tüketim için formu kapatıp yeniden açın.",
+    respond: async () => ({ success: true, data: await freshBeamDto(id), message: "Tüketim zaten kayıtlı (yeniden gönderim)" }),
+  });
 
 /** Elle tüketim (CONSUMED) — READY ya da MOUNTED; kalanı aşamaz. Faz 4'te top çıkışından otomatik. */
 export async function consumeBeam(id: string, input: ConsumeInput, userId?: string): Promise<ApiResponse<WarpBeamDto>> {
   const lengthM = positiveM(input.lengthM, "Tüketilen metre");
   const token = input.clientToken || null;
-  if (token) {
-    const prior = await priorConsume(token);
-    if (prior) return replayConsume(id, lengthM, prior);
-  }
-  let result: { ev: { id: string }; beamNo: string; left: Prisma.Decimal };
-  try {
-    result = await prisma.$transaction(async (tx) => {
+  return consumeReplay(id, lengthM).run(token, async () => {
+    const result = await prisma.$transaction(async (tx) => {
       await assertMountTrackingOnTx(tx);
       const beam = await loadBeamTx(tx, id);
       liveOrThrow(beam);
@@ -98,15 +94,9 @@ export async function consumeBeam(id: string, input: ConsumeInput, userId?: stri
       });
       return { ev, beamNo: beam.beamNo, left: remaining.minus(lengthM) };
     });
-  } catch (e) {
-    // Ön-okuma kilitsiz: aynı token'lı eşzamanlı denemenin kaybedeni kazananın satırını kalan kuralında ya da token
-    // P2002'sinde görür — hangi hatayla düşerse düşsün cevap token'dan gelir (replay), iş kuralından değil.
-    const prior = token ? await priorConsume(token) : null;
-    if (!prior) throw e;
-    return replayConsume(id, lengthM, prior);
-  }
-  await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: "CONSUMED", data: { beamId: id, lengthM: Number(lengthM), lengthSource: input.lengthSource } });
-  return { success: true, data: await freshBeamDto(id), message: `${result.beamNo}: ${lengthM} m tüketildi — kalan ${result.left} m` };
+    await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: "CONSUMED", data: { beamId: id, lengthM: Number(lengthM), lengthSource: input.lengthSource } });
+    return { success: true, data: await freshBeamDto(id), message: `${result.beamNo}: ${lengthM} m tüketildi — kalan ${result.left} m` };
+  });
 }
 
 export interface AdjustInput {

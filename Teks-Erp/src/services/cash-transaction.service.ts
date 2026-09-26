@@ -24,7 +24,7 @@ import { D, resolveExchangeRateTx } from "./helpers/finance.helper";
 import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./helpers/cash-period-guard.helper";
 import { applyCashTxTx, cancelCashTxTx, KIND_DIRECTION, nextCashNoTx, type AccountRef } from "./helpers/cash-ledger.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { tokenReplay } from "./helpers/token-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 
 // Tür→yön, belge no ve bakiye yazımı TEK YAZAR helper'ında (`cash-ledger.helper`); burada yeniden dışa verilir.
@@ -69,21 +69,64 @@ export interface TransferInput {
  * gibi servis tarafında varsayılan atanan alanlar buraya KONMAZ: saklanan değer
  * doludur, gelen `undefined`dır ve kapı MEŞRU tekrarları 409'a düşürürdü.
  */
-function assertCashTxnReplay(
-  existing: { id: string; kind: CashTxnKind; amount: Prisma.Decimal; cashBoxId: string | null; bankAccountId: string | null },
-  input: CashTxnInput,
-): void {
-  assertReplayPayloadMatches(
-    [
-      { ad: "kind", mevcut: existing.kind, gelen: input.kind },
-      { ad: "amount", mevcut: existing.amount, gelen: input.amount },
-      { ad: "cashBoxId", mevcut: existing.cashBoxId, gelen: input.cashBoxId },
-      { ad: "bankAccountId", mevcut: existing.bankAccountId, gelen: input.bankAccountId },
-    ],
-    "Bu istemci anahtarı FARKLI bir kasa hareketi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
-    { cashTransactionId: existing.id },
+type CashReplayRow = { id: string; docNo: string; kind: CashTxnKind; amount: Prisma.Decimal; cashBoxId: string | null; bankAccountId: string | null; status: PaymentStatus };
+const CASH_REPLAY_SELECT = { id: true, docNo: true, kind: true, amount: true, cashBoxId: true, bankAccountId: true, status: true } as const;
+
+/** 4. durum: iptal edilmiş hareketin token'ı "zaten oluşturulmuş" diye dönmez (§5-4). */
+function assertCashReplayAlive(rows: Array<{ docNo: string; status: PaymentStatus }>): void {
+  const dead = rows.find((r) => r.status === PaymentStatus.CANCELLED);
+  if (!dead) return;
+  throw AppError.conflict(
+    `Bu form daha önce kaydedilmiş ve kayıt İPTAL edilmiş (${dead.docNo}) — aynı gönderim tekrar edilemez. Yeni kayıt için formu kapatıp yeniden açın.`,
+    { code: "CASH_TXN_CANCELLED", docNo: dead.docNo },
   );
 }
+
+const cashTxnReplay = (input: CashTxnInput) =>
+  tokenReplay<CashReplayRow, ApiResponse<{ id: string; docNo: string }>>({
+    find: (db, clientToken) => db.cashTransaction.findUnique({ where: { clientToken }, select: CASH_REPLAY_SELECT }),
+    alive: (p) => assertCashReplayAlive([p]),
+    identity: (p) => [
+      { ad: "kind", mevcut: p.kind, gelen: input.kind },
+      { ad: "amount", mevcut: p.amount, gelen: input.amount },
+      { ad: "cashBoxId", mevcut: p.cashBoxId, gelen: input.cashBoxId },
+      { ad: "bankAccountId", mevcut: p.bankAccountId, gelen: input.bankAccountId },
+    ],
+    collision: "Bu istemci anahtarı FARKLI bir kasa hareketi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+    collisionEk: (p) => ({ cashTransactionId: p.id }),
+    respond: (p) => ({ success: true, data: { id: p.id, docNo: p.docNo }, message: "Kayıt zaten oluşturulmuş." }),
+  });
+
+type TransferReplayRow = { out: CashReplayRow; legs: CashReplayRow[] };
+
+/** Virman replay'i: token ÇIKAN bacaktadır; gövde kapısı kaynak + hedef + tutar (§5-3), iptal edilmiş grup 409. */
+const transferReplay = (from: AccountRef, to: AccountRef, amount: Prisma.Decimal) =>
+  tokenReplay<TransferReplayRow, ApiResponse<{ ids: string[]; docNos: string[] }>>({
+    find: async (db, clientToken) => {
+      const out = await db.cashTransaction.findUnique({ where: { clientToken }, select: { ...CASH_REPLAY_SELECT, transferGroupId: true } });
+      if (!out?.transferGroupId) return null;
+      const legs = await db.cashTransaction.findMany({ where: { transferGroupId: out.transferGroupId }, select: CASH_REPLAY_SELECT });
+      return { out, legs };
+    },
+    alive: (p) => assertCashReplayAlive(p.legs),
+    identity: (p) => {
+      const inLeg = p.legs.find((l) => l.kind === CashTxnKind.TRANSFER_IN);
+      return [
+        { ad: "fromCashBoxId", mevcut: p.out.cashBoxId, gelen: from.cashBoxId },
+        { ad: "fromBankAccountId", mevcut: p.out.bankAccountId, gelen: from.bankAccountId },
+        { ad: "toCashBoxId", mevcut: inLeg?.cashBoxId ?? null, gelen: to.cashBoxId },
+        { ad: "toBankAccountId", mevcut: inLeg?.bankAccountId ?? null, gelen: to.bankAccountId },
+        { ad: "amount", mevcut: p.out.amount, gelen: amount },
+      ];
+    },
+    collision: "Bu form daha önce başka bir virman olarak kaydedilmiş. Yeni virman için formu kapatıp yeniden açın.",
+    collisionEk: (p) => ({ docNos: p.legs.map((l) => l.docNo) }),
+    // Yanıt her zaman [ÇIKAN, GİREN] — sırasız cached yanıt replay'i normal yanıttan ayırt edilebilir yapardı.
+    respond: (p) => {
+      const rows = [...p.legs].sort((a, b) => (a.kind === CashTxnKind.TRANSFER_OUT ? -1 : b.kind === CashTxnKind.TRANSFER_OUT ? 1 : 0));
+      return { success: true, data: { ids: rows.map((r) => r.id), docNos: rows.map((r) => r.docNo) }, message: "Virman zaten kaydedilmiş." };
+    },
+  });
 
 const nextCashNo = nextCashNoTx;
 
@@ -146,35 +189,6 @@ function compareLockKeys(a: string, b: string): number {
 
 export class CashTransactionService {
   /**
-   * Token → kayıtlı virmanın CACHED yanıtı (idempotent replay). Ön kontrol ve
-   * eşzamanlı-çarpışma catch'i AYNI helper'ı çağırır — iki yol iki ayrı select
-   * yazsaydı cached yanıtın şekli/sırası sessizce ayrışırdı.
-   *
-   * ⚠️ SIRA DETERMİNİSTİK: ÇIKAN (TRANSFER_OUT) önce, GİREN sonra — normal
-   * yanıtın `[outRow, inRow]` sırasının aynısı. `findMany` sırasız dönebilir;
-   * sırasız cached yanıt, replay'i normal yanıttan ayırt edilebilir yapardı.
-   */
-  private async loadTransferByToken(
-    clientToken: string,
-  ): Promise<ApiResponse<{ ids: string[]; docNos: string[] }> | null> {
-    const existing = await prisma.cashTransaction.findUnique({
-      where: { clientToken },
-      select: { transferGroupId: true },
-    });
-    if (!existing?.transferGroupId) return null;
-    const rows = await prisma.cashTransaction.findMany({
-      where: { transferGroupId: existing.transferGroupId },
-      select: { id: true, docNo: true, kind: true },
-    });
-    rows.sort((a, b) => (a.kind === CashTxnKind.TRANSFER_OUT ? -1 : b.kind === CashTxnKind.TRANSFER_OUT ? 1 : 0));
-    return {
-      success: true,
-      data: { ids: rows.map((r) => r.id), docNos: rows.map((r) => r.docNo) },
-      message: "Virman zaten kaydedilmiş.",
-    };
-  }
-
-  /**
    * Masraf / gelir / açılış fişi.
    *
    * ⚠️ Para birimi HESAPTAN gelir, girdide SORULMAZ: kasa tek para birimlidir
@@ -185,106 +199,75 @@ export class CashTransactionService {
     const amount = D(input.amount);
     if (amount.lte(0)) throw AppError.badRequest("Tutar sıfırdan büyük olmalı.");
 
-    if (input.clientToken) {
-      const existing = await prisma.cashTransaction.findUnique({
-        where: { clientToken: input.clientToken },
-        select: { id: true, docNo: true, kind: true, amount: true, cashBoxId: true, bankAccountId: true },
-      });
-      if (existing) {
-        assertCashTxnReplay(existing, input);
-        return {
-          success: true,
-          data: { id: existing.id, docNo: existing.docNo },
-          message: "Kayıt zaten oluşturulmuş.",
-        };
-      }
-    }
+    // R: token her kuraldan önce okunur ve hareket hangi hatayla düşerse düşsün (açılış tekilliği, bakiye,
+    // token P2002) yeniden okunur — kaybeden deneme iş kuralı 409'unu değil önceki kaydı alır.
+    return cashTxnReplay(input).run(input.clientToken, () => this.createFresh(input, amount, userId));
+  }
 
+  private async createFresh(input: CashTxnInput, amount: Prisma.Decimal, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
     const txnDate = input.txnDate ?? new Date();
     // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
     // PARALEL istek ikisi de "token yok" görür, ikisi de INSERT eder ve biri
     // `clientToken` unique'ine çarpar. O P2002 RETRY EDİLMEZ (retry aynı
     // token'ı 5 tur boşa yazardı → yanıltıcı "Barkod üretimi ... başarısız"
-    // 409'u); aşağıdaki catch onu cached yanıta çevirir (purchase-order emsali).
-    let result: { id: string; docNo: string };
-    try {
-      result = await withBarcodeRetry(
-        () =>
-          prisma.$transaction(async (tx) => {
-        const acc = await loadAccount(tx, input, "Kasa hareketi");
+    // 409'u); boğaz onu önceki kayda çevirir (purchase-order emsali).
+    const result = await withBarcodeRetry(
+      () =>
+        prisma.$transaction(async (tx) => {
+      const acc = await loadAccount(tx, input, "Kasa hareketi");
 
-        // ⚠️ KASA/BANKA DÖNEM KİLİDİ (K-1, 2026-08-14). `txnDate` kullanıcı
-        // girdisidir ve kasa defteri RAPORLANMIŞ bir sayfadır — bu guard
-        // gelmeden geçmişe tarihli bir masraf/gelir fişi, Excel'e alınmış kasa
-        // defterini sessizce değiştirebiliyordu (Sınıf 1 taramasının "sessiz
-        // ikinci üye" bulgusu). Kilit uzayı 8028 (cari 8026'dan ayrı).
-        await assertCashPeriodOpenTx(tx, {
-          cashBoxId: input.cashBoxId ?? null,
-          bankAccountId: input.bankAccountId ?? null,
-          txnDate,
+      // ⚠️ KASA/BANKA DÖNEM KİLİDİ (K-1, 2026-08-14). `txnDate` kullanıcı
+      // girdisidir ve kasa defteri RAPORLANMIŞ bir sayfadır — bu guard
+      // gelmeden geçmişe tarihli bir masraf/gelir fişi, Excel'e alınmış kasa
+      // defterini sessizce değiştirebiliyordu (Sınıf 1 taramasının "sessiz
+      // ikinci üye" bulgusu). Kilit uzayı 8028 (cari 8026'dan ayrı).
+      await assertCashPeriodOpenTx(tx, {
+        cashBoxId: input.cashBoxId ?? null,
+        bankAccountId: input.bankAccountId ?? null,
+        txnDate,
+      });
+
+      const rate =
+        input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, acc.currency, txnDate);
+      if (rate == null) {
+        throw AppError.badRequest(
+          `${acc.currency} için ${txnDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin.`,
+        );
+      }
+      if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
+
+      // Açılış hesap başına TEK — DB'de partial unique ile kilitli; burada
+      // anlamlı mesaj üretilir (sed kullanıcıya "unique ihlali" derdi).
+      if (input.kind === CashTxnKind.OPENING) {
+        const dup = await tx.cashTransaction.findFirst({
+          where: {
+            kind: CashTxnKind.OPENING,
+            status: { not: PaymentStatus.CANCELLED },
+            ...(input.cashBoxId ? { cashBoxId: input.cashBoxId } : { bankAccountId: input.bankAccountId }),
+          },
+          select: { docNo: true },
         });
-
-        const rate =
-          input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, acc.currency, txnDate);
-        if (rate == null) {
-          throw AppError.badRequest(
-            `${acc.currency} için ${txnDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin.`,
+        if (dup) {
+          throw AppError.conflict(
+            `"${acc.name}" için açılış bakiyesi zaten girilmiş (${dup.docNo}). Düzeltmek için önce onu iptal edin.`,
           );
         }
-        if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
-
-        // Açılış hesap başına TEK — DB'de partial unique ile kilitli; burada
-        // anlamlı mesaj üretilir (sed kullanıcıya "unique ihlali" derdi).
-        if (input.kind === CashTxnKind.OPENING) {
-          const dup = await tx.cashTransaction.findFirst({
-            where: {
-              kind: CashTxnKind.OPENING,
-              status: { not: PaymentStatus.CANCELLED },
-              ...(input.cashBoxId ? { cashBoxId: input.cashBoxId } : { bankAccountId: input.bankAccountId }),
-            },
-            select: { docNo: true },
-          });
-          if (dup) {
-            throw AppError.conflict(
-              `"${acc.name}" için açılış bakiyesi zaten girilmiş (${dup.docNo}). Düzeltmek için önce onu iptal edin.`,
-            );
-          }
-        }
-
-        // Satır + bakiye TEK YAZARDAN (eksi-kasa kapısı çıkan kasa hareketinde ve dönem kapısı helper'ın içinde).
-        const row = await applyCashTxTx(tx, {
-          kind: input.kind, cashBoxId: input.cashBoxId ?? null, bankAccountId: input.bankAccountId ?? null,
-          currency: acc.currency, exchangeRate: rate, amount, txnDate,
-          category: input.category, description: input.description, reference: input.reference,
-          createdById: userId ?? null, clientToken: input.clientToken ?? null,
-        });
-        return { id: row.id, docNo: row.docNo };
-          }),
-        undefined,
-        // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
-        // P2002'si retry EDİLMEZ — catch cached yanıta çevirir.
-        (err) => !isClientTokenP2002(err),
-      );
-    } catch (err) {
-      // Catch tx DIŞINDA (aborted-transaction tuzağı). Cached yanıt ön
-      // kontroldekiyle AYNI şekil + AYNI mesaj — replay ayırt edilemez.
-      if (input.clientToken && isClientTokenP2002(err)) {
-        const existing = await prisma.cashTransaction.findUnique({
-          where: { clientToken: input.clientToken },
-          select: { id: true, docNo: true, kind: true, amount: true, cashBoxId: true, bankAccountId: true },
-        });
-        if (existing) {
-          // Ön kontrolle AYNI kapı: yarışı kaybeden istek de farklı gövdeyse 409 alır.
-          assertCashTxnReplay(existing, input);
-          return {
-            success: true,
-            data: { id: existing.id, docNo: existing.docNo },
-            message: "Kayıt zaten oluşturulmuş.",
-          };
-        }
       }
-      throw err;
-    }
+
+      // Satır + bakiye TEK YAZARDAN (eksi-kasa kapısı çıkan kasa hareketinde ve dönem kapısı helper'ın içinde).
+      const row = await applyCashTxTx(tx, {
+        kind: input.kind, cashBoxId: input.cashBoxId ?? null, bankAccountId: input.bankAccountId ?? null,
+        currency: acc.currency, exchangeRate: rate, amount, txnDate,
+        category: input.category, description: input.description, reference: input.reference,
+        createdById: userId ?? null, clientToken: input.clientToken ?? null,
+      });
+      return { id: row.id, docNo: row.docNo };
+        }),
+      undefined,
+      // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
+      // P2002'si retry EDİLMEZ — catch cached yanıta çevirir.
+      (err) => !isClientTokenP2002(err),
+    );
 
     void AuditService.log({
       userId,
@@ -320,78 +303,71 @@ export class CashTransactionService {
       throw AppError.badRequest("Kaynak ve hedef hesap aynı olamaz.");
     }
 
-    if (input.clientToken) {
-      const cached = await this.loadTransferByToken(input.clientToken);
-      if (cached) return cached;
-    }
+    // R: virmanın gövde kapısı kaynak + hedef + tutar; iptal edilmiş virmanın token'ı 409.
+    return transferReplay(from, to, amount).run(input.clientToken, () => this.transferFresh(input, { from, to, amount }, userId));
+  }
 
+  private async transferFresh(
+    input: TransferInput,
+    { from, to, amount }: { from: AccountRef; to: AccountRef; amount: Prisma.Decimal },
+    userId?: string,
+  ): Promise<ApiResponse<{ ids: string[]; docNos: string[] }>> {
     const txnDate = input.txnDate ?? new Date();
     // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
     // PARALEL istek ikisi de "token yok" görür, ikisi de INSERT eder ve biri
     // `clientToken` unique'ine çarpar (token yalnız ÇIKAN bacakta). O P2002
-    // RETRY EDİLMEZ; aşağıdaki catch cached yanıta çevirir (PO emsali).
-    let result: { ids: string[]; docNos: string[]; groupId: string };
-    try {
-      result = await withBarcodeRetry(
-        () =>
-          prisma.$transaction(async (tx) => {
-        const fromAcc = await loadAccount(tx, from, "Çıkan hesap");
-        const toAcc = await loadAccount(tx, to, "Giren hesap");
+    // RETRY EDİLMEZ; boğaz onu önceki kayda çevirir (PO emsali).
+    const result = await withBarcodeRetry(
+      () =>
+        prisma.$transaction(async (tx) => {
+      const fromAcc = await loadAccount(tx, from, "Çıkan hesap");
+      const toAcc = await loadAccount(tx, to, "Giren hesap");
 
-        // ⚠️ KASA/BANKA DÖNEM KİLİDİ (K-1) — İKİ hesap → ÇOĞUL helper, iki
-        // tekil çağrı DEĞİL (Sınıf 3: sırasız çift kilit = ayna virmanda
-        // deadlock; çoğul helper anahtarları kendisi sıralar).
-        await assertCashPeriodsOpenTx(tx, [
-          { ...from, txnDate },
-          { ...to, txnDate },
-        ]);
+      // ⚠️ KASA/BANKA DÖNEM KİLİDİ (K-1) — İKİ hesap → ÇOĞUL helper, iki
+      // tekil çağrı DEĞİL (Sınıf 3: sırasız çift kilit = ayna virmanda
+      // deadlock; çoğul helper anahtarları kendisi sıralar).
+      await assertCashPeriodsOpenTx(tx, [
+        { ...from, txnDate },
+        { ...to, txnDate },
+      ]);
 
-        if (fromAcc.currency !== toAcc.currency) {
-          throw AppError.badRequest(
-            `"${fromAcc.name}" ${fromAcc.currency}, "${toAcc.name}" ${toAcc.currency} — farklı para birimleri arasında virman yapılamaz (kur işlemi ayrı kaydedilmeli).`,
-          );
-        }
-
-        const rate = await resolveExchangeRateTx(tx, fromAcc.currency, txnDate);
-        if (rate == null) {
-          throw AppError.badRequest(
-            `${fromAcc.currency} için ${txnDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin.`,
-          );
-        }
-        const amountTry = amount.mul(rate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-        const groupId = crypto.randomUUID();
-        // İki bacak KANONİK kilit sırasında yazılır (ABBA kapalı); her bacak satır + bakiye tek yazardan.
-        // Belge no sırası bacak sırasına göre değişebilir; yanıt her zaman [ÇIKAN, GİREN] döner.
-        const legs = [
-          { ref: from, kind: CashTxnKind.TRANSFER_OUT, acc: fromAcc, description: input.description?.trim() || `Virman → ${toAcc.name}`, clientToken: input.clientToken ?? null },
-          { ref: to, kind: CashTxnKind.TRANSFER_IN, acc: toAcc, description: input.description?.trim() || `Virman ← ${fromAcc.name}`, clientToken: null },
-        ].sort((x, y) => compareLockKeys(accountLockKey(x.ref), accountLockKey(y.ref)));
-        const written = new Map<CashTxnKind, { id: string; docNo: string }>();
-        for (const leg of legs) {
-          written.set(leg.kind, await applyCashTxTx(tx, {
-            kind: leg.kind, cashBoxId: leg.ref.cashBoxId ?? null, bankAccountId: leg.ref.bankAccountId ?? null,
-            currency: leg.acc.currency, exchangeRate: rate, amount, txnDate, description: leg.description,
-            transferGroupId: groupId, createdById: userId ?? null, clientToken: leg.clientToken,
-          }));
-        }
-        const outRow = written.get(CashTxnKind.TRANSFER_OUT)!;
-        const inRow = written.get(CashTxnKind.TRANSFER_IN)!;
-        return { ids: [outRow.id, inRow.id], docNos: [outRow.docNo, inRow.docNo], groupId };
-          }),
-        undefined,
-        // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
-        // P2002'si retry EDİLMEZ — catch cached yanıta çevirir.
-        (err) => !isClientTokenP2002(err),
-      );
-    } catch (err) {
-      // Catch tx DIŞINDA (aborted-transaction tuzağı). Cached yanıt ön
-      // kontrolle AYNI helper'dan gelir — şekil + sıra + mesaj birebir.
-      if (input.clientToken && isClientTokenP2002(err)) {
-        const cached = await this.loadTransferByToken(input.clientToken);
-        if (cached) return cached;
+      if (fromAcc.currency !== toAcc.currency) {
+        throw AppError.badRequest(
+          `"${fromAcc.name}" ${fromAcc.currency}, "${toAcc.name}" ${toAcc.currency} — farklı para birimleri arasında virman yapılamaz (kur işlemi ayrı kaydedilmeli).`,
+        );
       }
-      throw err;
-    }
+
+      const rate = await resolveExchangeRateTx(tx, fromAcc.currency, txnDate);
+      if (rate == null) {
+        throw AppError.badRequest(
+          `${fromAcc.currency} için ${txnDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin.`,
+        );
+      }
+      const amountTry = amount.mul(rate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+      const groupId = crypto.randomUUID();
+      // İki bacak KANONİK kilit sırasında yazılır (ABBA kapalı); her bacak satır + bakiye tek yazardan.
+      // Belge no sırası bacak sırasına göre değişebilir; yanıt her zaman [ÇIKAN, GİREN] döner.
+      const legs = [
+        { ref: from, kind: CashTxnKind.TRANSFER_OUT, acc: fromAcc, description: input.description?.trim() || `Virman → ${toAcc.name}`, clientToken: input.clientToken ?? null },
+        { ref: to, kind: CashTxnKind.TRANSFER_IN, acc: toAcc, description: input.description?.trim() || `Virman ← ${fromAcc.name}`, clientToken: null },
+      ].sort((x, y) => compareLockKeys(accountLockKey(x.ref), accountLockKey(y.ref)));
+      const written = new Map<CashTxnKind, { id: string; docNo: string }>();
+      for (const leg of legs) {
+        written.set(leg.kind, await applyCashTxTx(tx, {
+          kind: leg.kind, cashBoxId: leg.ref.cashBoxId ?? null, bankAccountId: leg.ref.bankAccountId ?? null,
+          currency: leg.acc.currency, exchangeRate: rate, amount, txnDate, description: leg.description,
+          transferGroupId: groupId, createdById: userId ?? null, clientToken: leg.clientToken,
+        }));
+      }
+      const outRow = written.get(CashTxnKind.TRANSFER_OUT)!;
+      const inRow = written.get(CashTxnKind.TRANSFER_IN)!;
+      return { ids: [outRow.id, inRow.id], docNos: [outRow.docNo, inRow.docNo], groupId };
+        }),
+      undefined,
+      // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
+      // P2002'si retry EDİLMEZ — boğaz (`tokenReplay.run`) replay'e çevirir.
+      (err) => !isClientTokenP2002(err),
+    );
 
     void AuditService.log({
       userId,

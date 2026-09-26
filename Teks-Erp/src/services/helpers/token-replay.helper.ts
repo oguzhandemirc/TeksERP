@@ -28,7 +28,9 @@
 // =============================================================================
 
 import { OrderStatus, Prisma, RollStatus, WeavingOrderStatus } from "@prisma/client";
+import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { assertReplayPayloadMatches, type ReplayAlani } from "./idempotent-replay.helper";
 
 /**
  * Token başına replay serileştirmesinin advisory uzayı (2 argümanlı form).
@@ -45,6 +47,72 @@ export const CLIENT_TOKEN_LOCK_NS: number = 8036;
  */
 export async function lockClientTokenTx(tx: Prisma.TransactionClient, clientToken: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${CLIENT_TOKEN_LOCK_NS}::int, hashtext(${clientToken}))`;
+}
+
+// =============================================================================
+// TEK BOĞAZ — `tokenReplay` (`docs/design/TOKEN-REPLAY-KILIDI.md` §3)
+// =============================================================================
+// Replay cevabı yalnız `resolve`dan çıkar: önce 4. durum, sonra gövde kapısı (BOŞ OLAMAZ), sonra yanıt.
+// Kip çağrı yerinde seçilir: `run` = R (varsayılan) · `inTx` = K (8036 tx'in İLK ifadesi) · `behindLock`
+// = K′ (8036 ALMAZ; yolun mevcut kilidinin ARKASINDA okur). Yollar `scripts/lib/token-replay-beyan.ts`te.
+
+export interface TokenReplayPolicy<P, R> {
+  /** Token'la önceki kaydı TAZE okur (`prisma` ya da kilidi tutan tx). */
+  find: (db: Prisma.TransactionClient, clientToken: string) => Promise<P | null>;
+  /** 4. durum: kayıt sonradan iptal/geri alındıysa 409 fırlatır; ölü hâli olmayan model gerekçesini beyan eder. */
+  alive: ((prior: P) => void) | { neverDies: string };
+  /** Kimlik-kilit alanları (mevcut ↔ gelen) — boş liste programlama hatasıdır (`assertReplayPayloadMatches`). */
+  identity: (prior: P) => ReplayAlani[];
+  /** Kapı düşünce 409 `CLIENT_TOKEN_COLLISION` cümlesi: ne oldu + ne yapılır. */
+  collision: string | ((prior: P) => string);
+  collisionEk?: (prior: P) => Record<string, unknown>;
+  /** Önceki kayıttan BUGÜNKÜ başarı biçiminde yanıt (eski istemci replay'i başarı sayar). */
+  respond: (prior: P) => R | Promise<R>;
+}
+
+/**
+ * Boğazın dış yüzü. HİÇBİR metot önceki kaydı (P) ham döndürmez: replay yanıtı yalnız içerideki
+ * `resolve`dan (4. durum → gövde kapısı → respond) çıkar — "kapısız replay" tipte yazılamaz.
+ */
+export interface TokenReplay<R> {
+  /** R: ön-okuma → iş → iş HANGİ hatayla düşerse düşsün token yeniden okunur; kayıt varsa cevap ondan. */
+  run(clientToken: string | null | undefined, work: () => Promise<R>): Promise<R>;
+  /** K: 8036 kilidi + taze okuma + resolve; tx geri çağrısının İLK await'i olmalı. `null` = ilk deneme. */
+  inTx(tx: Prisma.TransactionClient, clientToken: string): Promise<R | null>;
+  /** K′: yalnız taze okuma + resolve — çağıran yolun mevcut kilidinin arkasında çağırır (8036 ALMAZ). */
+  behindLock(tx: Prisma.TransactionClient, clientToken: string): Promise<R | null>;
+  /** Kilitsiz okuma + resolve — HIZ YOLU ya da savunma dalı, kapı değil. */
+  replayIfAny(clientToken: string): Promise<R | null>;
+}
+
+export function tokenReplay<P, R>(policy: TokenReplayPolicy<P, R>): TokenReplay<R> {
+  const resolve = async (prior: P): Promise<R> => {
+    if (typeof policy.alive === "function") policy.alive(prior);
+    const message = typeof policy.collision === "function" ? policy.collision(prior) : policy.collision;
+    assertReplayPayloadMatches(policy.identity(prior), message, policy.collisionEk?.(prior));
+    return policy.respond(prior);
+  };
+  const resolved = async (prior: P | null): Promise<R | null> => (prior ? resolve(prior) : null);
+  return {
+    async run(clientToken, work) {
+      if (!clientToken) return work();
+      const once = await policy.find(prisma, clientToken);
+      if (once) return resolve(once);
+      try {
+        return await work();
+      } catch (err) {
+        const prior = await policy.find(prisma, clientToken).catch(() => null);
+        if (!prior) throw err;
+        return resolve(prior);
+      }
+    },
+    async inTx(tx, clientToken) {
+      await lockClientTokenTx(tx, clientToken);
+      return resolved(await policy.find(tx, clientToken));
+    },
+    behindLock: async (tx, clientToken) => resolved(await policy.find(tx, clientToken)),
+    replayIfAny: async (clientToken) => resolved(await policy.find(prisma, clientToken)),
+  };
 }
 
 /**

@@ -126,6 +126,7 @@ istemciler bunu işliyor. Sözleşme kırılmaz: backend önce çıkar, `minVers
 | **D2** | Ortak boğaz + zayıf (b): `withTokenReplay`, AST bekçisi ("`clientToken` alan her create yolu bu boğazdan geçer"), fason kabul ona taşınır (gövde kapısı eklenir) · #8 · #9 · #18 · #19 | R | Kasa replay'ine iptal kapısı eklenir (§5-4). |
 | **D3** | Kalan (a): #1 · #2 · #3 · #4 · #5 · #7 · #12 · #13 · #14 · #15 · #16 · #17 | R; kilidi olanlarda K′ | Mekanik; yol başına bir zorlanmış sıra bekçisi. |
 | **D4** | §5'in istemci ve retry kalemleri | — | Panel + tablet dilimi; sunucu dilimlerinden bağımsız. |
+| **D5** | 4. durum eksikleri (Payment · Invoice · PurchaseOrder · GoodsReceipt · WarehouseTransfer'in CANCELLED'ı replay'de görülmüyor; WorkOrder yalnız `isActive`) · yarışta ham P2002 (`createWarpBeam`, fason dokuma kabulü, dokuma işi) · predicate'siz retry (§5-2: mal kabul, depo transferi) · kalan token yollarının boğaza taşınması (KK1 ilk giriş, açık kumaş, Tambur elle top, toplama listesi) | R (boğaz) | D2 envanterinden (24 model, ~56 birim); beyan `scripts/lib/token-replay-beyan.ts`te `borc: "D5"`, cırcır `test_token_replay_bogaz` §6. |
 
 ## 5. Yan bulgular (sınıf dışı ya da sınıfa eşlik eden)
 

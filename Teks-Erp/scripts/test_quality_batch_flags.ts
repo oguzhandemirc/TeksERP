@@ -396,7 +396,8 @@ async function main(): Promise<void> {
     // onu göremez; gövde bazlı bakılır. Açık kumaş kesiminde kalite her hâlükârda
     // dolu ("1.KALITE" varsayılanı), yani kapının ısıracağı bir durum yok.
     const tamburKod = oku("services/tambur.service.ts");
-    const ofBas = tamburKod.indexOf("async cutOpenFabric(");
+    // Gövde `cutOpenFabricInner`da (dış metot token boğazı sarmalayıcısı).
+    const ofBas = tamburKod.indexOf("async cutOpenFabricInner(");
     const ofSon = tamburKod.indexOf("async ", ofBas + 10);
     check("§4 zemin: cutOpenFabric gövdesi ayrıştırıldı", ofBas > 0 && ofSon > ofBas);
     check(

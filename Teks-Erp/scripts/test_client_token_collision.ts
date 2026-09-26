@@ -116,8 +116,9 @@ async function main(): Promise<void> {
     if (!kod.includes("where: { clientToken")) continue;
     const ad = yol.split("/").pop() as string;
     okuyucular.push(ad);
+    // `tokenReplay` boğazı kapıyı içeride ZORUNLU taşır (yol başına ölçüm: `test_token_replay_bogaz`).
     const kapili =
-      kod.includes("assertReplayPayloadMatches(") || kod.includes("CLIENT_TOKEN_COLLISION");
+      kod.includes("assertReplayPayloadMatches(") || kod.includes("CLIENT_TOKEN_COLLISION") || /\btokenReplay\s*[<(]/.test(kod);
     if (!kapili && !(ad in MUAFLAR)) kapisiz.push(ad);
   }
   check("§2: replay okuyucusu bulundu (körlük zemini)", okuyucular.length >= 8, okuyucular.join(", "));

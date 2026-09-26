@@ -14,10 +14,18 @@
 //      sipariş yazımı düşerse top claim'i de geri alınır.
 //   §3 elle numaralı sipariş (#11, R): sıralı tekrar "numara zaten var" değil replay · aynı token + başka
 //      numara → 409 · eşzamanlı aynı token → tek sipariş.
+//   §4 Tambur kesimi (#8 depo topu · #9 açık kumaş, R): eşzamanlı aynı token → tek çocuk (kaybeden "top
+//      değişti" 409'unu almaz) · başka metre → 409 · iptal edilmiş çocuğun token'ı → 409 ENTRY_CANCELLED.
+//   §5 kasa (#18 hareket · #19 virman, R): eşzamanlı açılış → replay ("açılış zaten girilmiş" değil) · iptal
+//      edilmiş hareket/virman → 409 CASH_TXN_CANCELLED · virmanda başka tutar → 409 · eksi kasa kapısı açıkken
+//      eşzamanlı virman → replay (bakiye 409'u değil).
+//   §6 fason kabul (R + gövde kapısı): aynı token + başka top kümesi / başka metraj → 409 (eskiden sessiz başarı).
+//   §7 hareketli teslim bordrosu (K, K3 bayrağı açık): eşzamanlı aynı token → tek bordro, çek TEK kez hareket eder
+//      (kaybeden 8036'da bekler, geçişleri yeniden koşmaz).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar FOTOĞRAFINA döndürülür.
 // =============================================================================
 import { randomUUID } from "node:crypto";
-import { Prisma, RollStatus, WarpBeamOrigin, WarpKgSource } from "@prisma/client";
+import { CariKind, ChequeDocType, ChequeEventType, ChequeKind, ChequeStatus, Currency, Prisma, RollStatus, StationKind, WarpBeamOrigin, WarpKgSource, WorkOrderStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { SIRA_ZORLANDI, sonucKodu, zorlanmisSira, type ZorlanmisSiraSonucu } from "./lib/zorlanmis-sira";
@@ -26,6 +34,14 @@ import { createWarpBeam, getWarpBeam } from "../src/services/warp-beam.service";
 import { windWarpBeam } from "../src/services/warp-beam-wind.service";
 import { cancelConsumed, consumeBeam } from "../src/services/warp-beam-consume.service";
 import { orderService } from "../src/routes/order.routes";
+import { TamburService } from "../src/services/tambur.service";
+import { cashTransactionService } from "../src/services/cash-transaction.service";
+import { SubcontractorService } from "../src/services/subcontractor.service";
+import { TravelerCardService } from "../src/services/traveler-card.service";
+import { roleGrade } from "./fixture-quality-grade";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
+import { fixtureWarehouseId } from "./fixture-warehouse";
+import { chequeDeliveryNoteService } from "../src/services/cheque-delivery-note.service";
 
 let pass = 0;
 let fail = 0;
@@ -42,7 +58,7 @@ const ozet = (s: ZorlanmisSiraSonucu) => `B | A = ${s.sonuclar.map(sonucKodu).jo
 const zorlandi = (ad: string, s: ZorlanmisSiraSonucu) => check(`${ad}: sıra zorlandı (B kapıda bekledi)`, SIRA_ZORLANDI.has(s.kapi), s.kapi);
 
 const TAG = `TRZ${Date.now().toString(36).toUpperCase()}`;
-const FLAGS = [SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING];
+const FLAGS = [SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.FINANCE_BLOCK_NEGATIVE_CASH_ENABLED, "finance.enabled", "finance.chequeNoteMovementEnabled"];
 const setFlag = (key: string, v: boolean) => prisma.systemSetting.upsert({ where: { key }, create: { key, value: String(v) }, update: { value: String(v) } });
 
 const olusan = {
@@ -53,6 +69,14 @@ const olusan = {
   itemId: null as string | null,
   customerIds: [] as string[],
   rollIds: [] as string[],
+  cutParentIds: [] as string[],
+  colorId: null as string | null,
+  bordroCariIds: [] as string[],
+  chequeIds: [] as string[],
+  woIds: [] as string[],
+  stepIds: [] as string[],
+  boxIds: [] as string[],
+  bankIds: [] as string[],
 };
 let foto: Array<{ key: string; value: Prisma.JsonValue }> | null = null;
 
@@ -234,6 +258,220 @@ async function elleNumara(): Promise<void> {
     !!ids[0] && ids[0] === ids[1] && (await sayi(no2)) === 1, ozet(s));
 }
 
+async function kesim(): Promise<void> {
+  console.log("§4 Tambur kesimi (#8 depo topu · #9 açık kumaş)");
+  const tambur = new TamburService();
+  const need = <T>(v: T | null, ad: string): T => {
+    if (v == null) throw new Error(`Seed fikstürü eksik: ${ad}`);
+    return v;
+  };
+  const item = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS").id;
+  const grade = await roleGrade("FIRST");
+  const renk = await prisma.color.create({ data: { code: `${TAG}-RK`.slice(0, 32), name: `${TAG} renk` }, select: { id: true } });
+  olusan.colorId = renk.id;
+  const color = renk.id;
+  const stTambur = need(await prisma.station.findFirst({ where: { kind: StationKind.TAMBUR }, select: { id: true } }), "TAMBUR").id;
+  let seq = 0;
+  const ortak = { itemId: item, colorId: color, width: 150, qualityGrade: grade.code, qualityGradeId: grade.id };
+  const depoTopu = async (qty: number) => {
+    const r = await prisma.roll.create({ data: { ...ortak, barcode: `${TAG}-K${seq++}`, status: RollStatus.WAREHOUSE, currentQty: qty, initialQty: qty }, select: { id: true } });
+    olusan.cutParentIds.push(r.id);
+    return r.id;
+  };
+  const acikKumas = async (qty: number) => {
+    const wo = await prisma.workOrder.create({
+      data: { workOrderNumber: `${TAG}-WO${seq++}`, type: "STOCK_PRODUCTION", status: WorkOrderStatus.IN_PROGRESS, width: 150, targetItemId: item, steps: { create: [{ stationId: stTambur, stepSequence: 1, status: "ACTIVE" as const }] } },
+      include: { steps: true },
+    });
+    olusan.woIds.push(wo.id);
+    const r = await prisma.roll.create({ data: { ...ortak, barcode: null, status: RollStatus.IN_PRODUCTION, currentQty: qty, initialQty: qty, currentStepId: wo.steps[0]!.id, entrySource: "SUBCONTRACTOR_RETURN" }, select: { id: true } });
+    olusan.cutParentIds.push(r.id);
+    return r.id;
+  };
+  const cocuk = (t: string) => prisma.roll.count({ where: { clientToken: t } });
+  const kalan = async (id: string) => Number((await prisma.roll.findUniqueOrThrow({ where: { id }, select: { currentQty: true } })).currentQty);
+  const kes = (id: string, m: number, t: string) => () => tambur.cutWarehouseRoll(id, { cutLength: m, clientToken: t });
+  const acKes = (id: string, m: number, t: string) => () => tambur.cutOpenFabric(id, { lengthMeters: m, status: "WAREHOUSE", clientToken: t });
+
+  // B token'ı okur, ebeveyn satır kilidini alıp çocuğu yazarken bekler; A aynı token'la aynı topu keser.
+  // 100'den 60: A kilidi alınca kalan 40 < 60 görür — kural yolu (top "değişti"), P2002 yolu değil.
+  {
+    const w = await depoTopu(100);
+    const t = randomUUID();
+    const s = await zorlanmisSira({ model: "roll", metod: "create" }, kes(w, 60, t), kes(w, 60, t));
+    zorlandi("④a #8 aynı gövde", s);
+    check("④a ⭐ #8 aynı token, eşzamanlı: ikisi de başarılı, TEK çocuk, ebeveyn bir kez düştü (kaybeden 'top değişti' 409'unu almaz)",
+      s.sonuclar.every((r) => r.status === "fulfilled") && (await cocuk(t)) === 1 && (await kalan(w)) === 40, ozet(s));
+  }
+  {
+    const w = await depoTopu(100);
+    const t = randomUUID();
+    const s = await zorlanmisSira({ model: "roll", metod: "create" }, kes(w, 60, t), kes(w, 50, t));
+    zorlandi("④b #8 başka metre", s);
+    check("④b ⭐ #8 aynı token + başka metre, eşzamanlı: biri keser, öteki 409 CLIENT_TOKEN_COLLISION; tek çocuk",
+      s.sonuclar.filter((r) => r.status === "fulfilled").length === 1 && s.sonuclar.map(sonucKodu).includes("CLIENT_TOKEN_COLLISION") && (await cocuk(t)) === 1, ozet(s));
+  }
+  {
+    const w = await depoTopu(100);
+    const t = randomUUID();
+    await kes(w, 20, t)();
+    await prisma.roll.updateMany({ where: { clientToken: t }, data: { status: RollStatus.CANCELLED } });
+    check("④c #8 iptal edilmiş çocuğun token'ı → 409 ENTRY_CANCELLED (4. durum; eskiden 'kesim zaten kaydedilmiş')", (await kodu(kes(w, 20, t))) === "ENTRY_CANCELLED");
+  }
+  {
+    const o = await acikKumas(100);
+    const t = randomUUID();
+    const s = await zorlanmisSira({ model: "roll", metod: "create" }, acKes(o, 60, t), acKes(o, 60, t));
+    zorlandi("④d #9 aynı gövde", s);
+    check("④d ⭐ #9 açık kumaş, aynı token eşzamanlı: ikisi de başarılı, TEK çocuk (kaybeden 'top değişti' 409'unu almaz)",
+      s.sonuclar.every((r) => r.status === "fulfilled") && (await cocuk(t)) === 1 && (await kalan(o)) === 40, ozet(s));
+  }
+}
+
+async function kasa(): Promise<void> {
+  console.log("§5 Kasa (#18 hareket · #19 virman)");
+  const kasaAc = async (n: string) => {
+    const b = await prisma.cashBox.create({ data: { code: `${TAG}-K${n}`, name: `${TAG} kasa ${n}`, currency: "TRY" }, select: { id: true } });
+    olusan.boxIds.push(b.id);
+    return b.id;
+  };
+  const bankaAc = async (n: string) => {
+    const b = await prisma.bankAccount.create({ data: { code: `${TAG}-B${n}`, name: `${TAG} banka ${n}`, currency: "TRY" }, select: { id: true } });
+    olusan.bankIds.push(b.id);
+    return b.id;
+  };
+  const tokenSatiri = (t: string) => prisma.cashTransaction.count({ where: { clientToken: t } });
+  const k1 = await kasaAc("1");
+  const b1 = await bankaAc("1");
+  await setFlag(SETTING_KEYS.FINANCE_BLOCK_NEGATIVE_CASH_ENABLED, false);
+  {
+    // B token'ı okur, açılış tekilliği okumasında bekler; A aynı token'la aynı açılışı yazar.
+    const t = randomUUID();
+    const ac = () => cashTransactionService.create({ kind: "OPENING", cashBoxId: k1, amount: 100, clientToken: t });
+    const s = await zorlanmisSira({ model: "cashTransaction", metod: "findFirst" }, ac, ac);
+    zorlandi("⑤a #18 açılış", s);
+    check("⑤a ⭐ #18 aynı token'lı eşzamanlı açılış: ikisi de başarılı, tek satır ('açılış zaten girilmiş' 409'u değil)",
+      s.sonuclar.every((r) => r.status === "fulfilled") && (await tokenSatiri(t)) === 1, ozet(s));
+  }
+  {
+    const t = randomUUID();
+    const r = await cashTransactionService.create({ kind: "EXPENSE", cashBoxId: k1, amount: 10, clientToken: t });
+    await cashTransactionService.cancel(r.data!.id, `${TAG} iptal`);
+    check("⑤b #18 iptal edilmiş hareketin token'ı → 409 CASH_TXN_CANCELLED (§5-4; eskiden 'zaten oluşturulmuş')",
+      (await kodu(() => cashTransactionService.create({ kind: "EXPENSE", cashBoxId: k1, amount: 10, clientToken: t }))) === "CASH_TXN_CANCELLED");
+  }
+  const virman = (amount: number, t: string, from = k1) => () => cashTransactionService.transfer({ fromCashBoxId: from, toBankAccountId: b1, amount, clientToken: t });
+  {
+    const t = randomUUID();
+    await virman(30, t)();
+    check("⑤c #19 aynı token + başka tutar → 409 CLIENT_TOKEN_COLLISION (§5-3; eskiden eski virman 'kaydedilmiş' dönerdi)", (await kodu(virman(40, t))) === "CLIENT_TOKEN_COLLISION");
+    const tekrar = await kodu(virman(30, t));
+    check("⑤c #19 aynı gövde tekrarı → replay, ikinci virman yok", tekrar === "ok" && (await prisma.cashTransaction.count({ where: { cashBoxId: k1, kind: "TRANSFER_OUT", status: { not: "CANCELLED" } } })) === 1, tekrar);
+    const out = await prisma.cashTransaction.findFirstOrThrow({ where: { clientToken: t }, select: { id: true } });
+    await cashTransactionService.cancel(out.id, `${TAG} iptal`);
+    check("⑤d #19 iptal edilmiş virmanın token'ı → 409 CASH_TXN_CANCELLED", (await kodu(virman(30, t))) === "CASH_TXN_CANCELLED");
+  }
+  {
+    // Eksi kasa kapısı AÇIK: B kilitleri tutup satırı yazarken bekler; A aynı token'la aynı virmanı dener.
+    const k2 = await kasaAc("2");
+    await cashTransactionService.create({ kind: "OPENING", cashBoxId: k2, amount: 100, clientToken: randomUUID() });
+    await setFlag(SETTING_KEYS.FINANCE_BLOCK_NEGATIVE_CASH_ENABLED, true);
+    const t = randomUUID();
+    const s = await zorlanmisSira({ model: "cashTransaction", metod: "create" }, virman(80, t, k2), virman(80, t, k2));
+    zorlandi("⑤e #19 eksi kasa", s);
+    check("⑤e ⭐ #19 eksi kasa kapısı açıkken aynı token'lı eşzamanlı virman: ikisi de başarılı, tek virman (bakiye 409'u değil)",
+      s.sonuclar.every((r) => r.status === "fulfilled") && (await tokenSatiri(t)) === 1, ozet(s));
+    await setFlag(SETTING_KEYS.FINANCE_BLOCK_NEGATIVE_CASH_ENABLED, false);
+  }
+}
+
+async function fasonKabul(): Promise<void> {
+  console.log("§6 Fason kabul (gövde kapısı)");
+  const sub = new SubcontractorService();
+  const cards = new TravelerCardService();
+  const need = (v: { id: string } | null, ad: string): string => {
+    if (!v) throw new Error(`Seed fikstürü eksik: ${ad}`);
+    return v.id;
+  };
+  const item = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
+  const grade = await roleGrade("FIRST");
+  const stBoya = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
+  const stKursun = need(await prisma.station.findFirst({ where: { code: "KURSUN_KK2" }, select: { id: true } }), "KURSUN_KK2");
+  const boyaci = (await ensureTestDyeHouse()).id;
+  const depo = await fixtureWarehouseId();
+  let seq = 0;
+  const kur = async () => {
+    const wo = await prisma.workOrder.create({
+      data: {
+        workOrderNumber: `${TAG}-FW${seq++}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: 250, targetQuantity: 1000, targetItemId: item,
+        steps: { create: [{ stationId: stBoya, stepSequence: 1, status: "PENDING" }, { stationId: stKursun, stepSequence: 2, status: "PENDING" }] },
+      },
+      include: { steps: { orderBy: { stepSequence: "asc" } } },
+    });
+    olusan.woIds.push(wo.id);
+    olusan.stepIds.push(...wo.steps.map((st) => st.id));
+    await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, undefined));
+    const toplar: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const r = await prisma.roll.create({ data: { barcode: `${TAG}-F${seq++}`, itemId: item, initialQty: 300, currentQty: 300, status: RollStatus.STOCK, warehouseId: depo, qualityGrade: grade.code, qualityGradeId: grade.id, width: 250 }, select: { id: true } });
+      olusan.rollIds.push(r.id);
+      toplar.push(r.id);
+    }
+    await sub.dispatch({ workOrderId: wo.id, stepId: wo.steps[0]!.id, subcontractorId: boyaci, rollIds: toplar }, undefined);
+    return { woId: wo.id, stepId: wo.steps[0]!.id, toplar };
+  };
+  const kabul = (k: { woId: string; stepId: string }, returns: Array<{ rollId: string; receivedQty?: number }>, t: string) => () =>
+    sub.receive({ workOrderId: k.woId, stepId: k.stepId, subcontractorId: boyaci, returns, newRolls: [{ qty: 290 }], clientToken: t }, undefined);
+  {
+    const k = await kur();
+    const t = randomUUID();
+    await kabul(k, [{ rollId: k.toplar[0]! }], t)();
+    const tekrar = await kodu(kabul(k, [{ rollId: k.toplar[0]! }], t));
+    check("⑥a aynı token + aynı gövde → replay", tekrar === "ok" && (await prisma.subcontractorReceipt.count({ where: { clientToken: t } })) === 1, tekrar);
+    check("⑥b ⭐ aynı token + BAŞKA top → 409 CLIENT_TOKEN_COLLISION (eskiden eski makbuz 'kabul zaten yapılmış' dönerdi)",
+      (await kodu(kabul(k, [{ rollId: k.toplar[1]! }], t))) === "CLIENT_TOKEN_COLLISION");
+  }
+  {
+    const k = await kur();
+    const t = randomUUID();
+    await kabul(k, [{ rollId: k.toplar[0]!, receivedQty: 100 }], t)();
+    check("⑥c aynı token + BAŞKA metraj (kısmi 100 → 120) → 409 CLIENT_TOKEN_COLLISION",
+      (await kodu(kabul(k, [{ rollId: k.toplar[0]!, receivedQty: 120 }], t))) === "CLIENT_TOKEN_COLLISION");
+  }
+}
+
+async function hareketliBordro(): Promise<void> {
+  console.log("§7 Hareketli teslim bordrosu (K3 bayrağı açık)");
+  for (const key of ["finance.enabled", "finance.chequeNoteMovementEnabled"]) {
+    await prisma.systemSetting.upsert({ where: { key }, create: { key, value: true }, update: { value: true } });
+  }
+  const musteri = await prisma.customer.create({ data: { code: `${TAG}-BM`, name: `${TAG} bordro müşteri` }, select: { id: true } });
+  olusan.customerIds.push(musteri.id);
+  const cari = await prisma.cariAccount.create({ data: { kind: CariKind.CUSTOMER, customerId: musteri.id }, select: { id: true } });
+  olusan.bordroCariIds.push(cari.id);
+  const banka = await prisma.bankAccount.create({ data: { code: `${TAG}-BB`, name: `${TAG} bordro banka`, currency: Currency.TRY }, select: { id: true } });
+  olusan.bankIds.push(banka.id);
+  const gun = 864e5;
+  const cek = await prisma.cheque.create({
+    data: {
+      docNo: `${TAG}-C1`, kind: ChequeKind.RECEIVED, docType: ChequeDocType.CHEQUE, status: ChequeStatus.PORTFOLIO, cariId: cari.id,
+      currency: Currency.TRY, exchangeRate: 1, amount: 500, amountTry: 500,
+      issueDate: new Date(Date.now() - 3 * gun), postingDate: new Date(Date.now() - 3 * gun), dueDate: new Date(Date.now() + 20 * gun), drawerName: `${TAG} Keşideci`,
+    },
+    select: { id: true },
+  });
+  olusan.chequeIds.push(cek.id);
+  const t = randomUUID();
+  const kes = () => chequeDeliveryNoteService.create({ chequeIds: [cek.id], bankAccountId: banka.id, clientToken: t }, undefined, { canMoveCheques: true });
+  // B token kilidini alıp seçim okumasında bekler; A aynı token'la aynı bordroyu keser.
+  const s = await zorlanmisSira({ model: "cheque", metod: "findMany" }, kes, kes);
+  zorlandi("⑦a hareketli bordro", s);
+  const ids = s.sonuclar.map((r) => (r.status === "fulfilled" ? (r.value as { data: { id: string } }).data.id : null));
+  const depozit = await prisma.chequeEvent.count({ where: { chequeId: cek.id, type: ChequeEventType.DEPOSIT } });
+  check("⑦a ⭐ hareketli bordro, aynı token eşzamanlı: ikisi de başarılı, AYNI bordro, çek TEK kez hareket etti (replay geçişi yeniden koşmaz)",
+    !!ids[0] && ids[0] === ids[1] && (await prisma.chequeDeliveryNote.count({ where: { clientToken: t } })) === 1 && depozit === 1, `${ozet(s)} · DEPOSIT=${depozit}`);
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) {
@@ -250,6 +488,10 @@ async function main(): Promise<void> {
   await levent();
   await hizliSiparis();
   await elleNumara();
+  await kesim();
+  await kasa();
+  await fasonKabul();
+  await hareketliBordro();
 }
 
 async function temizlik(): Promise<void> {
@@ -261,6 +503,61 @@ async function temizlik(): Promise<void> {
       console.error(`  ❌ temizlik "${ad}" düştü: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
+  if (olusan.cutParentIds.length) {
+    await adim("kesim çocukları", async () => {
+      await prisma.rollVariance.deleteMany({ where: { roll: { parentRollId: { in: olusan.cutParentIds } } } });
+      await prisma.rollOperation.deleteMany({ where: { roll: { parentRollId: { in: olusan.cutParentIds } } } });
+      await prisma.roll.deleteMany({ where: { parentRollId: { in: olusan.cutParentIds } } });
+      await prisma.rollOperation.deleteMany({ where: { rollId: { in: olusan.cutParentIds } } });
+      await prisma.rollMovement.deleteMany({ where: { rollId: { in: olusan.cutParentIds } } });
+      await prisma.rollVariance.deleteMany({ where: { rollId: { in: olusan.cutParentIds } } });
+      await prisma.roll.deleteMany({ where: { id: { in: olusan.cutParentIds } } });
+    });
+  }
+  if (olusan.colorId) await adim("renk", () => prisma.color.deleteMany({ where: { id: olusan.colorId! } }));
+  if (olusan.woIds.length) {
+    const wo = { in: olusan.woIds };
+    const receipts = (await prisma.subcontractorReceipt.findMany({ where: { workOrderId: wo }, select: { id: true } })).map((r) => r.id);
+    const dispatches = (await prisma.subcontractorDispatch.findMany({ where: { workOrderId: wo }, select: { id: true } })).map((d) => d.id);
+    const woRolls = (await prisma.roll.findMany({ where: { OR: [{ currentStepId: { in: olusan.stepIds } }, { producedInStepId: { in: olusan.stepIds } }, { parentReceipt: { workOrderId: wo } }, { id: { in: olusan.rollIds } }] }, select: { id: true } })).map((r) => r.id);
+    await adim("kabul kalemleri", () => prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: receipts } } }));
+    await adim("kabul özellikleri", () => prisma.subcontractorReceiptProperty.deleteMany({ where: { receiptId: { in: receipts } } }));
+    await adim("sevk kalemleri", () => prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispatches } } }));
+    await adim("fason top izleri", async () => {
+      await prisma.rollOperation.deleteMany({ where: { rollId: { in: woRolls } } });
+      await prisma.rollMovement.deleteMany({ where: { rollId: { in: woRolls } } });
+      await prisma.rollProperty.deleteMany({ where: { rollId: { in: woRolls } } });
+      await prisma.rollVariance.deleteMany({ where: { rollId: { in: woRolls } } });
+    });
+    await adim("fason toplar", () => prisma.roll.deleteMany({ where: { id: { in: woRolls } } }));
+    await adim("kabuller", () => prisma.subcontractorReceipt.deleteMany({ where: { id: { in: receipts } } }));
+    await adim("sevkler", () => prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatches } } }));
+    await adim("refakat kartları", () => prisma.travelerCard.deleteMany({ where: { workOrderId: wo } }));
+    await adim("partiler", () => prisma.batch.deleteMany({ where: { workOrderId: wo } }));
+    await adim("adımlar", () => prisma.workOrderStep.deleteMany({ where: { workOrderId: wo } }));
+    await adim("iş emirleri", () => prisma.workOrder.deleteMany({ where: { id: wo } }));
+  }
+  if (olusan.chequeIds.length) {
+    const notlar = [...new Set((await prisma.chequeDeliveryNoteItem.findMany({ where: { chequeId: { in: olusan.chequeIds } }, select: { noteId: true } })).map((n) => n.noteId))];
+    await adim("çek olayları", () => prisma.chequeEvent.deleteMany({ where: { chequeId: { in: olusan.chequeIds } } }));
+    await adim("çek cari satırları", async () => {
+      await prisma.cariTransaction.deleteMany({ where: { chequeId: { in: olusan.chequeIds }, reversesTxnId: { not: null } } });
+      await prisma.cariTransaction.deleteMany({ where: { chequeId: { in: olusan.chequeIds } } });
+    });
+    await adim("bordro kalemleri", () => prisma.chequeDeliveryNoteItem.deleteMany({ where: { noteId: { in: notlar } } }));
+    await adim("bordrolar", () => prisma.chequeDeliveryNote.deleteMany({ where: { id: { in: notlar } } }));
+    await adim("bordro belgeleri", () => prisma.printedDocument.deleteMany({ where: { sourceId: { in: notlar } } }));
+    await adim("çekler", () => prisma.cheque.deleteMany({ where: { id: { in: olusan.chequeIds } } }));
+  }
+  if (olusan.bordroCariIds.length) {
+    await adim("bordro cari bakiye", () => prisma.cariBalance.deleteMany({ where: { cariId: { in: olusan.bordroCariIds } } }));
+    await adim("bordro cari", () => prisma.cariAccount.deleteMany({ where: { id: { in: olusan.bordroCariIds } } }));
+  }
+  if (olusan.boxIds.length || olusan.bankIds.length) {
+    await adim("kasa hareketleri", () => prisma.cashTransaction.deleteMany({ where: { OR: [{ cashBoxId: { in: olusan.boxIds } }, { bankAccountId: { in: olusan.bankIds } }] } }));
+    await adim("kasalar", () => prisma.cashBox.deleteMany({ where: { id: { in: olusan.boxIds } } }));
+    await adim("bankalar", () => prisma.bankAccount.deleteMany({ where: { id: { in: olusan.bankIds } } }));
+  }
   if (olusan.customerIds.length) {
     const orders = (await prisma.order.findMany({ where: { customerId: { in: olusan.customerIds } }, select: { id: true } })).map((o) => o.id);
     await adim("sipariş satırları", () => prisma.orderLine.deleteMany({ where: { orderId: { in: orders } } }));

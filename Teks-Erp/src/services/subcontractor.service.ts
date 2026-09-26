@@ -19,6 +19,7 @@ import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY, inheritRollPropertiesTx, 
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
+import { tokenReplay } from "./helpers/token-replay.helper";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -723,6 +724,50 @@ async function nextDirectShipmentNo(tx: Prisma.TransactionClient): Promise<strin
       select: { shipmentNo: true, createdAt: true },
     });
     return todays.map((s) => ({ code: s.shipmentNo, createdAt: s.createdAt }));
+  });
+}
+
+type ReceiptReplayRow = Prisma.SubcontractorReceiptGetPayload<{
+  include: { subcontractor: true; step: { include: { station: true } }; items: { include: { newRoll: true } } };
+}>;
+
+/**
+ * Fason kabul replay'i (R). Aynı fişin ikinci kopyası yarışı kaybettiğinde üç ayrı noktada düşebilir (tx öncesi
+ * kural · tx içi claim · token P2002) ve operatör için üçü de "kabul zaten yapıldı"dır: cevap hata türüne değil
+ * token KİMLİĞİNE bakar (BULGU-T1-005). Gövde kapısı: iş emri + adım + fasoncu + dönen top kümesi + elle verilen
+ * metrajlar; iptal edilmiş kabulün token'ı 409 `RECEIPT_CANCELLED`.
+ */
+function receiptReplay(data: { workOrderId: string; stepId: string; subcontractorId: string; returns: Array<{ rollId: string; receivedQty?: number | null }> }) {
+  const explicit = data.returns.filter((r) => r.receivedQty != null);
+  const qtyKey = (rows: Array<{ rollId: string; qty: Prisma.Decimal.Value | null }>) =>
+    rows.map((r) => `${r.rollId}:${r.qty == null ? "" : new Prisma.Decimal(r.qty).toFixed(3)}`).sort().join(",");
+  return tokenReplay<ReceiptReplayRow, ApiResponse<unknown>>({
+    find: (db, clientToken) =>
+      db.subcontractorReceipt.findUnique({
+        where: { clientToken },
+        include: { subcontractor: true, step: { include: { station: true } }, items: { include: { newRoll: true } } },
+      }),
+    alive: (p) => {
+      if (!p.cancelledAt) return;
+      throw AppError.conflict(
+        "Bu kabul denemesi daha önce kaydedilmiş ve İPTAL edilmiş — aynı deneme tekrar gönderilemez. Kabulü ekrandan yeniden yapın.",
+        { code: "RECEIPT_CANCELLED" },
+      );
+    },
+    identity: (p) => [
+      { ad: "workOrderId", mevcut: p.workOrderId, gelen: data.workOrderId },
+      { ad: "stepId", mevcut: p.stepId, gelen: data.stepId },
+      { ad: "subcontractorId", mevcut: p.subcontractorId, gelen: data.subcontractorId },
+      { ad: "toplar", mevcut: p.items.map((i) => i.newRollId).sort().join(","), gelen: data.returns.map((r) => r.rollId).sort().join(",") },
+      {
+        ad: "metrajlar",
+        mevcut: qtyKey(explicit.map((r) => ({ rollId: r.rollId, qty: p.items.find((i) => i.newRollId === r.rollId)?.receivedQty ?? null }))),
+        gelen: qtyKey(explicit.map((r) => ({ rollId: r.rollId, qty: r.receivedQty ?? null }))),
+      },
+    ],
+    collision: (p) => `Bu form daha önce başka bir kabul olarak kaydedilmiş (makbuz ${p.receiptNo}) — yeni kabul için ekranı kapatıp yeniden açın.`,
+    collisionEk: (p) => ({ receiptNo: p.receiptNo }),
+    respond: (p) => ({ success: true, data: p, message: `Mal kabul zaten yapılmış (idempotent retry). Makbuz: ${p.receiptNo}` }),
   });
 }
 
@@ -2553,35 +2598,7 @@ export class SubcontractorService {
     data: Parameters<SubcontractorService["receiveInner"]>[0],
     userId?: string,
   ): ReturnType<SubcontractorService["receiveInner"]> {
-    try {
-      return await this.receiveInner(data, userId);
-    } catch (err) {
-      if (!data.clientToken) throw err;
-      const cached = await prisma.subcontractorReceipt.findUnique({
-        where: { clientToken: data.clientToken },
-        include: {
-          subcontractor: true,
-          step: { include: { station: true } },
-          items: { include: { newRoll: true } },
-        },
-      });
-      // Token'la makbuz yoksa bu bir yarış değil, gerçek hatadır — yutma.
-      if (!cached) throw err;
-      // ⚠️ `cancelledAt` KAPISI ZORUNLU: iptal edilmiş bir kabulün token'ına
-      // "başarılı" demek, olmayan bir kabulü olmuş göstermek olurdu
-      // (idempotency'nin 4. durumu; KK1 ENTRY_CANCELLED emsali).
-      if (cached.cancelledAt) {
-        throw AppError.conflict(
-          "Bu kabul denemesi daha önce kaydedilmiş ve İPTAL edilmiş — aynı deneme tekrar gönderilemez. Kabulü ekrandan yeniden yapın.",
-          { code: "RECEIPT_CANCELLED" },
-        );
-      }
-      return {
-        success: true,
-        data: cached,
-        message: `Mal kabul zaten yapılmış (idempotent retry). Makbuz: ${cached.receiptNo}`,
-      };
-    }
+    return receiptReplay(data).run(data.clientToken ?? null, () => this.receiveInner(data, userId));
   }
 
   /**
@@ -2653,33 +2670,8 @@ export class SubcontractorService {
       }
     }
 
-    // IDEMPOTENCY #1 — clientToken (kısmi teslimatın TEK replay kimliği).
-    // Küme-eşitliği guard'ı (aşağıda) kısmi teslimatta çalışamaz: aynı top iki
-    // ayrı teslimatta MEŞRU olarak tekrar gelir. Token eşleşirse cached makbuz;
-    // makbuz iptal edilmişse replay GEÇERSİZDİR (KK1 ENTRY_CANCELLED emsali).
-    if (data.clientToken) {
-      const tokenHit = await prisma.subcontractorReceipt.findUnique({
-        where: { clientToken: data.clientToken },
-        include: {
-          subcontractor: true,
-          step: { include: { station: true } },
-          items: { include: { newRoll: true } },
-        },
-      });
-      if (tokenHit) {
-        if (tokenHit.cancelledAt) {
-          throw AppError.conflict(
-            "Bu kabul denemesi daha önce kaydedilmiş ve İPTAL edilmiş — aynı deneme tekrar gönderilemez. Kabulü ekrandan yeniden yapın.",
-            { code: "RECEIPT_CANCELLED" },
-          );
-        }
-        return {
-          success: true,
-          data: tokenHit,
-          message: `Mal kabul zaten yapılmış (idempotent retry). Makbuz: ${tokenHit.receiptNo}`,
-        };
-      }
-    }
+    // IDEMPOTENCY #1 — clientToken (kısmi teslimatın TEK replay kimliği): `receive()`deki boğaz
+    // (`receiptReplay`) okur; küme-eşitliği guard'ı (aşağıda) kısmi teslimatta çalışamaz.
 
     // IDEMPOTENCY (offline sync replay): yalnız bu çağrıdaki dönüş kümesiyle
     // BİREBİR AYNI kümeyi kabul etmiş (iptal edilmemiş) bir makbuz varsa cached

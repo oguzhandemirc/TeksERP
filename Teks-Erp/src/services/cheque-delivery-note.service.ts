@@ -42,7 +42,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
-import { assertChequeDeliveryNoteReplayAlive, lockClientTokenTx } from "./helpers/token-replay.helper";
+import { assertChequeDeliveryNoteReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { RBAC_DENIED_CODE } from "../middlewares/rbac.middleware";
 import { resolveChequeNoteMovementEnabled } from "./system-setting.service";
 import {
@@ -386,41 +386,26 @@ const REPLAY_SELECT = {
 type ReplayRow = Prisma.ChequeDeliveryNoteGetPayload<{ select: typeof REPLAY_SELECT }>;
 
 /**
- * Token'lı önceki kayıt, token KİLİDİ altında — kilit tx'in İLK ifadesidir. Kilitsiz okuma
- * yarışta token'ı kaçırır ve iş kuralı (②) kazananın commit'ini görüp replay yerine 409 döner.
+ * Bordro replay'i: iptal edilmişse 409 · aynı yük → aynı BRD · başka yük → 409 `CLIENT_TOKEN_COLLISION`.
+ * Aynı yük = aynı çek kümesi + aynı hedef + aynı not; teslim tarihi YALNIZ istemci gönderdiyse
+ * karşılaştırılır (verilmezse "şimdi"dir ve iki denemede farklıdır). K: `inTx` tx'in İLK ifadesidir.
  */
-async function lockedPriorByTokenTx(tx: Prisma.TransactionClient, clientToken: string): Promise<ReplayRow | null> {
-  await lockClientTokenTx(tx, clientToken);
-  return tx.chequeDeliveryNote.findUnique({ where: { clientToken }, select: REPLAY_SELECT });
-}
-
-/**
- * Replay'in üç dalı (① hiç yazılmadıysa çağrılmaz): iptal edilmişse 409 · aynı yük →
- * aynı BRD · başka yük → 409 `CLIENT_TOKEN_COLLISION`. Aynı yük = aynı çek kümesi +
- * aynı hedef + aynı not; teslim tarihi YALNIZ istemci gönderdiyse karşılaştırılır
- * (verilmezse "şimdi"dir ve iki denemede farklıdır).
- */
-function resolveReplay(
-  prior: ReplayRow,
-  input: CreateChequeDeliveryNoteInput,
-  chequeIds: string[],
-): { id: string; docNo: string; count: number } {
-  assertChequeDeliveryNoteReplayAlive(prior);
-  const priorIds = prior.items.map((i) => i.chequeId).sort();
-  const incomingIds = [...chequeIds].sort();
-  const same =
-    priorIds.length === incomingIds.length &&
-    priorIds.every((id, k) => id === incomingIds[k]) &&
-    prior.bankAccountId === (input.bankAccountId ?? null) &&
-    prior.cariId === (input.cariId ?? null) &&
-    prior.targetLabel === (input.targetLabel?.trim() || null) &&
-    prior.notes === (input.notes?.trim() || null) &&
-    (!input.deliveryDate || prior.deliveryDate.getTime() === input.deliveryDate.getTime());
-  if (same) return { id: prior.id, docNo: prior.docNo, count: priorIds.length };
-  throw AppError.conflict(
-    `Bu form daha önce kaydedilmiş: ${prior.docNo}. Yeni bordro için formu kapatıp yeniden açın.`,
-    { code: "CLIENT_TOKEN_COLLISION", noteId: prior.id, docNo: prior.docNo },
-  );
+function noteReplay(input: CreateChequeDeliveryNoteInput, chequeIds: string[]) {
+  return tokenReplay<ReplayRow, { id: string; docNo: string; count: number }>({
+    find: (db, clientToken) => db.chequeDeliveryNote.findUnique({ where: { clientToken }, select: REPLAY_SELECT }),
+    alive: assertChequeDeliveryNoteReplayAlive,
+    identity: (p) => [
+      { ad: "chequeIds", mevcut: p.items.map((i) => i.chequeId).sort().join(","), gelen: [...chequeIds].sort().join(",") },
+      { ad: "bankAccountId", mevcut: p.bankAccountId, gelen: input.bankAccountId },
+      { ad: "cariId", mevcut: p.cariId, gelen: input.cariId },
+      { ad: "targetLabel", mevcut: p.targetLabel, gelen: input.targetLabel?.trim() || null },
+      { ad: "notes", mevcut: p.notes, gelen: input.notes?.trim() || null },
+      ...(input.deliveryDate ? [{ ad: "deliveryDate", mevcut: p.deliveryDate.getTime(), gelen: input.deliveryDate.getTime() }] : []),
+    ],
+    collision: (p) => `Bu form daha önce kaydedilmiş: ${p.docNo}. Yeni bordro için formu kapatıp yeniden açın.`,
+    collisionEk: (p) => ({ noteId: p.id, docNo: p.docNo }),
+    respond: (p) => ({ id: p.id, docNo: p.docNo, count: p.items.length }),
+  });
 }
 
 /**
@@ -552,6 +537,7 @@ export class ChequeDeliveryNoteService {
     const ctx: CreateCtx = {
       input, chequeIds, deliveryDate, clientToken, movementOn, canMoveCheques: opts.canMoveCheques === true, userId,
     };
+    const replay = noteReplay(input, chequeIds);
 
     let outcome: CreateOutcome;
     try {
@@ -562,8 +548,8 @@ export class ChequeDeliveryNoteService {
             // ve mükerrer onayı (②) replay'i "zaten bordroda" 409'una çevirirdi. Replay hareketi
             // yeniden KOŞMAZ.
             if (clientToken) {
-              const prior = await lockedPriorByTokenTx(tx, clientToken);
-              if (prior) return { replay: true, ...resolveReplay(prior, input, chequeIds) };
+              const replayed = await replay.inTx(tx, clientToken);
+              if (replayed) return { replay: true, ...replayed };
             }
             return { replay: false, ...(await this.createTx(tx, ctx)) };
           }),
@@ -574,12 +560,9 @@ export class ChequeDeliveryNoteService {
     } catch (err) {
       // Token kilidi aynı denemeleri serileştirir; bu dal kilidi atlayan bir yazara karşı savunmadır.
       if (!clientToken || !isClientTokenP2002(err)) throw err;
-      const prior = await prisma.chequeDeliveryNote.findUnique({
-        where: { clientToken },
-        select: REPLAY_SELECT,
-      });
-      if (!prior) throw err;
-      outcome = { replay: true, ...resolveReplay(prior, input, chequeIds) };
+      const replayed = await replay.replayIfAny(clientToken);
+      if (!replayed) throw err;
+      outcome = { replay: true, ...replayed };
     }
 
     if (outcome.replay) {

@@ -25,7 +25,7 @@ import { randomUUID } from "node:crypto";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { assertRollReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -228,6 +228,26 @@ interface TamburStepSummary {
   stationCode: string;
   stationName: string;
   rolls: TamburRollSummary[];
+}
+
+/**
+ * Kesim replay'i (iki kesim yolu): aynı `clientToken`la doğmuş çocuk + güncel ebeveyn. Çocuk sonradan iptal/fire
+ * edildiyse 409 `ENTRY_CANCELLED` (4. durum). ⚠️ AYNI TOKEN, FARKLI GÖVDE (BULGU-T4-003): operatör 40 m kesip zaman
+ * aşımına düşer, yeniden ölçüp 25 m yazar, aynı token gider — düzeltme sessizce yutulmasın; yabancı bir
+ * ebeveyn/çocuk çifti de dönmesin.
+ */
+function cutReplay<R>(parentId: string, length: number, respond: (child: Roll, parent: Roll) => R) {
+  return tokenReplay<Roll, R>({
+    find: (db, clientToken) => db.roll.findUnique({ where: { clientToken } }),
+    alive: assertRollReplayAlive,
+    identity: (child) => [
+      { ad: "parentRollId", mevcut: child.parentRollId, gelen: parentId },
+      { ad: "cutLength", mevcut: child.initialQty, gelen: length },
+    ],
+    collision: "Bu istemci anahtarı FARKLI bir kesim için kullanılmış. Ekranı yenileyip kesimi tekrar girin — önceki kesim zaten kayıtlı olabilir.",
+    collisionEk: (child) => ({ childBarcode: child.barcode }),
+    respond: async (child) => respond(child, await prisma.roll.findUniqueOrThrow({ where: { id: parentId } })),
+  });
 }
 
 export class TamburService {
@@ -2095,63 +2115,33 @@ export class TamburService {
   // ===========================================================================
 
   /**
-   * İdempotent tekrar (iki kesim yolu): aynı `clientToken`la doğmuş çocuk varsa ilk kesimin
-   * çocuğu + güncel ebeveyn döner. Kilitten ÖNCE (ilk deneme ebeveyni eksilttiği için tekrar
-   * "top değişti" 409'una düşmesin) ve eşzamanlı aynı-token yarışında (P2002) çağrılır.
+   * Depo topu kesimi (R): token her kuraldan önce okunur ve kesim hangi hatayla düşerse düşsün
+   * (tx öncesi aşım/tüketilmiş kuralı, token P2002) yeniden okunur — cevap token'dan gelir.
    */
-  private async findCutReplay(
-    parentId: string,
-    clientToken: string,
-    length: number,
-  ): Promise<{ child: Roll; parent: Roll } | null> {
-    const existing = await prisma.roll.findUnique({ where: { clientToken } });
-    if (!existing) return null;
-    const freshParent = await prisma.roll.findUnique({ where: { id: parentId } });
-    if (!freshParent) return null;
-    // ⚠️ AYNI TOKEN, FARKLI GÖVDE (BULGU-T4-003): operatör 40 m kesip zaman aşımına
-    // düşer, yeniden ölçüp 25 m yazar, aynı token gider — düzeltme sessizce yutulmasın;
-    // yabancı bir ebeveyn/çocuk çifti de dönmesin. (Açık kumaşta alan adı `lengthMeters`.)
-    assertReplayPayloadMatches(
-      [
-        { ad: "parentRollId", mevcut: existing.parentRollId, gelen: parentId },
-        { ad: "cutLength", mevcut: existing.initialQty, gelen: length },
-      ],
-      "Bu istemci anahtarı FARKLI bir kesim için kullanılmış. Ekranı yenileyip " +
-        "kesimi tekrar girin — önceki kesim zaten kayıtlı olabilir.",
-      { childBarcode: existing.barcode },
-    );
-    return { child: existing, parent: freshParent };
-  }
-
-  private async cutWarehouseReplay(
-    rollId: string,
-    clientToken: string,
-    cutLength: number,
-  ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }> | null> {
-    const r = await this.findCutReplay(rollId, clientToken, cutLength);
-    if (!r) return null;
-    return {
-      success: true,
-      data: { childRoll: r.child, parentRoll: r.parent, parentRemainingQty: Number(r.parent.currentQty) },
-      message: "Kesim zaten kaydedilmiş (idempotent retry)",
-    };
-  }
-
-  private async cutOpenFabricReplay(
-    parentId: string,
-    clientToken: string,
-    lengthMeters: number,
-  ): Promise<ApiResponse<{ childRoll: Roll; parentRemainingQty: number }> | null> {
-    const r = await this.findCutReplay(parentId, clientToken, lengthMeters);
-    if (!r) return null;
-    return {
-      success: true,
-      data: { childRoll: r.child, parentRemainingQty: Number(r.parent.currentQty) },
-      message: "Kesim zaten kaydedilmiş (idempotent retry)",
-    };
-  }
-
   async cutWarehouseRoll(
+    ...args: Parameters<TamburService["cutWarehouseRollInner"]>
+  ): ReturnType<TamburService["cutWarehouseRollInner"]> {
+    const [rollId, data] = args;
+    return cutReplay<Awaited<ReturnType<TamburService["cutWarehouseRollInner"]>>>(rollId, data.cutLength, (child, parent) => ({
+      success: true,
+      data: { childRoll: child, parentRoll: parent, parentRemainingQty: Number(parent.currentQty) },
+      message: "Kesim zaten kaydedilmiş (idempotent retry)",
+    })).run(data.clientToken, () => this.cutWarehouseRollInner(...args));
+  }
+
+  /** Açık kumaş kesimi (R) — `cutWarehouseRoll` ile aynı boğaz. */
+  async cutOpenFabric(
+    ...args: Parameters<TamburService["cutOpenFabricInner"]>
+  ): ReturnType<TamburService["cutOpenFabricInner"]> {
+    const [openFabricRollId, data] = args;
+    return cutReplay<Awaited<ReturnType<TamburService["cutOpenFabricInner"]>>>(openFabricRollId, data.lengthMeters, (child, parent) => ({
+      success: true,
+      data: { childRoll: child, parentRemainingQty: Number(parent.currentQty) },
+      message: "Kesim zaten kaydedilmiş (idempotent retry)",
+    })).run(data.clientToken, () => this.cutOpenFabricInner(...args));
+  }
+
+  private async cutWarehouseRollInner(
     rollId: string,
     data: {
       cutLength: number;
@@ -2193,11 +2183,6 @@ export class TamburService {
     if (!(data.cutLength > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
     }
-    if (data.clientToken) {
-      const replay = await this.cutWarehouseReplay(rollId, data.clientToken, data.cutLength);
-      if (replay) return replay;
-    }
-
     // Kat katalog doğrulaması — `undefined` korunur (parent'tan miras dalı ona bakar).
     const foldType = await resolveFoldTypeForWrite(data.foldType);
 
@@ -2308,312 +2293,297 @@ export class TamburService {
       updatedParent: Roll;
       defter: { pair: boolean; overage: boolean };
     };
+    result = await prisma.$transaction(async (tx) => {
+    // ── KİLİT tx'in İLK ifadesi, NİYET KORUNUR (2026-09-25, BULGU-T1-002 daraltıldı) ──
+    // Ebeveyn satır kilidiyle alınır, kalan kilit ALTINDA okunur. Karar ÖN OKUMADAKİ
+    // niyete göre verilir: normal niyette kalan artık yetmiyorsa ya da aşım niyetinde
+    // kalan ön okumadan farklıysa araya başka bir yazım girmiştir (eşzamanlı kesim,
+    // çift gönderim) → 409. Eşzamanlı eksilme sessizce AŞIMA DÖNMEZ: iki tablet aynı
+    // topu aynı anda kesemez, onu aşım diye yazmak yoktan kumaş yazmaktır.
+    const kilitli = await tx.$queryRaw<Array<{ currentQty: Prisma.Decimal }>>`
+      SELECT "currentQty" FROM rolls WHERE id = ${parent.id}::uuid FOR UPDATE`;
+    if (kilitli.length === 0) throw AppError.conflict("Top bu sırada silindi — listeyi yenileyin");
+    const tazeKalan = new Prisma.Decimal(kilitli[0]!.currentQty);
+    const tazeAsim = exceedsRemaining;
+    const degisti = tazeAsim
+      ? !tazeKalan.equals(new Prisma.Decimal(parent.currentQty))
+      : tazeKalan.lessThan(data.cutLength);
+    if (degisti) {
+      throw AppError.conflict("Bu top siz keserken başka bir işlemle değişti — ekranı yenileyip tekrar deneyin.", {
+        code: "ROLL_CHANGED_DURING_CUT",
+      });
+    }
+
+    const child = await tx.roll.create({
+      data: {
+        barcode: childBarcode,
+        clientToken: data.clientToken ?? null,
+        itemId: parent.itemId,
+        colorId: parent.colorId,
+        width: parent.width,
+        // KAT — kesim anında seçilen değer KAZANIR. Bu yolda iş emri/adım YOK
+        // (depo topu kesimi), tek bağlam parent → fallback yalnız parent.
+        foldType: foldType !== undefined ? foldType : (parent.foldType ?? null),
+        initialQty: data.cutLength,
+        currentQty: data.cutLength,
+        weightKg: null,
+        // Bitmiş re-cut → WAREHOUSE; ham kesim → operatör hedefi (STOCK/WAREHOUSE).
+        status: childStatus,
+        qualityGrade: resolvedQualityGrade,
+        qualityGradeId: resolvedQualityGradeId,
+        parentRollId: parent.id,
+        // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
+        batchId: parent.batchId,
+        // DEPO parent'tan MİRAS ALINIR (giriş istasyonunun TERSİNE): kesmek malı
+        // TAŞIMAZ, çocuk ebeveynin durduğu depodadır. Sorgu yalnız ebeveyn deposuz
+        // ise (backfill öncesi kayıt) koşar — `??` sağ tarafı kısa devre yapar.
+        warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
+        // GİRİŞ İSTASYONU — bu yolda ADIM YOK (depo topu kesimi) → oturum tek kaynak.
+        // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
+        // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
+        entryStationId: resolveEntryStationId({ sessionStationId }),
+        entrySource: RollEntrySource.TAMBUR_SPLIT,
+        createdById: userId ?? null,
+        createdMachineId: sessionMachineId ?? null,
+        // Kartelalık yalnız depoya (WAREHOUSE) inen çıktıda anlamlı; ham stoğa
+        // dönen (üretime devam) parçada işaretlenmez.
+        markedForKartela:
+          (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
+        // Etiket niyeti kesim anında kalıcı (yazıcı/ekran bağımsız).
+        lastLabelSnapshot: cutIntentSnapshot,
+        // Sorgulanabilir ayna — snapshot ile AYNI create'te (bkz. Roll.labelCustomerId).
+        labelCustomerId: cutLabelCustomerId,
+      },
+    });
+
+    if (propertySnapshot.length > 0) {
+      await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
+    }
+
+    // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent topta yapılmış operasyonlar
+    // child'a `inheritedFromParentRollId=parent.id` ile kopyalanır. Aksi halde
+    // child Bitmiş Depo'da "kurşun/KK2 yapılmadı" gözüküyor.
+    // Filter KALDIRILDI: zincirleme inherit destekle. Depo topundaki KURSUN/QC2
+    // op'ları zaten parent'tan inherit edilmiştir (inheritedFromParentRollId
+    // set). Sadece "orijinal" op'lara bakarsak chain kopar, child'da hiç op
+    // kalmaz. Çoklu kayıt olabilir; sorun değil — UI find() ilki bulur.
+    const inheritedOps = await tx.rollOperation.findMany({
+      where: { ...ACTIVE_OPERATION,
+        rollId: parent.id,
+        operationType: {
+          in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
+        },
+      },
+      // machineId: parent'ın işlendiği makine kopyada KORUNUR (yeni damga uygulanmaz).
+      select: {
+        workOrderStepId: true,
+        operationType: true,
+        operatorId: true,
+        metadata: true,
+        machineId: true,
+      },
+    });
+    if (inheritedOps.length > 0) {
+      await tx.rollOperation.createMany({
+        data: inheritedOps.map((op) => ({
+          rollId: child.id,
+          workOrderStepId: op.workOrderStepId,
+          operationType: op.operationType,
+          operatorId: op.operatorId,
+          machineId: op.machineId,
+          metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+          inheritedFromParentRollId: parent.id,
+        })),
+      });
+    }
+
+    // Parent kısalıyor — YALNIZ `currentQty` düşer, `initialQty` DOKUNULMAZ.
+    //
+    // ⚠️ 2026-08-29 DENETİMİ ÖNCESİ buraya `initialQty` de yazılıyordu ("her
+    // kesim sonrası reset") ve gerekçesi gösterimdi: "70 / 100" yanıltıcı
+    // görünüyordu. Ama kolonun anlamı GÖSTERİM değil ÜRETİM ANI SNAPSHOT'ıdır
+    // ve onu düşürmek üç ayrı kusur üretiyordu:
+    //   ① İş emrinin ÜRETİLEN metrajı geriye dönük azalıyordu (BULGU-T2-016;
+    //      ölçüm: IE1408260004 −76,7 m; saha kopyasında 120 top bu durumda).
+    //   ② `rollWhole = initialQty.equals(currentQty)` kesimden SONRA da TRUE
+    //      kalıyordu → "yalnız bütün topta metraj düzeltilir" kuralı kesilmiş
+    //      topu da geçiriyor, operatör ekrandaki eski değeri yazınca 100 m'lik
+    //      fiziksel toptan sistemde 140,5 m doğuyordu (BULGU-T1-001 repro'su).
+    //   ③ "Tümden Geri Al" çocuk toplamını yazarken `initialQty` düşük kaldığı
+    //      için sapma defterine OLMAYAN bir AŞIM satırı yazılıyordu (BULGU-T2-002).
+    // Geri alma aritmetiği bundan ETKİLENMEZ: `computeRestoredQty` ebeveynin
+    // değil ÇOCUKLARIN `initialQty`'sini toplar (tambur-undo.service.ts:344).
+    // Gösterim tarafı: "60 / 100" artık doğru cümledir — "bu top 100 m girdi,
+    // 60 m'si elde" — ve kesilmiş topun metrajı ARTIK DÜZELTİLEMEZ (istenen).
+    //
+    // Atomic decrement — hesap DB-side, gte guard concurrent overdraw'a karşı.
+    // Aşımda (cutLength > currentQty) decrement negatife düşer → bunun yerine topu
+    // tamamen tüket (currentQty=0; initialQty korunur). gt:0 guard eşzamanlı
+    // çift-tüketimi engeller.
+    // F128: guarded-decrement = atomik claim. WHERE'e status + shipmentId:null +
+    // sackId:null eklenerek pre-tx (check-then-act) statü/rezervasyon/çuval kontrolü
+    // tx içine alınır: eşzamanlı sevkiyat rezervasyonu (shipping updateMany {id,
+    // shipmentId:null, status:WAREHOUSE}) ya da ÇUVALA OKUTMA (scanIntoSack
+    // updateMany {id, sackId:null}) araya girerse WHERE eşleşmez → P2025 → 409.
+    // `sackId: null` şart: çuvaldaki topun metrajını eksiltmek çuval içeriğini
+    // sessizce bozar (2026-07-30 hayalet-içerik bulgusu).
+    // Aşım dalının WHERE'indeki `currentQty: tazeKalan` guard'ı KİLİTLE birlikte kalır
+    // (savunma katmanı): kilit altında okunan değerden başka bir değere yazılamaz.
+    // ⚠️ `currentQty > 0` ŞARTI YİNE YOK: 0'a inmiş topta ikinci aşım kesimi
+    //    MEŞRU (mal fiziksel olarak elde, 2026-08-12 saha vakası).
+    let updatedParent;
     try {
-      result = await prisma.$transaction(async (tx) => {
-      // ── KİLİT tx'in İLK ifadesi, NİYET KORUNUR (2026-09-25, BULGU-T1-002 daraltıldı) ──
-      // Ebeveyn satır kilidiyle alınır, kalan kilit ALTINDA okunur. Karar ÖN OKUMADAKİ
-      // niyete göre verilir: normal niyette kalan artık yetmiyorsa ya da aşım niyetinde
-      // kalan ön okumadan farklıysa araya başka bir yazım girmiştir (eşzamanlı kesim,
-      // çift gönderim) → 409. Eşzamanlı eksilme sessizce AŞIMA DÖNMEZ: iki tablet aynı
-      // topu aynı anda kesemez, onu aşım diye yazmak yoktan kumaş yazmaktır.
-      const kilitli = await tx.$queryRaw<Array<{ currentQty: Prisma.Decimal }>>`
-        SELECT "currentQty" FROM rolls WHERE id = ${parent.id}::uuid FOR UPDATE`;
-      if (kilitli.length === 0) throw AppError.conflict("Top bu sırada silindi — listeyi yenileyin");
-      const tazeKalan = new Prisma.Decimal(kilitli[0]!.currentQty);
-      const tazeAsim = exceedsRemaining;
-      const degisti = tazeAsim
-        ? !tazeKalan.equals(new Prisma.Decimal(parent.currentQty))
-        : tazeKalan.lessThan(data.cutLength);
-      if (degisti) {
-        throw AppError.conflict("Bu top siz keserken başka bir işlemle değişti — ekranı yenileyip tekrar deneyin.", {
-          code: "ROLL_CHANGED_DURING_CUT",
-        });
-      }
-
-      const child = await tx.roll.create({
-        data: {
-          barcode: childBarcode,
-          clientToken: data.clientToken ?? null,
-          itemId: parent.itemId,
-          colorId: parent.colorId,
-          width: parent.width,
-          // KAT — kesim anında seçilen değer KAZANIR. Bu yolda iş emri/adım YOK
-          // (depo topu kesimi), tek bağlam parent → fallback yalnız parent.
-          foldType: foldType !== undefined ? foldType : (parent.foldType ?? null),
-          initialQty: data.cutLength,
-          currentQty: data.cutLength,
-          weightKg: null,
-          // Bitmiş re-cut → WAREHOUSE; ham kesim → operatör hedefi (STOCK/WAREHOUSE).
-          status: childStatus,
-          qualityGrade: resolvedQualityGrade,
-          qualityGradeId: resolvedQualityGradeId,
-          parentRollId: parent.id,
-          // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
-          batchId: parent.batchId,
-          // DEPO parent'tan MİRAS ALINIR (giriş istasyonunun TERSİNE): kesmek malı
-          // TAŞIMAZ, çocuk ebeveynin durduğu depodadır. Sorgu yalnız ebeveyn deposuz
-          // ise (backfill öncesi kayıt) koşar — `??` sağ tarafı kısa devre yapar.
-          warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
-          // GİRİŞ İSTASYONU — bu yolda ADIM YOK (depo topu kesimi) → oturum tek kaynak.
-          // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
-          // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
-          entryStationId: resolveEntryStationId({ sessionStationId }),
-          entrySource: RollEntrySource.TAMBUR_SPLIT,
-          createdById: userId ?? null,
-          createdMachineId: sessionMachineId ?? null,
-          // Kartelalık yalnız depoya (WAREHOUSE) inen çıktıda anlamlı; ham stoğa
-          // dönen (üretime devam) parçada işaretlenmez.
-          markedForKartela:
-            (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
-          // Etiket niyeti kesim anında kalıcı (yazıcı/ekran bağımsız).
-          lastLabelSnapshot: cutIntentSnapshot,
-          // Sorgulanabilir ayna — snapshot ile AYNI create'te (bkz. Roll.labelCustomerId).
-          labelCustomerId: cutLabelCustomerId,
-        },
-      });
-
-      if (propertySnapshot.length > 0) {
-        await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
-      }
-
-      // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent topta yapılmış operasyonlar
-      // child'a `inheritedFromParentRollId=parent.id` ile kopyalanır. Aksi halde
-      // child Bitmiş Depo'da "kurşun/KK2 yapılmadı" gözüküyor.
-      // Filter KALDIRILDI: zincirleme inherit destekle. Depo topundaki KURSUN/QC2
-      // op'ları zaten parent'tan inherit edilmiştir (inheritedFromParentRollId
-      // set). Sadece "orijinal" op'lara bakarsak chain kopar, child'da hiç op
-      // kalmaz. Çoklu kayıt olabilir; sorun değil — UI find() ilki bulur.
-      const inheritedOps = await tx.rollOperation.findMany({
-        where: { ...ACTIVE_OPERATION,
-          rollId: parent.id,
-          operationType: {
-            in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
-          },
-        },
-        // machineId: parent'ın işlendiği makine kopyada KORUNUR (yeni damga uygulanmaz).
-        select: {
-          workOrderStepId: true,
-          operationType: true,
-          operatorId: true,
-          metadata: true,
-          machineId: true,
-        },
-      });
-      if (inheritedOps.length > 0) {
-        await tx.rollOperation.createMany({
-          data: inheritedOps.map((op) => ({
-            rollId: child.id,
-            workOrderStepId: op.workOrderStepId,
-            operationType: op.operationType,
-            operatorId: op.operatorId,
-            machineId: op.machineId,
-            metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
-            inheritedFromParentRollId: parent.id,
-          })),
-        });
-      }
-
-      // Parent kısalıyor — YALNIZ `currentQty` düşer, `initialQty` DOKUNULMAZ.
-      //
-      // ⚠️ 2026-08-29 DENETİMİ ÖNCESİ buraya `initialQty` de yazılıyordu ("her
-      // kesim sonrası reset") ve gerekçesi gösterimdi: "70 / 100" yanıltıcı
-      // görünüyordu. Ama kolonun anlamı GÖSTERİM değil ÜRETİM ANI SNAPSHOT'ıdır
-      // ve onu düşürmek üç ayrı kusur üretiyordu:
-      //   ① İş emrinin ÜRETİLEN metrajı geriye dönük azalıyordu (BULGU-T2-016;
-      //      ölçüm: IE1408260004 −76,7 m; saha kopyasında 120 top bu durumda).
-      //   ② `rollWhole = initialQty.equals(currentQty)` kesimden SONRA da TRUE
-      //      kalıyordu → "yalnız bütün topta metraj düzeltilir" kuralı kesilmiş
-      //      topu da geçiriyor, operatör ekrandaki eski değeri yazınca 100 m'lik
-      //      fiziksel toptan sistemde 140,5 m doğuyordu (BULGU-T1-001 repro'su).
-      //   ③ "Tümden Geri Al" çocuk toplamını yazarken `initialQty` düşük kaldığı
-      //      için sapma defterine OLMAYAN bir AŞIM satırı yazılıyordu (BULGU-T2-002).
-      // Geri alma aritmetiği bundan ETKİLENMEZ: `computeRestoredQty` ebeveynin
-      // değil ÇOCUKLARIN `initialQty`'sini toplar (tambur-undo.service.ts:344).
-      // Gösterim tarafı: "60 / 100" artık doğru cümledir — "bu top 100 m girdi,
-      // 60 m'si elde" — ve kesilmiş topun metrajı ARTIK DÜZELTİLEMEZ (istenen).
-      //
-      // Atomic decrement — hesap DB-side, gte guard concurrent overdraw'a karşı.
-      // Aşımda (cutLength > currentQty) decrement negatife düşer → bunun yerine topu
-      // tamamen tüket (currentQty=0; initialQty korunur). gt:0 guard eşzamanlı
-      // çift-tüketimi engeller.
-      // F128: guarded-decrement = atomik claim. WHERE'e status + shipmentId:null +
-      // sackId:null eklenerek pre-tx (check-then-act) statü/rezervasyon/çuval kontrolü
-      // tx içine alınır: eşzamanlı sevkiyat rezervasyonu (shipping updateMany {id,
-      // shipmentId:null, status:WAREHOUSE}) ya da ÇUVALA OKUTMA (scanIntoSack
-      // updateMany {id, sackId:null}) araya girerse WHERE eşleşmez → P2025 → 409.
-      // `sackId: null` şart: çuvaldaki topun metrajını eksiltmek çuval içeriğini
-      // sessizce bozar (2026-07-30 hayalet-içerik bulgusu).
-      // Aşım dalının WHERE'indeki `currentQty: tazeKalan` guard'ı KİLİTLE birlikte kalır
-      // (savunma katmanı): kilit altında okunan değerden başka bir değere yazılamaz.
-      // ⚠️ `currentQty > 0` ŞARTI YİNE YOK: 0'a inmiş topta ikinci aşım kesimi
-      //    MEŞRU (mal fiziksel olarak elde, 2026-08-12 saha vakası).
-      let updatedParent;
-      try {
-        updatedParent = tazeAsim
-          ? await tx.roll.update({
-              where: {
-                id: parent.id,
-                status: parent.status,
-                shipmentId: null,
-                sackId: null,
-                // İYİMSER GUARD — okunan taze değer. Bkz. yukarıdaki not.
-                currentQty: tazeKalan,
-              },
-              data: { currentQty: 0 },
-            })
-          : await tx.roll.update({
-              where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null, currentQty: { gte: data.cutLength } },
-              data: { currentQty: { decrement: data.cutLength } },
-            });
-      } catch (err) {
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === "P2025"
-        ) {
-          throw AppError.conflict(
-            "Top bu sırada değişti (statü değişmiş / çuvala okutulmuş / sevkiyata rezerve edilmiş / kalan metre yetersiz) — listeyi yenileyip tekrar deneyin"
-          );
-        }
-        throw err;
-      }
-      const newParentQty = Number(updatedParent.currentQty);
-      // Kapanış öncesi metraj = kesimden ÖNCEKİ kalan (satır KİLİDİ altında okunan
-      // `tazeKalan`; normal niyette ön okumadan küçük olabilir), çocukların toplamı DEĞİL.
-      const kesimOncesiQty = Number(tazeKalan);
-
-      // AŞIM DEFTERİ — `cutOpenFabric` ikizi. Depo kesimi adıma bağlı DEĞİL.
-      const overageQty = tazeAsim ? overageOf(data.cutLength, tazeKalan) : new Prisma.Decimal(0);
-      let overageVarianceId: string | null = null;
-      if (tazeAsim) {
-        overageVarianceId = await recordVarianceTx(tx, {
-          rollId: parent.id,
-          workOrderStepId: null,
-          kind: RollVarianceKind.OVERAGE,
-          // Defter payı da TAZE metrajdan (bayat değer 140 m'lik aşımı 20 m yazıyordu).
-          qty: overageQty,
-          source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
-          // KEŞİF EBEVEYNDE, KAYNAĞI ÇOCUK: geri alma bu çocuğun keşfini buradan bulur
-          // ve bump'ı yalnız karşılanmayan kısım için yazar (hüküm ②).
-          sourceRollId: child.id,
-          userId,
-        });
-      }
-
-      // ── STOK DEFTERİ — KESİM MALI TAŞIMAZ, BÖLER ──────────────────────────
-      // Ebeveynden çıkan metraj çocuğa girer: satır TEK değil ÇİFT yazılır ve
-      // ikisi aynı `transformGroupId` altında toplanır → grup neti SIFIR, depo
-      // toplamı kesimden etkilenmez. "Çocuğa yazmak çift saydırır" korkusu
-      // yalnız EBEVEYN ÇIKIŞI yazılmadığında geçerliydi.
-      //
-      // DEVREDEN metraj ebeveynin GERÇEKTEN kaybettiği kadardır: aşımda ebeveyn
-      // `tazeKalan`ı kaybeder, çocuk `cutLength` ile doğar.
-      const transferQty = tazeAsim ? tazeKalan : new Prisma.Decimal(data.cutLength);
-      let ledgerPairWritten = false;
-      let ledgerOverageWritten = false;
-      // HEPSİ YA HİÇ: bir uç yazılamıyorsa (deposuz defter-öncesi top) hiçbiri
-      // yazılmaz — tek başına çocuk girişi, karşılığı olmayan bir ARTI olurdu.
-      if (
-        parent.warehouseId !== null &&
-        child.warehouseId !== null &&
-        WAREHOUSE_STOCK_STATUSES.includes(parent.status) &&
-        WAREHOUSE_STOCK_STATUSES.includes(child.status) &&
-        qtyYazilabilir(transferQty)
-      ) {
-        const transformGroupId = randomUUID();
-        await postStockMove(tx, {
-          rollId: parent.id,
-          eventType: WarehouseEventType.TRANSFORM,
-          qty: transferQty,
-          from: { warehouseId: parent.warehouseId, status: parent.status },
-          reasonCode: STOCK_MOVE_REASON.CUT_SPLIT,
-          transformGroupId,
-          userId: userId ?? null,
-        });
-        await postStockMove(tx, {
-          rollId: child.id,
-          eventType: WarehouseEventType.TRANSFORM,
-          qty: transferQty,
-          to: { warehouseId: child.warehouseId, status: child.status },
-          reasonCode: STOCK_MOVE_REASON.CUT_SPLIT,
-          transformGroupId,
-          userId: userId ?? null,
-        });
-        ledgerPairWritten = true;
-      }
-      // AŞIM bir DEVİR değil KEŞİF: gruba GİRMEZ, yoksa "grup neti sıfır"
-      // değişmezi aşımda sessizce kırılırdı. Kapı ÇİFTTEN AYRI sorulur çünkü
-      // 0 m'ye inmiş topta ikinci aşım kesimi meşrudur ve orada devredecek
-      // metraj yoktur (2026-08-12 saha vakası).
-      if (
-        child.warehouseId !== null &&
-        WAREHOUSE_STOCK_STATUSES.includes(child.status) &&
-        qtyYazilabilir(overageQty)
-      ) {
-        await postStockMove(tx, {
-          rollId: child.id,
-          eventType: WarehouseEventType.ADJUST,
-          qty: overageQty,
-          to: { warehouseId: child.warehouseId, status: child.status },
-          reasonCode: STOCK_MOVE_REASON.OVERAGE,
-          rollVarianceId: overageVarianceId,
-          userId: userId ?? null,
-        });
-        ledgerOverageWritten = true;
-      }
-
-      // ── KAYNAK TÜKENDİYSE EMEKLİ ET (2026-08-29 / BULGU-T1-039) ────────────
-      // Operatör 36,7 m'lik depo topunu tek parça hâlinde keser ve ekranı
-      // "Bitir" demeden kapatırsa kaynak top WAREHOUSE / 0 m / BARKODLU olarak
-      // depoda kalıyordu: Bitmiş Depo listesinde fazla bir satır, çuvala
-      // okutulabilen ve çuvalın "top adedi"ni şişiren bir hayalet, irsaliyede
-      // 0 m'lik bir kalem. Metraj toplamları etkilenmez (0 m), ADET metrikleri
-      // etkilenir — ve mutabakat kapısı bu satırları sonsuza dek anomali diye
-      // raporlar, yani kapının sinyali körelir.
-      //
-      // `finalizeWarehouseCut`in kapanışıyla AYNI hâl yazılır: kapanış öncesi
-      // metraj + statü. Geri alma yolu (`tambur-undo` depo dalı) bu iki kolonu
-      // OKUR — yazmazsak diriltme metrajı çocuklardan TÜRETMEYE çalışır ve
-      // aşımda `currentQty > initialQty` üretir (2026-08-09 dersi).
-      // ⚠️⚠️ AŞIM DALI HARİÇ — bu iki kural ÇARPIŞIYOR ve sınır burada (bekçi
-      //    `test_tambur_cut_concurrency` §3 ilk yazımda bunu kırmızı verdi):
-      //    aşım kesiminde parent 0'a iner ama FİZİKSEL kumaş bitmemiştir
-      //    (2026-08-12: "500 m kayıtlı kumaş 550 m çıkabilir, fazlalık tek
-      //    kesimde bitmeyebilir"). Orada emekli etmek, operatörün elindeki malı
-      //    kesmesini engeller ve "top işlenebilir durumda değil" 400'ü verir.
-      //    Emeklilik yalnız TAM BİTEN kesimde: kalan tam tükendi ve aşım YOK.
-      if (!tazeAsim && newParentQty === 0 && parent.status !== RollStatus.TAMBUR_CONSUMED) {
-        await tx.roll.update({
-          where: { id: parent.id },
-          data: {
-            status: RollStatus.TAMBUR_CONSUMED,
-            currentStepId: null,
-            preTamburCloseQty: new Prisma.Decimal(kesimOncesiQty),
-            preTamburCloseStatus: parent.status,
-          },
-        });
-      }
-
-      return {
-        child,
-        newParentQty,
-        updatedParent,
-        defter: { pair: ledgerPairWritten, overage: ledgerOverageWritten },
-      };
-      });
+      updatedParent = tazeAsim
+        ? await tx.roll.update({
+            where: {
+              id: parent.id,
+              status: parent.status,
+              shipmentId: null,
+              sackId: null,
+              // İYİMSER GUARD — okunan taze değer. Bkz. yukarıdaki not.
+              currentQty: tazeKalan,
+            },
+            data: { currentQty: 0 },
+          })
+        : await tx.roll.update({
+            where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null, currentQty: { gte: data.cutLength } },
+            data: { currentQty: { decrement: data.cutLength } },
+          });
     } catch (err) {
-      // Offline/ağ-retry idempotency: aynı clientToken ile 2. çağrı → clientToken @unique
-      // P2002. tx geri sarıldığından İKİNCİ decrement UYGULANMAZ; ilk çağrının oluşturduğu
-      // child + güncel parent idempotent döner (createInitialEntry deseni).
       if (
-        data.clientToken &&
         err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
+        err.code === "P2025"
       ) {
-        const replay = await this.cutWarehouseReplay(rollId, data.clientToken, data.cutLength);
-        if (replay) return replay;
+        throw AppError.conflict(
+          "Top bu sırada değişti (statü değişmiş / çuvala okutulmuş / sevkiyata rezerve edilmiş / kalan metre yetersiz) — listeyi yenileyip tekrar deneyin"
+        );
       }
       throw err;
     }
+    const newParentQty = Number(updatedParent.currentQty);
+    // Kapanış öncesi metraj = kesimden ÖNCEKİ kalan (satır KİLİDİ altında okunan
+    // `tazeKalan`; normal niyette ön okumadan küçük olabilir), çocukların toplamı DEĞİL.
+    const kesimOncesiQty = Number(tazeKalan);
+
+    // AŞIM DEFTERİ — `cutOpenFabric` ikizi. Depo kesimi adıma bağlı DEĞİL.
+    const overageQty = tazeAsim ? overageOf(data.cutLength, tazeKalan) : new Prisma.Decimal(0);
+    let overageVarianceId: string | null = null;
+    if (tazeAsim) {
+      overageVarianceId = await recordVarianceTx(tx, {
+        rollId: parent.id,
+        workOrderStepId: null,
+        kind: RollVarianceKind.OVERAGE,
+        // Defter payı da TAZE metrajdan (bayat değer 140 m'lik aşımı 20 m yazıyordu).
+        qty: overageQty,
+        source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
+        // KEŞİF EBEVEYNDE, KAYNAĞI ÇOCUK: geri alma bu çocuğun keşfini buradan bulur
+        // ve bump'ı yalnız karşılanmayan kısım için yazar (hüküm ②).
+        sourceRollId: child.id,
+        userId,
+      });
+    }
+
+    // ── STOK DEFTERİ — KESİM MALI TAŞIMAZ, BÖLER ──────────────────────────
+    // Ebeveynden çıkan metraj çocuğa girer: satır TEK değil ÇİFT yazılır ve
+    // ikisi aynı `transformGroupId` altında toplanır → grup neti SIFIR, depo
+    // toplamı kesimden etkilenmez. "Çocuğa yazmak çift saydırır" korkusu
+    // yalnız EBEVEYN ÇIKIŞI yazılmadığında geçerliydi.
+    //
+    // DEVREDEN metraj ebeveynin GERÇEKTEN kaybettiği kadardır: aşımda ebeveyn
+    // `tazeKalan`ı kaybeder, çocuk `cutLength` ile doğar.
+    const transferQty = tazeAsim ? tazeKalan : new Prisma.Decimal(data.cutLength);
+    let ledgerPairWritten = false;
+    let ledgerOverageWritten = false;
+    // HEPSİ YA HİÇ: bir uç yazılamıyorsa (deposuz defter-öncesi top) hiçbiri
+    // yazılmaz — tek başına çocuk girişi, karşılığı olmayan bir ARTI olurdu.
+    if (
+      parent.warehouseId !== null &&
+      child.warehouseId !== null &&
+      WAREHOUSE_STOCK_STATUSES.includes(parent.status) &&
+      WAREHOUSE_STOCK_STATUSES.includes(child.status) &&
+      qtyYazilabilir(transferQty)
+    ) {
+      const transformGroupId = randomUUID();
+      await postStockMove(tx, {
+        rollId: parent.id,
+        eventType: WarehouseEventType.TRANSFORM,
+        qty: transferQty,
+        from: { warehouseId: parent.warehouseId, status: parent.status },
+        reasonCode: STOCK_MOVE_REASON.CUT_SPLIT,
+        transformGroupId,
+        userId: userId ?? null,
+      });
+      await postStockMove(tx, {
+        rollId: child.id,
+        eventType: WarehouseEventType.TRANSFORM,
+        qty: transferQty,
+        to: { warehouseId: child.warehouseId, status: child.status },
+        reasonCode: STOCK_MOVE_REASON.CUT_SPLIT,
+        transformGroupId,
+        userId: userId ?? null,
+      });
+      ledgerPairWritten = true;
+    }
+    // AŞIM bir DEVİR değil KEŞİF: gruba GİRMEZ, yoksa "grup neti sıfır"
+    // değişmezi aşımda sessizce kırılırdı. Kapı ÇİFTTEN AYRI sorulur çünkü
+    // 0 m'ye inmiş topta ikinci aşım kesimi meşrudur ve orada devredecek
+    // metraj yoktur (2026-08-12 saha vakası).
+    if (
+      child.warehouseId !== null &&
+      WAREHOUSE_STOCK_STATUSES.includes(child.status) &&
+      qtyYazilabilir(overageQty)
+    ) {
+      await postStockMove(tx, {
+        rollId: child.id,
+        eventType: WarehouseEventType.ADJUST,
+        qty: overageQty,
+        to: { warehouseId: child.warehouseId, status: child.status },
+        reasonCode: STOCK_MOVE_REASON.OVERAGE,
+        rollVarianceId: overageVarianceId,
+        userId: userId ?? null,
+      });
+      ledgerOverageWritten = true;
+    }
+
+    // ── KAYNAK TÜKENDİYSE EMEKLİ ET (2026-08-29 / BULGU-T1-039) ────────────
+    // Operatör 36,7 m'lik depo topunu tek parça hâlinde keser ve ekranı
+    // "Bitir" demeden kapatırsa kaynak top WAREHOUSE / 0 m / BARKODLU olarak
+    // depoda kalıyordu: Bitmiş Depo listesinde fazla bir satır, çuvala
+    // okutulabilen ve çuvalın "top adedi"ni şişiren bir hayalet, irsaliyede
+    // 0 m'lik bir kalem. Metraj toplamları etkilenmez (0 m), ADET metrikleri
+    // etkilenir — ve mutabakat kapısı bu satırları sonsuza dek anomali diye
+    // raporlar, yani kapının sinyali körelir.
+    //
+    // `finalizeWarehouseCut`in kapanışıyla AYNI hâl yazılır: kapanış öncesi
+    // metraj + statü. Geri alma yolu (`tambur-undo` depo dalı) bu iki kolonu
+    // OKUR — yazmazsak diriltme metrajı çocuklardan TÜRETMEYE çalışır ve
+    // aşımda `currentQty > initialQty` üretir (2026-08-09 dersi).
+    // ⚠️⚠️ AŞIM DALI HARİÇ — bu iki kural ÇARPIŞIYOR ve sınır burada (bekçi
+    //    `test_tambur_cut_concurrency` §3 ilk yazımda bunu kırmızı verdi):
+    //    aşım kesiminde parent 0'a iner ama FİZİKSEL kumaş bitmemiştir
+    //    (2026-08-12: "500 m kayıtlı kumaş 550 m çıkabilir, fazlalık tek
+    //    kesimde bitmeyebilir"). Orada emekli etmek, operatörün elindeki malı
+    //    kesmesini engeller ve "top işlenebilir durumda değil" 400'ü verir.
+    //    Emeklilik yalnız TAM BİTEN kesimde: kalan tam tükendi ve aşım YOK.
+    if (!tazeAsim && newParentQty === 0 && parent.status !== RollStatus.TAMBUR_CONSUMED) {
+      await tx.roll.update({
+        where: { id: parent.id },
+        data: {
+          status: RollStatus.TAMBUR_CONSUMED,
+          currentStepId: null,
+          preTamburCloseQty: new Prisma.Decimal(kesimOncesiQty),
+          preTamburCloseStatus: parent.status,
+        },
+      });
+    }
+
+    return {
+      child,
+      newParentQty,
+      updatedParent,
+      defter: { pair: ledgerPairWritten, overage: ledgerOverageWritten },
+    };
+    });
 
     await AuditService.log({
       userId,
@@ -3044,7 +3014,7 @@ export class TamburService {
    * alanında. Geri uyum: tablet eski `status` enum'unu (A1_STOCK/SCRAP)
    * göndermeye devam edebilir; karşılık gelen qualityGrade'e otomatik dönüşür.
    */
-  async cutOpenFabric(
+  private async cutOpenFabricInner(
     openFabricRollId: string,
     data: {
       lengthMeters: number;
@@ -3075,11 +3045,6 @@ export class TamburService {
     if (!(data.lengthMeters > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
     }
-    if (data.clientToken) {
-      const replay = await this.cutOpenFabricReplay(openFabricRollId, data.clientToken, data.lengthMeters);
-      if (replay) return replay;
-    }
-
     // Kat katalog doğrulaması — `undefined` korunur (parent → WO fallback zinciri).
     const foldType = await resolveFoldTypeForWrite(data.foldType);
 
@@ -3190,233 +3155,218 @@ export class TamburService {
       : await resolveQualityGradeId(resolvedQualityGrade);
 
     let result: { child: Roll; newParentQty: number };
-    try {
-      result = await prisma.$transaction(async (tx) => {
-      // F130: WO satırını kilitle → eşzamanlı WO iptaliyle (softDelete cancelClaim
-      // aynı WO satırını kilitler) serileş; iptal-guard'ını kilit ALTINDA TAZE oku
-      // (pre-tx 2169 guard'ının atomik hali). Lock sırası WO→roll (kardeşlerle tutarlı).
-      await touchWorkOrderTx(tx, woId);
-      const freshWo = await tx.workOrder.findUnique({
-        where: { id: woId },
-        select: { status: true },
+    result = await prisma.$transaction(async (tx) => {
+    // F130: WO satırını kilitle → eşzamanlı WO iptaliyle (softDelete cancelClaim
+    // aynı WO satırını kilitler) serileş; iptal-guard'ını kilit ALTINDA TAZE oku
+    // (pre-tx 2169 guard'ının atomik hali). Lock sırası WO→roll (kardeşlerle tutarlı).
+    await touchWorkOrderTx(tx, woId);
+    const freshWo = await tx.workOrder.findUnique({
+      where: { id: woId },
+      select: { status: true },
+    });
+    if (
+      freshWo?.status === WorkOrderStatus.CANCELLED ||
+      freshWo?.status === WorkOrderStatus.SUPERSEDED
+    ) {
+      throw AppError.conflict("İptal/devredilmiş iş emrinin açık kumaşı kesilemez");
+    }
+    // ── AÇIK KUMAŞ SATIR KİLİDİ + NİYET KORUNUR (2026-09-25, K-KES2) ──
+    // Kilit sırası WO → roll (F130). İş emri kilidi eşzamanlı kesimleri zaten SIRALAR:
+    // kural yokken ikinci kesim birincinin commit'inden SONRA "taze" okuyup HER SEFERİNDE
+    // aşıma dönüyor, 100 m'lik kumaştan 240 m çocuk doğuyordu (iyimser guard sıralı tx'te
+    // tutar). `cutWarehouseRoll` ile aynı kural: normal niyette kilitli kalan yetmiyorsa ya
+    // da aşım niyetinde kalan ön okumadan farklıysa 409 — eşzamanlı eksilme aşıma DÖNMEZ.
+    const kilitli = await tx.$queryRaw<Array<{ currentQty: Prisma.Decimal }>>`
+      SELECT "currentQty" FROM rolls WHERE id = ${parent.id}::uuid FOR UPDATE`;
+    if (kilitli.length === 0) throw AppError.conflict("Açık kumaş bu sırada silindi — listeyi yenileyin");
+    const tazeKalan = new Prisma.Decimal(kilitli[0]!.currentQty);
+    const tazeAsim = exceedsRemaining;
+    const degisti = tazeAsim
+      ? !tazeKalan.equals(new Prisma.Decimal(parent.currentQty))
+      : tazeKalan.lessThan(data.lengthMeters);
+    if (degisti) {
+      throw AppError.conflict("Bu top siz keserken başka bir işlemle değişti — ekranı yenileyip tekrar deneyin.", {
+        code: "ROLL_CHANGED_DURING_CUT",
       });
-      if (
-        freshWo?.status === WorkOrderStatus.CANCELLED ||
-        freshWo?.status === WorkOrderStatus.SUPERSEDED
-      ) {
-        throw AppError.conflict("İptal/devredilmiş iş emrinin açık kumaşı kesilemez");
-      }
-      // ── AÇIK KUMAŞ SATIR KİLİDİ + NİYET KORUNUR (2026-09-25, K-KES2) ──
-      // Kilit sırası WO → roll (F130). İş emri kilidi eşzamanlı kesimleri zaten SIRALAR:
-      // kural yokken ikinci kesim birincinin commit'inden SONRA "taze" okuyup HER SEFERİNDE
-      // aşıma dönüyor, 100 m'lik kumaştan 240 m çocuk doğuyordu (iyimser guard sıralı tx'te
-      // tutar). `cutWarehouseRoll` ile aynı kural: normal niyette kilitli kalan yetmiyorsa ya
-      // da aşım niyetinde kalan ön okumadan farklıysa 409 — eşzamanlı eksilme aşıma DÖNMEZ.
-      const kilitli = await tx.$queryRaw<Array<{ currentQty: Prisma.Decimal }>>`
-        SELECT "currentQty" FROM rolls WHERE id = ${parent.id}::uuid FOR UPDATE`;
-      if (kilitli.length === 0) throw AppError.conflict("Açık kumaş bu sırada silindi — listeyi yenileyin");
-      const tazeKalan = new Prisma.Decimal(kilitli[0]!.currentQty);
-      const tazeAsim = exceedsRemaining;
-      const degisti = tazeAsim
-        ? !tazeKalan.equals(new Prisma.Decimal(parent.currentQty))
-        : tazeKalan.lessThan(data.lengthMeters);
-      if (degisti) {
-        throw AppError.conflict("Bu top siz keserken başka bir işlemle değişti — ekranı yenileyip tekrar deneyin.", {
-          code: "ROLL_CHANGED_DURING_CUT",
-        });
-      }
-      // Child Roll oluştur
-      const child = await tx.roll.create({
-        data: {
-          barcode: childBarcode,
-          clientToken: data.clientToken ?? null,
-          itemId: parent.itemId,
-          colorId: parent.colorId,
-          width: parent.width,
-          // KAT — kesim anında seçilen değer KAZANIR (kullanıcı kararı: "top
-          // kesilerek yeni bir kat değeri kazanabilir"). `undefined` = istemci
-          // alanı hiç GÖNDERMEDİ → parent, o da yoksa iş emri planı (eski APK
-          // geri-uyumluluğu; MİRAS DEĞİL). `null` = istemci açıkça "kat yok" dedi.
-          foldType:
-            foldType !== undefined
-              ? foldType
-              : (parent.foldType ?? parent.currentStep?.workOrder?.foldType ?? null),
-          initialQty: data.lengthMeters,
-          currentQty: data.lengthMeters,
-          weightKg: null,
-          status: childStatus,
-          qualityGrade: resolvedQualityGrade,
-          qualityGradeId: resolvedQualityGradeId,
-          producedInStepId: tamburStepId,
-          parentRollId: parent.id,
-          // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
-          batchId: parent.batchId,
-          // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
-          warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
-          // GİRİŞ İSTASYONU — kesim hangi Tambur adımındaysa çocuk orada doğdu.
-          // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
-          // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
-          entryStationId: resolveEntryStationId({ stepStationId: parent.currentStep?.stationId }),
-          entrySource: RollEntrySource.TAMBUR_SPLIT,
-          createdById: userId ?? null,
-          createdMachineId: sessionMachineId ?? null,
-          // Sadece depoya giden (WAREHOUSE) çıktı kartelalık işaretlenir.
-          markedForKartela:
-            (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
-          // Etiket niyeti kesim anında kalıcı (yazıcı/ekran bağımsız).
-          lastLabelSnapshot: cutIntentSnapshot,
-          // Sorgulanabilir ayna — snapshot ile AYNI create'te (bkz. Roll.labelCustomerId).
-          labelCustomerId: cutLabelCustomerId,
-          // currentStepId: child Tambur'dan çıktı (depo değil bir step) — null.
-        },
-      });
+    }
+    // Child Roll oluştur
+    const child = await tx.roll.create({
+      data: {
+        barcode: childBarcode,
+        clientToken: data.clientToken ?? null,
+        itemId: parent.itemId,
+        colorId: parent.colorId,
+        width: parent.width,
+        // KAT — kesim anında seçilen değer KAZANIR (kullanıcı kararı: "top
+        // kesilerek yeni bir kat değeri kazanabilir"). `undefined` = istemci
+        // alanı hiç GÖNDERMEDİ → parent, o da yoksa iş emri planı (eski APK
+        // geri-uyumluluğu; MİRAS DEĞİL). `null` = istemci açıkça "kat yok" dedi.
+        foldType:
+          foldType !== undefined
+            ? foldType
+            : (parent.foldType ?? parent.currentStep?.workOrder?.foldType ?? null),
+        initialQty: data.lengthMeters,
+        currentQty: data.lengthMeters,
+        weightKg: null,
+        status: childStatus,
+        qualityGrade: resolvedQualityGrade,
+        qualityGradeId: resolvedQualityGradeId,
+        producedInStepId: tamburStepId,
+        parentRollId: parent.id,
+        // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
+        batchId: parent.batchId,
+        // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
+        warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
+        // GİRİŞ İSTASYONU — kesim hangi Tambur adımındaysa çocuk orada doğdu.
+        // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
+        // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
+        entryStationId: resolveEntryStationId({ stepStationId: parent.currentStep?.stationId }),
+        entrySource: RollEntrySource.TAMBUR_SPLIT,
+        createdById: userId ?? null,
+        createdMachineId: sessionMachineId ?? null,
+        // Sadece depoya giden (WAREHOUSE) çıktı kartelalık işaretlenir.
+        markedForKartela:
+          (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
+        // Etiket niyeti kesim anında kalıcı (yazıcı/ekran bağımsız).
+        lastLabelSnapshot: cutIntentSnapshot,
+        // Sorgulanabilir ayna — snapshot ile AYNI create'te (bkz. Roll.labelCustomerId).
+        labelCustomerId: cutLabelCustomerId,
+        // currentStepId: child Tambur'dan çıktı (depo değil bir step) — null.
+      },
+    });
 
-      // STOK DEFTERİ — çocuk depoda doğdu: üretimden depoya GİRİŞ (hüküm §11 giriş kalemi).
-      await postOpenFabricChildEntryTx(tx, child, tamburStepId, userId);
+    // STOK DEFTERİ — çocuk depoda doğdu: üretimden depoya GİRİŞ (hüküm §11 giriş kalemi).
+    await postOpenFabricChildEntryTx(tx, child, tamburStepId, userId);
 
-      if (propertySnapshot.length > 0) {
-        await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
-      }
+    if (propertySnapshot.length > 0) {
+      await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
+    }
 
-      // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent açık kumaşta yapılan
-      // işlemler child top'a `inheritedFromParentRollId=parent.id` ile kopyalanır.
-      // Aksi halde child Bitmiş Depo'da "kurşun/KK2 yapılmadı" gözüküyor; oysa
-      // operasyonlar fiziksel olarak parent üzerinde yapılmış ve sonucu child'a
-      // geçmiş. Bulk split (satır 407-414 / 561-575) bunu yapıyor — open fabric
-      // split'te de aynı semantik gerek.
-      // Filter KALDIRILDI: zincirleme inherit destekle. Depo topundaki KURSUN/QC2
-      // op'ları zaten parent'tan inherit edilmiştir (inheritedFromParentRollId
-      // set). Sadece "orijinal" op'lara bakarsak chain kopar, child'da hiç op
-      // kalmaz. Çoklu kayıt olabilir; sorun değil — UI find() ilki bulur.
-      const inheritedOps = await tx.rollOperation.findMany({
-        where: { ...ACTIVE_OPERATION,
-          rollId: parent.id,
-          operationType: {
-            in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
-          },
-        },
-        // machineId: parent'ın işlendiği makine kopyada KORUNUR (yeni damga uygulanmaz).
-        select: {
-          workOrderStepId: true,
-          operationType: true,
-          operatorId: true,
-          metadata: true,
-          machineId: true,
-        },
-      });
-      if (inheritedOps.length > 0) {
-        await tx.rollOperation.createMany({
-          data: inheritedOps.map((op) => ({
-            rollId: child.id,
-            workOrderStepId: op.workOrderStepId,
-            operationType: op.operationType,
-            operatorId: op.operatorId,
-            machineId: op.machineId,
-            metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
-            inheritedFromParentRollId: parent.id,
-          })),
-        });
-      }
-
-      // PLAN-SAPMA DEFTERİ — per-cut modelde geçiş = KESİM, satır çocuk bazlı.
-      // ⚠️ TX İÇİNDE: aynı `clientToken` ile replay child create'te P2002 verir →
-      // tx rollback → defter satırı da geri sarılır (çift satır imkânsız).
-      await recordPlanDeviationTx(tx, {
-        mismatches: planDeviations,
+    // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent açık kumaşta yapılan
+    // işlemler child top'a `inheritedFromParentRollId=parent.id` ile kopyalanır.
+    // Aksi halde child Bitmiş Depo'da "kurşun/KK2 yapılmadı" gözüküyor; oysa
+    // operasyonlar fiziksel olarak parent üzerinde yapılmış ve sonucu child'a
+    // geçmiş. Bulk split (satır 407-414 / 561-575) bunu yapıyor — open fabric
+    // split'te de aynı semantik gerek.
+    // Filter KALDIRILDI: zincirleme inherit destekle. Depo topundaki KURSUN/QC2
+    // op'ları zaten parent'tan inherit edilmiştir (inheritedFromParentRollId
+    // set). Sadece "orijinal" op'lara bakarsak chain kopar, child'da hiç op
+    // kalmaz. Çoklu kayıt olabilir; sorun değil — UI find() ilki bulur.
+    const inheritedOps = await tx.rollOperation.findMany({
+      where: { ...ACTIVE_OPERATION,
         rollId: parent.id,
-        childRollId: child.id,
-        workOrderId: woId,
-        workOrderStepId: tamburStepId,
-        qtyM: data.lengthMeters,
-        source: "cut",
-        confirmedById: userId,
+        operationType: {
+          in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
+        },
+      },
+      // machineId: parent'ın işlendiği makine kopyada KORUNUR (yeni damga uygulanmaz).
+      select: {
+        workOrderStepId: true,
+        operationType: true,
+        operatorId: true,
+        metadata: true,
+        machineId: true,
+      },
+    });
+    if (inheritedOps.length > 0) {
+      await tx.rollOperation.createMany({
+        data: inheritedOps.map((op) => ({
+          rollId: child.id,
+          workOrderStepId: op.workOrderStepId,
+          operationType: op.operationType,
+          operatorId: op.operatorId,
+          machineId: op.machineId,
+          metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+          inheritedFromParentRollId: parent.id,
+        })),
       });
+    }
 
-      // Parent atomic decrement — hesap DB-side, gte guard concurrent overdraw'a karşı.
-      // Aşımda (lengthMeters > currentQty) decrement negatife düşer → bunun yerine açık
-      // kumaşı tamamen tüket (currentQty=0). gt:0 guard eşzamanlı çift-tüketimi engeller.
-      // Karar yukarıda satır KİLİDİ altında verildi (niyet korunur); `currentQty: tazeKalan`
-      // guard'ı aşım dalında savunma katmanı olarak kalır.
-      let updatedParent;
-      try {
-        // F130: guarded-decrement = atomik claim. status + currentStepId eklendi:
-        // eşzamanlı KK2 reopen (currentStepId'yi KK2 step'e çeker) araya girerse
-        // WHERE eşleşmez → P2025 → 409 (KK2'ye geri çekilmiş top kesilmez).
-        updatedParent = tazeAsim
-          ? await tx.roll.update({
-              // ⚠️ AŞIM DALINDA `currentQty > 0` ŞARTI YOK (2026-08-12 saha
-              // vakası): 500 m kayıtlı kumaş fiziksel 550 m çıkabilir ve fazlalık
-              // TEK kesimde bitmeyebilir (50 m'den 3 top). İlk aşım kesimi kalanı
-              // 0'a çeker; guard `gt: 0` olarak kalsaydı 0'daki topta İKİNCİ kesim
-              // P2025'e düşüp "bu sırada değişti" yarış mesajını basıyordu —
-              // oysa yarış yok, mal fiziksel olarak elde. Çifte-harcama koruması
-              // burada ANLAMSIZ: 0'ın altına inilecek gerçek stok kalmadı; her
-              // aşım kesimi çocuk + sapma satırı üretir (aşağıdaki defter), yani
-              // iz kaybolmaz. KK2 reopen/statü guard'ları AYNEN duruyor.
-              // ⚠️ `currentQty: tazeKalan` İYİMSER GUARD (2026-08-29 / T1-002):
-              // metraj şartı olmadan iki eşzamanlı aşım kesimi ikisi de eşleşiyor
-              // ve 100 m'lik kumaştan 240 m çocuk doğuyordu.
-              where: {
-                id: parent.id,
-                status: RollStatus.IN_PRODUCTION,
-                currentStepId: tamburStepId,
-                currentQty: tazeKalan,
-              },
-              data: { currentQty: 0 },
-            })
-          : await tx.roll.update({
-              where: { id: parent.id, status: RollStatus.IN_PRODUCTION, currentStepId: tamburStepId, currentQty: { gte: data.lengthMeters } },
-              data: { currentQty: { decrement: data.lengthMeters } },
-            });
-      } catch (err) {
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === "P2025"
-        ) {
-          throw AppError.conflict(
-            "Açık kumaş bu sırada değişti (KK2'ye geri çekilmiş / statü değişmiş / kalan metre yetersiz) — listeyi yenileyip tekrar deneyin"
-          );
-        }
-        throw err;
-      }
-      const newParentQty = Number(updatedParent.currentQty);
+    // PLAN-SAPMA DEFTERİ — per-cut modelde geçiş = KESİM, satır çocuk bazlı.
+    // ⚠️ TX İÇİNDE: aynı `clientToken` ile replay child create'te P2002 verir →
+    // tx rollback → defter satırı da geri sarılır (çift satır imkânsız).
+    await recordPlanDeviationTx(tx, {
+      mismatches: planDeviations,
+      rollId: parent.id,
+      childRollId: child.id,
+      workOrderId: woId,
+      workOrderStepId: tamburStepId,
+      qtyM: data.lengthMeters,
+      source: "cut",
+      confirmedById: userId,
+    });
 
-      // AŞIM DEFTERİ (2026-08-09) — sapmanın ARTI yönü. 2026-08-09 öncesinde
-      // hiçbir yere yazılmıyordu: bayrak aşımı kabul ediyor, parent tamamen
-      // tüketiliyor ve "N m fazla çıktı" bilgisi buharlaşıyordu. Sonuç: rapor
-      // yalnız eksi yönü görüyordu ("giriş 100, çıkış 140" açıklamasız kalıyordu).
-      // Sebep SORULMAZ — aşımı sistem tespit eder, operatör beyan etmez.
-      if (tazeAsim) {
-        await recordVarianceTx(tx, {
-          rollId: parent.id,
-          workOrderStepId: tamburStepId,
-          kind: RollVarianceKind.OVERAGE,
-          // Defter payı da TAZE metrajdan (bayat değer aşımı eksik yazıyordu).
-          qty: overageOf(data.lengthMeters, tazeKalan),
-          source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
-          // KEŞİF EBEVEYNDE, KAYNAĞI ÇOCUK (hüküm ②) — üretim dalında stok satırı yok,
-          // geri alma yalnız bump'ı bu keşifle karşılar.
-          sourceRollId: child.id,
-          userId,
-        });
-      }
-
-      return { child, newParentQty };
-      });
+    // Parent atomic decrement — hesap DB-side, gte guard concurrent overdraw'a karşı.
+    // Aşımda (lengthMeters > currentQty) decrement negatife düşer → bunun yerine açık
+    // kumaşı tamamen tüket (currentQty=0). gt:0 guard eşzamanlı çift-tüketimi engeller.
+    // Karar yukarıda satır KİLİDİ altında verildi (niyet korunur); `currentQty: tazeKalan`
+    // guard'ı aşım dalında savunma katmanı olarak kalır.
+    let updatedParent;
+    try {
+      // F130: guarded-decrement = atomik claim. status + currentStepId eklendi:
+      // eşzamanlı KK2 reopen (currentStepId'yi KK2 step'e çeker) araya girerse
+      // WHERE eşleşmez → P2025 → 409 (KK2'ye geri çekilmiş top kesilmez).
+      updatedParent = tazeAsim
+        ? await tx.roll.update({
+            // ⚠️ AŞIM DALINDA `currentQty > 0` ŞARTI YOK (2026-08-12 saha
+            // vakası): 500 m kayıtlı kumaş fiziksel 550 m çıkabilir ve fazlalık
+            // TEK kesimde bitmeyebilir (50 m'den 3 top). İlk aşım kesimi kalanı
+            // 0'a çeker; guard `gt: 0` olarak kalsaydı 0'daki topta İKİNCİ kesim
+            // P2025'e düşüp "bu sırada değişti" yarış mesajını basıyordu —
+            // oysa yarış yok, mal fiziksel olarak elde. Çifte-harcama koruması
+            // burada ANLAMSIZ: 0'ın altına inilecek gerçek stok kalmadı; her
+            // aşım kesimi çocuk + sapma satırı üretir (aşağıdaki defter), yani
+            // iz kaybolmaz. KK2 reopen/statü guard'ları AYNEN duruyor.
+            // ⚠️ `currentQty: tazeKalan` İYİMSER GUARD (2026-08-29 / T1-002):
+            // metraj şartı olmadan iki eşzamanlı aşım kesimi ikisi de eşleşiyor
+            // ve 100 m'lik kumaştan 240 m çocuk doğuyordu.
+            where: {
+              id: parent.id,
+              status: RollStatus.IN_PRODUCTION,
+              currentStepId: tamburStepId,
+              currentQty: tazeKalan,
+            },
+            data: { currentQty: 0 },
+          })
+        : await tx.roll.update({
+            where: { id: parent.id, status: RollStatus.IN_PRODUCTION, currentStepId: tamburStepId, currentQty: { gte: data.lengthMeters } },
+            data: { currentQty: { decrement: data.lengthMeters } },
+          });
     } catch (err) {
-      // Offline/ağ-retry idempotency (cutWarehouseRoll ile aynı): aynı clientToken ile
-      // 2. çağrı → clientToken @unique P2002, tx geri sarılır (ikinci decrement YOK) →
-      // mevcut child + güncel parent metresi idempotent döner.
       if (
-        data.clientToken &&
         err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
+        err.code === "P2025"
       ) {
-        const replay = await this.cutOpenFabricReplay(openFabricRollId, data.clientToken, data.lengthMeters);
-        if (replay) return replay;
+        throw AppError.conflict(
+          "Açık kumaş bu sırada değişti (KK2'ye geri çekilmiş / statü değişmiş / kalan metre yetersiz) — listeyi yenileyip tekrar deneyin"
+        );
       }
       throw err;
     }
+    const newParentQty = Number(updatedParent.currentQty);
+
+    // AŞIM DEFTERİ (2026-08-09) — sapmanın ARTI yönü. 2026-08-09 öncesinde
+    // hiçbir yere yazılmıyordu: bayrak aşımı kabul ediyor, parent tamamen
+    // tüketiliyor ve "N m fazla çıktı" bilgisi buharlaşıyordu. Sonuç: rapor
+    // yalnız eksi yönü görüyordu ("giriş 100, çıkış 140" açıklamasız kalıyordu).
+    // Sebep SORULMAZ — aşımı sistem tespit eder, operatör beyan etmez.
+    if (tazeAsim) {
+      await recordVarianceTx(tx, {
+        rollId: parent.id,
+        workOrderStepId: tamburStepId,
+        kind: RollVarianceKind.OVERAGE,
+        // Defter payı da TAZE metrajdan (bayat değer aşımı eksik yazıyordu).
+        qty: overageOf(data.lengthMeters, tazeKalan),
+        source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
+        // KEŞİF EBEVEYNDE, KAYNAĞI ÇOCUK (hüküm ②) — üretim dalında stok satırı yok,
+        // geri alma yalnız bump'ı bu keşifle karşılar.
+        sourceRollId: child.id,
+        userId,
+      });
+    }
+
+    return { child, newParentQty };
+    });
 
     await AuditService.log({
       userId,
