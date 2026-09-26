@@ -483,9 +483,9 @@ async function aracKalibrasyonu(): Promise<void> {
   const tutan = await pool.connect();
   const komsu = await pool.connect();
   try {
+    const komsuPid = (await komsu.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]?.pid ?? -1;
     await tutan.query("SELECT pg_advisory_lock($1::int, $2::int)", [K, n]);
     const komsuBekler = komsu.query("SELECT pg_advisory_lock($1::int, $2::int)", [K, n]);
-    const komsuPid = (komsu as unknown as { processID: number }).processID;
     let beklemede = false;
     for (let i = 0; i < 200 && !beklemede; i++) {
       const [r] = await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid = ${komsuPid}::int AND wait_event_type = 'Lock'`;
