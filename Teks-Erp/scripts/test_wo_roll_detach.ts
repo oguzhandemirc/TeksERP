@@ -15,12 +15,16 @@
 //   §9 iş emri DEVRİ: taşınan açık üretime alma satırı yeni iş emrinin adımına bağlanır (eski satır bağlı
 //      ters `PRODUCTION_ISSUE_TRANSFER`le kapanır, yeni ileri satır, net 0); yeni iş emrinden Top Çıkar
 //      tersini yazar, açık satır kalmaz (ölçüldü 2026-09-26: devirden sonra Top Çıkar tersi YAZMIYORDU)
+//   §10 zorlanmış sıra: Top Çıkar claim'e kadar okudu, rakip yazar (iş emri kilidini almayan) topu
+//      taşıdı → claim'in beklenen-durum koşulu 409 verir, top rakibin bıraktığı yerde, ters satır yok
 //   §9c Hareketler: eski iş emrinde "İş emrine devredildi → yeni", yenide "Devirle üretime alındı ← eski";
 //      devir hiçbir iş emrinde "Top çıkarıldı" DEĞİLDİR (yalnız gerçek Top Çıkar)
 // NEGATİF SONDA (elle, 2026-09-25): `detachBlockers` boş dizi dönünce §7 kırmızı; ters satır yazımı
 // kaldırılınca §3 kırmızı. Yedek kopyadan geri alındı. (2026-09-26, md5 ile geri alındı) `repointRollsTx`teki
 // `rebindProductionIssuesTx` çağrısı kaldırılınca §9 + §9b kırmızı; devir tersi `ROLL_DETACH` yazınca §9 + §9b +
 // §9c kırmızı; çizelgenin devir satırları kaldırılınca §9c kırmızı.
+// (06 denetimi, md5 ile geri alındı) claim WHERE `{ id }`e indirilince §10 kırmızı (B geçti, rakibin taşıdığı top STOCK'a
+// döndü, ters satır yazıldı) — eski paket bu mutasyonda 8/0 yeşildi.
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
@@ -30,6 +34,7 @@ import { WorkOrderRollDetachService } from "../src/services/workorder-roll-detac
 import { WorkOrderTimelineService } from "../src/services/workorder-timeline.service";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { SIRA_ZORLANDI, zorlanmisSira } from "./lib/zorlanmis-sira";
 
 const svc = new WorkOrderService();
 const detach = new WorkOrderRollDetachService();
@@ -159,6 +164,19 @@ async function main(): Promise<void> {
         && yeni.length === 2 && yeni.some((x) => x.startsWith("Devirle üretime alındı|") && x.endsWith(`← ${wo4.splitFrom?.workOrderNumber}`))
         && yeni.some((x) => x.startsWith("Top çıkarıldı|")),
       `eski ${JSON.stringify(eski)} · yeni ${JSON.stringify(yeni)}`);
+
+    const { wo: wo5, rolls: [e] } = await isEmriVeToplar([["E", RollStatus.STOCK]]);
+    const adimlar = await prisma.workOrderStep.findMany({ where: { workOrderId: wo5 }, orderBy: { stepSequence: "asc" }, select: { id: true } });
+    const yaris = await zorlanmisSira({ model: "roll", metod: "updateMany" },
+      () => detach.detachRoll(wo5, e, "yarış sondası", ADMIN),
+      () => prisma.roll.update({ where: { id: e }, data: { currentStepId: adimlar[1]!.id } }));
+    const eSon = await prisma.roll.findUniqueOrThrow({ where: { id: e }, select: { status: true, currentStepId: true } });
+    const eTers = await prisma.warehouseMovement.count({ where: { rollId: e, reasonCode: STOCK_MOVE_REASON.ROLL_DETACH } });
+    const bHata = yaris.sonuclar[0].status === "rejected" ? (yaris.sonuclar[0].reason as { statusCode?: number }).statusCode : "ok";
+    check("§10 ⭐ zorlanmış sıra: rakip claim'den önce topu taşıdı → Top Çıkar 409, top rakibin adımında, ters satır yok",
+      SIRA_ZORLANDI.has(yaris.kapi) && bHata === 409 && yaris.sonuclar[1].status === "fulfilled"
+        && eSon.status === RollStatus.IN_PRODUCTION && eSon.currentStepId === adimlar[1]!.id && eTers === 0,
+      `kapı ${yaris.kapi} · B ${bHata} · top ${eSon.status}@${eSon.currentStepId === adimlar[1]!.id ? "2. adım" : eSon.currentStepId ?? "adımsız"} · ters ${eTers}`);
 
     const ikinci = await hata(() => detach.detachRoll(wo, a, "tekrar", ADMIN));
     const sebepsiz = await hata(() => detach.detachRoll(wo2, c, " ", ADMIN));
