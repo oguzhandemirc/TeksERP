@@ -1,10 +1,10 @@
 {
   "_not": "ESLint uyarı TAVANI — yalnız DÜŞER. Ölçüm: node scripts/check-lint-baseline.mjs --yaz",
   "_kapsam": "eslint src scripts prisma",
-  "_dosyaSayisi": 1475,
+  "_dosyaSayisi": 1492,
   "kurallar": {
     "max-lines": 90,
-    "max-lines-per-function": 305,
+    "max-lines-per-function": 297,
     "max-params": 47
   }
 }
