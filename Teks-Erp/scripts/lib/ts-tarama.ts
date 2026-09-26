@@ -25,3 +25,17 @@ export function walkTs(dir: string, out: string[] = []): string[] {
   }
   return out;
 }
+
+/** `dir` altındaki verilen uzantılı dosyalar (özyinelemeli; aynı atlanan dizinler) — istemci ağaçları `.tsx` de taşır. */
+export function walkKaynak(dir: string, uzantilar: readonly string[], out: string[] = []): string[] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const abs = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (ATLANAN_DIZINLER.has(entry.name)) continue;
+      walkKaynak(abs, uzantilar, out);
+    } else if (uzantilar.some((u) => entry.name.endsWith(u))) {
+      out.push(abs);
+    }
+  }
+  return out;
+}

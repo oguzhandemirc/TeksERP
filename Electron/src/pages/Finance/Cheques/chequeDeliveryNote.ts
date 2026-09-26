@@ -19,7 +19,6 @@
 // düşmek yanlış numaralı bir resmi belge üretirdi.
 // =============================================================================
 
-import { isAmbiguousFailure } from "@/lib/fasonReceiveAttempt";
 import { bordroBlockReason, type SelectableCheque } from "./chequeBordro";
 import { dayStartIso } from "./dates";
 import { targetBlockReason, targetBodyFields, type DeliveryTarget } from "./chequeNoteMovement";
@@ -185,16 +184,5 @@ export function buildDeliveryNoteBody(draft: DeliveryNoteDraft): DeliveryNoteBod
   };
 }
 
-/**
- * Kayıt denemesi düştükten sonra hangi token'la devam edilir. Token yalnız sonucu
- * BELİRSİZ bırakan hatada (ağ · zaman aşımı · 5xx) yapışır — sunucu ilk denemeyi
- * yazmış olabilir ve aynı token ikinci BRD'yi önler. Kesin 4xx'te hiçbir şey
- * yazılmamıştır: yeni deneme yeni token alır.
- */
-export function tokenAfterFailure(
-  token: string,
-  error: unknown,
-  gen: () => string = () => crypto.randomUUID(),
-): string {
-  return isAmbiguousFailure(error) ? token : gen();
-}
+/** Deneme token'ı tek kaynaktan (`lib/attemptToken`); bordro çağıranları ve testleri için yeniden ihraç. */
+export { tokenAfterFailure } from "@/lib/attemptToken";

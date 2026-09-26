@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { printDocumentArea } from "@/lib/print";
 import { isDarkHex } from "@/pages/SackTags/service";
-import { isAmbiguousFailure } from "@/lib/fasonReceiveAttempt";
+import { isAmbiguousFailure } from "@/lib/attemptToken";
 import { sackHubService } from "./service";
 import { shipmentStatusLabels, type PickListPrint, type PickListRow } from "./types";
 

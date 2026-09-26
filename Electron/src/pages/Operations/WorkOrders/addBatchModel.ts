@@ -1,5 +1,5 @@
 // Panel "Parti Ekle" saf kuralları (hareket defteri D8c) — ekransız sınanır.
-import { isAmbiguousFailure } from "@/lib/fasonReceiveAttempt";
+import { isAmbiguousFailure } from "@/lib/attemptToken";
 import type { PickedRoll } from "@/components/operations/roll-picker/pickable-rolls";
 import type { RollPickerScope } from "@/components/operations/roll-picker/RollPickerDialog";
 

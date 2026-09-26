@@ -19,6 +19,7 @@ import {
   ReceiptLineRows, emptyLine, expandLines, lineKind, receiptTotals, type DraftLine,
 } from "./ReceiptLineRows";
 import { ReceiptImportButton } from "./ReceiptImportButton";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { useItemTypes, yarnIdsFrom } from "./useItemTypes";
 // TİCARET (D3) — alış siparişi bağı. Bölüm görünürlük kararını KENDİ verir
 // (`showPurchaseOrderFields`) ve fabrikada tek bayt çizmez; burada bir `&&`
@@ -94,6 +95,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
       .filter(Boolean)
       .join(" + ") || "0 top";
 
+  const attempt = useAttemptToken();
   const createM = useMutation({
     mutationFn: () =>
       createGoodsReceipt({
@@ -107,17 +109,19 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
         currency,
         // Fişin KENDİ idempotency anahtarı — çift tıklama/ağ kopması ikinci fiş
         // AÇMAZ ve satırları tekrar İŞLEMEZ (backend mevcut fişi döner).
-        clientToken: crypto.randomUUID(),
+        clientToken: attempt.token(),
         // Servis, değer yoksa anahtarı gövdeye HİÇ koymaz (bkz. service.ts).
         purchaseOrderId,
-        lines: expandLines(lines, yarnIds),
+        lines: expandLines(lines, yarnIds, attempt.keyed),
       }),
     onError: (error) => {
+      attempt.onFailure(error);
       // C8: sunucu ön-uçuşu → satıra bağla, modal AÇIK kalır, toast yok. Başka hata → mevcut yol (interceptor toast'ı).
       const issues = receiptLinesInvalidFrom(error);
       if (issues) setServerIssues(serverLineIssues(issues, expandLineKeys(lines)));
     },
     onSuccess: (res) => {
+      attempt.onSuccess();
       // Atlanan satır varsa SESSİZ GEÇME — sebebiyle söyle (yalnız KOŞU ANI hataları: yarış/409).
       const failed = res.data.failed ?? [];
       if (failed.length > 0) {

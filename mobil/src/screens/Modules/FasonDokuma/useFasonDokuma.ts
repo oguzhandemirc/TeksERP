@@ -1,7 +1,7 @@
 // =============================================================================
 // FASON DOKUMA KABUL — ekran durumu: bağlam · seçili iş · iki mutasyon (kuyruk YOK)
 // =============================================================================
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import Toast from 'react-native-toast-message';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fasonDokumaService, type FasonTabletOrder } from '../../../services/fasonDokuma.service';
@@ -13,9 +13,22 @@ import { EMPTY_RECEIPT_ROW, buildReceiptRequest, receiptFingerprint, rowsAfterRe
 export const FASON_CTX_KEY = ['fason-dokuma', 'context'] as const;
 type Attempt = { token: string; fingerprint: string; at: number };
 
-function tokenFor(prev: Attempt | null, fingerprint: string): string {
+function tokenFor(prev: Attempt | null, fingerprint: string, gen: () => string = generateClientUuid): string {
   if (prev && prev.fingerprint === fingerprint && Date.now() - prev.at <= INFLIGHT_REUSE_WINDOW_MS) return prev.token;
-  return generateClientUuid();
+  return gen();
+}
+
+/** Tek deneme: belirsiz hata → token yapışır (aynı deneme), kesin 4xx ya da başarı → sonraki gönderim taze token. */
+async function sendAttempt<T>(ref: MutableRefObject<Attempt | null>, fingerprint: string, send: (token: string) => Promise<T>): Promise<T> {
+  const token = tokenFor(ref.current, fingerprint);
+  try {
+    const res = await send(token);
+    ref.current = null;
+    return res;
+  } catch (e) {
+    ref.current = isAmbiguousFailure(e) ? { token, fingerprint, at: Date.now() } : null;
+    throw e;
+  }
 }
 
 function failureText(e: unknown): string {
@@ -33,24 +46,17 @@ export function useFasonDokuma() {
   const [rows, setRows] = useState<ReceiptRowForm[]>([{ ...EMPTY_RECEIPT_ROW }]);
   const [manifestNo, setManifestNo] = useState('');
   const [failedMessages, setFailedMessages] = useState<string[]>([]);
-  const attempt = useRef<Attempt | null>(null);
+  const receiveAttempt = useRef<Attempt | null>(null);
+  const returnAttempt = useRef<Attempt | null>(null);
   const order: FasonTabletOrder | null = useMemo(() => context.data?.weavingOrders.find((o) => o.id === orderId) ?? null, [context.data, orderId]);
   const refresh = useCallback(() => void qc.invalidateQueries({ queryKey: FASON_CTX_KEY }), [qc]);
 
   const receive = useMutation({
     mutationFn: async () => {
       if (!order) throw new Error('İş seçilmedi');
-      const fp = receiptFingerprint(order.id, rows);
-      const token = tokenFor(attempt.current, fp);
-      try {
-        const res = await fasonDokumaService.receive(buildReceiptRequest(rows, { weavingOrderId: order.id, manifestNo, notes: '', clientToken: token }));
-        attempt.current = null;
-        return res;
-      } catch (e) {
-        // Belirsiz hata → token yapışır (aynı deneme), kesin 4xx → taze token.
-        attempt.current = isAmbiguousFailure(e) ? { token, fingerprint: fp, at: Date.now() } : null;
-        throw e;
-      }
+      return sendAttempt(receiveAttempt, receiptFingerprint(order.id, rows), (clientToken) =>
+        fasonDokumaService.receive(buildReceiptRequest(rows, { weavingOrderId: order.id, manifestNo, notes: '', clientToken })),
+      );
     },
     onSuccess: (res) => {
       const after = rowsAfterReceipt(rows, res.data);
@@ -66,7 +72,9 @@ export function useFasonDokuma() {
 
   const returnBeam = useMutation({
     mutationFn: (p: { dispatchId: string; warpBeamId: string; lengthM: number }) =>
-      fasonDokumaService.returnBeam(p.dispatchId, p.warpBeamId, { lengthM: p.lengthM, clientToken: generateClientUuid() }),
+      sendAttempt(returnAttempt, `${p.dispatchId}|${p.warpBeamId}|${p.lengthM}`, (clientToken) =>
+        fasonDokumaService.returnBeam(p.dispatchId, p.warpBeamId, { lengthM: p.lengthM, clientToken }),
+      ),
     onSuccess: (res) => {
       setModal(null);
       Toast.show({ type: 'success', text1: res.message ?? 'Levent dönüşü kaydedildi', visibilityTime: 5000 });

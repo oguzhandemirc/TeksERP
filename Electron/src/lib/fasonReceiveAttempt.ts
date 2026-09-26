@@ -22,6 +22,7 @@
 //   ① PARMAK İZİ — token yalnız AYNI teslimat yeniden gönderilirken kullanılır.
 //   ② ZAMAN PENCERESİ — aynı rakamlar yarın tekrar gelebilir.
 // =============================================================================
+import { isAmbiguousFailure } from "./attemptToken";
 
 /** Yapışkanlığın ömrü — operatörün yeniden denemesine yeter, ertesi teslimata yetmez. */
 export const FASON_RETRY_WINDOW_MS = 10 * 60_000;
@@ -63,23 +64,8 @@ export function receiveFingerprint(p: FingerprintablePayload): string {
   return [p.workOrderId, p.stepId, p.subcontractorId, donusler, parcalar].join("|");
 }
 
-/**
- * Bu hata SONUCU BELİRSİZ mi bıraktı? Yapışkanlığın tek meşru sebebi budur.
- *
- * Ağ hatası / zaman aşımı (status yok) ve 5xx → istek COMMIT olmuş OLABİLİR.
- * Kesin 4xx → hiçbir şey yazılmadığı KESİNDİR; yapışmak, düzeltilemeyen bir
- * hatada aynı yükü sonsuza dek yeniden gönderen bir döngü kurardı.
- *
- * ⚠️ Panelin hata nesnesi axios'tan gelir: durum kodu `response.status`tedir,
- * `status` DEĞİL (mobil ikizinden ayrıldığı tek yer). İkisi de okunur — biri
- * eksikse "durum yok" sayılır ve BELİRSİZ tarafa düşer (güvenli yön: fazladan
- * korumak, eksik korumaktan iyidir).
- */
-export function isAmbiguousFailure(error: unknown): boolean {
-  const e = error as { status?: number; response?: { status?: number } } | null | undefined;
-  const status = e?.response?.status ?? e?.status;
-  return status === undefined || status >= 500;
-}
+/** Belirsiz hata ölçütü tek kaynaktan (`lib/attemptToken`); fason kabulün eski çağıranları için yeniden ihraç. */
+export { isAmbiguousFailure } from "./attemptToken";
 
 /**
  * Bu gönderim hangi token'ı taşımalı? Yapışkan token YALNIZ üç koşul birlikte

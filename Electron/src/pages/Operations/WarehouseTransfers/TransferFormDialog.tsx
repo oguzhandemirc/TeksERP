@@ -14,6 +14,7 @@ import {
   type PickedRoll, type PickedSack,
 } from "./service";
 import { TransferPickerDialog } from "./TransferPickerDialog";
+import { useAttemptToken } from "@/lib/attemptToken";
 
 interface Props {
   open: boolean;
@@ -70,6 +71,7 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
     },
   });
 
+  const attempt = useAttemptToken();
   const createM = useMutation({
     mutationFn: () =>
       createTransfer({
@@ -77,9 +79,11 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
         toWarehouseId: toId,
         rollIds: picked.map((p) => p.id),
         sackIds: pickedSacks.map((sk) => sk.id),
-        clientToken: crypto.randomUUID(),
+        clientToken: attempt.token(),
       }),
+    onError: (e) => attempt.onFailure(e),
     onSuccess: (res) => {
+      attempt.onSuccess();
       toast.success(res.message ?? "Transfer tamamlandı.");
       void qc.invalidateQueries({ queryKey: ["warehouse-transfers"] });
       void qc.invalidateQueries({ queryKey: ["rolls"] });

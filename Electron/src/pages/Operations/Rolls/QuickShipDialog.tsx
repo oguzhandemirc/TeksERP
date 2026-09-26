@@ -40,6 +40,7 @@ import { DestinationLockField } from "@/pages/Operations/SackContentEdit/Destina
 import type { ShipmentDestination } from "@/pages/Operations/SackContentEdit/types";
 import { Callout } from "@/components/ui/callout";
 import { toastServerSuccess } from "@/lib/serverNotes";
+import { useAttemptToken } from "@/lib/attemptToken";
 
 interface Props {
   open: boolean;
@@ -109,6 +110,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], onShipp
   const blockedReason = yon.blockedReason;
   const valid = Boolean(customerId) && rolls.length > 0 && !yon.blocked && yon.destination != null;
 
+  const attempt = useAttemptToken();
   const shipM = useMutation({
     mutationFn: () =>
       quickShip({
@@ -116,9 +118,11 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], onShipp
         customerId: customerId as string,
         destination: yon.destination ?? undefined,
         ...(yon.chosen ? { destinationChosen: true as const } : {}),
-        clientToken: crypto.randomUUID(),
+        clientToken: attempt.token(),
       }),
+    onError: (e) => attempt.onFailure(e),
     onSuccess: (res) => {
+      attempt.onSuccess();
       toastServerSuccess(res, "Sevk edildi.");
       void qc.invalidateQueries({ queryKey: ["rolls"] });
       void qc.invalidateQueries({ queryKey: ["shipments"] });

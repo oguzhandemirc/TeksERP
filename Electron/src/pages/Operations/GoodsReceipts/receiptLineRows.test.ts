@@ -15,7 +15,8 @@
 // `yarnItemIds` verilmeden çağrı ESKİ davranışla bire bir kalmalı (kumaş-only
 // kurulumda bu özellik tek bayt fark üretmez).
 import { describe, expect, it } from "vitest";
-import { expandLines, receiptTotals, type DraftLine } from "./ReceiptLineRows";
+import { createAttemptToken } from "@/lib/attemptToken";
+import { expandLines as expandWith, receiptTotals, type DraftLine } from "./ReceiptLineRows";
 
 const line = (o: Partial<DraftLine>): DraftLine => ({
   key: crypto.randomUUID(),
@@ -32,6 +33,8 @@ const line = (o: Partial<DraftLine>): DraftLine => ({
 });
 
 const YARN = new Set(["yarn-1"]);
+/** Her çağrı taze deneme: satır token'ları çağrı içinde tekil. */
+const expandLines = (ls: DraftLine[], y?: ReadonlySet<string>) => expandWith(ls, y, createAttemptToken().keyed);
 
 describe("receiptTotals — iplik ayrımı", () => {
   it("yarnItemIds verilmezse tüm satırlar kumaş sayılır (eski davranış)", () => {
@@ -113,6 +116,20 @@ describe("expandLines — iplik payload sözleşmesi", () => {
       YARN,
     );
     expect(out).toHaveLength(0);
+  });
+});
+
+describe("expandLines — satır token'ı deneme başına (kk1.md İstemci token'ı)", () => {
+  it("aynı deneme yeniden gönderilince her satır AYNI token'ı taşır; deneme yenilenince hepsi değişir", () => {
+    const attempt = createAttemptToken();
+    const lines = [line({ count: 2 }), line({ itemId: "yarn-1", initialQty: 5 })];
+    const first = expandWith(lines, YARN, attempt.keyed).map((x) => x.clientToken);
+    const retry = expandWith(lines, YARN, attempt.keyed).map((x) => x.clientToken);
+    expect(retry).toEqual(first);
+    expect(new Set(first).size).toBe(3);
+    attempt.onFailure({ response: { status: 400 } });
+    const fresh = expandWith(lines, YARN, attempt.keyed).map((x) => x.clientToken);
+    expect(fresh.some((t) => first.includes(t))).toBe(false);
   });
 });
 

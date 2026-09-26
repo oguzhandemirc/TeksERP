@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -13,6 +13,7 @@ import { allocateBulk } from "./Allocations/service";
 import { PaymentOpenInvoices } from "./PaymentOpenInvoices";
 import { PaymentAccountSelect } from "./PaymentAccountSelect";
 import { usePaymentAllocation } from "./usePaymentAllocation";
+import { useAttemptToken } from "@/lib/attemptToken";
 
 interface Props {
   open: boolean;
@@ -68,8 +69,12 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
 
   const valid = Boolean(selected) && amount > 0 && Boolean(customerId) && alloc.blockReason === null;
 
+  const attempt = useAttemptToken();
+  // Ödeme yazıldıktan sonra eşleme düşerse token yapışır: yeniden deneme ödemeyi replay eder, yalnız eşlemeyi tekrarlar.
+  const paymentWritten = useRef(false);
   const createM = useMutation({
     mutationFn: async () => {
+      paymentWritten.current = false;
       const created = await createPayment({
         direction,
         method,
@@ -79,8 +84,9 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
         cashBoxId: selected?.kind === "CASH" ? selected.id : null,
         bankAccountId: selected?.kind === "BANK" ? selected.id : null,
         reference: reference || null,
-        clientToken: crypto.randomUUID(),
+        clientToken: attempt.token(),
       });
+      paymentWritten.current = true;
       // Seçim varsa aynı adımda faturaya eşle (mevcut motor `PaymentAllocation`); yoksa bugünkü gibi bağsız.
       const paymentId = (created.data as { id?: string } | undefined)?.id;
       if (alloc.items.length > 0 && paymentId) {
@@ -89,7 +95,11 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
       }
       return created;
     },
+    onError: (e) => {
+      if (!paymentWritten.current) attempt.onFailure(e);
+    },
     onSuccess: (r) => {
+      attempt.onSuccess();
       toast.success(r.message ?? "Kaydedildi.");
       onCreated();
       onOpenChange(false);

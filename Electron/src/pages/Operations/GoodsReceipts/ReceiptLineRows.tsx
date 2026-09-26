@@ -145,13 +145,14 @@ export function receiptTotals(lines: DraftLine[], yarnItemIds?: ReadonlySet<stri
 }
 
 /** Taslak satırları → backend gövdesi. Adet N → N ayrı satır. İplik satırı kumaşa özgü anahtarları HİÇ taşımaz
- *  (backend `addYarnLine` 400 ile reddeder); kumaş satırı `lineClass`ı HER ZAMAN taşır (fiş kutusu yok — satır tek yer). */
-export function expandLines(lines: DraftLine[], yarnItemIds?: ReadonlySet<string>) {
+ *  (backend `addYarnLine` 400 ile reddeder); kumaş satırı `lineClass`ı HER ZAMAN taşır (fiş kutusu yok — satır tek yer).
+ *  Satır token'ı çağırandan gelir (`attempt.keyed`): aynı denemenin yeniden gönderiminde aynı satır aynı token'ı taşır. */
+export function expandLines(lines: DraftLine[], yarnItemIds: ReadonlySet<string> | undefined, lineToken: (key: string) => string) {
   return lines
     .filter((l) => l.itemId && l.initialQty > 0 && l.count > 0)
     .flatMap((l) => {
       const yarn = lineKind(l, yarnItemIds) === "YARN";
-      return Array.from({ length: l.count }, () =>
+      return Array.from({ length: l.count }, (_, i) =>
         yarn
           ? {
               itemId: l.itemId,
@@ -160,7 +161,7 @@ export function expandLines(lines: DraftLine[], yarnItemIds?: ReadonlySet<string
               // Devere Faz 2: lot + bobin yalnız iplik satırında (Zod bilinmeyeni sessizce atar — iki uçta da beyanlı).
               lotNo: l.lotNo?.trim() ? l.lotNo.trim() : null,
               bobbinCount: l.bobbinCount ?? null,
-              clientToken: crypto.randomUUID(),
+              clientToken: lineToken(`${l.key}#${i}`),
             }
           : {
               itemId: l.itemId,
@@ -173,7 +174,7 @@ export function expandLines(lines: DraftLine[], yarnItemIds?: ReadonlySet<string
               propertyIds: l.propertyIds.length > 0 ? l.propertyIds : undefined,
               lineClass: l.lineClass ?? DEFAULT_LINE_CLASS,
               // Her TOP kendi idempotency anahtarını taşır (backend uuid bekler). Asıl koruma FİŞ seviyesindedir.
-              clientToken: crypto.randomUUID(),
+              clientToken: lineToken(`${l.key}#${i}`),
             },
       );
     });

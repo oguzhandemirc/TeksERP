@@ -15,6 +15,7 @@ import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useCustomerTerms } from "./useCustomerTerms";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import {
   useItemPriceSuggestion,
@@ -505,6 +506,7 @@ function InvoiceFormBody({
   // Kaydedilebilirlik saf katmanda (yeni ve düzenleme yolu AYNI kural).
   const valid = canSubmitInvoiceForm({ customerId, subcontractorId: legacySubcontractorId, lines });
 
+  const attempt = useAttemptToken();
   const createM = useMutation({
     mutationFn: () =>
       createInvoice({
@@ -522,12 +524,14 @@ function InvoiceFormBody({
         // tür değiştirilirse bağ sessizce düşer — yanlış kaynağa bağlı fatura,
         // bağsız faturadan kötüdür. Sed backend'de partial unique.
         returnGroupId: type === "SALES_RETURN" ? (prefill?.returnGroupId ?? null) : null,
-        clientToken: crypto.randomUUID(),
+        clientToken: attempt.token(),
         // Satır süzgeci saf katmanda — düzenleme yolu da AYNI fonksiyonu
         // kullanır (iki kopya, "hangi satır gider" sorusuna iki cevap demekti).
         lines: payloadLines(lines),
       }),
+    onError: (e) => attempt.onFailure(e),
     onSuccess: (r) => {
+      attempt.onSuccess();
       toast.success(r.message ?? "Taslak oluşturuldu.");
       setLines([emptyLine(defaultVatRate)]);
       setExternalNo("");

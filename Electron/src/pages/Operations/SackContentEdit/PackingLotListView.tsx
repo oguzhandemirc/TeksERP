@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageBody } from "@/components/layout/PageShell";
 import { cn } from "@/lib/utils";
+import { useAttemptToken } from "@/lib/attemptToken";
 import { sackHubService } from "./service";
 import { invalidateSackHub, PACKING_LOT_STALE_MS } from "./useSackData";
 import { LotRowMenu } from "./PackingLotHeader";
@@ -63,13 +64,10 @@ export function PackingLotListView({
     void qc.invalidateQueries({ queryKey: ["packing-groups"] });
     void qc.invalidateQueries({ queryKey: ["packing-lot-summary"] });
   };
-  const create = useMutation({
-    mutationFn: () => sackHubService.createPackingGroup({ customerId, sackIds: [], clientToken: crypto.randomUUID() }),
-    onSuccess: (res) => {
-      toast.success(`${res.data.name} oluşturuldu — çuval açmaya başlayabilirsiniz.`);
-      refresh();
-      onOpen(res.data.id);
-    },
+  const create = useCreateLot(customerId, (res) => {
+    toast.success(`${res.data.name} oluşturuldu — çuval açmaya başlayabilirsiniz.`);
+    refresh();
+    onOpen(res.data.id);
   });
   const all: PackingGroup[] = lots.data?.data ?? [];
   const rows = sortLots(filterLots(all, { query, status: "OPEN" }), sort);
@@ -115,6 +113,21 @@ export function PackingLotListView({
 }
 
 /** Başlık satırı: arama · "Sevk Partisi Oluştur" · Sevkiyatlar. */
+type CreatedLot = Awaited<ReturnType<typeof sackHubService.createPackingGroup>>;
+
+/** "Yeni parti" — token mantıksal deneme başına (kk1.md), tıklama başına değil. */
+function useCreateLot(customerId: string, onCreated: (res: CreatedLot) => void) {
+  const attempt = useAttemptToken();
+  return useMutation({
+    mutationFn: () => sackHubService.createPackingGroup({ customerId, sackIds: [], clientToken: attempt.token() }),
+    onError: (e) => attempt.onFailure(e),
+    onSuccess: (res) => {
+      attempt.onSuccess();
+      onCreated(res);
+    },
+  });
+}
+
 function LotToolbar(p: {
   query: string;
   onQuery: (v: string) => void;

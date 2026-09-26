@@ -1,6 +1,6 @@
 # Token replay kilidi — kilitsiz ön-okuma sınıfı ve kapatma planı
 
-> **Durum:** KARARLANDI (kullanıcı, 2026-09-26 sabah): planın TAMAMI — §6 S1–S5 hepsi (A). Uygulama sırası D1 → D2 → D3 → D4, her dilim ayrı tren. **D1 İNDİ** (tren 22: #6 levent tüketimi R + tek kilitli kalan okuyucu · #10 hızlı sipariş K · #11 elle sipariş no R); D2 spec aşamasında.
+> **Durum:** KARARLANDI (kullanıcı, 2026-09-26 sabah): planın TAMAMI — §6 S1–S5 hepsi (A). Uygulama sırası D1 → D2 → D3 → D4, her dilim ayrı tren. **D1 İNDİ** (tren 22: #6 levent tüketimi R + tek kilitli kalan okuyucu · #10 hızlı sipariş K · #11 elle sipariş no R); **D2 ve D3 İNDİ** (tek boğaz + 12 kalan yol); D4 istemci dilimi.
 > **Ölçüm tabanı:** origin `c7e5c059`, statik okuma. Üç ölçüm ajanı 19 yolun sunucu + panel + tablet
 > akışını okudu; kritik iddialar elle doğrulandı (#6, #10, #11, §5'in 1–2. maddeleri). Satır
 > numaraları bu tabandadır.
@@ -125,7 +125,7 @@ istemciler bunu işliyor. Sözleşme kırılmaz: backend önce çıkar, `minVers
 | **D1** | (b) yolları: #6 levent tüketimi · #10 hızlı sipariş · #11 elle sipariş no | #6: R + token P2002 yakalama + gövde kapısı (`lengthM`) · #10: K, tek tx · #11: token ön-okuması clash kontrolünün ÖNÜNE + R | #11 için yarış gerekmez, sıralı bekçi yeter. #10'un yanlış mesajı düzelir. §5-6 ve §5-7 aynı dosyalarda. |
 | **D2** | Ortak boğaz + zayıf (b): `withTokenReplay`, AST bekçisi ("`clientToken` alan her create yolu bu boğazdan geçer"), fason kabul ona taşınır (gövde kapısı eklenir) · #8 · #9 · #18 · #19 | R | Kasa replay'ine iptal kapısı eklenir (§5-4). |
 | **D3** | Kalan (a): #1 · #2 · #3 · #4 · #5 · #7 · #12 · #13 · #14 · #15 · #16 · #17 | R; kilidi olanlarda K′ | Mekanik; yol başına bir zorlanmış sıra bekçisi. |
-| **D4** | §5'in istemci ve retry kalemleri | — | Panel + tablet dilimi; sunucu dilimlerinden bağımsız. |
+| **D4** | §5'in istemci ve retry kalemleri: her tıklamada token üreten 8 site (panel 7 · tablet 1) | tek yardımcı `Electron/src/lib/attemptToken.ts` (`useAttemptToken`, mal kabul satırları `keyed`); tablet mevcut `tokenFor` | Bekçi `test_istemci_token_uretimi`: sert kol taban 0 + P3 borç cırcırı (29: token tutup kesin 4xx'te yenilemeyen birim, beyan `scripts/lib/istemci-token-beyan.ts`). **D4b (isteğe bağlı):** P3 birimlerinin yardımcıya taşınması. |
 | **D5** | 4. durum eksikleri (Payment · PurchaseOrder · GoodsReceipt'in CANCELLED'ı replay'de görülmüyor; fatura, depo transferi ve iş emri D3'te kapandı) · yarışta ham P2002 (`createWarpBeam`, fason dokuma kabulü, dokuma işi) · predicate'siz retry (§5-2: mal kabul; depo transferi D3'te kapandı) · kalan token yollarının boğaza taşınması (KK1 ilk giriş, açık kumaş, Tambur elle top, toplama listesi) · **hızlı iş emri telafisi (D3 bulgusu):** sıfır top bağlanınca `hardDelete` token'ı null'luyor ve arşiv ucu aynı yolu kullanıyor — arşivlenmiş iş emrinin tekrarı replay değil YENİ iş emri açar, 4. durum orada ölçülemez | R (boğaz) | D2 envanterinden (24 model, ~56 birim); beyan `scripts/lib/token-replay-beyan.ts`te `borc: "D5"` (D3 sonunda 16), cırcır `test_token_replay_bogaz` §6. |
 
 ## 5. Yan bulgular (sınıf dışı ya da sınıfa eşlik eden)
