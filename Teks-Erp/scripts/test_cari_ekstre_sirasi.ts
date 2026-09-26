@@ -8,8 +8,9 @@
 // 300 çek tek cariye, tek tx) 299 komşuda aynı-an eşitliği 0, en kısa aralık 1 ms. Yapısal garanti
 // YOK ⇒ okuyucu belirlenimli: ekstre ve "en son terslenmemiş satır" okuyucuları eşitlikte `id`.
 // Eşitlik bir gün gerçekten ölçülürse yazar tek damgaya bağlanır (seçenek b).
-//   §1 ⭐ tek sıra tanımı (AST, `src/`): `cariTransaction.find*` sıralaması yalnız
-//      `CARI_STATEMENT_ORDER` / `CARI_TXN_LATEST_FIRST`ten; sabitler eşitlikte `id` taşır
+//   §1 ⭐ tek sıra tanımı (AST, `src/`, `lib/tek-sira-tarama`): `cariTransaction.find*` sıralaması yalnız
+//      `CARI_STATEMENT_ORDER` / `CARI_TXN_LATEST_FIRST`ten; tek satır okuyucu (`findFirst`) `CARI_TXN_LATEST_FIRST`;
+//      ölçülemeyen okuyucu (literal olmayan · kısaltılmış · spread) KIRMIZI; sabitler eşitlikte `id` taşır
 //   §2 ⭐ ekstre: aynı tarihli ve AYNI ANDA yazılmış satırlar id sırasıyla döner, iki sorgu aynı sırayı ve
 //      aynı ara bakiyeleri verir (satırlar id'nin TERSİ sırayla yazılır — fiziksel sıra kurtaramaz)
 // Ekran, PDF ve Excel aynı sunucu satırlarını okur (`StatementDialog` · `statementExport`, istemci
@@ -17,16 +18,17 @@
 // Gerekli mi: doğduğu gün ekstre `[txnDate, createdAt]` eşitlik bozucusuzdu; §2 onsuz kırmızı (sonda ①).
 // Sonda (✓B2, bu commit; md5 ile geri alındı): ① `CARI_STATEMENT_ORDER`dan `id` çıkar → §1 + §2 ❌2 ·
 // ② ekstre okuyucusu elle `[{ txnDate }, { createdAt }]`e döner → §1 + §2 ❌2.
+// Sonda (✓B1, 06 denetimi madde 11): çek ters yolunun "en son" okuyucusu artan sıraya (`CARI_STATEMENT_ORDER`) döner → §1 ❌1
+// (düzeltmeden önce 5/0 idi).
 // =============================================================================
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { join, relative } from "node:path";
-import * as ts from "typescript";
+import { join } from "node:path";
 import { CariKind, CariTxnSource, Currency } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { cariService } from "../src/services/cari.service";
 import { CARI_STATEMENT_ORDER, CARI_TXN_LATEST_FIRST } from "../src/services/helpers/finance.helper";
 import { walkTs } from "./lib/ts-tarama";
+import { tekSiraTara, type TekSiraKurali } from "./lib/tek-sira-tarama";
 import { fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
@@ -41,37 +43,24 @@ const ROOT = join(__dirname, "..");
 const TAG = `TST-CES-${Date.now()}`;
 const olusan: { customerId?: string; cariId?: string; txnIds: string[] } = { txnIds: [] };
 
+/** Cari defterin sıra kuralı — tek satır okuyucu `CARI_TXN_LATEST_FIRST`; ekstre sırası yalnız çok satırlı okumada. */
+const CARI_SIRA: TekSiraKurali = {
+  model: "cariTransaction",
+  sabitler: new Set(["CARI_STATEMENT_ORDER", "CARI_TXN_LATEST_FIRST"]),
+  enSon: new Set(["CARI_TXN_LATEST_FIRST"]),
+  artanBeyan: {},
+};
+
 function tekSiraTanimi(): void {
-  console.log("§1 ⭐ Tek sıra tanımı — okuyucular `CARI_STATEMENT_ORDER` / `CARI_TXN_LATEST_FIRST`");
+  console.log("§1 ⭐ Tek sıra tanımı — okuyucular `CARI_STATEMENT_ORDER` / `CARI_TXN_LATEST_FIRST`, tek satır okuyucu \"en son\"");
   check("sabitler eşitlikte id taşır",
     JSON.stringify(CARI_STATEMENT_ORDER) === '[{"txnDate":"asc"},{"createdAt":"asc"},{"id":"asc"}]'
       && JSON.stringify(CARI_TXN_LATEST_FIRST) === '[{"createdAt":"desc"},{"id":"desc"}]',
     JSON.stringify(CARI_STATEMENT_ORDER));
-  const sabit = new Set(["CARI_STATEMENT_ORDER", "CARI_TXN_LATEST_FIRST"]);
-  const ihlal: string[] = [];
-  let sirali = 0;
-  for (const abs of walkTs(join(ROOT, "src"))) {
-    const sf = ts.createSourceFile(abs, readFileSync(abs, "utf8"), ts.ScriptTarget.Latest, true);
-    const git = (n: ts.Node): void => {
-      if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && /^find/.test(n.expression.name.text)
-        && ts.isPropertyAccessExpression(n.expression.expression) && n.expression.expression.name.text === "cariTransaction") {
-        const arg = n.arguments[0];
-        const ob = arg && ts.isObjectLiteralExpression(arg)
-          ? arg.properties.find((p): p is ts.PropertyAssignment => ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === "orderBy")
-          : undefined;
-        if (ob) {
-          sirali++;
-          if (!(ts.isIdentifier(ob.initializer) && sabit.has(ob.initializer.text))) {
-            ihlal.push(`${relative(ROOT, abs)}:${sf.getLineAndCharacterOfPosition(ob.getStart()).line + 1} ${ob.initializer.getText().replace(/\s+/g, " ")}`);
-          }
-        }
-      }
-      ts.forEachChild(n, git);
-    };
-    git(sf);
-  }
-  check("körlük zemini: ≥ 3 sıralı okuyucu tarandı", sirali >= 3, `${sirali}`);
-  check("elle sıralama yok (hepsi tek sıra tanımından)", ihlal.length === 0, ihlal.join(" · "));
+  const r = tekSiraTara(ROOT, walkTs(join(ROOT, "src")), CARI_SIRA);
+  check("körlük zemini: ≥ 3 sıralı okuyucu tarandı", r.sirali >= 3, `${r.sirali}`);
+  check("elle sıralama ya da \"en son\" olmayan tek satır okuyucu yok", r.ihlal.length === 0, r.ihlal.join(" · "));
+  check("ölçülemeyen okuyucu yok (literal olmayan · kısaltılmış · spread)", r.olculemedi.length === 0, r.olculemedi.join(" · "));
 }
 
 async function ekstre(): Promise<void> {

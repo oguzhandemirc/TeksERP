@@ -11,7 +11,9 @@
 //      SONRA damgalanır; aynı tx'te ardışık ileri + ters satırlar kesin artan · (c) satırsız topta damga DB saati
 //      aralığında · (d) toplu çağrıda BÜTÜN topların son satırından sonra · (e) aynı top toplu çağrıda iki kez →
 //      dizi sırasıyla kesin artan (06 denetimi: saat terimi sıfırlanınca ya da yalnız ilk top damgalanınca 9/0)
-//   §2 ⭐ tek sıra tanımı (AST, DB'siz): `src/` altında `warehouseMovement.find*` sıralaması yalnız
+//   §2 ⭐ tek sıra tanımı (AST, DB'siz, `lib/tek-sira-tarama`): ölçülemeyen okuyucu (literal olmayan argüman ·
+//      kısaltılmış `orderBy` · spread) KIRMIZI; tek satır okuyucu (`findFirst`) `MOVEMENT_DESC` — artan okuma yalnız
+//      beyanla (iki yönlü); saf sondalar ✓K3 her koşumda. `src/` altında `warehouseMovement.find*` sıralaması yalnız
 //      `MOVEMENT_ASC`/`MOVEMENT_DESC`ten gelir — ya sabitin kendisi ya da öneki olan dizinin KUYRUĞU
 //      (`[{ rollId }, ...MOVEMENT_ASC]`, top başına gruplama); elle `{ createdAt }` yok; sabitler eşitlikte
 //      `id` taşır. Körlük zemini: ≥ 15 sıralı okuyucu.
@@ -20,11 +22,11 @@
 // ② "son satır + 1 ms" terimi kalkar → §1 ❌6 · ③ bir okuyucu elle `{ createdAt: "desc" }`e döner → §2 ❌1.
 // Sonda (✓B3, 06 denetimi madde 10; md5 ile geri alındı): saat terimi `to_timestamp(0)` → (c) ❌1 · toplu damga yalnız
 // ilk toptan → (d) ❌1 · aynı topun tekrar ofseti kalkar → (e) ❌1 (ilk ikisi düzeltmeden önce 9/0 idi).
+// Sonda (✓B3, 06 denetimi madde 11; md5 ile geri alındı): kısaltılmış `orderBy,` + yerel sabit → §2 ÖLÇÜLEMEDİ ❌1 ·
+// "en son" okuyucusu `MOVEMENT_DESC → ASC` → §2 ❌1 (ikisi düzeltmeden önce 12/0 idi) · saf sondalar ✓K3 her koşumda.
 // =============================================================================
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { join, relative } from "node:path";
-import * as ts from "typescript";
+import { join } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
 import {
   MOVEMENT_ASC,
@@ -36,6 +38,7 @@ import {
 } from "../src/services/helpers/warehouse-ledger.helper";
 import { reverseStockMove } from "../src/services/helpers/warehouse-ledger-reverse.helper";
 import { walkTs } from "./lib/ts-tarama";
+import { bosSonuc, tekSiraKaynak, tekSiraTara, type TekSiraKurali } from "./lib/tek-sira-tarama";
 import { fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
@@ -141,39 +144,53 @@ async function saat(): Promise<void> {
     f.length === 4 && f.every((t, i) => i === 0 || t > f[i - 1]!), f.map((t) => new Date(t).toISOString().slice(17)).join(" < "));
 }
 
+/** Depo defterinin sıra kuralı — artan `findFirst` yalnız beyanla. */
+const DEPO_SIRA: TekSiraKurali = {
+  model: "warehouseMovement",
+  sabitler: new Set(["MOVEMENT_ASC", "MOVEMENT_DESC"]),
+  enSon: new Set(["MOVEMENT_DESC"]),
+  artanBeyan: {
+    "src/services/kartela.service.ts#cancelDispatch":
+      "kartela sevk iptali: topun bu sevk için TEK açık EXTERNAL satırı olur; birden çoksa en ESKİsi (FIFO) terslenir",
+    "src/services/shipping.service.ts#writeUndoDispatchLedgerTx":
+      "sevk stornosu: topun bu sevkiyatta TEK açık SHIPMENT satırı olur; birden çoksa en ESKİsi (FIFO) terslenir",
+  },
+};
+
 function tekSiraTanimi(): void {
-  console.log("§2 ⭐ Tek sıra tanımı — okuyucular `MOVEMENT_ASC`/`MOVEMENT_DESC`");
+  console.log("§2 ⭐ Tek sıra tanımı — okuyucular `MOVEMENT_ASC`/`MOVEMENT_DESC`, tek satır okuyucu \"en son\"");
   check("sabitler eşitlikte id taşır",
     JSON.stringify(MOVEMENT_ASC) === '[{"createdAt":"asc"},{"id":"asc"}]' && JSON.stringify(MOVEMENT_DESC) === '[{"createdAt":"desc"},{"id":"desc"}]');
-  const sabit = new Set(["MOVEMENT_ASC", "MOVEMENT_DESC"]);
-  const ihlal: string[] = [];
-  let sirali = 0;
-  for (const abs of walkTs(join(ROOT, "src"))) {
-    const sf = ts.createSourceFile(abs, readFileSync(abs, "utf8"), ts.ScriptTarget.Latest, true);
-    const git = (n: ts.Node): void => {
-      if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && /^find/.test(n.expression.name.text)
-        && ts.isPropertyAccessExpression(n.expression.expression) && n.expression.expression.name.text === "warehouseMovement") {
-        const arg = n.arguments[0];
-        const ob = arg && ts.isObjectLiteralExpression(arg)
-          ? arg.properties.find((p): p is ts.PropertyAssignment => ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === "orderBy")
-          : undefined;
-        if (ob) {
-          sirali++;
-          const ini = ob.initializer;
-          const son = ts.isArrayLiteralExpression(ini) ? ini.elements[ini.elements.length - 1] : undefined;
-          const kuyruk = !!son && ts.isSpreadElement(son) && ts.isIdentifier(son.expression) && sabit.has(son.expression.text)
-            && ts.isArrayLiteralExpression(ini) && ini.elements.slice(0, -1).every((e) => !/createdAt|\bid\b/.test(e.getText()));
-          if (!((ts.isIdentifier(ini) && sabit.has(ini.text)) || kuyruk)) {
-            ihlal.push(`${relative(ROOT, abs)}:${sf.getLineAndCharacterOfPosition(ob.getStart()).line + 1} ${ob.initializer.getText().replace(/\s+/g, " ")}`);
-          }
-        }
-      }
-      ts.forEachChild(n, git);
-    };
-    git(sf);
-  }
-  check("körlük zemini: ≥ 15 sıralı okuyucu tarandı", sirali >= 15, `${sirali}`);
-  check("elle sıralama yok (hepsi tek sıra tanımından)", ihlal.length === 0, ihlal.join(" · "));
+  // Saf sondalar (✓K, her koşumda): tarayıcının kendisi — ölçülemeyen uyumlu sayılmaz, yön kuralı ısırır.
+  const sonda = (kod: string) => {
+    const r = bosSonuc();
+    tekSiraKaynak("sonda.ts", kod, DEPO_SIRA, r, new Set());
+    return r;
+  };
+  // Model adı dizgede ayrı kurulur: metin tarayıcıları (keyfi arama) sonda dizgesini gerçek çağrı sanmasın.
+  const d = `tx.${DEPO_SIRA.model}`;
+  const K = {
+    kisa: sonda(`async function f(tx, id){ const orderBy = { createdAt: 'desc' }; return ${d}.findFirst({ where: { id }, orderBy }); }`),
+    literalDegil: sonda(`async function f(tx, a){ return ${d}.findFirst(a); }`),
+    spread: sonda(`async function f(tx, a, id){ return ${d}.findMany({ ...a, where: { id } }); }`),
+    elle: sonda(`async function f(tx, id){ return ${d}.findMany({ where: { id }, orderBy: { createdAt: 'desc' } }); }`),
+    artan: sonda(`async function f(tx, id){ return ${d}.findFirst({ where: { id }, orderBy: MOVEMENT_ASC }); }`),
+    enSon: sonda(`async function f(tx, id){ return ${d}.findFirst({ where: { id }, orderBy: MOVEMENT_DESC }); }`),
+    onekli: sonda(`async function f(tx, id){ return ${d}.findMany({ where: { id }, orderBy: [{ rollId: 'asc' }, ...MOVEMENT_ASC] }); }`),
+  };
+  check("saf sonda: kısaltılmış orderBy · literal olmayan argüman · spread → ÖLÇÜLEMEDİ",
+    K.kisa.olculemedi.length === 1 && K.literalDegil.olculemedi.length === 1 && K.spread.olculemedi.length === 1);
+  check("saf sonda: elle sıralama → ihlal · artan findFirst (beyansız) → ihlal",
+    K.elle.ihlal.length === 1 && K.artan.ihlal.length === 1);
+  check("saf sonda: \"en son\" findFirst ve önekli kuyruk → uyumlu",
+    K.enSon.ihlal.length + K.enSon.olculemedi.length === 0 && K.onekli.ihlal.length + K.onekli.olculemedi.length === 0);
+
+  const r = tekSiraTara(ROOT, walkTs(join(ROOT, "src")), DEPO_SIRA);
+  check("körlük zemini: ≥ 15 sıralı okuyucu tarandı", r.sirali >= 15, `${r.sirali}`);
+  check("elle sıralama ya da \"en son\" olmayan tek satır okuyucu yok", r.ihlal.length === 0, r.ihlal.join(" · "));
+  check("ölçülemeyen okuyucu yok (literal olmayan · kısaltılmış · spread)", r.olculemedi.length === 0, r.olculemedi.join(" · "));
+  check("artan findFirst beyanı iki yönlü (her beyan canlı)", r.oluBeyan.length === 0 && r.beyanli.length === Object.keys(DEPO_SIRA.artanBeyan).length,
+    `beyanlı ${r.beyanli.length} · ölü ${r.oluBeyan.join(", ")}`);
 }
 
 async function main(): Promise<void> {
