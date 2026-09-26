@@ -201,6 +201,37 @@ describe("ReworkRollsDialog", () => {
   });
 });
 
+describe("ReworkRollsDialog — deneme anahtarı", () => {
+  it("⭐ deneme anahtarı: 504 sonrası yeni `rolls` dizisiyle render aynı anahtarı korur; 400 sonrası yeni anahtar", async () => {
+    quickStart
+      .mockRejectedValueOnce({ response: { status: 504 }, message: "Gateway Timeout" })
+      .mockRejectedValueOnce({ response: { status: 400, data: { message: "Rota geçersiz" } } });
+    routeSteps = IC_ROUTE;
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const ui = (rs: unknown[]) => (
+      <QueryClientProvider client={qc}>
+        <ReworkRollsDialog open onOpenChange={() => {}} rolls={rs as never} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui([roll()]));
+    await selectRoute();
+    const gonder = async (n: number) => {
+      fireEvent.click(await screen.findByRole("button", { name: /İş emri aç/ }));
+      await waitFor(() => expect(quickStart).toHaveBeenCalledTimes(n));
+      await waitFor(() => expect(screen.getByRole("button", { name: /İş emri aç/ })).not.toBeDisabled());
+    };
+    await gonder(1);
+    // Çağıran seçimi her render'da yeni dizi olarak kurar — belirsiz hatadan sonra anahtar düşmemeli.
+    rerender(ui([roll()]));
+    await gonder(2);
+    await gonder(3);
+    const [t1, t2, t3] = quickStart.mock.calls.map((c) => (c[0] as { clientToken: string }).clientToken);
+    expect(t1).toEqual(expect.any(String));
+    expect(t2).toBe(t1);
+    expect(t3).not.toBe(t1);
+  });
+});
+
 /**
  * İKİ MOD, TEK MOTOR (2026-08-26).
  *

@@ -5,6 +5,7 @@
 //   §2 satırdaki "Tümü" → taslak + tutar ÖN-DOLAR; Kaydet → createPayment SONRA allocateBulk (paymentId + kalem)
 //   §3 seçim yoksa ödeme bugünkü gibi bağsız: allocateBulk ÇAĞRILMAZ
 //   §4 eşlenen > tutar → Kaydet kilitli, sebep yazılı
+//   §5 deneme anahtarı: belirsiz hata (504) → aynı clientToken; kesin ret (400) → sonraki deneme YENİ clientToken
 // =============================================================================
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { screen, waitFor, fireEvent } from "@testing-library/react";
@@ -96,5 +97,25 @@ describe("PaymentFormDialog — açık faturalar", () => {
     fireEvent.change(draftInput, { target: { value: "700" } });
     await waitFor(() => expect(screen.getByTestId("odeme-engel")).toHaveTextContent(/aşıyor/));
     expect(screen.getByRole("button", { name: /Tahsilat Kaydet/ })).toBeDisabled();
+  });
+
+  it("§5 ⭐ 504 → aynı anahtarla tekrar; 400 → sonraki deneme yeni anahtar", async () => {
+    createPayment
+      .mockRejectedValueOnce({ response: { status: 504 }, message: "Gateway Timeout" })
+      .mockRejectedValueOnce({ response: { status: 400, data: { message: "Tutar geçersiz" } } })
+      .mockResolvedValueOnce({ success: true, data: { id: "pay-1", docNo: "T-1" }, message: "Kaydedildi." });
+    const user = await setup();
+    await screen.findByText("F-1");
+    fireEvent.change(screen.getByLabelText("Tutar"), { target: { value: "150" } });
+    const kaydet = screen.getByRole("button", { name: /Tahsilat Kaydet/ });
+    for (let n = 1; n <= 3; n++) {
+      await user.click(kaydet);
+      await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(n));
+      await waitFor(() => expect(kaydet).not.toBeDisabled());
+    }
+    const [t1, t2, t3] = createPayment.mock.calls.map((c) => (c[0] as { clientToken: string }).clientToken);
+    expect(t1).toEqual(expect.any(String));
+    expect(t2).toBe(t1);
+    expect(t3).not.toBe(t1);
   });
 });

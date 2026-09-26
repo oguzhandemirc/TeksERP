@@ -13,14 +13,18 @@
 //   §4 körlük: iki istemci de taranıyor, politika kökleri dışa açık, uyumlu tutucu tanınıyor.
 //   §5 İKİZ MAKİNE: panel `lib/attemptToken.ts` ile tablet `offline/attemptToken.ts` durum makinesi AST'de özdeş.
 //   §6 belirsiz-hata ölçütü istemci başına TEK tanım; tablet ikizi onu `entryAttempt`ten alır (kopya yok).
+//   §7 POLİTİKA API'Sİ: `useAttemptToken` denemesi token'ı okur, sonucu `onFailure` VE `onSuccess`e bağlar; `renew`
+//      başarı/hata yolunda çağrılmaz (onError/onSuccess/mutationFn · catch · then/catch/finally geri çağrısı).
+//      Deneme nesnesi birimden kaçamaz (prop · argüman · dönüş; bağımlılık dizisi hariç) — kaçan sonuç bağı ölçülemez.
 // KALAN RİSK (beyanlı kör nokta): uyum BİRİM düzeyinde ölçülür — politika yardımcısını kullanan bir birime
 // eklenen ikinci, ayrı bir ham tutucu (`useState(() => üret())`) P3'e düşmez ve görülmez.
+// §7 efektin bağımlılık dizisini ölçmez (`renew` efekti seçim dizisine bağlanırsa yeşil kalır) — bunu diyalog testi tutar.
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as ts from "typescript";
 import { ISTEMCI_MUAF, KOK_POLITIKA, MUAF_SINIFLARI } from "./lib/istemci-token-beyan";
-import { ISTEMCI_KOKLERI, REPO, politikaAdlari, tara, type Uretim } from "./lib/istemci-token-tarama";
+import { ISTEMCI_KOKLERI, REPO, istemciDosyalari, politikaAdlari, tara, type Uretim } from "./lib/istemci-token-tarama";
 
 let pass = 0;
 let fail = 0;
@@ -121,6 +125,74 @@ function main(): void {
   }
   const ikizKaynak = fs.readFileSync(path.join(REPO, IKIZLER[1]), "utf8");
   check("tablet ikizi ölçütü entryAttempt'ten alır (kopya yok)", /import\s*\{[^}]*\bisAmbiguousFailure\b[^}]*\}\s*from\s*['"]\.\/entryAttempt['"]/.test(ikizKaynak));
+
+  console.log("§7 Politika API'si — deneme sonucu yardımcıya bağlı, renew yalnız açılış/sıfırlama");
+  const SONUC_YOLU = new Set(["onError", "onSuccess", "onSettled", "mutationFn"]);
+  const BAGIMLILIK = new Set(["useEffect", "useLayoutEffect", "useCallback", "useMemo"]);
+  const apiHatasi: string[] = [];
+  let deneme = 0;
+  for (const rel of istemciDosyalari()) {
+    const src = fs.readFileSync(path.join(REPO, rel), "utf8");
+    // Hook dışı makine (`createAttemptToken`) bu ölçümü atlatır; adı (takma adla import dahil) yalnız yardımcıda geçer.
+    if (!(IKIZLER as readonly string[]).includes(rel) && /\bcreateAttemptToken\b/.test(src)) apiHatasi.push(`${rel}: createAttemptToken yardımcı dışında (useAttemptToken kullan)`);
+    // Takma adlı hook denemeyi taramadan saklar.
+    if (/\buseAttemptToken\s+as\b/.test(src)) apiHatasi.push(`${rel}: useAttemptToken takma adla içe alınmış (tarama göremez)`);
+    if (!/\buseAttemptToken\s*\(/.test(src)) continue;
+    const sf = ts.createSourceFile(rel, src, ts.ScriptTarget.Latest, true, rel.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+    const satir = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart()).line + 1;
+    const gez = (n: ts.Node) => {
+      if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && ts.isCallExpression(n.initializer) && /(^|\.)useAttemptToken$/.test(n.initializer.expression.getText(sf))) {
+        deneme++;
+        const ad = n.name.text;
+        // Kapsam: bildirimi içeren en yakın fonksiyon (hook gövdesi).
+        let kapsam: ts.Node = n;
+        while (kapsam.parent && !(ts.isFunctionDeclaration(kapsam) || ts.isArrowFunction(kapsam) || ts.isFunctionExpression(kapsam) || ts.isMethodDeclaration(kapsam))) kapsam = kapsam.parent;
+        const cagri = new Map<string, ts.Node[]>();
+        let kacti = false;
+        const tara7 = (k: ts.Node) => {
+          if (ts.isIdentifier(k) && k.text === ad && k !== n.name) {
+            const ust = k.parent;
+            if (ts.isPropertyAccessExpression(ust) && ust.expression === k) {
+              const liste = cagri.get(ust.name.text) ?? [];
+              liste.push(ust);
+              cagri.set(ust.name.text, liste);
+            } else {
+              // Bağımlılık dizisi (useEffect/useCallback/useMemo'nun ikinci argümanı) kaçış değildir.
+              const dizi = ts.isArrayLiteralExpression(ust) ? ust.parent : null;
+              const bagimlilik = dizi && ts.isCallExpression(dizi) && BAGIMLILIK.has(dizi.expression.getText(sf)) && dizi.arguments[1] === ust;
+              if (!bagimlilik) kacti = true;
+            }
+          }
+          ts.forEachChild(k, tara7);
+        };
+        tara7(kapsam);
+        const yer = `${rel}:${satir(n)} ${ad}`;
+        if (!cagri.has("token") && !cagri.has("keyed")) apiHatasi.push(`${yer}: token/keyed okunmuyor`);
+        // Birimden kaçan deneme (prop/argüman/dönüş) sonucun nereye bağlandığını ölçülemez kılar → fail-closed.
+        if (kacti) apiHatasi.push(`${yer}: deneme nesnesi birimden kaçıyor (sonuç bağı ölçülemez)`);
+        else {
+          if (!cagri.has("onFailure")) apiHatasi.push(`${yer}: onFailure çağrılmıyor (kesin 4xx'te yenileme / belirsizde yapışma yok)`);
+          if (!cagri.has("onSuccess")) apiHatasi.push(`${yer}: onSuccess çağrılmıyor`);
+        }
+        for (const r of cagri.get("renew") ?? []) {
+          for (let u: ts.Node | undefined = r.parent; u && u !== kapsam; u = u.parent) {
+            const sonucYolu =
+              (ts.isPropertyAssignment(u) && SONUC_YOLU.has(u.name.getText(sf))) ||
+              ts.isCatchClause(u) ||
+              ((ts.isArrowFunction(u) || ts.isFunctionExpression(u)) && ts.isCallExpression(u.parent) && ts.isPropertyAccessExpression(u.parent.expression) && ["then", "catch", "finally"].includes(u.parent.expression.name.text));
+            if (sonucYolu) {
+              apiHatasi.push(`${rel}:${satir(r)} ${ad}.renew() sonuç yolunda (belirsiz hatada token'ı düşürür)`);
+              break;
+            }
+          }
+        }
+      }
+      ts.forEachChild(n, gez);
+    };
+    gez(sf);
+  }
+  check("⭐ her deneme token'ı okur, onFailure + onSuccess'e bağlı; renew sonuç yolunda değil", apiHatasi.length === 0, apiHatasi.join(" · "));
+  check("deneme taraması kör değil (≥ 30 useAttemptToken)", deneme >= 30, `${deneme} deneme`);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
