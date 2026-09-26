@@ -25,6 +25,7 @@
 // kaldırılınca §3 kırmızı. Yedek kopyadan geri alındı. (2026-09-26, md5 ile geri alındı) `repointRollsTx`teki
 // `rebindProductionIssuesTx` çağrısı kaldırılınca §9 + §9b kırmızı; devir tersi `ROLL_DETACH` yazınca §9 + §9b +
 // §9c kırmızı; çizelgenin devir satırları kaldırılınca §9c kırmızı.
+// (06 denetimi 13, md5 ile geri alındı) devirde yeni ileri satırın metrajı ×2 → §9d ❌ (eski paket 11/0).
 // (06 denetimi, md5 ile geri alındı) claim WHERE `{ id }`e indirilince §10 kırmızı (B geçti, rakibin taşıdığı top STOCK'a
 // döndü, ters satır yazıldı) — eski paket bu mutasyonda 8/0 yeşildi.
 // (06 denetimi, md5 ile geri alındı) sekiz engelin HER BİRİ tek tek kaldırıldı → §11 ❌ (her seferinde yalnız o engel;
@@ -180,7 +181,7 @@ async function main(): Promise<void> {
     woIds.push(wo4.id);
     const acik = (rollId: string) => prisma.warehouseMovement.findMany({
       where: { rollId, reasonCode: STOCK_MOVE_REASON.PRODUCTION_ISSUE, reversesMovementId: null, reversedBy: { none: {} } },
-      select: { workOrderStepId: true },
+      select: { workOrderStepId: true, qty: true },
     });
     const devirSonrasi = await acik(d);
     const devirTersi = await prisma.warehouseMovement.findFirst({ where: { rollId: d, reasonCode: STOCK_MOVE_REASON.PRODUCTION_ISSUE_TRANSFER }, select: { notes: true } });
@@ -188,6 +189,16 @@ async function main(): Promise<void> {
     check("§9 devir: açık üretime alma satırı YENİ iş emrinin ilk adımına bağlandı, eskisi devir tersiyle (ROLL_DETACH değil) kapandı",
       devirSonrasi.length === 1 && devirSonrasi[0]?.workOrderStepId === wo4.steps[0]?.id && (devirTersi?.notes ?? "").startsWith("İş emri devri") && devirDetach === 0,
       `${devirSonrasi.length} açık · ${devirTersi?.notes} · ROLL_DETACH ${devirDetach}`);
+    // Net 0: devir miktar yaratmaz — terslenen ileri satır, ters satır ve yeni ileri satır AYNI metraj.
+    const devirSatirlari = await prisma.warehouseMovement.findMany({
+      where: { rollId: d, reasonCode: { in: [STOCK_MOVE_REASON.PRODUCTION_ISSUE, STOCK_MOVE_REASON.PRODUCTION_ISSUE_TRANSFER] } },
+      select: { reasonCode: true, qty: true, reversesMovementId: true },
+    });
+    const ileriToplam = devirSatirlari.filter((x) => x.reasonCode === STOCK_MOVE_REASON.PRODUCTION_ISSUE).reduce((t, x) => t + Number(x.qty), 0);
+    const tersToplam = devirSatirlari.filter((x) => x.reasonCode === STOCK_MOVE_REASON.PRODUCTION_ISSUE_TRANSFER).reduce((t, x) => t + Number(x.qty), 0);
+    check("§9d ⭐ devir net 0: ileri Σ − ters Σ = açık satırın metrajı = topun üretime giren metrajı (100)",
+      ileriToplam - tersToplam === 100 && devirSonrasi.length === 1 && Number(devirSonrasi[0]!.qty) === 100 && tersToplam === 100,
+      `ileri ${ileriToplam} · ters ${tersToplam} · açık ${devirSonrasi.map((x) => Number(x.qty)).join(",")}`);
     const cikar = await detach.detachRoll(wo4.id, d, "Devirden sonra yanlış", ADMIN);
     const dSon = await prisma.roll.findUniqueOrThrow({ where: { id: d }, select: { status: true, warehouseId: true } });
     const tersSayisi = await prisma.warehouseMovement.count({ where: { rollId: d, reasonCode: STOCK_MOVE_REASON.ROLL_DETACH } });
