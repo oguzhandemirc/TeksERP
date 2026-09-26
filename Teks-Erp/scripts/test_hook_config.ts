@@ -38,6 +38,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
+import { parse as dotenvParse } from "dotenv";
 import { atlamaDefteri } from "./lib/atlama";
 
 const KOK = join(__dirname, "..", "..");
@@ -414,6 +415,43 @@ function main(): void {
   check("§10c ⭐ fabrika yedeği hedefinde status BİLE koşmaz (⏭ FABRİKA YEDEĞİ, <2 sn, çıkış 0)", rFab.status === 0 && /FABRİKA YEDEĞİ/.test(rFab.stdout) && fabMs < 2000, `${fabMs} ms`);
   const rYok = spawnSync("node", [join(KOK, "scripts/hooks/lib/test-db-semasi.mjs"), "--url=postgresql://m:m@127.0.0.1:1/x"], { encoding: "utf8", cwd: KOK, timeout: 60_000 });
   check("§10d ⭐ DB yok → ⏭ ÖLÇÜLEMEDİ, çıkış 0 (kapı durmaz)", rYok.status === 0 && /ÖLÇÜLEMEDİ/.test(rYok.stdout), `çıkış=${rYok.status}`);
+  // §10f `.env` okuma = backend'in ayrıştırıcısı (dotenv). RECETELER izole ağaç §5 URL'i TEK TIRNAKLA
+  //    yazdırır; kapı yalnız çift tırnağı soyduğu için tırnaklı URL `migrate status`a gidip P1013 ile
+  //    ⏭ "ölçülemedi"ye düşüyordu (9b ölçtü 2026-09-26). Kapı sıfır bağımlılıklıdır, bu yüzden
+  //    eşdeğerlik ÖRNEKLERLE dotenv'e karşı ölçülür.
+  const envOrnek = [
+    `DATABASE_URL="postgresql://u:p@h:5432/a_test?schema=public"`,
+    `DATABASE_URL='postgresql://u:p@h:5432/a_test?schema=public'`,
+    "DATABASE_URL=postgresql://u:p@h:5432/a_test?schema=public",
+    "PORT=4417\nDATABASE_URL='postgresql://u:p@localhost:55433/b_test?schema=public'\nJWT_SECRET=x",
+    "  export DATABASE_URL = 'postgresql://u:p@h/c_test?schema=public'   # yorum",
+    "DATABASE_URL=postgresql://u:p@h/d_test?schema=public # yorum",
+    "DATABASE_URL=`postgresql://u:p@h/e_test?schema=public`",
+    `DATABASE_URL="postgresql://u:p@h/eski_test"\nDATABASE_URL='postgresql://u:p@h/yeni_test?schema=public'`,
+    "DATABASE_URL=",
+    "PORT=4000",
+  ];
+  const r10f = defterKos(
+    {},
+    `const m = await import(${tds});\n` +
+      `process.stdout.write(JSON.stringify(${JSON.stringify(envOrnek)}.map((t) => { const u = m.envDegeri(t, "DATABASE_URL"); return [u, u ? m.dbAdi(u) : null]; })));`,
+  );
+  let s10f: Array<[string | null, string | null]> = [];
+  try { s10f = JSON.parse(r10f.stdout) as Array<[string | null, string | null]>; } catch { /* aşağıda kırmızı */ }
+  const beklenen = envOrnek.map((t) => dotenvParse(t).DATABASE_URL || null);
+  const ayrisan = envOrnek.filter((_, i) => s10f[i]?.[0] !== beklenen[i]);
+  check("§10f ⭐ kapının `.env` okuması dotenv ile AYNI (çift · tek · ters tırnak · tırnaksız · export · yorum · son tanım kazanır)",
+    r10f.status === 0 && s10f.length === envOrnek.length && ayrisan.length === 0,
+    r10f.status === 0 ? (ayrisan.length ? `ayrışan: ${ayrisan.join(" ¦ ")}` : `${envOrnek.length} örnek`) : r10f.stderr.slice(0, 120));
+  check("§10f2 tırnaklı URL'de veritabanı adı ve `?schema=` sağlam (a_test · b_test · son tanım yeni_test)",
+    s10f[1]?.[1] === "a_test" && s10f[3]?.[1] === "b_test" && s10f[7]?.[1] === "yeni_test" && (s10f[1]?.[0] ?? "").endsWith("?schema=public"));
+  // §10g Fabrika verisi bir SINIFTIR: yalnız eski yedeğin adı değil, aynı önekli her DB (yeni döküm,
+  //    kopya) status'a bağlanmaz. Ad buraya yazılmaz — önek modülden okunur.
+  const rOnek = defterKos({}, `const m = await import(${tds}); process.stdout.write(m.FABRIKA_ONEKI);`);
+  const onek = rOnek.stdout.trim();
+  const rFab2 = spawnSync("node", [join(KOK, "scripts/hooks/lib/test-db-semasi.mjs"), `--url=postgresql://u:p@127.0.0.1:1/${onek}sonda${process.pid}?schema=public`], { encoding: "utf8", cwd: KOK, timeout: 30_000 });
+  check("§10g ⭐ fabrika öneki taşıyan HER ad (sabitteki yedek dışında da) status'a bağlanmaz — ⏭ FABRİKA YEDEĞİ",
+    onek.length > 0 && fab10?.startsWith(onek) && rFab2.status === 0 && /FABRİKA YEDEĞİ/.test(rFab2.stdout), rFab2.stdout.trim().slice(0, 100));
   check("§10e pre-commit adımı 'prisma istemcisi güncel'in ardında, ağır değil",
     /ad: "prisma istemcisi güncel"[\s\S]{0,400}ad: "test DB'si şeması", cwd: "\.", cmd: \["node", \["scripts\/hooks\/lib\/test-db-semasi\.mjs"\]\] \}/.test(preCommit) && !/test DB'si şeması"[^\n]*agir: true/.test(preCommit));
 

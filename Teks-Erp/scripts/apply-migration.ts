@@ -25,6 +25,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parse as parseEnv } from "dotenv";
 
 const ROOT = join(__dirname, "..");
 
@@ -63,10 +64,10 @@ function resolveDbUrl(): { psqlUrl: string; prismaUrl: string; kaynak: string } 
     ham = ortam;
     kaynak = "process.env.DATABASE_URL";
   } else {
-    const env = readFileSync(join(ROOT, ".env"), "utf8");
-    const m = env.match(/^DATABASE_URL="([^"]+)"/m);
-    if (!m || !m[1]) fail("DATABASE_URL ne ortamda ne de .env içinde bulundu.");
-    ham = m[1];
+    // Backend'in okuduğu ayrıştırıcıyla (dotenv): tek/çift tırnaklı ve tırnaksız değer aynı sonucu verir.
+    const envUrl = parseEnv(readFileSync(join(ROOT, ".env"), "utf8")).DATABASE_URL?.trim();
+    if (!envUrl) fail("DATABASE_URL ne ortamda ne de .env içinde bulundu.");
+    ham = envUrl;
     kaynak = ".env dosyası (ortamda DATABASE_URL yok)";
   }
   const url = new URL(ham);

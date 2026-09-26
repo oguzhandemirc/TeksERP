@@ -14,7 +14,7 @@
 //    GERİDE       ⏭ "Following migrations have not yet been applied:" — N satır + çare
 //    ÖLÇÜLEMEDİ   ⏭ P1000/P1001/erişim yok · DATABASE_URL yok
 //    ARIZA        ⏭ "ölçülemedi: beklenmeyen çıktı" — üç sonuç dışı dördüncü bir SESSİZLİK olmasın
-//    FABRİKA      ⏭ hedef `tekserp_fabrika_dev` ise status BİLE koşmaz (o DB'ye bağlanılmaz)
+//    FABRİKA      ⏭ hedef fabrika verisiyse (`FABRIKA_ONEKI` ile başlayan HER ad) status BİLE koşmaz
 //
 // Neden durmaz: kapının adımları DB'siz; geride DB yalnız oturumun kendi bekçi koşumlarını
 //    yanıltır — sert kapı doğru davranışı (docs commit'i) DB şartına bağlardı.
@@ -31,12 +31,36 @@ import { fileURLToPath } from "node:url";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const BACKEND = join(REPO, "Teks-Erp");
 export const FABRIKA_YEDEGI = "tekserp_fabrika_dev";
+/** Fabrika verisi taşıyan DB'lerin SINIFI — ad değişse de (kopya, yeni döküm) kural aynı. */
+export const FABRIKA_ONEKI = "tekserp_fabrika_";
+
+/** Hedef fabrika verisi mi — o DB'ye status bile bağlanmaz. */
+export function fabrikaMi(ad) {
+  return typeof ad === "string" && ad.startsWith(FABRIKA_ONEKI);
+}
+
+/**
+ * `.env` metnindeki bir anahtarın değeri — backend'in okuduğu `dotenv` ile AYNI sonuç: çift, tek
+ * ya da ters tırnaklı değer tırnaksız döner; tırnaksız değer `#`ten önce biter; `export` öneki
+ * serbest; aynı anahtar iki kez varsa SONUNCUSU. Bulunamazsa ya da boşsa null.
+ * (Kapı sıfır bağımlılıklıdır; `dotenv` eşdeğerliğini `test_hook_config` §10f ölçer.)
+ */
+export function envDegeri(metin, anahtar) {
+  const satir = new RegExp(`^[ \\t]*(?:export[ \\t]+)?${anahtar}[ \\t]*=[ \\t]*(.*)$`, "gm");
+  let deger = null;
+  for (const m of metin.matchAll(satir)) {
+    const ham = m[1].trim();
+    const q = ham[0];
+    const son = q === '"' || q === "'" || q === "`" ? ham.indexOf(q, 1) : -1;
+    deger = son > 0 ? ham.slice(1, son) : ham.split("#")[0].trim();
+  }
+  return deger ? deger : null;
+}
 
 /** `.env`den DATABASE_URL (salt okur); yoksa null. */
 export function envUrl(envYolu = join(BACKEND, ".env")) {
   if (!existsSync(envYolu)) return null;
-  const m = readFileSync(envYolu, "utf8").match(/^\s*DATABASE_URL\s*=\s*"?([^"\n]+)"?\s*$/m);
-  return m ? m[1].trim() : null;
+  return envDegeri(readFileSync(envYolu, "utf8"), "DATABASE_URL");
 }
 
 /** URL'deki veritabanı adı (yol bileşeni, `?` öncesi). */
@@ -69,8 +93,8 @@ function main() {
     process.exit(0);
   }
   const ad = dbAdi(url);
-  if (ad === FABRIKA_YEDEGI) {
-    console.log(`⏭ test DB'si şeması ÖLÇÜLMEZ — hedef ${FABRIKA_YEDEGI} FABRİKA YEDEĞİDİR, status bile bağlanmaz`);
+  if (fabrikaMi(ad)) {
+    console.log(`⏭ test DB'si şeması ÖLÇÜLMEZ — hedef ${ad} FABRİKA YEDEĞİDİR, status bile bağlanmaz`);
     process.exit(0);
   }
   const r = spawnSync("npx", ["prisma", "migrate", "status"], {
