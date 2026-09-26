@@ -1,7 +1,10 @@
 // =============================================================================
 // GERİYE DOLDURMA — Roll.entryReason + Roll.foldType
-// Çalıştır: npx tsx scripts/backfill_roll_fold_and_reason.ts          (DRY-RUN)
-//           npx tsx scripts/backfill_roll_fold_and_reason.ts --apply  (YAZAR)
+// Çalıştır: npx tsx scripts/backfill_roll_fold_and_reason.ts                                 (DRY-RUN)
+//           npx tsx scripts/backfill_roll_fold_and_reason.ts --apply --onay=<N> --hedef=<db>  (YAZAR)
+//   Pakette: node dist/tools/backfill_roll_fold_and_reason.cjs … (aynı argümanlar)
+// KAPI: `--apply` iki teyit ister — `--onay=<N>` (N = kuru koşumdaki TOPLAM, birebir) ve
+// `--hedef=<db-adı>` (DATABASE_URL'den çözülen adla birebir); biri tutmazsa yazma YOK.
 // =============================================================================
 // 2026-08-04'te iki kalıcı kolon eklendi. Bu script, kolonlardan ÖNCE doğmuş
 // topların değerlerini mevcut izlerden geri kurar:
@@ -30,8 +33,13 @@
 import prisma, { pool } from "../src/lib/prisma";
 import { normalizeFoldType } from "../src/services/helpers/fold-type";
 import { izDustuUyarisi, onarimIziYaz } from "./lib/onarim-izi";
+import { hedefDbAdi } from "./lib/hedef-db-kapisi";
+import { kosumKomutu } from "./lib/kosum-komutu";
 
-const APPLY = process.argv.includes("--apply");
+const argv = process.argv.slice(2);
+const APPLY = argv.includes("--apply");
+const ONAY = Number((argv.find((a) => a.startsWith("--onay=")) ?? "").split("=")[1] ?? NaN);
+const HEDEF = (argv.find((a) => a.startsWith("--hedef=")) ?? "").split("=")[1] ?? "";
 
 interface Planned {
   rollId: string;
@@ -42,6 +50,8 @@ interface Planned {
 }
 
 async function main(): Promise<void> {
+  const db = hedefDbAdi();
+  console.log(`HEDEF VERİTABANI: ${db}`);
   const planned: Planned[] = [];
 
   // ── 1) SEBEP — elle doğan, kolonu boş toplar ───────────────────────────────
@@ -140,9 +150,11 @@ async function main(): Promise<void> {
   }
 
   if (!APPLY) {
-    console.log("\n  → Uygulamak için: npx tsx scripts/backfill_roll_fold_and_reason.ts --apply\n");
+    console.log(`\n  → Uygulamak için (kullanıcı onayıyla, HEDEF adı birebir; onay = TOPLAM):\n    ${kosumKomutu("backfill_roll_fold_and_reason")} --apply --onay=${planned.length} --hedef=${db}\n`);
     return;
   }
+  if (!HEDEF || HEDEF !== db) { console.error(`❌ --hedef=${HEDEF || "(yok)"} ≠ çözülen veritabanı "${db}". Yazma YOK.`); process.exitCode = 1; return; }
+  if (!Number.isFinite(ONAY) || ONAY !== planned.length) { console.error(`❌ ONAY UYUŞMUYOR: kuru koşum ${planned.length} alan, --onay=${ONAY}. Yazma YOK.`); process.exitCode = 1; return; }
 
   let written = 0;
   for (const pl of planned) {

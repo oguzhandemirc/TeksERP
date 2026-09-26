@@ -21,10 +21,20 @@
 //
 // Fixture kendi verisini üretir (ortam verisine bağımlı DEĞİL) ve finally'de siler.
 // =============================================================================
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
 import { normalizeFoldType } from "../src/services/helpers/fold-type";
+import { cocukOrtami, hedefDbAdi } from "./lib/hedef-db-kapisi";
 import type { Request } from "express";
+
+function kosBackfill(args: string[]): { kod: number; cikti: string } {
+  const r = spawnSync("npx", ["tsx", "scripts/backfill_roll_fold_and_reason.ts", ...args], {
+    cwd: join(__dirname, ".."), env: cocukOrtami(), encoding: "utf8", timeout: 120_000,
+  });
+  return { kod: r.status ?? -1, cikti: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+}
 
 let pass = 0;
 let fail = 0;
@@ -184,9 +194,39 @@ async function main(): Promise<void> {
     check("foldType kolonu okunuyor", row.foldType === "4-KAT", String(row.foldType));
     check("entryReason kolonu ayrı (bu topta null)", row.entryReason === null);
     check("entryReasonCode kolonu şemada (bu topta null)", row.entryReasonCode === null);
+
+    // ── 5) GERİYE DOLDURMA KAPISI — `--apply` iki teyit ister (--onay + --hedef) ──
+    // Kardeş dört yayın günü betiğindeki kapı bunda yoktu: çıplak `--apply` yazıyordu.
+    console.log("\n[5] backfill_roll_fold_and_reason: --onay/--hedef kapısı");
+    const goc = await mkRoll(6, null, null);
+    const gocLog = await prisma.systemLog.create({
+      data: { category: "DOMAIN", action: "CREATE", tableName: "ROLL", recordId: goc,
+        newData: { event: "TAMBUR_MANUAL_ROLL", reason: `TEST-FLD göç ${ts}` } },
+      select: { id: true },
+    });
+    auditLogIds.push(gocLog.id);
+    const sebep = async () => (await prisma.roll.findUniqueOrThrow({ where: { id: goc }, select: { entryReason: true } })).entryReason;
+    const db = hedefDbAdi();
+    const kuru = kosBackfill([]);
+    const n = Number(kuru.cikti.match(/TOPLAM: (\d+)/)?.[1] ?? NaN);
+    check("§5a kuru koşum hedefi ADIYLA basar, fixture'ı listeler, yazmaz",
+      kuru.kod === 0 && kuru.cikti.includes(`HEDEF VERİTABANI: ${db}`) && kuru.cikti.includes(`TEST-FLD-R6-${ts}`) &&
+        Number.isFinite(n) && n >= 1 && kuru.cikti.includes(`--onay=${n} --hedef=${db}`) && (await sebep()) === null,
+      `çıkış ${kuru.kod} · TOPLAM ${n}`);
+    const ciplak = kosBackfill(["--apply"]);
+    const yanlisHedef = kosBackfill(["--apply", `--onay=${n}`, "--hedef=baska_db"]);
+    const yanlisOnay = kosBackfill(["--apply", `--onay=${n + 1}`, `--hedef=${db}`]);
+    check("§5b ⭐ çıplak --apply · yanlış --hedef · yanlış --onay YAZMAZ (çıkış ≠ 0, 'Yazma YOK')",
+      [ciplak, yanlisHedef, yanlisOnay].every((r) => r.kod !== 0 && r.cikti.includes("Yazma YOK")) && (await sebep()) === null,
+      `çıkış ${ciplak.kod}/${yanlisHedef.kod}/${yanlisOnay.kod}`);
+    const uygula = kosBackfill(["--apply", `--onay=${n}`, `--hedef=${db}`]);
+    check("§5c doğru onay + hedef yazar", uygula.kod === 0 && (await sebep()) === `TEST-FLD göç ${ts}`, `çıkış ${uygula.kod}`);
   } finally {
     // Test DB'de audit koruması (teks.audit_guard) kapalı; açıksa satır kalır, zararsız.
     await prisma.systemLog.deleteMany({ where: { id: { in: auditLogIds } } }).catch(() => {});
+    await prisma.systemLog.deleteMany({
+      where: { action: "ROLL_FOLD_AND_REASON_BACKFILL", createdAt: { gte: new Date(ts) } },
+    }).catch(() => {});
     await prisma.roll.deleteMany({ where: { id: { in: created } } });
     await prisma.item.delete({ where: { id: item.id } }).catch(() => {});
     console.log("\n(temizlendi — TEST-FLD fixture'ları silindi)");
