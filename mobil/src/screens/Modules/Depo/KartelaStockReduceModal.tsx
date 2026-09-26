@@ -5,7 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import AppModal from '../../../components/AppModal';
 import { swatchService, type KartelaStockGroup } from '../../../services/swatch.service';
-import { generateClientUuid } from '../../../offline/barcode';
+import { useAttemptToken } from '../../../offline/attemptToken';
 import { colors, spacing, radius } from '../../../theme';
 
 /**
@@ -31,15 +31,15 @@ export function KartelaStockReduceModal({
   // İdempotency anahtarı — modal açılışı bir form-oturumudur. Sayaç-bazlı düşümün
   // otomatik/manuel replay'i FARKLI N kartela daha iptal ederdi (çift düşüm);
   // aynı token'la 2. çağrı backend'de cached { reduced } döner. Her açılışta yenilenir.
-  const [clientToken, setClientToken] = useState(generateClientUuid);
+  const attempt = useAttemptToken();
 
   useEffect(() => {
     if (visible) {
       setCount('1');
       setReason('');
-      setClientToken(generateClientUuid());
+      attempt.renew();
     }
-  }, [visible, group?.itemId, group?.colorId]);
+  }, [visible, group?.itemId, group?.colorId, attempt]);
 
   const max = group?.count ?? 0;
   const n = parseInt(count, 10);
@@ -53,9 +53,10 @@ export function KartelaStockReduceModal({
         colorId: group!.colorId,
         count: n,
         reason: reason.trim(),
-        clientToken,
+        clientToken: attempt.token(),
       }),
     onSuccess: (res) => {
+      attempt.onSuccess();
       Toast.show({
         type: 'success',
         text1: res.message ?? `${res.data.reduced} kartela düşüldü`,
@@ -65,8 +66,10 @@ export function KartelaStockReduceModal({
     },
     // Mobil apiClient yalnız 401'i toast'lar; 409 (bayat sayım → "Listeyi
     // yenileyin") dahil diğer tüm hatalar burada yüzeye çıkarılmalı (modal açık kalır).
-    onError: (e: Error) =>
-      Toast.show({ type: 'error', text1: 'Stok düşülemedi', text2: e.message }),
+    onError: (e: Error) => {
+      attempt.onFailure(e);
+      Toast.show({ type: 'error', text1: 'Stok düşülemedi', text2: e.message });
+    },
   });
 
   return (

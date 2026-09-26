@@ -36,7 +36,7 @@ import {
 } from '../../../services/packing.service';
 import { isWorkSessionLost } from '../../../services/api';
 import { signalScan } from '../../../services/scanFeedback';
-import { generateClientUuid } from '../../../offline/barcode';
+import { useAttemptToken } from '../../../offline/attemptToken';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useSackWeigh } from '../../../hooks/useSackWeigh';
@@ -149,10 +149,10 @@ export default function PaketlemeScreen() {
 
   // İdempotency (A4): token mantıksal "çuval aç" denemesi başına BİR kez üretilir —
   // timeout-retry AYNI token'la gider, backend mükerrer boş çuval yerine ilkini döner.
-  // BAŞARIDA döndürülür (rotate) ki operatörün bilinçli "yeni çuval" isteği taze
-  // token alsın; hatada korunur (retry koruması). HizliSiparisScreen emsali.
-  const openSackTokenRef = useRef(generateClientUuid());
-  const shipTokenRef = useRef(generateClientUuid());
+  // Başarıda ve kesin 4xx'te yenilenir (operatörün bilinçli "yeni çuval" isteği taze token alır); belirsiz hatada
+  // korunur (retry koruması). Çuval açma ile sevk AYRI denemelerdir.
+  const openSackAttempt = useAttemptToken();
+  const shipAttempt = useAttemptToken();
 
   const poolQ = useQuery({
     queryKey: ['pool-sacks', customerId],
@@ -221,12 +221,16 @@ export default function PaketlemeScreen() {
     }
     if (ensureSackRef.current) return ensureSackRef.current;
     const p = packingService
-      .openSack({ customerId, branchId, clientToken: openSackTokenRef.current })
+      .openSack({ customerId, branchId, clientToken: openSackAttempt.token() })
       .then((res) => {
-        openSackTokenRef.current = generateClientUuid(); // başarı → sonraki açılış taze token
+        openSackAttempt.onSuccess(); // başarı → sonraki açılış taze token
         const sid = res.data.id;
         setActiveSack(sid);
         return sid;
+      })
+      .catch((e: unknown) => {
+        openSackAttempt.onFailure(e);
+        throw e;
       })
       .finally(() => {
         ensureSackRef.current = null;
@@ -273,9 +277,9 @@ export default function PaketlemeScreen() {
   }, [sackKey]);
 
   const openSackMut = useMutation({
-    mutationFn: () => packingService.openSack({ customerId, branchId, clientToken: openSackTokenRef.current }),
+    mutationFn: () => packingService.openSack({ customerId, branchId, clientToken: openSackAttempt.token() }),
     onSuccess: (res) => {
-      openSackTokenRef.current = generateClientUuid(); // başarı → sonraki açılış taze token
+      openSackAttempt.onSuccess(); // başarı → sonraki açılış taze token
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setActiveSack(res.data.id);
       Toast.show({ type: 'success', text1: 'Çuval açıldı', text2: 'Topları bu çuvala okut.' });
@@ -283,6 +287,7 @@ export default function PaketlemeScreen() {
     },
     onError: (e: Error) => {
       if (isWorkSessionLost(e)) return;
+      openSackAttempt.onFailure(e);
       Toast.show({ type: 'error', text1: 'Çuval açılamadı', text2: e.message });
     },
   });
@@ -341,7 +346,7 @@ export default function PaketlemeScreen() {
         orderIds: undefined,
         destination: destination ?? undefined,
         ...(chosen ? { destinationChosen: true as const } : {}),
-        clientToken: shipTokenRef.current,
+        clientToken: shipAttempt.token(),
       });
       // ⚠️ UYARILAR YANITIN KÖKÜNDE (`ApiResponse.warnings`), `data`nın İÇİNDE
       // DEĞİL — `created.data` döndürüp geçmek 2026-09-03'e kadar tabletin
@@ -349,7 +354,7 @@ export default function PaketlemeScreen() {
       return { ...created.data, warnings: created.warnings ?? [] };
     },
     onSuccess: (data) => {
-      shipTokenRef.current = generateClientUuid(); // başarı → taze token (ekran zaten kapanır)
+      shipAttempt.onSuccess(); // başarı → taze token (ekran zaten kapanır)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
@@ -371,6 +376,7 @@ export default function PaketlemeScreen() {
     },
     onError: (e: Error) => {
       if (isWorkSessionLost(e)) return;
+      shipAttempt.onFailure(e);
       Toast.show({ type: 'error', text1: 'Sevkiyat kurulamadı', text2: e.message });
     },
   });

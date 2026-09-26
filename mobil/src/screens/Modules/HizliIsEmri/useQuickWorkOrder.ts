@@ -14,7 +14,7 @@ import { useScanFeedback } from '../../../hooks/useScanFeedback';
 import { useFoldValues } from '../../../hooks/useFoldValues';
 import { useSubcontractorDefault } from '../../../hooks/useSubcontractorDefault';
 import type { AvailableOrderLine } from '../../../services/order.service';
-import { generateClientUuid } from '../../../offline/barcode';
+import { useAttemptToken } from '../../../offline/attemptToken';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import type { ItemLifecycleStatus, Roll } from '../../../types/models';
@@ -158,10 +158,9 @@ export function useQuickWorkOrder() {
    * yolu vardır. Ret satırı olarak göstermek onu yine çıkmaza kilitlerdi.
    */
   const [cancelledScan, setCancelledScan] = useState<Roll | null>(null);
-  // İdempotency anahtarı — form-oturumu kimliği. Mount'ta üretilir; timeout sonrası
-  // tekrar basış aynı token'ı gönderir → backend cached WO döner (quickStart
-  // replay-guard'ı attach/telafi'yi atlar). resetAll'da (yeni WO) yenilenir.
-  const [clientToken, setClientToken] = useState(generateClientUuid);
+  // İdempotency anahtarı — mantıksal deneme kimliği. Timeout sonrası tekrar basış aynı token'ı gönderir → backend
+  // cached WO döner. Başarıda, kesin 4xx'te ve resetAll'da (yeni WO) yenilenir.
+  const attempt = useAttemptToken();
   const resolvingRef = useRef(false);
   // addRolls async tarama closure'ında güncel listeyi okumak için ayna ref.
   const scannedRef = useRef<ScannedRoll[]>([]);
@@ -747,6 +746,7 @@ export function useQuickWorkOrder() {
     networkMode: 'always',
     mutationFn: (payload: QuickStartRequest) => workOrderService.quickStart(payload),
     onSuccess: (res, variables) => {
+      attempt.onSuccess();
       const data = res.data;
       if (!data) return;
       const warnings = [...(res.warnings ?? [])];
@@ -784,6 +784,7 @@ export function useQuickWorkOrder() {
       qc.invalidateQueries({ queryKey: ['available-order-lines'] });
     },
     onError: (err: unknown) => {
+      attempt.onFailure(err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       const msg = errMessage(err);
       setSubmitError(msg);
@@ -886,7 +887,7 @@ export function useQuickWorkOrder() {
     const stepPlanning = [...planBySeq.entries()].map(([sequence, v]) => ({ sequence, ...v }));
 
     const payload: QuickStartRequest = {
-      clientToken,
+      clientToken: attempt.token(),
       rollBarcodes: scanned.map((s) => s.barcode),
       routeTemplateId,
       targetColorId: canApplyColor ? targetColorId : null,
@@ -912,7 +913,7 @@ export function useQuickWorkOrder() {
     mutation.mutate(payload);
   }, [
     blockingReason,
-    clientToken,
+    attempt,
     scanned,
     routeTemplateId,
     canApplyColor,
@@ -960,8 +961,8 @@ export function useQuickWorkOrder() {
     setSubmitError(null);
     setDispatchFirstStep(true);
     setResult(null);
-    setClientToken(generateClientUuid()); // yeni WO oturumu → yeni token
-  }, [lastRouteTemplateId, resetScanFeedback]);
+    attempt.renew(); // yeni WO oturumu → yeni token
+  }, [lastRouteTemplateId, resetScanFeedback, attempt]);
 
   return {
     // toplar

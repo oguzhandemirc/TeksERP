@@ -12900,3 +12900,13 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Kural ③ bekçileri yapısala çevrildi (4b isteği).** `test_token_replay_cancelled` §5 "assertRollReplayAlive(" metnini dosya başına sayıyordu — politika `alive: assertRollReplayAlive` parantezsiz yazınca kör kalırdı; artık AST: top okuyan HER boğaz politikasının `alive`ı yardımcıyı çağırır, `ENTRY_CANCELLED` kodu yalnız yardımcıda üretilir. `test_client_token_collision` §2 dosya adıyla muaf listesi tutuyordu (dosya boğaza taşınınca ölü muaf); artık birim başına: token okuyan her birim politika içinde ya da beyanlı giriş/helper/muaftır.
 
 **Borç 0.** `BORC_TABANI` 0: yeni token yolu boğazdan doğar ya da beyanlı muaf/helper olur.
+
+## 2026-09-26 — Token replay D4b: istemci P3 borcu 29 → 0; tablet ikizi; P3 kapısı sert [ÇEKİRDEK]
+
+**Karar (kullanıcı onayı, 4b aracılığıyla).** D4'te beyanlı borç olarak bırakılan 29 token tutucu birim (panel 23 · tablet 6) ortak deneme yardımcısına taşındı: gönderimde `attempt.token()`, hatada `onFailure` (belirsizde yapışır, kesin 4xx'te yenilenir), başarıda `onSuccess`, bugünkü "yeni açılış / yeni giriş / payload değişti" noktaları `renew()`. SackEditorView'daki elle 4xx kopyası kalktı. İki ayrı uç = iki deneme (paketlemede çuval aç ile sevk). Tambur'un rulo başına kesim token'ı `keyed(rollId)`; Tambur elle top modalında `BATCH_REQUIRED` sorusu token'ı düşürmez (hiçbir şey yazılmadı, deneme sürüyor).
+
+**Tablet ikizi.** İstemciler kod paylaşmıyor (`matchesPermission` emsali): `mobil/src/offline/attemptToken.ts` panelle AYNI saf makineyi taşır. Ayrışma kapısı `test_istemci_token_uretimi` §5: `createAttemptToken`/`useAttemptToken` gövdeleri (yorum, boşluk ve tırnak biçimi normalize) ve `AttemptToken` üyeleri AST'de özdeş olmalı. Belirsiz-hata ölçütü istemci başına TEK tanım (§6): panel `lib/attemptToken.ts` (axios `response.status`), tablet `offline/entryAttempt.ts` (`.status`); ikiz ölçütü kopyalamaz, `entryAttempt`ten alır. Sondalar: ikiz gövdesi değişti → ❌; ikize yerel ölçüt kopyası → ❌; birim yardımcıdan koparıldı → ❌.
+
+**Davranış değişikliği.** Kesin 4xx'ten sonra form düzeltilip yeniden gönderilince YENİ token → yeni kayıt; bugün aynı token'la takılı kalınıyordu (belirsiz hatadan sonra form değişirse 409 çakışma, form yeniden açılana kadar). P3 borç listesi ve cırcırı kalktı: kapı sert (taban 0); kk1.md'deki "istemci borcu" cümlesi silindi, kural ile kod aynı.
+
+**Sırada (4b onaylı, ayrı dilim).** İstemciler kesin 4xx'te yenilediği için hızlı iş emri telafisi de token'ı tutabilir (kendi kodu) — D5c'deki `releaseToken` son beyanlı istisnadır.

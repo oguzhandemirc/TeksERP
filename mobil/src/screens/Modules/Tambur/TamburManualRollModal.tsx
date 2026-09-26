@@ -22,7 +22,7 @@
 // yazılmaz (emsal: `CutActionBar.tsx`).
 // =============================================================================
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import {
   Button,
@@ -45,7 +45,7 @@ import {
   tamburService,
   type TamburManualRollRequest,
 } from '../../../services/tambur.service';
-import { generateClientUuid } from '../../../offline/barcode';
+import { useAttemptToken } from '../../../offline/attemptToken';
 import { useFoldValues } from '../../../hooks/useFoldValues';
 import {
   MANUAL_REASON_PRESETS,
@@ -119,9 +119,9 @@ export default function TamburManualRollModal({
   // görürse BATCH_REQUIRED ile seçenekleri döner ve bu ikisi dolar.
   const [batchChoices, setBatchChoices] = useState<BatchChoice[] | null>(null);
   const [batch, setBatch] = useState<BatchChoice | null>(null);
-  const tokenRef = useRef<string | null>(null);
+  const attempt = useAttemptToken();
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setPhase('form');
     setQty('');
     setReason('');
@@ -131,18 +131,18 @@ export default function TamburManualRollModal({
     setReasonDraft('');
     setBatchChoices(null);
     setBatch(null);
-    tokenRef.current = null;
-  };
+    attempt.renew();
+  }, [attempt]);
 
   // Kapanışta sıfırla — bir sonraki açılış önceki topun metrajıyla başlamasın.
   useEffect(() => {
     if (!visible) reset();
-  }, [visible]);
+  }, [visible, reset]);
 
   const createMutation = useMutation({
     mutationFn: (payload: TamburManualRollRequest) => tamburService.createManualRoll(payload),
     onSuccess: (res) => {
-      tokenRef.current = null;
+      attempt.onSuccess();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
@@ -168,6 +168,7 @@ export default function TamburManualRollModal({
         setBatchChoices(choices);
         return;
       }
+      attempt.onFailure(err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Top eklenemedi', text2: err.message });
     },
@@ -182,25 +183,24 @@ export default function TamburManualRollModal({
 
   const goConfirm = () => {
     if (!formValid) return;
-    // Mantıksal deneme BURADA başlar → token burada doğar.
-    if (!tokenRef.current) tokenRef.current = generateClientUuid();
+    // Mantıksal deneme onayda sürer; token ilk gönderimde doğar (`attempt.token()`).
     setPhase('confirm');
   };
 
   const backToForm = () => {
     // Payload değişebilir → aynı token'la farklı içerik göndermek backend'de
     // idempotency ÇAKIŞMASI (409) üretir; token'ı burada düşür.
-    tokenRef.current = null;
+    attempt.renew();
     setPhase('form');
   };
 
   const submit = () => {
-    if (!formValid || !tokenRef.current) return;
+    if (!formValid) return;
     const payload: TamburManualRollRequest = {
       targetStepId,
       initialQty: qtyNum,
       reason: reason.trim(),
-      clientToken: tokenRef.current,
+      clientToken: attempt.token(),
       foldType,
       // Parti YALNIZ operatör seçtiyse gider. Gönderilmezse backend çözer
       // (tek açık parti → sessizce bağla · birden fazla → BATCH_REQUIRED).

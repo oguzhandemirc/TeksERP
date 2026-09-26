@@ -124,7 +124,7 @@ import Animated, { useAnimatedRef } from 'react-native-reanimated';
 import { defectTypeService } from '../../../services/defectType.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { useFoldValues } from '../../../hooks/useFoldValues';
-import { generateClientUuid } from '../../../offline/barcode';
+import { useAttemptToken } from '../../../offline/attemptToken';
 import type {
   TamburStepSummary,
   TamburRollSummary,
@@ -743,17 +743,9 @@ export default function TamburScreen() {
   // olmaz). Token yalnız o topun BAŞARI yanıtı gelince düşer; top değişince
   // rollId anahtarı uyuşmaz → taze token. (Eski kod her mutate()'te yeni token
   // üretiyordu — koruma fiilen hiç devreye girmiyordu.)
-  const cutTokenRef = useRef<{ rollId: string; token: string } | null>(null);
-  const recutTokenRef = useRef<{ rollId: string; token: string } | null>(null);
-  const takeCutToken = (
-    ref: React.MutableRefObject<{ rollId: string; token: string } | null>,
-    rollId: string,
-  ): string => {
-    if (!ref.current || ref.current.rollId !== rollId) {
-      ref.current = { rollId, token: generateClientUuid() };
-    }
-    return ref.current.token;
-  };
+  // Anahtar rollId: top değişince o topun kendi token'ı (aynı denemede) — başarıda ya da kesin 4xx'te yenilenir.
+  const cutAttempt = useAttemptToken();
+  const recutAttempt = useAttemptToken();
   // Son kesimden dönen güncel parent — X kapat sırasında etiketi basıma kuyruğa
   // atılır (operatör fiziksel etiketi yenilemeli, eski metraj artık geçersiz).
   const [recutLastParentRoll, setRecutLastParentRoll] = useState<Roll | null>(null);
@@ -799,8 +791,8 @@ export default function TamburScreen() {
   const [manualColorCatalogWanted, setManualColorCatalogWanted] = useState(false);
   // İdempotency: token MANTIKSAL DENEME başına bir kez üretilir. Hata sonrası
   // aynı payload'la tekrar basış AYNI token'ı gönderir (mükerrer top doğmaz);
-  // payload değişirse bu artık başka bir denemedir → aşağıdaki effect düşürür.
-  const manualTokenRef = useRef<string | null>(null);
+  // payload değişirse bu artık başka bir denemedir → aşağıdaki effect yeniler.
+  const manualAttempt = useAttemptToken();
 
   // ── Kataloglar ──
   const defectTypesQuery = useQuery({
@@ -1327,7 +1319,7 @@ export default function TamburScreen() {
       // Çıktı alındı → kartelalık anahtarı cihaz tercihine göre kapanır.
       clearKartelaAfterOutput();
       // Bu denemenin token'ı görevini tamamladı — sıradaki kesim taze token alır.
-      if (cutTokenRef.current?.rollId === variables.rollId) cutTokenRef.current = null;
+      cutAttempt.onSuccess();
       // Kesim parent metrajını düşürdü + child doğdu — rulo listeleri/picker bayat kalmasın.
       qc.invalidateQueries({ queryKey: ['rolls'] });
       // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
@@ -1390,6 +1382,7 @@ export default function TamburScreen() {
     },
     onError: (err: Error, variables) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      cutAttempt.onFailure(err);
       const mm = readPlanMismatch(err);
       if (mm) {
         // Onay modalı konuşur — kırmızı toast basılmaz (409 bir hata değil,
@@ -1613,7 +1606,7 @@ export default function TamburScreen() {
       // Çıktı alındı → kartelalık anahtarı cihaz tercihine göre kapanır.
       clearKartelaAfterOutput();
       // Bu denemenin token'ı görevini tamamladı — sıradaki kesim taze token alır.
-      if (recutTokenRef.current?.rollId === variables.rollId) recutTokenRef.current = null;
+      recutAttempt.onSuccess();
       // Kesim parent metrajını düşürdü + child doğdu — rulo listeleri/picker bayat kalmasın.
       qc.invalidateQueries({ queryKey: ['rolls'] });
       // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
@@ -1674,6 +1667,7 @@ export default function TamburScreen() {
     },
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      recutAttempt.onFailure(err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Kesim başarısız', text2: err.message });
     },
@@ -1762,7 +1756,7 @@ export default function TamburScreen() {
       tamburService.produceFinishedRoll(data),
     onSuccess: (res, variables) => {
       // Deneme kapandı — sıradaki giriş taze token alır.
-      manualTokenRef.current = null;
+      manualAttempt.onSuccess();
       // Çıktı alındı → kartelalık anahtarı cihaz tercihine göre kapanır.
       clearKartelaAfterOutput();
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1825,6 +1819,7 @@ export default function TamburScreen() {
     },
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      manualAttempt.onFailure(err);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Top eklenemedi', text2: err.message });
     },
@@ -1978,7 +1973,7 @@ export default function TamburScreen() {
         targetCustomerId: work.voluntaryEntry.targetCustomerId,
         markedForKartela: markAsKartela,
         // Ağ-retry idempotency: deneme başına SABİT token (tekrar basış = aynı token).
-        clientToken: takeCutToken(cutTokenRef, selectedRoll.rollId),
+        clientToken: cutAttempt.keyed(selectedRoll.rollId),
         // Bu topta sapma bir kez onaylandıysa sonraki kesimler bayrağı taşır.
         confirmMismatch: planMismatchConfirmedRef.current.has(selectedRoll.rollId) || undefined,
       });
@@ -2301,7 +2296,7 @@ export default function TamburScreen() {
         markedForKartela: markAsKartela,
         rawDestination: isRawStock ? recutRawDestination : undefined,
         // Ağ-retry idempotency: deneme başına SABİT token (tekrar basış = aynı token).
-        clientToken: takeCutToken(recutTokenRef, recutResolvedRollId),
+        clientToken: recutAttempt.keyed(recutResolvedRollId),
       });
     // Aşımda parmak hatası koruması: onay iste (top tamamen tüketilir).
     if (exceedsRemaining) {
@@ -2349,15 +2344,6 @@ export default function TamburScreen() {
 
   // ── MANUEL EKLE modu: form sıfırlama + anahtar + gönderim ─────────────────
 
-  /**
-   * Manuel giriş idempotency token'ı — MANTIKSAL DENEME başına BİR kez üretilir
-   * (`takeCutToken` ile aynı sözleşme, orada anahtar rollId'dir; burada top
-   * henüz YOK, deneme payload'ıyla tanımlanır → payload değişince effect düşürür).
-   */
-  const takeManualToken = (): string => {
-    if (!manualTokenRef.current) manualTokenRef.current = generateClientUuid();
-    return manualTokenRef.current;
-  };
 
   /** Manuel forma özgü alanlar (paylaşılan `work` state'ine DOKUNMAZ). */
   const resetManualForm = () => {
@@ -2371,7 +2357,7 @@ export default function TamburScreen() {
     setManualPicker(null);
     setManualReasonFreeOpen(false);
     setManualReasonDraft('');
-    manualTokenRef.current = null;
+    manualAttempt.renew();
   };
 
   /**
@@ -2415,8 +2401,9 @@ export default function TamburScreen() {
   // ESKİ topu geri döndürürdü: operatör 120 m yazıp gönderemez, 150 yapıp tekrar
   // dener ve sistemde sessizce 120 m'lik top kalırdı.)
   useEffect(() => {
-    manualTokenRef.current = null;
+    manualAttempt.renew();
   }, [
+    manualAttempt,
     manualItemId,
     manualColorId,
     manualReason,
@@ -2553,7 +2540,7 @@ export default function TamburScreen() {
         targetCustomerId: work.voluntaryEntry.targetCustomerId,
         markedForKartela: markAsKartela,
         reason,
-        clientToken: takeManualToken(),
+        clientToken: manualAttempt.token(),
       });
 
     // Renk seçilmediyse SOR — geçerli bir durum ama sessiz geçilmemeli.
