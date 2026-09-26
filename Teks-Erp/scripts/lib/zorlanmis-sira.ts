@@ -16,6 +16,8 @@ export interface KapiNoktasi {
   metod: string;
   /** "tx" (varsayılan): B'nin tx'indeki ilk çağrı · "dis": B'nin tx DIŞI (genel istemci) ilk çağrısı — tx'ten önce koşan kural. */
   kapsam?: "tx" | "dis";
+  /** B'nin ilk `atla` eşleşen çağrısı geçer, kapı sonrakindedir — aynı çağrı ön-okumada da koşuyorsa pencere onun ARDINDADIR. */
+  atla?: number;
 }
 
 /** Kapının açılış sebebi; son ikisi "B kapıya vardı ama sıra zorlanamadı" demektir. */
@@ -30,10 +32,10 @@ export interface ZorlanmisSiraSonucu {
 /** Kapının GERÇEKTEN sırayı zorladığı açılışlar — bekçi sonucu yorumlamadan önce bunu ölçer. */
 export const SIRA_ZORLANDI: ReadonlySet<KapiAcilisi> = new Set<KapiAcilisi>(["A bitti", "A kilitte bekliyor"]);
 
-const kapiDeposu = new AsyncLocalStorage<() => Promise<KapiAcilisi>>();
+const kapiDeposu = new AsyncLocalStorage<() => Promise<unknown>>();
 type TxFn = (fn: unknown, opts?: unknown) => Promise<unknown>;
 
-function kapiliTx(tx: object, nokta: KapiNoktasi, bekle: () => Promise<KapiAcilisi>): object {
+function kapiliTx(tx: object, nokta: KapiNoktasi, bekle: () => Promise<unknown>): object {
   const bagla = (t: object, p: string | symbol) => {
     const v = Reflect.get(t, p) as unknown;
     return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(t) : v;
@@ -93,8 +95,12 @@ export async function zorlanmisSira(
       }
       return "zaman aşımı";
     })());
+  let gecen = 0;
+  const kapi = async (): Promise<void> => {
+    if (++gecen > (nokta.atla ?? 0)) await bekle();
+  };
   try {
-    const bSoz = kapiDeposu.run(bekle, b);
+    const bSoz = kapiDeposu.run(kapi, b);
     await Promise.race([kapida, bSoz.catch(() => undefined)]);
     const aSoz = a().finally(() => (aBitti = true));
     const [bs, as] = await Promise.allSettled([bSoz, aSoz]);

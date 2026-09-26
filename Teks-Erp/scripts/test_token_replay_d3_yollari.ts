@@ -7,7 +7,7 @@
 // okur, kuralda bekler; A aynı token'la koşar. Beklenen: ikisi de başarılı, tek kayıt — iş kuralı 4xx'i değil.
 //   §1 sevkiyat (#1) · §2 hızlı sevk (#2) · §3 çuval aç, varsayılan mod (#15) · §4 paketleme grubu (#14, K′)
 //   §5 levent bağlama (#3) · §6 sarım (#4) · §7 fason levent dönüşü (#5) · §8 tezgah koşumu (#7)
-//   §9 hızlı iş emri (#12) · §10 parti ekle (#13, K′) · §11 depo transferi (#16) · §12 fatura taslağı (#17)
+//   §9 hızlı iş emri (#12; ⑨a doğrulama penceresi · ⑨a′ create penceresi, `atla`) · §10 parti ekle (#13, K′) · §11 depo transferi (#16) · §12 fatura taslağı (#17)
 // Ek olarak yeni 409'lar: başka gövde → CLIENT_TOKEN_COLLISION · geri alınmış/iptal → yolun 4. durum kodu.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Dokunulan ayarlar FOTOĞRAFINA döndürülür.
 // =============================================================================
@@ -240,6 +240,28 @@ async function isEmri(): Promise<void> {
     }
   }
   {
+    // İlk adım FASON: bağlama iş emrini üretime almaz (PLANNED kalır) — telafinin arşivleyebildiği tek durum. İç istasyonla
+    // iş emri IN_PROGRESS olur, arşiv reddedilir ve dış R boğazı hatayı maskeler (pencere açılmaz).
+    const fsn = await prisma.station.create({ data: { name: `${TAG}-FSN`, code: `${TAG}-FSN`.slice(0, 32), type: StationType.EXTERNAL }, select: { id: true } });
+    o.stationIds.push(fsn.id);
+    const r = await top(item, RollStatus.STOCK, { width: 150 });
+    const t = randomUUID();
+    const bas = () => woSvc.quickStart({ steps: [{ stationId: fsn.id, notes: null }, { stationId: st.id, notes: null }], rollBarcodes: [r.barcode], clientToken: t }, undefined);
+    // B top doğrulamasını GEÇMİŞ, create()'in token ön-okumasında bekler (ilk workOrder.findUnique quickStart'ın kendi
+    // ön-okuması — atlanır); A iş emrini açıp topu bağlar. B'nin create'i replay döner ve bağlama/telafi TEKRARLANMAZ —
+    // tekrarlansaydı bağlama 0 döner, telafi A'nın GERÇEK iş emrini arşivleyip token'ı bırakırdı.
+    const s = await zorlanmisSira({ model: "workOrder", metod: "findUnique", kapsam: "dis", atla: 1 }, bas, bas);
+    check("⑨a′ hızlı iş emri (create penceresi): sıra zorlandı (A bitti)", s.kapi === "A bitti", s.kapi);
+    const [b, a] = s.sonuclar;
+    const bYanit = b.status === "fulfilled" ? (b.value as { message?: string; data?: { attached?: number } }) : null;
+    check("⑨a′ ⭐ B'nin create'i replay döner: ikisi de başarılı, B idempotent yanıt + top A'nın iş emrinde, tek canlı iş emri",
+      a.status === "fulfilled" && /idempotent/.test(bYanit?.message ?? "") && bYanit?.data?.attached === 1 &&
+        (await prisma.workOrder.count({ where: { clientToken: t, isActive: true } })) === 1, ozet(s));
+    const wo = await prisma.workOrder.findUnique({ where: { clientToken: t }, select: { id: true, status: true } });
+    if (wo) o.woIds.push(wo.id);
+    check("⑨a′ pencere gerçek: iş emri PLANNED (ilk adım fason — telafi arşivleyebilirdi)", wo?.status === "PLANNED", wo?.status ?? "yok");
+  }
+  {
     const wo = ((await woSvc.create({ type: "STOCK_PRODUCTION", targetItemId: item, width: 150, steps: [{ stationId: st.id }] })).data as { id: string }).id;
     o.woIds.push(wo);
     const r = await top(item, RollStatus.STOCK, { width: 150 });
@@ -323,6 +345,11 @@ async function temizlik(): Promise<void> {
     }
   }
   // Sevkiyat/çuval/iş emri/transfer/levent kalıntıları — bağımlıdan bağımsıza.
+  // Token'ı bırakılmış (telafiyle arşivlenmiş) iş emri clientToken'la bulunamaz; fikstür kumaşından da toplanır.
+  if (o.itemIds.length) {
+    const kumasIsEmirleri = await prisma.workOrder.findMany({ where: { targetItemId: { in: o.itemIds } }, select: { id: true } });
+    o.woIds = [...new Set([...o.woIds, ...kumasIsEmirleri.map((w) => w.id)])];
+  }
   const custWhere = { customerId: { in: o.customerIds } };
   const shipments = (await prisma.shipment.findMany({ where: custWhere, select: { id: true } })).map((s) => s.id);
   const sacks = [...new Set([...o.sackIds, ...(await prisma.sack.findMany({ where: custWhere, select: { id: true } })).map((s) => s.id)])];

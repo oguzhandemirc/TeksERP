@@ -12986,3 +12986,11 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **ReworkRollsDialog doğrulaması.** D4 öncesi token `[open, rolls]` efektinde yenileniyordu; çağıran seçimi her render'da yeni dizi kurduğu için belirsiz hatadan sonraki render token'ı düşürüyordu. D4b (5a074438) yenilemeyi `[open, attempt]` efektine ayırdı (`attempt` `useRef` ile kararlı); `rolls` yalnız en önerisini besler. Yeni test bunu kilitler (sonda: efekte `rolls` eklenince kırmızı).
 
 **Kör nokta (beyanlı).** Efektin bağımlılık DİZİSİ AST'de ölçülmez (`renew` efekti `rolls`a bağlanırsa §7 yeşil kalır) — bu sınıfı diyalog davranış testi tutar; tüm diyaloglar için tutmaz.
+
+## 2026-09-26 — Token replay denetimi (06) konu 4: hızlı iş emrinin create penceresi zorlanır [ÇEKİRDEK]
+
+**Bulgu (06).** `quickStartFresh`teki `if (createRes.idempotentReplay)` dalı `if (false)` yapılınca `test_token_replay_d3_yollari` 34/0 yeşil kaldı. Sebep: ⑨a'da B tx öncesi top doğrulamasında (`roll.findMany`) bekliyor; A bitince B'nin doğrulaması 400 veriyor ve dış R boğazı cevabı token'dan veriyor — B `create()`a hiç varmıyor, iç dal hiç koşmuyor. İkinci maske: ilk adım iç istasyonsa bağlama iş emrini IN_PROGRESS yapar, telafinin `hardDelete`'i reddedilir ("Üretimdeki iş emri arşivlenemez") ve dış R yine replay verir — dal yokken bile davranış doğru görünür. Tehlike yalnız **ilk adımı fason** olan rotada gerçek: iş emri PLANNED kalır ve telafi A'nın gerçek iş emrini arşivleyip token'ı bırakır.
+
+**Kapı.** ⑨a′ (ilk adımı fason rota; iş emrinin PLANNED kaldığı ölçülür): B doğrulamayı GEÇMİŞ, `create()`ın token ön-okumasında bekler; A iş emrini açıp topu bağlar; B'nin create'i replay döner. Beklenen: ikisi başarılı, B'nin yanıtı idempotent ve top A'nın iş emrinde, tek canlı iş emri. Dal kaldırılırsa B bağlamaya devam eder, 0 top bağlar ve telafi A'nın GERÇEK iş emrini arşivleyip token'ı bırakır → kırmızı. İki pencere de gerçek olduğu için ⑨a kalır (dış R'nin catch yolu), ⑨a′ eklenir.
+
+**Araç.** `zorlanmisSira`ya `KapiNoktasi.atla` eklendi: B'nin ilk `atla` eşleşen çağrısı geçer, kapı sonrakindedir — aynı çağrı ön-okumada da koşuyorsa (burada `workOrder.findUnique`: önce quickStart'ın, sonra create'in R ön-okuması) pencere onun ardındadır. Sıra "A bitti" ile açılmalı (B kilit tutmaz). Test temizliği token'ı bırakılmış iş emrini fikstür kumaşından da toplar.
