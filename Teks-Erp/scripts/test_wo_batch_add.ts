@@ -18,7 +18,8 @@
 // NEGATİF SONDA (elle, 2026-09-26): `recomputeStepStatus`un sevk bekleyen dalı sıfırlanınca §6 kırmızı;
 // boğaz yalnız ilk adımı yeniden hesaplayınca §7 kırmızı; boğazın tamamlanmış kapısı kaldırılınca §5 kırmızı
 // (kod WORKORDER_TERMINAL_DURING_ATTACH'a düşer); elle taşımanın iki kapısı kaldırılınca §5 kırmızı (taşıma geçer).
-// §10 (2026-09-26): yüklemden boş-parti dalı düşürülünce kırmızı. Yedek kopyadan geri alındı.
+// §10 (2026-09-26): yüklemden boş-parti dalı düşürülünce kırmızı. §9b: BATCH_ADD etiketi silinince ya da
+// createBatchTx açanı yazmayınca kırmızı. Yedek kopyadan geri alındı.
 // =============================================================================
 
 import { randomUUID } from "node:crypto";
@@ -181,6 +182,9 @@ async function bolum6to8(): Promise<void> {
   check("§9 Hareketler: 'Parti eklendi · 1 top · 100 m' tek satır; ilk parti 'açıldı', eklenen parti bir daha basılmaz",
     eklendi.length === 1 && (eklendi[0].detail ?? "").includes("1 top") && acildi.length === 1 && acildi[0].detail !== res.data.batch?.batchNumber,
     `${eklendi.map((x) => x.detail).join(",")} · açıldı ${acildi.length}`);
+  // Panel e2e (2026-09-26) ham tetik kodunu ve aktörsüz "Parti açıldı"yı yakaladı.
+  check("§9b tetik Türkçe ('Parti Ekle', ham kod değil); 'Parti açıldı' satırında açan kullanıcı var",
+    eklendi[0]?.trigger === "Parti Ekle" && !!acildi[0]?.actor, `${eklendi[0]?.trigger} · ${acildi[0]?.actor}`);
 }
 
 async function bolum10(): Promise<void> {

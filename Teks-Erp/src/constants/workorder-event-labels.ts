@@ -87,6 +87,7 @@ export const WORK_ORDER_TRIGGER_LABEL: Record<string, string> = {
   STEP_PLAN: "Adım planlama",
   ROLL_ATTRIBUTES: "Toplara uygula",
   ROLL_DETACH: "Top Çıkar",
+  BATCH_ADD: "Parti Ekle",
   // Geçmiş doldurma (D7) tetikleri — yalnız `channel=BACKFILL` satırlarında.
   APPROX_LAST_STEP: "Son adım bitişi (yaklaşık)",
   TYPE_DERIVED_FROM_LINKS: "Tip siparişten türetildi (toplu düzeltme)",

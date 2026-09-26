@@ -290,6 +290,7 @@ export async function createBatchTx(
       workOrderId: params.workOrderId,
       splitFromId: params.splitFromId ?? null,
       clientToken: params.clientToken ?? null,
+      createdById: params.userId ?? null,
     },
     select: { id: true, batchNumber: true, workOrderId: true, splitFromId: true },
   });
