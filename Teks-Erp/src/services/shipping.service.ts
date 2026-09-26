@@ -32,6 +32,7 @@ import {
   ShipmentEventType,
   SackWeighingKind,
   SwatchEventType,
+  SwatchStatus,
 } from "@prisma/client";
 import { randomUUID } from "crypto";
 import prisma from "../lib/prisma";
@@ -172,7 +173,7 @@ import {
 import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-owner.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
-import { assertRollsRevivable } from "./helpers/item-usage.helper";
+import { assertRollsRevivable, assertSwatchesRevivable } from "./helpers/item-usage.helper";
 import { SWATCH_IN_STOCK_WHERE, transitionSwatchesTx } from "./helpers/swatch-event.helper";
 
 // Re-export saf primitifler (geriye uyum — eskiden bu dosyada tanımlıydı).
@@ -4073,6 +4074,9 @@ export class ShippingService {
         reason: trimmed,
         userId,
       });
+      // SHIPPED → IN_SHIPMENT kartelayı canlı kümeye döndürür: dirilmedir, kart Pasif olamaz (MV-06, top ikizi aşağıda).
+      const shippedSwatches = await tx.swatch.findMany({ where: { shipmentId, status: SwatchStatus.SHIPPED }, select: { id: true } });
+      await assertSwatchesRevivable(tx, shippedSwatches.map((s) => s.id));
       await transitionSwatchesTx(tx, SwatchEventType.SHIP_UNDONE, { scope: { shipmentId }, shipment: { id: shipmentId }, ctx: { trigger: "SHIPMENT_UNDO_DISPATCH", userId, reason: trimmed } });
 
       // `isActive` şemada "sevkiyat PLANNED mı" denormudur (dispatch/cancel false yapar).

@@ -12873,6 +12873,22 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
   - kaynağa bağlı "uyumlu okuyucu var" kontrolü origin/main'de kırmızı olurdu, kaldırıldı;
   - çözücü 9f'nin import'lu sabitini görmeseydi 9f'nin düzeltmesi tabanı düşürmezdi.
 
+## 2026-09-26 — Sevk stornosu Pasif kartın kartelasını diriltmez; kartela dirilme geçişleri geçiş tablosundan türeyen kapıda [ÇEKİRDEK]
+
+**Arıza (06'nın bağımsız test denetimi, canlı mutasyonla; 4b iş verdi).** `undoDispatch` kartelayı SHIPPED'dan IN_SHIPMENT'a, yani canlı kümeye döndürüyordu ve kart kapısını sormuyordu. Toplar için aynı yolda `assertRollsRevivable` vardı. Sonuç: Pasif (arşivli) ürünün kartelası canlıya dönüyordu (MV-06 ihlali). Kartelanın iki dirilme geçişinden yalnız düşüm stornosu (REDUCTION_REVERSED) kapılıydı. Gerçek yolla yeniden üretildi: çuval → onaylı sevkiyat → sevk → ürün Pasif → storno geçti, kartela IN_SHIPMENT.
+
+**Düzeltme.**
+- `undoDispatch` SHIP_UNDONE'dan önce sevkiyatın SHIPPED kartelaları için `assertSwatchesRevivable` çağırır. Yanıt 409 ve çıkış yolu mesajı; tx düşer, kartela SHIPPED ve sevkiyat DISPATCHED kalır.
+- Sınıf kapısı `test_item_usage_single_source` §3b: dirilme tipleri geçiş tablosundan (`SWATCH_TRANSITIONS`) ve canlı kümeden (`LIVE_SWATCH`) TÜRER, elle liste yok. Bugün SHIP_UNDONE ve REDUCTION_REVERSED. O tiple `transitionSwatchesTx` çağıran fonksiyon `assertSwatchesRevivable` çağırmalı; yeni bir dirilme tipi kapısız doğamaz.
+- Sondalar: düzeltmeden önce `test_kartela_arsiv_kapisi` §5 ❌; düzeltme kaldırılınca §3b 1 kapısız ❌.
+
+**DB seddi (ölçüldü, öneri — uygulanmadı).** Top ve sipariş satırında seddi tetikleyici tutuyor (`rolls_item_not_archived` · `order_lines_item_not_archived`, 23514 → 409). Kartelada sed yok.
+- Ölçüm: `swatches`a src'de tek yazar var (`swatch-event.helper`; başka `swatch.update/create` yok). Geçiş tablosu DB CHECK'le boğaz-ikiz. Dirilme tipi 2 ve artık tablodan türeyen AST kapısıyla korunuyor. Uygulama yolunda risk düşük.
+- Açık kalan: ham SQL / script ve ileride tek yazarı atlayan kod.
+- Öneri: üçüncü canlı referans sınıfı olduğu için top ikizi `swatches_item_not_archived` ayrı küçük dilimde eklensin. Gövde: canlı kümeye giren INSERT/UPDATE + ARCHIVED kart → 23514; error.middleware haritasına `SWATCH_ON_ARCHIVED_ITEM_MESSAGE`; `test_db_invariants` envanteri; bekçi uygulama kapısını atlayan doğrudan UPDATE ile ölçer. Maliyet: tek migration, idempotent; mevcut ihlal önce ölçülür (fabrika kopyasında salt-okunur).
+
+**Aynı sınıfta ikinci açık (ölçüldü, kapsam dışı — rapor).** Dirilme kapıları (`assertRollsRevivable` · `assertSwatchesRevivable`) yalnız ÜRÜN kartına bakıyor. Renk arşiv kapısı ise canlı topu ve canlı kartelayı da referans sayıyor (`COLOR_ARCHIVE`). Renk arşivlendikten sonra top/kartela dirilmesi arşivli rengi canlı referansa döndürür (MV-06, renk). Renk için DB seddi de yok.
+
 ## 2026-09-26 — Token replay D5b: üretim nesneleri tek boğazda; yarışta ham P2002 kalktı; borç 11 → 5 [ÇEKİRDEK]
 
 **Kapsam.** Levent planı (R) · dokuma işi · fason dokuma kabulü · top indirme (R + K′). K′ ilk ifade kilidinin arkasında: dokuma işinde 8032, fason kabulde iş emri satır claim'i, indirmede 8029; numaralar maksimumdan türediği için kilidin arkasında erken dönen deneme numara sarf etmez. Ayrım `fresh: true/false as const` (D3 paketleme grubu kalıbı).

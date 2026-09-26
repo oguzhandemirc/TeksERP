@@ -10,15 +10,18 @@
 //      kapı 409
 //   §3 kartelalar düşülünce (canlı değil) ürün Pasif'e alınabilir
 //   §4 Pasif kartın düşümü geri alınamaz (dirilme 409, çıkış yolu mesajda)
+//   §5 sevk stornosu da dirilmedir (SHIPPED → IN_SHIPMENT): Pasif kartın sevk edilmiş kartelası
+//      geri alınamaz — 409 + çıkış yolu, kartela SHIPPED ve sevkiyat DISPATCHED kalır
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
-import { ItemLifecycleStatus } from "@prisma/client";
+import { ItemLifecycleStatus, ShipmentStatus, SwatchStatus } from "@prisma/client";
 import { createSwatchesTx } from "../src/services/helpers/swatch-event.helper";
 import { transitionItemLifecycle } from "../src/services/helpers/item-lifecycle.helper";
 import { assertArchivableTx, listArchiveBlockers } from "../src/services/helpers/master-data-archive.helper";
 import { COLOR_ARCHIVE } from "../src/services/helpers/archive-gate/color-archive.helper";
 import { kartelaService } from "../src/services/kartela.service";
+import { shippingService } from "../src/services/shipping.service";
 import { SWATCH_ON_ARCHIVED_ITEM_MESSAGE } from "../src/constants/item-archive-messages";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { ensureTestKartela } from "./fixture-subcontractor";
@@ -33,8 +36,12 @@ const hata = async (fn: () => Promise<unknown>) => {
 };
 
 const TS = Date.now().toString().slice(-7);
-let ITEM = "", COLOR = "", RECEIPT = "";
+let ITEM = "", COLOR = "", RECEIPT = "", ITEM2 = "", CUSTOMER = "";
 const swatchIds: string[] = [];
+const sackIds: string[] = [];
+const shipmentIds: string[] = [];
+const CONF_KEY = "shipping.confirmationEnabled";
+let oncekiOnay: { value: unknown } | null | undefined;
 
 async function main(): Promise<void> {
   console.log("=== Kartela — ana veri arşiv kapısı (S4) ===");
@@ -77,6 +84,30 @@ async function main(): Promise<void> {
     const hala = await prisma.swatch.count({ where: { id: { in: swatchIds }, status: "REDUCED" } });
     check("§4 Pasif kartın düşümü geri alınamaz: 409 + çıkış yolu, kartelalar düşülmüş kalır",
       e4?.statusCode === 409 && e4.message === SWATCH_ON_ARCHIVED_ITEM_MESSAGE && hala === 2, `${e4?.statusCode} · ${e4?.message}`);
+
+    // §5 — kartela çuval → onaylı sevkiyat → sevk; kart Pasif; sevk stornosu kartelayı diriltemez
+    oncekiOnay = await prisma.systemSetting.findUnique({ where: { key: CONF_KEY }, select: { value: true } });
+    await prisma.systemSetting.upsert({ where: { key: CONF_KEY }, create: { key: CONF_KEY, value: true }, update: { value: true } });
+    CUSTOMER = (await prisma.customer.create({ data: { code: `TEST-KAK-${TS}`, name: `Kartela Arşiv Müşteri ${TS}` } })).id;
+    ITEM2 = (await prisma.item.create({ data: { code: `TEST-KAK2-${TS}`, name: `Kartela Arşiv Sevk ${TS}`, itemType: "FABRIC" } })).id;
+    const [sv] = await prisma.$transaction((tx) => createSwatchesTx(tx, [{
+      cardNumber: `TST-KAK2-${TS}`, barcode: `TST-KAK2B-${TS}`, itemId: ITEM2, colorId: COLOR, parentReceiptId: RECEIPT,
+    }], { trigger: "KARTELA_RECEIVE", userId: admin.id }));
+    swatchIds.push(sv!.id);
+    const sack = (await shippingService.openSack({ customerId: CUSTOMER }, admin.id)).data as { id: string };
+    sackIds.push(sack.id);
+    await shippingService.scanIntoSack({ sackId: sack.id, barcode: `TST-KAK2B-${TS}` }, admin.id);
+    const shp = (await shippingService.createShipment({ sackIds: [sack.id], customerId: CUSTOMER }, admin.id)).data as { id: string };
+    shipmentIds.push(shp.id);
+    await shippingService.dispatchShipment(shp.id, {}, admin.id);
+    const e5a = await hata(() => transitionItemLifecycle({ itemId: ITEM2, to: ItemLifecycleStatus.ARCHIVED, userId: admin.id }));
+    const e5 = await hata(() => shippingService.undoDispatch(shp.id, "bekçi: storno", admin.id));
+    const sv5 = await prisma.swatch.findUniqueOrThrow({ where: { id: sv!.id }, select: { status: true } });
+    const shp5 = await prisma.shipment.findUniqueOrThrow({ where: { id: shp.id }, select: { status: true } });
+    check("§5 ⭐ sevk stornosu Pasif kartın kartelasını diriltemez: 409 + çıkış yolu, kartela SHIPPED, sevkiyat DISPATCHED",
+      e5a === null && e5?.statusCode === 409 && e5.message === SWATCH_ON_ARCHIVED_ITEM_MESSAGE
+        && sv5.status === SwatchStatus.SHIPPED && shp5.status === ShipmentStatus.DISPATCHED,
+      `arşiv ${e5a?.message ?? "ok"} · storno ${e5?.statusCode ?? "GEÇTİ"} · kartela ${sv5.status} · sevkiyat ${shp5.status}`);
   } finally {
     await temizle();
   }
@@ -86,8 +117,19 @@ async function main(): Promise<void> {
 }
 
 async function temizle(): Promise<void> {
+  if (oncekiOnay !== undefined) {
+    if (oncekiOnay === null) await prisma.systemSetting.deleteMany({ where: { key: CONF_KEY } });
+    else await prisma.systemSetting.update({ where: { key: CONF_KEY }, data: { value: oncekiOnay.value as never } });
+  }
   if (ITEM) await prisma.swatchStockReductionItem.deleteMany({ where: { reduction: { itemId: ITEM } } });
   await prisma.swatch.deleteMany({ where: { id: { in: swatchIds } } });
+  await prisma.printedDocument.deleteMany({ where: { sourceId: { in: shipmentIds } } });
+  await prisma.shipmentOrder.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
+  await prisma.sack.updateMany({ where: { id: { in: sackIds } }, data: { shipmentId: null, seq: null } });
+  await prisma.sack.deleteMany({ where: { id: { in: sackIds } } });
+  await prisma.shipment.deleteMany({ where: { id: { in: shipmentIds } } });
+  if (ITEM2) await prisma.item.deleteMany({ where: { id: ITEM2 } });
+  if (CUSTOMER) await prisma.customer.deleteMany({ where: { id: CUSTOMER } });
   if (ITEM) await prisma.swatchStockReduction.deleteMany({ where: { itemId: ITEM } });
   if (RECEIPT) await prisma.kartelaReceipt.deleteMany({ where: { id: RECEIPT } });
   if (ITEM) await prisma.item.deleteMany({ where: { id: ITEM } });

@@ -13,6 +13,7 @@
 //       — başka modelin sorgusunda iç içe Item süzgeci/seçimi (kontrol oraya saklanır)
 //   (c) `<x>.<itemİlişkisi>.isActive` — seçilmiş ilişkinin bellekte okunması
 //   (d) aynı dizge içinde `"items"` + `"isActive"` — ham SQL
+// §3 top dirilme yolları `assertRollsRevivable` · §3b kartela dirilme geçişleri (tablodan türer) `assertSwatchesRevivable`.
 // Item ilişki adları şema METNİNDEN türer (elle liste yok).
 //
 // CIRCIR: taban ölçülen sayıya EŞİT olmalı (iki yönlü). Taşıma öncesi taban
@@ -22,6 +23,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as ts from "typescript";
+import { SwatchStatus } from "@prisma/client";
+import { SWATCH_TRANSITIONS } from "../src/services/helpers/swatch-event.helper";
+import { LIVE_SWATCH } from "../src/services/helpers/live-ref-where.helper";
 
 let pass = 0;
 let fail = 0;
@@ -239,6 +243,45 @@ if (!process.env.ITEM_USAGE_SCAN_ROOT) {
   for (const s2 of sites.filter((x) => !x.ok)) console.log(`   · KAPISIZ dirilme: ${s2.at} (${s2.fn})`);
   check(`körlük zemini: dirilme yolu bulundu — ${sites.length} (≥ 11, 2026-09-25 ölçümü)`, sites.length >= 11);
   check("⭐ her dirilme yolu assertRollsRevivable çağırıyor", sites.every((x) => x.ok), `${sites.filter((x) => !x.ok).length} kapısız`);
+}
+
+console.log("\n=== 3b) Kartela dirilme geçişleri kart kapısından geçiyor (S4, MV-06) ===");
+// Dirilme tipi geçiş tablosundan TÜRER (elle liste yok): canlı olmayan durumdan canlı kümeye (`LIVE_SWATCH`)
+// giden her `SwatchEventType`. O tiple `transitionSwatchesTx` çağıran fonksiyon `assertSwatchesRevivable` çağırmalı.
+const CANLI = (LIVE_SWATCH.status as { in: SwatchStatus[] }).in;
+const DIRILME = Object.entries(SWATCH_TRANSITIONS)
+  .filter(([, t]) => t.from !== null && !CANLI.includes(t.from) && CANLI.includes(t.to))
+  .map(([tip]) => tip);
+function swatchReviveSites(files: string[]): Array<{ at: string; tip: string; ok: boolean }> {
+  const out: Array<{ at: string; tip: string; ok: boolean }> = [];
+  for (const abs of files) {
+    const rel = path.relative(SRC, abs).split(path.sep).join("/");
+    const src = fs.readFileSync(abs, "utf8");
+    if (!src.includes("transitionSwatchesTx(")) continue;
+    const sf = ts.createSourceFile(rel, src, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "transitionSwatchesTx") {
+        const tipArg = node.arguments[1];
+        const tip = tipArg && ts.isPropertyAccessExpression(tipArg) ? tipArg.name.text : null;
+        if (tip && DIRILME.includes(tip)) {
+          let outer: ts.Node | undefined;
+          for (let n = node.parent; n; n = n.parent) if (ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n)) outer = n;
+          const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
+          out.push({ at: `${rel}:${line + 1}`, tip, ok: /assertSwatchesRevivable\(/.test(outer ? outer.getText(sf) : "") });
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+  return out;
+}
+if (!process.env.ITEM_USAGE_SCAN_ROOT) {
+  const sw = swatchReviveSites(FILES);
+  for (const s2 of sw.filter((x) => !x.ok)) console.log(`   · KAPISIZ kartela dirilmesi: ${s2.at} (${s2.tip})`);
+  check(`körlük zemini: dirilme tipi tablodan türedi (${DIRILME.join(" · ")}) ve her tipin yazarı bulundu`,
+    DIRILME.length >= 2 && DIRILME.every((t) => sw.some((x) => x.tip === t)), `${sw.length} çağrı`);
+  check("⭐ her kartela dirilme geçişi assertSwatchesRevivable çağırıyor", sw.every((x) => x.ok), `${sw.filter((x) => !x.ok).length} kapısız`);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
