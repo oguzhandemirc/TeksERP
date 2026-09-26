@@ -11,7 +11,7 @@ import type { PrintedDocSnapshot } from "../printed-document.service";
 import {
   resolveDocStyle, docPageCss, docTableCss, scaleDocCss, docLogoHtml,
   docBlankGridCss, docBlankGridHtml,
-  DOC_LOGO_CSS, DOC_STAMPS_CSS, docCopyBadge, docBlocksHtml, docPrintNoteHtml, docStampsBar,
+  DOC_LOGO_CSS, DOC_STAMPS_CSS, docCopyBadge, docBlocksHtml, docPrintNoteHtml, docStampsBar, docTitle,
 } from "./doc-style";
 import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize, scaleW } from "./doc-density";
@@ -77,7 +77,7 @@ export function renderReturnDispatchHtml(snapshot: PrintedDocSnapshot, meta: Ren
   const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
   const h = doc.header;
 
-  const title = (cfg.titleOverride?.trim() || "İADE İRSALİYESİ").toUpperCase();
+  const title = docTitle(cfg.titleOverride, "İADE İRSALİYESİ");
   const showLetterhead = cfg.showLetterhead !== false;
   const showSignatures = cfg.showSignatures !== false;
   const sigLabels = cfg.signatureLabels?.length ? cfg.signatureLabels : ["Teslim Eden (Müşteri)", "Teslim Alan"];

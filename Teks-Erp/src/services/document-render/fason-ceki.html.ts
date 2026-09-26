@@ -50,7 +50,7 @@ import {
   docBlankGridCss,
   docBlankGridHtml,
   docPrintNoteHtml,
-  docStampsBar,
+  docStampsBar, docTitle,
 } from "./doc-style";
 import {
   FASON_DENSITY,
@@ -262,7 +262,7 @@ export function renderFasonCekiHtml(
   const company = snapshot.company;
   const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
 
-  const title = (cfg.titleOverride?.trim() || "KUMAŞ İRSALİYESİ").toUpperCase();
+  const title = docTitle(cfg.titleOverride, "KUMAŞ İRSALİYESİ");
   const showLetterhead = cfg.showLetterhead !== false;
   const showSignatures = cfg.showSignatures !== false;
   const sigLabels =

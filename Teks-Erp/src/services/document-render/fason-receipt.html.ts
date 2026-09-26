@@ -22,7 +22,7 @@ import {
   docBlankGridCss,
   docBlankGridHtml,
   docPrintNoteHtml,
-  docStampsBar,
+  docStampsBar, docTitle,
 } from "./doc-style";
 import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize } from "./doc-density";
@@ -95,7 +95,7 @@ export function renderFasonReceiptHtml(
   const company = snapshot.company;
   const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
 
-  const title = (cfg.titleOverride?.trim() || "FASON KABUL MAKBUZU").toUpperCase();
+  const title = docTitle(cfg.titleOverride, "FASON KABUL MAKBUZU");
   const showLetterhead = cfg.showLetterhead !== false;
   const showSignatures = cfg.showSignatures !== false;
   const sigLabels =

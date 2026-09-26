@@ -71,6 +71,7 @@ import {
 import type { PrintedDocDb } from "./printed-document.service";
 import type { ApiResponse } from "../types/api.types";
 import { uyari } from "../lib/logger";
+import { upperTr } from "../utils/tr-case";
 
 type Tx = Prisma.TransactionClient;
 
@@ -1324,7 +1325,7 @@ async function buildStockCountDoc(
       warehouseCode: count.warehouse.code,
       createdBy: nameOf(count.createdById),
       completedBy: nameOf(count.completedById),
-      status: statusLabel(count.status).toUpperCase(),
+      status: upperTr(statusLabel(count.status)),
       finalized,
     },
     rollLines,

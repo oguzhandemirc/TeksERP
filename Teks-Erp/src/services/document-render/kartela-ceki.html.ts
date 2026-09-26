@@ -26,7 +26,7 @@ import {
   docBlankGridCss,
   docBlankGridHtml,
   docPrintNoteHtml,
-  docStampsBar,
+  docStampsBar, docTitle,
 } from "./doc-style";
 import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize } from "./doc-density";
@@ -115,7 +115,7 @@ export function renderKartelaCekiHtml(
   const company = snapshot.company;
   const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
 
-  const title = (cfg.titleOverride?.trim() || "KARTELA ÇEKİ LİSTESİ").toUpperCase();
+  const title = docTitle(cfg.titleOverride, "KARTELA ÇEKİ LİSTESİ");
   const showLetterhead = cfg.showLetterhead !== false;
   const showSignatures = cfg.showSignatures !== false;
   const sigLabels =

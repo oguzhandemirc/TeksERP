@@ -19,6 +19,7 @@ import {
   type DocTablesPayload,
 } from "./doc-model";
 import { fmtDate } from "./fmt-date";
+import { docTitle } from "./doc-style";
 
 interface DirectShipRoll {
   sequence: number;
@@ -275,7 +276,7 @@ function tableSections(doc: DirectShipDoc, cfg: DocumentConfig): DirectShipSecti
 export function directShipParts(snapshot: PrintedDocSnapshot, meta: DirectShipRenderMeta) {
   const doc = snapshot.doc as unknown as DirectShipDoc;
   const cfg = snapshot.docConfigOverride ?? {};
-  const title = (cfg.titleOverride?.trim() || "FASONDAN SEVK İRSALİYESİ").toUpperCase();
+  const title = docTitle(cfg.titleOverride, "FASONDAN SEVK İRSALİYESİ");
   // Serbest not (cfg.footerNote) — sections.notes !== false ise (default açık).
   const footerNote = sectionOn(cfg.sections, "notes") && cfg.footerNote ? cfg.footerNote : null;
   const watermark: "draft" | "void" | "old" | null = meta.draft

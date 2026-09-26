@@ -10,6 +10,7 @@
 // Stil, DocumentConfig'in parçası olduğu için freeze anında snapshot'a otomatik
 // donar (docConfigOverride) — eski belge her zaman kendi görünümüyle basılır.
 // =============================================================================
+import { upperTr } from "../../utils/tr-case";
 
 /** Ham (kısmi) stil ayarı — DocumentConfig.style. Tüm alanlar opsiyonel. */
 export interface DocStyleConfig {
@@ -453,4 +454,14 @@ export function scaleDocCss(css: string, s: ResolvedDocStyle): string {
     });
   }
   return out;
+}
+
+/**
+ * Belge BAŞLIĞI — şablondaki başlık metni (boşsa varsayılan) büyük harfle. Türkçe belgede
+ * `upperTr` (i → İ; düz `toUpperCase` "TESLIM" basıyordu), İngilizce belgede düz büyük harf
+ * (i → I). Dil, belgenin KENDİ dil kararından gelir; çağıran ikinci bir dil kuralı kurmaz.
+ */
+export function docTitle(override: string | null | undefined, fallback: string, lang: "tr" | "en" = "tr"): string {
+  const t = override?.trim() || fallback;
+  return lang === "en" ? t.toUpperCase() : upperTr(t);
 }

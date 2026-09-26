@@ -18,7 +18,7 @@ import type { PrintedDocSnapshot } from "../printed-document.service";
 import {
   resolveDocStyle, docPageCss, docTableCss, scaleDocCss, docLogoHtml,
   docBlankGridCss, docBlankGridHtml,
-  DOC_LOGO_CSS, DOC_STAMPS_CSS, docCopyBadge, docBlocksHtml, docPrintNoteHtml, docStampsBar,
+  DOC_LOGO_CSS, DOC_STAMPS_CSS, docCopyBadge, docBlocksHtml, docPrintNoteHtml, docStampsBar, docTitle,
 } from "./doc-style";
 import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize, scaleW } from "./doc-density";
@@ -128,7 +128,7 @@ function renderWarehouseDoc(
   const company = snapshot.company;
   const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
 
-  const title = (cfg.titleOverride?.trim() || opts.defaultTitle).toUpperCase();
+  const title = docTitle(cfg.titleOverride, opts.defaultTitle);
   const showLetterhead = cfg.showLetterhead !== false;
   const showSignatures = cfg.showSignatures !== false;
   const sigLabels = cfg.signatureLabels?.length ? cfg.signatureLabels : opts.signatureLabels;

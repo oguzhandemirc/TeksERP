@@ -24,7 +24,7 @@
 import {
   resolveDocStyle, docPageCss, docTableCss, scaleDocCss, docLogoHtml,
   docBlankGridCss, docBlankGridHtml, DOC_LOGO_CSS, DOC_STAMPS_CSS,
-  docCopyBadge, docBlocksHtml, docPrintNoteHtml, docStampsBar,
+  docCopyBadge, docBlocksHtml, docPrintNoteHtml, docStampsBar, docTitle,
 } from "./doc-style";
 import { buildDocTable } from "./doc-table";
 import {
@@ -187,11 +187,6 @@ function fmtQty(v: string | null | undefined): string {
 const sectionOn = (sections: Record<string, boolean> | undefined, key: string): boolean =>
   sections?.[key] !== false;
 
-/** Belge başlığı — PDF ile Excel aynı metni basar. */
-function financeDocTitle(override: string | undefined, fallback: string): string {
-  return (override?.trim() || fallback).toUpperCase();
-}
-
 function renderFinanceDoc(
   snapshot: PrintedDocSnapshot,
   meta: RenderMeta,
@@ -228,7 +223,7 @@ function renderFinanceDoc(
   const company = snapshot.company;
   const lh = company?.letterhead ?? { addressLine: "", phone: "", taxInfo: "" };
 
-  const title = financeDocTitle(cfg.titleOverride, opts.defaultTitle);
+  const title = docTitle(cfg.titleOverride, opts.defaultTitle);
   const showLetterhead = cfg.showLetterhead !== false;
   const showSignatures = cfg.showSignatures !== false;
   const sigLabels = cfg.signatureLabels?.length ? cfg.signatureLabels : opts.signatureLabels;
@@ -696,7 +691,7 @@ export function renderChequeDeliveryNoteTables(
   const wm = meta.draft ? "TASLAK" : meta.status === "VOIDED" ? "İPTAL" : meta.status === "SUPERSEDED" ? "ESKİ KOPYA" : null;
   const header: Array<[string, string | null]> = [
     ...(wm ? [[wm, null] as [string, null]] : []),
-    [financeDocTitle(p.cfg.titleOverride, p.defaultTitle), null],
+    [docTitle(p.cfg.titleOverride, p.defaultTitle), null],
     ...(snapshot.company?.name ? [[snapshot.company.name, null] as [string, null]] : []),
     ...(sectionOn(p.cfg.sections, "documentNo") ? [["Belge No", p.h.documentNo] as [string, string]] : []),
     ...(sectionOn(p.cfg.sections, "date") ? [["Tarih", fmtDate(p.h.date, "—")] as [string, string]] : []),

@@ -31,7 +31,7 @@ import {
   docBlankGridCss,
   docBlankGridHtml,
   docPrintNoteHtml,
-  docStampsBar,
+  docStampsBar, docTitle,
 } from "./doc-style";
 import { buildDocTable, type DocColumnCfg } from "./doc-table";
 import {
@@ -458,7 +458,7 @@ function shipmentDispatchParts(snapshot: PrintedDocSnapshot, meta: RenderMeta) {
       ? "en"
       : "tr";
   const L = LABELS[lang];
-  const title = (cfg.titleOverride?.trim() || L.title).toUpperCase();
+  const title = docTitle(cfg.titleOverride, L.title, lang);
   const products = doc.products ?? [];
   const sacks = doc.sacks ?? [];
   const cekiRows = doc.cekiRows ?? [];

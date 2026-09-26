@@ -21,7 +21,7 @@ import {
   docBlankGridCss,
   docBlankGridHtml,
   docPrintNoteHtml,
-  docStampsBar,
+  docStampsBar, docTitle,
 } from "./doc-style";
 import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize, scaleW } from "./doc-density";
@@ -100,7 +100,7 @@ export function renderQualityCertificateHtml(
   const showDate = sectionOn(cfg.sections, "date");
   const showOrderNos = sectionOn(cfg.sections, "orderNos");
 
-  const title = (cfg.titleOverride?.trim() || "KALİTE SERTİFİKASI").toUpperCase();
+  const title = docTitle(cfg.titleOverride, "KALİTE SERTİFİKASI");
   const showLetterhead = cfg.showLetterhead !== false;
   const showSignatures = cfg.showSignatures !== false;
   const sigLabels = cfg.signatureLabels?.length ? cfg.signatureLabels : ["Kalite Sorumlusu", "Teslim Alan"];
