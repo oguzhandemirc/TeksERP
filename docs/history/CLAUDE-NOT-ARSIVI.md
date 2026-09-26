@@ -12858,6 +12858,21 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 **Borç (ölçüldü, kapsam dışı).** src'de `createdAt` sıralı ama `id` bozucusuz 43 `findFirst` "en son" okuyucusu var. Defterler: WarehouseMovement 8 · RollOperation 6 · ChequeEvent 4 · CariTransaction 2 · WarpBeamEvent 2 (yazarı zaten kesin artan) · WorkOrderEvent 1; kalanı defter dışı. Genel bir cırcır bekçisi ayrı dilim.
 
+**Kapı (③, 4b kararı: kuralın tek çaresi kapıdır).** `test_esitlik_bozucu` 32. hızlı mandal oldu (AST, DB'siz, ~1,7 sn).
+- **Okuyucu:** `findFirst(OrThrow)` · `findMany` + `take: ±1` · iç içe ilişki `take: ±1`.
+- **`orderBy` çözümü:** const aynı dosyada ya da göreli import'ta çözülür (9f'nin `MOVEMENT_DESC` gibi paylaşılan sıra sabitleri de). Çözülemeyen ifade ÖLÇÜLEMEDİ sayılır ve borca girer.
+- **Kapsam:** `DEFTER_BEYANI`nin DEFTER · SATIR_EBEVEYN · PIVOT_TICARI sınıfları. Muaf küme kapalı, tiple kilitli: yeni `DefterSinifi` karar ister. `updatedAt` taşıyan durum tablosu da muaftır.
+- **Ölçüm** (43 tek satır okuyucusu):
+  - origin/main `ec23b97c` → borç 26;
+  - ② (`statusBeforeEntry`) sonrası → 25 (taban);
+  - 9f'nin dalında (depo + cari sıra sabitleri) → 16;
+  - ① + ② + 9f inince beklenen → 15;
+  - muaf sınıfta 17 okuyucu sayılmaz.
+- **Sondalar:** negatif (bozucu kaldırıldı) → §4a ❌; pozitif (bir okuyucuya `id`) → CI'da §4b ❌, commit kapısında ⏭. Ön ilk koşumda üç yan bulgu düzeltildi:
+  - `keyfi_arama` sonda literallerini ortam araması saydı;
+  - kaynağa bağlı "uyumlu okuyucu var" kontrolü origin/main'de kırmızı olurdu, kaldırıldı;
+  - çözücü 9f'nin import'lu sabitini görmeseydi 9f'nin düzeltmesi tabanı düşürmezdi.
+
 ## 2026-09-26 — Token replay D5b: üretim nesneleri tek boğazda; yarışta ham P2002 kalktı; borç 11 → 5 [ÇEKİRDEK]
 
 **Kapsam.** Levent planı (R) · dokuma işi · fason dokuma kabulü · top indirme (R + K′). K′ ilk ifade kilidinin arkasında: dokuma işinde 8032, fason kabulde iş emri satır claim'i, indirmede 8029; numaralar maksimumdan türediği için kilidin arkasında erken dönen deneme numara sarf etmez. Ayrım `fresh: true/false as const` (D3 paketleme grubu kalıbı).
