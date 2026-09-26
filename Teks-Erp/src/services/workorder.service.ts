@@ -1561,12 +1561,12 @@ export class WorkOrderService {
       errors = attachRes.data?.errors ?? [];
       batch = attachRes.data?.batch ?? null;
     } catch (err) {
-      await this.hardDelete(workOrder.id, userId).catch(logOrphanCleanupFailure);
+      await this.hardDelete(workOrder.id, userId, { releaseToken: true }).catch(logOrphanCleanupFailure);
       throw err;
     }
 
     if (attached === 0) {
-      await this.hardDelete(workOrder.id, userId).catch(logOrphanCleanupFailure);
+      await this.hardDelete(workOrder.id, userId, { releaseToken: true }).catch(logOrphanCleanupFailure);
       throw AppError.conflict(
         `Hiçbir top bağlanamadı; iş emri oluşturulmadı. ${errors.join("; ")}`.trim(),
       );
@@ -4730,7 +4730,7 @@ export class WorkOrderService {
    * geri çeker ki yeni üretimde tekrar kullanılabilsin. `producedInStepId`
    * lineage olarak korunur (FK hala valid — step silinmedi).
    */
-  async hardDelete(id: string, userId?: string): Promise<ApiResponse<WorkOrder>> {
+  async hardDelete(id: string, userId?: string, opts: { releaseToken?: boolean } = {}): Promise<ApiResponse<WorkOrder>> {
     const existing = await prisma.workOrder.findUnique({
       where: { id },
       include: {
@@ -4822,12 +4822,12 @@ export class WorkOrderService {
       // bırakmasın (softDelete'teki bloğun simetriği).
       await setWorkOrderCardStatusesTx(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_ARCHIVED" });
 
+      // Token YALNIZ hızlı iş emri telafisinde bırakılır (`releaseToken`): iki istemci P3 borcunda, düzeltilmiş
+      // tekrar boş token'a güveniyor. Arşiv ucu token'ı TUTAR → aynı gönderimin tekrarı 409 WORK_ORDER_CANCELLED.
+      if (opts.releaseToken) await tx.workOrder.update({ where: { id }, data: { clientToken: null } });
       const archivedRow = await tx.workOrder.update({
         where: { id },
-        // clientToken serbest bırakılır: zero-attach telafisi sonrası operatör
-        // AYNI form oturumundan (aynı token) düzeltip tekrar denediğinde taze
-        // create arşivli WO'nun token'ına çarpmasın.
-        data: { isActive: false, clientToken: null },
+        data: { isActive: false },
       });
       await recordWorkOrderFieldChangesTx(
         tx,

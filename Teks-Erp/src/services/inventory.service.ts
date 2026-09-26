@@ -33,9 +33,7 @@ import { AppError } from "../utils/app-error";
 import { resolveDefaultDefectTypeTx } from "./helpers/default-defect-type.helper";
 import { assertMasterDataLiveTx } from "./helpers/master-data-live.helper";
 import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
-import { assertRollReplayAlive } from "./helpers/token-replay.helper";
-import { isClientTokenP2002 } from "../utils/p2002";
+import { assertRollReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import { FACTORY_TIMEZONE } from "../constants/time";
 import { resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
@@ -682,7 +680,52 @@ export class InventoryService {
    * ⚠️ Bu metot iki farklı niyete hizmet eder ve ayrım 5. parametre (`opts`)
    * ile YAPILIR, renkle DEĞİL — bkz. `opts.forcedStatus` gerekçesi.
    */
-  async createInitialEntry(
+  /**
+   * Top doğumu — token replay'i tek boğazdan (R): ön-okuma kg/ürün/renk/kalite kapılarından ÖNCE (kapılar sonradan
+   * değişse de tekrarın cevabı token'dan). Gövde `createInitialEntryFresh`.
+   */
+  async createInitialEntry(...args: Parameters<InventoryService["createInitialEntryFresh"]>): Promise<InitialEntryResult> {
+    const [data, , , , opts] = args;
+    return this.initialEntryReplay(data, opts).run(data.clientToken, () => this.createInitialEntryFresh(...args));
+  }
+
+  /**
+   * Top doğumu replay'i. Kimlik: ürün · renk · metre + BAĞLAM (mal kabul fişi · fason makbuzu · indirme verildiyse — başka
+   * fişin satır token'ı o fişin topunu döndürmesin). 4. durum: iptal/fire → `ENTRY_CANCELLED`. Yanıt `idempotent: true`
+   * taşır (mal kabul sayımı buna bakar); çakışma ayrıntısında `barcode` (KK1 okur).
+   */
+  private initialEntryReplay(
+    data: { itemId: string; colorId?: string | null; initialQty: number },
+    opts?: { goodsReceiptId?: string | null; parentReceiptId?: string | null; doffEventId?: string | null },
+  ) {
+    type Prior = Prisma.RollGetPayload<{ include: { item: true; color: true; createdBy: { select: { id: true; username: true; fullName: true } } } }>;
+    const context = [
+      ["goodsReceiptId", opts?.goodsReceiptId],
+      ["parentReceiptId", opts?.parentReceiptId],
+      ["doffEventId", opts?.doffEventId],
+    ] as const;
+    return tokenReplay<Prior, InitialEntryResult>({
+      find: (db, clientToken) =>
+        db.roll.findUnique({ where: { clientToken }, include: { item: true, color: true, createdBy: { select: { id: true, username: true, fullName: true } } } }),
+      alive: (r) => assertRollReplayAlive(r),
+      identity: (r) => [
+        { ad: "itemId", mevcut: r.itemId, gelen: data.itemId },
+        { ad: "colorId", mevcut: r.colorId, gelen: data.colorId ?? null },
+        { ad: "initialQty", mevcut: r.initialQty, gelen: data.initialQty },
+        ...context.filter(([, v]) => v).map(([ad, v]) => ({ ad, mevcut: r[ad], gelen: v })),
+      ],
+      collision: "Bu istemci anahtarı farklı bir topla kullanılmış. Topu yeniden okutup tekrar deneyin.",
+      collisionEk: (r) => ({
+        barcode: r.barcode,
+        existing: { id: r.id, itemId: r.itemId, colorId: r.colorId, initialQty: Number(r.initialQty) },
+        incoming: { itemId: data.itemId, colorId: data.colorId ?? null, initialQty: data.initialQty },
+      }),
+      // ⚠️ YENİ TOP DOĞMADI — defter tutan çağıran bunu SAYMAMALI (`InitialEntryResult` başlığı).
+      respond: (r) => ({ success: true, data: r, message: `Top zaten kayıtlı (idempotent retry). Barkod: ${r.barcode}`, idempotent: true }),
+    });
+  }
+
+  private async createInitialEntryFresh(
     data: {
       itemId: string;
       colorId?: string | null;
@@ -1059,7 +1102,8 @@ export class InventoryService {
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
     // Devere Faz 4: bağlı leventten otomatik tüketim uyarıları (bayrak kapalıyken dizi boş kalır, yanıta girmez).
     const autoConsumeWarnings: string[] = [];
-    try {
+    // Token P2002'si boğaza düşer (`run` yeniden okur).
+    {
       roll = await prisma.$transaction(async (tx) => {
         // TX KAPISI (Sınıf 4 — I1): İLK ifade. Mal Kabul satırı burada fişi
         // claim'ler; `cancel` ile yarış bu satır kilidinde serileşir. Kapı
@@ -1262,68 +1306,6 @@ export class InventoryService {
         }
         return created;
       });
-    } catch (err) {
-      // İdempotency: aynı clientToken ile 2. çağrı (offline sync replay / eşzamanlı race).
-      // Roll.clientToken @unique → P2002 → mevcut Roll'u dön (audit ilk çağrıda yazıldı).
-      if (
-        data.clientToken &&
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
-        const existing = await prisma.roll.findUnique({
-          where: { clientToken: data.clientToken },
-          include: {
-            item: true,
-            color: true,
-            createdBy: { select: { id: true, username: true, fullName: true } },
-          },
-        });
-        if (existing) {
-          // ⚠️ ÖNCE 4. DURUM: kayıt yazıldı ama SONRADAN İPTAL EDİLDİ mi?
-          // Payload özdeşliğinden ÖNCE gelmesi gerekiyor — özdeş bir payload
-          // iptal edilmiş kaydı "başarılı" diye döndürürdü ve operatör 100 m
-          // kumaşın kaydolduğunu sanırdı (T1-006; sahada 227 canlı token).
-          assertRollReplayAlive(existing);
-          // F117: İdempotent retry SADECE gelen payload mevcut kayıtla ÖZDEŞSE geçerli.
-          // Aynı token farklı topla kullanıldıysa (istemci hatası) 2. giriş sessizce
-          // "kaydedildi" görünmemeli; kimlik-kilit alanları (item/renk/metre)
-          // uyuşmuyorsa 409 çakışma fırlat.
-          const sameItem = existing.itemId === data.itemId;
-          const sameColor = existing.colorId === (data.colorId ?? null);
-          const sameQty = new Prisma.Decimal(data.initialQty).equals(existing.initialQty);
-          if (sameItem && sameColor && sameQty) {
-            return {
-              success: true,
-              data: existing,
-              message: `Top zaten kayıtlı (idempotent retry). Barkod: ${existing.barcode}`,
-              // ⚠️ YENİ TOP DOĞMADI — defter tutan çağıran bunu SAYMAMALI
-              // (`InitialEntryResult` başlığındaki gerekçe). Mal Kabul bu
-              // alana bakarak sipariş kalemi kapasitesini ikinci kez
-              // tüketmiyor; alan düşerse o hata sessizce geri gelir.
-              idempotent: true,
-            };
-          }
-          throw AppError.conflict(
-            "Bu istemci anahtarı farklı bir topla kullanılmış. Topu yeniden okutup tekrar deneyin.",
-            {
-              code: "CLIENT_TOKEN_COLLISION",
-              barcode: existing.barcode,
-              existing: {
-                id: existing.id,
-                itemId: existing.itemId,
-                colorId: existing.colorId,
-                initialQty: Number(existing.initialQty),
-              },
-              incoming: {
-                itemId: data.itemId,
-                colorId: data.colorId ?? null,
-                initialQty: data.initialQty,
-              },
-            },
-          );
-        }
-      }
-      throw err;
     }
 
     await AuditService.log({
@@ -4897,7 +4879,31 @@ export class InventoryService {
   //   - parentReceiptId: kaynak receipt referansı (lineage)
   //   - initialQty / currentQty: 0 (ölçüm kursun-finish'te yapılır)
   //
-  async createOpenFabric(
+  /** Açık kumaş — token replay'i tek boğazdan (R + K′ iş emri satır kilidinin arkasında). Gövde `createOpenFabricFresh`. */
+  async createOpenFabric(...args: Parameters<InventoryService["createOpenFabricFresh"]>): Promise<ApiResponse<Roll>> {
+    const [data] = args;
+    return this.openFabricReplay(data).run(data.clientToken, () => this.createOpenFabricFresh(...args));
+  }
+
+  /**
+   * Açık kumaş replay'i. Kimlik: makbuz · DOĞUŞ adımı (`producedInStepId`; `currentStepId` top ilerleyince değişir ve
+   * meşru tekrarı sahte 409'a düşürürdü). 4. durum: iptal/fire → `ENTRY_CANCELLED`.
+   */
+  private openFabricReplay(data: { receiptId: string; stepId: string }) {
+    return tokenReplay<Roll, ApiResponse<Roll>>({
+      find: (db, clientToken) => db.roll.findUnique({ where: { clientToken } }),
+      alive: (r) => assertRollReplayAlive(r),
+      identity: (r) => [
+        { ad: "parentReceiptId", mevcut: r.parentReceiptId, gelen: data.receiptId },
+        { ad: "producedInStepId", mevcut: r.producedInStepId, gelen: data.stepId },
+      ],
+      collision: "Bu istemci anahtarı FARKLI bir açık kumaş kaydı için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+      collisionEk: (r) => ({ rollId: r.id }),
+      respond: (r) => ({ success: true, data: r, message: `Açık kumaş zaten açılmış (idempotent retry, id: ${r.id}).` }),
+    });
+  }
+
+  private async createOpenFabricFresh(
     data: {
       receiptId: string;
       stepId: string; // Kurşun/KK2 (PROCESS_QC) step
@@ -4953,15 +4959,16 @@ export class InventoryService {
 
     const propertyIds = receipt.appliedProperties.map((p) => p.propertyId);
 
-    let roll: Roll;
-    try {
-      roll = await prisma.$transaction(async (tx) => {
+    const outcome = await prisma.$transaction(async (tx) => {
       // F115: WO satırını tx başında kilitle → cancelReceipt (o da tx başında
       // touchWorkOrderTx alır) ve WO-completion yollarıyla serileş. Guard'ları
       // kilit ALTINDA TAZE oku — pre-tx guard'lar (2197-2227) yalnız UX; araya
       // giren cancelReceipt/WO-tamamlama commit ederse iptalli/tamamlanmış
       // parent'a hayalet IN_PRODUCTION top doğardı (write-skew).
       await touchWorkOrderTx(tx, receipt.workOrderId);
+      // K′: aynı token'ın kaybedeni iş emri satır kilidinde bekler, token'ı kilidin arkasında okur.
+      const replay = data.clientToken ? await this.openFabricReplay(data).behindLock(tx, data.clientToken) : null;
+      if (replay) return { fresh: false as const, replay };
 
       const fr = await tx.subcontractorReceipt.findUnique({
         where: { id: data.receiptId },
@@ -5056,40 +5063,10 @@ export class InventoryService {
       await recomputeStepStatus(tx, step.id);
       await ensureWorkOrderInProgress(tx, receipt.workOrderId);
 
-      return created;
-      });
-    } catch (err) {
-      // İdempotent replay (createInitialEntry emsali): aynı clientToken'la 2. çağrı
-      // → mevcut açık-kumaş Roll'u dön (audit ilk çağrıda yazıldı). Catch tx DIŞINDA
-      // — PG aborted-tx tuzağına girmez.
-      if (data.clientToken && isClientTokenP2002(err)) {
-        const existing = await prisma.roll.findUnique({
-          where: { clientToken: data.clientToken },
-        });
-        if (existing) {
-          // 4. durum: iptal/fire edilmiş açık kumaşın token'ı replay EDİLEMEZ.
-          assertRollReplayAlive(existing);
-          // ⚠️ AYNI TOKEN, FARKLI GÖVDE (BULGU-T4-003): token'la bulunan Roll
-          // eskiden KOŞULSUZ dönüyordu — başka bir makbuzun/adımın açık kumaşı
-          // "zaten açılmış" diye gösterilebiliyordu.
-          assertReplayPayloadMatches(
-            [
-              { ad: "parentReceiptId", mevcut: existing.parentReceiptId, gelen: data.receiptId },
-              { ad: "currentStepId", mevcut: existing.currentStepId, gelen: data.stepId },
-            ],
-            "Bu istemci anahtarı FARKLI bir açık kumaş kaydı için kullanılmış. " +
-              "Ekranı yenileyip tekrar deneyin.",
-            { rollId: existing.id },
-          );
-          return {
-            success: true,
-            data: existing,
-            message: `Açık kumaş zaten açılmış (idempotent retry, id: ${existing.id}).`,
-          };
-        }
-      }
-      throw err;
-    }
+      return { fresh: true as const, roll: created };
+    });
+    if (!outcome.fresh) return outcome.replay;
+    const roll = outcome.roll;
 
     await AuditService.log({
       userId,

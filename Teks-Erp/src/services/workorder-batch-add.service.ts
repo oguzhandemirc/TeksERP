@@ -216,13 +216,17 @@ type AddBatchResponse = {
 
 /**
  * Parti ekle replay'i: aynı iş emri + okutulan her top o partide ("eksik top yok"). Küme EŞİTLİĞİ değil: partiye
- * sonradan doğan çocuk toplar eklenir ve meşru tekrarı sahte 409'a düşürürdü. Parti durum taşımaz (boş parti silinir).
+ * sonradan doğan çocuk toplar eklenir ve meşru tekrarı sahte 409'a düşürürdü. 4. durum: başka partiye birleştirilmiş
+ * parti → 409 `BATCH_MERGED` (eskiden "başka toplar" çakışması diyordu).
  */
 const batchReplay = (workOrderId: string, barcodes: string[]) =>
-  tokenReplay<{ id: string; batchNumber: string; workOrderId: string; rolls: Array<{ barcode: string | null }> }, AddBatchResponse>({
+  tokenReplay<{ id: string; batchNumber: string; workOrderId: string; mergedIntoId: string | null; rolls: Array<{ barcode: string | null }> }, AddBatchResponse>({
     find: (db, clientToken) =>
-      db.batch.findUnique({ where: { clientToken }, select: { id: true, batchNumber: true, workOrderId: true, rolls: { select: { barcode: true } } } }),
-    alive: { neverDies: "parti durum taşımaz; boş parti silinince token da gider" },
+      db.batch.findUnique({ where: { clientToken }, select: { id: true, batchNumber: true, workOrderId: true, mergedIntoId: true, rolls: { select: { barcode: true } } } }),
+    alive: (b) => {
+      if (!b.mergedIntoId) return;
+      throw AppError.conflict(`Bu form daha önce kaydedilmiş ama parti (${b.batchNumber}) sonra başka bir partiye BİRLEŞTİRİLMİŞ — aynı gönderim tekrar edilemez. Formu kapatıp yeniden açın.`, { code: "BATCH_MERGED", batchId: b.id });
+    },
     identity: (b) => {
       const inBatch = new Set(b.rolls.map((r) => r.barcode));
       return [

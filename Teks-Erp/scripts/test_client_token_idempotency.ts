@@ -6,7 +6,8 @@
 //   CT3 WO create       : replay → aynı id + TEK refakat kartı; farklı targetItem → 409
 //   CT4 quickStart      : replay → aynı WO, isActive===true KALIR (hardDelete regresyonu!)
 //   CT5 reduceStock     : replay → N iptal (2N DEĞİL) + tek SwatchStockReduction satırı
-//   CT6 hardDelete token: zero-attach telafisi sonrası aynı token'la taze create BAŞARIR
+//   CT6 hardDelete token: telafi (releaseToken) sonrası aynı token'la taze create BAŞARIR; panel arşivi token'ı
+//       TUTAR → tekrar 409 WORK_ORDER_CANCELLED (CT6b)
 //
 // Çalıştır: npx tsx scripts/test_client_token_idempotency.ts
 import prisma from "../src/lib/prisma";
@@ -175,21 +176,39 @@ async function main(): Promise<void> {
     check("CT5: tek SwatchStockReduction satırı", redCnt === 1, `reduction ${redCnt}`);
   }
 
-  // ═══ CT6 — hardDelete TOKEN RELEASE ═══
-  console.log("\n=== CT6: hardDelete token release → aynı token'la taze create BAŞARIR ===");
+  // ═══ CT6 — hızlı iş emri telafisi TOKEN'I BIRAKIR; panel arşivi TUTAR ═══
+  console.log("\n=== CT6: telafi (releaseToken) → aynı token'la taze create BAŞARIR · arşiv → 409 WORK_ORDER_CANCELLED ===");
   {
     const token = uuid();
     const w1 = await wos.create({ clientToken: token, type: "STOCK_PRODUCTION", targetItemId: ITEM, steps: [{ stationId: STATION, notes: null }] }, ADMIN);
     const wo1 = w1.data as { id: string };
-    // hardDelete (zero-attach telafisi emsali) → arşivler + clientToken NULL'lar.
-    await wos.hardDelete(wo1.id, ADMIN);
+    createdWoIds.push(wo1.id);
+    // Zero-attach telafisi (`quickStartFresh`) → arşivler + clientToken NULL'lar (istemciler P3: düzeltilmiş tekrar boş token'a güvenir).
+    await wos.hardDelete(wo1.id, ADMIN, { releaseToken: true });
     const afterDel = await prisma.workOrder.findUnique({ where: { id: wo1.id }, select: { isActive: true, clientToken: true } });
     check("CT6: hardDelete WO'yu arşivledi + token'ı serbest bıraktı", afterDel?.isActive === false && afterDel?.clientToken === null);
     // Aynı token'la taze create → collision DEĞİL, yeni WO doğar (token serbest).
     const w2 = await wos.create({ clientToken: token, type: "STOCK_PRODUCTION", targetItemId: ITEM, steps: [{ stationId: STATION, notes: null }] }, ADMIN);
     const wo2 = w2.data as { id: string; workOrderNumber: string };
-    createdWoIds.push(wo1.id, wo2.id);
+    createdWoIds.push(wo2.id);
     check("CT6: aynı token'la taze create BAŞARIR (yeni WO)", wo2.id !== wo1.id && w2.success === true, `${wo2.workOrderNumber}`);
+  }
+  {
+    // Panel arşivi (`DELETE /work-orders/:id/permanent`) token'ı TUTAR: aynı gönderimin tekrarı yeni iş emri açmaz.
+    const token = uuid();
+    const w1 = await wos.create({ clientToken: token, type: "STOCK_PRODUCTION", targetItemId: ITEM, steps: [{ stationId: STATION, notes: null }] }, ADMIN);
+    const wo1 = w1.data as { id: string };
+    createdWoIds.push(wo1.id);
+    await wos.hardDelete(wo1.id, ADMIN);
+    const afterArchive = await prisma.workOrder.findUnique({ where: { id: wo1.id }, select: { isActive: true, clientToken: true } });
+    check("CT6b: arşiv WO'yu pasifledi, token'ı TUTTU", afterArchive?.isActive === false && afterArchive?.clientToken === token);
+    let kod = "(hata yok)";
+    try {
+      await wos.create({ clientToken: token, type: "STOCK_PRODUCTION", targetItemId: ITEM, steps: [{ stationId: STATION, notes: null }] }, ADMIN);
+    } catch (e) {
+      kod = String((e as { details?: { code?: string } }).details?.code ?? (e as Error).message);
+    }
+    check("CT6b: arşivlenmiş iş emrinin token'ı → 409 WORK_ORDER_CANCELLED (yeni WO doğmaz)", kod === "WORK_ORDER_CANCELLED", kod);
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

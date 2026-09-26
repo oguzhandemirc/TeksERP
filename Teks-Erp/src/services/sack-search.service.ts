@@ -30,6 +30,7 @@ import { batchLoadAliasesMulti } from "./helpers/customer-name.helper";
 import { readPackingLotSettings } from "./helpers/packing-group.helper";
 import { readPackingGroupsEnabled } from "./system-setting.service";
 import { recordSackPickList, type PickListPrint } from "./helpers/manifest-number.helper";
+import { tokenReplay } from "./helpers/token-replay.helper";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
 
@@ -684,6 +685,30 @@ function resolveSackSort(params: SackSearchParams): {
   return { sortField, sortOrder, sortNullable, orderByPrimary };
 }
 
+/**
+ * Çeki listesi replay'i. Kimlik = çuval KÜMESİ (sıralı, tekil; basımda var olmayan id düşer — `getPickList` de düşürür);
+ * `contentKey` DEĞİL: içerik sonradan değişse de aynı token ilk basımı döner (çeki ⑤). Liste iptal edilmez (kâğıt sahadadır).
+ */
+function pickListReplay(sackIds: string[]) {
+  const select = { id: true, manifestNo: true, printedAt: true, snapshot: true } as const;
+  type Prior = Prisma.ManifestGetPayload<{ select: typeof select }> & { incoming: string };
+  return tokenReplay<Prior, ApiResponse<PickListPrint>>({
+    find: async (db, clientToken) => {
+      const m = await db.manifest.findUnique({ where: { clientToken }, select });
+      if (!m) return null;
+      const existing = await db.sack.findMany({ where: { id: { in: sackIds } }, select: { id: true } });
+      return { ...m, incoming: [...new Set(existing.map((x) => x.id))].sort().join(",") };
+    },
+    alive: { neverDies: "çeki listesi iptal edilmez; basılan kâğıt sahadadır" },
+    identity: (m) => [
+      { ad: "çuvallar", mevcut: [...new Set((m.snapshot as Array<{ id: string }>).map((r) => r.id))].sort().join(","), gelen: m.incoming },
+    ],
+    collision: "Bu istemci anahtarı BAŞKA çuvallarla basılmış bir çeki listesine ait — listeyi yeniden seçip tekrar basın.",
+    collisionEk: (m) => ({ manifestNo: m.manifestNo }),
+    respond: ({ incoming: _incoming, ...m }) => ({ success: true, data: { ...m, reused: true }, message: `Çeki listesi yeniden basıldı: ${m.manifestNo}` }),
+  });
+}
+
 export class SackSearchService {
   /**
    * Çuval arama — içerik (ürün/renk/en) ve/veya kimlik (kod/sevkiyat/müşteri)
@@ -1195,9 +1220,11 @@ export class SackSearchService {
    * önceki bir basımla aynıysa AYNI CL ve AYNI anlık görüntü döner (yeniden basım); değilse yeni CL.
    */
   async printPickList(sackIds: string[], userId: string | undefined, clientToken: string): Promise<ApiResponse<PickListPrint>> {
-    const live = (await this.getPickList(sackIds)).data as Array<{ id: string }>;
-    const data = await recordSackPickList(live, userId, clientToken);
-    return { success: true, data, message: data.reused ? `Çeki listesi yeniden basıldı: ${data.manifestNo}` : `Çeki listesi oluşturuldu: ${data.manifestNo}` };
+    return pickListReplay(sackIds).run(clientToken, async () => {
+      const live = (await this.getPickList(sackIds)).data as Array<{ id: string }>;
+      const data = await recordSackPickList(live, userId, clientToken);
+      return { success: true, data, message: data.reused ? `Çeki listesi yeniden basıldı: ${data.manifestNo}` : `Çeki listesi oluşturuldu: ${data.manifestNo}` };
+    });
   }
 
   /**

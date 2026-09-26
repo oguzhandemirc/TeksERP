@@ -83,12 +83,14 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}subcontractor-weaving.service.ts::receiveForWeavingFresh`]: { giris: { [`${S}subcontractor-weaving.service.ts::receiveForWeaving`]: "R", [`${S}subcontractor-weaving.service.ts::receiveForWeavingFresh`]: "K′" } },
   [`${S}machine-doff.service.ts::openDoffFresh`]: { giris: { [`${S}machine-doff.service.ts::openDoff`]: "R", [`${S}machine-doff.service.ts::openDoffFresh`]: "K′" } },
 
+  // ── Boğazda: D5c (top doğumu · çeki) ────────────────────────────────────────────────────────────────────
+  // Top doğumunun 8021'i koşullu (yalnız mükerrer kapısı açıkken) → yalnız R. Tambur'un iki yolu token'ı faz 1'e iletir
+  // (yazar/okuyucu değil): elle top (a′) bağlı-topta `replayIfAny` erken yolu, kartsız top tepede `run`.
+  [`${S}inventory.service.ts::createInitialEntryFresh`]: { giris: { [`${S}inventory.service.ts::createInitialEntry`]: "R" } },
+  [`${S}inventory.service.ts::createOpenFabricFresh`]: { giris: { [`${S}inventory.service.ts::createOpenFabric`]: "R", [`${S}inventory.service.ts::createOpenFabricFresh`]: "K′" } },
+  [`${S}helpers/manifest-number.helper.ts::recordSackPickList`]: { helper: "çeki listesi yazarı (içerik tekilliği iş kuralı); replay printPickList'in boğazında" },
+
   // ── Borç: D5 (4. durum eksikleri · ham P2002 · predicate'siz retry · boğaza taşıma) ─────
-  [`${S}inventory.service.ts::createInitialEntry`]: { borc: "D5", not: "sınıf dışı (ön-okuma yok, P2002 yeniden okur); boğaza taşıma" },
-  [`${S}inventory.service.ts::createOpenFabric`]: { borc: "D5", not: "sınıf dışı; boğaza taşıma" },
-  [`${S}tambur-manual.service.ts::createManualRoll`]: { borc: "D5", not: "ön-okuma yalnız 4. durum; createInitialEntry'ye iletir" },
-  [`${S}tambur-manual.service.ts::produceFinishedRoll`]: { borc: "D5", not: "ön-okuma yalnız 4. durum; createInitialEntry'ye iletir" },
-  [`${S}helpers/manifest-number.helper.ts::recordSackPickList`]: { borc: "D5", not: "toplama listesi günlüğü; boğaza taşıma" },
 
   // ── Muaf (kapalı küme) ──────────────────────────────────────────────────────
   [`${S}kartela.service.ts::reduceStock`]: { muaf: "ILK_YAZIM_TOKEN", neden: "SwatchStockReduction satırı tx'in ilk yazımı (plan §1 sınıf dışı)" },

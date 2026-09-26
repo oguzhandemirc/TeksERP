@@ -75,7 +75,7 @@ import {
   WorkOrderStatus,
 } from "@prisma/client";
 import { AppError } from "../utils/app-error";
-import { assertRollReplayAlive } from "./helpers/token-replay.helper";
+import { assertRollReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { resolveReasonCode } from "./reason-preset.service";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
@@ -918,6 +918,10 @@ export class TamburManualService {
     },
     ctx: TamburFieldContext = {},
   ): Promise<ApiResponse<unknown>> {
+    // (a′) Kapılardan ÖNCE: bu token'ın topu bu adıma ZATEN bağlandıysa cevap token'dan (iş emri arada tamamlansa da).
+    // Bağlanmamışsa (kendini onarma) ya da yoksa bugünkü akış: kapılar → createInitialEntry (boğaz R) → bağlama (idempotent).
+    const early = await this.manualRollAttachedReplay(input).replayIfAny(input.clientToken);
+    if (early) return early;
     const reason = input.reason?.trim() ?? "";
     if (reason.length < 3) {
       throw AppError.badRequest("İşlem nedeni zorunlu (en az 3 karakter)", {
@@ -1050,21 +1054,7 @@ export class TamburManualService {
         : false;
 
 
-    // ⚠️ İPTAL EDİLMİŞ TOPUN TOKEN'I REPLAY EDİLEMEZ (2026-08-04) —
-    // `produceFinishedRoll`'daki ikizinin aynısı. Orada cevap sessizce YANLIŞ
-    // oluyordu; burada FAZ 2 claim'i (status in [STOCK, WAREHOUSE]) sayesinde
-    // zaten 409 dönüyordu ama mesaj "Top bu sırada başka bir işleme girdi"
-    // diyordu — operatör ekranı yenileyip tekrar deniyor ve aynı duvara
-    // çarpıyordu. Gerçek sebep başka: bu deneme iptalle KAPANMIŞTIR.
-    const priorRoll = await prisma.roll.findUnique({
-      where: { clientToken: input.clientToken },
-      select: { id: true, status: true, barcode: true },
-    });
-    // ⚠️ Kural TEK KAYNAKTA (2026-08-29 / T1-006). Bu blok bu dosyada İKİ KEZ
-    // elle yazılmıştı ve diğer ÜÇ replay okuyucusunda (KK1 ham giriş · açık
-    // kumaş · sipariş) hiç yoktu — kopyalanabilir bir kural, kopyalanmadığı
-    // yerde sessizce yok demektir.
-    if (priorRoll) assertRollReplayAlive(priorRoll);
+    // 4. durum ve gövde kapısı faz 1'in boğazında (`createInitialEntry` R).
 
     // FAZ 1 — topun kendisi. `isMobileOrigin=false` BİLİNÇLİ: istek Tambur
     // tabletinden (eşleşmiş cihaz) gelse de bu bir KK1 istasyon taraması DEĞİL,
@@ -1357,7 +1347,88 @@ export class TamburManualService {
    * Hareket (`RollMovement`) AÇILMAZ: hareket bir istasyondan geçişi anlatır,
    * burada geçilen istasyon yok. `currentStepId` null kalır → top serbest depoda.
    */
-  async produceFinishedRoll(
+  /**
+   * (a′) Elle top replay'i — YALNIZ bu adıma zaten bağlanmış top (adımda AKTİF hareketi olan; geri alınmış bağlama
+   * sayılmaz) için; bulunmazsa null → bugünkü
+   * akış. Kimlik: metre + (gönderildiyse) ürün/renk. 4. durum: iptal/fire → `ENTRY_CANCELLED`. Yanıt ilk başarının
+   * biçiminde, `alreadyAttached: true`. Kalan dar pencere: ilk deneme doğdu ama bağlanamadı + arada iş emri kapandı.
+   */
+  private manualRollAttachedReplay(input: { targetStepId: string; initialQty: number; itemId?: string; colorId?: string | null }) {
+    const select = {
+      id: true, barcode: true, status: true, itemId: true, colorId: true, initialQty: true, currentQty: true,
+      batch: { select: { id: true, batchNumber: true } },
+    } as const;
+    type Prior = Prisma.RollGetPayload<{ select: typeof select }> & {
+      step: { id: string; station: { name: string }; workOrder: { workOrderNumber: string; targetColorId: string | null } };
+    };
+    return tokenReplay<Prior, ApiResponse<unknown>>({
+      find: async (db, clientToken) => {
+        const roll = await db.roll.findFirst({ where: { clientToken, movements: { some: { ...ACTIVE_MOVEMENT, workOrderStepId: input.targetStepId } } }, select });
+        if (!roll) return null;
+        const step = await db.workOrderStep.findUniqueOrThrow({
+          where: { id: input.targetStepId },
+          select: { id: true, station: { select: { name: true } }, workOrder: { select: { workOrderNumber: true, targetColorId: true } } },
+        });
+        return { ...roll, step };
+      },
+      alive: (r) => assertRollReplayAlive(r),
+      identity: (r) => [
+        { ad: "initialQty", mevcut: r.initialQty, gelen: input.initialQty },
+        ...(input.itemId ? [{ ad: "itemId", mevcut: r.itemId, gelen: input.itemId }] : []),
+        ...(input.colorId !== undefined ? [{ ad: "colorId", mevcut: r.colorId, gelen: input.colorId }] : []),
+      ],
+      collision: "Bu istemci anahtarı farklı bir topla kullanılmış. Formu yeniden açıp tekrar deneyin.",
+      collisionEk: (r) => ({ barcode: r.barcode }),
+      respond: (r) => ({
+        success: true,
+        data: {
+          rollId: r.id, barcode: r.barcode, itemId: r.itemId, colorId: r.colorId,
+          colorSource: r.step.workOrder.targetColorId ? "WORKORDER" : r.colorId ? "OPERATOR" : "NONE",
+          currentQty: Number(r.currentQty), targetStepId: r.step.id, workOrderNumber: r.step.workOrder.workOrderNumber,
+          alreadyAttached: true, reopenedWorkOrder: false, batchId: r.batch?.id ?? null, batchNumber: r.batch?.batchNumber ?? null,
+        },
+        message: `Top elle eklendi ve "${r.step.station.name}" adımına alındı${r.batch ? ` (parti: ${r.batch.batchNumber})` : ""}. Barkod: ${r.barcode}`,
+      }),
+    });
+  }
+
+  /**
+   * Kartsız bitmiş top — token replay'i tek boğazdan (R, TEPEDE): ön-okuma sebep/kat/etiket niyeti kapılarından ÖNCE.
+   * Replay yanıtı saklı etiket görüntüsünü yankılar (yeni gövdenin niyetini değil); ikinci CREATE audit yazılmaz.
+   */
+  async produceFinishedRoll(...args: Parameters<TamburManualService["produceFinishedRollFresh"]>): Promise<ApiResponse<unknown>> {
+    const [input] = args;
+    return this.finishedRollReplay(input).run(input.clientToken, () => this.produceFinishedRollFresh(...args));
+  }
+
+  private finishedRollReplay(input: { itemId: string; colorId?: string | null; initialQty: number }) {
+    const select = {
+      id: true, barcode: true, status: true, form: true, itemId: true, colorId: true, initialQty: true, currentQty: true,
+      qualityGrade: true, markedForKartela: true, lastLabelSnapshot: true,
+    } as const;
+    return tokenReplay<Prisma.RollGetPayload<{ select: typeof select }>, ApiResponse<unknown>>({
+      find: (db, clientToken) => db.roll.findUnique({ where: { clientToken }, select }),
+      alive: (r) => assertRollReplayAlive(r),
+      identity: (r) => [
+        { ad: "itemId", mevcut: r.itemId, gelen: input.itemId?.trim() },
+        { ad: "colorId", mevcut: r.colorId, gelen: input.colorId ?? null },
+        { ad: "initialQty", mevcut: r.initialQty, gelen: input.initialQty },
+      ],
+      collision: "Bu istemci anahtarı farklı bir topla kullanılmış. Formu yeniden açıp tekrar deneyin.",
+      collisionEk: (r) => ({ barcode: r.barcode }),
+      respond: (r) => ({
+        success: true,
+        data: {
+          rollId: r.id, barcode: r.barcode, status: r.status, form: r.form, itemId: r.itemId, colorId: r.colorId,
+          currentQty: Number(r.currentQty), qualityGrade: r.qualityGrade, markedForKartela: r.markedForKartela,
+          labelIntent: r.lastLabelSnapshot, idempotentReplay: true,
+        },
+        message: `Bu top zaten kayıtlıydı (tekrar deneme). Barkod: ${r.barcode}`,
+      }),
+    });
+  }
+
+  private async produceFinishedRollFresh(
     input: {
       itemId: string;
       colorId?: string | null;
@@ -1419,28 +1490,6 @@ export class TamburManualService {
     // okuma yalnız CEVABI dürüst etiketlemek için. Yarışta iki eşzamanlı istek de
     // "yeni" der; zararsız — top yine TEK doğar, `createInitialEntry` P2002'yi
     // yakalayıp mevcut kaydı döner.)
-    const priorRoll = await prisma.roll.findUnique({
-      where: { clientToken: input.clientToken },
-      select: { id: true, status: true, barcode: true },
-    });
-
-    // ⚠️ İPTAL EDİLMİŞ TOPUN TOKEN'I REPLAY EDİLEMEZ (2026-08-04).
-    //
-    // Eskiden bu dal yoktu: operatör Manuel Mod'la top ekler, sonra onu geri
-    // alır (CANCELLED), ardından aynı ekrandan "Tekrar Dene" derse istemci AYNI
-    // clientToken'ı gönderirdi. `createInitialEntry` unique çakışmasını yakalayıp
-    // MEVCUT (iptal edilmiş) topu döndürür, uç da `success: true` +
-    // `idempotentReplay: true` + O TOPUN BARKODU ile cevap verirdi. Operatör
-    // "top eklendi" görür, envanterde top YOKTUR — 409'dan daha kötüsü, çünkü
-    // sessizce yanlış bir cevaptır ve stok eksik kalır.
-    //
-    // Doğru cevap NET HATA: mantıksal deneme iptalle KAPANMIŞTIR; yeni top
-    // isteniyorsa yeni bir denemedir ve yeni token ister.
-    // ⚠️ Kural TEK KAYNAKTA (2026-08-29 / T1-006). Bu blok bu dosyada İKİ KEZ
-    // elle yazılmıştı ve diğer ÜÇ replay okuyucusunda (KK1 ham giriş · açık
-    // kumaş · sipariş) hiç yoktu — kopyalanabilir bir kural, kopyalanmadığı
-    // yerde sessizce yok demektir.
-    if (priorRoll) assertRollReplayAlive(priorRoll);
 
     let created;
     try {
@@ -1490,12 +1539,13 @@ export class TamburManualService {
       throw err;
     }
     const roll = created.data;
-    const idempotentReplay = priorRoll !== null;
+    // Yarışın kaybedeni de replay'dir: faz 1'in boğazı `idempotent: true` döndü → ikinci CREATE audit yazılmaz.
+    const idempotentReplay = created.idempotent === true;
 
     // Zincir-dışı doğumun KALICI sebep izi (iz #2). Tekrar denemede de yazılır —
     // "operatör bunu iki kez denedi" saha teşhisinde bilgidir; `idempotentReplay`
     // bayrağı satırı ayırt eder.
-    await AuditService.log({
+    if (!idempotentReplay) await AuditService.log({
       userId: ctx.userId,
       action: "CREATE",
       tableName: "ROLL",

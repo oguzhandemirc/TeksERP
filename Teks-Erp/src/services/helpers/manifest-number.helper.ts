@@ -49,16 +49,13 @@ const PRINT_SELECT = { id: true, manifestNo: true, printedAt: true, snapshot: tr
 /**
  * Çeki listesi basım kaydı: ilk basımda CL doğar ve basılan içerik donar; aynı içerik yeniden
  * basılınca aynı satır döner. Farklı içerik yeni CL alır, eski liste tarihte kalır (iptal edilmez —
- * kâğıt sahada zaten var). Yarış: içerik/token tekilliği P2002 verirse kazananın satırı okunur.
+ * kâğıt sahada zaten var). Token replay'i çağıranın boğazında (`printPickList`); burada yalnız içerik tekilliği.
  */
 export async function recordSackPickList(
   rows: ReadonlyArray<{ id: string }>,
   userId: string | undefined,
   clientToken: string,
 ): Promise<PickListPrint> {
-  const byToken = await prisma.manifest.findUnique({ where: { clientToken }, select: PRINT_SELECT });
-  if (byToken) return { ...byToken, reused: true };
-
   const contentKey = pickListContentKey(rows);
   const existing = await prisma.manifest.findUnique({ where: { contentKey }, select: PRINT_SELECT });
   if (existing) return { ...existing, reused: true };
@@ -92,9 +89,8 @@ export async function recordSackPickList(
     return { ...created, reused: false };
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const winner =
-        (await prisma.manifest.findUnique({ where: { clientToken }, select: PRINT_SELECT })) ??
-        (await prisma.manifest.findUnique({ where: { contentKey }, select: PRINT_SELECT }));
+      // İçerik yarışının kazananı (iş kuralı); token yarışı çağıranın boğazına düşer (`run` yeniden okur).
+      const winner = await prisma.manifest.findUnique({ where: { contentKey }, select: PRINT_SELECT });
       if (winner) return { ...winner, reused: true };
     }
     throw e;

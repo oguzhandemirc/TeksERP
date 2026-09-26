@@ -11,15 +11,16 @@
 //   çocuğunu "Kesim zaten kaydedilmiş" diye döndürür. 25 m HİÇ yazılmaz.
 //
 // §1 SAF KARAR      — yardımcının kendisi (Decimal tuzağı, null denkliği, boş liste)
-// §2 ENVANTER       — token'la replay okuyan HER servis ya kapıdan geçer ya
-//                     gerekçeli muaftır (İKİ YÖNLÜ: ölü/hayalet muaf da kırmızı)
+// §2 ENVANTER       — token OKUYAN her fonksiyon birimi boğaz politikasının içinde ya da beyanlıdır (yapısal;
+//                     ölü/hayalet satır `test_token_replay_bogaz` §2'de)
 // §3 UÇTAN UCA      — çuval açma: aynı token + FARKLI müşteri → 409;
 //                     aynı token + AYNI müşteri → 200 (bugünkü davranış korunur)
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
+import { tokenBirimleri } from "./lib/token-yazim-tarama";
+import { TOKEN_YOLLARI } from "./lib/token-replay-beyan";
 import {
   assertReplayPayloadMatches,
   replayAlaniAyni,
@@ -44,21 +45,6 @@ function hataKodu(fn: () => void): string {
     return String((e as { details?: { code?: string } }).details?.code ?? (e as Error).message);
   }
 }
-
-/**
- * Token'la replay OKUYAN servisler ve her birinin gövde kapısı durumu.
- * ⚠️ Muaf "kapı gerekmiyor" demektir — "gerekli ama geçsin" DEĞİL.
- */
-const MUAFLAR: Record<string, string> = {
-  "tambur-manual.service.ts":
-    "token yalnız 'bu deneme İPTAL edilmiş mi' (T1-006) sorusu için okunuyor; yanlış-durum hâlini FAZ 2 atomik claim'i zaten 409'luyor",
-  "import.service.ts":
-    "token bir ÇALIŞMA claim'i (ImportRun); farklı gövde hâli finishedAt/IMPORT_IN_PROGRESS ile kapalı (T1-008)",
-  "subcontractor.service.ts":
-    "⚠️ AÇIK BORÇ — fason kabulünde sunucu tarafı gövde kıyaslamıyor. İstemci tarafı 2026-08-31'de parmak izi + 10 dk penceresiyle kapatıldı (BULGU-T2-007); sunucu kapısı AYRI iş (kimlik = returns kümesi + receivedQty'ler, kısmi teslimatta meşruen tekrar eden top kümesiyle çakışmamalı)",
-};
-/** Kendi satır-içi F117 kopyasını taşıyanlar — ortaklaştırma ayrı iş. */
-const KENDI_KONTROLU = ["workorder.service.ts", "order.service.ts", "kartela.service.ts"];
 
 async function main(): Promise<void> {
   // ═══ §1 — SAF KARAR ═══
@@ -94,50 +80,24 @@ async function main(): Promise<void> {
     hataKodu(() => assertReplayPayloadMatches([], "m")).includes("boş olamaz"),
   );
 
-  // ═══ §2 — ENVANTER (iki yönlü) ═══
-  console.log("\n=== §2: token replay okuyan her servis ===");
-  const dizin = join(__dirname, "../src/services");
-  const dosyalar: string[] = [];
-  const gez = (d: string): void => {
-    for (const e of readdirSync(d, { withFileTypes: true })) {
-      if (e.isDirectory()) gez(join(d, e.name));
-      else if (e.name.endsWith(".service.ts")) dosyalar.push(join(d, e.name));
-    }
-  };
-  gez(dizin);
-  check("§2: servis dosyaları tarandı (körlük zemini)", dosyalar.length > 25, `${dosyalar.length} dosya`);
-
-  const okuyucular: string[] = [];
-  const kapisiz: string[] = [];
-  for (const yol of dosyalar) {
-    const src = readFileSync(yol, "utf8");
-    // Yorumlar ayıklanır — "kodu değil yorumu eşlemek" bu turda iki kez ısırdı.
-    const kod = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
-    if (!kod.includes("where: { clientToken")) continue;
-    const ad = yol.split("/").pop() as string;
-    okuyucular.push(ad);
-    // `tokenReplay` boğazı kapıyı içeride ZORUNLU taşır (yol başına ölçüm: `test_token_replay_bogaz`).
-    const kapili =
-      kod.includes("assertReplayPayloadMatches(") || kod.includes("CLIENT_TOKEN_COLLISION") || /\btokenReplay\s*[<(]/.test(kod);
-    if (!kapili && !(ad in MUAFLAR)) kapisiz.push(ad);
-  }
-  check("§2: replay okuyucusu bulundu (körlük zemini)", okuyucular.length >= 8, okuyucular.join(", "));
-  check(
-    "§2a: gövde kapısı olmayan replay okuyucusu YOK",
-    kapisiz.length === 0,
-    kapisiz.join(", ") || "hepsi kapılı ya da gerekçeli muaf",
-  );
-  const oluMuaf = Object.keys(MUAFLAR).filter((m) => !okuyucular.includes(m));
-  check("§2b: ölü muaf yok", oluMuaf.length === 0, oluMuaf.join(", ") || "muaf listesi güncel");
-  // Kendi kopyasını taşıyanlar gerçekten taşıyor mu (borç kaydı bayatlamasın).
-  const bozukBorc = KENDI_KONTROLU.filter(
-    (m) => !okuyucular.includes(m) || !readFileSync(join(dizin, m), "utf8").includes("CLIENT_TOKEN_COLLISION"),
-  );
-  check(
-    "§2c: 'kendi kontrolü var' listesi doğru",
-    bozukBorc.length === 0,
-    bozukBorc.join(", ") || KENDI_KONTROLU.join(", "),
-  );
+  // ═══ §2 — ENVANTER (yapısal; tarama `scripts/lib/token-yazim-tarama.ts`, beyan `scripts/lib/token-replay-beyan.ts`) ═══
+  // Dosya adıyla tutulan muaf listesi, dosya boğaza taşınınca "ölü muaf" diye kızarıyor ya da yanlış dosyada kalıp
+  // sessiz yeşil veriyordu. Ölçüt birim başınadır: token OKUYAN her fonksiyon birimi boğaz politikasının içindedir ya da
+  // beyanlı giriş/helper/muaftır; borç satırı kapısız sayılır.
+  console.log("\n=== §2: token okuyan her birim gövde kapısından geçer ===");
+  const tarama = tokenBirimleri(join(__dirname, ".."));
+  const politikaBirimleri = [...tarama.hepsi.values()].filter((b) => b.cagrilar.some((c) => c.ad === "tokenReplay"));
+  const politikaCagrilari = new Set(politikaBirimleri.flatMap((b) => b.cagrilar.map((c) => `${b.anahtar.split("::")[0]}::${c.ad}`)));
+  const okuyucular = tarama.token.filter((b) => b.okumalar.length > 0);
+  check("§2: token okuyan birim bulundu (körlük zemini)", okuyucular.length >= 15, `${okuyucular.length} birim`);
+  const kapisiz = okuyucular
+    .filter((b) => !politikaBirimleri.includes(b) && !politikaCagrilari.has(b.anahtar))
+    .filter((b) => {
+      const y = TOKEN_YOLLARI[b.anahtar];
+      return !y || "borc" in y;
+    })
+    .map((b) => b.anahtar);
+  check("§2a: ⭐ gövde kapısından geçmeyen token okuyucusu YOK (boğaz politikası ya da beyanlı giriş/helper/muaf)", kapisiz.length === 0, kapisiz.join(" · ") || "hepsi");
 
   // ═══ §3 — UÇTAN UCA (çuval açma) ═══
   console.log("\n=== §3: çuval açma — aynı token, farklı müşteri ===");

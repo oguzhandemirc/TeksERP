@@ -17,7 +17,7 @@
 // §2 Fire (SCRAP)      — aynı kapı ("vardı, gitti" de kapanmış bir denemedir)
 // §3 Sipariş           — iptal edilmiş siparişin token'ı → 409 ORDER_CANCELLED
 // §4 REGRESYON         — iptal EDİLMEMİŞ kaydın replay'i BAYT BAYT aynı
-// §5 Tek kaynak        — kural elle kopyalanmamış (AST/metin)
+// §5 Tek kaynak        — top okuyan her boğaz politikası 4. durumu tek yardımcıdan sorar; kod elle kopyalanmamış (AST)
 // §6 Sevkiyat          — iptal edilmiş sevkiyatın token'ı → 409 SHIPMENT_CANCELLED
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
@@ -26,6 +26,8 @@ import { RollStatus } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
+import * as tsAst from "typescript";
+import { tokenBirimleri } from "./lib/token-yazim-tarama";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
@@ -216,8 +218,27 @@ async function main(): Promise<void> {
     await temizlikSenaryo();
   }
 
-  // ═══ §5 — kural TEK KAYNAKTA, elle kopyalanmamış ═══
-  console.log("\n=== §5: tek kaynak (elle kopya yasağı) ===");
+  // ═══ §5 — kural TEK KAYNAKTA (AST; metin sayımı değil) ═══
+  // Politika `alive: (r) => assertRollReplayAlive(r)` ya da parantezsiz `alive: assertRollReplayAlive` yazabilir — metinde
+  // "assertRollReplayAlive(" aramak ikincisini görmezdi (sessiz körlük). Ölçüt yapısaldır: TOP okuyan her boğaz politikası
+  // 4. durumu tek kaynaktan sorar; `ENTRY_CANCELLED` kodu yalnız yardımcıda üretilir.
+  console.log("\n=== §5: tek kaynak (AST) ===");
+  const tarama = tokenBirimleri(join(__dirname, ".."));
+  const icerir = (n: tsAst.Node, eslesir: (k: tsAst.Node) => boolean): boolean => eslesir(n) || (tsAst.forEachChild(n, (k) => (icerir(k, eslesir) ? true : undefined)) ?? false);
+  const alan = (lit: tsAst.ObjectLiteralExpression, ad: string) =>
+    lit.properties.find((p): p is tsAst.PropertyAssignment => tsAst.isPropertyAssignment(p) && p.name.getText() === ad)?.initializer;
+  const topOkur = (k: tsAst.Node) =>
+    tsAst.isPropertyAccessExpression(k) && ["findUnique", "findFirst"].includes(k.name.text) && tsAst.isPropertyAccessExpression(k.expression) && k.expression.name.text === "roll";
+  const topPolitikalari = tarama.politikalar.filter((p) => {
+    const f = p.literal && alan(p.literal, "find");
+    return !!f && icerir(f, topOkur);
+  });
+  check("§5: top okuyan boğaz politikaları bulundu (körlük zemini)", topPolitikalari.length >= 5, topPolitikalari.map((p) => p.yer).join(", "));
+  const kuralsiz = topPolitikalari.filter((p) => {
+    const a = p.literal && alan(p.literal, "alive");
+    return !a || !icerir(a, (k) => tsAst.isIdentifier(k) && k.text === "assertRollReplayAlive");
+  });
+  check("§5: ⭐ top okuyan HER boğaz politikası 4. durumu tek kaynaktan sorar (assertRollReplayAlive)", kuralsiz.length === 0, kuralsiz.map((p) => p.yer).join(", ") || "hepsi");
   const svcDir = join(__dirname, "../src/services");
   const dosyalar: string[] = [];
   const gez = (d: string): void => {
@@ -228,20 +249,13 @@ async function main(): Promise<void> {
     }
   };
   gez(svcDir);
-  // KÖRLÜK ZEMİNİ: tarama boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı"
-  // aynı yeşile çıkardı.
   check("§5: servis ağacı tarandı (körlük zemini)", dosyalar.length > 40, `${dosyalar.length} dosya`);
   const kopya = dosyalar.filter((f) => {
     if (f.endsWith("token-replay.helper.ts")) return false;
-    return readFileSync(f, "utf8").includes('code: "ENTRY_CANCELLED"');
+    const sf = tsAst.createSourceFile(f, readFileSync(f, "utf8"), tsAst.ScriptTarget.Latest, true);
+    return icerir(sf, (k) => tsAst.isPropertyAssignment(k) && k.name.getText() === "code" && tsAst.isStringLiteral(k.initializer) && k.initializer.text === "ENTRY_CANCELLED");
   });
-  check(
-    "§5: `ENTRY_CANCELLED` yalnız TEK KAYNAKTA üretiliyor",
-    kopya.length === 0,
-    kopya.map((f) => f.split("/").pop()).join(", ") || "elle kopya yok",
-  );
-  const kullanan = dosyalar.filter((f) => readFileSync(f, "utf8").includes("assertRollReplayAlive("));
-  check("§5: kuralı KULLANAN yol sayısı beklenen (>=3 dosya)", kullanan.length >= 3, kullanan.map((f) => f.split("/").pop()).join(", "));
+  check("§5: `ENTRY_CANCELLED` yalnız TEK KAYNAKTA üretiliyor", kopya.length === 0, kopya.map((f) => f.split("/").pop()).join(", ") || "elle kopya yok");
 }
 
 async function cleanup(): Promise<void> {
