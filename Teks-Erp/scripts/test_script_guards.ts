@@ -155,10 +155,11 @@ const HEDEF_KURAN_TAVAN = 1;
  * **26 betik `--apply` alıyor, 18'i beyan etmiyor** → tavan 18. Yani taban
  * BÜYÜRKEN borç küçüldü: ratchet yalnız borcu dondurmuyor, davranışı da çekiyor.
  * Kalanlar: `setup-ticaret` + backfill/fix/repair ailesi (başkalarının dosyaları).
+ * Sonra 16: kurulum dilimi `backfill_roll_fold_and_reason`a `--onay/--hedef` kapısı taktı.
  *
  * ⚠️ Tavan yalnız DÜŞER — devralınan borç dondurulur, yeni borç kırmızı verir.
  */
-const APPLY_BEYANSIZ_TAVAN = 18;
+const APPLY_BEYANSIZ_TAVAN = 16;
 
 const MUAFLAR: Record<string, string> = {
   "test_db_invariants.ts":
