@@ -13,10 +13,13 @@
 //   §3 türetilmiş `yayin` alanları koddaki sabitlerle birebir (yayın kökü, VDS
 //      kökü, feed/manifest/künye yolu biçimi) + kaynak sabitler birbirleriyle aynı
 //   §4 işaretçiler + sabit kimlik: iki musteri.json, Electron/package.json,
-//      main.ts, index.html, splash.html, mobil/app.json `varsayilan` kanalla birebir;
-//      bilinmeyen kanal kodu KIRMIZI
+//      mobil/app.json `varsayilan` kanalla birebir; panel kaynağı (main.ts,
+//      index.html, splash.html, shared/channel.ts, build-channel.ts) kimliği KANALDAN
+//      alır, hiçbir kanalın literal kimliğini taşımaz; bilinmeyen kanal kodu KIRMIZI
 //   §5 yayın yolu ENVANTERİ: yayın/paketleme yapan her dosya beyanlı ve kapılı
 //      (kapısız ikinci yol = kırmızı; kapanmış borç beyanı da kırmızı — iki yönlü)
+//   §6 commit kapısı tetiği (`kanalBekcisiTetigi`) bu bekçinin okuduğu HER dosyayı
+//      kapsar ve açık listesinin her dosyası diskte vardır (tetik okunandan dar ya da ölü olamaz)
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ (okunamayan dosya, yeri değişmiş
 // sabit). Ölçülemeyen kapı geçmiş kapı değildir — 2 de sıfır-dışıdır.
@@ -33,16 +36,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import {
+  KANAL_BEKCI_DOSYALARI,
   KAYIT_REL,
   KOK,
   Olculemedi,
   PANEL_SABIT_DOSYALAR,
   TABLET_SABIT_DOSYALAR,
   YAYIN_ANAHTARLARI,
+  YAYIN_YOLU_DESENLERI,
   dosyalariOku,
+  kanalBekcisiTetigi,
   kayitAyristir,
   kayitHatalari,
   panelIsaretciFarki,
+  panelKaynakFarki,
   panelSabitKimlikFarki,
   tabletIsaretciFarki,
   tabletSabitKimlikFarki,
@@ -61,6 +68,8 @@ const DONMUS = {
     'panel.urunAdi': 'Adnan Şahin ERP',
     'panel.paketAdi': 'adnan-sahin-erp-admin',
     'panel.erpDisAdresi': 'https://adnansahin-erp.etkiliyazilim.com',
+    // Electron/.env.production (a84fa180) VITE_API_BASE_URL — paketin arayüzüne gömülü (ölçüldü: 1.3.3 derlemesi).
+    'panel.erpAdresi': 'http://192.168.1.250:4000',
     'tablet.androidPaket': 'com.teks.erp.mobil',
     'tablet.erpAdresi': 'http://192.168.1.250:4000/api',
     'tablet.otaSertifika': 'keystore/ota-certs/certificate.pem',
@@ -103,7 +112,8 @@ const KOD_KAYNAKLARI = [
   'deploy/electron-yayinla.sh',
   'deploy/mobil-yayinla.mjs',
 ];
-const OKUNAN = [...new Set([KAYIT_REL, KAPI_CLI, ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR, ...KOD_KAYNAKLARI, ...Object.keys(YAYIN_YOLLARI)])];
+const KAPI_KANCASI = 'scripts/hooks/pre-commit.mjs';
+const OKUNAN = [...new Set([KAYIT_REL, KAPI_CLI, KAPI_KANCASI, ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR, ...KOD_KAYNAKLARI, ...Object.keys(YAYIN_YOLLARI)])];
 
 /** Diskte yayın yolu keşfi — desen: deploy/ kökünde yayinla|paketle · mobil/scripts'te yayinla|apk. */
 function yayinDosyalariniBul(kok = KOK) {
@@ -116,7 +126,7 @@ function yayinDosyalariniBul(kok = KOK) {
       throw new Olculemedi(`${dizin} listelenemedi`);
     }
   };
-  return [...bul('deploy', /(yayinla|paketle)/i), ...bul('mobil/scripts', /(yayinla|apk)/i)].sort();
+  return YAYIN_YOLU_DESENLERI.flatMap((d) => bul(d.dizin, d.ad)).sort();
 }
 
 function yakala(d, rel, desen, neyi) {
@@ -129,14 +139,15 @@ function yakala(d, rel, desen, neyi) {
 /** Koddaki kaynak sabitler + yol BİÇİMLERİ. Biçim değiştiyse ÖLÇÜLEMEDİ (türetim sessizce kaymasın). */
 function sabitleriOlc(d, kirmizi) {
   const kokUF = yakala(d, 'Electron/shared/update-feed.ts', /export const UPDATE_BASE_URL = "([^"]+)";/, 'UPDATE_BASE_URL');
+  // Panelin çalışma anı adresi kaydın kendisidir (derleme anında); biçimini aşağıdaki türetim ölçer.
   yakala(d, 'Electron/shared/update-feed.ts',
-    /export const DEFAULT_UPDATE_FEED_URL = `\$\{UPDATE_BASE_URL\}\$\{MUSTERI_KODU\}\/electron\/`;/, 'panel feed biçimi');
+    /export const DEFAULT_UPDATE_FEED_URL: string = UPDATE_FEED_URL;/, 'panel feed kayıttan (UPDATE_FEED_URL)');
   const kokFeed = yakala(d, 'mobil/scripts/lib/feed.cjs', /const YAYIN_KOKU = '([^']+)';/, 'YAYIN_KOKU');
   yakala(d, 'mobil/scripts/lib/feed.cjs', /return `\$\{YAYIN_KOKU\}\$\{musteriKodu\}\/mobil\/`;/, 'feedUrl biçimi');
   yakala(d, 'mobil/scripts/lib/feed.cjs', /return `\$\{normalizeFeed\(feed\)\}ota\/\$\{runtimeVersion\}\/manifest`;/, 'manifestUrl biçimi');
   yakala(d, 'mobil/scripts/lib/feed.cjs', /return `\$\{normalizeFeed\(feed\)\}apk\/surum\.json`;/, 'apkKunyeUrl biçimi');
   const kokPaketle = yakala(d, 'deploy/electron-paketle.sh', /^BASE_URL="([^"]+)"$/m, 'BASE_URL');
-  yakala(d, 'deploy/electron-paketle.sh', /url: base \+ kod \+ '\/electron\/'/, 'publish adresi yazımı');
+  yakala(d, 'deploy/electron-paketle.sh', /^beklenen_url="\$\{BASE_URL\}\$\{musteri\}\/electron\/"$/m, 'beklenen adres türetimi');
   const kokYayinla = yakala(d, 'deploy/electron-yayinla.sh', /^BASE_URL="\$\{BASE_URL:-([^}]+)\}"$/m, 'BASE_URL');
   const vdsYayinla = yakala(d, 'deploy/electron-yayinla.sh', /^YAYIN_KOK="\$\{YAYIN_KOK:-([^}]+)\}"$/m, 'YAYIN_KOK');
   yakala(d, 'deploy/electron-yayinla.sh', /UZAK_DIZIN="\$\{UZAK_DIZIN:-\$YAYIN_KOK\/\$musteri\/electron\}"/, 'UZAK_DIZIN biçimi');
@@ -258,6 +269,7 @@ function olc(d, yayinDosyalari) {
     const on = (x) => `§4 ağaç ↔ varsayilan "${vk}": ${x}`;
     dene(() => kirmizi.push(...panelSabitKimlikFarki(varsayilan, d).map(on)));
     dene(() => kirmizi.push(...panelIsaretciFarki(vk, varsayilan, d).map(on)));
+    dene(() => kirmizi.push(...panelKaynakFarki(kayit, d).map((x) => `§4 panel kaynağı: ${x}`)));
     dene(() => kirmizi.push(...tabletSabitKimlikFarki(varsayilan, d).map(on)));
     dene(() => kirmizi.push(...tabletIsaretciFarki(vk, d).map(on)));
   }
@@ -292,6 +304,23 @@ function olc(d, yayinDosyalari) {
     if (beyan.sinif === 'kanal-disi') bilgi.push(`ℹ️  §5 kanal dışı: ${f} — ${beyan.gerekce}`);
   }
 
+  // §6 — tetik okunandan DAR olamaz (kapsanmayan okuma = kapıda görülmeyen değişiklik) ve ölü girdi taşımaz.
+  for (const f of [...OKUNAN, ...yayinDosyalari, 'scripts/check-kanallar.mjs']) {
+    if (!kanalBekcisiTetigi(f)) kirmizi.push(`§6 commit kapısı tetiği ${f} dosyasını KAPSAMIYOR — bekçi onu okuyor ama ona dokunan commit bekçiyi koşmaz`);
+  }
+  for (const f of KANAL_BEKCI_DOSYALARI) {
+    if (!fs.existsSync(path.join(KOK, f))) kirmizi.push(`§6 tetik listesinde ÖLÜ girdi: ${f} diskte yok`);
+  }
+  // Tetik kablolanmış mı: kanca tetiği kullanıyor ve İKİ bekçiyi de koşuyor (tanımlı ama bağlanmamış tetik kapı değildir).
+  const kanca = d[KAPI_KANCASI];
+  if (typeof kanca !== 'string') olculemedi.push(`${KAPI_KANCASI} okunamadı`);
+  else {
+    for (const [ne, iz] of [['tetik', 'staged.some(kanalBekcisiTetigi)'], ['kayıt bekçisi', '"scripts/check-kanallar.mjs"'],
+      ['yayın kapıları bekçisi', '"scripts/test_kanal_yayin_kapisi.mjs"']]) {
+      if (!kanca.includes(iz)) kirmizi.push(`§6 commit kancası kanal ${ne} kablosunu taşımıyor (${iz})`);
+    }
+  }
+
   // Kabuk kapısının gövdesi KOŞULSUZ koşmalı: "doğrudan mı çağrıldım" tespiti sembolik
   // bağlı yolda (macOS /var, /tmp) susup 0 döndü — fail-open. Tripwire: koşulsuz çağrı satırı.
   const cliKod = typeof d[KAPI_CLI] === 'string' ? d[KAPI_CLI].replace(/^\s*\/\/.*$/gm, '') : null;
@@ -322,7 +351,7 @@ function sondalar(taban, tabanYollar) {
     k.tur = tur;
     k.ad = `Kanal ${kod}`;
     for (const a of Object.keys(k.yayin)) k.yayin[a] = k.yayin[a].replaceAll('/adnansahin', `/${kod}`);
-    k.panel = { appId: `com.ornek.${kod}`, urunAdi: `Urun ${kod}`, paketAdi: `urun-${kod}`, erpDisAdresi: '' };
+    k.panel = { appId: `com.ornek.${kod}`, urunAdi: `Urun ${kod}`, paketAdi: `urun-${kod}`, erpDisAdresi: '', erpAdresi: `http://10.9.8.${kod.length}:4000` };
     k.tablet = { ...k.tablet, androidPaket: `com.ornek.${kod}`, gorunenAd: `Tablet ${kod}`,
       erpAdresi: `http://10.9.9.${kod.length}:4000/api`, otaSertifika: `keystore/ota-certs-${kod}/certificate.pem` };
     o.kanallar[kod] = k;
@@ -369,22 +398,35 @@ function sondalar(taban, tabanYollar) {
     ['N20 build-apk borcu kapandı ama beyan kaldı → KIRMIZI (iki yönlü)', 'kirmizi', (d) => { d['mobil/scripts/build-apk.mjs'] += `\n// ${KAPI_IZI}\n`; }],
     ['N21 kabuk yayıncıdan kanal kapısı çağrısı silindi (electron-yayinla.sh) → KIRMIZI', 'kirmizi', (d) => { d['deploy/electron-yayinla.sh'] = d['deploy/electron-yayinla.sh'].replaceAll(KAPI_CLI, 'scripts/baska.mjs'); }],
     ['N22 kapı CLI dosyasına giriş tespiti geri döndü (fail-open sınıfı) → KIRMIZI', 'kirmizi', (d) => { d[KAPI_CLI] = d[KAPI_CLI].replace('main(process.argv.slice(2));', 'if (process.argv[1] === fileURLToPath(import.meta.url)) main(process.argv.slice(2));'); }],
+    ['N23 main.ts AUMID yeniden literal (kanaldan değil) → KIRMIZI', 'kirmizi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('setAppUserModelId(APP_ID)', 'setAppUserModelId("com.etkiliyazilim.adnan-sahin-erp")'); }],
+    ['N24 main.ts pencere başlığı yeniden literal → KIRMIZI', 'kirmizi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('title: WINDOW_TITLE,', 'title: "Adnan Şahin ERP",'); }],
+    ['N25 main.ts sayfa başlığının pencere başlığını ezmesi açıldı (page-title-updated kalktı) → KIRMIZI', 'kirmizi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('mainWindow.on("page-title-updated", (event) => event.preventDefault());', ''); }],
+    ['N26 index.html <title> yeniden literal ürün adı → KIRMIZI', 'kirmizi', (d) => { d['Electron/index.html'] = d['Electron/index.html'].replace('<title>%TEKSERP_WINDOW_TITLE%</title>', '<title>Adnan Şahin ERP</title>'); }],
+    ['N27 musteri.json yeniden kimlik kopyası taşıyor (ad) → KIRMIZI', 'kirmizi', (d) => jd(d, 'Electron/shared/musteri.json', (o) => { o.ad = 'Adnan Şahin Tekstil'; })],
+    ['N28 iki kanal aynı panel.erpAdresi (varsayılan sunucu) → KIRMIZI', 'kirmizi', kayitta((o) => { tf(o).panel.erpAdresi = 'http://192.168.1.250:4000'; })],
+    ['N29 adnansahin panel.erpAdresi kayıtta "düzeltildi" → KIRMIZI (DONMUŞ)', 'kirmizi', kayitta((o) => { as(o).panel.erpAdresi = 'http://192.168.1.251:4000'; })],
+    ['N30 build-channel.ts kayıt defterini okumuyor → KIRMIZI', 'kirmizi', (d) => { d['Electron/build-channel.ts'] = d['Electron/build-channel.ts'].replaceAll('deploy/kanallar.json', 'shared/baska.json'); }],
+    ['N31 splash.html <title> yeniden kanal ürün adı taşıyor → KIRMIZI', 'kirmizi', (d) => { d['Electron/resources/splash.html'] = d['Electron/resources/splash.html'].replace('<title>TeksERP</title>', '<title>TeksERP Test Fabrika</title>'); }],
+    ['N32 shared/channel.ts kimliği sanal modülden değil (elle yazılmış) → KIRMIZI', 'kirmizi', (d) => { d['Electron/shared/channel.ts'] = d['Electron/shared/channel.ts'].replace('from "virtual:tekserp-channel"', 'from "./elle-kimlik"'); }],
+    ['N33 bekçinin okuduğu bir yayın yolu commit tetiğinin DIŞINDA → KIRMIZI (§6)', 'kirmizi', (d, y) => { y.push('Electron/yayinla-panel.sh'); }, '§6'],
+    ['N34 commit kancasından kanal adımı söküldü → KIRMIZI (§6)', 'kirmizi', (d) => { d[KAPI_KANCASI] = d[KAPI_KANCASI].replace('staged.some(kanalBekcisiTetigi)', 'false'); }, '§6'],
     ['O1 kayıt defteri bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 update-feed.ts UPDATE_BASE_URL adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/shared/update-feed.ts'] = d['Electron/shared/update-feed.ts'].replace('export const UPDATE_BASE_URL', 'export const YAYIN_KOKU_URL'); }],
-    ['O3 main.ts setAppUserModelId literal kalktı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('setAppUserModelId("com.etkiliyazilim.adnan-sahin-erp")', 'setAppUserModelId(APP_ID)'); }],
+    ['O3 main.ts setAppUserModelId çağrısı kalktı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('app.setAppUserModelId(APP_ID);', 'void 0;'); }],
     ['O4 mobil/musteri.json yok → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['mobil/musteri.json'] = undefined; }],
   ];
 
   let gecti = 0;
   const kaldi = [];
-  for (const [ad, beklenen, mutasyon] of S) {
+  for (const [ad, beklenen, mutasyon, iz] of S) {
     const d = { ...taban };
     const y = [...tabanYollar];
     mutasyon(d, y);
     const degisti = ad.startsWith('P0') || Object.keys(taban).some((k) => d[k] !== taban[k]) || y.length !== tabanYollar.length;
     const s = olc(d, y);
     const h = hukum(s);
-    const ok = degisti && h === beklenen;
+    // `iz`: hüküm DOĞRU bölümden gelmeli (başka bir kolun kırmızısı sondayı sahte geçirmesin).
+    const ok = degisti && h === beklenen && (!iz || [...s.kirmizi, ...s.olculemedi].some((x) => x.includes(iz)));
     if (ok) gecti += 1;
     else kaldi.push(ad);
     const neden = [...s.olculemedi, ...s.kirmizi][0];

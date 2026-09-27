@@ -22,12 +22,16 @@ import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { buildChannelCode, channelPlugin, panelChannel } from "./build-channel";
 
 /** Renderer sürümü — `X-Client-Version` başlığına gömülür (`src/lib/client-info.ts`); dev ve build'de aynı. */
 const APP_VERSION = (JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8")) as { version: string }).version;
 
+/** Kanal kimliği (başlık · dış adres) kayıttan — `TEKSERP_KANAL` yoksa dinlenme işaretçisi; bkz. build-channel.ts. */
+const channel = panelChannel(buildChannelCode(process.env));
+
 export default defineConfig(({ command }) => ({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), channelPlugin(channel)],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -42,15 +46,12 @@ export default defineConfig(({ command }) => ({
             process.env.VITE_WEB_API_BASE_URL ?? "",
           ),
           // Fabrikanın DIŞ adresi — iki adımlı doğrulama kurulum bağlantısı
-          // bununla üretilir. `shared/musteri.json` TEK KAYNAK; komut satırından
-          // yazdırmak, bir yazım hatasının sessizce çalışmayan bir bağlantı
-          // üretmesi demekti (yönetici bağlantıyı gönderir, kullanıcıda açılmaz).
+          // bununla üretilir. Kanal kaydı (`deploy/kanallar.json` → panel.erpDisAdresi)
+          // TEK KAYNAK; komut satırından yazdırmak, bir yazım hatasının sessizce
+          // çalışmayan bir bağlantı üretmesi demekti (yönetici bağlantıyı gönderir,
+          // kullanıcıda açılmaz).
           "import.meta.env.VITE_PUBLIC_APP_URL": JSON.stringify(
-            process.env.VITE_PUBLIC_APP_URL ??
-              (JSON.parse(
-                readFileSync(new URL("./shared/musteri.json", import.meta.url), "utf-8"),
-              ) as { erpAdresi?: string }).erpAdresi ??
-              "",
+            process.env.VITE_PUBLIC_APP_URL ?? channel.publicErpUrl,
           ),
         }
       : {}),

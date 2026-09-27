@@ -8,6 +8,7 @@
 #   ./deploy/electron-yayinla.sh --musteri=adnansahin             # paketin sürümüne yayınla
 #   ./deploy/electron-yayinla.sh --musteri=adnansahin 2.8.1       # belirli sürümü yayınla
 #   ./deploy/electron-yayinla.sh --musteri=adnansahin --dogrula   # YÜKLEME YOK — yayını denetle
+#   ./deploy/electron-yayinla.sh --musteri=testfabrika --kuru     # AĞ YOK — yerel kapılar + yükleme planı
 # Reçete: docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md
 #
 # Script'in asıl işi YÜKLEME SIRASINI korumaktır: `latest.yml` EN SON gider.
@@ -40,11 +41,13 @@ hata() { echo "HATA: $*" >&2; exit 1; }
 # --- Argümanlar ------------------------------------------------------------
 musteri=""
 denetim_kipi=0
+kuru=0
 surum_arg=""
 for a in "$@"; do
   case "$a" in
     --musteri=*) musteri="${a#--musteri=}" ;;
     --dogrula) denetim_kipi=1 ;;
+    --kuru) kuru=1 ;;
     -*) hata "Tanınmayan seçenek: $a" ;;
     *)
       [ -z "$surum_arg" ] || hata "Fazla argüman: $a"
@@ -52,6 +55,8 @@ for a in "$@"; do
       ;;
   esac
 done
+
+[ "$kuru" = "1" ] && [ "$denetim_kipi" = "1" ] && hata "--kuru ile --dogrula birlikte verilemez (--dogrula yayına bakar, --kuru hiç ağa çıkmaz)."
 
 [ -n "$musteri" ] || hata "HANGİ KANALA YAYINLANIYOR? --musteri=<kod> zorunlu.
   Hedef klasör paketin kimliğinden çözülür; argüman niyettir ve onunla birebir olmalı.
@@ -119,6 +124,17 @@ if [ "$denetim_kipi" = "0" ]; then
 
   mb=$(( $(wc -c < "$setup") / 1024 / 1024 ))
   echo "Yüklenecek: TeksERP-$surum-Setup.exe (${mb} MB) + blockmap + latest.yml"
+
+  # --- KURU KİP: yerel kapıların hepsi geçti; hiçbir ağ/ssh/scp/curl/etiket işi yok ---
+  if [ "$kuru" = "1" ]; then
+    echo "[kuru] hedef      : $SSH_HEDEF:$UZAK_DIZIN/"
+    echo "[kuru] sıra       : 1) TeksERP-$surum-Setup.exe + .blockmap  2) latest.yml (EN SON)"
+    echo "[kuru] yayın adresi: $YAYIN_URL/latest.yml"
+    echo "[kuru] defter     : $(dirname "$YAYIN_KOK")/defter/$musteri-YAYIN-DEFTERI.tsv"
+    echo "[kuru] değişmezlik · sha512 · dış doğrulama · budama · panel-v$surum etiketi ATLANDI (ağ gerektirir)"
+    echo "KURU — paket '$musteri' kanalının; yükleme yapılmadı."
+    exit 0
+  fi
 
   # --- DEĞİŞMEZLİK KAPISI ------------------------------------------------
   # Yayınlanmış bir sürümün dosyaları ÜZERİNE YAZILMAZ. Aynı numarayla farklı

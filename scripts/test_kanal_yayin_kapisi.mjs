@@ -8,17 +8,22 @@
 //   curl    → yalnız guncelleme.etkiliyazilim.com, sahte uzaktan cevaplanır; başka her
 //             adres KIRMIZI (ağa çıkma girişimi)
 //   git     → okuma serbest, `tag -a`/`push` ENGELLENİR ve kaydedilir
-//   npm     → `run build:win*` electron-builder'ın KİMLİK çıktılarını package.json'dan
-//             üretir (app-update.yml url + updaterCacheDirName, exe adı, latest.yml)
+//   npm     → `run build:win*` iki derleyicinin KİMLİK çıktılarını üretir: electron-builder
+//             package.json + `-c.*` argümanlarından (app-update.yml url + updaterCacheDirName,
+//             exe adı, latest.yml, paketin package.json'ı — extraMetadata), electron-vite
+//             `TEKSERP_KANAL` (yoksa işaretçi) + kayıttan (app.asar içinde main.js AUMID/adres,
+//             arayüzün varsayılan sunucusu/etiketi/başlığı)
 //   npx     → kaydedilir, 0 döner (paketlemenin vitest adımı; ayrı bekçisi var)
 // Kabuk betikleri (electron-*.sh) geçici bir ağaç KOPYASINDA koşar — gerçek
 // `Electron/release/`e ve musteri.json'a dokunulmaz. mobil-yayinla.mjs `--kuru`,
 // yayinla-ota.mjs `--check` ile gerçek ağaçtan koşar (ikisi de o kiplerde yazmaz).
 //
 // NE ÖLÇER:
-//   §1 electron-yayinla.sh — hedef PAKETİN kimliğinden; niyet (--musteri) ≠ paket → ssh'tan ÖNCE dur
-//   §2 electron-paketle.sh — bilinmeyen kanal / kimliği ağaçta olmayan kanal → hiçbir dosya yazılmadan dur;
-//      adnansahin paketlemesi dinlenmedeki dosyaları BAYT BAYT aynı bırakır, çıktı release/<kod>/<sürüm>
+//   §1 electron-yayinla.sh — hedef PAKETİN kimliğinden; niyet (--musteri) ≠ paket → ssh'tan ÖNCE dur;
+//      paketin İÇİ (asar package.json · ana süreç · arayüz) başka kanalınsa dur; --kuru ağa hiç çıkmaz
+//   §2 electron-paketle.sh — bilinmeyen kanal → hiçbir dosya yazılmadan dur; kimlik derleme ANINDA
+//      enjekte edilir: testfabrika paketi kendi kimliğiyle doğar, iki paketleme de dinlenmedeki
+//      dosyaları BAYT BAYT aynı bırakır; enjeksiyonun iki bacağından biri düşerse paket DURUR
 //   §3 mobil-yayinla.mjs — OTA künye/bundle ve APK bundle ERP adresi kanalın adresi değilse dur;
 //      okunamayan bundle/manifest ÖLÇÜLEMEDİ = dur; --kuru etiket atmaz
 //   §4 yayinla-ota.mjs — çözülen ERP adresi kanalın değilse ağdan ÖNCE dur
@@ -36,9 +41,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { kanalCoz, tabletSabitKimlikFarki, panelSabitKimlikFarki, dosyalariOku, TABLET_SABIT_DOSYALAR, PANEL_SABIT_DOSYALAR } from './lib/kanallar.mjs';
+import {
+  asarOku, kanalBekcisiTetigi, kanalCoz, tabletSabitKimlikFarki, panelSabitKimlikFarki, panelDerlemeAyarlari, dosyalariOku,
+  TABLET_SABIT_DOSYALAR, PANEL_SABIT_DOSYALAR,
+} from './lib/kanallar.mjs';
 import { bundleAdresOlcumu } from '../mobil/scripts/lib/adres.mjs';
 import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
 
@@ -136,26 +144,87 @@ if (arac === 'git') {
 }
 if (arac === 'npx') { yaz({ args: a.join(' ') }); process.exit(0); }
 if (arac === 'npm') {
-  yaz({ args: a.join(' ') });
+  yaz({ args: a.join(' '), kanal: process.env.TEKSERP_KANAL || null });
   if (a[0] !== 'run' || !/^build:win/.test(a[1] ?? '')) process.exit(0);
   const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-  const cikti = p.build.directories.output.replaceAll('$' + '{version}', p.version);
+  // electron-builder: package.json build + '-c.<yol>=<değer>' (publish.* ilk girdiye, extraMetadata paketin package.json'ına)
+  const cfg = JSON.parse(JSON.stringify(p.build));
+  const meta = { name: p.name, productName: p.productName, version: p.version, description: p.description, main: p.main };
+  for (const x of a.slice(2)) {
+    const m = /^-c\.([^=]+)=([\s\S]*)$/.exec(x);
+    if (!m) continue;
+    const yol = m[1].split('.');
+    if (yol[0] === 'extraMetadata') { meta[yol[1]] = m[2]; continue; }
+    if (yol[0] === 'publish') { cfg.publish[0][yol[1]] = m[2]; continue; }
+    let o = cfg;
+    for (const k of yol.slice(0, -1)) o = o[k] = o[k] || {};
+    o[yol[yol.length - 1]] = m[2];
+  }
+  const urun = cfg.productName || meta.productName;
+  const cikti = cfg.directories.output.replaceAll('$' + '{version}', meta.version);
   const res = path.join(cikti, 'win-unpacked', 'resources');
   fs.mkdirSync(res, { recursive: true });
   fs.writeFileSync(path.join(res, 'app-update.yml'),
-    'provider: generic\nurl: ' + p.build.publish[0].url + '\nchannel: latest\nupdaterCacheDirName: ' + p.name + '-updater\n');
-  fs.writeFileSync(path.join(cikti, 'win-unpacked', p.build.productName + '.exe'), 'SAHTE ' + p.name);
-  const exe = 'TeksERP-' + p.version + '-Setup.exe';
-  const govde = Buffer.from('SAHTE-SETUP ' + p.name + ' ' + p.version + ' ' + p.build.publish[0].url);
+    'provider: generic\nurl: ' + cfg.publish[0].url + '\nchannel: latest\nupdaterCacheDirName: ' + meta.name + '-updater\n');
+  fs.writeFileSync(path.join(cikti, 'win-unpacked', urun + '.exe'), 'SAHTE ' + meta.name);
+  // electron-vite: kanal TEKSERP_KANAL ya da dinlenme işaretçisi → kayıttan gömülen kimlik
+  // Kayıt öncesi bir ref'te (--eski) ağaçta kayıt yok: o ref'in gömdüğü kimlik bugünkü kaydın aynı kanalıdır.
+  const kayitYolu = fs.existsSync('../deploy/kanallar.json') ? '../deploy/kanallar.json' : process.env.KANAL_KAYDI_YEDEK;
+  const kayit = JSON.parse(fs.readFileSync(kayitYolu, 'utf8'));
+  const kod = process.env.TEKSERP_KANAL || JSON.parse(fs.readFileSync('shared/musteri.json', 'utf8')).kod;
+  const { asarYaz, gomuluKimlik } = await import(process.env.ASAR_YAZ);
+  asarYaz(path.join(res, 'app.asar'), gomuluKimlik(kayit.kanallar[kod], meta));
+  const exe = 'TeksERP-' + meta.version + '-Setup.exe';
+  const govde = Buffer.from('SAHTE-SETUP ' + meta.name + ' ' + meta.version + ' ' + cfg.publish[0].url);
   fs.writeFileSync(path.join(cikti, exe), govde);
   fs.writeFileSync(path.join(cikti, exe + '.blockmap'), 'SAHTE-BLOCKMAP');
   const sha = crypto.createHash('sha512').update(govde).digest('base64');
   fs.writeFileSync(path.join(cikti, 'latest.yml'),
-    'version: ' + p.version + '\nfiles:\n  - url: ' + exe + '\n    sha512: ' + sha + '\n    size: ' + govde.length + '\npath: ' + exe + '\nsha512: ' + sha + '\n');
+    'version: ' + meta.version + '\nfiles:\n  - url: ' + exe + '\n    sha512: ' + sha + '\n    size: ' + govde.length + '\npath: ' + exe + '\nsha512: ' + sha + '\n');
   process.exit(0);
 }
 process.exit(97);
 `);
+// Asar yazıcı + "electron-vite ne gömer" taklidi — sahte derleyici ve testin kendisi AYNI dosyayı kullanır.
+const ASAR_YAZ = path.join(GECICI, 'asar-yaz.mjs');
+fs.writeFileSync(ASAR_YAZ, String.raw`
+import fs from 'node:fs';
+export function asarYaz(yol, dosyalar) {
+  const baslik = { files: {} };
+  const parcalar = [];
+  let ofset = 0;
+  for (const [p, icerik] of Object.entries(dosyalar)) {
+    const b = Buffer.from(icerik);
+    const yp = p.split('/');
+    let n = baslik;
+    for (const d of yp.slice(0, -1)) n = (n.files[d] = n.files[d] || { files: {} });
+    n.files[yp[yp.length - 1]] = { size: b.length, offset: String(ofset) };
+    parcalar.push(b);
+    ofset += b.length;
+  }
+  const json = Buffer.from(JSON.stringify(baslik));
+  const hizali = (json.length + 3) & ~3;
+  const tursu = Buffer.alloc(8 + hizali);
+  tursu.writeUInt32LE(4 + hizali, 0);
+  tursu.writeUInt32LE(json.length, 4);
+  json.copy(tursu, 8);
+  const bas = Buffer.alloc(8);
+  bas.writeUInt32LE(4, 0);
+  bas.writeUInt32LE(tursu.length, 4);
+  fs.writeFileSync(yol, Buffer.concat([bas, tursu, ...parcalar]));
+}
+/** Bir kanalla derlenen panelin asar içeriği: paketin package.json'ı + gömülü kimlik dizeleri. */
+export function gomuluKimlik(k, meta) {
+  const baslik = k.gorunurEtiket ? k.gorunurEtiket + ' · ' + k.panel.urunAdi : k.panel.urunAdi;
+  return {
+    'package.json': JSON.stringify(meta),
+    'out/main/main.js': 'const appId = "' + k.panel.appId + '"; const updateFeedUrl = "' + k.yayin.panelFeed + '"; const windowTitle = "' + baslik + '";',
+    'out/renderer/index.html': '<title>' + baslik + '</title>',
+    'out/renderer/assets/index-sahte.js': 'const erpUrl = "' + k.panel.erpAdresi + '"; const label = ' + JSON.stringify(k.gorunurEtiket) + ';',
+  };
+}
+`);
+const { asarYaz, gomuluKimlik } = await import(pathToFileURL(ASAR_YAZ).href);
 const BIN = path.join(GECICI, 'bin');
 fs.mkdirSync(BIN);
 for (const arac of ['ssh', 'scp', 'curl', 'git', 'npm', 'npx']) {
@@ -195,6 +264,8 @@ function kos(o, komut, argumanlar, { cwd, girdi } = {}) {
       GERCEK_GIT,
       SSH_HEDEF: 'sahte-hedef',
       GIT_CEILING_DIRECTORIES: GECICI,
+      ASAR_YAZ: pathToFileURL(ASAR_YAZ).href,
+      KANAL_KAYDI_YEDEK: path.join(KOK, 'deploy/kanallar.json'),
     },
   });
   return { kod: r.status, cikti: `${r.stdout ?? ''}${r.stderr ?? ''}` };
@@ -237,10 +308,18 @@ function agacKur(o, { ref = null } = {}) {
 }
 
 /** Sahte panel derlemesi — electron-builder'ın kimlik taşıyan çıktıları. */
-function panelArtefakti(dizin, { url, cache, exe, surum }) {
+const KAYIT = JSON.parse(fs.readFileSync(path.join(KOK, 'deploy/kanallar.json'), 'utf8'));
+function panelArtefakti(dizin, { url, cache, exe, surum, ic = 'adnansahin', icMutasyon = null, asarYok = false }) {
   const res = path.join(dizin, 'win-unpacked', 'resources');
   fs.mkdirSync(res, { recursive: true });
   if (url) fs.writeFileSync(path.join(res, 'app-update.yml'), `provider: generic\nurl: ${url}\nchannel: latest\nupdaterCacheDirName: ${cache}\n`);
+  // Paketin İÇİ (asar): hangi kanalla derlendiyse onun kimliği; `icMutasyon` karışık kimliği kurar.
+  if (!asarYok) {
+    const k = KAYIT.kanallar[ic];
+    const icerik = gomuluKimlik(k, { name: k.panel.paketAdi, productName: k.panel.urunAdi, version: surum });
+    if (icMutasyon) icMutasyon(icerik);
+    asarYaz(path.join(res, 'app.asar'), icerik);
+  }
   fs.writeFileSync(path.join(dizin, 'win-unpacked', exe), 'exe');
   const ad = `TeksERP-${surum}-Setup.exe`;
   const govde = crypto.randomBytes(4096);
@@ -251,7 +330,7 @@ function panelArtefakti(dizin, { url, cache, exe, surum }) {
     `version: ${surum}\nfiles:\n  - url: ${ad}\n    sha512: ${sha}\n    size: ${govde.length}\npath: ${ad}\nsha512: ${sha}\n`);
 }
 const ADNANSAHIN_PANEL = { url: `${YAYIN_HOST}adnansahin/electron/`, cache: 'adnan-sahin-erp-admin-updater', exe: 'Adnan Şahin ERP.exe' };
-const TESTFABRIKA_PANEL = { url: `${YAYIN_HOST}testfabrika/electron/`, cache: 'teks-erp-testfabrika-updater', exe: 'TeksERP Test Fabrika.exe' };
+const TESTFABRIKA_PANEL = { url: `${YAYIN_HOST}testfabrika/electron/`, cache: 'teks-erp-testfabrika-updater', exe: 'TeksERP Test Fabrika.exe', ic: 'testfabrika' };
 
 /** Uzaktaki dosyalar (yol → sha256) — yüklemenin ETKİSİ. */
 function uzakAgaci(o) {
@@ -291,10 +370,13 @@ function iz(o) {
 
 console.log('\n§1 — electron-yayinla.sh: hedef paketin kimliğinden, ssh\'tan ÖNCE');
 
+// `--eski=<ref>`: ref'teki yayıncı `--musteri` biliyor mu (D1+) — bilmiyorsa argümansız + release/<sürüm> düzeni.
+const ESKI_KANALLI = ESKI ? gitGoster(ESKI, 'deploy/electron-yayinla.sh').includes('--musteri=') : false;
+
 function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artefakt = ADNANSAHIN_PANEL, dizin = 'adnansahin', surum = '9.9.9', ekArg = [] } = {}) {
   const o = ortam();
   const agac = agacKur(o, { ref });
-  const rel = ref ? path.join(agac, 'Electron/release', surum) : path.join(agac, 'Electron/release', dizin, surum);
+  const rel = ref && !ESKI_KANALLI ? path.join(agac, 'Electron/release', surum) : path.join(agac, 'Electron/release', dizin, surum);
   if (artefakt) panelArtefakti(rel, { ...artefakt, surum });
   const args = [musteriArg, surum, ...ekArg].filter(Boolean);
   const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), args, { cwd: agac });
@@ -324,11 +406,11 @@ function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artef
     o.cagrilar().filter((c) => c.arac === 'curl').every((c) => c.url.startsWith(`${YAYIN_HOST}adnansahin/electron/`)));
 
   if (ESKI) {
-    const e = yayinSenaryosu({ ref: ESKI, musteriArg: null });
+    const e = yayinSenaryosu({ ref: ESKI, musteriArg: ESKI_KANALLI ? '--musteri=adnansahin' : null });
     const izEski = iz(e.o);
     const izYeni = iz(o);
     const fark = izEski.length !== izYeni.length ? ['uzunluk'] : izEski.filter((s, i) => s !== izYeni[i]);
-    ol(`1a⇄${ESKI} ESKİ betik (argümansız, ağaçtaki musteri.json) ile YENİ betik (--musteri) aynı izi bırakır`,
+    ol(`1a⇄${ESKI} ESKİ betik (${ESKI_KANALLI ? '--musteri' : 'argümansız, ağaçtaki musteri.json'}) ile YENİ betik (--musteri) aynı izi bırakır`,
       e.r.kod === 0 && fark.length === 0, `eski çıkış ${e.r.kod}\nESKİ:\n${izEski.join('\n')}\nYENİ:\n${izYeni.join('\n')}`);
     const uE = Object.keys(uzakAgaci(e.o)).sort();
     ol(`1a⇄${ESKI} uzaktaki dosya kümesi aynı`, uE.join(',') === Object.keys(u).sort().join(','), `${uE.join('\n')}\n--\n${Object.keys(u).sort().join('\n')}`);
@@ -340,7 +422,7 @@ function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artef
   const { o, r } = yayinSenaryosu({ artefakt: TESTFABRIKA_PANEL, dizin: 'adnansahin' });
   ol('1b testfabrika paketi + --musteri=adnansahin → DUR, ssh/scp SIFIR',
     r.kod !== 0 && agText(o).length === 0 && /testfabrika/.test(r.cikti), r.cikti.slice(-500));
-  if (ESKI) {
+  if (ESKI && !ESKI_KANALLI) {
     // GEREKÇE ÖLÇÜMÜ (kapı gerekli mi): eski betik aynı paketi ne yapıyordu?
     const e = yayinSenaryosu({ ref: ESKI, musteriArg: null, artefakt: TESTFABRIKA_PANEL });
     const yuklenen = e.o.cagrilar().filter((c) => c.arac === 'scp').map((c) => c.hedef);
@@ -387,56 +469,172 @@ function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artef
   const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '--dogrula'], { cwd: agac });
   ol('1i --dogrula (salt denetim) → çıkış 0, ssh/scp SIFIR', r.kod === 0 && agText(o).length === 0 && /OK — yayında: 9\.9\.8/.test(r.cikti), r.cikti.slice(-400));
 }
+const agSifir = (o) => o.cagrilar().filter((c) => ['ssh', 'scp', 'curl'].includes(c.arac) || c.ENGELLENDI).length === 0;
+{
+  const { o, r } = yayinSenaryosu({ musteriArg: '--musteri=testfabrika', artefakt: TESTFABRIKA_PANEL, dizin: 'testfabrika', ekArg: ['--kuru'] });
+  ol('1j --kuru: testfabrika paketi + --musteri=testfabrika → KABUL (çıkış 0), ssh/scp/curl/etiket SIFIR, plan testfabrika klasörü',
+    r.kod === 0 && agSifir(o) && /KURU — paket 'testfabrika' kanalının/.test(r.cikti) && r.cikti.includes(`${VDS}/html/testfabrika/electron/`),
+    r.cikti.slice(-600));
+}
+{
+  const { o, r } = yayinSenaryosu({ artefakt: TESTFABRIKA_PANEL, dizin: 'adnansahin', ekArg: ['--kuru'] });
+  ol('1k --kuru: aynı testfabrika paketi + --musteri=adnansahin → DUR, ağ SIFIR', r.kod !== 0 && agSifir(o) && /KANALININ DEĞİL/.test(r.cikti), r.cikti.slice(-500));
+}
+{
+  const { o, r } = yayinSenaryosu({ ekArg: ['--kuru', '--dogrula'] });
+  ol('1l --kuru ile --dogrula birlikte → DUR (biri ağa bakar, öbürü hiç çıkmaz)', r.kod !== 0 && agSifir(o) && /birlikte verilemez/.test(r.cikti), r.cikti.slice(-300));
+}
+{
+  // Paketin İÇİ başka kanalın: productName → userData dizini (aynı makinede iki kanal aynı veriyi paylaşır).
+  const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, icMutasyon: (ic) => {
+    const pk = JSON.parse(ic['package.json']);
+    pk.productName = 'TeksERP Test Fabrika';
+    ic['package.json'] = JSON.stringify(pk);
+  } } });
+  ol('1m paketin package.json productName (userData) başka kanalın → DUR, ssh/scp SIFIR', r.kod !== 0 && agText(o).length === 0 && /productName/.test(r.cikti), r.cikti.slice(-500));
+}
+{
+  // app-update.yml + exe fabrikanın, ama ana süreç (AUMID · çalışma anı adresi) testfabrika ile derlenmiş.
+  const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, icMutasyon: (ic) => {
+    ic['out/main/main.js'] = gomuluKimlik(KAYIT.kanallar.testfabrika, {})['out/main/main.js'];
+  } } });
+  ol('1n ana süreç başka kanalın AUMID/adresini taşıyor (karışık derleme) → DUR, ssh/scp SIFIR',
+    r.kod !== 0 && agText(o).length === 0 && /ana süreç/.test(r.cikti) && /testfabrika/.test(r.cikti), r.cikti.slice(-600));
+}
+{
+  const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, asarYok: true } });
+  ol('1o paket arşivi (app.asar) yok → ÖLÇÜLEMEDİ, ssh/scp SIFIR', r.kod !== 0 && agText(o).length === 0 && /ÖLÇÜLEMEDİ/.test(r.cikti), r.cikti.slice(-300));
+}
 
 /* ------------------------------------------------------------------ *
  * §2 electron-paketle.sh (sahte derleyici)
  * ------------------------------------------------------------------ */
 
-console.log('\n§2 — electron-paketle.sh: dosya yazmadan kanal kapısı, çıktı kanala ayrık');
+console.log('\n§2 — electron-paketle.sh: dosya yazmadan kanal kapısı, kimlik derleme anında, çıktı kanala ayrık');
 
-const IZLENEN = ['Electron/package.json', 'Electron/shared/musteri.json'];
-const ozet = (agac) => IZLENEN.map((rel) => crypto.createHash('sha256').update(fs.readFileSync(path.join(agac, rel))).digest('hex')).join(',');
+// Dinlenme dosyaları (panel kimliğinin ağaçtaki izleri + kayıt): paketleme bunlara DOKUNMAZ.
+const IZLENEN = [...PANEL_SABIT_DOSYALAR, 'deploy/kanallar.json'];
+const ozet = (agac) => IZLENEN.map((rel) => {
+  const y = path.join(agac, rel);
+  return fs.existsSync(y) ? crypto.createHash('sha256').update(fs.readFileSync(y)).digest('hex') : 'yok';
+}).join(',');
+const SURUM = JSON.parse(fs.readFileSync(path.join(KOK, 'Electron/package.json'), 'utf8')).version;
 
-function paketleSenaryosu(argumanlar, { ref = null } = {}) {
+function paketleSenaryosu(argumanlar, { ref = null, mutasyon = null, agacMutasyon = null } = {}) {
   const o = ortam();
   const agac = agacKur(o, { ref });
+  if (agacMutasyon) agacMutasyon(agac);
+  if (mutasyon) {
+    const y = path.join(agac, 'deploy/electron-paketle.sh');
+    const once = fs.readFileSync(y, 'utf8');
+    const sonra = mutasyon(once);
+    if (sonra === once) throw new Error('paketle mutasyonu UYGULANMADI — sonda geçersiz');
+    fs.writeFileSync(y, sonra);
+  }
   const once = ozet(agac);
   const r = kos(o, path.join(agac, 'deploy/electron-paketle.sh'), argumanlar, { cwd: agac });
   return { o, r, agac, once, sonra: ozet(agac) };
 }
+/** Derlenen paketin kimliği — yayıncının okuduğu yüklemle aynı kaynaktan (asar dahil). */
+function derlenen(agac, kod, surum = SURUM) {
+  const dizin = path.join(agac, 'Electron/release', kod, surum);
+  const res = path.join(dizin, 'win-unpacked/resources');
+  if (!fs.existsSync(path.join(res, 'app.asar'))) return null;
+  const ic = asarOku(path.join(res, 'app.asar'), () => true);
+  return {
+    yml: fs.readFileSync(path.join(res, 'app-update.yml'), 'utf8'),
+    exeler: fs.readdirSync(path.join(dizin, 'win-unpacked')).filter((f) => f.endsWith('.exe')),
+    paket: JSON.parse(ic['package.json'].toString('utf8')),
+    main: ic['out/main/main.js'].toString('utf8'),
+    arayuz: ic['out/renderer/assets/index-sahte.js'].toString('utf8'),
+    baslik: ic['out/renderer/index.html'].toString('utf8'),
+  };
+}
+const npmCagrisi = (o) => o.cagrilar().find((c) => c.arac === 'npm' && /^run build:win/.test(c.args));
 {
-  const s = paketleSenaryosu(['testfabirka', '9.9.9']);
-  ol('2a bilinmeyen kanal → DUR, package.json/musteri.json DEĞİŞMEDİ, derleme YOK',
+  const s = paketleSenaryosu(['testfabirka', SURUM]);
+  ol('2a bilinmeyen kanal → DUR, dinlenme dosyaları DEĞİŞMEDİ, derleme YOK',
     s.r.kod !== 0 && s.once === s.sonra && !s.o.cagrilar().some((c) => c.arac === 'npm') && /BİLİNMEYEN KANAL/.test(s.r.cikti), s.r.cikti);
 }
 {
-  const s = paketleSenaryosu(['testfabrika', '9.9.9']);
-  ol('2b kimliği ağaçta olmayan kanal (testfabrika, D2 öncesi) → DUR, dosya DEĞİŞMEDİ, derleme YOK',
-    s.r.kod !== 0 && s.once === s.sonra && !s.o.cagrilar().some((c) => c.arac === 'npm') && /PANEL KİMLİĞİNİ TAŞIMIYOR/.test(s.r.cikti), s.r.cikti.slice(0, 600));
+  const s = paketleSenaryosu(['testfabrika', SURUM]);
+  const d = derlenen(s.agac, 'testfabrika');
+  const n = npmCagrisi(s.o);
+  ol(`2b testfabrika ${SURUM} → çıkış 0, çıktı release/testfabrika/${SURUM}/`, s.r.kod === 0 && d !== null, s.r.cikti.slice(-700));
+  ol('2b dinlenme dosyaları BAYT BAYT aynı (kimlik ağaca yazılmadı: package.json · musteri.json · main.ts · index.html · …)', s.once === s.sonra);
+  ol('2b derleyici iki bacağı da aldı: TEKSERP_KANAL=testfabrika + electron-builder -c.* (appId · ürün adı · paket adı · adres)',
+    n?.kanal === 'testfabrika' && n.args.includes('-c.appId=com.etkiliyazilim.teks-erp.testfabrika') &&
+      n.args.includes('-c.extraMetadata.name=teks-erp-testfabrika') && n.args.includes(`-c.publish.url=${YAYIN_HOST}testfabrika/electron/`),
+    JSON.stringify(n));
+  ol('2b paket kimliği testfabrika: adres · updater önbelleği · "TeksERP Test Fabrika.exe" · paketin package.json · AUMID · varsayılan sunucu · etiket',
+    d !== null && d.yml.includes(`url: ${YAYIN_HOST}testfabrika/electron/`) && d.yml.includes('updaterCacheDirName: teks-erp-testfabrika-updater') &&
+      d.exeler.join() === 'TeksERP Test Fabrika.exe' && d.paket.name === 'teks-erp-testfabrika' && d.paket.productName === 'TeksERP Test Fabrika' &&
+      d.main.includes('"com.etkiliyazilim.teks-erp.testfabrika"') && d.arayuz.includes('"http://100.70.47.46:4000"') && d.arayuz.includes('"TEST FABRİKA"') &&
+      !d.main.includes('adnan-sahin') && !d.arayuz.includes('192.168.1.250'), JSON.stringify(d)?.slice(0, 600));
+  ol('2b yayın komutu önerisi --musteri=testfabrika taşıyor', /electron-yayinla\.sh --musteri=testfabrika/.test(s.r.cikti));
 }
 {
-  const surum = JSON.parse(fs.readFileSync(path.join(KOK, 'Electron/package.json'), 'utf8')).version;
-  const s = paketleSenaryosu(['adnansahin', surum]);
-  const yml = path.join(s.agac, 'Electron/release/adnansahin', surum, 'win-unpacked/resources/app-update.yml');
-  ol(`2c adnansahin ${surum} → çıkış 0, çıktı release/adnansahin/${surum}/`, s.r.kod === 0 && fs.existsSync(yml), s.r.cikti.slice(-600));
-  ol('2c dinlenmedeki package.json + musteri.json BAYT BAYT aynı kaldı (adnansahin için sıfır fark)', s.once === s.sonra);
-  ol('2c gömülü kimlik bugünkü: url …/adnansahin/electron/ · adnan-sahin-erp-admin-updater · "Adnan Şahin ERP.exe"',
-    fs.existsSync(yml) && fs.readFileSync(yml, 'utf8').includes(`url: ${YAYIN_HOST}adnansahin/electron/`) &&
-      fs.readFileSync(yml, 'utf8').includes('updaterCacheDirName: adnan-sahin-erp-admin-updater') &&
-      fs.existsSync(path.join(path.dirname(path.dirname(yml)), 'Adnan Şahin ERP.exe')));
+  const s = paketleSenaryosu(['adnansahin', SURUM]);
+  const d = derlenen(s.agac, 'adnansahin');
+  const n = npmCagrisi(s.o);
+  const p = JSON.parse(fs.readFileSync(path.join(KOK, 'Electron/package.json'), 'utf8'));
+  ol(`2c adnansahin ${SURUM} → çıkış 0, çıktı release/adnansahin/${SURUM}/`, s.r.kod === 0 && d !== null, s.r.cikti.slice(-600));
+  ol('2c dinlenme dosyaları BAYT BAYT aynı kaldı (adnansahin için sıfır fark)', s.once === s.sonra);
+  ol('2c gömülü kimlik bugünkü: url …/adnansahin/electron/ · adnan-sahin-erp-admin-updater · "Adnan Şahin ERP.exe" · paketin package.json · AUMID',
+    d !== null && d.yml.includes(`url: ${YAYIN_HOST}adnansahin/electron/`) && d.yml.includes('updaterCacheDirName: adnan-sahin-erp-admin-updater') &&
+      d.exeler.join() === 'Adnan Şahin ERP.exe' && d.paket.name === 'adnan-sahin-erp-admin' && d.paket.productName === 'Adnan Şahin ERP' &&
+      d.main.includes('"com.etkiliyazilim.adnan-sahin-erp"') && d.arayuz.includes('"http://192.168.1.250:4000"') && d.arayuz.includes('const label = null'));
+  // Enjekte edilen değerler ağaçtaki tabanla birebir: varsayilan kanal için ezme bir şey DEĞİŞTİRMEZ.
+  const ayar = panelDerlemeAyarlari('adnansahin', kanalCoz('adnansahin').kanal);
+  const taban = {
+    appId: p.build.appId, productName: p.build.productName, 'extraMetadata.name': p.name, 'extraMetadata.productName': p.productName,
+    'extraMetadata.description': p.description, 'nsis.shortcutName': p.build.nsis.shortcutName,
+    'nsis.uninstallDisplayName': p.build.nsis.uninstallDisplayName, 'publish.url': p.build.publish[0].url, 'directories.output': p.build.directories.output,
+  };
+  ol('2c ⭐ adnansahin için enjekte edilen HER kimlik değeri package.json tabanıyla birebir (ezme = no-op)',
+    JSON.stringify(ayar) === JSON.stringify(taban) && n?.kanal === 'adnansahin', `${JSON.stringify(ayar)}\n${JSON.stringify(taban)}`);
   ol('2c yayın komutu önerisi --musteri taşıyor', /electron-yayinla\.sh --musteri=adnansahin/.test(s.r.cikti));
   if (ESKI) {
-    const e = paketleSenaryosu(['adnansahin', surum], { ref: ESKI });
-    const eYml = path.join(e.agac, 'Electron/release', surum, 'win-unpacked/resources/app-update.yml');
-    ol(`2c⇄${ESKI} ESKİ paketleme aynı gömülü kimliği üretir (app-update.yml birebir, exe adı aynı)`,
-      e.r.kod === 0 && fs.existsSync(eYml) && fs.readFileSync(eYml, 'utf8') === fs.readFileSync(yml, 'utf8') &&
-        fs.readdirSync(path.join(path.dirname(path.dirname(eYml)))).join() === fs.readdirSync(path.dirname(path.dirname(yml))).join(),
+    const e = paketleSenaryosu(['adnansahin', SURUM], { ref: ESKI });
+    const eKok = [path.join(e.agac, 'Electron/release/adnansahin', SURUM), path.join(e.agac, 'Electron/release', SURUM)].find((y) => fs.existsSync(y));
+    const eYml = eKok ? path.join(eKok, 'win-unpacked/resources/app-update.yml') : '';
+    const yml = path.join(s.agac, 'Electron/release/adnansahin', SURUM, 'win-unpacked/resources/app-update.yml');
+    ol(`2c⇄${ESKI} ESKİ paketleme aynı gömülü kimliği üretir (app-update.yml birebir, exe adı aynı, paketin package.json'ı aynı)`,
+      e.r.kod === 0 && Boolean(eKok) && fs.readFileSync(eYml, 'utf8') === fs.readFileSync(yml, 'utf8') &&
+        fs.readdirSync(path.join(eKok, 'win-unpacked')).join() === fs.readdirSync(path.dirname(path.dirname(yml))).join() &&
+        asarOku(path.join(eKok, 'win-unpacked/resources/app.asar'), (x) => x === 'package.json')['package.json'].equals(
+          asarOku(path.join(path.dirname(yml), 'app.asar'), (x) => x === 'package.json')['package.json']),
       e.r.cikti.slice(-400));
     const pE = JSON.parse(fs.readFileSync(path.join(e.agac, 'Electron/package.json'), 'utf8'));
     const pY = JSON.parse(fs.readFileSync(path.join(s.agac, 'Electron/package.json'), 'utf8'));
     pE.build.directories.output = pY.build.directories.output = '<ayrık>';
-    ol(`2c⇄${ESKI} paketlemenin yazdığı package.json çıktı dizini DIŞINDA birebir`, JSON.stringify(pE) === JSON.stringify(pY));
+    ol(`2c⇄${ESKI} paketlemeden sonra package.json çıktı dizini DIŞINDA birebir`, JSON.stringify(pE) === JSON.stringify(pY));
   }
+}
+{
+  // SONDA: enjeksiyonun electron-builder bacağı düşerse paket tabanın (adnansahin) kimliğiyle doğar.
+  const s = paketleSenaryosu(['testfabrika', SURUM], { mutasyon: (m) => m.replaceAll(' -- "${derleme_argumanlari[@]}"', '') });
+  ol('2d ⭐ SONDA: electron-builder -c.* argümanları düşerse → derleme sonrası kapı DURDURUR (karışık kimlik yayına çıkamaz)',
+    s.r.kod !== 0 && Boolean(npmCagrisi(s.o)) && /PAKET YANLIŞ MÜŞTERİYİ GÖSTERİYOR|KANALININ DEĞİL|bulunamadı/.test(s.r.cikti) && s.once === s.sonra,
+    s.r.cikti.slice(-500));
+}
+{
+  // SONDA: electron-vite bacağı düşerse app-update.yml doğru ama ana süreç başka kanalın AUMID/adresini taşır.
+  const s = paketleSenaryosu(['testfabrika', SURUM], { mutasyon: (m) => m.replaceAll('TEKSERP_KANAL="$musteri" npm run', 'npm run') });
+  ol('2e ⭐ SONDA: TEKSERP_KANAL (kod içi kimlik) düşerse → derleme sonrası kapı ana süreçteki yabancı kimliği yakalar',
+    s.r.kod !== 0 && Boolean(npmCagrisi(s.o)) && /ana süreç/.test(s.r.cikti) && /adnansahin/.test(s.r.cikti), s.r.cikti.slice(-600));
+}
+{
+  // Kaynak literal kimlik taşıyorsa enjeksiyon onu göremez: kapı HİÇBİR ŞEY yazmadan ve derlemeden önce durur.
+  const s = paketleSenaryosu(['testfabrika', SURUM], { agacMutasyon: (agac) => {
+    const y = path.join(agac, 'Electron/electron/main.ts');
+    const m = fs.readFileSync(y, 'utf8');
+    const yeni = m.replace('setAppUserModelId(APP_ID)', 'setAppUserModelId("com.etkiliyazilim.adnan-sahin-erp")');
+    if (yeni === m) throw new Error('main.ts mutasyonu UYGULANMADI — sonda geçersiz');
+    fs.writeFileSync(y, yeni);
+  } });
+  ol('2f kaynakta literal AUMID (kanaldan değil) → paketleme kanal kapısında DURUR, derleme YOK, dosya yazılmadı',
+    s.r.kod !== 0 && !s.o.cagrilar().some((c) => c.arac === 'npm') && /PAKETLENEMEZ/.test(s.r.cikti) && s.once === s.sonra, s.r.cikti.slice(0, 600));
 }
 
 /* ------------------------------------------------------------------ *
@@ -608,6 +806,41 @@ console.log('\n§5 — ortak yüklemler');
   const m2 = bundleAdresOlcumu(`x${FABRIKA_ERP}http://10.0.0.5:4000/api`, FABRIKA_ERP);
   ol('5d bundle ölçümü: sayar, uç uca dizede de bulur, yabancı sayısal IP\'yi ayırır',
     m.gecenSayi === 2 && m.yabanciIp.length === 0 && m2.yabanciIp.join() === 'http://10.0.0.5:4000/api');
+}
+{
+  const y = path.join(GECICI, 'deneme.asar');
+  asarYaz(y, { 'package.json': '{"name":"x"}', 'out/main/main.js': 'const a = "b";' });
+  const ic = asarOku(y, () => true);
+  const bozuk = path.join(GECICI, 'bozuk.asar');
+  fs.writeFileSync(bozuk, 'bozuk-arsiv');
+  let olculemedi = false;
+  try {
+    asarOku(bozuk, () => true);
+  } catch (e) {
+    olculemedi = e?.constructor?.name === 'Olculemedi';
+  }
+  ol('5e asar okuyucu: yazılanı birebir okur, bozuk arşiv ÖLÇÜLEMEDİ (ihlal değil)',
+    ic['package.json']?.toString() === '{"name":"x"}' && ic['out/main/main.js']?.toString() === 'const a = "b";' && olculemedi);
+}
+{
+  // Commit kapısı tetiği bu bekçinin OKUDUĞU her dosyayı kapsamalı: koşturulan betikler + yerel
+  // import kapanışları + kabuğun çağırdığı node betikleri + ağaç kopyası. Liste ölçülür, sayılmaz.
+  const kosulan = ['scripts/test_kanal_yayin_kapisi.mjs', 'deploy/mobil-yayinla.mjs', 'mobil/scripts/yayinla-ota.mjs',
+    'deploy/electron-yayinla.sh', 'deploy/electron-paketle.sh', ...ORTAK_KAYNAK, ...TABLET_SABIT_DOSYALAR];
+  const okunan = new Set();
+  const gez = (rel) => {
+    if (okunan.has(rel) || !fs.existsSync(path.join(KOK, rel))) return;
+    okunan.add(rel);
+    const m = fs.readFileSync(path.join(KOK, rel), 'utf8');
+    const yerel = [...m.matchAll(/(?:from\s+|require\(\s*|import\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g)].map((x) => x[1]);
+    const kabuk = [...m.matchAll(/\$kok\/(scripts\/[\w./-]+\.mjs)/g)].map((x) => x[1]);
+    for (const y of yerel) gez(path.posix.normalize(path.posix.join(path.posix.dirname(rel), y)));
+    for (const y of kabuk) gez(y);
+  };
+  for (const f of kosulan) gez(f);
+  const disarida = [...okunan].filter((f) => !kanalBekcisiTetigi(f));
+  ol(`5f commit kapısı tetiği bu bekçinin okuduğu ${okunan.size} dosyanın HEPSİNİ kapsıyor (import kapanışı ölçüldü)`,
+    okunan.size > 15 && disarida.length === 0, disarida.join('\n'));
 }
 
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi.length} başarısız ===`);

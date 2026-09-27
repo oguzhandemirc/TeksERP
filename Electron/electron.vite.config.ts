@@ -2,10 +2,14 @@ import { resolve } from "node:path";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { buildChannelCode, channelPlugin, panelChannel } from "./build-channel";
 
-export default defineConfig({
+// Kanal kimliği derleme ANINDA kayıttan (deploy/kanallar.json) — ağaca yazılmaz; bkz. build-channel.ts.
+const channel = panelChannel(buildChannelCode(process.env));
+
+export default defineConfig(({ command }) => ({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), channelPlugin(channel)],
     build: {
       outDir: "out/main",
       lib: {
@@ -19,7 +23,7 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), channelPlugin(channel)],
     build: {
       outDir: "out/preload",
       lib: {
@@ -34,7 +38,13 @@ export default defineConfig({
   },
   renderer: {
     root: ".",
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), channelPlugin(channel)],
+    // Keşif sonuç vermezse bağlanılan sunucu kanaldan; geliştirmede `.env` (localhost) geçerli kalır.
+    // Açık `VITE_API_BASE_URL` ortamı bugünkü gibi önceliklidir — paketleme kapısı paketi kanalla ölçer.
+    define:
+      command === "build"
+        ? { "import.meta.env.VITE_API_BASE_URL": JSON.stringify(process.env.VITE_API_BASE_URL ?? channel.erpUrl) }
+        : {},
     resolve: {
       alias: {
         "@": resolve(__dirname, "src"),
@@ -49,4 +59,4 @@ export default defineConfig({
     },
     server: { port: 5174 },
   },
-});
+}));

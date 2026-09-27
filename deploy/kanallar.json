@@ -5,7 +5,8 @@
     "DAVRANIŞ TAŞIMAZ: bayrak/ayar anahtarı buraya giremez — şema KAPALI anahtar kümesidir. 'adnansahin'de yok' hâlâ 'bayrağı kapalı' demektir.",
     "'yayin' bloğu koddan TÜRER (yayın kökü · VDS kökü · runtimeVersion); elle düzeltilmez, bekçi türetimle birebir ölçer.",
     "Üretim kanalının kimliği DONMUŞTUR: değişimi sahadaki kurulumlar için bir GÖÇTÜR (yeni uygulama · kayıp userData · kopan güncelleme kanalı).",
-    "Commit edilen işaretçiler (Electron/shared/musteri.json · mobil/musteri.json · Electron/package.json · Electron/electron/main.ts · mobil/app.json) 'varsayilan' kanalı gösterir.",
+    "Commit edilen işaretçiler (Electron/shared/musteri.json · mobil/musteri.json · Electron/package.json · mobil/app.json) 'varsayilan' kanalı gösterir.",
+    "Panel kimliği ağaca YAZILMAZ: electron-paketle.sh <kod> onu derleme ANINDA enjekte eder (electron-builder -c.* + Vite sanal modülü, Electron/build-channel.ts); panel.erpAdresi = keşif sonuç vermezse panelin bağlandığı varsayılan sunucu.",
     "runtimeVersion kanal kimliği DEĞİLDİR (JS↔native uyum kimliği): çakışma denetimine girmez, mobil/app.json ile eşit olmak zorundadır.",
     "Bekçi: node scripts/check-kanallar.mjs (+ --sonda) · yayın kapıları: node scripts/test_kanal_yayin_kapisi.mjs. Kural: docs/kurallar/surum-yayin.md; karar: docs/history/CLAUDE-NOT-ARSIVI.md 2026-09-27 testfabrika D1."
   ],
@@ -29,7 +30,8 @@
         "appId": "com.etkiliyazilim.adnan-sahin-erp",
         "urunAdi": "Adnan Şahin ERP",
         "paketAdi": "adnan-sahin-erp-admin",
-        "erpDisAdresi": "https://adnansahin-erp.etkiliyazilim.com"
+        "erpDisAdresi": "https://adnansahin-erp.etkiliyazilim.com",
+        "erpAdresi": "http://192.168.1.250:4000"
       },
       "tablet": {
         "androidPaket": "com.teks.erp.mobil",
@@ -58,7 +60,8 @@
         "appId": "com.etkiliyazilim.teks-erp.testfabrika",
         "urunAdi": "TeksERP Test Fabrika",
         "paketAdi": "teks-erp-testfabrika",
-        "erpDisAdresi": "http://100.70.47.46:4000"
+        "erpDisAdresi": "http://100.70.47.46:4000",
+        "erpAdresi": "http://100.70.47.46:4000"
       },
       "tablet": {
         "androidPaket": "com.teks.erp.mobil.testfabrika",

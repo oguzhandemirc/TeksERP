@@ -39,7 +39,7 @@ const KANAL_ANAHTARLARI = {
 export const YAYIN_ANAHTARLARI = [
   'panelFeed', 'panelManifest', 'mobilFeed', 'otaManifest', 'apkKunye', 'vdsPanel', 'vdsMobil', 'panelDefter',
 ];
-export const PANEL_ANAHTARLARI = ['appId', 'urunAdi', 'paketAdi', 'erpDisAdresi'];
+export const PANEL_ANAHTARLARI = ['appId', 'urunAdi', 'paketAdi', 'erpDisAdresi', 'erpAdresi'];
 export const TABLET_ANAHTARLARI = ['androidPaket', 'gorunenAd', 'erpAdresi', 'runtimeVersion', 'otaSertifika'];
 
 /**
@@ -51,7 +51,7 @@ export const TABLET_ANAHTARLARI = ['androidPaket', 'gorunenAd', 'erpAdresi', 'ru
 export const AYRIK_ALANLAR = [
   'ad', 'gorunurEtiket',
   ...YAYIN_ANAHTARLARI.map((a) => `yayin.${a}`),
-  'panel.appId', 'panel.urunAdi', 'panel.paketAdi', 'panel.erpDisAdresi',
+  'panel.appId', 'panel.urunAdi', 'panel.paketAdi', 'panel.erpDisAdresi', 'panel.erpAdresi',
   'tablet.androidPaket', 'tablet.gorunenAd', 'tablet.erpAdresi', 'tablet.otaSertifika',
 ];
 
@@ -178,6 +178,12 @@ export function kayitHatalari(kayit) {
     if (typeof dis === 'string' && dis !== '' && !/^https?:\/\/[^/\s]+$/.test(dis)) {
       h.push(`${on}: panel.erpDisAdresi "${dis}" biçimi tutmuyor (http(s)://<host>[:port], sonda / yok)`);
     }
+    // Keşif sonuç vermezse panelin bağlandığı sunucu — tabletin `/api`li adresinin panel karşılığı.
+    const panelErp = k.panel?.erpAdresi;
+    if (typeof panelErp === 'string' && panelErp !== '' && !/^https?:\/\/[^/\s]+$/.test(panelErp)) {
+      h.push(`${on}: panel.erpAdresi "${panelErp}" biçimi tutmuyor (http(s)://<host>[:port], /api yok, sonda / yok)`);
+    }
+    if (typeof panelErp === 'string' && /(localhost|127\.0\.0\.1)/i.test(panelErp)) h.push(`${on}: panel.erpAdresi localhost olamaz`);
   }
 
   // İKİLİ FARK — iki kanal hiçbir dağıtım kimliğini paylaşamaz.
@@ -244,43 +250,93 @@ const fark = (liste, neresi, gercek, beklenen) => {
   if (gercek !== beklenen) liste.push(`${neresi} = "${gercek}" — kanal "${beklenen}" bekliyor`);
 };
 
-/** Paketlemenin YAZMADIĞI panel kimliği — ağaç bu kanalın kimliğini taşımıyorsa paket yanlış kimlikle doğar. */
+/**
+ * Panel kimliğinin çalışma ağacındaki izleri. Kimlik ağaca YAZILMAZ: paketleme onu
+ * derleme ANINDA enjekte eder (`panelDerlemeAyarlari` → electron-builder `-c.*`,
+ * `Electron/build-channel.ts` → Vite sanal modülü). Ağaçta iki tür iz kalır:
+ *   · package.json alanları — ezilen TABAN, dinlenmede `varsayilan` kanalın değeri;
+ *   · kaynak dosyalar — kimliği kanaldan ALIR, literal taşımaz (literal ezmeyi görmez).
+ */
 export const PANEL_SABIT_DOSYALAR = [
   'Electron/package.json', 'Electron/electron/main.ts', 'Electron/index.html', 'Electron/resources/splash.html',
-  'Electron/shared/musteri.json',
+  'Electron/shared/musteri.json', 'Electron/shared/channel.ts', 'Electron/build-channel.ts',
 ];
+
+/** index.html `<title>` yer tutucusu — `Electron/build-channel.ts` derlemede pencere başlığıyla değiştirir. */
+export const PANEL_BASLIK_YER_TUTUCU = '%TEKSERP_WINDOW_TITLE%';
+/** Derleme kanalını electron-vite'a (Vite sanal modülü) taşıyan ortam değişkeni. */
+export const PANEL_KANAL_ORTAMI = 'TEKSERP_KANAL';
+/** Paket açıklaması (NSIS kurulum dosyasının FileDescription'ı) ürün adından türer. */
+export const panelAciklamasi = (kanal) => `${kanal.panel.urunAdi} — Admin Panel by Etkili Yazılım`;
+
+/** Dinlenmedeki package.json kimlik alanları ↔ kanal (bekçi: `varsayilan`; paketleme: taban temiz mi). */
 export function panelSabitKimlikFarki(kanal, dosyalar) {
   const f = [];
   const p = json(dosyalar, 'Electron/package.json');
-  const m = json(dosyalar, 'Electron/shared/musteri.json');
   fark(f, 'Electron/package.json name', p.name, kanal.panel.paketAdi);
   fark(f, 'Electron/package.json productName', p.productName, kanal.panel.urunAdi);
+  fark(f, 'Electron/package.json description', p.description, panelAciklamasi(kanal));
   fark(f, 'Electron/package.json build.productName', p.build?.productName, kanal.panel.urunAdi);
   fark(f, 'Electron/package.json build.appId', p.build?.appId, kanal.panel.appId);
   fark(f, 'Electron/package.json build.nsis.shortcutName', p.build?.nsis?.shortcutName, kanal.panel.urunAdi);
   fark(f, 'Electron/package.json build.nsis.uninstallDisplayName', p.build?.nsis?.uninstallDisplayName, kanal.panel.urunAdi);
-  fark(f, 'Electron/electron/main.ts pencere title',
-    yakala(dosyalar, 'Electron/electron/main.ts', /\btitle:\s*"([^"]*)"/, 'BrowserWindow `title: "…"` literal'), kanal.panel.urunAdi);
-  fark(f, 'Electron/electron/main.ts setAppUserModelId',
-    yakala(dosyalar, 'Electron/electron/main.ts', /setAppUserModelId\(\s*"([^"]*)"\s*\)/, '`setAppUserModelId("…")` literal'),
-    kanal.panel.appId);
-  fark(f, 'Electron/index.html <title>',
-    yakala(dosyalar, 'Electron/index.html', /<title>([^<]*)<\/title>/, '<title>'), kanal.panel.urunAdi);
-  fark(f, 'Electron/resources/splash.html <title>',
-    yakala(dosyalar, 'Electron/resources/splash.html', /<title>([^<]*)<\/title>/, '<title>'), kanal.panel.urunAdi);
-  fark(f, 'Electron/shared/musteri.json ad', m.ad, kanal.ad);
-  fark(f, 'Electron/shared/musteri.json erpAdresi', m.erpAdresi ?? '', kanal.panel.erpDisAdresi);
   return f;
 }
 
-/** Paketlemenin YAZDIĞI panel işaretçileri — dinlenmede `varsayilan` kanalı göstermeli. */
+const yorumsuz = (m) => m.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Metinde `değer` TIRNAKLI bir dize olarak geçiyor mu (önek/alt dize eşleşmesi değil). */
+export const tirnakliGecer = (metin, deger) => new RegExp(`(["'\`])${esc(deger)}\\1`).test(metin);
+
+/**
+ * Kaynak dosyalar kimliği KANALDAN alıyor mu — hiçbir kanalın literal kimliği yok, bağ noktaları yerinde.
+ * Bağ noktası bulunamazsa ÖLÇÜLEMEDİ (yer/biçim değişti); literal ya da yanlış bağ KIRMIZI.
+ */
+export function panelKaynakFarki(kayit, dosyalar) {
+  const f = [];
+  const kanallar = Object.entries(kayit?.kanallar ?? {});
+  const oku = (rel) => {
+    if (typeof dosyalar[rel] !== 'string') throw new Olculemedi(`${rel} okunamadı`);
+    return dosyalar[rel];
+  };
+  const main = yorumsuz(oku('Electron/electron/main.ts'));
+  if (!/setAppUserModelId\(/.test(main)) throw new Olculemedi('Electron/electron/main.ts: setAppUserModelId çağrısı bulunamadı (yeri değişti — bekçiyi güncelle)');
+  if (!/\bnew BrowserWindow\(\{[\s\S]*?\btitle:/.test(main)) throw new Olculemedi('Electron/electron/main.ts: BrowserWindow `title:` bulunamadı');
+  if (!/from\s+["']@shared\/channel["']/.test(main)) f.push('Electron/electron/main.ts kimliği @shared/channel\'dan almıyor');
+  if (!/setAppUserModelId\(\s*APP_ID\s*\)/.test(main)) f.push('Electron/electron/main.ts setAppUserModelId kanaldan değil (`APP_ID` bekleniyor)');
+  if (!/\btitle:\s*WINDOW_TITLE\s*,/.test(main)) f.push('Electron/electron/main.ts pencere başlığı kanaldan değil (`title: WINDOW_TITLE` bekleniyor)');
+  if (!/"page-title-updated"[\s\S]{0,120}?preventDefault\(\)/.test(main)) {
+    f.push('Electron/electron/main.ts sayfa <title>\'ının pencere başlığını ezmesini engellemiyor (`page-title-updated` → preventDefault)');
+  }
+  for (const [kod, k] of kanallar) {
+    for (const [alan, v] of [['appId', k?.panel?.appId], ['urunAdi', k?.panel?.urunAdi]]) {
+      if (typeof v === 'string' && v && tirnakliGecer(main, v)) f.push(`Electron/electron/main.ts "${kod}" kanalının ${alan} literalini taşıyor ("${v}") — kimlik kanaldan gelir`);
+    }
+  }
+  const baslik = yakala(dosyalar, 'Electron/index.html', /<title>([^<]*)<\/title>/, '<title>');
+  if (baslik !== PANEL_BASLIK_YER_TUTUCU) f.push(`Electron/index.html <title> = "${baslik}" — yer tutucu ${PANEL_BASLIK_YER_TUTUCU} bekleniyor (başlık derlemede kanaldan)`);
+  const splash = yakala(dosyalar, 'Electron/resources/splash.html', /<title>([^<]*)<\/title>/, '<title>');
+  for (const [kod, k] of kanallar) {
+    if (k?.panel?.urunAdi && splash.includes(k.panel.urunAdi)) f.push(`Electron/resources/splash.html <title> "${kod}" kanalının ürün adını taşıyor — kanaldan bağımsız olmalı`);
+  }
+  if (!/from\s+["']virtual:tekserp-channel["']/.test(oku('Electron/shared/channel.ts'))) {
+    f.push('Electron/shared/channel.ts kimliği derleme sanal modülünden (virtual:tekserp-channel) almıyor');
+  }
+  const derleme = oku('Electron/build-channel.ts');
+  for (const [ne, iz] of [['kayıt defteri', 'deploy/kanallar.json'], ['kanal ortamı', PANEL_KANAL_ORTAMI], ['başlık yer tutucusu', PANEL_BASLIK_YER_TUTUCU]]) {
+    if (!derleme.includes(iz)) f.push(`Electron/build-channel.ts ${ne} izini (${iz}) taşımıyor`);
+  }
+  return f;
+}
+
+/** Dinlenmedeki panel işaretçileri — `varsayilan` kanalı göstermeli (musteri.json yalnız KOD taşır). */
 export function panelIsaretciFarki(kod, kanal, dosyalar) {
   const f = [];
   const p = json(dosyalar, 'Electron/package.json');
   const m = json(dosyalar, 'Electron/shared/musteri.json');
-  const anahtar = esitKumeler(Object.keys(m), ['kod', 'ad', 'erpAdresi']);
+  const anahtar = esitKumeler(Object.keys(m), ['kod']);
   if (anahtar.fazla.length || anahtar.eksik.length) {
-    f.push(`Electron/shared/musteri.json anahtarları {kod, ad, erpAdresi} değil (fazla: ${anahtar.fazla.join(',') || '-'} · eksik: ${anahtar.eksik.join(',') || '-'})`);
+    f.push(`Electron/shared/musteri.json yalnız {kod} taşır — kimlik kayıt defterinden (fazla: ${anahtar.fazla.join(',') || '-'} · eksik: ${anahtar.eksik.join(',') || '-'})`);
   }
   fark(f, 'Electron/shared/musteri.json kod', m.kod, kod);
   fark(f, 'Electron/package.json build.publish[0].url', p.build?.publish?.[0]?.url, kanal.yayin.panelFeed);
@@ -290,6 +346,28 @@ export function panelIsaretciFarki(kod, kanal, dosyalar) {
 
 /** `release/<kod>/${version}` — electron-builder makrosu `${version}` harfiyen. */
 export const panelCiktiDeseni = (kod) => `release/${kod}/\${version}`;
+
+/**
+ * electron-builder'a derleme ANINDA verilen kimlik (`-c.<anahtar>=<değer>`). package.json'daki
+ * taban ne olursa olsun paketin kimliği buradan doğar; `varsayilan` kanal için taban ile birebir.
+ * `extraMetadata` paketin İÇİNDEKİ package.json'dır: `name` → güncelleyici önbelleği,
+ * `productName` → çalışma anı adı ve userData dizini.
+ */
+export function panelDerlemeAyarlari(kod, kanal) {
+  return {
+    appId: kanal.panel.appId,
+    productName: kanal.panel.urunAdi,
+    'extraMetadata.name': kanal.panel.paketAdi,
+    'extraMetadata.productName': kanal.panel.urunAdi,
+    'extraMetadata.description': panelAciklamasi(kanal),
+    'nsis.shortcutName': kanal.panel.urunAdi,
+    'nsis.uninstallDisplayName': kanal.panel.urunAdi,
+    'publish.url': kanal.yayin.panelFeed,
+    'directories.output': panelCiktiDeseni(kod),
+  };
+}
+export const panelDerlemeArgumanlari = (kod, kanal) =>
+  Object.entries(panelDerlemeAyarlari(kod, kanal)).map(([k, v]) => `-c.${k}=${v}`);
 
 export const TABLET_SABIT_DOSYALAR = ['mobil/app.json', 'mobil/musteri.json'];
 /**
@@ -321,6 +399,35 @@ export function tabletIsaretciFarki(kod, dosyalar) {
   return f;
 }
 
+/* ------------------------------------------------------------------ *
+ * Commit kapısı tetiği — kanal bekçilerinin OKUDUĞU küme (elle sayılmaz, sabitlerden türer)
+ * ------------------------------------------------------------------ */
+
+/** Yayın yolu keşfi (check-kanallar §5): deploy/ kökünde yayinla|paketle · mobil/scripts'te yayinla|apk. */
+export const YAYIN_YOLU_DESENLERI = [
+  { dizin: 'deploy', ad: /(yayinla|paketle)/i },
+  { dizin: 'mobil/scripts', ad: /(yayinla|apk)/i },
+];
+/**
+ * İki kanal bekçisinin (check-kanallar · test_kanal_yayin_kapisi) okuduğu açık dosyalar: kimlik
+ * kaynakları + koşturulan betiklerin KOD kapanışı (veri dosyalarının kendi kapısı var, örn. sürüm notu).
+ */
+export const KANAL_BEKCI_DOSYALARI = [...new Set([
+  KAYIT_REL, 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/check-kanallar.mjs',
+  'scripts/test_kanal_yayin_kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs',
+  'scripts/check-surum-notlari.mjs', 'scripts/hooks/pre-commit.mjs',
+  ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR,
+  'Electron/shared/update-feed.ts', 'mobil/scripts/lib/feed.cjs', 'mobil/scripts/lib/adres.mjs', 'mobil/scripts/lib/zip.mjs',
+  'mobil/scripts/lib/manifest.mjs',
+])];
+/** Bu yola dokunan commit kanal bekçilerini koşar (`scripts/hooks/pre-commit.mjs`). */
+export function kanalBekcisiTetigi(rel) {
+  if (KANAL_BEKCI_DOSYALARI.includes(rel)) return true;
+  const i = rel.lastIndexOf('/');
+  const dizin = rel.slice(0, i);
+  return YAYIN_YOLU_DESENLERI.some((d) => d.dizin === dizin && d.ad.test(rel.slice(i + 1)));
+}
+
 /** Verilen göreli yolları diskten okur; yoksa değer `undefined` kalır (tüketici ÖLÇÜLEMEDİ der). */
 export function dosyalariOku(yollar, kok = KOK) {
   const d = {};
@@ -339,11 +446,56 @@ export function dosyalariOku(yollar, kok = KOK) {
  * ------------------------------------------------------------------ */
 
 /**
+ * Asar arşivinden seçilen dosyaları okur (zero-dep). Biçim: [u32 4][u32 başlık turşusu boyu]
+ * [u32 yük boyu][u32 JSON boyu][JSON başlık]…; veri 8 + turşu boyundan başlar, girdi
+ * `{size, offset}` (offset dize). `unpacked` girdi arşivde değildir, okunmaz.
+ */
+export function asarOku(yol, sec) {
+  let fd;
+  try {
+    fd = fs.openSync(yol, 'r');
+  } catch {
+    throw new Olculemedi(`paket arşivi okunamadı: ${yol}`);
+  }
+  try {
+    const bas = Buffer.alloc(16);
+    if (fs.readSync(fd, bas, 0, 16, 0) !== 16 || bas.readUInt32LE(0) !== 4) throw new Error('asar başlığı değil');
+    const tursu = bas.readUInt32LE(4);
+    const uzunluk = bas.readUInt32LE(12);
+    if (uzunluk <= 0 || uzunluk > tursu) throw new Error('başlık boyu tutarsız');
+    const hb = Buffer.alloc(uzunluk);
+    fs.readSync(fd, hb, 0, uzunluk, 16);
+    const baslik = JSON.parse(hb.toString('utf8'));
+    const taban = 8 + tursu;
+    const cikti = {};
+    const gez = (n, on) => {
+      for (const [ad, alt] of Object.entries(n.files ?? {})) {
+        const p = `${on}${ad}`;
+        if (alt.files) gez(alt, `${p}/`);
+        else if (sec(p) && !alt.unpacked && typeof alt.size === 'number') {
+          const b = Buffer.alloc(alt.size);
+          fs.readSync(fd, b, 0, alt.size, taban + Number(alt.offset));
+          cikti[p] = b;
+        }
+      }
+    };
+    gez(baslik, '');
+    return cikti;
+  } catch (e) {
+    throw new Olculemedi(`paket arşivi (${yol}) çözülemedi: ${e.message}`);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/**
  * `release/<kod>/<sürüm>` dizinindeki derlemenin kendi kimliği.
- * Otorite `win-unpacked/resources/app-update.yml`dir: kurulu uygulamanın GERÇEKTEN
- * baktığı güncelleme adresi ve updater önbellek adı (= package.json `name`) oradadır;
- * exe adı `productName`den doğar. Aynı dizindeki Setup.exe aynı derlemenin çıktısıdır
- * (paketleme dizini derlemeden önce siler).
+ *   · `win-unpacked/resources/app-update.yml` — güncelleme adresi + updater önbellek adı;
+ *   · `win-unpacked/<ürün adı>.exe` — kurulum dizini, kısayol, görev çubuğu adı;
+ *   · `resources/app.asar` → paketin package.json'ı (`name`, `productName` → userData) ile
+ *     derlenmiş ana süreç/arayüz: çalışma anında KULLANILAN adres/AUMID oradadır
+ *     (updater `setFeedURL`le app-update.yml'i ezer — yalnız yml'e bakan kapı kör kalırdı).
+ * Aynı dizindeki Setup.exe aynı derlemenin çıktısıdır (paketleme dizini derlemeden önce siler).
  */
 export function panelArtefaktKimligi(dizin) {
   const yml = path.join(dizin, 'win-unpacked', 'resources', 'app-update.yml');
@@ -368,10 +520,31 @@ export function panelArtefaktKimligi(dizin) {
   } catch {
     throw new Olculemedi(`${path.join(dizin, 'win-unpacked')} okunamadı`);
   }
-  return { url, updaterCacheDirName, exeler };
+  const asarYol = path.join(dizin, 'win-unpacked', 'resources', 'app.asar');
+  const icerik = asarOku(asarYol, (p) => p === 'package.json' || p === 'out/main/main.js' ||
+    (p.startsWith('out/renderer/') && /\.(js|html)$/.test(p)));
+  if (!icerik['package.json'] || !icerik['out/main/main.js'] || !icerik['out/renderer/index.html']) {
+    throw new Olculemedi(`${asarYol}: package.json / out/main/main.js / out/renderer/index.html yok — paket kimliği çözülemedi`);
+  }
+  let paket;
+  try {
+    paket = JSON.parse(icerik['package.json'].toString('utf8'));
+  } catch (e) {
+    throw new Olculemedi(`${asarYol} package.json ayrıştırılamadı: ${e.message}`);
+  }
+  const arayuzJs = Object.keys(icerik).filter((p) => p.startsWith('out/renderer/') && p.endsWith('.js')).sort();
+  return {
+    url,
+    updaterCacheDirName,
+    exeler,
+    paket: { name: paket.name, productName: paket.productName },
+    anaSurec: icerik['out/main/main.js'].toString('utf8'),
+    arayuz: arayuzJs.map((p) => icerik[p].toString('utf8')).join('\n'),
+    arayuzBasligi: /<title>([^<]*)<\/title>/.exec(icerik['out/renderer/index.html'].toString('utf8'))?.[1] ?? null,
+  };
 }
 
-/** Artefakt ↔ kanal. Boş dizi = paket bu kanalındır. */
+/** Artefakt ↔ kanal. Boş dizi = paket bu kanalındır (ve başka hiçbir kanalın kimliğini taşımaz). */
 export function panelArtefaktFarki(kayit, kod, artefakt) {
   const kanal = kayit.kanallar[kod];
   const f = [];
@@ -384,6 +557,31 @@ export function panelArtefaktFarki(kayit, kod, artefakt) {
   const beklenenExe = `${kanal.panel.urunAdi}.exe`;
   if (!artefakt.exeler.includes(beklenenExe)) {
     f.push(`win-unpacked içinde "${beklenenExe}" yok (bulunan: ${artefakt.exeler.join(', ') || '-'})`);
+  }
+  fark(f, 'paketin package.json name (updater önbelleği)', artefakt.paket.name, kanal.panel.paketAdi);
+  fark(f, 'paketin package.json productName (çalışma anı adı · userData)', artefakt.paket.productName, kanal.panel.urunAdi);
+  for (const [ne, v] of [['appId (AUMID)', kanal.panel.appId], ['güncelleme adresi', kanal.yayin.panelFeed]]) {
+    if (!tirnakliGecer(artefakt.anaSurec, v)) f.push(`ana süreçte (out/main/main.js) bu kanalın ${ne} "${v}" yok — kanal derlemeye enjekte edilmemiş`);
+  }
+  if (!tirnakliGecer(artefakt.arayuz, kanal.panel.erpAdresi)) f.push(`arayüzde bu kanalın varsayılan sunucusu "${kanal.panel.erpAdresi}" yok`);
+  if (kanal.gorunurEtiket && !tirnakliGecer(artefakt.arayuz, kanal.gorunurEtiket)) f.push(`arayüzde görünür etiket "${kanal.gorunurEtiket}" yok`);
+  const baslik = artefakt.arayuzBasligi ?? '';
+  if (!baslik.includes(kanal.panel.urunAdi) || (kanal.gorunurEtiket && !baslik.includes(kanal.gorunurEtiket))) {
+    f.push(`arayüz <title> "${baslik}" bu kanalın ürün adını${kanal.gorunurEtiket ? '/etiketini' : ''} taşımıyor`);
+  }
+  for (const [diger, d] of Object.entries(kayit.kanallar)) {
+    if (diger === kod) continue;
+    const yabanci = [
+      ['ana süreç', artefakt.anaSurec, 'appId', d.panel.appId], ['ana süreç', artefakt.anaSurec, 'güncelleme adresi', d.yayin.panelFeed],
+      ['ana süreç', artefakt.anaSurec, 'ürün adı', d.panel.urunAdi],
+      ['arayüz', artefakt.arayuz, 'appId', d.panel.appId], ['arayüz', artefakt.arayuz, 'ürün adı', d.panel.urunAdi],
+      ['arayüz', artefakt.arayuz, 'varsayılan sunucu', d.panel.erpAdresi], ['arayüz', artefakt.arayuz, 'dış adres', d.panel.erpDisAdresi],
+      ['arayüz', artefakt.arayuz, 'görünür etiket', d.gorunurEtiket],
+    ];
+    for (const [yer, metin, ne, v] of yabanci) {
+      if (typeof v === 'string' && v && tirnakliGecer(metin, v)) f.push(`${yer} "${diger}" kanalının ${ne} "${v}" değerini taşıyor — bu paket karışık kimlikli`);
+    }
+    if (d.panel.urunAdi && baslik.includes(d.panel.urunAdi)) f.push(`arayüz <title> "${diger}" kanalının ürün adını taşıyor`);
   }
   return f;
 }

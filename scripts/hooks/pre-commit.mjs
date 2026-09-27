@@ -30,6 +30,7 @@ import { sirala } from "./lib/adim-sirasi.mjs";
 import { deftereYaz } from "./lib/kapi-defteri.mjs";
 import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
 import { agirSurecSayisi, slotAl } from "./lib/semafor.mjs";
+import { kanalBekcisiTetigi } from "../lib/kanallar.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // Kapı defteri: wt BASENAME'i (wt-0c · Teks-Erp), tam yol ve kimlik yok — lib/kapi-defteri.mjs.
@@ -249,6 +250,15 @@ if (staged.some((f) => SURUM_NOTU_YOLLARI.has(f))) {
     cwd: ".",
     cmd: ["node", ["scripts/check-surum-notlari.mjs"]],
   });
+}
+
+// KANAL KAPILARI (testfabrika D2): dağıtım kanalı kimliğine ya da yayın betiklerine dokunan
+// commit iki kanal bekçisini görür — ikisi de zero-dep/DB'siz/ağsız, CI dışında yalnız burada
+// koşarlar. Tetik bekçilerin OKUDUĞU kümeden türer (`kanalBekcisiTetigi`, elle sayılmaz);
+// kapsamını check-kanallar §6 ve test_kanal_yayin_kapisi 5f ölçer (okunandan dar olamaz).
+if (staged.some(kanalBekcisiTetigi)) {
+  adimlar.push({ ad: "kanal kayıt defteri", cwd: ".", cmd: ["node", ["scripts/check-kanallar.mjs"]] });
+  adimlar.push({ ad: "kanal yayın kapıları", cwd: ".", cmd: ["node", ["scripts/test_kanal_yayin_kapisi.mjs"]], gitEnvSil: true });
 }
 
 if (adimlar.length === 0) process.exit(0);

@@ -42,10 +42,10 @@ echo "$musteri" | grep -qE '^[a-z0-9][a-z0-9-]{1,30}$' \
   || hata "Müşteri kodu yalnız küçük harf, rakam ve tire içerebilir (2-31 karakter): '$musteri'"
 
 # --- KANAL KAPISI — HİÇBİR DOSYA YAZILMADAN ve ağdan ÖNCE ------------------
-# Kod `deploy/kanallar.json`da kayıtlı olmalı (yazım hatası → dur) ve ağaç bu
-# kanalın panel kimliğini taşımalı: bu betik appId/ürün adı/paket adı/pencere
-# kimliğini YAZMAZ, yazmadığı kimlikle derlenen panel aynı makinede başka
-# kanalın kurulumunun üstüne kurulur. Çıkış 2 = ÖLÇÜLEMEDİ, o da durdurur.
+# Kod `deploy/kanallar.json`da kayıtlı olmalı (yazım hatası → dur), ağaç dinlenmede
+# (varsayilan kanal tabanı) ve kaynak kimliği KANALDAN almalı: literal kimlik taşıyan
+# bir kaynak derleme anındaki enjeksiyonu görmez ve paket başka kanalın kimliğiyle
+# doğar (aynı makinede o kanalın kurulumu). Çıkış 2 = ÖLÇÜLEMEDİ, o da durdurur.
 node "$kok/scripts/kanal-kapisi.mjs" panel-paketle "$musteri" \
   || hata "Kanal kapısı geçilmedi — yukarıdaki satırlara bak (kayıt defteri: deploy/kanallar.json)."
 
@@ -113,46 +113,48 @@ if [ -z "$istenen_surum" ]; then
   ") || hata "Sıradaki sürüm hesaplanamadı."
 fi
 
-# --- 1) Müşteriyi ve sürümü tek kaynağa yaz -------------------------------
-mevcut=$(node -p "require('./shared/musteri.json').kod")
-if [ "$mevcut" != "$musteri" ]; then
-  echo "Müşteri değişiyor: $mevcut → $musteri"
-fi
-
-node -e "
+# --- 1) Sürümü yaz — KİMLİK YAZILMAZ ---------------------------------------
+# Kanal kimliği (appId · ürün adı · paket adı · güncelleme adresi · çıktı dizini ·
+# pencere başlığı · varsayılan sunucu · görünür etiket) ağaca YAZILMAZ: derleme
+# ANINDA kayıttan enjekte edilir (electron-builder `-c.*` + `TEKSERP_KANAL` →
+# Electron/build-channel.ts). Ağaçtaki package.json/musteri.json dinlenme tabanıdır
+# ve paketleme bitince (ya da düşünce) aynen kalır. Yazılan tek şey sürüm numarası:
+# numara koda aittir, kanala değil (yayından sonra commit'lenir).
+if [ -n "$istenen_surum" ]; then
+  node -e "
 const fs = require('fs');
-const kod = process.argv[1];
-const surum = process.argv[2] || null;
-const base = process.argv[3];
-
-// shared/musteri.json — adres bundan TÜRETİLİR (shared/update-feed.ts)
-const mPath = './shared/musteri.json';
-const m = JSON.parse(fs.readFileSync(mPath, 'utf8'));
-if (m.kod !== kod) { m.kod = kod; }
-fs.writeFileSync(mPath, JSON.stringify(m, null, 2) + '\n');
-
-// package.json > build.publish — electron-builder bunu app-update.yml olarak
-// pakete GÖMER. İki dosya birlikte yazılır; bekçi eşitliklerini kilitler.
 const pPath = './package.json';
 const p = JSON.parse(fs.readFileSync(pPath, 'utf8'));
-p.build.publish = [{ provider: 'generic', url: base + kod + '/electron/', channel: 'latest' }];
-// Çıktı KANALA ayrılır: iki kanalın aynı sürümü aynı klasörde dursaydı, düşen bir
-// paketleme sonrası yayıncı ÖBÜR kanalın derlemesini bulurdu (B3).
-p.build.directories = { ...(p.build.directories || {}), output: 'release/' + kod + '/\${version}' };
-if (surum) p.version = surum;
-fs.writeFileSync(pPath, JSON.stringify(p, null, 2) + '\n');
-" "$musteri" "$istenen_surum" "$BASE_URL"
+if (p.version !== process.argv[1]) {
+  p.version = process.argv[1];
+  fs.writeFileSync(pPath, JSON.stringify(p, null, 2) + '\n');
+}
+" "$istenen_surum"
+fi
 
 surum=$(node -p "require('./package.json').version")
 beklenen_url="${BASE_URL}${musteri}/electron/"
 rel="release/$musteri/$surum"
+
+# Kimlik argümanları kayıttan (satır başına bir `-c.<anahtar>=<değer>`); boşsa DUR.
+derleme_satirlari=$(node "$kok/scripts/kanal-kapisi.mjs" panel-derleme "$musteri") \
+  || hata "Kanal kimliği derleme argümanlarına çevrilemedi (deploy/kanallar.json)."
+derleme_argumanlari=()
+while IFS= read -r satir; do
+  if [ -n "$satir" ]; then derleme_argumanlari+=("$satir"); fi
+done <<< "$derleme_satirlari"
+[ "${#derleme_argumanlari[@]}" -gt 0 ] || hata "Kanal kimliği boş çıktı — derleme yapılmadı."
+
 echo "Müşteri: $musteri · Sürüm: $surum"
 echo "Yayın adresi: $beklenen_url"
+echo "Kimlik (derleme anında, deploy/kanallar.json):"
+printf '  %s\n' "${derleme_argumanlari[@]}"
 
 # --- 2) Tutarlılık bekçisi (derlemeden ÖNCE — ucuz kontrol) ---------------
-npx vitest run src/test/update-feed-url.test.ts --reporter=dot >/dev/null 2>&1 \
-  || hata "Adres bekçisi kırmızı — musteri.json ile package.json ayrışmış olabilir.
-  Ayrıntı için: cd Electron && npx vitest run src/test/update-feed-url.test.ts"
+# Aynı kanalla koşar: derlenecek kanalın kaydı çözülüyor ve gömülecek kimlik kayıtla birebir mi.
+TEKSERP_KANAL="$musteri" npx vitest run src/test/update-feed-url.test.ts --reporter=dot >/dev/null 2>&1 \
+  || hata "Adres bekçisi kırmızı — kanal kaydı ile gömülecek kimlik ayrışmış olabilir.
+  Ayrıntı için: cd Electron && TEKSERP_KANAL=$musteri npx vitest run src/test/update-feed-url.test.ts"
 
 # --- 2b) SÜRÜM NOTU KAPISI ------------------------------------------------
 # Not yazılmadan sürüm çıkmaz (kullanıcı kararı). Bekçi ayrıca kopyaların taze
@@ -172,10 +174,12 @@ node "$kok/scripts/check-surum-notlari.mjs" --panel="$surum" \
 # --- 3) Derle -------------------------------------------------------------
 echo "Derleniyor (bu birkaç dakika sürer)…"
 rm -rf "$rel"
+# Kanal İKİ derleyiciye de verilir: `TEKSERP_KANAL` electron-vite'a (kod içi kimlik),
+# `-c.*` electron-builder'a (paket kimliği). Biri eksik kalırsa 4. adım karışık kimliği yakalar.
 if [ "$(uname)" = "Darwin" ]; then
-  npm run build:win:cross
+  TEKSERP_KANAL="$musteri" npm run build:win:cross -- "${derleme_argumanlari[@]}"
 else
-  npm run build:win
+  TEKSERP_KANAL="$musteri" npm run build:win -- "${derleme_argumanlari[@]}"
 fi
 
 # --- 4) GÖMÜLÜ ADRES KAPISI (asıl koruma) ---------------------------------
@@ -194,8 +198,9 @@ if [ "$gomulu_url" != "$beklenen_url" ]; then
 fi
 echo "✓ Gömülü adres doğru: $gomulu_url"
 
-# Aynı yüklem yayıncıda da koşar: paket kimliği (adres · updater önbelleği · exe adı)
-# kanalla birebir mi — yayıncı hedefi bu kimlikten çözer, ağaçtaki musteri.json'dan değil.
+# Aynı yüklem yayıncıda da koşar: paket kimliği (adres · updater önbelleği · exe adı ·
+# paketin package.json'ı · ana süreç/arayüz kimliği) kanalla birebir ve başka kanalın
+# kimliği YOK mu — yayıncı hedefi bu kimlikten çözer, ağaçtaki musteri.json'dan değil.
 node "$kok/scripts/kanal-kapisi.mjs" panel-yayin "$musteri" "$electron_dir/$rel" \
   || hata "Derlenen paketin kimliği '$musteri' kanalıyla birebir değil — yayınlama."
 

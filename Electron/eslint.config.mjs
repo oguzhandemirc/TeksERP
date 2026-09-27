@@ -317,7 +317,8 @@ export default [
   {
     // `e2e/guzergah/*.mjs` (güzergâh sürücüsü) aynı Node bağlamı — kapsam dışı kalsaydı
     // `npx eslint` onu varsayılan yapılandırmayla (node globals YOK) tarardı.
-    files: ["e2e/**/*.{ts,tsx,mjs}", "playwright.config.ts", "vitest.config.ts"],
+    // `build-channel.ts`: üç derleme yapılandırmasının ortak kanal çözücüsü — aynı Node bağlamı.
+    files: ["e2e/**/*.{ts,tsx,mjs}", "playwright.config.ts", "vitest.config.ts", "build-channel.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: { ecmaVersion: "latest", sourceType: "module" },

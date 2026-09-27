@@ -11,6 +11,7 @@ import { TabActiveProvider, TabIdProvider } from "./tabs/tab-active";
 import { TabPortalProvider } from "./tabs/tab-portal";
 import { ServerOfflineBanner } from "./ServerOfflineBanner";
 import { BossMenu } from "./BossMenu";
+import { ChannelBadge } from "./ChannelBadge";
 import { useServerHeartbeat } from "@/hooks/useServerClock";
 import { useExpiryAutoLogout } from "@/hooks/useExpiryAutoLogout";
 import { BOSS_PATH } from "@/lib/boss-path";
@@ -70,6 +71,7 @@ export function BossShell() {
           </div>
         </div>
         <div className="app-no-drag flex shrink-0 items-center gap-1">
+          <ChannelBadge />
           {canOpenFullPanel && (
             <Button
               type="button"

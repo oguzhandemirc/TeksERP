@@ -24,9 +24,10 @@ release/<sürüm>/           latest.yml              latest.yml'e bakar
 
 > ⚠️ **Düzeltme (2026-09-03) — yukarıdaki diyagramın ilk iki satırı BAYAT.** (a) "sürüm no'yu artır" → doğrusu **"sürüm notunu yaz (kapı)"**: yama hanesini 2026-09-02'den beri script artırıyor (taban git etiketi `panel-v*`, doğrulayan yayın sunucusu — `scripts/lib/surum.mjs`); elle artırma yalnız küçük/büyük hane içindir ve o bir karardır. (b) `npm run build:win` → doğrusu **`./deploy/electron-paketle.sh <müşteri>`**; ham `build:win` bir önceki müşterinin adresiyle derler ve bu komut bu belgenin kendi "2. Paketle" bölümünde zaten yasaklı. Belge kendi içinde çelişiyordu ve çelişkinin yanlış tarafı en çok okunan diyagramdaydı.
 
-- **Yayın adresi:** `https://guncelleme.etkiliyazilim.com/adnansahin/electron/`
-  Tek kaynak: `Electron/shared/update-feed.ts` + `Electron/package.json > build.publish`.
-  İkisinin eşitliği `src/test/update-feed-url.test.ts` bekçisiyle kilitli.
+- **Yayın adresi:** `https://guncelleme.etkiliyazilim.com/<kanal>/electron/` (fabrika: `adnansahin`)
+  Tek kaynak: kanal kaydı `deploy/kanallar.json` (`yayin.panelFeed`); paketleme aynı değeri
+  electron-builder'a (`app-update.yml`) ve koda (`shared/channel.ts` → updater) derleme anında verir.
+  Kaynak tarafı `src/test/update-feed-url.test.ts`, paketin içi `scripts/kanal-kapisi.mjs panel-yayin` ile kilitli.
 - **İndirme farksal:** `.blockmap` sayesinde 150 MB'ın tamamı değil, yalnız değişen
   bloklar iner. Bu yüzden blockmap dosyasını yüklemeyi atlama.
 - **Kontrol ritmi 15 DAKİKA** (2026-09-04 kullanıcı kararı; eskiden 4 saat).
@@ -163,9 +164,9 @@ ikincisinde patlar.
 
 | Kademe | Ne yapar | Neyi yakalayamaz |
 |---|---|---|
-| `shared/musteri.json` tek kaynak | Adres koddan **türetilir**, elle yazılan ikinci kopya yok | — |
-| Bekçi `update-feed-url.test.ts` | `musteri.json` ↔ `package.json` ↔ `update-feed.ts` tutarlılığı | Üçü de aynı **yanlış** müşteriyi gösterirse |
-| **Paketleme kapısı** (derlemeden SONRA) | Paketin içindeki `app-update.yml`i okur, **argümanla verilen** müşteriyle kıyaslar | — |
+| Kanal kaydı tek kaynak (`deploy/kanallar.json`) | Kimlik (appId · ürün adı · paket adı · adres · başlık · varsayılan sunucu · etiket) derleme ANINDA enjekte edilir, ağaca yazılmaz; kaynakta literal kimlik yok (`check-kanallar` §4) | — |
+| Bekçi `update-feed-url.test.ts` (`TEKSERP_KANAL=<kod>`) | Derlenecek kanalın kaydı çözülüyor ve gömülecek kimlik kayıtla birebir | Enjeksiyon derlemede düşerse |
+| **Paketleme kapısı** (derlemeden SONRA) | Paketin İÇİNİ okur — `app-update.yml`, exe adı, asar'daki package.json (userData) ve ana süreç/arayüz (AUMID · çalışma anı adresi · varsayılan sunucu) — **argümanla verilen** kanalla kıyaslar, başka kanalın kimliği varsa durur | — |
 
 Son kademe kritik: beklenen değer **argümandan** (bağımsız niyet beyanı), gerçek
 değer **çıktıdan** gelir. Beklenen değeri de `musteri.json`dan alsaydı kontrol
@@ -252,13 +253,14 @@ Kural + bekçi: `scripts/lib/surum.mjs` · `scripts/test_surum.mjs`.
 ./deploy/electron-paketle.sh adnansahin 1.2.0    # haneyi elle ver
 ```
 
-Script müşteri kodunu `shared/musteri.json` ve `package.json > build.publish`
-içine **birlikte** yazar, derler ve derlemeden **sonra** paketin içindeki gömülü
-adresi okuyup doğru müşteriyi gösterdiğini doğrular.
+Script kanalın kimliğini kayıttan alır ve **derleme anında** iki derleyiciye verir
+(electron-builder `-c.*` + `TEKSERP_KANAL` → electron-vite); ağaca kimlik yazmaz (yalnız
+sürüm numarasını), derlemeden **sonra** paketin içini okuyup doğru kanalı gösterdiğini
+doğrular. Hazırlık kanalı (`testfabrika`) pencere başlığında ve üst şeritte **"TEST FABRİKA"**
+işaretini taşır; üretim kanalında işaret yoktur.
 
-⚠️ **Ham `npm run build:win` kullanma.** O, `package.json`da ne yazıyorsa onunla
-derler — yani bir önceki müşterinin adresiyle. Paketleme script'i tam olarak bu
-hatayı önlemek için var.
+⚠️ **Ham `npm run build:win` kullanma.** O, ağaçtaki dinlenme tabanıyla (`varsayilan`
+kanal) derler ve hiçbir kapıdan geçmez. Paketleme script'i tam olarak bu hatayı önlemek için var.
 
 Çıktı: `Electron/release/<kanal>/<sürüm>/` içinde **üç dosya** (kanala ayrık: iki kanalın aynı sürümü aynı klasörde durmaz)
 
@@ -300,6 +302,10 @@ Kanal kodu `deploy/kanallar.json`da kayıtlı olmalıdır. Script üç dosyanın
 ve `latest.yml`in gerçekten o sürümü gösterdiğini doğrular, **doğru sırada** yükler
 ve sonunda yayını dışarıdan kontrol eder. **Elle `scp` YOK** — kanal kapısı,
 değişmezlik, sha512, yayın defteri ve etiket yalnız bu betikte.
+
+Ağa çıkmadan prova: `./deploy/electron-yayinla.sh --musteri=<kanal> --kuru` — yerel kapıların
+hepsi (kanal kaydı · paketin kimliği · üç dosya · `latest.yml` sürümü) koşar ve yükleme planı
+basılır; ssh/scp/curl/etiket YOK (değişmezlik ve sha512 sunucu ister, kuru kipte atlanır).
 
 > ⚠️ `deploy/electron-yayinla.ps1` EMEKLİ (2026-09-27): eski sunucuya, sabit
 > `adnansahin` klasörüne ve kapısız yüklüyordu; artık hiçbir şey yüklemeden

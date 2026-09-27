@@ -55,7 +55,7 @@ const SERBEST = [/\.env\.example$/, /\.env\..*\.example$/, /\.env\.docker\.examp
  */
 const IZINLI: Record<string, string> = {
   "Electron/.env.production":
-    "yalnız VITE_API_BASE_URL (LAN adresi) + APP_ENV — sır yok; derlemeyi kim yaparsa yapsın fabrika adresi aynı gitsin diye bilerek commit'li (dosyanın kendi başlığı gerekçeli)",
+    "yalnız APP_ENV — sır yok; varsayılan sunucu adresi kanal kaydına taşındı (deploy/kanallar.json panel.erpAdresi, derleme anında gömülür), dosya bilerek commit'li (kendi başlığı gerekçeli)",
 };
 
 /** Sır GÖRÜNÜMLÜ anahtar adları — izinli dosyalarda bulunmaları YASAK. */

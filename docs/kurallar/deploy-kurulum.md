@@ -92,7 +92,7 @@
 
 ### Değişmezler
 
-- **[PROFİL]** [PROFİL] Electron paket kimliği (productName 'Adnan Şahin ERP' + appId `com.etkiliyazilim.adnan-sahin-erp`) SABİTTİR, müşteriyle türemez; `deploy/electron-paketle.sh` yalnız `shared/musteri.json` yazar. İkinci müşteride çözüm `if (musteri)` değil, kimliği musteri.json'dan türetmek (ayrı karar). <sub>(CLAUDE.md:1)</sub>
+- **[ÇEKİRDEK]** Electron paket kimliği (appId = AUMID · ürün adı → exe/kurulum dizini/userData · paket adı → güncelleyici önbelleği · güncelleme adresi · pencere başlığı · varsayılan sunucu · görünür etiket) KANALDAN türer ve derleme ANINDA enjekte edilir (`deploy/electron-paketle.sh <kod>` → electron-builder `-c.*` + `TEKSERP_KANAL` → `Electron/build-channel.ts` sanal modülü): ağaca YAZILMAZ, kaynak literal kimlik taşımaz, paket derlemeden sonra İÇİNDEN (asar dahil) okunarak kanalla ölçülür; yeni kanal `if (musteri)` değil kayıt satırıdır. · bekçi: `scripts/check-kanallar.mjs (§4 panel kaynağı) · scripts/test_kanal_yayin_kapisi.mjs (§2 paketleme, 1m–1o paketin içi) · Electron/src/test/update-feed-url.test.ts` <sub>(arşiv:2026-09-27 testfabrika kanalı D2)</sub>
 
 ### Tuzaklar
 

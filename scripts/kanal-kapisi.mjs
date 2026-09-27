@@ -5,7 +5,8 @@
 // Çıkış: 0 geçti · 1 KIRMIZI · 2 ÖLÇÜLEMEDİ — sıfır-dışı her çıkış DURDURUR.
 //
 //   node scripts/kanal-kapisi.mjs kanal <kod>                      # kayıtlı mı
-//   node scripts/kanal-kapisi.mjs panel-paketle <kod>              # ağaç bu kanalın panel kimliğini taşıyor mu
+//   node scripts/kanal-kapisi.mjs panel-paketle <kod>              # kayıtlı mı + ağaç dinlenmede + kimlik kaynağı kanal
+//   node scripts/kanal-kapisi.mjs panel-derleme <kod>              # electron-builder `-c.*` kimlik argümanları (satır başına bir)
 //   node scripts/kanal-kapisi.mjs panel-yayin <kod> <paket dizini> # paket (release/<kod>/<sürüm>) bu kanalın mı
 //
 // ⚠️ AYRI DOSYA ve KOŞULSUZ `main()`: CLI eskiden kitaplığın içindeydi ve "doğrudan
@@ -22,6 +23,9 @@ import {
   kanalCoz,
   panelArtefaktFarki,
   panelArtefaktKimligi,
+  panelDerlemeArgumanlari,
+  panelIsaretciFarki,
+  panelKaynakFarki,
   panelSabitKimlikFarki,
 } from './lib/kanallar.mjs';
 
@@ -41,16 +45,28 @@ function main(argv) {
       return;
     }
     if (komut === 'panel-paketle') {
-      const { kanal } = kanalCoz(kod);
-      const f = panelSabitKimlikFarki(kanal, dosyalariOku(PANEL_SABIT_DOSYALAR));
+      // Kimlik derleme ANINDA enjekte edilir; ağaç yalnız ezilen TABANDIR ve dinlenmede olmalı.
+      const { kayit, kanal } = kanalCoz(kod);
+      const vk = kayit.varsayilan;
+      const d = dosyalariOku(PANEL_SABIT_DOSYALAR);
+      const f = [
+        ...panelSabitKimlikFarki(kayit.kanallar[vk], d).map((x) => `dinlenme ("${vk}"): ${x}`),
+        ...panelIsaretciFarki(vk, kayit.kanallar[vk], d).map((x) => `dinlenme ("${vk}"): ${x}`),
+        ...panelKaynakFarki(kayit, d),
+      ];
       if (f.length) {
-        dur(`AĞAÇ "${kod}" KANALININ PANEL KİMLİĞİNİ TAŞIMIYOR — paketlenirse yanlış kimlikle doğar`, [
+        dur(`AĞAÇ "${kod}" KANALI İÇİN PAKETLENEMEZ — kimlik kaynağı kanal değil ya da ağaç dinlenmede değil`, [
           ...f,
-          'Paketleme bu alanları YAZMAZ (yalnız kod · yayın adresi · çıktı dizini); başka kanalın kimliğiyle',
-          'derlenen panel aynı makinede o kanalın kurulumunun, verisinin ve güncelleyicisinin üstüne yazar.',
+          'Paketleme kimliği ağaca YAZMAZ, derleme anında enjekte eder; literal kimlik taşıyan kaynak o enjeksiyonu',
+          'göremez ve paket başka kanalın kimliğiyle doğar (aynı makinede o kanalın kurulumu/verisi/güncelleyicisi).',
         ], 1);
       }
-      console.log(`  ✓ kanal "${kod}" (${kanal.tur}) · panel kimliği ağaçla birebir`);
+      console.log(`  ✓ kanal "${kod}" (${kanal.tur}) · ağaç dinlenmede ("${vk}") · kimlik derlemede kanaldan`);
+      return;
+    }
+    if (komut === 'panel-derleme') {
+      const { kanal } = kanalCoz(kod);
+      for (const a of panelDerlemeArgumanlari(kod, kanal)) console.log(a);
       return;
     }
     if (komut === 'panel-yayin') {
@@ -63,10 +79,10 @@ function main(argv) {
           'Hedef klasör paketin KENDİ kimliğinden çözülür; çalışma ağacındaki musteri.json bir beyandır.',
         ], 1);
       }
-      console.log(`  ✓ paket "${kod}" kanalının (app-update.yml · updater önbelleği · exe adı)`);
+      console.log(`  ✓ paket "${kod}" kanalının (app-update.yml · updater önbelleği · exe adı · paketin package.json'ı · ana süreç/arayüz kimliği)`);
       return;
     }
-    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['kanal <kod> · panel-paketle <kod> · panel-yayin <kod> <dizin>'], 2);
+    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['kanal <kod> · panel-paketle <kod> · panel-derleme <kod> · panel-yayin <kod> <dizin>'], 2);
   } catch (e) {
     if (e instanceof Olculemedi) dur(`ÖLÇÜLEMEDİ — ${e.message}`, ['Ölçülemeyen kapı geçmiş kapı değildir: DUR.'], 2);
     if (e?.satirlar) dur(e.message, e.satirlar, 1);

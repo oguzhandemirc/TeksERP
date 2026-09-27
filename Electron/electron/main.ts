@@ -5,6 +5,7 @@ import log from "electron-log/main.js";
 import { registerIpcHandlers } from "./ipc/index.js";
 import { startDiscoveryIfNeeded } from "./ipc/discovery.ipc.js";
 import { buildAppMenu } from "./menu.js";
+import { APP_ID, WINDOW_TITLE } from "@shared/channel";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -43,7 +44,8 @@ async function createMainWindow(): Promise<void> {
     resizable: false,
     minWidth: 1100,
     minHeight: 700,
-    title: "Adnan Şahin ERP",
+    // Kanaldan (deploy/kanallar.json, derleme anında) — hazırlık kanalında etiketi de taşır.
+    title: WINDOW_TITLE,
     icon: iconPath,
     backgroundColor: "#000",
     show: false,
@@ -68,6 +70,8 @@ async function createMainWindow(): Promise<void> {
   });
 
   mainWindow.once("ready-to-show", () => mainWindow?.show());
+  // Pencere başlığı yalnız kanaldan gelir: splash'in ve renderer'ın <title>'ı onu ezmesin.
+  mainWindow.on("page-title-updated", (event) => event.preventDefault());
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -94,8 +98,8 @@ async function createMainWindow(): Promise<void> {
 
 app.whenReady().then(async () => {
   if (process.platform === "win32") {
-    // Taskbar ikonu/gruplaması ve bildirimlerin doğru logoyla görünmesi için — appId ile birebir aynı.
-    app.setAppUserModelId("com.etkiliyazilim.adnan-sahin-erp");
+    // Taskbar ikonu/gruplaması ve bildirimlerin doğru logoyla görünmesi için — kanalın appId'siyle birebir.
+    app.setAppUserModelId(APP_ID);
   }
 
   if (isDev && process.platform === "darwin" && app.dock) {

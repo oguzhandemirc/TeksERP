@@ -2,6 +2,7 @@ import { PanelLeft, Search, LogOut, RotateCw, Settings } from "lucide-react";
 import { PencereKontrolleri } from "./PencereKontrolleri";
 import { Button } from "@/components/ui/button";
 import { DemoModeBadge } from "@/components/demo/DemoModeBadge";
+import { ChannelBadge } from "./ChannelBadge";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { NotificationBell } from "./NotificationBell";
 import { GuncellemeDugmesi } from "./GuncellemeDugmesi";
@@ -70,6 +71,8 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
       </div>
 
       <div className="ml-auto flex items-center gap-1 app-no-drag">
+        {/* Hazırlık kanalının işareti ("TEST FABRİKA") — üretim kanalında hiçbir şey çizilmez. */}
+        <ChannelBadge />
         {/* Unutulmuş demo modu SESSİZ kalamaz — bayrak kapalıyken hiçbir şey çizilmez. */}
         <DemoModeBadge />
         <Button

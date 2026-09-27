@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { SurumRozeti } from "@/components/SurumRozeti";
 import { PencereKontrolleri } from "@/components/layout/PencereKontrolleri";
+import { ChannelBadge } from "@/components/layout/ChannelBadge";
 import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
 import { connectToDiscoveredServer } from "@/lib/server-identity";
 import { useLoginFlow, type LoginFormValues } from "./useLoginFlow";
@@ -65,6 +66,7 @@ export function LoginPage() {
 
       <div className="relative flex w-full items-center justify-center bg-background p-10 md:w-[460px] md:shrink-0">
         <div className="absolute right-5 top-5 flex items-center gap-2">
+          <ChannelBadge />
           {IS_ELECTRON && (
             <button
               type="button"

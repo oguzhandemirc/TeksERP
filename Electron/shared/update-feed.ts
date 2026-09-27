@@ -1,15 +1,15 @@
-import musteri from "./musteri.json";
+import { CHANNEL_CODE, CHANNEL_NAME, PUBLIC_ERP_URL, UPDATE_FEED_URL } from "./channel";
 
 /**
- * Bu paketin ait olduğu MÜŞTERİ — güncelleme kanalını belirleyen tek değer.
+ * Bu paketin ait olduğu MÜŞTERİ (dağıtım kanalı) — güncelleme kanalını belirleyen tek değer.
  *
- * ⚠️ Bu dosyayı elle düzenleme. Müşteri, paketleme komutuyla seçilir:
+ * ⚠️ Kanal paketleme komutuyla seçilir ve derleme ANINDA gömülür (`shared/channel.ts`,
+ * kaynak `deploy/kanallar.json`); ağaçta yazılı bir değer yoktur:
  *
  *     ./deploy/electron-paketle.sh <müşteri-kodu>
  *
- * Script `shared/musteri.json`'ı ve `package.json > build.publish` adresini
- * BİRLİKTE yazar, sonra derlenen paketin İÇİNDEKİ gömülü adresi okuyup doğru
- * müşteriyi gösterdiğini doğrular.
+ * Script aynı kanalın kimliğini electron-builder'a da (`app-update.yml`, appId, ürün adı)
+ * verir, sonra derlenen paketin İÇİNİ okuyup doğru kanalı gösterdiğini doğrular.
  *
  * NEDEN BU KADAR DİKKAT: yayın adresi pakete derleme anında gömülür. Yanlış
  * müşteri kodu taşıyan bir paket, **başka bir fabrikanın güncellemelerini
@@ -17,15 +17,15 @@ import musteri from "./musteri.json";
  * yalnızca yanlış müşteriyi gösterirler. Tek müşteriyle görünmez, ikincisinde
  * patlar.
  */
-export const MUSTERI_KODU = musteri.kod;
-export const MUSTERI_ADI = musteri.ad;
+export const MUSTERI_KODU = CHANNEL_CODE;
+export const MUSTERI_ADI = CHANNEL_NAME;
 
 /**
  * BU FABRİKANIN DIŞ (İNTERNET) ADRESİ — uzaktan erişim tüneline bakan adres.
  *
  * ⚠️ GÜNCELLEME ADRESİNDEN TÜRETİLMEZ ve türetilmemeli. İkisi AYRI KANALDIR:
  * güncelleme paketi yayın sunucusundan gelir (`guncelleme.etkiliyazilim.com`),
- * ERP ise fabrikanın kendi tünelinden. Aynı `musteri.kod`u paylaşmaları bir
+ * ERP ise fabrikanın kendi tünelinden. Aynı kanal kodunu paylaşmaları bir
  * tesadüftür, bağımlılık değil — birini diğerinden üretmek, bir gün biri
  * değiştiğinde diğerini sessizce yanlışlar. (Aynı ders mobilde ölçüldü:
  * API kanalı ile güncelleme kanalı bilerek ayrı tutuluyor.)
@@ -37,7 +37,7 @@ export const MUSTERI_ADI = musteri.ad;
  * Boş bırakılırsa (uzaktan erişim kullanmayan kurulum) bağlantı mevcut
  * adresten üretilir — LAN'da kurulum yapan kurulumlar için doğru davranış.
  */
-export const ERP_DIS_ADRESI: string = (musteri as { erpAdresi?: string }).erpAdresi ?? "";
+export const ERP_DIS_ADRESI: string = PUBLIC_ERP_URL;
 
 /** Tüm müşterilerin ortak yayın kökü. */
 export const UPDATE_BASE_URL = "https://guncelleme.etkiliyazilim.com/";
@@ -64,7 +64,8 @@ export const UPDATE_BASE_URL = "https://guncelleme.etkiliyazilim.com/";
  * adları kapsamadığı için her müşteriye ayrı sertifika gerekirdi.)
  *
  * Adres sonunda `/` ile biter: electron-updater `latest.yml` ve setup dosyasını
- * bu adrese EKLEYEREK ister (`<url>latest.yml`).
+ * bu adrese EKLEYEREK ister (`<url>latest.yml`). Değer kayıt defterinden gelir; kaydın
+ * `<UPDATE_BASE_URL><kod>/electron/` biçimini `scripts/check-kanallar.mjs` §3 ölçer.
  *
  * ⚠️ Bu alan adı Cloudflare'de **proxy'si AÇIK** (turuncu bulut) olmak
  * zorundadır. Sunucudaki sertifika bir **Cloudflare Origin CA** sertifikasıdır
@@ -72,7 +73,7 @@ export const UPDATE_BASE_URL = "https://guncelleme.etkiliyazilim.com/";
  * çevrilirse istemci doğrudan origin'e bağlanır, sertifikayı reddeder ve
  * güncelleme SESSİZCE durur (panelde "sertifika kabul edilmedi" yazar).
  */
-export const DEFAULT_UPDATE_FEED_URL = `${UPDATE_BASE_URL}${MUSTERI_KODU}/electron/`;
+export const DEFAULT_UPDATE_FEED_URL: string = UPDATE_FEED_URL;
 
 /**
  * Makineye özel adres ezmesi (secure-store anahtarı). Normalde BOŞTUR.

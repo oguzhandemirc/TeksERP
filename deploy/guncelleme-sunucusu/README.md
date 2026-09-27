@@ -60,5 +60,5 @@ ssh yenisunucu 'mkdir -p /opt/stack/apps/tekserp-guncelleme/html/<musteri>/elect
 ```
 
 DNS, sertifika, Traefik ya da servis değişikliği **yoktur**. Adresi elle
-düzenleme — paketleme komutu `shared/musteri.json` ve `package.json`ı birlikte
-yazar ve derlemeden SONRA paketin içindeki gömülü adresi doğrular.
+düzenleme — paketleme komutu kanalın kimliğini kayıttan derleme ANINDA enjekte
+eder (ağaca yazmaz) ve derlemeden SONRA paketin içindeki gömülü kimliği doğrular.

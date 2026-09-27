@@ -2,7 +2,7 @@
 
 Electron 42 + React 19 + TypeScript + Vite. Yönetim paneli; saha akışı yok; backend `Teks-Erp/` ile HTTP üzerinden. Domain kuralları kök `CLAUDE.md`; alan kuralları `docs/kurallar/<alan>.md`; teknik desenler `docs/KOD-KURALLARI.md`. Bu dosya yalnız panel-geneli düzeni taşır (yeniden yazım 2026-09-05; önceki sürüm git `6695afc2`).
 
-> Paket kimliği (`productName` "Adnan Şahin ERP", `appId com.etkiliyazilim.adnan-sahin-erp`) SABİTTİR ve müşteriyle türemez; müşteri farkı yalnız `shared/musteri.json` (kod/ad/ERP adresi). Kimliği müşteriden türetmek ayrı bir karardır — `if (musteri === 'X')` değil.
+> Paket kimliği (appId/AUMID · ürün adı · paket adı · güncelleme adresi · pencere başlığı · varsayılan sunucu · görünür etiket) KANALDAN gelir: `deploy/kanallar.json` → `./deploy/electron-paketle.sh <kod>` derleme ANINDA enjekte eder (electron-builder `-c.*` + `TEKSERP_KANAL` → `build-channel.ts` → `virtual:tekserp-channel`, kodda `@shared/channel`). Ağaçtaki `package.json` + `shared/musteri.json` (`{kod}`) yalnız dinlenme tabanıdır (`varsayilan` = adnansahin); kaynağa literal kimlik yazılmaz, `if (musteri === 'X')` yazılmaz.
 
 ## Komutlar ve ortam
 
@@ -19,7 +19,7 @@ npm run electron:rebuild   # serialport, node-hid
 
 ## Mimari ve süreç sınırı
 
-- `electron/` main (main.ts, preload.ts, menu.ts, `ipc/<domain>.ipc.ts`, `discovery/`) · `shared/` (ipc-contract, update-feed, musteri.json) · `src/` renderer: `App.tsx` (provider'lar), `router.tsx` **yalnız oturum-dışı router**; içerik route'ları `src/routes/content-routes.tsx`; `components/{ui,layout,data-table,forms}`, `hooks/`, `pages/<Modul>/`, `services/` (apiClient tek geçit), `store/`, `types/`, `lib/`, `providers/`, `components/layout/tabs/` (sekme router'ları, derinlik defteri).
+- `electron/` main (main.ts, preload.ts, menu.ts, `ipc/<domain>.ipc.ts`, `discovery/`) · `shared/` (ipc-contract, update-feed, channel, musteri.json) · `src/` renderer: `App.tsx` (provider'lar), `router.tsx` **yalnız oturum-dışı router**; içerik route'ları `src/routes/content-routes.tsx`; `components/{ui,layout,data-table,forms}`, `hooks/`, `pages/<Modul>/`, `services/` (apiClient tek geçit), `store/`, `types/`, `lib/`, `providers/`, `components/layout/tabs/` (sekme router'ları, derinlik defteri).
 - **Process boundary pazarlık dışı:** renderer `electron/fs/path/child_process/os/net` import etmez; native API yalnız `window.api`; `webPreferences` `sandbox:true, contextIsolation:true, nodeIntegration:false`. Token `safeStorage` + `electron-store`; renderer `localStorage`'a token YAZMAZ (tek istisna web build).
 - **Yeni IPC kanalı 4 adım:** `shared/ipc-contract.ts` tip → `electron/ipc/<domain>.ipc.ts` handler → `preload.ts` köprü (yalnız serializable) → `window.api.<domain>.<action>`.
 - Backend yanıt şekilleri `src/types/api.ts` (`ApiResponse`, `PaginatedResponse`, `QueryParams`); servis yolları TAM (`/api/...`, öneksiz 404'ü FilterBar "Sonuç yok" olarak yutar). `apiClient` interceptor: 401 token sil + auth store kapısı; 403 "yetkin yok" (üç dar istisna: Access oturumu, ayar şifresi, login); 4xx backend mesajı; 5xx generic → mutation `onError`'da ikinci toast YOK.
@@ -42,7 +42,7 @@ JWT yalnız `permissions[]`; `useRoleAccess` → `isAdmin`/`hasPermission`/…; 
 
 ## Otomatik güncelleme (özet)
 
-`electron-updater`, generic provider; yayın adresi TEK KAYNAK `shared/update-feed.ts` ↔ `package.json > build.publish` (bekçi `update-feed-url.test.ts`); `artifactName` ASCII (`${productName}` YASAK); `autoUpdater`a modül gövdesinde dokunma; `autoInstallOnAppQuit=false`; `nsis.perMachine` (yönetici olmayan hesapta güncelleme kurulmaz); şerit yalnız `ready` durumunda (`error` şeridi internetsiz makinede her açılışta körleştirir); `package.json > version` artmazsa hiçbir panel güncellenmez (yama hanesini script artırır). Reçete: `docs/kurallar/surum-yayin.md`, `docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md`.
+`electron-updater`, generic provider; yayın adresi TEK KAYNAK kanal kaydı (`deploy/kanallar.json` → `shared/channel.ts` + electron-builder `-c.publish.url`; bekçi `update-feed-url.test.ts`, paketten okuyan `scripts/kanal-kapisi.mjs panel-yayin`); `artifactName` ASCII (`${productName}` YASAK); `autoUpdater`a modül gövdesinde dokunma; `autoInstallOnAppQuit=false`; `nsis.perMachine` (yönetici olmayan hesapta güncelleme kurulmaz); şerit yalnız `ready` durumunda (`error` şeridi internetsiz makinede her açılışta körleştirir); `package.json > version` artmazsa hiçbir panel güncellenmez (yama hanesini script artırır). Reçete: `docs/kurallar/surum-yayin.md`, `docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md`.
 
 ## Paketler
 
