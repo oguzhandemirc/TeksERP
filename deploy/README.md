@@ -122,6 +122,19 @@ powershell -ExecutionPolicy Bypass -File deploy\test\run-harness.ps1 -Script dep
 powershell -ExecutionPolicy Bypass -File deploy\test\run-harness.ps1 -Script docs\history\kur.ps1.2026-08-24.orig
 ```
 
+**Diğer ölçüm araçları (`deploy/test/`, macOS/Linux'ta pwsh 7.3+):**
+
+| Araç | Ne ölçer |
+|---|---|
+| `sozdizimi.sh [dosya…]` | `deploy/*.ps1` ayrıştırıcı denetimi (koşturmaz) |
+| `native-arg.sh` | `ilk-kurulum.ps1` `NativeArg`: psql'e giden SQL Standard ve **Legacy (=5.1)** kipte bozulmadan varıyor mu |
+| `ilk-kurulum-yerel.sh <senaryo> <Legacy\|Standard> …` | `ilk-kurulum.ps1`i docker'daki PG16'ya karşı baştan sona (sahte psql/pg_dump/pg_restore). Paylaşılan dev kümesinde yalnız `_test` DB, `-PgAyarla` YOK — sunucu ayarı için tek kullanımlık konteyner |
+| `yedekle-yerel.sh <senaryo>` | `yedekle.ps1` aynı kökte: döküm + doğrulama + saklama; `LIST_BOZ=1` doğrulama dalı |
+
+Windows'a özgü olanlar (icacls/Get-Acl, Görev Zamanlayıcı, güvenlik duvarı, SSH oturum ölümü,
+5.1'in kendisi) bu araçlarla ÖLÇÜLMEZ — betikler onları "YAPILMADAN KALANLAR"a yazar; kaynak
+sözleşmesi `Teks-Erp/scripts/test_sunucu_betikleri.ts`te.
+
 > pwsh bu Mac'te sistemde kurulu değil: `brew install --cask powershell@preview` pkg için
 > sudo şifresi ister (arka planda geçmez). Microsoft'un `osx-arm64.tar.gz` sürümü herhangi bir
 > klasöre açılıp `PWSH=` ile gösterilebilir — sisteme kurulum gerekmez.

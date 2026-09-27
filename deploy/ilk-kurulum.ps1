@@ -208,6 +208,11 @@ if ($DumpAmaci -and -not $Dump) { Uyar "-DumpAmaci verildi ama -Dump yok - kulla
 
 # --- PostgreSQL araclari ----------------------------------------------------
 Adim "PostgreSQL araclari bulunuyor..."
+if (-not $PgBin -and (Test-Path (Join-Path "$Kok\pgsql\bin" "pg_dump.exe"))) {
+  # Onceki kosumun baglantisi (fabrikada D:\PostgreSQL\16\bin'e JUNCTION) ya da zip'ten
+  # yerinde acilmis ikililer: ikinci kosum -PgBin'siz de ayni araci bulur.
+  $PgBin = "$Kok\pgsql\bin"
+}
 if (-not $PgBin) {
   # Program Files altindaki EN YUKSEK surum. `kur.ps1` bunlari $Kok\pgsql\bin
   # altinda arar; asagida oraya baglanacak.

@@ -44,7 +44,7 @@ kurulum** şudur. Çelişki görürseniz bu tablo geçerlidir.
 | Ne | Değer |
 |---|---|
 | PostgreSQL | **16.9**, servis `postgresql-tekserp`, port **5432**, initdb UTF8 / **C locale** |
-| PG yolları | `C:\TeksERP\pgsql\bin` · veri `C:\TeksERP\pgdata` |
+| PG yolları | program **`D:\PostgreSQL\16`** (bin `D:\PostgreSQL\16\bin`) · veri **`D:\PostgreSQL\data`** — ölçüldü (2026-09-27 prova raporu + `backend-2.10.0.md` sınırlar listesi). `C:\TeksERP\pgsql\bin` o bin dizinine bir **JUNCTION**'dır (`kur.ps1`, `yedekle.ps1` ve `PG_BIN_DIR` bu yolu kullanır — `Remove-Item -Recurse` ile SİLİNMEZ). ⚠️ Bu satır eskiden `C:\TeksERP\pgsql\bin` · `C:\TeksERP\pgdata` diyordu: yazılı olan ölçülmüş olandan farklıydı |
 | Veritabanı / kullanıcı | **`app\.env` → `DATABASE_URL`den okunur** (yan yana kurulumda iki kurulum AYRI DB kullanır — adı buraya sabitleme) · superuser `postgres` |
 | Backend (ÇALIŞAN) | **`C:\TeksERP\app`** — `kur.ps1` ile kurulan PAKET (git klonu DEĞİL) · pm2 adı **`tekserp-backend-yeni`** (`kur.ps1 -UygulamaAdi` belirler; `ecosystem.config.js` onu env'den okur) · önceki sürüm `app.eski-<damga>` |
 | Paketin üretildiği yer | **GELİŞTİRME MAKİNESİ** — sunucuda build klonu YOK ve gerekmiyor (düzeltildi 2026-09-07; bu satır eskiden `D:\tekserp-build\tekserp` diyordu). Windows şart değil: macOS/Linux'ta `pwsh` ile koşar, üretilen paket Windows içindir (`deploy/paketle.ps1` başlığı). Çalışan kod klondan KOŞMAZ |
@@ -214,6 +214,41 @@ CREATE DATABASE "tekserp" ENCODING 'UTF8';
 > var (`customer.name`, `item.name/code`, `color.name`, `batchNumber`, `shipmentNo`…).
 > Sunucu locale'i dev'den farklıysa **arama davranışı sessizce değişir**. Ayrıntı:
 > `Teks-Erp/DB-MIMARI-DENETIM.md`.
+
+### 2.1b Yeni sunucuda PostgreSQL — ölçülmüş tuzaklar (2026-09-27 thinkpad-1 provası)
+
+Fabrika düzeni: program `D:\PostgreSQL\16`, veri `D:\PostgreSQL\data`, servis
+`postgresql-tekserp`, `C:\TeksERP\pgsql\bin` → bin JUNCTION (`ilk-kurulum.ps1` kurar). Yeni
+sunucuda aynı düzen önerilir; iki yol ve provada ölçülen dört tuzak:
+
+1. **EDB kurucusu** (`postgresql-16.x-windows-x64.exe --mode unattended …`) **SSH / masaüstsüz
+   oturumda exit 1 verdi** — hata metni yok. Kurucuyu yerel konsolda ya da RDP masaüstünde
+   koşun; uzaktan yapılacaksa 2. yol.
+2. **Zip ikilileri** (EDB "binaries" zip): kurucusuz, uzaktan açılabilir — ama ikililer
+   **imzasız**; doğrulama fabrikanınkiyle **SHA256 kıyası** (aynı minör sürüm, ör. 16.9):
+   ```powershell
+   # fabrikada:  Get-FileHash D:\PostgreSQL\16\bin\postgres.exe, D:\PostgreSQL\16\bin\pg_dump.exe -Algorithm SHA256
+   # yeni sunucuda aynı dosyalar → özetler BİREBİR aynı olmalı; değilse KURMA.
+   ```
+3. **`initdb` yönetici hesabında KISITLI TOKEN ile çalışır** (Windows'ta PostgreSQL kendini
+   yetkisizleştirip yeniden başlatır): veri dizini yöneticinin tam yetkili olduğu yerde, korumalı
+   klasörün (Program Files) DIŞINDA olmalı ve servisi koşturacak hesap (ör.
+   `NT AUTHORITY\NetworkService`) ona tam yetkili olmalı:
+   ```powershell
+   D:\PostgreSQL\16\bin\initdb.exe -D D:\PostgreSQL\data -U postgres -W -E UTF8 --locale=C
+   icacls D:\PostgreSQL\data /grant "*S-1-5-20:(OI)(CI)F" /T      # NetworkService (SID)
+   D:\PostgreSQL\16\bin\pg_ctl.exe register -N postgresql-tekserp -U "NT AUTHORITY\NetworkService" -D D:\PostgreSQL\data -S auto
+   Start-Service postgresql-tekserp
+   ```
+   (`--locale=C` fabrikanın collation kararıdır — yukarıdaki not; sürümü ve locale'i fabrikayla
+   aynı tutun, döküm arası farkı sessiz arama davranışı farkıdır.)
+4. **`%TEMP%`ten TAŞINAN dosya ACL'ini taşır:** zip `%TEMP%`e açılıp `Move-Item` ile
+   `D:\PostgreSQL\16`e taşınırsa dosyalar TEMP'in "yalnız bu kullanıcı" iznini korur ve servis
+   hesabı ikilileri okuyamaz (servis kalkmaz). Taşıdıktan sonra mirası geri yükleyin:
+   `icacls D:\PostgreSQL\16 /reset /T /Q` (kopyalanan dosya hedefin iznini alır, taşınan almaz).
+
+Sonra `ilk-kurulum.ps1 -PgBin D:\PostgreSQL\16\bin …` (ikinci koşumda `-PgBin` gerekmez; junction
+bulunur) — sunucu ayarları için `-PgAyarla` (§6).
 
 ### 2.2 Backend
 
