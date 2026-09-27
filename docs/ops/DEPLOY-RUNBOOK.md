@@ -120,6 +120,14 @@ JWT_SECRET="<en az 32 karakter güçlü rastgele>"
   - ⚠️ **Bayat düzeltmesi (2026-09-03):** dev DB adı artık `tekserp_demo` (Docker `tekserp-local-db`, port 55433) — eski `adnansahin_db` düzeltildi; üretim `tekserp`. **Çok müşteride DB adı bir kurulum parametresidir** — dokümana müşteri adı gömmek yerine "ortam/müşteri başına farklı; yetkili değer o kurulumun `.env`indedir" demek doğru olanıdır. Yanlış ad geri yükleme tatbikatında hedefi ıskalatır.
 - Eski `secret.json` **artık yok** (installer üretiyordu). Tek yetkili sır
   kaynağı `.env`'dir — **yedekleyin**; kaybolursa mevcut DB'ye bağlanılamaz.
+- **İzin:** `.env`, `pg-setup\db-credentials.json`, `backups\` (fabrikanın TÜM verisi) ve
+  `rclone.conf` yalnız **SYSTEM + Administrators** okur. Kök klasör `C:\`'den "Users okur /
+  Authenticated Users değiştirir" mirasını alır — 2026-09-27 provasında dördü de açıktı.
+  `ilk-kurulum.ps1` daraltır ve ölçer (idempotent, yeniden koşmak güvenli); `kur.ps1` her sürümde
+  yeni `app\.env`i daraltır, `.env`/ecosystem yedeğini artık `%TEMP%`e yazmaz (bellekte tutar) ve
+  `backups`/`pg-setup` genişse uyarır (değiştirmez — canlı sunucuda o klasörü okuyan başka bir şey
+  olabilir). Elle: `icacls <yol> /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F
+  /remove:g *S-1-5-32-545 *S-1-5-11 *S-1-1-0 /T` (SID'ler yerelleştirilmiş grup adından bağımsız).
 
 ### `Teks-Erp/ecosystem.config.js` (operasyonel — git'te)
 

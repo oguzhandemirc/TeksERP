@@ -206,5 +206,38 @@ for (const yol of SUNUCU_PS1) {
       kod.some((k) => /var olan deger DOKUNULMADI/.test(k)));
 }
 
+// §9 — sır hijyeni (bulgu 10, 19): sır dosyaları yalnız SYSTEM + Administrators
+//   (SID ile), kur.ps1 sırrı %TEMP%'e yazmaz, parola komut satırı dışından da gelir.
+{
+  const kurT = psTara(readFileSync(join(KOK, "deploy/kur.ps1"), "utf8"));
+  const ilkT = psTara(readFileSync(join(KOK, "deploy/ilk-kurulum.ps1"), "utf8"));
+  const kodK = kurT.satirlar.map((s) => s.kod);
+  const kodI = ilkT.satirlar.map((s) => s.kod);
+  const sidSozlesmesi = (kod: string[]) => kod.some((k) =>
+    /icacls\.exe .*\/inheritance:r .*\*S-1-5-18:.*\*S-1-5-32-544:.*\/remove:g .*\*S-1-5-32-545.*\*S-1-5-11.*\*S-1-1-0/.test(k));
+  check("§9a ⭐ iki betikte de izin daraltma SID'le: miras kesilir, SYSTEM + Administrators, Users/Authenticated Users/Everyone silinir",
+    sidSozlesmesi(kodK) && sidSozlesmesi(kodI));
+  const tempSir = kodK.map((k, i) => ({ k, i })).filter((x) => /\$env:TEMP/.test(x.k) && /env|ecosystem/i.test(x.k.replace(/\$env:TEMP/g, "")));
+  check("§9b ⭐ kur.ps1 .env / ecosystem yedeğini %TEMP%'e YAZMAZ (bellekte tutar)", tempSir.length === 0,
+    tempSir.length ? `satır ${tempSir.map((x) => x.i + 1).join(", ")}` : "temiz");
+  const yaz = kodK.findIndex((k) => /WriteAllBytes\(\(Join-Path \$appDir "\.env"\)/.test(k));
+  const daralt = kodK.findIndex((k) => /^\s*SirIzniDaralt \(Join-Path \$appDir "\.env"\)/.test(k));
+  check("§9c ⭐ kur.ps1 yeni app\\.env'i yazdıktan SONRA izni daraltır", yaz >= 0 && daralt > yaz,
+    `yaz ${yaz + 1} · daralt ${daralt + 1}`);
+  const adim = kodI.findIndex((k) => /^\s*Adim\s+"Sir dosyalarinin izinleri/.test(k));
+  const envAdim = kodI.findIndex((k) => /^\s*Adim\s+"app\\\.env/.test(k));
+  const credAdim = kodI.findIndex((k) => /^\s*Adim\s+"db-credentials\.json/.test(k));
+  const yollar = kodI.find((k) => /^\s*\$sirYollari\s*=/.test(k)) ?? "";
+  check("§9d ⭐ ilk-kurulum izin adımı .env + pg-setup + backups'ı kapsıyor, ikisi yazıldıktan SONRA ve ÖLÇÜYOR (GenisErisim)",
+    adim > envAdim && adim > credAdim && envAdim >= 0 && credAdim >= 0 &&
+      /app\\\.env/.test(yollar) && /pg-setup/.test(yollar) && /backups/.test(yollar) &&
+      kodI.some((k) => /\$g = GenisErisim \$k/.test(k)), `adım satır ${adim + 1}`);
+  check("§9e ⭐ DB parolası zorunlu PARAMETRE değil; dosyadan (-DbParolaDosyasi) ya da gizli soruyla (SecureString) gelir",
+    !kodI.some((k) => /Mandatory\s*=\s*\$true\)\]\[string\]\$DbParola/.test(k)) &&
+      kodI.some((k) => /^\s*\[string\]\$DbParolaDosyasi/.test(k)) &&
+      kodI.some((k) => /^\s*\[string\]\$PostgresParolaDosyasi/.test(k)) &&
+      kodI.some((k) => /Read-Host -AsSecureString/.test(k)));
+}
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

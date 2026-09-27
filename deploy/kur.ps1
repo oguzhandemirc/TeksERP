@@ -174,6 +174,30 @@ function TasiIsrarla($kaynak, $hedef, $deneme = 5, $bekleMs = 1500) {
   }
 }
 
+# Yeni `app\.env` kokun mirasini alir (C:\'den: Users okur, Authenticated Users
+# degistirir). Yalniz SYSTEM (pm2 daemon) + Administrators; SID ile, yerellestirilmis
+# grup adina bakmadan. ilk-kurulum.ps1 `SirIzniDaralt` ile ayni sozlesme.
+function SirIzniDaralt($yol) {
+  if (-not (Test-Path $yol)) { return }
+  if (-not (Get-Command icacls.exe -ErrorAction SilentlyContinue)) { Uyar "icacls yok - izin DARALTILAMADI: $yol"; return }
+  $hak = if ((Get-Item $yol -Force).PSIsContainer) { "(OI)(CI)F" } else { "F" }
+  & icacls.exe $yol /inheritance:r /grant:r "*S-1-5-18:$hak" "*S-1-5-32-544:$hak" /remove:g "*S-1-5-32-545" "*S-1-5-11" "*S-1-1-0" | Out-Null
+  if ($LASTEXITCODE -ne 0) { Uyar "izin daraltilamadi (icacls $LASTEXITCODE): $yol" }
+  else { Ok "izin: yalniz SYSTEM + Administrators - $(Split-Path $yol -Leaf)" }
+}
+
+# Users / Authenticated Users / Everyone'a izin veren ACE'ler. $null = olculemedi.
+function GenisErisim($yol) {
+  if (-not (Test-Path $yol) -or -not (Get-Command Get-Acl -ErrorAction SilentlyContinue)) { return $null }
+  $genis = @("S-1-5-32-545", "S-1-5-11", "S-1-1-0")
+  $bulunan = @()
+  foreach ($ace in (Get-Acl $yol).Access) {
+    try { $sid = $ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { continue }
+    if ($genis -contains $sid -and "$($ace.AccessControlType)" -eq "Allow") { $bulunan += "$($ace.IdentityReference)" }
+  }
+  return ,$bulunan
+}
+
 $kok       = $Kok
 $appDir    = "$kok\app"
 $eskiKlon  = "$kok\tekserp\Teks-Erp"      # ilk gecis: git klonundan gelen kurulum
@@ -425,8 +449,10 @@ else { Fail "Mevcut kurulum bulunamadi ($appDir veya $eskiKlon)." }
 
 $envKaynak = Join-Path $mevcut ".env"
 if (-not (Test-Path $envKaynak)) { Fail ".env BULUNAMADI: $envKaynak  -> sirlar olmadan kurulum yapilmaz." }
-$envYedek = Join-Path $env:TEMP "tekserp-env-$damga.bak"
-Copy-Item $envKaynak $envYedek -Force
+# Sir %TEMP%'e YAZILMAZ: kopya orada kalir (kosum dusse de, bitse de) ve dosya
+# kullanicinin TEMP ACL'ini tasir. Bellekte tutulur; geri donus kaynagi zaten
+# `app.eski-*\.env`dir.
+$envBayt = [System.IO.File]::ReadAllBytes($envKaynak)
 
 # ecosystem.config.js SUNUCUNUNDUR, paketin degil (denetim 2026-08-29, BULGU-T1-020).
 # Icinde .env'de olmayan OPERASYONEL ayarlar yasar: BACKUP_SCHEDULE_ENABLED,
@@ -435,11 +461,8 @@ Copy-Item $envKaynak $envYedek -Force
 # (offsite bos, scheduler acik) -> her kurulum sahadaki ayari sessizce geri aliyordu:
 # gece yedegi ve makine disi kopya, guncelleme yapilan gece KAPANIYORDU.
 $ecoKaynak = Join-Path $mevcut "ecosystem.config.js"
-$ecoYedek  = $null
-if (Test-Path $ecoKaynak) {
-  $ecoYedek = Join-Path $env:TEMP "tekserp-ecosystem-$damga.bak"
-  Copy-Item $ecoKaynak $ecoYedek -Force
-}
+$ecoBayt   = $null
+if (Test-Path $ecoKaynak) { $ecoBayt = [System.IO.File]::ReadAllBytes($ecoKaynak) }
 Ok "mevcut: $mevcut   |  .env + ecosystem.config.js kenara alindi"
 
 # --- Onay -------------------------------------------------------------------
@@ -567,17 +590,27 @@ try {
   # BILEREK silinmez - geri donus tamamlanana kadar dursun (sonda hatirlatilir).
   New-Item -ItemType Directory -Path $appDir | Out-Null
   Copy-Item "$temp\*" $appDir -Recurse -Force
-  Copy-Item $envYedek (Join-Path $appDir ".env") -Force
+  [System.IO.File]::WriteAllBytes((Join-Path $appDir ".env"), $envBayt)
   # Sunucunun ecosystem'i KORUNUR; paketinki yanina '.paket' olarak birakilir.
   # Prompt YOK (kurulum -Zorla ile otomatik kosabiliyor) - fark EKRANA basilir,
   # karar operatorde kalir. Yeni ayar geldiyse .paket dosyasindan elle alinir.
-  if ($ecoYedek -and (Test-Path $ecoYedek)) {
+  if ($ecoBayt) {
     $ecoHedef = Join-Path $appDir "ecosystem.config.js"
     if (Test-Path $ecoHedef) { Copy-Item $ecoHedef "$ecoHedef.paket" -Force }
-    Copy-Item $ecoYedek $ecoHedef -Force
+    [System.IO.File]::WriteAllBytes($ecoHedef, $ecoBayt)
   }
 } catch { GeriAlOtomatik "Dosya yerlestirme basarisiz: $($_.Exception.Message)" }
-if ($ecoYedek) {
+SirIzniDaralt (Join-Path $appDir ".env")
+# Yedekler ve kimlik dosyasi bu surumde DEGISTIRILMEZ (canli sunucuda o klasoru okuyan
+# baska bir sey olabilir); genis erisim yalniz SOYLENIR - daraltma ilk-kurulum.ps1'in isi.
+foreach ($y in @($backupDir, (Split-Path $credFile -Parent))) {
+  $g = GenisErisim $y
+  if ($g -and $g.Count) {
+    Uyar "$y herkese acik ($(@($g | Sort-Object -Unique) -join ', ')) - yedek/kimlik fabrika verisi tasir."
+    Uyar "  -> daraltmak icin: powershell -NoProfile -ExecutionPolicy Bypass -File <paket>\ilk-kurulum.ps1 ... (idempotent; izin adimi)"
+  }
+}
+if ($ecoBayt) {
   Ok "app\ olusturuldu, .env + ecosystem.config.js (SUNUCUNUNKI) tasindi"
   # Fark ozeti: yalnizca env: blogundaki ANAHTARLAR karsilastirilir; deger
   # basilmaz (sir olmasa da operasyonel bilgi ekrana dokulmesin).

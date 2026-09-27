@@ -9,15 +9,18 @@
 #   yalniz bu surec icin gevser, makinenin ayari degismez:
 #     powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 <parametreler>
 #
-#   # Sifirdan (veritabani da yok):
-#   ... -File .\ilk-kurulum.ps1 -DbParola <app-parolasi> -PostgresParola <postgres-parolasi> -PgAyarla
+#   # Sifirdan (veritabani da yok) - iki parola da gizli sorulur:
+#   ... -File .\ilk-kurulum.ps1 -PgAyarla
 #   (-PgAyarla: PostgreSQL sunucu ayarlarini da yazar - YENI sunucuda; bayraksiz yalniz raporlar)
 #
 #   # Fabrika yedegini de yukle (tek komut) - dokumun AMACI ZORUNLU (asagida):
-#   ... -File .\ilk-kurulum.ps1 -DbParola <p> -PostgresParola <pp> -Dump "C:\yol\son.dump" -DumpAmaci Kopya
+#   ... -File .\ilk-kurulum.ps1 -Dump "C:\yol\son.dump" -DumpAmaci Kopya -PgAyarla
 #
-#   # Veritabani ZATEN varsa (elle olusturulmus): -PostgresParola gerekmez.
-#   ... -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbParola <p> -DbKullanici postgres
+#   # Etkilesimsiz (zamanlanmis gorev / uzaktan): parolalar DOSYADAN
+#   ... -File .\ilk-kurulum.ps1 -DbParolaDosyasi C:\gecici\db.txt -PostgresParolaDosyasi C:\gecici\pg.txt
+#
+#   # Veritabani ZATEN varsa (elle olusturulmus): yonetici parolasi gerekmez.
+#   ... -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbKullanici postgres
 #
 # NE YAPAR: `kur.ps1`in BEKLEDIGI iskeleti kurar - klasorler, pg baglantisi,
 #   veritabani + rol, db-credentials.json, .env, pm2. Kendisi SURUM KURMAZ;
@@ -46,13 +49,20 @@
 #
 # ⚠ PAROLA VARSAYILANI YOKTUR ve olmayacaktir. Bu dosya fabrika sunucusunda da
 #   kosar; gomulu bir varsayilan oraya da giderdi ve "sonra degistiririz" adimi
-#   unutulurdu. Parola komut satirindan gelir.
+#   unutulurdu. Parola uc yoldan gelir, tercih sirasiyla:
+#     (1) soru: parametre verilmezse gizli sorulur (Read-Host -AsSecureString);
+#     (2) dosya: -DbParolaDosyasi / -PostgresParolaDosyasi <yol> (tek satir; zamanlanmis
+#         gorevde soru sorulamaz - dosyayi ACL'li olustur, kurulumdan sonra sil);
+#     (3) duz: -DbParola / -PostgresParola - komut satiri PowerShell gecmisine ve surec
+#         listesine duser; calisir ama uyari basar.
 # =============================================================================
 param(
   [string]$DbAdi = "tekserp",
-  [Parameter(Mandatory = $true)][string]$DbParola,   # uygulamanin baglanti parolasi
+  [string]$DbParola,                                 # uygulamanin baglanti parolasi (baslik: parola)
+  [string]$DbParolaDosyasi,
   [string]$DbKullanici = "tekserp",                  # uygulamanin DB rolu
-  [string]$PostgresParola,                           # YALNIZ rol/DB yaratmak icin
+  [string]$PostgresParola,                           # rol/DB yaratmak + superuser ayarlari icin
+  [string]$PostgresParolaDosyasi,
   [string]$PostgresKullanici = "postgres",
   [string]$Dump,                                     # opsiyonel: BOS veritabanina yukle
   [ValidateSet("Kopya", "Tasima")][string]$DumpAmaci, # -Dump ile ZORUNLU (baslik)
@@ -70,7 +80,7 @@ $ErrorActionPreference = "Stop"
 
 # Adimlar kendiliginden numaralanir; adim eklenince yalniz toplam degisir.
 $script:adimNo = 0
-$script:adimToplam = 10
+$script:adimToplam = 11
 function Adim($m) { $script:adimNo++; Write-Host ""; Write-Host "[$($script:adimNo)/$($script:adimToplam)] $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  + $m" -ForegroundColor Green }
 function Uyar($m) { Write-Host "  ! $m" -ForegroundColor Yellow }
@@ -78,6 +88,58 @@ function Dur($m)  { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; Wri
 # Kurulumu durdurmayan ama YAPILMADAN kalan is: sonda tek listede tekrar basilir.
 $script:acik = @()
 function Acik($m) { Uyar $m; $script:acik += $m }
+
+# Parola: dosya > duz (uyarili) > gizli soru. Etkilesimsiz oturumda soru sorulamaz.
+# -Zorunlu: yoksa durur. Degilse etkilesimli oturumda bos birakilabilir soru sorulur.
+function ParolaCoz($duz, $dosya, $etiket, [switch]$Zorunlu) {
+  if ($duz -and $dosya) { Dur "$etiket icin hem parola hem dosya verildi - birini sec." }
+  if ($dosya) {
+    if (-not (Test-Path $dosya)) { Dur "$etiket parola dosyasi yok: $dosya" }
+    $p = ([System.IO.File]::ReadAllText((Resolve-Path $dosya).Path)).TrimEnd("`r", "`n")
+    if (-not $p) { Dur "$etiket parola dosyasi BOS: $dosya" }
+    return $p
+  }
+  if ($duz) {
+    Uyar "$etiket parolasi komut satirinda verildi - PowerShell gecmisine ve surec listesine duser (tercih: soru ya da ...ParolaDosyasi)."
+    return $duz
+  }
+  $soramaz = -not [Environment]::UserInteractive -or [Console]::IsInputRedirected
+  if ($soramaz) {
+    if ($Zorunlu) { Dur "$etiket parolasi gerekli ve bu oturum soru soramiyor: -...ParolaDosyasi <yol> ver." }
+    return $null
+  }
+  $ss = Read-Host -AsSecureString "  $etiket parolasi$(if (-not $Zorunlu) { ' (bos = yok)' })"
+  $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ss)
+  try { $p = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+  finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+  if (-not $p) { if ($Zorunlu) { Dur "$etiket parolasi bos." }; return $null }
+  return $p
+}
+
+# Sir tasiyan yol yalniz SYSTEM (pm2 daemon, zamanlanmis gorevler) + Administrators'a:
+# kok C:\'den "Users okur / Authenticated Users degistirir" mirasini alir. SID ile
+# (yerellestirilmis grup adi "Yoneticiler" olabilir); dizinde alt ogelere de (/T).
+function SirIzniDaralt($yol) {
+  if (-not (Test-Path $yol)) { return }
+  if (-not (Get-Command icacls.exe -ErrorAction SilentlyContinue)) { Acik "icacls yok - izin DARALTILAMADI: $yol"; return }
+  $dizin = (Get-Item $yol -Force).PSIsContainer
+  $hak = if ($dizin) { "(OI)(CI)F" } else { "F" }
+  $ek = if ($dizin) { @("/T") } else { @() }
+  & icacls.exe $yol /inheritance:r /grant:r "*S-1-5-18:$hak" "*S-1-5-32-544:$hak" /remove:g "*S-1-5-32-545" "*S-1-5-11" "*S-1-1-0" @ek | Out-Null
+  if ($LASTEXITCODE -ne 0) { Acik "izin daraltilamadi (icacls $LASTEXITCODE): $yol" }
+}
+
+# Users / Authenticated Users / Everyone'a izin veren ACE'ler. $null = olculemedi.
+function GenisErisim($yol) {
+  if (-not (Test-Path $yol) -or -not (Get-Command Get-Acl -ErrorAction SilentlyContinue)) { return $null }
+  $genis = @("S-1-5-32-545", "S-1-5-11", "S-1-1-0")
+  $bulunan = @()
+  foreach ($ace in (Get-Acl $yol).Access) {
+    try { $sid = $ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { continue }
+    if ($genis -contains $sid -and "$($ace.AccessControlType)" -eq "Allow") { $bulunan += "$($ace.IdentityReference)" }
+  }
+  return ,$bulunan
+}
 
 # Native komuta, icinde cift tirnak olan TEK arguman. PowerShell 5.1 (ve 7.3 oncesi
 # "Legacy" kip) argumani tirnaklarken icerdeki `"`yi KACIRMAZ; psql `"updatedAt"`
@@ -118,6 +180,9 @@ Write-Host "================================================================"
 Write-Host "  Kok       : $Kok"
 Write-Host "  Veritabani: $DbAdi @ localhost:$DbPort"
 Write-Host "  Rol       : $DbKullanici"
+
+$DbParola       = ParolaCoz $DbParola $DbParolaDosyasi "DB (uygulama rolu)" -Zorunlu
+$PostgresParola = ParolaCoz $PostgresParola $PostgresParolaDosyasi "PostgreSQL yonetici ($PostgresKullanici)"
 
 if ($Dump -and -not $DumpAmaci) {
   Dur @"
@@ -438,6 +503,28 @@ if (Test-Path $envDosya) {
     "PORT=4000"
   ) | Set-Content $envDosya -Encoding UTF8
   Ok "olusturuldu: $envDosya  (JWT_SECRET bu makinede uretildi)"
+}
+
+# --- Sir dosyalarinin izinleri -------------------------------------------------
+# .env (DB parolasi + JWT_SECRET), db-credentials.json, gece yedekleri (fabrikanin TUM
+# verisi) ve rclone.conf (Drive jetonu) - hepsi kokun genis mirasini aliyordu.
+# Idempotent: her kosumda daraltilir ve OLCULUR (izin daraltilamadiysa acik kalir).
+Adim "Sir dosyalarinin izinleri (yalniz SYSTEM + Administrators)..."
+$sirYollari = @("$Kok\app\.env", "$Kok\pg-setup", "$Kok\backups", "$Kok\rclone.conf")
+foreach ($y in $sirYollari) {
+  if (-not (Test-Path $y)) { continue }
+  SirIzniDaralt $y
+  $kontrol = @($y)
+  if ((Get-Item $y -Force).PSIsContainer) { $kontrol += @(Get-ChildItem $y -Recurse -Force | ForEach-Object { $_.FullName }) }
+  $olculemedi = $false; $kalan = @()
+  foreach ($k in $kontrol) {
+    $g = GenisErisim $k
+    if ($null -eq $g) { $olculemedi = $true; break }
+    if ($g.Count) { $kalan += "$(Split-Path $k -Leaf): $($g -join ', ')" }
+  }
+  if ($olculemedi)   { Acik "izin OLCULEMEDI (Get-Acl yok): $y" }
+  elseif ($kalan.Count) { Acik "hala genis erisim var: $($kalan -join ' | ')" }
+  else               { Ok "yalniz SYSTEM + Administrators: $y" }
 }
 
 # --- pm2 --------------------------------------------------------------------

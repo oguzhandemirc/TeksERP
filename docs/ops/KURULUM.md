@@ -24,11 +24,15 @@
 
 ```powershell
 # Yürütme ilkesi: çıplak `.\ilk-kurulum.ps1` Restricted/RemoteSigned makinede KOŞMAZ.
-# Sıfırdan (veritabanı da yok) + fabrika yedeğini yükle; -PgAyarla PostgreSQL sunucu ayarlarını da yazar:
-powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbParola <app-parolası> -PostgresParola <postgres-parolası> -Dump "<dump>" -DumpAmaci Kopya -PgAyarla
+# Sıfırdan (veritabanı da yok) + fabrika yedeğini yükle; iki parola da gizli sorulur,
+# -PgAyarla PostgreSQL sunucu ayarlarını da yazar:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -Dump "<dump>" -DumpAmaci Kopya -PgAyarla
 
-# Veritabanı ZATEN varsa: -PostgresParola gerekmez.
-powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbParola <p> -DbKullanici postgres
+# Etkileşimsiz (zamanlanmış görev / uzaktan): parolalar DOSYADAN (soru sorulamaz).
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbParolaDosyasi <db.txt> -PostgresParolaDosyasi <pg.txt> -PgAyarla
+
+# Veritabanı ZATEN varsa: yönetici parolası gerekmez (sorulursa boş geç).
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbKullanici postgres
 ```
 
 Klasör iskeletini (`app` · `backups` · `logs` · `pg-setup` · `pm2-home`), pg
@@ -66,6 +70,13 @@ veritabanında yazamaz.
 
 ⚠️ **Parolanın varsayılanı YOK** ve olmayacak — bu dosya fabrika sunucusunda da
 koşar; gömülü bir varsayılan oraya da gider ve "sonra değiştiririz" adımı unutulur.
+Parola üç yoldan gelir: **soru** (parametre verilmezse gizli sorulur — `Read-Host -AsSecureString`) ·
+**dosya** (`-DbParolaDosyasi` / `-PostgresParolaDosyasi <yol>`, tek satır — zamanlanmış görevde soru
+sorulamaz; dosyayı yalnız yöneticinin okuyacağı yerde oluştur, kurulumdan sonra sil) · **düz**
+(`-DbParola` / `-PostgresParola` — PowerShell geçmişine ve süreç listesine düşer; çalışır, uyarı basar).
+
+⚠️ **Sır dosyalarının izni** (`.env` · `db-credentials.json` · `backups\` · `rclone.conf`) yalnız
+SYSTEM + Administrators'a daraltılır ve ölçülür; kalan genişlik "YAPILMADAN KALANLAR"da yazar.
 
 ⚠️ **`db-credentials.json` alan adları iki nesildir:** yeni kurulumlar `user`/`pass`
 yazar, sahadaki eski dosya `superuser`/`superpass` taşır. `kur.ps1` ikisini de okur
