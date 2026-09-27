@@ -124,7 +124,7 @@ module.exports = {
         //
         // ⚠ SAHADAKİ SUNUCUDA (SAHINSRV) GECE YEDEĞİNİ BACKEND ALMIYOR.
         // Bağımsız bir Windows Görev Zamanlayıcı görevi alıyor:
-        //   TeksERP-DB-Backup → C:\Etkili-Yazilim\yedekle.ps1, her gece 02:00,
+        //   TeksERP-DB-Backup → <kök>\yedekle.ps1 (repo: deploy/yedekle.ps1), her gece 03:00,
         //   C:\Etkili-Yazilim\backups, 30 gün saklama.
         // Bunun bilinçli üstünlüğü: backend ÇÖKMÜŞ ya da KAPALIYKEN bile yedek
         // alınır. Bu yüzden orada scheduler KAPATILIR — ikisi birden açık kalırsa

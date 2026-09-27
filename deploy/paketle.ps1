@@ -297,7 +297,10 @@ Copy-Item "$proj\ecosystem.config.js" "$stage\"
 #     `C:\<kok>\kur.ps1` artik zorunlu degil, yalnizca kolaylik kopyasi.
 Copy-Item "$repo\deploy\kur.ps1" "$stage\"
 # Sifirdan kurulumun iskeleti de ayni zip'te: sunucuya repo agaci tasinmaz.
+# ilk-kurulum acilis + gece yedegi gorevlerinin dosyalarini kendi yanindan alir.
 Copy-Item "$repo\deploy\ilk-kurulum.ps1" "$stage\"
+Copy-Item "$repo\deploy\yedekle.ps1" "$stage\"
+Copy-Item "$repo\deploy\pm2-boot.cmd" "$stage\"
 
 # Prisma yapilandirmasi: TS DEGIL, seed kancasi OLMAYAN JS surumu
 $prodCfg = "$proj\deploy\prisma.config.prod.js"

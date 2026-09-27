@@ -33,7 +33,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 }
 
 /** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç). */
-const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1"];
+const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1"];
 
 const YONLENDIRME = /(?:^|\s)2>(?:&1|\$null)/;
 const CIPLAK_NPM = /(?:^|[\s&(;|])npm(?=\s|$)/;
@@ -47,7 +47,7 @@ for (const yol of SUNUCU_PS1) {
   const t = psTara(readFileSync(tam, "utf8"));
   const son = t.satirlar[t.satirlar.length - 1];
   check(`§0 ${yol} tarandı (körlük zemini: satır + fonksiyon + dengeli parantez)`,
-    t.satirlar.length > 100 && t.fonksiyonlar.length >= 3 && son?.derinlik === 0,
+    t.satirlar.length > 60 && t.fonksiyonlar.length >= 2 && son?.derinlik === 0,
     `${t.satirlar.length} satır · ${t.fonksiyonlar.length} fonksiyon · son derinlik ${son?.derinlik}`);
 
   // §1 — yönlendirme yalnız EAP=Continue + finally'de geri koyan yardımcıda
@@ -156,8 +156,11 @@ for (const yol of SUNUCU_PS1) {
   check("§5c ⭐ paketle.ps1 araç listesini (araclar.json) doğruluyor ve eksikte Fail",
     pk.satirlar.some((s) => /araclar\.json/.test(s.kod)) &&
       pk.satirlar.some((s) => /Fail\s+"Arac uretilmedi/.test(s.kod)));
-  check("§5d paketle.ps1 `ilk-kurulum.ps1`i pakete koyuyor (sunucuya repo ağacı taşınmaz)",
-    pk.satirlar.some((s) => /^\s*Copy-Item\s+"\$repo\\deploy\\ilk-kurulum\.ps1"\s+"\$stage\\"/.test(s.kod)));
+  const pakete = (ad: string) => pk.satirlar.some((s) =>
+    s.kod.trim() === `Copy-Item "$repo\\deploy\\${ad}" "$stage\\"`);
+  const eksikDosya = ["ilk-kurulum.ps1", "yedekle.ps1", "pm2-boot.cmd"].filter((a) => !pakete(a));
+  check("§5d paketle.ps1 `ilk-kurulum.ps1` + `yedekle.ps1` + `pm2-boot.cmd`i pakete koyuyor (sunucuya repo ağacı taşınmaz)",
+    eksikDosya.length === 0, eksikDosya.length ? `eksik: ${eksikDosya.join(", ")}` : "üçü de");
 }
 
 // §7 — `-Dump` fabrikanın KİMLİĞİNİ taşır (bulgu 8): amaç beyanı zorunlu, Kopya
@@ -237,6 +240,37 @@ for (const yol of SUNUCU_PS1) {
       kodI.some((k) => /^\s*\[string\]\$DbParolaDosyasi/.test(k)) &&
       kodI.some((k) => /^\s*\[string\]\$PostgresParolaDosyasi/.test(k)) &&
       kodI.some((k) => /Read-Host -AsSecureString/.test(k)));
+}
+
+// §10 — açılış + gece yedeği görevleri (bulgu 12, 16, 17). Hiçbir betik kurmuyordu ve
+//   paketteki ecosystem backend zamanlayıcısını KAPALI getiriyor: sıfırdan kurulumda
+//   reboot'ta backend kalkmıyor, gece yedeği hiç alınmıyordu.
+{
+  const ilk = psTara(readFileSync(join(KOK, "deploy/ilk-kurulum.ps1"), "utf8")).satirlar.map((s) => s.kod);
+  const yed = psTara(readFileSync(join(KOK, "deploy/yedekle.ps1"), "utf8")).satirlar.map((s) => s.kod);
+  const cmdYol = join(KOK, "deploy/pm2-boot.cmd");
+  const cmd = existsSync(cmdYol) ? readFileSync(cmdYol, "utf8") : "";
+  check("§10a ⭐ ilk-kurulum iki görevi SYSTEM olarak kuruyor (açılış + günlük), var olanı ezmiyor",
+    ilk.some((k) => k.includes('ad = "TeksERP-Backend-Boot"')) && ilk.some((k) => k.includes('ad = "TeksERP-DB-Backup"')) &&
+      ilk.some((k) => k.includes('New-ScheduledTaskPrincipal -UserId "SYSTEM"')) &&
+      ilk.some((k) => k.includes("New-ScheduledTaskTrigger -AtStartup")) &&
+      ilk.some((k) => k.includes("New-ScheduledTaskTrigger -Daily -At $YedekSaati")) &&
+      ilk.some((k) => k.includes("gorev zaten var, DOKUNULMADI")));
+  check("§10b ⭐ gece yedeği saati varsayılanı 03:00 (fabrika dökümü damgası 03:00:01 ölçüldü)",
+    ilk.some((k) => k.includes('[string]$YedekSaati = "03:00"')));
+  const yarim = yed.findIndex((k) => k.includes('"-f", $yarim'));
+  const liste = yed.findIndex((k) => k.includes('@("--list", $yarim)'));
+  const tasi = yed.findIndex((k) => k.trim().startsWith("Move-Item $yarim $hedef"));
+  const sakla = yed.findIndex((k) => k.trim() === "Sakla $yedekDir $desen");
+  check("§10c ⭐ yedekle.ps1: dökümü `.part`a yazar → `pg_restore --list` → ancak SONRA `.dump` adı → ancak SONRA saklama",
+    yarim >= 0 && liste > yarim && tasi > liste && sakla > tasi,
+    `f ${yarim + 1} · list ${liste + 1} · taşı ${tasi + 1} · sakla ${sakla + 1}`);
+  check("§10d yedekle.ps1 saklaması en yeni N'i yaşına bakmadan korur (3), 30 gün, yalnız kendi desenine dokunur",
+    yed.some((k) => k.includes("Select-Object -Skip $EnAzTut")) && yed.some((k) => k.includes("[int]$EnAzTut = 3")) &&
+      yed.some((k) => k.includes("[int]$SaklamaGun = 30")) && yed.some((k) => k.includes("_\\d{8}_\\d{6}\\.dump$")));
+  check("§10e pm2-boot.cmd: PM2_HOME kur.ps1'inkiyle aynı (<kök>\\pm2-home), `pm2 resurrect`, tamamı ASCII",
+    cmd.includes('set "PM2_HOME=%KOK%pm2-home"') && cmd.includes('pm2\\node_modules\\.bin\\pm2.cmd" resurrect') &&
+      !/[^\x00-\x7F]/.test(cmd));
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

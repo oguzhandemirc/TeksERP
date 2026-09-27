@@ -50,8 +50,8 @@ kurulum** şudur. Çelişki görürseniz bu tablo geçerlidir.
 | Paketin üretildiği yer | **GELİŞTİRME MAKİNESİ** — sunucuda build klonu YOK ve gerekmiyor (düzeltildi 2026-09-07; bu satır eskiden `D:\tekserp-build\tekserp` diyordu). Windows şart değil: macOS/Linux'ta `pwsh` ile koşar, üretilen paket Windows içindir (`deploy/paketle.ps1` başlığı). Çalışan kod klondan KOŞMAZ |
 | Deploy script'leri | `C:\TeksERP\kur.ps1` (repo kaynağı `deploy/kur.ps1` — **elle kopyalanır**; script kendini güncelleyemez, paket `app\` altına iner) · `deploy/paketle.ps1` geliştirme makinesinde |
 | pm2 daemon | **SYSTEM** hesabı → **pm2 komutları YÖNETİCİ shell ister** (`EPERM \\.\pipe\rpc.sock` alıyorsanız sebebi budur) |
-| Boot | Görev **`TeksERP-Backend-Boot`** → `pm2-boot.cmd` → `pm2 resurrect` (sistem açılışında, SYSTEM) |
-| Gece yedeği | Görev **`TeksERP-DB-Backup`**, **02:00**, `yedekle.ps1` → `C:\TeksERP\backups`, **30 gün** |
+| Boot | Görev **`TeksERP-Backend-Boot`** → `C:\TeksERP\pm2-boot.cmd` → `pm2 resurrect` (sistem açılışında, SYSTEM) |
+| Gece yedeği | Görev **`TeksERP-DB-Backup`**, **03:00** (fabrika dökümlerinin damgası `…_030001` — ölçüldü; bu satır eskiden 02:00 diyordu), `yedekle.ps1` → `C:\TeksERP\backups` + `E:\TeksERP-yedek`, **30 gün** |
 | Backend scheduler | **KAPALI** (`BACKUP_SCHEDULE_ENABLED=false`) — gece yedeğini yukarıdaki görev alır |
 
 > ⚠️ **2026-09-02 —** `adnansahin` dalı **EMEKLİ**; build klonu `main` ucundadır ve paket `main`'den üretilir (`docs/design/MODUL-BAYRAK-TASARIM.md` §0: müşteri dalı/forku yasak). ⚠️ 2026-09-07: sunucudaki build klonu tartışması tamamen KAPANDI — sunucuda klon yok, paket geliştirme makinesinde üretiliyor.
@@ -433,7 +433,7 @@ seçilmelidir. NAS/uzak sunucu tercih edilirse aynı kart `BACKUP_OFFSITE_DIR`
 (yerel/UNC yol) alanıyla da çalışır — rclone gerekmez.
 
 **Kopyalama ne zaman koşar:** backend açılışından sonra **saatlik** (gece yedeği
-02:00'de alınır; saatlik süpürme "sabaha kadar bir kez mutlaka" garantisi verir).
+03:00'te alınır; saatlik süpürme "sabaha kadar bir kez mutlaka" garantisi verir).
 Durum `/api/admin/health` → `offsite` alanında ve panelde görünür.
 
 > **⚠ Offsite bir ağ paylaşımıysa (`\\NAS\yedek`) hangi hesap yazıyor?** Kopyayı
@@ -646,6 +646,19 @@ ALTER DATABASE "tekserp" SET statement_timeout = '50s';
 ---
 
 ## 7) Reboot kalıcılığı (Windows)
+
+> **Sıfırdan kurulumda `ilk-kurulum.ps1` iki görevi kurar** (SYSTEM; var olan görev/dosya ezilmez):
+> - **`TeksERP-Backend-Boot`** — sistem açılışında `cmd /c <kök>\pm2-boot.cmd` → `PM2_HOME=<kök>\pm2-home`
+>   ile `pm2 resurrect` (liste `kur.ps1 [8/9]`'daki `pm2 save`den gelir); çıktı `<kök>\logs\pm2-boot.log`.
+> - **`TeksERP-DB-Backup`** — her gün `-YedekSaati` (varsayılan **03:00**), `powershell -NoProfile
+>   -ExecutionPolicy Bypass -File <kök>\yedekle.ps1 [-IkinciHedef <yol>]`: `pg_dump -Fc` → `.dump.part` →
+>   `pg_restore --list` → `.dump` (bozuk döküm silinir) → 30 günden eskiyi sil, en yeni 3'ü yaşına
+>   bakmadan koru → varsa ikinci kopya; log `<kök>\backups\backup.log`; kaçan çalışma açılışta telafi
+>   (`StartWhenAvailable`). Kaynak repoda: `deploy/pm2-boot.cmd`, `deploy/yedekle.ps1` (pakete girer).
+>   Fabrikadaki görevlerin metni repoda YOKTU (2026-09-27 provasında runbook tarifinden elle yazıldı);
+>   fabrikadaki `yedekle.ps1` bu dosyayla DEĞİŞTİRİLMEZ — ilk-kurulum var olan dosyaya dokunmaz.
+> Doğrula: `Get-ScheduledTask TeksERP-* | Get-ScheduledTaskInfo` (NextRunTime dolu) ·
+> `Start-ScheduledTask TeksERP-DB-Backup` → `backups\backup.log`'da `OK <ad>.dump … dogrulandi`.
 
 `pm2 startup` **Windows'u desteklemez** — `pm2 save` tek başına yeterli değildir,
 listeyi geri yükleyecek bir tetikleyici gerekir. Yaygın çözümler: `pm2-installer`

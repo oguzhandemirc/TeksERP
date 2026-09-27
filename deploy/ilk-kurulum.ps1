@@ -74,13 +74,17 @@ param(
   [switch]$PgAyarla,
   # Yeniden baslatma isteyen ayar (shared_buffers, listen_addresses...) yazildiysa
   # tek calisan postgresql* servisini yeniden baslat. Canli sunucuda VERME.
-  [switch]$PgYenidenBaslat
+  [switch]$PgYenidenBaslat,
+  # Gece yedegi gorevinin saati (fabrika dokumlerinin damgasi 03:00:01 - olculdu).
+  [ValidatePattern('^\d{2}:\d{2}$')][string]$YedekSaati = "03:00",
+  # Opsiyonel ikinci kopya (ikinci disk). Fabrikada E:\TeksERP-yedek.
+  [string]$YedekIkinciHedef
 )
 $ErrorActionPreference = "Stop"
 
 # Adimlar kendiliginden numaralanir; adim eklenince yalniz toplam degisir.
 $script:adimNo = 0
-$script:adimToplam = 11
+$script:adimToplam = 12
 function Adim($m) { $script:adimNo++; Write-Host ""; Write-Host "[$($script:adimNo)/$($script:adimToplam)] $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  + $m" -ForegroundColor Green }
 function Uyar($m) { Write-Host "  ! $m" -ForegroundColor Yellow }
@@ -547,6 +551,54 @@ if (Test-Path $pm2) {
   Ok "kuruldu: $pm2"
 }
 
+# --- Zamanlanmis gorevler: acilis + gece yedegi ---------------------------------
+# Hicbir betik bunlari kurmuyordu ve paketteki ecosystem BACKUP_SCHEDULE_ENABLED=false:
+# sifirdan kurulumda reboot'ta backend kalkmiyor, gece yedegi HIC alinmiyordu. Tarif
+# fabrikadaki gorevlerden (runbook): ikisi de SYSTEM. Var olan gorev/dosya ezilmez.
+Adim "Zamanlanmis gorevler (TeksERP-Backend-Boot, TeksERP-DB-Backup)..."
+foreach ($dosya in @("pm2-boot.cmd", "yedekle.ps1")) {
+  $hedef = Join-Path $Kok $dosya
+  $kaynak = Join-Path $PSScriptRoot $dosya
+  if (Test-Path $hedef) { Uyar "zaten var, DOKUNULMADI: $hedef" }
+  elseif (Test-Path $kaynak) { Copy-Item $kaynak $hedef; Ok "kondu: $hedef" }
+  else { Acik "$dosya bu betigin yaninda yok ($PSScriptRoot) - paketi ya da repodaki deploy\ klasorunu kullan" }
+}
+if (-not (Get-Command Register-ScheduledTask -ErrorAction SilentlyContinue)) {
+  Acik "Gorev Zamanlayici cmdlet'leri yok - TeksERP-Backend-Boot ve TeksERP-DB-Backup KURULAMADI"
+} else {
+  $sistem = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+  $gorevler = @(
+    @{ ad = "TeksERP-Backend-Boot"; dosya = "$Kok\pm2-boot.cmd"
+       eylem = { New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$Kok\pm2-boot.cmd`"" }
+       tetik = { New-ScheduledTaskTrigger -AtStartup }
+       sure = (New-TimeSpan -Minutes 30)
+       tanim = "TeksERP: acilista pm2 resurrect (backend) - ilk-kurulum.ps1" },
+    @{ ad = "TeksERP-DB-Backup"; dosya = "$Kok\yedekle.ps1"
+       eylem = {
+         $arg = "-NoProfile -ExecutionPolicy Bypass -File `"$Kok\yedekle.ps1`""
+         if ($YedekIkinciHedef) { $arg += " -IkinciHedef `"$YedekIkinciHedef`"" }
+         New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arg }
+       tetik = { New-ScheduledTaskTrigger -Daily -At $YedekSaati }
+       sure = (New-TimeSpan -Hours 2)
+       tanim = "TeksERP: gece yedegi (pg_dump + dogrulama + 30 gun) - ilk-kurulum.ps1" }
+  )
+  foreach ($g in $gorevler) {
+    $var = Get-ScheduledTask -TaskName $g.ad -ErrorAction SilentlyContinue
+    if ($var) {
+      $e = @($var.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments)" }) -join " ; "
+      Uyar "gorev zaten var, DOKUNULMADI: $($g.ad)  ($e)"
+      continue
+    }
+    if (-not (Test-Path $g.dosya)) { Acik "gorev kurulmadi: $($g.ad) - $($g.dosya) yok"; continue }
+    # StartWhenAvailable: kacan calisma (makine o saatte kapaliydi) acilinca telafi edilir.
+    $ayar = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit $g.sure
+    Register-ScheduledTask -TaskName $g.ad -Action (& $g.eylem) -Trigger (& $g.tetik) -Principal $sistem -Settings $ayar -Description $g.tanim | Out-Null
+    Ok "gorev kuruldu: $($g.ad)"
+  }
+  Write-Host "    Dogrula: Get-ScheduledTask TeksERP-* | Get-ScheduledTaskInfo  (NextRunTime dolu olmali)"
+  Write-Host "    Gece yedegini simdi dene: Start-ScheduledTask TeksERP-DB-Backup ; sonra $Kok\backups\backup.log"
+}
+
 # --- Son dogrulama ----------------------------------------------------------
 Adim "Dogrulama..."
 $mig = (Psql $DbKullanici $DbParola $DbAdi "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL").cikti
@@ -560,8 +612,13 @@ if ($script:acik.Count) {
 }
 
 Write-Host ""
-Write-Host "================================================================" -ForegroundColor Green
-Write-Host "  ISKELET HAZIR" -ForegroundColor Green
+if ($script:acik.Count) {
+  Write-Host "================================================================" -ForegroundColor Yellow
+  Write-Host "  ISKELET HAZIR - AMA $($script:acik.Count) IS YAPILMADAN KALDI (yukaridaki liste)" -ForegroundColor Yellow
+} else {
+  Write-Host "================================================================" -ForegroundColor Green
+  Write-Host "  ISKELET HAZIR" -ForegroundColor Green
+}
 Write-Host "================================================================"
 Write-Host "  Sonraki adim - surumu kur:"
 Write-Host "      powershell -NoProfile -ExecutionPolicy Bypass -File .\kur.ps1 -Kok `"$Kok`" -Paket <tekserp-backend-....zip>"
