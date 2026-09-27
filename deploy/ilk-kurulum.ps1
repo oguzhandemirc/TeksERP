@@ -23,8 +23,10 @@
 #   ... -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbKullanici postgres
 #
 # NE YAPAR: `kur.ps1`in BEKLEDIGI iskeleti kurar - klasorler, pg baglantisi,
-#   veritabani + rol, db-credentials.json, .env, pm2. Kendisi SURUM KURMAZ;
-#   islemi bitince size `kur.ps1` komutunu yazar.
+#   veritabani + rol, [dump], DB duzeyi ayarlar, [PostgreSQL sunucu ayarlari],
+#   db-credentials.json, .env, sir dosyalarinin izinleri, pm2, acilis + gece yedegi
+#   gorevleri, API guvenlik duvari kurali. Kendisi SURUM KURMAZ; islemi bitince
+#   `kur.ps1` komutunu ve YAPILMADAN KALANLAR listesini yazar.
 #
 # NEDEN VAR (2026-09-04): `kur.ps1` bir YUKSELTME aracidir; ilk satirlarinda
 #   "Mevcut kurulum bulunamadi" ile durur ve `.env`i MEVCUT kurulumdan alir.
@@ -192,9 +194,6 @@ Write-Host "  Kok       : $Kok"
 Write-Host "  Veritabani: $DbAdi @ localhost:$DbPort"
 Write-Host "  Rol       : $DbKullanici"
 
-$DbParola       = ParolaCoz $DbParola $DbParolaDosyasi "DB (uygulama rolu)" -Zorunlu
-$PostgresParola = ParolaCoz $PostgresParola $PostgresParolaDosyasi "PostgreSQL yonetici ($PostgresKullanici)"
-
 if ($Dump -and -not $DumpAmaci) {
   Dur @"
 -Dump verildi ama -DumpAmaci verilmedi. Dokumun kurulum kimligi icin karar ver:
@@ -205,6 +204,9 @@ if ($Dump -and -not $DumpAmaci) {
 "@
 }
 if ($DumpAmaci -and -not $Dump) { Uyar "-DumpAmaci verildi ama -Dump yok - kullanilmayacak." }
+
+$DbParola       = ParolaCoz $DbParola $DbParolaDosyasi "DB (uygulama rolu)" -Zorunlu
+$PostgresParola = ParolaCoz $PostgresParola $PostgresParolaDosyasi "PostgreSQL yonetici ($PostgresKullanici)"
 
 # --- PostgreSQL araclari ----------------------------------------------------
 Adim "PostgreSQL araclari bulunuyor..."
@@ -258,8 +260,8 @@ if ($hazir) {
   if (-not $PostgresParola) {
     Dur @"
 '$DbAdi' veritabanina '$DbKullanici' ile baglanilamadi ve olusturamiyorum.
-       Olusturmam icin PostgreSQL yonetici parolasini ver:
-         -PostgresParola <postgres-parolasi>
+       Olusturmam icin PostgreSQL yonetici parolasi gerekir:
+         -PostgresParolaDosyasi <yol>  (ya da etkilesimli oturumda sorulunca gir)
        Veritabani zaten VARSA, dogru rol/parolayi ver (-DbKullanici / -DbParola).
 "@
   }
