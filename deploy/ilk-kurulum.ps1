@@ -12,8 +12,8 @@
 #   # Sifirdan (veritabani da yok):
 #   ... -File .\ilk-kurulum.ps1 -DbParola <app-parolasi> -PostgresParola <postgres-parolasi>
 #
-#   # Fabrika yedegini de yukle (tek komut):
-#   ... -File .\ilk-kurulum.ps1 -DbParola <p> -PostgresParola <pp> -Dump "C:\yol\son.dump"
+#   # Fabrika yedegini de yukle (tek komut) - dokumun AMACI ZORUNLU (asagida):
+#   ... -File .\ilk-kurulum.ps1 -DbParola <p> -PostgresParola <pp> -Dump "C:\yol\son.dump" -DumpAmaci Kopya
 #
 #   # Veritabani ZATEN varsa (elle olusturulmus): -PostgresParola gerekmez.
 #   ... -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbParola <p> -DbKullanici postgres
@@ -34,6 +34,15 @@
 #   klasorler/rol/veritabani varsa gecilir, MEVCUT ROLUN PAROLASI DEGISTIRILMEZ.
 #   Iki kez kosmak guvenlidir.
 #
+# ⚠ -Dump VERILINCE -DumpAmaci ZORUNLUDUR (varsayilan YOK). Dokum fabrikanin kurulum
+#   kimligini (`system.installationId`) ve makine disi yedek hedefini
+#   (`backup.offsiteRemote`/`offsiteDir`) tasir:
+#     Kopya   test/prova/demo kopyasi -> kimlik YENILENIR, offsite hedefi BOSALTILIR.
+#             Yenilenmezse ayni LAN'daki tablet/panel kopyayi fabrika sanip baglanir
+#             ve kopyanin yedekleri fabrikanin Drive/NAS'ina gider.
+#     Tasima  AYNI fabrika yeni sunucuya tasiniyor -> ikisi de KORUNUR.
+#   Ikisinin de sessiz bir varsayilani yanlistir; bkz. arsiv 2026-09-27 thinkpad-1 provasi.
+#
 # ⚠ PAROLA VARSAYILANI YOKTUR ve olmayacaktir. Bu dosya fabrika sunucusunda da
 #   kosar; gomulu bir varsayilan oraya da giderdi ve "sonra degistiririz" adimi
 #   unutulurdu. Parola komut satirindan gelir.
@@ -45,13 +54,17 @@ param(
   [string]$PostgresParola,                           # YALNIZ rol/DB yaratmak icin
   [string]$PostgresKullanici = "postgres",
   [string]$Dump,                                     # opsiyonel: BOS veritabanina yukle
+  [ValidateSet("Kopya", "Tasima")][string]$DumpAmaci, # -Dump ile ZORUNLU (baslik)
   [int]$DbPort = 5432,
   [string]$PgBin,
   [string]$Kok = "C:\TeksERP"
 )
 $ErrorActionPreference = "Stop"
 
-function Adim($m) { Write-Host ""; Write-Host $m -ForegroundColor Cyan }
+# Adimlar kendiliginden numaralanir; adim eklenince yalniz toplam degisir.
+$script:adimNo = 0
+$script:adimToplam = 8
+function Adim($m) { $script:adimNo++; Write-Host ""; Write-Host "[$($script:adimNo)/$($script:adimToplam)] $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  + $m" -ForegroundColor Green }
 function Uyar($m) { Write-Host "  ! $m" -ForegroundColor Yellow }
 function Dur($m)  { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; Write-Host ""; exit 1 }
@@ -96,8 +109,19 @@ Write-Host "  Kok       : $Kok"
 Write-Host "  Veritabani: $DbAdi @ localhost:$DbPort"
 Write-Host "  Rol       : $DbKullanici"
 
-# --- [1/8] PostgreSQL araclari ----------------------------------------------
-Adim "[1/8] PostgreSQL araclari bulunuyor..."
+if ($Dump -and -not $DumpAmaci) {
+  Dur @"
+-Dump verildi ama -DumpAmaci verilmedi. Dokumun kurulum kimligi icin karar ver:
+         -DumpAmaci Kopya   test/prova/demo kopyasi: kurulum kimligi YENILENIR,
+                            makine disi yedek hedefi (offsite) BOSALTILIR.
+         -DumpAmaci Tasima  AYNI fabrika yeni sunucuya tasiniyor: kimlik ve
+                            offsite KORUNUR (cihazlar sunucuyu ayni kurulum tanir).
+"@
+}
+if ($DumpAmaci -and -not $Dump) { Uyar "-DumpAmaci verildi ama -Dump yok - kullanilmayacak." }
+
+# --- PostgreSQL araclari ----------------------------------------------------
+Adim "PostgreSQL araclari bulunuyor..."
 if (-not $PgBin) {
   # Program Files altindaki EN YUKSEK surum. `kur.ps1` bunlari $Kok\pgsql\bin
   # altinda arar; asagida oraya baglanacak.
@@ -114,7 +138,7 @@ $pgSurum = (& (Join-Path $PgBin "pg_dump.exe") --version) -replace '.*\s'
 Ok "pg_dump $pgSurum  ($PgBin)"
 
 # --- [2/8] Klasorler ---------------------------------------------------------
-Adim "[2/8] Klasor iskeleti..."
+Adim "Klasor iskeleti..."
 foreach ($d in @("$Kok", "$Kok\app", "$Kok\backups", "$Kok\logs", "$Kok\pg-setup", "$Kok\pm2-home")) {
   if (Test-Path $d) { Uyar "zaten var: $d" } else { New-Item -ItemType Directory -Path $d -Force | Out-Null; Ok "olusturuldu: $d" }
 }
@@ -131,10 +155,10 @@ if (Test-Path $pgsqlBin) {
   Ok "baglandi: $pgsqlBin -> $PgBin"
 }
 
-# --- [3/8] Veritabani + rol --------------------------------------------------
+# --- Veritabani + rol -------------------------------------------------------
 # Once BAGLANMAYI dener. Basarirsa hicbir sey yaratmaz - idempotentligin kalbi
 # burasi: ikinci kosumda rol de veritabani da zaten vardir.
-Adim "[3/8] Veritabani ve rol..."
+Adim "Veritabani ve rol..."
 $hazir = (Psql $DbKullanici $DbParola $DbAdi "SELECT 1").kod -eq 0
 
 if ($hazir) {
@@ -186,11 +210,11 @@ if ($hazir) {
   Ok "baglanti dogrulandi"
 }
 
-# --- [4/8] Dump (opsiyonel) --------------------------------------------------
+# --- Dump (opsiyonel) -------------------------------------------------------
 # ⚠ YALNIZ BOS veritabanina yukler. Dolu bir veritabaninin uzerine restore,
 #   yarim birlesmis bir sema birakir ve hangi satirin hangi surumden geldigi
 #   bir daha bilinemez - o yuzden kapi FAIL-CLOSED.
-Adim "[4/8] Fabrika yedegi (dump)..."
+Adim "Fabrika yedegi (dump)..."
 if (-not $Dump) {
   Uyar "-Dump verilmedi, atlaniyor (bos veritabani ile devam)."
 } elseif (-not (Test-Path $Dump)) {
@@ -218,6 +242,33 @@ if (-not $Dump) {
   if ($restoreKod -ne 0) { Uyar "pg_restore uyari verdi (kod $restoreKod) ama sema yuklendi - asagidaki sayilar dogruysa sorun yok." }
   $top = (Psql $DbKullanici $DbParola $DbAdi "SELECT count(*) FROM rolls").cikti
   Ok "yuklendi  |  migration: $mig  |  top: $top"
+
+  if ($DumpAmaci -eq "Tasima") {
+    Uyar "-DumpAmaci Tasima: kurulum kimligi ve offsite hedefi dokumdeki gibi KORUNDU."
+  } else {
+    # Kopya: kimlik ve makine disi yedek hedefi fabrikanin; ikisi de bu makinede YANLIS.
+    # Iz SystemLog'a duser (backend'in kendi yenileme olayiyla ayni ad) - cihazlarin
+    # "farkli kurulum" sorusunun sebebi kayitsiz kalmasin.
+    $eski = (Psql $DbKullanici $DbParola $DbAdi "SELECT value->>'installationId' FROM system_settings WHERE key = 'system.installationId'").cikti
+    $yeni = [guid]::NewGuid().ToString()
+    $an   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+    if ($eski) {
+      $k = Psql $DbKullanici $DbParola $DbAdi ("UPDATE system_settings SET value = jsonb_build_object('installationId', '$yeni', 'createdAt', '$an'), ""updatedAt"" = now(), ""updatedById"" = NULL WHERE key = 'system.installationId'")
+      if ($k.kod -ne 0) { Dur "Kurulum kimligi yenilenemedi: $($k.cikti)" }
+      Ok "kurulum kimligi YENILENDI: $eski -> $yeni"
+    } else {
+      Ok "dokumde kurulum kimligi yok - backend ilk acilista yenisini uretir"
+    }
+    # CTE: psql `-t` UPDATE'in komut etiketini ("UPDATE 2") de basar; SELECT basmaz.
+    $o = Psql $DbKullanici $DbParola $DbAdi "WITH u AS (UPDATE system_settings SET value = '""""'::jsonb, ""updatedAt"" = now(), ""updatedById"" = NULL WHERE key IN ('backup.offsiteRemote', 'backup.offsiteDir') AND value <> '""""'::jsonb RETURNING key) SELECT key FROM u ORDER BY key"
+    if ($o.kod -ne 0) { Dur "Offsite hedefi bosaltilamadi: $($o.cikti)" }
+    $bosalan = @($o.cikti -split "`n" | Where-Object { $_ })
+    if ($bosalan.Count) { Ok "makine disi yedek hedefi BOSALTILDI: $($bosalan -join ', ')  (panelden yeniden girilir)" }
+    else                { Ok "dokumde makine disi yedek hedefi yok" }
+    $iz = "{""kaynak"":""ilk-kurulum -DumpAmaci Kopya"",""old"":""$eski"",""new"":""$(if ($eski) { $yeni } else { '' })"",""offsiteBosaltilan"":""$($bosalan -join ',')""}"
+    $l = Psql $DbKullanici $DbParola $DbAdi "INSERT INTO system_logs (id, category, action, ""tableName"", ""recordId"", ""newData"", ""createdAt"") VALUES (gen_random_uuid(), 'SYSTEM', 'INSTALLATION_ID_REGENERATED', 'system_settings', 'system.installationId', '$iz'::jsonb, now())"
+    if ($l.kod -ne 0) { Uyar "Iz SystemLog'a yazilamadi (kimlik yine de yenilendi): $($l.cikti)" }
+  }
 }
 
 # --- [5/8] db-credentials.json ----------------------------------------------
@@ -225,7 +276,7 @@ if (-not $Dump) {
 # yoksa yedek ADIMI DUSER ve kurulum iptal olur - yani bu dosya opsiyonel degil.
 # Alan adlari `user`/`pass`; fabrikadaki eski dosya `superuser`/`superpass`
 # tasir ve kur.ps1 ikisini de okur (eski dosya bozulmadan calismaya devam eder).
-Adim "[5/8] db-credentials.json..."
+Adim "db-credentials.json..."
 $credFile = "$Kok\pg-setup\db-credentials.json"
 if (Test-Path $credFile) {
   Uyar "zaten var, DOKUNULMADI: $credFile"
@@ -237,7 +288,7 @@ if (Test-Path $credFile) {
 
 # --- [6/8] .env --------------------------------------------------------------
 # ⚠ SIR DOSYASI. Varsa ASLA ezilmez.
-Adim "[6/8] app\.env..."
+Adim "app\.env..."
 $envDosya = "$Kok\app\.env"
 if (Test-Path $envDosya) {
   Uyar "zaten var, DOKUNULMADI (sir dosyasi): $envDosya"
@@ -258,7 +309,7 @@ if (Test-Path $envDosya) {
 }
 
 # --- [7/8] pm2 ---------------------------------------------------------------
-Adim "[7/8] pm2..."
+Adim "pm2..."
 $pm2 = "$Kok\pm2\node_modules\.bin\pm2.cmd"
 if (Test-Path $pm2) {
   Uyar "zaten var: $pm2"
@@ -278,7 +329,7 @@ if (Test-Path $pm2) {
 }
 
 # --- [8/8] Son dogrulama -----------------------------------------------------
-Adim "[8/8] Dogrulama..."
+Adim "Dogrulama..."
 $mig = (Psql $DbKullanici $DbParola $DbAdi "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL").cikti
 if ($mig) { Ok "baglanti OK  |  uygulanmis migration: $mig" }
 else      { Ok "baglanti OK  |  veritabani BOS (migration'lari kur.ps1 uygulayacak)" }

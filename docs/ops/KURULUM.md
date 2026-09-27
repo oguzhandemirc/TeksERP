@@ -25,7 +25,7 @@
 ```powershell
 # Yürütme ilkesi: çıplak `.\ilk-kurulum.ps1` Restricted/RemoteSigned makinede KOŞMAZ.
 # Sıfırdan (veritabanı da yok) + fabrika yedeğini yükle:
-powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbParola <app-parolası> -PostgresParola <postgres-parolası> -Dump "<dump>"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbParola <app-parolası> -PostgresParola <postgres-parolası> -Dump "<dump>" -DumpAmaci Kopya
 
 # Veritabanı ZATEN varsa: -PostgresParola gerekmez.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbParola <p> -DbKullanici postgres
@@ -50,6 +50,13 @@ ve gereken `ALTER ROLE` komutunu yazar).
 olur; şemada `CREATE EXTENSION` yok (ölçüldü), yani migration'lar için superuser
 gerekmiyor. Superuser parolası yalnız rolü/veritabanını YARATMAK için istenir ve
 hiçbir yere yazılmaz.
+
+⚠️ **`-Dump` verilince `-DumpAmaci` ZORUNLU — varsayılanı YOK.** Döküm fabrikanın kurulum
+kimliğini (`system.installationId`) ve makine dışı yedek hedefini (`backup.offsiteRemote` /
+`offsiteDir`) taşır. `Kopya` (test/prova/demo) kimliği YENİLER, iki offsite anahtarını boşaltır ve
+SystemLog'a `INSTALLATION_ID_REGENERATED` izini düşer — yenilenmezse aynı ağdaki tablet/panel kopyayı
+fabrika sanıp bağlanır, kopyanın yedekleri fabrikanın Drive/NAS'ına gider. `Tasima` (aynı fabrika yeni
+donanıma) ikisini de korur. Amaçsız `-Dump` hiçbir şeye dokunmadan durur.
 
 ⚠️ **Dump yalnız BOŞ veritabanına yüklenir** (fail-closed). Dolu bir şemanın üzerine
 restore, hangi satırın hangi sürümden geldiği bir daha bilinemeyen yarım bir şema

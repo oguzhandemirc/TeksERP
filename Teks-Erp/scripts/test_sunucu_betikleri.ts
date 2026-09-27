@@ -160,5 +160,24 @@ for (const yol of SUNUCU_PS1) {
     pk.satirlar.some((s) => /^\s*Copy-Item\s+"\$repo\\deploy\\ilk-kurulum\.ps1"\s+"\$stage\\"/.test(s.kod)));
 }
 
+// §7 — `-Dump` fabrikanın KİMLİĞİNİ taşır (bulgu 8): amaç beyanı zorunlu, Kopya
+//   kimliği yeniler ve makine dışı yedek hedefini boşaltır. Davranış yerel docker
+//   PG'sine karşı `deploy/test/ilk-kurulum-yerel.sh` ile ölçülür; burada kaynak kilitlenir.
+{
+  const t = psTara(readFileSync(join(KOK, "deploy/ilk-kurulum.ps1"), "utf8"));
+  const kod = t.satirlar.map((s) => s.kod);
+  const kapiIdx = kod.findIndex((k) => /^\s*if\s*\(\$Dump\s+-and\s+-not\s+\$DumpAmaci\)/.test(k));
+  check("§7a ⭐ `-DumpAmaci` Kopya|Tasima ile sınırlı ve VARSAYILANI YOK",
+    kod.some((k) => /\[ValidateSet\("Kopya",\s*"Tasima"\)\]\[string\]\$DumpAmaci\s*,/.test(k)));
+  check("§7b ⭐ `-Dump` amaçsız verilirse hiçbir şeye dokunmadan DURUR",
+    kapiIdx >= 0 && kod.slice(kapiIdx, kapiIdx + 2).some((k) => /\bDur\b/.test(k)) &&
+      kapiIdx < kod.findIndex((k) => /^\s*Adim\s+"/.test(k)),
+    kapiIdx >= 0 ? `satır ${kapiIdx + 1}` : "kapı YOK");
+  check("§7c ⭐ Kopya dalı kurulum kimliğini YENİLER ve iki offsite anahtarını boşaltır (iz SystemLog'a)",
+    kod.some((k) => /UPDATE system_settings SET value = jsonb_build_object\('installationId'/.test(k)) &&
+      kod.some((k) => /'backup\.offsiteRemote',\s*'backup\.offsiteDir'/.test(k)) &&
+      kod.some((k) => /INSERT INTO system_logs .*INSTALLATION_ID_REGENERATED/.test(k)));
+}
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);
