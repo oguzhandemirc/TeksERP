@@ -10,7 +10,8 @@
 #     powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 <parametreler>
 #
 #   # Sifirdan (veritabani da yok):
-#   ... -File .\ilk-kurulum.ps1 -DbParola <app-parolasi> -PostgresParola <postgres-parolasi>
+#   ... -File .\ilk-kurulum.ps1 -DbParola <app-parolasi> -PostgresParola <postgres-parolasi> -PgAyarla
+#   (-PgAyarla: PostgreSQL sunucu ayarlarini da yazar - YENI sunucuda; bayraksiz yalniz raporlar)
 #
 #   # Fabrika yedegini de yukle (tek komut) - dokumun AMACI ZORUNLU (asagida):
 #   ... -File .\ilk-kurulum.ps1 -DbParola <p> -PostgresParola <pp> -Dump "C:\yol\son.dump" -DumpAmaci Kopya
@@ -57,17 +58,26 @@ param(
   [ValidateSet("Kopya", "Tasima")][string]$DumpAmaci, # -Dump ile ZORUNLU (baslik)
   [int]$DbPort = 5432,
   [string]$PgBin,
-  [string]$Kok = "C:\TeksERP"
+  [string]$Kok = "C:\TeksERP",
+  # PostgreSQL SUNUCU ayarlari (runbook §6) ALTER SYSTEM ile yazilsin mi. Sunucu
+  # GENELIDIR (tum veritabanlari) - verilmezse yalniz fark RAPORLANIR. Superuser ister.
+  [switch]$PgAyarla,
+  # Yeniden baslatma isteyen ayar (shared_buffers, listen_addresses...) yazildiysa
+  # tek calisan postgresql* servisini yeniden baslat. Canli sunucuda VERME.
+  [switch]$PgYenidenBaslat
 )
 $ErrorActionPreference = "Stop"
 
 # Adimlar kendiliginden numaralanir; adim eklenince yalniz toplam degisir.
 $script:adimNo = 0
-$script:adimToplam = 8
+$script:adimToplam = 10
 function Adim($m) { $script:adimNo++; Write-Host ""; Write-Host "[$($script:adimNo)/$($script:adimToplam)] $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  + $m" -ForegroundColor Green }
 function Uyar($m) { Write-Host "  ! $m" -ForegroundColor Yellow }
 function Dur($m)  { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; Write-Host ""; exit 1 }
+# Kurulumu durdurmayan ama YAPILMADAN kalan is: sonda tek listede tekrar basilir.
+$script:acik = @()
+function Acik($m) { Uyar $m; $script:acik += $m }
 
 # Native komuta, icinde cift tirnak olan TEK arguman. PowerShell 5.1 (ve 7.3 oncesi
 # "Legacy" kip) argumani tirnaklarken icerdeki `"`yi KACIRMAZ; psql `"updatedAt"`
@@ -137,7 +147,7 @@ if (-not $PgBin -or -not (Test-Path (Join-Path $PgBin "pg_dump.exe"))) {
 $pgSurum = (& (Join-Path $PgBin "pg_dump.exe") --version) -replace '.*\s'
 Ok "pg_dump $pgSurum  ($PgBin)"
 
-# --- [2/8] Klasorler ---------------------------------------------------------
+# --- Klasorler --------------------------------------------------------------
 Adim "Klasor iskeleti..."
 foreach ($d in @("$Kok", "$Kok\app", "$Kok\backups", "$Kok\logs", "$Kok\pg-setup", "$Kok\pm2-home")) {
   if (Test-Path $d) { Uyar "zaten var: $d" } else { New-Item -ItemType Directory -Path $d -Force | Out-Null; Ok "olusturuldu: $d" }
@@ -216,7 +226,7 @@ if ($hazir) {
 #   bir daha bilinemez - o yuzden kapi FAIL-CLOSED.
 Adim "Fabrika yedegi (dump)..."
 if (-not $Dump) {
-  Uyar "-Dump verilmedi, atlaniyor (bos veritabani ile devam)."
+  Uyar "-Dump verilmedi - veritabani oldugu gibi kullaniliyor."
 } elseif (-not (Test-Path $Dump)) {
   Dur "Dump bulunamadi: $Dump"
 } else {
@@ -271,7 +281,129 @@ if (-not $Dump) {
   }
 }
 
-# --- [5/8] db-credentials.json ----------------------------------------------
+# --- Veritabani duzeyi ayarlar ------------------------------------------------
+# pg_restore bunlari TASIMAZ (ayar veritabaninin OID'sine bagli): dokumden kurulan
+# kopya korumasiz acilir ("[audit-guard] KORUMA KAPALI"). Restore'dan SONRA kurulur -
+# statement_timeout restore'un index yaratimini keserdi. Var olan FARKLI deger ezilmez.
+Adim "Veritabani ayarlari (DB duzeyi)..."
+$dbAyarlari = [ordered]@{
+  "statement_timeout"                   = "50s"
+  "idle_in_transaction_session_timeout" = "5min"
+  # HEDEF ayar - fabrikadaki degeri OLCULMEDI (repo notu K6 "sahada KAPALI" diyor).
+  "teks.audit_guard"                    = "on"
+}
+$yonetici = $false
+if ($PostgresParola) { $yonetici = (Psql $PostgresKullanici $PostgresParola "postgres" "SELECT 1").kod -eq 0 }
+$mevcutAyar = @{}
+$r = Psql $DbKullanici $DbParola $DbAdi "SELECT unnest(setconfig) FROM pg_db_role_setting WHERE setrole = 0 AND setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())"
+foreach ($satir in @($r.cikti -split "`n" | Where-Object { $_ -match '=' })) {
+  $parca = $satir -split '=', 2
+  $mevcutAyar[$parca[0]] = $parca[1]
+}
+$dbAdiSql = $DbAdi -replace '"', '""'
+foreach ($ad in $dbAyarlari.Keys) {
+  $hedef = $dbAyarlari[$ad]
+  if ($mevcutAyar.ContainsKey($ad)) {
+    if ($mevcutAyar[$ad] -eq $hedef) { Ok "zaten: $ad = $hedef" }
+    else { Acik "$ad = $($mevcutAyar[$ad]) (hedef $hedef) - var olan deger DOKUNULMADI" }
+    continue
+  }
+  $sql = "ALTER DATABASE ""$dbAdiSql"" SET $ad = '$hedef'"
+  # Ozel (teks.*) parametreyi PG 16'da yalniz superuser kurar: DB sahibi
+  # "permission denied to set parameter" alir (olculdu).
+  if ($yonetici) { $a = Psql $PostgresKullanici $PostgresParola "postgres" $sql }
+  elseif ($ad -notlike "teks.*") { $a = Psql $DbKullanici $DbParola $DbAdi $sql }
+  else { Acik "$ad KURULAMADI - superuser gerekir (-PostgresParola). Elle: $sql"; continue }
+  if ($a.kod -eq 0) { Ok "kuruldu: $ad = $hedef" } else { Acik "$ad kurulamadi: $($a.cikti)" }
+}
+
+# --- PostgreSQL sunucu ayarlari (runbook §6) -----------------------------------
+# Eski installer'in postgresql.conf'a yazdiklari. Sunucu GENELI oldugu icin yalniz
+# -PgAyarla ile yazilir (ALTER SYSTEM -> postgresql.auto.conf); onceden ALTER SYSTEM ile
+# konmus farkli deger ezilmez. Bellek degerleri RAM'den (installer olcegi).
+Adim "PostgreSQL sunucu ayarlari..."
+function MbDeger([double]$mb) {
+  $mb = [math]::Floor($mb)
+  if ($mb % 1024 -eq 0) { return "$([int]($mb / 1024))GB" }
+  return "$([int]$mb)MB"
+}
+$pgHedef = [ordered]@{
+  "listen_addresses"                    = "127.0.0.1"
+  "timezone"                            = "Europe/Istanbul"
+  "log_timezone"                        = "Europe/Istanbul"
+  "statement_timeout"                   = "50s"
+  "idle_in_transaction_session_timeout" = "5min"
+  "log_destination"                     = "stderr"
+  "logging_collector"                   = "on"
+  "log_directory"                       = "log"
+  "log_min_duration_statement"          = "500ms"
+  "work_mem"                            = "16MB"
+}
+$ramMB = $null
+try { $ramMB = [math]::Floor((Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory / 1MB) } catch { $ramMB = $null }
+if ($ramMB) {
+  $pgHedef["shared_buffers"]       = MbDeger ([math]::Min([math]::Max($ramMB * 0.25, 128), 8192))
+  $pgHedef["effective_cache_size"] = MbDeger ([math]::Max($ramMB * 0.60, 512))
+  $pgHedef["maintenance_work_mem"] = MbDeger ([math]::Min([math]::Max($ramMB * 0.05, 64), 512))
+} else {
+  Acik "RAM olculemedi - shared_buffers / effective_cache_size / maintenance_work_mem hesaplanmadi"
+}
+$adlar = ($pgHedef.Keys | ForEach-Object { "'$_'" }) -join ","
+# pg_settings adi buyuk/kucuk harf tasir ("TimeZone"); karsilastirma kucuk harfle.
+$okuSql = "SELECT lower(name) || '|' || current_setting(name) || '|' || pending_restart || '|' || coalesce(sourcefile, '') FROM pg_settings WHERE lower(name) IN ($adlar)"
+# Superuser yoksa uygulama DB'sinden okunur: DB duzeyi degerler ve gizli ayarlar karisir,
+# rapor YAKLASIKTIR (yazma zaten superuser ister).
+$oku = if ($yonetici) { Psql $PostgresKullanici $PostgresParola "postgres" $okuSql } else { Psql $DbKullanici $DbParola $DbAdi $okuSql }
+$pgMevcut = @{}
+foreach ($satir in @($oku.cikti -split "`n" | Where-Object { $_ -match '\|' })) {
+  $parca = $satir -split '\|', 4
+  $pgMevcut[$parca[0]] = [pscustomobject]@{ deger = $parca[1]; bekliyor = ($parca[2] -in @("t", "true")); dosya = $parca[3] }
+}
+# Yazilmis ama yeniden baslatma bekleyen ayar "farkli" sayilmaz: ikinci kosum onu
+# yeniden yazmaz, yalniz yeniden baslatmayi hatirlatir.
+$bekleyen = @($pgMevcut.Keys | Where-Object { $pgMevcut[$_].bekliyor } | Sort-Object)
+$farkli = @($pgHedef.Keys | Where-Object {
+  -not $pgMevcut.ContainsKey($_) -or ($pgMevcut[$_].deger -ne $pgHedef[$_] -and -not $pgMevcut[$_].bekliyor)
+})
+if (-not $farkli.Count) {
+  Ok "yazilacak ayar yok ($($pgHedef.Count) ayar hedefte ya da yeniden baslatma bekliyor)"
+} elseif (-not $PgAyarla) {
+  foreach ($ad in $farkli) { Write-Host "    $ad = $($pgMevcut[$ad].deger)  (hedef $($pgHedef[$ad]))" }
+  if (-not $yonetici) { Write-Host "    (superuser olmadan okundu - yaklasik)" }
+  Acik "$($farkli.Count) PostgreSQL sunucu ayari hedeften farkli - YAZILMADI. Uygulamak icin -PgAyarla -PostgresParola <...> ile yeniden kos."
+} elseif (-not $yonetici) {
+  Acik "-PgAyarla superuser ister (-PostgresParola) - sunucu ayarlari YAZILMADI."
+} else {
+  $yazilan = 0
+  foreach ($ad in $farkli) {
+    $m = $pgMevcut[$ad]
+    if ($m -and $m.dosya -like "*postgresql.auto.conf") {
+      Acik "$ad = $($m.deger) onceden ALTER SYSTEM ile konmus (hedef $($pgHedef[$ad])) - DOKUNULMADI"
+      continue
+    }
+    $a = Psql $PostgresKullanici $PostgresParola "postgres" "ALTER SYSTEM SET $ad = '$($pgHedef[$ad])'"
+    if ($a.kod -eq 0) { $yazilan++; Ok "yazildi: $ad = $($pgHedef[$ad])  (onceki $($m.deger))" } else { Acik "$ad yazilamadi: $($a.cikti)" }
+  }
+  [void](Psql $PostgresKullanici $PostgresParola "postgres" "SELECT pg_reload_conf()")
+  $bekleyen = @((Psql $PostgresKullanici $PostgresParola "postgres" "SELECT lower(name) FROM pg_settings WHERE pending_restart ORDER BY 1").cikti -split "`n" | Where-Object { $_ })
+}
+if ($bekleyen.Count) {
+  $servis = @()
+  if (Get-Command Get-Service -ErrorAction SilentlyContinue) {
+    $servis = @(Get-Service -Name "postgresql*" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" })
+  }
+  if ($PgYenidenBaslat -and $servis.Count -eq 1) {
+    Restart-Service -Name $servis[0].Name -Force
+    Ok "PostgreSQL servisi yeniden baslatildi ($($servis[0].Name)) - etkin: $($bekleyen -join ', ')"
+  } else {
+    $servisAd = if ($servis.Count -eq 1) { $servis[0].Name } else { "<postgresql servisi>" }
+    Acik "PostgreSQL yeniden baslatilinca etkin: $($bekleyen -join ', ')  ->  Restart-Service $servisAd  (ya da -PgYenidenBaslat)"
+  }
+} elseif ($PgAyarla -and $yonetici -and $yazilan) {
+  Ok "ayarlar yeniden yuklendi (yeniden baslatma gerekmiyor)"
+}
+
+# --- db-credentials.json ---------------------------------------------------
 # `kur.ps1` [3/9] bunu okur ve migration ONCESI guvenlik yedegini alir. Dosya
 # yoksa yedek ADIMI DUSER ve kurulum iptal olur - yani bu dosya opsiyonel degil.
 # Alan adlari `user`/`pass`; fabrikadaki eski dosya `superuser`/`superpass`
@@ -286,7 +418,7 @@ if (Test-Path $credFile) {
   Ok "yazildi: $credFile"
 }
 
-# --- [6/8] .env --------------------------------------------------------------
+# --- .env -------------------------------------------------------------------
 # ⚠ SIR DOSYASI. Varsa ASLA ezilmez.
 Adim "app\.env..."
 $envDosya = "$Kok\app\.env"
@@ -308,7 +440,7 @@ if (Test-Path $envDosya) {
   Ok "olusturuldu: $envDosya  (JWT_SECRET bu makinede uretildi)"
 }
 
-# --- [7/8] pm2 ---------------------------------------------------------------
+# --- pm2 --------------------------------------------------------------------
 Adim "pm2..."
 $pm2 = "$Kok\pm2\node_modules\.bin\pm2.cmd"
 if (Test-Path $pm2) {
@@ -328,11 +460,17 @@ if (Test-Path $pm2) {
   Ok "kuruldu: $pm2"
 }
 
-# --- [8/8] Son dogrulama -----------------------------------------------------
+# --- Son dogrulama ----------------------------------------------------------
 Adim "Dogrulama..."
 $mig = (Psql $DbKullanici $DbParola $DbAdi "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL").cikti
 if ($mig) { Ok "baglanti OK  |  uygulanmis migration: $mig" }
 else      { Ok "baglanti OK  |  veritabani BOS (migration'lari kur.ps1 uygulayacak)" }
+
+if ($script:acik.Count) {
+  Write-Host ""
+  Write-Host "  YAPILMADAN KALANLAR ($($script:acik.Count)) - yukarida ayrintisi var:" -ForegroundColor Yellow
+  foreach ($x in $script:acik) { Write-Host "    - $x" -ForegroundColor Yellow }
+}
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Green

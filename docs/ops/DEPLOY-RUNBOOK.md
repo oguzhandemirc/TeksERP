@@ -581,6 +581,12 @@ pm2 start tekserp-backend
 
 ## 6) PostgreSQL yapılandırması (installer'dan taşındı)
 
+> **`ilk-kurulum.ps1` uygular:** DB düzeyi üçlü (`teks.audit_guard=on`, `statement_timeout=50s`,
+> `idle_in_transaction_session_timeout=5min`) her koşumda, döküm yüklendikten SONRA; aşağıdaki
+> sunucu ayarları yalnız `-PgAyarla` ile, `ALTER SYSTEM` üzerinden (postgresql.auto.conf —
+> `postgresql.conf` dosyası elle düzenlenmez). Bayraksız koşum farkı raporlar. Var olan farklı değer
+> (DB düzeyi ya da önceden `ALTER SYSTEM`) ezilmez. Bellek değerleri RAM'den (aşağıdaki oranlar).
+
 > Bu blok eski `manage.ps1`'in `postgresql.conf`'a yazdığı ayarların **tek kalan
 > kaydıdır**. Yeni bir sunucu kurulurken elle uygulanmalıdır.
 >

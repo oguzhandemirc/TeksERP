@@ -179,5 +179,32 @@ for (const yol of SUNUCU_PS1) {
       kod.some((k) => /INSERT INTO system_logs .*INSTALLATION_ID_REGENERATED/.test(k)));
 }
 
+// §8 — veritabanı + sunucu ayarları (bulgu 9, 14). pg_restore DB düzeyi ayarları
+//   taşımaz; ilk kurulum kurar. Sıra load-bearing: restore'dan ÖNCE kurulan
+//   statement_timeout restore'un index yaratımını keser. Sunucu geneli ayar yalnız
+//   `-PgAyarla` ile yazılır; önceden ALTER SYSTEM ile konmuş farklı değer ezilmez.
+{
+  const t = psTara(readFileSync(join(KOK, "deploy/ilk-kurulum.ps1"), "utf8"));
+  const kod = t.satirlar.map((s) => s.kod);
+  const adimIdx = (re: RegExp) => kod.findIndex((k) => /^\s*Adim\s+"/.test(k) && re.test(k));
+  const dump = adimIdx(/dump/i);
+  const dbAyar = adimIdx(/Veritabani ayarlari/);
+  const pgAyar = adimIdx(/PostgreSQL sunucu ayarlari/);
+  check("§8a ⭐ DB düzeyi ayarlar dump yüklemesinden SONRA (statement_timeout restore'u kesmesin)",
+    dump >= 0 && dbAyar > dump, `dump satır ${dump + 1} · ayar satır ${dbAyar + 1}`);
+  const hedef = (ad: string, deger: string) => kod.some((k) => new RegExp(`"${ad.replace(".", "\\.")}"\\s*=\\s*"${deger}"`).test(k));
+  check("§8b ⭐ DB düzeyi hedefler: teks.audit_guard=on · statement_timeout=50s · idle_in_transaction_session_timeout=5min",
+    hedef("teks.audit_guard", "on") && hedef("statement_timeout", "50s") && hedef("idle_in_transaction_session_timeout", "5min"));
+  const alterSys = kod.findIndex((k) => /ALTER SYSTEM SET/.test(k));
+  const raporDali = kod.findIndex((k) => /^\s*\}\s*elseif\s*\(-not\s+\$PgAyarla\)/.test(k));
+  const sonElse = raporDali < 0 ? -1 : kod.slice(raporDali, alterSys).findIndex((k, i) => i > 0 && /^\s*\}\s*else\s*\{/.test(k));
+  check("§8c ⭐ ALTER SYSTEM yalnız -PgAyarla dalında (varsayılan yalnız rapor)",
+    pgAyar > dbAyar && alterSys > raporDali && raporDali >= 0 && sonElse > 0,
+    alterSys >= 0 ? `ALTER SYSTEM satır ${alterSys + 1}` : "ALTER SYSTEM yok");
+  check("§8d önceden ALTER SYSTEM ile konmuş (postgresql.auto.conf) farklı değer EZİLMEZ; DB düzeyinde var olan farklı değer ezilmez",
+    kod.some((k) => /-like\s+"\*postgresql\.auto\.conf"/.test(k)) &&
+      kod.some((k) => /var olan deger DOKUNULMADI/.test(k)));
+}
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

@@ -18,14 +18,14 @@
 ### A0. Ön koşullar
 1. **Node.js 22.x** (CI: `node-version: 22`), **PostgreSQL 16.x** (2026-09-04 ÖLÇÜMÜ: saha `SAHINSRV` **16.9**, geliştirme konteyneri **16.15** — parite ana sürümde. ⚠️ Burada uzun süre "18.x (dev 18.4 ile parite)" yazıyordu; ne saha ne dev 18'di ve bu satıra güvenen biri sahaya yükleyemeyeceği bir dump üretirdi: `pg_restore` GERİYE çalışmaz, 18'in dump'ı 16'ya yüklenmez. Sürümü değiştirmeden önce İKİSİNİ DE ölç.) ve **pm2** (`npm i -g pm2`) kur. `package.json`'da `engines` yok — sürüm operasyonel gerekliliktir.
 2. Boş bir PostgreSQL veritabanı + login rolü oluştur. **Rol CREATEDB yetkili olmalı** — Prisma 7 `migrate deploy` bağlanınca DB'yi oluşturmayı dener; yetki yoksa "permission denied to create database" ile patlar.
-3. **`postgresql.conf` TeksERP ayarlarını uygula** — `listen_addresses='127.0.0.1'`, `statement_timeout='50s'`, `log_min_duration_statement=500`, timezone ve bellek tuning'i. Bu değerlerin **tek kalan kaydı** `DEPLOY-RUNBOOK.md §6`'dır (installer'dan taşındı); atlanırsa default `work_mem=4MB`/`shared_buffers=128MB` ile yıllık raporlar `statement_timeout`'a takılır.
+3. **PostgreSQL sunucu ayarları** — `listen_addresses='127.0.0.1'`, `statement_timeout='50s'`, `log_min_duration_statement=500`, timezone ve bellek tuning'i (tam liste `DEPLOY-RUNBOOK.md §6`). **`ilk-kurulum.ps1 -PgAyarla` uygular** (`ALTER SYSTEM`; bayraksız koşum yalnız farkı raporlar, yeniden başlatma isteyenler `-PgYenidenBaslat` ya da elle `Restart-Service`). Atlanırsa default `work_mem=4MB`/`shared_buffers=128MB` ile yıllık raporlar `statement_timeout`'a takılır.
 
 ### A0b. İskeleti kur (SIFIRDAN kurulumda — `ilk-kurulum.ps1`)
 
 ```powershell
 # Yürütme ilkesi: çıplak `.\ilk-kurulum.ps1` Restricted/RemoteSigned makinede KOŞMAZ.
-# Sıfırdan (veritabanı da yok) + fabrika yedeğini yükle:
-powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbParola <app-parolası> -PostgresParola <postgres-parolası> -Dump "<dump>" -DumpAmaci Kopya
+# Sıfırdan (veritabanı da yok) + fabrika yedeğini yükle; -PgAyarla PostgreSQL sunucu ayarlarını da yazar:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbParola <app-parolası> -PostgresParola <postgres-parolası> -Dump "<dump>" -DumpAmaci Kopya -PgAyarla
 
 # Veritabanı ZATEN varsa: -PostgresParola gerekmez.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbParola <p> -DbKullanici postgres
@@ -72,6 +72,11 @@ yazar, sahadaki eski dosya `superuser`/`superpass` taşır. `kur.ps1` ikisini de
 — çalışan bir sunucudaki dosyayı elle düzeltmek gerekmez.
 
 ### A0c. Audit koruması (`audit_guard`) — AÇIK olmalı
+
+> **`ilk-kurulum.ps1` bunu kurar** (döküm yüklendikten sonra, `-PostgresParola` verildiyse; `teks.*`
+> parametresini PG 16'da yalnız superuser kurabilir). Parola verilmediyse betik aşağıdaki komutu
+> "YAPILMADAN KALANLAR" listesinde basar. ⚠️ Bu HEDEF ayardır — fabrikadaki değeri ölçülmedi
+> (repo notu K6 "sahada KAPALI" diyor).
 
 ```sql
 ALTER DATABASE <db> SET teks.audit_guard = 'on';
