@@ -33,6 +33,7 @@ import { recordActivity } from './src/store/lockStore';
 import IdleLockGate from './src/components/lock/IdleLockGate';
 import UpdateGate from './src/components/UpdateGate';
 import { SurumNotuGate } from './src/components/SurumNotuGate';
+import ChannelStrip from './src/components/ChannelStrip';
 
 registerStationMutationDefaults();
 
@@ -194,6 +195,9 @@ export default function App() {
                 hiçbir şey çizmez (null döner). */}
             <SurumNotuGate />
             <UpdateGate />
+            {/* Hazırlık kanalının işareti (ör. "TEST FABRİKA") — en üstte, dokunmayı yutmaz;
+                üretim kanalında null. */}
+            <ChannelStrip />
           </View>
         </PersistQueryClientProvider>
       </SafeAreaProvider>

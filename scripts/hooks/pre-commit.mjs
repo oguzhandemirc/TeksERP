@@ -255,7 +255,7 @@ if (staged.some((f) => SURUM_NOTU_YOLLARI.has(f))) {
 // KANAL KAPILARI (testfabrika D2): dağıtım kanalı kimliğine ya da yayın betiklerine dokunan
 // commit iki kanal bekçisini görür — ikisi de zero-dep/DB'siz/ağsız, CI dışında yalnız burada
 // koşarlar. Tetik bekçilerin OKUDUĞU kümeden türer (`kanalBekcisiTetigi`, elle sayılmaz);
-// kapsamını check-kanallar §6 ve test_kanal_yayin_kapisi 5f ölçer (okunandan dar olamaz).
+// kapsamını check-kanallar §6 ve test_kanal_yayin_kapisi 5i ölçer (okunandan dar olamaz).
 if (staged.some(kanalBekcisiTetigi)) {
   adimlar.push({ ad: "kanal kayıt defteri", cwd: ".", cmd: ["node", ["scripts/check-kanallar.mjs"]] });
   adimlar.push({ ad: "kanal yayın kapıları", cwd: ".", cmd: ["node", ["scripts/test_kanal_yayin_kapisi.mjs"]], gitEnvSil: true });

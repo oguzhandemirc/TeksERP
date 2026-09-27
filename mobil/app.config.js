@@ -2,8 +2,13 @@
 // TeksERP Mobil — dinamik Expo yapılandırması
 // =============================================================================
 // `app.json` STATİK gerçekleri taşır (ad, paket adı, izinler, runtimeVersion,
-// kod imzalama sertifikası). Bu dosya tek bir şeyi enjekte eder: uygulamanın
-// GÜNCELLEMEYİ alacağı adres.
+// kod imzalama sertifikası) — DİNLENMEDE varsayılan kanalın kimliğiyle. Bu dosya
+// dinlenmede tek bir şeyi enjekte eder: uygulamanın GÜNCELLEMEYİ alacağı adres.
+//
+// ⚠️ KANAL DERLEMESİ: derleme betikleri `TEKSERP_KANAL=<kod>` koyar; o zaman
+// kanalın bütün kimliği (paket adı · görünen ad · güncelleme adresi · OTA
+// sertifikası · görünür etiket) `deploy/kanallar.json`dan uygulanır
+// (`scripts/lib/kanal.cjs`). app.json kanal için YAZILMAZ (parmak izi girdisi).
 //
 // ⚠️ GÜNCELLEME ADRESİ, API ADRESİNDEN BAĞIMSIZDIR (2026-08-26 kararı).
 // Uygulama ERP'ye fabrika ağından bağlanır (`EXPO_PUBLIC_API_URL`,
@@ -35,6 +40,14 @@ module.exports = ({ config }) => {
       'app.json → expo.runtimeVersion tanımlı değil. Güncelleme adresi bu ' +
         'değeri içerir (her APK yalnız kendi paketini görsün diye).',
     );
+  }
+
+  const kanalKodu = String(process.env.TEKSERP_KANAL ?? '').trim();
+  if (kanalKodu) {
+    // Tembel yükleme: dinlenmede yapılandırmanın yüklediği modül kümesi (Expo
+    // parmak izinin kaynağı) değişmesin.
+    const { kanalYapilandirmasi } = require('./scripts/lib/kanal.cjs');
+    return kanalYapilandirmasi(config, kanalKodu, runtimeVersion);
   }
 
   const { deger: feed } = guncellemeAdresiCoz(process.env.EXPO_PUBLIC_UPDATE_URL);

@@ -304,6 +304,58 @@ async function main(): Promise<void> {
     }
   }
 
+  // ---------------------------------------------------------------- §10
+  // Her dağıtım kanalının OTA anahtarı AYRIDIR: yanlış klasöre yüklenen paket "başka sunucuya
+  // bağlanır" yerine "güncelleme gelmez"e iner. GERÇEK kanal anahtarlarıyla ölçülür (mobil/keystore,
+  // git dışı): imza yayın betiğinin üreticisiyle atılır, LAN ikizinden servis edilir ve istemcinin
+  // yaptığı doğrulamayla (keyid iki kanalda da "main" — ayrımı yalnız anahtar yapar) her kanalın
+  // sertifikasına karşı sınanır.
+  console.log("\n§10 — Kanal imzası: kanalın anahtarıyla imzalı paketi YALNIZ kendi tabletleri kabul eder");
+  {
+    const kayit = JSON.parse(fs.readFileSync(path.join(REPO_KOK, "deploy/kanallar.json"), "utf8"));
+    const kanalLib = require(path.join(MOBIL, "scripts/lib/kanal.cjs"));
+    const uretici = await import(path.join(MOBIL, "scripts/lib/manifest.mjs"));
+    const malzeme = Object.keys(kayit.kanallar).map((kod) => {
+      const y = kanalLib.otaImzaYollari(kayit.kanallar[kod]);
+      return { kod, anahtar: path.join(MOBIL, y.anahtar), sertifika: path.join(MOBIL, y.sertifika) };
+    });
+    const eksik = malzeme.filter((m) => !fs.existsSync(m.anahtar) || !fs.existsSync(m.sertifika));
+    if (eksik.length && process.env.TEKSERP_STRICT !== "1") {
+      console.log(`  ℹ️  atlandı — imza malzemesi bu makinede yok (${eksik.map((m) => m.kod).join(", ")}); TEKSERP_STRICT=1 ile zorunlu`);
+    } else {
+      check("her kanalın OTA anahtarı + sertifikası var", eksik.length === 0, eksik.map((m) => m.kod).join(", "));
+      const KANAL_RV = "99.1";
+      fs.mkdirSync(path.join(kok, "ota", KANAL_RV), { recursive: true });
+      for (const imzalayan of malzeme) {
+        const manifest = {
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          runtimeVersion: KANAL_RV,
+          launchAsset: { hash: "x", key: "x", contentType: "application/javascript", fileExtension: ".bundle", url: "https://ornek/x" },
+          assets: [],
+          metadata: {},
+          extra: { imzalayan: imzalayan.kod },
+        };
+        const imza = uretici.imzaBasligi(JSON.stringify(manifest), fs.readFileSync(imzalayan.anahtar, "utf8"), "main");
+        fs.writeFileSync(path.join(kok, "ota", KANAL_RV, "manifest"), uretici.multipartKur({ manifest, imzaBasligiDegeri: imza }));
+        const servis = Buffer.from(await (await fetch(`${taban}/updates/ota/${KANAL_RV}/manifest`)).arrayBuffer());
+        for (const tablet of malzeme) {
+          let kabul = true;
+          try {
+            uretici.multipartDogrula(servis, fs.readFileSync(tablet.sertifika, "utf8"));
+          } catch {
+            kabul = false;
+          }
+          const beklenen = tablet.kod === imzalayan.kod;
+          check(
+            `"${imzalayan.kod}" anahtarıyla imzalı paket → "${tablet.kod}" tableti ${beklenen ? "KABUL eder" : "REDDEDER"}`,
+            kabul === beklenen,
+          );
+        }
+      }
+    }
+  }
+
   server.close();
 }
 

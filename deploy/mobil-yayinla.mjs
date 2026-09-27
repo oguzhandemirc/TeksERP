@@ -6,9 +6,10 @@
  * Mac'te üretilir.
  *
  * ⚠️ HEDEF KANAL KAYIT DEFTERİNDEN, KİMLİK ARTEFAKTTAN: `--musteri`
- * `deploy/kanallar.json`da kayıtlı olmalı; paketin gömülü güncelleme adresleri
- * VE ERP adresi o kanalınkiyle birebir olmalı — ikisi de yüklemeden ÖNCE ölçülür,
- * okunamazsa ÖLÇÜLEMEDİ = DUR (`scripts/lib/kanallar.mjs`).
+ * `deploy/kanallar.json`da kayıtlı olmalı; paketin gömülü güncelleme adresleri,
+ * ERP adresi ve (APK'da) paket adı o kanalınkiyle birebir olmalı — hepsi yüklemeden
+ * ÖNCE ölçülür, okunamazsa ÖLÇÜLEMEDİ = DUR (`scripts/lib/kanallar.mjs`,
+ * `mobil/scripts/lib/apk-kimlik.mjs`).
  *
  * ⚠️ BU SCRIPT'İN VAR OLMA SEBEBİ — YÜKLEME SIRASI:
  * Manifest, paket dosyalarına İŞARET EDER. Manifest önce yüklenirse, henüz
@@ -38,6 +39,7 @@ import { etiketAt, manifestGovdesindenSurum } from '../scripts/lib/surum.mjs';
 import { KAYIT_REL, Olculemedi, erpAdresiEsit, kanalCoz } from '../scripts/lib/kanallar.mjs';
 import { bundleAdresOlcumu } from '../mobil/scripts/lib/adres.mjs';
 import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
+import { ApkOlculemedi, apkKimligi } from '../mobil/scripts/lib/apk-kimlik.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MOBIL = path.resolve(HERE, '..', 'mobil');
@@ -129,8 +131,9 @@ if (!MUSTERI) {
 }
 /** Kanal kayıt defterinden — bilinmeyen kod ya da kırmızı kayıt: hiçbir şey yüklenmeden DUR. */
 let KANAL;
+let KAYIT;
 try {
-  ({ kanal: KANAL } = kanalCoz(MUSTERI));
+  ({ kanal: KANAL, kayit: KAYIT } = kanalCoz(MUSTERI));
 } catch (e) {
   if (e instanceof Olculemedi) dur(`KANAL KAYIT DEFTERİ ÖLÇÜLEMEDİ (${KAYIT_REL})`, e.message);
   dur(e.message, ...(e.satirlar ?? []));
@@ -514,6 +517,29 @@ async function apkYayinla(apkYol) {
 
   // ⚠️ ARTEFAKT KİMLİĞİ ÖNCE (ucuz, ağsız) ve FAIL-CLOSED: okunamayan adres
   // "kapı atlandı" değil ÖLÇÜLEMEDİ'dir — adresi ölçülmemiş APK yüklenmez.
+  //
+  // PAKET ADI: kanalların APK mührü ORTAKTIR, yani aynı paket adlı başka kanal APK'sı
+  // o kanalın uygulamasının ÜSTÜNE sessizce kurulur; tek yapısal ayrım paket adıdır.
+  let apkPaket;
+  try {
+    apkPaket = apkKimligi(apkYol).paket;
+  } catch (e) {
+    if (!(e instanceof ApkOlculemedi)) throw e;
+    dur('ÖLÇÜLEMEDİ — APK paket adı okunamadı', e.message, 'Paket adı ölçülemeyen APK yüklenmez.');
+  }
+  if (apkPaket !== KANAL.tablet.androidPaket) {
+    const sahibi = Object.entries(KAYIT.kanallar).find(([, k]) => k.tablet.androidPaket === apkPaket)?.[0];
+    dur(
+      'APK BAŞKA BİR UYGULAMANIN PAKETİ',
+      `APK paket adı : ${apkPaket}${sahibi ? `  ("${sahibi}" kanalının)` : '  (hiçbir kayıtlı kanalın değil)'}`,
+      `kanalın paketi: ${KANAL.tablet.androidPaket}  (${MUSTERI} · ${KAYIT_REL})`,
+      '',
+      'Yüklenirse bu kanalın tabletleri ya ikinci bir uygulama kurar ya da (aynı paket adıyla)',
+      'başka kanalın uygulamasının ÜSTÜNE yazar. Doğru kanal için yeniden derle:',
+      `  cd mobil && npm run build:apk -- --musteri=${MUSTERI}`,
+    );
+  }
+  bilgi(`  APK paket adı     : ${apkPaket}`);
   const { adres: apkAdres, hata: adresHatasi } = apkicindekiAdres(apkYol);
   if (!apkAdres) {
     dur(

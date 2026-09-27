@@ -26,8 +26,12 @@
 //      dosyaları BAYT BAYT aynı bırakır; enjeksiyonun iki bacağından biri düşerse paket DURUR
 //   §3 mobil-yayinla.mjs — OTA künye/bundle ve APK bundle ERP adresi kanalın adresi değilse dur;
 //      okunamayan bundle/manifest ÖLÇÜLEMEDİ = dur; --kuru etiket atmaz
-//   §4 yayinla-ota.mjs — çözülen ERP adresi kanalın değilse ağdan ÖNCE dur
-//   §5 yüklemler (lib): zip okuyucu, bundle ölçümü, tablet kimliği
+//   §4 yayinla-ota.mjs — çözülen ERP adresi kanalın değilse ağdan ÖNCE dur; testfabrika kanalı kendi
+//      kimliğiyle geçer ve native parmak izi kanaldan BAĞIMSIZ (iki kanalda aynı); app.json kanal için
+//      yeniden yazılmışsa dur
+//   §5 yüklemler (lib): zip okuyucu, bundle ölçümü, tablet kimliği, ikili manifest (AXML) okuyucu
+//   §6 build-apk.mjs — kanal ARGÜMANDAN (kapalı küme), ERP adresi kanalın; APK'nın KENDİ paket adı /
+//      güncelleme adresi / OTA sertifikası / çalışma anı yapılandırması hedef kanalın değilse dur
 //
 // `--eski=<git-ref>`: §1a/§2c'nin İZİNİ o ref'teki betiklerle de çıkarır ve
 // karşılaştırır (adnansahin için "davranış değişmedi" ölçümü).
@@ -49,6 +53,8 @@ import {
 } from './lib/kanallar.mjs';
 import { bundleAdresOlcumu } from '../mobil/scripts/lib/adres.mjs';
 import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
+import { apkKimligi, axmlOgeleri } from '../mobil/scripts/lib/apk-kimlik.mjs';
+import { imzaBasligi, imzayiKabulEdenler, multipartKur } from '../mobil/scripts/lib/manifest.mjs';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ESKI = (process.argv.find((a) => a.startsWith('--eski=')) ?? '').slice('--eski='.length) || null;
@@ -250,7 +256,7 @@ function ortam() {
   };
 }
 
-function kos(o, komut, argumanlar, { cwd, girdi } = {}) {
+function kos(o, komut, argumanlar, { cwd, girdi, ortamEk = {} } = {}) {
   const r = spawnSync(komut, argumanlar, {
     cwd: cwd ?? o.d,
     encoding: 'utf8',
@@ -266,6 +272,7 @@ function kos(o, komut, argumanlar, { cwd, girdi } = {}) {
       GIT_CEILING_DIRECTORIES: GECICI,
       ASAR_YAZ: pathToFileURL(ASAR_YAZ).href,
       KANAL_KAYDI_YEDEK: path.join(KOK, 'deploy/kanallar.json'),
+      ...ortamEk,
     },
   });
   return { kod: r.status, cikti: `${r.stdout ?? ''}${r.stderr ?? ''}` };
@@ -304,6 +311,24 @@ function agacKur(o, { ref = null } = {}) {
   fs.chmodSync(path.join(agac, 'deploy/electron-paketle.sh'), 0o755);
   // Sürüm notu kapısının kendi bekçisi var; burada ölçülen o değil (beyanlı saplama).
   kopyala(agac, 'scripts/check-surum-notlari.mjs', 'process.exit(0);\n');
+  return agac;
+}
+
+/**
+ * Mobil yayın betiklerinin koştuğu asgari ağaç kopyası (app.json değiştirilebilir) — gerçek ağaca
+ * dokunulmadan "ağaç şöyle olsaydı" sorusu için. Sürüm notu kapısı beyanlı saplama.
+ */
+function mobilAgaci(o, appJsonDegistir = null) {
+  sayac += 1;
+  const agac = path.join(o.d, `mobil-agac-${sayac}`);
+  fs.cpSync(path.join(KOK, 'scripts/lib'), path.join(agac, 'scripts/lib'), { recursive: true });
+  fs.cpSync(path.join(KOK, 'mobil/scripts'), path.join(agac, 'mobil/scripts'), { recursive: true });
+  for (const rel of ['deploy/kanallar.json', 'mobil/app.config.js', 'mobil/musteri.json', 'mobil/package.json', 'surum-notlari.json']) kopyala(agac, rel);
+  const aj = JSON.parse(fs.readFileSync(path.join(KOK, 'mobil/app.json'), 'utf8'));
+  if (appJsonDegistir) appJsonDegistir(aj);
+  kopyala(agac, 'mobil/app.json', `${JSON.stringify(aj, null, 2)}\n`);
+  kopyala(agac, 'scripts/check-surum-notlari.mjs', 'process.exit(0);\n');
+  execFileSync(GERCEK_GIT, ['init', '-q'], { cwd: agac, env: TEMIZ_ENV });
   return agac;
 }
 
@@ -719,11 +744,58 @@ function zipYaz(yol, girdiler) {
   eocd.writeUInt32LE(cd.length, 12); eocd.writeUInt32LE(ofset, 16);
   fs.writeFileSync(yol, Buffer.concat([...yerel, cd, eocd]));
 }
-function apk(o, { feed = `${YAYIN_HOST}adnansahin/mobil/`, erp = FABRIKA_ERP, bundleYok = false, manifestUrlYok = false } = {}) {
+/**
+ * Asgari İKİLİ AndroidManifest (AXML, UTF-16 dize havuzu): `<manifest package>` + `<meta-data>`.
+ * Android'in kurulumda okuduğu biçim — paket adı öznitelikten, metin aramasından değil.
+ */
+function axmlYaz({ paket, meta = {} }) {
+  const NS = 'http://schemas.android.com/apk/res/android';
+  const YOK = 0xffffffff;
+  const dizeler = [];
+  const no = (x) => {
+    let i = dizeler.indexOf(x);
+    if (i < 0) i = dizeler.push(x) - 1;
+    return i;
+  };
+  const ogeler = [{ ad: 'manifest', oz: paket == null ? [] : [{ ns: null, ad: 'package', deger: paket }] }];
+  for (const [n, v] of Object.entries(meta)) ogeler.push({ ad: 'meta-data', oz: [{ ns: NS, ad: 'name', deger: n }, { ns: NS, ad: 'value', deger: v }] });
+  for (const e of ogeler) { no(e.ad); for (const a of e.oz) { if (a.ns) no(a.ns); no(a.ad); no(a.deger); } }
+  const veriler = dizeler.map((x) => { const u = Buffer.alloc(2); u.writeUInt16LE(x.length); return Buffer.concat([u, Buffer.from(x, 'utf16le'), Buffer.alloc(2)]); });
+  let dv = Buffer.concat(veriler);
+  if (dv.length % 4) dv = Buffer.concat([dv, Buffer.alloc(4 - (dv.length % 4))]);
+  const havuz = Buffer.alloc(28 + 4 * dizeler.length);
+  havuz.writeUInt16LE(0x0001, 0); havuz.writeUInt16LE(28, 2); havuz.writeUInt32LE(havuz.length + dv.length, 4);
+  havuz.writeUInt32LE(dizeler.length, 8); havuz.writeUInt32LE(28 + 4 * dizeler.length, 20);
+  let ofs = 0;
+  veriler.forEach((v, i) => { havuz.writeUInt32LE(ofs, 28 + 4 * i); ofs += v.length; });
+  const parcalar = [havuz, dv];
+  for (const e of ogeler) {
+    const b = Buffer.alloc(36 + 20 * e.oz.length);
+    b.writeUInt16LE(0x0102, 0); b.writeUInt16LE(16, 2); b.writeUInt32LE(b.length, 4); b.writeUInt32LE(1, 8); b.writeUInt32LE(YOK, 12);
+    b.writeUInt32LE(YOK, 16); b.writeUInt32LE(no(e.ad), 20); b.writeUInt16LE(20, 24); b.writeUInt16LE(20, 26); b.writeUInt16LE(e.oz.length, 28);
+    e.oz.forEach((a, i) => {
+      const k = 36 + 20 * i;
+      b.writeUInt32LE(a.ns ? no(a.ns) : YOK, k); b.writeUInt32LE(no(a.ad), k + 4); b.writeUInt32LE(no(a.deger), k + 8);
+      b.writeUInt16LE(8, k + 12); b[k + 15] = 0x03; b.writeUInt32LE(no(a.deger), k + 16);
+    });
+    parcalar.push(b);
+  }
+  const govde = Buffer.concat(parcalar);
+  const bas = Buffer.alloc(8);
+  bas.writeUInt16LE(0x0003, 0); bas.writeUInt16LE(8, 2); bas.writeUInt32LE(8 + govde.length, 4);
+  return Buffer.concat([bas, govde]);
+}
+function apk(o, { feed = `${YAYIN_HOST}adnansahin/mobil/`, erp = FABRIKA_ERP, bundleYok = false, manifestUrlYok = false,
+  paket = 'com.teks.erp.mobil', manifestBozuk = false, sertifikaPem = null, appConfig = null } = {}) {
+  sayac += 1;
   const y = path.join(o.d, `sahte-${sayac}.apk`);
-  const man = Buffer.from(`\u0000android\u0000${manifestUrlYok ? 'bos' : `${feed}ota/54.2/manifest`}\u0000`, 'utf16le');
+  const meta = { 'expo.modules.updates.ENABLED': 'true' };
+  if (!manifestUrlYok) meta['expo.modules.updates.EXPO_UPDATE_URL'] = `${feed}ota/54.2/manifest`;
+  if (sertifikaPem) meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'] = sertifikaPem;
+  const man = manifestBozuk ? Buffer.from('<manifest>duz metin</manifest>') : axmlYaz({ paket, meta });
   const g = [{ ad: 'AndroidManifest.xml', veri: man, yontem: 8 }];
   if (!bundleYok) g.push({ ad: 'assets/index.android.bundle', veri: Buffer.from(`hermes\u0000${erp}\u0000son`, 'latin1'), yontem: 0 });
+  if (appConfig) g.push({ ad: 'assets/app.config', veri: Buffer.from(JSON.stringify(appConfig)), yontem: 8 });
   zipYaz(y, g);
   return y;
 }
@@ -756,6 +828,23 @@ const tabletSurum = JSON.parse(fs.readFileSync(path.join(KOK, 'mobil/app.json'),
   const r = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o, { feed: `${YAYIN_HOST}testfabrika/mobil/` })}`, `--surum=${tabletSurum}`, '--vc=57']);
   ol('3k APK güncelleme adresi testfabrika + --musteri=adnansahin → DUR', r.kod !== 0 && /YANLIŞ GÜNCELLEME ADRESİNİ/.test(r.cikti), r.cikti.slice(-400));
 }
+{
+  const o = ortam();
+  const r = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o, { paket: 'com.teks.erp.mobil.testfabrika' })}`, `--surum=${tabletSurum}`, '--vc=57']);
+  ol('3l APK paket adı testfabrika (adres + bundle fabrikanın) + --musteri=adnansahin → DUR (B5, not kapısından ÖNCE)',
+    r.kod !== 0 && /APK BAŞKA BİR UYGULAMANIN PAKETİ/.test(r.cikti) && /"testfabrika" kanalının/.test(r.cikti) && !/SÜRÜM NOTU/.test(r.cikti), r.cikti.slice(-500));
+}
+{
+  const o = ortam();
+  const r = mobilYayinla(o, ['--musteri=adnansahin', `--apk=${apk(o, { manifestBozuk: true })}`, `--surum=${tabletSurum}`, '--vc=57']);
+  ol('3m APK manifesti ikili XML değil → ÖLÇÜLEMEDİ (paket adı), DUR', r.kod !== 0 && /ÖLÇÜLEMEDİ — APK paket adı okunamadı/.test(r.cikti), r.cikti.slice(-400));
+}
+{
+  const o = ortam();
+  const r = mobilYayinla(o, ['--musteri=testfabrika', `--apk=${apk(o, { paket: 'com.teks.erp.mobil', feed: `${YAYIN_HOST}testfabrika/mobil/`, erp: TEST_ERP })}`, `--surum=${tabletSurum}`, '--vc=57']);
+  ol('3n fabrika paket adlı APK (adres + bundle testfabrika) + --musteri=testfabrika → DUR (fabrika uygulamasının ÜSTÜNE yazardı)',
+    r.kod !== 0 && /APK BAŞKA BİR UYGULAMANIN PAKETİ/.test(r.cikti) && /"adnansahin" kanalının/.test(r.cikti), r.cikti.slice(-500));
+}
 
 /* ------------------------------------------------------------------ *
  * §4 yayinla-ota.mjs --check (ağsız argümanlarla)
@@ -783,6 +872,46 @@ const otaCheck = (o, apiUrl) => kos(o, process.execPath, [path.join(KOK, 'mobil/
   ol('4c testfabrika adresi + --musteri=adnansahin → DUR (B6: üretim artık mümkün değil)',
     r.kod !== 0 && /ERP ADRESİ "adnansahin" KANALININ DEĞİL/.test(r.cikti) && !/Uygulama sürümü/.test(r.cikti), r.cikti.slice(-500));
 }
+const otaCheckKanal = (o, kod, ekArg = [], { cwd = path.join(KOK, 'mobil'), ortamEk = {} } = {}) => kos(o, process.execPath, [path.join(cwd, 'scripts/yayinla-ota.mjs'),
+  `--musteri=${kod}`, '--check', `--surum=${tabletSurum}`, '--update-url=http://127.0.0.1:9/', ...ekArg], { cwd, ortamEk });
+const parmakIzi = (cikti) => /Native parmak izi : ([0-9a-f]+)/.exec(cikti)?.[1] ?? null;
+{
+  const o = ortam();
+  const a = otaCheck(o, FABRIKA_ERP);
+  const t = otaCheckKanal(o, 'testfabrika', [`--api-url=${TEST_ERP}`]);
+  ol('4d testfabrika adresi + --musteri=testfabrika → kanal kapısı geçer (kimlik app.config.js\'ten, app.json\'a dokunmadan)',
+    t.kod === 0 && /Kanal {13}: testfabrika \(hazirlik\)/.test(t.cikti), t.cikti.slice(0, 900));
+  ol('4d native parmak izi kanaldan BAĞIMSIZ (adnansahin = testfabrika)',
+    parmakIzi(a.cikti) !== null && parmakIzi(a.cikti) === parmakIzi(t.cikti), `adnansahin ${parmakIzi(a.cikti)} · testfabrika ${parmakIzi(t.cikti)}`);
+}
+{
+  const o = ortam();
+  const r = otaCheckKanal(o, 'testfabrika', [`--api-url=${FABRIKA_ERP}`]);
+  ol('4e fabrika adresi + --musteri=testfabrika → DUR (hazırlık tabletleri fabrikaya yazmaz)',
+    r.kod !== 0 && /ERP ADRESİ "testfabrika" KANALININ DEĞİL/.test(r.cikti), r.cikti.slice(-400));
+}
+{
+  const o = ortam();
+  const r = otaCheckKanal(o, 'testfabrika');
+  ol('4f adres verilmezse kanal kaydından çözülür (--api-url gerekmez)',
+    r.kod === 0 && /kaynak {10}: kanal kaydı "testfabrika"/.test(r.cikti) && r.cikti.includes(TEST_ERP), r.cikti.slice(0, 800));
+}
+{
+  const o = ortam();
+  const r = otaCheckKanal(o, 'testfabrika', [], { ortamEk: { TEKSERP_KANAL: 'adnansahin' } });
+  ol('4g ortamda başka kanal (TEKSERP_KANAL=adnansahin) + --musteri=testfabrika → DUR', r.kod !== 0 && /KANAL ÇELİŞKİSİ/.test(r.cikti), r.cikti.slice(-300));
+}
+{
+  // Eski d5 reçetesi: app.json'u kanal için elle çevirmek → parmak izi girdisi değişir (sahte NATIVE DEĞİŞTİ).
+  const o = ortam();
+  const agac = mobilAgaci(o, (aj) => { aj.expo.android.package = 'com.teks.erp.mobil.testfabrika'; aj.expo.name = 'TeksERP Test'; });
+  const r = otaCheckKanal(o, 'testfabrika', [], { cwd: path.join(agac, 'mobil') });
+  ol('4h app.json kanal için yeniden yazılmış → DUR (parmak izi kimlikten bağımsız kalmalı)',
+    r.kod !== 0 && /app\.json DİNLENME KİMLİĞİNİ \("adnansahin"\) TAŞIMIYOR/.test(r.cikti), r.cikti.slice(-500));
+  const r2 = otaCheckKanal(o, 'testfabrika', [], { cwd: path.join(mobilAgaci(o), 'mobil') });
+  ol('4h kontrol: aynı kopya ağaç app.json dokunulmadan → geçer (sonda kopyanın kendisini ölçmüyor)',
+    r2.kod === 0 && /Kanal {13}: testfabrika/.test(r2.cikti), r2.cikti.slice(-500));
+}
 
 /* ------------------------------------------------------------------ *
  * §5 yüklemler
@@ -794,7 +923,7 @@ console.log('\n§5 — ortak yüklemler');
   ol('5a adnansahin: ağacın panel + tablet kimliği kayıtla birebir',
     panelSabitKimlikFarki(kanalCoz('adnansahin').kanal, d).length === 0 && tabletSabitKimlikFarki(kanalCoz('adnansahin').kanal, d).length === 0);
   const tf = tabletSabitKimlikFarki(kanalCoz('testfabrika').kanal, d);
-  ol('5b testfabrika: tablet kimliği ağaçta YOK (D3 öncesi OTA üretimi kapalı: paket adı + sertifika)',
+  ol('5b testfabrika kimliği app.json\'da YOK — app.json dinlenme (varsayilan) kimliğidir, kanal derleme anında enjekte edilir',
     tf.some((x) => x.includes('android.package')) && tf.some((x) => x.includes('codeSigningCertificate')), tf.join('\n'));
   const o = ortam();
   const y = apk(o);
@@ -806,7 +935,25 @@ console.log('\n§5 — ortak yüklemler');
   const m2 = bundleAdresOlcumu(`x${FABRIKA_ERP}http://10.0.0.5:4000/api`, FABRIKA_ERP);
   ol('5d bundle ölçümü: sayar, uç uca dizede de bulur, yabancı sayısal IP\'yi ayırır',
     m.gecenSayi === 2 && m.yabanciIp.length === 0 && m2.yabanciIp.join() === 'http://10.0.0.5:4000/api');
+  const pem = '-----BEGIN CERTIFICATE-----\r\nMIIB\r\n-----END CERTIFICATE-----\r\n';
+  const k = apkKimligi(apk(o, { paket: 'com.teks.erp.mobil.testfabrika', feed: `${YAYIN_HOST}testfabrika/mobil/`, sertifikaPem: pem, appConfig: { name: 'TeksERP Test' } }));
+  ol('5e ikili manifest okuyucu: paket adı öznitelikten, meta-data (adres + CRLF\'li sertifika) birebir, app.config okunur',
+    k.paket === 'com.teks.erp.mobil.testfabrika' && k.guncellemeAdresi === `${YAYIN_HOST}testfabrika/mobil/ota/54.2/manifest` &&
+      k.sertifikaPem === pem && k.guncellemeAcik === 'true' && k.appConfig?.name === 'TeksERP Test', JSON.stringify(k));
+  let bozukHata = null;
+  try { axmlOgeleri(Buffer.from('<manifest/>')); } catch (e) { bozukHata = e.message; }
+  ol('5f ikili olmayan manifest → ÖLÇÜLEMEDİ (metin olarak "okunmuş" sayılmaz)', /AXML/.test(bozukHata ?? ''), String(bozukHata));
+  const cift = () => crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const [a, b] = [cift(), cift()];
+  const pub = (k) => k.publicKey.export({ type: 'spki', format: 'pem' });
+  const man = { id: 'x', runtimeVersion: '54.2', extra: {} };
+  const govde = multipartKur({ manifest: man, imzaBasligiDegeri: imzaBasligi(JSON.stringify(man), a.privateKey.export({ type: 'pkcs8', format: 'pem' }), 'main') });
+  const ayri = imzayiKabulEdenler(govde, { imzalayan: pub(a), baska: pub(b) });
+  const paylasilan = imzayiKabulEdenler(govde, { imzalayan: pub(a), ayniAnahtar: pub(a) });
+  ol('5g çapraz red yüklemi: ayrı anahtarlı kanal imzayı REDDEDER, aynı anahtarı paylaşan KABUL eder (yayinla-ota bu ikinciyi durdurur)',
+    ayri.join() === 'imzalayan' && paylasilan.join() === 'imzalayan,ayniAnahtar', `ayri=${ayri} paylasilan=${paylasilan}`);
 }
+
 {
   const y = path.join(GECICI, 'deneme.asar');
   asarYaz(y, { 'package.json': '{"name":"x"}', 'out/main/main.js': 'const a = "b";' });
@@ -819,13 +966,15 @@ console.log('\n§5 — ortak yüklemler');
   } catch (e) {
     olculemedi = e?.constructor?.name === 'Olculemedi';
   }
-  ol('5e asar okuyucu: yazılanı birebir okur, bozuk arşiv ÖLÇÜLEMEDİ (ihlal değil)',
+  ol('5h asar okuyucu: yazılanı birebir okur, bozuk arşiv ÖLÇÜLEMEDİ (ihlal değil)',
     ic['package.json']?.toString() === '{"name":"x"}' && ic['out/main/main.js']?.toString() === 'const a = "b";' && olculemedi);
 }
 {
   // Commit kapısı tetiği bu bekçinin OKUDUĞU her dosyayı kapsamalı: koşturulan betikler + yerel
   // import kapanışları + kabuğun çağırdığı node betikleri + ağaç kopyası. Liste ölçülür, sayılmaz.
+  // app.config.js yayinla-ota'nın dinamik require'ı + mobil ağaç kopyası (import deseninde görünmez).
   const kosulan = ['scripts/test_kanal_yayin_kapisi.mjs', 'deploy/mobil-yayinla.mjs', 'mobil/scripts/yayinla-ota.mjs',
+    'mobil/scripts/build-apk.mjs', 'mobil/app.config.js',
     'deploy/electron-yayinla.sh', 'deploy/electron-paketle.sh', ...ORTAK_KAYNAK, ...TABLET_SABIT_DOSYALAR];
   const okunan = new Set();
   const gez = (rel) => {
@@ -839,8 +988,79 @@ console.log('\n§5 — ortak yüklemler');
   };
   for (const f of kosulan) gez(f);
   const disarida = [...okunan].filter((f) => !kanalBekcisiTetigi(f));
-  ol(`5f commit kapısı tetiği bu bekçinin okuduğu ${okunan.size} dosyanın HEPSİNİ kapsıyor (import kapanışı ölçüldü)`,
+  ol(`5i commit kapısı tetiği bu bekçinin okuduğu ${okunan.size} dosyanın HEPSİNİ kapsıyor (import kapanışı ölçüldü)`,
     okunan.size > 15 && disarida.length === 0, disarida.join('\n'));
+}
+
+/* ------------------------------------------------------------------ *
+ * §6 build-apk.mjs (--verify-only / --check, ağsız: --yoklama-yok)
+ * ------------------------------------------------------------------ */
+
+console.log('\n§6 — build-apk.mjs: kanal argümandan, APK\'nın kendi kimliği hedef kanalın mı');
+const buildApk = (o, args, { ortamEk = {} } = {}) => kos(o, process.execPath, [path.join(KOK, 'mobil/scripts/build-apk.mjs'), '--yoklama-yok', ...args],
+  { cwd: path.join(KOK, 'mobil'), ortamEk });
+{
+  const o = ortam();
+  const r = buildApk(o, [`--verify-only=${apk(o)}`]);
+  ol('6a --musteri yok → DUR (derleme niyetsiz koşmaz)', r.kod !== 0 && /HANGİ KANAL İÇİN DERLENİYOR/.test(r.cikti), r.cikti.slice(-300));
+}
+{
+  const o = ortam();
+  const r = buildApk(o, ['--musteri=testfabirka', `--verify-only=${apk(o)}`]);
+  ol('6b bilinmeyen kanal → DUR', r.kod !== 0 && /BİLİNMEYEN KANAL/.test(r.cikti), r.cikti.slice(-300));
+}
+{
+  const o = ortam();
+  const r = buildApk(o, ['--musteri=adnansahin', `--api-url=${TEST_ERP}`, `--verify-only=${apk(o)}`]);
+  ol('6c testfabrika adresi + --musteri=adnansahin → DUR (APK bu adresi gömemez)', r.kod !== 0 && /ERP ADRESİ "adnansahin" KANALININ DEĞİL/.test(r.cikti), r.cikti.slice(-300));
+}
+{
+  const o = ortam();
+  const r = buildApk(o, ['--musteri=testfabrika', `--verify-only=${apk(o)}`], { ortamEk: { TEKSERP_KANAL: 'adnansahin' } });
+  ol('6d ortamda başka kanal → DUR (KANAL ÇELİŞKİSİ)', r.kod !== 0 && /KANAL ÇELİŞKİSİ/.test(r.cikti), r.cikti.slice(-300));
+}
+{
+  const o = ortam();
+  const y = apk(o, { paket: 'com.teks.erp.mobil.testfabrika', feed: `${YAYIN_HOST}testfabrika/mobil/` });
+  const r = buildApk(o, ['--musteri=adnansahin', `--verify-only=${y}`]);
+  ol('6e yanlış paket adlı APK (testfabrika) + --musteri=adnansahin → DUR, APK kanonik adından taşınır',
+    r.kod !== 0 && /APK "adnansahin" KANALININ KİMLİĞİNİ TAŞIMIYOR/.test(r.cikti) &&
+      /paket adı "com\.teks\.erp\.mobil\.testfabrika" ≠ "com\.teks\.erp\.mobil"/.test(r.cikti) &&
+      !fs.existsSync(y) && fs.existsSync(y.replace(/\.apk$/, '.DOGRULANMADI.apk')), r.cikti.slice(-700));
+}
+{
+  const o = ortam();
+  const r = buildApk(o, ['--musteri=testfabrika', `--verify-only=${apk(o, { paket: 'com.teks.erp.mobil.testfabrika', feed: `${YAYIN_HOST}testfabrika/mobil/`, erp: TEST_ERP,
+    appConfig: { name: 'TeksERP', android: { package: 'com.teks.erp.mobil.testfabrika' }, updates: { url: `${YAYIN_HOST}adnansahin/mobil/ota/54.2/manifest` } } })}`]);
+  ol('6f paket adı doğru ama gömülü çalışma anı yapılandırması fabrikanın (künye fabrikadan okunurdu) → DUR',
+    r.kod !== 0 && /assets\/app\.config updates\.url/.test(r.cikti) && /assets\/app\.config name/.test(r.cikti), r.cikti.slice(-700));
+}
+{
+  const o = ortam();
+  const r = buildApk(o, ['--musteri=adnansahin', `--verify-only=${apk(o, { manifestBozuk: true })}`]);
+  ol('6g APK manifesti okunamıyor → ÖLÇÜLEMEDİ, DUR', r.kod !== 0 && /ÖLÇÜLEMEDİ — APK kimliği okunamadı/.test(r.cikti), r.cikti.slice(-300));
+}
+{
+  // Pozitif (kapı aşırı sert değil): kimliği TAM doğru sahte APK kanal kapısından geçer. Sertifika kıyası
+  // gerçek sertifika ister → yalnız keystore/ olan makinede (TEKSERP_STRICT=1'de zorunlu).
+  const sertYol = path.join(KOK, 'mobil', kanalCoz('testfabrika').kanal.tablet.otaSertifika);
+  if (fs.existsSync(sertYol) || process.env.TEKSERP_STRICT === '1') {
+    const o = ortam();
+    const tfCfg = { name: 'TeksERP Test', android: { package: 'com.teks.erp.mobil.testfabrika' },
+      updates: { url: `${YAYIN_HOST}testfabrika/mobil/ota/54.2/manifest` }, extra: { gorunurEtiket: 'TEST FABRİKA' } };
+    const tam = apk(o, { paket: 'com.teks.erp.mobil.testfabrika', feed: `${YAYIN_HOST}testfabrika/mobil/`, erp: TEST_ERP,
+      sertifikaPem: fs.readFileSync(sertYol, 'utf8'), appConfig: tfCfg });
+    const r = buildApk(o, ['--musteri=testfabrika', `--verify-only=${tam}`]);
+    ol('6h pozitif: kimliği tam doğru testfabrika APK\'sı kanal kapısından GEÇER (sonraki mühür kapısı ayrı)',
+      /✔ APK "testfabrika" kanalının kimliğini taşıyor/.test(r.cikti), r.cikti.slice(0, 900));
+    const tamYanlisSert = apk(o, { paket: 'com.teks.erp.mobil.testfabrika', feed: `${YAYIN_HOST}testfabrika/mobil/`, erp: TEST_ERP,
+      sertifikaPem: fs.readFileSync(path.join(KOK, 'mobil', kanalCoz('adnansahin').kanal.tablet.otaSertifika), 'utf8'), appConfig: tfCfg });
+    const r2 = buildApk(o, ['--musteri=testfabrika', `--verify-only=${tamYanlisSert}`]);
+    ol('6i her şey testfabrika ama gömülü OTA sertifikası fabrikanın → DUR (fabrika anahtarıyla imzalı paketi kabul ederdi)',
+      r2.kod !== 0 && /gömülü OTA sertifikası "testfabrika" kanalınınki değil/.test(r2.cikti), r2.cikti.slice(-500));
+  } else {
+    console.log('ℹ️  6h/6i atlandı — keystore/ yok (sertifika kıyası ölçülemez; TEKSERP_STRICT=1 ile zorunlu)');
+  }
 }
 
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi.length} başarısız ===`);

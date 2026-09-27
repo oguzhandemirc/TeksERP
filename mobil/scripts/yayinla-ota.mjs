@@ -24,9 +24,14 @@
  * tabletler açılışta çöker. Script native parmak izini hesaplayıp bir öncekiyle
  * karşılaştırır ve fark varsa DURUR.
  *
+ * ⚠️ KANAL (2026-09-27): `--musteri=<kod>` hedef kanaldır; paketin gömdüğü kimlik
+ * (manifestin `extra.expoClient`i: ad · paket adı · güncelleme adresi · görünür etiket),
+ * ERP adresi ve İMZA ANAHTARI `deploy/kanallar.json`dan. Her kanalın OTA anahtarı AYRIDIR:
+ * başka kanalın sertifikasıyla doğrulanan imza = paylaşılan anahtar = DUR.
+ *
  * Kullanım:
- *   EXPO_PUBLIC_API_URL=http://192.168.1.250:4000/api npm run yayinla
- *   npm run yayinla -- --api-url=http://192.168.1.250:4000/api
+ *   npm run yayinla -- --musteri=<kod>                     # ERP adresi kanal kaydından
+ *   npm run yayinla -- --musteri=<kod> --api-url=<adres>   # açık adres kanalınkiyle EŞİT olmalı
  *   npm run yayinla -- --check          # yalnız adres + parmak izi kontrolü
  *   npm run yayinla -- --parmak-izini-kabul-et   # native değişikliği bilinçli onayla
  *   npm run yayinla -- --update-url=https://…/mobil/   # feed adresini ez
@@ -37,18 +42,17 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import {
   adresiCoz,
   bundleAdresOlcumu,
-  feedUrl,
   guncellemeAdresiCoz,
   manifestUrl,
-  musteriOku,
   normalizeFeed,
 } from './lib/adres.mjs';
-import { imzaBasligi, manifestKur, multipartDogrula, multipartKur } from './lib/manifest.mjs';
+import { imzaBasligi, imzayiKabulEdenler, manifestKur, multipartDogrula, multipartKur } from './lib/manifest.mjs';
 import {
   etiketDefteriKiyasla,
   sonrakiSurumEtiketten,
@@ -65,8 +69,10 @@ import {
   kanalCoz,
   tabletSabitKimlikFarki,
 } from '../../scripts/lib/kanallar.mjs';
+import { KANAL_ORTAM, otaImzaYollari, tabletYapilandirmaFarki } from './lib/kanal.cjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const PROJECT_ROOT = path.resolve(HERE, '..');
 const CIKTI_KOK = path.join(PROJECT_ROOT, 'ota-cikti');
 const PARMAK_IZI_DOSYA = path.join(PROJECT_ROOT, '.ota-parmak-izi.json');
@@ -104,8 +110,8 @@ const SURUM_ARTIRMA_YOK = argv.includes('--surum-artirma');
  * (a) Adres
  * ------------------------------------------------------------------ */
 
-function adresCoz() {
-  const { deger, kaynak } = adresiCoz(arg('api-url'), PROJECT_ROOT);
+function adresCoz(kod, kanal) {
+  const { deger, kaynak } = adresiCoz(arg('api-url'), PROJECT_ROOT, { kod, erpAdresi: kanal.tablet.erpAdresi });
   if (!deger) {
     dur(
       'Sunucu adresi çözülemedi',
@@ -135,6 +141,16 @@ function adresCoz() {
  * (a2) KANAL KAPISI — paket hangi kanalın ERP sunucusuna bağlanacak?
  * ------------------------------------------------------------------ */
 
+/** Kayıt defterinden kanal — bilinmeyen kod / kırmızı kayıt: hiçbir şey yapılmadan DUR. */
+function kanalCozVeyaDur(musteri) {
+  try {
+    return kanalCoz(musteri);
+  } catch (e) {
+    if (e instanceof Olculemedi) dur(`KANAL KAYIT DEFTERİ ÖLÇÜLEMEDİ (${KAYIT_REL})`, e.message);
+    dur(e.message, ...(e.satirlar ?? []));
+  }
+}
+
 /**
  * ⚠️ BİÇİM DOĞRU DİYE ADRES DOĞRU DEĞİLDİR: `adresCoz` "bu bir ERP adresi mi" sorar,
  * "bu KANALIN adresi mi" sormaz. Başka kanalın adresini taşıyan paket bu kanalın
@@ -142,14 +158,7 @@ function adresCoz() {
  * sunucuya yazdırır — hata vermeden. Beklenen değer kayıt defterinden, ağdan ÖNCE;
  * eşit değilse kaçış YOK.
  */
-function kanalKapisi(musteri, adres, kaynak) {
-  let kanal;
-  try {
-    ({ kanal } = kanalCoz(musteri));
-  } catch (e) {
-    if (e instanceof Olculemedi) dur(`KANAL KAYIT DEFTERİ ÖLÇÜLEMEDİ (${KAYIT_REL})`, e.message);
-    dur(e.message, ...(e.satirlar ?? []));
-  }
+function kanalKapisi(musteri, kayit, kanal, adres, kaynak) {
   if (!erpAdresiEsit(adres, kanal.tablet.erpAdresi)) {
     dur(
       `ERP ADRESİ "${musteri}" KANALININ DEĞİL`,
@@ -160,21 +169,34 @@ function kanalKapisi(musteri, adres, kaynak) {
       'Adres gerçekten değiştiyse önce kayıt defteri değişir (üretim kanalında bu bir GÖÇTÜR).',
     );
   }
+  // PARMAK İZİ KİMLİKTEN BAĞIMSIZ: parmak izi app.json'un android bloğunu (paket adı dahil)
+  // hash'ler. app.json DİNLENME (varsayilan) kimliğini taşımalı; bir kanal için yeniden
+  // yazılmışsa kanal değişimi sahte "NATIVE DEĞİŞTİ" üretir — kimlik app.config.js'te.
   let farklar;
   try {
-    farklar = tabletSabitKimlikFarki(kanal, dosyalariOku(TABLET_SABIT_DOSYALAR));
+    farklar = tabletSabitKimlikFarki(kayit.kanallar[kayit.varsayilan], dosyalariOku(TABLET_SABIT_DOSYALAR));
   } catch (e) {
     if (e instanceof Olculemedi) dur('TABLET KİMLİĞİ ÖLÇÜLEMEDİ', e.message);
     throw e;
   }
   if (farklar.length) {
     dur(
-      `AĞAÇ "${musteri}" KANALININ TABLET KİMLİĞİNİ TAŞIMIYOR`,
+      `app.json DİNLENME KİMLİĞİNİ ("${kayit.varsayilan}") TAŞIMIYOR`,
       ...farklar,
       '',
-      'Bu kanalın paket adı / OTA sertifikası bu ağaçta yazılı değil; paket yanlış kimlikle imzalanırdı.',
+      "Kanal kimliği app.json'a YAZILMAZ: native parmak izinin girdisidir ve kanal değişimi",
+      `sahte "NATIVE DEĞİŞTİ" üretirdi. Kimlik derleme anında ${KANAL_ORTAM} ile app.config.js'ten gelir.`,
     );
   }
+  // Yapılandırma bu kanalın kimliğini ÜRETİYOR mu (ağdan önce, süreç içinde).
+  let cf;
+  try {
+    const cfg = require(path.join(PROJECT_ROOT, 'app.config.js'))({ config: appJson() });
+    cf = tabletYapilandirmaFarki(kanal, cfg, String(appJson().runtimeVersion ?? ''));
+  } catch (e) {
+    dur('ÖLÇÜLEMEDİ — app.config.js değerlendirilemedi', String(e?.message ?? e));
+  }
+  if (cf.length) dur(`app.config.js "${musteri}" KANALININ KİMLİĞİNİ ÜRETMİYOR`, ...cf);
   bilgi(`Kanal             : ${musteri} (${kanal.tur}) — ERP adresi ve tablet kimliği kayıtla birebir`);
 }
 
@@ -354,17 +376,32 @@ function exportKos(adres, hedefDizin) {
   if (sonuc.status !== 0) dur('expo export başarısız', `Çıkış kodu: ${sonuc.status}`);
 }
 
-function expoConfigYaz(adres, hedefDizin) {
+/**
+ * Manifestin `extra.expoClient`i — tablette `Constants.expoConfig` budur (görünen ad, APK
+ * künyesinin adresi, görünür etiket). ⚠️ FAIL-CLOSED: eskiden okunamazsa uyarıp alansız
+ * paket üretiyordu; kanal kimliği bu alanda yaşadığı için ölçülemeyen yapılandırma = DUR.
+ */
+function expoConfigYaz(adres, hedefDizin, musteri, kanal, runtimeVersion) {
   const sonuc = spawnSync('npx', ['expo', 'config', '--json', '--type', 'public'], {
     cwd: PROJECT_ROOT,
     encoding: 'utf8',
     env: { ...process.env, EXPO_PUBLIC_API_URL: adres },
   });
-  if (sonuc.status !== 0 || !sonuc.stdout) {
-    uyari('expo config okunamadı — expoConfig.json yazılmadı (paket yine geçerli).');
-    return null;
+  let cfg = null;
+  try {
+    if (sonuc.status === 0 && sonuc.stdout) cfg = JSON.parse(sonuc.stdout);
+  } catch {
+    cfg = null;
   }
-  const cfg = JSON.parse(sonuc.stdout);
+  if (!cfg) {
+    dur(
+      'ÖLÇÜLEMEDİ — expo config okunamadı',
+      (sonuc.stderr || '').trim().split('\n').slice(-3).join(' · ') || `çıkış ${sonuc.status}`,
+      'Paket kimliği (extra.expoClient) ölçülemeden paket üretilmez.',
+    );
+  }
+  const f = tabletYapilandirmaFarki(kanal, cfg, runtimeVersion, { herkese: true });
+  if (f.length) dur(`PAKETİN YAPILANDIRMASI "${musteri}" KANALININ DEĞİL`, ...f);
   fs.writeFileSync(path.join(hedefDizin, 'expoConfig.json'), JSON.stringify(cfg));
   return cfg;
 }
@@ -413,6 +450,30 @@ function paketiDogrula(hedefDizin, beklenenAdres) {
   return { bundleRel, boyut: icerik.length, varlikSayisi };
 }
 
+/**
+ * ÇAPRAZ RED — imza BAŞKA bir kanalın sertifikasıyla da doğrulanıyorsa iki kanal aynı OTA
+ * anahtarını paylaşıyor demektir: yanlış klasöre yüklenen paketi o kanalın tabletleri KABUL
+ * ederdi. Sertifikası bu makinede olmayan kanal ölçülmedi diye söylenir (sessiz geçmez).
+ */
+function capraziRed(govde, kayit, musteri, imzaYollari) {
+  const digerleri = {};
+  for (const [digerKod, diger] of Object.entries(kayit.kanallar)) {
+    if (digerKod === musteri) continue;
+    const yol = path.join(PROJECT_ROOT, diger.tablet.otaSertifika);
+    if (fs.existsSync(yol)) digerleri[digerKod] = fs.readFileSync(yol, 'utf8');
+    else bilgi(`  · "${digerKod}" sertifikası bu makinede yok — çapraz red ÖLÇÜLMEDİ`);
+  }
+  const kabul = imzayiKabulEdenler(govde, digerleri);
+  if (kabul.length) {
+    dur(
+      `İMZA "${kabul.join('", "')}" KANALININ SERTİFİKASIYLA DA DOĞRULANIYOR`,
+      `imzalayan anahtar: ${imzaYollari.anahtar}`,
+      'Kanallar aynı OTA anahtarını paylaşıyor — her kanalın anahtarı ayrı üretilir.',
+    );
+  }
+  for (const kod of Object.keys(digerleri)) bilgi(`✔ "${kod}" kanalının sertifikası bu imzayı REDDEDİYOR`);
+}
+
 /* ------------------------------------------------------------------ *
  * main
  * ------------------------------------------------------------------ */
@@ -420,34 +481,31 @@ function paketiDogrula(hedefDizin, beklenenAdres) {
 async function main() {
   baslik('TeksERP Mobil — UZAKTAN GÜNCELLEME PAKETİ');
 
-  const { deger: adres, kaynak } = adresCoz();
-
-  // ⚠️ MÜŞTERİ, KOMUTTAN. Paketin varlık URL'leri müşteri segmentini taşır;
-  // yanlış müşteriyle üretilen paket, o fabrikanın tabletlerine BAŞKA bir
-  // fabrikanın adreslerini gösterir. Beklenen değer dosyadan alınsaydı kapı
-  // dairesel olurdu (bkz. build-apk.mjs `guncellemeKapisi`).
-  const dosyadaki = musteriOku();
+  // ⚠️ KANAL, KOMUTTAN. Paketin varlık URL'leri, gömdüğü kimlik ve imza anahtarı kanaldan;
+  // beklenen değer ağaçtaki `musteri.json`dan (dinlenme işaretçisi) alınsaydı kapı dairesel
+  // olurdu (bkz. build-apk.mjs `guncellemeKapisi`).
   const musteri = arg('musteri');
   if (!musteri) {
     dur(
-      'HANGİ MÜŞTERİ İÇİN YAYINLANIYOR?',
-      '`--musteri=<kod>` zorunludur — paketin içindeki adresler o koda göre kurulur.',
-      `Bu ağaç şu an "${dosyadaki.kod}" (${dosyadaki.ad}) için yapılandırılmış.`,
-      `Örnek:  npm run yayinla -- --musteri=${dosyadaki.kod}`,
+      'HANGİ KANAL İÇİN YAYINLANIYOR?',
+      '`--musteri=<kod>` zorunludur — paketin içindeki adresler, kimlik ve imza o kanaldan.',
+      `Kanallar: ${KAYIT_REL}`,
+      'Örnek:  npm run yayinla -- --musteri=<kod>',
     );
   }
-  if (musteri !== dosyadaki.kod) {
-    dur(
-      'MÜŞTERİ UYUŞMAZLIĞI',
-      `komutta      : ${musteri}`,
-      `musteri.json : ${dosyadaki.kod}`,
-      'Ağaç başka bir müşteri için yapılandırılmış; önce musteri.json + prebuild.',
-    );
+  const { kayit, kanal } = kanalCozVeyaDur(musteri);
+  const ortamdaki = String(process.env[KANAL_ORTAM] ?? '').trim();
+  if (ortamdaki && ortamdaki !== musteri) {
+    dur('KANAL ÇELİŞKİSİ', `komutta           : ${musteri}`, `${KANAL_ORTAM} ortamı : ${ortamdaki}`);
   }
-  kanalKapisi(musteri, adres, kaynak);
+  // expo export / expo config / app.config.js bu kanalın kimliğiyle değerlendirilir.
+  process.env[KANAL_ORTAM] = musteri;
+
+  const { deger: adres, kaynak } = adresCoz(musteri, kanal);
+  kanalKapisi(musteri, kayit, kanal, adres, kaynak);
 
   const { deger: feed, kaynak: feedKaynak } = guncellemeAdresiCoz(
-    arg('update-url') || feedUrl(musteri),
+    arg('update-url') || kanal.yayin.mobilFeed,
   );
   let e = appJson();
   const runtimeVersion = String(e.runtimeVersion ?? '').trim();
@@ -458,7 +516,7 @@ async function main() {
     );
   }
 
-  bilgi(`Müşteri           : ${musteri} (${dosyadaki.ad})`);
+  bilgi(`Müşteri           : ${musteri} (${kanal.ad})`);
   bilgi(`ERP adresi        : ${adres}`);
   bilgi(`  kaynak          : ${kaynak}`);
   bilgi(`Güncelleme kanalı : ${manifestUrl(feed, runtimeVersion)}`);
@@ -612,7 +670,7 @@ async function main() {
 
   onbellegiTemizle();
   exportKos(adres, hedefDizin);
-  const expoConfig = expoConfigYaz(adres, hedefDizin);
+  const expoConfig = expoConfigYaz(adres, hedefDizin, musteri, kanal, runtimeVersion);
 
   const olcum = paketiDogrula(hedefDizin, adres);
 
@@ -636,8 +694,16 @@ async function main() {
 
   let imzaDegeri = null;
   let sertifikaPem = null;
-  const anahtarYol = path.join(PROJECT_ROOT, 'keystore/ota-keys/private-key.pem');
-  const sertifikaYol = path.join(PROJECT_ROOT, 'keystore/ota-certs/certificate.pem');
+  // Kanalın KENDİ anahtarı: başka kanalın tabletleri bu imzayı reddeder (yanlış klasöre
+  // yüklenen paket "başka sunucuya bağlanır" yerine "güncelleme gelmez"e iner).
+  let imzaYollari;
+  try {
+    imzaYollari = otaImzaYollari(kanal);
+  } catch (e) {
+    dur('KANALIN OTA İMZA YOLU ÇÖZÜLEMEDİ', e.message);
+  }
+  const anahtarYol = path.join(PROJECT_ROOT, imzaYollari.anahtar);
+  const sertifikaYol = path.join(PROJECT_ROOT, imzaYollari.sertifika);
 
   if (IMZASIZ) {
     uyari(
@@ -660,8 +726,15 @@ async function main() {
     const privateKey = fs.readFileSync(anahtarYol, 'utf8');
     const keyid = appJson().updates?.codeSigningMetadata?.keyid ?? 'main';
     imzaDegeri = imzaBasligi(JSON.stringify(manifest), privateKey, keyid);
-    sertifikaPem = fs.existsSync(sertifikaYol) ? fs.readFileSync(sertifikaYol, 'utf8') : null;
-    bilgi(`✔ İmzalandı (keyid="${keyid}", RSA-SHA256)`);
+    if (!fs.existsSync(sertifikaYol)) {
+      dur(
+        'KANALIN OTA SERTİFİKASI BULUNAMADI',
+        `Beklenen: ${sertifikaYol}`,
+        'İmza, kanalın tabletlerine gömülü sertifikayla doğrulanmadan yayınlanmaz.',
+      );
+    }
+    sertifikaPem = fs.readFileSync(sertifikaYol, 'utf8');
+    bilgi(`✔ İmzalandı (keyid="${keyid}", RSA-SHA256, ${imzaYollari.anahtar})`);
   }
 
   const govde = multipartKur({ manifest, imzaBasligiDegeri: imzaDegeri });
@@ -672,6 +745,7 @@ async function main() {
   const dogrulama = multipartDogrula(govde, sertifikaPem);
   bilgi(`✔ Gövde ayrıştırıldı — manifest id ${dogrulama.manifest.id}`);
   if (sertifikaPem) bilgi('✔ İmza SERTİFİKAYLA doğrulandı (istemcinin yaptığı işin aynısı)');
+  if (sertifikaPem) capraziRed(govde, kayit, musteri, imzaYollari);
   if (dogrulama.manifest.runtimeVersion !== runtimeVersion) {
     dur('Manifest runtimeVersion tutmuyor', `beklenen ${runtimeVersion}`);
   }

@@ -49,11 +49,14 @@ export function envDosyasiOku(dosya) {
 export const ENV_DOSYALARI = ['.env.production.local', '.env.local', '.env.production', '.env'];
 
 /**
- * Adresi çözer: CLI argümanı → ortam değişkeni → `.env*` dosyaları.
+ * Adresi çözer: CLI argümanı → ortam değişkeni → KANAL KAYDI → `.env*` dosyaları.
+ * Kanal verildiğinde `.env*` okunmaz: kanalın ERP adresi kayıt defterindedir
+ * (`deploy/kanallar.json`); açık verilen değer onunla eşit olmak zorundadır (çağıran ölçer).
  * @param {string|undefined} cliDeger `--api-url` ile verilen değer (varsa)
  * @param {string} projeKok proje kökü (mobil/)
+ * @param {{ kod: string, erpAdresi: string }} [kanal] derlenen kanal
  */
-export function adresiCoz(cliDeger, projeKok) {
+export function adresiCoz(cliDeger, projeKok, kanal) {
   if (cliDeger && cliDeger.trim()) {
     return { deger: cliDeger.trim(), kaynak: '--api-url argümanı' };
   }
@@ -61,6 +64,10 @@ export function adresiCoz(cliDeger, projeKok) {
   const envDeger = process.env.EXPO_PUBLIC_API_URL;
   if (envDeger && envDeger.trim()) {
     return { deger: envDeger.trim(), kaynak: 'EXPO_PUBLIC_API_URL ortam değişkeni' };
+  }
+
+  if (kanal?.erpAdresi) {
+    return { deger: kanal.erpAdresi, kaynak: `kanal kaydı "${kanal.kod}" (deploy/kanallar.json)` };
   }
 
   for (const ad of ENV_DOSYALARI) {

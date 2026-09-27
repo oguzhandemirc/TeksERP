@@ -34,7 +34,10 @@ ve **sessizce** eski sürümle açılır. Sürüm adreste olunca her APK yalnız
 görebilir.
 
 **③ Özel anahtar VPS'te DEĞİL.** `mobil/keystore/ota-keys/` (git dışı). Sunucuya sızan biri
-paket değiştiremez, çünkü imzayı üretemez.
+paket değiştiremez, çünkü imzayı üretemez. **Her kanalın anahtarı AYRIDIR**
+(`ota-keys[-<kanal>]/` ↔ `ota-certs[-<kanal>]/`): yanlış klasöre yüklenen bir paketi o kanalın
+tabletleri kriptografik olarak REDDEDER; yayın betiği imzanın diğer kanalların sertifikalarıyla
+reddedildiğini de ölçer.
 
 ---
 
@@ -53,11 +56,12 @@ durur.
 
 ```bash
 cd mobil
-EXPO_PUBLIC_API_URL=http://192.168.1.250:4000/api npm run yayinla
-node ../deploy/mobil-yayinla.mjs --paket=ota-cikti/<rv>/<damga>
+npm run yayinla -- --musteri=<kanal>            # ERP adresi kanal kaydından (deploy/kanallar.json)
+node ../deploy/mobil-yayinla.mjs --musteri=<kanal> --paket=ota-cikti/<kanal>/<rv>/<damga>
 ```
 
-`npm run yayinla` sırasıyla: ERP adresini çözer → **sürüm numarasını belirler** →
+`npm run yayinla` sırasıyla: kanalı kayıt defterinde çözer, ERP adresini kanaldan alır
+(açık verilen adres kanalınkiyle EŞİT olmalı) → **sürüm numarasını belirler** →
 **native parmak izini** önceki yayınla karşılaştırır → Metro önbelleğini siler →
 `expo export` → **üretilen bundle'ın içindeki ERP adresini geri okur** → manifest'i
 dondurur, **imzalar** ve imzayı **sertifikayla doğrular**. Herhangi biri düşerse paket
@@ -142,11 +146,17 @@ Yalnız native değişiklikte. `runtimeVersion` **artırılmış** olmalı (yay�
 
 ```bash
 cd mobil
-EXPO_PUBLIC_API_URL=http://192.168.1.250:4000/api npx expo prebuild --platform android
-EXPO_PUBLIC_API_URL=http://192.168.1.250:4000/api npm run build:apk
-node ../deploy/mobil-yayinla.mjs --apk=android/app/build/outputs/apk/release/app-release.apk \
-     --surum=2.9.8 --vc=55 --notlar="Yeni etiket yazıcısı desteği"
+TEKSERP_KANAL=<kanal> npx expo prebuild --platform android --clean --no-install
+npm run build:apk -- --musteri=<kanal>
+node ../deploy/mobil-yayinla.mjs --musteri=<kanal> --apk=android/app/build/outputs/apk/release/app-release.apk \
+     --surum=<sürüm> --vc=<versionCode>
 ```
+
+`build:apk` APK'nın KENDİ kimliğini derlemeden sonra okur (ikili AndroidManifest: paket adı ·
+güncelleme adresi · OTA sertifikası; `assets/app.config`: çalışma anı yapılandırması) ve hedef
+kanalınki değilse paketi `…DOGRULANMADI.apk` adıyla kenara koyup durur; `mobil-yayinla --apk`
+paket adı hedef kanalınki değilse yüklemeden önce durur (kanalların APK mührü ortaktır — aynı
+paket adlı başka kanal APK'sı üstüne SESSİZCE kurulurdu).
 
 Tablette: Ayarlar → Güncelleme → **İndir ve kur** → **Yükle**. Her tablette **bir kez**
 "bu kaynaktan kuruluma izin ver" onayı gerekir.
@@ -156,28 +166,30 @@ Tablette: Ayarlar → Güncelleme → **İndir ve kur** → **Yükle**. Her tabl
 
 ---
 
-## 4b. Birden fazla müşteri
+## 4b. Birden fazla kanal (fabrika · hazırlık)
 
-Yol düzeni `/<musteri>/<urun>/`. Yeni fabrika eklemek = sunucuda klasör açmak
-(`html/<kod>/mobil/{ota,apk}`); DNS/sertifika/servis işi YOK.
+Yol düzeni `/<kanal>/<urun>/`. Yeni kanal = sunucuda klasör açmak (`html/<kod>/mobil/{ota,apk}`)
++ `deploy/kanallar.json`a kayıt (bekçi `scripts/check-kanallar.mjs`); DNS/sertifika/servis işi YOK.
 
-Müşteri kodu **tek kaynakta**: `mobil/musteri.json`. Adres ondan **türetilir** —
-elle yazılan ikinci kopya yoktur. Derleme ve yayın komutları `--musteri` **zorunlu**
-alır ve dosyayla uyuşmazsa durur.
+Kanalın BÜTÜN kimliği tek kaynakta: `deploy/kanallar.json` (paket adı · görünen ad · ERP adresi ·
+OTA sertifikası · görünür etiket; güncelleme adresleri koddan türer). Derleme ve yayın komutları
+`--musteri` **zorunlu** alır ve kimliği argümandan çözer; `mobil/musteri.json` yalnız DİNLENME
+işaretçisidir (varsayılan kanal). Derleme betikleri çocuk süreçlere `TEKSERP_KANAL=<kod>` geçirir,
+`app.config.js` kimliği kayıttan uygular — `app.json` bir kanal için **yazılmaz** (native parmak
+izinin girdisidir; elle çevirmek sahte "NATIVE DEĞİŞTİ" üretir ve OTA betiği durur).
 
-> ⚠️ **Beklenen değer neden komuttan alınıyor:** eski kapı, APK'nın içindeki adresi
-> `feed.cjs`teki sabitle karşılaştırıyordu — ama `app.config.js` de adresi aynı
-> dosyadan türetiyor. Müşteri kodu yanlışsa **ikisi de aynı yanlışı söyler ve kapı
-> geçerdi**. Tek müşteriyle görünmez; ikinci fabrikada onun tabletleri birinci
-> müşterinin güncellemesini çeker. **Genel kural: beklenen değeri gerçek değerle
-> AYNI kaynaktan alan bir kapı, o kaynağın yanlış olmasını yakalayamaz.**
+> ⚠️ **Beklenen değer neden komuttan alınıyor:** beklenen değeri gerçek değerle AYNI kaynaktan
+> alan bir kapı, o kaynağın yanlış olmasını yakalayamaz. Ağaçtaki işaretçi yanlışsa hem
+> `app.config.js` hem kapı aynı yanlışı söylerdi.
 
-Üç yerde kapı var: derleme (APK'nın gömülü adresi ↔ `--musteri`), paket üretimi
-(çıktı müşteriye ayrı klasörde), yayın (paketin **manifestindeki** varlık adresleri
-↔ `--musteri`). Sonuncusu künyeye DEĞİL artefakta bakar — künye bir beyandır ve
-ölçümde beyana bakan sürüm ateşlemeyip paketi yanlış müşteriye yükledi.
+Dört yerde kapı var: derleme öncesi (argüman kayıtlı mı, ERP adresi kanalın mı, `android/` bu
+kanalla mı üretilmiş), derleme sonrası (APK'nın kendi kimliği), paket üretimi (yapılandırma +
+imza kanalın, çıktı kanala ayrı klasörde), yayın (APK paket adı · manifestteki varlık adresleri ·
+bundle'daki ERP adresi ↔ `--musteri`). Sonuncusu künyeye DEĞİL artefakta bakar.
 
-Müşteri değiştirmek: `musteri.json` → `npx expo prebuild` → `build:apk --musteri=<yeni>`.
+Hazırlık kanalı (`testfabrika`) tabletin durum çubuğu şeridinde **"TEST FABRİKA"** gösterir
+(kayıttaki `gorunurEtiket`; üretim kanalında alan hiç doğmaz). Test sürücüsü:
+`node scripts/surucu/guzergah.mjs --kanal=testfabrika …` (paket adı kayıttan).
 
 ---
 
@@ -211,7 +223,7 @@ yayınla. Tersi, tabletleri indirecek bir şey olmadan kilitler.
 | Anahtar | Yer | Kaybının bedeli |
 |---|---|---|
 | **Mühür** (APK imzası) | `mobil/keystore/tekserp-release.keystore` + `.properties` | Her tablette uygulama **silinip yeniden kurulur** |
-| **Kod imzalama** (paket imzası) | `mobil/keystore/ota-keys/private-key.pem` | Uzaktan güncelleme durur; yeni sertifikayla **yeni APK** gerekir |
+| **Kod imzalama** (paket imzası) — kanal başına | `mobil/keystore/ota-keys/private-key.pem` (adnansahin) · `mobil/keystore/ota-keys-testfabrika/private-key.pem` (testfabrika) | O kanalın uzaktan güncellemesi durur; yeni sertifikayla **yeni APK** gerekir |
 
 İkisi de `keystore/` altında ve git dışında. **Yedekleri şifreleriyle birlikte repo dışında
 saklanmalı.** İmza `plugins/withReleaseKeystore.js` ile her prebuild'de yeniden yazılır

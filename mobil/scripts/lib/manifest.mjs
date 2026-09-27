@@ -201,3 +201,24 @@ export function multipartDogrula(govdeBuf, sertifikaPem) {
 
   return { manifest: man, imzali: !!parcalar.manifest.imza };
 }
+
+/**
+ * ÇAPRAZ RED — imza verilen sertifikalardan HANGİLERİYLE doğrulanıyor? Her kanalın OTA anahtarı
+ * ayrıysa başka hiçbir kanalın sertifikası kabul etmez; ederse iki kanal anahtar paylaşıyordur ve
+ * yanlış klasöre yüklenen paketi o kanalın tabletleri de KABUL eder.
+ * @param {Buffer} govdeBuf imzalı multipart gövde
+ * @param {Record<string, string>} sertifikalar kanal kodu → sertifika (ya da açık anahtar) PEM
+ * @returns {string[]} imzayı KABUL eden kodlar
+ */
+export function imzayiKabulEdenler(govdeBuf, sertifikalar) {
+  return Object.entries(sertifikalar)
+    .filter(([, pem]) => {
+      try {
+        multipartDogrula(govdeBuf, pem);
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .map(([kod]) => kod);
+}
