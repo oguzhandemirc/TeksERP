@@ -163,8 +163,9 @@ döngüsü" altında TEK grup.
   bugün bu durumda bir davranış YOKTUR, yani ayarların varsayılanı kimsenin bugününü değiştirmez.
   Bugün pasif olan ve göçle Tükenene kadar'a geçecek kartlar (adnansahin'de 10) bugün TAMAMEN
   kilitlidir; onların gevşemesi ayarın değil göçün sonucudur ve kullanıcı kararıyla (§14/3)
-  bilerek yapılır. Her kurulumda aynı göç koşar ⇒ sürüm notu bu değişikliği ve etkilenen kartları
-  ADIYLA söyler.
+  bilerek yapılır. Her kurulumda aynı göç koşar ⇒ sürüm notu bu değişikliği söyler; etkilenen kartların
+  ADLI listesi kurulumun yayın kaydına girer, nota değil (not bütün fabrikalara aynı gider —
+  `docs/ops/SURUM-NOTLARI.md` kural 2; 2026-09-27 hizalaması).
 - Temel değişmez (D1 — pasif kartta canlı kayıt olamaz) ayara BAĞLANMAZ; çekirdektir.
 
 ## 5. Pasife alma akışı (backend)
@@ -232,7 +233,7 @@ kopya kalmaz.
 - `items`: `lifecycleStatus NOT NULL DEFAULT 'ACTIVE'`, `lifecycleChangedAt timestamptz`,
   `lifecycleChangedById uuid`, `lifecycleReason text`; `CHECK (("lifecycleStatus" = 'ARCHIVED') = (NOT "isActive"))`.
 - Birleştirme operasyonu kaynak satırına `lifecycleBefore` (nullable).
-- **Backfill (tek migration, dry-run listesi sürüm notunda):**
+- **Backfill (tek migration, dry-run listesi kurulumun yayın kaydında — sürüm notunda değil):**
   `isActive=true` → ACTIVE · `mergedIntoId` dolu → ARCHIVED · `isActive=false` ve canlı referans > 0
   → **PHASE_OUT** (bugün 10 kart; `isActive` true'ya döner) · kalan pasifler → ARCHIVED.
 - ⚠️ **Sıra şartı:** PHASE_OUT kartlarda `isActive` true'ya döndüğü için eski çıplak kontroller
