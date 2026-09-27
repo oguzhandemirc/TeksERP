@@ -273,5 +273,30 @@ for (const yol of SUNUCU_PS1) {
       !/[^\x00-\x7F]/.test(cmd));
 }
 
+// §11 — web paneli + API güvenlik duvarı (bulgu 13, 18). `dist-web` pakette ama
+//   `.env`e WEB_DIST_DIR yazılmıyordu (panel sunulmuyordu); 4000 kuralı elle ve
+//   profilsiz açılıyordu; Tailscale-In kuralı Private profilde her portu açabiliyor.
+{
+  const ilk = psTara(readFileSync(join(KOK, "deploy/ilk-kurulum.ps1"), "utf8")).satirlar.map((s) => s.kod);
+  const kur = psTara(readFileSync(join(KOK, "deploy/kur.ps1"), "utf8")).satirlar.map((s) => s.kod);
+  check("§11a ⭐ yeni .env WEB_DIST_DIR'i kurulum kökünden MUTLAK yazar (-WebPanelKapali hariç); mevcut .env'de yoksa söyler",
+    ilk.some((k) => k.includes("if (-not $WebPanelKapali) { $satirlar += \"WEB_DIST_DIR=") && k.includes("/app/dist-web")) &&
+      ilk.some((k) => k.includes("mevcut .env'de WEB_DIST_DIR yok")));
+  check("§11b ⭐ kur.ps1 WEB_DIST_DIR'in index.html taşıdığını ölçer (yoksa kök sessizce durum sayfası olur)",
+    kur.some((k) => k.includes("WEB_DIST_DIR\\s*=")) && kur.some((k) => k.includes('(Join-Path $wd "index.html")')));
+  const profilVars = ilk.find((k) => k.includes("[string[]]$ApiAgProfili =")) ?? "";
+  const adresVars = ilk.find((k) => k.includes("[string[]]$ApiIzinliAdres =")) ?? "";
+  check("§11c ⭐ API kuralı varsayılanı Domain+Private ve LocalSubnet (Public ve 'Any' DEĞİL), kural bu parametrelerle kurulur",
+    /@\("Domain", "Private"\)/.test(profilVars) && !/Public"\)?\s*$/.test(profilVars.split("=")[1] ?? "") &&
+      /@\("LocalSubnet"\)/.test(adresVars) &&
+      ilk.some((k) => k.includes("-Profile $ApiAgProfili -RemoteAddress $ApiIzinliAdres")));
+  check("§11d Tailscale-In kuralı ÖLÇÜLÜR (üçüncü tarafın kuralı değiştirilmez, açık iş olarak söylenir)",
+    ilk.some((k) => k.includes('Get-NetFirewallRule -DisplayName "Tailscale-In"')) &&
+      !ilk.some((k) => /Set-NetFirewallRule[^\n]*Tailscale/.test(k)));
+  check("§11e JWT_SECRET kriptografik üreteçten (Get-Random değil)",
+    ilk.some((k) => k.includes("[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bayt)")) &&
+      !ilk.some((k) => k.includes("$gizli") && k.includes("Get-Random")));
+}
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

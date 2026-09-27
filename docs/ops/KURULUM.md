@@ -75,6 +75,10 @@ Parola üç yoldan gelir: **soru** (parametre verilmezse gizli sorulur — `Read
 sorulamaz; dosyayı yalnız yöneticinin okuyacağı yerde oluştur, kurulumdan sonra sil) · **düz**
 (`-DbParola` / `-PostgresParola` — PowerShell geçmişine ve süreç listesine düşer; çalışır, uyarı basar).
 
+⚠️ **Güvenlik duvarı:** API kuralı (`TeksERP API 4000`) yalnız `Domain,Private` + `LocalSubnet`
+(`-ApiAgProfili` / `-ApiIzinliAdres`); Tailscale kuruluysa `Tailscale-In` kuralı ölçülür (runbook §2.2).
+**Web paneli:** yeni `.env`e `WEB_DIST_DIR` (mutlak) yazılır; istenmiyorsa `-WebPanelKapali`.
+
 ⚠️ **Sır dosyalarının izni** (`.env` · `db-credentials.json` · `backups\` · `rclone.conf`) yalnız
 SYSTEM + Administrators'a daraltılır ve ölçülür; kalan genişlik "YAPILMADAN KALANLAR"da yazar.
 

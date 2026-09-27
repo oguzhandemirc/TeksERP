@@ -78,13 +78,20 @@ param(
   # Gece yedegi gorevinin saati (fabrika dokumlerinin damgasi 03:00:01 - olculdu).
   [ValidatePattern('^\d{2}:\d{2}$')][string]$YedekSaati = "03:00",
   # Opsiyonel ikinci kopya (ikinci disk). Fabrikada E:\TeksERP-yedek.
-  [string]$YedekIkinciHedef
+  [string]$YedekIkinciHedef,
+  # Paketteki web paneli (app\dist-web) sunulmasin: .env'e WEB_DIST_DIR yazilmaz.
+  [switch]$WebPanelKapali,
+  # API (4000) gelen kurali: yalniz bu profiller ve uzak adresler. Public profil ve
+  # "Any" adres bilerek varsayilan DEGIL (bkz. Tailscale-In uyarisi, runbook §2.2).
+  [int]$ApiPort = 4000,
+  [ValidateSet("Domain", "Private", "Public")][string[]]$ApiAgProfili = @("Domain", "Private"),
+  [string[]]$ApiIzinliAdres = @("LocalSubnet")
 )
 $ErrorActionPreference = "Stop"
 
 # Adimlar kendiliginden numaralanir; adim eklenince yalniz toplam degisir.
 $script:adimNo = 0
-$script:adimToplam = 12
+$script:adimToplam = 13
 function Adim($m) { $script:adimNo++; Write-Host ""; Write-Host "[$($script:adimNo)/$($script:adimToplam)] $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  + $m" -ForegroundColor Green }
 function Uyar($m) { Write-Host "  ! $m" -ForegroundColor Yellow }
@@ -437,7 +444,10 @@ $farkli = @($pgHedef.Keys | Where-Object {
 if (-not $farkli.Count) {
   Ok "yazilacak ayar yok ($($pgHedef.Count) ayar hedefte ya da yeniden baslatma bekliyor)"
 } elseif (-not $PgAyarla) {
-  foreach ($ad in $farkli) { Write-Host "    $ad = $($pgMevcut[$ad].deger)  (hedef $($pgHedef[$ad]))" }
+  foreach ($ad in $farkli) {
+    $not = if ($pgMevcut[$ad] -and $pgMevcut[$ad].dosya -like "*postgresql.auto.conf") { "  [onceden ALTER SYSTEM - -PgAyarla da dokunmaz]" } else { "" }
+    Write-Host "    $ad = $($pgMevcut[$ad].deger)  (hedef $($pgHedef[$ad]))$not"
+  }
   if (-not $yonetici) { Write-Host "    (superuser olmadan okundu - yaklasik)" }
   Acik "$($farkli.Count) PostgreSQL sunucu ayari hedeften farkli - YAZILMADI. Uygulamak icin -PgAyarla -PostgresParola <...> ile yeniden kos."
 } elseif (-not $yonetici) {
@@ -496,17 +506,27 @@ if (Test-Path $envDosya) {
 } else {
   # JWT_SECRET makinede uretilir - ornek kopyalanmaz. Zayif/paylasilan bir sir,
   # oturum imzasini tahmin edilebilir kilar.
-  $gizli = [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Max 256 })) -replace '[+/=]', ''
+  $bayt = New-Object byte[] 48
+  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bayt)
+  $gizli = [Convert]::ToBase64String($bayt) -replace '[+/=]', ''
   # DATABASE_URL bir URI'dir: parola/kullanici URL-kodlanir. Ham yazilirsa
   # icindeki @ : / ? # karakterleri adresi sessizce baska bir yere isaret ettirir.
   $uKod = [uri]::EscapeDataString($DbKullanici)
   $pKod = [uri]::EscapeDataString($DbParola)
-  @(
+  $satirlar = @(
     "DATABASE_URL=`"postgresql://${uKod}:${pKod}@localhost:${DbPort}/${DbAdi}?schema=public`""
     "JWT_SECRET=`"$gizli`""
     "PORT=4000"
-  ) | Set-Content $envDosya -Encoding UTF8
-  Ok "olusturuldu: $envDosya  (JWT_SECRET bu makinede uretildi)"
+  )
+  # Paket web panelini (`app\dist-web`) tasir; degisken yoksa backend onu sunmaz ve
+  # kok (/) durum sayfasi olur. Mutlak yol: express.static goreliyi pm2 cwd'sine gore cozer.
+  if (-not $WebPanelKapali) { $satirlar += "WEB_DIST_DIR=`"$(($Kok -replace '\\', '/').TrimEnd('/'))/app/dist-web`"" }
+  $satirlar | Set-Content $envDosya -Encoding UTF8
+  Ok "olusturuldu: $envDosya  (JWT_SECRET bu makinede uretildi$(if (-not $WebPanelKapali) { '; web paneli: WEB_DIST_DIR' }))"
+}
+if ((Test-Path $envDosya) -and -not $WebPanelKapali -and -not (Select-String -Path $envDosya -Pattern '^\s*WEB_DIST_DIR\s*=' -Quiet)) {
+  Uyar "mevcut .env'de WEB_DIST_DIR yok - paketteki web paneli SUNULMUYOR (bilincliyse yok say)."
+  Uyar "  acmak icin .env'e ekle:  WEB_DIST_DIR=`"$(($Kok -replace '\\', '/').TrimEnd('/'))/app/dist-web`"  (sonra pm2 restart)"
 }
 
 # --- Sir dosyalarinin izinleri -------------------------------------------------
@@ -597,6 +617,42 @@ if (-not (Get-Command Register-ScheduledTask -ErrorAction SilentlyContinue)) {
   }
   Write-Host "    Dogrula: Get-ScheduledTask TeksERP-* | Get-ScheduledTaskInfo  (NextRunTime dolu olmali)"
   Write-Host "    Gece yedegini simdi dene: Start-ScheduledTask TeksERP-DB-Backup ; sonra $Kok\backups\backup.log"
+}
+
+# --- Guvenlik duvari: API portu --------------------------------------------------
+# Tabletler ve paneller 4000'e baglanir; kural eskiden elle aciliyordu. Yalniz Domain +
+# Private profil ve yerel alt ag: Public (kafe/otel Wi-Fi) profilinde API KAPALI kalir.
+# ⚠ Tailscale kurulu makinede "Tailscale-In" kurali Private profilde HER portu acabilir
+#   (thinkpad-1 provasi): Wi-Fi Private'a alinirsa 4000 - ve her sey - o aga acilir.
+#   Ucuncu tarafin kuralina dokunulmaz; yalniz OLCULUR ve soylenir.
+Adim "Guvenlik duvari (API $ApiPort)..."
+if (-not (Get-Command New-NetFirewallRule -ErrorAction SilentlyContinue)) {
+  Acik "NetSecurity cmdlet'leri yok - API $ApiPort kurali KURULAMADI/OLCULEMEDI"
+} else {
+  $kuralAd = "TeksERP API $ApiPort"
+  $kural = Get-NetFirewallRule -DisplayName $kuralAd -ErrorAction SilentlyContinue
+  if ($kural) {
+    $adres = @(($kural | Get-NetFirewallAddressFilter).RemoteAddress)
+    $profil = "$($kural.Profile)"
+    Uyar "kural zaten var, DOKUNULMADI: $kuralAd  (profil: $profil, uzak adres: $($adres -join ', '))"
+    if ($profil -match 'Any|Public' -or $adres -contains "Any") {
+      Acik "$kuralAd Public profilde ya da her adrese acik - daraltmak icin: Set-NetFirewallRule -DisplayName '$kuralAd' -Profile $($ApiAgProfili -join ',') -RemoteAddress $($ApiIzinliAdres -join ',')"
+    }
+  } else {
+    New-NetFirewallRule -DisplayName $kuralAd -Direction Inbound -Protocol TCP -LocalPort $ApiPort -Action Allow `
+      -Profile $ApiAgProfili -RemoteAddress $ApiIzinliAdres | Out-Null
+    Ok "kural kuruldu: $kuralAd  (profil: $($ApiAgProfili -join ', '), uzak adres: $($ApiIzinliAdres -join ', '))"
+  }
+  $ts = @(Get-NetFirewallRule -DisplayName "Tailscale-In" -ErrorAction SilentlyContinue | Where-Object { "$($_.Enabled)" -eq "True" })
+  foreach ($r in $ts) {
+    $arayuz = @(($r | Get-NetFirewallInterfaceFilter).InterfaceAlias)
+    $port = @(($r | Get-NetFirewallPortFilter).LocalPort)
+    if ("$($r.Profile)" -match 'Any|Private' -and ($arayuz -contains "Any" -or -not $arayuz.Count) -and ($port -contains "Any")) {
+      $ozel = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { "$($_.NetworkCategory)" -eq "Private" } | ForEach-Object { $_.InterfaceAlias })
+      Acik ("Tailscale-In kurali Private profilde HER porta acik (arayuz sinirsiz). Private aglar: " +
+            "$(if ($ozel.Count) { $ozel -join ', ' } else { '(yok)' }) - Wi-Fi'yi Public tut ya da kurali Tailscale arayuzuyle sinirla (DEPLOY-RUNBOOK 2.2).")
+    }
+  }
 }
 
 # --- Son dogrulama ----------------------------------------------------------

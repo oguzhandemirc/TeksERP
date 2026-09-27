@@ -233,10 +233,10 @@ npm run build                   # tsc → dist\  (çıktı: dist\server.js)
 pm2 start ecosystem.config.js
 pm2 save                        # reboot'ta geri yüklenecek listeyi kaydet
 
-# Fabrika ağına aç (tabletler + Electron PC'ler 4000'e bağlanır).
-# Eski installer bunu otomatik yapıyordu — pm2 yolunda ELLE yapılır.
+# Fabrika ağına aç (tabletler + Electron PC'ler 4000'e bağlanır). ilk-kurulum.ps1 kurar
+# (yoksa); elle kuruluyorsa AYNI kısıtla — Public profil (otel/kafe Wi-Fi) ve "her adres" DEĞİL:
 New-NetFirewallRule -DisplayName "TeksERP API 4000" -Direction Inbound `
-  -Protocol TCP -LocalPort 4000 -Action Allow
+  -Protocol TCP -LocalPort 4000 -Action Allow -Profile Domain,Private -RemoteAddress LocalSubnet
 
 # Sunucu keşfi (2026-08-26): backend kendini ağa "_teks-erp._tcp" olarak ilan
 # eder → yeni kurulan Electron paneli IP yazmadan bulur. Bu kural OLMADAN ilan
@@ -246,6 +246,21 @@ New-NetFirewallRule -DisplayName "TeksERP API 4000" -Direction Inbound `
 New-NetFirewallRule -DisplayName "TeksERP mDNS 5353" -Direction Inbound `
   -Protocol UDP -LocalPort 5353 -Action Allow
 ```
+
+> **⚠ Tailscale kurulu sunucuda `Tailscale-In` kuralı** (thinkpad-1 provası, 2026-09-27): kural
+> Private profilde HER portu açıyor ve arayüzle sınırlı değil. Bir Wi-Fi ağı "Private" (Özel) olarak
+> işaretlenirse 4000 — ve makinedeki her dinleyen port — o ağa açılır; yukarıdaki kısıtlı kural bunu
+> ENGELLEMEZ (izin kuralları birleşir). Wi-Fi'yi **Public** tutun
+> (`Set-NetConnectionProfile -InterfaceAlias Wi-Fi -NetworkCategory Public`) ya da kuralı Tailscale
+> arayüzüyle sınırlayın (`Set-NetFirewallRule -DisplayName Tailscale-In -InterfaceAlias Tailscale`).
+> `ilk-kurulum.ps1` kuralı DEĞİŞTİRMEZ (üçüncü tarafın), yalnız ölçer ve "YAPILMADAN KALANLAR"da söyler.
+> Kontrol: `Get-NetFirewallRule -DisplayName Tailscale-In | Get-NetFirewallInterfaceFilter` ·
+> `Get-NetConnectionProfile`.
+
+> **Web paneli (`dist-web`):** paket paneli taşır; backend onu yalnız `.env`de `WEB_DIST_DIR`
+> MUTLAK yolu varsa sunar (yoksa kök `/` durum sayfasıdır). `ilk-kurulum.ps1` yeni `.env`e
+> `WEB_DIST_DIR="<kök>/app/dist-web"` yazar (`-WebPanelKapali` ile yazmaz), var olan `.env`e dokunmaz
+> ve eksikse söyler; `kur.ps1` her sürümde yolun `index.html` taşıdığını ölçer.
 
 > **Keşif gerçekten çalışıyor mu?** Tek ölçüm noktası:
 > `GET /api/admin/health` → `discovery.mdns.reason`. `"ok"` değilse ilan

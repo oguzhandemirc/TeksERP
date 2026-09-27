@@ -610,6 +610,20 @@ foreach ($y in @($backupDir, (Split-Path $credFile -Parent))) {
     Uyar "  -> daraltmak icin: powershell -NoProfile -ExecutionPolicy Bypass -File <paket>\ilk-kurulum.ps1 ... (idempotent; izin adimi)"
   }
 }
+
+# Web paneli: paket dist-web tasir; .env'de WEB_DIST_DIR yoksa panel sunulmaz, varsa ve
+# yol index.html tasimiyorsa kok (/) SESSIZCE durum sayfasi olur.
+$envMetin = [System.Text.Encoding]::UTF8.GetString($envBayt).TrimStart([char]0xFEFF)   # 5.1 Set-Content BOM yazar
+$wm = [regex]::Match($envMetin, '(?m)^\s*WEB_DIST_DIR\s*=\s*"?([^"\r\n]*)"?')
+if ($wm.Success) {
+  $wd = $wm.Groups[1].Value.Trim()
+  if (-not [System.IO.Path]::IsPathRooted($wd)) { $wd = Join-Path $appDir $wd }
+  if (-not (Test-Path (Join-Path $wd "index.html"))) {
+    Uyar "WEB_DIST_DIR ($wd) index.html tasimiyor - web paneli yerine durum sayfasi acilir."
+  }
+} elseif (Test-Path (Join-Path $appDir "dist-web\index.html")) {
+  Write-Host "     (web paneli pakette ama .env'de WEB_DIST_DIR yok - sunulmuyor. Acmak icin .env: WEB_DIST_DIR=`"$($appDir -replace '\\', '/')/dist-web`")" -ForegroundColor DarkGray
+}
 if ($ecoBayt) {
   Ok "app\ olusturuldu, .env + ecosystem.config.js (SUNUCUNUNKI) tasindi"
   # Fark ozeti: yalnizca env: blogundaki ANAHTARLAR karsilastirilir; deger
