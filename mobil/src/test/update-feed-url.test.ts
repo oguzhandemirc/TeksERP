@@ -124,3 +124,103 @@ describe('güncelleme kanalı adresi', () => {
     expect(ad).not.toMatch(/\s/);
   });
 });
+
+// =============================================================================
+// KANAL DERLEMESİ — `TEKSERP_KANAL=<kod>` ile kimlik `deploy/kanallar.json`dan
+// =============================================================================
+// Derleme betikleri (build-apk · yayinla-ota) kanalı ARGÜMANDAN alır ve çocuk süreçlere
+// bu ortamla geçirir; app.json kanal için YAZILMAZ (native parmak izinin girdisi).
+// Kilitlenen: varsayılan kanalın çıktısı dinlenmedekiyle BİREBİR (anahtar sırası dahil),
+// her kanal kaydın kimliğini üretir, iki kanal kimlik paylaşamaz, bilinmeyen kod düşer.
+describe('kanal derlemesi (TEKSERP_KANAL)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const kanalLib = require(path.join(KOK, 'scripts/lib/kanal.cjs'));
+  const kayit = JSON.parse(fs.readFileSync(path.join(KOK, '..', 'deploy', 'kanallar.json'), 'utf8'));
+  const kodlar = Object.keys(kayit.kanallar);
+
+  function ortamla<T>(degiskenler: Record<string, string | undefined>, fn: () => T): T {
+    const eski: Record<string, string | undefined> = {};
+    for (const [k, v] of Object.entries(degiskenler)) {
+      eski[k] = process.env[k];
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    try {
+      return fn();
+    } finally {
+      for (const [k, v] of Object.entries(eski)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  }
+  const cfg = (kod?: string) =>
+    ortamla({ TEKSERP_KANAL: kod, EXPO_PUBLIC_UPDATE_URL: undefined }, () =>
+      appConfig({ config: JSON.parse(JSON.stringify(appJson)) }),
+    );
+
+  it('varsayılan kanalın çıktısı dinlenmedekiyle BİREBİR (anahtar sırası dahil)', () => {
+    expect(JSON.stringify(cfg(kayit.varsayilan))).toBe(JSON.stringify(cfg(undefined)));
+  });
+
+  it.each(kodlar)('%s kanalı kayıt defterindeki kimliği üretir', (kod) => {
+    expect(kanalLib.tabletYapilandirmaFarki(kayit.kanallar[kod], cfg(kod), appJson.runtimeVersion)).toEqual([]);
+  });
+
+  it('iki kanal paket adı, görünen ad, güncelleme adresi ya da sertifika PAYLAŞAMAZ', () => {
+    const ciktilar = kodlar.map((k) => cfg(k));
+    for (const alan of [
+      (c: { android: { package: string } }) => c.android.package,
+      (c: { name: string }) => c.name,
+      (c: { updates: { url: string } }) => c.updates.url,
+      (c: { updates: { codeSigningCertificate: string } }) => c.updates.codeSigningCertificate,
+    ]) {
+      const degerler = ciktilar.map((c) => alan(c as never));
+      expect(new Set(degerler).size).toBe(kodlar.length);
+    }
+  });
+
+  it('üretim kanalı görünür etiket TAŞIMAZ (extra hiç doğmaz); hazırlık kanalı taşır', () => {
+    for (const kod of kodlar) {
+      const k = kayit.kanallar[kod];
+      if (k.gorunurEtiket === null) expect(cfg(kod).extra).toBeUndefined();
+      else expect(cfg(kod).extra?.gorunurEtiket).toBe(k.gorunurEtiket);
+    }
+  });
+
+  it('app.json kanal için YAZILMAZ — dinlenme (varsayilan) kimliğini taşır', () => {
+    const v = kayit.kanallar[kayit.varsayilan].tablet;
+    expect(appJson.android.package).toBe(v.androidPaket);
+    expect(appJson.name).toBe(v.gorunenAd);
+    expect(appJson.updates.codeSigningCertificate.replace(/^\.\//, '')).toBe(v.otaSertifika);
+  });
+
+  it('bilinmeyen kanal kodu gürültülü düşer (sessizce varsayılana dönmez)', () => {
+    expect(() => cfg('testfabirka')).toThrow(/BİLİNMEYEN KANAL/);
+  });
+
+  it('kanal derlemesinde başka köke işaret eden EXPO_PUBLIC_UPDATE_URL düşer', () => {
+    const baskasi = kodlar.find((k) => k !== kayit.varsayilan) ?? kayit.varsayilan;
+    expect(() =>
+      ortamla({ TEKSERP_KANAL: baskasi, EXPO_PUBLIC_UPDATE_URL: kayit.kanallar[kayit.varsayilan].yayin.mobilFeed }, () =>
+        appConfig({ config: JSON.parse(JSON.stringify(appJson)) }),
+      ),
+    ).toThrow(/EXPO_PUBLIC_UPDATE_URL/);
+  });
+
+  it('OTA imza anahtarı yolu sertifika yolunun aynası; iki kanal aynı anahtarı göstermez', () => {
+    const anahtarlar = kodlar.map((k) => kanalLib.otaImzaYollari(kayit.kanallar[k]).anahtar);
+    expect(new Set(anahtarlar).size).toBe(kodlar.length);
+    expect(kanalLib.otaImzaYollari(kayit.kanallar[kayit.varsayilan]).anahtar).toBe('keystore/ota-keys/private-key.pem');
+  });
+
+  // Dosya varlığı yalnız keystore/ olan makinede ölçülebilir (yukarıdaki sertifika testinin gerekçesi).
+  const kanalSertifikaTesti = fs.existsSync(path.join(KOK, 'keystore')) || process.env.TEKSERP_STRICT === '1' ? it : it.skip;
+  kanalSertifikaTesti('her kanalın OTA sertifikası ve özel anahtarı GERÇEKTEN var', () => {
+    for (const kod of kodlar) {
+      const y = kanalLib.otaImzaYollari(kayit.kanallar[kod]);
+      expect([kod, fs.existsSync(path.join(KOK, y.sertifika))]).toEqual([kod, true]);
+      expect([kod, fs.existsSync(path.join(KOK, y.anahtar))]).toEqual([kod, true]);
+    }
+  });
+});

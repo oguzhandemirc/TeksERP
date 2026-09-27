@@ -8,12 +8,13 @@ React Native + Expo 54, Android tablet (yatay) + telefon (dikey), yön kilidi yo
 npx expo start · npx expo start --android · npx expo run:android   # native build (BT/BLE Expo Go'da çalışmaz)
 npx tsc --noEmit · npm test (jest --runInBand, 85 dosya / 854 vaka / ~17 sn — commit kapısında)
 npm run yayinla:check -- --musteri=<kod>        # OTA mı APK mı? (native parmak izi)
-EXPO_PUBLIC_API_URL=<erp-adresi> npm run yayinla -- --musteri=<kod>      # OTA (JS-only, ~%90)
-EXPO_PUBLIC_API_URL=<erp-adresi> npm run build:apk -- --musteri=<kod>    # native değişti → APK; ./gradlew ELLE ÇAĞIRMA
+npm run yayinla -- --musteri=<kod>              # OTA (JS-only, ~%90); ERP adresi + kimlik + imza anahtarı kanaldan
+TEKSERP_KANAL=<kod> npx expo prebuild --platform android --clean --no-install   # kanal değişince android/ yeniden
+npm run build:apk -- --musteri=<kod>            # native değişti → APK; ./gradlew ELLE ÇAĞIRMA
 node ../deploy/mobil-yayinla.mjs --musteri=<kod> --paket=ota-cikti/<kod>/<rv>/<damga>   # yükleme (manifest EN SON)
 ```
 
-- **Sahaya çıkış:** kanalı değişikliğin cinsi belirler; `--musteri` HER komutta zorunlu (kapı beklenen değeri argümandan alır — `musteri.json`dan alsaydı dairesel olurdu); ERP adresi açıkça verilir, varsayılan YOK; `runtimeVersion` native kimliğidir (artmazsa yeni JS eski native'i çağırır, tüm tabletler çöker); OTA turunda `versionCode`a dokunulmaz; `keystore/` git dışı, kaybı = her tablette sil+kur; `usesCleartextTraffic` `expo-build-properties` altında. Reçete ve tuzaklar: `docs/kurallar/surum-yayin.md`, `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`.
+- **Sahaya çıkış:** kanalı değişikliğin cinsi belirler; `--musteri` HER komutta zorunlu (kapı beklenen değeri argümandan alır — `musteri.json` yalnız dinlenme işaretçisidir); kanal kimliği (paket adı · görünen ad · güncelleme adresi · OTA sertifikası · görünür etiket) derleme anında `TEKSERP_KANAL` ile `app.config.js`ten gelir, `app.json` kanal için YAZILMAZ; ERP adresi kanalın kaydından (`deploy/kanallar.json`), açık verilen adres kanalınkiyle eşit olmalı, koda gömülü varsayılan YOK; her kanalın OTA anahtarı ayrı (`keystore/ota-keys[-<kod>]/`); `runtimeVersion` native kimliğidir (artmazsa yeni JS eski native'i çağırır, tüm tabletler çöker); OTA turunda `versionCode`a dokunulmaz; `keystore/` git dışı, kaybı = her tablette sil+kur; `usesCleartextTraffic` `expo-build-properties` altında. Reçete ve tuzaklar: `docs/kurallar/surum-yayin.md`, `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`.
 - **API adresi:** `EXPO_PUBLIC_API_URL` → `src/constants/api.ts` (dev-host'tan türetir) → axios `baseURL`; derleme anında gömülür. JWT `expo-secure-store`; her istek `Authorization: Bearer`; cache `@tanstack/react-query` (+ persist: offline mutasyon kuyruğu). Sunucu politikası `GET /api/client-policy/mobil` fail-open, iki eksen (`minVersion` + `minPaketTarihi`).
 
 ## Klasör yapısı

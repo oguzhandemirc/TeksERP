@@ -14,6 +14,11 @@ Bu dosya, mobil uygulamanın **iki imza anahtarını** parola korumalı bir arş
 | `tekserp-release.keystore` + `keystore.properties` | **Mühür** — APK'yı imzalar | İmza değişir, Android üstüne binmeyi reddeder → **her tablette sil + yeniden kur**. Silinen veri: cihaz eşleşmesi, sunucu adresi, oturum, gönderilmemiş kayıtlar |
 | `ota-keys/private-key.pem` | **Kod imzalama** — OTA paketlerini imzalar | Yeni sertifika + yeni APK gerekir; ama APK aynı mühürle imzalandığı için **uygulama içi güncelleyiciden tek dokunuşla** dağıtılır — dolaşma ve veri kaybı YOK |
 | `ota-certs/certificate.pem` · `ota-keys/public-key.pem` | Sertifika/açık anahtar (APK'ya gömülür) | Özel anahtardan yeniden üretilebilir |
+| `ota-keys-testfabrika/private-key.pem` (+ `public-key.pem`) · `ota-certs-testfabrika/certificate.pem` | **Kod imzalama — testfabrika kanalı** (her kanalın OTA anahtarı ayrı; `deploy/kanallar.json` `otaSertifika`) | O kanalın tabletleri için yeni sertifika + yeni APK |
+
+> ⚠️ **2026-09-27:** `ota-keys-testfabrika/` + `ota-certs-testfabrika/` bu arşivden SONRA üretildi —
+> `keystore-yedek.tar.gz.enc` onları henüz İÇERMEZ. Arşiv aşağıdaki "Yedeği yenilemek" komutuyla
+> (parola sahibinde) yenilenmeli ve açıldığı doğrulanmalı.
 
 Yani **asıl korunması gereken mühürdür**; OTA anahtarının kaybı çok daha ucuz.
 
@@ -25,7 +30,7 @@ openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
   -in mobil/keystore-yedek.tar.gz.enc | tar -xzf - -C mobil
 ```
 
-Parolayı soracak. Sonrasında `mobil/keystore/` altında beş dosya oluşur ve
+Parolayı soracak. Sonrasında `mobil/keystore/` altında imza dosyaları oluşur ve
 `npm run build:apk` / `npm run yayinla` çalışır hâle gelir.
 
 ## Yedeği yenilemek (anahtarlar değişirse)

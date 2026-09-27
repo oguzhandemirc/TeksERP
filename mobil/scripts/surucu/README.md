@@ -63,6 +63,7 @@ adb install -r <TEST-APK>
 node scripts/surucu/guzergah.mjs               # bütün T adımları
 node scripts/surucu/guzergah.mjs A3 D1 D2      # seçili
 #   --seri=<adb seri> · --host=<Mac LAN IP> (gerçek cihaz; emülatörde 10.0.2.2)
+#   --kanal=<kod> (paket adı deploy/kanallar.json'dan, ör. testfabrika) · --paket=<paket> (varsayılan com.teks.erp.mobil.test)
 
 # sözleşme öz-testi (cihazsız):
 node scripts/surucu/kos-sozlesme.mjs
