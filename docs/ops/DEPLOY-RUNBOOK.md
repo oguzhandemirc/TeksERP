@@ -365,6 +365,46 @@ sırasıyla uygular; tekrar çalıştırmak güvenli.
 > yerine `shutdown_with_message: true` ile IPC mesajı yollar ve `server.ts` bunu
 > dinler. Bu çift olmadan restart uçuştaki istekleri TCP düzeyinde koparır.
 
+## 3b) Uzaktan kurulum (SSH) — zamanlanmış görevle (SYSTEM) koş
+
+> **Neden:** Windows OpenSSH oturumu kapanınca oturumun alt süreçleri ÖLÜR. `kur.ps1` pm2
+> daemon'unu o oturumda doğurursa backend oturumla birlikte gider: kurulum "KURULUM TAMAM"
+> der, dakikalar sonra (oturum kapanınca) durur — 2026-09-27 thinkpad-1 provasında ölçüldü.
+> Daemon zaten SYSTEM'de koşuyorsa (açılış görevi `TeksERP-Backend-Boot` onu SYSTEM olarak
+> kaldırır) `pm2 start` o daemon'a konuşur ve oturumdan bağımsızdır.
+
+**`kur.ps1` bunu kendisi ölçer:** SSH oturumunda (`SSH_CONNECTION`) pm2 daemon yoksa HİÇBİR
+şeye dokunmadan durur; daemon SYSTEM'deyse geçer; başka hesaptaysa ya da ölçülemezse uyarır.
+Bilerek geçmek için `-SshKabul` (sonra oturumu kapatmadan `Start-ScheduledTask
+TeksERP-Backend-Boot`).
+
+**Reçete — işi tek kullanımlık SYSTEM görevine ver** (`uzaktan-kos.ps1` pakette; görevi kaydeder,
+çıktıyı dosyadan canlı izler, çıkış kodunu döndürür, bitince görevi siler; izleme SSH'la kopsa da
+görev koşmaya devam eder, log dosyası kalır):
+
+```powershell
+# Yönetici SSH oturumunda, paketin açıldığı klasörden:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\uzaktan-kos.ps1 `
+  -Betik C:\TeksERP\kur.ps1 `
+  -Argumanlar '-Kok C:\TeksERP -Paket "D:\indir\tekserp-backend-....zip" -Zorla'
+
+# İlk kurulum da aynı yoldan — görev ETKİLEŞİMSİZDİR, parolalar DOSYADAN:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\uzaktan-kos.ps1 `
+  -Betik D:\indir\paket\ilk-kurulum.ps1 `
+  -Argumanlar '-DbParolaDosyasi C:\gecici\db.txt -PostgresParolaDosyasi C:\gecici\pg.txt -PgAyarla'
+```
+
+- `kur.ps1` görevde `-Zorla` İSTER (onay sorusu cevaplanamaz; `uzaktan-kos` yoksa reddeder).
+- Log varsayılanı `C:\TeksERP\logs\uzaktan-<damga>.log` (yoksa betiğin klasörü); `-Log` ile değişir.
+- İzleme yarıda kesilirse görev silinmez: `Get-ScheduledTask TeksERP-Uzaktan-*` · log dosyası ·
+  bitince `Unregister-ScheduledTask <ad> -Confirm:$false`.
+- **Elle karşılığı** (betik yoksa): `Register-ScheduledTask -TaskName TeksERP-Uzaktan -User SYSTEM
+  -RunLevel Highest -Action (New-ScheduledTaskAction -Execute cmd.exe -Argument '/c powershell
+  -NoProfile -ExecutionPolicy Bypass -File C:\TeksERP\kur.ps1 -Kok C:\TeksERP -Paket "<zip>" -Zorla >
+  C:\TeksERP\logs\uzaktan.log 2>&1')` → `Start-ScheduledTask TeksERP-Uzaktan` →
+  `Get-Content C:\TeksERP\logs\uzaktan.log -Wait` → `(Get-ScheduledTaskInfo TeksERP-Uzaktan).LastTaskResult`
+  → `Unregister-ScheduledTask TeksERP-Uzaktan -Confirm:$false`.
+
 ---
 
 ## 4) Sağlık kontrolü

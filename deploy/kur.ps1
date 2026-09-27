@@ -11,6 +11,11 @@
 #     powershell -NoProfile -ExecutionPolicy Bypass -File C:\TeksERP\kur.ps1 -Paket <zip>
 #   Ilke yalniz bu surec icin gevser; makinenin ayari degismez.
 #
+# ⚠ UZAKTAN (SSH): Windows OpenSSH oturumu kapaninca oturumun alt surecleri olur. pm2
+#   daemon'u bu kosumda DOGARSA backend oturumla gider ("KURULUM TAMAM" der, sonra
+#   durur). SSH'tan: `uzaktan-kos.ps1` ile SYSTEM gorevi olarak kos (runbook §3b);
+#   daemon yoksa betik durur (-SshKabul ile bilerek gecilir).
+#
 # ⚠ PAKETLENMIS KURULUMDA `npm run <script>` KULLANMA - `node <tam yol>` kullan.
 #   Paket `node_modules\.bin` TASIMAZ ve bu BILINCLIDIR: npm o klasordeki
 #   shim'leri KURULUM ANINDA, kendi platformunda uretir (Windows'ta `.cmd`,
@@ -100,7 +105,9 @@ param(
   [string]$UygulamaAdi = "tekserp-backend-yeni",
   # PROVA paketini (paketle.ps1 -Prova: etiketsiz, surum belgesiz) kurmaya izin.
   #   Verilmezse [1/9] durur - fabrikaya kazara prova kurulmasin.
-  [switch]$ProvaKabul
+  [switch]$ProvaKabul,
+  # SSH oturumunda pm2 daemon YOKKEN yine de kos (daemon oturumla olecek - bilerek).
+  [switch]$SshKabul
 )
 $ErrorActionPreference = "Stop"
 
@@ -249,6 +256,31 @@ $admin = (New-Object Security.Principal.WindowsPrincipal(
   [Security.Principal.WindowsIdentity]::GetCurrent())
 ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $admin) { Fail "YONETICI PowerShell gerekir (pm2 daemon SYSTEM olarak kosuyor: EPERM \\.\pipe\rpc.sock)." }
+
+# --- Uzaktan (SSH) kosum -----------------------------------------------------
+# Daemon yoksa bu kosum onu SSH oturumunun icinde dogurur ve oturumla birlikte olur;
+# SYSTEM'e ait daemon (acilis gorevi / uzaktan-kos) oturumdan bagimsizdir. Uc sonuc:
+# bagimsiz -> gec · yok -> DUR · olculemedi / baska hesap -> uyar.
+if ($env:SSH_CONNECTION -or $env:SSH_CLIENT) {
+  $daemon = $null
+  try {
+    $daemon = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction Stop |
+                Where-Object { $_.CommandLine -match 'pm2[\\/]lib[\\/]Daemon\.js' })
+  } catch { $daemon = $null }
+  if ($null -eq $daemon) {
+    Uyar "SSH oturumu: pm2 daemon'u OLCULEMEDI - oturum kapaninca backend durabilir (DEPLOY-RUNBOOK 3b)."
+  } elseif ($daemon.Count -eq 0) {
+    if (-not $SshKabul) {
+      Fail "SSH oturumu ve pm2 daemon YOK: daemon bu oturumda dogar ve oturum kapaninca backend OLUR. SYSTEM gorevi olarak kos: uzaktan-kos.ps1 -Betik <kur.ps1> -Argumanlar '... -Zorla' (DEPLOY-RUNBOOK 3b). Bilerek devam: -SshKabul"
+    }
+    Uyar "-SshKabul: daemon bu oturumda dogacak - oturumu kapatmadan once 'Start-ScheduledTask TeksERP-Backend-Boot' ya da yeniden baslatma."
+  } else {
+    $sahip = ""
+    try { $sahip = "$((Invoke-CimMethod -InputObject $daemon[0] -MethodName GetOwner -ErrorAction Stop).User)" } catch { }
+    if ($sahip -eq "SYSTEM") { Ok "SSH oturumu: pm2 daemon SYSTEM'de (PID $($daemon[0].ProcessId)) - oturumdan bagimsiz" }
+    else { Uyar "SSH oturumu: pm2 daemon '$(if ($sahip) { $sahip } else { '?' })' hesabinda (PID $($daemon[0].ProcessId)) - bu oturumda dogduysa oturumla gider." }
+  }
+}
 
 # =============================================================================
 # GERI ALMA MODU

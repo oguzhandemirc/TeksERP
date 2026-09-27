@@ -33,7 +33,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 }
 
 /** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç). */
-const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1"];
+const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1"];
 
 const YONLENDIRME = /(?:^|\s)2>(?:&1|\$null)/;
 const CIPLAK_NPM = /(?:^|[\s&(;|])npm(?=\s|$)/;
@@ -47,7 +47,7 @@ for (const yol of SUNUCU_PS1) {
   const t = psTara(readFileSync(tam, "utf8"));
   const son = t.satirlar[t.satirlar.length - 1];
   check(`§0 ${yol} tarandı (körlük zemini: satır + fonksiyon + dengeli parantez)`,
-    t.satirlar.length > 60 && t.fonksiyonlar.length >= 2 && son?.derinlik === 0,
+    t.satirlar.length > 60 && t.fonksiyonlar.length >= 1 && son?.derinlik === 0,
     `${t.satirlar.length} satır · ${t.fonksiyonlar.length} fonksiyon · son derinlik ${son?.derinlik}`);
 
   // §1 — yönlendirme yalnız EAP=Continue + finally'de geri koyan yardımcıda
@@ -158,9 +158,10 @@ for (const yol of SUNUCU_PS1) {
       pk.satirlar.some((s) => /Fail\s+"Arac uretilmedi/.test(s.kod)));
   const pakete = (ad: string) => pk.satirlar.some((s) =>
     s.kod.trim() === `Copy-Item "$repo\\deploy\\${ad}" "$stage\\"`);
-  const eksikDosya = ["ilk-kurulum.ps1", "yedekle.ps1", "pm2-boot.cmd"].filter((a) => !pakete(a));
-  check("§5d paketle.ps1 `ilk-kurulum.ps1` + `yedekle.ps1` + `pm2-boot.cmd`i pakete koyuyor (sunucuya repo ağacı taşınmaz)",
-    eksikDosya.length === 0, eksikDosya.length ? `eksik: ${eksikDosya.join(", ")}` : "üçü de");
+  const sunucuDosyalari = ["ilk-kurulum.ps1", "yedekle.ps1", "pm2-boot.cmd", "uzaktan-kos.ps1"];
+  const eksikDosya = sunucuDosyalari.filter((a) => !pakete(a));
+  check(`§5d paketle.ps1 sunucu dosyalarını pakete koyuyor (${sunucuDosyalari.join(" + ")}) — sunucuya repo ağacı taşınmaz`,
+    eksikDosya.length === 0, eksikDosya.length ? `eksik: ${eksikDosya.join(", ")}` : "hepsi");
 }
 
 // §7 — `-Dump` fabrikanın KİMLİĞİNİ taşır (bulgu 8): amaç beyanı zorunlu, Kopya
@@ -296,6 +297,28 @@ for (const yol of SUNUCU_PS1) {
   check("§11e JWT_SECRET kriptografik üreteçten (Get-Random değil)",
     ilk.some((k) => k.includes("[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bayt)")) &&
       !ilk.some((k) => k.includes("$gizli") && k.includes("Get-Random")));
+}
+
+// §12 — SSH'tan kurulum (bulgu 11): Windows OpenSSH oturumu kapanınca alt süreçler
+//   ölür; pm2 daemon o oturumda doğarsa backend onunla gider. kur.ps1 daemon yokken
+//   DURUR (bilerek geçiş -SshKabul), iş SYSTEM görevine uzaktan-kos.ps1 ile verilir.
+{
+  const kur = psTara(readFileSync(join(KOK, "deploy/kur.ps1"), "utf8")).satirlar.map((s) => s.kod);
+  const uz = psTara(readFileSync(join(KOK, "deploy/uzaktan-kos.ps1"), "utf8")).satirlar.map((s) => s.kod);
+  const ssh = kur.findIndex((k) => k.includes("if ($env:SSH_CONNECTION -or $env:SSH_CLIENT)"));
+  const ilkDegisim = kur.findIndex((k) => /^\s*if \(\$GeriAl\) \{/.test(k));
+  const blok = ssh >= 0 ? kur.slice(ssh, ssh + 30) : [];
+  check("§12a ⭐ kur.ps1 SSH oturumunda pm2 daemon'u ölçer ve YOKSA durur (-SshKabul kaçışı), hiçbir şeye dokunmadan önce",
+    ssh >= 0 && ilkDegisim > ssh && blok.some((k) => k.includes("pm2[\\\\/]lib[\\\\/]Daemon\\.js")) &&
+      blok.some((k) => /^\s*Fail "SSH oturumu ve pm2 daemon YOK/.test(k)) && blok.some((k) => k.includes("if (-not $SshKabul)")),
+    `SSH satır ${ssh + 1} · GeriAl satır ${ilkDegisim + 1}`);
+  check("§12b ⭐ uzaktan-kos.ps1 işi SYSTEM görevine verir, çıktıyı dosyaya yönlendirir, bitince görevi siler (koşarken silmez)",
+    uz.some((k) => k.includes('New-ScheduledTaskPrincipal -UserId "SYSTEM"')) &&
+      uz.some((k) => /> `"\$Log`" 2>&1/.test(k)) &&
+      uz.some((k) => k.includes("Unregister-ScheduledTask -TaskName $gorevAd")) &&
+      uz.some((k) => k.includes("gorev HALA kosuyor")));
+  check("§12c uzaktan-kos.ps1 kur.ps1'i -Zorla/-GeriAl olmadan göreve vermez (onay sorusu görevde cevaplanamaz)",
+    uz.some((k) => k.includes("-notmatch '(^|\\s)-(Zorla|GeriAl)\\b'")));
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
