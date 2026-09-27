@@ -168,6 +168,8 @@ const MUAFLAR: Record<string, string> = {
   "test_bash_guard_scope.ts":
     "yıkıcı SQL metinleri KOMUT KAPISINA GİRDİ olarak verilir, hiç çalıştırılmaz — dosyada prisma/psql/Pool çağrısı YOK (ölçüldü 2026-09-13); kapı bir dizgeyi çalıştırılan komuttan ayırt edemediği için §1 buraya takılıyordu, `test_db_invariants.ts` muafiyetiyle aynı sınıf",
   "test_script_guards.ts": "bu dosyanın kendisi — izleri sabit olarak taşır",
+  "test_sunucu_betikleri.ts":
+    "`INSERT INTO system_logs` deploy/ilk-kurulum.ps1 KAYNAĞINDA aranan bir DİZGE (§7c: Kopya dökümünün kimlik izi), çalıştırılan ifade değil — dosya yalnız okur, prisma/psql/Pool çağrısı YOK; `test_bash_guard_scope.ts` muafiyetiyle aynı sınıf",
 };
 
 function main(): void {
