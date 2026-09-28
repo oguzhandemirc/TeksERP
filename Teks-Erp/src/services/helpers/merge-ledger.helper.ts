@@ -15,12 +15,14 @@
 // haritaya ikinci bir envanter eklemek "elle sayılan kapsam listesi" yasağına
 // girer ve bir gün ayrışır. Bugün tek composite PK'lı tablo
 // `subcontractor_category_links`; kod onu özel-kasa olarak BİLMEZ, PK'sından görür.
+// Geri yazılabilir kolonlar da aynı yoldan (`pg_attribute.attgenerated`) çözülür:
+// `GENERATED ALWAYS … STORED` kolona (`aliasFold`, `nameFold`) PG değer yazdırmaz.
 // =============================================================================
 import type { Prisma } from "@prisma/client";
 
 type Tx = Prisma.TransactionClient;
 
-/** Tablo → PK kolonları (tx ömrü boyunca önbelleklenir; katalog sorgusu ucuzdur). */
+/** Katalog önbelleği: PK ve geri yazılabilir kolonlar (tx ömrü boyunca; katalog sorgusu ucuzdur). */
 export type PkCache = Map<string, string[]>;
 
 export function newPkCache(): PkCache {
@@ -28,7 +30,7 @@ export function newPkCache(): PkCache {
 }
 
 export async function primaryKeyColumnsTx(tx: Tx, table: string, cache: PkCache): Promise<string[]> {
-  const hit = cache.get(table);
+  const hit = cache.get(`pk:${table}`);
   if (hit) return hit;
   const rows = await tx.$queryRawUnsafe<Array<{ attname: string }>>(
     `SELECT a.attname
@@ -44,8 +46,37 @@ export async function primaryKeyColumnsTx(tx: Tx, table: string, cache: PkCache)
     // "geri alınabilir" yalanını üretir.
     throw new Error(`merge-ledger: "${table}" tablosunda PRIMARY KEY yok — taşınan satır kimliklenemez.`);
   }
-  cache.set(table, cols);
+  cache.set(`pk:${table}`, cols);
   return cols;
+}
+
+/**
+ * Tablonun DEĞER YAZILABİLİR kolonları — üretilmiş (`attgenerated`) kolonlar hariç.
+ * Fotoğraftan geri yazım bu listeyle sınırlanır; üretilmiş kolonu DB yeniden hesaplar.
+ */
+export async function writableColumnsTx(tx: Tx, table: string, cache: PkCache): Promise<string[]> {
+  const hit = cache.get(`cols:${table}`);
+  if (hit) return hit;
+  const rows = await tx.$queryRawUnsafe<Array<{ attname: string }>>(
+    `SELECT attname FROM pg_attribute
+      WHERE attrelid = $1::regclass AND attnum > 0 AND NOT attisdropped AND attgenerated = ''
+      ORDER BY attnum`,
+    `"${table}"`,
+  );
+  const cols = rows.map((r) => r.attname);
+  cache.set(`cols:${table}`, cols);
+  return cols;
+}
+
+/** Fotoğrafta bulunan ve yazılabilir olan kolonlar (fotoğraftan sonra eklenen kolon DEFAULT'unu korur). */
+async function restorableColumnsTx(
+  tx: Tx,
+  table: string,
+  first: Record<string, unknown>,
+  cache: PkCache,
+): Promise<string[]> {
+  const writable = await writableColumnsTx(tx, table, cache);
+  return writable.filter((c) => Object.prototype.hasOwnProperty.call(first, c));
 }
 
 export interface MovedRows {
@@ -162,12 +193,15 @@ export async function repointBackTx(
 export async function restoreDeletedRowsTx(
   tx: Tx,
   params: { table: string; rows: Array<Record<string, unknown>> },
+  cache: PkCache,
 ): Promise<number> {
-  if (params.rows.length === 0) return 0;
+  const first = params.rows[0];
+  if (!first) return 0;
+  const cols = (await restorableColumnsTx(tx, params.table, first, cache)).map((c) => `"${c}"`).join(", ");
   return Number(
     await tx.$executeRawUnsafe(
-      `INSERT INTO "${params.table}"
-       SELECT * FROM jsonb_populate_recordset(NULL::"${params.table}", $1::jsonb)
+      `INSERT INTO "${params.table}" (${cols})
+       SELECT ${cols} FROM jsonb_populate_recordset(NULL::"${params.table}", $1::jsonb)
        ON CONFLICT DO NOTHING`,
       JSON.stringify(params.rows),
     ),
@@ -179,16 +213,20 @@ export async function restoreDeletedRowsTx(
  * Tek ifade: fotoğraf `jsonb_populate_recordset` ile TABLONUN KENDİ satır tipine
  * çevrilir (tip dönüşümünü PG yapar, elle cast yok) ve PK üzerinden eşlenir.
  * Dönen sayı yazılan satırdır; PK'sı artık bulunmayan satır sessizce atlanır.
+ * Taşıma kolonu (`movedColumn`) YAZILMAZ: satırın nereye ait olduğu MOVED kaleminin işidir;
+ * önce kaynaktan taşınıp sonra zenginleşen satırı fotoğraf hedefe geri çekerdi.
  */
 export async function restoreSnapshotRowsTx(
   tx: Tx,
-  params: { table: string; rows: Array<Record<string, unknown>> },
+  params: { table: string; movedColumn: string; rows: Array<Record<string, unknown>> },
   cache: PkCache,
 ): Promise<number> {
   const first = params.rows[0];
   if (!first) return 0;
   const pk = await primaryKeyColumnsTx(tx, params.table, cache);
-  const cols = Object.keys(first).filter((c) => !pk.includes(c));
+  const cols = (await restorableColumnsTx(tx, params.table, first, cache)).filter(
+    (c) => !pk.includes(c) && c !== params.movedColumn,
+  );
   if (cols.length === 0) return 0;
   const sets = cols.map((c) => `"${c}" = r."${c}"`).join(", ");
   const match = pk.map((c) => `t."${c}" = r."${c}"`).join(" AND ");

@@ -13,6 +13,10 @@
 //  ③ RENK NULL BÜTÜNLÜĞÜ — birleştirme hiç DELETE yapmadığı için `colorId`
 //     NULL'a düşemez; `Roll.colorId IS NULL` bu sistemde "HAM KUMAŞ" demektir.
 //     Merge öncesi/sonrası NULL sayısı BİREBİR eşit olmalı.
+//  ⑥ KAYNAKLAR ARASI ÇAKIŞMA — hedefte olmayan anahtar İKİ kaynakta birden varsa
+//     (iki müşteri aynı kumaşa ad vermiş) çakışma yüklemi hedefe bakarak onu
+//     göremez; ikinci kaynağın taşınması tekil kısıta çarpmamalı. Müşteri, ürün
+//     ve renk birleştirmesinin üçünde de ölçülür.
 
 import prisma, { pool } from "../src/lib/prisma";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
@@ -280,6 +284,143 @@ async function main(): Promise<void> {
       (await prisma.item.findUnique({ where: { id: k } }))?.mergedIntoId === null,
     );
   }
+
+  await crossSourceCases();
+}
+
+async function tryMerge(
+  entity: "customer" | "item" | "color",
+  survivorId: string,
+  sourceIds: string[],
+  reason: string,
+): Promise<string | null> {
+  try {
+    const pv = await MasterDataMergeService.preview(entity, survivorId, sourceIds);
+    await MasterDataMergeService.merge(entity, {
+      survivorId,
+      sourceIds,
+      reason,
+      acknowledgedConflicts: pv.conflicts.filter((c) => c.count > 0).length,
+    });
+    return null;
+  } catch (e) {
+    return (e as Error).message.replace(/\s+/g, " ").trim().slice(0, 300);
+  }
+}
+
+async function crossSourceCases(): Promise<void> {
+  console.log("\n── ⑥ Kaynaklar arası çakışma (hedefte olmayan anahtar iki kaynakta) ──");
+  const item = await mkItem("XS-I");
+  const color = await mkColor("XS-C");
+
+  // ⑥a MÜŞTERİ: iki kaynak aynı kumaşa ve aynı renge ad vermiş, hedefte ikisi de yok.
+  {
+    const s = await mkCustomer("XS-S");
+    const k1 = await mkCustomer("XS-K1");
+    const k2 = await mkCustomer("XS-K2");
+    await prisma.customerItemAlias.createMany({
+      data: [
+        { customerId: k1, itemId: item, alias: "BİRİNCİ KAYNAK ADI" },
+        { customerId: k2, itemId: item, alias: "İKİNCİ KAYNAK ADI" },
+      ],
+    });
+    await prisma.customerColorAlias.createMany({
+      data: [
+        { customerId: k1, colorId: color, assigned: false, alias: null },
+        { customerId: k2, colorId: color, assigned: true, alias: "İKİNCİ RENK ADI" },
+      ],
+    });
+    const pv = await MasterDataMergeService.preview("customer", s, [k1, k2]);
+    const seen = pv.conflicts.filter((c) => c.count > 0).map((c) => `${c.table}:${c.count}`).sort();
+    check(
+      "⑥a önizleme kaynaklar arası çakışmayı GÖSTERİYOR (operatör onayı ona göre)",
+      seen.join(",") === "customer_color_aliases:1,customer_item_aliases:1",
+      seen.join(",") || "çakışma YOK",
+    );
+    const err = await tryMerge("customer", s, [k1, k2], "iki kaynak ayni kumasa ad vermis sondasi");
+    check("⑥a ⭐ iki kaynaklı müşteri birleştirmesi tekil kısıta ÇARPMIYOR", err === null, err ?? "");
+    const itemRows = await prisma.customerItemAlias.findMany({ where: { customerId: s, itemId: item }, select: { alias: true } });
+    check(
+      "⑥a hedefte TEK ürün adı kaldı: kaynak sırasında ilki kazanır",
+      itemRows.length === 1 && itemRows[0]!.alias === "BİRİNCİ KAYNAK ADI",
+      JSON.stringify(itemRows),
+    );
+    const colorRow = await prisma.customerColorAlias.findFirst({ where: { customerId: s, colorId: color } });
+    check(
+      "⑥a renk adı alan alan birleşti (assigned OR + alias COALESCE, iki kaynaktan)",
+      colorRow?.assigned === true && colorRow.alias === "İKİNCİ RENK ADI",
+      JSON.stringify({ assigned: colorRow?.assigned, alias: colorRow?.alias }),
+    );
+    const left = await prisma.customerItemAlias.count({ where: { customerId: { in: [k1, k2] } } });
+    check("⑥a kaynaklarda ürün adı kalmadı", left === 0, `${left} satır`);
+  }
+
+  // ⑥b ÜRÜN: aynı müşteri iki kaynak karta da ad vermiş.
+  {
+    const cust = await mkCustomer("XS-M");
+    const s = await mkItem("XS-IS");
+    const k1 = await mkItem("XS-IK1");
+    const k2 = await mkItem("XS-IK2");
+    await prisma.customerItemAlias.createMany({
+      data: [
+        { customerId: cust, itemId: k1, alias: "BİRİNCİ KART ADI" },
+        { customerId: cust, itemId: k2, alias: "İKİNCİ KART ADI" },
+      ],
+    });
+    const err = await tryMerge("item", s, [k1, k2], "iki kaynak kart ayni musteride adli sondasi");
+    const rows = await prisma.customerItemAlias.findMany({ where: { customerId: cust, itemId: s }, select: { alias: true } });
+    check("⑥b ⭐ iki kaynaklı ürün birleştirmesi tekil kısıta ÇARPMIYOR", err === null, err ?? "");
+    check("⑥b hedefte tek ad, ilk kaynağınki", rows.length === 1 && rows[0]!.alias === "BİRİNCİ KART ADI", JSON.stringify(rows));
+  }
+
+  // ⑥c RENK: aynı müşteri iki kaynak renge de ad vermiş.
+  {
+    const cust = await mkCustomer("XS-R");
+    const s = await mkColor("XS-CS");
+    const k1 = await mkColor("XS-CK1");
+    const k2 = await mkColor("XS-CK2");
+    await prisma.customerColorAlias.createMany({
+      data: [
+        { customerId: cust, colorId: k1, assigned: true, alias: null },
+        { customerId: cust, colorId: k2, assigned: false, alias: "İKİNCİ RENK KARTI" },
+      ],
+    });
+    const err = await tryMerge("color", s, [k1, k2], "iki kaynak renk ayni musteride adli sondasi");
+    const row = await prisma.customerColorAlias.findFirst({ where: { customerId: cust, colorId: s } });
+    check("⑥c ⭐ iki kaynaklı renk birleştirmesi tekil kısıta ÇARPMIYOR", err === null, err ?? "");
+    check(
+      "⑥c renk adı iki kaynaktan alan alan birleşti",
+      row?.assigned === true && row.alias === "İKİNCİ RENK KARTI",
+      JSON.stringify({ assigned: row?.assigned, alias: row?.alias }),
+    );
+  }
+
+  // ⑥d BLOCK politikası kaynaklar arasında da bloklar: iki kaynak şubesi aynı ihracat kodunda.
+  {
+    const s = await mkCustomer("XS-BS");
+    const k1 = await mkCustomer("XS-BK1");
+    const k2 = await mkCustomer("XS-BK2");
+    await prisma.customerBranch.create({ data: { customerId: k1, name: "Bir", code: "TR35" } });
+    await prisma.customerBranch.create({ data: { customerId: k2, name: "İki", code: "TR35" } });
+    const pv = await MasterDataMergeService.preview("customer", s, [k1, k2]);
+    check(
+      "⑥d ⭐ iki kaynakta aynı ihracat kodu önizlemede BLOKÇU",
+      !pv.canMerge && pv.blockers.some((b) => b.key.startsWith("CONFLICT_CUSTOMER_BRANCHES")),
+      pv.blockers.map((b) => b.key).join(",") || "blokçu YOK",
+    );
+    let status: number | undefined;
+    try {
+      await MasterDataMergeService.merge("customer", {
+        survivorId: s,
+        sourceIds: [k1, k2],
+        reason: "kaynaklar arasi sube kodu cakismasi sondasi",
+        acknowledgedConflicts: 1,
+      });
+    } catch (e) {
+      status = (e as { statusCode?: number }).statusCode;
+    }
+    check("⑥d işlem 409 ile reddediyor (ham 23505/500 değil)", status === 409, String(status));
+  }
 }
 
 main()
@@ -291,6 +432,14 @@ main()
     await prisma.itemAllowedColor.deleteMany({ where: { itemId: { in: trash.items } } }).catch(() => undefined);
     await prisma.itemAllowedColor.deleteMany({ where: { colorId: { in: trash.colors } } }).catch(() => undefined);
     await prisma.customerColorAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
+    await prisma.customerItemAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
+    const ops = await prisma.mergeOperation
+      .findMany({ where: { survivorId: { in: [...trash.items, ...trash.colors, ...trash.customers] } }, select: { id: true } })
+      .catch(() => [] as Array<{ id: string }>);
+    const opIds = ops.map((o) => o.id);
+    await prisma.mergeOperationRef.deleteMany({ where: { operationId: { in: opIds } } }).catch(() => undefined);
+    await prisma.mergeOperationSource.deleteMany({ where: { operationId: { in: opIds } } }).catch(() => undefined);
+    await prisma.mergeOperation.deleteMany({ where: { id: { in: opIds } } }).catch(() => undefined);
     await prisma.customerBranch.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     await prisma.systemLog.deleteMany({
       where: { recordId: { in: [...trash.items, ...trash.colors, ...trash.customers] } },

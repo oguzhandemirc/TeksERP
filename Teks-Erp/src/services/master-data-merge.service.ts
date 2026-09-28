@@ -50,6 +50,7 @@ import {
   deleteCapturingTx,
   movePerSourceTx,
   newPkCache,
+  primaryKeyColumnsTx,
   snapshotRowsTx,
   type PkCache,
 } from "./helpers/merge-ledger.helper";
@@ -707,46 +708,51 @@ export class MasterDataMergeService {
           const mustResolve =
             rule.kind === "CONFLICT" &&
             (conflictCount > 0 || rule.policy === "EMPTY_MEANS_ALL");
-          if (mustResolve && rule.kind === "CONFLICT") {
-            const res = await resolveConflictTx(tx, rule, survivor.id, sourceIds);
-            conflictsResolved += res.count;
-            // Silinen satır KAYNAĞINA göre gruplanır: fotoğraf satırında taşınan
-            // kolonun değeri hâlâ kaynağın id'sidir (silme taşımadan ÖNCE koşar).
-            for (const sourceId of sourceIds) {
-              const own = res.deletedRows.filter((r) => String(r[rule.column] ?? "") === sourceId);
-              if (own.length > 0) {
+          // ⚠️ ÇÖZÜM + TAŞIMA KAYNAK BAŞINA ve SIRAYLA: iki kaynakta aynı anahtar varsa
+          // ikincisi ancak ilki taşındıktan sonra hedefte görünür (yoksa 23505). Kaynak
+          // başına taşıma ayrıca geri almanın satır kimliğini verir.
+          const snapshotted = new Set<string>();
+          let movedTotal = 0;
+          for (const sourceId of sourceIds) {
+            if (mustResolve && rule.kind === "CONFLICT") {
+              const res = await resolveConflictTx(tx, rule, survivor.id, [sourceId]);
+              conflictsResolved += res.count;
+              if (res.deletedRows.length > 0) {
                 refRows.push({
                   operationId: operation.id,
                   sourceId,
                   tableName: rule.table,
                   columnName: rule.column,
                   kind: MergeRefKind.DELETED,
-                  count: own.length,
+                  count: res.deletedRows.length,
                   // ⚠️ `rowIds` NOT NULL ve DEFAULT'u bilinçli düşürüldü (şema ikizliği):
                   // taşıma dışı kalemlerde AÇIKÇA boş dizi yazılır.
                   rowIds: [],
-                  rowData: own as Prisma.InputJsonValue,
+                  rowData: res.deletedRows as Prisma.InputJsonValue,
+                });
+              }
+              // Aynı satır iki kaynakla zenginleşebilir: yalnız İLK fotoğraf birleştirme öncesi hâldir.
+              const pk = await primaryKeyColumnsTx(tx, rule.table, pkCache);
+              const firstShots = res.snapshotRows.filter((r) => {
+                const key = pk.map((c) => String(r[c])).join("|");
+                if (snapshotted.has(key)) return false;
+                snapshotted.add(key);
+                return true;
+              });
+              if (firstShots.length > 0) {
+                // FIELD_MERGED satırı SURVIVOR'ın — kaynak yok (`sourceId` NULL).
+                refRows.push({
+                  operationId: operation.id,
+                  sourceId: null,
+                  tableName: rule.table,
+                  columnName: rule.column,
+                  kind: MergeRefKind.FIELD_MERGED,
+                  count: firstShots.length,
+                  rowIds: [],
+                  rowData: firstShots as Prisma.InputJsonValue,
                 });
               }
             }
-            if (res.snapshotRows.length > 0) {
-              // FIELD_MERGED satırı SURVIVOR'ın — kaynak yok (`sourceId` NULL).
-              refRows.push({
-                operationId: operation.id,
-                sourceId: null,
-                tableName: rule.table,
-                columnName: rule.column,
-                kind: MergeRefKind.FIELD_MERGED,
-                count: res.snapshotRows.length,
-                rowIds: [],
-                rowData: res.snapshotRows as Prisma.InputJsonValue,
-              });
-            }
-          }
-          // ⚠️ TAŞIMA KAYNAK BAŞINA: tek `UPDATE … = ANY(sources)` hangi satırın
-          // hangi kaynaktan geldiğini söyleyemez ve geri alma onu tahmin edemez.
-          let movedTotal = 0;
-          for (const sourceId of sourceIds) {
             const moved = await movePerSourceTx(
               tx,
               { table: rule.table, column: rule.column, survivorId: survivor.id, sourceId },
@@ -949,21 +955,29 @@ async function describeConflictTx(
   survivorId: string,
   sourceIds: string[],
 ): Promise<number> {
-  const other = rule.uniqueOn.filter((c) => c !== rule.column);
-  // Kısıt KOLONUN KENDİSİNDE ise (`CariAccount.customerId @unique`) "diğer
-  // anahtar kolonu" yoktur: çakışma, İKİ tarafın da satırı olduğunda doğar.
-  // Bu dalın önizleme ikizi (`describeConflict`) ile AYNI yüklemi kurması
-  // load-bearing — ayrışırsa önizleme bloklar, işlem sessizce geçerdi.
-  const matchOther = other.length > 0 ? ` AND (${other.map((c) => `t."${c}" = s."${c}"`).join(" AND ")})` : "";
   const rows = await tx.$queryRawUnsafe<Array<{ n: bigint }>>(
-    `SELECT count(*)::bigint AS n FROM "${rule.table}" s
-      WHERE s."${rule.column}" = ANY($1::uuid[])
-        AND EXISTS (SELECT 1 FROM "${rule.table}" t
-                     WHERE t."${rule.column}" = $2::uuid${matchOther})`,
+    `SELECT count(*)::bigint AS n FROM "${rule.table}" s WHERE ${conflictWhereSql(rule)}`,
     sourceIds,
     survivorId,
   );
   return Number(rows[0]?.n ?? 0);
+}
+
+/**
+ * ÇAKIŞMA YÜKLEMİ — önizleme sayımı, işlem sayımı ve çözücü TEK kaynaktan (`s` = kaynak
+ * satırı, `$1` = kaynaklar, `$2` = survivor). Satır, aynı anahtarı survivor'da YA DA
+ * listede kendinden ÖNCEKİ bir kaynakta taşıyorsa çakışır: iki kaynaktaki aynı anahtar
+ * hedefe taşınınca tekil kısıta çarpar. Kısıt KOLONUN KENDİSİNDE ise (`CariAccount.customerId
+ * @unique`) "diğer anahtar" yoktur: iki tarafın da satırı olması yeter.
+ */
+function conflictWhereSql(rule: Extract<MoveRule, { kind: "CONFLICT" }>): string {
+  const col = `"${rule.column}"`;
+  const other = rule.uniqueOn.filter((c) => c !== rule.column);
+  const matchOther = other.length > 0 ? ` AND (${other.map((c) => `t."${c}" = s."${c}"`).join(" AND ")})` : "";
+  return `s.${col} = ANY($1::uuid[])
+       AND EXISTS (SELECT 1 FROM "${rule.table}" t
+                    WHERE (t.${col} = $2::uuid
+                           OR array_position($1::uuid[], t.${col}) < array_position($1::uuid[], s.${col}))${matchOther})`;
 }
 
 /**
@@ -987,11 +1001,9 @@ async function resolveConflictTx(
 ): Promise<ConflictResolution> {
   const other = rule.uniqueOn.filter((c) => c !== rule.column);
   const matchOther = other.map((c) => `t."${c}" = s."${c}"`).join(" AND ");
-  // Sayım ikiziyle aynı yüklem — tek kolonlu kısıtta "diğer kolon" yoktur.
-  const conflictWhere =
-    `s."${rule.column}" = ANY($1::uuid[])
-       AND EXISTS (SELECT 1 FROM "${rule.table}" t
-                    WHERE t."${rule.column}" = $2::uuid${other.length > 0 ? ` AND (${matchOther})` : ""})`;
+  // Sayım ikiziyle aynı yüklem (çağıran kaynak başına koşar: kaynaklar arası çakışma
+  // burada, önceki kaynağın hedefe TAŞINMIŞ satırıyla görünür).
+  const conflictWhere = conflictWhereSql(rule);
 
   switch (rule.policy) {
     case "BLOCK":
@@ -1217,21 +1229,9 @@ async function describeConflict(
   let count = 0;
   let rows: Array<Record<string, unknown>> = [];
   try {
-    // Çakışma = kaynak satırın (diğer anahtar kolonları) survivor'da ZATEN var.
-    // ⚠️ Tek kolonlu kısıt (`CariAccount.customerId @unique`) da survivor'da
-    // satır ARAR — koşulsuz "kaynağın her satırı çakışma" saymak, hedefin hiç
-    // cari hesabı yokken bile birleştirmeyi bloklardı (işlem ikiziyle ayrışma).
-    const sql =
-      other.length > 0
-        ? `SELECT s.* FROM "${rule.table}" s
-           WHERE s."${rule.column}" = ANY($1::uuid[])
-             AND EXISTS (SELECT 1 FROM "${rule.table}" t
-                          WHERE t."${rule.column}" = $2::uuid
-                            AND (${other.map((c) => `t."${c}" = s."${c}"`).join(" AND ")}))
-           ORDER BY ${otherCols}`
-        : `SELECT s.* FROM "${rule.table}" s
-           WHERE s."${rule.column}" = ANY($1::uuid[])
-             AND EXISTS (SELECT 1 FROM "${rule.table}" t WHERE t."${rule.column}" = $2::uuid)`;
+    // İşlem ikiziyle AYNI yüklem (`conflictWhereSql`) — ayrışırsa önizleme bloklar,
+    // işlem sessizce geçer (ya da tersi).
+    const sql = `SELECT s.* FROM "${rule.table}" s WHERE ${conflictWhereSql(rule)}${other.length > 0 ? ` ORDER BY ${otherCols}` : ""}`;
     const all = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(sql, sourceIds, survivorId);
     count = all.length;
     rows = all.slice(0, sample);

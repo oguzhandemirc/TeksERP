@@ -193,11 +193,11 @@ async function restoreRefsTx(
     }
     const rows = (ref.rowData as Array<Record<string, unknown>> | null) ?? [];
     if (ref.kind === MergeRefKind.DELETED) {
-      const written = await restoreDeletedRowsTx(tx, { table: ref.tableName, rows });
+      const written = await restoreDeletedRowsTx(tx, { table: ref.tableName, rows }, pkCache);
       restoredDeletedRows += written;
       skippedRows += Math.max(0, ref.count - written);
     } else {
-      const written = await restoreSnapshotRowsTx(tx, { table: ref.tableName, rows }, pkCache);
+      const written = await restoreSnapshotRowsTx(tx, { table: ref.tableName, movedColumn: ref.columnName, rows }, pkCache);
       restoredFieldRows += written;
       skippedRows += Math.max(0, ref.count - written);
     }

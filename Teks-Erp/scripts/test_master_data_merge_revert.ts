@@ -25,6 +25,14 @@
 //   §7 ⭐ KİLİT SIRASI (ES değişmezi): `MERGE_MAP`te `swatch_stock_reductions`
 //      kuralı `swatches` kuralından ÖNCE gelir — kartela storno yolu da aynı
 //      sırada ilerliyor; ters sıra 40P01 üretirdi
+//   §8–§10 ⭐ ÜRETİLMİŞ KOLONLU TABLO: müşteri adı tabloları (`aliasFold`
+//      GENERATED ALWAYS … STORED) SKIP ile SİLİNEN ve MERGE_FIELDS ile
+//      ZENGİNLEŞEN satırı fotoğraftan geri yazar — müşteri, ürün, renk
+//      birleştirmesinin üçünde de (PG üretilmiş kolona değer yazılmasını reddeder)
+//   §11 ⭐ İKİ KAYNAK AYNI ANAHTARDA: ikinci kaynağın satırı ilkinin TAŞINMIŞ
+//      satırıyla çakışır (silinir/zenginleştirir); hedefin satırı iki kez
+//      zenginleşir. Geri alma, kalemlerin okunma sırasından bağımsız olarak
+//      üç kaydı da birleştirme öncesi hâline döndürür
 // =============================================================================
 import { CompanyType, MergeRefKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -49,6 +57,8 @@ function check(label: string, ok: boolean, detail = ""): void {
 const TAG = `TEST-UNMRG-${Date.now().toString().slice(-8)}`;
 const customerIds: string[] = [];
 const orderIds: string[] = [];
+const itemIds: string[] = [];
+const colorIds: string[] = [];
 let ADMIN = "";
 
 function errOf(e: unknown): { status?: number; code?: string; message: string } {
@@ -97,6 +107,59 @@ async function mergeOnce(
     acknowledgedConflicts: 0,
     fieldPicks,
     userId: ADMIN,
+  });
+}
+
+async function makeItem(suffix: string): Promise<string> {
+  const i = await prisma.item.create({
+    data: { code: `${TAG}-${suffix}`, name: `${TAG} Kumaş ${suffix}`, itemType: "FABRIC", unit: "MT" },
+    select: { id: true },
+  });
+  itemIds.push(i.id);
+  return i.id;
+}
+
+async function makeColor(suffix: string): Promise<string> {
+  const c = await prisma.color.create({
+    data: { code: `${TAG}-${suffix}`, name: `${TAG} Renk ${suffix}` },
+    select: { id: true },
+  });
+  colorIds.push(c.id);
+  return c.id;
+}
+
+async function mergeEntity(
+  entity: "customer" | "item" | "color",
+  survivorId: string,
+  sourceIds: string[],
+  acknowledgedConflicts: number,
+  reason: string,
+): Promise<string> {
+  await MasterDataMergeService.merge(entity, { survivorId, sourceIds, reason, acknowledgedConflicts, userId: ADMIN });
+  return latestOperation(survivorId);
+}
+
+/** Geri almayı dener; hata metnini döner (kırmızı sondada PG mesajı görünsün). */
+async function tryRevert(opId: string, reason: string): Promise<string | null> {
+  try {
+    await MasterDataUnmergeService.revert(opId, { reason, userId: ADMIN });
+    return null;
+  } catch (e) {
+    return (e as Error).message.replace(/\s+/g, " ").trim().slice(0, 300);
+  }
+}
+
+async function itemAliasRow(customerId: string, itemId: string) {
+  return prisma.customerItemAlias.findUnique({
+    where: { customerId_itemId: { customerId, itemId } },
+    select: { alias: true, aliasFold: true },
+  });
+}
+
+async function colorAliasRow(customerId: string, colorId: string) {
+  return prisma.customerColorAlias.findUnique({
+    where: { customerId_colorId: { customerId, colorId } },
+    select: { alias: true, assigned: true, aliasFold: true },
   });
 }
 
@@ -229,13 +292,184 @@ async function main(): Promise<void> {
       `düşüm=${red} kartela=${swa}`,
     );
   }
+
+  await aliasRevertCases();
+}
+
+/**
+ * §8–§10 — müşteri adı tabloları (`aliasFold` üretilmiş kolon). Kaynak ve hedefte
+ * aynı anahtar varsa SKIP (ürün adı) kaynağınkini SİLER, MERGE_FIELDS (renk adı)
+ * hedefinkini ZENGİNLEŞTİRİP kaynağınkini siler; geri alma ikisini de fotoğraftan yazar.
+ */
+async function aliasRevertCases(): Promise<void> {
+  // §8 — MÜŞTERİ birleştirmesi: iki alias tablosu, çakışan + çakışmayan satır
+  const custS = await makeCustomer("AL-H", `${TAG} Adlı Hedef`);
+  const custK = await makeCustomer("AL-K", `${TAG} Adlı Kaynak`);
+  const i1 = await makeItem("AL-I1");
+  const i2 = await makeItem("AL-I2");
+  const c1 = await makeColor("AL-C1");
+  const c2 = await makeColor("AL-C2");
+  await prisma.customerItemAlias.createMany({
+    data: [
+      { customerId: custS, itemId: i1, alias: "HEDEF KUMAŞ ADI" },
+      { customerId: custK, itemId: i1, alias: "Kaynak Şile" },
+      { customerId: custK, itemId: i2, alias: "Kaynak Çözgü" },
+    ],
+  });
+  await prisma.customerColorAlias.createMany({
+    data: [
+      { customerId: custS, colorId: c1, assigned: false, alias: null },
+      { customerId: custK, colorId: c1, assigned: true, alias: "Kaynak Işık" },
+      { customerId: custK, colorId: c2, assigned: true, alias: "Kaynak Gök" },
+    ],
+  });
+  const foldBefore = (await itemAliasRow(custK, i1))?.aliasFold ?? null;
+  const custOp = await mergeEntity("customer", custS, [custK], 2, "müşteri adlı iki kayıt birleştiriliyor (alias sondası)");
+  const merged = await colorAliasRow(custS, c1);
+  check(
+    "§8a Zemin: birleştirme SKIP silmesi + MERGE_FIELDS zenginleştirmesi yaptı",
+    (await itemAliasRow(custK, i1)) === null && merged?.assigned === true && merged.alias === "Kaynak Işık",
+    JSON.stringify(merged),
+  );
+  const custErr = await tryRevert(custOp, "müşteri adlı birleştirme geri alınıyor");
+  check("§8b ⭐ Üretilmiş kolonlu tablolarla müşteri birleştirmesi GERİ ALINIYOR", custErr === null, custErr ?? "");
+  const kI1 = await itemAliasRow(custK, i1);
+  const kI2 = await itemAliasRow(custK, i2);
+  const sI1 = await itemAliasRow(custS, i1);
+  check(
+    "§8c ⭐ SKIP ile silinen ürün adı fotoğraftan döndü, aliasFold DB'ce yeniden üretildi",
+    kI1?.alias === "Kaynak Şile" && kI1.aliasFold != null && kI1.aliasFold === foldBefore && sI1?.alias === "HEDEF KUMAŞ ADI",
+    JSON.stringify({ kI1, sI1, foldBefore }),
+  );
+  check("§8d Taşınan (çakışmasız) ürün adı kaynağına döndü", kI2?.alias === "Kaynak Çözgü", JSON.stringify(kI2));
+  const sC1 = await colorAliasRow(custS, c1);
+  const kC1 = await colorAliasRow(custK, c1);
+  const kC2 = await colorAliasRow(custK, c2);
+  check(
+    "§8e ⭐ MERGE_FIELDS zenginleştirmesi fotoğrafa döndü (hedef: atanmamış + adsız, aliasFold NULL)",
+    sC1?.assigned === false && sC1.alias === null && sC1.aliasFold === null,
+    JSON.stringify(sC1),
+  );
+  check(
+    "§8f ⭐ MERGE_FIELDS ile silinen kaynak renk adı döndü (aliasFold dolu)",
+    kC1?.assigned === true && kC1.alias === "Kaynak Işık" && kC1.aliasFold != null && kC2?.alias === "Kaynak Gök",
+    JSON.stringify({ kC1, kC2 }),
+  );
+
+  // §9 — ÜRÜN birleştirmesi: aynı müşteri iki karta da ad vermiş (SKIP)
+  const cust = await makeCustomer("AL-M", `${TAG} Adlı Müşteri`);
+  const itemS = await makeItem("AL-IS");
+  const itemK = await makeItem("AL-IK");
+  await prisma.customerItemAlias.createMany({
+    data: [
+      { customerId: cust, itemId: itemS, alias: "Hedef Kart Adı" },
+      { customerId: cust, itemId: itemK, alias: "Kaynak Kart Adı" },
+    ],
+  });
+  const itemOp = await mergeEntity("item", itemS, [itemK], 1, "aynı kumaşın iki kartı birleştiriliyor (alias sondası)");
+  const itemErr = await tryRevert(itemOp, "kumaş birleştirmesi geri alınıyor");
+  const back = await itemAliasRow(cust, itemK);
+  check("§9a ⭐ Üretilmiş kolonlu tabloyla ürün birleştirmesi GERİ ALINIYOR", itemErr === null, itemErr ?? "");
+  check(
+    "§9b ⭐ Silinen ürün adı kaynak karta döndü (aliasFold dolu)",
+    back?.alias === "Kaynak Kart Adı" && back.aliasFold != null,
+    JSON.stringify(back),
+  );
+
+  // §10 — RENK birleştirmesi: aynı müşteri iki renge de ad vermiş (MERGE_FIELDS)
+  const colS = await makeColor("AL-CS");
+  const colK = await makeColor("AL-CK");
+  await prisma.customerColorAlias.createMany({
+    data: [
+      { customerId: cust, colorId: colS, assigned: false, alias: null },
+      { customerId: cust, colorId: colK, assigned: true, alias: "Kaynak Renk Adı" },
+    ],
+  });
+  const colOp = await mergeEntity("color", colS, [colK], 1, "aynı rengin iki kartı birleştiriliyor (alias sondası)");
+  const colErr = await tryRevert(colOp, "renk birleştirmesi geri alınıyor");
+  const colSurv = await colorAliasRow(cust, colS);
+  const colBack = await colorAliasRow(cust, colK);
+  check("§10a ⭐ Üretilmiş kolonlu tabloyla renk birleştirmesi GERİ ALINIYOR", colErr === null, colErr ?? "");
+  check(
+    "§10b ⭐ Hedef renk adı fotoğrafa, kaynak renk adı kaynağa döndü",
+    colSurv?.assigned === false && colSurv.alias === null && colBack?.assigned === true && colBack.alias === "Kaynak Renk Adı" && colBack.aliasFold != null,
+    JSON.stringify({ colSurv, colBack }),
+  );
+
+  await multiSourceRevertCase();
+}
+
+/** §11 — iki kaynak aynı (müşteri, kumaş/renk) anahtarında; hedefin satırı iki kez zenginleşir. */
+async function multiSourceRevertCase(): Promise<void> {
+  const s = await makeCustomer("MK-H", `${TAG} Çok Kaynak Hedef`);
+  const k1 = await makeCustomer("MK-K1", `${TAG} Çok Kaynak Bir`);
+  const k2 = await makeCustomer("MK-K2", `${TAG} Çok Kaynak İki`);
+  const item = await makeItem("MK-I");
+  const cShared = await makeColor("MK-C");
+  const cSurv = await makeColor("MK-D");
+  await prisma.customerItemAlias.createMany({
+    data: [
+      { customerId: k1, itemId: item, alias: "Bir Kumaş" },
+      { customerId: k2, itemId: item, alias: "İki Kumaş" },
+    ],
+  });
+  await prisma.customerColorAlias.createMany({
+    data: [
+      // Hedefte yok: K1'inki taşınır, K2'ninki onu zenginleştirip silinir.
+      { customerId: k1, colorId: cShared, assigned: false, alias: null },
+      { customerId: k2, colorId: cShared, assigned: true, alias: "İki Renk" },
+      // Hedefte var: K1 ve K2 sırayla zenginleştirir (ilk fotoğraf asıl hâl).
+      { customerId: s, colorId: cSurv, assigned: false, alias: null },
+      { customerId: k1, colorId: cSurv, assigned: true, alias: null },
+      { customerId: k2, colorId: cSurv, assigned: false, alias: "İki Hedef Rengi" },
+    ],
+  });
+  const opId = await mergeEntity("customer", s, [k1, k2], 2, "iki kaynak aynı anahtarlarda birleştiriliyor (çok kaynak)");
+  const mid = await colorAliasRow(s, cSurv);
+  check(
+    "§11a Zemin: hedef satırı iki kaynaktan zenginleşti",
+    mid?.assigned === true && mid.alias === "İki Hedef Rengi",
+    JSON.stringify(mid),
+  );
+  const err = await tryRevert(opId, "çok kaynaklı birleştirme geri alınıyor");
+  check("§11b ⭐ Çok kaynaklı birleştirme GERİ ALINIYOR", err === null, err ?? "");
+  const got = {
+    k1Item: (await itemAliasRow(k1, item))?.alias,
+    k2Item: (await itemAliasRow(k2, item))?.alias,
+    sItem: (await itemAliasRow(s, item))?.alias ?? null,
+    k1Shared: await colorAliasRow(k1, cShared),
+    k2Shared: await colorAliasRow(k2, cShared),
+    sShared: await colorAliasRow(s, cShared),
+    sSurv: await colorAliasRow(s, cSurv),
+    k1Surv: await colorAliasRow(k1, cSurv),
+    k2Surv: await colorAliasRow(k2, cSurv),
+  };
+  check(
+    "§11c ⭐ Ürün adı iki kaynağa da döndü, hedefte kalmadı",
+    got.k1Item === "Bir Kumaş" && got.k2Item === "İki Kumaş" && got.sItem === null,
+    JSON.stringify({ k1: got.k1Item, k2: got.k2Item, s: got.sItem }),
+  );
+  check(
+    "§11d ⭐ Taşınıp zenginleşen satır İLK kaynağına ve asıl alanlarına döndü",
+    got.k1Shared?.assigned === false && got.k1Shared.alias === null &&
+      got.k2Shared?.assigned === true && got.k2Shared.alias === "İki Renk" && got.sShared === null,
+    JSON.stringify({ k1: got.k1Shared, k2: got.k2Shared, s: got.sShared }),
+  );
+  check(
+    "§11e ⭐ İki kez zenginleşen hedef satırı birleştirme ÖNCESİ hâline döndü",
+    got.sSurv?.assigned === false && got.sSurv.alias === null &&
+      got.k1Surv?.assigned === true && got.k1Surv.alias === null &&
+      got.k2Surv?.assigned === false && got.k2Surv.alias === "İki Hedef Rengi",
+    JSON.stringify({ s: got.sSurv, k1: got.k1Surv, k2: got.k2Surv }),
+  );
 }
 
 async function cleanup(): Promise<void> {
   try {
-    if (customerIds.length) {
+    const masterIds = [...customerIds, ...itemIds, ...colorIds];
+    if (masterIds.length) {
       const ops = await prisma.mergeOperation.findMany({
-        where: { OR: [{ survivorId: { in: customerIds } }, { sources: { some: { sourceId: { in: customerIds } } } }] },
+        where: { OR: [{ survivorId: { in: masterIds } }, { sources: { some: { sourceId: { in: masterIds } } } }] },
         select: { id: true },
       });
       const opIds = ops.map((o) => o.id);
@@ -244,7 +478,7 @@ async function cleanup(): Promise<void> {
         await prisma.mergeOperationSource.deleteMany({ where: { operationId: { in: opIds } } });
         await prisma.mergeOperation.deleteMany({ where: { id: { in: opIds } } });
       }
-      await prisma.duplicateReview.deleteMany({ where: { OR: [{ aId: { in: customerIds } }, { bId: { in: customerIds } }] } });
+      await prisma.duplicateReview.deleteMany({ where: { OR: [{ aId: { in: masterIds } }, { bId: { in: masterIds } }] } });
     }
     if (orderIds.length) {
       await prisma.orderLine.deleteMany({ where: { orderId: { in: orderIds } } });
@@ -253,6 +487,15 @@ async function cleanup(): Promise<void> {
     if (customerIds.length) {
       await prisma.cariAccount.deleteMany({ where: { customerId: { in: customerIds } } });
       await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
+    }
+    // Alias satırları müşteri silinince CASCADE ile gider; kartlar tombstone'suz silinir.
+    if (itemIds.length) {
+      await prisma.item.updateMany({ where: { id: { in: itemIds } }, data: { mergedIntoId: null } });
+      await prisma.item.deleteMany({ where: { id: { in: itemIds } } });
+    }
+    if (colorIds.length) {
+      await prisma.color.updateMany({ where: { id: { in: colorIds } }, data: { mergedIntoId: null } });
+      await prisma.color.deleteMany({ where: { id: { in: colorIds } } });
     }
   } catch (e) {
     console.warn("Temizlik uyarısı:", (e as Error).message.slice(0, 300));
