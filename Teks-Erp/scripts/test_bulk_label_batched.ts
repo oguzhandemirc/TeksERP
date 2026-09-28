@@ -6,7 +6,9 @@
 // BulkLabelContext). KANIT: bulk çıktısı, DEĞİŞMEYEN per-roll getRollLabelHtml
 // yolundan (preloaded=undefined → eski sorgular = ground truth) AYNI şekilde
 // kompoze edilen çıktıyla BYTE-IDENTİK olmalı. Branch matrisi (RAW/FINISHED,
-// snapshot ①②③, WO-inference ④, alias) tek bulk'ta kapsanır.
+// snapshot ①②③, WO-inference ④, alias) tek bulk'ta kapsanır. İki müşterili: ikinci
+// müşteride kumaşa özel renk adı (ITEM × COLOR) + genel ad; toplu = tekil ve kademe
+// doğru (negatif sonda: toplu yolda kumaşa özel kademe atlanınca üç kırmızı).
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
@@ -41,10 +43,13 @@ let ITEM = "",
   ADMIN = "",
   STATION = "";
 let testCustomerId = "";
+let ozelCustomerId = "";
+let ITEM2 = "";
 const rollBarcodes: string[] = [];
 const woIds: string[] = [];
 const orderIds: string[] = [];
 const stamp = Date.now().toString().slice(-7);
+let OZEL_IDS: string[] = [];
 
 async function setup(): Promise<string[]> {
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS").id;
@@ -96,13 +101,13 @@ async function setup(): Promise<string[]> {
   await prisma.workOrderToOrderLine.create({ data: { workOrderId: wo.id, orderLineId } });
 
   let i = 0;
-  const mk = async (cfg: { colorId: string | null; snapshot?: unknown; producedInStepId?: string }) => {
+  const mk = async (cfg: { colorId: string | null; snapshot?: unknown; producedInStepId?: string; itemId?: string }) => {
     const barcode = `TST-BLK-R${i++}-${stamp}`;
     rollBarcodes.push(barcode);
     const r = await prisma.roll.create({
       data: {
         barcode,
-        itemId: ITEM,
+        itemId: cfg.itemId ?? ITEM,
         colorId: cfg.colorId,
         status: RollStatus.WAREHOUSE,
         currentQty: 100,
@@ -119,6 +124,14 @@ async function setup(): Promise<string[]> {
     return r.id;
   };
 
+  // İkinci müşteri: kumaşa özel renk adı (ITEM × COLOR) + genel renk adı. Toplu yol çok
+  // müşterili tek yüklemeden okur (MUSTERI-KUMAS-RENK-ADI §5 #6) — tekil yolla aynı kademe.
+  const c2 = await prisma.customer.create({ data: { code: `TST-BLK-C2-${stamp}`, name: `Bulk Test Müşteri 2 ${stamp}` } });
+  ozelCustomerId = c2.id;
+  await prisma.customerColorAlias.create({ data: { customerId: c2.id, colorId: COLOR, alias: "BLK2-GENEL", assigned: true } });
+  await prisma.customerItemColorAlias.create({ data: { customerId: c2.id, itemId: ITEM, colorId: COLOR, alias: "BLK2-OZEL" } });
+  ITEM2 = (await prisma.item.create({ data: { code: `TST-BLK-I2-${stamp}`, name: `BULK TEST KUMAS 2 ${stamp}`, itemType: "FABRIC" }, select: { id: true } })).id;
+
   // Branch matrisi:
   const r1 = await mk({ colorId: null }); // RAW, branch ④ müşterisiz
   const r2 = await mk({ colorId: COLOR }); // FINISHED, branch ④ müşterisiz
@@ -126,7 +139,10 @@ async function setup(): Promise<string[]> {
   const r4 = await mk({ colorId: COLOR, snapshot: { orderLineId } }); // ① override (OVR)
   const r5 = await mk({ colorId: COLOR, snapshot: { stock: true } }); // ③ stok, müşterisiz
   const r6 = await mk({ colorId: COLOR, producedInStepId: stepId }); // ④ WO-inference (override)
-  return [r1, r2, r3, r4, r5, r6];
+  const r7 = await mk({ colorId: COLOR, snapshot: { customerId: c2.id } }); // ② kumaşa özel (ITEM × COLOR)
+  const r8 = await mk({ colorId: COLOR, snapshot: { customerId: c2.id }, itemId: ITEM2 }); // ② aynı renk başka kumaş → genel
+  OZEL_IDS = [r7, r8];
+  return [r1, r2, r3, r4, r5, r6, r7, r8];
 }
 
 async function run(ids: string[]): Promise<void> {
@@ -168,6 +184,14 @@ async function run(ids: string[]): Promise<void> {
   // Ek güven: alias/override içerik gerçekten basılıyor mu (dalların canlı olduğu).
   check("alias dalı render edildi (BLK-ITEM-ALIAS bulk'ta)", bulk.includes("BLK-ITEM-ALIAS"));
   check("override dalı render edildi (OVR-ITEM bulk'ta)", bulk.includes("OVR-ITEM"));
+  const [r7, r8] = OZEL_IDS as [string, string];
+  const tek7 = (await svc.getRollLabel(r7)).data;
+  const tek8 = (await svc.getRollLabel(r8)).data;
+  check("tekil: kumaşa özel ad o kumaşta kazanır, aynı rengin başka kumaşı genel ad",
+    tek7.colorName === "BLK2-OZEL" && tek7.colorNameScope === "ITEM" && tek8.colorName === "BLK2-GENEL" && tek8.colorNameScope === "CUSTOMER",
+    `${tek7.colorName}(${tek7.colorNameScope}) / ${tek8.colorName}(${tek8.colorNameScope})`);
+  check("toplu: iki müşterili tek yüklemede kumaşa özel VE genel ad basıldı",
+    bulk.includes("BLK2-OZEL") && bulk.includes("BLK2-GENEL"), `özel=${bulk.includes("BLK2-OZEL")} genel=${bulk.includes("BLK2-GENEL")}`);
 
   // ── NATIVE bulk (diyalogsuz seri/BT tek-job) — aynı fixture matrisi ─────────
   // bulk-native = N topun native bloklarının ardışık birleşimi. GROUND TRUTH:
@@ -197,6 +221,12 @@ async function cleanup(): Promise<void> {
   const lines = await prisma.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
   await prisma.orderLine.deleteMany({ where: { id: { in: lines.map((l) => l.id) } } });
   await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
+  if (ozelCustomerId) {
+    await prisma.customerItemColorAlias.deleteMany({ where: { customerId: ozelCustomerId } });
+    await prisma.customerColorAlias.deleteMany({ where: { customerId: ozelCustomerId } });
+    await prisma.customer.deleteMany({ where: { id: ozelCustomerId } });
+  }
+  if (ITEM2) await prisma.item.deleteMany({ where: { id: ITEM2 } });
   if (testCustomerId) {
     await prisma.customerItemAlias.deleteMany({ where: { customerId: testCustomerId } });
     await prisma.customerColorAlias.deleteMany({ where: { customerId: testCustomerId } });
