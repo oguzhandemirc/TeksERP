@@ -84,11 +84,6 @@ export const customerItemColorAliasImportAdapter: ImportAdapter = {
   writePermission: "customer-alias:write",
   readPermission: "customer-alias:read",
   keyColumns: ["externalKey"],
-  // Tablet 1.0.8 "kalıcı" düzeltmede çözülmüş (kumaşa özel olabilen) adı GENEL ada yazar
-  // (MUSTERI-KUMAS-RENK-ADI §7): kumaşa özel ad girişi D4 bütün tabletlere ulaşınca açılır.
-  releaseGate:
-    "kumaşa özel renk adı girişi, tablet güncellemesi bütün tabletlere ulaştıktan sonra açılacak " +
-    "(eski tablet bu adı müşterinin genel renk adına yazabilir).",
   columns: COLUMNS,
   notes: [
     "Bir satır = bir eşleme. Anahtar ÜÇ parçalıdır ve dikey çizgi ile ayrılır: CARİ|KUMAŞ|RENK.",

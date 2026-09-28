@@ -23,9 +23,7 @@
 
 import prisma from "../src/lib/prisma";
 import { ImportService } from "../src/services/import/import.service";
-import { listAdapters, getImportAdapter, getImportAdapterForRequest } from "../src/services/import/import-registry";
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { listAdapters, getImportAdapter } from "../src/services/import/import-registry";
 import { parseAliasKey } from "../src/services/import/adapters/customer-alias.adapter";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { parseLocaleNumber, parseBool, parseDateCell, isClearLiteral } from "../src/services/import/import-coerce";
@@ -387,28 +385,13 @@ async function main(): Promise<void> {
       }
     })());
 
-    // §14 AÇILIŞ KAPISI (MUSTERI-KUMAS-RENK-ADI §7): kumaşa özel ad girişi D4 bütün
-    // tabletlere ulaşana kadar kapalı — eski tablet onu GENEL ada sızdırır.
-    // Kapıyı kaldıran commit ilk kontrolü de değiştirir (kapı sessizce düşmesin).
-    console.log("\n--- 14. Açılış kapısı (releaseGate) ---");
-    const gated = listAdapters().filter((a) => a.releaseGate).map((a) => a.entity);
-    check("kumaşa özel renk adı şablonu KAPALI (D4 yayılımı ölçülene kadar)", gated.includes("customerItemColorAlias"), gated.join(","));
+    // §14 KAPI KODDA DEĞİL (MUSTERI-KUMAS-RENK-ADI §7): eski tablet (1.0.8) sızıntısı yalnız
+    // üretim kanalına terfide vardır ve YAYIN SIRASIYLA kapanır (önce tablet D4). Şablon her
+    // kurulumda listede doğar — test fabrikasında da denenebilmeli.
+    console.log("\n--- 14. Kumaşa özel renk adı şablonu listede (kapı yayın sırasında) ---");
     const listed = ImportService.listEntities(["*"]).map((e) => e.entity);
-    check("kapalı şablon /entities listesinde YOK (eski panel de göremez)", gated.every((e) => !listed.includes(e)), listed.filter((e) => gated.includes(e)).join(","));
-    check("açık şablonlar listede (kapı yalnız kapalıyı süzer)", listed.length === listAdapters().length - gated.length, `${listed.length}`);
-    const gateErr = (() => {
-      try {
-        getImportAdapterForRequest("customerItemColorAlias");
-        return null;
-      } catch (e) {
-        const ae = e as { statusCode?: number; details?: { code?: string } };
-        return `${ae.statusCode}:${ae.details?.code}`;
-      }
-    })();
-    check("kapalı şablonun HTTP girişi 403 IMPORT_ENTITY_GATED", gateErr === "403:IMPORT_ENTITY_GATED", String(gateErr));
-    check("açık şablonun HTTP girişi geçer", getImportAdapterForRequest("customerColorAlias").entity === "customerColorAlias");
-    const rotaKaynak = fs.readFileSync(path.join(__dirname, "..", "src", "routes", "import.routes.ts"), "utf8");
-    check("import.routes çıplak getImportAdapter ÇAĞIRMAZ (kapı tek boğazdan)", !/\bgetImportAdapter\s*\(/.test(rotaKaynak) && /getImportAdapterForRequest\s*\(/.test(rotaKaynak));
+    check("kumaşa özel renk adı şablonu /entities listesinde", listed.includes("customerItemColorAlias"), listed.join(","));
+    check("/entities bütün adaptörleri listeler (gizli şablon yok)", listed.length === listAdapters().length, `${listed.length}/${listAdapters().length}`);
   } finally {
     // Cleanup — testin kendi yarattığı her şey.
     // ⚠️ SIRA ZORUNLU: `ImportRunLine.importRun` ilişkisi RESTRICT'tir ve motor

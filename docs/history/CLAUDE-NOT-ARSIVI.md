@@ -13118,7 +13118,7 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 **Ölçüm.** `test_shipment_doc_customer_name` 104/0 (§0 altın 21 yüzey bayt-eşit; §11 beş yüzey aynı ad + 'ITEM'; donmuş belge değişmez, reissue yeni adı alır; izinsiz sipariş detayı ana veri kademesini taşımaz; §12 ısırık) · `test_customer_item_color_alias` 29/0 · `test_musteri_adi_tek_cozucu` 11/0 (üç gerçek-dosya sondası ısırdı) · birleştirme ⑥ + geri alma §8 (çok kaynak, id+anahtar+ad+tarih birebir döner). Sondalar ilgili bekçi başlıklarında.
 
-**Eski istemci.** Sözleşme yalnız ekler (yeni tablo, dört uç, isteğe bağlı `colorNameScope`/`resolvedCustomerColorName`); `minVersion` gerekmez. Eski tablet 1.0.8 "kalıcı" düzeltmede kumaşa özel adı GENELE yazabilir — kapı: D2 (giriş ekranı) üretime ancak D4 bütün aktif tabletlere ulaşınca terfi eder (tasarım §7).
+**Eski istemci.** Sözleşme yalnız ekler (yeni tablo, dört uç, isteğe bağlı `colorNameScope`/`resolvedCustomerColorName`); `minVersion` gerekmez. Eski tablet 1.0.8 "kalıcı" düzeltmede kumaşa özel adı GENELE yazabilir — kapı KODDA DEĞİL yayın sırasındadır (1e kararı 2026-09-28, iniş): üretim kanalına önce tablet D4 çıkar, yayılım `Session.clientVersion`dan ölçülür, sonra backend (D1 + D5) ve panel D2 — denetim turundaki D5 `releaseGate` kod kapısı (`be68ace0`) test fabrikasında da içe aktarmayı gizlediği ve ayrı kaldırma commit'i istediği için kaldırıldı (tasarım §7 terfi kontrol listesi).
 
 ## 2026-09-28 — Müşteri × kumaş × renk adı (D5 içe aktarma): üçüncü şablon; alias geri sarması yazılan değerle claim'li [ÇEKİRDEK]
 

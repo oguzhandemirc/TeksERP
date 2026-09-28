@@ -252,12 +252,6 @@ export interface ImportAdapter {
    * ⚠️ Çocuk listesi REPLACE semantiğidir: dosyadaki adımlar neyse o kalır.
    */
   grouped?: boolean;
-  /**
-   * Açılış kapısı: dolu iken şablon listede görünmez ve HTTP uçları 403
-   * `IMPORT_ENTITY_GATED` döner (`getImportAdapterForRequest`). Değer kullanıcıya
-   * basılan gerekçedir; kapı ayrı bir commit'le alan silinerek kalkar.
-   */
-  releaseGate?: string;
 
   /** Anahtar değerine göre mevcut kayıtları toplu getirir (N+1 yok). */
   findExisting(keys: string[]): Promise<Map<string, Record<string, unknown>>>;
