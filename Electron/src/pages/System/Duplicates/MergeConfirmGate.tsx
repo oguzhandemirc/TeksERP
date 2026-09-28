@@ -112,6 +112,9 @@ export function MergeConfirmGate({
                   {c.label} — {c.count} kayıt
                 </div>
                 <div className="text-muted-foreground">{c.why}</div>
+                {c.crossSourceNote && (
+                  <div className="mt-1 text-amber-700 dark:text-amber-400">{c.crossSourceNote}</div>
+                )}
               </li>
             ))}
           </ul>

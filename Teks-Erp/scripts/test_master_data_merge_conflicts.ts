@@ -19,8 +19,9 @@
 //     aynı (kumaş, renk) varsa ikinci UPDATE P2002 vermemeli.
 //  ⑦ KAYNAKLAR ARASI ÇAKIŞMA — hedefte olmayan anahtar İKİ kaynakta birden varsa
 //     (iki müşteri aynı kumaşa ad vermiş) ikinci kaynağın taşınması tekil kısıta
-//     çarpmamalı. Müşteri, ürün ve renk birleştirmesinin üçünde ve BLOCK kuralında
-//     ölçülür.
+//     çarpmamalı; önizleme bunu "kaynaklar arası" diye ayrı söyler. Müşteri, ürün ve
+//     renk birleştirmesinin üçünde ve BLOCK kuralında ölçülür; geniş anahtarlı
+//     `item_prices`in YANLIŞ bloklamadığı da (⑦e) ölçülür.
 
 import prisma, { pool } from "../src/lib/prisma";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
@@ -343,6 +344,14 @@ async function crossSourceCases(): Promise<void> {
       seen.join(",") === "customer_color_aliases:1,customer_item_aliases:1",
       seen.join(",") || "çakışma YOK",
     );
+    const itemConflict = pv.conflicts.find((c) => c.table === "customer_item_aliases");
+    check(
+      "⑦a önizleme kaynaklar arası kısmı AYRI sayıyor ve kazananı sırayla söylüyor",
+      itemConflict?.crossSourceCount === 1 && itemConflict.survivorCount === 0 &&
+        Boolean(itemConflict.crossSourceNote?.includes("İLK")) &&
+        Boolean(itemConflict.crossSourceNote?.includes(`${TAG} XS-K1 → ${TAG} XS-K2`)),
+      JSON.stringify({ n: itemConflict?.crossSourceCount, note: itemConflict?.crossSourceNote }),
+    );
     const err = await tryMerge("customer", s, [k1, k2], "iki kaynak ayni kumasa ad vermis sondasi");
     check("⑦a ⭐ iki kaynaklı müşteri birleştirmesi tekil kısıta ÇARPMIYOR", err === null, err ?? "");
     const itemRows = await prisma.customerItemAlias.findMany({ where: { customerId: s, itemId: item }, select: { alias: true } });
@@ -427,6 +436,59 @@ async function crossSourceCases(): Promise<void> {
     }
     check("⑦d işlem 409 ile reddediyor (ham 23505/500 değil)", status === 409, String(status));
   }
+
+  // ⑦e GENİŞ ANAHTAR kaynaklar arasında yanlış BLOKLAMAMALI: `item_prices`in ürün kuralı
+  // (itemId, kind, currency) üzerinden sayar; farklı müşteri istisnaları hedefte yan yana durabilir.
+  {
+    const c1 = await mkCustomer("XS-P1");
+    const c2 = await mkCustomer("XS-P2");
+    const s = await mkItem("XS-PS");
+    const k1 = await mkItem("XS-PK1");
+    const k2 = await mkItem("XS-PK2");
+    await prisma.itemPrice.createMany({
+      data: [
+        { itemId: k1, customerId: c1, kind: "SALE", currency: "TRY", price: 10 },
+        { itemId: k2, customerId: c2, kind: "SALE", currency: "TRY", price: 20 },
+        { itemId: k2, customerId: null, kind: "SALE", currency: "TRY", price: 15 },
+      ],
+    });
+    const pv = await MasterDataMergeService.preview("item", s, [k1, k2]);
+    check("⑦e ⭐ farklı müşteri istisnaları + varsayılan iki kaynakta: BLOKÇU YOK",
+      pv.canMerge && !pv.blockers.some((b) => b.key === "CONFLICT_ITEM_PRICES"),
+      pv.blockers.map((b) => `${b.key}:${b.count}`).join(",") || "blokçu yok");
+    const err = await tryMerge("item", s, [k1, k2], "farkli musteri fiyat istisnalari sondasi");
+    const moved = await prisma.itemPrice.count({ where: { itemId: s } });
+    check("⑦e birleştirme geçti, üç fiyat satırı hedefte", err === null && moved === 3, `${err ?? ""} taşınan=${moved}`);
+
+    // Pozitif ikiz: aynı müşteri, aynı tür/para iki kaynakta → gerçek kısıt çarpar, BLOK kalır.
+    const s2 = await mkItem("XS-PS2");
+    const k3 = await mkItem("XS-PK3");
+    const k4 = await mkItem("XS-PK4");
+    await prisma.itemPrice.createMany({
+      data: [
+        { itemId: k3, customerId: c1, kind: "SALE", currency: "TRY", price: 10 },
+        { itemId: k4, customerId: c1, kind: "SALE", currency: "TRY", price: 11 },
+      ],
+    });
+    const pv2 = await MasterDataMergeService.preview("item", s2, [k3, k4]);
+    check("⑦e aynı müşterinin iki kaynaktaki istisnası hâlâ BLOKÇU",
+      pv2.blockers.some((b) => b.key === "CONFLICT_ITEM_PRICES" && b.count === 1),
+      pv2.blockers.map((b) => `${b.key}:${b.count}`).join(",") || "blokçu yok");
+    // İki kaynakta kart VARSAYILANI (customerId NULL): varsayılan partial UNIQUE'i çarpar — NULL eşit sayılmalı.
+    const s3 = await mkItem("XS-PS3");
+    const k5 = await mkItem("XS-PK5");
+    const k6 = await mkItem("XS-PK6");
+    await prisma.itemPrice.createMany({
+      data: [
+        { itemId: k5, customerId: null, kind: "SALE", currency: "TRY", price: 10 },
+        { itemId: k6, customerId: null, kind: "SALE", currency: "TRY", price: 12 },
+      ],
+    });
+    const pv3 = await MasterDataMergeService.preview("item", s3, [k5, k6]);
+    check("⑦e iki kaynaktaki kart varsayılanı BLOKÇU (NULL müşteri eşit sayılır)",
+      pv3.blockers.some((b) => b.key === "CONFLICT_ITEM_PRICES" && b.count === 1),
+      pv3.blockers.map((b) => `${b.key}:${b.count}`).join(",") || "blokçu yok");
+  }
 }
 
 async function kumasaOzelRenkAdi(red: string): Promise<void> {
@@ -486,6 +548,7 @@ main()
     await prisma.mergeOperationRef.deleteMany({ where: { operationId: { in: opIds } } }).catch(() => undefined);
     await prisma.mergeOperationSource.deleteMany({ where: { operationId: { in: opIds } } }).catch(() => undefined);
     await prisma.mergeOperation.deleteMany({ where: { id: { in: opIds } } }).catch(() => undefined);
+    await prisma.itemPrice.deleteMany({ where: { itemId: { in: trash.items } } }).catch(() => undefined);
     await prisma.customerBranch.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     await prisma.systemLog.deleteMany({
       where: { recordId: { in: [...trash.items, ...trash.colors, ...trash.customers] } },

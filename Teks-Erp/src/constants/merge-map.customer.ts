@@ -54,8 +54,9 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
       policy: "SKIP",
       why:
         "Alias fiziksel ETİKETE basılıyor; survivor'ınki ŞU ANDA doğru basıyor. Kaynağınkini " +
-        "üstüne yazmak, çalışan bir etiketi sessizce değiştirmek olurdu. Atılan değer " +
-        "önizlemede gösterilir ve audit'e yazılır.",
+        "üstüne yazmak, çalışan bir etiketi sessizce değiştirmek olurdu. Hedefte ad yoksa ve " +
+        "birden çok kaynakta varsa sıradaki İLK kaynağınki kalır — önizleme sırayı adlarıyla " +
+        "söyler. Atılan değer defterde fotoğraflıdır; geri alma onu geri yazar.",
     },
     {
       kind: "CONFLICT",
@@ -83,7 +84,8 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
         "Ad etikete/irsaliyeye basılıyor; survivor'ınki ŞU ANDA doğru basıyor (CustomerItemAlias " +
         "emsali). ⚠️ GÖLGELEME: çakışmadan TAŞINAN satır survivor'ın GENEL renk adını o kumaşta " +
         "gölgeler ve çıktı sessizce değişir (A2'nin (X, Ekru)='P'si taşınınca A'nın X etiketi " +
-        "genel addan 'P'ye döner) — önizleme bu satırları kayıt başına listeler.",
+        "genel addan 'P'ye döner) — önizleme bu satırları kayıt başına listeler. Hedefte yoksa " +
+        "ve birden çok kaynakta varsa sıradaki İLK kaynağınki kalır.",
     },
     {
       kind: "CONFLICT",

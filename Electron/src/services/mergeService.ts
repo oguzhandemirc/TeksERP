@@ -39,6 +39,10 @@ export interface MergeConflictRow {
   policy: string;
   why: string;
   count: number;
+  /** Hedefte olmayan anahtarın birden çok kaynakta olduğu kısım (eski backend göndermez). */
+  crossSourceCount?: number;
+  /** Kaynaklar arası çakışmada kimin kazandığı, adlar ve sırayla. */
+  crossSourceNote?: string | null;
   rows: Array<Record<string, unknown>>;
   truncated: boolean;
 }

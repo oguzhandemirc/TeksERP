@@ -57,6 +57,8 @@ import {
 } from "./helpers/merge-ledger.helper";
 
 type ConflictRule = Extract<MoveRule, { kind: "CONFLICT" }>;
+/** Önizleme sorgusunun iç kolonu: satır survivor'la mı çakışıyor (değilse yalnız önceki bir kaynakla). */
+const VS_SURVIVOR = "__vsSurvivor";
 
 /**
  * GLOBAL advisory kilit. Kaynak/survivor id'lerine göre değil TEK anahtarla
@@ -108,6 +110,14 @@ export interface MergeConflictRow {
   policy: string;
   why: string;
   count: number;
+  /** `count`un hedefteki bir kayıtla çakışan kısmı. */
+  survivorCount: number;
+  /**
+   * `count`un YALNIZ kaynaklar arası kısmı: hedefte olmayan anahtar birden çok kaynakta.
+   * Kazanan istek sırasıdır (panelde soldan sağa) — `crossSourceNote` bunu adlarla söyler.
+   */
+  crossSourceCount: number;
+  crossSourceNote: string | null;
   /** Operatöre gösterilecek somut örnekler (kırpılmış olabilir). */
   rows: Array<Record<string, unknown>>;
   truncated: boolean;
@@ -355,16 +365,24 @@ export class MasterDataMergeService {
           count,
         });
         if (rule.kind === "CONFLICT") {
-          const c = await describeConflict(rule, survivor.id, sourceIdList);
+          const c = await describeConflict(rule, survivor.id, sources);
           if (c.count > 0) {
             conflicts.push(c);
             if (rule.policy === "BLOCK") {
+              // İki yön ayrı söylenir: kaynaklar arası çakışmada hedefte aranacak kayıt YOKTUR.
+              const where = [
+                c.survivorCount > 0 ? `${c.survivorCount} ${rule.label} kaydı hedefteki bir kayıtla ÇAKIŞIYOR` : null,
+                c.crossSourceCount > 0
+                  ? `${c.crossSourceCount} ${rule.label} kaydı birleşecek başka bir kayıttakiyle AYNI anahtarı ` +
+                    "taşıyor (ikisi hedefe birlikte gidemez)"
+                  : null,
+              ].filter((x): x is string => x !== null);
               blockers.push({
                 key: `CONFLICT_${rule.table.toUpperCase()}`,
                 count: c.count,
                 message:
-                  `${c.count} ${rule.label} kaydı hedefteki bir kayıtla ÇAKIŞIYOR ve otomatik ` +
-                  `çözülemez. Önce çakışan kayıtları elle düzeltin. (${rule.why.split(".")[0]}.)`,
+                  `${where.join("; ")} ve otomatik çözülemez. Önce çakışan kayıtları elle düzeltin. ` +
+                  `(${rule.why.split(".")[0]}.)`,
               });
             }
           }
@@ -667,6 +685,7 @@ export class MasterDataMergeService {
           if (c > 0 && rule.policy === "BLOCK") {
             throw AppError.conflict(
               `${c} ${rule.label} kaydı çakışıyor ve otomatik çözülemez: ${rule.why.split(".")[0]}.`,
+              { code: "MERGE_CONFLICT_BLOCKED", table: rule.table },
             );
           }
         }
@@ -674,6 +693,7 @@ export class MasterDataMergeService {
           throw AppError.conflict(
             "Önizlemeden sonra veriler değişti (çakışma sayısı farklı). Lütfen önizlemeyi " +
               "yenileyip tekrar onaylayın.",
+            { code: "MERGE_PREVIEW_STALE" },
           );
         }
 
@@ -1001,11 +1021,16 @@ function survivorSideSql(rule: ConflictRule): string {
 
 /**
  * Listede daha önceki bir kaynakta, taşınınca AYNI tekil kısıta çarpacak satır var mı.
+ * `uniqueOn` gerçek kısıttan bilerek genişse (`item_prices`) anahtar `crossSourceOn`dan
+ * gelir — geniş anahtar burada birbirine hiç çarpmayacak iki kaynağı bloklardı.
  * `p."col" = ANY($1)` ayrı durur ki (col, …) tekil indeksi kullanılabilsin.
  */
 function earlierSourceSql(rule: ConflictRule): string {
-  const other = rule.uniqueOn.filter((c) => c !== rule.column);
-  const match = other.map((c) => ` AND p."${c}" = s."${c}"`).join("");
+  const cross = rule.crossSourceOn ?? { columns: rule.uniqueOn.filter((c) => c !== rule.column) };
+  const nullSafe = new Set(cross.nullSafe ?? []);
+  const match = cross.columns
+    .map((c) => ` AND p."${c}" ${nullSafe.has(c) ? "IS NOT DISTINCT FROM" : "="} s."${c}"`)
+    .join("");
   return `EXISTS (SELECT 1 FROM "${rule.table}" p WHERE p."${rule.column}" = ANY($1::uuid[])
             AND array_position($1::uuid[], p."${rule.column}") < array_position($1::uuid[], s."${rule.column}")${match})`;
 }
@@ -1251,32 +1276,61 @@ async function countRows(rule: MoveRule, sourceIds: string[]): Promise<number | 
 async function describeConflict(
   rule: ConflictRule,
   survivorId: string,
-  sourceIds: string[],
+  sources: Array<{ id: string; name: unknown }>,
 ): Promise<MergeConflictRow> {
   const other = rule.uniqueOn.filter((c) => c !== rule.column);
   const otherCols = other.map((c) => `"${c}"`).join(", ");
   const sample = 5;
   let count = 0;
+  let survivorCount = 0;
   let rows: Array<Record<string, unknown>> = [];
   try {
-    // İşlem ikiziyle AYNI yüklem (`conflictPredicateSql`) — ayrışırsa önizleme bloklar,
-    // işlem sessizce geçer (ya da tersi).
-    const sql = `SELECT s.* FROM "${rule.table}" s WHERE ${conflictPredicateSql(rule)}${other.length > 0 ? ` ORDER BY ${otherCols}` : ""}`;
-    const all = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(sql, sourceIds, survivorId);
+    // İşlem ikiziyle AYNI yüklem (`conflictPredicateSql`); ek kolon yalnız çakışmanın
+    // YÖNÜNÜ söyler (survivor'la mı, yalnız önceki bir kaynakla mı) — sayımı değiştirmez.
+    const sql = `SELECT s.*, ${survivorSideSql(rule)} AS "${VS_SURVIVOR}" FROM "${rule.table}" s
+                  WHERE ${conflictPredicateSql(rule)}${other.length > 0 ? ` ORDER BY ${otherCols}` : ""}`;
+    const all = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      sql,
+      sources.map((x) => x.id),
+      survivorId,
+    );
     count = all.length;
-    rows = all.slice(0, sample);
+    survivorCount = all.filter((r) => r[VS_SURVIVOR] === true).length;
+    rows = all.slice(0, sample).map(({ [VS_SURVIVOR]: _dir, ...r }) => r);
   } catch {
     count = 0;
   }
+  const crossSourceCount = count - survivorCount;
   return {
     table: rule.table,
     label: rule.label,
     policy: rule.policy,
     why: rule.why,
     count,
+    survivorCount,
+    crossSourceCount,
+    crossSourceNote: crossSourceCount > 0 ? crossSourceNote(rule, crossSourceCount, sources) : null,
     rows,
     truncated: count > rows.length,
   };
+}
+
+/** Kaynaklar arası çakışmada kimin kazandığı — sıra istek sırasıdır, adlarıyla söylenir. */
+function crossSourceNote(rule: ConflictRule, n: number, sources: Array<{ name: unknown }>): string {
+  const order = sources.map((x) => String(x.name)).join(" → ");
+  const head = `${n} ${rule.label} kaydı hedefte yok ama birden çok birleşecek kayıtta var.`;
+  switch (rule.policy) {
+    case "SKIP":
+      return `${head} Sıradaki İLK kaydınki kalır, sonrakilerinki ATILIR (geri almada döner). Sıra: ${order}.`;
+    case "MERGE_FIELDS":
+      return `${head} Alan alan birleşir: sıradaki ilk kaydın dolu değeri kalır, atanmışlık korunur. Sıra: ${order}.`;
+    case "BLOCK":
+      return `${head} İkisi hedefe birlikte gidemez — önce birini elle düzeltin.`;
+    case "EMPTY_MEANS_ALL":
+      return `${head} Hedefin kısıtı boşsa hepsi atılır (hepsi serbest kalır); değilse yinelenen satır tek satıra iner.`;
+    default:
+      return `${head} Yinelenen satır tek satıra iner (kayıpsız). Sıra: ${order}.`;
+  }
 }
 
 export { MERGE_LOCK_NS, MERGE_LOCK_KEY, MERGE_TX_TIMEOUT_MS, MAX_ROWS_TO_MOVE };

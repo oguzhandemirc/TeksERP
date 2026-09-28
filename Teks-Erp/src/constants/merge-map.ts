@@ -48,6 +48,12 @@ export type MoveRule =
       uniqueOn: string[];
       policy: ConflictPolicy;
       why: string;
+      /**
+       * Kaynaklar ARASI çakışmanın anahtarı — yalnız `uniqueOn` gerçek kısıttan bilerek
+       * genişse yazılır (yoksa `uniqueOn` − `column`). `nullSafe` kolonları partial UNIQUE
+       * ikizi olarak `IS NOT DISTINCT FROM` ile eşlenir.
+       */
+      crossSourceOn?: { columns: string[]; nullSafe?: string[] };
     }
   | { kind: "EXEMPT"; model: string; table: string; column: string; reason: string };
 
