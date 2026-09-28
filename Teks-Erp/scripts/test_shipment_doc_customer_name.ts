@@ -54,6 +54,15 @@ import {
 } from "../src/services/system-setting.service";
 import { updateSchema } from "../src/routes/feature-flag.routes";
 import { docConfigSchema } from "../src/controllers/printed-document.controller";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  kurAltinFikstur,
+  normalize,
+  teardownAltinFikstur,
+  toplaYuzeyler,
+  type AltinFikstur,
+} from "./lib/musteri-renk-adi-fikstur";
 
 let pass = 0;
 let fail = 0;
@@ -172,6 +181,43 @@ function renderIkizVaryanti(ikizVar: boolean, colorSplit: boolean): string {
 }
 const renderIkizli = (split: boolean): string => renderIkizVaryanti(true, split);
 const renderIkizsiz = (split: boolean): string => renderIkizVaryanti(false, split);
+
+// ---------------------------------------------------------------------------
+// §0 — DB'Lİ ALTIN: kumaşa özel ad girilmedikçe çözücü yüzeyleri DEĞİŞMEZ
+// ---------------------------------------------------------------------------
+// Tasarım §6 "Ölçü": `test_sevk_belge_altin` yalnız renderer'ı, §1 yalnız
+// "bizdeki" rejimini ölçer; ikisi de çözücüyü KOŞMAZ. Bu bölüm çözücüyü gerçekten
+// koşan her yüzeyin yanıtını altınla bayt bayt karşılaştırır. Altın, çözücü
+// değişmeden ÖNCE bugünkü kodla yazıldı (`--yaz`); bilinçli değişiklik ayrı
+// bölümde ölçülür, altın yeniden yazılmaz.
+const ALTIN = join(__dirname, "lib", "musteri-renk-adi-altin.json");
+let ALTIN_F: AltinFikstur | null = null;
+
+async function altinBolumu(): Promise<void> {
+  console.log("\n§0 — DB'Lİ ALTIN: kumaşa özel satır yokken çözücü yüzeyleri bugünküyle bayt-eşit");
+  ALTIN_F = await kurAltinFikstur(`TEST-DCNA-${TS}`);
+  const scopes: unknown[] = [];
+  const gercek = normalize(ALTIN_F, await toplaYuzeyler(ALTIN_F), scopes) as Record<string, unknown>;
+  if (process.argv.includes("--yaz")) {
+    writeFileSync(ALTIN, JSON.stringify(gercek, null, 1) + "\n");
+    console.log(`  Altın yazıldı: ${Object.keys(gercek).length} yüzey → ${ALTIN}`);
+    return;
+  }
+  const altin = existsSync(ALTIN) ? (JSON.parse(readFileSync(ALTIN, "utf8")) as Record<string, unknown>) : {};
+  const eksik = Object.keys(gercek).filter((k) => !(k in altin));
+  const hayalet = Object.keys(altin).filter((k) => !(k in gercek));
+  check("altın dosyası var ve yüzey kümesi iki yönlü eşit", existsSync(ALTIN) && !eksik.length && !hayalet.length,
+    `eksik=${eksik.join(",")} hayalet=${hayalet.join(",")}`);
+  for (const k of Object.keys(gercek)) {
+    const a = JSON.stringify(altin[k]);
+    const g = JSON.stringify(gercek[k]);
+    check(`⭐ ${k} bayt-eşit`, a === g, a === g ? "" : `\n      altın:  ${a}\n      gerçek: ${g}`);
+  }
+  check("körlük zemini: altın genel adı (GENEL-EKRU) ve satır adını (ABC) taşıyor",
+    JSON.stringify(gercek).includes("GENEL-EKRU") && JSON.stringify(gercek).includes("ABC"));
+  check("colorNameScope (yeni alan) yalnız null/'CUSTOMER' — kumaşa özel satır yok",
+    scopes.every((v) => v === undefined || v === null || v === "CUSTOMER"), `${scopes.length} değer`);
+}
 
 async function run(): Promise<void> {
   // ---------------------------------------------------------------------------
@@ -868,6 +914,7 @@ prisma.systemSetting
       where: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE },
       select: { value: true },
     });
+    await altinBolumu();
     return run();
   })
   .catch((e) => {
@@ -876,6 +923,7 @@ prisma.systemSetting
   })
   .finally(async () => {
     await teardown().catch((e) => console.error("teardown hatası:", e));
+    await teardownAltinFikstur(ALTIN_F).catch((e) => console.error("teardown hatası (§0):", e));
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     await pool.end().catch(() => {});
