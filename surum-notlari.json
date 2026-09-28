@@ -58,6 +58,11 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Panel güncellemesi artık giriş ekranında da kurulur: yeni sürüm inince giriş ekranında “Güncelleme kurulacak” penceresi açılır, 15 saniye sonra (ya da “Şimdi kur”a basınca) kurulum başlar; Windows izin penceresinde “Evet” deyin. Önceden güncelleme yalnız giriş yaptıktan sonra kuruluyordu; giriş ekranında bekleyen bilgisayarlar güncellenmiyordu. Bu düzeltme bir sonraki güncellemeden itibaren geçerlidir: bu sürümü kurmak için bir kez giriş yapmanız gerekir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Kart eklerken ya da düzenlerken adın altında çıkan “benzer kayıtlar” uyarısı artık formu kaydırmıyor: tek satırlık bir özet görünüyor, tıklayınca benzer kayıtlar benzerlik oranlarıyla küçük bir listede açılıyor; birebir aynı ad kırmızıyla ayrıca belirtiliyor."
         }
       ]
     },
