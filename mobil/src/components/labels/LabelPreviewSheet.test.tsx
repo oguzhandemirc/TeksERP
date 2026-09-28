@@ -20,7 +20,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SimplePortalHost } from '../SimplePortal';
 // ⚠️ Bu import mock'lardan ÖNCE durur (import/first); babel `jest.mock`ları zaten
 // import'ların üstüne kaldırır, yani mock'lar yine geçerli.
-import { LabelPreviewSheet } from './LabelPreviewSheet';
+import { LabelPreviewSheet, sourceInfo } from './LabelPreviewSheet';
 
 jest.mock('expo-haptics', () => ({
   notificationAsync: jest.fn(() => Promise.resolve()),
@@ -131,5 +131,21 @@ describe('LabelPreviewSheet — audit izi kimliği', () => {
     const [gonderilenId, ctx] = mockRecordPrintEvent.mock.calls[0] as unknown as [string, { stock?: boolean }];
     expect(gonderilenId).toBe(GERCEK_ID);
     expect(ctx?.stock).toBe(true);
+  });
+});
+
+// Tambur önizlemesi renk için kumaşa özel kademeyi söylüyor; aynı topun bu
+// ekrandaki rozeti "Müşteri tanımı (master)" deyip ayrışmasın.
+describe('LabelPreviewSheet — renk rozeti kademesi', () => {
+  it('MASTER + ITEM → kumaşa özel', () => {
+    expect(sourceInfo('MASTER', 'ITEM').label).toBe('Müşteri tanımı · bu kumaşa özel');
+  });
+
+  it.each([['CUSTOMER'], [null], [undefined], ['BRANCH']])('MASTER + %s → genel müşteri tanımı', (scope) => {
+    expect(sourceInfo('MASTER', scope as 'ITEM' | null).label).toBe('Müşteri tanımı (master)');
+  });
+
+  it('OVERRIDE kademeden etkilenmez', () => {
+    expect(sourceInfo('OVERRIDE', 'ITEM').label).toBe('Bu sipariş için özel');
   });
 });

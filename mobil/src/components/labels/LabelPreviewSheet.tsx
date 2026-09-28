@@ -17,7 +17,7 @@ import Toast from 'react-native-toast-message';
 
 import { labelService } from '../../services/label.service';
 import { usePermissions } from '../../hooks/usePermission';
-import type { LabelPayload, NameSource } from '../../types/models';
+import type { ColorNameScope, LabelPayload, NameSource } from '../../types/models';
 
 // =============================================================================
 // Refactor 6 + 7 — Etiket önizleme + müşteri-isim override + audit print
@@ -43,8 +43,13 @@ interface Props {
   onPrintStock?: () => void;
 }
 
-function sourceInfo(s: NameSource | null): { short: string; label: string } {
+/** Renk satırında kademe de söylenir: Tambur önizlemesiyle aynı top aynı rozeti taşısın. */
+export function sourceInfo(
+  s: NameSource | null,
+  scope?: ColorNameScope | null,
+): { short: string; label: string } {
   if (s === 'OVERRIDE') return { short: 'Özel', label: 'Bu sipariş için özel' };
+  if (s === 'MASTER' && scope === 'ITEM') return { short: 'Müşteri · kumaş', label: 'Müşteri tanımı · bu kumaşa özel' };
   if (s === 'MASTER') return { short: 'Müşteri', label: 'Müşteri tanımı (master)' };
   return { short: 'Standart', label: 'Standart ad' };
 }
@@ -367,7 +372,9 @@ function PreviewBody({ payload }: { payload: LabelPayload }) {
                 </Text>
               )}
           </View>
-          {payload.colorNameSource && <SourceBadge source={payload.colorNameSource} />}
+          {payload.colorNameSource && (
+            <SourceBadge source={payload.colorNameSource} scope={payload.colorNameScope} />
+          )}
         </View>
       )}
       {show('qualityGrade') && (
@@ -417,8 +424,8 @@ function PreviewBody({ payload }: { payload: LabelPayload }) {
   );
 }
 
-function SourceBadge({ source }: { source: NameSource | null }) {
-  const info = sourceInfo(source);
+function SourceBadge({ source, scope }: { source: NameSource | null; scope?: ColorNameScope | null }) {
+  const info = sourceInfo(source, scope);
   const bg =
     source === 'OVERRIDE' ? '#fef3c7' : source === 'MASTER' ? '#e0f2fe' : '#f1f5f9';
   const fg =
