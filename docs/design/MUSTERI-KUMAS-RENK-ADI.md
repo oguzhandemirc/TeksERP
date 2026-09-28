@@ -429,7 +429,7 @@ Yalnız iki yeni kod doğar: `ITEM_COLOR_ALIAS_NOT_FOUND` ve `ITEM_COLOR_ALIAS_C
 - `'ITEM'`: renk adı yalnız o kumaşa özel ana veri satırından (`CustomerItemColorAlias`) geldiyse.
 - `'CUSTOMER'`: renk adı genel müşteri × renk satırından (`CustomerColorAlias`) geldiyse.
 - `null`: diğer her durumda. Yani ad sipariş satırından geldiyse (`OVERRIDE`), bizdeki ad kullanıldıysa (`DEFAULT`), top/satır renksizse, müşteri yoksa ya da kalite politikası adı düşürdüyse.
-- Alan yalnız ana veri kademesi KAZANDIĞINDA dolar. `NameSource` birliği değişmez. `colorNameSource === 'MASTER'` ⇔ `colorNameScope !== null` (bekçi: `test_shipment_doc_customer_name` §11 bu eşdeğerliği her yüzeyde ölçer).
+- Alan yalnız ana veri kademesi KAZANDIĞINDA dolar. `NameSource` birliği değişmez. `colorNameSource` taşıyan yüzeylerde (name-preview, rolls/:id) `colorNameSource === 'MASTER'` ⇔ `colorNameScope !== null`; `colorNameSource` taşımayan satır projeksiyonlarında (shipments/:id, open-orders, orders/:id) `colorNameScope !== null` ⇒ `customerColorName`/`resolvedCustomerColorName` ana veriden gelmiştir (bekçi: `test_shipment_doc_customer_name` §11 ikisini de ölçer).
 - **Eski istemci alanı yok sayar.** Yeni istemcide alan yoksa (eski backend) değer `null` kabul edilir. Bilinmeyen bir değer gelirse rozet genel "müşteri adı" olarak gösterilir.
 
 | Uç | Servis | JSON yolu | Eklenen | Not |
@@ -548,7 +548,7 @@ setCustomerItemColorAlias: (
 - **`test_route_auth_coverage` · `test_route_mount_reachability` · `test_swagger_spec` · `test_screen_catalog` · `test_permission_catalog`:** A–D ve `definitions/items` capabilities (route reçetesi §15).
 - **`test_shipment_doc_customer_name`:**
   - §0 altın: kumaşa özel satır yokken 12.4'teki her yanıt ALANI bugünküyle bayt-eşittir. Yeni `colorNameScope` alanı karşılaştırmadan önce çıkarılır, ayrıca `null`/`'CUSTOMER'` olarak doğrulanır.
-  - §11: `colorNameSource === 'MASTER' ⇔ colorNameScope !== null`; ITEM satırı eklenince name-preview = rolls/:id = shipments/:id = open-orders = orders/:id aynı adı ve `'ITEM'`i verir.
+  - §11: 12.4'teki eşdeğerlik (iki yüzey sınıfı); ITEM satırı eklenince name-preview = rolls/:id = shipments/:id = open-orders = orders/:id aynı adı ve `'ITEM'`i verir.
 - **Sipariş detayı izin dalı:** `customer-alias:read`'siz kullanıcıda `resolvedCustomerColorName === line.customerColorName` ve `colorNameScope === null` olmalı. Negatif sonda: izin kontrolü kaldırılınca kırmızı.
 - **C/D hata tablosu:**
   - `ITEM_PHASE_OUT` / `ITEM_INACTIVE` / `ITEM_MERGED` / `ITEM_COLOR_ALIAS_NOT_FOUND` / 400 UUID.
