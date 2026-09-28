@@ -61,6 +61,18 @@ export interface MergeFieldChoice {
   differs: boolean;
 }
 
+/**
+ * Taşınınca survivor'ın o kumaşta bugün basılan adını DEĞİŞTİRECEK kumaşa özel renk adı
+ * (backend `merge-shadowing.helper` MergeShadowRow aynası). `before: null` = bizdeki ad basılıyor.
+ */
+export interface MergeShadowRow {
+  customer: string;
+  item: string;
+  color: string;
+  alias: string;
+  before: string | null;
+}
+
 export interface MergePreview {
   entity: MergeEntity;
   survivor: { id: string; code: string | null; name: string } | null;
@@ -72,6 +84,8 @@ export interface MergePreview {
   conflicts: MergeConflictRow[];
   fieldChoices: MergeFieldChoice[];
   sideEffects: string[];
+  /** Eski backend göndermez — yoksa liste çizilmez. */
+  shadowing?: MergeShadowRow[];
   totalRowsToMove: number;
   measuredAll: boolean;
   computedAt: string;

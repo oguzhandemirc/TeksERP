@@ -3,6 +3,8 @@ import type { ApiResponse } from "@/types/api";
 import type { PrinterLanguage } from "./featureFlagService";
 
 export type LabelNameSource = "OVERRIDE" | "MASTER" | "DEFAULT";
+/** Ana veri kademesi kazandıysa hangi tablodan: ITEM = kumaşa özel, CUSTOMER = genel. Eski backend göndermez. */
+export type ColorNameScope = "ITEM" | "CUSTOMER";
 
 export interface RollLabelPayload {
   rollId: string;
@@ -25,6 +27,7 @@ export interface RollLabelPayload {
   colorName: string | null;
   colorNameDefault: string | null;
   colorNameSource: LabelNameSource | null;
+  colorNameScope?: ColorNameScope | null;
 
   customerName: string | null;
   customerId: string | null;

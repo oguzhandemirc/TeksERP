@@ -1,4 +1,5 @@
 import type { Tone } from "@/components/operations/StatusBadge";
+import type { ColorNameScope } from "@/services/labelService";
 
 export type ShipmentStatus = "PLANNED" | "DISPATCHED" | "CANCELLED";
 
@@ -119,6 +120,8 @@ export interface ShipmentDetailLine {
   width: number | null;
   customerItemName: string | null;
   customerColorName: string | null;
+  /** 'ITEM' = kumaşa özel ana veri adı; eski backend göndermez. */
+  colorNameScope?: ColorNameScope | null;
   requested: number;
   shipped: number;
   /** requested − shipped. */

@@ -1,5 +1,8 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
+import type { ItemLifecycleStatus } from "@/lib/item-lifecycle";
+
+export type { ColorNameScope } from "@/services/labelService";
 
 export interface CustomerItemAlias {
   id: string;
@@ -18,6 +21,21 @@ export interface CustomerColorAlias {
   /** Renk bu müşteriye "özel renk" olarak atandı mı? alias'tan bağımsız. */
   assigned: boolean;
   color?: { id: string; code: string; name: string; hex: string | null; isActive: boolean };
+}
+
+/** Müşterinin YALNIZ BİR KUMAŞTAKİ renk adı (müşteri + kumaş + renk); genel addan önce gelir. */
+export interface CustomerItemColorAlias {
+  id: string;
+  customerId: string;
+  itemId: string;
+  colorId: string;
+  /** Müşterinin BU kumaştaki renk adı — zorunlu (satır yalnız ad taşır). */
+  alias: string;
+  createdAt: string;
+  updatedAt: string;
+  item?: { id: string; code: string; name: string; lifecycleStatus: ItemLifecycleStatus };
+  color?: { id: string; code: string; name: string; hex: string | null; isActive: boolean };
+  customer?: { id: string; code: string; name: string; isActive: boolean };
 }
 
 export const customerAliasService = {
@@ -70,6 +88,40 @@ export const customerAliasService = {
     apiClient
       .delete<ApiResponse<void>>(
         `/api/customers/${customerId}/color-aliases/${colorId}`,
+      )
+      .then((r) => r.data),
+
+  listItemColorAliases: (customerId: string): Promise<ApiResponse<CustomerItemColorAlias[]>> =>
+    apiClient
+      .get<ApiResponse<CustomerItemColorAlias[]>>(`/api/customers/${customerId}/item-color-aliases`)
+      .then((r) => r.data),
+
+  listItemColorAliasesByItem: (itemId: string): Promise<ApiResponse<CustomerItemColorAlias[]>> =>
+    apiClient
+      .get<ApiResponse<CustomerItemColorAlias[]>>(`/api/items/${itemId}/customer-color-aliases`)
+      .then((r) => r.data),
+
+  upsertItemColorAlias: (
+    customerId: string,
+    itemId: string,
+    colorId: string,
+    alias: string,
+  ): Promise<ApiResponse<CustomerItemColorAlias>> =>
+    apiClient
+      .put<ApiResponse<CustomerItemColorAlias>>(
+        `/api/customers/${customerId}/item-color-aliases/${itemId}/${colorId}`,
+        { alias },
+      )
+      .then((r) => r.data),
+
+  deleteItemColorAlias: (
+    customerId: string,
+    itemId: string,
+    colorId: string,
+  ): Promise<ApiResponse<{ deleted: true }>> =>
+    apiClient
+      .delete<ApiResponse<{ deleted: true }>>(
+        `/api/customers/${customerId}/item-color-aliases/${itemId}/${colorId}`,
       )
       .then((r) => r.data),
 };
