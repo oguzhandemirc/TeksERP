@@ -44,6 +44,7 @@ import { MERGE_MAP } from "../src/constants/merge-map";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
 import { MasterDataUnmergeService } from "../src/services/master-data-unmerge.service";
 import { AppError } from "../src/utils/app-error";
+import { newPkCache, restoreSnapshotRowsTx } from "../src/services/helpers/merge-ledger.helper";
 import { ensureTestAdmin } from "./fixture-test-user";
 
 let pass = 0;
@@ -460,8 +461,52 @@ async function multiSourceRevertCase(): Promise<void> {
     mid?.assigned === true && mid.alias === "İki Hedef Rengi",
     JSON.stringify(mid),
   );
+  // Defterin kendisi ölçülür (geri almanın kalem okuma sırasına bağlı değil): aynı satırın
+  // yalnız İLK fotoğrafı yazılmış olmalı ve o fotoğraf birleştirme ÖNCESİ hâldir.
+  const survRowId = (await prisma.customerColorAlias.findUniqueOrThrow({
+    where: { customerId_colorId: { customerId: s, colorId: cSurv } },
+    select: { id: true },
+  })).id;
+  const shots = (await prisma.mergeOperationRef.findMany({
+    where: { operationId: opId, kind: MergeRefKind.FIELD_MERGED, tableName: "customer_color_aliases" },
+    select: { rowData: true },
+  })).flatMap((r) => (r.rowData as Array<Record<string, unknown>> | null) ?? []);
+  const survShots = shots.filter((r) => r.id === survRowId);
+  const ids = shots.map((r) => String(r.id));
+  check(
+    "§12f ⭐ Defter: her satırın TEK fotoğrafı var, hedef satırınki birleştirme öncesi hâl",
+    new Set(ids).size === ids.length && survShots.length === 1 &&
+      survShots[0]?.assigned === false && survShots[0]?.alias === null,
+    JSON.stringify(shots.map((r) => ({ id: String(r.id).slice(0, 8), assigned: r.assigned, alias: r.alias }))),
+  );
   const err = await tryRevert(opId, "çok kaynaklı birleştirme geri alınıyor");
   check("§12b ⭐ Çok kaynaklı birleştirme GERİ ALINIYOR", err === null, err ?? "");
+  // Sıradan bağımsızlık doğrudan: MOVED kalemi ÖNCE uygulanmış satıra, hedefi gösteren bir
+  // fotoğraf SONRA uygulanırsa satır kaynağında kalmalı (taşıma kolonu fotoğraftan yazılmaz).
+  // Kendi satırıyla (geri almanın sonucuna yaslanmaz) ve tx geri alınarak.
+  const cProbe = await makeColor("MK-P");
+  const probe = await prisma.$transaction(async (tx) => {
+    const created = await tx.customerColorAlias.create({
+      data: { customerId: k1, colorId: cProbe, assigned: false, alias: null },
+      select: { id: true },
+    });
+    const row = (await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT * FROM "customer_color_aliases" WHERE "id" = $1::uuid`,
+      created.id,
+    ))[0]!;
+    await restoreSnapshotRowsTx(
+      tx,
+      { table: "customer_color_aliases", movedColumn: "customerId", rows: [{ ...row, customerId: s, alias: "FOTOĞRAF" }] },
+      newPkCache(),
+    );
+    const after = await tx.customerColorAlias.findUnique({ where: { id: String(row.id) }, select: { customerId: true, alias: true } });
+    throw Object.assign(new Error("sonda geri alındı"), { after });
+  }).catch((e: { after?: { customerId: string; alias: string | null } }) => e.after ?? null);
+  check(
+    "§12g ⭐ Fotoğraf taşıma kolonunu YAZMAZ: sonra uygulanan fotoğraf satırı hedefe geri çekmiyor",
+    probe?.customerId === k1 && probe.alias === "FOTOĞRAF",
+    JSON.stringify(probe),
+  );
   const got = {
     k1Item: (await itemAliasRow(k1, item))?.alias,
     k2Item: (await itemAliasRow(k2, item))?.alias,

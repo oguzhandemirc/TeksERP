@@ -20,8 +20,8 @@
 //  ⑦ KAYNAKLAR ARASI ÇAKIŞMA — hedefte olmayan anahtar İKİ kaynakta birden varsa
 //     (iki müşteri aynı kumaşa ad vermiş) ikinci kaynağın taşınması tekil kısıta
 //     çarpmamalı; önizleme bunu "kaynaklar arası" diye ayrı söyler. Müşteri, ürün ve
-//     renk birleştirmesinin üçünde ve BLOCK kuralında ölçülür; geniş anahtarlı
-//     `item_prices`in YANLIŞ bloklamadığı da (⑦e) ölçülür.
+//     renk birleştirmesinin üçünde ölçülür; BLOCK 409'u details.code ile, geniş
+//     anahtarlı `item_prices`in YANLIŞ bloklamadığı da (⑦e) ölçülür.
 
 import prisma, { pool } from "../src/lib/prisma";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
@@ -418,23 +418,26 @@ async function crossSourceCases(): Promise<void> {
     await prisma.customerBranch.create({ data: { customerId: k1, name: "Bir", code: "TR35" } });
     await prisma.customerBranch.create({ data: { customerId: k2, name: "İki", code: "TR35" } });
     const pv = await MasterDataMergeService.preview("customer", s, [k1, k2]);
-    check(
-      "⑦d ⭐ iki kaynakta aynı ihracat kodu önizlemede BLOKÇU",
-      !pv.canMerge && pv.blockers.some((b) => b.key.startsWith("CONFLICT_CUSTOMER_BRANCHES")),
-      pv.blockers.map((b) => b.key).join(",") || "blokçu YOK",
-    );
-    let status: number | undefined;
+    const blocker = pv.blockers.find((b) => b.key.startsWith("CONFLICT_CUSTOMER_BRANCHES"));
+    check("⑦d ⭐ iki kaynakta aynı ihracat kodu önizlemede BLOKÇU", !pv.canMerge && Boolean(blocker),
+      pv.blockers.map((b) => b.key).join(",") || "blokçu YOK");
+    // Hedefin hiç şubesi yok: metin operatörü hedefte aramaya YOLLAMAMALI.
+    check("⑦d blokçu metni kaynaklar arası çakışmayı söylüyor, 'hedefteki' demiyor",
+      Boolean(blocker?.message.includes("birleşecek başka bir kayıttakiyle")) && !blocker?.message.includes("hedefteki"),
+      blocker?.message ?? "");
+    // Onay sayısı ÖNİZLEMEDEN: sabit sayı, terim sökülünce "önizleme bayat" 409'uyla sahte yeşil verirdi.
+    let code: unknown;
     try {
       await MasterDataMergeService.merge("customer", {
         survivorId: s,
         sourceIds: [k1, k2],
         reason: "kaynaklar arasi sube kodu cakismasi sondasi",
-        acknowledgedConflicts: 1,
+        acknowledgedConflicts: pv.conflicts.length,
       });
     } catch (e) {
-      status = (e as { statusCode?: number }).statusCode;
+      code = (e as { statusCode?: number; details?: { code?: unknown } }).details?.code;
     }
-    check("⑦d işlem 409 ile reddediyor (ham 23505/500 değil)", status === 409, String(status));
+    check("⑦d işlem BLOCK 409'uyla reddediyor (details.code, ham 23505/500 değil)", code === "MERGE_CONFLICT_BLOCKED", String(code));
   }
 
   // ⑦e GENİŞ ANAHTAR kaynaklar arasında yanlış BLOKLAMAMALI: `item_prices`in ürün kuralı
