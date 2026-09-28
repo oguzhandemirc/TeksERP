@@ -3,6 +3,7 @@ import { TypeToConfirm } from "@/components/forms/TypeToConfirm";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import type { MergePreview } from "@/services/mergeService";
+import { MergeShadowingList } from "./MergeShadowingList";
 
 /**
  * ONAY KAPISI — DÖRT KATMAN.
@@ -81,6 +82,8 @@ export function MergeConfirmGate({
           {w}
         </Callout>
       ))}
+
+      <MergeShadowingList rows={preview.shadowing ?? []} />
 
       <div>
         <h4 className="mb-2 text-sm font-medium">Taşınacak kayıtlar</h4>
