@@ -1,8 +1,8 @@
 # Backend `2.11.2`
 
-**Paket:** _(paketleme doldurur)_
-**SHA256:** _(paketleme doldurur)_
-**Commit:** _(paketleme doldurur)_
+**Paket:** `tekserp-backend-20260928_213101-72889f5a.zip`
+**SHA256:** `C758660D1DEA6B32C07E934679068A1096FD22DB1FB1634C7F7171EA1799C527`
+**Commit:** `72889f5a`
 **Önceki saha sürümü:** **2.10.0** (etiket `backend-v2.10.0` = `63b50d78`; SAHINSRV'de 2026-09-28 21:23 ölçüldü: `/health` 2.10.0 · `app\PAKET.json` 2.10.0 / 347 migration / commit `63b50d78` · `_prisma_migrations` 347 bitmiş, 0 sorunlu, son `20260924001000_roll_series_max_value` · pm2 `tekserp-backend-yeni` online, restart 0 · `company.name` ayar satırı YOK).
 
 **2.11.0 ve 2.11.1 sahaya hiç çıkmadı** — ikisi de yalnız test fabrikasına (thinkpad-1) prova paketi olarak kuruldu
@@ -168,3 +168,32 @@ düşerse Prisma o migration'ı FAILED işaretler — elle `resolve` YAPILMAZ, i
 - ölçülen kesinti
 - tablet yayılımı: `sessions.clientVersion` (MOBILE) dağılımı — kumaşa özel ad girilmeden önce her tablet
   1.0.12 olmalı (tasarım §7 ②; gözlemdir, sunucu kapısı değil)
+
+**Kurulum kaydı — 2026-09-28 (SAHINSRV, uzaktan SYSTEM görevi, vardiya yokken):**
+
+- Yöntem: paket `C:\TeksERP\guncelleme\`e scp; paketin `kur.ps1`/`uzaktan-kos.ps1`i `guncelleme\k2112\`ye
+  çıkarıldı (zip SHA256 tuttu); `C:\TeksERP\kur.ps1` pakettekiyle değişti (eski kopya
+  `guncelleme\kur.ps1.2.10.0-yedek`); görev `TeksERP-Uzaktan-20260928_213826`, log
+  `C:\TeksERP\logs\uzaktan-20260928_213826.log`, çıkış 0; görev kendini sildi.
+- `[1/9]`–`[9/9]` 21:38:26 → 21:41:12; `premigrate_20260928_213826.dump` (9,52 MB, doğrulandı); eski kurulum
+  `C:\TeksERP\app.eski-20260928_213826` (2.10.0). **API kesintisi ≤ 3 dk** (görev 21:38:26 → sağlık 21:41:12; API `[3/9]` yedeğinden sonra durdu,
+  yeni süreç 21:40:28'de kalktı).
+- `[7/9]` 16 migration uygulandı, "363 migrations found"; NOTICE/WARNING CLI'da görünmedi.
+- Sonra (21:42 ve 21:44, iki ölçüm): `/health` UP/UP 2.11.2 · pm2 `tekserp-backend-yeni` pid 205316 SYSTEM,
+  restart 0, iki ölçümde aynı · daemon pid 11944 değişmedi · `pm2-logrotate` yeniden kuruldu (restart 3,
+  test fabrikasındaki gibi) · `_prisma_migrations` 363 bitmiş / 0 sorunlu, son
+  `20260928133711_musteri_kumas_renk_adi` · 5 yeni tablo var, `customer_item_color_aliases` 0 satır ·
+  NOT VALID kısıt yalnız `rolls_qty_le_initial` (beklenen) · `company.name` = "Adnan Şahin Tekstil" (migration
+  yazdı), `login-methods` `companyName` kurulumdan önceki değerle aynı · yeni uçlar kimliksiz 401 ·
+  ecosystem sunucununki korundu (mDNS ilanı kurulum öncesi gibi açık) · boot uzlaştırması:
+  `mobile:is-emri-duzelt` izni + `ADMIN_FULL` şablonuna eklendi, numara serisi kataloğu 53 · `backend-err`
+  yalnız önceden de görülen pg `DeprecationWarning`.
+- ⑦ göçün "Tükenene kadar"a aldığı kartlar (10): STK-000003 · STK-000004 · STK-000005 · STK-000006 ·
+  STK-000012 · STK-000019 · STK-000031 · STK-000032 · STK-000093 · STK-000177 (adlarıyla liste 1e'nin
+  kurulum raporunda; fabrika verisi olduğu için belgeye yalnız kod). Ürün durumları: Aktif 140 · Tükenene kadar 10 · Pasif 115.
+- Kurulumun uyarısı (düzeltilmedi, kullanıcı kararı): `C:\TeksERP\backups` ve `C:\TeksERP\pg-setup`
+  `BUILTIN\Users` + `Authenticated Users`a açık — daraltma `ilk-kurulum.ps1` izin adımıyla.
+- **KOŞULMADI (kullanıcıda):** yayın günü araçları ③–⑥b (deneme dahil) ve ⑩ bayrağı.
+- Geri dönüş noktaları: kod `C:\TeksERP\app.eski-20260928_213826` (`kur.ps1 -GeriAl`) · veri
+  `C:\TeksERP\backups\premigrate_20260928_213826.dump`.
+- Aynı pencerede: tablet OTA 1.0.12 (21:2x, backend'den önce) ve panel 1.3.7 (22:09) `adnansahin` kanalında.
