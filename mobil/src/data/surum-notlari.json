@@ -53,6 +53,11 @@
           "kapsam": "tablet",
           "tip": "duzeltme",
           "metin": "Tambur etiket önizlemesinde müşteri adını “Bu müşteride hep” ile kalıcı düzeltirken, düzeltme artık o anda etikete basılan ada yazılır: kumaşa özel ad basılıyorsa o kumaşın adı güncellenir, müşterinin diğer kumaşlardaki renk adı değişmez. Yalnız değiştirdiğiniz alan kaydedilir; kumaş adını düzeltmek renk adını yazmaz. Etiket önizlemesi renk adının kumaşa özel olduğunu da gösterir. Bu tablet güncellemesi, kumaşa özel renk adı girilmeye başlanmadan önce bütün tabletlere yüklenmiş olmalıdır (eski tablet bu adı müşterinin genel renk adına yazabilir)."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Panel güncellemesi artık giriş ekranında da kurulur: yeni sürüm inince giriş ekranında “Güncelleme kurulacak” penceresi açılır, 15 saniye sonra (ya da “Şimdi kur”a basınca) kurulum başlar; Windows izin penceresinde “Evet” deyin. Önceden güncelleme yalnız giriş yaptıktan sonra kuruluyordu; giriş ekranında bekleyen bilgisayarlar güncellenmiyordu. Bu düzeltme bir sonraki güncellemeden itibaren geçerlidir: bu sürümü kurmak için bir kez giriş yapmanız gerekir."
         }
       ]
     },
