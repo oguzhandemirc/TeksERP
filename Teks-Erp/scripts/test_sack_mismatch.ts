@@ -22,6 +22,9 @@
 // §4 2. kalite → 🔴 (hedef müşteriden bağımsız)
 // §5 Müşterisiz çuval → etiket sinyali YOK (karşılaştırılacak hedef yok)
 // §6 Aynı müşteri → hiç sinyal yok
+// §8 KUMAŞA ÖZEL renk adı (MUSTERI-KUMAS-RENK-ADI §5 #9) — genel ad aynıyken
+//    kumaşa özel ad farkı 🔴; başka kumaşta sessiz. Sonda (ölçüldü, md5 geri
+//    alındı): `identityFor` kumaşı yok sayıp genel adı okursa §8 kırmızı.
 // =============================================================================
 import { RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -242,6 +245,41 @@ async function main(): Promise<void> {
       await prisma.customerTemplateRoute.deleteMany({ where: { id: route7.id } });
     }
 
+    // ── §8 KUMAŞA ÖZEL renk adı ─────────────────────────────────────────────
+    console.log("\n── §8 Kumaşa özel RENK ADI (müşteri × kumaş × renk) ──");
+    const [custD, custE] = await Promise.all([
+      prisma.customer.create({ data: { code: `TEST-MMD-${ts}`, name: `TEST D ${ts}` }, select: { id: true } }),
+      prisma.customer.create({ data: { code: `TEST-MME-${ts}`, name: `TEST E ${ts}` }, select: { id: true } }),
+    ]);
+    cleanup.customers.push(custD.id, custE.id);
+    for (const c of [custD.id, custE.id]) {
+      await prisma.customerColorAlias.create({ data: { customerId: c, colorId: color.id, alias: "ORTAK RENK" } });
+    }
+    const eIcin = await mkRoll("E8", custE.id);
+    const s8a = await detectSackMismatches([eIcin], custD.id);
+    check("genel renk adları aynı → 🔴 yok (yalnız bilgi)", !s8a.some((x) => x.severity === "warning"), kinds(s8a).join(","));
+    await prisma.customerItemColorAlias.create({
+      data: { customerId: custD.id, itemId: item.id, colorId: color.id, alias: "D BU KUMASTA" },
+    });
+    const s8b = await detectSackMismatches([eIcin], custD.id);
+    check("⭐ hedefin BU KUMAŞTA özel renk adı var → 🔴 (renk adı)",
+      /renk adı/.test(s8b.find((x) => x.kind === "LABEL_DIFFERS")?.message ?? ""), kinds(s8b).join(","));
+    const baskaKumas = await prisma.item.create({
+      data: { code: `TEST-MM2-${ts}`, name: `TEST Kumaş 2 ${ts}`, itemType: "FABRIC" },
+      select: { id: true },
+    });
+    cleanup.items.push(baskaKumas.id);
+    const eBaska = await prisma.roll.create({
+      data: {
+        barcode: `TEST-MM-E8B-${ts}`, itemId: baskaKumas.id, colorId: color.id, status: RollStatus.WAREHOUSE,
+        initialQty: 50, currentQty: 50, entrySource: "TAMBUR_SPLIT", labelCustomerId: custE.id,
+      },
+      select: { id: true, barcode: true, status: true, qualityGrade: true, itemId: true, colorId: true, labelCustomerId: true, lastLabelSnapshot: true },
+    });
+    cleanup.rolls.push(eBaska.id);
+    const s8c = await detectSackMismatches([eBaska], custD.id);
+    check("başka kumaşta kumaşa özel ad YOK → 🔴 yok (genel ad aynı)", !s8c.some((x) => x.severity === "warning"), kinds(s8c).join(","));
+
     // ── §6 AYNI müşteri ─────────────────────────────────────────────────────
     console.log("\n── §6 Aynı müşteri ──");
     const s6 = await detectSackMismatches([plain], custA.id);
@@ -254,6 +292,7 @@ async function main(): Promise<void> {
     await prisma.customerTemplateRoute.deleteMany({ where: { customerId: { in: cleanup.customers } } });
     await prisma.customerItemAlias.deleteMany({ where: { customerId: { in: cleanup.customers } } });
     await prisma.customerColorAlias.deleteMany({ where: { customerId: { in: cleanup.customers } } });
+    await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: cleanup.customers } } });
     await prisma.rollVariance.deleteMany({ where: { rollId: { in: cleanup.rolls } } });
     await prisma.roll.deleteMany({ where: { id: { in: cleanup.rolls } } });
     await prisma.item.deleteMany({ where: { id: { in: cleanup.items } } });

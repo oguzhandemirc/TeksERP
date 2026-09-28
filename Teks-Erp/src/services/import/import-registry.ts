@@ -23,6 +23,7 @@ import { fabricPropertyImportAdapter } from "./adapters/fabric-property.adapter"
 import { subcontractorCategoryImportAdapter } from "./adapters/subcontractor-category.adapter";
 import { subcontractorImportAdapter } from "./adapters/subcontractor.adapter";
 import { customerItemAliasImportAdapter, customerColorAliasImportAdapter } from "./adapters/customer-alias.adapter";
+import { customerItemColorAliasImportAdapter } from "./adapters/customer-item-color-alias.adapter";
 import { productRecipeImportAdapter } from "./adapters/product-recipe.adapter";
 import { routeImportAdapter } from "./adapters/route.adapter";
 import { orderImportAdapter } from "./adapters/order.adapter";
@@ -44,6 +45,7 @@ const ADAPTERS: ImportAdapter[] = [
   subcontractorImportAdapter,
   customerItemAliasImportAdapter,
   customerColorAliasImportAdapter,
+  customerItemColorAliasImportAdapter,
   productRecipeImportAdapter,
   routeImportAdapter,
   // — İşlem verisi (F4)

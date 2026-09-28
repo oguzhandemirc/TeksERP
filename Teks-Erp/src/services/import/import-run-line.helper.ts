@@ -69,9 +69,14 @@ export function buildImportRunLine(args: {
   recordId: string;
   row: PreparedRow;
   engineAction: "CREATE" | "UPDATE";
+  /** ③b pivotunda CREATE'in yazdığı kolonlar (`ImportAdapter.createdClaim`). */
+  createdClaim?: Record<string, unknown>;
 }): ImportRunLinePayload {
-  const { entity, tableName, recordId, row, engineAction } = args;
-  const changes = row.result.changes ?? {};
+  const { entity, tableName, recordId, row, engineAction, createdClaim } = args;
+  const changes =
+    engineAction === "CREATE" && createdClaim
+      ? Object.fromEntries(Object.entries(createdClaim).map(([k, v]) => [k, { from: null, to: v ?? null }]))
+      : (row.result.changes ?? {});
   const out: ImportRunLinePayload = {
     entity,
     tableName,

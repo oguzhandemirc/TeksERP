@@ -64,6 +64,7 @@ const ROUTE_FILE_FOR_SERVICE_ADAPTERS: Record<string, string> = {
   // `CustomerAliasService` upsert semantikli, kendi router'ı var.
   customerItemAlias: "customer-alias.routes.ts",
   customerColorAlias: "customer-alias.routes.ts",
+  customerItemColorAlias: "customer-alias.routes.ts",
   // Fason firma + kategori TEK router'da (subcontractorRouter / categoryRouter).
   subcontractor: "subcontractor-management.routes.ts",
   subcontractorCategory: "subcontractor-management.routes.ts",

@@ -25,11 +25,15 @@
 //   §7 ⭐ KİLİT SIRASI (ES değişmezi): `MERGE_MAP`te `swatch_stock_reductions`
 //      kuralı `swatches` kuralından ÖNCE gelir — kartela storno yolu da aynı
 //      sırada ilerliyor; ters sıra 40P01 üretirdi
-//   §8–§10 ⭐ ÜRETİLMİŞ KOLONLU TABLO: müşteri adı tabloları (`aliasFold`
+//   §8 ⭐ YENİ TABLO (customer_item_color_aliases, SKIP): çok kaynaklı birleştirme
+//      (survivor çakışması + kaynaklar arası çakışma + taşınan satır) geri alınınca
+//      her satır kendi kaynağına BİREBİR döner — üretilmiş kolon olmadığı için
+//      jenerik fotoğraflı geri yazım yeter (MUSTERI-KUMAS-RENK-ADI §4 "Geri alma").
+//   §9–§11 ⭐ ÜRETİLMİŞ KOLONLU TABLO: müşteri adı tabloları (`aliasFold`
 //      GENERATED ALWAYS … STORED) SKIP ile SİLİNEN ve MERGE_FIELDS ile
 //      ZENGİNLEŞEN satırı fotoğraftan geri yazar — müşteri, ürün, renk
 //      birleştirmesinin üçünde de (PG üretilmiş kolona değer yazılmasını reddeder)
-//   §11 ⭐ İKİ KAYNAK AYNI ANAHTARDA: ikinci kaynağın satırı ilkinin TAŞINMIŞ
+//   §12 ⭐ İKİ KAYNAK AYNI ANAHTARDA: ikinci kaynağın satırı ilkinin TAŞINMIŞ
 //      satırıyla çakışır (silinir/zenginleştirir); hedefin satırı iki kez
 //      zenginleşir. Geri alma, kalemlerin okunma sırasından bağımsız olarak
 //      üç kaydı da birleştirme öncesi hâline döndürür
@@ -293,16 +297,41 @@ async function main(): Promise<void> {
     );
   }
 
+  console.log("\n§8 Kumaşa özel renk adı: çok kaynaklı birleştir → geri al");
+  await kumasaOzelRenkAdiGeriAlma();
   await aliasRevertCases();
 }
 
+/** §8 — kumaşa özel renk adı: çok kaynaklı birleştir → geri al, her satır kendi kaynağına. */
+async function kumasaOzelRenkAdiGeriAlma(): Promise<void> {
+  const X = (await prisma.item.create({ data: { code: `${TAG}-IX`, name: `${TAG} KUMAS X`, itemType: "FABRIC" }, select: { id: true } })).id;
+  const Y = (await prisma.item.create({ data: { code: `${TAG}-IY`, name: `${TAG} KUMAS Y`, itemType: "FABRIC" }, select: { id: true } })).id;
+  const K = (await prisma.color.create({ data: { code: `${TAG}-K`, name: `${TAG} EKRU` }, select: { id: true } })).id;
+  itemIds.push(X, Y);
+  colorIds.push(K);
+  const s = await makeCustomer("ICA-H", `${TAG} ICA Hedef`);
+  const k1 = await makeCustomer("ICA-K1", `${TAG} ICA Kaynak 1`);
+  const k2 = await makeCustomer("ICA-K2", `${TAG} ICA Kaynak 2`);
+  const satirlar: Array<[string, string, string]> = [[s, X, "S-X"], [k1, X, "K1-X"], [k1, Y, "K1-Y"], [k2, Y, "K2-Y"]];
+  for (const [c, i, alias] of satirlar) await prisma.customerItemColorAlias.create({ data: { customerId: c, itemId: i, colorId: K, alias } });
+  const once = await prisma.customerItemColorAlias.findMany({ where: { customerId: { in: [s, k1, k2] } }, orderBy: { alias: "asc" } });
+  const pv = await MasterDataMergeService.preview("customer", s, [k1, k2]);
+  await MasterDataMergeService.merge("customer", { survivorId: s, sourceIds: [k1, k2], reason: "kumasa ozel ad geri alma sondasi", acknowledgedConflicts: pv.conflicts.length, userId: ADMIN });
+  const ara = await prisma.customerItemColorAlias.findMany({ where: { customerId: s }, select: { alias: true }, orderBy: { alias: "asc" } });
+  check("§8a birleştirme: survivor'da S-X (korundu) + K1-Y (taşındı), K2-Y atıldı", ara.map((r) => r.alias).join(",") === "K1-Y,S-X", ara.map((r) => r.alias).join(","));
+  await MasterDataUnmergeService.revert(await latestOperation(s), { reason: "kumasa ozel ad geri alma sondasi", userId: ADMIN });
+  const sonra = await prisma.customerItemColorAlias.findMany({ where: { customerId: { in: [s, k1, k2] } }, orderBy: { alias: "asc" } });
+  const iz = (rs: typeof once) => rs.map((r) => `${r.id}|${r.customerId}|${r.itemId}|${r.alias}|${r.createdAt.toISOString()}`).join("\n");
+  check("§8b ⭐ geri alma: dört satır kendi kaynağına BİREBİR döndü (id + anahtar + ad + tarih)", iz(once) === iz(sonra), `${once.length} → ${sonra.length}`);
+}
+
 /**
- * §8–§10 — müşteri adı tabloları (`aliasFold` üretilmiş kolon). Kaynak ve hedefte
+ * §9–§11 — müşteri adı tabloları (`aliasFold` üretilmiş kolon). Kaynak ve hedefte
  * aynı anahtar varsa SKIP (ürün adı) kaynağınkini SİLER, MERGE_FIELDS (renk adı)
  * hedefinkini ZENGİNLEŞTİRİP kaynağınkini siler; geri alma ikisini de fotoğraftan yazar.
  */
 async function aliasRevertCases(): Promise<void> {
-  // §8 — MÜŞTERİ birleştirmesi: iki alias tablosu, çakışan + çakışmayan satır
+  // §9 — MÜŞTERİ birleştirmesi: iki alias tablosu, çakışan + çakışmayan satır
   const custS = await makeCustomer("AL-H", `${TAG} Adlı Hedef`);
   const custK = await makeCustomer("AL-K", `${TAG} Adlı Kaynak`);
   const i1 = await makeItem("AL-I1");
@@ -327,36 +356,36 @@ async function aliasRevertCases(): Promise<void> {
   const custOp = await mergeEntity("customer", custS, [custK], 2, "müşteri adlı iki kayıt birleştiriliyor (alias sondası)");
   const merged = await colorAliasRow(custS, c1);
   check(
-    "§8a Zemin: birleştirme SKIP silmesi + MERGE_FIELDS zenginleştirmesi yaptı",
+    "§9a Zemin: birleştirme SKIP silmesi + MERGE_FIELDS zenginleştirmesi yaptı",
     (await itemAliasRow(custK, i1)) === null && merged?.assigned === true && merged.alias === "Kaynak Işık",
     JSON.stringify(merged),
   );
   const custErr = await tryRevert(custOp, "müşteri adlı birleştirme geri alınıyor");
-  check("§8b ⭐ Üretilmiş kolonlu tablolarla müşteri birleştirmesi GERİ ALINIYOR", custErr === null, custErr ?? "");
+  check("§9b ⭐ Üretilmiş kolonlu tablolarla müşteri birleştirmesi GERİ ALINIYOR", custErr === null, custErr ?? "");
   const kI1 = await itemAliasRow(custK, i1);
   const kI2 = await itemAliasRow(custK, i2);
   const sI1 = await itemAliasRow(custS, i1);
   check(
-    "§8c ⭐ SKIP ile silinen ürün adı fotoğraftan döndü, aliasFold DB'ce yeniden üretildi",
+    "§9c ⭐ SKIP ile silinen ürün adı fotoğraftan döndü, aliasFold DB'ce yeniden üretildi",
     kI1?.alias === "Kaynak Şile" && kI1.aliasFold != null && kI1.aliasFold === foldBefore && sI1?.alias === "HEDEF KUMAŞ ADI",
     JSON.stringify({ kI1, sI1, foldBefore }),
   );
-  check("§8d Taşınan (çakışmasız) ürün adı kaynağına döndü", kI2?.alias === "Kaynak Çözgü", JSON.stringify(kI2));
+  check("§9d Taşınan (çakışmasız) ürün adı kaynağına döndü", kI2?.alias === "Kaynak Çözgü", JSON.stringify(kI2));
   const sC1 = await colorAliasRow(custS, c1);
   const kC1 = await colorAliasRow(custK, c1);
   const kC2 = await colorAliasRow(custK, c2);
   check(
-    "§8e ⭐ MERGE_FIELDS zenginleştirmesi fotoğrafa döndü (hedef: atanmamış + adsız, aliasFold NULL)",
+    "§9e ⭐ MERGE_FIELDS zenginleştirmesi fotoğrafa döndü (hedef: atanmamış + adsız, aliasFold NULL)",
     sC1?.assigned === false && sC1.alias === null && sC1.aliasFold === null,
     JSON.stringify(sC1),
   );
   check(
-    "§8f ⭐ MERGE_FIELDS ile silinen kaynak renk adı döndü (aliasFold dolu)",
+    "§9f ⭐ MERGE_FIELDS ile silinen kaynak renk adı döndü (aliasFold dolu)",
     kC1?.assigned === true && kC1.alias === "Kaynak Işık" && kC1.aliasFold != null && kC2?.alias === "Kaynak Gök",
     JSON.stringify({ kC1, kC2 }),
   );
 
-  // §9 — ÜRÜN birleştirmesi: aynı müşteri iki karta da ad vermiş (SKIP)
+  // §10 — ÜRÜN birleştirmesi: aynı müşteri iki karta da ad vermiş (SKIP)
   const cust = await makeCustomer("AL-M", `${TAG} Adlı Müşteri`);
   const itemS = await makeItem("AL-IS");
   const itemK = await makeItem("AL-IK");
@@ -369,14 +398,14 @@ async function aliasRevertCases(): Promise<void> {
   const itemOp = await mergeEntity("item", itemS, [itemK], 1, "aynı kumaşın iki kartı birleştiriliyor (alias sondası)");
   const itemErr = await tryRevert(itemOp, "kumaş birleştirmesi geri alınıyor");
   const back = await itemAliasRow(cust, itemK);
-  check("§9a ⭐ Üretilmiş kolonlu tabloyla ürün birleştirmesi GERİ ALINIYOR", itemErr === null, itemErr ?? "");
+  check("§10a ⭐ Üretilmiş kolonlu tabloyla ürün birleştirmesi GERİ ALINIYOR", itemErr === null, itemErr ?? "");
   check(
-    "§9b ⭐ Silinen ürün adı kaynak karta döndü (aliasFold dolu)",
+    "§10b ⭐ Silinen ürün adı kaynak karta döndü (aliasFold dolu)",
     back?.alias === "Kaynak Kart Adı" && back.aliasFold != null,
     JSON.stringify(back),
   );
 
-  // §10 — RENK birleştirmesi: aynı müşteri iki renge de ad vermiş (MERGE_FIELDS)
+  // §11 — RENK birleştirmesi: aynı müşteri iki renge de ad vermiş (MERGE_FIELDS)
   const colS = await makeColor("AL-CS");
   const colK = await makeColor("AL-CK");
   await prisma.customerColorAlias.createMany({
@@ -389,9 +418,9 @@ async function aliasRevertCases(): Promise<void> {
   const colErr = await tryRevert(colOp, "renk birleştirmesi geri alınıyor");
   const colSurv = await colorAliasRow(cust, colS);
   const colBack = await colorAliasRow(cust, colK);
-  check("§10a ⭐ Üretilmiş kolonlu tabloyla renk birleştirmesi GERİ ALINIYOR", colErr === null, colErr ?? "");
+  check("§11a ⭐ Üretilmiş kolonlu tabloyla renk birleştirmesi GERİ ALINIYOR", colErr === null, colErr ?? "");
   check(
-    "§10b ⭐ Hedef renk adı fotoğrafa, kaynak renk adı kaynağa döndü",
+    "§11b ⭐ Hedef renk adı fotoğrafa, kaynak renk adı kaynağa döndü",
     colSurv?.assigned === false && colSurv.alias === null && colBack?.assigned === true && colBack.alias === "Kaynak Renk Adı" && colBack.aliasFold != null,
     JSON.stringify({ colSurv, colBack }),
   );
@@ -399,7 +428,7 @@ async function aliasRevertCases(): Promise<void> {
   await multiSourceRevertCase();
 }
 
-/** §11 — iki kaynak aynı (müşteri, kumaş/renk) anahtarında; hedefin satırı iki kez zenginleşir. */
+/** §12 — iki kaynak aynı (müşteri, kumaş/renk) anahtarında; hedefin satırı iki kez zenginleşir. */
 async function multiSourceRevertCase(): Promise<void> {
   const s = await makeCustomer("MK-H", `${TAG} Çok Kaynak Hedef`);
   const k1 = await makeCustomer("MK-K1", `${TAG} Çok Kaynak Bir`);
@@ -427,12 +456,12 @@ async function multiSourceRevertCase(): Promise<void> {
   const opId = await mergeEntity("customer", s, [k1, k2], 2, "iki kaynak aynı anahtarlarda birleştiriliyor (çok kaynak)");
   const mid = await colorAliasRow(s, cSurv);
   check(
-    "§11a Zemin: hedef satırı iki kaynaktan zenginleşti",
+    "§12a Zemin: hedef satırı iki kaynaktan zenginleşti",
     mid?.assigned === true && mid.alias === "İki Hedef Rengi",
     JSON.stringify(mid),
   );
   const err = await tryRevert(opId, "çok kaynaklı birleştirme geri alınıyor");
-  check("§11b ⭐ Çok kaynaklı birleştirme GERİ ALINIYOR", err === null, err ?? "");
+  check("§12b ⭐ Çok kaynaklı birleştirme GERİ ALINIYOR", err === null, err ?? "");
   const got = {
     k1Item: (await itemAliasRow(k1, item))?.alias,
     k2Item: (await itemAliasRow(k2, item))?.alias,
@@ -445,18 +474,18 @@ async function multiSourceRevertCase(): Promise<void> {
     k2Surv: await colorAliasRow(k2, cSurv),
   };
   check(
-    "§11c ⭐ Ürün adı iki kaynağa da döndü, hedefte kalmadı",
+    "§12c ⭐ Ürün adı iki kaynağa da döndü, hedefte kalmadı",
     got.k1Item === "Bir Kumaş" && got.k2Item === "İki Kumaş" && got.sItem === null,
     JSON.stringify({ k1: got.k1Item, k2: got.k2Item, s: got.sItem }),
   );
   check(
-    "§11d ⭐ Taşınıp zenginleşen satır İLK kaynağına ve asıl alanlarına döndü",
+    "§12d ⭐ Taşınıp zenginleşen satır İLK kaynağına ve asıl alanlarına döndü",
     got.k1Shared?.assigned === false && got.k1Shared.alias === null &&
       got.k2Shared?.assigned === true && got.k2Shared.alias === "İki Renk" && got.sShared === null,
     JSON.stringify({ k1: got.k1Shared, k2: got.k2Shared, s: got.sShared }),
   );
   check(
-    "§11e ⭐ İki kez zenginleşen hedef satırı birleştirme ÖNCESİ hâline döndü",
+    "§12e ⭐ İki kez zenginleşen hedef satırı birleştirme ÖNCESİ hâline döndü",
     got.sSurv?.assigned === false && got.sSurv.alias === null &&
       got.k1Surv?.assigned === true && got.k1Surv.alias === null &&
       got.k2Surv?.assigned === false && got.k2Surv.alias === "İki Hedef Rengi",
@@ -485,6 +514,7 @@ async function cleanup(): Promise<void> {
       await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     }
     if (customerIds.length) {
+      await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: customerIds } } });
       await prisma.cariAccount.deleteMany({ where: { customerId: { in: customerIds } } });
       await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
     }

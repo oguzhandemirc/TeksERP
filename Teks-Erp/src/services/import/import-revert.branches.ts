@@ -156,19 +156,41 @@ async function deactivate(
   return { detail: { action: "DEACTIVATE" } };
 }
 
-/** ③b: yalnız koşumun yarattığı alias satırı, yalnız `assigned:false` ise (§8.2a). */
+/**
+ * ③b pivot CREATE satırının claim'i: koşumun YAZDIĞI kolonlar (`changedFields[k].to`).
+ * `null` → defter yazılan değeri taşımıyor (claim'li yazımdan önceki koşum); o satır
+ * silinmez, çünkü "sonradan değişti mi" sorusu sorulamaz (fail-closed).
+ */
+export function pivotClaimOf(line: { changedFields: unknown }): Record<string, unknown> | null {
+  const cf = line.changedFields as Record<string, { from: unknown; to: unknown }> | null;
+  if (!cf || Object.keys(cf).length === 0) return null;
+  return Object.fromEntries(Object.entries(cf).map(([k, pair]) => [k, fromJson(pair.to)]));
+}
+
+export const PIVOT_LEGACY_SKIP =
+  "Eski koşum satırı: içe aktarımın yazdığı değer defterde yok — satır silinmedi, gerekiyorsa panelden kaldırın";
+
+/** Önizlemenin claim ikizi: claim'den sapan kolonlar (boş = claim tutar). */
+export function pivotClaimDrift(claim: Record<string, unknown>, rec: Record<string, unknown>): string[] {
+  return Object.keys(claim).filter((k) => String(rec[k] ?? "") !== String(claim[k] ?? ""));
+}
+
+/** ③b: yalnız koşumun yarattığı satır, yalnız yazdığı değerler hâlâ yerindeyse (defter.md). */
 async function deletePivot(
   tx: Prisma.TransactionClient,
   model: string,
   line: RevertLine,
 ): Promise<BranchOutcome> {
-  const where: Record<string, unknown> =
-    line.entity === "customerColorAlias"
-      ? { id: line.recordId, assigned: false }
-      : { id: line.recordId };
+  const claimed = pivotClaimOf(line);
+  if (!claimed) return { skipReason: PIVOT_LEGACY_SKIP };
+  const where: Record<string, unknown> = { ...claimed, id: line.recordId };
+  // Müşteriye ÖZEL atanmış renk satırı import tarafından yaratılmış OLAMAZ (§8.2a).
+  if (line.entity === "customerColorAlias") where.assigned = false;
   const claim = await delegateOf(tx, model).deleteMany({ where });
   if (claim.count === 0) {
-    return { skipReason: "Satır silinemedi (müşteriye özel atanmış ya da bulunamadı)" };
+    return {
+      skipReason: "Satır silinemedi (içe aktarımdan sonra değişti/taşındı, müşteriye özel atandı ya da bulunamadı)",
+    };
   }
   return { detail: { action: "DELETE_PIVOT" } };
 }

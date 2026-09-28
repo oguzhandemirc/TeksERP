@@ -83,7 +83,7 @@ import {
 // "Müşterideki ad" zinciri (2026-09-04) — etiketle AYNI cascade, tek kaynak.
 import { loadShipmentCustomerNames } from "./helpers/shipment-customer-name.helper";
 import { loadCustomerNamePolicy } from "./helpers/quality-role.helper";
-import { batchLoadAliases, batchLoadAliasesMulti, resolveName } from "./helpers/customer-name.helper";
+import { batchLoadAliases, batchLoadAliasesMulti, colorScopeOf, resolveName } from "./helpers/customer-name.helper";
 import { specMatch } from "./helpers/allocation.helper";
 import {
   resolveOrderCoverage,
@@ -4830,11 +4830,11 @@ export class ShippingService {
     // "türetilmiş alan / ayrışan yüzey" sınıfıdır; tek kaynak `customer-name.helper`.
     // Maliyet: müşteri başına 2 sorgu (`batchLoadAliases`), satır başına DEĞİL.
     const siparisKalemleri = shipment.orders.flatMap((so) => so.order.lines);
-    const { itemAliasByItemId, colorAliasByColorId } = await batchLoadAliases(
+    const { itemAliasByItemId, colors } = await batchLoadAliases(
       prisma,
       shipment.customer.id,
       siparisKalemleri.map((l) => l.itemId),
-      siparisKalemleri.map((l) => l.colorId).filter((c): c is string => !!c),
+      siparisKalemleri.map((l) => l.colorId),
     );
 
     const orders = shipment.orders.map((so) => ({
@@ -4849,11 +4849,8 @@ export class ShippingService {
         // DEFAULT'a düşerse (bizim adımız) alan null kalır — arayüz "(Müşteride: X)"
         // etiketini bizim adımızla basıp kullanıcıya sahte bir karşılık göstermesin.
         const musteriKumas = resolveName(l.customerItemName, itemAliasByItemId.get(l.itemId), "");
-        const musteriRenk = resolveName(
-          l.customerColorName,
-          l.colorId ? colorAliasByColorId.get(l.colorId) : null,
-          "",
-        );
+        const renkMaster = colors.master(shipment.customer.id, l.itemId, l.colorId);
+        const musteriRenk = resolveName(l.customerColorName, renkMaster?.alias, "");
         return {
           lineId: l.id,
           item: l.item,
@@ -4861,6 +4858,7 @@ export class ShippingService {
           width: l.width,
           customerItemName: musteriKumas.source === "DEFAULT" ? null : musteriKumas.name,
           customerColorName: musteriRenk.source === "DEFAULT" ? null : musteriRenk.name,
+          colorNameScope: colorScopeOf(musteriRenk, renkMaster),
           requested,
           shipped,
           openQty: requested.minus(shipped),
@@ -5416,11 +5414,11 @@ export class ShippingService {
     // master alias > yok. Bu uç `customerId`siz de çağrılabildiği için alias'lar
     // müşteri BAŞINA döngüyle değil, (customerId, itemId) çiftleriyle TEK sorgu
     // çiftinde çekilir — kaç müşteri olursa olsun 2 gidiş-dönüş.
-    const { itemAlias: kumasAlias, colorAlias: renkAlias } = await batchLoadAliasesMulti(
+    const { itemAlias: kumasAlias, colors } = await batchLoadAliasesMulti(
       prisma,
       orders.map((o) => o.customer.id),
       orders.flatMap((o) => o.lines.map((l) => l.itemId)),
-      orders.flatMap((o) => o.lines.map((l) => l.colorId)).filter((c): c is string => !!c),
+      orders.flatMap((o) => o.lines.map((l) => l.colorId)),
     );
 
     const data = orders.map((o) => ({
@@ -5432,15 +5430,13 @@ export class ShippingService {
         const fromWarehouse = specAvail(l);
         // DEFAULT'a düşerse null — arayüz bizim adımızı "müşterideki ad" diye basmasın.
         const musteriKumas = resolveName(l.customerItemName, kumasAlias.get(`${o.customer.id}:${l.itemId}`), "");
-        const musteriRenk = resolveName(
-          l.customerColorName,
-          l.colorId ? renkAlias.get(`${o.customer.id}:${l.colorId}`) : null,
-          "",
-        );
+        const renkMaster = colors.master(o.customer.id, l.itemId, l.colorId);
+        const musteriRenk = resolveName(l.customerColorName, renkMaster?.alias, "");
         return {
           lineId: l.id, item: l.item, color: l.color, width: l.width,
           customerItemName: musteriKumas.source === "DEFAULT" ? null : musteriKumas.name,
           customerColorName: musteriRenk.source === "DEFAULT" ? null : musteriRenk.name,
+          colorNameScope: colorScopeOf(musteriRenk, renkMaster),
           requested, shipped, openQty, warehouseAvailable: fromWarehouse,
           covered: openQty.lessThanOrEqualTo(0) || fromWarehouse.greaterThanOrEqualTo(openQty),
         };
@@ -5669,7 +5665,7 @@ async function collectShipmentDocContent(
       // bırakırdı (grup `customerName`ini İLK top kurar).
       const rollSkips = namePolicy.skips(r.qualityGradeId, r.qualityGrade);
       const ci = rollSkips ? null : customerNames.itemName(r.itemId, r.colorId);
-      const cc = rollSkips ? null : customerNames.colorName(r.colorId);
+      const cc = rollSkips ? null : customerNames.colorName(r.itemId, r.colorId);
       const custName =
         ci || cc
           ? [ci ?? r.item.name, cc ?? r.color?.name ?? "", widthStr].filter(Boolean).join(" ")
@@ -5719,7 +5715,7 @@ async function collectShipmentDocContent(
   const cekiRows = sacksGross.flatMap((sk) =>
     sk.rolls.map((r, idx) => {
       const skips = namePolicy.skips(r.qualityGradeId, r.qualityGrade);
-      return { rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? null, packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null, packingGroupCode: sk.packingGroup?.code ?? null, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null };
+      return { rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? null, packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null, packingGroupCode: sk.packingGroup?.code ?? null, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.itemId, r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null };
     })
   );
 

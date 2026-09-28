@@ -42,6 +42,7 @@ export const TABLE_LABELS: Record<string, string> = {
   CUSTOMER_BRANCH: "Müşteri Şubesi",
   CUSTOMER_ITEM_ALIAS: "Müşteri Kumaş Kodu",
   CUSTOMER_COLOR_ALIAS: "Müşteri Renk Kodu",
+  CUSTOMER_ITEM_COLOR_ALIAS: "Müşteri Kumaşa Özel Renk Adı",
   STATION: "İstasyon",
   STATION_CAPABILITY: "İstasyon Yeteneği",
   MACHINE: "Makine",

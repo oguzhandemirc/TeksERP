@@ -81,6 +81,7 @@ import { assertColorsAssignableToCustomer } from "./helpers/color-assignment.hel
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
 import { CustomerAliasService } from "./customer-alias.service";
+import { colorScopeOf, loadCustomerColorIndex, resolveName } from "./helpers/customer-name.helper";
 import {
   applyDateRange,
   buildOrderByClause,
@@ -339,6 +340,18 @@ function siparisSatirIzi(satirlar: ReadonlyArray<SiparisSatiri>): string {
   const d3 = (v: unknown) => (v == null || v === "" ? "" : new Prisma.Decimal(v as Prisma.Decimal.Value).toFixed(3));
   return satirlar.map((l) => `${l.itemId}|${l.colorId ?? ""}|${d3(l.width)}|${d3(l.quantity)}`).sort().join(";");
 }
+
+/** Detay yanıtının renk adı çözümüne giren parçası (defaultInclude şekli). */
+type OrderWithLines = {
+  customerId: string;
+  lines?: Array<{
+    itemId: string;
+    colorId: string | null;
+    customerColorName: string | null;
+    resolvedCustomerColorName?: string | null;
+    colorNameScope?: string | null;
+  }>;
+};
 
 export class OrderService extends BaseService {
   private aliasService = new CustomerAliasService();
@@ -732,6 +745,11 @@ export class OrderService extends BaseService {
    * tek-seferlik override'dır (frontend alanı master varken kilitler; "Override
    * Et" onayıyla farklı ad girilebilir). Master'ı ezmek o ayrımı bozar.
    *
+   * Renkte ikinci kapı (MUSTERI-KUMAS-RENK-ADI karar 2): o müşteri + kumaş + renk
+   * için KUMAŞA ÖZEL ad varsa satırdaki ad o kumaşın bağlamıdır — genel ada
+   * terfi edilmez; yoksa X'in adı kumaşa özel adı olmayan bütün kumaşlara sızardı.
+   * Kumaşa özel ad yalnız elle girilir, terfi onu yazmaz.
+   *
    * Best-effort: sipariş zaten commit edilmiştir, alias kaydı yan-etkidir.
    * Terfi sırasında bir hata olursa (örn. ürün/renk pasifleştirilmiş) sipariş
    * kaydı bozulmamalı — hata satır bazında yutulur.
@@ -750,6 +768,13 @@ export class OrderService extends BaseService {
     // dahil) item/color terfi edilir; mevcut satır korunur, ilk-dolu-ad kazanır.
     const itemNameById = new Map<string, string>();
     const colorNameById = new Map<string, string>();
+    let kumasaOzel: Set<string>;
+    try {
+      kumasaOzel = await this.kumasaOzelRenkCiftleri(customerId, lines);
+    } catch (e) {
+      hata("order", "kumaşa özel renk adı varlık-okuması başarısız:", e);
+      return;
+    }
     for (const line of lines) {
       const itemId = typeof line.itemId === "string" ? line.itemId : null;
       const colorId = typeof line.colorId === "string" ? line.colorId : null;
@@ -760,7 +785,8 @@ export class OrderService extends BaseService {
       if (itemId && itemName.length > 0 && !itemNameById.has(itemId)) {
         itemNameById.set(itemId, itemName);
       }
-      if (colorId && colorName.length > 0 && !colorNameById.has(colorId)) {
+      const ozel = itemId && colorId && kumasaOzel.has(`${itemId}|${colorId}`);
+      if (colorId && colorName.length > 0 && !ozel && !colorNameById.has(colorId)) {
         colorNameById.set(colorId, colorName);
       }
     }
@@ -813,6 +839,22 @@ export class OrderService extends BaseService {
         hata("order", "müşteri-renk alias terfisi başarısız:", e);
       }
     }
+  }
+
+  /** Satırlardaki (kumaş, renk) çiftlerinden bu müşteri için KUMAŞA ÖZEL renk adı olanlar. */
+  private async kumasaOzelRenkCiftleri(
+    customerId: string,
+    lines: Array<Record<string, unknown>>,
+  ): Promise<Set<string>> {
+    const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+    const itemIds = [...new Set(lines.map((l) => str(l.itemId)).filter((x): x is string => !!x))];
+    const colorIds = [...new Set(lines.map((l) => str(l.colorId)).filter((x): x is string => !!x))];
+    if (itemIds.length === 0 || colorIds.length === 0) return new Set();
+    const rows = await prisma.customerItemColorAlias.findMany({
+      where: { customerId, itemId: { in: itemIds }, colorId: { in: colorIds } },
+      select: { itemId: true, colorId: true },
+    });
+    return new Set(rows.map((r) => `${r.itemId}|${r.colorId}`));
   }
 
   /**
@@ -1810,9 +1852,35 @@ export class OrderService extends BaseService {
    *     (terminal — hep sevk edilmiş sayılır). Legacy directShipmentId=null → tek toplu satır.
    * Bilgilendirici snapshot (sevk muhasebesini değiştirmez).
    */
-  /** Detay: MT-dışı aktif satır varsa `warnings` ile "karşılama ölçülmüyor". */
-  async findById(id: string): Promise<ApiResponse<unknown>> {
-    return this.withUnitWarnings(await super.findById(id));
+  /**
+   * Detay: MT-dışı aktif satır varsa `warnings` ile "karşılama ölçülmüyor".
+   * Satırlara `resolvedCustomerColorName` + `colorNameScope` eklenir (tek çözücü).
+   * İzin fail-closed: `customer-alias:read` yoksa ana veri kademesi TAŞINMAZ.
+   */
+  async findById(id: string, opts?: { canReadCustomerAliases?: boolean }): Promise<ApiResponse<unknown>> {
+    const res = await super.findById(id);
+    if (res.success && res.data) {
+      await this.withResolvedColorNames(res.data as OrderWithLines, opts?.canReadCustomerAliases === true);
+    }
+    return this.withUnitWarnings(res);
+  }
+
+  /** Satır adı → kumaşa özel → genel; `DEFAULT`a düşerse null (bizim ad dönmez). */
+  private async withResolvedColorNames(order: OrderWithLines, withMaster: boolean): Promise<void> {
+    const lines = order.lines ?? [];
+    const colors = withMaster
+      ? await loadCustomerColorIndex(prisma, {
+          customerIds: [order.customerId],
+          itemIds: lines.map((l) => l.itemId),
+          colorIds: lines.map((l) => l.colorId),
+        })
+      : null;
+    for (const l of lines) {
+      const master = colors?.master(order.customerId, l.itemId, l.colorId) ?? null;
+      const r = resolveName(l.customerColorName, master?.alias, "");
+      l.resolvedCustomerColorName = r.source === "DEFAULT" ? null : r.name;
+      l.colorNameScope = colorScopeOf(r, master);
+    }
   }
 
   async getOrderShipments(orderId: string): Promise<ApiResponse<OrderShipmentsResult>> {

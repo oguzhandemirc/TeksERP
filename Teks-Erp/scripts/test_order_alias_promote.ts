@@ -5,6 +5,11 @@
 // OrderService.create → promoteCustomerAliases: satır-bazlı 2N findUnique yerine
 // benzersiz item/color için TEK varlık-okuması + yalnız eksik olanları upsert.
 // Davranış birebir: terfi olur; dedup (ilk-dolu-ad kazanır); mevcut alias EZİLMEZ.
+//
+// C) KUMAŞA ÖZEL AD VARKEN GENELE TERFİ YOK (MUSTERI-KUMAS-RENK-ADI karar 2):
+//    o müşteri + kumaş + renk için kumaşa özel ad varsa satırdaki renk adı o kumaşın
+//    bağlamıdır; genel ada yazılsa kumaşa özel adı olmayan bütün kumaşlara sızardı.
+//    Sonda (ölçüldü, md5 geri alındı): `!ozel &&` koşulu kaldırılınca C1+C2 kırmızı.
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
@@ -30,6 +35,7 @@ const orders = new OrderService({ modelName: "order", tableName: "ORDER", nested
 let ITEM = "",
   ADMIN = "",
   CUST = "";
+const ozelIds: { items: string[]; color: string } = { items: [], color: "" };
 const orderIds: string[] = [];
 const stamp = Date.now().toString().slice(-7);
 
@@ -46,6 +52,32 @@ async function mkOrder(lines: Record<string, unknown>[]): Promise<void> {
   );
   const id = (res.data as { id?: string } | null)?.id;
   if (id) orderIds.push(id);
+}
+
+const genelRenk = () =>
+  prisma.customerColorAlias.findUnique({ where: { customerId_colorId: { customerId: CUST, colorId: ozelIds.color } }, select: { alias: true } });
+
+async function kumasaOzelTerfi(): Promise<void> {
+  console.log("\n=== C) kumaşa özel ad varken genele terfi yok ===");
+  for (const k of ["X", "Y"]) {
+    const it = await prisma.item.create({ data: { code: `TST-ALIAS-I${k}-${stamp}`, name: `TST ALIAS KUMAS ${k} ${stamp}`, itemType: "FABRIC" }, select: { id: true } });
+    ozelIds.items.push(it.id);
+  }
+  ozelIds.color = (await prisma.color.create({ data: { code: `TST-ALIAS-K-${stamp}`, name: `TST ALIAS EKRU ${stamp}` }, select: { id: true } })).id;
+  const [X, Y] = ozelIds.items;
+  await prisma.customerItemColorAlias.create({ data: { customerId: CUST, itemId: X, colorId: ozelIds.color, alias: "X-OZEL" } });
+
+  await mkOrder([{ itemId: X, colorId: ozelIds.color, width: 150, quantity: 10, customerColorName: "SATIR-X" }]);
+  check("C1 ⭐ kumaşa özel adı olan kumaşın satır adı GENELE terfi edilmedi", (await genelRenk()) === null, (await genelRenk())?.alias ?? "yok");
+
+  await mkOrder([
+    { itemId: X, colorId: ozelIds.color, width: 150, quantity: 10, customerColorName: "SATIR-X2" },
+    { itemId: Y, colorId: ozelIds.color, width: 150, quantity: 10, customerColorName: "SATIR-Y" },
+  ]);
+  check("C2 ⭐ aynı renkte kumaşa özel adı OLMAYAN kumaşın adı terfi eder (bugünkü kural)",
+    (await genelRenk())?.alias === "SATIR-Y", (await genelRenk())?.alias ?? "yok");
+  const ozel = await prisma.customerItemColorAlias.findFirst({ where: { customerId: CUST, itemId: X }, select: { alias: true } });
+  check("C3 terfi kumaşa özel adı YAZMAZ (yalnız elle girilir)", ozel?.alias === "X-OZEL", ozel?.alias ?? "yok");
 }
 
 async function main(): Promise<void> {
@@ -69,13 +101,18 @@ async function main(): Promise<void> {
     // B) aynı müşteri+item, yeni ad → MEVCUT alias EZİLMEZ (existing → skip)
     await mkOrder([{ itemId: ITEM, width: 150, quantity: 30, customerItemName: "NEW-NAME" }]);
     check("mevcut item alias ezilmedi", (await itemAlias(ITEM))?.alias === "MUST-PATOS", (await itemAlias(ITEM))?.alias ?? "yok");
+
+    await kumasaOzelTerfi();
   } finally {
     const lines = await prisma.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
     await prisma.orderLine.deleteMany({ where: { id: { in: lines.map((l) => l.id) } } });
     await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     await prisma.customerItemAlias.deleteMany({ where: { customerId: CUST } });
     await prisma.customerColorAlias.deleteMany({ where: { customerId: CUST } });
+    await prisma.customerItemColorAlias.deleteMany({ where: { customerId: CUST } });
     await prisma.customer.deleteMany({ where: { id: CUST } });
+    if (ozelIds.items.length) await prisma.item.deleteMany({ where: { id: { in: ozelIds.items } } });
+    if (ozelIds.color) await prisma.color.deleteMany({ where: { id: ozelIds.color } });
     console.log("(test verisi temizlendi)");
   }
 

@@ -12,13 +12,21 @@ import { matchesPermission } from "../../middlewares/rbac.middleware";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { getImportAdapter } from "./import-registry";
-import { delegateOf, revertOneLine, type RevertAuditEntry, type RevertMode } from "./import-revert.branches";
+import {
+  delegateOf,
+  PIVOT_LEGACY_SKIP,
+  pivotClaimDrift,
+  pivotClaimOf,
+  revertOneLine,
+  type RevertAuditEntry,
+  type RevertMode,
+} from "./import-revert.branches";
 import type { ImportAdapter } from "./import.types";
 
 /**
- * 17 varlık × ters yol. `hardDeleteForbidden`: fiziksel silme REDDEDİLMEZ ama canlı
+ * 18 varlık × ters yol. `hardDeleteForbidden`: fiziksel silme REDDEDİLMEZ ama canlı
  * belgeleri sessizce null'lar/cascade'ler ⇒ geri sarma YALNIZ pasife alır (§8.2).
- * İki alias pivotu soft-delete kolonu taşımıyor ⇒ ③b sınıfı fiziksel silme (§8.2a).
+ * Üç müşteri adı pivotu soft-delete kolonu taşımıyor ⇒ ③b sınıfı fiziksel silme (§8.2a).
  */
 export const REVERT_PLAN: Record<string, { model: string; mode: RevertMode; hardDeleteForbidden?: boolean }> = {
   item: { model: "item", mode: "DEACTIVATE" },
@@ -35,6 +43,7 @@ export const REVERT_PLAN: Record<string, { model: string; mode: RevertMode; hard
   subcontractor: { model: "subcontractor", mode: "DEACTIVATE" },
   customerItemAlias: { model: "customerItemAlias", mode: "DELETE_PIVOT" },
   customerColorAlias: { model: "customerColorAlias", mode: "DELETE_PIVOT" },
+  customerItemColorAlias: { model: "customerItemColorAlias", mode: "DELETE_PIVOT" },
   productRecipe: { model: "productRecipe", mode: "DEACTIVATE", hardDeleteForbidden: true },
   route: { model: "route", mode: "DEACTIVATE", hardDeleteForbidden: true },
   order: { model: "order", mode: "CANCEL_DOCUMENT" },
@@ -145,7 +154,8 @@ export class ImportRevertService {
         label: l.label,
         lineAction: l.action,
         action: "SKIP",
-        fields: keysOf(l.changedFields),
+        // CREATE satırındaki `changedFields` pivot claim'idir, geri yazılacak alan DEĞİL.
+        fields: l.action === "CREATE" ? [] : keysOf(l.changedFields),
         children: keysOf(l.childSnapshot),
         alreadyReverted: l.revertedAt !== null,
       };
@@ -158,7 +168,7 @@ export class ImportRevertService {
         row.skipReason = "Kayıt bulunamadı (sonradan silinmiş)";
         return row;
       }
-      return l.action === "CREATE" ? planCreate(row, rec, plan.mode) : planUpdate(row);
+      return l.action === "CREATE" ? planCreate(row, rec, { mode: plan.mode, line: l }) : planUpdate(row);
     });
 
     return {
@@ -231,7 +241,12 @@ export class ImportRevertService {
   }
 }
 
-function planCreate(row: RevertPlanRow, rec: Record<string, unknown>, mode: RevertMode): RevertPlanRow {
+function planCreate(
+  row: RevertPlanRow,
+  rec: Record<string, unknown>,
+  args: { mode: RevertMode; line: { changedFields: unknown } },
+): RevertPlanRow {
+  const { mode, line } = args;
   if (mode === "CANCEL_DOCUMENT") {
     row.action = "CANCEL_DOCUMENT";
     if (rec.status === "CANCELLED") row.skipReason = "Belge zaten iptal edilmiş";
@@ -241,6 +256,11 @@ function planCreate(row: RevertPlanRow, rec: Record<string, unknown>, mode: Reve
     row.action = "DELETE_PIVOT";
     // Müşteriye ÖZEL renk satırı import tarafından yaratılmış OLAMAZ (§8.2a).
     if (rec.assigned === true) row.skipReason = "Müşteriye özel atanmış satır — silinmez";
+    // Yazımın claim'iyle AYNI kaynak (`pivotClaimOf`): önizleme yazımın atlayacağını söyler.
+    const claimed = pivotClaimOf(line);
+    const drift = claimed ? pivotClaimDrift(claimed, rec) : [];
+    if (!claimed) row.skipReason = PIVOT_LEGACY_SKIP;
+    else if (drift.length > 0) row.skipReason = `İçe aktarımdan sonra değişti (${drift.join(", ")}) — silinmez`;
     return row;
   }
   row.action = "DEACTIVATE";

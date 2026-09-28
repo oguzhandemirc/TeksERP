@@ -265,4 +265,11 @@ export interface ImportAdapter {
 
   /** Round-trip dışa aktarım: kayıtları şablon sütunlarına göre satırlaştırır. */
   exportRows(): Promise<Array<Record<string, string>>>;
+
+  /**
+   * Ters yolu fiziksel silme olan (③b pivot) varlıkta CREATE satırının YAZDIĞI
+   * kolonlar (kolon → değer). Defterin `changedFields`ine `{from:null,to}` olarak
+   * donar; geri sarma satırı ancak bu değerler hâlâ yerindeyse siler (atomik claim).
+   */
+  createdClaim?(row: PreparedRow): Record<string, unknown>;
 }

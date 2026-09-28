@@ -1,0 +1,569 @@
+{
+ "taslak": {
+  "products": [
+   {
+    "name": "P KUMAS X P EKRU 150cm.",
+    "customerName": "MASTER-X ABC 150cm.",
+    "customerItemOnly": "MASTER-X 150cm.",
+    "customerColorOnly": "ABC",
+    "rollCount": 1,
+    "totalMeters": 51
+   },
+   {
+    "name": "P KUMAS Y P EKRU 150cm.",
+    "customerName": "P KUMAS Y ABC 150cm.",
+    "customerItemOnly": "P KUMAS Y 150cm.",
+    "customerColorOnly": "ABC",
+    "rollCount": 1,
+    "totalMeters": 52
+   },
+   {
+    "name": "P KUMAS Z P EKRU 150cm.",
+    "customerName": "P KUMAS Z ABC 150cm.",
+    "customerItemOnly": "P KUMAS Z 150cm.",
+    "customerColorOnly": "ABC",
+    "rollCount": 1,
+    "totalMeters": 53
+   }
+  ],
+  "cekiRows": [
+   {
+    "rollId": "<R_X>",
+    "sackCode": "P-CV1",
+    "seq": 1,
+    "packageNo": null,
+    "packingGroupName": null,
+    "packingGroupCode": null,
+    "barcode": "P-R1",
+    "desen": "P KUMAS X",
+    "varyant": "P EKRU",
+    "customerDesen": "MASTER-X",
+    "customerVaryant": "ABC",
+    "width": 150,
+    "meters": 51,
+    "kg": 0,
+    "batchNumber": null
+   },
+   {
+    "rollId": "<R_Y>",
+    "sackCode": "P-CV1",
+    "seq": 1,
+    "packageNo": null,
+    "packingGroupName": null,
+    "packingGroupCode": null,
+    "barcode": "P-R2",
+    "desen": "P KUMAS Y",
+    "varyant": "P EKRU",
+    "customerDesen": null,
+    "customerVaryant": "ABC",
+    "width": 150,
+    "meters": 52,
+    "kg": 0,
+    "batchNumber": null
+   },
+   {
+    "rollId": "<R_Z>",
+    "sackCode": "P-CV1",
+    "seq": 1,
+    "packageNo": null,
+    "packingGroupName": null,
+    "packingGroupCode": null,
+    "barcode": "P-R3",
+    "desen": "P KUMAS Z",
+    "varyant": "P EKRU",
+    "customerDesen": null,
+    "customerVaryant": "ABC",
+    "width": 150,
+    "meters": 53,
+    "kg": 0,
+    "batchNumber": null
+   }
+  ]
+ },
+ "sevkiyat": [
+  {
+   "id": "<O>",
+   "orderNumber": "P-O",
+   "status": "PENDING",
+   "deadline": null,
+   "lines": [
+    {
+     "lineId": "<L_X>",
+     "item": {
+      "id": "<I_X>",
+      "code": "P-IX",
+      "name": "P KUMAS X"
+     },
+     "color": {
+      "id": "<K>",
+      "code": "P-K",
+      "name": "P EKRU"
+     },
+     "width": null,
+     "customerItemName": "MASTER-X",
+     "customerColorName": "ABC",
+     "requested": "100",
+     "shipped": "0",
+     "openQty": "100",
+     "thisShipment": "0"
+    },
+    {
+     "lineId": "<L_Y>",
+     "item": {
+      "id": "<I_Y>",
+      "code": "P-IY",
+      "name": "P KUMAS Y"
+     },
+     "color": {
+      "id": "<K>",
+      "code": "P-K",
+      "name": "P EKRU"
+     },
+     "width": null,
+     "customerItemName": null,
+     "customerColorName": "GENEL-EKRU",
+     "requested": "100",
+     "shipped": "0",
+     "openQty": "100",
+     "thisShipment": "0"
+    }
+   ]
+  }
+ ],
+ "acikSiparis": [
+  {
+   "lineId": "<L_X>",
+   "item": {
+    "id": "<I_X>",
+    "code": "P-IX",
+    "name": "P KUMAS X"
+   },
+   "color": {
+    "id": "<K>",
+    "code": "P-K",
+    "name": "P EKRU"
+   },
+   "width": null,
+   "customerItemName": "MASTER-X",
+   "customerColorName": "ABC",
+   "requested": "100",
+   "shipped": "0",
+   "openQty": "100",
+   "warehouseAvailable": "0",
+   "covered": false
+  },
+  {
+   "lineId": "<L_Y>",
+   "item": {
+    "id": "<I_Y>",
+    "code": "P-IY",
+    "name": "P KUMAS Y"
+   },
+   "color": {
+    "id": "<K>",
+    "code": "P-K",
+    "name": "P EKRU"
+   },
+   "width": null,
+   "customerItemName": null,
+   "customerColorName": "GENEL-EKRU",
+   "requested": "100",
+   "shipped": "0",
+   "openQty": "100",
+   "warehouseAvailable": "0",
+   "covered": false
+  }
+ ],
+ "oneri:X": {
+  "itemAlias": "MASTER-X",
+  "colorAlias": "GENEL-EKRU"
+ },
+ "oneri:Y": {
+  "itemAlias": null,
+  "colorAlias": "GENEL-EKRU"
+ },
+ "oneri:Z": {
+  "itemAlias": null,
+  "colorAlias": "GENEL-EKRU"
+ },
+ "oneri:Z-renksiz": {
+  "itemAlias": null,
+  "colorAlias": null
+ },
+ "etiket:X+L_X": {
+  "rollId": "<R_X>",
+  "barcode": "P-R1",
+  "status": "WAREHOUSE",
+  "qualityGrade": "",
+  "widthCm": 150,
+  "lengthMeters": 51,
+  "weightKg": null,
+  "markedForKartela": false,
+  "itemCode": "P-IX",
+  "itemName": "MASTER-X",
+  "itemNameDefault": "P KUMAS X",
+  "itemNameSource": "MASTER",
+  "colorCode": "P-K",
+  "colorName": "ABC",
+  "colorNameDefault": "P EKRU",
+  "colorNameSource": "OVERRIDE",
+  "customerName": "P MUSTERI A",
+  "customerId": "<C_A>",
+  "orderNumber": "P-O",
+  "orderLineId": "<L_X>",
+  "batchNumber": null,
+  "workOrderNumber": null,
+  "foldType": null
+ },
+ "etiket:Y+L_Y": {
+  "rollId": "<R_Y>",
+  "barcode": "P-R2",
+  "status": "WAREHOUSE",
+  "qualityGrade": "",
+  "widthCm": 150,
+  "lengthMeters": 52,
+  "weightKg": null,
+  "markedForKartela": false,
+  "itemCode": "P-IY",
+  "itemName": "P KUMAS Y",
+  "itemNameDefault": "P KUMAS Y",
+  "itemNameSource": "DEFAULT",
+  "colorCode": "P-K",
+  "colorName": "GENEL-EKRU",
+  "colorNameDefault": "P EKRU",
+  "colorNameSource": "MASTER",
+  "customerName": "P MUSTERI A",
+  "customerId": "<C_A>",
+  "orderNumber": "P-O",
+  "orderLineId": "<L_Y>",
+  "batchNumber": null,
+  "workOrderNumber": null,
+  "foldType": null
+ },
+ "etiket:Y+L_X": {
+  "rollId": "<R_Y>",
+  "barcode": "P-R2",
+  "status": "WAREHOUSE",
+  "qualityGrade": "",
+  "widthCm": 150,
+  "lengthMeters": 52,
+  "weightKg": null,
+  "markedForKartela": false,
+  "itemCode": "P-IY",
+  "itemName": "P KUMAS Y",
+  "itemNameDefault": "P KUMAS Y",
+  "itemNameSource": "DEFAULT",
+  "colorCode": "P-K",
+  "colorName": "ABC",
+  "colorNameDefault": "P EKRU",
+  "colorNameSource": "OVERRIDE",
+  "customerName": "P MUSTERI A",
+  "customerId": "<C_A>",
+  "orderNumber": "P-O",
+  "orderLineId": "<L_X>",
+  "batchNumber": null,
+  "workOrderNumber": null,
+  "foldType": null
+ },
+ "etiket:Z+C_A": {
+  "rollId": "<R_Z>",
+  "barcode": "P-R3",
+  "status": "WAREHOUSE",
+  "qualityGrade": "",
+  "widthCm": 150,
+  "lengthMeters": 53,
+  "weightKg": null,
+  "markedForKartela": false,
+  "itemCode": "P-IZ",
+  "itemName": "P KUMAS Z",
+  "itemNameDefault": "P KUMAS Z",
+  "itemNameSource": "DEFAULT",
+  "colorCode": "P-K",
+  "colorName": "GENEL-EKRU",
+  "colorNameDefault": "P EKRU",
+  "colorNameSource": "MASTER",
+  "customerName": "P MUSTERI A",
+  "customerId": "<C_A>",
+  "orderNumber": null,
+  "orderLineId": null,
+  "batchNumber": null,
+  "workOrderNumber": null,
+  "foldType": null
+ },
+ "etiket:X+C_A": {
+  "rollId": "<R_X>",
+  "barcode": "P-R1",
+  "status": "WAREHOUSE",
+  "qualityGrade": "",
+  "widthCm": 150,
+  "lengthMeters": 51,
+  "weightKg": null,
+  "markedForKartela": false,
+  "itemCode": "P-IX",
+  "itemName": "MASTER-X",
+  "itemNameDefault": "P KUMAS X",
+  "itemNameSource": "MASTER",
+  "colorCode": "P-K",
+  "colorName": "GENEL-EKRU",
+  "colorNameDefault": "P EKRU",
+  "colorNameSource": "MASTER",
+  "customerName": "P MUSTERI A",
+  "customerId": "<C_A>",
+  "orderNumber": null,
+  "orderLineId": null,
+  "batchNumber": null,
+  "workOrderNumber": null,
+  "foldType": null
+ },
+ "etiket:X+stok": {
+  "rollId": "<R_X>",
+  "barcode": "P-R1",
+  "status": "WAREHOUSE",
+  "qualityGrade": "",
+  "widthCm": 150,
+  "lengthMeters": 51,
+  "weightKg": null,
+  "markedForKartela": false,
+  "itemCode": "P-IX",
+  "itemName": "P KUMAS X",
+  "itemNameDefault": "P KUMAS X",
+  "itemNameSource": "DEFAULT",
+  "colorCode": "P-K",
+  "colorName": "P EKRU",
+  "colorNameDefault": "P EKRU",
+  "colorNameSource": "DEFAULT",
+  "customerName": null,
+  "customerId": null,
+  "orderNumber": null,
+  "orderLineId": null,
+  "batchNumber": null,
+  "workOrderNumber": null,
+  "foldType": null
+ },
+ "onizleme:X+L_X": {
+  "itemId": "<I_X>",
+  "colorId": "<K>",
+  "customerId": "<C_A>",
+  "customerName": "P MUSTERI A",
+  "itemName": "MASTER-X",
+  "itemNameDefault": "P KUMAS X",
+  "itemNameSource": "MASTER",
+  "colorName": "ABC",
+  "colorNameDefault": "P EKRU",
+  "colorNameSource": "OVERRIDE"
+ },
+ "onizleme:Y+L_Y": {
+  "itemId": "<I_Y>",
+  "colorId": "<K>",
+  "customerId": "<C_A>",
+  "customerName": "P MUSTERI A",
+  "itemName": "P KUMAS Y",
+  "itemNameDefault": "P KUMAS Y",
+  "itemNameSource": "DEFAULT",
+  "colorName": "GENEL-EKRU",
+  "colorNameDefault": "P EKRU",
+  "colorNameSource": "MASTER"
+ },
+ "onizleme:Z+C_A": {
+  "itemId": "<I_Z>",
+  "colorId": "<K>",
+  "customerId": "<C_A>",
+  "customerName": "P MUSTERI A",
+  "itemName": "P KUMAS Z",
+  "itemNameDefault": "P KUMAS Z",
+  "itemNameSource": "DEFAULT",
+  "colorName": "GENEL-EKRU",
+  "colorNameDefault": "P EKRU",
+  "colorNameSource": "MASTER"
+ },
+ "onizleme:Y+C_A": {
+  "itemId": "<I_Y>",
+  "colorId": "<K>",
+  "customerId": "<C_A>",
+  "customerName": "P MUSTERI A",
+  "itemName": "P KUMAS Y",
+  "itemNameDefault": "P KUMAS Y",
+  "itemNameSource": "DEFAULT",
+  "colorName": "GENEL-EKRU",
+  "colorNameDefault": "P EKRU",
+  "colorNameSource": "MASTER"
+ },
+ "cuvalIcerik": [
+  {
+   "barcode": "P-R1",
+   "musterideki": {
+    "itemName": "MASTER-X",
+    "colorName": "GENEL-EKRU"
+   },
+   "etiket": null
+  },
+  {
+   "barcode": "P-R2",
+   "musterideki": {
+    "itemName": null,
+    "colorName": "GENEL-EKRU"
+   },
+   "etiket": null
+  },
+  {
+   "barcode": "P-R3",
+   "musterideki": {
+    "itemName": null,
+    "colorName": "GENEL-EKRU"
+   },
+   "etiket": null
+  }
+ ],
+ "dokum": [
+  {
+   "sackNo": "P-CV1",
+   "rolls": [
+    {
+     "barcode": "P-R1",
+     "musterideki": {
+      "itemName": "MASTER-X",
+      "colorName": "GENEL-EKRU"
+     },
+     "etiket": null
+    },
+    {
+     "barcode": "P-R2",
+     "musterideki": {
+      "itemName": null,
+      "colorName": "GENEL-EKRU"
+     },
+     "etiket": null
+    },
+    {
+     "barcode": "P-R3",
+     "musterideki": {
+      "itemName": null,
+      "colorName": "GENEL-EKRU"
+     },
+     "etiket": null
+    }
+   ]
+  },
+  {
+   "sackNo": "P-CV2",
+   "rolls": [
+    {
+     "barcode": "P-R4",
+     "musterideki": {
+      "itemName": null,
+      "colorName": null
+     },
+     "etiket": null
+    }
+   ]
+  }
+ ],
+ "uyusmazlik": [
+  [
+   {
+    "kind": "LABEL_DIFFERS",
+    "severity": "warning",
+    "rollId": "<R_Y>",
+    "barcode": "P-R2",
+    "message": "Etiket bu müşteri için farklı çıkardı (renk adı) — stok etiketiyle basılmış"
+   },
+   {
+    "kind": "LABEL_DIFFERS",
+    "severity": "warning",
+    "rollId": "<R_Z>",
+    "barcode": "P-R3",
+    "message": "Etiket bu müşteri için farklı çıkardı (renk adı) — P MUSTERI B için basılmış"
+   }
+  ],
+  [
+   {
+    "kind": "LABEL_DIFFERS",
+    "severity": "warning",
+    "rollId": "<R_W>",
+    "barcode": "P-R4",
+    "message": "Etiket bu müşteri için farklı çıkardı (kumaş adı · renk adı) — P MUSTERI A için basılmış"
+   }
+  ]
+ ],
+ "donmus": {
+  "products": [
+   {
+    "name": "P KUMAS X P EKRU 150cm.",
+    "rollCount": 1,
+    "totalMeters": 51,
+    "customerName": "MASTER-X ABC 150cm.",
+    "customerItemOnly": "MASTER-X 150cm.",
+    "customerColorOnly": "ABC"
+   },
+   {
+    "name": "P KUMAS Y P EKRU 150cm.",
+    "rollCount": 1,
+    "totalMeters": 52,
+    "customerName": "P KUMAS Y ABC 150cm.",
+    "customerItemOnly": "P KUMAS Y 150cm.",
+    "customerColorOnly": "ABC"
+   },
+   {
+    "name": "P KUMAS Z P EKRU 150cm.",
+    "rollCount": 1,
+    "totalMeters": 53,
+    "customerName": "P KUMAS Z ABC 150cm.",
+    "customerItemOnly": "P KUMAS Z 150cm.",
+    "customerColorOnly": "ABC"
+   }
+  ],
+  "cekiRows": [
+   {
+    "kg": 0,
+    "seq": 1,
+    "desen": "P KUMAS X",
+    "width": 150,
+    "meters": 51,
+    "rollId": "<R_X>",
+    "barcode": "P-R1",
+    "varyant": "P EKRU",
+    "sackCode": "P-CV1",
+    "packageNo": null,
+    "batchNumber": null,
+    "customerDesen": "MASTER-X",
+    "customerVaryant": "ABC",
+    "packingGroupCode": null,
+    "packingGroupName": null
+   },
+   {
+    "kg": 0,
+    "seq": 1,
+    "desen": "P KUMAS Y",
+    "width": 150,
+    "meters": 52,
+    "rollId": "<R_Y>",
+    "barcode": "P-R2",
+    "varyant": "P EKRU",
+    "sackCode": "P-CV1",
+    "packageNo": null,
+    "batchNumber": null,
+    "customerDesen": null,
+    "customerVaryant": "ABC",
+    "packingGroupCode": null,
+    "packingGroupName": null
+   },
+   {
+    "kg": 0,
+    "seq": 1,
+    "desen": "P KUMAS Z",
+    "width": 150,
+    "meters": 53,
+    "rollId": "<R_Z>",
+    "barcode": "P-R3",
+    "varyant": "P EKRU",
+    "sackCode": "P-CV1",
+    "packageNo": null,
+    "batchNumber": null,
+    "customerDesen": null,
+    "customerVaryant": "ABC",
+    "packingGroupCode": null,
+    "packingGroupName": null
+   }
+  ]
+ }
+}

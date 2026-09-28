@@ -33,6 +33,7 @@ import { AuditService } from "./audit.service";
 import { markTravelerCardsDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { foldColorNameForCompare, foldNameForCompare } from "./helpers/name-normalize.helper";
 import { DuplicateReviewService } from "./duplicate-review.service";
+import { describeItemColorShadowing, type MergeShadowRow } from "./helpers/merge-shadowing.helper";
 import {
   MERGEABLE_FIELDS,
   MERGE_NAME_FIELD,
@@ -54,6 +55,8 @@ import {
   snapshotRowsTx,
   type PkCache,
 } from "./helpers/merge-ledger.helper";
+
+type ConflictRule = Extract<MoveRule, { kind: "CONFLICT" }>;
 
 /**
  * GLOBAL advisory kilit. Kaynak/survivor id'lerine göre değil TEK anahtarla
@@ -137,6 +140,8 @@ export interface MergePreview {
   warnings: string[];
   moves: MergeMoveRow[];
   conflicts: MergeConflictRow[];
+  /** Taşınınca survivor'ın bir kumaştaki renk adını DEĞİŞTİRECEK kumaşa özel satırlar. */
+  shadowing: MergeShadowRow[];
   /** Alan alan hangi değer kalsın (P2). Boş dizi = bu varlıkta seçilebilir alan yok. */
   fieldChoices: MergeFieldChoice[];
   sideEffects: string[];
@@ -367,6 +372,15 @@ export class MasterDataMergeService {
       }
     }
 
+    const shadowing =
+      sourceIdList.length > 0 && survivor ? await describeItemColorShadowing(entity, survivor.id, sourceIdList) : [];
+    if (shadowing.length > 0) {
+      warnings.push(
+        `${shadowing.length} kumaşa özel müşteri renk adı taşınacak ve hedefte o kumaşta basılan adı ` +
+          "DEĞİŞTİRECEK (etiket, irsaliye) — aşağıda kayıt başına listelendi.",
+      );
+    }
+
     const measured = moves.filter((m) => m.count !== null);
     const totalRowsToMove = measured.reduce((a, m) => a + (m.count ?? 0), 0);
     const measuredAll = measured.length === moves.length;
@@ -450,6 +464,7 @@ export class MasterDataMergeService {
       warnings,
       moves,
       conflicts,
+      shadowing,
       fieldChoices,
       sideEffects,
       totalRowsToMove,
@@ -951,12 +966,13 @@ export class MasterDataMergeService {
  */
 async function describeConflictTx(
   tx: Prisma.TransactionClient,
-  rule: Extract<MoveRule, { kind: "CONFLICT" }>,
+  rule: ConflictRule,
   survivorId: string,
   sourceIds: string[],
 ): Promise<number> {
+  // Önizleme ikiziyle (`describeConflict`) AYNI yüklem — ayrışırsa önizleme bloklar, işlem sessizce geçer.
   const rows = await tx.$queryRawUnsafe<Array<{ n: bigint }>>(
-    `SELECT count(*)::bigint AS n FROM "${rule.table}" s WHERE ${conflictWhereSql(rule)}`,
+    `SELECT count(*)::bigint AS n FROM "${rule.table}" s WHERE ${conflictPredicateSql(rule)}`,
     sourceIds,
     survivorId,
   );
@@ -965,19 +981,33 @@ async function describeConflictTx(
 
 /**
  * ÇAKIŞMA YÜKLEMİ — önizleme sayımı, işlem sayımı ve çözücü TEK kaynaktan (`s` = kaynak
- * satırı, `$1` = kaynaklar, `$2` = survivor). Satır, aynı anahtarı survivor'da YA DA
- * listede kendinden ÖNCEKİ bir kaynakta taşıyorsa çakışır: iki kaynaktaki aynı anahtar
- * hedefe taşınınca tekil kısıta çarpar. Kısıt KOLONUN KENDİSİNDE ise (`CariAccount.customerId
- * @unique`) "diğer anahtar" yoktur: iki tarafın da satırı olması yeter.
+ * satırı, `$1` = kaynaklar istek sırasıyla, `$2` = survivor). Satır, anahtarını survivor'da
+ * YA DA listede kendinden ÖNCEKİ bir kaynakta taşıyorsa çakışır: çözüm + taşıma kaynak
+ * sırasıyla yürür ve ikinci kaynağın satırı birincinin taşınmış satırına çarpar.
  */
-function conflictWhereSql(rule: Extract<MoveRule, { kind: "CONFLICT" }>): string {
-  const col = `"${rule.column}"`;
+function conflictPredicateSql(rule: ConflictRule): string {
+  return `s."${rule.column}" = ANY($1::uuid[]) AND (${survivorSideSql(rule)} OR ${earlierSourceSql(rule)})`;
+}
+
+/**
+ * Survivor'da aynı anahtar var mı. Kısıt KOLONUN KENDİSİNDE ise (`CariAccount.customerId
+ * @unique`) "diğer anahtar" yoktur: survivor'ın satırı olması yeter.
+ */
+function survivorSideSql(rule: ConflictRule): string {
   const other = rule.uniqueOn.filter((c) => c !== rule.column);
-  const matchOther = other.length > 0 ? ` AND (${other.map((c) => `t."${c}" = s."${c}"`).join(" AND ")})` : "";
-  return `s.${col} = ANY($1::uuid[])
-       AND EXISTS (SELECT 1 FROM "${rule.table}" t
-                    WHERE (t.${col} = $2::uuid
-                           OR array_position($1::uuid[], t.${col}) < array_position($1::uuid[], s.${col}))${matchOther})`;
+  const match = other.map((c) => ` AND t."${c}" = s."${c}"`).join("");
+  return `EXISTS (SELECT 1 FROM "${rule.table}" t WHERE t."${rule.column}" = $2::uuid${match})`;
+}
+
+/**
+ * Listede daha önceki bir kaynakta, taşınınca AYNI tekil kısıta çarpacak satır var mı.
+ * `p."col" = ANY($1)` ayrı durur ki (col, …) tekil indeksi kullanılabilsin.
+ */
+function earlierSourceSql(rule: ConflictRule): string {
+  const other = rule.uniqueOn.filter((c) => c !== rule.column);
+  const match = other.map((c) => ` AND p."${c}" = s."${c}"`).join("");
+  return `EXISTS (SELECT 1 FROM "${rule.table}" p WHERE p."${rule.column}" = ANY($1::uuid[])
+            AND array_position($1::uuid[], p."${rule.column}") < array_position($1::uuid[], s."${rule.column}")${match})`;
 }
 
 /**
@@ -995,7 +1025,7 @@ interface ConflictResolution {
 
 async function resolveConflictTx(
   tx: Prisma.TransactionClient,
-  rule: Extract<MoveRule, { kind: "CONFLICT" }>,
+  rule: ConflictRule,
   survivorId: string,
   sourceIds: string[],
 ): Promise<ConflictResolution> {
@@ -1003,7 +1033,7 @@ async function resolveConflictTx(
   const matchOther = other.map((c) => `t."${c}" = s."${c}"`).join(" AND ");
   // Sayım ikiziyle aynı yüklem (çağıran kaynak başına koşar: kaynaklar arası çakışma
   // burada, önceki kaynağın hedefe TAŞINMIŞ satırıyla görünür).
-  const conflictWhere = conflictWhereSql(rule);
+  const conflictWhere = conflictPredicateSql(rule);
 
   switch (rule.policy) {
     case "BLOCK":
@@ -1219,7 +1249,7 @@ async function countRows(rule: MoveRule, sourceIds: string[]): Promise<number | 
 
 /** Çakışan satırları say + birkaç örnek göster. */
 async function describeConflict(
-  rule: Extract<MoveRule, { kind: "CONFLICT" }>,
+  rule: ConflictRule,
   survivorId: string,
   sourceIds: string[],
 ): Promise<MergeConflictRow> {
@@ -1229,9 +1259,9 @@ async function describeConflict(
   let count = 0;
   let rows: Array<Record<string, unknown>> = [];
   try {
-    // İşlem ikiziyle AYNI yüklem (`conflictWhereSql`) — ayrışırsa önizleme bloklar,
+    // İşlem ikiziyle AYNI yüklem (`conflictPredicateSql`) — ayrışırsa önizleme bloklar,
     // işlem sessizce geçer (ya da tersi).
-    const sql = `SELECT s.* FROM "${rule.table}" s WHERE ${conflictWhereSql(rule)}${other.length > 0 ? ` ORDER BY ${otherCols}` : ""}`;
+    const sql = `SELECT s.* FROM "${rule.table}" s WHERE ${conflictPredicateSql(rule)}${other.length > 0 ? ` ORDER BY ${otherCols}` : ""}`;
     const all = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(sql, sourceIds, survivorId);
     count = all.length;
     rows = all.slice(0, sample);

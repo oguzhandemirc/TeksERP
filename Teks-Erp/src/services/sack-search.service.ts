@@ -552,28 +552,37 @@ function etiketiOku(snapRaw: unknown, printedAt: Date | null) {
   };
 }
 
+/** Bir müşterinin (null = müşterisiz) satır başına karşılık çözücüsü. */
+type MusteriAdi = (itemId: string, colorId: string | null) => { itemName: string | null; colorName: string | null };
+
 /**
- * Müşteri karşılığı çözücüsü — satır başına `{itemName, colorName}` döndürür.
+ * Müşteri karşılığı çözücüsü — müşteri KÜMESİ için tek yükleme; müşteri başına
+ * `{itemName, colorName}` döndüren fonksiyon verir. Renk adı tek çözücüden
+ * (kumaşa özel → genel); sipariş satırı adı okunmaz (bilinen sınır).
  *
  * ⚠️ Karşılık YOKSA `null` döner; BİZİM adımız "müşterideki ad" diye BASILMAZ
  * (2026-09-06 kullanıcı düzeltmesi: çoğu müşteri bizim adımızı kullanır,
  * uydurma alias defteri kirletir).
  */
 async function musteriAdiCozucu(
-  customerId: string | null,
+  customerIds: Array<string | null>,
   satirlar: { item: { id: string }; color: { id: string } | null }[],
-): Promise<(itemId: string, colorId: string | null) => { itemName: string | null; colorName: string | null }> {
-  if (!customerId) return () => ({ itemName: null, colorName: null });
-  const { itemAlias, colorAlias } = await batchLoadAliasesMulti(
+): Promise<(customerId: string | null) => MusteriAdi> {
+  const musteriler = customerIds.filter((c): c is string => !!c);
+  if (musteriler.length === 0) return () => () => ({ itemName: null, colorName: null });
+  const { itemAlias, colors } = await batchLoadAliasesMulti(
     prisma,
-    [customerId],
+    musteriler,
     satirlar.map((r) => r.item.id),
-    satirlar.map((r) => r.color?.id).filter((x): x is string => !!x),
+    satirlar.map((r) => r.color?.id ?? null),
   );
-  return (itemId, colorId) => ({
-    itemName: itemAlias.get(`${customerId}:${itemId}`) ?? null,
-    colorName: colorId ? (colorAlias.get(`${customerId}:${colorId}`) ?? null) : null,
-  });
+  return (customerId) => (itemId, colorId) =>
+    customerId
+      ? {
+          itemName: itemAlias.get(`${customerId}:${itemId}`) ?? null,
+          colorName: colors.master(customerId, itemId, colorId)?.alias ?? null,
+        }
+      : { itemName: null, colorName: null };
 }
 
 /** `getContentDump` sorgusunun döndürdüğü ham çuval — döküm satırının girdisi. */
@@ -610,10 +619,7 @@ interface DokumKaynagi {
  * Döküm satırı — tek çuvalın belge/Excel şekli. Metottan ayrı: boyut tavanı
  * YENİ kodda zorunlu ve üç ad eklenince `getContentDump` sınırı aştı.
  */
-function dokumSatiri(
-  s: DokumKaynagi,
-  musterideki: (i: string, c: string | null) => { itemName: string | null; colorName: string | null },
-) {
+function dokumSatiri(s: DokumKaynagi, musterideki: MusteriAdi) {
   const rolls = s.rolls.map((r) => ({
     id: r.id,
     barcode: r.barcode,
@@ -1093,10 +1099,8 @@ export class SackSearchService {
     // Alias kademesi müşteri kartındaki karşılıktır; yoksa `null` döner —
     // BİZİM adımız "müşterideki ad" diye BASILMAZ (2026-09-06 kullanıcı
     // düzeltmesi: çoğu müşteri bizim adımızı kullanır, uydurma alias yaratma).
-    const musterideki = await musteriAdiCozucu(
-      sack.customerId ?? sack.shipment?.customer?.id ?? null,
-      [...sack.rolls, ...sack.swatches],
-    );
+    const targetCustomerId = sack.customerId ?? sack.shipment?.customer?.id ?? null;
+    const musterideki = (await musteriAdiCozucu([targetCustomerId], [...sack.rolls, ...sack.swatches]))(targetCustomerId);
 
     return {
       success: true,
@@ -1318,14 +1322,14 @@ export class SackSearchService {
       },
     });
 
-    // Alias çözücü çuval BAŞINA kurulur: seçilen çuvallar farklı müşterilere ait
-    // olabilir ve tek bir müşteriyle çözmek yanlış adı basardı.
-    const cozucu = new Map<string, (i: string, c: string | null) => { itemName: string | null; colorName: string | null }>();
-    for (const s2 of sacks) {
-      cozucu.set(s2.id, await musteriAdiCozucu(s2.customer?.id ?? null, [...s2.rolls, ...s2.swatches]));
-    }
+    // Seçilen çuvallar farklı müşterilere ait olabilir: çözücü müşteri kümesiyle
+    // TEK yüklemeden kurulur, çuval BAŞINA kendi müşterisiyle okunur.
+    const cozucu = await musteriAdiCozucu(
+      sacks.map((s2) => s2.customer?.id ?? null),
+      sacks.flatMap((s2) => [...s2.rolls, ...s2.swatches]),
+    );
 
-    const data = sacks.map((s) => dokumSatiri(s, cozucu.get(s.id)!));
+    const data = sacks.map((s) => dokumSatiri(s, cozucu(s.customer?.id ?? null)));
 
     return { success: true, data };
   }

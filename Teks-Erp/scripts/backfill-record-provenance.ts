@@ -42,6 +42,7 @@ const MAP: Array<{ model: string; table: string }> = [
   { model: "permissionTemplate", table: "PERMISSION_TEMPLATE" },
   { model: "customerItemAlias", table: "CUSTOMER_ITEM_ALIAS" },
   { model: "customerColorAlias", table: "CUSTOMER_COLOR_ALIAS" },
+  { model: "customerItemColorAlias", table: "CUSTOMER_ITEM_COLOR_ALIAS" },
   { model: "subcontractorCategory", table: "SUBCONTRACTOR_CATEGORY" },
   { model: "travelerCardTemplate", table: "TRAVELER_CARD_TEMPLATE" },
   { model: "documentProfile", table: "DOCUMENT_PROFILE" },
@@ -116,6 +117,7 @@ function tableNameFor(model: string): string {
     // Faz A2
     user: "users", permissionTemplate: "permission_templates",
     customerItemAlias: "customer_item_aliases", customerColorAlias: "customer_color_aliases",
+    customerItemColorAlias: "customer_item_color_aliases",
     subcontractorCategory: "subcontractor_categories",
     travelerCardTemplate: "traveler_card_templates", documentProfile: "document_profiles",
     customerStandaloneLabel: "customer_standalone_labels",

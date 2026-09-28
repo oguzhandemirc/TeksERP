@@ -71,6 +71,16 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       policy: "SKIP",
       why: "Müşteri tarafındakiyle aynı gerekçe — alias etikete basılıyor.",
     },
+    {
+      kind: "CONFLICT",
+      model: "CustomerItemColorAlias",
+      table: "customer_item_color_aliases",
+      column: "itemId",
+      label: "Müşteri kumaşa özel renk adı",
+      uniqueOn: ["customerId", "itemId", "colorId"],
+      policy: "SKIP",
+      why: "Müşteri tarafındakiyle aynı: survivor'ın adı kazanır, çakışmayan satır taşınır.",
+    },
     // —— Ticaret / iplik / fatura bacağı ————————————————————————————————————
     { kind: "MOVE", model: "InvoiceLine", table: "invoice_lines", column: "itemId", label: "Fatura kalemi" },
     { kind: "MOVE", model: "YarnMovement", table: "yarn_movements", column: "itemId", label: "İplik hareketi" },

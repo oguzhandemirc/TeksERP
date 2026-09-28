@@ -13,10 +13,14 @@
 //  ③ RENK NULL BÜTÜNLÜĞÜ — birleştirme hiç DELETE yapmadığı için `colorId`
 //     NULL'a düşemez; `Roll.colorId IS NULL` bu sistemde "HAM KUMAŞ" demektir.
 //     Merge öncesi/sonrası NULL sayısı BİREBİR eşit olmalı.
-//  ⑥ KAYNAKLAR ARASI ÇAKIŞMA — hedefte olmayan anahtar İKİ kaynakta birden varsa
-//     (iki müşteri aynı kumaşa ad vermiş) çakışma yüklemi hedefe bakarak onu
-//     göremez; ikinci kaynağın taşınması tekil kısıta çarpmamalı. Müşteri, ürün
-//     ve renk birleştirmesinin üçünde de ölçülür.
+//  ⑥ KUMAŞA ÖZEL RENK ADI (customer_item_color_aliases, SKIP) — survivor'ın adı
+//     kazanır, çakışmayan taşınır; taşınan satırın survivor'ın o kumaştaki adını
+//     değiştirdiği önizlemede KAYIT BAŞINA listelenir (gölgeleme); ÇOK KAYNAKTA
+//     aynı (kumaş, renk) varsa ikinci UPDATE P2002 vermemeli.
+//  ⑦ KAYNAKLAR ARASI ÇAKIŞMA — hedefte olmayan anahtar İKİ kaynakta birden varsa
+//     (iki müşteri aynı kumaşa ad vermiş) ikinci kaynağın taşınması tekil kısıta
+//     çarpmamalı. Müşteri, ürün ve renk birleştirmesinin üçünde ve BLOCK kuralında
+//     ölçülür.
 
 import prisma, { pool } from "../src/lib/prisma";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
@@ -260,6 +264,8 @@ async function main(): Promise<void> {
     check("④ iki şube de survivor'a taşındı", n === 2, `${n} şube`);
   }
 
+  await kumasaOzelRenkAdi(red);
+
   // ── ⑤ Onay sayısı uyuşmazlığı 409 ────────────────────────────────────────
   console.log("\n── ⑤ Onaylanan çakışma sayısı uyuşmazlığı ──");
   {
@@ -309,11 +315,11 @@ async function tryMerge(
 }
 
 async function crossSourceCases(): Promise<void> {
-  console.log("\n── ⑥ Kaynaklar arası çakışma (hedefte olmayan anahtar iki kaynakta) ──");
+  console.log("\n── ⑦ Kaynaklar arası çakışma (hedefte olmayan anahtar iki kaynakta) ──");
   const item = await mkItem("XS-I");
   const color = await mkColor("XS-C");
 
-  // ⑥a MÜŞTERİ: iki kaynak aynı kumaşa ve aynı renge ad vermiş, hedefte ikisi de yok.
+  // ⑦a MÜŞTERİ: iki kaynak aynı kumaşa ve aynı renge ad vermiş, hedefte ikisi de yok.
   {
     const s = await mkCustomer("XS-S");
     const k1 = await mkCustomer("XS-K1");
@@ -333,29 +339,29 @@ async function crossSourceCases(): Promise<void> {
     const pv = await MasterDataMergeService.preview("customer", s, [k1, k2]);
     const seen = pv.conflicts.filter((c) => c.count > 0).map((c) => `${c.table}:${c.count}`).sort();
     check(
-      "⑥a önizleme kaynaklar arası çakışmayı GÖSTERİYOR (operatör onayı ona göre)",
+      "⑦a önizleme kaynaklar arası çakışmayı GÖSTERİYOR (operatör onayı ona göre)",
       seen.join(",") === "customer_color_aliases:1,customer_item_aliases:1",
       seen.join(",") || "çakışma YOK",
     );
     const err = await tryMerge("customer", s, [k1, k2], "iki kaynak ayni kumasa ad vermis sondasi");
-    check("⑥a ⭐ iki kaynaklı müşteri birleştirmesi tekil kısıta ÇARPMIYOR", err === null, err ?? "");
+    check("⑦a ⭐ iki kaynaklı müşteri birleştirmesi tekil kısıta ÇARPMIYOR", err === null, err ?? "");
     const itemRows = await prisma.customerItemAlias.findMany({ where: { customerId: s, itemId: item }, select: { alias: true } });
     check(
-      "⑥a hedefte TEK ürün adı kaldı: kaynak sırasında ilki kazanır",
+      "⑦a hedefte TEK ürün adı kaldı: kaynak sırasında ilki kazanır",
       itemRows.length === 1 && itemRows[0]!.alias === "BİRİNCİ KAYNAK ADI",
       JSON.stringify(itemRows),
     );
     const colorRow = await prisma.customerColorAlias.findFirst({ where: { customerId: s, colorId: color } });
     check(
-      "⑥a renk adı alan alan birleşti (assigned OR + alias COALESCE, iki kaynaktan)",
+      "⑦a renk adı alan alan birleşti (assigned OR + alias COALESCE, iki kaynaktan)",
       colorRow?.assigned === true && colorRow.alias === "İKİNCİ RENK ADI",
       JSON.stringify({ assigned: colorRow?.assigned, alias: colorRow?.alias }),
     );
     const left = await prisma.customerItemAlias.count({ where: { customerId: { in: [k1, k2] } } });
-    check("⑥a kaynaklarda ürün adı kalmadı", left === 0, `${left} satır`);
+    check("⑦a kaynaklarda ürün adı kalmadı", left === 0, `${left} satır`);
   }
 
-  // ⑥b ÜRÜN: aynı müşteri iki kaynak karta da ad vermiş.
+  // ⑦b ÜRÜN: aynı müşteri iki kaynak karta da ad vermiş.
   {
     const cust = await mkCustomer("XS-M");
     const s = await mkItem("XS-IS");
@@ -369,11 +375,11 @@ async function crossSourceCases(): Promise<void> {
     });
     const err = await tryMerge("item", s, [k1, k2], "iki kaynak kart ayni musteride adli sondasi");
     const rows = await prisma.customerItemAlias.findMany({ where: { customerId: cust, itemId: s }, select: { alias: true } });
-    check("⑥b ⭐ iki kaynaklı ürün birleştirmesi tekil kısıta ÇARPMIYOR", err === null, err ?? "");
-    check("⑥b hedefte tek ad, ilk kaynağınki", rows.length === 1 && rows[0]!.alias === "BİRİNCİ KART ADI", JSON.stringify(rows));
+    check("⑦b ⭐ iki kaynaklı ürün birleştirmesi tekil kısıta ÇARPMIYOR", err === null, err ?? "");
+    check("⑦b hedefte tek ad, ilk kaynağınki", rows.length === 1 && rows[0]!.alias === "BİRİNCİ KART ADI", JSON.stringify(rows));
   }
 
-  // ⑥c RENK: aynı müşteri iki kaynak renge de ad vermiş.
+  // ⑦c RENK: aynı müşteri iki kaynak renge de ad vermiş.
   {
     const cust = await mkCustomer("XS-R");
     const s = await mkColor("XS-CS");
@@ -387,15 +393,15 @@ async function crossSourceCases(): Promise<void> {
     });
     const err = await tryMerge("color", s, [k1, k2], "iki kaynak renk ayni musteride adli sondasi");
     const row = await prisma.customerColorAlias.findFirst({ where: { customerId: cust, colorId: s } });
-    check("⑥c ⭐ iki kaynaklı renk birleştirmesi tekil kısıta ÇARPMIYOR", err === null, err ?? "");
+    check("⑦c ⭐ iki kaynaklı renk birleştirmesi tekil kısıta ÇARPMIYOR", err === null, err ?? "");
     check(
-      "⑥c renk adı iki kaynaktan alan alan birleşti",
+      "⑦c renk adı iki kaynaktan alan alan birleşti",
       row?.assigned === true && row.alias === "İKİNCİ RENK KARTI",
       JSON.stringify({ assigned: row?.assigned, alias: row?.alias }),
     );
   }
 
-  // ⑥d BLOCK politikası kaynaklar arasında da bloklar: iki kaynak şubesi aynı ihracat kodunda.
+  // ⑦d BLOCK politikası kaynaklar arasında da bloklar: iki kaynak şubesi aynı ihracat kodunda.
   {
     const s = await mkCustomer("XS-BS");
     const k1 = await mkCustomer("XS-BK1");
@@ -404,7 +410,7 @@ async function crossSourceCases(): Promise<void> {
     await prisma.customerBranch.create({ data: { customerId: k2, name: "İki", code: "TR35" } });
     const pv = await MasterDataMergeService.preview("customer", s, [k1, k2]);
     check(
-      "⑥d ⭐ iki kaynakta aynı ihracat kodu önizlemede BLOKÇU",
+      "⑦d ⭐ iki kaynakta aynı ihracat kodu önizlemede BLOKÇU",
       !pv.canMerge && pv.blockers.some((b) => b.key.startsWith("CONFLICT_CUSTOMER_BRANCHES")),
       pv.blockers.map((b) => b.key).join(",") || "blokçu YOK",
     );
@@ -419,8 +425,47 @@ async function crossSourceCases(): Promise<void> {
     } catch (e) {
       status = (e as { statusCode?: number }).statusCode;
     }
-    check("⑥d işlem 409 ile reddediyor (ham 23505/500 değil)", status === 409, String(status));
+    check("⑦d işlem 409 ile reddediyor (ham 23505/500 değil)", status === 409, String(status));
   }
+}
+
+async function kumasaOzelRenkAdi(red: string): Promise<void> {
+  console.log("\n── ⑥ Kumaşa özel müşteri renk adı: SKIP + gölgeleme önizlemesi + çok kaynak ──");
+  const X = await mkItem("IC-X");
+  const Y = await mkItem("IC-Y");
+  const s = await mkCustomer("IC-S");
+  const k = await mkCustomer("IC-K");
+  await prisma.customerColorAlias.create({ data: { customerId: s, colorId: red, alias: "GENEL-S" } });
+  await prisma.customerItemColorAlias.create({ data: { customerId: s, itemId: X, colorId: red, alias: "S-X" } });
+  await prisma.customerItemColorAlias.create({ data: { customerId: k, itemId: X, colorId: red, alias: "K-X" } });
+  await prisma.customerItemColorAlias.create({ data: { customerId: k, itemId: Y, colorId: red, alias: "K-Y" } });
+  const pv = await MasterDataMergeService.preview("customer", s, [k]);
+  const golge = pv.shadowing;
+  check("⑥ önizleme: taşınan Y satırı GÖLGELEME olarak listelendi (önce GENEL-S → sonra K-Y)",
+    golge.length === 1 && golge[0]?.alias === "K-Y" && golge[0]?.before === "GENEL-S", JSON.stringify(golge));
+  check("⑥ önizleme: çakışan X satırı (SKIP) gölgeleme listesinde DEĞİL, çakışmada",
+    pv.conflicts.some((c) => c.table === "customer_item_color_aliases" && c.count === 1));
+  check("⑥ önizleme uyarısı basıldı", pv.warnings.some((w) => w.includes("kumaşa özel müşteri renk adı")));
+  await MasterDataMergeService.merge("customer", { survivorId: s, sourceIds: [k], reason: "kumasa ozel ad sondasi", acknowledgedConflicts: pv.conflicts.length });
+  const rows = await prisma.customerItemColorAlias.findMany({ where: { customerId: s }, select: { itemId: true, alias: true } });
+  const ad = (i: string) => rows.find((r) => r.itemId === i)?.alias;
+  check("⑥ SKIP: survivor'ın X adı korundu, Y taşındı", ad(X) === "S-X" && ad(Y) === "K-Y", JSON.stringify(rows));
+
+  const s2 = await mkCustomer("IC-S2");
+  const k2 = await mkCustomer("IC-K2");
+  const k3 = await mkCustomer("IC-K3");
+  await prisma.customerItemColorAlias.create({ data: { customerId: k2, itemId: X, colorId: red, alias: "K2-X" } });
+  await prisma.customerItemColorAlias.create({ data: { customerId: k3, itemId: X, colorId: red, alias: "K3-X" } });
+  let hata = "";
+  try {
+    const pv2 = await MasterDataMergeService.preview("customer", s2, [k2, k3]);
+    await MasterDataMergeService.merge("customer", { survivorId: s2, sourceIds: [k2, k3], reason: "cok kaynak sondasi", acknowledgedConflicts: pv2.conflicts.length });
+  } catch (e) {
+    hata = `${(e as Error).name}: ${(e as Error).message} ${JSON.stringify((e as { details?: unknown }).details ?? null)}`;
+  }
+  const kalan = await prisma.customerItemColorAlias.findMany({ where: { customerId: s2 }, select: { alias: true } });
+  check("⑥ ÇOK KAYNAK: iki kaynakta aynı (kumaş, renk) birleştirmeyi düşürmüyor", hata === "", hata);
+  check("⑥ ÇOK KAYNAK: survivor'da TEK satır kaldı", kalan.length === 1, JSON.stringify(kalan));
 }
 
 main()
@@ -432,6 +477,7 @@ main()
     await prisma.itemAllowedColor.deleteMany({ where: { itemId: { in: trash.items } } }).catch(() => undefined);
     await prisma.itemAllowedColor.deleteMany({ where: { colorId: { in: trash.colors } } }).catch(() => undefined);
     await prisma.customerColorAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
+    await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     await prisma.customerItemAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     const ops = await prisma.mergeOperation
       .findMany({ where: { survivorId: { in: [...trash.items, ...trash.colors, ...trash.customers] } }, select: { id: true } })

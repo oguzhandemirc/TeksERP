@@ -18,9 +18,14 @@ import {
   Prisma,
 } from "@prisma/client";
 import { assertItemUsable } from "./helpers/item-usage.helper";
+import { loadCustomerColorIndex } from "./helpers/customer-name.helper";
+import { assertColor, assertCustomer } from "./helpers/customer-alias-gates.helper";
+import * as itemColor from "./customer-item-color-alias.service";
 
 const TABLE_ITEM = "CUSTOMER_ITEM_ALIAS";
 const TABLE_COLOR = "CUSTOMER_COLOR_ALIAS";
+
+export type ItemColorKey = { customerId: string; itemId: string; colorId: string };
 
 export interface AliasLookupResult {
   itemAlias: string | null; // master alias (null = yoksa)
@@ -210,6 +215,27 @@ export class CustomerAliasService {
   }
 
   // ===========================================================================
+  // KUMAŞA ÖZEL RENK ADI (müşteri × kumaş × renk) — gövde ayrı modülde
+  // ===========================================================================
+
+  listItemColorAliases(customerId: string): ReturnType<typeof itemColor.listByCustomer> {
+    return itemColor.listByCustomer(customerId);
+  }
+
+  listItemColorAliasesByItem(itemId: string): ReturnType<typeof itemColor.listByItem> {
+    return itemColor.listByItem(itemId);
+  }
+
+  /** Anahtar tek nesne: beş konumsal parametre `max-params` tavanını aşardı. */
+  upsertItemColorAlias(key: ItemColorKey, alias: string, userId?: string): ReturnType<typeof itemColor.upsert> {
+    return itemColor.upsert(key, alias, userId);
+  }
+
+  deleteItemColorAlias(key: ItemColorKey, userId?: string): ReturnType<typeof itemColor.remove> {
+    return itemColor.remove(key, userId);
+  }
+
+  // ===========================================================================
   // LOOKUP — sadece master alias değerleri (cascade YOK; label.service uygular)
   // ===========================================================================
 
@@ -232,15 +258,13 @@ export class CustomerAliasService {
       where: { customerId_itemId: { customerId, itemId } },
       select: { alias: true },
     });
-    const colorRow = colorId
-      ? await client.customerColorAlias.findUnique({
-          where: { customerId_colorId: { customerId, colorId } },
-          select: { alias: true },
-        })
+    // Renk: tek çözücü — bu kumaşa özel ad varsa o, yoksa genel ad (sözleşme aynı).
+    const colors = colorId
+      ? await loadCustomerColorIndex(client, { customerIds: [customerId], itemIds: [itemId], colorIds: [colorId] })
       : null;
     return {
       itemAlias: itemRow?.alias ?? null,
-      colorAlias: colorRow?.alias ?? null,
+      colorAlias: colors?.master(customerId, itemId, colorId)?.alias ?? null,
     };
   }
 }
@@ -249,25 +273,7 @@ export class CustomerAliasService {
 // Local helpers
 // =============================================================================
 
-async function assertCustomer(customerId: string): Promise<void> {
-  const c = await prisma.customer.findUnique({
-    where: { id: customerId },
-    select: { id: true, isActive: true },
-  });
-  if (!c) throw AppError.notFound("Müşteri bulunamadı");
-  if (!c.isActive) throw AppError.badRequest("Müşteri pasif durumda");
-}
-
 /** Müşteri ürün adı karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı. */
 async function assertItem(itemId: string): Promise<void> {
   await assertItemUsable(prisma, itemId, "DEFINITION");
-}
-
-async function assertColor(colorId: string): Promise<void> {
-  const c = await prisma.color.findUnique({
-    where: { id: colorId },
-    select: { id: true, isActive: true },
-  });
-  if (!c) throw AppError.notFound("Renk bulunamadı");
-  if (!c.isActive) throw AppError.badRequest("Renk pasif durumda");
 }

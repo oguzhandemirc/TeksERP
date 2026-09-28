@@ -38,6 +38,8 @@ const TABLE_PERMISSIONS: Readonly<Record<string, string>> = {
   ITEM: "item:read",
   SUBCONTRACTOR_DISPATCH: "subcontractor:read",
   SUBCONTRACTOR_RECEIPT: "subcontractor:read",
+  // Kumaşa özel müşteri renk adı — künye paneli (MUSTERI-KUMAS-RENK-ADI §4 "Künye").
+  CUSTOMER_ITEM_COLOR_ALIAS: "customer-alias:read",
 };
 
 const paramsSchema = z.object({

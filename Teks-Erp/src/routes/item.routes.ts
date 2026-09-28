@@ -10,6 +10,7 @@ import { ItemService } from "../services/item.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { readFilterList } from "../utils/query-parser";
+import { CustomerAliasController } from "../controllers/customer-alias.controller";
 import "../types/express-augment";
 
 export const itemService = new ItemService({
@@ -31,6 +32,7 @@ export const itemService = new ItemService({
 });
 
 const controller = new BaseController(itemService);
+const aliasController = new CustomerAliasController();
 const router = Router();
 
 // Yaşam döngüsü (URUN-YASAM-DONGUSU.md §5). `clientToken` şemada YOK: geçiş hedef-durum
@@ -508,6 +510,33 @@ router.post(
       next(err);
     }
   },
+);
+
+/**
+ * @openapi
+ * /api/items/{id}/customer-color-aliases:
+ *   get:
+ *     tags: [Customer Aliases]
+ *     summary: Bu kumaşa bütün müşterilerin verdiği kumaşa özel renk adları
+ *     description: |
+ *       Kumaş kartı girişi (MUSTERI-KUMAS-RENK-ADI karar 1). Yalnız okur; yazma
+ *       `PUT/DELETE /api/customers/{customerId}/item-color-aliases/{itemId}/{colorId}`
+ *       üzerinden. Pasif ya da "Tükenene kadar" kumaşın satırları da listelenir.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "Liste — satır + customer + color özeti; createdAt desc, id desc" }
+ *       404: { description: Ürün bulunamadı }
+ */
+router.get(
+  "/:id/customer-color-aliases",
+  verifyToken,
+  requirePermission("customer-alias:read"),
+  aliasController.listItemColorAliasesByItem,
 );
 
 export default router;
