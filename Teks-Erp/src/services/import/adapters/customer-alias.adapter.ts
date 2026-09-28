@@ -1,4 +1,6 @@
-// Müşteriye özel ad eşlemeleri (kumaş adı + renk adı) — iki adaptör, tek dosya.
+// Müşteriye özel ad eşlemeleri (kumaş adı + renk adı) — iki adaptör + üçünün ortak
+// anahtar/doğrulama parçaları. Üçüncü adaptör (kumaşa özel renk adı, anahtar
+// `CARİ|ÜRÜN|RENK`) `customer-item-color-alias.adapter.ts`te; parçaları buradan alır.
 //
 // =============================================================================
 // ANAHTAR TASARIMI — neden "CARİ KODU|KUMAŞ KODU"
@@ -36,21 +38,35 @@ import { importKey } from "../import-key";
 // servis durumsuz olduğu için burada kendi örneğimizi kuruyoruz.
 const aliasService = new CustomerAliasService();
 
-/** Anahtardaki ayraç. Kod içinde `|` beklenmez; yine de İLK ayraç bölme noktasıdır. */
-const KEY_SEP = "|";
+/** Anahtardaki ayraç. Kod içinde `|` beklenmez; yine de İLK ayraçlar bölme noktasıdır. */
+export const KEY_SEP = "|";
 
 interface AliasKeyParts {
   customerCode: string;
   targetCode: string;
 }
 
-function parseAliasKey(raw: string): AliasKeyParts | null {
-  const idx = raw.indexOf(KEY_SEP);
-  if (idx < 0) return null;
-  const customerCode = raw.slice(0, idx).trim();
-  const targetCode = raw.slice(idx + KEY_SEP.length).trim();
-  if (!customerCode || !targetCode) return null;
-  return { customerCode, targetCode };
+/**
+ * Anahtarı `arity` parçaya böler: ilk `arity-1` ayraç böler, son parça kalan
+ * metnin tamamıdır (iki parçalı anahtarın bugünkü "ilk `|` böler" davranışı).
+ * Boş parça → `null`.
+ */
+export function parseAliasKey(raw: string, arity: 2 | 3): string[] | null {
+  const parts: string[] = [];
+  let rest = raw;
+  for (let i = 0; i < arity - 1; i++) {
+    const idx = rest.indexOf(KEY_SEP);
+    if (idx < 0) return null;
+    parts.push(rest.slice(0, idx).trim());
+    rest = rest.slice(idx + KEY_SEP.length);
+  }
+  parts.push(rest.trim());
+  return parts.every((p) => p.length > 0) ? parts : null;
+}
+
+function parsePair(raw: string): AliasKeyParts | null {
+  const p = parseAliasKey(raw, 2);
+  return p ? { customerCode: p[0]!, targetCode: p[1]! } : null;
 }
 
 /**
@@ -58,7 +74,7 @@ function parseAliasKey(raw: string): AliasKeyParts | null {
  * ("MUS1|patos" ile "MUS1|PATOS" aynı eşlemeyi bulur). Motorun metin-bazlı
  * mükerrer kontrolü bunu göremez — id üzerinden bakıyoruz.
  */
-function guardDuplicateTarget(row: PreparedRow, ctx: ImportContext, bucketKey: string): void {
+export function guardDuplicateTarget(row: PreparedRow, ctx: ImportContext, bucketKey: string): void {
   const targetId = row.result.targetId;
   if (!targetId) return;
   let bucket = ctx.cache.get(bucketKey);
@@ -82,7 +98,7 @@ function guardDuplicateTarget(row: PreparedRow, ctx: ImportContext, bucketKey: s
  * küçük harf yazılmış bir dosya HER koşumda "değişti" der ve hiçbir şey
  * değişmediği hâlde tüm satırlar UPDATE sayılır.
  */
-function applyAliasNormalization(row: PreparedRow): void {
+export function applyAliasNormalization(row: PreparedRow): void {
   const raw = row.values.alias;
   if (typeof raw !== "string") return;
   const norm = normalizeDisplayName(raw);
@@ -144,10 +160,10 @@ function commonColumns(targetLabel: string, targetExample: string, targetNameKey
 }
 
 /** Anahtarların müşteri parçasını TEK sorguda çözer (N+1 yok). */
-async function loadCustomers(
-  parsed: Array<{ raw: string; parts: AliasKeyParts }>,
+export async function loadCustomers(
+  customerCodes: string[],
 ): Promise<Map<string, { id: string; code: string; name: string }>> {
-  const codes = [...new Set(parsed.map((p) => p.parts.customerCode))];
+  const codes = [...new Set(customerCodes)];
   const rows = await prisma.customer.findMany({
     where: { code: { in: codes, mode: "insensitive" } },
     select: { id: true, code: true, name: true },
@@ -157,30 +173,34 @@ async function loadCustomers(
 
 function parseKeys(keys: string[]): Array<{ raw: string; parts: AliasKeyParts }> {
   return keys
-    .map((raw) => ({ raw, parts: parseAliasKey(raw) }))
+    .map((raw) => ({ raw, parts: parsePair(raw) }))
     .filter((p): p is { raw: string; parts: AliasKeyParts } => p.parts !== null);
 }
 
+/** Hedef varlığın çözülen id'sinin satırda taşındığı alan (`__itemId` / `__colorId`). */
+export const targetIdField = (entity: "item" | "color"): string => `__${entity}Id`;
+
 /**
- * İki adaptörün ORTAK satır doğrulaması: anahtar biçimi, mükerrer hedef, müşteri
- * + hedef referansının çözümü (id'ler `__customerId` / `__targetId`'de taşınır).
+ * Üç adaptörün ORTAK satır doğrulaması: anahtar biçimi, mükerrer hedef, müşteri
+ * + hedef referanslarının çözümü (id'ler `__customerId` / `targetIdField`'da taşınır).
+ * `targets` anahtarın müşteriden SONRAKİ parçalarıdır, sırasıyla.
  */
-async function validateAliasRow(
+export async function validateAliasRow(
   row: PreparedRow,
   ctx: ImportContext,
-  targetEntity: "item" | "color",
-  bucketKey: string,
+  spec: { targets: ReadonlyArray<"item" | "color">; bucketKey: string; format: string },
 ): Promise<void> {
   const key = row.result.key;
   if (!key) return; // anahtar boş — motor zaten "zorunlu" hatası verdi
-  const parts = parseAliasKey(key);
+  const parts = parseAliasKey(key, spec.targets.length === 2 ? 3 : 2);
   if (!parts) {
     row.result.errors.push({
       column: "externalKey",
-      message: `Anahtar '${key}' okunamadı. Biçim: CARİ KODU|KOD (örn. MUS1908260001${KEY_SEP}PATOS-01).`,
+      message: `Anahtar '${key}' okunamadı. Biçim: ${spec.format}.`,
     });
     return;
   }
+  const bucketKey = spec.bucketKey;
 
   guardDuplicateTarget(row, ctx, bucketKey);
 
@@ -193,15 +213,17 @@ async function validateAliasRow(
   applyAliasNormalization(row);
 
   // Referansları ŞİMDİ çöz (pasif kayıt da hata verir — servis zaten reddeder).
-  const customer = await resolveReference("customer", parts.customerCode, ctx);
+  const customer = await resolveReference("customer", parts[0]!, ctx);
   if (customer.error) row.result.errors.push({ column: "externalKey", ...customer.error });
   if (customer.warning) row.result.warnings.push({ column: "externalKey", message: customer.warning });
   if (customer.hit) row.values.__customerId = customer.hit.id;
 
-  const target = await resolveReference(targetEntity, parts.targetCode, ctx);
-  if (target.error) row.result.errors.push({ column: "externalKey", ...target.error });
-  if (target.warning) row.result.warnings.push({ column: "externalKey", message: target.warning });
-  if (target.hit) row.values.__targetId = target.hit.id;
+  for (const [i, entity] of spec.targets.entries()) {
+    const target = await resolveReference(entity, parts[i + 1]!, ctx);
+    if (target.error) row.result.errors.push({ column: "externalKey", ...target.error });
+    if (target.warning) row.result.warnings.push({ column: "externalKey", message: target.warning });
+    if (target.hit) row.values[targetIdField(entity)] = target.hit.id;
+  }
 }
 
 const SHARED_NOTES = [
@@ -230,7 +252,7 @@ export const customerItemAliasImportAdapter: ImportAdapter = {
     const parsed = parseKeys(keys);
     if (parsed.length === 0) return map;
 
-    const customerByCode = await loadCustomers(parsed);
+    const customerByCode = await loadCustomers(parsed.map((p) => p.parts.customerCode));
     if (customerByCode.size === 0) return map;
 
     const itemCodes = [...new Set(parsed.map((p) => p.parts.targetCode))];
@@ -270,8 +292,18 @@ export const customerItemAliasImportAdapter: ImportAdapter = {
   },
 
   async validateRow(row: PreparedRow, ctx: ImportContext) {
-    await validateAliasRow(row, ctx, "item", "customerItemAlias:target");
+    await validateAliasRow(row, ctx, {
+      targets: ["item"],
+      bucketKey: "customerItemAlias:target",
+      format: `CARİ KODU|KUMAŞ KODU (örn. MUS1908260001${KEY_SEP}PATOS-01)`,
+    });
   },
+
+  createdClaim: (row) => ({
+    customerId: row.values.__customerId,
+    itemId: row.values[targetIdField("item")],
+    alias: row.values.alias,
+  }),
 
   async createOne(row: PreparedRow, ctx: ImportContext) {
     return upsertItemAlias(row, ctx);
@@ -303,7 +335,7 @@ export const customerItemAliasImportAdapter: ImportAdapter = {
 async function upsertItemAlias(row: PreparedRow, ctx: ImportContext): Promise<{ id: string }> {
   const res = await aliasService.upsertItemAlias(
     row.values.__customerId as string,
-    row.values.__targetId as string,
+    row.values[targetIdField("item")] as string,
     String(row.values.alias),
     ctx.userId,
   );
@@ -333,7 +365,7 @@ export const customerColorAliasImportAdapter: ImportAdapter = {
     const parsed = parseKeys(keys);
     if (parsed.length === 0) return map;
 
-    const customerByCode = await loadCustomers(parsed);
+    const customerByCode = await loadCustomers(parsed.map((p) => p.parts.customerCode));
     if (customerByCode.size === 0) return map;
 
     const colorCodes = [...new Set(parsed.map((p) => p.parts.targetCode))];
@@ -375,8 +407,18 @@ export const customerColorAliasImportAdapter: ImportAdapter = {
   },
 
   async validateRow(row: PreparedRow, ctx: ImportContext) {
-    await validateAliasRow(row, ctx, "color", "customerColorAlias:target");
+    await validateAliasRow(row, ctx, {
+      targets: ["color"],
+      bucketKey: "customerColorAlias:target",
+      format: "CARİ KODU|RENK KODU",
+    });
   },
+
+  createdClaim: (row) => ({
+    customerId: row.values.__customerId,
+    colorId: row.values[targetIdField("color")],
+    alias: row.values.alias,
+  }),
 
   async createOne(row: PreparedRow, ctx: ImportContext) {
     return upsertColorAlias(row, ctx);
@@ -411,7 +453,7 @@ export const customerColorAliasImportAdapter: ImportAdapter = {
 async function upsertColorAlias(row: PreparedRow, ctx: ImportContext): Promise<{ id: string }> {
   const res = await aliasService.upsertColorAlias(
     row.values.__customerId as string,
-    row.values.__targetId as string,
+    row.values[targetIdField("color")] as string,
     String(row.values.alias),
     ctx.userId,
   );

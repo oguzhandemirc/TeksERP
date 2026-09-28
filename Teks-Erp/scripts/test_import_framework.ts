@@ -16,12 +16,15 @@
 //  10. `clientToken` idempotent — aynı deneme ikinci kez YAZMAZ
 //  11. Registry izinleri katalogda TANIMLI
 //  12. exportRows sütunları şablon sütunlarıyla AYNI (round-trip)
+//  13. Müşteri adı şablonları: iki parçalı şablonların sütunları DEĞİŞMEZ, üçlü
+//      anahtar (`CARİ|ÜRÜN|RENK`) ayrı şablondur; anahtar ayrıştırıcı iki biçimi de böler
 //
 // Fixture: `TEST-IMP-` önekli renkler + kumaşlar. Cleanup `finally`de.
 
 import prisma from "../src/lib/prisma";
 import { ImportService } from "../src/services/import/import.service";
 import { listAdapters, getImportAdapter } from "../src/services/import/import-registry";
+import { parseAliasKey } from "../src/services/import/adapters/customer-alias.adapter";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { parseLocaleNumber, parseBool, parseDateCell, isClearLiteral } from "../src/services/import/import-coerce";
 import { FACTORY_TIMEZONE } from "../src/constants/time";
@@ -364,6 +367,15 @@ async function main(): Promise<void> {
       }
     }
     check("her adaptör şablon tarifi üretir", tplOk);
+
+    console.log("\n--- 13. Müşteri adı şablonları ---");
+    const keysOf = (entity: string): string => getImportAdapter(entity).columns.map((c) => c.key).join(",");
+    check("kumaş adı şablonu sütunları DEĞİŞMEDİ", keysOf("customerItemAlias") === "externalKey,customerName,itemName,alias", keysOf("customerItemAlias"));
+    check("renk adı şablonu sütunları DEĞİŞMEDİ", keysOf("customerColorAlias") === "externalKey,customerName,colorName,alias", keysOf("customerColorAlias"));
+    check("kumaşa özel renk adı şablonu üçlü anahtar + üç bilgi sütunu", keysOf("customerItemColorAlias") === "externalKey,customerName,itemName,colorName,alias", keysOf("customerItemColorAlias"));
+    check("iki parçalı anahtar İLK ayraçta bölünür (bugünkü davranış)", JSON.stringify(parseAliasKey(" M1 | K|X ", 2)) === JSON.stringify(["M1", "K|X"]), JSON.stringify(parseAliasKey(" M1 | K|X ", 2)));
+    check("üç parçalı anahtar ilk İKİ ayraçta bölünür", JSON.stringify(parseAliasKey("M1|K1|R1", 3)) === JSON.stringify(["M1", "K1", "R1"]));
+    check("eksik/boş parça null (M1|K1 üçlüde, M1||R1)", parseAliasKey("M1|K1", 3) === null && parseAliasKey("M1||R1", 3) === null && parseAliasKey("M1", 2) === null);
     check("bilinmeyen varlık 404 verir", (() => {
       try {
         getImportAdapter("olmayan-varlik");

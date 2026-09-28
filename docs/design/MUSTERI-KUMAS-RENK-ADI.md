@@ -99,7 +99,7 @@ Sektör haritacısının "üç düzey tek tablo" önerisi reddedildi: iki canlı
 - `scripts/fix_duplicate_master_data.ts:61` renk referans sayımına yeni tablo eklenir. Sayılmazsa Cascade kumaşa özel adları sessizce siler.
 - `scripts/reset-operational.ts:92` korunan tablolar listesine eklenir.
 
-**İçe aktarma:** D5'e ertelendi. Mevcut iki şablonun sütunları DEĞİŞMEZ.
+**İçe aktarma:** D5 (karar 6; uygulama notları §14). Mevcut iki şablonun sütunları DEĞİŞMEZ.
 
 ### Defter mi, yapılandırma mı
 
@@ -572,3 +572,15 @@ D1 backend bu belgeye göre indi; aşağıdakiler belgeden bilinçli sapmalar ya
 - **`test_sevk_belge_excel_esit` (§6):** muhasebe Excel yolunu ÖLÇMÜYOR — kapsam notu bekçi başlığına yazıldı.
 - **P2002 yakalaması (§12.3):** eşzamanlı ilk PUT yarışında Prisma upsert'i tek ifadede (ON CONFLICT) koşuyor; 5 tur × 3 eşzamanlı ilk PUT'ta P2002 doğmadı. Yakalama savunma olarak duruyor; sondası SESSİZ (bekçi başlığında beyanlı), sözleşmenin sonucu ("500 ASLA") ölçülüyor.
 
+
+## 14. D5 uygulama notları (içe aktarma, 2026-09-28)
+
+- **Dosya yerleşimi (sapma):** üçüncü adaptör ayrı dosyada — `src/services/import/adapters/customer-item-color-alias.adapter.ts` (entity `customerItemColorAlias`, şablon "Müşteri Kumaşa Özel Renk Adları"). `customer-alias.adapter.ts` zaten 300 satır tavanının üstündeydi; ortak parçalar (`parseAliasKey`, `validateAliasRow`, `loadCustomers`, `guardDuplicateTarget`, `applyAliasNormalization`, `targetIdField`, `KEY_SEP`) oradan dışa açıldı. Mevcut iki şablonun sütunları DEĞİŞMEDİ (`test_import_framework §13`).
+- **Anahtar:** `parseAliasKey(raw, arity)` — ilk `arity-1` ayraç böler, son parça kalan metnin tamamı (iki parçalıda bugünkü "ilk `|` böler" davranışı korunur); boş parça `null`. Anahtar sütunu `maxLen` 120 (defter `ImportRunLine.keyValue` VarChar(120); üç kod en çok 32'şer). Çözülen id'ler `__itemId`/`__colorId` (eski ortak `__targetId` kalktı; iç alan).
+- **Kumaş kapısı önizlemede:** `assertItemUsable(…, "DEFINITION")` `validateRow`da da sorulur — "Tükenene kadar"/Pasif kumaş satırı önizlemede hata alır, yazma anında 409 verip koşumu yarıda DURDURMAZ. Kardeş `customerItemAlias` adaptörüne bu dilimde eklenmedi.
+- **Geri sarma claim'i (karar 6, `defter.md:60`):** jenerik mekanizma — `ImportAdapter.createdClaim(row)` CREATE satırının yazdığı kolonları (anahtar id'leri + normalize ad) verir, motor bunu `changedFields`e `{from:null,to}` olarak dondurur, `deletePivot` `deleteMany({id, …claim})` yazar, önizleme aynı claim'i okur (`pivotClaimOf` / `pivotClaimDrift`). ÜÇ alias adaptörü de beyan eder. Claim'e alias'ın yanında ANAHTAR kolonları da girer (tasarım yalnız alias diyordu): birleştirmeyle başka cariye taşınan satır, adı aynı olsa da o cariye aittir ve silinmez (§9 çapraz defter fikstürü).
+- **Eski defter satırı (sapma, fail-closed):** D5'ten önce yazılmış alias CREATE satırı claim değerini TAŞIMAZ; geri sarma onu artık SİLMEZ, gerekçeyle atlar (önceden yalnız `id` ile siliyordu). "Sonradan değişti mi" sorusu sorulamaz; `updatedAt ≤ defter anı` alternatifi uygulama saati (Prisma `@updatedAt`) ile DB saatini (`now()`) karıştırdığı için reddedildi. Satır gerekirse panelden kaldırılır.
+- **Preview `fields`:** CREATE satırında `changedFields` artık claim taşıdığı için önizleme CREATE satırının alan listesini boş basar (bugünkü çıktı korunur).
+- **Panel:** içe aktarım ekranı (`DataImportPage`) varlık listesini `/api/import/entities`ten okur — yeni şablon panel değişikliği OLMADAN görünür; geri sarma diyaloğu da jenerik.
+- **Dışa aktarım:** `exportRows` üçlü anahtarla satırlaştırır; dışa aktarılan dosya geri yüklenince her satır SKIP (`test_import_revert §8f`). Şablon örneğinde seri kodu yazılmaz (`test_bayat_kod_literali` tabanı).
+- **Bekçiler:** `test_import_revert` 66/0 (sabit 17→18, pivot 2→3; §8 DB fikstürü: CREATE claim · UPDATE geri dönüş · üçüncü taraf değişikliği atlanır · eski satır · önizleme kapıları · round-trip; §9 içe aktar → birleştir/SKIP → geri sar (ikisi atlanır) → birleştirmeyi geri al (0 atlama) → yeniden geri sar (ikisi silinir)) · `test_import_framework` 57/0 · `test_import_permissions` 10/0 · `test_musteri_adi_tek_cozucu` 11/0 (yeni dosyanın iki okuyucusu DISA_AKTARIM beyanında).

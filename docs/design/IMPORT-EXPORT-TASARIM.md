@@ -325,10 +325,11 @@ belgeleri sessizce null'lar/cascade'ler): `customerBranch` · `qualityGrade` ·
 `defectType` · `returnReason` · `subcontractorCategory` · `route` · `productRecipe`.
 Geri sarma bu yedisinde YALNIZ `isActive:false` yazar.
 
-### 8.2a İki alias pivotunda FİZİKSEL SİLME — sınıf ③b (yapılandırma pivotu)
+### 8.2a Üç müşteri adı pivotunda FİZİKSEL SİLME — sınıf ③b (yapılandırma pivotu)
 
-`customerItemAlias` ve `customerColorAlias` soft-delete kolonu TAŞIMIYOR
-(`schema.prisma` `customer_item_aliases` / `customer_color_aliases`), bu yüzden
+`customerItemAlias`, `customerColorAlias` ve `customerItemColorAlias` (kumaşa özel renk
+adı, `docs/design/MUSTERI-KUMAS-RENK-ADI.md` D5) soft-delete kolonu TAŞIMIYOR
+(`schema.prisma` `customer_item_aliases` / `customer_color_aliases` / `customer_item_color_aliases`), bu yüzden
 koşumun YARATTIĞI bir alias satırını geri almanın tek yolu fiziksel silmedir. Bu,
 hard delete'in ③b sınıfına (**saf yapılandırma pivotu**) girer ve üç sınırla sahiplenilir:
 
@@ -343,6 +344,12 @@ hard delete'in ③b sınıfına (**saf yapılandırma pivotu**) girer ve üç s�
 3. Satırın parasal/ticari/kalite sonucu yoktur (yalnız müşterinin bizim kayda verdiği ad)
    ve değişikliğin KENDİSİ `ImportRunLine`da defterli kalır — ③b'nin "değişiklik karar
    defterine yazılır" şartı böyle karşılanır.
+4. **Silme ATOMİK CLAIM'lidir (2026-09-28, D5):** CREATE satırı koşumun YAZDIĞI anahtar
+   kolonlarını + adı `changedFields`e `{from:null,to}` olarak dondurur
+   (`ImportAdapter.createdClaim`); geri sarma `deleteMany({id, …bu değerler})` yazar ve
+   önizleme aynı claim'i okur (`pivotClaimOf`). Sonradan adı değişen ya da birleştirmeyle
+   başka cariye taşınan satır gerekçeyle ATLANIR. Bu değeri taşımayan eski defter satırı
+   (D5 öncesi koşum) SİLİNMEZ — "sonradan değişti mi" sorulamaz; satır panelden kaldırılır.
 
 ⚠️ `assigned` ile `alias` BAĞIMSIZDIR (şema yorumu üç kombinasyonu sayıyor). Ölçüm:
 import yalnız `alias` yazar (`customer-alias.service.ts` upsert), `assigned` varsayılan
@@ -489,9 +496,10 @@ atlandı" sorusu da deftere düşer.
    şimdi, 5 satır sonra) koşum damgası ancak geri sarılmamış satır kalmadığında konur.
 9. Bekçi **`test_import_revert.ts` 40/0** (`tekserp_ea_test`); kırmızısı ÖNCE ölçüldü
    (servis yokken 3 kontrol kırmızı, saf yük + motor kontrolleri yeşil).
-   **KÖRLÜK ZEMİNİ:** route adım ağacının ve alias pivotunun DB geri yazımı fixture'la
-   KOŞULMUYOR (istasyon/müşteri fixture'ı gerekir) — o iki dal plan tablosu ve saf yük
-   üzerinden ölçülür ve bu cümle bekçinin ÇIKTISINDA da basılır.
+   **KÖRLÜK ZEMİNİ:** route adım ağacının DB geri yazımı fixture'la KOŞULMUYOR
+   (istasyon fixture'ı gerekir) — o dal plan tablosu ve saf yük üzerinden ölçülür ve bu
+   cümle bekçinin ÇIKTISINDA da basılır. Alias pivotu 2026-09-28'den (D5) beri §8/§9'da
+   kumaşa özel renk adı fixture'ıyla koşulur (claim, eski satır, çapraz defter sırası).
 10. Panel: `ImportRevertDialog` koşum geçmişinden açılır (yeni ekran yok).
     `ImportLineAction` etiketleri **audit sözlüğünden** okunur (`enumValueLabel`);
     ikinci bir etiket haritası AÇILMADI — reçetenin `types/enums.ts` aynası yalnız

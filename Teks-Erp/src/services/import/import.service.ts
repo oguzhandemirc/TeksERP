@@ -609,6 +609,7 @@ export class ImportService {
               recordId: out.id,
               row: p,
               engineAction: p.result.action === "CREATE" ? "CREATE" : "UPDATE",
+              createdClaim: p.result.action === "CREATE" ? adapter.createdClaim?.(p) : undefined,
             }),
           );
         } catch (e) {

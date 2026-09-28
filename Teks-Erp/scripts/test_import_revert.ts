@@ -15,18 +15,36 @@
 //   7. Çift geri sarma 409
 //   8. `REVIVE`ın tersi kör `isActive:false` DEĞİL — kaydedilmiş önceki durum
 //   9. Atomik claim (`updateMany WHERE {id, alan: onceki}`); `findUnique→if→update` YOK
+//  10. ③b pivot: CREATE satırı YAZDIĞI değerleri (anahtar + ad) deftere dondurur;
+//      geri sarma satırı ancak bunlar hâlâ yerindeyse siler (defter.md) — sonradan
+//      değişen/taşınan satır ATLANIR, değeri taşımayan eski defter satırı silinmez
+//  11. Çapraz defter sırası: içe aktar → birleştir (SKIP) → içe aktarmayı geri al →
+//      birleştirmeyi geri al → içe aktarmayı yeniden geri al; hiçbir defter ötekinin
+//      satırını sessizce yemez
 //
-// KÖRLÜK ZEMİNİ: route adım ağacı ve alias pivotu DB fixture'ıyla KOŞULMUYOR
-// (istasyon/müşteri fixture'ı gerektirir); onlar plan tablosu üzerinden STATİK
-// doğrulanır ve bu satır ekrana basılır ki "yeşil = kapsandı" sanılmasın.
+// KÖRLÜK ZEMİNİ: route adım ağacı DB fixture'ıyla KOŞULMUYOR (istasyon fixture'ı
+// gerektirir); plan tablosu üzerinden STATİK doğrulanır ve bu satır ekrana basılır
+// ki "yeşil = kapsandı" sanılmasın. Alias pivotu §8/§9'da kumaşa özel renk adı
+// (`customerItemColorAlias`) fixture'ıyla koşulur.
 //
-// Fixture: `TEST-REV-` önekli renkler. Cleanup `finally`de (defter satırı RESTRICT
-// olduğu için ÖNCE satırlar, sonra koşum silinir).
+// NEGATİF SONDALAR (ölçüldü, geri alındı): deletePivot claim'i yalnız `id`e
+// indirilince §8c + §9a kırmızı · motorun `createdClaim` aktarımı kaldırılınca
+// §8a kırmızı · önizleme sapma kontrolü kaldırılınca §8c önizleme kırmızı.
+//
+// Fixture: `TEST-REV-` önekli renkler + `TRV…` kodlu cari/kumaş/renk. Cleanup
+// `finally`de (defter satırı RESTRICT olduğu için ÖNCE satırlar, sonra koşum silinir).
 
+import { CompanyType } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { ImportService } from "../src/services/import/import.service";
 import { buildImportRunLine } from "../src/services/import/import-run-line.helper";
 import type { PreparedRow } from "../src/services/import/import.types";
+import { getImportAdapter } from "../src/services/import/import-registry";
+import { PIVOT_LEGACY_SKIP } from "../src/services/import/import-revert.branches";
+import { CustomerAliasService } from "../src/services/customer-alias.service";
+import { MasterDataMergeService } from "../src/services/master-data-merge.service";
+import { MasterDataUnmergeService } from "../src/services/master-data-unmerge.service";
+import { ensureTestAdmin } from "./fixture-test-user";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -105,6 +123,19 @@ async function main(): Promise<void> {
     engineAction: "UPDATE",
   });
   check("aktiften pasife çeken güncelleme REVIVE DEĞİL", notRevive.action === "UPDATE");
+
+  const pivotCreate = buildImportRunLine({
+    ...base,
+    row: fakeRow(9, {}, { action: "CREATE" }),
+    engineAction: "CREATE",
+    createdClaim: { customerId: "c", alias: "ABC" },
+  });
+  check(
+    "③b CREATE: yazılan değerler changedFields'e {from:null,to} olarak DONAR (geri sarma claim'i)",
+    JSON.stringify(pivotCreate.changedFields) ===
+      JSON.stringify({ customerId: { from: null, to: "c" }, alias: { from: null, to: "ABC" } }),
+    JSON.stringify(pivotCreate.changedFields),
+  );
 
   const withChildren = buildImportRunLine({
     ...base,
@@ -292,8 +323,14 @@ async function main(): Promise<void> {
     if (revert) {
       const plan = revert.REVERT_PLAN as Record<string, { mode: string }>;
       const entities = Object.keys(plan);
-      check("17 varlığın tamamı plan tablosunda", entities.length === 17, `${entities.length} varlık`);
-      check("iki alias pivotu DELETE_PIVOT (③b)", plan.customerItemAlias?.mode === "DELETE_PIVOT" && plan.customerColorAlias?.mode === "DELETE_PIVOT");
+      check("18 varlığın tamamı plan tablosunda", entities.length === 18, `${entities.length} varlık`);
+      const pivots = ["customerItemAlias", "customerColorAlias", "customerItemColorAlias"];
+      check(
+        "üç müşteri adı pivotu DELETE_PIVOT (③b) ve üçü de CREATE claim'ini beyan ediyor",
+        pivots.every((e) => plan[e]?.mode === "DELETE_PIVOT" && typeof getImportAdapter(e).createdClaim === "function") &&
+          Object.values(plan).filter((p) => p.mode === "DELETE_PIVOT").length === 3,
+        pivots.filter((e) => plan[e]?.mode !== "DELETE_PIVOT").join(","),
+      );
       check("sipariş CANCEL_DOCUMENT (mevcut iptal yolu)", plan.order?.mode === "CANCEL_DOCUMENT");
       const forbidden = ["customerBranch", "qualityGrade", "defectType", "returnReason", "subcontractorCategory", "route", "productRecipe"];
       check(
@@ -305,10 +342,14 @@ async function main(): Promise<void> {
       check("plan tablosu okunabiliyor", false, "modül yok");
     }
 
+    if (revert) {
+      await aliasPivotDallari(revert.ImportRevertService, runIds);
+      await caprazDefterSirasi(revert.ImportRevertService, runIds);
+    }
+
     console.log(
-      "\nℹ️ KÖRLÜK ZEMİNİ: route adım ağacının ve alias pivotunun DB geri yazımı bu bekçide" +
-        " fixture ile KOŞULMADI (istasyon/müşteri fixture'ı gerekir) — yalnız plan tablosu ve" +
-        " saf yük doğrulandı.",
+      "\nℹ️ KÖRLÜK ZEMİNİ: route adım ağacının DB geri yazımı bu bekçide fixture ile" +
+        " KOŞULMADI (istasyon fixture'ı gerekir) — yalnız plan tablosu ve saf yük doğrulandı.",
     );
   } finally {
     // Defter satırı RESTRICT: ÖNCE satırlar, sonra koşum.
@@ -316,11 +357,206 @@ async function main(): Promise<void> {
       await prisma.importRunLine.deleteMany({ where: { importRunId: { in: runIds } } });
       await prisma.importRun.deleteMany({ where: { id: { in: runIds } } });
     }
+    await temizlikAliasFixture();
     await prisma.color.deleteMany({ where: { name: { startsWith: PREFIX } } });
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
+}
+
+// =============================================================================
+// §8–§9 — ③b pivot (kumaşa özel renk adı) DB dalları
+// =============================================================================
+type RevertApi = typeof import("../src/services/import/import-revert.service").ImportRevertService;
+
+const TRV = `TRV${Date.now().toString(36).toUpperCase()}`;
+const fx = { customers: [] as string[], items: [] as string[], colors: [] as string[] };
+const aliasService = new CustomerAliasService();
+const ENTITY = "customerItemColorAlias";
+
+async function yeniCari(sfx: string): Promise<{ id: string; code: string }> {
+  const c = await prisma.customer.create({
+    data: { code: `${TRV}-${sfx}`, name: `${PREFIX} ${TRV} CARI ${sfx}`, type: CompanyType.CUSTOMER },
+    select: { id: true, code: true },
+  });
+  fx.customers.push(c.id);
+  return c;
+}
+async function yeniKumas(sfx: string): Promise<{ id: string; code: string }> {
+  const i = await prisma.item.create({
+    data: { code: `${TRV}-${sfx}`, name: `${PREFIX} ${TRV} KUMAS ${sfx}`, itemType: "FABRIC" },
+    select: { id: true, code: true },
+  });
+  fx.items.push(i.id);
+  return i;
+}
+async function yeniRenk(sfx: string): Promise<{ id: string; code: string }> {
+  const r = await prisma.color.create({
+    data: { code: `${TRV}-${sfx}`, name: `${PREFIX} ${TRV} RENK ${sfx}` },
+    select: { id: true, code: true },
+  });
+  fx.colors.push(r.id);
+  return r;
+}
+
+const anahtar = (...codes: string[]): string => codes.join("|");
+async function iceAktar(runIds: string[], rows: Array<{ rowNo: number; key: string; alias: string }>): Promise<string> {
+  const res = await ImportService.apply(
+    ENTITY,
+    rows.map((r) => ({ rowNo: r.rowNo, cells: { externalKey: r.key, alias: r.alias } })),
+    { mode: "upsert", onError: "abort", fileName: "bekci-ica.xlsx" },
+  );
+  runIds.push(res.runId);
+  return res.runId;
+}
+const ad = async (customerId: string, itemId: string, colorId: string): Promise<string | null> =>
+  (
+    await prisma.customerItemColorAlias.findUnique({
+      where: { customerId_itemId_colorId: { customerId, itemId, colorId } },
+      select: { alias: true },
+    })
+  )?.alias ?? null;
+
+async function aliasPivotDallari(revertSvc: RevertApi, runIds: string[]): Promise<void> {
+  console.log("\n--- 8. ③b pivot: kumaşa özel renk adı içe aktar → geri sar ---");
+  const c = await yeniCari("A");
+  const x = await yeniKumas("X");
+  const e = await yeniRenk("E");
+  const e2 = await yeniRenk("E2");
+
+  // §8a CREATE: yazılan anahtar + ad deftere donar
+  const createRun = await iceAktar(runIds, [
+    { rowNo: 2, key: anahtar(c.code, x.code, e.code), alias: "abc" },
+    { rowNo: 3, key: anahtar(c.code, x.code, e2.code), alias: "def" },
+  ]);
+  const lines = await prisma.importRunLine.findMany({ where: { importRunId: createRun }, orderBy: { rowNo: "asc" } });
+  const cf0 = lines[0]?.changedFields as Record<string, { from: unknown; to: unknown }> | null;
+  check("§8a iki CREATE satırı defterde", lines.length === 2 && lines.every((l) => l.action === "CREATE"), `${lines.length}`);
+  check(
+    "§8a CREATE satırı yazılan anahtar + NORMALİZE ad claim'ini taşıyor",
+    cf0?.customerId?.to === c.id && cf0?.itemId?.to === x.id && cf0?.colorId?.to === e.id && cf0?.alias?.to === "ABC",
+    JSON.stringify(cf0),
+  );
+  check("§8a kayıt DB'de BÜYÜK harfle", (await ad(c.id, x.id, e.id)) === "ABC");
+
+  // §8b UPDATE → alan bazlı geri dönüş (jenerik restoreRow yeni tabloda)
+  const updRun = await iceAktar(runIds, [{ rowNo: 2, key: anahtar(c.code, x.code, e.code), alias: "xyz" }]);
+  const updLine = (await prisma.importRunLine.findMany({ where: { importRunId: updRun } }))[0];
+  const ucf = updLine?.changedFields as Record<string, { from: unknown; to: unknown }> | null;
+  check("§8b güncelleme UPDATE satırı, yalnız alias", updLine?.action === "UPDATE" &&
+    Object.keys(ucf ?? {}).join(",") === "alias" && ucf?.alias?.from === "ABC" && ucf?.alias?.to === "XYZ", JSON.stringify(ucf));
+  await revertSvc.revert(updRun, { reason: "bekçi pivot güncelleme geri sarma", selectedRowNos: [2], permissions: ["admin:*"] });
+  check("§8b güncellemenin geri sarması adı ABC'ye döndürdü", (await ad(c.id, x.id, e.id)) === "ABC");
+
+  // §8c üçüncü taraf E2'nin adını değiştiriyor → önizleme ve yazım ATLAR, E silinir
+  await aliasService.upsertItemColorAlias({ customerId: c.id, itemId: x.id, colorId: e2.id }, "başka");
+  const plan = await revertSvc.preview(createRun, ["admin:*"]);
+  const pE = plan.rows.find((r) => r.rowNo === 2);
+  const pE2 = plan.rows.find((r) => r.rowNo === 3);
+  check("§8c önizleme: dokunulmamış satır DELETE_PIVOT, atlamasız, alan listesi boş",
+    pE?.action === "DELETE_PIVOT" && !pE.skipReason && pE.fields.length === 0, JSON.stringify(pE));
+  check("§8c önizleme: adı sonradan değişen satır gerekçeyle ATLANACAK (alias)",
+    (pE2?.skipReason ?? "").includes("alias"), String(pE2?.skipReason));
+  const res = await revertSvc.revert(createRun, { reason: "bekçi pivot yaratma geri sarma", selectedRowNos: [2, 3], permissions: ["admin:*"] });
+  check("§8c geri sarma: 1 silindi, 1 atlandı", res.reverted === 1 && res.skipped.length === 1, JSON.stringify(res));
+  check("§8c koşumun yazdığı satır SİLİNDİ", (await ad(c.id, x.id, e.id)) === null);
+  check("§8c ⭐ üçüncü tarafın adı EZİLMEDİ/SİLİNMEDİ", (await ad(c.id, x.id, e2.id)) === "BAŞKA");
+
+  // §8d claim'siz (eski) CREATE satırı: sorulamayan soru → silinmez
+  const leg = await aliasService.upsertItemColorAlias({ customerId: c.id, itemId: x.id, colorId: e.id }, "eski");
+  const legRun = await prisma.importRun.create({
+    data: { entity: ENTITY, status: "APPLIED", finishedAt: new Date(), rowCount: 1, created: 1 },
+    select: { id: true },
+  });
+  runIds.push(legRun.id);
+  await prisma.importRunLine.create({
+    data: { importRunId: legRun.id, entity: ENTITY, tableName: "CUSTOMER_ITEM_COLOR_ALIAS", recordId: leg.data.id, rowNo: 2, action: "CREATE" },
+  });
+  const legPlan = await revertSvc.preview(legRun.id, ["admin:*"]);
+  check("§8d önizleme: değersiz eski satır gerekçeyle atlanacak", legPlan.rows[0]?.skipReason === PIVOT_LEGACY_SKIP, String(legPlan.rows[0]?.skipReason));
+  const legRes = await revertSvc.revert(legRun.id, { reason: "bekçi eski defter satırı", selectedRowNos: [2], permissions: ["admin:*"] });
+  check("§8d yazım da atladı, satır DURUYOR", legRes.reverted === 0 && (await ad(c.id, x.id, e.id)) === "ESKİ", JSON.stringify(legRes));
+
+  // §8e önizleme kapıları: "Tükenene kadar" kumaş + iki parçalı anahtar
+  const y = await yeniKumas("Y");
+  await prisma.item.update({ where: { id: y.id }, data: { lifecycleStatus: "PHASE_OUT" } });
+  const pv = await ImportService.preview(ENTITY, [
+    { rowNo: 2, cells: { externalKey: anahtar(c.code, y.code, e.code), alias: "Z" } },
+    { rowNo: 3, cells: { externalKey: anahtar(c.code, x.code), alias: "Z" } },
+  ], { mode: "upsert", onError: "abort" });
+  check("§8e 'Tükenene kadar' kumaşa yeni ad ÖNİZLEMEDE hata (yazımda koşumu durdurmaz)", pv.rows[0]?.action === "ERROR", JSON.stringify(pv.rows[0]?.errors));
+  check("§8e iki parçalı anahtar üçlü şablonda okunamaz", pv.rows[1]?.action === "ERROR" &&
+    (pv.rows[1]?.errors ?? []).some((er) => er.message.includes("okunamadı")), JSON.stringify(pv.rows[1]?.errors));
+
+  // §8f round-trip: dışa aktarılan satır aynı dosyayla yüklenince SKIP
+  const exported = (await getImportAdapter(ENTITY).exportRows()).filter((r) => r.externalKey?.startsWith(TRV));
+  const cols = new Set(getImportAdapter(ENTITY).columns.map((k) => k.key));
+  check("§8f dışa aktarım fixture satırlarını üçlü anahtarla veriyor", exported.length === 2 &&
+    exported.every((r) => r.externalKey!.split("|").length === 3 && Object.keys(r).every((k) => cols.has(k))), JSON.stringify(exported));
+  const rt = await ImportService.preview(ENTITY, exported.map((r, i) => ({ rowNo: i + 2, cells: r })), { mode: "upsert", onError: "abort" });
+  check("§8f dışa aktarılan dosya geri yüklenince her satır SKIP", rt.rows.every((r) => r.action === "SKIP"), rt.rows.map((r) => r.action).join(","));
+}
+
+async function caprazDefterSirasi(revertSvc: RevertApi, runIds: string[]): Promise<void> {
+  console.log("\n--- 9. Çapraz defter: içe aktar → birleştir → geri sar → birleştirmeyi geri al → geri sar ---");
+  const admin = (await ensureTestAdmin()).id;
+  const s = await yeniCari("S");
+  const k = await yeniCari("K");
+  const x = await yeniKumas("X9");
+  const e = await yeniRenk("E9");
+  const e2 = await yeniRenk("F9");
+  await aliasService.upsertItemColorAlias({ customerId: s.id, itemId: x.id, colorId: e.id }, "S-GENEL");
+
+  const run = await iceAktar(runIds, [
+    { rowNo: 2, key: anahtar(k.code, x.code, e.code), alias: "P" }, // survivor'la çakışır → SKIP atar
+    { rowNo: 3, key: anahtar(k.code, x.code, e2.code), alias: "Q" }, // survivor'a taşınır
+  ]);
+  const pv = await MasterDataMergeService.preview("customer", s.id, [k.id]);
+  await MasterDataMergeService.merge("customer", {
+    survivorId: s.id, sourceIds: [k.id], reason: "bekçi çapraz defter sırası", acknowledgedConflicts: pv.conflicts.length, userId: admin,
+  });
+  check("§9 birleştirme: survivor'da S-GENEL korundu + Q taşındı", (await ad(s.id, x.id, e.id)) === "S-GENEL" && (await ad(s.id, x.id, e2.id)) === "Q");
+
+  const r1 = await revertSvc.revert(run, { reason: "bekçi birleşmiş kaydın geri sarması", selectedRowNos: [2, 3], permissions: ["admin:*"] });
+  check("§9a ⭐ içe aktarma geri sarması iki satırı da ATLADI (biri silinmiş, biri başka cariye taşınmış)",
+    r1.reverted === 0 && r1.skipped.length === 2, JSON.stringify(r1));
+  check("§9a survivor'ın taşınmış Q adı SİLİNMEDİ", (await ad(s.id, x.id, e2.id)) === "Q");
+
+  const op = await prisma.mergeOperation.findFirstOrThrow({ where: { survivorId: s.id }, orderBy: { createdAt: "desc" }, select: { id: true } });
+  const un = await MasterDataUnmergeService.revert(op.id, { reason: "bekçi çapraz defter geri alma", userId: admin });
+  check("§9b birleştirmeyi geri alma hiçbir satırı atlamadı (P ve Q kaynağa döndü)", un.skippedRows === 0 &&
+    (await ad(k.id, x.id, e.id)) === "P" && (await ad(k.id, x.id, e2.id)) === "Q", JSON.stringify(un));
+
+  const r2 = await revertSvc.revert(run, { reason: "bekçi atlanan satırların ikinci geri sarması", selectedRowNos: [2, 3], permissions: ["admin:*"] });
+  check("§9c atlanan satırlar ikinci geri sarmada silindi", r2.reverted === 2, JSON.stringify(r2));
+  const kalan = await prisma.customerItemColorAlias.findMany({ where: { customerId: { in: [s.id, k.id] } }, select: { alias: true } });
+  check("§9c son durum: yalnız survivor'ın kendi adı (S-GENEL)", kalan.map((r) => r.alias).join(",") === "S-GENEL", kalan.map((r) => r.alias).join(","));
+}
+
+async function temizlikAliasFixture(): Promise<void> {
+  try {
+    if (fx.customers.length > 0) {
+      const ops = await prisma.mergeOperation.findMany({
+        where: { OR: [{ survivorId: { in: fx.customers } }, { sources: { some: { sourceId: { in: fx.customers } } } }] },
+        select: { id: true },
+      });
+      const opIds = ops.map((o) => o.id);
+      if (opIds.length > 0) {
+        await prisma.mergeOperationRef.deleteMany({ where: { operationId: { in: opIds } } });
+        await prisma.mergeOperationSource.deleteMany({ where: { operationId: { in: opIds } } });
+        await prisma.mergeOperation.deleteMany({ where: { id: { in: opIds } } });
+      }
+      await prisma.duplicateReview.deleteMany({ where: { OR: [{ aId: { in: fx.customers } }, { bId: { in: fx.customers } }] } });
+      await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: fx.customers } } });
+      await prisma.cariAccount.deleteMany({ where: { customerId: { in: fx.customers } } });
+      await prisma.customer.deleteMany({ where: { id: { in: fx.customers } } });
+    }
+    if (fx.items.length > 0) await prisma.item.deleteMany({ where: { id: { in: fx.items } } });
+    if (fx.colors.length > 0) await prisma.color.deleteMany({ where: { id: { in: fx.colors } } });
+  } catch (err) {
+    console.warn("Temizlik uyarısı:", (err as Error).message.slice(0, 300));
+  }
 }
 
 main().catch((e) => {
