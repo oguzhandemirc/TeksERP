@@ -29,15 +29,18 @@ import Toast from 'react-native-toast-message';
 
 import AppModal from '../../../components/AppModal';
 import ModalTextInput from '../../../components/ModalTextInput';
-import { labelService, type LabelNamePreview as Preview } from '../../../services/label.service';
+import { labelService } from '../../../services/label.service';
 import { usePermissions } from '../../../hooks/usePermission';
+import { colors } from '../../../theme';
 import { shouldShowOriginalName } from './labelNameCompare';
+import { planPermanentWrites, sourceSummary, type PermanentWrite } from './labelNameSave';
 
-/** Ad kaynağının operatöre görünen karşılığı. */
-function sourceLabel(src: Preview['itemNameSource'] | null): string {
-  if (src === 'OVERRIDE') return 'siparişe özel';
-  if (src === 'MASTER') return 'müşteri adı';
-  return 'bizdeki ad';
+function writePermanent(w: PermanentWrite): Promise<unknown> {
+  if (w.kind === 'ITEM_ALIAS') return labelService.setCustomerItemAlias(w.customerId, w.itemId, w.alias);
+  if (w.kind === 'ITEM_COLOR_ALIAS') {
+    return labelService.setCustomerItemColorAlias(w.customerId, w.itemId, w.colorId, w.alias);
+  }
+  return labelService.setCustomerColorAlias(w.customerId, w.colorId, w.alias);
 }
 
 export function LabelNamePreview({
@@ -103,13 +106,9 @@ export function LabelNamePreview({
         });
       } else {
         if (!p.customerId) throw new Error('Müşteri seçili değil');
-        // Kalıcı yazımda BOŞ değer gönderilmez: alias'ı silmek ayrı bir karardır
-        // (Tanımlar ekranı) — acil düzeltme akışında kazara silinmemeli.
-        if (nextItem) {
-          await labelService.setCustomerItemAlias(p.customerId, p.itemId, nextItem);
-        }
-        if (nextColor && p.colorId) {
-          await labelService.setCustomerColorAlias(p.customerId, p.colorId, nextColor);
+        // Sıralı: yazımlar ayrı uçlara gider, biri düşerse hangisinin yazıldığı belli kalsın.
+        for (const w of planPermanentWrites(p, { itemName: nextItem, colorName: nextColor })) {
+          await writePermanent(w);
         }
       }
     },
@@ -135,6 +134,11 @@ export function LabelNamePreview({
   // Kural TEK KAYNAKTA (labelNameCompare) — bileşende tekrar yazmak, testin
   // gerçek davranışı değil kopyasını sınaması demekti.
   const showOriginal = shouldShowOriginalName(p);
+
+  // Kalıcı kayıt yalnız değişen alanı yazar; hiçbir alan değişmediyse Kaydet anlamsızdır.
+  const permanentPlan = planPermanentWrites(p, { itemName, colorName });
+  const colorWrite = permanentPlan.find((w) => w.kind !== 'ITEM_ALIAS');
+  const nothingToSave = scope === 'PERMANENT' && permanentPlan.length === 0;
 
   return (
     <>
@@ -163,7 +167,7 @@ export function LabelNamePreview({
           <Text style={s.sub}>
             {isStock
               ? 'Stok — müşteriye özel ad basılmaz'
-              : `${sourceLabel(p.itemNameSource)} · düzeltmek için dokun`}
+              : `${sourceSummary(p)} · düzeltmek için dokun`}
           </Text>
         </View>
       </TouchableRipple>
@@ -194,6 +198,9 @@ export function LabelNamePreview({
                 onChangeText={setColorName}
                 style={s.input}
               />
+              {p.colorNameScope === 'ITEM' ? (
+                <Text style={s.hint}>Bu renk adı yalnız bu kumaşa özel.</Text>
+              ) : null}
             </>
           ) : null}
 
@@ -235,6 +242,14 @@ export function LabelNamePreview({
               etiketini DEĞİŞTİRMEZ. Bunun için "Sadece bu siparişte"yi seç.
             </Text>
           ) : null}
+          {/* Genel renk adı müşterinin bütün kumaşlarında basılır — yazmadan önce söylenir. */}
+          {scope === 'PERMANENT' && colorWrite ? (
+            <Text style={s.hint}>
+              {colorWrite.kind === 'ITEM_COLOR_ALIAS'
+                ? 'Renk adı yalnız bu kumaşta değişir.'
+                : 'Renk adı bu müşterinin bütün kumaşlarında değişir (kumaşa özel adı olanlar hariç).'}
+            </Text>
+          ) : null}
 
           <View style={s.actions}>
             <Button mode="outlined" onPress={() => setEditOpen(false)} style={s.btn}>
@@ -242,11 +257,19 @@ export function LabelNamePreview({
             </Button>
             <Button
               mode="contained"
-              disabled={!scope || !itemName.trim() || saveMut.isPending}
+              disabled={!scope || !itemName.trim() || nothingToSave || saveMut.isPending}
               onPress={() => saveMut.mutate()}
               style={s.btn}
             >
-              {saveMut.isPending ? <ActivityIndicator size={16} /> : scope ? 'Kaydet' : 'Önce seçim yapın'}
+              {saveMut.isPending ? (
+                <ActivityIndicator size={16} />
+              ) : !scope ? (
+                'Önce seçim yapın'
+              ) : nothingToSave ? (
+                'Değişiklik yok'
+              ) : (
+                'Kaydet'
+              )}
             </Button>
           </View>
         </View>
@@ -314,6 +337,7 @@ const s = StyleSheet.create({
   scopeTitleActive: { color: '#3730a3' },
   scopeDesc: { fontSize: 12, color: '#64748b', marginTop: 2 },
   warn: { fontSize: 12, color: '#b45309', fontWeight: '600', marginTop: 8 },
+  hint: { fontSize: 12, color: colors.textSecondary, marginTop: 4 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 14 },
   btn: { flex: 1 },
 });

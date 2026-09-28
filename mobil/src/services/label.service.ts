@@ -1,6 +1,7 @@
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 import type {
+  ColorNameScope,
   LabelPayload,
   NameSource,
   SwatchLabelPayload,
@@ -19,6 +20,8 @@ export interface LabelNamePreview {
   colorName: string | null;
   colorNameDefault: string | null;
   colorNameSource: NameSource | null;
+  /** Renk adı ana veriden geldiyse hangi kademeden; eski backend göndermez (= null). */
+  colorNameScope?: ColorNameScope | null;
 }
 
 // =============================================================================
@@ -267,5 +270,19 @@ export const labelService = {
   ): Promise<ApiResponse<unknown>> =>
     apiClient
       .put<ApiResponse<unknown>>(`/customers/${customerId}/color-aliases/${colorId}`, { alias })
+      .then((r) => r.data),
+
+  /**
+   * Müşterinin YALNIZ bu kumaştaki renk adı. Tablet bunu yalnız zaten kumaşa özel
+   * olan adı düzeltirken çağırır; yeni kumaşa özel ad panelden girilir.
+   */
+  setCustomerItemColorAlias: (
+    customerId: string,
+    itemId: string,
+    colorId: string,
+    alias: string,
+  ): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .put<ApiResponse<unknown>>(`/customers/${customerId}/item-color-aliases/${itemId}/${colorId}`, { alias })
       .then((r) => r.data),
 };
