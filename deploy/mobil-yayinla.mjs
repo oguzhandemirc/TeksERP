@@ -27,7 +27,11 @@
  *   node deploy/mobil-yayinla.mjs --musteri=<kod> --paket=<ota-cikti/<kod>/54.2/1787…>
  *   node deploy/mobil-yayinla.mjs --musteri=<kod> --apk=<yol.apk> --surum=2.9.8 --vc=55
  *   node deploy/mobil-yayinla.mjs … --kuru     # yalnız ne yapacağını yaz (etiket de atılmaz)
+ *   node deploy/mobil-yayinla.mjs … --terfi-atla="<kullanıcının cümlesi>"   # K5 acil kaçışı (S4)
  *   node deploy/mobil-yayinla.mjs --dogrula=<url>       # yükleme YOK, yayını denetle
+ *
+ * ⚠️ TERFİ (K5): `terfiKaynagi` olan kanala (adnansahin) yalnız terfi etiketli commit'ten,
+ * hazırlık kanalında yayınlanmış sürüm çıkar — scripts/lib/terfi.mjs.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -40,6 +44,7 @@ import { KAYIT_REL, Olculemedi, erpAdresiEsit, kanalCoz } from '../scripts/lib/k
 import { bundleAdresOlcumu } from '../mobil/scripts/lib/adres.mjs';
 import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
 import { ApkOlculemedi, apkKimligi } from '../mobil/scripts/lib/apk-kimlik.mjs';
+import { cumleDenetle, istanbulSaati, terfiAtlaKaydi, terfiAtlaMesaji, terfiKapisi, terfiRaporu } from '../scripts/lib/terfi.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MOBIL = path.resolve(HERE, '..', 'mobil');
@@ -69,6 +74,8 @@ const arg = (ad) => {
   return d ?? '';
 };
 const KURU = argv.includes('--kuru');
+/** S4 kaçışı — yalnız kullanıcının cümlesiyle; verilmediyse undefined (boş verilmesi RED). */
+const TERFI_ATLA = argv.some((a) => a === '--terfi-atla' || a.startsWith('--terfi-atla=')) ? (arg('terfi-atla') ?? '') : undefined;
 
 /**
  * Yayın hedefi — `deploy/electron-yayinla.sh` ile AYNI kalıp: ssh takma adı
@@ -160,6 +167,38 @@ function kos(komut, argumanlar, aciklama) {
 }
 
 const ssh = (uzakKomut, aciklama) => kos('ssh', [SSH_HEDEF, uzakKomut], aciklama);
+
+/**
+ * TERFİ KAPISI (K5) — üretim kanalına yalnız hazırlık kanalında yayınlanmış ve kullanıcının terfi
+ * etiketiyle onayladığı commit; yüklemeden ÖNCE. `--kuru` ağa çıkmaz (kaynak kanal sürümü ölçülmez).
+ * Yüklem: scripts/lib/terfi.mjs (panel yayıncısıyla aynı).
+ */
+function terfiKapisiUygula(surum) {
+  const h = terfiKapisi({ kod: MUSTERI, urun: 'tablet', surum, atla: TERFI_ATLA, kuru: KURU });
+  const satirlar = terfiRaporu(h, { kod: MUSTERI, urun: 'tablet', surum });
+  if (h.sonuc === 'uyumlu') {
+    for (const s of satirlar) bilgi(s);
+    return h;
+  }
+  dur(satirlar[0].replace(/^✖ /, ''), ...satirlar.slice(1).map((s) => s.trim()),
+    h.sonuc === 'ihlal' ? 'Acil kaçış yalnız kullanıcının cümlesiyle: --terfi-atla="<cümle>"' : 'Ölçülemeyen şart geçmiş şart değildir.');
+  return h;
+}
+
+/** Terfi atlandıysa: kanal yayın defterine satır (kullanıcının cümlesi) — yayından SONRA, best-effort. */
+function terfiAtlaDefteri(surum) {
+  const cumle = cumleDenetle(TERFI_ATLA).cumle.replace(/'/g, "'\\''");
+  const defter = KANAL.yayin.panelDefter;
+  const satir = [istanbulSaati(), `tablet-${surum}`, `${process.env.USER ?? '?'}@${process.env.HOSTNAME ?? 'yerel'}`, '-', '-', `terfi-atlandi: ${cumle}`]
+    .map((x) => `'${x}'`).join(' ');
+  const komut = `mkdir -p '${path.posix.dirname(defter)}' && printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' ${satir} >> '${defter}'`;
+  if (KURU) {
+    bilgi(`  [kuru] yayın defteri (terfi atlandı): ssh ${SSH_HEDEF} ${komut}`);
+    return;
+  }
+  const r = spawnSync('ssh', [SSH_HEDEF, komut], { stdio: 'inherit' });
+  bilgi(r.status === 0 ? '  ✓ yayın defterine yazıldı (terfi atlandı)' : '  ⚠️ yayın defteri yazılamadı (yayın etkilenmedi)');
+}
 
 const scp = (kaynaklar, uzakYol, aciklama) =>
   kos('scp', ['-r', ...kaynaklar, `${SSH_HEDEF}:${uzakYol}`], aciklama);
@@ -396,6 +435,8 @@ async function paketiYayinla(paketDizin) {
     );
   }
   erpKapisi(bundleMetni, bundleYol, kunye.adres);
+  // Sürüm paketin DONMUŞ manifestinden (etiketle aynı kaynak) — okunamazsa terfi ÖLÇÜLEMEDİ.
+  terfiKapisiUygula(yayinlananPaketSurumu(paketDizin));
 
   baslik('OTA PAKETİ YAYINLANIYOR');
   bilgi(`Müşteri: ${MUSTERI}`);
@@ -596,6 +637,8 @@ async function apkYayinla(apkYol) {
     }
   }
 
+  terfiKapisiUygula(surum);
+
   const ad = `TeksERP-${surum}-vc${vc}.apk`;
   if (!/^[\x20-\x7E]+$/.test(ad) || /\s/.test(ad)) {
     // Electron'da `Ş` + boşluk taşıyan dosya adı aktarımda bozulup 404 üretmişti.
@@ -689,17 +732,32 @@ if (apk) await apkYayinla(path.resolve(apk));
 // ⚠️ `--kuru` ETİKET ATMAZ: hiçbir şey yayınlanmadı. Eskiden kuru koşum da
 // `tablet-v*` etiketini atıp origin'e itiyordu — sonraki turun tabanı yayınlanmamış
 // bir koda kayardı.
+// ⚠️ TERFİ ATLANDIYSA (S4) kullanıcının cümlesi yayın defterine ve etiket MESAJINA girer: yeni
+// atılan sürüm etiketi + `terfi/<kanal>/tablet-vX` kaçış etiketi (scripts/lib/terfi.mjs).
+const yayinSurumu = paket ? yayinlananPaketSurumu(path.resolve(paket)) : arg('surum');
+if (TERFI_ATLA !== undefined && yayinSurumu) terfiAtlaDefteri(yayinSurumu);
 if (KURU) {
   bilgi('\n  [kuru] sürüm etiketi atılmadı (yayın yok).');
 } else {
-  const etiketSurumu = paket ? yayinlananPaketSurumu(path.resolve(paket)) : arg('surum');
+  const etiketSurumu = yayinSurumu;
   if (etiketSurumu) {
-    const t = etiketAt('tablet', etiketSurumu);
+    const cumle = TERFI_ATLA !== undefined ? cumleDenetle(TERFI_ATLA).cumle : '';
+    const t = etiketAt('tablet', etiketSurumu,
+      cumle ? { mesaj: terfiAtlaMesaji({ kod: MUSTERI, urun: 'tablet', surum: etiketSurumu, cumle }) } : {});
     const mesaj = {
       atildi: `  ✓ sürüm etiketi atıldı: ${t.ad}`,
       'zaten-var': `  · sürüm etiketi zaten var: ${t.ad} (aynı tur)`,
       basarisiz: `  ⚠️ sürüm etiketi atılamadı: ${t.ad} (yayın etkilenmedi)`,
     }[t.durum];
     console.log(`\n${mesaj}${t.not ? ` — ${t.not}` : ''}`);
+    if (cumle) {
+      const k = terfiAtlaKaydi({ kod: MUSTERI, urun: 'tablet', surum: etiketSurumu, cumle });
+      const km = {
+        atildi: `  ✓ terfi atlama kaydı (etiket) atıldı: ${k.ad}`,
+        'zaten-var': `  · terfi etiketi zaten var: ${k.ad} (dokunulmadı)`,
+        basarisiz: `  ⚠️ terfi atlama etiketi atılamadı: ${k.ad} (yayın etkilenmedi; kayıt yayın defterinde)`,
+      }[k.durum];
+      console.log(`${km}${k.not ? ` — ${k.not}` : ''}`);
+    }
   }
 }

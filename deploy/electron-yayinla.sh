@@ -9,6 +9,10 @@
 #   ./deploy/electron-yayinla.sh --musteri=adnansahin 2.8.1       # belirli sürümü yayınla
 #   ./deploy/electron-yayinla.sh --musteri=adnansahin --dogrula   # YÜKLEME YOK — yayını denetle
 #   ./deploy/electron-yayinla.sh --musteri=testfabrika --kuru     # AĞ YOK — yerel kapılar + yükleme planı
+#   ./deploy/electron-yayinla.sh --musteri=adnansahin --terfi-atla="<kullanıcının cümlesi>"  # K5 acil kaçışı
+#
+# ⚠️ TERFİ (K5): `terfiKaynagi` olan kanala (adnansahin) yalnız terfi etiketli commit'ten, hazırlık
+# kanalında yayınlanmış sürüm çıkar (scripts/lib/terfi.mjs); kaçış yalnız kullanıcının cümlesiyle.
 # Reçete: docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md
 #
 # Script'in asıl işi YÜKLEME SIRASINI korumaktır: `latest.yml` EN SON gider.
@@ -43,11 +47,15 @@ musteri=""
 denetim_kipi=0
 kuru=0
 surum_arg=""
+terfi_atla=""
+terfi_atla_verildi=0
 for a in "$@"; do
   case "$a" in
     --musteri=*) musteri="${a#--musteri=}" ;;
     --dogrula) denetim_kipi=1 ;;
     --kuru) kuru=1 ;;
+    --terfi-atla=*) terfi_atla="${a#--terfi-atla=}"; terfi_atla_verildi=1 ;;
+    --terfi-atla) terfi_atla=""; terfi_atla_verildi=1 ;;
     -*) hata "Tanınmayan seçenek: $a" ;;
     *)
       [ -z "$surum_arg" ] || hata "Fazla argüman: $a"
@@ -57,6 +65,7 @@ for a in "$@"; do
 done
 
 [ "$kuru" = "1" ] && [ "$denetim_kipi" = "1" ] && hata "--kuru ile --dogrula birlikte verilemez (--dogrula yayına bakar, --kuru hiç ağa çıkmaz)."
+[ "$terfi_atla_verildi" = "1" ] && [ "$denetim_kipi" = "1" ] && hata "--terfi-atla yalnız yayında verilir (--dogrula hiçbir şey yüklemez)."
 
 [ -n "$musteri" ] || hata "HANGİ KANALA YAYINLANIYOR? --musteri=<kod> zorunlu.
   Hedef klasör paketin kimliğinden çözülür; argüman niyettir ve onunla birebir olmalı.
@@ -83,6 +92,18 @@ if [ "$denetim_kipi" = "0" ]; then
   # ARTEFAKT OTORİTESİ — paket gerçekten bu kanalın mı? (ssh'tan ÖNCE)
   node "$kok/scripts/kanal-kapisi.mjs" panel-yayin "$musteri" "$rel" \
     || hata "Paket '$musteri' kanalının değil ya da kimliği okunamadı — yükleme yapılmadı."
+  # TERFİ KAPISI (K5) — üretim kanalına yalnız hazırlık kanalında yayınlanmış, kullanıcının terfi
+  # etiketiyle onayladığı commit (ssh'tan ÖNCE). --kuru ağa çıkmaz: kaynak kanalın sürümü orada ölçülmez.
+  terfi_ek=()
+  [ "$kuru" = "1" ] && terfi_ek+=("--kuru")
+  [ "$terfi_atla_verildi" = "1" ] && terfi_ek+=("--terfi-atla=$terfi_atla")
+  if [ "${#terfi_ek[@]}" -gt 0 ]; then
+    node "$kok/scripts/kanal-kapisi.mjs" terfi "$musteri" panel "$surum" "${terfi_ek[@]}" \
+      || hata "Terfi kapısı geçilmedi — yükleme yapılmadı."
+  else
+    node "$kok/scripts/kanal-kapisi.mjs" terfi "$musteri" panel "$surum" \
+      || hata "Terfi kapısı geçilmedi — yükleme yapılmadı."
+  fi
 fi
 
 # Hedef yalnız doğrulanmış kanal kodundan türer.
@@ -132,6 +153,7 @@ if [ "$denetim_kipi" = "0" ]; then
     echo "[kuru] yayın adresi: $YAYIN_URL/latest.yml"
     echo "[kuru] defter     : $(dirname "$YAYIN_KOK")/defter/$musteri-YAYIN-DEFTERI.tsv"
     echo "[kuru] değişmezlik · sha512 · dış doğrulama · budama · panel-v$surum etiketi ATLANDI (ağ gerektirir)"
+    [ "$terfi_atla_verildi" = "1" ] && echo "[kuru] terfi atlama kaydı (yayın defteri + etiket mesajı) ATLANDI (yayın yok)"
     echo "KURU — paket '$musteri' kanalının; yükleme yapılmadı."
     exit 0
   fi
@@ -249,9 +271,17 @@ echo "OK — yayında: $surum"
 # ikinci bir iç dosya yine sızardı. Ayrım DİZİNDE olmalı — html/ yalnız kamuya
 # açık olması gereken şeyleri barındırır.
 DEFTER_DIZIN="$(dirname "$YAYIN_KOK")/defter"
-ssh "$SSH_HEDEF" "mkdir -p '$DEFTER_DIZIN' && printf '%s\t%s\t%s\t%s\t%s\n' \
+# Terfi atlandıysa (S4) kullanıcının cümlesi 6. kolon olur; tek tırnak uzak kabuk için kaçırılır.
+defter_bicim='%s\t%s\t%s\t%s\t%s\n'
+defter_ek=""
+if [ "$terfi_atla_verildi" = "1" ]; then
+  defter_bicim='%s\t%s\t%s\t%s\t%s\t%s\n'
+  terfi_atla_kacisli=$(printf '%s' "$terfi_atla" | tr '\t\r\n' '   ' | sed "s/'/'\\\\''/g")
+  defter_ek=" 'terfi-atlandi: $terfi_atla_kacisli'"
+fi
+ssh "$SSH_HEDEF" "mkdir -p '$DEFTER_DIZIN' && printf '$defter_bicim' \
   '$(date -Iseconds)' '$surum' '$(whoami)@$(hostname -s)' \
-  '$(shasum -a 256 "$setup" | cut -c1-16)' '$(wc -c < "$setup" | tr -d " ")' \
+  '$(shasum -a 256 "$setup" | cut -c1-16)' '$(wc -c < "$setup" | tr -d " ")'$defter_ek \
   >> '$DEFTER_DIZIN/$musteri-YAYIN-DEFTERI.tsv'" 2>/dev/null \
   && echo "  ✓ yayın defterine yazıldı" \
   || echo "  ⚠️ yayın defteri yazılamadı (yayın etkilenmedi)"
@@ -280,16 +310,25 @@ BUDA
 # başarısız sayılmaz — aksi hâlde operatör başarılı bir yayını tekrarlamaya
 # itilirdi. Var olan etiket TAŞINMAZ: aynı turda ikinci müşteriye yayın
 # yaparken `-f` ile taşımak, etiketin işaret ettiği kodu sessizce değiştirirdi.
+#
+# Terfi atlandıysa (S4) kullanıcının cümlesi etiket MESAJINA girer: yeni atılan sürüm etiketine ve
+# `terfi/<kanal>/panel-vX` kaçış etiketine (cümle argv'den — kabuk metnine gömülmez).
 node --input-type=module -e "
   import { etiketAt } from '$kok/scripts/lib/surum.mjs';
-  const s = etiketAt('panel', '$surum');
+  import { cumleDenetle, terfiAtlaMesaji } from '$kok/scripts/lib/terfi.mjs';
+  const cumle = process.argv[1] ? cumleDenetle(process.argv[1]).cumle : '';
+  const s = etiketAt('panel', '$surum', cumle ? { mesaj: terfiAtlaMesaji({ kod: '$musteri', urun: 'panel', surum: '$surum', cumle }) } : {});
   const mesaj = {
     'atildi': '  ✓ sürüm etiketi atıldı: ' + s.ad,
     'zaten-var': '  · sürüm etiketi zaten var: ' + s.ad + ' (aynı tur)',
     'basarisiz': '  ⚠️ sürüm etiketi atılamadı: ' + s.ad + ' (yayın etkilenmedi)',
   }[s.durum];
   console.log(mesaj + (s.not ? ' — ' + s.not : ''));
-" || echo "  ⚠️ sürüm etiketi atılamadı (yayın etkilenmedi)"
+" -- "$terfi_atla" || echo "  ⚠️ sürüm etiketi atılamadı (yayın etkilenmedi)"
+if [ "$terfi_atla_verildi" = "1" ]; then
+  node "$kok/scripts/kanal-kapisi.mjs" terfi-atla-kaydi "$musteri" panel "$surum" "$terfi_atla" \
+    || echo "  ⚠️ terfi atlama etiketi atılamadı (yayın etkilenmedi; kayıt yayın defterinde)"
+fi
 
 echo "Bu kanaldaki paneller en geç 15 dk içinde görür (açılışta 30 sn)."
 echo "Hemen denemek için: Genel Ayarlar > Bu Bilgisayar > Güncelleme > Şimdi kontrol et"

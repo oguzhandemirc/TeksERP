@@ -55,6 +55,11 @@
  *   npm run build:apk:check -- --musteri=<kod>              # yalnız ön kontrol, derleme YOK
  *   npm run build:apk:verify -- --musteri=<kod>             # mevcut APK'yı kanala karşı denetle
  *   … --yoklama-yok                                         # /health yoklamasını atla (ağa çıkma)
+ *   … --terfi-atla="<kullanıcının cümlesi>"                 # K5 acil kaçışı (S4) — terfi kapısını atla
+ *
+ * TERFİ (K5): `terfiKaynagi` olan kanala (adnansahin) APK yalnız terfi etiketli commit'ten,
+ * hazırlık kanalında yayınlanmış sürümle derlenir (scripts/lib/terfi.mjs). `--yoklama-yok`
+ * terfi kapısının kaynak kanal okumasını ATLAMAZ: o bir uyarı değil kapıdır.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -76,6 +81,7 @@ import { zipGirdisiOku } from './lib/zip.mjs';
 import { ApkOlculemedi, apkKimligi, sertifikaParmakIzi } from './lib/apk-kimlik.mjs';
 import { KANAL_ORTAM, tabletYapilandirmaFarki } from './lib/kanal.cjs';
 import { KAYIT_REL, Olculemedi, erpAdresiEsit, kanalCoz } from '../../scripts/lib/kanallar.mjs';
+import { terfiKapisi, terfiRaporu } from '../../scripts/lib/terfi.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(HERE, '..');
@@ -1099,6 +1105,25 @@ function androidVarMi() {
   }
 }
 
+/**
+ * (f3) TERFİ KAPISI (K5) — üretim kanalına (`terfiKaynagi` olan) APK yalnız hazırlık kanalında
+ * yayınlanmış ve kullanıcının terfi etiketiyle onayladığı commit'ten derlenir; sürüm app.json'dan
+ * (APK'nın versionName'i). --check'te de koşar; --verify-only derleme/yayın değildir, koşmaz.
+ */
+function terfiKapisiUygula(kod, s) {
+  const TERFI_ATLA = argv.some((a) => a === '--terfi-atla' || a.startsWith('--terfi-atla=')) ? (arg('terfi-atla') ?? '') : undefined;
+  const h = terfiKapisi({ kod, urun: 'tablet', surum: s?.appVersion, atla: TERFI_ATLA });
+  const satirlar = terfiRaporu(h, { kod, urun: 'tablet', surum: s?.appVersion });
+  if (h.sonuc !== 'uyumlu') {
+    dur(satirlar[0].replace(/^✖ /, ''), ...satirlar.slice(1).map((x) => x.trim()),
+      h.sonuc === 'ihlal' ? 'Acil kaçış yalnız kullanıcının cümlesiyle: --terfi-atla="<cümle>" (yayın komutu da aynı cümleyi ister).' : 'Ölçülemeyen şart geçmiş şart değildir.');
+  }
+  if (satirlar.length) {
+    baslik('TERFİ KAPISI');
+    for (const x of satirlar) bilgi(x);
+  }
+}
+
 function ozet(adres, s, stat, apkYolu = APK_PATH, { kod, kanal } = {}) {
   const sha = crypto.createHash('sha256').update(fs.readFileSync(apkYolu)).digest('hex');
   baslik('(4/4) HAZIR');
@@ -1137,7 +1162,9 @@ async function main() {
     // çalışıyordu; oysa `--check`'in varlık sebebi "sahaya paket hazırlamadan
     // önce saniyeler içinde doğrula" — sürüm kayması tam olarak orada
     // yakalanmalı, 70 saniyelik derlemenin ortasında değil.
-    surumNotuKapisi(surumBas());
+    const sCheck = surumBas();
+    surumNotuKapisi(sCheck);
+    terfiKapisiUygula(kod, sCheck);
     // Güncelleme kapısı ucuz yolda da koşar — "prebuild'i unuttum" hatası
     // 70 saniyelik derlemenin sonunda değil, saniyeler içinde görünsün.
     // android/ henüz üretilmemişse kapı atlanır (androidVarMi zaten söyler).
@@ -1177,6 +1204,7 @@ async function main() {
   androidVarMi();
   const s = surumBas();
   surumNotuKapisi(s);
+  terfiKapisiUygula(kod, s);
   guncellemeKapisi(kod, kanal);
 
   const derlemeBaslangici = Date.now();

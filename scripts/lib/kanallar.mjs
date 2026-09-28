@@ -33,7 +33,7 @@ export class Olculemedi extends Error {}
 const TURLER = new Set(['uretim', 'hazirlik']);
 const KOK_ANAHTARLARI = ['_aciklama', 'varsayilan', 'kanallar'];
 const KANAL_ANAHTARLARI = {
-  uretim: ['tur', 'ad', 'gorunurEtiket', 'yayin', 'panel', 'tablet'],
+  uretim: ['tur', 'terfiKaynagi', 'ad', 'gorunurEtiket', 'yayin', 'panel', 'tablet'],
   hazirlik: ['tur', 'ayna', 'ad', 'gorunurEtiket', 'yayin', 'panel', 'tablet'],
 };
 export const YAYIN_ANAHTARLARI = [
@@ -152,6 +152,18 @@ export function kayitHatalari(kayit) {
     if (k.tur === 'hazirlik') {
       const ayna = kanallar[k.ayna];
       if (!ayna || ayna.tur !== 'uretim') h.push(`${on}: ayna "${k.ayna}" kayıtlı bir üretim kanalı değil`);
+      // K5 (terfi) yapısal: aynası olduğu üretim kanalı yalnız BU kanaldan terfi alır. Anahtarı
+      // silmek ya da null'lamak terfi kapısını sessizce kapatırdı — burada kırmızıdır.
+      else if (ayna.terfiKaynagi !== kod) {
+        h.push(`${on}: aynası "${k.ayna}" terfiKaynagi "${ayna.terfiKaynagi}" — "${kod}" olmalı (üretim kanalı yalnız hazırlık aynasından terfi alır; K5)`);
+      }
+    }
+    // terfiKaynagi: null (terfi yok — tek kanallı kurulum) ya da aynası bu kanal olan HAZIRLIK kanalı.
+    if (k.tur === 'uretim' && k.terfiKaynagi !== null) {
+      const kaynak = typeof k.terfiKaynagi === 'string' ? kanallar[k.terfiKaynagi] : undefined;
+      if (!kaynak || kaynak.tur !== 'hazirlik' || kaynak.ayna !== kod) {
+        h.push(`${on}: terfiKaynagi "${k.terfiKaynagi}" aynası "${kod}" olan kayıtlı bir hazırlık kanalı değil (null ya da hazırlık kanal kodu)`);
+      }
     }
 
     for (const [blok, anahtarlar] of [['yayin', YAYIN_ANAHTARLARI], ['panel', PANEL_ANAHTARLARI], ['tablet', TABLET_ANAHTARLARI]]) {
@@ -414,7 +426,7 @@ export const YAYIN_YOLU_DESENLERI = [
  */
 export const KANAL_BEKCI_DOSYALARI = [...new Set([
   KAYIT_REL, 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/check-kanallar.mjs',
-  'scripts/test_kanal_yayin_kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs',
+  'scripts/test_kanal_yayin_kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs', 'scripts/lib/terfi.mjs',
   'scripts/check-surum-notlari.mjs', 'scripts/hooks/pre-commit.mjs',
   ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR,
   'Electron/shared/update-feed.ts', 'mobil/scripts/lib/feed.cjs', 'mobil/scripts/lib/adres.mjs', 'mobil/scripts/lib/zip.mjs',

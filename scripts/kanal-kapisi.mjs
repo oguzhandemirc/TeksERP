@@ -8,6 +8,8 @@
 //   node scripts/kanal-kapisi.mjs panel-paketle <kod>              # kayıtlı mı + ağaç dinlenmede + kimlik kaynağı kanal
 //   node scripts/kanal-kapisi.mjs panel-derleme <kod>              # electron-builder `-c.*` kimlik argümanları (satır başına bir)
 //   node scripts/kanal-kapisi.mjs panel-yayin <kod> <paket dizini> # paket (release/<kod>/<sürüm>) bu kanalın mı
+//   node scripts/kanal-kapisi.mjs terfi <kod> <panel|tablet> <sürüm> [--kuru] [--terfi-atla=<cümle>]  # K5 (scripts/lib/terfi.mjs)
+//   node scripts/kanal-kapisi.mjs terfi-atla-kaydi <kod> <panel|tablet> <sürüm> <cümle>             # kaçışın etiketi (best-effort)
 //
 // ⚠️ AYRI DOSYA ve KOŞULSUZ `main()`: CLI eskiden kitaplığın içindeydi ve "doğrudan
 // mı çalıştırıldım" diye `process.argv[1]`i `import.meta.url` ile kıyaslıyordu.
@@ -28,6 +30,7 @@ import {
   panelKaynakFarki,
   panelSabitKimlikFarki,
 } from './lib/kanallar.mjs';
+import { cumleDenetle, terfiAtlaKaydi, terfiKapisi, terfiRaporu } from './lib/terfi.mjs';
 
 function dur(baslik, satirlar, kod) {
   console.error(`\n  ✖ ${baslik}`);
@@ -82,7 +85,38 @@ function main(argv) {
       console.log(`  ✓ paket "${kod}" kanalının (app-update.yml · updater önbelleği · exe adı · paketin package.json'ı · ana süreç/arayüz kimliği)`);
       return;
     }
-    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['kanal <kod> · panel-paketle <kod> · panel-derleme <kod> · panel-yayin <kod> <dizin>'], 2);
+    if (komut === 'terfi') {
+      const [, , urun, surum, ...ek] = argv;
+      const bilinmeyen = ek.filter((a) => a !== '--kuru' && a !== '--terfi-atla' && !a.startsWith('--terfi-atla='));
+      if (bilinmeyen.length) dur(`terfi: tanınmayan argüman: ${bilinmeyen.join(' ')}`, [], 2);
+      const atlaArg = ek.find((a) => a === '--terfi-atla' || a.startsWith('--terfi-atla='));
+      const atla = atlaArg === undefined ? undefined : atlaArg.slice('--terfi-atla='.length);
+      const h = terfiKapisi({ kod, urun, surum, atla, kuru: ek.includes('--kuru') });
+      const satirlar = terfiRaporu(h, { kod, urun, surum });
+      if (h.sonuc === 'uyumlu') {
+        for (const s of satirlar) console.log(`  ${s}`);
+        return;
+      }
+      dur(satirlar[0].replace(/^✖ /, ''), [
+        ...satirlar.slice(1).map((s) => s.trim()),
+        h.sonuc === 'ihlal' ? 'Akış: hazırlık kanalı → test → kullanıcının onayı (terfi etiketi) → git checkout --detach <ürün>-vX → bu komut.' : null,
+        h.sonuc === 'ihlal' ? 'Acil kaçış yalnız kullanıcının cümlesiyle: --terfi-atla="<cümle>" (yayın defterine + etiket mesajına yazılır).' : null,
+      ].filter(Boolean), h.sonuc === 'olculemedi' ? 2 : 1);
+    }
+    if (komut === 'terfi-atla-kaydi') {
+      const [, , urun, surum, cumle] = argv;
+      const c = cumleDenetle(cumle);
+      if (!c.gecerli) dur(`terfi-atla-kaydi: ${c.sebep}`, [], 1);
+      const t = terfiAtlaKaydi({ kod, urun, surum, cumle: c.cumle });
+      const mesaj = {
+        atildi: `  ✓ terfi atlama kaydı (etiket) atıldı: ${t.ad}`,
+        'zaten-var': `  · terfi etiketi zaten var: ${t.ad} (dokunulmadı)`,
+        basarisiz: `  ⚠️ terfi atlama etiketi atılamadı: ${t.ad} (yayın etkilenmedi; kayıt yayın defterinde)`,
+      }[t.durum];
+      console.log(mesaj + (t.not ? ` — ${t.not}` : ''));
+      return;
+    }
+    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['kanal <kod> · panel-paketle <kod> · panel-derleme <kod> · panel-yayin <kod> <dizin> · terfi <kod> <ürün> <sürüm> · terfi-atla-kaydi <kod> <ürün> <sürüm> <cümle>'], 2);
   } catch (e) {
     if (e instanceof Olculemedi) dur(`ÖLÇÜLEMEDİ — ${e.message}`, ['Ölçülemeyen kapı geçmiş kapı değildir: DUR.'], 2);
     if (e?.satirlar) dur(e.message, e.satirlar, 1);

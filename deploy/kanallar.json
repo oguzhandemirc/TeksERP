@@ -7,6 +7,7 @@
     "Üretim kanalının kimliği DONMUŞTUR: değişimi sahadaki kurulumlar için bir GÖÇTÜR (yeni uygulama · kayıp userData · kopan güncelleme kanalı).",
     "Commit edilen işaretçiler (Electron/shared/musteri.json · mobil/musteri.json · Electron/package.json · mobil/app.json) 'varsayilan' kanalı gösterir.",
     "Panel kimliği ağaca YAZILMAZ: electron-paketle.sh <kod> onu derleme ANINDA enjekte eder (electron-builder -c.* + Vite sanal modülü, Electron/build-channel.ts); panel.erpAdresi = keşif sonuç vermezse panelin bağlandığı varsayılan sunucu.",
+    "terfiKaynagi (yalnız üretim kanalında): bu kanala yalnız o hazırlık kanalında yayınlanmış ve kullanıcının terfi etiketiyle onayladığı commit çıkar (K5, scripts/lib/terfi.mjs); null = terfi yok. Hazırlık kanalının aynası onu terfiKaynagi olarak göstermek ZORUNDADIR.",
     "runtimeVersion kanal kimliği DEĞİLDİR (JS↔native uyum kimliği): çakışma denetimine girmez, mobil/app.json ile eşit olmak zorundadır.",
     "Bekçi: node scripts/check-kanallar.mjs (+ --sonda) · yayın kapıları: node scripts/test_kanal_yayin_kapisi.mjs. Kural: docs/kurallar/surum-yayin.md; karar: docs/history/CLAUDE-NOT-ARSIVI.md 2026-09-27 testfabrika D1."
   ],
@@ -14,6 +15,7 @@
   "kanallar": {
     "adnansahin": {
       "tur": "uretim",
+      "terfiKaynagi": "testfabrika",
       "ad": "Adnan Şahin Tekstil",
       "gorunurEtiket": null,
       "yayin": {

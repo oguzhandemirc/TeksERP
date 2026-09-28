@@ -5,6 +5,10 @@
 #
 #   ./deploy/electron-paketle.sh adnansahin             # yama hanesi OTOMATİK artar
 #   ./deploy/electron-paketle.sh yenifabrika 2.9.0     # haneyi elle ver
+#   ./deploy/electron-paketle.sh adnansahin --terfi-atla="<kullanıcının cümlesi>"  # K5 acil kaçışı
+#
+# ⚠️ TERFİ (K5): `terfiKaynagi` olan kanal (adnansahin) yalnız terfi etiketli commit'ten, hazırlık
+# kanalında yayınlanmış sürümle paketlenir (scripts/lib/terfi.mjs) — önce `git checkout --detach panel-vX`.
 #
 # Kod `deploy/kanallar.json`da kayıtlı olmalı; çıktı `Electron/release/<kod>/<sürüm>/`.
 #
@@ -28,11 +32,28 @@ BASE_URL="https://guncelleme.etkiliyazilim.com/"
 
 hata() { echo "HATA: $*" >&2; exit 1; }
 
-musteri="${1:-}"
-istenen_surum="${2:-}"
+musteri=""
+istenen_surum=""
+# Terfi kaçışı (S4) yalnız KULLANICININ cümlesiyle; verilip verilmediği ayrı tutulur ki
+# boş `--terfi-atla=` sessizce "verilmedi"ye dönmesin (boş cümle RED).
+terfi_atla=""
+terfi_atla_verildi=0
+for a in "$@"; do
+  case "$a" in
+    --terfi-atla=*) terfi_atla="${a#--terfi-atla=}"; terfi_atla_verildi=1 ;;
+    --terfi-atla) terfi_atla=""; terfi_atla_verildi=1 ;;
+    -*) hata "Tanınmayan seçenek: $a" ;;
+    *)
+      if [ -z "$musteri" ]; then musteri="$a"
+      elif [ -z "$istenen_surum" ]; then istenen_surum="$a"
+      else hata "Fazla argüman: $a"
+      fi
+      ;;
+  esac
+done
 
 [ -n "$musteri" ] || hata "Müşteri kodu gerekli.
-  Kullanım: ./deploy/electron-paketle.sh <müşteri-kodu> [sürüm]
+  Kullanım: ./deploy/electron-paketle.sh <müşteri-kodu> [sürüm] [--terfi-atla=\"<kullanıcının cümlesi>\"]
   Örnek:    ./deploy/electron-paketle.sh adnansahin
   Sürüm verilmezse yama hanesi son git etiketinden türetilerek artar."
 
@@ -111,6 +132,20 @@ if [ -z "$istenen_surum" ]; then
     console.error('  Sürüm: ' + k.surum + ' — ' + k.gerekce);
     console.log(k.surum);
   ") || hata "Sıradaki sürüm hesaplanamadı."
+fi
+
+# --- 0b) TERFİ KAPISI (K5) — dosya yazılmadan ve derlemeden ÖNCE ----------------
+# Üretim kanalına (kayıtta `terfiKaynagi` olan) yalnız hazırlık kanalında yayınlanmış ve
+# kullanıcının terfi etiketiyle onayladığı commit paketlenir: HEAD == panel-vX · terfi/<kanal>/panel-vX
+# HEAD'de · kaynak kanalda yayındaki sürüm ≥ X. Hazırlık kanalında hiçbir şey değişmez.
+# Çıkış 1 = şart tutmadı, 2 = ÖLÇÜLEMEDİ; ikisi de durdurur. Yüklem: scripts/lib/terfi.mjs.
+terfi_surum="${istenen_surum:-$(node -p "require('./package.json').version")}"
+if [ "$terfi_atla_verildi" = "1" ]; then
+  node "$kok/scripts/kanal-kapisi.mjs" terfi "$musteri" panel "$terfi_surum" "--terfi-atla=$terfi_atla" \
+    || hata "Terfi kapısı geçilmedi — yukarıdaki satırlara bak."
+else
+  node "$kok/scripts/kanal-kapisi.mjs" terfi "$musteri" panel "$terfi_surum" \
+    || hata "Terfi kapısı geçilmedi — yukarıdaki satırlara bak."
 fi
 
 # --- 1) Sürümü yaz — KİMLİK YAZILMAZ ---------------------------------------
@@ -212,3 +247,6 @@ mb=$(( $(wc -c < "$setup") / 1024 / 1024 ))
 echo ""
 echo "HAZIR — $musteri / $surum (${mb} MB) · $rel"
 echo "Yayınlamak için: ./deploy/electron-yayinla.sh --musteri=$musteri"
+if [ "$terfi_atla_verildi" = "1" ]; then
+  echo "  (terfi atlandı — yayın komutu da kullanıcının cümlesini ister: --terfi-atla=\"…\")"
+fi

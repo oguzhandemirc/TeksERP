@@ -35,6 +35,10 @@
  *   npm run yayinla -- --check          # yalnız adres + parmak izi kontrolü
  *   npm run yayinla -- --parmak-izini-kabul-et   # native değişikliği bilinçli onayla
  *   npm run yayinla -- --update-url=https://…/mobil/   # feed adresini ez
+ *   npm run yayinla -- --musteri=<kod> --terfi-atla="<kullanıcının cümlesi>"   # K5 acil kaçışı (S4)
+ *
+ * ⚠️ TERFİ (K5): `terfiKaynagi` olan kanala (adnansahin) paket yalnız terfi etiketli commit'ten,
+ * hazırlık kanalında yayınlanmış sürümle üretilir — scripts/lib/terfi.mjs.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -70,6 +74,7 @@ import {
   tabletSabitKimlikFarki,
 } from '../../scripts/lib/kanallar.mjs';
 import { KANAL_ORTAM, otaImzaYollari, tabletYapilandirmaFarki } from './lib/kanal.cjs';
+import { terfiKapisi, terfiRaporu } from '../../scripts/lib/terfi.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -105,6 +110,8 @@ const IMZASIZ = argv.includes('--imzasiz');
 /** Yama hanesini otomatik artırma — `--surum=X.Y.Z` ya da `--surum-artirma` ile kapanır. */
 const SURUM_ELLE = arg('surum');
 const SURUM_ARTIRMA_YOK = argv.includes('--surum-artirma');
+/** S4 kaçışı — yalnız kullanıcının cümlesiyle; verilmediyse undefined (boş verilmesi RED). */
+const TERFI_ATLA = argv.some((a) => a === '--terfi-atla' || a.startsWith('--terfi-atla=')) ? (arg('terfi-atla') ?? '') : undefined;
 
 /* ------------------------------------------------------------------ *
  * (a) Adres
@@ -590,6 +597,18 @@ async function main() {
     if (tavan) uyari(tavan);
     hedefSurum = karar.surum;
     bilgi(`Sürüm             : ${karar.surum} — ${karar.gerekce}`);
+  }
+  // --- TERFİ KAPISI (K5) — app.json'a yazılmadan ÖNCE, --check'te de -------------
+  // Üretim kanalına (`terfiKaynagi` olan) yalnız hazırlık kanalında yayınlanmış ve kullanıcının
+  // terfi etiketiyle onayladığı commit paketlenir. Yüklem: scripts/lib/terfi.mjs.
+  {
+    const h = terfiKapisi({ kod: musteri, urun: 'tablet', surum: hedefSurum, atla: TERFI_ATLA });
+    const satirlar = terfiRaporu(h, { kod: musteri, urun: 'tablet', surum: hedefSurum });
+    if (h.sonuc !== 'uyumlu') {
+      dur(satirlar[0].replace(/^✖ /, ''), ...satirlar.slice(1).map((s) => s.trim()),
+        h.sonuc === 'ihlal' ? 'Acil kaçış yalnız kullanıcının cümlesiyle: --terfi-atla="<cümle>" (yayın komutu da aynı cümleyi ister).' : 'Ölçülemeyen şart geçmiş şart değildir.');
+    }
+    for (const s of satirlar) bilgi(s);
   }
   // ⚠️ `--check` YAN ETKİSİZ OLMALI. Ön kontrol, dosyayı değiştirmeden "bu tur
   // ne olurdu"yu göstermek içindir; app.json'a yazsaydı yalnız bakmak için
