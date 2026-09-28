@@ -27,6 +27,8 @@ export function ColorAliasAddForm({ customerId, pending, onAdd }: Props) {
   const [alias, setAlias] = useState("");
   const itemQ = useItemDetail(itemId ?? "");
   const allowedColorIds = itemId ? (itemQ.data?.data?.allowedColors ?? []).map((c) => c.colorId) : null;
+  // Kumaşın izinli renkleri gelmeden `[]` "kısıtsız" demektir — yükleme/hata sürerken renk seçilemez (fail-closed).
+  const colorLocked = Boolean(itemId) && !itemQ.data?.data;
   const canAdd = Boolean(colorId && alias.trim()) && !pending;
 
   const submit = () => {
@@ -77,6 +79,8 @@ export function ColorAliasAddForm({ customerId, pending, onAdd }: Props) {
           onChange={setColorId}
           customerId={customerId}
           allowedColorIds={allowedColorIds}
+          disabled={colorLocked}
+          lockedTooltip="Kumaşın izinli renkleri yükleniyor…"
           allowNone={false}
           triggerClassName="h-9"
         />

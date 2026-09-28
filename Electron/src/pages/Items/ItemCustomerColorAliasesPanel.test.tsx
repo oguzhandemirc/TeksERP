@@ -1,6 +1,10 @@
 // Kumaş kartı "Müşteri Renk Adları": müşteriye göre gruplu liste · cari kartıyla AYNI uca yazar/siler ·
 // Tükenene kadar kumaşta ekleme yok · sekme yalnız düzenlenen KUMAŞ kartında ve okuma izniyle çizilir.
 // Negatif sonda (kırmızı görüldü): ItemCardTabs izin kontrolü kaldırılınca "izin yoksa sekme yok" vakası ❌.
+// Ekleme: müşteri + renk + ad → kumaşa özel uç (bu kumaş); müşteri değişince renk sıfırlanır; pasif renkte ad salt okunur.
+// Negatif sondalar (kırmızı görüldü): onAdd'de itemId/müşteri yer değişince ekleme vakası ❌; müşteri değişiminde
+// setColorId(null) silinince sıfırlama vakası ❌; colorAcceptsAlias silinince pasif renk vakası ❌.
+// Seçiciler stub'dır: gerçek renk seçici modal kapalıyken de ağ sorgusu atar (test hermetik kalsın).
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -13,6 +17,21 @@ import type { Item } from "./types";
 let perms: string[] = [];
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => perms.includes(p) }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@/components/forms/CustomerPickerField", () => ({
+  CustomerPickerField: ({ onChange }: { onChange: (id: string | null) => void }) => (
+    <>
+      <button type="button" onClick={() => onChange("a")}>stub-müşteri-a</button>
+      <button type="button" onClick={() => onChange("b")}>stub-müşteri-b</button>
+    </>
+  ),
+}));
+vi.mock("@/components/forms/color-picker/ColorPickerModal", () => ({
+  ColorPickerModal: (p: { value: string | null; onChange: (id: string) => void; allowedColorIds?: string[] | null; customerId?: string | null }) => (
+    <button type="button" data-allowed={JSON.stringify(p.allowedColorIds ?? null)} data-customer={p.customerId ?? ""} onClick={() => p.onChange("ekru")}>
+      stub-renk:{p.value ?? "yok"}
+    </button>
+  ),
+}));
 vi.mock("@/pages/Customers/aliasService", () => ({
   customerAliasService: {
     listColorAliases: vi.fn(),
@@ -46,6 +65,7 @@ beforeEach(() => {
   svc.listItemColorAliasesByItem.mockResolvedValue({ success: true, data: [row(A, EKRU, "ABC"), row(B, EKRU, "KUM"), row(A, LACI, "GECE")] });
   svc.listColorAliases.mockResolvedValue({ success: true, data: [] });
   svc.deleteItemColorAlias.mockResolvedValue({ success: true, data: { deleted: true } });
+  svc.upsertItemColorAlias.mockResolvedValue({ success: true, data: row(A, EKRU, "ÖZEL") });
 });
 
 describe("ItemCustomerColorAliasesPanel", () => {
@@ -75,6 +95,41 @@ describe("ItemCustomerColorAliasesPanel", () => {
     expect(await screen.findByDisplayValue("ABC")).toHaveAttribute("readonly");
     expect(screen.queryByRole("button", { name: /Ekle/ })).toBeNull();
     expect(screen.getByText(/yeni ad eklenemez/)).toBeInTheDocument();
+  });
+
+  it("müşteri + renk + ad → bu kumaşın kumaşa özel ucuna yazar; renk seçici kumaşın izinli renkleri ve müşteriyle", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ItemCustomerColorAliasesPanel item={ITEM} />);
+    await screen.findByDisplayValue("KUM");
+    await user.click(screen.getByRole("button", { name: "stub-müşteri-a" }));
+    const picker = screen.getByRole("button", { name: /stub-renk/ });
+    expect(picker).toHaveAttribute("data-allowed", '["ekru","laci"]');
+    expect(picker).toHaveAttribute("data-customer", "a");
+    await user.click(picker);
+    await user.type(screen.getByPlaceholderText(/örn\. ABC/), "ÖZEL");
+    await user.click(screen.getByRole("button", { name: /Ekle/ }));
+    await waitFor(() => expect(svc.upsertItemColorAlias).toHaveBeenCalledWith("a", "x", "ekru", "ÖZEL"));
+  });
+
+  it("müşteri değişince seçili renk sıfırlanır (başka müşterinin özel rengi taşınmaz)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ItemCustomerColorAliasesPanel item={ITEM} />);
+    await screen.findByDisplayValue("KUM");
+    await user.click(screen.getByRole("button", { name: "stub-müşteri-a" }));
+    await user.click(screen.getByRole("button", { name: /stub-renk/ }));
+    await user.type(screen.getByPlaceholderText(/örn\. ABC/), "ÖZEL");
+    expect(screen.getByRole("button", { name: /Ekle/ })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "stub-müşteri-b" }));
+    expect(screen.getByRole("button", { name: /stub-renk/ })).toHaveTextContent("stub-renk:yok");
+    expect(screen.getByRole("button", { name: /Ekle/ })).toBeDisabled();
+  });
+
+  it("pasif renkteki ad salt okunur ama silinebilir", async () => {
+    svc.listItemColorAliasesByItem.mockResolvedValue({ success: true, data: [row(A, { ...EKRU, isActive: false }, "ABC"), row(B, LACI, "KUM")] });
+    renderWithProviders(<ItemCustomerColorAliasesPanel item={ITEM} />);
+    expect(await screen.findByDisplayValue("ABC")).toHaveAttribute("readonly");
+    expect(screen.getByDisplayValue("KUM")).not.toHaveAttribute("readonly");
+    expect(screen.getAllByRole("button", { name: "Sil" })).toHaveLength(2);
   });
 });
 

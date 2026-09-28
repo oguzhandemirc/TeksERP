@@ -1,5 +1,5 @@
 // Cari kartı renk adı listesi: her renkte genel ad, altında "yalnız X kumaşında" satırları.
-import { ITEM_LOCKED_HINT, itemAcceptsAlias, type ColorAliasGroup } from "./colorAliasChain";
+import { COLOR_LOCKED_HINT, ITEM_LOCKED_HINT, colorAcceptsAlias, itemAcceptsAlias, type ColorAliasGroup } from "./colorAliasChain";
 import { AliasEditRow, ColorLabel } from "./AliasEditRow";
 import type { CustomerItemColorAlias } from "./aliasService";
 
@@ -29,8 +29,9 @@ export function ColorAliasGroupList({ groups, canWrite, onSaveGeneral, onDeleteG
               <AliasEditRow
                 label={<ColorLabel color={g.color} />}
                 alias={g.general.alias ?? ""}
-                onSave={canWrite ? (a) => onSaveGeneral(g.colorId, a) : undefined}
+                onSave={canWrite && colorAcceptsAlias(g.color) ? (a) => onSaveGeneral(g.colorId, a) : undefined}
                 onDelete={canWrite ? () => onDeleteGeneral(g.colorId) : undefined}
+                lockedHint={canWrite ? COLOR_LOCKED_HINT : undefined}
               />
             ) : (
               <li className="flex items-center gap-2 p-2 text-sm">
@@ -39,7 +40,8 @@ export function ColorAliasGroupList({ groups, canWrite, onSaveGeneral, onDeleteG
               </li>
             )}
             {g.items.map((r) => {
-              const writable = canWrite && itemAcceptsAlias(r.item?.lifecycleStatus);
+              const itemOpen = itemAcceptsAlias(r.item?.lifecycleStatus);
+              const writable = canWrite && itemOpen && colorAcceptsAlias(r.color);
               return (
                 <AliasEditRow
                   key={r.id}
@@ -52,7 +54,7 @@ export function ColorAliasGroupList({ groups, canWrite, onSaveGeneral, onDeleteG
                   alias={r.alias}
                   onSave={writable ? (a) => onSaveItem(r, a) : undefined}
                   onDelete={canWrite ? () => onDeleteItem(r) : undefined}
-                  lockedHint={canWrite ? ITEM_LOCKED_HINT : undefined}
+                  lockedHint={canWrite ? (itemOpen ? COLOR_LOCKED_HINT : ITEM_LOCKED_HINT) : undefined}
                 />
               );
             })}

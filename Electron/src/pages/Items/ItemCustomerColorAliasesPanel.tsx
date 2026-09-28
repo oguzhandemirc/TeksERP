@@ -12,7 +12,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { ITEM_LIFECYCLE_LABEL, type ItemLifecycleStatus } from "@/lib/item-lifecycle";
 import { customerAliasService, type CustomerItemColorAlias } from "@/pages/Customers/aliasService";
 import { AliasEditRow, ColorLabel } from "@/pages/Customers/AliasEditRow";
-import { itemAliasDeleteText } from "@/pages/Customers/colorAliasChain";
+import { colorAcceptsAlias, itemAliasDeleteText } from "@/pages/Customers/colorAliasChain";
 import { ITEM_CUSTOMER_COLOR_ALIASES_QUERY_KEY, useItemColorAliasMutations } from "@/pages/Customers/useItemColorAliasMutations";
 
 interface Props {
@@ -47,7 +47,15 @@ function AddRow({ item, pending, onAdd }: Props & { pending: boolean; onAdd: (c:
   };
   return (
     <div className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-2 rounded-md border bg-muted/30 p-2">
-      <CustomerPickerField value={customerId} onChange={setCustomerId} triggerClassName="h-9" />
+      <CustomerPickerField
+        value={customerId}
+        onChange={(id) => {
+          // Seçici müşteriye atanmış renkleri de gösterir; başka müşteriye geçince seçim bayatlar.
+          setCustomerId(id);
+          setColorId(null);
+        }}
+        triggerClassName="h-9"
+      />
       <ColorPickerModal
         value={colorId}
         onChange={setColorId}
@@ -90,10 +98,10 @@ function CustomerGroupList({ groups, canWrite, itemOpen, onSave, onDelete }: {
                 key={r.id}
                 label={<ColorLabel color={r.color ?? null} />}
                 alias={r.alias}
-                // Pasif müşteri / kullanımdan kalkmış kumaş: sunucu yazımı reddeder — ad salt okunur, silinebilir.
-                onSave={canWrite && itemOpen && g.customer?.isActive !== false ? (a) => onSave(r, a) : undefined}
+                // Pasif müşteri / pasif renk / kullanımdan kalkmış kumaş: sunucu yazımı reddeder — ad salt okunur, silinebilir.
+                onSave={canWrite && itemOpen && g.customer?.isActive !== false && colorAcceptsAlias(r.color) ? (a) => onSave(r, a) : undefined}
                 onDelete={canWrite ? () => onDelete(r) : undefined}
-                lockedHint={canWrite ? "Kumaş ya da müşteri kullanımda değil — ad değiştirilemez, yalnız silinebilir." : undefined}
+                lockedHint={canWrite ? "Kumaş, müşteri ya da renk kullanımda değil — ad değiştirilemez, yalnız silinebilir." : undefined}
               />
             ))}
           </ul>

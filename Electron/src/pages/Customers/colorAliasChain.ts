@@ -4,7 +4,7 @@ import type { CustomerColorAlias, CustomerItemColorAlias } from "./aliasService"
 
 export interface ColorAliasGroup {
   colorId: string;
-  color: { id: string; code: string; name: string; hex: string | null } | null;
+  color: { id: string; code: string; name: string; hex: string | null; isActive?: boolean } | null;
   /** Genel (bütün kumaşlar) ad — yoksa null. */
   general: CustomerColorAlias | null;
   /** "Yalnız X kumaşında" adları, kumaş adına göre sıralı. */
@@ -65,3 +65,8 @@ export function generalAliasDeleteText(colorName: string, alias: string, itemNam
 export const itemAcceptsAlias = (lifecycle: string | undefined): boolean => lifecycle === undefined || lifecycle === "ACTIVE";
 
 export const ITEM_LOCKED_HINT = "Kumaş 'Tükenene kadar' ya da Pasif — ad değiştirilemez, yalnız silinebilir.";
+
+/** Renk yeni/değişen ad kabul ediyor mu (backend `assertColor` aynası): pasif renkte yazım 400. */
+export const colorAcceptsAlias = (color: { isActive?: boolean } | null | undefined): boolean => color?.isActive !== false;
+
+export const COLOR_LOCKED_HINT = "Renk pasif — ad değiştirilemez, yalnız silinebilir.";
