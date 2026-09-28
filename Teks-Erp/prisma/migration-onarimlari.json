@@ -5,5 +5,11 @@
     "tarih": "2026-09-23",
     "tasindigiMigration": "20260923230000_number_series_line_separator2",
     "gerekce": "Dosya, kendisinden SONRA doğan `number_series_lines` tablosuna ALTER yazıyordu; temiz bir veritabanında migrate deploy 42P01 ile düşüp migration'ı FAILED bırakıyordu (ölçüldü 2026-09-23, boş DB). Dosyayı ESKİ hâline almak çare değildi: eski hâli hiçbir temiz kurulumda koşamıyor. Satır, tabloyu yaratan migration'dan SONRA gelen yeni bir migration'a ADD COLUMN IF NOT EXISTS olarak taşındı; ara durumdaki veritabanlarında no-op. Sahada bu migration'ların hiçbiri uygulanmamıştı."
+  },
+  {
+    "migration": "20260928133711_musteri_kumas_renk_adi",
+    "sha256": "4b56f0adbefbb8432c1c6f8678ee48d9daa9b241e008e394136f39c6056a5dd9",
+    "tarih": "2026-09-28",
+    "gerekce": "İnişte ölçüldü: migration satırı silinip ikinci kez deploy edilince 42P07 ile düşüyordu (IF NOT EXISTS yoktu). Dosya aynı dalda doğdu ve hiçbir canlı kuruluma (fabrika, test fabrikası) uygulanmadan onarıldı: CREATE TABLE/INDEX IF NOT EXISTS + FK'lar pg_constraint kontrollü DO bloğunda. Ölçüm: şablondan temiz DB'de deploy → satır sil → ikinci deploy temiz, 6 kısıt + 4 indeks. Uygulanmış test DB'lerinde yalnız checksum farkı doğar (migrate deploy bunu reddetmez)."
   }
 ]
