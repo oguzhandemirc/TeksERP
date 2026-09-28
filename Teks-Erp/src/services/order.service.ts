@@ -768,12 +768,17 @@ export class OrderService extends BaseService {
     // dahil) item/color terfi edilir; mevcut satır korunur, ilk-dolu-ad kazanır.
     const itemNameById = new Map<string, string>();
     const colorNameById = new Map<string, string>();
-    let kumasaOzel: Set<string>;
-    try {
-      kumasaOzel = await this.kumasaOzelRenkCiftleri(customerId, lines);
-    } catch (e) {
-      hata("order", "kumaşa özel renk adı varlık-okuması başarısız:", e);
-      return;
+    // Varlık okuması yalnız renk adı taşıyan satırlar için; okunamazsa yalnız RENK
+    // terfisi atlanır (null), kumaş adı terfisi bundan etkilenmez.
+    const renkAdayi = lines.filter((l) => typeof l.customerColorName === "string" && l.customerColorName.trim().length > 0);
+    let kumasaOzel: Set<string> | null = new Set();
+    if (renkAdayi.length > 0) {
+      try {
+        kumasaOzel = await this.kumasaOzelRenkCiftleri(customerId, renkAdayi);
+      } catch (e) {
+        hata("order", "kumaşa özel renk adı varlık-okuması başarısız, renk terfisi atlandı:", e);
+        kumasaOzel = null;
+      }
     }
     for (const line of lines) {
       const itemId = typeof line.itemId === "string" ? line.itemId : null;
@@ -785,8 +790,8 @@ export class OrderService extends BaseService {
       if (itemId && itemName.length > 0 && !itemNameById.has(itemId)) {
         itemNameById.set(itemId, itemName);
       }
-      const ozel = itemId && colorId && kumasaOzel.has(`${itemId}|${colorId}`);
-      if (colorId && colorName.length > 0 && !ozel && !colorNameById.has(colorId)) {
+      const ozel = itemId && colorId && kumasaOzel?.has(`${itemId}|${colorId}`);
+      if (kumasaOzel && colorId && colorName.length > 0 && !ozel && !colorNameById.has(colorId)) {
         colorNameById.set(colorId, colorName);
       }
     }

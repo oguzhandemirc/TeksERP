@@ -23,7 +23,9 @@
 
 import prisma from "../src/lib/prisma";
 import { ImportService } from "../src/services/import/import.service";
-import { listAdapters, getImportAdapter } from "../src/services/import/import-registry";
+import { listAdapters, getImportAdapter, getImportAdapterForRequest } from "../src/services/import/import-registry";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { parseAliasKey } from "../src/services/import/adapters/customer-alias.adapter";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { parseLocaleNumber, parseBool, parseDateCell, isClearLiteral } from "../src/services/import/import-coerce";
@@ -384,6 +386,29 @@ async function main(): Promise<void> {
         return true;
       }
     })());
+
+    // §14 AÇILIŞ KAPISI (MUSTERI-KUMAS-RENK-ADI §7): kumaşa özel ad girişi D4 bütün
+    // tabletlere ulaşana kadar kapalı — eski tablet onu GENEL ada sızdırır.
+    // Kapıyı kaldıran commit ilk kontrolü de değiştirir (kapı sessizce düşmesin).
+    console.log("\n--- 14. Açılış kapısı (releaseGate) ---");
+    const gated = listAdapters().filter((a) => a.releaseGate).map((a) => a.entity);
+    check("kumaşa özel renk adı şablonu KAPALI (D4 yayılımı ölçülene kadar)", gated.includes("customerItemColorAlias"), gated.join(","));
+    const listed = ImportService.listEntities(["*"]).map((e) => e.entity);
+    check("kapalı şablon /entities listesinde YOK (eski panel de göremez)", gated.every((e) => !listed.includes(e)), listed.filter((e) => gated.includes(e)).join(","));
+    check("açık şablonlar listede (kapı yalnız kapalıyı süzer)", listed.length === listAdapters().length - gated.length, `${listed.length}`);
+    const gateErr = (() => {
+      try {
+        getImportAdapterForRequest("customerItemColorAlias");
+        return null;
+      } catch (e) {
+        const ae = e as { statusCode?: number; details?: { code?: string } };
+        return `${ae.statusCode}:${ae.details?.code}`;
+      }
+    })();
+    check("kapalı şablonun HTTP girişi 403 IMPORT_ENTITY_GATED", gateErr === "403:IMPORT_ENTITY_GATED", String(gateErr));
+    check("açık şablonun HTTP girişi geçer", getImportAdapterForRequest("customerColorAlias").entity === "customerColorAlias");
+    const rotaKaynak = fs.readFileSync(path.join(__dirname, "..", "src", "routes", "import.routes.ts"), "utf8");
+    check("import.routes çıplak getImportAdapter ÇAĞIRMAZ (kapı tek boğazdan)", !/\bgetImportAdapter\s*\(/.test(rotaKaynak) && /getImportAdapterForRequest\s*\(/.test(rotaKaynak));
   } finally {
     // Cleanup — testin kendi yarattığı her şey.
     // ⚠️ SIRA ZORUNLU: `ImportRunLine.importRun` ilişkisi RESTRICT'tir ve motor

@@ -59,7 +59,8 @@ export const COLOR_MERGE_RULES: MoveRule[] = [
       uniqueOn: ["customerId", "itemId", "colorId"],
       policy: "SKIP",
       why:
-        "Survivor'ın adı kazanır. ⚠️ GÖLGELEME: taşınan satır survivor rengin o kumaştaki GENEL " +
+        "Survivor'ın adı kazanır; kaynaklar arası aynı anahtarda kaynak sırasında İLK gelen " +
+        "kazanır. ⚠️ GÖLGELEME: taşınan satır survivor rengin o kumaştaki GENEL " +
         "adını gölgeler — önizleme listeler.",
     },
     {

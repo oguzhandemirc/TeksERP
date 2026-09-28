@@ -10,6 +10,9 @@
 //    o müşteri + kumaş + renk için kumaşa özel ad varsa satırdaki renk adı o kumaşın
 //    bağlamıdır; genel ada yazılsa kumaşa özel adı olmayan bütün kumaşlara sızardı.
 //    Sonda (ölçüldü, md5 geri alındı): `!ozel &&` koşulu kaldırılınca C1+C2 kırmızı.
+//
+// D) Kumaşa özel varlık okuması yalnız RENK adı taşıyan satırda; okuma hata verirse yalnız
+//    renk terfisi atlanır, kumaş adı terfisi sürer (delege bellekte sarılır, dosyaya dokunmaz).
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
@@ -35,7 +38,7 @@ const orders = new OrderService({ modelName: "order", tableName: "ORDER", nested
 let ITEM = "",
   ADMIN = "",
   CUST = "";
-const ozelIds: { items: string[]; color: string } = { items: [], color: "" };
+const ozelIds: { items: string[]; color: string; extraColors: string[] } = { items: [], color: "", extraColors: [] };
 const orderIds: string[] = [];
 const stamp = Date.now().toString().slice(-7);
 
@@ -78,6 +81,31 @@ async function kumasaOzelTerfi(): Promise<void> {
     (await genelRenk())?.alias === "SATIR-Y", (await genelRenk())?.alias ?? "yok");
   const ozel = await prisma.customerItemColorAlias.findFirst({ where: { customerId: CUST, itemId: X }, select: { alias: true } });
   check("C3 terfi kumaşa özel adı YAZMAZ (yalnız elle girilir)", ozel?.alias === "X-OZEL", ozel?.alias ?? "yok");
+
+  console.log("\n=== D) varlık okuması yalnız renk adayında; hatası kumaş terfisini düşürmez ===");
+  const K2 = (await prisma.color.create({ data: { code: `TST-ALIAS-K2-${stamp}`, name: `TST ALIAS BEJ ${stamp}` }, select: { id: true } })).id;
+  ozelIds.extraColors.push(K2);
+  const d = prisma.customerItemColorAlias as unknown as { findMany: (...a: unknown[]) => Promise<unknown> };
+  const orig = d.findMany;
+  let cagri = 0;
+  let atsin = false;
+  d.findMany = async (...a: unknown[]) => {
+    cagri++;
+    if (atsin) throw new Error("sonda: varlık okuması düştü");
+    return orig.apply(d, a);
+  };
+  try {
+    await mkOrder([{ itemId: Y, colorId: K2, width: 150, quantity: 10, customerItemName: "Y-KUMAS" }]);
+    check("D1 renk adı olmayan satırlar kumaşa özel varlık okuması YAPMAZ", cagri === 0, `çağrı=${cagri}`);
+    atsin = true;
+    await mkOrder([{ itemId: X, colorId: K2, width: 150, quantity: 10, customerItemName: "X-KUMAS", customerColorName: "X-BEJ" }]);
+    const xKumas = await itemAlias(X);
+    const k2Genel = await prisma.customerColorAlias.findUnique({ where: { customerId_colorId: { customerId: CUST, colorId: K2 } }, select: { alias: true } });
+    check("D2 ⭐ okuma hatası KUMAŞ adı terfisini düşürmez", xKumas?.alias === "X-KUMAS", xKumas?.alias ?? "yok");
+    check("D2 okuma hatasında RENK terfisi atlanır (kumaşa özel var mı bilinmiyor)", k2Genel === null, k2Genel?.alias ?? "yok");
+  } finally {
+    d.findMany = orig;
+  }
 }
 
 async function main(): Promise<void> {
@@ -113,6 +141,7 @@ async function main(): Promise<void> {
     await prisma.customer.deleteMany({ where: { id: CUST } });
     if (ozelIds.items.length) await prisma.item.deleteMany({ where: { id: { in: ozelIds.items } } });
     if (ozelIds.color) await prisma.color.deleteMany({ where: { id: ozelIds.color } });
+    if (ozelIds.extraColors.length) await prisma.color.deleteMany({ where: { id: { in: ozelIds.extraColors } } });
     console.log("(test verisi temizlendi)");
   }
 

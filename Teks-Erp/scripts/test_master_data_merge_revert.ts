@@ -301,6 +301,68 @@ async function main(): Promise<void> {
   console.log("\n§8 Kumaşa özel renk adı: çok kaynaklı birleştir → geri al");
   await kumasaOzelRenkAdiGeriAlma();
   await aliasRevertCases();
+
+  console.log("\n§13 Kardeş alias tabloları (GENERATED aliasFold): birleştir → geri al");
+  await kardesAliasGeriAlma();
+}
+
+/**
+ * §13 — D6 (MUSTERI-KUMAS-RENK-ADI §11 karar 7): kardeş iki alias tablosunun `aliasFold`u
+ * GENERATED; fotoğraftan geri yazım (`INSERT … SELECT *` / `SET "aliasFold"`) PG'de
+ * reddedilmemeli. SKIP (customer_item_aliases) silinen satırı, MERGE_FIELDS
+ * (customer_color_aliases) iki kez zenginleşen survivor satırını (K: üç tarafta) ve
+ * kaynaklar arası aynı rengi (K2: iki kaynakta, hedefte yok) birlikte ölçer.
+ */
+async function kardesAliasGeriAlma(): Promise<void> {
+  const X = (await prisma.item.create({ data: { code: `${TAG}-AX`, name: `${TAG} KARDES X`, itemType: "FABRIC" }, select: { id: true } })).id;
+  const Y = (await prisma.item.create({ data: { code: `${TAG}-AY`, name: `${TAG} KARDES Y`, itemType: "FABRIC" }, select: { id: true } })).id;
+  const K = (await prisma.color.create({ data: { code: `${TAG}-AK`, name: `${TAG} KARDES EKRU` }, select: { id: true } })).id;
+  const K2 = (await prisma.color.create({ data: { code: `${TAG}-AK2`, name: `${TAG} KARDES BEJ` }, select: { id: true } })).id;
+  itemIds.push(X, Y);
+  colorIds.push(K, K2);
+  const s = await makeCustomer("KA-H", `${TAG} KA Hedef`);
+  const k1 = await makeCustomer("KA-K1", `${TAG} KA Kaynak 1`);
+  const k2 = await makeCustomer("KA-K2", `${TAG} KA Kaynak 2`);
+  for (const [c, i, alias] of [[s, X, "S-X"], [k1, X, "K1-X"], [k1, Y, "K1-Y"], [k2, Y, "K2-Y"]] as const) {
+    await prisma.customerItemAlias.create({ data: { customerId: c, itemId: i, alias } });
+  }
+  const renkler: Array<[string, string, string | null, boolean]> = [
+    [s, K, "S-K", false],
+    [k1, K, "K1-K", true],
+    [k1, K2, null, true],
+    [k2, K, "K2-K", true],
+    [k2, K2, "K2-K2", false],
+  ];
+  for (const [c, colorId, alias, assigned] of renkler) {
+    await prisma.customerColorAlias.create({ data: { customerId: c, colorId, alias, assigned } });
+  }
+  const who = [s, k1, k2];
+  const fotograf = async (): Promise<string> => {
+    const ia = await prisma.customerItemAlias.findMany({ where: { customerId: { in: who } }, orderBy: { id: "asc" } });
+    const ca = await prisma.customerColorAlias.findMany({ where: { customerId: { in: who } }, orderBy: { id: "asc" } });
+    return [
+      ...ia.map((r) => `IA ${r.id}|${r.customerId}|${r.itemId}|${r.alias}|${r.createdAt.toISOString()}`),
+      ...ca.map((r) => `CA ${r.id}|${r.customerId}|${r.colorId}|${r.alias}|${r.assigned}|${r.createdAt.toISOString()}`),
+    ].join("\n");
+  };
+  const once = await fotograf();
+  const pv = await MasterDataMergeService.preview("customer", s, [k1, k2]);
+  const merged = await expectErr(() =>
+    MasterDataMergeService.merge("customer", { survivorId: s, sourceIds: [k1, k2], reason: "kardes alias geri alma sondasi", acknowledgedConflicts: pv.conflicts.length, userId: ADMIN }),
+  );
+  check("§13a birleştirme geçti (iki kaynakta aynı renk P2002 vermez)", merged === null, JSON.stringify(merged));
+  if (merged !== null) return;
+  const ca = await prisma.customerColorAlias.findMany({ where: { customerId: s }, include: { color: { select: { code: true } } }, orderBy: { color: { code: "asc" } } });
+  check(
+    "§13b MERGE_FIELDS: hedefte K (ad korunur, atama OR) + K2 (K1'in ataması + K2'nin adı)",
+    ca.map((r) => `${r.alias}:${r.assigned}`).join(",") === "S-K:true,K2-K2:true",
+    ca.map((r) => `${r.alias}:${r.assigned}`).join(","),
+  );
+  const opId = await latestOperation(s);
+  const geri = await expectErr(() => MasterDataUnmergeService.revert(opId, { reason: "kardes alias geri alma sondasi", userId: ADMIN }));
+  check("§13c ⭐ geri alma PG'de reddedilmedi (GENERATED aliasFold fotoğraftan yazılmaz)", geri === null, JSON.stringify(geri));
+  const sonra = await fotograf();
+  check("§13d ⭐ geri alma: dokuz satır kendi kaynağına BİREBİR döndü (id + anahtar + ad + atama + tarih)", once === sonra, once === sonra ? "" : `\nönce:\n${once}\nsonra:\n${sonra}`);
 }
 
 /** §8 — kumaşa özel renk adı: çok kaynaklı birleştir → geri al, her satır kendi kaynağına. */
@@ -560,6 +622,8 @@ async function cleanup(): Promise<void> {
     }
     if (customerIds.length) {
       await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: customerIds } } });
+      await prisma.customerItemAlias.deleteMany({ where: { customerId: { in: customerIds } } });
+      await prisma.customerColorAlias.deleteMany({ where: { customerId: { in: customerIds } } });
       await prisma.cariAccount.deleteMany({ where: { customerId: { in: customerIds } } });
       await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
     }

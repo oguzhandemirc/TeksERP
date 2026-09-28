@@ -7,7 +7,7 @@ import { matchesPermission, requirePermission } from "../middlewares/rbac.middle
 import { ImportRevertService } from "../services/import/import-revert.service";
 import { AppError } from "../utils/app-error";
 import { ImportService } from "../services/import/import.service";
-import { getImportAdapter } from "../services/import/import-registry";
+import { getImportAdapterForRequest } from "../services/import/import-registry";
 
 // =============================================================================
 // TOPLU İÇE / DIŞA AKTARIM UÇLARI
@@ -34,7 +34,7 @@ function requireEntityWrite(req: Request, _res: Response, next: NextFunction): v
   if (!req.user) return next(AppError.unauthorized("Kimlik doğrulama gerekli."));
   let adapter;
   try {
-    adapter = getImportAdapter(String(req.params.entity));
+    adapter = getImportAdapterForRequest(String(req.params.entity));
   } catch (e) {
     return next(e);
   }
@@ -53,7 +53,7 @@ function requireEntityRead(req: Request, _res: Response, next: NextFunction): vo
   if (!req.user) return next(AppError.unauthorized("Kimlik doğrulama gerekli."));
   let adapter;
   try {
-    adapter = getImportAdapter(String(req.params.entity));
+    adapter = getImportAdapterForRequest(String(req.params.entity));
   } catch (e) {
     return next(e);
   }

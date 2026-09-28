@@ -42,7 +42,19 @@ export async function describeItemColorShadowing(
     orderBy: [{ customerId: "asc" }, { itemId: "asc" }, { colorId: "asc" }],
   });
   if (rows.length === 0) return [];
-  const moved = rows.map((r) => ({ ...r, [col]: survivorId }));
+  // Kaynaklar arası aynı anahtarda taşıma kaynak SIRASIYLA yürür: ilk kaynağın satırı
+  // taşınır, sonrakiler atılır — atılacak satır "basılacak ad" diye listelenmez.
+  const order = (r: (typeof rows)[number]) => sourceIds.indexOf(r[col]);
+  const seen = new Set<string>();
+  const moved = [...rows]
+    .sort((a, b) => order(a) - order(b))
+    .map((r) => ({ ...r, [col]: survivorId }))
+    .filter((r) => {
+      const key = `${r.customerId}:${r.itemId}:${r.colorId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   const idx = await loadCustomerColorIndex(prisma, {
     customerIds: moved.map((r) => r.customerId),
     itemIds: moved.map((r) => r.itemId),

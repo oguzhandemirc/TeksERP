@@ -4,8 +4,8 @@
 // Anahtar ÜÇLÜDÜR ve kardeşler gibi TEK sütunda taşınır: `CARİ|ÜRÜN|RENK` (ilk iki
 // `|` böler) — motor satırı tek sütunla eşleştirir, anahtarı diğer hücrelerden
 // türetemez. Ad/kod bilgi sütunları `readOnly`; yazılan TEK alan `alias`tır.
-// Kumaş kapısı (`DEFINITION`) önizlemede de sorulur: "Tükenene kadar"/Pasif kumaş
-// yazma anında 409 verip koşumu yarıda DURDURMASIN, satır önizlemede hata alsın.
+// Kumaş kapısı (`DEFINITION`) önizlemede de sorulur (yalnız yazılacak satırda):
+// "Tükenene kadar"/Pasif kumaş yazma anında 409 verip koşumu yarıda DURDURMASIN.
 
 import prisma from "../../../lib/prisma";
 import { CustomerAliasService } from "../../customer-alias.service";
@@ -84,6 +84,11 @@ export const customerItemColorAliasImportAdapter: ImportAdapter = {
   writePermission: "customer-alias:write",
   readPermission: "customer-alias:read",
   keyColumns: ["externalKey"],
+  // Tablet 1.0.8 "kalıcı" düzeltmede çözülmüş (kumaşa özel olabilen) adı GENEL ada yazar
+  // (MUSTERI-KUMAS-RENK-ADI §7): kumaşa özel ad girişi D4 bütün tabletlere ulaşınca açılır.
+  releaseGate:
+    "kumaşa özel renk adı girişi, tablet güncellemesi bütün tabletlere ulaştıktan sonra açılacak " +
+    "(eski tablet bu adı müşterinin genel renk adına yazabilir).",
   columns: COLUMNS,
   notes: [
     "Bir satır = bir eşleme. Anahtar ÜÇ parçalıdır ve dikey çizgi ile ayrılır: CARİ|KUMAŞ|RENK.",
@@ -143,7 +148,11 @@ export const customerItemColorAliasImportAdapter: ImportAdapter = {
       targets: ["item", "color"],
       bucketKey: "customerItemColorAlias:target",
       format: "CARİ KODU|KUMAŞ KODU|RENK KODU",
+      pivot: "customerItemColorAlias",
     });
+    // Yalnız YAZILACAK satır sorulur: değişmeyen (SKIP) satır servise hiç ulaşmaz;
+    // hata alırsa dışa aktar → geri yükle turu `abort` ile bütünüyle reddedilir.
+    if (row.result.action !== "CREATE" && row.result.action !== "UPDATE") return;
     const itemId = row.values[targetIdField("item")];
     if (typeof itemId !== "string") return;
     try {

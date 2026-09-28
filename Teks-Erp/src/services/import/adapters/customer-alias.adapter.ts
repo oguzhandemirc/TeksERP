@@ -33,6 +33,7 @@ import { resolveReference } from "../import-lookup";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
 import { upperTr } from "../../../utils/tr-case";
 import { importKey } from "../import-key";
+import { aliasPivotExists, type AliasPivot } from "./alias-pivot-exists";
 
 // Servisin paylaşılan tekili yok (controller kendi private örneğini kuruyor);
 // servis durumsuz olduğu için burada kendi örneğimizi kuruyoruz.
@@ -188,7 +189,7 @@ export const targetIdField = (entity: "item" | "color"): string => `__${entity}I
 export async function validateAliasRow(
   row: PreparedRow,
   ctx: ImportContext,
-  spec: { targets: ReadonlyArray<"item" | "color">; bucketKey: string; format: string },
+  spec: { targets: ReadonlyArray<"item" | "color">; bucketKey: string; format: string; pivot: AliasPivot },
 ): Promise<void> {
   const key = row.result.key;
   if (!key) return; // anahtar boş — motor zaten "zorunlu" hatası verdi
@@ -218,11 +219,27 @@ export async function validateAliasRow(
   if (customer.warning) row.result.warnings.push({ column: "externalKey", message: customer.warning });
   if (customer.hit) row.values.__customerId = customer.hit.id;
 
+  let adIle = Boolean(customer.warning);
+  let cozuldu = Boolean(customer.hit);
   for (const [i, entity] of spec.targets.entries()) {
     const target = await resolveReference(entity, parts[i + 1]!, ctx);
     if (target.error) row.result.errors.push({ column: "externalKey", ...target.error });
     if (target.warning) row.result.warnings.push({ column: "externalKey", message: target.warning });
     if (target.hit) row.values[targetIdField(entity)] = target.hit.id;
+    adIle ||= Boolean(target.warning);
+    cozuldu &&= Boolean(target.hit);
+  }
+  // AD ile çözülen anahtarı `findExisting` (yalnız KOD) göremez: mevcut satır CREATE diye
+  // deftere geçer ve geri sarma içe aktarmadan ÖNCE var olan satırı siler.
+  if (row.result.action === "CREATE" && adIle && cozuldu && (await aliasPivotExists(spec.pivot, {
+    customerId: row.values.__customerId as string,
+    itemId: row.values[targetIdField("item")] as string | undefined,
+    colorId: row.values[targetIdField("color")] as string | undefined,
+  }))) {
+    row.result.errors.push({
+      column: "externalKey",
+      message: "Bu eşleme zaten var ama anahtar AD ile yazılmış — anahtarı KOD ile yazın (dışa aktarımdan kopyalayın).",
+    });
   }
 }
 
@@ -296,6 +313,7 @@ export const customerItemAliasImportAdapter: ImportAdapter = {
       targets: ["item"],
       bucketKey: "customerItemAlias:target",
       format: `CARİ KODU|KUMAŞ KODU (örn. MUS1908260001${KEY_SEP}PATOS-01)`,
+      pivot: "customerItemAlias",
     });
   },
 
@@ -411,6 +429,7 @@ export const customerColorAliasImportAdapter: ImportAdapter = {
       targets: ["color"],
       bucketKey: "customerColorAlias:target",
       format: "CARİ KODU|RENK KODU",
+      pivot: "customerColorAlias",
     });
   },
 

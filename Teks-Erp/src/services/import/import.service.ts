@@ -29,7 +29,7 @@ import { matchesPermission } from "../../middlewares/rbac.middleware";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
-import { getImportAdapter, listAdapters } from "./import-registry";
+import { getImportAdapter, listOpenAdapters } from "./import-registry";
 import { applyNameGuard, checkDuplicateNamesInFile } from "./import-name-guard";
 import { buildImportRunLine } from "./import-run-line.helper";
 import type { ImportRunLinePayload } from "./import-run-line.helper";
@@ -389,7 +389,7 @@ export class ImportService {
     // `canRead:false` gösteriyordu ("ekran hayır, uç evet" tutarsızlığı).
     const has = (code: string): boolean =>
       matchesPermission(permissions, code) || matchesPermission(permissions, "admin:*");
-    return listAdapters().map((a) => ({
+    return listOpenAdapters().map((a) => ({
       entity: a.entity,
       label: a.label,
       keyColumns: a.keyColumns,

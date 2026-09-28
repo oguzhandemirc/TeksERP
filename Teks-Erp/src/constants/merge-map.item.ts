@@ -79,7 +79,9 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       label: "Müşteri kumaşa özel renk adı",
       uniqueOn: ["customerId", "itemId", "colorId"],
       policy: "SKIP",
-      why: "Müşteri tarafındakiyle aynı: survivor'ın adı kazanır, çakışmayan satır taşınır.",
+      why:
+        "Müşteri tarafındakiyle aynı: survivor'ın adı kazanır, kaynaklar arası aynı anahtarda " +
+        "kaynak sırasında İLK gelen kazanır, çakışmayan satır taşınır.",
     },
     // —— Ticaret / iplik / fatura bacağı ————————————————————————————————————
     { kind: "MOVE", model: "InvoiceLine", table: "invoice_lines", column: "itemId", label: "Fatura kalemi" },
