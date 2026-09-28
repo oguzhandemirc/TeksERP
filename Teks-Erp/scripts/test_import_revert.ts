@@ -496,6 +496,31 @@ async function aliasPivotDallari(revertSvc: RevertApi, runIds: string[]): Promis
     exported.every((r) => r.externalKey!.split("|").length === 3 && Object.keys(r).every((k) => cols.has(k))), JSON.stringify(exported));
   const rt = await ImportService.preview(ENTITY, exported.map((r, i) => ({ rowNo: i + 2, cells: r })), { mode: "upsert", onError: "abort" });
   check("§8f dışa aktarılan dosya geri yüklenince her satır SKIP", rt.rows.every((r) => r.action === "SKIP"), rt.rows.map((r) => r.action).join(","));
+
+  // §8g kumaşı sonradan "Tükenene kadar"a alınmış MEVCUT satır: değişmeden geri yüklenince
+  // SKIP (hata yok, koşum reddedilmez); adı değişirse yazılacağı için önizlemede hata.
+  await prisma.customerItemColorAlias.create({ data: { customerId: c.id, itemId: y.id, colorId: e.id, alias: "ESKI-Y" } });
+  const exp2 = (await getImportAdapter(ENTITY).exportRows()).filter((r) => r.externalKey?.startsWith(TRV));
+  const rt2 = await ImportService.preview(ENTITY, exp2.map((r, i) => ({ rowNo: i + 2, cells: r })), { mode: "upsert", onError: "abort" });
+  check("§8g 'Tükenene kadar' kumaşın DEĞİŞMEYEN satırı SKIP, hatasız", exp2.length === 3 && rt2.rows.every((r) => r.action === "SKIP" && r.errors.length === 0),
+    rt2.rows.map((r) => `${r.action}:${r.errors.map((er) => er.message).join("/")}`).join(","));
+  const yKey = anahtar(c.code, y.code, e.code);
+  const rt3 = await ImportService.preview(ENTITY, [{ rowNo: 2, cells: { externalKey: yKey, alias: "YENI-Y" } }], { mode: "upsert", onError: "abort" });
+  check("§8g aynı satırın ADI değişirse (UPDATE) önizlemede hata — servis 409'u koşumu durdurmaz", rt3.rows[0]?.action === "ERROR", JSON.stringify(rt3.rows[0]?.errors));
+
+  // §8h anahtar AD ile yazılınca `findExisting` (yalnız KOD) mevcut satırı göremez: CREATE diye
+  // deftere geçip geri sarmada içe aktarmadan ÖNCE var olan satırı silerdi → önizlemede hata.
+  const xAdi = `${PREFIX} ${TRV} KUMAS X`;
+  const adli = await ImportService.preview(ENTITY, [{ rowNo: 2, cells: { externalKey: anahtar(c.code, xAdi, e.code), alias: "Q" } }], { mode: "upsert", onError: "abort" });
+  check("§8h ⭐ AD anahtarlı mevcut kumaşa özel eşleme CREATE değil hata", adli.rows[0]?.action === "ERROR" &&
+    (adli.rows[0]?.errors ?? []).some((er) => er.message.includes("AD ile")), `${adli.rows[0]?.action} ${JSON.stringify(adli.rows[0]?.errors)}`);
+  await aliasService.upsertItemAlias(c.id, x.id, "KARDES-X");
+  const kardes = await ImportService.preview("customerItemAlias", [{ rowNo: 2, cells: { externalKey: anahtar(c.code, xAdi), alias: "Q" } }], { mode: "upsert", onError: "abort" });
+  check("§8h kardeş kumaş adı şablonu da aynı kapıdan geçer", kardes.rows[0]?.action === "ERROR", `${kardes.rows[0]?.action} ${JSON.stringify(kardes.rows[0]?.errors)}`);
+  const e3 = await yeniRenk("E3");
+  const yeni = await ImportService.preview(ENTITY, [{ rowNo: 2, cells: { externalKey: anahtar(c.code, xAdi, e3.code), alias: "Q" } }], { mode: "upsert", onError: "abort" });
+  check("§8h kontrol: AD anahtarlı YENİ eşleme hâlâ CREATE (uyarılı)", yeni.rows[0]?.action === "CREATE" && (yeni.rows[0]?.warnings.length ?? 0) > 0,
+    `${yeni.rows[0]?.action} ${JSON.stringify(yeni.rows[0]?.errors)}`);
 }
 
 async function caprazDefterSirasi(revertSvc: RevertApi, runIds: string[]): Promise<void> {
@@ -549,6 +574,7 @@ async function temizlikAliasFixture(): Promise<void> {
       }
       await prisma.duplicateReview.deleteMany({ where: { OR: [{ aId: { in: fx.customers } }, { bId: { in: fx.customers } }] } });
       await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: fx.customers } } });
+      await prisma.customerItemAlias.deleteMany({ where: { customerId: { in: fx.customers } } });
       await prisma.cariAccount.deleteMany({ where: { customerId: { in: fx.customers } } });
       await prisma.customer.deleteMany({ where: { id: { in: fx.customers } } });
     }

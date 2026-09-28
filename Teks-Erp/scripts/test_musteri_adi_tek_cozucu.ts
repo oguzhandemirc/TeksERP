@@ -82,6 +82,7 @@ const BEYAN: Record<string, { sinif: Sinif; kanal: Kanal[] }> = {
   "services/import/adapters/customer-alias.adapter.ts#exportRows": { sinif: "DISA_AKTARIM", kanal: ["model"] },
   "services/import/adapters/customer-item-color-alias.adapter.ts#findExisting": { sinif: "DISA_AKTARIM", kanal: ["model"] },
   "services/import/adapters/customer-item-color-alias.adapter.ts#exportRows": { sinif: "DISA_AKTARIM", kanal: ["model"] },
+  "services/import/adapters/alias-pivot-exists.ts#aliasPivotExists": { sinif: "DISA_AKTARIM", kanal: ["model"] },
   "services/order.service.ts#promoteCustomerAliases": { sinif: "TERFI", kanal: ["model"] },
   "services/order.service.ts#kumasaOzelRenkCiftleri": { sinif: "TERFI", kanal: ["model"] },
   "services/helpers/merge-shadowing.helper.ts#describeItemColorShadowing": { sinif: "BIRLESTIRME", kanal: ["model"] },

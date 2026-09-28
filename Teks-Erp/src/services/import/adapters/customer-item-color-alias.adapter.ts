@@ -4,8 +4,8 @@
 // Anahtar ÜÇLÜDÜR ve kardeşler gibi TEK sütunda taşınır: `CARİ|ÜRÜN|RENK` (ilk iki
 // `|` böler) — motor satırı tek sütunla eşleştirir, anahtarı diğer hücrelerden
 // türetemez. Ad/kod bilgi sütunları `readOnly`; yazılan TEK alan `alias`tır.
-// Kumaş kapısı (`DEFINITION`) önizlemede de sorulur: "Tükenene kadar"/Pasif kumaş
-// yazma anında 409 verip koşumu yarıda DURDURMASIN, satır önizlemede hata alsın.
+// Kumaş kapısı (`DEFINITION`) önizlemede de sorulur (yalnız yazılacak satırda):
+// "Tükenene kadar"/Pasif kumaş yazma anında 409 verip koşumu yarıda DURDURMASIN.
 
 import prisma from "../../../lib/prisma";
 import { CustomerAliasService } from "../../customer-alias.service";
@@ -143,7 +143,11 @@ export const customerItemColorAliasImportAdapter: ImportAdapter = {
       targets: ["item", "color"],
       bucketKey: "customerItemColorAlias:target",
       format: "CARİ KODU|KUMAŞ KODU|RENK KODU",
+      pivot: "customerItemColorAlias",
     });
+    // Yalnız YAZILACAK satır sorulur: değişmeyen (SKIP) satır servise hiç ulaşmaz;
+    // hata alırsa dışa aktar → geri yükle turu `abort` ile bütünüyle reddedilir.
+    if (row.result.action !== "CREATE" && row.result.action !== "UPDATE") return;
     const itemId = row.values[targetIdField("item")];
     if (typeof itemId !== "string") return;
     try {
