@@ -21,8 +21,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PermissionGate } from "@/components/PermissionGate";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { customerAliasService } from "@/pages/Customers/aliasService";
 import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { orderStatusLabels } from "@/types/enums";
@@ -40,6 +38,7 @@ import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { OrderLineWoChips } from "./OrderLineWoChips";
 import { OrderShipmentsCard } from "./OrderShipmentsCard";
 import type { Order, OrderLine } from "./types";
+import { useOrderLineCustomerNames } from "./useOrderLineCustomerNames";
 
 /** Tek iş emri = tek kumaş+renk+en. Kalem imzası bu üçlüden türer. */
 const lineSig = (l: OrderLine) => `${l.itemId}::${l.colorId ?? ""}::${l.width ?? ""}`;
@@ -121,38 +120,8 @@ export function OrderDetailSheet({
     staleTime: 30_000,
   });
 
-  // Müşterinin kalıcı (master) kumaş/renk adları. Kalemdeki 1-shot override boşsa
-  // "müşterideki ad" buradan düşer — terfi edilmiş VEYA panelden girilmiş ad fark
-  // etmez, ikisi de gösterilir. customer-alias:read yoksa sessizce override'a düşülür.
-  const { hasPermission } = useRoleAccess();
-  const aliasEnabled = open && !!order?.customerId && hasPermission("customer-alias:read");
-  const itemAliasesQuery = useQuery({
-    queryKey: ["customer", order?.customerId, "item-aliases"],
-    queryFn: () => customerAliasService.listItemAliases(order!.customerId),
-    enabled: aliasEnabled,
-    staleTime: 60_000,
-  });
-  const colorAliasesQuery = useQuery({
-    queryKey: ["customer", order?.customerId, "color-aliases"],
-    queryFn: () => customerAliasService.listColorAliases(order!.customerId),
-    enabled: aliasEnabled,
-    staleTime: 60_000,
-  });
-  // itemId/colorId → müşterideki ad (master). Renk alias'ı null olabilir (atandı
-  // ama ad verilmedi) → o kaydı haritaya alma.
-  const itemAliasMap = new Map(
-    (itemAliasesQuery.data?.data ?? []).map((a) => [a.itemId, a.alias]),
-  );
-  const colorAliasMap = new Map(
-    (colorAliasesQuery.data?.data ?? [])
-      .filter((a) => a.alias)
-      .map((a) => [a.colorId, a.alias as string]),
-  );
-  /** Kalemdeki müşteri adı: 1-shot override > master alias > yok. */
-  const customerNames = (line: OrderLine) => ({
-    item: line.customerItemName ?? itemAliasMap.get(line.itemId) ?? null,
-    color: line.customerColorName ?? (line.colorId ? colorAliasMap.get(line.colorId) ?? null : null),
-  });
+  // Müşterideki kumaş/renk adı: renk adını sunucu çözer (kumaşa özel ad dahil); eski backend'de genel ad yedeği.
+  const customerNames = useOrderLineCustomerNames(order, open);
 
   // İlerleme çubuğunun PAYDASI aktif kalemlerden gelir: iptal edilmiş kalemin
   // metrajı payda kalsaydı, tamamı sevk edilmiş bir sipariş asla %100
@@ -430,7 +399,11 @@ export function OrderDetailSheet({
                               </Badge>
                             )}
                             {(cust.item || cust.color) && (
-                              <Badge variant="outline" className="text-[10px]">
+                              <Badge
+                                variant="outline"
+                                className="text-[10px]"
+                                title={cust.colorScope === "ITEM" ? "Renk adı bu müşterinin yalnız bu kumaştaki adı" : undefined}
+                              >
                                 Müşteride:{" "}
                                 {[cust.item, cust.color].filter(Boolean).join(" · ")}
                               </Badge>

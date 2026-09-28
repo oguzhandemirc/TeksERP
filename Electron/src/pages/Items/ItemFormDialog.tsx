@@ -35,6 +35,7 @@ import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
 import { useDevereEnabled } from "@/hooks/usePricingEnabled";
 import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
+import { ItemCardTabs } from "./ItemCardTabs";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
@@ -187,6 +188,7 @@ export function ItemFormDialog({
           </div>
         )}
 
+        <ItemCardTabs item={initial}>
         <form onSubmit={handleSubmit} className="space-y-3">
           {/* Sıra bilinçli: ÖNCE ad. Stok kodu forma EN ALTA, kapalı bir satır
               olarak alındı (2026-08-17 saha geri bildirimi) — ilk alan olduğu
@@ -341,6 +343,7 @@ export function ItemFormDialog({
             </Button>
           </DialogFooter>
         </form>
+        </ItemCardTabs>
 
         <Controller
           control={form.control}

@@ -2,6 +2,8 @@
 // Mühür/seal + packedQty KALDIRILDI. `shipment === null` → çuval DEPODA (düzenlenebilir);
 // doluysa sevkiyatta. Decimal'lar JSON number/string döner → kullanırken Number() sar.
 
+import type { ColorNameScope } from "@/services/labelService";
+
 // ── Sevkiyat statüleri / kapsam ──────────────────────────────────────────────
 export type ShipmentStatusKey = "PLANNED" | "DISPATCHED";
 
@@ -463,6 +465,8 @@ export interface OpenOrderLine {
   width: number | null;
   customerItemName: string | null;
   customerColorName: string | null;
+  /** 'ITEM' = kumaşa özel ana veri adı; eski backend göndermez. */
+  colorNameScope?: ColorNameScope | null;
   requested: number;
   shipped: number;
   openQty: number;

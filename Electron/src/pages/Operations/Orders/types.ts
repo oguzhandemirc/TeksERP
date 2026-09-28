@@ -1,5 +1,6 @@
 import type { OrderStatus, WorkOrderStatus } from "@/types/enums";
 import type { ItemUnitCode } from "@/lib/item-unit";
+import type { ColorNameScope } from "@/services/labelService";
 
 export interface OrderLineColor {
   id: string;
@@ -47,6 +48,9 @@ export interface OrderLine {
   customerItemName: string | null;
   /** Müşteri-bazlı renk adı override (1-shot). */
   customerColorName: string | null;
+  /** Sunucunun çözdüğü müşteri renk adı (satır adı → kumaşa özel → genel); yalnız detay ucunda, eski backend göndermez. */
+  resolvedCustomerColorName?: string | null;
+  colorNameScope?: ColorNameScope | null;
   /** Kesim/sevk için serbest not — örn. kaç parçaya bölüneceği. Tamburda görünür. */
   cutNote: string | null;
   /**
