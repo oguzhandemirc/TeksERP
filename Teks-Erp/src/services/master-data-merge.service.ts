@@ -33,6 +33,7 @@ import { AuditService } from "./audit.service";
 import { markTravelerCardsDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { foldColorNameForCompare, foldNameForCompare } from "./helpers/name-normalize.helper";
 import { DuplicateReviewService } from "./duplicate-review.service";
+import { describeItemColorShadowing, type MergeShadowRow } from "./helpers/merge-shadowing.helper";
 import {
   MERGEABLE_FIELDS,
   MERGE_NAME_FIELD,
@@ -136,6 +137,8 @@ export interface MergePreview {
   warnings: string[];
   moves: MergeMoveRow[];
   conflicts: MergeConflictRow[];
+  /** Taşınınca survivor'ın bir kumaştaki renk adını DEĞİŞTİRECEK kumaşa özel satırlar. */
+  shadowing: MergeShadowRow[];
   /** Alan alan hangi değer kalsın (P2). Boş dizi = bu varlıkta seçilebilir alan yok. */
   fieldChoices: MergeFieldChoice[];
   sideEffects: string[];
@@ -366,6 +369,15 @@ export class MasterDataMergeService {
       }
     }
 
+    const shadowing =
+      sourceIdList.length > 0 && survivor ? await describeItemColorShadowing(entity, survivor.id, sourceIdList) : [];
+    if (shadowing.length > 0) {
+      warnings.push(
+        `${shadowing.length} kumaşa özel müşteri renk adı taşınacak ve hedefte o kumaşta basılan adı ` +
+          "DEĞİŞTİRECEK (etiket, irsaliye) — aşağıda kayıt başına listelendi.",
+      );
+    }
+
     const measured = moves.filter((m) => m.count !== null);
     const totalRowsToMove = measured.reduce((a, m) => a + (m.count ?? 0), 0);
     const measuredAll = measured.length === moves.length;
@@ -449,6 +461,7 @@ export class MasterDataMergeService {
       warnings,
       moves,
       conflicts,
+      shadowing,
       fieldChoices,
       sideEffects,
       totalRowsToMove,
@@ -704,8 +717,9 @@ export class MasterDataMergeService {
           //     kısıtlarının taşınmaması gerekir (yoksa "hepsi serbest" olan
           //     kumaş sessizce 3 renge daralır).
           const conflictCount = conflictCounts.get(`${rule.table}.${rule.column}`) ?? 0;
+          const perSource = rule.kind === "CONFLICT" && resolvesPerSource(rule);
           const mustResolve =
-            rule.kind === "CONFLICT" &&
+            rule.kind === "CONFLICT" && !perSource &&
             (conflictCount > 0 || rule.policy === "EMPTY_MEANS_ALL");
           if (mustResolve && rule.kind === "CONFLICT") {
             const res = await resolveConflictTx(tx, rule, survivor.id, sourceIds);
@@ -747,6 +761,24 @@ export class MasterDataMergeService {
           // hangi kaynaktan geldiğini söyleyemez ve geri alma onu tahmin edemez.
           let movedTotal = 0;
           for (const sourceId of sourceIds) {
+            // Kaynak başına çözüm: survivor artık ÖNCEKİ kaynakların taşınmış
+            // satırlarını da taşır — aynı anahtarı ikinci kez taşımak P2002 verirdi.
+            if (perSource && rule.kind === "CONFLICT" && conflictCount > 0) {
+              const res = await resolveConflictTx(tx, rule, survivor.id, [sourceId]);
+              conflictsResolved += res.count;
+              if (res.deletedRows.length > 0) {
+                refRows.push({
+                  operationId: operation.id,
+                  sourceId,
+                  tableName: rule.table,
+                  columnName: rule.column,
+                  kind: MergeRefKind.DELETED,
+                  count: res.deletedRows.length,
+                  rowIds: [],
+                  rowData: res.deletedRows as Prisma.InputJsonValue,
+                });
+              }
+            }
             const moved = await movePerSourceTx(
               tx,
               { table: rule.table, column: rule.column, survivorId: survivor.id, sourceId },
@@ -949,21 +981,38 @@ async function describeConflictTx(
   survivorId: string,
   sourceIds: string[],
 ): Promise<number> {
-  const other = rule.uniqueOn.filter((c) => c !== rule.column);
-  // Kısıt KOLONUN KENDİSİNDE ise (`CariAccount.customerId @unique`) "diğer
-  // anahtar kolonu" yoktur: çakışma, İKİ tarafın da satırı olduğunda doğar.
   // Bu dalın önizleme ikizi (`describeConflict`) ile AYNI yüklemi kurması
   // load-bearing — ayrışırsa önizleme bloklar, işlem sessizce geçerdi.
-  const matchOther = other.length > 0 ? ` AND (${other.map((c) => `t."${c}" = s."${c}"`).join(" AND ")})` : "";
   const rows = await tx.$queryRawUnsafe<Array<{ n: bigint }>>(
-    `SELECT count(*)::bigint AS n FROM "${rule.table}" s
-      WHERE s."${rule.column}" = ANY($1::uuid[])
-        AND EXISTS (SELECT 1 FROM "${rule.table}" t
-                     WHERE t."${rule.column}" = $2::uuid${matchOther})`,
+    `SELECT count(*)::bigint AS n FROM "${rule.table}" s WHERE ${conflictPredicateSql(rule)}`,
     sourceIds,
     survivorId,
   );
   return Number(rows[0]?.n ?? 0);
+}
+
+/** Kaynak BAŞINA çözülen politikalar: çakışan kaynak satırı silinir (fotoğraflı). */
+const PER_SOURCE_POLICIES = new Set(["SKIP", "UNION", "UNION_COMPOSITE_PK"]);
+function resolvesPerSource(rule: Extract<MoveRule, { kind: "CONFLICT" }>): boolean {
+  return PER_SOURCE_POLICIES.has(rule.policy);
+}
+
+/**
+ * Çakışma yüklemi (`s` = kaynak satırı; $1 kaynaklar, $2 survivor) — önizleme
+ * ile işlemin TEK ortak parçası. Kısıt kolonun kendisindeyse (`CariAccount.customerId
+ * @unique`) "diğer anahtar kolonu" yoktur: çakışma, iki tarafın da satırı olduğunda doğar.
+ * Kaynak başına çözülen politikada ÖNCEKİ kaynakla aynı anahtar da çakışmadır: taşıma
+ * kaynak sırasıyla yürür ve ikinci kaynağın satırı birincinin taşınmış satırına çarpar.
+ */
+function conflictPredicateSql(rule: Extract<MoveRule, { kind: "CONFLICT" }>): string {
+  const other = rule.uniqueOn.filter((c) => c !== rule.column);
+  const match = (a: string) => (other.length > 0 ? ` AND (${other.map((c) => `${a}."${c}" = s."${c}"`).join(" AND ")})` : "");
+  const survivorSide = `EXISTS (SELECT 1 FROM "${rule.table}" t WHERE t."${rule.column}" = $2::uuid${match("t")})`;
+  const earlierSource = resolvesPerSource(rule)
+    ? ` OR EXISTS (SELECT 1 FROM "${rule.table}" p WHERE p."${rule.column}" = ANY($1::uuid[])
+          AND array_position($1::uuid[], p."${rule.column}") < array_position($1::uuid[], s."${rule.column}")${match("p")})`
+    : "";
+  return `s."${rule.column}" = ANY($1::uuid[]) AND (${survivorSide}${earlierSource})`;
 }
 
 /**
@@ -1221,17 +1270,7 @@ async function describeConflict(
     // ⚠️ Tek kolonlu kısıt (`CariAccount.customerId @unique`) da survivor'da
     // satır ARAR — koşulsuz "kaynağın her satırı çakışma" saymak, hedefin hiç
     // cari hesabı yokken bile birleştirmeyi bloklardı (işlem ikiziyle ayrışma).
-    const sql =
-      other.length > 0
-        ? `SELECT s.* FROM "${rule.table}" s
-           WHERE s."${rule.column}" = ANY($1::uuid[])
-             AND EXISTS (SELECT 1 FROM "${rule.table}" t
-                          WHERE t."${rule.column}" = $2::uuid
-                            AND (${other.map((c) => `t."${c}" = s."${c}"`).join(" AND ")}))
-           ORDER BY ${otherCols}`
-        : `SELECT s.* FROM "${rule.table}" s
-           WHERE s."${rule.column}" = ANY($1::uuid[])
-             AND EXISTS (SELECT 1 FROM "${rule.table}" t WHERE t."${rule.column}" = $2::uuid)`;
+    const sql = `SELECT s.* FROM "${rule.table}" s WHERE ${conflictPredicateSql(rule)}${other.length > 0 ? ` ORDER BY ${otherCols}` : ""}`;
     const all = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(sql, sourceIds, survivorId);
     count = all.length;
     rows = all.slice(0, sample);

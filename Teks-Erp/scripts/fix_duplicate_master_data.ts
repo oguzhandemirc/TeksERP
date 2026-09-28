@@ -59,6 +59,8 @@ async function colorRefs(id: string) {
     product_recipes: await prisma.productRecipe.count({ where: { colorId: id } }),
     item_allowed_colors: await prisma.itemAllowedColor.count({ where: { colorId: id } }),
     customer_color_aliases: await prisma.customerColorAlias.count({ where: { colorId: id } }),
+    // Sayılmazsa Cascade kumaşa özel müşteri renk adlarını sessizce siler.
+    customer_item_color_aliases: await prisma.customerItemColorAlias.count({ where: { colorId: id } }),
     swatches: await prisma.swatch.count({ where: { colorId: id } }),
     swatch_stock_reductions: await prisma.swatchStockReduction.count({ where: { colorId: id } }),
     roll_returns: await prisma.rollReturn.count({ where: { colorId: id } }),
@@ -76,6 +78,7 @@ async function itemRefs(id: string) {
     item_allowed_colors: await prisma.itemAllowedColor.count({ where: { itemId: id } }),
     item_allowed_properties: await prisma.itemAllowedProperty.count({ where: { itemId: id } }),
     customer_item_aliases: await prisma.customerItemAlias.count({ where: { itemId: id } }),
+    customer_item_color_aliases: await prisma.customerItemColorAlias.count({ where: { itemId: id } }),
     swatches: await prisma.swatch.count({ where: { itemId: id } }),
     swatch_stock_reductions: await prisma.swatchStockReduction.count({ where: { itemId: id } }),
     roll_returns: await prisma.rollReturn.count({ where: { itemId: id } }),

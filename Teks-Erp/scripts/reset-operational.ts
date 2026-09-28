@@ -89,7 +89,8 @@ async function main() {
   console.log(
     "  quality_grades, return_reasons, defect_types, label_templates,"
   );
-  console.log("  system_settings, customer_item_aliases, customer_color_aliases\n");
+  console.log("  system_settings, customer_item_aliases, customer_color_aliases,");
+  console.log("  customer_item_color_aliases\n");
 }
 
 main()

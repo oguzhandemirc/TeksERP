@@ -95,6 +95,7 @@ const PROVENANCE_TABLES = {
   PERMISSION_TEMPLATE: () => prisma.permissionTemplate,
   CUSTOMER_ITEM_ALIAS: () => prisma.customerItemAlias,
   CUSTOMER_COLOR_ALIAS: () => prisma.customerColorAlias,
+  CUSTOMER_ITEM_COLOR_ALIAS: () => prisma.customerItemColorAlias,
   SUBCONTRACTOR_CATEGORY: () => prisma.subcontractorCategory,
   TRAVELER_CARD_TEMPLATE: () => prisma.travelerCardTemplate,
   DOCUMENT_PROFILE: () => prisma.documentProfile,

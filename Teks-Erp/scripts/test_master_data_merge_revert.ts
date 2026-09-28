@@ -25,6 +25,10 @@
 //   §7 ⭐ KİLİT SIRASI (ES değişmezi): `MERGE_MAP`te `swatch_stock_reductions`
 //      kuralı `swatches` kuralından ÖNCE gelir — kartela storno yolu da aynı
 //      sırada ilerliyor; ters sıra 40P01 üretirdi
+//   §8 ⭐ YENİ TABLO (customer_item_color_aliases, SKIP): çok kaynaklı birleştirme
+//      (survivor çakışması + kaynaklar arası çakışma + taşınan satır) geri alınınca
+//      her satır kendi kaynağına BİREBİR döner — üretilmiş kolon olmadığı için
+//      jenerik fotoğraflı geri yazım yeter (MUSTERI-KUMAS-RENK-ADI §4 "Geri alma").
 // =============================================================================
 import { CompanyType, MergeRefKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -49,6 +53,8 @@ function check(label: string, ok: boolean, detail = ""): void {
 const TAG = `TEST-UNMRG-${Date.now().toString().slice(-8)}`;
 const customerIds: string[] = [];
 const orderIds: string[] = [];
+const itemIds: string[] = [];
+const colorIds: string[] = [];
 let ADMIN = "";
 
 function errOf(e: unknown): { status?: number; code?: string; message: string } {
@@ -229,6 +235,32 @@ async function main(): Promise<void> {
       `düşüm=${red} kartela=${swa}`,
     );
   }
+
+  console.log("\n§8 Kumaşa özel renk adı: çok kaynaklı birleştir → geri al");
+  await kumasaOzelRenkAdiGeriAlma();
+}
+
+/** §8 — kumaşa özel renk adı: çok kaynaklı birleştir → geri al, her satır kendi kaynağına. */
+async function kumasaOzelRenkAdiGeriAlma(): Promise<void> {
+  const X = (await prisma.item.create({ data: { code: `${TAG}-IX`, name: `${TAG} KUMAS X`, itemType: "FABRIC" }, select: { id: true } })).id;
+  const Y = (await prisma.item.create({ data: { code: `${TAG}-IY`, name: `${TAG} KUMAS Y`, itemType: "FABRIC" }, select: { id: true } })).id;
+  const K = (await prisma.color.create({ data: { code: `${TAG}-K`, name: `${TAG} EKRU` }, select: { id: true } })).id;
+  itemIds.push(X, Y);
+  colorIds.push(K);
+  const s = await makeCustomer("ICA-H", `${TAG} ICA Hedef`);
+  const k1 = await makeCustomer("ICA-K1", `${TAG} ICA Kaynak 1`);
+  const k2 = await makeCustomer("ICA-K2", `${TAG} ICA Kaynak 2`);
+  const satirlar: Array<[string, string, string]> = [[s, X, "S-X"], [k1, X, "K1-X"], [k1, Y, "K1-Y"], [k2, Y, "K2-Y"]];
+  for (const [c, i, alias] of satirlar) await prisma.customerItemColorAlias.create({ data: { customerId: c, itemId: i, colorId: K, alias } });
+  const once = await prisma.customerItemColorAlias.findMany({ where: { customerId: { in: [s, k1, k2] } }, orderBy: { alias: "asc" } });
+  const pv = await MasterDataMergeService.preview("customer", s, [k1, k2]);
+  await MasterDataMergeService.merge("customer", { survivorId: s, sourceIds: [k1, k2], reason: "kumasa ozel ad geri alma sondasi", acknowledgedConflicts: pv.conflicts.length, userId: ADMIN });
+  const ara = await prisma.customerItemColorAlias.findMany({ where: { customerId: s }, select: { alias: true }, orderBy: { alias: "asc" } });
+  check("§8a birleştirme: survivor'da S-X (korundu) + K1-Y (taşındı), K2-Y atıldı", ara.map((r) => r.alias).join(",") === "K1-Y,S-X", ara.map((r) => r.alias).join(","));
+  await MasterDataUnmergeService.revert(await latestOperation(s), { reason: "kumasa ozel ad geri alma sondasi", userId: ADMIN });
+  const sonra = await prisma.customerItemColorAlias.findMany({ where: { customerId: { in: [s, k1, k2] } }, orderBy: { alias: "asc" } });
+  const iz = (rs: typeof once) => rs.map((r) => `${r.id}|${r.customerId}|${r.itemId}|${r.alias}|${r.createdAt.toISOString()}`).join("\n");
+  check("§8b ⭐ geri alma: dört satır kendi kaynağına BİREBİR döndü (id + anahtar + ad + tarih)", iz(once) === iz(sonra), `${once.length} → ${sonra.length}`);
 }
 
 async function cleanup(): Promise<void> {
@@ -251,9 +283,12 @@ async function cleanup(): Promise<void> {
       await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     }
     if (customerIds.length) {
+      await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: customerIds } } });
       await prisma.cariAccount.deleteMany({ where: { customerId: { in: customerIds } } });
       await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
     }
+    if (itemIds.length) await prisma.item.deleteMany({ where: { id: { in: itemIds } } });
+    if (colorIds.length) await prisma.color.deleteMany({ where: { id: { in: colorIds } } });
   } catch (e) {
     console.warn("Temizlik uyarısı:", (e as Error).message.slice(0, 300));
   }

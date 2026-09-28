@@ -13,6 +13,10 @@
 //  ③ RENK NULL BÜTÜNLÜĞÜ — birleştirme hiç DELETE yapmadığı için `colorId`
 //     NULL'a düşemez; `Roll.colorId IS NULL` bu sistemde "HAM KUMAŞ" demektir.
 //     Merge öncesi/sonrası NULL sayısı BİREBİR eşit olmalı.
+//  ⑥ KUMAŞA ÖZEL RENK ADI (customer_item_color_aliases, SKIP) — survivor'ın adı
+//     kazanır, çakışmayan taşınır; taşınan satırın survivor'ın o kumaştaki adını
+//     değiştirdiği önizlemede KAYIT BAŞINA listelenir (gölgeleme); ÇOK KAYNAKTA
+//     aynı (kumaş, renk) varsa ikinci UPDATE P2002 vermemeli.
 
 import prisma, { pool } from "../src/lib/prisma";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
@@ -256,6 +260,8 @@ async function main(): Promise<void> {
     check("④ iki şube de survivor'a taşındı", n === 2, `${n} şube`);
   }
 
+  await kumasaOzelRenkAdi(red);
+
   // ── ⑤ Onay sayısı uyuşmazlığı 409 ────────────────────────────────────────
   console.log("\n── ⑤ Onaylanan çakışma sayısı uyuşmazlığı ──");
   {
@@ -282,6 +288,45 @@ async function main(): Promise<void> {
   }
 }
 
+async function kumasaOzelRenkAdi(red: string): Promise<void> {
+  console.log("\n── ⑥ Kumaşa özel müşteri renk adı: SKIP + gölgeleme önizlemesi + çok kaynak ──");
+  const X = await mkItem("IC-X");
+  const Y = await mkItem("IC-Y");
+  const s = await mkCustomer("IC-S");
+  const k = await mkCustomer("IC-K");
+  await prisma.customerColorAlias.create({ data: { customerId: s, colorId: red, alias: "GENEL-S" } });
+  await prisma.customerItemColorAlias.create({ data: { customerId: s, itemId: X, colorId: red, alias: "S-X" } });
+  await prisma.customerItemColorAlias.create({ data: { customerId: k, itemId: X, colorId: red, alias: "K-X" } });
+  await prisma.customerItemColorAlias.create({ data: { customerId: k, itemId: Y, colorId: red, alias: "K-Y" } });
+  const pv = await MasterDataMergeService.preview("customer", s, [k]);
+  const golge = pv.shadowing;
+  check("⑥ önizleme: taşınan Y satırı GÖLGELEME olarak listelendi (önce GENEL-S → sonra K-Y)",
+    golge.length === 1 && golge[0]?.alias === "K-Y" && golge[0]?.before === "GENEL-S", JSON.stringify(golge));
+  check("⑥ önizleme: çakışan X satırı (SKIP) gölgeleme listesinde DEĞİL, çakışmada",
+    pv.conflicts.some((c) => c.table === "customer_item_color_aliases" && c.count === 1));
+  check("⑥ önizleme uyarısı basıldı", pv.warnings.some((w) => w.includes("kumaşa özel müşteri renk adı")));
+  await MasterDataMergeService.merge("customer", { survivorId: s, sourceIds: [k], reason: "kumasa ozel ad sondasi", acknowledgedConflicts: pv.conflicts.length });
+  const rows = await prisma.customerItemColorAlias.findMany({ where: { customerId: s }, select: { itemId: true, alias: true } });
+  const ad = (i: string) => rows.find((r) => r.itemId === i)?.alias;
+  check("⑥ SKIP: survivor'ın X adı korundu, Y taşındı", ad(X) === "S-X" && ad(Y) === "K-Y", JSON.stringify(rows));
+
+  const s2 = await mkCustomer("IC-S2");
+  const k2 = await mkCustomer("IC-K2");
+  const k3 = await mkCustomer("IC-K3");
+  await prisma.customerItemColorAlias.create({ data: { customerId: k2, itemId: X, colorId: red, alias: "K2-X" } });
+  await prisma.customerItemColorAlias.create({ data: { customerId: k3, itemId: X, colorId: red, alias: "K3-X" } });
+  let hata = "";
+  try {
+    const pv2 = await MasterDataMergeService.preview("customer", s2, [k2, k3]);
+    await MasterDataMergeService.merge("customer", { survivorId: s2, sourceIds: [k2, k3], reason: "cok kaynak sondasi", acknowledgedConflicts: pv2.conflicts.length });
+  } catch (e) {
+    hata = `${(e as Error).name}: ${(e as Error).message} ${JSON.stringify((e as { details?: unknown }).details ?? null)}`;
+  }
+  const kalan = await prisma.customerItemColorAlias.findMany({ where: { customerId: s2 }, select: { alias: true } });
+  check("⑥ ÇOK KAYNAK: iki kaynakta aynı (kumaş, renk) birleştirmeyi düşürmüyor", hata === "", hata);
+  check("⑥ ÇOK KAYNAK: survivor'da TEK satır kaldı", kalan.length === 1, JSON.stringify(kalan));
+}
+
 main()
   .catch((e) => {
     fail++;
@@ -291,6 +336,7 @@ main()
     await prisma.itemAllowedColor.deleteMany({ where: { itemId: { in: trash.items } } }).catch(() => undefined);
     await prisma.itemAllowedColor.deleteMany({ where: { colorId: { in: trash.colors } } }).catch(() => undefined);
     await prisma.customerColorAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
+    await prisma.customerItemColorAlias.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     await prisma.customerBranch.deleteMany({ where: { customerId: { in: trash.customers } } }).catch(() => undefined);
     await prisma.systemLog.deleteMany({
       where: { recordId: { in: [...trash.items, ...trash.colors, ...trash.customers] } },
