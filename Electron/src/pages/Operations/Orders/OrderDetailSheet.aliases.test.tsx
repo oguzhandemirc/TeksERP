@@ -1,10 +1,12 @@
 // Sipariş detayı "Müşteride:" renk adı SUNUCUDAN gelir (`resolvedCustomerColorName`, kumaşa özel ad dahil):
 // yeni backend'de istemci genel ad haritası (colorAliasMap) HİÇ istenmez; alanı göndermeyen eski backend'de yedektir.
 // Negatif sonda (kırmızı görüldü): genel ad sorgusu yeni backend'de de açılınca (`enabled: canRead`) ilk iki vaka ❌.
+// Sunucunun "bizdeki ad" kararı (null) önbellekteki genel ad haritasıyla ezilmez. Negatif sonda (kırmızı görüldü):
+// `server.resolvedCustomerColorName ?? legacyColor.get(...)` biçimine çevrilince o vaka ❌.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
+import { render, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { customerAliasService } from "@/pages/Customers/aliasService";
 import { orderService } from "./service";
@@ -70,6 +72,24 @@ describe("OrderDetailSheet — müşteri renk adı", () => {
     expect(svc.listColorAliases).not.toHaveBeenCalled();
   });
 
+  it("yeni backend null (bizdeki ad) dönerse önbellekteki genel ad basılmaz", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // Aynı carinin genel ad haritası başka bir ekrandan önbellekte duruyor olabilir.
+    qc.setQueryData(["customer", "c1", "color-aliases"], { success: true, data: [{ id: "g", customerId: "c1", colorId: "ekru", alias: "KREM", assigned: false }] });
+    orders.getById.mockResolvedValue({ success: true, data: order([{ ...LINE, resolvedCustomerColorName: null, colorNameScope: null }]) });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <OrderDetailSheet order={order([LINE])} open onOpenChange={() => {}} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(qc.getQueryState(["orders", "detail", "o1"])?.status).toBe("success"));
+    await waitFor(() => expect(screen.getByText("X Kumaş")).toBeInTheDocument());
+    expect(screen.queryByText(/Müşteride:/)).toBeNull();
+    expect(svc.listColorAliases).not.toHaveBeenCalled();
+  });
+
   it("eski backend (alan yok): genel ad haritası yedek olarak kullanılır", async () => {
     orders.getById.mockResolvedValue({ success: true, data: order([LINE]) });
     renderWithProviders(<OrderDetailSheet order={order([LINE])} open onOpenChange={() => {}} />);
@@ -84,9 +104,4 @@ describe("OrderDetailSheet — müşteri renk adı", () => {
     await waitFor(() => expect(orders.getById).not.toHaveBeenCalled());
     expect(svc.listColorAliases).not.toHaveBeenCalled();
   });
-});
-
-it("sipariş detayı renk adını istemcide çözmez (kaynak taraması: genel ad haritası kalmadı)", () => {
-  const src = readFileSync(path.join(__dirname, "OrderDetailSheet.tsx"), "utf8");
-  expect(src).not.toMatch(/colorAliasMap|listColorAliases/);
 });
