@@ -4,7 +4,7 @@ import { Topbar } from "./Topbar";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { TabHost } from "./tabs";
-import { UpdateGate } from "./UpdateGate";
+import { UpdateDownloadStrip } from "./UpdateGate";
 import { SurumNotlariDialog } from "./SurumNotlariDialog";
 import { useSurumNotuAcilis } from "@/hooks/useSurumNotuAcilis";
 import { useGirisGuncellemeKontrolu } from "@/hooks/useGirisGuncellemeKontrolu";
@@ -87,7 +87,9 @@ export function AppShell() {
         onToggleSidebar={toggleSidebar}
         onOpenCommand={() => setPaletteOpen(true)}
       />
-      <UpdateGate />
+      {/* Kurulum tetiği (`UpdateGate`) burada DEĞİL, `App.tsx` `Root`ta — giriş
+          ekranı ve patron kabuğu da kurabilsin. Burada yalnız indirme şeridi. */}
+      <UpdateDownloadStrip />
       <ServerOfflineBanner />
       <div className="flex min-h-0 flex-1">
         <Sidebar collapsed={collapsed} />
