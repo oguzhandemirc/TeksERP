@@ -17,6 +17,46 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-28c",
+      "baslik": "Müşteri renk adı kumaşa göre girilebilir; irsaliyede aynı renkteki iki kumaş kendi adını basar; birleştirmeyi geri alma onarıldı",
+      "surumler": {
+        "panel": "1.3.7",
+        "tablet": "1.0.12"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Müşteriye özel renk adı artık kumaşa göre de girilebilir: aynı müşteri aynı renge bir kumaşta bir ad, başka bir kumaşta başka bir ad verebilir. Giriş iki yerden yapılır: Cari kartı → “Müşterideki Renk Adları” sekmesinde kumaş seçerek, ya da Kumaş kartı → “Müşteri Renk Adları” sekmesinde. Kumaşa özel ad girilmemiş kumaşlarda bugünkü müşteri renk adı basılmaya devam eder; etiket, önizleme, sevkiyat ve irsaliye aynı adı gösterir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Kumaşa özel müşteri renk adları Excel ile de girilebilir: Veri Aktarımı ekranında “Müşteri Kumaşa Özel Renk Adları” şablonu eklendi (anahtar: cari kodu | kumaş kodu | renk kodu). Dışa aktarılan dosya geri yüklendiğinde hiçbir satır değişmez; yapılan içe aktarma geri sarılabilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "İrsaliye: aynı sevkiyatta aynı renkte iki farklı kumaş varsa ve siparişlerde bu iki kumaşa farklı renk adı yazılmışsa, irsaliye artık her kumaşın kendi sipariş satırındaki adı basar (önceden ikisine de aynı adı basıyordu, etiket ise doğru adı basıyordu). Kumaşa özel ad girmeden değişen tek çıktı budur; diğer bütün belge ve etiketler bugünkü gibi basılır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Mükerrer kayıt birleştirmesinde “Birleştirmeyi geri al” müşteri kumaş adı ya da müşteri renk adı taşıyan müşteri, kumaş ve renk kayıtlarında hata verip geri alınamıyordu; düzeltildi, adlar birleştirme öncesi hâline döner. Birden fazla kaydı aynı anda birleştirirken birleşen kayıtlarda aynı bilgi (ör. aynı kumaşa verilmiş ad) varsa birleştirme hata veriyordu; artık önizleme bunu gösterir: adlarda listede ilk sıradaki kaydınki kalır, şube ihracat kodu gibi otomatik çözülemeyen bilgide önizleme birleştirmeyi durdurur."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Birleştirme önizlemesi artık, taşınınca hedef müşterinin bir kumaşta bugün basılan renk adını değiştirecek kumaşa özel adları kayıt kayıt listeler (bugün basılan → birleştirmeden sonra). Çakışmalarda, çakışmanın hedef kayıtla mı yoksa birleşen kayıtların kendi arasında mı olduğu ayrı yazılır ve hangisinin kalacağı adlarıyla söylenir."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "duzeltme",
+          "metin": "Tambur etiket önizlemesinde müşteri adını “Bu müşteride hep” ile kalıcı düzeltirken, düzeltme artık o anda etikete basılan ada yazılır: kumaşa özel ad basılıyorsa o kumaşın adı güncellenir, müşterinin diğer kumaşlardaki renk adı değişmez. Yalnız değiştirdiğiniz alan kaydedilir; kumaş adını düzeltmek renk adını yazmaz. Etiket önizlemesi renk adının kumaşa özel olduğunu da gösterir. Bu tablet güncellemesi, kumaşa özel renk adı girilmeye başlanmadan önce bütün tabletlere yüklenmiş olmalıdır (eski tablet bu adı müşterinin genel renk adına yazabilir)."
+        }
+      ]
+    },
+    {
       "id": "2026-09-28b",
       "baslik": "Giriş ekranında ve tablet başlığında bağlanılan sunucunun firma adı görünür",
       "surumler": {
