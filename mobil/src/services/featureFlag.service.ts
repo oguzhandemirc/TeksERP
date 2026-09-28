@@ -13,8 +13,8 @@ import {
 // rehberi). Admin Electron yönetim panelinden toggle eder.
 // =============================================================================
 
-/** Sevk irsaliyesi künyesinde firma adı verilmediğinde varsayılan. */
-export const DEFAULT_COMPANY_NAME = 'Adnan Şahin Tekstil';
+/** Firma adı okunamadığında gösterilen NÖTR yedek (backend ile aynı) — müşteri adı değil. */
+export const DEFAULT_COMPANY_NAME = 'TeksERP';
 
 export interface FeatureFlags {
   /** ÜRETİM MODÜLÜ (`production.enabled`) — tabletteki tek modül kapısı bugün

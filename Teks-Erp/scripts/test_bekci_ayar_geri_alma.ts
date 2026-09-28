@@ -38,6 +38,7 @@ function check(label: string, ok: boolean, extra = "") {
 /** Global ayarı yazıp DURUMU DEĞİŞTİRMEYEN bekçiler (aynı değeri yazar) — gerekçeli. */
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   { dosya: "test_superadmin.ts", neden: "HTTP turu modül anahtarına MEVCUT değeri yazar (yetki kapısını ölçer, durum değişmez)" },
+  { dosya: "test_firma_adi_dondur.ts", neden: "`system_settings` yazımı aynı adlı TEMP gölge tabloya (ON COMMIT DROP) ve tx `finally`de ROLLBACK — gerçek ayar tablosuna hiç dokunulmaz (gölgeleme her koşumda ölçülür)" },
 ];
 
 function main(): void {

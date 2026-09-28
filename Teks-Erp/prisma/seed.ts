@@ -446,7 +446,8 @@ async function main() {
     {
       key: "traveler.cardConfig",
       value: {
-        companyName: "Adnan Şahin Tekstil",
+        // Boş = kurulumun firma adı (`company.name`); müşteri adı koda gömülmez.
+        companyName: "",
         addressLine: "",
         phone: "",
         pageSize: "A4",

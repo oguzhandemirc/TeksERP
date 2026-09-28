@@ -1,5 +1,6 @@
 import { apiClient } from './api';
 import { BOOTSTRAP_TIMEOUT_MS } from '../constants/api';
+import { DEFAULT_COMPANY_NAME } from './featureFlag.service';
 import type {
   LoginRequest,
   LoginResponse,
@@ -18,7 +19,7 @@ export interface LoginMethodsConfig {
 export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = {
   enabled: ['list'],
   primary: 'list',
-  companyName: 'Adnan Şahin Tekstil',
+  companyName: DEFAULT_COMPANY_NAME,
 };
 
 export const authService = {

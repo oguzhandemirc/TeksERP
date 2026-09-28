@@ -14,7 +14,7 @@
 // - Alt bant okunur-satır payı tek geometride 3.5mm (PPLB/ZPL paritesi); PPLA
 //   akışı 4mm kullanıyordu → PPLA'da barkod bandı ~0.5mm yukarı.
 // - mm'ye yuvarlama (2 ondalık) ≤0.05mm sapma ekler.
-// - "Adnan Şahin Tekstil" HTML marka satırı BİLEREK taşınmaz (native'de hiç
+// - HTML marka satırı (firma adı) BİLEREK taşınmaz (native'de hiç
 //   yoktu; ekleseydik native çıktı değişirdi). İsteyen editörden statik metin
 //   elemanı olarak ekler.
 // =============================================================================

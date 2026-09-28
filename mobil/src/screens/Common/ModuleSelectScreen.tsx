@@ -14,6 +14,7 @@ import ScreenChrome from '../../components/ScreenChrome';
 import SyncStatusChip from '../../components/SyncStatusChip';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import { useModuleOrder } from '../../hooks/useModuleOrder';
+import { useCompanyName } from '../../hooks/useFeatureFlags';
 import { colors, moduleAccents, radius, shadow, spacing } from '../../theme';
 import type { MainStackParamList } from '../../navigation/types';
 import type { MobileScreenKey, MobileScreenMeta } from '../../types/permissions';
@@ -25,6 +26,8 @@ export default function ModuleSelectScreen() {
   const nav = useNavigation<Nav>();
   const isPhone = device === 'phone';
   const gap = isPhone ? spacing.md : spacing.lg;
+  // Başlık bağlanılan sunucunun firma adıdır — müşteri adı koda gömülmez.
+  const companyName = useCompanyName();
 
   // Sıra kullanıcı profilinden (backend) gelir; sürükle-bırakta geri yazılır.
   const { orderedScreens, setModuleOrder } = useModuleOrder();
@@ -100,7 +103,7 @@ export default function ModuleSelectScreen() {
   if (count === 0) {
     return (
       <ScreenChrome
-        title="Adnan Şahin Tekstil"
+        title={companyName}
         subtitle="Bölüm Seçimi"
         headerExtras={<SyncStatusChip />}
       >
@@ -120,7 +123,7 @@ export default function ModuleSelectScreen() {
 
   return (
     <ScreenChrome
-      title="Adnan Şahin Tekstil"
+      title={companyName}
       subtitle="Bölüm Seçimi"
       // Ölü mektup kutusunun ANA MENÜDEKİ girişi: operatör istasyondan çıkıp
       // buraya dönse de gönderilemeyen kaydı görebilsin (istasyon ekranlarında

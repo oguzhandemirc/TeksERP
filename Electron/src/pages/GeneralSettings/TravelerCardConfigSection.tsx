@@ -11,6 +11,7 @@ import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnab
 import {
   featureFlagService,
   DEFAULT_TRAVELER_CARD_CONFIG,
+  DEFAULT_COMPANY_NAME,
   type TravelerCardConfig,
   type TravelerCardPageSize,
   type TravelerCardFontWeight,
@@ -172,7 +173,7 @@ export function TravelerCardConfigSection({
             value={draft.companyName}
             maxLength={120}
             onChange={(e) => setDraft((d) => ({ ...d, companyName: e.target.value }))}
-            placeholder={DEFAULT_TRAVELER_CARD_CONFIG.companyName}
+            placeholder={flagsQ.data?.data?.companyName?.trim() || DEFAULT_COMPANY_NAME}
             className={INPUT_CLS}
           />
         </div>

@@ -30,6 +30,7 @@ import {
   type DocStyleConfig,
 } from "./document-render/doc-style";
 import { REPORT_BY_KEY } from "../constants/report-catalog";
+import { DEFAULT_COMPANY_NAME } from "../constants/company";
 import { SECURITY_SETTING_PREFIX } from "../constants/reserved-settings";
 import { resolveConfigPageSize } from "./document-render/traveler-card.density";
 import {
@@ -1074,8 +1075,8 @@ export interface LoginMethodsConfig {
 export const LOGIN_METHODS: LoginMethod[] = ["list", "pin", "card"];
 export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = { enabled: ["list"], primary: "list" };
 
-/** Firma adı verilmediğinde gösterilen varsayılan. */
-export const DEFAULT_COMPANY_NAME = "Adnan Şahin Tekstil";
+/** Firma adı verilmediğinde gösterilen NÖTR varsayılan (tek kaynak `constants/company`). */
+export { DEFAULT_COMPANY_NAME };
 
 /** Refakat kartı sayfa boyutu. */
 export type TravelerCardPageSize = "A4" | "A5";
@@ -1251,7 +1252,8 @@ export interface TravelerCardConfig {
 }
 
 export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
-  companyName: "Adnan Şahin Tekstil",
+  // Boş = kurulumun firma adı (`company.name`); `readTravelerCardConfig` doldurur.
+  companyName: "",
   addressLine: "",
   phone: "",
   // Varsayılan A5: kart tek yaprak, malla birlikte gezen operasyon kâğıdıdır —
@@ -5638,10 +5640,12 @@ export async function readTravelerCardConfig(
     select: { value: true },
   });
   const v = setting?.value;
-  if (!v || typeof v !== "object" || Array.isArray(v)) {
-    return DEFAULT_TRAVELER_CARD_CONFIG;
-  }
-  return normalizeTravelerCardConfig(v as Record<string, unknown>);
+  const cfg =
+    !v || typeof v !== "object" || Array.isArray(v)
+      ? DEFAULT_TRAVELER_CARD_CONFIG
+      : normalizeTravelerCardConfig(v as Record<string, unknown>);
+  // Kartın kendi adı yoksa kurulumun adı basılır — müşteri adı koda gömülmez.
+  return cfg.companyName ? cfg : { ...cfg, companyName: await readCompanyName(client) };
 }
 
 /**

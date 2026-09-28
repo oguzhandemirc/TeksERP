@@ -17,6 +17,31 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-28b",
+      "baslik": "Giriş ekranında ve tablet başlığında bağlanılan sunucunun firma adı görünür",
+      "surumler": {
+        "panel": "1.3.6",
+        "tablet": "1.0.11"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Giriş ekranının sol üstünde artık bağlanılan sunucunun firma adı yazar (Genel Ayarlar → Sistem → Şirket Bilgileri → Firma Adı). Aynı bilgisayarda farklı sunuculara bağlanan iki program her biri kendi sunucusunun adını gösterir. Sunucuya ulaşılamazsa ya da ad girilmemişse “TeksERP” yazar."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "duzeltme",
+          "metin": "Bölüm Seçimi ekranının başlığında artık bağlanılan sunucunun firma adı yazar. Ad okunamazsa “TeksERP” yazar."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "iyilestirme",
+          "metin": "Kumaş etiketinin üst satırındaki firma adı ve refakat kartında kart için ayrı bir ad girilmemişse basılan firma adı da artık sunucunun firma adıdır. Güncellemeyle kayıtlı firma adınız değişmez: ekranlarda, belgelerde ve etiketlerde bugüne kadar gördüğünüz ad görünmeye devam eder."
+        }
+      ]
+    },
+    {
       "id": "2026-09-28",
       "baslik": "Sunucu aramada ağdaki bütün sunucular listelenir; uygulamanın varsayılan sunucusu da aranır",
       "surumler": {

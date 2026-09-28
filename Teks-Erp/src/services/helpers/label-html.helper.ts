@@ -34,6 +34,7 @@ import {
   applyCopies,
 } from "./label-html.shared";
 import { buildLandscapeRollLabelHtml } from "./label-html-landscape.helper";
+import { DEFAULT_COMPANY_NAME } from "../../constants/company";
 
 // Resolver (label-format.resolver) bunları buradan import ediyor → re-export.
 export { DEFAULT_LABEL_FORMAT };
@@ -49,6 +50,8 @@ export interface BuildArgs {
   copies?: number;
   /** Fiziksel baskı geometrisi (medya + pay). Verilmezse DEFAULT_LABEL_FORMAT. */
   format?: LabelFormatGeometry;
+  /** Marka satırı — kurulumun firma adı (`company.name`); yoksa nötr yedek. */
+  companyName?: string;
 }
 
 export function buildRollLabelHtml(args: BuildArgs): string {
@@ -64,9 +67,10 @@ export function buildRollLabelHtml(args: BuildArgs): string {
 // PORTRAIT (dikey A6 istif) — eski düzen; kod fallback ve dikey profiller için.
 // ---------------------------------------------------------------------------
 function buildPortraitRollLabelHtml(
-  { payload, template, barcodeSvg, qrSvg, copies = 1 }: BuildArgs,
+  { payload, template, barcodeSvg, qrSvg, copies = 1, companyName }: BuildArgs,
   fmt: Required<LabelFormatGeometry>,
 ): string {
+  const brand = escapeHtml(companyName?.trim() || DEFAULT_COMPANY_NAME);
   const pageW = fmt.widthMm;
   const pageH = fmt.heightMm;
   const contentWidthMm = Math.max(0, pageW - fmt.marginMm * 2);
@@ -243,7 +247,7 @@ function buildPortraitRollLabelHtml(
 <body>
   <div class="label">
     <div class="top">
-      <span class="brand">Adnan Şahin Tekstil</span>
+      <span class="brand">${brand}</span>
       ${safeBatch && vis("batchNumber") ? `<span class="batch">${safeBatch}</span>` : ""}
     </div>
 

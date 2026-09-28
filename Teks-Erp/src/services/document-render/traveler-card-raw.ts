@@ -29,6 +29,15 @@ import {
   TRAVELER_LOOPS,
 } from "../../config/traveler-card-fields";
 import { fmtDate, fmtDateTime } from "./fmt-date";
+import { DEFAULT_COMPANY_NAME } from "../../constants/company";
+
+/** Kartın firma adı: snapshot'taki kart adı → kurulumun adı → nötr yedek. */
+export function resolveTravelerCompanyName(
+  cfg: { companyName?: string | null },
+  meta: Pick<TravelerCardMeta, "companyName">,
+): string {
+  return cfg.companyName?.trim() || meta.companyName?.trim() || DEFAULT_COMPANY_NAME;
+}
 
 /** Tüm döngülerin satır alanları (düzleştirilmiş) — bilinmeyen-anahtar taramasında kabul edilir. */
 const LOOP_ROW_KEYS = new Set(TRAVELER_LOOPS.flatMap((l) => l.fields.map((f) => f.key)));
@@ -75,7 +84,7 @@ export function buildRawContext(
       workOrderNumber: snapshot.workOrderNumber ?? "",
       version: String(meta.version),
       printedAt: fmtDateTime(meta.printedAt),
-      companyName: cfg.companyName?.trim() || "Adnan Şahin Tekstil",
+      companyName: resolveTravelerCompanyName(cfg, meta),
       addressLine: cfg.addressLine?.trim() ?? "",
       phone: cfg.phone?.trim() ?? "",
       footerNote: cfg.footerNote?.trim() ?? "",

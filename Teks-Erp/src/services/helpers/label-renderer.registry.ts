@@ -21,6 +21,7 @@ import { buildCanvasLabelHtml } from "./label-canvas-html.helper";
 import { readCanvasLayout } from "../../config/label-elements";
 import { isRasterLanguage, renderCanvasRaster, type RasterLanguage } from "./raster/raster-render";
 import { hata } from "../../lib/logger";
+import { readCompanyName } from "../system-setting.service";
 
 export interface LabelRenderInput {
   payload: LabelPayload;
@@ -42,6 +43,8 @@ export interface LabelRenderInput {
    *  (UTF-8 decode eden istemci) → false (ikon atlanır, komut temiz ASCII kalır). Yalnız
    *  PPLB komut-yolu ikonunu etkiler (ZPL ^GFA hex-ASCII; raster zaten binary). */
   iconGraphicsOk?: boolean;
+  /** HTML akış etiketinin marka satırı; verilmezse `company.name` okunur. */
+  companyName?: string;
 }
 
 export interface RenderedLabel {
@@ -66,6 +69,7 @@ const RENDERERS: Partial<Record<PrinterLanguage, Renderer>> = {
       qrSvg: i.qrSvg,
       copies: i.copies,
       format: i.format,
+      companyName: i.companyName,
     }),
   PPLA: (i) => buildRollLabelPpla({ payload: i.payload, format: i.format, copies: i.copies, template: i.template }),
   PPLB: (i) => buildRollLabelPplb({ payload: i.payload, format: i.format, copies: i.copies, template: i.template }),
@@ -141,9 +145,14 @@ export async function renderLabel(language: PrinterLanguage, input: LabelRenderI
     return { language: effective, content, contentType: CONTENT_TYPES[effective], encoding: "text" };
   }
 
+  // HTML akış etiketinin marka satırı kurulumun firma adıdır (koda gömülmez).
+  const flowInput =
+    effective === PrinterLanguage.RASTER_HTML && input.companyName === undefined
+      ? { ...input, companyName: await readCompanyName() }
+      : input;
   return {
     language: effective,
-    content: RENDERERS[effective]!(input),
+    content: RENDERERS[effective]!(flowInput),
     contentType: CONTENT_TYPES[effective],
     encoding: "text",
   };

@@ -68,4 +68,17 @@ export const authService = {
     apiClient
       .get<ApiResponse<AuthMeResponse>>("/api/auth/me", { suppressErrorToast: true })
       .then((r) => r.data),
+
+  /**
+   * Public giriş yöntemleri ucu — giriş ekranı yalnız kurulumun firma adını
+   * (`company.name`) okur. Arka plan çağrısı: hata toast'ı bastırılır, düşerse
+   * ekran nötr yedeği gösterir.
+   */
+  getLoginMethods: (): Promise<ApiResponse<{ companyName?: string }>> =>
+    apiClient
+      .get<ApiResponse<{ companyName?: string }>>("/api/auth/login-methods", {
+        suppressErrorToast: true,
+        timeout: 5_000,
+      })
+      .then((r) => r.data),
 };

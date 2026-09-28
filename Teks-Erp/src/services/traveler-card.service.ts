@@ -40,7 +40,7 @@ import { matchesSeries, previewSeriesCode, resolveSeriesFormat } from "./number-
 // NOT: `readTravelerCardConfig` artık BURADAN çağrılmıyor — kart config'i
 // şablon çözümünden gelir (`travelerTemplateService.resolveForPrint`, şablon
 // yoksa o zaten sistem ayarına düşer). Tip hâlâ gerekli.
-import { type TravelerCardConfig } from "./system-setting.service";
+import { type TravelerCardConfig, readCompanyName } from "./system-setting.service";
 import bwipjs from "bwip-js";
 import {
   renderTravelerCard,
@@ -1120,6 +1120,7 @@ export class TravelerCardService {
       // snapshot'ta değil (kart WO açılışında doğar, parti attachRolls'ta) —
       // donmuş bir parti listesi diye bir şey hiç var olmadı.
       batches: await this.resolveLiveBatches(card.workOrderId),
+      companyName: await readCompanyName(),
     });
   }
 
@@ -1149,6 +1150,7 @@ export class TravelerCardService {
       qrSvg,
       draft: true,
       batches: SAMPLE_TRAVELER_BATCHES,
+      companyName: await readCompanyName(),
     });
   }
 

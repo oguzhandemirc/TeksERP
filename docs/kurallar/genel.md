@@ -25,6 +25,8 @@
 - **[ÇEKİRDEK]** TOTP kurulumunun TEK yolu yöneticinin açtığı 15 dk'lık tek kullanımlık penceredir (TOFU REDDEDİLDİ: parola sızmışsa saldırgan 2FA'yı kendi telefonuna bağlar); ikinci faktör `issueToken`den ÖNCE koşar; üç hata üç ayrı statü (403/409/401) ve giriş kilidi yalnız 401'i sayar. · bekçi: `scripts/test_totp.ts (RFC 4226/6238 dış vektörleri)` <sub>(CLAUDE.md:95)</sub>
 - **[ÇEKİRDEK]** Kullanıcının indirdiği içe aktarım şablonu bir SÖZLEŞMENİN DONDURULMUŞ KOPYASIDIR: panel Excel başlığını etiketle eşler, başlık/sütun adı değişikliği sürüm kırıcıdır ve `minVersion` uygulanamaz — mevcut başlık korunur, bilgi yeni sütunla/yardım metniyle eklenir ("Miktar (m)" + "Birim" emsali). <sub>(arşiv:2026-09-13)</sub>
 
+- **[ÇEKİRDEK]** Müşteri adı koda gömülmez: ekranda, belgede ve etikette firma adı bağlanılan sunucunun `company.name` ayarından okunur, okunamazsa nötr yedek "TeksERP" (`constants/company.ts` + iki istemci aynası) gösterilir; bir müşteriye özgü görünüm kanal kaydında ya da veride yaşar. · bekçi: `scripts/test_musteri_adi_kodda_yok.ts`, `scripts/test_firma_adi_dondur.ts` <sub>(arşiv 2026-09-28 firma adı)</sub>
+
 ### Yasaklar
 
 - **[ÇEKİRDEK]** Tünel dinleyicisi YALNIZ `127.0.0.1`e bağlanır; uzak port `0.0.0.0`a AÇILMAZ (açılırsa uzak/LAN ayrımı komple çöker, iki yönde de kural seti sessizce yanlış uygulanır) ve `HOST` env'i bu dinleyicide bilerek onurlandırılmaz. · bekçi: `scripts/test_remote_access_guard.ts` <sub>(CLAUDE.md:95)</sub>
@@ -82,7 +84,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_audit_depth`, `test_audit_labels`, `test_boss_overview`, `test_device_activity`, `test_device_pairing_flag`, `test_discovery_identity`, `test_dispatch_allocation_fresh`, `test_identity_ledger`, `test_label_snapshot_audit_split`, `test_manual_attributes_reason`, `test_merge_field_picks`, `test_o19_operator_trace`, `test_observability_cache`, `test_observability_contract`, `test_period_close`, `test_permission_grant_source`, `test_phase0_quickwins`, `test_process_warnings`, `test_record_provenance`, `test_remote_access_guard`, `test_report_day_boundary`, `test_reports`, `test_roll_entry_station`, `test_sack_notes`, `test_settings_password`, `test_shipment_invoice`, `test_superadmin`, `test_superadmin_provision`, `test_superadmin_visible`, `test_system_log`, `test_system_log_query_gate`, `test_totp`, `test_user_credentials_guard`, `test_web_hardening`, `test_work_session_close_all`, `test_work_session_stamping`, `test_mobil_enum_aynasi`
+Backend: `test_audit_depth`, `test_audit_labels`, `test_boss_overview`, `test_device_activity`, `test_device_pairing_flag`, `test_discovery_identity`, `test_dispatch_allocation_fresh`, `test_identity_ledger`, `test_label_snapshot_audit_split`, `test_manual_attributes_reason`, `test_merge_field_picks`, `test_o19_operator_trace`, `test_observability_cache`, `test_observability_contract`, `test_period_close`, `test_permission_grant_source`, `test_phase0_quickwins`, `test_process_warnings`, `test_record_provenance`, `test_remote_access_guard`, `test_report_day_boundary`, `test_reports`, `test_roll_entry_station`, `test_sack_notes`, `test_settings_password`, `test_shipment_invoice`, `test_superadmin`, `test_superadmin_provision`, `test_superadmin_visible`, `test_system_log`, `test_system_log_query_gate`, `test_totp`, `test_user_credentials_guard`, `test_web_hardening`, `test_work_session_close_all`, `test_work_session_stamping`, `test_mobil_enum_aynasi`, `test_musteri_adi_kodda_yok`, `test_firma_adi_dondur`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
@@ -90,3 +92,4 @@ Backend: `test_audit_depth`, `test_audit_labels`, `test_boss_overview`, `test_de
 - 2026-09-10 · 2026-09-10 — Fabrika prod log'undan üç bulgu (kapanış teşhisi ③) [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-10
 - 2026-09-10 · 2026-09-10 — Künyesiz istemci görünmezdi: sürüm UA'dan okunuyor [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-10 künyesiz
 - 2026-09-17 · 2026-09-17 — Oturum kaydına istemci sürümü: künye ilk kez kalıcı satıra yazıldı, §1 üç kollu oldu [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-17 oturum sürümü
+- 2026-09-28 · 2026-09-28 — Müşteri adı koddan çıktı: firma adı sunucudan, yedek nötr; mevcut kurulumun adı migration ile dondu [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-28 firma adı

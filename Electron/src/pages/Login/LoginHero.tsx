@@ -1,4 +1,7 @@
+import { useServerCompanyName } from "./useServerCompanyName";
+
 export function LoginHero() {
+  const companyName = useServerCompanyName();
   return (
     <div className="relative hidden flex-1 overflow-hidden bg-[#070b1a] md:flex">
       {/* Pencereyi taşıma şeridi — macOS `titleBarStyle: "hiddenInset"` ile
@@ -25,8 +28,11 @@ export function LoginHero() {
 
       <div className="relative z-10 flex h-full w-full flex-col justify-between p-14 text-white">
         <div>
-          <span className="text-sm font-medium tracking-[0.2em] text-white/70 uppercase">
-            Adnan Şahin Tekstil
+          <span
+            data-testid="login-company-name"
+            className="text-sm font-medium tracking-[0.2em] text-white/70 uppercase"
+          >
+            {companyName}
           </span>
         </div>
 

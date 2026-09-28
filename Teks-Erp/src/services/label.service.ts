@@ -22,6 +22,7 @@ import {
   readLabelCopies,
   readLabelNativeSendEnabled,
   readScrapGradeLabelEnabled,
+  readCompanyName,
 } from "./system-setting.service";
 import { LabelKind, PrinterLanguage, Prisma, RollStatus, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import { sampleQualityCode, loadCustomerNamePolicy } from "./helpers/quality-role.helper";
@@ -678,6 +679,7 @@ export class LabelService {
       barcodeSvg,
       qrSvg,
       format,
+      companyName: await readCompanyName(),
     });
     return { success: true, data: { html } };
   }

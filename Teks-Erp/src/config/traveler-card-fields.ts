@@ -39,7 +39,7 @@ export const TRAVELER_FIELDS: TravelerFieldDef[] = [
   { key: "workOrderNumber", label: "İş Emri No", group: "kart", sample: "IE0308260007" },
   { key: "version", label: "Versiyon", group: "kart", sample: "1" },
   { key: "printedAt", label: "Basım tarihi", group: "kart", sample: "03.08.2026 09:12" },
-  { key: "companyName", label: "Firma adı", group: "kart", sample: "Adnan Şahin Tekstil" },
+  { key: "companyName", label: "Firma adı", group: "kart", sample: "Örnek Tekstil A.Ş." },
   { key: "addressLine", label: "Firma adresi", group: "kart", sample: "OSB 5. Cad. No:12 Bursa" },
   { key: "phone", label: "Firma telefonu", group: "kart", sample: "0224 000 00 00" },
   { key: "footerNote", label: "Alt not (ayardan)", group: "kart", sample: "Bu kart mal ile hareket eder." },

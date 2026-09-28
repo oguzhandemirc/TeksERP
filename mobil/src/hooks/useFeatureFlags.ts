@@ -1,5 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { DEFAULT_FEATURE_FLAGS, featureFlagService } from '../services/featureFlag.service';
+import {
+  DEFAULT_COMPANY_NAME,
+  DEFAULT_FEATURE_FLAGS,
+  featureFlagService,
+} from '../services/featureFlag.service';
 import { useAuthStore } from '../store/authStore';
 import { pickableLifecycle, type ItemPickUse } from '../lib/item-lifecycle';
 
@@ -19,6 +23,11 @@ export function useFeatureFlags() {
     staleTime: 5 * 60 * 1000,
     enabled: hasToken,
   });
+}
+
+/** Bağlanılan sunucunun firma adı (`company.name`); yüklenene dek/boşsa nötr yedek. */
+export function useCompanyName(): string {
+  return useFeatureFlags().data?.companyName?.trim() || DEFAULT_COMPANY_NAME;
 }
 
 /** Üretim modülü açık mı? Default TRUE (backend satır-yok değeri) — yüklenene

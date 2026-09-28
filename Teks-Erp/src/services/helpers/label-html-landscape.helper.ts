@@ -28,6 +28,7 @@ import {
   formatDate,
   applyCopies,
 } from "./label-html.shared";
+import { DEFAULT_COMPANY_NAME } from "../../constants/company";
 
 interface LandscapeBuildArgs {
   payload: LabelPayload;
@@ -36,6 +37,8 @@ interface LandscapeBuildArgs {
   qrSvg: string;
   copies?: number;
   format?: LabelFormatGeometry;
+  /** Marka satırı — kurulumun firma adı (`company.name`). */
+  companyName?: string;
 }
 
 export function buildLandscapeRollLabelHtml({
@@ -45,8 +48,10 @@ export function buildLandscapeRollLabelHtml({
   qrSvg,
   copies = 1,
   format,
+  companyName,
 }: LandscapeBuildArgs): string {
   const fmt = { ...DEFAULT_LABEL_FORMAT, ...(format ?? {}) };
+  const brand = escapeHtml(companyName?.trim() || DEFAULT_COMPANY_NAME);
   // Medyanın gerçek basılan ölçüsü (takas yok). 100×60 → içerik 94×54mm.
   const pageW = fmt.widthMm;
   const pageH = fmt.heightMm;
@@ -227,7 +232,7 @@ export function buildLandscapeRollLabelHtml({
 
     <div class="col-right">
       <div class="brand-row">
-        <span class="brand">Adnan Şahin Tekstil</span>
+        <span class="brand">${brand}</span>
         ${safeBatch && vis("batchNumber") ? `<span class="batch">${safeBatch}</span>` : ""}
       </div>
 

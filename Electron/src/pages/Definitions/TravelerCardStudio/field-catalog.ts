@@ -25,7 +25,7 @@ export const FIELD_GROUPS: { title: string; fields: PaletteField[] }[] = [
       { key: "workOrderNumber", label: "İş Emri No", sample: "IE0308260007" },
       { key: "version", label: "Versiyon", sample: "1" },
       { key: "printedAt", label: "Basım tarihi", sample: "03.08.2026 09:12" },
-      { key: "companyName", label: "Firma adı", sample: "Adnan Şahin Tekstil" },
+      { key: "companyName", label: "Firma adı", sample: "Örnek Tekstil A.Ş." },
       { key: "addressLine", label: "Firma adresi", sample: "OSB 5. Cad." },
       { key: "phone", label: "Telefon", sample: "0224 000 00 00" },
       { key: "footerNote", label: "Alt not", sample: "Bu kart mal ile hareket eder." },

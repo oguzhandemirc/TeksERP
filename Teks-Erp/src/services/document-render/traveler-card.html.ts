@@ -25,7 +25,12 @@ import { resolveSectionOrder, type TravelerSectionKey } from "./traveler-card.se
 // farklı çizimi demekti; bkz. TravelerCardConfig.blankGrid notu).
 import { docBlankGridCss, docBlankGridHtml } from "./doc-style";
 import { travelerFieldCss } from "./traveler-card.fields";
-import { renderRawTemplate, buildRawContext, wrapRawDocument } from "./traveler-card-raw";
+import {
+  renderRawTemplate,
+  buildRawContext,
+  wrapRawDocument,
+  resolveTravelerCompanyName,
+} from "./traveler-card-raw";
 import { fmtDate, fmtDateTime } from "./fmt-date";
 import { cssFixed } from "./fmt-num";
 
@@ -116,6 +121,8 @@ export interface TravelerCardMeta {
   draft?: boolean;
   /** Baskı anında canlı çözülen partiler (bkz. TravelerBatchLine). Yoksa blok basılmaz. */
   batches?: TravelerBatchLine[];
+  /** Kurulumun firma adı (`company.name`) — snapshot'ta kart adı yoksa basılır. */
+  companyName?: string;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -246,7 +253,7 @@ export function renderTravelerCardHtml(
   meta: TravelerCardMeta,
 ): string {
   const cfg = snapshot.config ?? ({} as Partial<TravelerCardConfig>);
-  const companyName = cfg.companyName?.trim() || "Adnan Şahin Tekstil";
+  const companyName = resolveTravelerCompanyName(cfg, meta);
   const addressLine = cfg.addressLine?.trim() ?? "";
   const phone = cfg.phone?.trim() ?? "";
   const showOperationGrid = cfg.showOperationGrid !== false;

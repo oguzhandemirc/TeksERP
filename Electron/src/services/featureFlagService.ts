@@ -168,7 +168,8 @@ export const TRAVELER_FIELD_SIZE_MIN = 5;
 export const TRAVELER_FIELD_SIZE_MAX = 48;
 
 export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
-  companyName: "Adnan Şahin Tekstil",
+  // Boş = kurulumun firma adı (`company.name`); backend okurken doldurur.
+  companyName: "",
   addressLine: "",
   phone: "",
   // Backend `DEFAULT_TRAVELER_CARD_CONFIG` ile aynı olmalı — kart varsayılan A5.
@@ -209,8 +210,8 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   footerNote: "",
 };
 
-/** Firma adı verilmediğinde gösterilen varsayılan (backend ile aynı). */
-export const DEFAULT_COMPANY_NAME = "Adnan Şahin Tekstil";
+/** Firma adı okunamadığında gösterilen NÖTR yedek (backend ile aynı) — müşteri adı değil. */
+export const DEFAULT_COMPANY_NAME = "TeksERP";
 
 /** Etiket yazıcı dili (backend PrinterLanguage enum ile aynı). */
 export type PrinterLanguage = "RASTER_HTML" | "PPLA" | "PPLB" | "ZPL";
