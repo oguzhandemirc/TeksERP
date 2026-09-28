@@ -1291,6 +1291,13 @@ export interface QualityGrade {
 
 export type NameSource = 'OVERRIDE' | 'MASTER' | 'DEFAULT';
 
+/**
+ * Ana veri kademesi kazandığında hangi tablodan geldiği: `ITEM` = müşterinin YALNIZ
+ * o kumaştaki renk adı, `CUSTOMER` = müşteri geneli. Diğer her durumda `null`;
+ * alanı göndermeyen eski backend de `null` sayılır.
+ */
+export type ColorNameScope = 'ITEM' | 'CUSTOMER';
+
 export interface LabelPayload {
   rollId: string;
   barcode: string | null;
@@ -1309,6 +1316,7 @@ export interface LabelPayload {
   colorName: string | null;
   colorNameDefault: string | null;
   colorNameSource: NameSource | null;
+  colorNameScope?: ColorNameScope | null;
 
   customerName: string | null;
   customerId: string | null;
