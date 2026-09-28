@@ -58,6 +58,25 @@ export function listAdapters(): ImportAdapter[] {
   return ADAPTERS;
 }
 
+/** Kullanıcıya açık şablonlar — açılış kapısı dolu olan listelenmez. */
+export function listOpenAdapters(): ImportAdapter[] {
+  return ADAPTERS.filter((a) => !a.releaseGate);
+}
+
+/**
+ * HTTP uçlarının TEK girişi: `getImportAdapter` + açılış kapısı. Uç kendi
+ * `getImportAdapter` çağrısını yaparsa kapı atlanır (`test_import_framework §14`).
+ */
+export function getImportAdapterForRequest(entity: string): ImportAdapter {
+  const a = getImportAdapter(entity);
+  if (a.releaseGate) {
+    throw AppError.forbidden(`'${a.label}' içe aktarımı henüz açılmadı: ${a.releaseGate}`, {
+      code: "IMPORT_ENTITY_GATED",
+    });
+  }
+  return a;
+}
+
 export function getImportAdapter(entity: string): ImportAdapter {
   const a = BY_ENTITY.get(entity);
   if (!a) {
