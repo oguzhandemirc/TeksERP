@@ -7,7 +7,7 @@ import { z } from "zod";
 import { BaseController } from "../controllers/base.controller";
 import { OrderService } from "../services/order.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import "../types/express-augment";
 import { ACTIVE_ORDER_LINK } from "../services/helpers/order-link.helper";
@@ -601,7 +601,23 @@ router.get(
  *       404:
  *         description: Sipariş bulunamadı
  */
-router.get("/:id", verifyToken, requirePermission("order:read"), controller.findById);
+/**
+ * İnce handler: çağıranın `customer-alias:read` izni servise geçer — izinsiz
+ * kullanıcıya ana veri renk adı taşınmaz (MUSTERI-KUMAS-RENK-ADI §12.4 #12).
+ * Dışa açık: bekçi izin dalını sunucusuz ölçer.
+ */
+export async function orderDetailHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const id = assertValidUuid(req.params.id, "id");
+    const result = await orderService.findById(id, {
+      canReadCustomerAliases: matchesPermission(req.user?.permissions ?? [], "customer-alias:read"),
+    });
+    res.status(result.success ? 200 : 404).json(result);
+  } catch (e) {
+    next(e);
+  }
+}
+router.get("/:id", verifyToken, requirePermission("order:read"), orderDetailHandler);
 
 /**
  * @openapi

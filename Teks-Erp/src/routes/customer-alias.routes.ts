@@ -4,6 +4,7 @@
 // Mount: /api/customers/:customerId/aliases (suggest)
 //        /api/customers/:customerId/item-aliases/:itemId
 //        /api/customers/:customerId/color-aliases/:colorId
+//        /api/customers/:customerId/item-color-aliases/:itemId/:colorId
 // =============================================================================
 
 import { Router } from "express";
@@ -171,6 +172,95 @@ router.delete(
   verifyToken,
   requirePermission("customer-alias:write"),
   controller.deleteColorAlias,
+);
+
+// ---- KUMAŞA ÖZEL RENK ADLARI (müşteri × kumaş × renk) ----
+
+/**
+ * @openapi
+ * /api/customers/{customerId}/item-color-aliases:
+ *   get:
+ *     tags: [Customer Aliases]
+ *     summary: Müşterinin kumaşa özel renk adları
+ *     description: |
+ *       Müşterinin yalnız belirli bir kumaştaki renge verdiği adlar. Etiket,
+ *       irsaliye ve ekranlarda genel renk adını o kumaşta gölgeler.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: customerId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "Liste — satır + item + color özeti; createdAt desc, id desc" }
+ *       400: { description: Müşteri pasif }
+ *       404: { description: Müşteri bulunamadı }
+ */
+router.get(
+  "/item-color-aliases",
+  verifyToken,
+  requirePermission("customer-alias:read"),
+  controller.listItemColorAliases,
+);
+
+/**
+ * @openapi
+ * /api/customers/{customerId}/item-color-aliases/{itemId}/{colorId}:
+ *   put:
+ *     tags: [Customer Aliases]
+ *     summary: Kumaşa özel renk adı upsert
+ *     description: |
+ *       Idempotent. Kapılar: müşteri aktif, kumaş tanım alabilir (Pasif/"Tükenene
+ *       kadar" → 409 ITEM_INACTIVE/ITEM_PHASE_OUT), renk aktif. Eşzamanlı ilk
+ *       yazım yarışı → 409 ITEM_COLOR_ALIAS_CONFLICT.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: customerId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: itemId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: colorId, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [alias]
+ *             properties:
+ *               alias: { type: string, maxLength: 200 }
+ *     responses:
+ *       200: { description: Satır }
+ *       400: { description: Doğrulama / UUID / pasif müşteri ya da renk }
+ *       404: { description: Müşteri ya da renk bulunamadı }
+ *       409: { description: Kumaş kapısı ya da eşzamanlı yazım }
+ */
+router.put(
+  "/item-color-aliases/:itemId/:colorId",
+  verifyToken,
+  requirePermission("customer-alias:write"),
+  controller.upsertItemColorAlias,
+);
+
+/**
+ * @openapi
+ * /api/customers/{customerId}/item-color-aliases/{itemId}/{colorId}:
+ *   delete:
+ *     tags: [Customer Aliases]
+ *     summary: Kumaşa özel renk adını sil
+ *     description: Saf yapılandırma pivotu (③b); kart kapısı yok. Satır yoksa 404 ITEM_COLOR_ALIAS_NOT_FOUND.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: customerId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: itemId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: colorId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ deleted: true }" }
+ *       404: { description: Satır yok }
+ */
+router.delete(
+  "/item-color-aliases/:itemId/:colorId",
+  verifyToken,
+  requirePermission("customer-alias:write"),
+  controller.deleteItemColorAlias,
 );
 
 export default router;

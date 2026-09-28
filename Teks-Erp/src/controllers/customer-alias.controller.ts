@@ -4,7 +4,8 @@
 
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { CustomerAliasService } from "../services/customer-alias.service";
+import { CustomerAliasService, type ItemColorKey } from "../services/customer-alias.service";
+import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import "../types/express-augment";
 
 const aliasSchema = z.object({
@@ -85,6 +86,39 @@ export class CustomerAliasController {
     } catch (e) { next(e); }
   };
 
+  // ---- KUMAŞA ÖZEL RENK ADLARI (müşteri × kumaş × renk) ----
+
+  listItemColorAliases = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.listItemColorAliases(req.params.customerId as string);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** Kumaş kartı girişi (`/api/items/:id/customer-color-aliases`) — yazma yine C/D'den. */
+  listItemColorAliasesByItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.listItemColorAliasesByItem(assertValidUuid(req.params.id, "id"));
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  upsertItemColorAlias = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const key = itemColorKey(req);
+      const { alias } = aliasSchema.parse(req.body);
+      const result = await this.service.upsertItemColorAlias(key, alias, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  deleteItemColorAlias = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.deleteItemColorAlias(itemColorKey(req), req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
   // ---- SUGGEST — sipariş giriş ekranı için tek-atış öneri ----
 
   suggest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -97,5 +131,14 @@ export class CustomerAliasController {
       );
       res.status(200).json({ success: true, data: result });
     } catch (e) { next(e); }
+  };
+}
+
+/** Yol parametreleri UUID değilse açıkça 400 (kardeş uçlar bunu yapmıyor). */
+function itemColorKey(req: Request): ItemColorKey {
+  return {
+    customerId: assertValidUuid(req.params.customerId, "customerId"),
+    itemId: assertValidUuid(req.params.itemId, "itemId"),
+    colorId: assertValidUuid(req.params.colorId, "colorId"),
   };
 }

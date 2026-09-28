@@ -18,6 +18,7 @@ import { LabelService } from "../../src/services/label.service";
 import { sackSearchService } from "../../src/services/sack-search.service";
 import { detectMismatchesForSacks } from "../../src/services/helpers/sack-content-mismatch.helper";
 import { CustomerAliasService } from "../../src/services/customer-alias.service";
+import { hedefDbEngeli } from "./hedef-db-kapisi";
 
 export interface AltinFikstur {
   P: string;
@@ -110,6 +111,9 @@ async function kurToplar(f: AltinFikstur): Promise<void> {
 }
 
 export async function kurAltinFikstur(onEk: string): Promise<AltinFikstur> {
+  // Fikstür yazar ve teardown siler: fabrika/üretim adlı hedefte hiç başlamaz.
+  const engel = hedefDbEngeli();
+  if (engel) throw new Error(engel);
   const f: AltinFikstur = { P: onEk, id: {} };
   await kurAnaVeri(f);
   await kurSiparisSevk(f);

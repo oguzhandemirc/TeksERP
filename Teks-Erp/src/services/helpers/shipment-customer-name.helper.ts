@@ -32,18 +32,25 @@
 // seferliğine bile değiştiyse o ismi kullanırız". Renk eşleşmeyen ama aynı
 // ürünün satırında girilmiş bir ad, hiç ad basmamaktan iyidir. Dar kademe
 // (itemId+colorId) her zaman ÖNCE denenir.
+//
+// ⚠️ RENKTE DA İKİ KADEME VAR ve genişi 3. SIRADADIR (MUSTERI-KUMAS-RENK-ADI §5):
+//   1 satır adı, aynı kumaş+renk → 2 kumaşa özel ana veri → 3 satır adı, aynı
+//   renk BAŞKA kumaş → 4 genel ana veri. Dar kademe irsaliyeyi etiketle hizalar
+//   (etiket kendi satırından basar); geniş kademe kumaşa özel adın ALTINDA kalır,
+//   yoksa X'in satır adı Y'nin kumaşa özel adını ezerdi. Seçimi
+//   `pickShipmentColorName` yapar — sıra orada tek yerde yaşar.
 // =============================================================================
 
 import { Prisma } from "@prisma/client";
 import { ACTIVE_SACK_ALLOCATION } from "./sack-allocation.helper";
-import { batchLoadAliases } from "./customer-name.helper";
+import { batchLoadAliases, pickShipmentColorName } from "./customer-name.helper";
 
 /** Bir sevkiyat için çözülmüş müşteri-adı sözlüğü. */
 export interface ShipmentCustomerNames {
   /** (itemId, colorId) -> müşterideki ürün adı (override ya da master). */
   itemName(itemId: string, colorId: string | null): string | null;
-  /** colorId -> müşterideki renk adı (override ya da master). */
-  colorName(colorId: string | null): string | null;
+  /** (itemId, colorId) -> müşterideki renk adı (override ya da master). */
+  colorName(itemId: string, colorId: string | null): string | null;
 }
 
 const NO_COLOR = " ";
@@ -55,6 +62,7 @@ type AliasDb = {
   orderLine: Prisma.TransactionClient["orderLine"];
   customerItemAlias: Prisma.TransactionClient["customerItemAlias"];
   customerColorAlias: Prisma.TransactionClient["customerColorAlias"];
+  customerItemColorAlias: Prisma.TransactionClient["customerItemColorAlias"];
 };
 
 interface CandidateLine {
@@ -130,6 +138,7 @@ export async function loadShipmentCustomerNames(
 
   const itemByPair = new Map<string, string>();
   const itemByItem = new Map<string, string>();
+  const colorByPair = new Map<string, string>();
   const colorByColor = new Map<string, string>();
   const seen = new Set<string>();
   for (const c of candidates) {
@@ -142,7 +151,11 @@ export async function loadShipmentCustomerNames(
       if (!itemByItem.has(c.itemId)) itemByItem.set(c.itemId, item);
     }
     const color = clean(c.customerColorName);
-    if (color && c.colorId && !colorByColor.has(c.colorId)) colorByColor.set(c.colorId, color);
+    if (color && c.colorId) {
+      const k = ckey(c.itemId, c.colorId);
+      if (!colorByPair.has(k)) colorByPair.set(k, color);
+      if (!colorByColor.has(c.colorId)) colorByColor.set(c.colorId, color);
+    }
   }
 
   // Master alias (canlı) — override yoksa ikinci kademe.
@@ -157,9 +170,13 @@ export async function loadShipmentCustomerNames(
         null
       );
     },
-    colorName(colorId) {
+    colorName(itemId, colorId) {
       if (!colorId) return null;
-      return colorByColor.get(colorId) ?? master.colorAliasByColorId.get(colorId) ?? null;
+      return pickShipmentColorName({
+        pairOverride: colorByPair.get(ckey(itemId, colorId)) ?? null,
+        wideOverride: colorByColor.get(colorId) ?? null,
+        master: master.colors.master(input.customerId, itemId, colorId),
+      }).ad;
     },
   };
 }

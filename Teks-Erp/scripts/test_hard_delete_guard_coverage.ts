@@ -131,6 +131,9 @@ const EXPECTED: Record<string, string> = {
   "Customer <- CustomerBranch.customer : Cascade": "guarded (branchCount) — sayım 0 değilse silme zaten bloklanır",
   "Customer <- CustomerColorAlias.customer : Cascade": "cascade-intended — alias müşterisiz anlamsız",
   "Customer <- CustomerItemAlias.customer : Cascade": "cascade-intended — alias müşterisiz anlamsız",
+  // Kumaşa özel renk adı (MUSTERI-KUMAS-RENK-ADI §4): kardeşlerle simetrik. Renk FK'sı da
+  // Cascade ama renk bu taramanın DIŞINDA (kalıcı silme ucu yok) — yazılırsa bayat satır olur.
+  "Customer <- CustomerItemColorAlias.customer : Cascade": "cascade-intended — ad eşlemesi müşterisiz anlamsız",
   // Paket D (2026-08-14) — `CustomerItemAlias` ile BİREBİR aynı şekil ve aynı
   // gerekçe: fiyat satırı, ait olduğu müşteri/kalem yokken anlamsızdır. Kalıcı
   // silme zaten bağımlılık-guard'lı `DELETE /:id/permanent` ucundan geçiyor;
@@ -185,6 +188,7 @@ const EXPECTED: Record<string, string> = {
   "Device <- DevicePeripheral.device : Cascade": "guarded (pivotCount, A5 2026-07-31)",
   "Device <- PeripheralDevice.device : SetNull": "guarded (peripheralCount, A5 2026-07-31)",
   "Item <- CustomerItemAlias.item : Cascade": "cascade-intended — alias ürünsüz anlamsız",
+  "Item <- CustomerItemColorAlias.item : Cascade": "cascade-intended — ad eşlemesi kumaşsız anlamsız",
   "Item <- ItemAllowedColor.item : Cascade": "cascade-intended — izin pivotu (pivot replace istisnası)",
   "Item <- ItemAllowedProperty.item : Cascade": "cascade-intended — izin pivotu",
   "Item <- WorkOrder.targetItem : SetNull": "guarded (woCount, A5 2026-07-31)",

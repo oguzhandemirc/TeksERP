@@ -30,6 +30,11 @@
 //   ⑦ `docConfigSchema.labels` silinir               → 1 kırmızı (§6 önizleme)
 //   ⑧ (2026-09-10) `docNameMode` fiş yükünden düşürülür  → 5 kırmızı (§10)
 //   ⑨ (2026-09-10) rejim fişte SABİTLENİR (canlı okunmaz) → 2 kırmızı (§10)
+//   ⑩ (2026-09-28) renk indeksi GENEL adı yutar          → 20 kırmızı (§0 altın 14 yüzey)
+//   ⑪ geniş kademe (`wideOverride`) düşürülür            → 4 kırmızı (§0 taslak/donmuş, §11)
+//   ⑫ indeks KUMAŞA ÖZEL satırı atlar                     → 6 kırmızı (§11)
+//   ⑬ sipariş detayında izin kontrolü `true`ya çevrilir   → 1 kırmızı (§11 izin dalı)
+//   ⑭ ISIRIK: dar kademe (`pairOverride`) yok = eski kod  → 2 kırmızı (§12), düzeltmeyle yeşil
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { ItemType, Prisma, PrintedDocType, RollStatus, ShipmentStatus } from "@prisma/client";
@@ -63,6 +68,7 @@ import {
   toplaYuzeyler,
   type AltinFikstur,
 } from "./lib/musteri-renk-adi-fikstur";
+import { ozelAdBolumu, birIBolumu, teardownBirI, type Check } from "./lib/musteri-renk-adi-ozel";
 
 let pass = 0;
 let fail = 0;
@@ -314,8 +320,8 @@ async function run(): Promise<void> {
   check(
     "override YOKKEN master alias okunur",
     namesMaster.itemName(ITEM, COLOR) === "MASTER-URUN" &&
-      namesMaster.colorName(COLOR) === "MASTER-RENK",
-    `${namesMaster.itemName(ITEM, COLOR)} / ${namesMaster.colorName(COLOR)}`,
+      namesMaster.colorName(ITEM, COLOR) === "MASTER-RENK",
+    `${namesMaster.itemName(ITEM, COLOR)} / ${namesMaster.colorName(ITEM, COLOR)}`,
   );
 
   // Bir-seferlik override yazıldı → master EZİLİR. Kullanıcının cümlesi:
@@ -334,13 +340,13 @@ async function run(): Promise<void> {
   check(
     "⭐ bir-seferlik override master alias'ı EZİYOR",
     namesOverride.itemName(ITEM, COLOR) === "TEK-SEFERLIK-URUN" &&
-      namesOverride.colorName(COLOR) === "TEK-SEFERLIK-RENK",
-    `${namesOverride.itemName(ITEM, COLOR)} / ${namesOverride.colorName(COLOR)}`,
+      namesOverride.colorName(ITEM, COLOR) === "TEK-SEFERLIK-RENK",
+    `${namesOverride.itemName(ITEM, COLOR)} / ${namesOverride.colorName(ITEM, COLOR)}`,
   );
   check(
     "hiç karşılığı olmayan üründe null döner (uydurulmaz)",
     namesOverride.itemName("00000000-0000-0000-0000-000000000000", null) === null &&
-      namesOverride.colorName(null) === null,
+      namesOverride.colorName(ITEM, null) === null,
   );
 
   // ---------------------------------------------------------------------------
@@ -915,6 +921,8 @@ prisma.systemSetting
       select: { value: true },
     });
     await altinBolumu();
+    if (ALTIN_F) await ozelAdBolumu(ALTIN_F, check as Check);
+    await birIBolumu(`TEST-DCNB-${TS}`, check as Check);
     return run();
   })
   .catch((e) => {
@@ -924,6 +932,7 @@ prisma.systemSetting
   .finally(async () => {
     await teardown().catch((e) => console.error("teardown hatası:", e));
     await teardownAltinFikstur(ALTIN_F).catch((e) => console.error("teardown hatası (§0):", e));
+    await teardownBirI().catch((e) => console.error("teardown hatası (§12):", e));
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     await pool.end().catch(() => {});

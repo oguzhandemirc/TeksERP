@@ -11,7 +11,9 @@
 //     ↓ yoksa
 //   Item.name                   (default)          →  source: "DEFAULT"
 //
-// Aynı sıra color için.
+// Aynı sıra color için; renkte MASTER kademesi iki katlıdır: kumaşa özel
+// (`CustomerItemColorAlias`) → genel (`CustomerColorAlias`), bkz. aşağıda
+// `loadCustomerColorIndex`.
 // =============================================================================
 
 import { Prisma } from "@prisma/client";
@@ -59,89 +61,143 @@ export function normalizeOverride(v: string | null | undefined): string | null {
 }
 
 // =============================================================================
-// Toplu master alias çekme — N rulolu listelerde 2N query yerine 2 query.
-// Snapshot inşa eden yerler için.
+// RENK ADI ANA VERİ KADEMESİ — TEK ÇÖZÜCÜ (docs/design/MUSTERI-KUMAS-RENK-ADI.md §5)
+// =============================================================================
+// Müşterinin renk adı iki tablodan gelebilir: kumaşa özel (`CustomerItemColorAlias`,
+// müşteri × kumaş × renk) ve genel (`CustomerColorAlias`, müşteri × renk). Özelden
+// genele çözülür (Oracle Customer Items / BC Item References kalıbı). Bu iki tabloyu
+// ad için okuyan TEK yer burasıdır; `test_musteri_adi_tek_cozucu` başka okuyucuyu
+// kırmızıya düşürür — etiketle irsaliyenin farklı ad basmasının tek panzehiri.
+// =============================================================================
+
+/** Ana veri kademesinin hangi tablodan geldiği. `NameSource` DEĞİŞMEZ. */
+export type ColorNameScope = "ITEM" | "CUSTOMER";
+
+export interface ColorMaster {
+  alias: string;
+  scope: ColorNameScope;
+}
+
+export interface CustomerColorIndex {
+  /** Ana veri kademesi: kumaşa özel → genel; ikisi de yoksa null. */
+  master(customerId: string, itemId: string, colorId: string | null): ColorMaster | null;
+}
+
+type ColorIndexDb = {
+  customerColorAlias: Prisma.TransactionClient["customerColorAlias"];
+  customerItemColorAlias: Prisma.TransactionClient["customerItemColorAlias"];
+};
+
+const uniq = (xs: Array<string | null | undefined>): string[] => [...new Set(xs.filter((x): x is string => !!x))];
+
+/**
+ * Çok müşterili, N+1'siz: iki findMany (customerId IN · itemId IN · colorId IN).
+ * Seri çeker — tx içinde de güvenli (tx + Promise.all yasak).
+ */
+export async function loadCustomerColorIndex(
+  db: ColorIndexDb,
+  keys: { customerIds: Array<string | null | undefined>; itemIds: Array<string | null | undefined>; colorIds: Array<string | null | undefined> },
+): Promise<CustomerColorIndex> {
+  const customerIds = uniq(keys.customerIds);
+  const itemIds = uniq(keys.itemIds);
+  const colorIds = uniq(keys.colorIds);
+  const general = new Map<string, string>();
+  const byItem = new Map<string, string>();
+  if (customerIds.length > 0 && colorIds.length > 0) {
+    const rows = await db.customerColorAlias.findMany({
+      where: { customerId: { in: customerIds }, colorId: { in: colorIds } },
+      select: { customerId: true, colorId: true, alias: true },
+    });
+    // `alias` null = yalnız atama (assigned), özel ad yok → bizim adımız geçerli.
+    for (const r of rows) if (r.alias) general.set(`${r.customerId}|${r.colorId}`, r.alias);
+    if (itemIds.length > 0) {
+      const own = await db.customerItemColorAlias.findMany({
+        where: { customerId: { in: customerIds }, itemId: { in: itemIds }, colorId: { in: colorIds } },
+        select: { customerId: true, itemId: true, colorId: true, alias: true },
+      });
+      for (const r of own) byItem.set(`${r.customerId}|${r.itemId}|${r.colorId}`, r.alias);
+    }
+  }
+  return {
+    master(customerId, itemId, colorId) {
+      if (!colorId) return null;
+      const own = byItem.get(`${customerId}|${itemId}|${colorId}`);
+      if (own) return { alias: own, scope: "ITEM" };
+      const gen = general.get(`${customerId}|${colorId}`);
+      return gen ? { alias: gen, scope: "CUSTOMER" } : null;
+    },
+  };
+}
+
+/**
+ * İrsaliye kademe sırası (sevkiyat kapsamında satır kümesi olan yüzeyler), saf:
+ *   1 satır adı, aynı kumaş+renk → 2 kumaşa özel → 3 satır adı, aynı renk başka kumaş
+ *   → 4 genel → null (çağıran bizim adımıza düşer).
+ * 3. kademe (geniş) 2'nin ALTINDA: kumaşa özel ad girildiyse başka kumaşın satır adı
+ * onu ezmez; girilmediyse zincir bugünküyle aynı çıktıyı verir.
+ */
+export function pickShipmentColorName(a: {
+  pairOverride: string | null;
+  wideOverride: string | null;
+  master: ColorMaster | null;
+}): { ad: string | null; scope: ColorNameScope | null } {
+  if (a.pairOverride) return { ad: a.pairOverride, scope: null };
+  if (a.master?.scope === "ITEM") return { ad: a.master.alias, scope: "ITEM" };
+  if (a.wideOverride) return { ad: a.wideOverride, scope: null };
+  if (a.master) return { ad: a.master.alias, scope: "CUSTOMER" };
+  return { ad: null, scope: null };
+}
+
+/** `colorNameScope` yalnız ana veri kademesi KAZANDIĞINDA dolar (§12.4). */
+export function colorScopeOf(resolved: ResolvedName | null, master: ColorMaster | null): ColorNameScope | null {
+  return resolved?.source === "MASTER" && master ? master.scope : null;
+}
+
+// =============================================================================
+// Toplu master alias çekme — kumaş adı haritası + renk indeksi, sorgu sayısı sabit.
 // =============================================================================
 
 export interface BatchAliasResult {
   itemAliasByItemId: Map<string, string>;
-  colorAliasByColorId: Map<string, string>;
+  colors: CustomerColorIndex;
 }
 
-/**
- * Bir müşteri için itemId/colorId set'lerine karşılık gelen master alias'ları
- * tek seferde çeker. Kullanım: snapshot builder'larda.
- *
- * tx içinde de güvenli: pg adapter Promise.all yasaklı, biz seri çekiyoruz.
- */
+type AliasDb = ColorIndexDb & { customerItemAlias: Prisma.TransactionClient["customerItemAlias"] };
+
+/** Tek müşteri için kumaş adı haritası + renk indeksi (snapshot builder'lar). */
 export async function batchLoadAliases(
-  client: Prisma.TransactionClient | { customerItemAlias: Prisma.TransactionClient["customerItemAlias"]; customerColorAlias: Prisma.TransactionClient["customerColorAlias"] },
+  client: AliasDb,
   customerId: string,
   itemIds: string[],
-  colorIds: string[],
+  colorIds: Array<string | null>,
 ): Promise<BatchAliasResult> {
-  const uniqItems = Array.from(new Set(itemIds));
-  const uniqColors = Array.from(new Set(colorIds.filter((c) => !!c)));
-
+  const multi = await batchLoadAliasesMulti(client, [customerId], itemIds, colorIds);
   const itemAliasByItemId = new Map<string, string>();
-  const colorAliasByColorId = new Map<string, string>();
-
-  if (uniqItems.length > 0) {
-    const itemRows = await client.customerItemAlias.findMany({
-      where: { customerId, itemId: { in: uniqItems } },
-      select: { itemId: true, alias: true },
-    });
-    for (const r of itemRows) itemAliasByItemId.set(r.itemId, r.alias);
-  }
-
-  if (uniqColors.length > 0) {
-    const colorRows = await client.customerColorAlias.findMany({
-      where: { customerId, colorId: { in: uniqColors } },
-      select: { colorId: true, alias: true },
-    });
-    // alias null = sadece atama, özel ad yok → etikette standart renk adı kullanılır.
-    for (const r of colorRows) if (r.alias) colorAliasByColorId.set(r.colorId, r.alias);
-  }
-
-  return { itemAliasByItemId, colorAliasByColorId };
+  for (const [k, v] of multi.itemAlias) itemAliasByItemId.set(k.slice(customerId.length + 1), v);
+  return { itemAliasByItemId, colors: multi.colors };
 }
 
 /**
- * ÇOK MÜŞTERİLİ toplu alias — `batchLoadAliases`in N müşterili ikizi.
- *
- * Neden ayrı: müşteri başına döngü kurmak N müşteride 2N sorgu demekti ve bu
- * repoda `tx.*` + `Promise.all` yasak (seri koşardı). Burada (customerId, itemId)
- * çiftleri tek `in` sorgusuna giriyor → kaç müşteri olursa olsun 2 gidiş-dönüş.
- *
- * Anahtar biçimi `${customerId}:${id}`.
+ * ÇOK MÜŞTERİLİ toplu alias — kaç müşteri olursa olsun sabit gidiş-dönüş
+ * (müşteri başına döngü tx + Promise.all yasağı yüzünden seri koşardı).
+ * Kumaş adı anahtarı `${customerId}:${itemId}`.
  */
 export async function batchLoadAliasesMulti(
-  client: { customerItemAlias: Prisma.TransactionClient["customerItemAlias"]; customerColorAlias: Prisma.TransactionClient["customerColorAlias"] },
+  client: AliasDb,
   customerIds: string[],
   itemIds: string[],
-  colorIds: string[],
-): Promise<{ itemAlias: Map<string, string>; colorAlias: Map<string, string> }> {
-  const musteriler = [...new Set(customerIds)];
-  const urunler = [...new Set(itemIds)];
-  const renkler = [...new Set(colorIds.filter(Boolean))];
+  colorIds: Array<string | null>,
+): Promise<{ itemAlias: Map<string, string>; colors: CustomerColorIndex }> {
+  const musteriler = uniq(customerIds);
+  const urunler = uniq(itemIds);
   const itemAlias = new Map<string, string>();
-  const colorAlias = new Map<string, string>();
-  if (musteriler.length === 0) return { itemAlias, colorAlias };
-
-  if (urunler.length > 0) {
+  if (musteriler.length > 0 && urunler.length > 0) {
     const rows = await client.customerItemAlias.findMany({
       where: { customerId: { in: musteriler }, itemId: { in: urunler } },
       select: { customerId: true, itemId: true, alias: true },
     });
     for (const r of rows) itemAlias.set(`${r.customerId}:${r.itemId}`, r.alias);
   }
-  if (renkler.length > 0) {
-    const rows = await client.customerColorAlias.findMany({
-      where: { customerId: { in: musteriler }, colorId: { in: renkler } },
-      select: { customerId: true, colorId: true, alias: true },
-    });
-    // `alias` null = yalnız atama, özel ad yok → bizim adımız geçerli.
-    for (const r of rows) if (r.alias) colorAlias.set(`${r.customerId}:${r.colorId}`, r.alias);
-  }
-  return { itemAlias, colorAlias };
+  const colors = await loadCustomerColorIndex(client, { customerIds: musteriler, itemIds: urunler, colorIds });
+  return { itemAlias, colors };
 }

@@ -49,8 +49,12 @@ import {
   resolveName,
   normalizeOverride,
   NameSource,
-  batchLoadAliases,
-  type BatchAliasResult,
+  batchLoadAliasesMulti,
+  loadCustomerColorIndex,
+  colorScopeOf,
+  type ColorMaster,
+  type ColorNameScope,
+  type CustomerColorIndex,
 } from "./helpers/customer-name.helper";
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
 import { resolveLabelFormat, loadMachinePrinter, type ResolvedLabelFormat } from "./helpers/label-format.resolver";
@@ -201,7 +205,8 @@ interface BulkLabelContext {
   rollById: Map<string, RollWithLabelIncludes>;
   orderLineById: Map<string, OrderLineLabelCtx>;
   customerById: Map<string, { id: string; name: string }>;
-  aliasByCustomer: Map<string, BatchAliasResult>;
+  /** Bütün müşteriler için TEK yükleme: kumaş adı `${customerId}:${itemId}` + renk indeksi. */
+  aliases: { itemAlias: Map<string, string>; colors: CustomerColorIndex };
   format: ResolvedLabelFormat;
   templateByKind: Partial<Record<LabelKind, LabelTemplate | null>>;
   /** Kind-başına seçili boyut varyantı (kanvas) — templateByKind ile aynı çözümden. */
@@ -291,7 +296,7 @@ export class LabelService {
     let itemOverride: string | null = null;
     let colorOverride: string | null = null;
     let itemMasterAlias: string | null = null;
-    let colorMasterAlias: string | null = null;
+    let colorMaster: ColorMaster | null = null;
 
     // Baskı bağlamı çözümü. Çağrı explicit opts verdiyse (Tambur baskı anı veya
     // relabel) onu kullan. Vermediyse (Electron "Etiket" butonu / mobil görüntüleme)
@@ -363,16 +368,12 @@ export class LabelService {
       customerName = null;
     }
 
-    // Master alias'lar — customer × item / customer × color (yoksa null).
-    // preloaded'da batchLoadAliases sonucu Map'ten okunur (aynı sonuç: itemAlias
-    // yoksa undefined→null; colorAlias null/yok → batchLoadAliases zaten düşürür).
+    // Master alias'lar — kumaş adı müşteri × kumaş; renk adı tek çözücüden
+    // (kumaşa özel → genel). Toplu yolda aynı sonuç önceden yüklenmiş indeksten okunur.
     if (customerId) {
       if (preloaded) {
-        const alias = preloaded.aliasByCustomer.get(customerId);
-        itemMasterAlias = alias?.itemAliasByItemId.get(roll.item.id) ?? null;
-        if (roll.color) {
-          colorMasterAlias = alias?.colorAliasByColorId.get(roll.color.id) ?? null;
-        }
+        itemMasterAlias = preloaded.aliases.itemAlias.get(`${customerId}:${roll.item.id}`) ?? null;
+        colorMaster = preloaded.aliases.colors.master(customerId, roll.item.id, roll.color?.id ?? null);
       } else {
         const itemAlias = await prisma.customerItemAlias.findUnique({
           where: {
@@ -383,13 +384,12 @@ export class LabelService {
         itemMasterAlias = itemAlias?.alias ?? null;
 
         if (roll.color) {
-          const colorAlias = await prisma.customerColorAlias.findUnique({
-            where: {
-              customerId_colorId: { customerId, colorId: roll.color.id },
-            },
-            select: { alias: true },
+          const idx = await loadCustomerColorIndex(prisma, {
+            customerIds: [customerId],
+            itemIds: [roll.item.id],
+            colorIds: [roll.color.id],
           });
-          colorMasterAlias = colorAlias?.alias ?? null;
+          colorMaster = idx.master(customerId, roll.item.id, roll.color.id);
         }
       }
     }
@@ -403,7 +403,7 @@ export class LabelService {
       itemOverride = null;
       itemMasterAlias = null;
       colorOverride = null;
-      colorMasterAlias = null;
+      colorMaster = null;
     }
 
     const itemNameResolved = resolveName(
@@ -415,11 +415,13 @@ export class LabelService {
     let colorName: string | null = null;
     let colorNameDefault: string | null = null;
     let colorNameSource: NameSource | null = null;
+    let colorNameScope: ColorNameScope | null = null;
     if (roll.color) {
       colorNameDefault = roll.color.name;
-      const r = resolveName(colorOverride, colorMasterAlias, roll.color.name);
+      const r = resolveName(colorOverride, colorMaster?.alias, roll.color.name);
       colorName = r.name;
       colorNameSource = r.source;
+      colorNameScope = colorScopeOf(r, colorMaster);
     }
 
     const payload: LabelPayload = {
@@ -441,6 +443,7 @@ export class LabelService {
       colorName,
       colorNameDefault,
       colorNameSource,
+      colorNameScope,
 
       customerName,
       customerId,
@@ -496,6 +499,7 @@ export class LabelService {
       colorName: string | null;
       colorNameDefault: string | null;
       colorNameSource: NameSource | null;
+      colorNameScope: ColorNameScope | null;
     }>
   > {
     let itemId = input.itemId ?? null;
@@ -555,7 +559,7 @@ export class LabelService {
     }
 
     let itemMaster: string | null = null;
-    let colorMaster: string | null = null;
+    let colorMaster: ColorMaster | null = null;
     if (customerId) {
       const ia = await prisma.customerItemAlias.findUnique({
         where: { customerId_itemId: { customerId, itemId: item.id } },
@@ -563,16 +567,17 @@ export class LabelService {
       });
       itemMaster = ia?.alias ?? null;
       if (color) {
-        const ca = await prisma.customerColorAlias.findUnique({
-          where: { customerId_colorId: { customerId, colorId: color.id } },
-          select: { alias: true },
+        const idx = await loadCustomerColorIndex(prisma, {
+          customerIds: [customerId],
+          itemIds: [item.id],
+          colorIds: [color.id],
         });
-        colorMaster = ca?.alias ?? null;
+        colorMaster = idx.master(customerId, item.id, color.id);
       }
     }
 
     const itemResolved = resolveName(itemOverride, itemMaster, item.name);
-    const colorResolved = color ? resolveName(colorOverride, colorMaster, color.name) : null;
+    const colorResolved = color ? resolveName(colorOverride, colorMaster?.alias, color.name) : null;
 
     return {
       success: true,
@@ -587,6 +592,7 @@ export class LabelService {
         colorName: colorResolved?.name ?? null,
         colorNameDefault: color?.name ?? null,
         colorNameSource: colorResolved?.source ?? null,
+        colorNameScope: colorScopeOf(colorResolved, colorMaster),
       },
     };
   }
@@ -1315,7 +1321,7 @@ export class LabelService {
       rollById,
       orderLineById,
       customerById,
-      aliasByCustomer: new Map(),
+      aliases: { itemAlias: new Map(), colors: { master: () => null } },
       format,
       templateByKind,
       variantByKind,
@@ -1337,12 +1343,15 @@ export class LabelService {
       byCustomer.set(cid, g);
     }
 
-    // §2-B: alias'ları müşteri bazlı batch'le (batchLoadAliases reuse — null color
-    // alias'ı düşürür, inline yolla birebir aynı).
-    const aliasByCustomer = new Map<string, BatchAliasResult>();
-    for (const [cid, g] of byCustomer) {
-      aliasByCustomer.set(cid, await batchLoadAliases(prisma, cid, [...g.itemIds], [...g.colorIds]));
-    }
+    // §2-B: alias'lar bütün müşteriler için TEK yüklemeyle (müşteri başına döngü
+    // yok). Anahtar müşteri kimliği taşır; bir müşterinin başka kumaştaki satırı
+    // hiç okunmaz, yani çapraz çarpım sonucu değiştirmez.
+    const aliases = await batchLoadAliasesMulti(
+      prisma,
+      [...byCustomer.keys()],
+      [...byCustomer.values()].flatMap((g) => [...g.itemIds]),
+      [...byCustomer.values()].flatMap((g) => [...g.colorIds]),
+    );
 
     // §2-C: müşteri-şablon route'ları tek sorguda (tekil yoldaki halkanın batch
     // karşılığı). Varyant, format TEK olduğundan şablon-başına bir kez seçilir.
@@ -1371,7 +1380,7 @@ export class LabelService {
       }
     }
 
-    return { rollById, orderLineById, customerById, aliasByCustomer, format, templateByKind, variantByKind, customerTemplateByKey, copies, rasterMode: finishedRouting.rasterMode };
+    return { rollById, orderLineById, customerById, aliases, format, templateByKind, variantByKind, customerTemplateByKey, copies, rasterMode: finishedRouting.rasterMode };
   }
 
   /**

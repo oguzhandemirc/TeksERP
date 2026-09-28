@@ -18,7 +18,7 @@
 // İÇERİĞİ farklı çıkar mıydı?"** Üç şey bunu değiştirir ve üçü de etiket
 // basımında zaten çözülüyor:
 //   ① `CustomerTemplateRoute` — müşteriye özel etiket ŞABLONU
-//   ② `CustomerItemAlias` / `CustomerColorAlias` — müşteriye özel kumaş/renk ADI
+//   ② `CustomerItemAlias` / renk adı (kumaşa özel → genel) — müşteriye özel kumaş/renk ADI
 //   ③ etikete basılan MÜŞTERİ ADININ kendisi
 //
 // Kural KENDİLİĞİNDEN SESSİZDİR: etiket müşteriye özel hiçbir şey basmıyorsa
@@ -32,6 +32,7 @@ import prisma from "../../lib/prisma";
 import { LabelKind, RollStatus, QualityGradeRole } from "@prisma/client";
 import { collectBoundKeys } from "./label-context-fit";
 import { loadQualityRoles } from "./quality-role.helper";
+import { loadCustomerColorIndex, type CustomerColorIndex } from "./customer-name.helper";
 
 export type MismatchKind =
   /** 🔴 Etiket hedef müşteri için FARKLI çıkardı — aksiyon: etiketi yenile. */
@@ -102,8 +103,8 @@ interface MismatchLookups {
   /** ⚠️ Değer NULLABLE: `CustomerTemplateRoute.templateId` şemada opsiyonel. */
   routeBy: Map<string, string | null>;
   itemAliasBy: Map<string, string>;
-  /** ⚠️ Değer NULLABLE: `CustomerColorAlias.alias` şemada opsiyonel. */
-  colorAliasBy: Map<string, string | null>;
+  /** Renk adı tek çözücüden (kumaşa özel → genel) — etiketin kendisiyle aynı kademe. */
+  colors: CustomerColorIndex;
   nameBy: Map<string, string>;
   /** templateId → bu şablon müşteriye bağlı bir alan basıyor mu. */
   nameVisibleByTemplate: Map<string, boolean>;
@@ -151,14 +152,14 @@ async function loadLookups(
   const empty: MismatchLookups = {
     routeBy: new Map(),
     itemAliasBy: new Map(),
-    colorAliasBy: new Map(),
+    colors: { master: () => null },
     nameBy: new Map(),
     nameVisibleByTemplate: new Map(),
     secondCodes,
   };
   if (customerIds.length === 0) return empty;
 
-  const [routes, itemAliases, colorAliases, customers] = await Promise.all([
+  const [routes, itemAliases, colors, customers] = await Promise.all([
     prisma.customerTemplateRoute.findMany({
       where: { customerId: { in: customerIds }, kind: LabelKind.ROLL_FINISHED },
       select: { customerId: true, templateId: true },
@@ -169,12 +170,7 @@ async function loadLookups(
           select: { customerId: true, itemId: true, alias: true },
         })
       : Promise.resolve([]),
-    colorIds.length
-      ? prisma.customerColorAlias.findMany({
-          where: { customerId: { in: customerIds }, colorId: { in: colorIds } },
-          select: { customerId: true, colorId: true, alias: true },
-        })
-      : Promise.resolve([]),
+    loadCustomerColorIndex(prisma, { customerIds, itemIds, colorIds }),
     prisma.customer.findMany({
       where: { id: { in: customerIds } },
       select: { id: true, name: true },
@@ -201,7 +197,7 @@ async function loadLookups(
   return {
     routeBy: new Map(routes.map((r) => [r.customerId, r.templateId])),
     itemAliasBy: new Map(itemAliases.map((a) => [`${a.customerId}|${a.itemId}`, a.alias])),
-    colorAliasBy: new Map(colorAliases.map((a) => [`${a.customerId}|${a.colorId}`, a.alias])),
+    colors,
     nameBy: new Map(customers.map((c) => [c.id, c.name])),
     nameVisibleByTemplate,
     secondCodes,
@@ -263,8 +259,7 @@ function evaluateSack(
   const identityFor = (customerId: string | null, r: RollRow): LabelIdentity => ({
     templateId: customerId ? (lk.routeBy.get(customerId) ?? null) : null,
     itemAlias: customerId ? (lk.itemAliasBy.get(`${customerId}|${r.itemId}`) ?? null) : null,
-    colorAlias:
-      customerId && r.colorId ? (lk.colorAliasBy.get(`${customerId}|${r.colorId}`) ?? null) : null,
+    colorAlias: customerId ? (lk.colors.master(customerId, r.itemId, r.colorId)?.alias ?? null) : null,
     customerName: customerId ? (lk.nameBy.get(customerId) ?? null) : null,
   });
 

@@ -52,6 +52,18 @@ export const COLOR_MERGE_RULES: MoveRule[] = [
     },
     {
       kind: "CONFLICT",
+      model: "CustomerItemColorAlias",
+      table: "customer_item_color_aliases",
+      column: "colorId",
+      label: "Müşteri kumaşa özel renk adı",
+      uniqueOn: ["customerId", "itemId", "colorId"],
+      policy: "SKIP",
+      why:
+        "Survivor'ın adı kazanır. ⚠️ GÖLGELEME: taşınan satır survivor rengin o kumaştaki GENEL " +
+        "adını gölgeler — önizleme listeler.",
+    },
+    {
+      kind: "CONFLICT",
       model: "StationColor",
       table: "station_colors",
       column: "colorId",

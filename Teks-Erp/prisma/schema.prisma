@@ -592,6 +592,8 @@ model User {
   updatedCustomerItemAliass       CustomerItemAlias[]       @relation("CustomerItemAliasUpdatedBy")
   createdCustomerColorAliass      CustomerColorAlias[]      @relation("CustomerColorAliasCreatedBy")
   updatedCustomerColorAliass      CustomerColorAlias[]      @relation("CustomerColorAliasUpdatedBy")
+  createdCustomerItemColorAliass  CustomerItemColorAlias[]  @relation("CustomerItemColorAliasCreatedBy")
+  updatedCustomerItemColorAliass  CustomerItemColorAlias[]  @relation("CustomerItemColorAliasUpdatedBy")
   createdSubcontractorCategorys   SubcontractorCategory[]   @relation("SubcontractorCategoryCreatedBy")
   updatedSubcontractorCategorys   SubcontractorCategory[]   @relation("SubcontractorCategoryUpdatedBy")
   createdTravelerCardTemplates    TravelerCardTemplate[]    @relation("TravelerCardTemplateCreatedBy")
@@ -2701,6 +2703,8 @@ model Item {
   workOrdersAsTarget WorkOrder[]            @relation("WorkOrderTargetItem")
   /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
   customerAliases    CustomerItemAlias[]
+  /// Müşterinin BU kumaştaki renge verdiği ad (kumaşa özel; genel adı gölgeler).
+  customerColorAliases CustomerItemColorAlias[]
   productRecipes     ProductRecipe[]
   weavingOrders      WeavingOrder[]         @relation("WeavingOrderItem")
   machineRuns        MachineRun[]           @relation("MachineRunItem")
@@ -3442,6 +3446,7 @@ model Customer {
   branches         CustomerBranch[]
   itemAliases      CustomerItemAlias[]
   colorAliases     CustomerColorAlias[]
+  itemColorAliases CustomerItemColorAlias[]
   shipments        Shipment[]
   sacks            Sack[]
   packingGroups    PackingGroup[]
@@ -7333,6 +7338,7 @@ model Color {
   stationCapabilities StationColor[]
   /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
   customerAliases     CustomerColorAlias[]
+  customerItemAliases CustomerItemColorAlias[]
   /// Fason kabullerde renk olarak uygulandığı receipt'ler (boyahane dönüşü).
   appliedAtReceipts   SubcontractorReceipt[]
   productRecipes      ProductRecipe[]
@@ -7658,6 +7664,36 @@ model CustomerColorAlias {
   @@index([aliasFold])
   @@index([aliasFold(ops: raw("gin_trgm_ops"))], map: "customer_color_aliases_aliasFold_trgm_idx", type: Gin)
   @@map("customer_color_aliases")
+}
+
+/// MÜŞTERİ × KUMAŞ × RENK ADI — müşterinin YALNIZ o kumaştaki renge verdiği ad
+/// (docs/design/MUSTERI-KUMAS-RENK-ADI.md). Genel adı (`CustomerColorAlias`) o
+/// kumaşta gölgeler; okuma tek çözücüden (`customer-name.helper`). Saf yapılandırma
+/// pivotu (③b): belgeye adın kendisi gider ve snapshot'ta donar, FK ile bağlanmaz.
+/// `aliasFold` YOK — genel aramada bulunmaz (MV-04); `assigned` YOK — satır yalnız ad taşır.
+model CustomerItemColorAlias {
+  id         String @id @default(uuid()) @db.Uuid
+  customerId String @db.Uuid
+  itemId     String @db.Uuid
+  colorId    String @db.Uuid
+  alias      String
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  item     Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  color    Color    @relation(fields: [colorId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CustomerItemColorAliasCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CustomerItemColorAliasUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([customerId, itemId, colorId])
+  @@index([itemId])
+  @@index([colorId])
+  @@map("customer_item_color_aliases")
 }
 
 /// Etiket template'i — hangi alanlar gözüksün, sırası, başlığı, bold/font.

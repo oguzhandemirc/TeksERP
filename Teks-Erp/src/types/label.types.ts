@@ -27,9 +27,9 @@
 // =============================================================================
 
 import type { LabelKind } from "@prisma/client";
-import type { NameSource } from "../services/helpers/customer-name.helper";
+import type { ColorNameScope, NameSource } from "../services/helpers/customer-name.helper";
 
-export type { NameSource };
+export type { ColorNameScope, NameSource };
 
 export interface LabelPayload {
   // Roll core
@@ -53,6 +53,8 @@ export interface LabelPayload {
   colorName: string | null; // effective (cascade) — colorId null ise null
   colorNameDefault: string | null;
   colorNameSource: NameSource | null;
+  /** Renk adı ana veriden geldiyse hangi kademeden: kumaşa özel ya da genel; aksi hâlde null. */
+  colorNameScope?: ColorNameScope | null;
 
   // Customer/Order — allocation YOKSA HEPSİ NULL (frontend bloğu render etmez)
   customerName: string | null;
