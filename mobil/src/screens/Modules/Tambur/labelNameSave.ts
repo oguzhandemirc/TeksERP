@@ -50,6 +50,49 @@ export function planPermanentWrites(
   return out;
 }
 
+/**
+ * Kalıcı kaydın dayandığı ana veri görüntüsü: sipariş kalemi OLMADAN çağrılan
+ * name-preview'in cevabı (kumaşa özel → genel → bizdeki). Renk yazımının kademesi
+ * buradan okunur — kalemde özel ad varken bile altındaki kumaşa özel satır görünür.
+ */
+export interface MasterSnapshot {
+  itemName: string;
+  colorName: string | null;
+  colorNameScope?: ColorNameScope | null;
+}
+
+/** Açılışta görülen ana veri kayıt anında değiştiyse (panelden düzeltme) yazılmaz. */
+export function masterChanged(seen: MasterSnapshot, fresh: MasterSnapshot): boolean {
+  return (
+    seen.itemName !== fresh.itemName ||
+    (seen.colorName ?? null) !== (fresh.colorName ?? null) ||
+    (seen.colorNameScope ?? null) !== (fresh.colorNameScope ?? null)
+  );
+}
+
+export class NameChangedError extends Error {
+  constructor() {
+    super('Ad bu arada başka bir yerden değişti — ekran tazelendi, kontrol edip yeniden kaydedin.');
+    this.name = 'NameChangedError';
+  }
+}
+
+function writeLabel(kind: PermanentWrite['kind'], first = false): string {
+  if (kind === 'ITEM_ALIAS') return first ? 'Kumaş adı' : 'kumaş adı';
+  return first ? 'Renk adı' : 'renk adı';
+}
+
+/** Sıralı yazımda biri düşerse operatör hangisinin GEÇTİĞİNİ bilmeli — önizleme ona göre tazelenir. */
+export function partialFailureMessage(
+  done: PermanentWrite['kind'][],
+  failed: PermanentWrite['kind'],
+  reason: string,
+): string {
+  if (done.length === 0) return reason;
+  const ok = done.map((k, i) => writeLabel(k, i === 0)).join(' ve ');
+  return `${ok} kaydedildi, ${writeLabel(failed)} kaydedilemedi: ${reason}`;
+}
+
 /** Ad kaynağının operatöre görünen karşılığı (kumaş satırı). */
 export function sourceLabel(src: NameSource | null): string {
   if (src === 'OVERRIDE') return 'siparişe özel';

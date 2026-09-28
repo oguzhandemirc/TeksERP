@@ -6,7 +6,13 @@
 // kumaşlarına sızardı. Bu dosya planın iki yarısını ölçer: yalnız değişen alan
 // yazılır ve renk kazanan kademeye yazılır.
 // =============================================================================
-import { colorSourceLabel, planPermanentWrites, sourceSummary } from './labelNameSave';
+import {
+  colorSourceLabel,
+  masterChanged,
+  partialFailureMessage,
+  planPermanentWrites,
+  sourceSummary,
+} from './labelNameSave';
 
 const base = {
   customerId: 'c1',
@@ -116,5 +122,37 @@ describe('renk rozeti', () => {
 
   it('özet: renksiz topta yalnız kumaş rozeti', () => {
     expect(sourceSummary({ itemNameSource: 'OVERRIDE', colorName: null, colorNameSource: null })).toBe('siparişe özel');
+  });
+});
+
+describe('masterChanged — açılışta görülen ana veri kayıt anında aynı mı', () => {
+  const seen = { itemName: 'PAMUKLU ASTAR', colorName: 'ABC', colorNameScope: 'CUSTOMER' as const };
+
+  it('aynıysa değişmedi', () => {
+    expect(masterChanged(seen, { ...seen })).toBe(false);
+  });
+
+  it('eksik kademe alanı null sayılır (eski backend)', () => {
+    expect(masterChanged({ itemName: 'A', colorName: null }, { itemName: 'A', colorName: null, colorNameScope: null })).toBe(false);
+  });
+
+  it.each([
+    ['kademe (panel kumaşa özel ad girdi)', { colorNameScope: 'ITEM' as const }],
+    ['renk adı', { colorName: 'DEF' }],
+    ['kumaş adı', { itemName: 'COTTON' }],
+  ])('%s değiştiyse değişti', (_ad, fark) => {
+    expect(masterChanged(seen, { ...seen, ...fark })).toBe(true);
+  });
+});
+
+describe('partialFailureMessage — sıralı yazımda hangisi geçti', () => {
+  it('ilk yazım düştüyse yalnız sebep', () => {
+    expect(partialFailureMessage([], 'ITEM_ALIAS', 'Ağ hatası')).toBe('Ağ hatası');
+  });
+
+  it('kumaş geçti, renk düştü', () => {
+    expect(partialFailureMessage(['ITEM_ALIAS'], 'ITEM_COLOR_ALIAS', 'Kumaş pasif')).toBe(
+      'Kumaş adı kaydedildi, renk adı kaydedilemedi: Kumaş pasif',
+    );
   });
 });

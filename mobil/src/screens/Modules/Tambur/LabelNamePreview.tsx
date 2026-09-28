@@ -24,8 +24,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, TouchableRipple, Button, ActivityIndicator } from 'react-native-paper';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import Toast from 'react-native-toast-message';
+import { useQuery } from '@tanstack/react-query';
 
 import AppModal from '../../../components/AppModal';
 import ModalTextInput from '../../../components/ModalTextInput';
@@ -33,15 +32,8 @@ import { labelService } from '../../../services/label.service';
 import { usePermissions } from '../../../hooks/usePermission';
 import { colors } from '../../../theme';
 import { shouldShowOriginalName } from './labelNameCompare';
-import { planPermanentWrites, sourceSummary, type PermanentWrite } from './labelNameSave';
-
-function writePermanent(w: PermanentWrite): Promise<unknown> {
-  if (w.kind === 'ITEM_ALIAS') return labelService.setCustomerItemAlias(w.customerId, w.itemId, w.alias);
-  if (w.kind === 'ITEM_COLOR_ALIAS') {
-    return labelService.setCustomerItemColorAlias(w.customerId, w.itemId, w.colorId, w.alias);
-  }
-  return labelService.setCustomerColorAlias(w.customerId, w.colorId, w.alias);
-}
+import { planPermanentWrites, sourceSummary } from './labelNameSave';
+import { useLabelNameSave } from './useLabelNameSave';
 
 export function LabelNamePreview({
   rollId,
@@ -53,7 +45,6 @@ export function LabelNamePreview({
   orderLineId: string | null;
   customerId: string | null;
 }) {
-  const qc = useQueryClient();
   const { has } = usePermissions();
   // Kalıcı (master alias) yazma yetkisi. Yoksa o seçenek HİÇ çizilmez — gri
   // buton, alınamayacak bir yetkiyi vaat etmektir (proje kuralı).
@@ -74,6 +65,22 @@ export function LabelNamePreview({
   const p = q.data?.data ?? null;
 
   const [editOpen, setEditOpen] = useState(false);
+  const previewCustomerId = p?.customerId ?? null;
+  // Kalıcı renk yazımının kademesi sipariş kalemi OLMADAN çözülen ana veriden okunur:
+  // kalemde özel ad varken de altındaki kumaşa özel satır görünür. Pencere her
+  // açılışta tazeler (odak tetiği yok, önbellek saatlerce bayat kalabilir).
+  const mq = useQuery({
+    queryKey: ['label', 'name-preview', 'master', rollId, previewCustomerId],
+    queryFn: () =>
+      labelService.previewCustomerNames({ rollId: rollId!, orderLineId: null, customerId: previewCustomerId }),
+    enabled: editOpen && canPermanent && !!rollId && !!previewCustomerId,
+    staleTime: 0,
+  });
+  const master = mq.data?.data ?? null;
+  const openEdit = () => {
+    setEditOpen(true);
+    void q.refetch();
+  };
   const [itemName, setItemName] = useState('');
   const [colorName, setColorName] = useState('');
   // Kapsam SEÇİLMEDEN kaydedilemez: "bu siparişte mi, hep mi" sorusunun cevabını
@@ -93,36 +100,15 @@ export function LabelNamePreview({
     else setScope(null);
   }, [editOpen, p, orderLineId, canOrder, canPermanent]);
 
-  const saveMut = useMutation({
-    mutationFn: async () => {
-      if (!p) return;
-      const nextItem = itemName.trim();
-      const nextColor = colorName.trim();
-      if (scope === 'ORDER') {
-        if (!orderLineId) throw new Error('Sipariş satırı yok');
-        await labelService.updateOrderLineCustomerNames(orderLineId, {
-          customerItemName: nextItem || null,
-          customerColorName: nextColor || null,
-        });
-      } else {
-        if (!p.customerId) throw new Error('Müşteri seçili değil');
-        // Sıralı: yazımlar ayrı uçlara gider, biri düşerse hangisinin yazıldığı belli kalsın.
-        for (const w of planPermanentWrites(p, { itemName: nextItem, colorName: nextColor })) {
-          await writePermanent(w);
-        }
-      }
-    },
-    onSuccess: () => {
-      Toast.show({
-        type: 'success',
-        text1: scope === 'ORDER' ? 'Bu sipariş için güncellendi' : 'Müşteri adı güncellendi',
-      });
-      void qc.invalidateQueries({ queryKey: ['label', 'name-preview'] });
-      void qc.invalidateQueries({ queryKey: ['label', 'roll'] });
-      setEditOpen(false);
-    },
-    onError: (e: Error) =>
-      Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: e.message }),
+  const saveMut = useLabelNameSave({
+    rollId,
+    orderLineId,
+    p,
+    master,
+    scope,
+    itemName,
+    colorName,
+    onSaved: () => setEditOpen(false),
   });
 
   if (!rollId || q.isLoading || !p) return null;
@@ -136,14 +122,23 @@ export function LabelNamePreview({
   const showOriginal = shouldShowOriginalName(p);
 
   // Kalıcı kayıt yalnız değişen alanı yazar; hiçbir alan değişmediyse Kaydet anlamsızdır.
-  const permanentPlan = planPermanentWrites(p, { itemName, colorName });
+  const permanentPlan = planPermanentWrites(
+    { ...p, colorNameScope: master?.colorNameScope ?? null },
+    { itemName, colorName },
+  );
   const colorWrite = permanentPlan.find((w) => w.kind !== 'ITEM_ALIAS');
   const nothingToSave = scope === 'PERMANENT' && permanentPlan.length === 0;
+  // Bayat veriyle karar verilmez: pencere açılışındaki tazeleme bitmeden Kaydet kapalı.
+  const refreshing = q.isFetching || (scope === 'PERMANENT' && mq.isFetching);
+  const masterFailed = scope === 'PERMANENT' && mq.isError && !mq.isFetching;
+  const masterMissing = scope === 'PERMANENT' && (!master || masterFailed);
+  const colorCleared =
+    scope === 'PERMANENT' && !!p.colorId && !colorName.trim() && !!(p.colorName ?? '').trim();
 
   return (
     <>
       <TouchableRipple
-        onPress={isStock ? undefined : () => setEditOpen(true)}
+        onPress={isStock ? undefined : openEdit}
         disabled={isStock}
         style={s.row}
       >
@@ -221,7 +216,7 @@ export function LabelNamePreview({
               active={scope === 'PERMANENT'}
               onPress={() => setScope('PERMANENT')}
               title="Bu müşteride hep"
-              desc="Kalıcı: bu müşteride bu kumaş bundan sonra hep böyle basılır."
+              desc="Kalıcı müşteri tanımı: sipariş kaleminde özel ad girilmedikçe bu müşteride hep böyle basılır."
             />
           ) : null}
           {/* Hiç seçenek çizilmediyse SEBEBİ söylenir — boş bir modal, operatöre
@@ -238,8 +233,14 @@ export function LabelNamePreview({
               sebebini hiçbir yerde göremezdi. */}
           {scope === 'PERMANENT' && p.itemNameSource === 'OVERRIDE' ? (
             <Text style={s.warn}>
-              Bu siparişte özel bir ad girilmiş — kalıcıyı değiştirmek bu siparişin
-              etiketini DEĞİŞTİRMEZ. Bunun için "Sadece bu siparişte"yi seç.
+              Bu kalemde kumaş için özel bir ad girilmiş — kalıcıyı değiştirmek bu kalemin
+              etiketini DEĞİŞTİRMEZ. Bunun için "Sadece bu sipariş kaleminde"yi seç.
+            </Text>
+          ) : null}
+          {scope === 'PERMANENT' && colorWrite && p.colorNameSource === 'OVERRIDE' ? (
+            <Text style={s.warn}>
+              Bu kalemde renk için özel bir ad girilmiş — kalıcı renk adını değiştirmek bu
+              kalemin etiketini DEĞİŞTİRMEZ. Bunun için "Sadece bu sipariş kaleminde"yi seç.
             </Text>
           ) : null}
           {/* Genel renk adı müşterinin bütün kumaşlarında basılır — yazmadan önce söylenir. */}
@@ -247,8 +248,14 @@ export function LabelNamePreview({
             <Text style={s.hint}>
               {colorWrite.kind === 'ITEM_COLOR_ALIAS'
                 ? 'Renk adı yalnız bu kumaşta değişir.'
-                : 'Renk adı bu müşterinin bütün kumaşlarında değişir (kumaşa özel adı olanlar hariç).'}
+                : 'Renk adı bu müşterinin bütün kumaşlarında değişir (kumaşa özel adı ya da sipariş kaleminde özel adı olanlar hariç).'}
             </Text>
+          ) : null}
+          {colorCleared ? (
+            <Text style={s.hint}>Boş bırakılan renk adı kaydedilmez — adı silmek panelden (Tanımlar) yapılır.</Text>
+          ) : null}
+          {masterFailed ? (
+            <Text style={s.warn}>Güncel ad alınamadı — pencereyi kapatıp yeniden açın.</Text>
           ) : null}
 
           <View style={s.actions}>
@@ -257,7 +264,9 @@ export function LabelNamePreview({
             </Button>
             <Button
               mode="contained"
-              disabled={!scope || !itemName.trim() || nothingToSave || saveMut.isPending}
+              disabled={
+                !scope || !itemName.trim() || nothingToSave || refreshing || masterMissing || saveMut.isPending
+              }
               onPress={() => saveMut.mutate()}
               style={s.btn}
             >
@@ -265,6 +274,10 @@ export function LabelNamePreview({
                 <ActivityIndicator size={16} />
               ) : !scope ? (
                 'Önce seçim yapın'
+              ) : masterFailed ? (
+                'Güncel ad alınamadı'
+              ) : refreshing || masterMissing ? (
+                'Güncel ad alınıyor…'
               ) : nothingToSave ? (
                 'Değişiklik yok'
               ) : (
