@@ -9,7 +9,9 @@
 // "ayrışan yüzey" sınıfıdır ve sessizdir (tip geçer, testler çoğu fikstürde yeşil).
 //
 // ÜÇ KANAL (src/ altında, yorumlar hariç AST):
-//   ① model delegesi OKUMASI: `<x>.customerColorAlias|customerItemColorAlias.find*/count/aggregate/groupBy`
+//   ① model delegesi: `<x>.customerColorAlias|customerItemColorAlias` — YAZMA metodu çağrısı
+//      (create*/update*/upsert/delete*) DIŞINDAKİ her erişim; takma ada alınan delege
+//      (`const d = prisma.customerItemColorAlias; d.findMany(…)`) de böyle yakalanır.
 //   ② ilişki alanı: include/select/where/orderBy nesnelerinde ya da arama yolu
 //      dizgesinde renk-adı ilişkileri (`colorAliases` · `itemColorAliases` ·
 //      `customerAliases` · `customerItemAliases` · `customerColorAliases`)
@@ -24,6 +26,7 @@
 //   ① label.service#getRollLabel'e doğrudan `customerColorAlias.findUnique` eklenir → kırmızı
 //   ② sack-content-mismatch#loadLookups kendi `customerColorAlias.findMany`ine döndürülür → kırmızı
 //   ③ POZİTİF: beyanlı bir okuyucu (order.service#kumasaOzelRenkCiftleri) kaldırılır → ölü beyan kırmızısı
+//   ④ ① kanalı eski "yalnız find*/count zinciri" biçimine döndürülür → takma ad sondası + künye beyanı kırmızı
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -40,7 +43,8 @@ function check(label: string, ok: boolean, extra = ""): void {
 
 const SRC = path.resolve(__dirname, "..", "src");
 const MODELLER = new Set(["customerColorAlias", "customerItemColorAlias"]);
-const OKUMA = /^(find|count$|aggregate$|groupBy$)/;
+/** Yazma metodu — ① bunun DIŞINDAKİ her delege erişimini okuma sayar (takma ad dahil). */
+const YAZMA = /^(create|update|upsert|delete)/;
 const ILISKILER = ["colorAliases", "itemColorAliases", "customerAliases", "customerItemAliases", "customerColorAliases"];
 const TABLOLAR = ["customer_color_aliases", "customer_item_color_aliases"];
 const SORGU_ANAHTARLARI = new Set(["include", "select", "where", "orderBy", "_count"]);
@@ -58,6 +62,7 @@ const SINIFLAR = {
   TERFI: "sipariş satırı adının terfisi — yalnız VARLIK kontrolü",
   BIRLESTIRME: "birleştirme haritası/önizleme — tablo adı ya da taşınacak satır listesi",
   ARAMA: "arama alanı (`customerAliases.some.alias`) — kaydı BULUR, ad seçmez",
+  KUNYE: "kayıt künyesi (kim/ne zaman yarattı-değiştirdi) — yalnız künye kolonları, ad seçmez",
 } as const;
 type Sinif = keyof typeof SINIFLAR;
 
@@ -91,6 +96,8 @@ const BEYAN: Record<string, { sinif: Sinif; kanal: Kanal[] }> = {
   "services/tambur.service.ts#listRecentOutputRolls": { sinif: "ARAMA", kanal: ["iliski"] },
   "services/order.service.ts#findAvailableForWorkOrder": { sinif: "ARAMA", kanal: ["iliski"] },
   "services/order.service.ts#findAvailableOrderLines": { sinif: "ARAMA", kanal: ["iliski"] },
+  "services/record-info.service.ts#CUSTOMER_COLOR_ALIAS": { sinif: "KUNYE", kanal: ["model"] },
+  "services/record-info.service.ts#CUSTOMER_ITEM_COLOR_ALIAS": { sinif: "KUNYE", kanal: ["model"] },
 };
 
 interface Isabet {
@@ -136,9 +143,11 @@ function tara(dosya: string, kaynak = fs.readFileSync(dosya, "utf8")): Isabet[] 
     out.push({ anahtar: `${rel}#${fonksiyonAdi(node)}`, kanal, yer: `${rel}:${satir}` });
   };
   const gez = (node: ts.Node): void => {
-    // ① `<x>.customerColorAlias.findMany(…)` — okuma metodu çağrısı
-    if (ts.isPropertyAccessExpression(node) && MODELLER.has(node.name.text) && ts.isPropertyAccessExpression(node.parent)
-      && node.parent.expression === node && OKUMA.test(node.parent.name.text)) ekle(node, "model");
+    // ① `<x>.customerColorAlias…` — yazma çağrısı değilse okuma (takma ad dahil)
+    if (ts.isPropertyAccessExpression(node) && MODELLER.has(node.name.text)
+      && !(ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node && YAZMA.test(node.parent.name.text))) {
+      ekle(node, "model");
+    }
     // ② sorgu nesnesinde ilişki anahtarı
     if (ts.isPropertyAssignment(node) && ILISKILER.includes(node.name.getText().replace(/["']/g, ""))
       && (sorguIcinde(node) || iliskiBicimi(node.initializer))) ekle(node, "iliski");
@@ -188,6 +197,11 @@ function main(): void {
   const kopya = "async function x(){ await prisma.customerColorAlias.findUnique({ where: { id: '1' } }); }";
   check("sonda: label.service'te kopya findUnique → beyansız isabet",
     degerlendir(tara(sahte, kopya)).beyansiz.some((i) => i.kanal === "model"));
+  const takma = "async function y(){ const d = prisma.customerItemColorAlias; return d.findMany({ select: { alias: true } }); }";
+  check("sonda: takma ada alınan delegeyle okuma → beyansız isabet",
+    degerlendir(tara(sahte, takma)).beyansiz.some((i) => i.kanal === "model"));
+  const yazma = "async function z(){ await prisma.customerItemColorAlias.upsert({ where: {}, create: {}, update: {} }); }";
+  check("sonda: yazma çağrısı ① isabeti DEĞİL", tara(sahte, yazma).length === 0);
   const iliski = "const r = prisma.color.findMany({ include: { customerItemAliases: true } });";
   check("sonda: include içinde kumaşa özel ilişki → isabet", tara(sahte, iliski).some((i) => i.kanal === "iliski"));
   const yorum = "// customer_color_aliases tablosu\nconst a = 1;";
