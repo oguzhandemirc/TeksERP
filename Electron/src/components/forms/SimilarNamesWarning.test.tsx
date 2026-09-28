@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { SimilarNamesWarning } from "./SimilarNamesWarning";
 
 const get = vi.fn();
@@ -14,12 +14,17 @@ const row = (over: Partial<Record<string, unknown>> = {}) => ({
   ...over,
 });
 
+function setup() {
+  vi.useFakeTimers();
+  get.mockReset();
+  get.mockResolvedValue({ data: { data: [row()] } });
+}
+
+// Liste satır içinde değil açılır katmanda: özet satırı tetikleyicidir.
+const openList = () => fireEvent.click(screen.getByRole("button"));
+
 describe("benzer kayıt uyarısı", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    get.mockReset();
-    get.mockResolvedValue({ data: { data: [row()] } });
-  });
+  beforeEach(setup);
   afterEach(() => vi.useRealTimers());
 
   it("3 harften kısa terimde SUNUCUYA HİÇ SORMAZ", () => {
@@ -38,26 +43,16 @@ describe("benzer kayıt uyarısı", () => {
     expect(String(get.mock.calls[0]?.[0])).toContain("name=moda+t");
   });
 
-  it("benzer kayıtları listeler", async () => {
-    render(<SimilarNamesWarning entity="customers" name="moda tekstil" />);
-    vi.advanceTimersByTime(400);
-    await vi.waitFor(() => expect(screen.getByText("MODA TEKSTİL")).toBeTruthy());
-    expect(screen.getByText(/Benzer kayıtlar var/)).toBeTruthy();
-  });
-
-  it("BİREBİR aynı ad ayrı başlıkla vurgulanır", async () => {
-    get.mockResolvedValue({ data: { data: [row({ score: 1 })] } });
-    render(<SimilarNamesWarning entity="customers" name="moda tekstil" />);
-    vi.advanceTimersByTime(400);
-    await vi.waitFor(() => expect(screen.getByText(/Bu ad zaten kayıtlı/)).toBeTruthy());
-  });
-
   it("SONUÇ YOKSA hiçbir şey çizmez (form kalabalıklaşmasın)", async () => {
     get.mockResolvedValue({ data: { data: [] } });
     const { container } = render(<SimilarNamesWarning entity="customers" name="zzqxw" />);
     vi.advanceTimersByTime(400);
     await vi.waitFor(() => expect(get).toHaveBeenCalled());
     expect(container.textContent).toBe("");
+    // Canlı bölge bağlı kalır ama KUTU üretmez (`contents`) — form düzeni kaymaz.
+    const live = container.querySelector('[role="status"]');
+    expect(live?.childElementCount).toBe(0);
+    expect(live?.className).toContain("contents");
   });
 
   it("UÇ PATLASA BİLE form çalışmaya devam eder (sessiz yut)", async () => {
@@ -79,10 +74,12 @@ describe("benzer kayıt uyarısı", () => {
     });
     render(<SimilarNamesWarning entity="items" name="oslo" />);
     vi.advanceTimersByTime(400);
-    await vi.waitFor(() => expect(screen.getByText(/altına birleştirilmiş/)).toBeTruthy());
+    await vi.waitFor(() => expect(screen.getByText(/Benzer kayıtlar var/)).toBeTruthy());
+    openList();
+    expect(screen.getByText(/altına birleştirilmiş/)).toBeTruthy();
     expect(screen.getByText(/OSLO ANA/)).toBeTruthy();
     // Tombstone satırında "(pasif)" YAZILMAZ — iki ayrı şey söylemek gürültüdür.
-    expect(screen.queryByText("(pasif)")).toBeNull();
+    expect(screen.queryByText("pasif")).toBeNull();
   });
 
   it("başlık KAÇ benzer kayıt olduğunu söyler", async () => {
@@ -101,6 +98,7 @@ describe("benzer kayıt uyarısı", () => {
     render(<SimilarNamesWarning entity="customers" name="moda tekstil" />);
     vi.advanceTimersByTime(400);
     await vi.waitFor(() => expect(screen.getByText(/kaydedilemez/)).toBeTruthy());
+    openList();
     expect(screen.getByText(/Farklı bir ad yazın/)).toBeTruthy();
   });
 
@@ -109,5 +107,47 @@ describe("benzer kayıt uyarısı", () => {
     vi.advanceTimersByTime(400);
     await vi.waitFor(() => expect(get).toHaveBeenCalled());
     expect(String(get.mock.calls[0]?.[0])).toContain("excludeId=abc");
+  });
+});
+
+describe("benzer kayıt uyarısı — açılır liste", () => {
+  beforeEach(setup);
+  afterEach(() => vi.useRealTimers());
+
+  it("benzer kayıtları listeler", async () => {
+    render(<SimilarNamesWarning entity="customers" name="moda tekstil" />);
+    vi.advanceTimersByTime(400);
+    await vi.waitFor(() => expect(screen.getByText(/Benzer kayıtlar var/)).toBeTruthy());
+    // Özet satırı adı AÇMADAN da söyler — uyarı tıklamaya muhtaç kalmasın.
+    expect(screen.getByRole("button").textContent).toContain("MODA TEKSTİL");
+    openList();
+    const list = screen.getByRole("dialog", { name: "Benzer kayıtlar" });
+    expect(list.textContent).toContain("MODA TEKSTİL");
+    expect(list.textContent).toContain("MUS001");
+    expect(list.textContent).toContain("%76 benzer");
+  });
+
+  it("liste açılır katmanda: formda satır içi blok çizilmez, Esc katmanı kapatır", async () => {
+    render(<SimilarNamesWarning entity="customers" name="moda tekstil" />);
+    vi.advanceTimersByTime(400);
+    await vi.waitFor(() => expect(screen.getByText(/Benzer kayıtlar var/)).toBeTruthy());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("list")).toBeNull();
+    openList();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe("true");
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("BİREBİR aynı ad ayrı başlıkla vurgulanır", async () => {
+    get.mockResolvedValue({ data: { data: [row({ score: 1 })] } });
+    render(<SimilarNamesWarning entity="customers" name="moda tekstil" />);
+    vi.advanceTimersByTime(400);
+    await vi.waitFor(() => expect(screen.getByText(/Bu ad zaten kayıtlı/)).toBeTruthy());
+    openList();
+    // Satırda da "aynı ad" rozeti — yüzde değil (yüzde "benzer" der, bu kesin).
+    expect(screen.getByText("aynı ad")).toBeTruthy();
+    expect(screen.queryByText(/benzer$/)).toBeNull();
   });
 });
