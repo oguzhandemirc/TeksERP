@@ -13,9 +13,11 @@
  * DÜŞÜRÜR. Bu yüzden bir `onResult` kanalı BİLEREK yok: renderer `invoke` ile
  * çeker. Eksik sanıp eklemeyin — sessizce kaybolan bildirimler üretir.
  *
- * ⚠️ TARAMA EMNİYETİ: sabitlenmiş kimlik + kayıtlı adres cevap veriyorsa tarama
- * HİÇ koşmaz. Açılış başına 253 bağlantı denemesi, 15 makine aynı anda açılırsa
- * ~3800 eder; bu ancak gerçekten gerektiğinde meşrudur.
+ * ⚠️ TARAMA EMNİYETİ (hızlı kip — açılış): sabitlenmiş kimlik + kayıtlı adres
+ * cevap veriyorsa tarama HİÇ koşmaz. Açılış başına 253 bağlantı denemesi, 15
+ * makine aynı anda açılırsa ~3800 eder; bu ancak gerçekten gerektiğinde meşrudur.
+ * Kullanıcının bastığı "Ağda Bul" (`discovery:start`) AÇIK kiptir: bilinen adres
+ * cevap verse de alt ağ taranır ve bulunan her sunucu listelenir (`DiscoveryMode`).
  */
 import { ipcMain } from "electron";
 import os from "node:os";
@@ -28,15 +30,20 @@ import {
   bySourceRank,
   compareIdentity,
   dedupeCandidates,
+  discoveryPriorityUrls,
   groupByInstallation,
   identityRequiredForPort,
   rankCandidates,
   runStagedPortScan,
   scanTargetsFor,
+  stopsOnPinnedMatch,
+  sweepSkipReason,
   type DiscoveredServer,
+  type DiscoveryMode,
   type DiscoverySource,
   type ServerIdentity,
 } from "../../shared/discovery.js";
+import { DEFAULT_ERP_URL } from "@shared/channel";
 import type { DiscoveryState } from "../../shared/ipc-contract.js";
 import { readSecureValue, writeSecureValue } from "./secure-store.ipc.js";
 import { browseMdns } from "../discovery/mdns-browser.js";
@@ -51,7 +58,7 @@ const SPLASH_TIMEOUT_MS = 8_000;
 const MANUAL_TIMEOUT_MS = 12_000;
 /** mDNS'e bu kadar süre şans tanınır; sonra tarama da başlar. */
 const SCAN_DELAY_MS = 1_200;
-/** Aynı taramayı arka arkaya koşturmamak için. */
+/** Aynı taramayı arka arkaya koşturmamak için — yalnız hızlı kipte; açık arama kullanıcının isteğidir. */
 const SCAN_COOLDOWN_MS = 30_000;
 
 function emptyState(): DiscoveryState {
@@ -139,7 +146,7 @@ function localInterfaces(): Array<{ address: string; netmask: string }> {
   return out;
 }
 
-async function runDiscovery(timeoutMs: number): Promise<DiscoveryState> {
+async function runDiscovery(timeoutMs: number, mode: DiscoveryMode): Promise<DiscoveryState> {
   const pinnedId = readPinnedId();
   const deadline = Date.now() + timeoutMs;
   const found: DiscoveredServer[] = [];
@@ -160,13 +167,13 @@ async function runDiscovery(timeoutMs: number): Promise<DiscoveryState> {
   const collect = (c: DiscoveredServer | null): void => {
     if (!c) return;
     found.push(c);
-    if (c.matchesPinned === "match") {
+    if (c.matchesPinned === "match" && stopsOnPinnedMatch(mode)) {
       controller.abort();
       resolveEarly?.();
     }
   };
 
-  // --- Ayak 1: bilinen adresler (kayıtlı + son kullanılanlar + localhost) ----
+  // --- Ayak 1: bilinen adresler (kayıtlı + son kullanılanlar + kanalın varsayılanı + localhost)
   const knownProbes: Array<Promise<void>> = [];
   const storedUrl = readSecureValue(API_BASE_URL_KEY);
   const seenAddr = new Set<string>();
@@ -178,8 +185,12 @@ async function runDiscovery(timeoutMs: number): Promise<DiscoveryState> {
     seenAddr.add(key);
     knownProbes.push(verify(parts.host, parts.port, via, pinnedId, 1500).then(collect));
   };
-  if (storedUrl) pushKnown(storedUrl, "stored");
-  for (const u of readRecentUrls()) pushKnown(u, "recent");
+  const recentUrls = readRecentUrls().map((u) => u.trim());
+  const viaOf = (u: string): DiscoverySource =>
+    u === storedUrl?.trim() ? "stored" : recentUrls.includes(u) ? "recent" : "default";
+  for (const u of discoveryPriorityUrls([storedUrl, ...recentUrls], DEFAULT_ERP_URL)) {
+    pushKnown(u, viaOf(u));
+  }
   pushKnown(`http://localhost:${DISCOVERY_DEFAULT_PORT}`, "localhost");
 
   // --- Ayak 2: mDNS (her ilan anında doğrulanır) ----------------------------
@@ -207,15 +218,18 @@ async function runDiscovery(timeoutMs: number): Promise<DiscoveryState> {
       new Promise((r) => setTimeout(r, SCAN_DELAY_MS)),
       earlyExit,
     ]);
-    if (controller.signal.aborted) {
-      state.scan.skippedReason = "sabitlenmiş sunucu zaten bulundu";
+    // "Zaten bulundu" kararı ORTAK helper'da (KEŞİF-İKİZ) — açık kipte süpürme daima koşar.
+    const known = sweepSkipReason(mode, {
+      pinnedMatched: controller.signal.aborted,
+      // Uyuşmayan kimlik "kullanılabilir" değildir (mobil ikiziyle aynı): varsayılan adres başka
+      // kuruluma çıkarsa süpürme yine koşar ve taşınmış sunucu bulunur.
+      usableFound: found.some((c) => c.matchesPinned !== "mismatch"),
+    });
+    if (known) {
+      state.scan.skippedReason = known;
       return;
     }
-    if (found.length > 0) {
-      state.scan.skippedReason = "bilinen adres cevap verdi";
-      return;
-    }
-    if (Date.now() - lastScanAt < SCAN_COOLDOWN_MS) {
+    if (mode === "quick" && Date.now() - lastScanAt < SCAN_COOLDOWN_MS) {
       state.scan.skippedReason = "son tarama çok yakın (30sn)";
       return;
     }
@@ -340,7 +354,7 @@ export async function startDiscoveryIfNeeded(): Promise<void> {
       }
     }
 
-    const result = await runDiscovery(SPLASH_TIMEOUT_MS);
+    const result = await runDiscovery(SPLASH_TIMEOUT_MS, "quick");
     const usable = result.candidates.filter((c) => c.matchesPinned !== "mismatch");
 
     if (!stored && usable.length === 1 && usable[0]) {
@@ -369,7 +383,8 @@ export function registerDiscoveryIpc(): void {
   ipcMain.handle("discovery:start", async (_e, opts?: { timeoutMs?: number }) => {
     if (running) return running;
     const timeout = Math.min(30_000, Math.max(2_000, opts?.timeoutMs ?? MANUAL_TIMEOUT_MS));
-    running = runDiscovery(timeout).finally(() => {
+    // Renderer'daki her çağıran kullanıcının bastığı arama düğmesidir → açık kip.
+    running = runDiscovery(timeout, "explicit").finally(() => {
       running = null;
     });
     return running;

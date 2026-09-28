@@ -30,6 +30,9 @@ import {
   dedupeCandidates,
   groupByInstallation,
   SCAN_MAX_HOSTS,
+  discoveryPriorityUrls,
+  stopsOnPinnedMatch,
+  sweepSkipReason,
   type DiscoveredServer,
 } from './discovery';
 
@@ -283,5 +286,57 @@ describe('groupByInstallation / dedupeCandidates — bir satır = bir SUNUCU', (
   it('körlük zemini: boş giriş boş çıkar, tek aday tek grup', () => {
     expect(groupByInstallation([])).toHaveLength(0);
     expect(groupByInstallation([cand({})])).toHaveLength(1);
+  });
+});
+
+// =============================================================================
+// Açık arama ↔ hızlı keşif + varsayılan adres (KEŞİF-İKİZ; Electron ikizi aynı
+// iddiaları `discovery-logic.test.ts`te ölçer)
+// =============================================================================
+describe('DiscoveryMode — açık arama hepsini gösterir, hızlı keşif erken çıkar', () => {
+  it('⭐ açık kip: bilinen adres bulsa da süpürme ATLANMAZ', () => {
+    expect(sweepSkipReason('explicit', { pinnedMatched: true, usableFound: true })).toBeNull();
+    expect(stopsOnPinnedMatch('explicit')).toBe(false);
+  });
+
+  it('⭐ hızlı kip: erken çıkış DEĞİŞMEDİ', () => {
+    expect(sweepSkipReason('quick', { pinnedMatched: true, usableFound: true })).toBeTruthy();
+    expect(sweepSkipReason('quick', { pinnedMatched: false, usableFound: true })).toBeTruthy();
+    expect(stopsOnPinnedMatch('quick')).toBe(true);
+  });
+
+  it('körlük zemini: hızlı kipte hiçbir şey bulunmadıysa süpürme koşar', () => {
+    expect(sweepSkipReason('quick', { pinnedMatched: false, usableFound: false })).toBeNull();
+  });
+});
+
+describe('discoveryPriorityUrls — varsayılan adres DAİMA aday', () => {
+  it('⭐ gömülü varsayılan bilinenlerin ARDINA eklenir', () => {
+    const out = discoveryPriorityUrls(
+      ['http://100.107.103.79:4000/api'],
+      'http://100.70.47.46:4000/api',
+    );
+    expect(out).toEqual(['http://100.107.103.79:4000/api', 'http://100.70.47.46:4000/api']);
+  });
+
+  it('aynı host:port tekrar eklenmez (yol/şema biçimi farklı olsa da)', () => {
+    const out = discoveryPriorityUrls(
+      ['http://100.70.47.46:4000/api', 'http://100.70.47.46:4000'],
+      'http://100.70.47.46:4000/api',
+    );
+    expect(out).toEqual(['http://100.70.47.46:4000/api']);
+  });
+
+  it('port yazılmamış varsayılan, varsayılan portla eşlenir', () => {
+    expect(discoveryPriorityUrls(['http://h:4000'], 'http://h')).toEqual(['http://h:4000']);
+  });
+
+  it('geri döngü varsayılanı (gömülü adres yok) eklenmez; bilinen localhost korunur', () => {
+    expect(discoveryPriorityUrls([], 'http://localhost:4000/api')).toEqual([]);
+    expect(discoveryPriorityUrls(['http://localhost:4000'], null)).toEqual(['http://localhost:4000']);
+  });
+
+  it('boş/çözülemeyen girdiler atılır', () => {
+    expect(discoveryPriorityUrls([null, undefined, '', 'bozuk'], undefined)).toEqual([]);
   });
 });

@@ -22,7 +22,7 @@
 | Mükerrer · nameFold seddi | `docs/kurallar/mukerrer.md` | 2026-08-21, 2026-08-22, 2026-08-25 |
 | Numaralandırma · numara serisi · ön ek | `docs/kurallar/numaralandirma.md` | 2026-09-22 |
 | Sebep katalogları | `docs/kurallar/sebep-katalogu.md` | 2026-08-25, 2026-08-26 |
-| Keşif · Cihaz · Ağ · Donanım | `docs/kurallar/kesif-cihaz.md` | 2026-09-04 |
+| Keşif · Cihaz · Ağ · Donanım | `docs/kurallar/kesif-cihaz.md` | 2026-09-04, 2026-09-28 |
 | Sürüm · Yayın (panel/tablet) | `docs/kurallar/surum-yayin.md` | 2026-08-19, 2026-08-26, 2026-08-27, 2026-09-03 |
 | Deploy · Kurulum · Migration | `docs/kurallar/deploy-kurulum.md` | 2026-08-26, 2026-09-04 |
 | Modül anahtarları · Bayraklar · Profiller | `docs/kurallar/modul-bayrak.md` | 2026-09-02, 2026-09-03, 2026-09-04 |

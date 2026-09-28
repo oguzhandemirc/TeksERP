@@ -8,9 +8,11 @@
  * düştü, HER istek "Network Error"). Tarama ayağı yeni yerel modül İSTEMEZ,
  * hiçbir multicast filtresine takılmaz ve OTA ile gidebilir.
  *
- * ⚠️ SIRA LOAD-BEARING: önce OLASI adresler (kayıtlı/son kullanılan/tipik sunucu
- * IP'leri), sonra tam süpürme. Fabrikada sunucu `.250`de — öncelik listesi onu
- * ilk turda bulur ve süpürme HİÇ koşmaz. Düz süpürme 253 isteği tablet Wi-Fi'sinde
+ * ⚠️ SIRA LOAD-BEARING: önce OLASI adresler (kayıtlı/son kullanılan/gömülü
+ * varsayılan/tipik sunucu IP'leri), sonra tam süpürme. HIZLI kipte (arka plan
+ * onarımı) öncelik listesi sunucuyu bulunca süpürme HİÇ koşmaz; AÇIK kipte
+ * (kullanıcının "Ağda Ara"sı) süpürme yine koşar ve ağdaki HER sunucu listelenir
+ * (`DiscoveryMode`, KEŞİF-İKİZ). Düz süpürme 253 isteği tablet Wi-Fi'sinde
  * ~3 sn'ye yayar; öncelik listesi bunu tipik olarak yarım saniyeye indirir.
  *
  * Cihazın kendi IP'si `NetInfo`dan geliyor (`details.ipAddress`/`subnet`) —
@@ -18,12 +20,14 @@
  * ve birleşik manifest'te doğrulandı.
  */
 import NetInfo from '@react-native-community/netinfo';
+import { API_URL } from '../constants/api';
 import {
   DISCOVERY_DEFAULT_PORT,
   DISCOVERY_IDENTITY_PATH,
   baseUrlOf,
   compareIdentity,
   dedupeCandidates,
+  discoveryPriorityUrls,
   fallbackDiscoveryPorts,
   groupByInstallation,
   identityRequiredForPort,
@@ -31,7 +35,10 @@ import {
   rankCandidates,
   runStagedPortScan,
   scanTargetsFor,
+  stopsOnPinnedMatch,
+  sweepSkipReason,
   type DiscoveredServer,
+  type DiscoveryMode,
   type ServerGroup,
 } from '../lib/discovery';
 
@@ -53,10 +60,19 @@ export interface DiscoveryProgress {
 }
 
 export interface DiscoveryOptions {
-  /** Sabitlenmiş kurulum kimliği — aday bununla eşleşirse tur ERKEN biter. */
+  /** Sabitlenmiş kurulum kimliği — aday bununla eşleşirse tur ERKEN biter (yalnız hızlı kipte). */
   pinnedInstallationId?: string | null;
-  /** Önce denenecek tam adresler (kayıtlı adres, son kullanılanlar). */
+  /**
+   * Önce denenecek tam adresler (kayıtlı adres, son kullanılanlar). Uygulamanın
+   * gömülü varsayılan adresi (`API_URL`) bunlara DAİMA eklenir.
+   */
   preferredUrls?: string[];
+  /**
+   * `quick` (varsayılan — arka plan onarımı): öncelik listesi bulunca süpürme yok,
+   * sabitlenmiş eşleşmede tur biter. `explicit` (kullanıcının "Ağda Ara"sı):
+   * süpürme yine koşar, bulunan HER sunucu listelenir.
+   */
+  mode?: DiscoveryMode;
   /** Tam süpürme yapılsın mı. Splash yolunda KAPALI tutulur (ekranı bekletmesin). */
   fullSweep?: boolean;
   /**
@@ -179,7 +195,7 @@ async function probeMany(
   targets: { host: string; port: number }[],
   pinnedId: string | null | undefined,
   found: DiscoveredServer[],
-  opts: { signal?: AbortSignal; onProgress?: (n: number) => void },
+  opts: { signal?: AbortSignal; onProgress?: (n: number) => void; stopOnMatch: boolean },
 ): Promise<boolean> {
   let index = 0;
   let tried = 0;
@@ -199,7 +215,7 @@ async function probeMany(
         found.push(hit);
         // Sabitlenmiş kimlikle eşleşen aday = kesin cevap; aramaya devam etmek
         // tablet pilini ve fabrika ağını boşuna meşgul eder.
-        if (hit.matchesPinned === 'match') earlyMatch = true;
+        if (hit.matchesPinned === 'match' && opts.stopOnMatch) earlyMatch = true;
       }
     }
   };
@@ -214,8 +230,9 @@ async function probeMany(
  * Sunucuyu arar.
  *
  * `fullSweep` KAPALIYKEN yalnız öncelikli adresler denenir (hızlı, açılış yolu
- * için); AÇIKKEN bulunamazsa tüm alt ağ süpürülür (kullanıcı "Sunucuyu Ara"
- * dediğinde).
+ * için); AÇIKKEN bulunamazsa tüm alt ağ süpürülür. `mode: 'explicit'`
+ * (kullanıcının "Ağda Ara"sı) öncelik listesi bulsa da süpürür ve her sunucuyu
+ * listeler.
  *
  * `extraPorts` AÇIKKEN ve varsayılan portta HİÇ kullanılabilir aday çıkmadıysa
  * yedek portlar (`DISCOVERY_PORTS`) sırayla denenir; aday bulan İLK portta
@@ -223,6 +240,8 @@ async function probeMany(
  */
 export async function discoverServers(opts: DiscoveryOptions = {}): Promise<DiscoveryResult> {
   const pinnedId = opts.pinnedInstallationId ?? null;
+  const mode: DiscoveryMode = opts.mode ?? 'quick';
+  const stopOnMatch = stopsOnPinnedMatch(mode);
   const found: DiscoveredServer[] = [];
   const seen = new Set<string>();
   const push = (host: string, port: number): { host: string; port: number } | null => {
@@ -237,9 +256,9 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
   const address = details.ipAddress ?? null;
   const subnet = details.subnet ?? null;
 
-  // --- 1) Öncelikli adresler: kayıtlı/son kullanılan + tipik sunucu oktetleri --
+  // --- 1) Öncelikli adresler: kayıtlı/son kullanılan + gömülü varsayılan + tipik oktetler
   const priority: { host: string; port: number }[] = [];
-  for (const url of opts.preferredUrls ?? []) {
+  for (const url of discoveryPriorityUrls(opts.preferredUrls ?? [], API_URL)) {
     const p = splitUrl(url);
     if (!p) continue;
     const t = push(p.host, p.port);
@@ -267,6 +286,7 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
   const early = await probeMany(priority, pinnedId, found, {
     signal: opts.signal,
     onProgress: bump,
+    stopOnMatch,
   });
   done += priority.length;
   tried = done;
@@ -288,7 +308,7 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
     if (targets.length === 0) return [];
     const before = found.length;
     total += targets.length;
-    await probeMany(targets, pinnedId, found, { signal: opts.signal, onProgress: bump });
+    await probeMany(targets, pinnedId, found, { signal: opts.signal, onProgress: bump, stopOnMatch });
     done += targets.length;
     tried = done;
     return found.slice(before);
@@ -296,16 +316,14 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
 
   // --- 2) Tam süpürme, VARSAYILAN portta (yalnız gerekiyorsa) ---------------
   let scanRan = false;
-  let skippedReason: string | null = null;
-  if (early) {
-    skippedReason = 'sabitlenmiş sunucu öncelikli listede bulundu';
-  } else if (hasUsable()) {
-    skippedReason = 'öncelikli listede kullanılabilir sunucu bulundu';
-  } else if (!opts.fullSweep) {
-    skippedReason = 'hızlı arama (süpürme kapalı)';
-  } else if (!address) {
-    skippedReason = 'cihazın ağ adresi okunamadı';
-  } else {
+  // "Zaten bulundu" kararı ORTAK helper'da (KEŞİF-İKİZ) — açık kipte süpürme daima koşar.
+  let skippedReason: string | null = sweepSkipReason(mode, {
+    pinnedMatched: early,
+    usableFound: hasUsable(),
+  });
+  if (!skippedReason && !opts.fullSweep) skippedReason = 'hızlı arama (süpürme kapalı)';
+  if (!skippedReason && !address) skippedReason = 'cihazın ağ adresi okunamadı';
+  if (!skippedReason) {
     scanRan = true;
     await runStage(
       sweepHosts

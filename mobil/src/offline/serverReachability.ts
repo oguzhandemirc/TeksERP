@@ -134,6 +134,8 @@ async function trySelfHeal(): Promise<void> {
       pinnedInstallationId: pinned,
       preferredUrls: [current],
       fullSweep: true,
+      // Arka plan turu: sabitlenmiş sunucu bulununca durur (pil + fabrika ağı).
+      mode: 'quick',
     });
     // Karar SAF katmanda (`lib/discovery.pickSelfHealTarget`) — üç kuralı da
     // orada bekçi kilitliyor. Burada yalnız uygulama var.

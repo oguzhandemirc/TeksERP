@@ -15,6 +15,9 @@
 import NetInfo from '@react-native-community/netinfo';
 import { discoverServers } from './discovery.service';
 
+// Gömülü varsayılan ERP adresi: testfabrika tabletinin kanal adresi (Tailscale).
+jest.mock('../constants/api', () => ({ API_URL: 'http://100.70.47.46:4000/api' }));
+
 const IDENTITY = {
   product: 'TeksERP',
   discoveryVersion: 1,
@@ -255,5 +258,91 @@ describe('discoverServers — yedek portlar', () => {
     expect(res.candidates).toHaveLength(1);
     expect(res.candidates[0]?.identity).toBeNull();
     expect(res.candidates[0]?.port).toBe(4000);
+  });
+});
+
+// =============================================================================
+// Bekçi: AÇIK ARAMA ("Ağda Ara") ağdaki HER sunucuyu gösterir + varsayılan adres
+// =============================================================================
+// Saha vakası: testfabrika tableti (Wi-Fi 192.168.1.100) SAHINSRV'ye elle bağlı;
+// aynı Wi-Fi'deki test sunucusu (192.168.1.109, Tailscale 100.70.47.46 — tabletin
+// kendi gömülü varsayılanı) "Ağda Ara"da görünmüyordu: öncelik listesi SAHINSRV'yi
+// bulunca süpürme koşmuyor, gömülü varsayılan da hiç denenmiyordu.
+// =============================================================================
+const SAHINSRV = { ...IDENTITY, installationId: 'iid-fabrika', serverName: 'SAHINSRV' };
+const THINKPAD = {
+  ...IDENTITY,
+  installationId: 'iid-test',
+  serverName: 'thinkpad-1',
+  companyName: 'Test Fabrika',
+  version: '2.11.0',
+};
+
+describe('discoverServers — açık arama hepsini listeler', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockOwnIp('192.168.1.100');
+  });
+
+  it('⭐ öncelikte bulunsa da AÇIK arama süpürür ve ikinci sunucuyu listeler', async () => {
+    const { tried } = mockNetwork({ '100.107.103.79': SAHINSRV, '192.168.1.109': THINKPAD });
+    const res = await discoverServers({
+      pinnedInstallationId: 'iid-fabrika',
+      preferredUrls: ['http://100.107.103.79:4000/api'],
+      fullSweep: true,
+      mode: 'explicit',
+    });
+    expect(res.scan.ran).toBe(true);
+    expect(res.scan.skippedReason).toBeNull();
+    // Sabitlenmiş eşleşme turu bitirmedi: /24'ün tamamı denendi (bütçe = 253 − kendisi).
+    expect(tried.length).toBeGreaterThan(240);
+    expect(tried.length).toBeLessThanOrEqual(256);
+    const names = res.candidates.map((c) => c.identity?.serverName).sort();
+    expect(names).toEqual(['SAHINSRV', 'thinkpad-1']);
+    // Sabitlenmiş uyuşmazlık işaretlemesi aynen: ikinci sunucu "farklı kurulum".
+    expect(res.candidates.find((c) => c.host === '192.168.1.109')?.matchesPinned).toBe('mismatch');
+    expect(res.candidates[0]?.matchesPinned).toBe('match');
+  });
+
+  it('⭐ hızlı keşif erken çıkışı DEĞİŞMEDİ (aynı ağ, kip verilmedi)', async () => {
+    const { tried } = mockNetwork({ '100.107.103.79': SAHINSRV, '192.168.1.109': THINKPAD });
+    const res = await discoverServers({
+      pinnedInstallationId: 'iid-fabrika',
+      preferredUrls: ['http://100.107.103.79:4000/api'],
+      fullSweep: true,
+    });
+    expect(res.scan.ran).toBe(false);
+    expect(res.scan.skippedReason).toBeTruthy();
+    expect(tried.length).toBeLessThan(20);
+    expect(res.candidates.map((c) => c.identity?.serverName)).toEqual(['SAHINSRV']);
+  });
+
+  it('⭐ gömülü VARSAYILAN adres öncelik listesinde — süpürmesiz de bulunur', async () => {
+    // Test sunucusu yalnız Tailscale'den erişilebilir (LAN süpürmesi onu göremez).
+    const { tried } = mockNetwork({ '100.107.103.79': SAHINSRV, '100.70.47.46': THINKPAD });
+    const res = await discoverServers({
+      preferredUrls: ['http://100.107.103.79:4000/api'],
+      fullSweep: false,
+    });
+    expect(tried).toContain('100.70.47.46');
+    expect(res.candidates.map((c) => c.identity?.serverName).sort()).toEqual([
+      'SAHINSRV',
+      'thinkpad-1',
+    ]);
+  });
+
+  it('aynı sunucu Wi-Fi + Tailscale adresinden bulununca TEK satır kalır', async () => {
+    mockNetwork({ '100.107.103.79': SAHINSRV, '100.70.47.46': THINKPAD, '192.168.1.109': THINKPAD });
+    const res = await discoverServers({
+      pinnedInstallationId: 'iid-fabrika',
+      preferredUrls: ['http://100.107.103.79:4000/api'],
+      fullSweep: true,
+      mode: 'explicit',
+    });
+    expect(res.candidates).toHaveLength(2);
+    const test = res.groups.find((g) => g.installationId === 'iid-test');
+    expect(test?.addresses.map((a) => a.host).sort()).toEqual(['100.70.47.46', '192.168.1.109']);
+    // LAN adresi Tailscale'den önce tercih edilir.
+    expect(test?.primary.host).toBe('192.168.1.109');
   });
 });

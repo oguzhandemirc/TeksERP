@@ -37,6 +37,8 @@ function sourceLabel(via: DiscoveredServer["via"]): string {
       return "kayıtlı adres";
     case "recent":
       return "son kullanılan";
+    case "default":
+      return "varsayılan sunucu";
     case "localhost":
       return "bu bilgisayar";
   }

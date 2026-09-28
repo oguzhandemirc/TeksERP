@@ -39,6 +39,9 @@ import {
   fallbackDiscoveryPorts,
   identityRequiredForPort,
   runStagedPortScan,
+  discoveryPriorityUrls,
+  stopsOnPinnedMatch,
+  sweepSkipReason,
   type DiscoveredServer,
 } from "@shared/discovery";
 import { readFileSync } from "node:fs";
@@ -477,6 +480,47 @@ function twinBlock(file: string): string | null {
     .join("\n")
     .trim();
 }
+
+// Açık arama ↔ hızlı keşif + varsayılan adres. `electron/**` vitest'e girmez; masaüstü
+// orkestrasyonu (`discovery.ipc.ts`) bu kararları yalnız bu helper'lardan okur.
+describe("DiscoveryMode — açık arama hepsini gösterir, hızlı keşif erken çıkar", () => {
+  it("⭐ açık kip: bilinen adres bulsa da süpürme ATLANMAZ, eşleşme turu bitirmez", () => {
+    expect(sweepSkipReason("explicit", { pinnedMatched: true, usableFound: true })).toBeNull();
+    expect(stopsOnPinnedMatch("explicit")).toBe(false);
+  });
+
+  it("⭐ hızlı kip: erken çıkış DEĞİŞMEDİ", () => {
+    expect(sweepSkipReason("quick", { pinnedMatched: true, usableFound: true })).toBeTruthy();
+    expect(sweepSkipReason("quick", { pinnedMatched: false, usableFound: true })).toBeTruthy();
+    expect(stopsOnPinnedMatch("quick")).toBe(true);
+  });
+
+  it("körlük zemini: hızlı kipte hiçbir şey bulunmadıysa süpürme koşar", () => {
+    expect(sweepSkipReason("quick", { pinnedMatched: false, usableFound: false })).toBeNull();
+  });
+});
+
+describe("discoveryPriorityUrls — kanalın varsayılan sunucusu DAİMA aday", () => {
+  it("⭐ varsayılan, kayıtlı + son kullanılanların ARDINA eklenir", () => {
+    const out = discoveryPriorityUrls(
+      ["http://100.107.103.79:4000", "http://192.168.1.250:4000"],
+      "http://100.70.47.46:4000",
+    );
+    expect(out).toEqual([
+      "http://100.107.103.79:4000",
+      "http://192.168.1.250:4000",
+      "http://100.70.47.46:4000",
+    ]);
+  });
+
+  it("kayıtlı adres varsayılanla aynıysa tek kez girer", () => {
+    expect(discoveryPriorityUrls(["http://h:4000"], "http://h:4000")).toEqual(["http://h:4000"]);
+  });
+
+  it("geri döngü varsayılanı eklenmez (localhost ayağı zaten ayrı)", () => {
+    expect(discoveryPriorityUrls([], "http://localhost:4000")).toEqual([]);
+  });
+});
 
 describe("KEŞİF-İKİZ bloğu — mobil ile Electron BİREBİR", () => {
   it("körlük zemini: iki dosyada da blok BULUNDU ve boş değil", () => {

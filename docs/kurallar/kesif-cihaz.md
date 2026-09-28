@@ -33,6 +33,7 @@
 
 ### Reçeteler
 
+- **[ÇEKİRDEK]** Kullanıcının açıkça başlattığı arama ("Ağda Ara") bilinen adres cevap verse de yerel alt ağı süpürür ve bulduğu HER sunucuyu listeler; otomatik keşif (açılış, arka plan onarımı) erken çıkışını korur; uygulamanın gömülü varsayılan sunucu adresi her iki kipte de öncelik listesine DAİMA girer — karar tek yerde, KEŞİF-İKİZ bloğundaki `DiscoveryMode` · `sweepSkipReason` · `stopsOnPinnedMatch` · `discoveryPriorityUrls`. · bekçi: `mobil/src/services/discovery.service.test.ts (açık arama hepsini listeler) + mobil/src/lib/discovery.test.ts + Electron/src/test/discovery-logic.test.ts (DiscoveryMode · discoveryPriorityUrls) + mobil/src/components/ServerDiscoveryList.render.test.tsx §2b` <sub>(arşiv 2026-09-28)</sub>
 - **[ÇEKİRDEK]** Keşif portu KADEMELİ: ① mDNS (portu ilandan) → ② tarama yalnız varsayılan portta → ③ YALNIZ ①+② sıfır aday döndürdüyse yedek portlar sırayla, aday bulan İLK portta DURARAK. Sunucu bulunduysa genişleme HİÇ koşmaz (maliyet-sıfır kuralı). · bekçi: `Electron/src/test/discovery-logic.test.ts (44) :389 varsayılan portta bulunca geniş tarama KOŞMAZ · :412 hiç bulunamayınca yedekler SIRAYLA · :421 yedek portta bulunan aday doğru portla döner ve orada DURUR + mobil/src/services/discovery.service.test.ts (15)` <sub>(CLAUDE.md:110)</sub>
 
 ### Kararlar

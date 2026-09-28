@@ -125,3 +125,20 @@ describe('ServerDiscoveryList', () => {
     });
   });
 });
+
+describe('ServerDiscoveryList — keşif kipi', () => {
+  it('§2b "Ağda Ara" AÇIK kiptir — öncelik listesi bulsa da ağdaki her sunucu aranır', async () => {
+    discoverMock.mockResolvedValue({ candidates: [] } as never);
+    ciz();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('sunucu-ara'));
+    });
+    expect(discoverMock).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'explicit', fullSweep: true, extraPorts: true }),
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(2500);
+      await Promise.resolve();
+    });
+  });
+});

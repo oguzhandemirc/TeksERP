@@ -41,7 +41,7 @@ export interface ServerIdentity {
 export type IdentityMatch = "match" | "mismatch" | "unknown";
 
 /** Adayın hangi yoldan bulunduğu — sıralamada ve arayüzdeki rozette kullanılır. */
-export type DiscoverySource = "stored" | "mdns" | "recent" | "scan" | "localhost";
+export type DiscoverySource = "stored" | "mdns" | "recent" | "default" | "scan" | "localhost";
 
 export interface DiscoveredServer {
   baseUrl: string;
@@ -441,6 +441,63 @@ export function dedupeCandidates<T extends AddressCandidate>(
   return groupByInstallation(list, tieBreak).map((g) => g.primary);
 }
 
+/**
+ * Keşif turunun KİPİ — turu kimin başlattığı, ne zaman durulacağını belirler.
+ *
+ *  • `quick` (otomatik: açılış, arka plan onarımı): bilinen adreste kullanılabilir
+ *    sunucu cevap verince alt ağ süpürülmez, sabitlenmiş kimlik eşleşince tur
+ *    biter. Pil, fabrika ağı ve açılış süresi için BİLİNÇLİ erken çıkış.
+ *  • `explicit` (kullanıcı "Ağda Ara"/"Ağda Bul" dedi): soru "bağlanacak sunucu var mı"
+ *    değil "ağda HANGİ sunucular var"dır — bilinen adres cevap verse de yerel alt
+ *    ağ süpürülür ve bulunan HER sunucu listelenir; erken çıkış burada ikinci
+ *    sunucuyu gizler. Bütçe (`SCAN_MAX_HOSTS`, kademeli port) aynen geçerlidir.
+ */
+export type DiscoveryMode = 'quick' | 'explicit';
+
+/** Sabitlenmiş kimlikle eşleşen aday turu bitirsin mi? Yalnız hızlı kipte. */
+export function stopsOnPinnedMatch(mode: DiscoveryMode): boolean {
+  return mode === 'quick';
+}
+
+/**
+ * Bilinen adreslerin sonucu alt ağ süpürmesini ATLATIR mı — atlatıyorsa sebebi,
+ * süpürme koşacaksa null. Projeye özgü sebepler (süpürme kapalı, ağ adresi yok,
+ * soğuma süresi) çağıranındır ve bu kararın ARDINDAN sorulur.
+ */
+export function sweepSkipReason(
+  mode: DiscoveryMode,
+  known: { pinnedMatched: boolean; usableFound: boolean },
+): string | null {
+  if (mode === 'explicit') return null;
+  if (known.pinnedMatched) return 'sabitlenmiş sunucu bilinen adreste bulundu';
+  return known.usableFound ? 'bilinen adreste kullanılabilir sunucu bulundu' : null;
+}
+
+type MaybeUrl = string | null | undefined;
+
+/**
+ * Öncelik listesinin adresleri: bilinen adresler (şu anki + son kullanılanlar)
+ * ve ardından uygulamanın GÖMÜLÜ VARSAYILAN sunucusu.
+ *
+ * ⚠️ VARSAYILAN ADRES DAİMA ADAYDIR: ayarlardaki "Otomatik (varsayılan)" satırı
+ * bir sunucu vaat eder; keşif onu denemezse kullanıcı başka sunucuya geçtiği an
+ * uygulamanın kendi sunucusu listeden düşer. Geri döngü varsayılanı (`localhost`)
+ * "gömülü adres yok" demektir ve eklenmez. Tekrarlar `host:port` düzeyinde atılır.
+ */
+export function discoveryPriorityUrls(known: readonly MaybeUrl[], defaultUrl: MaybeUrl): string[] {
+  const seen = new Set<string>();
+  const keep = (raw: MaybeUrl, isDefault: boolean): string[] => {
+    const url = (raw ?? '').trim();
+    const [, host, port] = /^https?:\/\/([^:/\s]+)(?::(\d+))?/i.exec(url) ?? [];
+    if (!host || (isDefault && addressPreferenceRank(host) === ADDRESS_RANK.LOOPBACK)) return [];
+    const key = `${host.toLowerCase()}:${port ? Number(port) : DISCOVERY_DEFAULT_PORT}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [url];
+  };
+  return [...known.flatMap((u) => keep(u, false)), ...keep(defaultUrl, true)];
+}
+
 // <<< KEŞİF-İKİZ SON
 
 // ---------------------------------------------------------------------------
@@ -451,8 +508,10 @@ const SOURCE_RANK: Record<DiscoverySource, number> = {
   stored: 0,
   mdns: 1,
   recent: 2,
-  scan: 3,
-  localhost: 4,
+  // Kanalın gömülü sunucusu: kör taramadan güvenilir, kullanıcının seçtiği adresten değil.
+  default: 3,
+  scan: 4,
+  localhost: 5,
 };
 
 /**

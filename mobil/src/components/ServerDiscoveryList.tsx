@@ -70,8 +70,10 @@ export function ServerDiscoveryList({
         preferredUrls: [currentUrl, ...(recentUrls ?? [])].filter(
           (u): u is string => typeof u === 'string' && u.length > 0,
         ),
-        // Kullanıcı AÇIKÇA "ara" dedi → tam süpürme meşru.
+        // Kullanıcı AÇIKÇA "ara" dedi → tam süpürme meşru ve ağdaki HER sunucu
+        // listelenir (öncelik listesi bulsa da; bkz. `DiscoveryMode`).
         fullSweep: true,
+        mode: 'explicit',
         // ...ve hiç bulunamazsa yedek portlar (5000/3000/8080). Bu, port avının
         // TEK açık olduğu yol: arka plan turları bunu AÇMAZ (bkz. DiscoveryOptions).
         extraPorts: true,

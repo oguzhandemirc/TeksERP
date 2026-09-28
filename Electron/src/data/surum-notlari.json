@@ -17,6 +17,26 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-28",
+      "baslik": "Sunucu aramada ağdaki bütün sunucular listelenir; uygulamanın varsayılan sunucusu da aranır",
+      "surumler": {
+        "panel": "1.3.5",
+        "tablet": "1.0.10"
+      },
+      "maddeler": [
+        {
+          "kapsam": "tablet",
+          "tip": "duzeltme",
+          "metin": "“Ağda Ara” artık ağdaki bütün sunucuları listeler: şu an bağlı olduğunuz sunucu bulunsa da arama devam eder ve aynı ağdaki diğer sunucular da görünür. Uygulamanın varsayılan sunucusu da her aramada denenir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Sunucu adresi penceresindeki “Ağda Bul” artık ağdaki bütün sunucuları listeler: kayıtlı sunucu cevap verse de arama devam eder. Programın varsayılan sunucusu da her aramada denenir ve listede “varsayılan sunucu” diye görünür."
+        }
+      ]
+    },
+    {
       "id": "2026-09-27",
       "baslik": "Ürün kartı üç durumlu (Aktif · Tükenene kadar · Pasif); canlı kaydı olan ana veri pasife alınamaz; iş emrinin hareket geçmişi ve tablette Düzelt menüsü; kartela hareketleri; çek teslim bordrosu tek akış; belgelerde PDF ile Excel aynı; ağ yavaşken ikinci basış ikinci kayıt açmaz",
       "surumler": {
