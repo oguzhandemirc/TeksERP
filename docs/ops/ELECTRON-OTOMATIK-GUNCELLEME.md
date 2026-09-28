@@ -39,13 +39,20 @@ release/<sürüm>/           latest.yml              latest.yml'e bakar
   kurulmaz (pencere/mount sayısı kadar çoğalır); topbar düğmesi yalnız
   `updater:check` çağırır. Bekçi: `src/test/update-check-interval.test.ts`.
 - **Topbar'da "güncelleme denetle" düğmesi** (zilin solunda): durumu gösterir
-  (kontrol ediliyor / güncel / iniyor / yeniden başlatılacak). ⚠️ Hata KIRMIZI
+  (kontrol ediliyor / güncel / iniyor / güncelleme hazır — birazdan kurulur). ⚠️ Hata KIRMIZI
   BASMAZ — durum eşlemesinin tek kaynağı `src/lib/updater-durum.ts`, `error` ve
   `idle` için `null` döner; internete çıkamayan makinede sürekli yanan kırmızı,
   gerçek güncelleme geldiğinde de görmezden gelinir. Hata metni Sistem →
   Güncelleme ekranındadır.
 - **Kurulum ZORUNLU:** indirme bitince kapatılamaz bir kapı açılır, 2 dakikalık
   geri sayımdan sonra kurulum kendiliğinden başlar (bkz. "Operatör ne görüyor").
+- **Kurulum tetiği HER EKRANDA:** kapı (`UpdateGate`) `App.tsx` `Root`ta TEK kez
+  çizilir — giriş ekranında, tam panelde ve patron kabuğunda. Giriş ekranında
+  kaydedilmemiş iş olmadığı için geri sayım 15 sn'dir (oturum açıkken 2 dk kalır).
+  Eskiden kapı yalnız giriş sonrası kabuktaydı: giriş ekranında inen paket
+  `pending`de bekledi, kapatıp açmak kurmadı (1.3.5 ve 1.3.6 testfabrikada bu
+  yüzden kurulmadı, 2026-09-28). Sürüm politikası kilidi (`minVersion`) yalnız
+  oturum açıkken uygulanır. Bekçi: `src/test/update-gate-her-ekranda.test.tsx`.
 - **Kapanışta sessiz kurulum bilerek KAPALI** (`autoInstallOnAppQuit = false`):
   uygulama "Program Files"a kurulu olduğu için Windows izin sorar; kapanışta
   tetiklenseydi operatör gittikten sonra ekranda cevapsız bir izin penceresi
@@ -442,11 +449,12 @@ sürüme taşıyor; `minVersion` o mekanizmanın YETMEDİĞİ durumlar için aci
 
 Kullanıcı kararı (2026-08-26): güncelleme ertelenemez. Akış iki aşamalı:
 
-1. **İnerken ince şerit** — *"Yeni sürüm indiriliyor… %N · İndirme bitince uygulama
-   yeniden başlatılacak — işinizi kaydedin."* İş akışı kesilmez.
+1. **İnerken ince şerit** (yalnız tam panelde; giriş ekranında sağ alttaki sürüm
+   rozeti "güncelleme iniyor" der) — *"Yeni sürüm indiriliyor… %N · İndirme bitince
+   uygulama yeniden başlatılacak — işinizi kaydedin."* İş akışı kesilmez.
 2. **İndikten sonra tam ekran kapı** — kapatılamaz, tek çıkış *Şimdi kur ve yeniden
-   başlat*. **2 dakikalık geri sayım** vardır; süre dolunca kurulum kendiliğinden
-   başlar.
+   başlat*. **2 dakikalık geri sayım** vardır (giriş ekranında 15 sn); süre dolunca
+   kurulum kendiliğinden başlar.
 3. Windows izin penceresi → **Evet** → kurulum sessiz → panel kendiliğinden geri açılır.
 4. İzin penceresine **Hayır** denirse (ya da kurulum başka bir sebeple başlamazsa)
    kapı kilitli kalmaz: 20 saniye içinde uygulama kapanmadıysa kilit açılır,
@@ -460,7 +468,8 @@ kapandı" diye okunurdu. Geri sayım zorunluluğu yumuşatmaz — yalnız "işin
 penceresi açar. Aynı sebeple 1. aşamadaki şerit de load-bearing: kapı sürpriz
 olmasın diye önceden uyarır.
 
-Süre `UpdateGate.tsx > GERI_SAYIM_SN` sabitidir.
+Süreler `UpdateGate.tsx > GERI_SAYIM_SN` (oturum) ve `GIRIS_GERI_SAYIM_SN` (giriş
+ekranı) sabitleridir.
 
 ---
 
@@ -475,6 +484,12 @@ güncelleme o makinede kurulmaz** (panel eski sürümle çalışmaya devam eder,
 Fabrikadaki bir makinede bunu bir kez kontrol et. Sorun çıkarsa çözüm tek satırlık:
 `package.json > build.nsis.perMachine: false` → uygulama kullanıcı klasörüne kurulur,
 izin hiç sorulmaz. Bedeli, o geçiş için bir elle tur daha (eski kurulumu kaldır + yenisini kur).
+
+`nsis.packElevateHelper: true` beyanlıdır: app-builder-lib yalnız bu beyanla
+(`perMachine` + `oneClick:false` iken) `latest.yml`e `isAdminRightsRequired: true`
+yazar ve güncelleyici kurulumu doğrudan `elevate.exe` ile başlatır. Beyansız
+yol da çalışır ama önce kurulumu yetkisiz başlatıp EACCES/740 alır, sonra
+`elevate.exe`ye düşer (bir hata satırı + bir deneme boşa).
 
 **② Paket imzalı değil** (kod imzalama sertifikası yok). Güncelleme akışını
 etkilemez — indirilen dosya `latest.yml` içindeki sha512 ile doğrulanır. Yalnız
@@ -580,7 +595,7 @@ Farklıysa önbellek, ikisi de 404 ise dosya gerçekten yok.
 | `Electron/shared/update-schedule.ts` | Kontrol ritmi (15 dk) — TEK KAYNAK |
 | `Electron/src/lib/updater-durum.ts` | Durum → kısa metin/renk eşlemesi — TEK KAYNAK |
 | `Electron/src/components/layout/GuncellemeDugmesi.tsx` | Topbar'daki denetleme düğmesi |
-| `Electron/src/components/layout/UpdateGate.tsx` | İnerken şerit + zorunlu kurulum kapısı |
+| `Electron/src/components/layout/UpdateGate.tsx` | İnerken şerit (`UpdateDownloadStrip`, yalnız AppShell) + zorunlu kurulum kapısı (`UpdateGate`, `App.tsx` `Root`ta tek) |
 | `Electron/src/components/layout/SurumNotlariDialog.tsx` | "Neler değişti" penceresi |
 | `Electron/src/lib/surum-notlari.ts` | Gösterim kararı (saf, test edilir) |
 | `surum-notlari.json` + `scripts/check-surum-notlari.mjs` | Not kaynağı + bekçi |

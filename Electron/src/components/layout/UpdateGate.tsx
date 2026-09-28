@@ -17,6 +17,12 @@ import { IS_ELECTRON } from "@/lib/runtime-env";
 const GERI_SAYIM_SN = 120;
 
 /**
+ * Giriş ekranında geri sayım: orada yarım kalabilecek bir form yok, beklemenin
+ * tek sebebi "Şimdi kur"a basma şansı tanımak.
+ */
+export const GIRIS_GERI_SAYIM_SN = 15;
+
+/**
  * Kurulum başlatılamadıysa (Windows izin penceresine "Hayır" denmesi en olası
  * sebep) bir sonraki denemeye kalan süre. İlk geri sayımdan uzun: aynı soruyu
  * iki dakikada bir sormak, operatörü "Hayır"a şartlandırır.
@@ -41,22 +47,55 @@ function sureMetni(sn: number): string {
 }
 
 /**
- * Güncelleme yüzeyi. Kapı İKİ ayrı sebeple açılabilir:
+ * İndirme şeridi — yalnız oturum kabuğunda (`AppShell`), üst çubuğun altında
+ * akışa girer. Kurulumu TETİKLEMEZ; tetik `UpdateGate`in işidir.
+ *
+ * `error` durumu burada gösterilmez: internete çıkamayan bir makine her
+ * açılışta kırmızı bir şey görürse uyarı körleşir. Hata Genel Ayarlar →
+ * Bu Bilgisayar → Güncelleme'de yazılıdır.
+ */
+export function UpdateDownloadStrip() {
+  const { status } = useUpdater();
+  const iniyor = status?.state === "downloading" || status?.state === "available";
+  if (!status || !iniyor) return null;
+  const yuzde = status.percent ?? 0;
+  return (
+    <div className="flex shrink-0 items-center gap-3 border-b border-info/30 bg-info/10 px-4 py-1.5 text-xs">
+      <Download className="h-3.5 w-3.5 shrink-0 animate-pulse text-info" />
+      <span className="min-w-0 flex-1 truncate">
+        <strong className="font-semibold">Yeni sürüm indiriliyor…</strong>{" "}
+        <span className="text-muted-foreground">
+          İndirme bitince uygulama yeniden başlatılacak — işinizi kaydedin.
+        </span>
+      </span>
+      {status.state === "downloading" && (
+        <span className="shrink-0 font-mono tabular-nums text-info">%{yuzde}</span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Güncelleme kapısı — kurulumu tetikleyen TEK bileşen, `App.tsx` `Root`
+ * düzeyinde bir kez çizilir: giriş ekranında, `AppShell`de ve `BossShell`de.
+ * Yalnız kabukta çizildiği günlerde giriş ekranında inen paket hiç kurulmadı
+ * (`autoInstallOnAppQuit=false`, kapatıp açmak kurmaz).
+ *
+ * Kapı İKİ ayrı sebeple açılabilir:
  *
  *  ① **Güncelleme indi** (`state === "ready"`) — normal akış.
  *  ② **Backend bu sürümü kabul etmiyor** (`minVersion` politikası) — güncelleme
  *     henüz inmemiş olsa bile panel kullanılamaz, çünkü sözleşme uyuşmuyor.
  *     Bu projede deploy sırası "backend ÖNCE" olduğu için o aralık gerçek.
  *
- * İnerken ince şerit gösterilir: kapı sürpriz olmasın. Sürpriz kesinti =
- * kaydedilmemiş iş kaybı + "bilgisayar kendi kendine kapandı" algısı.
+ * Politika kilidi yalnız oturum açıkken uygulanır (giriş ekranı sunucu adresini
+ * kendi yüzeyinden değiştirebilir); indirilmiş paket her ekranda kurulur.
+ * Giriş ekranında kaydedilmemiş iş olmadığından geri sayım kısadır.
  *
- * `error` durumu kapı KAPALIYKEN gösterilmez: internete çıkamayan bir makine
- * her açılışta kırmızı bir şey görürse uyarı körleşir. Hata Genel Ayarlar →
- * Bu Bilgisayar → Güncelleme'de yazılıdır. Kapı AÇIKKEN gösterilir — orada
- * operatör beklemek zorunda ve neden beklediğini bilmeli.
+ * Hata kapı AÇIKKEN gösterilir — orada operatör beklemek zorunda ve neden
+ * beklediğini bilmeli.
  */
-export function UpdateGate() {
+export function UpdateGate({ girisEkrani }: { girisEkrani: boolean }) {
   const { status, check, install } = useUpdater();
   const policy = useClientPolicy();
   /**
@@ -81,21 +120,22 @@ export function UpdateGate() {
   const kuruldu = useRef(false);
   const [kuruluyor, setKuruluyor] = useState(false);
   const [kurulumHatasi, setKurulumHatasi] = useState(false);
-  const [kalan, setKalan] = useState(GERI_SAYIM_SN);
+  const geriSayim = girisEkrani ? GIRIS_GERI_SAYIM_SN : GERI_SAYIM_SN;
+  const [kalan, setKalan] = useState(geriSayim);
 
   const hazir = status?.state === "ready";
-  const iniyor = status?.state === "downloading" || status?.state === "available";
-  const politikaKilidi = isBelowMinimum(status?.currentVersion, policy?.minVersion);
+  const politikaKilidi =
+    !girisEkrani && isBelowMinimum(status?.currentVersion, policy?.minVersion);
   const kapiAcik = Boolean(status?.enabled) && (hazir || politikaKilidi);
 
   // Geri sayım YALNIZ kurulacak paket hazırken işler. Politika kilidi varken
   // paket henüz inmediyse sayacak bir şey yok — orada beklenen şey indirmedir.
   useEffect(() => {
     if (!hazir || kuruluyor) return;
-    setKalan(kurulumHatasi ? YENIDEN_DENEME_SN : GERI_SAYIM_SN);
+    setKalan(kurulumHatasi ? YENIDEN_DENEME_SN : geriSayim);
     const t = setInterval(() => setKalan((k) => (k > 0 ? k - 1 : 0)), 1000);
     return () => clearInterval(t);
-  }, [hazir, kuruluyor, kurulumHatasi]);
+  }, [hazir, kuruluyor, kurulumHatasi, geriSayim]);
 
   const kur = () => {
     if (kuruldu.current) return;
@@ -122,24 +162,7 @@ export function UpdateGate() {
     return () => clearTimeout(t);
   }, [kuruluyor]);
 
-  if (!kapiAcik) {
-    if (!iniyor) return null;
-    const yuzde = status?.percent ?? 0;
-    return (
-      <div className="flex shrink-0 items-center gap-3 border-b border-info/30 bg-info/10 px-4 py-1.5 text-xs">
-        <Download className="h-3.5 w-3.5 shrink-0 animate-pulse text-info" />
-        <span className="min-w-0 flex-1 truncate">
-          <strong className="font-semibold">Yeni sürüm indiriliyor…</strong>{" "}
-          <span className="text-muted-foreground">
-            İndirme bitince uygulama yeniden başlatılacak — işinizi kaydedin.
-          </span>
-        </span>
-        {status?.state === "downloading" && (
-          <span className="shrink-0 font-mono tabular-nums text-info">%{yuzde}</span>
-        )}
-      </div>
-    );
-  }
+  if (!kapiAcik) return null;
 
   // --- Kapı açık -----------------------------------------------------------
   const paketBekleniyor = politikaKilidi && !hazir;
@@ -149,7 +172,7 @@ export function UpdateGate() {
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="guncelleme-basligi"
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm"
+      className="app-no-drag fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm"
     >
       <div className="mx-4 w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
         <div className="mb-4 flex items-center gap-3">
@@ -239,6 +262,13 @@ export function UpdateGate() {
                 olabilir.{" "}
                 <span className="font-mono tabular-nums">{sureMetni(kalan)}</span> sonra
                 yeniden denenecek.
+              </p>
+            ) : girisEkrani ? (
+              <p className="mb-4 text-sm text-muted-foreground">
+                <strong className="font-mono tabular-nums text-foreground">
+                  {sureMetni(kalan)}
+                </strong>{" "}
+                sonra kurulum kendiliğinden başlayacak.
               </p>
             ) : (
               <p className="mb-4 text-sm text-muted-foreground">

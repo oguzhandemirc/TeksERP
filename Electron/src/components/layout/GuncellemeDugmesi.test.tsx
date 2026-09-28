@@ -28,7 +28,7 @@ const baloncukSayisi = () =>
  * TOPBAR "GÜNCELLEME DENETLE" DÜĞMESİ — bekçi (2026-09-04).
  *
  * ⭐ İDDİA ①: düğme durumu GÖSTERİR (kontrol ediliyor / güncel / iniyor /
- *   yeniden başlatılacak) ve metin tek kaynaktan (`@/lib/updater-durum`) gelir.
+ *   hazır — birazdan kurulur) ve metin tek kaynaktan (`@/lib/updater-durum`) gelir.
  * ⭐ İDDİA ②: hata KIRMIZI BASMAZ — `error` durumunda düğme nötr görünür ve
  *   hiçbir "destructive" sınıf taşımaz. Sürekli kırmızı bir gösterge körleşir.
  * ⭐ İDDİA ③: tık `updater:check`i ÇAĞIRIR (ikinci bir zamanlayıcı değil).
@@ -153,7 +153,7 @@ describe("durum eşlemesi (tek kaynak)", () => {
     expect(guncellemeRozeti("up-to-date")).toEqual({ metin: "güncel", sinif: "text-success" });
     expect(guncellemeRozeti("available")?.metin).toBe("güncelleme iniyor");
     expect(guncellemeRozeti("downloading")?.metin).toBe("güncelleme iniyor");
-    expect(guncellemeRozeti("ready")?.metin).toBe("yeniden başlatılacak");
+    expect(guncellemeRozeti("ready")?.metin).toBe("güncelleme hazır — birazdan kurulur");
     for (const s of ["checking", "available", "downloading", "ready"] as const) {
       expect(guncellemeRozeti(s)!.sinif).not.toMatch(/destructive|red/);
     }

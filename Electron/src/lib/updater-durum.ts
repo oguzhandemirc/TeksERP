@@ -32,7 +32,8 @@ export function guncellemeRozeti(state: UpdateState | undefined): GuncellemeRoze
     case "downloading":
       return { metin: "güncelleme iniyor", sinif: "text-info" };
     case "ready":
-      return { metin: "yeniden başlatılacak", sinif: "text-info" };
+      // Kurulum tetiği (`UpdateGate`) her ekranda çizildiği için bu vaat doğrudur.
+      return { metin: "güncelleme hazır — birazdan kurulur", sinif: "text-info" };
     case "up-to-date":
       return { metin: "güncel", sinif: "text-success" };
     default:

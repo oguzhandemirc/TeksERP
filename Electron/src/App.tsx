@@ -8,6 +8,7 @@ import { MotionProvider } from "@/components/motion";
 import { PreferencesProvider } from "@/providers/PreferencesProvider";
 import { AppShell } from "@/components/layout/AppShell";
 import { BossShell } from "@/components/layout/BossShell";
+import { UpdateGate } from "@/components/layout/UpdateGate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SettingsPasswordDialog } from "@/components/settings/SettingsPasswordDialog";
 import { LiveReferencesDialog } from "@/components/LiveReferencesDialog";
@@ -121,17 +122,28 @@ function Root() {
   // fabrikada oturum açıkken) `AppShell` çizilir ve `#/2fa-kurulum` hiçbir
   // içerik rotasına uymadığı için BOŞ SAYFA görünürdü — hata yok, log yok.
   const onEnrollPath = hashPath === TOTP_ENROLL_PATH;
-  if (onEnrollPath || !user || !canEnterApp(user.permissions)) {
-    return <RouterProvider router={authRouter} />;
+  const oturumDisi = onEnrollPath || !user || !canEnterApp(user.permissions);
+  let kabuk;
+  if (oturumDisi) {
+    kabuk = <RouterProvider router={authRouter} />;
+  } else if (hashPath === BOSS_PATH || hashPath.startsWith(`${BOSS_PATH}/`)) {
+    // PATRON KABUĞU — `#/boss` ile açılır. `AppShell`in sekme şeridi + sidebar'ı
+    // telefonda kullanılamıyor; patron ekranı tek iş yaptığı için ince kabuk
+    // yeterli. Kabuk `content-routes`u AYNI router altyapısıyla çalıştırır, yani
+    // detaya iniş bugünkü ekranlarla sorunsuz çalışır (bkz. BossShell başlığı).
+    kabuk = <BossShell />;
+  } else {
+    kabuk = <AppShell />;
   }
-  // PATRON KABUĞU — `#/boss` ile açılır. `AppShell`in sekme şeridi + sidebar'ı
-  // telefonda kullanılamıyor; patron ekranı tek iş yaptığı için ince kabuk
-  // yeterli. Kabuk `content-routes`u AYNI router altyapısıyla çalıştırır, yani
-  // detaya iniş bugünkü ekranlarla sorunsuz çalışır (bkz. BossShell başlığı).
-  if (hashPath === BOSS_PATH || hashPath.startsWith(`${BOSS_PATH}/`)) {
-    return <BossShell />;
-  }
-  return <AppShell />;
+  // ⚠️ KURULUM TETİĞİ HER EKRANDA, TEK YERDE: yalnız kabukta çizildiğinde giriş
+  // ekranında inen paket hiç kurulmuyordu. Kardeş konumu sabit — kabuk değişse
+  // de geri sayım durumu korunur.
+  return (
+    <>
+      {kabuk}
+      <UpdateGate girisEkrani={oturumDisi} />
+    </>
+  );
 }
 
 export function App() {
