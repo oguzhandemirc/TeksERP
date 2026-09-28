@@ -553,3 +553,22 @@ setCustomerItemColorAlias: (
 - **C/D hata tablosu:**
   - `ITEM_PHASE_OUT` / `ITEM_INACTIVE` / `ITEM_MERGED` / `ITEM_COLOR_ALIAS_NOT_FOUND` / 400 UUID.
   - Yarış `ITEM_COLOR_ALIAS_CONFLICT`: iki eşzamanlı ilk PUT'tan biri 200, diğeri 200 ya da 409 almalı, 500 ASLA.
+
+## 13. D1 uygulama notları (sapmalar ve ölçülenler, 2026-09-28)
+
+D1 backend bu belgeye göre indi; aşağıdakiler belgeden bilinçli sapmalar ya da "DOĞRULANMADI" diye bırakılmış maddelerin ölçüm sonucudur.
+
+- **Servis imzası (§12.2):** `upsertItemColorAlias(key: { customerId, itemId, colorId }, alias, userId?)` ve `deleteItemColorAlias(key, userId?)`. Beş konumsal parametre `max-params` (4) lint tavanını yükseltirdi. HTTP sözleşmesi (yol, gövde, yanıt, hata tablosu) AYNEN.
+- **Dosya yerleşimi:** gövde `src/services/customer-item-color-alias.service.ts`te; `CustomerAliasService`in dört metodu oraya delege eder (kardeş servis 300 satır tavanına dayanıyordu). Kardeşin yerel `assertCustomer`/`assertColor` kapıları `helpers/customer-alias-gates.helper.ts`e taşındı; iki servis aynı kapıyı çağırır.
+- **Künye:** upsert'in `update` dalı `updatedById`yi de yazar (kardeş yazmıyor; künye kolonu "son değiştiren"i taşır).
+- **Terfi (#11, karar 2):** kural satır düzeyinde uygulanır — (kumaş, renk) çiftinde kumaşa özel ad olan satır terfi ADAYI olmaz; aynı renkte kumaşa özel adı OLMAYAN başka kumaşın satırı bugünkü gibi terfi eder. Varlık okuması ayrı fonksiyonda (`order.service#kumasaOzelRenkCiftleri`), bekçide TERFİ sınıfıyla beyanlı.
+- **Sipariş detayı (#12):** ince handler dışa açık (`order.routes#orderDetailHandler`) — izin dalı sunucusuz ölçülür (`test_shipment_doc_customer_name §11`, sonda: izin `true`ya çevrilince kırmızı).
+- **Künye route allowlist:** `record-info.routes` `TABLE_PERMISSIONS`e `CUSTOMER_ITEM_COLOR_ALIAS: "customer-alias:read"` eklendi (kardeş iki tablo orada yok; bu dilimde dokunulmadı).
+- **fix_duplicate_master_data:** yeni tablo renk sayımına EK OLARAK kumaş sayımına da girdi (FK iki yönde de Cascade).
+- **Birleştirme — kaynaklar arası çakışma (§4, "DOĞRULANMADI"):** sondayla DOĞRULANDI: iki kaynakta aynı (kumaş, renk) varken birleştirme P2002 ile düşüyordu (kardeş `CustomerItemAlias` dahil bütün SKIP/UNION tablolarında). Düzeltme jenerik: SKIP · UNION · UNION_COMPOSITE_PK kaynak BAŞINA çözülür (önceki kaynağın taşınmış satırı survivor'da sayılır), çakışma yüklemi önizleme ve işlemde tek parçadır (`conflictPredicateSql`) ve kaynaklar arası çakışma önizlemede görünür. MERGE_FIELDS · EMPTY_MEANS_ALL · BLOCK bu dilimde DEĞİŞMEDİ (açık risk: `customer_color_aliases`te iki kaynakta aynı renk hâlâ ölçülmedi).
+- **Birleştirme geri alma (§4):** jenerik fotoğraflı geri yazım yeni tabloda çalışıyor — `test_master_data_merge_revert §8` çok kaynaklı birleştir → geri al; dört satır id + anahtar + ad + tarih BİREBİR döner.
+- **Gölgeleme önizlemesi:** `MergePreview.shadowing: { customer, item, color, alias, before }[]` (yeni alan; panel D2'de çizer) + uyarı satırı. Liste, taşınınca survivor'ın o kumaşta bugün basılan ana veri adını DEĞİŞTİRECEK her satırı verir — survivor'da genel ad yoksa da (`before: null` = bizim adımız).
+- **Donma (§6 §11 üçlüsü):** "donmuş belge aynı kalır, reissue yeni adı alır" `test_shipment_doc_customer_name §11`de ölçüldü (freeze_timing'e ek bölüm açılmadı; `test_shipment_doc_freeze_timing` değişmeden yeşil).
+- **`test_sevk_belge_excel_esit` (§6):** muhasebe Excel yolunu ÖLÇMÜYOR — kapsam notu bekçi başlığına yazıldı.
+- **P2002 yakalaması (§12.3):** eşzamanlı ilk PUT yarışında Prisma upsert'i tek ifadede (ON CONFLICT) koşuyor; 5 tur × 3 eşzamanlı ilk PUT'ta P2002 doğmadı. Yakalama savunma olarak duruyor; sondası SESSİZ (bekçi başlığında beyanlı), sözleşmenin sonucu ("500 ASLA") ölçülüyor.
+

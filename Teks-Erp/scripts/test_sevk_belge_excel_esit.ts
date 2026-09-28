@@ -17,6 +17,10 @@
 // rejimini de taşır: damgasız (eski) zarf `toFixed`le, `numberRounding` damgalı zarf
 // ticari yuvarlamayla basılır — bağımsız biçimleyici damgaya göre ikisinden birini seçer.
 //
+// KAPSAM NOTU (2026-09-28, MUSTERI-KUMAS-RENK-ADI §6): bu bekçi yalnız BELGE PDF'i ↔
+// belge Excel'i (tablo modeli) ölçer; panelin MUHASEBE Excel'ini (`accounting-export.ts`)
+// ÖLÇMEZ. O yol snapshot'tan okur ve ad kademesi SEÇMEZ; ölçüsü Electron testindedir.
+//
 // Negatif sonda (commit mesajında, ✓B2): ① renderer'da çuval tablosuna YALNIZ
 // HTML'e bir kolon eklendi → kırmızı · ② modelden (Excel) çeki tablosunun bir
 // kolonu düşürüldü → kırmızı; ikisi de md5 ile geri alındı.

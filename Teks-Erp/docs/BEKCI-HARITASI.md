@@ -883,6 +883,8 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 | `mobil/src/screens/Modules/Tambur/LabelNamePreview.logic.test.ts` | shouldShowOriginalName iki yönlü: müşteri adı bizdekinden FARKLIYSA 'Bizde:' referans satırı çizilir, AYNIYSA çizilmez (aynı ad iki kez yazılırsa oper |  |  |  |
 | `mobil/src/services/btPrinter.service.test.ts` | Isınma + parçalama disiplini: soğuk hatta ilk giden şey asıl yük olmaz (2026-08-19'da PPLB akışının BAŞI yutuluyordu). Her test AYRI MAC kullanır — ma |  | ✓ |  |
 | `mobil/src/services/tambur.service.test.ts` | Kesim çağrılarında etiket NİYETİ (targetCustomerId / targetOrderLineId) POST gövdesine geçer — ulaşmazsa kesimde lastLabelSnapshot seed edilemez ('eti |  |  |  |
+| `Teks-Erp/scripts/test_musteri_adi_tek_cozucu.ts` | Müşteri RENK adını iki alias tablosundan (kumaşa özel → genel) okuyan TEK yerin `customer-name.helper#loadCustomerColorIndex` olduğunu AST ile kilitler: üç kanal (model delegesi okuması · include/select/where + arama yolu ilişki alanı · dizgede tablo adı), beyan anahtarı dosya#fonksiyon + kapalı sınıf kümesi, iki yönlü (beyansız isabet + ölü beyan kırmızı); tasarım MUSTERI-KUMAS-RENK-ADI §5 |  | ✓B3 (bu commit) · +✓K3 bellek-içi (§3) |  |
+| `Teks-Erp/scripts/test_customer_item_color_alias.ts` | Kumaşa özel müşteri renk adı uç sözleşmesi (MUSTERI-KUMAS-RENK-ADI §12.3): yol UUID 400 · Zod · normalize sonrası boş · üç yazma kapısı (müşteri · kumaş DEFINITION → ITEM_PHASE_OUT/INACTIVE/MERGED · renk) · upsert idempotent + audit · atomik silme P2025 → 404 ITEM_COLOR_ALIAS_NOT_FOUND · iki liste ucu · eşzamanlı ilk PUT'ta 500 yok (P2002 yakalaması sondası SESSİZ: upsert tek ifade, yarış P2002 doğurmuyor) | ✓ | ✓B2 (bu commit) |  |
 
 ## finans
 
