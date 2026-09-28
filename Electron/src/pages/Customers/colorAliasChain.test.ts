@@ -41,6 +41,12 @@ describe("silme onayı zinciri anlatır", () => {
     expect(itemAliasDeleteText(row, undefined)).toContain("(varsa)");
   });
 
+  it("irsaliyenin 3. kademesi anlatılır: aynı sevkte bu renkte BAŞKA kumaşın satır adı genel addan önce gelir", () => {
+    const t = itemAliasDeleteText({ itemName: "X", colorName: "Ekru", alias: "P" }, "KREM");
+    expect(t).toContain("irsaliyede aynı sevkte bu renkte bir sipariş satırına ad yazılmışsa (başka kumaşta olsa bile) o da önce gelir");
+    expect(generalAliasDeleteText("Ekru", "KREM", [])).toContain("(başka kumaşta olsa bile)");
+  });
+
   it("genel ad silinince kumaşa özel adların kaldığı söylenir", () => {
     const t = generalAliasDeleteText("Ekru", "KREM", ["X", "Y"]);
     expect(t).toContain('bizdeki ad "Ekru"');

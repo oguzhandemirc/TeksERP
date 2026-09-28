@@ -35,7 +35,9 @@ export function groupColorAliases(
   return [...groups.values()];
 }
 
-const LINE_NAME_FIRST = "Sipariş satırına ayrıca ad yazılmışsa o yine önce gelir.";
+// Zincirin 1. ve 3. kademesi: satır adı ana veriden önce gelir; irsaliyede aynı renkteki BAŞKA kumaşın satır adı da.
+const LINE_NAME_FIRST =
+  "Sipariş satırına ayrıca ad yazılmışsa o yine önce gelir; irsaliyede aynı sevkte bu renkte bir sipariş satırına ad yazılmışsa (başka kumaşta olsa bile) o da önce gelir.";
 
 /**
  * Kumaşa özel adı silince bu kumaşta ne basılır. `generalAlias`: müşterinin genel adı; `undefined` = henüz bilinmiyor.
