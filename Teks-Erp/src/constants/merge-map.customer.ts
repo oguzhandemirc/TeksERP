@@ -81,7 +81,8 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
       policy: "SKIP",
       why:
         "Ad etikete/irsaliyeye basılıyor; survivor'ınki ŞU ANDA doğru basıyor (CustomerItemAlias " +
-        "emsali). ⚠️ GÖLGELEME: çakışmadan TAŞINAN satır survivor'ın GENEL renk adını o kumaşta " +
+        "emsali); kaynaklar arası aynı anahtarda kaynak sırasında İLK gelen kazanır, sonrakiler " +
+        "atılır. ⚠️ GÖLGELEME: çakışmadan TAŞINAN satır survivor'ın GENEL renk adını o kumaşta " +
         "gölgeler ve çıktı sessizce değişir (A2'nin (X, Ekru)='P'si taşınınca A'nın X etiketi " +
         "genel addan 'P'ye döner) — önizleme bu satırları kayıt başına listeler.",
     },

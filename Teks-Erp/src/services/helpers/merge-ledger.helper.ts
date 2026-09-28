@@ -156,18 +156,39 @@ export async function repointBackTx(
 }
 
 /**
+ * Tablonun fotoğraftan YAZILABİLİR kolonları: GENERATED kolon (`aliasFold`) değer
+ * kabul etmez (PG 428C9) — `SELECT *` / `SET` onu taşırsa geri alma bütünüyle düşer.
+ */
+async function writableColumnsTx(tx: Tx, table: string, cache: PkCache): Promise<string[]> {
+  const key = `writable:${table}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const rows = await tx.$queryRawUnsafe<Array<{ attname: string }>>(
+    `SELECT attname FROM pg_attribute
+      WHERE attrelid = $1::regclass AND attnum > 0 AND NOT attisdropped AND attgenerated = ''
+      ORDER BY attnum`,
+    `"${table}"`,
+  );
+  const cols = rows.map((r) => r.attname);
+  cache.set(key, cols);
+  return cols;
+}
+
+/**
  * Silinen satırları fotoğraftan yeniden yazar. Aynı anahtar bu arada yeniden
  * doğmuşsa satır ATLANIR (`ON CONFLICT DO NOTHING`) — yazılan sayı dönen değerdir.
  */
 export async function restoreDeletedRowsTx(
   tx: Tx,
   params: { table: string; rows: Array<Record<string, unknown>> },
+  cache: PkCache,
 ): Promise<number> {
   if (params.rows.length === 0) return 0;
+  const cols = (await writableColumnsTx(tx, params.table, cache)).map((c) => `"${c}"`).join(", ");
   return Number(
     await tx.$executeRawUnsafe(
-      `INSERT INTO "${params.table}"
-       SELECT * FROM jsonb_populate_recordset(NULL::"${params.table}", $1::jsonb)
+      `INSERT INTO "${params.table}" (${cols})
+       SELECT ${cols} FROM jsonb_populate_recordset(NULL::"${params.table}", $1::jsonb)
        ON CONFLICT DO NOTHING`,
       JSON.stringify(params.rows),
     ),
@@ -179,16 +200,20 @@ export async function restoreDeletedRowsTx(
  * Tek ifade: fotoğraf `jsonb_populate_recordset` ile TABLONUN KENDİ satır tipine
  * çevrilir (tip dönüşümünü PG yapar, elle cast yok) ve PK üzerinden eşlenir.
  * Dönen sayı yazılan satırdır; PK'sı artık bulunmayan satır sessizce atlanır.
+ * `skipColumns` (taşınan kolon) yazılmaz: önceki kaynaktan taşınıp zenginleşen satırın
+ * sahibini MOVED kalemi geri yazar — iki kalem sırasız uygulansa da aynı sonucu verir.
  */
 export async function restoreSnapshotRowsTx(
   tx: Tx,
-  params: { table: string; rows: Array<Record<string, unknown>> },
+  params: { table: string; rows: Array<Record<string, unknown>>; skipColumns?: string[] },
   cache: PkCache,
 ): Promise<number> {
   const first = params.rows[0];
   if (!first) return 0;
   const pk = await primaryKeyColumnsTx(tx, params.table, cache);
-  const cols = Object.keys(first).filter((c) => !pk.includes(c));
+  const writable = new Set(await writableColumnsTx(tx, params.table, cache));
+  const skip = new Set(params.skipColumns ?? []);
+  const cols = Object.keys(first).filter((c) => !pk.includes(c) && writable.has(c) && !skip.has(c));
   if (cols.length === 0) return 0;
   const sets = cols.map((c) => `"${c}" = r."${c}"`).join(", ");
   const match = pk.map((c) => `t."${c}" = r."${c}"`).join(" AND ");
