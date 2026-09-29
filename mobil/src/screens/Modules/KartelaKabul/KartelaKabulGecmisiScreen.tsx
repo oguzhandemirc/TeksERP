@@ -25,6 +25,7 @@ import {
 import { blockedSwatchCardNumbers } from './blockedSwatches.helper';
 import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
+import { showScreenError } from '../../../lib/screenToast';
 
 const STATUS_TABS: { key: KartelaReceiptStatusFilter; label: string }[] = [
   { key: 'all', label: 'Tümü' },
@@ -99,7 +100,7 @@ export default function KartelaKabulGecmisiScreen() {
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Geri alınamadı', text2: err.message });
+      showScreenError(err, 'Geri alınamadı');
     },
   });
 

@@ -66,6 +66,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** Giriş öncesi K5 sinyali tek boolean'dır: `login-methods.lisansDurduruldu` yalnız zorla ∧ UYGULANAN DURDURULMUŞ iken true (gözlemde false), kimliksize başka lisans bilgisi verilmez; panel K5'te kabuğu bağlamaz, yalnız "verilerimi al" sayfası (yedek · dışa aktarma · çıkış) açılır ve o yüzeyin çağırdığı her uç DURDURULMUŞ izin listesindedir; tablet giriş ekranı yalnız bu açılışta taze okunan sinyalle K5 ekranı çizer. · bekçi: `test_lisans_k5_giris (§1–§2 sinyal · §3 panel K5 yüzeyi)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Lisans reddi (403 `LICENSE_*`) tabletin kuyruğundaki saha kaydını SİLMEZ: kayıt kalıcı bekler, uzun aralıkla yeniden denenir, kalıcı düşüş duyurulmaz; çip "lisans nedeniyle bekleyen N kayıt" der; ekran hata toast'ları ortak yardımcıdan (`showScreenError`) geçer ve interceptor'ın söylediği lisans reddinde susar. · bekçi: `mobil src/offline/mutations.test.ts (D7)`, `mobil src/lib/screenToast.test.ts` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Çevrimdışı QR çok parçalıdır (`TKLQ1|i/n|kimlik|özet|veri`, 1…4 parça): biçimin tek kaynağı `Teks-Erp/src/lib/license/qr-parca.ts`, panel · tablet · satıcı bayt-eşit ayna taşır, /q sayfasının tarayıcı eşi TS eşiyle birebir ölçülür; tablet parçaları toplar, bütünlüğü doğrular ve backend'e TEK metin gönderir. · bekçi: `test_lisans_qr_parca_aynasi`, `test_qr_sayfasi` <sub>(arşiv:2026-09-29)</sub>
 
 ## Geçersiz kılınan kurallar — bunlara UYMA

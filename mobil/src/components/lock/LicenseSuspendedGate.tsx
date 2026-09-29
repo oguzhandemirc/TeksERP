@@ -18,42 +18,50 @@ import { performLogout } from '../../offline/sessionSwitch';
 import { bannerToShow, isSuspendedStatus } from '../../lib/license';
 import { colors, spacing } from '../../theme/tokens';
 
-export function LicenseSuspendedScreen({
+/** Oturumlu tablette K5 metni: giriş yapılmış, kayıt yapılamaz. */
+const SIGNED_IN_BODY =
+  'Bu sunucunun lisansı durdurulduğu için tabletten kayıt yapılamaz. Verileriniz ' +
+  'korunuyor — yönetici panelden yedek ve dışa aktarma alabilir.';
+
+/**
+ * K5 kartı — oturumlu tam ekranda ve GİRİŞ EKRANINDA (`login-methods.lisansDurduruldu`)
+ * ortak. Çıkış düğmesi yalnız oturum varken anlamlıdır (`onLogout` verilirse çizilir).
+ */
+export function LicenseSuspendedCard({
+  body = SIGNED_IN_BODY,
   message,
   busy,
   onRetry,
   onLogout,
 }: {
+  body?: string;
   message: string | null;
   busy: boolean;
   onRetry: () => void;
-  onLogout: () => void;
+  onLogout?: () => void;
 }) {
   return (
-    <View style={styles.root} testID="lisans-k5-ekrani">
-      <View style={styles.card}>
-        <Icon source="shield-lock-outline" size={64} color={colors.danger} />
-        <Text style={styles.title}>Lisans durduruldu</Text>
-        <Text style={styles.body}>
-          Bu sunucunun lisansı durdurulduğu için tabletten kayıt yapılamaz. Verileriniz
-          korunuyor — yönetici panelden yedek ve dışa aktarma alabilir.
-        </Text>
-        {message ? <Text style={styles.message}>{message}</Text> : null}
-        <Text style={styles.hint}>Yöneticinize başvurun.</Text>
-        <View style={styles.actions}>
-          <Button
-            mode="contained"
-            icon="refresh"
-            loading={busy}
-            onPress={() => {
-              if (!busy) onRetry();
-            }}
-            contentStyle={styles.buttonContent}
-            buttonColor={colors.brand}
-            testID="lisans-k5-tekrar"
-          >
-            Tekrar dene
-          </Button>
+    <View style={styles.card}>
+      <Icon source="shield-lock-outline" size={64} color={colors.danger} />
+      <Text style={styles.title}>Lisans durduruldu</Text>
+      <Text style={styles.body}>{body}</Text>
+      {message ? <Text style={styles.message}>{message}</Text> : null}
+      <Text style={styles.hint}>Yöneticinize başvurun.</Text>
+      <View style={styles.actions}>
+        <Button
+          mode="contained"
+          icon="refresh"
+          loading={busy}
+          onPress={() => {
+            if (!busy) onRetry();
+          }}
+          contentStyle={styles.buttonContent}
+          buttonColor={colors.brand}
+          testID="lisans-k5-tekrar"
+        >
+          Tekrar dene
+        </Button>
+        {onLogout ? (
           <Button
             mode="outlined"
             icon="logout"
@@ -65,8 +73,21 @@ export function LicenseSuspendedScreen({
           >
             Çıkış yap
           </Button>
-        </View>
+        ) : null}
       </View>
+    </View>
+  );
+}
+
+export function LicenseSuspendedScreen(props: {
+  message: string | null;
+  busy: boolean;
+  onRetry: () => void;
+  onLogout: () => void;
+}) {
+  return (
+    <View style={styles.root} testID="lisans-k5-ekrani">
+      <LicenseSuspendedCard {...props} />
     </View>
   );
 }

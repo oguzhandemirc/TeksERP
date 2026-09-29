@@ -28,6 +28,7 @@ import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { FLAGS_KEY } from '../../../hooks/useFeatureFlags';
 import type { MainStackParamList } from '../../../navigation/types';
 import SackContentsModal from './SackContentsModal';
+import { showScreenError } from '../../../lib/screenToast';
 
 // =============================================================================
 // Sevk Kapısı — havuzdan kurulmuş, sevk bekleyen PLANNED sevkiyatlar. Sevk onayı
@@ -107,7 +108,7 @@ export default function SevkiyatScreen() {
     },
     // L fix: 409'da (baska operator ayni sevkiyati degistirdi) board tazelensin.
     onError: (e: Error) => {
-      Toast.show({ type: 'error', text1: 'Sevk edilemedi', text2: e.message });
+      showScreenError(e, 'Sevk edilemedi');
       refresh();
     },
   });
@@ -123,7 +124,7 @@ export default function SevkiyatScreen() {
       refresh();
     },
     onError: (e: Error) => {
-      Toast.show({ type: 'error', text1: 'Çuval çıkarılamadı', text2: e.message });
+      showScreenError(e, 'Çuval çıkarılamadı');
       void qc.invalidateQueries({ queryKey: ['sack-contents'] });
       refresh();
     },

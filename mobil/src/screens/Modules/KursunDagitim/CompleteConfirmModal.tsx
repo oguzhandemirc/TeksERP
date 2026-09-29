@@ -13,6 +13,7 @@ import {
 } from '../../../services/kursunBypass.service';
 import { fmtMeters } from './dagitimUi';
 import { colors, spacing, radius } from '../../../theme';
+import { showScreenError } from '../../../lib/screenToast';
 
 // =============================================================================
 // "İŞİ BİTİR" ONAY MODALI — kurşun rotanın SON adımı olduğunda dağıtım ekranından
@@ -79,7 +80,7 @@ export default function CompleteConfirmModal({ row, onDismiss, onDone }: Props) 
     },
     onError: (e: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'İş bitirilemedi', text2: e.message });
+      showScreenError(e, 'İş bitirilemedi');
       // Yarışta kapsam değişmiş olabilir — önizlemeyi tazele, operatör görsün.
       void previewQ.refetch();
     },

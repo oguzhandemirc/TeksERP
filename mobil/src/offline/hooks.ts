@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { onlineManager, useMutationState } from '@tanstack/react-query';
 import { offlineReason, subscribeOfflineReason, type OfflineReason } from './serverReachability';
+import { isLicenseBlocked } from '../lib/license';
 
 export function useIsOnline(): boolean {
   const [online, setOnline] = useState<boolean>(onlineManager.isOnline());
@@ -35,6 +36,8 @@ export interface PendingStationOp {
   key: readonly unknown[];
   variables: unknown;
   isPaused: boolean;
+  /** Son deneme lisans kapısına takıldı (403 LICENSE_*) — kayıt silinmez, uzun aralıkla bekler. */
+  licenseBlocked: boolean;
 }
 
 export function usePendingStationOps(): PendingStationOp[] {
@@ -50,6 +53,7 @@ export function usePendingStationOps(): PendingStationOp[] {
       key: (mut.options.mutationKey as readonly unknown[] | undefined) ?? [],
       variables: mut.state.variables,
       isPaused: mut.state.isPaused,
+      licenseBlocked: isLicenseBlocked(mut.state.failureReason),
     }),
   });
 }

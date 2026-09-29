@@ -56,6 +56,7 @@ import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { foldSearchText } from '../../../utils/searchFold';
+import { showScreenError } from '../../../lib/screenToast';
 
 // O12 fix: uzun kabul formu (per-top sayım + cm/kg ölçümleri) Android LMK
 // kill'inde sıfırlanıyordu — FasonKabul'daki draft deseni (debounce + savedAt
@@ -437,7 +438,7 @@ export default function KartelaKabulScreen() {
     },
     onError: (err) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Kabul başarısız', text2: err.message });
+      showScreenError(err, 'Kabul başarısız');
     },
   });
 

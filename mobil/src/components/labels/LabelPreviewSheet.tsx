@@ -18,6 +18,7 @@ import Toast from 'react-native-toast-message';
 import { labelService } from '../../services/label.service';
 import { usePermissions } from '../../hooks/usePermission';
 import type { ColorNameScope, LabelPayload, NameSource } from '../../types/models';
+import { showScreenError } from '../../lib/screenToast';
 
 // =============================================================================
 // Refactor 6 + 7 — Etiket önizleme + müşteri-isim override + audit print
@@ -94,7 +95,7 @@ export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLa
       setEditOpen(false);
     },
     onError: (err: Error) => {
-      Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: err.message });
+      showScreenError(err, 'Güncellenemedi');
     },
   });
 

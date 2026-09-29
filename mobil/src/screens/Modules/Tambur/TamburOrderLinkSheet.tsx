@@ -25,6 +25,7 @@ import {
 } from '../../../services/workOrder.service';
 import { canUnlinkOrderLine } from './canUnlinkOrderLine';
 import { colors, spacing, radius } from '../../../theme';
+import { showScreenError } from '../../../lib/screenToast';
 
 const PAGE_SIZE = 20;
 // OrderLinkPicker ile aynı gerekçe: "yazmayı bıraktım" sinyali, hecede bir istek değil.
@@ -175,7 +176,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
       invalidateAfterLink();
     },
     onError: (err: Error) => {
-      Toast.show({ type: 'error', text1: 'Bağlanamadı', text2: err.message });
+      showScreenError(err, 'Bağlanamadı');
     },
   });
 
@@ -199,7 +200,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
       invalidateAfterLink();
     },
     onError: (err: Error) => {
-      Toast.show({ type: 'error', text1: 'Zincir tamamlanamadı', text2: err.message });
+      showScreenError(err, 'Zincir tamamlanamadı');
     },
   });
 
@@ -214,7 +215,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
     },
     onError: (err: Error) => {
       // Yarış (son bağ / iptal edilmiş İE) → backend son sözü söyler.
-      Toast.show({ type: 'error', text1: 'Bağ kaldırılamadı', text2: err.message });
+      showScreenError(err, 'Bağ kaldırılamadı');
     },
   });
 

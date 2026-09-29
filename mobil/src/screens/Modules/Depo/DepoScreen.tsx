@@ -54,6 +54,7 @@ import type { Roll } from '../../../types/models';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import { KartelaStockReduceModal } from './KartelaStockReduceModal';
 import { useScanClassifier } from '../../../hooks/useScanSeries';
+import { showScreenError } from '../../../lib/screenToast';
 
 const PAGE_SIZE = 50;
 
@@ -413,7 +414,7 @@ export default function DepoScreen() {
         setCancelTarget(reopen);
         return;
       }
-      Toast.show({ type: 'error', text1: 'Kaldırılamadı', text2: err.message });
+      showScreenError(err, 'Kaldırılamadı');
     },
     // Optimistic satır düşürme YOK (KK1'den bilinçli fark): burada liste
     // sunucudan sayfalanıyor ve üstteki sayaçlar ayrı bir aggregate ucundan
@@ -995,7 +996,7 @@ function RollDetailModal({
     },
     onError: (err: Error) => {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'İşaret kaldırılamadı', text2: err.message });
+      showScreenError(err, 'İşaret kaldırılamadı');
     },
   });
 

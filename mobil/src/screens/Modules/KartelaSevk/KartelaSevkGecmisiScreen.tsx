@@ -24,6 +24,7 @@ import {
 } from '../../../services/kartela.service';
 import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
+import { showScreenError } from '../../../lib/screenToast';
 
 const STATUS_TABS: { key: KartelaDispatchStatusFilter; label: string }[] = [
   { key: 'all', label: 'Tümü' },
@@ -82,7 +83,7 @@ export default function KartelaSevkGecmisiScreen() {
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'İptal edilemedi', text2: err.message });
+      showScreenError(err, 'İptal edilemedi');
     },
   });
 

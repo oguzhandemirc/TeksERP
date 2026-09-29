@@ -128,6 +128,7 @@ import type {
 } from '../../../types/models';
 import type { MainStackParamList } from '../../../navigation/types';
 import { foldSearchText } from '../../../utils/searchFold';
+import { showScreenError } from '../../../lib/screenToast';
 
 const RECEIPTS_PAGE_SIZE = 12;
 const DRAFT_KEY = 'fason_kabul_draft_v1';
@@ -644,7 +645,7 @@ export default function FasonKabulScreen() {
         });
         return;
       }
-      Toast.show({ type: 'error', text1: 'Kabul başarısız', text2: err.message });
+      showScreenError(err, 'Kabul başarısız');
     },
   });
 
@@ -671,7 +672,7 @@ export default function FasonKabulScreen() {
     },
     onError: (err) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Kapama başarısız', text2: (err as Error).message });
+      showScreenError(err, 'Kapama başarısız');
     },
   });
 
@@ -898,7 +899,7 @@ export default function FasonKabulScreen() {
         g = res.data;
       } catch (err) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        Toast.show({ type: 'error', text1: 'Grup detayı alınamadı', text2: (err as Error).message });
+        showScreenError(err, 'Grup detayı alınamadı');
         return;
       } finally {
         setGroupLoading(false);

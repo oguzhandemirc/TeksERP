@@ -17,6 +17,7 @@
 import { queryClient } from './queryClient';
 import { jitteredBackoff } from './backoff';
 import { resolveAuthToken } from '../services/api';
+import { isLicenseBlocked } from '../lib/license';
 import { useAuthStore } from '../store/authStore';
 import {
   kursunQcService,
@@ -88,6 +89,14 @@ export interface TamburFinalizeOpenFabricVars {
 /** NoAuth bekleme aralığı — token gelene dek sunucusuz "yokla" periyodu. */
 export const NO_AUTH_RETRY_MS = 15_000;
 
+/**
+ * Lisans reddi (403 LICENSE_*) bekleme aralığı. Lisans bir SUNUCU durumudur, saha kaydının
+ * kusuru değil: kayıt kuyrukta KALICI bekler (silinmez, "kayıt gitmedi" denmez) ve bu uzun
+ * aralıkla yeniden denenir; lisans düzelince ilk denemede akar. Uygulama yeniden açılınca
+ * diriltilen kayıt hemen denenir (persistPolicy).
+ */
+export const LICENSE_RETRY_MS = 5 * 60_000;
+
 /** Token yokken fırlatılır — HTTP'ye hiç çıkılmadığı için sunucu yükü sıfır;
  *  retry politikası bunu süresiz bekletir (kayıt kaybolmaz). */
 export class NoAuthError extends Error {
@@ -117,13 +126,14 @@ const withAuthGuard =
 // L fix (Y12 genislemesi): TUM deterministik 4xx fail-fast — 400/403/404/409
 // yeniden denenince ayni cevabi alir, hata toastini ~8sn geciktirirdi.
 // NoAuthError İSTİSNA: HTTP'ye çıkmamış kayıt kalıcı düşürülmez, süresiz bekler.
+// Lisans reddi (403 LICENSE_*) de İSTİSNA: kayıt silinmez, uzun aralıkla bekler (LICENSE_RETRY_MS).
 // 401 + bellekte token YOK da aynı istisnadır: guard'ı token'la geçmiş ama
 // uçuş sırasında logout olmuş istek sunucudan 401 alır — bu "oturum yok"
 // beklemesidir, kalıcı düşürme değil (api.ts toast'ı zaten 'girişten sonra
 // gönderilir' diyor; sözü kod da tutsun). Token bellekte DURUYORKEN gelen 401
 // (kick/iptal) eski Y12 kuralıyla fail-fast kalır.
 export const stationRetry = (failureCount: number, error: unknown): boolean => {
-  if (isNoAuthError(error)) return true;
+  if (isNoAuthError(error) || isLicenseBlocked(error)) return true;
   const status = (error as { status?: number } | null)?.status;
   if (status === 401 && !useAuthStore.getState().token) return true;
   if (status && status >= 400 && status < 500) return false;
@@ -135,6 +145,7 @@ export const stationRetry = (failureCount: number, error: unknown): boolean => {
  *  senkron retry dalgasını kırar). */
 export const stationRetryDelay = (attempt: number, error: unknown): number => {
   if (isNoAuthError(error)) return NO_AUTH_RETRY_MS;
+  if (isLicenseBlocked(error)) return LICENSE_RETRY_MS;
   const status = (error as { status?: number } | null)?.status;
   if (status === 401 && !useAuthStore.getState().token) return NO_AUTH_RETRY_MS;
   return jitteredBackoff(attempt);

@@ -13,6 +13,7 @@ import {
   tokenForSubmit,
   type EntryAttemptState,
 } from '../../../offline/entryAttempt';
+import { showScreenError } from '../../../lib/screenToast';
 
 // =============================================================================
 // Yeni Sipariş sihirbazının TÜM durumu ve kuralları. Ekran bileşenleri yalnız
@@ -158,7 +159,7 @@ export function useNewOrder() {
       // Yapışkanlık YALNIZ belirsiz hatada. Kesin 4xx'te token tazelenir ki
       // operatör payload'ı düzeltip yeniden gönderebilsin.
       setAttempt((s) => (isAmbiguousFailure(err) ? onAttemptFailed(s, vars.clientToken) : IDLE_ATTEMPT));
-      Toast.show({ type: 'error', text1: 'Sipariş açılamadı', text2: err.message });
+      showScreenError(err, 'Sipariş açılamadı');
     },
   });
 

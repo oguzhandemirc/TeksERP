@@ -144,6 +144,7 @@ import type {
   Customer,
 } from '../../../types/models';
 import { upperTr } from '../../../utils/trCase';
+import { showScreenError } from '../../../lib/screenToast';
 
 // =============================================================================
 // Multi-job state — Tambur'da operatör paralel iş yürütebilir (KursunQc paralel).
@@ -1270,7 +1271,7 @@ export default function TamburScreen() {
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Finalize başarısız', text2: err.message });
+      showScreenError(err, 'Finalize başarısız');
     },
   });
 
@@ -1399,7 +1400,7 @@ export default function TamburScreen() {
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Top oluşturulamadı', text2: err.message });
+      showScreenError(err, 'Top oluşturulamadı');
     },
   });
 
@@ -1522,7 +1523,7 @@ export default function TamburScreen() {
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Tamamlanamadı', text2: err.message });
+      showScreenError(err, 'Tamamlanamadı');
     },
   });
 
@@ -1543,7 +1544,7 @@ export default function TamburScreen() {
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Eklenemedi', text2: err.message });
+      showScreenError(err, 'Eklenemedi');
     },
   });
 
@@ -1559,7 +1560,7 @@ export default function TamburScreen() {
     },
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
-      Toast.show({ type: 'error', text1: 'Silinemedi', text2: err.message });
+      showScreenError(err, 'Silinemedi');
     },
   });
 
@@ -1669,7 +1670,7 @@ export default function TamburScreen() {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       recutAttempt.onFailure(err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Kesim başarısız', text2: err.message });
+      showScreenError(err, 'Kesim başarısız');
     },
   });
 
@@ -1744,7 +1745,7 @@ export default function TamburScreen() {
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Bitirilemedi', text2: err.message });
+      showScreenError(err, 'Bitirilemedi');
     },
   });
 
@@ -1821,7 +1822,7 @@ export default function TamburScreen() {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       manualAttempt.onFailure(err);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Top eklenemedi', text2: err.message });
+      showScreenError(err, 'Top eklenemedi');
     },
   });
 
@@ -6407,7 +6408,7 @@ function RecentOutputModal({
       setSelectMode(false);
       void q.refetch();
     } catch (e) {
-      Toast.show({ type: 'error', text1: 'Toplu işlem başarısız', text2: (e as Error).message });
+      showScreenError(e, 'Toplu işlem başarısız');
     } finally {
       setBulkBusy(false);
       setBulkTargetOpen(false);
@@ -6455,7 +6456,7 @@ function RecentOutputModal({
       setPreviewRoll(roll);
     } catch (e) {
       signalScan('reject');
-      Toast.show({ type: 'error', text1: 'Okunamadı', text2: (e as Error).message });
+      showScreenError(e, 'Okunamadı');
     } finally {
       setScanResolving(false);
     }
@@ -7261,7 +7262,7 @@ function FinalizeRemainingModal({
     },
     onError: (err: Error) => {
       setLocalOrder(null); // eski sıraya dön — kâğıt üstünde yalan kalmasın
-      Toast.show({ type: 'error', text1: 'Sıra kaydedilemedi', text2: err.message });
+      showScreenError(err, 'Sıra kaydedilemedi');
     },
   });
 
@@ -8027,7 +8028,7 @@ function TamburUndoConfirmModal({
     },
     onError: (e: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Geri alınamadı', text2: e.message });
+      showScreenError(e, 'Geri alınamadı');
       // Yarışta durum değişmiş olabilir — önizlemeyi tazele, operatör görsün.
       void previewQ.refetch();
     },

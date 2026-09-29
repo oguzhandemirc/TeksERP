@@ -21,6 +21,7 @@ import AssignedList from './AssignedList';
 import CompleteConfirmModal from './CompleteConfirmModal';
 import { fmtMeters } from './dagitimUi';
 import { colors, spacing, radius } from '../../../theme';
+import { showScreenError } from '../../../lib/screenToast';
 
 // =============================================================================
 // KURŞUN DAĞITIM — kurşun makinelerine TABLET KOYULMAYAN düzenin ofis ekranı.
@@ -92,7 +93,7 @@ export default function KursunDagitimScreen() {
     },
     onError: (e: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Dağıtılamadı', text2: e.message });
+      showScreenError(e, 'Dağıtılamadı');
       void refresh();
     },
   });
@@ -114,7 +115,7 @@ export default function KursunDagitimScreen() {
     },
     onError: (e: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Atama kaldırılamadı', text2: e.message });
+      showScreenError(e, 'Atama kaldırılamadı');
       void refresh();
     },
   });
@@ -132,7 +133,7 @@ export default function KursunDagitimScreen() {
     },
     onError: (e: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Acil işareti değiştirilemedi', text2: e.message });
+      showScreenError(e, 'Acil işareti değiştirilemedi');
       void refresh();
     },
   });

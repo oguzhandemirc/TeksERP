@@ -21,6 +21,8 @@
 //   3. yazıcı kuyruğu — "top KAYITLI, etiketi çıkmadı" ayrı ve kalıcı yüzey.
 // =============================================================================
 
+import { isLicenseBlocked } from '../lib/license';
+
 /** Sunucunun SORU sorduğu 409'lar — cevabı ekranın kendi modalıdır (ITEM_MISMATCH/ROUTE_SKIP: Fason Sevk onay modalı). */
 const CONFLICT_CODES = new Set(['POSSIBLE_DUPLICATE', 'CLIENT_TOKEN_COLLISION', 'MULTI_BATCH', 'ITEM_MISMATCH', 'ROUTE_SKIP']);
 
@@ -41,9 +43,10 @@ export function isStationMutationKey(key: unknown): key is readonly unknown[] {
  * Saf karar — ekrandaki bir `if`'te yaşasaydı tersine çevrilmesi hiçbir testi
  * kırmazdı (`shouldReleaseInFlight` emsali).
  *
- * Üç hayır:
+ * Dört hayır:
  *   • istasyon-dışı mutation → o ekranın kendi hata yolu var,
  *   • `noAuth` → HTTP'ye hiç çıkmadı, kuyrukta süresiz bekliyor (hata değil),
+ *   • lisans reddi (403 LICENSE_*) → kayıt kuyrukta bekler, çipi "lisans nedeniyle bekleyen" söyler,
  *   • çakışma 409'u → ekran modalla SORUYOR; toast aynı kararı ikinci kez,
  *     üstelik cevaplanamaz biçimde sordururdu.
  */
@@ -69,6 +72,7 @@ export function shouldAnnounceFailure(
   if (!isStationMutationKey(key)) return false;
   const e = (error ?? null) as FailureLike | null;
   if (e?.noAuth) return false; // HTTP'ye çıkmadı — düşüş değil, bekleyiş
+  if (isLicenseBlocked(error)) return false; // lisans reddi kuyrukta bekler (stationRetry), düşüş değil
   const code = e?.details?.code;
   if (typeof code === 'string' && CONFLICT_CODES.has(code)) return ekranYok;
   return true;

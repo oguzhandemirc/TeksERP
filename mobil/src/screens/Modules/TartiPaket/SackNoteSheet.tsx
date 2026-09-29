@@ -8,6 +8,7 @@ import AppModal from '../../../components/AppModal';
 import { colors, spacing, radius } from '../../../theme';
 import { packingService } from '../../../services/packing.service';
 import { isWorkSessionLost } from '../../../services/api';
+import { showScreenError } from '../../../lib/screenToast';
 
 // =============================================================================
 // Çuval yorumu sheet'i — İÇ serbest not ("kendimiz için").
@@ -53,7 +54,7 @@ export default function SackNoteSheet({ target, onDismiss, onSaved }: Props) {
     },
     onError: (e: Error) => {
       if (isWorkSessionLost(e)) return;
-      Toast.show({ type: 'error', text1: 'Not kaydedilemedi', text2: e.message });
+      showScreenError(e, 'Not kaydedilemedi');
     },
   });
 
