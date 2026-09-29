@@ -1,16 +1,10 @@
-// Parmak izi ÖLÇÜMÜ: OS etkenleri (`fingerprint-os.ts`) + PostgreSQL (F5). Normalleştirme, tuzlu özet ve karar
-// protokolde (`protocol/parmak-izi.ts`); burada yalnız ham değer okunur. Ham değer bu
-// dosyadan dışarı yalnız `digestFingerprint`e gider — loga, audit'e, uca GİRMEZ.
+// Parmak izi ÖLÇÜMÜ: OS etkenleri (f1..f4) ve tuzlu özet LİSANS ÇEKİRDEĞİNDE (üretimde native),
+// PostgreSQL etkeni (F5) burada okunur. Ham F5 bu dosyadan dışarı yalnız çekirdeğe gider —
+// loga, audit'e, uca GİRMEZ.
 import prisma from "../prisma";
-import { collectOsFactors } from "./fingerprint-os";
-import {
-  FINGERPRINT_FACTORS,
-  digestFingerprint,
-  normalizeFactor,
-  type Fingerprint,
-  type FingerprintFactor,
-  type RawFingerprint,
-} from "./protocol";
+import { normalizeFactor, type Fingerprint, type FingerprintFactor } from "./protocol";
+import type { LicenseCore } from "./license-core";
+import { getLicenseCore } from "./native";
 
 export interface MeasuredFingerprint {
   readonly digest: Fingerprint;
@@ -30,10 +24,8 @@ async function postgresFactor(): Promise<string | null> {
   }
 }
 
-/** Beş etkeni ölçer ve kurulum tuzuyla özetler. */
-export async function measureFingerprint(salt: Uint8Array): Promise<MeasuredFingerprint> {
-  const raw: RawFingerprint = { ...(await collectOsFactors()), f5: await postgresFactor() };
-  const digest = digestFingerprint(raw, salt);
-  const measured = Object.fromEntries(FINGERPRINT_FACTORS.map((f) => [f, digest[f] !== null])) as Record<FingerprintFactor, boolean>;
-  return { digest, measured, measuredAt: new Date().toISOString() };
+/** Beş etkeni ölçer ve kurulum tuzuyla özetler (çekirdek kullanılamıyorsa hepsi ölçülemedi). */
+export async function measureFingerprint(salt: Uint8Array, core: LicenseCore = getLicenseCore()): Promise<MeasuredFingerprint> {
+  const c = await core.collectFingerprint(salt, await postgresFactor());
+  return { digest: c.digest, measured: c.measured, measuredAt: new Date().toISOString() };
 }

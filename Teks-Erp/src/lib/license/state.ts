@@ -3,17 +3,16 @@
 // bugünkü davranıştır (sıfır fark) — iki alan ayrı tutulur ki gözlem ölçülebilsin.
 import {
   STATE_TIERS,
-  verifyEntitlement,
-  verifyLease,
   type VerifiedEntitlement,
   type VerifiedLease,
   type StateTier,
   type Validity,
   type RootKey,
   type LicenseMode,
-  type Result,
   type SanctionLevel,
 } from "./protocol";
+import { coreVerifyEntitlement, coreVerifyLease } from "./core-bridge";
+import type { CoreResult, LicenseCore } from "./license-core";
 import {
   REASON_VALIDITY,
   evaluateMaintenance,
@@ -84,20 +83,24 @@ function severity(k: StateTier | undefined): number {
   return SEVERITY.get(k ?? "NORMAL") ?? 0;
 }
 
-export function toDocResult<T>(s: Result<T> | null): DocResult<T> {
+export function toDocResult<T>(s: CoreResult<T> | null): DocResult<T> {
   if (s === null) return { status: "YOK" };
   return s.ok ? { status: "GECERLI", value: s.value } : { status: "GECERSIZ", code: s.code };
 }
 
-/** Diskten okunan HAK ve kirayı çapaya karşı doğrular (dosya yoksa `null` verilir). */
+/**
+ * Diskten okunan HAK ve kirayı çapaya karşı LİSANS ÇEKİRDEĞİNDE doğrular (üretimde native; dosya
+ * yoksa `null` verilir). `core` yalnız testlerden verilir.
+ */
 export function verifyLicenseDocuments(g: {
   readonly entitlementJws: string | null;
   readonly leaseJws: string | null;
   readonly roots: readonly RootKey[];
+  readonly core?: LicenseCore;
 }): { readonly hak: DocResult<VerifiedEntitlement>; readonly kira: DocResult<VerifiedLease> } {
   return {
-    hak: toDocResult(g.entitlementJws === null ? null : verifyEntitlement(g.entitlementJws, g.roots)),
-    kira: toDocResult(g.leaseJws === null ? null : verifyLease(g.leaseJws, g.roots)),
+    hak: toDocResult(g.entitlementJws === null ? null : coreVerifyEntitlement(g.entitlementJws, g.roots, g.core)),
+    kira: toDocResult(g.leaseJws === null ? null : coreVerifyLease(g.leaseJws, g.roots, g.core)),
   };
 }
 

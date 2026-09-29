@@ -13,8 +13,8 @@ import {
   type EntitlementDoc,
   type LeaseDoc,
   type LicenseMode,
-  type ProtocolErrorCode,
 } from "./protocol";
+import type { CoreErrorCode } from "./license-core";
 import { evaluateClock, type ClockResult, type EntitlementPin, type SanctionSnapshot } from "./saat";
 
 export const REASON_CODES = [
@@ -108,7 +108,7 @@ export type DocResult<T> =
   | { readonly status: "YOK" }
   /** Dosya var ama okunamadı: YOK değildir (silmekle eşit sayılmaz), ölçülemedi bulgusu `depoOkunamadi`dan gelir. */
   | { readonly status: "OKUNAMADI" }
-  | { readonly status: "GECERSIZ"; readonly code: ProtocolErrorCode }
+  | { readonly status: "GECERSIZ"; readonly code: CoreErrorCode }
   | { readonly status: "GECERLI"; readonly value: T };
 
 export type IntegrityStatus = "GECERLI" | "GECERSIZ" | "OLCULEMEDI" | "KAPSAM_DISI";
