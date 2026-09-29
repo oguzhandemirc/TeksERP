@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { KAYIT_REL, kayitAyristir } from './kanallar.mjs';
 
 export const BILDIRIM_TURU = 'tekserp-yayin-bildirimi';
 export const IMZA_ONEKI = 'tekserp-yayin-bildirimi.v1\n';
@@ -110,10 +111,10 @@ export async function yayinBildirVeBas(olay, secenek) {
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-/** Kanal üretim kanalı mı (kayıtta `terfiKaynagi`)? Okunamazsa false — TERFI satırı atlanır, YAYIN yine gider. */
-export function uretimKanaliMi(kanal, kayitDosyasi = path.join(KOK, 'deploy', 'kanallar.json')) {
+/** Kanal terfi alan üretim kanalı mı (kayıtta `terfiKaynagi`)? Kayıt tek ayrıştırıcıdan (`kanallar.mjs`); okunamazsa false — TERFI satırı atlanır, YAYIN yine gider. */
+export function uretimKanaliMi(kanal, kayitDosyasi = path.join(KOK, KAYIT_REL)) {
   try {
-    return Boolean(JSON.parse(fs.readFileSync(kayitDosyasi, 'utf8')).kanallar?.[kanal]?.terfiKaynagi);
+    return Boolean(kayitAyristir(fs.readFileSync(kayitDosyasi, 'utf8')).kanallar?.[kanal]?.terfiKaynagi);
   } catch {
     return false;
   }

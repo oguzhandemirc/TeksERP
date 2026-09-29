@@ -10,7 +10,7 @@
 | `tekserp-korumali_<sürüm>_linux-amd64.tar.gz` | `docker save | gzip -n` — `docker load` açar (yeniden üretilebilir: aynı imaj aynı sha) |
 | `docker-compose.yml` · `.env.ornek` | üç servis (postgres 16 · backend · yedek) ve ortam şablonu |
 | `PAKET-DOCKER.json` | künye — `tekserp-butunluk` v1 belgesi (dosya sha256'ları base64url, imaj kimliği, runtime Node/V8, `.jsc` sha256) |
-| `PAKET-DOCKER.json.jws` | PAKET anahtarıyla imza — **2e inene dek YOK** (§8) |
+| `PAKET-DOCKER.json.jws` | PAKET anahtarıyla imza (`teslim-paketle.sh` 2e aracıyla atar; anahtar yoksa paket üretilmez — §8) |
 | `SHA256SUMS` | `sha256sum -c SHA256SUMS` ile doğrulanır |
 
 İmajın içinde KAYNAK YOK: sunucu V8 bayt kodu (`/app/dist/server.jsc` + yükleyici), araçlar karartılmış tek dosya (`/app/dist/tools/*.cjs`), native lisans çekirdeği (`/app/native/`), prod `node_modules`, Prisma şema motoru `debian-openssl-3.0.x`, migration SQL. Süreç `10001:10001` (root değil); `/app` root'a ait ve salt-okunur; compose kök dosya sistemini salt-okunur açar (`/tmp` tmpfs).
@@ -77,9 +77,9 @@ docker compose logs -f backend                 # [1/3] migration → [2/3] seed 
 - Servisler `cap_drop: ALL`, `no-new-privileges`, salt-okunur kök ile koşar; yazılabilir yerler yalnız birimler + `/tmp`.
 - Web paneli (`WEB_DIST_DIR`) bu imajda YOK: panel Electron'dan ve tabletten bağlanır; `/` durum sayfasıdır.
 
-## 8. İmza arayüzü (2e bağlanınca)
+## 8. İmza
 
 - İmzalanan belge `PAKET-DOCKER.json`un BAYTLARIDIR: `tekserp-butunluk` v1 (`Teks-Erp/src/lib/license/integrity.ts` `IntegrityManifestSchema` — `v`, `paketId`, `urun: "backend-docker"`, `surum`, `derlemeTarihi`, `musteri`, `dosyalar[{yol, sha256 (base64url), boyut}]`; ek alanlar `imaj`, `sunucu`, `commit` imzanın kapsamında).
-- İmza: PAKET anahtarı (`kid` = `paket-<yıl>`), JWS EdDSA, `typ` = `tekserp-butunluk` → `PAKET-DOCKER.json.jws`. Anahtar yalnız Mac'te; CI ve bu betik imzalamaz.
+- İmza: PAKET anahtarı, JWS EdDSA, `typ` = `tekserp-butunluk` → `PAKET-DOCKER.json.jws`. `teslim-paketle.sh` künyeyi yazdıktan sonra 2e aracını çağırır (`npx tsx Teks-Erp/scripts/build-korumali-imza.ts belge --belge=<çıktı>/PAKET-DOCKER.json --anahtar=<dosya>`); anahtar `TEKSERP_PAKET_ANAHTARI` (varsayılan `~/.tekserp/satici-hazirlik/paket-hazirlik.paket.json` — hazırlık anahtarı yalnız TEST/DEMO; üretim `paket-<yıl>` ayrı tören). Anahtar yalnız Mac'te, CI'a girmez; anahtar yoksa ya da öz-denetim düşerse paket ÜRETİLMEZ. `.jws` SHA256SUMS'a girer (bekçi `test_docker_hijyeni` §5c · `test_lisans_butunluk` §6).
 - Doğrulama sırası (kurulumda, `docker load`dan ÖNCE): JWS'i gömülü PAKET açık anahtarıyla doğrula → `dosyalar`daki her dosyanın sha256'sı → `imaj.arsiv` ≡ yüklenecek tar. Doğrulayıcı bugün native çekirdekte (`verifyIntegrity`); imaj DIŞINDA koşacak bir doğrulama aracı 2e ile birlikte tanımlanır.
 - İmaj İÇİ bütünlük listesi (açılışta + günlük): 2e'nin biçimiyle aynı belge `/app` ağacı için üretilir; imzalı liste imaja ince bir son katman olarak eklenir (derle → listeyi dışa ver → Mac imzalar → `FROM <imaj>` + `COPY` → yeni etiket). Bugün uygulanmadı — borç.

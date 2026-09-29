@@ -7,6 +7,7 @@
 //   npx tsx scripts/build-korumali-imza.ts imzala --kok=<paket dizini> --anahtar=<dosya> --surum=<x.y.z>
 //       [--urun=backend] [--musteri=<kod>] [--kurulum=<uuid>] [--derleme-tarihi=<ISO>]
 //   npx tsx scripts/build-korumali-imza.ts zip --zip=<paket.zip> --anahtar=<dosya> [--kurulum=<uuid>] [--surum-belgesi=<md>]
+//   npx tsx scripts/build-korumali-imza.ts belge --belge=<PAKET-DOCKER.json> --anahtar=<dosya>   (Docker teslim künyesi → <belge>.jws)
 //
 // `zip` kipi: zip'i açar, sürüm/müşteri/derleme künyesini PAKET.json + dist/server-kunye.json'dan okur,
 // imzalar, `butunluk.jws`i ekler ve PAKET.json'daki dosya sayısını bir artırır (kur.ps1 sayım kapısı).
@@ -17,7 +18,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { generatePackageKey, readPackageKey, signPackageDirectory, writePackageKey } from "./lib/butunluk-imza";
+import { generatePackageKey, readPackageKey, signManifestDocument, signPackageDirectory, writePackageKey } from "./lib/butunluk-imza";
 import { STAGING_PACKAGE_CLASSES, STAGING_PACKAGE_KID_PREFIX } from "../src/lib/license/integrity-scope";
 
 function arg(name: string): string | null {
@@ -114,7 +115,13 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === "zip") return signZip();
-  throw new Error("komut: anahtar-uret | imzala | zip");
+  if (cmd === "belge") {
+    const key = readPackageKey(home(need("anahtar")));
+    const r = await signManifestDocument(path.resolve(need("belge")), key);
+    console.log(`✓ ${r.file} · kid ${key.kid} · ${r.token.length} bayt`);
+    return;
+  }
+  throw new Error("komut: anahtar-uret | imzala | zip | belge");
 }
 
 main().catch((e: unknown) => {

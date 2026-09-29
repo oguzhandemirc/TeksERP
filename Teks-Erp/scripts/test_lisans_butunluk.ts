@@ -10,16 +10,18 @@
 //   §4 native'e bağlama: motor çekirdekten geçer; zorunlu kipte TS'e düşme YOK; `.node` dlopen
 //      ÖNCESİ imzalı listeye karşı (liste yok / yanlış anahtar / kurcalanmış → çekirdek YOK)
 //   §5 imza aracı: öz-denetim, JWS tavanı, derleme künyesi tarihten
+//   §6 Docker teslim künyesi (`PAKET-DOCKER.json`) imzası: ek alanlar imzada, kurcalama GECERSIZ, CLI `belge`
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_lisans_butunluk.ts
 // =============================================================================
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createPrivateKey, randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { createHash, createPrivateKey, randomUUID } from "node:crypto";
 import { atlamaDefteri } from "./lib/atlama";
-import { generatePackageKey, signPackageDirectory } from "./lib/butunluk-imza";
+import { generatePackageKey, signManifestDocument, signPackageDirectory, writePackageKey } from "./lib/butunluk-imza";
 import { signJws, type RootKey } from "../src/lib/license/protocol";
-import { INTEGRITY_TYP, PACKAGE_PUBLIC_KEYS, type PackageKey } from "../src/lib/license/integrity";
+import { INTEGRITY_TYP, PACKAGE_PUBLIC_KEYS, verifyIntegrity, type PackageKey } from "../src/lib/license/integrity";
 import { INTEGRITY_FILE, INTEGRITY_SCOPE_DIRS, isStagingPackageKid } from "../src/lib/license/integrity-scope";
 import { runIntegrityCheck, type IntegrityCheckInput } from "../src/lib/license/integrity-check";
 import { tsLicenseCore, type LicenseCore } from "../src/lib/license/license-core";
@@ -272,6 +274,41 @@ async function bolum5(): Promise<void> {
   check("§5c şemaya uymayan imzalı yük → GECERSIZ (BELGE_*)", s.durum === "GECERSIZ" && (s.kod ?? "").startsWith("BELGE_"), `${s.kod}`);
 }
 
+async function bolum6(): Promise<void> {
+  console.log("\n§6 Docker teslim künyesi imzası (PAKET-DOCKER.json → .jws)");
+  const dir = path.join(TEMP, "teslim");
+  mkdirSync(dir, { recursive: true });
+  const dosya = (ad: string, icerik: string | Buffer) => {
+    writeFileSync(path.join(dir, ad), icerik);
+    const b = readFileSync(path.join(dir, ad));
+    return { yol: ad, sha256: createHash("sha256").update(b).digest("base64url"), boyut: b.length };
+  };
+  const liste = [dosya("tekserp-korumali_2.12.0_linux-amd64.tar.gz", Buffer.alloc(4096, 5)), dosya("docker-compose.yml", "services: {}\n"), dosya(".env.ornek", "A=1\n")];
+  const kunye = { v: 1, paketId: randomUUID(), urun: "backend-docker", surum: "2.12.0", derlemeTarihi: "2026-09-30T08:00:00.000Z", musteri: "testfabrika", commit: "abc", imaj: { etiket: "x:1", platform: "linux/amd64" }, dosyalar: liste };
+  const belge = path.join(dir, "PAKET-DOCKER.json");
+  writeFileSync(belge, `${JSON.stringify(kunye, null, 2)}\n`);
+  const r = await signManifestDocument(belge, A);
+  const v = await verifyIntegrity(readFileSync(r.file, "utf8").trim(), dir, keysOf(A));
+  const yuk = JSON.parse(Buffer.from(r.token.split(".")[1] ?? "", "base64url").toString("utf8")) as { imaj?: { etiket?: string }; commit?: string };
+  check("§6a ⭐ imzalı künye GECERLI, ek alanlar (imaj · commit) imza kapsamında", v.durum === "GECERLI" && yuk.imaj?.etiket === "x:1" && yuk.commit === "abc", `${v.durum} ${v.kod ?? ""}`);
+  appendFileSync(path.join(dir, "docker-compose.yml"), "# kurcalandı\n");
+  const v2 = await verifyIntegrity(readFileSync(r.file, "utf8").trim(), dir, keysOf(A));
+  check("§6b teslim dosyası kurcalanınca GECERSIZ (BUTUNLUK_UYUSMAZ)", v2.durum === "GECERSIZ" && v2.kod === "BUTUNLUK_UYUSMAZ", `${v2.durum} ${v2.kod}`);
+  let hata = "";
+  try {
+    await signManifestDocument(belge, A);
+  } catch (e) {
+    hata = e instanceof Error ? e.message : String(e);
+  }
+  check("§6c kurcalanmış dosyayla imza ATILMAZ (öz-denetim)", /öz-denetim/.test(hata), hata.slice(0, 80));
+  writeFileSync(path.join(dir, "docker-compose.yml"), "services: {}\n");
+  const anahtarDizini = path.join(TEMP, "anahtar6");
+  const kf = writePackageKey(anahtarDizini, generatePackageKey("paket-hazirlik", ["TEST", "DEMO"]));
+  rmSync(r.file);
+  const cli = spawnSync(process.execPath, ["--import", "tsx", "scripts/build-korumali-imza.ts", "belge", `--belge=${belge}`, `--anahtar=${kf}`], { cwd: TEKS, encoding: "utf8", timeout: 60_000 });
+  check("§6d ⭐ CLI `belge` (teslim-paketle.sh'in çağrısı) .jws yazar", cli.status === 0 && existsSync(r.file), `${cli.status} ${(cli.stderr || cli.stdout).trim().slice(0, 100)}`);
+}
+
 async function main(): Promise<void> {
   console.log("=== Lisans bütünlük · künye · filigran · native bağlama ===");
   try {
@@ -284,6 +321,7 @@ async function main(): Promise<void> {
     bolum3();
     await bolum4();
     await bolum5();
+    await bolum6();
   } finally {
     rmSync(TEMP, { recursive: true, force: true });
   }

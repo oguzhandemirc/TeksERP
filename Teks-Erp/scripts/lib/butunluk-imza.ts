@@ -88,3 +88,21 @@ export async function signPackageDirectory(g: SignInput): Promise<SignResult> {
   fs.writeFileSync(file, `${token}\n`);
   return { token, manifest, file };
 }
+
+/**
+ * Hazır bir `tekserp-butunluk` v1 belgesini (Docker teslim künyesi `PAKET-DOCKER.json`) imzalar ve
+ * `<belge>.jws`e yazar. Yük dosyanın TAMAMIDIR (şemanın atladığı ek alanlar da imza kapsamında);
+ * yazmadan önce listedeki dosyalar belgenin dizinine karşı doğrulanır.
+ */
+export async function signManifestDocument(file: string, key: SignInput["key"]): Promise<{ token: string; file: string }> {
+  const doc = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+  const parsed = IntegrityManifestSchema.safeParse(doc);
+  if (!parsed.success) throw new Error(`belge tekserp-butunluk v1 değil: ${parsed.error.issues[0]?.message ?? "şema"}`);
+  const token = signJws({ typ: INTEGRITY_TYP, kid: key.kid, payload: doc, privateKey: key.privateKey });
+  if (token.length > JWS_MAX_LENGTH) throw new Error(`imzalı belge ${token.length} bayt > ${JWS_MAX_LENGTH}`);
+  const check = await verifyIntegrity(token, path.dirname(file), [{ kid: key.kid, x: key.x }]);
+  if (check.durum !== "GECERLI") throw new Error(`öz-denetim düştü: ${check.durum} ${check.kod ?? ""}`);
+  const out = `${file}.jws`;
+  fs.writeFileSync(out, `${token}\n`);
+  return { token, file: out };
+}

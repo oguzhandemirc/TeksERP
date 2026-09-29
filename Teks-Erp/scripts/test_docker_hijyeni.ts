@@ -15,6 +15,7 @@
 //      gerçek aktarım kümesiyle ölçülür; Dockerfile'ın her COPY kaynağı kümede var.
 //   §5 korumalı Linux imajı (Faz 2f) DURAĞAN: izin listesi `*` ile başlar, çalışma aşaması
 //      root değil + bağlamdan yalnız docker/ betikleri, machine-id silinir; compose ro/127/seed 0.
+//      §5c teslim künyesi 2e aracıyla imzalanır: anahtar yoksa paket yok, .jws SHA256SUMS'ta.
 // =============================================================================
 import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -282,6 +283,33 @@ function korumaliStatik(dockerfile: string, ignore: string, compose: string): st
   for (const [ad, d, i, c] of sondalar) {
     const uygulandi = d !== df || i !== ig || c !== dc;
     check(`§5b sonda: ${ad} → kırmızı`, uygulandi && korumaliStatik(d, i, c).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §5c — teslim künyesi İMZALI çıkar (2e aracı, `build-korumali-imza.ts belge`): anahtar yoksa paket
+// üretilmez, imza SHA256SUMS'a girer, imza özetlerden ÖNCE atılır.
+function teslimImzaStatik(betik: string): string[] {
+  const kod = betik.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+  const ih: string[] = [];
+  const imza = kod.search(/build-korumali-imza\.ts belge --belge="\$CIKTI\/PAKET-DOCKER\.json" --anahtar="\$ANAHTAR"/);
+  if (imza < 0) ih.push("künye imza aracına verilmiyor");
+  if (!/\[ -f "\$ANAHTAR" \] \|\| \{[^}]*exit 1; \}/.test(kod)) ih.push("anahtar yokken paket üretimi durmuyor");
+  const ozet = kod.search(/for f in [^;\n]*PAKET-DOCKER\.json\.jws; do/);
+  if (ozet < 0) ih.push("imza dosyası SHA256SUMS'a girmiyor");
+  else if (imza > ozet) ih.push("imza özetlerden SONRA atılıyor");
+  return ih;
+}
+{
+  const t = oku("Teks-Erp/docker/korumali/teslim-paketle.sh");
+  const g = teslimImzaStatik(t);
+  check("§5c ⭐ teslim künyesi 2e aracıyla imzalanır (anahtarsız paket yok, .jws SHA256SUMS'ta)", g.length === 0, g.join(" | ") || "temiz");
+  const sondalar: Array<[string, string]> = [
+    ["imza çağrısı silindi", t.replace(/^\( cd "\$REPO\/Teks-Erp" && npx tsx scripts\/build-korumali-imza\.ts belge.*$/m, "( true ) \\")],
+    ["anahtarsız devam", t.replace(/imzasız teslim paketi üretilmez" >&2; exit 1; \}/, 'imzasız teslim paketi üretilmez" >&2; }')],
+    ["jws özetsiz", t.replace("PAKET-DOCKER.json PAKET-DOCKER.json.jws; do", "PAKET-DOCKER.json; do")],
+  ];
+  for (const [ad, m] of sondalar) {
+    check(`§5c sonda: ${ad} → kırmızı`, m !== t && teslimImzaStatik(m).length > 0, m !== t ? "" : "MUTASYON UYGULANMADI");
   }
 }
 

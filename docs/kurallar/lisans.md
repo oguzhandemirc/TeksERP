@@ -175,3 +175,4 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-29 · İndirme belirteci zinciri + kira bulut alanları (3bc): satıcı verir → fabrika saklar → panel/tablet ve yayıncı kullanır
 - 2026-09-30 · Portal dağıtım modülleri (3d-1): ilk kurulum bağlantısı, iki yönlü dosya, yayın bildirimi ve sürüm görünümü
 - 2026-09-29 · Lisans 3d-2: kurulum kaydı (kur.ps1 → yoklama → satıcı defteri), destek talepleri, sürüm politikası kiradan
+- 2026-09-30 · Lisans entegrasyonu 4 (I5): dokuz dal tek gövdede — tek silme damgası düzeltmesi, native her zaman zorunlu, Docker künyesi imzalı, destek talebi künyesi NULL alabilir

@@ -10757,11 +10757,12 @@ model SupportTicket {
   sendAttempts   Int       @default(0)
   /// Son gönderim hatasının KODU (ham metin değil).
   lastErrorCode  String?   @db.VarChar(60)
-  createdById    String    @db.Uuid
+  /// Talebi açan (künye): servis her zaman yazar; kolon künye kuralı gereği NULL alabilir (test_record_provenance §3).
+  createdById    String?   @db.Uuid
   createdAt      DateTime  @default(now()) @db.Timestamptz
   updatedAt      DateTime  @updatedAt @db.Timestamptz
 
-  createdBy User                 @relation("SupportTicketCreatedBy", fields: [createdById], references: [id])
+  createdBy User?                @relation("SupportTicketCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   replies   SupportTicketReply[]
 
   @@index([status, updatedAt])

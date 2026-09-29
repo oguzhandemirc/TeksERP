@@ -21,7 +21,7 @@ export interface SupportTicket {
   readonly lastErrorCode: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly createdBy: { readonly id: string; readonly fullName: string };
+  readonly createdBy: { readonly id: string; readonly fullName: string } | null;
   readonly _count?: { readonly replies: number };
   readonly replies?: readonly SupportReply[];
 }

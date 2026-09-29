@@ -10,7 +10,7 @@ const formatDateTime = (iso: string | null): string => safeFormat(iso, "dd.MM.yy
 
 /** Talep satırının ikinci satırı: numara, açılış, gönderim durumu (hata yalnız KOD olarak). */
 export function ticketMeta(t: SupportTicket): string {
-  const parts = [t.ticketNo ?? "Numara bekleniyor", formatDateTime(t.createdAt), t.createdBy.fullName];
+  const parts = [t.ticketNo ?? "Numara bekleniyor", formatDateTime(t.createdAt), t.createdBy?.fullName ?? "—"];
   if (t.status === "GONDERILMEDI" && t.lastErrorCode) parts.push(`son deneme: ${t.lastErrorCode}`);
   return parts.join(" · ");
 }

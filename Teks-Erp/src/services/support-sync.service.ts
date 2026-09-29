@@ -41,7 +41,7 @@ export async function sendSupportTicket(ticketId: string, transport: VendorTrans
           talepId: t.id,
           konu: t.subject,
           aciklama: t.description,
-          acan: t.createdBy.fullName.slice(0, 120) || null,
+          acan: t.createdBy?.fullName.slice(0, 120) || null,
           panelSurum: panelVersion.success ? panelVersion.data : null,
           ek: t.screenshot && t.screenshotType ? { tur: t.screenshotType, veri: Buffer.from(t.screenshot).toString("base64") } : null,
           saglik: await buildPollHealthSummary(),
