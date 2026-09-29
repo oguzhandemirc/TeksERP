@@ -159,7 +159,7 @@ async function main(): Promise<void> {
     kontrol("§4d tavan dışı kalmış imzalı hak için KOD üretilemez → 409", kodEski.status === 409 && kodEski.kod === "BAYI_TAVANI_ASILDI", `${kodEski.status} ${kodEski.kod}`);
     const daralt = await bayi(`/haklar/${hakId}/surum`, { clientToken: randomUUID(), bayiParolasi: BAYI_PAROLASI, sebep: "tavana uyum", moduller: [URETIM] });
     const kod = await bayi(`/kurulumlar/${kurId}/etkinlestirme-kodu`, { clientToken: randomUUID() });
-    kontrol("§4e hak tavana indirilince imza 201 ve kod üretilir (düz kod yalnız bu yanıtta)", daralt.status === 201 && kod.status === 201 && /^TKS-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(String(kod.veri.kod)), `${daralt.status}/${kod.status}`);
+    kontrol("§4e hak tavana indirilince imza 201 ve kod üretilir (düz kod yalnız bu yanıtta)", daralt.status === 201 && kod.status === 201 && /^TKS(-[0-9A-Z]{4}){4}$/.test(String(kod.veri.kod)), `${daralt.status}/${kod.status}`);
 
     console.log("\n§5 kurulum ADEDİ");
     await tavanYaz(bayiId, [URETIM, FINANS], ["URETIM"], 1, "tek kurulum hakkı");

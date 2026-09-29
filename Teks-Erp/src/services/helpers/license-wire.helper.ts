@@ -55,6 +55,7 @@ const VENDOR_MESSAGES = {
   ETKINLESTIRME_KODU_GECERSIZ: "Etkinleştirme kodu geçersiz.",
   ETKINLESTIRME_KODU_KULLANILMIS: "Bu etkinleştirme kodu daha önce kullanılmış.",
   TASIMA_ONAYI_BEKLIYOR: "Taşıma onayı bekleniyor; onaylanınca lisans kendiliğinden gelir.",
+  TASIMA_KODU_GEREKLI: "Bu kurulum başka bir makinede etkin; taşıma talebi açın ve onaylanınca verilen taşıma koduyla etkinleştirin.",
   KURULUM_BILINMIYOR: "Bu kurulum lisans sunucusunda kayıtlı değil (taşıma talebi gerekebilir).",
   KURULUM_IPTAL: "Bu kurulumun lisansı taşındı ya da iptal edildi.",
   KIRA_VERILMEDI: "Lisans sunucusu bu kuruluma kira vermedi; destek hattıyla görüşün.",

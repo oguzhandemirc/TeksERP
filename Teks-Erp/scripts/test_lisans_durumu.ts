@@ -23,6 +23,8 @@
 //   D1 ek sürede HAK tavanı yeniden gevşetildi                  → 2 ❌ (§3b · §7d)
 //   D2 son kira anlık görüntüsü (sonYaptirim) yok sayıldı        → 2 ❌ (§14c · §14d)
 //   D3 dondurma yalnız HAK tavanı varken uygulandı              → 2 ❌ (§14b · §14f)
+//   P0 (D4 saat kayması bilgidir):
+//   P1 SAAT_KAYIK geçerlilik etkisi ÖLÇÜLEMEDİ yapıldı           → 1 ❌ (§6d)
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
 //   Doğuşta ısıran GERÇEK kusur: §5e — zehirli yüksek suyu üst eşikte tavanlamak güvenilir
 //   saati duvarın ilerisine itip sahte SAAT_GERİ üretiyordu; `saat.ts` bu dilimde düzeltildi.
@@ -40,6 +42,8 @@ import {
 } from "../src/lib/license/protocol";
 import {
   OBSERVE_EFFECT,
+  REASON_CODES,
+  REASON_VALIDITY,
   toDocResult,
   computeLicenseState,
   isModuleLicensed,
@@ -199,6 +203,11 @@ function saatGeriBolumu(): void {
   check("§6b ⭐ bitmiş kirada saati bitiş öncesine almak NORMAL'e döndürmez", e.hesaplananKademe === "EK_SURE", ozet(e));
   const y = durum({ saat: { duvarMs: SIMDI - 3 * DAY_MS, monotonik: null, durumDosyasiGecerli: false, yuksekSuMs: SIMDI } });
   check("§6c durum kaydı yokken yüksek su tutar", y.saat.finding === "SAAT_GERI" && y.saat.trustedMs === SIMDI, ozet(y));
+  // D4: satıcı saati imzasızdır — kayma raporlanır ama geçerliliği/kademeyi değiştiremez.
+  check(
+    "§6d SAAT_KAYIK neden listesinde ve BİLGİdir (geçerlilik etkisi yok; ÖLÇÜLEMEDİ sayılan SAAT_GERİ'den ayrı)",
+    (REASON_CODES as readonly string[]).includes("SAAT_KAYIK") && REASON_VALIDITY.SAAT_KAYIK === null && REASON_VALIDITY.SAAT_GERI === "OLCULEMEDI",
+  );
 }
 
 function uretimAcikBolumu(): void {

@@ -3,15 +3,14 @@
 // bitişi) YENİ İMZALI SÜRÜMDÜR: alanlar ve sürüm aynı tx'te yazılır — imzasız alan değişimi yok.
 // İmza tx DIŞINDA hazırlanır (parola alt sürecin stdin'ine), sonra kilit altında deftere yazılır.
 // Kod kuruluma bağlı doğar; düz metni yalnız bir kez döner (DB'de sha256 + son 4).
-import { randomInt } from "node:crypto";
 import type { Hak, HakSurumu, Kurulum, Musteri, Tesis } from "@prisma/client";
 import {
-  ActivationCodeSchema,
   DAY_MS,
   EntitlementSchema,
   ModuleKeySchema,
   TYP,
   decodeDocument,
+  generateActivationCode,
   verifyEntitlement,
   type EntitlementDoc,
 } from "../lisans-protokol";
@@ -248,15 +247,7 @@ export async function issueEntitlementVersion(
 }
 
 // ---------------------------------------------------------------- etkinleştirme kodu
-
-const CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-export function generateActivationCode(): string {
-  let body = "";
-  for (let i = 0; i < 12; i++) body += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
-  const code = `TKS-${body.slice(0, 4)}-${body.slice(4, 8)}-${body.slice(8, 12)}`;
-  return ActivationCodeSchema.parse(code);
-}
+// Biçim ve üretim protokolde tek kaynak (`generateActivationCode`, 16 karakter).
 
 export interface IssuedActivationCode {
   readonly code: string;

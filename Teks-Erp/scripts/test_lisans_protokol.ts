@@ -21,6 +21,10 @@
 //      defteri 20 dk penceresi · zarf
 //   §4 parmak izi: eşik sınırları · ölçülemeyen uyuşmazlık sayılmaz · DR f5 · normalleştirme
 //   §5 gövde şemaları: istek KATI (allowlist), yanıt GEVŞEK · etkinleştirme kodu
+//   §7 P0 (D4 · D8 · D14): yalnız etkinleştirme/taşıma kimliksiz imzalanır (yok · "" · null),
+//      taşınan kimlik hep bağlar · taşıma talebi kod taşımaz, yanıtı lisanssız · ortam bilgi
+//      kimliği · yanıtta kurulumId/kodTuru · ISTEK_ZAMAN sunucuSaati (biçimsizse yok) ·
+//      TASIMA_KODU_GEREKLI · saticiSapmaSn · 16 karakterlik kod üretimi + 12'lik tanınır
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon zinciri (bir kezlik, ✓B; her biri cp + shasum ile
 // birebir geri alındı; sayılar commit mesajında):
@@ -34,6 +38,13 @@
 //   B7  çapadaki hazırlık kökü sınıflarına URETIM        → 6 ❌ (§0g · §0k · §0m · §0n · §0o · §0p)
 //   B8  çapa satırı ve sınıf listesi iç freeze'siz       → 1 ❌ (§0l)
 //   B9  çapa boşaltıldı (hazırlık döngüsü kör kalır)     → 2 ❌ (§0j körlük zemini · §0q)
+//   P0 dilimi:
+//   B10 İSTEK refine'ı devre dışı (kimliksiz yoklama)   → 3 ❌ (§7f · §7f2 · §7h)
+//   B11 bağ yalnız sunucu kimliği varken                → 1 ❌ (§7c2)
+//   B12 kimliksiz şemasından `null` kolu kaldırıldı     → 2 ❌ (§7g3 · §7i4)
+//   B13 üretici 12 karakter üretir                      → 1 ❌ (§7p)
+//   B14 önek tespiti yalnız "TKS ile başlar + uzun"     → 1 ❌ (§7r4)
+//   B15 hata gövdesinde sunucuSaati `.catch`siz         → 1 ❌ (§7m2)
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
 // ⚠️ Gerekli mi (reçete md. 20): kapı doğduğu gün ağaçta ısırılacak bir kusur YOKTU (klasör
 //   bu dilimde doğdu); gerekçe ÖLÇÜLMEDİ — satıcı/fabrika dilimleri buna karşı yazılacak.
@@ -42,6 +53,18 @@ import { createHmac, generateKeyPairSync } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
+  ACTIVATION_CODE_KINDS,
+  ACTIVATION_CODE_LENGTH,
+  ActivateRequestSchema,
+  ActivationCodeSchema,
+  EnvironmentSchema,
+  TransferRequestSchema,
+  TransferResponseSchema,
+  VENDOR_ERROR_CODES,
+  VendorErrorResponseSchema,
+  bodyDigest,
+  generateActivationCode,
+  installationKeyId,
   OfflineRequestSchema,
   DAY_MS,
   ROOT_PUBLIC_KEYS,
@@ -418,6 +441,96 @@ function govdeBolumu(): void {
   check("§5g O→0 ve I/L→1 dönüşümü", normalizeActivationCode("TKS-OOOO-IIII-LLLL") === "TKS-0000-1111-1111");
 }
 
+function p0Bolumu(): void {
+  console.log("\n§7 — P0: lisans kimliği portalda (D14) · taşıma kodu (D8) · saat kayması (D4) · 16 karakterlik kod");
+  const govde = JSON.stringify({ v: 1, kod: "TKS-0000-0000-0000-0000" });
+  const bas = (kimlik: string | null, amac: "etkinlestir" | "tasima" | "yokla" = "etkinlestir"): string =>
+    signRequest({ installationId: kimlik, purpose: amac, body: govde, key: { privateKey: f.kurulum.privateKey, nowMs: SIMDI } });
+  const dogrula = (t: string, kimlik: string | null, amac: "etkinlestir" | "tasima" | "yokla" = "etkinlestir"): Result<unknown> =>
+    verifyRequest(t, { publicKeyX: f.kurulum.x, body: govde, nowMs: SIMDI, purposes: [amac], installationId: kimlik });
+  beklenen("§7a ⭐ etkinleştirme isteği kurulum kimliği TAŞIMADAN imzalanır ve doğrulanır", dogrula(bas(null), null), "OK");
+  beklenen("§7b kimliksiz etkinleştirme, satıcının koddan bulduğu kurulumla doğrulanır (bağ kodda)", dogrula(bas(null), f.kurulumId), "OK");
+  beklenen("§7c ⭐ kimlik TAŞIYAN istek başka kurulumla doğrulanamaz (bağ sürer)", dogrula(bas(f.kurulumId), f.hakId), "ISTEK_KURULUM");
+  beklenen("§7c2 kimlik TAŞIYAN istek kimliksiz (kod yolu) doğrulamada da RED — taşınan kimlik hep bağlar", dogrula(bas(f.kurulumId), null), "ISTEK_KURULUM");
+  beklenen("§7d taşıma talebi de kimliksiz imzalanabilir (yeni makine kimliği bilmeyebilir)", dogrula(bas(null, "tasima"), null, "tasima"), "OK");
+  const kimliksiz = readRequestIdentity(bas(null));
+  check("§7e imzasız okuma kimliksiz istekte null döner", kimliksiz.ok && kimliksiz.value.installationId === null);
+  const anahtar = { ...f.kurulum, kid: installationKeyId(f.kurulum.x) };
+  const ham = (yuk: Record<string, unknown>): string => hamImzala(TYP.ISTEK, anahtar, { v: 1, zaman: msToIso(SIMDI), nonce: generateNonce(), govdeOzeti: bodyDigest(govde), ...yuk });
+  beklenen("§7f ⭐ kimliksiz YOKLAMA RED (yalnız etkinleştirme/taşıma kimliksiz olabilir)", dogrula(ham({ amac: "yokla" }), null, "yokla"), "BELGE_SEMA");
+  beklenen("§7f2 boş dizge kimlikli YOKLAMA da RED ('boş' = 'yok')", dogrula(ham({ amac: "yokla", kurulumId: "" }), null, "yokla"), "BELGE_SEMA");
+  const bos = ham({ amac: "etkinlestir", kurulumId: "" });
+  beklenen("§7g boş dizge kurulum kimliği 'yok' sayılır (etkinleştirme)", dogrula(bos, null), "OK");
+  const bosKimlik = readRequestIdentity(bos);
+  check("§7g2 boş dizge imzasız okumada da null", bosKimlik.ok && bosKimlik.value.installationId === null);
+  const nullIstek = ham({ amac: "etkinlestir", kurulumId: null });
+  beklenen("§7g3 null kurulum kimliği de 'yok' sayılır (etkinleştirme)", dogrula(nullIstek, null), "OK");
+  const nullKimlik = readRequestIdentity(nullIstek);
+  check("§7g4 null kimlik imzasız okumada null", nullKimlik.ok && nullKimlik.value.installationId === null);
+  const sayiKimlik = readRequestIdentity(ham({ amac: "etkinlestir", kurulumId: 42 }));
+  check("§7g5 dizge olmayan kimlik biçimsiz (BELGE_SEMA)", !sayiKimlik.ok && sayiKimlik.code === "BELGE_SEMA");
+  let firlatti = false;
+  try {
+    bas(null, "yokla");
+  } catch {
+    firlatti = true;
+  }
+  check("§7h kimliksiz yoklama İMZALANMAZ (programcı hatası)", firlatti);
+  const ortam = { platform: "win32", mimari: "x64", isletimSistemi: "Windows Server 2022", nodeSurum: "v24.18.0", uygulamaSurum: "2.11.2", derlemeTarihi: null, konteyner: false };
+  const etkinGovde = { v: 1, kod: "TKS-ABCD-EFGH-JKMN-PQRS", acikAnahtar: f.kurulum.x, parmakIzi: f.parmakIzi, ortam };
+  check("§7i etkinleştirme gövdesi kurulum kimliği olmadan geçer", ActivateRequestSchema.safeParse(etkinGovde).success);
+  const bosGovde = ActivateRequestSchema.safeParse({ ...etkinGovde, kurulumId: "" });
+  check("§7i2 boş kurulum kimliği 'yok'a iner", bosGovde.success && bosGovde.data.kurulumId === undefined);
+  const nullGovde = ActivateRequestSchema.safeParse({ ...etkinGovde, kurulumId: null });
+  check("§7i4 null kurulum kimliği de 'yok'a iner", nullGovde.success && nullGovde.data.kurulumId === undefined);
+  check("§7i3 biçimsiz kurulum kimliği RED", !ActivateRequestSchema.safeParse({ ...etkinGovde, kurulumId: "abc" }).success);
+  check("§7j taşıma talebi kod ve kimlik taşımadan geçer", TransferRequestSchema.safeParse({ v: 1, acikAnahtar: f.kurulum.x, parmakIzi: f.parmakIzi, ortam, gerekce: null }).success);
+  check("§7j2 taşıma talebi kod TAŞIYAMAZ (katı gövde)", !TransferRequestSchema.safeParse({ v: 1, kod: "TKS-ABCD-EFGH-JKMN-PQRS", acikAnahtar: f.kurulum.x, parmakIzi: f.parmakIzi, ortam, gerekce: null }).success);
+  check(
+    "§7j3 taşıma yanıtı lisanssız (null) ve üç durumlu",
+    ["BEKLIYOR", "ONAYLANDI", "REDDEDILDI"].every((durum) => TransferResponseSchema.safeParse({ v: 1, talepId: f.hakId, durum, lisans: null }).success),
+  );
+  check("§7k ortam.installationId bilgi alanı kabul, yokken de geçer", EnvironmentSchema.safeParse({ ...ortam, installationId: f.kurulumId }).success && EnvironmentSchema.safeParse(ortam).success);
+  check("§7k2 biçimsiz ortam.installationId RED", !EnvironmentSchema.safeParse({ ...ortam, installationId: "fabrika-1" }).success);
+  const yanit = { v: 1, hak: null, kira: kiraBas(f), indirmeBelirtecleri: [], sunucuSaati: msToIso(SIMDI) };
+  const tamYanit = LicenseResponseSchema.safeParse({ ...yanit, kurulumId: f.kurulumId, kodTuru: "tasima" });
+  check("§7l etkinleştirme yanıtı kurulum kimliğini ve kod türünü taşır", tamYanit.success && tamYanit.data.kurulumId === f.kurulumId && tamYanit.data.kodTuru === "tasima");
+  const ileriTur = LicenseResponseSchema.safeParse({ ...yanit, kodTuru: "gelecek-tur" });
+  check("§7l2 tanınmayan kod türü yanıtı düşürmez, yok sayılır (ileri uyum)", ileriTur.success && ileriTur.data.kodTuru === undefined);
+  check("§7l3 biçimsiz yanıt kurulum kimliği RED (kimlik alanı gevşemez)", !LicenseResponseSchema.safeParse({ ...yanit, kurulumId: "abc" }).success);
+  check("§7l4 kod türleri: ilk · tasima", ACTIVATION_CODE_KINDS.join(",") === "ilk,tasima");
+  const hataGovdesi = (sunucuSaati: unknown) => ({ success: false, message: "istek zamanı sapıyor", details: { code: "ISTEK_ZAMAN", sunucuSaati } });
+  const saatli = VendorErrorResponseSchema.safeParse(hataGovdesi(msToIso(SIMDI)));
+  check("§7m ⭐ ISTEK_ZAMAN hatası details.sunucuSaati taşır ve okunur", saatli.success && saatli.data.details.sunucuSaati === msToIso(SIMDI));
+  const bozukSaat = VendorErrorResponseSchema.safeParse(hataGovdesi("dün"));
+  check("§7m2 biçimsiz sunucuSaati yok sayılır, hata kodu yine okunur", bozukSaat.success && bozukSaat.data.details.code === "ISTEK_ZAMAN" && bozukSaat.data.details.sunucuSaati === undefined);
+  check("§7n satıcı kodu TASIMA_KODU_GEREKLI tanımlı", (VENDOR_ERROR_CODES as readonly string[]).includes("TASIMA_KODU_GEREKLI"));
+  const saatliYokla = yoklaGovdesi();
+  Object.assign(saatliYokla.saat as object, { saticiSapmaSn: -742 });
+  check("§7o yoklama saat sapmasını (sn) taşıyabilir", PollRequestSchema.safeParse(saatliYokla).success);
+  Object.assign(saatliYokla.saat as object, { saticiSapmaSn: 1.5 });
+  check("§7o2 kesirli sapma RED (tam saniye)", !PollRequestSchema.safeParse(saatliYokla).success);
+  const kodlar = Array.from({ length: 200 }, () => generateActivationCode());
+  check(
+    "§7p ⭐ üretilen kod 16 karakter (4 blok, Crockford) ve şemadan geçer",
+    ACTIVATION_CODE_LENGTH === 16 && kodlar.every((k) => /^TKS(-[0-9A-HJKMNP-TV-Z]{4}){4}$/.test(k) && ActivationCodeSchema.safeParse(k).success),
+    kodlar[0],
+  );
+  check("§7p2 200 üretimde tekrar yok", new Set(kodlar).size === kodlar.length);
+  check("§7q ⭐ eski 12 karakterlik kod bir sürüm daha TANINIR", ActivationCodeSchema.safeParse("TKS-ABCD-EFGH-JKMN").success);
+  check(
+    "§7q2 8 ve 20 karakter, yabancı harf (U/I/L/O) RED",
+    !ActivationCodeSchema.safeParse("TKS-ABCD-EFGH").success &&
+      !ActivationCodeSchema.safeParse("TKS-ABCD-EFGH-JKMN-PQRS-TVWX").success &&
+      !ActivationCodeSchema.safeParse("TKS-ABCD-EFGH-JKMN-PQRU").success,
+  );
+  check("§7r 16 karakterlik kod normalleşir (önek, boşluk, küçük harf)", normalizeActivationCode(" tks abcd efgh jkmn pqrs ") === "TKS-ABCD-EFGH-JKMN-PQRS");
+  check("§7r2 öneksiz 16 karakter + O→0, I/L→1", normalizeActivationCode("oooo-iiii-llll-abcd") === "TKS-0000-1111-1111-ABCD");
+  check("§7r3 öneksiz 12 karakter (eski biçim) de normalleşir", normalizeActivationCode("abcdefghjkmn") === "TKS-ABCD-EFGH-JKMN");
+  check("§7r4 'TKS' ile BAŞLAYAN öneksiz 16 karakter önek sanılmaz", normalizeActivationCode("tksa-bcde-fghj-kmnp") === "TKS-TKSA-BCDE-FGHJ-KMNP");
+  check("§7r5 ara uzunluk (13) normalleşmez, şemadan geçmez", !ActivationCodeSchema.safeParse(normalizeActivationCode("abcdefghjkmnp")).success);
+}
+
 function zamanTutarliligi(): void {
   check("§6a tolerans 10 dk, gün 24 sa", CLOCK_SKEW_MS === 10 * DAKIKA && DAY_MS === 24 * 60 * DAKIKA);
   const { privateKey } = generateKeyPairSync("ed448");
@@ -438,6 +551,7 @@ zincirBolumu();
 istekBolumu();
 parmakIziBolumu();
 govdeBolumu();
+p0Bolumu();
 zamanTutarliligi();
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

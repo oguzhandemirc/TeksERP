@@ -35,6 +35,15 @@ export const REQUEST_PURPOSES = [
   "dr-devral",
 ] as const;
 export type RequestPurpose = (typeof REQUEST_PURPOSES)[number];
+/**
+ * Kurulum kimliği (portalda doğan UUID, fabrikada LICENSE_DIR'de) henüz bilinmeyebilen amaçlar: anahtar
+ * gövdeden gelir; etkinleştirmede kurulumu kod belirler, kimliksiz taşıma talebini onaylayan operatör eşler.
+ */
+export const INSTALLATION_ID_OPTIONAL_PURPOSES = ["etkinlestir", "tasima"] as const satisfies readonly RequestPurpose[];
+
+export function isInstallationIdOptional(purpose: RequestPurpose): boolean {
+  return (INSTALLATION_ID_OPTIONAL_PURPOSES as readonly RequestPurpose[]).includes(purpose);
+}
 
 /** Kiranın ömür tavanı: sızmış bir alt anahtarla geriye tarihli uzun kira basılamasın. */
 export const LEASE_MAX_DAYS = 45;
@@ -42,6 +51,11 @@ export const GRACE_MAX_DAYS = 60;
 
 export const IsoTimeSchema = z.iso.datetime();
 export const UuidSchema = z.uuid();
+/** Taşınmayan kurulum kimliği: alan yok · boş dizge · `null` — üçü de "yok"a (`undefined`) iner. */
+export const OptionalInstallationIdSchema = z
+  .union([UuidSchema, z.literal(""), z.null()])
+  .optional()
+  .transform((v) => v || undefined);
 /** sha256/HMAC-SHA256 özeti, base64url (43 karakter). */
 export const DigestSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 export const PublicKeyXSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
@@ -136,14 +150,19 @@ export const LeaseSchema = z
   });
 export type LeaseDoc = z.infer<typeof LeaseSchema>;
 
-export const RequestSchema = z.object({
-  v: z.literal(PROTOCOL_VERSION),
-  kurulumId: UuidSchema,
-  zaman: IsoTimeSchema,
-  nonce: z.string().regex(/^[A-Za-z0-9_-]{22,64}$/),
-  amac: z.enum(REQUEST_PURPOSES),
-  govdeOzeti: DigestSchema,
-});
+export const RequestSchema = z
+  .object({
+    v: z.literal(PROTOCOL_VERSION),
+    kurulumId: OptionalInstallationIdSchema,
+    zaman: IsoTimeSchema,
+    nonce: z.string().regex(/^[A-Za-z0-9_-]{22,64}$/),
+    amac: z.enum(REQUEST_PURPOSES),
+    govdeOzeti: DigestSchema,
+  })
+  .refine((r) => r.kurulumId !== undefined || isInstallationIdOptional(r.amac), {
+    message: "Kurulum kimliği yalnız etkinleştirme ve taşıma isteğinde boş olabilir",
+    path: ["kurulumId"],
+  });
 export type RequestDoc = z.infer<typeof RequestSchema>;
 
 export const DownloadSchema = z

@@ -1,6 +1,6 @@
 # Lisans protokolü — kanonik sözleşme (v:1)
 
-> **Durum:** Faz 1a (2026-09-29), DONMUŞ kontrat — satıcı sunucusu (1b) ve fabrika lisans motoru (1c) buna karşı yazılır.
+> **Durum:** Faz 1a (2026-09-29), DONMUŞ kontrat — satıcı sunucusu (1b) ve fabrika lisans motoru (1c) buna karşı yazılır. **P0 (2026-09-29, W3a kapısı):** lisans kimliği portalda (D14) · taşıma kodu (D8) · satıcı saati (D4) · 16 karakterlik kod — v:1 İÇİNDE geriye uyumlu; tam alan listesi §12 madde 14, uygulayan dilimlere bağlayıcı notlar §13a.
 > **Tek kaynak KOD'dur:** `Teks-Erp/src/lib/license/protocol/` (+ yerel durum için `state.ts`, `state-rules.ts`, `saat.ts`). Bu belge onun anlatımıdır; ayrışırsa kod ve bekçisi kazanır, belge düzeltilir.
 > **Bekçiler:** `Teks-Erp/scripts/test_lisans_protokol.ts` (sözleşme) · `Teks-Erp/scripts/test_lisans_durumu.ts` (durum) · ayna bekçisi (`test_lisans_protokol_aynasi`) satıcı klasörü doğunca 1b'de.
 > **Üst belge:** onaylı plan (Kod Koruma + Lisanslama, §3 protokol, §4 durum). Plan ile çelişki çıkarsa plan kazanır; bu dilimde bilinçli yapılan sapmalar ve genişlemeler en sondaki "Plandan sapmalar" bölümündedir.
@@ -19,7 +19,7 @@
 | `protocol/indirme.ts` | İNDİRME belirteci imzala/doğrula + `isDownloadPathAllowed` (CF Worker'ın kâhini) |
 | `protocol/istek.ts` | İSTEK imzala/doğrula · `readRequestIdentity` · `bodyDigest` · `generateNonce` · `NonceLedger` · çevrimdışı `zarf` |
 | `protocol/parmak-izi.ts` | etken normalleştirme · tuzlu özet · eşleşme kararı (üç sonuç) |
-| `protocol/uclar.ts` | satıcı uç yolları, istek/yanıt gövde şemaları, sağlık özeti allowlist'i, zil konuları, satıcı hata kodları, durum/kademe/kip kelime dağarcığı |
+| `protocol/uclar.ts` | satıcı uç yolları, istek/yanıt gövde şemaları, sağlık özeti allowlist'i, zil konuları, satıcı hata kodları, durum/kademe/kip kelime dağarcığı, etkinleştirme kodu biçimi + TEK üreticisi |
 | `state.ts` + `state-rules.ts` | SAF lisans durumu (fabrika tarafı; aynaya girmez) |
 | `saat.ts` | güvenilir saat hesabı + imzalı `durum.json` belgesi (fabrika tarafı) |
 | `store.ts` · `runtime.ts` · `fingerprint.ts` | fabrika motoru (Faz 1c): `LICENSE_DIR` deposu (atomik yazım, senkron yükleme) · bellek çekirdeği + senkron `getLicenseSnapshot()` · parmak izi toplayıcı — aynaya GİRMEZ |
@@ -71,7 +71,7 @@
 | `surum` | int ≥ 1 | her yeniden basımda artar; kira bu sürüme bağlanır |
 | `lisansNo` | `TKS-YYYY-NNNN[NN]` | doğuşta materyalize |
 | `musteri` / `tesis` | `{id: uuid, ad: 1–200}` | |
-| `kurulumId` | uuid | fabrikanın `installationId`si |
+| `kurulumId` | uuid | **lisans kimliği** — portalda kurulum açılırken doğar, fabrikada `LICENSE_DIR`de durur (D14); fabrika DB'sinin `system.installationId`si DEĞİL (o yalnız `ortam.installationId` bilgisi) |
 | `sinif` | `URETIM` · `TEST` · `DR` · `DEMO` · `BAYI` · `BARINDIRILAN` | |
 | `moduller` | modül anahtarı[] (≤ 64, tekrarsız) | TAVAN; biçim `MODULE_SETTING_KEYS` (`finance.enabled`, `depo.multiEnabled`) ya da `patron-bulut`; protokol listeyi BİLMEZ, eşleme 1c'nin |
 | `kalici` | bool | |
@@ -107,6 +107,9 @@
 
 `kurulumId` · `zaman` (ISO) · `nonce` (base64url 22–64) · `amac` (`etkinlestir` · `yokla` · `zil` · `cevrimdisi` · `destek` · `esitle` · `tasima` · `dr-devral`) · `govdeOzeti` (sha256, base64url 43).
 
+- **`kurulumId` yalnız `etkinlestir` ve `tasima`da YOK olabilir** (`INSTALLATION_ID_OPTIONAL_PURPOSES`; D14): kimliği henüz bilmeyen makine imzalar. Alan yok · `""` · `null` üçü de "yok"tur (`OptionalInstallationIdSchema` → `undefined`; imzalayan alanı imzaya hiç sokmaz). Başka amaçta kimliksiz istek `BELGE_SEMA` (imzalayan fırlatır). `readRequestIdentity` kimliksiz istekte `installationId: null` döner.
+- **Taşınan kimlik HER ZAMAN bağlar:** istek `kurulumId` taşıyorsa `verifyRequest`e verilen kurulumla aynı olmalı — satıcı kurulumu koddan bulmuş ya da hiç bulamamış (`installationId: null`) olsa da (`ISTEK_KURULUM`). Kimliksiz istekte bağ denetimi yoktur; bağ koddadır (etkinleştirme) ya da onaylayan operatördedir (taşıma).
+
 ### İNDİRME (`tekserp-indirme`) — İNDİRME imzalı
 
 `kanal` · `yolOneki` (tam olarak `/<kanal>/electron/` ya da `/<kanal>/mobil/`) · `kurulumId` · `exp` (ISO). Doğrulama: `simdi > exp + tol` ⇒ `BELGE_SURESI_DOLDU`; `exp − simdi > 70 dk + tol` ⇒ `INDIRME_OMUR`. Yol: önekin ALTINDA (önekin kendisi değil), `..` · `\` · `//` · `%2e` · `%2f` · `%5c` · `%00` RED.
@@ -118,7 +121,8 @@
 ## 4. İstek taşıma ve doğrulama sırası
 
 - İmzalı istek HTTP başlığında: `X-TKL-Istek: <jws>`. `govdeOzeti` = gövdenin **HAM baytlarının** sha256'sı (`bodyDigest`) (sunucu JSON ayrıştırmadan ÖNCEKİ baytları özetler — `express.json` `verify` kancası ya da `express.raw`). Gövdesiz istek (SSE `GET /v1/zil`) boş dizgenin özetini taşır.
-- **Satıcı sırası:** ① `readRequestIdentity` (imzasız) → kurulum kaydı; etkinleştirme ve taşımada açık anahtar GÖVDEDEN alınır ve `kid = installationKeyId(x)` olmalı ② `verifyRequest` (typ · imza · şema · `kurulumId` · izinli amaç · ±10 dk · gövde özeti, sabit zamanlı karşılaştırma) ③ **nonce kaydı ATOMİK**: `(kurulumId, nonce)` UNIQUE; saklama = istek `zaman`ı + 10 dk. `NonceLedger` bellek içi karşılığıdır.
+- **Satıcı sırası:** ① `readRequestIdentity` (imzasız) → kimlik varsa kurulum kaydı; **kimliksiz etkinleştirmede kurulum KODDAN** (kod özeti → kurulum), kimliksiz taşıma talebi hiçbir kuruluma OTOMATİK bağlanmaz (`ortam.installationId` bilgidir, kimlik değil — DB kopyası onu taşır; eşleme onaylayan operatörün kararı); etkinleştirme ve taşımada açık anahtar GÖVDEDEN alınır ve `kid = installationKeyId(x)` olmalı ② `verifyRequest` (typ · imza · şema · taşınan `kurulumId`in bağı · izinli amaç · ±10 dk · gövde özeti, sabit zamanlı karşılaştırma) ③ **nonce kaydı ATOMİK**: `(kurulum, nonce)` UNIQUE — kimliksiz istekte kurulum koddan bulunan kayıttır, kurulumsuz taşıma talebinde anahtar kimliği (`kid`); saklama = istek `zaman`ı + 10 dk. `NonceLedger` bellek içi karşılığıdır (`installationId` parametresi bu kapsam anahtarıdır).
+- **Saat kayması (D4):** `ISTEK_ZAMAN` (±10 dk dışı) yanıtı `details.sunucuSaati` (ISO, satıcının o anki saati) taşır. Bu saat **İMZASIZDIR**: fabrika onunla yalnız sapmayı (duvar − satıcı) ölçer ve isteği **BİR KEZ** düzeltilmiş zamanla (yeni nonce) yeniden imzalar; ikinci `ISTEK_ZAMAN`da durur. Sapma güvenilir saate, yüksek suya, ek süreye ve kademeye GİRMEZ — `SAAT_KAYIK` nedeni (bilgi, geçerliliği değiştirmez) ve yoklamada `saat.saticiSapmaSn` ile raporlanır. Biçimsiz `sunucuSaati` yok sayılır, hata kodu yine okunur.
 - **Çevrimdışı / panel aktarma:** `wrapEnvelope(request, body)` → tek base64url metin (`{v, istek, govde}`); `POST /v1/cevrimdisi` gövdesi `{v, zarf}`. Yanıt imzalı belgeler taşıdığından panel/telefon yanıtı taklit edemez.
 
 ## 5. Satıcı uçları (`uclar.ts`)
@@ -127,33 +131,35 @@
 
 | Uç | Amaç | İstek gövdesi | Yanıt |
 |---|---|---|---|
-| `POST /v1/etkinlestir` | `etkinlestir` | `ActivateRequestSchema` `{v, kod: TKS-XXXX-XXXX-XXXX, kurulumId, acikAnahtar, parmakIzi, ortam}` | `LicenseResponseSchema` |
+| `POST /v1/etkinlestir` | `etkinlestir` | `ActivateRequestSchema` `{v, kod: TKS-XXXX-XXXX-XXXX-XXXX, kurulumId?, acikAnahtar, parmakIzi, ortam}` — `kurulumId` yok/`""`/`null` = yok (kurulumu kod belirler) | `LicenseResponseSchema` (+ `kurulumId`, `kodTuru`) |
 | `POST /v1/yokla` | `yokla` | `PollRequestSchema` (aşağıda) | `LicenseResponseSchema` |
 | `GET /v1/zil` (SSE) | `zil` | — | `event: zil` / `data: {konu}`; 25 sn'de bir yorum satırı |
 | `POST /v1/cevrimdisi` | zarfın içindeki | `OfflineRequestSchema` `{v, zarf}` | `LicenseResponseSchema` |
-| `POST /v1/tasima` | `tasima` | `TransferRequestSchema` `{v, kurulumId, acikAnahtar, parmakIzi, ortam, gerekce}` | `TransferResponseSchema` `{v, talepId, durum: BEKLIYOR·ONAYLANDI·REDDEDILDI, lisans \| null}` |
-| `POST /v1/dr-devral` | `dr-devral` | `DrTakeoverRequestSchema` `{v, anaKurulumId, gerekce}` | `LicenseResponseSchema` |
+| `POST /v1/tasima` | `tasima` | `TransferRequestSchema` `{v, kurulumId?, acikAnahtar, parmakIzi, ortam, gerekce}` — yalnız TALEP, `kod` anahtarı RED (D8) | `TransferResponseSchema` `{v, talepId, durum: BEKLIYOR·ONAYLANDI·REDDEDILDI, lisans: null}` |
+| `POST /v1/dr-devral` | `dr-devral` | `DrTakeoverRequestSchema` `{v, anaKurulumId, gerekce}` — `anaKurulumId` ananın LİSANS kimliğidir (portal/ana `LICENSE_DIR`); DR'nin DB replikası onu taşımaz | `LicenseResponseSchema` |
 | `POST /v1/destek` | `destek` | Faz 3d'de tanımlanır (amaç şimdiden ayrıldı) | — |
 
-- **`PollRequestSchema`:** `sonKiraId` (kira zinciri) · `hak {hakId, surum} \| null` · `parmakIzi` · `durum {gecerlilik, nedenler[], kip, hesaplananKademe, uygulananKademe}` · `saat {duvar, guvenilir, bulgu}` · `ortam` · `saglik` · `gozlem {reddedilecekIstek, reddedilecekModul}`.
-- **`ortam`:** `platform` (win32·linux·darwin) · `mimari` (x64·arm64) · `isletimSistemi` ≤120 · `nodeSurum` (`vX.Y.Z`) · `uygulamaSurum` · `derlemeTarihi \| null` · `konteyner`.
+- **`PollRequestSchema`:** `sonKiraId` (kira zinciri) · `hak {hakId, surum} \| null` · `parmakIzi` · `durum {gecerlilik, nedenler[], kip, hesaplananKademe, uygulananKademe}` · `saat {duvar, guvenilir, bulgu, saticiSapmaSn?}` · `ortam` · `saglik` · `gozlem {reddedilecekIstek, reddedilecekModul}`. `saticiSapmaSn` (tam sayı, ±1e9) = son `ISTEK_ZAMAN`dan ölçülen duvar − satıcı saati (sn); yok = ölçülmedi; bilgidir, kademeye girmez (D4).
+- **`ortam`:** `platform` (win32·linux·darwin) · `mimari` (x64·arm64) · `isletimSistemi` ≤120 · `nodeSurum` (`vX.Y.Z`) · `uygulamaSurum` · `derlemeTarihi \| null` · `konteyner` · `installationId?` (uuid; fabrika DB'sinin `system.installationId`si — YALNIZ BİLGİ, dökümle/DR replikasıyla kopyalanır, lisans kimliği DEĞİL; D14).
 - **Sağlık özeti ALLOWLIST'i (`saglik`):** `surum` · `calismaSn` · `dbBoyutBayt` · `yedek {hukum: ok·uyari·kritik·yapilandirilmamis, yasSaat}` · `offsite {yapilandirildi, ok, eksikSayisi}` · `diskDolulukYuzde` · `auditYazmaHatasi` · `havuzZamanAsimi` · `istemciler [{tur: panel·tablet·web·diger, surum, adet}]` (≤50, kullanıcı adı YOK) · `isHatalari [{is, adet}]` (≤50). Serbest metin alanı bilerek yok: ham hata metni, dosya adı, iş verisi yapısal olarak giremez.
-- **`LicenseResponseSchema`:** `{v, hak: JWS \| null (yalnız değiştiyse ya da kurulumda yoksa), kira: JWS, indirmeBelirtecleri: [{yolOneki, belirtec}] (≤4), sunucuSaati}`.
+- **`LicenseResponseSchema`:** `{v, hak: JWS \| null (yalnız değiştiyse ya da kurulumda yoksa), kira: JWS, indirmeBelirtecleri: [{yolOneki, belirtec}] (≤4), sunucuSaati, kurulumId?, kodTuru?}`. **`kurulumId`** (uuid) etkinleştirme yanıtında DAİMA dolu: lisans kimliği fabrikaya buradan gelir ve `LICENSE_DIR`e yazılır (D14); OTORİTE imzalı kiradır — yanıttaki değer kiranın `kurulumId`siyle aynı olmalı, ayrışırsa yanıt reddedilir. **`kodTuru`** (`ilk` · `tasima`, `ACTIVATION_CODE_KINDS`) tüketilen kodun türüdür, bilgidir; tanınmayan değer yanıtı düşürmez, yok sayılır.
 - **Zil konuları:** `lisans` · `gelen-kutusu` · `ozet` · `rapor` · `guncelleme` · `destek`. İçerik taşımaz; sahte zil yalnız fazladan yoklama yaptırır.
-- **Etkinleştirme kodu:** Crockford base32 (`I/L/O/U` yok); `normalizeActivationCode` büyük harf + `O→0`, `I/L→1` + tire yerleşimi yapar (kullanıcının elle yazdığı kod).
+- **Etkinleştirme kodu:** `TKS-XXXX-XXXX-XXXX-XXXX` — 16 karakter Crockford base32 (`I/L/O/U` yok, ≈80 bit), 4'lü tireli gruplar; üretim TEK yerde `generateActivationCode` (yalnız 16 karakter). Eski 12 karakterlik biçim (`TKS-XXXX-XXXX-XXXX`) BİR SÜRÜM daha TANINIR (`ActivationCodeSchema` iki biçimi de kabul eder), üretilmez. `normalizeActivationCode` iki uzunlukta da büyük harf + `O→0`, `I/L→1` + önek/tire yerleşimi yapar (kullanıcının elle yazdığı kod); `TKS` ile başlayan öneksiz 16'lık gövde önek sanılmaz.
+- **Kod türü ve taşıma (D8):** `ilk` kod yalnız hiç etkinleşmemiş kurulumu açar; başka bir anahtarla ETKİN kuruluma `ilk` kod ⇒ 409 `TASIMA_KODU_GEREKLI`. Yeni makine `POST /v1/tasima` ile yalnız TALEP açar (kod ya da lisans dönmez); satıcı onayında tek kullanımlık `tasima` türü kod doğar, müşteriye portal üzerinden iletilir ve yeni makine onu normal `POST /v1/etkinlestir` yolundan kullanır (`kodTuru: "tasima"`); eski anahtar emekli olur (sonraki istekleri 403 `KURULUM_IPTAL`). Kod türü kodun metninde değil satıcının kaydındadır.
 
-**Hata gövdesi** (backend ile aynı): `{success: false, message: <TR>, details: {code}}`. `details.code` ∈ satıcı kodları ya da protokol doğrulama kodları (aşağıda).
+**Hata gövdesi** (backend ile aynı): `{success: false, message: <TR>, details: {code, sunucuSaati?}}`. `details.code` ∈ satıcı kodları ya da protokol doğrulama kodları (aşağıda); `details.sunucuSaati` (ISO) `ISTEK_ZAMAN`da satıcının saatidir (§4 saat kayması), imzasızdır.
 
 | `details.code` | HTTP | Ne zaman |
 |---|---|---|
 | `GOVDE_GECERSIZ` | 400 | gövde şemaya uymuyor / allowlist dışı anahtar |
 | `PROTOKOL_SURUMU` | 400 | desteklenmeyen `v` |
-| `ISTEK_GECERSIZ` ya da protokol kodu (`ISTEK_ZAMAN`, `ISTEK_GOVDE_OZETI`, `ISTEK_KID`, `ISTEK_AMAC`, `ISTEK_KURULUM`, `JWS_*`) | 401 | imzalı istek doğrulanamadı |
+| `ISTEK_GECERSIZ` ya da protokol kodu (`ISTEK_ZAMAN`, `ISTEK_GOVDE_OZETI`, `ISTEK_KID`, `ISTEK_AMAC`, `ISTEK_KURULUM`, `JWS_*`) | 401 | imzalı istek doğrulanamadı; `ISTEK_ZAMAN` + `details.sunucuSaati` |
 | `ISTEK_TEKRAR` | 409 | nonce daha önce görüldü |
 | `KURULUM_BILINMIYOR` | 401 | kurulum kaydı yok |
 | `KURULUM_IPTAL` | 403 | taşındı/iptal; kira verilmez |
 | `ETKINLESTIRME_KODU_GECERSIZ` / `_KULLANILMIS` | 404 / 409 | kod yok / atomik claim kaybedildi |
 | `TASIMA_ONAYI_BEKLIYOR` | 409 | ikinci anahtar onay bekliyor (kurulum ek sürede çalışır) |
+| `TASIMA_KODU_GEREKLI` | 409 | kurulum başka anahtarla ETKİN — yeni makine yalnız onaylı taşıma koduyla etkinleşir, `ilk` kod yetmez (D8) |
 | `KIRA_VERILMEDI` | 403 | kopya şüphesinin ikinci penceresi |
 | `HIZ_SINIRI` | 429 | |
 | `TEKRAR_DENEYIN` | 409 | eşzamanlı işlem çakıştı (PG 40001/40P01, atomik claim kaybı) — AYNI istek yeniden denenebilir |
@@ -171,7 +177,7 @@
 
 ## 7. Lisans durumu (`state.ts` — fabrika tarafı, SAF)
 
-**Girdi** (`LicenseStateInput`, 1c doldurur): `kurulumId` · `kurulumAnahtarKimligi` · `hak`, `kira` (`DocResult`: `YOK` · `GECERSIZ(kod)` · `GECERLI(değer)` — `verifyLicenseDocuments` ile üretilir) · `saat {duvarMs, yuksekSuMs, monotonik: {kiraId, gecenMs} \| null, durumDosyasiGecerli}` · `parmakIziEslesme` · `butunluk` (`GECERLI` · `GECERSIZ` · `OLCULEMEDI` · `KAPSAM_DISI` — Faz 1'de `KAPSAM_DISI`) · `derlemeTarihiMs` · `ilkAcilisMs` (**DB'den** türer — dosya silmekle yenilenmez) · `sonYoklamaBasarisizMi` (son 24 sa) · `varsayilanKip` (derleme) · `sonKiraZorlamasi` (`durum.json`'dan).
+**Girdi** (`LicenseStateInput`, 1c doldurur): `kurulumId` (lisans kimliği, `LICENSE_DIR`'den; etkinleşmemişte `null` — DB `installationId`si DEĞİL, D14) · `kurulumAnahtarKimligi` · `hak`, `kira` (`DocResult`: `YOK` · `GECERSIZ(kod)` · `GECERLI(değer)` — `verifyLicenseDocuments` ile üretilir) · `saat {duvarMs, yuksekSuMs, monotonik: {kiraId, gecenMs} \| null, durumDosyasiGecerli}` · `parmakIziEslesme` · `butunluk` (`GECERLI` · `GECERSIZ` · `OLCULEMEDI` · `KAPSAM_DISI` — Faz 1'de `KAPSAM_DISI`) · `derlemeTarihiMs` · `ilkAcilisMs` (**DB'den** türer — dosya silmekle yenilenmez) · `sonYoklamaBasarisizMi` (son 24 sa) · `varsayilanKip` (derleme) · `sonKiraZorlamasi` (`durum.json`'dan).
 
 **Çıktı** (`LicenseState`): `gecerlilik` (GECERLI · GECERSIZ · OLCULEMEDI) · `nedenler[{kod, ayrinti}]` · `kip` · **`hesaplananKademe` ↔ `uygulananKademe`** · **`hesaplanan` ↔ `uygulanan`** etki (`bant {metin, ton}`, `guncellemeIzni`, `modulTavani`) · `ekSureKalanGun` · `kisitlamaKalanGun` · `devredildi` · `yaptirimKademesi` · `saat`. Modül okuyucusu: `readX = readXRaw ∧ isModuleLicensed(durum, anahtar)`.
 
@@ -195,6 +201,7 @@
 - Monotonik ölçülebiliyorken: yüksek su üst eşiği aşıyorsa alt sınır olarak **hiç kullanılmaz** (geçmişte ileri giden bir saatin zehirlediği iz; `SAAT_ILERI`/`YUKSEK_SU` raporlanır); duvar < alt sınır − tol ⇒ `SAAT_GERI`, güvenilir = alt sınır; duvar > üst eşik ⇒ `SAAT_ILERI`, güvenilir = alt sınır (**erken bitiş YOK**); aksi hâlde güvenilir = max(duvar, alt sınır).
 - Monotonik yokken (dosya yok/bozuk/başka kira): `DURUM_DOSYASI` (ÖLÇÜLEMEDİ) + güvenilir = max(duvar, yüksek su); duvar < yüksek su − tol ⇒ `SAAT_GERI`.
 - `accumulatedRuntime({storedMs, loadHrNs, nowHrNs})`: hrtime geri gitmiş görünürse birikim küçülmez.
+- **`SAAT_KAYIK` (D4, neden listesinde, `REASON_VALIDITY` = `null`):** satıcı `ISTEK_ZAMAN` ile duvar saatinin ±10 dk'dan fazla kaydığını söyledi. BİLGİdir: imzasız satıcı saati ne güvenilir saate ne yüksek suya girer; geçerlilik ve kademe saat kaymasından DÜŞMEZ (güvenilir saatin kaynakları yukarıdakilerdir). Saat bulgusu (`SAAT_ILERI`/`SAAT_GERI`, ÖLÇÜLEMEDİ) ayrı kalır.
 
 ## 9. Sürümleme kuralı (`v`)
 
@@ -247,6 +254,18 @@
 11. **Kapı listeleri (Faz 1c-kapı):** plan listesine iki ek — `GET /api/client-policy/*` her kademede (panelin sürüm kurtarması, tablet OTA ile aynı sınıf) ve `GET /api/auth/me` DURDURULMUŞ'ta ("verilerimi al" ekranı oturum izinlerini çözer); etiket içeriği dondurma (`seed-snapshot`) baskı sayılmadı, kapalı. `LICENSE_MODULE.modul` DB anahtarıdır (HAK sözlüğü), `MODULE_DISABLED.modul` kısa koddur.
 12. **Satıcı hata kodları `TEKRAR_DENEYIN` · `BULUNAMADI` (satıcı tamamlama):** eşzamanlılık çakışması önce `SUNUCU_HATASI` (409) ile, bilinmeyen yol protokol DIŞI bir portal koduyla dönüyordu — biri "sunucu arızası"yla karışıyor, öteki tek kaynak dışındaydı. İkisi `VENDOR_ERROR_CODES`e eklendi (kod EKLEMEK kırıcı değil, §9); portal kod listesi protokolle kesişmez (bekçi `test_satici_kapilari` §8).
 13. **Hazırlık dilimi:** güven çapasına hazırlık kökü `hazirlik-2026-1` (TEST/DEMO) girdi — plan hazırlık kökünü öngörüyordu, çapanın dolu doğması bu dilimde; bekçi §0' çapanın KENDİ satırıyla ÜRETİM'i reddettiğini ölçer. Satıcı adresi varsayılanı (`LICENSE_SERVER_URL` verilmezse üretim satıcısı) plana EK: önceki davranış "adres yoksa dışarı çıkış yok" idi; etkinleşmemiş kurulum yine hiç istek atmaz, fark yalnız etkinleştirme düğmesinin ek yapılandırma istememesidir.
+14. **P0 — W2 sonrası yönetici kararları (D4 · D8 · D14 + kod biçimi), v:1 İÇİNDE:** şema düzeyinde hepsi ya YENİ isteğe bağlı alan ya da gevşetmedir (hiçbir alan zorunlu olmadı, hiçbir şema daralmadı) ⇒ `v` artmaz. İki DAVRANIŞ daralması var — taşıma yanıtı artık lisans taşımaz, başka anahtarla ETKİN kurulum `ilk` kodla yeniden etkinleşmez (`TASIMA_KODU_GEREKLI`); sahada lisanslı kurulum olmadığından (D14 gerekçesi) `v` artırılmadan yapılır, satıcı dilimi uygular. Tam liste (uygulayan dilimler buna göre yazar):
+    - **İSTEK (`RequestSchema`):** `kurulumId` zorunlu → `OptionalInstallationIdSchema` (uuid · yok · `""` · `null`; son üçü `undefined`), `refine`: yalnız `etkinlestir`/`tasima` kimliksiz olabilir (`INSTALLATION_ID_OPTIONAL_PURPOSES`, `isInstallationIdOptional`). `signRequest.installationId: string \| null` (null = alan imzaya girmez) · `readRequestIdentity` → `installationId: string \| null` · `RequestVerifyInput.installationId: string \| null` (taşınan kimlik hep bağlar).
+    - **`ActivateRequestSchema.kurulumId`** ve **`TransferRequestSchema.kurulumId`:** zorunlu uuid → `OptionalInstallationIdSchema`.
+    - **`EnvironmentSchema.installationId?`** (uuid, bilgi).
+    - **`PollRequestSchema.saat.saticiSapmaSn?`** (tam sayı sn, ±1e9).
+    - **`LicenseResponseSchema.kurulumId?`** (uuid; etkinleştirmede daima) · **`kodTuru?`** (`ilk`·`tasima`, tanınmayan → yok).
+    - **`TransferResponseSchema.lisans`:** şema aynı (nullable), anlam: satıcı daima `null` döner.
+    - **`VendorErrorResponseSchema.details.sunucuSaati?`** (ISO; biçimsiz → yok).
+    - **`VENDOR_ERROR_CODES` + `TASIMA_KODU_GEREKLI`** (409).
+    - **Etkinleştirme kodu:** `ActivationCodeSchema` 3 ya da 4 blok (`TKS(-XXXX){3,4}`); yeni `ACTIVATION_CODE_LENGTH` (16) · `LEGACY_ACTIVATION_CODE_LENGTH` (12) · `ACTIVATION_CODE_KINDS` (`ilk`·`tasima`) · `generateActivationCode()` (satıcının kendi üreticisi kalktı); `normalizeActivationCode` 12 ve 16.
+    - **Fabrika tarafı (aynaya girmez):** `REASON_CODES` + `SAAT_KAYIK` (`REASON_VALIDITY` `null`).
+    - Eski satıcı ↔ yeni fabrika: istek gövdeleri KATI olduğundan yeni isteğe bağlı alan taşıyan istek eski satıcıda `GOVDE_GECERSIZ` alır ⇒ satıcı ÖNCE güncellenir (sahada lisanslı kurulum yok, D14 gerekçesi). Yeni satıcı ↔ eski fabrika: yanıt gövdeleri GEVŞEK, yeni alanlar yok sayılır; eski fabrika kimlik taşımaya devam eder ve bağ denetimi aynen işler.
 
 ## 12a. Adlandırma — plan adı → kod adı
 
@@ -266,11 +285,21 @@
 | saat | `evaluateClock(ClockInput)` → `ClockResult {trustedMs, source, finding, findingSource}` · `accumulatedRuntime` · `signStateRecord` / `verifyStateRecord` / `monotonicElapsed` |
 | sonuç tipi | `Result<T>` = `{ok: true, value}` · `{ok: false, code, message}` (`code` ∈ `PROTOCOL_ERROR_CODES`) |
 | gövde şemaları | `ActivateRequestSchema` · `PollRequestSchema` · `TransferRequestSchema` · `DrTakeoverRequestSchema` · `OfflineRequestSchema` · `LicenseResponseSchema` · `TransferResponseSchema` · `HealthSummarySchema` · `StateSummarySchema` · `VendorErrorResponseSchema` |
+| kimliksiz istek (P0, D14) | `OptionalInstallationIdSchema` · `INSTALLATION_ID_OPTIONAL_PURPOSES` · `isInstallationIdOptional(purpose)` |
+| etkinleştirme kodu (P0) | `generateActivationCode()` · `normalizeActivationCode(text)` · `ActivationCodeSchema` · `ACTIVATION_CODE_LENGTH` (16) · `LEGACY_ACTIVATION_CODE_LENGTH` (12) · `ACTIVATION_CODE_KINDS` / `ActivationCodeKind` (`ilk` · `tasima`) |
 
 ## 13. 1b / 1c için bağlayıcı notlar
 
 - **1b (satıcı):** imzalamadan önce `signDocument` şemadan geçirir (geçmeyen belge imzalanmaz). HAK imzasında bayinin GÜNCEL tavanı ayrıca denetlenir (sertifika kısıtı yetmez). Nonce `(kurulumId, nonce)` UNIQUE, saklama `zaman` + 10 dk. Yanıtı isteğin `v`siyle üret. Kira zinciri: yoklamadaki `sonKiraId` ucu tutar (plan §4 çatal üç hâli). Kök çapasını kendi kök listesiyle aynı dosyadan (ayna) okur.
 - **1c (fabrika):** `ilkAcilisMs` DB'den (silinmeyen veri: kurulum kimliği satırının `createdAt`i ya da en eski defter kaydı); `yuksekSuMs` yalnız sunucu saati + defter `createdAt`inden (güvenilir saatin kendisini yüksek suya yazma — döngüsel zehirlenme); `sonYoklamaBasarisizMi` §5'teki tanımla; `durum.json` her yazımda `sira++`, yeni kira kabulünde `birikenMs = 0` + `kiraId` güncellenir, `sonKiraZorlamasi` son kullanılabilir kiradan. Parmak izi eşleşmesi kiranın `parmakIzi` kümesine karşı (`compareFingerprints`, DR'de `f5Haric`). `butunluk` Faz 2'ye dek `KAPSAM_DISI`. Yoklama gövdesini `PollRequestSchema.parse` ile kur (allowlist dışı alan kod yolunda patlar).
+
+## 13a. P0 sonrası uygulayan dilimler için bağlayıcı notlar (W3a)
+
+Protokol P0'da değişti; aşağıdakiler UYGULAMA işidir ve protokol dosyalarına dokunmadan yapılır (protokol değişikliği gerekirse dilim yapmaz, raporlar).
+
+- **Satıcı:** kurulum açılırken `kurulumId`yi PORTAL üretir (bugün portal/bayi formu fabrikanın DB kimliğini `kurulumId: z.uuid()` diye istiyor; `Kurulum.kurulumId` şema yorumu "fabrikanın installationId'si"); kimliksiz etkinleştirmede kurulumu kod özetinden bulur (bugün `installation-auth.ts` kimliksiz isteği `ISTEK_GECERSIZ` ile reddediyor — P0 yalnız derlenir bıraktı); etkinleştirme yanıtına `kurulumId` + `kodTuru` koyar; `ilk` kod başka anahtarla ETKİN kuruluma `TASIMA_KODU_GEREKLI` (bugün `YENIDEN_ETKINLESTI` kabul ediliyor); taşıma talebi kod/lisans döndürmez, onayda `tasima` türü tek kullanımlık kod üretir (bugün onay yeni anahtarı etkinleştirip talep yanıtında lisans veriyor); kimliksiz taşıma talebini kuruluma OTOMATİK bağlamaz (`ortam.installationId` ipucudur, otorite operatör); `ISTEK_ZAMAN` gövdesine `details.sunucuSaati`; kod DB'de sunucu sırrıyla (pepper) HMAC; bayi ETKİN kuruluma kod üretemez.
+- **Fabrika:** lisans kimliğini etkinleştirme yanıtından (otorite kira `kurulumId`) öğrenip `LICENSE_DIR`e yazar; sonraki BÜTÜN istekler (yokla · zil · çevrimdışı · dr-devral · destek · eşitle · taşıma) ve `durum.json` (`kurulumId`), durum girdisi (`LicenseStateInput.kurulumId`), yanıt bağ denetimi, `detay.kurulum.kurulumId` o kimliği kullanır — bugün hepsi DB `installationId`sini (`getLicenseDbFacts().installationId`) kullanıyor; etkinleştirme isteği ve kimliği bilinmeyen taşıma talebi `kurulumId` taşımaz; `ortam.installationId` DB kimliğini bilgi olarak taşır (`test_lisans_yoklama_allowlist` beyan kümesine `installationId` + `saticiSapmaSn` eklenir — karar P0'da verildi). `ISTEK_ZAMAN` + `sunucuSaati`de isteği BİR KEZ yeniden imzalar, `SAAT_KAYIK` nedenini ve `saticiSapmaSn`i raporlar; hata mesajı ve panel yer tutucusu 16 karakterlik biçimi (`TKS-XXXX-XXXX-XXXX-XXXX`) gösterir.
+- **DR:** `anaKurulumId` ananın LİSANS kimliğidir; DR sunucusu onu DB replikasından türetemez (replika DB kimliğini taşır) — yönetici ana Lisans ekranından ya da portaldan alır.
 
 ## 14. Fabrika API'si (`/api/license/*`, Faz 1c) — panel (1d) ve tablet (1e) buna karşı yazılır
 
