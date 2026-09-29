@@ -10,6 +10,7 @@ import { OnceSecretModal } from "./OnceSecret";
 import { useApi, useCan } from "./session";
 import type { ActivationCodeCreated, Customer, EntitlementSummary, Installation, Ref, Site } from "./types";
 import { Button, ErrorText, Field, Modal, ModalActions } from "./ui";
+import { CLOUD_RETENTION_DEFAULT, RETENTION_CHOICES, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN, retentionBody, retentionValue } from "./cloud-settings";
 
 // ---------------------------------------------------------------- modül seçici
 
@@ -184,6 +185,8 @@ export function InstallationFormModal({
   const [channel, setChannel] = useState(installation?.kanalKodu ?? "");
   const [name, setName] = useState(installation?.ad ?? "");
   const [poll, setPoll] = useState(String(installation?.yoklamaAraligiDk ?? 60));
+  const [sync, setSync] = useState(String(installation?.esitlemeAraligiDk ?? SYNC_MINUTES_DEFAULT));
+  const [retention, setRetention] = useState(retentionValue(installation ? installation.bulutSaklamaAy : CLOUD_RETENTION_DEFAULT));
   const write = useWrite<Installation>((body) => (installation ? api.patch(`/kurulumlar/${installation.id}`, body) : api.post("/kurulumlar", body)));
   // Düzenlenen kurulumun bugünkü kanalı listede olmasa da (ör. bayi tavanından çıkmış) seçili görünür.
   const channelChoices = installation && !channelOptions.includes(installation.kanalKodu) ? [installation.kanalKodu, ...channelOptions] : channelOptions;
@@ -193,7 +196,11 @@ export function InstallationFormModal({
       body.tesisId = siteId;
       body.sinif = cls;
     } else if (cls !== installation.sinif) body.sinif = cls;
-    if (allowPollInterval) body.yoklamaAraligiDk = Number(poll);
+    if (allowPollInterval) {
+      body.yoklamaAraligiDk = Number(poll);
+      body.esitlemeAraligiDk = Number(sync);
+      body.bulutSaklamaAy = retentionBody(retention);
+    }
     const r = await write.run(body);
     if (r.ok) onSaved(r.data);
   };
@@ -226,6 +233,22 @@ export function InstallationFormModal({
       {allowPollInterval ? (
         <Field label="Yoklama aralığı (dakika)">
           <input type="number" min={5} max={1440} value={poll} onChange={(e) => setPoll(e.target.value)} />
+        </Field>
+      ) : null}
+      {allowPollInterval ? (
+        <Field label="Patron bulutu eşitleme aralığı (dakika)" hint="1–60 dk; kiraya yazılır, fabrika bu aralıkla eşitler (patron bulutu hakkı varsa).">
+          <input type="number" min={SYNC_MINUTES_MIN} max={SYNC_MINUTES_MAX} value={sync} onChange={(e) => setSync(e.target.value)} />
+        </Field>
+      ) : null}
+      {allowPollInterval ? (
+        <Field label="Buluttaki geçmiş" hint="Patron bulutunda tutulan geçmişin süresi; daha eskisi buluttan budanır.">
+          <select value={retention} onChange={(e) => setRetention(e.target.value)}>
+            {RETENTION_CHOICES.map(([v, t]) => (
+              <option key={v} value={v}>
+                {t}
+              </option>
+            ))}
+          </select>
         </Field>
       ) : null}
       <ErrorText error={write.error} />

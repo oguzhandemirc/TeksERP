@@ -113,7 +113,7 @@ if (dogrulaUrl) {
     );
   }
 
-  belirtecGerekli();
+  belirtecGerekli(dogrulaUrl);
   const ok = await dosyaDogrula(dogrulaUrl, { yerelBoyut: beklenenBoyut });
   bilgi(
     ok
@@ -210,9 +210,10 @@ const scp = (kaynaklar, uzakYol, aciklama) =>
  * X-TKL-Indirme). Kenar doğrulaması (dosyaDogrula · iste) yalnız satıcı yayın belirteciyle
  * yapılır; belirteç yoksa DUR — anonim okumaya düşülmez. Değer hiçbir çıktıya yazılmaz.
  */
-function belirtecGerekli() {
+/** `url`: okunacak kanal adresi — CLI kaynağı belirteci onun kanal/ürün önekine basar. */
+function belirtecGerekli(url) {
   try {
-    belirtecOku();
+    belirtecOku(url);
   } catch (e) {
     if (!(e instanceof BelirtecYok)) throw e;
     dur('YAYIN BELİRTECİ YOK — hiçbir şey yüklenmedi, anonim okumaya düşülmez', ...e.message.split('\n').map((x) => x.trim()));
@@ -731,7 +732,7 @@ if (!paket && !apk) {
 }
 // Belirteç yükleme ÖNCESİ ölçülür: yoksa hiçbir şey yüklenmez (kenar doğrulaması yapılamayan
 // yayın açılmaz). --kuru ağa çıkmadığı için belirteç istemez.
-if (!KURU) belirtecGerekli();
+if (!KURU) belirtecGerekli(FEED);
 if (paket) await paketiYayinla(path.resolve(paket));
 if (apk) await apkYayinla(path.resolve(apk));
 

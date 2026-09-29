@@ -25,6 +25,7 @@ import {
   getMeasuredFingerprint,
   getPollStatus,
   peekObservationCounters,
+  requestDownloadTokenRefresh,
   type LicenseSnapshot,
 } from "../lib/license/runtime";
 import type { Banner, LicenseEffect, StateReason } from "../lib/license/state";
@@ -255,18 +256,49 @@ export interface LicenseDownloadToken {
   readonly gecerlilikSonu: string | null;
 }
 
-export function getDownloadToken(g: { urun: "electron" | "mobil"; kanal?: string | null }): LicenseDownloadToken {
-  const snap = getLicenseSnapshot();
-  if (!snap.state.uygulanan.guncellemeIzni) {
-    throw licenseError(403, "LICENSE_UPDATES_FROZEN", "Bu kurulum için güncelleme dondurulmuş.");
-  }
-  const kanal = g.kanal ?? snap.lease?.document.kanal.kod ?? null;
-  const prefix = kanal ? `/${kanal}/${g.urun}/` : null;
-  const token = prefix ? getDownloadTokens().find((t) => t.yolOneki === prefix) : undefined;
-  if (!token) throw licenseError(404, "LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE", "İndirme belirteci yok (kurulum etkin değil ya da yoklama bekleniyor).");
+/** Bu kadar süresi kalan belirteç yine verilir ama yoklama dürtülür (bir sonraki kiranın belirteci gelsin). */
+export const DOWNLOAD_TOKEN_REFRESH_MARGIN_MS = 15 * 60 * 1000;
+
+export type DownloadTokenDecision =
+  | { readonly kind: "frozen" }
+  | { readonly kind: "none"; readonly nudge: true }
+  | { readonly kind: "ok"; readonly token: LicenseDownloadToken; readonly nudge: boolean };
+
+/**
+ * SAF karar: güncelleme donuksa (K1) hiç belirteç yok; önekteki saklı belirteç yoksa, süresi okunamıyorsa ya
+ * da dolmuşsa verilmez ve yoklama dürtülür; dolmaya yakınsa verilir ve yoklama dürtülür.
+ */
+export function decideDownloadToken(g: {
+  readonly updatesAllowed: boolean;
+  readonly prefix: string | null;
+  readonly tokens: ReadonlyArray<{ yolOneki: string; belirtec: string }>;
+  readonly nowMs: number;
+}): DownloadTokenDecision {
+  if (!g.updatesAllowed) return { kind: "frozen" };
+  const token = g.prefix ? g.tokens.find((t) => t.yolOneki === g.prefix) : undefined;
+  if (!token) return { kind: "none", nudge: true };
   const payload = parseJws(token.belirtec);
   const exp = payload.ok && typeof payload.value.payload.exp === "string" ? payload.value.payload.exp : null;
-  return { yolOneki: token.yolOneki, belirtec: token.belirtec, gecerlilikSonu: exp };
+  const expMs = exp === null ? Number.NaN : Date.parse(exp);
+  if (!Number.isFinite(expMs) || expMs <= g.nowMs) return { kind: "none", nudge: true };
+  return { kind: "ok", token: { yolOneki: token.yolOneki, belirtec: token.belirtec, gecerlilikSonu: exp }, nudge: expMs - g.nowMs < DOWNLOAD_TOKEN_REFRESH_MARGIN_MS };
+}
+
+export function getDownloadToken(g: { urun: "electron" | "mobil"; kanal?: string | null }): LicenseDownloadToken {
+  const snap = getLicenseSnapshot();
+  const kanal = g.kanal ?? snap.lease?.document.kanal.kod ?? null;
+  const d = decideDownloadToken({
+    updatesAllowed: snap.state.uygulanan.guncellemeIzni,
+    prefix: kanal ? `/${kanal}/${g.urun}/` : null,
+    tokens: getDownloadTokens(),
+    nowMs: Date.now(),
+  });
+  if (d.kind === "frozen") throw licenseError(403, "LICENSE_UPDATES_FROZEN", "Bu kurulum için güncelleme dondurulmuş.");
+  if (d.nudge) requestDownloadTokenRefresh();
+  if (d.kind === "none") {
+    throw licenseError(404, "LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE", "İndirme belirteci yok (kurulum etkin değil ya da yoklama bekleniyor).");
+  }
+  return d.token;
 }
 
 // ── Proxy okuması ───────────────────────────────────────────────────────────────

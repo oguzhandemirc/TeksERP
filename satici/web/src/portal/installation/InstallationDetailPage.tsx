@@ -90,6 +90,8 @@ export function InstallationDetailPage() {
             ["Etkinleşme", fmtDateTime(inst.etkinlesmeZamani)],
             ["Son yoklama", fmtDateTime(inst.sonYoklamaZamani)],
             ["Yoklama aralığı", `${inst.yoklamaAraligiDk} dk`],
+            ["Bulut eşitleme aralığı", `${inst.esitlemeAraligiDk} dk`],
+            ["Buluttaki geçmiş", inst.bulutSaklamaAy === null ? "Tüm geçmiş" : `${inst.bulutSaklamaAy} ay`],
             ["Kurulum anahtarı", inst.anahtarKimligi ? <code key="a">{inst.anahtarKimligi}</code> : "—"],
           ]}
         />

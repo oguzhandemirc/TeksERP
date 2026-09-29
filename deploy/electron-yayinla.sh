@@ -87,8 +87,8 @@ if [ "$kuru" = "0" ]; then
   trap 'rm -f "$BELIRTEC_BASLIK"' EXIT
   node --input-type=module -e "
     import { baslikDosyasiYaz } from '$kok/scripts/lib/yayin-okuma.mjs';
-    try { baslikDosyasiYaz(process.argv[1]); } catch (e) { console.error('HATA: ' + e.message); process.exit(3); }
-  " -- "$BELIRTEC_BASLIK" || hata "Yayın belirteci yok — hiçbir şey yüklenmedi (anonim okumaya düşülmez)."
+    try { baslikDosyasiYaz(process.argv[1], process.argv[2]); } catch (e) { console.error('HATA: ' + e.message); process.exit(3); }
+  " -- "$BELIRTEC_BASLIK" "/$musteri/electron/" || hata "Yayın belirteci yok — hiçbir şey yüklenmedi (anonim okumaya düşülmez)."
   [ -s "$BELIRTEC_BASLIK" ] || hata "Yayın belirteci başlık dosyası boş — hiçbir şey yüklenmedi."
 fi
 # Güncelleme sunucusuna TEK sanksiyonlu HTTP okuması (bekçi: scripts/check-yayin-okuma.mjs).

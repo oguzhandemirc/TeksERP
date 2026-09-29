@@ -41,7 +41,7 @@ import {
 } from "./lib/test-ortam";
 
 /** Sözleşmenin allowlist'i — yanıtın anahtar kümesi BİREBİR bu olmalı. */
-const IZINLI_ALANLAR = ["v", "kurulumId", "tesis", "acikAnahtar", "anahtarKimligi", "durum", "sinif", "moduller", "patronBulutBitis", "devredildi", "aktif"].sort();
+const IZINLI_ALANLAR = ["v", "kurulumId", "tesis", "acikAnahtar", "anahtarKimligi", "durum", "sinif", "moduller", "patronBulutBitis", "devredildi", "aktif", "saklamaAy"].sort();
 
 interface Cevap {
   readonly status: number;
@@ -133,11 +133,13 @@ function birimSondalari(ortam: AnahtarOrtami, sir: string): void {
     patronBulutBitis: null,
     devredildi: false,
     aktif: true,
+    saklamaAy: 13,
   };
   kontrol("§3a ✓K sözleşmeli yanıt şemadan geçer", InternalInstallationSchema.safeParse(ornek).success);
   kontrol("§3b fazla üst alan (musteri) RED", !InternalInstallationSchema.safeParse({ ...ornek, musteri: { ad: "X" } }).success);
   kontrol("§3c tesis altında fazla alan (vergiNo) RED", !InternalInstallationSchema.safeParse({ ...ornek, tesis: { ...ornek.tesis, vergiNo: "1" } }).success);
   kontrol("§3d patron-bulut dışı modül RED", !InternalInstallationSchema.safeParse({ ...ornek, moduller: ["finance.enabled"] }).success);
+  kontrol("§3d' saklama süresi yalnız 3 · 13 · 25 · null (12 RED, null GEÇER)", !InternalInstallationSchema.safeParse({ ...ornek, saklamaAy: 12 }).success && InternalInstallationSchema.safeParse({ ...ornek, saklamaAy: null }).success);
   kontrol("§3e allowlist sabiti şemanın anahtarlarıyla aynı", JSON.stringify(Object.keys(InternalInstallationSchema.shape).sort()) === JSON.stringify(IZINLI_ALANLAR));
 }
 
@@ -214,6 +216,10 @@ async function main(): Promise<void> {
     kontrol("§5h hakkı olmayan kurulum: moduller [] + bitiş null + anahtarsız ETKINLESMEDI", r2.status === 200 && JSON.stringify(r2.json.moduller) === "[]" && r2.json.patronBulutBitis === null && r2.json.acikAnahtar === null && r2.json.durum === "ETKINLESMEDI", r2.metin.slice(0, 160));
     await prisma.kurulum.update({ where: { id: bulutsuz.kurulumDbId }, data: { durum: "IPTAL" } });
     const r3 = await istek(`${ic}/ic/v1/kurulum/${bulutsuz.kurulumId}`, { bearer: sir });
+    kontrol("§5h' saklama süresi kurulum ayarından (varsayılan 13 ay)", r.json.saklamaAy === 13 && r2.json.saklamaAy === 13, `${String(r.json.saklamaAy)}/${String(r2.json.saklamaAy)}`);
+    await prisma.kurulum.update({ where: { id: bulut.kurulumDbId }, data: { bulutSaklamaAy: null } });
+    const tum = await istek(`${ic}/ic/v1/kurulum/${bulut.kurulumId}`, { bearer: sir });
+    kontrol("§5h'' tüm geçmiş → saklamaAy null", tum.status === 200 && tum.json.saklamaAy === null, tum.metin.slice(0, 120));
     kontrol("§5i IPTAL kurulum → aktif:false, durum IPTAL", r3.json.aktif === false && r3.json.durum === "IPTAL", r3.metin.slice(0, 120));
 
     console.log("\n§6 kimlik ve yol kapısı");

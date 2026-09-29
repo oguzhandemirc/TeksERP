@@ -118,12 +118,16 @@ const InstallationCreate = z.strictObject({
   kanalKodu: z.string().min(1).max(40),
   ad: z.string().max(200).nullable().optional(),
   yoklamaAraligiDk: z.number().int().optional(),
+  esitlemeAraligiDk: z.number().int().optional(),
+  bulutSaklamaAy: z.number().int().nullable().optional(),
 });
 const InstallationUpdate = z.strictObject({
   clientToken: Token,
   ad: z.string().max(200).nullable().optional(),
   kanalKodu: z.string().min(1).max(40).optional(),
   yoklamaAraligiDk: z.number().int().optional(),
+  esitlemeAraligiDk: z.number().int().optional(),
+  bulutSaklamaAy: z.number().int().nullable().optional(),
   sinif: ClassEnum.optional(),
 });
 const EntitlementCreate = z.strictObject({
@@ -475,7 +479,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         clientToken: b.clientToken,
         body: b,
         run: (tx) =>
-          createInstallationTx(tx, { site, siteId: site.id, licenseClass: b.sinif, channelCode: b.kanalKodu, name: b.ad, pollMinutes: b.yoklamaAraligiDk }),
+          createInstallationTx(tx, { site, siteId: site.id, licenseClass: b.sinif, channelCode: b.kanalKodu, name: b.ad, pollMinutes: b.yoklamaAraligiDk, syncMinutes: b.esitlemeAraligiDk, cloudRetentionMonths: b.bulutSaklamaAy }),
         respond: (row) => ({ status: 201, data: row }),
         audit: (row) => [{ event: "KURULUM_EKLENDI", entity: "Kurulum", entityId: row.id, summary: { sinif: row.sinif, kanal: row.kanalKodu } }],
       });
@@ -494,7 +498,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         clientToken: b.clientToken,
         body: withPath(b, id),
         run: (tx) =>
-          updateInstallationTx(tx, { installationDbId: id, name: b.ad, channelCode: b.kanalKodu, pollMinutes: b.yoklamaAraligiDk, licenseClass: b.sinif, actor: c.session.actor }),
+          updateInstallationTx(tx, { installationDbId: id, name: b.ad, channelCode: b.kanalKodu, pollMinutes: b.yoklamaAraligiDk, syncMinutes: b.esitlemeAraligiDk, cloudRetentionMonths: b.bulutSaklamaAy, licenseClass: b.sinif, actor: c.session.actor }),
         respond: (row) => ({ data: row }),
         audit: (row) => [{ event: "KURULUM_GUNCELLENDI", entity: "Kurulum", entityId: row.id, summary: { alanlar: Object.keys(b).filter((k) => k !== "clientToken") } }],
       });

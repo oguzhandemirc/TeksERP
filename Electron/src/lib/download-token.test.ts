@@ -1,0 +1,116 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  API_BASE_URL_STORE_KEY,
+  AUTH_TOKEN_STORE_KEY,
+  DOWNLOAD_TOKEN_HEADER,
+  downloadTokenUrl,
+  feedOptions,
+  fetchDownloadToken,
+} from "@shared/download-token";
+
+// İNDİRME BELİRTECİ (3b) — panel her güncelleme denetiminden önce fabrikanın backend'inden belirteç
+// alır ve electron-updater'a başlık verir; alınamazsa BAŞLIKSIZ (bugünkü davranış). Main süreç
+// işleyicisi gerçek modülüyle, electron/electron-updater sahteleriyle koşar.
+const h = vi.hoisted(() => ({
+  handlers: new Map<string, (...a: unknown[]) => unknown>(),
+  fetchMock: vi.fn(),
+  store: new Map<string, string>(),
+  updater: {
+    setFeedURL: vi.fn(),
+    checkForUpdates: vi.fn(async () => null),
+    on: vi.fn(),
+    quitAndInstall: vi.fn(),
+    logger: null as unknown,
+    autoDownload: false,
+    autoInstallOnAppQuit: true,
+  },
+}));
+vi.mock("electron", () => ({
+  app: { isPackaged: true, getVersion: () => "9.9.9" },
+  BrowserWindow: { getAllWindows: () => [] },
+  ipcMain: { handle: (ch: string, fn: (...a: unknown[]) => unknown) => h.handlers.set(ch, fn), on: vi.fn() },
+  net: { fetch: (...a: unknown[]) => h.fetchMock(...a) },
+}));
+vi.mock("electron-updater", () => ({ default: { autoUpdater: h.updater } }));
+vi.mock("electron-log/main.js", () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock("../../electron/ipc/secure-store.ipc.js", () => ({
+  readSecureValue: (k: string) => h.store.get(k) ?? null,
+  writeSecureValue: (k: string, v: string) => h.store.set(k, v),
+  deleteSecureValue: (k: string) => h.store.delete(k),
+}));
+
+const TOKEN = "eyJhbGciOiJFZERTQSJ9.eyJ2IjoxfQ.c2lnbmF0dXJl";
+const ok = (belirtec: unknown) => ({ ok: true, status: 200, json: async () => ({ success: true, data: { belirtec } }) }) as unknown as Response;
+const fail = (status: number) => ({ ok: false, status, json: async () => ({ success: false }) }) as unknown as Response;
+
+describe("indirme belirteci (saf)", () => {
+  it("uç adresi renderer gibi taban + yol; http(s) olmayan taban → null", () => {
+    expect(downloadTokenUrl("http://10.0.0.5:4000/")).toBe("http://10.0.0.5:4000/api/license/indirme-belirteci?urun=electron");
+    expect(downloadTokenUrl("https://erp.example/fabrika")).toBe("https://erp.example/fabrika/api/license/indirme-belirteci?urun=electron");
+    expect(downloadTokenUrl(null)).toBeNull();
+    expect(downloadTokenUrl("file:///etc/passwd")).toBeNull();
+  });
+
+  it("oturumla alınır; Bearer + yönlendirme yok", async () => {
+    const f = vi.fn(async () => ok(TOKEN));
+    await expect(fetchDownloadToken({ apiBaseUrl: "http://s:4000", authToken: "jwt", fetchImpl: f })).resolves.toBe(TOKEN);
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("http://s:4000/api/license/indirme-belirteci?urun=electron");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer jwt");
+    expect(init.redirect).toBe("error");
+  });
+
+  it("oturum/adres yok, 403 K1, 404, biçimsiz yanıt, ağ hatası, zaman aşımı → null (başlıksız denetim)", async () => {
+    const f = vi.fn(async () => ok(TOKEN));
+    expect(await fetchDownloadToken({ apiBaseUrl: "http://s", authToken: null, fetchImpl: f })).toBeNull();
+    expect(await fetchDownloadToken({ apiBaseUrl: null, authToken: "jwt", fetchImpl: f })).toBeNull();
+    expect(f).not.toHaveBeenCalled();
+    for (const r of [fail(403), fail(404), ok(42), ok("boşluklu belirteç"), ok(`${"a".repeat(9000)}.b.c`)]) {
+      expect(await fetchDownloadToken({ apiBaseUrl: "http://s", authToken: "jwt", fetchImpl: async () => r })).toBeNull();
+    }
+    expect(await fetchDownloadToken({ apiBaseUrl: "http://s", authToken: "jwt", fetchImpl: async () => { throw new Error("ECONNREFUSED"); } })).toBeNull();
+    const asili = (_u: string, init: RequestInit) => new Promise<Response>((_r, rej) => init.signal?.addEventListener("abort", () => rej(new Error("abort"))));
+    expect(await fetchDownloadToken({ apiBaseUrl: "http://s", authToken: "jwt", fetchImpl: asili, timeoutMs: 10 })).toBeNull();
+  });
+
+  it("feed seçenekleri: belirteç varsa başlık, yoksa bugünkü gibi başlıksız", () => {
+    expect(feedOptions("https://g/k/electron/", TOKEN)).toEqual({ provider: "generic", url: "https://g/k/electron/", requestHeaders: { [DOWNLOAD_TOKEN_HEADER]: TOKEN } });
+    expect(feedOptions("https://g/k/electron/", null)).toEqual({ provider: "generic", url: "https://g/k/electron/" });
+    expect(DOWNLOAD_TOKEN_HEADER).toBe("X-TKL-Indirme");
+  });
+
+  it("ayna: secure-store anahtarları renderer'ınkiyle aynı", () => {
+    const src = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
+    expect(src("secure-token.ts")).toContain(`const TOKEN_KEY = "${AUTH_TOKEN_STORE_KEY}";`);
+    expect(src("api-config.ts")).toContain(`const STORE_KEY = "${API_BASE_URL_STORE_KEY}";`);
+  });
+});
+
+describe("updater.ipc — her denetimde belirteç", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    h.store.clear();
+    h.fetchMock.mockReset();
+    h.updater.setFeedURL.mockClear();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("oturum varken denetim başlıklı, belirteç alınamayınca başlıksız", async () => {
+    const { registerUpdaterIpc } = await import("../../electron/ipc/updater.ipc");
+    h.store.set(API_BASE_URL_STORE_KEY, "http://10.0.0.5:4000");
+    h.store.set(AUTH_TOKEN_STORE_KEY, "jwt");
+    h.fetchMock.mockResolvedValue(ok(TOKEN));
+    registerUpdaterIpc();
+    const check = h.handlers.get("updater:check")!;
+    await check();
+    const son = () => h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { requestHeaders?: Record<string, string> };
+    expect(son().requestHeaders).toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });
+    expect(h.fetchMock).toHaveBeenCalledWith("http://10.0.0.5:4000/api/license/indirme-belirteci?urun=electron", expect.anything());
+
+    h.fetchMock.mockResolvedValue(fail(403));
+    await check();
+    expect(son().requestHeaders).toBeUndefined();
+  });
+});

@@ -1,6 +1,7 @@
 # İndirme kapısı Worker'ı — kurulum, prova, geçiş, geri alma
 
 > **Durum (2026-09-29, dilim 3a):** kod ve bekçi hazır, **YAYIN YAPILMADI.** Worker'ı panele yapıştırmak, rota bağlamak, ayarı yazmak ve origin'i daraltmak kullanıcı cümlesiyle yapılır ("yayınla"); her adım ÖNCE testfabrika kanalında, sonra adnansahin'de.
+> **İstemci zinciri (dilim 3bc):** fabrika ucu `GET /api/license/indirme-belirteci?urun=electron|mobil` süresi dolmuş belirteci vermez, dolmaya < 15 dk kalmışsa yoklamayı dürter; panel (`updater.ipc.ts` + `/download-token`) her denetimde `X-TKL-Indirme`, tablet (`mobil/src/services/downloadToken.service.ts`) her OTA denetiminden önce `tkl` extra param + APK isteğinde başlık, açılışta native denetim bayat paramla 403 alırsa JS 5 sn sonra tazeleyip yeniden dener; belirteç alınamazsa HER İKİSİ BAŞLIKSIZ ister (geçiş listesi). Yayın betikleri önce taze CLI belirteci (`docs/kurallar/surum-yayin.md`). Senaryo L22/L24 bu zinciri gerçek Worker modülüyle koşar.
 > **Kod:** `deploy/guncelleme-sunucusu/worker/indirme-kapisi.js` · **Kâhin:** `Teks-Erp/src/lib/license/protocol/indirme.ts` · **Bekçi:** `Teks-Erp/scripts/test_indirme_kapisi.ts` · **Sözleşme:** `docs/design/LISANS-PROTOKOLU.md` (İNDİRME) · plan Faz 3a (`docs/design/LISANS-KOD-KORUMA.md`).
 
 ## 0. Ne yapar, ne yapmaz

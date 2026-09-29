@@ -15,6 +15,7 @@ import { CLASS_LABEL, MODULE_LABEL } from "../shared/labels";
 import { PORTAL_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
 import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
+import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "../shared/cloud-settings";
 
 const WEB_SRC = path.resolve(__dirname, "..");
 const SERVER_SRC = path.resolve(__dirname, "../../../sunucu/src");
@@ -161,6 +162,17 @@ describe("eşikler ve biçim desenleri aynası", () => {
     const src = read("services/sanction.service.ts");
     expect(HEAVY_K3_MIN_DAYS).toBe(numberConst(src, /export const HEAVY_K3_MIN_DAYS = (\d+);/));
     expect(INSTALLMENT_DEFAULT_RESTRICTION_DAYS).toBe(numberConst(src, /installmentRestrictionDays = [^\n]*\?\? (\d+);/));
+  });
+
+  it("patron bulutu eşitleme aralığı ve saklama seçenekleri (cloud-entitlement.ts)", () => {
+    const src = read("services/cloud-entitlement.ts");
+    expect(SYNC_MINUTES_MIN).toBe(numberConst(src, /export const SYNC_MINUTES_MIN = (\d+);/));
+    expect(SYNC_MINUTES_MAX).toBe(numberConst(src, /export const SYNC_MINUTES_MAX = (\d+);/));
+    expect(SYNC_MINUTES_DEFAULT).toBe(numberConst(src, /export const SYNC_MINUTES_DEFAULT = (\d+);/));
+    expect(CLOUD_RETENTION_DEFAULT).toBe(numberConst(src, /export const CLOUD_RETENTION_DEFAULT = (\d+);/));
+    const m = /export const CLOUD_RETENTION_MONTHS = \[([^\]]*)\] as const;/.exec(src);
+    expect(m, "CLOUD_RETENTION_MONTHS bulunamadı").not.toBeNull();
+    expect([...CLOUD_RETENTION_MONTHS]).toEqual(m![1]!.split(",").map((x) => Number(x.trim())));
   });
 
   it("bakım ay tavanı varsayılanı ve üst sınırı (dealer.service.ts)", () => {

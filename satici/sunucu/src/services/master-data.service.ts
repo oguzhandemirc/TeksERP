@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import type { Kurulum, LisansSinifi, Musteri, Tesis } from "@prisma/client";
 import { recordAudit } from "../lib/audit";
 import { badRequest, notFoundError, retryConflict, stateConflict } from "../lib/errors";
+import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "./cloud-entitlement";
 import { lockCustomer, lockDealers, lockInstallation } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
 import { requireChannel } from "./channel.service";
@@ -31,6 +32,18 @@ export function cleanTaxNo(taxNo: string | null | undefined): string | null {
 function pollMinutes(v: number | undefined): number | undefined {
   if (v === undefined) return undefined;
   if (!Number.isInteger(v) || v < 5 || v > 1440) throw badRequest("Yoklama aralığı 5–1440 dakika olmalı");
+  return v;
+}
+
+function syncMinutes(v: number | undefined): number | undefined {
+  if (v === undefined) return undefined;
+  if (!Number.isInteger(v) || v < SYNC_MINUTES_MIN || v > SYNC_MINUTES_MAX) throw badRequest("Eşitleme aralığı 1–60 dakika olmalı");
+  return v;
+}
+
+function cloudRetention(v: number | null | undefined): number | null | undefined {
+  if (v === undefined || v === null) return v;
+  if (!(CLOUD_RETENTION_MONTHS as readonly number[]).includes(v)) throw badRequest("Bulut saklama süresi 3, 13, 25 ay ya da tüm geçmiş olmalı");
   return v;
 }
 
@@ -162,6 +175,8 @@ export interface CreateInstallationInput {
   readonly channelCode: string;
   readonly name?: string | null;
   readonly pollMinutes?: number;
+  readonly syncMinutes?: number;
+  readonly cloudRetentionMonths?: number | null;
 }
 
 /**
@@ -182,6 +197,8 @@ export async function createInstallationUnderLock(tx: Tx, g: CreateInstallationI
       kanalKodu: g.channelCode,
       ad: name,
       yoklamaAraligiDk: pollMinutes(g.pollMinutes) ?? 60,
+      esitlemeAraligiDk: syncMinutes(g.syncMinutes) ?? SYNC_MINUTES_DEFAULT,
+      bulutSaklamaAy: g.cloudRetentionMonths === undefined ? CLOUD_RETENTION_DEFAULT : cloudRetention(g.cloudRetentionMonths),
     },
   });
 }
@@ -197,11 +214,13 @@ export interface UpdateInstallationInput {
   readonly name?: string | null;
   readonly channelCode?: string;
   readonly pollMinutes?: number;
+  readonly syncMinutes?: number;
+  readonly cloudRetentionMonths?: number | null;
   readonly licenseClass?: LisansSinifi;
   readonly actor: string;
 }
 
-/** Ad · kanal · yoklama aralığı · (imzalı HAK yokken) sınıf. Kiraya giden alan değişirse zil çalar. */
+/** Ad · kanal · yoklama/eşitleme aralığı · bulut saklama · (imzalı HAK yokken) sınıf. Kiraya giden alan değişirse zil çalar. */
 export async function updateInstallationTx(tx: Tx, g: UpdateInstallationInput): Promise<Kurulum> {
   await lockInstallation(tx, g.installationDbId);
   const inst = await tx.kurulum.findUnique({ where: { id: g.installationDbId } });
@@ -215,6 +234,8 @@ export async function updateInstallationTx(tx: Tx, g: UpdateInstallationInput): 
     ...(g.name === undefined ? {} : { ad: g.name === null ? null : cleanName(g.name, "Kurulum") }),
     ...(g.channelCode === undefined ? {} : { kanalKodu: g.channelCode }),
     ...(g.pollMinutes === undefined ? {} : { yoklamaAraligiDk: pollMinutes(g.pollMinutes) }),
+    ...(g.syncMinutes === undefined ? {} : { esitlemeAraligiDk: syncMinutes(g.syncMinutes) }),
+    ...(g.cloudRetentionMonths === undefined ? {} : { bulutSaklamaAy: cloudRetention(g.cloudRetentionMonths) }),
     ...(g.licenseClass === undefined ? {} : { sinif: g.licenseClass }),
   };
   const current = inst as unknown as Record<string, unknown>;
@@ -224,7 +245,7 @@ export async function updateInstallationTx(tx: Tx, g: UpdateInstallationInput): 
   if (changed.length === 0) return inst;
   const updated = await tx.kurulum.update({ where: { id: inst.id }, data });
   await tx.kurulumKaydi.create({ data: { kurulumId: inst.id, olay: "GUNCELLENDI", ayrinti: { alanlar: changed }, yapan: g.actor } });
-  if (changed.includes("kanalKodu") || changed.includes("yoklamaAraligiDk")) await notifyDoorbell(tx, inst.id, "lisans");
+  if (["kanalKodu", "yoklamaAraligiDk", "esitlemeAraligiDk"].some((k) => changed.includes(k))) await notifyDoorbell(tx, inst.id, "lisans");
   return updated;
 }
 

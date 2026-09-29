@@ -7,8 +7,14 @@
 //   ① SSH (tercih) — VDS dosya sisteminden, `yayinci` hesabıyla (sır gerektirmez):
 //      "ne yayında" sorusunun kaynağı (latest.yml · OTA manifesti · APK künyesi).
 //   ② Belirteçli HTTP — yalnız "kenardan ne görünüyor" doğrulamasında (CF önbelleği,
-//      başlıklar, boyut). Belirteç repoya GİRMEZ: `~/.tekserp/yayin-belirteci` (600).
-// Belirteç yoksa/biçimsizse/izinleri gevşekse DUR — anonim okumaya DÜŞÜLMEZ.
+//      başlıklar, boyut). Belirteç kaynağı, bu sırayla:
+//      a) TAZE CLI belirteci — `~/.tekserp/yayin-belirteci-kaynagi.json` (600) varsa: satıcı
+//         `anahtar.ts indirme-belirteci` komutu adresin kanalı için basar (hazırlıkta yerel anahtar
+//         dizini, üretimde VDS'teki satıcı konteyneri, SSH ile); kanal × ürün öneki, ≤ 70 dk.
+//      b) yoksa `~/.tekserp/yayin-belirteci` (600) dosyası (tek belirteç).
+//      Belirteç repoya GİRMEZ.
+// Belirteç yoksa/biçimsizse/izinleri gevşekse ya da yapılandırılmış CLI üretemezse DUR — anonim
+// okumaya ve öteki kaynağa DÜŞÜLMEZ.
 // Belirteç değeri hiçbir çıktıya, hata mesajına ya da süreç argümanına yazılmaz.
 // Bekçi: scripts/check-yayin-okuma.mjs (yayın betiklerinde belirteçsiz HTTP okuma yok).
 // =============================================================================
@@ -17,6 +23,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { kayitOku, Olculemedi } from './kanallar.mjs';
 
@@ -42,8 +49,107 @@ const nasilAlinir = (yol) => [
   'Belirteç repoya, log\'a ya da sürüm notuna GİRMEZ.',
 ].join('\n  ');
 
-/** @returns {string} belirteç — yalnız başlığa konur, hiçbir yere yazdırılmaz. */
-export function belirtecOku() {
+// ---------------------------------------------------------------- taze CLI belirteci (kaynak a)
+/** CLI kaynağının yapılandırma dosyasını ezer (bekçiler için); verilmezse ev dizinindeki dosya. */
+export const KAYNAK_ORTAMI = 'TEKSERP_YAYIN_BELIRTEC_KAYNAGI';
+const SATICI_SUNUCU = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'satici', 'sunucu');
+const CLI_OMUR_DK = 60;
+/** Bu kadar süresi kalmış belirteç yeniden kullanılmaz — uzun yükleme ortasında dolmasın. */
+const TAZELIK_PAYI_MS = 10 * 60_000;
+const CLI_ZAMAN_ASIMI_MS = 60_000;
+const KAPSAM_DESENI = /^\/([a-z0-9][a-z0-9-]{0,39})\/(electron|mobil)\//;
+const SSH_HEDEF_DESENI = /^[A-Za-z0-9@._-]{1,120}$/;
+const UZAK_KOMUT_DESENI = /^[A-Za-z0-9 ._/=-]{1,300}$/;
+const onbellek = new Map();
+
+export function kaynakDosyasi() {
+  return process.env[KAYNAK_ORTAMI] || path.join(os.homedir(), '.tekserp', 'yayin-belirteci-kaynagi.json');
+}
+
+/** Yapılandırılmamışsa null (bugünkü davranış: dosya belirteci). Dosya VARSA her kusuru DUR'dur. */
+function kaynakOku() {
+  const yol = kaynakDosyasi();
+  let st;
+  try {
+    st = fs.statSync(yol);
+  } catch {
+    return null;
+  }
+  if (!st.isFile() || (process.platform !== 'win32' && (st.mode & 0o077) !== 0)) {
+    throw new BelirtecYok(`YAYIN BELİRTECİ KAYNAĞI dosya değil ya da izinleri gevşek: ${yol} — chmod 600`);
+  }
+  let k;
+  try {
+    k = JSON.parse(fs.readFileSync(yol, 'utf8'));
+  } catch {
+    throw new BelirtecYok(`YAYIN BELİRTECİ KAYNAĞI okunamadı/JSON değil: ${yol}`);
+  }
+  const anahtarlar = Object.keys(k ?? {}).sort().join(',');
+  if (k?.tur === 'yerel' && anahtarlar === 'dizin,tur' && typeof k.dizin === 'string' && k.dizin.length > 0) {
+    return { tur: 'yerel', dizin: k.dizin.startsWith('~/') ? path.join(os.homedir(), k.dizin.slice(2)) : path.resolve(k.dizin) };
+  }
+  if (k?.tur === 'ssh' && anahtarlar === 'hedef,komut,tur' && SSH_HEDEF_DESENI.test(String(k.hedef)) && UZAK_KOMUT_DESENI.test(String(k.komut))) {
+    return { tur: 'ssh', hedef: k.hedef, komut: k.komut };
+  }
+  throw new BelirtecYok(`YAYIN BELİRTECİ KAYNAĞI tanınmıyor: ${yol} — {"tur":"yerel","dizin":…} ya da {"tur":"ssh","hedef":…,"komut":…}`);
+}
+
+/** Adresin kanal + ürün öneki (`/<kanal>/electron/` · `/<kanal>/mobil/`); değilse null. */
+export function kapsamCoz(url) {
+  let yol;
+  try {
+    yol = new URL(String(url ?? ''), 'https://yer-tutucu.invalid').pathname;
+  } catch {
+    return null;
+  }
+  const m = KAPSAM_DESENI.exec(yol);
+  return m ? { kanal: m[1], yolOneki: `/${m[1]}/${m[2]}/` } : null;
+}
+
+function cliCalistir(kaynak, kanal) {
+  const argv = ['indirme-belirteci', `--kanal=${kanal}`, `--dk=${CLI_OMUR_DK}`];
+  const secenek = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: CLI_ZAMAN_ASIMI_MS, maxBuffer: 1024 * 1024 };
+  let cikti;
+  try {
+    cikti = kaynak.tur === 'yerel'
+      ? execFileSync(process.execPath, ['--import', 'tsx', 'scripts/anahtar.ts', ...argv, `--dizin=${kaynak.dizin}`], { ...secenek, cwd: SATICI_SUNUCU })
+      : execFileSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', kaynak.hedef, `${kaynak.komut} ${argv.join(' ')}`], secenek);
+  } catch (e) {
+    throw new BelirtecYok(`YAYIN BELİRTECİ üretilemedi (${kaynak.tur}; çıkış ${e.status ?? e.code ?? '?'}) — satıcı anahtar CLI'ını denetle`);
+  }
+  let j;
+  try {
+    j = JSON.parse(cikti);
+  } catch {
+    throw new BelirtecYok('YAYIN BELİRTECİ CLI çıktısı JSON değil (içerik yazdırılmadı)');
+  }
+  const liste = (Array.isArray(j?.belirtecler) ? j.belirtecler : []).map((b) => ({ yolOneki: b?.yolOneki, belirtec: b?.belirtec, expMs: Date.parse(b?.exp) }));
+  if (j?.v !== 1 || liste.length === 0 || !liste.every((b) => KAPSAM_DESENI.test(String(b.yolOneki)) && BELIRTEC_DESENI.test(String(b.belirtec)) && Number.isFinite(b.expMs))) {
+    throw new BelirtecYok('YAYIN BELİRTECİ CLI çıktısı sözleşmeye uymuyor (içerik yazdırılmadı)');
+  }
+  return liste;
+}
+
+function cliBelirteci(kaynak, url) {
+  const kapsam = kapsamCoz(url);
+  if (!kapsam) throw new BelirtecYok(`YAYIN BELİRTECİ: adres kanal/ürün önekinde değil (/<kanal>/electron|mobil/): ${String(url ?? '(yok)').split(/[?#]/)[0]}`);
+  const taze = (b) => b.yolOneki === kapsam.yolOneki && b.expMs - Date.now() >= TAZELIK_PAYI_MS;
+  let b = (onbellek.get(kapsam.kanal) ?? []).find(taze);
+  if (!b) {
+    onbellek.set(kapsam.kanal, cliCalistir(kaynak, kapsam.kanal));
+    b = onbellek.get(kapsam.kanal).find(taze);
+  }
+  if (!b) throw new BelirtecYok(`YAYIN BELİRTECİ: CLI ${kapsam.yolOneki} için taze belirteç vermedi`);
+  return b.belirtec;
+}
+
+/**
+ * @param {string} [url] okunacak adres ya da yol — CLI kaynağında belirtecin kanal/ürün öneki buradan seçilir.
+ * @returns {string} belirteç — yalnız başlığa konur, hiçbir yere yazdırılmaz.
+ */
+export function belirtecOku(url) {
+  const kaynak = kaynakOku();
+  if (kaynak) return cliBelirteci(kaynak, url);
   const yol = belirtecDosyasi();
   let st;
   try {
@@ -67,7 +173,7 @@ export function belirtecOku() {
   return deger;
 }
 
-export const indirmeBasliklari = () => ({ [INDIRME_BASLIGI]: belirtecOku() });
+export const indirmeBasliklari = (url) => ({ [INDIRME_BASLIGI]: belirtecOku(url) });
 
 /**
  * Güncelleme sunucusuna TEK sanksiyonlu HTTP okuması — belirteç başlığı her istekte.
@@ -75,13 +181,16 @@ export const indirmeBasliklari = () => ({ [INDIRME_BASLIGI]: belirtecOku() });
  */
 export async function belirtecliFetch(url, secenek = {}) {
   if (!/^https:\/\//.test(String(url ?? ''))) throw new Olculemedi(`adres HTTPS değil: ${url}`);
-  const basliklar = { ...(secenek.headers ?? {}), ...indirmeBasliklari() };
+  const basliklar = { ...(secenek.headers ?? {}), ...indirmeBasliklari(url) };
   return fetch(url, { ...secenek, headers: basliklar });
 }
 
-/** Kabuk betikleri için başlık dosyası (`curl -H @dosya`): belirteç argv'ye düşmez. Mod 600. */
-export function baslikDosyasiYaz(hedef) {
-  const satir = `${INDIRME_BASLIGI}: ${belirtecOku()}\n`;
+/**
+ * Kabuk betikleri için başlık dosyası (`curl -H @dosya`): belirteç argv'ye düşmez. Mod 600.
+ * `url`: dosyayla okunacak adreslerin ortak öneki (ör. `/<kanal>/electron/`) — CLI kaynağında gerekir.
+ */
+export function baslikDosyasiYaz(hedef, url) {
+  const satir = `${INDIRME_BASLIGI}: ${belirtecOku(url)}\n`;
   fs.writeFileSync(hedef, satir, { mode: 0o600 });
   fs.chmodSync(hedef, 0o600);
 }

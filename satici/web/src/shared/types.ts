@@ -57,6 +57,10 @@ export interface Installation {
   readonly anahtarKimligi: string | null;
   readonly zorlama: boolean;
   readonly yoklamaAraligiDk: number;
+  /** Patron bulutu eşitleme aralığı (dk, 1–60) — kiraya basılır. */
+  readonly esitlemeAraligiDk: number;
+  /** Buluttaki geçmişin saklama süresi (ay: 3 · 13 · 25); null = tüm geçmiş. */
+  readonly bulutSaklamaAy: number | null;
   readonly platform: string | null;
   readonly sonOrtam: Record<string, unknown> | null;
   readonly sonSaglik: Record<string, unknown> | null;

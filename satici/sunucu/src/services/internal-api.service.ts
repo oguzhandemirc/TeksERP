@@ -1,16 +1,16 @@
 // SATICI İÇ API'Sİ (patron bulutu → satıcı; sözleşme PATRON-BULUTU-ESITLEME §17). Yanıt ALLOWLIST'tir:
 // yalnız eşitleme kapısının ihtiyacı (açık anahtar + kid, durum, sınıf, patron-bulut hakkı ve bitişi, tesis
-// kimliği/adı). Müşteri, vergi no, lisans no, bayi, parmak izi, ortam/sağlık ve öteki modüller ÇIKMAZ; çıktı
+// kimliği/adı, bulut saklama süresi). Müşteri, vergi no, lisans no, bayi, parmak izi, ortam/sağlık ve öteki modüller ÇIKMAZ; çıktı
 // KATI şemadan geçer, fazla alan 500'dür (sızıntı sessiz olmaz). Kimlik = LİSANS kimliği (D14).
-import type { Hak } from "@prisma/client";
 import { z } from "zod";
 import { IsoTimeSchema, LICENSE_CLASSES, PublicKeyXSchema, UuidSchema, InstallationKidSchema } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
 import type { Db } from "../lib/prisma";
 import { notifyDoorbell, type DoorbellTopic } from "./doorbell";
+import { cloudEntitlementUntil, cloudRetentionMonths, CLOUD_MODULE_KEY } from "./cloud-entitlement";
 import { computeSanctionState } from "./lease.service";
 
-export const CLOUD_MODULE_KEY = "patron-bulut";
+export { CLOUD_MODULE_KEY };
 /** İç API'den çalınabilen zil konuları — lisans/güncelleme/destek zili yalnız satıcının kendi eylemlerinden. */
 export const INTERNAL_DOORBELL_TOPICS = ["gelen-kutusu", "rapor", "ozet"] as const satisfies readonly DoorbellTopic[];
 
@@ -26,6 +26,8 @@ export const InternalInstallationSchema = z.strictObject({
   patronBulutBitis: IsoTimeSchema.nullable(),
   devredildi: z.boolean(),
   aktif: z.boolean(),
+  /** Buluttaki geçmişin saklama süresi (ay); `null` = tüm geçmiş. */
+  saklamaAy: z.union([z.literal(3), z.literal(13), z.literal(25), z.null()]),
 });
 export type InternalInstallation = z.infer<typeof InternalInstallationSchema>;
 
@@ -34,19 +36,6 @@ export const InternalDoorbellSchema = z.strictObject({
   tesisId: UuidSchema,
   konu: z.enum(INTERNAL_DOORBELL_TOPICS),
 });
-
-type CloudHak = Pick<Hak, "aktif" | "guncelSurum" | "moduller" | "bakimBitis" | "gecerlilikBitis">;
-
-/**
- * Patron bulutu hakkının bitişi — TEK kaynak. Hak imzalı ve `patron-bulut` modülünü taşıyor, modül yaptırımla
- * donmamış olmalı; bitiş bakım ve (varsa) geçerlilik bitişinin ERKENİ (ticari model kararı gelene dek).
- */
-export function cloudEntitlementUntil(hak: CloudHak | null, frozenModules: readonly string[]): Date | null {
-  if (!hak || !hak.aktif || hak.guncelSurum < 1 || !hak.moduller.includes(CLOUD_MODULE_KEY)) return null;
-  if (frozenModules.includes(CLOUD_MODULE_KEY)) return null;
-  const ends = [hak.bakimBitis.getTime(), ...(hak.gecerlilikBitis ? [hak.gecerlilikBitis.getTime()] : [])];
-  return new Date(Math.min(...ends));
-}
 
 /** Lisans kimliğiyle kurulum görünümü; kurulum yoksa null (404). DB kimliği ya da fabrika installationId'si eşleşmez. */
 export async function readInstallationForCloud(db: Db, licenseId: string): Promise<InternalInstallation | null> {
@@ -69,6 +58,7 @@ export async function readInstallationForCloud(db: Db, licenseId: string): Promi
     patronBulutBitis: until ? until.toISOString() : null,
     devredildi: inst.durum === "DEVREDILDI",
     aktif: inst.aktif && inst.tesis.aktif && inst.durum !== "IPTAL",
+    saklamaAy: cloudRetentionMonths(inst),
   });
 }
 
