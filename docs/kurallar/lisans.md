@@ -61,6 +61,15 @@
 - **[ÇEKİRDEK]** Bir kez gösterilen sır (etkinleştirme kodu · TOTP sırrı/QR) yalnız canlı yanıtta ve bileşen durumunda yaşar — önbelleğe, web deposuna, URL'ye yazılmaz; tekrar yanıtında "gösterilemez" denir. TOTP kurulumu hesabı açan/sıfırlayan yöneticinin ekranındadır (TOTP'siz oturum olmadığından ilk girişte kurulum akışı YOK), kurtarma kodu yoktur. · bekçi: `satici/web src/test/once-secret.test.tsx` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Arayüzün sunucudan kopyaladığı her bilgi (izin tablosu, ağır K3 eşiği, tavan sınırları, kanal/sürüm desenleri, çağrılan her uç) ayna bekçisiyle sunucu KAYNAĞINA karşı ölçülür; arayüz yalnız gizler, kararı sunucu verir. · bekçi: `satici/web src/test/mirrors.test.ts` <sub>(arşiv:2026-09-29)</sub>
 
+## Native lisans çekirdeği (`Teks-Erp/native/lisans-cekirdek`)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Native çekirdek TS protokolünün AYNASIDIR, TS tek kaynak ve test kâhinidir: doğrulama/şema/parmak izi kuralı önce TS'te değişir, Rust aynası ve vektör dosyası (`--vektor-yaz`) aynı commit'te iner; denetim sırası da aynadır ve iki uygulama aynı vektörlerde aynı sonucu verir. · bekçi: `test_lisans_native_kahin (§0h regex aynası · §2b bayatlık · §4a kayıtlı · §5a canlı vektör)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Üretim paketinde native ZORUNLUDUR (derleme sabiti `__TEKSERP_NATIVE_REQUIRED__`): zorunlu kipte TS yoluna düşülmez, ortam yolu okunmaz, test çapalı derleme reddedilir; kullanılamayan çekirdek istisna atmaz — doğrulamalar `CEKIRDEK_YOK`, bütünlük GEÇERSİZ, lisans merdiveni işler, süreç düşmez. · bekçi: `test_lisans_native_kahin (§1b · §1e · §1g · §7a)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Güven çapası native ikiliye GÖMÜLÜDÜR (= `ROOT_PUBLIC_KEYS` / `PACKAGE_PUBLIC_KEYS`); dışarıdan çapa yalnız `test-anchor` özellikli derlemede kabul edilir, paket özelliksiz derlemeyi taşır. · bekçi: `test_lisans_native_kahin (§0e gömülü çapa · §7b enjeksiyon reddi)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Parmak izi toplayıcısı iki uygulamada AYNI ham değeri okur — Windows'ta aynı PowerShell sondası (metin satır satır aynı), Linux/macOS'ta aynı dosya/komut aynı sırayla; Faz 1 kiralarının kabul edilen kümesi TS toplayıcısıyla ölçüldüğünden sapma yükseltmede parmak izini uyuşmaz yapar. · bekçi: `test_lisans_native_kahin (§0d sonda metni · §6a aynı makinede aynı özet)` <sub>(arşiv:2026-09-29)</sub>
+
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
 - **KISMI** `docs/design/LISANS-PROTOKOLU.md §6 (f4 = birincil fiziksel ağ kartının MAC'i)` → `R:2026-09-29 yönetici kararı (F3/F4)`: F4 sistem/anakart seri numarasıdır, MAC kullanılmaz; F3 RAID genel serisi ölçülemedi. Kod henüz eski hâlde (borç, yukarıda Yasaklar).
@@ -73,7 +82,9 @@ Fabrika tarafı: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## lisans` bölümü.**
 
-Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`
+Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_native_kahin`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`
+
+Native çekirdek (cargo, `cd Teks-Erp/native/lisans-cekirdek && npm test`; commit kapısında koşar, cargo yoksa ⏭ beyanla): `tests/vektorler.rs` (TS kâhininin vektör dosyası Rust tarafında) · derleme `npm run derle` (kâhinin §3–§7'si için `.node`).
 
 Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koşar): `mirrors.test.ts`, `sanction.test.tsx`, `once-secret.test.tsx`, `login.test.tsx`, `app-isolation.test.ts`
 
@@ -92,4 +103,5 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-29 · Satıcı tamamlama: kısa K3 ağır, bayi tavanı kalıcı izni + bakım ay tavanı, denetim budaması, kanal varlığı, iki protokol hata kodu
 - 2026-09-29 · Portal web (1f): aynı kökenden statik servis, TOTP kurulumu yöneticide, ayna bekçisi, commit kapısının beşinci projesi
 - 2026-09-29 · Senaryo L (lisans uçtan uca) koşucusu; kira alışverişleri süreç içinde sıralı
+- 2026-09-29 · Native lisans çekirdeği (Faz 2c): TS protokolünün Rust aynası, gömülü çapa, zorunlu kip, vektör kâhini
 - 2026-09-29 · Hazırlık kökü çapada, satıcı adresi varsayılanı, satıcının VDS kurulum tasarımı

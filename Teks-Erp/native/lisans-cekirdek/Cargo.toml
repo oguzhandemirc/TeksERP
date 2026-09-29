@@ -1,0 +1,46 @@
+[package]
+name = "lisans-cekirdek"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+description = "TeksERP lisans çekirdeği (native): JWS/EdDSA doğrulama, parmak izi, bütünlük, modül anahtarı"
+license = "UNLICENSED"
+
+[lib]
+# cdylib = Node eklentisi (.node); rlib = `cargo test` bütünleşme testleri aynı çekirdeği bağlasın.
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["napi"]
+# N-API yapıştırıcısı. `cargo test` bunu KAPALI koşar: test ikilisi node sembollerini çözemez.
+napi = ["dep:napi", "dep:napi-derive"]
+# Dışarıdan güven çapası (kök / paket anahtarı) enjeksiyonu — YALNIZ geliştirme/test derlemesi.
+# Üretim derlemesi (2b) bu özelliksiz çıkar: yamalı JS kendi kökünü veremez; yükleyici zorunlu
+# kipte test çapalı derlemeyi reddeder.
+test-anchor = []
+
+[dependencies]
+napi = { version = "3", default-features = false, features = ["napi4"], optional = true }
+napi-derive = { version = "3", optional = true }
+ed25519-dalek = { version = "2.2", default-features = false, features = ["std", "zeroize"] }
+x25519-dalek = { version = "2.0", default-features = false, features = ["static_secrets", "zeroize"] }
+sha2 = "0.10"
+hmac = "0.12"
+hkdf = "0.12"
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
+base64 = "0.22"
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+regex = { version = "1", default-features = false, features = ["std", "perf"] }
+unicode-normalization = "0.1"
+zeroize = "1"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+# panic = "unwind" (varsayılan) bilerek: native hata JS istisnasına döner (`catch_unwind`), süreç düşmez.
+lto = true
+codegen-units = 1
+strip = "symbols"
+opt-level = 3
