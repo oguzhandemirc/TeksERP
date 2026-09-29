@@ -189,6 +189,9 @@ export const TABLE_LABELS: Record<string, string> = {
 
   // Fabrika tarafında da etiketsiz kalmış olanlar (aynı tarama).
   ROLL_QTY_ADJUST: "Top Metraj Düzeltmesi",
+  // Patron bulutu gelen kutusu makbuzu (B3) · destek talebi (3d-2).
+  CLOUD_INBOX_RECEIPT: "Bulut Gelen Kutusu Makbuzu",
+  SUPPORT_TICKET: "Destek Talebi",
 };
 
 /** Ham tableName'i Türkçe etiketle. Boş → "—", bilinmeyen → ham değer. */
@@ -848,6 +851,12 @@ export const ENUM_LABELS: Record<string, string> = {
   SEAL: "Mühürlendi",
   UNSEAL: "Mühür açıldı",
   RESEAL: "Yeniden mühürlendi",
+
+  // ── Patron bulutu gelen kutusu makbuzu (B3) — CloudInboxKind · CloudInboxOutcome.
+  SIPARIS: "Sipariş",
+  CARI: "Cari",
+  ISLENDI: "İşlendi",
+  REDDEDILDI: "Reddedildi",
 };
 
 // =============================================================================

@@ -70,7 +70,8 @@ function statik(): void {
   const customerModel = schema.slice(schema.indexOf("model Customer {"), schema.indexOf("\n}", schema.indexOf("model Customer {")));
   check("§0c terimler TEK kaynak: `Customer` modelinde paymentTermDays/defaultCurrency/taxOffice/riskLimit YOK (B yolu reddi)", !/paymentTermDays|defaultCurrency|riskLimit|taxOffice/.test(customerModel));
   const okuyucular = spawnSync("grep", ["-rl", "paymentTermDays", path.join(ROOT, "src")], { encoding: "utf8" }).stdout.trim().split("\n").map((f) => path.relative(ROOT, f)).sort();
-  const beklenen = ["src/routes/customer.routes.ts", "src/routes/finance.routes.ts", "src/services/cari.service.ts", "src/services/helpers/customer-finance-bridge.helper.ts", "src/services/helpers/finance.helper.ts", "src/services/helpers/shipment-auto-draft.helper.ts", "src/services/invoice.service.ts", "src/services/reports/finance-aging.report.ts"];
+  // cloud-sync: patron bulutu projeksiyonu vade gününü hesap kartından SALT OKUR (terim yine tek kaynak).
+  const beklenen = ["src/cloud-sync/catalog-facts.ts", "src/cloud-sync/derived.ts", "src/routes/customer.routes.ts", "src/routes/finance.routes.ts", "src/services/cari.service.ts", "src/services/helpers/customer-finance-bridge.helper.ts", "src/services/helpers/finance.helper.ts", "src/services/helpers/shipment-auto-draft.helper.ts", "src/services/invoice.service.ts", "src/services/reports/finance-aging.report.ts"];
   check("§0d `paymentTermDays` okuyan dosya kümesi KAPALI (yeni okuyucu = beyan)", JSON.stringify(okuyucular) === JSON.stringify(beklenen), okuyucular.join(","));
   const fr = readFileSync(path.join(ROOT, "src/routes/finance.routes.ts"), "utf8");
   check("§0e `POST /finance/cari` 400 CARI_ACCOUNT_BORN_WITH_CARD (şema yine doğrulanır)", /cariCreateSchema\.parse\(req\.body\);\s*\n\s*throw AppError\.badRequest\([\s\S]{0,400}?CARI_ACCOUNT_BORN_WITH_CARD/.test(fr));

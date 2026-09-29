@@ -125,6 +125,8 @@ const SURUM_OKUYUCULARI = new Map<string, string>([
    "login/kart/PIN uçlarında `Session.clientVersion` yazımı — yalnız `ctx` nesnesine konur"],
   ["middlewares/auth.middleware.ts",
    "`lastSeenAt` dokunuşunda NULL kalmış satırı doldurur (panel sürümü ASENKRON okuduğu için ilk istek sürümsüz gidebiliyor) — `updateMany`ye argüman"],
+  ["routes/support.routes.ts",
+   "destek talebine panel sürümü (3d-2) — yalnız `createSupportTicket` argüman nesnesine konur, satıcıya bilgi olarak gider"],
 ]);
 const okuyucular: string[] = [];
 for (const file of walk(SRC)) {

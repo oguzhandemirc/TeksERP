@@ -204,7 +204,7 @@ async function main(): Promise<void> {
     const schema = readFileSync(join(__dirname, "..", "prisma", "schema.prisma"), "utf8");
     const modelBody = (name: string) => schema.slice(schema.indexOf(`model ${name} {`), schema.indexOf("\n}", schema.indexOf(`model ${name} {`)));
     check("⭐ `Roll` ve `WorkOrder`da `weavingOrderId` kolonu YOK — top→iş `weavingOrderOfRoll` ile türetilir", !/^\s*weavingOrderId\s/m.test(modelBody("Roll")) && !/^\s*weavingOrderId\s/m.test(modelBody("WorkOrder")));
-    check("pivot + levent bağı şemada (yalnız ekleme)", /model WeavingOrderToOrderLine \{/.test(schema) && /^\s*weavingOrderId String\?\s+@db\.Uuid/m.test(modelBody("WarpBeam")));
+    check("pivot + levent bağı şemada (yalnız ekleme)", /model WeavingOrderToOrderLine \{/.test(schema) && /^\s*weavingOrderId\s+String\?\s+@db\.Uuid/m.test(modelBody("WarpBeam")));
   } catch (e) {
     fail++;
     console.log(`  ✗ FAIL: beklenmeyen hata — ${msg(e).slice(0, 300)}`);
