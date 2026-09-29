@@ -10,6 +10,7 @@ import {
   OfflineRequestSchema,
   PollRequestSchema,
   REQUEST_HEADER,
+  SupportRequestSchema,
   TransferRequestSchema,
   isPlainObject,
   openEnvelope,
@@ -21,6 +22,7 @@ import type { DoorbellHub } from "../services/doorbell";
 import { drTakeoverTarget, processDrTakeover } from "../services/dr.service";
 import { authenticateRequest } from "../services/installation-auth";
 import { processPoll } from "../services/poll.service";
+import { openSupportTicket } from "../services/support.service";
 import { handleTransferRequest } from "../services/transfer.service";
 import { parseJsonBody, parseStrict, rawBodyOf } from "./body";
 import { proxyTrustFrom } from "./client-address";
@@ -118,6 +120,17 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
       precheck: async (a) => void (await drTakeoverTarget(a.installation, parsed)),
     });
     res.json(await processDrTakeover(ctx, auth, parsed, nowMs));
+  });
+
+  // DESTEK: gövde küçük ek (≤1 MB görüntü, base64) taşıyabilir — yalnız bu uçta daha geniş ham sınır.
+  // Büyük ek bu gövdede değil `/y/<belirteç>` yükleme bağlantısıyla gider (3d-1).
+  const rawSupport = express.raw({ type: () => true, limit: "2mb" });
+  app.post(ENDPOINTS.SUPPORT, rawSupport, async (req: Request, res: Response) => {
+    const nowMs = Date.now();
+    const body = rawBodyOf(req.body);
+    const parsed = parseStrict(SupportRequestSchema, parseJsonBody(body));
+    const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: body, purposes: ["destek"], nowMs, limit });
+    res.json(await openSupportTicket(auth, parsed));
   });
 
   // KAPI ZİLİ (SSE): kurulum imzalı abonelik; içerik taşımaz, yalnız "şimdi yokla". Kurulum başına ≤ ZIL_AZAMI_ABONE.

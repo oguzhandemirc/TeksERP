@@ -16,13 +16,13 @@ export interface Page<T> {
 
 export const MAX_PAGE = 200;
 
-function page<T extends { id: string }>(rows: T[], limit: number): Page<T> {
+export function page<T extends { id: string }>(rows: T[], limit: number): Page<T> {
   const more = rows.length > limit;
   const items = more ? rows.slice(0, limit) : rows;
   return { items, nextCursor: more ? (items[items.length - 1]?.id ?? null) : null };
 }
 
-function cursorArgs(cursor: string | undefined, limit: number) {
+export function cursorArgs(cursor: string | undefined, limit: number) {
   return {
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),

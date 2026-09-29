@@ -349,6 +349,11 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     await tx.yoklama.deleteMany({ where: w });
     await tx.kopyaUyarisi.deleteMany({ where: w });
     await tx.tasimaTalebi.deleteMany({ where: w });
+    // Destek talepleri (3d-2): defter satırları önce, talep sonra; denetim ayak izi talep id'siyle.
+    const talepler = await tx.destekTalebi.findMany({ where: w, select: { id: true } });
+    for (const t of talepler) denetimIdleri.add(t.id);
+    await tx.destekOlayi.deleteMany({ where: { talepId: { in: talepler.map((t) => t.id) } } });
+    await tx.destekTalebi.deleteMany({ where: w });
     await tx.kurulumKaydi.deleteMany({ where: w });
     await tx.kurulum.updateMany({ where: { id: { in: ids } }, data: { sonKiraId: null } });
     await tx.kira.deleteMany({ where: w });

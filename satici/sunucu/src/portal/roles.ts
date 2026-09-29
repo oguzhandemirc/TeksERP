@@ -31,6 +31,8 @@ export const PORTAL_PERMISSIONS = {
   "bayi:yonet": ADMIN,
   "kullanici:yonet": ADMIN,
   "denetim:oku": VENDOR,
+  /** Destek kutusu: fabrikanın talebine yanıt yazma ve talebi kapatma (okuma `portal:oku`). */
+  "destek:yanitla": VENDOR,
   "anahtar:oku": VENDOR,
   /** Bayi alt-portalı (yalnız kendi müşterileri). */
   "bayi:portal": ["BAYI"],

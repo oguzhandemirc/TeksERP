@@ -14,6 +14,7 @@ import { installationName, type Catalog, type InstallationDetail } from "../../s
 import { Badge, Button, KeyValues, PageTitle, QueryState, Section } from "../../shared/ui";
 import { statusTone } from "../pages/Installations";
 import { HealthPanel, IncidentsPanel, RecordsPanel } from "./IncidentPanels";
+import { InstallHistoryPanel } from "./InstallHistoryPanel";
 import { InstallmentPanel, PlannedPanel } from "./PlanPanels";
 import { SanctionPanel } from "./SanctionPanel";
 
@@ -126,7 +127,12 @@ export function InstallationDetailPage() {
       ) : null}
       {tab === "saglik" ? <HealthPanel detail={d} /> : null}
       {tab === "olaylar" ? <IncidentsPanel detail={d} onChanged={refresh} /> : null}
-      {tab === "kayit" ? <RecordsPanel detail={d} /> : null}
+      {tab === "kayit" ? (
+        <>
+          <InstallHistoryPanel detail={d} />
+          <RecordsPanel detail={d} />
+        </>
+      ) : null}
 
       {dialog?.kind === "edit" && catalog.data ? (
         <InstallationFormModal
