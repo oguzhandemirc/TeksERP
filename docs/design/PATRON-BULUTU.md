@@ -3,6 +3,7 @@
 > **Durum:** onaylı plan (kullanıcı 2026-09-29), repo içindeki kalıcı hâli — plan dosyasının Plan B kısmı. Temeli Plan A kurar: `docs/design/LISANS-KOD-KORUMA.md` (kurulum kimlik anahtarı, Müşteri → Tesis → Kurulum modeli, konulu kapı zili, veri sınıfı ayrımı, `patron-bulut` hakkı). Protokol: `docs/design/LISANS-PROTOKOLU.md`.
 > **Uygulama sırası:** A önce; B'nin temel gerektirmeyen işleri paralel. B1 eşitleme, A'nın fabrika motoru dilimindeki `readXRaw` ayrımı indikten SONRA başlar.
 > **Kararların tam metni:** `docs/history/CLAUDE-NOT-ARSIVI.md` (2026-09-29 notları).
+> **B1 ayrıntısı (eşitleme sözleşmesi v1, projeksiyon kataloğu, rapor isteği ve gelen kutusu protokolleri, bulut RLS taslağı, izin kataloğu):** `docs/design/PATRON-BULUTU-ESITLEME.md` — ölçüm betikleri `Teks-Erp/scripts/olcum/patron-*.ts`.
 
 ## Bulut ayna reddi (2026-09-01) — KISMEN GEÇERSİZ
 
