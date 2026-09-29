@@ -1,0 +1,5 @@
+/target/
+/dist/
+/dist-uretim/
+/node_modules/
+*.node

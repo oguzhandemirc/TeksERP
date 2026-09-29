@@ -1,0 +1,4 @@
+# Windows: C çalışma zamanı STATİK bağlanır — hedef sunucuda VC++ yeniden dağıtılabilir paketi
+# olmasa da `.node` yüklenir (ölçüldü: statiksiz derleme VCRUNTIME140.dll ister).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

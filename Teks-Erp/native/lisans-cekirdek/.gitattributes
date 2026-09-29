@@ -1,0 +1,2 @@
+# Üretilmiş test vektörü (TS kâhini yazar: `npx tsx scripts/test_lisans_native_kahin.ts --vektor-yaz`) — elle düzenlenmez.
+test-vektorleri/*.json linguist-generated=true -diff

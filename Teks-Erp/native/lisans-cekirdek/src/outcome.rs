@@ -1,0 +1,83 @@
+//! Doğrulama sonucu — TS `Result<T>` (`protocol/ortak.ts`) aynası: istisna değil değer.
+//! Kodlar protokolün `PROTOCOL_ERROR_CODES` kümesinin alt kümesidir; çekirdeğe özgü
+//! kodlar (bütünlük, modül anahtarı, çapa enjeksiyonu) ayrı listede durur ve kâhin
+//! bekçisi ikisini de TS tarafıyla karşılaştırır.
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fail {
+    pub code: &'static str,
+    pub message: String,
+}
+
+pub type Outcome<T> = Result<T, Fail>;
+
+pub fn fail<T>(code: &'static str, message: impl Into<String>) -> Outcome<T> {
+    Err(Fail { code, message: message.into() })
+}
+
+/// Protokol kodları — `Teks-Erp/src/lib/license/protocol/ortak.ts` `PROTOCOL_ERROR_CODES`in
+/// bu çekirdeğin ürettiği alt kümesi (istek/indirme kodları fabrika tarafında doğrulanmaz).
+pub mod code {
+    pub const JWS_BICIM: &str = "JWS_BICIM";
+    pub const JWS_BASLIK: &str = "JWS_BASLIK";
+    pub const JWS_ALG: &str = "JWS_ALG";
+    pub const JWS_TYP: &str = "JWS_TYP";
+    pub const JWS_KID: &str = "JWS_KID";
+    pub const JWS_IMZA: &str = "JWS_IMZA";
+    pub const BELGE_SEMA: &str = "BELGE_SEMA";
+    pub const BELGE_SURUM: &str = "BELGE_SURUM";
+    pub const GUVEN_CAPASI_BOS: &str = "GUVEN_CAPASI_BOS";
+    pub const GUVEN_CAPASI_BICIM: &str = "GUVEN_CAPASI_BICIM";
+    pub const KOK_BILINMIYOR: &str = "KOK_BILINMIYOR";
+    pub const KOK_SINIF_YETKISIZ: &str = "KOK_SINIF_YETKISIZ";
+    pub const SERTIFIKA_KULLANIM: &str = "SERTIFIKA_KULLANIM";
+    pub const SERTIFIKA_ZAMAN: &str = "SERTIFIKA_ZAMAN";
+    pub const BAYI_KIMLIK: &str = "BAYI_KIMLIK";
+    pub const BAYI_TAVAN_MODUL: &str = "BAYI_TAVAN_MODUL";
+    pub const BAYI_TAVAN_SINIF: &str = "BAYI_TAVAN_SINIF";
+    pub const KIRA_HAK_UYUSMAZ: &str = "KIRA_HAK_UYUSMAZ";
+    pub const KIRA_SINIF_YETKISIZ: &str = "KIRA_SINIF_YETKISIZ";
+
+    /// Çekirdeğe özgü kodlar (protokol kümesinde YOK; TS aynası `native.ts` `CORE_ERROR_CODES`).
+    pub const CAPA_ENJEKSIYONU_KAPALI: &str = "CAPA_ENJEKSIYONU_KAPALI";
+    pub const BUTUNLUK_CAPA_BOS: &str = "BUTUNLUK_CAPA_BOS";
+    pub const BUTUNLUK_OKUNAMADI: &str = "BUTUNLUK_OKUNAMADI";
+    pub const BUTUNLUK_UYUSMAZ: &str = "BUTUNLUK_UYUSMAZ";
+    pub const MODUL_SARMA_BICIM: &str = "MODUL_SARMA_BICIM";
+    pub const MODUL_UYUSMAZ: &str = "MODUL_UYUSMAZ";
+    pub const MODUL_ANAHTAR_GECERSIZ: &str = "MODUL_ANAHTAR_GECERSIZ";
+    pub const MODUL_SARMA_ACILAMADI: &str = "MODUL_SARMA_ACILAMADI";
+
+    pub const PROTOCOL: &[&str] = &[
+        JWS_BICIM,
+        JWS_BASLIK,
+        JWS_ALG,
+        JWS_TYP,
+        JWS_KID,
+        JWS_IMZA,
+        BELGE_SEMA,
+        BELGE_SURUM,
+        GUVEN_CAPASI_BOS,
+        GUVEN_CAPASI_BICIM,
+        KOK_BILINMIYOR,
+        KOK_SINIF_YETKISIZ,
+        SERTIFIKA_KULLANIM,
+        SERTIFIKA_ZAMAN,
+        BAYI_KIMLIK,
+        BAYI_TAVAN_MODUL,
+        BAYI_TAVAN_SINIF,
+        KIRA_HAK_UYUSMAZ,
+        KIRA_SINIF_YETKISIZ,
+    ];
+
+    pub const CORE: &[&str] = &[
+        CAPA_ENJEKSIYONU_KAPALI,
+        BUTUNLUK_CAPA_BOS,
+        BUTUNLUK_OKUNAMADI,
+        BUTUNLUK_UYUSMAZ,
+        MODUL_SARMA_BICIM,
+        MODUL_UYUSMAZ,
+        MODUL_ANAHTAR_GECERSIZ,
+        MODUL_SARMA_ACILAMADI,
+    ];
+}

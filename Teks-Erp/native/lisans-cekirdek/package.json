@@ -1,0 +1,31 @@
+{
+  "name": "@tekserp/lisans-cekirdek",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TeksERP native lisans çekirdeği (Rust + napi-rs) — derleme ve test komutları",
+  "license": "UNLICENSED",
+  "scripts": {
+    "derle": "node scripts/derle.mjs yerel",
+    "derle:uretim": "node scripts/derle.mjs yerel --uretim",
+    "derle:win": "node scripts/derle.mjs win-x64",
+    "derle:win:uretim": "node scripts/derle.mjs win-x64 --uretim",
+    "derle:linux": "node scripts/derle.mjs linux-x64",
+    "derle:linux:uretim": "node scripts/derle.mjs linux-x64 --uretim",
+    "denetle": "node scripts/kapi.mjs denetle",
+    "test": "node scripts/kapi.mjs test"
+  },
+  "napi": {
+    "binaryName": "lisans-cekirdek",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "x86_64-unknown-linux-gnu"
+    ]
+  },
+  "engines": {
+    "node": ">=22.21"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "3.10.5"
+  }
+}
