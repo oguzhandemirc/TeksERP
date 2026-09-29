@@ -15,6 +15,9 @@
 //   ⑥b kenar ağında dinamik dağıtım aralığı (ip_range) alt ağın içinde ve satıcının sabit adresi
 //      onun DIŞINDA — Traefik (dinamik) satıcının adresini kapamasın
 //   ⑦ Traefik etiketi yalnız `satici`de ve kenar ağını gösteriyor; DB'nin portu ve dış ağı yok
+//   ⑧ İÇ API (patron bulutu → satıcı): `ic-api` ağı internal, satıcı sabit adresinde dinler (IC_BIND = o
+//      adres, 4612), kaynak YALNIZ patronun sabit /32'si (alt ağda, ağ geçidi .1 değil, satıcı değil,
+//      dinamik aralığın DIŞINDA); sır docker secret'ı (`ic_api_belirteci`) yalnız satıcıya bağlı
 //   Ⓛ GERİ DÖNGÜ KİPİ (docker-compose.loopback.yml, satıcıda TAILNET_LOOPBACK=1 — Tailscale gelene dek):
 //      ① yerine: HİÇBİR port yayımlanmaz · satıcının tailnet dinleyicisi 127.0.0.1'de · tailnet ağı
 //      internal · `portal-tunel` satıcının ağ ad alanında, portsuz/birimsiz, tailnet köprü adresini dinler.
@@ -158,7 +161,7 @@ for (const [ad, s] of servisler) {
 
 // ④ ağlar
 const aglar = cfg.networks ?? {};
-for (const anahtar of geriDongu ? ["kenar", "ic", "tailnet"] : ["kenar", "ic"]) {
+for (const anahtar of geriDongu ? ["kenar", "ic", "tailnet", "ic-api"] : ["kenar", "ic", "ic-api"]) {
   kontrol(`④ ${anahtar} ağı internal`, aglar[anahtar]?.internal === true, aglar[anahtar]?.name ?? "YOK");
 }
 const disAglar = Object.entries(aglar).filter(([, n]) => n.external).map(([a]) => a);
@@ -202,6 +205,32 @@ const kural = Object.entries(satici.labels ?? {}).find(([k]) => /^traefik\.http\
 kontrol("⑦ yönlendirici Host kuralı taşır", /^Host\(`[a-z0-9.-]+`\)$/.test(kural), kural || "YOK");
 const db = cfg.services?.["satici-db"] ?? {};
 kontrol("⑦ DB portsuz ve yalnız iç ağda", (db.ports ?? []).length === 0 && JSON.stringify(Object.keys(db.networks ?? {})) === '["ic"]', Object.keys(db.networks ?? {}).join(", "));
+
+// ⑧ iç API
+{
+  const ac = aglar["ic-api"]?.ipam?.config?.[0] ?? {};
+  const icIp = satici.networks?.["ic-api"]?.ipv4_address ?? "";
+  const ortamIc = satici.environment ?? {};
+  const kaynaklar = String(ortamIc.IC_KAYNAK_AGLARI ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const gecit = ac.subnet ? (() => {
+    const [ag] = ac.subnet.split("/");
+    const p = ag.split(".").map(Number);
+    return `${p[0]}.${p[1]}.${p[2]}.${p[3] + 1}`;
+  })() : "";
+  const dinamikte = (ip) => !!ac.ip_range && aralikta(ip, ac.ip_range);
+  kontrol("⑧a satıcı iç API'yi ic-api ağındaki sabit adresinde dinler (IC_BIND, 4612)", icIp !== "" && ortamIc.IC_BIND === icIp && String(ortamIc.PORT_IC) === "4612", `IC_BIND=${ortamIc.IC_BIND ?? "YOK"} · adres=${icIp || "YOK"} · PORT_IC=${ortamIc.PORT_IC ?? "YOK"}`);
+  kontrol("⑧b satıcının iç adresi alt ağda, ağ geçidi değil, dinamik aralığın DIŞINDA", icIp !== "" && !!ac.subnet && aralikta(icIp, ac.subnet) && icIp !== gecit && !dinamikte(icIp), `alt ağ ${ac.subnet ?? "YOK"} · dinamik ${ac.ip_range ?? "YOK"}`);
+  const kaynakIp = kaynaklar.length === 1 && kaynaklar[0].endsWith("/32") ? kaynaklar[0].slice(0, -3) : "";
+  kontrol(
+    "⑧c kaynak YALNIZ tek /32 (patron): alt ağda, ağ geçidi/satıcı değil, dinamik aralık dışında",
+    kaynakIp !== "" && aralikta(kaynakIp, ac.subnet ?? "0.0.0.0/32") && kaynakIp !== gecit && kaynakIp !== icIp && !dinamikte(kaynakIp),
+    `IC_KAYNAK_AGLARI=${ortamIc.IC_KAYNAK_AGLARI ?? "YOK"}`,
+  );
+  const sirli = servisler.filter(([, sv]) => (sv.secrets ?? []).some((x) => (x.source ?? x) === "ic_api_belirteci")).map(([a]) => a);
+  kontrol("⑧d iç API sırrı docker secret'ı, yalnız satıcıda", JSON.stringify(sirli) === '["satici"]' && ortamIc.IC_API_BELIRTEC_DOSYASI === "/run/secrets/ic_api_belirteci", `${sirli.join(", ") || "hiçbiri"} · ${ortamIc.IC_API_BELIRTEC_DOSYASI ?? "YOK"}`);
+  const yayin4612 = servisler.flatMap(([a, sv]) => (sv.ports ?? []).filter((p) => String(p.target) === "4612").map(() => a));
+  kontrol("⑧e 4612 hiçbir yere yayımlanmaz", yayin4612.length === 0, yayin4612.join(", "));
+}
 
 console.log(`\n=== ${gecti} geçti, ${ihlal} ihlal ===`);
 process.exit(ihlal > 0 ? 1 : 0);

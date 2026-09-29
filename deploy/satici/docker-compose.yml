@@ -7,12 +7,15 @@ name: tekserp-satici-${ORTAM:?ORTAM gerekli (hazirlik|uretim)}
 # kopyalanır; değerler yanındaki `.env`ten (ornek.env). Bugün yalnız ORTAM=hazirlik kurulur
 # (lisans-test.etkiliyazilim.com, yalnız TEST/DEMO imzalayan hazırlık kökü).
 #
-# Üç ağ, üç ayrı kapı — hiçbiri güncelleme/patron/kiracı konteynerleriyle ORTAK değil:
+# Dört ağ, dört ayrı kapı — yalnız `ic-api` patron konteyneriyle ORTAK; hiçbiri güncelleme/kiracıyla değil:
 #   kenar   (internal) Traefik ↔ satıcının GENEL dinleyicisi (/v1/*, /q, /bayi/api). Traefik bu ağa
 #                      runbook adımıyla bağlanır; `web` ağına satıcı KATILMAZ.
 #   ic      (internal) satıcı ↔ kendi PG16'sı ↔ yedek işi. Port yayını YOK.
 #   tailnet (tek çıkış) portalın TEK yolu: port yalnız VDS'in Tailscale IP'sine yayımlanır; uygulama
 #                      ayrıca soket + kaynak ağı (100.64/10) kapısıyla fail-closed 404 verir.
+#   ic-api  (internal) patron bulutu → satıcı iç API'si (/ic/v1/*, 4612). Port yayını YOK. Satıcı kaynağı
+#                      YALNIZ patronun sabit adresinden (/32) kabul eder + ortak sır (docker secret); patron
+#                      compose'u bu ağa `external` olarak katılır (ayrı dilim). Sır dosyası yoksa iç API açılmaz.
 # Docker soketi hiçbir servise BAĞLANMAZ. Kök FS salt okunur · root olmayan kullanıcı · yetenek yok ·
 # cgroup CPU/bellek/süreç sınırı (kiracı ya da patron konteyneri satıcıyı aç bırakamasın).
 # Budama: telemetri (nonce · yoklama · portal oturumu/işlemi) + ayak izi denetimi (90 gün / 2 yıl)
@@ -83,7 +86,12 @@ services:
       IC_VEKIL_AGLARI: ${KENAR_AGI}
       # Tailnet dinleyicisi düz HTTP (WireGuard içinde) → çerez Secure'suz; genelde her zaman Secure.
       TAILNET_CEREZ_GUVENLI: "0"
-    secrets: [db_parolasi]
+      # İç API: kendi köprüsündeki sabit adres; kaynak YALNIZ patron konteyneri (soket adresi, başlık okunmaz).
+      PORT_IC: "4612"
+      IC_BIND: ${IC_API_IP:?IC_API_IP gerekli}
+      IC_KAYNAK_AGLARI: ${PATRON_IC_IP:?PATRON_IC_IP gerekli}/32
+      IC_API_BELIRTEC_DOSYASI: /run/secrets/ic_api_belirteci
+    secrets: [db_parolasi, ic_api_belirteci]
     volumes:
       # Anahtar birimi SALT OKUNUR: kök (parolalı) · alt/indirme (0600) · portal-totp.key — hepsi önceden hazır.
       - ${ANAHTAR_DIZINI_HOST:?ANAHTAR_DIZINI_HOST gerekli}:/anahtarlar:ro
@@ -93,6 +101,7 @@ services:
       kenar: { ipv4_address: "${KENAR_IP}" }
       ic: {}
       tailnet: { ipv4_address: "${TAILNET_KONTEYNER_IP}" }
+      ic-api: { ipv4_address: "${IC_API_IP}" }
     ports:
       # YALNIZ Tailscale arayüz IP'sine (100.x) — 0.0.0.0 ya da genel IP YASAK.
       - "${TAILNET_IP:?TAILNET_IP gerekli (tailscale ip -4)}:${TAILNET_PORT:-4611}:4611"
@@ -162,6 +171,9 @@ secrets:
   # root:SIR_GID 0440 — yalnız bu projenin konteynerleri (group_add) okur.
   db_parolasi:
     file: ${DB_PAROLA_DOSYASI:?DB_PAROLA_DOSYASI gerekli}
+  # Satıcı ↔ patron ortak Bearer'ı (root:SIR_GID 0440; patron tarafı aynı sırrı kendi .env'inde taşır).
+  ic_api_belirteci:
+    file: ${IC_API_BELIRTEC_DOSYASI_HOST:?IC_API_BELIRTEC_DOSYASI_HOST gerekli}
 
 volumes:
   satici-pg:
@@ -183,3 +195,10 @@ networks:
     name: tekserp-satici-${ORTAM}-tailnet
     ipam:
       config: [{ subnet: "${TAILNET_AGI:?TAILNET_AGI gerekli}" }]
+  ic-api:
+    name: tekserp-satici-${ORTAM}-ic-api
+    internal: true
+    # Sabit adresler (satıcı IC_API_IP · patron PATRON_IC_IP) dinamik aralığın DIŞINDA: sonradan katılan bir
+    # konteyner patronun adresini kapıp kaynak kapısını geçemesin (denetim ⑧).
+    ipam:
+      config: [{ subnet: "${IC_API_AGI:?IC_API_AGI gerekli}", ip_range: "${IC_API_DINAMIK_ARALIK:?IC_API_DINAMIK_ARALIK gerekli}" }]
