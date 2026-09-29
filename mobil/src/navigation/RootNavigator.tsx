@@ -25,6 +25,7 @@ import ScannerSettingsScreen from '../screens/Common/settings/ScannerSettingsScr
 import UpdateSettingsScreen from '../screens/Common/settings/UpdateSettingsScreen';
 import { SurumNotlariScreen } from '../screens/Common/settings/SurumNotlariScreen';
 import WorkPreferencesScreen from '../screens/Common/settings/WorkPreferencesScreen';
+import LicenseSettingsScreen from '../screens/Common/settings/LicenseSettingsScreen';
 import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
 import MainNavigator from './MainNavigator';
 import { rootNavigationRef } from './navigationRef';
@@ -245,6 +246,11 @@ export default function RootNavigator() {
           name="SettingsWorkPreferences"
           component={WorkPreferencesScreen}
           options={{ animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="SettingsLicense"
+          component={LicenseSettingsScreen}
+          options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
           name="DevicePairing"

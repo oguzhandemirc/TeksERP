@@ -34,6 +34,9 @@ import IdleLockGate from './src/components/lock/IdleLockGate';
 import UpdateGate from './src/components/UpdateGate';
 import { SurumNotuGate } from './src/components/SurumNotuGate';
 import ChannelStrip from './src/components/ChannelStrip';
+import LicenseBanner from './src/components/LicenseBanner';
+import LicenseSuspendedGate from './src/components/lock/LicenseSuspendedGate';
+import { LICENSE_STATUS_KEY } from './src/hooks/useLicenseStatus';
 
 registerStationMutationDefaults();
 
@@ -76,6 +79,8 @@ export default function App() {
         // (`['kursun-bypass','visibility']`) 2026-08-05'te kaldırıldı: Kurşun
         // Dağıtım karosu artık bayrak/sayaçtan bağımsız, yalnız izne bağlı.
         void queryClient.invalidateQueries({ queryKey: FLAGS_KEY });
+        // Lisans bandı/K5 de öne gelişte tazelenir (5 dk aralığını beklemeden).
+        void queryClient.invalidateQueries({ queryKey: LICENSE_STATUS_KEY });
       }
     });
     return () => sub.remove();
@@ -188,6 +193,9 @@ export default function App() {
                 </SimplePortalScope>
               </PaperProvider>
             </View>
+            {/* Lisans K5 (durduruldu) tam ekranı — kilidin ÜSTÜNDE, güncelleme kapısının
+                ALTINDA: durdurulmuş sunucuda da OTA kurtarma yolu açık kalır. */}
+            <LicenseSuspendedGate />
             {/* Uzaktan güncelleme kapısı — EN ÜST katman, kilit katmanından da
                 SONRA. Yenileme örtüsü her şeyin üstünde görünmeli: `reloadAsync`
                 uygulamayı aniden yeniden başlatır ve altta kalan bir örtü,
@@ -198,6 +206,8 @@ export default function App() {
             {/* Hazırlık kanalının işareti (ör. "TEST FABRİKA") — en üstte, dokunmayı yutmaz;
                 üretim kanalında null. */}
             <ChannelStrip />
+            {/* Lisans bandı — ChannelStrip kalıbı; gözlem kipinde / normal kademede hiç çizilmez. */}
+            <LicenseBanner />
           </View>
         </PersistQueryClientProvider>
       </SafeAreaProvider>

@@ -7,6 +7,8 @@ import { getCurrentBaseUrl } from '../store/baseUrlStore';
 import { getOrCreateDeviceId } from '../utils/deviceId';
 // Import yönü güvenli: authStore yalnız utils/storage'a bağımlı (api'yi import etmez).
 import { useAuthStore } from '../store/authStore';
+import { useLicenseStore } from '../store/licenseStore';
+import { classifyLicenseError, licenseBlockToast } from '../lib/license';
 import { recordNetSample } from './netStats';
 import {
   reportServerReachable,
@@ -90,6 +92,24 @@ let lastLoginLockToastAt = 0;
 export function isLoginLocked(err: unknown): boolean {
   const e = err as { status?: number; details?: { code?: string } } | null;
   return e?.status === 429 && e?.details?.code === 'LOGIN_LOCKED';
+}
+
+// 403 LICENSE_* → kısıtlı kip / kapalı modül uyarısı (aynı metin 10 sn'de bir) ve
+// K5 sinyali. Kimliksiz `LICENSE_GATE` bilinçli olarak ayrıntısızdır: çağıranın
+// kendi hata yolu yeter (giriş öncesi arka plan istekleri toast yağdırmasın).
+const LICENSE_TOAST_DEDUP_MS = 10_000;
+let lastLicenseToast = { key: '', at: 0 };
+
+export function handleLicenseRejection(details: unknown): void {
+  const block = classifyLicenseError(403, details);
+  if (!block) return;
+  useLicenseStore.getState().noteBlock(block.kind === 'suspended');
+  const toast = licenseBlockToast(block);
+  if (!toast) return;
+  const now = Date.now();
+  if (lastLicenseToast.key === toast.text1 && now - lastLicenseToast.at < LICENSE_TOAST_DEDUP_MS) return;
+  lastLicenseToast = { key: toast.text1, at: now };
+  Toast.show({ type: 'error', text1: toast.text1, text2: toast.text2, visibilityTime: 6000 });
 }
 
 apiClient.interceptors.request.use(async (config) => {
@@ -242,6 +262,10 @@ apiClient.interceptors.response.use(
         });
       }
     }
+
+    // Lisans kapısı (403 LICENSE_*): sunucu durumudur, bu ekranın hatası değil →
+    // tek yerden, tekilleştirilmiş uyarı; K5 tam ekranı store sinyaliyle açılır.
+    if (status === 403) handleLicenseRejection(error.response?.data?.details);
 
     // K-A3 fix: backend mesajı yoksa ham axios İngilizcesi ('Network Error',
     // 'timeout of 10000ms exceeded') operatöre sızıyordu — Türkçe karşılıkları.
