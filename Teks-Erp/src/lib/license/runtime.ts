@@ -63,6 +63,10 @@ export function setLicenseDbFacts(p: Partial<LicenseDbFacts>): void {
 export function getLicenseDbFacts(): LicenseDbFacts {
   return facts;
 }
+/** Lisans kimliği — imzalı istekler ve patron bulutu ön koşulu TEK buradan okur (D14 geçişinin tek dikişi). */
+export function getLicenseInstallationId(): string | null {
+  return facts.installationId;
+}
 
 // ── Ölçüm ─────────────────────────────────────────────────────────────────────
 let fingerprint: MeasuredFingerprint | null = null;

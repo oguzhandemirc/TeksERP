@@ -4,11 +4,9 @@
 // bulutun `kabul` listesiyle ilerler; onaysız paket sonraki turda aynı konumdan yeniden kurulur.
 import { gzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
-import { getLicenseSnapshot } from "../lib/license/runtime";
 import { readFinanceEnabled, readProductionEnabled } from "../services/system-setting.service";
 import { appVersionForWire } from "../services/helpers/license-wire.helper";
-import { evaluateSyncEligibility } from "./eligibility";
-import { getCloudUrl } from "./cloud-url";
+import { cloudEligibility } from "./eligibility";
 import { computeHorizon } from "./horizon";
 import { cloudPost, type CloudCallContext, type CloudTransport } from "./cloud-client";
 import { collectProjectionChanges } from "./change-scan";
@@ -211,12 +209,11 @@ async function sendDrafts(queue: PacketDraft[], st: SendState): Promise<{ status
 
 export async function runSyncRound(opts: RoundOptions, deps: RoundDeps): Promise<RoundOutcome> {
   const now = deps.nowMs ?? Date.now;
-  const cloud = getCloudUrl();
-  const elig = evaluateSyncEligibility(getLicenseSnapshot(now()), now(), cloud.url);
+  const elig = cloudEligibility(now());
   const empty = { packets: 0, accepted: [], rejected: [], fullRequested: [], more: false, contractWarning: null };
-  if (!elig.ok || !cloud.url) return { ...empty, status: "GONDERILMEDI", reason: elig.ok ? "BULUT_ADRESI_YOK" : elig.reason, horizon: null };
+  if (!elig.ok) return { ...empty, status: "GONDERILMEDI", reason: elig.reason, horizon: null };
 
-  const ctx: CloudCallContext = { baseUrl: cloud.url, installationId: elig.installationId, transport: deps.transport };
+  const ctx: CloudCallContext = { baseUrl: elig.baseUrl, installationId: elig.installationId, transport: deps.transport };
   const horizon = (await computeHorizon(now())).at;
   const stored = await loadWatermarks();
   const flags: ModuleFlags = { production: await readProductionEnabled(), finance: await readFinanceEnabled() };

@@ -18,7 +18,7 @@ import {
   signRequest,
 } from "../lib/license/protocol";
 import { getLicenseStore } from "../lib/license/store";
-import { getLicenseConfig, getLicenseDbFacts, updateDoorbellStatus } from "../lib/license/runtime";
+import { getLicenseConfig, getLicenseInstallationId, updateDoorbellStatus } from "../lib/license/runtime";
 import { onLicenseActivated } from "../services/license-sync.service";
 import { requestImmediateLicensePoll } from "./license-poll.job";
 import { dispatchDoorbellTopic } from "./doorbell-topics";
@@ -99,7 +99,7 @@ export function backoffMs(n: number, random: () => number = Math.random): number
 
 function canConnect(): boolean {
   const store = getLicenseStore();
-  return Boolean(getLicenseConfig().vendorUrl && store?.key && !store.problem && store.leaseJws && getLicenseDbFacts().installationId);
+  return Boolean(getLicenseConfig().vendorUrl && store?.key && !store.problem && store.leaseJws && getLicenseInstallationId());
 }
 
 function scheduleConnect(delayMs: number): void {
@@ -155,7 +155,7 @@ async function connectOnce(): Promise<void> {
     return;
   }
   const store = getLicenseStore();
-  const installationId = getLicenseDbFacts().installationId;
+  const installationId = getLicenseInstallationId();
   const base = getLicenseConfig().vendorUrl;
   if (!store?.key || !installationId || !base) return;
   controller = new AbortController();

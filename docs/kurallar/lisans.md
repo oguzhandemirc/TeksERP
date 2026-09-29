@@ -115,3 +115,4 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-29 · Hazırlık kökü çapada, satıcı adresi varsayılanı, satıcının VDS kurulum tasarımı
 - 2026-09-29 · Lisans protokolü P0: lisans kimliği portalda (D14), taşıma kodu (D8), satıcı saati (D4), 16 karakterlik kod
 - 2026-09-29 · Lisans kapısı F1b: kimlik önce (D6), K5 listesi panelin gerçek çağrılarıyla, etkinleştirme kodu gövdede + günlük maskesi (D12), LICENSE_MODULE tek biçim
+- 2026-09-29 · Patron bulutu gelen kutusu (B3): makbuz aynı tx, teknik kullanıcı girişsiz, sipariş aktörü audit'te

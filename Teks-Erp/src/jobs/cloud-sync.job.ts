@@ -12,8 +12,7 @@ import { reportJobFailure } from "./job-failure";
 import { onDoorbellTopic } from "./doorbell-topics";
 import { bilgi, uyari } from "../lib/logger";
 import { factoryMinuteOfDay, factoryYmd } from "../constants/time";
-import { getLicenseSnapshot } from "../lib/license/runtime";
-import { evaluateSyncEligibility, type SyncBlockReason } from "../cloud-sync/eligibility";
+import { cloudEligibility, type CloudBlockReason } from "../cloud-sync/eligibility";
 import { getCloudUrl } from "../cloud-sync/cloud-url";
 import { egressCloudTransport, type CloudTransport } from "../cloud-sync/cloud-client";
 import { runSyncRound, type RoundOutcome } from "../cloud-sync/sync-round";
@@ -41,7 +40,7 @@ export function clampInterval(minutes: number): number {
 
 export interface CloudSyncStatus {
   readonly eligible: boolean;
-  readonly blockReason: SyncBlockReason | null;
+  readonly blockReason: CloudBlockReason | null;
   readonly lastRoundAt: number | null;
   readonly lastOutcome: Pick<RoundOutcome, "status" | "reason" | "packets" | "horizon" | "contractWarning"> | null;
   readonly lastReconcileYmd: string | null;
@@ -84,10 +83,9 @@ async function exclusive(fn: () => Promise<void>): Promise<void> {
 }
 
 async function pushStandardReports(nowMs: number): Promise<void> {
-  const cloud = getCloudUrl();
-  const elig = evaluateSyncEligibility(getLicenseSnapshot(nowMs), nowMs, cloud.url);
-  if (!elig.ok || !cloud.url) return;
-  const ctx = { baseUrl: cloud.url, installationId: elig.installationId, transport };
+  const elig = cloudEligibility(nowMs);
+  if (!elig.ok) return;
+  const ctx = { baseUrl: elig.baseUrl, installationId: elig.installationId, transport };
   const stored = await loadWatermarks();
   for (const plan of standardReportPlan(new Date(nowMs))) {
     const result = await computeReportResult({ istekId: null, key: plan.key, params: plan.params, donem: plan.donem, nowMs });
@@ -99,10 +97,9 @@ async function pushStandardReports(nowMs: number): Promise<void> {
 }
 
 async function runReportClaims(nowMs: number): Promise<void> {
-  const cloud = getCloudUrl();
-  const elig = evaluateSyncEligibility(getLicenseSnapshot(nowMs), nowMs, cloud.url);
-  if (!elig.ok || !cloud.url) return;
-  await claimAndRunReportRequests({ baseUrl: cloud.url, installationId: elig.installationId, transport });
+  const elig = cloudEligibility(nowMs);
+  if (!elig.ok) return;
+  await claimAndRunReportRequests({ baseUrl: elig.baseUrl, installationId: elig.installationId, transport });
 }
 
 /** Günde bir: eski eşitleme işaretleri budanır — ön koşuldan BAĞIMSIZ (tetikleyiciler her kurulumda yazar). */
@@ -117,8 +114,7 @@ async function dailyPrune(nowMs: number): Promise<void> {
 /** Tek koşum — zamanlayıcı ve bekçi aynı fonksiyonu çağırır. */
 export async function runCloudSyncTick(nowMs: number = Date.now()): Promise<void> {
   await dailyPrune(nowMs);
-  const cloud = getCloudUrl();
-  const elig = evaluateSyncEligibility(getLicenseSnapshot(nowMs), nowMs, cloud.url);
+  const elig = cloudEligibility(nowMs);
   status = { ...status, eligible: elig.ok, blockReason: elig.ok ? null : elig.reason };
   if (!elig.ok) return;
   await exclusive(async () => {

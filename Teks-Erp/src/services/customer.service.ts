@@ -76,6 +76,21 @@ async function nextCustomerCode(): Promise<string> {
       .then((rows) => rows.map((r) => ({ code: r.code, createdAt: r.createdAt }))), new Date());
 }
 
+/** `prepareCardCreate` çıktısı — retry denemeleri arasında aynı kalır. */
+export interface CardCreatePlan {
+  readonly data: Record<string, unknown>;
+  readonly wantsProfile: boolean;
+  readonly branches: ReturnType<typeof validateAndShapeBranches>;
+}
+
+/** `createCardInTx` çıktısı — commit sonrası `finishCardCreate`e verilir. */
+export interface BornCard {
+  readonly card: Record<string, unknown>;
+  readonly profile: { id: string; code: string } | null;
+  readonly cariAccountId: string | null;
+  readonly auditData: Record<string, unknown>;
+}
+
 export class CustomerService extends BaseService {
   constructor(config: BaseServiceConfig) {
     super(config);
@@ -213,40 +228,35 @@ export class CustomerService extends BaseService {
     /** Z-A: kart formunun "Finans" bölümü — route `finance:write` + modül kapısını geçirmiş, Zod doğrulamış. */
     opts?: { finance?: CustomerFinanceInput | null }
   ): Promise<ApiResponse<unknown>> {
-    // Müşteri kodu backend-authoritative: her zaman `MUS+GGAAYY+NNNN` günlük
-    // sıralı üretilir; istemciden gelen `code` YOK SAYILIR (iki giriş noktası —
-    // Müşteriler sayfası + sipariş içi hızlı ekleme — aynı formatı alsın).
-    // Eşzamanlı iki create aynı sıra no'yu okuyup INSERT'te @unique çakışırsa
-    // (P2002) withBarcodeRetry taze sıra no ile yeniden dener.
-    //
-    // Opsiyonel inline şubeler: doğrulama+şekillendirme retry DIŞINDA bir kez
-    // (idempotent, yan etkisiz). Şekillenmiş dizi retry içinde `data.branches`'e
-    // yazılır → super.create sanitize'ı korur (config.nestedCreateFields) ve
-    // BaseService onu `{ create: [...] }`'e sarıp müşteriyle ATOMİK nested-create eder.
+    const plan = this.prepareCardCreate(data);
+    return this.withCardCreateRetry(data, async () => {
+      const born = await prisma.$transaction((tx) => this.createCardInTx(tx, plan, userId));
+      return this.finishCardCreate(born, userId, { finance: opts?.finance ?? null });
+    });
+  }
+
+  /**
+   * Kart doğuşunun BİR KEZ koşan hazırlığı (retry'da tekrarlanmaz: `subcontractorRole` gövdeden düşülür).
+   * Rol modeli: bayraklar gövdeden, `type` TÜRETİLİR. `subcontractorRole: true` kart + fason PROFİLİ tek tx'te
+   * doğurur; Tedarikçi rolü şart. Inline şubeler burada bir kez doğrulanıp şekillenir (yan etkisiz).
+   */
+  prepareCardCreate(data: Record<string, unknown>): CardCreatePlan {
     this.normalizeDefaultDestination(data);
-    // Rol modeli: bayraklar gövdeden, `type` TÜRETİLİR (istemcinin `type`i yalnız rollere çevrilir).
-    // `subcontractorRole: true` (kullanıcı 16:03): kart + fason PROFİLİ tek tx'te doğar; Tedarikçi rolü şart.
     const wantsProfile = data.subcontractorRole === true;
     delete data.subcontractorRole;
     const roles = applyPartnerRoles(data, null);
     if (wantsProfile && !roles.isSupplierRole) throw AppError.badRequest(PROFILE_CUSTOMER_TYPE_MESSAGE);
-    const branches = validateAndShapeBranches(data.branches);
-    // Retry YALNIZ kod çakışmasına (taze sıra no çözer); `nameFold` canlı seddi / vergi no P2002'si retry ile çözülmez —
-    // beş boş deneme + "Barkod üretimi başarısız" yerine dürüst 409 (ad-mükerrer guard'ı yarışta ya da kalıntıda kaçırmış olabilir).
+    return { data, wantsProfile, branches: validateAndShapeBranches(data.branches) };
+  }
+
+  /**
+   * Kod backend-authoritative (`MUS+GGAAYY+NNNN`, istemcinin `code`u yok sayılır); eşzamanlı iki doğuş aynı sıra
+   * no'yu okursa P2002 → taze sıra no ile yeniden dener. Retry YALNIZ kod çakışmasına: `nameFold` seddi / vergi no
+   * P2002'si retry ile çözülmez, dürüst 409 `CUSTOMER_NAME_DUPLICATE` olur.
+   */
+  async withCardCreateRetry<T>(data: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
     try {
-      return await withBarcodeRetry(async () => {
-        data.code = await nextCustomerCode();
-        this.applyStringFields(data, true);
-        this.applyCardFields(data);
-        const validated = this.validateTaxNumber(data.taxNumber);
-        if (validated !== undefined) {
-          data.taxNumber = validated;
-          await this.assertTaxNumberAvailable(validated);
-        }
-        if (branches) data.branches = branches;
-        else delete data.branches;
-        return this.createCardTx(data, userId, { wantsProfile, finance: opts?.finance ?? null });
-      }, undefined, (err) => p2002TargetsCode(err), "Müşteri kodu");
+      return await withBarcodeRetry(fn, undefined, (err) => p2002TargetsCode(err), "Müşteri kodu");
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         throw AppError.conflict(`'${String(data.name ?? "").trim()}' adında bir müşteri zaten var (ad tekildir; büyük/küçük harf ve boşluk farkı sayılmaz).`, { code: "CUSTOMER_NAME_DUPLICATE" });
@@ -256,29 +266,56 @@ export class CustomerService extends BaseService {
   }
 
   /**
-   * KART TEK TX (Z-A): kart (+ fason profili) (+ cari hesap — yalnız finans modülü AÇIKKEN, `bornCariAccountTx`).
-   * `BaseService.create` tx açmadığı için aynı adımlar (sanitize → ad normalize → ad-mükerrer → insert) burada
-   * tx'li koşar; audit her kayda tx DIŞINDA yazılır. Profil bağı bayrağı `syncSubcontractorRoleTx` ile türetilir.
-   * Terimler (`finance`) hesaba tx SONRASI `cariService.update` yoluyla yazılır (aynı doğrulama + aynı audit satırı).
+   * TX-ALAN DİKİŞ (tek yol): kart (+ fason profili) (+ cari hesap — yalnız finans modülü AÇIKKEN) VERİLEN tx'te.
+   * Uç kendi tx'ini açar; patron bulutu gelen kutusu aynı tx'e makbuzunu yazar (atomik değilse idempotency yok).
+   * Audit ve finans terimleri tx DIŞINDA, commit SONRASI `finishCardCreate`te.
    */
-  private async createCardTx(rawData: Record<string, unknown>, userId: string | undefined, opts: { wantsProfile: boolean; finance: CustomerFinanceInput | null }): Promise<ApiResponse<unknown>> {
-    const data = this.normalizeNameFields(this.sanitizeWriteData(rawData));
-    await this.assertNameNotDuplicate(data);
-    const prismaData = withActor({ ...data }, userId, "CREATE", "customer");
+  async createCardInTx(tx: Prisma.TransactionClient, plan: CardCreatePlan, userId: string | undefined): Promise<BornCard> {
+    const data = plan.data;
+    data.code = await nextCustomerCode();
+    this.applyStringFields(data, true);
+    this.applyCardFields(data);
+    const validated = this.validateTaxNumber(data.taxNumber);
+    if (validated !== undefined) {
+      data.taxNumber = validated;
+      await this.assertTaxNumberAvailable(validated);
+    }
+    if (plan.branches) data.branches = plan.branches;
+    else delete data.branches;
+    const clean = this.normalizeNameFields(this.sanitizeWriteData(data));
+    await this.assertCardNameFree(clean);
+    const prismaData = withActor({ ...clean }, userId, "CREATE", "customer");
     if (Array.isArray(prismaData.branches)) prismaData.branches = { create: prismaData.branches };
-    const { card, profile, cariAccountId } = await prisma.$transaction(async (tx) => {
-      const c = (await tx.customer.create({ data: prismaData as never, include: { subcontractor: { select: { id: true, isActive: true } } } })) as unknown as {
-        id: string; code: string; name: string; taxNumber: string | null; contactPhone: string | null; address: string | null;
-      };
-      const p = opts.wantsProfile ? await createProfileForCustomerTx(tx, c, userId) : null;
-      const accId = await bornCariAccountTx(tx, c.id);
-      const fresh = await tx.customer.findUnique({ where: { id: c.id }, include: { subcontractor: { select: { id: true, isActive: true } } } });
-      return { card: fresh as unknown as Record<string, unknown>, profile: p, cariAccountId: accId };
-    });
-    await AuditService.log({ userId, action: "CREATE", tableName: "CUSTOMER", recordId: card.id as string, newData: data });
+    const c = (await tx.customer.create({ data: prismaData as never, include: { subcontractor: { select: { id: true, isActive: true } } } })) as unknown as {
+      id: string; code: string; name: string; taxNumber: string | null; contactPhone: string | null; address: string | null;
+    };
+    const profile = plan.wantsProfile ? await createProfileForCustomerTx(tx, c, userId) : null;
+    const cariAccountId = await bornCariAccountTx(tx, c.id);
+    const fresh = await tx.customer.findUnique({ where: { id: c.id }, include: { subcontractor: { select: { id: true, isActive: true } } } });
+    return { card: fresh as unknown as Record<string, unknown>, profile, cariAccountId, auditData: clean };
+  }
+
+  /** Commit SONRASI: audit (her kayda) + finans terimleri (`cariService.update` yolu) + yanıt. `auditExtra` kaynak künyesi. */
+  async finishCardCreate(
+    born: BornCard,
+    userId: string | undefined,
+    opts: { finance: CustomerFinanceInput | null; auditExtra?: Record<string, unknown> },
+  ): Promise<ApiResponse<unknown>> {
+    const { card, profile, cariAccountId } = born;
+    await AuditService.log({ userId, action: "CREATE", tableName: "CUSTOMER", recordId: card.id as string, newData: { ...born.auditData, ...(opts.auditExtra ?? {}) } });
     if (profile) await AuditService.log({ userId, action: "CREATE", tableName: "SUBCONTRACTOR", recordId: profile.id, newData: { code: profile.code, customerId: card.id, bornWithCard: true } });
     if (opts.finance && cariAccountId) await writeCustomerFinanceTerms(card.id as string, opts.finance, userId);
     return { success: true, data: { ...card, cariAccountId }, message: profile ? "Kart ve fason profili oluşturuldu" : "Kayıt oluşturuldu" };
+  }
+
+  /** Ad-mükerrer guard'ı kart doğuşunda `details.code` taşır (P2002 seddiyle aynı kod — istemci tek kodu tanır). */
+  private async assertCardNameFree(data: Record<string, unknown>): Promise<void> {
+    try {
+      await this.assertNameNotDuplicate(data);
+    } catch (e) {
+      if (e instanceof AppError && e.statusCode === 409) throw AppError.conflict(e.message, { ...(e.details ?? {}), code: "CUSTOMER_NAME_DUPLICATE" });
+      throw e;
+    }
   }
 
   /** Z-A ⑤: kart PATCH gövdesindeki `finance` alt nesnesi — route izin + modül kapısını geçirmiş olmalı. */

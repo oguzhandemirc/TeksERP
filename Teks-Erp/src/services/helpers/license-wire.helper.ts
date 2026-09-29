@@ -14,7 +14,7 @@ import {
   type VendorErrorCode,
 } from "../../lib/license/protocol";
 import { getLicenseStore, type InstallationKey, type LicenseStoreSnapshot } from "../../lib/license/store";
-import { getLicenseConfig, getLicenseDbFacts, getMeasuredFingerprint } from "../../lib/license/runtime";
+import { getLicenseConfig, getLicenseInstallationId, getMeasuredFingerprint } from "../../lib/license/runtime";
 
 const VENDOR_TIMEOUT_MS = 20_000;
 
@@ -95,7 +95,7 @@ export function requireStore(): LicenseStoreSnapshot & { key: InstallationKey } 
 
 export function requireReady(): ReadyContext {
   const store = requireStore();
-  const installationId = getLicenseDbFacts().installationId;
+  const installationId = getLicenseInstallationId();
   if (!installationId) throw licenseError(409, "LICENSE_IDENTITY_NOT_READY", "Kurulum kimliği henüz hazır değil; biraz sonra tekrar deneyin.");
   return { store, key: store.key, installationId };
 }

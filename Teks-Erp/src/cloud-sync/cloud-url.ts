@@ -1,5 +1,5 @@
 // Patron bulutunun adresi — TEK çözüm yeri; `PATRON_CLOUD_URL` başka yerde okunmaz.
-// Adres tek başına eşitleme AÇMAZ: ön koşul kiradan ve HAK'tan gelir (`eligibility.ts`).
+// Adres tek başına eşitlemeyi ya da gelen kutusunu AÇMAZ: ön koşul kiradan ve HAK'tan gelir (`eligibility.ts`).
 import { isEgressTargetAllowed } from "../lib/http-egress";
 
 export const DEFAULT_PATRON_CLOUD_URL = "https://patron.etkiliyazilim.com";

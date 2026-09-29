@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createPublicKey, randomUUID } from "node:crypto";
-import { DAY_MS, LeaseSchema, TYP, msToIso, signDocument, type SanctionLevel } from "../../src/lib/license/protocol";
+import { DAY_MS, LeaseSchema, TYP, msToIso, signDocument, type LeaseDoc, type SanctionLevel } from "../../src/lib/license/protocol";
 import { loadLicenseStoreSync, saveEntitlement, saveLease, saveStateRecord } from "../../src/lib/license/store";
 import {
   __resetLicenseRuntimeForTests,
@@ -33,6 +33,8 @@ export interface KipSecenegi {
   readonly parmakIziOlculdu?: boolean;
   /** true → kira 10 gün önce bitti (EK_SURE; ek süre 30 gün). */
   readonly kiraBitti?: boolean;
+  /** Kiranın ek alanları (ör. patron bulutu: `esitlemeAraligiDk`, `patronBulutBitis`, `devredildi`). */
+  readonly kiraEk?: Partial<Pick<LeaseDoc, "esitlemeAraligiDk" | "patronBulutBitis" | "devredildi">>;
 }
 
 let kokDizin: string | null = null;
@@ -81,6 +83,7 @@ export function lisansKipKur(s: KipSecenegi): { f: Fikstur; snap: LicenseSnapsho
       donmusModuller: [...(s.donmus ?? [])],
       guncellemeDonuk: false,
     },
+    ...(s.kiraEk ?? {}),
   });
   saveLease(signDocument({ typ: TYP.KIRA, schema: LeaseSchema, payload: yuk, key: f.alt }));
   // Birikim = kiradan beri geçen süre: monotonik tahmin duvar saatiyle örtüşür (saat bulgusu yok).

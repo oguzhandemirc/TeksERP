@@ -28,6 +28,7 @@ import { AccessUsersPage } from "@/pages/Access/Users/AccessUsersPage";
 import { UserFootprintPage } from "@/pages/Access/Users/footprint/UserFootprintPage";
 import { TemplatesPage } from "@/pages/Access/Templates/TemplatesPage";
 import { PermissionsCatalogPage } from "@/pages/Access/Permissions/PermissionsCatalogPage";
+import { PatronCloudPage } from "@/pages/Access/PatronCloud/PatronCloudPage";
 import { ItemsPage } from "@/pages/Items/ItemsPage";
 import { CustomersPage } from "@/pages/Customers/CustomersPage";
 import { ProductionStationsPage } from "@/pages/Stations/ProductionStationsPage";
@@ -671,6 +672,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:users">
         <PermissionsCatalogPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Patron bulutu: teknik kullanıcı (bulut yazmalarının aktörü) + bulut hesapları (salt okunur).
+    path: "access/patron-bulut",
+    element: (
+      <ProtectedRoute requirePermission="admin:users">
+        <PatronCloudPage />
       </ProtectedRoute>
     ),
   },

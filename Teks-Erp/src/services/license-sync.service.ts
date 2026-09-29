@@ -23,7 +23,7 @@ import { getLicenseStore, saveEntitlement, saveLease, saveTransfer } from "../li
 import { measureFingerprint } from "../lib/license/fingerprint";
 import {
   getLicenseConfig,
-  getLicenseDbFacts,
+  getLicenseInstallationId,
   getLicenseSnapshot,
   invalidateLicenseSnapshot,
   peekObservationCounters,
@@ -221,7 +221,7 @@ export function pollLicenseOnce(transport: VendorTransport = egressTransport): P
 async function pollOnce(transport: VendorTransport): Promise<{ outcome: PollOutcome; code?: string }> {
   const store = getLicenseStore();
   const config = getLicenseConfig();
-  if (!store || store.problem || !store.key || !getLicenseDbFacts().installationId) return { outcome: "HAZIR_DEGIL" };
+  if (!store || store.problem || !store.key || !getLicenseInstallationId()) return { outcome: "HAZIR_DEGIL" };
   const activated = Boolean(store.leaseJws || store.transfer);
   if (!config.vendorUrl) {
     // Etkin bir kurulum adres kaybederse yenileyemez: bu da başarısız yoklamadır.

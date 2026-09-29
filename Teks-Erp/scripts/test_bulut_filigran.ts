@@ -35,11 +35,11 @@ import { gzipSync } from "node:zlib";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { AuditService } from "../src/services/audit.service";
-import { setMeasuredFingerprint, getLicenseSnapshot } from "../src/lib/license/runtime";
+import { setMeasuredFingerprint, getLicenseSnapshot, getLicenseInstallationId } from "../src/lib/license/runtime";
 import { runSyncRound, type RoundOutcome } from "../src/cloud-sync/sync-round";
 import { egressCloudTransport } from "../src/cloud-sync/cloud-client";
 import { getCloudUrl, setCloudUrlForTests } from "../src/cloud-sync/cloud-url";
-import { evaluateSyncEligibility } from "../src/cloud-sync/eligibility";
+import { evaluateCloudEligibility } from "../src/cloud-sync/eligibility";
 import { __setScanLimitForTests } from "../src/cloud-sync/change-scan";
 import { RECORD_PROJECTIONS } from "../src/cloud-sync/projections";
 import { FULL_RESEND_MARKER, wmKey } from "../src/cloud-sync/watermarks";
@@ -96,7 +96,7 @@ async function onKosulBolumu(lisans: BulutLisans, bulut: SahteBulut): Promise<vo
   const once = bulut.istekler.length;
   const bekle = async (ad: string, kur: () => void, neden: string): Promise<void> => {
     kur();
-    const e = evaluateSyncEligibility(getLicenseSnapshot(), Date.now(), getCloudUrl().url);
+    const e = evaluateCloudEligibility(getLicenseSnapshot(), Date.now(), getCloudUrl().url, getLicenseInstallationId());
     const o = await tur();
     check(`§1 ${ad} → ${neden}`, !e.ok && e.reason === neden && o.status === "GONDERILMEDI", `${e.ok ? "UYGUN" : e.reason} · ${o.status}`);
   };
@@ -113,7 +113,7 @@ async function onKosulBolumu(lisans: BulutLisans, bulut: SahteBulut): Promise<vo
   await bekle("bulut adresi kapalı", () => setCloudUrlForTests(null), "BULUT_ADRESI_YOK");
   setCloudUrlForTests(bulut.url);
   check("§1z ⭐ hiçbir ret dalında dışarı istek atılmadı", bulut.istekler.length === once, `${bulut.istekler.length - once} istek`);
-  const e = evaluateSyncEligibility(getLicenseSnapshot(), Date.now(), bulut.url);
+  const e = evaluateCloudEligibility(getLicenseSnapshot(), Date.now(), bulut.url, getLicenseInstallationId());
   check("§1y uygun lisans geri gelince eşitleme açık (kurulum kimliği HAK'tan)", e.ok && e.installationId === lisans.installationId, e.ok ? `aralık ${e.intervalMinutes} dk` : e.reason);
 }
 
