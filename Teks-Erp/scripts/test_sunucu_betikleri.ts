@@ -438,5 +438,16 @@ for (const yol of SUNUCU_PS1) {
     kurSayi === KUR_KULTUR_BORCU, `ölçülen ${kurSayi}`);
 }
 
+// §15 — paketle.ps1 PowerShell 7 ister (2b-D thinkpad-1 provası): 5.1'de `#Requires`
+//   olmadan npm ci'den sonra anlaşılmaz hatayla düşer; -Korumali Windows x64'te bile
+//   `$IsWindows` 5.1'de tanımsız olduğu için "bu hostta üretilemez" der.
+{
+  const pk = readFileSync(join(KOK, "deploy/paketle.ps1"), "utf8").split(/\r?\n/);
+  const req = pk.findIndex((k) => /^#Requires -Version 7(\.0)?\s*$/.test(k));
+  const param = pk.findIndex((k) => /^param\(/.test(k));
+  check("§15 ⭐ paketle.ps1 `#Requires -Version 7` taşır (5.1'de ilk satırda, açık hatayla reddedilir)",
+    req >= 0 && param > req, `#Requires satır ${req + 1} · param satır ${param + 1}`);
+}
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

@@ -449,6 +449,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\uzaktan-kos.ps1 `
 
 ---
 
+## 3c) Korumalı paket (`paketle.ps1 -Korumali`) — hedef makinede üretim ve duman (2026-09-29 thinkpad-1 provası)
+
+Bayt kodu (`.jsc`) OS + mimari + V8'e kilitli olduğundan korumalı paket **hedef platformda** üretilir (CI `korumali-paket.yml` ya da Windows x64 makine). thinkpad-1 provasında ölçülen tuzaklar:
+
+- **pwsh 7 şart.** `paketle.ps1` Windows PowerShell 5.1'de koşmaz (üç argümanlı `Join-Path`, `$IsWindows`); thinkpad-1'de Store sürümü `pwsh` 7.6.6 var ve SSH oturumunda da çalışıyor.
+- **Git deposu şart.** Paketleyici `git rev-parse` + temizlik denetimi yapar; kirli ağaçta `Read-Host` sorar ve etkileşimsiz kabukta takılır. Kaynak `git archive` ile taşınıyorsa hedefte yerel `git init` + tek commit (yerel `-c user.*`, küresel yapılandırmaya yazmadan).
+- **İz yalıtımı** (paylaşılan makinede): `TEMP`/`TMP` (sahne dizini), `LOCALAPPDATA`/`APPDATA`, `npm_config_cache`, `KORUMA_ARSIV_DIZINI`, `GIT_CONFIG_GLOBAL` + `GIT_CONFIG_NOSYSTEM=1`, `CHECKPOINT_DISABLE=1` hepsi prova kökü altına verilir. ⚠ `KORUMA_ARSIV_DIZINI` verilmezse kaynak haritası arşivi `%USERPROFILE%\.tekserp\kaynak-haritalari`ne iner — kaynak haritası yabancı makinede kalır.
+- **Uzun iş SSH'a bağlanmaz.** Windows OpenSSH oturumu kapanınca alt süreçler ölür; derleme `Win32_Process.Create` (WMI) ile ayrık başlatılır, günlük dosyası yoklanır (zamanlanmış görev yaratmadan).
+- **Süreler (thinkpad-1, 2026-09-29):** toplam 723 sn — `npm ci` 56 sn · runtime indirme + SHA256 · esbuild `server.cjs` 5,2 MB · bytenode `server.jsc` 12,7 MB · `npm ci --omit=dev` 27 sn · zip ~7 dk (`Compress-Archive`, en yavaş adım). Paket 13.379 dosya / 499,8 MB → zip 154,9 MB.
+- **npm 11 `allow-scripts` uyarısı** (sistem Node 26 → npm 11.17): `@prisma/engines`/`esbuild`/`prisma` kurulum betikleri koşmadı; etkisiz ölçüldü — şema motoru `prisma generate` ile indi (`schema-engine-windows.exe` MZ ✓).
+- **Paylaşılan makinede duman kurulumu** (kur.ps1 KOŞULMAZ — pm2'yi siler): paket prova köküne açılır (`tar -xf`; `Expand-Archive` 13 bin dosyada dakikalar sürer), `.env` sıfırdan yazılır — `HOST=127.0.0.1`, testfabrika'dan farklı `PORT`, `DISCOVERY_MDNS_ENABLED=false` (ağa ikinci sunucu ilan edilmez), `BACKUP_SCHEDULE_ENABLED=false`, `LICENSE_SERVER_URL=kapali` (satıcıya çıkılmaz); lisans deposu varsayılanı `<app>\..\lisans` yani prova kökü. Şema `runtime\node.exe node_modules\prisma\build\index.js migrate deploy`; sunucu `Start-Process runtime\node.exe dist\server.js -PassThru` (pm2 yok, PID ile kapatılır). Paketlenmiş kurulumda `admin` doğmaz (seed pakette yok): ilk hesap satıcı hesabıdır, `dist\tools\superadmin-olustur.cjs` GERÇEK terminal ister (uzaktan `ssh -tt`); tünel dışı girişte TOTP istenmez.
+
+---
+
 ## 4) Sağlık kontrolü
 
 ```bash

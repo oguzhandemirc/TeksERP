@@ -143,7 +143,7 @@ Uyarı sayısı üç varyantta da 0. `pg-native` `pg`nin koşullu `require`ıdı
 **2b paketleme hattı**
 
 1. esbuild `dis` varyantı + `minify` (tanımlayıcı karartma dahil), `legalComments: none`, `sourcemap: external`; üçüncü taraf kod pakete ve bayt koduna GİRMEZ (`node_modules` bugünkü gibi `npm ci --omit=dev` ya da pakette; `kur.ps1` akışı değişmez). `tam` varyantı reddedilir: üçüncü taraf `__dirname` çözümünü sessizce kırıyor (§1) ve plan üçüncü taraf kodu bayt koduna çevirmeyi yasaklıyor.
-2. Dosya adı sözleşmesi: `kur.ps1` ve `ecosystem.config.js` `dist\server.js` bekliyor (varlık denetimi dört yerde) → `dist/server.js` küçük, okunur yükleyici olur; paket `dist/server.jsc` (+ araçlar `dist/tools/*.cjs` bugünkü gibi).
+2. Dosya adı sözleşmesi: `kur.ps1` ve `ecosystem.config.js` `dist\server.js` bekliyor (varlık denetimi dört yerde) → `dist/server.js` küçük, okunur yükleyici olur; paket `dist/server.jsc` (+ araçlar `dist/tools/*.cjs`; 2b-D: onlar da minify ile karartılır, §8).
 3. Yükleyici `.jsc`'yi açmadan önce `process.versions.v8`, `process.platform`, `process.arch`ı derleme künyesiyle karşılaştırır; uyuşmazlıkta açık Türkçe hatayla düşer. Node YAMA sürümü tek başına ölçüt değildir (24.18 → 24.21 kabul edildi); V8 sürümü değişirse V8 zaten reddeder, yükleyici bunu anlaşılır hataya çevirir.
 4. bytenode çalışma zamanı bir npm bağımlılığıdır (MIT, 1.7.0); iki seçenek: (a) onayla bağımlılık olarak eklemek, (b) aynı tekniği (`vm.Script` + `cachedData`, `--no-lazy` / `--no-flush-bytecode`) ~40 satırlık kendi yükleyicimizle yazmak — tedarik zinciri ve sürüm denetimi bizde kalır. **Öneri (b)**; derleme tarafı CI'da yine bytenode ya da aynı betikle.
 5. Arşiv: her derlemenin bytenode ÖNCESİ `server.cjs` + `server.cjs.map` (≈15 MB) bizde saklanır, pakete girmez; yığındaki `:1:<sütun>`u kaynağa çeviren küçük bir araç 2b'ye girer (§3 formülü).
@@ -187,3 +187,30 @@ Hepsi `Teks-Erp/` içinden, ağır iş sarmalayıcısıyla (`node ../scripts/agi
 | `Teks-Erp/scripts/olcum/modul-sinirlari.ts` | metafile'dan modül tablosu (+ `--json`) | yok |
 | `Teks-Erp/scripts/olcum/bytenode-deneme.mjs` | `.jsc` üretir, davranış/başlatma/uyumluluk ölçer | paket sahnesine `server.jsc`; bytenode AĞAÇ DIŞINDA |
 | `Teks-Erp/scripts/olcum/prisma-yorumsuz.ts` | yorumsuz şemadan `generate` + eşdeğerlik | geçici dizin (`--uygula` yalnız izole ağaçta) |
+
+## 8. 2b-D — Windows duman provası (thinkpad-1, 2026-09-29)
+
+Korumalı paketin HEDEF platformda ilk gerçek üretimi ve açılışı. Yalıtım: her şey `C:\TeksERP-korumali-prova` altında (TEMP/TMP, LOCALAPPDATA/APPDATA, npm önbelleği, kaynak haritası arşivi, git yapılandırması); testfabrika kurulumuna, pm2'ye, görevlere, güvenlik duvarına, sistem Node'una dokunulmadı; sunucu yalnız `127.0.0.1:4090`. Kaynak `lisans/2b-paket` dalının 2b ucu (`git archive` → hedefte yerel git commit); paketleyici `pwsh 7.6.6 paketle.ps1 -Korumali -Prova -WebPanelHaric -Surum 2.11.2`.
+
+**Derleme (ölçüldü):**
+
+| Adım | Sonuç |
+|---|---|
+| Toplam | 723 sn, rc 0 |
+| `npm ci` (tam) | 56 sn, 436 paket (sistem Node 26.4 / npm 11.17) |
+| runtime indirme | `node-v24.18.0-win-x64.zip`, SHA256 resmî kayıtla eşit, `runtime\node.exe` 88,2 MB |
+| esbuild | `server.cjs` 5.191 KB, uyarı 0 |
+| bytenode | `server.jsc` 12.712 KB, V8 13.6.233.17-node.50 (runtime Node ile — V8 kilidi tuttu) |
+| `npm ci --omit=dev` + generate | 27 sn, 298 paket; `schema-engine-windows.exe` 19,8 MB MZ ✓ |
+| Paket | 13.379 dosya / 499,8 MB → zip 154,9 MB (`Compress-Archive` ~7 dk, en yavaş adım); 363 migration |
+| Prisma şeması | 4.640 yorum satırı soyuldu |
+| Kaynak haritası | arşivde (`KORUMA_ARSIV_DIZINI`), `dist`te `.map` 0 |
+
+**Bulunan kusurlar:**
+
+1. **Araçlar okunur kaynak taşıyordu (DÜZELTİLDİ).** `dist/tools/*.cjs` karartmasızdı; `superadmin-olustur.cjs` tek başına 60 src modülünü (`src/lib/license/protocol/*` dahil) 33.884 satır ve 679 `// src/...` yol yorumuyla taşıyordu. `build-araclar --korumali` → minify: 1.262 → 683 KB, 89 satır, yol yorumu 0; paketleyici yol yorumu kalırsa durur; bekçi `test_node_surumu` §5.
+2. **5.1'de yanıltıcı hata (DÜZELTİLDİ).** `paketle.ps1` pwsh 7 ister ama söylemiyordu; 5.1'de `-Korumali` Windows x64'te bile "bu hostta üretilemez" derdi. `#Requires -Version 7.0`; bekçi `test_sunucu_betikleri` §13.
+3. **npm 11 `allow-scripts` (etkisiz, not).** Kurulum betikleri koşmadı; şema motoru `prisma generate` ile indi.
+4. **Sistem Node'u hâlâ ön koşul (not).** `kur.ps1 [7/9]` `migrate deploy`u ve `ilk-kurulum.ps1`in araç ipucu sistem `node`unu çağırır; pm2 de sistem Node'unda koştuğu için bugün zararsız.
+
+**Açık — duman ÖLÇÜLEMEDİ.** Paket prova köküne açılırken (`Expand-Archive`, 13 bin dosya) thinkpad-1 ağdan düştü (~20:37) ve iki saat içinde dönmedi (Tailscale "offline"; ~21:40'ta tek kısa görünme). Açılış süresi, bellek, `/health` + giriş + `/api/admin/health` + üç GET, yanlış Node ile exit 78 ve Defender uyarısı bu yüzden Windows'ta ölçülmedi; prova kökü thinkpad-1'de temizlenmeyi bekliyor (DB yaratılmadı). Duman betikleri hazır; makine dönünce aynı dilimle koşulur.

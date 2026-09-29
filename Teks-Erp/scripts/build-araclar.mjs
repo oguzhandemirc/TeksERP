@@ -26,6 +26,11 @@ import { fileURLToPath } from "node:url";
 
 const kok = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+// KORUMALI paket (paketle.ps1 -Korumali): araclar da minify + isim karartma ile derlenir.
+// Karartmasiz cikti src'nin onlarca modulunu (lisans protokolu dahil) okunur JS olarak
+// ve `// src/...` yol yorumlariyla pakete tasiyordu; `node dist\tools\x.cjs` sozlesmesi degismez.
+const KORUMALI = process.argv.includes("--korumali");
+
 const ARACLAR = [
   { giris: "scripts/superadmin-olustur.ts", cikti: "dist/tools/superadmin-olustur.cjs" },
   // Yayin gunu veri adimlari: pakette `scripts/` ve `tsx` yok, sunucuda internet olmayabilir.
@@ -60,11 +65,12 @@ for (const arac of ARACLAR) {
     format: "cjs",
     external: DISARIDA,
     sourcemap: false,
+    minify: KORUMALI,
     legalComments: "none",
     logLevel: "warning",
   });
   const kb = (statSync(path.join(kok, arac.cikti)).size / 1024).toFixed(0);
-  console.log(`  + ${arac.cikti}  (${kb} KB)`);
+  console.log(`  + ${arac.cikti}  (${kb} KB${KORUMALI ? ", karartilmis" : ""})`);
 }
 
 // Tek liste: `paketle.ps1` her aracin pakette oldugunu bundan dogrular ve PAKET.json'a
