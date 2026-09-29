@@ -2,7 +2,7 @@
 // WEB SÜRÜMÜ SUNUMU BEKÇİSİ — patron uygulamasının web çıktısı API ile aynı kökenden (`/`):
 //   §1 kök + istemci yönlendirmesi: uzantısız GET/HEAD giriş HTML'ini alır, önbelleğe girmez
 //   §2 önbellek: özetli dizinler (`_expo/static`, `assets`) uzun ömürlü, diğerleri no-store
-//   §3 CSP: satır içi stil yalnız KENDİ özetiyle (unsafe-inline yok), çerçeve/dış kaynak yok
+//   §3 CSP: satır içi stil yalnız KENDİ özetiyle + react-native-web'in boş ögesi (unsafe-inline yok)
 //   §4 API sınırı: `/api` · `/v1` altı ASLA HTML'e düşmez (JSON 404), `/saglik` ve hesap API'si çalışır
 //   §5 iç ad alanı (`IC_ONEKLER`) web'de de 404; önek sınırı kelime değil bölüm
 //   §6 eksik varlık · GET/HEAD dışı yöntem · noktalı bölüm → 404
@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { API_ONEKLER, IC_ONEKLER, TAZE, UZUN_ONBELLEK, createWebRouter } from "../src/http/web-static";
+import { API_ONEKLER, BOS_STIL_OZETI, IC_ONEKLER, TAZE, UZUN_ONBELLEK, createWebRouter } from "../src/http/web-static";
 import { PATRON_KOKU, kontrol, ortamKur, sonuc } from "./lib/test-ortam";
 
 const STIL = "\n      html, body { height: 100%; }\n      #root { display: flex; }\n    ";
@@ -69,7 +69,8 @@ async function main(): Promise<void> {
     console.log("\n§3 güvenlik başlıkları");
     const ozet = `'sha256-${createHash("sha256").update(STIL, "utf8").digest("base64")}'`;
     const stilSrc = kok.csp.split(";").map((p) => p.trim()).find((p) => p.startsWith("style-src")) ?? "";
-    kontrol("§3a ⭐ style-src yalnız 'self' + satır içi stilin KENDİ özeti", stilSrc === `style-src 'self' ${ozet}`, stilSrc);
+    kontrol("§3a ⭐ style-src yalnız 'self' + boş öge (react-native-web) + satır içi stilin KENDİ özeti", stilSrc === `style-src 'self' ${BOS_STIL_OZETI} ${ozet}`, stilSrc);
+    kontrol("§3a' boş içeriğin özeti gerçekten boş dizgenin sha256'sı", BOS_STIL_OZETI === "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='", BOS_STIL_OZETI);
     kontrol("§3b unsafe-inline/unsafe-eval YOK, dış kaynak YOK", !/unsafe-(inline|eval)|https?:|\*/.test(kok.csp), kok.csp);
     kontrol("§3c çerçeveye gömülmez + bağlantı yalnız aynı köken", /frame-ancestors 'none'/.test(kok.csp) && /connect-src 'self'(;|$)/.test(kok.csp) && kok.xfo === "DENY", kok.xfo);
     kontrol("§3d varlık ve derin yol da aynı CSP'yi taşır", js.csp === kok.csp && derin.csp === kok.csp);

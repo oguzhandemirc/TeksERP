@@ -1,0 +1,24 @@
+# =============================================================================
+# YEREL DUMAN örtüsü — yalnız geliştirme makinesinde, `duman.sh` ile (VDS'te KULLANILMAZ).
+# =============================================================================
+# Ana dosyanın üstüne biner: Traefik yok → patron YALNIZ 127.0.0.1'e yayımlanır (kenar ağı bu yüzden
+# internal değil; internal ağda port yayını çalışmaz); satıcı yok → ic-api ağı projenin kendi internal
+# ağıdır ve KURULUM_KAYNAGI=kayit (kurulum kaydı CLI'yle). compose-denetle bu örtüyü REDDEDER (① port) —
+# bilerek: örtü yalnız duman içindir.
+# =============================================================================
+services:
+  patron:
+    ports:
+      - "127.0.0.1:${DUMAN_PORT:-18620}:4620"
+    environment:
+      KURULUM_KAYNAGI: kayit
+
+networks:
+  kenar:
+    internal: false
+  ic-api:
+    name: tekserp-patron-${ORTAM}-ic-api
+    external: false
+    internal: true
+    ipam:
+      config: [{ subnet: "${DUMAN_IC_API_AGI:-172.31.241.0/28}", ip_range: "${DUMAN_IC_API_DINAMIK:-172.31.241.8/29}" }]

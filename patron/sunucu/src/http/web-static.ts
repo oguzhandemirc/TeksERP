@@ -37,13 +37,20 @@ export function satirIciOzetler(html: string): { stil: string[]; betik: string[]
   return { stil, betik };
 }
 
+/**
+ * react-native-web kendi `<style>` ögesini BOŞ yaratıp kuralları CSSOM'la ekler (CSP CSSOM'u kısıtlamaz);
+ * boş içeriğin özeti izinli değilse öge engellenir ve sayfa stilsiz çizilir (Chromium'da ölçüldü).
+ */
+export const BOS_STIL_OZETI = sha256("");
+
 /** Dış kaynak yok, çerçeveye gömülmez; bağlantı yalnız aynı kökene (`/api`). */
 export function webCsp(html: string): string {
   const o = satirIciOzetler(html);
+  const stil = [...new Set([BOS_STIL_OZETI, ...o.stil])];
   return [
     "default-src 'self'",
     ["script-src 'self'", ...o.betik].join(" "),
-    ["style-src 'self'", ...o.stil].join(" "),
+    ["style-src 'self'", ...stil].join(" "),
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self'",
