@@ -34,7 +34,7 @@ import {
   type LeaseDoc,
 } from "../../src/lib/license/protocol";
 import { setCloudUrlForTests } from "../../src/cloud-sync/cloud-url";
-import { PackageSchema, ReportResultRequestSchema, type ReportResult, type SyncPackage } from "../../src/cloud-sync/wire";
+import { PackageSchema, RECONCILE_PARENTS, ReportResultRequestSchema, type ReportResult, type SyncPackage } from "../../src/cloud-sync/wire";
 import { PATRON_CLOUD_ENTITLEMENT } from "../../src/cloud-sync/eligibility";
 import { fiksturKur, hakBas, kiraYuku, type Fikstur } from "./lisans-fikstur";
 
@@ -109,6 +109,10 @@ export interface SahteBulut {
     hata500: number;
     bekleyenRaporlar: Array<{ istekId: string; raporAnahtari: string; parametreler: Record<string, unknown> }>;
     ufukTarihi: Record<string, string | null>;
+    /** Bulutun saati − gerçek saat (ms): imza damgası bu saate göre ±10 dk dışındaysa `ISTEK_ZAMAN` (D4). */
+    saatFarkiMs: number;
+    /** `sunucuSaati`nde BİLDİRİLEN fark (null = gerçek fark); yanlış bildirim düzeltmeyi boşa çıkarır. */
+    bildirilenSaatFarkiMs: number | null;
   };
   kapat(): Promise<void>;
 }
@@ -126,8 +130,8 @@ function yanit(res: http.ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-function hata(res: http.ServerResponse, status: number, code: string): void {
-  yanit(res, status, { success: false, message: "sahte bulut reddetti", details: { code } });
+function hata(res: http.ServerResponse, status: number, code: string, ek: Record<string, unknown> = {}): void {
+  yanit(res, status, { success: false, message: "sahte bulut reddetti", details: { ...ek, code } });
 }
 
 /** `{t,k}` karşılaştırması — bulut ikisini metin olarak sıralar (§6.4). */
@@ -148,13 +152,15 @@ export async function sahteBulutBaslat(x: string): Promise<SahteBulut> {
   const satirlar = new Map<string, Map<string, BulutSatiri>>();
   const tamTarama = new Map<string, string>();
   const gorulenPaket = new Map<string, unknown>();
-  const mod: SahteBulut["mod"] = { ret: new Set(), istenenTam: new Set(), hata500: 0, bekleyenRaporlar: [], ufukTarihi: {} };
+  const mod: SahteBulut["mod"] = { ret: new Set(), istenenTam: new Set(), hata500: 0, bekleyenRaporlar: [], ufukTarihi: {}, saatFarkiMs: 0, bildirilenSaatFarkiMs: null };
 
-  const dogrula = (req: http.IncomingMessage, govde: Buffer): boolean => {
+  /** null = imza geçerli; aksi hâlde protokol kodu (bulut `ISTEK_*` kodunu olduğu gibi geçirir). */
+  const dogrula = (req: http.IncomingMessage, govde: Buffer): string | null => {
     const token = req.headers[REQUEST_HEADER.toLowerCase()];
     const kimlik = readRequestIdentity(token);
-    if (!kimlik.ok) return false;
-    return verifyRequest(token, { publicKeyX: x, body: govde, nowMs: Date.now(), purposes: ["esitle"], installationId: kimlik.value.installationId }).ok;
+    if (!kimlik.ok) return kimlik.code;
+    const v = verifyRequest(token, { publicKeyX: x, body: govde, nowMs: Date.now() + mod.saatFarkiMs, purposes: ["esitle"], installationId: kimlik.value.installationId });
+    return v.ok ? null : v.code;
   };
 
   const esitle = (paket: SyncPackage): unknown => {
@@ -194,8 +200,16 @@ export async function sahteBulutBaslat(x: string): Promise<SahteBulut> {
       if (!sakli || zincirKarsilastir(k.filigran.yeni, sakli) > 0) zincir.set(k.projeksiyon, k.filigran.yeni);
       kabul.push({ projeksiyon: k.projeksiyon, filigran: k.filigran.yeni });
     }
+    // Sözleşmenin uzlaştırma kuralı (saklama hariç): canlı ∧ (kalemse) üst belge canlı − bekleyen.
     for (const u of paket.uzlastirma) {
-      const canli = [...(satirlar.get(u.projeksiyon) ?? new Map<string, BulutSatiri>())].filter(([, s]) => !s.silindi).map(([id]) => id);
+      const bekleyen = new Set(u.bekleyen);
+      const bag = RECONCILE_PARENTS[u.projeksiyon];
+      const ust = bag ? (satirlar.get(bag.parent) ?? new Map<string, BulutSatiri>()) : null;
+      const ustCanli = (s: BulutSatiri): boolean => {
+        const u = ust && bag ? ust.get(String(s.veri[bag.field])) : null;
+        return !ust || (!!u && !u.silindi);
+      };
+      const canli = [...(satirlar.get(u.projeksiyon) ?? new Map<string, BulutSatiri>())].filter(([id, s]) => !s.silindi && !bekleyen.has(id) && ustCanli(s)).map(([id]) => id);
       if (canli.length !== u.adet || kumeOzeti(canli) !== u.ozet) istenen.push({ projeksiyon: u.projeksiyon, tur: "TAM", neden: "UZLASTIRMA_UYUSMAZ" });
     }
     for (const p of mod.istenenTam) istenen.push({ projeksiyon: p, tur: "TAM", neden: "TEST" });
@@ -208,13 +222,15 @@ export async function sahteBulutBaslat(x: string): Promise<SahteBulut> {
       const govde = await govdeOku(req);
       const yol = req.url ?? "";
       const gzip = req.headers["content-encoding"] === "gzip";
-      const imza = dogrula(req, govde);
+      const red = dogrula(req, govde);
+      const imza = red === null;
       const kaydet = (durum: number, paketId: string | null = null): void => {
         istekler.push({ yol, imza, gzip, paketId, durum });
       };
       if (!imza) {
         kaydet(401);
-        return hata(res, 401, "ISTEK_GECERSIZ");
+        const fark = mod.bildirilenSaatFarkiMs ?? mod.saatFarkiMs;
+        return red === "ISTEK_ZAMAN" ? hata(res, 401, red, { sunucuSaati: new Date(Date.now() + fark).toISOString() }) : hata(res, 401, "ISTEK_GECERSIZ");
       }
       let json: unknown;
       try {

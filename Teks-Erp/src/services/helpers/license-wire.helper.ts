@@ -17,6 +17,7 @@ import {
 } from "../../lib/license/protocol";
 import { installHistoryPath, readInstallHistory } from "../../lib/license/install-history";
 import { ensureInstallationX25519, getLicenseStore, type InstallationKey, type LicenseStoreSnapshot } from "../../lib/license/store";
+import { requestClockSkewMs } from "../../lib/license/request-clock";
 import {
   getLicenseConfig,
   getLicenseDbFacts,
@@ -160,8 +161,8 @@ export function readVendorError(status: number, bodyText: string): { code: strin
  * imza damgasına ve `SAAT_KAYIK` bilgisine girer, güvenilir saate/kademeye GİRMEZ (D4).
  */
 export function learnVendorClock(code: string, vendorTimeMs: number | undefined, receivedAtMs: number = Date.now()): number | null {
-  if (code !== "ISTEK_ZAMAN" || vendorTimeMs === undefined || !Number.isFinite(vendorTimeMs)) return null;
-  const skewMs = receivedAtMs - vendorTimeMs;
+  const skewMs = requestClockSkewMs(code, vendorTimeMs, receivedAtMs);
+  if (skewMs === null) return null;
   recordVendorClockSkew(skewMs);
   return skewMs;
 }

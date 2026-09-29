@@ -16,6 +16,7 @@ import { PROJECTION_CATALOG } from "../catalog/projections";
 import {
   ENVELOPE_VERSION,
   MAX_DECOMPRESSED_BYTES,
+  MAX_RECONCILE_PENDING,
   MAX_RECORDS_PER_PACKAGE,
   PackageSchema,
   SYNC_CONTRACT_VERSION,
@@ -69,6 +70,8 @@ export function parsePackage(json: Buffer, caller: FactoryCaller, nowMs: number)
   if (verdict === "ESKI") throw new CloudError(400, "SOZLESME_ESKI", "Fabrika programı eski — eşitleme için güncelleme gerekli");
   if (verdict === "YENI") throw new CloudError(400, "SOZLESME_BILINMIYOR", "Bu eşitleme sözleşmesi sürümünü bulut henüz tanımıyor");
   if (Date.parse(pkg.ufuk) > nowMs + CLOCK_SKEW_MS) throw badRequest("Paketin ufku gelecekte (fabrika saati ileri)");
+  const pending = pkg.uzlastirma.reduce((n, u) => n + u.bekleyen.length, 0);
+  if (pending > MAX_RECONCILE_PENDING) throw badRequest(`Uzlaştırma en çok ${MAX_RECONCILE_PENDING} bekleyen kimlik taşır (${pending})`);
   const records = pkg.kayitlar.reduce((n, e) => n + e.yaz.length + e.sil.length, 0);
   if (records > MAX_RECORDS_PER_PACKAGE) throw new CloudError(413, "PAKET_BUYUK", `Paket en çok ${MAX_RECORDS_PER_PACKAGE} kayıt taşır (${records})`);
   return pkg;
@@ -81,9 +84,9 @@ function packageScope(pkg: SyncPackage): string[] {
   for (const s of pkg.anliklar) names.add(s.projeksiyon);
   for (const u of pkg.uzlastirma) {
     names.add(u.projeksiyon);
-    // Saklama tarihi üstten gelen kalemin uzlaştırması üst satırı OKUR (ufuk süzmesi).
+    // Kalemin uzlaştırması üst satırı OKUR: kalem, ebeveyni kümedeyse kümededir (S45).
     const parent = PROJECTION_CATALOG.get(u.projeksiyon)?.root.parent;
-    if (parent && PROJECTION_CATALOG.get(u.projeksiyon)?.root.retentionFromParent) names.add(parent.projection);
+    if (parent) names.add(parent.projection);
   }
   return [...names].filter((n) => PROJECTION_CATALOG.has(n));
 }
@@ -94,12 +97,12 @@ function monthsBefore(nowMs: number, months: number): Date {
   return d;
 }
 
-/** Saklama ufku (§9.5): budanan OLGU projeksiyonları için `şimdi − saklamaAy`; TAM gönderim bununla sınırlanır. */
+/** Saklama ufku (§9.5): budanan OLGU projeksiyonları (ve ebeveyni budanan kalemler, S45) için `şimdi − saklamaAy`. */
 export function retentionHorizons(retentionMonths: number | null, nowMs: number): Record<string, string> {
   if (retentionMonths === null) return {};
   const iso = monthsBefore(nowMs, retentionMonths).toISOString();
   const out: Record<string, string> = {};
-  for (const def of PROJECTION_CATALOG.values()) if (def.root.kind === "OLGU" && def.root.retentionFields?.length) out[def.name] = iso;
+  for (const def of PROJECTION_CATALOG.values()) if (def.root.kind === "OLGU" && (def.root.retentionFields?.length || def.root.parent)) out[def.name] = iso;
   return out;
 }
 

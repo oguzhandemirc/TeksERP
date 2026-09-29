@@ -52,7 +52,12 @@ export const FACTORY_CHANNEL_ERROR_CODES = [
   "RAPOR_BILINMIYOR",
 ] as const;
 export type FactoryChannelErrorCode = (typeof FACTORY_CHANNEL_ERROR_CODES)[number];
-export const CloudErrorResponseSchema = z.object({ success: z.literal(false), message: z.string(), details: z.looseObject({ code: z.string() }) });
+/** `ISTEK_ZAMAN`da `details.sunucuSaati` bulutun saatidir (İMZASIZ, D4): fabrika isteği yalnız BİR KEZ düzeltilmiş zamanla yeniden imzalar. */
+export const CloudErrorResponseSchema = z.object({
+  success: z.literal(false),
+  message: z.string(),
+  details: z.looseObject({ code: z.string(), sunucuSaati: z.iso.datetime().optional().catch(undefined) }),
+});
 
 const Iso = z.iso.datetime();
 const Uuid = z.uuid();
@@ -103,11 +108,29 @@ export type SnapshotEntry = z.infer<typeof SnapshotEntrySchema>;
  * BOŞ küme `md5('')`dir, `null` değil (iki uç aynı biçimde özetler; aksi hâlde boş projeksiyon her gün TAM ister).
  */
 export const EMPTY_SET_DIGEST = "d41d8cd98f00b204e9800998ecf8427e";
+
+/**
+ * UZLAŞTIRMA KÜMESİ (§4.4, S44–S45) — iki uç AYNI kuralla sayar:
+ *   küme = canlı ∧ kapsam ∧ (kendi saklama tarihi yok ∨ ≥ ufukTarihi) ∧ (ebeveyni varsa: ebeveyn canlı ∧ kapsamda ∧
+ *          (saklama tarihi yok ∨ ≥ ufukTarihi)) − bekleyen
+ * `bekleyen`: fabrikanın henüz onaylatmadığı kökler (son onaylı ufuktan sonra doğan ya da ebeveyni öyle olan). Sınırı
+ * YALNIZ fabrika çizer; bulut satır zamanına bakmaz, listeyi dışlar — saati kaymış satır iki uçta birlikte dışarıda kalır.
+ */
+export const RECONCILE_PARENTS: Readonly<Record<string, { readonly parent: string; readonly field: string }>> = {
+  "siparis-kalemi": { parent: "siparis", field: "siparisId" },
+  "cek-hareketi": { parent: "cek-senet", field: "cekId" },
+  "fatura-kalemi": { parent: "fatura", field: "faturaId" },
+};
+/** Bir paketteki bütün `bekleyen` kimliklerin toplam tavanı; aşan projeksiyonun uzlaştırması o gün ATLANIR (TAM istenmez). */
+export const MAX_RECONCILE_PENDING = 5000;
+
 export const ReconcileEntrySchema = z.strictObject({
   projeksiyon: ProjectionName,
   adet: z.number().int().min(0),
   ozet: z.string().regex(/^[0-9a-f]{32}$/),
   ufukTarihi: Iso.nullable(),
+  /** Eski fabrika göndermez (boş liste = eski davranış); bulut ÖNCE yayınlanır. */
+  bekleyen: z.array(Uuid).max(MAX_RECONCILE_PENDING).default([]),
 });
 export type ReconcileEntry = z.infer<typeof ReconcileEntrySchema>;
 
