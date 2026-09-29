@@ -1,0 +1,9 @@
+node_modules
+dist
+# Ortam dosyası: üç DB URL'i (göç · uygulama · eşitleme rolü) + anahtar dizini — repoya girmez.
+.env
+.env.*
+!.env.example
+# Anahtar dizini: TOTP sırlarının sarma anahtarı (patron-totp.key) — ASLA repoya girmez.
+anahtarlar/
+patron-totp.key

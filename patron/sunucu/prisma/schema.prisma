@@ -1,0 +1,409 @@
+// =============================================================================
+// TeksERP patron bulutu sunucusu — Prisma şeması
+// =============================================================================
+// Sözleşme: docs/design/PATRON-BULUTU-ESITLEME.md §9 (bulut veri modeli ve RLS).
+// Çekirdek kurallar burada da geçerli (kök CLAUDE.md):
+//   - PK: UUID; her DateTime timestamptz; UUID kolon @db.Uuid.
+//   - ÇOK KİRACILI TEK DB: her satır `tesis_id` taşır ve PostgreSQL RLS ile yalıtılır
+//     (politikalar migration SQL'inde; `current_setting('app.tesis_id')` her istek tx'inin
+//     İLK ifadesinde yazılır — tek yazar `src/lib/tenant.ts`).
+//   - Bulut HESAP YAPMAZ: projeksiyon satırı fabrikanın hesapladığı veridir (jsonb), bulut saklar,
+//     süzer, gösterir. İş kaydı fabrikada doğar; buluttaki tek yazma kanalı gelen kutusudur.
+//   - Soft delete: hesap `status`, cihaz `active`, kurulum `active`. Hard delete yalnız
+//     saklama/telemetri budamasında (beyan: `src/services/maintenance.ts` PRUNED_TABLES).
+//   - Sır hijyeni: parola (scrypt özeti), TOTP sırrı (sarılı), davet/oturum belirteci (sha256) —
+//     düz metin DB'ye, loga, denetime GİRMEZ.
+// Adlandırma: model/kolon İngilizce (snake_case tablo ve kolon), kod DEĞERLERİ Türkçe.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Protokol `LICENSE_CLASSES` ile birebir (yalnız URETIM eşitleme gönderebilir).
+enum LicenseClass {
+  URETIM
+  TEST
+  DR
+  DEMO
+  BAYI
+  BARINDIRILAN
+}
+
+enum FacilityStatus {
+  AKTIF
+  PASIF
+}
+
+/// Kurulum kaydının kaynağı: satıcı CLI'si ile yapılandırılmış kayıt ya da satıcı iç API'si önbelleği.
+enum InstallationSource {
+  KAYIT
+  SATICI
+}
+
+enum AccountStatus {
+  /// Davet belirteci bekliyor (parola + TOTP kurulumu yapılmadı) — giriş YOK.
+  DAVETLI
+  AKTIF
+  /// Tesis yöneticisi ya da satıcı kilitledi — giriş YOK, oturumlar kapanır.
+  KILITLI
+  /// Arşiv (soft delete) — giriş YOK.
+  PASIF
+}
+
+enum SessionCloseReason {
+  CIKIS
+  SURE_DOLDU
+  HESAP_KAPANDI
+  SIFIRLAMA
+}
+
+enum InboxKind {
+  SIPARIS
+  CARI
+}
+
+/// Gelen kutusu durum makinesi (hepsi atomik claim): BEKLIYOR → ISLENIYOR → ISLENDI | REDDEDILDI;
+/// BEKLIYOR → IPTAL (yalnız yazar); ISLENIYOR → BEKLIYOR (claim süresi dolunca, bakım işi).
+enum InboxStatus {
+  BEKLIYOR
+  ISLENIYOR
+  ISLENDI
+  REDDEDILDI
+  IPTAL
+}
+
+enum ReportStatus {
+  BEKLIYOR
+  HESAPLANIYOR
+  HAZIR
+  HATA
+  IPTAL
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
+// -----------------------------------------------------------------------------
+// TESİS · KURULUM (satıcının Müşteri → Tesis → Kurulum ağacının buluttaki yansıması)
+// -----------------------------------------------------------------------------
+
+/// Tesis — `tesis_id` satıcının HAK'taki `tesis.id`sidir (kimlik satıcıda doğar). Saklama süresi
+/// portal ayarıdır (3 · 13 · 25 ay · NULL = tümü; varsayılan 13).
+model Facility {
+  tesisId         String         @id @map("tesis_id") @db.Uuid
+  name            String         @map("name") @db.VarChar(200)
+  retentionMonths Int?           @default(13) @map("retention_months")
+  status          FacilityStatus @default(AKTIF) @map("status")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  installations Installation[]
+  accounts      Account[]
+
+  @@map("facilities")
+}
+
+/// Kurulum kaydı — imzalı isteği doğrulamak için açık anahtar + eşitleme hakkı (sınıf, modüller,
+/// patron bulutu bitişi). Kaynak: satıcı CLI'si (KAYIT) ya da satıcı iç API önbelleği (SATICI).
+model Installation {
+  id             String             @id @default(uuid()) @db.Uuid
+  tesisId        String             @map("tesis_id") @db.Uuid
+  installationId String             @unique @map("kurulum_id") @db.Uuid
+  publicKeyX     String?            @map("public_key_x") @db.VarChar(43)
+  keyId          String?            @map("key_id") @db.VarChar(47)
+  licenseClass   LicenseClass       @map("license_class")
+  modules        String[]           @map("modules")
+  cloudUntil     DateTime?          @map("cloud_until") @db.Timestamptz
+  handedOver     Boolean            @default(false) @map("handed_over")
+  active         Boolean            @default(true) @map("active")
+  source         InstallationSource @map("source")
+  refreshedAt    DateTime           @map("refreshed_at") @db.Timestamptz
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  facility Facility @relation(fields: [tesisId], references: [tesisId], onDelete: Restrict)
+
+  @@index([tesisId])
+  @@map("installations")
+}
+
+// -----------------------------------------------------------------------------
+// HESAPLAR (bulutta BAĞIMSIZ — fabrika kullanıcısına bağlanmaz; hesap başına TEK tesis)
+// -----------------------------------------------------------------------------
+
+/// Bulut hesabı. E-posta küçük harfe normalleşir ve TÜM bulutta tekildir (giriş tesis sormaz).
+/// Parola scrypt özeti; TOTP sırrı AES-256-GCM ile sarılı (anahtar ANAHTAR_DIZINI'nde, DB'de değil).
+/// İzinler kod kataloğundan (`src/catalog/permissions.ts`); süper yetki yoktur.
+model Account {
+  id               String        @id @default(uuid()) @db.Uuid
+  tesisId          String        @map("tesis_id") @db.Uuid
+  email            String        @unique @map("email") @db.VarChar(254)
+  name             String        @map("name") @db.VarChar(120)
+  passwordHash     String?       @map("password_hash") @db.VarChar(200)
+  totpSecretSealed String?       @map("totp_secret_sealed") @db.VarChar(300)
+  totpLastStep     Int?          @map("totp_last_step")
+  permissions      String[]      @map("permissions")
+  status           AccountStatus @default(DAVETLI) @map("status")
+  inviteTokenHash  String?       @unique @map("invite_token_hash") @db.VarChar(64)
+  inviteExpiresAt  DateTime?     @map("invite_expires_at") @db.Timestamptz
+  failedLogins     Int           @default(0) @map("failed_logins")
+  lockedUntil      DateTime?     @map("locked_until") @db.Timestamptz
+  lastLoginAt      DateTime?     @map("last_login_at") @db.Timestamptz
+  createdById      String?       @map("created_by_id") @db.Uuid
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  facility Facility  @relation(fields: [tesisId], references: [tesisId], onDelete: Restrict)
+  sessions Session[]
+
+  @@index([tesisId])
+  @@map("accounts")
+}
+
+/// Oturum — TELEMETRİ sınıfı (iş kararı okumaz; kapanış/bitişten sonra budanır). Belirteç düz
+/// saklanmaz (sha256). Taşıma: `Authorization: Bearer` (çerez yok → CSRF yüzeyi yok).
+model Session {
+  id          String              @id @default(uuid()) @db.Uuid
+  tesisId     String              @map("tesis_id") @db.Uuid
+  accountId   String              @map("account_id") @db.Uuid
+  tokenHash   String              @unique @map("token_hash") @db.VarChar(64)
+  client      String?             @map("client") @db.VarChar(20)
+  lastUsedAt  DateTime            @map("last_used_at") @db.Timestamptz
+  expiresAt   DateTime            @map("expires_at") @db.Timestamptz
+  closedAt    DateTime?           @map("closed_at") @db.Timestamptz
+  closeReason SessionCloseReason? @map("close_reason")
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([tesisId, accountId])
+  @@map("sessions")
+}
+
+/// Bulut denetimi — AYAK İZİ, defter değil (iş kararı okumaz; başarısız giriş 90 gün, diğerleri
+/// 2 yıl sonra budanır). Özete sır girmez.
+model AccountAudit {
+  id        String   @id @default(uuid()) @db.Uuid
+  tesisId   String   @map("tesis_id") @db.Uuid
+  actor     String   @map("actor") @db.VarChar(120)
+  event     String   @map("event") @db.VarChar(60)
+  entity    String   @map("entity") @db.VarChar(60)
+  entityId  String?  @map("entity_id") @db.VarChar(80)
+  summary   Json?    @map("summary")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([tesisId, createdAt])
+  @@map("account_audit")
+}
+
+/// İşlem kimliği (clientToken) makbuzu — tek boğaz `src/lib/idempotency.ts`: aynı kimlik aynı
+/// yanıtı alır, eylem ikinci kez koşmaz; başka hesap/eylem/gövde 409. Telemetri sınıfı, budanır.
+model OperationReceipt {
+  id             String   @id @default(uuid()) @db.Uuid
+  tesisId        String   @map("tesis_id") @db.Uuid
+  clientToken    String   @map("client_token") @db.Uuid
+  accountId      String   @map("account_id") @db.Uuid
+  action         String   @map("action") @db.VarChar(60)
+  bodyDigest     String   @map("body_digest") @db.VarChar(64)
+  responseStatus Int      @map("response_status")
+  response       Json     @map("response")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([tesisId, clientToken])
+  @@map("operation_receipts")
+}
+
+// -----------------------------------------------------------------------------
+// GELEN KUTUSU · RAPOR İSTEĞİ · CİHAZ
+// -----------------------------------------------------------------------------
+
+/// Gelen kutusu kaydı (sözleşme §8): hesabın yazdığı MESAJ — fabrika çeker ve normal servis
+/// yolundan yazar. `message_id` istemcide mantıksal deneme başına bir kez üretilir.
+model InboxMessage {
+  id                  String      @id @default(uuid()) @db.Uuid
+  tesisId             String      @map("tesis_id") @db.Uuid
+  messageId           String      @map("message_id") @db.Uuid
+  kind                InboxKind   @map("kind")
+  body                Json        @map("body")
+  accountId           String      @map("account_id") @db.Uuid
+  accountName         String      @map("account_name") @db.VarChar(120)
+  status              InboxStatus @default(BEKLIYOR) @map("status")
+  ownerInstallationId String?     @map("owner_installation_id") @db.Uuid
+  claimUntil          DateTime?   @map("claim_until") @db.Timestamptz
+  claimCount          Int         @default(0) @map("claim_count")
+  result              Json?       @map("result")
+  processedAt         DateTime?   @map("processed_at") @db.Timestamptz
+  cancelledAt         DateTime?   @map("cancelled_at") @db.Timestamptz
+  createdAt           DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([tesisId, messageId])
+  @@index([tesisId, status, createdAt])
+  @@map("inbox_messages")
+}
+
+/// Rapor isteği (sözleşme §7): hesap yazar → fabrika claim eder → sonucu yazar.
+model ReportRequest {
+  id                  String       @id @default(uuid()) @db.Uuid
+  tesisId             String       @map("tesis_id") @db.Uuid
+  accountId           String       @map("account_id") @db.Uuid
+  reportKey           String       @map("report_key") @db.VarChar(80)
+  family              String       @map("family") @db.VarChar(40)
+  params              Json         @map("params")
+  paramsDigest        String       @map("params_digest") @db.VarChar(64)
+  status              ReportStatus @default(BEKLIYOR) @map("status")
+  ownerInstallationId String?      @map("owner_installation_id") @db.Uuid
+  claimUntil          DateTime?    @map("claim_until") @db.Timestamptz
+  claimCount          Int          @default(0) @map("claim_count")
+  resultId            String?      @map("result_id") @db.Uuid
+  errorCode           String?      @map("error_code") @db.VarChar(60)
+  completedAt         DateTime?    @map("completed_at") @db.Timestamptz
+  cancelledAt         DateTime?    @map("cancelled_at") @db.Timestamptz
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([tesisId, status, createdAt])
+  @@map("report_requests")
+}
+
+/// Rapor sonucu — ekleme-yalnız; `projection` = `rapor.<aile>` (alan izni RLS'i projeksiyon adından).
+model ReportResult {
+  id           String    @id @default(uuid()) @db.Uuid
+  tesisId      String    @map("tesis_id") @db.Uuid
+  reportKey    String    @map("report_key") @db.VarChar(80)
+  projection   String    @map("projection") @db.VarChar(80)
+  paramsDigest String    @map("params_digest") @db.VarChar(64)
+  data         Json      @map("data")
+  computedAt   DateTime  @map("computed_at") @db.Timestamptz
+  sourceHorizon DateTime? @map("source_horizon") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([tesisId, reportKey, paramsDigest, computedAt])
+  @@map("report_results")
+}
+
+/// Bildirim cihazı (push belirteci; gönderim B5). Belirteç tekilliği özetten (uzun web-push aboneliği).
+model PushDevice {
+  id         String         @id @default(uuid()) @db.Uuid
+  tesisId    String         @map("tesis_id") @db.Uuid
+  accountId  String         @map("account_id") @db.Uuid
+  platform   DevicePlatform @map("platform")
+  token      String         @map("token") @db.VarChar(4096)
+  tokenHash  String         @map("token_hash") @db.VarChar(64)
+  name       String?        @map("name") @db.VarChar(120)
+  active     Boolean        @default(true) @map("active")
+  lastSeenAt DateTime       @map("last_seen_at") @db.Timestamptz
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([tesisId, tokenHash])
+  @@index([tesisId, accountId])
+  @@map("push_devices")
+}
+
+// -----------------------------------------------------------------------------
+// EŞİTLEME (fabrika → bulut) — yazan yalnız eşitleme rolü (`patron_sync` sınıfı)
+// -----------------------------------------------------------------------------
+
+/// Projeksiyon satırı (sözleşme §9.1): tek genel tablo; `projection` alt satırı da adlandırır
+/// (`siparis.finans`). `version_at` paketin ufkudur (monoton) — eski paket yeni veriyi ezemez.
+model ProjectionRow {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tesisId     String    @map("tesis_id") @db.Uuid
+  projection  String    @map("projection") @db.VarChar(80)
+  recordId    String    @map("record_id") @db.Uuid
+  data        Json      @map("data")
+  versionAt   DateTime  @map("version_at") @db.Timestamptz
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz
+  retentionAt DateTime? @map("retention_at") @db.Timestamptz
+  sortAt      DateTime  @map("sort_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+
+  @@unique([tesisId, projection, recordId])
+  @@index([tesisId, projection, sortAt, recordId])
+  @@map("projection_rows")
+}
+
+/// Buluttaki filigran (projeksiyon başına): zincir denetimi `onceki ≤ saklanan` (§6.4).
+model SyncWatermark {
+  id             String   @id @default(uuid()) @db.Uuid
+  tesisId        String   @map("tesis_id") @db.Uuid
+  projection     String   @map("projection") @db.VarChar(80)
+  watermarkT     DateTime @map("watermark_t") @db.Timestamptz
+  watermarkK     String   @map("watermark_k") @db.VarChar(120)
+  catalogVersion Int      @map("catalog_version")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([tesisId, projection])
+  @@map("sync_watermarks")
+}
+
+/// Paket makbuzu — `(tesis, paketId)` tekrarında SAKLI yanıt döner (ağ tekrarı idempotent).
+model PackageReceipt {
+  id             String   @id @default(uuid()) @db.Uuid
+  tesisId        String   @map("tesis_id") @db.Uuid
+  packageId      String   @map("package_id") @db.Uuid
+  installationId String   @map("installation_id") @db.Uuid
+  bodyDigest     String   @map("body_digest") @db.VarChar(64)
+  response       Json     @map("response")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([tesisId, packageId])
+  @@map("package_receipts")
+}
+
+/// Tesisin eşitleme durumu ("son eşitleme" damgası, sözleşme uyarısı, takılan ufuk).
+model SyncState {
+  tesisId            String    @id @map("tesis_id") @db.Uuid
+  lastPackageAt      DateTime  @map("last_package_at") @db.Timestamptz
+  lastInstallationId String    @map("last_installation_id") @db.Uuid
+  contractVersion    Int       @map("contract_version")
+  appVersion         String?   @map("app_version") @db.VarChar(40)
+  horizon            DateTime  @map("horizon") @db.Timestamptz
+  horizonChangedAt   DateTime  @map("horizon_changed_at") @db.Timestamptz
+  contractWarning    String?   @map("contract_warning") @db.VarChar(40)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("sync_state")
+}
+
+/// TAM gönderim turu (işaretle-süpür): son parça gelince `version_at < started_at` satırlar düşer.
+model FullSyncRun {
+  id            String    @id @default(uuid()) @db.Uuid
+  tesisId       String    @map("tesis_id") @db.Uuid
+  projection    String    @map("projection") @db.VarChar(80)
+  startedAt     DateTime  @map("started_at") @db.Timestamptz
+  totalParts    Int       @map("total_parts")
+  receivedParts Int[]     @map("received_parts")
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([tesisId, projection, startedAt])
+  @@map("full_sync_runs")
+}
+
+/// İmzalı istek nonce defteri — TELEMETRİ (tekrar oynatma engeli; saklama = istek zamanı + 10 dk).
+model RequestNonce {
+  id             String   @id @default(uuid()) @db.Uuid
+  tesisId        String   @map("tesis_id") @db.Uuid
+  installationId String   @map("installation_id") @db.Uuid
+  nonce          String   @map("nonce") @db.VarChar(64)
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([installationId, nonce])
+  @@map("request_nonces")
+}

@@ -146,6 +146,15 @@ export const PROJELER = [
     test: null,
   },
   {
+    // Patron bulutu sunucusu (Plan B, B2): satıcıyla aynı yığın ve kalıp — geniş tip config'i src'yi
+    // kapsar; bekçileri kendi `_test` DB'si + çalışma rolleri ister → commit kadansında DEĞİL (CI
+    // "Patron sunucusu" job'ı + elle).
+    ad: "patron/sunucu",
+    typecheck: ["npm", ["run", "typecheck:scripts:plain"]],
+    lint: ["npm", ["run", "lint"]],
+    test: null,
+  },
+  {
     // Satıcı portalı web arayüzü (React + Vite): vitest paketi DB'siz ve hızlıdır (~2 sn); ayna
     // bekçisi sunucu kaynağını metin olarak okur → sunucu sözleşmesi değişince burada kırmızı.
     ad: "satici/web",

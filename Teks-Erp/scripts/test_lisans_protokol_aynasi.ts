@@ -6,7 +6,7 @@
 //
 // ÖLÇÜM: dosya KÜMESİ birebir (eksik de fazla da kırmızı) + her dosyanın sha256'sı birebir.
 // Boş kaynak "iki boş küme eşit" diye yeşil veremez (kaynak ≥ 5 dosya şartı).
-// ÜÇ SONUÇ: zorunlu ayna (satıcı) yoksa KIRMIZI; henüz doğmamış ayna (patron, Plan B) yalnız
+// ÜÇ SONUÇ: zorunlu ayna (satıcı · patron sunucusu) yoksa KIRMIZI; henüz doğmamış ayna yalnız
 //   ⏭ beyanla geçilir — yokluk "eşit" sayılmaz, "ölçülmedi" diye söylenir.
 // Düzeltme: değişiklik ÖNCE kaynakta, sonra `cp -p Teks-Erp/src/lib/license/protocol/*.ts <ayna>/`.
 //
@@ -30,7 +30,7 @@ const KOK = path.resolve(__dirname, "..", "..");
 const KAYNAK = "Teks-Erp/src/lib/license/protocol";
 const AYNALAR: readonly { dizin: string; zorunlu: boolean; not: string }[] = [
   { dizin: "satici/sunucu/src/lisans-protokol", zorunlu: true, not: "satıcı sunucusu (Faz 1b)" },
-  { dizin: "patron/sunucu/src/lisans-protokol", zorunlu: false, not: "patron bulutu (Plan B — henüz doğmadı)" },
+  { dizin: "patron/sunucu/src/lisans-protokol", zorunlu: true, not: "patron bulutu sunucusu (Plan B, B2)" },
 ];
 
 /** Dizindeki dosyalar → sha256 (alt dizin yok sayılmaz: klasör düz olmalı, alt dizin de fark sayılır). */

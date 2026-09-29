@@ -1,0 +1,62 @@
+// Patron bulutu yapılandırması — ortamdan okunur, Zod ile doğrulanır; geçersiz değer açılışı
+// DURDURUR (fail-closed). Üç DB URL'i üç ayrı roldür: göç (tablo sahibi; yalnız migration/CLI),
+// uygulama (hesap API'si; projeksiyona YAZAMAZ) ve eşitleme (fabrika kanalı). Sır (iç API belirteci,
+// DB parolaları) günlüğe yazılmaz.
+import path from "node:path";
+import { z } from "zod";
+
+const port = z.coerce.number().int().min(0).max(65535);
+const positiveInt = (min: number, max: number) => z.coerce.number().int().min(min).max(max);
+
+const EnvSchema = z
+  .object({
+    /** Uygulama rolü (NOSUPERUSER NOBYPASSRLS) — hesap API'si. */
+    DATABASE_URL: z.string().min(1),
+    /** Eşitleme rolü (NOSUPERUSER NOBYPASSRLS) — fabrika kanalı + bakım budaması. */
+    ESITLEME_DATABASE_URL: z.string().min(1),
+    PORT: port.default(4620),
+    BIND: z.string().min(1).default("127.0.0.1"),
+    /** TOTP sırlarının sarma anahtarı burada (`patron-totp.key`, 0600) — DB'de DEĞİL. */
+    ANAHTAR_DIZINI: z.string().min(1).default("anahtarlar"),
+    /** Kurulum kaydının kaynağı: `kayit` (satıcı CLI'siyle DB'ye yazılmış) · `satici` (iç API + önbellek). */
+    KURULUM_KAYNAGI: z.enum(["kayit", "satici"]).default("kayit"),
+    SATICI_IC_API_URL: z.url().optional(),
+    SATICI_IC_API_BELIRTECI: z.string().min(32).optional(),
+    /** Satıcı iç API önbelleğinin TAZELİK süresi; süre dolunca yeniden sorulur, ulaşılamazsa bayat kayıt kullanılır. */
+    KURULUM_ONBELLEK_DK: positiveInt(1, 1440).default(5),
+    VEKIL_IP_BASLIGI: z.string().min(1).optional(),
+    /** Oturum: boşta kalma (saat) ve mutlak ömür (gün) — patron uygulaması telefonda uzun oturum ister. */
+    OTURUM_BOSTA_SAAT: positiveInt(1, 720).default(168),
+    OTURUM_AZAMI_GUN: positiveInt(1, 90).default(30),
+    GIRIS_ESIGI: positiveInt(3, 50).default(5),
+    KILIT_DK: positiveInt(1, 1440).default(15),
+    GIRIS_HIZ_DK: positiveInt(1, 1000).default(20),
+    DAVET_GECERLILIK_SAAT: positiveInt(1, 720).default(72),
+    /** Fabrika kanalı (/v1/*) IP başına dakikalık hız sınırı. */
+    V1_HIZ_DK: positiveInt(10, 100000).default(600),
+    GELEN_KUTUSU_CLAIM_DK: positiveInt(1, 60).default(10),
+    RAPOR_CLAIM_DK: positiveInt(1, 60).default(5),
+    BAKIM_ARALIGI_SN: positiveInt(1, 3600).default(60),
+    OTURUM_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
+    ISLEM_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
+    PAKET_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
+    RAPOR_SONUC_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
+    DENETIM_GIRIS_SAKLAMA_GUN: positiveInt(30, 3650).default(90),
+    DENETIM_SAKLAMA_GUN: positiveInt(365, 3650).default(730),
+  })
+  .superRefine((c, ctx) => {
+    if (c.KURULUM_KAYNAGI === "satici" && (!c.SATICI_IC_API_URL || !c.SATICI_IC_API_BELIRTECI)) {
+      ctx.addIssue({ code: "custom", message: "KURULUM_KAYNAGI=satici için SATICI_IC_API_URL ve SATICI_IC_API_BELIRTECI zorunlu", path: ["KURULUM_KAYNAGI"] });
+    }
+  });
+
+export type CloudConfig = Readonly<z.infer<typeof EnvSchema>>;
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd: string = process.cwd()): CloudConfig {
+  const parsed = EnvSchema.safeParse(env);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`Patron bulutu yapılandırması geçersiz — ${issues}`);
+  }
+  return Object.freeze({ ...parsed.data, ANAHTAR_DIZINI: path.resolve(cwd, parsed.data.ANAHTAR_DIZINI) });
+}

@@ -1,0 +1,6 @@
+{
+  "_not": "ESLint uyarı TAVANI — yalnız DÜŞER. Ölçüm: node scripts/check-lint-baseline.mjs --yaz",
+  "_kapsam": "eslint src scripts",
+  "_dosyaSayisi": 55,
+  "kurallar": {}
+}
