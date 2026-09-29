@@ -1,0 +1,398 @@
+// =============================================================================
+// BEKÇİ — LİSANS PROTOKOLÜ: JWS/EdDSA · güven zinciri · İSTEK · parmak izi · gövde şemaları
+// =============================================================================
+// Çalıştırma: npx tsx scripts/run-all-tests.ts lisans_protokol   (DB'SİZ)
+//
+// NE ÖLÇER: `src/lib/license/protocol/` sözleşmesi — satıcı sunucusu ve fabrika motoru
+// bu klasörü DONMUŞ kontrat olarak kullanır; burada kırmızı, iki tarafın ayrışması demektir.
+//   §0 klasör KAPALI (yalnız node:crypto + zod + kardeş dosya), değişken modül durumu yok,
+//      src'de anahtar malzemesi yok, üretim güven çapası donuk (boşken fail-closed)
+//   §1 JWS: geçerli · alg none · alg HS256 (anahtar karışması) · typ yanlış/eksik · kid
+//      bilinmez · başlıkta gömülü anahtar/crit · gövde/imza kurcalı · kanonik olmayan
+//      base64 · uzunluk tavanı · v:2 · süresi dolmuş · ±10 dk tolerans · indirme yolu
+//   §2 zincir: alt sertifika imza anında geçerli (sonradan dolan kirayı öldürmez) ·
+//      süresi geçmiş alt sertifika · yanlış kullanım · hazırlık kökü ÜRETİM imzalayamaz ·
+//      bayi tavanı (modül/sınıf/kimlik) · boş çapa · kira↔HAK bağı · kira ömür tavanı
+//   §3 İSTEK: tolerans · gövde özeti · amaç · anahtar · kurulum · typ karışması · nonce
+//      defteri 20 dk penceresi · zarf
+//   §4 parmak izi: eşik sınırları · ölçülemeyen uyuşmazlık sayılmaz · DR f5 · normalleştirme
+//   §5 gövde şemaları: istek KATI (allowlist), yanıt GEVŞEK · etkinleştirme kodu
+//
+// NEGATİF SONDA — dosya DIŞI mutasyon zinciri (bir kezlik, ✓B; her biri cp + shasum ile
+// birebir geri alındı; sayılar commit mesajında):
+//   B1  jws.ts `alg` denetimi kaldırıldı                 → 2 ❌ (§1b none · §1c HS256)
+//   B2  kökün sınıf yetkisi (HAK) kaldırıldı            → 1 ❌ (§2g hazırlık ÜRETİM)
+//   B2b çapada hazırlık kökü sınırı kaldırıldı          → 1 ❌ (§2i)
+//   B3  bayi modül tavanı kaldırıldı                    → 1 ❌ (§2q)
+//   B4  nonce saklama "ilk görülüş + 15 dk"             → 2 ❌ (§3n 20 dk penceresi · §3o)
+//   B5  parmak izi eşiği 3 → 2                          → 2 ❌ (§4c · §4e)
+//   B6  protocol/ dosyasına `express` importu           → 1 ❌ (§0c kapalılık)
+//   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
+// ⚠️ Gerekli mi (reçete md. 20): kapı doğduğu gün ağaçta ısırılacak bir kusur YOKTU (klasör
+//   bu dilimde doğdu); gerekçe ÖLÇÜLMEDİ — satıcı/fabrika dilimleri buna karşı yazılacak.
+// =============================================================================
+import { createHmac, generateKeyPairSync } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import {
+  OfflineRequestSchema,
+  DAY_MS,
+  ROOT_PUBLIC_KEYS,
+  LicenseResponseSchema,
+  NonceLedger,
+  CLOCK_SKEW_MS,
+  TYP,
+  PollRequestSchema,
+  b64uEncode,
+  normalizeActivationCode,
+  normalizeFactor,
+  prepareTrustAnchor,
+  verifyEntitlement,
+  verifyDownloadToken,
+  signDownloadToken,
+  isDownloadPathAllowed,
+  verifyRequest,
+  signRequest,
+  readRequestIdentity,
+  verifyJws,
+  verifyLease,
+  checkLeaseBinding,
+  msToIso,
+  generateNonce,
+  compareFingerprints,
+  digestFingerprint,
+  openEnvelope,
+  wrapEnvelope,
+  type Fingerprint,
+  type Result,
+} from "../src/lib/license/protocol";
+import { signStateRecord } from "../src/lib/license/saat";
+import {
+  HAM_PARMAK_IZI,
+  anahtarUret,
+  fiksturKur,
+  hakBas,
+  hakYuku,
+  hamImzala,
+  kiraBas,
+  kiraYuku,
+  sertifikaBas,
+  sertifikaYuku,
+  siniflar,
+} from "./lib/lisans-fikstur";
+
+let pass = 0;
+let fail = 0;
+function check(label: string, ok: boolean, detay = ""): void {
+  if (ok) {
+    pass++;
+    console.log(`✅ ${label}${detay ? ` — ${detay}` : ""}`);
+  } else {
+    fail++;
+    console.log(`❌ ${label}${detay ? ` — ${detay}` : ""}`);
+  }
+}
+function kod<T>(s: Result<T>): string {
+  return s.ok ? "OK" : s.code;
+}
+function beklenen<T>(label: string, s: Result<T>, k: string): void {
+  check(label, kod(s) === k, `beklenen ${k}, gelen ${kod(s)}${s.ok ? "" : ` (${s.message})`}`);
+}
+
+const SIMDI = Date.parse("2026-10-01T09:00:00.000Z");
+const f = fiksturKur(SIMDI);
+const DAKIKA = 60 * 1000;
+
+function kapalilik(): void {
+  console.log("\n§0 — protokol klasörü KAPALI, anahtar malzemesi src'de YOK");
+  const dizin = join(__dirname, "../src/lib/license/protocol");
+  const dosyalar = readdirSync(dizin).filter((d) => d.endsWith(".ts"));
+  check("§0a körlük zemini: protokol dosyaları okundu", dosyalar.length >= 9, `${dosyalar.length} dosya`);
+  let importSayisi = 0;
+  const ihlal: string[] = [];
+  const degisken: string[] = [];
+  for (const d of dosyalar) {
+    const metin = readFileSync(join(dizin, d), "utf8");
+    for (const m of metin.matchAll(/(?:from\s+|require\(\s*|import\(\s*)["']([^"']+)["']/g)) {
+      importSayisi++;
+      const hedef = m[1];
+      if (hedef !== "node:crypto" && hedef !== "zod" && !/^\.\/[a-z-]+$/.test(hedef)) ihlal.push(`${d} → ${hedef}`);
+    }
+    if (/^(export\s+)?(let|var)\s/m.test(metin)) degisken.push(d);
+  }
+  check("§0b körlük zemini: import satırı sayıldı", importSayisi >= 15, `${importSayisi} import`);
+  check("§0c ⭐ yalnız node:crypto + zod + kardeş dosya import edilir", ihlal.length === 0, ihlal.join(" · ") || "temiz");
+  check("§0d modül düzeyinde değiştirilebilir durum (let/var) yok", degisken.length === 0, degisken.join(", ") || "temiz");
+  const lisansDizini = join(__dirname, "../src/lib/license");
+  const tum = [...readdirSync(lisansDizini).filter((d) => d.endsWith(".ts")).map((d) => join(lisansDizini, d)), ...dosyalar.map((d) => join(dizin, d))];
+  const sir = tum.filter((p) => /-----BEGIN|PRIVATE KEY|"d"\s*:\s*"/.test(readFileSync(p, "utf8")));
+  check("§0e src/lib/license altında anahtar malzemesi (PEM/JWK d) yok", sir.length === 0, sir.join(", ") || `${tum.length} dosya temiz`);
+  check("§0f üretim güven çapası donuk (Object.isFrozen)", Object.isFrozen(ROOT_PUBLIC_KEYS));
+  const uretim = verifyEntitlement(hakBas(f), ROOT_PUBLIC_KEYS);
+  if (ROOT_PUBLIC_KEYS.length === 0) beklenen("§0g ⭐ çapa BOŞKEN hiçbir HAK geçerli olamaz (fail-closed)", uretim, "GUVEN_CAPASI_BOS");
+  else check("§0g üretim çapası biçimce geçerli", prepareTrustAnchor(ROOT_PUBLIC_KEYS).ok);
+  const typlar = Object.values(TYP);
+  check("§0h belge türleri (typ) birbirinden farklı", new Set(typlar).size === typlar.length, typlar.join(", "));
+}
+
+function parca(nesne: unknown): string {
+  return b64uEncode(JSON.stringify(nesne));
+}
+
+function jwsBolumu(): void {
+  console.log("\n§1 — JWS compact + EdDSA");
+  const hak = hakBas(f);
+  beklenen("§1a geçerli HAK doğrulanır", verifyEntitlement(hak, f.kokler), "OK");
+  const [b, y, s] = hak.split(".");
+  beklenen("§1b ⭐ alg none RED", verifyEntitlement(`${parca({ alg: "none", typ: TYP.HAK, kid: f.kok.kid })}.${y}.`, f.kokler), "JWS_ALG");
+  const hsBaslik = parca({ alg: "HS256", typ: TYP.HAK, kid: f.kok.kid });
+  const hsImza = b64uEncode(createHmac("sha256", Buffer.from(f.kok.x, "base64url")).update(`${hsBaslik}.${y}`).digest());
+  beklenen("§1c ⭐ alg HS256 (açık anahtar sır diye kullanılır) RED", verifyEntitlement(`${hsBaslik}.${y}.${hsImza}`, f.kokler), "JWS_ALG");
+  beklenen("§1d typ yanlış (KİRA türü HAK diye) RED", verifyEntitlement(kiraBas(f), f.kokler), "JWS_TYP");
+  const typsiz = `${parca({ alg: "EdDSA", kid: f.kok.kid })}.${y}.${s}`;
+  beklenen("§1e typ eksik RED", verifyEntitlement(typsiz, f.kokler), "JWS_TYP");
+  beklenen("§1f kid bilinmez (çapada yok) RED", verifyEntitlement(hakBas(f, {}, anahtarUret("kok-2099-9")), f.kokler), "KOK_BILINMIYOR");
+  const jwkBaslik = `${parca({ alg: "EdDSA", typ: TYP.HAK, kid: f.kok.kid, jwk: { kty: "OKP" } })}.${y}.${s}`;
+  beklenen("§1g başlıkta gömülü anahtar (jwk) RED", verifyEntitlement(jwkBaslik, f.kokler), "JWS_BASLIK");
+  const critBaslik = `${parca({ alg: "EdDSA", typ: TYP.HAK, kid: f.kok.kid, crit: ["exp"] })}.${y}.${s}`;
+  beklenen("§1h başlıkta crit RED", verifyEntitlement(critBaslik, f.kokler), "JWS_BASLIK");
+  const kurcaliYuk = parca({ ...hakYuku(f), moduller: ["production.enabled", "finance.enabled", "iplik.enabled"] });
+  beklenen("§1i ⭐ gövde kurcalı (modül eklendi) RED", verifyEntitlement(`${b}.${kurcaliYuk}.${s}`, f.kokler), "JWS_IMZA");
+  const imza = Buffer.from(s, "base64url");
+  imza[5] ^= 0x01;
+  beklenen("§1j imza kurcalı (tek bit) RED", verifyEntitlement(`${b}.${y}.${b64uEncode(imza)}`, f.kokler), "JWS_IMZA");
+  beklenen("§1k aynı kid başka anahtar RED", verifyEntitlement(hakBas(f, {}, anahtarUret("kok-2026-1")), f.kokler), "JWS_IMZA");
+  beklenen("§1l kanonik olmayan base64 (dolgu) RED", verifyEntitlement(`${b}=.${y}.${s}`, f.kokler), "JWS_BICIM");
+  beklenen("§1m uzunluk tavanı (33 KB) RED", verifyEntitlement(`${b}.${"A".repeat(33 * 1024)}.${s}`, f.kokler), "JWS_BICIM");
+  beklenen("§1n dört parça RED", verifyEntitlement(`${hak}.x`, f.kokler), "JWS_BICIM");
+  beklenen("§1o v:2 sürüm hatası olarak AYRI kodlanır", verifyEntitlement(hamImzala(TYP.HAK, f.kok, { ...hakYuku(f), v: 2 }), f.kokler), "BELGE_SURUM");
+  const eksik: Record<string, unknown> = { ...hakYuku(f) };
+  delete eksik.bakimBitis;
+  beklenen("§1p şemaya uymayan (bakimBitis yok) RED", verifyEntitlement(hamImzala(TYP.HAK, f.kok, eksik), f.kokler), "BELGE_SEMA");
+  let imzalamadi = false;
+  try {
+    hakBas(f, { lisansNo: "YANLIS" });
+  } catch {
+    imzalamadi = true;
+  }
+  check("§1q şemadan geçmeyen belge İMZALANMAZ (imzalayan fırlatır)", imzalamadi);
+  const genel = verifyJws(hak, { typ: TYP.HAK, findKey: () => undefined });
+  beklenen("§1r genel doğrulayıcıda bilinmeyen kid JWS_KID", genel, "JWS_KID");
+}
+
+function indirmeBolumu(): void {
+  console.log("\n§1' — İNDİRME belirteci: süre, tolerans, ömür, yol");
+  const anahtarlar = [{ kid: f.ind.kid, x: f.ind.x }];
+  const bas = (expMs: number, simdiMs = SIMDI): string =>
+    signDownloadToken({
+      payload: { v: 1, kanal: "deneme-kanal", yolOneki: "/deneme-kanal/electron/", kurulumId: f.kurulumId, exp: msToIso(expMs) },
+      key: f.ind,
+      nowMs: simdiMs,
+    });
+  const gecerli = bas(SIMDI + 60 * DAKIKA);
+  beklenen("§1s geçerli belirteç", verifyDownloadToken(gecerli, { keys: anahtarlar, nowMs: SIMDI }), "OK");
+  const eski = bas(SIMDI - 30 * DAKIKA, SIMDI - 90 * DAKIKA);
+  beklenen("§1t ⭐ süresi dolmuş (30 dk önce) RED", verifyDownloadToken(eski, { keys: anahtarlar, nowMs: SIMDI }), "BELGE_SURESI_DOLDU");
+  const toleransli = bas(SIMDI - 9 * DAKIKA, SIMDI - 60 * DAKIKA);
+  beklenen("§1u saat toleransı: 9 dk geçmiş kabul", verifyDownloadToken(toleransli, { keys: anahtarlar, nowMs: SIMDI }), "OK");
+  const tolerans = bas(SIMDI - 11 * DAKIKA, SIMDI - 60 * DAKIKA);
+  beklenen("§1v saat toleransı: 11 dk geçmiş RED", verifyDownloadToken(tolerans, { keys: anahtarlar, nowMs: SIMDI }), "BELGE_SURESI_DOLDU");
+  const uzun = hamImzala(TYP.INDIRME, f.ind, { v: 1, kanal: "deneme-kanal", yolOneki: "/deneme-kanal/mobil/", kurulumId: f.kurulumId, exp: msToIso(SIMDI + 3 * 60 * DAKIKA) });
+  beklenen("§1w ömür 70 dk'yı aşan belirteç RED", verifyDownloadToken(uzun, { keys: anahtarlar, nowMs: SIMDI }), "INDIRME_OMUR");
+  beklenen("§1x başka anahtar (alt) imzalı belirteç RED", verifyDownloadToken(gecerli, { keys: [{ kid: f.ind.kid, x: f.alt.x }], nowMs: SIMDI }), "JWS_IMZA");
+  const b = verifyDownloadToken(gecerli, { keys: anahtarlar, nowMs: SIMDI });
+  if (b.ok) {
+    check("§1y yol öneki altındaki dosya izinli", isDownloadPathAllowed(b.value, "/deneme-kanal/electron/latest.yml"));
+    check("§1z ⭐ `..` kaçışı RED", !isDownloadPathAllowed(b.value, "/deneme-kanal/electron/../mobil/x.apk"));
+    check("§1z2 kodlanmış kaçış (%2e%2e) RED", !isDownloadPathAllowed(b.value, "/deneme-kanal/electron/%2E%2E/x"));
+    check("§1z3 başka kanal öneki RED", !isDownloadPathAllowed(b.value, "/baska-kanal/electron/latest.yml"));
+    check("§1z4 önekin kendisi (dizin listesi) RED", !isDownloadPathAllowed(b.value, "/deneme-kanal/electron/"));
+  } else check("§1y belirteç çözülemedi", false);
+}
+
+function zincirBolumu(): void {
+  console.log("\n§2 — güven zinciri: kök → alt/indirme/bayi sertifikası");
+  const kira = verifyLease(kiraBas(f), f.kokler);
+  const hak = verifyEntitlement(hakBas(f), f.kokler);
+  beklenen("§2a geçerli kira zinciri", kira, "OK");
+  if (kira.ok && hak.ok) beklenen("§2b kira ↔ HAK bağı", checkLeaseBinding(kira.value, hak.value), "OK");
+  const eskiAlt = sertifikaBas(f.kok, sertifikaYuku(f, f.alt, "ALT", { baslangic: msToIso(SIMDI - 200 * DAY_MS), bitis: msToIso(SIMDI - 20 * DAY_MS) }));
+  const eskiKira = kiraBas(f, { altSertifika: eskiAlt, verilis: msToIso(SIMDI - 25 * DAY_MS), bitis: msToIso(SIMDI + 5 * DAY_MS) });
+  beklenen("§2c alt sertifika bugün dolmuş ama İMZA ANINDA geçerli → kira geçerli", verifyLease(eskiKira, f.kokler), "OK");
+  const olu = kiraBas(f, { altSertifika: eskiAlt });
+  beklenen("§2d ⭐ süresi geçmiş alt sertifikayla basılmış kira RED", verifyLease(olu, f.kokler), "SERTIFIKA_ZAMAN");
+  const indSert = sertifikaBas(f.kok, sertifikaYuku(f, f.ind, "INDIRME"));
+  beklenen("§2e yanlış kullanım (İNDİRME sertifikası kira imzalıyor) RED", verifyLease(kiraBas(f, { altSertifika: indSert }, f.ind), f.kokler), "SERTIFIKA_KULLANIM");
+  const yabanciKok = anahtarUret("kok-2099-1");
+  const yabanciAlt = sertifikaBas(yabanciKok, sertifikaYuku(f, f.alt, "ALT"));
+  beklenen("§2f tanınmayan kökün sertifikası RED", verifyLease(kiraBas(f, { altSertifika: yabanciAlt }), f.kokler), "KOK_BILINMIYOR");
+  beklenen("§2g ⭐ hazırlık kökü ÜRETİM HAK'ı imzalayamaz", verifyEntitlement(hakBas(f, {}, f.hazirlik), f.kokler), "KOK_SINIF_YETKISIZ");
+  beklenen("§2h hazırlık kökü TEST HAK'ı imzalayabilir", verifyEntitlement(hakBas(f, { sinif: "TEST" }, f.hazirlik), f.kokler), "OK");
+  const hazirlikUretim = [{ kid: f.hazirlik.kid, x: f.hazirlik.x, classes: siniflar("TEST", "URETIM") }];
+  beklenen("§2i ⭐ ÜRETİM yetkili tanımlanmış hazırlık kökü çapada RED", prepareTrustAnchor(hazirlikUretim), "GUVEN_CAPASI_BICIM");
+  const hazirlikAlt = sertifikaBas(f.hazirlik, sertifikaYuku(f, f.alt, "ALT", { siniflar: siniflar("URETIM") }));
+  beklenen("§2j hazırlık kökü ÜRETİM yetkili alt sertifika basamaz", verifyLease(kiraBas(f, { altSertifika: hazirlikAlt }), f.kokler), "KOK_SINIF_YETKISIZ");
+  const testAlt = sertifikaBas(f.hazirlik, sertifikaYuku(f, f.alt, "ALT", { siniflar: siniflar("TEST", "DEMO") }));
+  const testKira = verifyLease(kiraBas(f, { altSertifika: testAlt }), f.kokler);
+  if (testKira.ok && hak.ok) {
+    beklenen("§2k ⭐ hazırlık alt anahtarı ÜRETİM HAK'ına kira veremez", checkLeaseBinding(testKira.value, hak.value), "KIRA_SINIF_YETKISIZ");
+  } else check("§2k hazırlık kirası kurulamadı", false, kod(testKira));
+  beklenen("§2l boş çapa: geçerli HAK bile RED", verifyEntitlement(hakBas(f), []), "GUVEN_CAPASI_BOS");
+  const surumKira = verifyLease(kiraBas(f, { hakSurum: 2 }), f.kokler);
+  if (surumKira.ok && hak.ok) beklenen("§2m kira HAK'ın başka sürümüne ait → RED", checkLeaseBinding(surumKira.value, hak.value), "KIRA_HAK_UYUSMAZ");
+  const uzunKira = hamImzala(TYP.KIRA, f.alt, { ...kiraYuku(f), bitis: msToIso(SIMDI + 60 * DAY_MS) });
+  beklenen("§2n kira ömrü 45 günü aşamaz", verifyLease(uzunKira, f.kokler), "BELGE_SEMA");
+  const k3 = hamImzala(TYP.KIRA, f.alt, { ...kiraYuku(f), yaptirim: { kademe: "K3", mesaj: null, kisitlamaTarihi: null, donmusModuller: [], guncellemeDonuk: false } });
+  beklenen("§2o K3 kısıtlama tarihi taşımalı", verifyLease(k3, f.kokler), "BELGE_SEMA");
+  bayiBolumu();
+}
+
+function bayiBolumu(): void {
+  const tavan = { bayiId: f.musteriId, moduller: ["production.enabled", "finance.enabled", "ticaret.enabled"] };
+  const bayiSert = sertifikaBas(f.kok, sertifikaYuku(f, f.bayi, "BAYI", { siniflar: siniflar("URETIM", "DEMO"), bayi: tavan }));
+  const bas = (ek: Parameters<typeof hakBas>[1], imzalayan = f.bayi): string =>
+    hakBas(f, { bayiId: tavan.bayiId, bayiSertifikasi: bayiSert, ...ek }, imzalayan);
+  beklenen("§2p bayi tavanı içindeki HAK geçerli", verifyEntitlement(bas({}), f.kokler), "OK");
+  beklenen("§2q ⭐ bayi tavanı dışı modül RED", verifyEntitlement(bas({ moduller: ["production.enabled", "iplik.enabled"] }), f.kokler), "BAYI_TAVAN_MODUL");
+  beklenen("§2r ⭐ bayi tavanı dışı sınıf RED", verifyEntitlement(bas({ sinif: "TEST" }), f.kokler), "BAYI_TAVAN_SINIF");
+  beklenen("§2s başka bayi kimliği RED", verifyEntitlement(bas({ bayiId: f.tesisId }), f.kokler), "BAYI_KIMLIK");
+  beklenen("§2t gömülü sertifikanın anahtarıyla imzalanmamış HAK RED", verifyEntitlement(bas({}, anahtarUret("bayi-b2")), f.kokler), "BAYI_KIMLIK");
+  const altSert = sertifikaBas(f.kok, sertifikaYuku(f, f.alt, "ALT"));
+  beklenen("§2u bayi yerine ALT sertifikası gömülü HAK RED", verifyEntitlement(hakBas(f, { bayiId: tavan.bayiId, bayiSertifikasi: altSert }, f.alt), f.kokler), "BAYI_KIMLIK");
+  beklenen("§2v kök imzalı HAK bayi sertifikası taşıyamaz", verifyEntitlement(hakBas(f, { bayiId: tavan.bayiId, bayiSertifikasi: bayiSert }), f.kokler), "BAYI_KIMLIK");
+}
+
+function istekBolumu(): void {
+  console.log("\n§3 — İSTEK: kimlik, tazelik, gövde, tekrar");
+  const govde = JSON.stringify({ v: 1, sonKiraId: null });
+  const bas = (simdiMs: number, amac: "yokla" | "zil" = "yokla"): string =>
+    signRequest({ installationId: f.kurulumId, purpose: amac, body: govde, key: { privateKey: f.kurulum.privateKey, nowMs: simdiMs } });
+  const dogrula = (t: string, ek: Partial<Parameters<typeof verifyRequest>[1]> = {}): Result<unknown> =>
+    verifyRequest(t, { publicKeyX: f.kurulum.x, body: govde, nowMs: SIMDI, purposes: ["yokla"], installationId: f.kurulumId, ...ek });
+  beklenen("§3a geçerli istek", dogrula(bas(SIMDI)), "OK");
+  beklenen("§3b istek 9 dk ileride — tolerans içinde", dogrula(bas(SIMDI + 9 * DAKIKA)), "OK");
+  beklenen("§3c ⭐ istek 11 dk ileride RED", dogrula(bas(SIMDI + 11 * DAKIKA)), "ISTEK_ZAMAN");
+  beklenen("§3d istek 11 dk geride RED", dogrula(bas(SIMDI - 11 * DAKIKA)), "ISTEK_ZAMAN");
+  beklenen("§3e ⭐ gövde değişti RED", dogrula(bas(SIMDI), { body: `${govde} ` }), "ISTEK_GOVDE_OZETI");
+  beklenen("§3f amaç uyuşmaz (zil yokla ucuna) RED", dogrula(bas(SIMDI, "zil")), "ISTEK_AMAC");
+  beklenen("§3g başka kurulumun anahtarı RED", dogrula(bas(SIMDI), { publicKeyX: anahtarUret("kur-x").x }), "ISTEK_KID");
+  beklenen("§3h anahtar başka kurulum kimliğine kayıtlı RED", dogrula(bas(SIMDI), { installationId: f.hakId }), "ISTEK_KURULUM");
+  const durum = signStateRecord(
+    { v: 1, kurulumId: f.kurulumId, kiraId: f.hakId, birikenMs: 0, yazildi: msToIso(SIMDI), yuksekSu: msToIso(SIMDI), sonKiraZorlamasi: null, sira: 0 },
+    f.kurulum.privateKey,
+    f.kurulum.x,
+  );
+  beklenen("§3i ⭐ aynı anahtarın imzaladığı durum kaydı istek yerine geçemez (typ)", dogrula(durum), "JWS_TYP");
+  const kimlik = readRequestIdentity(bas(SIMDI));
+  check("§3j imza doğrulanmadan kurulum kimliği okunur (anahtar araması için)", kimlik.ok && kimlik.value.installationId === f.kurulumId);
+  const n = generateNonce();
+  check("§3k nonce 128 bit base64url, tekrar etmez", /^[A-Za-z0-9_-]{22}$/.test(n) && n !== generateNonce(), n);
+  const defter = new NonceLedger();
+  const ileri = SIMDI + 10 * DAKIKA;
+  check("§3l ilk görülüş kaydedilir", defter.record({ installationId: f.kurulumId, nonce: n, requestTimeMs: ileri, nowMs: SIMDI }));
+  check("§3m tekrar RED", !defter.record({ installationId: f.kurulumId, nonce: n, requestTimeMs: ileri, nowMs: SIMDI + DAKIKA }));
+  // 10 dk ileri damgalı istek 19 dk sonra hâlâ zaman denetiminden geçer: defter onu HATIRLAMALI.
+  check("§3n ⭐ 20 dk penceresi: 19. dakikadaki tekrar da RED", !defter.record({ installationId: f.kurulumId, nonce: n, requestTimeMs: ileri, nowMs: SIMDI + 19 * DAKIKA }));
+  defter.record({ installationId: f.kurulumId, nonce: generateNonce(), requestTimeMs: SIMDI + 30 * DAKIKA, nowMs: SIMDI + 30 * DAKIKA });
+  check("§3o süresi geçen nonce budanır", defter.size === 1, `${defter.size} kayıt`);
+  const zarf = openEnvelope(wrapEnvelope(bas(SIMDI), govde));
+  check("§3p zarf gidiş-dönüş: istek + ham gövde korunur", zarf.ok && zarf.value.body.toString("utf8") === govde);
+  beklenen("§3q bozuk zarf RED", openEnvelope("bozuk!"), "ZARF_BICIM");
+}
+
+function pi(ek: Partial<Fingerprint>): Fingerprint {
+  return { ...f.parmakIzi, ...ek };
+}
+
+function parmakIziBolumu(): void {
+  console.log("\n§4 — parmak izi: eşik, ölçülemeyen, normalleştirme");
+  const baska = digestFingerprint({ f1: "11111111222233334444555566667777", f2: "8888aaaabbbbccccddddeeee00001234", f3: "BASKADISK99", f4: "00:1B:2C:3D:4E:5F", f5: "1234567" }, f.tuz);
+  const k = (a: Fingerprint, b: Fingerprint, f5Haric = false): string => compareFingerprints(a, b, { excludeF5: f5Haric }).result;
+  check("§4a 5/5 eşleşme", k(f.parmakIzi, f.parmakIzi) === "ESLESTI");
+  check("§4b ⭐ 3/5 eşleşme (2 uyuşmaz) yeter", k(f.parmakIzi, pi({ f4: baska.f4, f5: baska.f5 })) === "ESLESTI");
+  check("§4c ⭐ 2/5 eşleşme yetmez", k(f.parmakIzi, pi({ f3: baska.f3, f4: baska.f4, f5: baska.f5 })) === "ESLESMEDI");
+  check("§4d ⭐ ölçülemeyen uyuşmazlık sayılmaz: 3 ölçülebilir, 3 eşleşme", k(f.parmakIzi, pi({ f2: null, f5: null })) === "ESLESTI");
+  check("§4e 3 ölçülebilir, 2 eşleşme yetmez", k(f.parmakIzi, pi({ f2: null, f5: null, f4: baska.f4 })) === "ESLESMEDI");
+  check("§4f 2 ölçülebilir, ikisi eşleşir → geçerli", k(f.parmakIzi, pi({ f2: null, f3: null, f5: null })) === "ESLESTI");
+  check("§4g 2 ölçülebilir, biri uyuşmaz → geçersiz", k(f.parmakIzi, pi({ f2: null, f3: null, f5: null, f4: baska.f4 })) === "ESLESMEDI");
+  check("§4h ⭐ tek ölçülebilir → ÖLÇÜLEMEDİ (üç sonuç, iki değil)", k(f.parmakIzi, { f1: f.parmakIzi.f1, f2: null, f3: null, f4: null, f5: null }) === "OLCULEMEDI");
+  check("§4i DR: f5 dışarıda, f5 uyuşmazlığı sayılmaz", compareFingerprints(f.parmakIzi, pi({ f4: baska.f4, f5: baska.f5 }), { excludeF5: true }).matched === 3);
+  const ayni = digestFingerprint({ ...HAM_PARMAK_IZI, f1: "6f1c2b9a0d3e4b579a113c5e7d9f0b24", f4: "00-1a-2b-3c-4d-5e", f3: " s4evnx0n912345 " }, f.tuz);
+  check("§4j normalleştirme: GUID süsü/MAC ayırıcı/boşluk aynı özeti verir", ayni.f1 === f.parmakIzi.f1 && ayni.f4 === f.parmakIzi.f4 && ayni.f3 === f.parmakIzi.f3);
+  check("§4k yerel yönetimli (sanal) MAC ölçülemedi sayılır", normalizeFactor("f4", "02:42:ac:11:00:02") === null);
+  check("§4l yer tutucu SMBIOS değeri ölçülemedi sayılır", normalizeFactor("f2", "00000000-0000-0000-0000-000000000000") === null && normalizeFactor("f3", "To Be Filled By O.E.M.") === null);
+  const tuzlu = digestFingerprint(HAM_PARMAK_IZI, Buffer.alloc(32, 9));
+  check("§4m başka kurulum tuzu başka özet üretir (ham kimlik dışarı çıkmaz)", tuzlu.f1 !== f.parmakIzi.f1);
+  const alan = digestFingerprint({ f1: "abcdef0123456789abcdef0123456789", f2: "abcdef0123456789abcdef0123456789" }, f.tuz);
+  check("§4n aynı değer iki etkende farklı özet (alan ayrımı)", alan.f1 !== null && alan.f1 !== alan.f2);
+  let kisa = false;
+  try {
+    digestFingerprint(HAM_PARMAK_IZI, Buffer.alloc(8));
+  } catch {
+    kisa = true;
+  }
+  check("§4o 16 bayttan kısa tuz reddedilir", kisa);
+}
+
+function yoklaGovdesi(): Record<string, unknown> {
+  return {
+    v: 1,
+    sonKiraId: null,
+    hak: null,
+    parmakIzi: f.parmakIzi,
+    durum: { gecerlilik: "GECERLI", nedenler: [], kip: "gozlem", hesaplananKademe: "NORMAL", uygulananKademe: "NORMAL" },
+    saat: { duvar: msToIso(SIMDI), guvenilir: msToIso(SIMDI), bulgu: null },
+    ortam: { platform: "win32", mimari: "x64", isletimSistemi: "Windows Server 2022", nodeSurum: "v24.18.0", uygulamaSurum: "2.11.2", derlemeTarihi: null, konteyner: false },
+    saglik: {
+      surum: "2.11.2",
+      calismaSn: 3600,
+      dbBoyutBayt: 1024,
+      yedek: { hukum: "ok", yasSaat: 5 },
+      offsite: { yapilandirildi: true, ok: true, eksikSayisi: 0 },
+      diskDolulukYuzde: 40,
+      auditYazmaHatasi: 0,
+      havuzZamanAsimi: 0,
+      istemciler: [{ tur: "tablet", surum: "1.3.2", adet: 4 }],
+      isHatalari: [],
+    },
+    gozlem: { reddedilecekIstek: 0, reddedilecekModul: 0 },
+  };
+}
+
+function govdeBolumu(): void {
+  console.log("\n§5 — uç gövdeleri: istek KATI, yanıt GEVŞEK");
+  check("§5a geçerli yoklama gövdesi", PollRequestSchema.safeParse(yoklaGovdesi()).success);
+  const sizinti = yoklaGovdesi();
+  const saglik = sizinti.saglik;
+  if (typeof saglik === "object" && saglik !== null) Object.assign(saglik, { kullanicilar: ["ali"] });
+  check("§5b ⭐ sağlık özetine allowlist dışı anahtar RED", !PollRequestSchema.safeParse(sizinti).success);
+  check("§5c kök gövdeye allowlist dışı anahtar RED", !PollRequestSchema.safeParse({ ...yoklaGovdesi(), siparisler: [] }).success);
+  const yanit = { v: 1, hak: null, kira: kiraBas(f), indirmeBelirtecleri: [], sunucuSaati: msToIso(SIMDI), yeniBilgi: 1 };
+  check("§5d yanıtta tanınmayan bilgi alanı kabul (ileri uyum)", LicenseResponseSchema.safeParse(yanit).success);
+  check("§5e çevrimdışı istek zarf taşır", OfflineRequestSchema.safeParse({ v: 1, zarf: "abc" }).success);
+  check("§5f etkinleştirme kodu normalleştirme", normalizeActivationCode(" tks abcd efgh jkmn ") === "TKS-ABCD-EFGH-JKMN");
+  check("§5g O→0 ve I/L→1 dönüşümü", normalizeActivationCode("TKS-OOOO-IIII-LLLL") === "TKS-0000-1111-1111");
+}
+
+function zamanTutarliligi(): void {
+  check("§6a tolerans 10 dk, gün 24 sa", CLOCK_SKEW_MS === 10 * DAKIKA && DAY_MS === 24 * 60 * DAKIKA);
+  const { privateKey } = generateKeyPairSync("ed448");
+  let ed448 = false;
+  try {
+    hamImzala(TYP.HAK, { kid: "kok-2026-1", privateKey, acik: privateKey, x: "" }, hakYuku(f));
+  } catch {
+    ed448 = true;
+  }
+  check("§6b Ed25519 dışı anahtarla imza atılmaz", ed448);
+}
+
+kapalilik();
+jwsBolumu();
+indirmeBolumu();
+zincirBolumu();
+istekBolumu();
+parmakIziBolumu();
+govdeBolumu();
+zamanTutarliligi();
+console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+process.exit(fail > 0 ? 1 : 0);
