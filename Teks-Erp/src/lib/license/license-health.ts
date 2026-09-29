@@ -3,6 +3,7 @@ import { getLicenseSnapshot } from "./runtime";
 import { getDoorbellStatus, getLicenseEngineStatus, getPollStatus } from "./license-signals";
 import { getIntegrityOutcome, integrityStatusForState } from "./integrity-state";
 import { getLicenseCoreStatus } from "./native";
+import { BUILD_WATERMARK } from "./watermark";
 
 /** `/api/admin/health` lisans bloğu — durum ÖZETİ (belge içeriği ve anahtar yok). */
 export function licenseHealthBlock(): Record<string, unknown> {
@@ -26,6 +27,7 @@ export function licenseHealthBlock(): Record<string, unknown> {
       cekirdek: getLicenseCoreStatus().kaynak,
       butunluk: integrityStatusForState(),
       butunlukKod: getIntegrityOutcome()?.kod ?? null,
+      paketId: BUILD_WATERMARK?.paketId ?? null,
     };
   } catch {
     return { hazir: false, motor: motor.durum, motorNeden: motor.neden };

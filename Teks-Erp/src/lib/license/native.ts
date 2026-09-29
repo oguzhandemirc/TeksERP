@@ -219,6 +219,20 @@ export function getLicenseCoreStatus(): CoreLoadStatus {
   return loaded.status;
 }
 
+/**
+ * Test-only (Senaryo L): süreç çekirdeğini değiştirir (ör. native doğrulama + TS parmak izi toplayıcısı,
+ * sahte makine kimliği yalnız TS sondasına enjekte edilebildiği için). Zorunlu kipte YOK SAYILIR.
+ */
+export function configureLicenseCoreForTests(core: LicenseCore | null): void {
+  if (NATIVE_REQUIRED) return;
+  if (core === null) {
+    loaded = null;
+    return;
+  }
+  const base = loaded ?? loadLicenseCoreFrom(defaultOptions());
+  loaded = { core, status: base.status };
+}
+
 /** Test-only: bir sonraki çağrı çekirdeği yeniden yükler (açılmış `.node` önbellekte kalır). */
 export function resetLicenseCoreForTests(): void {
   loaded = null;

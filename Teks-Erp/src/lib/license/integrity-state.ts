@@ -3,6 +3,7 @@
 // yeniden başlatmak ya da kirayı yenilemek ek süreyi uzatmaz.
 import { isoToMs, msToIso } from "./protocol";
 import type { IntegrityOutcome } from "./integrity-check";
+import type { PackageKey } from "./integrity";
 import type { IntegrityStatus } from "./state-rules";
 import type { StateRecord } from "./saat";
 import { bumpLicenseSnapshotVersion } from "./license-signals";
@@ -10,6 +11,18 @@ import { NATIVE_REQUIRED } from "./native";
 
 let integrity: IntegrityOutcome | null = null;
 let firstMismatchMs: number | null = null;
+let testTarget: { readonly root?: string; readonly keys?: readonly PackageKey[] } | null = null;
+
+/** Test-only (Senaryo L): denetlenecek kök ve PAKET anahtarı. Zorunlu kipte (korumalı paket) YOK SAYILIR. */
+export function configureIntegrityForTests(t: { readonly root?: string; readonly keys?: readonly PackageKey[] } | null): void {
+  testTarget = t;
+}
+
+/** Denetim hedefi: paket kökü = süreç kökü (`app/`), gömülü PAKET çapası. */
+export function integrityCheckTarget(required: boolean = NATIVE_REQUIRED): { readonly root: string; readonly keys: readonly PackageKey[] | undefined } {
+  if (required || testTarget === null) return { root: process.cwd(), keys: undefined };
+  return { root: testTarget.root ?? process.cwd(), keys: testTarget.keys };
+}
 
 export function setIntegrityOutcome(o: IntegrityOutcome | null, nowMs: number = Date.now()): void {
   integrity = o;
@@ -56,4 +69,5 @@ export function integrityRecordValue(record: StateRecord | null): string | null 
 export function __resetIntegrityStateForTests(): void {
   integrity = null;
   firstMismatchMs = null;
+  testTarget = null;
 }

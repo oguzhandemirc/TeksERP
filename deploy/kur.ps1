@@ -562,6 +562,18 @@ if (Test-Path $runtimeExe) {
   if (Test-Path (Join-Path $temp "dist\server.jsc")) {
     Ok "paket korumali (dist\server.jsc bayt kodu) - dist\server.js yukleyici"
   }
+  # Faz 2e: korumali paket IMZALI dosya listesi (butunluk.jws) + native lisans cekirdegi tasir.
+  # Imzasiz korumali paket KURULMAZ: acilista butunluk GECERSIZ (BUTUNLUK_LISTE_YOK) ve native
+  # cekirdek yuklenmez (imzali listede degil) -> lisans merdiveni. Imza satici Mac'inde atilir.
+  if ($m -and $m.korumali) {
+    if (-not (Test-Path (Join-Path $temp "butunluk.jws"))) {
+      Fail "Korumali paket IMZASIZ (butunluk.jws yok). Satici Mac'inde imzala: npx tsx Teks-Erp/scripts/build-korumali-imza.ts zip --zip=<paket> --anahtar=<PAKET anahtari>"
+    }
+    if (-not (Get-ChildItem (Join-Path $temp "native") -Filter "lisans-cekirdek.*.node" -File -ErrorAction SilentlyContinue)) {
+      Fail "Korumali paket native lisans cekirdegini (native\lisans-cekirdek.*.node) tasimiyor - paket bozuk."
+    }
+    Ok "paket imzali dosya listesi tasiyor (butunluk.jws, anahtar $($m.butunlukKid)) + native lisans cekirdegi"
+  }
 } else {
   Write-Host "  . paket kendi Node'unu tasimiyor (eski bicim) - uygulama sistem Node'uyla kosar" -ForegroundColor DarkGray
 }
