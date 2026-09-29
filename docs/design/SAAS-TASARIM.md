@@ -345,6 +345,7 @@ for (const t of await activeTenants()) await runAsTenant(t, () => job.runIfDue()
 
 - **Operasyonel bayraklar** (bugünkü `SystemSetting`): tenant DB'sinde, firma admin'i yönetir — DB-per-tenant sayesinde bedava firma-bazlı. "Kurşun bypass açık mı" burası.
 - **Abonelik bayrakları** (`Tenant.planFlags`, master): "fason modülü satın alındı mı". `GET /api/feature-flags` yanıtına salt-okunur `plan` bloğu olarak iner; **enforcement paketleme kararına kadar yazılmaz** (alan rezerve, kapı yok). "Benzer ama varyasyonlu" ilk fazda operasyonel bayraklar + Bölüm D ile karşılanır.
+  > ⚠️ **2026-09-29 — lisans hakkı TEK KAYNAK:** modül hakkını artık imzalı lisans HAK belgesinin modül listesi (tavan) belirler (`docs/design/LISANS-KOD-KORUMA.md` §4, `docs/kurallar/lisans.md`). `Tenant.planFlags` ikinci bir hak kaynağı olarak DOĞMAZ; barındırma planında `BARINDIRILAN` sınıfının HAK'ıyla birleşir (satıcı portalı tek yazar). O güne dek alan rezerve kalır, okuyucu yazılmaz.
 
 ---
 

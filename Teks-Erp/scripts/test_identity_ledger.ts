@@ -190,10 +190,15 @@ export function bolumSatirSayilari(haritaMetni: string): Map<string, number> {
 function yonB() {
   console.log("\n§2 YÖN B — bekçi kümesi gerçek kaynağıyla hizalı mı");
 
+  // Satıcı sunucusu (satici/sunucu) kendi bekçilerini kendi dizininde taşır; harita onları
+  // lisans alanına atar, bu yüzden gerçek küme iki dizinin birleşimidir.
+  const BEKCI_DIZINLERI = ["Teks-Erp/scripts", "satici/sunucu/scripts"];
   const gercek = new Set(
-    readdirSync(path.join(REPO, "Teks-Erp/scripts"))
-      .filter((f) => f.startsWith("test_") && f.endsWith(".ts"))
-      .map((f) => f.slice(0, -3)),
+    BEKCI_DIZINLERI.filter((d) => existsSync(path.join(REPO, d))).flatMap((d) =>
+      readdirSync(path.join(REPO, d))
+        .filter((f) => f.startsWith("test_") && f.endsWith(".ts"))
+        .map((f) => f.slice(0, -3)),
+    ),
   );
   const haritaMetni = oku(HARITA);
   const haritaAdlar = new Set(bekciAdlari(haritaMetni));
