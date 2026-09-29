@@ -212,7 +212,8 @@ async function bolum6ile8(aktor: string, kartId: string): Promise<void> {
     ? await prisma.order.findUnique({ where: { id: o1.varlikId }, select: { createdById: true, clientToken: true, customerId: true, lines: { select: { quantity: true } } } })
     : null;
   check("clientToken = mesajId · cari · kalem", sip?.clientToken === m.mesajId && sip?.customerId === kartId && Number(sip?.lines[0]?.quantity) === 125.5, JSON.stringify(sip));
-  // Sipariş doğuş yolu `createdById` yazmaz (panel siparişiyle aynı); aktör audit'te ve makbuzda.
+  // Oluşturan panel siparişiyle AYNI dikişten (`prepareOrderCreate` aktörü → `withActor`) kolona yazılır.
+  check("sipariş createdById = teknik kullanıcı (panel yoluyla aynı dikiş)", sip?.createdById === aktor, String(sip?.createdById));
   const aud = auditlar.find((x) => x.recordId === o1?.varlikId && x.action === "CREATE" && x.tableName !== "CLOUD_INBOX_RECEIPT");
   const yuk = aud?.newData as Record<string, unknown> | undefined;
   check("audit: aktör teknik kullanıcı + kaynak künyesi", aud?.userId === aktor && yuk?.kaynak === "PATRON_BULUTU" && yuk?.mesajId === m.mesajId);

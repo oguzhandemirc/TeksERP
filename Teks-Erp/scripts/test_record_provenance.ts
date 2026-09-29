@@ -11,11 +11,15 @@
 // ⚠️ İKİ YÖNLÜ: kolonu olan model `PROVENANCE_MODELS` listesinde OLMALI (yoksa
 // yazılmaz, kolon boş kalır) — ve listede olan modelin kolonu OLMALI (yoksa
 // Prisma çalışma-zamanında patlar). Tek yönlü kontrol iki arızayı da kaçırır.
+//
+// §7 YAZIM YOLU: listede olmak yalnız BaseService yolunu kapsar; listedeki modelin src'deki HER yaratma
+// çağrısı oluşturanı yazmalı ya da `scripts/lib/kunye-yazim-tarama.ts` KUNYE_BORCLARI'nda açık adla durmalı.
 // =============================================================================
 import fs from "fs";
 import path from "path";
 import prisma, { pool } from "../src/lib/prisma";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { KUNYE_BORCLARI, judge, scanSource, scanSrc } from "./lib/kunye-yazim-tarama";
 
 let pass = 0;
 let fail = 0;
@@ -288,6 +292,64 @@ async function main(): Promise<void> {
     hardDeletes.length === 0,
     hardDeletes.join(" · ") || "yalnız soft delete (deletedAt)",
   );
+
+  // ── 7) YARATMA YOLU oluşturanı YAZIYOR MU (statik, AST) ─────────────────
+  // Liste ⊆ şema (§1) yetmez: modeli listeye koymak yalnız BaseService yolunu kapsar; elle insert eden
+  // servis (sipariş 2026-09-29'a kadar) createdById'yi sessizce NULL bırakır. Beyansız boşluk kırmızı;
+  // borç listesi cırcır değil — kapanan borç listeden düşmezse o da kırmızı.
+  const scan = scanSrc(srcDir, written);
+  check("körlük zemini: tarayıcı src'yi okudu", scan.files >= 100, `${scan.files} dosya`);
+  check("körlük zemini: yaratma çağrısı bulundu", scan.sites.length >= 5, `${scan.sites.length} çağrı`);
+  const base = scan.sites.find((s) => s.key === "services/base.service.ts::delegate.create");
+  check("BaseService genel yolu (delegate.create) künye yazıyor", base?.writes === true, base ? `satır ${base.line}` : "bulunamadı");
+  const orderSites = scan.sites.filter((s) => s.model === "order");
+  check("sipariş doğuşu TEK insert ve künye yazıyor", orderSites.length === 1 && orderSites[0]!.writes,
+    orderSites.map((s) => `${s.key}:${s.line}:${s.writes}`).join(" · ") || "bulunamadı");
+  const verdict = judge(scan.sites, KUNYE_BORCLARI);
+  check("beyansız künyesiz yaratma çağrısı YOK", verdict.undeclared.length === 0,
+    verdict.undeclared.map((s) => `${s.file}:${s.line} ${s.key}`).join(" · "));
+  check("borç listesinde bayat anahtar YOK (çağrı kaldırılmış)", verdict.staleMissing.length === 0, verdict.staleMissing.join(" · "));
+  check("kapanan borç listeden DÜŞÜRÜLMÜŞ", verdict.staleFixed.length === 0, verdict.staleFixed.join(" · "));
+  console.log(`   ℹ️ beyanlı künye borcu: ${Object.keys(KUNYE_BORCLARI).join(" · ") || "yok"}`);
+
+  // Gömülü sondalar: tarayıcının kendisi iki yönde ısırıyor mu (bozuk tarayıcı her şeyi "yazıyor" sayardı).
+  const probeModels = new Set(["order"]);
+  const bad = scanSource("x.ts", "async function f(tx){ return tx.order.create({ data: { a: 1 } }); }", probeModels);
+  check("sonda(−): künyesiz insert yakalanır", bad.length === 1 && !bad[0]!.writes);
+  const good = scanSource("x.ts", 'function f(tx,u){ const d = withActor({}, u, "CREATE", "order"); return tx.order.create({ data: d }); }', probeModels);
+  check("sonda(+): withActor'lı insert yazıyor sayılır", good.length === 1 && good[0]!.writes);
+  const wrong = scanSource("x.ts", 'function f(tx,u){ const d = withActor({}, u, "CREATE", "color"); return tx.order.create({ data: d }); }', probeModels);
+  check("sonda(−): BAŞKA modelin withActor'u sayılmaz", wrong.length === 1 && !wrong[0]!.writes);
+  const j = judge([{ key: "k", file: "x.ts", line: 1, model: "order", writes: true }], { k: "borç" });
+  check("sonda(+): kapanan borç 'düşürülmeli' der", j.staleFixed.join() === "k");
+
+  // ── 8) CANLI: panel yolu (OrderService.create) oluşturanı yazar ────────
+  // Hızlı sipariş `test_raw_sale_quick_order`, gelen kutusu `test_bulut_gelen_kutusu` ölçer.
+  const oCust = await prisma.customer.create({ data: { code: `TEST-PRV-OC-${ts}`, name: `TEST KUNYE SIPARIS ${ts}` }, select: { id: true } });
+  const oItem = await prisma.item.create({
+    data: { code: `TEST-PRV-OI-${ts}`, name: `TEST KUNYE URUN ${ts}`, itemType: "FABRIC", unit: "MT" }, select: { id: true },
+  });
+  let oId = "";
+  try {
+    const { OrderService } = await import("../src/services/order.service");
+    const osvc = new OrderService({
+      modelName: "order", tableName: "ORDER", searchFields: [], codeSearchFields: ["orderNumber"],
+      defaultInclude: { lines: true }, nestedCreateFields: ["lines"],
+    } as never);
+    const res = await osvc.create({ customerId: oCust.id, lines: [{ itemId: oItem.id, quantity: 10 }] }, u1!.id);
+    oId = (res.data as { id: string }).id;
+    const row = await prisma.order.findUnique({ where: { id: oId }, select: { createdById: true, updatedById: true } });
+    check("sipariş create → createdById = aktör", row?.createdById === u1!.id, String(row?.createdById));
+    check("sipariş create → updatedById = aktör", row?.updatedById === u1!.id, String(row?.updatedById));
+  } finally {
+    if (oId) {
+      await prisma.orderLine.deleteMany({ where: { orderId: oId } }).catch(() => {});
+      await prisma.systemLog.deleteMany({ where: { tableName: "ORDER", recordId: oId } }).catch(() => {});
+      await prisma.order.deleteMany({ where: { id: oId } }).catch(() => {});
+    }
+    await prisma.item.deleteMany({ where: { id: oItem.id } }).catch(() => {});
+    await prisma.customer.deleteMany({ where: { id: oCust.id } }).catch(() => {});
+  }
 
   await prisma.workOrder.deleteMany({ where: { id: prvWo.id } }).catch(() => {});
   // Fixture temizliği — arşiv-yolu müşterisi bu koşumun ürünüdür, kalıcı değil.

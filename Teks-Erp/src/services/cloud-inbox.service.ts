@@ -161,7 +161,7 @@ async function customerService() {
 async function createOrderFromMessage(f: ReceiptFields, w: OrderWire, replay: ReceiptReplay, actorUserId: string): Promise<InboxOutcome> {
   const svc = await orderService();
   const data = orderWireToFactory(w, f.msg.mesajId);
-  const prepared = await svc.prepareOrderCreate(data, f.msg.mesajId);
+  const prepared = await svc.prepareOrderCreate(data, f.msg.mesajId, { userId: actorUserId });
   const r = await withBarcodeRetry(
     () =>
       prisma.$transaction(async (tx) => {
@@ -182,7 +182,7 @@ async function createOrderFromMessage(f: ReceiptFields, w: OrderWire, replay: Re
     (err) => !isClientTokenP2002(err),
   );
   if (r.replay) return r.replayed;
-  await svc.finishOrderCreate(r.order, data, prepared, { userId: actorUserId, auditExtra: sourceStamp(f.msg) });
+  await svc.finishOrderCreate(r.order, data, prepared, { auditExtra: sourceStamp(f.msg) });
   await auditReceipt(r.receipt, actorUserId);
   return outcomeFromReceipt(r.receipt);
 }

@@ -12,7 +12,7 @@ import { ACTIVE_SACK_ALLOCATION } from "./helpers/sack-allocation.helper";
 import { setWorkOrderTypeTx } from "./helpers/workorder-event.helper";
 import type { ItemUnit } from "@prisma/client";
 import { AuditService } from "./audit.service";
-import { BaseService, BaseServiceConfig, CursorPaginatedResponse } from "./base.service";
+import { BaseService, BaseServiceConfig, CursorPaginatedResponse, withActor } from "./base.service";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import {
   decodeDynamicCursor,
@@ -312,11 +312,18 @@ export interface OrderShipmentsResult {
 /** `create`in tx dışı yarısının çıktısı — hızlı sipariş aynı kapılardan geçip kendi tx'inde yazsın diye. */
 export interface PreparedOrderCreate {
   prismaData: Record<string, unknown>;
+  /** Oluşturan — insert (`createdById`) ve audit AYNI alandan okur; doğuş yolu başına bir kez verilir. */
+  actorUserId: string | undefined;
   lineCheck: { checks: ItemUsageCheck[]; warnings: string[] };
   destination: Awaited<ReturnType<typeof resolveShipmentDestination>>["destination"];
   manualOrderNumber: string | null;
   today: Date;
   fmt: ReturnType<typeof resolveSeriesFormat>;
+}
+
+/** Sipariş doğuşunun aktörü: her doğuş yolu (uç · hızlı sipariş · gelen kutusu · içe aktarma) AÇIKÇA verir. */
+export interface OrderActor {
+  userId: string | undefined;
 }
 
 /** İdempotency anahtarı (Roll emsali) — route-level zod yok (BaseController ham body), burada doğrulanır. */
@@ -2036,9 +2043,9 @@ export class OrderService extends BaseService {
     // R: token HER iş kuralından (elle numara çakışması dahil) ÖNCE okunur ve iş hangi hatayla düşerse
     // düşsün yeniden okunur — sıralı tekrar da eşzamanlı kaybeden de önceki siparişi alır.
     return this.orderReplay(data).run(clientToken, async () => {
-      const prepared = await this.prepareOrderCreate(data, clientToken);
+      const prepared = await this.prepareOrderCreate(data, clientToken, { userId });
       const record = await this.insertPreparedOrder(prepared);
-      return this.finishOrderCreate(record, data, prepared, { userId });
+      return this.finishOrderCreate(record, data, prepared);
     });
   }
 
@@ -2051,9 +2058,10 @@ export class OrderService extends BaseService {
     record: Record<string, unknown>,
     data: Record<string, unknown>,
     prepared: PreparedOrderCreate,
-    actor: { userId: string | undefined; auditExtra?: Record<string, unknown> },
+    opts?: { auditExtra?: Record<string, unknown> },
   ): Promise<ApiResponse<unknown>> {
-    const { userId, auditExtra } = actor;
+    const userId = prepared.actorUserId;
+    const auditExtra = opts?.auditExtra;
     const orderNumber = record.orderNumber as string;
     await AuditService.log({
       userId,
@@ -2082,6 +2090,7 @@ export class OrderService extends BaseService {
   async prepareOrderCreate(
     data: Record<string, unknown>,
     clientToken: string | null,
+    actor: OrderActor,
     /** Yalnız hızlı sipariş: satırlar okutulan toplardan doğdu — gövdeden GELMEZ. */
     opts?: { fromScannedRolls?: boolean },
   ): Promise<PreparedOrderCreate> {
@@ -2211,7 +2220,7 @@ export class OrderService extends BaseService {
         throw AppError.conflict(`'${manualOrderNumber}' numaralı sipariş zaten var`);
       }
     }
-    return { prismaData, lineCheck, destination, manualOrderNumber, today, fmt };
+    return { prismaData, actorUserId: actor.userId, lineCheck, destination, manualOrderNumber, today, fmt };
   }
 
   /**
@@ -2267,10 +2276,17 @@ export class OrderService extends BaseService {
     );
   }
 
-  /** Siparişin TEK insert'i. `destination` data literalinde: donmuş kolonun yazıcısı AST ile ölçülür (`test_snapshot_kolonlari`). */
+  /**
+   * Siparişin TEK insert'i. `destination` data literalinde: donmuş kolonun yazıcısı AST ile ölçülür (`test_snapshot_kolonlari`).
+   * Künye (`createdById`/`updatedById`) BaseService ile aynı yazıcıdan: `withActor` (`test_record_provenance` ölçer).
+   */
   private insertOrderTx(tx: Prisma.TransactionClient, p: PreparedOrderCreate, orderNumber: string): Promise<Record<string, unknown>> {
     return tx.order.create({
-      data: { ...p.prismaData, orderNumber, destination: p.destination } as Prisma.OrderUncheckedCreateInput,
+      data: {
+        ...withActor(p.prismaData, p.actorUserId, "CREATE", "order"),
+        orderNumber,
+        destination: p.destination,
+      } as Prisma.OrderUncheckedCreateInput,
       ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
     }) as Promise<Record<string, unknown>>;
   }
@@ -2372,7 +2388,7 @@ export class OrderService extends BaseService {
       if (once) return once;
     }
 
-    const outcome = await this.quickOrderTx({ data, rolls, lines, clientToken, replay });
+    const outcome = await this.quickOrderTx({ data, rolls, lines, clientToken, replay, userId });
     if ("replayed" in outcome) return outcome.replayed;
     const order = outcome.order as { id: string; orderNumber: string };
     const stockRollIds = outcome.stockRollIds;
@@ -2405,12 +2421,13 @@ export class OrderService extends BaseService {
   }
 
   /** Hızlı siparişin yazan yarısı: token kilidi (8036) + token → kart kilitleri (8030) → top claim'i → sipariş. */
-  private async quickOrderTx({ data, rolls, lines, clientToken, replay }: {
+  private async quickOrderTx({ data, rolls, lines, clientToken, replay, userId }: {
     data: { customerId: string; branchId?: string | null };
     rolls: Array<{ id: string; barcode: string | null; status: RollStatus; shipmentId: string | null; sackId: string | null; currentStepId: string | null }>;
     lines: Array<{ itemId: string; colorId: string | null; width: number | null; quantity: number }>;
     clientToken: string | null;
     replay: TokenReplay<ApiResponse<unknown>>;
+    userId: string | undefined;
   }): Promise<{ replayed: ApiResponse<unknown> } | { order: Record<string, unknown>; stockRollIds: string[] }> {
     // Her top serbest + satılabilir statüde olmalı (STOCK ham veya WAREHOUSE, çuvalsız).
     for (const r of rolls) {
@@ -2425,6 +2442,7 @@ export class OrderService extends BaseService {
     const prepared = await this.prepareOrderCreate(
       { customerId: data.customerId, branchId: data.branchId ?? null, lines, clientToken },
       clientToken,
+      { userId },
       { fromScannedRolls: true },
     );
     const stockRollIds = rolls.filter((r) => r.status === RollStatus.STOCK).map((r) => r.id);
