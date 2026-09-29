@@ -13,7 +13,7 @@
 > - **TBK md. 115 — sorumsuzluk anlaşması:** §11'deki sorumluluk sınırı ağır kusuru kapsamıyor mu? Tavan ve dolaylı zarar istisnası geçerli mi?
 > - **HMK md. 193 — delil sözleşmesi:** Lisans Veren'in imzalı elektronik kayıtlarını (yoklama, portal defteri, filigran) delil sayan §9.4 geçerli mi, karşı delil hakkı yeterince korunuyor mu?
 > - **TCK md. 243–244:** lisans denetiminin çalışmayı kısıtlaması ("kısıtlı kip", "durdurulmuş") ve Lisans Veren'in uzaktan erişimi "sistemi engelleme" ya da "sisteme izinsiz girme" sayılabilir mi? Taslak her kademede verilere erişimi açık tuttu ve uzaktan erişimi Lisans Alan onayına bağladı (§8, `BAKIM-DESTEK-SOZLESMESI.md` §6). Bu önlemler riski ne ölçüde azaltır?
-> - **KVKK:** lisans yoklaması iş ya da kişisel veri taşımaz (`VERI-ISLEME-EKI.md` Bölüm A). Kabul kaydındaki ad-soyad ve destek talepleri kişisel veridir. Aydınlatma yükümlülüğü (md. 10) nasıl karşılanmalı?
+> - **KVKK:** lisans yoklaması iş ya da kişisel veri taşımaz (`VERI-ISLEME-EKI.md` Bölüm A); iş verisi taşıyan tek kanal, ayrı eki olan patron bulutudur (§12.2). Kabul kaydındaki ad-soyad ve destek talepleri kişisel veridir. Aydınlatma yükümlülüğü (md. 10) nasıl karşılanmalı?
 > - **TMK md. 2 — hakkın kötüye kullanılması:** tek taraflı ve anında uygulanan K4 ve K5 kademeleri (`YAPTIRIM-MADDELERI.md` §4) bu açıdan savunulabilir mi?
 
 ---
@@ -133,7 +133,7 @@ Lisans Alan aşağıdaki koruma önlemlerini bildiğini ve kabul ettiğini beyan
 
 Her Lisans Belgesi tek bir sınıf taşır:
 
-10.1. **Üretim:** Tesis'in günlük işi. Patron bulutu gibi dışarıya veri gönderen ek hizmetler yalnız bu sınıfta açılabilir.
+10.1. **Üretim:** Tesis'in günlük işi. Patron bulutu gibi dışarıya veri gönderen ek hizmetler yalnız bu sınıfta açılabilir. Patron bulutu bu sözleşmeyle verilmez; ayrı hak (`patron-bulut`) ve ayrı imzalanan `PATRON-BULUTU-VERI-ISLEME-EKI.md` ile açılır (§12.2, Ek-6).
 
 10.2. **Test / hazırlık:** Yalnız deneme, eğitim ve sürüm provası için kullanılır. Canlı üretim işlemi yapılamaz (gerçek sevkiyat, fatura ve tahsilat kaydı gibi). Üretim verisinin kopyasıyla test yapılırsa, bu kopyadaki kişisel verilerden Lisans Alan sorumludur.
 
@@ -157,7 +157,7 @@ Her Lisans Belgesi tek bir sınıf taşır:
 
 12.1. Yazılım'ın, kaynak ve derlenmiş kodunun, belgelerinin ve Lisans Alan için yapılan özel geliştirmelerin bütün hakları Lisans Veren'dedir [avukat: özel geliştirme için ayrı hüküm istenirse]. Bu sözleşme yalnız §4'teki kullanım hakkını verir.
 
-12.2. **İş verisi Lisans Alan'ındır.** Yazılım'a girilen ve Yazılım'ın ürettiği iş verisi (üretim, stok, sipariş, cari, finans, kullanıcı kayıtları) Lisans Alan'a aittir. Lisans Veren bu veriye yalnız `BAKIM-DESTEK-SOZLESMESI.md` §6'daki uzaktan erişimle ve Lisans Alan onayıyla ulaşır.
+12.2. **İş verisi Lisans Alan'ındır.** Yazılım'a girilen ve Yazılım'ın ürettiği iş verisi (üretim, stok, sipariş, cari, finans, kullanıcı kayıtları) Lisans Alan'a aittir. Lisans Veren bu veriye yalnız `BAKIM-DESTEK-SOZLESMESI.md` §6'daki uzaktan erişimle ve Lisans Alan onayıyla ulaşır. Lisans Alan patron bulutu hizmetini açarsa, seçilmiş verinin okuma kopyası Lisans Veren'in bulut sunucusunda veri işleyen sıfatıyla tutulur; bu kopya da Lisans Alan'ındır ve `PATRON-BULUTU-VERI-ISLEME-EKI.md`'ye göre işlenir, saklanır ve imha edilir.
 
 12.3. **Lisans ihlalinde tazminat:** [DOLDURULACAK — ceza koşulu olacak mı, tutarı; avukat: FSEK md. 68, TBK md. 179–182, TTK md. 22].
 
@@ -191,3 +191,4 @@ Türk hukuku uygulanır. Uyuşmazlıklarda [DOLDURULACAK] mahkemeleri ve icra da
 - Ek-3: `VERI-ISLEME-EKI.md`
 - Ek-4: `BAKIM-DESTEK-SOZLESMESI.md` (bakım satın alınmışsa)
 - Ek-5: Fiyat ve ödeme planı [DOLDURULACAK]
+- Ek-6: `PATRON-BULUTU-VERI-ISLEME-EKI.md` ve ekleri (yalnız patron bulutu hizmeti satın alınmışsa; ayrı imzalanır)

@@ -126,3 +126,11 @@ Lisans Veren'in bu sözleşmeden doğan toplam sorumluluğu, zarar anından önc
 ## 11. Uygulanacak hukuk ve yetki
 
 Lisans Sözleşmesi §15 uygulanır.
+
+## 12. Patron bulutu
+
+12.1. Patron bulutu (fabrika verisinin okuma kopyasının Lisans Veren'in bulut sunucusunda tutulması ve "TeksERP Patron" uygulamasıyla gösterilmesi) bu sözleşmenin konusu değildir. Ayrı hakla (`patron-bulut`) ve ayrı imzalanan `PATRON-BULUTU-VERI-ISLEME-EKI.md` ile açılır [DOLDURULACAK — ticari model: ayrı abonelik mi, bakıma dahil mi].
+
+12.2. Patron bulutu bakıma dahil satılırsa bakımın sona ermesi (§8) patron bulutunu da sona erdirir: eşitleme durur, dışa aktarma ve imha `PATRON-BULUTU-SAKLAMA-IMHA.md` §4'e göre yapılır. Yazılım'ın kendisi Son Hak Edilen Sürüm'de çalışmaya devam eder; fabrika verisi etkilenmez.
+
+12.3. Patron bulutuna ilişkin destek taleplerinde Lisans Veren'in bulut kopyasına erişimi `PATRON-BULUTU-TEDBIRLER.md` §3'e, güvenlik ihlali `VERI-IHLALI-BILDIRIM-PROSEDURU.md`'ye tabidir.

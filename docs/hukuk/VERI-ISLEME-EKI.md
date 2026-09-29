@@ -2,7 +2,7 @@
 
 > **TASLAK — AVUKAT ONAYI BEKLİYOR.** Bu metin `SON-KULLANICI-LISANS-SOZLESMESI.md` (Lisans Sözleşmesi) ve `BAKIM-DESTEK-SOZLESMESI.md`'nin ekidir. Kullanıcının 2026-09-29 kararlarına göre Claude tarafından hazırlanmıştır; hukuki görüş değildir. Bölüm A'daki alan listesi yazılımın lisans protokolünden birebir alınmıştır. `[DOLDURULACAK]` işaretli süre ve adlar ticari ya da eksik bilgidir.
 >
-> Metin kimliği: `VIE-2026.1-taslak` · Patron bulutu eki (Bölüm P) ayrı bir belge olarak imzalanır; burada yalnız iskeleti durur.
+> Metin kimliği: `VIE-2026.1-taslak` · Patron bulutu bu ekin kapsamında değildir; ayrı eki `PATRON-BULUTU-VERI-ISLEME-EKI.md`dir (Bölüm P).
 
 > **Türk hukuku: FSEK, TBK, KVKK, TCK 244 açısından avukat şu maddelere özellikle baksın**
 > - **KVKK md. 3 ve 5 — kişisel veri mi?** Bölüm A'daki yoklama alanları bir şirket sunucusunu tanımlar; gerçek kişiye ait değildir. Taslak bunları "kişisel veri değil" diye niteledi (A.1). Kurulum kimliği ve IP adresi, şahıs işletmesi olan bir müşteride gerçek kişiyle ilişkilendirilebilir mi? Öyleyse hukuki sebep olarak md. 5/2-c (sözleşmenin ifası) ve md. 5/2-f (meşru menfaat) yeterli mi?
@@ -11,7 +11,6 @@
 > - **KVKK md. 12 — veri işleyen:** Bölüm B, Lisans Veren'in destek ve uzaktan erişimdeki veri işleyen sıfatını yazılı talimata bağladı. Müşterek sorumluluk ve ihlal bildirimi (72 saat) doğru kurulmuş mu?
 > - **Silme, Yok Etme veya Anonim Hale Getirme Yönetmeliği:** Bölüm D'deki süreler ve periyodik imha aralığı (en çok 6 ay) uygun mu? Kayıt defterlerinin sözleşme süresi + 10 yıl saklanması (TBK md. 146, TTK md. 82) kişisel veri içeren kısımlar için ölçülü mü?
 > - **TCK md. 136 ve 243:** Bölüm B'deki "sunucudan veri çıkarmama" kuralı ve istisnası (yazılı onay) yeterli mi?
-> - **FSEK / TBK:** Bölüm P'de buluttaki kopyanın imhası sözleşme bitişine bağlandı. Bu, TBK md. 146 zamanaşımı süresince delil saklama ihtiyacıyla çelişir mi?
 
 ---
 
@@ -105,7 +104,7 @@ B.2. Lisans Veren bu verileri:
 
 B.3. **Yedek anahtarları.** Lisans Veren'in kasasında tutulan yedek parolası ve Lisans Veren yedek anahtarı, Lisans Alan'ın bütün geçmiş yedeklerini açabilir. Bunlar yalnız `BAKIM-DESTEK-SOZLESMESI.md` §7'deki hallerde kullanılır ve her kullanım Lisans Alan'a bildirilir.
 
-B.4. **İhlal bildirimi.** Lisans Veren, Lisans Alan verisini etkileyen bir güvenlik ihlalini öğrendiğinde Lisans Alan'a gecikmeden, en geç [DOLDURULACAK — öneri: 24 saat] içinde bildirir. Kurul'a bildirim (72 saat) veri sorumlusu olan Lisans Alan'ındır; Lisans Veren bunun için gereken bilgiyi verir.
+B.4. **İhlal bildirimi.** Lisans Veren, Lisans Alan verisini etkileyen bir güvenlik ihlalini öğrendiğinde Lisans Alan'a gecikmeden, en geç [DOLDURULACAK — öneri: 24 saat] içinde bildirir. Kurul'a bildirim (72 saat) veri sorumlusu olan Lisans Alan'ındır; Lisans Veren bunun için gereken bilgiyi verir. Adımlar ve içerik: `VERI-IHLALI-BILDIRIM-PROSEDURU.md`.
 
 B.5. **İlgili kişi başvuruları.** Lisans Veren'e gelen bir ilgili kişi başvurusu Lisans Alan'a yönlendirilir. Lisans Veren, Lisans Alan'ın cevap vermesi için gereken teknik desteği verir.
 
@@ -149,40 +148,6 @@ Periyodik imha [DOLDURULACAK — öneri: 6 ayda bir] yapılır ve kayda geçer [
 
 ---
 
-## P. Patron bulutu veri işleme eki — İSKELET (ayrı belge olarak imzalanır)
+## P. Patron bulutu
 
-> Bu bölüm, patron bulutu hizmeti satılmaya başladığında **ayrı bir ek** olarak tamamlanır ve imzalanır. Ticari model henüz belirlenmedi (kullanıcı kararı 2026-09-29). Yukarıdaki A–E bölümleri patron bulutunu KAPSAMAZ.
-
-**P.1. Konu.** Fabrika verisinin seçilmiş bir okuma kopyası belirli aralıklarla Lisans Veren'in bulut sunucusuna eşitlenir. Patron uygulaması (iOS, Android, web) bu kopyayı gösterir. Uygulamadan girilen sipariş ve cari kayıtları bir gelen kutusuna düşer; fabrika sunucusu bunları çekip kendi kurallarıyla işler. Fabrika her zaman tek yazardır: bulut hesap yapmaz ve fabrika verisini değiştirmez.
-
-**P.2. Roller.** Lisans Alan veri sorumlusudur, Lisans Veren veri işleyendir.
-
-**P.3. Açılış şartları.** Hizmet varsayılan olarak kapalıdır. Ayrı bir hakla (`patron-bulut`) ve ayrı sözleşmeyle açılır; yalnız Üretim sınıfı Kurulum veri gönderir. Test, demo ve DR kurulumları göndermez.
-
-**P.4. Kişisel veri kategorileri** [DOLDURULACAK — eşitleme sözleşmesi kesinleşince alan alan]:
-
-| Kategori | Örnek | İlgili kişi |
-|---|---|---|
-| Cari kimlik ve iletişim | Ünvan (şahıs işletmesinde gerçek kişi adı), yetkili kişi, telefon, e-posta, adres, vergi/TC kimlik no [avukat: TCKN buluta gitmeli mi] | Müşteri, tedarikçi, fason firmaları |
-| Finans | Cari bakiye ve hareketler, kasa/banka, çek/senet (keşideci adı), fiyat ve maliyet | Aynı |
-| Sipariş ve sevkiyat | Sipariş satırları, teslim bilgileri | Aynı |
-| Üretim ve stok | İş emri, top ve stok özetleri; kaydı yapan kullanıcının adı | Fabrika çalışanları |
-| Bulut hesabı | Ad, e-posta, parola özeti, TOTP sırrı, izinler, oturum ve IP kayıtları, bildirim tercihleri ve cihaz bildirim anahtarları | Patron ve ekibi |
-| Gelen kutusu | Bulut kullanıcısının girdiği sipariş ve cari gövdesi, işlem sonucu | Aynı |
-
-**Buluta gitmeyenler:** denetim (audit) kayıtları; fabrika kullanıcılarının parolaları, PIN'leri ve kartları; [DOLDURULACAK].
-
-**P.5. Alıcılar ve alt işleyenler.** VDS sağlayıcısı (Türkiye), Cloudflare; bildirimler için Expo, Google (FCM) ve Apple (APNs). Bildirim içeriği asgaride tutulur [DOLDURULACAK — bildirim metninde tutar ve ad olacak mı] [avukat: KVKK md. 9].
-
-**P.6. Saklama.** Buluttaki geçmiş Kurulum başına ayarlanır: 3, 13 ya da 25 ay, ya da tüm geçmiş. Varsayılan 13 aydır. Fabrikada silinen kayıt bulutta da silinir.
-
-**P.7. İmha.**
-- Abonelik bitince eşitleme durur.
-- Lisans Alan'a [DOLDURULACAK — öneri: 90 gün] dışa aktarma süresi tanınır.
-- Süre sonunda buluttaki bütün veri silinir; bulut yedeklerinden [DOLDURULACAK — öneri: 35 gün] içinde düşer.
-- İmha tutanağı Lisans Alan'a verilir.
-- Bulut hesapları kapatılır.
-
-**P.8. Güvenlik.** Tesis başına veri ayrımı (veritabanı satır düzeyi güvenlik), parola ve TOTP, alan bazlı izinler, imzalı eşitleme paketleri, fabrika tek yazar.
-
-**P.9. İhlal bildirimi, ilgili kişi başvuruları, denetim.** Bölüm B'deki gibi [DOLDURULACAK — bulut için ayrıca].
+Patron bulutu bu ekin kapsamında DEĞİLDİR. Ayrı imzalanan `PATRON-BULUTU-VERI-ISLEME-EKI.md` (`PBVIE-2026.1`) ve onun ekleri düzenler: `PATRON-BULUTU-SAKLAMA-IMHA.md` · `PATRON-BULUTU-TEDBIRLER.md` · `PATRON-BULUTU-AYDINLATMA-METNI.md` · `VERI-IHLALI-BILDIRIM-PROSEDURU.md`. Bu bölümde daha önce duran iskelet o belgeye taşındı ve tamamlandı.
