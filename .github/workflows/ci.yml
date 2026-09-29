@@ -56,6 +56,11 @@ jobs:
       # yayından SONRA çağırır. Zero-dep, DB'siz, ağsız (sahte fetch).
       - name: Yayın bildirimi yardımcısı (3d)
         run: node scripts/test_yayin_bildirim.mjs
+      # Lisans devreye alma ölçüm betikleri (runbook docs/ops/LISANS-DEVREYE-ALMA-TESTFABRIKA.md) canlı VDS'e ve
+      # testfabrika'ya bakar: varsayılan KURU, --olc ile bile yalnız OKUMA. Zero-dep, DB'siz, ağsız (tuzak altında);
+      # kalıcı negatif + pozitif sondalar aynı adımda.
+      - name: Lisans devreye alma betikleri kuru kipte ağa çıkmaz
+        run: node scripts/test_lisans_devreye_kuru.mjs
       # Sürüm notu kapısı — paketleme kapısının CI İKİZİ. 2026-09-14'e kadar bu
       # kapı YALNIZ paketleme/OTA yolunda koşuyordu: not eksikse hata, sahaya
       # çıkmaya HAZIRLANIRKEN (çoğu zaman gece) görülüyordu. Sürümler künyeden
