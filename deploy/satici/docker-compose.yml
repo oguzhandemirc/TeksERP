@@ -1,0 +1,180 @@
+name: tekserp-satici-${ORTAM:?ORTAM gerekli (hazirlik|uretim)}
+
+# =============================================================================
+# TeksERP SATICI (lisans) sunucusu — tekserp-vds · /opt/stack/apps/tekserp-satici-<ortam>/
+# =============================================================================
+# Runbook: docs/ops/SATICI-KURULUM.md (kurulum · doğrulama · geri alma). Bu dosya sunucuya ELLE
+# kopyalanır; değerler yanındaki `.env`ten (ornek.env). Bugün yalnız ORTAM=hazirlik kurulur
+# (lisans-test.etkiliyazilim.com, yalnız TEST/DEMO imzalayan hazırlık kökü).
+#
+# Üç ağ, üç ayrı kapı — hiçbiri güncelleme/patron/kiracı konteynerleriyle ORTAK değil:
+#   kenar   (internal) Traefik ↔ satıcının GENEL dinleyicisi (/v1/*, /q, /bayi/api). Traefik bu ağa
+#                      runbook adımıyla bağlanır; `web` ağına satıcı KATILMAZ.
+#   ic      (internal) satıcı ↔ kendi PG16'sı ↔ yedek işi. Port yayını YOK.
+#   tailnet (tek çıkış) portalın TEK yolu: port yalnız VDS'in Tailscale IP'sine yayımlanır; uygulama
+#                      ayrıca soket + kaynak ağı (100.64/10) kapısıyla fail-closed 404 verir.
+# Docker soketi hiçbir servise BAĞLANMAZ. Kök FS salt okunur · root olmayan kullanıcı · yetenek yok ·
+# cgroup CPU/bellek/süreç sınırı (kiracı ya da patron konteyneri satıcıyı aç bırakamasın).
+# Budama: telemetri (nonce · yoklama · portal oturumu/işlemi) + ayak izi denetimi (90 gün / 2 yıl)
+# süreç içi bakım işinde (BAKIM_ARALIGI_SN; varsayılanlar kodda);
+# yedek dosyaları `satici-yedek` döngüsünde (en yeni YEDEK_EN_AZ kopya asla silinmez).
+# =============================================================================
+
+x-sertlik: &sertlik
+  read_only: true
+  init: true
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  satici-db:
+    <<: *sertlik
+    image: ${PG_IMAGE:-postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685}
+    container_name: tekserp-satici-${ORTAM}-db
+    # Resmî imajın `postgres` kullanıcısı (alpine: 70); root'la başlayıp düşmez → yetenek gerekmez.
+    user: "70:70"
+    group_add: ["${SIR_GID:?SIR_GID gerekli}"]
+    environment:
+      POSTGRES_USER: satici
+      POSTGRES_DB: satici
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_parolasi
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=40", "-c", "timezone=UTC"]
+    secrets: [db_parolasi]
+    volumes:
+      - satici-pg:/var/lib/postgresql/data
+    tmpfs:
+      - /var/run/postgresql:uid=70,gid=70,mode=0775
+      - /tmp:mode=1777
+    networks: [ic]
+    cpus: 0.5
+    mem_limit: 256m
+    memswap_limit: 256m
+    pids_limit: 100
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "satici", "-d", "satici"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  satici:
+    <<: *sertlik
+    image: ${SATICI_IMAJ:?SATICI_IMAJ gerekli (tekserp-satici:<sha>)}
+    container_name: tekserp-satici-${ORTAM}
+    user: "10001:10001"
+    group_add: ["${SIR_GID}"]
+    depends_on:
+      satici-db: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      PORT_GENEL: "4610"
+      GENEL_BIND: ${KENAR_IP:?KENAR_IP gerekli}
+      PORT_TAILNET: "4611"
+      TAILNET_BIND: ${TAILNET_KONTEYNER_IP:?TAILNET_KONTEYNER_IP gerekli}
+      ANAHTAR_DIZINI: /anahtarlar
+      # İstemci IP'si Cloudflare başlığından (hız sınırı). Köken yalnız CF'ye açılana dek taklit edilebilir.
+      VEKIL_IP_BASLIGI: cf-connecting-ip
+      # Tailnet dinleyicisi düz HTTP (WireGuard içinde) → çerez Secure'suz; genelde her zaman Secure.
+      TAILNET_CEREZ_GUVENLI: "0"
+    secrets: [db_parolasi]
+    volumes:
+      # Anahtar birimi SALT OKUNUR: kök (parolalı) · alt/indirme (0600) · portal-totp.key — hepsi önceden hazır.
+      - ${ANAHTAR_DIZINI_HOST:?ANAHTAR_DIZINI_HOST gerekli}:/anahtarlar:ro
+    tmpfs:
+      - /tmp:mode=1777
+    networks:
+      kenar: { ipv4_address: "${KENAR_IP}" }
+      ic: {}
+      tailnet: { ipv4_address: "${TAILNET_KONTEYNER_IP}" }
+    ports:
+      # YALNIZ Tailscale arayüz IP'sine (100.x) — 0.0.0.0 ya da genel IP YASAK.
+      - "${TAILNET_IP:?TAILNET_IP gerekli (tailscale ip -4)}:${TAILNET_PORT:-4611}:4611"
+    cpus: 0.75
+    mem_limit: 384m
+    memswap_limit: 384m
+    pids_limit: 200
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://'+process.env.GENEL_BIND+':4610/saglik',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=tekserp-satici-${ORTAM}-kenar
+      - "traefik.http.routers.tekserp-satici-${ORTAM}.rule=Host(`${SATICI_HOST:?SATICI_HOST gerekli}`)"
+      - traefik.http.routers.tekserp-satici-${ORTAM}.entrypoints=websecure
+      - traefik.http.routers.tekserp-satici-${ORTAM}.tls=true
+      - traefik.http.services.tekserp-satici-${ORTAM}.loadbalancer.server.port=4610
+
+  # Göç TEK SEFERLİK ve ELLE (`--profile goc run --rm satici-goc`): geri alınamaz eşik, önce yedek.
+  satici-goc:
+    <<: *sertlik
+    image: ${SATICI_IMAJ}
+    profiles: ["goc"]
+    restart: "no"
+    user: "10001:10001"
+    group_add: ["${SIR_GID}"]
+    depends_on:
+      satici-db: { condition: service_healthy }
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+    secrets: [db_parolasi]
+    tmpfs:
+      - /tmp:mode=1777
+    networks: [ic]
+    cpus: 0.5
+    mem_limit: 384m
+    pids_limit: 100
+
+  satici-yedek:
+    <<: *sertlik
+    image: ${SATICI_YEDEK_IMAJ:?SATICI_YEDEK_IMAJ gerekli (tekserp-satici-yedek:<sha>)}
+    container_name: tekserp-satici-${ORTAM}-yedek
+    user: "10001:10001"
+    group_add: ["${SIR_GID}"]
+    depends_on:
+      satici-db: { condition: service_healthy }
+    environment:
+      YEDEK_ARALIK_SAAT: "${YEDEK_ARALIK_SAAT:-24}"
+      YEDEK_SAKLA_GUN: "${YEDEK_SAKLA_GUN:-30}"
+      YEDEK_EN_AZ: "${YEDEK_EN_AZ:-7}"
+    secrets: [db_parolasi]
+    volumes:
+      - ${YEDEK_DIZINI_HOST:?YEDEK_DIZINI_HOST gerekli}:/yedek
+      - ${YEDEK_ALICI_DIZINI_HOST:?YEDEK_ALICI_DIZINI_HOST gerekli}:/yedek-alici:ro
+      - ${ANAHTAR_DIZINI_HOST}:/anahtarlar:ro
+    tmpfs:
+      - /tmp:mode=1777
+    networks: [ic]
+    cpus: 0.25
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 50
+
+secrets:
+  # root:SIR_GID 0440 — yalnız bu projenin konteynerleri (group_add) okur.
+  db_parolasi:
+    file: ${DB_PAROLA_DOSYASI:?DB_PAROLA_DOSYASI gerekli}
+
+volumes:
+  satici-pg:
+    name: tekserp-satici-${ORTAM}-pg
+
+networks:
+  kenar:
+    name: tekserp-satici-${ORTAM}-kenar
+    internal: true
+    ipam:
+      config: [{ subnet: "${KENAR_AGI:?KENAR_AGI gerekli}" }]
+  ic:
+    name: tekserp-satici-${ORTAM}-ic
+    internal: true
+  tailnet:
+    name: tekserp-satici-${ORTAM}-tailnet
+    ipam:
+      config: [{ subnet: "${TAILNET_AGI:?TAILNET_AGI gerekli}" }]

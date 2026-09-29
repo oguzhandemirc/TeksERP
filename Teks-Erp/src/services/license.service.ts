@@ -1,6 +1,6 @@
 // Fabrika lisans motoru — API yüzeyi (`/api/license/*`) + başlatma. Motor GÖZLEM kipinde doğar:
-// hiçbir istek engellenmez, bant yok (plan §4). Satıcı adresi (`LICENSE_SERVER_URL`) yoksa dışarı
-// HİÇ istek atılmaz. Kapı (kısıtlı kip) ve modül tavanı AYRI dilim.
+// hiçbir istek engellenmez, bant yok (plan §4). Satıcı adresi kapalıysa (`resolveVendorUrl`) ya da kurulum
+// etkinleşmemişse dışarı HİÇ istek atılmaz. Kapı (kısıtlı kip) ve modül tavanı AYRI dilim.
 import { AppError } from "../utils/app-error";
 import { listBackups } from "./backup.service";
 import { bilgi, uyari } from "../lib/logger";

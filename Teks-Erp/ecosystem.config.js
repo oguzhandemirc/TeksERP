@@ -194,9 +194,11 @@ module.exports = {
         //   imzalıyorsa Node'un Windows sertifika deposuna güvenmesi için (ayar olmadan satıcıya
         //   giden HTTPS "self-signed certificate in chain" ile düşer). Proxy'siz kurulumda zararsız.
         NODE_USE_SYSTEM_CA: "1",
-        // LICENSE_SERVER_URL: satıcı lisans sunucusu kökü (ör. https://lisans.<alan>). YOKSA
-        //   lisans motoru dışarı HİÇ istek atmaz (gözlem kipi, sıfır fark). Etkinleştirmede eklenir.
-        // LICENSE_SERVER_URL: "",
+        // LICENSE_SERVER_URL: satıcı lisans sunucusu kökü. VERİLMEZSE üretim satıcısı
+        //   (https://lisans.etkiliyazilim.com — src/lib/license/vendor-url.ts);
+        //   hazırlık/testfabrika kurulumunda https://lisans-test.etkiliyazilim.com; "kapali" dışarı
+        //   çıkışı tamamen kapatır. Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz.
+        // LICENSE_SERVER_URL: "https://lisans-test.etkiliyazilim.com",
 
         // --- Kopyaya geri yükleme (Sistem → Veritabanı Geri Yükleme)
         // PGDATA_DIR: disk guard'ının ölçeceği birim. Verilmezse tablespace

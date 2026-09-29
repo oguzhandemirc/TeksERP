@@ -10,11 +10,18 @@ export interface RootKey {
 }
 
 /**
- * BOŞ doğar: gerçek kök üretilene dek hiçbir HAK geçerli olamaz (fail-closed).
+ * Bugün yalnız HAZIRLIK kökü: ÜRETİM kökü kullanıcı töreniyle ayrı bir sürümde eklenir; o güne dek
+ * ÜRETİM · DR · BAYI · BARINDIRILAN sınıfında hiçbir HAK geçerli olamaz (fail-closed).
  * Rotasyonda yeni kid bir sürümle EKLENİR, eskisi örtüşme penceresi boyunca kalır.
  * Doğrulama fonksiyonları çapayı ARGÜMAN alır; bu sabit yalnız üretim çağıranının girdisidir.
  */
-export const ROOT_PUBLIC_KEYS: readonly RootKey[] = Object.freeze([]);
+export const ROOT_PUBLIC_KEYS: readonly RootKey[] = Object.freeze([
+  Object.freeze({
+    kid: "hazirlik-2026-1",
+    x: "705hChzAL045Gp-XoG6SaUKAW8muK1SFcW0Vpwhf-mo",
+    classes: Object.freeze<LicenseClass[]>(["TEST", "DEMO"]),
+  }),
+]);
 
 /** Hazırlık kökü ÜRETİM imzalayamaz; çapa bu kümeyi aşan bir hazırlık kökünü reddeder. */
 export const STAGING_ROOT_CLASSES: readonly LicenseClass[] = Object.freeze(["TEST", "DEMO"]);

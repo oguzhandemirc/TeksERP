@@ -6,12 +6,14 @@
 
 Fabrikaların lisansını verir ve yönetir: **etkinleştirme** (tek kullanımlık kod → HAK + KİRA), **yoklama** (kira yenileme + kira zinciri kararı + indirme belirteçleri), **kapı zili** (SSE; içerik taşımaz, "şimdi yokla" der), **çevrimdışı/QR**, **taşıma** (her taşıma satıcı onayıyla), **DR devralımı** (self-servis + anında bildirim), **yaptırım** (K0–K5, zorlama, geçerlilik bitişi, planlı eylem, taksit), **portal JSON API'si** (satıcı: tailnet `/portal/api` · bayi: genel `/bayi/api`). Portal web arayüzü `satici/web`'dedir (kendi `CLAUDE.md`'si); derlenmiş çıktısını bu sunucu API ile AYNI kökenden sunar (`src/http/web-static.ts`).
 
+**VDS kurulumu** (compose · imaj · yalıtım denetimi · yedek): `deploy/satici/` + runbook `docs/ops/SATICI-KURULUM.md` — imaj Mac'te HEAD'den derlenir, VDS'te kaynak yok; hazırlık anahtarları `~/.tekserp/satici-hazirlik/` (repo dışı).
+
 ## Katmanlar
 
 | Katman | Yer | Kural |
 |---|---|---|
 | Protokol | `src/lisans-protokol/` | `Teks-Erp/src/lib/license/protocol/` klasörünün **BAYT-EŞİT aynası**. Burada DÜZENLENMEZ: değişiklik önce Teks-Erp'te, sonra kopya. Bekçi `Teks-Erp/scripts/test_lisans_protokol_aynasi.ts` |
-| Anahtar | `src/keys/` | Kök/bayi parolalı (scrypt + AES-256-GCM); parola YALNIZ imza alt sürecinin stdin'ine (argv/env ASLA), Buffer iş bitince sıfırlanır. ALT/İNDİRME 0600, kök imzalı sertifikalı. Çapa: gömülü `ROOT_PUBLIC_KEYS`; `GUVEN_CAPASI_DOSYASI` yalnız hazırlık/test |
+| Anahtar | `src/keys/` | Kök/bayi parolalı (scrypt + AES-256-GCM); parola YALNIZ imza alt sürecinin stdin'ine (argv/env ASLA), Buffer iş bitince sıfırlanır. ALT/İNDİRME 0600, kök imzalı sertifikalı. Çapa: gömülü `ROOT_PUBLIC_KEYS` (bugün hazırlık kökü `hazirlik-2026-1`, yalnız TEST/DEMO; ÜRETİM kökü törenle); `GUVEN_CAPASI_DOSYASI` yalnız test |
 | Servis | `src/services/` | İş kuralı + tx. Durum geçişi atomik claim (`updateMany WHERE {id, beklenen}` + `count===0 → 409`); `tx.*` `Promise.all`'a girmez |
 | HTTP | `src/http/` | Genel dinleyici: `/v1/*` + `/q` + `/bayi/api` (yalnız BAYI) + bayi arayüzü `/bayi`. Tailnet dinleyicisi: `/portal/*` (soket + kaynak ağı kapısı, fail-closed 404) + satıcı arayüzü `/portal` (kapının ARKASINDA). Web arayüzü `PORTAL_WEB_DIZINI`den (varsayılan `../web/dist`); dinleyici yalnız KENDİ uygulamasını sunar, `/api` altı HTML'e düşmez, derlenmemişse 404 (bekçi `test_portal_web_statik`). `/v1` gövdesi ham baytlarıyla alınır (imzalı özet) ve KATI şemadan geçer |
 | Portal | `src/portal/` + `src/http/portal-*.ts` · `dealer-routes.ts` | Rota TABLOSU veridir: her rota izin (`roles.ts`) + kimlik beyanı taşır; yazma `executePortalAction` (işlem kimliği + eylem + denetim tek boğaz). Oturum: parola scrypt + TOTP ZORUNLU tek adım, çerez httpOnly + SameSite=Strict, oturum doğduğu dinleyiciye bağlı |

@@ -2,7 +2,7 @@
 // Lisans yoklaması — saatlik (kiradaki `yoklamaAraligiDk`) + jitter; zil gelince hemen.
 // =============================================================================
 // `exchange-rate.job.ts` kalıbı: gecikmeli ilk koşum, `running` koruması, test enjeksiyonu.
-// ⚠️ SIFIR FARK: satıcı adresi yoksa ya da kurulum etkinleşmemişse HİÇBİR dış istek atılmaz.
+// ⚠️ SIFIR FARK: kurulum etkinleşmemişse ya da satıcı adresi kapalıysa HİÇBİR dış istek atılmaz.
 // Beklenen ağ hatası `reportJobFailure`e YAZILMAZ (internetsiz fabrikada her saat defteri
 // şişirirdi); yalnız programcı hatası (gövde kurulamadı vb.) iz bırakır. Kurulum kimliği
 // `whenIdentityReady` ile beklenir; parmak izi günde bir tazelenir.
@@ -13,7 +13,8 @@ import { bilgi, uyari } from "../lib/logger";
 import { pollLicenseOnce, refreshLicenseDbFacts, refreshLicenseFingerprint, type PollOutcome } from "../services/license-sync.service";
 import { evaluateLicenseTransitions, licenseHousekeeping } from "../services/license-trail.service";
 import { egressTransport, type VendorTransport } from "../services/helpers/license-wire.helper";
-import { getLicenseSnapshot, setNextPollAt } from "../lib/license/runtime";
+import { getLicenseConfig, getLicenseSnapshot, setNextPollAt } from "../lib/license/runtime";
+import { STARTUP_VENDOR } from "../lib/license/vendor-url";
 import { POLL_DEFAULT_MINUTES } from "../lib/license/protocol";
 
 const STARTUP_DELAY_MS = 60 * 1000;
@@ -117,7 +118,10 @@ export function startLicensePoll(): void {
     fingerprintTimer = setInterval(() => void refreshLicenseFingerprint().catch(() => undefined), FINGERPRINT_REFRESH_MS);
     fingerprintTimer.unref();
     schedule(withJitter(STARTUP_DELAY_MS));
-    bilgi("lisans", "yoklama zamanlayıcısı aktif (gözlem kipi; satıcı adresi yoksa dışarı istek atılmaz)");
+    const vendorUrl = getLicenseConfig().vendorUrl;
+    const vendor = vendorUrl ? `${new URL(vendorUrl).host} (${STARTUP_VENDOR.source})` : `yok (${STARTUP_VENDOR.source})`;
+    if (STARTUP_VENDOR.source === "gecersiz") uyari("lisans", "LICENSE_SERVER_URL biçimsiz (yalnız https://<host>[:port]) — satıcıya dışarı istek atılmaz");
+    bilgi("lisans", `yoklama zamanlayıcısı aktif — satıcı: ${vendor}; etkinleşmemiş kurulum dışarı istek atmaz`);
   })();
 }
 
