@@ -11,7 +11,8 @@
 //    kurar, parolayı SCRAM doğrulayıcısıyla STDIN'den verir, ölçüm geçmeden `.env`e
 //    dokunmaz, sahip süperse durur · ilk-kurulum `-BakimRolu` isteğe bağlı · kur.ps1
 //    yalnız söyler.
-// §3 KÜME (DATABASE_URL kimliği süper kullanıcıysa; değilse ⏭ ölçülemedi): geçici
+// §3 KÜME (hedef fixture değilse ❌ bağlanmadan durur; DATABASE_URL kimliği süper kullanıcıysa,
+//    değilse ⏭ ölçülemedi): geçici
 //    uygulama + bakım rolü ve `teks_bakimtest_*` DB'lerinde yoklama üç eksik ön koşulu
 //    ayrı ayrı yakalar; tam ön koşulla bakım rolü CREATE DATABASE … OWNER · teks.audit_guard
 //    yeniden kurulumu · pg_terminate_backend · RENAME · DROP … WITH (FORCE) yapar,
@@ -24,6 +25,7 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { Client } from "pg";
 import { psTara } from "./lib/ps-tarama";
+import { fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 const KOK = join(__dirname, "..", "..");
 let pass = 0;
@@ -135,6 +137,9 @@ async function testCluster(): Promise<void> {
   const { parseDatabaseUrl, toClientConfig, withDatabase, quoteIdent } = await import("../src/services/helpers/pg-conn.helper");
   const base = parseDatabaseUrl(process.env.DATABASE_URL);
   if (!base) { console.log("⏭️  §3 DATABASE_URL yok — küme katmanı ÖLÇÜLEMEDİ"); return; }
+  // Küme katmanı bu kimlikle rol + DB kurar: hedef fixture değilse (fabrika kopyası) bağlanmadan DURUR.
+  const engel = hedefDbEngeli() ?? fixtureHedefEngeli();
+  if (engel) { check("§3 hedef kapısı: küme katmanı yalnız fixture hedefinde koşar", false, engel); return; }
   const su = new Client(toClientConfig(withDatabase(base, "postgres")));
   await su.connect();
   const yetki = (await su.query<{ s: boolean }>(`SELECT rolsuper AS s FROM pg_roles WHERE rolname = current_user`)).rows[0]?.s;
