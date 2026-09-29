@@ -71,6 +71,13 @@ export interface PdfApi {
   save: (opts: PdfSaveOpts) => Promise<PdfSaveResult>;
   /** N belgeyi seçilen KLASÖRE ayrı ayrı PDF olarak yazar (her biri <name>.pdf). */
   saveBatch: (opts: PdfSaveBatchOpts) => Promise<SaveBatchResult>;
+  /** PDF meta verisine yazılacak lisans filigranı (lisans sahibi + no); null = yalnız üretici. */
+  setLicenseMeta: (meta: PdfLicenseMetaInput | null) => Promise<void>;
+}
+/** Lisans filigranı — main süreç biçimi yeniden doğrular (TKS-YYYY-NNNN, ≤200 karakter sahip). */
+export interface PdfLicenseMetaInput {
+  lisansSahibi: string;
+  lisansNo: string;
 }
 
 export interface FilesBatchItem {
