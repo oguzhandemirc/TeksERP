@@ -142,6 +142,19 @@ async function main() {
   fs.rmSync(bekliyorIz, { force: true });
 
   if (uretebilir) {
+    // ⚠ ÜRETEN Node'un V8'i GÖNDERİLECEK runtime'ınkiyle (node-surumu.json) AYNI olmalı.
+    // `.jsc` V8'e kilitli; farklı V8 ile üretilen bayt kodunu paketin runtime\node.exe'si
+    // (kayıttaki sürüm) AÇAMAZ ve yükleyici exit 78 verir — kurulumda değil BURADA yakala.
+    // 2a: yalnız -node.N soneki farkı (24.18↔24.21, aynı V8 tabanı) KABUL; 26.x RED.
+    const uretenTaban = v8TabanCoz(process.versions.v8);
+    if (uretenTaban !== v8Taban) {
+      throw new Error(
+        `ÜRETEN Node'un V8 tabanı (${uretenTaban}, node ${process.version}) kaydınkiyle (${v8Taban}, node ${nodeSurum}) AYNI DEĞİL.\n` +
+        `       .jsc bu V8 ile üretilirse gönderilecek runtime\\node.exe (${nodeSurum}) onu AÇAMAZ.\n` +
+        `       Çözüm: build-korumali'yi paketin Node ${nodeSurum}'iyle koş (CI korumali-paket.yml exact sürümü kurar;\n` +
+        `       elle: paketin indirdiği runtime node ikilisiyle ya da nvm ile ${nodeSurum}).`,
+      );
+    }
     const bytenode = (await import('bytenode')).default ?? (await import('bytenode'));
     await bytenode.compileFile({ filename: cjs, output: jsc });
     if (!fs.existsSync(jsc) || fs.statSync(jsc).size === 0) throw new Error('bytenode .jsc üretemedi');

@@ -228,10 +228,20 @@ KORUMALI paket .jsc'yi HEDEF platformda uretir: '$Hedef' bu hostta ($($PSVersion
 "@
   }
   if (Test-Path "$proj\dist") { Remove-Item "$proj\dist" -Recurse -Force }  # olu cikti birikmesin
+  # ⚠ .jsc GONDERILECEK runtime node ikilisiyle URETILIR (2a: V8 kilidi). Sistemin
+  #   Node'u baska surum olabilir (thinkpad-1 26.4) -> onunla uretilen .jsc'yi
+  #   paketin runtime\node.exe'si (24.x) ACAMAZ. O yuzden ONCE runtime'i indir,
+  #   sonra build-korumali'yi ONUNLA kos (build-korumali'nin V8 kapisi bunu zorlar).
+  node (Join-Path $repo "scripts\koruma-runtime-indir.mjs") $Hedef $stage
+  if ($LASTEXITCODE -ne 0) { Fail "runtime node ikilisi indirilemedi / SHA256 dogrulanamadi - paket uretilmedi." }
+  $rtAlt = if ($Hedef -eq "win-x64") { "runtime\node.exe" } else { "runtime\bin\node" }
+  $runtimeNode = Join-Path $stage $rtAlt
+  if (-not (Test-Path $runtimeNode)) { Fail "runtime ikilisi sahnede yok: $rtAlt" }
+  Write-Host "  runtime     : $rtAlt (paketin kendi Node'u - .jsc BUNUNLA uretilir + acilir)"
   # build-korumali: dist\server.js (KUCUK YUKLEYICI) + dist\server.jsc (bayt kodu) +
   # dist\server-kunye.json (V8/platform/mimari kapisi). Kaynak haritasi REPO DISI arsive.
-  node (Join-Path $proj "scripts\build-korumali.mjs") --hedef=$Hedef --cikti="$proj\dist"
-  if ($LASTEXITCODE -ne 0) { Fail "KORUMALI DERLEME BASARISIZ - paket uretilmedi." }
+  & $runtimeNode (Join-Path $proj "scripts\build-korumali.mjs") --hedef=$Hedef --cikti="$proj\dist"
+  if ($LASTEXITCODE -ne 0) { Fail "KORUMALI DERLEME BASARISIZ - paket uretilmedi (runtime Node ile)." }
   if (-not (Test-Path "$proj\dist\server.js"))  { Fail "dist\server.js (yukleyici) yok - build-korumali bozuk." }
   if (-not (Test-Path "$proj\dist\server.jsc")) { Fail "dist\server.jsc (bayt kodu) yok - host hedefe uymadi." }
   if (-not (Test-Path "$proj\dist\server-kunye.json")) { Fail "dist\server-kunye.json yok - yukleyici kapisi kurulmamis." }
@@ -332,14 +342,12 @@ Copy-Item "$proj\prisma\migrations"    "$stage\prisma\migrations" -Recurse
 $migSayi = (Get-ChildItem "$stage\prisma\migrations" -Directory).Count
 Write-Host "  prisma      : schema.prisma + $migSayi migration  (seed*.ts DAHIL DEGIL$(if ($Korumali) { '; YORUMSUZ' }))"
 
-# Korumali paket kendi Node ikilisini TASIR (runtime\node.exe) - .jsc V8 kilidi.
-# Tek indirici (koruma-runtime-indir.mjs): node-surumu.json'dan indirir + SHA256 dogrular.
+# Korumali paketin runtime\node.exe'si [2/6]'da (build-korumali'den ONCE) $stage'e
+# indirildi ve .jsc onunla uretildi - burada yalniz sahnede oldugunu dogrula.
 if ($Korumali) {
-  node (Join-Path $repo "scripts\koruma-runtime-indir.mjs") $Hedef $stage
-  if ($LASTEXITCODE -ne 0) { Fail "runtime node ikilisi indirilemedi / SHA256 dogrulanamadi - paket uretilmedi." }
   $rtAlt = if ($Hedef -eq "win-x64") { "runtime\node.exe" } else { "runtime\bin\node" }
-  if (-not (Test-Path (Join-Path $stage $rtAlt))) { Fail "runtime ikilisi sahnede yok: $rtAlt" }
-  Write-Host "  runtime     : $rtAlt (paketin kendi Node'u - .jsc bununla acilir)"
+  if (-not (Test-Path (Join-Path $stage $rtAlt))) { Fail "runtime ikilisi sahnede yok: $rtAlt (build adiminda inmeliydi)" }
+  Write-Host "  runtime     : $rtAlt (paketin kendi Node'u - pakette)"
 }
 
 # cwd'den okunan varliklar
