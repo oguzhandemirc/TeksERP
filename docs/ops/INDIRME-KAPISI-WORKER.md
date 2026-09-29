@@ -18,6 +18,7 @@
 1. **İNDİRME anahtarı:** kök imzalı `INDIRME` kullanımlı sertifika (kid `ind-…`); Worker'a yalnız açık yarısı `{kid, x}` girer (özel yarı satıcıda, `docs/ops/SATICI-KURULUM.md`). `x` 43 karakter base64url'dir.
 2. **İstemciler belirteç gönderiyor:** panel (3b) ve tablet (3c) belirteç kodu sahada; 3c' yayın betikleri Worker'dan ÖNCE iner. Belirteç kodunu taşıyan İLK sürüm eski anonim yoldan iner — geçiş listesi bu yüzden vardır.
 3. **Geçiş listesi hazır:** her kanalın BUGÜNKÜ sürüm dosyaları — `latest.yml`, güncel exe + `.blockmap`, OTA `manifest`(ler), güncel OTA damga dizini (önek), `apk/surum.json`, güncel apk. Adları yayın klasöründen okuyarak yaz, elle tahmin etme.
+4. **Yayıncı belirteci üretildi (dilim 3bc):** yayın betiklerinin kenar doğrulaması (`?onbellek-atla=`/`cb=` sorgulu `HEAD`/`GET`) `~/.tekserp/yayin-belirteci`ndeki belirteci `X-TKL-Indirme` başlığıyla gönderir. 3c' bu değeri yalnız OPAK biçimle denetler (`[A-Za-z0-9._~+/=-]{16,8192}`); Worker ise satıcının İNDİRME anahtarıyla imzalı Ed25519 JWS (`typ: tekserp-indirme`, yayın kanalının öneki) ister. Yayıncı belirteci üretimi inmeden ve belirteç yayın makinesine yazılmadan rota BAĞLANMAZ — aksi hâlde dosyalar SSH ile yüklenir ama kenar doğrulaması 403 `JWS_BICIM` ile durur. Worker belirteç dışı sorguyu origin'e aynen iletir (`t` hariç), önbellek anahtarı belirteçsiz URL'dir; önbellek atlatması bu yüzden kapı arkasında da çalışır (bekçi §4o–§4q).
 
 ## 2. Ayar — `TKL_INDIRME_AYAR`
 

@@ -18,6 +18,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { Pool } from "pg";
 import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
 import { LICENSE_FILES } from "../src/lib/license/store";
@@ -111,6 +112,39 @@ function eskiKoklerdekiLisansKimlikleri(): string[] {
     }
   }
   return out;
+}
+
+type IndirmeAnahtari = { kid: string; x: string };
+/** 3a Worker modülünün (`deploy/guncelleme-sunucusu/worker/indirme-kapisi.js`, düz JS) L15'te kullanılan yüzü. */
+interface WorkerKapisi {
+  VARSAYILAN_AYAR: Record<string, unknown>;
+  belirteciDogrula(b: string, o: { anahtarlar: IndirmeAnahtari[]; simdiMs: number }): Promise<{ ok: true; belge: { yolOneki: string; exp: string } } | { ok: false; kod: string }>;
+  yolIzinli(belge: { yolOneki: string }, yol: string): boolean;
+  kapiOlustur(o: { ayar: unknown; fetchImpl: (r: Request) => Promise<Response>; simdi: () => number }): (r: Request) => Promise<Response>;
+}
+
+/** L15 fetch kolu: kapının kendisi, sahte origin'le — kabulde origin'e belirteç gitmez, retlerde origin'e hiç gidilmez. */
+async function l15FetchIsleyicisi(a: Adim, worker: WorkerKapisi, belirtec: string, anahtarlar: IndirmeAnahtari[], simdiMs: number, exp: number): Promise<void> {
+  const origin: Request[] = [];
+  const fetchImpl = async (r: Request): Promise<Response> => {
+    origin.push(r);
+    return new Response("ok", { status: 200 });
+  };
+  const git = (url: string, baslik: Record<string, string> = {}, simdi = simdiMs) =>
+    worker.kapiOlustur({ ayar: { ...worker.VARSAYILAN_AYAR, anahtarlar }, fetchImpl, simdi: () => simdi })(new Request(url, { headers: baslik }));
+  const kod = (y: Response) => `${y.status} ${y.headers.get("X-TKL-Kod") ?? ""}`.trim();
+  const kok = "https://guncelleme.example.test";
+  const exe = `${kok}/${KANAL}/electron/TeksERP-Setup.exe`;
+  const y1 = await git(`${exe}?onbellek-atla=1`, { "X-TKL-Indirme": belirtec });
+  const o1 = origin[0];
+  a.kontrol("fetch: başlıklı istek 200; origin'e belirteç gitmez, sorgu aynen gider", y1.status === 200 && origin.length === 1 && !o1?.headers.has("x-tkl-indirme") && o1?.url === `${exe}?onbellek-atla=1`, `${kod(y1)} ${o1?.url ?? "-"}`);
+  const y2 = await git(exe);
+  a.kontrol("fetch: belirteçsiz → 403 INDIRME_BELIRTEC_YOK", kod(y2) === "403 INDIRME_BELIRTEC_YOK", kod(y2));
+  const y3 = await git(`${kok}/${KANAL}/mobil/x.apk?t=${belirtec}`);
+  a.kontrol("fetch: yanlış önek (?t=) → 403 INDIRME_YOL", kod(y3) === "403 INDIRME_YOL", kod(y3));
+  const y4 = await git(exe, { "X-TKL-Indirme": belirtec }, exp + 11 * 60 * 1000);
+  a.kontrol("fetch: süresi dolmuş → 403 BELGE_SURESI_DOLDU", kod(y4) === "403 BELGE_SURESI_DOLDU", kod(y4));
+  a.kontrol("fetch: retlerde origin HİÇ çağrılmadı", origin.length === 1, String(origin.length));
 }
 
 async function adim(no: string, baslik: string, fn: (a: Adim) => Promise<void>): Promise<void> {
@@ -757,27 +791,33 @@ async function main(): Promise<number> {
 
     // ============================================================ L15
     await adim("L15", "indirme belirteci: Worker doğrulayıcısı geçerli / süresi dolmuş / yanlış önek / imzasız ayırır", async (a) => {
-      a.kismi("CF Worker kodu Faz 3a'da; ölçüm Worker'ın kâhini `protocol/indirme.ts` ile, belirteç gerçek backend'den");
+      // Ölçüm 3a Worker'ının KENDİ modülüyle (Node'da; workerd canlı ölçümü runbook §4'te), belirteç gerçek backend'den.
+      const worker = (await import(pathToFileURL(path.join(__dirname, "..", "..", "deploy/guncelleme-sunucusu/worker/indirme-kapisi.js")).href)) as WorkerKapisi;
       const t = await C.istemci.istek("GET", "/api/license/indirme-belirteci?urun=electron");
       a.kontrol("GET /api/license/indirme-belirteci?urun=electron → 200", t.status === 200 && t.veri.yolOneki === `/${KANAL}/electron/`, ozet(t));
       const belirtec = String(t.veri.belirtec);
-      const anahtar = [{ kid: hz.indirme.kid, x: hz.indirme.x }];
-      const ok = verifyDownloadToken(belirtec, { keys: anahtar, nowMs: saticiSimdi() });
-      a.kontrol("geçerli belirteç doğrulanır", ok.ok, ok.ok ? "" : ok.code);
-      a.kontrol("yol: kanal önekinin altı kabul", ok.ok && isDownloadPathAllowed(ok.value, `/${KANAL}/electron/TeksERP-Setup.exe`));
-      a.kontrol("yanlış önek (başka kanal / mobil) RED", ok.ok && !isDownloadPathAllowed(ok.value, `/baska-kanal/electron/x.exe`) && !isDownloadPathAllowed(ok.value, `/${KANAL}/mobil/x.apk`));
-      a.kontrol("yol kaçışı (..) RED", ok.ok && !isDownloadPathAllowed(ok.value, `/${KANAL}/electron/../mobil/x.apk`));
-      const exp = ok.ok ? Date.parse(ok.value.exp) : 0;
-      const dolmus = verifyDownloadToken(belirtec, { keys: anahtar, nowMs: exp + 11 * 60 * 1000 });
-      a.kontrol("süresi dolmuş → BELGE_SURESI_DOLDU", !dolmus.ok && dolmus.code === "BELGE_SURESI_DOLDU", dolmus.ok ? "kabul!" : dolmus.code);
+      const anahtarlar = [{ kid: hz.indirme.kid, x: hz.indirme.x }];
+      const simdiMs = saticiSimdi();
+      const ok = await worker.belirteciDogrula(belirtec, { anahtarlar, simdiMs });
+      a.kontrol("Worker: geçerli belirteç doğrulanır", ok.ok, ok.ok ? "" : ok.kod);
+      const kahin = verifyDownloadToken(belirtec, { keys: [...anahtarlar], nowMs: simdiMs });
+      a.kontrol("Worker ↔ kâhin aynı belge", ok.ok && kahin.ok && ok.belge.yolOneki === kahin.value.yolOneki && ok.belge.exp === kahin.value.exp);
+      const exe = `/${KANAL}/electron/TeksERP-Setup.exe`;
+      a.kontrol("yol: kanal önekinin altı kabul", ok.ok && worker.yolIzinli(ok.belge, exe));
+      a.kontrol("yanlış önek (başka kanal / mobil) RED", ok.ok && !worker.yolIzinli(ok.belge, "/baska-kanal/electron/x.exe") && !worker.yolIzinli(ok.belge, `/${KANAL}/mobil/x.apk`));
+      a.kontrol("yol kaçışı (..) RED", ok.ok && !worker.yolIzinli(ok.belge, `/${KANAL}/electron/../mobil/x.apk`));
+      const exp = ok.ok ? Date.parse(ok.belge.exp) : 0;
+      const dolmus = await worker.belirteciDogrula(belirtec, { anahtarlar, simdiMs: exp + 11 * 60 * 1000 });
+      a.kontrol("süresi dolmuş → BELGE_SURESI_DOLDU", !dolmus.ok && dolmus.kod === "BELGE_SURESI_DOLDU", dolmus.ok ? "kabul!" : dolmus.kod);
       const [h, p] = belirtec.split(".");
       const imzasiz = `${b64uEncode(JSON.stringify({ alg: "none", typ: "tekserp-indirme", kid: hz.indirme.kid }))}.${p}.`;
-      const r1 = verifyDownloadToken(imzasiz, { keys: anahtar, nowMs: saticiSimdi() });
-      a.kontrol("imzasız (alg none) RED", !r1.ok, r1.ok ? "kabul!" : r1.code);
+      const r1 = await worker.belirteciDogrula(imzasiz, { anahtarlar, simdiMs });
+      a.kontrol("imzasız (alg none) → JWS_ALG", !r1.ok && r1.kod === "JWS_ALG", r1.ok ? "kabul!" : r1.kod);
       const yuk = JSON.parse(Buffer.from(p!, "base64url").toString("utf8")) as Record<string, unknown>;
       const kurcali = `${h}.${b64uEncode(JSON.stringify({ ...yuk, yolOneki: "/baska-kanal/electron/", kanal: "baska-kanal" }))}.${belirtec.split(".")[2]}`;
-      const r2 = verifyDownloadToken(kurcali, { keys: anahtar, nowMs: saticiSimdi() });
-      a.kontrol("kurcalanmış yük → JWS_IMZA", !r2.ok && r2.code === "JWS_IMZA", r2.ok ? "kabul!" : r2.code);
+      const r2 = await worker.belirteciDogrula(kurcali, { anahtarlar, simdiMs });
+      a.kontrol("kurcalanmış yük → JWS_IMZA", !r2.ok && r2.kod === "JWS_IMZA", r2.ok ? "kabul!" : r2.kod);
+      await l15FetchIsleyicisi(a, worker, belirtec, anahtarlar, simdiMs, exp);
     });
 
     // ============================================================ L16

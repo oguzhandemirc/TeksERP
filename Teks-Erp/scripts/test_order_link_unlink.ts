@@ -184,11 +184,13 @@ function astKontrolleri(): void {
     delegate: "workOrderToOrderLine", model: "WorkOrderToOrderLine", sabit: "ACTIVE_ORDER_LINK", damga: "unlinkedAt",
     tablo: "work_order_to_order_lines", helper: join("src", "services", "helpers", "order-link.helper.ts"),
   }]).get("workOrderToOrderLine")!;
-  // Zeminler BU tablo için ölçüldü (2026-09-14): çağrı 15 · ilişki 24 · ham SQL 0 (=== 0).
+  // Zeminler BU tablo için ölçüldü (2026-09-14; ham SQL 2026-09-29): çağrı 15 · ilişki 24 · ham SQL 2 (bulut kök çözücüsü).
   check("§13a ⭐ `src/`de `workOrderToOrderLine.delete*` KALMADI", r.silme.length === 0, r.silme.join(", "));
   check("§13b her okuma/güncelleme çağrısı ACTIVE_ORDER_LINK taşır ya da gerekçeli istisnadır", r.cagriSayisi >= 12 && r.cagriIhlal.length === 0, `çağrı=${r.cagriSayisi}${r.cagriIhlal.length ? " İHLAL: " + r.cagriIhlal.join(", ") : ""}`);
   check("§13c her ilişki süzgeci / iç içe okuması aktif yüklemi taşır (every YOK)", r.iliskiSayisi >= 20 && r.iliskiIhlal.length === 0, `ilişki=${r.iliskiSayisi}${r.iliskiIhlal.length ? " İHLAL: " + r.iliskiIhlal.join(", ") : ""}`);
-  check("§13d ham SQL başvurusu YOK (=== 0)", r.sqlSayisi === 0 && r.sqlIhlal.length === 0, `sql=${r.sqlSayisi}`);
+  // Ham SQL yalnız bulut kök çözücüsünde (catalog-facts lookup); her biri `"unlinkedAt" IS NULL` taşır.
+  check("§13d her ham SQL başvurusu aktif yüklemi taşır (taban 2: tarayıcı SQL'i görüyor)", r.sqlSayisi >= 2 && r.sqlIhlal.length === 0,
+    `sql=${r.sqlSayisi}${r.sqlIhlal.length ? " İHLAL: " + r.sqlIhlal.join(", ") : ""}`);
   const istisnaDosyalari = new Set(r.istisnalar.map((y) => y.split(":")[0]));
   const beklenmeyen = [...istisnaDosyalari].filter((d) => !BEKLENEN_ISTISNA_DOSYALARI.has(d));
   const olu = [...BEKLENEN_ISTISNA_DOSYALARI].filter((d) => !istisnaDosyalari.has(d));

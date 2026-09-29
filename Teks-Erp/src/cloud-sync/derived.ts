@@ -8,6 +8,7 @@ import { daysPastDeadline } from "../services/helpers/order-deadline.helper";
 import { grossRollCount, loadShipmentGrossTotals, LIVE_RETURN_WHERE } from "../services/helpers/shipment-gross-totals.helper";
 import { loadSackContentTotals } from "../services/helpers/sack-content-totals.helper";
 import { currentWorkOrderStep } from "../services/helpers/work-order-current-step.helper";
+import { ACTIVE_ORDER_LINK } from "../services/helpers/order-link.helper";
 import { invoiceOpenAmount, unallocatedAmount } from "../services/helpers/finance.helper";
 import {
   bucketOfDaysOverdue,
@@ -112,7 +113,8 @@ async function workOrderDerived(rows: readonly RawRow[]): Promise<DerivedValues>
     select: {
       id: true,
       steps: { select: { id: true, stepSequence: true, status: true, stationId: true, station: { select: { name: true } } }, orderBy: { stepSequence: "asc" } },
-      orderLinks: WO_LIST_CUSTOMER_LINKS,
+      // Seçim listeyle aynı; aktif bağ yüklemi tek kaynaktan çağrı yerinde (koparılmış bağ projeksiyona girmez).
+      orderLinks: { ...WO_LIST_CUSTOMER_LINKS, where: ACTIVE_ORDER_LINK },
     },
   });
   const withMeters = await new WorkOrderService().withProductionMeters(wos);

@@ -11,6 +11,7 @@
 //   §4 ⭐ ayrılma körlüğü (§4.3a): top çuval/sevkiyat/adım değiştirince ESKİ ebeveyn KIRLI;
 //      FK dışı güncelleme işaret YAZMAZ (sıcak yolda maliyet yok)
 //   §5 filigransız küme (§4.3b): `shipment_orders` ekleme/silme sevkiyatı KIRLI yapar
+//      §5c ölçüm aracının kendisi: pencere µs hassas (DB saati metin taşınır; JS Date ms'ye keser)
 //   §6 bekleyen adım silinince iş emri KIRLI
 //   §7 ⭐ tüketim (P15 · P18): silinen satır bir sonraki turda `sil: SILINDI` ile buluta gider,
 //      kaskadla silinen kalem de; bulutta satır düşer
@@ -21,6 +22,7 @@
 //   S1 migration'dan `invoices_sync_deleted` satırı silindi               → §1 ❌
 //   S2 `sync_mark_roll_old_parents` sackId dalı kaldırıldı (DB'de yeniden kuruldu) → §4 ❌
 //   S3 `scanMarks` SILINDI işaretlerini yok saydı                           → §7 ❌
+//   S4 `isaretler` penceresi ms'ye kesildi (eski JS Date davranışı)          → §5c ❌
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
@@ -70,9 +72,13 @@ async function temizleFikstur(): Promise<void> {
   await prisma.$executeRawUnsafe(`DELETE FROM "customers" WHERE "code" LIKE $1`, `${TAG}%`);
 }
 
-async function isaretler(c: PoolClient, sonra: Date): Promise<Array<{ tableName: string; rowId: string; kind: string }>> {
+/** DB saati µs hassas METİN: JS `Date` ms'ye keser ve aynı milisaniyedeki ÖNCEKİ işaret pencereye sızar. */
+async function dbSaati(c: PoolClient, ifade = "clock_timestamp()"): Promise<string> {
+  return (await c.query<{ t: string }>(`SELECT (${ifade})::text AS t`)).rows[0]!.t;
+}
+async function isaretler(c: PoolClient, sonra: string): Promise<Array<{ tableName: string; rowId: string; kind: string }>> {
   const r = await c.query<{ tableName: string; rowId: string; kind: string }>(
-    `SELECT "tableName", "rowId"::text AS "rowId", "kind"::text AS kind FROM "sync_marks" WHERE "createdAt" >= $1 ORDER BY "createdAt", "id"`,
+    `SELECT "tableName", "rowId"::text AS "rowId", "kind"::text AS kind FROM "sync_marks" WHERE "createdAt" >= $1::timestamptz ORDER BY "createdAt", "id"`,
     [sonra],
   );
   return r.rows;
@@ -104,7 +110,7 @@ async function txBolumleri(): Promise<void> {
   const c = await pool.connect();
   try {
     await c.query("BEGIN");
-    const t0 = (await c.query<{ t: Date }>("SELECT now() AS t")).rows[0]!.t;
+    const t0 = await dbSaati(c, "now()");
     // Fikstür tx içinde İŞ ANAHTARIYLA kurulur ve tx ile birlikte geri alınır.
     const musteri = randomUUID();
     const urun = randomUUID();
@@ -144,7 +150,7 @@ async function txBolumleri(): Promise<void> {
       `INSERT INTO "rolls" ("id", "itemId", "initialQty", "currentQty", "sackId", "shipmentId", "currentStepId", "producedInStepId", "updatedAt") VALUES ($1, $2, 50, 50, $3, $4, $5, $5, now())`,
       [top, urun, cA, s1, st1],
     );
-    const t4 = (await c.query<{ t: Date }>("SELECT clock_timestamp() AS t")).rows[0]!.t;
+    const t4 = await dbSaati(c);
     await c.query(`UPDATE "rolls" SET "currentQty" = 49 WHERE "id" = $1`, [top]);
     check("§4a ⭐ FK dışı güncelleme işaret YAZMAZ (tetikleyici yalnız ebeveyn değişince)", (await isaretler(c, t4)).length === 0);
     await c.query(`UPDATE "rolls" SET "sackId" = $2 WHERE "id" = $1`, [top, cB]);
@@ -160,16 +166,22 @@ async function txBolumleri(): Promise<void> {
     console.log("\n§5 — filigransız küme (shipment_orders)");
     const siparis2 = randomUUID();
     await c.query(`INSERT INTO "orders" ("id", "orderNumber", "customerId", "updatedAt") VALUES ($1, $2, $3, now())`, [siparis2, `${TAG}S2`, musteri]);
-    const t5 = (await c.query<{ t: Date }>("SELECT clock_timestamp() AS t")).rows[0]!.t;
+    const t5 = await dbSaati(c);
     await c.query(`INSERT INTO "shipment_orders" ("shipmentId", "orderId") VALUES ($1, $2)`, [s1, siparis2]);
     const e5 = (await isaretler(c, t5)).filter((m) => m.tableName === "shipments" && m.rowId === s1).length;
     await c.query(`DELETE FROM "shipment_orders" WHERE "shipmentId" = $1 AND "orderId" = $2`, [s1, siparis2]);
     const d5 = (await isaretler(c, t5)).filter((m) => m.tableName === "shipments" && m.rowId === s1).length;
     check("§5a ⭐ küme satırı eklenince sevkiyat KIRLI", e5 === 1, String(e5));
     check("§5b küme satırı silinince sevkiyat yine KIRLI (deleteMany + yeniden yazım)", d5 === 2, String(d5));
+    // Ölçüm aracının kendisi: pencere sınırı, 1 µs önceki işareti (aynı ms) dışarıda bırakmalı.
+    const tp = await dbSaati(c);
+    const prob = randomUUID();
+    await c.query(`INSERT INTO "sync_marks" ("tableName", "rowId", "kind", "createdAt") VALUES ('shipments', $1, 'DIRTY', $2::timestamptz)`, [prob, tp]);
+    const sinir = await dbSaati(c, `'${tp}'::timestamptz + interval '1 microsecond'`);
+    check("§5c pencere µs hassas: sınırdan 1 µs önceki işaret sızmaz", !(await isaretler(c, sinir)).some((m) => m.rowId === prob), `${tp} → ${sinir}`);
 
     console.log("\n§6 — bekleyen adım silme");
-    const t6 = (await c.query<{ t: Date }>("SELECT clock_timestamp() AS t")).rows[0]!.t;
+    const t6 = await dbSaati(c);
     await c.query(`UPDATE "rolls" SET "currentStepId" = NULL, "producedInStepId" = NULL WHERE "id" = $1`, [top]);
     await c.query(`DELETE FROM "work_order_steps" WHERE "id" = $1`, [st2]);
     check("§6a adım silindi → iş emri KIRLI (adım kök değil)", var_(await isaretler(c, t6), "work_orders", is1, "DIRTY"));

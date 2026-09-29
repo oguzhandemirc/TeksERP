@@ -12,7 +12,8 @@
 //      typ · bilinmeyen kid (+ çok anahtar) — her ret yanında aynı yolun kabulü
 //   §2 kapsam: kapsam dışı yol aynen geçer · kodlanmış/çift bölü/büyük harf atlatma kapılı
 //   §3 geçiş listesi: içi/dışı · önek · süresi dolmuş · bitişsiz/90 günden uzak = ayar geçersiz
-//   §4 belirteç kaynakları: `Expo-Extra-Params` (RFC 8941) · `?t=` · origin'e belirteç GİTMEZ
+//   §4 belirteç kaynakları: `Expo-Extra-Params` (RFC 8941) · `?t=` · origin'e belirteç GİTMEZ;
+//      belirteç dışı sorgu (yayın betiklerinin `onbellek-atla`/`cb`) origin'e aynen gider
 //   §5 OTA: varlık belirteci kapalıyken varlık anonim, kaçışlı varlık yolu kapılı · açıkken
 //      manifestin imza DIŞI `extensions.assetRequestHeaders`ı yazılır, imza (gerçek üretici
 //      `mobil/scripts/lib/manifest.mjs`) hâlâ doğrulanır
@@ -329,6 +330,13 @@ async function bolum4(w: WorkerModulu): Promise<void> {
   await ret(w, "§4m başlık önceliklidir: bozuk başlık + geçerli ?t= RED", a, istek(`${exe}?t=${g}`, bsl("bozuk")), "JWS_BICIM");
   const r = await kabul(w, "§4n Range başlığı korunur", a, istek(exe, { ...bsl(g), Range: "bytes=0-99" }));
   check("§4n' origin Range'i gördü, belirteç başlığını görmedi", r.cagrilar[0]?.basliklar.get("range") === "bytes=0-99" && !r.cagrilar[0]?.basliklar.has("x-tkl-indirme"));
+  // 3c' kenar doğrulaması: belirteç başlıkta, önbellek atlatması sorguda (`onbellek-atla` · `cb`).
+  const t1 = await kabul(w, "§4o yayın doğrulaması: HEAD + başlık + ?onbellek-atla=", a, istek(`${exe}?onbellek-atla=4242`, bsl(g), "HEAD"));
+  check("§4o' origin sorguyu aynen gördü (atlatma işler), belirteç başlığı yok", t1.cagrilar[0]?.url === `${KOK}${exe}?onbellek-atla=4242` && !t1.cagrilar[0]?.basliklar.has("x-tkl-indirme"), t1.cagrilar[0]?.url);
+  const t2 = await kabul(w, "§4p temiz URL + başlık", a, istek(exe, bsl(g)));
+  check("§4p' önbellek anahtarı belirteçsiz temiz URL (sorgu eklenmedi)", t2.cagrilar[0]?.url === `${KOK}${exe}`, t2.cagrilar[0]?.url);
+  const t3 = await kabul(w, "§4q ?cb= + ?t= birlikte", a, istek(`${exe}?cb=7&t=${g}`));
+  check("§4q' origin'e yalnız cb gitti (t düştü)", t3.cagrilar[0]?.url === `${KOK}${exe}?cb=7`, t3.cagrilar[0]?.url);
 }
 
 interface UreticiModulu {
