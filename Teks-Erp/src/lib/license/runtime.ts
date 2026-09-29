@@ -23,7 +23,8 @@ import {
   __resetIntegrityStateForTests,
   buildDateMsForState,
   integrityAnchorMs,
-  integrityRecordValue,
+  integrityRecordPatch,
+  integrityStampMs,
   integrityStatusForState,
 } from "./integrity-state";
 import {
@@ -144,7 +145,7 @@ export function persistAccumulation(nowMs: number = Date.now()): boolean {
     clockConsistent: snap.state.saat.finding === null,
     ledgerHighWaterMs: facts.ledgerHighWaterMs,
     skewSeconds: skewSecondsForRecord(),
-    integrityFirst: integrityRecordValue(record),
+    integrity: integrityRecordPatch(record),
     nowMs,
   });
   return true;
@@ -161,7 +162,7 @@ export function startAccumulationForLease(g: {
     ...g,
     ledgerHighWaterMs: facts.ledgerHighWaterMs,
     skewSeconds: skewSecondsForRecord(),
-    integrityFirst: integrityRecordValue(recordFor(currentAccumulation(), g.licenseId)),
+    integrity: integrityRecordPatch(recordFor(currentAccumulation(), g.licenseId)),
     nowMs: g.nowMs ?? Date.now(),
   });
 }
@@ -205,6 +206,8 @@ export interface LicenseSnapshot {
   readonly lastKnownLease: { readonly kiraId: string; readonly verilisMs: number } | null;
   readonly fingerprintDecision: FingerprintDecision | null;
   readonly durumKaydi: { readonly gecerli: boolean; readonly sira: number | null };
+  /** Bu paketin ilk bütünlük uyuşmazlığı (durum kaydı + süreç; yalnız yeni paket sıfırlar). */
+  readonly integrityFirstMismatchMs: number | null;
   readonly computedAtMs: number;
 }
 
@@ -319,6 +322,7 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
     lastKnownLease: lastKnownLeaseOf(lease, record),
     fingerprintDecision: decision,
     durumKaydi: { gecerli: record !== null, sira: record?.sira ?? null },
+    integrityFirstMismatchMs: integrityStampMs(record),
     computedAtMs: nowMs,
   };
   cached = { snap, version };

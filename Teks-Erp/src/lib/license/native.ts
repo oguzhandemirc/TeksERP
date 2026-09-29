@@ -11,6 +11,7 @@ import { z } from "zod";
 import { b64uEncode, decodeDocument, publicKeyFromX, verifyJws } from "./protocol";
 import { INTEGRITY_TYP, IntegrityManifestSchema, PACKAGE_PUBLIC_KEYS, type PackageKey } from "./integrity";
 import { INTEGRITY_FILE } from "./integrity-scope";
+import { INTEGRITY_LIST_FILE, parseIntegrityList } from "./integrity-list";
 import { tsLicenseCore, type LicenseCore } from "./license-core";
 import { isNativeBinding, nativeCore, unavailableCore, type NativeBinding } from "./native-adapter";
 
@@ -19,7 +20,7 @@ declare const __TEKSERP_NATIVE_REQUIRED__: boolean | undefined;
 export const NATIVE_REQUIRED: boolean = typeof __TEKSERP_NATIVE_REQUIRED__ !== "undefined" && __TEKSERP_NATIVE_REQUIRED__ === true;
 
 /** Native `api::ABI` ile eşit olmalı: istek/yanıt biçimi kırılınca ikisi birlikte artar. */
-export const NATIVE_ABI = 1;
+export const NATIVE_ABI = 2;
 /** Açık dosya yolu (geliştirme/test); ZORUNLU kipte OKUNMAZ — yamalı çekirdek enjekte edilemesin. */
 export const NATIVE_PATH_ENV = "TEKSERP_LISANS_CEKIRDEK";
 
@@ -161,8 +162,17 @@ export function packagedNativeRejection(
   if (!j.ok) return { neden: "LISTE_GECERSIZ", ayrinti: j.code };
   const m = decodeDocument(IntegrityManifestSchema, j.value.payload);
   if (!m.ok) return { neden: "LISTE_GECERSIZ", ayrinti: m.code };
+  let listBytes: Buffer;
+  try {
+    listBytes = readFileSync(path.join(root, INTEGRITY_LIST_FILE));
+  } catch {
+    return { neden: "LISTE_YOK", ayrinti: `${INTEGRITY_LIST_FILE} okunamadı` };
+  }
+  const listDigest = b64uEncode(createHash("sha256").update(listBytes).digest());
+  const entries = listBytes.length === m.value.liste.boyut && listDigest === m.value.liste.sha256 ? parseIntegrityList(listBytes, m.value.liste.dosyaSayisi) : null;
+  if (!entries) return { neden: "LISTE_GECERSIZ", ayrinti: `${INTEGRITY_LIST_FILE} imzalı özetle uyuşmuyor ya da biçimsiz` };
   const rel = `native/${path.basename(file)}`;
-  const entry = m.value.dosyalar.find((f) => f.yol === rel);
+  const entry = entries.find((f) => f.yol === rel);
   if (!entry) return { neden: "LISTE_UYUSMAZ", ayrinti: `${rel} imzalı listede yok` };
   let bytes: Buffer;
   try {

@@ -35,6 +35,7 @@ import path from "node:path";
 import { z } from "zod";
 import { PROTOCOL_ERROR_CODES, ROOT_PUBLIC_KEYS, TYP } from "../src/lib/license/protocol";
 import { CORE_ERROR_CODES, CORE_UNAVAILABLE_CODE, tsLicenseCore, type LicenseCore } from "../src/lib/license/license-core";
+import { INTEGRITY_LIST_FILE, INTEGRITY_MAX_FILES, INTEGRITY_MAX_LIST_BYTES } from "../src/lib/license/integrity-list";
 import {
   NATIVE_ABI,
   NATIVE_PATH_ENV,
@@ -223,13 +224,14 @@ function bolum0(): void {
   const hkdf = /pub const HKDF_INFO_PREFIX: &str = "([^"]+)";/.exec(rustKaynak("module_key.rs"));
   check("§0g modül anahtarı HKDF öneki aynı", hkdf?.[1] === MODULE_KEY_HKDF_PREFIX, hkdf?.[1] ?? "yok");
 
-  const rustDosyalar = ["jws.rs", "schema.rs", "chain.rs", "iso.rs", "integrity.rs", "module_key.rs"].map(rustKaynak);
+  const rustDosyalar = ["jws.rs", "schema.rs", "chain.rs", "iso.rs", "integrity.rs", "integrity_list.rs", "module_key.rs"].map(rustKaynak);
   const tsKaynaklar = [
     "src/lib/license/protocol/belgeler.ts",
     "src/lib/license/protocol/jws.ts",
     "src/lib/license/protocol/anahtar-zinciri.ts",
     "src/lib/license/protocol/parmak-izi.ts",
     "src/lib/license/integrity.ts",
+    "src/lib/license/integrity-list.ts",
   ].map((p) => oku(path.join(TEKS, p)));
   const zodDesenleri = [z.iso.datetime()._zod.def.pattern?.source, z.uuid()._zod.def.pattern?.source].filter((s): s is string => !!s);
   const tsKume = new Set([...tsKaynaklar.flatMap(tsDesenleri), ...zodDesenleri].map(desenNormal));
@@ -245,6 +247,16 @@ function bolum0(): void {
   const gereken = ["HAK", "KIRA", "SERTIFIKA", "BUTUNLUK"].filter((ad) => !rustTypAdlari.has(ad));
   check("§0j Rust'taki HER belge türü (TYP_*) protokolün TYP kayıt defterinde aynı ad ve değerle", typFark.length === 0 && gereken.length === 0, typFark.join(" · ") || (gereken.length ? `Rust'ta yok: ${gereken.join(",")}` : `${rustTyp.length} tür`));
   check("§0j' TS bütünlük türü kayıt defterinden (INTEGRITY_TYP = TYP.BUTUNLUK)", INTEGRITY_TYP === TYP.BUTUNLUK, INTEGRITY_TYP);
+  const liste = rustKaynak("integrity_list.rs");
+  const rustListeDosyasi = /pub const LIST_FILE: &str = "([^"]+)";/.exec(liste)?.[1];
+  const rustAzami = /pub const MAX_FILES: usize = ([0-9_]+);/.exec(liste)?.[1]?.replace(/_/g, "");
+  const rustAzamiBayt = /pub const MAX_LIST_BYTES: u64 = ([0-9 *]+);/.exec(liste)?.[1];
+  const bayt = rustAzamiBayt ? rustAzamiBayt.split("*").reduce((a, x) => a * Number(x.trim()), 1) : NaN;
+  check(
+    "§0k liste dosyası sabitleri Rust = TS (ad · azami satır · azami bayt)",
+    rustListeDosyasi === INTEGRITY_LIST_FILE && Number(rustAzami) === INTEGRITY_MAX_FILES && bayt === INTEGRITY_MAX_LIST_BYTES,
+    `rust ${rustListeDosyasi} ${rustAzami} ${bayt}`,
+  );
 }
 
 function secenek(g: Partial<LoaderOptions> & { cwd: string }): LoaderOptions {

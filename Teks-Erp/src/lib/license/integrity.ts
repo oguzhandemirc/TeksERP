@@ -1,10 +1,10 @@
-// Bütünlük denetimi — PAKET anahtarıyla imzalı dosya listesi (`tekserp-butunluk`), Faz 2e'nin biçimi
-// için v1 ARAYÜZÜ. Bu TS uygulaması native çekirdeğin (`native/lisans-cekirdek/src/integrity.rs`)
-// başvurusu ve geliştirme yoludur; üretimde denetim native'dedir (yamalı JS listeyi geçemesin).
-// Karar sırası iki uygulamada aynıdır, kâhin bekçisi (`test_lisans_native_kahin`) ölçer.
+// Bütünlük denetimi — PAKET anahtarıyla imzalı yük (`butunluk.jws`, `tekserp-butunluk`) + onun
+// sha256'sıyla bağlı liste dosyası (`integrity-list.ts`). Bu TS uygulaması native çekirdeğin
+// (`native/lisans-cekirdek/src/integrity.rs`) başvurusu ve geliştirme yoludur; üretimde denetim
+// native'dedir (yamalı JS listeyi geçemesin). Karar sırası iki uygulamada aynıdır, kâhin ölçer.
 import { createHash, type KeyObject } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
@@ -18,9 +18,18 @@ import {
   publicKeyFromX,
   verifyJws,
 } from "./protocol";
+import {
+  INTEGRITY_LIST_FILE,
+  INTEGRITY_MAX_FILES,
+  INTEGRITY_MAX_LIST_BYTES,
+  byteOrder,
+  parseIntegrityList,
+  walkIntegrityScope,
+  type IntegrityListEntry,
+} from "./integrity-list";
 
 export const INTEGRITY_TYP = TYP.BUTUNLUK;
-export const INTEGRITY_MAX_FILES = 20_000;
+export { INTEGRITY_MAX_FILES };
 /** Rapordaki dosya listelerinin tavanı (sayılar ayrıca tam verilir). */
 export const INTEGRITY_LIST_CAP = 50;
 
@@ -50,20 +59,27 @@ const ManifestPathSchema = z
   .regex(SAFE_PATH)
   .refine((p) => p.split("/").every((s) => s !== "." && s !== ".."), "Yol `.`/`..` segmenti taşıyamaz");
 
-export const IntegrityManifestSchema = z
-  .object({
-    v: z.literal(1),
-    paketId: UuidSchema,
-    urun: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/),
-    surum: VersionTextSchema,
-    derlemeTarihi: IsoTimeSchema,
-    musteri: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/).nullable(),
-    dosyalar: z
-      .array(z.strictObject({ yol: ManifestPathSchema, sha256: DigestSchema, boyut: z.number().int().min(0) }))
-      .min(1)
-      .max(INTEGRITY_MAX_FILES)
-      .refine((list) => new Set(list.map((f) => f.yol)).size === list.length, "Dosya listesinde tekrar var"),
-  });
+const ScopeListSchema = (max: number) =>
+  z
+    .array(ManifestPathSchema)
+    .max(max)
+    .refine((list) => new Set(list).size === list.length, "Kapsamda tekrar var");
+
+/** İmzalı yük: künye + liste dosyasının boyu/özeti/satır sayısı + FAZLA dosya aranacak kapsam. */
+export const IntegrityManifestSchema = z.object({
+  v: z.literal(1),
+  paketId: UuidSchema,
+  urun: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/),
+  surum: VersionTextSchema,
+  derlemeTarihi: IsoTimeSchema,
+  musteri: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/).nullable(),
+  liste: z.strictObject({
+    sha256: DigestSchema,
+    boyut: z.number().int().min(1).max(INTEGRITY_MAX_LIST_BYTES),
+    dosyaSayisi: z.number().int().min(1).max(INTEGRITY_MAX_FILES),
+  }),
+  kapsam: z.strictObject({ dizinler: ScopeListSchema(32), dosyalar: ScopeListSchema(64) }),
+});
 export type IntegrityManifest = z.infer<typeof IntegrityManifestSchema>;
 
 export type IntegrityVerdict = "GECERLI" | "GECERSIZ" | "OLCULEMEDI";
@@ -79,6 +95,9 @@ export interface IntegrityReport {
   readonly degisikSayisi: number;
   readonly okunamayan: string[];
   readonly okunamayanSayisi: number;
+  /** Kapsamda diskte duran ama listede olmayan girdiler (eklenmiş kod). */
+  readonly fazla: string[];
+  readonly fazlaSayisi: number;
   readonly paket: {
     readonly paketId: string;
     readonly urun: string;
@@ -98,6 +117,8 @@ export const IntegrityReportSchema = z.object({
   degisikSayisi: z.number().int().min(0),
   okunamayan: z.array(z.string()),
   okunamayanSayisi: z.number().int().min(0),
+  fazla: z.array(z.string()),
+  fazlaSayisi: z.number().int().min(0),
   paket: z
     .object({ paketId: z.string(), urun: z.string(), surum: z.string(), derlemeTarihi: z.string(), musteri: z.string().nullable() })
     .nullable(),
@@ -107,7 +128,10 @@ interface Buckets {
   missing: string[];
   changed: string[];
   unreadable: string[];
+  extra: string[];
 }
+
+const emptyBuckets = (): Buckets => ({ missing: [], changed: [], unreadable: [], extra: [] });
 
 interface ReportInput {
   readonly durum: IntegrityVerdict;
@@ -119,7 +143,7 @@ interface ReportInput {
 
 function report({ durum, kod, total = 0, buckets, paket = null }: ReportInput): IntegrityReport {
   const cap = (list: string[]) => list.slice(0, INTEGRITY_LIST_CAP);
-  const b = buckets ?? { missing: [], changed: [], unreadable: [] };
+  const b = buckets ?? emptyBuckets();
   return {
     durum,
     kod,
@@ -130,6 +154,8 @@ function report({ durum, kod, total = 0, buckets, paket = null }: ReportInput): 
     degisikSayisi: b.changed.length,
     okunamayan: cap(b.unreadable),
     okunamayanSayisi: b.unreadable.length,
+    fazla: cap(b.extra),
+    fazlaSayisi: b.extra.length,
     paket,
   };
 }
@@ -144,13 +170,17 @@ function sha256File(file: string): Promise<string> {
   });
 }
 
-async function checkFile(root: string, f: IntegrityManifest["dosyalar"][number], out: Buckets): Promise<void> {
+function isNotFound(e: unknown): boolean {
+  return e instanceof Error && "code" in e && (e.code === "ENOENT" || e.code === "ENOTDIR");
+}
+
+async function checkFile(root: string, f: IntegrityListEntry, out: Buckets): Promise<void> {
   const full = path.join(root, ...f.yol.split("/"));
   let info;
   try {
     info = await stat(full);
   } catch (e) {
-    if (e instanceof Error && "code" in e && e.code === "ENOENT") out.missing.push(f.yol);
+    if (isNotFound(e)) out.missing.push(f.yol);
     else out.unreadable.push(f.yol);
     return;
   }
@@ -171,7 +201,30 @@ async function isDirectory(p: string): Promise<boolean> {
   }
 }
 
-/** İmzalı listeye karşı `root` altındaki dosyalar. `keys` verilmezse gömülü `PACKAGE_PUBLIC_KEYS`. */
+export type ListRead =
+  | { readonly ok: true; readonly entries: IntegrityListEntry[] }
+  | { readonly ok: false; readonly bucket: "missing" | "changed" | "unreadable" };
+
+/** Liste dosyası: yok → eksik · boy/özet/dilbilgisi tutmaz → değişik · okunamaz → okunamayan. */
+export async function readIntegrityList(root: string, liste: IntegrityManifest["liste"]): Promise<ListRead> {
+  const file = path.join(root, INTEGRITY_LIST_FILE);
+  let bytes: Buffer;
+  try {
+    const info = await stat(file);
+    if (!info.isFile()) return { ok: false, bucket: "missing" };
+    if (info.size !== liste.boyut) return { ok: false, bucket: "changed" };
+    bytes = await readFile(file);
+  } catch (e) {
+    return { ok: false, bucket: isNotFound(e) ? "missing" : "unreadable" };
+  }
+  if (bytes.length !== liste.boyut || b64uEncode(createHash("sha256").update(bytes).digest()) !== liste.sha256) {
+    return { ok: false, bucket: "changed" };
+  }
+  const entries = parseIntegrityList(bytes, liste.dosyaSayisi);
+  return entries ? { ok: true, entries } : { ok: false, bucket: "changed" };
+}
+
+/** İmzalı yüke karşı `root` altındaki dosyalar. `keys` verilmezse gömülü `PACKAGE_PUBLIC_KEYS`. */
 export async function verifyIntegrity(manifest: unknown, root: string, keys: readonly PackageKey[] = PACKAGE_PUBLIC_KEYS): Promise<IntegrityReport> {
   const usable = new Map<string, KeyObject>();
   for (const k of keys) {
@@ -185,12 +238,22 @@ export async function verifyIntegrity(manifest: unknown, root: string, keys: rea
   if (!d.ok) return report({ durum: "GECERSIZ", kod: d.code });
   const m = d.value;
   const paket = { paketId: m.paketId, urun: m.urun, surum: m.surum, derlemeTarihi: m.derlemeTarihi, musteri: m.musteri };
-  if (!(await isDirectory(root))) return report({ durum: "OLCULEMEDI", kod: "BUTUNLUK_OKUNAMADI", total: m.dosyalar.length, paket });
-  const buckets: Buckets = { missing: [], changed: [], unreadable: [] };
-  for (const f of m.dosyalar) await checkFile(root, f, buckets);
-  if (buckets.missing.length > 0 || buckets.changed.length > 0) {
-    return report({ durum: "GECERSIZ", kod: "BUTUNLUK_UYUSMAZ", total: m.dosyalar.length, buckets, paket });
+  const total = m.liste.dosyaSayisi;
+  if (!(await isDirectory(root))) return report({ durum: "OLCULEMEDI", kod: "BUTUNLUK_OKUNAMADI", total, paket });
+  const buckets = emptyBuckets();
+  const list = await readIntegrityList(root, m.liste);
+  if (!list.ok) {
+    buckets[list.bucket].push(INTEGRITY_LIST_FILE);
+    const bad = list.bucket !== "unreadable";
+    return report({ durum: bad ? "GECERSIZ" : "OLCULEMEDI", kod: bad ? "BUTUNLUK_LISTE_BOZUK" : "BUTUNLUK_OKUNAMADI", total, buckets, paket });
   }
-  if (buckets.unreadable.length > 0) return report({ durum: "OLCULEMEDI", kod: "BUTUNLUK_OKUNAMADI", total: m.dosyalar.length, buckets, paket });
-  return report({ durum: "GECERLI", kod: null, total: m.dosyalar.length, buckets, paket });
+  for (const f of list.entries) await checkFile(root, f, buckets);
+  const expectedPaths = new Set(list.entries.map((f) => f.yol));
+  const walk = await walkIntegrityScope(root, m.kapsam);
+  buckets.extra = walk.entries.filter((e) => !expectedPaths.has(e));
+  buckets.unreadable = [...buckets.unreadable, ...walk.unreadable].sort(byteOrder);
+  if (buckets.missing.length > 0 || buckets.changed.length > 0) return report({ durum: "GECERSIZ", kod: "BUTUNLUK_UYUSMAZ", total, buckets, paket });
+  if (buckets.extra.length > 0) return report({ durum: "GECERSIZ", kod: "BUTUNLUK_FAZLA", total, buckets, paket });
+  if (buckets.unreadable.length > 0) return report({ durum: "OLCULEMEDI", kod: "BUTUNLUK_OKUNAMADI", total, buckets, paket });
+  return report({ durum: "GECERLI", kod: null, total, buckets, paket });
 }

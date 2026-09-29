@@ -14,7 +14,7 @@ use crate::outcome::{code, Fail, Outcome};
 use serde_json::{json, Value};
 
 /// Arayüz sürümü: istek/yanıt biçimi kırılınca artar; yükleyici eşit değilse native'i KULLANMAZ.
-pub const ABI: u32 = 1;
+pub const ABI: u32 = 2;
 pub const TEST_ANCHOR: bool = cfg!(feature = "test-anchor");
 
 fn ok(value: Value) -> Value {

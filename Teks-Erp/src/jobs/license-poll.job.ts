@@ -15,9 +15,9 @@ import {
   pollLicenseOnce,
   refreshLicenseDbFacts,
   refreshLicenseFingerprint,
-  refreshLicenseIntegrity,
   type PollOutcome,
 } from "../services/license-sync.service";
+import { refreshLicenseIntegrity } from "../services/license-integrity.service";
 import { evaluateLicenseTransitions, licenseHousekeeping } from "../services/license-trail.service";
 import { egressTransport, type VendorTransport } from "../services/helpers/license-wire.helper";
 import { getLicenseConfig, getLicenseSnapshot, setLicenseEngineStatus, setNextPollAt } from "../lib/license/runtime";

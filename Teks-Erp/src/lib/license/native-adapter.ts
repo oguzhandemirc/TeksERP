@@ -191,6 +191,8 @@ export function unavailableCore(reason: string): LicenseCore {
         degisikSayisi: 0,
         okunamayan: [],
         okunamayanSayisi: 0,
+        fazla: [],
+        fazlaSayisi: 0,
         paket: null,
       },
     }),

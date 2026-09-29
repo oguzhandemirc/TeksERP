@@ -29,6 +29,10 @@ import {
 } from "../lib/license/runtime";
 import type { Banner, LicenseEffect, StateReason } from "../lib/license/state";
 import { licenseError } from "./helpers/license-wire.helper";
+import { getLicenseCoreStatus } from "../lib/license/native";
+import { getIntegrityOutcome, integrityStatusForState } from "../lib/license/integrity-state";
+import { BUILD_WATERMARK } from "../lib/license/watermark";
+import type { IntegrityStatus } from "../lib/license/state-rules";
 
 // ── Durum özeti (herkes) ────────────────────────────────────────────────────────
 export interface LicenseStatusSummary {
@@ -144,6 +148,43 @@ export interface LicenseDetail {
   readonly tasima: PendingTransfer | null;
   readonly gozlem: { reddedilecekIstek: number; reddedilecekModul: number };
   readonly proxy: LicenseProxySettings;
+  /** Lisans çekirdeği + imzalı paket bütünlüğü (dosya adı taşımaz; yalnız sayılar). */
+  readonly butunluk: {
+    cekirdek: "native" | "ts" | "yok";
+    cekirdekNeden: string | null;
+    zorunlu: boolean;
+    durum: IntegrityStatus;
+    kod: string | null;
+    denetlendi: string | null;
+    paketId: string | null;
+    paketSurumu: string | null;
+    derlemeTarihi: string | null;
+    anahtar: string | null;
+    sayilar: { dosya: number; eksik: number; degisik: number; fazla: number; okunamayan: number } | null;
+    ilkUyusmazlik: string | null;
+  };
+}
+
+function integritySection(snap: LicenseSnapshot): LicenseDetail["butunluk"] {
+  const core = getLicenseCoreStatus();
+  const o = getIntegrityOutcome();
+  const r = o?.rapor ?? null;
+  return {
+    cekirdek: core.kaynak,
+    cekirdekNeden: core.kaynak === "native" ? null : core.neden,
+    zorunlu: core.zorunlu,
+    durum: integrityStatusForState(),
+    kod: o?.kod ?? null,
+    denetlendi: o?.denetlendi ?? null,
+    paketId: r?.paket?.paketId ?? BUILD_WATERMARK?.paketId ?? null,
+    paketSurumu: r?.paket?.surum ?? null,
+    derlemeTarihi: r?.paket?.derlemeTarihi ?? null,
+    anahtar: o?.kid ?? null,
+    sayilar: r
+      ? { dosya: r.dosyaSayisi, eksik: r.eksikSayisi, degisik: r.degisikSayisi, fazla: Math.max(r.fazlaSayisi, o?.fazlaSayisi ?? 0), okunamayan: r.okunamayanSayisi }
+      : null,
+    ilkUyusmazlik: isoOrNull(snap.integrityFirstMismatchMs),
+  };
 }
 
 function isoOrNull(ms: number | null): string | null {
@@ -245,6 +286,7 @@ export function getLicenseDetail(): LicenseDetail {
     tasima: store?.transfer ?? null,
     gozlem: peekObservationCounters(),
     proxy: getProxySettings(),
+    butunluk: integritySection(snap),
   };
 }
 

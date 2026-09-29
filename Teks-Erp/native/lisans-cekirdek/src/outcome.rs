@@ -43,6 +43,8 @@ pub mod code {
     pub const BUTUNLUK_CAPA_BOS: &str = "BUTUNLUK_CAPA_BOS";
     pub const BUTUNLUK_OKUNAMADI: &str = "BUTUNLUK_OKUNAMADI";
     pub const BUTUNLUK_UYUSMAZ: &str = "BUTUNLUK_UYUSMAZ";
+    pub const BUTUNLUK_FAZLA: &str = "BUTUNLUK_FAZLA";
+    pub const BUTUNLUK_LISTE_BOZUK: &str = "BUTUNLUK_LISTE_BOZUK";
     pub const MODUL_SARMA_BICIM: &str = "MODUL_SARMA_BICIM";
     pub const MODUL_UYUSMAZ: &str = "MODUL_UYUSMAZ";
     pub const MODUL_ANAHTAR_GECERSIZ: &str = "MODUL_ANAHTAR_GECERSIZ";
@@ -75,6 +77,8 @@ pub mod code {
         BUTUNLUK_CAPA_BOS,
         BUTUNLUK_OKUNAMADI,
         BUTUNLUK_UYUSMAZ,
+        BUTUNLUK_FAZLA,
+        BUTUNLUK_LISTE_BOZUK,
         MODUL_SARMA_BICIM,
         MODUL_UYUSMAZ,
         MODUL_ANAHTAR_GECERSIZ,

@@ -1,18 +1,14 @@
-// Çalışan backend'in BÜTÜNLÜK DENETİMİ (açılışta + günlük). İmza ve dosya özeti lisans çekirdeğinde
-// (üretimde native); bu dosya çekirdeğin sormadığı iki kararı ekler: kapsam dizinlerinde listede
-// olmayan FAZLA dosya ve hazırlık PAKET anahtarının sınıf kuralı. Sonuç lisans durumuna girer.
+// Çalışan backend'in BÜTÜNLÜK DENETİMİ (açılışta + günlük). İmza, dosya özeti ve FAZLA dosya lisans
+// çekirdeğinde (üretimde native); bu dosya ikinci katmandır: FAZLA'yı imzalı kapsamda YENİDEN arar
+// (yamalı çekirdek "geçerli" dese de) ve hazırlık PAKET anahtarının sınıf kuralını ekler.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { isPlainObject, parseJws } from "./protocol";
-import type { IntegrityReport, PackageKey } from "./integrity";
+import { decodeDocument, parseJws } from "./protocol";
+import { IntegrityManifestSchema, readIntegrityList, type IntegrityReport, type PackageKey } from "./integrity";
+import { walkIntegrityScope } from "./integrity-list";
 import type { LicenseCore } from "./license-core";
 import type { IntegrityStatus } from "./state-rules";
-import {
-  INTEGRITY_FILE,
-  STAGING_PACKAGE_CLASSES,
-  isStagingPackageKid,
-  listScopedFiles,
-} from "./integrity-scope";
+import { INTEGRITY_FILE, STAGING_PACKAGE_CLASSES, isStagingPackageKid } from "./integrity-scope";
 import { BUILD_WATERMARK, watermarkMatches, type BuildWatermark } from "./watermark";
 
 /** Çekirdeğin dışındaki (TS ikinci katman) bütünlük kodları. */
@@ -67,13 +63,18 @@ async function readList(root: string): Promise<string | null> {
   }
 }
 
-/** İmzası çekirdekte doğrulanmış listenin yolları (yük yeniden ayrıştırılır; imza kararı çekirdeğindir). */
-function manifestPaths(token: string): Set<string> {
+/**
+ * İkinci katman: imzası çekirdekte doğrulanmış yükün kapsamında listede olmayan girdiler. Yük burada
+ * yeniden ayrıştırılır (imza kararı çekirdeğindir); liste okunamazsa ölçülmez (çekirdek raporu karar verir).
+ */
+async function extraEntries(token: string, root: string): Promise<string[]> {
   const p = parseJws(token);
-  const files = p.ok ? p.value.payload.dosyalar : null;
-  const out = new Set<string>();
-  if (Array.isArray(files)) for (const f of files) if (isPlainObject(f) && typeof f.yol === "string") out.add(f.yol);
-  return out;
+  const m = p.ok ? decodeDocument(IntegrityManifestSchema, p.value.payload) : null;
+  if (!m?.ok) return [];
+  const list = await readIntegrityList(root, m.value.liste);
+  if (!list.ok) return [];
+  const expectedPaths = new Set(list.entries.map((f) => f.yol));
+  return (await walkIntegrityScope(root, m.value.kapsam)).entries.filter((e) => !expectedPaths.has(e));
 }
 
 export async function runIntegrityCheck(g: IntegrityCheckInput): Promise<IntegrityOutcome> {
@@ -89,9 +90,9 @@ export async function runIntegrityCheck(g: IntegrityCheckInput): Promise<Integri
 
   const header = parseJws(token);
   const kid = header.ok ? header.value.header.kid : null;
-  const inManifest = manifestPaths(token);
-  const extra = (await listScopedFiles(g.root)).filter((f) => !inManifest.has(f));
-  const base = { kid, rapor, fazla: extra.slice(0, EXTRA_LIST_CAP), fazlaSayisi: extra.length };
+  const extra = await extraEntries(token, g.root);
+  const shown = extra.length > 0 ? extra : rapor.fazla;
+  const base = { kid, rapor, fazla: shown.slice(0, EXTRA_LIST_CAP), fazlaSayisi: Math.max(extra.length, rapor.fazlaSayisi) };
   const kunye = { derlemeTarihi: rapor.paket.derlemeTarihi, musteri: rapor.paket.musteri, paketId: rapor.paket.paketId, surum: rapor.paket.surum };
 
   if (kid !== null && isStagingPackageKid(kid)) {
