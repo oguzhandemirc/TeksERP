@@ -36,6 +36,7 @@ const api: ApiBridge = {
     maximize: () => ipcRenderer.send("window:maximize"),
     close: () => ipcRenderer.send("window:close"),
     isMaximized: () => ipcRenderer.invoke("window:is-maximized"),
+    captureScreenshot: () => ipcRenderer.invoke("window:capture-screenshot"),
   },
   system: {
     openExternal: (url) => ipcRenderer.invoke("system:open-external", url),

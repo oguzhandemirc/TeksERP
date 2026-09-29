@@ -9,6 +9,7 @@
 // burada yeniden tanımlamak iki kopya demek olurdu.
 import type { DiscoveredServer, ServerGroup } from "./discovery";
 import type { LicenseRelayRequest, LicenseRelayResult } from "./license-relay";
+import type { ScreenshotResult } from "./screenshot";
 
 export type { DiscoveredServer };
 
@@ -30,6 +31,8 @@ export interface WindowApi {
   maximize: () => void;
   close: () => void;
   isMaximized: () => Promise<boolean>;
+  /** Destek talebi (3d-2): YALNIZ bu pencerenin görüntüsü, ≤600 KB JPEG; yakalanamazsa null. */
+  captureScreenshot: () => Promise<ScreenshotResult | null>;
 }
 
 export interface SystemApi {
