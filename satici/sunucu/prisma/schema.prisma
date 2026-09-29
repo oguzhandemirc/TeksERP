@@ -229,8 +229,12 @@ model Kurulum {
   sonKiraId String? @unique @db.Uuid
 
   /// Kip: false = gözlem (varsayılan; bugünkü davranış), true = zorla. Değişim defteri YaptirimEylemi(ZORLAMA).
-  zorlama          Boolean @default(false)
-  yoklamaAraligiDk Int     @default(60)
+  zorlama           Boolean @default(false)
+  yoklamaAraligiDk  Int     @default(60)
+  /// Patron bulutu eşitleme aralığı (dk, 1–60; CHECK) — kiraya basılır, fabrika eşitleme işi okur.
+  esitlemeAraligiDk Int     @default(5)
+  /// Buluttaki geçmişin saklama süresi (ay: 3 · 13 · 25; NULL = tüm geçmiş; CHECK) — iç API `saklamaAy`.
+  bulutSaklamaAy    Int?    @default(13)
 
   platform         String?   @db.VarChar(10)
   sonOrtam         Json?

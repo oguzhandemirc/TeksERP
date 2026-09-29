@@ -14,6 +14,10 @@
 //   npx tsx scripts/anahtar.ts bayi-uret --kid=bayi-ornek --bayi-id=<uuid> --moduller=a.enabled,b.enabled
 //                                        --siniflar=URETIM --kok=kok-2026-1 [--gun=365]
 //   npx tsx scripts/anahtar.ts sirlar-uret   (portal TOTP sarma anahtarı + etkinleştirme kodu sırrı; VAR olan korunur)
+//   npx tsx scripts/anahtar.ts indirme-belirteci --kanal=testfabrika[,adnansahin] [--dk=60]
+//       YAYINCI indirme belirteçleri (kanal × electron/mobil, ≤ 70 dk). Parola istemez (İNDİRME alt anahtarı).
+//       Çıktı stdout'a TEK satır JSON: {"v":1,"belirtecler":[{kanal,yolOneki,belirtec,exp}]} — yayın betiği
+//       (scripts/lib/yayin-okuma.mjs) okur; çıktıyı dosyaya/loga yönlendirmeyin.
 //   Ortak: [--dizin=<anahtar dizini>] (varsayılan ANAHTAR_DIZINI ya da ./anahtarlar)
 // Stdin'den parola (TTY yoksa): her istenen parola bir satır (kök-uret: parola + tekrar).
 // =============================================================================
@@ -42,6 +46,8 @@ import {
   writeKeyFileExclusive,
 } from "../src/keys/key-files";
 import { signWithWrappedKey } from "../src/keys/signer";
+import { KeyStore } from "../src/keys/key-store";
+import { PUBLISHER_DEFAULT_MINUTES, PublisherTokenError, publisherTokens } from "../src/keys/publisher-token";
 import { ACTIVATION_CODE_PEPPER_FILE, ActivationCodeHasher } from "../src/keys/code-pepper";
 import { PORTAL_SECRET_KEY_FILE, PortalSecretBox } from "../src/portal/secret-box";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
@@ -220,6 +226,22 @@ function generateServerSecrets(flags: Map<string, string>): void {
   }
 }
 
+/** Yayıncı indirme belirteçleri — anahtar dizini yalnız OKUNUR (dizin yoksa yaratılmaz). */
+function publisherDownloadTokens(flags: Map<string, string>): void {
+  const dir = path.resolve(flags.get("dizin") || process.env.ANAHTAR_DIZINI || "anahtarlar");
+  if (!existsSync(dir)) throw new CliError(`Anahtar dizini yok: ${dir}`);
+  const channels = required(flags, "kanal").split(",").map((s) => s.trim()).filter(Boolean);
+  const minutes = flags.has("dk") ? Number(flags.get("dk")) : PUBLISHER_DEFAULT_MINUTES;
+  const keys = KeyStore.load({ ANAHTAR_DIZINI: dir, GUVEN_CAPASI_DOSYASI: process.env.GUVEN_CAPASI_DOSYASI || undefined });
+  try {
+    const belirtecler = publisherTokens(keys, { channels, minutes, nowMs: Date.now() });
+    process.stdout.write(`${JSON.stringify({ v: 1, belirtecler })}\n`);
+  } catch (err) {
+    if (err instanceof PublisherTokenError) throw new CliError(err.message);
+    throw err;
+  }
+}
+
 async function main(): Promise<void> {
   const { command, flags } = args(process.argv.slice(2));
   switch (command) {
@@ -233,8 +255,10 @@ async function main(): Promise<void> {
       return generateDealer(flags);
     case "sirlar-uret":
       return generateServerSecrets(flags);
+    case "indirme-belirteci":
+      return publisherDownloadTokens(flags);
     default:
-      throw new CliError("Komut: kok-uret | alt-uret | indirme-uret | bayi-uret | sirlar-uret (ayrıntı dosya başında)");
+      throw new CliError("Komut: kok-uret | alt-uret | indirme-uret | bayi-uret | sirlar-uret | indirme-belirteci (ayrıntı dosya başında)");
   }
 }
 

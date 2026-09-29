@@ -24,6 +24,7 @@ import {
 import { VendorError } from "../lib/errors";
 import type { Db, Tx } from "../lib/prisma";
 import { channelVersionsForLease } from "./channel.service";
+import { leaseCloudFields } from "./cloud-entitlement";
 import type { VendorContext } from "./context";
 
 export interface SanctionState {
@@ -106,6 +107,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
   if (!key) throw new VendorError(500, "SUNUCU_HATASI", "Kira imzalayacak geçerli alt anahtar yok");
   const sanction = await computeSanctionState(tx, installation.id);
   const channel = await tx.kanal.findUnique({ where: { kod: installation.kanalKodu } });
+  const cloud = leaseCloudFields(installation, entitlement, sanction.donmusModuller);
   const id = randomUUID();
   const issuedAt = new Date(nowMs);
   const expiresAt = new Date(nowMs + ctx.config.KIRA_GUN * DAY_MS);
@@ -131,8 +133,8 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
       guncellemeDonuk: sanction.guncellemeDonuk,
     },
     yoklamaAraligiDk: installation.yoklamaAraligiDk,
-    esitlemeAraligiDk: null,
-    patronBulutBitis: null,
+    esitlemeAraligiDk: cloud.esitlemeAraligiDk,
+    patronBulutBitis: cloud.patronBulutBitis,
     devredildi: installation.durum === "DEVREDILDI",
     kanal: { kod: installation.kanalKodu, guncelSurumler: channelVersionsForLease(channel) },
     altSertifika: key.certificate,
