@@ -782,6 +782,8 @@ export const ENUM_LABELS: Record<string, string> = {
   MOVED: "Taşındı",
   DELETED: "Silindi (çakışma)",
   FIELD_MERGED: "Alan birleşti",
+  // ── Patron bulutu eşitleme işareti (SyncMarkKind) — DELETED MergeRefKind ile ORTAK
+  DIRTY: "Kirli (buluta yeniden gönderilecek)",
   // ── Donmuş belge türü (PrintedDocType) — ticaret paketi
   TRANSFER_DISPATCH: "Depo transfer irsaliyesi",
   GOODS_RECEIPT: "Mal kabul fişi",
@@ -1011,6 +1013,9 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   IN: "ödeme yönü ve iplik hareketi — ikisi de 'Giriş'",
   OUT: "ödeme yönü ve iplik hareketi — ikisi de 'Çıkış'",
   ISSUED: "ChequeKind ve ChequeStatus — global 'Verdiğimiz (kendi çekimiz)' ikisinde de doğru; durum alanı ayrıca CHEQUE.status override'ı taşır",
+  DELETED:
+    "MergeRefKind(birleştirmede çakışan satır silindi) ve SyncMarkKind(eşitleme işareti: kök satır silindi, 2026-09-29) — " +
+    "SyncMark hiçbir denetim kaydına girmez (tetikleyici yazar, audit muafiyeti TELEMETRİ); ekranda yalnız birleştirme bağlamı görünür, ortak Türkçe orada doğru",
 
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
   OPEN:

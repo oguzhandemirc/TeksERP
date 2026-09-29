@@ -33,6 +33,7 @@ import { ACTIVE_LINE, MEASURED_LINE } from "../helpers/order-line-scope.helper";
 import { round1 } from "./_breakdown";
 import type { ReportFilterInput } from "./_filters";
 import { droppedRows, optionList, type Secenekler, type WithSecenekler } from "./_secenekler";
+import { daysPastDeadline } from "../helpers/order-deadline.helper";
 
 /** R5b-c3 seçici kaynağı — FIFO motoru pahalı olduğundan HAFİF ayrı sorgu: açık kalemlerin kumaşları (motorla aynı küme koşulu). */
 /** R5b-c4: süzgeçli koşumda açık kalem sayısı (FIFO motoru koşmadan; motorla aynı küme koşulu) — `dusenSatir` paydası. */
@@ -223,10 +224,7 @@ export async function getOpenOrderCoverage(filters: Pick<ReportFilterInput, "ite
         else if (state === "KISMI") sum.partial++;
         else sum.none++;
 
-        const late =
-          line.deadline && line.deadline.getTime() < now
-            ? Math.floor((now - line.deadline.getTime()) / 86_400_000)
-            : null;
+        const late = daysPastDeadline(line.deadline, now);
         if (late != null && uncovered.greaterThan(0)) {
           sum.overdueLines++;
           sum.overdueQty = sum.overdueQty.plus(uncovered);

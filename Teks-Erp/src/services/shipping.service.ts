@@ -128,6 +128,7 @@ import {
   type SackAllocLine,
 } from "./helpers/allocation.helper";
 import { recomputeOrderStatusForOrdersTx, touchOrderLinesTx } from "./helpers/order-status.helper";
+import { LIVE_RETURN_WHERE, grossRollCount, loadShipmentGrossTotals } from "./helpers/shipment-gross-totals.helper";
 import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
 import { ACTIVE_TAG_SELECT, ACTIVE_TAG_WHERE, toTagBadges } from "./helpers/sack-tag.helper";
 import {
@@ -4313,7 +4314,7 @@ export class ShippingService {
       },
       customer: { select: { id: true, code: true, name: true } },
       branch: { select: { id: true, code: true, name: true } },
-      _count: { select: { sacks: true, rolls: true, orders: true, returns: { where: { cancelledAt: null } } } },
+      _count: { select: { sacks: true, rolls: true, orders: true, returns: { where: LIVE_RETURN_WHERE } } },
     } as const;
 
     // --- BİRLEŞİK LİSTE: fasondan DOĞRUDAN sevkler (DirectShipment) çuval
@@ -4519,60 +4520,17 @@ export class ShippingService {
     const attachTotals = async <T extends UnifiedRow>(rows: T[]): Promise<T[]> => {
       const shipIds = rows.filter((r) => r.kind === "SHIPMENT").map((r) => r.id);
       if (shipIds.length === 0) return rows;
-      // ⚠️ TEK ANLIK GÖRÜNTÜ ŞART (2026-08-09 denetimi, F-SEV-ESZ-002).
-      // Brüt metraj `canlı toplam + iade geri-eklemesi` ile üretiliyor; iki sayım
-      // FARKLI anlık görüntülerden gelirse aradaki pencerede commit eden bir iade
-      // ya ÇİFT sayılır (top hâlâ sevkiyatta görünürken iade satırı da eklenir)
-      // ya da KAYBOLUR (shipmentId nullanmış, iade henüz görünmüyor). İkisi de
-      // geçicidir ve tam da bu yüzden teşhis edilemez: muhasebeci ekranda 501 m
-      // görür, Excel'de 452 m okur ve hangisinin doğru olduğunu bilemez.
-      //
-      // `Promise.all` bunu SAĞLAMAZ — havuzdan AYRI bağlantılar, ayrı görüntüler.
-      // Batch `$transaction` tek bağlantıda çalıştırır AMA tek başına yetmez:
-      // PostgreSQL varsayılanı READ COMMITTED ve orada her İFADE kendi anlık
-      // görüntüsünü alır, transaction içinde bile. Bu yüzden izolasyon
-      // RepeatableRead'e yükseltilir — tx'in İLK ifadesinde alınan görüntü
-      // üçünde de geçerli olur.
-      //
-      // ⚠️ Bu, "tx.* ile Promise.all YASAK" kuralının ihlali DEĞİLDİR: o kural
-      // interaktif tx client'ını paylaşmaya ilişkindir; burada BATCH API var
-      // (dizi formu), Prisma'nın kendisi sırayla çalıştırır.
-      // ⚠️ P2034 riski YOK: üçü de SALT OKUMA; RepeatableRead serileştirme
-      // hatasını yalnız YAZAN transaction'larda üretir.
-      const [rollGroups, sackGroups, returnGroups] = await prisma.$transaction(
-        [
-          prisma.roll.groupBy({
-            by: ["shipmentId"],
-            where: { shipmentId: { in: shipIds } },
-            _sum: { currentQty: true },
-          }),
-          prisma.sack.groupBy({
-            by: ["shipmentId"],
-            where: { shipmentId: { in: shipIds } },
-            _sum: { weightKg: true },
-          }),
-          prisma.rollReturn.groupBy({
-            by: ["fromShipmentId"],
-            where: { fromShipmentId: { in: shipIds }, cancelledAt: null },
-            _sum: { qty: true },
-          }),
-        ],
-        { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-      );
-      const liveMeters = new Map(rollGroups.map((g) => [g.shipmentId, g._sum.currentQty ?? D0()]));
-      const kg = new Map(sackGroups.map((g) => [g.shipmentId, g._sum.weightKg ?? D0()]));
-      const returnedMeters = new Map(returnGroups.map((g) => [g.fromShipmentId, g._sum.qty ?? D0()]));
+      // TEK ANLIK GÖRÜNTÜ + brüt formül tek kaynakta (patron bulutu projeksiyonu da okur).
+      const totals = await loadShipmentGrossTotals(shipIds);
       return rows.map((r) => {
         if (r.kind !== "SHIPMENT") return r;
-        const gross = (liveMeters.get(r.id) ?? D0()).plus(returnedMeters.get(r.id) ?? D0());
+        const t = totals.get(r.id);
         return {
           ...r,
-          totalMeters: Number(gross),
-          totalKg: Number(kg.get(r.id) ?? D0()),
-          // Brüt top adedi: canlı (iade sonrası eksilmiş) + iade edilmiş adet.
-          // İade sayısı zaten `_count.returns` ile geldi (aynı `cancelledAt: null`
-          // süzgeci) → ayrı sorgu gerekmez.
-          _count: { ...r._count, rolls: r._count.rolls + r._count.returns },
+          totalMeters: Number(t?.grossMeters ?? D0()),
+          totalKg: Number(t?.kg ?? D0()),
+          // İade sayısı `_count.returns` ile geldi (aynı `LIVE_RETURN_WHERE`) → ayrı sorgu gerekmez.
+          _count: { ...r._count, rolls: grossRollCount(r._count.rolls, r._count.returns) },
         };
       });
     };

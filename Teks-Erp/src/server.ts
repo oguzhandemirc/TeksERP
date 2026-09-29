@@ -19,6 +19,7 @@ import { startShiftCalendarScheduler } from './jobs/shift-calendar.job';
 import { startShiftCloseScheduler } from './jobs/machine-shift-close.job';
 import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
+import { startCloudSync, stopCloudSync } from './jobs/cloud-sync.job';
 import { initLicenseEngine } from './services/license.service';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
@@ -231,6 +232,9 @@ const server = app.listen(Number(PORT), HOST, () => {
     // (`LICENSE_SERVER_URL=kapali`) DIŞARI HİÇ İSTEK ATILMAZ; motor gözlem kipinde (hiçbir istek engellenmez).
     startLicensePoll();
     startLicenseDoorbell();
+    // Patron bulutu eşitlemesi: yalnız ÜRETİM sınıfı + `patron-bulut` hakkı + kiradaki aralık
+    // varken dışarı çıkar (fail-closed); aksi hâlde tek işi günlük işaret budamasıdır.
+    startCloudSync();
 
     void AuditService.logEvent({
         category: "SYSTEM",
@@ -307,6 +311,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     // Zil akışı kesilir, lisans birikimi diske yazılır (senkron, kısa).
     shutdownPhase = "lisans";
     try {
+        stopCloudSync();
         stopLicenseDoorbell();
         stopLicensePoll();
     } catch (err) {

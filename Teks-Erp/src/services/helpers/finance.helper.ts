@@ -16,6 +16,22 @@ export const D0 = (): Prisma.Decimal => new Prisma.Decimal(0);
 export const D = (v: Prisma.Decimal.Value): Prisma.Decimal => new Prisma.Decimal(v);
 
 /**
+ * Faturanın açık tutarı — TEK FORMÜL `grandTotal − paidTotal` (yaşlandırma, kapama
+ * ekranı, patron bulutu projeksiyonu). İkinci bir formül "ayrışan yüzey" sınıfıdır.
+ */
+export function invoiceOpenAmount(grandTotal: Prisma.Decimal.Value, paidTotal: Prisma.Decimal.Value): Prisma.Decimal {
+  return D(grandTotal).minus(D(paidTotal));
+}
+
+/**
+ * Tahsilat/ödeme/çekin kapamaya bağlanmamış kısmı — `amount − allocatedTotal`
+ * (kapama sayaç sözleşmesi; patron bulutunun `eslesmemis` alanı da bu).
+ */
+export function unallocatedAmount(amount: Prisma.Decimal.Value, allocatedTotal: Prisma.Decimal.Value): Prisma.Decimal {
+  return D(amount).minus(D(allocatedTotal));
+}
+
+/**
  * Belge numarası ön ekleri.
  *
  * ⚠️ Fatura TÜRÜ ön eki belirler — tek "FT" ön eki kullanmak, satış ve alış

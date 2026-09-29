@@ -39,6 +39,7 @@
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { readUnvalidatedConstraints } from "../src/lib/constraint-health";
+import { SYNC_ROOT_TABLES } from "../src/cloud-sync/projections";
 
 let pass = 0,
   fail = 0;
@@ -939,6 +940,40 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
     why: "defter mührü: UPDATE her zaman, doğrudan DELETE RED; üst top silinince FK kaskadı geçer (ortak fonksiyon defter_block_tamper)",
   },
+  // ── Patron bulutu eşitlemesi (20260929152815_patron_bulut_esitleme) ──────────
+  // Silme tespiti koda değil DB'ye bağlı (statik tarama kaskad/dinamik silmede kör):
+  // 24 katalog kök tablosunun HER BİRİ `sync_marks`a SILINDI yazar. Kök listesi
+  // `src/cloud-sync/projections.ts` ile İKİ YÖNLÜ `test_bulut_silme_damgasi` §1'de ölçülür.
+  ...SYNC_ROOT_TABLES.map((table) => ({
+    table,
+    trigger: `${table}_sync_deleted`,
+    timing: ["AFTER DELETE", "FOR EACH ROW", "sync_mark_deleted("],
+    why: "patron bulutu: silinen kök satır aynı tx'te SILINDI işareti yazar (kaskadla silinen de) — düşerse bulutta hayalet satır kalır",
+  })),
+  {
+    table: "work_order_steps",
+    trigger: "work_order_steps_sync_deleted",
+    timing: ["AFTER DELETE", "FOR EACH ROW", "sync_mark_parent_dirty('work_orders', 'workOrderId')"],
+    why: "patron bulutu: silinen bekleyen adım iş emrini KIRLI yapar (adım kök değil, iş emrinin aktif istasyonu değişir)",
+  },
+  {
+    table: "rolls",
+    trigger: "rolls_sync_parent_moved",
+    timing: ["AFTER UPDATE OF", "FOR EACH ROW", "sync_mark_roll_old_parents()"],
+    why: "patron bulutu ayrılma körlüğü: top ESKİ çuval/sevkiyat/iş emrinden ayrılınca eski ebeveyn KIRLI (yeni ebeveyn filigrandan görünür)",
+  },
+  {
+    table: "sacks",
+    trigger: "sacks_sync_parent_moved",
+    timing: ["AFTER UPDATE OF", "FOR EACH ROW", "sync_mark_sack_old_shipment()"],
+    why: "patron bulutu ayrılma körlüğü: çuval sevkiyattan çıkınca ESKİ sevkiyat KIRLI",
+  },
+  {
+    table: "shipment_orders",
+    trigger: "shipment_orders_sync_dirty",
+    timing: ["AFTER INSERT OR DELETE OR UPDATE", "FOR EACH ROW", "sync_mark_shipment_orders()"],
+    why: "patron bulutu filigransız küme: shipment_orders ne id ne updatedAt taşır, her yazım sevkiyatı KIRLI yapar",
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1024,6 +1059,36 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     volatility: "i",
     bodyFragments: ["tr_fold(", "WITH ORDINALITY", "^[0-9]+$", "string_agg"],
     why: "renk ad seddi — JS `foldColorNameForCompare` ile birebir aynı çıktı",
+  },
+  {
+    name: "sync_mark_deleted",
+    volatility: "v",
+    bodyFragments: ['INSERT INTO "sync_marks"', "TG_TABLE_NAME", "'DELETED'", "TG_NARGS = 2", "'DIRTY'"],
+    why: "patron bulutu silme işareti: kök satır SILINDI, verilen ebeveyn KIRLI — gövde düşerse silme buluta hiç gitmez",
+  },
+  {
+    name: "sync_mark_parent_dirty",
+    volatility: "v",
+    bodyFragments: ['INSERT INTO "sync_marks"', "TG_ARGV[0]", "'DIRTY'"],
+    why: "patron bulutu: kök olmayan çocuk silinince ebeveyn KIRLI",
+  },
+  {
+    name: "sync_mark_roll_old_parents",
+    volatility: "v",
+    bodyFragments: ['OLD."sackId"', 'OLD."shipmentId"', 'OLD."currentStepId"', 'OLD."producedInStepId"', "'work_orders'", "'DIRTY'"],
+    why: "patron bulutu ayrılma körlüğü: dört FK'nın ESKİ ebeveyni KIRLI — biri düşerse eski çuvalın/sevkiyatın/iş emrinin toplamı bulutta bayatlar",
+  },
+  {
+    name: "sync_mark_sack_old_shipment",
+    volatility: "v",
+    bodyFragments: ['OLD."shipmentId"', "'shipments'", "'DIRTY'"],
+    why: "patron bulutu: çuvalın ESKİ sevkiyatı KIRLI",
+  },
+  {
+    name: "sync_mark_shipment_orders",
+    volatility: "v",
+    bodyFragments: ["TG_OP IN ('UPDATE', 'DELETE')", "TG_OP IN ('INSERT', 'UPDATE')", "'shipments'", "'DIRTY'"],
+    why: "patron bulutu: sevkiyat ↔ sipariş kümesinin her yazımı (ekleme/güncelleme/silme) sevkiyatı KIRLI yapar",
   },
 ];
 

@@ -959,6 +959,8 @@ model Station {
   @@index([kind])
   @@index([defaultCategoryId])
   @@index([nameFold])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "stations_updatedAt_esitleme_idx")
   @@map("stations")
 }
 
@@ -2793,6 +2795,8 @@ model Item {
   /// Çözgü kartının "bu çözgü hangi desenleri besliyor" sorgusu + kalıcı silme
   /// kapısının bağımlılık sayımı bu index'ten okur (devere Faz 1a).
   @@index([warpSpecId])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "items_updatedAt_esitleme_idx")
   @@map("items")
 }
 
@@ -3385,6 +3389,8 @@ model Roll {
   /// plan Seq Scan+Sort → Index Scan Backward + Incremental Sort, LIMIT'te duruyor).
   /// ⚠️ Statü kümesinin TEK KAYNAĞI `inventory.service.ts` rollScope='PRODUCTION_ACTIVE'.
   @@index([updatedAt(sort: Desc)], map: "rolls_uretim_updatedAt_idx")
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "rolls_updatedAt_esitleme_idx")
   @@map("rolls")
 }
 
@@ -3515,6 +3521,8 @@ model Customer {
   @@index([nameFold])
   @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "customers_nameFold_trgm_idx", type: Gin)
   @@index([mergedIntoId])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "customers_updatedAt_esitleme_idx")
   @@map("customers")
 }
 
@@ -3585,6 +3593,8 @@ model CustomerBranch {
   @@index([customerId, isActive])
   @@index([nameFold])
   @@index([cityFold])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "customer_branches_updatedAt_esitleme_idx")
   @@map("customer_branches")
 }
 
@@ -3676,6 +3686,8 @@ model Order {
   @@index([orderDate])
   @@index([completedAt])
   @@index([destination])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "orders_updatedAt_esitleme_idx")
   @@map("orders")
 }
 
@@ -3768,6 +3780,8 @@ model OrderLine {
   @@index([itemId, createdAt])
   @@index([customerItemNameFold])
   @@index([customerItemNameFold(ops: raw("gin_trgm_ops"))], map: "order_lines_customerItemNameFold_trgm_idx", type: Gin)
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "order_lines_updatedAt_esitleme_idx")
   @@map("order_lines")
 }
 
@@ -3898,6 +3912,8 @@ model WorkOrder {
   @@index([splitFromId])
   /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
   @@index([workOrderNumber(ops: raw("gin_trgm_ops"))], map: "work_orders_workOrderNumber_trgm_idx", type: Gin)
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "work_orders_updatedAt_esitleme_idx")
   @@map("work_orders")
 }
 
@@ -4185,6 +4201,8 @@ model WorkOrderStep {
   // COMPLETED yığını indekslenmez, açık kuyruk sorgusu O(açık step). Prisma 7
   // predicate'i drift saymaz. Migration: 20260607010000.
   @@index([stationId, status, isUrgent, priority, startedAt])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "work_order_steps_updatedAt_esitleme_idx")
   @@map("work_order_steps")
 }
 
@@ -4322,6 +4340,8 @@ model WorkOrderToOrderLine {
   @@unique([workOrderId, orderLineId], map: "work_order_to_order_lines_active_pair_uq")
   @@index([orderLineId])
   @@index([workOrderId, unlinkedAt])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "work_order_to_order_lines_updatedAt_esitleme_idx")
   @@map("work_order_to_order_lines")
 }
 
@@ -5182,6 +5202,10 @@ model MergeOperation {
 
   @@index([entity, createdAt(sort: Desc)])
   @@index([survivorId])
+  // Patron bulutu eşitlemesi birleştirme defterini `(createdAt, id)` sırasıyla tarar (FK taşıması `updatedAt` yazmaz).
+  @@index([createdAt, id], map: "merge_operations_createdAt_esitleme_idx")
+  // Patron bulutu eşitlemesi birleştirme defterini `(revertedAt, id)` sırasıyla tarar (FK taşıması `updatedAt` yazmaz).
+  @@index([revertedAt, id], map: "merge_operations_revertedAt_esitleme_idx")
   @@map("merge_operations")
 }
 
@@ -5553,6 +5577,8 @@ model RollMovement {
   // (çift START/SKIP/FINISH yarışlarının kaybedeni P2002 alır). Geri alınmış açık
   // satır sedde yer işgal etmez (migration 20260911190000). Partial UNIQUE
   // @@index ile eşleşmediğinden şemada karşılığı bilinçli olarak YOK.
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "roll_movements_updatedAt_esitleme_idx")
   @@map("roll_movements")
 }
 
@@ -5802,6 +5828,8 @@ model DirectShipment {
   /// Şube-kırılımlı sevk listesi. DB'de KISMİ (`"branchId" IS NOT NULL`) — şube
   /// opsiyonel, satırların çoğu NULL (migration 20260905140000).
   @@index([branchId])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "direct_shipments_updatedAt_esitleme_idx")
   @@map("direct_shipments")
 }
 
@@ -6090,6 +6118,8 @@ model Subcontractor {
   @@index([documentProfileId])
   @@index([nameFold])
   @@index([mergedIntoId])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "subcontractors_updatedAt_esitleme_idx")
   @@map("subcontractors")
 }
 
@@ -6762,6 +6792,8 @@ model Sack {
   @@index([branchId])
   /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
   @@index([sackNo(ops: raw("gin_trgm_ops"))], map: "sacks_sackNo_trgm_idx", type: Gin)
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "sacks_updatedAt_esitleme_idx")
   @@map("sacks")
 }
 
@@ -7112,6 +7144,8 @@ model Shipment {
   @@index([carrierFold])
   /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
   @@index([shipmentNo(ops: raw("gin_trgm_ops"))], map: "shipments_shipmentNo_trgm_idx", type: Gin)
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "shipments_updatedAt_esitleme_idx")
   @@map("shipments")
 }
 
@@ -7290,6 +7324,8 @@ model RollReturn {
   @@index([returnGroupId])
   @@index([reasonTextFold])
   @@index([noteFold])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "roll_returns_updatedAt_esitleme_idx")
   @@map("roll_returns")
 }
 
@@ -7395,6 +7431,8 @@ model Color {
   @@index([nameFold])
   @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "colors_nameFold_trgm_idx", type: Gin)
   @@index([mergedIntoId])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "colors_updatedAt_esitleme_idx")
   @@map("colors")
 }
 
@@ -8517,6 +8555,8 @@ model Warehouse {
   @@index([isActive])
   @@index([addressFold])
   @@index([notesFold])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "warehouses_updatedAt_esitleme_idx")
   @@map("warehouses")
 }
 
@@ -8865,6 +8905,8 @@ model CariAccount {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([kind, isActive])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "cari_accounts_updatedAt_esitleme_idx")
   @@map("cari_accounts")
 }
 
@@ -8887,6 +8929,8 @@ model CariBalance {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@id([cariId, currency])
+  // Patron bulutu eşitleme filigranı `(updatedAt, cariId, currency)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, cariId, currency], map: "cari_balances_updatedAt_esitleme_idx")
   @@map("cari_balances")
 }
 
@@ -9009,6 +9053,8 @@ model Invoice {
   @@index([returnGroupId])
   @@index([subcontractorReceiptId])
   @@index([goodsReceiptId])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "invoices_updatedAt_esitleme_idx")
   @@map("invoices")
 }
 
@@ -9185,6 +9231,8 @@ model CariTransaction {
   // sorguda okunur. PARTIAL DEĞİL — komşu iki kaynak bağı da (invoiceId,
   // paymentId) tam index; aynı tablodaki üç bağın üçü aynı desende kalsın.
   @@index([chequeId])
+  // Patron bulutu eşitleme filigranı `(createdAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([createdAt, id], map: "cari_transactions_createdAt_esitleme_idx")
   @@map("cari_transactions")
 }
 
@@ -9262,6 +9310,8 @@ model Payment {
   @@index([direction, status, paymentDate])
   @@index([cashBoxId, paymentDate])
   @@index([bankAccountId, paymentDate])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "payments_updatedAt_esitleme_idx")
   @@map("payments")
 }
 
@@ -9301,6 +9351,8 @@ model CashBox {
   /// AD SEDDİ — bkz. `Warehouse.nameFold` gerekçesi.
   @@unique([nameFold])
   @@index([isActive])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "cash_boxes_updatedAt_esitleme_idx")
   @@map("cash_boxes")
 }
 
@@ -9338,6 +9390,8 @@ model BankAccount {
   @@unique([nameFold])
   @@index([isActive])
   @@index([bankNameFold])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "bank_accounts_updatedAt_esitleme_idx")
   @@map("bank_accounts")
 }
 
@@ -9481,6 +9535,8 @@ model CashTransaction {
   @@index([bankAccountId, txnDate])
   @@index([kind, status, txnDate])
   @@index([transferGroupId])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "cash_transactions_updatedAt_esitleme_idx")
   @@map("cash_transactions")
 }
 
@@ -9692,6 +9748,8 @@ model Cheque {
   @@index([status, dueDate])
   @@index([endorsedToCariId])
   @@index([bankAccountId])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "cheques_updatedAt_esitleme_idx")
   @@map("cheques")
 }
 
@@ -9781,6 +9839,8 @@ model ChequeEvent {
   @@index([bankAccountId, eventDate])
   @@index([cashBoxId, eventDate])
   @@index([counterCariId])
+  // Patron bulutu eşitleme filigranı `(createdAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([createdAt, id], map: "cheque_events_createdAt_esitleme_idx")
   @@map("cheque_events")
 }
 
@@ -10155,6 +10215,8 @@ model ItemPrice {
   // → partial: WHERE "customerId" IS NOT NULL  (müşteri istisnası tektir)
   @@unique([itemId, customerId, kind, currency], map: "item_price_customer_uq")
   @@index([customerId])
+  // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
+  @@index([updatedAt, id], map: "item_prices_updatedAt_esitleme_idx")
   @@map("item_prices")
 }
 
@@ -10579,4 +10641,60 @@ model StockCountLine {
   @@index([rollId])
   @@index([itemId])
   @@map("stock_count_lines")
+}
+
+// =============================================================================
+// PATRON BULUTU EŞİTLEMESİ (B1) — fabrika tarafının iki durum tablosu
+// =============================================================================
+// Sözleşme: docs/design/PATRON-BULUTU-ESITLEME.md §4. Değişiklik tespiti audit'ten
+// TÜRETİLMEZ; filigran (`updatedAt`/`createdAt` + id) + DB tetikleyicilerinin
+// yazdığı işaretler + birleştirme defteri. Kod: src/cloud-sync/.
+
+/// Eşitleme işaretinin türü — KAPALI küme: satır silindi ya da filigranın göremediği
+/// bir değişiklik kök satırı kirletti. Yeni tür doğarsa işleyen kod da değişmek zorunda.
+enum SyncMarkKind {
+  DELETED
+  DIRTY
+}
+
+/// EŞİTLEME İŞARETİ — satırı UYGULAMA KODU YAZMAZ, satır düzeyi DB tetikleyicileri yazar:
+/// katalog kök tablosunda silinen satır (DELETED; kaskadla silinen de) ve filigranın
+/// göremediği değişiklik (DIRTY: topun ESKİ çuvalı/sevkiyatı/iş emri, sevkiyat↔sipariş
+/// kümesi, silinen çocuğun ebeveyni). Silen yolun dili (Prisma, ham SQL, kaskad) önemsizdir
+/// ve işaret silmeyle AYNI tx'te commit olur ya da geri alınır.
+/// TELEMETRİ sınıfı (defter DEĞİL): satır silindiğinde raporlanan hiçbir sayı değişmez;
+/// bulutun onayladığı filigranın gerisinde kalan ve 7 günden eski satırlar budanır.
+/// FK YOK (bilinçli): silinen satırın kimliğini taşır; `tableName` + `rowId` birlikte anlamlıdır.
+/// `id`/`createdAt` varsayılanları DB'de — tetikleyici Prisma'dan geçmez.
+model SyncMark {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tableName String       @db.VarChar(63)
+  rowId     String       @db.Uuid
+  kind      SyncMarkKind
+  createdAt DateTime     @default(dbgenerated("clock_timestamp()")) @db.Timestamptz
+
+  @@index([createdAt, id], map: "sync_marks_createdAt_id_idx")
+  @@index([tableName, createdAt, id], map: "sync_marks_tableName_createdAt_id_idx")
+  @@map("sync_marks")
+}
+
+/// EŞİTLEME FİLİGRANI — DURUM tablosu (defter DEĞİL): "nereye kadar gönderildi ve bulut
+/// onayladı". `source` biçimi: `<projeksiyon>|<tablo>.<kolon>` (kaynak filigranı: `watermarkAt`
+/// + `tieBreaker` JSON dizisi) · `<projeksiyon>` (bulut zinciri: `watermarkAt` = onaylı ufuk,
+/// `tieBreaker` = tur sayacı, `catalogVersion`, `retentionFrom` = bulutun saklama ufku) ·
+/// `anlik|<ad>` (`digest` = son onaylı içerik özeti). YALNIZ bulut onayından sonra ilerler.
+/// Döküm başka makineye taşınırsa filigran da taşınır; bulutun zincir denetimi TAM gönderim ister.
+model SyncWatermark {
+  id             String    @id @default(uuid()) @db.Uuid
+  source         String    @unique @db.VarChar(160)
+  watermarkAt    DateTime? @db.Timestamptz
+  tieBreaker     String?   @db.VarChar(200)
+  catalogVersion Int?
+  digest         String?   @db.VarChar(64)
+  retentionFrom  DateTime? @db.Timestamptz
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@map("sync_watermarks")
 }

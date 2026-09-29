@@ -100,7 +100,7 @@ const TOP_N = 5;
  * Üretim akışı kolonları — etiketler Kanban ile AYNI olmak zorunda.
  * Ayrışırsa patron ile sahadaki operatör aynı kolonu farklı adla konuşur.
  */
-const FLOW_COLUMNS = [
+export const FLOW_COLUMNS = [
   ["hamStok", "Ham Stok"],
   ["yariMamul", "Yarı Mamul"],
   ["fason", "Fason'da"],
@@ -215,24 +215,32 @@ export async function getBossOverview(params: {
             })),
           }
         : null,
-    shipping: shipRes
-      ? {
-          shippedQty: shipRes.summary.shippedQty,
-          shippedRollCount: shipRes.summary.shippedRollCount,
-          onTimePct: shipRes.summary.onTimePct,
-          completedOrders: shipRes.summary.completedOrders,
-          avgLateDays: shipRes.summary.avgLateDays,
-        }
-      : null,
-    subcontract: subRes
-      ? {
-          openQty: subRes.summary.openQty,
-          openItems: subRes.summary.openItems,
-          firePct: subRes.summary.firePct,
-          avgTurnaroundDays: subRes.summary.avgTurnaroundDays,
-          // `oldestOpen` en yaşlıdan sıralı gelir; boşsa açık sevk yok demektir.
-          oldestOpenDays: subRes.oldestOpen[0]?.daysOpen ?? null,
-        }
-      : null,
+    shipping: shipRes ? bossShippingSection(shipRes) : null,
+    subcontract: subRes ? bossSubcontractSection(subRes) : null,
+  };
+}
+
+/**
+ * Dönemli iki bölümün eşlemesi — patron bulutu (`cloud-sync` · `ozet`) aynı bölümü dört
+ * standart pencere için ayrı ayrı basar; eşleme ikinci kez yazılmasın diye buradan okur.
+ */
+export function bossShippingSection(shipRes: Awaited<ReturnType<typeof getShipmentScorecard>>): BossShipping {
+  return {
+    shippedQty: shipRes.summary.shippedQty,
+    shippedRollCount: shipRes.summary.shippedRollCount,
+    onTimePct: shipRes.summary.onTimePct,
+    completedOrders: shipRes.summary.completedOrders,
+    avgLateDays: shipRes.summary.avgLateDays,
+  };
+}
+
+export function bossSubcontractSection(subRes: Awaited<ReturnType<typeof getSubcontractScorecard>>): BossSubcontract {
+  return {
+    openQty: subRes.summary.openQty,
+    openItems: subRes.summary.openItems,
+    firePct: subRes.summary.firePct,
+    avgTurnaroundDays: subRes.summary.avgTurnaroundDays,
+    // `oldestOpen` en yaşlıdan sıralı gelir; boşsa açık sevk yok demektir.
+    oldestOpenDays: subRes.oldestOpen[0]?.daysOpen ?? null,
   };
 }

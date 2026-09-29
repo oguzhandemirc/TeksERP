@@ -62,6 +62,10 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "içe aktarım satırını `import/import-revert.branches` damgalar; audit geri sarma eyleminde (`import-revert.service`)" },
   { model: "FabricPropertyValue", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "özellik DEĞERİ ebeveyn özellikle birlikte yazılır; audit ebeveynin ucunda `tableName: \"FABRIC_PROPERTY\"` ile (route katmanı)" },
+  { model: "SyncMark", sinif: "TELEMETRI",
+    gerekce: "patron bulutu eşitleme işareti; satırı DB tetikleyicileri yazar (uygulama CUD'u değil), uygulamanın tek yazımı yaşa göre budamadır (src/cloud-sync/marks-pruning.ts) — `defter.md` § Telemetri ≠ defter" },
+  { model: "SyncWatermark", sinif: "SISTEM_ISI",
+    gerekce: "eşitleme filigranı (durum tablosu) — yazan eşitleme işidir (bulut onayından sonra), audit'in öznesi olacak bir kullanıcı yoktur; iş kaydı değildir" },
   { model: "ShiftInstance", sinif: "SISTEM_ISI",
     gerekce: "vardiya takvimi `jobs/shift-calendar.job` tarafından üretilir; kullanıcı eylemi yok, audit'in öznesi olacak kullanıcı da yok" },
 ];

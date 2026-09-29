@@ -25,6 +25,7 @@ import { applyDateRange, buildTextSearch, isCodeLikeTerm, readFilterList, readId
 import { foldSearchTokens } from "../utils/search-fold";
 import { foldCodeForCompare } from "../utils/code-format";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
+import { PRESENT_ROLL_WHERE, loadSackContentTotals } from "./helpers/sack-content-totals.helper";
 import { ACTIVE_TAG_WHERE, ACTIVE_TAG_SELECT, toTagBadges } from "./helpers/sack-tag.helper";
 import { batchLoadAliasesMulti } from "./helpers/customer-name.helper";
 import { readPackingLotSettings } from "./helpers/packing-group.helper";
@@ -34,16 +35,9 @@ import { tokenReplay } from "./helpers/token-replay.helper";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
 
-/**
- * "Çuvalda FİZİKSEL olarak duran top" yüklemi — TEK KAYNAK.
- *
- * ⚠️ Liste satırındaki `rollCount` bu süzgeçten geçer (hayalet top: kartelaya /
- * tambura / fasona gitmiş ama `sackId` hâlâ dolu). "Boş çuval" filtresi de AYNI
- * yüklemi kullanmak ZORUNDA: ayrı yazılsaydı yalnız hayalet taşıyan bir çuval
- * listede "0 top" basar ama "Boş" filtresinde ÇIKMAZDI — bu depoda adı konmuş
- * "türetilmiş alan / ayrışan yüzey" sınıfı (2026-08-21 taraması).
- */
-const PRESENT_ROLL_WHERE = { status: { notIn: SACK_ABSENT_STATUSES } } satisfies Prisma.RollWhereInput;
+// "Çuvalda FİZİKSEL olarak duran top" yüklemi (`PRESENT_ROLL_WHERE`) ve çuval içerik
+// sayacı `helpers/sack-content-totals.helper`da tek kaynaktır: liste satırının `rollCount`u
+// ile "Boş çuval" süzgeci AYRI yazılsaydı hayalet taşıyan çuval "0 top" basıp "Boş"ta çıkmazdı.
 
 /**
  * Tarih aralığı filtresinin kabul ettiği kolonlar (FilterBar `dateRange`).
@@ -792,33 +786,19 @@ export class SackSearchService {
     // etiketi (label.service — aynı küme) ve irsaliye AYNI çuval için ÜÇ FARKLI top
     // adedi basardı. Filtre `matchAgg`'a da uygulanır; yoksa içerik filtresi seçili
     // ürünün hayaletini sayıp "eşleşen > toplam" absürtlüğü doğar.
-    const presentOnly = PRESENT_ROLL_WHERE;
-    const [allAgg, matchAgg, swatchAgg] = ids.length
+    // Hayalet dışlaması ve sayaç formülü tek kaynakta (`loadSackContentTotals`).
+    const [allBySack, matchBySack, swatchAgg] = ids.length
       ? await Promise.all([
-          prisma.roll.groupBy({
-            by: ["sackId"],
-            where: { sackId: { in: ids }, ...presentOnly },
-            _count: { _all: true },
-            _sum: { currentQty: true },
-          }),
-          hasContentFilter
-            ? prisma.roll.groupBy({
-                by: ["sackId"],
-                where: { sackId: { in: ids }, ...presentOnly, ...rollFilter },
-                _count: { _all: true },
-                _sum: { currentQty: true },
-              })
-            : Promise.resolve([]),
+          loadSackContentTotals(ids),
+          hasContentFilter ? loadSackContentTotals(ids, rollFilter) : Promise.resolve(new Map<string, never>()),
           prisma.swatch.groupBy({
             by: ["sackId"],
             where: { sackId: { in: ids } },
             _count: { _all: true },
           }),
         ])
-      : [[], [], []];
+      : [new Map<string, never>(), new Map<string, never>(), []];
 
-    const allBySack = new Map(allAgg.map((g) => [g.sackId, g]));
-    const matchBySack = new Map(matchAgg.map((g) => [g.sackId, g]));
     const swatchBySack = new Map(swatchAgg.map((g) => [g.sackId, g]));
 
     const data = pageRows.map((s) => {
@@ -843,12 +823,12 @@ export class SackSearchService {
         customer: s.customer,
         branch: s.branch,
         shipment: s.shipment, // null = havuzda; dolu = sevkiyatta
-        rollCount: all?._count._all ?? 0,
-        totalQty: Number(all?._sum.currentQty ?? 0),
+        rollCount: all?.rollCount ?? 0,
+        totalQty: Number(all?.totalQty ?? 0),
         swatchCount: swatchBySack.get(s.id)?._count._all ?? 0,
         // İçerik filtresi yokken null — UI eşleşme sütununu gizler.
-        matchRollCount: hasContentFilter ? (match?._count._all ?? 0) : null,
-        matchQty: hasContentFilter ? Number(match?._sum.currentQty ?? 0) : null,
+        matchRollCount: hasContentFilter ? (match?.rollCount ?? 0) : null,
+        matchQty: hasContentFilter ? Number(match?.totalQty ?? 0) : null,
       };
     });
 
