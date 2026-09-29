@@ -69,6 +69,21 @@ pub fn unwrap_module_key(request: String) -> Result<String> {
     call(&request, api::unwrap_module_key)
 }
 
+#[napi(catch_unwind)]
+pub fn unwrap_lease_module_key(request: String) -> Result<String> {
+    call(&request, api::unwrap_lease_module_key)
+}
+
+#[napi(catch_unwind)]
+pub fn protect_local(request: String) -> Result<String> {
+    call(&request, api::protect_local)
+}
+
+#[napi(catch_unwind)]
+pub fn unprotect_local(request: String) -> Result<String> {
+    call(&request, api::unprotect_local)
+}
+
 /// İş parçacığı havuzunda koşan istek (süreç başlatma, dosya özetleme) — olay döngüsü bloke olmaz.
 pub struct BlockingCall {
     request: String,

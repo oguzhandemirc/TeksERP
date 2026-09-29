@@ -8,7 +8,7 @@
 
 | Parça | Nerede | Ölçüm |
 |---|---|---|
-| Rust çekirdeği (napi-rs) | `Teks-Erp/native/lisans-cekirdek/` | `cargo test` 6 birim + vektör dosyası (296 kayıt) · clippy üç hedefte temiz |
+| Rust çekirdeği (napi-rs) | `Teks-Erp/native/lisans-cekirdek/` | `cargo test` 6 birim + vektör dosyası (319 kayıt) · clippy üç hedefte temiz |
 | Arayüz + TS uygulaması | `Teks-Erp/src/lib/license/license-core.ts` | TS protokolünün kendisi — kâhin |
 | Yükleyici · adaptör | `Teks-Erp/src/lib/license/native.ts` · `Teks-Erp/src/lib/license/native-adapter.ts` | dosya yok / bozuk / künye uyuşmaz / zorunlu kip dalları bekçide; native yanıtı sözleşme şemalarından geçer |
 | Bütünlük (2e arayüzü) · modül anahtarı (2d arayüzü) | `Teks-Erp/src/lib/license/integrity.ts` · `Teks-Erp/src/lib/license/module-key.ts` | TS başvurusu = native ile aynı vektörler |
@@ -31,7 +31,7 @@
 - **Native yanıtı sözleşme şemalarından geçer** (Zod: belge şemaları, sonuç zarfı, kod kümesi): native'deki bir hata sessiz kabul üretemez; sözleşmeye uymayan yanıt `CEKIRDEK_YOK`'tur. JWS yükü kopyalanmadan geçer (`z.record` `__proto__` anahtarını prototipe yazıp yükten düşürürdü — vektörle yakalandı).
 - **Panik** JS istisnasına döner (`#[napi(catch_unwind)]`, iş parçacığı görevlerinde `catch_unwind`); `panic = "unwind"` bilerek (abort backend'i düşürürdü). Süreç başlatan/dosya özetleyen çağrılar (`collectFingerprint`, `verifyIntegrity`) libuv havuzunda koşar, olay döngüsü bloke olmaz.
 
-## 2. JSON sınırı (ABI 1)
+## 2. JSON sınırı (ABI 2 — Faz 2d kiradan açma + yerel koruma ekledi)
 
 Her dışa aktarım JSON metni alır, JSON metni döndürür (napi nesne eşlemesi yok — sürümler arası kırılgan değil). `api.rs` fonksiyonlarını hem napi yapıştırıcısı hem `cargo test` çağırır: test edilen yüzey Node'un gördüğü yüzeydir.
 
@@ -48,6 +48,8 @@ Her dışa aktarım JSON metni alır, JSON metni döndürür (napi nesne eşleme
 | `collectFingerprint` (Promise) | `{salt, f5}` | `{digest, measured}` |
 | `verifyIntegrity` (Promise) | `{manifest, root, keys?}` | `{ok, value: IntegrityReport}` |
 | `unwrapModuleKey` | `{wrap, privateKey, modul}` | `{ok, value: {anahtar}}` |
+| `unwrapLeaseModuleKey` (ABI 2) | `{lease, entitlement, privateKey, modul, kid, roots?}` | `{ok, value: {anahtar, surum}}` |
+| `protectLocal` · `unprotectLocal` (ABI 2) | `{veri}` (base64url) | `{ok, value: {veri}}` — Windows DPAPI; başka platformda `KORUMA_YOK` |
 
 `roots?`/`keys?` verilmezse GÖMÜLÜ çapa. Biçim kırılırsa `api::ABI` ve `NATIVE_ABI` birlikte artar (bekçi §0f eşitliği ölçer).
 
@@ -85,7 +87,7 @@ JWS `typ: tekserp-butunluk`, imzalayan PAKET anahtarı (`kid` `paket-<…>`). Y�
 
 ## 7. Modül anahtarı sarması v1 — Faz 2d için arayüz
 
-`{v: 1, modul: "<modül anahtarı>", epk: <32 bayt>, sarili: <32 anahtar + 16 etiket>}`: geçici X25519 → ortak sır → HKDF-SHA256 (tuz = `epk ‖ alıcı açık`, bilgi = `tekserp/modul-anahtari/v1␟<modül>`) → AES-256-GCM (sıfır nonce — anahtar her sarmada tektir). `.tkenc` alıcı sarmasının kalıbıdır; fark, HKDF bilgisine giren modül adıdır (bir modülün sarması başkasının yerine geçemez, vektörle ölçüldü). Kodlar: `MODUL_SARMA_BICIM` · `MODUL_UYUSMAZ` · `MODUL_ANAHTAR_GECERSIZ` (biçimsiz özel anahtar ya da düşük mertebeli nokta — OpenSSL türetmeyi reddeder, Rust sıfır sırrı yakalar) · `MODUL_SARMA_ACILAMADI`. Sarma satıcı tarafındadır (`wrapModuleKey`, TS). **2d'ye not:** "güvenlik-kritik sonuç anahtardır" ilkesi için açma native'de kira doğrulamasına BAĞLANMALI (sarma kiradan okunur, kira native'de doğrulanır, anahtar yalnız geçerli kirayla döner); kurulumun X25519 anahtarı bugün yok (`store.ts` `x25519: null`).
+`{v: 1, modul: "<modül anahtarı>", epk: <32 bayt>, sarili: <32 anahtar + 16 etiket>}`: geçici X25519 → ortak sır → HKDF-SHA256 (tuz = `epk ‖ alıcı açık`, bilgi = `tekserp/modul-anahtari/v1␟<modül>`) → AES-256-GCM (sıfır nonce — anahtar her sarmada tektir). `.tkenc` alıcı sarmasının kalıbıdır; fark, HKDF bilgisine giren modül adıdır (bir modülün sarması başkasının yerine geçemez, vektörle ölçüldü). Kodlar: `MODUL_SARMA_BICIM` · `MODUL_UYUSMAZ` · `MODUL_ANAHTAR_GECERSIZ` (biçimsiz özel anahtar ya da düşük mertebeli nokta — OpenSSL türetmeyi reddeder, Rust sıfır sırrı yakalar) · `MODUL_SARMA_ACILAMADI`. Sarma satıcı tarafındadır (`wrapModuleKey`, protokolün `modul-anahtari.ts`i). **Faz 2d (YAPILDI, 2026-09-30):** açma kira doğrulamasına bağlandı — `unwrapLeaseModuleKey` kira + HAK'ı doğrular ve bağlar, modül HAK'ta ∧ dondurulmamış olmalı, kiranın `modulAnahtarlari` listesinde (modül, kid) hakkı aranır, sarma kurulumun X25519 özel yarısıyla açılır ve açılan anahtarın özeti (`mk-` + sha256(önek ␟ anahtar) 22 karakter) kid'e eşit olmalı; kodlar `MODUL_HAK_YOK` · `MODUL_DONMUS` · `MODUL_ANAHTARI_YOK` · `MODUL_KID_UYUSMAZ`. Kurulumun X25519'u kurulum anahtar dosyasındadır (eski kurulumda ilk yoklamada doğar). Yerel koruma (`protectLocal`, Windows DPAPI FFI, ek entropi `tekserp/modul-onbellek/v1`) modül anahtarı önbelleği içindir. Ayrıntı: `docs/kurallar/lisans.md` § Modül şifreleme (Faz 2d).
 
 ## 8. Derleme ve hedefler
 
@@ -109,7 +111,7 @@ Hedef ölçümü: **darwin-arm64** yerel 34/0 · **win-x64** thinkpad-1'de (Node
 
 ## 10. Bekçi ve vektörler
 
-- `test_lisans_native_kahin` (DB'siz): §0 statik aynalar · §1 yükleyici (dosya yok · zorunlu · platform · bozuk `.node` · ortam yolu · aday sırası · künye kararı) · §2 vektör dosyası bayatlık + kod kapsamı · §3–§7 native (yoksa "⏭ ATLANDI — native yok", 7 kontrol sayılı; `TEKSERP_STRICT=1`de kırmızı) · §8 kalıcı K sondaları. Vektör dosyası: `npx tsx scripts/test_lisans_native_kahin.ts --vektor-yaz` (TS kâhini yazar; 296 kayıt: JWS 39 · sertifika 34 · HAK 41 · kira 41 · bağ 7 · normalleştirme 49 · özet 6 · bütünlük 33 · modül 14 · tarih 32).
+- `test_lisans_native_kahin` (DB'siz): §0 statik aynalar · §1 yükleyici (dosya yok · zorunlu · platform · bozuk `.node` · ortam yolu · aday sırası · künye kararı) · §2 vektör dosyası bayatlık + kod kapsamı · §3–§7 native (yoksa "⏭ ATLANDI — native yok", 7 kontrol sayılı; `TEKSERP_STRICT=1`de kırmızı) · §8 kalıcı K sondaları. Vektör dosyası: `npx tsx scripts/test_lisans_native_kahin.ts --vektor-yaz` (TS kâhini yazar; 319 kayıt: JWS 39 · sertifika 34 · HAK 41 · kira 52 · bağ 7 · normalleştirme 49 · özet 6 · bütünlük 33 · modül 14 · kiradan modül 12 · tarih 32).
 - `cargo test` aynı dosyayı Rust tarafında koşar (tarih vektörleri dahil — native'in tarih ucu yok).
 - Negatif sondalar (her biri uygulandı/geri alındı sha ile, geri alınınca 34/0): alg denetimi · parmak izi katılığı · UTF-16 boy · kesir yuvarlama · yer tutucu · Windows sondası · HKDF modül bağı · gömülü kök · bayi modül tavanı · zorunlu kipte TS'e düşme · regex tek yanlı değişim · sertifika zaman toleransı · zorunlu kipte test derlemesi reddi — 13'ü de kırmızı; I3-1c'de dört sonda daha: kirada `sunucuSaati` isteğe bağlı · HAK'ta `kurulumId` isteğe bağlı (ikisi §4a/§5a + `cargo test`) · Rust `TYP_BUTUNLUK` değeri · TS `TYP` adı (ikisi §0j) (ayrıntı `Teks-Erp/docs/BEKCI-HARITASI.md` `## lisans`).
 

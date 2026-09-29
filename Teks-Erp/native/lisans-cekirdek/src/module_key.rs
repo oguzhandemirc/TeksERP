@@ -74,3 +74,25 @@ pub fn unwrap(wrap: &Value, private_key_b64: &str, expected_module: &str) -> Out
     key.copy_from_slice(&plain);
     Ok(key)
 }
+
+/// Anahtar kimliği öneki — TS `MODULE_KEY_KID_PREFIX` (`protocol/modul-anahtari.ts`) aynası.
+pub const KID_PREFIX: &str = "tekserp/modul-anahtari/kid/v1";
+
+/// `mk-` + base64url(sha256(önek ␟ anahtar)) ilk 22 karakter — TS `moduleKeyId` aynası.
+pub fn key_id(key: &[u8; 32]) -> String {
+    use sha2::Digest;
+    let mut h = Sha256::new();
+    h.update(format!("{KID_PREFIX}\u{1f}").as_bytes());
+    h.update(key);
+    let digest = b64::encode(&h.finalize());
+    format!("mk-{}", &digest[..22])
+}
+
+/// Kiradaki hak listesinden (modül, kid) hakkını bulur; HAK/yaptırım kararı çağıranın (api.rs).
+pub fn find_grant<'a>(lease: &'a serde_json::Map<String, Value>, module: &str, kid: &str) -> Option<&'a Value> {
+    lease
+        .get("modulAnahtarlari")?
+        .as_array()?
+        .iter()
+        .find(|g| g.get("modul").and_then(Value::as_str) == Some(module) && g.get("kid").and_then(Value::as_str) == Some(kid))
+}

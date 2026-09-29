@@ -14,11 +14,31 @@ import type { AuthenticatedRequest } from "./installation-auth";
 import { renewLease } from "./renewal.service";
 import { requireReason } from "./sanction.service";
 
+export const DR_AMBIGUOUS_MESSAGE = "Ana kurulum kimliğini portaldan ya da ana sunucunun Lisans ekranından alın";
+
+/**
+ * Kimliksiz DR: tesisin TEK etkin ÜRETİM kurulumu. Yoksa, bu DR'nin zaten devraldığı tek ÜRETİM kurulumu
+ * (yanıtı kaybolmuş isteğin yeniden denemesi aynı sonucu alsın); 0 ya da birden çok → 409 DR_ANA_BELIRSIZ.
+ */
+async function inferMainInstallation(dr: Kurulum): Promise<Kurulum> {
+  const base = { tesisId: dr.tesisId, sinif: "URETIM" as const, aktif: true, id: { not: dr.id } };
+  const active = await prisma.kurulum.findMany({ where: { ...base, durum: "ETKIN" }, take: 2 });
+  if (active.length === 1) return active[0]!;
+  if (active.length === 0) {
+    const taken = await prisma.kurulum.findMany({ where: { ...base, durum: "DEVREDILDI" }, take: 2 });
+    const mine = taken.length === 1 ? await prisma.kurulumKaydi.findFirst({ where: { kurulumId: taken[0]!.id, olay: "DEVREDILDI" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] }) : null;
+    const drId = mine?.ayrinti && typeof mine.ayrinti === "object" && !Array.isArray(mine.ayrinti) ? mine.ayrinti.drKurulumId : undefined;
+    if (drId === dr.kurulumId) return taken[0]!;
+  }
+  throw new VendorError(409, "DR_ANA_BELIRSIZ", DR_AMBIGUOUS_MESSAGE);
+}
+
 /** Ucuz ön denetim (yan etkisiz, nonce'tan ÖNCE): DR sınıfı + ETKİN; ana kurulum aynı tesisin üretim kurulumu. */
-export async function drTakeoverTarget(dr: Kurulum, body: { anaKurulumId: string }): Promise<Kurulum> {
+export async function drTakeoverTarget(dr: Kurulum, body: { anaKurulumId?: string | undefined }): Promise<Kurulum> {
   if (dr.sinif !== "DR" || dr.durum !== "ETKIN") {
     throw new VendorError(400, "GOVDE_GECERSIZ", "Üretimi yalnız ETKİN bir DR sınıfı kurulum devralabilir");
   }
+  if (body.anaKurulumId === undefined) return inferMainInstallation(dr);
   const main = await prisma.kurulum.findUnique({ where: { kurulumId: body.anaKurulumId } });
   // Başka tesisin kurulumu "bulunamadı" sayılır: varlığı sızdırılmaz.
   if (!main || main.id === dr.id || main.tesisId !== dr.tesisId || main.sinif !== "URETIM") {
@@ -30,7 +50,7 @@ export async function drTakeoverTarget(dr: Kurulum, body: { anaKurulumId: string
 export async function processDrTakeover(
   ctx: VendorContext,
   auth: AuthenticatedRequest,
-  body: { anaKurulumId: string; gerekce: string },
+  body: { anaKurulumId?: string | undefined; gerekce: string },
   nowMs: number,
 ): Promise<LicenseResponse> {
   const dr = auth.installation;

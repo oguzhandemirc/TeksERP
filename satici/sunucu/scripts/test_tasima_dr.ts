@@ -242,6 +242,16 @@ async function main(): Promise<void> {
     kontrol("§4b ✓K başka tesisin DR'si devralamaz → 400", yabanciDenedi.status === 400, `${yabanciDenedi.status} ${yabanciDenedi.kod}`);
     const anaDurum0 = await prisma.kurulum.findUniqueOrThrow({ where: { id: ana.kurulumDbId } });
     kontrol("§4c reddedilen denemeler anayı DEĞİŞTİRMEDİ", anaDurum0.durum === "ETKIN");
+    // Faz 2d yönetici kararı: ana kurulum kimliği isteğe bağlı — tesiste tek ETKİN ÜRETİM yoksa 409.
+    const kimliksizDevral = () =>
+      imzaliPost(sunucu.genel, ENDPOINTS.DR_TAKEOVER, { kurulumId: dr.kurulumId, amac: "dr-devral", anahtar: drAnahtar, govde: { v: 1, gerekce: "ana sunucu arızalı" } });
+    const belirsiz = await kimliksizDevral();
+    kontrol(
+      "§4i ✓K kimliksiz DR, tesiste İKİ etkin ÜRETİM → 409 DR_ANA_BELIRSIZ, hiçbiri devredilmez",
+      belirsiz.status === 409 && belirsiz.kod === "DR_ANA_BELIRSIZ" &&
+        (await prisma.kurulum.count({ where: { id: { in: [ana.kurulumDbId, diger.kurulumDbId] }, durum: "ETKIN" } })) === 2,
+      `${belirsiz.status} ${belirsiz.kod}`,
+    );
 
     const zil = await zilAboneOl(sunucu.genel, { kurulumId: ana.kurulumId, anahtar: anaAnahtar });
     const zilBekle = zil.bekleKonu("lisans", 2_000);
@@ -267,6 +277,18 @@ async function main(): Promise<void> {
     const geri = await yokla(ana.kurulumId, anaAnahtar, anaKira?.kiraId ?? null);
     kontrol("§5a geri alma → ana ETKİN, kira devredildi=false", kiraOf(geri)?.devredildi === false && (await prisma.kurulum.findUniqueOrThrow({ where: { id: ana.kurulumDbId } })).durum === "ETKIN");
     kontrol("§5b geri alma kurulum kaydında (DR_GERI_ALINDI)", (await prisma.kurulumKaydi.count({ where: { kurulumId: ana.kurulumDbId, olay: "DR_GERI_ALINDI" } })) === 1);
+
+    console.log("\n§5' kimliksiz DR (Faz 2d kararı) — tesisin TEK etkin ÜRETİM kurulumu çıkarılır");
+    await cancelInstallationForDr(diger.kurulumDbId);
+    const cikarilan = await kimliksizDevral();
+    kontrol(
+      "§5c kimliksiz DR, tek etkin ÜRETİM → 200, o kurulum DEVREDILDI",
+      cikarilan.status === 200 && (await prisma.kurulum.findUniqueOrThrow({ where: { id: ana.kurulumDbId } })).durum === "DEVREDILDI",
+      `${cikarilan.status} ${cikarilan.kod ?? ""}`,
+    );
+    const cikarilanTekrar = await kimliksizDevral();
+    kontrol("§5d kimliksiz DR yeniden denemesi (yanıt kaybı) → 200, aynı ana (bu DR'nin devraldığı)", cikarilanTekrar.status === 200, `${cikarilanTekrar.status} ${cikarilanTekrar.kod ?? ""}`);
+    await revertDrTakeover({ mainInstallationDbId: ana.kurulumDbId, actor: "bekci", reason: "kimliksiz DR sondası geri" });
     temizlenecek.push(yabanciDr.kurulumDbId);
 
     console.log("\n§6 kurulum iptali ve ters yolu");
@@ -293,6 +315,11 @@ async function main(): Promise<void> {
     await kapat();
   }
   sonuc();
+}
+
+async function cancelInstallationForDr(installationDbId: string): Promise<void> {
+  const { cancelInstallation } = await import("../src/services/installation-admin.service");
+  await cancelInstallation({ installationDbId, reason: "kimliksiz DR sondası: tek üretim kalsın", actor: "bekci" });
 }
 
 main().catch(async (err: Error) => {

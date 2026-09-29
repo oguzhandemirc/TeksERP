@@ -29,6 +29,7 @@ import {
   type LicenseCore,
 } from "./license-core";
 import { IntegrityReportSchema, type IntegrityReport, type PackageKey } from "./integrity";
+import type { LeaseModuleKeyRequest } from "./module-key";
 
 export interface NativeBinding {
   kunye(): string;
@@ -41,6 +42,9 @@ export interface NativeBinding {
   normalizeFactor(request: string): string;
   digestFingerprint(request: string): string;
   unwrapModuleKey(request: string): string;
+  unwrapLeaseModuleKey(request: string): string;
+  protectLocal(request: string): string;
+  unprotectLocal(request: string): string;
   collectFingerprint(request: string): Promise<string>;
   verifyIntegrity(request: string): Promise<string>;
 }
@@ -56,6 +60,9 @@ const BINDING_FUNCTIONS = [
   "normalizeFactor",
   "digestFingerprint",
   "unwrapModuleKey",
+  "unwrapLeaseModuleKey",
+  "protectLocal",
+  "unprotectLocal",
   "collectFingerprint",
   "verifyIntegrity",
 ] as const;
@@ -130,6 +137,8 @@ export function nativeCore(b: NativeBinding): LicenseCore {
   const binding = resultSchema(z.literal(true));
   const integrity = resultSchema(IntegrityReportSchema);
   const moduleKey = resultSchema(z.object({ anahtar: z.string() }));
+  const leaseModuleKey = resultSchema(z.object({ anahtar: z.string().regex(/^[A-Za-z0-9_-]{43}$/), surum: z.number().int().min(1) }));
+  const protectedData = resultSchema(z.object({ veri: z.string() }));
   return Object.freeze({
     source: "native" as const,
     verifyJws: (token: unknown, typ: string, keys: readonly JwsKey[]): CoreResult<JwsView> =>
@@ -161,6 +170,16 @@ export function nativeCore(b: NativeBinding): LicenseCore {
       decodeResult(integrity, await b.verifyIntegrity(JSON.stringify({ manifest, root, ...(keys === undefined ? {} : { keys }) })), "bütünlük"),
     unwrapModuleKey: (wrap: unknown, privateKeyX: string, modul: string): CoreResult<{ anahtar: string }> =>
       decodeResult(moduleKey, b.unwrapModuleKey(JSON.stringify({ wrap, privateKey: privateKeyX, modul })), "modül anahtarı"),
+    unwrapLeaseModuleKey: (g: LeaseModuleKeyRequest): CoreResult<{ anahtar: string; surum: number }> =>
+      decodeResult(
+        leaseModuleKey,
+        b.unwrapLeaseModuleKey(
+          JSON.stringify({ lease: g.lease, entitlement: g.entitlement, privateKey: g.privateKeyX, modul: g.modul, kid: g.kid, ...anchorField(g.roots) }),
+        ),
+        "kiradan modül anahtarı",
+      ),
+    protectLocal: (veri: string): CoreResult<{ veri: string }> => decodeResult(protectedData, b.protectLocal(JSON.stringify({ veri })), "yerel koruma"),
+    unprotectLocal: (veri: string): CoreResult<{ veri: string }> => decodeResult(protectedData, b.unprotectLocal(JSON.stringify({ veri })), "yerel koruma"),
   });
 }
 
@@ -195,5 +214,8 @@ export function unavailableCore(reason: string): LicenseCore {
       },
     }),
     unwrapModuleKey: () => refuse<{ anahtar: string }>(),
+    unwrapLeaseModuleKey: () => refuse<{ anahtar: string; surum: number }>(),
+    protectLocal: () => refuse<{ veri: string }>(),
+    unprotectLocal: () => refuse<{ veri: string }>(),
   });
 }

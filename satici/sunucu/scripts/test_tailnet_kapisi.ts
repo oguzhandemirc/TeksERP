@@ -21,6 +21,7 @@ import { KeyStore } from "../src/keys/key-store";
 import { ActivationCodeHasher } from "../src/keys/code-pepper";
 import { createTailnetApp, isTailnetSource, requireTailnet } from "../src/http/tailnet-app";
 import { PortalSecretBox } from "../src/portal/secret-box";
+import { ModuleKeyVault } from "../src/keys/module-vault";
 import { fiksturKur } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import { kontrol, sonuc } from "./lib/test-ortam";
 
@@ -75,7 +76,7 @@ async function main(): Promise<void> {
   const kapaliConfig = loadConfig({ ...taban, ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: path.join(dizin, "capa.json") });
   let tailnetAdresi: AddressInfo | null = null;
   let kapaliAdres: AddressInfo | null = null;
-  const ctx = { config, keys: KeyStore.load(config), portalSecrets: PortalSecretBox.load(dizin, { create: true }), codeHasher: ActivationCodeHasher.load(dizin, { create: true }) };
+  const ctx = { config, keys: KeyStore.load(config), portalSecrets: PortalSecretBox.load(dizin, { create: true }), codeHasher: ActivationCodeHasher.load(dizin, { create: true }), moduleVault: ModuleKeyVault.load(dizin, { create: true }) };
   const app = createTailnetApp(ctx, null, () => tailnetAdresi);
   const dogru = http.createServer(app);
   const yanlis = http.createServer(app);

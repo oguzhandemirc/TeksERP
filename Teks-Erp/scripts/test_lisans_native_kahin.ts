@@ -33,7 +33,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import { PROTOCOL_ERROR_CODES, ROOT_PUBLIC_KEYS, TYP } from "../src/lib/license/protocol";
+import { MODULE_KEY_KID_PREFIX, PROTOCOL_ERROR_CODES, ROOT_PUBLIC_KEYS, TYP, b64uDecode, b64uEncode } from "../src/lib/license/protocol";
 import { CORE_ERROR_CODES, CORE_UNAVAILABLE_CODE, tsLicenseCore, type LicenseCore } from "../src/lib/license/license-core";
 import {
   NATIVE_ABI,
@@ -222,6 +222,8 @@ function bolum0(): void {
   check("§0f arayüz sürümü Rust = NATIVE_ABI", Number(abi?.[1]) === NATIVE_ABI, `rust ${abi?.[1]} · ts ${NATIVE_ABI}`);
   const hkdf = /pub const HKDF_INFO_PREFIX: &str = "([^"]+)";/.exec(rustKaynak("module_key.rs"));
   check("§0g modül anahtarı HKDF öneki aynı", hkdf?.[1] === MODULE_KEY_HKDF_PREFIX, hkdf?.[1] ?? "yok");
+  const kidOnek = /pub const KID_PREFIX: &str = "([^"]+)";/.exec(rustKaynak("module_key.rs"));
+  check("§0g' modül anahtarı kimlik öneki aynı (Faz 2d)", kidOnek?.[1] === MODULE_KEY_KID_PREFIX, kidOnek?.[1] ?? "yok");
 
   const rustDosyalar = ["jws.rs", "schema.rs", "chain.rs", "iso.rs", "integrity.rs", "module_key.rs"].map(rustKaynak);
   const tsKaynaklar = [
@@ -313,7 +315,9 @@ async function bolum1(): Promise<void> {
 /** Native'in üretebildiği ve vektörlerde geçmesi gereken kodlar (enjeksiyon reddi yalnız üretim derlemesinde). */
 function kapsamGereken(): string[] {
   const outcome = rustKaynak("outcome.rs");
-  return [...(rustKodKumesi(outcome, "PROTOCOL") ?? []), ...(rustKodKumesi(outcome, "CORE") ?? [])].filter((c) => c !== "CAPA_ENJEKSIYONU_KAPALI");
+  // Yerel koruma kodları platforma bağlıdır (DPAPI yalnız Windows) — vektörle değil §3c'de canlı ölçülür.
+  const PLATFORM_KODLARI = ["CAPA_ENJEKSIYONU_KAPALI", "KORUMA_YOK", "KORUMA_HATASI"];
+  return [...(rustKodKumesi(outcome, "PROTOCOL") ?? []), ...(rustKodKumesi(outcome, "CORE") ?? [])].filter((c) => !PLATFORM_KODLARI.includes(c));
 }
 
 async function bolum2(dosya: VektorDosyasi | null): Promise<void> {
@@ -362,8 +366,21 @@ async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
     kunye.protokolKodlari.every((c) => (PROTOCOL_ERROR_CODES as readonly string[]).includes(c)) &&
       jsonEsit(kunye.cekirdekKodlari, [...CORE_ERROR_CODES]) &&
       jsonEsit(kunye.windowsSondasi, [...WINDOWS_PROBE_LINES]) &&
-      kunye.modulHkdfOneki === MODULE_KEY_HKDF_PREFIX,
+      kunye.modulHkdfOneki === MODULE_KEY_HKDF_PREFIX &&
+      kunye.modulKidOneki === MODULE_KEY_KID_PREFIX,
   );
+  // §3c yerel koruma (Faz 2d önbelleği): Windows'ta DPAPI gidiş-dönüş, başka platformda KORUMA_YOK (TS de).
+  const koruma = native.protectLocal(b64uEncode(Buffer.from("tekserp-onbellek-sondasi")));
+  if (process.platform === "win32") {
+    const geri = koruma.ok ? native.unprotectLocal(koruma.value.veri) : koruma;
+    check("§3c yerel koruma: DPAPI sarar ve aynı veriyi geri açar", geri.ok && Buffer.from(b64uDecode(geri.value.veri) ?? []).toString() === "tekserp-onbellek-sondasi");
+  } else {
+    check(
+      "§3c yerel koruma: Windows dışında KORUMA_YOK (native = TS)",
+      !koruma.ok && koruma.code === "KORUMA_YOK" && !tsLicenseCore.protectLocal("AA").ok,
+      koruma.ok ? "native sardı?" : koruma.code,
+    );
+  }
 
   console.log("\n§6 parmak izi toplama (bu makine)");
   const tuz = Buffer.alloc(32, 0x42);

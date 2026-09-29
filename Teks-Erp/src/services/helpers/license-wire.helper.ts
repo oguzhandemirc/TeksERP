@@ -15,7 +15,8 @@ import {
   type RequestPurpose,
   type VendorErrorCode,
 } from "../../lib/license/protocol";
-import { getLicenseStore, type InstallationKey, type LicenseStoreSnapshot } from "../../lib/license/store";
+import { installHistoryPath, readInstallHistory } from "../../lib/license/install-history";
+import { ensureInstallationX25519, getLicenseStore, type InstallationKey, type LicenseStoreSnapshot } from "../../lib/license/store";
 import {
   getLicenseConfig,
   getLicenseDbFacts,
@@ -67,6 +68,7 @@ const VENDOR_MESSAGES = {
   KURULUM_BILINMIYOR: "Bu kurulum lisans sunucusunda kayıtlı değil (taşıma talebi gerekebilir).",
   KURULUM_IPTAL: "Bu kurulumun lisansı taşındı ya da iptal edildi.",
   KIRA_VERILMEDI: "Lisans sunucusu bu kuruluma kira vermedi; destek hattıyla görüşün.",
+  DR_ANA_BELIRSIZ: "Ana kurulum kimliğini portaldan ya da ana sunucunun Lisans ekranından alın.",
   HIZ_SINIRI: "Çok sık denendi; biraz sonra tekrar deneyin.",
   TEKRAR_DENEYIN: "Lisans sunucusunda eşzamanlı bir işlem çakıştı; biraz sonra tekrar deneyin.",
   BULUNAMADI: "Lisans sunucusu bu isteği tanımadı (adres yanlış ya da sunucu sürümü eski olabilir; LICENSE_SERVER_URL ayarını kontrol edin).",
@@ -263,4 +265,18 @@ export function currentFingerprintDigest(): { f1: string | null; f2: string | nu
 
 export function invalidResponse(message: string, protocolCode?: string): AppError {
   return licenseError(400, "LICENSE_RESPONSE_INVALID", message, protocolCode ? { protocolCode } : {});
+}
+
+/** Kurulumun X25519 açık yarısı (Faz 2d) — eski kurulumda burada doğar; üretilemezse alan gönderilmez. */
+export function encryptionKeyField(): { sifrelemeAnahtari?: string } {
+  const pair = ensureInstallationX25519();
+  return pair ? { sifrelemeAnahtari: pair.publicX } : {};
+}
+
+/** Kurulum kaydı alanı (3d-2) — kayıt yoksa alan hiç gitmez (eski satıcı KATI şemayla reddeder). */
+export function installRecordsField(): { kurulumKayitlari?: ReturnType<typeof readInstallHistory> } {
+  const dir = getLicenseStore()?.dir;
+  if (!dir) return {};
+  const records = readInstallHistory(installHistoryPath(dir));
+  return records.length > 0 ? { kurulumKayitlari: records } : {};
 }

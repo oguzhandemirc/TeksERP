@@ -22,7 +22,6 @@ import { coreCheckLeaseBinding, coreVerifyEntitlement, coreVerifyLease } from ".
 import { runIntegrityCheck } from "../lib/license/integrity-check";
 import { integrityCheckTarget, setIntegrityOutcome } from "../lib/license/integrity-state";
 import { NATIVE_REQUIRED, getLicenseCore } from "../lib/license/native";
-import { installHistoryPath, readInstallHistory } from "../lib/license/install-history";
 import {
   getLicenseConfig,
   getLicenseSnapshot,
@@ -43,6 +42,8 @@ import {
   buildEnvironment,
   currentFingerprintDigest,
   egressTransport,
+  encryptionKeyField,
+  installRecordsField,
   invalidResponse,
   licenseError,
   requireReady,
@@ -106,6 +107,7 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     // Zincir ucu: kira dosyası silinmiş/eskisiyle değiştirilmişse durum kaydının bildiği son kabul.
     sonKiraId: snap.lastKnownLease?.kiraId ?? null,
     hak: snap.entitlement ? { hakId: snap.entitlement.document.hakId, surum: snap.entitlement.document.surum } : null,
+    ...encryptionKeyField(),
     parmakIzi: currentFingerprintDigest(),
     durum: {
       gecerlilik: s.gecerlilik,
@@ -126,13 +128,6 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     // Kurulum kaydı yoksa alan hiç gitmez: eski satıcı KATI şemayla tanımadığı anahtarı reddeder.
     ...installRecordsField(),
   });
-}
-
-function installRecordsField(): { kurulumKayitlari?: ReturnType<typeof readInstallHistory> } {
-  const dir = getLicenseStore()?.dir;
-  if (!dir) return {};
-  const records = readInstallHistory(installHistoryPath(dir));
-  return records.length > 0 ? { kurulumKayitlari: records } : {};
 }
 
 // ── Kira kabulü ─────────────────────────────────────────────────────────────────

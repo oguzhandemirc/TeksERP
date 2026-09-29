@@ -23,6 +23,7 @@ import { normalizeUsername } from "../src/portal/auth.service";
 import { hashPortalPassword } from "../src/portal/password";
 import { PORTAL_ROLES, type PortalRole } from "../src/portal/roles";
 import { PortalSecretBox } from "../src/portal/secret-box";
+import { ModuleKeyVault } from "../src/keys/module-vault";
 import { createPortalUserTx, resetPortalUserTotpTx, setPortalUserPasswordTx, unlockPortalUserTx } from "../src/portal/users.service";
 import type { VendorContext } from "../src/services/context";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
@@ -65,6 +66,7 @@ async function main(): Promise<void> {
     config,
     keys: KeyStore.load(config),
     portalSecrets: PortalSecretBox.load(config.ANAHTAR_DIZINI, { create: true }),
+    moduleVault: ModuleKeyVault.load(config.ANAHTAR_DIZINI, { create: true }),
     codeHasher: ActivationCodeHasher.load(config.ANAHTAR_DIZINI, { create: true }),
   };
   const { prisma, pool } = await import("../src/lib/prisma");

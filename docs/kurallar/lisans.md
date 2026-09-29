@@ -74,6 +74,7 @@
 
 ### Kararlar
 
+- **[ÇEKİRDEK]** DR devralımında ana kurulum kimliği isteğe bağlıdır: verilmezse satıcı tesisin TEK etkin ÜRETİM kurulumunu çıkarır, 0 ya da birden çok ise 409 `DR_ANA_BELIRSIZ` döner (yanıtı kaybolan yeniden deneme bu DR'nin devraldığı anayı bulur). · bekçi: `satici test_tasima_dr (§4i · §5c · §5d) · Senaryo L13` <sub>(arşiv:2026-09-30 Faz 2d yönetici kararı)</sub>
 - **[ÇEKİRDEK]** Geri sayımı 7 günden kısa K3 AĞIR yaptırımdır (K4 gibi): yalnız yönetici uygular/planlar/kaldırır ve lisans numarasıyla ikinci onay ister; planlı K3 ile taksit planının kısıtlama günü de aynı kapıdan geçer, ağırlık yazım anında satıra (`agir`) donar. · bekçi: `test_portal_yaptirim (§5 kısa K3 ağır)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Bayi tavanı modül ⊆ · sınıf ⊆ · kurulum adedi · kanal ⊆ · kalıcı izni (varsayılan HAYIR) · bakım ay tavanı (varsayılan 12) ile bağlar; denetim imzadan önce ve bayi kilidi altında yeniden yapılır, tavan sürümlü defterdir. · bekçi: `test_portal_bayi_tavani (§2c kanal · §3a0/§3a1/§9 kalıcı + bakım)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Kurulum KAYITLI bir kanala bağlıdır (FK; `kod` kimliktir, değişmez, sert silinmez); kiranın `kanal.guncelSurumler`i kanal satırından dolar, bayi yalnız satıcının atadığı kanallarda kurulum açar. · bekçi: `test_portal_uclar (§1k kanal · §1e2 kira kanalı)` <sub>(arşiv:2026-09-29)</sub>
@@ -108,6 +109,17 @@
 - **[ÇEKİRDEK]** Native kendi bütünlüğünü doğrulayamaz: zorunlu kipte `.node` dlopen ÖNCESİ imzalı listeye karşı TS'te denetlenir (liste yok / tanınmayan anahtar / uyuşmaz → çekirdek YOK, TS'e düşülmez); motorun HAK · kira · bağ doğrulaması ve parmak izi ölçümü yalnız `getLicenseCore()`den geçer (`core-bridge.ts`); test kancaları (`configureIntegrityForTests` · `configureLicenseCoreForTests`) zorunlu kipte YOK SAYILIR. · bekçi: `test_lisans_butunluk (§4)` <sub>(arşiv:2026-09-29 Faz 2e)</sub>
 - **[ÇEKİRDEK]** Derleme tarihi YALNIZ imzalı künyeden okunur (imzasız/eksik = `DERLEME_TARIHI_YOK`); bayt kodu filigranı (`__TEKSERP_FILIGRAN__`: müşteri · kurulum · paket kimliği) imzalı künyeyle uyuşmazsa GEÇERSİZ (`BUTUNLUK_FILIGRAN`); panelin her PDF'i meta veride lisans sahibi + lisans no taşır (kişisel veri yok). · bekçi: `test_lisans_butunluk (§1l · §3i) · Electron pdf-metadata.test · Senaryo L18 (uçtan uca, bekçi değil)` <sub>(arşiv:2026-09-29 Faz 2e)</sub>
 
+## Modül şifreleme (Faz 2d)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Şifreli modülün anahtarını YALNIZ doğrulanmış kiradan, çekirdekte aç (kira → HAK → bağ → modül HAK'ta ∧ dondurulmamış → kirada (modül, kid) hakkı → kurulumun X25519 özel yarısı → açılan anahtarın özeti = kid); sonuç boolean değil ANAHTARDIR ve üretimde TS açıcısına düşülmez. · bekçi: `test_lisans_modul_sifreleme (§2 · §5) · test_lisans_native_kahin (kiraModul vektörleri)` <sub>(arşiv:2026-09-30 Faz 2d)</sub>
+- **[ÇEKİRDEK]** Satıcı modül anahtarını yalnız HAK'taki, dondurulmamış (K2) ve X25519'u bilinen kuruluma sarsın; kasa (`modul_anahtari`) anahtarı kasa anahtarıyla (`ANAHTAR_DIZINI/modul-kasasi.key`, 0600, DB'de değil) sarılı tutar, satırı silinmez (emeklilik `aktif=false`); kurulumun X25519'u yalnız temiz zincirde (çatal ve açık kopya uyarısı yokken) kaydedilir ve değişimi kurulum kaydına yazılır. · bekçi: `satici test_modul_anahtari (§1–§4)` <sub>(arşiv:2026-09-30 Faz 2d)</sub>
+- **[ÇEKİRDEK]** Çözülen modül kodunu BELLEKTE derle, diske düz yazma; modül çekirdekten aldığı her parçayı (src + npm) ev sahibi haritasından AYNI örnek olarak alır; anahtar yoksa 403 `LICENSE_MODULE` (`details.modul`, `neden: ANAHTAR_YOK`) döner — tavan kapısıyla aynı yüzey, kimlik ve modül kapısından SONRA. · bekçi: `test_lisans_modul_sifreleme (§3 · §4)` <sub>(arşiv:2026-09-30 Faz 2d)</sub>
+- **[ÇEKİRDEK]** Yalnız sınırı temiz modülü şifrele (katalog `Teks-Erp/src/lib/license/sifreli-moduller.json`, bugün `depo-multi`); derleme modül dosyası çekirdeğe ya da çekirdek dosyası modül paketine sızarsa DÜŞER; şifreleme `build-korumali.mjs --sifrele` ile açılır, geliştirme ve varsayılan paket bugünkü gibi şifresizdir. · bekçi: `test_lisans_modul_sifreleme (§3a · §7a · §7b) · build-korumali sızıntı kapısı` <sub>(arşiv:2026-09-30 Faz 2d)</sub>
+- **[ÇEKİRDEK]** Modül anahtarı önbelleği yalnız HIZ katmanıdır, yetki kaynağı değildir: girdi güncel kira kimliğine bağlıdır (kira değişince kiradan yeniden açılır); Windows'ta native DPAPI, Linux'ta 0600, başka platformda önbellek yok. · bekçi: `test_lisans_native_kahin (§3c)` <sub>(arşiv:2026-09-30 Faz 2d)</sub>
+- **[ÇEKİRDEK]** KATI istek gövdesine yeni isteğe bağlı alan (`sifrelemeAnahtari`) eski satıcıda 400'dür: satıcıyı fabrikadan ÖNCE yayınla. · bekçi: `test_lisans_yoklama_allowlist (beyan kümesi)` <sub>(arşiv:2026-09-30 Faz 2d)</sub>
+
 ## İstemciler (panel · tablet · satıcının /q sayfası)
 
 ### Değişmezler
@@ -135,7 +147,7 @@ Fabrika tarafı: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## lisans` bölümü.**
 
-Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_native_kahin`, `test_lisans_butunluk`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_client_policy_kira`, `test_destek_talebi`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_indirme_kapisi`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_destek_kurulum_kaydi`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`, `test_genel_dinleyici`, `test_imza_parolasi`, `test_bayi_sahipligi`, `test_ic_api`, `test_bulut_kira_alanlari`, `test_lisans_qr_parca_aynasi`, `test_lisans_k5_giris`, `test_indirme_belirteci_ucu`, `test_qr_sayfasi`, `test_dagitim_baglanti`, `test_dagitim_yukleme`, `test_dagitim_budama`, `test_yayin_bildirimi`
+Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_native_kahin`, `test_lisans_butunluk`, `test_lisans_modul_sifreleme`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_client_policy_kira`, `test_destek_talebi`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_indirme_kapisi`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_modul_anahtari`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_destek_kurulum_kaydi`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`, `test_genel_dinleyici`, `test_imza_parolasi`, `test_bayi_sahipligi`, `test_ic_api`, `test_bulut_kira_alanlari`, `test_lisans_qr_parca_aynasi`, `test_lisans_k5_giris`, `test_indirme_belirteci_ucu`, `test_qr_sayfasi`, `test_dagitim_baglanti`, `test_dagitim_yukleme`, `test_dagitim_budama`, `test_yayin_bildirimi`
 
 Native çekirdek (cargo, `cd Teks-Erp/native/lisans-cekirdek && npm test`; commit kapısında koşar, cargo yoksa ⏭ beyanla): `tests/vektorler.rs` (TS kâhininin vektör dosyası Rust tarafında) · derleme `npm run derle` (kâhinin §3–§7'si için `.node`).
 
@@ -147,7 +159,7 @@ Tablet (jest, `cd mobil && npx jest <yol>`): `src/services/downloadToken.service
 
 Yeni lisans bekçisi doğduğu commit'te bu listeye VE haritanın `## lisans` bölümüne birlikte eklenir.
 
-Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnız `_test` DB'ler): Senaryo L + Y tek komut `cd Teks-Erp && npx tsx scripts/senaryo-ly.ts` (ortam değişkenleri dosya başında) — L1…L29 sonuç tablosu `docs/design/LISANS-SENARYO-L.md`.
+Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnız `_test` DB'ler): Senaryo L + Y tek komut `cd Teks-Erp && npx tsx scripts/senaryo-ly.ts` (ortam değişkenleri dosya başında) — L1…L30 sonuç tablosu `docs/design/LISANS-SENARYO-L.md`.
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
@@ -176,3 +188,4 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-30 · Portal dağıtım modülleri (3d-1): ilk kurulum bağlantısı, iki yönlü dosya, yayın bildirimi ve sürüm görünümü
 - 2026-09-29 · Lisans 3d-2: kurulum kaydı (kur.ps1 → yoklama → satıcı defteri), destek talepleri, sürüm politikası kiradan
 - 2026-09-30 · Lisans entegrasyonu 4 (I5): dokuz dal tek gövdede — tek silme damgası düzeltmesi, native her zaman zorunlu, Docker künyesi imzalı, destek talebi künyesi NULL alabilir
+- 2026-09-30 · Modül şifreleme (Faz 2d): anahtar kiradan native çekirdekte, satıcı kasası, bellekte derleme, DR ana kimliği isteğe bağlı

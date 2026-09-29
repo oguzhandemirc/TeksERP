@@ -112,6 +112,16 @@ fn evaluate(v: &Value) -> Value {
             let req = obj(&[("wrap", &v["wrap"]), ("privateKey", &v["privateKey"]), ("modul", &v["modul"])]);
             result_shape(&api::unwrap_module_key(&Value::Object(req)))
         }
+        "kiraModul" => {
+            let req = obj(&[
+                ("lease", &v["lease"]),
+                ("entitlement", &v["entitlement"]),
+                ("privateKey", &v["privateKey"]),
+                ("modul", &v["modul"]),
+                ("kid", &v["kid"]),
+            ]);
+            result_shape(&api::unwrap_lease_module_key(&with_anchor(req, v, "roots")))
+        }
         "tarih" => {
             let ms = iso::date_parse_ms(v["metin"].as_str().expect("metin"));
             json!({ "ms": if ms.is_nan() { Value::Null } else { json!(ms as i64) } })

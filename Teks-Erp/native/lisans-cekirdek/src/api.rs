@@ -9,12 +9,13 @@ use crate::fingerprint::{self, FACTORS, PLACEHOLDER_VALUES};
 use crate::integrity;
 use crate::jsonx::js_number;
 use crate::jws;
+use crate::local_protect;
 use crate::module_key;
 use crate::outcome::{code, Fail, Outcome};
 use serde_json::{json, Value};
 
 /// Arayüz sürümü: istek/yanıt biçimi kırılınca artar; yükleyici eşit değilse native'i KULLANMAZ.
-pub const ABI: u32 = 1;
+pub const ABI: u32 = 2;
 pub const TEST_ANCHOR: bool = cfg!(feature = "test-anchor");
 
 fn ok(value: Value) -> Value {
@@ -62,6 +63,8 @@ pub fn identity() -> Value {
         "yerTutucular": PLACEHOLDER_VALUES,
         "windowsSondasi": collect::WINDOWS_PROBE_LINES,
         "modulHkdfOneki": module_key::HKDF_INFO_PREFIX,
+        "modulKidOneki": module_key::KID_PREFIX,
+        "korumaEntropisi": local_protect::ENTROPY,
     })
 }
 
@@ -220,4 +223,57 @@ pub fn unwrap_module_key(req: &Value) -> Value {
     let private = req.get("privateKey").and_then(Value::as_str).unwrap_or_default();
     let module = req.get("modul").and_then(Value::as_str).unwrap_or_default();
     outcome(module_key::unwrap(&token(req, "wrap"), private, module).map(|k| json!({ "anahtar": b64::encode(k.as_slice()) })))
+}
+
+fn in_list(v: Option<&Value>, module: &str) -> bool {
+    v.and_then(Value::as_array).is_some_and(|l| l.iter().any(|m| m.as_str() == Some(module)))
+}
+
+/// Faz 2d: modül anahtarı YALNIZ doğrulanmış kiradan açılır (güvenlik-kritik sonuç ANAHTARDIR).
+/// Sıra TS `unwrapLeaseModuleKey` ile aynı: kira → HAK → bağ → HAK'ta mı → donmuş mu → kirada hak
+/// → sarma → açılan anahtarın kimliği.
+pub fn unwrap_lease_module_key(req: &Value) -> Value {
+    let run = || -> Outcome<Value> {
+        let roots = roots_from(req)?;
+        let lease = chain::verify_lease(&token(req, "lease"), &roots)?;
+        let entitlement = chain::verify_entitlement(&token(req, "entitlement"), &roots)?;
+        chain::check_lease_binding(&lease, &entitlement)?;
+        let module = req.get("modul").and_then(Value::as_str).unwrap_or_default();
+        let kid = req.get("kid").and_then(Value::as_str).unwrap_or_default();
+        if !in_list(entitlement.document.get("moduller"), module) {
+            return Err(Fail { code: code::MODUL_HAK_YOK, message: format!("{module} modülü HAK'ta yok") });
+        }
+        if !in_list(lease.document.get("yaptirim").and_then(|y| y.get("donmusModuller")), module) {
+            let Some(grant) = module_key::find_grant(&lease.document, module, kid) else {
+                return Err(Fail {
+                    code: code::MODUL_ANAHTARI_YOK,
+                    message: format!("Kira {module} modülünün {kid} anahtarını taşımıyor"),
+                });
+            };
+            let private = req.get("privateKey").and_then(Value::as_str).unwrap_or_default();
+            let key = module_key::unwrap(grant.get("sarma").unwrap_or(&Value::Null), private, module)?;
+            if module_key::key_id(&key) != kid {
+                return Err(Fail { code: code::MODUL_KID_UYUSMAZ, message: "Açılan anahtarın kimliği istenen kimlik değil".into() });
+            }
+            return Ok(json!({ "anahtar": b64::encode(key.as_slice()), "surum": grant.get("surum").cloned().unwrap_or(Value::Null) }));
+        }
+        Err(Fail { code: code::MODUL_DONMUS, message: format!("{module} modülü lisans sunucusunca dondurulmuş") })
+    };
+    outcome(run())
+}
+
+fn protect_call(req: &Value, unprotect: bool) -> Value {
+    let Some(data) = req.get("veri").and_then(Value::as_str).and_then(b64::decode_strict) else {
+        return err(Fail { code: code::KORUMA_HATASI, message: "Korunacak veri base64url değil".into() });
+    };
+    outcome(local_protect::run(&data, unprotect).map(|v| json!({ "veri": b64::encode(&v) })))
+}
+
+/// Windows DPAPI ile yerel sarma (modül anahtarı önbelleği); başka platformda `KORUMA_YOK`.
+pub fn protect_local(req: &Value) -> Value {
+    protect_call(req, false)
+}
+
+pub fn unprotect_local(req: &Value) -> Value {
+    protect_call(req, true)
 }

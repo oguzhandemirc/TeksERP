@@ -17,6 +17,7 @@ import {
   publicKeyX,
 } from "./protocol";
 import { readDocField, readFileState, readJsonField, writeFileAtomicSync } from "./store-files";
+import { generateX25519, keyFileBody, x25519FromFile } from "./store-key-file";
 
 export { writeFileAtomicSync } from "./store-files";
 
@@ -43,6 +44,14 @@ export interface InstallationKey {
   /** Parmak izi HMAC tuzu — kurulum başına, dışarı çıkmaz. */
   readonly salt: Buffer;
   readonly createdAt: string;
+  /** Modül anahtarı alıcısı (Faz 2d); eski kurulumda ilk yoklamaya dek null (`ensureInstallationX25519`). */
+  readonly x25519: InstallationX25519 | null;
+}
+
+/** Kurulumun X25519 anahtar çifti — ham 32 bayt, base64url. Özel yarısı LICENSE_DIR dışına çıkmaz. */
+export interface InstallationX25519 {
+  readonly privateX: string;
+  readonly publicX: string;
 }
 
 export interface ProxyConfig {
@@ -85,8 +94,8 @@ export interface LicenseStoreSnapshot {
 const KeyFileSchema = z.object({
   v: z.literal(1),
   ed25519: z.object({ pkcs8: z.string().min(40), x: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }),
-  /** İleride şifreli modül anahtarı için (Faz 2); v:1'de boş. */
-  x25519: z.null(),
+  /** Şifreli modül anahtarlarının alıcısı (Faz 2d); eski dosyada null — ilk yoklamada doğar. */
+  x25519: z.object({ d: z.string().regex(/^[A-Za-z0-9_-]{43}$/), x: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).nullable(),
   tuz: z.string().min(22),
   olusturuldu: IsoTimeSchema,
 });
@@ -142,7 +151,9 @@ function keyFromFile(raw: unknown): InstallationKey | null {
     if (privateKey.asymmetricKeyType !== "ed25519") return null;
     const x = publicKeyX(privateKey);
     if (x !== parsed.data.ed25519.x) return null;
-    return { privateKey, x, kid: installationKeyId(x), salt, createdAt: parsed.data.olusturuldu };
+    // Tutarsız X25519 Ed25519 kimliğini BOZMAZ (taşıma gerektirmesin): null sayılır, ilk yoklamada yenilenir.
+    const x25519 = parsed.data.x25519 ? x25519FromFile(parsed.data.x25519) : null;
+    return { privateKey, x, kid: installationKeyId(x), salt, createdAt: parsed.data.olusturuldu, x25519 };
   } catch {
     return null;
   }
@@ -151,12 +162,9 @@ function keyFromFile(raw: unknown): InstallationKey | null {
 function generateKey(dir: string): InstallationKey {
   const { privateKey } = generateKeyPairSync("ed25519");
   const x = publicKeyX(privateKey);
-  const salt = generateFingerprintSalt();
-  const createdAt = new Date().toISOString();
-  const pkcs8 = privateKey.export({ format: "der", type: "pkcs8" });
-  const body = { v: 1, ed25519: { pkcs8: b64uEncode(pkcs8), x }, x25519: null, tuz: b64uEncode(salt), olusturuldu: createdAt };
-  writeFileAtomicSync(path.join(dir, LICENSE_FILES.KEY), JSON.stringify(body, null, 2));
-  return { privateKey, x, kid: installationKeyId(x), salt, createdAt };
+  const key = { privateKey, x, salt: generateFingerprintSalt(), createdAt: new Date().toISOString(), x25519: generateX25519() };
+  writeFileAtomicSync(path.join(dir, LICENSE_FILES.KEY), keyFileBody(key));
+  return { ...key, kid: installationKeyId(x) };
 }
 
 function emptySnapshot(dir: string, problem: StoreProblem | null, unreadable: readonly string[] = []): LicenseStoreSnapshot {
@@ -316,6 +324,25 @@ export function saveTransfer(t: PendingTransfer | null): void {
   if (t === null) fs.rmSync(file, { force: true });
   else writeFileAtomicSync(file, JSON.stringify({ v: 1, ...t }));
   current = { ...s, transfer: t, unreadable: withoutUnreadable(s, LICENSE_FILES.TRANSFER) };
+}
+
+/**
+ * Eski kurulumun (x25519 null) X25519 çiftini üretir ve anahtar dosyasına yazar; varsa aynısını döndürür.
+ * Yoklama/etkinleştirme gövdesi kurulmadan ÇAĞRILIR. Yazılamazsa null (yoklama anahtarsız sürer).
+ */
+export function ensureInstallationX25519(): InstallationX25519 | null {
+  if (!current || current.problem || !current.key) return null;
+  if (current.key.x25519) return current.key.x25519;
+  const s = current;
+  const key = s.key!;
+  const next: InstallationKey = { ...key, x25519: generateX25519() };
+  try {
+    writeFileAtomicSync(path.join(s.dir, LICENSE_FILES.KEY), keyFileBody(next));
+  } catch {
+    return null;
+  }
+  current = { ...s, key: next };
+  return next.x25519;
 }
 
 /** Test-only: bellek kopyasını sıfırlar (dosyalara dokunmaz). */

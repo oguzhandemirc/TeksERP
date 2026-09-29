@@ -7,7 +7,8 @@ import { getLicenseSnapshot, recordModuleObservation, type LicenseSnapshot } fro
 import { ceilingAllows, type ModuleCeiling } from "./state";
 import type { LicenseMode } from "./protocol";
 
-export type ModuleClosedReason = "LISANSTA_YOK" | "DONDURULDU";
+/** `ANAHTAR_YOK`: şifreli modülün anahtarı kiradan açılamadı (Faz 2d) — aynı yüzey, aynı kod. */
+export type ModuleClosedReason = "LISANSTA_YOK" | "DONDURULDU" | "ANAHTAR_YOK";
 
 /** Panelin salt-okunur lisans bloğu (`GET /api/feature-flags` → `license`). */
 export interface LicenseModuleBlock {
@@ -53,6 +54,11 @@ export function licenseModuleError(settingKey: string, label: string): AppError 
   if (!reason) return null;
   const why = reason === "DONDURULDU" ? "lisans sunucusunca dondurulmuş" : "lisansınızda yok";
   return AppError.forbidden(`${label} modülü ${why}.`, { code: "LICENSE_MODULE", modul: settingKey, neden: reason });
+}
+
+/** Şifreli modülün anahtarı yoksa 403 `LICENSE_MODULE` — tavan kapısıyla AYNI biçim (`details.modul`, `neden`). */
+export function licenseModuleKeyError(settingKey: string, label: string, why: string): AppError {
+  return AppError.forbidden(`${label} modülünün lisans anahtarı yok.`, { code: "LICENSE_MODULE", modul: settingKey, neden: "ANAHTAR_YOK", anahtar: why });
 }
 
 /** Verilen modül anahtarları için panel bloğu — önbelleğe girmez, her okumada tazedir. */

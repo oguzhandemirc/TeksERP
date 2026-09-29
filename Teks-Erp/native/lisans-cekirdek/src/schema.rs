@@ -29,6 +29,8 @@ struct Patterns {
     version: Regex,
     license_no: Regex,
     cert_kid: Regex,
+    module_key_id: Regex,
+    wrapped_key: Regex,
 }
 
 fn patterns() -> &'static Patterns {
@@ -46,6 +48,8 @@ fn patterns() -> &'static Patterns {
         version: Regex::new(r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}([-+][0-9A-Za-z.-]{1,40})?$").expect("surum"),
         license_no: Regex::new(r"^TKS-[0-9]{4}-[0-9]{4,6}$").expect("lisansNo"),
         cert_kid: Regex::new(r"^[a-z]+-[a-z0-9-]{1,60}$").expect("sertifika kid"),
+        module_key_id: Regex::new(r"^mk-[A-Za-z0-9_-]{22}$").expect("modul kid"),
+        wrapped_key: Regex::new(r"^[A-Za-z0-9_-]{64}$").expect("sarili"),
     })
 }
 
@@ -271,6 +275,39 @@ fn fingerprint(v: &Value) -> Option<Value> {
     nested(v, &[req("f1", &d), req("f2", &d), req("f3", &d), req("f4", &d), req("f5", &d)], true)
 }
 
+/// `ModuleKeyWrapSchema` (z.object: tanınmayan anahtar atılır).
+fn module_key_wrap(v: &Value) -> Option<Value> {
+    let is_v = |x: &Value| js_number(x) == Some(1.0);
+    let is_wrapped = |x: &Value| is_str_matching(x, &patterns().wrapped_key);
+    nested(v, &[req("v", &is_v), req("modul", &is_module_key), req("epk", &is_digest), req("sarili", &is_wrapped)], false)
+}
+
+/// `ModuleKeyGrantSchema`: sarmanın modülü hakkın modülüyle aynı olmalı.
+fn module_key_grant(v: &Value) -> Option<Value> {
+    let is_surum = |x: &Value| is_int(x, Some(1.0), None);
+    let is_kid = |x: &Value| is_str_matching(x, &patterns().module_key_id);
+    let any_object = |x: &Value| x.is_object();
+    let out = object_with_nested(
+        v,
+        &[req("modul", &is_module_key), req("surum", &is_surum), req("kid", &is_kid), req("sarma", &any_object)],
+        &[("sarma", &module_key_wrap)],
+    )
+    .ok()?;
+    let wrap_module = out.get("sarma").and_then(|w| w.get("modul"));
+    (wrap_module == out.get("modul")).then_some(Value::Object(out))
+}
+
+/// `modulAnahtarlari`: en çok 32 hak, `kid` tekrarsız; her öğe atılmış hâliyle.
+fn module_key_grants(v: &Value) -> Option<Value> {
+    let Value::Array(items) = v else { return None };
+    if items.len() > 32 {
+        return None;
+    }
+    let shaped: Vec<Value> = items.iter().map(module_key_grant).collect::<Option<_>>()?;
+    let kids: Vec<Value> = shaped.iter().map(|g| g.get("kid").cloned().unwrap_or(Value::Null)).collect();
+    unique_strings(&kids).then_some(Value::Array(shaped))
+}
+
 pub fn lease(v: &Value) -> Result<Map<String, Value>, String> {
     let is_v = |x: &Value| js_number(x) == Some(PROTOCOL_VERSION);
     let is_surum = |x: &Value| is_int(x, Some(1.0), None);
@@ -280,6 +317,7 @@ pub fn lease(v: &Value) -> Result<Map<String, Value>, String> {
     let is_poll = |x: &Value| is_int(x, Some(5.0), Some(1440.0));
     let is_sync = |x: &Value| is_nullable(x, &|y| is_int(y, Some(1.0), Some(1440.0)));
     let any_object = |x: &Value| x.is_object();
+    let is_array = |x: &Value| x.is_array();
     let out = object_with_nested(
         v,
         &[
@@ -303,8 +341,9 @@ pub fn lease(v: &Value) -> Result<Map<String, Value>, String> {
             req("devredildi", &is_bool),
             req("kanal", &any_object),
             req("altSertifika", &is_jws_text),
+            opt("modulAnahtarlari", &is_array),
         ],
-        &[("parmakIzi", &fingerprint), ("yaptirim", &sanction), ("kanal", &channel)],
+        &[("parmakIzi", &fingerprint), ("yaptirim", &sanction), ("kanal", &channel), ("modulAnahtarlari", &module_key_grants)],
     )?;
     let (issued, ends) = (ms(&out, "verilis"), ms(&out, "bitis"));
     if !strictly_after(ends, issued) {

@@ -23,6 +23,7 @@
 // KULLANIM (Teks-Erp/ içinden, ağır iş sarmalayıcısıyla):
 //   node ../scripts/agir-is.mjs -- node scripts/build-korumali.mjs [--hedef=win-x64|linux-x64] [--cikti=dist]
 //     [--musteri=<kanal kodu>] [--kurulum=<uuid>]   (filigran; imza ayrı adım: scripts/build-korumali-imza.ts)
+//     [--sifrele=hepsi|<paket,…>] [--modul-anahtar-dizini=<yol>]   (Faz 2d şifreli modül; varsayılan ŞİFRESİZ)
 //   Ortam: KORUMA_ARSIV_DIZINI (varsayılan ~/.tekserp/kaynak-haritalari) — REPO DIŞI.
 // =============================================================================
 
@@ -34,6 +35,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { hedefCoz, v8Taban as v8TabanCoz } from '../../scripts/lib/node-surumu.mjs';
+import { cekirdekEklentisi, katalogOku, modulPaketiDerle } from './lib/sifreli-modul-derle.mjs';
 
 const PROJ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(PROJ, '..');
@@ -90,8 +92,38 @@ async function main() {
   if (kurulumId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(kurulumId)) throw new Error('--kurulum UUID değil');
   const filigran = { musteri, kurulumId, paketId, derlemeTarihi: zaman };
 
+  // --- 0b. Şifreli modüller (Faz 2d) — YALNIZ --sifrele ile; varsayılan bugünkü şifresiz paket -----
+  // Modül kendi dosyalarıyla ayrı pakete bölünür, hazırlık anahtarıyla (0600, REPO DIŞI) AES-256-GCM
+  // mühürlenir (`dist/moduller/<paket>.tkmod`); çekirdekte giriş importu şifreli kapıya çevrilir.
+  const esbuild = await import('esbuild');
+  const { build } = esbuild;
+  const modulDizini = path.join(ciktiDir, 'moduller');
+  fs.rmSync(modulDizini, { recursive: true, force: true });
+  const sifreleArg = arg('sifrele');
+  const katalog = katalogOku(PROJ);
+  const sifreliPaketler = sifreleArg === null ? [] : sifreleArg === true || sifreleArg === 'hepsi'
+    ? katalog
+    : katalog.filter((p) => String(sifreleArg).split(',').includes(p.paket));
+  if (sifreleArg !== null && sifreliPaketler.length === 0) throw new Error(`--sifrele: katalogda eşleşen paket yok (${sifreleArg})`);
+  const ev = new Map();
+  const duzModulDizini = fs.mkdtempSync(path.join(os.tmpdir(), 'tekserp-modul-'));
+  const sifreliKunye = [];
+  for (const p of sifreliPaketler) {
+    const duz = path.join(duzModulDizini, `${p.paket}.cjs`);
+    const r = await modulPaketiDerle({ esbuild, proj: PROJ, giris: p.giris, dosyalar: p.dosyalar, outfile: duz, disarida: DISARIDA, target: `node${nodeSurum.split('.')[0]}` });
+    for (const [k, v] of r.ev) ev.set(k, v);
+    const anahtarDizini = typeof arg('modul-anahtar-dizini') === 'string' ? [`--anahtar-dizini=${arg('modul-anahtar-dizini')}`] : [];
+    const cikti = execFileSync(
+      process.execPath,
+      ['--import', 'tsx', path.join(PROJ, 'scripts/build-korumali-modul.ts'), `--girdi=${duz}`, `--cikti=${path.join(modulDizini, `${p.paket}.tkmod`)}`, `--modul=${p.modul}`, `--paket=${p.paket}`, ...anahtarDizini],
+      { cwd: PROJ, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] },
+    );
+    const muhur = JSON.parse(cikti.trim().split('\n').pop());
+    sifreliKunye.push({ paket: p.paket, modul: p.modul, surum: muhur.surum, kid: muhur.kid, bayt: muhur.bayt, evSahibi: r.ev.size });
+    console.log(`  şifreli    : moduller/${p.paket}.tkmod · ${p.modul} · anahtar ${muhur.surum}. sürüm ${muhur.kid} · ev sahibi ${r.ev.size} parça`);
+  }
+
   // --- 1. esbuild: bizim kod, minify + isim karartma, harita harici -------------
-  const { build } = await import('esbuild');
   const cjs = path.join(ciktiDir, 'server.cjs');
   const harita = `${cjs}.map`;
   const sonuc = await build({
@@ -112,7 +144,14 @@ async function main() {
       __TEKSERP_NATIVE_REQUIRED__: 'true',
       __TEKSERP_FILIGRAN__: JSON.stringify(JSON.stringify(filigran)),
     },
+    plugins: [cekirdekEklentisi({ proj: PROJ, paketler: sifreliPaketler, ev })],
   });
+  // Şifreli modülün hiçbir dosyası çekirdeğe girmemeli (girerse şifreleme hiçbir şeyi gizlemez).
+  const cekirdekGirdileri = new Set(Object.keys(sonuc.metafile.inputs).map((i) => path.resolve(process.cwd(), i)));
+  for (const p of sifreliPaketler) {
+    const sizan = p.dosyalar.filter((d) => cekirdekGirdileri.has(path.join(PROJ, 'src', d)));
+    if (sizan.length) throw new Error(`Şifreli modül ${p.paket} çekirdeğe sızdı: ${sizan.join(', ')}`);
+  }
   const cjsBayt = fs.statSync(cjs).size;
   const cjsSha = crypto.createHash('sha256').update(fs.readFileSync(cjs)).digest('hex');
   console.log(`  esbuild    : server.cjs ${(cjsBayt / 1024).toFixed(0)} KB · uyarı ${sonuc.warnings.length} · sha256 ${cjsSha.slice(0, 12)}…`);
@@ -140,6 +179,7 @@ async function main() {
     cjsSha256: cjsSha,
     jscUretildi: false,
     nativeZorunlu: true,              // korumalı derlemede native çekirdek her zaman zorunlu (define ile aynı)
+    sifreliModuller: sifreliKunye,
   };
 
   // --- 3. Arşiv (REPO DIŞI): bytenode öncesi .cjs + .map + kimlik ----------------
@@ -149,6 +189,9 @@ async function main() {
   fs.mkdirSync(arsivDir, { recursive: true });
   fs.copyFileSync(cjs, path.join(arsivDir, 'server.cjs'));
   if (fs.existsSync(harita)) fs.copyFileSync(harita, path.join(arsivDir, 'server.cjs.map'));
+  // Şifreli modüllerin DÜZ hâli + haritası yalnız arşive (pakete girmez), geçici dizin silinir.
+  for (const f of fs.readdirSync(duzModulDizini)) fs.copyFileSync(path.join(duzModulDizini, f), path.join(arsivDir, `modul-${f}`));
+  fs.rmSync(duzModulDizini, { recursive: true, force: true });
   fs.writeFileSync(path.join(arsivDir, 'kunye.json'), JSON.stringify(kunye, null, 2) + '\n');
   if (arsivDir.startsWith(REPO + path.sep)) {
     throw new Error(`KAYNAK HARİTASI ARŞİVİ REPO İÇİNDE (${arsivDir}) — KORUMA_ARSIV_DIZINI'ni repo dışına ver. Harita pakete/repoya GİRMEZ.`);

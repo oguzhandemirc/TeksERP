@@ -51,6 +51,8 @@ AuditService.logEvent = async () => undefined;
 /** BEYAN: gövdede geçebilecek anahtarların TAMAMI (her derinlikte). Genişletmek bir karardır. */
 const IZINLI_ANAHTARLAR = new Set([
   "v", "sonKiraId", "hak", "hakId", "surum", "parmakIzi", "f1", "f2", "f3", "f4", "f5",
+  // Faz 2d: kurulumun X25519 AÇIK anahtarı (modül anahtarlarının alıcısı) — sır değil, iş verisi değil.
+  "sifrelemeAnahtari",
   "durum", "gecerlilik", "nedenler", "kip", "hesaplananKademe", "uygulananKademe",
   "saat", "duvar", "guvenilir", "bulgu", "saticiSapmaSn",
   "ortam", "platform", "mimari", "isletimSistemi", "nodeSurum", "uygulamaSurum", "derlemeTarihi", "konteyner", "installationId",
