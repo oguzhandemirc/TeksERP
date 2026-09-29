@@ -20,7 +20,7 @@
 // gözden geçirilir; CI'ın kendi kendine indirmesi o kaydı görünmez kılardı.
 //
 // Çalıştır:
-//   node scripts/check-lint-baseline.mjs                 # üç proje, kontrol
+//   node scripts/check-lint-baseline.mjs                 # dört proje, kontrol
 //   node scripts/check-lint-baseline.mjs --proje=mobil   # tek proje
 //   node scripts/check-lint-baseline.mjs --yaz           # tavanı BUGÜNKÜ sayıya sabitle
 // =============================================================================
@@ -43,6 +43,7 @@ const PROJELER = {
   backend: { dizin: "Teks-Erp", argv: ["eslint", "src", "scripts", "prisma"] },
   electron: { dizin: "Electron", argv: ["eslint", ".", "--ext", ".ts,.tsx"] },
   mobil: { dizin: "mobil", argv: ["eslint", "."] },
+  satici: { dizin: "satici/sunucu", argv: ["eslint", "src", "scripts"] },
 };
 
 // KÖRLÜK ZEMİNİ: eslint hiçbir dosyayı lint etmediyse çıktı "0 ihlal" olur ve
@@ -55,7 +56,9 @@ const PROJELER = {
 //   · `scripts` argv'den düşerse → 473 < 900 ✔ yakalanır
 //   · `src` düşerse             → 570 < 900 ✔ yakalanır
 //   · normal dosya silinmesi     → ~126 dosyalık pay, gürültü yapmaz
-const EN_AZ_DOSYA = { backend: 900, electron: 600, mobil: 200 };
+// satici bugün 71 dosya (src 48 · scripts 23; protokol aynası kapsam dışı); zemin 60 iki dalın
+// her birinin düşüşünü yakalar (23 < 60 · 48 < 60).
+const EN_AZ_DOSYA = { backend: 900, electron: 600, mobil: 200, satici: 60 };
 
 // =============================================================================
 // COMMIT KAPISI KİPİ (`--commit-kapisi` + staged liste stdin'den)

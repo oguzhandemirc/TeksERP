@@ -5,7 +5,14 @@ import os from "node:os";
 import { AppError } from "../../utils/app-error";
 import { APP_VERSION } from "../../lib/app-version";
 import { EgressError, egressRequest } from "../../lib/http-egress";
-import { REQUEST_HEADER, VendorErrorResponseSchema, VersionTextSchema, signRequest, type RequestPurpose } from "../../lib/license/protocol";
+import {
+  REQUEST_HEADER,
+  VendorErrorResponseSchema,
+  VersionTextSchema,
+  signRequest,
+  type RequestPurpose,
+  type VendorErrorCode,
+} from "../../lib/license/protocol";
 import { getLicenseStore, type InstallationKey, type LicenseStoreSnapshot } from "../../lib/license/store";
 import { getLicenseConfig, getLicenseDbFacts, getMeasuredFingerprint } from "../../lib/license/runtime";
 
@@ -38,7 +45,13 @@ export function licenseError(status: number, code: string, message: string, extr
   return new AppError(message, status, true, { code, ...extra });
 }
 
-const VENDOR_MESSAGES: Readonly<Record<string, string>> = {
+// Satıcının HER koduna TR mesaj: yeni kod `VENDOR_ERROR_CODES`e eklenince burası derlenmez (tanınmayan kod
+// sessizce "reddetti"ye düşmesin). Protokol doğrulama kodları (`JWS_*`, `ISTEK_*`) genel mesaja düşer.
+const VENDOR_MESSAGES = {
+  GOVDE_GECERSIZ: "Lisans sunucusu isteğin gövdesini kabul etmedi (sürüm uyumsuzluğu olabilir).",
+  PROTOKOL_SURUMU: "Lisans sunucusu bu protokol sürümünü desteklemiyor.",
+  ISTEK_GECERSIZ: "Lisans sunucusu imzalı isteği doğrulayamadı (saat farkı ya da anahtar sorunu olabilir).",
+  ISTEK_TEKRAR: "Aynı istek ikinci kez gönderildi; biraz sonra tekrar deneyin.",
   ETKINLESTIRME_KODU_GECERSIZ: "Etkinleştirme kodu geçersiz.",
   ETKINLESTIRME_KODU_KULLANILMIS: "Bu etkinleştirme kodu daha önce kullanılmış.",
   TASIMA_ONAYI_BEKLIYOR: "Taşıma onayı bekleniyor; onaylanınca lisans kendiliğinden gelir.",
@@ -46,7 +59,13 @@ const VENDOR_MESSAGES: Readonly<Record<string, string>> = {
   KURULUM_IPTAL: "Bu kurulumun lisansı taşındı ya da iptal edildi.",
   KIRA_VERILMEDI: "Lisans sunucusu bu kuruluma kira vermedi; destek hattıyla görüşün.",
   HIZ_SINIRI: "Çok sık denendi; biraz sonra tekrar deneyin.",
-};
+  TEKRAR_DENEYIN: "Lisans sunucusunda eşzamanlı bir işlem çakıştı; biraz sonra tekrar deneyin.",
+  BULUNAMADI: "Lisans sunucusu bu isteği tanımadı (adres yanlış ya da sunucu sürümü eski olabilir; LICENSE_SERVER_URL ayarını kontrol edin).",
+  SUNUCU_HATASI: "Lisans sunucusunda bir hata oluştu; biraz sonra tekrar deneyin.",
+} as const satisfies Readonly<Record<VendorErrorCode, string>>;
+
+/** Aynı istek sonradan tekrar denenebilir mi (panel "tekrar dene" gösterir; kalıcı red değil). */
+const VENDOR_RETRYABLE: ReadonlySet<string> = new Set<VendorErrorCode>(["TEKRAR_DENEYIN", "HIZ_SINIRI", "ISTEK_TEKRAR", "SUNUCU_HATASI"]);
 
 export function vendorFailureToError(r: { status: number; code: string }): AppError {
   if (r.status === 0) {
@@ -54,7 +73,8 @@ export function vendorFailureToError(r: { status: number; code: string }): AppEr
       egressCode: r.code,
     });
   }
-  return licenseError(409, "LICENSE_VENDOR_REJECTED", VENDOR_MESSAGES[r.code] ?? "Lisans sunucusu isteği reddetti.", { vendorCode: r.code });
+  const message = (VENDOR_MESSAGES as Readonly<Record<string, string>>)[r.code] ?? "Lisans sunucusu isteği reddetti.";
+  return licenseError(409, "LICENSE_VENDOR_REJECTED", message, { vendorCode: r.code, tekrarDenenebilir: VENDOR_RETRYABLE.has(r.code) });
 }
 
 // ── Önkoşullar ──────────────────────────────────────────────────────────────────

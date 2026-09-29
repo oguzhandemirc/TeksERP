@@ -4,9 +4,10 @@ import type { ProtocolErrorCode, VendorErrorCode } from "../lisans-protokol";
 /**
  * Portal (satıcı + bayi JSON API'si) kodları — protokolün DIŞINDA: fabrika bunları hiç görmez.
  * /v1/* uçları yalnız protokol kodlarını döndürür; bunlar yalnız /portal/api ve /bayi/api'de.
+ * Ortak kodlar (`BULUNAMADI`, `TEKRAR_DENEYIN`, `GOVDE_GECERSIZ`…) protokolün `VENDOR_ERROR_CODES`inde
+ * yaşar; burada TEKRARLANMAZ (tek kaynak — bekçi: test_satici_kapilari §8).
  */
 export const PORTAL_ERROR_CODES = [
-  "BULUNAMADI",
   "OTURUM_YOK",
   "GIRIS_BASARISIZ",
   "GIRIS_KILITLI",
@@ -18,6 +19,7 @@ export const PORTAL_ERROR_CODES = [
   "URETIM_MODULU_UYARISI",
   "IMZA_PAROLASI_HATALI",
   "PAROLA_ZAYIF",
+  "KULLANICI_ADI_KULLANIMDA",
 ] as const;
 export type PortalErrorCode = (typeof PORTAL_ERROR_CODES)[number];
 
@@ -44,8 +46,9 @@ export function requestRejected(code: ProtocolErrorCode, message: string): Vendo
   return new VendorError(401, passThrough ? code : "ISTEK_GECERSIZ", message);
 }
 
-export const retryConflict = (): VendorError =>
-  new VendorError(409, "SUNUCU_HATASI", "Eşzamanlı işlem çakıştı; lütfen tekrar deneyin");
+/** 409 "tekrar deneyin": 40001/40P01 ya da atomik claim kaybı — istemci aynı isteği yeniden dener. */
+export const retryConflict = (message = "Eşzamanlı işlem çakıştı; lütfen tekrar deneyin"): VendorError =>
+  new VendorError(409, "TEKRAR_DENEYIN", message);
 
 export const notFoundError = (what: string): VendorError => new VendorError(404, "BULUNAMADI", `${what} bulunamadı`);
 

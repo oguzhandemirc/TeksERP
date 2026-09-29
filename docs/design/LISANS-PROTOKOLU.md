@@ -156,6 +156,8 @@
 | `TASIMA_ONAYI_BEKLIYOR` | 409 | ikinci anahtar onay bekliyor (kurulum ek sürede çalışır) |
 | `KIRA_VERILMEDI` | 403 | kopya şüphesinin ikinci penceresi |
 | `HIZ_SINIRI` | 429 | |
+| `TEKRAR_DENEYIN` | 409 | eşzamanlı işlem çakıştı (PG 40001/40P01, atomik claim kaybı) — AYNI istek yeniden denenebilir |
+| `BULUNAMADI` | 404 | satıcıda böyle bir yol yok (adres yanlış ya da satıcı sürümü eski); portal uçlarının "kayıt yok" 404'ü de bu kodu taşır |
 | `SUNUCU_HATASI` | 500 | 503 kullanılmaz |
 
 **Yoklama başarısı tanımı (1c için bağlayıcı):** *başarılı yoklama = geçerli YENİ bir kira alındı.* Ağ hatası, 4xx/5xx, yanıt belgesinin yerelde doğrulanamaması ve `KIRA_VERILMEDI` başarısızdır. Etkinleşmemiş kurulumda yoklama yapılamaz ⇒ başarısız sayılır (ikinci anahtar kendiliğinden sağlanır).
@@ -243,6 +245,7 @@
 9. **Karar verildi (yönetici kararı 2, Faz 1c):** sunucu kararları (K1–K5, dondurulan modül, DEVREDİLDİ) son geçerli imzalı kiradan KALICIDIR; ek süre gevşetmez; tavanın fail-open'ı yalnız belirsizlik içindir. Uygulama: `state.ts` `computeEffect` + `sanctionSource`, `saat.ts` `sonYaptirim`; bekçi `test_lisans_durumu` §3b/§7d/§14.
 10. **Parmak izi f3/f4 (yönetici kararı 3, Faz 1c):** f4 MAC değil sistem/anakart seri numarası; f3 genel RAID serisi ölçülemedi. `parmak-izi.ts` normalleştirmesi değişti — satıcı aynası (1b) bu dosyayı yeniden kopyalar (özet biçimi aynı; yalnız f3/f4 normalleştirmesi).
 11. **Kapı listeleri (Faz 1c-kapı):** plan listesine iki ek — `GET /api/client-policy/*` her kademede (panelin sürüm kurtarması, tablet OTA ile aynı sınıf) ve `GET /api/auth/me` DURDURULMUŞ'ta ("verilerimi al" ekranı oturum izinlerini çözer); etiket içeriği dondurma (`seed-snapshot`) baskı sayılmadı, kapalı. `LICENSE_MODULE.modul` DB anahtarıdır (HAK sözlüğü), `MODULE_DISABLED.modul` kısa koddur.
+12. **Satıcı hata kodları `TEKRAR_DENEYIN` · `BULUNAMADI` (satıcı tamamlama):** eşzamanlılık çakışması önce `SUNUCU_HATASI` (409) ile, bilinmeyen yol protokol DIŞI bir portal koduyla dönüyordu — biri "sunucu arızası"yla karışıyor, öteki tek kaynak dışındaydı. İkisi `VENDOR_ERROR_CODES`e eklendi (kod EKLEMEK kırıcı değil, §9); portal kod listesi protokolle kesişmez (bekçi `test_satici_kapilari` §8).
 
 ## 12a. Adlandırma — plan adı → kod adı
 
@@ -361,7 +364,7 @@ interface LicenseDataExportManifest {
 type PollOutcome = "YAPILANDIRILMAMIS" | "HAZIR_DEGIL" | "ETKIN_DEGIL" | "BASARILI" | "BASARISIZ";
 ```
 
-**Hata kodları (`details.code`):** `LICENSE_STORE_UNAVAILABLE` 409 (depo `app\`/`BACKUP_DIR` içinde ya da yazılamıyor) · `LICENSE_IDENTITY_NOT_READY` 409 · `LICENSE_NOT_CONFIGURED` 409 (`LICENSE_SERVER_URL` yok) · `LICENSE_NOT_ACTIVE` 409 · `LICENSE_ALREADY_ACTIVE` 409 · `LICENSE_CODE_INVALID` 400 · `LICENSE_VENDOR_UNREACHABLE` 502 (+ `egressCode`) · `LICENSE_VENDOR_REJECTED` 409 (+ `vendorCode` ∈ §5 satıcı kodları; mesaj TR) · `LICENSE_RESPONSE_INVALID` 400 (+ `protocolCode`; imzasız/kurcalı/başka kuruluma ait yanıt) · `LICENSE_LEASE_STALE` 409 · `LICENSE_UPDATES_FROZEN` 403 · `LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE` 404 · `LICENSE_PROXY_INVALID` 400 · `LICENSE_PROXY_UNSUPPORTED` 409 (Node < 22.21 / 24.5) · `DEVICE_OR_SESSION_REQUIRED` 401. Kapı kodları (`LICENSE_RESTRICTED` · `LICENSE_SUSPENDED` · `LICENSE_MODULE` · `LICENSE_GATE`) §14a'da.
+**Hata kodları (`details.code`):** `LICENSE_STORE_UNAVAILABLE` 409 (depo `app\`/`BACKUP_DIR` içinde ya da yazılamıyor) · `LICENSE_IDENTITY_NOT_READY` 409 · `LICENSE_NOT_CONFIGURED` 409 (`LICENSE_SERVER_URL` yok) · `LICENSE_NOT_ACTIVE` 409 · `LICENSE_ALREADY_ACTIVE` 409 · `LICENSE_CODE_INVALID` 400 · `LICENSE_VENDOR_UNREACHABLE` 502 (+ `egressCode`) · `LICENSE_VENDOR_REJECTED` 409 (+ `vendorCode` ∈ §5 satıcı kodları, HER kodun kendi TR mesajı — tablo `license-wire.helper.ts` `VENDOR_MESSAGES`, `VendorErrorCode` üstünde tam; + `tekrarDenenebilir`: `TEKRAR_DENEYIN` · `HIZ_SINIRI` · `ISTEK_TEKRAR` · `SUNUCU_HATASI` için `true`) · `LICENSE_RESPONSE_INVALID` 400 (+ `protocolCode`; imzasız/kurcalı/başka kuruluma ait yanıt) · `LICENSE_LEASE_STALE` 409 · `LICENSE_UPDATES_FROZEN` 403 · `LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE` 404 · `LICENSE_PROXY_INVALID` 400 · `LICENSE_PROXY_UNSUPPORTED` 409 (Node < 22.21 / 24.5) · `DEVICE_OR_SESSION_REQUIRED` 401. Kapı kodları (`LICENSE_RESTRICTED` · `LICENSE_SUSPENDED` · `LICENSE_MODULE` · `LICENSE_GATE`) §14a'da.
 
 **Davranış sözleşmesi:**
 - **Gözlem = sıfır fark:** `durum.kademe` NORMAL, `bant` null, `guncellemeIzni` true — istemci bant/kilit ÇİZMEZ; yalnız Lisans ekranı `detay.durum.hesaplanan*` alanlarını gösterir.

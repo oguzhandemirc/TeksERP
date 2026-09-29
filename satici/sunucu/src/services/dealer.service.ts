@@ -1,4 +1,5 @@
-// BAYİ — hesap, TAVAN (modül ⊆ · sınıf ⊆ · kurulum adedi; sürümlü defter) ve bayi imzalı HAK.
+// BAYİ — hesap, TAVAN (modül ⊆ · sınıf ⊆ · kurulum adedi · kanal ⊆ · kalıcı izni · bakım ay tavanı;
+// sürümlü defter) ve bayi imzalı HAK.
 // Protokol bayi sertifikasının kısıtını KRİPTOGRAFİK uygular (sertifikadaki modül/sınıf); portal
 // bunun ÜSTÜNE bayinin GÜNCEL tavanını uygular — sertifika verildikten sonra daraltılan tavan
 // sertifika süresince de bağlar. Denetim iki kez: imzadan ÖNCE (parola boşa sorulmasın) ve
@@ -6,7 +7,7 @@
 import type { Bayi, BayiTavani, HakSurumu, Kurulum, LisansSinifi, Tesis } from "@prisma/client";
 import { LICENSE_CLASSES, verifyCertificate, verifyEntitlement } from "../lisans-protokol";
 import { KeyStore } from "../keys/key-store";
-import { VendorError, badRequest, notFoundError, stateConflict } from "../lib/errors";
+import { VendorError, badRequest, notFoundError, retryConflict, stateConflict } from "../lib/errors";
 import { lockCustomer, lockDealer, lockInstallation } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
@@ -20,25 +21,58 @@ import {
   type IssuedActivationCode,
   type PreparedEntitlementVersion,
 } from "./entitlement.service";
+import { cleanChannelList } from "./channel.service";
 import { cleanName, cleanTaxNo, createInstallationUnderLock, type CreateInstallationInput } from "./master-data.service";
 import { requireReason } from "./sanction.service";
+
+/** Bayi tavanının bakım ay tavanı varsayılanı (yıllık bakım kalıbı) ve üst sınırı. */
+export const DEFAULT_MAINTENANCE_MONTHS = 12;
+export const MAX_MAINTENANCE_MONTHS = 120;
 
 export interface DealerCeilingInput {
   readonly modules: readonly string[];
   readonly classes: readonly LisansSinifi[];
   readonly installationCount: number;
+  /** Bayinin kurulum açabileceği kanallar (boş = kurulum açamaz). */
+  readonly channels?: readonly string[];
+  /** Bayi KALICI hak imzalayabilir mi — varsayılan HAYIR (yönetici kararı g). */
+  readonly perpetualAllowed?: boolean;
+  /** Bakım bitişi imza anından en çok kaç ay sonra olabilir. */
+  readonly maintenanceMonths?: number;
 }
 
 export type CeilingViolation =
   | { readonly tur: "MODUL"; readonly moduller: string[] }
   | { readonly tur: "SINIF"; readonly sinif: string }
   | { readonly tur: "ADET"; readonly kullanim: number; readonly tavan: number }
+  | { readonly tur: "KANAL"; readonly kanal: string }
+  | { readonly tur: "KALICI" }
+  | { readonly tur: "BAKIM"; readonly bakimBitis: string; readonly enGec: string; readonly tavanAy: number }
   | { readonly tur: "TAVAN_YOK" };
 
-/** SAF: hak (modüller + sınıf) ve kullanım güncel tavana sığıyor mu? */
+/** `atMs` + `months` takvim ayı (UTC; ayın son günü taşarsa ay sonuna oturur). */
+export function addMonthsUtc(atMs: number, months: number): number {
+  const d = new Date(atMs);
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, lastDay));
+  return d.getTime();
+}
+
+/** SAF: hak (modüller · sınıf · kalıcı · bakım bitişi), kanal ve kullanım güncel tavana sığıyor mu? */
 export function ceilingViolations(
-  ceiling: Pick<BayiTavani, "moduller" | "siniflar" | "kurulumAdedi"> | null,
-  g: { readonly modules?: readonly string[]; readonly licenseClass?: LisansSinifi; readonly usage?: number },
+  ceiling: Pick<BayiTavani, "moduller" | "siniflar" | "kurulumAdedi" | "kanallar" | "kaliciIzni" | "bakimAyTavani"> | null,
+  g: {
+    readonly modules?: readonly string[];
+    readonly licenseClass?: LisansSinifi;
+    readonly usage?: number;
+    readonly channelCode?: string;
+    readonly perpetual?: boolean;
+    /** Bakım bitişi `atMs` (imza/doğuş anı) + tavan ayını aşamaz. */
+    readonly maintenance?: { readonly until: Date; readonly atMs: number };
+  },
 ): CeilingViolation[] {
   if (!ceiling) return [{ tur: "TAVAN_YOK" }];
   const out: CeilingViolation[] = [];
@@ -46,6 +80,14 @@ export function ceilingViolations(
   if (outside.length > 0) out.push({ tur: "MODUL", moduller: outside });
   if (g.licenseClass !== undefined && !ceiling.siniflar.includes(g.licenseClass)) out.push({ tur: "SINIF", sinif: g.licenseClass });
   if (g.usage !== undefined && g.usage > ceiling.kurulumAdedi) out.push({ tur: "ADET", kullanim: g.usage, tavan: ceiling.kurulumAdedi });
+  if (g.channelCode !== undefined && !ceiling.kanallar.includes(g.channelCode)) out.push({ tur: "KANAL", kanal: g.channelCode });
+  if (g.perpetual === true && !ceiling.kaliciIzni) out.push({ tur: "KALICI" });
+  if (g.maintenance) {
+    const latest = addMonthsUtc(g.maintenance.atMs, ceiling.bakimAyTavani);
+    if (g.maintenance.until.getTime() > latest) {
+      out.push({ tur: "BAKIM", bakimBitis: g.maintenance.until.toISOString(), enGec: new Date(latest).toISOString(), tavanAy: ceiling.bakimAyTavani });
+    }
+  }
   return out;
 }
 
@@ -57,6 +99,12 @@ function describe(v: CeilingViolation): string {
       return `tavan dışı sınıf: ${v.sinif}`;
     case "ADET":
       return `kurulum adedi aşılıyor (${v.kullanim} > ${v.tavan})`;
+    case "KANAL":
+      return `bayiye atanmamış kanal: ${v.kanal}`;
+    case "KALICI":
+      return "bayinin kalıcı hak imzalama izni yok";
+    case "BAKIM":
+      return `bakım bitişi tavanı aşıyor (en geç ${v.enGec.slice(0, 10)}, ${v.tavanAy} ay)`;
     case "TAVAN_YOK":
       return "bayinin tanımlı tavanı yok";
   }
@@ -67,7 +115,16 @@ export function assertWithinCeiling(violations: readonly CeilingViolation[]): vo
   throw new VendorError(409, "BAYI_TAVANI_ASILDI", `Bayi tavanı aşılıyor — ${violations.map(describe).join("; ")}`, { ihlaller: violations });
 }
 
-function cleanCeiling(c: DealerCeilingInput): DealerCeilingInput {
+interface CleanCeiling {
+  readonly modules: string[];
+  readonly classes: LisansSinifi[];
+  readonly installationCount: number;
+  readonly channels: string[];
+  readonly perpetualAllowed: boolean;
+  readonly maintenanceMonths: number;
+}
+
+async function cleanCeiling(db: Db, c: DealerCeilingInput): Promise<CleanCeiling> {
   const modules = [...new Set(c.modules)];
   const classes = [...new Set(c.classes)];
   for (const cls of classes) if (!(LICENSE_CLASSES as readonly string[]).includes(cls)) throw badRequest(`Bilinmeyen sınıf: ${cls}`);
@@ -75,8 +132,26 @@ function cleanCeiling(c: DealerCeilingInput): DealerCeilingInput {
   if (!Number.isInteger(c.installationCount) || c.installationCount < 0 || c.installationCount > 100_000) {
     throw badRequest("Kurulum adedi 0–100000 olmalı");
   }
-  return { modules, classes, installationCount: c.installationCount };
+  const months = c.maintenanceMonths ?? DEFAULT_MAINTENANCE_MONTHS;
+  if (!Number.isInteger(months) || months < 1 || months > MAX_MAINTENANCE_MONTHS) throw badRequest(`Bakım ay tavanı 1–${MAX_MAINTENANCE_MONTHS} olmalı`);
+  return {
+    modules,
+    classes,
+    installationCount: c.installationCount,
+    channels: await cleanChannelList(db, c.channels ?? []),
+    perpetualAllowed: c.perpetualAllowed ?? false,
+    maintenanceMonths: months,
+  };
 }
+
+const ceilingRow = (c: CleanCeiling) => ({
+  moduller: c.modules,
+  siniflar: c.classes,
+  kurulumAdedi: c.installationCount,
+  kanallar: c.channels,
+  kaliciIzni: c.perpetualAllowed,
+  bakimAyTavani: c.maintenanceMonths,
+});
 
 export async function currentCeiling(db: Db, dealer: Pick<Bayi, "id" | "guncelTavanSurum">): Promise<BayiTavani | null> {
   if (dealer.guncelTavanSurum < 1) return null;
@@ -101,11 +176,9 @@ export async function createDealerTx(
   g: { name: string; taxNo?: string | null; ceiling: DealerCeilingInput; reason: string; actor: string },
 ): Promise<Bayi & { tavan: BayiTavani }> {
   const reason = requireReason(g.reason, "Bayi hesabı");
-  const ceiling = cleanCeiling(g.ceiling);
+  const ceiling = await cleanCeiling(tx, g.ceiling);
   const dealer = await tx.bayi.create({ data: { ad: cleanName(g.name, "Bayi"), vergiNo: cleanTaxNo(g.taxNo), guncelTavanSurum: 1 } });
-  const tavan = await tx.bayiTavani.create({
-    data: { bayiId: dealer.id, surum: 1, moduller: ceiling.modules as string[], siniflar: [...ceiling.classes], kurulumAdedi: ceiling.installationCount, sebep: reason, yapan: g.actor },
-  });
+  const tavan = await tx.bayiTavani.create({ data: { bayiId: dealer.id, surum: 1, ...ceilingRow(ceiling), sebep: reason, yapan: g.actor } });
   return { ...dealer, tavan };
 }
 
@@ -113,14 +186,12 @@ export async function createDealerTx(
 export async function setDealerCeilingTx(tx: Tx, g: { dealerId: string; ceiling: DealerCeilingInput; reason: string; actor: string }): Promise<BayiTavani> {
   await lockDealer(tx, g.dealerId);
   const reason = requireReason(g.reason, "Bayi tavanı değişimi");
-  const ceiling = cleanCeiling(g.ceiling);
+  const ceiling = await cleanCeiling(tx, g.ceiling);
   const dealer = await findDealer(tx, g.dealerId);
   const next = dealer.guncelTavanSurum + 1;
   const claim = await tx.bayi.updateMany({ where: { id: dealer.id, guncelTavanSurum: dealer.guncelTavanSurum }, data: { guncelTavanSurum: next } });
-  if (claim.count === 0) throw stateConflict("Tavan bu arada değişti; yeniden deneyin");
-  return tx.bayiTavani.create({
-    data: { bayiId: dealer.id, surum: next, moduller: ceiling.modules as string[], siniflar: [...ceiling.classes], kurulumAdedi: ceiling.installationCount, sebep: reason, yapan: g.actor },
-  });
+  if (claim.count === 0) throw retryConflict("Tavan bu arada değişti; yeniden deneyin");
+  return tx.bayiTavani.create({ data: { bayiId: dealer.id, surum: next, ...ceilingRow(ceiling), sebep: reason, yapan: g.actor } });
 }
 
 export async function setDealerActiveTx(tx: Tx, g: { dealerId: string; active: boolean; reason: string }): Promise<Bayi> {
@@ -165,7 +236,7 @@ export function reloadKeys(ctx: VendorContext): void {
 
 // ---------------------------------------------------------------- bayinin kurulumu
 
-/** Bayi kurulum açar: sınıf tavanda, kullanım + 1 ≤ adet (bayi + müşteri ağacı kilidi altında). */
+/** Bayi kurulum açar: sınıf ve kanal tavanda, kullanım + 1 ≤ adet (bayi + müşteri ağacı kilidi altında). */
 export async function createDealerInstallationTx(
   tx: Tx,
   g: CreateInstallationInput & { dealerId: string; site: Tesis },
@@ -175,11 +246,20 @@ export async function createDealerInstallationTx(
   const dealer = await findDealer(tx, g.dealerId);
   if (!dealer.aktif) throw stateConflict("Bayi pasif");
   const ceiling = await currentCeiling(tx, dealer);
-  assertWithinCeiling(ceilingViolations(ceiling, { licenseClass: g.licenseClass, usage: (await dealerUsage(tx, dealer.id)) + 1 }));
+  const usage = (await dealerUsage(tx, dealer.id)) + 1;
+  assertWithinCeiling(ceilingViolations(ceiling, { licenseClass: g.licenseClass, usage, channelCode: g.channelCode }));
   return createInstallationUnderLock(tx, g);
 }
 
 // ---------------------------------------------------------------- bayi imzalı HAK
+
+/** HAK'ın tavana giden alanları (modül · sınıf · kalıcı · bakım bitişi `atMs`e göre). */
+export function signedFieldsOf(
+  f: { readonly modules: readonly string[]; readonly licenseClass: LisansSinifi; readonly perpetual: boolean; readonly maintenanceUntil: Date },
+  atMs: number,
+): Parameters<typeof ceilingViolations>[1] {
+  return { modules: f.modules, licenseClass: f.licenseClass, perpetual: f.perpetual, maintenance: { until: f.maintenanceUntil, atMs } };
+}
 
 function dealerKeyFor(ctx: VendorContext, dealer: Bayi, nowMs: number): { path: string; kid: string; certificate: string } {
   if (!dealer.anahtarKid) throw stateConflict("Bayinin bağlı imza anahtarı yok (satıcıya başvurun)");
@@ -209,7 +289,7 @@ export async function prepareDealerEntitlementVersion(
     const key = dealerKeyFor(ctx, dealer, nowMs);
     const { payload, fields } = buildEntitlementPayload(hak, g.changes ?? {}, nowMs, { dealerId: dealer.id, certificate: key.certificate });
     const ceiling = await currentCeiling(prisma, dealer);
-    assertWithinCeiling(ceilingViolations(ceiling, { modules: fields.modules, licenseClass: fields.licenseClass, usage: await dealerUsage(prisma, dealer.id) }));
+    assertWithinCeiling(ceilingViolations(ceiling, { ...signedFieldsOf(fields, nowMs), usage: await dealerUsage(prisma, dealer.id) }));
     const token = await signEntitlement(key.path, payload, g.password);
     // Protokolün kriptografik kısıtı: sertifikadaki modül/sınıf dışına çıkan HAK burada düşer.
     const verified = verifyEntitlement(token, ctx.keys.anchor);
@@ -247,7 +327,7 @@ export async function recordDealerEntitlementVersionTx(tx: Tx, p: PreparedEntitl
   const dealer = await findDealer(tx, p.dealerId);
   if (!dealer.aktif) throw stateConflict("Bayi pasif");
   const ceiling = await currentCeiling(tx, dealer);
-  assertWithinCeiling(ceilingViolations(ceiling, { modules: p.fields.modules, licenseClass: p.fields.licenseClass, usage: await dealerUsage(tx, dealer.id) }));
+  assertWithinCeiling(ceilingViolations(ceiling, { ...signedFieldsOf(p.fields, p.issuedAt.getTime()), usage: await dealerUsage(tx, dealer.id) }));
   return writeEntitlementVersionUnderLock(tx, p);
 }
 
@@ -264,7 +344,8 @@ export async function createDealerActivationCodeTx(
   const hak = await tx.hak.findFirst({ where: { kurulumId: g.installationDbId, aktif: true }, include: { kurulum: true } });
   if (hak && hak.guncelSurum >= 1) {
     const ceiling = await currentCeiling(tx, dealer);
-    assertWithinCeiling(ceilingViolations(ceiling, { modules: hak.moduller, licenseClass: hak.kurulum.sinif, usage: await dealerUsage(tx, dealer.id) }));
+    const fields = { modules: hak.moduller, licenseClass: hak.kurulum.sinif, perpetual: hak.kalici, maintenanceUntil: hak.bakimBitis };
+    assertWithinCeiling(ceilingViolations(ceiling, { ...signedFieldsOf(fields, g.nowMs ?? Date.now()), usage: await dealerUsage(tx, dealer.id) }));
   }
   return issueActivationCodeUnderLock(tx, ctx, g);
 }

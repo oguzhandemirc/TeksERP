@@ -1,6 +1,6 @@
 name: CI
 
-# TeksERP monorepo — 3 alt proje (Teks-Erp backend, Electron panel, mobil).
+# TeksERP monorepo — 3 alt proje (Teks-Erp backend, Electron panel, mobil) + satıcı sunucusu (satici/sunucu).
 # Her push + PR'da tip kontrolü + test takımları koşar. Backend testleri yerel
 # PostgreSQL gerektirir (service container + migrate deploy + seed); Electron
 # (Vitest/jsdom) ve mobil (jest-expo) DB'siz çalışır.
@@ -379,6 +379,97 @@ jobs:
         working-directory: .
       - name: Test (jest-expo)
         run: npx jest --runInBand
+
+  # ===========================================================================
+  # SATICI — lisans satıcı sunucusu (satici/sunucu); kendi PG'si + migrate deploy + bekçi koşucusu.
+  # Backend job'ıyla aynı node + PG sürümü. Satıcı bekçileri protokol TEK KAYNAĞINI ve fikstürü
+  # `Teks-Erp/src/lib/license/protocol` + `Teks-Erp/scripts/lib/lisans-fikstur`ten içe aktarır ⇒
+  # Teks-Erp bağımlılıkları da kurulur (zod oradan çözülür; tip kapısı da onları görür).
+  # DB adı `_test` ile biter: satıcı koşucusunun hedef DB kapısı başka adı REDDEDER (fail-closed).
+  # ===========================================================================
+  satici:
+    name: Satıcı (tsc + lint + bekçi)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: satici/sunucu
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tekserp_satici_ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tekserp_satici_ci_test?schema=public
+      SATICI_ERISIM_GUNLUGU: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            satici/sunucu/package-lock.json
+            Teks-Erp/package-lock.json
+      - name: Teks-Erp bağımlılıkları (ortak protokol + bekçi fikstürü)
+        run: npm ci
+        working-directory: Teks-Erp
+      - run: npm ci
+      - name: Prisma generate
+        run: npx prisma generate
+      - name: Migrate deploy (satıcı migration'ları)
+        run: npx prisma migrate deploy
+      - name: Lint
+        run: npm run lint
+      - name: Lint tavanı (baseline)
+        run: node scripts/check-lint-baseline.mjs --proje=satici
+        working-directory: .
+      - name: Type-check (src · src + scripts)
+        run: npm run typecheck:plain && npm run typecheck:scripts:plain
+      - name: Kapı kapsamı (tip kapısı SIFIR dosya derlemiyor)
+        run: node scripts/kapi-kapsami.mjs satici/sunucu
+        working-directory: .
+      - name: Satıcı bekçileri
+        run: npx tsx scripts/run-all-tests.ts
+
+  # ===========================================================================
+  # SATICI WEB — portal web arayüzü (satici/web; React + Vite). DB'siz: tip + lint + vitest (ayna
+  # bekçisi sunucu KAYNAĞINI metin olarak okur, sunucu bağımlılığı gerekmez) + iki derleme (portal ·
+  # bayi) — derleme kırılırsa satıcı sunucusu arayüzsüz (404) kalır.
+  # ===========================================================================
+  satici-web:
+    name: Satıcı web (tsc + lint + vitest + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: satici/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: satici/web/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run typecheck:plain
+      - name: Kapı kapsamı (tip kapısı SIFIR dosya derlemiyor)
+        run: node scripts/kapi-kapsami.mjs satici/web
+        working-directory: .
+      - name: Test (vitest)
+        run: npx vitest run
+      - name: Derleme (portal + bayi)
+        run: npm run build
 
   # ===========================================================================
   # E2E — Electron uygulaması gerçekten açılıp Login render oluyor mu (Playwright

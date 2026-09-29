@@ -14,6 +14,7 @@
     "typecheck:plain": "tsc --noEmit --pretty false",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "typecheck:scripts:plain": "tsc --noEmit --pretty false -p tsconfig.scripts.json",
+    "lint": "eslint src scripts",
     "test": "tsx scripts/run-all-tests.ts",
     "anahtar": "tsx scripts/anahtar.ts",
     "prisma:generate": "prisma generate",
@@ -32,6 +33,9 @@
     "@types/express": "5.0.6",
     "@types/node": "25.6.0",
     "@types/pg": "8.20.0",
+    "@typescript-eslint/eslint-plugin": "8.58.2",
+    "@typescript-eslint/parser": "8.58.2",
+    "eslint": "10.2.1",
     "tsx": "4.22.4",
     "typescript": "6.0.2"
   }

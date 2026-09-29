@@ -2,16 +2,21 @@
 // anahtar deposunun tazelenmesi. `running` koruması üst üste binmeyi engeller; her adım ayrı
 // hata sınırında (biri düşerse diğerleri koşar).
 //
-// BUDAMA BEYANI — yaşa göre SİLİNEN tablolar yalnız bunlardır (TELEMETRİ: hiçbir iş kararı okumaz;
-// bekçi: scripts/test_satici_kapilari.ts): nonce_defteri (sonKullanim geçti) · yoklama (saklama günü) ·
-// portal_oturumu (bitişinden saklama günü sonra) · portal_islemi (işlem kimliği; saklama günü sonra).
+// BUDAMA BEYANI — yaşa göre SİLİNEN tablolar yalnız bunlardır (hiçbir iş kararı okumaz; bekçi:
+// scripts/test_satici_kapilari.ts): TELEMETRİ nonce_defteri (sonKullanim geçti) · yoklama (saklama günü) ·
+// portal_oturumu (bitişinden saklama günü sonra) · portal_islemi (işlem kimliği; saklama günü sonra) ·
+// AYAK İZİ denetim (günde bir: başarısız giriş 90 gün, diğeri 2 yıl — yönetici kararı h).
 import type { AnahtarTuru } from "@prisma/client";
+import { DAY_MS } from "../lisans-protokol";
 import { KeyStore } from "../keys/key-store";
 import { prisma } from "../lib/prisma";
 import type { VendorContext } from "./context";
 import { runDuePlannedActions, runOverdueInstallments } from "./sanction.service";
 
-export const PRUNED_MODELS = ["nonceDefteri", "yoklama", "portalOturumu", "portalIslemi"] as const;
+export const PRUNED_MODELS = ["nonceDefteri", "yoklama", "portalOturumu", "portalIslemi", "denetim"] as const;
+
+/** Kısa saklanan denetim sınıfı: başarısız/reddedilen giriş denemeleri (kaba kuvvet gürültüsü). */
+export const AUDIT_FAILED_LOGIN_EVENTS = ["PORTAL_GIRIS_BASARISIZ", "PORTAL_GIRIS_REDDEDILDI"] as const;
 
 export async function pruneExpiredNonces(nowMs: number): Promise<number> {
   const r = await prisma.nonceDefteri.deleteMany({ where: { sonKullanim: { lt: new Date(nowMs) } } });
@@ -36,6 +41,20 @@ export async function prunePortalActions(nowMs: number, keepDays: number): Promi
   return r.count;
 }
 
+/**
+ * Denetim budaması — iki sınıf TEK tx'te (ikisi birden ya da hiçbiri): başarısız giriş satırları
+ * `failedLoginKeepDays`, geri kalan her denetim satırı `keepDays` sonra silinir.
+ */
+export async function pruneAudit(nowMs: number, g: { failedLoginKeepDays: number; keepDays: number }): Promise<{ failedLogins: number; other: number }> {
+  const [failedLogins, other] = await prisma.$transaction([
+    prisma.denetim.deleteMany({
+      where: { olay: { in: [...AUDIT_FAILED_LOGIN_EVENTS] }, createdAt: { lt: new Date(nowMs - g.failedLoginKeepDays * DAY_MS) } },
+    }),
+    prisma.denetim.deleteMany({ where: { createdAt: { lt: new Date(nowMs - g.keepDays * DAY_MS) } } }),
+  ]);
+  return { failedLogins: failedLogins.count, other: other.count };
+}
+
 /** Anahtar künyesi: yalnız AÇIK yarı + kid + tür + geçerlilik (özel yarı DB'ye girmez). */
 export async function syncKeyRegistry(keys: KeyStore): Promise<number> {
   let n = 0;
@@ -57,6 +76,8 @@ export async function syncKeyRegistry(keys: KeyStore): Promise<number> {
 export class MaintenanceScheduler {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  /** Denetim budaması günde bir (dakikalık işin içinde; süreç açılışında bir kez). */
+  private lastAuditPruneMs: number | null = null;
 
   constructor(private readonly ctx: VendorContext) {}
 
@@ -70,6 +91,12 @@ export class MaintenanceScheduler {
     this.timer = null;
   }
 
+  private async pruneAuditDaily(nowMs: number): Promise<void> {
+    if (this.lastAuditPruneMs !== null && nowMs - this.lastAuditPruneMs < DAY_MS) return;
+    await pruneAudit(nowMs, { failedLoginKeepDays: this.ctx.config.DENETIM_GIRIS_SAKLAMA_GUN, keepDays: this.ctx.config.DENETIM_SAKLAMA_GUN });
+    this.lastAuditPruneMs = nowMs;
+  }
+
   async runOnce(nowMs: number = Date.now()): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -79,6 +106,7 @@ export class MaintenanceScheduler {
         ["yoklama budaması", () => prunePollTelemetry(nowMs, this.ctx.config.YOKLAMA_SAKLAMA_GUN)],
         ["portal oturumu budaması", () => prunePortalSessions(nowMs, this.ctx.config.PORTAL_OTURUM_SAKLAMA_GUN)],
         ["portal işlem kimliği budaması", () => prunePortalActions(nowMs, this.ctx.config.PORTAL_ISLEM_SAKLAMA_GUN)],
+        ["denetim budaması", () => this.pruneAuditDaily(nowMs)],
         ["planlı eylemler", () => runDuePlannedActions(nowMs)],
         ["geciken taksitler", () => runOverdueInstallments(nowMs)],
         [

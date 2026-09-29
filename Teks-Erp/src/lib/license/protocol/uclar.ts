@@ -163,6 +163,10 @@ export const VENDOR_ERROR_CODES = [
   "TASIMA_ONAYI_BEKLIYOR",
   "KIRA_VERILMEDI",
   "HIZ_SINIRI",
+  /** 409: eşzamanlı işlem çakıştı (40001/40P01, atomik claim kaybı) — aynı istek yeniden denenebilir. */
+  "TEKRAR_DENEYIN",
+  /** 404: satıcıda böyle bir yol yok (adres yanlış ya da sunucu sürümü eski). */
+  "BULUNAMADI",
   "SUNUCU_HATASI",
 ] as const;
 export type VendorErrorCode = (typeof VENDOR_ERROR_CODES)[number];

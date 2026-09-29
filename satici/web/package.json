@@ -1,0 +1,48 @@
+{
+  "name": "tekserp-satici-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TeksERP satıcı portalı web arayüzü — satıcı (tailnet /portal) ve bayi (genel /bayi) uygulamaları",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:portal": "vite --mode portal",
+    "dev:bayi": "vite --mode bayi",
+    "build": "npm run build:portal && npm run build:bayi",
+    "build:portal": "vite build --mode portal",
+    "build:bayi": "vite build --mode bayi",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:plain": "tsc --noEmit --pretty false -p tsconfig.json",
+    "lint": "eslint src vite.config.ts vitest.config.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.100.9",
+    "qrcode.react": "4.2.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "react-router-dom": "7.18.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.4",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/node": "24.12.2",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@typescript-eslint/eslint-plugin": "8.59.2",
+    "@typescript-eslint/parser": "8.59.2",
+    "@vitejs/plugin-react": "5.2.0",
+    "eslint": "9.39.4",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.6.0",
+    "jsdom": "26.1.0",
+    "typescript": "5.6.3",
+    "vite": "7.3.6",
+    "vitest": "3.2.6"
+  }
+}

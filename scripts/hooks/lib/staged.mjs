@@ -136,6 +136,23 @@ export const PROJELER = [
     lint: ["npm", ["run", "lint"]],
     test: ["npx", ["jest", "--runInBand"]], // ölçüm: 29 sn
   },
+  {
+    // Satıcı (lisans) sunucusu: `ad` DİZİNDİR (iç içe). Geniş tip config'i (src + scripts + ortak
+    // protokol fikstürü) dar olanı kapsar — ayrıca `typecheck:plain` koşmak aynı src'yi iki kez derlerdi.
+    // Bekçileri kendi `_test` DB'sini ister → commit kadansında DEĞİL (CI "Satıcı" job'ı + elle).
+    ad: "satici/sunucu",
+    typecheck: ["npm", ["run", "typecheck:scripts:plain"]],
+    lint: ["npm", ["run", "lint"]],
+    test: null,
+  },
+  {
+    // Satıcı portalı web arayüzü (React + Vite): vitest paketi DB'siz ve hızlıdır (~2 sn); ayna
+    // bekçisi sunucu kaynağını metin olarak okur → sunucu sözleşmesi değişince burada kırmızı.
+    ad: "satici/web",
+    typecheck: ["npm", ["run", "typecheck:plain"]],
+    lint: ["npm", ["run", "lint"]],
+    test: ["npx", ["vitest", "run"]],
+  },
 ];
 
 /** Staged dosyalardan etkilenen alt projeler (kod dosyası şartıyla). */

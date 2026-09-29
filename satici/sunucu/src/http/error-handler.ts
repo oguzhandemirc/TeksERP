@@ -1,11 +1,11 @@
 // Hata gövdesi backend ile aynı: {success:false, message:<TR>, details:{code}}. 503 kullanılmaz.
 // Günlüğe istek gövdesi/başlığı yazılmaz (imzalı istek, sağlık özeti, parmak izi).
 import type { NextFunction, Request, Response } from "express";
-import { VendorError } from "../lib/errors";
+import { VendorError, retryConflict, type VendorCode } from "../lib/errors";
 import { isRetryableConflict } from "../lib/prisma-errors";
 
 export function notFound(_req: Request, res: Response): void {
-  res.status(404).json({ success: false, message: "Bulunamadı", details: { code: "BULUNAMADI" } });
+  res.status(404).json({ success: false, message: "Bulunamadı", details: { code: "BULUNAMADI" satisfies VendorCode } });
 }
 
 export function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction): void {
@@ -23,7 +23,8 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     return;
   }
   if (isRetryableConflict(err)) {
-    res.status(409).json({ success: false, message: "Eşzamanlı işlem çakıştı; lütfen tekrar deneyin", details: { code: "SUNUCU_HATASI" } });
+    const e409 = retryConflict();
+    res.status(e409.status).json({ success: false, message: e409.message, details: { code: e409.code } });
     return;
   }
   console.error(`[satici] ${req.method} ${req.path} beklenmeyen hata: ${e.name ?? "Error"}: ${e.message ?? String(err)}`);

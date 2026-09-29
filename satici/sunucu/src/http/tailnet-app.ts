@@ -1,7 +1,8 @@
 // TAILNET DİNLEYİCİSİ — portal (1f) ve kök parolası isteyen uçlar YALNIZ burada.
 // Kapı iki koşullu ve FAIL-CLOSED: istek (1) tailnet dinleyicisinin soketine gelmiş olmalı ve
 // (2) kaynak adresi tailnet/geri döngü ağlarında olmalı; biri tutmazsa 404 (varlık sızdırılmaz).
-// Portal JSON API'si /portal/api altında (portal-routes.ts); /portal/saglik yalnız sayılar taşır.
+// Portal JSON API'si /portal/api altında (portal-routes.ts); /portal/saglik yalnız sayılar taşır;
+// satıcı web arayüzü (satici/web dist/portal) /portal altında, kapının ARKASINDA.
 import { BlockList, isIPv4, isIPv6, type AddressInfo } from "node:net";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { auditFailureCount } from "../lib/audit";
@@ -10,6 +11,7 @@ import type { DoorbellHub } from "../services/doorbell";
 import { accessLog, errorHandler, notFound } from "./error-handler";
 import { createPortalRouter } from "./portal-http";
 import { VENDOR_PORTAL_ROUTES } from "./portal-routes";
+import { createWebAppRouter } from "./web-static";
 
 /** Geri döngü + Tailscale CGNAT (100.64.0.0/10) ve Tailscale IPv6 ULA'sı. */
 export const TAILNET_SOURCE_NETWORKS = ["127.0.0.0/8", "::1/128", "100.64.0.0/10", "fd7a:115c:a1e0::/48"] as const;
@@ -74,6 +76,7 @@ export function createTailnetApp(ctx: VendorContext, hub: DoorbellHub | null, li
     });
   });
   app.use("/portal", portal);
+  app.use("/portal", createWebAppRouter(ctx.config.PORTAL_WEB_DIZINI, "portal"));
   app.use(notFound);
   app.use(errorHandler);
   return app;

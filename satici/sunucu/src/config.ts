@@ -20,6 +20,8 @@ const EnvSchema = z.object({
     .refine((v) => !WILDCARD_ADDRESSES.has(v.trim()), "TAILNET_BIND joker adres olamaz (0.0.0.0 / ::)"),
   PORT_TAILNET: port.default(4611),
   ANAHTAR_DIZINI: z.string().min(1).default("anahtarlar"),
+  /** Derlenmiş web arayüzü (`satici/web` → `dist/portal` · `dist/bayi`); yoksa arayüz 404, API çalışır. */
+  PORTAL_WEB_DIZINI: z.string().min(1).default("../web/dist"),
   /** Yalnız hazırlık/test: gömülü çapa (ROOT_PUBLIC_KEYS) yerine bu dosyadaki kökler. */
   GUVEN_CAPASI_DOSYASI: z.string().min(1).optional(),
   KIRA_GUN: positiveInt(1, 45).default(30),
@@ -49,13 +51,17 @@ const EnvSchema = z.object({
   /** Budama: kapanmış/bitmiş oturum ve işlem kimliği satırlarının saklama süresi (gün). */
   PORTAL_OTURUM_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
   PORTAL_ISLEM_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
+  /** Denetim budaması (günlük; denetim defter değil ayak izidir): başarısız giriş satırları ve diğer denetim (gün). */
+  DENETIM_GIRIS_SAKLAMA_GUN: positiveInt(30, 3650).default(90),
+  DENETIM_SAKLAMA_GUN: positiveInt(365, 3650).default(730),
   /** Tailnet çerezine Secure: yalnız tailnet dinleyicisi HTTPS arkasındaysa "1" (genel dinleyicide her zaman Secure). */
   TAILNET_CEREZ_GUVENLI: z.enum(["0", "1"]).default("0"),
 });
 
 export type VendorConfig = Readonly<
-  Omit<z.infer<typeof EnvSchema>, "ANAHTAR_DIZINI" | "GUVEN_CAPASI_DOSYASI"> & {
+  Omit<z.infer<typeof EnvSchema>, "ANAHTAR_DIZINI" | "GUVEN_CAPASI_DOSYASI" | "PORTAL_WEB_DIZINI"> & {
     ANAHTAR_DIZINI: string;
+    PORTAL_WEB_DIZINI: string;
     GUVEN_CAPASI_DOSYASI: string | undefined;
   }
 >;
@@ -70,6 +76,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd: string = p
   return Object.freeze({
     ...c,
     ANAHTAR_DIZINI: path.resolve(cwd, c.ANAHTAR_DIZINI),
+    PORTAL_WEB_DIZINI: path.resolve(cwd, c.PORTAL_WEB_DIZINI),
     GUVEN_CAPASI_DOSYASI: c.GUVEN_CAPASI_DOSYASI ? path.resolve(cwd, c.GUVEN_CAPASI_DOSYASI) : undefined,
   });
 }

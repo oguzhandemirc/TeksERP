@@ -13,10 +13,14 @@
 //   ⭐ etkinleşmemiş kurulum yoklamaz · zil(lisans) yoklatır, başka konu yoklatmaz
 //   ⭐ yoklama CONNECT proxy üzerinden; proxy kimlik bilgisi ekrana/audit'e sızmaz
 //   ⭐ gözlem kipinde K5 bile uygulanmaz (sıfır fark)
+//   ⭐ satıcının HER hata kodu tanınır (TR mesaj; TEKRAR_DENEYIN tekrar denenebilir, BULUNAMADI adres ipucu)
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): M1 persistAccumulation bozuk kayıtta sıfırdan başlatır · M2 kabulde kurulum
-// bağı denetimi kaldırılır · M3 zil konusu süzgeci kaldırılır · M4 proxy ayarı ajanı değiştirmez.
+// bağı denetimi kaldırılır · M3 zil konusu süzgeci kaldırılır · M4 proxy ayarı ajanı değiştirmez ·
+// M5 TEKRAR_DENEYIN tekrar denenebilir kümesinden çıkarılır (§8b).
+// ⭐ KALICI SONDA ✓K1 (her koşumda): bilinmeyen kod genel mesaja düşer — §8a'nın "her kodun kendi
+// mesajı var" karşılaştırıcısı kör değil.
 // =============================================================================
 import fs from "node:fs";
 import os from "node:os";
@@ -31,7 +35,8 @@ import { INSTALLATION_ID_SETTING_KEY, isReservedSettingKey } from "../src/consta
 import { loadLicenseStoreSync, resolveLicenseDir, writeFileAtomicSync, LICENSE_FILES } from "../src/lib/license/store";
 import { configureLicenseRuntimeForTests, getLicenseSnapshot, persistAccumulation, setMeasuredFingerprint, invalidateLicenseSnapshot } from "../src/lib/license/runtime";
 import { setEgressTrustForTests } from "../src/lib/http-egress";
-import { openEnvelope, verifyRequest, type Fingerprint } from "../src/lib/license/protocol";
+import { VENDOR_ERROR_CODES, openEnvelope, verifyRequest, type Fingerprint } from "../src/lib/license/protocol";
+import { vendorFailureToError } from "../src/services/helpers/license-wire.helper";
 import { signStateRecord } from "../src/lib/license/saat";
 import { activateLicense, acceptOfflineResponse, buildOfflineRequest, getLicenseStatus, getProxySettings, updateProxySettings } from "../src/services/license.service";
 import { pollLicenseOnce, refreshLicenseDbFacts } from "../src/services/license-sync.service";
@@ -243,9 +248,28 @@ function sozlesmeBolumu(): void {
   check("§7b ⭐ system.installationId rezerve (PUT /api/admin/settings/:key RED)", isReservedSettingKey(SETTING_KEYS.SYSTEM_INSTALLATION_ID));
 }
 
+function saticiKodlariBolumu(): void {
+  console.log("\n§8 — satıcı hata kodları: her kod tanınır");
+  const ayrinti = (code: string) => {
+    const e = vendorFailureToError({ status: 409, code });
+    return { mesaj: e.message, d: (e.details ?? {}) as { code?: string; vendorCode?: string; tekrarDenenebilir?: boolean } };
+  };
+  const genel = ayrinti("BILINMEYEN_KOD_X").mesaj;
+  const tanimsiz = VENDOR_ERROR_CODES.filter((k) => ayrinti(k).mesaj === genel);
+  check("§8a ✓K bilinmeyen kod genel mesaja düşer; VENDOR_ERROR_CODES'un HER kodu kendi TR mesajını taşır", genel.includes("reddetti") && tanimsiz.length === 0, tanimsiz.join(","));
+  const tekrar = ayrinti("TEKRAR_DENEYIN");
+  check(
+    "§8b TEKRAR_DENEYIN → LICENSE_VENDOR_REJECTED + vendorCode + tekrarDenenebilir",
+    tekrar.d.code === "LICENSE_VENDOR_REJECTED" && tekrar.d.vendorCode === "TEKRAR_DENEYIN" && tekrar.d.tekrarDenenebilir === true && /tekrar deneyin/.test(tekrar.mesaj),
+  );
+  const yok = ayrinti("BULUNAMADI");
+  check("§8c BULUNAMADI → kalıcı (tekrar denenmez), adres ipucu (LICENSE_SERVER_URL)", yok.d.tekrarDenenebilir === false && yok.mesaj.includes("LICENSE_SERVER_URL"));
+}
+
 async function main(): Promise<void> {
   let satici: SahteSatici | null = null;
   try {
+    saticiKodlariBolumu();
     depoBolumu();
     const hazir = await kurulumuHazirla();
     satici = hazir.satici;

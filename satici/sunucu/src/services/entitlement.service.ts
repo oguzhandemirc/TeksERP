@@ -18,7 +18,7 @@ import {
 import { KeyFileError } from "../keys/key-files";
 import { signWithWrappedKey } from "../keys/signer";
 import { recordAudit } from "../lib/audit";
-import { VendorError, badRequest, notFoundError, stateConflict } from "../lib/errors";
+import { VendorError, badRequest, notFoundError, retryConflict, stateConflict } from "../lib/errors";
 import { lockInstallation, lockLicenseNumber } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
 import { hashActivationCode } from "./activation.service";
@@ -209,7 +209,7 @@ export async function writeEntitlementVersionUnderLock(tx: Tx, p: PreparedEntitl
     where: { id: p.entitlementId, guncelSurum: p.baseVersion, aktif: true },
     data: { guncelSurum: p.version, moduller: p.fields.modules, kalici: p.fields.perpetual, bakimBitis: p.fields.maintenanceUntil },
   });
-  if (claim.count === 0) throw stateConflict("HAK bu arada başka bir sürümle imzalandı; yeniden deneyin");
+  if (claim.count === 0) throw retryConflict("HAK bu arada başka bir sürümle imzalandı; yeniden deneyin");
   const inst = await tx.kurulum.findUniqueOrThrow({ where: { id: p.installationDbId } });
   if (inst.sinif !== p.fields.licenseClass) throw stateConflict("Kurulum sınıfı imza sırasında değişti; yeniden deneyin");
   const created = await tx.hakSurumu.create({

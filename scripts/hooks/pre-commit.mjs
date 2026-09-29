@@ -95,6 +95,8 @@ const RAPOR_DIZINI = mkdtempSync(join(tmpdir(), "tekserp-kapi-"));
 process.on("exit", () => rmSync(RAPOR_DIZINI, { recursive: true, force: true }));
 
 const etkilenen = etkilenenProjeler(REPO, staged);
+// Proje adı iç içe dizin olabilir (`satici/sunucu`): rapor dosya adı düzleştirilir (alt dizin açılmaz).
+const raporYolu = (ad) => join(RAPOR_DIZINI, `${ad.replace(/\//g, "__")}.json`);
 
 // PRISMA İSTEMCİSİ GÜNCEL Mİ (1e hükmü 2026-09-14): izole ağaçta rebase şemayı taşır,
 // üretileni taşımaz; tip kapısı 30–90 sn sonra "Property 'X' does not exist" der ve
@@ -123,19 +125,19 @@ for (const proje of etkilenen) {
     cwd: ".",
     // TEK ESLİNT KOŞUMU (ölçüldü 2026-09-13): lint ve tavan aynı kümeyi ayrı ayrı
     // tarıyordu (19 sn + 3,5 GB × 2). Rapor bir kez yazılır, tavan onu okur.
-    cmd: ["node", ["scripts/hooks/lint-gate.mjs", `--proje=${proje.ad}`, `--rapor=${join(RAPOR_DIZINI, `${proje.ad}.json`)}`]],
+    cmd: ["node", ["scripts/hooks/lint-gate.mjs", `--proje=${proje.ad}`, `--rapor=${raporYolu(proje.ad)}`]],
     stdin: `${staged.join("\n")}\n`,
     env: AGIR_ADIM_ENV,
     agir: true,
   });
-  const anahtar = { "Teks-Erp": "backend", Electron: "electron", mobil: "mobil" }[proje.ad];
+  const anahtar = { "Teks-Erp": "backend", Electron: "electron", mobil: "mobil", "satici/sunucu": "satici" }[proje.ad];
   if (existsSync(join(REPO, proje.ad, "lint-baseline.json"))) {
     adimlar.push({
       ad: `${proje.ad} · lint tavanı`,
       cwd: ".",
       // Tavan da commit kapısı kipinde: SAYIM proje geneli kalır (tabanla
       // karşılaştırılabilir olmalı), yalnız VERDİKT bu commit'in dosyalarına bakar.
-      cmd: ["node", ["scripts/check-lint-baseline.mjs", `--proje=${anahtar}`, "--commit-kapisi", `--rapor=${join(RAPOR_DIZINI, `${proje.ad}.json`)}`]],
+      cmd: ["node", ["scripts/check-lint-baseline.mjs", `--proje=${anahtar}`, "--commit-kapisi", `--rapor=${raporYolu(proje.ad)}`]],
       stdin: `${staged.join("\n")}\n`,
       env: AGIR_ADIM_ENV,
       agir: true, // lint'in raporunu okur — kararlı sıralama onu lint'in ardında tutar
@@ -201,7 +203,10 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
 // Tetik bekçinin okuduğu dizinden dar kalamaz. Bedel: migration commit'ine +~0,3 sn.
 // `mobil/src/` (1e hükmü 2026-09-25, audit_okuma_kaynagi ile): bekçi audit ucu çağıran istemci
 // dosyasını panelde VE tablette arar; yalnız tablete dokunan commit de mandal görmeli. Bedel +~1 sn.
-if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/|Teks-Erp\/prisma\/|Electron\/src\/|mobil\/src\/|docs\/)/.test(f))) {
+// `satici/sunucu/scripts/` (lisans satıcı tamamlama): identity_ledger bekçi dizini olarak BUNU okur
+// (satıcı bekçileri harita + lisans.md listesiyle eşleşmeli); satici'nin src'sini okuyan mandal yok
+// ⇒ tetik `satici/` bütünü DEĞİL, okunan dizin kadar.
+if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/|Teks-Erp\/prisma\/|Electron\/src\/|mobil\/src\/|docs\/|satici\/sunucu\/scripts\/)/.test(f))) {
   adimlar.push({ ad: "hızlı mandallar", cwd: ".", cmd: ["node", ["scripts/hooks/hizli-mandallar.mjs"]] });
 }
 

@@ -2,7 +2,7 @@
 // Her rota bir izin beyan eder (roles.ts); her yazma işlem kimliğiyle (clientToken) idempotenttir.
 // Yol parametresi gövde özetine girer (`_yol`): aynı kimlik başka kayıtta kullanılamaz.
 import { z } from "zod";
-import { LICENSE_CLASSES, SANCTION_LEVELS } from "../lisans-protokol";
+import { ChannelCodeSchema, LICENSE_CLASSES, SANCTION_LEVELS } from "../lisans-protokol";
 import { passwordBuffer } from "../keys/key-files";
 import { VendorError } from "../lib/errors";
 import { prisma, type Tx } from "../lib/prisma";
@@ -25,7 +25,17 @@ import {
   unlockPortalUserTx,
   userView,
 } from "../portal/users.service";
-import { createDealerTx, findDealer, linkDealerKeyTx, reloadKeys, setDealerActiveTx, setDealerCeilingTx } from "../services/dealer.service";
+import { CHANNEL_KINDS, ChannelVersionsSchema, createChannelTx, listChannels, updateChannelTx } from "../services/channel.service";
+import {
+  MAX_MAINTENANCE_MONTHS,
+  createDealerTx,
+  findDealer,
+  linkDealerKeyTx,
+  reloadKeys,
+  setDealerActiveTx,
+  setDealerCeilingTx,
+  type DealerCeilingInput,
+} from "../services/dealer.service";
 import { revertDrTakeoverTx } from "../services/dr.service";
 import {
   createActivationCodeTx,
@@ -57,9 +67,13 @@ import {
   extendValidityTx,
   findInstallmentItem,
   findSanctionAction,
+  installmentRestrictionDays,
+  plannedK3IsHeavy,
   recordInstallmentPaymentTx,
   revertSanctionTx,
   sanctionAudit,
+  sanctionInputIsHeavy,
+  sanctionRowIsHeavy,
   schedulePlannedActionTx,
   setEnforcementTx,
   setValidityEndTx,
@@ -134,6 +148,8 @@ const LightSanction = z.strictObject({
   kisitlamaTarihi: IsoSchema.optional(),
   moduller: ModuleList.optional(),
   sebep: Reason,
+  /** Geri sayımı 7 günden kısa K3 AĞIRDIR (yalnız yönetici): lisans numarası AYNEN. */
+  onay: z.string().max(40).optional(),
 });
 const HeavySanction = z.strictObject({
   clientToken: Token,
@@ -154,6 +170,7 @@ const Planned = z.strictObject({
   kisitlamaGun: z.number().int().min(0).max(3650).optional(),
   moduller: ModuleList.optional(),
   sebep: Reason,
+  onay: z.string().max(40).optional(),
 });
 const InstallmentPlan = z.strictObject({
   clientToken: Token,
@@ -162,10 +179,41 @@ const InstallmentPlan = z.strictObject({
   uzatmaGun: z.number().int().min(0).max(3650).optional(),
   gecikmeGun: z.number().int().min(0).max(3650).optional(),
   kisitlamaGun: z.number().int().min(0).max(3650).optional(),
+  onay: z.string().max(40).optional(),
 });
 const TokenOnly = z.strictObject({ clientToken: Token });
 const CopyAlertClose = z.strictObject({ clientToken: Token, sebep: Reason, digerParmakIziniKabulEt: z.boolean() });
-const Ceiling = z.strictObject({ moduller: ModuleList, siniflar: z.array(ClassEnum).min(1).max(LICENSE_CLASSES.length), kurulumAdedi: z.number().int().min(0).max(100_000) });
+const Ceiling = z.strictObject({
+  moduller: ModuleList,
+  siniflar: z.array(ClassEnum).min(1).max(LICENSE_CLASSES.length),
+  kurulumAdedi: z.number().int().min(0).max(100_000),
+  /** Bayinin kurulum açabileceği kanallar (satıcı atar; boş = kurulum açamaz). */
+  kanallar: z.array(ChannelCodeSchema).max(100).optional(),
+  /** Varsayılan HAYIR (yönetici kararı g). */
+  kaliciIzni: z.boolean().optional(),
+  bakimAyTavani: z.number().int().min(1).max(MAX_MAINTENANCE_MONTHS).optional(),
+});
+const ceilingInput = (t: z.infer<typeof Ceiling>, modules: string[]): DealerCeilingInput => ({
+  modules,
+  classes: t.siniflar,
+  installationCount: t.kurulumAdedi,
+  channels: t.kanallar,
+  perpetualAllowed: t.kaliciIzni,
+  maintenanceMonths: t.bakimAyTavani,
+});
+const ChannelCreate = z.strictObject({
+  clientToken: Token,
+  kod: ChannelCodeSchema,
+  ad: z.string().min(1).max(200),
+  tur: z.enum(CHANNEL_KINDS),
+  guncelSurumler: ChannelVersionsSchema.optional(),
+});
+const ChannelUpdate = z.strictObject({
+  clientToken: Token,
+  ad: z.string().min(1).max(200).optional(),
+  tur: z.enum(CHANNEL_KINDS).optional(),
+  guncelSurumler: ChannelVersionsSchema.optional(),
+});
 const DealerCreate = z.strictObject({ clientToken: Token, ad: z.string().min(1).max(200), vergiNo: TaxNo, tavan: Ceiling, sebep: Reason });
 const DealerCeiling = z.strictObject({ clientToken: Token, tavan: Ceiling, sebep: Reason });
 const DealerKey = z.strictObject({ clientToken: Token, kid: z.string().regex(/^bayi-[a-z0-9-]{1,60}$/) });
@@ -180,6 +228,13 @@ const UserCreate = z.strictObject({
 const UserPassword = z.strictObject({ clientToken: Token, parola: z.string().min(1).max(200), sebep: Reason });
 
 const withPath = (body: object, id: string) => ({ ...body, _yol: id });
+
+/** Ağır yaptırımı (K4 · K5 · geri sayımı 7 günden kısa K3) yalnız `yaptirim:agir` taşıyan rol uygular/planlar/kaldırır. */
+function requireHeavyRole(c: PortalRequestContext, heavy: boolean, what: string): void {
+  if (heavy && !roleHas(c.session.user.rol, "yaptirim:agir")) {
+    throw new VendorError(403, "YETKISIZ", `${what} ağır yaptırımdır: yalnız yönetici`);
+  }
+}
 const moduleChanges = (moduller: string[] | undefined, confirmed: boolean | undefined): string[] | undefined => {
   if (moduller === undefined) return undefined;
   const modules = assertKnownModules(moduller);
@@ -287,6 +342,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     kimlik: "OKUMA",
     handler: async (c) => ({ data: await q.listCopyAlerts(prisma, { status: queryEnum(c.req, "durum", ["ACIK", "KAPANDI"] as const), ...pageQuery(c.req) }) }),
   },
+  { method: "get", path: "/kanallar", permission: "portal:oku", kimlik: "OKUMA", handler: async () => ({ data: await listChannels(prisma) }) },
   { method: "get", path: "/bayiler", permission: "portal:oku", kimlik: "OKUMA", handler: async () => ({ data: await q.listDealers(prisma) }) },
   { method: "get", path: "/bayiler/:id", permission: "portal:oku", kimlik: "OKUMA", handler: async (c) => ({ data: await q.dealerDetail(prisma, idParam(c.req, "id", "Bayi")) }) },
   { method: "get", path: "/kullanicilar", permission: "kullanici:yonet", kimlik: "OKUMA", handler: async () => ({ data: await q.listUsers(prisma) }) },
@@ -526,6 +582,8 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       const id = idParam(c.req, "id", "Kurulum");
       const b = bodyOf(c, LightSanction);
       const modules = b.moduller ? assertKnownModules(b.moduller) : undefined;
+      const restrictionDate = b.kisitlamaTarihi ? new Date(b.kisitlamaTarihi) : undefined;
+      requireHeavyRole(c, sanctionInputIsHeavy({ level: b.kademe, restrictionDays: b.kisitlamaGun, restrictionDate }, c.nowMs), "Geri sayımı 7 günden kısa K3");
       return portalAction(c, {
         action: "YAPTIRIM",
         clientToken: b.clientToken,
@@ -536,10 +594,11 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
             level: b.kademe,
             message: b.mesaj,
             restrictionDays: b.kisitlamaGun,
-            restrictionDate: b.kisitlamaTarihi ? new Date(b.kisitlamaTarihi) : undefined,
+            restrictionDate,
             modules,
             reason: b.sebep,
             actor: c.session.actor,
+            confirmation: b.onay,
             nowMs: c.nowMs,
           }),
         respond: (row) => ({ status: 201, data: row }),
@@ -575,10 +634,8 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       const id = idParam(c.req, "id", "Yaptırım eylemi");
       const b = bodyOf(c, ReasonOnly);
       const target = await findSanctionAction(prisma, id);
-      // K4/K5'i yalnız onu uygulayabilen rol kaldırır.
-      if ((target.tur === "K4" || target.tur === "K5") && !roleHas(c.session.user.rol, "yaptirim:agir")) {
-        throw new VendorError(403, "YETKISIZ", `${target.tur} yalnız yönetici tarafından geri alınır`);
-      }
+      // Ağır eylemi (K4 · K5 · kısa geri sayımlı K3) yalnız onu uygulayabilen rol kaldırır.
+      requireHeavyRole(c, sanctionRowIsHeavy(target), `${target.tur} geri alma`);
       return portalAction(c, {
         action: "YAPTIRIM_GERI_AL",
         clientToken: b.clientToken,
@@ -652,6 +709,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       const id = idParam(c.req, "id", "Kurulum");
       const b = bodyOf(c, Planned);
       const modules = b.moduller ? assertKnownModules(b.moduller) : undefined;
+      requireHeavyRole(c, plannedK3IsHeavy(b.kademe, b.kisitlamaGun), "Geri sayımı 7 günden kısa planlı K3");
       return portalAction(c, {
         action: "PLANLI_EYLEM",
         clientToken: b.clientToken,
@@ -666,6 +724,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
             modules,
             reason: b.sebep,
             actor: c.session.actor,
+            confirmation: b.onay,
           }),
         respond: (row) => ({ status: 201, data: row }),
         audit: (row) => [{ event: "PLANLI_EYLEM", entity: "PlanliEylem", entityId: row.id, summary: { tur: row.tur, vade: row.vade.toISOString(), sebep: row.sebep } }],
@@ -700,6 +759,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     handler: async (c) => {
       const id = idParam(c.req, "id", "Kurulum");
       const b = bodyOf(c, InstallmentPlan);
+      requireHeavyRole(c, plannedK3IsHeavy("K3", installmentRestrictionDays(b.kisitlamaGun)), "Kısıtlama günü 7'den kısa taksit planı");
       return portalAction(c, {
         action: "TAKSIT_PLANI",
         clientToken: b.clientToken,
@@ -713,6 +773,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
             graceDays: b.gecikmeGun,
             restrictionDays: b.kisitlamaGun,
             actor: c.session.actor,
+            confirmation: b.onay,
           }),
         respond: (plan) => ({ status: 201, data: plan }),
         audit: (plan) => [{ event: "TAKSIT_PLANI", entity: "TaksitPlani", entityId: plan.id, summary: { kurulumId: id, kalem: plan.kalemler.length } }],
@@ -856,6 +917,43 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     },
   },
 
+  // ------------------------------------------------------------ kanal
+  {
+    method: "post",
+    path: "/kanallar",
+    permission: "kanal:yonet",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const b = bodyOf(c, ChannelCreate);
+      return portalAction(c, {
+        action: "KANAL_EKLE",
+        clientToken: b.clientToken,
+        body: b,
+        run: (tx) => createChannelTx(tx, { code: b.kod, name: b.ad, kind: b.tur, versions: b.guncelSurumler }),
+        respond: (row) => ({ status: 201, data: row }),
+        audit: (row) => [{ event: "KANAL_EKLENDI", entity: "Kanal", entityId: row.id, summary: { kod: row.kod, tur: row.tur } }],
+      });
+    },
+  },
+  {
+    method: "patch",
+    path: "/kanallar/:id",
+    permission: "kanal:yonet",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Kanal");
+      const b = bodyOf(c, ChannelUpdate);
+      return portalAction(c, {
+        action: "KANAL_GUNCELLE",
+        clientToken: b.clientToken,
+        body: withPath(b, id),
+        run: (tx) => updateChannelTx(tx, { channelId: id, name: b.ad, kind: b.tur, versions: b.guncelSurumler }),
+        respond: (row) => ({ data: row }),
+        audit: (row) => [{ event: "KANAL_GUNCELLENDI", entity: "Kanal", entityId: row.id, summary: { kod: row.kod, alanlar: Object.keys(b).filter((k) => k !== "clientToken") } }],
+      });
+    },
+  },
+
   // ------------------------------------------------------------ bayi
   {
     method: "post",
@@ -870,7 +968,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         clientToken: b.clientToken,
         body: b,
         run: (tx) =>
-          createDealerTx(tx, { name: b.ad, taxNo: b.vergiNo, ceiling: { modules, classes: b.tavan.siniflar, installationCount: b.tavan.kurulumAdedi }, reason: b.sebep, actor: c.session.actor }),
+          createDealerTx(tx, { name: b.ad, taxNo: b.vergiNo, ceiling: ceilingInput(b.tavan, modules), reason: b.sebep, actor: c.session.actor }),
         respond: (row) => ({ status: 201, data: row }),
         audit: (row) => [{ event: "BAYI_EKLENDI", entity: "Bayi", entityId: row.id, summary: { tavanSurum: 1, sebep: b.sebep } }],
       });
@@ -889,7 +987,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         action: "BAYI_TAVAN",
         clientToken: b.clientToken,
         body: withPath(b, id),
-        run: (tx) => setDealerCeilingTx(tx, { dealerId: id, ceiling: { modules, classes: b.tavan.siniflar, installationCount: b.tavan.kurulumAdedi }, reason: b.sebep, actor: c.session.actor }),
+        run: (tx) => setDealerCeilingTx(tx, { dealerId: id, ceiling: ceilingInput(b.tavan, modules), reason: b.sebep, actor: c.session.actor }),
         respond: (row) => ({ status: 201, data: row }),
         audit: (row) => [{ event: "BAYI_TAVANI", entity: "Bayi", entityId: id, summary: { surum: row.surum, sebep: b.sebep } }],
       });

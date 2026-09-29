@@ -132,6 +132,33 @@ enum AnahtarDurumu {
   IPTAL
 }
 
+/// Dağıtım kanalının türü — `deploy/kanallar.json` `tur` değerleriyle aynı sözlük.
+enum KanalTuru {
+  uretim
+  hazirlik
+}
+
+// -----------------------------------------------------------------------------
+// KANAL — dağıtım kanalı (güncelleme sunucusundaki `/<kod>/electron/` · `/<kod>/mobil/` yol segmenti)
+// -----------------------------------------------------------------------------
+
+/// Kurulum bir kanala bağlıdır; kira `kanal.guncelSurumler`i buradan alır (yayın bildirimi Faz 3).
+/// `kod` kimliktir ve DEĞİŞMEZ (indirme belirtecinin yol öneki); ad · tür · güncel sürümler değişir.
+model Kanal {
+  id             String    @id @default(uuid()) @db.Uuid
+  kod            String    @unique @db.VarChar(40)
+  ad             String    @db.VarChar(200)
+  tur            KanalTuru
+  /// `{backend?, panel?, tablet?}` sürüm metinleri — protokol KİRA `kanal.guncelSurumler` şeması.
+  guncelSurumler Json      @default("{}")
+  createdAt      DateTime  @default(now()) @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @db.Timestamptz
+
+  kurulumlar Kurulum[]
+
+  @@map("kanal")
+}
+
 // -----------------------------------------------------------------------------
 // MASTER: Müşteri → Tesis → Kurulum → Hak
 // -----------------------------------------------------------------------------
@@ -203,6 +230,7 @@ model Kurulum {
   updatedAt        DateTime  @updatedAt @db.Timestamptz
 
   tesis          Tesis               @relation(fields: [tesisId], references: [id])
+  kanal          Kanal               @relation(fields: [kanalKodu], references: [kod], onDelete: Restrict, onUpdate: Restrict)
   sonKira        Kira?               @relation("KurulumSonKira", fields: [sonKiraId], references: [id], onDelete: NoAction)
   haklar         Hak[]
   kiralar        Kira[]              @relation("KurulumKiralari")
@@ -217,6 +245,7 @@ model Kurulum {
   taksitPlanlari TaksitPlani[]
 
   @@index([tesisId])
+  @@index([kanalKodu])
   @@map("kurulum")
 }
 
@@ -393,23 +422,23 @@ model PlanliEylem {
 }
 
 model TaksitPlani {
-  id           String   @id @default(uuid()) @db.Uuid
-  kurulumId    String   @db.Uuid
-  aciklama     String   @db.VarChar(500)
+  id            String    @id @default(uuid()) @db.Uuid
+  kurulumId     String    @db.Uuid
+  aciklama      String    @db.VarChar(500)
   /// Ödeme onayında geçerlilik bitişi bir sonraki bekleyen vade + bu kadar gün olur.
-  uzatmaGun    Int      @default(15)
+  uzatmaGun     Int       @default(15)
   /// Vade + bu kadar gün ödeme yoksa K3.
-  gecikmeGun   Int      @default(15)
+  gecikmeGun    Int       @default(15)
   /// K3'ün geri sayımı (gün).
-  kisitlamaGun Int      @default(15)
-  aktif        Boolean  @default(true)
-  yapan        String   @db.VarChar(120)
+  kisitlamaGun  Int       @default(15)
+  aktif         Boolean   @default(true)
+  yapan         String    @db.VarChar(120)
   /// Planın kapanışı (aktif → pasif): bekleyen kalemler IPTAL olur; durumla çift yüklem (CHECK).
   kapanisZamani DateTime? @db.Timestamptz
   kapatan       String?   @db.VarChar(120)
   kapanisSebebi String?   @db.VarChar(500)
-  createdAt    DateTime @default(now()) @db.Timestamptz
-  updatedAt    DateTime @updatedAt @db.Timestamptz
+  createdAt     DateTime  @default(now()) @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @db.Timestamptz
 
   kurulum  Kurulum        @relation(fields: [kurulumId], references: [id])
   kalemler TaksitKalemi[]
@@ -597,16 +626,22 @@ model Bayi {
 
 /// Bayi tavanının sürümleri — EKLEME-YALNIZ defter (tetikleyiciyle değişmez).
 model BayiTavani {
-  id           String         @id @default(uuid()) @db.Uuid
-  bayiId       String         @db.Uuid
-  surum        Int
-  moduller     String[]
-  siniflar     LisansSinifi[]
+  id            String         @id @default(uuid()) @db.Uuid
+  bayiId        String         @db.Uuid
+  surum         Int
+  moduller      String[]
+  siniflar      LisansSinifi[]
   /// Bayinin müşterilerinde açık (iptal edilmemiş, aktif) kurulum sayısının üst sınırı.
-  kurulumAdedi Int
-  sebep        String         @db.VarChar(500)
-  yapan        String         @db.VarChar(120)
-  createdAt    DateTime       @default(now()) @db.Timestamptz
+  kurulumAdedi  Int
+  /// Bayinin kurulum açabileceği kanallar (satıcı atar; boş = kurulum açamaz).
+  kanallar      String[]       @default([])
+  /// Bayi KALICI hak imzalayabilir mi (yönetici kararı g; varsayılan hayır).
+  kaliciIzni    Boolean        @default(false)
+  /// Bayinin imzaladığı HAK'ta bakım bitişi imza anından en çok bu kadar ay sonra olabilir.
+  bakimAyTavani Int            @default(12)
+  sebep         String         @db.VarChar(500)
+  yapan         String         @db.VarChar(120)
+  createdAt     DateTime       @default(now()) @db.Timestamptz
 
   bayi Bayi @relation(fields: [bayiId], references: [id])
 

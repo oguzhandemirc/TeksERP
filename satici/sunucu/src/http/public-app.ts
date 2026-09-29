@@ -1,5 +1,6 @@
 // GENEL DİNLEYİCİ (Traefik/Cloudflare arkası): /v1/* protokol uçları + /q QR sayfası + /bayi/api
-// (yalnız BAYI rolünün alt-portalı). Satıcı portalı ve kök parolası isteyen hiçbir uç burada YOK.
+// (yalnız BAYI rolünün alt-portalı) + bayi web arayüzü (/bayi, satici/web dist/bayi). Satıcı portalı,
+// satıcı arayüzü ve kök parolası isteyen hiçbir uç burada YOK.
 // Sıkıştırma ara katmanı bilerek yok: zil (SSE) akışı `no-transform` ile tamponsuz gitmeli.
 import express, { type Express, type Request, type Response } from "express";
 import {
@@ -27,6 +28,7 @@ import { accessLog, errorHandler, notFound } from "./error-handler";
 import { createPortalRouter } from "./portal-http";
 import { qrPage } from "./qr-page";
 import { rateLimit } from "./rate-limit";
+import { createWebAppRouter } from "./web-static";
 
 /** Gövdedeki açık anahtar (etkinleştirme/taşıma): imzayı doğrulamadan önce gerekir. */
 function bodyKey(json: Record<string, unknown>): string {
@@ -118,6 +120,7 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
   app.get("/q", rateLimit({ perMinute: ctx.config.QR_HIZ_SINIRI_DK, proxyHeader: ctx.config.VEKIL_IP_BASLIGI }), qrPage);
 
   app.use("/bayi/api", createPortalRouter(ctx, "GENEL", DEALER_PORTAL_ROUTES));
+  app.use("/bayi", createWebAppRouter(ctx.config.PORTAL_WEB_DIZINI, "bayi"));
 
   app.use(notFound);
   app.use(errorHandler);

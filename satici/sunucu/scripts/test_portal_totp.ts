@@ -6,9 +6,12 @@
 // SameSite=Strict + yol sınırlı. TOTP sıfırlanınca açık oturumlar kapanır.
 // Ölçüm gerçek HTTP ile (süreç içi iki dinleyici, kendi `_test` DB'si).
 // İlk yönetici yalnız CLI'dan doğar (parola stdin/TTY; argv RED) ve portala girebilir.
-// ⭐ KALICI SONDA ✓K2 (her koşumda): (1) aynı adımın kodu reddedilirken SONRAKİ adımın kodu kabul
+// Kullanıcı adı tekil: ön okuma da, ön okumayı geçen eşzamanlı açılışın UNIQUE ihlali de (P2002)
+// AYNI 409 KULLANICI_ADI_KULLANIMDA'ya iner — 500 değil.
+// ⭐ KALICI SONDA ✓K3 (her koşumda): (1) aynı adımın kodu reddedilirken SONRAKİ adımın kodu kabul
 //    edilir — tekrar kilidi adım bazlı, körü körüne ret değil · (2) doğru üçlü 200 verir (her şeyi
-//    reddeden bir kapı "401" yeşili veremez).
+//    reddeden bir kapı "401" yeşili veremez) · (3) tekillik ihlali hedefi `kullaniciAdi`da tutar, `id`de
+//    TUTMAZ (hedef okuyucusu her P2002'yi aynı sanmıyor).
 // Koşum: npx tsx scripts/test_portal_totp.ts
 // =============================================================================
 import { spawnSync } from "node:child_process";
@@ -131,6 +134,44 @@ async function main(): Promise<void> {
     kontrol("§5f saklanan yanıtta ve gövde özetinde sır/parola yok", islem !== null && !islemMetni.includes(acilisTotp?.sir ?? "∅") && !islemMetni.includes(govde.parola));
     const denetimMetni = JSON.stringify(await prisma.denetim.findMany({ where: { varlikId: yeniId ?? "" } }));
     kontrol("§5g denetimde sır/parola yok", !denetimMetni.includes(acilisTotp?.sir ?? "∅") && !denetimMetni.includes(govde.parola));
+
+    console.log("\n§5h kullanıcı adı yarışı → 409 KULLANICI_ADI_KULLANIMDA");
+    const ayniAd = await portalIstek(sunucu.tailnet, "/portal/api/kullanicilar", { cerez: giris.cerez!, govde: { ...govde, clientToken: randomUUID() } });
+    kontrol("§5h1 alınmış ad (yeni işlem kimliği) → 409 KULLANICI_ADI_KULLANIMDA", ayniAd.status === 409 && ayniAd.kod === "KULLANICI_ADI_KULLANIMDA", `${ayniAd.status} ${ayniAd.kod}`);
+    const { createPortalUserTx } = await import("../src/portal/users.service");
+    const { hashPortalPassword } = await import("../src/portal/password");
+    const { uniqueViolationOn } = await import("../src/lib/prisma-errors");
+    const yarisAd = `bekci-${randomUUID().slice(0, 12)}`;
+    const ozet = await hashPortalPassword(`yaris-${randomUUID()}`);
+    // A satırı yazar ama COMMIT'i bekletir; B'nin ön okuması onu GÖRMEZ, INSERT'i A'nın commit'ini bekler → P2002.
+    let birak: () => void = () => undefined;
+    let yazdi: () => void = () => undefined;
+    const aYazdi = new Promise<void>((r) => (yazdi = r));
+    const a = prisma.$transaction(
+      async (tx) => {
+        const u = await tx.portalKullanici.create({ data: { kullaniciAdi: yarisAd, adSoyad: "Yarış A", rol: "SATICI_OPERATOR", parolaOzeti: ozet, totpSirSifreli: "v1.x", parolaDegisim: new Date() } });
+        yazdi();
+        await new Promise<void>((r) => (birak = r));
+        return u.id;
+      },
+      { timeout: 20_000 },
+    );
+    await aYazdi;
+    const b = prisma
+      .$transaction((tx) => createPortalUserTx(tx, ctx, { username: yarisAd, fullName: "Yarış B", role: "SATICI_OPERATOR", passwordHash: ozet }))
+      .then(() => "OLUSTU")
+      .catch((err: { code?: string }) => err.code ?? String(err));
+    setTimeout(() => birak(), 300);
+    kullanicilar.push(await a);
+    const bSonuc = await b;
+    kontrol("§5h2 ön okumayı geçen eşzamanlı açılış (UNIQUE ihlali) → KULLANICI_ADI_KULLANIMDA, ham P2002/500 değil", bSonuc === "KULLANICI_ADI_KULLANIMDA", bSonuc);
+    let ihlal: unknown = null;
+    try {
+      await prisma.portalKullanici.create({ data: { kullaniciAdi: yarisAd, adSoyad: "x", rol: "SATICI_OPERATOR", parolaOzeti: ozet, totpSirSifreli: "v1.x", parolaDegisim: new Date() } });
+    } catch (err) {
+      ihlal = err;
+    }
+    kontrol("§5h3 ✓K hedef ayrımı: aynı ad ihlali `kullaniciAdi`da tutar, `id`de TUTMAZ", uniqueViolationOn(ihlal, "kullaniciAdi") && !uniqueViolationOn(ihlal, "id"));
 
     console.log("\n§6 TOTP sıfırlama oturumları kapatır");
     const oturumOnce = await portalIstek(sunucu.tailnet, "/portal/api/oturum", { cerez: acildi.cerez! });
