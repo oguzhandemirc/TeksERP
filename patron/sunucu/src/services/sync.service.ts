@@ -79,7 +79,12 @@ function packageScope(pkg: SyncPackage): string[] {
   const names = new Set<string>();
   for (const e of pkg.kayitlar) names.add(e.projeksiyon);
   for (const s of pkg.anliklar) names.add(s.projeksiyon);
-  for (const u of pkg.uzlastirma) names.add(u.projeksiyon);
+  for (const u of pkg.uzlastirma) {
+    names.add(u.projeksiyon);
+    // Saklama tarihi üstten gelen kalemin uzlaştırması üst satırı OKUR (ufuk süzmesi).
+    const parent = PROJECTION_CATALOG.get(u.projeksiyon)?.root.parent;
+    if (parent && PROJECTION_CATALOG.get(u.projeksiyon)?.root.retentionFromParent) names.add(parent.projection);
+  }
   return [...names].filter((n) => PROJECTION_CATALOG.has(n));
 }
 

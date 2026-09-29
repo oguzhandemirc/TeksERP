@@ -20,10 +20,10 @@ import { periodRange, type StandardPeriod } from "./periods";
 import type { ModuleKey } from "./projections";
 import { cloudPost, type CloudCallContext } from "./cloud-client";
 import {
-  CLOUD_ENDPOINTS,
-  PACKET_MAX_GZIP_BYTES,
+  SYNC_PATHS,
+  MAX_COMPRESSED_BYTES,
   ReportClaimResponseSchema,
-  ReportResultSchema,
+  ReportResultRequestSchema,
   toWireValue,
   type ReportResult,
   type WireValue,
@@ -162,7 +162,7 @@ export async function computeReportResult(g: {
     hesaplandi: new Date(g.nowMs).toISOString(),
     kaynakUfuk: new Date(g.nowMs).toISOString(),
   };
-  const fail = (hataKodu: ReportResult["hataKodu"]): ReportResult => ReportResultSchema.parse({ ...base, durum: "HATA", veri: null, hataKodu });
+  const fail = (hataKodu: ReportResult["hataKodu"]): ReportResult => ReportResultRequestSchema.parse({ ...base, durum: "HATA", veri: null, hataKodu });
   const r = findRemoteReport(g.key);
   if (!r || g.key.startsWith("audit/")) return fail("RAPOR_BILINMIYOR");
   const avail = await availability(r);
@@ -179,7 +179,7 @@ export async function computeReportResult(g: {
     // İş kuralı hatası (ör. aralık > 366 gün) kullanıcı parametresinin sonucudur.
     return fail("PARAMETRE_GECERSIZ");
   }
-  return ReportResultSchema.parse({ ...base, durum: "HAZIR", veri: toWireValue(value), hataKodu: null });
+  return ReportResultRequestSchema.parse({ ...base, durum: "HAZIR", veri: toWireValue(value), hataKodu: null });
 }
 
 export interface ReportRunOutcome {
@@ -190,7 +190,7 @@ export interface ReportRunOutcome {
 
 /** Bulutta bekleyen istekleri üstlenir, hesaplar, sonucu gönderir (her sonuç ayrı imzalı istek). */
 export async function claimAndRunReportRequests(ctx: CloudCallContext, nowMs: () => number = Date.now): Promise<ReportRunOutcome> {
-  const res = await cloudPost(ctx, CLOUD_ENDPOINTS.REPORT_CLAIM, { v: 1, enFazla: REPORT_CLAIM_BATCH }, { gzip: false });
+  const res = await cloudPost(ctx, SYNC_PATHS.REPORT_CLAIM, { v: 1, enFazla: REPORT_CLAIM_BATCH }, { gzip: false });
   if (!res.ok) return { claimed: 0, sent: 0, failedSend: 0 };
   const parsed = ReportClaimResponseSchema.safeParse(res.json);
   if (!parsed.success) return { claimed: 0, sent: 0, failedSend: 0 };
@@ -208,10 +208,10 @@ export async function claimAndRunReportRequests(ctx: CloudCallContext, nowMs: ()
 /** Sonuç 4 MB (sıkıştırılmış) tavanını aşarsa veri yerine `SONUC_BUYUK` hatası gider. */
 export async function sendReportResult(ctx: CloudCallContext, result: ReportResult): Promise<boolean> {
   let body: ReportResult = result;
-  if (gzipSync(Buffer.from(JSON.stringify(body))).length > PACKET_MAX_GZIP_BYTES) {
-    body = ReportResultSchema.parse({ ...result, durum: "HATA", veri: null, hataKodu: "SONUC_BUYUK" });
+  if (gzipSync(Buffer.from(JSON.stringify(body))).length > MAX_COMPRESSED_BYTES) {
+    body = ReportResultRequestSchema.parse({ ...result, durum: "HATA", veri: null, hataKodu: "SONUC_BUYUK" });
   }
-  const r = await cloudPost(ctx, CLOUD_ENDPOINTS.REPORT_RESULT, body, { gzip: true });
+  const r = await cloudPost(ctx, SYNC_PATHS.REPORT_RESULT, body, { gzip: true });
   return r.ok;
 }
 

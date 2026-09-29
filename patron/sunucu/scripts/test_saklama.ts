@@ -30,7 +30,7 @@ async function fikstur(o: Ortam, k: TestKurulumu) {
   const yeniTarih = simdi - 20 * GUN;
   const ids = { eskiSiparis: randomUUID(), yeniSiparis: randomUUID(), eskiKalem: randomUUID(), urun: randomUUID(), eskiFatura: randomUUID(), eskiFaturaKalem: randomUUID() };
   const ufuk = simdi - 60_000;
-  const w = { t: iso(ufuk), k: "1" };
+  const w = { t: iso(ufuk), k: "000000000001" };
   const kayitlar = [
     girdi("siparis", { yaz: [{ id: ids.eskiSiparis, siparisTarihi: iso(eskiTarih) }, { id: ids.yeniSiparis, siparisTarihi: iso(yeniTarih) }], yeni: w }),
     girdi("siparis.finans", { yaz: [{ id: ids.eskiSiparis, tutar: "1.00" }, { id: ids.yeniSiparis, tutar: "2.00" }], yeni: w }),

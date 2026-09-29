@@ -16,18 +16,17 @@ import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
+import { cardWireToFactory, inboxPayloadDigest, orderWireToFactory } from "../cloud-sync/inbox-wire";
 import {
-  CardWireSchema,
-  OrderWireSchema,
-  cardWireToFactory,
-  inboxPayloadDigest,
-  orderWireToFactory,
+  CustomerMessageSchema,
+  INBOX_RESULT_MESSAGE_MAX,
+  OrderMessageSchema,
   type InboxKind,
   type InboxMessage,
   type InboxOutcome,
   type InboxRejectCode,
-  type OrderWire,
-} from "../cloud-sync/inbox-wire";
+  type OrderMessage,
+} from "../cloud-sync/wire";
 
 /** Audit yükündeki kaynak künyesi — ayak izi; iş kararı buradan türetilmez. */
 export const PATRON_CLOUD_SOURCE = "PATRON_BULUTU";
@@ -37,7 +36,8 @@ class InboxRejection extends Error {
     readonly code: InboxRejectCode,
     message: string,
   ) {
-    super(message);
+    // Bulut sonuç satırı mesajı en çok INBOX_RESULT_MESSAGE_MAX taşır; tek uzun mesaj bütün `sonuc` turunu 400'e düşürmesin.
+    super(message.length > INBOX_RESULT_MESSAGE_MAX ? `${message.slice(0, INBOX_RESULT_MESSAGE_MAX - 1)}…` : message || "İşlenemedi.");
     this.name = "InboxRejection";
   }
 }
@@ -137,7 +137,7 @@ function classifyError(err: unknown, kind: InboxKind): InboxRejection | null {
 }
 
 /** Tel gövdesinin işaret ettiği kayıtlar fabrikada var mı — ret kodu sınıflaması için (iş kuralı servisindedir). */
-async function assertOrderReferencesExist(w: OrderWire): Promise<void> {
+async function assertOrderReferencesExist(w: OrderMessage): Promise<void> {
   const customer = await prisma.customer.findUnique({ where: { id: w.cariKartId }, select: { id: true } });
   if (!customer) throw new InboxRejection("CARI_BULUNAMADI", "Siparişin cari kartı fabrikada bulunamadı.");
   const itemIds = [...new Set(w.kalemler.map((k) => k.urunId))];
@@ -158,7 +158,7 @@ async function customerService() {
 }
 
 /** SİPARİŞ (K): kapılar `prepareOrderCreate`ten; sipariş + makbuz aynı tx; 8036 mesajId üzerinde tx'in ilk ifadesi. */
-async function createOrderFromMessage(f: ReceiptFields, w: OrderWire, replay: ReceiptReplay, actorUserId: string): Promise<InboxOutcome> {
+async function createOrderFromMessage(f: ReceiptFields, w: OrderMessage, replay: ReceiptReplay, actorUserId: string): Promise<InboxOutcome> {
   const svc = await orderService();
   const data = orderWireToFactory(w, f.msg.mesajId);
   const prepared = await svc.prepareOrderCreate(data, f.msg.mesajId);
@@ -226,12 +226,12 @@ export async function processInboxMessage(msg: InboxMessage, actorUserId: string
     const fast = await replay.replayIfAny(msg.mesajId);
     if (fast) return fast;
     if (kind === "SIPARIS") {
-      const parsed = OrderWireSchema.safeParse(msg.govde);
+      const parsed = OrderMessageSchema.safeParse(msg.govde);
       if (!parsed.success) throw new InboxRejection("GOVDE_GECERSIZ", "Sipariş gövdesi sözleşmeye uymuyor.");
       await assertOrderReferencesExist(parsed.data);
       return await createOrderFromMessage(f, parsed.data, replay, actorUserId);
     }
-    const parsed = CardWireSchema.safeParse(msg.govde);
+    const parsed = CustomerMessageSchema.safeParse(msg.govde);
     if (!parsed.success) throw new InboxRejection("GOVDE_GECERSIZ", "Cari gövdesi sözleşmeye uymuyor.");
     return await createCardFromMessage(f, cardWireToFactory(parsed.data), replay, actorUserId);
   } catch (err) {

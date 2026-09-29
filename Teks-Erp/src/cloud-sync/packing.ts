@@ -7,12 +7,12 @@ import { positionsAfterFull } from "./change-scan";
 import { FULL_RESEND_MARKER, type StoredWatermark, type WatermarkWrite } from "./watermarks";
 import type { BuiltSnapshot } from "./snapshots";
 import type { RecordProjection } from "./projections";
-import { PACKET_MAX_RECORDS, type DeleteReason, type RecordEntry, type ReconcileEntry, type WireWatermark } from "./wire";
+import { MAX_RECORDS_PER_PACKAGE, type DeleteReason, type RecordEntry, type ReconcileEntry, type Watermark } from "./wire";
 
 /** TAM gönderimde sayfa başına kök (alt satırlarla ≤ 3 katı satır). */
 export const FULL_PAGE_ROOTS = 1000;
 /** Bir birimin en çok satırı — iki birim bir pakete sığsın. */
-const UNIT_MAX_ROWS = Math.floor(PACKET_MAX_RECORDS / 2);
+const UNIT_MAX_ROWS = Math.floor(MAX_RECORDS_PER_PACKAGE / 2);
 
 export interface UnitEntry {
   readonly name: string;
@@ -84,7 +84,7 @@ export function withCompletion(units: Unit[], writes: WatermarkWrite[]): Unit[] 
   return [...units.slice(0, -1), { ...last, onComplete: writes }];
 }
 
-export function chainOf(stored: StoredWatermark | undefined): WireWatermark | null {
+export function chainOf(stored: StoredWatermark | undefined): Watermark | null {
   if (!stored?.at || !stored.tie?.[0]) return null;
   return { t: stored.at.toISOString(), k: stored.tie[0] };
 }
@@ -116,7 +116,7 @@ export async function planFull(p: RecordProjection, chain: StoredWatermark | und
   return withCompletion(units, positionsAfterFull(p, horizon));
 }
 
-export function entryOf(u: UnitEntry, unit: Unit, filigran: { onceki: WireWatermark | null; yeni: WireWatermark }): RecordEntry {
+export function entryOf(u: UnitEntry, unit: Unit, filigran: { onceki: Watermark | null; yeni: Watermark }): RecordEntry {
   return { projeksiyon: u.name, katalogSurum: unit.projection.catalogVersion, yaz: u.yaz, sil: u.sil, filigran, tam: unit.full };
 }
 
@@ -126,7 +126,7 @@ export function packDrafts(units: Unit[], snapshots: BuiltSnapshot[], reconcile:
   let cur: Unit[] = [];
   let rows = 0;
   for (const u of units) {
-    if (cur.length > 0 && rows + u.rows > PACKET_MAX_RECORDS) {
+    if (cur.length > 0 && rows + u.rows > MAX_RECORDS_PER_PACKAGE) {
       drafts.push({ units: cur, snapshots: [], reconcile: [] });
       cur = [];
       rows = 0;

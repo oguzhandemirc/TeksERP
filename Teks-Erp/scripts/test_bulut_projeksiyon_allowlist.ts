@@ -47,7 +47,7 @@ import {
 import { DERIVERS } from "../src/cloud-sync/derived";
 import { buildRecords } from "../src/cloud-sync/record-builder";
 import { buildSnapshots, SNAPSHOT_WIRE_SCHEMAS } from "../src/cloud-sync/snapshots";
-import { SyncPacketSchema } from "../src/cloud-sync/wire";
+import { PackageSchema } from "../src/cloud-sync/wire";
 import { REMOTE_REPORTS, computeReportResult } from "../src/cloud-sync/report-requests";
 
 const engel = hedefDbEngeli();
@@ -293,11 +293,11 @@ function paketBolumu(): void {
     ...temel,
     kayitlar: [{ projeksiyon: "renk", katalogSurum: 1, yaz: [satir], sil: [], filigran: { onceki: null, yeni: { t: new Date().toISOString(), k: "000000000001" } }, tam: null, ...ek }],
   });
-  check("§7a geçerli paket geçer", SyncPacketSchema.safeParse(kayit()).success);
-  check("§7b ⭐ zarfta tanınmayan anahtar RED", !SyncPacketSchema.safeParse({ ...temel, ekAlan: 1 }).success);
-  check("§7c ⭐ kayıtta tanınmayan anahtar RED", !SyncPacketSchema.safeParse(kayit({ gizli: true })).success);
-  check("§7d ⭐ uuid olmayan satır kimliği RED", !SyncPacketSchema.safeParse(kayit({}, { id: "1", ad: "x" })).success);
-  check("§7e sayaç 12 hane değilse RED (metin sırası = sayı sırası)", !SyncPacketSchema.safeParse({ ...kayit(), kayitlar: [{ ...kayit().kayitlar[0]!, filigran: { onceki: null, yeni: { t: new Date().toISOString(), k: "1" } } }] }).success);
+  check("§7a geçerli paket geçer", PackageSchema.safeParse(kayit()).success);
+  check("§7b ⭐ zarfta tanınmayan anahtar RED", !PackageSchema.safeParse({ ...temel, ekAlan: 1 }).success);
+  check("§7c ⭐ kayıtta tanınmayan anahtar RED", !PackageSchema.safeParse(kayit({ gizli: true })).success);
+  check("§7d ⭐ uuid olmayan satır kimliği RED", !PackageSchema.safeParse(kayit({}, { id: "1", ad: "x" })).success);
+  check("§7e sayaç 12 hane değilse RED (metin sırası = sayı sırası)", !PackageSchema.safeParse({ ...kayit(), kayitlar: [{ ...kayit().kayitlar[0]!, filigran: { onceki: null, yeni: { t: new Date().toISOString(), k: "1" } } }] }).success);
 }
 
 function izinBolumu(): void {
