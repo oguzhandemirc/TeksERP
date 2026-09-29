@@ -5,7 +5,8 @@
 //   · saklama tarihi alanı (OLGU; BOYUT ve durum-benzeri OLGU budanmaz) + sıralama alanı
 //   · kök satırda BULUNAMAYACAK alan adları (FINANS/KISISEL sınıflı kolonlar alt satıra bölünür;
 //     fabrika hatası kök satıra tutar sızdırırsa bulut o girdiyi REDDEDER)
-//   · alt kaydın ebeveyni (ebeveyni budanan kalem öksüz kalmaz)
+//   · alt kaydın ebeveyni (ebeveyni budanan kalem öksüz kalmaz) — bağ TEL SÖZLEŞMESİNDEN (`RECONCILE_PARENTS`)
+import { RECONCILE_PARENTS } from "../wire/esitleme";
 import type { CloudPermission } from "./permissions";
 
 export type ProjectionKind = "BOYUT" | "OLGU" | "ANLIK";
@@ -25,11 +26,18 @@ export interface RootProjection {
   readonly forbiddenRootFields?: readonly string[];
   /** Kalem → üst belge: üstü canlı değilse kalem öksüzdür (bakım budar). */
   readonly parent?: { readonly projection: string; readonly field: string };
-  /** Saklama tarihi kalemin kendisinde yok, ÜST belgeden gelir (fabrika `retention.parent`, S23) — uzlaştırma üstün ufkuyla süzer. */
+  /** Saklama tarihi kalemin kendisinde yok, ÜST belgeden gelir (fabrika `retention.parent`, S23; tel aynası eşler). */
   readonly retentionFromParent?: boolean;
 }
 
 const OTURUM: readonly CloudPermission[] = ["bulut:oturum"];
+
+/** Kalem → üst belge bağı sözleşmeden: budama ile uzlaştırma AYNI bağla çalışır (S45). */
+function parentOf(name: string): { readonly projection: string; readonly field: string } {
+  const rule = RECONCILE_PARENTS[name];
+  if (!rule) throw new Error(`Uzlaştırma sözleşmesinde ebeveyn yok: ${name}`);
+  return { projection: rule.parent, field: rule.field };
+}
 const FINANS_KOLONU: CloudPermission = "bulut:fiyat:oku";
 const KISISEL_KOLONU: CloudPermission = "bulut:cari:oku";
 
@@ -74,7 +82,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
     sortFields: ["olusturulma"],
     subRows: ["finans"],
     forbiddenRootFields: ["birimFiyat"],
-    parent: { projection: "siparis", field: "siparisId" },
+    parent: parentOf("siparis-kalemi"),
   },
   { name: "sevkiyat", kind: "OLGU", permissions: ["bulut:sevkiyat:oku"], retentionFields: ["cikisTarihi", "olusturulma"], sortFields: ["cikisTarihi", "olusturulma"] },
   { name: "dogrudan-sevk", kind: "OLGU", permissions: ["bulut:sevkiyat:oku"], retentionFields: ["cikisTarihi", "olusturulma"], sortFields: ["cikisTarihi", "olusturulma"] },
@@ -122,7 +130,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
     permissions: ["bulut:cek:oku"],
     retentionFields: ["tarih"],
     sortFields: ["tarih", "olusturulma"],
-    parent: { projection: "cek-senet", field: "cekId" },
+    parent: parentOf("cek-hareketi"),
   },
   {
     name: "fatura",
@@ -139,7 +147,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
     permissions: ["bulut:fatura:oku"],
     subRows: ["finans"],
     forbiddenRootFields: ["birimFiyat", "iskontoOrani", "kdvOrani", "tevkifatOrani", "tutar", "kdvTutari"],
-    parent: { projection: "fatura", field: "faturaId" },
+    parent: parentOf("fatura-kalemi"),
     retentionFromParent: true,
   },
   {
@@ -193,7 +201,9 @@ function buildCatalog(): ReadonlyMap<string, ProjectionDef> {
   for (const def of out.values()) {
     const parent = def.root.parent;
     if (parent && !out.has(parent.projection)) throw new Error(`Ebeveyn projeksiyon katalogda yok: ${parent.projection}`);
+    if (!def.subRow && Boolean(parent) !== (def.root.name in RECONCILE_PARENTS)) throw new Error(`Ebeveyn bağı sözleşmeyle uyuşmuyor: ${def.root.name}`);
   }
+  for (const child of Object.keys(RECONCILE_PARENTS)) if (!out.has(child)) throw new Error(`Sözleşmedeki çocuk katalogda yok: ${child}`);
   return out;
 }
 

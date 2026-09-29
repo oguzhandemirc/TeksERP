@@ -39,10 +39,14 @@ export class CloudError extends Error {
   }
 }
 
-/** İmzalı istek doğrulanamadı: JWS/İSTEK kodları olduğu gibi, diğerleri genel koda iner. */
-export function requestRejected(code: ProtocolErrorCode, message: string): CloudError {
+/**
+ * İmzalı istek doğrulanamadı: JWS/İSTEK kodları olduğu gibi, diğerleri genel koda iner. `ISTEK_ZAMAN` bulutun o anki
+ * saatini taşır (`details.sunucuSaati`, İMZASIZ): fabrika isteği BİR KEZ düzeltilmiş zamanla yeniden imzalar (D4).
+ */
+export function requestRejected(code: ProtocolErrorCode, message: string, nowMs: number): CloudError {
   const passThrough = code.startsWith("JWS_") || code.startsWith("ISTEK_");
-  return new CloudError(401, passThrough ? code : "ISTEK_GECERSIZ", message);
+  const extra = code === "ISTEK_ZAMAN" ? { sunucuSaati: new Date(nowMs).toISOString() } : undefined;
+  return new CloudError(401, passThrough ? code : "ISTEK_GECERSIZ", message, extra);
 }
 
 export const badRequest = (message: string): CloudError => new CloudError(400, "GOVDE_GECERSIZ", message);

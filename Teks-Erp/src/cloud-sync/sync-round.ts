@@ -12,13 +12,14 @@ import { cloudPost, type CloudCallContext, type CloudTransport } from "./cloud-c
 import { collectProjectionChanges } from "./change-scan";
 import { buildRecords } from "./record-builder";
 import { buildSnapshots } from "./snapshots";
-import { membershipDigest } from "./reconcile";
+import { membershipDigest, parentLinkOf } from "./reconcile";
 import { chainOf, entryOf, needsFull, packDrafts, planFull, retentionOf, toUnits, withCompletion, type PacketDraft, type Unit } from "./packing";
 import { RECORD_PROJECTIONS, type ModuleKey, type SnapshotCadence } from "./projections";
 import { FULL_RESEND_MARKER, formatRoundCounter, loadWatermarks, saveWatermarks, wmKey, type StoredWatermark, type WatermarkWrite } from "./watermarks";
 import {
   ENVELOPE_VERSION,
   MAX_COMPRESSED_BYTES,
+  MAX_RECONCILE_PENDING,
   MAX_DECOMPRESSED_BYTES,
   PackageSchema,
   SYNC_CONTRACT_VERSION,
@@ -55,6 +56,8 @@ export interface RoundOutcome {
   /** Tavana takılan kaynak var — iş beklemeden bir tur daha koşmalı. */
   readonly more: boolean;
   readonly contractWarning: string | null;
+  /** Bu uzlaştırmada iki uçta aynı kümeyle sayılamayan projeksiyonlar (ÖLÇÜLEMEDİ — TAM istenmez). */
+  readonly reconcileSkipped: string[];
 }
 
 interface ModuleFlags {
@@ -103,17 +106,33 @@ async function planRecordUnits(
   return { units, idle, more };
 }
 
-/** Günlük uzlaştırma (§4.4): son onaylı ufuktan ÖNCE doğmuş kümenin adedi + özeti. */
-async function planReconcile(stored: ReadonlyMap<string, StoredWatermark>, flags: ModuleFlags): Promise<ReconcileEntry[]> {
-  const out: ReconcileEntry[] = [];
+/**
+ * Günlük uzlaştırma (§4.4): küme − bekleyen (son onaylı ufuktan sonra doğanlar, ebeveyni öyle olanlar). Ebeveyni
+ * onaylanmamış çocuk ya da tavanı aşan bekleyen ÖLÇÜLEMEDİ sayılır: entry gitmez, TAM da istenmez.
+ */
+async function planReconcile(stored: ReadonlyMap<string, StoredWatermark>, flags: ModuleFlags): Promise<{ entries: ReconcileEntry[]; skipped: string[] }> {
+  const entries: ReconcileEntry[] = [];
+  const skipped: string[] = [];
+  let budget = MAX_RECONCILE_PENDING;
   for (const p of RECORD_PROJECTIONS) {
     if (!moduleOn(p.module, flags)) continue;
     const chain = stored.get(wmKey.chain(p.name));
     if (needsFull(p, chain) || !chain?.at) continue;
-    const d = await membershipDigest(p, { retentionFrom: retentionOf(p, chain), createdBefore: chain.at });
-    out.push({ projeksiyon: p.name, adet: d.count, ozet: d.digest, ufukTarihi: retentionOf(p, chain)?.toISOString() ?? null });
+    const link = parentLinkOf(p);
+    const parentChain = link ? stored.get(wmKey.chain(link.projection.name)) : undefined;
+    if (link && (needsFull(link.projection, parentChain) || !parentChain?.at)) {
+      skipped.push(p.name);
+      continue;
+    }
+    const d = await membershipDigest(p, { retentionFrom: retentionOf(p, chain), createdBefore: chain.at, parentCreatedBefore: parentChain?.at ?? null });
+    if (d.pendingOverflow || d.pending.length > budget) {
+      skipped.push(p.name);
+      continue;
+    }
+    budget -= d.pending.length;
+    entries.push({ projeksiyon: p.name, adet: d.count, ozet: d.digest, ufukTarihi: retentionOf(p, chain)?.toISOString() ?? null, bekleyen: d.pending });
   }
-  return out;
+  return { entries, skipped };
 }
 
 interface SendState {
@@ -212,7 +231,7 @@ async function sendDrafts(queue: PacketDraft[], st: SendState): Promise<{ status
 export async function runSyncRound(opts: RoundOptions, deps: RoundDeps): Promise<RoundOutcome> {
   const now = deps.nowMs ?? Date.now;
   const elig = cloudEligibility(now());
-  const empty = { packets: 0, accepted: [], rejected: [], fullRequested: [], more: false, contractWarning: null };
+  const empty = { packets: 0, accepted: [], rejected: [], fullRequested: [], more: false, contractWarning: null, reconcileSkipped: [] };
   if (!elig.ok) return { ...empty, status: "GONDERILMEDI", reason: elig.reason, horizon: null };
 
   const ctx: CloudCallContext = { baseUrl: elig.baseUrl, installationId: elig.installationId, transport: deps.transport };
@@ -228,7 +247,7 @@ export async function runSyncRound(opts: RoundOptions, deps: RoundDeps): Promise
           (s) => stored.get(wmKey.snapshot(s.projection))?.digest !== s.digest,
         )
       : [];
-  const reconcile = opts.kind === "UZLASTIRMA" ? await planReconcile(stored, flags) : [];
+  const reconcile = opts.kind === "UZLASTIRMA" ? await planReconcile(stored, flags) : { entries: [], skipped: [] };
 
   const st: SendState = {
     ctx,
@@ -239,7 +258,7 @@ export async function runSyncRound(opts: RoundOptions, deps: RoundDeps): Promise
     failed: new Set(),
     outcome: { packets: 0, accepted: [], rejected: [], fullRequested: [], contractWarning: null },
   };
-  const sent = await sendDrafts(packDrafts(plan.units, snapshots, reconcile), st);
+  const sent = await sendDrafts(packDrafts(plan.units, snapshots, reconcile.entries), st);
   const status = sent.status === "TAMAM" && (st.failed.size > 0 || st.outcome.rejected.length > 0) ? "KISMI" : sent.status;
-  return { ...st.outcome, more: plan.more, status, reason: sent.reason, horizon: horizon.toISOString() };
+  return { ...st.outcome, more: plan.more, status, reason: sent.reason, horizon: horizon.toISOString(), reconcileSkipped: reconcile.skipped };
 }

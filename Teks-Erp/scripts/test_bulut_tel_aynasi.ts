@@ -10,7 +10,11 @@
 //   §4 sözleşmenin dışa aktardığı ad iki projede İKİNCİ KEZ tanımlanmaz (elle kopya şema yok)
 //   §5 katalog çapraz ölçümü: fabrika kataloğu ↔ bulut kataloğu — ad/tür, alt satır, FINANS/KİŞİSEL alanın kökte
 //      yasağı (S34 ikinci seddi), saklama alanları ve üstten saklama (S23) birebir
+//   §6 uzlaştırma ebeveyn bağı (S45): sözleşmedeki her kalem → üst belge bağı iki katalogda çözülür (fabrikada alan
+//      kolon, bulutta `parent` aynı), fabrikanın üstten saklamalı kalemi sözleşmede
 // ⭐ KALICI SONDA ✓K1–✓K4 (her koşumda): karşılaştırıcılar sentetik girdide ısırır, temiz girdide susar.
+// NEGATİF SONDA (dosya dışı, cp + shasum geri): T1 bulut `cek-hareketi` bağı elle `cekNo` → §6b · T2 fabrika tel alanı
+//   `cekId` → `cekNo` → §6a.
 // Düzeltme: değişiklik ÖNCE kaynakta, sonra `cp -p patron/sunucu/src/wire/esitleme.ts Teks-Erp/src/cloud-sync/wire/`.
 // Koşum: npx tsx scripts/test_bulut_tel_aynasi.ts   (DB GEREKMEZ)
 // =============================================================================
@@ -18,6 +22,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { RECORD_PROJECTIONS, SNAPSHOT_PROJECTIONS } from "../src/cloud-sync/projections";
+import { RECONCILE_PARENTS } from "../src/cloud-sync/wire";
 
 let pass = 0;
 let fail = 0;
@@ -78,6 +83,8 @@ interface BulutKaydi {
   readonly kokteYasak: readonly string[];
   readonly saklama: readonly string[];
   readonly usttenSaklama: string | null;
+  /** Kalem → üst belge bağı `ebeveyn.alan` (yoksa null). */
+  readonly ebeveyn?: string | null;
 }
 
 /** Katalog çapraz farkı — saf fonksiyon (sondalar sentetik girdiyle çağırır). */
@@ -133,6 +140,7 @@ async function bulutKatalogu(): Promise<BulutKaydi[]> {
   if (!Array.isArray(liste)) return [];
   return liste.filter(kayit).map((p) => {
     const ust = kayit(p.parent) && typeof p.parent.projection === "string" ? p.parent.projection : null;
+    const alan = kayit(p.parent) && typeof p.parent.field === "string" ? p.parent.field : null;
     return {
       ad: String(p.name),
       tur: String(p.kind),
@@ -140,6 +148,7 @@ async function bulutKatalogu(): Promise<BulutKaydi[]> {
       kokteYasak: metinler(p.forbiddenRootFields),
       saklama: metinler(p.retentionFields),
       usttenSaklama: p.retentionFromParent === true ? ust : null,
+      ebeveyn: ust && alan ? `${ust}.${alan}` : null,
     };
   });
 }
@@ -183,6 +192,22 @@ async function main(): Promise<void> {
   const fark = katalogFarki(f.kayitlar, f.anliklar, b);
   check("§5b ⭐ ad · tür · alt satır · kökte yasak alan · saklama alanı birebir", fark.length === 0, fark.slice(0, 6).join(" · "));
   check("§5c üstten saklamalı kalem ölçüldü (fatura-kalemi)", f.kayitlar.some((k) => k.usttenSaklama !== null));
+
+  console.log("\n§6 uzlaştırma ebeveyn bağı (sözleşme ↔ iki katalog)");
+  const bag = Object.entries(RECONCILE_PARENTS);
+  const fabrikaBag = bag.filter(([c, r]) => {
+    const p = RECORD_PROJECTIONS.find((x) => x.name === c);
+    return !p || !RECORD_PROJECTIONS.some((x) => x.name === r.parent) || !p.columns.some((col) => col.wire === r.field);
+  });
+  check("§6a ⭐ her ebeveyn bağı fabrika kataloğunda çözülür (çocuk + üst belge + alan kolon)", bag.length >= 3 && fabrikaBag.length === 0, fabrikaBag.map(([c]) => c).join(","));
+  const bulutBag = bag.filter(([c, r]) => {
+    const k = b.find((x) => x.ad === c);
+    return !k || k.ebeveyn !== `${r.parent}.${r.field}`;
+  });
+  const fazla = b.filter((k) => k.ebeveyn && !(k.ad in RECONCILE_PARENTS)).map((k) => k.ad);
+  check("§6b ⭐ bulut kataloğunun kalem → üst belge bağı sözleşmeyle aynı (fazlası da yok)", bulutBag.length === 0 && fazla.length === 0, [...bulutBag.map(([c]) => c), ...fazla].join(","));
+  const ustten = f.kayitlar.filter((k) => k.usttenSaklama && RECONCILE_PARENTS[k.ad]?.parent !== k.usttenSaklama).map((k) => k.ad);
+  check("§6c fabrikanın üstten saklamalı kalemi sözleşmedeki ebeveynle aynı", ustten.length === 0, ustten.join(","));
 
   console.log("\n✓K kalıcı sondalar (sentetik)");
   check("✓K1 zod dışı içe aktarım ısırır · zod susar", iceAktarimlar('import { z } from "zod";\nimport x from "../lib/db";').join() === "zod,../lib/db" && iceAktarimlar('import { z } from "zod";').join() === "zod");

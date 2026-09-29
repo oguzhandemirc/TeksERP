@@ -49,7 +49,7 @@ export async function authenticateFactory(ctx: CloudContext, g: { header: unknow
     throw new CloudError(401, "ISTEK_GECERSIZ", "İmzalı istek başlığı (X-TKL-Istek) yok");
   }
   const identity = readRequestIdentity(g.header);
-  if (!identity.ok) throw requestRejected(identity.code, identity.message);
+  if (!identity.ok) throw requestRejected(identity.code, identity.message, g.nowMs);
   // Kimliksiz istek (protokolde yalnız etkinleştirme/taşıma) bulut kanalında meşru değil: `esitle` kimlik taşır.
   const installationId = identity.value.installationId;
   if (installationId === null || !UuidSchema.safeParse(installationId).success) {
@@ -67,7 +67,7 @@ export async function authenticateFactory(ctx: CloudContext, g: { header: unknow
     purposes: ["esitle"],
     installationId,
   });
-  if (!verified.ok) throw requestRejected(verified.code, verified.message);
+  if (!verified.ok) throw requestRejected(verified.code, verified.message, g.nowMs);
   await recordNonce(ctx, inst, verified.value, g.nowMs);
   if (!inst.active) throw new CloudError(403, "KURULUM_IPTAL", "Bu kurulumun kaydı pasif; patron bulutu kanalı kapalı");
   const denied = cloudEntitlementError(inst, g.nowMs);
