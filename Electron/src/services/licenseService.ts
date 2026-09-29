@@ -1,6 +1,5 @@
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
-import { DISCOVERY_IDENTITY_PATH, type ServerIdentity } from "@shared/discovery";
 import type {
   LicenseDataExportManifest,
   LicenseDetail,
@@ -59,11 +58,6 @@ export const licenseService = {
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/dr-devral`, { anaKurulumId, gerekce }, QUIET)),
   setProxy: (adres: string | null, atla: string | null) =>
     data(apiClient.put<ApiResponse<LicenseProxySettings>>(`${BASE}/proxy`, { adres, atla }, QUIET)),
-  /** Veritabanının kurulum kimliği (`system.installationId`) — YALNIZ bilgi; lisans kimliği değil (D14). */
-  databaseInstallationId: () =>
-    apiClient
-      .get<Partial<ServerIdentity>>(DISCOVERY_IDENTITY_PATH, QUIET)
-      .then((r) => (typeof r.data?.installationId === "string" ? r.data.installationId : null)),
   dataExport: () =>
     data(apiClient.get<ApiResponse<LicenseDataExportManifest>>(`${BASE}/veri-disari`, QUIET)),
 };

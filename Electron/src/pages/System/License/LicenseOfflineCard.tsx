@@ -39,7 +39,7 @@ export function LicenseOfflineCard({ d }: { d: LicenseDetail }) {
     <LicenseCard title="Çevrimdışı (QR)">
       <div className="flex flex-wrap gap-2">
         {amac === "etkinlestir" && (
-          <Input value={kod} onChange={(e) => setKod(e.target.value)} placeholder="Etkinleştirme kodu" className="max-w-xs font-mono uppercase" />
+          <Input value={kod} onChange={(e) => setKod(e.target.value)} placeholder="Etkinleştirme kodu (TKS-XXXX-XXXX-XXXX-XXXX)" maxLength={32} className="max-w-xs font-mono uppercase" />
         )}
         <Button variant="outline" disabled={busy !== null || (amac === "etkinlestir" && !kod.trim())} onClick={() => void create()}>
           {amac === "etkinlestir" ? "Etkinleştirme isteği oluştur" : "Yenileme isteği oluştur"}

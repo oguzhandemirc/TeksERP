@@ -69,6 +69,9 @@ const REASON_LABEL: Record<string, string> = {
   BAKIM_BITTI: "Bakım süresi bitti",
   BAKIM_IHLALI: "Bakım sonrası derlenmiş sürüm",
   DERLEME_TARIHI_YOK: "Derleme tarihi yok (bakım değerlendirilmedi)",
+  KIRA_GERI_ALINDI: "Lisans dosyaları eski bir kopyayla değiştirilmiş (geri alma)",
+  DEPO_OKUNAMADI: "Lisans dosyası okunamadı",
+  SAAT_KAYIK: "Sistem saati lisans sunucusundan kayık",
 };
 
 export const reasonLabel = (kod: string): string => REASON_LABEL[kod] ?? kod;
@@ -79,6 +82,8 @@ const FAILURE_LABEL: Record<string, string> = {
   KIRA_YENILENMEDI: "Sunucu kirayı yenilemedi",
   TASIMA_ONAYI_BEKLIYOR: "Taşıma onayı bekleniyor",
   TASIMA_REDDEDILDI: "Taşıma reddedildi",
+  TASIMA_KODU_BEKLENIYOR: "Taşıma onaylandı — taşıma kodu bekleniyor",
+  TASIMA_HATASI: "Taşıma talebi sorgulanamadı",
   EGRESS_NETWORK: "Ağ hatası (internet/proxy)",
   EGRESS_TIMEOUT: "Zaman aşımı",
   EGRESS_PROXY_UNSUPPORTED: "Bu Node sürümü proxy desteklemiyor",

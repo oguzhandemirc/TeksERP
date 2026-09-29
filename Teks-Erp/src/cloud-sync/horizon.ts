@@ -23,6 +23,7 @@ export interface Horizon {
  */
 export async function computeHorizon(appNowMs: number = Date.now()): Promise<Horizon> {
   const rows = await prisma.$queryRaw<Array<{ db_now: Date; oldest: Date | null }>>`
+    -- tz-ok: clock_timestamp() ve xact_start timestamptz; kıyas mutlak an, oturum saat dilimi karışmaz
     SELECT clock_timestamp() AS db_now,
            min(xact_start) FILTER (WHERE pid <> pg_backend_pid() AND xact_start IS NOT NULL) AS oldest
       FROM pg_stat_activity

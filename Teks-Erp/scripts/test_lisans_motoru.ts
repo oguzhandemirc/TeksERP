@@ -37,6 +37,8 @@
 // N11 okunamayan belge YOK sayılır (§14a) · N12 kimlik yoksa motor pes eder (§15c) · N13 sayaç çağrı
 // başına (§16a) · N14 veri gelince geri çekilme sıfırlanır (§17b) · N15 makine adı silinmez (§18a) ·
 // N16 kapalı süre kredisi 0 (§19a/b) · N17 onaylanan taşıma lisans ister (§20c).
+// I3-2 V1: N18 dikiş DB olgusundan okur (§21a/§21b) · N19 uygunluk dosyasına `getLicenseDbFacts`
+// (§21c/§21e) · V6 N20 gözlem özeti kira dosyasına bakar (§13b2) — üçü de kırmızı, geri alınınca yeşil.
 // ⭐ KALICI SONDA ✓K1 (her koşumda): bilinmeyen kod genel mesaja düşer — §8a'nın "her kodun kendi
 // mesajı var" karşılaştırıcısı kör değil.
 // =============================================================================
@@ -54,6 +56,7 @@ import { INSTALLATION_ID_SETTING_KEY, isReservedSettingKey } from "../src/consta
 import { getLicenseStore, loadLicenseStoreSync, resolveLicenseDir, writeFileAtomicSync, LICENSE_FILES } from "../src/lib/license/store";
 import {
   configureLicenseRuntimeForTests,
+  getLicenseInstallationId,
   getLicenseSnapshot,
   getMeasuredFingerprint,
   licenseHealthBlock,
@@ -68,7 +71,7 @@ import { applyModuleCeiling } from "../src/lib/license/module-ceiling";
 import { runWithRequestContext } from "../src/lib/request-context";
 import { setEgressTrustForTests } from "../src/lib/http-egress";
 import { DAY_MS, VENDOR_ERROR_CODES, msToIso, openEnvelope, parseJws, verifyRequest, type Fingerprint } from "../src/lib/license/protocol";
-import { buildEnvironment, currentFingerprintDigest, describeOperatingSystem, vendorFailureToError } from "../src/services/helpers/license-wire.helper";
+import { buildEnvironment, currentFingerprintDigest, describeOperatingSystem, requireReady, vendorFailureToError } from "../src/services/helpers/license-wire.helper";
 import { signStateRecord } from "../src/lib/license/saat";
 import {
   activateLicense,
@@ -97,6 +100,8 @@ import {
 } from "../src/jobs/license-doorbell.job";
 import { fiksturKur, kiraBas, hakBas, anahtarUret, type Fikstur } from "./lib/lisans-fikstur";
 import { sahteSaticiBaslat, sahteProxyBaslat, type SahteSatici } from "./lib/lisans-sahte-satici";
+import { scanLicenseIdentitySeam } from "./lib/lisans-kimlik-dikisi";
+import { logObservationSummaryIfDue, __resetLicenseTrailForTests } from "../src/services/license-trail.service";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -395,6 +400,26 @@ async function kimlikBolumu(x: Hazir): Promise<void> {
   yeniden(x.dizin);
 }
 
+/** §21 — tek dikiş (I3-2 V1): lisans, zil, eşitleme ve gelen kutusu AYNI kimliği okur. */
+function tekDikisBolumu(x: Hazir): void {
+  console.log("\n§21 — lisans kimliği TEK dikişten: imza · zil · patron bulutu eşitleme · gelen kutusu");
+  const dikis = getLicenseInstallationId();
+  check(
+    "§21a ⭐ getLicenseInstallationId = anlık görüntünün lisans kimliği = requireReady().licenseId (DB kimliği DEĞİL)",
+    dikis === x.f.kurulumId && dikis === getLicenseSnapshot().licenseId && requireReady().licenseId === dikis && dikis !== x.dbKimligi,
+    `${dikis?.slice(0, 8)} / db ${x.dbKimligi.slice(0, 8)}`,
+  );
+  const t = scanLicenseIdentitySeam();
+  check("§21b ⭐ dikişin gövdesi LICENSE_DIR kimliğini okur, DB olgusuna dokunmaz", t.seamReadsLicenseStore);
+  check("§21c ⭐ getLicenseDbFacts yalnız BEYANLI bilgi yüzeylerinde (yeni okuyucu = kırmızı)", t.undeclaredDbFactsReaders.length === 0, t.undeclaredDbFactsReaders.join(","));
+  check("§21d beyan ölü değil (okumayan dosya beyandan düşer)", t.staleDeclarations.length === 0, t.staleDeclarations.join(","));
+  check(
+    "§21e ⭐ kimlik kanalları (eşitleme · gelen kutusu · zil · uygunluk) DB kimliği kaynağı almaz; dosyaları yerinde",
+    t.channelViolations.length === 0 && t.missingChannelFiles.length === 0,
+    [...t.channelViolations, ...t.missingChannelFiles.map((f) => `YOK:${f}`)].join(","),
+  );
+}
+
 function durumKaydiAlani(dizin: string): Record<string, unknown> {
   const jws = (JSON.parse(fs.readFileSync(path.join(dizin, LICENSE_FILES.STATE), "utf8")) as { jws: string }).jws;
   const p = parseJws(jws);
@@ -496,6 +521,13 @@ async function etkinTanimiBolumu(x: Hazir): Promise<void> {
   yeniden(x.dizin);
   check("§13a ⭐ kira dosyası yok diye 'son yoklama başarısız' SAYILMAZ (ikinci anahtar yalnız gerçek denemeyle)", !pollFailedRecently(Date.now()));
   check("§13b ⭐ HAK + durum kaydı varken etkin sayılır (kira dosyası yokken de)", getLicenseSnapshot().activated && getLicenseDetail().kurulum.etkin);
+  __resetLicenseTrailForTests();
+  const gozlemde = getLicenseSnapshot().state.kip === "gozlem";
+  check(
+    "§13b2 gözlem özeti aynı 'etkin' tanımıyla (D3): kira dosyası yokken de günlük özet yazılır",
+    gozlemde && logObservationSummaryIfDue(Date.now() + 25 * 60 * 60 * 1000),
+    `kip gözlem=${gozlemde}`,
+  );
   // HAK 40 gün önce verilmiş: kirasız ek süre bitti — ikinci anahtar (gerçek başarısız yoklama) YOK.
   fs.writeFileSync(path.join(x.dizin, LICENSE_FILES.ENTITLEMENT), hakBas(x.f, { verilis: msToIso(Date.now() - 40 * DAY_MS) }));
   yeniden(x.dizin);
@@ -726,6 +758,7 @@ async function main(): Promise<void> {
     satici = hazir.satici;
     await etkinlestirmeBolumu(hazir);
     await kimlikBolumu(hazir);
+    tekDikisBolumu(hazir);
     await durumKaydiBolumu(hazir);
     await yoklamaBolumu(hazir);
     await zilBolumu(hazir);

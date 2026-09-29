@@ -231,6 +231,9 @@ async function zorlama(token: string): Promise<void> {
   for (const [m, yol] of [["GET", "/api/admin/health"], ["GET", "/api/mobile/updates/ota/1/manifest"], ["GET", "/api/license/durum"], ["POST", "/api/auth/login"], ["GET", "/api/auth/me"], ["GET", "/api/admin/backups/a.dump/download"]]) {
     check(`§9i K5'te açık: ${m} ${yol}`, (await kodu(uc(m, yol), token)).rotaya);
   }
+  for (const m of ["GET", "POST"] as const) {
+    check(`§9i2 ⭐ K5'te iki adımlı doğrulama kurulumu açık, kimliksiz (${m} /api/auth/totp/enroll — giriş akışı, yönetici kararı)`, (await kodu(uc(m, "/api/auth/totp/enroll"), null)).rotaya);
+  }
   lisansHazirDegil();
   check("§9j motor hazır değil → fail-open (lisans belirsizliği fabrikayı durdurmaz)", (await kodu(uc("POST", "/api/orders"), null)).rotaya);
 }
@@ -317,12 +320,12 @@ async function httpAyagi(port: number, token: string): Promise<void> {
 }
 
 function k5PanelUzlasmasi(): void {
-  console.log("\n§12 — panelin K5 kilit ekranı çağrıları ⊆ DURDURULMUŞ'ta açık");
+  console.log("\n§12 — panelin K5 'verilerimi al' sayfası çağrıları ⊆ DURDURULMUŞ'ta açık (F3: oturum-dışı router)");
   const r = k5PanelCagrilari();
   const kapali = (c: { method: string; path: string }): boolean => !isOpenInTier("DURDURULMUS", c.method, c.path.replace(/\{[^}]*\}/g, "x1"));
   check("§12a tohumlar canlı (ölü beyan yok)", r.oluTohum.length === 0, r.oluTohum.join(" | "));
   check("§12b ÖLÇÜLEMEDİ yok (çözülemeyen URL · tanınmayan HTTP istemcisi)", r.olculemedi.length === 0, r.olculemedi.join(" | "));
-  const TABAN = ["GET /api/auth/me", "GET /api/license/durum", "GET /api/license/detay", "GET /api/license/veri-disari", "POST /api/admin/backup", "GET /api/admin/backups/{x}/download", "GET /api/import/entities", "GET /api/import/{x}/export"];
+  const TABAN = ["GET /api/auth/me", "POST /api/auth/logout", "GET /api/license/durum", "POST /api/license/yokla", "GET /api/license/veri-disari", "POST /api/admin/backup", "GET /api/admin/backups/{x}/download", "GET /api/import/entities", "GET /api/import/{x}/export"];
   const bulunan = new Set(r.cagrilar.map((c) => `${c.method} ${c.path}`));
   const eksikTaban = TABAN.filter((t) => !bulunan.has(t));
   check("§12c körlük zemini: bilinen K5 çağrılarının hepsi çıkarıldı", eksikTaban.length === 0, `${r.cagrilar.length} çağrı · ${r.ziyaretEdilenDosya} dosya; eksik: ${eksikTaban.join(" | ")}`);

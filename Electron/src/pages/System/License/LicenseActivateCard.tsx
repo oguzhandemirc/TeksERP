@@ -37,6 +37,7 @@ export function LicenseActivateCard({ d }: { d: LicenseDetail }) {
             value={kod}
             onChange={(e) => setKod(e.target.value)}
             placeholder="TKS-XXXX-XXXX-XXXX-XXXX"
+            maxLength={32}
             className="max-w-xs font-mono uppercase"
             aria-label="Etkinleştirme kodu"
           />

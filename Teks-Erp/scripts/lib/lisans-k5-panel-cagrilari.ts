@@ -3,7 +3,7 @@
 // =============================================================================
 // Soru: panelin DURDURULMUŞ (K5) kilit ekranı hangi backend uçlarını çağırıyor? Kapının K5 izin
 // listesi bu kümeyi KAPSAMALI; aksi hâlde "verilerimi al" ekranı kendi kapımıza takılır.
-// Liste elle YAZILMAZ: tohum fonksiyonlardan (kilit ekranı, kilit altında koşan lisans kancası,
+// Liste elle YAZILMAZ: tohum fonksiyonlardan (K5 "verilerimi al" sayfası,
 // oturum kimliği) başlayıp Electron kaynağında SÖZDİZİMSEL çağrı grafiği gezilir — adlı yerel
 // fonksiyonlar, içe aktarılan bileşen/kanca/servis üyeleri (`licenseService.status` gibi değer
 // olarak geçenler dahil), dinamik `await import(...)` bağları — ve `apiClient.<fiil>(url)`
@@ -20,8 +20,7 @@ const ELECTRON_SHARED = path.join(ELECTRON_SRC, "..", "shared");
 
 /** Tohumlar: `<Electron/src'e göreli dosya>#<ad>` → neden. Ad üst düzey bildirim ya da nesne üyesidir. */
 export const K5_TOHUMLARI: Readonly<Record<string, string>> = {
-  "components/layout/LicenseLockGate.tsx#LicenseLockGate": "K5 kilit ekranı (verilerimi al paneli dahil)",
-  "hooks/useLicenseRelay.ts#useLicenseRelay": "AppShell'in kilit altında da koşan otomatik aktarma kancası",
+  "pages/LicenseSuspended/LicenseSuspendedPage.tsx#LicenseSuspendedPage": "K5 'verilerimi al' sayfası (F3: oturum-dışı router, kabuk bağlanmaz)",
   "store/auth.ts#refreshSystemAccount": "oturum kimliği (yetki aynası) — kilit ekranı izinleri buradan çözer",
 };
 

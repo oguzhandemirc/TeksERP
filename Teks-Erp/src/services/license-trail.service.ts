@@ -2,7 +2,6 @@
 // DEĞİL). Audit bir iz yüzeyidir; lisans kararı buradan OKUNMAZ.
 import { AuditService } from "./audit.service";
 import { uyari } from "../lib/logger";
-import { getLicenseStore } from "../lib/license/store";
 import { getLicenseSnapshot, peekObservationCounters, persistAccumulation } from "../lib/license/runtime";
 
 const OBSERVATION_SUMMARY_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -39,7 +38,8 @@ export function evaluateLicenseTransitions(nowMs: number = Date.now()): void {
 export function logObservationSummaryIfDue(nowMs: number = Date.now()): boolean {
   if (nowMs - lastSummaryAt < OBSERVATION_SUMMARY_INTERVAL_MS) return false;
   const snap = getLicenseSnapshot(nowMs);
-  if (!snap.hazir || snap.state.kip !== "gozlem" || !getLicenseStore()?.leaseJws) return false;
+  // Etkin tanımı D3: kira dosyasının varlığı değil, motorun `activated` kararı (HAK/durum kaydı da sayar).
+  if (!snap.hazir || snap.state.kip !== "gozlem" || !snap.activated) return false;
   lastSummaryAt = nowMs;
   void AuditService.logEvent({
     category: "SYSTEM",

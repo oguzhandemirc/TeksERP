@@ -92,7 +92,7 @@ export class FabrikaIstemcisi {
 /** `/api/license/detay` yanıtının senaryonun okuduğu kısmı (sözleşme: protokol belgesi §14). */
 export interface LisansDetayi {
   hazir: boolean;
-  kurulum: { kurulumId: string | null; anahtarKimligi: string | null; etkin: boolean };
+  kurulum: { kurulumId: string | null; veritabaniKimligi?: string | null; anahtarKimligi: string | null; etkin: boolean };
   depo: { durumKaydi: { gecerli: boolean; sira: number | null } };
   durum: {
     gecerlilik: string;
@@ -113,6 +113,7 @@ export interface LisansDetayi {
   parmakIzi: { karar: string | null; eslesen: number | null; olculebilen: number | null; uyusmayan: string[] };
   yoklama: { sonHataKodu: string | null; zil: { bagli: boolean } };
   gozlem: { reddedilecekIstek: number; reddedilecekModul: number };
+  tasima: { talepId: string; durum?: "BEKLIYOR" | "ONAYLANDI" } | null;
 }
 
 // ---------------------------------------------------------------- satıcı portalı

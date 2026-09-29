@@ -1,9 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Copy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { copyText } from "@/lib/clipboard";
-import { licenseService } from "@/services/licenseService";
 import type { FingerprintFactor, LicenseDetail } from "@/types/license";
 import { InfoRow, LicenseCard, when } from "./LicenseParts";
 import { FACTOR_LABEL } from "./labels";
@@ -45,7 +43,6 @@ function CopyableId({ value, label, testId }: { value: string | null; label: str
  */
 export function LicenseMachineCard({ d }: { d: LicenseDetail }) {
   const p = d.parmakIzi;
-  const db = useQuery({ queryKey: ["license", "db-kimligi"], queryFn: licenseService.databaseInstallationId, staleTime: 5 * 60_000 });
   return (
     <LicenseCard
       title="Kurulum ve parmak izi"
@@ -55,7 +52,7 @@ export function LicenseMachineCard({ d }: { d: LicenseDetail }) {
         <CopyableId value={d.kurulum.kurulumId} label="Lisans kimliği" testId="lisans-kurulum-kimligi" />
       </InfoRow>
       <InfoRow label="Veritabanı kimliği (bilgi)">
-        <CopyableId value={db.data ?? null} label="Veritabanı kimliği" testId="lisans-db-kimligi" />
+        <CopyableId value={d.kurulum.veritabaniKimligi ?? null} label="Veritabanı kimliği" testId="lisans-db-kimligi" />
       </InfoRow>
       <InfoRow label="Kurulum anahtarı">
         <span className="font-mono text-xs">{d.kurulum.anahtarKimligi ?? "—"}</span>

@@ -100,7 +100,6 @@ const DISLAMALAR: K5Dislama[] = [
   { dosya: "Electron/src/components/layout/LicenseLockGate.tsx", ad: "LicenseLockGate", gerekce: "kısıtlı kip kilidi oturum-dışında çizilmez", kanit: { dosya: APP, desen: /\{!oturumDisi && <LicenseLockGate \/>\}/ } },
   { dosya: APP, ad: "ScanSeriesLoader", gerekce: "okutma seri tablosu K5'te yüklenmez", kanit: { dosya: APP, desen: /if \(!userId \|\| suspended\) return;/ } },
   { dosya: "Electron/src/providers/PreferencesProvider.tsx", ad: "PreferencesProvider", gerekce: "tercih sorgusu K5'te kapalı; kayıt yalnız ayar ekranlarından (kabuk)", kanit: { dosya: "Electron/src/providers/PreferencesProvider.tsx", desen: /const enabled = hydrated && !!user && !licenseSuspended;/ } },
-  { dosya: "Electron/src/pages/TotpEnroll/TotpEnrollPage.tsx", ad: "TotpEnrollPage", gerekce: "2FA kurulum bağlantısı 'verilerimi al' akışının parçası değil (kurulu TOTP ile giriş açık)", kanit: { dosya: APP, desen: /const onEnrollPath = hashPath === TOTP_ENROLL_PATH;/ } },
 ];
 
 const ornekYol = (yol: string): string => yol.replace(/:p/g, "ornek");

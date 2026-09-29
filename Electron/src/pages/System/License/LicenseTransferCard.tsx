@@ -30,8 +30,9 @@ export function LicenseTransferCard({ d }: { d: LicenseDetail }) {
   return (
     <LicenseCard title="Taşıma ve felaket kurtarma">
       {d.tasima && (
-        <InfoRow label="Bekleyen taşıma">
+        <InfoRow label={d.tasima.durum === "ONAYLANDI" ? "Taşıma onaylandı" : "Bekleyen taşıma"}>
           {when(d.tasima.istendi)} · {d.tasima.talepId}
+          {d.tasima.durum === "ONAYLANDI" && " · taşıma kodunu portaldan alıp etkinleştirme alanına girin"}
         </InfoRow>
       )}
       <div className="space-y-1.5">

@@ -54,13 +54,15 @@ export const ALWAYS_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/auth/login-card", reason: "kartla giriş" },
   { method: "POST", path: "/api/auth/login-quick-pin", reason: "PIN ile giriş" },
   { method: "POST", path: "/api/auth/logout", reason: "oturum kapatma daima mümkün" },
+  // Giriş akışının parçası: sıfırlanan yönetici TOTP'yi kuramazsa K5'te "verilerimi al" için giremez.
+  { method: "GET", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu (giriş akışı; K5'te veri erişimi için)" },
+  { method: "POST", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu (giriş akışı; K5'te veri erişimi için)" },
 ];
 
 /** KISITLI kipte AYRICA açık yazmalar (okuma zaten serbest). Beyan dışı her yazma RED. */
 export const RESTRICTED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   // Kişisel tercih ve iki adımlı doğrulama
   { method: "PUT", path: "/api/auth/preferences", reason: "kişisel tercih; iş verisi değil" },
-  { method: "POST", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu (güvenlik)" },
   { method: "POST", path: "/api/admin/users/:id/totp/window", reason: "iki adımlı doğrulama kurulum penceresi — sıfırlanan kullanıcı yeniden kurabilsin (güvenlik)" },
   { method: "POST", path: "/api/devices/announce", reason: "cihaz duyurusu (tablet el sıkışması)" },
   // DB'ye yazmayan önizleme / gövdeli okuma

@@ -20,6 +20,7 @@ import os from "node:os";
 import path from "node:path";
 import { Pool } from "pg";
 import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
+import { LICENSE_FILES } from "../src/lib/license/store";
 import {
   DAY_MS,
   HealthSummarySchema,
@@ -83,6 +84,35 @@ class Adim {
 const SON_ADIM = process.argv.find((a) => a.startsWith("--son="))?.slice("--son=".length) ?? null;
 class DurNoktasi extends Error {}
 
+const KOK_ONEKI = "tekserp-senaryo-l-";
+
+/** Lisans kimliği (D14) fabrikanın LICENSE_DIR'inde doğar; satıcı kurulumu bu kimlikle bulunur. */
+function lisansKimligiOku(dizin: string): string | null {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(dizin, LICENSE_FILES.IDENTITY), "utf8")) as { kurulumId?: unknown };
+    return typeof j.kurulumId === "string" ? j.kurulumId : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Çökmüş önceki koşumların geçici köklerinde kalan lisans kimlikleri (temizlik kimliğe göre). */
+function eskiKoklerdekiLisansKimlikleri(): string[] {
+  const out: string[] = [];
+  for (const k of fs.readdirSync(os.tmpdir()).filter((a) => a.startsWith(KOK_ONEKI))) {
+    const kok = path.join(os.tmpdir(), k);
+    try {
+      for (const d of fs.readdirSync(kok).filter((a) => a.startsWith("lisans-"))) {
+        const id = lisansKimligiOku(path.join(kok, d));
+        if (id) out.push(id);
+      }
+    } catch {
+      /* okunamayan kök atlanır */
+    }
+  }
+  return out;
+}
+
 async function adim(no: string, baslik: string, fn: (a: Adim) => Promise<void>): Promise<void> {
   if (SON_ADIM && sonuclar.some((s) => s.no === SON_ADIM)) throw new DurNoktasi(SON_ADIM);
   console.log(`\n${no} ${baslik}`);
@@ -129,6 +159,9 @@ function saticiHedefKapisi(url: string): void {
 
 // ---------------------------------------------------------------- düzenek
 const KANAL = "senaryo-kanal";
+const RENK_ONEKI = "Senaryo Rengi ";
+// API adı TR büyük harfe çevirir ve sayısal eki başa alabilir ("SENARYO RENGİ AB12CD" · "123456 SENARYO RENGİ").
+const RENK_DESENI_SQL = "^(senaryo reng(i|İ|ı|I) [0-9a-f]{6}|[0-9a-f]{6} senaryo reng(i|İ|ı|I))$";
 /** Etkinleştirme / taşıma kodu: 16 karakter Crockford base32 (`TKS-XXXX-XXXX-XXXX-XXXX`). */
 const KOD_DESENI = /^TKS(-[0-9A-HJKMNP-TV-Z]{4}){4}$/;
 const UUID_DESENI = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -186,7 +219,7 @@ async function main(): Promise<number> {
   }
   console.log(`🎯 Fabrika: ${dbAdi(anaUrl)} · DR: ${dbAdi(drUrl)} · Bayi: ${dbAdi(bayiUrl)} · Satıcı: ${dbAdi(saticiUrl)}`);
 
-  const kok = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-senaryo-l-"));
+  const kok = fs.mkdtempSync(path.join(os.tmpdir(), KOK_ONEKI));
   console.log(`🗂  Geçici kök: ${kok}`);
   const tls = tlsSertifikasiUret(kok);
   const saticiEnv: NodeJS.ProcessEnv = {
@@ -219,8 +252,14 @@ async function main(): Promise<number> {
     return r.rows[0]?.id ?? null;
   };
 
-  // Önceki koşumun artığı (çökmüş koşum) — kurulum kimliğiyle.
-  const eskiKimlikler = (await Promise.all([anaUrl, drUrl, bayiUrl].map(kurulumKimligi))).filter((x): x is string => Boolean(x));
+  // Önceki koşumun artığı (çökmüş koşum) — LİSANS kimliğiyle (D14; eski köklerden), D14 öncesi satırlar
+  // için DB kimliğiyle de; ana DB'deki senaryo renkleri (saat kaydırmasında gelecek tarihli doğmuş olabilir).
+  const eskiKimlikler = [
+    ...eskiKoklerdekiLisansKimlikleri(),
+    ...(await Promise.all([anaUrl, drUrl, bayiUrl].map(kurulumKimligi))).filter((x): x is string => Boolean(x)),
+  ];
+  const eskiRenk = await db(anaUrl).query(`DELETE FROM colors WHERE name ~* $1`, [RENK_DESENI_SQL]);
+  if (eskiRenk.rowCount) console.log(`🧹 önceki koşumdan ${eskiRenk.rowCount} senaryo rengi silindi`);
   saticiYardimcisi(saticiEnv, ["temizle", `--kurulum-idleri=${eskiKimlikler.join(",")}`, "--bayi-adi-oneki=Senaryo L Bayi", `--kanallar=${KANAL}`]);
   const hz = saticiYardimcisi<Hazirlik>(saticiEnv, ["hazirla"]);
 
@@ -299,6 +338,15 @@ async function main(): Promise<number> {
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "updatedAt" = now()`,
       [anahtar, JSON.stringify(deger)],
     );
+  };
+
+  // Senaryonun kendi fikstür rengi: kimliğiyle toplanır, sonda silinir (saat kaydırmasında doğan satır
+  // ana DB'de gelecek tarihli kalıp başka bekçileri — bulut uzlaştırması — bozmasın).
+  const senaryoRenkleri: string[] = [];
+  const renkYarat = async (f: Fabrika): Promise<Yanit> => {
+    const y = await f.istemci.istek("POST", "/api/colors", { name: `${RENK_ONEKI}${randomBytes(3).toString("hex")}` });
+    if (y.status === 201 && typeof y.veri.id === "string") senaryoRenkleri.push(y.veri.id);
+    return y;
   };
 
   let portal = null as unknown as PortalIstemcisi;
@@ -424,7 +472,7 @@ async function main(): Promise<number> {
       const b = await A.istemci.bekle((d) => d.durum.hesaplananKademe === "KISITLI", 20_000);
       a.kontrol("hesaplanan KISITLI, uygulanan NORMAL (gözlem)", b.ms !== null && b.detay.durum.uygulananKademe === "NORMAL", `${b.detay.durum.hesaplananKademe}/${b.detay.durum.uygulananKademe}`);
       const sayac0 = b.detay.gozlem.reddedilecekIstek;
-      const renk = await A.istemci.istek("POST", "/api/colors", { name: `Senaryo Rengi ${randomBytes(3).toString("hex")}` });
+      const renk = await renkYarat(A);
       a.kontrol("POST /api/colors → 201 (yazma açık)", renk.status === 201, ozet(renk));
       const siparis = await A.istemci.istek("POST", "/api/orders", {});
       a.kontrol("POST /api/orders kapıdan geçer (doğrulama 400, lisans 403 DEĞİL)", siparis.status === 400 && !String(siparis.kod ?? "").startsWith("LICENSE"), ozet(siparis));
@@ -499,7 +547,7 @@ async function main(): Promise<number> {
       const c4 = await A.istemci.bekle((d) => d.durum.uygulananKademe === "NORMAL", 15_000, 100);
       const ms4 = c4.ms === null ? null : Date.now() - t1;
       a.kontrol("K4 geri alma ≤ 5 sn'de NORMAL", ms4 !== null && ms4 <= 5000, `${ms4 ?? "zaman aşımı"} ms`);
-      const s = await A.istemci.istek("POST", "/api/colors", { name: `Senaryo Rengi ${randomBytes(3).toString("hex")}` });
+      const s = await renkYarat(A);
       a.kontrol("NORMAL'de yazma yine 201", s.status === 201, ozet(s));
     });
 
@@ -540,7 +588,7 @@ async function main(): Promise<number> {
       a.kontrol("+31 gün: EK_SURE, gün sayacı ~29", d1.durum.hesaplananKademe === "EK_SURE" && d1.durum.uygulananKademe === "EK_SURE" && d1.durum.ekSureKalanGun !== null && d1.durum.ekSureKalanGun >= 28 && d1.durum.ekSureKalanGun <= 30, `${d1.durum.hesaplananKademe} ekSureKalanGun=${d1.durum.ekSureKalanGun} saat=${d1.durum.saat.kaynak}`);
       const durum = await A.istemci.istek("GET", "/api/license/durum");
       a.kontrol("/durum ekSureKalanGun + uyarı bandı (zorla)", durum.veri.ekSureKalanGun === d1.durum.ekSureKalanGun && (durum.veri.bant as { ton?: string } | null)?.ton === "uyari", JSON.stringify({ k: durum.veri.kademe, g: durum.veri.ekSureKalanGun }));
-      const yaz = await A.istemci.istek("POST", "/api/colors", { name: `Senaryo Rengi ${randomBytes(3).toString("hex")}` });
+      const yaz = await renkYarat(A);
       a.kontrol("EK_SURE'de yazma açık (201)", yaz.status === 201, ozet(yaz));
       await dunyayiIlerlet(30 * DAY_MS + 3 * 60 * 60 * 1000);
       const p2 = await A.istemci.yokla();
@@ -621,6 +669,14 @@ async function main(): Promise<number> {
       const o = await portal.istek("POST", `/tasima-talepleri/${talep?.id}/onayla`, { sebep: "Senaryo L onay", kurulumId: S.anaDbId });
       const tasimaKodu = String((o.veri.tasimaKodu as { kod?: string } | null)?.kod);
       a.kontrol("portal onay → 200 + tek kullanımlık taşıma kodu (16 karakter)", o.status === 200 && KOD_DESENI.test(tasimaKodu), ozet(o));
+      // D8: onay lisans taşımaz — C yoklayınca talep ONAYLANDI kalır ve kod beklenir.
+      const yb = await C.istemci.yokla();
+      const cb = await C.istemci.detay();
+      a.kontrol(
+        "C: onay sonrası yoklama → TASIMA_KODU_BEKLENIYOR, talep ONAYLANDI, lisans YOK",
+        yb.code === "TASIMA_KODU_BEKLENIYOR" && cb.tasima?.durum === "ONAYLANDI" && cb.kira === null,
+        `${yb.outcome} ${yb.code ?? ""} tasima=${cb.tasima?.durum ?? "yok"}`,
+      );
       const e = await C.istemci.istek("POST", "/api/license/etkinlestir", { kod: tasimaKodu });
       const d = await C.istemci.detay();
       a.kontrol(
@@ -647,7 +703,12 @@ async function main(): Promise<number> {
       const kod = await portal.istek("POST", `/kurulumlar/${S.drDbId}/etkinlestirme-kodu`, {});
       a.kontrol("portal: DR kurulumu + hak + kod", k.status === 201 && h.status === 201 && s.status === 201 && kod.status === 201, `${ozet(k)}/${ozet(h)}/${ozet(s)}/${ozet(kod)}`);
       const e = await D.istemci.istek("POST", "/api/license/etkinlestir", { kod: String(kod.veri.kod) });
-      a.kontrol("D etkinleşti", e.status === 200, ozet(e));
+      const de = await D.istemci.detay();
+      a.kontrol(
+        "D kimliksiz etkinleşti; lisans kimliği portalda doğan DR kimliği (yanıttan), ananınkinden ve DB kimliğinden ayrı",
+        e.status === 200 && de.kurulum.kurulumId === String(k.veri.kurulumId) && de.kurulum.kurulumId !== S.anaLisansId && de.kurulum.kurulumId !== de.kurulum.veritabaniKimligi,
+        `${ozet(e)} ${de.kurulum.kurulumId?.slice(0, 8)} / db ${String(de.kurulum.veritabaniKimligi).slice(0, 8)}`,
+      );
       // anaKurulumId ananın LİSANS kimliğidir (portaldan/ana Lisans ekranından; DR'nin DB replikası taşımaz).
       const dr = await D.istemci.istek("POST", "/api/license/dr-devral", { anaKurulumId: S.anaLisansId, gerekce: "Senaryo L: ana sunucu arızası" });
       const dd = await D.istemci.detay();
@@ -867,7 +928,7 @@ async function main(): Promise<number> {
       a.kontrol("satıcı yanıtında indirme belirteci YOK", belirtecler === 0, `adet=${belirtecler}`);
       const t = await C.istemci.istek("GET", "/api/license/indirme-belirteci?urun=electron");
       a.kontrol("GET indirme-belirteci → 403 LICENSE_UPDATES_FROZEN", t.status === 403 && t.kod === "LICENSE_UPDATES_FROZEN", ozet(t));
-      const w = await C.istemci.istek("POST", "/api/colors", { name: `Senaryo Rengi ${randomBytes(3).toString("hex")}` });
+      const w = await renkYarat(C);
       const r = await C.istemci.istek("GET", "/api/orders");
       a.kontrol("diğer uçlar açık: POST /api/colors 201, GET /api/orders 200", w.status === 201 && r.status === 200, `${ozet(w)} / ${ozet(r)}`);
       await geriAl(String(k1.veri.id));
@@ -929,12 +990,13 @@ async function main(): Promise<number> {
       a.kontrol("kademe DÜŞMEDİ (EK_SURE/KISITLI yok; UYARI)", d.durum.hesaplananKademe === "UYARI" && d.durum.uygulananKademe === "UYARI", `${d.durum.hesaplananKademe}/${d.durum.uygulananKademe}`);
       const p = await C.istemci.yokla();
       const d2 = await C.istemci.detay();
-      a.kontrol("başarısız yoklamadan SONRA da kademe düşmez (iki anahtarın saat ayağı güvenilir saatte)", d2.durum.hesaplananKademe === "UYARI", `${p.outcome} ${p.code ?? ""} → ${d2.durum.hesaplananKademe}`);
-      if (p.outcome !== "BASARILI") {
-        a.kismi(`saat ${Math.round(C.ekDuvarMs / DAY_MS)} gün ilerideyken yoklama satıcıda ${p.code ?? "?"} ile reddedilir: İSTEK duvar saatiyle imzalanıyor (±10 dk) — "yoklama başarılı" kolu bugünkü tasarımda gerçekleşemez (tasarım borcu)`);
-      } else {
-        a.kontrol("yoklama başarılı", true);
-      }
+      a.kontrol("yoklamadan SONRA da kademe düşmez (iki anahtarın saat ayağı güvenilir saatte)", d2.durum.hesaplananKademe === "UYARI", `${p.outcome} ${p.code ?? ""} → ${d2.durum.hesaplananKademe}`);
+      // D4: satıcı ISTEK_ZAMAN + sunucuSaati döner, fabrika BİR KEZ düzeltilmiş damgayla yeniden imzalar.
+      a.kontrol(
+        "yoklama başarılı (D4: satıcı saatiyle bir kez düzeltilmiş imza)",
+        p.outcome === "BASARILI",
+        `${p.outcome} ${p.code ?? ""} — saat ${Math.round(C.ekDuvarMs / DAY_MS)} gün ileride`,
+      );
     });
 
     // ============================================================ L26
@@ -1084,7 +1146,10 @@ async function main(): Promise<number> {
         : db(anaUrl).query(`UPDATE system_settings SET value = $2::jsonb, "updatedAt" = now() WHERE key = $1`, [anahtar, deger])
       ).catch(() => undefined);
     }
-    const kimlikler = (await Promise.all([anaUrl, drUrl, bayiUrl].map(kurulumKimligi).map((p) => p.catch(() => null)))).filter((x): x is string => Boolean(x));
+    await db(anaUrl).query(`DELETE FROM colors WHERE id = ANY($1::uuid[])`, [senaryoRenkleri]).catch((err: Error) => console.error(`⚠️ renk temizliği: ${err.message}`));
+    const lisansKimlikleri = [S.anaLisansId, ...[...fabrikalar.values()].map((f) => lisansKimligiOku(f.lisansDizini))];
+    const dbKimlikleri = await Promise.all([anaUrl, drUrl, bayiUrl].map(kurulumKimligi).map((p) => p.catch(() => null)));
+    const kimlikler = [...new Set([...lisansKimlikleri, ...dbKimlikleri].filter((x): x is string => Boolean(x)))];
     try {
       saticiYardimcisi(saticiEnv, [
         "temizle",

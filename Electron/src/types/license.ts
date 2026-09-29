@@ -52,7 +52,15 @@ export type FingerprintFactor = "f1" | "f2" | "f3" | "f4" | "f5";
 
 export interface LicenseDetail {
   hazir: boolean;
-  kurulum: { kurulumId: string | null; anahtarKimligi: string | null; etkin: boolean; ilkAcilis: string | null };
+  kurulum: {
+    /** Lisans kimliği (D14; portalda doğar, lisans klasöründe). */
+    kurulumId: string | null;
+    /** DB `system.installationId`si — yalnız bilgi. Eski backend göndermez. */
+    veritabaniKimligi?: string | null;
+    anahtarKimligi: string | null;
+    etkin: boolean;
+    ilkAcilis: string | null;
+  };
   depo: {
     dizin: string | null;
     sorun: "APP_ICINDE" | "YEDEK_ICINDE" | "OKUNAMADI" | "YAZILAMADI" | null;
@@ -130,7 +138,8 @@ export interface LicenseDetail {
       sonHataKodu: string | null;
     };
   };
-  tasima: { talepId: string; istendi: string; gerekce: string | null } | null;
+  /** `durum` ONAYLANDI: satıcı onayladı, taşıma kodu portaldan beklenir (D8). Eski backend göndermez. */
+  tasima: { talepId: string; istendi: string; gerekce: string | null; durum?: "BEKLIYOR" | "ONAYLANDI" } | null;
   gozlem: { reddedilecekIstek: number; reddedilecekModul: number };
   proxy: LicenseProxySettings;
 }
