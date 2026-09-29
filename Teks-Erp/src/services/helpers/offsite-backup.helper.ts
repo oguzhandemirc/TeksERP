@@ -32,10 +32,13 @@ import fs from "fs";
 import path from "path";
 import { runProcess } from "./pg-tool.helper";
 import {
+  isBackupFileName,
+  isEncryptedBackupName,
   NIGHTLY_PREFIX,
   PREMIGRATE_PREFIX,
   PRE_RESTORE_PREFIX,
 } from "./backup-naming.helper";
+import { ENCRYPTED_SUFFIX, readBackupCryptoConfig } from "../../lib/backup-crypto";
 import { readOffsiteRemote } from "../system-setting.service";
 
 /**
@@ -169,12 +172,19 @@ export interface OffsiteSweepResult {
   finishedAt: string;
 }
 
-function isBackupFile(name: string): boolean {
-  return name.toLowerCase().endsWith(".dump") && COPY_PREFIXES.some((p) => name.startsWith(p));
+/**
+ * Kopyalanacak yedek mi. ⚠️ Şifreleme yapılandırılmışsa (`BACKUP_KEY_DIR` dolu —
+ * geçersiz olsa bile) YALNIZ `.dump.tkenc` makine dışına çıkar: niyet şifrelemekse
+ * şifrelenememiş düz döküm Drive'a gitmez. Yapılandırılmamışsa bugünkü gibi `.dump`
+ * (varsa şifreliler de — onları taşımak zararsız).
+ */
+export function isOffsiteBackupFile(name: string, encryptedOnly: boolean): boolean {
+  if (!COPY_PREFIXES.some((p) => name.startsWith(p))) return false;
+  return encryptedOnly ? isEncryptedBackupName(name) : isBackupFileName(name);
 }
 
-async function localNames(dir: string): Promise<string[]> {
-  return (await fs.promises.readdir(dir)).filter(isBackupFile).sort();
+async function localNames(dir: string, encryptedOnly: boolean): Promise<string[]> {
+  return (await fs.promises.readdir(dir)).filter((n) => isOffsiteBackupFile(n, encryptedOnly)).sort();
 }
 
 /**
@@ -185,7 +195,7 @@ async function localNames(dir: string): Promise<string[]> {
  * dosyayı `missing` sayıp sahte alarm üretirdi (ya da tersi bir düzeltmeyle
  * gerçek eksikleri yutardı).
  */
-async function remoteNames(remote: string): Promise<string[] | null> {
+async function remoteNames(remote: string, encryptedOnly: boolean): Promise<string[] | null> {
   const res = await runProcess(RCLONE_BIN(), ["lsf", remote, "--files-only", ...configArgs()], {
     timeoutMs: LIST_TIMEOUT_MS,
     captureStdout: true,
@@ -194,7 +204,7 @@ async function remoteNames(remote: string): Promise<string[] | null> {
   return (res.stdout ?? "")
     .split(/\r?\n/)
     .map((s) => s.trim())
-    .filter(isBackupFile)
+    .filter((n) => isOffsiteBackupFile(n, encryptedOnly))
     .sort();
 }
 
@@ -244,9 +254,17 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
     return done({ remoteIsLocalPath: true });
   }
 
+  const crypt = await readBackupCryptoConfig();
+  const encryptedOnly = crypt.state !== "kapali";
+  if (crypt.state === "gecersiz") {
+    warnings.push(
+      `YEDEK ŞİFRELEME YAPILANDIRMASI GEÇERSİZ — yalnız şifreli yedekler kopyalanır: ${crypt.problems.join(" | ")}`,
+    );
+  }
+
   let local: string[];
   try {
-    local = await localNames(dir);
+    local = await localNames(dir, encryptedOnly);
   } catch (err) {
     warnings.push(`Yerel yedek klasörü okunamadı (${dir}): ${err instanceof Error ? err.message : err}`);
     return done({ configured: true });
@@ -265,7 +283,11 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
   // değiştiyse bu bir kurcalama/bozulma sinyalidir ve duyulmalıdır.
   // `--no-traverse`: hedefi baştan sona taramaz, yalnız gerekli adlara bakar —
   // aylar birikince listeleme maliyeti yüklemeyi gölgede bırakmasın.
-  const includeArgs = COPY_PREFIXES.flatMap((p) => ["--include", `${p}*.dump`]);
+  const includeArgs = COPY_PREFIXES.flatMap((p) =>
+    encryptedOnly
+      ? ["--include", `${p}*.dump${ENCRYPTED_SUFFIX}`]
+      : ["--include", `${p}*.dump`, "--include", `${p}*.dump${ENCRYPTED_SUFFIX}`],
+  );
   const copyRes = await runProcess(
     RCLONE_BIN(),
     [
@@ -299,7 +321,7 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
   }
 
   // ── 2) KAPSAMI DOĞRULA ────────────────────────────────────────────────────
-  const remoteList = await remoteNames(remote);
+  const remoteList = await remoteNames(remote, encryptedOnly);
   if (remoteList === null) {
     warnings.push(
       "Uzak hedef LİSTELENEMEDİ — kopyalar gitmiş olabilir ama kapsam doğrulanamadı. " +

@@ -16,6 +16,7 @@
 // =============================================================================
 
 import path from "path";
+import type { KeyObject } from "crypto";
 import {
   OrderStatus,
   RollStatus,
@@ -28,10 +29,16 @@ import {
   listBackups,
   resolveBackupPath,
   verifyBackupFile,
+  verifyEncryptedBackupWithKey,
   type BackupRestoreTarget,
   type BackupVerifyResult,
 } from "./backup.service";
-import { resolveBackupCutoff, safetyBackupName } from "./helpers/backup-naming.helper";
+import {
+  decryptedTempName,
+  resolveBackupCutoff,
+  safetyBackupName,
+} from "./helpers/backup-naming.helper";
+import { isEncryptedBackup, type BackupCryptoState } from "../lib/backup-crypto";
 import { hata } from "../lib/logger";
 
 // =============================================================================
@@ -79,6 +86,21 @@ export interface RestoreImpact {
   restoreTarget: BackupRestoreTarget | null;
   verify: BackupVerifyResult;
   safetyBackup: { fileName: string; absPath: string } | null;
+  /**
+   * Şifreleme bilgisi — panelin komut bloğu şifreli yedeği ÖNCE çözer ve (şifreleme
+   * açıksa) güvenlik yedeğini de şifreler. Anahtar/parola TAŞIMAZ; yalnız yollar.
+   */
+  encryption: {
+    state: BackupCryptoState;
+    keyDir: string | null;
+    /** Paketteki araç: `<backendCwd>/dist/tools/yedek-sifrele.cjs`. */
+    toolPath: string;
+    fileEncrypted: boolean;
+    /** Şifreli yedeğin komut bloğunda çözüleceği geçici düz kopya (`.part`). */
+    decryptedPath: string | null;
+    /** Parolayla açılıp içerik doğrulandı mı (düz yedekte `false`). */
+    unlocked: boolean;
+  };
   /** Backend çalışma dizini — komut bloğundaki `prisma migrate deploy` oradan koşar.
    *  İstemci sunucunun cwd'sini bilemez; bu yüzden backend bildirir. */
   backendCwd: string;
@@ -104,6 +126,8 @@ export interface RestoreGuardInput {
   running: boolean;
   restoreTarget: BackupRestoreTarget | null;
   verify: BackupVerifyResult;
+  /** Şifreli yedekte doğrulama sebebi (kurcalanmış · yanlış alıcı) — operatöre gösterilir. */
+  verifyDetail?: string | null;
   isNewest: boolean;
   newerBackupName: string | null;
 }
@@ -129,7 +153,16 @@ export function restoreGuards(input: RestoreGuardInput): {
   }
   if (input.verify === "corrupt") {
     blockReasons.push(
-      "Bu yedek dosyası okunamıyor (pg_restore --list başarısız). Geri yüklenirse veritabanı yarım kalır.",
+      input.verifyDetail
+        ? `Bu yedek dosyası bozuk: ${input.verifyDetail} Geri yüklenirse veritabanı yarım kalır.`
+        : "Bu yedek dosyası okunamıyor (pg_restore --list başarısız). Geri yüklenirse veritabanı yarım kalır.",
+    );
+  }
+  if (input.verify === "encrypted") {
+    blockReasons.push(
+      "Bu yedek ŞİFRELİ ve bu sunucuda açılamadı" +
+        (input.verifyDetail ? ` (${input.verifyDetail})` : " (yerel yedek anahtarı yok)") +
+        ". Dosyayı müşteri ya da Etkili Yazılım anahtarıyla çözüp düz .dump olarak yedek klasörüne koyun, sonra onu geri yükleyin.",
     );
   }
   if (input.verify === "unknown") {
@@ -469,8 +502,14 @@ async function auditRollup(cutoff: Date): Promise<AuditRollup> {
 
 let computing = false;
 
-/** Dosya bulunamazsa `null` → rota katmanı 404 döndürür. */
-export async function getRestoreImpact(name: string): Promise<RestoreImpact | null> {
+/**
+ * Dosya bulunamazsa `null` → rota katmanı 404 döndürür.
+ * `identity`: şifreli yedekte yedek parolasıyla açılmış yerel anahtar (rota kapısı açar).
+ */
+export async function getRestoreImpact(
+  name: string,
+  opts: { identity?: KeyObject | null } = {},
+): Promise<RestoreImpact | null> {
   const startedMs = Date.now();
   // Yolu YENİDEN çöz — istemcinin verdiği ada güvenme. Liste ile dialog açılışı
   // arasında dosya rotasyona girmiş/silinmiş olabilir.
@@ -497,13 +536,24 @@ export async function getRestoreImpact(name: string): Promise<RestoreImpact | nu
   const isNewest = !newest || newest.name === name;
   const newerBackup = isNewest ? null : { name: newest!.name, time: newest!.time };
 
-  const verify = await verifyBackupFile(abs);
+  // İçerikten (sihirli bayt) — ad `.dump` olsa da şifreli dosya şifreli sayılır.
+  const fileEncrypted = await isEncryptedBackup(abs);
+  let verify = await verifyBackupFile(abs);
+  let verifyDetail: string | null = null;
+  let unlocked = false;
+  if (verify === "encrypted" && opts.identity) {
+    const r = await verifyEncryptedBackupWithKey(abs, opts.identity);
+    verify = r.verdict;
+    verifyDetail = r.detail;
+    unlocked = r.verdict === "ok" || r.verdict === "unknown";
+  }
 
   const guards = restoreGuards({
     backupDirConfigured: listing.backupDir !== null,
     running: isBackupRunning(),
     restoreTarget: listing.restoreTarget,
     verify,
+    verifyDetail,
     isNewest,
     newerBackupName: newerBackup?.name ?? null,
   });
@@ -568,6 +618,14 @@ export async function getRestoreImpact(name: string): Promise<RestoreImpact | nu
     restoreTarget: listing.restoreTarget,
     verify,
     safetyBackup,
+    encryption: {
+      state: listing.encryption.state,
+      keyDir: listing.encryption.keyDir,
+      toolPath: path.join(process.cwd(), "dist", "tools", "yedek-sifrele.cjs"),
+      fileEncrypted,
+      decryptedPath: fileEncrypted ? path.join(path.dirname(abs), decryptedTempName(name, "elle")) : null,
+      unlocked,
+    },
     backendCwd: process.cwd(),
     pm2AppName: listing.pm2AppName,
     audit,

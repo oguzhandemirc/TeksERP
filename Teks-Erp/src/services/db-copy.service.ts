@@ -13,10 +13,18 @@
 // =============================================================================
 
 import path from "path";
+import type { KeyObject } from "crypto";
 import prisma from "../lib/prisma";
 import { readDiskFor, type DiskUsage } from "../lib/disk-metrics";
 import { AuditService } from "./audit.service";
-import { isBackupRunning, resolveBackupPath, verifyBackupFile } from "./backup.service";
+import {
+  isBackupRunning,
+  resolveBackupPath,
+  verifyBackupFile,
+  verifyDumpUncached,
+  withDecryptedCopy,
+} from "./backup.service";
+import { isBackupCryptoError } from "../lib/backup-crypto";
 import {
   exceedsIdentifierLimit,
   failedDbName,
@@ -378,6 +386,8 @@ export async function startCopyJob(
   backupName: string,
   /** @internal test kancası — üretim çağrısında verilmez (tek çağıran db-copy.routes). */
   deps: { list?: typeof listDbCopies; run?: typeof runCopyJob } = {},
+  /** Şifreli yedekte yedek parolasıyla açılmış yerel anahtar (rota kapısı açar). */
+  opts: { identity?: KeyObject | null } = {},
 ): Promise<StartCopyResult> {
   if (currentJob) {
     return { started: false, message: "Zaten bir kopya işlemi sürüyor." };
@@ -443,7 +453,13 @@ export async function startCopyJob(
     return { started: false, message: listing.disk.blockReason ?? "Disk alanı yetersiz." };
   }
 
-  void (deps.run ?? runCopyJob)(abs, backupName, copyName, conn.database);
+  void (deps.run ?? runCopyJob)({
+    absDump: abs,
+    backupName,
+    copyName,
+    liveDb: conn.database,
+    identity: opts.identity ?? null,
+  });
   return { started: true, message: `Kopya oluşturuluyor: ${copyName}`, copyName };
 }
 
@@ -515,12 +531,16 @@ async function dropCopyQuietly(copyName: string): Promise<string | null> {
   }
 }
 
-async function runCopyJob(
-  absDump: string,
-  backupName: string,
-  copyName: string,
-  liveDb: string,
-): Promise<void> {
+interface CopyJobInput {
+  absDump: string;
+  backupName: string;
+  copyName: string;
+  liveDb: string;
+  /** Şifreli yedekte yedek parolasıyla açılmış yerel anahtar; düz yedekte `null`. */
+  identity: KeyObject | null;
+}
+
+async function runCopyJob({ absDump, backupName, copyName, liveDb, identity }: CopyJobInput): Promise<void> {
   void AuditService.logEvent({
     category: "SYSTEM",
     action: "DB_COPY_STARTED",
@@ -542,7 +562,34 @@ async function runCopyJob(
     await finishJob(false, "Yedek dosyası bozuk (pg_restore --list başarısız).", "creating");
     return;
   }
+  if (verdict !== "encrypted") {
+    await restoreIntoCopy(absDump, copyName, liveDb);
+    return;
+  }
 
+  // --- 0b) Şifreli yedek: geçici düz kopyaya çöz (AEAD kurcalamayı burada yakalar),
+  // kopya iş bitince — başarı ya da hata — silinir.
+  if (!identity) {
+    await finishJob(false, "Yedek şifreli — yedek parolası verilmeden kopya kurulamaz.", "creating");
+    return;
+  }
+  setPhase("queued", "Şifreli yedek çözülüyor…");
+  try {
+    await withDecryptedCopy(absDump, identity, async (plain) => {
+      if ((await verifyDumpUncached(plain)) === "corrupt") {
+        await finishJob(false, "Şifre çözüldü ama içindeki döküm bozuk (pg_restore --list başarısız).", "creating");
+        return;
+      }
+      await restoreIntoCopy(plain, copyName, liveDb);
+    });
+  } catch (err) {
+    const msg = isBackupCryptoError(err) ? err.message : err instanceof Error ? err.message : String(err);
+    await finishJob(false, `Şifreli yedek çözülemedi: ${msg}`, "creating");
+  }
+}
+
+/** Adım 1–4: CREATE DATABASE → pg_restore → GUC replay → doğrulama (düz döküm üzerinde). */
+async function restoreIntoCopy(absDump: string, copyName: string, liveDb: string): Promise<void> {
   const conn = liveConn();
   if (!conn) {
     await finishJob(false, "DATABASE_URL çözümlenemedi.", "creating");

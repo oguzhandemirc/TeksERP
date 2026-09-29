@@ -21,16 +21,31 @@
 // docs/ops/DEPLOY-RUNBOOK.md anlatır.
 // =============================================================================
 
+import crypto, { type KeyObject } from "crypto";
 import fs from "fs";
 import path from "path";
 import { AuditService } from "./audit.service";
 import {
   backupKind,
+  decryptedTempName,
+  encryptedBackupName,
+  isBackupFileName,
+  isEncryptedBackupName,
   NIGHTLY_PREFIX,
   PREMIGRATE_PREFIX,
   stamp,
   type BackupKind,
 } from "./helpers/backup-naming.helper";
+import {
+  decryptFile,
+  encryptFile,
+  inspectEncrypted,
+  isBackupCryptoError,
+  isEncryptedBackup,
+  readBackupCryptoConfig,
+  summarizeBackupCrypto,
+  type BackupCryptoSummary,
+} from "../lib/backup-crypto";
 import {
   parseDatabaseUrl as parseUrl,
   pgToolArgs,
@@ -110,7 +125,12 @@ function parseDatabaseUrl(): PgConn | null {
 //
 // `--list` DB bağlantısı GEREKTİRMEZ, yalnız dosyanın TOC'unu okur.
 
-export type BackupVerifyResult = "ok" | "corrupt" | "unknown";
+/**
+ * `encrypted`: dosya şifreli yedek (`.tkenc`) ve yapısı sağlam — `pg_restore --list`
+ * onu okuyamaz ama bu BOZUK demek DEĞİLDİR; teşhis "şifreli — çöz"dür. İçerik
+ * yalnız anahtarla doğrulanır (`verifyEncryptedBackupWithKey`).
+ */
+export type BackupVerifyResult = "ok" | "corrupt" | "unknown" | "encrypted";
 
 /** (yol, boyut, mtime) anahtarlı süreç-içi cache — dialog yeniden açılışı anında olsun. */
 const verifyCache = new Map<string, BackupVerifyResult>();
@@ -127,6 +147,28 @@ export async function verifyBackupFile(abs: string): Promise<BackupVerifyResult>
   const cached = verifyCache.get(key);
   if (cached) return cached;
 
+  if (await isEncryptedBackup(abs)) {
+    let v: BackupVerifyResult = "encrypted";
+    try {
+      await inspectEncrypted(abs);
+    } catch {
+      v = "corrupt";
+    }
+    verifyCache.set(key, v);
+    return v;
+  }
+  const verdict = await listToc(abs);
+  // "unknown" cache'lenmez: geçici bir sorun (timeout/PATH) kalıcı hâle gelmesin.
+  if (verdict !== "unknown") verifyCache.set(key, verdict);
+  return verdict;
+}
+
+/** `pg_restore --list` — önbelleksiz; geçici çözülmüş kopyalar da bundan geçer. */
+export async function verifyDumpUncached(abs: string): Promise<BackupVerifyResult> {
+  return listToc(abs);
+}
+
+async function listToc(abs: string): Promise<BackupVerifyResult> {
   const conn = parseDatabaseUrl();
   const result = await Promise.race([
     runTool(pgTool("pg_restore"), ["--list", abs], conn?.password ?? ""),
@@ -144,9 +186,53 @@ export async function verifyBackupFile(abs: string): Promise<BackupVerifyResult>
   } else {
     verdict = result.code === 0 ? "ok" : "corrupt";
   }
-  // "unknown" cache'lenmez: geçici bir sorun (timeout/PATH) kalıcı hâle gelmesin.
-  if (verdict !== "unknown") verifyCache.set(key, verdict);
   return verdict;
+}
+
+/**
+ * Şifreli yedeği GEÇİCİ olarak çözer (`<ad>.dump.coz-<rastgele>.part`, aynı klasör),
+ * `fn`'i koşturur ve kopyayı HER durumda siler. Düz kopya `.part` ile bittiği için
+ * hiçbir liste/süpürücü onu yedek saymaz; süreç ölürse `.part` budaması temizler.
+ */
+export async function withDecryptedCopy<T>(
+  abs: string,
+  identity: KeyObject,
+  fn: (plainPath: string) => Promise<T>,
+): Promise<T> {
+  const tag = crypto.randomBytes(4).toString("hex");
+  const tmp = path.join(path.dirname(abs), decryptedTempName(path.basename(abs), tag));
+  try {
+    await decryptFile(abs, tmp, [identity]);
+    return await fn(tmp);
+  } finally {
+    await fs.promises.rm(tmp, { force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Anahtarla TAM doğrulama: AEAD etiketleri (kurcalama/kesilme) + çözülmüş dökümün
+ * `pg_restore --list`i. `detail` operatöre gösterilecek sebeptir.
+ */
+export async function verifyEncryptedBackupWithKey(
+  abs: string,
+  identity: KeyObject,
+): Promise<{ verdict: BackupVerifyResult; detail: string | null }> {
+  try {
+    const verdict = await withDecryptedCopy(abs, identity, listToc);
+    return {
+      verdict,
+      detail: verdict === "corrupt" ? "Şifre çözüldü ama içindeki döküm okunamıyor (pg_restore --list başarısız)." : null,
+    };
+  } catch (e) {
+    if (isBackupCryptoError(e) && e.code === "YANLIS_ANAHTAR") {
+      return {
+        verdict: "encrypted",
+        detail: "Bu sunucunun yerel anahtarı bu yedeğin alıcısı değil — yedek müşteri ya da Etkili Yazılım anahtarıyla çözülmeli.",
+      };
+    }
+    if (isBackupCryptoError(e)) return { verdict: "corrupt", detail: e.message };
+    return { verdict: "unknown", detail: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 // =============================================================================
@@ -275,12 +361,14 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
   // geçtikten sonra nihai ada alınır (`rename` aynı dizinde atomiktir).
   //
   // `.part` uzantısı her yerde GÖRÜNMEZDİR ve bu tesadüf değil: dosya listeleyen
-  // dört yol da `.dump` ile bitmeyi şart koşuyor (app.ts latestBackupInfo,
-  // rotasyon filtresi, listBackups, resolveBackupPath) — yeni bir yüzey eklerken
-  // aynı şartı koru.
+  // dört yol da `isBackupFileName`den geçiyor (app.ts latestBackupInfo, rotasyon
+  // filtresi, listBackups, resolveBackupPath) — yeni bir yüzey eklerken aynı
+  // yüklemi kullan.
   const partPath = `${out}.part`;
   /** rename başarıyla koştu mu — catch'in doğrulanmış yedeği silmemesi için. */
   let published = false;
+  /** Yayınlanan dosya: düz `out` ya da şifreli `out.tkenc`. */
+  let finalPath = out;
   try {
     await fs.promises.mkdir(BACKUP_DIR, { recursive: true });
     // Önceki bir çöküşten kalan bayat `.part` dosyalarını buda (24 saatten eski).
@@ -330,11 +418,35 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
       );
     }
 
-    // --- 2b) YAYINLA: doğrulanmış dosya nihai adını ALIR (aynı dizinde atomik).
-    // Bu satırdan ÖNCE hiçbir yüzey bu yedeği göremez; bu satırdan SONRA dosya
-    // tam ve doğrulanmıştır. Aradaki "yarım ama taze görünen yedek" penceresi YOK.
-    await fs.promises.rename(partPath, out);
-    published = true;
+    // --- 2b) ŞİFRELE (anahtar dizini yapılandırılmışsa) ve YAYINLA.
+    // Doğrulanmış dosya nihai adını ALIR (aynı dizinde atomik); bu satırlardan ÖNCE
+    // hiçbir yüzey yedeği göremez. Şifreleme açıksa düz döküm nihai ad HİÇ almaz:
+    // `.part` doğrudan şifrelenir. Şifreleme düşerse düz yedek KORUNUR (yedeksiz
+    // kalmaktan iyidir) ama makine dışına çıkmaz ve iş kırmızı biter.
+    const crypt = await readBackupCryptoConfig();
+    let encryptionProblem: string | null = null;
+    if (crypt.state === "acik") {
+      const enc = encryptedBackupName(out);
+      const encPart = `${enc}.part`;
+      try {
+        await fs.promises.rm(encPart, { force: true });
+        await encryptFile(partPath, encPart, crypt.recipients);
+        await inspectEncrypted(encPart);
+        await fs.promises.rename(encPart, enc);
+        finalPath = enc;
+        published = true;
+        await fs.promises.rm(partPath, { force: true });
+      } catch (err) {
+        await fs.promises.rm(encPart, { force: true }).catch(() => {});
+        encryptionProblem = `ŞİFRELENEMEDİ (${err instanceof Error ? err.message : String(err)})`;
+      }
+    } else if (crypt.state === "gecersiz") {
+      encryptionProblem = `ŞİFRELEME YAPILANDIRMASI GEÇERSİZ (${crypt.problems.join(" | ")})`;
+    }
+    if (!published) {
+      await fs.promises.rename(partPath, out);
+      published = true;
+    }
 
     // --- 3) Saklama rotasyonu (GÜN bazlı)
     // Yalnız günlük (tekserp_*) yedekler rotasyona girer; migration öncesi
@@ -343,7 +455,7 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
     const warnings: string[] = [];
     try {
       const names = (await fs.promises.readdir(BACKUP_DIR)).filter(
-        (f) => f.startsWith(NIGHTLY_PREFIX) && f.toLowerCase().endsWith(".dump"),
+        (f) => f.startsWith(NIGHTLY_PREFIX) && isBackupFileName(f),
       );
       const withTime = await Promise.all(
         names.map(async (name) => ({
@@ -365,11 +477,14 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
       warnings.push(`saklama temizliği yapılamadı: ${err instanceof Error ? err.message : err}`);
     }
 
-    // --- 4) Offsite kopya (Y-4)
-    if (OFFSITE_DIR) {
+    // --- 4) Offsite kopya (Y-4) — şifreleme niyeti varken DÜZ döküm makine dışına çıkmaz.
+    const offsiteAllowed = crypt.state === "kapali" || isEncryptedBackupName(finalPath);
+    if (OFFSITE_DIR && !offsiteAllowed) {
+      warnings.push("düz yedek OFFSITE klasörüne KOPYALANMADI (şifreleme yapılandırılmış ama bu yedek şifrelenemedi).");
+    } else if (OFFSITE_DIR) {
       try {
         await fs.promises.mkdir(OFFSITE_DIR, { recursive: true });
-        await fs.promises.copyFile(out, path.join(OFFSITE_DIR, path.basename(out)));
+        await fs.promises.copyFile(finalPath, path.join(OFFSITE_DIR, path.basename(finalPath)));
       } catch (err) {
         // Offsite başarısızlığı yerel yedeği geçersiz kılmaz, ama SESSİZ KALMAZ.
         warnings.push(
@@ -384,7 +499,14 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
     }
 
     const suffix = warnings.length > 0 ? ` UYARI: ${warnings.join(" | ")}` : "";
-    return finish(true, `Yedek alındı ve doğrulandı: ${path.basename(out)}.${suffix}`, out);
+    if (encryptionProblem) {
+      return finish(
+        false,
+        `Yedek alındı ve doğrulandı ama ${encryptionProblem} — düz yedek korundu: ${path.basename(finalPath)}.${suffix}`,
+        finalPath,
+      );
+    }
+    return finish(true, `Yedek alındı ve doğrulandı: ${path.basename(finalPath)}.${suffix}`, finalPath);
   } catch (err) {
     // Yarım dosyayı her hâlükârda temizle (yoksa no-op).
     await fs.promises.rm(partPath, { force: true }).catch(() => {});
@@ -397,7 +519,7 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
       false,
       `Yedek hatası: ${err instanceof Error ? err.message : String(err)}` +
         (published ? " (yedek dosyası ALINDI ve korundu — hata sonraki adımda oluştu)" : ""),
-      published ? out : null,
+      published ? finalPath : null,
     );
   } finally {
     running = false;
@@ -415,7 +537,8 @@ async function sweepStaleParts(): Promise<void> {
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
   try {
     for (const name of await fs.promises.readdir(BACKUP_DIR)) {
-      if (!name.endsWith(".dump.part")) continue;
+      // `.dump.part` (yarım döküm) · `.dump.tkenc.part` (yarım şifreli) · `.coz-*.part` (geçici çözülmüş)
+      if (!name.endsWith(".part") || !name.includes(".dump")) continue;
       const full = path.join(BACKUP_DIR, name);
       const st = await fs.promises.stat(full).catch(() => null);
       if (st && st.mtimeMs < cutoff) await fs.promises.rm(full, { force: true }).catch(() => {});
@@ -470,6 +593,8 @@ export interface BackupFileInfo {
   /** Ön ekten türeyen tür. Ön ek→tür eşlemesi TEK KAYNAKTA (backup-naming.helper)
    *  kalsın diye backend bildirir — panel prefix mantığını KOPYALAMAZ. */
   kind: BackupKind;
+  /** Şifreli yedek (`.tkenc`) — geri yükleme/kopya yedek parolası ister. */
+  encrypted: boolean;
 }
 
 /**
@@ -507,6 +632,8 @@ export interface BackupListing {
    * Bu alan panelin o kumandayı devre dışı bırakması ve sebebini yazması için.
    */
   scheduleEnabled: boolean;
+  /** Yedek şifreleme durumu (anahtar dizini) — anahtar baytı ve parola TAŞIMAZ. */
+  encryption: BackupCryptoSummary;
 }
 
 export async function listBackups(): Promise<BackupListing> {
@@ -524,15 +651,14 @@ export async function listBackups(): Promise<BackupListing> {
     // aynı cümlenin tersidir; iki yerde iki farklı yüklem yazmak, panelin
     // "açık" dediği bir kurulumda zamanlayıcının kapalı olması demekti.
     scheduleEnabled: process.env.BACKUP_SCHEDULE_ENABLED !== "false",
+    encryption: summarizeBackupCrypto(await readBackupCryptoConfig()),
   };
   const dir = BACKUP_DIR;
   if (!dir) return { files: [], backupDir: null, ...base };
   try {
     // F234: async fs — büyük yedek klasöründe readdirSync + per-file statSync
     // istek handler'ını (dolayısıyla event loop'u) bloklamasın.
-    const names = (await fs.promises.readdir(dir)).filter((f) =>
-      f.toLowerCase().endsWith(".dump"),
-    );
+    const names = (await fs.promises.readdir(dir)).filter(isBackupFileName);
     const files = (
       await Promise.all(
         names.map(async (name) => {
@@ -542,6 +668,7 @@ export async function listBackups(): Promise<BackupListing> {
             sizeBytes: st.size,
             time: new Date(st.mtimeMs).toISOString(),
             kind: backupKind(name),
+            encrypted: isEncryptedBackupName(name),
           };
         }),
       )
@@ -552,11 +679,11 @@ export async function listBackups(): Promise<BackupListing> {
   }
 }
 
-/** Güvenli yol: yalnız BACKUP_DIR içindeki bir .dump dosyası; traversal engellenir. */
+/** Güvenli yol: yalnız BACKUP_DIR içindeki bir yedek (.dump / .dump.tkenc); traversal engellenir. */
 export function resolveBackupPath(name: string): string | null {
   if (!BACKUP_DIR) return null;
   const safe = path.basename(name); // dizin bileşenlerini sıyır (../ vb. düşer)
-  if (safe !== name || !/\.dump$/i.test(safe)) return null;
+  if (safe !== name || !isBackupFileName(safe)) return null;
   const root = path.resolve(BACKUP_DIR);
   const abs = path.resolve(root, safe);
   if (abs !== root + path.sep + safe && !abs.startsWith(root + path.sep)) return null;
