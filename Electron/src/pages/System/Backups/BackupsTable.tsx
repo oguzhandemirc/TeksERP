@@ -83,7 +83,10 @@ export function BackupsTable({
                 <TableRow key={f.name}>
                   <TableCell className="font-mono text-xs">{f.name}</TableCell>
                   <TableCell>
-                    <Badge variant={meta.variant}>{meta.label}</Badge>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant={meta.variant}>{meta.label}</Badge>
+                      {f.encrypted && <Badge variant="outline">Şifreli</Badge>}
+                    </div>
                   </TableCell>
                   <TableCell className="tabular-nums">{fmtBytes(f.sizeBytes)}</TableCell>
                   <TableCell className="tabular-nums">

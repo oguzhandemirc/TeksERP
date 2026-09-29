@@ -6,7 +6,8 @@
 // =============================================================================
 
 export type ImpactGroupKey = "production" | "orders" | "subcontract" | "system";
-export type BackupVerifyResult = "ok" | "corrupt" | "unknown";
+/** `encrypted`: şifreli yedek, bu sunucuda açılamadı — bozuk DEĞİL ("şifreli — çöz"). */
+export type BackupVerifyResult = "ok" | "corrupt" | "unknown" | "encrypted";
 
 export interface ImpactRow {
   key: string;
@@ -60,6 +61,16 @@ export interface RestoreImpact {
   verify: BackupVerifyResult;
   /** Geri yükleme öncesi alınacak güvenlik yedeğinin adı — BACKEND üretir. */
   safetyBackup: { fileName: string; absPath: string } | null;
+  /** Şifreleme bilgisi (yollar; anahtar/parola YOK). Eski sunucu göndermez → düz yedek. */
+  encryption?: {
+    state: "kapali" | "acik" | "gecersiz";
+    keyDir: string | null;
+    toolPath: string;
+    fileEncrypted: boolean;
+    decryptedPath: string | null;
+    /** Yedek parolasıyla açılıp içerik doğrulandı mı. */
+    unlocked: boolean;
+  };
   /** Backend çalışma dizini — `prisma migrate deploy` oradan koşar. */
   backendCwd: string;
   pm2AppName: string;

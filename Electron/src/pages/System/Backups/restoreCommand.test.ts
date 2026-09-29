@@ -202,3 +202,68 @@ describe("restoreCommand", () => {
     });
   });
 });
+
+describe("restoreCommand — şifreli yedek (.tkenc)", () => {
+  const ENC_NAME = "tekserp_20260729_030000.dump.tkenc";
+  const encImpact = (over: Record<string, unknown> = {}) =>
+    ({
+      ...IMPACT,
+      file: { ...IMPACT.file, name: ENC_NAME, absPath: `C:\\TeksERP\\backups\\${ENC_NAME}` },
+      encryption: {
+        state: "acik",
+        keyDir: "C:\\TeksERP\\yedek-anahtar",
+        toolPath: "C:\\TeksERP\\app\\dist\\tools\\yedek-sifrele.cjs",
+        fileEncrypted: true,
+        decryptedPath: "C:\\TeksERP\\backups\\tekserp_20260729_030000.dump.coz-elle.part",
+        unlocked: true,
+        ...over,
+      },
+    }) as unknown as RestoreImpact;
+  const cmd = restoreCommand(LISTING, ENC_NAME, encImpact())!;
+  const code = cmd.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#"));
+
+  it("çözme adımı güvenlik yedeğinden SONRA, geri yüklemeden ÖNCE ve $ok guard'ında", () => {
+    const safeIdx = code.findIndex((l) => l.includes('pg_restore --list "$safe"'));
+    const cozIdx = code.findIndex((l) => l.includes(" coz --girdi "));
+    const restoreIdx = code.findIndex((l) => l.includes("--clean --if-exists"));
+    expect(cozIdx).toBeGreaterThan(safeIdx);
+    expect(restoreIdx).toBeGreaterThan(cozIdx);
+    expect(code[cozIdx]!.startsWith("if ($ok) { node ")).toBe(true);
+  });
+
+  it("KRİTİK: pg_restore ŞİFRELİ dosyayı değil çözülmüş kopyayı okur", () => {
+    const restore = code.find((l) => l.includes("--clean --if-exists"))!;
+    expect(restore).toContain('"$plain"');
+    expect(restore).not.toContain(".tkenc");
+  });
+
+  it("KRİTİK: parola bloğa GİRMEZ — araç onu pencerede sorar", () => {
+    expect(cmd).not.toMatch(/--parola|X-Backup-Password/i);
+  });
+
+  it("çözme başarısızsa $ok düşer (geri yükleme yapılmaz)", () => {
+    expect(cmd).toContain('$ok = $ok -and ($LASTEXITCODE -eq 0) -and (Test-Path "$plain")');
+  });
+
+  it("çözülmüş kopya KOŞULSUZ silinir ve pm2 start yine en sonda", () => {
+    const rm = code.find((l) => l.startsWith('Remove-Item "$plain"'));
+    expect(rm).toBeDefined();
+    expect(code[code.length - 1]).toBe("pm2 start teks-erp-backend");
+  });
+
+  it("şifreleme açıksa güvenlik yedeği de şifrelenir (--duzu-sil)", () => {
+    expect(cmd).toContain('sifrele --girdi "$safe"');
+    expect(cmd).toContain("--duzu-sil");
+  });
+
+  it("anahtar dizini ya da çözme yolu yoksa komut ÜRETİLMEZ (fail-closed)", () => {
+    expect(restoreCommand(LISTING, ENC_NAME, encImpact({ keyDir: null }))).toBeNull();
+    expect(restoreCommand(LISTING, ENC_NAME, encImpact({ decryptedPath: null }))).toBeNull();
+  });
+
+  it("düz yedekte (eski sunucu: encryption alanı yok) blok değişmez", () => {
+    const plain = restoreCommand(LISTING, NAME, IMPACT)!;
+    expect(plain).not.toContain("$plain");
+    expect(plain).not.toContain("yedek-sifrele");
+  });
+});

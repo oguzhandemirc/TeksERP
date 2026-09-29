@@ -1,4 +1,5 @@
 import apiClient from "@/services/apiClient";
+import { backupPasswordHeaders } from "@/lib/backup-password";
 import type { DbCopyListing, SwapCommands, VerificationReport } from "./types";
 
 /** React-query anahtarı — hook'lar ve invalidate eden yüzeyler tek kaynaktan okur. */
@@ -18,13 +19,15 @@ export async function fetchDbCopies(): Promise<DbCopyListing> {
   return res.data.data;
 }
 
-export async function startCopy(
-  backupName: string,
-): Promise<{ success: boolean; message: string; copyName?: string }> {
+/** Şifreli yedekte `password` yalnız `X-Backup-Password` başlığında gider (gövdeye girmez). */
+export async function startCopy(input: {
+  backupName: string;
+  password?: string | null;
+}): Promise<{ success: boolean; message: string; copyName?: string }> {
   const res = await apiClient.post<{ success: boolean; message: string; copyName?: string }>(
     "/api/admin/db-copies",
-    { backupName },
-    { suppressErrorToast: true },
+    { backupName: input.backupName },
+    { suppressErrorToast: true, headers: backupPasswordHeaders(input.password) },
   );
   return res.data;
 }
