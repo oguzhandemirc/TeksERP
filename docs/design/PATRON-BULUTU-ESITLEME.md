@@ -549,6 +549,11 @@ Plan P1–P16 aynen geçerlidir. Bu tasarımın ölçtüğü yeni riskler için 
 - **S11 — bulut deposu genel `projection_rows` + ifade indeksleri** (tip başına tablo değil) — N−1 esnekliği ve tek politika.
 - **S12 — `sync_marks` telemetri sınıfı**, budanır; `test_telemetri_defter_degil` beyanına girer.
 
+- **S13 — `cloud_inbox_receipts` sınıfı `DURUM`** (§8.3 "DEFTER" demişti): makbuz tek kullanımlık tüketim kaydıdır; iş sonucu ve ters yolu varlığın kendi defterindedir (sipariş iptali · kart arşivi) — `defter-beyan.ts`te beyanlı. Makbuz yine silinmez, güncellenmez.
+- **S14 — tel şemasında `SIPARIS.aciklama` ve `CARI.vergiDairesi` YOK** (§8.5): fabrikanın yaratma yolunda karşılık gelen yazılabilir alan yok; alan doğarsa eşlemeye girer (`test_bulut_gelen_kutusu` §1).
+- **S15 — sipariş aktörü `createdById`de değil** (§8.4): sipariş doğuş yolu `createdById` yazmıyor (panel siparişleri de NULL — ölçüldü); aktör audit `userId`i ve makbuzdur. Cari kartta `createdById` = teknik kullanıcı.
+- **S16 — teknik kullanıcı reddi kodda** (§8.4 "giriş yöntemi yok"): `issueToken` teknik kullanıcıya token üretmez (parolası sıfırlansa bile); bulut hesap listesi imzalı `POST /v1/hesaplar {v:1}` ile her turda çekilir ve süreç belleğinde tutulur (B2 ucu bu sözleşmeyle yazılır).
+
 ## 15. Ölçüm betikleri (bu dilimin çıktısı)
 
 | Betik | DB | Ne ölçer | Çıkış |

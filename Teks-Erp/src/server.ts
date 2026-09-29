@@ -19,6 +19,7 @@ import { startShiftCalendarScheduler } from './jobs/shift-calendar.job';
 import { startShiftCloseScheduler } from './jobs/machine-shift-close.job';
 import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
+import { startCloudInbox, stopCloudInbox } from './jobs/cloud-inbox.job';
 import { initLicenseEngine } from './services/license.service';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
@@ -231,6 +232,7 @@ const server = app.listen(Number(PORT), HOST, () => {
     // (`LICENSE_SERVER_URL=kapali`) DIŞARI HİÇ İSTEK ATILMAZ; motor gözlem kipinde (hiçbir istek engellenmez).
     startLicensePoll();
     startLicenseDoorbell();
+    startCloudInbox();
 
     void AuditService.logEvent({
         category: "SYSTEM",
@@ -308,6 +310,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     shutdownPhase = "lisans";
     try {
         stopLicenseDoorbell();
+        stopCloudInbox();
         stopLicensePoll();
     } catch (err) {
         uyari("shutdown", "lisans kapanışı tamamlanamadı", err);

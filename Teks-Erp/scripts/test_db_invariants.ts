@@ -600,6 +600,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // İki ayak: MACHINE_STOP ise `stopLossClass` NOT NULL ve <> 'MINOR' (MINOR bir
   // SÜRE sınıfıdır, sebep sınıfı değil). Katalog + job + bu CHECK aynı commit'te.
   { table: "reason_presets", name: "reason_presets_machine_class_chk" },
+  // Patron bulutu gelen kutusu makbuzu (B3) — çift yüklem: ISLENDI ⇔ entityId dolu.
+  { table: "cloud_inbox_receipts", name: "cloud_inbox_receipts_outcome_entity_chk" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedQty_pos" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedWeight_nonneg" },
   { table: "kartela_dispatch_items", name: "kartela_dispatch_items_dispatchedQty_pos" },

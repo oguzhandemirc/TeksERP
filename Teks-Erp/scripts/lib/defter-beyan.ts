@@ -523,6 +523,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
 
   // ── DURUM ──────────────────────────────────────────────────────────────────
   { model: "UserRecoveryCode", sinif: "DURUM", gerekce: "tek kullanımlık kurtarma kodu; tüketimi `usedAt` ile işaretlenir, defter değil" },
+  { model: "CloudInboxReceipt", sinif: "DURUM",
+    gerekce: "patron bulutu mesajının TEK KULLANIMLIK tüketim kaydı (idempotency makbuzu): iş sonucu varlığın KENDİ defterinde (sipariş/cari), ters yolu da onun ters yoludur (sipariş iptali · kart arşivi); makbuz silinmez, güncellenmez, geri alınmaz — silinse raporlanan sayı değişmez ama aynı mesaj ikinci varlık doğururdu" },
 ];
 
 // =============================================================================

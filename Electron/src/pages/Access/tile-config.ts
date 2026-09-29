@@ -1,4 +1,4 @@
-import { Users2, Layers, BookOpen, Tablet, ShieldCheck, Cpu, type LucideIcon } from "lucide-react";
+import { Users2, Layers, BookOpen, Tablet, ShieldCheck, Cpu, CloudCog, type LucideIcon } from "lucide-react";
 
 /** Yetkilendirme = "sisteme kim/ne girebilir": insanlar (kullanıcı erişimi) +
  *  saha tabletleri (cihaz erişimi). İki grup ayrı başlık altında sunulur. */
@@ -58,6 +58,15 @@ export const accessTiles: AccessTile[] = [
     description: "Sistemdeki tüm yetkilerin referans listesi",
     icon: BookOpen,
     to: "/access/permissions",
+    group: "user",
+  },
+  {
+    // Bulut hesapları bulutta yönetilir; burada teknik kullanıcı doğar ve hesaplar salt okunur görünür.
+    key: "patron-bulut",
+    title: "Patron Bulutu",
+    description: "Buluttan gelen sipariş/cari kaydının kullanıcısı ve bulut hesapları",
+    icon: CloudCog,
+    to: "/access/patron-bulut",
     group: "user",
   },
   {

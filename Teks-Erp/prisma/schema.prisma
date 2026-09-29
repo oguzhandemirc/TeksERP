@@ -10580,3 +10580,39 @@ model StockCountLine {
   @@index([itemId])
   @@map("stock_count_lines")
 }
+
+/// Patron bulutu gelen kutusu kaydının türü (bulut tel değeri; `PATRON-BULUTU-ESITLEME.md` §8).
+enum CloudInboxKind {
+  SIPARIS
+  CARI
+}
+
+/// Fabrikanın bir bulut mesajına verdiği KESİN sonuç. Belirsiz hata (5xx/ağ) makbuz doğurmaz.
+enum CloudInboxOutcome {
+  ISLENDI
+  REDDEDILDI
+}
+
+/// Patron bulutu GELEN KUTUSU MAKBUZU — hangi bulut mesajının hangi varlığı doğurduğunun ya da neden
+/// reddedildiğinin TEK kaydı. Ekleme-yalnız DEFTER (güncellenmez, silinmez; `updatedAt` yok). Varlık
+/// (sipariş / cari kart) ile AYNI tx'te yazılır: tekrar gelen mesaj iş kuralını yeniden koşmaz, cevabı
+/// buradan alır. Order/Customer'a kaynak kolonu EKLENMEZ (yeni skaler = yeni yazılabilir alan tuzağı).
+model CloudInboxReceipt {
+  id               String            @id @default(uuid()) @db.Uuid
+  /// Bulut mesaj kimliği (istemci mantıksal deneme başına bir kez üretir) — idempotency anahtarı.
+  messageId        String            @unique @db.Uuid
+  kind             CloudInboxKind
+  outcome          CloudInboxOutcome
+  /// ISLENDI'de doğan sipariş/cari kart kimliği; REDDEDILDI'de NULL (CHECK ile çift yüklem).
+  entityId         String?           @db.Uuid
+  /// Kaydı yazan bulut hesabı (fabrika kullanıcısı DEĞİL; aktör teknik kullanıcıdır).
+  cloudAccountId   String            @db.Uuid
+  cloudAccountName String            @db.VarChar(200)
+  /// Gövdenin kanonik sha256'sı (hex) — aynı mesajId başka gövdeyle gelirse çakışma.
+  payloadDigest    String            @db.VarChar(64)
+  /// Buluta bildirilen sonuç: `{ varlikId, belgeNo, kod, mesaj }`.
+  result           Json
+  createdAt        DateTime          @default(now()) @db.Timestamptz
+
+  @@map("cloud_inbox_receipts")
+}

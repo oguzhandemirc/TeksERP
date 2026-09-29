@@ -61,6 +61,15 @@
 - **[ÇEKİRDEK]** Bir kez gösterilen sır (etkinleştirme kodu · TOTP sırrı/QR) yalnız canlı yanıtta ve bileşen durumunda yaşar — önbelleğe, web deposuna, URL'ye yazılmaz; tekrar yanıtında "gösterilemez" denir. TOTP kurulumu hesabı açan/sıfırlayan yöneticinin ekranındadır (TOTP'siz oturum olmadığından ilk girişte kurulum akışı YOK), kurtarma kodu yoktur. · bekçi: `satici/web src/test/once-secret.test.tsx` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Arayüzün sunucudan kopyaladığı her bilgi (izin tablosu, ağır K3 eşiği, tavan sınırları, kanal/sürüm desenleri, çağrılan her uç) ayna bekçisiyle sunucu KAYNAĞINA karşı ölçülür; arayüz yalnız gizler, kararı sunucu verir. · bekçi: `satici/web src/test/mirrors.test.ts` <sub>(arşiv:2026-09-29)</sub>
 
+## Patron bulutu — gelen kutusu (fabrika tarafı)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Bulut hiçbir fabrika satırını doğrudan yazmaz: gelen kutusu kaydı fabrikada NORMAL servis yolundan geçer (sipariş `prepareOrderCreate` + `insertPreparedOrderTx`, `clientToken = mesajId`; cari `prepareCardCreate` + `createCardInTx`, kod fabrikada doğar); tel → fabrika anahtar eşlemesi tek yerdedir (`cloud-sync/inbox-wire.ts`) ve hedefleri yazılabilir kümelerin içinde kalır. · bekçi: `test_bulut_gelen_kutusu (§1 eşleme · §6 sipariş)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Gelen kutusu idempotency'si makbuzdadır: varlık ile `CloudInboxReceipt` AYNI tx'te yazılır, 8036 token kilidi mesajId üzerinde tx'in ilk ifadesidir; aynı mesaj tekrar gelirse iş kuralı koşmaz, cevap makbuzdan döner; kesin ret de makbuz yazar, belirsiz hata (5xx/ağ/DB) yazmaz; Order/Customer'a kaynak kolonu eklenmez (kaynak makbuzda ve audit yükünde). · bekçi: `test_bulut_gelen_kutusu (§3 tekrar · §4 aynı tx · §5 ret · §7 çakışma)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Patron bulutu teknik kullanıcısının giriş yöntemi YOKTUR: izinleri yalnız `order:write` + `customer:write`, kimliği ayrılmış ayar anahtarında (`patronBulutu.teknikKullaniciId`; `User`a işaret kolonu yok); tek token üreticisi (`issueToken`) onu parolası bilinse de reddeder ve kimliksiz `mobile-users` listesinden beyanlı hariçtir. · bekçi: `test_bulut_gelen_kutusu (§2 · §9)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Gelen kutusu işi fail-closed ön koşulla çalışır (HAK `URETIM` ∧ `patron-bulut` ∧ kira `patronBulutBitis` > şimdi ∧ devredilmemiş ∧ aralık tanımlı; ayrıca bulut adresi ve teknik kullanıcı) — biri eksikse HİÇ dış istek atılmaz; `zorla`da uygulanan kademe sipariş/cari yazmasını kapatıyorsa `al` çağrılmaz ve kayıt bulutta BEKLIYOR kalır. · bekçi: `test_bulut_gelen_kutusu (§10)` <sub>(arşiv:2026-09-29)</sub>
+
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
 - **KISMI** `docs/design/LISANS-PROTOKOLU.md §6 (f4 = birincil fiziksel ağ kartının MAC'i)` → `R:2026-09-29 yönetici kararı (F3/F4)`: F4 sistem/anakart seri numarasıdır, MAC kullanılmaz; F3 RAID genel serisi ölçülemedi. Kod henüz eski hâlde (borç, yukarıda Yasaklar).
@@ -73,7 +82,7 @@ Fabrika tarafı: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## lisans` bölümü.**
 
-Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`
+Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_bulut_gelen_kutusu`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`
 
 Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koşar): `mirrors.test.ts`, `sanction.test.tsx`, `once-secret.test.tsx`, `login.test.tsx`, `app-isolation.test.ts`
 
@@ -93,3 +102,4 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-29 · Portal web (1f): aynı kökenden statik servis, TOTP kurulumu yöneticide, ayna bekçisi, commit kapısının beşinci projesi
 - 2026-09-29 · Senaryo L (lisans uçtan uca) koşucusu; kira alışverişleri süreç içinde sıralı
 - 2026-09-29 · Hazırlık kökü çapada, satıcı adresi varsayılanı, satıcının VDS kurulum tasarımı
+- 2026-09-29 · Patron bulutu gelen kutusu (B3): makbuz aynı tx, teknik kullanıcı girişsiz, sipariş aktörü audit'te

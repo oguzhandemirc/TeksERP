@@ -65,6 +65,13 @@ export const PROFILE_STAMP_SETTING_KEY = "system.profile";
 export const INSTALLATION_ID_SETTING_KEY = "system.installationId";
 
 /**
+ * Patron bulutu TEKNİK KULLANICISININ kimliği (`services/patron-cloud.service.ts` yazar, "Patron bulutunu
+ * etkinleştir" eylemi). KAYIT, AYAR DEĞİL: ham ayar ucundan yazılabilseydi `admin:settings` taşıyan biri bulut
+ * yazmalarının aktörünü istediği hesaba çevirebilirdi. `User`a işaret kolonu eklenmez; okuması serbest.
+ */
+export const PATRON_CLOUD_USER_SETTING_KEY = "patronBulutu.teknikKullaniciId";
+
+/**
  * `PUT /api/admin/settings/:key` ucunun REDDETTİĞİ anahtarlar.
  *
  * Kümeye ek olarak ön ek kuralı da uygulanır (`isReservedSettingKey`) — küme
@@ -75,6 +82,7 @@ export const RESERVED_SETTING_KEYS: ReadonlySet<string> = new Set([
   SETTINGS_PASSWORD_HASH_KEY,
   PROFILE_STAMP_SETTING_KEY,
   INSTALLATION_ID_SETTING_KEY,
+  PATRON_CLOUD_USER_SETTING_KEY,
 ]);
 
 /** `security.` ile başlıyor mu — liste/dışa-aktarım süzgeçlerinin yüklemi. */

@@ -44,7 +44,7 @@ import { nextSeriesNo, resolveSeriesFormat } from "./number-series.service";
 // manualClosedById, orderNumber, orderId) istemciden YAZILAMAZ. Statü
 // geçişleri yalnız özel endpoint'lerden (cancel, manual-close) ve
 // recomputeOrderStatusTx'tan akar (şemadaki "tek yazma noktası" notları).
-const ORDER_HEADER_WRITABLE = new Set([
+export const ORDER_HEADER_WRITABLE: ReadonlySet<string> = new Set([
   "customerId",
   "branchId",
   "currency",
@@ -52,7 +52,7 @@ const ORDER_HEADER_WRITABLE = new Set([
   "deadline",
   "orderDate",
 ]);
-const ORDER_LINE_WRITABLE = new Set([
+export const ORDER_LINE_WRITABLE: ReadonlySet<string> = new Set([
   "itemId",
   "colorId",
   "quantity",
@@ -310,7 +310,7 @@ export interface OrderShipmentsResult {
 
 /** Kart kullanım uyarılarını (ör. "Tükenene kadar" A2) yanıtın `warnings`ine ekler. */
 /** `create`in tx dışı yarısının çıktısı — hızlı sipariş aynı kapılardan geçip kendi tx'inde yazsın diye. */
-interface PreparedOrderCreate {
+export interface PreparedOrderCreate {
   prismaData: Record<string, unknown>;
   lineCheck: { checks: ItemUsageCheck[]; warnings: string[] };
   destination: Awaited<ReturnType<typeof resolveShipmentDestination>>["destination"];
@@ -2038,38 +2038,48 @@ export class OrderService extends BaseService {
     return this.orderReplay(data).run(clientToken, async () => {
       const prepared = await this.prepareOrderCreate(data, clientToken);
       const record = await this.insertPreparedOrder(prepared);
-      const orderNumber = record.orderNumber as string;
-
-      await AuditService.log({
-        userId,
-        action: "CREATE",
-        tableName: this.config.tableName,
-        recordId: record.id as string,
-        newData: { ...data, orderNumber },
-      });
-
-      // Müşteriye-özel ad terfisi: girilen customerItemName/customerColorName,
-      // master alias yoksa kalıcı kaydedilir (sonraki siparişte otomatik gelir).
-      await this.promoteCustomerAliases(
-        data.customerId as string | undefined,
-        Array.isArray(data.lines)
-          ? (data.lines as Array<Record<string, unknown>>)
-          : null,
-        userId
-      );
-
-      return withExtraWarnings(
-        this.withUnitWarnings({ success: true, data: record, message: "Sipariş oluşturuldu" }),
-        prepared.lineCheck.warnings,
-      );
+      return this.finishOrderCreate(record, data, prepared, { userId });
     });
   }
 
   /**
-   * Sipariş doğuşunun tx DIŞI yarısı: doğrulamalar, varsayılanlar, whitelist'li gövde, donmuş yön ve elle numara
-   * kapısı. Yazmaz; `create` ve hızlı sipariş aynı kapılardan geçsin diye tek yerde.
+   * Doğuşun commit SONRASI yarısı (tek yol: uç + patron bulutu gelen kutusu): audit, müşteriye-özel ad terfisi
+   * (girilen customerItemName/customerColorName master alias yoksa kalıcı kaydedilir), birim uyarıları.
+   * `auditExtra` kaynak künyesidir (ör. `kaynak: "PATRON_BULUTU"`); iş verisi değil, ayak izi.
    */
-  private async prepareOrderCreate(
+  async finishOrderCreate(
+    record: Record<string, unknown>,
+    data: Record<string, unknown>,
+    prepared: PreparedOrderCreate,
+    actor: { userId: string | undefined; auditExtra?: Record<string, unknown> },
+  ): Promise<ApiResponse<unknown>> {
+    const { userId, auditExtra } = actor;
+    const orderNumber = record.orderNumber as string;
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: this.config.tableName,
+      recordId: record.id as string,
+      newData: { ...data, orderNumber, ...(auditExtra ?? {}) },
+    });
+    await this.promoteCustomerAliases(
+      data.customerId as string | undefined,
+      Array.isArray(data.lines)
+        ? (data.lines as Array<Record<string, unknown>>)
+        : null,
+      userId
+    );
+    return withExtraWarnings(
+      this.withUnitWarnings({ success: true, data: record, message: "Sipariş oluşturuldu" }),
+      prepared.lineCheck.warnings,
+    );
+  }
+
+  /**
+   * Sipariş doğuşunun tx DIŞI yarısı: doğrulamalar, varsayılanlar, whitelist'li gövde, donmuş yön ve elle numara
+   * kapısı. Yazmaz; `create`, hızlı sipariş ve patron bulutu gelen kutusu aynı kapılardan geçsin diye tek yerde.
+   */
+  async prepareOrderCreate(
     data: Record<string, unknown>,
     clientToken: string | null,
     /** Yalnız hızlı sipariş: satırlar okutulan toplardan doğdu — gövdeden GELMEZ. */
@@ -2221,13 +2231,19 @@ export class OrderService extends BaseService {
           throw AppError.conflict(`'${p.manualOrderNumber}' numaralı sipariş zaten var`);
         }
       }
-      const orderNumber = p.manualOrderNumber ?? (await this.nextOrderNumber(prisma, p));
-      // Kart kilitleri tx'in İLK ifadeleri (8030 SHARED → FOR SHARE): eşzamanlı "Pasif'e geç" satırı görür.
-      return prisma.$transaction(async (tx) => {
-        await runItemUsageChecksTx(tx, p.lineCheck.checks);
-        return this.insertOrderTx(tx, p, orderNumber);
-      });
+      return prisma.$transaction((tx) => this.insertPreparedOrderTx(tx, p));
     }, undefined, (err) => !isClientTokenP2002(err)) as Promise<Record<string, unknown>>;
+  }
+
+  /**
+   * TX-ALAN DİKİŞ: `prepareOrderCreate`ten geçmiş gövde VERİLEN tx'te yazılır. Kart kilitleri (8030 SHARED → FOR
+   * SHARE) bu dikişin ilk ifadeleridir; 8036 token kilidi alınıyorsa ÇAĞIRANIN tx'inde ondan ÖNCE gelir (hızlı
+   * sipariş ile aynı sıra). Sıra no kilitlerin ARKASINDA okunur; çakışmayı çağıranın `withBarcodeRetry`si çözer.
+   */
+  async insertPreparedOrderTx(tx: Prisma.TransactionClient, p: PreparedOrderCreate): Promise<Record<string, unknown>> {
+    await runItemUsageChecksTx(tx, p.lineCheck.checks);
+    const orderNumber = p.manualOrderNumber ?? (await this.nextOrderNumber(tx, p));
+    return this.insertOrderTx(tx, p, orderNumber);
   }
 
   /**

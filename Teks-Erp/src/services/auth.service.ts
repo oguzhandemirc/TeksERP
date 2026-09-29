@@ -5,6 +5,7 @@
 import prisma from "../lib/prisma";
 import { Prisma, ClientType } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { readPatronCloudUserId } from "./helpers/patron-cloud-user.helper";
 import jwt from "jsonwebtoken";
 import { randomBytes, randomInt, randomUUID } from "crypto";
 import { JwtPayload } from "../types/api.types";
@@ -364,6 +365,11 @@ export class AuthService {
     },
     ctx?: LoginContext
   ): Promise<{ token: string; user: JwtPayload }> {
+    // Patron bulutu teknik kullanıcısının GİRİŞ YÖNTEMİ YOKTUR: parolası panelden sıfırlansa ya da PIN/kart verilse
+    // bile oturum açılmaz (tek token üreticisi burası; mesaj genel — hesabın varlığını doğrulamaz).
+    if (user.id === (await readPatronCloudUserId())) {
+      throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
+    }
     const permissions = await this.getEffectivePermissions(user.id);
 
     // Masaüstü (Electron VE web paneli) girişi: kullanıcının en az bir MASAÜSTÜ
@@ -521,6 +527,9 @@ export class AuthService {
     // F55: getEffectivePermissions ile aynı geçerlilik penceresi — süresi geçmiş/henüz
     // başlamamış mobil izin sahibi listede görünüp login olup 403 (boş izin) almasın.
     const now = new Date();
+    // BEYANLI HARİÇ: patron bulutu teknik kullanıcısı (giriş yöntemi yok) kimliksiz listede görünmez — bugün mobil izni
+    // taşımadığı için zaten düşer; ama kural "izni yok" değil "teknik hesap" (bekçi `test_bulut_gelen_kutusu`).
+    const patronCloudUserId = await readPatronCloudUserId();
     return prisma.user.findMany({
       // Satıcı hesabı tablet giriş listesinde GÖRÜNMEZ. Bugün zaten görünmezdi
       // (mobil GRANT satırı doğmuyor, `["*"]` koddan geliyor) — ama kural
@@ -528,6 +537,7 @@ export class AuthService {
       // izin verilse liste anında sızardı.
       where: ({
         isActive: true,
+        ...(patronCloudUserId ? { NOT: { id: patronCloudUserId } } : {}),
         permissions: {
           some: {
             AND: [
