@@ -5,18 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { licenseService } from "@/services/licenseService";
 import { copyText } from "@/lib/clipboard";
+import { offlineRequestQrValues } from "@/lib/license/offline-qr";
 import type { LicenseDetail, LicenseOfflineRequest } from "@/types/license";
 import { InfoRow, LicenseCard, when } from "./LicenseParts";
 import { useLicenseAction } from "./hooks";
 
 /**
- * TAM ÇEVRİMDIŞI yol: sunucu da bu bilgisayar da internete çıkamıyorsa istek
- * QR ile telefona taşınır; telefonun gösterdiği yanıt metni buraya yapıştırılır.
- * İstek 10 dakika geçerlidir (imzalı zaman damgası).
+ * TAM ÇEVRİMDIŞI yol: sunucu da bu bilgisayar da internete çıkamıyorsa istek QR ile telefona
+ * taşınır; telefonun gösterdiği yanıt tablette QR'la okutulur ya da metni buraya yapıştırılır.
+ * Büyük istek sıralı QR parçalarına bölünür (`offlineRequestQrValues`). İstek 10 dk geçerlidir.
  */
-/** QR sürüm 40, düzeltme L — ikili kip kapasitesi ≈ 2953 bayt; sığmayan istek metinle taşınır. */
-const QR_MAX_CHARS = 2900;
-
 export function LicenseOfflineCard({ d }: { d: LicenseDetail }) {
   const [req, setReq] = useState<LicenseOfflineRequest | null>(null);
   const [kod, setKod] = useState("");
@@ -35,8 +33,8 @@ export function LicenseOfflineCard({ d }: { d: LicenseDetail }) {
       setReq(null);
       return "Yanıt kabul edildi.";
     });
-  const qrValue = req?.qrAdresi ?? req?.zarf ?? "";
-  const fits = qrValue.length <= QR_MAX_CHARS;
+  const copyValue = req?.qrAdresi ?? req?.zarf ?? "";
+  const qrValues = req ? offlineRequestQrValues(req.qrAdresi) : null;
   return (
     <LicenseCard title="Çevrimdışı (QR)">
       <div className="flex flex-wrap gap-2">
@@ -49,19 +47,17 @@ export function LicenseOfflineCard({ d }: { d: LicenseDetail }) {
       </div>
       {req && (
         <div className="flex flex-wrap items-start gap-4 rounded-md border p-3">
-          {fits && (
-            <div className="rounded bg-white p-2">
-              <QRCodeSVG value={qrValue} size={180} level="L" />
-            </div>
-          )}
+          {qrValues && <RequestQrSequence key={req.zarf} values={qrValues} />}
           <div className="min-w-0 flex-1 space-y-1 text-xs">
             <InfoRow label="Geçerlilik">{when(req.gecerlilikSonu)} saatine kadar</InfoRow>
             <p className="text-muted-foreground">
-              {fits
-                ? "Telefonla okutun; açılan sayfa yanıt metnini gösterir. O metni aşağıya yapıştırın."
-                : "İstek QR koduna sığmıyor; metni kopyalayıp lisans sunucusunun QR sayfasına taşıyın."}
+              {!qrValues
+                ? "İstek QR koduna sığmıyor; metni kopyalayıp telefona gönderin ve tarayıcıda açın."
+                : qrValues.length > 1
+                  ? "QR'ları telefonla SIRAYLA okutun; son parçada telefon yanıtı QR olarak gösterir. Yanıtı tabletten (Ayarlar → Lisans) okutun ya da metnini aşağıya yapıştırın."
+                  : "Telefonla okutun; açılan sayfa yanıtı QR olarak gösterir. Yanıtı tabletten (Ayarlar → Lisans) okutun ya da metnini aşağıya yapıştırın."}
             </p>
-            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => void copyText(qrValue)}>
+            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => void copyText(copyValue)}>
               İstek metnini kopyala
             </Button>
           </div>
@@ -81,5 +77,31 @@ export function LicenseOfflineCard({ d }: { d: LicenseDetail }) {
         </Button>
       </div>
     </LicenseCard>
+  );
+}
+
+/** Çok parçalı istek: parçalar sırayla — telefon her QR'da sayfayı açar, parçaları kendisi biriktirir. */
+function RequestQrSequence({ values }: { values: string[] }) {
+  const [i, setI] = useState(0);
+  const step = (d: number) => setI((cur) => (cur + d + values.length) % values.length);
+  return (
+    <div className="flex flex-col items-center gap-1.5" data-testid="lisans-istek-qr">
+      <div className="rounded bg-white p-2">
+        <QRCodeSVG value={values[i] ?? ""} size={220} level="L" />
+      </div>
+      {values.length > 1 && (
+        <div className="flex items-center gap-2 text-xs">
+          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => step(-1)} aria-label="Önceki QR">
+            ‹
+          </Button>
+          <span className="font-medium tabular-nums" data-testid="lisans-istek-qr-sira">
+            QR {i + 1} / {values.length}
+          </span>
+          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => step(1)} aria-label="Sonraki QR">
+            ›
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

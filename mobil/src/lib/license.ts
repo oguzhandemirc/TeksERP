@@ -8,6 +8,8 @@
 // bakılır — gözlemde tablet HİÇBİR ŞEY çizmez (sıfır fark).
 // =============================================================================
 
+import { addQrPart, isQrPart, type QrPartState } from './qr-parca';
+
 export type LicenseTier = 'NORMAL' | 'UYARI' | 'EK_SURE' | 'KISITLI' | 'DURDURULMUS';
 export type LicenseMode = 'gozlem' | 'zorla';
 export type LicenseClass = 'URETIM' | 'TEST' | 'DR' | 'DEMO' | 'BAYI' | 'BARINDIRILAN';
@@ -99,6 +101,17 @@ export function isLicenseBlocked(err: unknown): boolean {
 }
 
 /**
+ * Interceptor bu lisans reddini operatöre ZATEN söyledi mi (kısıtlı kip / modül uyarısı ya da K5 tam
+ * ekranı)? Ekranın kendi hata toast'ı onu EZERDİ (tek toast görünür) — ortak yardımcı `showScreenError`
+ * bununla susar. Kimliksiz `LICENSE_GATE` ayrıntısızdır ve toast üretmez: onda ekranın hatası kalır.
+ */
+export function isLicenseNotified(err: unknown): boolean {
+  const e = err as { status?: number; details?: unknown } | null;
+  const block = classifyLicenseError(e?.status, e?.details);
+  return block !== null && block.kind !== 'gate';
+}
+
+/**
  * Global uyarı metni. `suspended` tam ekranla, `gate` (kimliksiz istek — ayrıntı
  * bilinçli olarak yok) çağıranın kendi hata yoluyla karşılanır: ikisi de toast üretmez.
  */
@@ -177,4 +190,48 @@ export function normalizeScannedResponse(raw: string): string | null {
   if (text.length < 10 || text.length > MAX_RESPONSE_CHARS) return null;
   if (text.startsWith('{')) return text.endsWith('}') ? text : null;
   return BASE64URL.test(text) ? text : null;
+}
+
+/**
+ * Giriş öncesi K5: `login-methods.lisansDurduruldu` yalnız BU açılışta sunucudan TAZE okunmuşsa
+ * geçerlidir — diskteki dünkü değer bugün tableti kilitlemez (durum sorgusunun persist edilmeme
+ * gerekçesiyle aynı). Eski backend alanı göndermez → false.
+ */
+export function isLoginSuspended(methods: { lisansDurduruldu?: unknown } | undefined, fresh: boolean): boolean {
+  return fresh && methods?.lisansDurduruldu === true;
+}
+
+/** Yanıt QR okutmasının bir adımı — ekran bunu çizer, karar burada (saf). */
+export type LicenseScanStep =
+  | { kind: 'gonder'; yanit: string }
+  | { kind: 'parca'; state: QrPartState; received: number; total: number }
+  | { kind: 'tekrar'; received: number; total: number }
+  | { kind: 'ret'; reason: string; reset: boolean };
+
+/**
+ * Okutulan QR: çok parçalı yanıtın bir parçası (TKLQ1, `lib/qr-parca.ts`) ya da tek parça eski
+ * biçim. Parçalar toplanır; küme tamamlanıp bütünlüğü doğrulanınca backend'e TEK metin gider.
+ */
+export function licenseScanStep(state: QrPartState | null, raw: string): LicenseScanStep {
+  // Parça KIRPILMAZ: veri dilimi boşlukla bitebilir, özeti bozulurdu.
+  const framed = raw.trimStart();
+  if (isQrPart(framed)) {
+    const r = addQrPart(state, framed);
+    switch (r.kind) {
+      case 'tamam': {
+        const yanit = normalizeScannedResponse(r.text);
+        return yanit ? { kind: 'gonder', yanit } : { kind: 'ret', reason: 'Birleşen metin bir lisans yanıtı değil', reset: true };
+      }
+      case 'eklendi':
+        return { kind: 'parca', state: r.state, received: r.received, total: r.state.total };
+      case 'tekrar':
+        return { kind: 'tekrar', received: r.received, total: r.state.total };
+      case 'bozuk':
+        return { kind: 'ret', reason: 'Parçalar birleşmedi — QR\'ların hepsini baştan okutun', reset: true };
+      default:
+        return { kind: 'ret', reason: 'QR parçası okunamadı — yeniden okutun', reset: false };
+    }
+  }
+  const single = normalizeScannedResponse(raw);
+  return single ? { kind: 'gonder', yanit: single } : { kind: 'ret', reason: 'Bu QR bir lisans yanıtı değil', reset: false };
 }

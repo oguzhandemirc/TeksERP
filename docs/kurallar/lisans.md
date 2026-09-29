@@ -66,6 +66,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** Giriş öncesi K5 sinyali tek boolean'dır: `login-methods.lisansDurduruldu` yalnız zorla ∧ UYGULANAN DURDURULMUŞ iken true (gözlemde false), kimliksize başka lisans bilgisi verilmez; panel K5'te kabuğu bağlamaz, yalnız "verilerimi al" sayfası (yedek · dışa aktarma · çıkış) açılır ve o yüzeyin çağırdığı her uç DURDURULMUŞ izin listesindedir; tablet giriş ekranı yalnız bu açılışta taze okunan sinyalle K5 ekranı çizer. · bekçi: `test_lisans_k5_giris (§1–§2 sinyal · §3 panel K5 yüzeyi)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Çevrimdışı QR çok parçalıdır (`TKLQ1|i/n|kimlik|özet|veri`, 1…4 parça): biçimin tek kaynağı `Teks-Erp/src/lib/license/qr-parca.ts`, panel · tablet · satıcı bayt-eşit ayna taşır, /q sayfasının tarayıcı eşi TS eşiyle birebir ölçülür; tablet parçaları toplar, bütünlüğü doğrular ve backend'e TEK metin gönderir. · bekçi: `test_lisans_qr_parca_aynasi`, `test_qr_sayfasi` <sub>(arşiv:2026-09-29)</sub>
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
@@ -79,7 +80,7 @@ Fabrika tarafı: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## lisans` bölümü.**
 
-Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`, `test_lisans_k5_giris`
+Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`, `test_lisans_qr_parca_aynasi`, `test_lisans_k5_giris`, `test_qr_sayfasi`
 
 Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koşar): `mirrors.test.ts`, `sanction.test.tsx`, `once-secret.test.tsx`, `login.test.tsx`, `app-isolation.test.ts`
 
