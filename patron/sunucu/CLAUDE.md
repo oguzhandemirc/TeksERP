@@ -47,9 +47,18 @@ Bulutta BAĞIMSIZ (fabrika kullanıcısına bağlanmaz), hesap başına TEK tesi
 
 ## Budama beyanı (telemetri + okuma kopyası)
 
-Yaşa göre silinen tablolar YALNIZ `src/services/maintenance.ts` `PRUNED_TABLES` (bekçi `test_patron_kapilari` §4 iki yönlü ölçer): `projection_rows` (tesisin saklama süresi — 3 · 13 · 25 ay · tümü, varsayılan 13 — kökü düşen kaydın alt satırı ve kalemiyle; 7 günden eski mezar taşı) · `request_nonces` · `package_receipts` · `full_sync_runs` · `report_results` · `report_requests` · `inbox_messages` (sonuçlanmış; asıl kayıt fabrikada) · `sessions` · `operation_receipts` · `account_audit` (ayak izi: başarısız giriş 90 gün, diğerleri 730 gün). Hiçbiri fabrikanın defteri değildir; iş kararı bunlardan okunmaz. Başka her silme yasak; hesap ve cihaz soft (durum/`active`).
+Yaşa göre silinen tablolar YALNIZ `src/services/maintenance.ts` `PRUNED_TABLES` (bekçi `test_patron_kapilari` §4 iki yönlü ölçer): `projection_rows` (tesisin saklama süresi — 3 · 13 · 25 ay · tümü, varsayılan 13 — kökü düşen kaydın alt satırı ve kalemiyle; 7 günden eski mezar taşı) · `request_nonces` · `package_receipts` · `full_sync_runs` · `report_results` · `report_requests` · `inbox_messages` (sonuçlanmış; asıl kayıt fabrikada) · `sessions` · `operation_receipts` · `account_audit` (ayak izi: başarısız giriş 90 gün, diğerleri 730 gün) · `notifications` (sonuçlanmış bildirim, `BILDIRIM_SAKLAMA_GUN` = 90). Hiçbiri fabrikanın defteri değildir; iş kararı bunlardan okunmaz. Başka her silme yasak; hesap ve cihaz soft (durum/`active`).
 
 Audit istisnaları (beyanlı sınıflar): fabrika kanalı yazımları (paket makbuzu kendi kaydıdır — sistem işi) · bakım işi (sistem işi) · oturum dokunuşu (telemetri). Hesap CUD'u, davet, giriş/çıkış, gelen kutusu/rapor yazımı/iptali, cihaz kaydı `account_audit`e düşer.
+
+## Bildirimler (B5)
+
+- **Kip:** `BILDIRIM_KIPI` = `kapali` (varsayılan — bugünkü davranış: iş kurulmaz, hiçbir şey üretilmez) · `sahte` (kayıtlı sahte gönderici, ağ yok; yerel/prova) · `gercek` (Expo push HTTP API'si + web push VAPID; `BILDIRIM_VAPID_KONU` zorunlu). Gerçek gönderim yerelde DENENMEZ; canlı deneme mağaza hesapları + patron VDS kurulumu sonrası.
+- **Kural tek kaynak** `src/catalog/notifications.ts`: tür → kaynak projeksiyon + izinler (HEPSİ) + finans sınıfı; tür, kaynağın okuma iznini KAPSAR, finans türü finans izni ister (açılışta ölçülür). Ayar: hesap → tesis yöneticisinin varsayılanı → koddaki varsayılan (tek çözücü `resolveSettings`).
+- **Olay üretimi durumsuz** (`notification-events.ts`): bulut HESAP YAPMAZ — eşik fabrikanın özet sayısıyla yalnız karşılaştırılır; `dedup_key` (gün / olay kimliği) + `UNIQUE(tesis, hesap, dedup_key)` ⇒ aynı olay ikinci kez doğmaz. Kural düşüren olay ATLANDI doğar (tür sonradan açılınca eski olay gitmez).
+- **Gönderim** (`notification-sender.ts`): `FOR UPDATE SKIP LOCKED` claim; ağ çağrısı tx dışında; sonuç yalnız kendi claim'imiz duruyorsa yazılır; gönderim anında izin/tür/sessiz saat YENİDEN (sessizde bitişe ertelenir, hak yanmaz); geçersiz cihaz pasife; geçici hata 5 denemeye kadar.
+- **Sır:** VAPID çifti `ANAHTAR_DIZINI/patron-vapid.json` (0600, üstüne yazılmaz); gizli anahtar yalnız `VapidKeys` kapanışında, günlüğe/DB'ye/API'ye düşmez (taşıyıcı hatası yalnız kısa KOD olarak saklanır). Web aboneliği yalnız izinli push servisine (SSRF kapısı, kayıtta ve gönderimde aynı yüklem `push/targets.ts`).
+- Bekçiler: `test_bildirim_kurallari` (tekrar yok · sessiz saat · kapalı tür · izin) · `test_bildirim_gonderim` (katalog · kip · VAPID sırrı · SSRF · teslim · API · budama).
 
 ## Komutlar
 

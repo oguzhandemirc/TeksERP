@@ -190,3 +190,81 @@ export interface Device {
   readonly sonGorulme: string;
   readonly olusturulma: string;
 }
+
+// ---------------------------------------------------------------- bildirimler (B5)
+
+/** Bildirim türleri — kurallar sunucu kataloğunda (`src/catalog/notifications.ts`: izin, finans sınıfı, kaynak). */
+export const NOTIFICATION_KINDS = [
+  "gelen-kutusu-sonucu",
+  "stok-esigi",
+  "geciken-siparis",
+  "gunluk-uretim",
+  "esitleme-gecikti",
+  "yedek-basarisiz",
+  "cek-vadesi",
+] as const;
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+
+/** Eşikler: `null` = o eşik kapalı. Sayılar fabrikanın gönderdiği özetle YALNIZ karşılaştırılır. */
+export interface NotificationThresholds {
+  readonly hamStokAlt: number | null;
+  readonly bitmisStokAlt: number | null;
+  readonly gecikenKalemUst: number | null;
+  readonly gunlukUretimAlt: number | null;
+  /** Günlük üretim bu saatten (İstanbul, 0–23) sonra değerlendirilir. */
+  readonly gunlukUretimSaati: number;
+  readonly esitlemeGecikmeDk: number;
+}
+
+/** Sessiz saatler (İstanbul, "SS:DD"); başlangıç > bitiş gece yarısını aşar. Sessizde doğan bildirim bitişte gider. */
+export interface QuietHours {
+  readonly acik: boolean;
+  readonly baslangic: string;
+  readonly bitis: string;
+}
+
+export interface NotificationSettings {
+  /** false = hiç bildirim yok. */
+  readonly acik: boolean;
+  readonly turler: Readonly<Record<NotificationKind, boolean>>;
+  readonly sessiz: QuietHours;
+  readonly esikler: NotificationThresholds;
+}
+
+export interface NotificationKindInfo {
+  readonly tur: NotificationKind;
+  readonly ad: string;
+  readonly aciklama: string;
+  readonly finans: boolean;
+  /** Hesabın izni bu türü almaya yetiyor mu (yetmiyorsa ayar açık olsa da gitmez). */
+  readonly izinli: boolean;
+}
+
+/** `GET /bildirim/ayarlar`. */
+export interface NotificationSettingsView {
+  readonly etkin: NotificationSettings;
+  readonly kaynak: "HESAP" | "TESIS" | "VARSAYILAN";
+  readonly hesap: NotificationSettings | null;
+  readonly tesis: NotificationSettings | null;
+  readonly turler: readonly NotificationKindInfo[];
+  /** Sunucunun gönderim kipi: `kapali` iken kuyruk birikir, hiçbir şey gönderilmez. */
+  readonly gonderim: "kapali" | "sahte" | "gercek";
+  /** Web push aboneliği için VAPID açık anahtarı (base64url); yapılandırılmamışsa null. */
+  readonly webPushAnahtari: string | null;
+}
+
+export const NOTIFICATION_STATUSES = ["BEKLIYOR", "GONDERILIYOR", "GONDERILDI", "BASARISIZ", "ATLANDI"] as const;
+export type NotificationStatus = (typeof NOTIFICATION_STATUSES)[number];
+
+export interface NotificationItem {
+  readonly id: string;
+  readonly tur: string;
+  readonly baslik: string;
+  readonly metin: string;
+  /** Dokununca açılacak uygulama yolu (ör. `/gelen-kutusu/<mesajId>`). */
+  readonly rota: string | null;
+  readonly durum: NotificationStatus;
+  readonly atlamaNedeni: string | null;
+  readonly olusturulma: string;
+  readonly gonderilme: string | null;
+}

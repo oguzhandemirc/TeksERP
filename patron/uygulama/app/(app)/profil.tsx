@@ -1,4 +1,5 @@
-// Profil: hesap bilgisi, parola değişimi (TOTP ile), bildirim ayarları iskeleti (B5), çıkış.
+// Profil: hesap bilgisi, parola değişimi (TOTP ile), bildirim ayarlarına geçiş, çıkış.
+import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { useSession } from "../../src/state/session";
 import { Screen } from "../../src/ui/Frame";
@@ -7,6 +8,7 @@ import { useWrite } from "../../src/ui/useWrite";
 
 export default function Profile() {
   const { api, facility, logout } = useSession();
+  const router = useRouter();
   const [cur, setCur] = useState("");
   const [next, setNext] = useState("");
   const [totp, setTotp] = useState("");
@@ -29,7 +31,8 @@ export default function Profile() {
       <Button label="Parolayı değiştir" busy={change.busy} disabled={change.disabled || cur === "" || next.length < 12 || totp.length !== 6}
         onPress={() => void change.run(totp).then((r) => { if (r) { setOk(true); setCur(""); setNext(""); setTotp(""); } })} />
       <Title>Bildirimler</Title>
-      <Muted>Bildirim ayarları yakında (sipariş işlendi, rapor hazır, eşitleme gecikti).</Muted>
+      <Muted>Hangi bildirimlerin, hangi saatlerde geleceğini ve eşikleri seçin; bu cihazı bildirim için kaydedin.</Muted>
+      <Button label="Bildirim ayarları" onPress={() => router.push("/bildirimler" as never)} testID="bildirim-ayarlari" />
       <ConfirmButton label="Çıkış yap" question="Oturum kapatılsın ve bu cihazdaki son veri silinsin mi?" onConfirm={() => void logout()} testID="cikis" />
     </Screen>
   );

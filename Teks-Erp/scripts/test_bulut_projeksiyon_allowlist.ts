@@ -112,7 +112,7 @@ function bicimBolumu(): void {
   console.log("\n§1 — katalog biçimi");
   const boyut = RECORD_PROJECTIONS.filter((p) => p.role === "BOYUT").length;
   const olgu = RECORD_PROJECTIONS.filter((p) => p.role === "OLGU").length;
-  check("§1a 24 KAYIT (7 BOYUT + 17 OLGU) + 6 ANLIK", RECORD_PROJECTIONS.length === 24 && boyut === 7 && olgu === 17 && SNAPSHOT_PROJECTIONS.length === 6,
+  check("§1a 24 KAYIT (7 BOYUT + 17 OLGU) + 7 ANLIK", RECORD_PROJECTIONS.length === 24 && boyut === 7 && olgu === 17 && SNAPSHOT_PROJECTIONS.length === 7,
     `${RECORD_PROJECTIONS.length} (${boyut}+${olgu}) + ${SNAPSHOT_PROJECTIONS.length}`);
   const adlar = [...RECORD_PROJECTIONS, ...SNAPSHOT_PROJECTIONS].map((p) => p.name);
   check("§1b projeksiyon adları tekil ve tel biçiminde", new Set(adlar).size === adlar.length && adlar.every((a) => /^[a-z][a-z0-9-]*$/.test(a)));
@@ -281,6 +281,9 @@ async function anlikBolumu(): Promise<void> {
   check("§6b ⭐ anlık çıktılarda operatör/kullanıcı/top düzeyi alan yok (P25)", kotu.length === 0, kotu.join(",") || "temiz");
   const uretim = snaps.find((s) => s.projection === "uretim-akisi");
   check("§6c uretim-akisi yalnız kolon toplamı + istasyon sayaçları taşır", !!uretim && JSON.stringify(Object.keys(uretim.data as object)) === JSON.stringify(["kolonlar", "istasyonlar"]));
+  const saglik = snaps.find((s) => s.projection === "saglik");
+  check("§6d saglik yalnız yedek hükmü + zamanı + yaşı taşır (dosya adı/yol GİTMEZ)", !!saglik && JSON.stringify(anahtarlar(saglik.data)) === JSON.stringify(["yedek", "yedek.hukum", "yedek.sonGeceYedegi", "yedek.yasSaat"]),
+    saglik ? anahtarlar(saglik.data).join(",") : "üretilmedi");
 }
 
 function paketBolumu(): void {

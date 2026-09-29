@@ -24,6 +24,7 @@ export const PRUNED_TABLES = {
   sessions: "kapanmış/bitmiş + OTURUM_SAKLAMA_GUN (telemetri)",
   operation_receipts: "ISLEM_SAKLAMA_GUN (işlem kimliği penceresi)",
   account_audit: "ayak izi: başarısız giriş DENETIM_GIRIS_SAKLAMA_GUN · diğerleri DENETIM_SAKLAMA_GUN",
+  notifications: "sonuçlanmış (GONDERILDI · BASARISIZ · ATLANDI) + BILDIRIM_SAKLAMA_GUN (telemetri; olay kimliği günlük/olay başına, pencere ondan uzun)",
 } as const;
 
 const DAY_MS = 86_400_000;
@@ -140,6 +141,11 @@ async function pruneAccountTables(ctx: CloudContext, f: { tesisId: string; reten
     n += (
       await tx.reportRequest.deleteMany({
         where: { tesisId: f.tesisId, status: { in: ["HAZIR", "HATA", "IPTAL"] }, updatedAt: { lt: new Date(nowMs - c.RAPOR_SONUC_SAKLAMA_GUN * DAY_MS) } },
+      })
+    ).count;
+    n += (
+      await tx.notification.deleteMany({
+        where: { tesisId: f.tesisId, status: { in: ["GONDERILDI", "BASARISIZ", "ATLANDI"] }, updatedAt: { lt: new Date(nowMs - c.BILDIRIM_SAKLAMA_GUN * DAY_MS) } },
       })
     ).count;
     if (f.retentionMonths !== null) {

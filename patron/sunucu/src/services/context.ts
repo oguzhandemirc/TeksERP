@@ -5,6 +5,7 @@ import type { SecretBox } from "../auth/secret-box";
 import type { CloudConfig } from "../config";
 import type { Doorbell } from "./doorbell";
 import type { InstallationDirectory } from "./installation-directory";
+import type { NotificationRuntime } from "./notification-scheduler";
 
 export interface CloudContext {
   readonly config: CloudConfig;
@@ -14,4 +15,6 @@ export interface CloudContext {
   readonly directory: InstallationDirectory;
   readonly doorbell: Doorbell;
   readonly now: () => number;
+  /** Bildirim çalışma zamanı (`BILDIRIM_KIPI=kapali` iken yok). */
+  readonly notifications?: NotificationRuntime | null;
 }

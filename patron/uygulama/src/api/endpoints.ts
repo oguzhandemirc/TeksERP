@@ -4,6 +4,7 @@ import type { ApiClient, Query } from "./client";
 import type {
   Account,
   AccountInviteResult,
+  Device,
   CustomerMessageBody,
   FacilityStatus,
   InboxItemKind,
@@ -13,6 +14,9 @@ import type {
   InviteConfirmed,
   InviteInfo,
   LoginResponse,
+  NotificationItem,
+  NotificationSettings,
+  NotificationSettingsView,
   OrderMessageBody,
   Page,
   PermissionCatalog,
@@ -47,6 +51,13 @@ export const ENDPOINTS = {
   accountUpdate: ["patch", "/hesaplar/:id"],
   accountStatus: ["post", "/hesaplar/:id/durum"],
   accountReset: ["post", "/hesaplar/:id/sifirla"],
+  deviceRegister: ["post", "/cihazlar"],
+  deviceList: ["get", "/cihazlar"],
+  deviceRemove: ["post", "/cihazlar/:id/kaldir"],
+  notificationSettings: ["get", "/bildirim/ayarlar"],
+  notificationSettingsSet: ["post", "/bildirim/ayarlar"],
+  notificationFacilityDefaults: ["post", "/bildirim/tesis-varsayilani"],
+  notificationHistory: ["get", "/bildirimler"],
 } as const satisfies Record<string, readonly ["get" | "post" | "patch", string]>;
 
 type Name = keyof typeof ENDPOINTS;
@@ -96,6 +107,13 @@ export function createApi(c: ApiClient) {
     accountUpdate: (id: string, b: { clientToken: string; ad?: string; izinler?: string[] }) => c.patch<Account>(pathOf("accountUpdate", { id }), b),
     accountStatus: (id: string, b: { clientToken: string; durum: "AKTIF" | "KILITLI" | "PASIF" }) => c.post<Account>(pathOf("accountStatus", { id }), b),
     accountReset: (id: string, clientToken: string) => c.post<AccountInviteResult>(pathOf("accountReset", { id }), { clientToken }),
+    deviceRegister: (b: { platform: "ios" | "android" | "web"; belirtec: string; ad?: string }) => c.post<Device>(pathOf("deviceRegister"), b),
+    deviceList: () => c.get<Device[]>(pathOf("deviceList")),
+    deviceRemove: (id: string) => c.post<Device>(pathOf("deviceRemove", { id }), {}),
+    notificationSettings: () => c.get<NotificationSettingsView>(pathOf("notificationSettings")),
+    notificationSettingsSet: (ayarlar: NotificationSettings | null) => c.post<NotificationSettingsView>(pathOf("notificationSettingsSet"), { ayarlar }),
+    notificationFacilityDefaults: (ayarlar: NotificationSettings) => c.post<NotificationSettingsView>(pathOf("notificationFacilityDefaults"), { ayarlar }),
+    notificationHistory: (p: { imlec?: string; limit?: number } = {}) => c.get<Page<NotificationItem>>(pathOf("notificationHistory"), p),
   };
 }
 

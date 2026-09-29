@@ -58,6 +58,17 @@
 - **[ÇEKİRDEK]** Kurulum kaydının satıcı iç API önbelleği TAZELİKTİR: süre dolunca sorulur, ulaşılamazsa bayat kayıtla devam edilir, hiç dolmadıysa RED; zil yalnız `{tesisId, konu}` taşır. · bekçi: `test_kurulum_dizini (§1 · §4 · §8)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Audit ailesi ve kişi adı taşıyan rapor (operatör performansı) buluttan istenemez; rapor ailesinin izni bulutta anahtarın önekinden türer, fabrikanın gönderdiği aileye güvenilmez. · bekçi: `test_rapor_istegi (§1a · §1b · §3)` <sub>(arşiv:2026-09-29)</sub>
 
+## Bildirimler (B5)
+
+- **[ÇEKİRDEK]** Bildirim türünün kuralı tek kaynaktır (`patron/sunucu/src/catalog/notifications.ts`): tür, kaynak projeksiyonun okuma iznini KAPSAR ve finans içerikli tür finans izni ister — okunamayan veri bildirimle sızmaz (açılışta ölçülür).
+- **[ÇEKİRDEK]** Eşik bulutta HESAPLANMAZ, yalnız fabrikanın özet sayısıyla karşılaştırılır; karşılaştırmanın ihtiyaç duyduğu toplam (bugün tamamlanan, gece yedeği hükmü) fabrikanın anlık projeksiyonuna girer.
+- **[ÇEKİRDEK]** Aynı olay aynı hesaba ikinci kez doğmaz: bildirim kimliği (`dedup_key`, gün ya da olay kimliği) `UNIQUE(tesis, hesap, dedup_key)` ile seddedilir; kural düşüren olay da ATLANDI olarak doğar.
+- **[ÇEKİRDEK]** Gönderim anında izin, tür ve sessiz saat YENİDEN sınanır (doğuştan sonra düşen izin tutar); sessiz saatte gönderilmez, bitişe ertelenir.
+- **[ÇEKİRDEK]** `notifications` TELEMETRİ'dir: sonuçlanmış satır `BILDIRIM_SAKLAMA_GUN` sonra budanır, iş kararı ondan okunmaz.
+- **[ÇEKİRDEK]** VAPID gizli anahtarı dosyada (0600) yaşar ve günlüğe, DB'ye, API yanıtına girmez; taşıyıcı hatası yalnız kısa KOD olarak saklanır; web aboneliği yalnız izinli push servisine kaydolur (SSRF kapısı).
+- **[ÇEKİRDEK]** Bildirime dokununca açılan yol yalnız uygulamanın kendi ekranıdır: telefonda `safeRoute`, web'de service worker AYNI kalıpla süzer (dış adres, `//`, bilinmeyen bölüm açılmaz; jest ölçer).
+- **[PROFİL]** `BILDIRIM_KIPI` varsayılanı `kapali`dır (bugünkü davranış); `gercek` yalnız mağaza hesapları + patron VDS kurulumundan sonra açılır.
+
 ## Uygulama (`patron/uygulama`)
 
 ### Değişmezler
@@ -84,9 +95,9 @@ Bulut sunucusu bekçileri kendi projesinden: `cd patron/sunucu && node ../../scr
 
 Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`
 
-Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_patron_kapilari`, `test_uzlastirma_kumesi`
+Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`
 
-Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
+Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `notifications.test.tsx`, `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
 
 Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## patron-bulutu` bölümüne birlikte eklenir. Katalog ya da tetikleyici değişince `test_db_invariants` (TRIGGERS/EXPECTED_FUNCTIONS) de koşulur.
 
@@ -99,3 +110,4 @@ Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## pat
 - 2026-09-29 · Lisans + patron bulutu entegrasyonu (I3-1a): tek ön koşul, tek bulut adresi, tek protokol kaynağı, birleşik sapma listesi
 - 2026-09-29 · Patron uygulaması (B4): Expo tek kod tabanı, salt-okunur çevrimdışı önbellek, tel tipi aynası
 - 2026-09-29 · Patron bulutu eşitleme saat/ufuk düzeltmeleri (BF): bekleyen listesi, kalem ebeveyn kuralı, bulut D4
+- 2026-09-30 · Patron bildirimleri (B5): tür kataloğu, durumsuz olay üretimi, idempotent bildirim kimliği, gönderimde yeniden sınama, VAPID sırrı dosyada

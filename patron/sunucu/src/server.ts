@@ -13,6 +13,7 @@ import type { CloudContext } from "./services/context";
 import { createDoorbell } from "./services/doorbell";
 import { InstallationDirectory } from "./services/installation-directory";
 import { MaintenanceScheduler } from "./services/maintenance";
+import { createNotificationRuntime, NotificationScheduler } from "./services/notification-scheduler";
 
 function listen(server: http.Server, port: number, host: string): Promise<AddressInfo> {
   return new Promise((resolve, reject) => {
@@ -42,6 +43,7 @@ async function main(): Promise<void> {
     directory: new InstallationDirectory(sync.prisma, config),
     doorbell: createDoorbell(config),
     now: () => Date.now(),
+    notifications: createNotificationRuntime(config),
   };
   const server = http.createServer(createApp(ctx));
   const address = await listen(server, config.PORT, config.BIND);
@@ -50,6 +52,9 @@ async function main(): Promise<void> {
   const maintenance = new MaintenanceScheduler(ctx);
   maintenance.start();
   void maintenance.runOnce();
+  const notifier = ctx.notifications ? new NotificationScheduler(ctx, ctx.notifications) : null;
+  notifier?.start();
+  console.log(`PATRON_BILDIRIM kip=${config.BILDIRIM_KIPI}`);
 
   let closing = false;
   const shutdown = async (signal: string): Promise<void> => {
@@ -57,6 +62,7 @@ async function main(): Promise<void> {
     closing = true;
     console.log(`[patron] ${signal}: kapanıyor`);
     maintenance.stop();
+    notifier?.stop();
     await new Promise<void>((r) => server.close(() => r()));
     await closeDatabase(app);
     await closeDatabase(sync);

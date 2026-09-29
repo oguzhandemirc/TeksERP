@@ -25,7 +25,10 @@ describe("ayna: patron/sunucu ↔ patron/uygulama", () => {
   });
 
   it("uygulamanın çağırdığı her uç sunucunun API_ROUTES'unda var", () => {
-    const text = readFileSync(join(SERVER, "http/api-routes.ts"), "utf8");
+    // Tablo parçalı olabilir: api-routes.ts'in içe aktardığı `./*-routes` dosyaları da tablonun parçasıdır (yayılır).
+    const main = readFileSync(join(SERVER, "http/api-routes.ts"), "utf8");
+    const parts = [...main.matchAll(/from "\.\/([a-z-]+-routes)"/g)].map((m) => readFileSync(join(SERVER, `http/${m[1]!}.ts`), "utf8"));
+    const text = [main, ...parts].join("\n");
     // Yol şablon literaliyle de yazılır (`/veri/:${PROJECTION}`): sabitler metinden çözülür.
     const consts = new Map([...text.matchAll(/const ([A-Z_]+) = "([^"]+)"/g)].map((m) => [m[1]!, m[2]!]));
     const resolve = (p: string) => p.replace(/\$\{([A-Z_]+)\}/g, (_x, k: string) => consts.get(k) ?? `?${k}`);

@@ -43,8 +43,22 @@ const EnvSchema = z
     RAPOR_SONUC_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
     DENETIM_GIRIS_SAKLAMA_GUN: positiveInt(30, 3650).default(90),
     DENETIM_SAKLAMA_GUN: positiveInt(365, 3650).default(730),
+    /** Bildirim gönderimi: `kapali` (varsayılan — bugünkü davranış, hiçbir şey üretilmez/gönderilmez) · `sahte`
+     *  (kayıtlı sahte gönderici; yerel/prova) · `gercek` (Expo push + web push). */
+    BILDIRIM_KIPI: z.enum(["kapali", "sahte", "gercek"]).default("kapali"),
+    BILDIRIM_ARALIGI_SN: positiveInt(5, 3600).default(30),
+    /** Sonuçlanmış bildirim satırı bu kadar gün sonra budanır (telemetri). */
+    BILDIRIM_SAKLAMA_GUN: positiveInt(7, 3650).default(90),
+    /** Web push VAPID `sub` (mailto: ya da https:) — `gercek` kipte zorunlu. Anahtar çifti ANAHTAR_DIZINI'nde. */
+    BILDIRIM_VAPID_KONU: z.string().regex(/^(mailto:|https:\/\/)\S+$/).optional(),
+    EXPO_PUSH_URL: z.url().default("https://exp.host/--/api/v2/push/send"),
+    /** Expo erişim belirteci (isteğe bağlı "enhanced push security") — SIRdır, günlüğe yazılmaz. */
+    EXPO_ERISIM_BELIRTECI: z.string().min(16).optional(),
   })
   .superRefine((c, ctx) => {
+    if (c.BILDIRIM_KIPI === "gercek" && !c.BILDIRIM_VAPID_KONU) {
+      ctx.addIssue({ code: "custom", message: "BILDIRIM_KIPI=gercek için BILDIRIM_VAPID_KONU zorunlu", path: ["BILDIRIM_VAPID_KONU"] });
+    }
     if (c.KURULUM_KAYNAGI === "satici" && (!c.SATICI_IC_API_URL || !c.SATICI_IC_API_BELIRTECI)) {
       ctx.addIssue({ code: "custom", message: "KURULUM_KAYNAGI=satici için SATICI_IC_API_URL ve SATICI_IC_API_BELIRTECI zorunlu", path: ["KURULUM_KAYNAGI"] });
     }

@@ -8,7 +8,6 @@ import { acceptInvite, confirmInvite, inspectInvite } from "../auth/invite.servi
 import { changeOwnPassword, login, logout, resolveSession, type SessionContext } from "../auth/session.service";
 import { ASSIGNABLE_PERMISSIONS, ROLE_TEMPLATES } from "../catalog/permissions";
 import { CloudError, badRequest } from "../lib/errors";
-import type { WriteResult } from "../lib/idempotency";
 import { createAccount, listAccountAudit, listAccounts, resetAccount, setAccountStatus, updateAccount } from "../services/account.service";
 import type { CloudContext } from "../services/context";
 import type { LoginResponse, PermissionCatalog } from "../wire/api";
@@ -16,64 +15,12 @@ import { facilityStatus, getProjectionRecord, getSnapshot, listProjection } from
 import { deactivateDevice, listDevices, registerDevice } from "../services/device.service";
 import { cancelInbox, createInboxMessage, getInbox, listInbox } from "../services/inbox.service";
 import { cancelReportRequest, createReportRequest, getReportRequest, listReportRequests } from "../services/report.service";
+import { PermissionList, Template, Token, body, page, param, s, text, uuidCursor, written, type ApiCall, type ApiRouteDef } from "./api-route-kit";
+import { NOTIFICATION_ROUTES } from "./notification-routes";
 import { rateLimit } from "./rate-limit";
 
-export interface ApiCall {
-  readonly ctx: CloudContext;
-  readonly req: Request;
-  /** `OTURUM` rotalarında dolu. */
-  readonly session: SessionContext | null;
-}
+export type { ApiCall, ApiRouteDef } from "./api-route-kit";
 
-export interface ApiRouteDef {
-  readonly method: "get" | "post" | "patch";
-  readonly path: string;
-  readonly auth: "ACIK" | "OTURUM";
-  /** Yazma: işlem kimliğiyle idempotent ("ISLEM_KIMLIGI") ya da gerekçesi yazılı muafiyet; okuma "OKUMA". */
-  readonly kimlik: "OKUMA" | "ISLEM_KIMLIGI" | { readonly muaf: string };
-  readonly handler: (c: ApiCall) => Promise<{ status?: number; data: unknown; replayed?: boolean }>;
-}
-
-const Uuid = z.uuid();
-const Token = z.uuid();
-const PermissionList = z.array(z.string().max(40)).max(40);
-const Template = z.enum(["PATRON", "MUHASEBE", "SATIS"]);
-
-function body<T>(c: ApiCall, schema: z.ZodType<T>): T {
-  const r = schema.safeParse(c.req.body ?? {});
-  if (r.success) return r.data;
-  const first = r.error.issues[0];
-  const where = first && first.path.length > 0 ? ` (${first.path.join(".")})` : "";
-  throw badRequest(`İstek gövdesi sözleşmeye uymuyor${where}: ${first?.message ?? "bilinmiyor"}`);
-}
-
-function param(c: ApiCall, name: string): string {
-  const v = c.req.params[name];
-  if (typeof v !== "string" || !Uuid.safeParse(v).success) throw new CloudError(404, "BULUNAMADI", "Kayıt bulunamadı");
-  return v;
-}
-
-function text(c: ApiCall, name: string, max = 200): string | undefined {
-  const v = c.req.query[name];
-  if (typeof v !== "string") return undefined;
-  const t = v.trim();
-  return t ? t.slice(0, max) : undefined;
-}
-
-function page(c: ApiCall): { cursor: string | undefined; limit: number } {
-  const raw = text(c, "limit");
-  const limit = raw === undefined ? 50 : Number(raw);
-  if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw badRequest("limit 1–200 olmalı");
-  return { cursor: text(c, "imlec", 400), limit };
-}
-
-function uuidCursor(cursor: string | undefined): string | undefined {
-  if (cursor !== undefined && !Uuid.safeParse(cursor).success) throw badRequest("İmleç biçimsiz");
-  return cursor;
-}
-
-const s = (c: ApiCall): SessionContext => c.session!;
-const written = (r: WriteResult) => ({ status: r.status, data: r.data, replayed: r.replayed });
 const PROJECTION = "projeksiyon";
 
 export const API_ROUTES: readonly ApiRouteDef[] = [
@@ -234,6 +181,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     kimlik: { muaf: "atomik claim active → pasif; tekrarı aynı sonuç" },
     handler: async (c) => ({ data: await deactivateDevice(c.ctx, s(c), param(c, "id")) }),
   },
+  ...NOTIFICATION_ROUTES,
   // ---- hesap yönetimi (bulut:hesap:yonet) ----
   { method: "get", path: "/hesaplar", auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await listAccounts(c.ctx, s(c)) }) },
   {
