@@ -537,7 +537,7 @@ function butunlukVektorleri(f: Fikstur): Vektor[] {
     v("55 eksik (liste 50'de kesilir)", imzali({ dosyalar: [...liste, ...cok] })),
     v("kök dizin yok", imzali(), { kok: "yok" }),
     v("çapa boş", imzali(), { keys: [] }),
-    v("gömülü çapa (bugün boş)", imzali(), { keys: null }),
+    v("gömülü çapa: test paket anahtarı tanınmıyor", imzali(), { keys: null }),
     v("çapa kid biçimsiz", imzali(), { keys: [{ kid: "PAKET-1", x: paket.x }] }),
     v("çapa kid tekrarlı", imzali(), { keys: [...keys, ...keys] }),
     v("çapa anahtarı biçimsiz", imzali(), { keys: [{ kid: paket.kid, x: "abc" }] }),

@@ -32,9 +32,12 @@ export interface PackageKey {
 
 /**
  * PAKET anahtarının açık yarısı — native çekirdeğe GÖMÜLÜ çapanın (`anchor.rs`) kaynağı.
- * Bugün BOŞ: PAKET anahtarı 2e'de üretilir; boş çapa = bütünlük ÖLÇÜLEMEDİ (erken kısıt yok).
+ * Bugün yalnız HAZIRLIK anahtarı (`paket-hazirlik`): yalnız TEST/DEMO kurulumunda kabul, ÜRETİM'de
+ * red (`integrity-scope.ts` `STAGING_PACKAGE_*`). Üretim anahtarı `paket-<yıl>` ayrı törende eklenir.
  */
-export const PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = Object.freeze([]);
+export const PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = Object.freeze([
+  Object.freeze({ kid: "paket-hazirlik", x: "auFAoNnXZDIWdyLJ5EVsakwMquIa_GHqCyKxZHz16Z8" }),
+]);
 
 const PACKAGE_KID = /^paket-[a-z0-9-]{1,40}$/;
 const SAFE_PATH = /^(?:[A-Za-z0-9_.@+-]+\/)*[A-Za-z0-9_.@+-]+$/;
