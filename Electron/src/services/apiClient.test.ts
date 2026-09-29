@@ -218,6 +218,48 @@ describe("apiClient interceptor", () => {
       await expect(getInterceptor().rejected(makeError(403, { body, suppress: true }))).rejects.toBeDefined();
       expect(toastError).not.toHaveBeenCalled();
     });
+
+    // Lisans kapısı yetki sorunu değil: backend cümlesi, paralel istekler TEK toast,
+    // ve durum sorgusu hemen tazelensin diye sinyal.
+    it("⭐ 403 LICENSE_* → 'yetkiniz yok' DEĞİL, lisans cümlesi; aynı kod aynı toast id'si + sinyal", async () => {
+      const { onLicenseGate } = await import("@/lib/license/signal");
+      const heard = vi.fn();
+      const off = onLicenseGate(heard);
+      const body = { message: "Bu kurulum kısıtlı kipte: yeni kayıt yapılamaz.", details: { code: "LICENSE_RESTRICTED" } };
+      await expect(getInterceptor().rejected(makeError(403, { body }))).rejects.toBeDefined();
+      await expect(getInterceptor().rejected(makeError(403, { body }))).rejects.toBeDefined();
+      off();
+      expect(toastError).not.toHaveBeenCalledWith(expect.stringMatching(/yetkiniz/i));
+      expect(toastError).toHaveBeenCalledTimes(2);
+      const [m1, o1] = toastError.mock.calls[0] as [string, { id: string }];
+      const [, o2] = toastError.mock.calls[1] as [string, { id: string }];
+      expect(m1).toBe(body.message);
+      expect(o1.id).toBe("license:LICENSE_RESTRICTED");
+      expect(o1.id).toBe(o2.id);
+      expect(heard).toHaveBeenCalledTimes(2);
+    });
+
+    it("403 LICENSE_* + suppressErrorToast → toast yok ama sinyal var", async () => {
+      const { onLicenseGate } = await import("@/lib/license/signal");
+      const heard = vi.fn();
+      const off = onLicenseGate(heard);
+      const body = { message: "x", details: { code: "LICENSE_SUSPENDED" } };
+      await expect(getInterceptor().rejected(makeError(403, { body, suppress: true }))).rejects.toBeDefined();
+      off();
+      expect(toastError).not.toHaveBeenCalled();
+      expect(heard).toHaveBeenCalledTimes(1);
+    });
+
+    it("403 lisans dışı kod → genel yetki dalı; sinyal yok", async () => {
+      const { onLicenseGate } = await import("@/lib/license/signal");
+      const heard = vi.fn();
+      const off = onLicenseGate(heard);
+      const body = { message: "x", details: { code: "PERMISSION_DENIED" } };
+      await expect(getInterceptor().rejected(makeError(403, { body }))).rejects.toBeDefined();
+      off();
+      expect(toastError).toHaveBeenCalledWith("Bu işlem için yetkiniz bulunmuyor.");
+      expect(heard).not.toHaveBeenCalled();
+    });
   });
 
   describe("hata mesajı eşleme", () => {

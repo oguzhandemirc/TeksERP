@@ -2,6 +2,7 @@ import { Navigate, type RouteObject } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import {
   DOCUMENT_DESIGN_READ,
+  LICENSE_ACCESS,
   SETTINGS_COMPANY_ACCESS,
   SETTINGS_FLAGS_ACCESS,
   SETTINGS_PRINTING_ACCESS,
@@ -90,6 +91,8 @@ import { LegacySettingsRedirect } from "@/pages/GeneralSettings/LegacySettingsRe
 import { FeatureFlagsPage } from "@/pages/GeneralSettings/FeatureFlagsPage";
 import { NumberingPage } from "@/pages/GeneralSettings/Numbering/NumberingPage";
 import { UpdatePage } from "@/pages/System/UpdatePage";
+import { LicensePage } from "@/pages/System/License/LicensePage";
+import { AboutPage } from "@/pages/System/About/AboutPage";
 import {
   SETTINGS_ADMIN_PERMISSION,
   WORKSTATION_PERMISSION,
@@ -822,6 +825,25 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={[SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION]}>
         <UpdatePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Lisans — karo ile AYNI küme (`LICENSE_ACCESS`). Gözlem kipinde satıcıya
+    // özeldir: karo/palet gizler, sayfa da aynı yüklemle kendi notunu basar.
+    path: "system/license",
+    element: (
+      <ProtectedRoute requireAnyPermission={LICENSE_ACCESS}>
+        <LicensePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Hakkında — lisans sahibi · no · sürüm (görünür filigran); `system/about` manifestosu.
+    path: "system/about",
+    element: (
+      <ProtectedRoute requirePermission="license:view">
+        <AboutPage />
       </ProtectedRoute>
     ),
   },

@@ -8,6 +8,7 @@
 // Keşif aday tipi saf mantık dosyasında yaşıyor (orada test edilebiliyor);
 // burada yeniden tanımlamak iki kopya demek olurdu.
 import type { DiscoveredServer, ServerGroup } from "./discovery";
+import type { LicenseRelayRequest, LicenseRelayResult } from "./license-relay";
 
 export type { DiscoveredServer };
 
@@ -330,6 +331,11 @@ export interface DiscoveryApi {
   pin: (installationId: string | null) => Promise<void>;
 }
 
+/** Lisans panel aktarması — backend dışarı çıkamıyorsa imzalı isteği satıcıya taşır. */
+export interface LicenseApi {
+  relay: (req: LicenseRelayRequest) => Promise<LicenseRelayResult>;
+}
+
 export interface ApiBridge {
   secureStore: SecureStoreApi;
   discovery: DiscoveryApi;
@@ -343,6 +349,7 @@ export interface ApiBridge {
   pdf: PdfApi;
   files: FilesApi;
   updater: UpdaterApi;
+  license: LicenseApi;
 }
 
 declare global {

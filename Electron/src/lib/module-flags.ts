@@ -35,6 +35,11 @@ export const MODULE_FLAG_KEYS = [
 
 export type ModuleFlagKey = (typeof MODULE_FLAG_KEYS)[number];
 
+/** Bayrak alanı bir MODÜL anahtarı mı (tip daraltıcı). */
+export function isModuleFlagKey(key: string): key is ModuleFlagKey {
+  return (MODULE_FLAG_KEYS as readonly string[]).includes(key);
+}
+
 /**
  * `<bağımlı>` açıkken `<ön koşul>` de açık olmalı.
  *

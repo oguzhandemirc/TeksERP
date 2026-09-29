@@ -1,5 +1,6 @@
-import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
+import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, Info, KeyRound, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
 import {
+  LICENSE_ACCESS,
   SETTINGS_COMPANY_ACCESS,
   SETTINGS_FLAGS_ACCESS,
   SETTINGS_PRINTING_ACCESS,
@@ -59,6 +60,12 @@ export interface SystemTile {
    * modüllerini bir daha yapılandıramaz.
    */
   superadminOnly?: boolean;
+  /**
+   * Lisans GÖZLEM kapısı: kip `gozlem` iken karo yalnız satıcı kapısı açık
+   * oturuma çizilir (lisans fabrikaya sıfır farktır); `zorla`da izin yeter.
+   * İznin ÜSTÜNE eklenir, yerine geçmez — yüklem `lib/license/visibility.ts`.
+   */
+  licenseObservationGate?: boolean;
 }
 
 export interface SystemTileSection {
@@ -284,6 +291,27 @@ export const systemTiles: SystemTile[] = [
     to: "/system/update",
     group: "config",
     permissionAny: ["admin:settings", "settings:workstation"],
+  },
+  {
+    key: "license",
+    title: "Lisans",
+    description: "Lisans durumu, hak ve modüller, kira ve yoklama, etkinleştirme ve taşıma",
+    icon: KeyRound,
+    to: "/system/license",
+    group: "config",
+    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI küme.
+    permissionAny: LICENSE_ACCESS,
+    licenseObservationGate: true,
+  },
+  {
+    key: "about",
+    title: "Hakkında",
+    description: "Lisans sahibi, lisans numarası ve program sürümleri",
+    icon: Info,
+    to: "/system/about",
+    group: "config",
+    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
+    permission: "license:view",
   },
   {
     key: "release-notes",

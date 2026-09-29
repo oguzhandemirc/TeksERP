@@ -23,6 +23,8 @@ export interface CommandEntry {
    * ⚠️ İZNİN YERİNE GEÇMEZ: giriş kendi `permission`ını taşımaya devam eder.
    */
   superadminOnly?: boolean;
+  /** Lisans gözlem kapısı — `SystemTile.licenseObservationGate` aynası (`lib/license/visibility.ts`). */
+  licenseObservationGate?: boolean;
   /** Görünmeyen ek arama anahtarları (cmdk eşleşme değerine eklenir). */
   keywords?: string;
   /**

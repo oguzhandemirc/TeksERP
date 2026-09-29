@@ -7,6 +7,28 @@ import { recordNetSample } from "@/services/netStats";
 import { applyClientInfoHeaders } from "@/lib/client-info";
 import { shouldToastWarnings, showServerWarnings } from "@/lib/serverNotes";
 import { presentLiveReferences } from "@/lib/live-references";
+import { notifyLicenseGate } from "@/lib/license/signal";
+
+/**
+ * KURULUM KARARI olan 403'ler yetki sorunu değildir — "yetkiniz yok" kullanıcıyı rolünü
+ * aramaya yollar. Cümle backend'den; paralel istekler TEK toast'ta birleşir (sonner `id`).
+ *  · `MODULE_DISABLED` (K26): modül bu kurulumda kapalı.
+ *  · `LICENSE_*`: lisans kararı (kısıtlı kip · durdurma · lisansta olmayan modül ·
+ *    güncelleme dondurma); durum sorgusu hemen tazelenir ki bant/kilit yoklamayı beklemesin.
+ * Dal işlendiyse `true`.
+ */
+function handleInstallationGate(body: ApiErrorBody | undefined, suppressToast: boolean): boolean {
+  const code = body?.details?.code;
+  if (code === "MODULE_DISABLED") {
+    const msg = body?.message || "Bu modül bu kurulumda kapalı.";
+    if (!suppressToast) toast.error(msg, { id: `module-disabled:${msg}` });
+    return true;
+  }
+  if (typeof code !== "string" || !code.startsWith("LICENSE_")) return false;
+  notifyLicenseGate();
+  if (!suppressToast) toast.error(body?.message || "Bu işlem lisans nedeniyle yapılamıyor.", { id: `license:${code}` });
+  return true;
+}
 
 /** İstek süresi ölçümü için config'e damgalanan başlangıç zamanı. */
 interface TimedConfig {
@@ -225,13 +247,8 @@ apiClient.interceptors.response.use(
           toast.error(buildErrorMessage(body));
           return Promise.reject(error);
         }
-        // KAPALI MODÜL yetki sorunu değildir (K26): kurulumun kararıdır; "yetkiniz yok" kullanıcıyı
-        // rolünü aramaya yollar. Aynı modülün paralel istekleri TEK toast'ta birleşir (sonner `id`).
-        if (body?.details?.code === "MODULE_DISABLED") {
-          const msg = body.message || "Bu modül bu kurulumda kapalı.";
-          if (!suppressToast) toast.error(msg, { id: `module-disabled:${msg}` });
-          return Promise.reject(error);
-        }
+        // Kapalı modül ve lisans kapısı yetki sorunu DEĞİLDİR (bkz. `handleInstallationGate`).
+        if (handleInstallationGate(body, suppressToast)) return Promise.reject(error);
         if (!suppressToast) toast.error("Bu işlem için yetkiniz bulunmuyor.");
         return Promise.reject(error);
       }

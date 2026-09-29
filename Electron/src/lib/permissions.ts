@@ -72,6 +72,11 @@ export const SYSTEM_SERVER_STATUS_ACCESS = ["admin:settings", "system:server-sta
 export const SYSTEM_CLIENTS_ACCESS = ["admin:settings", "system:clients"];
 export const SYSTEM_BACKUPS_ACCESS = ["admin:settings", "system:backups"];
 export const SYSTEM_ROLL_ARCHIVE_ACCESS = ["admin:settings", "roll:read"];
+/**
+ * Lisans ekranı — backend `SCREEN_CATALOG` `system/license` aynası; `admin:settings`
+ * BİLEREK yok (lisans ayrı atanır; manifestoda beyanlı değil).
+ */
+export const LICENSE_ACCESS = ["license:view", "license:manage"];
 
 /**
  * Sistem hub'ı (ve kenar çubuğundaki "Sistem") — karolarından BİRİNİ açabilen
@@ -104,4 +109,6 @@ export const SYSTEM_HUB_ACCESS = [
   "system:server-status",
   "system:clients",
   "system:backups",
+  "license:view",
+  "license:manage",
 ];

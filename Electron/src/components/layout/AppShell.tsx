@@ -9,12 +9,14 @@ import { SurumNotlariDialog } from "./SurumNotlariDialog";
 import { useSurumNotuAcilis } from "@/hooks/useSurumNotuAcilis";
 import { useGirisGuncellemeKontrolu } from "@/hooks/useGirisGuncellemeKontrolu";
 import { ServerOfflineBanner } from "./ServerOfflineBanner";
+import { LicenseBanner } from "./LicenseBanner";
 import { ScanResultOverlay } from "@/components/scanner/ScanResultOverlay";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useTabShortcuts } from "@/hooks/useTabShortcuts";
 import { useServerHeartbeat } from "@/hooks/useServerClock";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import { useExpiryAutoLogout } from "@/hooks/useExpiryAutoLogout";
+import { useLicenseRelay } from "@/hooks/useLicenseRelay";
 import { useScannerWedge } from "@/hooks/useScannerWedge";
 import { useDeviceScanner } from "@/hooks/useDeviceScanner";
 import { useDeviceAnnounce } from "@/hooks/useDeviceAnnounce";
@@ -69,6 +71,8 @@ export function AppShell() {
   useGirisGuncellemeKontrolu();
   useIdleLogout();
   useExpiryAutoLogout();
+  // Backend satıcıya çıkamıyorsa imzalı lisans isteğini bu bilgisayarın ağından taşır.
+  useLicenseRelay();
 
   const toggleSidebar = () =>
     setCollapsed((c) => {
@@ -90,6 +94,8 @@ export function AppShell() {
       {/* Kurulum tetiği (`UpdateGate`) burada DEĞİL, `App.tsx` `Root`ta — giriş
           ekranı ve patron kabuğu da kurabilsin. Burada yalnız indirme şeridi. */}
       <UpdateDownloadStrip />
+      {/* Lisans bandı backend'in uyguladığı karardır; gözlemde hiç çizilmez. */}
+      <LicenseBanner />
       <ServerOfflineBanner />
       <div className="flex min-h-0 flex-1">
         <Sidebar collapsed={collapsed} />
