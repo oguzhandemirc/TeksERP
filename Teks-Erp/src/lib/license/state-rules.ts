@@ -30,6 +30,8 @@ export const REASON_CODES = [
   "BUTUNLUK_OLCULEMEDI",
   "SAAT_ILERI",
   "SAAT_GERI",
+  /** Satıcı `ISTEK_ZAMAN` ile duvar saatinin kaydığını söyledi; istek bir kez düzeltilmiş zamanla yeniden imzalanır. */
+  "SAAT_KAYIK",
   "DURUM_DOSYASI",
   "ILK_ACILIS_BILINMIYOR",
   "KIRA_SURESI_DOLDU",
@@ -62,6 +64,8 @@ export const REASON_VALIDITY: Readonly<Record<ReasonCode, Validity | null>> = {
   BUTUNLUK_OLCULEMEDI: "OLCULEMEDI",
   SAAT_ILERI: "OLCULEMEDI",
   SAAT_GERI: "OLCULEMEDI",
+  // Bilgi: imzasız satıcı saati güvenilir saate girmez, kademe saat kaymasından düşmez.
+  SAAT_KAYIK: null,
   DURUM_DOSYASI: "OLCULEMEDI",
   ILK_ACILIS_BILINMIYOR: "OLCULEMEDI",
   KIRA_SURESI_DOLDU: null,

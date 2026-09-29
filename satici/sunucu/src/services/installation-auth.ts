@@ -81,10 +81,12 @@ export async function authenticateRequest(g: AuthenticateInput): Promise<Authent
   }
   const identity = readRequestIdentity(g.header);
   if (!identity.ok) throw requestRejected(identity.code, identity.message);
-  if (!UuidSchema.safeParse(identity.value.installationId).success) {
+  // Kimliksiz istek (etkinleştirme/taşıma) protokolde meşru; kurulumu koddan bulan yol ayrı dilimde.
+  const claimedId = identity.value.installationId;
+  if (claimedId === null || !UuidSchema.safeParse(claimedId).success) {
     throw new VendorError(401, "ISTEK_GECERSIZ", "İstekteki kurulum kimliği biçimsiz");
   }
-  const installation = await prisma.kurulum.findUnique({ where: { kurulumId: identity.value.installationId } });
+  const installation = await prisma.kurulum.findUnique({ where: { kurulumId: claimedId } });
   if (!installation || !installation.aktif) {
     throw new VendorError(401, "KURULUM_BILINMIYOR", "Bu kurulum satıcıda kayıtlı değil");
   }
@@ -95,7 +97,7 @@ export async function authenticateRequest(g: AuthenticateInput): Promise<Authent
     body: g.rawBody,
     nowMs: g.nowMs,
     purposes: g.purposes,
-    installationId: identity.value.installationId,
+    installationId: claimedId,
   });
   if (!verified.ok) throw requestRejected(verified.code, verified.message);
   await recordNonce(installation.id, verified.value, g.nowMs);

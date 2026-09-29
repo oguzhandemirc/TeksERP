@@ -351,7 +351,7 @@ async function main(): Promise<number> {
       a.kontrol("hak sürüm 1 (kök parolasıyla imza) → 201", s.status === 201 && s.veri.surum === 1, `${ozet(s)} surum=${String(s.veri.surum)}`);
       const kod = await portal.istek("POST", `/kurulumlar/${S.anaDbId}/etkinlestirme-kodu`, {});
       S.kod = String(kod.veri.kod);
-      a.kontrol("etkinleştirme kodu → 201 (TKS-XXXX-XXXX-XXXX)", kod.status === 201 && /^TKS-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(String(kod.veri.kod)), ozet(kod));
+      a.kontrol("etkinleştirme kodu → 201 (16 karakter, TKS-XXXX-XXXX-XXXX-XXXX)", kod.status === 201 && /^TKS(-[0-9A-HJKMNP-TV-Z]{4}){4}$/.test(String(kod.veri.kod)), ozet(kod));
     });
 
     // ============================================================ L2

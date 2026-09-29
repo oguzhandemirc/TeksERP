@@ -17,8 +17,12 @@ export function bodyDigest(body: Uint8Array | string): string {
   return b64uEncode(createHash("sha256").update(body).digest());
 }
 
+/**
+ * `installationId: null` yalnız kimliği henüz bilinmeyen amaçta (etkinleştirme, taşıma) geçerlidir —
+ * alan imzaya hiç girmez; başka amaçta şema reddeder (programcı hatası, fırlatır).
+ */
 export function signRequest(g: {
-  readonly installationId: string;
+  readonly installationId: string | null;
   readonly purpose: RequestPurpose;
   readonly body: Uint8Array | string;
   readonly key: { readonly privateKey: KeyObject; readonly nowMs: number; readonly nonce?: string };
@@ -26,7 +30,7 @@ export function signRequest(g: {
   const kid = installationKeyId(publicKeyX(g.key.privateKey));
   const payload: RequestDoc = {
     v: 1,
-    kurulumId: g.installationId,
+    kurulumId: g.installationId ?? undefined,
     zaman: msToIso(g.key.nowMs),
     nonce: g.key.nonce ?? generateNonce(),
     amac: g.purpose,
@@ -35,13 +39,18 @@ export function signRequest(g: {
   return signDocument({ typ: TYP.ISTEK, schema: RequestSchema, payload, key: { kid, privateKey: g.key.privateKey } });
 }
 
-/** İmzayı DOĞRULAMADAN kurulum kimliğini okur — sunucu açık anahtarı bununla bulur. */
-export function readRequestIdentity(token: unknown): Result<{ installationId: string; kid: string }> {
+/**
+ * İmzayı DOĞRULAMADAN kurulum kimliğini okur — sunucu açık anahtarı bununla bulur. `null` = istek
+ * kimlik taşımıyor (yok · "" · null; yalnız etkinleştirme/taşımada meşru, şema denetler).
+ */
+export function readRequestIdentity(token: unknown): Result<{ installationId: string | null; kid: string }> {
   const parsed = parseJws(token);
   if (!parsed.ok) return forwardFailure(parsed);
   const installationId = parsed.value.payload.kurulumId;
-  if (typeof installationId !== "string") return failure("BELGE_SEMA", "İstek kurulum kimliği taşımıyor");
-  return success({ installationId, kid: parsed.value.header.kid });
+  if (installationId !== undefined && installationId !== null && typeof installationId !== "string") {
+    return failure("BELGE_SEMA", "İstek kurulum kimliği biçimsiz");
+  }
+  return success({ installationId: installationId || null, kid: parsed.value.header.kid });
 }
 
 function digestsEqual(a: string, b: string): boolean {
@@ -56,8 +65,11 @@ export interface RequestVerifyInput {
   readonly body: Uint8Array | string;
   readonly nowMs: number;
   readonly purposes: readonly RequestPurpose[];
-  /** Sunucunun anahtarı bulduğu kurulum; imzalı kimlik onunla aynı olmalı. */
-  readonly installationId: string;
+  /**
+   * Sunucunun kurulumu bulduğu kimlik (bulamadıysa null); istek kimlik TAŞIYORSA onunla aynı olmalı. Kimlik
+   * taşımayan istek (yalnız etkinleştirme/taşıma — şema denetler) bağ denetiminden muaftır: bağ koddadır.
+   */
+  readonly installationId: string | null;
 }
 
 /** Tekrar oynatma (nonce) denetimi BURADA DEĞİL: çağıran `NonceDefteri` ya da DB'de atomik yapar. */
@@ -70,7 +82,9 @@ export function verifyRequest(token: unknown, g: RequestVerifyInput): Result<Req
   const b = decodeDocument(RequestSchema, j.value.payload);
   if (!b.ok) return forwardFailure(b);
   const request = b.value;
-  if (request.kurulumId !== g.installationId) return failure("ISTEK_KURULUM", "İsteğin kurulum kimliği anahtarın sahibiyle uyuşmuyor");
+  if (request.kurulumId !== undefined && request.kurulumId !== g.installationId) {
+    return failure("ISTEK_KURULUM", "İsteğin kurulum kimliği anahtarın sahibiyle uyuşmuyor");
+  }
   if (!g.purposes.includes(request.amac)) return failure("ISTEK_AMAC", `Bu uç ${request.amac} amaçlı isteği kabul etmez`);
   if (Math.abs(isoToMs(request.zaman) - g.nowMs) > CLOCK_SKEW_MS) {
     return failure("ISTEK_ZAMAN", "İstek zamanı sunucu saatinden 10 dakikadan fazla sapıyor");

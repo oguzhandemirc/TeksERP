@@ -35,7 +35,7 @@ PG_BIN_DIR=<sunucuyla aynı ana sürüm pg istemcisi> \
 
 | Adım | Sonuç | Kanıt (özet) |
 |---|---|---|
-| L1 portalda (kanal) → müşteri → tesis → kurulum → hak (+ kod) | ✅ | portal `/kanallar` (yoksa 201) `/musteriler` `/tesisler` `/kurulumlar` `/kurulumlar/:id/hak` 201 · `TKS-2026-0001` doğuşta · `/haklar/:id/surum` (kök parolası) 201 sürüm 1 · kod 201 `TKS-XXXX-XXXX-XXXX` |
+| L1 portalda (kanal) → müşteri → tesis → kurulum → hak (+ kod) | ✅ | portal `/kanallar` (yoksa 201) `/musteriler` `/tesisler` `/kurulumlar` `/kurulumlar/:id/hak` 201 · `TKS-2026-0001` doğuşta · `/haklar/:id/surum` (kök parolası) 201 sürüm 1 · kod 201 `TKS-XXXX-XXXX-XXXX-XXXX` (16 karakter, P0) |
 | L2 etkinleştirme → hak + kira, NORMAL | ✅ | `POST /api/license/etkinlestir` (küçük harf + boşluklu elle yazım) 200 · GECERLI / NORMAL / NORMAL / gözlem · parmak izi ESLESTI 3/3 · portal kurulum ETKIN + anahtar kimliği · zil bağlandı |
 | L3 yoklama kirayı yeniler; gövde allowlist | ✅ | yoklama BASARILI, yeni kira · tel üstündeki gövde `PollRequestSchema` (katı) ve `HealthSummarySchema` (katı) geçer · kullanıcı adı / `LICENSE_DIR` yolu / DB adı yok · `sonKiraId` önceki kira |
 | L4 K0 → zil → ≤ 5 sn bant | ✅ | portal K0 201 → `hesaplanan.bant.metin` = portal mesajı **124 ms** · gözlemde uygulanan bant null, `/durum.bant` null · geri alma zille yansıdı |
