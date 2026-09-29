@@ -10,7 +10,8 @@
 //   §0 STATİK aynalar (native gerekmez): Rust kod kümeleri ⊆/= TS · yer tutucu listesi · Windows
 //      sondası satır satır · gömülü çapa = ROOT_PUBLIC_KEYS / PACKAGE_PUBLIC_KEYS · arayüz sürümü ·
 //      HKDF öneki · Rust'taki HER regex TS kaynağında (ya da canlı Zod deseninde) birebir var ·
-//      derleme sabiti geliştirmede kapalı
+//      derleme sabiti geliştirmede kapalı · Rust'taki her belge türü (TYP_*) protokolün TYP kayıt
+//      defterinde aynı ad/değerle (bütünlük türü dahil)
 //   §1 yükleyici: dosya yok → TS (zorunlu değil) / "yok" + her doğrulama CEKIRDEK_YOK + bütünlük
 //      GEÇERSİZ, istisna yok (zorunlu) · desteklenmeyen platform · bozuk .node · zorunlu kip ortam
 //      yolunu okumaz · aday sırası
@@ -23,16 +24,16 @@
 //      reddeder / üretim derlemesi çapa enjeksiyonunu reddeder
 //   §8 ⭐ KALICI SONDA ✓K (her koşumda): karşılaştırıcı farkı ısırır, eşitte susar · bayatlık
 //      denetimi mutasyona uğramış beklenenle kırmızı · kapsam denetimi eksik kodu yakalar ·
-//      regex aynası değişmiş deseni yakalar
+//      regex aynası değişmiş deseni yakalar · TYP aynası değişmiş/kayıtsız türü yakalar
 //
 // NEGATİF SONDA — dosya DIŞI mutasyonlar (commit mesajında sayılarla; her biri geri alındı, sha eşit):
 //   bkz. Teks-Erp/docs/BEKCI-HARITASI.md `## lisans` satırı.
 // =============================================================================
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import { PROTOCOL_ERROR_CODES, ROOT_PUBLIC_KEYS } from "../src/lib/license/protocol";
+import { PROTOCOL_ERROR_CODES, ROOT_PUBLIC_KEYS, TYP } from "../src/lib/license/protocol";
 import { CORE_ERROR_CODES, CORE_UNAVAILABLE_CODE, tsLicenseCore, type LicenseCore } from "../src/lib/license/license-core";
 import {
   NATIVE_ABI,
@@ -44,7 +45,7 @@ import {
   nativeFileName,
   type LoaderOptions,
 } from "../src/lib/license/native";
-import { PACKAGE_PUBLIC_KEYS } from "../src/lib/license/integrity";
+import { INTEGRITY_TYP, PACKAGE_PUBLIC_KEYS } from "../src/lib/license/integrity";
 import { MODULE_KEY_HKDF_PREFIX } from "../src/lib/license/module-key";
 import { WINDOWS_PROBE_LINES } from "../src/lib/license/fingerprint-os";
 import { atlamaDefteri } from "./lib/atlama";
@@ -108,6 +109,16 @@ export function rustDesenleri(kaynaklar: readonly string[]): string[] {
     if (zod) out.push([...zod[1].matchAll(/r"([^"]*)"/g)].map((x) => x[1]).join(""));
   }
   return out;
+}
+
+/** Rust'taki belge türü sabitleri: `pub const TYP_<AD>: &str = "…";` → [AD, değer]. */
+export function rustTypSabitleri(kaynaklar: readonly string[]): [string, string][] {
+  return kaynaklar.flatMap((k) => [...k.matchAll(/pub const TYP_(\w+): &str = "([^"]*)";/g)].map((m): [string, string] => [m[1], m[2]]));
+}
+
+/** Rust TYP_<AD> sabiti TS `TYP.<AD>` ile aynı adda ve aynı değerde değilse fark satırı. */
+export function typFarklari(rust: readonly (readonly [string, string])[], ts: Readonly<Record<string, string>>): string[] {
+  return rust.filter(([ad, deger]) => ts[ad] !== deger).map(([ad, deger]) => `TYP_${ad}="${deger}" (TS: ${ts[ad] ?? "yok"})`);
 }
 
 /** JS regex literallerinin kaynağı (`/…/` — satır içi, bayraksız ya da bayraklı). */
@@ -226,6 +237,14 @@ function bolum0(): void {
   const yetim = rust.filter((d) => !tsKume.has(desenNormal(d)));
   check("§0h Rust'taki HER regex TS kaynağında ya da canlı Zod deseninde birebir", rust.length >= 12 && yetim.length === 0, yetim.length ? `yetim: ${yetim.join(" · ")}` : `${rust.length} desen`);
   check("§0i derleme sabiti geliştirmede KAPALI (native zorunlu değil)", NATIVE_REQUIRED === false);
+
+  const tumRust = readdirSync(path.join(NATIVE_DIZIN, "src")).filter((d) => d.endsWith(".rs")).sort().map(rustKaynak);
+  const rustTyp = rustTypSabitleri(tumRust);
+  const typFark = typFarklari(rustTyp, TYP);
+  const rustTypAdlari = new Set(rustTyp.map(([ad]) => ad));
+  const gereken = ["HAK", "KIRA", "SERTIFIKA", "BUTUNLUK"].filter((ad) => !rustTypAdlari.has(ad));
+  check("§0j Rust'taki HER belge türü (TYP_*) protokolün TYP kayıt defterinde aynı ad ve değerle", typFark.length === 0 && gereken.length === 0, typFark.join(" · ") || (gereken.length ? `Rust'ta yok: ${gereken.join(",")}` : `${rustTyp.length} tür`));
+  check("§0j' TS bütünlük türü kayıt defterinden (INTEGRITY_TYP = TYP.BUTUNLUK)", INTEGRITY_TYP === TYP.BUTUNLUK, INTEGRITY_TYP);
 }
 
 function secenek(g: Partial<LoaderOptions> & { cwd: string }): LoaderOptions {
@@ -411,6 +430,9 @@ async function bolum8(dosya: VektorDosyasi | null): Promise<void> {
   }
   const tsKume = new Set(tsDesenleri("const A = /^tekserp-[a-z]+$/;").map(desenNormal));
   check("§8f regex aynası değişmiş deseni yakalar, `\\d` ≡ `[0-9]` eşitliğinde susar", !tsKume.has(desenNormal("^tekserp-[a-z0-9]+$")) && tsKume.has(desenNormal("^tekserp-[a-z]+$")) && desenNormal("^\\d{4}$") === desenNormal("^[0-9]{4}$"));
+  const sentetik = rustTypSabitleri([`pub const TYP_HAK: &str = "tekserp-hak";\npub const TYP_BUTUNLUK: &str = "tekserp-butunlukx";\npub const TYP_YENI: &str = "tekserp-yeni";`]);
+  const sentetikFark = typFarklari(sentetik, { HAK: "tekserp-hak", BUTUNLUK: "tekserp-butunluk" });
+  check("§8g TYP aynası değişmiş değeri ve kayıt defterinde olmayan türü yakalar, eşitte susar", sentetik.length === 3 && sentetikFark.length === 2 && typFarklari(sentetik.slice(0, 1), { HAK: "tekserp-hak" }).length === 0, sentetikFark.join(" · "));
 }
 
 async function main(): Promise<void> {
