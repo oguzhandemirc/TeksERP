@@ -1,0 +1,208 @@
+#!/usr/bin/env node
+// =============================================================================
+// BEKÇİ — LİSANS DEVREYE ALMA BETİKLERİ KURU KİPTE AĞA ÇIKMAZ · zero-dep, DB'siz, ağsız
+// =============================================================================
+// `deploy/lisans-devreye/` (runbook docs/ops/LISANS-DEVREYE-ALMA-TESTFABRIKA.md) canlı VDS'e ve testfabrika'ya
+// bakan ölçüm betikleridir. Sözleşme: varsayılan KURU (plan basar, hiçbir bağlantı açmaz); `--olc` ile bile
+// yalnız OKUMA (HTTP GET/HEAD · ssh/PowerShell salt-okuma izin listesi). Bu bekçi ölçer:
+//   §1 STATİK — §1a ağ/süreç API'si yalnız tek boğazda (lib/ag.mjs) · §1b boğazın her kapısında sıra:
+//      sözleşme denetimi → `if (!this.olc) return kuru` → ağ çağrısı; fetch/spawnSync tek yerde · §1c kip yalnız
+//      `--olc`tan · §1d HTTP yalnız GET/HEAD
+//   §2 DİNAMİK — betikler ağ/süreç TUZAĞI altında (fetch · child_process · http(s) · net) kuru koşar: sıfır
+//      girişim, her kontrol plan satırı basar; POZİTİF KONTROL: aynı tuzak `--olc` girişimini YAKALAR
+//   §3 SÖZLEŞME BİRİMİ — sshDenetle/psDenetle/httpDenetle sabit vektörlerle (izin listesi sessizce gevşemesin)
+//   §4 SONDALAR (her koşumda, geçici kopyada) — NEGATİF N1…N5 kırmızı vermeli; POZİTİF P1 temiz kopya ve
+//      P2 meşru yeni salt-okuma kontrolü eklenmiş kopya YEŞİL kalmalı (kapı meşru eklemeyi engellemez)
+//
+// Koşum: node scripts/test_lisans_devreye_kuru.mjs     (çıkış 0 yeşil · 1 kırmızı)
+// =============================================================================
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const HEDEF = path.join(KOK, 'deploy/lisans-devreye');
+const TMP = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lisans-devreye-kuru-')));
+let kirmizi = 0;
+const yaz = (ok, ad, ayrinti = '') => {
+  if (!ok) kirmizi += 1;
+  console.log(`${ok ? '✅' : '❌'} ${ad}${ayrinti ? `  [${ayrinti}]` : ''}`);
+};
+
+// ---- Denetimler: statik (kaynak metni) ve dinamik (tuzak altında koşum) ----
+const BOGAZ = 'lib/ag.mjs';
+const AG_API = [/from\s+['"](node:)?(child_process|http|https|net|tls|dgram|http2|worker_threads)['"]/, /\bfetch\s*\(/, /\bXMLHttpRequest\b/, /\bWebSocket\b/, /\bprocess\.binding\b/, /\bimport\s*\(/];
+
+function dosyalar(kok) {
+  const out = [];
+  const gez = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) gez(p);
+      else if (e.name.endsWith('.mjs')) out.push(path.relative(kok, p));
+    }
+  };
+  gez(kok);
+  return out.sort();
+}
+
+/** Yöntem gövdesi: `ad(` ile başlayan sınıf yöntemini, bir sonraki yönteme ya da sınıf sonuna kadar. */
+function yontemGovdesi(kaynak, ad) {
+  const bas = kaynak.search(new RegExp(`\\n  (async )?${ad.replace('#', '\\#')}\\(`));
+  if (bas < 0) return null;
+  const sonraki = kaynak.slice(bas + 1).search(/\n  (async )?#?\w+\(|\n}/);
+  return kaynak.slice(bas, sonraki < 0 ? undefined : bas + 1 + sonraki);
+}
+
+/** Statik denetim: [{ ad, ok, ayrinti }] */
+function statikDenetim(kok) {
+  const sonuc = [];
+  const ekle = (ad, ok, ayrinti = '') => sonuc.push({ ad, ok, ayrinti });
+  const liste = dosyalar(kok);
+  ekle('§1a betik dosyaları bulundu', liste.length >= 3 && liste.includes(BOGAZ), liste.join(', '));
+  for (const f of liste) {
+    if (f === BOGAZ) continue;
+    const k = fs.readFileSync(path.join(kok, f), 'utf8').replace(/^\s*\/\/.*$/gm, '');
+    const ihlal = AG_API.filter((r) => r.test(k)).map(String);
+    ekle(`§1a ${f}: ağ/süreç API'si yalnız ${BOGAZ}'ta`, ihlal.length === 0, ihlal.join(' '));
+  }
+  const ag = fs.readFileSync(path.join(kok, BOGAZ), 'utf8');
+  const sira = { http: [/httpDenetle\(/, /\bfetch\s*\(/], ssh: [/sshDenetle\(/, /this\.#kos\(/], tp: [/psDenetle\(/, /this\.#kos\(/], yerelBetik: [/YEREL_BETIKLER\.includes\(/, /this\.#kos\(/] };
+  for (const [ad, [denetle, cagri]] of Object.entries(sira)) {
+    const g = yontemGovdesi(ag, ad);
+    const iD = g ? g.search(denetle) : -1;
+    const iK = g ? g.search(/if \(!this\.olc\) return this\.#kuru\(/) : -1;
+    const iC = g ? g.search(cagri) : -1;
+    ekle(`§1b Ag.${ad}: sözleşme → kuru dönüş → ağ çağrısı sırası`, iD >= 0 && iK > iD && iC > iK, g ? `denetle@${iD} kuru@${iK} çağrı@${iC}` : 'yöntem yok');
+  }
+  const fetchSay = (ag.match(/\bfetch\s*\(/g) ?? []).length;
+  const spawnSay = (ag.match(/\bspawnSync\s*\(/g) ?? []).length;
+  const kosGovde = yontemGovdesi(ag, '#kos') ?? '';
+  ekle('§1b fetch yalnız Ag.http, spawnSync yalnız Ag.#kos', fetchSay === 1 && spawnSay === 1 && /spawnSync\(/.test(kosGovde), `fetch ${fetchSay} · spawnSync ${spawnSay}`);
+  const kosCagrilari = (ag.match(/this\.#kos\(/g) ?? []).length;
+  ekle('§1b #kos yalnız ssh/tp/yerelBetik içinden (3 çağrı)', kosCagrilari === 3, `${kosCagrilari}`);
+  ekle("§1c kip yalnız `--olc`tan (varsayılan KURU)", /return \{ olc: argv\.includes\('--olc'\) \};/.test(ag), 'kipOku gövdesi');
+  const acanlar = liste.filter((f) => /\bolc\s*[:=]\s*(true|!)/.test(fs.readFileSync(path.join(kok, f), 'utf8')));
+  ekle('§1c hiçbir betik olc=true varsayılanı koymaz', acanlar.length === 0, acanlar.join(', '));
+  const yontemler = liste.filter((f) => /yontem\s*:\s*['"](?!GET['"]|HEAD['"])/.test(fs.readFileSync(path.join(kok, f), 'utf8')));
+  ekle('§1d HTTP çağrıları yalnız GET/HEAD', yontemler.length === 0, yontemler.join(', '));
+  return sonuc;
+}
+
+const TUZAK = `import cp from 'node:child_process'; import net from 'node:net'; import http from 'node:http'; import https from 'node:https';
+import fs from 'node:fs'; import { syncBuiltinESMExports } from 'node:module';
+const kaydet = (ad, x) => { fs.appendFileSync(process.env.TUZAK_DEFTER, ad + '\\t' + String(x).slice(0, 160) + '\\n'); throw new Error('TUZAK ' + ad); };
+for (const f of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) cp[f] = (a) => kaydet('child_process.' + f, a);
+for (const m of [http, https]) { m.request = (a) => kaydet('http.request', a); m.get = (a) => kaydet('http.get', a); }
+net.connect = net.createConnection = (a) => kaydet('net.connect', JSON.stringify(a));
+net.Socket.prototype.connect = function (a) { return kaydet('net.Socket.connect', JSON.stringify(a)); };
+globalThis.fetch = (u) => kaydet('fetch', u);
+syncBuiltinESMExports();
+`;
+
+/** Betiği tuzak altında koşar: { kod, cikti, girisimler[] } */
+function tuzakliKos(kok, tmp, betik, args) {
+  fs.mkdirSync(tmp, { recursive: true });
+  const tuzak = path.join(tmp, 'tuzak.mjs');
+  if (!fs.existsSync(tuzak)) fs.writeFileSync(tuzak, TUZAK);
+  const defter = path.join(tmp, `defter-${Date.now()}-${Math.random().toString(36).slice(2)}.tsv`);
+  fs.writeFileSync(defter, '');
+  const r = spawnSync(process.execPath, ['--import', tuzak, path.join(kok, betik), ...args], {
+    encoding: 'utf8', timeout: 60_000, env: { ...process.env, TUZAK_DEFTER: defter, HOME: tmp },
+  });
+  const girisimler = fs.readFileSync(defter, 'utf8').split('\n').filter(Boolean);
+  return { kod: r.status, cikti: `${r.stdout}${r.stderr}`, girisimler };
+}
+
+/** Dinamik denetim: kuru koşumlar SIFIR girişim + plan basar; `--olc` koşumu girişim yakalar (pozitif kontrol). */
+function dinamikDenetim(kok, tmp) {
+  const sonuc = [];
+  const ekle = (ad, ok, ayrinti = '') => sonuc.push({ ad, ok, ayrinti });
+  const a = tuzakliKos(kok, tmp, 'asama-dogrula.mjs', ['--asama=hepsi']);
+  const planSatiri = (a.cikti.match(/^\s{6}(HTTP|ssh|tp|yerel)\b/gm) ?? []).length;
+  ekle('§2a asama-dogrula kuru: çıkış 0, sıfır ağ/süreç girişimi', a.kod === 0 && a.girisimler.length === 0, `kod ${a.kod} · girişim ${a.girisimler.length} ${a.girisimler.slice(0, 2).join(' | ')}${a.kod ? ` · ${a.cikti.trim().split('\n').pop()}` : ''}`);
+  ekle('§2a asama-dogrula kuru: her kontrol plan satırı bastı (≥ 30)', planSatiri >= 30, `${planSatiri} plan satırı`);
+  const t = tuzakliKos(kok, tmp, 't4-gozlem.mjs', []);
+  ekle('§2b t4-gozlem kuru: çıkış 0, sıfır girişim, dosya yazmaz', t.kod === 0 && t.girisimler.length === 0 && !fs.existsSync(path.join(tmp, '.tekserp')), `kod ${t.kod} · girişim ${t.girisimler.length}`);
+  const o = tuzakliKos(kok, tmp, 'asama-dogrula.mjs', ['--asama=2', '--olc', '--satici-sha=000000000000']);
+  ekle('§2c pozitif kontrol: --olc girişimi TUZAĞA düşer (tuzak kör değil)', o.girisimler.length > 0, `girişim ${o.girisimler.length}`);
+  return sonuc;
+}
+
+async function sozlesmeBirimi() {
+  const ag = await import(path.join(HEDEF, 'lib/ag.mjs'));
+  const dener = (f, x) => { try { f(x); return true; } catch { return false; } };
+  const izinli = ['docker ps --format "{{.Names}}"', 'docker exec tekserp-satici-hazirlik ls -1 /anahtarlar', 'head -3 /opt/x/latest.yml',
+    'docker exec x-db psql -U satici -d satici -tAc "select migration_name from _prisma_migrations"', 'curl -s https://x/saglik'];
+  const yasak = ['docker compose up -d', 'rm -rf /opt/x', 'echo a > /tmp/b', 'sudo ls', 'docker exec x-db psql -c "alter table t add c int"',
+    'find /x -delete', 'cat /opt/x/.env', 'curl -s -X POST https://x', 'curl -s -d a=b https://x', 'docker network connect a traefik', 'ls $(id)'];
+  const psIzinli = ["'a=' + (Get-Content 'C:\\x' -Raw)", '(Get-CimInstance Win32_Process).StartName', '(Get-Date).AddDays(1)',
+    'Invoke-CimMethod -InputObject $_ -MethodName GetOwner', "Invoke-WebRequest -UseBasicParsing http://127.0.0.1:4000/health"];
+  const psYasak = ['Set-Content a b', 'Restart-Service x', 'Stop-Process -Id 1', '& pm2 list', 'Get-Content x > y', 'Invoke-WebRequest -Method Post x',
+    'Invoke-CimMethod -MethodName Terminate', 'Start-Process node', 'Register-ScheduledTask x', 'schtasks /run /tn x', 'Remove-Item C:\\x'];
+  const kotuIzin = izinli.filter((x) => !dener(ag.sshDenetle, x));
+  const kotuYasak = yasak.filter((x) => dener(ag.sshDenetle, x));
+  yaz(kotuIzin.length === 0 && kotuYasak.length === 0, '§3 ssh salt-okuma sözleşmesi (izinli geçer, yazan reddedilir)', [...kotuIzin, ...kotuYasak].join(' | '));
+  const psKotuIzin = psIzinli.filter((x) => !dener(ag.psDenetle, x));
+  const psKotuYasak = psYasak.filter((x) => dener(ag.psDenetle, x));
+  yaz(psKotuIzin.length === 0 && psKotuYasak.length === 0, '§3 PowerShell salt-okuma sözleşmesi', [...psKotuIzin, ...psKotuYasak].join(' | '));
+  const http = [['GET', true], ['HEAD', true], ['POST', false], ['PUT', false], ['DELETE', false]].filter(([y, b]) => dener((u) => ag.httpDenetle(u, y), 'https://x') !== b);
+  yaz(http.length === 0, '§3 HTTP yalnız GET/HEAD', http.map(([y]) => y).join(','));
+  yaz(ag.kipOku([]).olc === false && ag.kipOku(['--kuru']).olc === false && ag.kipOku(['--olc']).olc === true, '§3 kipOku: varsayılan kuru');
+}
+
+/** Kopya üzerinde statik + dinamik denetim; kırmızı sayısı. */
+function kopyaDenetle(kopya, tmp) {
+  return [...statikDenetim(kopya), ...dinamikDenetim(kopya, tmp)].filter((x) => !x.ok);
+}
+
+function kopyala(ad, degistir) {
+  const d = path.join(TMP, ad);
+  fs.cpSync(HEDEF, d, { recursive: true });
+  for (const [dosya, eski, yeni] of degistir) {
+    const f = path.join(d, dosya);
+    const k = fs.readFileSync(f, 'utf8');
+    if (!k.includes(eski)) throw new Error(`sonda ${ad}: '${eski.slice(0, 40)}' ${dosya}'da yok — sonda uygulanamadı`);
+    fs.writeFileSync(f, k.replace(eski, yeni));
+  }
+  const tmp = path.join(TMP, `${ad}-tmp`);
+  fs.mkdirSync(tmp);
+  return { d, tmp };
+}
+
+const SONDALAR = [
+  ['N1 boğaz dışı fetch (asamalar-b 4.2)', '§1a lib/asamalar-b', [['lib/asamalar-b.mjs', "kos: (ag, g) => ag.http(`${g.tpKok}/health`)", "kos: async (ag, g) => { await fetch(`${g.tpKok}/health`); return ag.http(`${g.tpKok}/health`); }"]], false],
+  ['N2 kuru dönüş ağ çağrısından SONRA (Ag.http)', '§1b Ag.http', [['lib/ag.mjs', "    if (!this.olc) return this.#kuru(`HTTP ${yontem} ${url}${belirtec ? ' (Bearer)' : ''}`);\n", ''],
+    ['lib/ag.mjs', "      return { kuru: false, durum: r.status", "      if (!this.olc) return this.#kuru(`HTTP ${yontem} ${url}`);\n      return { kuru: false, durum: r.status"]], false],
+  ['N3 varsayılan kip ÖLÇÜM (kipOku)', '§1c kip', [['lib/ag.mjs', "return { olc: argv.includes('--olc') };", "return { olc: !argv.includes('--kuru') };"]], false],
+  ['N4 ssh komutunda yazma (compose up)', '§2a asama-dogrula kuru: çıkış 0', [['lib/asamalar-a.mjs', "ag.ssh('docker inspect traefik --format", "ag.ssh('docker compose up -d && docker inspect traefik --format"]], false],
+  ['N5 PowerShell yazma fiili (Restart-Service)', '§2a asama-dogrula kuru: çıkış 0', [['lib/asamalar-b.mjs', "\"'surum=' + $k.uygulamaSurumu\",", "\"Restart-Service TeksERP\",\n  \"'surum=' + $k.uygulamaSurumu\","]], false],
+  ['P1 temiz kopya', null, [], true],
+  ['P2 meşru yeni salt-okuma kontrolü', null, [['lib/asamalar-b.mjs', "export const ASAMA_5 = [", "export const ASAMA_5 = [\n  { no: '5.0', ad: 'sonda', kos: (ag) => ag.ssh('docker ps --format \"{{.Names}}\"', { hedef: 'yayin' }), degerlendir: () => ({ sonuc: 'UYUMLU', not: '' }) },"]], true],
+];
+
+async function main() {
+  console.log('── §1 statik');
+  for (const x of statikDenetim(HEDEF)) yaz(x.ok, x.ad, x.ok ? '' : x.ayrinti);
+  console.log('── §2 dinamik (tuzak altında)');
+  for (const x of dinamikDenetim(HEDEF, path.join(TMP, 'asil'))) yaz(x.ok, x.ad, x.ayrinti);
+  console.log('── §3 sözleşme birimi');
+  await sozlesmeBirimi();
+  console.log('── §4 sondalar (geçici kopya)');
+  let negatif = 0;
+  for (const [ad, beklenenKirmizi, degistir, yesilBeklenir] of SONDALAR) {
+    const { d, tmp } = kopyala(ad.split(' ')[0], degistir);
+    const kotu = kopyaDenetle(d, tmp);
+    if (!yesilBeklenir) negatif += 1;
+    // Negatif sonda DOĞRU kontrolde kırmızı vermeli — başka bir yerden gelen kırmızı sondayı geçersiz kılar.
+    const ok = yesilBeklenir ? kotu.length === 0 : kotu.some((x) => x.ad.startsWith(beklenenKirmizi));
+    yaz(ok, `${ad} → ${yesilBeklenir ? 'YEŞİL' : `KIRMIZI (${beklenenKirmizi})`} beklenir`, `kırmızı ${kotu.length}${kotu.length ? `: ${kotu.map((x) => x.ad.slice(0, 40)).join(' | ')}` : ''}`);
+  }
+  console.log(`\n${kirmizi === 0 ? '✅ YEŞİL' : `❌ ${kirmizi} kırmızı`} · ${negatif} negatif + ${SONDALAR.length - negatif} pozitif sonda`);
+  fs.rmSync(TMP, { recursive: true, force: true });
+  return kirmizi === 0 ? 0 : 1;
+}
+
+main().then((k) => process.exit(k), (e) => { console.error(e); process.exit(1); });

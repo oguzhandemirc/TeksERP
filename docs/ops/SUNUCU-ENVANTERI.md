@@ -176,6 +176,7 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
 - [`MOBIL-UZAKTAN-GUNCELLEME.md`](MOBIL-UZAKTAN-GUNCELLEME.md) — tablet güncellemesi
 - [`YEDEK-GERI-YUKLEME-TATBIKATI.md`](YEDEK-GERI-YUKLEME-TATBIKATI.md) — geri yükleme provası
 - [`SATICI-KURULUM.md`](SATICI-KURULUM.md) — satıcı (lisans) sunucusu: ayrı compose projesi, tailnet portalı, şifreli yedek (hazırlık; VDS'e henüz kurulmadı)
+- [`LISANS-DEVREYE-ALMA-TESTFABRIKA.md`](LISANS-DEVREYE-ALMA-TESTFABRIKA.md) — lisansı testfabrika'da devreye alma sırası (satıcı A2 imajı → yayıncı → korumalı backend → yayın → portal → gözlem kipinde etkinleştirme → Senaryo T); salt-okuma aşama doğrulayıcısı
 
 ## Açık iş
 

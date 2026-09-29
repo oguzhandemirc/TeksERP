@@ -36,6 +36,7 @@
 - **[ÇEKİRDEK]** İndirme belirtecini istemciye yalnız fabrikanın kendi ucu verir (`GET /api/license/indirme-belirteci?urun=electron|mobil`, onaylı cihaz ya da oturum): K1'de 403 `LICENSE_UPDATES_FROZEN`, önekte saklı belirteç yoksa ya da süresi dolmuş/okunamıyorsa VERMEZ (404) ve yoklamayı dürter, dolmaya < 15 dk kalmışsa verir ve dürter (dürtme en çok 5 dk'da bir); panel her denetimde, tablet her OTA denetiminden önce (açılışta da) TAZE belirteç ister ve alamazsa BAŞLIKSIZ ister — saklı/bayat belirteci göndermez. · bekçi: `test_indirme_belirteci_ucu (§1 · §2 · §3) · Electron src/lib/download-token.test.ts · mobil src/services/downloadToken.service.test.ts` <sub>(arşiv:2026-09-29 3bc)</sub>
 - **[PROFİL]** Satıcı sunucusu tekserp-vds'te ayrı compose projesidir (`deploy/satici/`): kendi PG16'sı, `web` ağına katılmaz, portal yalnız VDS'in Tailscale IP'sine yayımlanır (Tailscale öncesi geri döngü kipinde hiç yayımlanmaz), iç API (4612) yalnız `ic-api` köprüsünde ve yalnız patronun sabit /32 adresinden, sır docker secret'ı (port yayını yok), anahtar birimi salt okunur, yedekler `.tkenc` (özel yarı VDS dışında); kurulumdan önce `compose-denetle.mjs` yeşil, VDS yazımından önce/sonra adnansahin baytları AYNI — runbook `docs/ops/SATICI-KURULUM.md`. <sub>(arşiv:2026-09-29)</sub>
 - **[PROFİL]** Geçiş sırası: her faz ÖNCE testfabrika (thinkpad-1), sonra adnansahin; adnansahin `zorla`ya takvimle değil gözlem ölçümü + kullanıcı cümlesiyle geçer (takvim kapısı YOK); SAHINSRV müdahaleleri thinkpad-1 denemelerinin tamamı bittikten sonra TEK pencerede, vardiya yokken, "uygula" cümlesiyle. <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Canlı hedefe (VDS satıcısı · kurulum makinesi) bakan devreye alma ölçüm betikleri varsayılan KURU koşar ve `--olc` ile bile yalnız OKUR: tek ağ boğazı (`deploy/lisans-devreye/lib/ag.mjs`) sözleşmeyi bağlantıdan ÖNCE denetler (HTTP GET/HEAD · ssh/PowerShell salt-okuma izin listesi), sonuç üç durumludur (UYUMLU · IHLAL · ÖLÇÜLEMEDİ); devreye alma sırası pazarlık dışıdır — satıcı fabrikadan ÖNCE (katı yoklama şeması), geri almada fabrika ÖNCE. · bekçi: `scripts/test_lisans_devreye_kuru.mjs` <sub>(arşiv:2026-09-30)</sub>
 
 ## Backend (fabrika lisans motoru)
 
@@ -141,6 +142,8 @@ Native çekirdek (cargo, `cd Teks-Erp/native/lisans-cekirdek && npm test`; commi
 
 Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koşar): `mirrors.test.ts`, `sanction.test.tsx`, `once-secret.test.tsx`, `login.test.tsx`, `app-isolation.test.ts`, `distribution.test.tsx`, `cloud-settings.test.tsx`
 
+Devreye alma betikleri (kök, zero-dep, ağsız): `node scripts/test_lisans_devreye_kuru.mjs` (runbook `docs/ops/LISANS-DEVREYE-ALMA-TESTFABRIKA.md`)
+
 Panel (vitest, `cd Electron && npx vitest run <yol>`): `src/lib/download-token.test.ts` (indirme belirteci, 3b)
 
 Tablet (jest, `cd mobil && npx jest <yol>`): `src/services/downloadToken.service.test.ts` (indirme belirteci, 3c)
@@ -176,3 +179,4 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-30 · Portal dağıtım modülleri (3d-1): ilk kurulum bağlantısı, iki yönlü dosya, yayın bildirimi ve sürüm görünümü
 - 2026-09-29 · Lisans 3d-2: kurulum kaydı (kur.ps1 → yoklama → satıcı defteri), destek talepleri, sürüm politikası kiradan
 - 2026-09-30 · Lisans entegrasyonu 4 (I5): dokuz dal tek gövdede — tek silme damgası düzeltmesi, native her zaman zorunlu, Docker künyesi imzalı, destek talebi künyesi NULL alabilir
+- 2026-09-30 · Lisans devreye alma runbook'u (R2): testfabrika sırası, kuru-varsayılan salt-okuma ölçüm betikleri, A2 önkoşul borçları
