@@ -13,11 +13,17 @@
 //      (ölçüldü: tailnet ağı 100.100.100.0/28 iken host'tan yayımlı porta gelen istek geçidin
 //      adresiyle girip portalı 200 açtı)
 //   ⑦ Traefik etiketi yalnız `satici`de ve kenar ağını gösteriyor; DB'nin portu ve dış ağı yok
+//   Ⓛ GERİ DÖNGÜ KİPİ (docker-compose.loopback.yml, satıcıda TAILNET_LOOPBACK=1 — Tailscale gelene dek):
+//      ① yerine: HİÇBİR port yayımlanmaz · satıcının tailnet dinleyicisi 127.0.0.1'de · tailnet ağı
+//      internal · `portal-tunel` satıcının ağ ad alanında, portsuz/birimsiz, tailnet köprü adresini dinler.
+//      Ana kipte TAILNET_LOOPBACK ve `portal-tunel` YASAK (iki kip karışmaz).
 //
-// Kullanım: node deploy/satici/compose-denetle.mjs --env-file <.env> [-f <compose>]
+// Kullanım: node deploy/satici/compose-denetle.mjs --env-file <.env> [-f <compose> ...]
+//   -f verilmezse .env'deki COMPOSE_FILE (":" ayrık, bu dizine göre) — yoksa docker-compose.yml.
 // Çıkış: 0 temiz · 1 ihlal · 2 ölçülemedi (docker yok / config çözülemedi).
 // =============================================================================
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,15 +34,35 @@ const al = (ad) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const envDosyasi = al("--env-file");
-const composeDosyasi = al("-f") ?? path.join(burasi, "docker-compose.yml");
 if (!envDosyasi) {
-  console.error("kullanım: compose-denetle.mjs --env-file <.env> [-f <compose>]");
+  console.error("kullanım: compose-denetle.mjs --env-file <.env> [-f <compose> ...]");
   process.exit(2);
 }
+let envMetni;
+try {
+  envMetni = readFileSync(envDosyasi, "utf8");
+} catch (err) {
+  console.error(`ÖLÇÜLEMEDİ: .env okunamadı — ${err.message}`);
+  process.exit(2);
+}
+const composeFileSatiri = envMetni
+  .split(/\r?\n/)
+  .map((l) => l.match(/^\s*COMPOSE_FILE\s*=\s*(.*?)\s*$/)?.[1])
+  .filter((v) => v !== undefined)
+  .pop();
+const acikF = args.flatMap((a, i) => (a === "-f" && args[i + 1] ? [args[i + 1]] : []));
+const composeDosyalari =
+  acikF.length > 0
+    ? acikF
+    : composeFileSatiri
+      ? composeFileSatiri.replace(/^["']|["']$/g, "").split(":").filter(Boolean).map((f) => path.resolve(burasi, f))
+      : [path.join(burasi, "docker-compose.yml")];
 
-const r = spawnSync("docker", ["compose", "--env-file", envDosyasi, "-f", composeDosyasi, "--profile", "goc", "config", "--format", "json"], {
-  encoding: "utf8",
-});
+const r = spawnSync(
+  "docker",
+  ["compose", "--env-file", envDosyasi, ...composeDosyalari.flatMap((f) => ["-f", f]), "--profile", "goc", "config", "--format", "json"],
+  { encoding: "utf8" },
+);
 if (r.status !== 0) {
   console.error(`ÖLÇÜLEMEDİ: docker compose config — ${(r.stderr || r.error?.message || "").trim()}`);
   process.exit(2);
@@ -71,16 +97,39 @@ function cakisir(cidr, yasak) {
 }
 
 const servisler = Object.entries(cfg.services ?? {});
-kontrol("körlük zemini: dört servis çözüldü (db · satici · goc · yedek)", servisler.length === 4, servisler.map(([a]) => a).join(", "));
+const saticiOrtam = cfg.services?.satici?.environment ?? {};
+const geriDongu = String(saticiOrtam.TAILNET_LOOPBACK ?? "") === "1";
+const tunel = cfg.services?.["portal-tunel"];
+console.log(`kip: ${geriDongu ? "GERİ DÖNGÜ (Tailscale öncesi, portal yalnız VDS içinden)" : "TAILNET"} · dosyalar: ${composeDosyalari.map((f) => path.basename(f)).join(" + ")}\n`);
+const beklenen = geriDongu ? ["satici-db", "satici", "satici-goc", "satici-yedek", "portal-tunel"] : ["satici-db", "satici", "satici-goc", "satici-yedek"];
+kontrol(
+  `körlük zemini: ${beklenen.length} servis çözüldü (${beklenen.join(" · ")})`,
+  servisler.length === beklenen.length && beklenen.every((a) => a in (cfg.services ?? {})),
+  servisler.map(([a]) => a).join(", "),
+);
 
 // ① port yayını
 const yayinlayan = servisler.filter(([, s]) => (s.ports ?? []).length > 0);
-kontrol("① yalnız `satici` port yayımlar", yayinlayan.length === 1 && yayinlayan[0][0] === "satici", yayinlayan.map(([a]) => a).join(", ") || "hiçbiri");
-for (const [ad, s] of yayinlayan) {
-  for (const p of s.ports) {
-    const ip = p.host_ip ?? "";
-    kontrol(`① ${ad}:${p.published}→${p.target} yalnız Tailscale adresine (100.64.0.0/10)`, ip !== "" && aralikta(ip, "100.64.0.0/10"), ip || "host_ip YOK (0.0.0.0)");
+if (geriDongu) {
+  kontrol("①Ⓛ hiçbir servis port yayımlamaz (portal yalnız VDS'in içinden, SSH tüneliyle)", yayinlayan.length === 0, yayinlayan.map(([a]) => a).join(", ") || "hiçbiri");
+  kontrol("①Ⓛ satıcının tailnet dinleyicisi konteynerin geri döngüsünde (TAILNET_BIND=127.0.0.1)", saticiOrtam.TAILNET_BIND === "127.0.0.1", String(saticiOrtam.TAILNET_BIND ?? "YOK"));
+  const kopruIp = cfg.services?.satici?.networks?.tailnet?.ipv4_address;
+  const tunelOrtam = tunel?.environment ?? {};
+  kontrol("①Ⓛ portal-tunel satıcının ağ ad alanında", tunel?.network_mode === "service:satici", String(tunel?.network_mode ?? "YOK"));
+  kontrol(
+    "①Ⓛ portal-tunel portsuz ve birimsiz, yalnız tailnet köprü adresini dinler",
+    (tunel?.ports ?? []).length === 0 && (tunel?.volumes ?? []).length === 0 && !!kopruIp && tunelOrtam.TUNEL_DINLE === kopruIp,
+    `TUNEL_DINLE=${tunelOrtam.TUNEL_DINLE ?? "YOK"} · köprü=${kopruIp ?? "YOK"}`,
+  );
+} else {
+  kontrol("① yalnız `satici` port yayımlar", yayinlayan.length === 1 && yayinlayan[0][0] === "satici", yayinlayan.map(([a]) => a).join(", ") || "hiçbiri");
+  for (const [ad, s] of yayinlayan) {
+    for (const p of s.ports) {
+      const ip = p.host_ip ?? "";
+      kontrol(`① ${ad}:${p.published}→${p.target} yalnız Tailscale adresine (100.64.0.0/10)`, ip !== "" && aralikta(ip, "100.64.0.0/10"), ip || "host_ip YOK (0.0.0.0)");
+    }
   }
+  kontrol("① geri döngü kalıntısı yok (TAILNET_LOOPBACK · portal-tunel)", !tunel && saticiOrtam.TAILNET_LOOPBACK === undefined, [tunel ? "portal-tunel" : "", saticiOrtam.TAILNET_LOOPBACK !== undefined ? `TAILNET_LOOPBACK=${saticiOrtam.TAILNET_LOOPBACK}` : ""].filter(Boolean).join(", "));
 }
 
 // ② docker soketi
@@ -107,7 +156,7 @@ for (const [ad, s] of servisler) {
 
 // ④ ağlar
 const aglar = cfg.networks ?? {};
-for (const anahtar of ["kenar", "ic"]) {
+for (const anahtar of geriDongu ? ["kenar", "ic", "tailnet"] : ["kenar", "ic"]) {
   kontrol(`④ ${anahtar} ağı internal`, aglar[anahtar]?.internal === true, aglar[anahtar]?.name ?? "YOK");
 }
 const disAglar = Object.entries(aglar).filter(([, n]) => n.external).map(([a]) => a);

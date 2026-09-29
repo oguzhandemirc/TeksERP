@@ -5,7 +5,8 @@
 # Bağlam `imaj-derle.sh`in HEAD'den (git archive) kurduğu temiz dizindir; VDS'te derleme YOK,
 # kaynak VDS'e gitmez (imaj `docker save` arşiviyle taşınır). Runbook: docs/ops/SATICI-KURULUM.md
 #
-#   sunucu — node dist/server.js (tek süreç, iki dinleyici) · Prisma şema motoru göç işi için içeride
+#   sunucu — node dist/server.js (tek süreç, iki dinleyici) · Prisma şema motoru göç işi için içeride ·
+#            portal web arayüzü (satici/web derlemesi: /portal tailnet'te, /bayi genelde) /uygulama/web'de
 #   yedek  — pg_dump 16 + yedek-sifrele.cjs (.tkenc) döngüsü; anahtar dizini arşivi de şifreli
 #
 # İkisi de root OLMAYAN kullanıcıyla (10001) koşar; compose kök FS'i salt okunur bağlar.
@@ -13,6 +14,17 @@
 # =============================================================================
 ARG NODE_IMAGE=node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
 ARG PG_IMAGE=postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+
+# -----------------------------------------------------------------------------
+# Web arayüzü: çıktı platformdan bağımsız statik dosyadır → derleme makinesinin kendi mimarisinde
+# (öykünmesiz) koşar. Yalnız `dist/` sunucu imajına geçer; web'in node_modules'ü ve kaynağı geçmez.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/ ./
+RUN npm run build \
+ && test -f dist/portal/portal.html && test -f dist/bayi/bayi.html
 
 # -----------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS derleme
@@ -49,12 +61,16 @@ COPY --from=derleme /uygulama/dist ./dist
 COPY --from=derleme /uygulama/dist-cli ./dist-cli
 COPY --from=derleme /uygulama/prisma ./prisma
 COPY --from=derleme /uygulama/prisma.config.ts /uygulama/package.json ./
+COPY --from=web /web/dist ./web
 COPY --chmod=0755 satici-baslat.sh /usr/local/bin/satici-baslat
+# Yalnız geri döngü kipinde (Tailscale onayı gelene dek) ayrı konteynerde koşar: docker-compose.loopback.yml
+COPY --chmod=0444 portal-tunel.cjs /usr/local/lib/portal-tunel.cjs
 ENV NODE_ENV=production \
     HOME=/tmp \
     CHECKPOINT_DISABLE=1 \
     PRISMA_HIDE_UPDATE_MESSAGE=1 \
-    ANAHTAR_DIZINI=/anahtarlar
+    ANAHTAR_DIZINI=/anahtarlar \
+    PORTAL_WEB_DIZINI=/uygulama/web
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/satici-baslat"]
 CMD ["node", "dist/server.js"]
