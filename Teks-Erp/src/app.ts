@@ -123,6 +123,7 @@ import mobileUpdateRoutes from "./routes/mobile-update.routes";
 import clientPolicyRoutes from "./routes/client-policy.routes";
 import bossRoutes from "./routes/boss.routes";
 import licenseRoutes from "./routes/license.routes";
+import supportRoutes from "./routes/support.routes";
 import patronCloudRoutes from "./routes/patron-cloud.routes";
 const app: Express = express();
 
@@ -622,6 +623,8 @@ app.use("/api/boss", bossRoutes);
 // Lisans (fabrika motoru): durum · etkinleştirme · çevrimdışı/aktarma · taşıma · DR ·
 // indirme belirteci · veri dışarı · proxy. Bu uçlar kapının HER kademede açık listesindedir.
 app.use("/api/license", licenseRoutes);
+// Destek talepleri (3d-2): panel → satıcı `/v1/destek`; yanıtlar zil `destek` + yoklamayla döner.
+app.use("/api/destek", supportRoutes);
 // Patron bulutu (fabrika yüzeyi): teknik kullanıcı + salt okunur bulut hesapları. Gelen kutusu işi `jobs/cloud-inbox.job.ts`.
 app.use("/api/patron-bulut", patronCloudRoutes);
 

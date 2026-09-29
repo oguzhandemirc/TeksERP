@@ -37,6 +37,7 @@ import {
   type LicenseSnapshot,
 } from "../lib/license/runtime";
 import { evaluateLicenseTransitions } from "./license-trail.service";
+import { syncSupportAfterPoll } from "./support-sync.service";
 import {
   buildEnvironment,
   currentFingerprintDigest,
@@ -281,6 +282,8 @@ async function pollOnce(transport: VendorTransport): Promise<{ outcome: PollOutc
     recordPollOutcome({ ok: false, code: result.code });
     return { outcome: "BASARISIZ", code: result.code };
   }
+  // Destek (3d-2): yanıtın `destek` alanı + giden kutusu — kira alışverişi kuyruğunun DIŞINDA, yoklamayı düşürmez.
+  void syncSupportAfterPoll(result.json, transport);
   try {
     const accepted = await acceptLicenseResponse(result.json, "yoklama");
     if (!accepted.yeniKira) {
