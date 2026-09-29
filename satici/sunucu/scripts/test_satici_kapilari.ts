@@ -10,6 +10,7 @@
 //   §5 şema aynası: Prisma `LisansSinifi` = protokol `LICENSE_CLASSES`; `YaptirimTuru` ⊇ K0…K5
 //   §8 hata kodu TEK KAYNAK: portal kodları (`PORTAL_ERROR_CODES`) protokol kodlarıyla (`VENDOR_ERROR_CODES` ∪
 //      `PROTOCOL_ERROR_CODES`) kesişmez — ortak kod (BULUNAMADI, TEKRAR_DENEYIN…) yalnız protokolde yaşar
+//      · iç API kodları (`INTERNAL_ERROR_CODES`) ikisiyle de kesişmez (§8d)
 //   §7 kilit SIRASI: bir fonksiyon birden çok kilit alıyorsa sıra PORTAL_TOKEN → DEALER → CUSTOMER →
 //      TRANSFER_KEY → INSTALLATION → LICENSE_NUMBER (lib/locks.ts başlığı); ters sıra kilitlenme (40P01) doğurur
 // Taban 0 — tarayıcı (cırcır değil): ihlal doğduğu an kırmızı.
@@ -22,7 +23,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { LICENSE_CLASSES, PROTOCOL_ERROR_CODES, SANCTION_LEVELS, VENDOR_ERROR_CODES } from "../src/lisans-protokol";
-import { PORTAL_ERROR_CODES } from "../src/lib/errors";
+import { INTERNAL_ERROR_CODES, PORTAL_ERROR_CODES } from "../src/lib/errors";
 import { LOCK_NAMESPACES } from "../src/lib/locks";
 import { PRUNED_MODELS } from "../src/services/maintenance";
 import { SATICI_KOKU, kontrol, sonuc } from "./lib/test-ortam";
@@ -206,6 +207,8 @@ function main(): void {
   console.log("\n§8 hata kodu tek kaynak");
   const ortak = sharedCodes(PORTAL_ERROR_CODES, [...VENDOR_ERROR_CODES, ...PROTOCOL_ERROR_CODES]);
   kontrol("§8a portal kodları protokol kodlarıyla kesişmez", ortak.length === 0 && PORTAL_ERROR_CODES.length > 0, ortak.join(", "));
+  const icOrtak = sharedCodes(INTERNAL_ERROR_CODES, [...VENDOR_ERROR_CODES, ...PROTOCOL_ERROR_CODES, ...PORTAL_ERROR_CODES]);
+  kontrol("§8d iç API kodları protokol ve portal kodlarıyla kesişmez", icOrtak.length === 0 && INTERNAL_ERROR_CODES.length > 0, icOrtak.join(", "));
   kontrol("§8b protokolde TEKRAR_DENEYIN ve BULUNAMADI var", (["TEKRAR_DENEYIN", "BULUNAMADI"] as const).every((k) => (VENDOR_ERROR_CODES as readonly string[]).includes(k)));
   kontrol("§8c ✓K kesişim karşılaştırıcısı sentetik ortak kodu yakalar", sharedCodes(["A", "BULUNAMADI"], ["BULUNAMADI", "C"]).join() === "BULUNAMADI");
 

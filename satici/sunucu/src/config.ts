@@ -94,13 +94,28 @@ const EnvSchema = z.object({
   DENETIM_SAKLAMA_GUN: positiveInt(365, 3650).default(730),
   /** Tailnet çerezine Secure: yalnız tailnet dinleyicisi HTTPS arkasındaysa "1" (genel dinleyicide her zaman Secure). */
   TAILNET_CEREZ_GUVENLI: z.enum(["0", "1"]).default("0"),
+  /** İÇ API dinleyicisi (patron bulutu → satıcı, `/ic/v1/*`): docker iç ağındaki kendi adresi ya da geri döngü. */
+  PORT_IC: port.default(4612),
+  IC_BIND: z
+    .string()
+    .default("127.0.0.1")
+    .refine((v) => !WILDCARD_ADDRESSES.has(v.trim()), "IC_BIND joker adres olamaz (0.0.0.0 / ::)"),
+  /** İç API'ye bağlanabilecek KAYNAK ağlar (soket adresi; başlık okunmaz). Verilmezse yalnız geri döngü. */
+  IC_KAYNAK_AGLARI: cidrList.optional(),
+  /** İç API ortak sırrının (Bearer) dosyası; yoksa, okunamazsa ya da zayıfsa iç API AÇILMAZ. */
+  IC_API_BELIRTEC_DOSYASI: z.string().min(1).optional(),
+  /** İç zil: tesis başına dakikalık tavan. */
+  IC_ZIL_HIZ_DK: positiveInt(1, 1000).default(12),
+  /** İç API çağrı sayacının denetime yazılma aralığı (dk; her istek değil, pencere başına tek satır). */
+  IC_SAYAC_DK: positiveInt(1, 24 * 60).default(60),
 });
 
 export type VendorConfig = Readonly<
-  Omit<z.infer<typeof EnvSchema>, "ANAHTAR_DIZINI" | "GUVEN_CAPASI_DOSYASI" | "PORTAL_WEB_DIZINI"> & {
+  Omit<z.infer<typeof EnvSchema>, "ANAHTAR_DIZINI" | "GUVEN_CAPASI_DOSYASI" | "PORTAL_WEB_DIZINI" | "IC_API_BELIRTEC_DOSYASI"> & {
     ANAHTAR_DIZINI: string;
     PORTAL_WEB_DIZINI: string;
     GUVEN_CAPASI_DOSYASI: string | undefined;
+    IC_API_BELIRTEC_DOSYASI: string | undefined;
   }
 >;
 
@@ -116,5 +131,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd: string = p
     ANAHTAR_DIZINI: path.resolve(cwd, c.ANAHTAR_DIZINI),
     PORTAL_WEB_DIZINI: path.resolve(cwd, c.PORTAL_WEB_DIZINI),
     GUVEN_CAPASI_DOSYASI: c.GUVEN_CAPASI_DOSYASI ? path.resolve(cwd, c.GUVEN_CAPASI_DOSYASI) : undefined,
+    IC_API_BELIRTEC_DOSYASI: c.IC_API_BELIRTEC_DOSYASI ? path.resolve(cwd, c.IC_API_BELIRTEC_DOSYASI) : undefined,
   });
 }
