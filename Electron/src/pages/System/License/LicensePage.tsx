@@ -11,6 +11,7 @@ import { LicenseStatusCard } from "./LicenseStatusCard";
 import { LicenseEntitlementCard } from "./LicenseEntitlementCard";
 import { LicenseLeaseCard } from "./LicenseLeaseCard";
 import { LicenseMachineCard } from "./LicenseMachineCard";
+import { LicenseIntegrityCard } from "./LicenseIntegrityCard";
 import { LicenseActivateCard } from "./LicenseActivateCard";
 import { LicenseOfflineCard } from "./LicenseOfflineCard";
 import { LicenseTransferCard } from "./LicenseTransferCard";
@@ -60,6 +61,7 @@ export function LicensePage() {
             <LicenseEntitlementCard d={d} />
             <LicenseLeaseCard d={d} />
             <LicenseMachineCard d={d} />
+            <LicenseIntegrityCard b={d.butunluk} />
             {canManage && <LicenseActivateCard d={d} />}
             {canManage && <LicenseOfflineCard d={d} />}
             {canManage && <LicenseTransferCard d={d} />}

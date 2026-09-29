@@ -142,6 +142,26 @@ export interface LicenseDetail {
   tasima: { talepId: string; istendi: string; gerekce: string | null; durum?: "BEKLIYOR" | "ONAYLANDI" } | null;
   gozlem: { reddedilecekIstek: number; reddedilecekModul: number };
   proxy: LicenseProxySettings;
+  /** Lisans çekirdeği + imzalı paket bütünlüğü (yalnız sayılar, dosya adı yok). Eski backend göndermez. */
+  butunluk?: LicenseIntegrity;
+}
+
+export type IntegrityStatus = "GECERLI" | "GECERSIZ" | "OLCULEMEDI" | "KAPSAM_DISI";
+
+export interface LicenseIntegrity {
+  cekirdek: "native" | "ts" | "yok";
+  cekirdekNeden: string | null;
+  zorunlu: boolean;
+  durum: IntegrityStatus;
+  kod: string | null;
+  denetlendi: string | null;
+  paketId: string | null;
+  paketSurumu: string | null;
+  derlemeTarihi: string | null;
+  anahtar: string | null;
+  sayilar: { dosya: number; eksik: number; degisik: number; fazla: number; okunamayan: number } | null;
+  /** Bu paketin ilk uyuşmazlığı: ek süre buradan sayılır, yalnız yeni paket sıfırlar. */
+  ilkUyusmazlik: string | null;
 }
 
 export type OfflinePurpose = "yokla" | "etkinlestir";

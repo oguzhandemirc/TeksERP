@@ -31,7 +31,7 @@
 - **Native yanıtı sözleşme şemalarından geçer** (Zod: belge şemaları, sonuç zarfı, kod kümesi): native'deki bir hata sessiz kabul üretemez; sözleşmeye uymayan yanıt `CEKIRDEK_YOK`'tur. JWS yükü kopyalanmadan geçer (`z.record` `__proto__` anahtarını prototipe yazıp yükten düşürürdü — vektörle yakalandı).
 - **Panik** JS istisnasına döner (`#[napi(catch_unwind)]`, iş parçacığı görevlerinde `catch_unwind`); `panic = "unwind"` bilerek (abort backend'i düşürürdü). Süreç başlatan/dosya özetleyen çağrılar (`collectFingerprint`, `verifyIntegrity`) libuv havuzunda koşar, olay döngüsü bloke olmaz.
 
-## 2. JSON sınırı (ABI 1)
+## 2. JSON sınırı (ABI 2 — 2e-S: bütünlük yükü liste dosyasına bağlı, rapora `fazla`)
 
 Her dışa aktarım JSON metni alır, JSON metni döndürür (napi nesne eşlemesi yok — sürümler arası kırılgan değil). `api.rs` fonksiyonlarını hem napi yapıştırıcısı hem `cargo test` çağırır: test edilen yüzey Node'un gördüğü yüzeydir.
 
@@ -69,19 +69,21 @@ Her dışa aktarım JSON metni alır, JSON metni döndürür (napi nesne eşleme
 - Toplayıcı iki uygulamada **aynı ham değeri** okumalıdır: Faz 1 kiralarının kabul edilen kümesi TS toplayıcısıyla ölçüldü; native farklı okursa yükseltmeden sonra parmak izi "uyuşmaz" olurdu. Windows'ta AYNI PowerShell sondası koşulur (satır satır aynı metin, bekçi §0d + §3b); Linux'ta aynı dosyalar aynı sırayla (Node `readdirSync` bayt sırasıyla sıralar — native de sıralar; JS `trim` kümesi U+FEFF'i kırpar, U+0085'i kırpmaz); macOS'ta aynı `ioreg` çağrısı.
 - **Ölçüm (§6a, aynı tuz):** darwin-arm64 f1 + f4 · **thinkpad-1 (gerçek Windows) f1 + f2 + f3 + f4 dördü de ölçüldü, iki toplayıcı birebir** · Linux (Docker amd64) `/etc/machine-id` bağlanınca f1 birebir; konteynerde disk (f3) ve DMI (f2/f4) ölçülemedi → bekçi §6b bunu "ikisi de boş" eşitliği saymaz, beyanla atlar.
 
-## 6. Bütünlük v1 — Faz 2e'nin biçimi için arayüz
+## 6. Bütünlük — imzalı yük + liste dosyası (Faz 2e-S, arayüz sürümü 2)
 
-JWS `typ: tekserp-butunluk`, imzalayan PAKET anahtarı (`kid` `paket-<…>`). Yük:
+JWS `typ: tekserp-butunluk`, imzalayan PAKET anahtarı (`kid` `paket-<…>`). Yük (tanınmayan üst alan atılır — ör. filigranın `kurulumId`i):
 
 ```json
 { "v": 1, "paketId": "<uuid>", "urun": "backend", "surum": "2.12.0", "derlemeTarihi": "<ISO Z>",
   "musteri": "<kod>" | null,
-  "dosyalar": [ { "yol": "dist/server.jsc", "sha256": "<base64url 43>", "boyut": 123 } ] }
+  "liste": { "sha256": "<base64url 43>", "boyut": 1234, "dosyaSayisi": 15210 },
+  "kapsam": { "dizinler": ["dist", "native", "node_modules", "prisma/migrations"], "dosyalar": ["package.json", "kur.ps1"] } }
 ```
 
-- `yol` göreli POSIX (`[A-Za-z0-9_.@+-]` segmentleri, `.`/`..`, ters eğik çizgi, sürücü harfi, baştaki `/` RED, ≤ 512), tekrarsız; dosya girdisi KATI nesne; 1–20 000 dosya.
-- **Karar sırası:** çapa boş/biçimsiz → `OLCULEMEDI(BUTUNLUK_CAPA_BOS)` · imza/şema → `GECERSIZ(<protokol kodu>)` · kök dizin değil → `OLCULEMEDI(BUTUNLUK_OKUNAMADI)` · eksik (yok ya da dosya değil) veya değişmiş (boy ya da sha256) dosya → `GECERSIZ(BUTUNLUK_UYUSMAZ)` · yalnız okunamayan → `OLCULEMEDI(BUTUNLUK_OKUNAMADI)` · aksi `GECERLI`. Rapor listeleri 50'de kesilir, sayılar tam.
-- Native v1 listede olmayan fazla dosyayı sormaz; **2e kararı:** fazla dosya TS ikinci katmanında (`integrity-check.ts`) yalnız kapsam dizinlerinde (`dist/` · `native/` · `runtime/`, tek kaynak `integrity-scope.ts`) aranır — JWS 32 KB tavanı yüzünden liste `node_modules`u kapsamaz. `PACKAGE_PUBLIC_KEYS` = [`paket-hazirlik`] (2e; yalnız TEST/DEMO, sınıf kuralı TS'te), üretim anahtarı ayrı tören. Tür protokolün `TYP` kayıt defterindedir (`TYP.BUTUNLUK`; TS `INTEGRITY_TYP` ondan okur, Rust `TYP_BUTUNLUK` aynasıdır — kâhin §0j ölçer).
+- `liste` ve `kapsam` KATI nesne; kapsam yolları göreli POSIX (`[A-Za-z0-9_.@+-]` segmentleri, `.`/`..` RED, ≤ 512), tekrarsız, en çok 32 dizin / 64 dosya; `liste.boyut` 1…64 MB, `dosyaSayisi` 1…200 000.
+- Liste dosyası `butunluk-liste.txt` (paket kökü): `<sha256>\t<boyut>\t<yol>\n`; yalnız yazdırılabilir ASCII + TAB + LF, son satır LF, yollar bayt sırasıyla kesin artan (tekrar yok), yol segmenti `/ \ : * ? " < > |` içermez, `.`/`..` değil, boşluk serbest; satır sayısı `dosyaSayisi`na eşit; boyut ≤ 2^53−1, baştaki sıfır yok.
+- **Karar sırası:** çapa boş/biçimsiz → `OLCULEMEDI(BUTUNLUK_CAPA_BOS)` · imza/şema → `GECERSIZ(<protokol kodu>)` · kök dizin değil → `OLCULEMEDI(BUTUNLUK_OKUNAMADI)` · liste dosyası yok (eksik) / boy-özet-dilbilgisi tutmaz (değişik) → `GECERSIZ(BUTUNLUK_LISTE_BOZUK)`, okunamaz → `OLCULEMEDI(BUTUNLUK_OKUNAMADI)` · eksik (yok ya da dosya değil) veya değişmiş (boy ya da sha256) dosya → `GECERSIZ(BUTUNLUK_UYUSMAZ)` · imzalı kapsamda listede olmayan girdi → `GECERSIZ(BUTUNLUK_FAZLA)` · yalnız okunamayan (dosya ya da kapsam dizini) → `OLCULEMEDI(BUTUNLUK_OKUNAMADI)` · aksi `GECERLI`. Rapor listeleri (`eksik` · `degisik` · `okunamayan` · `fazla`) 50'de kesilir, sayılar tam.
+- **2e-S (arayüz sürümü 2):** liste JWS'te değil, sha256'sı imzalı ayrı dosyada (`butunluk-liste.txt`, `src/integrity_list.rs` ↔ `integrity-list.ts`; biçim kararı `LISANS-KOD-KORUMA.md` §13.8). Native imzalı `kapsam`ta listede olmayan FAZLA girdiyi de sorar (sembolik bağ izlenmez; okunamayan dizin ÖLÇÜLEMEDİ); karar sırası eksik/değişmiş → `BUTUNLUK_UYUSMAZ` · fazla → `BUTUNLUK_FAZLA` · okunamayan → `BUTUNLUK_OKUNAMADI`; liste dosyası yok/özet/dilbilgisi → `BUTUNLUK_LISTE_BOZUK`. TS ikinci katmanı (`integrity-check.ts`) FAZLA'yı imzalı kapsamda yeniden arar. `PACKAGE_PUBLIC_KEYS` = [`paket-hazirlik`] (yalnız TEST/DEMO, sınıf kuralı TS'te), üretim anahtarı ayrı tören. Tür protokolün `TYP` kayıt defterindedir (`TYP.BUTUNLUK`; TS `INTEGRITY_TYP` ondan okur, Rust `TYP_BUTUNLUK` aynasıdır — kâhin §0j ölçer); liste sabitleri kâhin §0k'da.
 
 ## 7. Modül anahtarı sarması v1 — Faz 2d için arayüz
 
