@@ -1,0 +1,187 @@
+name: tekserp-patron-${ORTAM:?ORTAM gerekli (uretim|hazirlik)}
+
+# =============================================================================
+# TeksERP PATRON BULUTU — tekserp-vds · /opt/stack/apps/tekserp-patron-<ortam>/
+# =============================================================================
+# Runbook: docs/ops/PATRON-BULUTU-KURULUM.md (kurulum · doğrulama · geri alma). Bu dosya sunucuya ELLE
+# kopyalanır; değerler yanındaki `.env`ten (ornek.env). Web sürümü (patron/uygulama) ve API AYNI kökende:
+# patron.etkiliyazilim.com/ → web, /api → hesap API'si, /v1 → fabrika kanalı (kurulum imzalı).
+#
+# Üç ağ — hiçbiri satıcının kendi ağlarıyla, güncelleme ya da `web` ağıyla ORTAK değil:
+#   kenar   (internal) Traefik ↔ patron. Traefik runbook adımıyla bağlanır (yeniden başlatmasız).
+#   ic      (internal) patron ↔ kendi PG16'sı ↔ yedek işi. Port yayını YOK.
+#   ic-api  (external, satıcının) patron → satıcı iç API'si (/ic/v1/*, 4612). Patron SABİT adresle katılır
+#           (PATRON_IC_IP — satıcının kaynak kapısı yalnız bu /32'yi kabul eder). Patron burada DİNLEMEZ.
+# Üç DB rolü (patron/sunucu/scripts/db-rolleri.ts): göç (tablo sahibi; yalnız patron-goc + yedek) ·
+# uygulama · eşitleme (RLS'i atlayamaz; sunucu yalnız bu ikisini alır). Parolalar docker secret'ı.
+# Docker soketi hiçbir servise BAĞLANMAZ. Kök FS salt okunur · root olmayan kullanıcı · yetenek yok ·
+# cgroup CPU/bellek/süreç sınırı (patron satıcıyı ve güncelleme yayınını aç bırakamasın).
+# =============================================================================
+
+x-sertlik: &sertlik
+  read_only: true
+  init: true
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  patron-db:
+    <<: *sertlik
+    image: ${PG_IMAGE:-postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685}
+    container_name: tekserp-patron-${ORTAM}-db
+    user: "70:70"
+    group_add: ["${SIR_GID:?SIR_GID gerekli}"]
+    environment:
+      POSTGRES_USER: patron_goc
+      POSTGRES_DB: patron
+      POSTGRES_PASSWORD_FILE: /run/secrets/goc_parolasi
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command: ["postgres", "-c", "shared_buffers=96MB", "-c", "max_connections=40", "-c", "timezone=UTC"]
+    secrets: [goc_parolasi]
+    volumes:
+      - patron-pg:/var/lib/postgresql/data
+    tmpfs:
+      - /var/run/postgresql:uid=70,gid=70,mode=0775
+      - /tmp:mode=1777
+    networks: [ic]
+    cpus: 0.5
+    mem_limit: 384m
+    memswap_limit: 384m
+    pids_limit: 100
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "patron_goc", "-d", "patron"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  patron:
+    <<: *sertlik
+    image: ${PATRON_IMAJ:?PATRON_IMAJ gerekli (tekserp-patron:<sha>)}
+    container_name: tekserp-patron-${ORTAM}
+    user: "10001:10001"
+    group_add: ["${SIR_GID}"]
+    depends_on:
+      patron-db: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      # Yığın cgroup tavanının altında: çöp toplayıcı OOM öldürmesinden ÖNCE devreye girer.
+      NODE_OPTIONS: --max-old-space-size=320
+      PORT: "4620"
+      # Yalnız kenar adresinde dinler: ic-api ağından (satıcı ya da oraya katılan konteyner) ulaşılamaz.
+      BIND: ${KENAR_IP:?KENAR_IP gerekli}
+      ANAHTAR_DIZINI: /anahtarlar
+      PATRON_WEB_DIZINI: /uygulama/web
+      KURULUM_KAYNAGI: ${KURULUM_KAYNAGI:-satici}
+      SATICI_IC_API_URL: http://${SATICI_IC_API_IP:?SATICI_IC_API_IP gerekli}:4612
+      # İstemci IP'si (hız sınırı anahtarı) Cloudflare başlığından; köken yalnız CF'ye açılana dek taklit edilebilir (runbook §11).
+      VEKIL_IP_BASLIGI: cf-connecting-ip
+    secrets: [uygulama_parolasi, esitleme_parolasi, ic_api_belirteci]
+    volumes:
+      # Anahtar birimi SALT OKUNUR: patron-totp.key önceden üretilir (runbook §2.1); yoksa açılış DURUR.
+      - ${ANAHTAR_DIZINI_HOST:?ANAHTAR_DIZINI_HOST gerekli}:/anahtarlar:ro
+    tmpfs:
+      - /tmp:mode=1777
+    networks:
+      kenar: { ipv4_address: "${KENAR_IP}" }
+      ic: {}
+      ic-api: { ipv4_address: "${PATRON_IC_IP:?PATRON_IC_IP gerekli}" }
+    cpus: 0.75
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 200
+    healthcheck:
+      test: ["CMD", "node", "-e", "const h=process.env.BIND==='0.0.0.0'?'127.0.0.1':process.env.BIND;require('http').get('http://'+h+':4620/saglik',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=tekserp-patron-${ORTAM}-kenar
+      # Yalnız genel yüzeyler: iç/yönetim ad alanları (web-static.ts IC_ONEKLER) yönlendiriciye hiç girmez → Traefik 404.
+      - "traefik.http.routers.tekserp-patron-${ORTAM}.rule=Host(`${PATRON_HOST:?PATRON_HOST gerekli}`) && !PathRegexp(`^/(ic|yonetim)(/|$$)`)"
+      - traefik.http.routers.tekserp-patron-${ORTAM}.entrypoints=websecure
+      - traefik.http.routers.tekserp-patron-${ORTAM}.tls=true
+      - traefik.http.services.tekserp-patron-${ORTAM}.loadbalancer.server.port=4620
+
+  # Göç + rol hizalaması TEK SEFERLİK ve ELLE (`--profile goc run --rm patron-goc`): geri alınamaz eşik, önce yedek.
+  # Satıcı CLI'si (tesis · kurulum · ilk yönetici) aynı konteynerden: `run --rm patron-goc node dist-cli/scripts/tesis.js …`
+  patron-goc:
+    <<: *sertlik
+    image: ${PATRON_IMAJ}
+    profiles: ["goc"]
+    restart: "no"
+    user: "10001:10001"
+    group_add: ["${SIR_GID}"]
+    depends_on:
+      patron-db: { condition: service_healthy }
+    command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist-cli/scripts/db-rolleri.js"]
+    secrets: [goc_parolasi, uygulama_parolasi, esitleme_parolasi]
+    tmpfs:
+      - /tmp:mode=1777
+    networks: [ic]
+    cpus: 0.5
+    mem_limit: 384m
+    memswap_limit: 384m
+    pids_limit: 100
+
+  patron-yedek:
+    <<: *sertlik
+    image: ${PATRON_YEDEK_IMAJ:?PATRON_YEDEK_IMAJ gerekli (tekserp-patron-yedek:<sha>)}
+    container_name: tekserp-patron-${ORTAM}-yedek
+    user: "10001:10001"
+    group_add: ["${SIR_GID}"]
+    depends_on:
+      patron-db: { condition: service_healthy }
+    environment:
+      YEDEK_ARALIK_SAAT: "${YEDEK_ARALIK_SAAT:-24}"
+      YEDEK_SAKLA_GUN: "${YEDEK_SAKLA_GUN:-30}"
+      YEDEK_EN_AZ: "${YEDEK_EN_AZ:-7}"
+    secrets: [goc_parolasi]
+    volumes:
+      - ${YEDEK_DIZINI_HOST:?YEDEK_DIZINI_HOST gerekli}:/yedek
+      - ${YEDEK_ALICI_DIZINI_HOST:?YEDEK_ALICI_DIZINI_HOST gerekli}:/yedek-alici:ro
+      - ${ANAHTAR_DIZINI_HOST}:/anahtarlar:ro
+    tmpfs:
+      - /tmp:mode=1777
+    networks: [ic]
+    cpus: 0.25
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 50
+
+secrets:
+  # root:SIR_GID 0440 — yalnız bu projenin konteynerleri (group_add) okur; SIR_GID satıcınınkinden AYRI.
+  goc_parolasi:
+    file: ${GOC_PAROLA_DOSYASI:?GOC_PAROLA_DOSYASI gerekli}
+  uygulama_parolasi:
+    file: ${UYGULAMA_PAROLA_DOSYASI:?UYGULAMA_PAROLA_DOSYASI gerekli}
+  esitleme_parolasi:
+    file: ${ESITLEME_PAROLA_DOSYASI:?ESITLEME_PAROLA_DOSYASI gerekli}
+  # Satıcı ↔ patron ortak Bearer'ı: satıcının dosyasının patron dizinindeki KOPYASI (ortak birim yok; runbook §3).
+  ic_api_belirteci:
+    file: ${IC_API_BELIRTEC_DOSYASI_HOST:?IC_API_BELIRTEC_DOSYASI_HOST gerekli}
+
+volumes:
+  patron-pg:
+    name: tekserp-patron-${ORTAM}-pg
+
+networks:
+  kenar:
+    name: tekserp-patron-${ORTAM}-kenar
+    internal: true
+    # Traefik DİNAMİK adresle katılır (ip_range); patronun sabit KENAR_IP'si aralığın DIŞINDA (satıcıda ölçülen çakışma).
+    ipam:
+      config: [{ subnet: "${KENAR_AGI:?KENAR_AGI gerekli}", ip_range: "${KENAR_DINAMIK_ARALIK:?KENAR_DINAMIK_ARALIK gerekli}" }]
+  ic:
+    name: tekserp-patron-${ORTAM}-ic
+    internal: true
+  ic-api:
+    # Satıcı compose'unun ağı (tekserp-satici-<ortam>-ic-api); önce satıcı kurulu olmalı.
+    name: ${SATICI_IC_API_AGI:?SATICI_IC_API_AGI gerekli (tekserp-satici-<ortam>-ic-api)}
+    external: true
