@@ -92,10 +92,11 @@ const YAYIN_YOLLARI = {
   'mobil/scripts/yayinla-ota.mjs': { sinif: 'kapili', terfi: true },
   'mobil/scripts/build-apk.mjs': { sinif: 'kapili', terfi: true },
   'deploy/electron-yayinla.ps1': { sinif: 'saplama' },
-  'deploy/paketle.ps1': {
-    sinif: 'kanal-disi',
-    gerekce: 'backend zip — kanal kimliği taşımaz (S8: ilk tur tek zip; dist-web dış adresi beyanlı fark)',
-  },
+  // Backend zip: -Musteri <kod> ile kanal kimliği (pm2Ad/urunAdi) alır → 'kapılı'
+  //   (Faz 2b: müşteri kodu argümandan, kök kuralı backend'e genişledi). TERFİ YOK:
+  //   backend'in HTTP yayın feed'i Faz 3 dağıtım kapısına kadar yok — üretim kanalına
+  //   HTTP terfisi ölçülemez, o yüzden terfi kapısı burada aranmaz.
+  'deploy/paketle.ps1': { sinif: 'kapili' },
 };
 const KAPI_IZI = 'scripts/lib/kanallar.mjs';
 /** Kapı izi: .mjs yayıncı kitaplığı import eder, kabuk yayıncı CLI'yi çağırır. */
@@ -358,6 +359,8 @@ function sondalar(taban, tabanYollar) {
     k.panel = { appId: `com.ornek.${kod}`, urunAdi: `Urun ${kod}`, paketAdi: `urun-${kod}`, erpDisAdresi: '', erpAdresi: `http://10.9.8.${kod.length}:4000` };
     k.tablet = { ...k.tablet, androidPaket: `com.ornek.${kod}`, gorunenAd: `Tablet ${kod}`,
       erpAdresi: `http://10.9.9.${kod.length}:4000/api`, otaSertifika: `keystore/ota-certs-${kod}/certificate.pem` };
+    // Backend kimliği de AYRIK (urunAdi/pm2Ad her kanalda benzersiz — Faz 2b).
+    k.backend = { urunAdi: `Urun ${kod} Backend`, pm2Ad: `tekserp-backend-${kod}` };
     o.kanallar[kod] = k;
   };
   const kayitta = (fn) => (d) => jd(d, KAYIT_REL, fn);
@@ -424,6 +427,7 @@ function sondalar(taban, tabanYollar) {
     ['N40 kabuk yayıncıdan terfi kapısı çağrısı silindi (electron-yayinla.sh) → KIRMIZI', 'kirmizi', (d) => { d['deploy/electron-yayinla.sh'] = d['deploy/electron-yayinla.sh'].replaceAll('kanal-kapisi.mjs" terfi', 'kanal-kapisi.mjs" kanal'); }, 'terfi kapısı'],
     ['N41 mjs yayıncıdan terfi yüklemi çağrısı silindi, import kaldı (mobil-yayinla.mjs) → KIRMIZI', 'kirmizi', (d) => { d['deploy/mobil-yayinla.mjs'] = d['deploy/mobil-yayinla.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
     ['N42 build-apk terfi kapısı çağrısı silindi → KIRMIZI', 'kirmizi', (d) => { d['mobil/scripts/build-apk.mjs'] = d['mobil/scripts/build-apk.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
+    ['N43 backend paketleyiciden (paketle.ps1) kanal kapısı çağrısı silindi → KIRMIZI', 'kirmizi', (d) => { d['deploy/paketle.ps1'] = d['deploy/paketle.ps1'].replaceAll('kanal-kapisi.mjs', 'baska.mjs'); }],
     ['O1 kayıt defteri bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 update-feed.ts UPDATE_BASE_URL adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/shared/update-feed.ts'] = d['Electron/shared/update-feed.ts'].replace('export const UPDATE_BASE_URL', 'export const YAYIN_KOKU_URL'); }],
     ['O3 main.ts setAppUserModelId çağrısı kalktı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('app.setAppUserModelId(APP_ID);', 'void 0;'); }],

@@ -33,14 +33,22 @@ export class Olculemedi extends Error {}
 const TURLER = new Set(['uretim', 'hazirlik']);
 const KOK_ANAHTARLARI = ['_aciklama', 'varsayilan', 'kanallar'];
 const KANAL_ANAHTARLARI = {
-  uretim: ['tur', 'terfiKaynagi', 'ad', 'gorunurEtiket', 'yayin', 'panel', 'tablet'],
-  hazirlik: ['tur', 'ayna', 'ad', 'gorunurEtiket', 'yayin', 'panel', 'tablet'],
+  uretim: ['tur', 'terfiKaynagi', 'ad', 'gorunurEtiket', 'yayin', 'panel', 'tablet', 'backend'],
+  hazirlik: ['tur', 'ayna', 'ad', 'gorunurEtiket', 'yayin', 'panel', 'tablet', 'backend'],
 };
 export const YAYIN_ANAHTARLARI = [
   'panelFeed', 'panelManifest', 'mobilFeed', 'otaManifest', 'apkKunye', 'vdsPanel', 'vdsMobil', 'panelDefter',
 ];
 export const PANEL_ANAHTARLARI = ['appId', 'urunAdi', 'paketAdi', 'erpDisAdresi', 'erpAdresi'];
 export const TABLET_ANAHTARLARI = ['androidPaket', 'gorunenAd', 'erpAdresi', 'runtimeVersion', 'otaSertifika'];
+/**
+ * Backend paketinin (paketle.ps1 -Musteri <kod>) müşteriye özel dağıtım kimliği. Faz 2b:
+ *   · urunAdi — /health + PAKET.json'da görünen backend adı (filigran; her kanalda AYRIK);
+ *   · pm2Ad   — sunucudaki pm2 süreç adı (TEKSERP_PM2_AD; iki kurulum çakışmasın — her kanalda AYRIK).
+ * DAVRANIŞ TAŞIMAZ: bayrak/ayar değil, dağıtım kimliği (feed'ler gibi). Backend yayın feed'i
+ * Faz 3'te bu bloğa girer; o güne dek zip elden/portaldan gider.
+ */
+export const BACKEND_ANAHTARLARI = ['urunAdi', 'pm2Ad'];
 
 /**
  * İki kanal arasında AYNI OLAMAYAN alanlar. `runtimeVersion` bilerek YOK: uyum
@@ -53,6 +61,7 @@ export const AYRIK_ALANLAR = [
   ...YAYIN_ANAHTARLARI.map((a) => `yayin.${a}`),
   'panel.appId', 'panel.urunAdi', 'panel.paketAdi', 'panel.erpDisAdresi', 'panel.erpAdresi',
   'tablet.androidPaket', 'tablet.gorunenAd', 'tablet.erpAdresi', 'tablet.otaSertifika',
+  'backend.urunAdi', 'backend.pm2Ad',
 ];
 
 const al = (nesne, yol) => yol.split('.').reduce((o, k) => (o == null ? undefined : o[k]), nesne);
@@ -166,7 +175,7 @@ export function kayitHatalari(kayit) {
       }
     }
 
-    for (const [blok, anahtarlar] of [['yayin', YAYIN_ANAHTARLARI], ['panel', PANEL_ANAHTARLARI], ['tablet', TABLET_ANAHTARLARI]]) {
+    for (const [blok, anahtarlar] of [['yayin', YAYIN_ANAHTARLARI], ['panel', PANEL_ANAHTARLARI], ['tablet', TABLET_ANAHTARLARI], ['backend', BACKEND_ANAHTARLARI]]) {
       const b = k[blok];
       if (!b || typeof b !== 'object' || Array.isArray(b)) {
         h.push(`${on}: ${blok} bloğu yok`);
@@ -180,6 +189,11 @@ export function kayitHatalari(kayit) {
         const bosOlabilir = blok === 'panel' && a === 'erpDisAdresi';
         if (typeof v !== 'string' || (!bosOlabilir && !v.trim())) h.push(`${on}: ${blok}.${a} boş ya da metin değil`);
       }
+    }
+    // pm2 adı sunucuda süreç/servis kimliğidir: boşluk/ters bölü/kabuk taşıyamaz.
+    const pm2 = k.backend?.pm2Ad;
+    if (typeof pm2 === 'string' && !/^[a-zA-Z0-9._-]{2,60}$/.test(pm2)) {
+      h.push(`${on}: backend.pm2Ad "${pm2}" biçimi tutmuyor (harf/rakam/nokta/tire/alt çizgi, 2-60)`);
     }
     const erp = k.tablet?.erpAdresi;
     if (typeof erp === 'string' && !/^https?:\/\/[^/\s]+\/api$/.test(erp)) {
@@ -409,6 +423,23 @@ export function tabletIsaretciFarki(kod, dosyalar) {
   }
   fark(f, 'mobil/musteri.json kod', m.kod, kod);
   return f;
+}
+
+/* ------------------------------------------------------------------ *
+ * BACKEND paketinin kimliği — paketle.ps1 -Musteri <kod> derleme anında enjekte eder
+ * ------------------------------------------------------------------ */
+
+/**
+ * Backend paketinin bu kanala göre alacağı kimlik değerleri. paketle.ps1 bunları
+ * ecosystem env'ine (TEKSERP_PM2_AD) ve PAKET.json'a yazar; panel/tablet kimliği gibi
+ * ağaca YAZILMAZ, paket ANINDA enjekte edilir. Backend'de literal iz taşıyan kaynak
+ * yoktur (kimlik çalışma anında env/manifest'ten okunur), o yüzden yalnız değer üretir.
+ */
+export function backendPaketleAyarlari(kod, kanal) {
+  return {
+    TEKSERP_PM2_AD: kanal.backend.pm2Ad,
+    TEKSERP_BACKEND_URUN: kanal.backend.urunAdi,
+  };
 }
 
 /* ------------------------------------------------------------------ *

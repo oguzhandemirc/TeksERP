@@ -1,0 +1,98 @@
+name: Korumalı paket (.jsc)
+
+# =============================================================================
+# KORUMALI BACKEND ARTEFAKTLARI — platforma kilitli .jsc'yi HEDEF platformda üretir
+# =============================================================================
+# Bayt kodu (.jsc) OS + mimari + V8 sürümüne KİLİTLİDİR (2a ölçümü
+# docs/design/KOD-KORUMA-OLCUM.md): macOS'ta win/linux .jsc ÜRETİLEMEZ. Bu iş
+# akışı windows-latest + ubuntu-latest koşucularında, `deploy/node-surumu.json`in
+# pinlediği AYNI Node 24 ile derler; yapıtlar (server.jsc + yükleyici + künye +
+# runtime node ikilisi) indirilir ve Mac YALNIZ birleştirir + PAKET anahtarıyla
+# imzalar.
+#
+# ⚠ İMZA ANAHTARI CI'A GİRMEZ. Bu iş akışı hiçbir sır (PAKET imza anahtarı, .env,
+#   DB kimliği) kullanmaz; yalnız açık kaynaktan derler. Nihai imza Mac'te.
+#
+# workflow_dispatch ile ELLE tetiklenir (otomatik push/PR'da KOŞMAZ: .jsc üretimi
+# yalnız yayın hazırlığında gerekir, her commit'te değil).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      musteri:
+        description: "Müşteri/kanal kodu (deploy/kanallar.json backend bloğu; boşsa kanal-dışı)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  korumali:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - hedef: win-x64
+            runs-on: windows-latest
+          - hedef: linux-x64
+            runs-on: ubuntu-latest
+    name: "Korumalı .jsc — ${{ matrix.hedef }}"
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node sürümü TEK KAYNAK deploy/node-surumu.json — .jsc paketi ÜRETEN Node'un
+      # V8'ine kilitlidir, o yüzden çalışma zamanıyla AYNI sürüm kurulur.
+      - name: Node sürümünü node-surumu.json'dan oku
+        id: nodesurum
+        shell: bash
+        run: echo "surum=$(node -e "process.stdout.write(require('./deploy/node-surumu.json').surum)")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.nodesurum.outputs.surum }}
+
+      - name: Bağımlılıklar (Teks-Erp — esbuild + bytenode dahil)
+        working-directory: Teks-Erp
+        run: npm ci --no-audit --no-fund
+
+      # Runtime node ikilisini indir + SHA256 doğrula (tek indirici; kayıttan).
+      - name: Runtime node ikilisi (SHA doğrulamalı)
+        run: node scripts/koruma-runtime-indir.mjs ${{ matrix.hedef }} koruma-cikti
+
+      # Kaynak haritası REPO DIŞI — pakete girmez, yığın çözümü için ayrı artefakt.
+      - name: Korumalı derleme (esbuild minify → bytenode .jsc)
+        working-directory: Teks-Erp
+        env:
+          KORUMA_ARSIV_DIZINI: ${{ runner.temp }}/koruma-arsiv
+        run: node scripts/build-korumali.mjs --hedef=${{ matrix.hedef }} --cikti=../koruma-cikti/dist
+
+      # .jsc GERÇEKTEN üretildi mi (host==hedef): künyeden ölç, üretilmediyse DUR.
+      - name: .jsc üretimini doğrula
+        shell: bash
+        run: |
+          node -e "const k=require('./koruma-cikti/dist/server-kunye.json'); if(!k.jscUretildi){console.error('server.jsc üretilmedi (host hedefe uymadı) — bu koşucu ${{ matrix.hedef }} üretmeli'); process.exit(1)} console.log('jsc',k.jscSha256.slice(0,16),'v8',k.v8Taban)"
+          test -f koruma-cikti/dist/server.jsc || { echo "server.jsc yok"; exit 1; }
+
+      - name: Yapıtları yükle (.jsc + yükleyici + künye + runtime)
+        uses: actions/upload-artifact@v4
+        with:
+          name: korumali-${{ matrix.hedef }}
+          path: |
+            koruma-cikti/dist/server.jsc
+            koruma-cikti/dist/server.js
+            koruma-cikti/dist/server-kunye.json
+            koruma-cikti/runtime/**
+          if-no-files-found: error
+          retention-days: 7
+
+      # Kaynak haritası AYRI artefakt (pakete GİRMEZ; yığın izini satırdan kaynağa çevirir).
+      - name: Kaynak haritası arşivi (repo dışı → artefakt)
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaynak-haritasi-${{ matrix.hedef }}
+          path: ${{ runner.temp }}/koruma-arsiv/**
+          if-no-files-found: warn
+          retention-days: 7

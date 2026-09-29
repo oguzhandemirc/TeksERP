@@ -7,6 +7,7 @@
 //   node scripts/kanal-kapisi.mjs kanal <kod>                      # kayıtlı mı
 //   node scripts/kanal-kapisi.mjs panel-paketle <kod>              # kayıtlı mı + ağaç dinlenmede + kimlik kaynağı kanal
 //   node scripts/kanal-kapisi.mjs panel-derleme <kod>              # electron-builder `-c.*` kimlik argümanları (satır başına bir)
+//   node scripts/kanal-kapisi.mjs backend-paketle <kod>          # kayıtlı mı + backend bloğu (pm2Ad/urunAdi) → KEY=VALUE
 //   node scripts/kanal-kapisi.mjs panel-yayin <kod> <paket dizini> # paket (release/<kod>/<sürüm>) bu kanalın mı
 //   node scripts/kanal-kapisi.mjs terfi <kod> <panel|tablet> <sürüm> [--kuru] [--terfi-atla=<cümle>]  # K5 (scripts/lib/terfi.mjs)
 //   node scripts/kanal-kapisi.mjs terfi-atla-kaydi <kod> <panel|tablet> <sürüm> <cümle>             # kaçışın etiketi (best-effort)
@@ -21,6 +22,7 @@
 import {
   Olculemedi,
   PANEL_SABIT_DOSYALAR,
+  backendPaketleAyarlari,
   dosyalariOku,
   kanalCoz,
   panelArtefaktFarki,
@@ -65,6 +67,16 @@ function main(argv) {
         ], 1);
       }
       console.log(`  ✓ kanal "${kod}" (${kanal.tur}) · ağaç dinlenmede ("${vk}") · kimlik derlemede kanaldan`);
+      return;
+    }
+    if (komut === 'backend-paketle') {
+      // Backend paketinin (paketle.ps1 -Musteri <kod>) kanal kimliği. kanalCoz →
+      // kayitHatalari backend bloğunu (urunAdi/pm2Ad) da doğrular (eksikse KIRMIZI).
+      // Backend'in HTTP yayın feed'i YOK (Faz 3'e kadar) → burada TERFİ yok, yalnız
+      // kimlik. Çıktı KEY=VALUE (paketle.ps1 ecosystem env'ine + PAKET.json'a yazar).
+      const { kanal } = kanalCoz(kod);
+      const ayar = backendPaketleAyarlari(kod, kanal);
+      for (const [k, v] of Object.entries(ayar)) console.log(`${k}=${v}`);
       return;
     }
     if (komut === 'panel-derleme') {
@@ -116,7 +128,7 @@ function main(argv) {
       console.log(mesaj + (t.not ? ` — ${t.not}` : ''));
       return;
     }
-    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['kanal <kod> · panel-paketle <kod> · panel-derleme <kod> · panel-yayin <kod> <dizin> · terfi <kod> <ürün> <sürüm> · terfi-atla-kaydi <kod> <ürün> <sürüm> <cümle>'], 2);
+    dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['kanal <kod> · panel-paketle <kod> · backend-paketle <kod> · panel-derleme <kod> · panel-yayin <kod> <dizin> · terfi <kod> <ürün> <sürüm> · terfi-atla-kaydi <kod> <ürün> <sürüm> <cümle>'], 2);
   } catch (e) {
     if (e instanceof Olculemedi) dur(`ÖLÇÜLEMEDİ — ${e.message}`, ['Ölçülemeyen kapı geçmiş kapı değildir: DUR.'], 2);
     if (e?.satirlar) dur(e.message, e.satirlar, 1);

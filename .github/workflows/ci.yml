@@ -59,6 +59,11 @@ jobs:
       # deyip KIRMIZI verir (fail-closed), sessizce atlamaz.
       - name: Sürüm notu kapısı (künyeden okunan panel + tablet sürümü)
         run: node scripts/check-surum-notlari.mjs --kunyeden
+      # Korumalı paket çalışma zamanı kaydı (deploy/node-surumu.json) — tek kaynak
+      # tutarlılığı + tüketicilerin onu okuduğu. Ağsız (SHA biçimi ölçülür; resmî
+      # SHASUMS doğrulaması yalnız yerelde --ag ile). Zero-dep, DB'siz.
+      - name: Node sürüm kaydı (korumalı paket runtime)
+        run: node scripts/test_node_surumu.mjs
 
   # ===========================================================================
   # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test
@@ -102,9 +107,11 @@ jobs:
         # burada derinlik verilir ki CI DA ölçsün (koşum yeri ölçüm koşuludur).
         with:
           fetch-depth: 0
+      # Backend'in ÇALIŞMA ZAMANI Node 24'tür (korumalı paket runtime, deploy/node-surumu.json).
+      # CI de o çizgide ölçer ki "kod bu Node'da koşar" sinyali gerçek olsun (Faz 2b).
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: Teks-Erp/package-lock.json
       - run: npm ci

@@ -26,7 +26,7 @@ import { execFileSync } from 'node:child_process';
 import { KOK, kanalCoz, Olculemedi } from './kanallar.mjs';
 import { ayristir, etiketAdi, karsilastir, manifestGovdesindenSurum, terfiEtiketAdi } from './surum.mjs';
 
-export const TERFI_URUNLERI = ['panel', 'tablet'];
+export const TERFI_URUNLERI = ['panel', 'tablet', 'backend'];
 /** Kullanıcı cümlesi — onay (etiket mesajı) ve kaçış (`--terfi-atla`) için aynı asgari. */
 export const CUMLE_ASGARI_KARAKTER = 20;
 export const CUMLE_ASGARI_KELIME = 3;
@@ -143,6 +143,13 @@ export function httpsOku(url, basliklar = {}) {
  * @returns {Array<{ne: string, url: string, durum: 'var'|'yok'|'olculemedi', surum?: string, neden?: string}>}
  */
 export function kaynakSurumleri(kaynakKanal, urun, oku = httpsOku) {
+  // Backend'in HTTP yayın feed'i YOK (paketle.ps1 zip'i elden/portaldan gider; Faz 3
+  // dağıtım kapısı VDS feed'ini ekleyene kadar). ③ şartı ÖLÇÜLEMEZ → terfi ÖLÇÜLEMEDİ =
+  // DUR (fail-closed: backend üretim kanalına HTTP kapısıyla otomatik terfi ettirilemez).
+  if (urun === 'backend') {
+    return [{ ne: 'backend yayın sürümü', url: null, durum: 'olculemedi',
+      neden: 'backend HTTP yayın feed\'i Faz 3 dağıtım kapısına kadar YOK — kaynak kanaldaki sürüm ölçülemez' }];
+  }
   const y = kaynakKanal.yayin;
   const ozet = (ne, url, r, cikar) => {
     if (r.durum !== 'var') return { ne, url, ...r };
