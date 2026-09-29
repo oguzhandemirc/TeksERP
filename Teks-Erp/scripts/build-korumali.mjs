@@ -144,7 +144,7 @@ async function main() {
       __TEKSERP_NATIVE_REQUIRED__: 'true',
       __TEKSERP_FILIGRAN__: JSON.stringify(JSON.stringify(filigran)),
     },
-    plugins: sifreliPaketler.length ? [cekirdekEklentisi({ proj: PROJ, paketler: sifreliPaketler, ev })] : [],
+    plugins: [cekirdekEklentisi({ proj: PROJ, paketler: sifreliPaketler, ev })],
   });
   // Şifreli modülün hiçbir dosyası çekirdeğe girmemeli (girerse şifreleme hiçbir şeyi gizlemez).
   const cekirdekGirdileri = new Set(Object.keys(sonuc.metafile.inputs).map((i) => path.resolve(process.cwd(), i)));

@@ -35,7 +35,7 @@ const gates: ModuleLoader[] = [];
 function defaultHost(): HostMap {
   // Yalnız şifreli derlemede var: eklenti modülün çekirdekten aldığı her parçayı buraya bağlar.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require("tekserp:module-host") as HostMap;
+  return (require("tekserp:module-host") as { HOST: HostMap }).HOST;
 }
 
 function routerOf(exports: unknown): RequestHandler | null {

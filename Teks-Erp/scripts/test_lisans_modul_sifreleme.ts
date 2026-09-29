@@ -8,6 +8,7 @@
 // §4 düz metin diske düşmez · §5 üretimde TS'e düşme yok · §6 kurulumun X25519 anahtarı.
 // Sondalar (✓K): BEKCI-HARITASI `## lisans` satırında.
 // =============================================================================
+import { spawnSync } from "node:child_process";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -89,12 +90,20 @@ function bolum2(ad: string, core: LicenseCore, s: KiraSenaryosu): void {
 
 type HostMap = Record<string, () => unknown>;
 
-async function bolum3ve4(): Promise<void> {
+interface ModulPaketi {
+  readonly pkgDir: string;
+  readonly key: Buffer;
+}
+
+async function bolum3ve4(): Promise<ModulPaketi | null> {
   console.log("\n§3 yükleyici — GERÇEK depo-multi paketi bellekte, çekirdeğin örnekleriyle");
   const { katalogOku, modulPaketiDerle } = await import("./lib/sifreli-modul-derle.mjs");
   const esbuild = createRequire(path.join(TEKS, "package.json"))("esbuild") as unknown;
   const paket = katalogOku(TEKS).find((p) => p.modul === MODUL);
-  if (!paket) return check("§3 katalogda depo-multi var", false);
+  if (!paket) {
+    check("§3 katalogda depo-multi var", false);
+    return null;
+  }
   const duz = path.join(TEMP, "derleme", "depo-multi.cjs");
   const { ev } = await modulPaketiDerle({ esbuild, proj: TEKS, giris: paket.giris, dosyalar: paket.dosyalar, outfile: duz, disarida: ["@prisma/client", ".prisma/client", ".prisma/client/default", "prisma", "bwip-js"] });
   const yuzey = [...ev.keys()];
@@ -134,6 +143,48 @@ async function bolum3ve4(): Promise<void> {
     /\b(writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|writeFileAtomicSync|copyFile)\b/.test(oku(f)),
   );
   check("§4c ✓K çözme/derleme yolunda hiçbir dosya yazma çağrısı yok", yazanlar.length === 0, yazanlar.join(", "));
+  return { pkgDir, key };
+}
+
+/**
+ * §7 GERÇEK paket biçiminde (esbuild çekirdek + eklenti) ev sahibi aynı örneği verir: çift paketli npm
+ * (zod `import` ↔ `require` başka dosya) iki kopya doğurursa `instanceof` kırılır; şifresiz korumalı
+ * derleme de eklentisiz kalırsa `tekserp:module-host` çözülemez (ikisi de ölçülerek yakalandı).
+ */
+async function bolum7(p: ModulPaketi): Promise<void> {
+  console.log("\n§7 korumalı derleme biçiminde yükleme (esbuild + eklenti, ayrı süreç)");
+  const { cekirdekEklentisi, katalogOku, modulPaketiDerle } = await import("./lib/sifreli-modul-derle.mjs");
+  const esbuild = createRequire(path.join(TEKS, "package.json"))("esbuild") as { build(o: Record<string, unknown>): Promise<unknown> };
+  const disarida = ["@prisma/client", ".prisma/client", ".prisma/client/default", "prisma", "bwip-js"];
+  const paketler = katalogOku(TEKS).filter((k) => k.modul === MODUL);
+  const { ev } = await modulPaketiDerle({ esbuild, proj: TEKS, giris: paketler[0]!.giris, dosyalar: paketler[0]!.dosyalar, outfile: path.join(TEMP, "d7", "m.cjs"), disarida });
+  const giris = path.join(TEMP, "d7", "giris.ts");
+  const kaynak = (dosya: string) => JSON.stringify(path.join(TEKS, "src", dosya));
+  writeFileSync(giris, [
+    `import { createModuleLoader } from ${kaynak("lib/license/encrypted-module-router")};`,
+    `import { getRegisteredDocBuilders } from ${kaynak("services/printed-document.service")};`,
+    `import { ZodError } from "zod";`,
+    `const HOST = require("tekserp:module-host").HOST;`,
+    `const [dir, k] = process.argv.slice(2);`,
+    `const r = createModuleLoader("depo-multi", { packageDir: dir, unlock: () => ({ ok: true, key: Buffer.from(k, "base64url"), surum: 1, kaynak: "kira" }) }).tryLoad();`,
+    `console.log("SONUC " + JSON.stringify({ ok: r.ok, kod: r.ok ? null : r.code, belge: getRegisteredDocBuilders().has("TRANSFER_DISPATCH"), zod: HOST["npm:zod"]().ZodError === ZodError }));`,
+    `process.exit(0);`,
+  ].join("\n"));
+  const cikti = path.join(TEMP, "d7", "cekirdek.cjs");
+  const derle = async (liste: typeof paketler) => {
+    try {
+      await esbuild.build({ entryPoints: [giris], outfile: cikti, bundle: true, platform: "node", format: "cjs", external: disarida, nodePaths: [path.join(TEKS, "node_modules")], logLevel: "silent", plugins: [cekirdekEklentisi({ proj: TEKS, paketler: liste, ev })] });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  check("§7a şifresiz korumalı derleme (paket yok) çekirdeği yine derler — ev sahibi eklentisi takılı", await derle([]));
+  const derlendi = await derle(paketler);
+  const cocuk = derlendi ? spawnSync(process.execPath, [cikti, p.pkgDir, p.key.toString("base64url")], { cwd: TEKS, env: { ...process.env, NODE_PATH: path.join(TEKS, "node_modules") }, encoding: "utf8", timeout: 120_000 }) : null;
+  const satir = cocuk?.stdout.split("\n").find((l) => l.startsWith("SONUC ")) ?? null;
+  const sonucu = satir ? (JSON.parse(satir.slice(6)) as { ok: boolean; kod: string | null; belge: boolean; zod: boolean }) : null;
+  check("§7b ✓K paketli çekirdekte modül yüklenir, belge kayıt defteri ve zod AYNI örnek (çift kopya yok)", !!sonucu?.ok && sonucu.belge && sonucu.zod, satir ?? (cocuk?.stderr ?? "derlenmedi").slice(-300));
 }
 
 function bolum5(): void {
@@ -179,7 +230,8 @@ async function main(): Promise<void> {
   if (yerel.core.source === "native") bolum2("native", yerel.core, kiraSenaryosu());
   else if (process.env.TEKSERP_STRICT === "1") check("§2 native test derlemesi (TEKSERP_STRICT)", false, neden);
   else console.log(`⏭ §2 native kolu ATLANDI — ${neden} (derle: cd native/lisans-cekirdek && npm run derle)`);
-  await bolum3ve4();
+  const paket = await bolum3ve4();
+  if (paket) await bolum7(paket);
   bolum5();
   await bolum6();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

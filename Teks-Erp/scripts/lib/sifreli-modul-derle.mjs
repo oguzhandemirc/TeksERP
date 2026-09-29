@@ -62,7 +62,10 @@ export async function modulPaketiDerle({ esbuild, proj, giris, dosyalar, outfile
   return { ev };
 }
 
-/** Çekirdek derlemesi eklentisi: giriş importu → kapı; `tekserp:module-host` → ev sahibi haritası. */
+/**
+ * Çekirdek derlemesi eklentisi — HER korumalı derlemede takılır (çekirdek `tekserp:module-host`u içe aktarır):
+ * şifreli paket varsa giriş importu → kapı ve ev sahibi haritası dolu; yoksa harita boş, giriş kancası yok.
+ */
 export function cekirdekEklentisi({ proj, paketler, ev }) {
   const girisler = new Map(paketler.map((p) => [path.join(proj, 'src', p.giris), p.paket]));
   const routerYolu = path.join(proj, 'src/lib/license/encrypted-module-router.ts');
@@ -70,10 +73,25 @@ export function cekirdekEklentisi({ proj, paketler, ev }) {
     name: 'tekserp-sifreli-kapi',
     setup(b) {
       b.onResolve({ filter: /^tekserp:module-host$/ }, () => ({ path: 'ev-sahibi', namespace: 'tekserp-host' }));
+      // src parçası `require` ile (esbuild ESM→CJS köprüsü `__esModule` taşır, aynı dosya aynı örnek); npm
+      // parçası çekirdeğin kendi `import`uyla AYNI koşuldan (çift paketlerde `require` başka dosyayı seçer:
+      // zod index.js ↔ index.cjs — iki kopya `instanceof`u kırar).
       b.onLoad({ filter: /.*/, namespace: 'tekserp-host' }, () => {
-        const satirlar = [...ev.entries()].map(([k, v]) => `  ${JSON.stringify(k)}: () => require(${JSON.stringify(v.tur === 'src' ? v.yol : v.ad)}),`);
-        return { contents: `module.exports = {\n${satirlar.join('\n')}\n};\n`, loader: 'js', resolveDir: proj };
+        const importlar = [];
+        const satirlar = [];
+        for (const [k, v] of ev) {
+          if (v.tur === 'src') {
+            satirlar.push(`  ${JSON.stringify(k)}: () => require(${JSON.stringify(v.yol)}),`);
+            continue;
+          }
+          const ad = `npm${importlar.length}`;
+          importlar.push(`import * as ${ad} from ${JSON.stringify(v.ad)};`);
+          satirlar.push(`  ${JSON.stringify(k)}: () => ({ ...${ad}, __esModule: true }),`);
+        }
+        return { contents: `${importlar.join('\n')}\nexport const HOST = {\n${satirlar.join('\n')}\n};\n`, loader: 'js', resolveDir: proj };
       });
+      // Şifreli paket yoksa (varsayılan korumalı derleme) yalnız boş ev sahibi haritası kurulur; giriş kancası yok.
+      if (paketler.length === 0) return;
       const adlar = paketler.map((p) => path.basename(p.giris).replace(/\.ts$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
       b.onResolve({ filter: new RegExp(`(${adlar.join('|')})(\\.ts)?$`) }, async (a) => {
         if (a.pluginData?.tekserpIc || a.kind === 'entry-point') return undefined;
