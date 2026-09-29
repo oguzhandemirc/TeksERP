@@ -9,7 +9,9 @@
 // ⭐ KALICI SONDA ✓K1 (her koşumda): kapsam karşılaştırıcısı sentetik eksik ve fazla kümede ısırır.
 // Koşum: npx tsx scripts/test_portal_uclar.ts
 // =============================================================================
-import { randomUUID } from "node:crypto";
+import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { DAY_MS, ENDPOINTS, parseJws } from "../src/lisans-protokol";
 import { DEALER_PORTAL_ROUTES } from "../src/http/dealer-routes";
@@ -35,6 +37,7 @@ import {
   portalSunuculariKur,
   sonuc,
   temizleKurulumlar,
+  temizleDagitim,
   temizlePortal,
   totpKodu,
   type PortalYanit,
@@ -48,7 +51,9 @@ export function coverageGaps(table: readonly Pick<PortalRouteDef, "method" | "pa
 
 async function main(): Promise<void> {
   hedefDbKapisi();
-  const ortam = await anahtarOrtamiKur(Date.now(), { PORTAL_GIRIS_HIZ_DK: "1000" });
+  const dagitimKoku = mkdtempSync(path.join(os.tmpdir(), "uclar-dagitim-"));
+  const derlemeDizini = path.join(dagitimKoku, "derlemeler");
+  const ortam = await anahtarOrtamiKur(Date.now(), { PORTAL_GIRIS_HIZ_DK: "1000", DOSYA_DIZINI: path.join(dagitimKoku, "dosyalar"), DERLEME_DIZINI: derlemeDizini });
   const { ctx, f } = ortam;
   const { prisma } = await import("../src/lib/prisma");
   const kullanicilar: string[] = [];
@@ -109,6 +114,31 @@ async function main(): Promise<void> {
     kurulumlar.push(kId);
     await s("patch", "/kurulumlar/:id", `/kurulumlar/${kId}`, 200, { yoklamaAraligiDk: 30, sinif: "TEST" });
     await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${kId}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), sinif: "URETIM" } });
+
+    console.log("\n§1z dağıtım rotaları (Faz 3d; davranış test_dagitim_* bekçilerinde)");
+    mkdirSync(derlemeDizini, { recursive: true });
+    writeFileSync(path.join(derlemeDizini, "TeksERP-uclar.exe"), Buffer.from("uclar-derleme"));
+    const ozet = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+    await s("get", "/dagitim/derlemeler", "/dagitim/derlemeler", 200);
+    const dBag = await s("post", "/dagitim/baglantilar", "/dagitim/baglantilar", 201, { tur: "ILK_KURULUM", musteriId: mId, kurulumId: kId, derlemeAdi: "TeksERP-uclar.exe", gecerlilikSaat: 1, azamiIndirme: 1 });
+    await s("get", "/dagitim/baglantilar", `/dagitim/baglantilar?musteriId=${mId}`, 200);
+    await s("post", "/dagitim/baglantilar/:id/iptal", `/dagitim/baglantilar/${(dBag.veri.baglanti as { id: string }).id}/iptal`, 200, { sebep: "uçlar kapsamı" });
+    const dIst = await s("post", "/dagitim/yukleme-istekleri", "/dagitim/yukleme-istekleri", 201, { musteriId: mId, gecerlilikSaat: 1, kotaMb: 2, azamiDosyaMb: 1 });
+    await s("get", "/dagitim/yukleme-istekleri", `/dagitim/yukleme-istekleri?musteriId=${mId}`, 200);
+    await s("post", "/dagitim/yukleme-istekleri/:id/iptal", `/dagitim/yukleme-istekleri/${(dIst.veri.istek as { id: string }).id}/iptal`, 200, { sebep: "uçlar kapsamı" });
+    const dIcerik = Buffer.from("uçlar giden dosyası");
+    const dOt = await s("post", "/dagitim/giden-oturum", "/dagitim/giden-oturum", 200, { musteriId: mId, dosyaAdi: "not.txt", boyut: dIcerik.length, sha256: ozet(dIcerik) });
+    const dOid = dOt.veri.oturumId as string;
+    const dPut = await fetch(`${sunucu.tailnet}/portal/api/ham/giden-oturum/${dOid}/parca/0`, { method: "PUT", headers: { Cookie: cerez, "X-Parca-Sha256": ozet(dIcerik) }, body: new Uint8Array(dIcerik) });
+    kontrol("§1z0 ham parça ucu (JSON tablosu dışı) oturumla 200", dPut.status === 200, `${dPut.status}`);
+    await s("get", "/dagitim/giden-oturum/:id", `/dagitim/giden-oturum/${dOid}`, 200);
+    await s("post", "/dagitim/giden-oturum/:id/tamamla", `/dagitim/giden-oturum/${dOid}/tamamla`, 200, {});
+    await s("get", "/dagitim/dosyalar", `/dagitim/dosyalar?musteriId=${mId}`, 200);
+    await s("get", "/dagitim/defter", `/dagitim/defter?musteriId=${mId}`, 200);
+    await s("get", "/surumler", "/surumler", 200);
+    const dYk = await s("post", "/yayincilar", "/yayincilar", 201, { kid: `uclar-${kanal}`, ad: "Uçlar yayıncı", acikAnahtar: generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x });
+    await s("get", "/yayincilar", "/yayincilar", 200);
+    await s("post", "/yayincilar/:id/pasif", `/yayincilar/${dYk.veri.id as string}/pasif`, 200, { sebep: "uçlar kapsamı" });
     const hak = await s("post", "/kurulumlar/:id/hak", `/kurulumlar/${kId}/hak`, 201, { kalici: false, bakimBitis: new Date(Date.now() + 365 * DAY_MS).toISOString() });
     const hakId = hak.veri.id as string;
     const uretimsiz = await portalIstek(sunucu.tailnet, `/portal/api/haklar/${hakId}/surum`, { cerez, govde: { clientToken: randomUUID(), kokParolasi: TEST_KOK_PAROLASI, sebep: "x", moduller: ["finance.enabled"] } });
@@ -319,6 +349,8 @@ async function main(): Promise<void> {
     kontrol("§5d ✓K karşılaştırıcı sentetik kümede ısırır (eksik POST /b · hayalet PATCH /c)", sonda.missing.join() === "POST /b" && sonda.ghost.join() === "PATCH /c");
   } finally {
     await sunucu.kapat();
+    await temizleDagitim({ musteriler, yayinciKidler: [`uclar-${kanal}`] });
+    rmSync(dagitimKoku, { recursive: true, force: true });
     await temizleKurulumlar([...kurulumlar, ...(await bayiKurulumlari(bayiler))], ortam.kidler);
     await temizlePortal({ kullanicilar, bayiler, tesisler, musteriler, kanallar: [kanal] });
     ortam.temizle();

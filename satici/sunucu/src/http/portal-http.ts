@@ -150,6 +150,18 @@ function sessionView(s: PortalSession) {
   return { kullanici: s.user, dinleyici: s.listener, bitis: s.expiresAt.toISOString() };
 }
 
+/** Oturum + izin kapısı — JSON rota tablosunun DIŞINDAKİ (ham gövdeli/akışlı) portal uçları da buradan geçer. */
+export async function requirePortalSession(ctx: VendorContext, listener: PortalListener, http: { req: Request; res: Response }, permission?: PortalPermission): Promise<PortalSession> {
+  const { req, res } = http;
+  const session = await resolveSession(ctx, { listener, token: readCookie(req, SESSION_COOKIE[listener]) });
+  if (!session) {
+    res.append("Set-Cookie", cookieHeader(ctx, listener, "", 0));
+    throw new VendorError(401, "OTURUM_YOK", "Oturum yok ya da süresi doldu; yeniden giriş yapın");
+  }
+  if (permission && !roleHas(session.user.rol, permission)) throw new VendorError(403, "YETKISIZ", "Bu işlem için yetkiniz yok");
+  return session;
+}
+
 export function createPortalRouter(ctx: VendorContext, listener: PortalListener, routes: readonly PortalRouteDef[]): Router {
   const router = express.Router();
   router.use(noStore);
@@ -165,14 +177,7 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
     res.status(200).json({ success: true, data: sessionView(session) });
   });
 
-  const requireSession = async (req: Request, res: Response): Promise<PortalSession> => {
-    const session = await resolveSession(ctx, { listener, token: readCookie(req, SESSION_COOKIE[listener]) });
-    if (!session) {
-      res.append("Set-Cookie", cookieHeader(ctx, listener, "", 0));
-      throw new VendorError(401, "OTURUM_YOK", "Oturum yok ya da süresi doldu; yeniden giriş yapın");
-    }
-    return session;
-  };
+  const requireSession = (req: Request, res: Response): Promise<PortalSession> => requirePortalSession(ctx, listener, { req, res });
 
   router.post("/oturum/kapat", async (req: Request, res: Response) => {
     const session = await resolveSession(ctx, { listener, token: readCookie(req, SESSION_COOKIE[listener]) });

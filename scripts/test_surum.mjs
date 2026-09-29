@@ -234,7 +234,7 @@ ol('terfiKaynagi olmayan kanal → uyumlu (gerekmez); kaçış verilirse → ihl
 // §5c — uçtan uca: geçici depo + CLI (kanal-kapisi terfi) + sahte ssh/curl/git
 const T = fs.mkdtempSync(path.join(os.tmpdir(), 'tekserp-terfi-'));
 try {
-  const temizEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+  const temizEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), TEKSERP_YAYIN_BILDIRIMI: '0' };
   const gercekGit = execFileSync('/usr/bin/env', ['sh', '-c', 'command -v git'], { encoding: 'utf8' }).trim();
   const uzak = path.join(T, 'uzak');
   const log = path.join(T, 'cagri.jsonl');
@@ -282,6 +282,7 @@ process.exit(97);
     fs.mkdirSync(path.dirname(path.join(depo, rel)), { recursive: true });
     fs.copyFileSync(path.join(KOK, rel), path.join(depo, rel));
   }
+  fs.copyFileSync(path.join(KOK, 'scripts/lib/yayin-bildirim.mjs'), path.join(depo, 'scripts/lib/yayin-bildirim.mjs'));
   const dg = (...a) => execFileSync(gercekGit, ['-c', 'user.email=bekci@test', '-c', 'user.name=bekci', ...a], { cwd: depo, env: temizEnv, encoding: 'utf8' }).trim();
   dg('init', '-q');
   dg('commit', '-q', '--allow-empty', '-m', 'onceki');

@@ -1,6 +1,7 @@
 // SATICI PORTALI JSON API'si — YALNIZ tailnet dinleyicisinde, /portal/api altında (web arayüzü 1f).
 // Her rota bir izin beyan eder (roles.ts); her yazma işlem kimliğiyle (clientToken) idempotenttir.
 // Yol parametresi gövde özetine girer (`_yol`): aynı kimlik başka kayıtta kullanılamaz.
+import { DISTRIBUTION_PORTAL_ROUTES } from "./distribution-routes";
 import { z } from "zod";
 import { ChannelCodeSchema, LICENSE_CLASSES, SANCTION_LEVELS } from "../lisans-protokol";
 import { passwordBuffer } from "../keys/key-files";
@@ -1159,4 +1160,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       });
     },
   },
+
+  // ------------------------------------------------------------ dağıtım (Faz 3d: distribution-routes.ts)
+  ...DISTRIBUTION_PORTAL_ROUTES,
 ];

@@ -12,7 +12,8 @@
 //      `PROTOCOL_ERROR_CODES`) kesişmez — ortak kod (BULUNAMADI, TEKRAR_DENEYIN…) yalnız protokolde yaşar
 //      · iç API kodları (`INTERNAL_ERROR_CODES`) ikisiyle de kesişmez (§8d)
 //   §7 kilit SIRASI: bir fonksiyon birden çok kilit alıyorsa sıra PORTAL_TOKEN → DEALER → CUSTOMER →
-//      TRANSFER_KEY → INSTALLATION → LICENSE_NUMBER (lib/locks.ts başlığı); ters sıra kilitlenme (40P01) doğurur
+//      TRANSFER_KEY → INSTALLATION → LICENSE_NUMBER → UPLOAD_REQUEST → UPLOAD_SESSION → SHARED_FILE → DOWNLOAD_LINK
+//      (lib/locks.ts başlığı); ters sıra kilitlenme (40P01) doğurur
 // Taban 0 — tarayıcı (cırcır değil): ihlal doğduğu an kırmızı.
 // ⭐ KALICI SONDA ✓K6 (her koşumda): aynı çözümleyiciler sentetik ihlalli kaynakta ISIRIR —
 //    kilitsiz tx · tx içinde Promise.all · defter modelinde deleteMany · tabloda olmayan uzay ·
@@ -39,6 +40,11 @@ const LOCK_RANK: Readonly<Record<string, number>> = {
   lockInstallation: 4,
   lockInstallations: 4,
   lockLicenseNumber: 5,
+  lockUploadRequest: 6,
+  lockUploadScope: 6,
+  lockUploadSession: 7,
+  lockSharedFile: 8,
+  lockDownloadLink: 9,
 };
 const LOCK_FUNCS = new Set(Object.keys(LOCK_RANK));
 const DB_CLIENTS = new Set(["prisma", "tx", "db"]);
@@ -195,7 +201,7 @@ function main(): void {
   kontrol("§2 her $transaction'ın ilk ifadesi kilit", f.unlockedTx.length === 0, f.unlockedTx.join(", "));
   kontrol("§3 tx içinde Promise.all yok", f.promiseAllInTx.length === 0, f.promiseAllInTx.join(", "));
   kontrol(`§4 sert silme yalnız telemetride (${PRUNED_MODELS.join(" · ")})`, f.hardDeletes.length === 0, f.hardDeletes.join(", "));
-  kontrol("§7 çoklu kilit sırası PORTAL_TOKEN → DEALER → CUSTOMER → TRANSFER_KEY → INSTALLATION → LICENSE_NUMBER", f.lockOrder.length === 0, f.lockOrder.join(", "));
+  kontrol("§7 çoklu kilit sırası PORTAL_TOKEN → DEALER → CUSTOMER → TRANSFER_KEY → INSTALLATION → LICENSE_NUMBER → UPLOAD_REQUEST → UPLOAD_SESSION → SHARED_FILE → DOWNLOAD_LINK", f.lockOrder.length === 0, f.lockOrder.join(", "));
 
   console.log("\n§5 şema aynası");
   const schema = readFileSync(path.join(SATICI_KOKU, "prisma", "schema.prisma"), "utf8");

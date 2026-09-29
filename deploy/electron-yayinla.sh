@@ -350,5 +350,15 @@ if [ "$terfi_atla_verildi" = "1" ]; then
     || echo "  ⚠️ terfi atlama etiketi atılamadı (yayın etkilenmedi; kayıt yayın defterinde)"
 fi
 
+# --- PORTALA YAYIN BİLDİRİMİ (Faz 3d) ---------------------------------------
+# Satıcı portalının sürüm/kanal görünümü + yayın defteri: YAYIN (+ üretim kanalında TERFI, kaçışta
+# TERFI_ATLANDI), yayıncı anahtarıyla imzalı (scripts/lib/yayin-bildirim.mjs). ⚠️ BEST-EFFORT: yardımcı
+# ASLA fırlatmaz, gitmezse yalnız uyarı basar — yayın zaten yapıldı, durdurulmaz.
+bildirim_terfi=""
+[ "$terfi_atla_verildi" = "1" ] && bildirim_terfi="--terfi-atla=$terfi_atla"
+node "$kok/scripts/lib/yayin-bildirim.mjs" bildir-yayin --urun=panel --kanal="$musteri" --surum="$surum" --tur=kurulum \
+  --sha16="$(shasum -a 256 "$setup" | cut -c1-16)" --boyut="$(wc -c < "$setup" | tr -d ' ')" \
+  ${bildirim_terfi:+"$bildirim_terfi"} || echo "  ⚠️ portala yayın bildirimi gönderilemedi (yayın etkilenmedi)"
+
 echo "Bu kanaldaki paneller en geç 15 dk içinde görür (açılışta 30 sn)."
 echo "Hemen denemek için: Genel Ayarlar > Bu Bilgisayar > Güncelleme > Şimdi kontrol et"

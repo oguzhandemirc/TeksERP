@@ -40,6 +40,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { etiketAt, manifestGovdesindenSurum } from '../scripts/lib/surum.mjs';
+import { yayinSonrasiBildir } from '../scripts/lib/yayin-bildirim.mjs';
 import { KAYIT_REL, Olculemedi, erpAdresiEsit, kanalCoz } from '../scripts/lib/kanallar.mjs';
 import { bundleAdresOlcumu } from '../mobil/scripts/lib/adres.mjs';
 import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
@@ -778,6 +779,20 @@ if (KURU) {
         basarisiz: `  ⚠️ terfi atlama etiketi atılamadı: ${k.ad} (yayın etkilenmedi; kayıt yayın defterinde)`,
       }[k.durum];
       console.log(`${km}${k.not ? ` — ${k.not}` : ''}`);
+    }
+    // PORTALA YAYIN BİLDİRİMİ (Faz 3d): yayın başına YAYIN (+ üretimde TERFI, kaçışta TERFI_ATLANDI), imzalı.
+    // ⚠️ BEST-EFFORT: yardımcı ASLA fırlatmaz, gitmezse uyarı basar — yayın zaten yapıldı.
+    console.log('');
+    if (paket) await yayinSonrasiBildir({ urun: 'tablet', kanal: MUSTERI, surum: etiketSurumu, ayrinti: { tur: 'ota' }, terfiAtla: TERFI_ATLA });
+    if (apk) {
+      let ayrinti = { tur: 'apk', vc: arg('vc') };
+      try {
+        const icerik = fs.readFileSync(path.resolve(apk));
+        ayrinti = { ...ayrinti, sha16: crypto.createHash('sha256').update(icerik).digest('hex').slice(0, 16), boyut: icerik.length };
+      } catch {
+        // Özet okunamadıysa bildirim özetsiz gider (bildirim yayını durdurmaz).
+      }
+      await yayinSonrasiBildir({ urun: 'tablet', kanal: MUSTERI, surum: etiketSurumu, ayrinti, terfiAtla: TERFI_ATLA });
     }
   }
 }

@@ -11,8 +11,10 @@ import { CustomersPage } from "./pages/Customers";
 import { DashboardPage } from "./pages/Dashboard";
 import { DealerDetailPage } from "./pages/DealerDetail";
 import { DealersPage } from "./pages/Dealers";
+import { FilesPage } from "./pages/Files";
 import { InstallationsPage } from "./pages/Installations";
 import { CopyAlertsPage, DrPage, PlannedActionsPage, TransfersPage } from "./pages/Queues";
+import { ReleasesPage } from "./pages/Releases";
 import { UsersPage } from "./pages/Users";
 
 export const PORTAL_PRODUCT = "TeksERP Satıcı Portalı";
@@ -27,6 +29,8 @@ export const PORTAL_NAV: readonly NavItem[] = [
   { to: "/dr", label: "DR", permission: "portal:oku" },
   { to: "/bayiler", label: "Bayiler", permission: "portal:oku" },
   { to: "/kanallar", label: "Kanallar", permission: "portal:oku" },
+  { to: "/surumler", label: "Sürümler", permission: "portal:oku" },
+  { to: "/dosyalar", label: "Dosyalar", permission: "portal:oku" },
   { to: "/kullanicilar", label: "Portal kullanıcıları", permission: "kullanici:yonet" },
   { to: "/denetim", label: "Denetim defteri", permission: "denetim:oku" },
   { to: "/anahtarlar", label: "Anahtarlar", permission: "anahtar:oku" },
@@ -49,6 +53,8 @@ export const PORTAL_ROUTES: RouteObject[] = [
       { path: "bayiler", element: <DealersPage /> },
       { path: "bayiler/:id", element: <DealerDetailPage /> },
       { path: "kanallar", element: <ChannelsPage /> },
+      { path: "surumler", element: <ReleasesPage /> },
+      { path: "dosyalar", element: <FilesPage /> },
       { path: "kullanicilar", element: <UsersPage /> },
       { path: "denetim", element: <AuditPage /> },
       { path: "anahtarlar", element: <KeysPage /> },

@@ -612,3 +612,29 @@ export async function bayiKurulumlari(bayiler: readonly string[]): Promise<strin
   const rows = await prisma.kurulum.findMany({ where: { tesis: { musteri: { bayiId: { in: [...bayiler] } } } }, select: { id: true } });
   return rows.map((r) => r.id);
 }
+
+/**
+ * Dağıtım fikstürünün temizliği (Faz 3d) — müşteri silinmeden ÖNCE çağrılır (FK). Defter satırları yalnız `_test`
+ * DB'sinde beyanla silinir; yayıncı anahtarı ve yayın bildirimi kimlikle ayrıca.
+ */
+export async function temizleDagitim(g: { musteriler?: readonly string[]; yayinciKidler?: readonly string[]; bildirimKanallari?: readonly string[] }): Promise<void> {
+  const { prisma } = await import("../../src/lib/prisma");
+  const musteriler = [...(g.musteriler ?? [])].filter((x) => typeof x === "string" && x.length > 0);
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL satici.defter_temizlik = 'test'`);
+    const w = { musteriId: { in: musteriler } };
+    const oturumlar = (await tx.yuklemeOturumu.findMany({ where: w, select: { id: true } })).map((o) => o.id);
+    const baglantilar = (await tx.indirmeBaglantisi.findMany({ where: w, select: { id: true } })).map((o) => o.id);
+    const istekler = (await tx.yuklemeIstegi.findMany({ where: w, select: { id: true } })).map((o) => o.id);
+    const yayincilar = (await tx.yayinciAnahtari.findMany({ where: { kid: { in: [...(g.yayinciKidler ?? [])] } }, select: { id: true } })).map((o) => o.id);
+    await tx.dagitimDefteri.deleteMany({ where: w });
+    await tx.yuklemeParcasi.deleteMany({ where: { oturumId: { in: oturumlar } } });
+    await tx.yuklemeOturumu.deleteMany({ where: w });
+    await tx.indirmeBaglantisi.deleteMany({ where: w });
+    await tx.dagitimDosyasi.deleteMany({ where: w });
+    await tx.yuklemeIstegi.deleteMany({ where: w });
+    await tx.yayinBildirimi.deleteMany({ where: { kanalKodu: { in: [...(g.bildirimKanallari ?? [])] } } });
+    await tx.yayinciAnahtari.deleteMany({ where: { id: { in: yayincilar } } });
+    await tx.denetim.deleteMany({ where: { varlikId: { in: [...baglantilar, ...istekler, ...yayincilar] } } });
+  });
+}
