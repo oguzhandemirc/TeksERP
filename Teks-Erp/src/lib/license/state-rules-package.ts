@@ -20,7 +20,11 @@ const MAINTENANCE_WARNING_DAYS = 30;
  * her KISITLI gibi iki anahtarla: süre geçmiş VE yoklama başarısız) kısıtlı kip. Satıcı uyuşmazlığı
  * yoklamadaki nedenlerden görür; bağlantı sürerken kararı yaptırım kataloğundadır.
  */
-export function evaluateIntegrity(g: LicenseStateInput, nowMs: number, out: Finding[]): void {
+export function evaluateIntegrity(
+  g: Pick<LicenseStateInput, "butunluk" | "butunlukIlkUyusmazlikMs" | "sonYoklamaBasarisizMi">,
+  nowMs: number,
+  out: Finding[],
+): void {
   if (g.butunluk === "OLCULEMEDI") out.push({ code: "BUTUNLUK_OLCULEMEDI", tier: "UYARI", banner: UNMEASURED_BANNER });
   if (g.butunluk !== "GECERSIZ") return;
   const first = g.butunlukIlkUyusmazlikMs ?? null;

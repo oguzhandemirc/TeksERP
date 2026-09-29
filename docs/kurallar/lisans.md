@@ -90,6 +90,16 @@
 - **[ÇEKİRDEK]** Güven çapası native ikiliye GÖMÜLÜDÜR (= `ROOT_PUBLIC_KEYS` / `PACKAGE_PUBLIC_KEYS`); dışarıdan çapa yalnız `test-anchor` özellikli derlemede kabul edilir, paket özelliksiz derlemeyi taşır. · bekçi: `test_lisans_native_kahin (§0e gömülü çapa · §7b enjeksiyon reddi)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Parmak izi toplayıcısı iki uygulamada AYNI ham değeri okur — Windows'ta aynı PowerShell sondası (metin satır satır aynı), Linux/macOS'ta aynı dosya/komut aynı sırayla; Faz 1 kiralarının kabul edilen kümesi TS toplayıcısıyla ölçüldüğünden sapma yükseltmede parmak izini uyuşmaz yapar. · bekçi: `test_lisans_native_kahin (§0d sonda metni · §6a aynı makinede aynı özet)` <sub>(arşiv:2026-09-29)</sub>
 
+## Bütünlük · derleme künyesi · filigran (Faz 2e)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Korumalı paket PAKET anahtarıyla imzalı bir dosya listesi (`butunluk.jws`, `typ: tekserp-butunluk`, sha256 + boy) taşır; kapsam TEK kaynaktır (`lib/license/integrity-scope.ts`: `dist/` · `native/` · `runtime/` + kökteki bizim dosyalar ve SİSTEM hesabıyla koşan betikler) ve kapsam dizininde listede olmayan dosya FAZLA'dır; JWS 32 KB tavanı yüzünden üçüncü taraf `node_modules` ve migration SQL'i kapsam dışıdır (beyanlı). · bekçi: `test_lisans_butunluk (§1 · §2c · §5a)` <sub>(arşiv:2026-09-29 Faz 2e)</sub>
+- **[ÇEKİRDEK]** Liste satıcı Mac'inde imzalanır (`Teks-Erp/scripts/build-korumali-imza.ts`), imza anahtarı CI'a ve pakete girmez; hazırlık anahtarı (`paket-hazirlik*`) yalnız TEST/DEMO kurulumunda geçer — ÜRETİM HAK'ında GEÇERSİZ (`BUTUNLUK_HAZIRLIK_ANAHTARI`), HAK yoksa ÖLÇÜLEMEDİ; üretim anahtarı (`paket-<yıl>`, parolalı) ayrı törenle `PACKAGE_PUBLIC_KEYS` + native `anchor.rs`e girer. · bekçi: `test_lisans_butunluk (§1j · §1k · §2a · §2b) · test_lisans_native_kahin (§0e')` <sub>(arşiv:2026-09-29 Faz 2e)</sub>
+- **[ÇEKİRDEK]** Bütünlük açılışta + günlük denetlenir ve uyuşmazlık LİSANS GİBİ işler: ilk görülüşten 30 gün EK_SURE, sonra (zamanın getirdiği her KISITLI gibi) iki anahtarla KISITLI; çapa imzalı durum kaydındadır (`butunlukIlk`), yeniden başlatma ve kira yenileme ek süreyi uzatmaz; korumalı pakette liste yok = GEÇERSİZ, geliştirmede KAPSAM_DISI (bugünkü davranış). · bekçi: `test_lisans_butunluk (§1i · §3)` <sub>(arşiv:2026-09-29 Faz 2e)</sub>
+- **[ÇEKİRDEK]** Native kendi bütünlüğünü doğrulayamaz: zorunlu kipte `.node` dlopen ÖNCESİ imzalı listeye karşı TS'te denetlenir (liste yok / tanınmayan anahtar / uyuşmaz → çekirdek YOK, TS'e düşülmez); motorun HAK · kira · bağ doğrulaması ve parmak izi ölçümü yalnız `getLicenseCore()`den geçer (`core-bridge.ts`); test kancaları (`configureIntegrityForTests` · `configureLicenseCoreForTests`) zorunlu kipte YOK SAYILIR. · bekçi: `test_lisans_butunluk (§4)` <sub>(arşiv:2026-09-29 Faz 2e)</sub>
+- **[ÇEKİRDEK]** Derleme tarihi YALNIZ imzalı künyeden okunur (imzasız/eksik = `DERLEME_TARIHI_YOK`); bayt kodu filigranı (`__TEKSERP_FILIGRAN__`: müşteri · kurulum · paket kimliği) imzalı künyeyle uyuşmazsa GEÇERSİZ (`BUTUNLUK_FILIGRAN`); panelin her PDF'i meta veride lisans sahibi + lisans no taşır (kişisel veri yok). · bekçi: `test_lisans_butunluk (§1l · §3i) · Electron pdf-metadata.test · Senaryo L18 (uçtan uca, bekçi değil)` <sub>(arşiv:2026-09-29 Faz 2e)</sub>
+
 ## İstemciler (panel · tablet · satıcının /q sayfası)
 
 ### Değişmezler
@@ -113,7 +123,7 @@ Fabrika tarafı: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## lisans` bölümü.**
 
-Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_native_kahin`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`, `test_genel_dinleyici`, `test_imza_parolasi`, `test_bayi_sahipligi`, `test_lisans_qr_parca_aynasi`, `test_lisans_k5_giris`, `test_qr_sayfasi`
+Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_native_kahin`, `test_lisans_butunluk`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`, `test_genel_dinleyici`, `test_imza_parolasi`, `test_bayi_sahipligi`, `test_lisans_qr_parca_aynasi`, `test_lisans_k5_giris`, `test_qr_sayfasi`
 
 Native çekirdek (cargo, `cd Teks-Erp/native/lisans-cekirdek && npm test`; commit kapısında koşar, cargo yoksa ⏭ beyanla): `tests/vektorler.rs` (TS kâhininin vektör dosyası Rust tarafında) · derleme `npm run derle` (kâhinin §3–§7'si için `.node`).
 
@@ -135,6 +145,7 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-29 · Portal web (1f): aynı kökenden statik servis, TOTP kurulumu yöneticide, ayna bekçisi, commit kapısının beşinci projesi
 - 2026-09-29 · Senaryo L (lisans uçtan uca) koşucusu; kira alışverişleri süreç içinde sıralı
 - 2026-09-29 · Native lisans çekirdeği (Faz 2c): TS protokolünün Rust aynası, gömülü çapa, zorunlu kip, vektör kâhini
+- 2026-09-29 · Bütünlük + filigran + motorun native'e bağlanması (Faz 2e): imzalı liste kapsamı, hazırlık PAKET anahtarı, merdiven, ikinci denetim noktası, künye, PDF meta
 - 2026-09-29 · Hazırlık kökü çapada, satıcı adresi varsayılanı, satıcının VDS kurulum tasarımı
 - 2026-09-29 · Lisans protokolü P0: lisans kimliği portalda (D14), taşıma kodu (D8), satıcı saati (D4), 16 karakterlik kod
 - 2026-09-29 · Lisans kapısı F1b: kimlik önce (D6), K5 listesi panelin gerçek çağrılarıyla, etkinleştirme kodu gövdede + günlük maskesi (D12), LICENSE_MODULE tek biçim
