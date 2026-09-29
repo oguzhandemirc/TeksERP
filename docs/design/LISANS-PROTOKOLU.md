@@ -398,3 +398,7 @@ Her-kademe listesi: `/api/license/*` · `GET /api/admin/health` · `GET /api/mob
 **Panel bloğu:** `GET /api/feature-flags` → `data.license = { kip: "gozlem" | "zorla", kapaliModuller: Array<{ anahtar: string /* DB anahtarı */, neden: "LISANSTA_YOK" | "DONDURULDU" }> }` — SALT OKUNUR (PATCH şeması kabul etmez), önbelleğe girmez, gözlemde daima boş. Modül şalterleri (`financeEnabled`…) HAM değerdir; "lisansınızda yok" rozeti bu listeden çizilir.
 
 **Eski istemci ne yapar:** kapı kodları yalnız zorlamada doğar (Faz 4'e dek derleme varsayılanı gözlem); eski panel/tablet 403'ü genel yetki hatası gibi gösterir. `license` alanı EK'tir, eski istemci yok sayar.
+
+### 14b. İstemci sözleşmeleri (F3) — panel, tablet ve satıcının /q sayfası
+
+- **Giriş öncesi K5:** `GET /api/auth/login-methods` yanıtına `lisansDurduruldu: boolean` eklendi (zorla ∧ UYGULANAN DURDURULMUŞ; gözlemde ve motor hazır değilken `false`). Kimliksize verilen TEK lisans bilgisidir; başka anahtar (kademe, gün, modül, lisans no) eklenmez (bekçi `test_lisans_k5_giris`). Eski istemci alanı yok sayar.

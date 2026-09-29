@@ -3,6 +3,8 @@ import { RouteErrorFallback } from "@/components/RouteErrorFallback";
 import { LoginPage } from "@/pages/Login/LoginPage";
 import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { TotpEnrollPage } from "@/pages/TotpEnroll/TotpEnrollPage";
+import { LicenseSuspendedPage } from "@/pages/LicenseSuspended/LicenseSuspendedPage";
+import { LICENSE_SUSPENDED_PATH, useLicenseSuspension } from "@/lib/license/suspension";
 import { useAuthStore } from "@/store/auth";
 import { canEnterApp } from "@/types/auth";
 import { TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
@@ -16,9 +18,14 @@ import { TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
  */
 function AuthLanding() {
   const user = useAuthStore((s) => s.user);
+  const licenseSuspended = useLicenseSuspension((s) => s.suspended);
   const location = useLocation();
   if (user && !canEnterApp(user.permissions)) {
     return <Navigate to="/forbidden" replace />;
+  }
+  // K5 (lisans durduruldu): oturum yalnız "verilerimi al" sayfasına gider.
+  if (user && licenseSuspended) {
+    return <Navigate to={LICENSE_SUSPENDED_PATH} replace />;
   }
   // ⚠️ GİDİLMEK İSTENEN YOL KORUNUR. Patron ekranını yer imine ekleyip
   // `#/boss` ile gelen biri, giriş sonrası köke (AppShell) düşüyordu — yani
@@ -35,5 +42,6 @@ export const authRouter = createHashRouter([
   // 2FA kurulumu — oturum GEREKTİRMEZ (sayfanın kendi başlığındaki gerekçe).
   // Yol sabiti `TOTP_ENROLL_PATH` ile paylaşılır; App.tsx kapısı da onu okur.
   { path: TOTP_ENROLL_PATH, element: <TotpEnrollPage />, errorElement: <RouteErrorFallback /> },
+  { path: LICENSE_SUSPENDED_PATH, element: <LicenseSuspendedPage />, errorElement: <RouteErrorFallback /> },
   { path: "*", element: <AuthLanding />, errorElement: <RouteErrorFallback /> },
 ]);

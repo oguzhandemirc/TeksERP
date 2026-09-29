@@ -15,6 +15,7 @@ import { SettingsPasswordDialog } from "@/components/settings/SettingsPasswordDi
 import { LiveReferencesDialog } from "@/components/LiveReferencesDialog";
 import { authRouter } from "./router";
 import { useAuthStore } from "@/store/auth";
+import { useLicenseSuspension } from "@/lib/license/suspension";
 import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt, jwtPayloadExpiryMs } from "@/lib/jwt";
 import { canEnterApp } from "@/types/auth";
@@ -84,10 +85,12 @@ function AuthHydrator() {
  */
 function ScanSeriesLoader() {
   const userId = useAuthStore((s) => s.user?.userId ?? null);
+  // K5'te yalnız "verilerimi al" sayfası konuşur; uç DURDURULMUŞ izin listesinde değil.
+  const suspended = useLicenseSuspension((s) => s.suspended);
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || suspended) return;
     void loadScanSeries();
-  }, [userId]);
+  }, [userId, suspended]);
   return null;
 }
 
@@ -115,6 +118,8 @@ function Root() {
   // ⚠️ REAKTİF OKUMA ŞART — düz `window.location.hash` React'e hiçbir şey
   // söylemez ve kabuk geçişleri tepkisiz kalır (bkz. `use-hash-path.ts`).
   const hashPath = useHashPath();
+  // K5: kabuk (yüzlerce uç) hiç bağlanmaz; oturum-dışı router "verilerimi al" sayfasını açar.
+  const licenseSuspended = useLicenseSuspension((s) => s.suspended);
 
   if (!isHydrated) return null;
   // ⚠️ 2FA KURULUM SAYFASI OTURUM DURUMUNDAN BAĞIMSIZ AÇILIR.
@@ -123,7 +128,7 @@ function Root() {
   // fabrikada oturum açıkken) `AppShell` çizilir ve `#/2fa-kurulum` hiçbir
   // içerik rotasına uymadığı için BOŞ SAYFA görünürdü — hata yok, log yok.
   const onEnrollPath = hashPath === TOTP_ENROLL_PATH;
-  const oturumDisi = onEnrollPath || !user || !canEnterApp(user.permissions);
+  const oturumDisi = onEnrollPath || !user || !canEnterApp(user.permissions) || licenseSuspended;
   let kabuk;
   if (oturumDisi) {
     kabuk = <RouterProvider router={authRouter} />;

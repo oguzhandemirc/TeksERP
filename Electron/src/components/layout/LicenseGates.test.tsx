@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { useAuthStore } from "@/store/auth";
 import type { JwtPayload } from "@/types/auth";
@@ -15,7 +15,9 @@ vi.mock("@/hooks/useRoleAccess", () => ({
 
 const { LicenseBanner } = await import("./LicenseBanner");
 const { LicenseLockGate } = await import("./LicenseLockGate");
+const { LicenseSuspendedPage } = await import("@/pages/LicenseSuspended/LicenseSuspendedPage");
 const { useLicenseStatus } = await import("@/hooks/useLicenseStatus");
+const { useLicenseSuspension } = await import("@/lib/license/suspension");
 
 /** Sorgu ÇÖZÜLDÜ mü — "çizilmedi" iddiası ancak veri geldikten sonra anlamlıdır. */
 function Loaded() {
@@ -44,6 +46,7 @@ const base: LicenseStatusSummary = {
 describe("lisans bandı ve kilidi", () => {
   beforeEach(() => {
     status.mockReset();
+    useLicenseSuspension.setState({ suspended: false });
     useAuthStore.setState({ user: { userId: "u1", username: "op", permissions: ["roll:read"] } as unknown as JwtPayload });
   });
 
@@ -76,13 +79,28 @@ describe("lisans bandı ve kilidi", () => {
     expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
-  it("⭐ DURDURULMUS: kapatılamaz; 'verilerimi al' yetkisiz kullanıcıya yönetici girişi ister", async () => {
+  it("⭐ DURDURULMUS: kilit çizilmez, K5 sinyali yanar — kabuk yerine 'verilerimi al' sayfası açılır", async () => {
     status.mockResolvedValue({ ...base, kip: "zorla", kademe: "DURDURULMUS" });
     renderWithProviders(<LicenseLockGate />);
-    expect(await screen.findByTestId("lisans-kilidi-suspended")).toBeInTheDocument();
+    await waitFor(() => expect(useLicenseSuspension.getState().suspended).toBe(true));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("⭐ K5 sayfası: kapatılamaz; 'verilerimi al' yetkisiz kullanıcıya yönetici girişi ister; çıkış var", async () => {
+    status.mockResolvedValue({ ...base, kip: "zorla", kademe: "DURDURULMUS", bant: { metin: "Sözleşme askıda.", ton: "tehlike" } });
+    renderWithProviders(<LicenseSuspendedPage />);
+    expect(await screen.findByText("Sözleşme askıda.")).toBeInTheDocument();
+    expect(screen.getByTestId("lisans-k5-sayfasi")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Salt okunur devam et" })).toBeNull();
     expect(screen.getByText(/yönetici hesabıyla giriş yapın/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Çıkış yap/ })).toBeInTheDocument();
+  });
+
+  it("K5 kalkınca (sunucu NORMAL) sinyal söner — kabuk kendiliğinden geri gelir", async () => {
+    useLicenseSuspension.setState({ suspended: true });
+    status.mockResolvedValue({ ...base, kip: "zorla", kademe: "NORMAL" });
+    renderWithProviders(<Loaded />);
+    await waitFor(() => expect(useLicenseSuspension.getState().suspended).toBe(false));
   });
 
   it("oturum yoksa durum sorulmaz (kimliksize ayrıntı zaten verilmez)", async () => {

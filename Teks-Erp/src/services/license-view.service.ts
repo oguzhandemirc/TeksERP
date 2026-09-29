@@ -70,6 +70,20 @@ export function getLicenseStatus(authenticated: boolean): LicenseStatusResponse 
   };
 }
 
+/**
+ * Giriş öncesi K5 sinyali (`GET /api/auth/login-methods` → `lisansDurduruldu`) — kimliksize
+ * verilen TEK lisans bilgisi: yalnız zorlama kipinde ve UYGULANAN kademe DURDURULMUŞ iken true,
+ * gözlemde daima false. Motor hazır değilse ya da durum okunamazsa false (fabrikayı durdurmaz).
+ */
+export function isSuspendedBeforeLogin(): boolean {
+  try {
+    const snap = getLicenseSnapshot();
+    return snap.hazir && snap.state.kip === "zorla" && snap.state.uygulananKademe === "DURDURULMUS";
+  } catch {
+    return false;
+  }
+}
+
 // ── Ayrıntı (license:view) ──────────────────────────────────────────────────────
 export interface LicenseDetail {
   readonly hazir: boolean;

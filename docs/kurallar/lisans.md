@@ -61,6 +61,12 @@
 - **[ÇEKİRDEK]** Bir kez gösterilen sır (etkinleştirme kodu · TOTP sırrı/QR) yalnız canlı yanıtta ve bileşen durumunda yaşar — önbelleğe, web deposuna, URL'ye yazılmaz; tekrar yanıtında "gösterilemez" denir. TOTP kurulumu hesabı açan/sıfırlayan yöneticinin ekranındadır (TOTP'siz oturum olmadığından ilk girişte kurulum akışı YOK), kurtarma kodu yoktur. · bekçi: `satici/web src/test/once-secret.test.tsx` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Arayüzün sunucudan kopyaladığı her bilgi (izin tablosu, ağır K3 eşiği, tavan sınırları, kanal/sürüm desenleri, çağrılan her uç) ayna bekçisiyle sunucu KAYNAĞINA karşı ölçülür; arayüz yalnız gizler, kararı sunucu verir. · bekçi: `satici/web src/test/mirrors.test.ts` <sub>(arşiv:2026-09-29)</sub>
 
+## İstemciler (panel · tablet · satıcının /q sayfası)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Giriş öncesi K5 sinyali tek boolean'dır: `login-methods.lisansDurduruldu` yalnız zorla ∧ UYGULANAN DURDURULMUŞ iken true (gözlemde false), kimliksize başka lisans bilgisi verilmez; panel K5'te kabuğu bağlamaz, yalnız "verilerimi al" sayfası (yedek · dışa aktarma · çıkış) açılır ve o yüzeyin çağırdığı her uç DURDURULMUŞ izin listesindedir; tablet giriş ekranı yalnız bu açılışta taze okunan sinyalle K5 ekranı çizer. · bekçi: `test_lisans_k5_giris (§1–§2 sinyal · §3 panel K5 yüzeyi)` <sub>(arşiv:2026-09-29)</sub>
+
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
 - **KISMI** `docs/design/LISANS-PROTOKOLU.md §6 (f4 = birincil fiziksel ağ kartının MAC'i)` → `R:2026-09-29 yönetici kararı (F3/F4)`: F4 sistem/anakart seri numarasıdır, MAC kullanılmaz; F3 RAID genel serisi ölçülemedi. Kod henüz eski hâlde (borç, yukarıda Yasaklar).
@@ -73,7 +79,7 @@ Fabrika tarafı: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## lisans` bölümü.**
 
-Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`
+Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`, `test_lisans_k5_giris`
 
 Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koşar): `mirrors.test.ts`, `sanction.test.tsx`, `once-secret.test.tsx`, `login.test.tsx`, `app-isolation.test.ts`
 

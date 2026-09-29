@@ -17,6 +17,13 @@ import { IS_ELECTRON } from "@/lib/runtime-env";
  */
 const CLIENT_TYPE = IS_ELECTRON ? "electron" : "web";
 
+/** Public login-methods yanıtının panelin okuduğu alanları. */
+export interface LoginMethodsInfo {
+  companyName?: string;
+  /** K5 giriş sinyali: yalnız zorlamada ve lisans durdurulmuşken true (eski backend göndermez). */
+  lisansDurduruldu?: boolean;
+}
+
 export const authService = {
   /**
    * Giriş — gövdeye `clientType` eklenir (Electron'da 'electron', tarayıcıda
@@ -74,9 +81,9 @@ export const authService = {
    * (`company.name`) okur. Arka plan çağrısı: hata toast'ı bastırılır, düşerse
    * ekran nötr yedeği gösterir.
    */
-  getLoginMethods: (): Promise<ApiResponse<{ companyName?: string }>> =>
+  getLoginMethods: (): Promise<ApiResponse<LoginMethodsInfo>> =>
     apiClient
-      .get<ApiResponse<{ companyName?: string }>>("/api/auth/login-methods", {
+      .get<ApiResponse<LoginMethodsInfo>>("/api/auth/login-methods", {
         suppressErrorToast: true,
         timeout: 5_000,
       })
