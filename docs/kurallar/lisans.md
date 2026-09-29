@@ -68,6 +68,7 @@
 - **[ÇEKİRDEK]** Giriş öncesi K5 sinyali tek boolean'dır: `login-methods.lisansDurduruldu` yalnız zorla ∧ UYGULANAN DURDURULMUŞ iken true (gözlemde false), kimliksize başka lisans bilgisi verilmez; panel K5'te kabuğu bağlamaz, yalnız "verilerimi al" sayfası (yedek · dışa aktarma · çıkış) açılır ve o yüzeyin çağırdığı her uç DURDURULMUŞ izin listesindedir; tablet giriş ekranı yalnız bu açılışta taze okunan sinyalle K5 ekranı çizer. · bekçi: `test_lisans_k5_giris (§1–§2 sinyal · §3 panel K5 yüzeyi)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Lisans reddi (403 `LICENSE_*`) tabletin kuyruğundaki saha kaydını SİLMEZ: kayıt kalıcı bekler, uzun aralıkla yeniden denenir, kalıcı düşüş duyurulmaz; çip "lisans nedeniyle bekleyen N kayıt" der; ekran hata toast'ları ortak yardımcıdan (`showScreenError`) geçer ve interceptor'ın söylediği lisans reddinde susar. · bekçi: `mobil src/offline/mutations.test.ts (D7)`, `mobil src/lib/screenToast.test.ts` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Çevrimdışı QR çok parçalıdır (`TKLQ1|i/n|kimlik|özet|veri`, 1…4 parça): biçimin tek kaynağı `Teks-Erp/src/lib/license/qr-parca.ts`, panel · tablet · satıcı bayt-eşit ayna taşır, /q sayfasının tarayıcı eşi TS eşiyle birebir ölçülür; tablet parçaları toplar, bütünlüğü doğrular ve backend'e TEK metin gönderir. · bekçi: `test_lisans_qr_parca_aynasi`, `test_qr_sayfasi` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Panel aktarması yalnız yapılandırılmış satıcı ana makinesine (`LICENSE_VENDOR_HOSTS`: üretim + hazırlık) gider, döngü adresi yalnız paketlenmemiş derlemede; etkinleştirme kodu taşıyan istek gövdeyle (POST) gider, URL'ye girmez; `LICENSE_MODULE.details.modul` DB anahtarıdır, istemci eski API alanı biçimini de tanır. · bekçi: `Electron src/lib/license/license-relay.test.ts`, `Electron src/services/licenseService.test.ts`, `Electron src/lib/license/ceiling.test.ts` <sub>(arşiv:2026-09-29)</sub>
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
@@ -101,3 +102,4 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-29 · Portal web (1f): aynı kökenden statik servis, TOTP kurulumu yöneticide, ayna bekçisi, commit kapısının beşinci projesi
 - 2026-09-29 · Senaryo L (lisans uçtan uca) koşucusu; kira alışverişleri süreç içinde sıralı
 - 2026-09-29 · Hazırlık kökü çapada, satıcı adresi varsayılanı, satıcının VDS kurulum tasarımı
+- 2026-09-29 · Lisans istemcileri (F3): giriş öncesi K5, tablet kuyruğu lisans reddinde silmez, çok parçalı QR, panel aktarma hedefi
