@@ -17,6 +17,9 @@ import { startDefaultWarehouseReconciler } from './jobs/default-warehouse.job';
 import { startExchangeRateScheduler } from './jobs/exchange-rate.job';
 import { startShiftCalendarScheduler } from './jobs/shift-calendar.job';
 import { startShiftCloseScheduler } from './jobs/machine-shift-close.job';
+import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
+import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
+import { initLicenseEngine } from './services/license.service';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
@@ -52,6 +55,14 @@ const HOST = process.env.HOST || "0.0.0.0";
 
 // Uzaktan erişim (Cloudflare Tunnel) dinleyicisi. `REMOTE_PORT` yoksa null.
 const remoteAccess = readRemoteAccessConfig();
+
+// LİSANS DEPOSU dinlemeden ÖNCE ve SENKRON yüklenir: ilk istek geldiğinde kurulum anahtarı,
+// HAK/kira ve proxy bellekte olsun. Hata sunucuyu düşürmez (motor gözlemde "ölçülemedi" kalır).
+try {
+    initLicenseEngine();
+} catch (err) {
+    uyari("lisans", "lisans deposu yüklenemedi — motor ölçülemedi durumunda", err);
+}
 
 // Node süreç uyarıları YIĞIN İZİYLE log'a düşsün — Node'un kendi çıktısı
 // "nereden geldiğini görmek için --trace-deprecation ile başlat" diyor ve o
@@ -216,6 +227,10 @@ const server = app.listen(Number(PORT), HOST, () => {
     startShiftCalendarScheduler();
     // Kapanan vardiya × tezgah karnesi (M2) — aynı bayrak, aynı sıfır fark.
     startShiftCloseScheduler();
+    // Lisans yoklaması + kapı zili: satıcı adresi (`LICENSE_SERVER_URL`) yoksa ya da kurulum
+    // etkinleşmemişse DIŞARI HİÇ İSTEK ATILMAZ; motor gözlem kipinde (hiçbir istek engellenmez).
+    startLicensePoll();
+    startLicenseDoorbell();
 
     void AuditService.logEvent({
         category: "SYSTEM",
@@ -289,6 +304,14 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     // olsaydı iki bütçe toplanır ve yukarıdaki 5sn'lik zorla-çıkış sayacını
     // yakma riski doğardı). `stopMdnsAdvertiser` kendi içinde de 1sn kapı taşır
     // ve asla reject etmez — goodbye paketi gitmezse kapanış yine de ilerler.
+    // Zil akışı kesilir, lisans birikimi diske yazılır (senkron, kısa).
+    shutdownPhase = "lisans";
+    try {
+        stopLicenseDoorbell();
+        stopLicensePoll();
+    } catch (err) {
+        uyari("shutdown", "lisans kapanışı tamamlanamadı", err);
+    }
     shutdownPhase = "gecikme flush + mDNS";
     void Promise.race([
         Promise.allSettled([flushLatencyNow().catch(() => {}), stopMdnsAdvertiser()]),

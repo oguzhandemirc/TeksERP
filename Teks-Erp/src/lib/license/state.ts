@@ -23,25 +23,30 @@ import {
   computeClock,
   evaluateGrace,
   evaluateSanction,
+  sanctionSnapshotOf,
   type Banner,
   type DocResult,
   type Finding,
   type LicenseStateInput,
   type ReasonCode,
 } from "./state-rules";
-import type { ClockResult } from "./saat";
+import type { ClockResult, SanctionSnapshot } from "./saat";
 
 export type { Banner, DocResult, LicenseStateInput, ReasonCode } from "./state-rules";
-export { REASON_CODES, REASON_VALIDITY, DEFAULT_GRACE_DAYS } from "./state-rules";
+export { REASON_CODES, REASON_VALIDITY, DEFAULT_GRACE_DAYS, sanctionSnapshotOf } from "./state-rules";
 
+/**
+ * `allowed` HAK'ın satın alınmış modül listesidir (null = HAK tavanı uygulanmıyor);
+ * `denied` sunucunun dondurduğu modüller (K2) — belirsizlikte de, ek sürede de kalıcı.
+ */
 export type ModuleCeiling =
   | { readonly applies: false }
-  | { readonly applies: true; readonly allowed: readonly string[] };
+  | { readonly applies: true; readonly allowed: readonly string[] | null; readonly denied: readonly string[] };
 
 export interface LicenseEffect {
   readonly bant: Banner | null;
   readonly guncellemeIzni: boolean;
-  /** Tavan YALNIZ kullanılabilir bir HAK varken uygulanır; ölçülemedi ve ek süre ham değere düşer. */
+  /** HAK tavanı yalnız BELİRSİZLİKTE (ölçülemedi / HAK yok) açılır; dondurulan modül her hâlde kapalı. */
   readonly modulTavani: ModuleCeiling;
 }
 
@@ -125,19 +130,24 @@ function computeMode(g: LicenseStateInput, lease: VerifiedLease | null): License
 
 const UPDATE_BLOCKERS: ReadonlySet<ReasonCode> = new Set(["GUNCELLEME_DONDURULDU", "BAKIM_BITTI", "BAKIM_IHLALI"]);
 
+/** Sunucu kararlarının kaynağı: kullanılabilir kira; yoksa son kiranın anlık görüntüsü (silmek gevşetmez). */
+function sanctionSource(g: LicenseStateInput, lease: VerifiedLease | null): SanctionSnapshot | null {
+  return lease ? sanctionSnapshotOf(lease.document) : g.sonYaptirim;
+}
+
 function computeEffect(x: {
-  readonly tier: StateTier;
   readonly validity: Validity;
-  readonly docs: { readonly entitlement: VerifiedEntitlement | null; readonly lease: VerifiedLease | null };
+  readonly tier: StateTier;
+  readonly entitlement: VerifiedEntitlement | null;
+  readonly lease: VerifiedLease | null;
+  readonly sanction: SanctionSnapshot | null;
   readonly findings: readonly Finding[];
 }): LicenseEffect {
-  const { entitlement, lease } = x.docs;
-  const ceilingApplies = entitlement !== null && x.validity !== "OLCULEMEDI" && x.tier !== "EK_SURE";
-  const frozen = lease ? lease.document.yaptirim.donmusModuller : [];
-  const ceiling: ModuleCeiling =
-    ceilingApplies && entitlement ? { applies: true, allowed: entitlement.document.moduller.filter((m) => !frozen.includes(m)) } : { applies: false };
+  const allowed = x.entitlement !== null && x.validity !== "OLCULEMEDI" ? x.entitlement.document.moduller : null;
+  const denied = x.sanction ? x.sanction.donmusModuller : [];
+  const ceiling: ModuleCeiling = allowed !== null || denied.length > 0 ? { applies: true, allowed, denied } : { applies: false };
   const updateAllowed =
-    lease !== null && x.tier !== "DURDURULMUS" && !x.findings.some((f) => UPDATE_BLOCKERS.has(f.code));
+    x.lease !== null && x.tier !== "DURDURULMUS" && !x.findings.some((f) => UPDATE_BLOCKERS.has(f.code));
   return { bant: pickBanner(x.findings), guncellemeIzni: updateAllowed, modulTavani: ceiling };
 }
 
@@ -160,13 +170,14 @@ export function computeLicenseState(g: LicenseStateInput): LicenseState {
   const now = clock.trustedMs;
   evaluateMeasurements(g, lease?.document ?? null, findings);
   evaluateGrace(g, { entitlement, lease: lease?.document ?? null }, now, findings);
-  const restrictionDaysLeft = lease ? evaluateSanction(lease.document, now, findings) : null;
+  const sanction = sanctionSource(g, lease);
+  const restrictionDaysLeft = sanction ? evaluateSanction(sanction, now, findings) : null;
   if (entitlement) evaluateMaintenance(g, entitlement.document, now, findings);
 
   const validity = computeValidity(findings);
   const computedTier = computeTier(findings, validity);
   const mode = computeMode(g, lease);
-  const computed = computeEffect({ tier: computedTier, validity, docs: { entitlement, lease }, findings });
+  const computed = computeEffect({ validity, tier: computedTier, entitlement, lease, sanction, findings });
   const graceDays = findings.filter((f) => f.tier === "EK_SURE" && f.daysLeft !== undefined).map((f) => f.daysLeft ?? 0);
   return {
     gecerlilik: validity,
@@ -178,14 +189,15 @@ export function computeLicenseState(g: LicenseStateInput): LicenseState {
     uygulanan: mode === "zorla" ? computed : OBSERVE_EFFECT,
     ekSureKalanGun: computedTier === "EK_SURE" && graceDays.length > 0 ? Math.min(...graceDays) : null,
     kisitlamaKalanGun: restrictionDaysLeft,
-    devredildi: lease?.document.devredildi ?? false,
-    yaptirimKademesi: lease?.document.yaptirim.kademe ?? null,
+    devredildi: sanction?.devredildi ?? false,
+    yaptirimKademesi: sanction?.kademe ?? null,
     saat: clock,
   };
 }
 
 export function ceilingAllows(cap: ModuleCeiling, key: string): boolean {
-  return !cap.applies || cap.allowed.includes(key);
+  if (!cap.applies) return true;
+  return (cap.allowed === null || cap.allowed.includes(key)) && !cap.denied.includes(key);
 }
 
 /** Modül okuyucusunun lisans ayağı: `readX = readXRaw ∧ isModuleLicensed(state, key)`. */

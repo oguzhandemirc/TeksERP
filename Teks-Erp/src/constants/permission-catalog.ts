@@ -221,6 +221,11 @@ export const PERMISSION_CATALOG = [
   { code: "system:server-status", module: "ADMIN", category: "web", description: "Sistem → Sunucu Durumu" },
   { code: "system:clients", module: "ADMIN", category: "web", description: "Sistem → Bağlı İstemciler" },
   { code: "system:backups", module: "ADMIN", category: "web", description: "Sistem → Yedekler (yedek al, zamanlama, dış kopya durumu) — yedek listesi/indirme ayrıca admin:users ister" },
+  // Lisans ekranı: görmek (durum ayrıntısı, kira, parmak izi ölçümü) ile yönetmek
+  // (etkinleştirme, çevrimdışı/aktarma yanıtı, taşıma, DR devralma, proxy) AYRI — yönetim
+  // satıcıyla konuşur ve kurulumun lisans bağını değiştirir. Kategori `web`: `admin:*` VERMEZ.
+  { code: "license:view", module: "ADMIN", category: "web", description: "Sistem → Lisans (durum, kira, parmak izi ölçümü, yoklama geçmişi — salt-okunur)" },
+  { code: "license:manage", module: "ADMIN", category: "web", description: "Lisans yönetimi (etkinleştirme, çevrimdışı/aktarma yanıtı, taşıma talebi, DR devralma, proxy ayarı)" },
   // 2026-08-05: Tanımlar → Çıktılar altındaki belge/kart TASARIM ekranları
   // (Belge Şablonları, Refakat Kartı, Refakat Kartı Şablonları, Serbest
   // Belgeler). `admin:settings`ten AYRI olması ürün kararıdır — `settings:

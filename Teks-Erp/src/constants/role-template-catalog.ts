@@ -528,6 +528,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "system:server-status",
       "system:clients",
       "system:backups",
+      // Lisans: kurulumun satıcıyla bağı sistem yönetimidir (etkinleştirme, taşıma, proxy).
+      "license:view",
+      "license:manage",
       "report:audit",
       // Toplu içe aktarım: kurulum/veri taşıma işini yapan kişi sistem
       // yöneticisidir. Tek başına yetmez — aktarılacak varlığın write izni de

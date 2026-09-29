@@ -32,7 +32,7 @@
 import app from "../src/app";
 
 /** Göreli sıra sözleşmesi — TAM eşitlik DEĞİL: yeni bir middleware eklemek
- *  testi kırmasın, yalnız bu yedisinin birbirine göre yeri korunsun. */
+ *  testi kırmasın, yalnız bu dokuzunun birbirine göre yeri korunsun. */
 const ORDER = [
   "helmetMiddleware",
   "corsMiddleware",
@@ -42,6 +42,7 @@ const ORDER = [
   "jsonParser", // express.json — morgan+latency'den SONRA (F-CORE-OPS-003)
   "serveStatic", // statik varlıklar
   "resolveDevice", // cihaz çözümü — statikten SONRA (F-CORE-VER-002)
+  "licenseGate", // lisans kapısı — rotalardan ÖNCE (Faz 1c; aşağıda ayrıca ölçülür)
 ] as const;
 
 /** Körlük zemini: üst seviye middleware sayısı bunun altına düşerse tarayıcı boşa düşmüştür. */
@@ -98,6 +99,20 @@ function main(): void {
     idx("resolveDevice") > names.lastIndexOf("serveStatic"),
     `resolveDevice@${idx("resolveDevice")} sonServeStatic@${names.lastIndexOf("serveStatic")}`,
   );
+
+  // Lisans kapısı İLK router'dan ÖNCE olmalı: sonra bağlansaydı önündeki router'ların
+  // uçları kısıtlı/durdurulmuş kipte kapıdan geçmeden yazardı (kapı sessizce delinir).
+  const ilkRouter = names.indexOf("router");
+  check(
+    "licenseGate ilk route router'ından ÖNCE (hiçbir uç kapıyı atlamaz)",
+    idx("licenseGate") !== -1 && ilkRouter !== -1 && idx("licenseGate") < ilkRouter,
+    `licenseGate@${idx("licenseGate")} ilkRouter@${ilkRouter}`,
+  );
+  // Kapı `/api` önekinde bağlı ve Access JWT katmanından SONRA (uzak isteğin kimlik duvarı önce).
+  const appKaynak = require("fs").readFileSync(require("path").join(__dirname, "../src/app.ts"), "utf8") as string;
+  const iAccess = appKaynak.indexOf('app.use("/api", verifyAccessJwt(');
+  const iGate = appKaynak.indexOf('app.use("/api", licenseGate)');
+  check("licenseGate `/api` önekinde, verifyAccessJwt'den SONRA bağlı", iAccess !== -1 && iGate > iAccess, `access@${iAccess} gate@${iGate}`);
 
   // ── 2) errorHandler ZİNCİRİN SONU ─────────────────────────────────────────
   check(

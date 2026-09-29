@@ -601,15 +601,35 @@ if (-not $YedekSifreleme) {
   & node $sifreArac durum --anahtar-dizini $anahtarDizini
 }
 
+# --- Lisans deposu dizini -----------------------------------------------------
+# Kurulum anahtari + HAK + kira: app\ ve backups\ DISINDA (kurulum app\'i degistirir, offsite
+# supurucu backups\'u makine disina kopyalar). Backend varsayilani ayni yol (<kok>\lisans);
+# anahtari backend ILK ACILISTA uretir. /T YOK, junction'a dokunulmaz (thinkpad-1 dersi).
+$lisansDizini = "$Kok\lisans"
+if (Test-Path $lisansDizini) {
+  $lisansOge = Get-Item $lisansDizini -Force
+  if ($lisansOge.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { Acik "lisans dizini junction/bag - izin DEGISTIRILMEDI: $lisansDizini" }
+} else {
+  New-Item -ItemType Directory -Path $lisansDizini -Force | Out-Null
+  Ok "lisans dizini olusturuldu: $lisansDizini"
+}
+if ((Test-Path $lisansDizini) -and -not ((Get-Item $lisansDizini -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+  if (Get-Command icacls.exe -ErrorAction SilentlyContinue) {
+    & icacls.exe $lisansDizini /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null
+    if ($LASTEXITCODE -ne 0) { Acik "lisans dizini izni daraltilamadi (icacls $LASTEXITCODE)" }
+  } else { Acik "icacls yok - lisans dizini izni DARALTILAMADI" }
+}
+
 # --- Sir dosyalarinin izinleri -------------------------------------------------
 # .env (DB parolasi + JWT_SECRET), db-credentials.json, gece yedekleri (fabrikanin TUM
 # verisi) ve rclone.conf (Drive jetonu) - hepsi kokun genis mirasini aliyordu.
 # Idempotent: her kosumda daraltilir ve OLCULUR (izin daraltilamadiysa acik kalir).
 Adim "Sir dosyalarinin izinleri (yalniz SYSTEM + Administrators)..."
-$sirYollari = @("$Kok\app\.env", "$Kok\pg-setup", "$Kok\backups", "$Kok\rclone.conf", "$Kok\yedek-anahtar")
+$sirYollari = @("$Kok\app\.env", "$Kok\pg-setup", "$Kok\backups", "$Kok\rclone.conf", "$Kok\yedek-anahtar", $lisansDizini)
 foreach ($y in $sirYollari) {
   if (-not (Test-Path $y)) { continue }
-  SirIzniDaralt $y
+  # Lisans dizini yukarida /T'siz daraltildi; burada yalniz OLCULUR.
+  if ($y -ne $lisansDizini) { SirIzniDaralt $y }
   $kontrol = @($y)
   if ((Get-Item $y -Force).PSIsContainer) { $kontrol += @(Get-ChildItem $y -Recurse -Force | ForEach-Object { $_.FullName }) }
   $olculemedi = $false; $kalan = @()

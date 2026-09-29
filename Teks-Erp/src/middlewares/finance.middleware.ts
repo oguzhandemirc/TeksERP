@@ -15,7 +15,8 @@
 // kapatmanın etkisi bir sonraki istekte görünmelidir.
 // =============================================================================
 import { Request, Response, NextFunction } from "express";
-import { readFinanceEnabled } from "../services/system-setting.service";
+import { SETTING_KEYS, readFinanceEnabled } from "../services/system-setting.service";
+import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 
 export async function requireFinanceEnabled(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -29,7 +30,8 @@ export async function requireFinanceEnabled(req: Request, res: Response, next: N
       // `modulKapali`): istemci "modül kapalı"yı metinden değil koddan ayırt
       // eder. `code` TOP-LEVEL DEĞİL — `error.middleware` onu `details` altına
       // basar; `body.code` arayan istemci sessizce hep `undefined` okur.
-      throw AppError.forbidden(
+      // Lisans kapatıyorsa `LICENSE_MODULE` (bayrak DB'de açık olsa da) — kardeş kapılarla aynı.
+      throw licenseModuleError(SETTING_KEYS.FINANCE_ENABLED, "Ön muhasebe") ?? AppError.forbidden(
         "Ön muhasebe modülü bu kurulumda kapalı. Genel Ayarlar → Muhasebe bölümünden açılabilir.",
         { code: "MODULE_DISABLED", modul: "finance" },
       );

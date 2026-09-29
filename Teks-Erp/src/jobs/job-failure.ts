@@ -26,6 +26,13 @@ import { AuditService } from "../services/audit.service";
 import { classifyPoolTimeout, recordPoolTimeout } from "../lib/pool-health";
 import { hata } from "../lib/logger";
 
+/** Süreç ömrü boyunca iş başına hata sayısı — lisans yoklamasının sağlık özeti okur (audit OKUNMAZ). */
+const failureCounts = new Map<string, number>();
+
+export function getJobFailureCounts(): ReadonlyMap<string, number> {
+  return failureCounts;
+}
+
 /**
  * Bir zamanlanmış işin başarısızlığını konsola + SystemLog'a yazar; hata bir
  * havuz zaman aşımıysa `/health` sayacını da artırır.
@@ -34,6 +41,7 @@ import { hata } from "../lib/logger";
  */
 export function reportJobFailure(job: string, err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
+  failureCounts.set(job, (failureCounts.get(job) ?? 0) + 1);
 
   // Havuz zaman aşımıysa /health sayacına da düşsün (HTTP yolundaki davranışın aynısı).
   const kind = classifyPoolTimeout(err);

@@ -15,7 +15,7 @@ import {
   type LicenseMode,
   type ProtocolErrorCode,
 } from "./protocol";
-import { evaluateClock, type ClockResult } from "./saat";
+import { evaluateClock, type ClockResult, type SanctionSnapshot } from "./saat";
 
 export const REASON_CODES = [
   "HAK_YOK",
@@ -122,6 +122,21 @@ export interface LicenseStateInput {
   readonly sonYoklamaBasarisizMi: boolean;
   readonly varsayilanKip: LicenseMode;
   readonly sonKiraZorlamasi: boolean | null;
+  /** Son kullanılabilir kiranın sunucu kararları (`durum.json`); kira kullanılabilirken yok sayılır. */
+  readonly sonYaptirim: SanctionSnapshot | null;
+}
+
+/** Kiradan sunucu kararlarının anlık görüntüsü — `durum.json` bunu saklar, durum onu okur. */
+export function sanctionSnapshotOf(lease: LeaseDoc): SanctionSnapshot {
+  const y = lease.yaptirim;
+  return {
+    kademe: y.kademe,
+    mesaj: y.mesaj,
+    kisitlamaTarihi: y.kisitlamaTarihi,
+    donmusModuller: [...y.donmusModuller],
+    guncellemeDonuk: y.guncellemeDonuk,
+    devredildi: lease.devredildi,
+  };
 }
 
 export const DEFAULT_GRACE_DAYS = 30;
@@ -251,12 +266,14 @@ export function evaluateGrace(
   }
 }
 
-/** Sunucunun imzalı kararı tek anahtarlıdır: K3 tarihi, K4, K5 ve DEVREDİLDİ ikinci anahtar beklemez. */
-export function evaluateSanction(lease: LeaseDoc, nowMs: number, out: Finding[]): number | null {
-  const y = lease.yaptirim;
+/**
+ * Sunucunun imzalı kararı tek anahtarlıdır: K3 tarihi, K4, K5 ve DEVREDİLDİ ikinci anahtar
+ * beklemez. Kaynak kullanılabilir kira ya da (kira silinmiş/bozuksa) son kiranın anlık görüntüsü.
+ */
+export function evaluateSanction(y: SanctionSnapshot, nowMs: number, out: Finding[]): number | null {
   if (y.donmusModuller.length > 0) out.push({ code: "MODUL_DONDURULDU", detail: y.donmusModuller.join(",") });
   if (y.guncellemeDonuk || y.kademe === "K1") out.push({ code: "GUNCELLEME_DONDURULDU" });
-  if (lease.devredildi) {
+  if (y.devredildi) {
     out.push({ code: "DEVREDILDI", tier: "KISITLI", banner: dangerBanner("Üretim DR sunucusunda sürüyor; bu sunucu kısıtlı kipte (veri erişimi açık).") });
   }
   const message = y.mesaj ?? "";

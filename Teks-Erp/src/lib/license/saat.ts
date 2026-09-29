@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { KeyObject } from "node:crypto";
 import {
   IsoTimeSchema,
+  ModuleKeySchema,
+  SANCTION_LEVELS,
   CLOCK_SKEW_MS,
   TYP,
   UuidSchema,
@@ -83,6 +85,20 @@ export function accumulatedRuntime(g: { readonly storedMs: number; readonly load
   return Math.max(0, g.storedMs) + diff;
 }
 
+/**
+ * Son kullanılabilir kiranın SUNUCU KARARLARI (yaptırım + devir): kira silinse ya da
+ * bozulsa da kalıcıdır — ek süre ve dosya silme onları gevşetmez.
+ */
+export const SanctionSnapshotSchema = z.object({
+  kademe: z.enum(SANCTION_LEVELS).nullable(),
+  mesaj: z.string().max(500).nullable(),
+  kisitlamaTarihi: IsoTimeSchema.nullable(),
+  donmusModuller: z.array(ModuleKeySchema).max(64),
+  guncellemeDonuk: z.boolean(),
+  devredildi: z.boolean(),
+});
+export type SanctionSnapshot = z.infer<typeof SanctionSnapshotSchema>;
+
 /** `durum.json`: kurulum anahtarıyla imzalı, kiraya bağlı birikim kaydı. */
 export const StateRecordSchema = z.object({
   v: z.literal(1),
@@ -93,6 +109,8 @@ export const StateRecordSchema = z.object({
   yuksekSu: IsoTimeSchema,
   /** Son kullanılabilir kiranın zorlama kararı: kira silinirse kip ona göre korunur. */
   sonKiraZorlamasi: z.boolean().nullable(),
+  /** Son kullanılabilir kiranın sunucu kararları; kira yoksa null. */
+  sonYaptirim: SanctionSnapshotSchema.nullable(),
   /** Her yazımda artar; geri yüklenmiş eski kopyayı ayırt etmeye yarar. */
   sira: z.number().int().min(0),
 });
