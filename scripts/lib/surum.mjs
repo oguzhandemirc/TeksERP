@@ -22,6 +22,8 @@
 
 import { execFileSync } from 'node:child_process';
 
+import { yayinOku } from './yayin-okuma.mjs';
+
 /* ------------------------------------------------------------------ *
  * semver aritmetiği
  * ------------------------------------------------------------------ */
@@ -216,25 +218,14 @@ export function etiketAt(onEk, surum, { mesaj } = {}) {
  * Yayındaki sürümü okuma (yalnız DOĞRULAMA için)
  * ------------------------------------------------------------------ */
 
-const ZAMAN_ASIMI_MS = 12_000;
-
-/** Önbellek kırıcı — CF kenarı eski cevabı tutuyor olabilir. */
-function tazeUrl(url) {
-  return url + (url.includes('?') ? '&' : '?') + 'cb=' + Date.now();
-}
-
-async function getir(url, basliklar = {}) {
-  const kontrol = new AbortController();
-  const zamanlayici = setTimeout(() => kontrol.abort(), ZAMAN_ASIMI_MS);
-  try {
-    const y = await fetch(tazeUrl(url), { signal: kontrol.signal, headers: basliklar });
-    if (!y.ok) return null;
-    return await y.text();
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(zamanlayici);
-  }
+/**
+ * Yayın dosyasını VDS dosya sisteminden SSH ile okur (scripts/lib/yayin-okuma.mjs):
+ * güncelleme sunucusu anonim okumaya kapalıdır, "ne yayında" sorusunun kaynağı disktir
+ * (CF önbelleği de aradan çıkar). Okunamazsa null = ÖLÇÜLEMEDİ (çağıran uyarır).
+ */
+async function getir(url) {
+  const r = yayinOku(url);
+  return r.durum === 'var' ? r.govde : null;
 }
 
 /**
@@ -270,14 +261,9 @@ export async function yayindakiPanelSurumu(kanalKoku) {
 }
 
 /** Tabletin yayındaki paket sürümü — OTA manifestinin `extra.expoClient`i. */
-export async function yayindakiTabletSurumu(manifestUrl, runtimeVersion) {
-  return manifestGovdesindenSurum(
-    await getir(manifestUrl, {
-      'expo-runtime-version': String(runtimeVersion),
-      'expo-platform': 'android',
-      accept: 'multipart/mixed',
-    }),
-  );
+// İkinci parametre imza uyumu için kalır: runtimeVersion manifest yolunda zaten var (…/ota/<rv>/manifest).
+export async function yayindakiTabletSurumu(manifestUrl, _runtimeVersion) {
+  return manifestGovdesindenSurum(await getir(manifestUrl));
 }
 
 /** Yayındaki KURULUM DOSYASININ (APK) künyesi. Hiç yayınlanmadıysa null. */

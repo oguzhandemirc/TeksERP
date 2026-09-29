@@ -7,7 +7,7 @@
 //   ① HEAD == `<ürün>-v<X>` etiketinin commit'i (ilk kanala çıkan kodun ta kendisi)
 //   ② `terfi/<kanal>/<ürün>-v<X>` AÇIKLAMALI etiketi HEAD'de ve mesajı onay cümlesini taşır
 //      (etiket commit'e bağlı → onaylanan kodu ve sürüm notu metnini dondurur)
-//   ③ kaynak kanalda yayındaki sürüm ≥ X (public HTTPS; okunamazsa ÖLÇÜLEMEDİ)
+//   ③ kaynak kanalda yayındaki sürüm ≥ X (VDS dosya sisteminden SSH ile; okunamazsa ÖLÇÜLEMEDİ)
 // Dört paketleme/yayın betiği (electron-paketle · electron-yayinla · yayinla-ota ·
 // build-apk · mobil-yayinla) AYNI fonksiyonu çağırır; kabuk betikleri CLI'den
 // (`scripts/kanal-kapisi.mjs terfi …`).
@@ -18,19 +18,20 @@
 // cümle RED; geçerli cümle yayın defterine ve etiket mesajına yazılır. `terfiKaynagi`
 // olmayan kanalda kaçış anlamsızdır → RED (alışkanlık olmasın).
 //
-// Ağ `curl` ile okunur (fetch değil): bekçiler PATH'e sahte `curl` koyarak ağsız ölçer.
+// Yayındaki sürüm SSH ile VDS'ten okunur (scripts/lib/yayin-okuma.mjs — güncelleme sunucusu
+// anonim okumaya kapalı); bekçiler PATH'e sahte `ssh` koyarak ağsız ölçer.
 // =============================================================================
 
 import { execFileSync } from 'node:child_process';
 
 import { KOK, kanalCoz, Olculemedi } from './kanallar.mjs';
 import { ayristir, etiketAdi, karsilastir, manifestGovdesindenSurum, terfiEtiketAdi } from './surum.mjs';
+import { yayinOku } from './yayin-okuma.mjs';
 
 export const TERFI_URUNLERI = ['panel', 'tablet', 'backend'];
 /** Kullanıcı cümlesi — onay (etiket mesajı) ve kaçış (`--terfi-atla`) için aynı asgari. */
 export const CUMLE_ASGARI_KARAKTER = 20;
 export const CUMLE_ASGARI_KELIME = 3;
-const ZAMAN_ASIMI_SN = 12;
 
 /** Kaçış/onay cümlesi: boşluklar tekilleşir (defter TSV'sine sekme/satır sızmaz). */
 export function cumleDenetle(ham) {
@@ -114,35 +115,13 @@ export function gitOlgulari({ kod, urun, surum, kok = KOK }) {
 }
 
 /**
- * Tek HTTPS okuması (curl). HTTP 404 = "yayın yok" (ölçüldü); ağ hatası / başka kod = ÖLÇÜLEMEDİ.
- * @returns {{durum: 'var', govde: string} | {durum: 'yok'} | {durum: 'olculemedi', neden: string}}
- */
-export function httpsOku(url, basliklar = {}) {
-  if (!/^https:\/\//.test(String(url ?? ''))) return { durum: 'olculemedi', neden: `adres HTTPS değil: ${url}` };
-  const IS = '\n__TEKSERP_HTTP__';
-  const args = ['-sS', '--max-time', String(ZAMAN_ASIMI_SN), '-w', `${IS}%{http_code}`];
-  for (const [k, v] of Object.entries(basliklar)) args.push('-H', `${k}: ${v}`);
-  args.push(`${url}${url.includes('?') ? '&' : '?'}onbellek-atla=${process.pid}${Date.now()}`);
-  let cikti;
-  try {
-    cikti = execFileSync('curl', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 16 * 1024 * 1024 });
-  } catch (e) {
-    return { durum: 'olculemedi', neden: `${url} okunamadı (curl çıkış ${e.status ?? '?'}${e.stderr ? `: ${String(e.stderr).trim().slice(0, 160)}` : ''})` };
-  }
-  const i = cikti.lastIndexOf(IS);
-  if (i < 0) return { durum: 'olculemedi', neden: `${url}: HTTP durum kodu okunamadı` };
-  const kod = cikti.slice(i + IS.length).trim();
-  if (kod === '200') return { durum: 'var', govde: cikti.slice(0, i) };
-  if (kod === '404') return { durum: 'yok' };
-  return { durum: 'olculemedi', neden: `${url}: HTTP ${kod || '000'}` };
-}
-
-/**
  * Kaynak kanalda yayındaki sürüm(ler). Panel: `latest.yml`; tablet: OTA manifesti + APK künyesi
  * (aynı `tablet-v*` çizgisi — biri ≥ X ise yeter).
  * @returns {Array<{ne: string, url: string, durum: 'var'|'yok'|'olculemedi', surum?: string, neden?: string}>}
  */
-export function kaynakSurumleri(kaynakKanal, urun, oku = httpsOku) {
+export function kaynakSurumleri(kaynakKanal, urun, oku) {
+  // Adres → VDS yolu yalnız KAYNAK kanalın kaydından çözülür (başka kanalın dosyası okunamaz).
+  oku ??= (url) => yayinOku(url, { kayit: { kanallar: { kaynak: kaynakKanal } } });
   // Backend'in HTTP yayın feed'i YOK (paketle.ps1 zip'i elden/portaldan gider; Faz 3
   // dağıtım kapısı VDS feed'ini ekleyene kadar). ③ şartı ÖLÇÜLEMEZ → terfi ÖLÇÜLEMEDİ =
   // DUR (fail-closed: backend üretim kanalına HTTP kapısıyla otomatik terfi ettirilemez).
@@ -160,10 +139,9 @@ export function kaynakSurumleri(kaynakKanal, urun, oku = httpsOku) {
     return [ozet('panel latest.yml', y.panelManifest, oku(y.panelManifest),
       (g) => /^version:\s*['"]?([^\s'"]+)['"]?\s*$/m.exec(g)?.[1] ?? null)];
   }
-  const rv = kaynakKanal.tablet.runtimeVersion;
   return [
     ozet('tablet OTA manifesti', y.otaManifest,
-      oku(y.otaManifest, { 'expo-runtime-version': rv, 'expo-platform': 'android', accept: 'multipart/mixed' }),
+      oku(y.otaManifest),
       (g) => manifestGovdesindenSurum(g)),
     ozet('tablet APK künyesi', y.apkKunye, oku(y.apkKunye), (g) => {
       try {
@@ -253,7 +231,7 @@ export function terfiHukmu({ kod, urun, surum, kaynak, git, kaynaklar, atla }) {
  * Kapının tamamı: olguları toplar, hükmü verir. Kayıt/git okunamazsa ÖLÇÜLEMEDİ (fırlatmaz).
  * @param {{kod: string, urun: string, surum: string, atla?: string, kuru?: boolean, kok?: string, kayit?: object, oku?: Function}} o
  */
-export function terfiKapisi({ kod, urun, surum, atla, kuru = false, kok = KOK, kayit, oku = httpsOku }) {
+export function terfiKapisi({ kod, urun, surum, atla, kuru = false, kok = KOK, kayit, oku }) {
   if (!TERFI_URUNLERI.includes(urun)) return { sonuc: 'olculemedi', satirlar: [`bilinmeyen ürün "${urun}" (${TERFI_URUNLERI.join(' | ')})`] };
   let k;
   try {

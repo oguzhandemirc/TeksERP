@@ -334,12 +334,38 @@ basılır; ssh/scp/curl/etiket YOK (değişmezlik ve sha512 sunucu ister, kuru k
 > aynı olmalı. (Bu yüzden paket adı ASCII'ye çevrildi: eski ad "Adnan Şahin
 > ERP-…exe" idi ve `Ş` + boşluk aktarımda sessizce bozulup 404 üretirdi.)
 
+### 3b. Yayın belirteci — betikler güncelleme sunucusunu ANONİM okumaz (3c')
+
+Güncelleme sunucusunun kenarında Cloudflare Worker durur (Faz 3a): `/<kanal>/electron/*` ve
+`/<kanal>/mobil/*` yalnız indirme belirteciyle (`X-TKL-Indirme`) açılır, anonim okuma 403 alır.
+Yayın betikleri bu yüzden iki yoldan okur (tek kaynak `scripts/lib/yayin-okuma.mjs`, bekçi
+`scripts/check-yayin-okuma.mjs`):
+
+- **"Ne yayında"** → VDS diskinden SSH (`ssh tekserp-yayin`, `yayinci`, salt okuma). Sır gerekmez.
+- **"Kenardan ne görünüyor"** (CF önbelleği · başlıklar · boyut) → satıcı yayın belirteciyle HTTP.
+
+**Bir kez, yayın yapılan Mac'te:** belirteci satıcı portalından al ve
+`~/.tekserp/yayin-belirteci` dosyasına TEK SATIR yaz, `chmod 600 ~/.tekserp/yayin-belirteci`.
+Repoya, log'a, sürüm notuna GİRMEZ. Dosya yoksa / izinleri gevşekse / biçimsizse yayın betiği
+**ilk ssh/scp'den ÖNCE durur** (anonim okumaya düşmez). `--kuru` belirteç istemez.
+
+| Betik (3c' öncesi satır) | Ne okuyordu | Neden | Şimdi |
+|---|---|---|---|
+| `electron-yayinla.sh:121` | `latest.yml` (`--dogrula` sürümü) | denetlenecek sürüm | SSH `cat` (VDS) |
+| `electron-yayinla.sh:223,225,241` | paket/`latest.yml` HEAD + boyut | önbellek ↔ origin ayrımı, yarım yükleme | `belirtecli_curl` |
+| `electron-yayinla.sh:247` | `latest.yml` | yayında görünen sürüm = yüklenen | `belirtecli_curl` |
+| `mobil-yayinla.mjs:228,229` | manifest/bundle/APK HEAD | önbellek ↔ origin, boyut, içerik tipi | `belirtecliFetch` |
+| `mobil-yayinla.mjs:304` | manifest / APK künyesi GET | protokol başlıkları, manifest id, versionCode | `belirtecliFetch` |
+| `surum.mjs:230` (`getir`) | panel `latest.yml` · OTA manifesti · APK künyesi | etiket defteri doğrulaması (`electron-paketle.sh:108`, `yayinla-ota.mjs:566,634`) | SSH (VDS) |
+| `terfi.mjs:128` (`httpsOku`) | kaynak kanalın `latest.yml` · OTA manifesti · APK künyesi | terfi şartı ③ (beş yayıncı) | SSH (VDS) |
+
 ### 4. Doğrula
 
-Script bunu kendi yapar. Elle:
+Script bunu kendi yapar. Elle (salt denetim, yükleme yok — belirteç ister):
 
 ```bash
-curl -s https://guncelleme.etkiliyazilim.com/adnansahin/electron/latest.yml
+./deploy/electron-yayinla.sh --musteri=<kanal> --dogrula
+# ya da diskten:  ssh tekserp-yayin "cat /opt/stack/apps/tekserp-guncelleme/html/<kanal>/electron/latest.yml"
 # version: <yeni sürüm>  ve  path: TeksERP-<sürüm>-Setup.exe  yazmalı
 ```
 

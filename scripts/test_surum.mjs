@@ -11,9 +11,10 @@
 // §3 gerçek git etiketleri üzerinde koşar — GEÇİCİ bir depoda, bu deponun
 //    etiketlerine DOKUNMADAN.
 // §5 TERFİ KAPISI (K5, scripts/lib/terfi.mjs): saf hüküm + geçici depoda uçtan uca
-//    (CLI çıkış kodları, kaçış kaydı). Ağ ve push SAHTE: PATH'in önüne sahte `curl`
-//    (yalnız yayın sunucusu, geçici dizinden cevaplar; başka adres KIRMIZI) ve sahte
-//    `git` (`push` ENGELLENİR) konur. Kalıcı sonda: yüklemden bir şart sökülünce
+//    (CLI çıkış kodları, kaçış kaydı). Ağ ve push SAHTE: PATH'in önüne sahte `ssh`
+//    (yalnız VDS yayın ağacında `test -f … ; cat …` okuması, geçici dizinden cevaplar;
+//    başka komut KIRMIZI), sahte `curl` (HER çağrı KIRMIZI — güncelleme sunucusu anonim
+//    okumaya kapalı, 3c') ve sahte `git` (`push` ENGELLENİR) konur. Kalıcı sonda: yüklemden bir şart sökülünce
 //    ilgili kontrolün kırmızıya döndüğü ölçülür.
 //
 //   node scripts/test_surum.mjs
@@ -230,7 +231,7 @@ ol('terfiKaynagi olmayan kanal → uyumlu (gerekmez); kaçış verilirse → ihl
   assert.equal(h({ kaynak: null, git: null, kaynaklar: null, atla: 'fabrika çöktü, test turu beklemeden çıkar' }).sonuc, 'ihlal');
 });
 
-// §5c — uçtan uca: geçici depo + CLI (kanal-kapisi terfi) + sahte curl/git
+// §5c — uçtan uca: geçici depo + CLI (kanal-kapisi terfi) + sahte ssh/curl/git
 const T = fs.mkdtempSync(path.join(os.tmpdir(), 'tekserp-terfi-'));
 try {
   const temizEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
@@ -247,18 +248,21 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 const [arac, ...a] = process.argv.slice(2);
 const yaz = (o) => fs.appendFileSync(process.env.CAGRI_LOG, JSON.stringify({ arac, ...o }) + '\n');
-const HOST = 'https://guncelleme.etkiliyazilim.com/';
-if (arac === 'curl') {
-  const url = (a.find((x) => /^https?:\/\//.test(x)) ?? '').split('?')[0];
-  const wi = a.indexOf('-w');
-  const bicim = wi >= 0 ? a[wi + 1] : '';
-  yaz({ url });
-  if (!url.startsWith(HOST)) { yaz({ YABANCI_AG: url }); process.exit(6); }
-  if (process.env.SAHTE_CURL_KOPUK && url.includes(process.env.SAHTE_CURL_KOPUK)) { process.stderr.write('curl: (7) Failed to connect\n'); process.exit(7); }
-  const dosya = path.join(process.env.SAHTE_UZAK, url.slice(HOST.length));
-  const kod = process.env.SAHTE_CURL_KOD || (fs.existsSync(dosya) ? '200' : '404');
-  if (kod === '200') process.stdout.write(fs.readFileSync(dosya));
-  process.stdout.write(bicim.replace('%{http_code}', kod));
+const VDS = '/opt/stack/apps/tekserp-guncelleme/html/';
+if (arac === 'curl') { yaz({ ANONIM_HTTP: a.join(' ') }); process.exit(6); }
+if (arac === 'ssh') {
+  const k = [...a];
+  while (k.length && k[0].startsWith('-')) { const o = k.shift(); if (o === '-o' || o === '-p') k.shift(); }
+  const host = k.shift();
+  const komut = k.join(' ');
+  const m = /^test -f '([^']+)' \|\| exit 44; cat '\1'$/.exec(komut);
+  if (!m || !m[1].startsWith(VDS)) { yaz({ host, YABANCI_KOMUT: komut }); process.exit(97); }
+  yaz({ host, yol: m[1] });
+  if (process.env.SAHTE_SSH_KOPUK && m[1].includes(process.env.SAHTE_SSH_KOPUK)) { process.stderr.write('ssh: connect to host: Connection refused\n'); process.exit(255); }
+  if (process.env.SAHTE_SSH_KOD) { process.stderr.write('Permission denied\n'); process.exit(Number(process.env.SAHTE_SSH_KOD)); }
+  const dosya = path.join(process.env.SAHTE_UZAK, m[1]);
+  if (!fs.existsSync(dosya)) process.exit(44);
+  process.stdout.write(fs.readFileSync(dosya));
   process.exit(0);
 }
 if (arac === 'git') {
@@ -268,13 +272,13 @@ if (arac === 'git') {
 }
 process.exit(97);
 `);
-  for (const arac of ['curl', 'git']) {
+  for (const arac of ['ssh', 'curl', 'git']) {
     fs.writeFileSync(path.join(bin, arac), `#!/bin/sh\nexec "${process.execPath}" "${sahte}" ${arac} "$@"\n`);
     fs.chmodSync(path.join(bin, arac), 0o755);
   }
   // Geçici depo: kapının kendi dosyaları (KOK = depo) + kayıt defteri.
   const depo = path.join(T, 'depo');
-  for (const rel of ['scripts/kanal-kapisi.mjs', 'scripts/lib/kanallar.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/terfi.mjs', 'deploy/kanallar.json']) {
+  for (const rel of ['scripts/kanal-kapisi.mjs', 'scripts/lib/kanallar.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs', 'deploy/kanallar.json']) {
     fs.mkdirSync(path.dirname(path.join(depo, rel)), { recursive: true });
     fs.copyFileSync(path.join(KOK, rel), path.join(depo, rel));
   }
@@ -282,7 +286,7 @@ process.exit(97);
   dg('init', '-q');
   dg('commit', '-q', '--allow-empty', '-m', 'onceki');
   dg('commit', '-q', '--allow-empty', '-m', 'surum');
-  const kaynakYml = path.join(uzak, 'testfabrika/electron/latest.yml');
+  const kaynakYml = path.join(uzak, 'opt/stack/apps/tekserp-guncelleme/html/testfabrika/electron/latest.yml');
   fs.mkdirSync(path.dirname(kaynakYml), { recursive: true });
   const cli = (args, ortamEk = {}) => {
     const r = spawnSync(process.execPath, [path.join(depo, 'scripts/kanal-kapisi.mjs'), ...args], {
@@ -329,23 +333,23 @@ process.exit(97);
   fs.writeFileSync(kaynakYml, 'version: 1.3.3\npath: TeksERP-1.3.3-Setup.exe\n');
   ol('E2E kaynak GERİDE (1.3.3) → çıkış 1', () => assert.equal(terfi().kod, 1));
   fs.writeFileSync(kaynakYml, 'version: 1.3.4\npath: TeksERP-1.3.4-Setup.exe\n');
-  ol('E2E ⭐ POZİTİF: üç şart tutuyor → çıkış 0, onay cümlesi basılır, tek ağ okuması kaynak latest.yml', () => {
+  ol('E2E ⭐ POZİTİF: üç şart tutuyor → çıkış 0, onay cümlesi basılır, tek okuma kaynak latest.yml (SSH, VDS diski; anonim HTTP YOK)', () => {
     fs.writeFileSync(log, '');
     const r = terfi();
     assert.equal(r.kod, 0, r.cikti);
     assert.match(r.cikti, /✓ terfi kapısı: panel 1\.3\.4 → adnansahin/);
     assert.match(r.cikti, /onay: "testfabrikada denendi/);
-    assert.deepEqual(cagrilar().map((c) => c.url), ['https://guncelleme.etkiliyazilim.com/testfabrika/electron/latest.yml']);
+    assert.deepEqual(cagrilar(), [{ arac: 'ssh', host: 'tekserp-yayin', yol: '/opt/stack/apps/tekserp-guncelleme/html/testfabrika/electron/latest.yml' }]);
   });
-  ol('E2E kaynak OKUNAMIYOR (bağlantı reddi) → çıkış 2 (ÖLÇÜLEMEDİ)', () => {
-    const r = terfi([], { SAHTE_CURL_KOPUK: '/testfabrika/' });
+  ol('E2E kaynak OKUNAMIYOR (ssh bağlantı reddi) → çıkış 2 (ÖLÇÜLEMEDİ)', () => {
+    const r = terfi([], { SAHTE_SSH_KOPUK: '/testfabrika/' });
     assert.equal(r.kod, 2, r.cikti);
     assert.match(r.cikti, /ÖLÇÜLEMEDİ/);
   });
-  ol('E2E kaynak HTTP 500 → çıkış 2 (ÖLÇÜLEMEDİ, "yok" DEĞİL)', () => assert.equal(terfi([], { SAHTE_CURL_KOD: '500' }).kod, 2));
+  ol('E2E ssh izin reddi (çıkış 1) → çıkış 2 (ÖLÇÜLEMEDİ, "yok" DEĞİL)', () => assert.equal(terfi([], { SAHTE_SSH_KOD: '1' }).kod, 2));
   ol('E2E --kuru: kaynak okunmaz (ağ yok), git şartları geçer → çıkış 0', () => {
     fs.writeFileSync(log, '');
-    const r = terfi(['--kuru'], { SAHTE_CURL_KOPUK: '/testfabrika/' });
+    const r = terfi(['--kuru'], { SAHTE_SSH_KOPUK: '/testfabrika/' });
     assert.equal(r.kod, 0, r.cikti);
     assert.equal(cagrilar().length, 0);
   });
@@ -353,7 +357,7 @@ process.exit(97);
   ol('E2E --terfi-atla="acil çıkar" (kısa) → çıkış 1', () => assert.equal(terfi(['--terfi-atla=acil çıkar']).kod, 1));
   ol('E2E --terfi-atla="<cümle>" → çıkış 0, ağ YOK (kaynak okunmadı)', () => {
     fs.writeFileSync(log, '');
-    const r = terfi(['--terfi-atla=fabrika çöktü, test turu beklemeden çıkar'], { SAHTE_CURL_KOPUK: '/' });
+    const r = terfi(['--terfi-atla=fabrika çöktü, test turu beklemeden çıkar'], { SAHTE_SSH_KOPUK: '/' });
     assert.equal(r.kod, 0, r.cikti);
     assert.match(r.cikti, /TERFİ KAPISI ATLANDI/);
     assert.equal(cagrilar().length, 0);
@@ -380,7 +384,7 @@ process.exit(97);
   const sondaYukle = async (degistir) => {
     const d = path.join(T, `sonda-${Math.random().toString(36).slice(2)}`);
     fs.mkdirSync(d);
-    for (const f of ['kanallar.mjs', 'surum.mjs']) fs.copyFileSync(path.join(KOK, 'scripts/lib', f), path.join(d, f));
+    for (const f of ['kanallar.mjs', 'surum.mjs', 'yayin-okuma.mjs']) fs.copyFileSync(path.join(KOK, 'scripts/lib', f), path.join(d, f));
     const once = fs.readFileSync(path.join(KOK, 'scripts/lib/terfi.mjs'), 'utf8');
     const sonra = degistir(once);
     if (sonra === once) throw new Error('sonda mutasyonu UYGULANMADI');

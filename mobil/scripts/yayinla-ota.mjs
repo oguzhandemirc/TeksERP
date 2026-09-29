@@ -590,7 +590,7 @@ async function main() {
       );
     }
     if (kiyas.durum === 'olculemedi') {
-      uyari('Yayındaki sürüm okunamadı; etiket defteri DOĞRULANMADI (internet?).');
+      uyari('Yayındaki sürüm okunamadı (ssh tekserp-yayin, VDS diski); etiket defteri DOĞRULANMADI.');
     }
     // Yayınlanmamış tur sayısı açılış modalinin tavanını aşıyorsa söyle (uyarı, blok değil).
     const tavan = tavanUyarisi(surumNotlariniOku(), 'tablet', yayinda, karar.surum);
