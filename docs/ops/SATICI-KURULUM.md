@@ -24,14 +24,17 @@ Cloudflare (proxy AÇIK) ─443─► Traefik (websecure, Origin CA *.etkiliyazi
                             satici :4610 GENEL  (/v1/* · /q · /bayi/api · /saglik)
 Mac (tailnet) ─► 100.x.y.z:4611 (tailscale0) ─DNAT─► ağ: …-tailnet ─► satici :4611 TAILNET (/portal/*)
                             satici ◄─ ağ: …-ic (internal) ─► satici-db (PG16) ◄─ satici-yedek
+patron (ayrı compose, PATRON_IC_IP) ─ ağ: …-ic-api (internal) ─► satici :4612 İÇ (/ic/v1/* · Bearer)
 ```
 
 | Konteyner | İmaj | Kullanıcı | Bellek · CPU · süreç | Ağlar |
 |---|---|---|---|---|
-| `tekserp-satici-hazirlik` | `tekserp-satici:<sha>` (node 24, `node dist/server.js`) | 10001 | 384 MB · 0,75 · 200 | kenar (sabit IP) · ic · tailnet (sabit IP) |
+| `tekserp-satici-hazirlik` | `tekserp-satici:<sha>` (node 24, `node dist/server.js`) | 10001 | 384 MB · 0,75 · 200 | kenar (sabit IP) · ic · tailnet (sabit IP) · ic-api (sabit IP) |
 | `tekserp-satici-hazirlik-db` | `postgres:16-alpine` (özetle sabit) | 70 | 256 MB · 0,5 · 100 | ic |
 | `tekserp-satici-hazirlik-yedek` | `tekserp-satici-yedek:<sha>` (pg_dump 16 + `yedek-sifrele.cjs`) | 10001 | 128 MB · 0,25 · 50 | ic |
 | `satici-goc` (profil `goc`, tek seferlik) | `tekserp-satici:<sha>` | 10001 | 384 MB · 0,5 · 100 | ic |
+
+**İç API (patron bulutu → satıcı, §5b):** satıcının üçüncü dinleyicisi `IC_API_IP:4612` yalnız `ic-api` köprüsünde (internal, port yayını YOK). Uygulama kapısı fail-closed: istek o soketten gelmeli VE kaynak adres `PATRON_IC_IP/32` olmalı (soket adresi; başlık okunmaz) → değilse 404; ardından ortak Bearer (docker secret `ic_api_belirteci`, sabit zamanlı) → yanlışsa 401. Sır dosyası yoksa/herkese açıksa/zayıfsa iç dinleyici hiç açılmaz (günlük: `iç API KAPALI`). Köprünün ağ geçidi (.1 = VDS'in kendisi) ve dinamik aralık kaynak sayılmaz — host kabuğu da, sonradan ağa katılan bir konteyner de iç API'ye ulaşamaz.
 
 Hepsinde: kök FS **salt okunur** · `cap_drop: ALL` · `no-new-privileges` · docker soketi **bağlı değil** · `init`. Satıcı `web` ağına katılmaz: güncelleme/patron/kiracı konteynerleri satıcıya ağdan ulaşamaz, satıcı onlara ulaşamaz. Bu değişmezleri `deploy/satici/compose-denetle.mjs` ölçer (§2.4) — kuruluma o yeşil vermeden geçilmez.
 
@@ -180,6 +183,26 @@ Tailscale kullanıcı onayı beklerken satıcı **geri döngü kipinde** koşar:
 9. **İlk yedek:** `sudo docker compose exec satici-yedek /arac/yedek-dongusu.sh tek` → `satici_<damga>.dump.tkenc` + `anahtarlar_<damga>.tar.tkenc`. Günlükteki "Yerel anahtar (yerel.tkkey) yok" uyarısı BEKLENİR: satıcıda yerel alıcı bilerek yoktur — VDS kendi yedeğini açamaz, açan özel yarı yalnız Mac'te (§7).
 10. **Sonra:** `Teks-Erp-wt/vds-dogrula.sh` → ✅ adnansahin AYNI.
 
+## 5b. İç API (patron bulutu → satıcı) — sır, ağ, patronun katılması
+
+VDS YAZIMIDIR (kullanıcının "uygula" cümlesiyle); S1 diliminde yazıldı, UYGULANMADI. Compose bu değişkenleri ZORUNLU tutar: §12'deki kurulum bir sonraki `compose up`tan önce 1–4'ü ister.
+
+1. **Ağ ölçümü** (salt okuma, §3 gibi): `IC_API_AGI` başka köprü/rota ile çakışmaz — `sudo docker network inspect -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}}{{end}}' $(sudo docker network ls -q)` + `ip -4 route`. Sabit adresler (`IC_API_IP`, `PATRON_IC_IP`) alt ağda, `.1` (ağ geçidi = VDS) değil, `IC_API_DINAMIK_ARALIK` dışında.
+2. **Sır** (ekrana BASILMAZ; satıcı ve patron aynı değeri taşır):
+
+   ```bash
+   K=/opt/stack/apps/tekserp-satici-hazirlik
+   openssl rand -hex 32 | sudo tee $K/sirlar/ic-api-belirteci >/dev/null
+   sudo chown root:61061 $K/sirlar/ic-api-belirteci && sudo chmod 440 $K/sirlar/ic-api-belirteci
+   ```
+
+   Herkese okunur (ör. 0644), 32 karakterden kısa ya da boşluklu sırda satıcı iç API'yi AÇMAZ (günlük `iç API KAPALI: …`, neden sırrı içermez).
+3. **`.env`** (`ornek.env`): `IC_API_AGI` · `IC_API_IP` · `PATRON_IC_IP` · `IC_API_DINAMIK_ARALIK` · `IC_API_BELIRTEC_DOSYASI_HOST`. Mac'te `node deploy/satici/compose-denetle.mjs --env-file <.env>` → ⑧a–⑧e dahil yeşil; olmadan geçilmez.
+4. **Satıcıyı yeniden yarat:** önce yedek (`sudo docker compose exec satici-yedek /arac/yedek-dongusu.sh tek`), sonra `sudo docker compose up -d satici` — `ic-api` ağı doğar, satıcı birkaç saniye kesilir (fabrikalar kira ömrü içinde etkilenmez). Günlük: `SATICI_DINLIYOR genel=4610 tailnet=4611 ic=4612`.
+5. **Patron** (ayrı compose, patron dilimi): ağ `tekserp-satici-hazirlik-ic-api: {external: true}`, servis ağında `ipv4_address: <PATRON_IC_IP>`; patronun `.env`i (0600): `KURULUM_KAYNAGI=satici` · `SATICI_IC_API_URL=http://<IC_API_IP>:4612` · `SATICI_IC_API_BELIRTECI=<aynı sır>` (sunucuda dosyadan yazılır: `printf 'SATICI_IC_API_BELIRTECI=%s\n' "$(sudo cat $K/sirlar/ic-api-belirteci)" | sudo tee -a <patron>/.env >/dev/null`). Patron önbelleği (`KURULUM_ONBELLEK_DK`, 5) tazeliktir: satıcıya ulaşamazsa bayat kayıtla sürer, hiç dolmadıysa RED; satıcının 404'ü kaydı pasife çeker (401 çekmez).
+6. **Sır rotasyonu:** yeni sır dosyaya → `sudo docker compose up -d --force-recreate satici` + patronun `.env`i + patron yeniden başlatılır. Arada patron 401 alır: bulut bayat kayıtla sürer, zil kaçar (fabrika her turda yine yoklar).
+7. **İç API'yi kapatmak (ağ kalır):** `sudo truncate -s 0 $K/sirlar/ic-api-belirteci && sudo docker compose up -d --force-recreate satici` → `ic=kapali`; patron bayat kayıtla sürer.
+
 ## 6. DNS (kullanıcı — Cloudflare)
 
 
@@ -200,6 +223,19 @@ Tailscale kullanıcı onayı beklerken satıcı **geri döngü kipinde** koşar:
 | `sudo docker stats --no-stream` | VDS | sınırlar tablodaki gibi |
 | `curl -sI https://guncelleme.etkiliyazilim.com/adnansahin/electron/latest.yml` + `vds-dogrula.sh` | Mac | 200 · adnansahin AYNI |
 | Yedek açılır mı (aşağıda) | Mac | `pg_restore --list` dolu; anahtar arşivi Mac'teki dizinle bayt-eşit |
+| `sudo docker compose logs satici \| grep SATICI_DINLIYOR` | VDS | `ic=4612` (sır yoksa `ic=kapali` + `iç API KAPALI`) |
+| `curl -s -o /dev/null -w '%{http_code}' https://lisans-test.etkiliyazilim.com/ic/v1/zil` | internet | `404` (genel dinleyici iç yolu bilmez) |
+| İç API kapısı — aşağıdaki geçici konteyner, `--ip <PATRON_IC_IP>` ile (patron henüz AYNI adreste çalışmıyorken) | VDS | Bearer'lı: `404 BULUNAMADI` (sıfır kurulum kimliği) · Bearer'sız: `401 IC_KIMLIK_GECERSIZ` |
+| aynı komut `--ip` OLMADAN (dinamik adres) | VDS | ikisi de `404` (kaynak kapısı) |
+
+İç API kapı ölçümü (satıcı imajının kendi Node'u; sır ekrana basılmaz):
+
+```bash
+sudo docker run --rm --network tekserp-satici-hazirlik-ic-api --ip <PATRON_IC_IP> --user 10001:10001 --group-add 61061 \
+  -v $K/sirlar/ic-api-belirteci:/s:ro --entrypoint node tekserp-satici:<sha> -e '
+  const b=require("fs").readFileSync("/s","utf8").trim(), u="http://<IC_API_IP>:4612/ic/v1/kurulum/00000000-0000-4000-8000-000000000000";
+  (async()=>{for(const h of [{Authorization:"Bearer "+b},{}]){const r=await fetch(u,{headers:h});console.log(r.status,(await r.json()).details?.code)}})()'
+```
 
 Portal 200 yerine 404 dönüyorsa: kaynak adres korunmamıştır (DNAT değil vekil) — satıcının erişim günlüğündeki kaynak IP'ye bak (`docker logs tekserp-satici-hazirlik | grep portal`); köprü ağ geçidini tailnet listesine eklemek ÇÖZÜM DEĞİLDİR (host'taki her süreç portalı açar).
 
@@ -227,6 +263,8 @@ sudo iptables -D DOCKER-USER -s <TAILNET_AGI> -m conntrack --ctstate NEW -j DROP
 # Traefik compose'undaki kenar ağı satırı KALDIRILIR, sonra:
 sudo docker network disconnect tekserp-satici-hazirlik-kenar traefik 2>/dev/null; sudo docker network rm tekserp-satici-hazirlik-kenar
 ```
+
+İç API (§5b) geri alınırken önce patron ağdan çıkar (patron compose'undan `ic-api` satırı + `docker network disconnect`), sonra `compose down` ağı siler; yalnız kapatmak için §5b.7 yeter.
 
 Traefik compose'unun kurulum öncesi hâli yanında durur: `/opt/stack/traefik/docker-compose.yml.yedek-20260929-satici` → geri alırken `sudo cp -p` ile yerine konur (ağ bağlantısı kesildikten SONRA değil, ağ silinmeden ÖNCE — dosya dış ağı andığı sürece Traefik yeniden yaratılamaz). Geri döngü kipinde DOCKER-USER kuralı ve birim YOKTUR (o iki satır atlanır); `compose down` `portal-tunel`i de kaldırır.
 
@@ -262,6 +300,7 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 - **Satıcı `denetim` budaması** (yönetici kararı h: başarısız giriş 90 gün, diğer denetim 2 yıl) bu dilimin tabanında YOK — `lisans/satici-tamamlama` dilimi getirir; imaj o dilim indikten sonraki HEAD'den derlenmezse denetim tablosu budanmadan büyür (kurulumdan önce `git log -- satici/sunucu/src/services/maintenance.ts` ile ölç).
 - Traefik'in kalıcı ağ satırı Traefik compose'unu değiştirir (§5.5) — o dosya bu repoda değil (2026-09-29'da yazıldı, öncesi yanında `.yedek-20260929-satici`).
 - Geri döngü kipinde portal erişimi SSH oturumu + VDS'te `nc` ile (sshd TCP yönlendirmeyi kapatır) — kabuk erişimi olan her VDS hesabı köprü adresine zaten ulaşır; kapı parola + TOTP'tir. Tailscale ana kipi bunu kaldırır (§4a).
+- **İç API ortak sırrı iki yerde** (satıcı secret dosyası root:SIR_GID 0440 · patronun `.env`i 0600): VDS'te root her ikisini okur (kabul edilen — kök/konteyner kaçışı her şeyi açar). Sızarsa açığa çıkan yalnız allowlist'tir (kurulumların açık anahtarı + kid, durum, sınıf, patron bulutu hakkı/bitişi, tesis adı) ve zil çalınabilir (içerik taşımaz, kurulum başına hız sınırlı); kişisel/ticari veri yoktur. Çare rotasyon (§5b.6).
 - Kök anahtar VDS'te (parolalı) — konteyner kaçışı kök dosyasını okur ama parolasız işe yaramaz; parola yalnız imza anında formdan alt sürece gider (plan §12).
 
 ## 12. Kurulum kaydı — 2026-09-29 (hazırlık, geri döngü kipi)
