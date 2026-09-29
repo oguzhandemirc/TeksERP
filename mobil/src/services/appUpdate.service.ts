@@ -24,6 +24,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 import { queryClient } from '../offline/queryClient';
+import { downloadTokenHeaders, refreshOtaDownloadToken } from './downloadToken.service';
 
 /* ------------------------------------------------------------------ *
  * 1) UZAKTAN GÜNCELLEME
@@ -108,6 +109,8 @@ export type OtaKontrolSonuc =
 export async function otaKontrolEtVeIndir(): Promise<OtaKontrolSonuc> {
   if (!Updates.isEnabled) return { durum: 'kapali' };
   try {
+    // Manifest isteği taze indirme belirteciyle (3c); alınamazsa başlıksız — bugünkü davranış.
+    await refreshOtaDownloadToken();
     const sonuc = await Updates.checkForUpdateAsync();
     if (!sonuc.isAvailable) return { durum: 'guncel' };
     const indirme = await Updates.fetchUpdateAsync();
@@ -264,7 +267,7 @@ export async function apkDurumu(): Promise<ApkDurum> {
     const kontrol = new AbortController();
     const zamanlayici = setTimeout(() => kontrol.abort(), KUNYE_TIMEOUT_MS);
     try {
-      const yanit = await fetch(`${taban}apk/surum.json`, { signal: kontrol.signal });
+      const yanit = await fetch(`${taban}apk/surum.json`, { signal: kontrol.signal, headers: await downloadTokenHeaders() });
       if (!yanit.ok) return { kunye: null, kurulu, yeniVarMi: false };
       const ham = (await yanit.json()) as Partial<ApkKunye>;
       // Statik künyede `varMi` alanı yok — dosyanın VARLIĞI yayının kendisidir.
@@ -311,7 +314,7 @@ export async function apkIndirVeKur(
     const indirici = FileSystem.createDownloadResumable(
       indirmeUrl,
       hedef,
-      {},
+      { headers: await downloadTokenHeaders() },
       (p) => {
         if (onIlerleme && p.totalBytesExpectedToWrite > 0) {
           onIlerleme(p.totalBytesWritten / p.totalBytesExpectedToWrite);

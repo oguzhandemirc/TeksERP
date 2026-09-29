@@ -31,6 +31,7 @@ import {
   guvenliYenile,
   kuruluVersionName,
 } from '../services/appUpdate.service';
+import { refreshOtaDownloadToken } from '../services/downloadToken.service';
 import {
   kilitlenmeliMi,
   politikaDegerlendir,
@@ -41,6 +42,8 @@ import { colors } from '../theme/tokens';
 
 /** Ön plana her dönüşte sormak gereksiz trafik — en az bu kadar ara olsun. */
 const SORMA_ARALIGI_MS = 10 * 60 * 1000;
+/** Açılışta native ON_LOAD denetimi bitsin diye JS denetimi bu kadar sonra. */
+const LAUNCH_RETRY_DELAY_MS = 5 * 1000;
 
 export default function UpdateGate() {
   const { isUpdatePending } = Updates.useUpdates();
@@ -58,6 +61,8 @@ export default function UpdateGate() {
     if (Date.now() - sonSorma.current < SORMA_ARALIGI_MS) return;
     sonSorma.current = Date.now();
     try {
+      // Taze indirme belirteci (3c) — alınamazsa param silinir, istek bugünkü gibi başlıksız.
+      await refreshOtaDownloadToken();
       const sonuc = await Updates.checkForUpdateAsync();
       if (sonuc.isAvailable) await Updates.fetchUpdateAsync();
     } catch {
@@ -88,6 +93,13 @@ export default function UpdateGate() {
   useEffect(() => {
     void politikaKontrol();
   }, [politikaKontrol]);
+
+  /* --- (0) Açılış: native ON_LOAD denetimi saklı (bayat olabilecek) belirteçle koştu; indirme
+         kapısı 403 verdiyse uygulama gömülüyle açıldı. JS belirteci tazeleyip bir kez daha sorar. */
+  useEffect(() => {
+    const t = setTimeout(() => void sor(), LAUNCH_RETRY_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [sor]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (durum) => {

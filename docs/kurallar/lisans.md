@@ -123,6 +123,8 @@ Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koş
 
 Panel (vitest, `cd Electron && npx vitest run <yol>`): `src/lib/download-token.test.ts` (indirme belirteci, 3b)
 
+Tablet (jest, `cd mobil && npx jest <yol>`): `src/services/downloadToken.service.test.ts` (indirme belirteci, 3c)
+
 Yeni lisans bekçisi doğduğu commit'te bu listeye VE haritanın `## lisans` bölümüne birlikte eklenir.
 
 Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnız `_test` DB'ler): Senaryo L + Y tek komut `cd Teks-Erp && npx tsx scripts/senaryo-ly.ts` (ortam değişkenleri dosya başında) — L1…L29 sonuç tablosu `docs/design/LISANS-SENARYO-L.md`.
