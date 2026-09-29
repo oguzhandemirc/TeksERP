@@ -5,8 +5,12 @@
 // GEÇERSİZ sayan bir çekirdeğe çevrilir (lisans merdiveni: uyarı → ek süre → kısıtlı; süreç düşmez).
 // Adaptör (sözleşme şemaları, native ve "yok" çekirdekleri): `native-adapter.ts`.
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { createHash, type KeyObject } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
+import { b64uEncode, decodeDocument, publicKeyFromX, verifyJws } from "./protocol";
+import { INTEGRITY_TYP, IntegrityManifestSchema, PACKAGE_PUBLIC_KEYS, type PackageKey } from "./integrity";
+import { INTEGRITY_FILE } from "./integrity-scope";
 import { tsLicenseCore, type LicenseCore } from "./license-core";
 import { isNativeBinding, nativeCore, unavailableCore, type NativeBinding } from "./native-adapter";
 
@@ -19,7 +23,15 @@ export const NATIVE_ABI = 1;
 /** Açık dosya yolu (geliştirme/test); ZORUNLU kipte OKUNMAZ — yamalı çekirdek enjekte edilemesin. */
 export const NATIVE_PATH_ENV = "TEKSERP_LISANS_CEKIRDEK";
 
-export type FallbackReason = "PLATFORM_DESTEKSIZ" | "DOSYA_YOK" | "YUKLENEMEDI" | "KUNYE_UYUSMAZ" | "TEST_DERLEMESI";
+export type FallbackReason =
+  | "PLATFORM_DESTEKSIZ"
+  | "DOSYA_YOK"
+  | "YUKLENEMEDI"
+  | "KUNYE_UYUSMAZ"
+  | "TEST_DERLEMESI"
+  | "LISTE_YOK"
+  | "LISTE_GECERSIZ"
+  | "LISTE_UYUSMAZ";
 
 export interface NativeIdentity {
   readonly ad: string;
@@ -53,6 +65,8 @@ export interface LoaderOptions {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly platform: string;
   readonly arch: string;
+  /** Zorunlu kipte `.node`u imzalı listeye karşı denetleyen PAKET anahtarları (yalnız testler değiştirir). */
+  readonly packageKeys?: readonly PackageKey[];
 }
 
 /** napi-rs adlandırması: `lisans-cekirdek.<platform>-<arch>[-<abi>].node`; desteklenmeyen hedef `null`. */
@@ -122,6 +136,45 @@ export function identityRejection(
   return null;
 }
 
+/**
+ * İKİNCİ DENETİM NOKTASI: native kendi bütünlüğünü doğrulayamaz (yamalı `.node` her şeyi "geçerli"
+ * diyebilir). Zorunlu kipte `.node` AÇILMADAN ÖNCE (dlopen yamalı kodu çalıştırır) paket kökündeki
+ * imzalı listeye karşı TS protokolüyle denetlenir; liste yok/geçersiz/uyuşmaz → çekirdek YOK.
+ */
+export function packagedNativeRejection(
+  file: string,
+  root: string,
+  keys: readonly PackageKey[] = PACKAGE_PUBLIC_KEYS,
+): { readonly neden: FallbackReason; readonly ayrinti: string } | null {
+  let token: string;
+  try {
+    token = readFileSync(path.join(root, INTEGRITY_FILE), "utf8").trim();
+  } catch {
+    return { neden: "LISTE_YOK", ayrinti: `${INTEGRITY_FILE} okunamadı` };
+  }
+  const usable = new Map<string, KeyObject>();
+  for (const k of keys) {
+    const key = publicKeyFromX(k.x);
+    if (key) usable.set(k.kid, key);
+  }
+  const j = verifyJws(token, { typ: INTEGRITY_TYP, findKey: (kid) => usable.get(kid) });
+  if (!j.ok) return { neden: "LISTE_GECERSIZ", ayrinti: j.code };
+  const m = decodeDocument(IntegrityManifestSchema, j.value.payload);
+  if (!m.ok) return { neden: "LISTE_GECERSIZ", ayrinti: m.code };
+  const rel = `native/${path.basename(file)}`;
+  const entry = m.value.dosyalar.find((f) => f.yol === rel);
+  if (!entry) return { neden: "LISTE_UYUSMAZ", ayrinti: `${rel} imzalı listede yok` };
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(file);
+  } catch {
+    return { neden: "LISTE_UYUSMAZ", ayrinti: `${rel} okunamadı` };
+  }
+  const digest = b64uEncode(createHash("sha256").update(bytes).digest());
+  if (bytes.length !== entry.boyut || digest !== entry.sha256) return { neden: "LISTE_UYUSMAZ", ayrinti: `${rel} imzalı listeyle uyuşmuyor` };
+  return null;
+}
+
 /** Saf yükleme (önbelleksiz) — bekçiler farklı kip/yol/platformla çağırır. */
 export function loadLicenseCoreFrom(o: LoaderOptions): LoadedCore {
   const tried = nativeCandidates(o);
@@ -132,6 +185,10 @@ export function loadLicenseCoreFrom(o: LoaderOptions): LoadedCore {
   if (tried.length === 0) return fallback("PLATFORM_DESTEKSIZ", `${o.platform}-${o.arch} için native derleme yok`);
   const file = tried.find((f) => existsSync(f));
   if (!file) return fallback("DOSYA_YOK", "native .node bulunamadı");
+  if (o.required) {
+    const rejected = packagedNativeRejection(file, o.cwd, o.packageKeys);
+    if (rejected) return fallback(rejected.neden, rejected.ayrinti);
+  }
   let binding: NativeBinding;
   let identity: NativeIdentity;
   try {

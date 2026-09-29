@@ -15,7 +15,6 @@ import { coreVerifyEntitlement, coreVerifyLease } from "./core-bridge";
 import type { CoreResult, LicenseCore } from "./license-core";
 import {
   REASON_VALIDITY,
-  evaluateMaintenance,
   evaluateEntitlement,
   evaluateLease,
   evaluateMeasurements,
@@ -30,6 +29,7 @@ import {
   type ReasonCode,
 } from "./state-rules";
 import { evaluateRollback, evaluateStore, evaluateVendorClock } from "./state-rules-trust";
+import { evaluateIntegrity, evaluateMaintenance } from "./state-rules-package";
 import type { ClockResult, SanctionSnapshot } from "./saat";
 
 export type { Banner, DocResult, LicenseStateInput, ReasonCode } from "./state-rules";
@@ -178,6 +178,7 @@ export function computeLicenseState(g: LicenseStateInput): LicenseState {
   evaluateVendorClock(g, findings);
   const now = clock.trustedMs;
   evaluateMeasurements(g, lease?.document ?? null, findings);
+  evaluateIntegrity(g, now, findings);
   evaluateGrace(g, { entitlement, lease: lease?.document ?? null }, now, findings);
   const sanction = sanctionSource(g, lease);
   const restrictionDaysLeft = sanction ? evaluateSanction(sanction, now, findings) : null;

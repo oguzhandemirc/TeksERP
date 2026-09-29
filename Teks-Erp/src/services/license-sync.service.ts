@@ -19,6 +19,9 @@ import {
 import { getLicenseStore, saveEntitlement, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
 import { measureFingerprint } from "../lib/license/fingerprint";
 import { coreCheckLeaseBinding, coreVerifyEntitlement, coreVerifyLease } from "../lib/license/core-bridge";
+import { runIntegrityCheck } from "../lib/license/integrity-check";
+import { setIntegrityOutcome } from "../lib/license/integrity-state";
+import { NATIVE_REQUIRED, getLicenseCore } from "../lib/license/native";
 import {
   getLicenseConfig,
   getLicenseSnapshot,
@@ -74,6 +77,15 @@ export async function refreshLicenseFingerprint(): Promise<void> {
   const store = getLicenseStore();
   if (!store?.key) return;
   setMeasuredFingerprint(await measureFingerprint(store.key.salt));
+}
+
+/**
+ * İmzalı dosya listesine karşı bütünlük (açılışta + günlük). Paket kökü süreç kökü (`app/`);
+ * hazırlık PAKET anahtarının sınıf kuralı için doğrulanmış HAK'ın sınıfı verilir.
+ */
+export async function refreshLicenseIntegrity(root: string = process.cwd()): Promise<void> {
+  const entitlementClass = getLicenseSnapshot().entitlement?.document.sinif ?? null;
+  setIntegrityOutcome(await runIntegrityCheck({ root, required: NATIVE_REQUIRED, core: getLicenseCore(), entitlementClass }));
 }
 
 function skewSeconds(): number | undefined {

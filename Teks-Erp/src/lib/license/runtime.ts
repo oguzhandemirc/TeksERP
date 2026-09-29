@@ -20,6 +20,13 @@ import { LICENSE_FILES, getLicenseStore, type LicenseStoreSnapshot } from "./sto
 import { STARTUP_VENDOR } from "./vendor-url";
 import type { MeasuredFingerprint } from "./fingerprint";
 import {
+  __resetIntegrityStateForTests,
+  buildDateMsForState,
+  integrityAnchorMs,
+  integrityRecordValue,
+  integrityStatusForState,
+} from "./integrity-state";
+import {
   beginRecordForLease,
   currentAccumulation,
   downtimeCreditOf,
@@ -32,9 +39,6 @@ import {
 } from "./accumulation";
 import {
   bumpLicenseSnapshotVersion,
-  getDoorbellStatus,
-  getLicenseEngineStatus,
-  getPollStatus,
   licenseSnapshotVersion,
   peekVendorClockSkew,
   pollFailedRecently,
@@ -140,6 +144,7 @@ export function persistAccumulation(nowMs: number = Date.now()): boolean {
     clockConsistent: snap.state.saat.finding === null,
     ledgerHighWaterMs: facts.ledgerHighWaterMs,
     skewSeconds: skewSecondsForRecord(),
+    integrityFirst: integrityRecordValue(record),
     nowMs,
   });
   return true;
@@ -156,6 +161,7 @@ export function startAccumulationForLease(g: {
     ...g,
     ledgerHighWaterMs: facts.ledgerHighWaterMs,
     skewSeconds: skewSecondsForRecord(),
+    integrityFirst: integrityRecordValue(recordFor(currentAccumulation(), g.licenseId)),
     nowMs: g.nowMs ?? Date.now(),
   });
 }
@@ -245,8 +251,9 @@ function buildInput(nowMs: number): BuiltInput {
       kapaliKrediMs: downtimeCreditOf(a, record),
     },
     parmakIziEslesme: "OLCULEMEDI",
-    butunluk: "KAPSAM_DISI",
-    derlemeTarihiMs: null,
+    butunluk: integrityStatusForState(),
+    butunlukIlkUyusmazlikMs: integrityAnchorMs(record),
+    derlemeTarihiMs: buildDateMsForState(),
     ilkAcilisMs: facts.firstOpenMs,
     sonYoklamaBasarisizMi: pollFailedRecently(nowMs),
     varsayilanKip: DEFAULT_LICENSE_MODE,
@@ -318,35 +325,11 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
   return snap;
 }
 
-/** `/api/admin/health` lisans bloğu — durum ÖZETİ (belge içeriği ve anahtar yok). */
-export function licenseHealthBlock(): Record<string, unknown> {
-  const motor = getLicenseEngineStatus();
-  try {
-    const snap = getLicenseSnapshot();
-    const pollStatus = getPollStatus();
-    const iso = (ms: number | null): string | null => (ms === null ? null : new Date(ms).toISOString());
-    return {
-      hazir: snap.hazir,
-      motor: motor.durum,
-      motorNeden: motor.neden,
-      kip: snap.state.kip,
-      gecerlilik: snap.state.gecerlilik,
-      hesaplananKademe: snap.state.hesaplananKademe,
-      uygulananKademe: snap.state.uygulananKademe,
-      nedenler: snap.state.nedenler.map((n) => n.kod),
-      sonYoklama: iso(pollStatus.lastAttemptAt),
-      sonBasariliYoklama: iso(pollStatus.lastSuccessAt),
-      zilBagli: getDoorbellStatus().connected,
-    };
-  } catch {
-    return { hazir: false, motor: motor.durum, motorNeden: motor.neden };
-  }
-}
-
 /** Test-only: bellek durumunu sıfırlar. */
 export function __resetLicenseRuntimeForTests(): void {
   facts = { installationId: null, firstOpenMs: null, ledgerHighWaterMs: null };
   fingerprint = null;
+  __resetIntegrityStateForTests();
   __resetLicenseSignalsForTests();
   __resetAccumulationForTests();
   cached = null;

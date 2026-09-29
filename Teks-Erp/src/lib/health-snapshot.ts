@@ -20,7 +20,7 @@ import { getOffsiteHealth } from "../services/helpers/offsite-backup.helper";
 import { isBackupFileName, NIGHTLY_PREFIX } from "../services/helpers/backup-naming.helper";
 import { seriesExhaustionWarnings } from "../services/helpers/series-exhaustion.helper";
 import { masterDataArchiveHealthSnapshot } from "../services/helpers/master-data-health.helper";
-import { licenseHealthBlock } from "./license/runtime";
+import { licenseHealthBlock } from "./license/license-health";
 import { compareBackupCryptoIntent, type BackupCryptoIntent } from "./backup-crypto/intent";
 
 // Yedek klasörü: BACKUP_DIR üretimde pm2 ortamından gelir (ecosystem.config env
