@@ -8,11 +8,12 @@ import type { SessionContext } from "../auth/session.service";
 import { accountActor, recordAudit } from "../lib/audit";
 import { notFound } from "../lib/errors";
 import { withTesis } from "../lib/tenant";
+import type { Device } from "../wire/api";
 import type { CloudContext } from "./context";
 
 export const PLATFORM_WIRE: Readonly<Record<"ios" | "android" | "web", DevicePlatform>> = { ios: "IOS", android: "ANDROID", web: "WEB" };
 
-function deviceView(d: PushDevice) {
+function deviceView(d: PushDevice): Device {
   return { id: d.id, platform: d.platform.toLowerCase(), ad: d.name, aktif: d.active, sonGorulme: d.lastSeenAt.toISOString(), olusturulma: d.createdAt.toISOString() };
 }
 

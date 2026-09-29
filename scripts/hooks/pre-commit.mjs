@@ -120,7 +120,8 @@ for (const proje of etkilenen) {
   // Lint doğrudan değil KAPI üzerinden: taranan küme aynı kalır (tavan aynı kümeyi
   // ölçmek zorunda), yalnız verdikt commit'in kendi dosyalarına daralır. Staged liste
   // stdin'den geçer — kapı tabanı yeniden türetmesin (bkz. lint-gate.mjs § KÜME).
-  adimlar.push({
+  // `lint: null` beyanlı projede (patron/uygulama) lint aracı yoktur: adım eklenmez.
+  if (proje.lint) adimlar.push({
     ad: `${proje.ad} · lint`,
     cwd: ".",
     // TEK ESLİNT KOŞUMU (ölçüldü 2026-09-13): lint ve tavan aynı kümeyi ayrı ayrı

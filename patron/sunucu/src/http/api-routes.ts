@@ -11,6 +11,7 @@ import { CloudError, badRequest } from "../lib/errors";
 import type { WriteResult } from "../lib/idempotency";
 import { createAccount, listAccountAudit, listAccounts, resetAccount, setAccountStatus, updateAccount } from "../services/account.service";
 import type { CloudContext } from "../services/context";
+import type { LoginResponse, PermissionCatalog } from "../wire/api";
 import { facilityStatus, getProjectionRecord, getSnapshot, listProjection } from "../services/data.service";
 import { deactivateDevice, listDevices, registerDevice } from "../services/device.service";
 import { cancelInbox, createInboxMessage, getInbox, listInbox } from "../services/inbox.service";
@@ -85,7 +86,8 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     handler: async (c) => {
       const b = body(c, z.strictObject({ eposta: z.string().min(3).max(254), parola: z.string().min(1).max(200), totp: z.string().min(1).max(12), istemci: z.enum(["mobil", "web"]).optional() }));
       const r = await login(c.ctx, { email: b.eposta, password: b.parola, totp: b.totp, client: b.istemci ?? null });
-      return { data: { belirtec: r.token, bitis: r.expiresAt.toISOString(), hesap: { id: r.session.accountId, ad: r.session.accountName, eposta: r.session.email, izinler: [...r.session.permissions].sort() }, tesisId: r.session.tesisId } };
+      const data: LoginResponse = { belirtec: r.token, bitis: r.expiresAt.toISOString(), hesap: { id: r.session.accountId, ad: r.session.accountName, eposta: r.session.email, izinler: [...r.session.permissions].sort() }, tesisId: r.session.tesisId };
+      return { data };
     },
   },
   {
@@ -138,7 +140,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
       return { data: null };
     },
   },
-  { method: "get", path: "/izinler", auth: "OTURUM", kimlik: "OKUMA", handler: async () => ({ data: { izinler: ASSIGNABLE_PERMISSIONS, sablonlar: ROLE_TEMPLATES } }) },
+  { method: "get", path: "/izinler", auth: "OTURUM", kimlik: "OKUMA", handler: async () => ({ data: { izinler: ASSIGNABLE_PERMISSIONS, sablonlar: ROLE_TEMPLATES } satisfies PermissionCatalog }) },
   // ---- veri ----
   {
     method: "get",

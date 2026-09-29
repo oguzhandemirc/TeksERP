@@ -155,6 +155,14 @@ export const PROJELER = [
     test: null,
   },
   {
+    // Patron uygulaması (Expo; telefon/tablet/web): ESLint izinli paket DEĞİL ⇒ lint adımı yok
+    // (`lint: null`, kapı adımı atlar); jest paketi DB'siz (~3 sn) ve sunucu ayna bekçisini taşır.
+    ad: "patron/uygulama",
+    typecheck: ["npm", ["run", "typecheck:plain"]],
+    lint: null,
+    test: ["npx", ["jest", "--runInBand"]],
+  },
+  {
     // Satıcı portalı web arayüzü (React + Vite): vitest paketi DB'siz ve hızlıdır (~2 sn); ayna
     // bekçisi sunucu kaynağını metin olarak okur → sunucu sözleşmesi değişince burada kırmızı.
     ad: "satici/web",

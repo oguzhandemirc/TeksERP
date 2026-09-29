@@ -28,6 +28,22 @@
 - **[ÇEKİRDEK]** Kurulum kaydının satıcı iç API önbelleği TAZELİKTİR: süre dolunca sorulur, ulaşılamazsa bayat kayıtla devam edilir, hiç dolmadıysa RED; zil yalnız `{tesisId, konu}` taşır. · bekçi: `test_kurulum_dizini (§1 · §4 · §8)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Audit ailesi ve kişi adı taşıyan rapor (operatör performansı) buluttan istenemez; rapor ailesinin izni bulutta anahtarın önekinden türer, fabrikanın gönderdiği aileye güvenilmez. · bekçi: `test_rapor_istegi (§1a · §1b · §3)` <sub>(arşiv:2026-09-29)</sub>
 
+## Uygulama (`patron/uygulama`)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Uygulama yalnız GİZLER, karar sunucudadır: izni olmayan bölüm menüde çizilmez, doğrudan açılırsa içerik yerine uyarı gösterilir; uygulamadaki her `bulut:` izin literali, pano kartı izni ve rapor aile eşlemesi bulut kataloğuna karşı ölçülür. · bekçi: `mirror.test.ts` · `access.test.ts` · `ui.test.tsx` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Tel tiplerinin tek kaynağı `patron/sunucu/src/wire/api.ts`dir; `patron/uygulama/src/api/wire.ts` onun bayt-eşit aynasıdır ve uygulamanın çağırdığı her uç sunucunun `API_ROUTES`unda bulunur. · bekçi: `mirror.test.ts` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Çevrimdışı önbellek SALT-OKUNURDUR: son veri yalnız AĞ hatasında "çevrimdışı — son veri <zaman>" bandıyla gösterilir, 403/404'te saklı kopya silinir, çıkışta bütün önbellek silinir, çevrimdışıyken yazma düğmesi kapalıdır. · bekçi: `cache.test.ts` · `ui.test.tsx` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Yazma işlem kimliği (`mesajId`/`clientToken`) mantıksal deneme başına bir kez üretilir, yalnız sonucu belirsiz bırakan hatada (ağ/5xx) yapışır, kesin 4xx'te ve gövde değişince yenilenir; hata kodu yalnız `details.code`ten okunur. · bekçi: `client.test.ts` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Firma adı ve logosu koda gömülmez: tesisin `ad`ından gelir, yoksa nötr "TeksERP Patron" yazılır; oturum belirteci gizli depoda (web'de yalnız sekme ömrü), TOTP sırrı ve davet kodu hiçbir depoya yazılmaz. · bekçi: `ui.test.tsx` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Yıkıcı işlem (gelen kutusu/rapor isteği iptali, hesap kilidi/arşivi, davet yenileme) iki adımlı onayla uygulanır. · bekçi: `ui.test.tsx` <sub>(arşiv:2026-09-29)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Projeksiyon ve anlık verinin şekli fabrikada tanımlıdır; uygulama alanları jenerik biçimler (TR sayı/tarih, `…Id` gizli) ve aritmetik yapmaz. · bekçi: `format.test.ts` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Rapor isteğinin parametresi fabrikanın kendi şemasıdır: uygulama yalnız özel aralığı (`dateFrom`/`dateTo`) ve katalog girdisinin ek alanlarını toplar; istenebilir liste fabrikanın `rapor-katalogu` anlık kaydından okunur. · bekçi: `forms.test.ts` <sub>(arşiv:2026-09-29)</sub>
+
 ## Bekçiler — bu alana dokununca koş
 
 Bulut sunucusu bekçileri kendi projesinden: `cd patron/sunucu && node ../../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts` (kendi `_test` DB'si + çalışma rolleri; roller her koşumda hizalanır). Protokol aynası fabrika tarafında: `cd Teks-Erp && npx tsx scripts/test_lisans_protokol_aynasi.ts`.
@@ -35,5 +51,7 @@ Bulut sunucusu bekçileri kendi projesinden: `cd patron/sunucu && node ../../scr
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## patron-bulutu` bölümü.**
 
 Backend: `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_patron_kapilari`, `test_lisans_protokol_aynasi`
+
+Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
 
 Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## patron-bulutu` bölümüne birlikte eklenir.
