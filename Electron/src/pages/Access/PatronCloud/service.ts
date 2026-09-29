@@ -24,7 +24,7 @@ export interface CloudAccount {
   id: string;
   ad: string;
   eposta?: string | null;
-  durum: "AKTIF" | "KILITLI" | "PASIF";
+  durum: "DAVETLI" | "AKTIF" | "KILITLI" | "PASIF";
   sonGiris?: string | null;
 }
 

@@ -16,7 +16,7 @@ import { PermissionManagementService } from "./permission-management.service";
 import { PATRON_CLOUD_USER_SETTING_KEY } from "../constants/reserved-settings";
 import { cloudEligibility, type CloudBlockReason } from "../cloud-sync/eligibility";
 import { getCloudUrl, type CloudUrlSource } from "../cloud-sync/cloud-url";
-import type { CloudAccount } from "../cloud-sync/inbox-wire";
+import type { CloudAccount } from "../cloud-sync/wire";
 import { readPatronCloudUserId } from "./helpers/patron-cloud-user.helper";
 
 /** Teknik kullanıcının kullanıcı adı (panel kuralı: yalnız İngilizce harf + rakam). */

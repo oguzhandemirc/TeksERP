@@ -8,7 +8,7 @@ import type { Tx } from "../lib/db";
 import { NO_TENANT } from "../lib/tenant";
 import type { EntryRejectCode, FullRequestReason, RecordEntry, SyncResponse, Watermark } from "../wire/esitleme";
 import type { z } from "zod";
-import type { ReconcileEntrySchema, SnapshotEntrySchema } from "../wire/esitleme";
+import { EMPTY_SET_DIGEST, type ReconcileEntrySchema, type SnapshotEntrySchema } from "../wire/esitleme";
 
 export interface PackageAccumulator {
   kabul: SyncResponse["kabul"];
@@ -172,13 +172,20 @@ export async function reconcile(tx: Tx, g: { tesisId: string; rec: z.infer<typeo
   const def = projectionDef(g.rec.projeksiyon);
   if (!def) return reject(acc, g.rec.projeksiyon, "PROJEKSIYON_BILINMIYOR");
   if (def.root.kind === "ANLIK") return reject(acc, g.rec.projeksiyon, "PROJEKSIYON_TURU");
-  const horizonFilter = g.rec.ufukTarihi
-    ? Prisma.sql`AND (retention_at IS NULL OR retention_at >= ${new Date(g.rec.ufukTarihi)}::timestamptz)`
-    : Prisma.empty;
-  const rows = await tx.$queryRaw<{ adet: number; ozet: string | null }[]>(Prisma.sql`
-    SELECT count(*)::int AS adet, md5(string_agg(record_id::text, ',' ORDER BY record_id)) AS ozet
-      FROM projection_rows
-     WHERE tesis_id = ${g.tesisId}::uuid AND projection = ${g.rec.projeksiyon} AND deleted_at IS NULL ${horizonFilter}`);
-  const mine = rows[0] ?? { adet: 0, ozet: null };
-  if (mine.adet !== g.rec.adet || (mine.ozet ?? null) !== g.rec.ozet) requestFull(acc, g.rec.projeksiyon, "UZLASTIRMA");
+  const ufuk = g.rec.ufukTarihi ? new Date(g.rec.ufukTarihi) : null;
+  const parent = def.root.retentionFromParent ? def.root.parent : undefined;
+  // Fabrika kümeyi AYNI tarihle süzer: kalemin tarihi yoksa üst belgenin saklama tarihi (fabrika `retention.parent`).
+  const horizonFilter = !ufuk
+    ? Prisma.empty
+    : parent
+      ? Prisma.sql`AND EXISTS (SELECT 1 FROM projection_rows p
+           WHERE p.tesis_id = r.tesis_id AND p.projection = ${parent.projection} AND p.deleted_at IS NULL
+             AND p.record_id::text = r.data->>${parent.field} AND (p.retention_at IS NULL OR p.retention_at >= ${ufuk}::timestamptz))`
+      : Prisma.sql`AND (r.retention_at IS NULL OR r.retention_at >= ${ufuk}::timestamptz)`;
+  const rows = await tx.$queryRaw<{ adet: number; ozet: string }[]>(Prisma.sql`
+    SELECT count(*)::int AS adet, md5(COALESCE(string_agg(r.record_id::text, ',' ORDER BY r.record_id), '')) AS ozet
+      FROM projection_rows r
+     WHERE r.tesis_id = ${g.tesisId}::uuid AND r.projection = ${g.rec.projeksiyon} AND r.deleted_at IS NULL ${horizonFilter}`);
+  const mine = rows[0] ?? { adet: 0, ozet: EMPTY_SET_DIGEST };
+  if (mine.adet !== g.rec.adet || mine.ozet !== g.rec.ozet) requestFull(acc, g.rec.projeksiyon, "UZLASTIRMA");
 }
