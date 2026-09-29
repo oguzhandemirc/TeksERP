@@ -42,6 +42,28 @@ const path = require("path");
 // ve ters bolu JSON/log satirlarinda kacis karakteri gibi okunur.
 const KOK = path.resolve(__dirname, "..").replace(/\\/g, "/");
 
+// =============================================================================
+// PAKETIN KENDI NODE'U — korumali paket (Faz 2b) kendi calisma zamanini tasir
+// =============================================================================
+// Korumali paket `.jsc` (V8 bayt kodu) tasir; bayt kodu paketi ureten Node'un
+// V8 surumune KILITLIDIR. O yuzden paket kendi `runtime\node.exe`'sini yaninda
+// getirir ve pm2 uygulamayi ONUNLA baslatmali - sistemdeki (baska surum) Node
+// `.jsc`'yi reddeder. `interpreter` bunu soyler.
+//
+// GERIYE UYUM: `runtime\node.exe` YOKSA (eski paket bicimi - duz `dist\server.js`)
+// `interpreter` HIC verilmez ve pm2 bugunku gibi sistem Node'unu kullanir. Yani
+// bu satir eski paketlerde davranisi DEGISTIRMEZ.
+const RUNTIME_NODE = (() => {
+  const alt = process.platform === "win32" ? "runtime/node.exe" : "runtime/bin/node";
+  const yol = path.join(__dirname, alt);
+  try {
+    if (require("fs").existsSync(yol)) return yol.replace(/\\/g, "/");
+  } catch {
+    // fs okunamadi - pm2 sistem Node'una duser (eski davranis)
+  }
+  return null;
+})();
+
 module.exports = {
   apps: [
     {
@@ -56,7 +78,12 @@ module.exports = {
       name: process.env.TEKSERP_PM2_AD || "tekserp-backend-yeni",
       // tsconfig: rootDir=./src, outDir=./dist → çıktı `dist/server.js`
       // (`dist/src/server.js` DEĞİL — yanlış yol pm2'yi hiç başlatmaz).
+      // Korumali pakette `dist/server.js` KUCUK BIR YUKLEYICIDIR (`dist/server.jsc`
+      // bayt kodunu acar); giris yolu yine aynidir, pm2 ayrimi gormez.
       script: "dist/server.js",
+      // Paketin kendi Node'u varsa uygulama ONUNLA kosar (yukaridaki gerekce);
+      // yoksa alan `undefined` kalir ve pm2 sistem Node'unu kullanir (eski paket).
+      ...(RUNTIME_NODE ? { interpreter: RUNTIME_NODE } : {}),
       // cwd load-bearing: app.ts `public/`, raster-font `assets/fonts/` ve sürüm
       // bilgisi için `package.json`'ı process.cwd()'e göre çözer. Ayrıca .env de
       // buradan okunur. Bu satır yanlışsa durum sayfası ve etiket fontu bozulur.

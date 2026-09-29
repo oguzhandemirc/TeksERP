@@ -68,7 +68,19 @@ param(
   # Kucuk/buyuk hane bir KARARDIR - elle verilir (ornek: -Surum 3.0.0).
   [string]$Surum,
   # Yayin provasi paketi - baslik "PROVA KIPI".
-  [switch]$Prova)
+  [switch]$Prova,
+  # Musteri/kanal kodu (kanallar.json backend blogu). Kok kural "musteri kodu
+  # ARGUMANDAN" Faz 2b'de backend'e de genisledi. YOKSA bugunku davranis
+  # (kanal-disi tek zip) korunur - AMA uyarilir. Kimlik pakete filigran olur.
+  [string]$Musteri,
+  # KORUMALI paket: esbuild minify + isim karartma -> bytenode .jsc + paketin
+  # kendi runtime node ikilisi + yorumsuz Prisma semasi. Bayt kodu OS/mimari/V8'e
+  # kilitli oldugundan yalniz HEDEF platformda uretilir (Windows x64 -> win-x64).
+  # Verilmezse bugunku tsc --removeComments paketi (eski bicim, sistem Node) uretilir.
+  [switch]$Korumali,
+  # Korumali paketin hedef platformu (bayt kodu kilidi). Bugun yalniz win-x64
+  # sahaya cikiyor; linux-x64 Docker yapiti ayri dilim (2f).
+  [ValidateSet("win-x64", "linux-x64")][string]$Hedef = "win-x64")
 $ErrorActionPreference = "Stop"
 
 function Fail($m) { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; exit 1 }
@@ -97,6 +109,30 @@ if ($kirli) {
   if ($c -ne 'e') { Fail "Iptal edildi." }
 }
 Write-Host "  dal=$dal  commit=$commit"
+
+# --- Musteri (kanal) kimligi ------------------------------------------------
+# -Musteri <kod>: paket kanalin kimligini (pm2 adi + urun adi) kanallar.json
+# backend blogundan alir (kanal-kapisi.mjs dogrular; bilinmeyen kanal = DUR).
+# Kimlik pakete FILIGRAN olur (PAKET.json); YOKSA kanal-disi paket + uyari.
+$backendPm2 = $null
+$backendUrun = $null
+if ($Musteri) {
+  Write-Host ""
+  Write-Host "  musteri=$Musteri (kanal kimligi kanallar.json backend blogundan)"
+  $kanalCik = & node (Join-Path $repo "scripts/kanal-kapisi.mjs") backend-paketle $Musteri
+  if ($LASTEXITCODE -ne 0) { Fail "kanal kapisi: '$Musteri' kanali dogrulanamadi (yukaridaki cikti)." }
+  foreach ($satir in @($kanalCik)) {
+    if ($satir -cmatch '^TEKSERP_PM2_AD=(.+)$') { $backendPm2 = $Matches[1] }
+    elseif ($satir -cmatch '^TEKSERP_BACKEND_URUN=(.+)$') { $backendUrun = $Matches[1] }
+  }
+  if (-not $backendPm2 -or -not $backendUrun) { Fail "kanal kapisi backend kimligini (pm2Ad/urunAdi) vermedi." }
+  Write-Host "    pm2 adi : $backendPm2"
+  Write-Host "    urun    : $backendUrun"
+} else {
+  Write-Host ""
+  Write-Host "  ! UYARI: -Musteri verilmedi - KANAL-DISI paket (bugunku davranis korunur)." -ForegroundColor Yellow
+  Write-Host "    Kanal kimligi (pm2 adi/urun adi) icin: paketle.ps1 -Musteri <kanal-kodu>" -ForegroundColor Yellow
+}
 
 # --- Surum numarasi ---------------------------------------------------------
 # ⚠ YAMA hanesi OTOMATIK artar; taban GIT ETIKETI (`backend-v*`). Panel/tablet
@@ -174,25 +210,63 @@ if ($LASTEXITCODE -ne 0) { Fail "npm ci basarisiz." }
 npx prisma generate
 if ($LASTEXITCODE -ne 0) { Fail "prisma generate basarisiz - tsc'nin ihtiyac duydugu tipler uretilemedi." }
 
-Adim "[2/6] Derleniyor (tsc --removeComments -> dist)..."
-# --removeComments: URETIM paketinde yorumlar SILINIR. Gerekce: derlenmis JS
-# varsayilan olarak tum yorumlari tasir; bu kod tabaninda yorumlar is mantiginin
-# GEREKCESINI anlatir (tek serviste 478 satir) ve kopyalanan dist'i neredeyse
-# kaynak kadar degerli kilar. Bayrak yalniz BURADA verilir - `npm run build`
-# ile yapilan gelistirme derlemen yorumlu kalir.
-#
-# Yan etki: swagger-jsdoc route JSDoc'larindan okur; yorumlar gidince sunucuda
-# baslangicta "[swagger] UYARI: OpenAPI spec BOS" satiri gorunur. ZARARSIZ -
-# Swagger uretimde zaten mount EDILMIYOR (NODE_ENV=production -> erken return).
-if (Test-Path "$proj\dist") { Remove-Item "$proj\dist" -Recurse -Force }  # olu cikti birikmesin
-npx tsc --removeComments
-if ($LASTEXITCODE -ne 0) { Fail "DERLEME BASARISIZ - paket uretilmedi." }
-if (-not (Test-Path "$proj\dist\server.js")) { Fail "dist\server.js yok. tsconfig rootDir/outDir bozulmus olabilir." }
-# `//# sourceMappingURL=` pragmasi yorum DEGILDIR (--removeComments onu birakir, .map dosyalari
-# asagida ayrica cikarilir) - eski desen onu da sayiyordu ve her deploy'da "67 (0 olmali)"
-# basip gercek bir yorum sizintisini gorunmez kiliyordu (2026-08-25 saha olcumu: 67/67 pragma).
-$kalanYorum = (Select-String -Path "$proj\dist\services\*.js" -Pattern '^\s*//(?!#\s*sourceMappingURL)' -CaseSensitive -ErrorAction SilentlyContinue | Measure-Object).Count
-Write-Host "  yorum temizligi: dist\services icinde kalan // satiri = $kalanYorum (0 olmali)"
+if ($Korumali) {
+  Adim "[2/6] KORUMALI derleme (esbuild minify + isim karartma -> bytenode .jsc)..."
+  # ⚠ Bayt kodu (.jsc) OS + mimari + V8'e KILITLIDIR (2a olcumu KOD-KORUMA-OLCUM.md):
+  #   win-x64 .jsc yalniz Windows x64'te, linux-x64 yalniz Linux x64'te uretilir.
+  #   Mac'te uretilemez -> CI (korumali-paket.yml) ya da hedef makine (thinkpad-1).
+  $osArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+  $hostWin   = $IsWindows -and ($osArch -eq [System.Runtime.InteropServices.Architecture]::X64)
+  $hostLinux = $IsLinux   -and ($osArch -eq [System.Runtime.InteropServices.Architecture]::X64)
+  $uretebilir = ($Hedef -eq "win-x64" -and $hostWin) -or ($Hedef -eq "linux-x64" -and $hostLinux)
+  if (-not $uretebilir) {
+    Fail @"
+KORUMALI paket .jsc'yi HEDEF platformda uretir: '$Hedef' bu hostta ($($PSVersionTable.Platform)/$osArch) URETILEMEZ.
+       Bayt kodu OS/mimari/V8'e kilitlidir (2a olcumu). Sec:
+         * CI:  .github/workflows/korumali-paket.yml (windows-latest + ubuntu-latest)
+         * ya da hedef makinede kos (or. thinkpad-1 Windows, node 24 -> win-x64).
+"@
+  }
+  if (Test-Path "$proj\dist") { Remove-Item "$proj\dist" -Recurse -Force }  # olu cikti birikmesin
+  # ⚠ .jsc GONDERILECEK runtime node ikilisiyle URETILIR (2a: V8 kilidi). Sistemin
+  #   Node'u baska surum olabilir (thinkpad-1 26.4) -> onunla uretilen .jsc'yi
+  #   paketin runtime\node.exe'si (24.x) ACAMAZ. O yuzden ONCE runtime'i indir,
+  #   sonra build-korumali'yi ONUNLA kos (build-korumali'nin V8 kapisi bunu zorlar).
+  node (Join-Path $repo "scripts\koruma-runtime-indir.mjs") $Hedef $stage
+  if ($LASTEXITCODE -ne 0) { Fail "runtime node ikilisi indirilemedi / SHA256 dogrulanamadi - paket uretilmedi." }
+  $rtAlt = if ($Hedef -eq "win-x64") { "runtime\node.exe" } else { "runtime\bin\node" }
+  $runtimeNode = Join-Path $stage $rtAlt
+  if (-not (Test-Path $runtimeNode)) { Fail "runtime ikilisi sahnede yok: $rtAlt" }
+  Write-Host "  runtime     : $rtAlt (paketin kendi Node'u - .jsc BUNUNLA uretilir + acilir)"
+  # build-korumali: dist\server.js (KUCUK YUKLEYICI) + dist\server.jsc (bayt kodu) +
+  # dist\server-kunye.json (V8/platform/mimari kapisi). Kaynak haritasi REPO DISI arsive.
+  & $runtimeNode (Join-Path $proj "scripts\build-korumali.mjs") --hedef=$Hedef --cikti="$proj\dist"
+  if ($LASTEXITCODE -ne 0) { Fail "KORUMALI DERLEME BASARISIZ - paket uretilmedi (runtime Node ile)." }
+  if (-not (Test-Path "$proj\dist\server.js"))  { Fail "dist\server.js (yukleyici) yok - build-korumali bozuk." }
+  if (-not (Test-Path "$proj\dist\server.jsc")) { Fail "dist\server.jsc (bayt kodu) yok - host hedefe uymadi." }
+  if (-not (Test-Path "$proj\dist\server-kunye.json")) { Fail "dist\server-kunye.json yok - yukleyici kapisi kurulmamis." }
+  Write-Host "  korumali: dist\server.js (yukleyici) + server.jsc (bayt kodu) + server-kunye.json"
+} else {
+  Adim "[2/6] Derleniyor (tsc --removeComments -> dist)..."
+  # --removeComments: URETIM paketinde yorumlar SILINIR. Gerekce: derlenmis JS
+  # varsayilan olarak tum yorumlari tasir; bu kod tabaninda yorumlar is mantiginin
+  # GEREKCESINI anlatir (tek serviste 478 satir) ve kopyalanan dist'i neredeyse
+  # kaynak kadar degerli kilar. Bayrak yalniz BURADA verilir - `npm run build`
+  # ile yapilan gelistirme derlemen yorumlu kalir.
+  #
+  # Yan etki: swagger-jsdoc route JSDoc'larindan okur; yorumlar gidince sunucuda
+  # baslangicta "[swagger] UYARI: OpenAPI spec BOS" satiri gorunur. ZARARSIZ -
+  # Swagger uretimde zaten mount EDILMIYOR (NODE_ENV=production -> erken return).
+  if (Test-Path "$proj\dist") { Remove-Item "$proj\dist" -Recurse -Force }  # olu cikti birikmesin
+  npx tsc --removeComments
+  if ($LASTEXITCODE -ne 0) { Fail "DERLEME BASARISIZ - paket uretilmedi." }
+  if (-not (Test-Path "$proj\dist\server.js")) { Fail "dist\server.js yok. tsconfig rootDir/outDir bozulmus olabilir." }
+  # `//# sourceMappingURL=` pragmasi yorum DEGILDIR (--removeComments onu birakir, .map dosyalari
+  # asagida ayrica cikarilir) - eski desen onu da sayiyordu ve her deploy'da "67 (0 olmali)"
+  # basip gercek bir yorum sizintisini gorunmez kiliyordu (2026-08-25 saha olcumu: 67/67 pragma).
+  $kalanYorum = (Select-String -Path "$proj\dist\services\*.js" -Pattern '^\s*//(?!#\s*sourceMappingURL)' -CaseSensitive -ErrorAction SilentlyContinue | Measure-Object).Count
+  Write-Host "  yorum temizligi: dist\services icinde kalan // satiri = $kalanYorum (0 olmali)"
+}
 
 # --- Sunucu araclari (dist\tools) -------------------------------------------
 # ⚠ Bu script `npm run build` DEGIL dogrudan `npx tsc --removeComments` kosar
@@ -255,10 +329,26 @@ Write-Host "  dist        : $((Get-ChildItem "$stage\dist" -Recurse -File).Count
 
 # prisma - YALNIZ schema + migrations (seed'ler HARIC)
 New-Item -ItemType Directory -Path "$stage\prisma" | Out-Null
-Copy-Item "$proj\prisma\schema.prisma" "$stage\prisma\"
+if ($Korumali) {
+  # Korumali paket: sema YORUMSUZ kopyalanir (4.640 yorum satiri pakete girmesin;
+  # 2a §4). [4/6] `prisma generate` bu yorumsuz semadan calisir -> uretilmis istemci
+  # de yorumsuz olur. Calisma anI veri modeli BIREBIR aynidir (2a: migrate diff 0).
+  node (Join-Path $proj "scripts\prisma-yorumsuz-yaz.mjs") "$proj\prisma\schema.prisma" "$stage\prisma\schema.prisma"
+  if ($LASTEXITCODE -ne 0) { Fail "prisma semasi yorumsuz kopyalanamadi." }
+} else {
+  Copy-Item "$proj\prisma\schema.prisma" "$stage\prisma\"
+}
 Copy-Item "$proj\prisma\migrations"    "$stage\prisma\migrations" -Recurse
 $migSayi = (Get-ChildItem "$stage\prisma\migrations" -Directory).Count
-Write-Host "  prisma      : schema.prisma + $migSayi migration  (seed*.ts DAHIL DEGIL)"
+Write-Host "  prisma      : schema.prisma + $migSayi migration  (seed*.ts DAHIL DEGIL$(if ($Korumali) { '; YORUMSUZ' }))"
+
+# Korumali paketin runtime\node.exe'si [2/6]'da (build-korumali'den ONCE) $stage'e
+# indirildi ve .jsc onunla uretildi - burada yalniz sahnede oldugunu dogrula.
+if ($Korumali) {
+  $rtAlt = if ($Hedef -eq "win-x64") { "runtime\node.exe" } else { "runtime\bin\node" }
+  if (-not (Test-Path (Join-Path $stage $rtAlt))) { Fail "runtime ikilisi sahnede yok: $rtAlt (build adiminda inmeliydi)" }
+  Write-Host "  runtime     : $rtAlt (paketin kendi Node'u - pakette)"
+}
 
 # cwd'den okunan varliklar
 Copy-Item "$proj\public" "$stage\public" -Recurse
@@ -400,11 +490,27 @@ $dosyalar = @(
 )
 if ($dosyalar.Count -eq 0) { Fail "Stage bos - paketlenecek dosya yok." }
 
+# Korumali paketin runtime Node surumu (kur.ps1 [1/9] runtime\node.exe ile karsilastirir).
+$runtimeNodeSurumu = $null
+if ($Korumali) {
+  $nsYol = Join-Path $repo "deploy\node-surumu.json"
+  if (-not (Test-Path $nsYol)) { Fail "deploy\node-surumu.json yok - korumali paketin runtime surumu belirlenemez." }
+  $runtimeNodeSurumu = (Get-Content $nsYol -Raw | ConvertFrom-Json).surum
+}
+
 $manifest = [ordered]@{
   ad              = $ad
   commit          = $commit
   dal             = $dal
   calismaAgaciTemiz = [bool](-not $kirli)
+  # Kanal (musteri) kimligi - FILIGRAN. -Musteri verilmediyse null (kanal-disi).
+  backendKanal    = $Musteri
+  backendUrun     = $backendUrun
+  backendPm2Ad    = $backendPm2
+  # Korumali paket bicimi: .jsc + runtime\node.exe tasir; kur.ps1 [1/9] onu denetler.
+  korumali        = [bool]$Korumali
+  korumaHedef     = if ($Korumali) { $Hedef } else { $null }
+  runtimeNodeSurumu = $runtimeNodeSurumu
   uretimZamani    = (Get-Date).ToString("s")
   # Makine/kullanici adi: Windows'ta COMPUTERNAME+USERNAME, POSIX'te HOSTNAME+USER.
   # Damga bilgi amacli; cozulemezse "?" yazilir, paketleme DURMAZ.

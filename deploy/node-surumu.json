@@ -1,0 +1,30 @@
+{
+  "_aciklama": [
+    "KORUMALI PAKETİN ÇALIŞMA ZAMANI — tek Node sürümü, tek yerde (Faz 2b).",
+    "Neden sabit: bugün Node dağınık (SAHINSRV 24.18 · CI/Docker 22 · thinkpad-1 26.4 · Mac 26.8). Bayt kodu (.jsc) V8 sürümüne + platforma + mimariye KİLİTLİDİR; paketi üreten ile çalıştıran Node AYNI olmazsa V8 önbelleği reddeder. Bu yüzden paket kendi node ikilisini TAŞIR ve o ikili buradan seçilir.",
+    "surum = SAHINSRV'nin bugünkü sürümü (24.18.0); çizgi 24 (aktif LTS). Değişimi bir KARARDIR: yeni sürümde .jsc yeniden derlenir (CI korumali-paket.yml), sha256'lar resmi SHASUMS256.txt'ten yenilenir, ecosystem.config.js + kur.ps1 [1/9] otomatik izler (hepsi bu dosyayı okur).",
+    "sha256 = https://nodejs.org/dist/v<surum>/SHASUMS256.txt (resmi). İndirilen zip/tar paketleme/CI'da bu özetle DOĞRULANIR; tutmazsa paket üretilmez.",
+    "runtimeAlt = arşiv açıldığında node ikilisinin arşiv-içi yolu (üst dizin node-v<surum>-<hedef> ATILIR, altındaki bu yol paketin runtime/ köküne kopyalanır).",
+    "v8Taban = paket üretildiğinde beklenen process.versions.v8'in taban üçlüsü (major.minor.build; -node.N soneki yama). Yükleyici .jsc'yi açmadan ÖNCE process.versions.v8 tabanını + platform + mimariyi bununla kıyaslar (2a ölçümü: 24.18↔24.21 aynı V8 tabanı KABUL, 26.x RED).",
+    "Bekçi: node scripts/test_node_surumu.mjs (kaynaklar bu dosyayla birebir; sha256 biçimi; hedef kümesi). Kural: docs/kurallar/deploy-kurulum.md."
+  ],
+  "surum": "24.18.0",
+  "cizgi": "24",
+  "v8Taban": "13.6.233.17",
+  "yayin": {
+    "win-x64": {
+      "dosya": "node-v24.18.0-win-x64.zip",
+      "url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-win-x64.zip",
+      "sha256": "0ae68406b42d7725661da979b1403ec9926da205c6770827f33aac9d8f26e821",
+      "arsivKok": "node-v24.18.0-win-x64",
+      "runtimeAlt": "node.exe"
+    },
+    "linux-x64": {
+      "dosya": "node-v24.18.0-linux-x64.tar.xz",
+      "url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-x64.tar.xz",
+      "sha256": "55aa7153f9d88f28d765fcdad5ae6945b5c0f98a36881703817e4c450fa76742",
+      "arsivKok": "node-v24.18.0-linux-x64",
+      "runtimeAlt": "bin/node"
+    }
+  }
+}

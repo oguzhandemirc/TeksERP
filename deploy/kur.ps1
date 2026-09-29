@@ -533,6 +533,39 @@ if ($m -and $m.nodeSurumu) {
   }
 }
 
+# --- Paketin KENDI Node'u (KORUMALI PAKET, Faz 2b) --------------------------
+# Korumali paket `dist\server.jsc` (V8 bayt kodu) tasir; bayt kodu paketi ureten
+# Node'un V8 surumune KILITLIDIR. O yuzden paket yaninda `runtime\node.exe`
+# getirir ve pm2 uygulamayi ONUNLA baslatir (ecosystem.config.js `interpreter`).
+# Sistem Node'u (baska surum) .jsc'yi V8 ONBELLEK REDDIYLE reddederdi.
+#
+# ⚠ GERIYE UYUM: `runtime\node.exe` YOKSA bu ESKI PAKET BICIMIDIR (duz
+#   dist\server.js) - uygulama yukaridaki sistem Node'uyla kosmaya devam eder,
+#   davranis DEGISMEZ. Yeni bicim yalniz `runtime\` varsa devreye girer.
+$runtimeExe = Join-Path $temp "runtime\node.exe"
+if (Test-Path $runtimeExe) {
+  # MZ imzasi: yarim inen / bozuk ikili "var" gorunur ama backend acilamaz.
+  $rtImza = [System.IO.File]::ReadAllBytes($runtimeExe)[0..1]
+  if ($rtImza[0] -ne 0x4D -or $rtImza[1] -ne 0x5A) {
+    Fail "runtime\node.exe Windows ikilisi DEGIL (MZ imzasi yok) - paketleme yarim kalmis. Backend bu Node'la acilamaz."
+  }
+  $rtSurum = (& $runtimeExe --version) -creplace '^v',''
+  # Manifest paketin node surumunu beyan eder; runtime\node.exe onunla BIREBIR olmali,
+  # yoksa .jsc bayt kodu bu ikilide acilmaz (V8 uyumsuzlugu -> acik hata iyi ki [1/9]'da).
+  $beklenenRt = if ($m -and $m.PSObject.Properties.Name -contains 'runtimeNodeSurumu' -and $m.runtimeNodeSurumu) { ($m.runtimeNodeSurumu -replace '^v','') } else { $null }
+  if ($beklenenRt -and ($rtSurum -cne $beklenenRt)) {
+    Fail "Paketin runtime\node.exe surumu $rtSurum, manifest $beklenenRt bekliyor - .jsc bayt kodu bu ikilide acilmaz. Paket bozuk."
+  }
+  Ok "paket kendi Node'unu tasiyor: runtime\node.exe v$rtSurum (uygulama BUNUNLA kosar - .jsc uyumu)"
+  # Bu paket bayt kodu tasiyorsa (dist\server.jsc) dist\server.js yalniz yukleyicidir;
+  # yukleyici acmadan ONCE process.versions.v8'i manifestteki v8Taban ile de kiyaslar (build-korumali).
+  if (Test-Path (Join-Path $temp "dist\server.jsc")) {
+    Ok "paket korumali (dist\server.jsc bayt kodu) - dist\server.js yukleyici"
+  }
+} else {
+  Write-Host "  . paket kendi Node'unu tasimiyor (eski bicim) - uygulama sistem Node'uyla kosar" -ForegroundColor DarkGray
+}
+
 $migSayi = (Get-ChildItem "$temp\prisma\migrations" -Directory).Count
 Ok "paket saglam ($migSayi migration klasoru)"
 

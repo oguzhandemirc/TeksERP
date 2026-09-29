@@ -41,6 +41,10 @@
         "erpAdresi": "http://192.168.1.250:4000/api",
         "runtimeVersion": "54.2",
         "otaSertifika": "keystore/ota-certs/certificate.pem"
+      },
+      "backend": {
+        "urunAdi": "Adnan Şahin ERP Backend",
+        "pm2Ad": "tekserp-backend-yeni"
       }
     },
     "testfabrika": {
@@ -71,6 +75,10 @@
         "erpAdresi": "http://100.70.47.46:4000/api",
         "runtimeVersion": "54.2",
         "otaSertifika": "keystore/ota-certs-testfabrika/certificate.pem"
+      },
+      "backend": {
+        "urunAdi": "TeksERP Test Fabrika Backend",
+        "pm2Ad": "tekserp-backend-testfabrika"
       }
     }
   }
