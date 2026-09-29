@@ -4,8 +4,8 @@ import { canCancel, resultText } from "../src/lib/inbox";
 const keys = (p: string[]) => visibleModules(p).map((m) => m.key);
 
 describe("izin görünürlüğü (istemci yalnız gizler)", () => {
-  it("izinsiz hesap yalnız pano + profil görür", () => {
-    expect(keys(["bulut:oturum"])).toEqual(["pano", "profil"]);
+  it("izinsiz hesap yalnız pano + bildirimler + profil görür", () => {
+    expect(keys(["bulut:oturum"])).toEqual(["pano", "bildirimler", "profil"]);
   });
   it("satış şablonu: finans ve hesaplar YOK, gelen kutusu VAR", () => {
     const k = keys(["bulut:oturum", "bulut:ozet:oku", "bulut:siparis:oku", "bulut:sevkiyat:oku", "bulut:uretim:oku", "bulut:stok:oku", "bulut:rapor:oku", "bulut:cari:oku", "bulut:siparis:yaz", "bulut:cari:yaz"]);

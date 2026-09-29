@@ -13578,6 +13578,8 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 **Karar [PROFİL].** `BILDIRIM_KIPI` varsayılanı `kapali` (bugünkü davranış, ölçüldü: `createNotificationRuntime` null, iş kurulmaz); `sahte` yerel prova; `gercek` yalnız mağaza hesapları + patron VDS kurulumu sonrası (`BILDIRIM_VAPID_KONU` zorunlu). Varsayılan sessiz saat 22:00–07:00 İstanbul, geciken eşiği 0, eşitleme gecikmesi 60 dk.
 
+**Uygulama.** `expo-notifications` + `expo-device` (SDK 54 uyumlu, `npx expo install`); Bildirimler ekranı (`/bildirimler`, her hesaba açık menü): ana anahtar · tür başına anahtar (izni yetmeyen tür açıklanır, pasif) · sessiz saatler · eşikler · "tesis varsayılanına dön" · yöneticiye "tesis varsayılanı olarak kaydet" · bu cihazı kaydet (telefon: izin → Expo belirteci, EAS proje kimliği yoksa YAPILANDIRMA_EKSIK; web: `public/bildirim-sw.js` + Push API, VAPID açık anahtarı sunucudan) · kayıtlı cihazlar · son bildirimler. Dokunma: telefonda `useNotificationTaps` (soğuk açılış dahil), web'de SW; yol iki yerde aynı kalıpla süzülür. Jest 49/49 (3 sonda); `expo export --platform web` 1,3 MB, SW pakette.
+
 **Birleşim düzeltmesi.** B4'ün `api.ts`i `InboxKind`/`InboxMessage` adlarını tel sözleşmesiyle çakıştırıyordu (`test_bulut_tel_aynasi` §4a birleşimde kırmızı) → `InboxEntryKind`/`InboxEntry` (uygulama aynası dahil). `test_rls_sizinti` §1d artık bütün migration'ların RLS listesi birleşimini ölçer.
 
 **Ölçüm.** `test_bildirim_kurallari` 20/0 (5 negatif sonda, her biri kırmızı) · `test_bildirim_gonderim` 26/0 (6 negatif sonda) · patron paketi 12/12 · fabrika bulut bekçileri 7/7 (`allowlist` 7 ANLIK + §6d).

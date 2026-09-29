@@ -12,6 +12,7 @@ export type ModuleKey =
   | "finans"
   | "gelen-kutusu"
   | "hesaplar"
+  | "bildirimler"
   | "profil";
 
 export interface ModuleDef {
@@ -35,6 +36,7 @@ export const MODULES: readonly ModuleDef[] = [
   { key: "raporlar", title: "Raporlar", route: "/raporlar", anyOf: ["bulut:rapor:oku"] },
   { key: "gelen-kutusu", title: "Gelen kutusu", route: "/gelen-kutusu", anyOf: ["bulut:siparis:yaz", "bulut:cari:yaz"] },
   { key: "hesaplar", title: "Hesaplar", route: "/hesaplar", anyOf: ["bulut:hesap:yonet"] },
+  { key: "bildirimler", title: "Bildirimler", route: "/bildirimler", anyOf: [] },
   { key: "profil", title: "Profil", route: "/profil", anyOf: [] },
 ];
 

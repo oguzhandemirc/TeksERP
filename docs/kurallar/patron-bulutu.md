@@ -65,6 +65,7 @@
 - **[ÇEKİRDEK]** Gönderim anında izin, tür ve sessiz saat YENİDEN sınanır (doğuştan sonra düşen izin tutar); sessiz saatte gönderilmez, bitişe ertelenir.
 - **[ÇEKİRDEK]** `notifications` TELEMETRİ'dir: sonuçlanmış satır `BILDIRIM_SAKLAMA_GUN` sonra budanır, iş kararı ondan okunmaz.
 - **[ÇEKİRDEK]** VAPID gizli anahtarı dosyada (0600) yaşar ve günlüğe, DB'ye, API yanıtına girmez; taşıyıcı hatası yalnız kısa KOD olarak saklanır; web aboneliği yalnız izinli push servisine kaydolur (SSRF kapısı).
+- **[ÇEKİRDEK]** Bildirime dokununca açılan yol yalnız uygulamanın kendi ekranıdır: telefonda `safeRoute`, web'de service worker AYNI kalıpla süzer (dış adres, `//`, bilinmeyen bölüm açılmaz; jest ölçer).
 - **[PROFİL]** `BILDIRIM_KIPI` varsayılanı `kapali`dır (bugünkü davranış); `gercek` yalnız mağaza hesapları + patron VDS kurulumundan sonra açılır.
 
 ## Uygulama (`patron/uygulama`)
@@ -95,7 +96,7 @@ Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bul
 
 Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`
 
-Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
+Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `notifications.test.tsx`, `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
 
 Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## patron-bulutu` bölümüne birlikte eklenir. Katalog ya da tetikleyici değişince `test_db_invariants` (TRIGGERS/EXPECTED_FUNCTIONS) de koşulur.
 
