@@ -8,7 +8,8 @@ import { BaseController } from "../controllers/base.controller";
 import { CustomerService } from "../services/customer.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
-import { readFinanceEnabled } from "../services/system-setting.service";
+import { SETTING_KEYS, readFinanceEnabled } from "../services/system-setting.service";
+import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 
@@ -66,7 +67,7 @@ async function takeFinanceSub(req: { body?: unknown; user?: { permissions: strin
     throw AppError.forbidden("Cari terimleri (vade, para birimi, vergi dairesi, risk limiti) için 'finance:write' yetkisi gerekli.", { code: "PERMISSION_DENIED", required: "finance:write" });
   }
   if (!(await readFinanceEnabled())) {
-    throw AppError.forbidden("Ön muhasebe modülü bu kurulumda kapalı — cari terimleri yazılamaz. Genel Ayarlar → Modüller bölümünden açılabilir.", { code: "MODULE_DISABLED", modul: "finance" });
+    throw licenseModuleError(SETTING_KEYS.FINANCE_ENABLED, "Ön muhasebe") ?? AppError.forbidden("Ön muhasebe modülü bu kurulumda kapalı — cari terimleri yazılamaz. Genel Ayarlar → Modüller bölümünden açılabilir.", { code: "MODULE_DISABLED", modul: "finance" });
   }
   return finance;
 }

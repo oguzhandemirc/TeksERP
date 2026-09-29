@@ -1,10 +1,11 @@
 // =============================================================================
 // TeksERP — LİSANS KAPISI YOL LİSTELERİ (TEK KAYNAK)
 // =============================================================================
-// `licenseGate` isteği YÖNTEM + YOL ile sınıflar; kimliğe bakmaz (lisans bir sunucu
-// durumudur). Varsayılan KAPALI: KISITLI'da yazma, DURDURULMUŞ'ta her şey RED; açık
-// olan her yol burada GEREKÇESİYLE beyanlıdır. Bekçi: `scripts/test_lisans_kapisi.ts`
-// (rota envanterine karşı: ölü desen yok · K5 ⊂ K4 · dışa aktarma yolları her kademede açık).
+// `licenseGate` isteği YÖNTEM + YOL ile sınıflar. Varsayılan KAPALI: KISITLI'da yazma,
+// DURDURULMUŞ'ta her şey RED; açık olan her yol burada GEREKÇESİYLE beyanlıdır. Kapalı yolda
+// kimlik önce gelir: oturumsuz istek rotanın 401'ini alır, yalnız kimlik istemeyen uçlarda
+// (`PUBLIC_ROUTES`) kapı genel `LICENSE_GATE` döner. Bekçi: `scripts/test_lisans_kapisi.ts`
+// (rota envanterine karşı: ölü desen yok · K5 ⊂ K4 · kimliksiz uç listesi envanterle birebir).
 // =============================================================================
 import type { StateTier } from "../lib/license/protocol";
 
@@ -60,6 +61,7 @@ export const RESTRICTED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   // Kişisel tercih ve iki adımlı doğrulama
   { method: "PUT", path: "/api/auth/preferences", reason: "kişisel tercih; iş verisi değil" },
   { method: "POST", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu (güvenlik)" },
+  { method: "POST", path: "/api/admin/users/:id/totp/window", reason: "iki adımlı doğrulama kurulum penceresi — sıfırlanan kullanıcı yeniden kurabilsin (güvenlik)" },
   { method: "POST", path: "/api/devices/announce", reason: "cihaz duyurusu (tablet el sıkışması)" },
   // DB'ye yazmayan önizleme / gövdeli okuma
   { method: "POST", path: "/api/number-series/preview", reason: "numara biçimi önizlemesi; yazmaz" },
@@ -121,6 +123,31 @@ export const SUSPENDED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   { method: "GET", path: "/api/auth/me", reason: "oturum sahibi ve izinleri — 'verilerimi al' ekranı yetkiyi çözer" },
 ];
 
+/**
+ * KİMLİK İSTEMEYEN uçlar (`test_route_auth_coverage` muaf listesinin kapıdaki karşılığı).
+ * Kapalı bir yolda oturumsuz istek rotaya geçer ve rotanın `verifyToken`ı 401 döner; bu
+ * uçlarda geçecek bir kimlik duvarı olmadığından kapı kendisi genel `LICENSE_GATE` döner.
+ * Bekçi listeyi rota envanterinin kimliksiz uçlarıyla İKİ YÖNLÜ ölçer — eksik satır bir
+ * kaçak yoldur (oturumsuz istek kapıyı rotaya geçerek atlar).
+ */
+export const PUBLIC_ROUTES: readonly LicenseRouteRule[] = [
+  { method: "GET", path: "/api/discovery/identity", reason: "servis keşfi; istemci sunucuyu tanımadan çağırır" },
+  { method: "GET", path: "/api/auth/login-methods", reason: "giriş ekranı" },
+  { method: "POST", path: "/api/auth/login", reason: "token üreten uç" },
+  { method: "POST", path: "/api/auth/login-card", reason: "token üreten uç" },
+  { method: "POST", path: "/api/auth/login-quick-pin", reason: "token üreten uç" },
+  { method: "GET", path: "/api/auth/mobile-users", reason: "tablet giriş ekranı kullanıcı listesi" },
+  { method: "GET", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu; koruma tek kullanımlık token" },
+  { method: "POST", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu; koruma tek kullanımlık token" },
+  { method: "POST", path: "/api/devices/announce", reason: "cihaz el sıkışması; eşleşmeden token yok" },
+  { method: "GET", path: "/api/devices/status", reason: "cihaz atama durumu yoklaması" },
+  { method: "GET", path: "/api/devices/pairing-required", reason: "eşleşme zorunluluğu (giriş öncesi)" },
+  { method: "GET", path: "/api/mobile/updates/*", reason: "tablet OTA (giriş öncesi)" },
+  { method: "GET", path: "/api/client-policy/*", reason: "panel sürüm politikası (giriş öncesi)" },
+  { method: "GET", path: "/api/license/durum", reason: "lisans bandı; kimliksize ayrıntı yok" },
+  { method: "GET", path: "/api/license/indirme-belirteci", reason: "onaylı cihaz ya da oturum" },
+];
+
 /** Adı açık listeye benzeyen ama BİLEREK kapalı yazmalar (bekçi bunları sınıflı sayar). */
 export const DECLARED_CLOSED_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/printed-documents/:docType/:sourceId/reissue", reason: "yeni resmi belge sürümü = yeni iş" },
@@ -158,6 +185,11 @@ export function ruleMatches(rule: LicenseRouteRule, method: string, path: string
 
 function anyMatch(rules: readonly LicenseRouteRule[], method: string, path: string): boolean {
   return rules.some((r) => ruleMatches(r, method, path));
+}
+
+/** Uç kimlik istemiyor mu — kapalı yolda oturumsuz isteğe rotanın 401'i yerine `LICENSE_GATE`. */
+export function isPublicRoute(method: string, path: string): boolean {
+  return anyMatch(PUBLIC_ROUTES, method, path);
 }
 
 /** İstek bu kademede açık mı? Tanınmayan kademe fail-closed (RED). */

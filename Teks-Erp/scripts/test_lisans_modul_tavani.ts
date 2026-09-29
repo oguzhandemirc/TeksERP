@@ -15,11 +15,16 @@
 //      yazma tavanı 403, panel ham değeri + lisans bloğunu görür; kapatmak serbest.
 //   §4 belirsizlikte (ölçülemedi) ham değer · §5 ⭐ K2 dondurması ek sürede de, belirsizlikte de
 //      kapalı; HAK tavanı ek sürede SÜRER · §6 gözlemde ham değer + "reddederdim" sayacı.
+//   §7 ⭐ LICENSE_MODULE TEK BİÇİM: `details.modul` DB anahtarıdır (`finance.enabled`), tek üretici
+//      `licenseModuleError` (literal başka dosyada yok), her çağrı `SETTING_KEYS.X` modül anahtarıyla;
+//      adlı kapı DIŞINDAKİ her `MODULE_DISABLED` reddinin (satır içi kapılar) önünde lisans sorusu
+//      var ve anahtarı `if` koşulundaki okuyucuyla aynı; çalışırken iki satır içi kapı DB anahtarı döner.
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): T1 bir enforcement çağıranı ham varyanta · T2 `getFeatureFlags` enforcement'a ·
 // T3 enforcement gövdesinde yanlış anahtar · T4 bir kapıdan `licenseModuleError` kaldırılır ·
-// T5 tavan HAK'ı ek sürede gevşetir · T6 yazma tavanı kaldırılır.
+// T5 tavan HAK'ı ek sürede gevşetir · T6 yazma tavanı kaldırılır · (§7) U1 satır içi kapıdan lisans
+// sorusu kaldırılır · U2 satır içi kapıda yanlış anahtar · U3 kısa kodlu LICENSE_MODULE literali eklenir.
 // =============================================================================
 import path from "node:path";
 import type { NextFunction, Request, Response } from "express";
@@ -40,7 +45,11 @@ import { MODULE_SETTING_KEYS } from "../src/constants/module-flags";
 import { requireFinanceEnabled } from "../src/middlewares/finance.middleware";
 import { peekObservationCounters, resetObservationCounters } from "../src/lib/license/runtime";
 import { lisansKipKur, temizleLisansKipDizini } from "./lib/lisans-kip-fikstur";
-import { SERVIS, SRC_KOKU, anilislar, kapiGovdesi, okuyucuCiftleri } from "./lib/modul-okuyucu-tarama";
+import { SERVIS, SRC_KOKU, anilislar, kapiGovdesi, lisansModulTaramasi, okuyucuCiftleri } from "./lib/modul-okuyucu-tarama";
+import { randomUUID } from "node:crypto";
+import { licenseModuleError } from "../src/lib/license/module-ceiling";
+import { assertEmanetWritableTx } from "../src/services/helpers/emanet-owner.helper";
+import { getWeavingTabletContext } from "../src/services/subcontractor-weaving-tablet.service";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -109,6 +118,52 @@ function statikAyak(): void {
     const lisans = [...new Set(g.lisansSabitleri)].sort();
     check(`§2f ${fonk}: okunan her modülün LICENSE_MODULE eşi var`, okunan.length > 0 && okunan.join() === lisans.join(), `okunan=${okunan.join()} lisans=${lisans.join()}`);
   }
+}
+
+/** `licenseModuleError`in `SETTING_KEYS.X` dışı argümanla MEŞRU çağrıldığı yer — gerekçeli; ölü beyan kırmızı. */
+const DOLAYLI_ANAHTARLI_URETICILER: Record<string, string> = {
+  "services/system-setting.service.ts#assertModuleWritesLicensed": "yazma tavanı: `MODULE_SETTING_KEY_BY_FLAG` değerleri (hepsi `SETTING_KEYS.*`) üstünde döner",
+};
+
+function tekBicimAyagi(): void {
+  console.log("\n§7 — LICENSE_MODULE tek biçim (DB anahtarı) · satır içi kapılar");
+  const t = lisansModulTaramasi();
+  check("§7a ⭐ \"LICENSE_MODULE\" kodu tek dosyada doğar (module-ceiling)", t.literalDosyalari.join() === path.join("lib", "license", "module-ceiling.ts"), t.literalDosyalari.join(" | "));
+  const modulSabiti = (x: string | null): boolean => x !== null && MODULE_SETTING_KEYS.has((SETTING_KEYS as Record<string, string>)[x] ?? "");
+  const kural = t.ureticiler.filter((u) => !modulSabiti(u.sabit) && !(u.yer in DOLAYLI_ANAHTARLI_URETICILER));
+  check("§7b ⭐ her `licenseModuleError` çağrısı modül DB anahtarıyla (SETTING_KEYS.X)", t.ureticiler.length >= 15 && kural.length === 0, `${t.ureticiler.length} çağrı; kural dışı: ${kural.map((u) => `${u.yer}(${u.argMetni})`).join(" | ")}`);
+  for (const [yer, neden] of Object.entries(DOLAYLI_ANAHTARLI_URETICILER)) {
+    check(`§7b2 ölü beyan yok: ${yer} (${neden})`, t.ureticiler.some((u) => u.yer === yer && u.sabit === null));
+  }
+  const lisanssiz = t.kapaliSiteleri.filter((k) => !k.lisansOnde);
+  check("§7c ⭐ her MODULE_DISABLED reddinin önünde lisans sorusu var (lisans kapattıysa LICENSE_MODULE)", t.kapaliSiteleri.length >= 12 && lisanssiz.length === 0, `${t.kapaliSiteleri.length} site; lisanssız: ${lisanssiz.map((k) => k.yer).join(" | ")}`);
+  const sabitOf = new Map(okuyucuCiftleri().map((c) => [c.ad, c.sabit] as const));
+  const adli = new Set(ADLI_KAPILAR.map(([d, f]) => `${d}#${f}`));
+  const satirIci = t.kapaliSiteleri.filter((k) => k.kosulOkuyuculari.length > 0);
+  const olculemedi = t.kapaliSiteleri.filter((k) => k.kosulOkuyuculari.length === 0 && !adli.has(k.yer) && k.lisansSabitleri.length === 0);
+  check("§7d ÖLÇÜLEMEDİ yok: koşulunda okuyucu görülmeyen red yalnız adlı kapıda (§2f ölçer)", olculemedi.length === 0, olculemedi.map((k) => k.yer).join(" | "));
+  const yanlisAnahtar = satirIci.filter((k) => !k.kosulOkuyuculari.some((o) => k.lisansSabitleri.includes(sabitOf.get(o) ?? `?${o}`)));
+  check("§7e ⭐ satır içi kapıda lisans anahtarı = koşuldaki okuyucunun anahtarı", satirIci.length >= 6 && yanlisAnahtar.length === 0, `${satirIci.length} satır içi; yanlış: ${yanlisAnahtar.map((k) => `${k.yer} okur=${k.kosulOkuyuculari.join(",")} lisans=${k.lisansSabitleri.join(",")}`).join(" | ")}`);
+}
+
+async function tekBicimDavranisi(): Promise<void> {
+  console.log("\n§7f — çalışırken: kapalı modülün LICENSE_MODULE yanıtı DB anahtarı taşır");
+  lisansKipKur({ zorlama: true, moduller: ["production.enabled"] });
+  const kapali = [...MODULE_SETTING_KEYS].filter((k) => k !== "production.enabled");
+  const bicimsiz = kapali.filter((k) => (licenseModuleError(k, "x")?.details as { modul?: string } | undefined)?.modul !== k);
+  check("§7f1 ⭐ üretici her modülde `modul` = DB anahtarı", kapali.length === 9 && bicimsiz.length === 0, bicimsiz.join(","));
+  const ayrinti = async (fn: () => Promise<unknown>): Promise<Record<string, unknown> | null> => {
+    try {
+      await fn();
+      return null;
+    } catch (e) {
+      return ((e as { details?: Record<string, unknown> }).details ?? null);
+    }
+  };
+  const emanet = await ayrinti(() => assertEmanetWritableTx(prisma, randomUUID(), "top"));
+  check("§7f2 ⭐ satır içi kapı (emanet sahibi) → LICENSE_MODULE emanet.enabled", emanet?.code === "LICENSE_MODULE" && emanet.modul === "emanet.enabled", JSON.stringify(emanet));
+  const dokuma = await ayrinti(() => getWeavingTabletContext());
+  check("§7f3 ⭐ satır içi kapı (fason dokuma tableti) → LICENSE_MODULE dokuma.enabled", dokuma?.code === "LICENSE_MODULE" && dokuma.modul === "dokuma.enabled", JSON.stringify(dokuma));
 }
 
 async function kapiKodu(): Promise<string | undefined> {
@@ -180,6 +235,7 @@ async function main(): Promise<void> {
   AuditService.log = async () => undefined;
   AuditService.logEvent = async () => undefined;
   statikAyak();
+  tekBicimAyagi();
   const izlenen = [SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.TICARET_ENABLED];
   const once = await prisma.systemSetting.findMany({ where: { key: { in: izlenen } } });
   const yazan = await prisma.user.create({
@@ -189,6 +245,7 @@ async function main(): Promise<void> {
   yazanId = yazan.id;
   try {
     await davranisAyagi();
+    await tekBicimDavranisi();
   } finally {
     await temizleBayraklar(izlenen, once);
     await prisma.user.deleteMany({ where: { id: yazan.id } });

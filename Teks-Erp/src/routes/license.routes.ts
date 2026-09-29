@@ -7,6 +7,8 @@
 //     da kabul eder.
 // Geri kalan her uç `router.use(verifyToken)`un ARKASINDA — sıra load-bearing.
 // Kapı (kısıtlı kip) bu dosyada DEĞİL: app düzeyinde `licenseGate`; `/api/license/*` her kademede açık.
+// Etkinleştirme kodu URL'de taşınmaz: istek zarfı uçları POST gövdesiyle çalışır; aynı uçların
+// `?kod=`lu GET biçimi eski panel için BİR sürüm daha durur (erişim günlüğünde kod maskelenir).
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
@@ -56,7 +58,7 @@ const canView = requireAnyPermission("license:view", "license:manage");
 const canManage = requirePermission("license:manage");
 
 const ActivateBody = z.object({ kod: z.string().trim().min(12).max(40) });
-const OfflineQuery = z.object({
+const OfflineRequestInput = z.object({
   amac: z.enum(["yokla", "etkinlestir"]).default("yokla"),
   kod: z.string().trim().max(40).optional(),
 });
@@ -173,11 +175,40 @@ router.post("/yokla", canManage, async (_req: Request, res: Response, next: Next
 });
 
 /**
+ * İstek zarfı (çevrimdışı QR ve panel aktarması aynı zarfı üretir). `source`: POST gövdesi ya da
+ * eski GET sorgusu. GET biçimi yalnız geçiş içindir — `Deprecation` başlığı taşır; panel POST'a
+ * geçtikten bir sürüm sonra kaldırılır.
+ */
+function offlineRequestHandler(source: "body" | "query") {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const input = OfflineRequestInput.parse((source === "body" ? req.body : req.query) ?? {});
+      if (source === "query") res.setHeader("Deprecation", "true");
+      res.status(200).json({ success: true, data: await buildOfflineRequest({ amac: input.amac, kod: input.kod ?? null }) });
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/**
  * @openapi
  * /api/license/cevrimdisi-istek:
- *   get:
+ *   post:
  *     tags: [Lisans]
  *     summary: Çevrimdışı (QR) imzalı istek zarfı — 10 dk geçerli
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { amac: { type: string, enum: [yokla, etkinlestir] }, kod: { type: string } } }
+ *     responses:
+ *       200: { description: "{ zarf, gecerlilikSonu, qrAdresi, istekGovdesi, hedefUrl }" }
+ *   get:
+ *     tags: [Lisans]
+ *     deprecated: true
+ *     summary: "ESKİ biçim — kod URL'de; POST'a geçildikten bir sürüm sonra kaldırılır"
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: amac, required: false, schema: { type: string, enum: [yokla, etkinlestir] } }
@@ -185,14 +216,8 @@ router.post("/yokla", canManage, async (_req: Request, res: Response, next: Next
  *     responses:
  *       200: { description: "{ zarf, gecerlilikSonu, qrAdresi, istekGovdesi, hedefUrl }" }
  */
-router.get("/cevrimdisi-istek", canManage, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const q = OfflineQuery.parse(req.query);
-    res.status(200).json({ success: true, data: await buildOfflineRequest({ amac: q.amac, kod: q.kod ?? null }) });
-  } catch (err) {
-    next(err);
-  }
-});
+router.post("/cevrimdisi-istek", canManage, offlineRequestHandler("body"));
+router.get("/cevrimdisi-istek", canManage, offlineRequestHandler("query"));
 
 /**
  * @openapi
@@ -217,9 +242,21 @@ router.post("/cevrimdisi-yanit", canManage, async (req: Request, res: Response, 
 /**
  * @openapi
  * /api/license/aktarma-istegi:
- *   get:
+ *   post:
  *     tags: [Lisans]
  *     summary: Panel aktarması için imzalı istek (panel satıcıya kendisi iletir)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { amac: { type: string, enum: [yokla, etkinlestir] }, kod: { type: string } } }
+ *     responses:
+ *       200: { description: "{ istekGovdesi, hedefUrl, gecerlilikSonu }" }
+ *   get:
+ *     tags: [Lisans]
+ *     deprecated: true
+ *     summary: "ESKİ biçim — kod URL'de; POST'a geçildikten bir sürüm sonra kaldırılır"
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: amac, required: false, schema: { type: string, enum: [yokla, etkinlestir] } }
@@ -227,14 +264,8 @@ router.post("/cevrimdisi-yanit", canManage, async (req: Request, res: Response, 
  *     responses:
  *       200: { description: "{ istekGovdesi, hedefUrl, gecerlilikSonu }" }
  */
-router.get("/aktarma-istegi", canManage, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const q = OfflineQuery.parse(req.query);
-    res.status(200).json({ success: true, data: await buildOfflineRequest({ amac: q.amac, kod: q.kod ?? null }) });
-  } catch (err) {
-    next(err);
-  }
-});
+router.post("/aktarma-istegi", canManage, offlineRequestHandler("body"));
+router.get("/aktarma-istegi", canManage, offlineRequestHandler("query"));
 
 /**
  * @openapi

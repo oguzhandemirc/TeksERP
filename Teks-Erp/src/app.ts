@@ -15,6 +15,7 @@ import {
 import { APP_VERSION } from "./lib/app-version";
 import { errorHandler } from "./middlewares/error.middleware";
 import { installDecimalNumberSerializer } from "./utils/json-replacer";
+import { redactSecretQueryParams } from "./utils/url-redaction";
 import prisma from "./lib/prisma";
 import { buildRichHealth } from "./lib/health-snapshot";
 
@@ -254,6 +255,13 @@ app.use(compression({ threshold: 1024 }));
 // F17: production'da 'combined' (tarih/IP/UA — pm2 dosya log'una ANSI'siz),
 // dev'de renkli kısa 'dev'.
 const isProd = (process.env.APP_ENV ?? process.env.NODE_ENV) === "production";
+// Erişim günlüğü sır taşımaz: `url` ve `referrer` jetonları sır parametrelerinin DEĞERİNİ
+// maskeler (etkinleştirme kodu, kurulum token'ı…). İki biçim de (`combined`/`dev`) bu jetonları okur.
+morgan.token<Request, Response>("url", (req) => redactSecretQueryParams(req.originalUrl || req.url || ""));
+morgan.token<Request, Response>("referrer", (req) => {
+  const ref = req.headers.referer ?? req.headers.referrer;
+  return ref ? redactSecretQueryParams(String(ref)) : undefined;
+});
 app.use(morgan(isProd ? "combined" : "dev"));
 
 // Per-endpoint gecikme istatistiği (istek başına O(1)) — morgan'dan sonra,
@@ -452,9 +460,9 @@ if (hardening.rateLimit.enabled) {
 // burada uzak erişim DURUR — sessiz bir açık yerine gürültülü bir arıza.
 app.use("/api", verifyAccessJwt(remoteAccess));
 
-// LİSANS KAPISI — rotalardan ÖNCE, yöntem + yol ile sınıflar (kimliğe bakmaz; "önce 401"
-// kuralının beyanlı istisnası). Gözlem kipinde hiçbir isteği engellemez (sıfır fark).
-// Açık yol listeleri: `constants/license-routes.ts`; bekçi `test_lisans_kapisi`.
+// LİSANS KAPISI — rotalardan ÖNCE, yöntem + yol ile sınıflar; kapalı yolda kimlik önce gelir
+// (oturumsuz istek rotanın 401'ini alır, kademe yalnız geçerli oturuma). Gözlem kipinde hiçbir
+// isteği engellemez (sıfır fark). Açık yol listeleri: `constants/license-routes.ts`; bekçi `test_lisans_kapisi`.
 app.use("/api", licenseGate);
 
 // =============================================================================

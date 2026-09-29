@@ -10,7 +10,8 @@ import { WeavingExecutionKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
-import { readDokumaEnabled } from "./system-setting.service";
+import { SETTING_KEYS, readDokumaEnabled } from "./system-setting.service";
+import { licenseModuleError } from "../lib/license/module-ceiling";
 import { WEAVING_ORDER_OPEN_STATUSES } from "./weaving-order.service";
 
 export interface FasonTabletBeam {
@@ -39,7 +40,7 @@ export interface FasonTabletContext {
 
 export async function getWeavingTabletContext(): Promise<ApiResponse<FasonTabletContext>> {
   if (!(await readDokumaEnabled())) {
-    throw AppError.forbidden("Dokuma modülü bu kurulumda kapalı — fason dokuma kabulü yapılamaz.", {
+    throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma") ?? AppError.forbidden("Dokuma modülü bu kurulumda kapalı — fason dokuma kabulü yapılamaz.", {
       code: "MODULE_DISABLED",
       modul: "dokuma",
     });

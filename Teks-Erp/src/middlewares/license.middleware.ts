@@ -1,10 +1,11 @@
 // =============================================================================
 // LİSANS KAPISI (`licenseGate`) — app düzeyinde, `/api` altında, rotalardan ÖNCE
 // =============================================================================
-// Yöntem + yol ile sınıflar (`constants/license-routes.ts`), kimliğe BAKMAZ: lisans bir
-// SUNUCU durumudur. Bu yüzden "önce 401" kuralının BEYANLI istisnasıdır — kimliksiz
-// isteğe de 403 döner, ama yalnız genel `LICENSE_GATE` kodu; kademe ayrıntısı yalnız
-// geçerli oturuma verilir (anonim çağırana K5 sinyali sızmaz).
+// Yöntem + yol ile sınıflar (`constants/license-routes.ts`). Kapalı yolda KİMLİK ÖNCE gelir:
+// geçerli oturumu olmayan istek (başlık yok, imzası/süresi geçersiz, oturumu sonlanmış) kapıdan
+// ROTAYA geçer ve rotanın `verifyToken`ı 401 döner; kademe yalnız geçerli oturuma uygulanır.
+// Kimlik istemeyen uçlarda (`PUBLIC_ROUTES`) geçecek duvar olmadığından kapı yalnız genel
+// `LICENSE_GATE` döner. Kimliksiz çağırana kademe/gün/modül SIZMAZ.
 //
 // Gözlem kipinde uygulanan kademe daima NORMAL'dir: kapı hiçbir isteği engellemez,
 // yalnız "reddederdim" sayacını artırır (sıfır fark). Motor hazır değilse ya da durum
@@ -15,7 +16,8 @@ import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../utils/app-error";
 import { getLicenseSnapshot, recordObservation, type LicenseSnapshot } from "../lib/license/runtime";
 import type { LicenseState } from "../lib/license/state";
-import { isOpenInTier } from "../constants/license-routes";
+import { isOpenInTier, isPublicRoute } from "../constants/license-routes";
+import { AuthService } from "../services/auth.service";
 import { verifyToken } from "./auth.middleware";
 
 function readySnapshot(): LicenseSnapshot | null {
@@ -27,18 +29,27 @@ function readySnapshot(): LicenseSnapshot | null {
   }
 }
 
-/** Başlık varsa TAM doğrulama (oturum kaydı dahil); geçersiz/eksik = kimliksiz. */
+/** Hafif denetim: Bearer başlığı + JWT imzası ve süresi (DB'siz). */
+function hasPlausibleToken(req: Request): boolean {
+  const token = req.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) return false;
+  try {
+    AuthService.verifyToken(token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** İmzası geçerli token'ın oturumu da canlı mı (sonlanmış oturuma kademe ayrıntısı verilmez). */
 function hasValidSession(req: Request, res: Response): Promise<boolean> {
-  if (!req.headers.authorization) return Promise.resolve(false);
+  if (!hasPlausibleToken(req)) return Promise.resolve(false);
   return new Promise((resolve) => {
     void verifyToken(req, res, (err?: unknown) => resolve(!err));
   });
 }
 
-function rejection(state: LicenseState, authenticated: boolean): AppError {
-  if (!authenticated) {
-    return AppError.forbidden("Bu işlem lisans durumu nedeniyle şu anda kullanılamıyor.", { code: "LICENSE_GATE" });
-  }
+function tierRejection(state: LicenseState): AppError {
   if (state.uygulananKademe === "DURDURULMUS") {
     return AppError.forbidden(
       "Lisans durduruldu. Yalnız lisans ekranı ve 'verilerimi al' (yedek + dışa aktarma) açık.",
@@ -59,6 +70,10 @@ function rejection(state: LicenseState, authenticated: boolean): AppError {
   );
 }
 
+function publicRouteRejection(): AppError {
+  return AppError.forbidden("Bu işlem lisans durumu nedeniyle şu anda kullanılamıyor.", { code: "LICENSE_GATE" });
+}
+
 export function licenseGate(req: Request, res: Response, next: NextFunction): void {
   const snap = readySnapshot();
   if (!snap) {
@@ -72,5 +87,9 @@ export function licenseGate(req: Request, res: Response, next: NextFunction): vo
     next();
     return;
   }
-  void hasValidSession(req, res).then((authenticated) => next(rejection(snap.state, authenticated)));
+  void hasValidSession(req, res).then((authenticated) => {
+    if (authenticated) next(tierRejection(snap.state));
+    else if (isPublicRoute(req.method, path)) next(publicRouteRejection());
+    else next();
+  });
 }
