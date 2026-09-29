@@ -38,6 +38,19 @@ const EnvSchema = z.object({
   QR_HIZ_SINIRI_DK: positiveInt(1, 10000).default(30),
   /** Vekil arkasında istemci IP'sini taşıyan başlık (ör. cf-connecting-ip); boşsa soket adresi. */
   VEKIL_IP_BASLIGI: z.string().min(1).optional(),
+  /** Portal oturumu: boşta kalma (dk) ve mutlak ömür (saat). */
+  PORTAL_OTURUM_BOSTA_DK: positiveInt(1, 24 * 60).default(30),
+  PORTAL_OTURUM_AZAMI_SAAT: positiveInt(1, 72).default(12),
+  /** Ardışık başarısız girişte hesap kilidi: eşik ve süre (dk). */
+  PORTAL_GIRIS_ESIGI: positiveInt(3, 50).default(5),
+  PORTAL_KILIT_DK: positiveInt(1, 24 * 60).default(15),
+  /** Giriş ucunun IP başına dakikalık hız sınırı (iki dinleyicide ayrı sayılır). */
+  PORTAL_GIRIS_HIZ_DK: positiveInt(1, 1000).default(20),
+  /** Budama: kapanmış/bitmiş oturum ve işlem kimliği satırlarının saklama süresi (gün). */
+  PORTAL_OTURUM_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
+  PORTAL_ISLEM_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
+  /** Tailnet çerezine Secure: yalnız tailnet dinleyicisi HTTPS arkasındaysa "1" (genel dinleyicide her zaman Secure). */
+  TAILNET_CEREZ_GUVENLI: z.enum(["0", "1"]).default("0"),
 });
 
 export type VendorConfig = Readonly<

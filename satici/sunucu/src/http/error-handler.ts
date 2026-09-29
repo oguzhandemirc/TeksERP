@@ -14,7 +14,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     return;
   }
   if (err instanceof VendorError) {
-    res.status(err.status).json({ success: false, message: err.message, details: { code: err.code } });
+    res.status(err.status).json({ success: false, message: err.message, details: { ...(err.extra ?? {}), code: err.code } });
     return;
   }
   const e = err as { type?: string; status?: number; message?: string; name?: string };

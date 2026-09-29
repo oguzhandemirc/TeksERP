@@ -6,14 +6,15 @@ import type { TasimaTalebi } from "@prisma/client";
 import { z } from "zod";
 import { TransferResponseSchema, type TransferRequestSchema } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
-import { VendorError, retryConflict } from "../lib/errors";
+import { VendorError, notFoundError, retryConflict, stateConflict } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
-import { prisma } from "../lib/prisma";
+import { prisma, type Tx } from "../lib/prisma";
 import { isUniqueViolation } from "../lib/prisma-errors";
 import type { VendorContext } from "./context";
 import { notifyDoorbell } from "./doorbell";
 import type { AuthenticatedRequest } from "./installation-auth";
 import { renewLease } from "./renewal.service";
+import { requireReason } from "./sanction.service";
 
 type TransferRequest = z.infer<typeof TransferRequestSchema>;
 type TransferResponse = z.infer<typeof TransferResponseSchema>;
@@ -97,52 +98,59 @@ export async function processTransferRequest(
   return TransferResponseSchema.parse({ v: 1, talepId: talep.talep.id, durum: talep.talep.durum, lisans: null });
 }
 
-async function decide(
-  talepId: string,
-  decision: "ONAYLANDI" | "REDDEDILDI",
-  actor: string,
-  reason: string,
-): Promise<TasimaTalebi> {
-  if (!reason.trim()) throw new VendorError(400, "GOVDE_GECERSIZ", "Taşıma kararı için sebep zorunlu");
+export async function findTransferRequest(talepId: string): Promise<TasimaTalebi> {
   const talep = await prisma.tasimaTalebi.findUnique({ where: { id: talepId } });
-  if (!talep) throw new VendorError(404, "GOVDE_GECERSIZ", "Taşıma talebi bulunamadı");
-  return prisma.$transaction(async (tx) => {
-    await lockInstallation(tx, talep.kurulumId);
-    const claim = await tx.tasimaTalebi.updateMany({
-      where: { id: talepId, durum: "BEKLIYOR" },
-      data: { durum: decision, kararZamani: new Date(), kararVeren: actor, kararSebebi: reason },
-    });
-    if (claim.count === 0) throw new VendorError(409, "GOVDE_GECERSIZ", "Taşıma talebi zaten karara bağlanmış");
-    if (decision === "ONAYLANDI") {
-      const inst = await tx.kurulum.findUniqueOrThrow({ where: { id: talep.kurulumId } });
-      if (inst.durum !== "ETKIN") throw new VendorError(409, "KURULUM_IPTAL", "Kurulum ETKİN değil; taşıma onaylanamaz");
-      await tx.kurulumKaydi.create({
-        data: {
-          kurulumId: inst.id,
-          olay: "TASINDI",
-          anahtarKimligi: talep.yeniAnahtarKimligi,
-          acikAnahtar: talep.yeniAcikAnahtar,
-          eskiAnahtarKimligi: inst.anahtarKimligi,
-          eskiAcikAnahtar: inst.acikAnahtar,
-          ayrinti: { talepId: talep.id, sebep: reason },
-          yapan: actor,
-        },
-      });
-      const moved = await tx.kurulum.updateMany({
-        where: { id: inst.id, anahtarKimligi: inst.anahtarKimligi },
-        data: {
-          acikAnahtar: talep.yeniAcikAnahtar,
-          anahtarKimligi: talep.yeniAnahtarKimligi,
-          kabulEdilenParmakIzi: talep.yeniParmakIzi ?? undefined,
-          sonOrtam: talep.ortam ?? undefined,
-          sonKiraId: null,
-        },
-      });
-      if (moved.count === 0) throw retryConflict();
-      await notifyDoorbell(tx, inst.id, "lisans");
-    }
-    return tx.tasimaTalebi.findUniqueOrThrow({ where: { id: talepId } });
+  if (!talep) throw notFoundError("Taşıma talebi");
+  return talep;
+}
+
+/** Karar (BEKLIYOR → ONAYLANDI | REDDEDILDI, atomik). `talep` kilitsiz okunur (kurulumu değişmez). */
+export async function decideTransferTx(
+  tx: Tx,
+  g: { talep: TasimaTalebi; decision: "ONAYLANDI" | "REDDEDILDI"; actor: string; reason: string },
+): Promise<TasimaTalebi> {
+  await lockInstallation(tx, g.talep.kurulumId);
+  const reason = requireReason(g.reason, "Taşıma kararı");
+  const talep = g.talep;
+  const claim = await tx.tasimaTalebi.updateMany({
+    where: { id: talep.id, durum: "BEKLIYOR" },
+    data: { durum: g.decision, kararZamani: new Date(), kararVeren: g.actor, kararSebebi: reason },
   });
+  if (claim.count === 0) throw stateConflict("Taşıma talebi zaten karara bağlanmış");
+  if (g.decision === "ONAYLANDI") {
+    const inst = await tx.kurulum.findUniqueOrThrow({ where: { id: talep.kurulumId } });
+    if (inst.durum !== "ETKIN") throw new VendorError(409, "KURULUM_IPTAL", "Kurulum ETKİN değil; taşıma onaylanamaz");
+    await tx.kurulumKaydi.create({
+      data: {
+        kurulumId: inst.id,
+        olay: "TASINDI",
+        anahtarKimligi: talep.yeniAnahtarKimligi,
+        acikAnahtar: talep.yeniAcikAnahtar,
+        eskiAnahtarKimligi: inst.anahtarKimligi,
+        eskiAcikAnahtar: inst.acikAnahtar,
+        ayrinti: { talepId: talep.id, sebep: reason },
+        yapan: g.actor,
+      },
+    });
+    const moved = await tx.kurulum.updateMany({
+      where: { id: inst.id, anahtarKimligi: inst.anahtarKimligi },
+      data: {
+        acikAnahtar: talep.yeniAcikAnahtar,
+        anahtarKimligi: talep.yeniAnahtarKimligi,
+        kabulEdilenParmakIzi: talep.yeniParmakIzi ?? undefined,
+        sonOrtam: talep.ortam ?? undefined,
+        sonKiraId: null,
+      },
+    });
+    if (moved.count === 0) throw retryConflict();
+    await notifyDoorbell(tx, inst.id, "lisans");
+  }
+  return tx.tasimaTalebi.findUniqueOrThrow({ where: { id: talep.id } });
+}
+
+async function decide(talepId: string, decision: "ONAYLANDI" | "REDDEDILDI", actor: string, reason: string): Promise<TasimaTalebi> {
+  const talep = await findTransferRequest(talepId);
+  return prisma.$transaction((tx) => decideTransferTx(tx, { talep, decision, actor, reason }));
 }
 
 /** Portal eylemi: taşımayı onayla (eski anahtar düşer, yeni anahtar sonraki isteğinde kira alır). */

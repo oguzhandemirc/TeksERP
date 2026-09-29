@@ -8,3 +8,6 @@ dist
 anahtarlar/
 *.kok.json
 *.anahtar.json
+*.bayi.json
+# Portal TOTP sırlarının sarma anahtarı (ANAHTAR_DIZINI içinde) — ASLA repoya girmez.
+portal-totp.key

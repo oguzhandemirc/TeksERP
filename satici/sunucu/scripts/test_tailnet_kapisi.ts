@@ -18,6 +18,7 @@ import path from "node:path";
 import { loadConfig } from "../src/config";
 import { KeyStore } from "../src/keys/key-store";
 import { createTailnetApp, isTailnetSource, requireTailnet } from "../src/http/tailnet-app";
+import { PortalSecretBox } from "../src/portal/secret-box";
 import { fiksturKur } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import { kontrol, sonuc } from "./lib/test-ortam";
 
@@ -65,7 +66,7 @@ async function main(): Promise<void> {
   writeFileSync(path.join(dizin, "capa.json"), JSON.stringify(f.kokler));
   const config = loadConfig({ ...taban, ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: path.join(dizin, "capa.json") });
   let tailnetAdresi: AddressInfo | null = null;
-  const app = createTailnetApp({ config, keys: KeyStore.load(config) }, null, () => tailnetAdresi);
+  const app = createTailnetApp({ config, keys: KeyStore.load(config), portalSecrets: PortalSecretBox.load(dizin, { create: true }) }, null, () => tailnetAdresi);
   const dogru = http.createServer(app);
   const yanlis = http.createServer(app);
   try {

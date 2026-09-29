@@ -5,6 +5,8 @@
 //     fabrika tarafıyla aynı kökler); kök parolalı dosya, alt/indirme 0600 geçici dizine yazılır.
 //   · Sunucu GERÇEK süreç olarak kalkar (tek süreç, iki dinleyici, port 0) ve PID'iyle kapatılır.
 import { spawn, type ChildProcess } from "node:child_process";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -30,6 +32,7 @@ import { loadConfig } from "../../src/config";
 import { passwordBuffer, subKeyFileFor, wrapPrivateKey, writeKeyFileExclusive } from "../../src/keys/key-files";
 import { KeyStore } from "../../src/keys/key-store";
 import { loadEnvFile } from "../../src/lib/env";
+import { PortalSecretBox } from "../../src/portal/secret-box";
 import type { VendorContext } from "../../src/services/context";
 
 export const SATICI_KOKU = path.resolve(__dirname, "..", "..");
@@ -74,7 +77,7 @@ export interface AnahtarOrtami {
 }
 
 /** Geçici anahtar dizini: parolalı üretim + hazırlık kökü, ALT ve İNDİRME (kök imzalı), çapa dosyası. */
-export async function anahtarOrtamiKur(simdi: number = Date.now()): Promise<AnahtarOrtami> {
+export async function anahtarOrtamiKur(simdi: number = Date.now(), ekOrtam: Record<string, string> = {}): Promise<AnahtarOrtami> {
   const f = fiksturKur(simdi);
   const dizin = mkdtempSync(path.join(os.tmpdir(), "satici-bekci-"));
   const parola = (): Buffer => passwordBuffer(TEST_KOK_PAROLASI);
@@ -97,8 +100,8 @@ export async function anahtarOrtamiKur(simdi: number = Date.now()): Promise<Anah
   const capaDosyasi = path.join(dizin, "capa.json");
   writeFileSync(capaDosyasi, JSON.stringify(f.kokler));
   loadEnvFile();
-  const config = loadConfig({ ...process.env, ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: capaDosyasi }, SATICI_KOKU);
-  const ctx: VendorContext = { config, keys: KeyStore.load(config, simdi) };
+  const config = loadConfig({ ...process.env, ...ekOrtam, ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: capaDosyasi }, SATICI_KOKU);
+  const ctx: VendorContext = { config, keys: KeyStore.load(config, simdi), portalSecrets: PortalSecretBox.load(dizin, { create: true }) };
   const kidler = [f.kok.kid, f.hazirlik.kid, f.alt.kid, f.ind.kid];
   return { f, dizin, capaDosyasi, ctx, kidler, temizle: () => rmSync(dizin, { recursive: true, force: true }) };
 }
@@ -305,6 +308,7 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     for (const h of await tx.hak.findMany({ where: w, select: { id: true } })) denetimIdleri.add(h.id);
     for (const p of await tx.planliEylem.findMany({ where: w, select: { id: true } })) denetimIdleri.add(p.id);
     const planlar = await tx.taksitPlani.findMany({ where: w, select: { id: true } });
+    for (const p of planlar) denetimIdleri.add(p.id);
     for (const k of await tx.taksitKalemi.findMany({ where: { planId: { in: planlar.map((p) => p.id) } }, select: { id: true } })) denetimIdleri.add(k.id);
     await tx.taksitKalemi.deleteMany({ where: { planId: { in: planlar.map((p) => p.id) } } });
     await tx.taksitPlani.deleteMany({ where: w });
@@ -417,4 +421,138 @@ export function kiraIdOf(json: Record<string, unknown>): string {
   const id = p.ok ? p.value.payload.kiraId : undefined;
   if (typeof id !== "string") throw new Error("yanıtta kira yok");
   return id;
+}
+
+// ---------------------------------------------------------------- portal (süreç içi iki dinleyici)
+export interface PortalSunuculari {
+  /** Tailnet dinleyicisi (satıcı portalı /portal/api). */
+  readonly tailnet: string;
+  /** Genel dinleyici (bayi alt-portalı /bayi/api, /v1/*). */
+  readonly genel: string;
+  kapat(): Promise<void>;
+}
+
+function dinle(server: http.Server): Promise<AddressInfo> {
+  return new Promise((r) => server.listen(0, "127.0.0.1", () => r(server.address() as AddressInfo)));
+}
+
+/** Portal uygulamalarını AYNI bağlamla süreç içinde kaldırır (bekçi saati/anahtarı enjekte edebilsin). */
+export async function portalSunuculariKur(ctx: VendorContext): Promise<PortalSunuculari> {
+  process.env.SATICI_ERISIM_GUNLUGU ??= "0";
+  const { createTailnetApp } = await import("../../src/http/tailnet-app");
+  const { createPublicApp } = await import("../../src/http/public-app");
+  let tailnetAdresi: AddressInfo | null = null;
+  const t = http.createServer(createTailnetApp(ctx, null, () => tailnetAdresi));
+  const g = http.createServer(createPublicApp(ctx, null));
+  tailnetAdresi = await dinle(t);
+  const genelAdresi = await dinle(g);
+  const kapat = (s: http.Server) => new Promise<void>((r) => (s.closeAllConnections(), s.close(() => r())));
+  return {
+    tailnet: `http://127.0.0.1:${tailnetAdresi.port}`,
+    genel: `http://127.0.0.1:${genelAdresi.port}`,
+    kapat: async () => {
+      await kapat(t);
+      await kapat(g);
+    },
+  };
+}
+
+export interface PortalKimlik {
+  readonly id: string;
+  readonly kullaniciAdi: string;
+  readonly parola: string;
+  readonly sir: string;
+  readonly rol: "SATICI_YONETICI" | "SATICI_OPERATOR" | "BAYI";
+}
+
+/** Portal kullanıcısı (servisten; TOTP sırrı döner). Kullanıcı adı bekçi önekli, tekil. */
+export async function portalKullaniciAc(ctx: VendorContext, rol: PortalKimlik["rol"], bayiId: string | null = null): Promise<PortalKimlik> {
+  const { prisma } = await import("../../src/lib/prisma");
+  const { createPortalUserTx } = await import("../../src/portal/users.service");
+  const { hashPortalPassword } = await import("../../src/portal/password");
+  const kullaniciAdi = `bekci-${randomUUID().slice(0, 12)}`;
+  const parola = `bekci-parola-${randomUUID()}`;
+  const r = await createPortalUserTx(prisma, ctx, { username: kullaniciAdi, fullName: "Bekçi Kullanıcı", role: rol, dealerId: bayiId, passwordHash: await hashPortalPassword(parola) });
+  return { id: r.user.id, kullaniciAdi, parola, sir: r.totp.sir, rol };
+}
+
+/** TOTP kodu; `adimKaydir` ile sonraki adımın kodu (aynı 30 sn içinde ikinci giriş için). */
+export async function totpKodu(sir: string, adimKaydir = 0, zamanMs: number = Date.now()): Promise<string> {
+  const { hotp, totpStep } = await import("../../src/portal/totp");
+  return hotp(sir, totpStep(zamanMs) + adimKaydir);
+}
+
+export type PortalYolu = "/portal/api" | "/bayi/api";
+
+export interface PortalYanit extends Yanit {
+  readonly basliklar: Headers;
+  readonly veri: Record<string, unknown>;
+}
+
+/** JSON portal isteği; `cerez` "ad=değer" biçiminde. */
+export async function portalIstek(
+  taban: string,
+  yol: string,
+  g: { yontem?: string; govde?: unknown; cerez?: string; icerikTuru?: string } = {},
+): Promise<PortalYanit> {
+  const yontem = g.yontem ?? (g.govde === undefined ? "GET" : "POST");
+  const r = await fetch(`${taban}${yol}`, {
+    method: yontem,
+    headers: {
+      ...(yontem === "GET" ? {} : { "Content-Type": g.icerikTuru ?? "application/json" }),
+      ...(g.cerez ? { Cookie: g.cerez } : {}),
+    },
+    ...(g.govde === undefined ? {} : { body: typeof g.govde === "string" ? g.govde : JSON.stringify(g.govde) }),
+  });
+  const metin = await r.text();
+  let json: Record<string, unknown> = {};
+  try {
+    json = JSON.parse(metin) as Record<string, unknown>;
+  } catch {
+    json = { _metin: metin };
+  }
+  const details = json.details as { code?: string } | undefined;
+  return { status: r.status, json, kod: details?.code, basliklar: r.headers, veri: (json.data ?? {}) as Record<string, unknown> };
+}
+
+/** Giriş: başarılıysa çerez "ad=değer" döner. `totp` verilmezse güncel adımın kodu. */
+export async function portalGiris(
+  taban: string,
+  yol: PortalYolu,
+  k: PortalKimlik,
+  g: { totp?: string; parola?: string; adimKaydir?: number } = {},
+): Promise<PortalYanit & { cerez: string | null; setCookie: string | null }> {
+  const y = await portalIstek(taban, `${yol}/oturum/ac`, {
+    govde: { kullaniciAdi: k.kullaniciAdi, parola: g.parola ?? k.parola, totp: g.totp ?? (await totpKodu(k.sir, g.adimKaydir ?? 0)) },
+  });
+  const setCookie = y.basliklar.get("set-cookie");
+  const cerez = y.status === 200 && setCookie ? setCookie.split(";")[0]!.trim() : null;
+  return { ...y, cerez, setCookie };
+}
+
+/** Portal fikstürünün temizliği: kullanıcılar (oturum + işlem kimliği) · boş tesis/müşteri · bayi + tavan defteri. */
+export async function temizlePortal(g: { kullanicilar?: readonly string[]; bayiler?: readonly string[]; tesisler?: readonly string[]; musteriler?: readonly string[] }): Promise<void> {
+  const { prisma } = await import("../../src/lib/prisma");
+  const kullanicilar = [...(g.kullanicilar ?? [])];
+  const bayiler = [...(g.bayiler ?? [])];
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL satici.defter_temizlik = 'test'`);
+    await tx.portalOturumu.deleteMany({ where: { kullaniciId: { in: kullanicilar } } });
+    await tx.portalIslemi.deleteMany({ where: { kullaniciId: { in: kullanicilar } } });
+    await tx.portalKullanici.deleteMany({ where: { OR: [{ id: { in: kullanicilar } }, { bayiId: { in: bayiler } }] } });
+    const tesisler = [...(g.tesisler ?? []), ...(await tx.tesis.findMany({ where: { musteri: { bayiId: { in: bayiler } } }, select: { id: true } })).map((t) => t.id)];
+    await tx.tesis.deleteMany({ where: { id: { in: tesisler }, kurulumlar: { none: {} } } });
+    const musteriler = [...(g.musteriler ?? []), ...(await tx.musteri.findMany({ where: { bayiId: { in: bayiler } }, select: { id: true } })).map((m) => m.id)];
+    await tx.musteri.deleteMany({ where: { id: { in: musteriler }, tesisler: { none: {} } } });
+    await tx.bayiTavani.deleteMany({ where: { bayiId: { in: bayiler } } });
+    await tx.bayi.deleteMany({ where: { id: { in: bayiler } } });
+    await tx.denetim.deleteMany({ where: { varlikId: { in: [...kullanicilar, ...bayiler, ...tesisler, ...musteriler] } } });
+  });
+}
+
+/** Bayinin kurulumları (temizlikte `temizleKurulumlar`a verilir). */
+export async function bayiKurulumlari(bayiler: readonly string[]): Promise<string[]> {
+  const { prisma } = await import("../../src/lib/prisma");
+  const rows = await prisma.kurulum.findMany({ where: { tesis: { musteri: { bayiId: { in: [...bayiler] } } } }, select: { id: true } });
+  return rows.map((r) => r.id);
 }

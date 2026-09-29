@@ -8,9 +8,12 @@
 //   §4 SERT SİLME yalnız telemetride: `.delete/.deleteMany` yalnız `PRUNED_MODELS` modellerinde;
 //      ham SQL'de DELETE/TRUNCATE yok
 //   §5 şema aynası: Prisma `LisansSinifi` = protokol `LICENSE_CLASSES`; `YaptirimTuru` ⊇ K0…K5
+//   §7 kilit SIRASI: bir fonksiyon birden çok kilit alıyorsa sıra PORTAL_TOKEN → DEALER → CUSTOMER →
+//      INSTALLATION → LICENSE_NUMBER (lib/locks.ts başlığı); ters sıra kilitlenme (40P01) doğurur
 // Taban 0 — tarayıcı (cırcır değil): ihlal doğduğu an kırmızı.
-// ⭐ KALICI SONDA ✓K4 (her koşumda): aynı çözümleyiciler sentetik ihlalli kaynakta ISIRIR —
-//    kilitsiz tx · tx içinde Promise.all · defter modelinde deleteMany · tabloda olmayan uzay.
+// ⭐ KALICI SONDA ✓K5 (her koşumda): aynı çözümleyiciler sentetik ihlalli kaynakta ISIRIR —
+//    kilitsiz tx · tx içinde Promise.all · defter modelinde deleteMany · tabloda olmayan uzay ·
+//    kurulum kilidinden SONRA bayi kilidi.
 // Koşum: npx tsx scripts/test_satici_kapilari.ts   (DB GEREKMEZ)
 // =============================================================================
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -22,7 +25,16 @@ import { PRUNED_MODELS } from "../src/services/maintenance";
 import { SATICI_KOKU, kontrol, sonuc } from "./lib/test-ortam";
 
 const SRC = path.join(SATICI_KOKU, "src");
-const LOCK_FUNCS = new Set(["lockInstallation", "lockInstallations", "lockLicenseNumber"]);
+/** Kilit fonksiyonları ve alınma sırası (küçük önce) — lib/locks.ts başlığındaki sıra. */
+const LOCK_RANK: Readonly<Record<string, number>> = {
+  lockPortalToken: 0,
+  lockDealer: 1,
+  lockCustomer: 2,
+  lockInstallation: 3,
+  lockInstallations: 3,
+  lockLicenseNumber: 4,
+};
+const LOCK_FUNCS = new Set(Object.keys(LOCK_RANK));
 const DB_CLIENTS = new Set(["prisma", "tx", "db"]);
 
 function tsFiles(dir: string): string[] {
@@ -75,16 +87,41 @@ interface Findings {
   promiseAllInTx: string[];
   hardDeletes: string[];
   advisoryOutsideLocks: string[];
+  lockOrder: string[];
+}
+
+function isFunctionLike(n: ts.Node): n is ts.FunctionLikeDeclaration {
+  return ts.isFunctionDeclaration(n) || ts.isArrowFunction(n) || ts.isFunctionExpression(n) || ts.isMethodDeclaration(n);
+}
+
+/** Fonksiyonun KENDİ gövdesindeki kilit çağrıları (iç içe fonksiyonlara inmeden), kaynak sırasıyla. */
+function ownLockCalls(fn: ts.FunctionLikeDeclaration): ts.CallExpression[] {
+  const out: ts.CallExpression[] = [];
+  const visit = (n: ts.Node): void => {
+    if (n !== fn && isFunctionLike(n)) return;
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && LOCK_FUNCS.has(n.expression.text)) out.push(n);
+    n.forEachChild(visit);
+  };
+  if (fn.body) visit(fn.body);
+  return out;
 }
 
 export function analyze(files: { name: string; text: string }[]): Findings {
-  const f: Findings = { unlockedTx: [], promiseAllInTx: [], hardDeletes: [], advisoryOutsideLocks: [] };
+  const f: Findings = { unlockedTx: [], promiseAllInTx: [], hardDeletes: [], advisoryOutsideLocks: [], lockOrder: [] };
   const allowed = new Set<string>(PRUNED_MODELS);
   for (const { name, text } of files) {
     const sf = parse(name, text);
     const where = (n: ts.Node) => `${name}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1}`;
     if (!name.endsWith(path.join("lib", "locks.ts")) && /pg_advisory/.test(text)) f.advisoryOutsideLocks.push(name);
     walk(sf, (n) => {
+      if (isFunctionLike(n)) {
+        let highest = -1;
+        for (const call of ownLockCalls(n)) {
+          const rank = LOCK_RANK[(call.expression as ts.Identifier).text]!;
+          if (rank < highest) f.lockOrder.push(`${where(call)} ${(call.expression as ts.Identifier).text}`);
+          highest = Math.max(highest, rank);
+        }
+      }
       if (isTransactionCall(n)) {
         const cb = n.arguments[0];
         if (cb && (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb))) {
@@ -145,7 +182,8 @@ function main(): void {
   console.log("\n§2–§4 tx ve silme disiplini");
   kontrol("§2 her $transaction'ın ilk ifadesi kilit", f.unlockedTx.length === 0, f.unlockedTx.join(", "));
   kontrol("§3 tx içinde Promise.all yok", f.promiseAllInTx.length === 0, f.promiseAllInTx.join(", "));
-  kontrol("§4 sert silme yalnız telemetride (nonceDefteri · yoklama)", f.hardDeletes.length === 0, f.hardDeletes.join(", "));
+  kontrol(`§4 sert silme yalnız telemetride (${PRUNED_MODELS.join(" · ")})`, f.hardDeletes.length === 0, f.hardDeletes.join(", "));
+  kontrol("§7 çoklu kilit sırası PORTAL_TOKEN → DEALER → CUSTOMER → INSTALLATION → LICENSE_NUMBER", f.lockOrder.length === 0, f.lockOrder.join(", "));
 
   console.log("\n§5 şema aynası");
   const schema = readFileSync(path.join(SATICI_KOKU, "prisma", "schema.prisma"), "utf8");
@@ -166,12 +204,16 @@ function main(): void {
     },
     { name: "sonda/c.ts", text: `async function c(){ await prisma.kira.deleteMany({ where: {} }); await tx.$executeRaw\`DELETE FROM kira\`; }` },
     { name: "sonda/d.ts", text: `const q = "SELECT pg_advisory_xact_lock(9999, 1)";` },
+    { name: "sonda/e.ts", text: `async function e(tx){ await lockInstallation(tx, "1"); await lockDealer(tx, "2"); }` },
+    { name: "sonda/f.ts", text: `async function f(tx){ await lockPortalToken(tx, "t"); await lockDealer(tx, "2"); await lockCustomer(tx, "c"); await lockInstallations(tx, ["1"]); await lockLicenseNumber(tx, 2026); }` },
   ]);
   kontrol("§6a kilitsiz tx yakalanır", sonda.unlockedTx.some((w) => w.startsWith("sonda/a.ts")));
   kontrol("§6b tx içinde Promise.all yakalanır", sonda.promiseAllInTx.some((w) => w.startsWith("sonda/b.ts")));
   const c = sonda.hardDeletes.filter((w) => w.startsWith("sonda/c.ts"));
   kontrol("§6c defter modelinde deleteMany + ham DELETE yakalanır", c.some((w) => w.endsWith("kira.deleteMany")) && c.some((w) => w.endsWith("ham SQL")), c.join(" · "));
   kontrol("§6d kilit dosyası dışında pg_advisory yakalanır", sonda.advisoryOutsideLocks.includes("sonda/d.ts"));
+  kontrol("§6e kurulum kilidinden SONRA bayi kilidi yakalanır", sonda.lockOrder.some((w) => w.startsWith("sonda/e.ts") && w.endsWith("lockDealer")));
+  kontrol("§6f doğru sıradaki beşli kilit zinciri SUSAR (kör reddetme yok)", !sonda.lockOrder.some((w) => w.startsWith("sonda/f.ts")));
   sonuc();
 }
 

@@ -1,6 +1,7 @@
 // SATICI SUNUCUSU — tek süreç, iki dinleyici: GENEL (/v1/*, /q) + TAILNET (portal; kök parolası).
 // Açılış: yapılandırma (fail-closed) → anahtar deposu → anahtar künyesi → zil (PG LISTEN) →
 // dinleyiciler → bakım işi. Kapanış: SIGTERM/SIGINT'te akışlar ve bağlantılar düzgün kapanır.
+import { mkdirSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { loadConfig } from "./config";
@@ -9,6 +10,7 @@ import { loadEnvFile } from "./lib/env";
 import { pool, prisma } from "./lib/prisma";
 import { createPublicApp } from "./http/public-app";
 import { createTailnetApp } from "./http/tailnet-app";
+import { PortalSecretBox } from "./portal/secret-box";
 import type { VendorContext } from "./services/context";
 import { DoorbellHub } from "./services/doorbell";
 import { MaintenanceScheduler, syncKeyRegistry } from "./services/maintenance";
@@ -28,7 +30,8 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const keys = KeyStore.load(config);
   for (const w of keys.warnings) console.warn(`[satici] anahtar: ${w}`);
-  const ctx: VendorContext = { config, keys };
+  mkdirSync(config.ANAHTAR_DIZINI, { recursive: true, mode: 0o700 });
+  const ctx: VendorContext = { config, keys, portalSecrets: PortalSecretBox.load(config.ANAHTAR_DIZINI, { create: true }) };
   await syncKeyRegistry(keys).catch((err: Error) => console.error(`[satici] anahtar künyesi yazılamadı: ${err.message}`));
 
   const hub = new DoorbellHub(config.DATABASE_URL, config.ZIL_KALP_SN);

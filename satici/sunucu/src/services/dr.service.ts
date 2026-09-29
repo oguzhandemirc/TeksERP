@@ -4,13 +4,14 @@
 // Ters yol: portal eylemi `revertDrTakeover` (DEVREDILDI → ETKIN, kurulum kaydına satır).
 import type { LicenseResponse } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
-import { VendorError } from "../lib/errors";
+import { VendorError, stateConflict } from "../lib/errors";
 import { lockInstallation, lockInstallations } from "../lib/locks";
-import { prisma } from "../lib/prisma";
+import { prisma, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
 import { notifyDoorbell } from "./doorbell";
 import type { AuthenticatedRequest } from "./installation-auth";
 import { renewLease } from "./renewal.service";
+import { requireReason } from "./sanction.service";
 
 export async function processDrTakeover(
   ctx: VendorContext,
@@ -79,19 +80,21 @@ export async function processDrTakeover(
 }
 
 /** Portal eylemi (ters yol): devredilmiş ana kurulumu yeniden ETKİN yapar. */
-export async function revertDrTakeover(g: { mainInstallationDbId: string; actor: string; reason: string }): Promise<void> {
-  if (!g.reason.trim()) throw new VendorError(400, "GOVDE_GECERSIZ", "Geri alma için sebep zorunlu");
-  await prisma.$transaction(async (tx) => {
-    await lockInstallation(tx, g.mainInstallationDbId);
-    const claim = await tx.kurulum.updateMany({
-      where: { id: g.mainInstallationDbId, durum: "DEVREDILDI" },
-      data: { durum: "ETKIN" },
-    });
-    if (claim.count === 0) throw new VendorError(409, "GOVDE_GECERSIZ", "Kurulum devredilmiş durumda değil");
-    await tx.kurulumKaydi.create({
-      data: { kurulumId: g.mainInstallationDbId, olay: "DR_GERI_ALINDI", ayrinti: { sebep: g.reason }, yapan: g.actor },
-    });
-    await notifyDoorbell(tx, g.mainInstallationDbId, "lisans");
+export async function revertDrTakeoverTx(tx: Tx, g: { mainInstallationDbId: string; actor: string; reason: string }): Promise<void> {
+  await lockInstallation(tx, g.mainInstallationDbId);
+  const reason = requireReason(g.reason, "DR devrini geri almak");
+  const claim = await tx.kurulum.updateMany({
+    where: { id: g.mainInstallationDbId, durum: "DEVREDILDI" },
+    data: { durum: "ETKIN" },
   });
+  if (claim.count === 0) throw stateConflict("Kurulum devredilmiş durumda değil");
+  await tx.kurulumKaydi.create({
+    data: { kurulumId: g.mainInstallationDbId, olay: "DR_GERI_ALINDI", ayrinti: { sebep: reason }, yapan: g.actor },
+  });
+  await notifyDoorbell(tx, g.mainInstallationDbId, "lisans");
+}
+
+export async function revertDrTakeover(g: { mainInstallationDbId: string; actor: string; reason: string }): Promise<void> {
+  await prisma.$transaction((tx) => revertDrTakeoverTx(tx, g));
   await recordAudit({ event: "DR_GERI_ALINDI", entity: "Kurulum", entityId: g.mainInstallationDbId, actor: g.actor, summary: { sebep: g.reason } });
 }

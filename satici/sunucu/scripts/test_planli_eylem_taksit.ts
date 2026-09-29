@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     const vadesi = await svc.schedulePlannedAction({ installationDbId: k.kurulumDbId, level: "K3", restrictionDays: 15, dueAt: new Date(simdi - 1_000), reason: "vade + 15 gün ödeme yok", actor: "bekci" });
     const gelecek = await svc.schedulePlannedAction({ installationDbId: k.kurulumDbId, level: "K1", dueAt: new Date(simdi + DAY_MS), reason: "bakım bitişi", actor: "bekci" });
     const iptal = await svc.schedulePlannedAction({ installationDbId: k.kurulumDbId, level: "K0", message: "x", dueAt: new Date(simdi - 1_000), reason: "vazgeçildi", actor: "bekci" });
-    await svc.cancelPlannedAction({ id: iptal.id, actor: "bekci" });
+    await svc.cancelPlannedAction({ id: iptal.id, reason: "müşteri ödedi", actor: "bekci" });
     let k45 = "";
     try {
       await svc.schedulePlannedAction({ installationDbId: k.kurulumDbId, level: "K5", dueAt: new Date(simdi), reason: "x", actor: "bekci" });

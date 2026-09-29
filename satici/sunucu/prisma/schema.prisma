@@ -140,12 +140,16 @@ model Musteri {
   id        String   @id @default(uuid()) @db.Uuid
   ad        String   @db.VarChar(200)
   vergiNo   String?  @db.VarChar(20)
+  /// Müşteriyi yöneten bayi (yoksa doğrudan satıcı). Bayinin kurulum adedi bu bağdan sayılır.
+  bayiId    String?  @db.Uuid
   aktif     Boolean  @default(true)
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
+  bayi     Bayi?   @relation(fields: [bayiId], references: [id], onDelete: Restrict)
   tesisler Tesis[]
 
+  @@index([bayiId])
   @@map("musteri")
 }
 
@@ -374,6 +378,10 @@ model PlanliEylem {
   sebep          String            @db.VarChar(500)
   yapan          String            @db.VarChar(120)
   uygulamaZamani DateTime?         @db.Timestamptz
+  /// İptal (BEKLIYOR → IPTAL) — kim, ne zaman, neden; durumla çift yüklem (CHECK).
+  iptalZamani    DateTime?         @db.Timestamptz
+  iptalEden      String?           @db.VarChar(120)
+  iptalSebebi    String?           @db.VarChar(500)
   createdAt      DateTime          @default(now()) @db.Timestamptz
   updatedAt      DateTime          @updatedAt @db.Timestamptz
 
@@ -396,6 +404,10 @@ model TaksitPlani {
   kisitlamaGun Int      @default(15)
   aktif        Boolean  @default(true)
   yapan        String   @db.VarChar(120)
+  /// Planın kapanışı (aktif → pasif): bekleyen kalemler IPTAL olur; durumla çift yüklem (CHECK).
+  kapanisZamani DateTime? @db.Timestamptz
+  kapatan       String?   @db.VarChar(120)
+  kapanisSebebi String?   @db.VarChar(500)
   createdAt    DateTime @default(now()) @db.Timestamptz
   updatedAt    DateTime @updatedAt @db.Timestamptz
 
@@ -557,4 +569,129 @@ model Denetim {
   @@index([varlik, varlikId])
   @@index([createdAt])
   @@map("denetim")
+}
+
+// -----------------------------------------------------------------------------
+// BAYİ — hesap + tavan (modül ⊆ · sınıf ⊆ · kurulum adedi). Bayi imzalı HAK, protokolün
+// kriptografik sertifika kısıtına EK olarak GÜNCEL tavana karşı sunucuda yeniden doğrulanır.
+// -----------------------------------------------------------------------------
+
+model Bayi {
+  id               String   @id @default(uuid()) @db.Uuid
+  ad               String   @db.VarChar(200)
+  vergiNo          String?  @db.VarChar(20)
+  /// Bayinin imza anahtarının kid'i (`bayi-…`); kök imzalı sertifikası bu bayinin id'sini taşır.
+  anahtarKid       String?  @unique @db.VarChar(80)
+  /// Güncel tavan sürümü (0 = tavan yok → bayi hiçbir HAK imzalayamaz). Değişim defteri BayiTavani.
+  guncelTavanSurum Int      @default(0)
+  aktif            Boolean  @default(true)
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+
+  tavanlar     BayiTavani[]
+  musteriler   Musteri[]
+  kullanicilar PortalKullanici[]
+
+  @@map("bayi")
+}
+
+/// Bayi tavanının sürümleri — EKLEME-YALNIZ defter (tetikleyiciyle değişmez).
+model BayiTavani {
+  id           String         @id @default(uuid()) @db.Uuid
+  bayiId       String         @db.Uuid
+  surum        Int
+  moduller     String[]
+  siniflar     LisansSinifi[]
+  /// Bayinin müşterilerinde açık (iptal edilmemiş, aktif) kurulum sayısının üst sınırı.
+  kurulumAdedi Int
+  sebep        String         @db.VarChar(500)
+  yapan        String         @db.VarChar(120)
+  createdAt    DateTime       @default(now()) @db.Timestamptz
+
+  bayi Bayi @relation(fields: [bayiId], references: [id])
+
+  @@unique([bayiId, surum])
+  @@map("bayi_tavani")
+}
+
+// -----------------------------------------------------------------------------
+// PORTAL — kullanıcı (parola scrypt + TOTP ZORUNLU), oturum (telemetri), işlem kimliği (idempotency)
+// -----------------------------------------------------------------------------
+
+enum PortalRolu {
+  SATICI_YONETICI
+  SATICI_OPERATOR
+  BAYI
+}
+
+/// Oturumun doğduğu dinleyici — oturum yalnız orada geçerlidir (satıcı rolleri tailnet, bayi genel).
+enum PortalDinleyici {
+  GENEL
+  TAILNET
+}
+
+model PortalKullanici {
+  id             String     @id @default(uuid()) @db.Uuid
+  /// Küçük harf, [a-z0-9._-] — doğuşta normalleştirilir.
+  kullaniciAdi   String     @unique @db.VarChar(60)
+  adSoyad        String     @db.VarChar(120)
+  rol            PortalRolu
+  /// Yalnız BAYI rolünde dolu (CHECK).
+  bayiId         String?    @db.Uuid
+  /// scrypt$N$r$p$tuz$özet — düz parola DB'ye girmez.
+  parolaOzeti    String     @db.VarChar(200)
+  /// TOTP sırrı AES-256-GCM ile sarılı (anahtar ANAHTAR_DIZINI'nde, DB'de değil).
+  totpSirSifreli String     @db.VarChar(200)
+  /// Son kabul edilen TOTP adımı (tekrar oynatma kilidi).
+  totpSonAdim    Int?
+  basarisizGiris Int        @default(0)
+  kilitBitis     DateTime?  @db.Timestamptz
+  sonGiris       DateTime?  @db.Timestamptz
+  parolaDegisim  DateTime   @db.Timestamptz
+  aktif          Boolean    @default(true)
+  createdAt      DateTime   @default(now()) @db.Timestamptz
+  updatedAt      DateTime   @updatedAt @db.Timestamptz
+
+  bayi      Bayi?           @relation(fields: [bayiId], references: [id], onDelete: Restrict)
+  oturumlar PortalOturumu[]
+
+  @@map("portal_kullanici")
+}
+
+/// Portal oturumu — TELEMETRİ sınıfı: iş kararı okumaz, bitişinden sonra budanır. Belirteç düz
+/// saklanmaz (sha256). Oturum doğduğu dinleyiciye bağlıdır.
+model PortalOturumu {
+  id            String          @id @default(uuid()) @db.Uuid
+  kullaniciId   String          @db.Uuid
+  belirtecOzeti String          @unique @db.VarChar(64)
+  dinleyici     PortalDinleyici
+  sonKullanim   DateTime        @db.Timestamptz
+  bitis         DateTime        @db.Timestamptz
+  kapanisZamani DateTime?       @db.Timestamptz
+  kapanisNedeni String?         @db.VarChar(40)
+  createdAt     DateTime        @default(now()) @db.Timestamptz
+  updatedAt     DateTime        @updatedAt @db.Timestamptz
+
+  kullanici PortalKullanici @relation(fields: [kullaniciId], references: [id])
+
+  @@index([kullaniciId])
+  @@index([bitis])
+  @@map("portal_oturumu")
+}
+
+/// Portal işlem kimliği (clientToken) — idempotency: eylem ile AYNI tx'te yazılır, yanıt (sırsız)
+/// saklanır; aynı kimlikle tekrar aynı yanıtı alır. TELEMETRİ sınıfı: saklama süresi sonunda budanır.
+model PortalIslemi {
+  id          String   @id @default(uuid()) @db.Uuid
+  clientToken String   @unique @db.Uuid
+  kullaniciId String   @db.Uuid
+  eylem       String   @db.VarChar(60)
+  /// Gövdenin (sır alanları çıkarılmış) sha256'sı — gövde kapısı.
+  govdeOzeti  String   @db.VarChar(64)
+  yanitDurumu Int
+  yanit       Json
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  @@index([createdAt])
+  @@map("portal_islemi")
 }
