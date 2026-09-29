@@ -1,6 +1,7 @@
 name: CI
 
-# TeksERP monorepo — 3 alt proje (Teks-Erp backend, Electron panel, mobil) + satıcı sunucusu (satici/sunucu).
+# TeksERP monorepo — 3 alt proje (Teks-Erp backend, Electron panel, mobil) + satıcı sunucusu (satici/sunucu)
+# + native lisans çekirdeği (Teks-Erp/native/lisans-cekirdek, Rust).
 # Her push + PR'da tip kontrolü + test takımları koşar. Backend testleri yerel
 # PostgreSQL gerektirir (service container + migrate deploy + seed); Electron
 # (Vitest/jsdom) ve mobil (jest-expo) DB'siz çalışır.
@@ -470,6 +471,46 @@ jobs:
         run: npx vitest run
       - name: Derleme (portal + bayi)
         run: npm run build
+
+  # ===========================================================================
+  # NATIVE — lisans çekirdeği (Teks-Erp/native/lisans-cekirdek; Rust + napi-rs, Faz 2c). DB'siz:
+  # biçim + clippy (uyarı = hata) + `cargo test` (TS kâhininin vektör dosyası) + linux-x64 `.node`
+  # + kâhin bekçisi GERÇEK `.node`a karşı. TEKSERP_STRICT: bekçinin "ATLANDI"sı burada KIRMIZIDIR
+  # (backend job'ı native derlemez; orada sayılı beyanla atlar). Üretim özellikli (test çapasız)
+  # win-x64 + linux-x64 paket derlemesi `korumali-paket.yml`de (Faz 2b sahipliği).
+  # ===========================================================================
+  native:
+    name: Native lisans çekirdeği (fmt + clippy + test + kâhin)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Teks-Erp/native/lisans-cekirdek
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            Teks-Erp/native/lisans-cekirdek/package-lock.json
+            Teks-Erp/package-lock.json
+      - name: Rust araç zinciri (stable + rustfmt + clippy)
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy && rustup default stable
+      - name: Teks-Erp bağımlılıkları (kâhin — TS protokolü + tsx)
+        run: npm ci
+        working-directory: Teks-Erp
+      - run: npm ci
+      - name: Biçim + clippy
+        run: node scripts/kapi.mjs denetle
+      - name: cargo test (TS kâhininin vektörleri)
+        run: node scripts/kapi.mjs test
+      - name: Native derleme (linux-x64-gnu, test çapalı)
+        run: npx napi build --platform --release --no-js --features test-anchor --output-dir dist
+      - name: Kâhin bekçisi (TS ↔ gerçek .node)
+        run: npx tsx scripts/test_lisans_native_kahin.ts
+        working-directory: Teks-Erp
+        env:
+          TEKSERP_STRICT: "1"
 
   # ===========================================================================
   # E2E — Electron uygulaması gerçekten açılıp Login render oluyor mu (Playwright

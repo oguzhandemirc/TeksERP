@@ -153,13 +153,30 @@ export const PROJELER = [
     lint: ["npm", ["run", "lint"]],
     test: ["npx", ["vitest", "run"]],
   },
+  {
+    // Native lisans çekirdeği (Rust + napi-rs, Faz 2c): `Teks-Erp/` İÇİNDE iç içe proje — dosya EN
+    // ÖZGÜL projeye aittir (`dosyaSahibi`); Teks-Erp'nin tip/lint'i bu dizini zaten taramaz. Tip adımı
+    // `cargo fmt --check` + clippy (uyarı = hata), ESLint YOK (`lint: null`), test `cargo test` (TS
+    // kâhininin vektör dosyası dahil). cargo yoksa betik ⏭ beyanla 0 döner — ölçüm CI "Native" job'ında.
+    ad: "Teks-Erp/native/lisans-cekirdek",
+    typecheck: ["node", ["scripts/kapi.mjs", "denetle"]],
+    lint: null,
+    test: ["node", ["scripts/kapi.mjs", "test"]],
+    // Rust kaynağı, Cargo.toml/lock, vektör dosyası ve betikler bu projenin girdisidir.
+    kodDosyasi: (f) => /\.(rs|toml|lock|json|mjs)$/.test(f),
+  },
 ];
+
+/** Dosyanın sahibi: öneki eşleşen EN UZUN proje — iç içe proje üst projenin kapısını tetiklemez. */
+export function dosyaSahibi(f) {
+  return PROJELER.filter((p) => f.startsWith(`${p.ad}/`)).sort((a, b) => b.ad.length - a.ad.length)[0] ?? null;
+}
 
 /** Staged dosyalardan etkilenen alt projeler (kod dosyası şartıyla). */
 export function etkilenenProjeler(repo, staged) {
   return PROJELER.filter(
     (p) =>
-      staged.some((f) => f.startsWith(`${p.ad}/`) && codeFile(f)) &&
+      staged.some((f) => dosyaSahibi(f) === p && (p.kodDosyasi ?? codeFile)(f)) &&
       existsSync(join(repo, p.ad, "package.json")),
   );
 }
