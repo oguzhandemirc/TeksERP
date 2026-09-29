@@ -904,7 +904,7 @@ export async function reverifyCopy(copyName: string): Promise<VerificationReport
 
 interface RawDbRow {
   datname: string;
-  size_bytes: string;
+  size_bytes: string | null;
   open_conns: string;
 }
 
@@ -932,9 +932,11 @@ export async function listDbCopies(): Promise<DbCopyListing> {
       const live = conn.database;
 
       // Cluster genelindeki tüm DB'ler + boyut + açık bağlantı sayısı (tek sorgu).
+      // CONNECT yetkisi olmayan DB'nin boyutu süper olmayan bakım rolünde HATA verir → NULL.
       const dbs = await client.query<RawDbRow>(
         `SELECT d.datname,
-                pg_database_size(d.datname)::text AS size_bytes,
+                CASE WHEN has_database_privilege(d.oid, 'CONNECT')
+                     THEN pg_database_size(d.oid)::text END AS size_bytes,
                 (SELECT count(*) FROM pg_stat_activity a WHERE a.datname = d.datname)::text AS open_conns
          FROM pg_database d
          WHERE d.datistemplate = false`,
@@ -950,7 +952,9 @@ export async function listDbCopies(): Promise<DbCopyListing> {
       const tablespaceDir = tsRow.rows[0]?.dir ?? null;
 
       const byName = new Map(dbs.rows.map((r) => [r.datname, r]));
-      const liveSize = byName.has(live) ? Number(byName.get(live)!.size_bytes) : null;
+      const sizeOf = (r: RawDbRow | undefined): number | null =>
+        r?.size_bytes == null ? null : Number(r.size_bytes);
+      const liveSize = sizeOf(byName.get(live));
 
       const records = await readCopyRecords();
       const toCopy = (r: RawDbRow): DbCopy => {
@@ -958,7 +962,7 @@ export async function listDbCopies(): Promise<DbCopyListing> {
         return {
           name: r.datname,
           createdAt: parseDbStamp(r.datname)?.toISOString() ?? null,
-          sizeBytes: Number(r.size_bytes),
+          sizeBytes: sizeOf(r),
           state: evaluateCopyState({
             record: rec,
             jobPhase: currentJob?.copyName === r.datname ? currentJob.phase : null,
