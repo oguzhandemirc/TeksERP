@@ -49,6 +49,7 @@ import {
 import { readOffsiteRemote, readOffsiteDir } from "../services/system-setting.service";
 import { runOffsiteSweepNow } from "../jobs/offsite-sweeper";
 import { getRestoreImpact } from "../services/backup-impact.service";
+import { unlockBackupForRequest } from "../middlewares/backup-password";
 import { latencySnapshot, resetLatencyStats } from "../services/latency-stats.service";
 import { ClientRegistryService } from "../services/client-registry.service";
 import {
@@ -1801,16 +1802,23 @@ router.get(
  *       kök CLAUDE.md'nin "yıkıcı işlemde etkilenen kayıtları somut listele"
  *       kuralının geri yükleme karşılığıdır. Sayımlar yalnız INSERT'leri yakalar —
  *       UPDATE'ler audit rollup'ında görünür (yanıttaki `audit` alanı).
+ *       Şifreli yedekte (`.tkenc`) yedek parolası `X-Backup-Password` başlığıyla verilir;
+ *       yerel anahtar açılır ve içerik tam doğrulanır.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: name
  *         required: true
  *         schema: { type: string }
+ *       - in: header
+ *         name: X-Backup-Password
+ *         required: false
+ *         schema: { type: string }
  *     responses:
  *       200: { description: Etki önizlemesi }
- *       403: { description: Yetki yok (admin:settings + admin:users gerekli) }
+ *       403: { description: Yetki yok (admin:settings + admin:users gerekli) · BACKUP_PASSWORD_REQUIRED · BACKUP_PASSWORD_INVALID }
  *       404: { description: Yedek dosyası bulunamadı }
+ *       429: { description: BACKUP_PASSWORD_LOCKED }
  */
 router.get(
   "/backups/:name/restore-impact",
@@ -1824,7 +1832,12 @@ router.get(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const name = req.params.name as string;
-      const data = await getRestoreImpact(name);
+      // Şifreli yedek: yerel anahtar `X-Backup-Password` başlığıyla açılır (403 → panel sorar).
+      const abs = resolveBackupPath(name);
+      const unlock = abs ? await unlockBackupForRequest(req, abs) : null;
+      const data = await getRestoreImpact(name, {
+        identity: unlock?.encrypted ? unlock.identity : null,
+      });
       if (!data) {
         next(AppError.notFound("Yedek dosyası bulunamadı."));
         return;
@@ -1841,6 +1854,7 @@ router.get(
           cutoffSource: data.cutoff.source,
           totalCreated: data.totalCreated,
           canRestore: data.canRestore,
+          encrypted: data.encryption.fileEncrypted,
         },
       });
       res.status(200).json({ success: true, data });

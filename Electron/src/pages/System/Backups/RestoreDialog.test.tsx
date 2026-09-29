@@ -222,4 +222,39 @@ describe("RestoreDialog", () => {
     expect(screen.getByRole("textbox")).toHaveValue("");
     expect(copyBtn()).toBeDisabled();
   });
+
+  it("şifreli yedekte 403 REQUIRED → parola sorulur; yanlışta 'hatalı' der", async () => {
+    const err = (code: string) => {
+      const e = new Error("403") as Error & { isAxiosError: boolean; response: unknown };
+      e.isAxiosError = true;
+      e.response = { status: 403, data: { message: "x", details: { code } } };
+      return e;
+    };
+    stub({ isError: true, error: err("BACKUP_PASSWORD_REQUIRED") as never });
+    const { unmount } = render();
+    expect(screen.getByLabelText("Yedek parolası")).toBeInTheDocument();
+    expect(screen.queryByText(/Etki önizlemesi yüklenemedi/i)).not.toBeInTheDocument();
+    expect(copyBtn()).toBeDisabled();
+    unmount();
+    stub({ isError: true, error: err("BACKUP_PASSWORD_INVALID") as never });
+    render();
+    expect(screen.getByText(/Yedek parolası hatalı/i)).toBeInTheDocument();
+  });
+
+  it("parola gönderilince alan temizlenir ve sorgu yeni denemeyle çağrılır (parola anahtara girmez)", async () => {
+    const e = new Error("403") as Error & { isAxiosError: boolean; response: unknown };
+    e.isAxiosError = true;
+    e.response = { status: 403, data: { details: { code: "BACKUP_PASSWORD_REQUIRED" } } };
+    stub({ isError: true, error: e as never });
+    render();
+    const input = screen.getByLabelText("Yedek parolası") as HTMLInputElement;
+    await userEvent.type(input, "gizli-parola-123");
+    await userEvent.click(screen.getByRole("button", { name: /Doğrula/i }));
+    expect(input.value).toBe("");
+    const calls = vi.mocked(useRestoreImpact).mock.calls;
+    const last = calls[calls.length - 1]!;
+    expect(last[1]?.attempt).toBe(1);
+    expect(last[1]?.ref.current).toBe("gizli-parola-123");
+    expect(JSON.stringify(last[0])).not.toContain("gizli");
+  });
 });

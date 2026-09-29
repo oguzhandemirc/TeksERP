@@ -8,6 +8,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { Input } from "@/components/ui/input";
+import {
+  BACKUP_PASSWORD_CODES,
+  backupPasswordErrorCode,
+  backupPasswordMessage,
+} from "@/lib/backup-password";
 import { safeFormat } from "@/lib/format";
 import { fmtBytes } from "../ServerStatus/serverHealth";
 import { useBackups } from "../Backups/hooks";
@@ -29,8 +35,11 @@ export function StartCopyCard({
   const start = useStartCopy();
   const [selected, setSelected] = useState<string>(presetBackup ?? "");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Şifreli yedeğin parolası: yalnız bu eylemde yaşar, istek gidince silinir.
+  const [password, setPassword] = useState("");
 
   const files = backups.data?.files ?? [];
+  const encrypted = files.find((f) => f.name === selected)?.encrypted === true;
   const blocked =
     !!listing?.capabilityError ||
     (listing?.capabilities && !listing.capabilities.enabled) ||
@@ -44,20 +53,23 @@ export function StartCopyCard({
     (listing?.job ? "Bir kopya işlemi sürüyor." : null);
 
   function submit() {
-    start.mutate(selected, {
-      onSuccess: (r) => {
-        setConfirmOpen(false);
-        if (r.success) toast.success(r.message);
-        else toast.error(r.message);
+    const pw = encrypted ? password : null;
+    setPassword("");
+    start.mutate(
+      { backupName: selected, password: pw },
+      {
+        onSuccess: (r) => {
+          setConfirmOpen(false);
+          if (r.success) toast.success(r.message);
+          else toast.error(r.message);
+        },
+        onError: (e: unknown) => {
+          setConfirmOpen(false);
+          const invalid = backupPasswordErrorCode(e) === BACKUP_PASSWORD_CODES.INVALID;
+          toast.error(invalid ? "Yedek parolası hatalı." : backupPasswordMessage(e, "Kopya başlatılamadı."));
+        },
       },
-      onError: (e: unknown) => {
-        setConfirmOpen(false);
-        const msg =
-          (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-          "Kopya başlatılamadı.";
-        toast.error(msg);
-      },
-    });
+    );
   }
 
   return (
@@ -80,8 +92,20 @@ export function StartCopyCard({
               </SelectContent>
             </Select>
           </div>
+          {encrypted && (
+            <div className="w-56">
+              <p className="mb-1.5 text-sm font-medium">Yedek parolası</p>
+              <Input
+                type="password"
+                autoComplete="off"
+                aria-label="Yedek parolası"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+          )}
           <Button
-            disabled={!selected || !!blocked || start.isPending}
+            disabled={!selected || !!blocked || start.isPending || (encrypted && !password)}
             onClick={() => setConfirmOpen(true)}
           >
             <DatabaseZap className="mr-1.5 h-4 w-4" />

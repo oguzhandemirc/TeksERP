@@ -17,6 +17,8 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireSystemAccountWhenPresent } from "../middlewares/system-account.middleware";
 import { AuditService } from "../services/audit.service";
+import { resolveBackupPath } from "../services/backup.service";
+import { unlockBackupForRequest } from "../middlewares/backup-password";
 import {
   dropCopy,
   getSwapCommands,
@@ -70,7 +72,8 @@ router.get(
  *     description: >
  *       `CREATE DATABASE` → `pg_restore` → veritabanı ayarlarını replay → doğrula.
  *       **202 döner ve BEKLEMEZ**; ilerleme `GET /api/admin/db-copies` yanıtındaki
- *       `job` alanından yoklanır. Canlı veritabanına HİÇ dokunulmaz.
+ *       `job` alanından yoklanır. Canlı veritabanına HİÇ dokunulmaz. Şifreli yedekte
+ *       yedek parolası `X-Backup-Password` başlığıyla verilir (403 BACKUP_PASSWORD_REQUIRED/INVALID, 429 LOCKED).
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       202: { description: Kopya oluşturuluyor }
@@ -85,7 +88,20 @@ router.post(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = z.object({ backupName: z.string().min(1) }).parse(req.body);
-      const result = await startCopyJob(body.backupName);
+      // Şifreli yedek: yerel anahtar `X-Backup-Password` başlığıyla açılır (403 → panel sorar).
+      const abs = resolveBackupPath(body.backupName);
+      const unlock = abs ? await unlockBackupForRequest(req, abs) : null;
+      if (unlock?.encrypted && !unlock.identity) {
+        res.status(400).json({
+          success: false,
+          message:
+            "Yedek şifreli ve bu sunucuda yerel yedek anahtarı yok — dosyayı müşteri ya da Etkili Yazılım anahtarıyla çözüp düz .dump olarak yedek klasörüne koyun.",
+        });
+        return;
+      }
+      const result = await startCopyJob(body.backupName, {}, {
+        identity: unlock?.encrypted ? unlock.identity : null,
+      });
       res.status(result.started ? 202 : 400).json({
         success: result.started,
         message: result.message,

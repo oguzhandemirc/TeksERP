@@ -129,7 +129,7 @@ import searchRoutes from "./routes/search.routes";
 import mobileUpdateRoutes from "./routes/mobile-update.routes";
 import clientPolicyRoutes from "./routes/client-policy.routes";
 import bossRoutes from "./routes/boss.routes";
-import { NIGHTLY_PREFIX } from "./services/helpers/backup-naming.helper";
+import { isBackupFileName, NIGHTLY_PREFIX } from "./services/helpers/backup-naming.helper";
 import { seriesExhaustionWarnings } from "./services/helpers/series-exhaustion.helper";
 import { masterDataArchiveHealthSnapshot } from "./services/helpers/master-data-health.helper";
 import { readUnvalidatedConstraints } from "./lib/constraint-health";
@@ -405,7 +405,7 @@ function scanBackups(): void {
     let newest: { name: string; mtimeMs: number } | null = null;
     let newestNightly: { name: string; mtimeMs: number } | null = null;
     for (const f of fs.readdirSync(backupDir)) {
-      if (!f.toLowerCase().endsWith(".dump")) continue;
+      if (!isBackupFileName(f)) continue; // düz .dump + şifreli .dump.tkenc; .part görünmez
       const st = fs.statSync(path.join(backupDir, f));
       if (!newest || st.mtimeMs > newest.mtimeMs) newest = { name: f, mtimeMs: st.mtimeMs };
       if (f.startsWith(NIGHTLY_PREFIX) && (!newestNightly || st.mtimeMs > newestNightly.mtimeMs)) {

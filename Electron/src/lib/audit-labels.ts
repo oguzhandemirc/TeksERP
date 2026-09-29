@@ -258,6 +258,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   BACKUP_FAILED: "Yedekleme başarısız",
   BACKUP_DOWNLOAD: "Yedek indirildi",
   BACKUP_RESTORE_PREVIEW: "Geri yükleme önizlemesi",
+  BACKUP_PASSWORD_FAILED: "Hatalı yedek parolası",
   OFFSITE_REMOTE_AUTHORIZED: "Dış kopya yetkilendirildi",
 
   // ── SYSTEM · kopyaya geri yükleme ──

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ClipboardCopy } from "lucide-react";
 import {
@@ -13,6 +13,13 @@ import { Button } from "@/components/ui/button";
 import { PreviewErrorBlock } from "@/components/forms/PreviewErrorBlock";
 import { matchesConfirmation } from "@/components/forms/TypeToConfirm";
 import { copyText } from "@/lib/clipboard";
+import { Callout } from "@/components/ui/callout";
+import {
+  BACKUP_PASSWORD_CODES,
+  backupPasswordErrorCode,
+  backupPasswordMessage,
+} from "@/lib/backup-password";
+import { BackupPasswordPrompt } from "./BackupPasswordPrompt";
 import { restoreCommand, type BackupListing } from "./service";
 import { useRestoreImpact } from "./hooks";
 import { RestoreImpactSummary } from "./RestoreImpactSummary";
@@ -42,14 +49,21 @@ export function RestoreDialog({
   onClose: () => void;
 }) {
   const open = name !== null;
-  const query = useRestoreImpact(open ? name : null);
+  // Şifreli yedek: parola ref'te bir istek boyunca yaşar, sorgu okuyunca siler.
+  const passwordRef = useRef<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const query = useRestoreImpact(open ? name : null, { ref: passwordRef, attempt });
   const impact = query.data;
   const [typed, setTyped] = useState("");
+  const pwCode = query.isError ? backupPasswordErrorCode(query.error) : null;
+  const asksPassword =
+    pwCode === BACKUP_PASSWORD_CODES.REQUIRED || pwCode === BACKUP_PASSWORD_CODES.INVALID;
 
   // Her açılışta / dosya değişiminde onay metnini SIFIRLA — aksi halde önceki
   // onay farklı bir hedef için geçerli sayılır.
   useEffect(() => {
     if (open) setTyped("");
+    passwordRef.current = null;
   }, [open, name]);
 
   const db = impact?.restoreTarget?.database ?? "";
@@ -66,7 +80,9 @@ export function RestoreDialog({
     }
     await copyText(cmd);
     toast.success(
-      "Komut bloğu kopyalandı. Sunucuda yönetici PowerShell'de çalıştırın; şifre satırını doldurmayı unutmayın.",
+      impact?.encryption?.fileEncrypted
+        ? "Komut bloğu kopyalandı. Sunucuda yönetici PowerShell'de çalıştırın; şifre satırını doldurun — yedek parolası o pencerede ayrıca sorulur."
+        : "Komut bloğu kopyalandı. Sunucuda yönetici PowerShell'de çalıştırın; şifre satırını doldurmayı unutmayın.",
     );
     onClose();
   }
@@ -89,7 +105,24 @@ export function RestoreDialog({
             </p>
           )}
 
-          {query.isError && (
+          {asksPassword && (
+            <BackupPasswordPrompt
+              invalid={pwCode === BACKUP_PASSWORD_CODES.INVALID}
+              pending={query.isFetching}
+              onSubmit={(pw) => {
+                passwordRef.current = pw;
+                setAttempt((n) => n + 1);
+              }}
+            />
+          )}
+
+          {query.isError && pwCode === BACKUP_PASSWORD_CODES.LOCKED && (
+            <Callout tone="danger">
+              {backupPasswordMessage(query.error, "Çok fazla hatalı yedek parolası denemesi.")}
+            </Callout>
+          )}
+
+          {query.isError && !pwCode && (
             <PreviewErrorBlock
               message="Bu yedeğe dönüldüğünde ne kaybedileceği hesaplanamadı — önizleme görülmeden geri yükleme komutu üretilmez."
               onRetry={() => void query.refetch()}
@@ -99,6 +132,13 @@ export function RestoreDialog({
 
           {impact && !query.isError && (
             <>
+              {impact.encryption?.fileEncrypted && impact.encryption.unlocked && (
+                <Callout tone="info">
+                  Şifreli yedek — yedek parolasıyla açıldı ve içeriği doğrulandı. Komut bloğu yedeği
+                  önce geçici bir kopyaya çözer; parola sunucu penceresinde ayrıca sorulur ve
+                  panoya yazılmaz.
+                </Callout>
+              )}
               <RestoreImpactSummary impact={impact} />
               <RestoreImpactCounts impact={impact} />
               <RestoreAuditDelta audit={impact.audit} />

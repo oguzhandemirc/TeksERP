@@ -15,6 +15,8 @@
 // dayandığı invariant'tır — değiştirilirse güvenlik yedeği bir gün yok olur.
 // =============================================================================
 
+import { ENCRYPTED_SUFFIX } from "../../lib/backup-crypto/format";
+
 export const NIGHTLY_PREFIX = "tekserp_";
 export const PREMIGRATE_PREFIX = "premigrate_";
 export const PRE_RESTORE_PREFIX = "pre-restore_";
@@ -33,9 +35,48 @@ export function safetyBackupName(now: Date): string {
   return `${PRE_RESTORE_PREFIX}${stamp(now)}.dump`;
 }
 
+// =============================================================================
+// İki biçim: düz `.dump` ve şifreli `.dump.tkenc` (lib/backup-crypto). Yedek dosyası
+// soran HER yüzey bu yüklemlerden geçer — `.dump` ile bitmeyi elle yazan yüzey şifreli
+// yedeği sessizce görmez olur. `.part` ile biten yarım dosya hiçbirine UYMAZ.
+// =============================================================================
+const PLAIN_EXT = ".dump";
+const ENCRYPTED_EXT = `${PLAIN_EXT}${ENCRYPTED_SUFFIX}`;
+
+/** Yedek dosyası mı (düz ya da şifreli)? Yarım (`.part`) ve kuyruklu adlar HAYIR. */
+export function isBackupFileName(name: string): boolean {
+  const n = name.toLowerCase();
+  return n.endsWith(PLAIN_EXT) || n.endsWith(ENCRYPTED_EXT);
+}
+
+/** Adı şifreli yedek biçiminde mi? (İçerik ayrıca sihirli baytla doğrulanır.) */
+export function isEncryptedBackupName(name: string): boolean {
+  return name.toLowerCase().endsWith(ENCRYPTED_EXT);
+}
+
+/** Şifreli adın düz karşılığı (`x.dump.tkenc` → `x.dump`); düz ad olduğu gibi döner. */
+export function plainBackupName(name: string): string {
+  return isEncryptedBackupName(name) ? name.slice(0, -ENCRYPTED_SUFFIX.length) : name;
+}
+
+/** Şifreli yedeğin adı (`x.dump` → `x.dump.tkenc`). */
+export function encryptedBackupName(plainName: string): string {
+  return `${plainName}${ENCRYPTED_SUFFIX}`;
+}
+
+/**
+ * Şifreli yedeğin GEÇİCİ çözülmüş kopyası: `x.dump.coz-<etiket>.part`. `.part` ile
+ * bittiği için hiçbir liste/süpürücü onu yedek saymaz ve bayat kalırsa `.part`
+ * budaması siler. Etiket aynı dosyanın eşzamanlı iki çözümünü ayırır.
+ */
+export function decryptedTempName(name: string, tag: string): string {
+  return `${plainBackupName(name)}.coz-${tag}.part`;
+}
+
 // Sona çapalı: üç ön eki de yakalar (`premigrate_1.5.0_...` gibi araya sürüm
-// giren biçim dahil), `....dump.bak` gibi kuyruklu adları REDDEDER.
-const STAMP_RE = /_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.dump$/i;
+// giren biçim dahil), `....dump.bak` gibi kuyruklu adları REDDEDER; şifreli
+// `.dump.tkenc` aynı damgayı taşır.
+const STAMP_RE = /_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.dump(?:\.tkenc)?$/i;
 /** Veritabanı adları için aynı damga, `.dump` uzantısı OLMADAN (sona çapalı). */
 const DB_STAMP_RE = /_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/;
 

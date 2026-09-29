@@ -1,5 +1,6 @@
 import apiClient from "@/services/apiClient";
 import { withSettingsPassword } from "@/lib/settings-password";
+import { backupPasswordHeaders } from "@/lib/backup-password";
 import type { RestoreImpact, RestoreImpactResponse } from "./restore-impact.types";
 
 /** Ön ekten türeyen yedek türü — backend bildirir (prefix mantığı tek kaynakta). */
@@ -10,6 +11,18 @@ export interface BackupFileInfo {
   sizeBytes: number;
   time: string;
   kind: BackupKind;
+  /** Şifreli yedek (`.tkenc`) — geri yükleme/kopya yedek parolası ister. Eski sunucu göndermez. */
+  encrypted?: boolean;
+}
+
+/** Yedek şifreleme özeti — anahtar baytı ve parola TAŞIMAZ. */
+export interface BackupEncryptionSummary {
+  state: "kapali" | "acik" | "gecersiz";
+  keyDir: string | null;
+  recipients: Array<{ ad: string; parmakIzi: string }>;
+  localKey: boolean;
+  problems: string[];
+  warnings: string[];
 }
 
 export interface BackupRestoreTarget {
@@ -48,6 +61,8 @@ export interface BackupListing {
    * Opsiyonel: eski sunucu göndermez → kumanda bugünkü gibi açık kalır.
    */
   scheduleEnabled?: boolean;
+  /** Yedek şifreleme durumu. Opsiyonel: eski sunucu göndermez → şifreleme yok sayılır. */
+  encryption?: BackupEncryptionSummary;
 }
 
 /** Saf veri erişimi (React'e bağlı değil) — hook'lar `hooks.ts`te. */
@@ -58,10 +73,11 @@ export async function fetchBackups(): Promise<BackupListing> {
   return res.data;
 }
 
-export async function fetchRestoreImpact(name: string): Promise<RestoreImpact> {
+/** Şifreli yedekte `password` yerel anahtarı açar (yalnız başlıkta gider). */
+export async function fetchRestoreImpact(name: string, password?: string | null): Promise<RestoreImpact> {
   const res = await apiClient.get<RestoreImpactResponse>(
     `/api/admin/backups/${encodeURIComponent(name)}/restore-impact`,
-    { suppressErrorToast: true },
+    { suppressErrorToast: true, headers: backupPasswordHeaders(password) },
   );
   return res.data.data;
 }
@@ -113,6 +129,11 @@ export async function downloadBackup(name: string): Promise<void> {
  * 4. `Remove-Item Env:PGPASSWORD` ve `pm2 start` KOŞULSUZ ve SONDA. Güvenlik
  *    yedeği başarısızsa DB'ye dokunulmamıştır ama backend duruyordur — mutlaka
  *    geri kalkmalı. Bunları asla `$ok`'a bağlamayın.
+ *
+ * ŞİFRELİ YEDEK (`impact.encryption.fileEncrypted`): güvenlik yedeğinden SONRA
+ * paketteki araç yedeği geçici düz kopyaya çözer — yedek parolası O PENCEREDE
+ * sorulur, bloğa/panoya YAZILMAZ; `pg_restore` kopyayı okur ve kopya sonda
+ * koşulsuz silinir. Şifreleme açıksa güvenlik yedeği de sonda şifrelenir.
  * ---------------------------------------------------------------------------
  */
 export function restoreCommand(
@@ -123,6 +144,11 @@ export function restoreCommand(
   const t = impact?.restoreTarget;
   const safety = impact?.safetyBackup;
   if (!impact || !t || !safety) return null;
+  const enc = impact.encryption;
+  const encrypted = enc?.fileEncrypted === true;
+  // Şifreli yedeği çözecek yol ya da anahtar dizini yoksa komut ÜRETİLMEZ (fail-closed).
+  if (encrypted && (!enc?.decryptedPath || !enc.keyDir)) return null;
+  const sealSafety = enc?.state === "acik" && !!enc.keyDir;
 
   const app = impact.pm2AppName || listing?.pm2AppName || "teks-erp-backend";
   const cwd = impact.backendCwd;
@@ -130,6 +156,25 @@ export function restoreCommand(
   // birleştirmek POSIX sunucuda bozuk yol üretiyordu (`/a/b\c.dump`).
   const file = impact.file.absPath;
   const conn = `-h ${t.host} -p ${t.port} -U ${t.user} -d ${t.database}`;
+  const tool = enc?.toolPath ?? "";
+  const source = encrypted ? "$plain" : file;
+
+  const decryptBlock = encrypted
+    ? [
+        ``,
+        `# 3a) SIFRELI YEDEK - once gecici duz kopyaya coz. Yedek parolasi BU PENCEREDE`,
+        `#     sorulur (komut satirina yazilmaz). Kopya en sonda KOSULSUZ silinir.`,
+        `$plain = "${enc!.decryptedPath}"`,
+        `$LASTEXITCODE = 1`,
+        `if ($ok) { node "${tool}" coz --girdi "${file}" --cikti "$plain" --anahtar-dizini "${enc!.keyDir}" }`,
+        `$ok = $ok -and ($LASTEXITCODE -eq 0) -and (Test-Path "$plain")`,
+        `if ($safeOk -and -not $ok) { Write-Host "SIFRELI YEDEK COZULEMEDI (parola/anahtar) - GERI YUKLEME YAPILMADI." -ForegroundColor Red }`,
+      ]
+    : [];
+  const sealBlock = sealSafety
+    ? [`if ($safeOk) { node "${tool}" sifrele --girdi "$safe" --anahtar-dizini "${enc!.keyDir}" --duzu-sil }`]
+    : [];
+  const cleanupBlock = encrypted ? [`Remove-Item "$plain" -ErrorAction SilentlyContinue`] : [];
 
   // Write-Host metni ASCII: konsol codepage'i 857/850 olabilir, Türkçe bozulur.
   return [
@@ -153,10 +198,12 @@ export function restoreCommand(
     `if ($stopped) { pg_dump ${conn} -Fc -f "$safe" }`,
     `$ok = $stopped -and ($LASTEXITCODE -eq 0) -and (Test-Path "$safe")`,
     `if ($ok) { pg_restore --list "$safe" > $null; $ok = ($LASTEXITCODE -eq 0) }`,
+    `$safeOk = $ok`,
     ``,
     `# 3) YALNIZ guvenlik yedegi dogrulandiysa geri yukle`,
     `if (-not $ok) { Write-Host "GUVENLIK YEDEGI ALINAMADI - GERI YUKLEME YAPILMADI. Disk/yetki/PATH kontrol edin." -ForegroundColor Red }`,
-    `if ($ok) { pg_restore ${conn} --clean --if-exists "${file}" }`,
+    ...decryptBlock,
+    `if ($ok) { pg_restore ${conn} --clean --if-exists "${source}" }`,
     `$restored = $ok -and ($LASTEXITCODE -eq 0)`,
     ``,
     `# 4) SEMA GUNCELLEME - ATLANIRSA SESSIZ BOZULMA`,
@@ -167,6 +214,8 @@ export function restoreCommand(
     `if ($restored) { npx prisma migrate deploy }`,
     ``,
     `# 5) Her durumda: sifreyi temizle, backend'i baslat`,
+    ...sealBlock,
+    ...cleanupBlock,
     `Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue`,
     `pm2 start ${app}`,
   ].join("\n");
