@@ -22,6 +22,11 @@
 #   # Veritabani ZATEN varsa (elle olusturulmus): yonetici parolasi gerekmez.
 #   ... -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbKullanici postgres
 #
+#   # Yedek sifrelemeyi kur (istege bagli; tekrar kosmak guvenli, var olan anahtar ezilmez):
+#   ... -File .\ilk-kurulum.ps1 -YedekSifreleme -YedekMusteriAnahtarCikti E:\musteri-yedek-anahtari.txt
+#   (yerel anahtar YEDEK PAROLASIYLA sarilir - parola terminalde sorulur; musteri anahtarinin
+#    ozel yarisi USB'ye / ekrana BIR KEZ yazilir; runbook: docs/ops/YEDEK-SIFRELEME.md)
+#
 # NE YAPAR: `kur.ps1`in BEKLEDIGI iskeleti kurar - klasorler, pg baglantisi,
 #   veritabani + rol, [dump], DB duzeyi ayarlar, [PostgreSQL sunucu ayarlari],
 #   db-credentials.json, .env, sir dosyalarinin izinleri, pm2, acilis + gece yedegi
@@ -87,13 +92,19 @@ param(
   # "Any" adres bilerek varsayilan DEGIL (bkz. Tailscale-In uyarisi, runbook §2.2).
   [int]$ApiPort = 4000,
   [ValidateSet("Domain", "Private", "Public")][string[]]$ApiAgProfili = @("Domain", "Private"),
-  [string[]]$ApiIzinliAdres = @("LocalSubnet")
+  [string[]]$ApiIzinliAdres = @("LocalSubnet"),
+  # Yedek sifreleme (.tkenc) - verilmezse yedekler bugunku gibi DUZ kalir.
+  [switch]$YedekSifreleme,
+  # Musteri anahtarinin OZEL yarisinin yazilacagi dosya (USB). Verilmezse ekrana bir kez basilir.
+  [string]$YedekMusteriAnahtarCikti,
+  # Etkili Yazilim alicisinin ACIK anahtar dosyasi (tkpub1:...). Tore sonrasi da eklenebilir.
+  [string]$YedekEtkiliAcikAnahtar
 )
 $ErrorActionPreference = "Stop"
 
 # Adimlar kendiliginden numaralanir; adim eklenince yalniz toplam degisir.
 $script:adimNo = 0
-$script:adimToplam = 13
+$script:adimToplam = 14
 function Adim($m) { $script:adimNo++; Write-Host ""; Write-Host "[$($script:adimNo)/$($script:adimToplam)] $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  + $m" -ForegroundColor Green }
 function Uyar($m) { Write-Host "  ! $m" -ForegroundColor Yellow }
@@ -536,12 +547,66 @@ if ((Test-Path $envDosya) -and -not $WebPanelKapali -and -not (Select-String -Pa
   Uyar "  acmak icin .env'e ekle:  WEB_DIST_DIR=`"$(($Kok -replace '\\', '/').TrimEnd('/'))/app/dist-web`"  (sonra pm2 restart)"
 }
 
+# --- Yedek sifreleme (istege bagli) ------------------------------------------
+# Uc alici: yerel (ozel yarisi YEDEK PAROLASIYLA sarili, sunucuda - rutin geri yukleme),
+# musteri (ozel yarisi USB + kagit - sunucu olurse bagimsiz erisim), Etkili Yazilim
+# (cevrimdisi). Anahtar dizini yedek klasorunun DISINDA: offsite supurucu backups\'u
+# makine disina kopyalar. Var olan anahtar EZILMEZ; parola argumana/loga girmez (arac sorar).
+Adim "Yedek sifreleme (istege bagli)..."
+$anahtarDizini = "$Kok\yedek-anahtar"
+$sifreArac = Join-Path (Join-Path (Join-Path $PSScriptRoot "dist") "tools") "yedek-sifrele.cjs"
+if (-not $YedekSifreleme) {
+  if (Test-Path $anahtarDizini) { Ok "anahtar dizini var: $anahtarDizini (yedekler sifreleniyor)" }
+  else { Uyar "verilmedi - yedekler DUZ .dump (bugunku davranis). Kurmak icin: -YedekSifreleme" }
+} elseif (-not (Test-Path $sifreArac)) {
+  Acik "yedek-sifrele araci yok ($sifreArac) - betigi PAKETIN kokunden kos"
+} elseif (-not (Get-Command node.exe -ErrorAction SilentlyContinue)) {
+  Acik "node.exe bulunamadi - yedek sifreleme KURULMADI (once Node.js 22)"
+} else {
+  New-Item -ItemType Directory -Path $anahtarDizini -Force | Out-Null
+  if (Test-Path "$anahtarDizini\yerel.tkkey") {
+    Uyar "yerel anahtar zaten var, DOKUNULMADI: $anahtarDizini\yerel.tkkey"
+  } elseif (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+    Acik "yedek parolasi terminal ister - yerel anahtar KURULMADI (etkilesimli pencerede tekrar kos)"
+  } else {
+    Write-Host "  Yedek parolasi (en az 10 karakter): musteri yoneticisinde VE Etkili Yazilim kasasinda saklanacak."
+    & node $sifreArac anahtar-uret --ad yerel --dizin $anahtarDizini --parolali
+    if ($LASTEXITCODE -eq 0) { Ok "yerel anahtar: $anahtarDizini\yerel.tkpub + yerel.tkkey (parolali)" }
+    else { Acik "yerel anahtar uretilemedi (kod $LASTEXITCODE)" }
+  }
+  if (Test-Path "$anahtarDizini\musteri.tkpub") {
+    Uyar "musteri anahtari zaten var, DOKUNULMADI: $anahtarDizini\musteri.tkpub"
+  } else {
+    if ($YedekMusteriAnahtarCikti) {
+      & node $sifreArac anahtar-uret --ad musteri --dizin $anahtarDizini --ozel-cikti $YedekMusteriAnahtarCikti
+    } else {
+      & node $sifreArac anahtar-uret --ad musteri --dizin $anahtarDizini
+    }
+    if ($LASTEXITCODE -eq 0) {
+      Ok "musteri anahtari: acik yarisi $anahtarDizini\musteri.tkpub"
+      Write-Host "  !!! MUSTERI OZEL ANAHTARI $(if ($YedekMusteriAnahtarCikti) { "$YedekMusteriAnahtarCikti dosyasinda" } else { 'yukarida ekrana basildi' }) - KAGIDA yaz, USB'yi musteriye teslim et, SUNUCUDA BIRAKMA !!!" -ForegroundColor Yellow
+    } else { Acik "musteri anahtari uretilemedi (kod $LASTEXITCODE)" }
+  }
+  if ($YedekEtkiliAcikAnahtar) {
+    if (Test-Path "$anahtarDizini\etkili.tkpub") { Uyar "etkili.tkpub zaten var, DOKUNULMADI" }
+    elseif (-not (Test-Path $YedekEtkiliAcikAnahtar)) { Acik "Etkili Yazilim acik anahtari bulunamadi: $YedekEtkiliAcikAnahtar" }
+    else { Copy-Item $YedekEtkiliAcikAnahtar "$anahtarDizini\etkili.tkpub"; Ok "Etkili Yazilim alicisi eklendi" }
+  } elseif (-not (Test-Path "$anahtarDizini\etkili.tkpub")) {
+    Acik "Etkili Yazilim alicisi YOK - tore sonrasi acik anahtari $anahtarDizini\etkili.tkpub olarak koy"
+  }
+  if ((Test-Path $envDosya) -and -not (Select-String -Path $envDosya -Pattern '^\s*BACKUP_KEY_DIR\s*=' -Quiet)) {
+    Add-Content -Path $envDosya -Value "BACKUP_KEY_DIR=`"$(($anahtarDizini -replace '\\', '/'))`"" -Encoding UTF8
+    Ok ".env: BACKUP_KEY_DIR eklendi (backend'in gordugu an: pm2 restart)"
+  }
+  & node $sifreArac durum --anahtar-dizini $anahtarDizini
+}
+
 # --- Sir dosyalarinin izinleri -------------------------------------------------
 # .env (DB parolasi + JWT_SECRET), db-credentials.json, gece yedekleri (fabrikanin TUM
 # verisi) ve rclone.conf (Drive jetonu) - hepsi kokun genis mirasini aliyordu.
 # Idempotent: her kosumda daraltilir ve OLCULUR (izin daraltilamadiysa acik kalir).
 Adim "Sir dosyalarinin izinleri (yalniz SYSTEM + Administrators)..."
-$sirYollari = @("$Kok\app\.env", "$Kok\pg-setup", "$Kok\backups", "$Kok\rclone.conf")
+$sirYollari = @("$Kok\app\.env", "$Kok\pg-setup", "$Kok\backups", "$Kok\rclone.conf", "$Kok\yedek-anahtar")
 foreach ($y in $sirYollari) {
   if (-not (Test-Path $y)) { continue }
   SirIzniDaralt $y

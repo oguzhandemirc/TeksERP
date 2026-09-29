@@ -261,17 +261,49 @@ for (const yol of SUNUCU_PS1) {
     ilk.some((k) => k.includes('[string]$YedekSaati = "03:00"')));
   const yarim = yed.findIndex((k) => k.includes('"-f", $yarim'));
   const liste = yed.findIndex((k) => k.includes('@("--list", $yarim)'));
-  const tasi = yed.findIndex((k) => k.trim().startsWith("Move-Item $yarim $hedef"));
+  // Yayın iki biçimli: şifreleme yoksa/düşerse `.part` düz adı alır (koşullu satır).
+  const tasi = yed.findIndex((k) => /(?:^\s*|\{\s*)Move-Item \$yarim \$hedef\b/.test(k));
   const sakla = yed.findIndex((k) => k.trim() === "Sakla $yedekDir $desen");
   check("§10c ⭐ yedekle.ps1: dökümü `.part`a yazar → `pg_restore --list` → ancak SONRA `.dump` adı → ancak SONRA saklama",
     yarim >= 0 && liste > yarim && tasi > liste && sakla > tasi,
     `f ${yarim + 1} · list ${liste + 1} · taşı ${tasi + 1} · sakla ${sakla + 1}`);
   check("§10d yedekle.ps1 saklaması en yeni N'i yaşına bakmadan korur (3), 30 gün, yalnız kendi desenine dokunur",
     yed.some((k) => k.includes("Select-Object -Skip $EnAzTut")) && yed.some((k) => k.includes("[int]$EnAzTut = 3")) &&
-      yed.some((k) => k.includes("[int]$SaklamaGun = 30")) && yed.some((k) => k.includes("_\\d{8}_\\d{6}\\.dump$")));
+      yed.some((k) => k.includes("[int]$SaklamaGun = 30")) && yed.some((k) => k.includes("_\\d{8}_\\d{6}\\.dump(\\.tkenc)?$")));
+  // §10f — yedek şifreleme (.tkenc): doğrulanmış `.part` şifrelenir, düz yayınlanmaz;
+  //   şifreleme niyeti varken düşerse düz yedek KORUNUR ama ikinci hedefe gitmez, görev kırmızı.
+  const sifrele = yed.findIndex((k) => /NativeKos \$node @\(\$sifreArac, "sifrele", "--girdi", \$yarim/.test(k));
+  check("§10f ⭐ yedekle.ps1: şifreleme `pg_restore --list`ten SONRA, yayından ve saklamadan ÖNCE; girdi doğrulanmış `.part`",
+    sifrele > liste && sifrele < tasi && tasi < sakla, `list ${liste + 1} · şifrele ${sifrele + 1} · taşı ${tasi + 1}`);
+  check("§10g ⭐ yedekle.ps1: anahtar dizini yoksa şifreleme YOK (bugünkü davranış); şifrelenemeyen düz yedek ikinci hedefe gitmez, çıkış 3",
+    yed.some((k) => k.includes("if (Test-Path $AnahtarDizini) {")) &&
+      yed.some((k) => k.includes("if ($IkinciHedef -and $sifreHatasi) {")) &&
+      yed.some((k) => k.includes("$cikis = if ($sifreHatasi) { 3 } else { 0 }")));
   check("§10e pm2-boot.cmd: PM2_HOME kur.ps1'inkiyle aynı (<kök>\\pm2-home), `pm2 resurrect`, tamamı ASCII",
     cmd.includes('set "PM2_HOME=%KOK%pm2-home"') && cmd.includes('pm2\\node_modules\\.bin\\pm2.cmd" resurrect') &&
       !/[^\x00-\x7F]/.test(cmd));
+}
+
+// §10h — premigrate yedeği ve ilk kurulum şifrelemesi: parola HİÇBİR betikte argümana
+//   yazılmaz (araç terminalde sorar); kur.ps1 premigrate'i aynı araçla şifreler ve -GeriAl
+//   şifreli yedeği çözdürür; ilk-kurulum adımı isteğe bağlıdır ve anahtar ezmez.
+{
+  const kur = psTara(readFileSync(join(KOK, "deploy/kur.ps1"), "utf8")).satirlar.map((s) => s.kod);
+  const ilk = psTara(readFileSync(join(KOK, "deploy/ilk-kurulum.ps1"), "utf8")).satirlar.map((s) => s.kod);
+  const yed = psTara(readFileSync(join(KOK, "deploy/yedekle.ps1"), "utf8")).satirlar.map((s) => s.kod);
+  const parolaArg = [...kur, ...ilk, ...yed].filter((k) => /yedek-sifrele|\$sifreArac|\$arac\b/.test(k) && /--parola(?!li)/.test(k));
+  check("§10h ⭐ yedek parolası hiçbir betikte araca ARGÜMAN olarak verilmez", parolaArg.length === 0, parolaArg.join(" | "));
+  const liste = kur.findIndex((k) => k.includes('--list $dump > $null'));
+  const sifre = kur.findIndex((k) => /& node \$sifreArac sifrele --girdi \$dump --anahtar-dizini \$anahtarDizini --duzu-sil/.test(k));
+  const esik = kur.findIndex((k) => k.includes("& node $prismaCli migrate deploy"));
+  check("§10i ⭐ kur.ps1: premigrate yedeği doğrulandıktan SONRA, migration eşiğinden ÖNCE şifrelenir",
+    liste >= 0 && sifre > liste && esik > sifre, `list ${liste + 1} · şifrele ${sifre + 1} · eşik ${esik + 1}`);
+  check("§10j kur.ps1 -GeriAl şifreli premigrate'i çözdürür (araç sorar, `--anahtar-dizini`)",
+    kur.some((k) => k.trim() === "PremigrateCoz") && kur.some((k) => /& node \$arac coz --girdi \$son\.FullName/.test(k)));
+  check("§10k ilk-kurulum: `-YedekSifreleme` isteğe bağlı, var olan yerel anahtar EZİLMEZ, anahtar dizini sır izniyle daraltılır",
+    ilk.some((k) => k.includes("[switch]$YedekSifreleme")) &&
+      ilk.some((k) => k.includes("yerel anahtar zaten var, DOKUNULMADI")) &&
+      ilk.some((k) => k.includes('$sirYollari = @(') && k.includes('"$Kok\\yedek-anahtar"')));
 }
 
 // §11 — web paneli + API güvenlik duvarı (bulgu 13, 18). `dist-web` pakette ama

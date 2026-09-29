@@ -211,6 +211,8 @@ $eskiKlon  = "$kok\tekserp\Teks-Erp"      # ilk gecis: git klonundan gelen kurul
 $pm2       = "$kok\pm2\node_modules\.bin\pm2.cmd"
 $pgbin     = "$kok\pgsql\bin"
 $backupDir = "$kok\backups"
+# Yedek sifreleme anahtar dizini (yedekle.ps1 ile ayni varsayilan; BACKUP_DIR DISINDA).
+$anahtarDizini = "$kok\yedek-anahtar"
 $credFile  = "$kok\pg-setup\db-credentials.json"
 $uygulama  = $UygulamaAdi
 # Operatore basilan komutlar: cipla `kur.ps1` yurutme ilkesine takilir (baslik).
@@ -283,6 +285,38 @@ if ($env:SSH_CONNECTION -or $env:SSH_CLIENT) {
 }
 
 # =============================================================================
+# SIFRELI PREMIGRATE YEDEGINI COZ (-GeriAl sonunda) - veri geri donusu icin
+# =============================================================================
+# Kod geri alinir, DB alinmaz (yukarida). Veri de geri donecekse en yeni premigrate_
+# yedegi SIFRELIYSE once duz kopyaya cozulur: yedek parolasi ARACIN KENDISI tarafindan
+# terminalde gizli sorulur - argv'ye, gecmise, loga GIRMEZ. Arac geri alinan eski
+# surumde olmayabilir: once app\, sonra kenara alinan app.basarisiz-* denenir.
+function PremigrateCoz {
+  $son = Get-ChildItem $backupDir -File -ErrorAction SilentlyContinue |
+         Where-Object { $_.Name -match '^premigrate_.*\.dump(\.tkenc)?$' } |
+         Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $son -or $son.Name -notlike "*.tkenc") { return }
+  $duz = Join-Path $backupDir (($son.Name -replace '\.tkenc$', '') + ".coz-geri.part")
+  $araclar = @("$appDir\dist\tools\yedek-sifrele.cjs") + @(Get-ChildItem "$kok\app.basarisiz-*" -Directory -ErrorAction SilentlyContinue |
+               Sort-Object Name -Descending | ForEach-Object { Join-Path $_.FullName "dist\tools\yedek-sifrele.cjs" })
+  $arac = $araclar | Where-Object { Test-Path $_ } | Select-Object -First 1
+  Write-Host ""
+  Uyar "Son premigrate yedegi SIFRELI: $($son.Name)"
+  if (-not $arac) { Uyar "yedek-sifrele araci bulunamadi - musteri anahtariyla baska makinede coz (runbook: YEDEK-SIFRELEME)."; return }
+  $komut = "node `"$arac`" coz --girdi `"$($son.FullName)`" --cikti `"$duz`" --anahtar-dizini `"$anahtarDizini`""
+  if ($Zorla -or [Console]::IsInputRedirected) { Write-Host "  Cozmek icin (parola terminalde sorulur): $komut"; return }
+  if ((Read-Host "  Veri geri donusu icin simdi cozulsun mu? Yedek parolasi sorulur (e/h)") -ne 'e') { Write-Host "  Sonra cozmek icin: $komut"; return }
+  & node $arac coz --girdi $son.FullName --cikti $duz --anahtar-dizini $anahtarDizini
+  if ($LASTEXITCODE -eq 0 -and (Test-Path $duz)) {
+    Ok "cozuldu: $duz"
+    Write-Host "  Geri yukleme (backend DURDURULMUS, yonetici pencere): pg_restore -h localhost -p <port> -U <kullanici> -d <db> --clean --if-exists `"$duz`""
+    Write-Host "  Bitince DUZ kopyayi sil: Remove-Item `"$duz`""
+  } else {
+    Uyar "cozulemedi (kod $LASTEXITCODE) - parola/anahtar. Musteri anahtariyla: node `"$arac`" coz --girdi `"$($son.FullName)`" --cikti `"$duz`" --anahtar <musteri.tksec>"
+  }
+}
+
+# =============================================================================
 # GERI ALMA MODU
 # =============================================================================
 if ($GeriAl) {
@@ -348,6 +382,7 @@ if ($GeriAl) {
   Write-Host ""
   Uyar "DB migration'lari GERI ALINMADI. Eski kod yeni semayla kosuyor."
   Uyar "Uyumsuzluk varsa yedekten restore gerekir: $backupDir"
+  PremigrateCoz
   exit 0
 }
 
@@ -522,6 +557,19 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $dump)) { $env:PGPASSWORD=""; Fail "
 & "$pgbin\pg_restore.exe" --list $dump > $null
 if ($LASTEXITCODE -ne 0) { $env:PGPASSWORD=""; Fail "Yedek DOGRULANAMADI (bozuk dump) -> kurulum IPTAL." }
 $env:PGPASSWORD = ""
+# Sifreleme (anahtar dizininde alici varsa): gece yedegiyle ayni arac ve kural. Sifreleme
+# duserse kurulum DURMAZ - migration oncesi dogrulanmis bir geri donus noktasi sifresizden
+# iyidir; duz dosya yerel kalir, offsite supurucusu sifreleme niyetinde onu kopyalamaz.
+if ((Test-Path $anahtarDizini) -and @(Get-ChildItem $anahtarDizini -Filter "*.tkpub" -File -ErrorAction SilentlyContinue).Count -gt 0) {
+  $sifreArac = "$temp\dist\tools\yedek-sifrele.cjs"
+  if (-not (Test-Path $sifreArac)) {
+    Uyar "yedek-sifrele araci pakette yok - premigrate yedegi DUZ kaldi: $dump"
+  } else {
+    & node $sifreArac sifrele --girdi $dump --anahtar-dizini $anahtarDizini --duzu-sil
+    if ($LASTEXITCODE -eq 0 -and (Test-Path "$dump.tkenc") -and -not (Test-Path $dump)) { $dump = "$dump.tkenc" }
+    else { Uyar "premigrate yedegi SIFRELENEMEDI (kod $LASTEXITCODE) - DUZ kaldi: $dump" }
+  }
+}
 Ok "$([System.IO.Path]::GetFileName($dump))  ($([math]::Round((Get-Item $dump).Length/1MB,2)) MB) - dogrulandi, rotasyon disi"
 
 # --- [4/9] Uygulamayi durdur ------------------------------------------------
@@ -732,6 +780,10 @@ if ($LASTEXITCODE -ne 0) {
   Write-Host "    Durumu gor :  cd $appDir ; node node_modules\prisma\build\index.js migrate status"
   Write-Host "    Kodu geri al:  $kurKomut -GeriAl"
   Write-Host "    DB'yi geri al: pg_restore ... $dump   (KURULUM dokumanina bak)"
+  if ($dump -like "*.tkenc") {
+    Write-Host "    (yedek SIFRELI - once coz, parola terminalde sorulur:"
+    Write-Host "     node `"$appDir\dist\tools\yedek-sifrele.cjs`" coz --girdi `"$dump`" --cikti `"$($dump -replace '\.tkenc$','').coz-elle.part`" --anahtar-dizini `"$anahtarDizini`")"
+  }
   KokeDon
   exit 1
 }
@@ -848,10 +900,11 @@ Write-Host "  API      : $($h.status)   DB: $($h.db)   surum: $($h.version)"
 # /api/admin/health'e tasindi) - eski satir her deploy'da BOS basiyor ve operatore
 # "yedek yok" diye okunuyordu. Gece yedegi (tekserp_*.dump, rotasyona giren) klasorden okunur;
 # bu kurulumun premigrate_ dump'i ayrica asagida "veri:" satirinda.
-$geceYedegi = Get-ChildItem $backupDir -Filter "tekserp_*.dump" -ErrorAction SilentlyContinue |
+$geceYedegi = Get-ChildItem $backupDir -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -match '^tekserp_.*\.dump(\.tkenc)?$' } |
               Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($geceYedegi) { Write-Host "  Son gece yedegi: $($geceYedegi.Name)  ($($geceYedegi.LastWriteTime.ToString('yyyy-MM-dd HH:mm')))" }
-else             { Write-Host "  Son gece yedegi: YOK - $backupDir icinde tekserp_*.dump bulunamadi (Gorev Zamanlayici TeksERP-DB-Backup'a bak)" -ForegroundColor Yellow }
+else             { Write-Host "  Son gece yedegi: YOK - $backupDir icinde tekserp_*.dump(.tkenc) bulunamadi (Gorev Zamanlayici TeksERP-DB-Backup'a bak)" -ForegroundColor Yellow }
 Write-Host "  Kurulum  : $appDir"
 if ($m -and $m.araclar) {
   # Surum notunun YAYIN GUNU adimlari buradan kosulur (pakette tsx/scripts yok).
