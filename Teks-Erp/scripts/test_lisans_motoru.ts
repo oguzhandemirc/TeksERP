@@ -59,7 +59,6 @@ import {
   getLicenseInstallationId,
   getLicenseSnapshot,
   getMeasuredFingerprint,
-  licenseHealthBlock,
   peekObservationCounters,
   persistAccumulation,
   pollFailedRecently,
@@ -67,6 +66,7 @@ import {
   setMeasuredFingerprint,
   invalidateLicenseSnapshot,
 } from "../src/lib/license/runtime";
+import { licenseHealthBlock } from "../src/lib/license/license-health";
 import { applyModuleCeiling } from "../src/lib/license/module-ceiling";
 import { runWithRequestContext } from "../src/lib/request-context";
 import { setEgressTrustForTests } from "../src/lib/http-egress";

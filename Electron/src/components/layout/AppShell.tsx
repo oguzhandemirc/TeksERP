@@ -17,6 +17,7 @@ import { useServerHeartbeat } from "@/hooks/useServerClock";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import { useExpiryAutoLogout } from "@/hooks/useExpiryAutoLogout";
 import { useLicenseRelay } from "@/hooks/useLicenseRelay";
+import { usePdfLicenseWatermark } from "@/hooks/usePdfLicenseWatermark";
 import { useScannerWedge } from "@/hooks/useScannerWedge";
 import { useDeviceScanner } from "@/hooks/useDeviceScanner";
 import { useDeviceAnnounce } from "@/hooks/useDeviceAnnounce";
@@ -73,6 +74,7 @@ export function AppShell() {
   useExpiryAutoLogout();
   // Backend satıcıya çıkamıyorsa imzalı lisans isteğini bu bilgisayarın ağından taşır.
   useLicenseRelay();
+  usePdfLicenseWatermark();
 
   const toggleSidebar = () =>
     setCollapsed((c) => {

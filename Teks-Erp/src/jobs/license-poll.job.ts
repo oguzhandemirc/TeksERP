@@ -11,7 +11,13 @@
 import { getCachedInstallationIdentity, whenIdentityReady } from "./installation-identity.job";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
-import { pollLicenseOnce, refreshLicenseDbFacts, refreshLicenseFingerprint, type PollOutcome } from "../services/license-sync.service";
+import {
+  pollLicenseOnce,
+  refreshLicenseDbFacts,
+  refreshLicenseFingerprint,
+  refreshLicenseIntegrity,
+  type PollOutcome,
+} from "../services/license-sync.service";
 import { evaluateLicenseTransitions, licenseHousekeeping } from "../services/license-trail.service";
 import { egressTransport, type VendorTransport } from "../services/helpers/license-wire.helper";
 import { getLicenseConfig, getLicenseSnapshot, setLicenseEngineStatus, setNextPollAt } from "../lib/license/runtime";
@@ -159,6 +165,7 @@ async function bootstrap(): Promise<void> {
   } catch (err) {
     uyari("lisans", "parmak izi ölçülemedi (günlük tazelemede yeniden)", err instanceof Error ? err.message : err);
   }
+  await refreshIntegrityQuietly();
   if (stale()) return;
   evaluateLicenseTransitions();
   housekeepingTimer = setInterval(() => {
@@ -167,7 +174,11 @@ async function bootstrap(): Promise<void> {
       .finally(() => licenseHousekeeping());
   }, HOUSEKEEPING_INTERVAL_MS);
   housekeepingTimer.unref();
-  fingerprintTimer = setInterval(() => void refreshLicenseFingerprint().catch(() => undefined), FINGERPRINT_REFRESH_MS);
+  fingerprintTimer = setInterval(() => {
+    void refreshLicenseFingerprint()
+      .catch(() => undefined)
+      .finally(() => void refreshIntegrityQuietly());
+  }, FINGERPRINT_REFRESH_MS);
   fingerprintTimer.unref();
   engineRunning = true;
   setLicenseEngineStatus("CALISIYOR");
@@ -176,6 +187,15 @@ async function bootstrap(): Promise<void> {
   const vendor = vendorUrl ? `${new URL(vendorUrl).host} (${STARTUP_VENDOR.source})` : `yok (${STARTUP_VENDOR.source})`;
   if (STARTUP_VENDOR.source === "gecersiz") uyari("lisans", "LICENSE_SERVER_URL biçimsiz (yalnız https://<host>[:port]) — satıcıya dışarı istek atılmaz");
   bilgi("lisans", `yoklama zamanlayıcısı aktif — satıcı: ${vendor}; etkinleşmemiş kurulum dışarı istek atmaz`);
+}
+
+/** Bütünlük denetimi (açılışta + parmak iziyle aynı günlük tikte); hata ölçümü düşürür, süreci değil. */
+async function refreshIntegrityQuietly(): Promise<void> {
+  try {
+    await refreshLicenseIntegrity();
+  } catch (err) {
+    uyari("lisans", "bütünlük denetlenemedi (günlük tazelemede yeniden)", err instanceof Error ? err.message : err);
+  }
 }
 
 function scheduleBoot(): void {

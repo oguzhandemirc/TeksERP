@@ -66,6 +66,26 @@ function saatGonder(surec: ChildProcess, k: SaatKaydirmasi): Promise<void> {
   });
 }
 
+function butunlukGonder(
+  surec: ChildProcess,
+  kok: string | null,
+  anahtar: { kid: string; x: string } | null,
+): Promise<{ durum: string | null; kod: string | null }> {
+  return new Promise((resolve, reject) => {
+    const zaman = setTimeout(() => reject(new Error("bütünlük IPC yanıt vermedi")), 15_000);
+    const dinle = (m: unknown): void => {
+      if (typeof m !== "object" || m === null || Reflect.get(m, "tip") !== "senaryo-butunluk-tamam") return;
+      clearTimeout(zaman);
+      surec.off("message", dinle);
+      const durum: unknown = Reflect.get(m, "durum");
+      const kod: unknown = Reflect.get(m, "kod");
+      resolve({ durum: typeof durum === "string" ? durum : null, kod: typeof kod === "string" ? kod : null });
+    };
+    surec.on("message", dinle);
+    surec.send({ tip: "senaryo-butunluk", kok, anahtar });
+  });
+}
+
 function surecDurdur(surec: ChildProcess): Promise<void> {
   return new Promise((resolve) => {
     if (surec.exitCode !== null || surec.signalCode !== null) return resolve();
@@ -157,6 +177,8 @@ export interface FabrikaSureci {
   readonly lisansDizini: string;
   readonly pid: number;
   saat(k: SaatKaydirmasi): Promise<void>;
+  /** L18: süreçte bütünlük denetimini verilen kök + geçici PAKET anahtarıyla koşturur (`kok: null` sıfırlar). */
+  butunluk(kok: string | null, anahtar: { kid: string; x: string } | null): Promise<{ durum: string | null; kod: string | null }>;
   durdur(): Promise<void>;
   log(): string;
 }
@@ -243,6 +265,7 @@ export async function fabrikaBaslat(g: FabrikaSecenekleri): Promise<FabrikaSurec
     lisansDizini: g.lisansDizini,
     pid: surec.pid ?? -1,
     saat: (k) => saatGonder(surec, k),
+    butunluk: (kok, anahtar) => butunlukGonder(surec, kok, anahtar),
     durdur: () => surecDurdur(surec),
     log: () => log,
   };

@@ -35,6 +35,7 @@ import {
 } from "../src/lib/license/protocol";
 import { fixtureHedefEngeli, hacimHedefEngeli } from "./lib/hedef-db-kapisi";
 import { FabrikaIstemcisi, PortalIstemcisi, type LisansDetayi, type Yanit } from "./lib/senaryo-lisans-istemci";
+import { l18KunyeOlc } from "./lib/senaryo-lisans-kunye";
 import {
   Aktarici,
   ConnectVekili,
@@ -865,10 +866,8 @@ async function main(): Promise<number> {
 
     // ============================================================ L18
     await adim("L18", "bakım sonrası derleme tarihi → UYARI → EK_SURE", async (a) => {
-      const d = await C.istemci.detay();
-      const nedenler = d.durum.nedenler.map((n) => n.kod);
-      a.kontrol("fabrika derleme tarihini taşımıyor (DERLEME_TARIHI_YOK) — ölçülebilir değil", nedenler.includes("DERLEME_TARIHI_YOK") || !nedenler.includes("BAKIM_SONRASI_DERLEME"), nedenler.join(",") || "neden yok");
-      a.kismi("imzalı derleme künyesi Faz 2e'de (buildEnvironment derlemeTarihi=null, runtime derlemeTarihiMs=null); kural test_lisans_durumu §12'de saf fonksiyonla ölçülü — uçtan uca kol Faz 2 borcu");
+      if (!C.surec) throw new Error("C backend'i çalışmıyor");
+      await l18KunyeOlc({ kok, surec: C.surec, istemci: C.istemci, kontrol: (ad, ok, ayrinti) => a.kontrol(ad, ok, ayrinti), simdiMs: saticiSimdi() });
     });
 
     // ============================================================ L19

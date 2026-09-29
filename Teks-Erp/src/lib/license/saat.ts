@@ -148,6 +148,8 @@ export const StateRecordSchema = z.object({
   duvarTutarli: z.boolean().optional(),
   /** Satıcının `ISTEK_ZAMAN` ile bildirdiği son sapma (duvar − satıcı, sn); null = ölçülmedi/tutarlı. */
   saticiSapmaSn: z.number().int().min(-1e9).max(1e9).nullable().optional(),
+  /** Bütünlük uyuşmazlığının ilk görüldüğü an (ek süre buradan sayılır); uyuşunca null. */
+  butunlukIlk: IsoTimeSchema.nullable().optional(),
 });
 export type StateRecord = z.infer<typeof StateRecordSchema>;
 
