@@ -24,6 +24,7 @@ Bu tablo **kayıtlı kararın kendisidir**: `package.json > dependencies` ile bu
 | Font rasteri | `opentype.js` (2 dosya, DejaVu glif) | bwip ile ÇİFT DEĞİL: native yolun `asciiFold` kısıtını kaldıran Türkçe glif rasteri |
 | mDNS ilanı | `bonjour-service` **1.4.4 SABİT** | [KU-11]; tembel `require` + try/catch, tek dosya `jobs/mdns-advertiser.job.ts` |
 | Ortam | `dotenv` | — |
+| Korumalı paket yükleyicisi | `bytenode` **1.7.0 SABİT** (Faz 2b) | yalnız korumalı paketin `dist/server.js` yükleyicisi `.jsc`yi açar; geliştirmede kullanılmaz · `esbuild` devDependency (derleme) |
 | UUID | `uuid` (2 dosya: v4 + `validate`) | `crypto.randomUUID` 20 dosyada — ikilik, §8 |
 | Yapılandırılmış log | **PAKETSİZ** — `src/lib/logger.ts` (`hata`/`uyari`/`bilgi`/`satir`) | §9 (2026-09-07); `console` YALNIZ o dosyada, `no-console` açık |
 | Araç (dev) | `tsx` `nodemon` `ts-node` `typescript` `eslint` `@typescript-eslint/*` `@types/*` | `@faker-js/faker` ölü (§7) |
@@ -44,7 +45,7 @@ Paket `deploy/` ve `scripts/`yi TAŞIMAZ (`docs/KOD-KURALLARI.md` § deploy) —
 | Tema · animasyon · grafik | `next-themes` · `framer-motion` · `recharts` | — |
 | Tarih · renk · takvim · QR · DnD | `date-fns` (17) · `react-colorful` · `react-day-picker` · `qrcode.react` · `@dnd-kit/*` | — |
 | Excel | `exceljs` — **dinamik import** | SheetJS/xlsx KULLANILMAZ; `buffer` polyfill'i bu yolun (§7) |
-| PDF | **YOK** — baskı HTML + sandbox'lı iframe | `@react-pdf/renderer` ölü; PDF paketi EKLENMEZ |
+| PDF | baskı HTML + sandbox'lı iframe; dosya main süreçte printToPDF ile · `pdf-lib` **1.17.1 SABİT** YALNIZ main süreçte meta verisi için (lisans filigranı: lisans sahibi + no, Faz 2e — lisans planında onaylı) | `@react-pdf/renderer` ölü; PDF ÇİZİM/düzen paketi EKLENMEZ, `pdf-lib` renderer'a girmez |
 | HTTP | `axios` (14 dosya) | ham `fetch` **0** ölçüldü; tüm çağrılar `services/apiClient.ts` üstünden (`ELECTRON.md`) |
 | Native | `serialport` · `node-hid` (+ `@electron/rebuild`) | `createRequire` tembel yükleme ([KU-16]) |
 | Keşif | `bonjour-service` **1.4.4 SABİT** | `dependencies`te kalmak ZORUNDA |
