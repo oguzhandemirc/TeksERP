@@ -13,6 +13,7 @@ Tekstil fabrikası ERP'si. Üç alt proje (+ doğmakta olan satıcı platformu),
 | `mobil/` | React Native + Expo 54, Android tablet (yatay) + telefon (dikey) — saha | — |
 | `satici/` | Express 5 + Prisma 7 satıcı sunucusu (lisans API `/v1/*` + portal JSON API; VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si `satici/sunucu/`) + React 19 + Vite portal web arayüzü (`satici/web/`, aynı kökenden sunulur) | 4610 genel (`/bayi`) · 4611 portal (`/portal`, yalnız tailnet) |
 | `patron/` | Express 5 + Prisma 7 patron bulutu sunucusu (`patron/sunucu`: eşitleme alıcısı `/v1/*` + hesap API'si `/api/*`; çok kiracılı tek DB + PostgreSQL RLS; VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si) — uygulama (`patron/uygulama`, Expo) B4'te | 4620 |
+| `Teks-Erp/native/lisans-cekirdek/` | Rust + napi-rs native lisans çekirdeği (backend paketine `.node` olarak girer; ayrı süreç değil; kendi `CLAUDE.md`'si) | — |
 
 **Dallanma:** `feature/*` → `main`; müşteri dalı YOK. Fabrika paketi ve demo derlemesi `main`'den üretilir; müşteri farkı yalnız bayrak profilinde yaşar — "adnansahin'de yok" = "bayrağı kapalı". `if (musteri === 'X')` fork'un ilk sinyalidir, yasak. Müşteri adı da koda gömülmez: ekrandaki firma adı bağlanılan sunucunun `company.name` ayarından gelir, yedeği nötr (`test_musteri_adi_kodda_yok`).
 
@@ -117,9 +118,8 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 | Filtre · liste · arama | `docs/kurallar/filtre-liste.md` | Sunucu süzmesi; CSV; `updatedAt desc` (giriş sekmeleri Ham Stok + Yarı Mamul hariç); tek metraj; Ctrl+F yok |
 | Raporlar · karneler | `docs/kurallar/raporlar.md` | `finalizedAt` trigger; kaynak statü listesi; takvim günü ↔ mutlak pencere; parti araması aday listesi |
 | Finans · sağlamlık sınıfları | `docs/kurallar/finans.md` | Beş sınıf; iki tarih; ters yol; kilit sırası; çift yüklem; tek kaynak satır; kasa/KDV bayrakları PROFİL |
-| **Patron bulutu · eşitleme · rapor isteği** | `docs/kurallar/patron-bulutu.md` | Bulut hesap yapmaz, fabrika tek kaynak yardımcıyla hesaplar; katalog opt-in (`src/cloud-sync/projections.ts`); ön koşul fail-closed (URETIM + `patron-bulut` + kira); filigran güvenli ufukla, yalnız bulut onayıyla ilerler; silme tetikleyiciyle (`sync_marks`, telemetri) |
+| **Patron bulutu · eşitleme · gelen kutusu · bulut sunucusu** | `docs/kurallar/patron-bulutu.md` | Bulut hesap yapmaz, fabrika tek kaynak yardımcıyla hesaplar; katalog opt-in (`src/cloud-sync/projections.ts`); ön koşul fail-closed ve TEK (`cloudEligibility`: URETIM + `patron-bulut` + kira); filigran yalnız bulut onayıyla ilerler; silme tetikleyiciyle (`sync_marks`, telemetri); tek yazma kanalı gelen kutusu (makbuz aynı tx); bulutta `tesis_id` + RLS FORCE, iki rol NOBYPASSRLS |
 | **Lisans · kod koruma · satıcı platformu** | `docs/kurallar/lisans.md` | Gözlem sıfır fark; ek süre imzalı tarihten; KISITLI iki anahtarlı; sunucu kararı ek sürede kalıcı; parmak izi MAC'siz; kök parolası stdin |
-| Patron bulutu · eşitleme · gelen kutusu | `docs/kurallar/patron-bulutu.md` | Bulut hesap yapmaz, fabrika tek yazar; tek yazma kanalı gelen kutusu; hak fail-closed (yalnız ÜRETİM + `patron-bulut`); her tabloda `tesis_id` + RLS FORCE, iki çalışma rolü NOBYPASSRLS; alan izni alt satırla; sürüm anı = ufuk |
 | Genel · uzak erişim · konvansiyon | `docs/kurallar/genel.md` | Soket ayrımı; Access JWT fail-closed; TOTP kurulumu; audit; iki dinleyici tek process |
 
 Dizin ve arşiv tarihleri: `docs/kurallar/README.md`. Tasarım belgeleri: `docs/design/` (canlı), runbook'lar: `docs/ops/`, harita: `docs/README.md`.

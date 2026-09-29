@@ -552,7 +552,7 @@ if (Test-Path $runtimeExe) {
   $rtSurum = (& $runtimeExe --version) -creplace '^v',''
   # Manifest paketin node surumunu beyan eder; runtime\node.exe onunla BIREBIR olmali,
   # yoksa .jsc bayt kodu bu ikilide acilmaz (V8 uyumsuzlugu -> acik hata iyi ki [1/9]'da).
-  $beklenenRt = if ($m -and $m.PSObject.Properties.Name -contains 'runtimeNodeSurumu' -and $m.runtimeNodeSurumu) { ($m.runtimeNodeSurumu -replace '^v','') } else { $null }
+  $beklenenRt = if ($m -and $m.PSObject.Properties.Name -contains 'runtimeNodeSurumu' -and $m.runtimeNodeSurumu) { ($m.runtimeNodeSurumu -creplace '^v','') } else { $null }
   if ($beklenenRt -and ($rtSurum -cne $beklenenRt)) {
     Fail "Paketin runtime\node.exe surumu $rtSurum, manifest $beklenenRt bekliyor - .jsc bayt kodu bu ikilide acilmaz. Paket bozuk."
   }

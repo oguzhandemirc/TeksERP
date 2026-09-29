@@ -1,6 +1,7 @@
 // =============================================================================
 // LİSANS PROTOKOLÜ AYNASI — `Teks-Erp/src/lib/license/protocol/` TEK KAYNAKTIR; satıcı sunucusu
-// (`satici/sunucu/src/lisans-protokol/`) ve ileride patron sunucusu aynı dosyaları BAYT-EŞİT taşır.
+// (`satici/sunucu/src/lisans-protokol/`) ve patron bulutu sunucusu (`patron/sunucu/src/lisans-protokol/`)
+// aynı dosyaları BAYT-EŞİT taşır.
 // Ayna bozulursa iki taraf aynı belgeyi farklı doğrular (imza/şema/kod farkı) ve hata sessizdir:
 // fabrika reddeder, satıcı "verdim" sanır. Emsal: `test_mobil_enum_aynasi`.
 //

@@ -188,17 +188,22 @@ function schedule(delayMs: number): void {
   timer.unref();
 }
 
+/** Zil konusu kayıtları — kapanışta silinir (gelen kutusu işiyle simetrik). */
+let offDoorbell: Array<() => void> = [];
+
 export function startCloudSync(): void {
   if (started) return;
   started = true;
-  onDoorbellTopic("ozet", () => {
-    if (!running) void runSnapshotRound().catch((err) => reportJobFailure("cloud-sync", err));
-    else pendingSnapshot = true;
-  });
-  onDoorbellTopic("rapor", () => {
-    if (!running) void exclusive(() => runReportClaims(Date.now()));
-    else pendingReports = true;
-  });
+  offDoorbell = [
+    onDoorbellTopic("ozet", () => {
+      if (!running) void runSnapshotRound().catch((err) => reportJobFailure("cloud-sync", err));
+      else pendingSnapshot = true;
+    }),
+    onDoorbellTopic("rapor", () => {
+      if (!running) void exclusive(() => runReportClaims(Date.now()));
+      else pendingReports = true;
+    }),
+  ];
   void (async () => {
     const identity = await whenIdentityReady(IDENTITY_WAIT_MS);
     if (!identity || stopped) {
@@ -213,6 +218,8 @@ export function startCloudSync(): void {
 
 export function stopCloudSync(): void {
   stopped = true;
+  for (const off of offDoorbell) off();
+  offDoorbell = [];
   if (timer) clearTimeout(timer);
   timer = null;
 }

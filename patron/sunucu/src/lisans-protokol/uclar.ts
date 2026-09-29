@@ -1,12 +1,14 @@
 // Satıcı uçlarının gövde sözleşmesi (v:1). İstek gövdeleri KATI (tanınmayan anahtar RED:
 // yoklama iş verisi taşımaz, allowlist'in dışı sessizce sızamaz); yanıt gövdeleri
 // GEVŞEK (sunucu v:1 içinde yeni bilgi alanı ekleyebilir, eski kurulum yok sayar).
+import { randomInt } from "node:crypto";
 import { z } from "zod";
 import {
   PublicKeyXSchema,
   IsoTimeSchema,
   JwsTextSchema,
   FingerprintSchema,
+  OptionalInstallationIdSchema,
   PROTOCOL_VERSION,
   VersionTextSchema,
   UuidSchema,
@@ -38,17 +40,40 @@ export const DoorbellEventSchema = z.object({ konu: z.enum(DOORBELL_TOPICS) });
 
 /** Crockford base32: I/L/O/U yok — elle yazımda karışmaz. */
 const CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-const CODE_BLOCK = `[${CODE_ALPHABET}]{4}`;
-export const ActivationCodeSchema = z.string().regex(new RegExp(`^TKS-${CODE_BLOCK}-${CODE_BLOCK}-${CODE_BLOCK}$`));
+const CODE_PREFIX = "TKS";
+const CODE_BLOCK_LENGTH = 4;
+/** Üretilen kod: 16 karakter (4 blok, ≈80 bit) — `TKS-XXXX-XXXX-XXXX-XXXX`. */
+export const ACTIVATION_CODE_LENGTH = 16;
+/** Eski 12 karakterlik biçim (3 blok) BİR SÜRÜM daha TANINIR; üretilmez. */
+export const LEGACY_ACTIVATION_CODE_LENGTH = 12;
+const CODE_BODY_LENGTHS: readonly number[] = [LEGACY_ACTIVATION_CODE_LENGTH, ACTIVATION_CODE_LENGTH];
+const CODE_BLOCK = `[${CODE_ALPHABET}]{${CODE_BLOCK_LENGTH}}`;
+export const ActivationCodeSchema = z
+  .string()
+  .regex(new RegExp(`^${CODE_PREFIX}(-${CODE_BLOCK}){${LEGACY_ACTIVATION_CODE_LENGTH / CODE_BLOCK_LENGTH},${ACTIVATION_CODE_LENGTH / CODE_BLOCK_LENGTH}}$`));
 
-/** Kullanıcının yazdığı kodu kanonik biçime getirir (büyük harf, O→0, I/L→1, tire yerleşimi). */
+/** Kod türü: `ilk` hiç etkinleşmemiş kurulumu açar; `tasima` onaylı taşıma talebinin tek kullanımlık kodudur. */
+export const ACTIVATION_CODE_KINDS = ["ilk", "tasima"] as const;
+export type ActivationCodeKind = (typeof ACTIVATION_CODE_KINDS)[number];
+
+function formatActivationCode(body: string): string {
+  const blocks = body.match(new RegExp(`.{${CODE_BLOCK_LENGTH}}`, "g")) ?? [];
+  return [CODE_PREFIX, ...blocks].join("-");
+}
+
+/** Yeni kod (yalnız 16 karakterlik biçim). Düz metin yalnız üretim anında vardır; saklama satıcının işi. */
+export function generateActivationCode(): string {
+  const body = Array.from({ length: ACTIVATION_CODE_LENGTH }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
+  return ActivationCodeSchema.parse(formatActivationCode(body));
+}
+
+/** Kullanıcının yazdığı kodu kanonik biçime getirir (büyük harf, O→0, I/L→1, tire yerleşimi; 12 ve 16 karakter). */
 export function normalizeActivationCode(text: string): string {
   const alnum = text.toUpperCase().replace(/[^0-9A-Z]/g, "");
-  const body = (alnum.length === 15 && alnum.startsWith("TKS") ? alnum.slice(3) : alnum)
-    .replace(/O/g, "0")
-    .replace(/[IL]/g, "1");
-  if (body.length !== 12) return text.trim().toUpperCase();
-  return `TKS-${body.slice(0, 4)}-${body.slice(4, 8)}-${body.slice(8, 12)}`;
+  const prefixed = alnum.startsWith(CODE_PREFIX) && CODE_BODY_LENGTHS.includes(alnum.length - CODE_PREFIX.length);
+  const body = (prefixed ? alnum.slice(CODE_PREFIX.length) : alnum).replace(/O/g, "0").replace(/[IL]/g, "1");
+  if (!CODE_BODY_LENGTHS.includes(body.length)) return text.trim().toUpperCase();
+  return formatActivationCode(body);
 }
 
 export const EnvironmentSchema = z.strictObject({
@@ -59,6 +84,8 @@ export const EnvironmentSchema = z.strictObject({
   uygulamaSurum: VersionTextSchema,
   derlemeTarihi: IsoTimeSchema.nullable(),
   konteyner: z.boolean(),
+  /** Fabrika DB'sinin `system.installationId`si — YALNIZ BİLGİ (dökümle kopyalanır, lisans kimliği DEĞİL). */
+  installationId: UuidSchema.optional(),
 });
 
 const CounterSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -94,10 +121,11 @@ export const StateSummarySchema = z.strictObject({
 
 const VersionField = z.literal(PROTOCOL_VERSION);
 
+/** Etkinleştirme: kurulum kimliği portalda doğar ve YANITLA gelir — istek onu taşımaz (yok/boş kabul). */
 export const ActivateRequestSchema = z.strictObject({
   v: VersionField,
   kod: ActivationCodeSchema,
-  kurulumId: UuidSchema,
+  kurulumId: OptionalInstallationIdSchema,
   acikAnahtar: PublicKeyXSchema,
   parmakIzi: FingerprintSchema,
   ortam: EnvironmentSchema,
@@ -110,16 +138,26 @@ export const PollRequestSchema = z.strictObject({
   hak: z.strictObject({ hakId: UuidSchema, surum: z.number().int().min(1) }).nullable(),
   parmakIzi: FingerprintSchema,
   durum: StateSummarySchema,
-  saat: z.strictObject({ duvar: IsoTimeSchema, guvenilir: IsoTimeSchema, bulgu: z.enum(["SAAT_ILERI", "SAAT_GERI"]).nullable() }),
+  saat: z.strictObject({
+    duvar: IsoTimeSchema,
+    guvenilir: IsoTimeSchema,
+    bulgu: z.enum(["SAAT_ILERI", "SAAT_GERI"]).nullable(),
+    /** Son `ISTEK_ZAMAN` yanıtından ölçülen duvar − satıcı saati (sn); yok = ölçülmedi. Bilgidir, kademeye girmez. */
+    saticiSapmaSn: z.number().int().min(-1e9).max(1e9).optional(),
+  }),
   ortam: EnvironmentSchema,
   saglik: HealthSummarySchema,
   /** Gözlem kipinde zorlamanın REDDEDECEĞİ istek/modül sayısı (sıfır-fark ölçümü). */
   gozlem: z.strictObject({ reddedilecekIstek: CounterSchema, reddedilecekModul: CounterSchema }),
 });
 
+/**
+ * Taşıma YALNIZ TALEP açar (kod taşımaz): satıcı onayında tek kullanımlık `tasima` türü kod üretilir ve
+ * yeni makine onu normal etkinleştirme yolundan kullanır. Yeni makine kurulum kimliğini bilmeyebilir.
+ */
 export const TransferRequestSchema = z.strictObject({
   v: VersionField,
-  kurulumId: UuidSchema,
+  kurulumId: OptionalInstallationIdSchema,
   acikAnahtar: PublicKeyXSchema,
   parmakIzi: FingerprintSchema,
   ortam: EnvironmentSchema,
@@ -141,8 +179,16 @@ export const LicenseResponseSchema = z.object({
   kira: JwsTextSchema,
   indirmeBelirtecleri: z.array(z.object({ yolOneki: z.string().max(80), belirtec: JwsTextSchema })).max(4),
   sunucuSaati: IsoTimeSchema,
+  /** Lisans kimliği — etkinleştirme yanıtında daima; imzalı kiranın `kurulumId`siyle aynı olmalı (otorite kiradır). */
+  kurulumId: UuidSchema.optional(),
+  /** Etkinleştirmede tüketilen kodun türü (bilgi; tanınmayan değer yok sayılır). */
+  kodTuru: z.enum(ACTIVATION_CODE_KINDS).optional().catch(undefined),
 });
 
+/**
+ * Taşıma talebi yanıtı. Talep kod ya da lisans TAŞIMAZ: satıcı `lisans`ı null döner (alan v:1 uyumu için
+ * kalır); taşıma kodu müşteriye portal üzerinden iletilir, bu yanıtta asla dönmez.
+ */
 export const TransferResponseSchema = z.object({
   v: VersionField,
   talepId: UuidSchema,
@@ -161,6 +207,8 @@ export const VENDOR_ERROR_CODES = [
   "ETKINLESTIRME_KODU_GECERSIZ",
   "ETKINLESTIRME_KODU_KULLANILMIS",
   "TASIMA_ONAYI_BEKLIYOR",
+  /** 409: kurulum başka bir anahtarla ETKİN — yeni makine yalnız onaylı taşıma koduyla etkinleşir (ilk kod yetmez). */
+  "TASIMA_KODU_GEREKLI",
   "KIRA_VERILMEDI",
   "HIZ_SINIRI",
   /** 409: eşzamanlı işlem çakıştı (40001/40P01, atomik claim kaybı) — aynı istek yeniden denenebilir. */
@@ -174,7 +222,14 @@ export type VendorErrorCode = (typeof VENDOR_ERROR_CODES)[number];
 export const VendorErrorResponseSchema = z.object({
   success: z.literal(false),
   message: z.string(),
-  details: z.object({ code: z.string() }),
+  details: z.object({
+    code: z.string(),
+    /**
+     * `ISTEK_ZAMAN`da satıcının saati. İMZASIZDIR: yalnız isteği BİR KEZ yeniden damgalamaya yarar;
+     * güvenilir saate, yüksek suya, ek süreye girmez. Biçimsizse yok sayılır (kod yine okunur).
+     */
+    sunucuSaati: IsoTimeSchema.optional().catch(undefined),
+  }),
 });
 
 export type ActivateRequest = z.infer<typeof ActivateRequestSchema>;

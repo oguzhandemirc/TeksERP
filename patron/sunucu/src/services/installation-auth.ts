@@ -50,10 +50,12 @@ export async function authenticateFactory(ctx: CloudContext, g: { header: unknow
   }
   const identity = readRequestIdentity(g.header);
   if (!identity.ok) throw requestRejected(identity.code, identity.message);
-  if (!UuidSchema.safeParse(identity.value.installationId).success) {
-    throw new CloudError(401, "ISTEK_GECERSIZ", "İstekteki kurulum kimliği biçimsiz");
+  // Kimliksiz istek (protokolde yalnız etkinleştirme/taşıma) bulut kanalında meşru değil: `esitle` kimlik taşır.
+  const installationId = identity.value.installationId;
+  if (installationId === null || !UuidSchema.safeParse(installationId).success) {
+    throw new CloudError(401, "ISTEK_GECERSIZ", "İstekteki kurulum kimliği yok ya da biçimsiz");
   }
-  const inst = await ctx.directory.resolve(identity.value.installationId, g.nowMs);
+  const inst = await ctx.directory.resolve(installationId, g.nowMs);
   if (!inst || !inst.publicKeyX) throw new CloudError(401, "KURULUM_BILINMIYOR", "Bu kurulum patron bulutunda kayıtlı değil");
   if (safeKeyId(inst.publicKeyX) !== identity.value.kid) {
     throw new CloudError(401, "ISTEK_KID", "İstek bu kurulumun kayıtlı anahtarıyla imzalanmamış");
@@ -63,7 +65,7 @@ export async function authenticateFactory(ctx: CloudContext, g: { header: unknow
     body: g.rawBody,
     nowMs: g.nowMs,
     purposes: ["esitle"],
-    installationId: identity.value.installationId,
+    installationId,
   });
   if (!verified.ok) throw requestRejected(verified.code, verified.message);
   await recordNonce(ctx, inst, verified.value, g.nowMs);
