@@ -4,7 +4,9 @@
 // Kanal İÇERİK taşımaz (güvenlik imzalı yoklamada kalır): sahte zil yalnız fazladan
 // yoklama yaptırır. Global `EventSource` yok → fetch akışı elle ayrıştırılır. Satıcı
 // 25 sn'de bir yorum satırı gönderir; 60 sn sessizlik = kopuk sayılır, üstel geri
-// çekilmeyle yeniden bağlanılır. Etkinleşmemiş kurulum ya da adressiz satıcı: bağlanılmaz.
+// çekilmeyle yeniden bağlanılır — geri çekilme yalnız EN AZ bir dakika yaşamış bağlantıdan
+// sonra sıfırlanır (bağlantıyı periyodik kesen vekilde yeniden bağlanma fırtınası olmasın).
+// Etkinleşmemiş kurulum ya da adressiz satıcı: bağlanılmaz.
 // =============================================================================
 import type { IncomingMessage } from "node:http";
 import { egressStream, EgressError } from "../lib/http-egress";
@@ -18,8 +20,9 @@ import {
   signRequest,
 } from "../lib/license/protocol";
 import { getLicenseStore } from "../lib/license/store";
-import { getLicenseConfig, getLicenseInstallationId, updateDoorbellStatus } from "../lib/license/runtime";
+import { getLicenseConfig, getLicenseSnapshot, recordVendorClockSkew, updateDoorbellStatus } from "../lib/license/runtime";
 import { onLicenseActivated } from "../services/license-sync.service";
+import { learnVendorClock, readVendorError } from "../services/helpers/license-wire.helper";
 import { requestImmediateLicensePoll } from "./license-poll.job";
 import { dispatchDoorbellTopic } from "./doorbell-topics";
 
@@ -29,6 +32,9 @@ const BACKOFF_MAX_MS = 5 * 60 * 1000;
 /** Etkinleşmemiş kurulumda ne sıklıkla yeniden bakılır (etkinleştirme zaten dürter). */
 const IDLE_RECHECK_MS = 5 * 60 * 1000;
 const CONNECT_TIMEOUT_MS = 30 * 1000;
+/** Bu kadar yaşamış bağlantı "kararlı" sayılır; ancak ondan sonra geri çekilme baştan başlar. */
+export const STABLE_CONNECTION_MS = 60 * 1000;
+const ERROR_BODY_MAX = 16 * 1024;
 
 export type DoorbellEvent = { readonly kind: "zil"; readonly konu: string } | { readonly kind: "kalp" };
 
@@ -87,6 +93,8 @@ export class SseParser {
 
 let started = false;
 let stopped = false;
+/** Her durdurmada artar: durdurmadan önce başlamış bağlantı turu, sonra yeniden bağlanma planlamaz. */
+let generation = 0;
 let controller: AbortController | null = null;
 let retryTimer: NodeJS.Timeout | null = null;
 let attempt = 0;
@@ -97,9 +105,32 @@ export function backoffMs(n: number, random: () => number = Math.random): number
   return Math.round(base * (0.8 + random() * 0.4));
 }
 
+/**
+ * Sonraki bekleme hangi deneme sırasından hesaplanır: yalnız kararlı (≥ 1 dk yaşamış) bağlantı
+ * sırayı sıfırlar; hemen kopan bağlantı (veri gelmiş olsa da) sırayı ilerletir.
+ */
+export function reconnectAttempt(previous: number, livedMs: number | null): number {
+  return livedMs !== null && livedMs >= STABLE_CONNECTION_MS ? 0 : previous;
+}
+
 function canConnect(): boolean {
-  const store = getLicenseStore();
-  return Boolean(getLicenseConfig().vendorUrl && store?.key && !store.problem && store.leaseJws && getLicenseInstallationId());
+  if (!getLicenseConfig().vendorUrl) return false;
+  const snap = getLicenseSnapshot();
+  return snap.hazir && snap.activated && snap.licenseId !== null;
+}
+
+function readSmallBody(res: IncomingMessage): Promise<string> {
+  return new Promise((resolve) => {
+    let text = "";
+    res.setEncoding("utf8");
+    res.on("data", (chunk: string) => {
+      text += chunk;
+      if (text.length > ERROR_BODY_MAX) res.destroy();
+    });
+    res.on("end", () => resolve(text));
+    res.on("close", () => resolve(text));
+    res.on("error", () => resolve(text));
+  });
 }
 
 function scheduleConnect(delayMs: number): void {
@@ -129,7 +160,6 @@ async function consume(res: IncomingMessage, signal: AbortSignal): Promise<void>
     res.setEncoding("utf8");
     res.on("data", (chunk: string) => {
       arm();
-      attempt = 0;
       for (const ev of parser.push(chunk)) {
         const now = Date.now();
         if (ev.kind === "kalp") updateDoorbellStatus({ lastHeartbeatAt: now });
@@ -147,42 +177,69 @@ async function consume(res: IncomingMessage, signal: AbortSignal): Promise<void>
   });
 }
 
+async function openStream(base: string, licenseId: string, signal: AbortSignal, nowMs: number): Promise<IncomingMessage> {
+  const store = getLicenseStore();
+  if (!store?.key) throw new EgressError("EGRESS_NETWORK", "lisans deposu hazır değil");
+  const token = signRequest({ installationId: licenseId, purpose: "zil", body: "", key: { privateKey: store.key.privateKey, nowMs } });
+  return egressStream(`${base}${ENDPOINTS.DOORBELL}`, {
+    method: "GET",
+    headers: { accept: "text/event-stream", "cache-control": "no-cache", [REQUEST_HEADER]: token },
+    timeoutMs: CONNECT_TIMEOUT_MS,
+    signal,
+  });
+}
+
+const isEventStream = (res: IncomingMessage): boolean =>
+  res.statusCode === 200 && String(res.headers["content-type"] ?? "").includes("text/event-stream");
+
 async function connectOnce(): Promise<void> {
   if (stopped) return;
+  const gen = generation;
   if (!canConnect()) {
     updateDoorbellStatus({ connected: false });
     scheduleConnect(IDLE_RECHECK_MS);
     return;
   }
-  const store = getLicenseStore();
-  const installationId = getLicenseInstallationId();
+  const licenseId = getLicenseSnapshot().licenseId;
   const base = getLicenseConfig().vendorUrl;
-  if (!store?.key || !installationId || !base) return;
+  if (!licenseId || !base) return;
   controller = new AbortController();
-  const token = signRequest({ installationId, purpose: "zil", body: "", key: { privateKey: store.key.privateKey, nowMs: Date.now() } });
+  let livedMs: number | null = null;
   try {
-    const res = await egressStream(`${base}${ENDPOINTS.DOORBELL}`, {
-      method: "GET",
-      headers: { accept: "text/event-stream", "cache-control": "no-cache", [REQUEST_HEADER]: token },
-      timeoutMs: CONNECT_TIMEOUT_MS,
-      signal: controller.signal,
-    });
-    if (res.statusCode !== 200 || !String(res.headers["content-type"] ?? "").includes("text/event-stream")) {
-      res.resume();
-      updateDoorbellStatus({ connected: false, lastErrorCode: `HTTP_${res.statusCode ?? 0}` });
+    let res = await openStream(base, licenseId, controller.signal, Date.now());
+    let corrected = false;
+    if (res.statusCode === 401) {
+      // Saat kayıkken satıcı ISTEK_ZAMAN + kendi saatini döner: bir kez düzeltilmiş damgayla yeniden (D4).
+      const e = readVendorError(401, await readSmallBody(res));
+      const skewMs = learnVendorClock(e.code, e.vendorTimeMs);
+      if (skewMs === null) updateDoorbellStatus({ connected: false, lastErrorCode: e.code });
+      else {
+        corrected = true;
+        res = await openStream(base, licenseId, controller.signal, Date.now() - skewMs);
+      }
+    }
+    if (!isEventStream(res)) {
+      if (res.statusCode !== 401 || corrected) {
+        res.resume();
+        updateDoorbellStatus({ connected: false, lastErrorCode: `HTTP_${res.statusCode ?? 0}` });
+      }
     } else {
-      updateDoorbellStatus({ connected: true, lastConnectedAt: Date.now(), lastErrorCode: null });
+      if (!corrected) recordVendorClockSkew(null);
+      const t0 = Date.now();
+      updateDoorbellStatus({ connected: true, lastConnectedAt: t0, lastErrorCode: null });
       // Bağlanınca bir kez yokla: kopukken kaçan zil olmuş olabilir.
       requestImmediateLicensePoll();
       await consume(res, controller.signal);
+      livedMs = Date.now() - t0;
       updateDoorbellStatus({ connected: false });
     }
   } catch (err) {
     updateDoorbellStatus({ connected: false, lastErrorCode: err instanceof EgressError ? err.code : "EGRESS_NETWORK" });
   } finally {
-    controller = null;
+    if (gen === generation) controller = null;
   }
-  if (stopped) return;
+  if (stopped || gen !== generation) return;
+  attempt = reconnectAttempt(attempt, livedMs);
   scheduleConnect(backoffMs(attempt++));
 }
 
@@ -204,6 +261,7 @@ export function startLicenseDoorbell(): void {
 /** Kapanış fazı: akış kesilir, yeniden bağlanma planı iptal edilir. */
 export function stopLicenseDoorbell(): void {
   stopped = true;
+  generation++;
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
   controller?.abort();

@@ -21,10 +21,11 @@
 // (`system-setting.service.ts`), burada kullanıcı yok (boot). Doğrudan Prisma'ya
 // yazılır; `updatedById` şemada nullable.
 //
-// BEST-EFFORT: `permission-catalog.job.ts` deseninin birebir aynısı — gecikmeli
-// başlar, sınırlı sayıda yeniden dener, TÜKENSE BİLE SUNUCUYU DÜŞÜRMEZ. Kimlik
-// yazılamazsa keşif yine çalışır (uç `installationId: null` döner), yalnız
-// "farklı kurulum" tespiti devre dışı kalır — özelliğin kaybı, sunucunun değil.
+// BEST-EFFORT: `permission-catalog.job.ts` deseni — gecikmeli başlar, hızlı denemeler
+// tükenince bekleyenleri `null` ile çözer (mDNS ilanı asılı kalmasın) ama PES ETMEZ:
+// seyrek aralıkla denemeyi sürdürür, kimlik geç de olsa doğar (lisans motoru ve keşif
+// onu bekler). Sunucuyu hiçbir durumda düşürmez. Kimlik yazılamazsa keşif yine çalışır
+// (uç `installationId: null` döner), yalnız "farklı kurulum" tespiti o süre devre dışı.
 // =============================================================================
 
 import { randomUUID } from "crypto";
@@ -38,6 +39,8 @@ import { bilgi, hata, uyari } from "../lib/logger";
 const STARTUP_DELAY_MS = 3 * 1000;
 const RETRY_DELAY_MS = 15 * 1000;
 const MAX_ATTEMPTS = 5;
+/** Hızlı denemeler tükendikten sonra seyrek yeniden deneme aralığı (pes etme yok). */
+const SLOW_RETRY_DELAY_MS = 5 * 60 * 1000;
 
 export interface InstallationIdentity {
     /** uuid v4 — kurulum başına sabit. */
@@ -179,10 +182,15 @@ export function whenIdentityReady(capMs: number): Promise<InstallationIdentity |
     });
 }
 
+/** Deneme sırasına göre bekleme: önce hızlı, tükenince seyrek (pes etme yok). */
+export function identityRetryDelayMs(attempt: number): number {
+    return attempt < MAX_ATTEMPTS ? RETRY_DELAY_MS : SLOW_RETRY_DELAY_MS;
+}
+
 /**
- * Açılışta BİR KEZ koşar. Hata sunucuyu düşürmez; sınırlı sayıda yeniden dener,
- * tükenirse gürültülü loglar ve bekleyenleri null ile çözer (sonsuza dek asılı
- * kalan bir `whenIdentityReady` mDNS ilanını hiç başlatmazdı).
+ * Açılışta koşar. Hata sunucuyu düşürmez; hızlı denemeler tükenince gürültülü loglar ve
+ * bekleyenleri null ile çözer (sonsuza dek asılı kalan bir `whenIdentityReady` mDNS
+ * ilanını hiç başlatmazdı), sonra seyrek aralıkla denemeyi SÜRDÜRÜR.
  */
 export function startInstallationIdentity(): void {
     if (started) return;
@@ -190,20 +198,20 @@ export function startInstallationIdentity(): void {
 
     const attempt = (n: number): void => {
         void ensureInstallationIdentity().catch((err) => {
-            if (n < MAX_ATTEMPTS) {
-                uyari("installation-identity", `deneme ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
-                    `${RETRY_DELAY_MS / 1000}sn sonra tekrar denenecek:`,
+            if (n === MAX_ATTEMPTS) {
+                hata("installation-identity", `KİMLİK ÜRETİLEMEDİ (${MAX_ATTEMPTS} deneme). ` +
+                    "Servis keşfi çalışmaya devam eder ama istemciler sunucunun kimliğini " +
+                    `doğrulayamaz (farklı kurulum tespiti devre dışı); ${SLOW_RETRY_DELAY_MS / 60_000} dk aralıkla denemeye devam.`,
+                    err,
+                );
+                publish(null);
+            } else {
+                uyari("installation-identity", `deneme ${n} başarısız (DB hazır olmayabilir), ` +
+                    `${identityRetryDelayMs(n) / 1000}sn sonra tekrar denenecek:`,
                     err instanceof Error ? err.message : err,
                 );
-                setTimeout(() => attempt(n + 1), RETRY_DELAY_MS).unref();
-                return;
             }
-            hata("installation-identity", `KİMLİK ÜRETİLEMEDİ (${MAX_ATTEMPTS} deneme). ` +
-                "Servis keşfi çalışmaya devam eder ama istemciler sunucunun kimliğini " +
-                "doğrulayamaz (farklı kurulum tespiti devre dışı).",
-                err,
-            );
-            publish(null);
+            setTimeout(() => attempt(n + 1), identityRetryDelayMs(n)).unref();
         });
     };
 

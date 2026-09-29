@@ -19,12 +19,12 @@ import {
   type LicenseResponse,
   type SanctionLevel,
 } from "../lib/license/protocol";
-import { getLicenseStore, saveEntitlement, saveLease, saveTransfer } from "../lib/license/store";
+import { getLicenseStore, saveEntitlement, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
 import { measureFingerprint } from "../lib/license/fingerprint";
 import {
   getLicenseConfig,
-  getLicenseInstallationId,
   getLicenseSnapshot,
+  getVendorClockSkewMs,
   invalidateLicenseSnapshot,
   peekObservationCounters,
   recordPollOutcome,
@@ -51,7 +51,10 @@ import {
 } from "./helpers/license-wire.helper";
 
 // ── DB olguları + parmak izi ───────────────────────────────────────────────────
-/** İlk açılış (dosya silmekle yenilenmez) ve defterdeki yüksek su. */
+/**
+ * İlk açılış (dosya silmekle yenilenmez), defterdeki yüksek su ve DB'nin kurulum kimliği (YALNIZ
+ * bilgi — lisans kimliği LICENSE_DIR'dedir; DB kopyası onu taşımaz).
+ */
 export async function refreshLicenseDbFacts(installationId: string): Promise<void> {
   // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): yüksek su defterde YAZILMIŞ en geç andır — geri alınan işlem
   // de o anda yazılmıştır; süzmek, bir geri almadan sonra saat-geri tespitinin alt sınırını geriletirdi.
@@ -75,13 +78,20 @@ export async function refreshLicenseFingerprint(): Promise<void> {
   setMeasuredFingerprint(await measureFingerprint(store.key.salt));
 }
 
+function skewSeconds(): number | undefined {
+  const ms = getVendorClockSkewMs();
+  return ms === null ? undefined : Math.max(-1e9, Math.min(1e9, Math.round(ms / 1000)));
+}
+
 /** Yoklama gövdesi — protokolün KATI şemasından geçer (allowlist dışı alan kod yolunda patlar). */
 export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnType<typeof PollRequestSchema.parse>> {
   const snap = getLicenseSnapshot(nowMs);
   const s = snap.state;
+  const saticiSapmaSn = skewSeconds();
   return PollRequestSchema.parse({
     v: 1,
-    sonKiraId: snap.lease?.document.kiraId ?? null,
+    // Zincir ucu: kira dosyası silinmiş/eskisiyle değiştirilmişse durum kaydının bildiği son kabul.
+    sonKiraId: snap.lastKnownLease?.kiraId ?? null,
     hak: snap.entitlement ? { hakId: snap.entitlement.document.hakId, surum: snap.entitlement.document.surum } : null,
     parmakIzi: currentFingerprintDigest(),
     durum: {
@@ -91,7 +101,12 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
       hesaplananKademe: s.hesaplananKademe,
       uygulananKademe: s.uygulananKademe,
     },
-    saat: { duvar: msToIso(nowMs), guvenilir: msToIso(s.saat.trustedMs), bulgu: s.saat.finding },
+    saat: {
+      duvar: msToIso(nowMs),
+      guvenilir: msToIso(s.saat.trustedMs),
+      bulgu: s.saat.finding,
+      ...(saticiSapmaSn === undefined ? {} : { saticiSapmaSn }),
+    },
     ortam: buildEnvironment(),
     saglik: await buildPollHealthSummary(),
     gozlem: peekObservationCounters(),
@@ -123,7 +138,10 @@ export function onLicenseActivated(fn: () => void): void {
 
 /**
  * Satıcı yanıtını DOĞRULAR ve kabul eder: kira + HAK bu kuruluma, bu anahtara ve birbirine
- * bağlı olmalı; eski kira geri oynatılamaz. Yazım sırası durum → HAK → kira (yarım kalan
+ * bağlı olmalı; eski kira geri oynatılamaz (durum kaydının bildiği son kabul dahil — kira dosyasını
+ * silip eski yanıtı yapıştırmak yaptırımı geri almaz). Lisans kimliği bilinmiyorsa (etkinleştirme)
+ * BU anahtara bağlı imzalı kiradan öğrenilip LICENSE_DIR'e yazılır; yanıttaki `kurulumId` yalnız
+ * kirayla aynıysa kabul (otorite imzalı kira). Yazım sırası kimlik → durum → HAK → kira (yarım kalan
  * yazım bir sonraki yoklamada kendini onarır). İmza doğrulaması BURADA — panel/telefon yanıtı taklit edemez.
  */
 export async function acceptLicenseResponse(
@@ -139,30 +157,39 @@ export async function acceptLicenseResponse(
   const lease = verifyLease(resp.kira, roots);
   if (!lease.ok) throw invalidResponse(`Kira doğrulanamadı: ${lease.message}`, lease.code);
   const leaseDoc = lease.value.document;
-  if (leaseDoc.kurulumId !== ctx.installationId || leaseDoc.kurulumAnahtarKimligi !== ctx.key.kid) {
-    throw invalidResponse("Kira bu kuruluma ya da bu kurulum anahtarına ait değil.");
+  if (leaseDoc.kurulumAnahtarKimligi !== ctx.key.kid) throw invalidResponse("Kira bu kurulum anahtarına ait değil.");
+  if (resp.kurulumId !== undefined && resp.kurulumId !== leaseDoc.kurulumId) {
+    throw invalidResponse("Yanıttaki kurulum kimliği imzalı kirayla uyuşmuyor.");
   }
+  if (ctx.licenseId !== null && leaseDoc.kurulumId !== ctx.licenseId) throw invalidResponse("Kira bu kuruluma ait değil.");
+  const licenseId = leaseDoc.kurulumId;
   const entitlementJws = resp.hak ?? ctx.store.entitlementJws;
   if (!entitlementJws) throw invalidResponse("Yanıt HAK belgesi taşımıyor ve kurulumda HAK yok.");
   const entitlement = verifyEntitlement(entitlementJws, roots);
   if (!entitlement.ok) throw invalidResponse(`HAK doğrulanamadı: ${entitlement.message}`, entitlement.code);
-  if (entitlement.value.document.kurulumId !== ctx.installationId) throw invalidResponse("HAK bu kuruluma ait değil.");
+  if (entitlement.value.document.kurulumId !== licenseId) throw invalidResponse("HAK bu kuruluma ait değil.");
   const binding = checkLeaseBinding(lease.value, entitlement.value);
   if (!binding.ok) throw invalidResponse(`Kira HAK'a bağlı değil: ${binding.message}`, binding.code);
 
   const before = getLicenseSnapshot();
-  const previous = before.lease?.document ?? null;
-  if (previous && previous.kiraId === leaseDoc.kiraId) {
+  const known = before.lastKnownLease;
+  if (known && known.kiraId === leaseDoc.kiraId) {
+    // Aynı kira (ağ tekrarı): yeni değil. Silinen ya da eskisiyle değiştirilen dosyalar imzalı yanıttan onarılır.
+    if (!getLicenseStore()?.identity) saveLicenseIdentity(licenseId);
+    if (resp.hak && resp.hak !== getLicenseStore()?.entitlementJws) saveEntitlement(resp.hak);
+    if (before.lease?.document.kiraId !== leaseDoc.kiraId) saveLease(resp.kira);
     setDownloadTokens(resp.indirmeBelirtecleri);
+    invalidateLicenseSnapshot();
     return { yeniKira: false, kiraId: leaseDoc.kiraId };
   }
-  if (previous && isoToMs(leaseDoc.verilis) < isoToMs(previous.verilis)) {
+  if (known && isoToMs(leaseDoc.verilis) < known.verilisMs) {
     throw licenseError(409, "LICENSE_LEASE_STALE", "Gelen kira kurulumdakinden eski; yeniden denenemez.");
   }
   const priorSanction = sanctionView(before);
-  const firstActivation = !ctx.store.leaseJws;
+  const firstActivation = ctx.licenseId === null || !before.activated;
 
-  startAccumulationForLease(leaseDoc);
+  if (getLicenseStore()?.identity?.kurulumId !== licenseId) saveLicenseIdentity(licenseId);
+  startAccumulationForLease({ lease: leaseDoc, entitlement: entitlement.value, licenseId });
   if (resp.hak && resp.hak !== ctx.store.entitlementJws) saveEntitlement(resp.hak);
   saveLease(resp.kira);
   setDownloadTokens(resp.indirmeBelirtecleri);
@@ -178,6 +205,7 @@ export async function acceptLicenseResponse(
     recordId: leaseDoc.kiraId,
     payload: {
       kaynak: source,
+      kodTuru: resp.kodTuru ?? null,
       hakSurum: leaseDoc.hakSurum,
       bitis: leaseDoc.bitis,
       zorlama: leaseDoc.zorlama,
@@ -219,21 +247,22 @@ export function pollLicenseOnce(transport: VendorTransport = egressTransport): P
 }
 
 async function pollOnce(transport: VendorTransport): Promise<{ outcome: PollOutcome; code?: string }> {
+  const snap = getLicenseSnapshot();
   const store = getLicenseStore();
-  const config = getLicenseConfig();
-  if (!store || store.problem || !store.key || !getLicenseInstallationId()) return { outcome: "HAZIR_DEGIL" };
-  const activated = Boolean(store.leaseJws || store.transfer);
-  if (!config.vendorUrl) {
+  if (!snap.hazir || !store) return { outcome: "HAZIR_DEGIL" };
+  if (!getLicenseConfig().vendorUrl) {
     // Etkin bir kurulum adres kaybederse yenileyemez: bu da başarısız yoklamadır.
-    if (activated) recordPollOutcome({ ok: false, code: "YAPILANDIRILMAMIS" });
+    if (snap.activated) recordPollOutcome({ ok: false, code: "YAPILANDIRILMAMIS" });
     return { outcome: "YAPILANDIRILMAMIS" };
   }
-  if (!activated) return { outcome: "ETKIN_DEGIL" };
-  if (store.transfer) return pollTransfer(transport);
+  if (!snap.activated) return { outcome: "ETKIN_DEGIL" };
+  if (store.transfer && store.transfer.durum !== "ONAYLANDI") return pollTransfer(transport);
+  if (!snap.licenseId) return { outcome: "ETKIN_DEGIL" };
 
   let result: VendorResult;
   try {
-    result = await vendorPost(ENDPOINTS.POLL, "yokla", await buildPollBody(), transport);
+    // Gövde istek başına kurulur: saat düzeltmeli yeniden denemede öğrenilen sapma da gider.
+    result = await vendorPost(ENDPOINTS.POLL, "yokla", () => buildPollBody(), transport);
   } catch (err) {
     recordPollOutcome({ ok: false, code: "GOVDE_KURULAMADI" });
     throw err;
@@ -261,8 +290,9 @@ async function pollTransfer(transport: VendorTransport): Promise<{ outcome: Poll
   const transfer = getLicenseStore()?.transfer;
   try {
     const r = await sendTransfer(transfer?.gerekce ?? null, transport);
-    if (r.durum === "ONAYLANDI") return { outcome: "BASARILI" };
-    const code = r.durum === "REDDEDILDI" ? "TASIMA_REDDEDILDI" : "TASIMA_ONAYI_BEKLIYOR";
+    if (r.lisansAlindi) return { outcome: "BASARILI" };
+    // D8: onayda lisans değil tek kullanımlık taşıma kodu doğar (portaldan iletilir) — kodla etkinleşme beklenir.
+    const code = r.durum === "REDDEDILDI" ? "TASIMA_REDDEDILDI" : r.durum === "ONAYLANDI" ? "TASIMA_KODU_BEKLENIYOR" : "TASIMA_ONAYI_BEKLIYOR";
     recordPollOutcome({ ok: false, code });
     return { outcome: "BASARISIZ", code };
   } catch (err) {
@@ -273,12 +303,20 @@ async function pollTransfer(transport: VendorTransport): Promise<{ outcome: Poll
 }
 
 // ── Taşıma turu (API ve bekleyen talebin yoklaması) ─────────────────────────────
-export async function sendTransfer(gerekce: string | null, transport: VendorTransport): Promise<{ durum: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI"; talepId: string }> {
+/**
+ * Taşıma YALNIZ TALEP açar (D8): kimliği bilinmiyorsa kimliksiz imzalanır; satıcı onaylayınca taşıma
+ * kodu portaldan gelir ve normal etkinleştirme yolundan kullanılır. Onay yanıtı lisans taşırsa (eski
+ * satıcı) doğrulanıp kabul edilir.
+ */
+export async function sendTransfer(
+  gerekce: string | null,
+  transport: VendorTransport,
+): Promise<{ durum: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI"; talepId: string; lisansAlindi: boolean }> {
   const ctx = requireReady();
   requireVendorUrl();
   const body = TransferRequestSchema.parse({
     v: 1,
-    kurulumId: ctx.installationId,
+    kurulumId: ctx.licenseId ?? undefined,
     acikAnahtar: ctx.key.x,
     parmakIzi: currentFingerprintDigest(),
     ortam: buildEnvironment(),
@@ -289,14 +327,14 @@ export async function sendTransfer(gerekce: string | null, transport: VendorTran
   const parsed = TransferResponseSchema.safeParse(r.json);
   if (!parsed.success) throw invalidResponse("Taşıma yanıtı biçimsiz.");
   const t = parsed.data;
-  if (t.durum === "ONAYLANDI") {
-    if (!t.lisans) throw invalidResponse("Onaylanan taşıma lisans taşımıyor.");
+  if (t.durum === "ONAYLANDI" && t.lisans) {
     await acceptLicenseResponse(t.lisans, "tasima");
-    return { durum: t.durum, talepId: t.talepId };
+    return { durum: t.durum, talepId: t.talepId, lisansAlindi: true };
   }
+  const istendi = getLicenseStore()?.transfer?.istendi ?? msToIso(Date.now());
   if (t.durum === "REDDEDILDI") saveTransfer(null);
-  else saveTransfer({ talepId: t.talepId, istendi: getLicenseStore()?.transfer?.istendi ?? msToIso(Date.now()), gerekce });
-  return { durum: t.durum, talepId: t.talepId };
+  else saveTransfer({ talepId: t.talepId, istendi, gerekce, durum: t.durum });
+  return { durum: t.durum, talepId: t.talepId, lisansAlindi: false };
 }
 
 

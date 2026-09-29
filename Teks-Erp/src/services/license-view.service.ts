@@ -73,7 +73,17 @@ export function getLicenseStatus(authenticated: boolean): LicenseStatusResponse 
 // ── Ayrıntı (license:view) ──────────────────────────────────────────────────────
 export interface LicenseDetail {
   readonly hazir: boolean;
-  readonly kurulum: { kurulumId: string | null; anahtarKimligi: string | null; etkin: boolean; ilkAcilis: string | null };
+  /**
+   * `kurulumId` LİSANS kimliğidir (LICENSE_DIR; etkinleşmemişte null); `veritabaniKimligi` DB'nin
+   * `system.installationId`si — yalnız bilgi (DB kopyası taşır, lisans kimliği değildir; D14).
+   */
+  readonly kurulum: {
+    kurulumId: string | null;
+    veritabaniKimligi: string | null;
+    anahtarKimligi: string | null;
+    etkin: boolean;
+    ilkAcilis: string | null;
+  };
   readonly depo: {
     dizin: string | null;
     sorun: StoreProblem | null;
@@ -193,10 +203,17 @@ export function getLicenseDetail(): LicenseDetail {
   const d = snap.fingerprintDecision;
   return {
     hazir: snap.hazir,
-    kurulum: { kurulumId: facts.installationId, anahtarKimligi: store?.key?.kid ?? null, etkin: Boolean(store?.leaseJws), ilkAcilis: isoOrNull(facts.firstOpenMs) },
+    kurulum: {
+      kurulumId: snap.licenseId,
+      veritabaniKimligi: facts.installationId,
+      anahtarKimligi: store?.key?.kid ?? null,
+      etkin: snap.activated,
+      ilkAcilis: isoOrNull(facts.firstOpenMs),
+    },
     depo: {
       dizin: store?.dir ?? null,
-      sorun: store?.problem ?? null,
+      // Var olan ama okunamayan dosya da depo sorunudur (durum ÖLÇÜLEMEDİ sayar).
+      sorun: store?.problem ?? (store?.unreadable.length ? "OKUNAMADI" : null),
       bozukAnahtarKenaraAlindi: Boolean(store?.setAsideKeyFile),
       durumKaydi: { gecerli: snap.durumKaydi.gecerli, sira: snap.durumKaydi.sira },
     },

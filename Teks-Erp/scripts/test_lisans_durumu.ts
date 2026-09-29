@@ -25,6 +25,11 @@
 //   D3 dondurma yalnız HAK tavanı varken uygulandı              → 2 ❌ (§14b · §14f)
 //   P0 (D4 saat kayması bilgidir):
 //   P1 SAAT_KAYIK geçerlilik etkisi ÖLÇÜLEMEDİ yapıldı           → 1 ❌ (§6d)
+//   F1a (D2 geri alma · D4 · saat kapalı süre kredisi · D1 okunamayan belge):
+//   P2 geri alma denetimi (evaluateRollback) kaldırıldı          → 6 ❌ (§15a/b/e/f/g/h)
+//   P3 SAAT_KAYIK kademe taşıdı (UYARI)                          → 1 ❌ (§6e)
+//   P4 üst eşik kapalı süre kredisini yok saydı                  → 1 ❌ (§5f)
+//   P5 okunamayan kira YOK sayıldı (KIRA_YOK)                    → 1 ❌ (§16a)
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
 //   Doğuşta ısıran GERÇEK kusur: §5e — zehirli yüksek suyu üst eşikte tavanlamak güvenilir
 //   saati duvarın ilerisine itip sahte SAAT_GERİ üretiyordu; `saat.ts` bu dilimde düzeltildi.
@@ -193,6 +198,17 @@ function saatIleriBolumu(): void {
   check("§5d karşı: aynı durumda yoklama da başarısızsa KISITLI (ikinci anahtar budur)", c.hesaplananKademe === "KISITLI", ozet(c));
   const z = durum({ saat: { yuksekSuMs: SIMDI + 200 * DAY_MS } });
   check("§5e zehirli yüksek su (geçmişte ileri giden saat) tavanlanır, ek süre doğmaz", z.saat.finding === "SAAT_ILERI" && z.hesaplananKademe === "UYARI" && z.saat.trustedMs === SIMDI, ozet(z));
+  // Makine 3 gün KAPALI kaldı: monotonik tahmin (alt sınır) duvarın 3 gün gerisinde. Tutarlı saatle yazılmış
+  // kayıttan gelen kapalı süre kredisi üst eşiği genişletir — sahte SAAT_İLERİ yok, güvenilir = duvar.
+  const kapali = { duvarMs: SIMDI + 3 * DAY_MS, kapaliKrediMs: 3 * DAY_MS };
+  const k = durum({ saat: kapali });
+  check("§5f ⭐ 3 gün kapalı kalan makine (kredi 3 gün) → SAAT_İLERİ YOK, güvenilir = duvar", k.saat.finding === null && k.saat.trustedMs === SIMDI + 3 * DAY_MS && k.gecerlilik === "GECERLI", ozet(k));
+  const kk = durum({ saat: { duvarMs: SIMDI + 3 * DAY_MS } });
+  check("§5g karşı: aynı duvar kredi olmadan → SAAT_İLERİ (tahmin alt sınırdır)", kk.saat.finding === "SAAT_ILERI", ozet(kk));
+  const ks = durum({ saat: { ...kapali, duvarMs: SIMDI + 3 * DAY_MS + 40 * DAY_MS } });
+  check("§5h ⭐ kredinin ötesine sıçrayan saat yine SAAT_İLERİ, güvenilir = alt sınır (erken bitiş yok)", ks.saat.finding === "SAAT_ILERI" && ks.saat.trustedMs === SIMDI, ozet(ks));
+  const kl = durum({ saat: { ...kapali, duvarMs: SIMDI + 90 * DAY_MS, monotonik: null, durumDosyasiGecerli: false } });
+  check("§5i kredi alt sınıra GİRMEZ: durum kaydı yokken kredi hiçbir şey açmaz", kl.saat.source === "DUVAR" && kl.saat.trustedMs === SIMDI + 90 * DAY_MS, ozet(kl));
 }
 
 function saatGeriBolumu(): void {
@@ -208,6 +224,14 @@ function saatGeriBolumu(): void {
     "§6d SAAT_KAYIK neden listesinde ve BİLGİdir (geçerlilik etkisi yok; ÖLÇÜLEMEDİ sayılan SAAT_GERİ'den ayrı)",
     (REASON_CODES as readonly string[]).includes("SAAT_KAYIK") && REASON_VALIDITY.SAAT_KAYIK === null && REASON_VALIDITY.SAAT_GERI === "OLCULEMEDI",
   );
+  const kayik = durum({ girdi: { saticiSapmaMs: -20 * 60_000 } });
+  const duz = durum();
+  check(
+    "§6e ⭐ satıcı 20 dk kayma bildirdi → SAAT_KAYIK raporlanır; geçerlilik, kademe ve güvenilir saat DEĞİŞMEZ",
+    nedenVar(kayik, "SAAT_KAYIK") && kayik.gecerlilik === duz.gecerlilik && kayik.hesaplananKademe === duz.hesaplananKademe && kayik.saat.trustedMs === duz.saat.trustedMs,
+    ozet(kayik),
+  );
+  check("§6f karşı: tolerans içi sapma (5 dk) → SAAT_KAYIK yok", !nedenVar(durum({ girdi: { saticiSapmaMs: 5 * 60_000 } }), "SAAT_KAYIK"));
 }
 
 function uretimAcikBolumu(): void {
@@ -341,6 +365,50 @@ function kaliciKararBolumu(): void {
   check("§14g karşı: kullanılabilir kira varsa ESKİ anlık görüntü yok sayılır (yaptırım kalktı)", g.hesaplananKademe === "NORMAL", ozet(g));
 }
 
+function geriAlmaBolumu(): void {
+  console.log("\n§15 — geri alma (D2): durum kaydının bildiği son kiradan ESKİ kira ya da ters HAK pini kullanılmaz");
+  const k5 = { kademe: "K5" as const, mesaj: null, kisitlamaTarihi: null, donmusModuller: [], guncellemeDonuk: false, devredildi: false };
+  const pin = { hakId: f.hakId, surum: 1, sinif: "URETIM" as const, kokTuru: "kok" as const };
+  const sonra = { kiraId: randomUUID(), verilisMs: SIMDI };
+  const a = durum({ girdi: { sonKira: sonra, sonHak: pin, sonYaptirim: k5, sonKiraZorlamasi: true } });
+  check(
+    "§15a ⭐ diskteki kira durum kaydının son kirasından ESKİ → KIRA_GERI_ALINDI, ÖLÇÜLEMEDİ; K5 ve zorlama kayıttan sürer",
+    nedenVar(a, "KIRA_GERI_ALINDI") && a.gecerlilik === "OLCULEMEDI" && a.hesaplananKademe === "DURDURULMUS" && a.uygulananKademe === "DURDURULMUS" && a.kip === "zorla",
+    ozet(a),
+  );
+  const g = durum({ kira: { zorlama: false }, girdi: { sonKira: sonra, sonHak: pin, sonYaptirim: k5, sonKiraZorlamasi: true } });
+  check("§15b ⭐ geri alınan gözlem kirası kipi GEVŞETMEZ (son kabulün zorlaması sürer)", g.kip === "zorla" && g.uygulananKademe === "DURDURULMUS", ozet(g));
+  const ayni = durum({ girdi: { sonKira: { kiraId: KIRA_ID, verilisMs: SIMDI + DAY_MS }, sonHak: pin, sonYaptirim: k5 } });
+  check("§15c karşı: kira durum kaydının son kirasıyla AYNI → kira otoritedir (kayıttaki eski yaptırım yok sayılır)", !nedenVar(ayni, "KIRA_GERI_ALINDI") && ayni.hesaplananKademe === "NORMAL", ozet(ayni));
+  const yeni = durum({ girdi: { sonKira: { kiraId: randomUUID(), verilisMs: SIMDI - 30 * DAY_MS }, sonHak: pin, sonYaptirim: k5 } });
+  check("§15d karşı: kira kayıttakinden YENİ → kira otoritedir (yaptırım kalkmış olabilir)", !nedenVar(yeni, "KIRA_GERI_ALINDI") && yeni.hesaplananKademe === "NORMAL", ozet(yeni));
+  const sinif = durum({ girdi: { sonHak: { ...pin, sinif: "DEMO" } } });
+  check("§15e ⭐ HAK sınıf pini ters (kayıt DEMO, disk ÜRETİM) → KIRA_GERI_ALINDI (SINIF)", sinif.nedenler.some((n) => n.kod === "KIRA_GERI_ALINDI" && n.ayrinti === "SINIF") && sinif.gecerlilik === "OLCULEMEDI", ozet(sinif));
+  const kok = durum({ girdi: { sonHak: { ...pin, kokTuru: "hazirlik" } } });
+  check("§15f ⭐ kök türü pini ters (kayıt hazırlık kökü, disk üretim kökü) → KIRA_GERI_ALINDI (KOK)", kok.nedenler.some((n) => n.kod === "KIRA_GERI_ALINDI" && n.ayrinti === "KOK"), ozet(kok));
+  const surum = durum({ girdi: { sonHak: { ...pin, surum: 3 } } });
+  check("§15g diskteki HAK kayıttaki sürümden ESKİ → KIRA_GERI_ALINDI (HAK_SURUM)", surum.nedenler.some((n) => n.kod === "KIRA_GERI_ALINDI" && n.ayrinti === "HAK_SURUM"), ozet(surum));
+  const tavan = durum({ hak: { moduller: ["finance.enabled", "iplik.enabled"] }, girdi: { sonHak: { ...pin, sinif: "DEMO" } } });
+  check("§15h geri almada HAK tavanı belirsizlik sayılır (üretim açık), yaptırımsız kayıtta kademe düşmez", isModuleLicensed(tavan, "production.enabled") && tavan.hesaplananKademe !== "KISITLI", ozet(tavan));
+  const esit = durum({ girdi: { sonHak: pin, sonKira: { kiraId: KIRA_ID, verilisMs: SIMDI } } });
+  check("§15i karşı: pin ve son kira eşit → bulgu yok, GEÇERLİ", !nedenVar(esit, "KIRA_GERI_ALINDI") && esit.gecerlilik === "GECERLI", ozet(esit));
+}
+
+function depoBolumu(): void {
+  console.log("\n§16 — okunamayan depo dosyası (D1): YOK değil, ÖLÇÜLEMEDİ; sunucu kararı durum kaydından");
+  const k4 = { kademe: "K4" as const, mesaj: null, kisitlamaTarihi: null, donmusModuller: [], guncellemeDonuk: false, devredildi: false };
+  const a = durum({ girdi: { kira: { status: "OKUNAMADI" }, depoOkunamadi: ["kira.jws"], sonYaptirim: k4, sonKiraZorlamasi: true } });
+  check(
+    "§16a ⭐ kira okunamadı → DEPO_OKUNAMADI, ÖLÇÜLEMEDİ (KIRA_YOK/GEÇERSİZ değil); K4 kayıttan sürer",
+    nedenVar(a, "DEPO_OKUNAMADI") && a.gecerlilik === "OLCULEMEDI" && !nedenVar(a, "KIRA_YOK") && a.uygulananKademe === "KISITLI",
+    ozet(a),
+  );
+  const h = durum({ girdi: { hak: { status: "OKUNAMADI" }, depoOkunamadi: ["hak.jws"] } });
+  check("§16b HAK okunamadı → ÖLÇÜLEMEDİ (HAK_YOK değil), tavan belirsizlikte açık", h.gecerlilik === "OLCULEMEDI" && !nedenVar(h, "HAK_YOK") && isModuleLicensed(h, "production.enabled"), ozet(h));
+  const y = durum({ kira: "YOK", girdi: { sonYaptirim: k4, sonKiraZorlamasi: true } });
+  check("§16c karşı: kira gerçekten YOK → KIRA_YOK (GEÇERSİZ)", nedenVar(y, "KIRA_YOK") && y.gecerlilik === "GECERSIZ", ozet(y));
+}
+
 function safBolumu(): void {
   console.log("\n§13 — saflık ve saat yardımcıları");
   const g = girdi(eskiKira(35, 5));
@@ -375,6 +443,8 @@ kimlikBolumu();
 yaptirimBolumu();
 bakimBolumu();
 kaliciKararBolumu();
+geriAlmaBolumu();
+depoBolumu();
 safBolumu();
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

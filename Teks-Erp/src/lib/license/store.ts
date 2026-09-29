@@ -1,10 +1,10 @@
-// Lisans deposu — `LICENSE_DIR` altındaki dosyalar (kurulum anahtarı, HAK, kira, durum,
-// proxy, bekleyen taşıma). DB'de değil: dökümle taşınmasın ve kurulum `app\`'i
+// Lisans deposu — `LICENSE_DIR` altındaki dosyalar (kurulum anahtarı, lisans kimliği, HAK, kira,
+// durum, proxy, bekleyen taşıma). DB'de değil: dökümle taşınmasın ve kurulum `app\`'i
 // değiştirirken silinmesin. Dizin `app\` ve `BACKUP_DIR` DIŞINDA olmak ZORUNDA —
 // offsite süpürücü yedek klasöründeki her dosyayı makine dışına kopyalar.
 import fs from "node:fs";
 import path from "node:path";
-import { createPrivateKey, generateKeyPairSync, randomBytes, type KeyObject } from "node:crypto";
+import { createPrivateKey, generateKeyPairSync, type KeyObject } from "node:crypto";
 import { z } from "zod";
 import {
   JwsTextSchema,
@@ -16,9 +16,14 @@ import {
   installationKeyId,
   publicKeyX,
 } from "./protocol";
+import { readDocField, readFileState, readJsonField, writeFileAtomicSync } from "./store-files";
+
+export { writeFileAtomicSync } from "./store-files";
 
 export const LICENSE_FILES = {
   KEY: "kurulum-anahtari.json",
+  /** Lisans kimliği (`kurulumId`): portalda doğar, etkinleştirme yanıtından öğrenilir — DB'de DEĞİL. */
+  IDENTITY: "kurulum-kimligi.json",
   ENTITLEMENT: "hak.jws",
   LEASE: "kira.jws",
   STATE: "durum.json",
@@ -52,12 +57,20 @@ export interface PendingTransfer {
   readonly talepId: string;
   readonly istendi: string;
   readonly gerekce: string | null;
+  /** ONAYLANDI: satıcı onayladı, taşıma kodu portaldan gelir — yoklanmaz, kodla etkinleşmeyi bekler. */
+  readonly durum?: "BEKLIYOR" | "ONAYLANDI";
+}
+
+export interface LicenseIdentity {
+  readonly kurulumId: string;
+  readonly ogrenildi: string;
 }
 
 export interface LicenseStoreSnapshot {
   readonly dir: string;
   readonly problem: StoreProblem | null;
   readonly key: InstallationKey | null;
+  readonly identity: LicenseIdentity | null;
   readonly entitlementJws: string | null;
   readonly leaseJws: string | null;
   readonly stateJws: string | null;
@@ -65,6 +78,8 @@ export interface LicenseStoreSnapshot {
   readonly transfer: PendingTransfer | null;
   /** Bozuk bulunup kenara alınan anahtar dosyası (varsa) — ekranda görünür. */
   readonly setAsideKeyFile: string | null;
+  /** Var olan ama okunamayan dosyalar (ad): YOK değildir, durum bunu ÖLÇÜLEMEDİ sayar. */
+  readonly unreadable: readonly string[];
 }
 
 const KeyFileSchema = z.object({
@@ -87,9 +102,12 @@ const TransferFileSchema = z.object({
   talepId: UuidSchema,
   istendi: IsoTimeSchema,
   gerekce: z.string().max(500).nullable(),
+  durum: z.enum(["BEKLIYOR", "ONAYLANDI"]).optional(),
 });
+const IdentityFileSchema = z.object({ v: z.literal(1), kurulumId: UuidSchema, ogrenildi: IsoTimeSchema });
 
-const MAX_DOC_BYTES = 64 * 1024;
+/** Anahtar dosyası birkaç yüz bayttır; boş ya da bundan büyüğü OKUNAMADI (sessiz anahtar değişimi yok). */
+const MAX_KEY_BYTES = 8 * 1024;
 const EMPTY_PROXY: ProxyConfig = Object.freeze({ adres: null, atla: null, guncellendi: null });
 
 let current: LicenseStoreSnapshot | null = null;
@@ -111,54 +129,6 @@ export function resolveLicenseDir(
   const backupDir = env.BACKUP_DIR?.trim();
   if (backupDir && sameOrInside(dir, backupDir)) return { dir, problem: "YEDEK_ICINDE" };
   return { dir, problem: null };
-}
-
-/** Yarım yazım bırakmaz: geçici dosya + fsync + yeniden adlandırma. */
-export function writeFileAtomicSync(file: string, data: string | Buffer, mode = 0o600): void {
-  const tmp = `${file}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
-  const fd = fs.openSync(tmp, "w", mode);
-  try {
-    fs.writeSync(fd, typeof data === "string" ? Buffer.from(data, "utf8") : data);
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
-  }
-  try {
-    fs.renameSync(tmp, file);
-  } catch (err) {
-    fs.rmSync(tmp, { force: true });
-    throw err;
-  }
-  if (process.platform !== "win32") {
-    try {
-      const dirFd = fs.openSync(path.dirname(file), "r");
-      fs.fsyncSync(dirFd);
-      fs.closeSync(dirFd);
-    } catch {
-      /* dizin fsync'i desteklenmiyorsa yeniden adlandırma yine atomiktir */
-    }
-  }
-}
-
-function readTextIfExists(file: string): string | null {
-  try {
-    const st = fs.statSync(file);
-    if (!st.isFile() || st.size > MAX_DOC_BYTES) return null;
-    const text = fs.readFileSync(file, "utf8").trim();
-    return text.length > 0 ? text : null;
-  } catch {
-    return null;
-  }
-}
-
-function readJsonIfExists(file: string): unknown {
-  const text = readTextIfExists(file);
-  if (text === null) return undefined;
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
 }
 
 function keyFromFile(raw: unknown): InstallationKey | null {
@@ -189,23 +159,26 @@ function generateKey(dir: string): InstallationKey {
   return { privateKey, x, kid: installationKeyId(x), salt, createdAt };
 }
 
-function emptySnapshot(dir: string, problem: StoreProblem | null): LicenseStoreSnapshot {
+function emptySnapshot(dir: string, problem: StoreProblem | null, unreadable: readonly string[] = []): LicenseStoreSnapshot {
   return {
     dir,
     problem,
     key: null,
+    identity: null,
     entitlementJws: null,
     leaseJws: null,
     stateJws: null,
     proxy: EMPTY_PROXY,
     transfer: null,
     setAsideKeyFile: null,
+    unreadable,
   };
 }
 
 /**
- * Deponun tamamını SENKRON yükler (sunucu dinlemeye başlamadan önce çağrılır). Anahtar
- * yoksa üretir; bozuksa kenara alıp yenisini üretir (eski anahtara bağlı lisans taşıma ister).
+ * Deponun tamamını SENKRON yükler (sunucu dinlemeye başlamadan önce çağrılır). Anahtar YOKSA
+ * (ENOENT) üretir; içeriği bozuksa kenara alıp yenisini üretir (eski anahtara bağlı lisans taşıma
+ * ister); okunamıyor/boş/aşırı büyükse ÜRETMEZ — depo OKUNAMADI kalır (sessiz anahtar değişimi yok).
  */
 export function loadLicenseStoreSync(opts: { dir?: string } = {}): LicenseStoreSnapshot {
   const resolved = opts.dir ? { dir: path.resolve(opts.dir), problem: null } : resolveLicenseDir();
@@ -223,12 +196,22 @@ export function loadLicenseStoreSync(opts: { dir?: string } = {}): LicenseStoreS
   let setAsideKeyFile: string | null = null;
   let key: InstallationKey | null = null;
   const keyFile = path.join(dir, LICENSE_FILES.KEY);
-  const rawKey = readJsonIfExists(keyFile);
+  const keyRead = readFileState(keyFile, MAX_KEY_BYTES);
+  if (keyRead.kind === "OKUNAMADI" || keyRead.kind === "BOS" || keyRead.kind === "BUYUK") {
+    current = emptySnapshot(dir, "OKUNAMADI", [LICENSE_FILES.KEY]);
+    return current;
+  }
   try {
-    if (rawKey === undefined) {
+    if (keyRead.kind === "YOK") {
       key = generateKey(dir);
     } else {
-      key = keyFromFile(rawKey);
+      let raw: unknown = null;
+      try {
+        raw = JSON.parse(keyRead.text) as unknown;
+      } catch {
+        raw = null;
+      }
+      key = keyFromFile(raw);
       if (!key) {
         setAsideKeyFile = `${keyFile}.bozuk-${Date.now()}`;
         fs.renameSync(keyFile, setAsideKeyFile);
@@ -239,25 +222,34 @@ export function loadLicenseStoreSync(opts: { dir?: string } = {}): LicenseStoreS
     current = emptySnapshot(dir, "YAZILAMADI");
     return current;
   }
-  const stateRaw = readJsonIfExists(path.join(dir, LICENSE_FILES.STATE));
+  const unreadable: string[] = [];
+  const stateRaw = readJsonField(path.join(dir, LICENSE_FILES.STATE), unreadable);
   const stateParsed = StateFileSchema.safeParse(stateRaw);
-  const proxyParsed = ProxyFileSchema.safeParse(readJsonIfExists(path.join(dir, LICENSE_FILES.PROXY)));
-  const transferParsed = TransferFileSchema.safeParse(readJsonIfExists(path.join(dir, LICENSE_FILES.TRANSFER)));
+  const proxyParsed = ProxyFileSchema.safeParse(readJsonField(path.join(dir, LICENSE_FILES.PROXY), unreadable));
+  const transferParsed = TransferFileSchema.safeParse(readJsonField(path.join(dir, LICENSE_FILES.TRANSFER), unreadable));
+  const identityParsed = IdentityFileSchema.safeParse(readJsonField(path.join(dir, LICENSE_FILES.IDENTITY), unreadable));
   current = {
     dir,
     problem: null,
     key,
-    entitlementJws: readTextIfExists(path.join(dir, LICENSE_FILES.ENTITLEMENT)),
-    leaseJws: readTextIfExists(path.join(dir, LICENSE_FILES.LEASE)),
+    identity: identityParsed.success ? { kurulumId: identityParsed.data.kurulumId, ogrenildi: identityParsed.data.ogrenildi } : null,
+    entitlementJws: readDocField(path.join(dir, LICENSE_FILES.ENTITLEMENT), unreadable),
+    leaseJws: readDocField(path.join(dir, LICENSE_FILES.LEASE), unreadable),
     // Biçimsiz durum dosyası "var ama bozuk" demektir: imza doğrulaması düşürsün diye metin korunur.
     stateJws: stateParsed.success ? stateParsed.data.jws : stateRaw === undefined ? null : "bozuk",
     proxy: proxyParsed.success
       ? { adres: proxyParsed.data.adres, atla: proxyParsed.data.atla, guncellendi: proxyParsed.data.guncellendi }
       : EMPTY_PROXY,
     transfer: transferParsed.success
-      ? { talepId: transferParsed.data.talepId, istendi: transferParsed.data.istendi, gerekce: transferParsed.data.gerekce }
+      ? {
+          talepId: transferParsed.data.talepId,
+          istendi: transferParsed.data.istendi,
+          gerekce: transferParsed.data.gerekce,
+          durum: transferParsed.data.durum ?? "BEKLIYOR",
+        }
       : null,
     setAsideKeyFile,
+    unreadable,
   };
   return current;
 }
@@ -278,25 +270,43 @@ function writeDoc(file: string, text: string): void {
   writeFileAtomicSync(path.join(s.dir, file), `${text}\n`);
 }
 
+/** Yazılan dosya artık okunabilir: okunamayanlar listesinden düşer. */
+function withoutUnreadable(s: LicenseStoreSnapshot, file: string): readonly string[] {
+  return s.unreadable.filter((n) => n !== file);
+}
+
+/** Lisans kimliği YALNIZ doğrulanmış kiradan öğrenilir (etkinleştirme yanıtı); DB kimliği buraya yazılmaz. */
+export function saveLicenseIdentity(kurulumId: string): LicenseIdentity {
+  const s = requireWritable();
+  const identity: LicenseIdentity = { kurulumId: UuidSchema.parse(kurulumId), ogrenildi: new Date().toISOString() };
+  writeFileAtomicSync(path.join(s.dir, LICENSE_FILES.IDENTITY), JSON.stringify({ v: 1, ...identity }));
+  current = { ...s, identity, unreadable: withoutUnreadable(s, LICENSE_FILES.IDENTITY) };
+  return identity;
+}
+
 export function saveEntitlement(jws: string): void {
   writeDoc(LICENSE_FILES.ENTITLEMENT, jws);
-  current = { ...requireWritable(), entitlementJws: jws };
+  const s = requireWritable();
+  current = { ...s, entitlementJws: jws, unreadable: withoutUnreadable(s, LICENSE_FILES.ENTITLEMENT) };
 }
 
 export function saveLease(jws: string): void {
   writeDoc(LICENSE_FILES.LEASE, jws);
-  current = { ...requireWritable(), leaseJws: jws };
+  const s = requireWritable();
+  current = { ...s, leaseJws: jws, unreadable: withoutUnreadable(s, LICENSE_FILES.LEASE) };
 }
 
 export function saveStateRecord(jws: string): void {
   writeDoc(LICENSE_FILES.STATE, JSON.stringify({ v: 1, jws }));
-  current = { ...requireWritable(), stateJws: jws };
+  const s = requireWritable();
+  current = { ...s, stateJws: jws, unreadable: withoutUnreadable(s, LICENSE_FILES.STATE) };
 }
 
 export function saveProxy(cfg: { adres: string | null; atla: string | null }): ProxyConfig {
   const next: ProxyConfig = { adres: cfg.adres, atla: cfg.atla, guncellendi: new Date().toISOString() };
   writeDoc(LICENSE_FILES.PROXY, JSON.stringify({ v: 1, ...next }));
-  current = { ...requireWritable(), proxy: next };
+  const s = requireWritable();
+  current = { ...s, proxy: next, unreadable: withoutUnreadable(s, LICENSE_FILES.PROXY) };
   return next;
 }
 
@@ -305,7 +315,7 @@ export function saveTransfer(t: PendingTransfer | null): void {
   const file = path.join(s.dir, LICENSE_FILES.TRANSFER);
   if (t === null) fs.rmSync(file, { force: true });
   else writeFileAtomicSync(file, JSON.stringify({ v: 1, ...t }));
-  current = { ...s, transfer: t };
+  current = { ...s, transfer: t, unreadable: withoutUnreadable(s, LICENSE_FILES.TRANSFER) };
 }
 
 /** Test-only: bellek kopyasını sıfırlar (dosyalara dokunmaz). */

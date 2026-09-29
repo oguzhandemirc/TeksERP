@@ -8,12 +8,13 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { createHash, createPublicKey } from "node:crypto";
+import { createHash, createPublicKey, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { ensureInstallationIdentity } from "../../src/jobs/installation-identity.job";
-import { loadLicenseStoreSync, saveEntitlement, saveLease } from "../../src/lib/license/store";
+import { loadLicenseStoreSync, saveEntitlement, saveLease, saveLicenseIdentity } from "../../src/lib/license/store";
 import {
   configureLicenseRuntimeForTests,
+  getLicenseSnapshot,
   invalidateLicenseSnapshot,
   setMeasuredFingerprint,
   startAccumulationForLease,
@@ -40,7 +41,10 @@ import { fiksturKur, hakBas, kiraYuku, type Fikstur } from "./lisans-fikstur";
 export interface BulutLisans {
   readonly f: Fikstur;
   readonly dizin: string;
+  /** LİSANS kimliği (D14, `LICENSE_DIR`) — imzalı istekler bununla; DB kimliğinden bilerek FARKLI. */
   readonly installationId: string;
+  /** DB `system.installationId`si — yalnız bilgi; imzada görünmemeli (V1 sondası). */
+  readonly dbInstallationId: string;
   /** Depo açık anahtarı (sahte bulut imzayı bununla doğrular). */
   readonly x: string;
   /** HAK + KİRA yazar (varsayılan: URETIM, `patron-bulut`, aralık 5 dk, abonelik +30 gün, gözlem). */
@@ -54,7 +58,9 @@ export async function bulutLisansKur(): Promise<BulutLisans> {
   const kimlik = await ensureInstallationIdentity();
   const f0 = fiksturKur(Date.now());
   const key = store.key;
-  const f: Fikstur = { ...f0, kurulumId: kimlik.installationId, kurulum: { kid: key.kid, x: key.x, privateKey: key.privateKey, acik: createPublicKey(key.privateKey) } };
+  const lisansId = randomUUID();
+  saveLicenseIdentity(lisansId);
+  const f: Fikstur = { ...f0, kurulumId: lisansId, kurulum: { kid: key.kid, x: key.x, privateKey: key.privateKey, acik: createPublicKey(key.privateKey) } };
   configureLicenseRuntimeForTests({ roots: f.kokler, vendorUrl: null });
   await refreshLicenseDbFacts(kimlik.installationId);
   const tum = { f1: true, f2: true, f3: true, f4: true, f5: true };
@@ -68,11 +74,14 @@ export async function bulutLisansKur(): Promise<BulutLisans> {
       ...kira,
     });
     saveLease(signDocument({ typ: TYP.KIRA, schema: LeaseSchema, payload: doc, key: f.alt }));
-    startAccumulationForLease(doc);
+    invalidateLicenseSnapshot();
+    const hakDogru = getLicenseSnapshot().entitlement;
+    if (!hakDogru) throw new Error("bulut fikstürü: HAK doğrulanmadı");
+    startAccumulationForLease({ lease: doc, entitlement: hakDogru, licenseId: lisansId });
     invalidateLicenseSnapshot();
   };
   lisansiYaz();
-  return { f, dizin, installationId: kimlik.installationId, x: key.x, lisansiYaz };
+  return { f, dizin, installationId: lisansId, dbInstallationId: kimlik.installationId, x: key.x, lisansiYaz };
 }
 
 // ── Sahte bulut ───────────────────────────────────────────────────────────────

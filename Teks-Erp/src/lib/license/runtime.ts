@@ -5,7 +5,6 @@ import {
   ROOT_PUBLIC_KEYS,
   compareFingerprints,
   isoToMs,
-  msToIso,
   type FingerprintDecision,
   type LeaseDoc,
   type LicenseMode,
@@ -13,18 +12,46 @@ import {
   type VerifiedEntitlement,
   type VerifiedLease,
 } from "./protocol";
-import { computeLicenseState, sanctionSnapshotOf, verifyLicenseDocuments, type LicenseState } from "./state";
-import { evaluateEntitlement, evaluateLease, type Finding, type LicenseStateInput } from "./state-rules";
-import { accumulatedRuntime, signStateRecord, verifyStateRecord, type StateRecord } from "./saat";
-import { getLicenseStore, saveStateRecord } from "./store";
+import { computeLicenseState, verifyLicenseDocuments, type LicenseState } from "./state";
+import { evaluateEntitlement, evaluateLease, type DocResult, type Finding, type LicenseStateInput } from "./state-rules";
+import { evaluateRollback } from "./state-rules-trust";
+import type { StateRecord } from "./saat";
+import { LICENSE_FILES, getLicenseStore, type LicenseStoreSnapshot } from "./store";
 import { STARTUP_VENDOR } from "./vendor-url";
 import type { MeasuredFingerprint } from "./fingerprint";
+import {
+  beginRecordForLease,
+  currentAccumulation,
+  downtimeCreditOf,
+  elapsedOf,
+  highWaterOf,
+  recordFor,
+  rewriteRecord,
+  __resetAccumulationForTests,
+  type Accumulation,
+} from "./accumulation";
+import {
+  bumpLicenseSnapshotVersion,
+  getDoorbellStatus,
+  getLicenseEngineStatus,
+  getPollStatus,
+  licenseSnapshotVersion,
+  peekVendorClockSkew,
+  pollFailedRecently,
+  __resetLicenseSignalsForTests,
+} from "./license-signals";
+
+// Sinyaller ayrı modülde yaşar; çağıranlar tarihsel olarak buradan içe aktarır.
+export {
+  POLL_FAILURE_WINDOW_MS, getDoorbellStatus, getDownloadTokens, getLicenseEngineStatus, getPollStatus,
+  peekObservationCounters, pollFailedRecently, recordModuleObservation, recordObservation, recordPollOutcome,
+  recordVendorClockSkew, resetObservationCounters, setDownloadTokens, setLicenseEngineStatus, setNextPollAt,
+  updateDoorbellStatus, type DoorbellStatus, type LicenseEngineState, type LicenseEngineStatus, type PollStatus,
+} from "./license-signals";
 
 /** Derleme varsayılan kipi — Faz 4'e dek GÖZLEM (hiçbir istek engellenmez, bant yok). */
 export const DEFAULT_LICENSE_MODE: LicenseMode = "gozlem";
 const SNAPSHOT_TTL_MS = 30_000;
-/** "Son yoklama başarısız" penceresi (zamanın getirdiği kısıtlamanın ikinci anahtarı). */
-export const POLL_FAILURE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export interface LicenseRuntimeConfig {
   /** Satıcı lisans sunucusu kökü (`vendor-url.ts`); null ise dışarı hiç çıkılmaz. */
@@ -34,7 +61,6 @@ export interface LicenseRuntimeConfig {
 }
 
 let config: LicenseRuntimeConfig = { vendorUrl: STARTUP_VENDOR.url, roots: ROOT_PUBLIC_KEYS };
-let version = 0;
 
 export function getLicenseConfig(): LicenseRuntimeConfig {
   return config;
@@ -48,6 +74,7 @@ export function configureLicenseRuntimeForTests(p: Partial<LicenseRuntimeConfig>
 
 // ── DB'den türeyen olgular (dosya silmekle yenilenmez) ─────────────────────────
 export interface LicenseDbFacts {
+  /** DB'nin `system.installationId`si — YALNIZ BİLGİ (döküm/DR kopyası taşır); lisans kimliği DEĞİL. */
   readonly installationId: string | null;
   /** Kurulumun ilk açılışı: kimlik satırı ile en eski kullanıcının `createdAt`inin küçüğü. */
   readonly firstOpenMs: number | null;
@@ -63,9 +90,12 @@ export function setLicenseDbFacts(p: Partial<LicenseDbFacts>): void {
 export function getLicenseDbFacts(): LicenseDbFacts {
   return facts;
 }
-/** Lisans kimliği — imzalı istekler ve patron bulutu ön koşulu TEK buradan okur (D14 geçişinin tek dikişi). */
+/**
+ * Lisans kimliği (D14: LICENSE_DIR `kurulumId`) — imzalı istekler, zil, patron bulutu eşitleme ve
+ * gelen kutusu TEK buradan okur; DB `installationId`si (döküm/DR kopyası taşır) kimlik DEĞİLDİR.
+ */
 export function getLicenseInstallationId(): string | null {
-  return facts.installationId;
+  return getLicenseSnapshot().licenseId;
 }
 
 // ── Ölçüm ─────────────────────────────────────────────────────────────────────
@@ -78,153 +108,95 @@ export function getMeasuredFingerprint(): MeasuredFingerprint | null {
   return fingerprint;
 }
 
-// ── Yoklama ve zil durumu ───────────────────────────────────────────────────────
-export interface PollStatus {
-  readonly lastAttemptAt: number | null;
-  readonly lastSuccessAt: number | null;
-  readonly lastFailureAt: number | null;
-  readonly lastFailureCode: string | null;
-  readonly nextAttemptAt: number | null;
-}
-let poll: PollStatus = { lastAttemptAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureCode: null, nextAttemptAt: null };
-
-/** Başarılı yoklama = geçerli YENİ kira alındı; başka her sonuç başarısızdır (protokol §5). */
-export function recordPollOutcome(o: { ok: boolean; code?: string; atMs?: number }): void {
-  const at = o.atMs ?? Date.now();
-  poll = o.ok
-    ? { ...poll, lastAttemptAt: at, lastSuccessAt: at }
-    : { ...poll, lastAttemptAt: at, lastFailureAt: at, lastFailureCode: o.code ?? "BILINMIYOR" };
-  invalidateLicenseSnapshot();
-}
-export function setNextPollAt(ms: number | null): void {
-  poll = { ...poll, nextAttemptAt: ms };
-}
-export function getPollStatus(): PollStatus {
-  return poll;
+// ── Satıcı saati sapması: bu süreçte ölçülmediyse durum kaydındaki son değer ────
+export function getVendorClockSkewMs(): number | null {
+  const mem = peekVendorClockSkew();
+  if (mem.known) return mem.ms;
+  const sn = currentAccumulation()?.record?.saticiSapmaSn;
+  return typeof sn === "number" ? sn * 1000 : null;
 }
 
-export interface DoorbellStatus {
-  readonly connected: boolean;
-  readonly lastConnectedAt: number | null;
-  readonly lastEventAt: number | null;
-  readonly lastHeartbeatAt: number | null;
-  readonly lastErrorCode: string | null;
-}
-let doorbell: DoorbellStatus = { connected: false, lastConnectedAt: null, lastEventAt: null, lastHeartbeatAt: null, lastErrorCode: null };
-export function updateDoorbellStatus(p: Partial<DoorbellStatus>): void {
-  doorbell = { ...doorbell, ...p };
-}
-export function getDoorbellStatus(): DoorbellStatus {
-  return doorbell;
+function skewSecondsForRecord(): number | null {
+  const ms = getVendorClockSkewMs();
+  return ms === null ? null : Math.max(-1e9, Math.min(1e9, Math.round(ms / 1000)));
 }
 
-// ── Gözlem sayaçları (kapı "reddederdim" dediğinde artar; yoklamayla bize gider) ──
-let observation = { reddedilecekIstek: 0, reddedilecekModul: 0 };
-export function recordObservation(kind: "istek" | "modul"): void {
-  if (kind === "istek") observation.reddedilecekIstek++;
-  else observation.reddedilecekModul++;
-}
-export function peekObservationCounters(): { reddedilecekIstek: number; reddedilecekModul: number } {
-  return { ...observation };
-}
-export function resetObservationCounters(): void {
-  observation = { reddedilecekIstek: 0, reddedilecekModul: 0 };
-}
-
-// ── İndirme belirteçleri (satıcıdan kiraya eşlik eder; Faz 3 istemcileri okur) ───
-let downloadTokens: ReadonlyArray<{ yolOneki: string; belirtec: string }> = [];
-export function setDownloadTokens(tokens: ReadonlyArray<{ yolOneki: string; belirtec: string }>): void {
-  downloadTokens = [...tokens];
-}
-export function getDownloadTokens(): ReadonlyArray<{ yolOneki: string; belirtec: string }> {
-  return downloadTokens;
-}
-
-// ── Durum kaydı (monotonik birikim) ─────────────────────────────────────────────
-interface Accumulation {
-  readonly jws: string;
-  readonly installationId: string;
-  readonly record: StateRecord | null;
-  /** Bu süreçte kayda son dokunulan hrtime — birikim buradan sayılır. */
-  readonly baseHrNs: bigint;
-}
-let accumulation: Accumulation | null = null;
-
-/** Diskteki kaydı (bir kez) doğrular; kurulum kimliği ya da dosya değişince yeniden. */
-function currentAccumulation(): Accumulation | null {
-  const store = getLicenseStore();
-  const installationId = facts.installationId;
-  if (!store?.key || !store.stateJws || !installationId) return null;
-  if (accumulation && accumulation.jws === store.stateJws && accumulation.installationId === installationId) return accumulation;
-  const v = verifyStateRecord(store.stateJws, { publicKeyX: store.key.x, installationId });
-  accumulation = { jws: store.stateJws, installationId, record: v.ok ? v.value : null, baseHrNs: process.hrtime.bigint() };
-  return accumulation;
-}
-
-function elapsedOf(a: Accumulation): number {
-  return a.record ? accumulatedRuntime({ storedMs: a.record.birikenMs, loadHrNs: a.baseHrNs, nowHrNs: process.hrtime.bigint() }) : 0;
-}
-
-function highWaterOf(record: StateRecord | null, lease: LeaseDoc | null): number {
-  return Math.max(
-    facts.ledgerHighWaterMs ?? 0,
-    record ? isoToMs(record.yuksekSu) : 0,
-    lease ? isoToMs(lease.sunucuSaati) : 0,
-  );
-}
-
-function writeRecord(record: StateRecord): void {
-  const store = getLicenseStore();
-  if (!store?.key) throw new Error("Lisans deposu hazır değil");
-  const jws = signStateRecord(record, store.key.privateKey, store.key.x);
-  saveStateRecord(jws);
-  accumulation = { jws, installationId: record.kurulumId, record, baseHrNs: process.hrtime.bigint() };
-  invalidateLicenseSnapshot();
-}
-
+// ── Durum kaydı yazımı (katman `accumulation.ts`) ───────────────────────────────
 /**
  * Birikimi diske yazar (saatlik + kapanışta). YALNIZ geçerli kayıt kullanılabilir kiraya
  * aitse: bozuk/silinmiş kayıt aynı kira için sıfırdan BAŞLATILMAZ (saat hilesini açardı).
  */
 export function persistAccumulation(nowMs: number = Date.now()): boolean {
   const a = currentAccumulation();
-  const lease = getLicenseSnapshot(nowMs).lease?.document ?? null;
-  if (!a?.record || !lease || a.record.kiraId !== lease.kiraId) return false;
-  writeRecord({
-    ...a.record,
-    birikenMs: elapsedOf(a),
-    yazildi: msToIso(nowMs),
-    yuksekSu: msToIso(highWaterOf(a.record, lease)),
-    sira: a.record.sira + 1,
+  const snap = getLicenseSnapshot(nowMs);
+  const lease = snap.lease?.document ?? null;
+  const record = recordFor(a, snap.licenseId);
+  if (!a || !record || !lease || record.kiraId !== lease.kiraId) return false;
+  rewriteRecord({
+    a,
+    record,
+    lease,
+    entitlement: snap.entitlement,
+    clockConsistent: snap.state.saat.finding === null,
+    ledgerHighWaterMs: facts.ledgerHighWaterMs,
+    skewSeconds: skewSecondsForRecord(),
+    nowMs,
   });
   return true;
 }
 
-/** Yeni kira kabul edildi: birikim sıfırdan, kira kararları (kip + yaptırım) kalıcı iz olarak. */
-export function startAccumulationForLease(lease: LeaseDoc, nowMs: number = Date.now()): void {
-  if (!facts.installationId) throw new Error("Kurulum kimliği hazır değil");
-  const prev = currentAccumulation()?.record ?? null;
-  writeRecord({
-    v: 1,
-    kurulumId: facts.installationId,
-    kiraId: lease.kiraId,
-    birikenMs: 0,
-    yazildi: msToIso(nowMs),
-    yuksekSu: msToIso(highWaterOf(prev, lease)),
-    sonKiraZorlamasi: lease.zorlama,
-    sonYaptirim: sanctionSnapshotOf(lease),
-    sira: prev ? prev.sira + 1 : 0,
+/** Yeni kira kabul edildi: birikim sıfırdan, kira kararları + HAK pini kalıcı iz olarak. */
+export function startAccumulationForLease(g: {
+  readonly lease: LeaseDoc;
+  readonly entitlement: VerifiedEntitlement;
+  readonly licenseId: string;
+  readonly nowMs?: number;
+}): void {
+  beginRecordForLease({
+    ...g,
+    ledgerHighWaterMs: facts.ledgerHighWaterMs,
+    skewSeconds: skewSecondsForRecord(),
+    nowMs: g.nowMs ?? Date.now(),
   });
+}
+
+// ── Lisans kimliği (D14: LICENSE_DIR'de; DB kimliği yalnız bilgi) ────────────────
+export type LicenseIdSource = "DOSYA" | "KIRA" | "DURUM";
+
+/**
+ * Kimlik dosyası yoksa (D14 öncesi etkinleşmiş kurulum) BU kurulum anahtarına bağlı imzalı kira ya
+ * da bu anahtarla imzalı durum kaydı kimliği taşır — ikisini de yalnız satıcı/bu depo üretebilir.
+ * Benimseme bellekte kalır; dosyaya yalnız doğrulanmış satıcı yanıtı yazar.
+ */
+function resolveLicenseId(
+  store: LicenseStoreSnapshot | null,
+  lease: DocResult<VerifiedLease>,
+  a: Accumulation | null,
+): { id: string | null; source: LicenseIdSource | null } {
+  if (store?.identity) return { id: store.identity.kurulumId, source: "DOSYA" };
+  const kid = store?.key?.kid ?? null;
+  if (kid && lease.status === "GECERLI" && lease.value.document.kurulumAnahtarKimligi === kid) {
+    return { id: lease.value.document.kurulumId, source: "KIRA" };
+  }
+  if (a?.record) return { id: a.record.kurulumId, source: "DURUM" };
+  return { id: null, source: null };
 }
 
 // ── Anlık görüntü ───────────────────────────────────────────────────────────────
 export interface LicenseSnapshot {
-  /** Kurulum kimliği ve depo hazır mı — değilse durum yalnız bilgi amaçlıdır. */
+  /** Depo + kurulum anahtarı + DB olguları hazır mı — değilse durum yalnız bilgi amaçlıdır. */
   readonly hazir: boolean;
+  /** Lisans kimliği (`kurulumId`, LICENSE_DIR); etkinleşmemişte null. DB `installationId`si DEĞİL. */
+  readonly licenseId: string | null;
+  readonly licenseIdSource: LicenseIdSource | null;
+  /** Etkinleşmiş sayılır mı (kimlik ∧ (HAK ∨ kira ∨ geçerli durum kaydı) ∨ bekleyen taşıma). */
+  readonly activated: boolean;
   readonly state: LicenseState;
-  /** Kullanılabilir (bu kuruluma bağlı, doğrulanmış) belgeler. */
+  /** Kullanılabilir (bu kuruluma bağlı, doğrulanmış, geri alınmamış) belgeler. */
   readonly entitlement: VerifiedEntitlement | null;
   readonly lease: VerifiedLease | null;
+  /** Bilinen en yeni kira: kullanılabilir kira ile durum kaydındaki son kabulün yenisi (kira zinciri ucu). */
+  readonly lastKnownLease: { readonly kiraId: string; readonly verilisMs: number } | null;
   readonly fingerprintDecision: FingerprintDecision | null;
   readonly durumKaydi: { readonly gecerli: boolean; readonly sira: number | null };
   readonly computedAtMs: number;
@@ -233,28 +205,44 @@ export interface LicenseSnapshot {
 let cached: { snap: LicenseSnapshot; version: number } | null = null;
 
 export function invalidateLicenseSnapshot(): void {
-  version++;
+  bumpLicenseSnapshotVersion();
 }
 
-function buildInput(nowMs: number): { input: LicenseStateInput; entitlement: VerifiedEntitlement | null; lease: VerifiedLease | null; decision: FingerprintDecision | null; record: StateRecord | null } {
+function docStatus<T>(doc: DocResult<T>, file: string, store: LicenseStoreSnapshot | null): DocResult<T> {
+  return store?.unreadable.includes(file) ? { status: "OKUNAMADI" } : doc;
+}
+
+interface BuiltInput {
+  readonly input: LicenseStateInput;
+  readonly entitlement: VerifiedEntitlement | null;
+  readonly lease: VerifiedLease | null;
+  readonly decision: FingerprintDecision | null;
+  readonly record: StateRecord | null;
+  readonly licenseId: { id: string | null; source: LicenseIdSource | null };
+}
+
+function buildInput(nowMs: number): BuiltInput {
   const store = getLicenseStore();
   const docs = verifyLicenseDocuments({
     entitlementJws: store?.entitlementJws ?? null,
     leaseJws: store?.leaseJws ?? null,
     roots: config.roots,
   });
+  const kira = docStatus(docs.kira, LICENSE_FILES.LEASE, store);
   const a = currentAccumulation();
-  const record = a?.record ?? null;
+  const licenseId = resolveLicenseId(store, kira, a);
+  const record = recordFor(a, licenseId.id);
   const base: LicenseStateInput = {
-    kurulumId: facts.installationId,
+    kurulumId: licenseId.id,
     kurulumAnahtarKimligi: store?.key?.kid ?? null,
-    hak: docs.hak,
-    kira: docs.kira,
+    hak: docStatus(docs.hak, LICENSE_FILES.ENTITLEMENT, store),
+    kira,
     saat: {
       duvarMs: nowMs,
       yuksekSuMs: 0,
       monotonik: a && record ? { kiraId: record.kiraId, gecenMs: elapsedOf(a) } : null,
       durumDosyasiGecerli: record !== null,
+      kapaliKrediMs: downtimeCreditOf(a, record),
     },
     parmakIziEslesme: "OLCULEMEDI",
     butunluk: "KAPSAM_DISI",
@@ -264,44 +252,64 @@ function buildInput(nowMs: number): { input: LicenseStateInput; entitlement: Ver
     varsayilanKip: DEFAULT_LICENSE_MODE,
     sonKiraZorlamasi: record?.sonKiraZorlamasi ?? null,
     sonYaptirim: record?.sonYaptirim ?? null,
+    sonKira: record?.sonKira ? { kiraId: record.sonKira.kiraId, verilisMs: isoToMs(record.sonKira.verilis) } : null,
+    sonHak: record?.sonHak ?? null,
+    saticiSapmaMs: getVendorClockSkewMs(),
+    depoOkunamadi: store?.unreadable ?? [],
   };
   // Kullanılabilirlik kararı durumun KENDİ kurallarından (tek kaynak); bulgular burada atılır.
   const scratch: Finding[] = [];
   const entitlement = evaluateEntitlement(base, scratch);
-  const lease = evaluateLease(base, entitlement, scratch);
+  const lease = evaluateRollback(base, entitlement, evaluateLease(base, entitlement, scratch), scratch);
   const decision =
     lease && fingerprint
       ? compareFingerprints(lease.document.parmakIzi, fingerprint.digest, { excludeF5: entitlement?.document.sinif === "DR" })
       : null;
   const input: LicenseStateInput = {
     ...base,
-    saat: { ...base.saat, yuksekSuMs: highWaterOf(record, null) },
+    saat: { ...base.saat, yuksekSuMs: highWaterOf(record, null, facts.ledgerHighWaterMs) },
     parmakIziEslesme: decision?.result ?? "OLCULEMEDI",
   };
-  return { input, entitlement, lease, decision, record };
+  return { input, entitlement, lease, decision, record, licenseId };
 }
 
-/** Kurulum hiç etkinleşmemişse (ya da kullanılabilir kira yoksa) yoklama yapılamaz ⇒ başarısız sayılır. */
-export function pollFailedRecently(nowMs: number): boolean {
-  const store = getLicenseStore();
-  if (!store?.leaseJws) return true;
-  const failed = poll.lastFailureAt;
-  if (failed === null || nowMs - failed > POLL_FAILURE_WINDOW_MS) return false;
-  return poll.lastSuccessAt === null || poll.lastSuccessAt < failed;
+function isActivated(store: LicenseStoreSnapshot | null, licenseId: string | null, record: StateRecord | null): boolean {
+  if (!store || store.problem || !store.key) return false;
+  if (store.transfer && store.transfer.durum !== "ONAYLANDI") return true;
+  if (!licenseId) return false;
+  const docPresent =
+    store.entitlementJws !== null ||
+    store.leaseJws !== null ||
+    store.unreadable.includes(LICENSE_FILES.ENTITLEMENT) ||
+    store.unreadable.includes(LICENSE_FILES.LEASE);
+  return docPresent || record !== null;
+}
+
+function lastKnownLeaseOf(lease: VerifiedLease | null, record: StateRecord | null): LicenseSnapshot["lastKnownLease"] {
+  const fromLease = lease ? { kiraId: lease.document.kiraId, verilisMs: isoToMs(lease.document.verilis) } : null;
+  const fromRecord = record?.sonKira ? { kiraId: record.sonKira.kiraId, verilisMs: isoToMs(record.sonKira.verilis) } : null;
+  if (!fromLease) return fromRecord;
+  if (!fromRecord) return fromLease;
+  return fromRecord.verilisMs > fromLease.verilisMs ? fromRecord : fromLease;
 }
 
 /** Senkron, önbellekli (30 sn ya da herhangi bir girdi değişene dek). */
 export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot {
+  const version = licenseSnapshotVersion();
   if (cached && cached.version === version && nowMs - cached.snap.computedAtMs < SNAPSHOT_TTL_MS && nowMs >= cached.snap.computedAtMs) {
     return cached.snap;
   }
-  const { input, entitlement, lease, decision, record } = buildInput(nowMs);
+  const { input, entitlement, lease, decision, record, licenseId } = buildInput(nowMs);
   const store = getLicenseStore();
   const snap: LicenseSnapshot = {
     hazir: Boolean(store && !store.problem && store.key && facts.installationId),
+    licenseId: licenseId.id,
+    licenseIdSource: licenseId.source,
+    activated: isActivated(store, licenseId.id, record),
     state: computeLicenseState(input),
     entitlement,
     lease,
+    lastKnownLease: lastKnownLeaseOf(lease, record),
     fingerprintDecision: decision,
     durumKaydi: { gecerli: record !== null, sira: record?.sira ?? null },
     computedAtMs: nowMs,
@@ -312,24 +320,26 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
 
 /** `/api/admin/health` lisans bloğu — durum ÖZETİ (belge içeriği ve anahtar yok). */
 export function licenseHealthBlock(): Record<string, unknown> {
+  const motor = getLicenseEngineStatus();
   try {
     const snap = getLicenseSnapshot();
-    const poll = getPollStatus();
-    const bell = getDoorbellStatus();
+    const pollStatus = getPollStatus();
     const iso = (ms: number | null): string | null => (ms === null ? null : new Date(ms).toISOString());
     return {
       hazir: snap.hazir,
+      motor: motor.durum,
+      motorNeden: motor.neden,
       kip: snap.state.kip,
       gecerlilik: snap.state.gecerlilik,
       hesaplananKademe: snap.state.hesaplananKademe,
       uygulananKademe: snap.state.uygulananKademe,
       nedenler: snap.state.nedenler.map((n) => n.kod),
-      sonYoklama: iso(poll.lastAttemptAt),
-      sonBasariliYoklama: iso(poll.lastSuccessAt),
-      zilBagli: bell.connected,
+      sonYoklama: iso(pollStatus.lastAttemptAt),
+      sonBasariliYoklama: iso(pollStatus.lastSuccessAt),
+      zilBagli: getDoorbellStatus().connected,
     };
   } catch {
-    return { hazir: false };
+    return { hazir: false, motor: motor.durum, motorNeden: motor.neden };
   }
 }
 
@@ -337,11 +347,7 @@ export function licenseHealthBlock(): Record<string, unknown> {
 export function __resetLicenseRuntimeForTests(): void {
   facts = { installationId: null, firstOpenMs: null, ledgerHighWaterMs: null };
   fingerprint = null;
-  poll = { lastAttemptAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureCode: null, nextAttemptAt: null };
-  doorbell = { connected: false, lastConnectedAt: null, lastEventAt: null, lastHeartbeatAt: null, lastErrorCode: null };
-  observation = { reddedilecekIstek: 0, reddedilecekModul: 0 };
-  downloadTokens = [];
-  accumulation = null;
+  __resetLicenseSignalsForTests();
+  __resetAccumulationForTests();
   cached = null;
-  version++;
 }

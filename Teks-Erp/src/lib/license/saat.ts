@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { KeyObject } from "node:crypto";
 import {
   IsoTimeSchema,
+  LICENSE_CLASSES,
   ModuleKeySchema,
   SANCTION_LEVELS,
   CLOCK_SKEW_MS,
@@ -33,6 +34,12 @@ export interface ClockInput {
   /** Bu kira kabul edildiğinden beri biriken monotonik süre; ölçülemiyorsa null. */
   readonly monotonicElapsedMs: number | null;
   readonly pollIntervalMs: number;
+  /**
+   * Makinenin KAPALI geçirdiği, duvar saatiyle gözlenmiş süre (yalnız saat tutarlıyken yazılmış
+   * durum kaydından türer). Tahmin bir ALT sınırdır; üst eşik bu süre kadar genişler ki hafta
+   * sonu kapanan makine sahte SAAT_İLERİ görmesin. Güvenilir saatin alt sınırına GİRMEZ.
+   */
+  readonly downtimeCreditMs?: number;
 }
 
 export interface ClockResult {
@@ -59,7 +66,7 @@ export function evaluateClock(g: ClockInput): ClockResult {
     return { trustedMs: Math.max(g.wallMs, floor), source: "DUVAR", finding: null, findingSource: null };
   }
   const estimate = g.leaseServerTimeMs + Math.max(0, g.monotonicElapsedMs);
-  const upperBound = estimate + g.pollIntervalMs + CLOCK_SKEW_MS;
+  const upperBound = estimate + Math.max(0, g.downtimeCreditMs ?? 0) + g.pollIntervalMs + CLOCK_SKEW_MS;
   // Tahminin ötesindeki yüksek su alt sınır olarak HİÇ kullanılmaz: eşikte tavanlamak bile
   // güvenilir saati duvarın ilerisine iter ve sahte SAAT_GERİ üretir.
   const highWaterTrusted = floor <= upperBound;
@@ -99,6 +106,23 @@ export const SanctionSnapshotSchema = z.object({
 });
 export type SanctionSnapshot = z.infer<typeof SanctionSnapshotSchema>;
 
+/** Kök türü: HAK'ı imzalayan zincirin kökü üretim mi hazırlık mı (sınıf pininin parçası). */
+export const ROOT_KINDS = ["kok", "hazirlik"] as const;
+export type RootKind = (typeof ROOT_KINDS)[number];
+
+export function rootKindOf(rootKid: string): RootKind {
+  return rootKid.startsWith("hazirlik-") ? "hazirlik" : "kok";
+}
+
+/** Son kabul edilen HAK'ın pini: yerel dosya daha eski sürüme ya da başka sınıfa/köke dönerse geri alma sayılır. */
+export const EntitlementPinSchema = z.object({
+  hakId: UuidSchema,
+  surum: z.number().int().min(1),
+  sinif: z.enum(LICENSE_CLASSES),
+  kokTuru: z.enum(ROOT_KINDS),
+});
+export type EntitlementPin = z.infer<typeof EntitlementPinSchema>;
+
 /** `durum.json`: kurulum anahtarıyla imzalı, kiraya bağlı birikim kaydı. */
 export const StateRecordSchema = z.object({
   v: z.literal(1),
@@ -113,6 +137,17 @@ export const StateRecordSchema = z.object({
   sonYaptirim: SanctionSnapshotSchema.nullable(),
   /** Her yazımda artar; geri yüklenmiş eski kopyayı ayırt etmeye yarar. */
   sira: z.number().int().min(0),
+  // Aşağıdakiler sonradan eklendi (isteğe bağlı: eski kayıt okunur, ilk yazımda dolar).
+  /** Kabul edilen son kira: diskteki kira bundan ESKİYSE geri alınmıştır. */
+  sonKira: z.object({ kiraId: UuidSchema, verilis: IsoTimeSchema }).nullable().optional(),
+  /** Kabul edilen son HAK'ın sürüm/sınıf/kök pini. */
+  sonHak: EntitlementPinSchema.nullable().optional(),
+  /** Bu kira boyunca biriken, duvar saatiyle gözlenmiş kapalı kalma süresi (üst eşik kredisi). */
+  kapaliMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  /** Yazım anında duvar saati tahminle tutarlı mıydı; değilse `yazildi` kapalı süreye kredi VERMEZ. */
+  duvarTutarli: z.boolean().optional(),
+  /** Satıcının `ISTEK_ZAMAN` ile bildirdiği son sapma (duvar − satıcı, sn); null = ölçülmedi/tutarlı. */
+  saticiSapmaSn: z.number().int().min(-1e9).max(1e9).nullable().optional(),
 });
 export type StateRecord = z.infer<typeof StateRecordSchema>;
 
@@ -121,17 +156,22 @@ export function signStateRecord(record: StateRecord, privateKey: KeyObject, publ
   return signDocument({ typ: TYP.DURUM, schema: StateRecordSchema, payload: record, key: { kid, privateKey } });
 }
 
-export function verifyStateRecord(
-  token: unknown,
-  g: { readonly publicKeyX: string; readonly installationId: string },
-): Result<StateRecord> {
+/** İmza + şema; kurulum bağı ÇAĞIRANIN (lisans kimliği henüz bilinmiyorsa kayıttan benimsenebilir). */
+export function verifyStateRecordSignature(token: unknown, g: { readonly publicKeyX: string }): Result<StateRecord> {
   const key = publicKeyFromX(g.publicKeyX);
   if (!key) return failure("JWS_KID", "Kurulum açık anahtarı biçimsiz");
   const kid = installationKeyId(g.publicKeyX);
   const j = verifyJws(token, { typ: TYP.DURUM, findKey: (k) => (k === kid ? key : undefined) });
   if (!j.ok) return forwardFailure(j);
-  const d = decodeDocument(StateRecordSchema, j.value.payload);
-  if (!d.ok) return forwardFailure(d);
+  return decodeDocument(StateRecordSchema, j.value.payload);
+}
+
+export function verifyStateRecord(
+  token: unknown,
+  g: { readonly publicKeyX: string; readonly installationId: string },
+): Result<StateRecord> {
+  const d = verifyStateRecordSignature(token, g);
+  if (!d.ok) return d;
   if (d.value.kurulumId !== g.installationId) return failure("ISTEK_KURULUM", "Durum kaydı başka bir kuruluma ait");
   return success(d.value);
 }
