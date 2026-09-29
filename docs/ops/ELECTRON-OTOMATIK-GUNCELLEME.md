@@ -349,6 +349,11 @@ Yayın betikleri bu yüzden iki yoldan okur (tek kaynak `scripts/lib/yayin-okuma
 Repoya, log'a, sürüm notuna GİRMEZ. Dosya yoksa / izinleri gevşekse / biçimsizse yayın betiği
 **ilk ssh/scp'den ÖNCE durur** (anonim okumaya düşmez). `--kuru` belirteç istemez.
 
+**Taze CLI belirteci (3bc, tercih edilen):** `~/.tekserp/yayin-belirteci-kaynagi.json` (600) varsa betik
+her kanal/ürün için satıcı CLI'ından (`anahtar.ts indirme-belirteci`, ≤ 70 dk) taze belirteç üretir —
+hazırlıkta yerel anahtar dizini, üretimde VDS'teki satıcı konteyneri (ssh). Kaynak dosyası yoksa yukarıdaki
+dosya belirteci kullanılır; kaynak dosyası bozuksa ya da CLI başarısızsa betik DURUR (`docs/kurallar/surum-yayin.md`).
+
 | Betik (3c' öncesi satır) | Ne okuyordu | Neden | Şimdi |
 |---|---|---|---|
 | `electron-yayinla.sh:121` | `latest.yml` (`--dogrula` sürümü) | denetlenecek sürüm | SSH `cat` (VDS) |
