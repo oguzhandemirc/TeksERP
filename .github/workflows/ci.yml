@@ -441,6 +441,37 @@ jobs:
         run: npx tsx scripts/run-all-tests.ts
 
   # ===========================================================================
+  # SATICI WEB — portal web arayüzü (satici/web; React + Vite). DB'siz: tip + lint + vitest (ayna
+  # bekçisi sunucu KAYNAĞINI metin olarak okur, sunucu bağımlılığı gerekmez) + iki derleme (portal ·
+  # bayi) — derleme kırılırsa satıcı sunucusu arayüzsüz (404) kalır.
+  # ===========================================================================
+  satici-web:
+    name: Satıcı web (tsc + lint + vitest + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: satici/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: satici/web/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run typecheck:plain
+      - name: Kapı kapsamı (tip kapısı SIFIR dosya derlemiyor)
+        run: node scripts/kapi-kapsami.mjs satici/web
+        working-directory: .
+      - name: Test (vitest)
+        run: npx vitest run
+      - name: Derleme (portal + bayi)
+        run: npm run build
+
+  # ===========================================================================
   # E2E — Electron uygulaması gerçekten açılıp Login render oluyor mu (Playwright
   # _electron.launch). Headless Linux'ta xvfb gerekir. continue-on-error: CI'da
   # olası kırılganlık unit job'larını BLOKLAMASIN (E2E sinyali yine görünür).

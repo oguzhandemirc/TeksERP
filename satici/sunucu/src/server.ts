@@ -14,6 +14,7 @@ import { PortalSecretBox } from "./portal/secret-box";
 import type { VendorContext } from "./services/context";
 import { DoorbellHub } from "./services/doorbell";
 import { MaintenanceScheduler, syncKeyRegistry } from "./services/maintenance";
+import { webAppAvailable } from "./http/web-static";
 
 function listen(server: http.Server, port: number, host: string): Promise<AddressInfo> {
   return new Promise((resolve, reject) => {
@@ -30,6 +31,9 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const keys = KeyStore.load(config);
   for (const w of keys.warnings) console.warn(`[satici] anahtar: ${w}`);
+  for (const app of ["portal", "bayi"] as const) {
+    if (!webAppAvailable(config.PORTAL_WEB_DIZINI, app)) console.warn(`[satici] web arayüzü (${app}) derlenmemiş: /${app} 404 döner, API çalışır`);
+  }
   mkdirSync(config.ANAHTAR_DIZINI, { recursive: true, mode: 0o700 });
   const ctx: VendorContext = { config, keys, portalSecrets: PortalSecretBox.load(config.ANAHTAR_DIZINI, { create: true }) };
   await syncKeyRegistry(keys).catch((err: Error) => console.error(`[satici] anahtar künyesi yazılamadı: ${err.message}`));

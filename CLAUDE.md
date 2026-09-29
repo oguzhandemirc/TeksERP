@@ -11,7 +11,7 @@ Tekstil fabrikası ERP'si. Üç alt proje (+ doğmakta olan satıcı platformu),
 | `Teks-Erp/` | Express 5 + Prisma 7 + PostgreSQL backend | 4000 |
 | `Electron/` | Electron 42 + React 19 + Vite yönetim paneli (**admin frontend buraya yazılır**; `React/` yok) | 5174 |
 | `mobil/` | React Native + Expo 54, Android tablet (yatay) + telefon (dikey) — saha | — |
-| `satici/` | Express 5 + Prisma 7 satıcı sunucusu (lisans API `/v1/*` + portal JSON API; VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si `satici/sunucu/`) | 4610 genel · 4611 portal (yalnız tailnet) |
+| `satici/` | Express 5 + Prisma 7 satıcı sunucusu (lisans API `/v1/*` + portal JSON API; VDS'te, fabrikaya kurulmaz; kendi `CLAUDE.md`'si `satici/sunucu/`) + React 19 + Vite portal web arayüzü (`satici/web/`, aynı kökenden sunulur) | 4610 genel (`/bayi`) · 4611 portal (`/portal`, yalnız tailnet) |
 
 **Dallanma:** `feature/*` → `main`; müşteri dalı YOK. Fabrika paketi ve demo derlemesi `main`'den üretilir; müşteri farkı yalnız bayrak profilinde yaşar — "adnansahin'de yok" = "bayrağı kapalı". `if (musteri === 'X')` fork'un ilk sinyalidir, yasak. Müşteri adı da koda gömülmez: ekrandaki firma adı bağlanılan sunucunun `company.name` ayarından gelir, yedeği nötr (`test_musteri_adi_kodda_yok`).
 

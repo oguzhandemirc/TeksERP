@@ -4,7 +4,7 @@
 
 ## Amaç
 
-Fabrikaların lisansını verir ve yönetir: **etkinleştirme** (tek kullanımlık kod → HAK + KİRA), **yoklama** (kira yenileme + kira zinciri kararı + indirme belirteçleri), **kapı zili** (SSE; içerik taşımaz, "şimdi yokla" der), **çevrimdışı/QR**, **taşıma** (her taşıma satıcı onayıyla), **DR devralımı** (self-servis + anında bildirim), **yaptırım** (K0–K5, zorlama, geçerlilik bitişi, planlı eylem, taksit), **portal JSON API'si** (satıcı: tailnet `/portal/api` · bayi: genel `/bayi/api`). Portal web arayüzü (`satici/web`) 1f'de gelir.
+Fabrikaların lisansını verir ve yönetir: **etkinleştirme** (tek kullanımlık kod → HAK + KİRA), **yoklama** (kira yenileme + kira zinciri kararı + indirme belirteçleri), **kapı zili** (SSE; içerik taşımaz, "şimdi yokla" der), **çevrimdışı/QR**, **taşıma** (her taşıma satıcı onayıyla), **DR devralımı** (self-servis + anında bildirim), **yaptırım** (K0–K5, zorlama, geçerlilik bitişi, planlı eylem, taksit), **portal JSON API'si** (satıcı: tailnet `/portal/api` · bayi: genel `/bayi/api`). Portal web arayüzü `satici/web`'dedir (kendi `CLAUDE.md`'si); derlenmiş çıktısını bu sunucu API ile AYNI kökenden sunar (`src/http/web-static.ts`).
 
 ## Katmanlar
 
@@ -13,7 +13,7 @@ Fabrikaların lisansını verir ve yönetir: **etkinleştirme** (tek kullanıml�
 | Protokol | `src/lisans-protokol/` | `Teks-Erp/src/lib/license/protocol/` klasörünün **BAYT-EŞİT aynası**. Burada DÜZENLENMEZ: değişiklik önce Teks-Erp'te, sonra kopya. Bekçi `Teks-Erp/scripts/test_lisans_protokol_aynasi.ts` |
 | Anahtar | `src/keys/` | Kök/bayi parolalı (scrypt + AES-256-GCM); parola YALNIZ imza alt sürecinin stdin'ine (argv/env ASLA), Buffer iş bitince sıfırlanır. ALT/İNDİRME 0600, kök imzalı sertifikalı. Çapa: gömülü `ROOT_PUBLIC_KEYS`; `GUVEN_CAPASI_DOSYASI` yalnız hazırlık/test |
 | Servis | `src/services/` | İş kuralı + tx. Durum geçişi atomik claim (`updateMany WHERE {id, beklenen}` + `count===0 → 409`); `tx.*` `Promise.all`'a girmez |
-| HTTP | `src/http/` | Genel dinleyici: `/v1/*` + `/q` + `/bayi/api` (yalnız BAYI). Tailnet dinleyicisi: `/portal/*` (soket + kaynak ağı kapısı, fail-closed 404). `/v1` gövdesi ham baytlarıyla alınır (imzalı özet) ve KATI şemadan geçer |
+| HTTP | `src/http/` | Genel dinleyici: `/v1/*` + `/q` + `/bayi/api` (yalnız BAYI) + bayi arayüzü `/bayi`. Tailnet dinleyicisi: `/portal/*` (soket + kaynak ağı kapısı, fail-closed 404) + satıcı arayüzü `/portal` (kapının ARKASINDA). Web arayüzü `PORTAL_WEB_DIZINI`den (varsayılan `../web/dist`); dinleyici yalnız KENDİ uygulamasını sunar, `/api` altı HTML'e düşmez, derlenmemişse 404 (bekçi `test_portal_web_statik`). `/v1` gövdesi ham baytlarıyla alınır (imzalı özet) ve KATI şemadan geçer |
 | Portal | `src/portal/` + `src/http/portal-*.ts` · `dealer-routes.ts` | Rota TABLOSU veridir: her rota izin (`roles.ts`) + kimlik beyanı taşır; yazma `executePortalAction` (işlem kimliği + eylem + denetim tek boğaz). Oturum: parola scrypt + TOTP ZORUNLU tek adım, çerez httpOnly + SameSite=Strict, oturum doğduğu dinleyiciye bağlı |
 | Şema | `prisma/` | Müşteri → Tesis → Kurulum → Hak; defterler (`hak_surumu`, `kira`, `yaptirim_eylemi`, `kurulum_kaydi`) DB tetikleyicisiyle değişmez; telemetri (`nonce_defteri`, `yoklama`) yaşa göre budanır |
 
@@ -59,4 +59,4 @@ npm run typecheck && npm run typecheck:scripts && npm run lint   # commit kapıs
 node ../../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts [ad-parçası]   # yalnız *_test DB
 ```
 
-`.env` (repoya girmez, 0600): `DATABASE_URL` (kendi `_test` DB'si; `tekserp_fabrika_*` ASLA) · `PORT_GENEL` · `TAILNET_BIND` · `PORT_TAILNET` · `ANAHTAR_DIZINI` · (yalnız test) `GUVEN_CAPASI_DOSYASI`; saklama süreleri ve diğer isteğe bağlılar `.env.example`te. Bekçiler `scripts/test_*.ts`; harita `Teks-Erp/docs/BEKCI-HARITASI.md` § lisans. CI'da ayrı "Satıcı" job'ı (PG 16, `migrate deploy`, lint + tavan + tip + kapı kapsamı + bekçi koşucusu).
+`.env` (repoya girmez, 0600): `DATABASE_URL` (kendi `_test` DB'si; `tekserp_fabrika_*` ASLA) · `PORT_GENEL` · `TAILNET_BIND` · `PORT_TAILNET` · `ANAHTAR_DIZINI` · `PORTAL_WEB_DIZINI` (derlenmiş `satici/web` çıktısı; varsayılan `../web/dist`) · (yalnız test) `GUVEN_CAPASI_DOSYASI`; saklama süreleri ve diğer isteğe bağlılar `.env.example`te. Bekçiler `scripts/test_*.ts`; harita `Teks-Erp/docs/BEKCI-HARITASI.md` § lisans. CI'da ayrı "Satıcı" job'ı (PG 16, `migrate deploy`, lint + tavan + tip + kapı kapsamı + bekçi koşucusu).

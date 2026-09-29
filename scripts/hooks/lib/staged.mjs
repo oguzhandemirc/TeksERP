@@ -145,6 +145,14 @@ export const PROJELER = [
     lint: ["npm", ["run", "lint"]],
     test: null,
   },
+  {
+    // Satıcı portalı web arayüzü (React + Vite): vitest paketi DB'siz ve hızlıdır (~2 sn); ayna
+    // bekçisi sunucu kaynağını metin olarak okur → sunucu sözleşmesi değişince burada kırmızı.
+    ad: "satici/web",
+    typecheck: ["npm", ["run", "typecheck:plain"]],
+    lint: ["npm", ["run", "lint"]],
+    test: ["npx", ["vitest", "run"]],
+  },
 ];
 
 /** Staged dosyalardan etkilenen alt projeler (kod dosyası şartıyla). */
