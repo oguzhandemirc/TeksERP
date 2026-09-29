@@ -70,9 +70,10 @@ async function temizleFikstur(): Promise<void> {
   await prisma.$executeRawUnsafe(`DELETE FROM "customers" WHERE "code" LIKE $1`, `${TAG}%`);
 }
 
-async function isaretler(c: PoolClient, sonra: Date): Promise<Array<{ tableName: string; rowId: string; kind: string }>> {
+/** `sonra` PG metni olarak taşınır: JS `Date` milisaniyeye keser, aynı ms'deki ÖNCEKİ işaret sayılırdı (aralıklı kırmızı). */
+async function isaretler(c: PoolClient, sonra: Date | string): Promise<Array<{ tableName: string; rowId: string; kind: string }>> {
   const r = await c.query<{ tableName: string; rowId: string; kind: string }>(
-    `SELECT "tableName", "rowId"::text AS "rowId", "kind"::text AS kind FROM "sync_marks" WHERE "createdAt" >= $1 ORDER BY "createdAt", "id"`,
+    `SELECT "tableName", "rowId"::text AS "rowId", "kind"::text AS kind FROM "sync_marks" WHERE "createdAt" >= $1::timestamptz ORDER BY "createdAt", "id"`,
     [sonra],
   );
   return r.rows;
@@ -144,7 +145,7 @@ async function txBolumleri(): Promise<void> {
       `INSERT INTO "rolls" ("id", "itemId", "initialQty", "currentQty", "sackId", "shipmentId", "currentStepId", "producedInStepId", "updatedAt") VALUES ($1, $2, 50, 50, $3, $4, $5, $5, now())`,
       [top, urun, cA, s1, st1],
     );
-    const t4 = (await c.query<{ t: Date }>("SELECT clock_timestamp() AS t")).rows[0]!.t;
+    const t4 = (await c.query<{ t: string }>("SELECT clock_timestamp()::text AS t")).rows[0]!.t;
     await c.query(`UPDATE "rolls" SET "currentQty" = 49 WHERE "id" = $1`, [top]);
     check("§4a ⭐ FK dışı güncelleme işaret YAZMAZ (tetikleyici yalnız ebeveyn değişince)", (await isaretler(c, t4)).length === 0);
     await c.query(`UPDATE "rolls" SET "sackId" = $2 WHERE "id" = $1`, [top, cB]);
@@ -160,7 +161,7 @@ async function txBolumleri(): Promise<void> {
     console.log("\n§5 — filigransız küme (shipment_orders)");
     const siparis2 = randomUUID();
     await c.query(`INSERT INTO "orders" ("id", "orderNumber", "customerId", "updatedAt") VALUES ($1, $2, $3, now())`, [siparis2, `${TAG}S2`, musteri]);
-    const t5 = (await c.query<{ t: Date }>("SELECT clock_timestamp() AS t")).rows[0]!.t;
+    const t5 = (await c.query<{ t: string }>("SELECT clock_timestamp()::text AS t")).rows[0]!.t;
     await c.query(`INSERT INTO "shipment_orders" ("shipmentId", "orderId") VALUES ($1, $2)`, [s1, siparis2]);
     const e5 = (await isaretler(c, t5)).filter((m) => m.tableName === "shipments" && m.rowId === s1).length;
     await c.query(`DELETE FROM "shipment_orders" WHERE "shipmentId" = $1 AND "orderId" = $2`, [s1, siparis2]);
@@ -169,7 +170,7 @@ async function txBolumleri(): Promise<void> {
     check("§5b küme satırı silinince sevkiyat yine KIRLI (deleteMany + yeniden yazım)", d5 === 2, String(d5));
 
     console.log("\n§6 — bekleyen adım silme");
-    const t6 = (await c.query<{ t: Date }>("SELECT clock_timestamp() AS t")).rows[0]!.t;
+    const t6 = (await c.query<{ t: string }>("SELECT clock_timestamp()::text AS t")).rows[0]!.t;
     await c.query(`UPDATE "rolls" SET "currentStepId" = NULL, "producedInStepId" = NULL WHERE "id" = $1`, [top]);
     await c.query(`DELETE FROM "work_order_steps" WHERE "id" = $1`, [st2]);
     check("§6a adım silindi → iş emri KIRLI (adım kök değil)", var_(await isaretler(c, t6), "work_orders", is1, "DIRTY"));
