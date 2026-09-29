@@ -227,8 +227,8 @@ const server = app.listen(Number(PORT), HOST, () => {
     startShiftCalendarScheduler();
     // Kapanan vardiya × tezgah karnesi (M2) — aynı bayrak, aynı sıfır fark.
     startShiftCloseScheduler();
-    // Lisans yoklaması + kapı zili: satıcı adresi (`LICENSE_SERVER_URL`) yoksa ya da kurulum
-    // etkinleşmemişse DIŞARI HİÇ İSTEK ATILMAZ; motor gözlem kipinde (hiçbir istek engellenmez).
+    // Lisans yoklaması + kapı zili: kurulum etkinleşmemişse ya da satıcı adresi kapalıysa
+    // (`LICENSE_SERVER_URL=kapali`) DIŞARI HİÇ İSTEK ATILMAZ; motor gözlem kipinde (hiçbir istek engellenmez).
     startLicensePoll();
     startLicenseDoorbell();
 

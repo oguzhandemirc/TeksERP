@@ -105,6 +105,11 @@ function currentAgent(): https.Agent {
   return agent;
 }
 
+/** Dışarı gidilebilecek adres: HTTPS; düz HTTP yalnız aynı makinedeki (geliştirme) sunucuya — hat dinlenemez. */
+export function isEgressTargetAllowed(u: URL): boolean {
+  return u.protocol === "https:" || (u.protocol === "http:" && LOOPBACK_HOSTS.has(u.hostname));
+}
+
 function resolveTarget(url: string): { u: URL; secure: boolean } {
   let u: URL;
   try {
@@ -112,10 +117,8 @@ function resolveTarget(url: string): { u: URL; secure: boolean } {
   } catch {
     throw new EgressError("EGRESS_URL", "Dış adres çözülemedi");
   }
-  if (u.protocol === "https:") return { u, secure: true };
-  // Düz HTTP yalnız aynı makinedeki (geliştirme) sunucuya: hat dinlenemez.
-  if (u.protocol === "http:" && LOOPBACK_HOSTS.has(u.hostname)) return { u, secure: false };
-  throw new EgressError("EGRESS_URL", "Dış istek yalnız HTTPS olabilir");
+  if (!isEgressTargetAllowed(u)) throw new EgressError("EGRESS_URL", "Dış istek yalnız HTTPS olabilir");
+  return { u, secure: u.protocol === "https:" };
 }
 
 function openRequest(url: string, opts: EgressOptions): Promise<IncomingMessage> {

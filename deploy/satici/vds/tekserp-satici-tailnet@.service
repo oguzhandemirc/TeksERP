@@ -1,0 +1,17 @@
+# /etc/systemd/system/tekserp-satici-tailnet@.service — örnek: tekserp-satici-tailnet@hazirlik
+# Açılışta Docker ve Tailscale'den SONRA: tailnet adresini bekler, DOCKER-USER kurallarını koyar,
+# satıcıyı ayağa kaldırır (tailnet-hazirla.sh). Docker'ın kendisini BEKLETMEZ: Tailscale bozuksa
+# güncelleme yayını (tekserp-guncelleme) yine açılır, yalnız satıcı portalı kapalı kalır.
+[Unit]
+Description=TeksERP satıcı (%i) — tailnet yayını ve DOCKER-USER kuralları
+After=docker.service tailscaled.service network-online.target
+Wants=docker.service tailscaled.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/stack/apps/tekserp-satici-%i/tailnet-hazirla.sh /opt/stack/apps/tekserp-satici-%i
+TimeoutStartSec=420
+
+[Install]
+WantedBy=multi-user.target

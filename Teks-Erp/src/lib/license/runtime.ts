@@ -17,6 +17,7 @@ import { computeLicenseState, sanctionSnapshotOf, verifyLicenseDocuments, type L
 import { evaluateEntitlement, evaluateLease, type Finding, type LicenseStateInput } from "./state-rules";
 import { accumulatedRuntime, signStateRecord, verifyStateRecord, type StateRecord } from "./saat";
 import { getLicenseStore, saveStateRecord } from "./store";
+import { STARTUP_VENDOR } from "./vendor-url";
 import type { MeasuredFingerprint } from "./fingerprint";
 
 /** Derleme varsayılan kipi — Faz 4'e dek GÖZLEM (hiçbir istek engellenmez, bant yok). */
@@ -26,18 +27,13 @@ const SNAPSHOT_TTL_MS = 30_000;
 export const POLL_FAILURE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export interface LicenseRuntimeConfig {
-  /** Satıcı lisans sunucusu kökü (`LICENSE_SERVER_URL`); yoksa dışarı hiç çıkılmaz. */
+  /** Satıcı lisans sunucusu kökü (`vendor-url.ts`); null ise dışarı hiç çıkılmaz. */
   readonly vendorUrl: string | null;
-  /** Güven çapası — üretimde `ROOT_PUBLIC_KEYS` (boş doğar ⇒ hiçbir HAK geçerli değil). */
+  /** Güven çapası — üretimde `ROOT_PUBLIC_KEYS` (bugün yalnız hazırlık kökü ⇒ ÜRETİM HAK'ı geçerli değil). */
   readonly roots: readonly RootKey[];
 }
 
-function readVendorUrl(env: NodeJS.ProcessEnv): string | null {
-  const v = env.LICENSE_SERVER_URL?.trim();
-  return v ? v.replace(/\/+$/, "") : null;
-}
-
-let config: LicenseRuntimeConfig = { vendorUrl: readVendorUrl(process.env), roots: ROOT_PUBLIC_KEYS };
+let config: LicenseRuntimeConfig = { vendorUrl: STARTUP_VENDOR.url, roots: ROOT_PUBLIC_KEYS };
 let version = 0;
 
 export function getLicenseConfig(): LicenseRuntimeConfig {

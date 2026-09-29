@@ -7,6 +7,10 @@
 // bu klasörü DONMUŞ kontrat olarak kullanır; burada kırmızı, iki tarafın ayrışması demektir.
 //   §0 klasör KAPALI (yalnız node:crypto + zod + kardeş dosya), değişken modül durumu yok,
 //      src'de anahtar malzemesi yok, üretim güven çapası donuk (boşken fail-closed)
+//   §0' üretim çapasının KENDİ satırları: kid biçimi · hazırlık kökü (hazirlik-2026-1) var ve
+//      sınıfları ⊆ {TEST, DEMO} · derin donuk · o satırla ÜRETİM/DR/BAYI/BARINDIRILAN HAK'ı ve
+//      ÜRETİM yetkili alt sertifika RED, TEST geçer · başka anahtar gerçek açık yarıda RED ·
+//      ÜRETİM'e genişletilmiş çapa RED
 //   §1 JWS: geçerli · alg none · alg HS256 (anahtar karışması) · typ yanlış/eksik · kid
 //      bilinmez · başlıkta gömülü anahtar/crit · gövde/imza kurcalı · kanonik olmayan
 //      base64 · uzunluk tavanı · v:2 · süresi dolmuş · ±10 dk tolerans · indirme yolu
@@ -27,6 +31,9 @@
 //   B4  nonce saklama "ilk görülüş + 15 dk"             → 2 ❌ (§3n 20 dk penceresi · §3o)
 //   B5  parmak izi eşiği 3 → 2                          → 2 ❌ (§4c · §4e)
 //   B6  protocol/ dosyasına `express` importu           → 1 ❌ (§0c kapalılık)
+//   B7  çapadaki hazırlık kökü sınıflarına URETIM        → 6 ❌ (§0g · §0k · §0m · §0n · §0o · §0p)
+//   B8  çapa satırı ve sınıf listesi iç freeze'siz       → 1 ❌ (§0l)
+//   B9  çapa boşaltıldı (hazırlık döngüsü kör kalır)     → 2 ❌ (§0j körlük zemini · §0q)
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
 // ⚠️ Gerekli mi (reçete md. 20): kapı doğduğu gün ağaçta ısırılacak bir kusur YOKTU (klasör
 //   bu dilimde doğdu); gerekçe ÖLÇÜLMEDİ — satıcı/fabrika dilimleri buna karşı yazılacak.
@@ -38,6 +45,8 @@ import {
   OfflineRequestSchema,
   DAY_MS,
   ROOT_PUBLIC_KEYS,
+  LICENSE_CLASSES,
+  STAGING_ROOT_CLASSES,
   LicenseResponseSchema,
   NonceLedger,
   CLOCK_SKEW_MS,
@@ -130,9 +139,39 @@ function kapalilik(): void {
   check("§0f üretim güven çapası donuk (Object.isFrozen)", Object.isFrozen(ROOT_PUBLIC_KEYS));
   const uretim = verifyEntitlement(hakBas(f), ROOT_PUBLIC_KEYS);
   if (ROOT_PUBLIC_KEYS.length === 0) beklenen("§0g ⭐ çapa BOŞKEN hiçbir HAK geçerli olamaz (fail-closed)", uretim, "GUVEN_CAPASI_BOS");
-  else check("§0g üretim çapası biçimce geçerli", prepareTrustAnchor(ROOT_PUBLIC_KEYS).ok);
+  else check("§0g üretim çapası biçimce geçerli", prepareTrustAnchor(ROOT_PUBLIC_KEYS).ok, kod(prepareTrustAnchor(ROOT_PUBLIC_KEYS)));
   const typlar = Object.values(TYP);
   check("§0h belge türleri (typ) birbirinden farklı", new Set(typlar).size === typlar.length, typlar.join(", "));
+}
+
+/**
+ * Üretim çapasının KENDİ satırları: hazırlık kökü yalnız TEST/DEMO imzalar. Özel yarı repoda
+ * olmadığından davranış sondası çapanın gerçek kid + sınıf satırını kullanır, yalnız açık yarısını
+ * fikstür anahtarıyla değiştirir; gerçek açık yarının kullanıldığı ayrıca ölçülür (§0o).
+ */
+function uretimCapasi(): void {
+  console.log("\n§0' — üretim çapası (ROOT_PUBLIC_KEYS): hazırlık kökü yalnız TEST/DEMO");
+  const kidler = ROOT_PUBLIC_KEYS.map((r) => r.kid);
+  const bicimsiz = kidler.filter((k) => !/^(kok|hazirlik)-\d{4}-\d{1,3}$/.test(k));
+  check("§0i çapadaki her kid kok-/hazirlik-<yıl>-<n> biçiminde ve tekrarsız", bicimsiz.length === 0 && new Set(kidler).size === kidler.length, bicimsiz.join(", ") || kidler.join(", "));
+  const hazirliklar = ROOT_PUBLIC_KEYS.filter((r) => r.kid.startsWith("hazirlik-"));
+  check("§0j körlük zemini: çapada hazırlık kökü var (hazirlik-2026-1)", hazirliklar.some((r) => r.kid === "hazirlik-2026-1"), `${hazirliklar.length} hazırlık kökü`);
+  const tasan = hazirliklar.filter((r) => r.classes.length === 0 || r.classes.some((c) => !STAGING_ROOT_CLASSES.includes(c)));
+  check("§0k ⭐ çapadaki hazırlık kökü sınıfları ⊆ {TEST, DEMO} (ÜRETİM yok)", tasan.length === 0, tasan.map((r) => `${r.kid}: ${r.classes.join("+")}`).join(" · ") || "temiz");
+  check("§0l çapa DERİN donuk (her satır ve sınıf listesi)", ROOT_PUBLIC_KEYS.every((r) => Object.isFrozen(r) && Object.isFrozen(r.classes)));
+  const yasakSiniflar = LICENSE_CLASSES.filter((c) => !STAGING_ROOT_CLASSES.includes(c));
+  for (const r of hazirliklar) {
+    const vekil = anahtarUret(r.kid);
+    const capa = ROOT_PUBLIC_KEYS.map((k) => (k.kid === r.kid ? { ...k, x: vekil.x } : k));
+    const gecen = yasakSiniflar.filter((s) => kod(verifyEntitlement(hakBas(f, { sinif: s }, vekil), capa)) !== "KOK_SINIF_YETKISIZ");
+    check(`§0m ⭐ ${r.kid} ${yasakSiniflar.join("/")} HAK'ı imzalayamaz (çapanın kendi sınıf satırıyla)`, gecen.length === 0, gecen.join(", ") || `${yasakSiniflar.length} sınıf KOK_SINIF_YETKISIZ`);
+    beklenen(`§0n ${r.kid} TEST HAK'ı imzalayabilir (karşı kontrol)`, verifyEntitlement(hakBas(f, { sinif: "TEST" }, vekil), capa), "OK");
+    beklenen(`§0o ${r.kid} adına başka anahtarla basılmış HAK gerçek çapada RED (açık yarı gerçekten kullanılıyor)`, verifyEntitlement(hakBas(f, { sinif: "TEST" }, vekil), ROOT_PUBLIC_KEYS), "JWS_IMZA");
+    const altUretim = sertifikaBas(vekil, sertifikaYuku(f, f.alt, "ALT", { siniflar: siniflar("URETIM") }));
+    beklenen(`§0p ${r.kid} ÜRETİM yetkili alt sertifika basamaz`, verifyLease(kiraBas(f, { altSertifika: altUretim }), capa), "KOK_SINIF_YETKISIZ");
+  }
+  const genis = ROOT_PUBLIC_KEYS.map((k) => (k.kid.startsWith("hazirlik-") ? { ...k, classes: [...k.classes, "URETIM" as const] } : k));
+  beklenen("§0q ⭐ çapadaki hazırlık kökü ÜRETİM'e genişletilirse çapa RED", prepareTrustAnchor(genis), "GUVEN_CAPASI_BICIM");
 }
 
 function parca(nesne: unknown): string {
@@ -392,6 +431,7 @@ function zamanTutarliligi(): void {
 }
 
 kapalilik();
+uretimCapasi();
 jwsBolumu();
 indirmeBolumu();
 zincirBolumu();
