@@ -23,6 +23,9 @@
 //   §4 ecosystem.config.js + kur.ps1 paketin KENDİ Node'unu (runtime\node.exe)
 //      DENETLER ve eski paket biçiminde (runtime yoksa) sistem Node'una DÜŞER
 //      (geriye uyum beyanı literal olarak durur)
+//   §5 korumalı pakette sunucu araçları (`dist/tools/*.cjs`) da KARARTILIR: paketle.ps1
+//      -Korumali build-araclar'a --korumali geçirir + kaynak yolu yorumu kapısı; build-araclar
+//      minify'ı bayrağa bağlar (2b-D thinkpad-1 provası)
 //
 // AĞ (yalnız --ag): SHASUMS256.txt'i nodejs.org'dan çeker ve kayıttaki sha256'yı
 //   doğrular. Varsayılan koşum ağsızdır (ortak-kurallar); sha biçimini §1 ölçer.
@@ -69,8 +72,21 @@ const RUNTIME_DENETCILERI = {
     ne: 'kur.ps1 [1/9] runtime denetimi',
   },
 };
+// Korumalı pakette sunucu araçları da karartılır (2b-D thinkpad-1 provası): karartmasız
+// `dist/tools/*.cjs` src'nin onlarca modülünü (lisans protokolü dahil) okunur JS olarak taşıyordu.
+const ARAC_KARARTMA = {
+  'deploy/paketle.ps1': [
+    [/\$aracArg = if \(\$Korumali\) \{ @\("--korumali"\) \}/, "build-araclar'a --korumali geçirmiyor"],
+    [/build-araclar\.mjs"\) @aracArg/, 'build-araclar çağrısı bayrağı taşımıyor'],
+    [/if \(\$yolYorumu -gt 0\) \{ Fail/, 'araç karartma kapısı (kaynak yolu yorumu sayımı) yok'],
+  ],
+  'Teks-Erp/scripts/build-araclar.mjs': [
+    [/const KORUMALI = process\.argv\.includes\("--korumali"\)/, '--korumali bayrağını okumuyor'],
+    [/minify: KORUMALI,/, 'minify korumalı bayrağa bağlı değil'],
+  ],
+};
 // Bu bekçinin okuduğu HER dosya (tetik kapsamı §3).
-const OKUNAN = [KAYIT_REL, ...Object.keys(TUKETICILER), ...Object.keys(RUNTIME_DENETCILERI)];
+const OKUNAN = [...new Set([KAYIT_REL, ...Object.keys(TUKETICILER), ...Object.keys(RUNTIME_DENETCILERI), ...Object.keys(ARAC_KARARTMA)])];
 
 const SHASUMS = 'https://nodejs.org/dist/v{surum}/SHASUMS256.txt';
 
@@ -158,6 +174,16 @@ function olc(d) {
     if (!r.geriUyum.test(m)) kirmizi.push(`§4 ${rel} eski paket biçimine (runtime yoksa sistem Node) DÜŞMÜYOR — geriye uyum beyanı yok (${r.ne})`);
   }
 
+  // §5 — korumalı pakette araçlar da karartılır (bayrak zinciri + paketleyici kapısı)
+  for (const [rel, desenler] of Object.entries(ARAC_KARARTMA)) {
+    const m = d[rel];
+    if (typeof m !== 'string') {
+      olculemedi.push(`§5 ${rel} okunamadı (araç karartma zinciri)`);
+      continue;
+    }
+    for (const [desen, eksik] of desenler) if (!desen.test(m)) kirmizi.push(`§5 ${rel} ${eksik} — korumalı pakette araçlar okunur kaynak taşır`);
+  }
+
   return { kirmizi, olculemedi, bilgi, kayit };
 }
 
@@ -231,6 +257,12 @@ function sondalar(taban) {
       (d) => { d['deploy/kur.ps1'] = d['deploy/kur.ps1'].replace('$runtimeExe = Join-Path $temp "runtime\\node.exe"', '$runtimeExe = Join-Path $temp "x\\y.exe"'); }, '§4'],
     ['N10 CI iş akışı node-surumu.json\'u okumuyor → KIRMIZI (§2)', 'kirmizi',
       (d) => { d['.github/workflows/korumali-paket.yml'] = d['.github/workflows/korumali-paket.yml'].replace(/deploy\/node-surumu\.json/g, 'deploy/x.json'); }, '§2'],
+    ['N11 paketle.ps1 build-araclar\'a --korumali geçirmiyor → KIRMIZI (§5)', 'kirmizi',
+      (d) => { d['deploy/paketle.ps1'] = d['deploy/paketle.ps1'].replace('$aracArg = if ($Korumali) { @("--korumali") }', '$aracArg = if ($Korumali) { @() }'); }, '§5'],
+    ['N12 build-araclar minify bayrağa bağlı değil (hep okunur) → KIRMIZI (§5)', 'kirmizi',
+      (d) => { d['Teks-Erp/scripts/build-araclar.mjs'] = d['Teks-Erp/scripts/build-araclar.mjs'].replace('minify: KORUMALI,', 'minify: false,'); }, '§5'],
+    ['N13 paketle.ps1 araç karartma kapısı kaldırıldı → KIRMIZI (§5)', 'kirmizi',
+      (d) => { d['deploy/paketle.ps1'] = d['deploy/paketle.ps1'].replace('if ($yolYorumu -gt 0) { Fail', 'if ($false) { Write-Host'); }, '§5'],
     ['O1 kayıt bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 30); }],
   ];
 

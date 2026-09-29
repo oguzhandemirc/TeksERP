@@ -276,7 +276,10 @@ KORUMALI paket .jsc'yi HEDEF platformda uretir: '$Hedef' bu hostta ($($PSVersion
 #   girmedi - cunku `npm run build` hic cagrilmiyordu. Kapi (asagida) yakaladi.
 # ⚠ Join-Path: ters bolu macOS/Linux'ta yol ayirici DEGILDIR ve "$proj\scripts\x"
 #   tek parca bir dosya adi olur (`$env:TEMP` vakasiyla ayni sinif hata).
-node (Join-Path $proj "scripts" "build-araclar.mjs")
+# Korumali pakette araclar da karartilir (build-araclar --korumali): karartmasiz cikti
+# src'nin onlarca modulunu (lisans protokolu dahil) okunur JS olarak tasiyordu (2b-D).
+$aracArg = if ($Korumali) { @("--korumali") } else { @() }
+node (Join-Path $proj "scripts" "build-araclar.mjs") @aracArg
 if ($LASTEXITCODE -ne 0) { Fail "Arac derlemesi basarisiz - paket uretilmedi." }
 if (-not (Test-Path "$proj\dist\tools\superadmin-olustur.cjs")) {
   Fail "dist\tools\superadmin-olustur.cjs uretilmedi - bu paketle satici hesabi KURULAMAZ."
@@ -289,6 +292,13 @@ foreach ($a in $araclar) {
   if (-not (Test-Path (Join-Path (Join-Path $proj "dist") $a.dosya))) { Fail "Arac uretilmedi: dist/$($a.dosya)" }
 }
 Write-Host "  araclar (dist/tools): $(($araclar | ForEach-Object { $_.ad }) -join ', ')"
+if ($Korumali) {
+  # Arac karartma kapisi: karartmasiz esbuild ciktisi her modulun basina `// src/...` yol
+  # yorumu koyar; korumali pakette tek bir tane bile kalirsa araclar okunur kaynak tasiyor.
+  $yolYorumu = @(Select-String -Path (Join-Path (Join-Path (Join-Path $proj "dist") "tools") "*.cjs") -Pattern '^\s*//\s*(src|scripts)/' -ErrorAction SilentlyContinue).Count
+  if ($yolYorumu -gt 0) { Fail "KORUMALI paket: dist/tools araclari karartilmamis ($yolYorumu kaynak yolu yorumu) - build-araclar --korumali almadi." }
+  Write-Host "  araclar karartildi: kaynak yolu yorumu = 0"
+}
 
 # --- Web paneli (Electron/dist-web) -----------------------------------------
 # Ayni React kaynagi, Electron kabugu OLMADAN (Electron\vite.config.web.ts).
