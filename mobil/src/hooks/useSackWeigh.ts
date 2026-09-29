@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { useMutation } from '@tanstack/react-query';
 import { packingService } from '../services/packing.service';
 import { isWorkSessionLost } from '../services/api';
+import { isLicenseNotified } from '../lib/license';
 import { useMachinePeripherals, primaryScaleFor } from './useMachinePeripherals';
 import { buildIoFromPeripheral } from './usePeripheralIO';
 import { isBonded, pairByMac } from '../services/hal/btClassic.transport';
@@ -137,7 +138,8 @@ export function useSackWeigh(onSaved: () => void) {
     mutationFn: ({ sackId, kg, source }: { sackId: string; kg: number; source: WeighSource }) =>
       packingService.weighSack(sackId, { weightKg: kg, source }),
     onError: (e: Error) => {
-      if (isWorkSessionLost(e)) return;
+      // Lisans reddini interceptor zaten söyledi (bkz. `lib/screenToast`).
+      if (isWorkSessionLost(e) || isLicenseNotified(e)) return;
       // 409 = çuval bu sırada bir sevkiyata atandı (touchWarehouseSackTx guard'ı).
       // 400 = simüle kantar reddi → backend'in Türkçe mesajı doğrudan gösterilir
       // ("…simülasyon bayrağını kapatın, ya da ⋮ → Elle kg gir").

@@ -14,7 +14,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 import { QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { PaperProvider } from 'react-native-paper';
-import SyncStatusChip from './SyncStatusChip';
+import SyncStatusChip, { syncChipView } from './SyncStatusChip';
 import { queryClient } from '../offline/queryClient';
 import {
   __resetOnlineSignalForTests,
@@ -86,5 +86,18 @@ describe('SyncStatusChip', () => {
     // düğüm sayısına bakılır.
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.UNSAFE_queryAllByProps({ onPress: expect.anything() })).toHaveLength(0);
+  });
+});
+
+describe('syncChipView — D7 lisans nedeniyle bekleyen kayıt', () => {
+  it('⭐ lisans reddiyle bekleyen kayıt "sync" değil AYRI cümleyle söylenir; diğerleri yanına eklenir', () => {
+    expect(syncChipView(true, null, 3, 3)?.label).toBe('Lisans nedeniyle bekleyen 3 kayıt');
+    expect(syncChipView(true, null, 5, 2)?.label).toBe('Lisans nedeniyle bekleyen 2 kayıt · 3 sync');
+    expect(syncChipView(true, null, 2, 0)?.label).toBe('2 sync');
+    expect(syncChipView(true, null, 0, 0)).toBeNull();
+  });
+  it('çevrimdışıyken sebep yine ağ/sunucu cümlesidir (lisans çipi çevrimiçi karar)', () => {
+    expect(syncChipView(false, 'link', 2, 2)?.label).toBe('Çevrimdışı · 2 sırada');
+    expect(syncChipView(false, 'server', 0, 0)?.label).toBe('SUNUCUYA ULAŞILAMIYOR');
   });
 });

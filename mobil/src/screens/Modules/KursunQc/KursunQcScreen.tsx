@@ -61,6 +61,7 @@ import type {
   KursunOpenCard,
   DefectType,
 } from '../../../types/models';
+import { showScreenError } from '../../../lib/screenToast';
 
 // =============================================================================
 // Multi-job state — operatör birden fazla refakat kartını paralel açabilir.
@@ -617,7 +618,7 @@ export default function KursunQcScreen() {
         );
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'KK2 başarısız', text2: err.message });
+      showScreenError(err, 'KK2 başarısız');
     },
   });
 
@@ -714,7 +715,7 @@ export default function KursunQcScreen() {
         removeDefectOptimistic(context.cardId, context.rollId, vars.clientErrorId);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Hata kaydedilemedi', text2: err.message });
+      showScreenError(err, 'Hata kaydedilemedi');
     },
   });
 
@@ -774,7 +775,7 @@ export default function KursunQcScreen() {
         );
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Silinemedi', text2: err.message });
+      showScreenError(err, 'Silinemedi');
     },
   });
 
@@ -872,7 +873,7 @@ export default function KursunQcScreen() {
         );
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Kumaş bitirilemedi', text2: err.message });
+      showScreenError(err, 'Kumaş bitirilemedi');
     },
   });
 
@@ -926,7 +927,7 @@ export default function KursunQcScreen() {
         setActiveCardId(context.prevActiveCardId);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Adım kapatılamadı', text2: err.message });
+      showScreenError(err, 'Adım kapatılamadı');
     },
   });
 

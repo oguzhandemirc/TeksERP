@@ -9,6 +9,8 @@
 // testte çekmemek için. Asıl ilgilendiğimiz retry/pause mantığı bu mock'lardan
 // bağımsız.
 
+import { shouldAnnounceFailure } from "./announceFailure";
+
 // --- Servis mock'ları (import zinciri native/axios çekmesin) -----------------
 // registerStationMutationDefaults bu service'leri import eder; mutationFn'leri
 // kayıtta sarmalanır. Burada yalnız var olmaları yeter — pause/resume testi
@@ -61,6 +63,7 @@ import {
   NoAuthError,
   isNoAuthError,
   NO_AUTH_RETRY_MS,
+  LICENSE_RETRY_MS,
   stationOpLabel,
 } from "./mutations";
 import {
@@ -122,6 +125,21 @@ describe("OFFLINE_AWARE retry (kaydedilen gerçek config)", () => {
   it("5xx 3 denemeden sonra durur (sonsuz retry yok)", () => {
     expect(retry()(3, { status: 500 })).toBe(false);
     expect(retry()(10, { status: 500 })).toBe(false);
+  });
+
+  it("⭐ D7: lisans reddi (403 LICENSE_*) kaydı SİLMEZ — süresiz, uzun aralıkla bekler; kalıcı düşüş duyurusu yok", () => {
+    const codes = ["LICENSE_RESTRICTED", "LICENSE_SUSPENDED", "LICENSE_MODULE", "LICENSE_GATE"];
+    for (const code of codes) {
+      const err = { status: 403, details: { code } };
+      expect(retry()(0, err)).toBe(true);
+      expect(retry()(500, err)).toBe(true);
+      expect(delay()(3, err)).toBe(LICENSE_RETRY_MS);
+      expect(shouldAnnounceFailure(STATION_MUT.KK1_CREATE_ENTRY, err)).toBe(false);
+    }
+    expect(LICENSE_RETRY_MS).toBeGreaterThanOrEqual(60_000);
+    // Lisans DIŞI 403 eskisi gibi fail-fast ve duyurulur (kapsam dar).
+    expect(retry()(0, { status: 403, details: { code: "FORBIDDEN" } })).toBe(false);
+    expect(shouldAnnounceFailure(STATION_MUT.KK1_CREATE_ENTRY, { status: 403, details: { code: "FORBIDDEN" } })).toBe(true);
   });
 
   it("status'suz hata (ağ kopması / status undefined) retry edilir", () => {

@@ -12,6 +12,7 @@ import {
   type ReasonPresetKind,
 } from '../../services/reasonPreset.service';
 import { useInvalidateReasonPresets, isBuiltinPreset } from '../../hooks/useReasonPresets';
+import { showScreenError } from '../../lib/screenToast';
 
 // =============================================================================
 // HAZIR SEBEP DÜZENLEME (2026-08-19)
@@ -90,7 +91,7 @@ export default function ReasonPresetEditDialog({
       onDismiss();
     },
     onError: (err: Error) => {
-      Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: err.message });
+      showScreenError(err, 'Kaydedilemedi');
     },
   });
 
@@ -108,7 +109,7 @@ export default function ReasonPresetEditDialog({
     onError: (err: Error) => {
       // Sunucu "son aktif satır gizlenemez" diyebilir — mesajı AYNEN göster,
       // operatör neden olmadığını bilmeli.
-      Toast.show({ type: 'error', text1: 'Gizlenemedi', text2: err.message });
+      showScreenError(err, 'Gizlenemedi');
     },
   });
 

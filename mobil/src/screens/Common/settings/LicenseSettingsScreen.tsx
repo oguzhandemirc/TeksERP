@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Icon } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
@@ -8,7 +8,9 @@ import { usePermissions } from '../../../hooks/usePermission';
 import { LICENSE_STATUS_KEY, useLicenseStatus } from '../../../hooks/useLicenseStatus';
 import { licenseService } from '../../../services/license.service';
 import { signalScan } from '../../../services/scanFeedback';
-import { licenseSummaryRows, normalizeScannedResponse } from '../../../lib/license';
+import { licenseScanStep, licenseSummaryRows } from '../../../lib/license';
+import type { QrPartState } from '../../../lib/qr-parca';
+import type { ScanFlash } from '../../../components/BarcodeScannerView';
 import type { LicensePermission } from '../../../types/permissions';
 import {
   SETTINGS_COLORS as C,
@@ -26,11 +28,42 @@ import {
 /** Çevrimdışı yanıtı iletme yetkisi — backend ucunun guard'ıyla aynı kod (`has()` düz string alır). */
 const MANAGE_PERMISSION: LicensePermission = 'license:manage';
 
-/** QR okutma → süzgeç → backend. Kamera aynı kareyi art arda verebilir: okuma başına tek gönderim. */
+/** Merkez bildiriminin süresi — ret sebebini okumaya yetecek kadar. */
+const FLASH_MS = 2400;
+
+/**
+ * QR okutma → toplama → backend. Telefondaki sayfa yanıtı 1…4 parça QR olarak döndürür
+ * (TKLQ1, `lib/qr-parca.ts`); tarayıcı açık kalır, parçalar toplanır, küme tamamlanınca
+ * bütünlüğü doğrulanmış TEK metin gönderilir. Tek parça eski biçim de kabul edilir.
+ */
 function useResponseScanner() {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
+  const [progress, setProgress] = useState<QrPartState | null>(null);
+  const [flash, setFlash] = useState<ScanFlash | null>(null);
+  const progressRef = useRef<QrPartState | null>(null);
   const handlingRef = useRef(false);
+  const flashSeq = useRef(0);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
+
+  const showFlash = (next: Omit<ScanFlash, 'seq'>) => {
+    flashSeq.current += 1;
+    setFlash({ ...next, seq: flashSeq.current });
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), FLASH_MS);
+  };
+  const track = (next: QrPartState | null) => {
+    progressRef.current = next;
+    setProgress(next);
+  };
+  const setOpen = (value: boolean) => {
+    if (value) track(null);
+    setOpenState(value);
+  };
 
   const submit = useMutation({
     mutationFn: licenseService.submitOfflineResponse,
@@ -50,24 +83,35 @@ function useResponseScanner() {
 
   const onScan = (raw: string) => {
     if (handlingRef.current) return;
-    handlingRef.current = true;
-    setOpen(false);
-    const yanit = normalizeScannedResponse(raw);
-    if (!yanit) {
-      handlingRef.current = false;
-      signalScan('reject');
-      Toast.show({
-        type: 'error',
-        text1: 'Bu QR bir lisans yanıtı değil',
-        text2: 'Telefondaki lisans sayfasında çıkan yanıt QR\'ını okutun.',
-        visibilityTime: 6000,
-      });
-      return;
+    const step = licenseScanStep(progressRef.current, raw);
+    switch (step.kind) {
+      case 'gonder':
+        handlingRef.current = true;
+        track(null);
+        setOpenState(false);
+        submit.mutate(step.yanit);
+        return;
+      case 'parca':
+        signalScan('accept');
+        track(step.state);
+        return;
+      case 'tekrar':
+        signalScan('duplicate');
+        showFlash({ kind: 'duplicate', title: 'BU QR ZATEN OKUNDU', detail: `${step.received} / ${step.total} okundu` });
+        return;
+      case 'ret':
+        signalScan('reject');
+        if (step.reset) track(null);
+        showFlash({ kind: 'reject', title: 'OKUNMADI', detail: step.reason });
     }
-    submit.mutate(yanit);
   };
 
-  return { open, setOpen, onScan, busy: submit.isPending };
+  const received = progress ? progress.parts.filter((p) => p !== null).length : 0;
+  const notice = progress
+    ? `Yanıt QR'ları: ${received} / ${progress.total} okundu — sıradakini okutun`
+    : "Telefondaki lisans sayfasının QR'larını okutun (birden çoksa hepsini)";
+
+  return { open, setOpen, onScan, busy: submit.isPending, notice, flash };
 }
 
 function LicenseSummaryCard({ loading, rows }: { loading: boolean; rows: { label: string; value: string }[] }) {
@@ -106,7 +150,8 @@ function OfflineResponseCard({ busy, onOpen }: { busy: boolean; onOpen: () => vo
       <Text style={settingsStyles.label}>ÇEVRİMDIŞI YENİLEME</Text>
       <Text style={styles.body}>
         Sunucunun internet bağlantısı yoksa: paneldeki Lisans ekranında çevrimdışı istek
-        QR'ını telefonla okutun, telefonda açılan sayfadaki YANIT QR'ını buradan okutun.
+        QR'ını telefonla okutun; telefonda açılan sayfa YANIT QR'larını sırayla gösterir —
+        hepsini buradan okutun, tablet parçaları birleştirip sunucuya iletir.
       </Text>
       <SettingsActionButton
         label="Yanıt QR'ını okut"
@@ -138,6 +183,9 @@ export default function LicenseSettingsScreen() {
         title="Lisans yanıtı QR"
         barcodeTypes={['qr']}
         captureHaptic={false}
+        continuous
+        notice={scanner.notice}
+        flash={scanner.flash}
       />
     </SettingsPage>
   );

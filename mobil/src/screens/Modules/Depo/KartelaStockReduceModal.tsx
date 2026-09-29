@@ -7,6 +7,7 @@ import AppModal from '../../../components/AppModal';
 import { swatchService, type KartelaStockGroup } from '../../../services/swatch.service';
 import { useAttemptToken } from '../../../offline/attemptToken';
 import { colors, spacing, radius } from '../../../theme';
+import { showScreenError } from '../../../lib/screenToast';
 
 /**
  * Kartela stoğunu elle düşürme — kayıp/hasar/numune/sayım düzeltmesi için.
@@ -68,7 +69,7 @@ export function KartelaStockReduceModal({
     // yenileyin") dahil diğer tüm hatalar burada yüzeye çıkarılmalı (modal açık kalır).
     onError: (e: Error) => {
       attempt.onFailure(e);
-      Toast.show({ type: 'error', text1: 'Stok düşülemedi', text2: e.message });
+      showScreenError(e, 'Stok düşülemedi');
     },
   });
 

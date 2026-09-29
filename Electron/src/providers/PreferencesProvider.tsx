@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth";
+import { useLicenseSuspension } from "@/lib/license/suspension";
 import { fetchPreferences, savePreferences } from "@/services/preferencesService";
 import { DEFAULT_PREFERENCES, type AppPreferences } from "@/types/preferences";
 
@@ -47,7 +48,9 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const hydrated = useAuthStore((s) => s.isHydrated);
   const { setTheme } = useTheme();
 
-  const enabled = hydrated && !!user;
+  // K5: tercih ucu DURDURULMUŞ izin listesinde değil — "verilerimi al" sayfası varsayılanla çizilir.
+  const licenseSuspended = useLicenseSuspension((s) => s.suspended);
+  const enabled = hydrated && !!user && !licenseSuspended;
   const queryKey = useMemo(() => ["preferences", user?.userId] as const, [user?.userId]);
 
   // Oturum başına TEK fetch: staleTime Infinity → otomatik refetch yok (navigasyon/

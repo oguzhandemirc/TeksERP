@@ -23,6 +23,7 @@ import { colors, spacing, radius } from '../../../theme';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '../../../navigation/types';
+import { showScreenError } from '../../../lib/screenToast';
 
 // İade modülü vurgu rengi (amber) — alt bardaki "İade Al" ve geçmiş ekranındaki
 // "İade" rozetiyle aynı kimlik.
@@ -182,7 +183,7 @@ export default function IadeGirisiScreen() {
       signalScan('accept');
     } catch (err) {
       signalScan('reject');
-      Toast.show({ type: 'error', text1: 'İade alınamaz', text2: (err as Error).message });
+      showScreenError(err, 'İade alınamaz');
     } finally {
       setResolving(false);
     }
@@ -221,7 +222,7 @@ export default function IadeGirisiScreen() {
     },
     onError: (err) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'İade başarısız', text2: (err as Error).message });
+      showScreenError(err, 'İade başarısız');
     },
   });
 

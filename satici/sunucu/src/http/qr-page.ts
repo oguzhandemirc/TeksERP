@@ -1,8 +1,110 @@
-// QR SAYFASI İSKELETİ (telefon): fabrika panelinin gösterdiği QR `…/q#<zarf>` açar. `#parça`
-// tarayıcıdan sunucuya HİÇ gitmez (günlüğe de giremez); sayfa zarfı tarayıcıda okuyup
-// `/v1/cevrimdisi`e gönderir ve yanıtı gösterir. Yanıtı QR'a çevirme ve panele geri aktarma 1d/Faz 3.
+// QR SAYFASI (telefon): fabrika panelinin gösterdiği QR `…/q#<zarf>` (ya da çok parçalı istekte her
+// parça için `…/q#<TKLQ1 parçası>`) açar. `#parça` tarayıcıdan sunucuya HİÇ gitmez (günlüğe de
+// giremez); sayfa zarfı tarayıcıda okuyup `/v1/cevrimdisi`e gönderir ve YANITI çok parçalı QR olarak
+// gösterir — fabrikadaki tablet parçaları okutup birleştirir. İstek parçaları sekmeler arasında
+// yalnız bu kökenin yerel deposunda en çok 15 dk bekler, küme tamamlanınca silinir.
+// Biçim ve kodlayıcı: `qr-page-lib.ts` + `qr-page-matrix.ts` (bekçi `test_qr_sayfasi`).
 import type { Request, Response } from "express";
 import { ENDPOINTS } from "../lisans-protokol";
+import { QR_PAGE_LIB_JS } from "./qr-page-lib";
+import { QR_PAGE_MATRIX_JS } from "./qr-page-matrix";
+
+const CONTROLLER_JS = String.raw`(function () {
+  "use strict";
+  var OFFLINE = ${JSON.stringify(ENDPOINTS.OFFLINE)}, STORE_KEY = "tklq-istek", STORE_TTL_MS = 15 * 60 * 1000, CYCLE_MS = 2500;
+  var byId = function (id) { return document.getElementById(id); };
+  var durum = byId("durum"), qrKutu = byId("qr"), qrBilgi = byId("qr-bilgi"), araclar = byId("araclar");
+  var yanit = byId("yanit"), kopyala = byId("kopyala");
+  function say(metin) { durum.textContent = metin; }
+  function readStore() {
+    try {
+      var v = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+      return v && Date.now() - v.at < STORE_TTL_MS ? v.state : null;
+    } catch (e) { return null; }
+  }
+  function writeStore(state) {
+    try {
+      if (state) localStorage.setItem(STORE_KEY, JSON.stringify({ at: Date.now(), state: state }));
+      else localStorage.removeItem(STORE_KEY);
+      return true;
+    } catch (e) { return false; }
+  }
+  function showText(text) { yanit.hidden = false; yanit.value = text; kopyala.hidden = false; }
+  function drawQr(value) {
+    var m = TKLQ.qrMatrix(value), dim = m.length + 8, ns = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(ns, "svg"), bg = document.createElementNS(ns, "rect"), path = document.createElementNS(ns, "path");
+    svg.setAttribute("viewBox", "0 0 " + dim + " " + dim);
+    svg.setAttribute("shape-rendering", "crispEdges");
+    bg.setAttribute("width", String(dim)); bg.setAttribute("height", String(dim)); bg.setAttribute("fill", "#fff");
+    path.setAttribute("d", TKLQ.qrPath(m, 4)); path.setAttribute("fill", "#000");
+    svg.appendChild(bg); svg.appendChild(path);
+    qrKutu.textContent = "";
+    qrKutu.appendChild(svg);
+  }
+  function showParts(parts) {
+    var i = 0, timer = null;
+    function show() {
+      drawQr(parts[i]);
+      qrBilgi.textContent = parts.length > 1 ? "QR " + (i + 1) + " / " + parts.length + " — tablet hepsini okuyana dek açık tutun" : "Tabletle okutun";
+    }
+    function step(d) { i = (i + d + parts.length) % parts.length; show(); }
+    function play(on) {
+      if (timer) { clearInterval(timer); timer = null; }
+      if (on && parts.length > 1) timer = setInterval(function () { step(1); }, CYCLE_MS);
+      byId("dur").textContent = timer ? "Durdur" : "Oynat";
+    }
+    byId("onceki").onclick = function () { play(false); step(-1); };
+    byId("sonraki").onclick = function () { play(false); step(1); };
+    byId("dur").onclick = function () { play(!timer); };
+    araclar.hidden = parts.length < 2;
+    qrKutu.hidden = false;
+    qrBilgi.hidden = false;
+    show();
+    play(true);
+  }
+  kopyala.onclick = function () {
+    var done = function (ok) { kopyala.textContent = ok ? "Kopyalandı" : "Kopyalanamadı — metni seçip kopyalayın"; };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(yanit.value).then(function () { done(true); }, function () { done(false); });
+    else done(false);
+  };
+  function message(t) {
+    try { var j = JSON.parse(t); return j && typeof j.message === "string" ? j.message : "ayrıntı yok"; } catch (e) { return "ayrıntı yok"; }
+  }
+  function send(zarf) {
+    say("Lisans sunucusuna gönderiliyor…");
+    fetch(OFFLINE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ v: 1, zarf: zarf }) })
+      .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, t: t }; }); })
+      .then(function (x) {
+        if (!x.ok) { say("Sunucu isteği reddetti: " + message(x.t)); showText(x.t); return; }
+        var parts = TKLQ.split(x.t);
+        showText(x.t);
+        if (!parts) { say("Yanıt QR'a sığmıyor — metni kopyalayıp fabrika paneline yapıştırın."); return; }
+        say("Yanıt hazır. Fabrikadaki tablette Ayarlar → Lisans → “Yanıt QR'ını okut” ile QR'ların hepsini okutun; tablet yoksa metni kopyalayıp panele yapıştırın.");
+        showParts(parts);
+      })
+      .catch(function () { say("Sunucuya ulaşılamadı. İnternet bağlantısını denetleyin."); });
+  }
+  function missing(state) {
+    var out = [];
+    for (var k = 0; k < state.parts.length; k++) if (state.parts[k] === null) out.push(k + 1);
+    return out.join(", ");
+  }
+  var raw = location.hash.slice(1), text = raw;
+  history.replaceState(null, "", location.pathname);
+  try { text = decodeURIComponent(raw); } catch (e) { text = raw; }
+  if (!text) { say("Bağlantıda aktarma verisi yok. Fabrika panelindeki QR kodunu yeniden okutun."); return; }
+  if (text.indexOf("TKLQ1|") !== 0) { send(text); return; }
+  var r = TKLQ.add(readStore(), text);
+  if (r.kind === "tamam") { writeStore(null); send(r.text); return; }
+  if (r.kind === "eklendi" || r.kind === "tekrar") {
+    if (!writeStore(r.state)) { say("Bu tarayıcı parçaları biriktiremiyor (gizli sekme?). Paneldeki “İstek metnini kopyala” yolunu kullanın."); return; }
+    say("İstek parçası " + r.received + " / " + r.state.total + " alındı. Paneldeki sıradaki QR'ı okutun (eksik: " + missing(r.state) + ").");
+    return;
+  }
+  writeStore(null);
+  say(r.kind === "bozuk" ? "Parçalar birleşmedi (bozuk okuma). Paneldeki QR'ları baştan okutun." : "Bu QR bir lisans isteği parçası değil.");
+})();
+`;
 
 const PAGE = `<!doctype html>
 <html lang="tr">
@@ -11,35 +113,36 @@ const PAGE = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TeksERP lisans aktarma</title>
 <style>
+[hidden]{display:none!important}
 body{font-family:system-ui,sans-serif;margin:1rem;max-width:40rem;color:#1b1b1b;background:#fafafa}
-textarea{width:100%;min-height:12rem;font-family:ui-monospace,monospace;font-size:.75rem}
+textarea{width:100%;min-height:8rem;font-family:ui-monospace,monospace;font-size:.75rem;margin-top:1rem}
 .durum{padding:.5rem;border-radius:.25rem;background:#eef}
+.qr svg{display:block;width:min(92vw,68vh);height:auto;margin:1rem auto 0}
+.bilgi{text-align:center;font-weight:600}
+.araclar{display:flex;gap:.5rem;justify-content:center}
+button{font-size:1rem;padding:.5rem .9rem}
 </style>
 </head>
 <body>
 <h1>TeksERP lisans aktarma</h1>
 <p class="durum" id="durum">Hazırlanıyor…</p>
+<div class="qr" id="qr" hidden></div>
+<p class="bilgi" id="qr-bilgi" hidden></p>
+<div class="araclar" id="araclar" hidden><button id="onceki" type="button">‹ Önceki</button><button id="dur" type="button">Durdur</button><button id="sonraki" type="button">Sonraki ›</button></div>
 <textarea id="yanit" readonly hidden></textarea>
+<button id="kopyala" type="button" hidden>Metni kopyala</button>
 <script>
-(function () {
-  var durum = document.getElementById("durum");
-  var yanit = document.getElementById("yanit");
-  var zarf = location.hash.slice(1);
-  history.replaceState(null, "", location.pathname);
-  if (!zarf) { durum.textContent = "Bağlantıda aktarma verisi yok. Fabrika panelindeki QR kodunu yeniden okutun."; return; }
-  durum.textContent = "Lisans sunucusuna gönderiliyor…";
-  fetch("${ENDPOINTS.OFFLINE}", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ v: 1, zarf: zarf }) })
-    .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, t: t }; }); })
-    .then(function (x) {
-      if (!x.ok) { durum.textContent = "Sunucu isteği reddetti."; yanit.hidden = false; yanit.value = x.t; return; }
-      durum.textContent = "Yanıt hazır: bu metni fabrika paneline aktarın.";
-      yanit.hidden = false; yanit.value = x.t;
-    })
-    .catch(function () { durum.textContent = "Sunucuya ulaşılamadı. İnternet bağlantısını denetleyin."; });
-})();
+${QR_PAGE_LIB_JS}
+${QR_PAGE_MATRIX_JS}
+${CONTROLLER_JS}
 </script>
 </body>
 </html>`;
+
+/** Sayfa gövdesi — bekçi betiği buradan çıkarıp koşturur. */
+export function qrPageHtml(): string {
+  return PAGE;
+}
 
 export function qrPage(_req: Request, res: Response): void {
   res.set({

@@ -7,6 +7,7 @@ import { TabStrip } from "./TabStrip";
 import { TabRouter } from "./TabRouter";
 import { TabActiveProvider, TabIdProvider } from "./tab-active";
 import { TabPortalProvider } from "./tab-portal";
+import { LICENSE_SUSPENDED_PATH } from "@/lib/license/suspension";
 
 /**
  * Sekme barındırıcı. Açık tüm sekmeler aynı anda mount kalır; yalnız aktif olan
@@ -24,7 +25,8 @@ export function TabHost() {
     if (useTabsStore.getState().tabs.length > 0) return;
     const hash = window.location.hash.replace(/^#/, "");
     const usable =
-      hash && hash !== "/" && !hash.startsWith("/login") && !hash.startsWith("/forbidden")
+      hash && hash !== "/" && !hash.startsWith("/login") && !hash.startsWith("/forbidden") &&
+      !hash.startsWith(LICENSE_SUSPENDED_PATH)
         ? hash
         : "/";
     openTab(usable);

@@ -8,13 +8,17 @@ import {
   bannerToShow,
   classifyLicenseError,
   isLicenseBlocked,
+  isLicenseNotified,
+  isLoginSuspended,
   isSuspendedStatus,
+  licenseScanStep,
   licenseBlockToast,
   licenseSummaryRows,
   moduleLabel,
   normalizeScannedResponse,
   type LicenseStatusSummary,
 } from './license';
+import { splitIntoQrParts } from './qr-parca';
 
 function status(over: Partial<LicenseStatusSummary> = {}): LicenseStatusSummary {
   return {
@@ -147,5 +151,59 @@ describe('§6 modül adı aynası — backend MODULE_SETTING_KEYS ile birebir', 
   it('bilinmeyen anahtar ham döner (bilgi kaybolmaz)', () => {
     expect(moduleLabel('patron-bulut')).toBe('patron-bulut');
     expect(moduleLabel(null)).toBeNull();
+  });
+});
+
+describe('§7 isLicenseNotified — ekran toast\'ı yalnız interceptor SÖYLEDİYSE susar', () => {
+  it('kısıtlı kip · modül · K5 → söylendi; kimliksiz kapı ve lisans dışı 403 → söylenmedi', () => {
+    expect(isLicenseNotified({ status: 403, details: { code: 'LICENSE_RESTRICTED' } })).toBe(true);
+    expect(isLicenseNotified({ status: 403, details: { code: 'LICENSE_MODULE', modul: 'finance.enabled' } })).toBe(true);
+    expect(isLicenseNotified({ status: 403, details: { code: 'LICENSE_SUSPENDED' } })).toBe(true);
+    expect(isLicenseNotified({ status: 403, details: { code: 'LICENSE_GATE' } })).toBe(false);
+    expect(isLicenseNotified({ status: 403, details: { code: 'FORBIDDEN' } })).toBe(false);
+    expect(isLicenseNotified(new Error('ağ'))).toBe(false);
+  });
+});
+
+describe('§8 isLoginSuspended — giriş öncesi K5 yalnız TAZE sinyalle', () => {
+  it('taze + true → K5; bayat disk değeri, false ve eski backend (alan yok) → giriş açık', () => {
+    expect(isLoginSuspended({ lisansDurduruldu: true }, true)).toBe(true);
+    expect(isLoginSuspended({ lisansDurduruldu: true }, false)).toBe(false);
+    expect(isLoginSuspended({ lisansDurduruldu: false }, true)).toBe(false);
+    expect(isLoginSuspended({}, true)).toBe(false);
+    expect(isLoginSuspended(undefined, true)).toBe(false);
+    expect(isLoginSuspended({ lisansDurduruldu: 'true' }, true)).toBe(false);
+  });
+});
+
+describe('§9 licenseScanStep — çok parçalı yanıt QR\'ı', () => {
+  const yanit = JSON.stringify({ v: 1, hak: 'x'.repeat(1500), kira: 'y'.repeat(1500) });
+  const parts = splitIntoQrParts(yanit)!;
+  it('parçalar toplanır, son parçada TEK metin gönderilir', () => {
+    const a = licenseScanStep(null, parts[1]);
+    expect(a).toMatchObject({ kind: 'parca', received: 1, total: parts.length });
+    const state = a.kind === 'parca' ? a.state : null;
+    expect(licenseScanStep(state, parts[1])).toMatchObject({ kind: 'tekrar', received: 1 });
+    let st = state;
+    for (const p of [parts[0], parts[2]]) {
+      const r = licenseScanStep(st, p);
+      if (r.kind === 'parca') st = r.state;
+      else expect(r).toEqual({ kind: 'gonder', yanit });
+    }
+  });
+  it('tek parça eski biçim doğrudan gider; yabancı QR ve bozuk parça reddedilir', () => {
+    expect(licenseScanStep(null, `  ${yanit} `)).toEqual({ kind: 'gonder', yanit });
+    expect(licenseScanStep(null, 'R-000123')).toMatchObject({ kind: 'ret', reset: false });
+    expect(licenseScanStep(null, parts[0].replace(/.$/, '#'))).toMatchObject({ kind: 'ret', reset: false });
+  });
+  it('birleşen metin lisans yanıtına benzemiyorsa gönderilmez, küme sıfırlanır', () => {
+    const junk = splitIntoQrParts('düz metin '.repeat(200))!;
+    let st = null;
+    let last = licenseScanStep(st, junk[0]);
+    for (const p of junk.slice(1)) {
+      if (last.kind === 'parca') st = last.state;
+      last = licenseScanStep(st, p);
+    }
+    expect(last).toMatchObject({ kind: 'ret', reset: true });
   });
 });

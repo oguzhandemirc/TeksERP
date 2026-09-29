@@ -8,6 +8,8 @@ import { applyClientInfoHeaders } from "@/lib/client-info";
 import { shouldToastWarnings, showServerWarnings } from "@/lib/serverNotes";
 import { presentLiveReferences } from "@/lib/live-references";
 import { notifyLicenseGate } from "@/lib/license/signal";
+import { useLicenseSuspension } from "@/lib/license/suspension";
+import { licenseModuleKey, licenseModuleLabel } from "@/lib/license/ceiling";
 
 /**
  * KURULUM KARARI olan 403'ler yetki sorunu değildir — "yetkiniz yok" kullanıcıyı rolünü
@@ -26,7 +28,21 @@ function handleInstallationGate(body: ApiErrorBody | undefined, suppressToast: b
   }
   if (typeof code !== "string" || !code.startsWith("LICENSE_")) return false;
   notifyLicenseGate();
-  if (!suppressToast) toast.error(body?.message || "Bu işlem lisans nedeniyle yapılamıyor.", { id: `license:${code}` });
+  // K5: kabuk yerine "verilerimi al" sayfası açılır — sayfa durumu kendisi anlatır, toast yok.
+  if (code === "LICENSE_SUSPENDED") {
+    useLicenseSuspension.getState().setSuspended(true);
+    return true;
+  }
+  if (suppressToast) return true;
+  if (code === "LICENSE_MODULE") {
+    // `details.modul` DB anahtarıdır (tek biçim); aynı modülün paralel redleri tek toast.
+    const key = licenseModuleKey(body?.details);
+    const label = licenseModuleLabel(key);
+    const msg = body?.message || (label ? `${label} modülü lisansınızda kapalı.` : "Bu modül lisansınızda kapalı.");
+    toast.error(msg, { id: `license:LICENSE_MODULE:${key ?? "?"}` });
+    return true;
+  }
+  toast.error(body?.message || "Bu işlem lisans nedeniyle yapılamıyor.", { id: `license:${code}` });
   return true;
 }
 

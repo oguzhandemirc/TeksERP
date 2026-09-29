@@ -18,9 +18,18 @@ export interface LoginFormProps {
   form: UseFormReturn<LoginFormValues>;
   submitting: boolean;
   onSubmit: (values: LoginFormValues) => void;
+  /** Başlık altı cümle (K5'te "verilerimi al" girişi kendi cümlesini verir). */
+  subtitle?: string;
+  submitLabel?: string;
 }
 
-export function LoginForm({ form, submitting, onSubmit }: LoginFormProps) {
+export function LoginForm({
+  form,
+  submitting,
+  onSubmit,
+  subtitle = "Devam etmek için giriş yap.",
+  submitLabel = "Giriş Yap",
+}: LoginFormProps) {
   return (
     <div className="w-full max-w-sm space-y-8">
       <div className="flex flex-col items-center space-y-4 text-center">
@@ -34,9 +43,7 @@ export function LoginForm({ form, submitting, onSubmit }: LoginFormProps) {
         </div>
         <div className="space-y-1.5">
           <h2 className="text-3xl font-semibold tracking-tight">TeksERP</h2>
-          <p className="text-sm text-muted-foreground">
-            Devam etmek için giriş yap.
-          </p>
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
         </div>
       </div>
 
@@ -76,7 +83,7 @@ export function LoginForm({ form, submitting, onSubmit }: LoginFormProps) {
               Giriş yapılıyor...
             </>
           ) : (
-            "Giriş Yap"
+            submitLabel
           )}
         </Button>
       </form>

@@ -25,6 +25,8 @@ import { operatorColor, operatorInitials } from '../../utils/operatorColor';
 import type { MobileUser, LoginResponse } from '../../types/auth';
 import type { RootStackParamList } from '../../navigation/types';
 import { upperTr } from '../../utils/trCase';
+import { isLoginSuspended } from '../../lib/license';
+import { LicenseSuspendedCard } from '../../components/lock/LicenseSuspendedGate';
 
 const COLORS = {
   bg: '#0f172a',
@@ -119,6 +121,11 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     gcTime: 24 * 60 * 60 * 1000,
   });
   const enabledMethods = methodsQ.data?.enabled ?? ['list'];
+  // K5 (lisans DURDURULDU): yalnız bu açılışta TAZE okunan sinyal geçerli — diskteki dünkü değer
+  // tableti kilitlemez. Kilit kipinde (oturum var) karar `LicenseSuspendedGate`in.
+  const mountedAtRef = useRef(Date.now());
+  const suspendedBeforeLogin =
+    !lock && isLoginSuspended(methodsQ.data, methodsQ.dataUpdatedAt >= mountedAtRef.current);
   const [pickedMethod, setPickedMethod] = useState<LoginMethod | null>(null);
   const [methodPickerOpen, setMethodPickerOpen] = useState(false);
   const [cardScannerOpen, setCardScannerOpen] = useState(false);
@@ -850,7 +857,19 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         />
       )}
 
-      {activeMethod === 'card' ? (
+      {suspendedBeforeLogin ? (
+        <View style={styles.k5Wrap} testID="giris-lisans-durduruldu">
+          <LicenseSuspendedCard
+            body={
+              'Bu sunucunun lisansı durdurulduğu için tabletten giriş ve kayıt yapılamaz. ' +
+              'Verileriniz korunuyor — yönetici panelden yedek ve dışa aktarma alabilir.'
+            }
+            message={null}
+            busy={methodsQ.isFetching}
+            onRetry={() => void methodsQ.refetch()}
+          />
+        </View>
+      ) : activeMethod === 'card' ? (
         <KeyboardAwareScrollView
           contentContainerStyle={styles.cardWrap}
           keyboardShouldPersistTaps="handled"
@@ -1161,6 +1180,7 @@ function SelectPrompt({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
+  k5Wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
 
   // Kart modu (QR personel kartı)
   cardWrap: { flexGrow: 1, justifyContent: 'center', padding: 24 },

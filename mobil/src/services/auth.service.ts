@@ -15,6 +15,8 @@ export interface LoginMethodsConfig {
   /** Firma adı — public login-methods ucundan (company.name ayarı). Login/kilit
    *  başlığında marka satırı olarak gösterilir. */
   companyName?: string;
+  /** Giriş öncesi K5 sinyali: yalnız zorlama kipinde lisans DURDURULMUŞKEN true (eski backend göndermez). */
+  lisansDurduruldu?: boolean;
 }
 export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = {
   enabled: ['list'],

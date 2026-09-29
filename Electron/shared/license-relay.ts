@@ -38,8 +38,21 @@ export type LicenseRelayResult =
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
+/**
+ * Satıcının YAPILANDIRILMIŞ ana makineleri — aktarma yalnız bunlara gider (D12). Backend
+ * `lib/license/vendor-url.ts` varsayılanı (üretim) + hazırlık satıcısı; ayna bekçisi
+ * `license-relay.test.ts`. Hedefi backend söyler ama panel ona güvenmez: kurcalanmış bir
+ * backend paneli fabrika ağından rastgele bir adrese POST atan bir vekile çeviremesin.
+ */
+export const LICENSE_VENDOR_HOSTS: readonly string[] = ["lisans.etkiliyazilim.com", "lisans-test.etkiliyazilim.com"];
+
+export interface RelayTargetPolicy {
+  /** Döngü adresi (sahte/yerel satıcı) — yalnız paketlenmemiş geliştirme derlemesinde. */
+  allowLoopback: boolean;
+}
+
 /** Hedef adres satıcının çevrimdışı ucu mu? Geçerliyse normalize URL, değilse null. */
-export function validateRelayTarget(raw: unknown): string | null {
+export function validateRelayTarget(raw: unknown, policy: RelayTargetPolicy): string | null {
   if (typeof raw !== "string" || raw.length > 2048) return null;
   let url: URL;
   try {
@@ -47,10 +60,10 @@ export function validateRelayTarget(raw: unknown): string | null {
   } catch {
     return null;
   }
-  // Düz http yalnız geliştirme/sahte satıcı için döngü adresinde.
-  const httpsOk = url.protocol === "https:";
-  const loopbackHttp = url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname);
-  if (!httpsOk && !loopbackHttp) return null;
+  const vendorHost = url.protocol === "https:" && LICENSE_VENDOR_HOSTS.includes(url.hostname);
+  // Döngü adresi yalnız geliştirmede (Senaryo L'nin yerel satıcısı); üretim paketinde kapalı.
+  const loopback = policy.allowLoopback && LOOPBACK_HOSTS.has(url.hostname) && (url.protocol === "http:" || url.protocol === "https:");
+  if (!vendorHost && !loopback) return null;
   if (url.username || url.password || url.search || url.hash) return null;
   if (!url.pathname.endsWith(LICENSE_RELAY_PATH)) return null;
   return url.toString();

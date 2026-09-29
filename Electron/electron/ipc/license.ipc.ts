@@ -1,4 +1,4 @@
-import { ipcMain, net } from "electron";
+import { app, ipcMain, net } from "electron";
 import {
   LICENSE_RELAY_MAX_RESPONSE_BYTES,
   LICENSE_RELAY_TIMEOUT_MS,
@@ -37,8 +37,13 @@ async function readLimited(res: Response): Promise<string | null> {
   return new TextDecoder().decode(all);
 }
 
+/** Paketlenmiş (üretim) derlemede döngü adresi kapalı; bilinemiyorsa da kapalı (fail-closed). */
+function relayAllowsLoopback(): boolean {
+  return typeof app?.isPackaged === "boolean" ? !app.isPackaged : false;
+}
+
 export async function relayLicenseRequest(target: unknown, body: unknown): Promise<LicenseRelayResult> {
-  const url = validateRelayTarget(target);
+  const url = validateRelayTarget(target, { allowLoopback: relayAllowsLoopback() });
   if (!url) return { ok: false, kod: "HEDEF_GECERSIZ" };
   const payload = validateRelayBody(body);
   if (!payload) return { ok: false, kod: "GOVDE_GECERSIZ" };

@@ -15,6 +15,7 @@ import { useAttemptToken } from '../../../offline/attemptToken';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import type { MainStackParamList } from '../../../navigation/types';
+import { showScreenError } from '../../../lib/screenToast';
 
 // =============================================================================
 // Saha #11 — Hızlı Sipariş. Ham/stok topları arka arkaya okut → müşteri seç →
@@ -104,7 +105,7 @@ export default function HizliSiparisScreen() {
     },
     onError: (e: Error) => {
       attempt.onFailure(e);
-      Toast.show({ type: 'error', text1: 'Sipariş açılamadı', text2: e.message });
+      showScreenError(e, 'Sipariş açılamadı');
     },
   });
 

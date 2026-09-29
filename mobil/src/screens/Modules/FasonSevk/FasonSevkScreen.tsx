@@ -79,6 +79,7 @@ import {
 } from '../../../utils/labels';
 import { useScanClassifier } from '../../../hooks/useScanSeries';
 import { isWrongTypeForCardField, isWrongTypeForRollField } from './fasonScanGuards';
+import { showScreenError } from '../../../lib/screenToast';
 
 // Barkod tipi sezgisi — yanlış alana okutmayı backend 404'üne güvenmeden anında,
 // net mesajla yakalar. Tür SUNUCU TABLOSUNDAN gelir (ön ek tablette sabit
@@ -735,7 +736,7 @@ export default function FasonSevkScreen() {
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Sevk başarısız', text2: err.message });
+      showScreenError(err, 'Sevk başarısız');
     },
   });
 

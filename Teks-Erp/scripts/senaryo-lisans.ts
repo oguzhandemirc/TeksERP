@@ -1034,11 +1034,17 @@ async function main(): Promise<number> {
       const mobil = await C.istemci.anonim("GET", "/api/mobile/updates/manifest");
       a.kontrol("K5'te kimliksiz GET /api/mobile/updates/* kapıdan geçer (LICENSE_* değil)", !String(mobil.kod ?? "").startsWith("LICENSE"), ozet(mobil));
       const lm = await C.istemci.anonim("GET", "/api/auth/login-methods");
-      a.kontrol("GET /api/auth/login-methods → 200", lm.status === 200, ozet(lm));
-      if (!("lisansDurduruldu" in lm.veri)) a.not("login-methods 'lisansDurduruldu' sinyali (yönetici kararı d) bu tabanda yok — başka dilimin işi");
+      const lisansAnahtarlari = Object.keys(lm.veri).filter((k) => !["enabled", "primary", "companyName", "lisansDurduruldu"].includes(k));
+      a.kontrol(
+        "K5'te kimliksiz GET /api/auth/login-methods → 200, lisansDurduruldu:true (tek lisans bilgisi, başka anahtar yok)",
+        lm.status === 200 && lm.veri.lisansDurduruldu === true && lisansAnahtarlari.length === 0,
+        `${ozet(lm)} ${JSON.stringify(Object.keys(lm.veri))}`,
+      );
       await geriAl(String(k5.veri.id));
       const n = await C.istemci.bekle((d) => d.durum.uygulananKademe === "NORMAL", 20_000);
       a.kontrol("K5 geri alındı → NORMAL", n.ms !== null);
+      const lm2 = await C.istemci.anonim("GET", "/api/auth/login-methods");
+      a.kontrol("K5 kalkınca login-methods lisansDurduruldu:false (giriş ekranı normale döner)", lm2.status === 200 && lm2.veri.lisansDurduruldu === false, ozet(lm2));
     });
 
     // ============================================================ L29

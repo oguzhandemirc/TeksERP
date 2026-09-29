@@ -53,6 +53,7 @@ import {
 } from '../../../constants/manualReasons';
 import { colors, radius, spacing } from '../../../theme';
 import type { QualityGrade } from '../../../types/models';
+import { showScreenError } from '../../../lib/screenToast';
 
 /** Sebep alt sınırı — "Manuel Mod" ile ORTAK (backend de aynısını uygular). */
 const MIN_REASON = MANUAL_MIN_REASON;
@@ -170,7 +171,7 @@ export default function TamburManualRollModal({
       }
       attempt.onFailure(err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Top eklenemedi', text2: err.message });
+      showScreenError(err, 'Top eklenemedi');
     },
   });
 

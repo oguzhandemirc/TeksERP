@@ -19,6 +19,7 @@ import { SkeletonList } from '../../../components/motion';
 import { returnService, type ReturnRow, type ReturnCancelledFilter } from '../../../services/return.service';
 import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
+import { showScreenError } from '../../../lib/screenToast';
 
 const STATUS_TABS: { key: ReturnCancelledFilter; label: string }[] = [
   { key: 'active', label: 'Aktif' },
@@ -76,7 +77,7 @@ export default function IadeGecmisiScreen() {
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'İptal edilemedi', text2: err.message });
+      showScreenError(err, 'İptal edilemedi');
     },
   });
 
@@ -92,7 +93,7 @@ export default function IadeGecmisiScreen() {
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: err.message });
+      showScreenError(err, 'Güncellenemedi');
     },
   });
 

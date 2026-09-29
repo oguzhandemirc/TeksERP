@@ -32,6 +32,7 @@ import {
 import type { SubcontractorDispatchListItem } from '../../../types/models';
 import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
+import { showScreenError } from '../../../lib/screenToast';
 
 // =============================================================================
 // Fason Sevk Geçmişi — eski "Son Sevkler" modalının yerini alan tam sayfa.
@@ -141,7 +142,7 @@ export default function FasonSevkGecmisiScreen() {
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'İptal başarısız', text2: err.message });
+      showScreenError(err, 'İptal başarısız');
     },
   });
 

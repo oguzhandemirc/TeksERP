@@ -13,6 +13,7 @@ import { AuditService } from "../services/audit.service";
 import { TotpAccountService } from "../services/totp-account.service";
 import { readDevicePairingRequired, readLoginMethods, readCompanyName } from "../services/system-setting.service";
 import { SessionRegistryService } from "../services/session-registry.service";
+import { isSuspendedBeforeLogin } from "../services/license-view.service";
 import { AppError } from "../utils/app-error";
 import {
   resolveLoginLockoutKeys,
@@ -398,13 +399,15 @@ export class AuthController {
    *     tags: [Auth]
    *     summary: Mobil giriş yöntemleri (public — login ekranı auth'suz okur)
    *     responses:
-   *       200: { description: "{ enabled: (list|pin|card)[], primary }" }
+   *       200: { description: "{ enabled: (list|pin|card)[], primary, companyName, lisansDurduruldu }" }
    */
   static async loginMethods(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const methods = await readLoginMethods();
       const companyName = await readCompanyName();
-      res.status(200).json({ success: true, data: { ...methods, companyName } });
+      // K5 giriş ekranı sinyali: kimliksize verilen tek lisans bilgisi (yalnız zorla + DURDURULMUŞ).
+      const lisansDurduruldu = isSuspendedBeforeLogin();
+      res.status(200).json({ success: true, data: { ...methods, companyName, lisansDurduruldu } });
     } catch (error) {
       next(error);
     }

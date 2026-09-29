@@ -27,6 +27,7 @@ import AppModal from '../../../components/AppModal';
 import { isWorkSessionLost } from '../../../services/api';
 import { tamburService, type TamburSendToDyePreview } from '../../../services/tambur.service';
 import { colors, radius, spacing } from '../../../theme';
+import { showScreenError } from '../../../lib/screenToast';
 
 /** Sebep alanı — backend de aynı alt sınırı uygular (min 3 karakter). */
 const MIN_REASON = 3;
@@ -81,7 +82,7 @@ export default function TamburSendToDyeModal({ visible, onDismiss, rollId, onlin
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Geri gönderilemedi', text2: err.message });
+      showScreenError(err, 'Geri gönderilemedi');
     },
   });
 

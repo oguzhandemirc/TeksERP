@@ -89,6 +89,15 @@
 - **[ÇEKİRDEK]** Güven çapası native ikiliye GÖMÜLÜDÜR (= `ROOT_PUBLIC_KEYS` / `PACKAGE_PUBLIC_KEYS`); dışarıdan çapa yalnız `test-anchor` özellikli derlemede kabul edilir, paket özelliksiz derlemeyi taşır. · bekçi: `test_lisans_native_kahin (§0e gömülü çapa · §7b enjeksiyon reddi)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Parmak izi toplayıcısı iki uygulamada AYNI ham değeri okur — Windows'ta aynı PowerShell sondası (metin satır satır aynı), Linux/macOS'ta aynı dosya/komut aynı sırayla; Faz 1 kiralarının kabul edilen kümesi TS toplayıcısıyla ölçüldüğünden sapma yükseltmede parmak izini uyuşmaz yapar. · bekçi: `test_lisans_native_kahin (§0d sonda metni · §6a aynı makinede aynı özet)` <sub>(arşiv:2026-09-29)</sub>
 
+## İstemciler (panel · tablet · satıcının /q sayfası)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Giriş öncesi K5 sinyali tek boolean'dır: `login-methods.lisansDurduruldu` yalnız zorla ∧ UYGULANAN DURDURULMUŞ iken true (gözlemde false), kimliksize başka lisans bilgisi verilmez; panel K5'te kabuğu bağlamaz, yalnız "verilerimi al" sayfası (yedek · dışa aktarma · çıkış) açılır ve o yüzeyin çağırdığı her uç DURDURULMUŞ izin listesindedir; tablet giriş ekranı yalnız bu açılışta taze okunan sinyalle K5 ekranı çizer. · bekçi: `test_lisans_k5_giris (§1–§2 sinyal · §3 panel K5 yüzeyi)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Lisans reddi (403 `LICENSE_*`) tabletin kuyruğundaki saha kaydını SİLMEZ: kayıt kalıcı bekler, uzun aralıkla yeniden denenir, kalıcı düşüş duyurulmaz; çip "lisans nedeniyle bekleyen N kayıt" der; ekran hata toast'ları ortak yardımcıdan (`showScreenError`) geçer ve interceptor'ın söylediği lisans reddinde susar. · bekçi: `mobil src/offline/mutations.test.ts (D7)`, `mobil src/lib/screenToast.test.ts` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Çevrimdışı QR çok parçalıdır (`TKLQ1|i/n|kimlik|özet|veri`, 1…4 parça): biçimin tek kaynağı `Teks-Erp/src/lib/license/qr-parca.ts`, panel · tablet · satıcı bayt-eşit ayna taşır, /q sayfasının tarayıcı eşi TS eşiyle birebir ölçülür; tablet parçaları toplar, bütünlüğü doğrular ve backend'e TEK metin gönderir. · bekçi: `test_lisans_qr_parca_aynasi`, `test_qr_sayfasi` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Panel aktarması yalnız yapılandırılmış satıcı ana makinesine (`LICENSE_VENDOR_HOSTS`: üretim + hazırlık) gider, döngü adresi yalnız paketlenmemiş derlemede; etkinleştirme kodu taşıyan istek gövdeyle (POST) gider, URL'ye girmez; `LICENSE_MODULE.details.modul` DB anahtarıdır, istemci eski API alanı biçimini de tanır. · bekçi: `Electron src/lib/license/license-relay.test.ts`, `Electron src/services/licenseService.test.ts`, `Electron src/lib/license/ceiling.test.ts` <sub>(arşiv:2026-09-29)</sub>
+
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
 - **KISMI** `docs/design/LISANS-PROTOKOLU.md §6 (f4 = birincil fiziksel ağ kartının MAC'i)` → `R:2026-09-29 yönetici kararı (F3/F4)`: F4 sistem/anakart seri numarasıdır, MAC kullanılmaz; F3 RAID genel serisi ölçülemedi. Kod henüz eski hâlde (borç, yukarıda Yasaklar).
@@ -103,7 +112,7 @@ Fabrika tarafı: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## lisans` bölümü.**
 
-Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_native_kahin`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`, `test_genel_dinleyici`, `test_imza_parolasi`, `test_bayi_sahipligi`
+Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_native_kahin`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_portal_web_statik`, `test_denetim_budama`, `test_genel_dinleyici`, `test_imza_parolasi`, `test_bayi_sahipligi`, `test_lisans_qr_parca_aynasi`, `test_lisans_k5_giris`, `test_qr_sayfasi`
 
 Native çekirdek (cargo, `cd Teks-Erp/native/lisans-cekirdek && npm test`; commit kapısında koşar, cargo yoksa ⏭ beyanla): `tests/vektorler.rs` (TS kâhininin vektör dosyası Rust tarafında) · derleme `npm run derle` (kâhinin §3–§7'si için `.node`).
 
@@ -131,3 +140,4 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-29 · Patron bulutu gelen kutusu (B3): makbuz aynı tx, teknik kullanıcı girişsiz, sipariş aktörü audit'te
 - 2026-09-29 · Lisans motoru F1a: kimlik LICENSE_DIR'de, geri alma pini, okuma hatası ≠ yok, satıcı saati, motor dayanıklılığı
 - 2026-09-29 · Satıcı düzeltmeleri F2: D2s · D4 · D8 · D9 · D10 · D11 · D14 satıcı ayağı, kod pepper'ı, tailnet geri döngü bayrağı
+- 2026-09-29 · Lisans istemcileri (F3): giriş öncesi K5, tablet kuyruğu lisans reddinde silmez, çok parçalı QR, panel aktarma hedefi

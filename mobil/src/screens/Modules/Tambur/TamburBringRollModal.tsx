@@ -39,6 +39,7 @@ import RollPickerModal from '../../../components/RollPickerModal';
 import { isWorkSessionLost } from '../../../services/api';
 import { tamburService, type TamburBringPreview } from '../../../services/tambur.service';
 import { colors, radius, spacing } from '../../../theme';
+import { showScreenError } from '../../../lib/screenToast';
 
 /** Sebep alanı — backend de aynı alt sınırı uygular (min 3 karakter). */
 const MIN_REASON = 3;
@@ -100,7 +101,7 @@ export default function TamburBringRollModal({
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor zaten bildirdi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: err.message });
+      showScreenError(err, 'Top bulunamadı');
     },
   });
 
@@ -120,7 +121,7 @@ export default function TamburBringRollModal({
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Taşıma yapılamadı', text2: err.message });
+      showScreenError(err, 'Taşıma yapılamadı');
     },
   });
 

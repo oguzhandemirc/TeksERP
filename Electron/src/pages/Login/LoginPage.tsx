@@ -19,6 +19,8 @@ import type { DiscoveredServer } from "@shared/ipc-contract";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 import type { ExistingSessionInfo } from "@/types/auth";
 import { LoginHero } from "./LoginHero";
+import { useLoginLicenseSuspended } from "./useServerCompanyName";
+import { LicenseSuspendedLogin } from "./LicenseSuspendedLogin";
 
 /** 409 SESSION_EXISTS onay diyaloğu için, mevcut oturumu okunur cümleye çevir. */
 function describeExistingSession(info: ExistingSessionInfo): string {
@@ -57,6 +59,8 @@ export function LoginPage() {
   const { theme, setTheme } = useTheme();
   const reach = useServerReachability();
   const [mismatch, setMismatch] = useState<DiscoveredServer | null>(null);
+  // K5: giriş yalnız "verilerimi al" için; giren kabuk yerine o sayfaya gider (`router.tsx`).
+  const licenseSuspended = useLoginLicenseSuspended();
 
   const onSubmit = (values: LoginFormValues) => performLogin(values, false);
 
@@ -150,8 +154,10 @@ export function LoginPage() {
               form.resetField("password");
             }}
           />
+        ) : licenseSuspended ? (
+          <LicenseSuspendedLogin form={form} submitting={submitting} onSubmit={onSubmit} />
         ) : (
-        <LoginForm form={form} submitting={submitting} onSubmit={onSubmit} />
+          <LoginForm form={form} submitting={submitting} onSubmit={onSubmit} />
         )}
       </div>
       <SurumRozeti />

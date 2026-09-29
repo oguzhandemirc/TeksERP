@@ -56,6 +56,7 @@ import type { MainStackParamList } from '../../../navigation/types';
 import { foldSearchText } from '../../../utils/searchFold';
 import { useScanClassifier } from '../../../hooks/useScanSeries';
 import { resolvePoolScan } from './resolvePoolScan';
+import { showScreenError } from '../../../lib/screenToast';
 
 // =============================================================================
 // Paketleme — ÇUVAL DEPO akış (MÜŞTERİ-BAZLI). Param: { customerId, branchId? }.
@@ -288,7 +289,7 @@ export default function PaketlemeScreen() {
     onError: (e: Error) => {
       if (isWorkSessionLost(e)) return;
       openSackAttempt.onFailure(e);
-      Toast.show({ type: 'error', text1: 'Çuval açılamadı', text2: e.message });
+      showScreenError(e, 'Çuval açılamadı');
     },
   });
 
@@ -303,7 +304,7 @@ export default function PaketlemeScreen() {
     },
     onError: (e: Error) => {
       if (isWorkSessionLost(e)) return;
-      Toast.show({ type: 'error', text1: 'Aktarılamadı', text2: e.message });
+      showScreenError(e, 'Aktarılamadı');
     },
   });
 
@@ -320,7 +321,7 @@ export default function PaketlemeScreen() {
     },
     onError: (e: Error) => {
       if (isWorkSessionLost(e)) return;
-      Toast.show({ type: 'error', text1: 'Silinemedi', text2: e.message });
+      showScreenError(e, 'Silinemedi');
     },
   });
 
@@ -329,7 +330,7 @@ export default function PaketlemeScreen() {
     onSuccess: () => refreshPool(),
     onError: (e: Error) => {
       if (isWorkSessionLost(e)) return;
-      Toast.show({ type: 'error', text1: 'Çıkarılamadı', text2: e.message });
+      showScreenError(e, 'Çıkarılamadı');
     },
   });
 
@@ -377,7 +378,7 @@ export default function PaketlemeScreen() {
     onError: (e: Error) => {
       if (isWorkSessionLost(e)) return;
       shipAttempt.onFailure(e);
-      Toast.show({ type: 'error', text1: 'Sevkiyat kurulamadı', text2: e.message });
+      showScreenError(e, 'Sevkiyat kurulamadı');
     },
   });
 
@@ -431,7 +432,7 @@ export default function PaketlemeScreen() {
       refreshPool();
     } catch (e) {
       signalScan('reject');
-      Toast.show({ type: 'error', text1: 'Eklenemedi', text2: (e as Error).message });
+      showScreenError(e, 'Eklenemedi');
     } finally {
       setTimeout(() => {
         scanBusy.current = false;

@@ -149,6 +149,7 @@ import {
 } from '../../../components/motion';
 import { colors, radius, spacing } from '../../../theme';
 import type { Item, QualityGrade, Roll } from '../../../types/models';
+import { showScreenError } from '../../../lib/screenToast';
 
 const RECENT_PAGE_SIZE = 6;
 const HISTORY_PAGE_SIZE = 20;
@@ -210,7 +211,7 @@ function QuickAddDesenRow({
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       // api.ts backend TR mesajını err.message'a koyar (409 mükerrer vb.).
-      Toast.show({ type: 'error', text1: 'Desen oluşturulamadı', text2: err.message });
+      showScreenError(err, 'Desen oluşturulamadı');
     },
   });
 
@@ -1124,7 +1125,7 @@ export default function KK1Screen() {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(
             () => {},
           );
-          Toast.show({ type: 'error', text1: 'Geri alınamadı', text2: err.message });
+          showScreenError(err, 'Geri alınamadı');
         });
     },
     [qc],

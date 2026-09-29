@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/auth";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 import { isLicenseScreenVisible } from "@/lib/license/visibility";
 import { onLicenseGate } from "@/lib/license/signal";
+import { useLicenseSuspension } from "@/lib/license/suspension";
 import type { LicenseStatusSummary } from "@/types/license";
 
 export const LICENSE_STATUS_KEY = ["license", "durum"] as const;
@@ -34,7 +35,13 @@ export function useLicenseStatus(): LicenseStatusSummary | null {
     [qc],
   );
   const d = q.data;
-  return d && d.ayrinti ? d : null;
+  const summary = d && d.ayrinti ? d : null;
+  // Oturumda K5'in yetkili kaynağı UYGULANAN kademedir: kalkınca kabuk geri gelir.
+  const tier = summary?.kademe ?? null;
+  useEffect(() => {
+    if (tier !== null) useLicenseSuspension.getState().setSuspended(tier === "DURDURULMUS");
+  }, [tier]);
+  return summary;
 }
 
 /** Lisans ekranı (karo · palet · sayfa) bu oturuma çizilir mi. */

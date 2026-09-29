@@ -26,6 +26,7 @@ import { colors, spacing, radius } from '../../../theme';
 import type { Roll } from '../../../types/models';
 import type { MainStackParamList } from '../../../navigation/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { showScreenError } from '../../../lib/screenToast';
 
 // O12 fix: okutulmuş top listesi Android LMK kill'inde sıfırlanıyordu —
 // FasonKabul draft deseni (debounce + savedAt + 8h TTL).
@@ -173,7 +174,7 @@ export default function KartelaSevkScreen() {
         setBarcode('');
       } catch (err) {
         signalScan('reject');
-        Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: (err as Error).message });
+        showScreenError(err, 'Top bulunamadı');
       } finally {
         setResolving(false);
       }
@@ -237,7 +238,7 @@ export default function KartelaSevkScreen() {
     },
     onError: (err) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Sevk başarısız', text2: err.message });
+      showScreenError(err, 'Sevk başarısız');
     },
   });
 

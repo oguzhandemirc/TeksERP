@@ -5,12 +5,14 @@ import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 import Pulse from './motion/Pulse';
 import { palette, radius, spacing } from '../theme';
 import { useIsOnline, useOfflineReason, usePendingStationOps } from '../offline/hooks';
+import type { OfflineReason } from '../offline/serverReachability';
 
 /**
  * Bağlantı DURUMU rozeti — istasyon ekranlarının header'ında ortak.
  *
- * Üç durum:
+ * Dört durum:
  *  - online + bekleyen>0  → "N sync"        (mavi, nabız atan nokta = aktarım)
+ *  - online + lisans reddi → "Lisans nedeniyle bekleyen N kayıt" (amber; kayıt silinmez)
  *  - offline + bekleyen=0 → "Çevrimdışı" / "SUNUCUYA ULAŞILAMIYOR" (amber)
  *  - offline + bekleyen>0 → yukarıdaki + " · N sırada" (kırmızı = veri sırada)
  *
@@ -29,35 +31,54 @@ import { useIsOnline, useOfflineReason, usePendingStationOps } from '../offline/
  * ⚠️ KK1'in "etiket çıkmadı" bandıyla KARIŞTIRMA: bu SUNUCUYA YAZILAMAMIŞ
  * kaydı, o basılamamış ETİKETİ anlatır (top kayıtlıdır). İkisi ayrı yüzeydir.
  */
+/** Nabız noktası renkleri (açık tonlar; zemin koyu). */
+const DOT = { blue: '#bfdbfe', red: '#fecaca', amber: '#fde68a' } as const;
+
+/** Çipin görünümü — saf karar (null = çizilmez). `licensePending` ⊆ `pending`. */
+export function syncChipView(
+  online: boolean,
+  why: OfflineReason,
+  pending: number,
+  licensePending: number,
+): { bg: string; dot: string; label: string; a11y: string } | null {
+  if (online && pending === 0) return null;
+  if (online && licensePending > 0) {
+    // D7: lisans reddi kaydı SİLMEZ; kayıt kuyrukta uzun aralıkla bekler. Sebep AYRI söylenir —
+    // "sync" ya da "çevrimdışı" sanılırsa operatör ağla uğraşır, iş yöneticinindir.
+    const others = pending - licensePending;
+    const label = `Lisans nedeniyle bekleyen ${licensePending} kayıt${others > 0 ? ` · ${others} sync` : ''}`;
+    return { bg: palette.amber[700], dot: DOT.amber, label, a11y: label };
+  }
+  if (online) {
+    const label = `${pending} sync`;
+    return { bg: palette.blue[800], dot: DOT.blue, label, a11y: `${pending} işlem senkronize bekliyor` };
+  }
+  // SEBEBİ SÖYLE. "Çevrimdışı" tek başına operatörü yanlış işe yönlendiriyordu:
+  // ağ linki varken sunucu ölüyse tablette wifi'yle uğraşmanın faydası yok,
+  // haber verilmesi gereken IT'dir. İki durum ayrı metin, ayrı ikon rengi.
+  const serverDown = why === 'server';
+  let label = serverDown ? 'SUNUCUYA ULAŞILAMIYOR' : 'Çevrimdışı';
+  if (pending > 0) label += ` · ${pending} sırada`;
+  const a11y = serverDown
+    ? `Sunucuya ulaşılamıyor${pending > 0 ? `, ${pending} işlem bekliyor` : ''}`
+    : pending > 0
+      ? `Çevrimdışı, ${pending} işlem bekliyor`
+      : 'Çevrimdışı';
+  return {
+    bg: pending > 0 ? palette.red[700] : palette.amber[700],
+    dot: pending > 0 ? DOT.red : DOT.amber,
+    label,
+    a11y,
+  };
+}
+
 export default function SyncStatusChip() {
   const online = useIsOnline();
   const why = useOfflineReason();
-  const pendingCount = usePendingStationOps().length;
-
-  if (online && pendingCount === 0) return null;
-
-  let bg: string = palette.blue[800];
-  let dot: string = '#bfdbfe'; // blue 200
-  let label = `${pendingCount} sync`;
-  if (!online) {
-    // SEBEBİ SÖYLE. "Çevrimdışı" tek başına operatörü yanlış işe yönlendiriyordu:
-    // ağ linki varken sunucu ölüyse tablette wifi'yle uğraşmanın faydası yok,
-    // haber verilmesi gereken IT'dir. İki durum ayrı metin, ayrı ikon rengi.
-    const serverDown = why === 'server';
-    bg = pendingCount > 0 ? palette.red[700] : palette.amber[700];
-    dot = pendingCount > 0 ? '#fecaca' : '#fde68a';
-    label = serverDown ? 'SUNUCUYA ULAŞILAMIYOR' : 'Çevrimdışı';
-    if (pendingCount > 0) label += ` · ${pendingCount} sırada`;
-  }
-
-  const a11y =
-    why === 'server'
-      ? `Sunucuya ulaşılamıyor${pendingCount > 0 ? `, ${pendingCount} işlem bekliyor` : ''}`
-      : online
-        ? `${pendingCount} işlem senkronize bekliyor`
-        : pendingCount > 0
-          ? `Çevrimdışı, ${pendingCount} işlem bekliyor`
-          : 'Çevrimdışı';
+  const ops = usePendingStationOps();
+  const view = syncChipView(online, why, ops.length, ops.filter((o) => o.licenseBlocked).length);
+  if (!view) return null;
+  const { bg, dot, label, a11y } = view;
 
   return (
     <Animated.View
