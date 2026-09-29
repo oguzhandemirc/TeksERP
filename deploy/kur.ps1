@@ -242,6 +242,50 @@ $uygulama  = $UygulamaAdi
 $kurKomut  = "powershell -NoProfile -ExecutionPolicy Bypass -File $kok\kur.ps1"
 $env:PM2_HOME = "$kok\pm2-home"
 
+# --- KURULUM KAYDI (3d-2) -----------------------------------------------------
+# Her kurulum ve -GeriAl, kurulum kokundeki EKLEME-YALNIZ gecmis dosyasina BIR JSON
+# satiri yazar (app\ DISI, lisans\ ile yan yana; backend yoklamada son kayitlari
+# saticiya tasir). Kayit bilgidir: yazilamazsa kurulum DURMAZ, uyarir. Alanlar
+# protokolun InstallRecordSchema allowlist'i; geri donus noktasi YOL degil damga.
+$gecmisDosyasi = "$kok\kurulum-gecmisi.jsonl"
+$surumDeseni = '^\d{1,4}\.\d{1,4}\.\d{1,6}([-+][0-9A-Za-z.-]{1,40})?$'
+function PaketSurumu($dizin) {
+  $p = Join-Path $dizin "package.json"
+  if (-not (Test-Path $p)) { return $null }
+  try { $v = [string](Get-Content $p -Raw | ConvertFrom-Json).version } catch { return $null }
+  if ($v -cmatch $surumDeseni) { return $v } else { return $null }
+}
+function MigrationSayisi($dizin) {
+  $p = Join-Path $dizin "prisma\migrations"
+  if (-not (Test-Path $p)) { return $null }
+  return @(Get-ChildItem $p -Directory).Count
+}
+function KurulumKaydiYaz($alanlar) {
+  try {
+    $kayit = [ordered]@{
+      kayitId             = [guid]::NewGuid().ToString()
+      tur                 = $alanlar.tur
+      tarih               = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [System.Globalization.CultureInfo]::InvariantCulture)
+      commit              = $(if ([string]$alanlar.commit -cmatch '^[0-9a-f]{7,40}$') { [string]$alanlar.commit } else { $null })
+      paketOzeti          = $(if ([string]$alanlar.paketOzeti -cmatch '^[0-9a-f]{64}$') { [string]$alanlar.paketOzeti } else { $null })
+      oncekiSurum         = $alanlar.oncekiSurum
+      yeniSurum           = $alanlar.yeniSurum
+      migrationSayisi     = $alanlar.migrationSayisi
+      yeniMigrationSayisi = $alanlar.yeniMigrationSayisi
+      geriDonus           = [ordered]@{
+        damga       = $(if ([string]$alanlar.damga -cmatch '^\d{8}_\d{6}$') { [string]$alanlar.damga } else { $null })
+        kod         = [bool]$alanlar.kod
+        veri        = [bool]$alanlar.veri
+        veriSifreli = [bool]$alanlar.veriSifreli
+      }
+    }
+    if (-not $kayit.yeniSurum) { Uyar "kurulum kaydi YAZILMADI: yeni surum okunamadi"; return }
+    $satir = $kayit | ConvertTo-Json -Compress -Depth 4
+    [System.IO.File]::AppendAllText($gecmisDosyasi, $satir + "`n", (New-Object System.Text.UTF8Encoding $false))
+    Ok "kurulum kaydi eklendi: $gecmisDosyasi"
+  } catch { Uyar "kurulum kaydi YAZILAMADI: $($_.Exception.Message)" }
+}
+
 # cwd app\ icinde BIRAKILMAZ: script [5/9] sonrasi Set-Location $appDir yapar; oradan
 # cikmadan biten/dusen bir kosum, ayni oturumdaki ikinci kosumu (ve geri almayi)
 # kendi biraktigi tanitici yuzunden "app\ tasinamiyor" ile dusurur.
@@ -402,6 +446,7 @@ if ($GeriAl) {
   $h = Saglik 90
   if ($h) { Ok "Geri alindi. API $($h.status) / DB $($h.db) / v$($h.version)" }
   else { Fail "Geri alindi ama /health cevap vermedi. Bak: $pm2 logs $uygulama" }
+  KurulumKaydiYaz @{ tur = "GERI_ALMA"; oncekiSurum = (PaketSurumu "$kok\app.basarisiz-$damga"); yeniSurum = (PaketSurumu $appDir); migrationSayisi = (MigrationSayisi $appDir) }
   Write-Host ""
   Uyar "DB migration'lari GERI ALINMADI. Eski kod yeni semayla kosuyor."
   Uyar "Uyumsuzluk varsa yedekten restore gerekir: $backupDir"
@@ -411,6 +456,9 @@ if ($GeriAl) {
 
 if (-not $Paket) { Fail "Paket yolu gerekli:  kur.ps1 -Paket <zip>   (veya -GeriAl)" }
 if (-not (Test-Path $Paket)) { Fail "Paket bulunamadi: $Paket" }
+# Kurulum kaydi icin paket ozeti SIMDI (cwd sonra degisir; goreli yol kaybolur).
+$paketOzeti = $null
+try { $paketOzeti = (Get-FileHash $Paket -Algorithm SHA256).Hash.ToLowerInvariant() } catch { Uyar "paket ozeti olculemedi: $($_.Exception.Message)" }
 
 Write-Host ""
 Write-Host "================================================================"
@@ -958,6 +1006,17 @@ if (-not $h) {
 
 Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
 KokeDon   # cwd'yi app\ icinde birakma - ayni oturumdaki ikinci kosum kendi kilidine takilir
+
+# Kurulum kaydi (3d-2): onceki surum ve migration farki kenara alinan kurulumdan olculur.
+$eskiMig = MigrationSayisi $eskiAd
+$yeniMig = MigrationSayisi $appDir
+KurulumKaydiYaz @{
+  tur = "KURULUM"; commit = $(if ($m) { $m.commit } else { $null })
+  paketOzeti = $paketOzeti
+  oncekiSurum = (PaketSurumu $eskiAd); yeniSurum = (PaketSurumu $appDir)
+  migrationSayisi = $yeniMig; yeniMigrationSayisi = $(if ($null -ne $eskiMig -and $null -ne $yeniMig -and $yeniMig -ge $eskiMig) { $yeniMig - $eskiMig } else { $null })
+  damga = $damga; kod = (Test-Path $eskiAd); veri = (Test-Path $dump); veriSifreli = ($dump -clike "*.tkenc")
+}
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Green

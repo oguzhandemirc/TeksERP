@@ -10,12 +10,13 @@
 // panele güncelle diyebilme" yolu — yani kurtarmanın kendisi — kapanırdı.
 // Dönen veri zaten sırsızdır: iki sürüm numarası.
 //
-// Politika KODDA sabittir (src/config/client-version-policy.ts) — gerekçe orada.
+// `minVersion` KODDA sabittir (src/config/client-version-policy.ts) — gerekçe orada;
+// `currentVersion` kira varsa kanalın güncel sürümüdür (src/lib/client-policy-lease.ts).
 // =============================================================================
 
 import { Router, Request, Response } from "express";
 
-import { CLIENT_VERSION_POLICIES } from "../config/client-version-policy";
+import { effectiveClientPolicies, effectiveClientPolicy } from "../lib/client-policy-lease";
 import { APP_VERSION } from "../lib/app-version";
 
 const router = Router();
@@ -59,7 +60,7 @@ const router = Router();
 router.get("/", (_req: Request, res: Response) => {
   res.json({
     success: true,
-    data: { apiVersion: APP_VERSION, clients: CLIENT_VERSION_POLICIES },
+    data: { apiVersion: APP_VERSION, clients: effectiveClientPolicies() },
   });
 });
 
@@ -81,7 +82,7 @@ router.get("/", (_req: Request, res: Response) => {
  *         description: Bu istemci icin politika tanimli degil (istemci fail-open okur)
  */
 router.get("/:istemci", (req: Request, res: Response) => {
-  const policy = CLIENT_VERSION_POLICIES[String(req.params.istemci).toLowerCase()];
+  const policy = effectiveClientPolicy(String(req.params.istemci).toLowerCase());
   if (!policy) {
     res.status(404).json({ success: false, message: "Bu istemci için politika tanımlı değil" });
     return;

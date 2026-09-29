@@ -22,6 +22,7 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { psTara, kapsayanFonksiyon } from "./lib/ps-tarama";
+import { INSTALL_HISTORY_FILE_NAME, INSTALL_RECORD_KINDS, InstallRecordSchema } from "../src/lib/license/protocol";
 
 const KOK = join(__dirname, "..", "..");
 let pass = 0;
@@ -436,6 +437,34 @@ for (const yol of SUNUCU_PS1) {
   check("§14a ⭐ kur.ps1 dışında kültüre bağlı duyarsız regex/Select-String YOK", ihlal.length === 0, ihlal.join(", ") || "temiz");
   check(`§14b kur.ps1 kültür borcu = ${KUR_KULTUR_BORCU} (Faz 2b; düzeltilince tabanı İNDİR, artarsa kırmızı)`,
     kurSayi === KUR_KULTUR_BORCU, `ölçülen ${kurSayi}`);
+}
+
+// §15 — KURULUM KAYDI (3d-2): kur.ps1'in yazdığı satır protokolün allowlist'iyle AYNI anahtar
+//   kümesini taşır (iki yönlü: eksik alan da fazla alan da kırmızı), dosya kurulum kökündedir ve
+//   yalnız EKLENİR; hem kurulum hem -GeriAl kayıt düşer, tür değerleri protokolün kümesinden.
+{
+  const metin = readFileSync(join(KOK, "deploy/kur.ps1"), "utf8");
+  const t = psTara(metin);
+  const fn = t.fonksiyonlar.find((f) => f.ad === "KurulumKaydiYaz");
+  const govde = fn ? t.satirlar.filter((x) => x.no > fn.bas && x.no < fn.son) : [];
+  const anahtar = new Set(govde.flatMap((x) => /^\s*([A-Za-z]+)\s+=\s/.exec(x.kod)?.[1] ?? []));
+  const shape = InstallRecordSchema.shape;
+  const beklenen = new Set([...Object.keys(shape), ...Object.keys(shape.geriDonus.shape)]);
+  const eksik = [...beklenen].filter((k) => !anahtar.has(k));
+  const fazla = [...anahtar].filter((k) => !beklenen.has(k));
+  check("§15a körlük zemini: KurulumKaydiYaz bulundu ve gövdesi tarandı", Boolean(fn) && anahtar.size >= 10, `${anahtar.size} anahtar`);
+  check("§15b ⭐ kur.ps1 kaydı = protokol allowlist'i (eksik YOK · fazla YOK)", eksik.length === 0 && fazla.length === 0,
+    `eksik: ${eksik.join(",") || "-"} · fazla: ${fazla.join(",") || "-"}`);
+  const dosya = new RegExp(`^\\$gecmisDosyasi = "\\$kok\\\\${INSTALL_HISTORY_FILE_NAME.replace(".", "\\.")}"`, "m");
+  check("§15c geçmiş dosyası kurulum kökünde (app\\ DIŞI), ad protokolle aynı", dosya.test(metin));
+  const yazimlar = t.satirlar.filter((x) => /\$gecmisDosyasi\b/.test(x.kod) && !/^\s*\$gecmisDosyasi =/.test(x.kod));
+  check("§15d ⭐ dosya yalnız EKLENİR (AppendAllText; Set-Content/Out-File/WriteAllText YOK)",
+    yazimlar.length >= 1 && yazimlar.every((x) => /AppendAllText\(\$gecmisDosyasi/.test(x.kod) || /Ok "kurulum kaydi eklendi/.test(x.kod)),
+    yazimlar.map((x) => x.no).join(","));
+  const turler = [...metin.matchAll(/KurulumKaydiYaz @\{\s*tur = "([A-Z_]+)"/g)].map((m) => m[1]);
+  check("§15e ⭐ hem KURULUM hem GERI_ALMA kayıt düşer, türler protokolün kümesinden",
+    turler.includes("KURULUM") && turler.includes("GERI_ALMA") && turler.every((x) => (INSTALL_RECORD_KINDS as readonly string[]).includes(x ?? "")),
+    turler.join(","));
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

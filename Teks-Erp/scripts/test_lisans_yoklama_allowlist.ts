@@ -13,7 +13,8 @@
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): A1 sağlık özetine ham audit hata metni alanı eklendi · A2 istemci dağılımına
 // kurulum kimliği eklendi · A3 iş hatası dağılımına hata mesajı eklendi · (F1a) A4 ortamdan DB
-// kimliği düştü (§1d) · A5 yoklamadan satıcı saati sapması düştü (§1d).
+// kimliği düştü (§1d) · A5 yoklamadan satıcı saati sapması düştü (§1d) · (3d-2) A6 kurulum kaydı şeması
+// gevşetildi (`looseObject`): dosya yolu taşıyan satır gövdeye girdi → §1b · §2c · §4a/b/c kırmızı (5).
 // =============================================================================
 import os from "node:os";
 import path from "node:path";
@@ -27,7 +28,7 @@ import { reportJobFailure } from "../src/jobs/job-failure";
 import { touchClient } from "../src/lib/client-registry";
 import { loadLicenseStoreSync } from "../src/lib/license/store";
 import { configureLicenseRuntimeForTests, recordVendorClockSkew, setLicenseDbFacts, setMeasuredFingerprint } from "../src/lib/license/runtime";
-import { PollRequestSchema, type Fingerprint } from "../src/lib/license/protocol";
+import { INSTALL_HISTORY_FILE_NAME, PollRequestSchema, type Fingerprint } from "../src/lib/license/protocol";
 import { acceptLicenseResponse, buildPollBody } from "../src/services/license-sync.service";
 import { fiksturKur, hakBas, kiraBas, type Fikstur } from "./lib/lisans-fikstur";
 
@@ -56,6 +57,8 @@ const IZINLI_ANAHTARLAR = new Set([
   "saglik", "calismaSn", "dbBoyutBayt", "yedek", "hukum", "yasSaat", "offsite", "yapilandirildi", "ok", "eksikSayisi",
   "diskDolulukYuzde", "auditYazmaHatasi", "havuzZamanAsimi", "istemciler", "tur", "adet", "isHatalari", "is",
   "gozlem", "reddedilecekIstek", "reddedilecekModul",
+  "kurulumKayitlari", "kayitId", "tarih", "commit", "paketOzeti", "oncekiSurum", "yeniSurum", "migrationSayisi",
+  "yeniMigrationSayisi", "geriDonus", "damga", "kod", "veri", "veriSifreli",
 ]);
 
 function anahtarlar(deger: unknown, yol: string, out: string[]): string[] {
@@ -69,7 +72,24 @@ function anahtarlar(deger: unknown, yol: string, out: string[]): string[] {
   return out;
 }
 
-const DIZIN = fs.mkdtempSync(path.join(os.tmpdir(), "lisans-allowlist-"));
+// Kurulum kökü taklidi: lisans dizini + yanında kur.ps1'in kurulum geçmişi dosyası.
+const KOK = fs.mkdtempSync(path.join(os.tmpdir(), "lisans-allowlist-"));
+const DIZIN = path.join(KOK, "lisans");
+const GECMIS = path.join(KOK, INSTALL_HISTORY_FILE_NAME);
+const KAYIT_A = randomUUID();
+const KAYIT_B = randomUUID();
+function kayit(kayitId: string, ek: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    kayitId, tur: "KURULUM", tarih: "2026-09-29T21:30:00Z", commit: "1234567", paketOzeti: "a".repeat(64),
+    oncekiSurum: "2.11.1", yeniSurum: "2.11.2", migrationSayisi: 365, yeniMigrationSayisi: 16,
+    geriDonus: { damga: "20260929_213000", kod: true, veri: true, veriSifreli: true }, ...ek,
+  });
+}
+// BOM + bozuk satır + allowlist dışı alanlı satır (dosya adı taşıyor) + aynı kaydın ikinci hâli.
+fs.writeFileSync(GECMIS, [
+  "\uFEFF" + kayit(KAYIT_A, { yeniSurum: "2.11.0" }), "{bozuk", kayit(randomUUID(), { yol: "C:\\TeksERP\\premigrate_x.dump" }),
+  kayit(KAYIT_B), kayit(KAYIT_A),
+].join("\r\n") + "\n");
 
 async function hazirla(): Promise<{ f: Fikstur; dbKimligi: string; ornekler: { istemci: string; kullanici: string; hataMetni: string } }> {
   const dizin = DIZIN;
@@ -139,11 +159,21 @@ async function main(): Promise<void> {
     const ekli = { ...govde, saglik: { ...s, hataMetni: "x" } };
     const ekliIstemci = { ...govde, saglik: { ...s, istemciler: [{ tur: "panel", surum: "1.0.0", adet: 1, kullanici: "ali" }] } };
     check("§3c karşı: şemaya metin alanı eklenemez (KATI RED)", !PollRequestSchema.safeParse(ekli).success && !PollRequestSchema.safeParse(ekliIstemci).success);
+
+    console.log("\n§4 — kurulum kaydı (3d-2): son N geçerli satır, dosya adı/yol taşımaz");
+    const kk = govde.kurulumKayitlari ?? [];
+    check("§4a ⭐ geçerli iki kayıt gövdede (bozuk + allowlist dışı satır atlandı, BOM okundu)", kk.length === 2, `${kk.length}`);
+    check("§4b aynı kaydın SON hâli kalır, sıra eskiden yeniye", kk[0]?.kayitId === KAYIT_B && kk[1]?.kayitId === KAYIT_A && kk[1]?.yeniSurum === "2.11.2");
+    const yollu = { ...govde, kurulumKayitlari: [{ ...kk[0], yol: "x" }] };
+    check("§4c karşı: kayda allowlist dışı alan eklenemez (KATI RED)", !PollRequestSchema.safeParse(yollu).success);
+    fs.rmSync(GECMIS);
+    const govde2 = await buildPollBody();
+    check("§4d dosya yoksa alan HİÇ gitmez (eski satıcı uyumu)", !("kurulumKayitlari" in govde2));
   } catch (e) {
     fail++;
     console.log(`❌ beklenmeyen hata — ${e instanceof Error ? e.stack : String(e)}`);
   } finally {
-    fs.rmSync(DIZIN, { recursive: true, force: true });
+    fs.rmSync(KOK, { recursive: true, force: true });
     await prisma.$disconnect();
     await pool.end();
   }

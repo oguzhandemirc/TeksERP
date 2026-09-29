@@ -21,6 +21,7 @@ import {
 } from "../lib/license/protocol";
 import { getLicenseStore, saveEntitlement, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
 import { measureFingerprint } from "../lib/license/fingerprint";
+import { installHistoryPath, readInstallHistory } from "../lib/license/install-history";
 import {
   getLicenseConfig,
   getLicenseSnapshot,
@@ -110,7 +111,16 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     ortam: buildEnvironment(),
     saglik: await buildPollHealthSummary(),
     gozlem: peekObservationCounters(),
+    // Kurulum kaydı yoksa alan hiç gitmez: eski satıcı KATI şemayla tanımadığı anahtarı reddeder.
+    ...installRecordsField(),
   });
+}
+
+function installRecordsField(): { kurulumKayitlari?: ReturnType<typeof readInstallHistory> } {
+  const dir = getLicenseStore()?.dir;
+  if (!dir) return {};
+  const records = readInstallHistory(installHistoryPath(dir));
+  return records.length > 0 ? { kurulumKayitlari: records } : {};
 }
 
 // ── Kira kabulü ─────────────────────────────────────────────────────────────────

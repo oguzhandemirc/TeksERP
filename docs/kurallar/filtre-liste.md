@@ -40,7 +40,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** `GET /rolls/entry-users` + `/rolls/entry-stations` lookup uçları kataloğu değil GERÇEK veriyi döner (top girmiş kullanıcı/istasyon, groupBy); izin `roll:read | MOBILE_ROLL_READ` (kullanıcı listesi admin:users arkasında — yeni bilgi sızmaz); route'lar `/:id`den ÖNCE. · bekçi: `test_filter_multi_select.ts §2b (lookup sayımı)` <sub>(CLAUDE.md:55)</sub>
-- **[ÇEKİRDEK]** İstemci sürüm politikası KODDA sabit (`CLIENT_VERSION_POLICIES`, panelde ayar DEĞİL); uç `GET /api/client-policy/:istemci` PUBLIC; istemci FAIL-OPEN (uç okunamazsa kilitlenmez — bilinçli istisna); tanımsız istemci 404 (boş politika değil); `minVersion` sahadaki sürümden BÜYÜK OLAMAZ, yalnız gerçek kırılmada yükselir. · bekçi: `test_client_policy.ts` <sub>(CLAUDE.md:7)</sub>
+- **[ÇEKİRDEK]** İstemci sürüm politikasının `minVersion`ı KODDA sabit (`CLIENT_VERSION_POLICIES`, panelde ayar DEĞİL; `currentVersion` kiradan); uç `GET /api/client-policy/:istemci` PUBLIC; istemci FAIL-OPEN (uç okunamazsa kilitlenmez — bilinçli istisna); tanımsız istemci 404 (boş politika değil); `minVersion` sahadaki sürümden BÜYÜK OLAMAZ, yalnız gerçek kırılmada yükselir. · bekçi: `test_client_policy.ts` <sub>(CLAUDE.md:7)</sub>
 - **[ÇEKİRDEK]** Yedek ön ekleri yaşam döngüsüdür (TEK KAYNAK backup-naming.helper.ts): `tekserp_` rotasyona GİRER, `premigrate_`/`pre-restore_` rotasyon DIŞI; rotasyon filtresi yalnız `tekserp_`e bakar; cutoff = min(ad damgası, mtime) — ad damgası dump BAŞLANGICI, mtime BİTİŞ. (Bu küme konusu değil — yedek kümesine ait.) <sub>(CLAUDE.md:279)</sub>
 
 ### Tuzaklar
