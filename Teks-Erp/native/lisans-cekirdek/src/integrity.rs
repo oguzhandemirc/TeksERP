@@ -18,6 +18,7 @@ use std::io::Read;
 use std::path::Path;
 use std::sync::OnceLock;
 
+/// TS `TYP.BUTUNLUK` aynası (kâhin §0j ölçer).
 pub const TYP_BUTUNLUK: &str = "tekserp-butunluk";
 pub const MAX_FILES: usize = 20_000;
 pub const MAX_PATH_UTF16: usize = 512;

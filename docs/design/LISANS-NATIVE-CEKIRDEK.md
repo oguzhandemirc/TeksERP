@@ -8,7 +8,7 @@
 
 | Parça | Nerede | Ölçüm |
 |---|---|---|
-| Rust çekirdeği (napi-rs) | `Teks-Erp/native/lisans-cekirdek/` | `cargo test` 6 birim + vektör dosyası (289 kayıt) · clippy üç hedefte temiz |
+| Rust çekirdeği (napi-rs) | `Teks-Erp/native/lisans-cekirdek/` | `cargo test` 6 birim + vektör dosyası (296 kayıt) · clippy üç hedefte temiz |
 | Arayüz + TS uygulaması | `Teks-Erp/src/lib/license/license-core.ts` | TS protokolünün kendisi — kâhin |
 | Yükleyici · adaptör | `Teks-Erp/src/lib/license/native.ts` · `Teks-Erp/src/lib/license/native-adapter.ts` | dosya yok / bozuk / künye uyuşmaz / zorunlu kip dalları bekçide; native yanıtı sözleşme şemalarından geçer |
 | Bütünlük (2e arayüzü) · modül anahtarı (2d arayüzü) | `Teks-Erp/src/lib/license/integrity.ts` · `Teks-Erp/src/lib/license/module-key.ts` | TS başvurusu = native ile aynı vektörler |
@@ -81,7 +81,7 @@ JWS `typ: tekserp-butunluk`, imzalayan PAKET anahtarı (`kid` `paket-<…>`). Y�
 
 - `yol` göreli POSIX (`[A-Za-z0-9_.@+-]` segmentleri, `.`/`..`, ters eğik çizgi, sürücü harfi, baştaki `/` RED, ≤ 512), tekrarsız; dosya girdisi KATI nesne; 1–20 000 dosya.
 - **Karar sırası:** çapa boş/biçimsiz → `OLCULEMEDI(BUTUNLUK_CAPA_BOS)` · imza/şema → `GECERSIZ(<protokol kodu>)` · kök dizin değil → `OLCULEMEDI(BUTUNLUK_OKUNAMADI)` · eksik (yok ya da dosya değil) veya değişmiş (boy ya da sha256) dosya → `GECERSIZ(BUTUNLUK_UYUSMAZ)` · yalnız okunamayan → `OLCULEMEDI(BUTUNLUK_OKUNAMADI)` · aksi `GECERLI`. Rapor listeleri 50'de kesilir, sayılar tam.
-- Listede olmayan fazla dosya bu sürümde sorulmaz (paket `node_modules` taşır) — kapsam 2e'nin kararı. `PACKAGE_PUBLIC_KEYS` bugün BOŞ (PAKET anahtarı 2e'de): gömülü çapayla her denetim `OLCULEMEDI` (erken kısıt yok). Yeni `typ` protokolün `TYP` kayıt defterine P0'ın dilimiyle girmelidir (bugün yalnız JWS deseni `^tekserp-[a-z]+$` ile geçer).
+- Listede olmayan fazla dosya bu sürümde sorulmaz (paket `node_modules` taşır) — kapsam 2e'nin kararı. `PACKAGE_PUBLIC_KEYS` bugün BOŞ (PAKET anahtarı 2e'de): gömülü çapayla her denetim `OLCULEMEDI` (erken kısıt yok). Tür protokolün `TYP` kayıt defterindedir (`TYP.BUTUNLUK`; TS `INTEGRITY_TYP` ondan okur, Rust `TYP_BUTUNLUK` aynasıdır — kâhin §0j ölçer).
 
 ## 7. Modül anahtarı sarması v1 — Faz 2d için arayüz
 
@@ -109,6 +109,13 @@ Hedef ölçümü: **darwin-arm64** yerel 34/0 · **win-x64** thinkpad-1'de (Node
 
 ## 10. Bekçi ve vektörler
 
-- `test_lisans_native_kahin` (DB'siz): §0 statik aynalar · §1 yükleyici (dosya yok · zorunlu · platform · bozuk `.node` · ortam yolu · aday sırası · künye kararı) · §2 vektör dosyası bayatlık + kod kapsamı · §3–§7 native (yoksa "⏭ ATLANDI — native yok", 7 kontrol sayılı; `TEKSERP_STRICT=1`de kırmızı) · §8 kalıcı K sondaları. Vektör dosyası: `npx tsx scripts/test_lisans_native_kahin.ts --vektor-yaz` (TS kâhini yazar; 289 kayıt: JWS 39 · sertifika 34 · HAK 39 · kira 36 · bağ 7 · normalleştirme 49 · özet 6 · bütünlük 33 · modül 14 · tarih 32).
+- `test_lisans_native_kahin` (DB'siz): §0 statik aynalar · §1 yükleyici (dosya yok · zorunlu · platform · bozuk `.node` · ortam yolu · aday sırası · künye kararı) · §2 vektör dosyası bayatlık + kod kapsamı · §3–§7 native (yoksa "⏭ ATLANDI — native yok", 7 kontrol sayılı; `TEKSERP_STRICT=1`de kırmızı) · §8 kalıcı K sondaları. Vektör dosyası: `npx tsx scripts/test_lisans_native_kahin.ts --vektor-yaz` (TS kâhini yazar; 296 kayıt: JWS 39 · sertifika 34 · HAK 41 · kira 41 · bağ 7 · normalleştirme 49 · özet 6 · bütünlük 33 · modül 14 · tarih 32).
 - `cargo test` aynı dosyayı Rust tarafında koşar (tarih vektörleri dahil — native'in tarih ucu yok).
-- Negatif sondalar (her biri uygulandı/geri alındı sha ile, geri alınınca 34/0): alg denetimi · parmak izi katılığı · UTF-16 boy · kesir yuvarlama · yer tutucu · Windows sondası · HKDF modül bağı · gömülü kök · bayi modül tavanı · zorunlu kipte TS'e düşme · regex tek yanlı değişim · sertifika zaman toleransı · zorunlu kipte test derlemesi reddi — 13'ü de kırmızı (ayrıntı `Teks-Erp/docs/BEKCI-HARITASI.md` `## lisans`).
+- Negatif sondalar (her biri uygulandı/geri alındı sha ile, geri alınınca 34/0): alg denetimi · parmak izi katılığı · UTF-16 boy · kesir yuvarlama · yer tutucu · Windows sondası · HKDF modül bağı · gömülü kök · bayi modül tavanı · zorunlu kipte TS'e düşme · regex tek yanlı değişim · sertifika zaman toleransı · zorunlu kipte test derlemesi reddi — 13'ü de kırmızı; I3-1c'de dört sonda daha: kirada `sunucuSaati` isteğe bağlı · HAK'ta `kurulumId` isteğe bağlı (ikisi §4a/§5a + `cargo test`) · Rust `TYP_BUTUNLUK` değeri · TS `TYP` adı (ikisi §0j) (ayrıntı `Teks-Erp/docs/BEKCI-HARITASI.md` `## lisans`).
+
+## 11. P0 protokolüne uyum (I3-1c, 2026-09-29)
+
+- **Ölçüm** (`git diff 4cabcaa3 lisans/p0-protokol -- Teks-Erp/src/lib/license/`): P0 yalnız satıcı uçlarının sözleşmesini değiştirdi — `RequestSchema`/`istek.ts` (kurulum kimliği etkinleştirme ve taşımada boş olabilir), `uclar.ts` (16 karakterlik kod, taşıma kodu, `ortam.installationId`, `saat.saticiSapmaSn`, yanıtta `kurulumId`/`kodTuru`, `TASIMA_KODU_GEREKLI`, hata ayrıntısında imzasız `sunucuSaati`) ve `state-rules.ts` `SAAT_KAYIK`. Bunlar fabrikada TS'te kalır (istek imzalama, uç gövdeleri, yanıt okuma); native yüzey (HAK · kira · sertifika · bütünlük · modül anahtarı · parmak izi) değişmedi, Rust'ta P0 için kod değişikliği gerekmedi.
+- **P0'ın native'e dokunan iki kuralı vektörle sabitlendi:** imzasız satıcı saati güvenilir saate girmez, imzalı tek saat kaynağı kiranın `sunucuSaati`dir (D4) ve lisans kimliği kiradır (D14; istekte boş kimlik meşru, kira ve HAK'ta değil). 7 vektör: kira `sunucuSaati` yok/saatsiz, kira `kurulumId` yok/boş/null, HAK `kurulumId` yok/boş — hepsi iki uygulamada `BELGE_SEMA`.
+- **`tekserp-butunluk` kayıt defterinde:** `TYP.BUTUNLUK` (satıcı ve patron aynası bayt-eşit); kâhin §0j Rust'taki her `TYP_*` sabitini ad ve değerle ölçer.
+- **Hedef ölçümü:** darwin-arm64 kâhin 37/0 (`TEKSERP_STRICT=1`) · `cargo test` 6 + 2 · fmt + clippy temiz · win-x64 (cargo-xwin) ve linux-x64-gnu (zigbuild, GLIBC 2.28) test ve üretim derlemesi başarılı. Bu dilimde yalnız DERLEME ölçüldü; Windows'ta ve Linux'ta çalıştırma ölçümü 2c'nin ölçümüdür (thinkpad-1 kullanılmadı).

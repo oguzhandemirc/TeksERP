@@ -10,6 +10,7 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+/// Belge türleri: TS `TYP` kayıt defterinin aynası (`TYP_<AD>` = `TYP.<AD>`, kâhin §0j ölçer).
 pub const TYP_HAK: &str = "tekserp-hak";
 pub const TYP_KIRA: &str = "tekserp-kira";
 pub const TYP_SERTIFIKA: &str = "tekserp-sertifika";
