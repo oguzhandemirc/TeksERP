@@ -234,7 +234,14 @@ ol('terfiKaynagi olmayan kanal → uyumlu (gerekmez); kaçış verilirse → ihl
 // §5c — uçtan uca: geçici depo + CLI (kanal-kapisi terfi) + sahte ssh/curl/git
 const T = fs.mkdtempSync(path.join(os.tmpdir(), 'tekserp-terfi-'));
 try {
-  const temizEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), TEKSERP_YAYIN_BILDIRIMI: '0' };
+  // Hermetik git: makinenin global/sistem ayarı OKUNMAZ ve kimlik yalnız depo ayarından gelir
+  // (CI koşucusunda global kimlik yok; yerelde vardı, testi sessizce ondan besliyordu).
+  const gitGlobal = path.join(T, 'gitconfig-global');
+  fs.writeFileSync(gitGlobal, '[user]\n\tuseConfigOnly = true\n');
+  const temizEnv = {
+    ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))),
+    GIT_CONFIG_GLOBAL: gitGlobal, GIT_CONFIG_NOSYSTEM: '1', TEKSERP_YAYIN_BILDIRIMI: '0',
+  };
   const gercekGit = execFileSync('/usr/bin/env', ['sh', '-c', 'command -v git'], { encoding: 'utf8' }).trim();
   const uzak = path.join(T, 'uzak');
   const log = path.join(T, 'cagri.jsonl');
@@ -285,6 +292,8 @@ process.exit(97);
   fs.copyFileSync(path.join(KOK, 'scripts/lib/yayin-bildirim.mjs'), path.join(depo, 'scripts/lib/yayin-bildirim.mjs'));
   const dg = (...a) => execFileSync(gercekGit, ['-c', 'user.email=bekci@test', '-c', 'user.name=bekci', ...a], { cwd: depo, env: temizEnv, encoding: 'utf8' }).trim();
   dg('init', '-q');
+  dg('config', 'user.email', 'bekci@test');
+  dg('config', 'user.name', 'bekci');
   dg('commit', '-q', '--allow-empty', '-m', 'onceki');
   dg('commit', '-q', '--allow-empty', '-m', 'surum');
   const kaynakYml = path.join(uzak, 'opt/stack/apps/tekserp-guncelleme/html/testfabrika/electron/latest.yml');
@@ -368,6 +377,7 @@ process.exit(97);
     const cumle = "fabrika paneli açılmıyor, test'siz acil düzeltme";
     const r = cli(['terfi-atla-kaydi', 'adnansahin', 'panel', '1.3.5', cumle]);
     assert.equal(r.kod, 0, r.cikti);
+    assert.match(r.cikti, /etiket\) atıldı/, r.cikti);
     assert.equal(dg('cat-file', '-t', 'refs/tags/terfi/adnansahin/panel-v1.3.5'), 'tag');
     const mesaj = dg('for-each-ref', '--format=%(contents)', 'refs/tags/terfi/adnansahin/panel-v1.3.5');
     assert.ok(mesaj.includes(cumle), mesaj);
