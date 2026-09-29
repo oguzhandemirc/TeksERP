@@ -138,6 +138,22 @@ export function getDownloadTokens(): ReadonlyArray<{ yolOneki: string; belirtec:
   return downloadTokens;
 }
 
+/** İstemci belirteç isteğinin yoklamayı dürtmesi en çok bu aralıkla (satıcıyı istemci sayısıyla dövmemek). */
+export const DOWNLOAD_TOKEN_NUDGE_GAP_MS = 5 * 60 * 1000;
+let downloadTokenNudge: (() => void) | null = null;
+let lastDownloadTokenNudgeAt = Number.NEGATIVE_INFINITY;
+/** Yoklama işi kaydeder (servis işi içe aktarmaz). */
+export function onDownloadTokenStale(fn: () => void): void {
+  downloadTokenNudge = fn;
+}
+/** Belirteç yok ya da dolmak üzere: yoklamayı dürt (kısıtlı). Dürtüldüyse true. */
+export function requestDownloadTokenRefresh(nowMs: number = Date.now()): boolean {
+  if (!downloadTokenNudge || nowMs - lastDownloadTokenNudgeAt < DOWNLOAD_TOKEN_NUDGE_GAP_MS) return false;
+  lastDownloadTokenNudgeAt = nowMs;
+  downloadTokenNudge();
+  return true;
+}
+
 /** Test-only: sinyalleri sıfırlar. */
 export function __resetLicenseSignalsForTests(): void {
   poll = EMPTY_POLL;
@@ -147,5 +163,7 @@ export function __resetLicenseSignalsForTests(): void {
   observation = { reddedilecekIstek: 0, reddedilecekModul: 0 };
   seenModuleObservations.clear();
   downloadTokens = [];
+  downloadTokenNudge = null;
+  lastDownloadTokenNudgeAt = Number.NEGATIVE_INFINITY;
   version++;
 }

@@ -918,7 +918,31 @@ async function main(): Promise<number> {
     });
 
     // ============================================================ L22
+    // L22/L24 gerçek zincir: satıcı → fabrika ucu → istemci başlığı (belirteç yoksa başlıksız, 3b/3c) →
+    // indirme kapısı Worker'ı (gerçek modül, satıcının İNDİRME açık anahtarı, sahte origin).
+    const indirmeKapisindan = async (belirtec: string | null): Promise<{ status: number; kod: string | null; origin: number }> => {
+      const { pathToFileURL } = await import("node:url");
+      const w = (await import(pathToFileURL(path.resolve(__dirname, "..", "..", "deploy", "guncelleme-sunucusu", "worker", "indirme-kapisi.js")).href)) as {
+        kapiOlustur: (g: { ayar: unknown; fetchImpl?: (r: Request) => Promise<Response>; simdi?: () => number }) => (r: Request) => Promise<Response>;
+        VARSAYILAN_AYAR: Record<string, unknown>;
+      };
+      let origin = 0;
+      const kapi = w.kapiOlustur({
+        ayar: { ...w.VARSAYILAN_AYAR, anahtarlar: [{ kid: hz.indirme.kid, x: hz.indirme.x }] },
+        fetchImpl: async () => {
+          origin++;
+          return new Response("origin", { status: 200 });
+        },
+        simdi: saticiSimdi,
+      });
+      const y = await kapi(new Request(`https://guncelleme.example.test/${KANAL}/electron/latest.yml`, { headers: belirtec ? { "X-TKL-Indirme": belirtec } : {} }));
+      return { status: y.status, kod: y.headers.get("x-tkl-kod"), origin };
+    };
+    const istemciBelirteci = (t: Yanit): string | null => (t.status === 200 && typeof t.veri.belirtec === "string" ? t.veri.belirtec : null);
     await adim("L22", "K1 → indirme belirteci VERİLMEZ, diğer uçlar açık", async (a) => {
+      const once = await C.istemci.istek("GET", "/api/license/indirme-belirteci?urun=electron");
+      const w0 = await indirmeKapisindan(istemciBelirteci(once));
+      a.kontrol("K1 ÖNCESİ zincir: fabrikanın belirteciyle Worker 200 (origin çağrıldı)", once.status === 200 && w0.status === 200 && w0.origin === 1, `${ozet(once)} → ${w0.status} ${w0.kod ?? ""}`);
       const k1 = await yaptirim({ kademe: "K1" });
       a.kontrol("portal K1 → 201", k1.status === 201, ozet(k1));
       const b = await C.istemci.bekle((d) => !d.durum.uygulanan.guncellemeIzni, 20_000);
@@ -928,6 +952,8 @@ async function main(): Promise<number> {
       a.kontrol("satıcı yanıtında indirme belirteci YOK", belirtecler === 0, `adet=${belirtecler}`);
       const t = await C.istemci.istek("GET", "/api/license/indirme-belirteci?urun=electron");
       a.kontrol("GET indirme-belirteci → 403 LICENSE_UPDATES_FROZEN", t.status === 403 && t.kod === "LICENSE_UPDATES_FROZEN", ozet(t));
+      const wK1 = await indirmeKapisindan(istemciBelirteci(t));
+      a.kontrol("K1 zinciri: istemci başlıksız → Worker 403 INDIRME_BELIRTEC_YOK, origin'e gidilmedi", wK1.status === 403 && wK1.kod === "INDIRME_BELIRTEC_YOK" && wK1.origin === 0, `${wK1.status} ${wK1.kod ?? ""}`);
       const w = await renkYarat(C);
       const r = await C.istemci.istek("GET", "/api/orders");
       a.kontrol("diğer uçlar açık: POST /api/colors 201, GET /api/orders 200", w.status === 201 && r.status === 200, `${ozet(w)} / ${ozet(r)}`);
@@ -935,6 +961,8 @@ async function main(): Promise<number> {
       const n = await C.istemci.bekle((d) => d.durum.uygulanan.guncellemeIzni, 20_000);
       const t2 = await C.istemci.istek("GET", "/api/license/indirme-belirteci?urun=electron");
       a.kontrol("K1 geri alınınca belirteç yine verilir", n.ms !== null && t2.status === 200, ozet(t2));
+      const w2 = await indirmeKapisindan(istemciBelirteci(t2));
+      a.kontrol("geri alınınca zincir: yeni belirteçle Worker 200", w2.status === 200 && w2.origin === 1, `${w2.status} ${w2.kod ?? ""}`);
     });
 
     // ============================================================ L23
@@ -973,12 +1001,16 @@ async function main(): Promise<number> {
       a.kontrol("yoklama BASARILI ama satıcı yanıtında indirme belirteci YOK", p.outcome === "BASARILI" && adet === 0, `${p.outcome} adet=${adet}`);
       const t = await C.istemci.istek("GET", "/api/license/indirme-belirteci?urun=electron");
       a.kontrol("fabrika: belirteç verilmez (403 LICENSE_UPDATES_FROZEN ya da 404)", (t.status === 403 && t.kod === "LICENSE_UPDATES_FROZEN") || (t.status === 404 && t.kod === "LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE"), ozet(t));
+      const wB = await indirmeKapisindan(istemciBelirteci(t));
+      a.kontrol("bakım sonrası zincir: istemci başlıksız → Worker 403 INDIRME_BELIRTEC_YOK", wB.status === 403 && wB.kod === "INDIRME_BELIRTEC_YOK" && wB.origin === 0, `${wB.status} ${wB.kod ?? ""}`);
       const d = await C.istemci.detay();
       a.kontrol("program DURMAZ: uygulanan kademe NORMAL/UYARI (son hak edilen sürümde kalır)", ["NORMAL", "UYARI"].includes(d.durum.uygulananKademe), `${d.durum.uygulananKademe} ${d.durum.nedenler.map((n) => n.kod).join(",")}`);
       const geri = await hakSurum({ bakimBitis: msToIso(saticiSimdi() + 365 * DAY_MS), sebep: "Senaryo L bakım yenilendi" });
       await C.istemci.yokla();
       const t2 = await C.istemci.istek("GET", "/api/license/indirme-belirteci?urun=electron");
       a.kontrol("bakım yenilenince belirteç yine verilir", geri.status === 201 && t2.status === 200, `${ozet(geri)} / ${ozet(t2)}`);
+      const wY = await indirmeKapisindan(istemciBelirteci(t2));
+      a.kontrol("yenilenince zincir: Worker 200", wY.status === 200 && wY.origin === 1, `${wY.status} ${wY.kod ?? ""}`);
     });
 
     // ============================================================ L25

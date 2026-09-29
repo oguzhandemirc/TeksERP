@@ -46,6 +46,7 @@ export {
   POLL_FAILURE_WINDOW_MS, getDoorbellStatus, getDownloadTokens, getLicenseEngineStatus, getPollStatus,
   peekObservationCounters, pollFailedRecently, recordModuleObservation, recordObservation, recordPollOutcome,
   recordVendorClockSkew, resetObservationCounters, setDownloadTokens, setLicenseEngineStatus, setNextPollAt,
+  onDownloadTokenStale, requestDownloadTokenRefresh,
   updateDoorbellStatus, type DoorbellStatus, type LicenseEngineState, type LicenseEngineStatus, type PollStatus,
 } from "./license-signals";
 

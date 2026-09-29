@@ -14,7 +14,7 @@ import { bilgi, uyari } from "../lib/logger";
 import { pollLicenseOnce, refreshLicenseDbFacts, refreshLicenseFingerprint, type PollOutcome } from "../services/license-sync.service";
 import { evaluateLicenseTransitions, licenseHousekeeping } from "../services/license-trail.service";
 import { egressTransport, type VendorTransport } from "../services/helpers/license-wire.helper";
-import { getLicenseConfig, getLicenseSnapshot, setLicenseEngineStatus, setNextPollAt } from "../lib/license/runtime";
+import { getLicenseConfig, getLicenseSnapshot, onDownloadTokenStale, setLicenseEngineStatus, setNextPollAt } from "../lib/license/runtime";
 import { STARTUP_VENDOR } from "../lib/license/vendor-url";
 import { POLL_DEFAULT_MINUTES } from "../lib/license/protocol";
 
@@ -191,6 +191,8 @@ function scheduleBoot(): void {
 export function startLicensePoll(): void {
   if (started) return;
   started = true;
+  // İndirme belirteci dolmak üzere/yoksa istemcinin isteği yoklamayı dürter (kiraya eşlik eder).
+  onDownloadTokenStale(requestImmediateLicensePoll);
   void bootstrap();
 }
 
