@@ -52,6 +52,14 @@ Mobil APK/OTA yayını da buradadır (taşındı, 2026-08-26): **`html/adnansahi
 cache kuralı için `nginx/default.conf`'a uzantı eklenmesi gerekir: **manifest
 uzantısı `no-cache` tarafına**, paket (`.apk`) uzun cache tarafına.
 
+## İndirme kapısı (Cloudflare Worker) — YAYINLANMADI
+
+`worker/indirme-kapisi.js`: `/<kanal>/electron/*` ve `/<kanal>/mobil/*` dosyalarını yalnız fabrikanın
+backend'inden alınmış kısa ömürlü İNDİRME belirteciyle verir (Ed25519, Worker'da yalnız açık anahtar).
+Bu servisin dosyalarına dokunmaz; Cloudflare panelinden yapıştırılır. Kurulum, prova, geçiş listesi
+ve geri alma: [`docs/ops/INDIRME-KAPISI-WORKER.md`](../../docs/ops/INDIRME-KAPISI-WORKER.md).
+Kapı açıldıktan sonra origin yalnız Cloudflare'i kabul etmelidir (runbook §5).
+
 ## Yeni müşteri eklemek
 
 ```bash
