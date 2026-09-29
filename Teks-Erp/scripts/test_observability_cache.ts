@@ -5,14 +5,15 @@
 // (yazılmaz, sadece sayaç artar) → DB'ye kalıcı kayıt bırakmaz.
 //
 // Doğrulananlar:
-//   1. getFeatureFlags() ardışık iki çağrıda AYNI data referansı döner (cache hit,
-//      15 ayrı findUnique tekrar koşmaz).
+//   1. getFeatureFlags() ardışık çağrıda önbellekten döner (cache hit): servisi
+//      ATLAYAN bir DB yazımı TTL içinde görünmez. Referans eşitliği ölçü DEĞİL — yanıt
+//      her çağrıda canlı lisans bloğuyla yeni nesne olarak kurulur.
 //   2. setFeatureFlags() cache'i invalidate eder → sonraki getFeatureFlags() TAZE
-//      değer döner (bayat cache servis etmez), referans değişir.
+//      değer döner (bayat cache servis etmez), önbellek yeniden dolar.
 //   3. set() (herhangi bir ayar yazımı) cache'i bayatlatır.
 //   4. AuditService.log başarısız olursa (FK ihlali) sayaç artar, lastError/
 //      lastFailureAt dolar → /health bunu görebilir. Ana akış patlamaz (yutulur).
-//   5. invalidateFeatureFlagsCache() tek başına cache'i temizler.
+//   5. invalidateFeatureFlagsCache() tek başına cache'i temizler (servis dışı yazım görünür olur).
 
 import prisma from "../src/lib/prisma";
 import {
@@ -53,18 +54,26 @@ async function main(): Promise<void> {
     (await prisma.user.findFirst());
   if (!admin) throw new Error("Test için en az bir kullanıcı (admin) gerekli.");
 
-  // --- 1) Cache hit: iki ardışık çağrı aynı data referansını döndürür ---
+  const key = SETTING_KEYS.FINANCE_PRICING_ENABLED;
+  // Ham satır: geri alma BİREBİR olsun (satır yoktuysa yine yok) — `finally`de.
+  fiyatSatiriOnce = await prisma.systemSetting.findUnique({ where: { key } });
+  // Servisi (ve önbellek geçersizleştirmesini) ATLAYAN yazım: önbellekten dönen yanıt bunu görmez.
+  const dogrudanYaz = (v: boolean) => prisma.systemSetting.upsert({ where: { key }, create: { key, value: v }, update: { value: v } });
+
+  // --- 1) Cache hit: servis dışı DB yazımı TTL içinde görünmez ---
+  // Yanıt her çağrıda canlı `license` bloğuyla yeni nesnedir (lisans durumu ayar önbelleğinden
+  // bağımsız değişir) ⇒ referans eşitliği önbelleği ölçmez; ölçü, DB'nin okunmadığıdır.
   console.log("1) Feature-flag cache hit");
   invalidateFeatureFlagsCache(); // temiz başla
   const r1 = await systemSettingService.getFeatureFlags();
+  const original = r1.data!.pricingEnabled;
+  await dogrudanYaz(!original);
   const r2 = await systemSettingService.getFeatureFlags();
-  check(r1.data === r2.data, "ardışık getFeatureFlags() aynı data referansı (cache hit)");
+  check(r2.data!.pricingEnabled === original, "ardışık getFeatureFlags() önbellekten (servis dışı DB yazımı TTL içinde görünmez — cache hit)");
+  await dogrudanYaz(original);
 
   // --- 2) Invalidation + tazelik: setFeatureFlags sonrası taze değer ---
   console.log("2) setFeatureFlags() invalidation + tazelik");
-  const original = r1.data!.pricingEnabled;
-  // Ham satır: geri alma BİREBİR olsun (satır yoktuysa yine yok) — `finally`de.
-  fiyatSatiriOnce = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.FINANCE_PRICING_ENABLED } });
   const toggled = !original;
   const afterSet = await systemSettingService.setFeatureFlags(
     { pricingEnabled: toggled },
@@ -79,10 +88,10 @@ async function main(): Promise<void> {
     r3.data!.pricingEnabled === toggled,
     "set sonrası getFeatureFlags TAZE değer (bayat cache servis etmedi)"
   );
-  check(r3.data !== r1.data, "set sonrası data referansı değişti (cache yenilendi)");
-  // sonraki çağrı yine cache hit olmalı (referans r3 ile aynı)
+  // Önbellek yeniden DOLDU: servis dışı yazım yine TTL içinde görünmez.
+  await dogrudanYaz(original);
   const r4 = await systemSettingService.getFeatureFlags();
-  check(r4.data === r3.data, "yeniden cache hit (TTL içinde aynı referans)");
+  check(r4.data!.pricingEnabled === toggled, "set sonrası yeniden cache hit (servis dışı yazım görünmez)");
 
   // Geri alma `finally`de (`temizleFiyatBayragi`); burada yalnız servis yolundan eski değere dönüş ölçülür.
   await systemSettingService.setFeatureFlags({ pricingEnabled: original }, admin.id);
@@ -94,10 +103,14 @@ async function main(): Promise<void> {
 
   // --- 3) invalidateFeatureFlagsCache() tek başına çalışır ---
   console.log("3) Manuel invalidate");
+  await dogrudanYaz(!original);
   const a = await systemSettingService.getFeatureFlags();
+  check(a.data!.pricingEnabled === original, "invalidate ÖNCESİ servis dışı yazım görünmez (önbellek)");
   invalidateFeatureFlagsCache();
   const b = await systemSettingService.getFeatureFlags();
-  check(a.data !== b.data, "invalidateFeatureFlagsCache sonrası yeni referans");
+  check(b.data!.pricingEnabled === !original, "invalidateFeatureFlagsCache sonrası DB'den taze değer");
+  await dogrudanYaz(original);
+  invalidateFeatureFlagsCache();
 
   // --- 4) Audit failure sayacı: best-effort log düşerse /health görür ---
   console.log("4) Audit hata sayacı");

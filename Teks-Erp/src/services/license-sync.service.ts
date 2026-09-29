@@ -53,6 +53,8 @@ import {
 // ── DB olguları + parmak izi ───────────────────────────────────────────────────
 /** İlk açılış (dosya silmekle yenilenmez) ve defterdeki yüksek su. */
 export async function refreshLicenseDbFacts(installationId: string): Promise<void> {
+  // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): yüksek su defterde YAZILMIŞ en geç andır — geri alınan işlem
+  // de o anda yazılmıştır; süzmek, bir geri almadan sonra saat-geri tespitinin alt sınırını geriletirdi.
   const rows = await prisma.$queryRaw<Array<{ first: Date | null; high: Date | null }>>`
     SELECT LEAST(
              (SELECT "createdAt" FROM system_settings WHERE key = ${INSTALLATION_ID_SETTING_KEY}),

@@ -294,6 +294,7 @@ const OPERASYON_ISTISNA_DOSYALARI = new Set<string>([
   "src/services/backup-impact.service.ts", // yedekten beri YAZILAN satır hacmi
   "src/services/workorder.service.ts", // rota düzenleme: adımın defter geçmişi + RESTRICT FK
   "src/services/helpers/workorder-clone.helper.ts", // bölmede iz topla birlikte taşınır
+  "src/services/license-sync.service.ts", // lisans yüksek suyu: defterde YAZILMIŞ en geç an
 ]);
 
 async function cleanup(): Promise<void> {
