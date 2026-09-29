@@ -17,6 +17,67 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-30",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Hakkında ve Destek ekranları; şifreli yedekte geri yükleme yedek parolası ister; tablet lisans reddinde kaydı kaybetmez",
+      "surumler": {
+        "panel": "1.3.8",
+        "tablet": "1.0.13"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sistem altında “Hakkında” ekranı eklendi: programın kime lisanslı olduğunu (“Lisans sahibi”), lisans numarasını ve çalışan program sürümlerini gösterir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sistem altında “Destek” ekranı eklendi: buradan programı sağlayan firmaya destek talebi açabilir, talebe ekran görüntüsü ekleyebilir ve gelen yanıtları aynı ekrandan izleyebilirsiniz. İnternet bağlantısı yokken açılan talep bekletilir, bağlantı gelince kendiliğinden gönderilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Programa lisans altyapısı eklendi. Şimdilik yalnız gözlem yapılır: hiçbir ekran, işlem ya da modül lisans yüzünden engellenmez ve fabrika kullanıcıları bir fark görmez."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
+          "metin": "Lisans durdurulursa (bugün hiçbir kurulumda devrede değil) panel ve tablet giriş ekranında “Lisans durduruldu” uyarısı çıkar; panelde “Verilerimi al” sayfası açılır ve fabrika verilerini dışarı alabilirsiniz. Veriler hiçbir durumda silinmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Yedek şifrelemesi açılmış kurulumlarda: yedek listesinde şifreli yedeklerin yanında “Şifreli” etiketi görünür; şifreli bir yedekten geri yükleme önizlemesi, geri yükleme ya da yedekten kopya başlatırken panel “Yedek parolası” sorar. Parola ekranda kalmaz, bir sonraki denemede yeniden sorulur. Parolayı bilmeyen kullanıcı şifreli yedeği geri yükleyemez. Yedek şifrelemesi açılmamış kurulumlarda hiçbir şey değişmez; eski yedekler eskisi gibi geri yüklenir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Panelden, hızlı siparişten ve Excel ile içe aktarılarak açılan siparişlerde siparişi oluşturan kullanıcı kaydedilmiyordu; artık yeni siparişlerde kayıt bilgisinde görünür. Önceden açılmış siparişler değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Yeni ekranlar yeni yetkilerle açılır ve mevcut kullanıcılara kendiliğinden verilmez: “Hakkında” için lisans görüntüleme, “Destek” için destek talebi açma yetkisi gerekir. Bu yetkiler “Sistem Yöneticisi” yetki şablonunda hazır gelir; ihtiyacı olan kişilere “Kullanıcılar” ekranından verin."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "“Yetkilendirme” altında “Patron Bulutu” ekranı eklendi (hazırlık: bulut hizmeti henüz açık değil, ekran yalnız bilgi gösterir)."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "duzeltme",
+          "metin": "Tabletten gönderilen bir kayıt lisans nedeniyle geri çevrilirse artık silinmez: tablette bekletilir ve birkaç dakikada bir yeniden denenir. Durum çubuğunda “Lisans nedeniyle bekleyen” kayıt sayısı görünür. Bugün lisans hiçbir kaydı geri çevirmediği için sahada bir fark görülmez."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "İnternetsiz lisans işlemlerinde okutulan karekod artık birden çok parçaya bölünebilir; tablet (Ayarlar → Lisans) parçaları hangi sırayla okutulursa okutulsun toplar, aynı parçayı iki kez okuttuğunuzda uyarır."
+        }
+      ]
+    },
+    {
       "id": "2026-09-28c",
       "baslik": "Müşteri renk adı kumaşa göre girilebilir; irsaliyede aynı renkteki iki kumaş kendi adını basar; birleştirmeyi geri alma onarıldı",
       "surumler": {
