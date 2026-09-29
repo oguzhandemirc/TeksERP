@@ -18,7 +18,7 @@ import { hedefDbKapisi, kapat, kontrol, sonuc } from "./lib/test-ortam";
 
 async function main(): Promise<void> {
   hedefDbKapisi();
-  const d = await dagitimOrtamiKur();
+  const d = await dagitimOrtamiKur({ GENEL_KOK_ADRESI: "https://lisans.ornek.test/" });
   const { prisma } = await import("../src/lib/prisma");
   try {
     mkdirSync(d.dizin.derleme, { recursive: true });
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
     const ilk = await d.p("POST", "/dagitim/baglantilar", govde);
     const b = String(ilk.veri.belirtec ?? "");
     const link = ilk.veri.baglanti as { id: string; derlemeSha256: string; belirtecSonu: string };
-    kontrol("§1b 201 + belirteç + /d yolu + donmuş derleme özeti", ilk.status === 201 && /^[A-Za-z0-9_-]{32}$/.test(b) && ilk.veri.yol === `/d/${b}` && link.derlemeSha256 === sha256(icerik), `${ilk.status} ${ilk.kod ?? ""}`);
+    kontrol("§1b 201 + belirteç + /d yolu + genel kökten tam adres + donmuş derleme özeti", ilk.status === 201 && /^[A-Za-z0-9_-]{32}$/.test(b) && ilk.veri.yol === `/d/${b}` && ilk.veri.adres === `https://lisans.ornek.test/d/${b}` && link.derlemeSha256 === sha256(icerik), `${ilk.status} ${ilk.kod ?? ""}`);
     const tekrar = await d.p("POST", "/dagitim/baglantilar", govde);
     kontrol("§1c aynı işlem kimliği → aynı bağlantı, belirteç GÖSTERİLMEZ", tekrar.status === 201 && tekrar.basliklar.get("idempotent-replay") === "true" && tekrar.veri.belirtec === undefined && tekrar.veri.belirtecGosterilemez === true && (tekrar.veri.baglanti as { id: string }).id === link.id);
     const satir = JSON.stringify(await prisma.indirmeBaglantisi.findUniqueOrThrow({ where: { id: link.id } }), (_k, v: unknown) => (typeof v === "bigint" ? Number(v) : v));

@@ -120,7 +120,7 @@ Backend: `test_lisans_protokol`, `test_lisans_satici_adresi`, `test_lisans_durum
 
 Native çekirdek (cargo, `cd Teks-Erp/native/lisans-cekirdek && npm test`; commit kapısında koşar, cargo yoksa ⏭ beyanla): `tests/vektorler.rs` (TS kâhininin vektör dosyası Rust tarafında) · derleme `npm run derle` (kâhinin §3–§7'si için `.node`).
 
-Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koşar): `mirrors.test.ts`, `sanction.test.tsx`, `once-secret.test.tsx`, `login.test.tsx`, `app-isolation.test.ts`
+Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koşar): `mirrors.test.ts`, `sanction.test.tsx`, `once-secret.test.tsx`, `login.test.tsx`, `app-isolation.test.ts`, `distribution.test.tsx`
 
 Yeni lisans bekçisi doğduğu commit'te bu listeye VE haritanın `## lisans` bölümüne birlikte eklenir.
 

@@ -109,6 +109,8 @@ const EnvSchema = z.object({
   DOSYA_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
   /** Bu kadar saat parça gelmeyen açık yükleme oturumu terk sayılır (parçalar silinir, kota iade). */
   YUKLEME_TERK_SAAT: positiveInt(1, 24 * 30).default(48),
+  /** Genel dinleyicinin dışarıdan görünen kökü (ör. https://lisans.ornek.com) — portal /d · /y bağlantısını TAM adresle verir. */
+  GENEL_KOK_ADRESI: z.url({ protocol: /^https?$/ }).optional(),
   /** /d · /y · /yayin/bildirim istemci IP'si başına dakikalık sınır. */
   DAGITIM_HIZ_IP_DK: positiveInt(1, 100_000).default(120),
 });

@@ -177,7 +177,7 @@ describe("eşikler ve biçim desenleri aynası", () => {
 });
 
 describe("arayüzün çağırdığı her uç sunucuda var", () => {
-  const vendor = [...serverRoutes("http/portal-routes.ts"), ...sessionRoutes()];
+  const vendor = [...serverRoutes("http/portal-routes.ts"), ...serverRoutes("http/distribution-routes.ts"), ...sessionRoutes()];
   const dealer = [...serverRoutes("http/dealer-routes.ts"), ...sessionRoutes()];
   const calls = clientCalls();
 
@@ -206,5 +206,21 @@ describe("arayüzün çağırdığı her uç sunucuda var", () => {
       return !matches(c, vendor) && !matches(c, dealer);
     });
     expect(missing.map((c) => `${c.file}: ${c.key}`)).toEqual([]);
+  });
+});
+
+describe("ham dağıtım uçları (JSON tablosu dışı) sunucuda var", () => {
+  // distribution-raw.ts `/portal/api/ham` altına bağlanır; arayüz yolu `/portal/api/ham/…` şablonuyla yazar.
+  const raw = [...read("http/distribution-raw.ts").matchAll(/router\.(get|put)\(\s*"([^"]+)"/g)].map((m) => ({ method: m[1]!.toUpperCase(), segments: segs(`/portal/api/ham${m[2]!}`) }));
+  const used = walk(WEB_SRC).flatMap((file) => [...readFileSync(file, "utf8").matchAll(/`(\/portal\/api\/ham\/[^`]+)`/g)].map((m) => segs(m[1]!.replace(/\$\{[^}]+\}/g, ":p"))));
+
+  it("tarayıcı gerçekten ölçüyor", () => {
+    expect(raw.length).toBeGreaterThanOrEqual(2);
+    expect(used.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("arayüzün her ham yolu sunucunun ham yönlendiricisinde", () => {
+    const missing = used.filter((u) => !raw.some((r) => r.segments.length === u.length && r.segments.every((s, i) => isParam(s) || isParam(u[i]!) || s === u[i])));
+    expect(missing.map((m) => m.join("/"))).toEqual([]);
   });
 });

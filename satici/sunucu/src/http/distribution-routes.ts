@@ -60,6 +60,12 @@ const optionalUuid = (c: PortalRequestContext, name: string): string | undefined
   return v;
 };
 
+/** Müşteriye verilecek tam adres (genel kök yapılandırılmışsa); yoksa null — arayüz yolu gösterir. */
+function publicUrl(c: PortalRequestContext, pathPart: string): string | null {
+  const base = c.ctx.config.GENEL_KOK_ADRESI;
+  return base ? `${base.replace(/\/+$/, "")}${pathPart}` : null;
+}
+
 function outgoingOwner(c: PortalRequestContext, customerId: string): SessionOwner {
   return { kind: "SATICI", customerId, actor: c.session.actor };
 }
@@ -98,7 +104,7 @@ async function createLink(c: PortalRequestContext) {
       }),
     respond: (link) => {
       const view = jsonSafe(Object.fromEntries(Object.keys(LINK_VIEW).map((k) => [k, (link as Record<string, unknown>)[k]])));
-      return { status: 201, data: { baglanti: view, belirtec: token!.token, yol: `/d/${token!.token}` }, stored: { baglanti: view, belirtecGosterilemez: true } };
+      return { status: 201, data: { baglanti: view, belirtec: token!.token, yol: `/d/${token!.token}`, adres: publicUrl(c, `/d/${token!.token}`) }, stored: { baglanti: view, belirtecGosterilemez: true } };
     },
     audit: (link) => [{ event: "DAGITIM_BAGLANTISI_VERILDI", entity: "IndirmeBaglantisi", entityId: link.id, summary: { tur: link.tur, musteriId: link.musteriId, sonu: link.belirtecSonu } }],
   });
@@ -126,7 +132,7 @@ async function createRequest(c: PortalRequestContext) {
       }),
     respond: (r) => {
       const view = jsonSafe(Object.fromEntries(Object.keys(REQUEST_VIEW).map((k) => [k, (r as Record<string, unknown>)[k]])));
-      return { status: 201, data: { istek: view, belirtec: token!.token, yol: `/y/${token!.token}` }, stored: { istek: view, belirtecGosterilemez: true } };
+      return { status: 201, data: { istek: view, belirtec: token!.token, yol: `/y/${token!.token}`, adres: publicUrl(c, `/y/${token!.token}`) }, stored: { istek: view, belirtecGosterilemez: true } };
     },
     audit: (r) => [{ event: "DAGITIM_YUKLEME_ISTEGI_VERILDI", entity: "YuklemeIstegi", entityId: r.id, summary: { musteriId: r.musteriId, sonu: r.belirtecSonu } }],
   });

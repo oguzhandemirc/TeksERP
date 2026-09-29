@@ -13,6 +13,7 @@ import { useApi, useCan } from "../../shared/session";
 import { installationName, type Catalog, type InstallationDetail } from "../../shared/types";
 import { Badge, Button, KeyValues, PageTitle, QueryState, Section } from "../../shared/ui";
 import { statusTone } from "../pages/Installations";
+import { FirstInstallPanel } from "../distribution/FirstInstallPanel";
 import { HealthPanel, IncidentsPanel, RecordsPanel } from "./IncidentPanels";
 import { InstallmentPanel, PlannedPanel } from "./PlanPanels";
 import { SanctionPanel } from "./SanctionPanel";
@@ -24,6 +25,7 @@ const TABS = [
   ["saglik", "Sağlık ve kira"],
   ["olaylar", "Kopya ve taşıma"],
   ["kayit", "Eylem defteri"],
+  ["ilk-kurulum", "İlk kurulum"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -127,6 +129,7 @@ export function InstallationDetailPage() {
       {tab === "saglik" ? <HealthPanel detail={d} /> : null}
       {tab === "olaylar" ? <IncidentsPanel detail={d} onChanged={refresh} /> : null}
       {tab === "kayit" ? <RecordsPanel detail={d} /> : null}
+      {tab === "ilk-kurulum" ? <FirstInstallPanel installation={inst} /> : null}
 
       {dialog?.kind === "edit" && catalog.data ? (
         <InstallationFormModal
