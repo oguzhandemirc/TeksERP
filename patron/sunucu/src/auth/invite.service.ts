@@ -7,6 +7,7 @@
 import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError } from "../lib/errors";
 import { withLookup, withTesis } from "../lib/tenant";
+import type { InviteAccepted, InviteConfirmed, InviteInfo } from "../wire/api";
 import type { CloudContext } from "../services/context";
 import { assertPasswordStrength, hashPassword } from "./password";
 import { newToken, tokenDigest } from "./session.service";
@@ -29,7 +30,7 @@ async function findInvited(ctx: CloudContext, token: string, nowMs: number) {
   return { account, digest };
 }
 
-export async function inspectInvite(ctx: CloudContext, token: string) {
+export async function inspectInvite(ctx: CloudContext, token: string): Promise<InviteInfo> {
   const { account } = await findInvited(ctx, token, ctx.now());
   const facility = await withTesis(ctx.app, { tesisId: account.tesisId }, (tx) => tx.facility.findUnique({ where: { tesisId: account.tesisId } }));
   return {
@@ -42,7 +43,7 @@ export async function inspectInvite(ctx: CloudContext, token: string) {
 }
 
 /** ① Kabul: parola belirlenir, TOTP sırrı üretilir ve YALNIZ bu yanıtta döner (tekrar kabul yeni sır üretir). */
-export async function acceptInvite(ctx: CloudContext, g: { token: string; password: string }) {
+export async function acceptInvite(ctx: CloudContext, g: { token: string; password: string }): Promise<InviteAccepted> {
   assertPasswordStrength(g.password);
   const nowMs = ctx.now();
   const { account, digest } = await findInvited(ctx, g.token, nowMs);
@@ -61,7 +62,7 @@ export async function acceptInvite(ctx: CloudContext, g: { token: string; passwo
 }
 
 /** ② Onay: ilk TOTP kodu doğrulanır → AKTİF; davet belirteci düşer (tek kullanımlık). */
-export async function confirmInvite(ctx: CloudContext, g: { token: string; totp: string }) {
+export async function confirmInvite(ctx: CloudContext, g: { token: string; totp: string }): Promise<InviteConfirmed> {
   const nowMs = ctx.now();
   const { account, digest } = await findInvited(ctx, g.token, nowMs);
   if (!account.totpSecretSealed || !account.passwordHash) {

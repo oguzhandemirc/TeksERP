@@ -14,11 +14,12 @@ import { executeWrite, type WriteResult } from "../lib/idempotency";
 import { uniqueViolationOn } from "../lib/prisma-errors";
 import { withTesis } from "../lib/tenant";
 import type { AccountsResponse } from "../wire/esitleme";
+import type { Account as AccountWire } from "../wire/api";
 import type { CloudContext } from "./context";
 
 export const ADMIN_PERMISSION = "bulut:hesap:yonet";
 
-export function accountView(a: Account) {
+export function accountView(a: Account): AccountWire {
   return {
     id: a.id,
     eposta: a.email,

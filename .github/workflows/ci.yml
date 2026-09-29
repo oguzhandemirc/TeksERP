@@ -2,7 +2,7 @@ name: CI
 
 # TeksERP monorepo — 3 alt proje (Teks-Erp backend, Electron panel, mobil) + satıcı sunucusu (satici/sunucu)
 # + native lisans çekirdeği (Teks-Erp/native/lisans-cekirdek, Rust).
-# + patron bulutu sunucusu (patron/sunucu).
+# + patron bulutu sunucusu (patron/sunucu) + patron uygulaması (patron/uygulama).
 # Her push + PR'da tip kontrolü + test takımları koşar. Backend testleri yerel
 # PostgreSQL gerektirir (service container + migrate deploy + seed); Electron
 # (Vitest/jsdom) ve mobil (jest-expo) DB'siz çalışır.
@@ -611,3 +611,35 @@ jobs:
         run: npx playwright install-deps
       - name: E2E (build + headless launch)
         run: xvfb-run --auto-servernum npm run e2e
+
+  # ===========================================================================
+  # PATRON UYGULAMASI — patron/uygulama (Expo; telefon/tablet/web). DB'siz: tip + kapı kapsamı + jest
+  # (ayna bekçisi sunucu kataloğunu kaynaktan okur — sunucunun node_modules'ü gerekmez) + web dışa
+  # aktarımı. ESLint izinli paket değil ⇒ lint adımı yok (commit kapısında da `lint: null`).
+  # ===========================================================================
+  patron-uygulama:
+    name: Patron uygulaması (tsc + jest + web export)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: patron/uygulama
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: patron/uygulama/package-lock.json
+      - run: npm ci
+      - name: Type-check
+        run: npm run typecheck:plain
+      - name: Kapı kapsamı (tip kapısı SIFIR dosya derlemiyor)
+        run: node scripts/kapi-kapsami.mjs patron/uygulama
+        working-directory: .
+      - name: Test (jest — ekran mantığı, önbellek, istemci, ayna)
+        run: npx jest --runInBand
+      - name: Web dışa aktarımı
+        run: npx expo export --platform web --output-dir dist
+        env:
+          CI: "1"
+          EXPO_PUBLIC_PATRON_API: https://patron.ornek.invalid

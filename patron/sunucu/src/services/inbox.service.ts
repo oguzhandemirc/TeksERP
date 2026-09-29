@@ -10,6 +10,7 @@ import { CloudError, forbidden, notFound, stateConflict } from "../lib/errors";
 import { executeWrite, type WriteResult } from "../lib/idempotency";
 import { withTesis } from "../lib/tenant";
 import { CustomerMessageSchema, OrderMessageSchema, type InboxClaimRequestSchema, type InboxClaimResponse, type InboxResultRequestSchema, type InboxResultResponse } from "../wire/esitleme";
+import type { InboxItem as InboxItemWire } from "../wire/api";
 import type { z } from "zod";
 import type { SessionContext } from "../auth/session.service";
 import type { CloudContext } from "./context";
@@ -24,7 +25,7 @@ export interface InboxCreateInput {
   readonly govde: unknown;
 }
 
-function messageView(m: InboxMessage) {
+function messageView(m: InboxMessage): InboxItemWire {
   return {
     mesajId: m.messageId,
     tur: m.kind,

@@ -128,6 +128,11 @@ function main() {
     );
     process.exit(2);
   }
+  // `lint: null` = projede lint aracı yok (beyanlı); "ölçemedim" 2 ile döner, temiz sayılmaz.
+  if (!proje.lint) {
+    console.error(`lint-gate: ${proje.ad} lint aracı taşımıyor (PROJELER'de lint: null) — ölçülmedi`);
+    process.exit(2);
+  }
 
   // --rapor=<yol>: rapor oraya yazılır ve SİLİNMEZ — lint tavanı aynı JSON'u okur,
   // eslint bir kapıda İKİ kez koşmaz (ölçüldü 2026-09-13: 19 sn + 3,5 GB tasarruf).

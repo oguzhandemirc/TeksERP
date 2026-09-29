@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "TeksERP Patron",
+    "slug": "tekserp-patron",
+    "scheme": "tekserp-patron",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.etkiliyazilim.tekserp.patron",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.etkiliyazilim.tekserp.patron"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-font"],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
