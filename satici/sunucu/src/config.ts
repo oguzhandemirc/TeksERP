@@ -94,13 +94,33 @@ const EnvSchema = z.object({
   DENETIM_SAKLAMA_GUN: positiveInt(365, 3650).default(730),
   /** Tailnet çerezine Secure: yalnız tailnet dinleyicisi HTTPS arkasındaysa "1" (genel dinleyicide her zaman Secure). */
   TAILNET_CEREZ_GUVENLI: z.enum(["0", "1"]).default("0"),
+  // ---- Dağıtım (Faz 3d) ----
+  /** Paylaşılan dosya gövdeleri + yarım yükleme parçaları (satıcının kendi birimi; yerelde fikstür dizini). */
+  DOSYA_DIZINI: z.string().min(1).default("dosyalar"),
+  /** İlk kurulum derlemeleri (müşteri başına filigranlı derleme buraya konur; yalnız OKUNUR). */
+  DERLEME_DIZINI: z.string().min(1).default("derlemeler"),
+  /** Güncelleme sunucusunun yayın kökü (html/ + defter/) — SALT-OKUNUR bağ; verilmezse görünüm "ölçülemedi". */
+  YAYIN_DIZINI: z.string().min(1).optional(),
+  /** Parça tavanı (MB): Cloudflare ücretsiz planda istek gövdesi ≤ 100 MB → varsayılan 50. */
+  PARCA_AZAMI_MB: positiveInt(1, 95).default(50),
+  /** Tek dosya tavanı (MB) — yükleme isteğinin azamisi bunu aşamaz. */
+  DOSYA_AZAMI_MB: positiveInt(1, 20_480).default(4096),
+  /** Paylaşılan dosyanın gövde saklama süresi (gün); dolunca gövde budanır, satır KALIR. */
+  DOSYA_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
+  /** Bu kadar saat parça gelmeyen açık yükleme oturumu terk sayılır (parçalar silinir, kota iade). */
+  YUKLEME_TERK_SAAT: positiveInt(1, 24 * 30).default(48),
+  /** /d · /y · /yayin/bildirim istemci IP'si başına dakikalık sınır. */
+  DAGITIM_HIZ_IP_DK: positiveInt(1, 100_000).default(120),
 });
 
 export type VendorConfig = Readonly<
-  Omit<z.infer<typeof EnvSchema>, "ANAHTAR_DIZINI" | "GUVEN_CAPASI_DOSYASI" | "PORTAL_WEB_DIZINI"> & {
+  Omit<z.infer<typeof EnvSchema>, "ANAHTAR_DIZINI" | "GUVEN_CAPASI_DOSYASI" | "PORTAL_WEB_DIZINI" | "DOSYA_DIZINI" | "DERLEME_DIZINI" | "YAYIN_DIZINI"> & {
     ANAHTAR_DIZINI: string;
     PORTAL_WEB_DIZINI: string;
     GUVEN_CAPASI_DOSYASI: string | undefined;
+    DOSYA_DIZINI: string;
+    DERLEME_DIZINI: string;
+    YAYIN_DIZINI: string | undefined;
   }
 >;
 
@@ -116,5 +136,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd: string = p
     ANAHTAR_DIZINI: path.resolve(cwd, c.ANAHTAR_DIZINI),
     PORTAL_WEB_DIZINI: path.resolve(cwd, c.PORTAL_WEB_DIZINI),
     GUVEN_CAPASI_DOSYASI: c.GUVEN_CAPASI_DOSYASI ? path.resolve(cwd, c.GUVEN_CAPASI_DOSYASI) : undefined,
+    DOSYA_DIZINI: path.resolve(cwd, c.DOSYA_DIZINI),
+    DERLEME_DIZINI: path.resolve(cwd, c.DERLEME_DIZINI),
+    YAYIN_DIZINI: c.YAYIN_DIZINI ? path.resolve(cwd, c.YAYIN_DIZINI) : undefined,
   });
 }

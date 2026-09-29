@@ -462,6 +462,7 @@ export const KANAL_BEKCI_DOSYALARI = [...new Set([
   ...PANEL_SABIT_DOSYALAR, ...TABLET_SABIT_DOSYALAR,
   'Electron/shared/update-feed.ts', 'mobil/scripts/lib/feed.cjs', 'mobil/scripts/lib/adres.mjs', 'mobil/scripts/lib/zip.mjs',
   'mobil/scripts/lib/manifest.mjs', 'mobil/scripts/lib/apk-kimlik.mjs', 'mobil/scripts/lib/kanal.cjs', 'mobil/app.config.js',
+  'scripts/lib/yayin-bildirim.mjs',
 ])];
 /** Bu yola dokunan commit kanal bekçilerini koşar (`scripts/hooks/pre-commit.mjs`). */
 export function kanalBekcisiTetigi(rel) {

@@ -80,7 +80,7 @@ process.on('exit', () => fs.rmSync(GECICI, { recursive: true, force: true }));
 const GERCEK_GIT = execFileSync('/usr/bin/env', ['sh', '-c', 'command -v git'], { encoding: 'utf8' }).trim();
 // GIT_* SÖKÜLÜR: bekçi commit kapısından koşarsa hook ortamı GIT_DIR/GIT_INDEX_FILE taşır ve
 // geçici ağaçtaki `git init` GERÇEK depoya yazar (pre-commit.mjs `gitEnvSil` gerekçesi).
-const TEMIZ_ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+const TEMIZ_ENV = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), TEKSERP_YAYIN_BILDIRIMI: '0' };
 
 /* ------------------------------------------------------------------ *
  * Sahte araçlar
@@ -302,6 +302,7 @@ const ORTAK_KAYNAK = [
   'deploy/kanallar.json', 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs',
   'scripts/lib/terfi.mjs',
   ...PANEL_SABIT_DOSYALAR,
+  'scripts/lib/yayin-bildirim.mjs',
 ];
 function agacKur(o, { ref = null } = {}) {
   const agac = path.join(o.d, 'agac');

@@ -26,4 +26,9 @@ export class ActivationCodeHasher {
   digest(code: string): string {
     return crypto.createHmac("sha256", this.pepper).update(code, "utf8").digest("hex");
   }
+
+  /** Aynı sırla ALAN AYRIMLI özet (ör. dağıtım belirteci): bir alanın özeti başka alanın koduna denk gelemez. */
+  digestScoped(scope: string, value: string): string {
+    return crypto.createHmac("sha256", this.pepper).update(`${scope}\u0000${value}`, "utf8").digest("hex");
+  }
 }

@@ -10,6 +10,7 @@ import type { VendorContext } from "../services/context";
 import type { DoorbellHub } from "../services/doorbell";
 import { blockListOf, inList, stripMapped } from "./client-address";
 import { accessLog, errorHandler, notFound } from "./error-handler";
+import { createDistributionRawRouter } from "./distribution-raw";
 import { createPortalRouter } from "./portal-http";
 import { VENDOR_PORTAL_ROUTES } from "./portal-routes";
 import { createWebAppRouter } from "./web-static";
@@ -50,6 +51,8 @@ export function createTailnetApp(ctx: VendorContext, hub: DoorbellHub | null, li
   app.set("etag", false);
   app.use(accessLog);
   app.use(requireTailnet(listener, ctx.config.TAILNET_LOOPBACK === "1"));
+  // Ham gövdeli dağıtım uçları JSON yönlendiricisinden ÖNCE (JSON-yalnız yazma kapısı parça PUT'unu reddederdi).
+  app.use("/portal/api/ham", createDistributionRawRouter(ctx));
   app.use("/portal/api", createPortalRouter(ctx, "TAILNET", VENDOR_PORTAL_ROUTES));
   const portal = express.Router();
   portal.get("/saglik", (_req, res) => {

@@ -3,7 +3,8 @@ import { msToIso, type ProtocolErrorCode, type VendorErrorCode } from "../lisans
 
 /**
  * Portal (satıcı + bayi JSON API'si) kodları — protokolün DIŞINDA: fabrika bunları hiç görmez.
- * /v1/* uçları yalnız protokol kodlarını döndürür; bunlar yalnız /portal/api ve /bayi/api'de.
+ * /v1/* uçları yalnız protokol kodlarını döndürür; bunlar yalnız /portal/api, /bayi/api ve dağıtım uçlarında
+ * (/d · /y · /yayin/bildirim — Faz 3d).
  * Ortak kodlar (`BULUNAMADI`, `TEKRAR_DENEYIN`, `GOVDE_GECERSIZ`…) protokolün `VENDOR_ERROR_CODES`inde
  * yaşar; burada TEKRARLANMAZ (tek kaynak — bekçi: test_satici_kapilari §8).
  */
@@ -20,6 +21,15 @@ export const PORTAL_ERROR_CODES = [
   "IMZA_PAROLASI_KILITLI",
   "PAROLA_ZAYIF",
   "KULLANICI_ADI_KULLANIMDA",
+  // Dağıtım (Faz 3d): bağlantı/istek süresi doldu · sayısı bitti · iptal (410); gövde budandı (410);
+  // kota (413); dosya tavanı (413); uzantı/MIME allowlist dışı (415); parça/dosya özeti tutmadı (422).
+  "BAGLANTI_GECERSIZ",
+  "GOVDE_BUDANDI",
+  "KOTA_ASILDI",
+  "DOSYA_COK_BUYUK",
+  "DOSYA_TURU_YASAK",
+  "PARCA_BUTUNLUGU",
+  "YAYINCI_IMZASI_GECERSIZ",
 ] as const;
 export type PortalErrorCode = (typeof PORTAL_ERROR_CODES)[number];
 

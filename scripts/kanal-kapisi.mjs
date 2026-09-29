@@ -33,6 +33,7 @@ import {
   panelSabitKimlikFarki,
 } from './lib/kanallar.mjs';
 import { cumleDenetle, terfiAtlaKaydi, terfiKapisi, terfiRaporu } from './lib/terfi.mjs';
+import { yayinBildirVeBas } from './lib/yayin-bildirim.mjs';
 
 function dur(baslik, satirlar, kod) {
   console.error(`\n  ✖ ${baslik}`);
@@ -126,6 +127,8 @@ function main(argv) {
         basarisiz: `  ⚠️ terfi atlama etiketi atılamadı: ${t.ad} (yayın etkilenmedi; kayıt yayın defterinde)`,
       }[t.durum];
       console.log(mesaj + (t.not ? ` — ${t.not}` : ''));
+      // Portala terfi atlama bildirimi (Faz 3d) — kayıttan SONRA, best-effort: yardımcı fırlatmaz, süreç sonucu değişmez.
+      void yayinBildirVeBas({ olay: 'TERFI_ATLANDI', urun, kanal: kod, surum, ayrinti: { cumle: c.cumle, etiket: t.ad } });
       return;
     }
     dur(`bilinmeyen komut: ${komut ?? '(yok)'}`, ['kanal <kod> · panel-paketle <kod> · backend-paketle <kod> · panel-derleme <kod> · panel-yayin <kod> <dizin> · terfi <kod> <ürün> <sürüm> · terfi-atla-kaydi <kod> <ürün> <sürüm> <cümle>'], 2);

@@ -1,4 +1,4 @@
-// GENEL DİNLEYİCİ (Traefik/Cloudflare arkası): /v1/* protokol uçları + /q QR sayfası + /bayi/api
+// GENEL DİNLEYİCİ (Traefik/Cloudflare arkası): /v1/* protokol uçları + /q QR sayfası + /d · /y · /yayin (dağıtım) + /bayi/api
 // (yalnız BAYI rolünün alt-portalı) + bayi web arayüzü (/bayi, satici/web dist/bayi). Satıcı portalı,
 // satıcı arayüzü ve kök parolası isteyen hiçbir uç burada YOK.
 // Sıkıştırma ara katmanı bilerek yok: zil (SSE) akışı `no-transform` ile tamponsuz gitmeli.
@@ -29,6 +29,7 @@ import { accessLog, errorHandler, notFound } from "./error-handler";
 import { createPortalRouter } from "./portal-http";
 import { qrPage } from "./qr-page";
 import { FixedWindowLimiter, rateLimit, rateLimited } from "./rate-limit";
+import { mountDistributionPublic } from "./distribution-public";
 import { createWebAppRouter } from "./web-static";
 
 /** Kurulum (ya da kurulumsuz anahtar) başına sınır — imza doğrulandıktan SONRA sayılır (başkasının kotası tüketilemez). */
@@ -136,6 +137,9 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
   });
 
   app.get("/q", rateLimit({ perMinute: ctx.config.QR_HIZ_SINIRI_DK, trust }), qrPage);
+
+  // Dağıtım (Faz 3d): /d indirme · /y müşteri yüklemesi · /yayin/bildirim (yayıncı imzalı).
+  mountDistributionPublic(app, ctx);
 
   app.use("/bayi/api", createPortalRouter(ctx, "GENEL", DEALER_PORTAL_ROUTES));
   app.use("/bayi", createWebAppRouter(ctx.config.PORTAL_WEB_DIZINI, "bayi"));

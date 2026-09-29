@@ -31,6 +31,10 @@ export const PORTAL_PERMISSIONS = {
   "bayi:yonet": ADMIN,
   "kullanici:yonet": ADMIN,
   "denetim:oku": VENDOR,
+  /** İlk kurulum bağlantısı · paylaşım bağlantısı · yükleme isteği · dosya yükle/indir (Faz 3d). */
+  "dagitim:yaz": VENDOR,
+  /** Yayıncı imza anahtarı kaydı ve pasife alınması (yayın bildirimi güveni). */
+  "yayinci:yonet": ADMIN,
   "anahtar:oku": VENDOR,
   /** Bayi alt-portalı (yalnız kendi müşterileri). */
   "bayi:portal": ["BAYI"],

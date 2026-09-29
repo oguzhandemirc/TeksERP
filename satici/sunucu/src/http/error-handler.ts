@@ -3,6 +3,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { VendorError, retryConflict, type VendorCode } from "../lib/errors";
 import { isRetryableConflict, isUniqueViolation } from "../lib/prisma-errors";
+import { maskTokenPath } from "../distribution/tokens";
 
 export function notFound(_req: Request, res: Response): void {
   res.status(404).json({ success: false, message: "Bulunamadı", details: { code: "BULUNAMADI" satisfies VendorCode } });
@@ -32,12 +33,12 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
   res.status(500).json({ success: false, message: "Sunucu hatası", details: { code: "SUNUCU_HATASI" } });
 }
 
-/** Erişim günlüğü: yöntem + YOL (sorgu dizgisi ve #parça ASLA) + durum + süre. */
+/** Erişim günlüğü: yöntem + YOL (sorgu dizgisi ve #parça ASLA; /d · /y belirteci maskeli) + durum + süre. */
 export function accessLog(req: Request, res: Response, next: NextFunction): void {
   const started = Date.now();
   res.on("finish", () => {
     if (process.env.SATICI_ERISIM_GUNLUGU === "0") return;
-    const pathOnly = (req.originalUrl || req.url).split("?")[0];
+    const pathOnly = maskTokenPath((req.originalUrl || req.url).split("?")[0] ?? "");
     console.log(`[satici] ${req.method} ${pathOnly} ${res.statusCode} ${Date.now() - started}ms`);
   });
   next();

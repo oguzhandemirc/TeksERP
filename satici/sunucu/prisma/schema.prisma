@@ -187,6 +187,12 @@ model Musteri {
   bayi     Bayi?   @relation(fields: [bayiId], references: [id], onDelete: Restrict)
   tesisler Tesis[]
 
+  dagitimDosyalari    DagitimDosyasi[]
+  indirmeBaglantilari IndirmeBaglantisi[]
+  yuklemeIstekleri    YuklemeIstegi[]
+  yuklemeOturumlari   YuklemeOturumu[]
+  dagitimDefteri      DagitimDefteri[]
+
   @@index([bayiId])
   @@map("musteri")
 }
@@ -241,20 +247,21 @@ model Kurulum {
   createdAt        DateTime  @default(now()) @db.Timestamptz
   updatedAt        DateTime  @updatedAt @db.Timestamptz
 
-  tesis          Tesis               @relation(fields: [tesisId], references: [id])
-  kanal          Kanal               @relation(fields: [kanalKodu], references: [kod], onDelete: Restrict, onUpdate: Restrict)
-  sonKira        Kira?               @relation("KurulumSonKira", fields: [sonKiraId], references: [id], onDelete: NoAction)
-  haklar         Hak[]
-  kiralar        Kira[]              @relation("KurulumKiralari")
-  kodlar         EtkinlestirmeKodu[]
-  tasimalar      TasimaTalebi[]
-  kayitlar       KurulumKaydi[]
-  yoklamalar     Yoklama[]
-  noncelar       NonceDefteri[]
-  yaptirimlar    YaptirimEylemi[]
-  planliEylemler PlanliEylem[]
-  kopyaUyarilari KopyaUyarisi[]
-  taksitPlanlari TaksitPlani[]
+  tesis                  Tesis               @relation(fields: [tesisId], references: [id])
+  kanal                  Kanal               @relation(fields: [kanalKodu], references: [kod], onDelete: Restrict, onUpdate: Restrict)
+  sonKira                Kira?               @relation("KurulumSonKira", fields: [sonKiraId], references: [id], onDelete: NoAction)
+  haklar                 Hak[]
+  kiralar                Kira[]              @relation("KurulumKiralari")
+  kodlar                 EtkinlestirmeKodu[]
+  tasimalar              TasimaTalebi[]
+  kayitlar               KurulumKaydi[]
+  yoklamalar             Yoklama[]
+  noncelar               NonceDefteri[]
+  yaptirimlar            YaptirimEylemi[]
+  planliEylemler         PlanliEylem[]
+  kopyaUyarilari         KopyaUyarisi[]
+  taksitPlanlari         TaksitPlani[]
+  ilkKurulumBaglantilari IndirmeBaglantisi[]
 
   @@index([tesisId])
   @@index([kanalKodu])
@@ -756,4 +763,222 @@ model PortalIslemi {
 
   @@index([createdAt])
   @@map("portal_islemi")
+}
+
+// -----------------------------------------------------------------------------
+// DAĞITIM (Faz 3d) — ilk kurulum bağlantısı · iki yönlü dosya paylaşımı · yayın bildirimi.
+// Belirteçlerin düz metni DB'ye GİRMEZ (sunucu sırrıyla HMAC özeti + son 4). Dosya GÖVDELERİ diskte
+// (`DOSYA_DIZINI`, derlemeler `DERLEME_DIZINI`); saklama süresi dolan gövde budanır, SATIR KALIR.
+// Defterler (tetikleyiciyle değişmez): `dagitim_defteri` · `yayin_bildirimi`.
+// -----------------------------------------------------------------------------
+
+enum IndirmeTuru {
+  ILK_KURULUM
+  DOSYA
+}
+
+enum BaglantiDurumu {
+  AKTIF
+  IPTAL
+}
+
+enum DosyaYonu {
+  /// Bizden müşteriye (portaldan yüklenir, /d ile iner).
+  GIDEN
+  /// Müşteriden bize (/y yükleme isteğiyle gelir).
+  GELEN
+}
+
+enum YuklemeDurumu {
+  ACIK
+  TAMAMLANDI
+  TERK
+}
+
+/// Paylaşılan dosya. `govdeBudandiAt` DURUM kolonudur (olayın kendisi `dagitim_defteri`nde GOVDE_BUDANDI).
+model DagitimDosyasi {
+  id              String    @id @default(uuid()) @db.Uuid
+  musteriId       String    @db.Uuid
+  yon             DosyaYonu
+  ad              String    @db.VarChar(200)
+  mime            String    @db.VarChar(100)
+  boyut           BigInt
+  sha256          String    @db.Char(64)
+  /// `DOSYA_DIZINI` altındaki göreli yol — sunucu üretir (kullanıcı adı yola GİRMEZ).
+  depoAnahtari    String    @unique @db.VarChar(80)
+  saklamaBitis    DateTime  @db.Timestamptz
+  govdeBudandiAt  DateTime? @db.Timestamptz
+  yuklemeIstegiId String?   @db.Uuid
+  yukleyen        String    @db.VarChar(120)
+  createdAt       DateTime  @default(now()) @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @db.Timestamptz
+
+  musteri       Musteri             @relation(fields: [musteriId], references: [id])
+  yuklemeIstegi YuklemeIstegi?      @relation(fields: [yuklemeIstegiId], references: [id], onDelete: Restrict)
+  baglantilar   IndirmeBaglantisi[]
+  oturum        YuklemeOturumu?
+
+  @@index([musteriId, createdAt])
+  @@index([saklamaBitis])
+  @@map("dagitim_dosyasi")
+}
+
+/// /d/<belirteç> — süreli, indirme sayısı sınırlı bağlantı. ILK_KURULUM derleme dosyasını (sha256 bağlantı
+/// doğarken donar; dosya değişirse iner DEĞİL), DOSYA paylaşılan dosyayı indirir. Sayaç ↔ durum çift yüklem + CHECK.
+model IndirmeBaglantisi {
+  id            String         @id @default(uuid()) @db.Uuid
+  tur           IndirmeTuru
+  musteriId     String         @db.Uuid
+  /// Satıcı kurulum kaydı (`kurulum.id`) — yalnız ILK_KURULUM'da, isteğe bağlı.
+  kurulumId     String?        @db.Uuid
+  dosyaId       String?        @db.Uuid
+  derlemeAdi    String?        @db.VarChar(200)
+  derlemeSha256 String?        @db.Char(64)
+  derlemeBoyut  BigInt?
+  belirtecOzeti String         @unique @db.Char(64)
+  belirtecSonu  String         @db.VarChar(8)
+  bitis         DateTime       @db.Timestamptz
+  azamiIndirme  Int
+  indirmeSayisi Int            @default(0)
+  sonIndirme    DateTime?      @db.Timestamptz
+  durum         BaglantiDurumu @default(AKTIF)
+  aciklama      String?        @db.VarChar(500)
+  olusturan     String         @db.VarChar(120)
+  createdAt     DateTime       @default(now()) @db.Timestamptz
+  updatedAt     DateTime       @updatedAt @db.Timestamptz
+
+  musteri Musteri         @relation(fields: [musteriId], references: [id])
+  kurulum Kurulum?        @relation(fields: [kurulumId], references: [id], onDelete: Restrict)
+  dosya   DagitimDosyasi? @relation(fields: [dosyaId], references: [id], onDelete: Restrict)
+
+  @@index([musteriId, createdAt])
+  @@index([kurulumId])
+  @@index([dosyaId])
+  @@map("indirme_baglantisi")
+}
+
+/// /y/<belirteç> — müşterinin bize dosya yüklemesi için süreli, kotalı istek. Kota rezervasyonu ↔ durum çift yüklem + CHECK.
+model YuklemeIstegi {
+  id             String         @id @default(uuid()) @db.Uuid
+  musteriId      String         @db.Uuid
+  belirtecOzeti  String         @unique @db.Char(64)
+  belirtecSonu   String         @db.VarChar(8)
+  bitis          DateTime       @db.Timestamptz
+  kotaBayt       BigInt
+  /// Açık oturumların beyan ettiği + tamamlanan dosyaların baytı (terk edilen oturum iade eder).
+  kullanilanBayt BigInt         @default(0)
+  azamiDosyaBayt BigInt
+  durum          BaglantiDurumu @default(AKTIF)
+  aciklama       String?        @db.VarChar(500)
+  olusturan      String         @db.VarChar(120)
+  createdAt      DateTime       @default(now()) @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @db.Timestamptz
+
+  musteri   Musteri          @relation(fields: [musteriId], references: [id])
+  oturumlar YuklemeOturumu[]
+  dosyalar  DagitimDosyasi[]
+
+  @@index([musteriId, createdAt])
+  @@map("yukleme_istegi")
+}
+
+/// Sürdürülebilir parçalı yükleme (Cloudflare gövde sınırı ≤ 100 MB → parça ≤ `PARCA_AZAMI_MB`).
+/// GELEN oturum bir isteğe bağlıdır; GIDEN oturumu satıcı portalda açar.
+model YuklemeOturumu {
+  id          String        @id @default(uuid()) @db.Uuid
+  clientToken String        @unique @db.Uuid
+  istekId     String?       @db.Uuid
+  musteriId   String        @db.Uuid
+  yon         DosyaYonu
+  dosyaAdi    String        @db.VarChar(200)
+  mime        String        @db.VarChar(100)
+  toplamBayt  BigInt
+  parcaBayt   Int
+  parcaSayisi Int
+  /// İstemcinin beyan ettiği bütün dosya özeti — tamamlamada birleşik gövdeyle karşılaştırılır.
+  sha256      String        @db.Char(64)
+  durum       YuklemeDurumu @default(ACIK)
+  sonEtkinlik DateTime      @db.Timestamptz
+  dosyaId     String?       @unique @db.Uuid
+  olusturan   String        @db.VarChar(120)
+  createdAt   DateTime      @default(now()) @db.Timestamptz
+  updatedAt   DateTime      @updatedAt @db.Timestamptz
+
+  musteri  Musteri          @relation(fields: [musteriId], references: [id])
+  istek    YuklemeIstegi?   @relation(fields: [istekId], references: [id], onDelete: Restrict)
+  dosya    DagitimDosyasi?  @relation(fields: [dosyaId], references: [id], onDelete: Restrict)
+  parcalar YuklemeParcasi[]
+
+  @@index([istekId])
+  @@index([durum, sonEtkinlik])
+  @@map("yukleme_oturumu")
+}
+
+/// Alınan parça (ekleme-yalnız; aynı sıra aynı özetle gelirse idempotent, farklı özetle 409).
+model YuklemeParcasi {
+  id        String   @id @default(uuid()) @db.Uuid
+  oturumId  String   @db.Uuid
+  sira      Int
+  bayt      Int
+  sha256    String   @db.Char(64)
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  oturum YuklemeOturumu @relation(fields: [oturumId], references: [id])
+
+  @@unique([oturumId, sira])
+  @@map("yukleme_parcasi")
+}
+
+/// DAĞITIM DEFTERİ — ne oldu: BAGLANTI_VERILDI · INDIRILDI · BAGLANTI_IPTAL · YUKLEME_ISTEGI_VERILDI ·
+/// YUKLEME_ISTEGI_IPTAL · DOSYA_YUKLENDI · YUKLEME_TERK · GOVDE_BUDANDI. Değişmez (tetikleyici); iptal ters kayıttır.
+model DagitimDefteri {
+  id         String   @id @default(uuid()) @db.Uuid
+  olay       String   @db.VarChar(40)
+  musteriId  String   @db.Uuid
+  baglantiId String?  @db.Uuid
+  istekId    String?  @db.Uuid
+  dosyaId    String?  @db.Uuid
+  oturumId   String?  @db.Uuid
+  yapan      String   @db.VarChar(120)
+  ayrinti    Json?
+  createdAt  DateTime @default(now()) @db.Timestamptz
+
+  musteri Musteri @relation(fields: [musteriId], references: [id])
+
+  @@index([musteriId, createdAt])
+  @@index([baglantiId])
+  @@index([istekId])
+  @@index([dosyaId])
+  @@map("dagitim_defteri")
+}
+
+/// Yayın betiklerinin imza anahtarı (yalnız AÇIK yarı; özel yarı yayıncının makinesinde). Pasife alınır, silinmez.
+model YayinciAnahtari {
+  id          String   @id @default(uuid()) @db.Uuid
+  kid         String   @unique @db.VarChar(80)
+  ad          String   @db.VarChar(200)
+  acikAnahtar String   @db.VarChar(64)
+  aktif       Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  @@map("yayinci_anahtari")
+}
+
+/// YAYIN DEFTERİ (imzalı bildirim) — YAYIN · TERFI · TERFI_ATLANDI. `bildirimKimligi` içerikten türer:
+/// aynı olayın tekrarı aynı satırı döndürür (idempotent). Değişmez (tetikleyici).
+model YayinBildirimi {
+  id              String   @id @default(uuid()) @db.Uuid
+  bildirimKimligi String   @unique @db.Char(64)
+  olay            String   @db.VarChar(20)
+  urun            String   @db.VarChar(20)
+  kanalKodu       String   @db.VarChar(40)
+  surum           String   @db.VarChar(40)
+  yayinciKid      String   @db.VarChar(80)
+  olayZamani      DateTime @db.Timestamptz
+  ayrinti         Json?
+  createdAt       DateTime @default(now()) @db.Timestamptz
+
+  @@index([kanalKodu, createdAt])
+  @@map("yayin_bildirimi")
 }

@@ -52,6 +52,10 @@ jobs:
       # üçü de ancak sahada fark edilir.
       - name: Sürüm numarası kuralı
         run: node scripts/test_surum.mjs
+      # Yayın bildirimi yardımcısı (Faz 3d): portala imzalı bildirim yayını ASLA durdurmaz; üç kanca
+      # yayından SONRA çağırır. Zero-dep, DB'siz, ağsız (sahte fetch).
+      - name: Yayın bildirimi yardımcısı (3d)
+        run: node scripts/test_yayin_bildirim.mjs
       # Sürüm notu kapısı — paketleme kapısının CI İKİZİ. 2026-09-14'e kadar bu
       # kapı YALNIZ paketleme/OTA yolunda koşuyordu: not eksikse hata, sahaya
       # çıkmaya HAZIRLANIRKEN (çoğu zaman gece) görülüyordu. Sürümler künyeden
