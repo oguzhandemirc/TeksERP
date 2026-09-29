@@ -184,6 +184,20 @@ module.exports = {
         // Sahadaki değer (PostgreSQL 16.9 native kurulum):
         PG_BIN_DIR: `${KOK}/pgsql/bin`,
 
+        // --- Lisans (src/lib/license) — depo app\ ve backups\ DIŞINDA.
+        // LICENSE_DIR: kurulum anahtarı + HAK + kira + durum kaydı + proxy ayarı. Verilmezse
+        //   backend aynı yolu (<kök>/lisans) kendisi türetir; app\ ya da BACKUP_DIR içine
+        //   gösterilirse depo REDDEDİLİR (kurulum app\'i değiştirir, offsite süpürücü
+        //   backups\'u Drive'a kopyalar). İzinler kur.ps1'de (SYSTEM + Administrators).
+        LICENSE_DIR: `${KOK}/lisans`,
+        // NODE_USE_SYSTEM_CA: kurumsal proxy TLS'i açıp kendi kök sertifikasıyla yeniden
+        //   imzalıyorsa Node'un Windows sertifika deposuna güvenmesi için (ayar olmadan satıcıya
+        //   giden HTTPS "self-signed certificate in chain" ile düşer). Proxy'siz kurulumda zararsız.
+        NODE_USE_SYSTEM_CA: "1",
+        // LICENSE_SERVER_URL: satıcı lisans sunucusu kökü (ör. https://lisans.<alan>). YOKSA
+        //   lisans motoru dışarı HİÇ istek atmaz (gözlem kipi, sıfır fark). Etkinleştirmede eklenir.
+        // LICENSE_SERVER_URL: "",
+
         // --- Kopyaya geri yükleme (Sistem → Veritabanı Geri Yükleme)
         // PGDATA_DIR: disk guard'ının ölçeceği birim. Verilmezse tablespace
         //   dizini → `SHOW data_directory` → cwd sırasıyla çözülür. PostgreSQL

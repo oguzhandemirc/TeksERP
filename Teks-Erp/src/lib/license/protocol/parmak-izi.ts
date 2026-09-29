@@ -6,8 +6,9 @@ import { b64uEncode } from "./ortak";
 
 /**
  * f1 OS makine kimliği (Win MachineGuid · Linux /etc/machine-id · mac IOPlatformUUID)
- * f2 SMBIOS UUID · f3 sistem diski seri no · f4 birincil FİZİKSEL ağ kartının kalıcı MAC'i
- * f5 PostgreSQL `system_identifier` (pg_control_system()).
+ * f2 SMBIOS UUID · f3 sistem diski kimliği (Win Get-Disk UniqueId; NVMe/SATA seri)
+ * f4 sistem/anakart seri numarası (BIOS → anakart) · f5 PostgreSQL `system_identifier`.
+ * MAC bilerek YOK (kullanıcı kararı); CPU kimliği makineye özgü değildir.
  */
 export const FINGERPRINT_FACTORS = ["f1", "f2", "f3", "f4", "f5"] as const;
 export type FingerprintFactor = (typeof FINGERPRINT_FACTORS)[number];
@@ -30,18 +31,16 @@ const PLACEHOLDER_VALUES = new Set([
   "notspecified",
   "systemserialnumber",
   "0123456789",
+  "systemproductname",
+  "chassisserialnumber",
+  "baseboardserialnumber",
 ]);
+
+/** RAID/sanal birimlerin genel serisi (`Volume0`, `Volume1`…): makineye özgü değildir. */
+const GENERIC_DISK_SERIAL = /^volume\d*$/;
 
 function isUniform(text: string): boolean {
   return /^(.)\1*$/.test(text);
-}
-
-function normalizeMac(alnum: string): string | null {
-  if (!/^[0-9a-f]{12}$/.test(alnum)) return null;
-  const firstOctet = parseInt(alnum.slice(0, 2), 16);
-  // Yerel yönetimli (sanal/rastgele) ya da çok noktaya yayın MAC fiziksel kart kimliği değildir.
-  if ((firstOctet & 0x02) !== 0 || (firstOctet & 0x01) !== 0) return null;
-  return alnum;
 }
 
 /** Etken değerini kararlı biçime getirir; anlamsız/boş değer `null` (ölçülemedi) olur. */
@@ -54,9 +53,9 @@ export function normalizeFactor(factor: FingerprintFactor, raw: string | null | 
     case "f2":
       return /^[0-9a-f]{16,64}$/.test(alnum) ? alnum : null;
     case "f3":
-      return alnum.length >= 4 ? alnum : null;
+      return alnum.length >= 4 && !GENERIC_DISK_SERIAL.test(alnum) ? alnum : null;
     case "f4":
-      return normalizeMac(alnum);
+      return alnum.length >= 4 ? alnum : null;
     case "f5":
       return /^[0-9]{1,20}$/.test(alnum) ? alnum : null;
   }

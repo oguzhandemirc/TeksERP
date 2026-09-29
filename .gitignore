@@ -40,3 +40,6 @@ Teks-Erp/_*.mjs
 
 # Sıklık defteri — ARALIKLI bekçi teşhis verisi (yerel; CI kaydı log satırındadır)
 Teks-Erp/siklik-defteri.jsonl
+
+# Lisans deposu (geliştirmede backend varsayılanı: <kök>/lisans) — kurulum anahtarı taşır
+/lisans/

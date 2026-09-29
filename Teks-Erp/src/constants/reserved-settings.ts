@@ -55,6 +55,16 @@ export const SETTINGS_PASSWORD_HASH_KEY = "security.settingsPasswordHash";
 export const PROFILE_STAMP_SETTING_KEY = "system.profile";
 
 /**
+ * Kurulum kimliği (`jobs/installation-identity.job.ts` üretir; `SETTING_KEYS.SYSTEM_INSTALLATION_ID`
+ * ile AYNI değer — döngü olmasın diye burada literal, eşitliği lisans bekçisi ölçer).
+ *
+ * ⚠️ KAYIT, AYAR DEĞİL: lisans HAK/kirası ve parmak izi bu kimliğe bağlıdır; ham ayar
+ * ucundan yazılabilseydi `admin:settings` taşıyan biri kurulumu başka bir kimliğe
+ * çevirip lisans bağını ve keşif kimliğini koparabilirdi. Okuması serbest (sır değil).
+ */
+export const INSTALLATION_ID_SETTING_KEY = "system.installationId";
+
+/**
  * `PUT /api/admin/settings/:key` ucunun REDDETTİĞİ anahtarlar.
  *
  * Kümeye ek olarak ön ek kuralı da uygulanır (`isReservedSettingKey`) — küme
@@ -64,6 +74,7 @@ export const PROFILE_STAMP_SETTING_KEY = "system.profile";
 export const RESERVED_SETTING_KEYS: ReadonlySet<string> = new Set([
   SETTINGS_PASSWORD_HASH_KEY,
   PROFILE_STAMP_SETTING_KEY,
+  INSTALLATION_ID_SETTING_KEY,
 ]);
 
 /** `security.` ile başlıyor mu — liste/dışa-aktarım süzgeçlerinin yüklemi. */

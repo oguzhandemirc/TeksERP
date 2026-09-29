@@ -22,6 +22,7 @@
 | `protocol/uclar.ts` | satıcı uç yolları, istek/yanıt gövde şemaları, sağlık özeti allowlist'i, zil konuları, satıcı hata kodları, durum/kademe/kip kelime dağarcığı |
 | `state.ts` + `state-rules.ts` | SAF lisans durumu (fabrika tarafı; aynaya girmez) |
 | `saat.ts` | güvenilir saat hesabı + imzalı `durum.json` belgesi (fabrika tarafı) |
+| `store.ts` · `runtime.ts` · `fingerprint.ts` | fabrika motoru (Faz 1c): `LICENSE_DIR` deposu (atomik yazım, senkron yükleme) · bellek çekirdeği + senkron `getLicenseSnapshot()` · parmak izi toplayıcı — aynaya GİRMEZ |
 
 **Güven çapası PARAMETREDİR.** Doğrulama fonksiyonları kök listesini argüman alır; modül düzeyinde değiştirilebilir bir çapa yoktur. Üretim çağıranı `ROOT_PUBLIC_KEYS`ı verir; bu liste bugün **boştur** ⇒ `GUVEN_CAPASI_BOS` ⇒ hiçbir HAK geçerli olamaz (fail-closed). Gerçek kök üretildiğinde listeye bir sürümle eklenir. Test anahtarları src'ye girmez; bekçiler çalışma anında üretir (`Teks-Erp/scripts/lib/lisans-fikstur.ts`).
 
@@ -112,7 +113,7 @@
 
 ### DURUM (`tekserp-durum`) — yerel, KURULUM imzalı, ağa çıkmaz
 
-`kurulumId` · `kiraId` (birikimin ait olduğu kira) · `birikenMs` · `yazildi` · `yuksekSu` · `sonKiraZorlamasi` (bool \| null) · `sira` (her yazımda artar). Okuma/yazma 1c'nin; şema ve imza `saat.ts`te.
+`kurulumId` · `kiraId` (birikimin ait olduğu kira) · `birikenMs` · `yazildi` · `yuksekSu` · `sonKiraZorlamasi` (bool \| null) · `sonYaptirim` (`{kademe, mesaj, kisitlamaTarihi, donmusModuller[], guncellemeDonuk, devredildi}` \| null — son kullanılabilir kiranın SUNUCU KARARLARI; Faz 1c) · `sira` (her yazımda artar). Okuma/yazma 1c'nin (`lib/license/runtime.ts`); şema ve imza `saat.ts`te.
 
 ## 4. İstek taşıma ve doğrulama sırası
 
@@ -161,8 +162,8 @@
 
 ## 6. Parmak izi (`parmak-izi.ts`)
 
-- **Etkenler:** f1 OS makine kimliği (Win `MachineGuid` · Linux `/etc/machine-id` · mac `IOPlatformUUID`) · f2 SMBIOS UUID · f3 sistem diski seri no · f4 birincil FİZİKSEL ağ kartının kalıcı MAC'i · f5 PostgreSQL `system_identifier`. CPU kimliği bilerek YOK.
-- **Normalleştirme:** NFKC → yalnız harf/rakam → küçük harf. Boş, tek düze (`0000…`, `ffff…`) ve bilinen yer tutucular (`To Be Filled By O.E.M.`, `Default string`, `None`…) ⇒ **ölçülemedi** (`null`). f1/f2 16–64 hex · f3 ≥ 4 karakter · f4 tam 12 hex ve evrensel yönetimli, tek noktaya (yerel yönetimli/sanal ya da çok noktaya MAC ⇒ ölçülemedi) · f5 1–20 rakam.
+- **Etkenler (yönetici kararı 3, Faz 1c):** f1 OS makine kimliği (Win `MachineGuid` · Linux `/etc/machine-id` · mac `IOPlatformUUID`) · f2 SMBIOS UUID · f3 sistem diski kimliği (Win `Get-Disk` `UniqueId` → yoksa `SerialNumber`; NVMe/SATA normalize seri; RAID/sanal birimin genel `VolumeN` serisi = ölçülemedi) · f4 sistem/anakart seri numarası (Win `Win32_BIOS.SerialNumber` → yer tutucuysa `Win32_BaseBoard.SerialNumber`; Linux `product_serial` → `board_serial`, root-only) · f5 PostgreSQL `system_identifier`. **MAC YOK** (kullanıcı kararı), CPU kimliği YOK (makineye özgü değil). `Get-PhysicalDisk` ve `Get-NetAdapter -IncludeHidden` kullanılmaz (asılma ölçüldü). Toplayıcı `lib/license/fingerprint.ts` (tek PowerShell süreci, 20 sn zaman aşımı).
+- **Normalleştirme:** NFKC → yalnız harf/rakam → küçük harf. Boş, tek düze (`0000…`, `ffff…`) ve bilinen yer tutucular (`To Be Filled By O.E.M.`, `Default string`, `None`…) ⇒ **ölçülemedi** (`null`). f1/f2 16–64 hex · f3 ≥ 4 karakter ve `volume\d*` DEĞİL · f4 ≥ 4 karakter (yer tutucu `System Serial Number`, `Default string`, `To Be Filled By O.E.M.`… ölçülemedi) · f5 1–20 rakam.
 - **Özet:** `HMAC-SHA256(kurulum tuzu ≥ 16 bayt, "<etken>\x1f<değer>")`, base64url. Ham kimlik dışarı çıkmaz; alan öneki aynı değerin iki etkende çakışmasını önler; tuz kurulum başınadır (`LICENSE_DIR`'de, 1c).
 - **Karar — üç sonuç:** iki tarafta da ölçülebilen etken sayısı `n` (bir tarafta `null` olan paydadan çıkar, uyuşmazlık SAYILMAZ). `n < 2` ⇒ `OLCULEMEDI`; aksi hâlde eşleşen ≥ `min(3, n)` ⇒ `ESLESTI`, değilse `ESLESMEDI`. DR sınıfında f5 dışarıda (`f5Haric`).
 
@@ -178,9 +179,9 @@
 2. **Geçerlilik:** GEÇERSİZ nedeni (HAK/kira yok·bozuk·bağ uyuşmaz, parmak izi uyuşmaz, bütünlük uyuşmaz) ÖLÇÜLEMEDİ nedenini (saat ileri/geri, durum kaydı, parmak izi/bütünlük ölçülemedi, ilk açılış bilinmiyor) ezer. GEÇERLİ olmayan her durum en az `UYARI`.
 3. **Ek süre İMZALI tarihten türer** — çapa sırası: kullanılabilir kira ⇒ `min(bitis, gecerlilikBitis)` + `ekSureGun` · kira yok/bozuk ama HAK var ⇒ `hak.verilis` + 30 · ikisi de yok ⇒ `ilkAcilis` + 30 · o da yok ⇒ ÖLÇÜLEMEDİ (kısıtlama yok). Dosya silmek ek süreyi yenilemez, K4'ü kaldırmaz.
 4. **Zamanın getirdiği KISITLI iki anahtarlıdır:** çapa + ek süre geçmiş VE `sonYoklamaBasarisizMi`. İkinci anahtar yoksa `EK_SURE` (0 gün) + `EK_SURE_BITTI` nedeni — internet varken kademeyi yalnız sunucu düşürür. Aynı kural bakım ihlaline de uygulanır.
-5. **Sunucunun imzalı kararı tek anahtarlıdır:** K3 tarihi geçti · K4 ⇒ `KISITLI`; K5 ⇒ `DURDURULMUS`; `devredildi` ⇒ `KISITLI` + tehlike bandı. K0 ⇒ `NORMAL` + bilgi bandı (mesaj). K1 ya da `guncellemeDonuk` ⇒ güncelleme kesilir. `donmusModuller` (K2) ⇒ tavandan düşer. K3 tarihinden önce ⇒ `UYARI` + geri sayım.
+5. **Sunucunun imzalı kararı tek anahtarlıdır ve KALICIDIR (yönetici kararı 2):** K3 tarihi geçti · K4 ⇒ `KISITLI`; K5 ⇒ `DURDURULMUS`; `devredildi` ⇒ `KISITLI` + tehlike bandı. K0 ⇒ `NORMAL` + bilgi bandı (mesaj). K1 ya da `guncellemeDonuk` ⇒ güncelleme kesilir. `donmusModuller` (K2) ⇒ tavandan düşer. K3 tarihinden önce ⇒ `UYARI` + geri sayım. Kararların kaynağı kullanılabilir kira; kira silinmiş/bozuk/bağı kopuksa son kullanılabilir kiranın `durum.json`daki anlık görüntüsü (`sonYaptirim`) — silmek yaptırımı kaldırmaz. Ek süre ve belirsizlik bu kararları GEVŞETMEZ.
 6. **Bakım:** bakım içinde derlenmiş sürüm durmaz (bakım bitince yalnız güncelleme kesilir, `BAKIM_BITTI`); bakım SONRASI derlenmiş sürüm ⇒ derleme tarihinden 30 gün `EK_SURE`, sonra (iki anahtarla) `KISITLI`. Bakıma ≤ 30 gün ⇒ `BAKIM_BITIYOR` bilgisi. Derleme tarihi yoksa değerlendirilmez (`DERLEME_TARIHI_YOK` bilgisi).
-7. **Modül tavanı** yalnız kullanılabilir HAK varken VE geçerlilik ÖLÇÜLEMEDİ değilken VE kademe `EK_SURE` değilken uygulanır: `izinli = hak.moduller − donmusModuller`. Aksi hâlde ham bayrak geçer (`production` satır yokken TRUE okunduğu için lisans belirsizliği üretimi kapatmaz).
+7. **Modül tavanı iki bileşenlidir (yönetici kararı 2):** HAK tavanı (`allowed = hak.moduller`) yalnız kullanılabilir HAK varken VE geçerlilik ÖLÇÜLEMEDİ değilken uygulanır — fail-open YALNIZ BELİRSİZLİKTE (ölçülemedi · etkinleşmemiş · HAK yok/bozuk); ek süre belirsizlik DEĞİLDİR, HAK tavanı sürer. Dondurulan modüller (`denied = donmusModuller`, sunucu kararı) her hâlde kapalıdır — ek sürede, ölçülemedide, HAK bozukken de. `ModuleCeiling = {applies:false} | {applies:true, allowed: string[] | null, denied: string[]}`; `ceilingAllows = (allowed yok ∨ key ∈ allowed) ∧ key ∉ denied`. `production` satır yokken TRUE okunduğu için belirsizlik üretimi kapatmaz.
 8. **Kip:** kullanılabilir kira ⇒ `kira.zorlama`; değilse `sonKiraZorlamasi` (silinen kira kipi gevşetmesin); o da yoksa derleme varsayılanı.
 9. **Gözlem kipinde** her şey hesaplanır (`hesaplanan*`) ama **uygulanan** etki bugünkü davranıştır: kademe `NORMAL`, bant yok, güncelleme serbest, tavan yok (`OBSERVE_EFFECT`, sıfır fark).
 10. **Bant** en şiddetli bulgunun bandıdır (eşitlikte ilk yazılan).
@@ -226,7 +227,7 @@
 
 - **Çevrimdışı saat hilesi:** `durum.json`'u geri yüklemek ya da silip saati geri almak, monotonik tahmini geriye çeker; "erken bitiş yok" ilkesi gereği güvenilir saat tahmine yaslanır ⇒ çevrimdışı zarf uzayabilir. Çevrimiçiyken kira zinciri ve sunucu kararı kapatır; kalıcı savunma Faz 2 (native çekirdek, DPAPI/sayaç). `sira` alanı geri yüklemeyi portal raporunda görünür kılar.
 - **Kira silme + `durum.json` silme** birlikte yapılırsa kip derleme varsayılanına düşer (Faz 4'e dek `gozlem`). Faz 1–3'te sahadaki kod zaten okunur JS'tir (plan §12).
-- **K2 ve ek süre:** plan kuralı gereği ek sürede tavan ham değere düşer; dondurulan modül kira süresi dolup ek süreye girince açılır (sonra KISITLI). Aşağıda karar notu olarak işaretli.
+- **K2 ve ek süre — KARAR VERİLDİ (yönetici kararı 2, Faz 1c):** dondurulan modül ek sürede de, belirsizlikte de kapalı kalır; HAK tavanı ek sürede sürer (kural 7). Kalan kaçış: kira + `durum.json` BİRLİKTE silinirse son kira kararı da kaybolur — kira silme + durum silme ile aynı sınıf (Faz 2 native çekirdek).
 - İmza doğrulaması TS'tedir; Faz 2'de native çekirdeğe geçer, bu dosyalar test kâhini kalır.
 
 ## 12. Plandan sapmalar ve genişlemeler (bu dilimde yapıldı — gözden geçirilecek)
@@ -239,7 +240,8 @@
 6. **Kira YOK/bozuk ama HAK varken çapa `hak.verilis`** (plan yalnız kira ve ilk açılışı sayıyor): silme kaçışını kapatır, imzalı tarihten türer.
 7. **Yüksek su zehirlenmesi:** plan yüksek suyu doğrudan alt sınır sayıyor; tahminin üst eşiğini aşan yüksek su yok sayılır ve raporlanır (aksi hâlde geçmişte bir kez ileri giden saat fabrikayı kalıcı ek süreye iterdi — bekçi §5e bu kusuru yazım sırasında yakaladı).
 8. **Adlandırma:** plan ve görev metni kod adlarını Türkçe veriyor (`KOK_ACIK_ANAHTARLAR`, `lisansModuluAcik`…); `src/` bildirim adları `[IL-16]`/`[IL-32]` gereği İngilizce yazıldı (bekçi `test_identifier_language` ilk Türkçe yazımda 115 yeni ad saydı). Karşılıklar 12a tablosunda; tel alanları ve değerler Türkçe.
-9. **Karar bekleyen (1e/kullanıcı):** K2 dondurulmuş modülün ek sürede ham değere düşmesi plana sadık uygulandı; "sunucu kararı olduğu için dondurma ek sürede de sürsün" alternatifi tek satırlık değişikliktir (`state.ts` `etkiHesapla`).
+9. **Karar verildi (yönetici kararı 2, Faz 1c):** sunucu kararları (K1–K5, dondurulan modül, DEVREDİLDİ) son geçerli imzalı kiradan KALICIDIR; ek süre gevşetmez; tavanın fail-open'ı yalnız belirsizlik içindir. Uygulama: `state.ts` `computeEffect` + `sanctionSource`, `saat.ts` `sonYaptirim`; bekçi `test_lisans_durumu` §3b/§7d/§14.
+10. **Parmak izi f3/f4 (yönetici kararı 3, Faz 1c):** f4 MAC değil sistem/anakart seri numarası; f3 genel RAID serisi ölçülemedi. `parmak-izi.ts` normalleştirmesi değişti — satıcı aynası (1b) bu dosyayı yeniden kopyalar (özet biçimi aynı; yalnız f3/f4 normalleştirmesi).
 
 ## 12a. Adlandırma — plan adı → kod adı
 
@@ -264,3 +266,106 @@
 
 - **1b (satıcı):** imzalamadan önce `signDocument` şemadan geçirir (geçmeyen belge imzalanmaz). HAK imzasında bayinin GÜNCEL tavanı ayrıca denetlenir (sertifika kısıtı yetmez). Nonce `(kurulumId, nonce)` UNIQUE, saklama `zaman` + 10 dk. Yanıtı isteğin `v`siyle üret. Kira zinciri: yoklamadaki `sonKiraId` ucu tutar (plan §4 çatal üç hâli). Kök çapasını kendi kök listesiyle aynı dosyadan (ayna) okur.
 - **1c (fabrika):** `ilkAcilisMs` DB'den (silinmeyen veri: kurulum kimliği satırının `createdAt`i ya da en eski defter kaydı); `yuksekSuMs` yalnız sunucu saati + defter `createdAt`inden (güvenilir saatin kendisini yüksek suya yazma — döngüsel zehirlenme); `sonYoklamaBasarisizMi` §5'teki tanımla; `durum.json` her yazımda `sira++`, yeni kira kabulünde `birikenMs = 0` + `kiraId` güncellenir, `sonKiraZorlamasi` son kullanılabilir kiradan. Parmak izi eşleşmesi kiranın `parmakIzi` kümesine karşı (`compareFingerprints`, DR'de `f5Haric`). `butunluk` Faz 2'ye dek `KAPSAM_DISI`. Yoklama gövdesini `PollRequestSchema.parse` ile kur (allowlist dışı alan kod yolunda patlar).
+
+## 14. Fabrika API'si (`/api/license/*`, Faz 1c) — panel (1d) ve tablet (1e) buna karşı yazılır
+
+Yanıt zarfı backend'in genel biçimidir: başarı `{ success: true, data: T }`, hata `{ success: false, message: <TR>, details: { code, … } }` (`details.code` okunur; `body.code` YOK). Tipler kodda `Teks-Erp/src/services/license-view.service.ts` + `license.service.ts`; aşağıdaki blok onların aynasıdır (ayrışırsa kod kazanır).
+
+| Uç | Kimlik / izin | Gövde / sorgu | `data` |
+|---|---|---|---|
+| `GET /durum` | **herkes** — başlık varsa TAM doğrulama (geçersiz token 401), yoksa kimliksiz | — | `LicenseStatusResponse` (kimliksize `{ ayrinti: false }`) |
+| `GET /indirme-belirteci` | onaylı cihaz (`x-device-id`, onaylı+aktif) YA DA oturum; ikisi yoksa 401 `DEVICE_OR_SESSION_REQUIRED` | `?urun=electron\|mobil&kanal=<kod?>` (kanal yoksa kiranın kanalı) | `LicenseDownloadToken` |
+| `GET /detay` | `license:view` ∨ `license:manage` | — | `LicenseDetail` |
+| `GET /proxy` | `license:view` ∨ `license:manage` | — | `LicenseProxySettings` |
+| `PUT /proxy` | `license:manage` | `{ adres: string \| null, atla?: string \| null }` (null = kaldır; yeniden başlatma YOK) | `LicenseProxySettings` |
+| `POST /etkinlestir` | `license:manage` | `{ kod }` (elle yazım normalleşir: büyük harf, O→0, I/L→1, tire) | `LicenseDetail` |
+| `POST /yokla` | `license:manage` | — | `{ outcome: PollOutcome, code?: string }` |
+| `GET /cevrimdisi-istek` | `license:manage` | `?amac=yokla\|etkinlestir&kod=` | `LicenseOfflineRequest` (QR: `qrAdresi`) |
+| `POST /cevrimdisi-yanit` | `license:manage` | `{ yanit: string \| object }` — QR'dan base64url(JSON) ya da JSON | `LicenseDetail` |
+| `GET /aktarma-istegi` | `license:manage` | `?amac=…&kod=` | `LicenseOfflineRequest` (panel `istekGovdesi`ni `hedefUrl`e AYNEN POST eder) |
+| `POST /aktarma-yaniti` | `license:manage` | `{ yanit: object }` — satıcının yanıt gövdesi AYNEN | `LicenseDetail` |
+| `POST /tasima-talebi` | `license:manage` | `{ gerekce?: string \| null }` | `LicenseTransferResult` |
+| `POST /dr-devral` | `license:manage` | `{ anaKurulumId: uuid, gerekce: string }` | `LicenseDetail` |
+| `GET /veri-disari` | `admin:settings` ∨ `system:backups`, VE `admin:users` (yedek zinciriyle aynı) | — | `LicenseDataExportManifest` |
+
+```ts
+type StateTier = "NORMAL" | "UYARI" | "EK_SURE" | "KISITLI" | "DURDURULMUS";
+type LicenseMode = "gozlem" | "zorla";
+type Validity = "GECERLI" | "GECERSIZ" | "OLCULEMEDI";
+type LicenseClass = "URETIM" | "TEST" | "DR" | "DEMO" | "BAYI" | "BARINDIRILAN";
+interface Banner { metin: string; ton: "bilgi" | "uyari" | "tehlike" }
+
+// GET /durum — küresel bant ve Hakkında ekranı bunu okur.
+interface LicenseStatusSummary {
+  ayrinti: true;
+  kip: LicenseMode;
+  kademe: StateTier;              // UYGULANAN kademe — gözlemde DAİMA "NORMAL"
+  bant: Banner | null;            // uygulanan bant — gözlemde DAİMA null
+  ekSureKalanGun: number | null;  // yalnız kademe EK_SURE iken
+  kisitlamaKalanGun: number | null; // yalnız zorlamada (K3 geri sayımı)
+  guncellemeIzni: boolean;
+  sinif: LicenseClass | null;
+  lisansNo: string | null;        // TKS-YYYY-NNNN (görünür filigran)
+  lisansSahibi: { musteri: string; tesis: string } | null;
+  surum: string;                  // backend sürümü
+}
+type LicenseStatusResponse = LicenseStatusSummary | { ayrinti: false };
+
+// GET /detay — Lisans ekranı (yönetici).
+interface LicenseDetail {
+  hazir: boolean;                 // kurulum kimliği + depo hazır mı
+  kurulum: { kurulumId: string | null; anahtarKimligi: string | null; etkin: boolean; ilkAcilis: string | null };
+  depo: { dizin: string | null; sorun: "APP_ICINDE" | "YEDEK_ICINDE" | "OKUNAMADI" | "YAZILAMADI" | null;
+          bozukAnahtarKenaraAlindi: boolean; durumKaydi: { gecerli: boolean; sira: number | null } };
+  durum: {
+    gecerlilik: Validity; nedenler: Array<{ kod: string; ayrinti: string | null }>; kip: LicenseMode;
+    hesaplananKademe: StateTier; uygulananKademe: StateTier;
+    hesaplanan: LicenseEffect; uygulanan: LicenseEffect;   // gözlem: uygulanan = bugünkü davranış
+    ekSureKalanGun: number | null; kisitlamaKalanGun: number | null; devredildi: boolean;
+    yaptirimKademesi: "K0" | "K1" | "K2" | "K3" | "K4" | "K5" | null;
+    saat: { guvenilir: string; kaynak: "DUVAR" | "MONOTONIK" | "YUKSEK_SU"; bulgu: "SAAT_ILERI" | "SAAT_GERI" | null; bulguKaynagi: string | null };
+  };
+  hak: { hakId: string; surum: number; lisansNo: string; musteri: { id: string; ad: string }; tesis: { id: string; ad: string };
+         sinif: LicenseClass; moduller: string[]; kalici: boolean; bakimBitis: string; verilis: string; bayiId: string | null } | null;
+  kira: { kiraId: string; verilis: string; bitis: string; sunucuSaati: string; ekSureGun: number; zorlama: boolean;
+          gecerlilikBitis: string | null; yaptirim: { kademe: string | null; mesaj: string | null; kisitlamaTarihi: string | null;
+          donmusModuller: string[]; guncellemeDonuk: boolean }; yoklamaAraligiDk: number; devredildi: boolean;
+          kanal: { kod: string; guncelSurumler: { backend?: string; panel?: string; tablet?: string } } } | null;
+  parmakIzi: { olculdu: string | null; olculen: Record<"f1" | "f2" | "f3" | "f4" | "f5", boolean> | null;  // DEĞER değil, ölçülebildi mi
+               karar: "ESLESTI" | "ESLESMEDI" | "OLCULEMEDI" | null; eslesen: number | null; olculebilen: number | null; uyusmayan: string[] };
+  yoklama: { saticiYapilandirildi: boolean; saticiAdresi: string | null; sonDeneme: string | null; sonBasari: string | null;
+             sonBasarisizlik: string | null; sonHataKodu: string | null; sonrakiDeneme: string | null;
+             zil: { bagli: boolean; sonBaglanti: string | null; sonZil: string | null; sonKalpAtisi: string | null; sonHataKodu: string | null } };
+  tasima: { talepId: string; istendi: string; gerekce: string | null } | null;
+  gozlem: { reddedilecekIstek: number; reddedilecekModul: number };
+  proxy: LicenseProxySettings;
+}
+interface LicenseEffect {
+  bant: Banner | null; guncellemeIzni: boolean;
+  modulTavani: { applies: false } | { applies: true; allowed: string[] | null; denied: string[] };
+}
+interface LicenseProxySettings { kaynak: "panel" | "ortam" | "yok"; adres: string | null /* kimlik maskeli: http://***@host:port */; atla: string | null; destekleniyor: boolean }
+interface LicenseDownloadToken { yolOneki: string; belirtec: string; gecerlilikSonu: string | null }
+interface LicenseOfflineRequest {
+  amac: "yokla" | "etkinlestir"; zarf: string; gecerlilikSonu: string /* +10 dk */; hedefYol: "/v1/cevrimdisi";
+  hedefUrl: string | null; istekGovdesi: { v: 1; zarf: string }; qrAdresi: string | null /* <satıcı>/q#<zarf> */;
+}
+interface LicenseTransferResult { talepId: string; durum: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI"; lisans: LicenseDetail }
+interface LicenseDataExportManifest {
+  kademe: StateTier;
+  yedekler: Array<{ ad: string; boyutBayt: number; zaman: string; sifreli: boolean; indirmeYolu: string }>; // en yeni 10
+  yollar: { yedekAl: "POST /api/admin/backup"; yedekListesi: "GET /api/admin/backups"; yedekIndir: "GET /api/admin/backups/{ad}/download";
+            varliklar: "GET /api/import/entities"; disariAktar: "GET /api/import/{entity}/export" };
+}
+type PollOutcome = "YAPILANDIRILMAMIS" | "HAZIR_DEGIL" | "ETKIN_DEGIL" | "BASARILI" | "BASARISIZ";
+```
+
+**Hata kodları (`details.code`):** `LICENSE_STORE_UNAVAILABLE` 409 (depo `app\`/`BACKUP_DIR` içinde ya da yazılamıyor) · `LICENSE_IDENTITY_NOT_READY` 409 · `LICENSE_NOT_CONFIGURED` 409 (`LICENSE_SERVER_URL` yok) · `LICENSE_NOT_ACTIVE` 409 · `LICENSE_ALREADY_ACTIVE` 409 · `LICENSE_CODE_INVALID` 400 · `LICENSE_VENDOR_UNREACHABLE` 502 (+ `egressCode`) · `LICENSE_VENDOR_REJECTED` 409 (+ `vendorCode` ∈ §5 satıcı kodları; mesaj TR) · `LICENSE_RESPONSE_INVALID` 400 (+ `protocolCode`; imzasız/kurcalı/başka kuruluma ait yanıt) · `LICENSE_LEASE_STALE` 409 · `LICENSE_UPDATES_FROZEN` 403 · `LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE` 404 · `LICENSE_PROXY_INVALID` 400 · `LICENSE_PROXY_UNSUPPORTED` 409 (Node < 22.21 / 24.5) · `DEVICE_OR_SESSION_REQUIRED` 401. Kapı kodları (`LICENSE_RESTRICTED` · `LICENSE_SUSPENDED` · `LICENSE_MODULE` · `LICENSE_GATE`) 1c-kapı dilimindedir.
+
+**Davranış sözleşmesi:**
+- **Gözlem = sıfır fark:** `durum.kademe` NORMAL, `bant` null, `guncellemeIzni` true — istemci bant/kilit ÇİZMEZ; yalnız Lisans ekranı `detay.durum.hesaplanan*` alanlarını gösterir.
+- **Dışarı çıkış:** `LICENSE_SERVER_URL` yoksa ya da kurulum etkinleşmemişse backend satıcıya HİÇ istek atmaz (yoklama, zil). Yoklama saatlik (kiradaki `yoklamaAraligiDk`) + ±%10 jitter; zil (`/v1/zil`, SSE, 60 sn sessizlik = kopuk, üstel geri çekilme ≤ 5 dk) `lisans` konusunda hemen yoklatır.
+- **Ayak izi:** `LICENSE_STATE_CHANGED` (geçerlilik/kademe/kip değişimi; açılıştaki ilk ölçüm taban, satır yazmaz) · `LICENSE_LEASE_ACCEPTED` · `LICENSE_SANCTION_CHANGED` · `LICENSE_OBSERVATION_SUMMARY` (gözlemde günde bir, etkin kurulumda) · `LICENSE_ADMIN_ACTION` (`eylem` ∈ etkinlestir · cevrimdisi-yanit · aktarma-yaniti · tasima-talebi · dr-devral · proxy · veri-disari). Başarısız yoklama DEFTERE YAZILMAZ (bellek + `detay.yoklama`). Proxy kimlik bilgisi yüke girmez.
+- **Eski istemci ne yapar:** bütün uçlar YENİ; mevcut uç/alan değişmedi → eski panel/tablet etkilenmez. `/api/admin/health` yüküne yalnız EK `license` bloğu geldi (public `/health` DONMUŞ). `PUT /api/admin/settings/system.installationId` artık 400 `SETTING_KEY_RESERVED` (panelde bu anahtarın yüzeyi yoktu).
+- **Parmak izi yükü:** `detay.parmakIzi.olculen` yalnız etken başına boolean; ham değer ve tuzlu özet uca GİRMEZ.
+

@@ -106,6 +106,14 @@ const EXEMPT: Record<string, string> = {
   // düştü ve `npm test` tip kapısından sonra ilk adımda duruyordu (BULGU-T1-016).
   "GET /api/client-policy/": "sürüm künyesi (çoğul) — giriş öncesi sorulur; salt-okunur, DB'siz, sabitten",
   "GET /api/mobile/updates/{*yol}": "güncelleme paketi dosyaları — kimliksiz, yol kaçışı kapalı, imzayla korunur",
+  // Lisans durumu (Faz 1c): panel ve tablet bandı için HERKES çağırır; başlık varsa TAM
+  // doğrulama (geçersiz token 401), yoksa yalnız `{ayrinti:false}` — kademe/gün/modül
+  // sinyali kimliksize SIZMAZ (K5 bilgisi dışarı verilmez). Bekçi: test_lisans_motoru §2a.
+  "GET /api/license/durum": "herkes; kimliksiz çağırana ayrıntı yok (başlık varsa tam doğrulama)",
+  // İndirme belirteci: tablet OTA denetimini GİRİŞ ÖNCESİ yapar (mobil güncelleme uçlarıyla
+  // aynı gerekçe). Kimlik yerine ONAYLI CİHAZ (`req.device` yalnız onaylı+aktif cihazda dolar)
+  // ya da tam doğrulanan oturum; ikisi de yoksa 401 DEVICE_OR_SESSION_REQUIRED.
+  "GET /api/license/indirme-belirteci": "tablet giriş öncesi güncelleme; onaylı cihaz ya da oturum şart",
 };
 
 /**

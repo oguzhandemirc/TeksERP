@@ -193,6 +193,26 @@ function SirIzniDaralt($yol) {
   else { Ok "izin: yalniz SYSTEM + Administrators - $(Split-Path $yol -Leaf)" }
 }
 
+# Lisans dizini: yoksa yaratilir, yalniz SYSTEM + Administrators (kalitim kapali). /T YOK:
+# dizin yeni ya da yalniz bizim dosyalarimizi tasir, alt ogeler (OI)(CI) ile miras alir.
+# Junction/sembolik bag ise DOKUNULMAZ (hedefi baska bir yerin izinlerini degistirirdi).
+function LisansDiziniKur($yol) {
+  if (Test-Path $yol) {
+    $oge = Get-Item $yol -Force
+    if (-not $oge.PSIsContainer) { Uyar "lisans yolu bir DOSYA - dokunulmadi: $yol"; return }
+    if ($oge.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { Uyar "lisans dizini junction/bag - izin DEGISTIRILMEDI: $yol"; return }
+  } else {
+    New-Item -ItemType Directory -Path $yol -Force | Out-Null
+  }
+  if (-not (Get-Command icacls.exe -ErrorAction SilentlyContinue)) { Uyar "icacls yok - lisans dizini izni DARALTILAMADI: $yol"; return }
+  & icacls.exe $yol /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null
+  if ($LASTEXITCODE -ne 0) { Uyar "lisans dizini izni daraltilamadi (icacls $LASTEXITCODE): $yol"; return }
+  $g = GenisErisim $yol
+  if ($null -eq $g) { Uyar "lisans dizini izni OLCULEMEDI: $yol" }
+  elseif ($g.Count) { Uyar "lisans dizininde hala genis erisim: $($g -join ', ')" }
+  else { Ok "lisans dizini: yalniz SYSTEM + Administrators ($yol)" }
+}
+
 # Users / Authenticated Users / Everyone'a izin veren ACE'ler. $null = olculemedi.
 function GenisErisim($yol) {
   if (-not (Test-Path $yol) -or -not (Get-Command Get-Acl -ErrorAction SilentlyContinue)) { return $null }
@@ -213,6 +233,9 @@ $pgbin     = "$kok\pgsql\bin"
 $backupDir = "$kok\backups"
 # Yedek sifreleme anahtar dizini (yedekle.ps1 ile ayni varsayilan; BACKUP_DIR DISINDA).
 $anahtarDizini = "$kok\yedek-anahtar"
+# Lisans deposu (kurulum anahtari, HAK, kira): app\ ve backups\ DISINDA - kurulum app\'i
+# degistirir, offsite supurucu backups\'u makine disina kopyalar. Backend varsayilani ayni yol.
+$lisansDizini = "$kok\lisans"
 $credFile  = "$kok\pg-setup\db-credentials.json"
 $uygulama  = $UygulamaAdi
 # Operatore basilan komutlar: cipla `kur.ps1` yurutme ilkesine takilir (baslik).
@@ -488,12 +511,18 @@ if ($m -and $m.dosyaSayisi) {
 # Node surumu: package.json ZEMIN koyar (`engines.node`), bu kapi onu OLCER.
 # 2026-09-04 ev provasi (BULGU-6): dokuman "22.x" diyordu, saha makinesi 26.4,
 # paketi ureten 26.8 idi ve hicbir kapi farki gormuyordu. Ust sinir YOK.
-$nodeSurum = (& node --version) -replace '^v',''
-$nodeMajor = [int](($nodeSurum -split '\.')[0])
+$nodeSurum = (& node --version) -creplace '^v',''
+$nodeMajor = [int](($nodeSurum -csplit '\.')[0])
 $paketJson = Get-Content (Join-Path $temp "package.json") -Raw | ConvertFrom-Json
-$zemin = 22
-if ($paketJson.engines -and $paketJson.engines.node -match '(\d+)') { $zemin = [int]$Matches[1] }
-if ($nodeMajor -lt $zemin) {
+# Zemin MAJOR.MINOR olculur: lisans yoklamasinin proxy destegi Node 22.21+/24.5+ ister;
+# yalniz major karsilastirmak 22.5'i gecirirdi (proxy ayari SESSIZCE yok sayilirdi).
+$zemin = [version]"22.0"
+if ($paketJson.engines -and $paketJson.engines.node -cmatch '(\d+)(?:\.(\d+))?') {
+  $zeminMinor = if ($Matches[2]) { $Matches[2] } else { "0" }
+  $zemin = [version]("{0}.{1}" -f $Matches[1], $zeminMinor)
+}
+$nodeSurumV = [version](($nodeSurum -csplit '[-+]')[0])
+if ($nodeSurumV -lt $zemin) {
   Fail "Node $nodeSurum bu paket icin COK ESKI (en az $zemin gerekiyor). Once Node'u yukseltin."
 }
 Ok "node $nodeSurum (zemin: >=$zemin)"
@@ -681,6 +710,7 @@ try {
   }
 } catch { GeriAlOtomatik "Dosya yerlestirme basarisiz: $($_.Exception.Message)" }
 SirIzniDaralt (Join-Path $appDir ".env")
+LisansDiziniKur $lisansDizini
 # Yedekler ve kimlik dosyasi bu surumde DEGISTIRILMEZ (canli sunucuda o klasoru okuyan
 # baska bir sey olabilir); genis erisim yalniz SOYLENIR - daraltma ilk-kurulum.ps1'in isi.
 foreach ($y in @($backupDir, (Split-Path $credFile -Parent))) {

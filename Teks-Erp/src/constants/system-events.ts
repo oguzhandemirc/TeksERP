@@ -110,6 +110,23 @@ const DISCOVERY_EVENTS = {
 } as const;
 
 /**
+ * Lisans motoru — YALNIZ geçiş/kabul/yaptırım/özet (her başarısız yoklama DEĞİL: dış ağ
+ * hatası beklenen bir durumdur, defteri şişirmez). Anahtar, kira metni ve proxy kimliği yüke GİRMEZ.
+ */
+const LICENSE_EVENTS = {
+  /** Geçerlilik / hesaplanan ya da uygulanan kademe / kip değişti. */
+  LICENSE_STATE_CHANGED: "LICENSE_STATE_CHANGED",
+  /** Satıcıdan gelen yeni kira doğrulanıp kabul edildi (yoklama, etkinleştirme, çevrimdışı, taşıma, DR). */
+  LICENSE_LEASE_ACCEPTED: "LICENSE_LEASE_ACCEPTED",
+  /** Kiradaki sunucu kararı (K0–K5, dondurulan modül, devir) değişti. */
+  LICENSE_SANCTION_CHANGED: "LICENSE_SANCTION_CHANGED",
+  /** Gözlem kipinin günlük özeti (hesaplanan kademe + "reddederdim" sayaçları). */
+  LICENSE_OBSERVATION_SUMMARY: "LICENSE_OBSERVATION_SUMMARY",
+  /** Yöneticinin lisans eylemi (etkinleştir, çevrimdışı yanıt, taşıma, DR, proxy, veri dışarı). */
+  LICENSE_ADMIN_ACTION: "LICENSE_ADMIN_ACTION",
+} as const;
+
+/**
  * Ayar şifresi olayları.
  * ⚠️ BU AİLE KAPININ KÖR NOKTASIYDI: çağrı yerleri adı SABİTTEN kuruyor
  * (`action: SETTINGS_PASSWORD_EVENTS.FAILED`), bu yüzden kaynakta dizge arayan
@@ -175,6 +192,7 @@ export const SYSTEM_EVENT = {
   ...IMPORT_EVENTS,
   ...ADMIN_EVENTS,
   ...DISCOVERY_EVENTS,
+  ...LICENSE_EVENTS,
   ...SETTINGS_PASSWORD_EVENT_NAMES,
   ...REPAIR_EVENTS,
 } as const;

@@ -618,11 +618,12 @@ async function bolum3veSonrasi(): Promise<void> {
   );
   check("açılışta guard durumu kontrol ediliyor",
     /warnIfAuditGuardDisabled/.test(serverSrc) && /teks\.audit_guard/.test(serverSrc));
-  const appSrc = (await import("fs")).readFileSync(
-    (await import("path")).join(__dirname, "..", "src", "app.ts"), "utf8",
+  // Zengin sağlık yükü `app.ts`ten `lib/health-snapshot.ts`e taşındı (lisans yoklaması döngüsü).
+  const healthSrc = (await import("fs")).readFileSync(
+    (await import("path")).join(__dirname, "..", "src", "lib", "health-snapshot.ts"), "utf8",
   );
-  check("/health auditGuard alanını döndürüyor",
-    /auditGuard/.test(appSrc) && /teks\.audit_guard/.test(appSrc));
+  check("/api/admin/health auditGuard alanını döndürüyor",
+    /auditGuard/.test(healthSrc) && /teks\.audit_guard/.test(healthSrc));
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   await pool.end();

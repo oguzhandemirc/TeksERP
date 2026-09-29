@@ -19,6 +19,10 @@
 //   B4 SAAT_İLERİ'de duvar saati güvenildi                       → 2 ❌ (§5a · §5b)
 //   B5 kira silinince HAK verilişi yerine ilk açılış çapası      → 1 ❌ (§9d)
 //   B6 K3 tarihi geçince KISITLI'ya geçiş kaldırıldı             → 1 ❌ (§11e)
+//   Faz 1c (yönetici kararı 2 — sunucu kararları kalıcı, fail-open yalnız belirsizlikte):
+//   D1 ek sürede HAK tavanı yeniden gevşetildi                  → 2 ❌ (§3b · §7d)
+//   D2 son kira anlık görüntüsü (sonYaptirim) yok sayıldı        → 2 ❌ (§14c · §14d)
+//   D3 dondurma yalnız HAK tavanı varken uygulandı              → 2 ❌ (§14b · §14f)
 //   Her mutasyonun UYGULANDIĞI (sha farkı) ve geri alındığı (sha eşitliği) ayrıca ölçüldü.
 //   Doğuşta ısıran GERÇEK kusur: §5e — zehirli yüksek suyu üst eşikte tavanlamak güvenilir
 //   saati duvarın ilerisine itip sahte SAAT_GERİ üretiyordu; `saat.ts` bu dilimde düzeltildi.
@@ -102,6 +106,7 @@ function girdi(s: Senaryo = {}): LicenseStateInput {
     sonYoklamaBasarisizMi: false,
     varsayilanKip: "gozlem",
     sonKiraZorlamasi: null,
+    sonYaptirim: null,
     ...s.girdi,
   };
 }
@@ -151,7 +156,10 @@ function ekSureBolumu(): void {
   console.log("\n§3 — ek süre İMZALI kira.bitis'ten türer");
   const d = durum(eskiKira(35, 5));
   check("§3a kira 5 gün önce bitti → EK_SÜRE, 25 gün kaldı", d.hesaplananKademe === "EK_SURE" && d.ekSureKalanGun === 25, `${ozet(d)} kalan=${d.ekSureKalanGun}`);
-  check("§3b ek sürede tavan ham değere düşer", isModuleLicensed(d, "iplik.enabled"));
+  check(
+    "§3b ⭐ ek süre BELİRSİZLİK DEĞİL: HAK tavanı sürer (HAK dışı modül kapalı, HAK'taki açık)",
+    !isModuleLicensed(d, "iplik.enabled") && isModuleLicensed(d, "finance.enabled"),
+  );
   check("§3c karşı: bitişe 1 gün varken NORMAL", durum(eskiKira(29, -1)).hesaplananKademe === "NORMAL");
   const v = durum(eskiKira(20, -10, { gecerlilikBitis: msToIso(SIMDI - 2 * DAY_MS) }));
   check("§3d vade (gecerlilikBitis) kiradan önce dolarsa ek süre vadeden başlar", nedenVar(v, "VADE_DOLDU") && v.ekSureKalanGun === 28, `${ozet(v)} kalan=${v.ekSureKalanGun}`);
@@ -203,7 +211,9 @@ function uretimAcikBolumu(): void {
   const p = durum({ hak, girdi: { parmakIziEslesme: "OLCULEMEDI" } });
   check("§7c ÖLÇÜLEMEDİ (parmak izi) → production AÇIK", isModuleLicensed(p, "production.enabled"), ozet(p));
   const e = durum({ hak, ...eskiKira(35, 5) });
-  check("§7d ek süre → production AÇIK", isModuleLicensed(e, "production.enabled"), ozet(e));
+  check("§7d karşı: ek süre belirsizlik değil → HAK dışı production KAPALI (yönetici kararı 2)", e.hesaplananKademe === "EK_SURE" && !isModuleLicensed(e, "production.enabled"), ozet(e));
+  const y = durum({ hak: "YOK", kira: "YOK", girdi: { ilkAcilisMs: SIMDI - 10 * DAY_MS, varsayilanKip: "zorla" } });
+  check("§7f etkinleşmemiş kurulum (HAK yok) → production AÇIK", isModuleLicensed(y, "production.enabled"), ozet(y));
   const b = durum({ hak: "BOZUK" });
   check("§7e HAK bozuk → tavan yok (ham)", b.gecerlilik === "GECERSIZ" && isModuleLicensed(b, "production.enabled"), ozet(b));
 }
@@ -288,6 +298,40 @@ function bakimBolumu(): void {
   check("§12e derleme tarihi yok → bilgi nedeni, kademe NORMAL", nedenVar(e, "DERLEME_TARIHI_YOK") && e.hesaplananKademe === "NORMAL", ozet(e));
 }
 
+function kaliciKararBolumu(): void {
+  console.log("\n§14 — sunucu kararları KALICIDIR: ek süre ve belirsizlik gevşetmez (yönetici kararı 2)");
+  const k2 = { yaptirim: { kademe: "K2" as const, mesaj: null, kisitlamaTarihi: null, donmusModuller: ["finance.enabled"], guncellemeDonuk: false } };
+  const a = durum({ ...eskiKira(35, 5, k2) });
+  check(
+    "§14a ⭐ K2 + kira bitti (EK_SÜRE) → dondurulan modül KAPALI, HAK'taki diğeri açık",
+    a.hesaplananKademe === "EK_SURE" && !isModuleLicensed(a, "finance.enabled") && isModuleLicensed(a, "production.enabled"),
+    ozet(a),
+  );
+  const b = durum({ kira: k2, saat: { duvarMs: SIMDI + 90 * DAY_MS } });
+  check(
+    "§14b ⭐ K2 + ÖLÇÜLEMEDİ (saat) → dondurulan KAPALI, HAK tavanı açık (HAK dışı modül açık)",
+    b.gecerlilik === "OLCULEMEDI" && !isModuleLicensed(b, "finance.enabled") && isModuleLicensed(b, "iplik.enabled"),
+    ozet(b),
+  );
+  const son = (kademe: "K2" | "K5" | null, donmus: string[] = []) => ({
+    kademe, mesaj: null, kisitlamaTarihi: null, donmusModuller: donmus, guncellemeDonuk: false, devredildi: false,
+  });
+  const c = durum({ kira: "YOK", girdi: { sonYaptirim: son("K5"), sonKiraZorlamasi: true } });
+  check("§14c ⭐ kira SİLİNDİ, son kiranın K5'i sürer → DURDURULMUŞ", c.hesaplananKademe === "DURDURULMUS" && c.uygulananKademe === "DURDURULMUS", ozet(c));
+  const d = durum({ kira: "BOZUK", girdi: { sonYaptirim: son("K2", ["finance.enabled"]), sonKiraZorlamasi: true } });
+  check("§14d ⭐ kira BOZUK, son kiranın dondurduğu modül kapalı kalır", !isModuleLicensed(d, "finance.enabled"), ozet(d));
+  const e = durum({ kira: "YOK", girdi: { sonYaptirim: null, sonKiraZorlamasi: true } });
+  check("§14e karşı: son kira kararı yoksa yaptırım yok (kademe EK_SÜRE, DURDURULMUŞ değil)", e.hesaplananKademe === "EK_SURE", ozet(e));
+  const f2 = durum({ hak: "BOZUK", kira: k2 });
+  check(
+    "§14f HAK bozuk (belirsizlik) → HAK tavanı açık ama dondurulan modül KAPALI",
+    isModuleLicensed(f2, "iplik.enabled") && !isModuleLicensed(f2, "finance.enabled"),
+    ozet(f2),
+  );
+  const g = durum({ girdi: { sonYaptirim: son("K5") } });
+  check("§14g karşı: kullanılabilir kira varsa ESKİ anlık görüntü yok sayılır (yaptırım kalktı)", g.hesaplananKademe === "NORMAL", ozet(g));
+}
+
 function safBolumu(): void {
   console.log("\n§13 — saflık ve saat yardımcıları");
   const g = girdi(eskiKira(35, 5));
@@ -297,7 +341,7 @@ function safBolumu(): void {
   check("§13b biriken süre: kayıt + hrtime farkı", accumulatedRuntime({ storedMs: 1000, loadHrNs: 5_000_000_000n, nowHrNs: 7_000_000_000n }) === 3000);
   check("§13c hrtime geri gitmiş görünürse birikim küçülmez", accumulatedRuntime({ storedMs: 1000, loadHrNs: 9n, nowHrNs: 1n }) === 1000);
   const tok = signStateRecord(
-    { v: 1, kurulumId: f.kurulumId, kiraId: KIRA_ID, birikenMs: 42, yazildi: msToIso(SIMDI), yuksekSu: msToIso(SIMDI), sonKiraZorlamasi: true, sira: 3 },
+    { v: 1, kurulumId: f.kurulumId, kiraId: KIRA_ID, birikenMs: 42, yazildi: msToIso(SIMDI), yuksekSu: msToIso(SIMDI), sonKiraZorlamasi: true, sonYaptirim: null, sira: 3 },
     f.kurulum.privateKey,
     f.kurulum.x,
   );
@@ -321,6 +365,7 @@ kacisBolumu();
 kimlikBolumu();
 yaptirimBolumu();
 bakimBolumu();
+kaliciKararBolumu();
 safBolumu();
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

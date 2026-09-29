@@ -278,7 +278,7 @@ function istekBolumu(): void {
   beklenen("§3g başka kurulumun anahtarı RED", dogrula(bas(SIMDI), { publicKeyX: anahtarUret("kur-x").x }), "ISTEK_KID");
   beklenen("§3h anahtar başka kurulum kimliğine kayıtlı RED", dogrula(bas(SIMDI), { installationId: f.hakId }), "ISTEK_KURULUM");
   const durum = signStateRecord(
-    { v: 1, kurulumId: f.kurulumId, kiraId: f.hakId, birikenMs: 0, yazildi: msToIso(SIMDI), yuksekSu: msToIso(SIMDI), sonKiraZorlamasi: null, sira: 0 },
+    { v: 1, kurulumId: f.kurulumId, kiraId: f.hakId, birikenMs: 0, yazildi: msToIso(SIMDI), yuksekSu: msToIso(SIMDI), sonKiraZorlamasi: null, sonYaptirim: null, sira: 0 },
     f.kurulum.privateKey,
     f.kurulum.x,
   );
@@ -306,7 +306,7 @@ function pi(ek: Partial<Fingerprint>): Fingerprint {
 
 function parmakIziBolumu(): void {
   console.log("\n§4 — parmak izi: eşik, ölçülemeyen, normalleştirme");
-  const baska = digestFingerprint({ f1: "11111111222233334444555566667777", f2: "8888aaaabbbbccccddddeeee00001234", f3: "BASKADISK99", f4: "00:1B:2C:3D:4E:5F", f5: "1234567" }, f.tuz);
+  const baska = digestFingerprint({ f1: "11111111222233334444555566667777", f2: "8888aaaabbbbccccddddeeee00001234", f3: "BASKADISK99", f4: "MXL9921ZZQ", f5: "1234567" }, f.tuz);
   const k = (a: Fingerprint, b: Fingerprint, f5Haric = false): string => compareFingerprints(a, b, { excludeF5: f5Haric }).result;
   check("§4a 5/5 eşleşme", k(f.parmakIzi, f.parmakIzi) === "ESLESTI");
   check("§4b ⭐ 3/5 eşleşme (2 uyuşmaz) yeter", k(f.parmakIzi, pi({ f4: baska.f4, f5: baska.f5 })) === "ESLESTI");
@@ -317,9 +317,14 @@ function parmakIziBolumu(): void {
   check("§4g 2 ölçülebilir, biri uyuşmaz → geçersiz", k(f.parmakIzi, pi({ f2: null, f3: null, f5: null, f4: baska.f4 })) === "ESLESMEDI");
   check("§4h ⭐ tek ölçülebilir → ÖLÇÜLEMEDİ (üç sonuç, iki değil)", k(f.parmakIzi, { f1: f.parmakIzi.f1, f2: null, f3: null, f4: null, f5: null }) === "OLCULEMEDI");
   check("§4i DR: f5 dışarıda, f5 uyuşmazlığı sayılmaz", compareFingerprints(f.parmakIzi, pi({ f4: baska.f4, f5: baska.f5 }), { excludeF5: true }).matched === 3);
-  const ayni = digestFingerprint({ ...HAM_PARMAK_IZI, f1: "6f1c2b9a0d3e4b579a113c5e7d9f0b24", f4: "00-1a-2b-3c-4d-5e", f3: " s4evnx0n912345 " }, f.tuz);
-  check("§4j normalleştirme: GUID süsü/MAC ayırıcı/boşluk aynı özeti verir", ayni.f1 === f.parmakIzi.f1 && ayni.f4 === f.parmakIzi.f4 && ayni.f3 === f.parmakIzi.f3);
-  check("§4k yerel yönetimli (sanal) MAC ölçülemedi sayılır", normalizeFactor("f4", "02:42:ac:11:00:02") === null);
+  const ayni = digestFingerprint({ ...HAM_PARMAK_IZI, f1: "6f1c2b9a0d3e4b579a113c5e7d9f0b24", f4: "pf3-k7q2a", f3: " s4evnx0n912345 " }, f.tuz);
+  check("§4j normalleştirme: GUID süsü/seri ayırıcısı/boşluk aynı özeti verir", ayni.f1 === f.parmakIzi.f1 && ayni.f4 === f.parmakIzi.f4 && ayni.f3 === f.parmakIzi.f3);
+  check(
+    "§4k RAID birimi genel serisi (f3 `Volume1`) ve yer tutucu sistem serisi (f4) ölçülemedi sayılır",
+    normalizeFactor("f3", "Volume1") === null && normalizeFactor("f3", "VOLUME0") === null &&
+      normalizeFactor("f4", "System Serial Number") === null && normalizeFactor("f4", "Default string") === null,
+  );
+  check("§4k2 karşı: gerçek disk kimliği ve sistem serisi ölçülür", normalizeFactor("f3", "eui.0025388191B46B2E") !== null && normalizeFactor("f4", "PF3K7Q2A") === "pf3k7q2a");
   check("§4l yer tutucu SMBIOS değeri ölçülemedi sayılır", normalizeFactor("f2", "00000000-0000-0000-0000-000000000000") === null && normalizeFactor("f3", "To Be Filled By O.E.M.") === null);
   const tuzlu = digestFingerprint(HAM_PARMAK_IZI, Buffer.alloc(32, 9));
   check("§4m başka kurulum tuzu başka özet üretir (ham kimlik dışarı çıkmaz)", tuzlu.f1 !== f.parmakIzi.f1);

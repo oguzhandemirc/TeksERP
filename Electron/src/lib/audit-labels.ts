@@ -305,6 +305,13 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   // ⚠️ Bu satırı görmek NORMAL DEĞİLDİR: kimlik yalnız kayıt bozulduğunda
   // yenilenir ve yenilenince sahadaki her cihaz "farklı sunucu" uyarısı alır.
   INSTALLATION_ID_REGENERATED: "Kurulum kimliği YENİLENDİ",
+
+  // ── SYSTEM · lisans motoru ──
+  LICENSE_STATE_CHANGED: "Lisans durumu değişti",
+  LICENSE_LEASE_ACCEPTED: "Lisans kirası yenilendi",
+  LICENSE_SANCTION_CHANGED: "Lisans yaptırımı değişti",
+  LICENSE_OBSERVATION_SUMMARY: "Lisans gözlem özeti",
+  LICENSE_ADMIN_ACTION: "Lisans işlemi",
 };
 
 /** Sistem olayının Türkçe adı; bilinmeyen → ham değer (fail-open). */

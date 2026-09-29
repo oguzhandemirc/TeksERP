@@ -2,7 +2,7 @@
   "name": "tekserp-backend",
   "version": "2.11.2",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.21"
   },
   "description": "TeksERP - Tekstil ERP Backend",
   "scripts": {
