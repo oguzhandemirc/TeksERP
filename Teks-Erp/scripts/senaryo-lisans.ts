@@ -129,6 +129,9 @@ function saticiHedefKapisi(url: string): void {
 
 // ---------------------------------------------------------------- düzenek
 const KANAL = "senaryo-kanal";
+/** Etkinleştirme / taşıma kodu: 16 karakter Crockford base32 (`TKS-XXXX-XXXX-XXXX-XXXX`). */
+const KOD_DESENI = /^TKS(-[0-9A-HJKMNP-TV-Z]{4}){4}$/;
+const UUID_DESENI = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const HAK_MODULLERI = ["production.enabled", "finance.enabled"];
 const BAYI_PAROLASI = `senaryo-bayi-${randomBytes(6).toString("hex")}`;
 const PARMAK_IZLERI = {
@@ -194,6 +197,8 @@ async function main(): Promise<number> {
     PORT_TAILNET: "0",
     GENEL_BIND: "127.0.0.1",
     TAILNET_BIND: "127.0.0.1",
+    // Portal 127.0.0.1'den çağrılır: geri döngü yalnız bu bayrakla tailnet kaynağı (satıcıda varsayılan kapalı).
+    TAILNET_LOOPBACK: "1",
     BAKIM_ARALIGI_SN: "2",
     KOPYA_PENCERE_SN: "20",
     PORTAL_GIRIS_HIZ_DK: "1000",
@@ -265,7 +270,8 @@ async function main(): Promise<number> {
     f.istemci.url = f.surec.url;
     const g = await f.istemci.giris();
     if (g.status !== 200) throw new Error(`${f.ad} girişi ${ozet(g)}`);
-    const hazir = await f.istemci.bekle((d) => d.hazir && Boolean(d.kurulum.kurulumId), 30_000);
+    // Lisans kimliği etkinleştirmeden ÖNCE bilinmeyebilir (D14: portalda doğar, yanıtla gelir) — yalnız hazır beklenir.
+    const hazir = await f.istemci.bekle((d) => d.hazir, 30_000);
     if (hazir.ms === null) throw new Error(`${f.ad} lisans motoru hazır olmadı`);
   };
   const durdur = async (f: Fabrika): Promise<void> => {
@@ -298,7 +304,8 @@ async function main(): Promise<number> {
   let portal = null as unknown as PortalIstemcisi;
   const olusturulanlar = { kullanicilar: [hz.yonetici.id] as string[], bayiler: [] as string[], kidler: [...hz.kidler] as string[] };
   // Senaryonun satıcı tarafındaki kimlikleri
-  const S = { musteriId: "", tesisId: "", anaDbId: "", anaHakId: "", lisansNo: "", drDbId: "", kod: "", k4: "", k5: "", yedek: "" };
+  // anaLisansId: ana kurulumun LİSANS kimliği (portalda doğar, D14) — fabrika DB'sinin installationId'si DEĞİL.
+  const S = { musteriId: "", tesisId: "", anaDbId: "", anaLisansId: "", anaHakId: "", lisansNo: "", drDbId: "", kod: "", k4: "", k5: "", yedek: "" };
   const detayKurulum = async (dbId: string): Promise<Record<string, unknown>> => (await portal.istek("GET", `/kurulumlar/${dbId}`)).veri;
   const yaptirim = async (govde: Record<string, unknown>): Promise<Yanit> => portal.istek("POST", `/kurulumlar/${S.anaDbId}/yaptirim`, { sebep: "Senaryo L", ...govde });
   const agirYaptirim = async (kademe: "K4" | "K5"): Promise<Yanit> =>
@@ -320,8 +327,7 @@ async function main(): Promise<number> {
 
     const A = await yeniFabrika("A", anaUrl, PARMAK_IZLERI.A);
     await baslat(A);
-    const I1 = (await A.istemci.detay()).kurulum.kurulumId!;
-    console.log(`🏭 A: ${A.surec!.url} · kurulum ${I1}`);
+    console.log(`🏭 A: ${A.surec!.url}`);
     // Yönetici OLMAYAN kullanıcı (L7'de veri-dışarı izin guard'ı) — lisans etkinleşmeden, yazmalar açıkken.
     const operator = { username: `senaryo${randomBytes(3).toString("hex")}`, password: "senaryo123" };
     const opY = await A.istemci.istek("POST", "/api/admin/users", { ...{ username: operator.username, fullName: "Senaryo Operatör", password: operator.password }, grantOperatorDefaults: true, generateMobileCredentials: false });
@@ -340,9 +346,11 @@ async function main(): Promise<number> {
       const t = await portal.istek("POST", "/tesisler", { musteriId: S.musteriId, ad: "Merkez Tesis" });
       S.tesisId = String(t.veri.id);
       a.kontrol("tesis → 201", t.status === 201, ozet(t));
-      const k = await portal.istek("POST", "/kurulumlar", { tesisId: S.tesisId, kurulumId: I1, sinif: "URETIM", kanalKodu: KANAL, yoklamaAraligiDk: 5 });
+      // Lisans kimliğini portal ÜRETİR (D14): gövde onu taşımaz, yanıt döner.
+      const k = await portal.istek("POST", "/kurulumlar", { tesisId: S.tesisId, sinif: "URETIM", kanalKodu: KANAL, yoklamaAraligiDk: 5 });
       S.anaDbId = String(k.veri.id);
-      a.kontrol("kurulum (fabrikanın installationId'si, URETIM) → 201", k.status === 201 && k.veri.kurulumId === I1, ozet(k));
+      S.anaLisansId = String(k.veri.kurulumId);
+      a.kontrol("kurulum (URETIM) → 201, lisans kimliği satıcıda doğdu", k.status === 201 && UUID_DESENI.test(S.anaLisansId), `${ozet(k)} ${S.anaLisansId}`);
       const h = await portal.istek("POST", `/kurulumlar/${S.anaDbId}/hak`, { moduller: HAK_MODULLERI, kalici: false, bakimBitis: msToIso(saticiSimdi() + 365 * DAY_MS) });
       S.anaHakId = String(h.veri.id);
       S.lisansNo = String(h.veri.lisansNo);
@@ -351,7 +359,7 @@ async function main(): Promise<number> {
       a.kontrol("hak sürüm 1 (kök parolasıyla imza) → 201", s.status === 201 && s.veri.surum === 1, `${ozet(s)} surum=${String(s.veri.surum)}`);
       const kod = await portal.istek("POST", `/kurulumlar/${S.anaDbId}/etkinlestirme-kodu`, {});
       S.kod = String(kod.veri.kod);
-      a.kontrol("etkinleştirme kodu → 201 (16 karakter, TKS-XXXX-XXXX-XXXX-XXXX)", kod.status === 201 && /^TKS(-[0-9A-HJKMNP-TV-Z]{4}){4}$/.test(String(kod.veri.kod)), ozet(kod));
+      a.kontrol("etkinleştirme kodu → 201 (16 karakter, TKS-XXXX-XXXX-XXXX-XXXX)", kod.status === 201 && KOD_DESENI.test(String(kod.veri.kod)), ozet(kod));
     });
 
     // ============================================================ L2
@@ -360,6 +368,7 @@ async function main(): Promise<number> {
       a.kontrol("POST /api/license/etkinlestir (küçük harf + boşluklu elle yazım) → 200", y.status === 200, ozet(y));
       const d = await A.istemci.detay();
       a.kontrol("hak + kira yerelde, lisans no eşleşir", d.hak?.lisansNo === S.lisansNo && Boolean(d.kira?.kiraId), `${d.hak?.lisansNo} kira=${d.kira?.kiraId.slice(0, 8)}`);
+      a.kontrol("lisans kimliği etkinleştirme yanıtından öğrenildi (portalda doğan kimlik, DB kimliği değil)", d.kurulum.kurulumId === S.anaLisansId, `${d.kurulum.kurulumId} / ${S.anaLisansId}`);
       a.kontrol("geçerlilik GECERLI, hesaplanan = uygulanan = NORMAL, kip gözlem", d.durum.gecerlilik === "GECERLI" && d.durum.hesaplananKademe === "NORMAL" && d.durum.uygulananKademe === "NORMAL" && d.durum.kip === "gozlem", `${d.durum.gecerlilik}/${d.durum.hesaplananKademe}/${d.durum.uygulananKademe}/${d.durum.kip}`);
       a.kontrol("parmak izi ESLESTI", d.parmakIzi.karar === "ESLESTI", `${d.parmakIzi.karar} ${d.parmakIzi.eslesen}/${d.parmakIzi.olculebilen}`);
       const pk = await detayKurulum(S.anaDbId);
@@ -593,18 +602,32 @@ async function main(): Promise<number> {
 
     // ============================================================ L12
     const C = await yeniFabrika("C", anaUrl, PARMAK_IZLERI.C);
-    await adim("L12", "taşıma onayı → yeni geçerli, eski düşer", async (a) => {
+    // D8: talep yalnız TALEPtir; onay tek kullanımlık TAŞIMA KODU üretir, yeni makine onu normal etkinleştirme
+    // yolundan kullanınca anahtar değişir. C, A'nın DB'sini taşır ama lisans klasörünü taşımaz (lisans kimliğini
+    // bilmez): talep kimliksizse portal DB kimliği ipucuyla ana kurulumu önerir, hedefi operatör seçer.
+    await adim("L12", "taşıma: talep → portal onayı taşıma kodu → yeni makine kodla etkinleşir, eski düşer", async (a) => {
       await baslat(C);
       const t = await C.istemci.istek("POST", "/api/license/tasima-talebi", { gerekce: "Senaryo L: sunucu değişimi" });
       a.kontrol("C: taşıma talebi → BEKLIYOR", t.status === 200 && t.veri.durum === "BEKLIYOR", `${ozet(t)} ${String(t.veri.durum)}`);
-      const talepler = (await detayKurulum(S.anaDbId)).tasimaTalepleri as Array<{ id: string; durum: string }>;
-      const talep = talepler.find((x) => x.durum === "BEKLIYOR");
-      a.kontrol("portal: talep listede BEKLIYOR", Boolean(talep));
-      const o = await portal.istek("POST", `/tasima-talepleri/${talep?.id}/onayla`, { sebep: "Senaryo L onay" });
-      a.kontrol("portal onay → 200", o.status === 200, ozet(o));
-      const p = await C.istemci.yokla();
+      const cAnahtar = (await C.istemci.detay()).kurulum.anahtarKimligi;
+      const liste = await portal.istek("GET", "/tasima-talepleri?durum=BEKLIYOR");
+      type Talep = { id: string; kurulumId: string | null; yeniAnahtarKimligi: string; onerilenKurulumlar?: { id: string }[] };
+      const talep = ((liste.veri.items ?? []) as Talep[]).find((x) => x.yeniAnahtarKimligi === cAnahtar);
+      a.kontrol(
+        "portal: talep BEKLIYOR listesinde; bağlı ya da (kimliksizse) ana kurulum öneriler arasında",
+        Boolean(talep) && (talep!.kurulumId === S.anaDbId || (talep!.onerilenKurulumlar ?? []).some((k) => k.id === S.anaDbId)),
+        talep ? `bağ=${talep.kurulumId ?? "yok"} öneri=${(talep.onerilenKurulumlar ?? []).length}` : "talep yok",
+      );
+      const o = await portal.istek("POST", `/tasima-talepleri/${talep?.id}/onayla`, { sebep: "Senaryo L onay", kurulumId: S.anaDbId });
+      const tasimaKodu = String((o.veri.tasimaKodu as { kod?: string } | null)?.kod);
+      a.kontrol("portal onay → 200 + tek kullanımlık taşıma kodu (16 karakter)", o.status === 200 && KOD_DESENI.test(tasimaKodu), ozet(o));
+      const e = await C.istemci.istek("POST", "/api/license/etkinlestir", { kod: tasimaKodu });
       const d = await C.istemci.detay();
-      a.kontrol("C: yoklama taşımayı tamamlar → GECERLI, parmak izi ESLESTI", p.outcome === "BASARILI" && d.durum.gecerlilik === "GECERLI" && d.parmakIzi.karar === "ESLESTI", `${p.outcome} ${d.durum.gecerlilik} ${d.parmakIzi.karar}`);
+      a.kontrol(
+        "C: taşıma koduyla etkinleşme → GECERLI, parmak izi ESLESTI, lisans kimliği aynı",
+        e.status === 200 && d.durum.gecerlilik === "GECERLI" && d.parmakIzi.karar === "ESLESTI" && d.kurulum.kurulumId === S.anaLisansId,
+        `${ozet(e)} ${d.durum.gecerlilik} ${d.parmakIzi.karar} ${d.kurulum.kurulumId}`,
+      );
       const pa = await A.istemci.yokla();
       a.kontrol("A (eski anahtar): yoklama → KURULUM_IPTAL", pa.outcome === "BASARISIZ" && pa.code === "KURULUM_IPTAL", `${pa.outcome} ${pa.code ?? ""}`);
       const pk = await detayKurulum(S.anaDbId);
@@ -617,8 +640,7 @@ async function main(): Promise<number> {
     const D = await yeniFabrika("D", drUrl, PARMAK_IZLERI.D);
     await adim("L13", "DR devral → üretim kirası iptal (DEVREDILDI)", async (a) => {
       await baslat(D);
-      const I2 = (await D.istemci.detay()).kurulum.kurulumId!;
-      const k = await portal.istek("POST", "/kurulumlar", { tesisId: S.tesisId, kurulumId: I2, sinif: "DR", kanalKodu: KANAL, yoklamaAraligiDk: 5 });
+      const k = await portal.istek("POST", "/kurulumlar", { tesisId: S.tesisId, sinif: "DR", kanalKodu: KANAL, yoklamaAraligiDk: 5 });
       S.drDbId = String(k.veri.id);
       const h = await portal.istek("POST", `/kurulumlar/${S.drDbId}/hak`, { moduller: HAK_MODULLERI, kalici: true, bakimBitis: msToIso(saticiSimdi() + 365 * DAY_MS) });
       const s = await portal.istek("POST", `/haklar/${String(h.veri.id)}/surum`, { kokParolasi: hz.kokParolasi, sebep: "DR ilk imza" });
@@ -626,7 +648,8 @@ async function main(): Promise<number> {
       a.kontrol("portal: DR kurulumu + hak + kod", k.status === 201 && h.status === 201 && s.status === 201 && kod.status === 201, `${ozet(k)}/${ozet(h)}/${ozet(s)}/${ozet(kod)}`);
       const e = await D.istemci.istek("POST", "/api/license/etkinlestir", { kod: String(kod.veri.kod) });
       a.kontrol("D etkinleşti", e.status === 200, ozet(e));
-      const dr = await D.istemci.istek("POST", "/api/license/dr-devral", { anaKurulumId: I1, gerekce: "Senaryo L: ana sunucu arızası" });
+      // anaKurulumId ananın LİSANS kimliğidir (portaldan/ana Lisans ekranından; DR'nin DB replikası taşımaz).
+      const dr = await D.istemci.istek("POST", "/api/license/dr-devral", { anaKurulumId: S.anaLisansId, gerekce: "Senaryo L: ana sunucu arızası" });
       const dd = await D.istemci.detay();
       a.kontrol("D: dr-devral → 200, GECERLI", dr.status === 200 && dd.durum.gecerlilik === "GECERLI", `${ozet(dr)} ${dd.durum.gecerlilik}`);
       const pk = await detayKurulum(S.anaDbId);
@@ -802,10 +825,9 @@ async function main(): Promise<number> {
       olusturulanlar.kullanicilar.push(kul.id);
       const bayi = new PortalIstemcisi(satici!.genel, "/bayi/api", { kullaniciAdi: kul.kullaniciAdi, parola: hesapParolasi, sir: (hesap.veri.totp as { sir: string }).sir }, saticiSimdi);
       await baslat(E);
-      const I3 = (await E.istemci.detay()).kurulum.kurulumId!;
       const m = await bayi.istek("POST", "/musteriler", { ad: `Senaryo L Bayi Müşterisi ${randomBytes(3).toString("hex")}` });
       const t = await bayi.istek("POST", "/tesisler", { musteriId: String(m.veri.id), ad: "Merkez" });
-      const k = await bayi.istek("POST", "/kurulumlar", { tesisId: String(t.veri.id), kurulumId: I3, sinif: "URETIM", kanalKodu: KANAL });
+      const k = await bayi.istek("POST", "/kurulumlar", { tesisId: String(t.veri.id), sinif: "URETIM", kanalKodu: KANAL });
       // Bakım bitişi tavanın 12 ayının açıkça içinde (sınırdaki eşitlik ay uzunluğuna göre oynar).
       const h = await bayi.istek("POST", `/kurulumlar/${String(k.veri.id)}/hak`, { moduller: HAK_MODULLERI, kalici: true, bakimBitis: msToIso(saticiSimdi() + 330 * DAY_MS) });
       const s = await bayi.istek("POST", `/haklar/${String(h.veri.id)}/surum`, { bayiParolasi: BAYI_PAROLASI, sebep: "bayi ilk imza" });
@@ -816,7 +838,7 @@ async function main(): Promise<number> {
       a.kontrol("fabrika (E) bayi imzalı HAK'la etkinleşti → GECERLI, hak.bayiId = bayi", e.status === 200 && d.durum.gecerlilik === "GECERLI" && d.hak?.bayiId === bayiId, `${ozet(e)} ${d.durum.gecerlilik} bayiId=${d.hak?.bayiId}`);
       const asim = await bayi.istek("POST", `/haklar/${String(h.veri.id)}/surum`, { bayiParolasi: BAYI_PAROLASI, sebep: "tavan dışı", moduller: [...HAK_MODULLERI, "ticaret.enabled"] });
       a.kontrol("tavan dışı modül → 409 BAYI_TAVANI_ASILDI", asim.status === 409 && asim.kod === "BAYI_TAVANI_ASILDI", ozet(asim));
-      const adet = await bayi.istek("POST", "/kurulumlar", { tesisId: String(t.veri.id), kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: KANAL });
+      const adet = await bayi.istek("POST", "/kurulumlar", { tesisId: String(t.veri.id), sinif: "URETIM", kanalKodu: KANAL });
       a.kontrol("kurulum adedi aşımı → 409 BAYI_TAVANI_ASILDI", adet.status === 409 && adet.kod === "BAYI_TAVANI_ASILDI", ozet(adet));
       await durdur(E);
     });
@@ -1023,7 +1045,7 @@ async function main(): Promise<number> {
     await adim("L29", "DR devralımı sonrası eski ana yeniden bağlanınca DEVREDILDI → KISITLI", async (a) => {
       C.aktarici.kipAyarla("kesik");
       await baslat(D);
-      const dr = await D.istemci.istek("POST", "/api/license/dr-devral", { anaKurulumId: I1, gerekce: "Senaryo L29: ana ağdan koptu" });
+      const dr = await D.istemci.istek("POST", "/api/license/dr-devral", { anaKurulumId: S.anaLisansId, gerekce: "Senaryo L29: ana ağdan koptu" });
       a.kontrol("ana kopukken D devraldı → 200", dr.status === 200, ozet(dr));
       const once = await C.istemci.detay();
       a.kontrol("kopuk ana henüz bilmiyor (devredildi=false)", !once.durum.devredildi);

@@ -49,6 +49,13 @@ enum KodDurumu {
   IPTAL
 }
 
+/// Protokol `ACTIVATION_CODE_KINDS` ile birebir: `ilk` hiç etkinleşmemiş kurulumu açar (ya da aynı
+/// anahtarla yeniden etkinleştirir); `tasima` onaylı taşıma talebinin tek kullanımlık kodudur (D8).
+enum KodTuru {
+  ilk
+  tasima
+}
+
 enum TasimaDurumu {
   BEKLIYOR
   ONAYLANDI
@@ -111,6 +118,10 @@ enum KopyaUyariTuru {
   PARMAK_IZI_UYUSMAZ
   /// Aynı parmak izi ardışık "yakala" üretiyor (ayırt edilemeyen tam kopya) — yalnız uyarı.
   AYNI_PARMAK_IZI_TEKRAR
+  /// Yoklamada sunulan kira bu kurulumun kira defterinde yok (başka kurulumdan taşınmış/uydurulmuş) — yalnız uyarı.
+  YABANCI_KIRA
+  /// Yoklamadaki kip (gözlem/zorla) kurulumun kirasındaki zorlamayla uyuşmuyor (kira/durum silinmiş) — yalnız uyarı.
+  KIP_UYUSMAZ
 }
 
 enum KopyaUyariDurumu {
@@ -195,12 +206,13 @@ model Tesis {
   @@map("tesis")
 }
 
-/// Bir fabrika sunucusu (backend kurulumu). `kurulumId` fabrikanın `installationId`sidir
-/// (HAK bu kimliğe bağlanır); `id` satıcının kendi anahtarıdır.
+/// Bir fabrika sunucusu (backend kurulumu). `kurulumId` LİSANS kimliğidir: portalda doğar (D14),
+/// fabrikaya etkinleştirme yanıtıyla gider ve `LICENSE_DIR`de durur; HAK/kira/kod ona bağlanır.
+/// Fabrika DB'sinin installationId'si yalnız bilgidir (`sonOrtam.installationId`). `id` satıcının kendi anahtarıdır.
 model Kurulum {
   id        String        @id @default(uuid()) @db.Uuid
   tesisId   String        @db.Uuid
-  /// Fabrikanın installationId'si — HAK ve kira bu kimliğe bağlanır.
+  /// Lisans kimliği — portal üretir (sunucu tarafında `randomUUID`), dışarıdan verilmez.
   kurulumId String        @unique @db.Uuid
   ad        String?       @db.VarChar(200)
   sinif     LisansSinifi
@@ -328,18 +340,21 @@ model Kira {
 }
 
 /// Tekrar oynatma defteri — TELEMETRİ sınıfı: `sonKullanim` geçince budanır (istek zaten
-/// ±10 dk zaman denetiminden geçemez). `(kurulumId, nonce)` UNIQUE = atomik kayıt.
+/// ±10 dk zaman denetiminden geçemez). `(kapsam, nonce)` UNIQUE = atomik kayıt. Kapsam kurulumun
+/// satıcı kimliğidir; kurulumsuz taşıma talebinde `kid:<anahtar kimliği>` (o satırda `kurulumId` boş).
 model NonceDefteri {
   id          String   @id @default(uuid()) @db.Uuid
-  kurulumId   String   @db.Uuid
+  kapsam      String   @db.VarChar(80)
+  kurulumId   String?  @db.Uuid
   nonce       String   @db.VarChar(64)
   amac        String   @db.VarChar(20)
   sonKullanim DateTime @db.Timestamptz
   createdAt   DateTime @default(now()) @db.Timestamptz
 
-  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
+  kurulum Kurulum? @relation(fields: [kurulumId], references: [id], onDelete: Restrict)
 
-  @@unique([kurulumId, nonce])
+  @@unique([kapsam, nonce])
+  @@index([kurulumId])
   @@index([sonKullanim])
   @@map("nonce_defteri")
 }
@@ -472,12 +487,16 @@ model TaksitKalemi {
 // ETKİNLEŞTİRME · TAŞIMA · KOPYA
 // -----------------------------------------------------------------------------
 
-/// Tek kullanımlık etkinleştirme kodu. Düz metin saklanmaz: sha256 özeti + son 4 karakter.
+/// Tek kullanımlık etkinleştirme kodu. Düz metin saklanmaz: sunucu sırrıyla (pepper, anahtar
+/// dizininde) HMAC-SHA256 + son 4 karakter — son 4 YALNIZ burada (denetim/kurulum kaydı kod kimliğini taşır).
 model EtkinlestirmeKodu {
   id                     String    @id @default(uuid()) @db.Uuid
   kurulumId              String    @db.Uuid
   kodOzeti               String    @unique @db.VarChar(64)
   kodSonu                String    @db.VarChar(4)
+  tur                    KodTuru   @default(ilk)
+  /// Yalnız `tasima` kodunda: onaylanan talep (kodu yalnız o talebin anahtarı kullanır).
+  tasimaTalebiId         String?   @unique @db.Uuid
   durum                  KodDurumu @default(AKTIF)
   gecerlilikBitis        DateTime  @db.Timestamptz
   kullanimZamani         DateTime? @db.Timestamptz
@@ -489,17 +508,20 @@ model EtkinlestirmeKodu {
   createdAt              DateTime  @default(now()) @db.Timestamptz
   updatedAt              DateTime  @updatedAt @db.Timestamptz
 
-  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
-  kira    Kira?   @relation(fields: [kiraId], references: [id], onDelete: NoAction)
+  kurulum      Kurulum       @relation(fields: [kurulumId], references: [id])
+  kira         Kira?         @relation(fields: [kiraId], references: [id], onDelete: NoAction)
+  tasimaTalebi TasimaTalebi? @relation(fields: [tasimaTalebiId], references: [id], onDelete: NoAction)
 
   @@index([kurulumId])
   @@map("etkinlestirme_kodu")
 }
 
 /// Taşıma talebi: yeni anahtar + parmak izi, portal onayını bekler (durum makinesi, atomik claim).
+/// Kimliksiz talep (yeni makine lisans kimliğini bilmiyor) kuruluma BAĞSIZ doğar (`kurulumId` boş);
+/// bağı onaylayan operatör kurar. Onay tek kullanımlık `tasima` kodu üretir (D8), anahtar değişimi kodla.
 model TasimaTalebi {
   id                 String       @id @default(uuid()) @db.Uuid
-  kurulumId          String       @db.Uuid
+  kurulumId          String?      @db.Uuid
   yeniAcikAnahtar    String       @db.VarChar(64)
   yeniAnahtarKimligi String       @db.VarChar(64)
   yeniParmakIzi      Json
@@ -512,10 +534,12 @@ model TasimaTalebi {
   createdAt          DateTime     @default(now()) @db.Timestamptz
   updatedAt          DateTime     @updatedAt @db.Timestamptz
 
-  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
+  kurulum Kurulum?            @relation(fields: [kurulumId], references: [id], onDelete: Restrict)
+  kodlar  EtkinlestirmeKodu[]
 
   @@unique([kurulumId, yeniAnahtarKimligi])
   @@index([durum])
+  @@index([yeniAnahtarKimligi])
   @@map("tasima_talebi")
 }
 
@@ -681,6 +705,9 @@ model PortalKullanici {
   totpSonAdim    Int?
   basarisizGiris Int        @default(0)
   kilitBitis     DateTime?  @db.Timestamptz
+  /// İmza parolası (kök/bayi) ardışık hata sayacı ve süreli kilidi (D11) — giriş kilidinden AYRI.
+  imzaBasarisiz  Int        @default(0)
+  imzaKilitBitis DateTime?  @db.Timestamptz
   sonGiris       DateTime?  @db.Timestamptz
   parolaDegisim  DateTime   @db.Timestamptz
   aktif          Boolean    @default(true)

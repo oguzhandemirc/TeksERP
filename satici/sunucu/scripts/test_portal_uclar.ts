@@ -78,6 +78,7 @@ async function main(): Promise<void> {
     };
 
     console.log("\n§1 satıcı akışı");
+    const akisBaslangici = new Date(Date.now() - 1000);
     await s("get", "/katalog", "/katalog", 200);
     const kn = await s("post", "/kanallar", "/kanallar", 201, { kod: kanal, ad: "Uçlar kanalı", tur: "hazirlik" });
     const knTekrar = await portalIstek(sunucu.tailnet, "/portal/api/kanallar", { cerez, govde: { clientToken: randomUUID(), kod: kanal, ad: "x", tur: "uretim" } });
@@ -97,11 +98,14 @@ async function main(): Promise<void> {
     tesisler.push(tId);
     await s("patch", "/tesisler/:id", `/tesisler/${tId}`, 200, { ad: "Merkez Tesis" });
     await s("get", "/tesisler", `/tesisler?musteriId=${mId}`, 200);
-    const kurulumId = randomUUID();
-    const kayitsiz = await portalIstek(sunucu.tailnet, "/portal/api/kurulumlar", { cerez, govde: { clientToken: randomUUID(), tesisId: tId, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: "kayitsiz-kanal-yok" } });
+    const kayitsiz = await portalIstek(sunucu.tailnet, "/portal/api/kurulumlar", { cerez, govde: { clientToken: randomUUID(), tesisId: tId, sinif: "URETIM", kanalKodu: "kayitsiz-kanal-yok" } });
     kontrol("§1k2 kayıtlı olmayan kanala kurulum açılamaz → 400", kayitsiz.status === 400, `${kayitsiz.status} ${kayitsiz.kod ?? ""}`);
-    const k = await s("post", "/kurulumlar", "/kurulumlar", 201, { tesisId: tId, kurulumId, sinif: "URETIM", kanalKodu: kanal, ad: "Ana sunucu" });
+    const istemciKimligi = await portalIstek(sunucu.tailnet, "/portal/api/kurulumlar", { cerez, govde: { clientToken: randomUUID(), tesisId: tId, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: kanal } });
+    kontrol("§1k3 lisans kimliğini istemci VEREMEZ (D14; KATI gövde) → 400", istemciKimligi.status === 400 && istemciKimligi.kod === "GOVDE_GECERSIZ", `${istemciKimligi.status} ${istemciKimligi.kod ?? ""}`);
+    const k = await s("post", "/kurulumlar", "/kurulumlar", 201, { tesisId: tId, sinif: "URETIM", kanalKodu: kanal, ad: "Ana sunucu" });
     const kId = k.veri.id as string;
+    const kurulumId = k.veri.kurulumId as string;
+    kontrol("§1k4 ✓K lisans kimliği sunucuda doğdu (UUID, satıcı kaydının id'sinden ayrı)", /^[0-9a-f-]{36}$/.test(kurulumId) && kurulumId !== kId, kurulumId);
     kurulumlar.push(kId);
     await s("patch", "/kurulumlar/:id", `/kurulumlar/${kId}`, 200, { yoklamaAraligiDk: 30, sinif: "TEST" });
     await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${kId}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), sinif: "URETIM" } });
@@ -170,14 +174,23 @@ async function main(): Promise<void> {
     await s("get", "/tasima-talepleri", "/tasima-talepleri?durum=BEKLIYOR", 200);
     await s("post", "/tasima-talepleri/:id/reddet", `/tasima-talepleri/${red}/reddet`, 200, { sebep: "tanımadığımız makine" });
     const onay = await tasi();
-    await s("post", "/tasima-talepleri/:id/onayla", `/tasima-talepleri/${onay}/onayla`, 200, { sebep: "müşteri aradı" });
+    const onayYanit = await s("post", "/tasima-talepleri/:id/onayla", `/tasima-talepleri/${onay}/onayla`, 200, { sebep: "müşteri aradı" });
+    const tasimaKodu = onayYanit.veri.tasimaKodu as { kod?: string | null; kodSonu?: string } | null;
+    kontrol("§1l onay tek kullanımlık TAŞIMA KODU döner (düz kod yalnız bu yanıtta)", /^TKS(-[0-9A-Z]{4}){4}$/.test(String(tasimaKodu?.kod)) && tasimaKodu?.kodSonu === String(tasimaKodu?.kod).slice(-4), JSON.stringify(tasimaKodu?.kodSonu));
+    const saklananlar = await prisma.portalIslemi.findMany({ where: { eylem: { in: ["KOD_URET", "TASIMA_ONAYLANDI"] }, createdAt: { gte: akisBaslangici } } });
+    const saklananMetin = JSON.stringify(saklananlar.map((r) => r.yanit));
+    kontrol(
+      "§1l2 saklanan (tekrar) yanıt ne kodu ne son 4'ünü taşır — son 4 YALNIZ kod satırında",
+      saklananlar.length >= 2 && !saklananMetin.includes("kodSonu") && !saklananMetin.includes(String(tasimaKodu?.kod)) && !saklananMetin.includes(String(kod.veri.kod)),
+      `${saklananlar.length} satır`,
+    );
 
     await s("post", "/kurulumlar/:id/iptal", `/kurulumlar/${kId}/iptal`, 200, { sebep: "sözleşme feshi" });
     await s("post", "/kurulumlar/:id/iptal-geri-al", `/kurulumlar/${kId}/iptal-geri-al`, 200, { sebep: "yanlış kurulum iptal edildi" });
     await prisma.kurulum.update({ where: { id: kId }, data: { durum: "DEVREDILDI" } });
     await s("post", "/kurulumlar/:id/dr-geri-al", `/kurulumlar/${kId}/dr-geri-al`, 200, { sebep: "ana sunucu döndü" });
 
-    const bos = await s("post", "/kurulumlar", "/kurulumlar", 201, { tesisId: tId, kurulumId: randomUUID(), sinif: "TEST", kanalKodu: kanal });
+    const bos = await s("post", "/kurulumlar", "/kurulumlar", 201, { tesisId: tId, sinif: "TEST", kanalKodu: kanal });
     kurulumlar.push(bos.veri.id as string);
     const canliPasif = await portalIstek(sunucu.tailnet, `/portal/api/kurulumlar/${kId}/pasif`, { cerez, govde: { clientToken: randomUUID(), sebep: "x" } });
     kontrol("§1f ETKİN kurulum pasife alınamaz (önce iptal) → 409", canliPasif.status === 409, `${canliPasif.status}`);
@@ -267,12 +280,19 @@ async function main(): Promise<void> {
     await b("get", "/musteriler/:id", `/musteriler/${bm.veri.id as string}`, 200);
     const bt = await b("post", "/tesisler", "/tesisler", 201, { musteriId: bm.veri.id, ad: "Tesis" });
     await b("get", "/tesisler", "/tesisler", 200);
-    const bk = await b("post", "/kurulumlar", "/kurulumlar", 201, { tesisId: bt.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: "bayi-kanal" });
+    const bk = await b("post", "/kurulumlar", "/kurulumlar", 201, { tesisId: bt.veri.id, sinif: "URETIM", kanalKodu: "bayi-kanal" });
     await b("get", "/kurulumlar", "/kurulumlar", 200);
     const bh = await b("post", "/kurulumlar/:id/hak", `/kurulumlar/${bk.veri.id as string}/hak`, 201, { kalici: true, bakimBitis: new Date(Date.now() + 365 * DAY_MS).toISOString() });
     await b("post", "/haklar/:id/surum", `/haklar/${bh.veri.id as string}/surum`, 201, { bayiParolasi: "uclar-bayi-parolasi", sebep: "ilk imza" });
     await b("get", "/haklar/:id", `/haklar/${bh.veri.id as string}`, 200);
-    await b("post", "/kurulumlar/:id/etkinlestirme-kodu", `/kurulumlar/${bk.veri.id as string}/etkinlestirme-kodu`, 201, {});
+    const bKod = await b("post", "/kurulumlar/:id/etkinlestirme-kodu", `/kurulumlar/${bk.veri.id as string}/etkinlestirme-kodu`, 201, {});
+    const bSaklanan = await prisma.portalIslemi.findMany({ where: { eylem: "BAYI_KOD_URET", createdAt: { gte: akisBaslangici } } });
+    const bSaklananMetin = JSON.stringify(bSaklanan.map((r) => r.yanit));
+    kontrol(
+      "§3c bayinin saklanan kod yanıtı ne kodu ne son 4'ünü taşır",
+      bSaklanan.length >= 1 && !bSaklananMetin.includes("kodSonu") && !bSaklananMetin.includes(String(bKod.veri.kod)),
+      `${bSaklanan.length} satır`,
+    );
     const bAyrinti = await b("get", "/kurulumlar/:id", `/kurulumlar/${bk.veri.id as string}`, 200);
     kontrol("§3b bayi künyesi dar: yaptırım defteri / kiralar / parmak izi YOK", !("yaptirimDefteri" in bAyrinti.veri) && !("kiralar" in bAyrinti.veri) && (bAyrinti.veri.kurulum as Record<string, unknown>).kabulEdilenParmakIzi === undefined);
 

@@ -30,6 +30,15 @@ function cursorArgs(cursor: string | undefined, limit: number) {
   };
 }
 
+/**
+ * Bayi görünümünde `yapan`: satıcı kullanıcı adı ve BAŞKA bayinin kullanıcı adı gösterilmez (rol ailesi kalır);
+ * bayinin kendi hesapları ve sistem aktörleri (kurulum · bakım) olduğu gibi.
+ */
+async function dealerActorMask(db: Db, dealerId: string): Promise<(actor: string) => string> {
+  const own = new Set((await db.portalKullanici.findMany({ where: { bayiId: dealerId }, select: { kullaniciAdi: true } })).map((u) => `bayi:${u.kullaniciAdi}`));
+  return (actor) => (own.has(actor) ? actor : actor.startsWith("satici:") ? "satici" : actor.startsWith("bayi:") ? "bayi" : actor);
+}
+
 const dealerCustomerWhere = (dealerId: string | undefined): Prisma.MusteriWhereInput => (dealerId ? { bayiId: dealerId } : {});
 const dealerInstallationWhere = (dealerId: string | undefined): Prisma.KurulumWhereInput => (dealerId ? { tesis: { musteri: { bayiId: dealerId } } } : {});
 
@@ -140,13 +149,21 @@ export async function installationDetail(db: Db, id: string, g: { dealerId?: str
     take: 20,
     select: { id: true, kodSonu: true, durum: true, gecerlilikBitis: true, kullanimZamani: true, yapan: true, createdAt: true },
   });
+  if (dealerView) {
+    const mask = await dealerActorMask(db, g.dealerId!);
+    return {
+      kurulum: { ...inst, kabulEdilenParmakIzi: undefined },
+      hak,
+      hakSurumleri: versions.map((v) => ({ ...v, yapan: mask(v.yapan) })),
+      etkinlestirmeKodlari: codes.map((k) => ({ ...k, yapan: mask(k.yapan) })),
+    };
+  }
   const base = {
     kurulum: { ...inst, kabulEdilenParmakIzi: undefined },
     hak,
     hakSurumleri: versions,
     etkinlestirmeKodlari: codes,
   };
-  if (dealerView) return base;
   const sanctions = await db.yaptirimEylemi.findMany({ where: { kurulumId: inst.id }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
   const leases = await db.kira.findMany({
     where: { kurulumId: inst.id },
@@ -193,7 +210,9 @@ export async function entitlementDetail(db: Db, id: string, g: { dealerId?: stri
     },
   });
   if (!hak) throw notFoundError("Hak");
-  return hak;
+  if (!g.dealerId) return hak;
+  const mask = await dealerActorMask(db, g.dealerId);
+  return { ...hak, surumler: hak.surumler.map((v) => ({ ...v, yapan: mask(v.yapan) })) };
 }
 
 // ---------------------------------------------------------------- yaptırım · talepler
@@ -204,6 +223,17 @@ export async function listPlannedActions(db: Db, g: { status?: "BEKLIYOR" | "UYG
     ...cursorArgs(g.cursor, g.limit),
   });
   return page(rows, g.limit);
+}
+
+/** Bağsız (kimliksiz) talep için İPUCU: DB kimliği (`ortam.installationId`, bilgi) son yoklamasında aynı olan kurulumlar. */
+async function suggestedInstallations(db: Db, ortam: unknown) {
+  const dbId = (ortam as { installationId?: unknown } | null)?.installationId;
+  if (typeof dbId !== "string") return [];
+  return db.kurulum.findMany({
+    where: { aktif: true, sonOrtam: { path: ["installationId"], equals: dbId } },
+    select: { id: true, kurulumId: true, ad: true, durum: true, tesis: { select: { ad: true, musteri: { select: { ad: true } } } } },
+    take: 5,
+  });
 }
 
 export async function listTransfers(db: Db, g: { status?: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI"; cursor?: string; limit: number }) {
@@ -224,7 +254,9 @@ export async function listTransfers(db: Db, g: { status?: "BEKLIYOR" | "ONAYLAND
     },
     ...cursorArgs(g.cursor, g.limit),
   });
-  return page(rows, g.limit);
+  const out = [];
+  for (const r of rows) out.push({ ...r, onerilenKurulumlar: r.kurulumId === null && r.durum === "BEKLIYOR" ? await suggestedInstallations(db, r.ortam) : [] });
+  return page(out, g.limit);
 }
 
 export async function listCopyAlerts(db: Db, g: { status?: "ACIK" | "KAPANDI"; cursor?: string; limit: number }) {
@@ -303,11 +335,13 @@ export async function keyStatus(ctx: VendorContext, db: Db, nowMs: number) {
 export async function dealerSelf(db: Db, dealerId: string) {
   const dealer = await db.bayi.findUnique({ where: { id: dealerId } });
   if (!dealer) throw notFoundError("Bayi");
+  const ceiling = await currentCeiling(db, dealer);
+  const mask = await dealerActorMask(db, dealer.id);
   return {
     id: dealer.id,
     ad: dealer.ad,
     anahtarBagli: dealer.anahtarKid !== null,
-    tavan: await currentCeiling(db, dealer),
+    tavan: ceiling ? { ...ceiling, yapan: mask(ceiling.yapan) } : null,
     kullanim: await dealerUsage(db, dealer.id),
   };
 }

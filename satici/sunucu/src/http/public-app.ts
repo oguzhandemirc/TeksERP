@@ -15,37 +15,51 @@ import {
   openEnvelope,
 } from "../lisans-protokol";
 import { VendorError } from "../lib/errors";
-import { processActivation } from "../services/activation.service";
+import { handleActivation } from "../services/activation.service";
 import type { VendorContext } from "../services/context";
 import type { DoorbellHub } from "../services/doorbell";
-import { processDrTakeover } from "../services/dr.service";
+import { drTakeoverTarget, processDrTakeover } from "../services/dr.service";
 import { authenticateRequest } from "../services/installation-auth";
 import { processPoll } from "../services/poll.service";
-import { processTransferRequest } from "../services/transfer.service";
+import { handleTransferRequest } from "../services/transfer.service";
 import { parseJsonBody, parseStrict, rawBodyOf } from "./body";
+import { proxyTrustFrom } from "./client-address";
 import { DEALER_PORTAL_ROUTES } from "./dealer-routes";
 import { accessLog, errorHandler, notFound } from "./error-handler";
 import { createPortalRouter } from "./portal-http";
 import { qrPage } from "./qr-page";
-import { rateLimit } from "./rate-limit";
+import { FixedWindowLimiter, rateLimit, rateLimited } from "./rate-limit";
 import { createWebAppRouter } from "./web-static";
 
-/** Gövdedeki açık anahtar (etkinleştirme/taşıma): imzayı doğrulamadan önce gerekir. */
-function bodyKey(json: Record<string, unknown>): string {
-  if (typeof json.acikAnahtar !== "string") throw new VendorError(400, "GOVDE_GECERSIZ", "Gövdede kurulum açık anahtarı yok");
-  return json.acikAnahtar;
+/** Kurulum (ya da kurulumsuz anahtar) başına sınır — imza doğrulandıktan SONRA sayılır (başkasının kotası tüketilemez). */
+type ScopeLimit = (scope: string) => void;
+
+function scopeLimiter(perMinute: number): ScopeLimit {
+  const limiter = new FixedWindowLimiter(perMinute);
+  return (scope) => {
+    const retry = limiter.hit(scope);
+    if (retry !== null) throw rateLimited(retry);
+  };
 }
 
-async function handleActivation(ctx: VendorContext, header: unknown, raw: Buffer, nowMs: number) {
-  const json = parseJsonBody(raw);
-  const auth = await authenticateRequest({ header, rawBody: raw, purposes: ["etkinlestir"], nowMs, keyFromBody: bodyKey(json) });
-  return processActivation(ctx, auth, parseStrict(ActivateRequestSchema, json), nowMs);
+// Her uçta sıra: ham gövde → KATI şema (ucuz) → imza → uca özgü ön denetim → kurulum hız sınırı → nonce → kilit/tx.
+interface SignedCall {
+  readonly ctx: VendorContext;
+  readonly header: unknown;
+  readonly raw: Buffer;
+  readonly nowMs: number;
+  readonly limit: ScopeLimit;
 }
 
-async function handlePoll(ctx: VendorContext, header: unknown, raw: Buffer, nowMs: number, purposes: ("yokla" | "cevrimdisi")[]) {
-  const json = parseJsonBody(raw);
-  const auth = await authenticateRequest({ header, rawBody: raw, purposes, nowMs });
-  return processPoll(ctx, auth, parseStrict(PollRequestSchema, json), nowMs);
+async function activation(c: SignedCall) {
+  const body = parseStrict(ActivateRequestSchema, parseJsonBody(c.raw));
+  return handleActivation(c.ctx, { header: c.header, rawBody: c.raw, body, nowMs: c.nowMs, limit: c.limit });
+}
+
+async function poll(c: SignedCall & { readonly purposes: ("yokla" | "cevrimdisi")[] }) {
+  const body = parseStrict(PollRequestSchema, parseJsonBody(c.raw));
+  const auth = await authenticateRequest({ header: c.header, rawBody: c.raw, purposes: c.purposes, nowMs: c.nowMs, limit: c.limit });
+  return processPoll(c.ctx, auth, body, c.nowMs);
 }
 
 export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Express {
@@ -54,17 +68,22 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
   app.set("etag", false);
   app.use(accessLog);
   const raw = express.raw({ type: () => true, limit: "96kb" });
+  const trust = proxyTrustFrom(ctx.config);
+  const limit = scopeLimiter(ctx.config.V1_HIZ_KURULUM_DK);
 
   app.get("/saglik", (_req, res) => {
     res.set("Cache-Control", "no-store").json({ success: true });
   });
 
+  // İstemci adresi başına sınır: gövde okunmadan, imza doğrulanmadan ÖNCE (en ucuz kapı).
+  app.use("/v1", rateLimit({ perMinute: ctx.config.V1_HIZ_IP_DK, trust }));
+
   app.post(ENDPOINTS.ACTIVATE, raw, async (req: Request, res: Response) => {
-    res.json(await handleActivation(ctx, req.get(REQUEST_HEADER), rawBodyOf(req.body), Date.now()));
+    res.json(await activation({ ctx, header: req.get(REQUEST_HEADER), raw: rawBodyOf(req.body), nowMs: Date.now(), limit }));
   });
 
   app.post(ENDPOINTS.POLL, raw, async (req: Request, res: Response) => {
-    res.json(await handlePoll(ctx, req.get(REQUEST_HEADER), rawBodyOf(req.body), Date.now(), ["yokla"]));
+    res.json(await poll({ ctx, header: req.get(REQUEST_HEADER), raw: rawBodyOf(req.body), nowMs: Date.now(), limit, purposes: ["yokla"] }));
   });
 
   // Çevrimdışı/aktarma: dış istek imzasızdır (panel ya da telefon taşır); güven zarfın içindeki
@@ -76,36 +95,35 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
     if (!opened.ok) throw new VendorError(400, "ZARF_BICIM", opened.message);
     const inner = parseJsonBody(opened.value.body);
     const isActivation = isPlainObject(inner) && "kod" in inner;
-    res.json(
-      isActivation
-        ? await handleActivation(ctx, opened.value.request, opened.value.body, nowMs)
-        : await handlePoll(ctx, opened.value.request, opened.value.body, nowMs, ["yokla", "cevrimdisi"]),
-    );
+    const call: SignedCall = { ctx, header: opened.value.request, raw: opened.value.body, nowMs, limit };
+    res.json(isActivation ? await activation(call) : await poll({ ...call, purposes: ["yokla", "cevrimdisi"] }));
   });
 
   app.post(ENDPOINTS.TRANSFER, raw, async (req: Request, res: Response) => {
-    const nowMs = Date.now();
     const body = rawBodyOf(req.body);
-    const json = parseJsonBody(body);
-    const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: body, purposes: ["tasima"], nowMs, keyFromBody: bodyKey(json) });
-    res.json(await processTransferRequest(ctx, auth, parseStrict(TransferRequestSchema, json), nowMs));
+    const parsed = parseStrict(TransferRequestSchema, parseJsonBody(body));
+    res.json(await handleTransferRequest(ctx, { header: req.get(REQUEST_HEADER), rawBody: body, body: parsed, nowMs: Date.now(), limit }));
   });
 
   app.post(ENDPOINTS.DR_TAKEOVER, raw, async (req: Request, res: Response) => {
     const nowMs = Date.now();
     const body = rawBodyOf(req.body);
-    const json = parseJsonBody(body);
-    const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: body, purposes: ["dr-devral"], nowMs });
-    res.json(await processDrTakeover(ctx, auth, parseStrict(DrTakeoverRequestSchema, json), nowMs));
+    const parsed = parseStrict(DrTakeoverRequestSchema, parseJsonBody(body));
+    const auth = await authenticateRequest({
+      header: req.get(REQUEST_HEADER),
+      rawBody: body,
+      purposes: ["dr-devral"],
+      nowMs,
+      limit,
+      precheck: async (a) => void (await drTakeoverTarget(a.installation, parsed)),
+    });
+    res.json(await processDrTakeover(ctx, auth, parsed, nowMs));
   });
 
-  // KAPI ZİLİ (SSE): kurulum imzalı abonelik; içerik taşımaz, yalnız "şimdi yokla".
+  // KAPI ZİLİ (SSE): kurulum imzalı abonelik; içerik taşımaz, yalnız "şimdi yokla". Kurulum başına ≤ ZIL_AZAMI_ABONE.
   app.get(ENDPOINTS.DOORBELL, async (req: Request, res: Response) => {
     if (!hub) throw new VendorError(500, "SUNUCU_HATASI", "Kapı zili bu süreçte kapalı");
-    const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: Buffer.alloc(0), purposes: ["zil"], nowMs: Date.now() });
-    if (auth.role === "PENDING_TRANSFER") {
-      throw new VendorError(409, "TASIMA_ONAYI_BEKLIYOR", "Bu makinenin taşıma talebi onay bekliyor");
-    }
+    const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: Buffer.alloc(0), purposes: ["zil"], nowMs: Date.now(), limit });
     res.status(200).set({
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
@@ -117,7 +135,7 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
     hub.subscribe(auth.installation.id, res);
   });
 
-  app.get("/q", rateLimit({ perMinute: ctx.config.QR_HIZ_SINIRI_DK, proxyHeader: ctx.config.VEKIL_IP_BASLIGI }), qrPage);
+  app.get("/q", rateLimit({ perMinute: ctx.config.QR_HIZ_SINIRI_DK, trust }), qrPage);
 
   app.use("/bayi/api", createPortalRouter(ctx, "GENEL", DEALER_PORTAL_ROUTES));
   app.use("/bayi", createWebAppRouter(ctx.config.PORTAL_WEB_DIZINI, "bayi"));

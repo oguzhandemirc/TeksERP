@@ -66,6 +66,12 @@ async function main(): Promise<void> {
       zamanMs: Date.now() - CLOCK_SKEW_MS - 60_000,
     });
     kontrol("§2a 11 dk eski istek → 401 ISTEK_ZAMAN", eski.status === 401 && eski.kod === "ISTEK_ZAMAN", `${eski.status} ${eski.kod}`);
+    const sunucuSaati = (eski.json.details as { sunucuSaati?: unknown } | undefined)?.sunucuSaati;
+    kontrol(
+      "§2a2 ISTEK_ZAMAN yanıtı satıcının saatini taşır (details.sunucuSaati, ISO, şimdiye ±5 sn — D4)",
+      typeof sunucuSaati === "string" && Math.abs(Date.parse(sunucuSaati) - Date.now()) < 5_000,
+      String(sunucuSaati),
+    );
     const ileri = await imzaliPost(sunucu.genel, ENDPOINTS.POLL, {
       kurulumId: k.kurulumId,
       amac: "yokla",
@@ -85,7 +91,7 @@ async function main(): Promise<void> {
       nonce: ileriNonce,
     });
     kontrol("§2c +9 dk damgalı istek tolerans içinde → 200", kabul.status === 200, `${kabul.status} ${kabul.kod ?? ""}`);
-    const satir = await prisma.nonceDefteri.findUniqueOrThrow({ where: { kurulumId_nonce: { kurulumId: k.kurulumDbId, nonce: ileriNonce } } });
+    const satir = await prisma.nonceDefteri.findUniqueOrThrow({ where: { kapsam_nonce: { kapsam: k.kurulumDbId, nonce: ileriNonce } } });
     kontrol(
       "§2d saklama = istek ZAMANI + 10 dk (şimdi + 19 dk'dan az değil)",
       satir.sonKullanim.getTime() >= ileriZaman + CLOCK_SKEW_MS - 1_000,
@@ -126,11 +132,11 @@ async function main(): Promise<void> {
     kontrol("§4a aynı nonce BAŞKA kurulumda kabul (ad alanı kurulum başına)", ilkEt.status === 200 && ikinciEt.status === 200, `${ilkEt.status}/${ikinciEt.status}`);
     let p2002 = false;
     try {
-      await prisma.nonceDefteri.create({ data: { kurulumId: k2.kurulumDbId, nonce: ortakNonce, amac: "yokla", sonKullanim: new Date() } });
+      await prisma.nonceDefteri.create({ data: { kapsam: k2.kurulumDbId, kurulumId: k2.kurulumDbId, nonce: ortakNonce, amac: "yokla", sonKullanim: new Date() } });
     } catch (err) {
       p2002 = isUniqueViolation(err);
     }
-    kontrol("§4b DB seddi: aynı (kurulum, nonce) ikinci satır → P2002", p2002);
+    kontrol("§4b DB seddi: aynı (kapsam, nonce) ikinci satır → P2002", p2002);
   } finally {
     await sunucu.durdur();
     await temizleKurulumlar(temizlenecek, ortam.kidler);

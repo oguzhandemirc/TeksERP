@@ -100,7 +100,7 @@ export function BayiInstallationDetailPage() {
       <Section title="Özet">
         <KeyValues
           items={[
-            ["Kurulum kimliği (installationId)", <code key="k">{inst.kurulumId}</code>],
+            ["Lisans kimliği (kurulumId)", <code key="k">{inst.kurulumId}</code>],
             ["Durum", label(INSTALLATION_STATUS_LABEL, inst.durum)],
             ["Sınıf", label(CLASS_LABEL, inst.sinif)],
             ["Kanal", inst.kanalKodu],
@@ -118,6 +118,7 @@ export function BayiInstallationDetailPage() {
           modules: tavan?.moduller,
           defaultModules: tavan?.moduller.includes(PRODUCTION_MODULE_KEY) ? [PRODUCTION_MODULE_KEY] : [],
           passwordField: "bayiParolasi",
+          codeOnlyUnactivated: true,
           passwordLabel: "Bayi anahtar parolası",
           allowPerpetual: tavan?.kaliciIzni ?? true,
           maxMaintenanceMonths: tavan?.bakimAyTavani,

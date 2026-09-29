@@ -81,7 +81,7 @@ export function TransfersPage() {
   const list = usePaged<TransferRequest>(["tasima-talepleri"], "/tasima-talepleri", { durum: status || undefined });
   return (
     <>
-      <PageTitle title="Taşıma talepleri" sub="Her taşıma satıcı onayıyla: onayda eski makinenin kirası iptal olur." />
+      <PageTitle title="Taşıma talepleri" sub="Her taşıma satıcı onayıyla: onay tek kullanımlık taşıma kodu üretir; yeni makine kodla etkinleşince eski makinenin kirası biter." />
       <Section title="Liste">
         <StatusFilter value={status} onChange={setStatus} options={TRANSFER_STATUS_LABEL} />
         <QueryState isLoading={list.isLoading} error={list.error} />
@@ -92,7 +92,12 @@ export function TransfersPage() {
             { header: "Tarih", render: (r) => fmtDateTime(r.createdAt) },
             {
               header: "Kurulum",
-              render: (r) => (r.kurulum ? <Link to={`/kurulumlar/${r.kurulumId}`}>{`${r.kurulum.tesis.musteri.ad} › ${r.kurulum.tesis.ad} › ${r.kurulum.ad ?? r.kurulum.kurulumId.slice(0, 8)}`}</Link> : "—"),
+              render: (r) =>
+                r.kurulum ? (
+                  <Link to={`/kurulumlar/${r.kurulumId}`}>{`${r.kurulum.tesis.musteri.ad} › ${r.kurulum.tesis.ad} › ${r.kurulum.ad ?? r.kurulum.kurulumId.slice(0, 8)}`}</Link>
+                ) : (
+                  <span className="muted">Kimliksiz talep{r.onerilenKurulumlar?.length ? ` · ${r.onerilenKurulumlar.length} öneri` : ""}</span>
+                ),
             },
             { header: "Yeni anahtar", render: (r) => <code>{r.yeniAnahtarKimligi}</code> },
             { header: "Gerekçe", render: (r) => r.gerekce ?? "—" },

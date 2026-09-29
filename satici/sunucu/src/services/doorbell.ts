@@ -28,6 +28,9 @@ export class DoorbellHub {
   constructor(
     private readonly databaseUrl: string,
     private readonly heartbeatSeconds: number,
+    /** Kurulum başına eşzamanlı abonelik tavanı (D9): aşan yeni abonelik EN ESKİSİNİ kapatır — yarı açık kalmış
+     *  eski bağlantı meşru yeniden bağlanmayı kilitlemesin, kopya yine de sınırsız akış açamasın. */
+    private readonly maxPerInstallation: number = 3,
   ) {}
 
   async start(): Promise<void> {
@@ -82,8 +85,18 @@ export class DoorbellHub {
       set = new Set();
       this.streams.set(installationDbId, set);
     }
+    while (set.size >= this.maxPerInstallation) {
+      const oldest = set.values().next().value as Response;
+      set.delete(oldest);
+      oldest.end();
+    }
     set.add(res);
     res.on("close", () => this.unsubscribe(installationDbId, res));
+  }
+
+  /** Bu kurulumun bu süreçteki açık abonelik sayısı. */
+  subscriberCountOf(installationDbId: string): number {
+    return this.streams.get(installationDbId)?.size ?? 0;
   }
 
   private unsubscribe(installationDbId: string, res: Response): void {

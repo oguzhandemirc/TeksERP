@@ -3,26 +3,26 @@
 // müşterilerini görür/yönetir; başkasınınki "bulunamadı"dır. Yaptırım, taşıma, anahtar, kullanıcı
 // yönetimi YOK. Bayi imzalı HAK: bayi parolası imza alt sürecinin stdin'ine; sunucu protokolün
 // sertifika kısıtına EK olarak bayinin GÜNCEL tavanını uygular (dealer.service.ts).
+// Sahiplik iki kez: kilitsiz ön okuma (hızlı "yok") + eylemin tx'inde müşteri kilidi ALTINDA (D10) —
+// müşteri o arada başka bayiye geçtiyse eylem "bulunamadı" ile düşer.
 import type { Hak, Kurulum, Musteri, Tesis } from "@prisma/client";
 import { z } from "zod";
 import { LICENSE_CLASSES } from "../lisans-protokol";
 import { passwordBuffer } from "../keys/key-files";
 import { notFoundError } from "../lib/errors";
+import { withSigningPasswordGuard } from "../portal/signing-guard";
 import { prisma, type Db } from "../lib/prisma";
 import { DEFAULT_ENTITLEMENT_MODULES, assertKnownModules, assertProductionKept } from "../portal/module-catalog";
 import * as q from "../portal/queries";
+import { assertWithinCeiling, ceilingViolations, currentCeiling, signedFieldsOf, findDealer, prepareDealerEntitlementVersion } from "../services/dealer.service";
 import {
-  assertWithinCeiling,
-  ceilingViolations,
   createDealerActivationCodeTx,
+  createDealerEntitlementTx,
   createDealerInstallationTx,
-  currentCeiling,
-  signedFieldsOf,
-  findDealer,
-  prepareDealerEntitlementVersion,
+  installationCustomerId,
   recordDealerEntitlementVersionTx,
-} from "../services/dealer.service";
-import { createEntitlementTx, entitlementVersionAudit, type EntitlementChanges } from "../services/entitlement.service";
+} from "../services/dealer-ownership.service";
+import { entitlementVersionAudit, type EntitlementChanges } from "../services/entitlement.service";
 import { createCustomerTx, createSiteTx } from "../services/master-data.service";
 import { ClientTokenSchema, IsoSchema, ReasonSchema, bodyOf, idParam, pageQuery, portalAction, queryText, type PortalRequestContext, type PortalRouteDef } from "./portal-http";
 
@@ -31,10 +31,10 @@ const ModuleList = z.array(z.string().min(1).max(64)).max(64);
 
 const CustomerCreate = z.strictObject({ clientToken: Token, ad: z.string().min(1).max(200), vergiNo: z.string().max(20).nullable().optional() });
 const SiteCreate = z.strictObject({ clientToken: Token, musteriId: z.uuid(), ad: z.string().min(1).max(200) });
+// Lisans kimliği gövdede YOK: sunucu üretir (D14).
 const InstallationCreate = z.strictObject({
   clientToken: Token,
   tesisId: z.uuid(),
-  kurulumId: z.uuid(),
   sinif: z.enum(LICENSE_CLASSES),
   kanalKodu: z.string().min(1).max(40),
   ad: z.string().max(200).nullable().optional(),
@@ -142,7 +142,7 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         action: "BAYI_TESIS_EKLE",
         clientToken: b.clientToken,
         body: b,
-        run: (tx) => createSiteTx(tx, { customerId: b.musteriId, name: b.ad }),
+        run: (tx) => createSiteTx(tx, { customerId: b.musteriId, name: b.ad, dealerId }),
         respond: (row) => ({ status: 201, data: row }),
         audit: (row) => [{ event: "TESIS_EKLENDI", entity: "Tesis", entityId: row.id, summary: { bayiId: dealerId } }],
       });
@@ -161,7 +161,7 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         action: "BAYI_KURULUM_EKLE",
         clientToken: b.clientToken,
         body: b,
-        run: (tx) => createDealerInstallationTx(tx, { dealerId, site, siteId: site.id, installationId: b.kurulumId, licenseClass: b.sinif, channelCode: b.kanalKodu, name: b.ad }),
+        run: (tx) => createDealerInstallationTx(tx, { dealerId, site, siteId: site.id, licenseClass: b.sinif, channelCode: b.kanalKodu, name: b.ad }),
         respond: (row) => ({ status: 201, data: row }),
         audit: (row) => [{ event: "KURULUM_EKLENDI", entity: "Kurulum", entityId: row.id, summary: { sinif: row.sinif, bayiId: dealerId } }],
       });
@@ -177,9 +177,10 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       const id = idParam(c.req, "id", "Kurulum");
       const b = bodyOf(c, EntitlementCreate);
       const inst = await ownedInstallation(prisma, dealerId, id);
+      const customerId = await installationCustomerId(prisma, id);
       const modules = assertKnownModules(b.moduller ?? [...DEFAULT_ENTITLEMENT_MODULES]);
       assertProductionKept(modules, b.uretimModuluCikarilsin);
-      // Taslak da tavana sığmalı (imza anında kilit altında yeniden denetlenir).
+      // Taslak da tavana sığmalı (tx'te bayi kilidi altında ve imza anında yeniden denetlenir).
       const dealer = await findDealer(prisma, dealerId);
       const draft = { modules, licenseClass: inst.sinif, perpetual: b.kalici, maintenanceUntil: new Date(b.bakimBitis) };
       assertWithinCeiling(ceilingViolations(await currentCeiling(prisma, dealer), signedFieldsOf(draft, c.nowMs)));
@@ -187,7 +188,18 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         action: "BAYI_HAK_EKLE",
         clientToken: b.clientToken,
         body: withPath(b, id),
-        run: (tx) => createEntitlementTx(tx, { installationDbId: id, modules, perpetual: b.kalici, maintenanceUntil: new Date(b.bakimBitis), validUntil: null, nowMs: c.nowMs }),
+        run: (tx) =>
+          createDealerEntitlementTx(tx, {
+            dealerId,
+            customerId,
+            licenseClass: inst.sinif,
+            installationDbId: id,
+            modules,
+            perpetual: b.kalici,
+            maintenanceUntil: new Date(b.bakimBitis),
+            validUntil: null,
+            nowMs: c.nowMs,
+          }),
         respond: (hak) => ({ status: 201, data: hak }),
         audit: (hak) => [{ event: "HAK_EKLENDI", entity: "Hak", entityId: hak.id, summary: { lisansNo: hak.lisansNo, bayiId: dealerId } }],
       });
@@ -202,7 +214,8 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       const dealerId = dealerOf(c);
       const id = idParam(c.req, "id", "Hak");
       const b = bodyOf(c, EntitlementVersion);
-      await ownedEntitlement(prisma, dealerId, id);
+      const hak = await ownedEntitlement(prisma, dealerId, id);
+      const customerId = await installationCustomerId(prisma, hak.kurulumId);
       let modules: string[] | undefined;
       if (b.moduller !== undefined) {
         modules = assertKnownModules(b.moduller);
@@ -214,8 +227,11 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         action: "BAYI_HAK_SURUM",
         clientToken: b.clientToken,
         body: withPath(b, id),
-        prepare: () => prepareDealerEntitlementVersion(c.ctx, { dealerId, entitlementId: id, changes, password, reason: b.sebep, actor: c.session.actor, nowMs: c.nowMs }),
-        run: async (tx, p) => ({ row: await recordDealerEntitlementVersionTx(tx, p), p }),
+        prepare: () =>
+          withSigningPasswordGuard(c.ctx, { userId: c.session.user.id, actor: c.session.actor, kind: "BAYI", nowMs: c.nowMs }, () =>
+            prepareDealerEntitlementVersion(c.ctx, { dealerId, entitlementId: id, changes, password, reason: b.sebep, actor: c.session.actor, nowMs: c.nowMs }),
+          ),
+        run: async (tx, p) => ({ row: await recordDealerEntitlementVersionTx(tx, { ...p, customerId }), p }),
         respond: ({ row }) => ({ status: 201, data: { id: row.id, hakId: row.hakId, surum: row.surum, imzalayanKid: row.imzalayanKid, verilis: row.verilis } }),
         audit: ({ row, p }) => [entitlementVersionAudit(row, p)],
         release: () => password.fill(0),
@@ -232,17 +248,18 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       const id = idParam(c.req, "id", "Kurulum");
       const b = bodyOf(c, CodeCreate);
       await ownedInstallation(prisma, dealerId, id);
+      const customerId = await installationCustomerId(prisma, id);
       return portalAction(c, {
         action: "BAYI_KOD_URET",
         clientToken: b.clientToken,
         body: withPath(b, id),
-        run: (tx) => createDealerActivationCodeTx(tx, c.ctx, { dealerId, installationDbId: id, validDays: b.gecerlilikGun, actor: c.session.actor, nowMs: c.nowMs }),
+        run: (tx) => createDealerActivationCodeTx(tx, c.ctx, { dealerId, customerId, installationDbId: id, validDays: b.gecerlilikGun, actor: c.session.actor, nowMs: c.nowMs }),
         respond: (r) => ({
           status: 201,
           data: { id: r.id, kod: r.code, kodSonu: r.codeTail, gecerlilikBitis: r.expiresAt },
-          stored: { id: r.id, kod: null, kodSonu: r.codeTail, gecerlilikBitis: r.expiresAt, kodGosterilemez: true },
+          stored: { id: r.id, kod: null, gecerlilikBitis: r.expiresAt, kodGosterilemez: true },
         }),
-        audit: (r) => [{ event: "ETKINLESTIRME_KODU", entity: "Kurulum", entityId: id, summary: { kodSonu: r.codeTail, bayiId: dealerId } }],
+        audit: (r) => [{ event: "ETKINLESTIRME_KODU", entity: "Kurulum", entityId: id, summary: { kodId: r.id, tur: r.kind, bayiId: dealerId } }],
       });
     },
   },

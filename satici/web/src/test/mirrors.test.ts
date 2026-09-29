@@ -9,6 +9,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { RETRY_CONFLICT_CODE } from "../shared/api";
+import { LOGIN_RATE_LIMIT_CODE } from "../shared/LoginPage";
 import { DEFAULT_MAINTENANCE_MONTHS, MAX_MAINTENANCE_MONTHS } from "../shared/CeilingFields";
 import { CLASS_LABEL, MODULE_LABEL } from "../shared/labels";
 import { PORTAL_PERMISSIONS } from "../shared/permissions";
@@ -127,9 +128,11 @@ describe("katalog ekran adları", () => {
 
   it("arayüzün dallandığı hata kodları sunucuda tanımlı", () => {
     const codes = listStrings(read("lib/errors.ts"), "export const PORTAL_ERROR_CODES");
-    for (const c of ["OTURUM_YOK", "GIRIS_KILITLI", "IMZA_PAROLASI_HATALI"]) expect(codes).toContain(c);
-    // "Tekrar deneyin" (işlem kimliği yapışır) protokolün ortak kod listesinde yaşar.
-    expect(listStrings(read("lisans-protokol/uclar.ts"), "export const VENDOR_ERROR_CODES")).toContain(RETRY_CONFLICT_CODE);
+    for (const c of ["OTURUM_YOK", "GIRIS_BASARISIZ", "IMZA_PAROLASI_HATALI", "IMZA_PAROLASI_KILITLI"]) expect(codes).toContain(c);
+    // "Tekrar deneyin" (işlem kimliği yapışır) ve giriş hız sınırı protokolün ortak kod listesinde yaşar.
+    const vendorCodes = listStrings(read("lisans-protokol/uclar.ts"), "export const VENDOR_ERROR_CODES");
+    expect(vendorCodes).toContain(RETRY_CONFLICT_CODE);
+    expect(vendorCodes).toContain(LOGIN_RATE_LIMIT_CODE);
   });
 
   it("her kanal türünün ekran adı var", () => {

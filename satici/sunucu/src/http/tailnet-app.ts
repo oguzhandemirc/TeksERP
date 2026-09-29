@@ -1,41 +1,34 @@
 // TAILNET DİNLEYİCİSİ — portal (1f) ve kök parolası isteyen uçlar YALNIZ burada.
 // Kapı iki koşullu ve FAIL-CLOSED: istek (1) tailnet dinleyicisinin soketine gelmiş olmalı ve
-// (2) kaynak adresi tailnet/geri döngü ağlarında olmalı; biri tutmazsa 404 (varlık sızdırılmaz).
+// (2) kaynak adresi tailnet ağında olmalı (geri döngü yalnız TAILNET_LOOPBACK=1 iken); biri tutmazsa 404.
 // Portal JSON API'si /portal/api altında (portal-routes.ts); /portal/saglik yalnız sayılar taşır;
 // satıcı web arayüzü (satici/web dist/portal) /portal altında, kapının ARKASINDA.
-import { BlockList, isIPv4, isIPv6, type AddressInfo } from "node:net";
+import type { AddressInfo } from "node:net";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { auditFailureCount } from "../lib/audit";
 import type { VendorContext } from "../services/context";
 import type { DoorbellHub } from "../services/doorbell";
+import { blockListOf, inList, stripMapped } from "./client-address";
 import { accessLog, errorHandler, notFound } from "./error-handler";
 import { createPortalRouter } from "./portal-http";
 import { VENDOR_PORTAL_ROUTES } from "./portal-routes";
 import { createWebAppRouter } from "./web-static";
 
-/** Geri döngü + Tailscale CGNAT (100.64.0.0/10) ve Tailscale IPv6 ULA'sı. */
-export const TAILNET_SOURCE_NETWORKS = ["127.0.0.0/8", "::1/128", "100.64.0.0/10", "fd7a:115c:a1e0::/48"] as const;
+/** Tailscale CGNAT (100.64.0.0/10) ve Tailscale IPv6 ULA'sı — her zaman tailnet kaynağı. */
+export const TAILNET_SOURCE_NETWORKS = ["100.64.0.0/10", "fd7a:115c:a1e0::/48"] as const;
+/** Geri döngü: YALNIZ TAILNET_LOOPBACK=1 iken (Tailscale kurulana dek SSH tüneli) tailnet sayılır. */
+export const LOOPBACK_NETWORKS = ["127.0.0.0/8", "::1/128"] as const;
 
-const sources = new BlockList();
-for (const cidr of TAILNET_SOURCE_NETWORKS) {
-  const [net, bits] = cidr.split("/");
-  sources.addSubnet(net!, Number(bits), isIPv6(net!) ? "ipv6" : "ipv4");
-}
+const tailnet = blockListOf(TAILNET_SOURCE_NETWORKS);
+const loopback = blockListOf(LOOPBACK_NETWORKS);
 
-function stripMapped(address: string | undefined): string {
-  if (!address) return "";
-  return address.startsWith("::ffff:") && isIPv4(address.slice(7)) ? address.slice(7) : address;
-}
-
-export function isTailnetSource(remote: string | undefined): boolean {
+export function isTailnetSource(remote: string | undefined, allowLoopback: boolean): boolean {
   const a = stripMapped(remote);
-  if (isIPv4(a)) return sources.check(a, "ipv4");
-  if (isIPv6(a)) return sources.check(a, "ipv6");
-  return false;
+  return inList(tailnet, a) || (allowLoopback && inList(loopback, a));
 }
 
 /** Ara katman: dinleyici soketi + kaynak ağı. `listener()` null ise (henüz dinlemiyor) RED. */
-export function requireTailnet(listener: () => AddressInfo | string | null) {
+export function requireTailnet(listener: () => AddressInfo | string | null, allowLoopback: boolean) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const bound = listener();
     const onListener =
@@ -43,7 +36,7 @@ export function requireTailnet(listener: () => AddressInfo | string | null) {
       typeof bound === "object" &&
       req.socket.localPort === bound.port &&
       stripMapped(req.socket.localAddress) === stripMapped(bound.address);
-    if (!onListener || !isTailnetSource(req.socket.remoteAddress)) {
+    if (!onListener || !isTailnetSource(req.socket.remoteAddress, allowLoopback)) {
       notFound(req, res);
       return;
     }
@@ -56,7 +49,7 @@ export function createTailnetApp(ctx: VendorContext, hub: DoorbellHub | null, li
   app.disable("x-powered-by");
   app.set("etag", false);
   app.use(accessLog);
-  app.use(requireTailnet(listener));
+  app.use(requireTailnet(listener, ctx.config.TAILNET_LOOPBACK === "1"));
   app.use("/portal/api", createPortalRouter(ctx, "TAILNET", VENDOR_PORTAL_ROUTES));
   const portal = express.Router();
   portal.get("/saglik", (_req, res) => {

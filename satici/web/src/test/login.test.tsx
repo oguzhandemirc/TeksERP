@@ -57,17 +57,17 @@ describe("giriş (parola + TOTP tek adım)", () => {
     expect(logins[1]!.body).toEqual({ kullaniciAdi: "ayse", parola: "cok-gizli-parola", totp: "222333" });
   });
 
-  it("hesap kilidinde parola korunur, kod temizlenir", async () => {
+  it("hız sınırında parola korunur, kod temizlenir (kilitli hesap hatalı girişle aynı yanıtı alır — ayrı dalı yok)", async () => {
     const user = userEvent.setup();
     renderApp({
       base: "/portal/api",
       routes: PORTAL_ROUTES,
-      handlers: { "GET /oturum": noSession, "POST /oturum/ac": () => ({ status: 423, code: "GIRIS_KILITLI", message: "Hesap geçici olarak kilitli" }) },
+      handlers: { "GET /oturum": noSession, "POST /oturum/ac": () => ({ status: 429, code: "HIZ_SINIRI", message: "Çok fazla istek; biraz sonra deneyin" }) },
     });
     await screen.findByRole("form", { name: "Giriş" });
     await fill(user, "ayse", "cok-gizli-parola", "123456");
     await user.click(screen.getByRole("button", { name: "Giriş yap" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Hesap geçici olarak kilitli");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Çok fazla istek");
     expect(screen.getByLabelText(/^Parola/)).toHaveValue("cok-gizli-parola");
     expect(screen.getByLabelText(/^Doğrulama kodu/)).toHaveValue("");
   });

@@ -15,6 +15,7 @@ import {
   msToIso,
   signDocument,
   signDownloadToken,
+  type ActivationCodeKind,
   type Fingerprint,
   type LeaseDoc,
   type LicenseResponse,
@@ -199,11 +200,14 @@ export async function activeEntitlement(db: Db, installationDbId: string): Promi
   return hak;
 }
 
+/** Lisans yanıtı. Etkinleştirme yanıtı lisans kimliğini (`kurulumId`, D14) ve tüketilen kodun türünü taşır. */
 export function licenseResponse(g: {
   readonly hak: string | null;
   readonly kira: string;
   readonly tokens: { yolOneki: string; belirtec: string }[];
   readonly nowMs: number;
+  readonly installationId?: string;
+  readonly codeKind?: ActivationCodeKind;
 }): LicenseResponse {
   return LicenseResponseSchema.parse({
     v: 1,
@@ -211,5 +215,7 @@ export function licenseResponse(g: {
     kira: g.kira,
     indirmeBelirtecleri: g.tokens,
     sunucuSaati: msToIso(g.nowMs),
+    ...(g.installationId === undefined ? {} : { kurulumId: g.installationId }),
+    ...(g.codeKind === undefined ? {} : { kodTuru: g.codeKind }),
   });
 }

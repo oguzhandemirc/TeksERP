@@ -4,13 +4,12 @@
 // hiç etkinleşmemişken ya da iptal edilmişken pasife alınır (lisanslı fabrika sessizce kaybolmasın).
 // Ebeveyn–çocuk yarışı müşteri ağacı kilidiyle (9105) kapanır: çocuk doğarken ebeveyn pasife geçemez.
 // `…Tx` biçimlerinin ilk ifadesi kilittir; kilidin anahtarı (müşteri/tesis) değişmeyen alandan okunur.
+import { randomUUID } from "node:crypto";
 import type { Kurulum, LisansSinifi, Musteri, Tesis } from "@prisma/client";
-import { UuidSchema } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
-import { badRequest, notFoundError, stateConflict } from "../lib/errors";
-import { lockCustomer, lockInstallation } from "../lib/locks";
+import { badRequest, notFoundError, retryConflict, stateConflict } from "../lib/errors";
+import { lockCustomer, lockDealers, lockInstallation } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
-import { isUniqueViolation } from "../lib/prisma-errors";
 import { requireChannel } from "./channel.service";
 import { notifyDoorbell } from "./doorbell";
 import { requireReason } from "./sanction.service";
@@ -62,17 +61,50 @@ export async function createCustomerTx(tx: Db, g: { name: string; taxNo?: string
   return tx.musteri.create({ data: { ad, vergiNo: cleanTaxNo(g.taxNo), bayiId: g.dealerId ?? null } });
 }
 
-export async function updateCustomerTx(tx: Tx, g: { customerId: string; name?: string; taxNo?: string | null; dealerId?: string | null }): Promise<Musteri> {
-  await lockCustomer(tx, g.customerId);
-  const current = await tx.musteri.findUnique({ where: { id: g.customerId } });
-  if (!current) throw notFoundError("Müşteri");
-  await assertActiveDealer(tx, g.dealerId);
+export async function findCustomer(db: Db, customerId: string): Promise<Musteri> {
+  const row = await db.musteri.findUnique({ where: { id: customerId } });
+  if (!row) throw notFoundError("Müşteri");
+  return row;
+}
+
+/** Müşterinin bayi bağı DEĞİŞİYOR mu (atama, başka bayiye geçiş ya da bayiden alma)? Yetki kapısı rotada: yalnız yönetici. */
+export function changesDealer(customer: Pick<Musteri, "bayiId">, dealerId: string | null | undefined): boolean {
+  return dealerId !== undefined && dealerId !== customer.bayiId;
+}
+
+/**
+ * Ad · vergi no · bayi bağı. Bayi değişimi (D10): eski + yeni bayi kilidi (kimlik sırasıyla) → müşteri kilidi;
+ * kilitsiz okunan bağ kilit altında değişmişse "tekrar deneyin"; yeni bayinin GÜNCEL tavanı müşterinin canlı
+ * kurulumlarını (adet · sınıf · kanal · hak modülleri) kaldırmalı (`assertDealerCanTake`, dealer.service).
+ */
+export async function updateCustomerTx(
+  tx: Tx,
+  g: {
+    customer: Musteri;
+    name?: string;
+    taxNo?: string | null;
+    dealerId?: string | null;
+    assertDealerCanTake?: (tx: Tx, dealerId: string, customerId: string) => Promise<void>;
+  },
+): Promise<Musteri> {
+  const dealerChange = changesDealer(g.customer, g.dealerId);
+  if (dealerChange) await lockDealers(tx, [g.customer.bayiId, g.dealerId].filter((d): d is string => typeof d === "string"));
+  await lockCustomer(tx, g.customer.id);
+  const current = await findCustomer(tx, g.customer.id);
+  if (dealerChange) {
+    if (current.bayiId !== g.customer.bayiId) throw retryConflict("Müşterinin bayisi bu arada değişti; yeniden deneyin");
+    if (g.dealerId) {
+      await assertActiveDealer(tx, g.dealerId);
+      if (!g.assertDealerCanTake) throw new Error("Bayi değişimi tavan denetimi olmadan yapılamaz");
+      await g.assertDealerCanTake(tx, g.dealerId, current.id);
+    }
+  }
   return tx.musteri.update({
     where: { id: current.id },
     data: {
       ...(g.name === undefined ? {} : { ad: cleanName(g.name, "Müşteri") }),
       ...(g.taxNo === undefined ? {} : { vergiNo: cleanTaxNo(g.taxNo) }),
-      ...(g.dealerId === undefined ? {} : { bayiId: g.dealerId }),
+      ...(dealerChange ? { bayiId: g.dealerId ?? null } : {}),
     },
   });
 }
@@ -93,11 +125,12 @@ export async function setCustomerActiveTx(tx: Tx, g: { customerId: string; activ
 
 // ---------------------------------------------------------------- tesis
 
-export async function createSiteTx(tx: Tx, g: { customerId: string; name: string }): Promise<Tesis> {
+/** `dealerId` verilirse (bayi portalı) sahiplik müşteri kilidi ALTINDA denetlenir: başka bayinin müşterisi "yok"tur. */
+export async function createSiteTx(tx: Tx, g: { customerId: string; name: string; dealerId?: string }): Promise<Tesis> {
   await lockCustomer(tx, g.customerId);
   const ad = cleanName(g.name, "Tesis");
   const customer = await tx.musteri.findUnique({ where: { id: g.customerId } });
-  if (!customer) throw notFoundError("Müşteri");
+  if (!customer || (g.dealerId !== undefined && customer.bayiId !== g.dealerId)) throw notFoundError("Müşteri");
   if (!customer.aktif) throw stateConflict("Pasif müşteriye tesis eklenemez");
   return tx.tesis.create({ data: { musteriId: customer.id, ad } });
 }
@@ -125,27 +158,26 @@ export async function setSiteActiveTx(tx: Tx, g: { site: Tesis; active: boolean;
 
 export interface CreateInstallationInput {
   readonly siteId: string;
-  readonly installationId: string;
   readonly licenseClass: LisansSinifi;
   readonly channelCode: string;
   readonly name?: string | null;
   readonly pollMinutes?: number;
 }
 
-/** Kilit ALTINDA (müşteri ağacı) çağrılır: tesis/müşteri tazeden okunur ve aktif olmalı. */
+/**
+ * Kilit ALTINDA (müşteri ağacı) çağrılır: tesis/müşteri tazeden okunur ve aktif olmalı. Lisans kimliği
+ * (`kurulumId`) burada DOĞAR (D14): dışarıdan verilmez; fabrikaya etkinleştirme yanıtıyla gider.
+ */
 export async function createInstallationUnderLock(tx: Tx, g: CreateInstallationInput): Promise<Kurulum> {
-  if (!UuidSchema.safeParse(g.installationId).success) throw badRequest("Kurulum kimliği (installationId) UUID olmalı");
   await requireChannel(tx, g.channelCode);
   const name = g.name === undefined || g.name === null ? null : cleanName(g.name, "Kurulum");
   const site = await tx.tesis.findUnique({ where: { id: g.siteId }, include: { musteri: true } });
   if (!site) throw notFoundError("Tesis");
   if (!site.aktif || !site.musteri.aktif) throw stateConflict("Pasif tesis ya da müşteriye kurulum eklenemez");
-  const clash = await tx.kurulum.findUnique({ where: { kurulumId: g.installationId }, select: { id: true } });
-  if (clash) throw stateConflict("Bu installationId ile bir kurulum zaten kayıtlı");
   return tx.kurulum.create({
     data: {
       tesisId: site.id,
-      kurulumId: g.installationId,
+      kurulumId: randomUUID(),
       sinif: g.licenseClass,
       kanalKodu: g.channelCode,
       ad: name,
@@ -154,7 +186,7 @@ export async function createInstallationUnderLock(tx: Tx, g: CreateInstallationI
   });
 }
 
-/** Kurulum, fabrikanın installationId'siyle doğar — HAK o kimliğe imzalanır. `site` kilitsiz okunur (müşterisi değişmez). */
+/** Kurulum lisans kimliğiyle doğar — HAK o kimliğe imzalanır. `site` kilitsiz okunur (müşterisi değişmez). */
 export async function createInstallationTx(tx: Tx, g: CreateInstallationInput & { site: Tesis }): Promise<Kurulum> {
   await lockCustomer(tx, g.site.musteriId);
   return createInstallationUnderLock(tx, g);
@@ -234,13 +266,7 @@ export async function createSite(g: { customerId: string; name: string; actor: s
 
 export async function createInstallation(g: CreateInstallationInput & { actor: string }): Promise<Kurulum> {
   const site = await findSite(prisma, g.siteId);
-  let row: Kurulum;
-  try {
-    row = await prisma.$transaction((tx) => createInstallationTx(tx, { ...g, site }));
-  } catch (err) {
-    if (isUniqueViolation(err)) throw stateConflict("Bu installationId ile bir kurulum zaten kayıtlı");
-    throw err;
-  }
+  const row = await prisma.$transaction((tx) => createInstallationTx(tx, { ...g, site }));
   await recordAudit({ event: "KURULUM_EKLENDI", entity: "Kurulum", entityId: row.id, actor: g.actor, summary: { sinif: g.licenseClass } });
   return row;
 }

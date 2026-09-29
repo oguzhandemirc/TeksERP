@@ -2,7 +2,7 @@
 // Tek tx: kurulum kilidi (İLK ifade) → zincir kararı → kopya uyarısı → kira → uç ilerletme (atomik).
 // Reddin kendisi de kayıttır: kopya uyarısı ve yoklama satırı COMMIT olur, sonra 403 döner.
 import type { KopyaUyariTuru, KopyaUyarisi, Prisma } from "@prisma/client";
-import { compareFingerprints, type Fingerprint, type LicenseResponse, type PollRequest } from "../lisans-protokol";
+import { compareFingerprints, parseJws, type Fingerprint, type LicenseResponse, type PollRequest } from "../lisans-protokol";
 import { VendorError, retryConflict } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
@@ -45,6 +45,13 @@ const RESULT_OF: Record<ChainDecision, string> = {
   CATCH_UP: "YAKALA",
   FORK: "CATAL",
 };
+
+/** Deftere yazılmış kendi kiramızın zorlama alanı (imza burada yeniden doğrulanmaz: belge bizim DB'mizden). */
+function leaseEnforcement(token: string): boolean | null {
+  const parsed = parseJws(token);
+  const value = parsed.ok ? (parsed.value.payload as { zorlama?: unknown }).zorlama : undefined;
+  return typeof value === "boolean" ? value : null;
+}
 
 async function upsertCopyAlert(
   tx: Tx,
@@ -130,6 +137,21 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     const alert = await upsertCopyAlert(tx, inst.id, "PARMAK_IZI_UYUSMAZ", { owner: accepted, other: measured }, g.nowMs);
     alerts.push(alert);
     if (inSecondWindow(ctx, alert, g.nowMs)) deny = true;
+  }
+  // D2s — kira zincirinin iki kurcalama izi (yalnız UYARI; kira yine verilir, asla anında durdurma):
+  // sunulan kira bu kurulumun defterinde yoksa (başka kurulumdan taşınmış ya da uydurulmuş) YABANCI_KIRA;
+  // raporlanan kip, fabrikanın elindeki kiranın zorlamasıyla uyuşmuyorsa (kira/durum silinip varsayılana
+  // dönülmüş) KIP_UYUSMAZ. Beklenen kip SUNULAN kiradan okunur — portalda zorlama yeni değiştiyse fabrika
+  // eski kirayla gelir ve bu uyarı sayılmaz; kirası hiç yoksa kurulumun güncel zorlaması beklenir.
+  const presented = g.presentedLeaseId ? await tx.kira.findFirst({ where: { id: g.presentedLeaseId, kurulumId: inst.id } }) : null;
+  if (g.presentedLeaseId && !presented) {
+    await upsertCopyAlert(tx, inst.id, "YABANCI_KIRA", { owner: accepted, other: measured }, g.nowMs);
+  }
+  if (g.telemetry) {
+    const expected = presented ? leaseEnforcement(presented.belge) : inst.zorlama;
+    if (expected !== null && (g.telemetry.durum.kip === "zorla") !== expected) {
+      await upsertCopyAlert(tx, inst.id, "KIP_UYUSMAZ", { owner: accepted, other: measured }, g.nowMs);
+    }
   }
   if (decision === "CATCH_UP") {
     const since = new Date(g.nowMs - ctx.config.KOPYA_PENCERE_SN * 1000);

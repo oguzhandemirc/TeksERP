@@ -2,8 +2,8 @@
 // HAK taslağı imzasız doğar (guncelSurum 0); her yapısal değişiklik (modül tavanı · kalıcı · bakım
 // bitişi) YENİ İMZALI SÜRÜMDÜR: alanlar ve sürüm aynı tx'te yazılır — imzasız alan değişimi yok.
 // İmza tx DIŞINDA hazırlanır (parola alt sürecin stdin'ine), sonra kilit altında deftere yazılır.
-// Kod kuruluma bağlı doğar; düz metni yalnız bir kez döner (DB'de sha256 + son 4).
-import type { Hak, HakSurumu, Kurulum, Musteri, Tesis } from "@prisma/client";
+// Kod kuruluma bağlı doğar; düz metni yalnız bir kez döner (DB'de sunucu sırlı HMAC + son 4).
+import type { Hak, HakSurumu, KodTuru, Kurulum, Musteri, Tesis } from "@prisma/client";
 import {
   DAY_MS,
   EntitlementSchema,
@@ -20,7 +20,6 @@ import { recordAudit } from "../lib/audit";
 import { VendorError, badRequest, notFoundError, retryConflict, stateConflict } from "../lib/errors";
 import { lockInstallation, lockLicenseNumber } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
-import { hashActivationCode } from "./activation.service";
 import type { VendorContext } from "./context";
 import { notifyDoorbell } from "./doorbell";
 import { requireReason, setValidityUnderLock } from "./sanction.service";
@@ -247,30 +246,43 @@ export async function issueEntitlementVersion(
 }
 
 // ---------------------------------------------------------------- etkinleştirme kodu
-// Biçim ve üretim protokolde tek kaynak (`generateActivationCode`, 16 karakter).
+// Biçim ve üretim protokolde tek kaynak (`generateActivationCode`, 16 karakter). Türü (`ilk` · `tasima`)
+// kodun metninde değil burada: `tasima` kodu yalnız onaylanan talepten doğar (transfer.service).
 
 export interface IssuedActivationCode {
   readonly code: string;
   readonly id: string;
   readonly expiresAt: Date;
   readonly codeTail: string;
+  readonly kind: KodTuru;
+}
+
+export interface IssueActivationCodeInput {
+  readonly installationDbId: string;
+  readonly validDays?: number;
+  readonly actor: string;
+  readonly nowMs?: number;
+  /** Varsayılan `ilk`; `tasima` yalnız onaylanan taşıma talebiyle (`transferRequestId`). */
+  readonly kind?: KodTuru;
+  readonly transferRequestId?: string;
 }
 
 /**
  * Kilit ALTINDA: kuruluma bağlı tek kullanımlık kod; önceki AKTİF kodlar iptal (tek açık kod).
- * Düz metin YALNIZ dönüşte vardır — DB'de sha256 + son 4 karakter.
+ * Düz metin YALNIZ dönüşte vardır — DB'de sunucu sırlı HMAC + son 4 karakter (son 4 YALNIZ burada).
+ * `ilk` kod: etkinleşmemiş ya da ETKİN kurulum (ETKİN'de yalnız aynı anahtarla yeniden etkinleştirir);
+ * `tasima` kodu: yalnız ETKİN kurulum.
  */
-export async function issueActivationCodeUnderLock(
-  tx: Tx,
-  ctx: VendorContext,
-  g: { installationDbId: string; validDays?: number; actor: string; nowMs?: number },
-): Promise<IssuedActivationCode> {
+export async function issueActivationCodeUnderLock(tx: Tx, ctx: VendorContext, g: IssueActivationCodeInput): Promise<IssuedActivationCode> {
   const nowMs = g.nowMs ?? Date.now();
+  const kind: KodTuru = g.kind ?? "ilk";
+  if ((kind === "tasima") !== (g.transferRequestId !== undefined)) throw new VendorError(500, "SUNUCU_HATASI", "Taşıma kodu yalnız taşıma talebiyle üretilir");
   const days = g.validDays ?? ctx.config.ETKINLESTIRME_KODU_GUN;
   if (!Number.isInteger(days) || days < 1 || days > 365) throw badRequest("Kod geçerlilik günü 1–365 olmalı");
   const inst = await tx.kurulum.findUnique({ where: { id: g.installationDbId } });
   if (!inst) throw notFoundError("Kurulum");
-  if (!inst.aktif || (inst.durum !== "ETKINLESMEDI" && inst.durum !== "ETKIN")) throw stateConflict("Bu kurulum için etkinleştirme kodu üretilemez");
+  const allowed = kind === "tasima" ? inst.durum === "ETKIN" : inst.durum === "ETKINLESMEDI" || inst.durum === "ETKIN";
+  if (!inst.aktif || !allowed) throw stateConflict("Bu kurulum için etkinleştirme kodu üretilemez");
   const hak = await tx.hak.findFirst({ where: { kurulumId: inst.id, aktif: true } });
   if (!hak || hak.guncelSurum < 1) throw stateConflict("Önce kurulumun HAK'ı imzalanmalı");
   const code = generateActivationCode();
@@ -278,13 +290,15 @@ export async function issueActivationCodeUnderLock(
   const created = await tx.etkinlestirmeKodu.create({
     data: {
       kurulumId: inst.id,
-      kodOzeti: hashActivationCode(code),
+      kodOzeti: ctx.codeHasher.digest(code),
       kodSonu: code.slice(-4),
+      tur: kind,
+      tasimaTalebiId: g.transferRequestId ?? null,
       gecerlilikBitis: new Date(nowMs + days * DAY_MS),
       yapan: g.actor,
     },
   });
-  return { code, id: created.id, expiresAt: created.gecerlilikBitis, codeTail: created.kodSonu };
+  return { code, id: created.id, expiresAt: created.gecerlilikBitis, codeTail: created.kodSonu, kind };
 }
 
 export async function createActivationCodeTx(
@@ -301,6 +315,6 @@ export async function createActivationCode(
   g: { installationDbId: string; validDays?: number; actor: string; nowMs?: number },
 ): Promise<{ code: string; id: string; expiresAt: Date }> {
   const created = await prisma.$transaction((tx) => createActivationCodeTx(tx, ctx, g));
-  await recordAudit({ event: "ETKINLESTIRME_KODU", entity: "Kurulum", entityId: g.installationDbId, actor: g.actor, summary: { kodSonu: created.codeTail } });
+  await recordAudit({ event: "ETKINLESTIRME_KODU", entity: "Kurulum", entityId: g.installationDbId, actor: g.actor, summary: { kodId: created.id, tur: created.kind } });
   return { code: created.code, id: created.id, expiresAt: created.expiresAt };
 }

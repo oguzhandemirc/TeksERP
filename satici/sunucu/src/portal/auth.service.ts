@@ -1,8 +1,9 @@
 // PORTAL GİRİŞİ — tek adım: kullanıcı adı + parola + TOTP (TOTP ZORUNLU; TOTP'siz oturum yoktur).
 // Kapılar (sırayla): hesap bu dinleyicide girebilir mi (satıcı rolleri yalnız TAILNET, BAYI yalnız
 // GENEL; uymayan hesap BİLİNMEYEN hesap gibi davranır — sayaç değişmez, eşdeğer iş harcanır) →
-// kilit → parola + TOTP (tekrar oynatma kilidi) → oturum. Hata iletisi tek: hangi faktörün
-// tutmadığı söylenmez. Ardışık başarısızlık eşiği hesabı süreli kilitler.
+// kilit (kilitli hesap da BİLİNMEYEN hesap gibi: aynı yanıt, aynı scrypt işi — kilit hesabın varlığını
+// sızdırmasın) → parola + TOTP (tekrar oynatma kilidi) → oturum. Hata iletisi tek: hangi faktörün
+// tutmadığı ya da kilit söylenmez. Ardışık başarısızlık eşiği hesabı süreli kilitler.
 // Oturum belirteci düz saklanmaz (sha256); oturum doğduğu dinleyiciye bağlıdır.
 import { createHash, randomBytes } from "node:crypto";
 import type { PortalKullanici } from "@prisma/client";
@@ -44,7 +45,8 @@ export function sessionTokenDigest(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
-const loginFailed = (): VendorError => new VendorError(401, "GIRIS_BASARISIZ", "Kullanıcı adı, parola ya da doğrulama kodu hatalı");
+const loginFailed = (): VendorError =>
+  new VendorError(401, "GIRIS_BASARISIZ", "Kullanıcı adı, parola ya da doğrulama kodu hatalı (art arda hatalı denemede hesap bir süre kilitlenir)");
 
 function publicUser(u: Pick<PortalKullanici, "id" | "kullaniciAdi" | "adSoyad" | "rol" | "bayiId">): PortalSessionUser {
   return { id: u.id, kullaniciAdi: u.kullaniciAdi, adSoyad: u.adSoyad, rol: u.rol, bayiId: u.bayiId };
@@ -86,8 +88,9 @@ export async function login(ctx: VendorContext, g: LoginInput): Promise<{ token:
     throw loginFailed();
   }
   if (user.kilitBitis && user.kilitBitis.getTime() > nowMs) {
-    const minutes = Math.ceil((user.kilitBitis.getTime() - nowMs) / 60_000);
-    throw new VendorError(429, "GIRIS_KILITLI", `Çok sayıda hatalı deneme: hesap ${minutes} dakika kilitli`);
+    await burnPasswordCheck(g.password);
+    await recordAudit({ event: "PORTAL_GIRIS_REDDEDILDI", entity: "PortalKullanici", entityId: user.id, actor: "portal", summary: { dinleyici: g.listener, neden: "KILITLI" } });
+    throw loginFailed();
   }
   const passwordOk = await verifyPortalPassword(g.password, user.parolaOzeti);
   const secret = ctx.portalSecrets.open(user.totpSirSifreli, user.id);

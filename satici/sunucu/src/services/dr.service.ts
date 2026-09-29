@@ -2,6 +2,7 @@
 // AYNI tesisteki üretim kurulumunu devralır: ana kurulum DEVREDILDI olur, bir sonraki yoklamada
 // `devredildi: true` kirası alır (fabrikada anında KISITLI + bant — iki DB ayrışmasın).
 // Ters yol: portal eylemi `revertDrTakeover` (DEVREDILDI → ETKIN, kurulum kaydına satır).
+import type { Kurulum } from "@prisma/client";
 import type { LicenseResponse } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
 import { VendorError, stateConflict } from "../lib/errors";
@@ -13,14 +14,8 @@ import type { AuthenticatedRequest } from "./installation-auth";
 import { renewLease } from "./renewal.service";
 import { requireReason } from "./sanction.service";
 
-export async function processDrTakeover(
-  ctx: VendorContext,
-  auth: AuthenticatedRequest,
-  body: { anaKurulumId: string; gerekce: string },
-  nowMs: number,
-): Promise<LicenseResponse> {
-  const dr = auth.installation;
-  if (auth.role !== "CURRENT") throw new VendorError(401, "ISTEK_KID", "İstek bu kurulumun kayıtlı anahtarıyla imzalanmamış");
+/** Ucuz ön denetim (yan etkisiz, nonce'tan ÖNCE): DR sınıfı + ETKİN; ana kurulum aynı tesisin üretim kurulumu. */
+export async function drTakeoverTarget(dr: Kurulum, body: { anaKurulumId: string }): Promise<Kurulum> {
   if (dr.sinif !== "DR" || dr.durum !== "ETKIN") {
     throw new VendorError(400, "GOVDE_GECERSIZ", "Üretimi yalnız ETKİN bir DR sınıfı kurulum devralabilir");
   }
@@ -29,6 +24,17 @@ export async function processDrTakeover(
   if (!main || main.id === dr.id || main.tesisId !== dr.tesisId || main.sinif !== "URETIM") {
     throw new VendorError(400, "GOVDE_GECERSIZ", "Ana kurulum bu tesisin üretim kurulumları arasında bulunamadı");
   }
+  return main;
+}
+
+export async function processDrTakeover(
+  ctx: VendorContext,
+  auth: AuthenticatedRequest,
+  body: { anaKurulumId: string; gerekce: string },
+  nowMs: number,
+): Promise<LicenseResponse> {
+  const dr = auth.installation;
+  const main = await drTakeoverTarget(dr, body);
   const changed = await prisma.$transaction(async (tx) => {
     await lockInstallations(tx, [dr.id, main.id]);
     const freshMain = await tx.kurulum.findUniqueOrThrow({ where: { id: main.id } });

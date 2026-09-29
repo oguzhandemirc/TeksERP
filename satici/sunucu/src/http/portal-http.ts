@@ -12,6 +12,7 @@ import { roleHas, type PortalListener, type PortalPermission } from "../portal/r
 import { changeOwnPassword } from "../portal/users.service";
 import type { VendorContext } from "../services/context";
 import { parseStrict } from "./body";
+import { proxyTrustFrom } from "./client-address";
 import { rateLimit } from "./rate-limit";
 
 export type PortalMethod = "get" | "post" | "patch";
@@ -154,9 +155,10 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
   router.use(noStore);
   router.use(jsonOnlyWrites);
   router.use(express.json({ limit: "64kb", strict: true }));
-  const proxyHeader = listener === "GENEL" ? ctx.config.VEKIL_IP_BASLIGI : undefined;
+  // Vekil başlığı yalnız genel dinleyicide ve yalnız güvenilen vekilden gelen bağlantıda okunur.
+  const trust = listener === "GENEL" ? proxyTrustFrom(ctx.config) : proxyTrustFrom({ VEKIL_IP_BASLIGI: undefined, GUVENILIR_VEKIL_AGLARI: [], IC_VEKIL_AGLARI: [] });
 
-  router.post("/oturum/ac", rateLimit({ perMinute: ctx.config.PORTAL_GIRIS_HIZ_DK, proxyHeader }), async (req: Request, res: Response) => {
+  router.post("/oturum/ac", rateLimit({ perMinute: ctx.config.PORTAL_GIRIS_HIZ_DK, trust }), async (req: Request, res: Response) => {
     const body = parseStrict(LoginSchema, req.body ?? {});
     const { token, session } = await login(ctx, { listener, username: body.kullaniciAdi, password: body.parola, totp: body.totp });
     res.append("Set-Cookie", cookieHeader(ctx, listener, token, ctx.config.PORTAL_OTURUM_AZAMI_SAAT * 3600));

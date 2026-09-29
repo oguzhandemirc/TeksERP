@@ -18,6 +18,8 @@ export interface ConfirmActionProps<R> {
   /** İkinci onay: bu metin AYNEN yazılmadan düğme açılmaz (ör. lisans numarası). */
   readonly typedConfirmation?: { readonly expected: string; readonly label: string };
   readonly extra?: ReactNode;
+  /** `extra` içindeki alanlar geçerli mi (ör. seçilmesi zorunlu hedef); varsayılan evet. */
+  readonly extraValid?: boolean;
   readonly send: (body: { sebep?: string; onay?: string; clientToken: string }) => Promise<R>;
   readonly onDone: (result: R) => void;
   readonly onClose: () => void;
@@ -65,7 +67,7 @@ export function ConfirmAction<R>(p: ConfirmActionProps<R>) {
         <Button onClick={p.onClose} disabled={write.pending}>
           Vazgeç
         </Button>
-        <Button variant={p.danger ? "danger" : "primary"} onClick={submit} disabled={write.pending || !typedOk || !reasonOk}>
+        <Button variant={p.danger ? "danger" : "primary"} onClick={submit} disabled={write.pending || !typedOk || !reasonOk || p.extraValid === false}>
           {write.pending ? "İşleniyor…" : p.confirmLabel}
         </Button>
       </ModalActions>

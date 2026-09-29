@@ -77,8 +77,10 @@ services:
       PORT_TAILNET: "4611"
       TAILNET_BIND: ${TAILNET_KONTEYNER_IP:?TAILNET_KONTEYNER_IP gerekli}
       ANAHTAR_DIZINI: /anahtarlar
-      # İstemci IP'si Cloudflare başlığından (hız sınırı). Köken yalnız CF'ye açılana dek taklit edilebilir.
+      # İstemci IP'si Cloudflare başlığından (hız sınırı). Başlık YALNIZ güvenilen kenardan gelen bağlantıda okunur:
+      # soket Traefik'tir (kenar ağı) → güven kararı Traefik'in X-Forwarded-For'a yazdığı son halka CF aralığındaysa.
       VEKIL_IP_BASLIGI: cf-connecting-ip
+      IC_VEKIL_AGLARI: ${KENAR_AGI}
       # Tailnet dinleyicisi düz HTTP (WireGuard içinde) → çerez Secure'suz; genelde her zaman Secure.
       TAILNET_CEREZ_GUVENLI: "0"
     secrets: [db_parolasi]

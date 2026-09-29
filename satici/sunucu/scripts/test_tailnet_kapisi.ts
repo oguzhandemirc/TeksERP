@@ -1,7 +1,8 @@
 // =============================================================================
 // TAILNET KAPISI — portal ve kök parolası isteyen uçlar YALNIZ tailnet dinleyicisinde; kapı iki
 // koşullu ve FAIL-CLOSED: (1) istek tailnet dinleyicisinin soketine gelmiş olmalı, (2) kaynak adres
-// geri döngü / Tailscale ağında olmalı. Biri tutmazsa 404 (varlık sızdırılmaz). Yapılandırma
+// Tailscale ağında olmalı — geri döngü (127/8 · ::1) YALNIZ TAILNET_LOOPBACK=1 iken (varsayılan KAPALI;
+// Tailscale kurulana dek SSH tüneli için). Biri tutmazsa 404 (varlık sızdırılmaz). Yapılandırma
 // tailnet dinleyicisini joker adrese (0.0.0.0 / ::) bağlamayı açılışta REDDEDER.
 // Ölçüm: yapılandırma · kaynak ağı yüklemi (sınır değerleri) · ara katman sahte soketle · gerçek
 // iki sunucu: AYNI uygulama başka bir sokette dinletilince kapı 404 verir (soket koşulu gerçekten
@@ -17,6 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import { loadConfig } from "../src/config";
 import { KeyStore } from "../src/keys/key-store";
+import { ActivationCodeHasher } from "../src/keys/code-pepper";
 import { createTailnetApp, isTailnetSource, requireTailnet } from "../src/http/tailnet-app";
 import { PortalSecretBox } from "../src/portal/secret-box";
 import { fiksturKur } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
@@ -39,24 +41,29 @@ async function main(): Promise<void> {
     kontrol(`§1 TAILNET_BIND="${joker}" açılışta reddedilir`, reddedildi);
   }
   kontrol("§1d varsayılan tailnet bağı 127.0.0.1", loadConfig(taban).TAILNET_BIND === "127.0.0.1");
+  kontrol("§1e varsayılan TAILNET_LOOPBACK kapalı (0)", loadConfig(taban).TAILNET_LOOPBACK === "0");
 
   console.log("\n§2 kaynak ağı yüklemi");
-  const icerde = ["127.0.0.1", "::1", "100.64.0.1", "100.127.255.254", "::ffff:100.100.1.1", "fd7a:115c:a1e0::1"];
+  const icerde = ["100.64.0.1", "100.127.255.254", "::ffff:100.100.1.1", "fd7a:115c:a1e0::1"];
+  const geriDongu = ["127.0.0.1", "127.9.9.9", "::1", "::ffff:127.0.0.1"];
   const disarda = ["100.128.0.1", "100.63.255.255", "10.0.0.1", "192.168.1.10", "8.8.8.8", "fd00::1", "::ffff:8.8.8.8", "", "abc"];
-  kontrol("§2a tailnet/geri döngü adresleri içeride", icerde.every((a) => isTailnetSource(a)), icerde.filter((a) => !isTailnetSource(a)).join(","));
-  kontrol("§2b diğerleri dışarıda (sınırlar dahil)", disarda.every((a) => !isTailnetSource(a)), disarda.filter((a) => isTailnetSource(a)).join(","));
+  kontrol("§2a tailnet adresleri içeride (iki kipte de)", icerde.every((a) => isTailnetSource(a, false) && isTailnetSource(a, true)), icerde.filter((a) => !isTailnetSource(a, false)).join(","));
+  kontrol("§2b diğerleri dışarıda (sınırlar dahil, iki kipte de)", disarda.every((a) => !isTailnetSource(a, false) && !isTailnetSource(a, true)), disarda.filter((a) => isTailnetSource(a, true)).join(","));
+  kontrol("§2c ✓K geri döngü TAILNET_LOOPBACK kapalıyken DIŞARIDA", geriDongu.every((a) => !isTailnetSource(a, false)), geriDongu.filter((a) => isTailnetSource(a, false)).join(","));
+  kontrol("§2d ✓K geri döngü TAILNET_LOOPBACK=1 iken içeride", geriDongu.every((a) => isTailnetSource(a, true)), geriDongu.filter((a) => !isTailnetSource(a, true)).join(","));
 
   console.log("\n§3 ara katman (sahte soket)");
   const dene = (listener: AddressInfo | null, local: string, localPort: number, remote: string): number => {
     let durum = 0;
     const req = { socket: { localAddress: local, localPort, remoteAddress: remote }, method: "GET", path: "/portal/saglik" };
     const res = { status: (s: number) => ((durum = s), res), json: () => res };
-    requireTailnet(() => listener)(req as never, res as never, () => (durum = 200));
+    requireTailnet(() => listener, false)(req as never, res as never, () => (durum = 200));
     return durum;
   };
   const dinleyici: AddressInfo = { address: "127.0.0.1", family: "IPv4", port: 4611 };
-  kontrol("§3a dinleyici henüz yok → 404", dene(null, "127.0.0.1", 4611, "127.0.0.1") === 404);
-  kontrol("§3b başka port (genel dinleyici) → 404", dene(dinleyici, "127.0.0.1", 4610, "127.0.0.1") === 404);
+  kontrol("§3a dinleyici henüz yok → 404", dene(null, "127.0.0.1", 4611, "100.101.102.103") === 404);
+  kontrol("§3b başka port (genel dinleyici) → 404", dene(dinleyici, "127.0.0.1", 4610, "100.101.102.103") === 404);
+  kontrol("§3b2 doğru soket, kaynak geri döngü (bayrak kapalı) → 404", dene(dinleyici, "127.0.0.1", 4611, "127.0.0.1") === 404);
   kontrol("§3c doğru soket, kaynak internet → 404", dene(dinleyici, "127.0.0.1", 4611, "203.0.113.9") === 404);
   kontrol("§3d ✓K doğru soket + tailnet kaynağı → geçer", dene(dinleyici, "127.0.0.1", 4611, "100.101.102.103") === 200);
 
@@ -64,14 +71,21 @@ async function main(): Promise<void> {
   const dizin = mkdtempSync(path.join(os.tmpdir(), "satici-tailnet-"));
   const f = fiksturKur(Date.now());
   writeFileSync(path.join(dizin, "capa.json"), JSON.stringify(f.kokler));
-  const config = loadConfig({ ...taban, ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: path.join(dizin, "capa.json") });
+  const config = loadConfig({ ...taban, TAILNET_LOOPBACK: "1", ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: path.join(dizin, "capa.json") });
+  const kapaliConfig = loadConfig({ ...taban, ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: path.join(dizin, "capa.json") });
   let tailnetAdresi: AddressInfo | null = null;
-  const app = createTailnetApp({ config, keys: KeyStore.load(config), portalSecrets: PortalSecretBox.load(dizin, { create: true }) }, null, () => tailnetAdresi);
+  let kapaliAdres: AddressInfo | null = null;
+  const ctx = { config, keys: KeyStore.load(config), portalSecrets: PortalSecretBox.load(dizin, { create: true }), codeHasher: ActivationCodeHasher.load(dizin, { create: true }) };
+  const app = createTailnetApp(ctx, null, () => tailnetAdresi);
   const dogru = http.createServer(app);
   const yanlis = http.createServer(app);
+  const kapali = http.createServer(createTailnetApp({ ...ctx, config: kapaliConfig }, null, () => kapaliAdres));
   try {
     tailnetAdresi = await listen(dogru);
     const yanlisAdres = await listen(yanlis);
+    kapaliAdres = await listen(kapali);
+    const r0 = await fetch(`http://127.0.0.1:${kapaliAdres.port}/portal/saglik`);
+    kontrol("§4d ✓K TAILNET_LOOPBACK kapalı: kendi soketinde geri döngüden gelen istek → 404", r0.status === 404, `${r0.status}`);
     const r1 = await fetch(`http://127.0.0.1:${tailnetAdresi.port}/portal/saglik`);
     const r2 = await fetch(`http://127.0.0.1:${yanlisAdres.port}/portal/saglik`);
     kontrol("§4a ✓K tailnet soketinde portal sağlık → 200", r1.status === 200, `${r1.status}`);
@@ -81,6 +95,7 @@ async function main(): Promise<void> {
   } finally {
     await new Promise((r) => dogru.close(r));
     await new Promise((r) => yanlis.close(r));
+    await new Promise((r) => kapali.close(r));
     rmSync(dizin, { recursive: true, force: true });
   }
   const { pool } = await import("../src/lib/prisma");
