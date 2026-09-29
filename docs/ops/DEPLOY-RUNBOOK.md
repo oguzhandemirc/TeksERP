@@ -140,14 +140,20 @@ JWT_SECRET="<en az 32 karakter güçlü rastgele>"
 | `BACKUP_OFFSITE_DIR` | Makine dışı ikinci kopya (NAS/UNC). Boşsa yedekler DB ile aynı diskte |
 | `BACKUP_HOUR` | Gece yedeğinin saati — **yalnız fallback**. Yetkili kaynak panel: Sistem → Yedekler → "Otomatik yedek saati" (`SystemSetting backup.hour`). Öncelik: DB → env → `3`. Saat değişikliği **restart gerektirmez** (zamanlayıcı her 15 dk'da okur) |
 | `PG_BIN_DIR` | `pg_dump`/`pg_restore` konumu — Windows'ta PATH'te olmaz |
-| `BACKUP_PG_USER` / `BACKUP_PG_PASSWORD` | **Opsiyonel.** Yedeği ayrı bir DB kullanıcısıyla al (aşağıya bakın). Şifre sır → `.env`'e |
+| `BACKUP_PG_USER` / `BACKUP_PG_PASSWORD` | **Opsiyonel.** Yedek / geri yükleme komutu / DB kopyası kimliği — **süper kullanıcı DEĞİL, bakım rolü** (`tekserp_bakim`; aşağıya bakın). Şifre sır → `.env`'e |
 
 > **⚠ `pg_dump` hangi kullanıcıyla koşuyor?** Varsayılan olarak `DATABASE_URL`'deki
 > **uygulama kullanıcısı**. O kullanıcı tabloların sahibi ya da superuser değilse
 > `pg_dump` ya `permission denied for table X` ile patlar ya da bazı nesneleri
 > atlayıp **sessizce eksik** bir yedek üretir. Eski installer yedekleri `postgres`
-> süper kullanıcısıyla alıyordu. Uygulama kullanıcısı DB sahibi değilse
-> `BACKUP_PG_USER=postgres` + `BACKUP_PG_PASSWORD=...` verin. Teyit:
+> süper kullanıcısıyla alıyordu. **Süper kullanıcı GEREKMEZ** (ölçüldü PG 16,
+> 2026-09-29): yedek + DB kopyası + takas için CREATEDB + canlı DB sahibinin
+> rolüne üyelik + `teks.audit_guard` için `GRANT SET ON PARAMETER` +
+> `pg_read_all_settings` yeter. Bunu `bakim-rolu.ps1` kurar (paketin kökünde;
+> sıfırdan kurulumda `ilk-kurulum.ps1 -BakimRolu`) ve `.env`e `BACKUP_PG_USER=tekserp_bakim`
+> yazar — `postgres` parolası `.env`den çıkar. `BACKUP_PG_USER=postgres` olan eski
+> kurulum aynen çalışır; panelin DB kopyası yetenek satırı eksik ön koşulu
+> talimatıyla söyler. Teyit:
 > ```sql
 > SELECT datname, pg_get_userbyid(datdba) AS owner FROM pg_database WHERE datname = current_database();
 > ```
@@ -583,8 +589,12 @@ ters rename; eski canlı `<canlı>_old_<damga>` olarak durur.
 > bloğuyla aynıdır (aşağı bakın) — burada bedeli daha ağırdır.
 
 **Kısıtlar ve guard'lar:**
-- `BACKUP_PG_USER` **CREATEDB** ya da superuser olmalı; değilse özellik kapalı ve
-  panel `ALTER ROLE "x" CREATEDB;` talimatını gösterir.
+- `BACKUP_PG_USER` süper kullanıcı değilse dört ön koşul ölçülür, eksikte özellik
+  kapalı ve panel talimatı gösterir: CREATEDB (`ALTER ROLE "x" CREATEDB;`) · canlı
+  DB sahibi adına işlem (`GRANT "<sahip>" TO "x";`) · canlıdaki `teks.*` ayarı
+  (`GRANT SET ON PARAMETER teks.audit_guard TO "x";`) · canlıda sahibine
+  erişilemeyen nesne yok. Canlı DB'nin sahibi süper kullanıcıysa kapalı kalır.
+  Hepsini `bakim-rolu.ps1` kurar ve ölçer.
 - **Disk:** boş alan veritabanı boyutunun **1,2 katından azsa BLOK** — PGDATA
   birimini doldurmak canlı veritabanını durdurur. Ölçüm `PGDATA_DIR` →
   tablespace dizini → `SHOW data_directory` sırasıyla çözülür.
