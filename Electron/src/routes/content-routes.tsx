@@ -93,6 +93,7 @@ import { FeatureFlagsPage } from "@/pages/GeneralSettings/FeatureFlagsPage";
 import { NumberingPage } from "@/pages/GeneralSettings/Numbering/NumberingPage";
 import { UpdatePage } from "@/pages/System/UpdatePage";
 import { LicensePage } from "@/pages/System/License/LicensePage";
+import { SupportPage } from "@/pages/System/Support/SupportPage";
 import { AboutPage } from "@/pages/System/About/AboutPage";
 import {
   SETTINGS_ADMIN_PERMISSION,
@@ -845,6 +846,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={LICENSE_ACCESS}>
         <LicensePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Destek (3d-2) — satıcıya talep + yanıtlar; karo ile AYNI kod (`system/support` manifestosu).
+    path: "system/support",
+    element: (
+      <ProtectedRoute requirePermission="support:create">
+        <SupportPage />
       </ProtectedRoute>
     ),
   },

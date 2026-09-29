@@ -163,6 +163,7 @@ const CAP_LABEL: Record<string, string> = {
   "settings:workstation": "Bu bilgisayarın donanım ayarlarını değiştirebilir",
   "system:backups": "Yedek alabilir",
   "license:manage": "Lisansı etkinleştirip taşıyabilir, proxy ayarlayabilir",
+  "support:create": "Satıcıya destek talebi açabilir",
   // Depo mal kabul + ön muhasebe (2026-09-01) — kutunun yanında NE yapabildiği
   // yazmazsa yönetici atama ekranında ham kodu okur.
   "goods-receipt:write": "Mal kabul fişi açıp düzenleyebilir",
@@ -216,7 +217,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "access/permissions", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yetki Kataloğu", requires: ["admin:users"], capabilities: [] },
   { key: "access/patron-bulut", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Patron Bulutu", requires: ["admin:users"], capabilities: [] },
   // Sistem hub'ı: karolarından BİRİNİ açabilen herkes girer (Electron `SYSTEM_HUB_ACCESS` aynası).
-  { key: "system", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem", requires: ["admin:settings", "data:import", "master-data:merge", "settings:numbering", "settings:workstation", "settings:customers", "settings:orders", "settings:shipping", "settings:work-orders", "settings:production", "settings:kartela", "settings:devere", "settings:dokuma", "settings:warehouse", "settings:yarn", "settings:finance", "settings:label", "settings:devices", "settings:company", "settings:session", "system:activity", "system:work-sessions", "system:server-status", "system:clients", "system:backups", "license:view", "license:manage"], capabilities: [] },
+  { key: "system", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem", requires: ["admin:settings", "data:import", "master-data:merge", "settings:numbering", "settings:workstation", "settings:customers", "settings:orders", "settings:shipping", "settings:work-orders", "settings:production", "settings:kartela", "settings:devere", "settings:dokuma", "settings:warehouse", "settings:yarn", "settings:finance", "settings:label", "settings:devices", "settings:company", "settings:session", "system:activity", "system:work-sessions", "system:server-status", "system:clients", "system:backups", "license:view", "license:manage", "support:create"], capabilities: [] },
   { key: "system/activity", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Günlüğü", requires: ["admin:settings", "system:activity"], capabilities: [] },
   { key: "system/perf", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Endpoint Performansı", requires: ["admin:settings"], capabilities: [] },
   { key: "system/server-status", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sunucu Durumu", requires: ["admin:settings", "system:server-status"], capabilities: ["system:backups"] },
@@ -226,6 +227,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Lisans + Hakkında (panel yüzeyi Faz 1d). Hakkında'nın verisi herkese açık `GET /api/license/durum`.
   { key: "system/license", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Lisans", requires: ["license:view", "license:manage"], capabilities: ["license:manage"] },
   { key: "system/about", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Hakkında", requires: ["license:view"], capabilities: [] },
+  { key: "system/support", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Destek", requires: ["support:create"], capabilities: ["support:create"] },
   // Veri Aktarımı — `admin:settings` DEĞİL: toplu yükleme sistem yönetimi değil
   // VERİ yönetimidir ve ayrı atanır. Ekranın kendisi `data:import` ile açılır;
   // hangi varlığa yazılabileceği ayrıca o varlığın write izniyle sınırlıdır

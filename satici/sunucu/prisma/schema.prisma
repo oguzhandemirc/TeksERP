@@ -266,6 +266,7 @@ model Kurulum {
   kopyaUyarilari         KopyaUyarisi[]
   taksitPlanlari         TaksitPlani[]
   ilkKurulumBaglantilari IndirmeBaglantisi[]
+  destekTalepleri        DestekTalebi[]
 
   @@index([tesisId])
   @@index([kanalKodu])
@@ -593,13 +594,77 @@ model KurulumKaydi {
   eskiAcikAnahtar    String?  @db.VarChar(64)
   ayrinti            Json?
   yapan              String   @db.VarChar(120)
+  /// Fabrikanın `kur.ps1` kaydının kimliği (`kurulumKayitlari[].kayitId`) — yoklama tekrarında aynı satır ikinci kez yazılmaz.
+  kaynakKayitId      String?  @db.Uuid
   createdAt          DateTime @default(now()) @db.Timestamptz
 
   kurulum Kurulum @relation(fields: [kurulumId], references: [id])
 
+  @@unique([kurulumId, kaynakKayitId])
   @@index([kurulumId, createdAt])
   @@index([eskiAnahtarKimligi])
   @@map("kurulum_kaydi")
+}
+
+// -----------------------------------------------------------------------------
+// DESTEK — fabrikanın panelinden açılan talepler (`POST /v1/destek`, kurulum imzalı).
+// Talep DURUM tablosudur; ne olduğu (açılış · yanıt · kapanış) `destek_olayi` DEFTERİNDEDİR.
+// -----------------------------------------------------------------------------
+
+enum DestekDurumu {
+  ACIK
+  YANITLANDI
+  KAPANDI
+}
+
+enum DestekOlayTuru {
+  ACILDI
+  YANIT
+  KAPATILDI
+}
+
+model DestekTalebi {
+  id            String       @id @default(uuid()) @db.Uuid
+  kurulumId     String       @db.Uuid
+  /// Fabrikanın yerel talep kimliği — (kurulum, talepId) tekrar gönderimde aynı talebi döndürür.
+  talepId       String       @db.Uuid
+  /// Doğuşta materyalize (`DST-000001`); sıra `destek_talep_no_seq`.
+  talepNo       String       @unique @db.VarChar(40)
+  konu          String       @db.VarChar(200)
+  aciklama      String
+  acan          String?      @db.VarChar(120)
+  panelSurum    String?      @db.VarChar(60)
+  ekTuru        String?      @db.VarChar(20)
+  ek            Bytes?
+  saglik        Json
+  ortam         Json
+  durum         DestekDurumu @default(ACIK)
+  kapanisZamani DateTime?    @db.Timestamptz
+  createdAt     DateTime     @default(now()) @db.Timestamptz
+  updatedAt     DateTime     @updatedAt @db.Timestamptz
+
+  kurulum Kurulum       @relation(fields: [kurulumId], references: [id])
+  olaylar DestekOlayi[]
+
+  @@unique([kurulumId, talepId])
+  @@index([durum, updatedAt])
+  @@index([kurulumId, updatedAt])
+  @@map("destek_talebi")
+}
+
+/// Destek DEFTERİ — açılış, satıcı yanıtı, kapanış satır olarak; satır değişmez, silinmez.
+model DestekOlayi {
+  id        String         @id @default(uuid()) @db.Uuid
+  talepId   String         @db.Uuid
+  tur       DestekOlayTuru
+  metin     String?
+  yapan     String         @db.VarChar(120)
+  createdAt DateTime       @default(now()) @db.Timestamptz
+
+  talep DestekTalebi @relation(fields: [talepId], references: [id])
+
+  @@index([talepId, createdAt])
+  @@map("destek_olayi")
 }
 
 /// Satıcı anahtarlarının KÜNYESİ — yalnız AÇIK yarı; özel yarı DB'ye ASLA girmez.

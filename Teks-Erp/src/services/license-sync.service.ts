@@ -22,6 +22,7 @@ import { coreCheckLeaseBinding, coreVerifyEntitlement, coreVerifyLease } from ".
 import { runIntegrityCheck } from "../lib/license/integrity-check";
 import { integrityCheckTarget, setIntegrityOutcome } from "../lib/license/integrity-state";
 import { NATIVE_REQUIRED, getLicenseCore } from "../lib/license/native";
+import { installHistoryPath, readInstallHistory } from "../lib/license/install-history";
 import {
   getLicenseConfig,
   getLicenseSnapshot,
@@ -37,6 +38,7 @@ import {
   type LicenseSnapshot,
 } from "../lib/license/runtime";
 import { evaluateLicenseTransitions } from "./license-trail.service";
+import { syncSupportAfterPoll } from "./support-sync.service";
 import {
   buildEnvironment,
   currentFingerprintDigest,
@@ -121,7 +123,16 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     ortam: buildEnvironment(),
     saglik: await buildPollHealthSummary(),
     gozlem: peekObservationCounters(),
+    // Kurulum kaydı yoksa alan hiç gitmez: eski satıcı KATI şemayla tanımadığı anahtarı reddeder.
+    ...installRecordsField(),
   });
+}
+
+function installRecordsField(): { kurulumKayitlari?: ReturnType<typeof readInstallHistory> } {
+  const dir = getLicenseStore()?.dir;
+  if (!dir) return {};
+  const records = readInstallHistory(installHistoryPath(dir));
+  return records.length > 0 ? { kurulumKayitlari: records } : {};
 }
 
 // ── Kira kabulü ─────────────────────────────────────────────────────────────────
@@ -282,6 +293,8 @@ async function pollOnce(transport: VendorTransport): Promise<{ outcome: PollOutc
     recordPollOutcome({ ok: false, code: result.code });
     return { outcome: "BASARISIZ", code: result.code };
   }
+  // Destek (3d-2): yanıtın `destek` alanı + giden kutusu — kira alışverişi kuyruğunun DIŞINDA, yoklamayı düşürmez.
+  void syncSupportAfterPoll(result.json, transport);
   try {
     const accepted = await acceptLicenseResponse(result.json, "yoklama");
     if (!accepted.yeniKira) {

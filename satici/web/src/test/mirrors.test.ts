@@ -189,9 +189,18 @@ describe("eşikler ve biçim desenleri aynası", () => {
 });
 
 describe("arayüzün çağırdığı her uç sunucuda var", () => {
-  const vendor = [...serverRoutes("http/portal-routes.ts"), ...serverRoutes("http/distribution-routes.ts"), ...sessionRoutes()];
+  // Satıcı tablosu başka dosyadan yayılan parçaları da taşır (`...SUPPORT_PORTAL_ROUTES`): her yayılan tablo bu listede.
+  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts"];
+  const vendor = [...VENDOR_ROUTE_FILES.flatMap(serverRoutes), ...sessionRoutes()];
   const dealer = [...serverRoutes("http/dealer-routes.ts"), ...sessionRoutes()];
   const calls = clientCalls();
+
+  it("satıcı tablosuna yayılan her parça tarayıcının dosya listesinde (sessiz kör nokta yok)", () => {
+    const spreads = [...read("http/portal-routes.ts").matchAll(/\.\.\.([A-Z_]+_PORTAL_ROUTES)\b/g)].map((m) => m[1]!);
+    const declared = VENDOR_ROUTE_FILES.flatMap((f) => [...read(f).matchAll(/export const ([A-Z_]+_PORTAL_ROUTES)\b/g)].map((m) => m[1]!));
+    expect(spreads.length).toBeGreaterThan(0);
+    expect(spreads.filter((x) => !declared.includes(x))).toEqual([]);
+  });
 
   it("tarayıcı gerçekten ölçüyor (boş küme sahte yeşil verir)", () => {
     expect(vendor.length).toBeGreaterThan(40);

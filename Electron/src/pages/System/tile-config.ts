@@ -1,4 +1,4 @@
-import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, Info, KeyRound, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
+import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
 import {
   LICENSE_ACCESS,
   SETTINGS_COMPANY_ACCESS,
@@ -302,6 +302,16 @@ export const systemTiles: SystemTile[] = [
     // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI küme.
     permissionAny: LICENSE_ACCESS,
     licenseObservationGate: true,
+  },
+  {
+    key: "support",
+    title: "Destek",
+    description: "Satıcıya destek talebi açın (ekran görüntüsü + sağlık özeti), yanıtları izleyin",
+    icon: LifeBuoy,
+    to: "/system/support",
+    group: "config",
+    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
+    permission: "support:create",
   },
   {
     key: "about",

@@ -455,64 +455,64 @@ model User {
   isSystemAccount Boolean @default(false)
 
   // Relations
-  permissions                UserPermission[]         @relation("UserPermissionUser")
-  grantedPermissions         UserPermission[]         @relation("UserPermissionGrantedBy")
-  logs                       SystemLog[]
-  printedTravelerCards       TravelerCard[]           @relation("TravelerCardPrintedBy")
-  cardScans                  TravelerCardScan[]
-  rollMovements              RollMovement[]
-  printedManifests           Manifest[]               @relation("ManifestPrintedBy")
-  printedDocuments           PrintedDocument[]        @relation("PrintedDocumentPrintedBy")
-  dispatches                 SubcontractorDispatch[]  @relation("DispatchCreatedBy")
-  cancelledDispatches        SubcontractorDispatch[]  @relation("DispatchCancelledBy")
-  directShippedDispatches    SubcontractorDispatch[]  @relation("DispatchDirectShippedBy")
-  receipts                   SubcontractorReceipt[]   @relation("ReceiptCreatedBy")
-  cancelledReceipts          SubcontractorReceipt[]   @relation("ReceiptCancelledBy")
-  kartelaDispatches          KartelaDispatch[]        @relation("KartelaDispatchBy")
-  cancelledKartelaDispatches KartelaDispatch[]        @relation("KartelaDispatchCancelledBy")
-  kartelaReceipts            KartelaReceipt[]         @relation("KartelaReceiptBy")
-  cancelledKartelaReceipts   KartelaReceipt[]         @relation("KartelaReceiptCancelledBy")
-  swatchesCreated            Swatch[]                 @relation("SwatchCreatedBy")
-  rollOperations             RollOperation[]
-  rollVariances              RollVariance[]
-  reversedRollVariances      RollVariance[]           @relation("RollVarianceReversedBy")
-  planDeviationsConfirmed    RollPlanDeviation[]      @relation("RollPlanDeviationConfirmedBy")
-  detectedRollErrors         RollError[]              @relation("RollErrorDetectedBy")
-  processedRollErrors        RollError[]              @relation("RollErrorProcessedBy")
-  createdRolls               Roll[]                   @relation("RollCreatedBy")
-  cancelledRolls             Roll[]                   @relation("RollCancelledBy")
+  permissions                   UserPermission[]         @relation("UserPermissionUser")
+  grantedPermissions            UserPermission[]         @relation("UserPermissionGrantedBy")
+  logs                          SystemLog[]
+  printedTravelerCards          TravelerCard[]           @relation("TravelerCardPrintedBy")
+  cardScans                     TravelerCardScan[]
+  rollMovements                 RollMovement[]
+  printedManifests              Manifest[]               @relation("ManifestPrintedBy")
+  printedDocuments              PrintedDocument[]        @relation("PrintedDocumentPrintedBy")
+  dispatches                    SubcontractorDispatch[]  @relation("DispatchCreatedBy")
+  cancelledDispatches           SubcontractorDispatch[]  @relation("DispatchCancelledBy")
+  directShippedDispatches       SubcontractorDispatch[]  @relation("DispatchDirectShippedBy")
+  receipts                      SubcontractorReceipt[]   @relation("ReceiptCreatedBy")
+  cancelledReceipts             SubcontractorReceipt[]   @relation("ReceiptCancelledBy")
+  kartelaDispatches             KartelaDispatch[]        @relation("KartelaDispatchBy")
+  cancelledKartelaDispatches    KartelaDispatch[]        @relation("KartelaDispatchCancelledBy")
+  kartelaReceipts               KartelaReceipt[]         @relation("KartelaReceiptBy")
+  cancelledKartelaReceipts      KartelaReceipt[]         @relation("KartelaReceiptCancelledBy")
+  swatchesCreated               Swatch[]                 @relation("SwatchCreatedBy")
+  rollOperations                RollOperation[]
+  rollVariances                 RollVariance[]
+  reversedRollVariances         RollVariance[]           @relation("RollVarianceReversedBy")
+  planDeviationsConfirmed       RollPlanDeviation[]      @relation("RollPlanDeviationConfirmedBy")
+  detectedRollErrors            RollError[]              @relation("RollErrorDetectedBy")
+  processedRollErrors           RollError[]              @relation("RollErrorProcessedBy")
+  createdRolls                  Roll[]                   @relation("RollCreatedBy")
+  cancelledRolls                Roll[]                   @relation("RollCancelledBy")
   // Ticaret paketi — depo hareketleri / transfer / mal kabul izleri
-  warehouseMovements         WarehouseMovement[]      @relation("WarehouseMovementUser")
-  createdTransfers           WarehouseTransfer[]      @relation("WarehouseTransferCreatedBy")
-  cancelledTransfers         WarehouseTransfer[]      @relation("WarehouseTransferCancelledBy")
-  createdGoodsReceipts       GoodsReceipt[]           @relation("GoodsReceiptCreatedBy")
-  cancelledGoodsReceipts     GoodsReceipt[]           @relation("GoodsReceiptCancelledBy")
+  warehouseMovements            WarehouseMovement[]      @relation("WarehouseMovementUser")
+  createdTransfers              WarehouseTransfer[]      @relation("WarehouseTransferCreatedBy")
+  cancelledTransfers            WarehouseTransfer[]      @relation("WarehouseTransferCancelledBy")
+  createdGoodsReceipts          GoodsReceipt[]           @relation("GoodsReceiptCreatedBy")
+  cancelledGoodsReceipts        GoodsReceipt[]           @relation("GoodsReceiptCancelledBy")
   // Paket D (ticaret).
-  yarnMovements              YarnMovement[]           @relation("YarnMovementUser")
-  createdPurchaseOrders      PurchaseOrder[]          @relation("PurchaseOrderCreatedBy")
-  cancelledPurchaseOrders    PurchaseOrder[]          @relation("PurchaseOrderCancelledBy")
-  shortClosedPurchaseOrders  PurchaseOrder[]          @relation("PurchaseOrderShortClosedBy")
-  manualClosedOrders         Order[]                  @relation("OrderManualClosedBy")
-  systemSettingsUpdates      SystemSetting[]
-  numberSeriesUpdates        NumberSeries[]
-  preference                 UserPreference?
-  receivedReturns            RollReturn[]             @relation("RollReturnReceivedBy")
-  cancelledReturns           RollReturn[]             @relation("RollReturnCancelledBy")
-  workSessions               WorkSession[]
-  sessions                   Session[]
-  dispatchedShipments        Shipment[]               @relation("ShipmentDispatchedBy")
-  invoicedShipments          Shipment[]               @relation("ShipmentInvoicedBy")
-  directShipments            DirectShipment[]         @relation("DirectShipmentShippedBy")
-  invoicedDirectShipments    DirectShipment[]         @relation("DirectShipmentInvoicedBy")
-  weighedSacks               Sack[]                   @relation("SackWeighedBy")
-  sackTagAssignments         SackTagAssignment[]      @relation("SackTagAssignmentCreatedBy")
-  sackTagAssignmentsCleared  SackTagAssignment[]      @relation("SackTagAssignmentClearedBy")
-  sackAllocationsCleared     SackAllocation[]         @relation("SackAllocationClearedBy")
-  swatchStockReductions      SwatchStockReduction[]   @relation("SwatchStockReductionCreatedBy")
-  swatchStockReductionsReversed SwatchStockReduction[] @relation("SwatchStockReductionReversedBy")
-  kursunBypassAssigned       KursunBypassAssignment[] @relation("KursunBypassAssignedBy")
-  kursunBypassCompleted      KursunBypassAssignment[] @relation("KursunBypassCompletedBy")
-  kursunBypassCancelled      KursunBypassAssignment[] @relation("KursunBypassCancelledBy")
+  yarnMovements                 YarnMovement[]           @relation("YarnMovementUser")
+  createdPurchaseOrders         PurchaseOrder[]          @relation("PurchaseOrderCreatedBy")
+  cancelledPurchaseOrders       PurchaseOrder[]          @relation("PurchaseOrderCancelledBy")
+  shortClosedPurchaseOrders     PurchaseOrder[]          @relation("PurchaseOrderShortClosedBy")
+  manualClosedOrders            Order[]                  @relation("OrderManualClosedBy")
+  systemSettingsUpdates         SystemSetting[]
+  numberSeriesUpdates           NumberSeries[]
+  preference                    UserPreference?
+  receivedReturns               RollReturn[]             @relation("RollReturnReceivedBy")
+  cancelledReturns              RollReturn[]             @relation("RollReturnCancelledBy")
+  workSessions                  WorkSession[]
+  sessions                      Session[]
+  dispatchedShipments           Shipment[]               @relation("ShipmentDispatchedBy")
+  invoicedShipments             Shipment[]               @relation("ShipmentInvoicedBy")
+  directShipments               DirectShipment[]         @relation("DirectShipmentShippedBy")
+  invoicedDirectShipments       DirectShipment[]         @relation("DirectShipmentInvoicedBy")
+  weighedSacks                  Sack[]                   @relation("SackWeighedBy")
+  sackTagAssignments            SackTagAssignment[]      @relation("SackTagAssignmentCreatedBy")
+  sackTagAssignmentsCleared     SackTagAssignment[]      @relation("SackTagAssignmentClearedBy")
+  sackAllocationsCleared        SackAllocation[]         @relation("SackAllocationClearedBy")
+  swatchStockReductions         SwatchStockReduction[]   @relation("SwatchStockReductionCreatedBy")
+  swatchStockReductionsReversed SwatchStockReduction[]   @relation("SwatchStockReductionReversedBy")
+  kursunBypassAssigned          KursunBypassAssignment[] @relation("KursunBypassAssignedBy")
+  kursunBypassCompleted         KursunBypassAssignment[] @relation("KursunBypassCompletedBy")
+  kursunBypassCancelled         KursunBypassAssignment[] @relation("KursunBypassCancelledBy")
 
   /// İptal ettiği iş emirleri (2026-08-17 iptal izi). Düşük trafik "kim yaptı"
   /// FK'sı — sorgulanmadıkça indexlenmez (CLAUDE.md perf kuralı 1 istisnası).
@@ -527,54 +527,54 @@ model User {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   // Kayıt künyesi ters ilişkileri (2026-08-19) — createdBy/updatedBy
-  createdColors            Color[]            @relation("ColorCreatedBy")
-  updatedColors            Color[]            @relation("ColorUpdatedBy")
-  createdCustomers         Customer[]         @relation("CustomerCreatedBy")
-  updatedCustomers         Customer[]         @relation("CustomerUpdatedBy")
-  createdCustomerBranchs   CustomerBranch[]   @relation("CustomerBranchCreatedBy")
-  updatedCustomerBranchs   CustomerBranch[]   @relation("CustomerBranchUpdatedBy")
-  createdDefectTypes       DefectType[]       @relation("DefectTypeCreatedBy")
-  updatedDefectTypes       DefectType[]       @relation("DefectTypeUpdatedBy")
-  createdFabricPropertys   FabricProperty[]   @relation("FabricPropertyCreatedBy")
-  updatedFabricPropertys   FabricProperty[]   @relation("FabricPropertyUpdatedBy")
-  createdItems             Item[]             @relation("ItemCreatedBy")
-  updatedItems             Item[]             @relation("ItemUpdatedBy")
-  lifecycleChangedItems    Item[]             @relation("ItemLifecycleChangedBy")
-  createdMachines          Machine[]          @relation("MachineCreatedBy")
-  updatedMachines          Machine[]          @relation("MachineUpdatedBy")
-  createdMachineSpecs      MachineSpec[]      @relation("MachineSpecCreatedBy")
-  updatedMachineSpecs      MachineSpec[]      @relation("MachineSpecUpdatedBy")
-  createdShiftDefinitions  ShiftDefinition[]  @relation("ShiftDefinitionCreatedBy")
-  updatedShiftDefinitions  ShiftDefinition[]  @relation("ShiftDefinitionUpdatedBy")
-  createdMachineCollectors MachineCollector[] @relation("MachineCollectorCreatedBy")
-  updatedMachineCollectors MachineCollector[] @relation("MachineCollectorUpdatedBy")
-  machineStopsClassified   MachineStopEvent[] @relation("MachineStopClassifiedBy")
-  machineStopReclasses     MachineStopReclass[] @relation("MachineStopReclassBy")
-  machineShiftStatsSealed  MachineShiftStat[] @relation("MachineShiftStatSealedBy")
+  createdColors            Color[]                @relation("ColorCreatedBy")
+  updatedColors            Color[]                @relation("ColorUpdatedBy")
+  createdCustomers         Customer[]             @relation("CustomerCreatedBy")
+  updatedCustomers         Customer[]             @relation("CustomerUpdatedBy")
+  createdCustomerBranchs   CustomerBranch[]       @relation("CustomerBranchCreatedBy")
+  updatedCustomerBranchs   CustomerBranch[]       @relation("CustomerBranchUpdatedBy")
+  createdDefectTypes       DefectType[]           @relation("DefectTypeCreatedBy")
+  updatedDefectTypes       DefectType[]           @relation("DefectTypeUpdatedBy")
+  createdFabricPropertys   FabricProperty[]       @relation("FabricPropertyCreatedBy")
+  updatedFabricPropertys   FabricProperty[]       @relation("FabricPropertyUpdatedBy")
+  createdItems             Item[]                 @relation("ItemCreatedBy")
+  updatedItems             Item[]                 @relation("ItemUpdatedBy")
+  lifecycleChangedItems    Item[]                 @relation("ItemLifecycleChangedBy")
+  createdMachines          Machine[]              @relation("MachineCreatedBy")
+  updatedMachines          Machine[]              @relation("MachineUpdatedBy")
+  createdMachineSpecs      MachineSpec[]          @relation("MachineSpecCreatedBy")
+  updatedMachineSpecs      MachineSpec[]          @relation("MachineSpecUpdatedBy")
+  createdShiftDefinitions  ShiftDefinition[]      @relation("ShiftDefinitionCreatedBy")
+  updatedShiftDefinitions  ShiftDefinition[]      @relation("ShiftDefinitionUpdatedBy")
+  createdMachineCollectors MachineCollector[]     @relation("MachineCollectorCreatedBy")
+  updatedMachineCollectors MachineCollector[]     @relation("MachineCollectorUpdatedBy")
+  machineStopsClassified   MachineStopEvent[]     @relation("MachineStopClassifiedBy")
+  machineStopReclasses     MachineStopReclass[]   @relation("MachineStopReclassBy")
+  machineShiftStatsSealed  MachineShiftStat[]     @relation("MachineShiftStatSealedBy")
   machineShiftSealsActed   MachineShiftStatSeal[] @relation("MachineShiftSealBy")
-  createdPeripheralDevices PeripheralDevice[] @relation("PeripheralDeviceCreatedBy")
-  updatedPeripheralDevices PeripheralDevice[] @relation("PeripheralDeviceUpdatedBy")
-  createdProductRecipes    ProductRecipe[]    @relation("ProductRecipeCreatedBy")
-  updatedProductRecipes    ProductRecipe[]    @relation("ProductRecipeUpdatedBy")
-  createdWarpSpecs         WarpSpec[]         @relation("WarpSpecCreatedBy")
-  updatedWarpSpecs         WarpSpec[]         @relation("WarpSpecUpdatedBy")
-  createdQualityGrades     QualityGrade[]     @relation("QualityGradeCreatedBy")
-  updatedQualityGrades     QualityGrade[]     @relation("QualityGradeUpdatedBy")
-  createdReturnReasons     ReturnReason[]     @relation("ReturnReasonCreatedBy")
-  updatedReturnReasons     ReturnReason[]     @relation("ReturnReasonUpdatedBy")
-  createdRoutes            Route[]            @relation("RouteCreatedBy")
-  updatedRoutes            Route[]            @relation("RouteUpdatedBy")
-  createdStations          Station[]          @relation("StationCreatedBy")
-  updatedStations          Station[]          @relation("StationUpdatedBy")
-  createdSubcontractors    Subcontractor[]    @relation("SubcontractorCreatedBy")
-  updatedSubcontractors    Subcontractor[]    @relation("SubcontractorUpdatedBy")
-  createdLabelTemplates    LabelTemplate[]    @relation("LabelTemplateCreatedBy")
-  updatedLabelTemplates    LabelTemplate[]    @relation("LabelTemplateUpdatedBy")
-  createdOrders            Order[]            @relation("OrderCreatedBy")
-  updatedOrders            Order[]            @relation("OrderUpdatedBy")
-  cancelledOrderLines      OrderLine[]        @relation("OrderLineCancelledBy")
-  createdBatchs            Batch[]            @relation("BatchCreatedBy")
-  updatedBatchs            Batch[]            @relation("BatchUpdatedBy")
+  createdPeripheralDevices PeripheralDevice[]     @relation("PeripheralDeviceCreatedBy")
+  updatedPeripheralDevices PeripheralDevice[]     @relation("PeripheralDeviceUpdatedBy")
+  createdProductRecipes    ProductRecipe[]        @relation("ProductRecipeCreatedBy")
+  updatedProductRecipes    ProductRecipe[]        @relation("ProductRecipeUpdatedBy")
+  createdWarpSpecs         WarpSpec[]             @relation("WarpSpecCreatedBy")
+  updatedWarpSpecs         WarpSpec[]             @relation("WarpSpecUpdatedBy")
+  createdQualityGrades     QualityGrade[]         @relation("QualityGradeCreatedBy")
+  updatedQualityGrades     QualityGrade[]         @relation("QualityGradeUpdatedBy")
+  createdReturnReasons     ReturnReason[]         @relation("ReturnReasonCreatedBy")
+  updatedReturnReasons     ReturnReason[]         @relation("ReturnReasonUpdatedBy")
+  createdRoutes            Route[]                @relation("RouteCreatedBy")
+  updatedRoutes            Route[]                @relation("RouteUpdatedBy")
+  createdStations          Station[]              @relation("StationCreatedBy")
+  updatedStations          Station[]              @relation("StationUpdatedBy")
+  createdSubcontractors    Subcontractor[]        @relation("SubcontractorCreatedBy")
+  updatedSubcontractors    Subcontractor[]        @relation("SubcontractorUpdatedBy")
+  createdLabelTemplates    LabelTemplate[]        @relation("LabelTemplateCreatedBy")
+  updatedLabelTemplates    LabelTemplate[]        @relation("LabelTemplateUpdatedBy")
+  createdOrders            Order[]                @relation("OrderCreatedBy")
+  updatedOrders            Order[]                @relation("OrderUpdatedBy")
+  cancelledOrderLines      OrderLine[]            @relation("OrderLineCancelledBy")
+  createdBatchs            Batch[]                @relation("BatchCreatedBy")
+  updatedBatchs            Batch[]                @relation("BatchUpdatedBy")
 
   // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
   createdById String? @db.Uuid
@@ -614,6 +614,8 @@ model User {
   duplicateReviewsDecided         DuplicateReview[]         @relation("DuplicateReviewDecidedBy")
   mergedColors                    Color[]                   @relation("ColorMergedBy")
   mergedSubcontractors            Subcontractor[]           @relation("SubcontractorMergedBy")
+  /// Destek talebi künyesi (kim açtı).
+  supportTickets                  SupportTicket[]           @relation("SupportTicketCreatedBy")
 
   @@map("users")
 }
@@ -648,17 +650,17 @@ model UserPreference {
 /// deviceId serbest VARCHAR (FK DEĞİL) — kayıtsız/eşleşmemiş client de login yapıp
 /// oturum açabilmeli; buraya devices tablosuna FK koymak o senaryoyu kilitlerdi.
 model Session {
-  id           String     @id @default(uuid()) @db.Uuid
-  userId       String     @db.Uuid
-  deviceType   ClientType
-  jti          String     @unique @db.Uuid
-  deviceId     String?    @db.VarChar(64)
-  createdAt    DateTime   @default(now()) @db.Timestamptz
-  updatedAt    DateTime   @updatedAt @db.Timestamptz
-  expiresAt    DateTime   @db.Timestamptz
-  revokedAt    DateTime?  @db.Timestamptz
-  revokeReason String?    @db.VarChar(32)
-  lastSeenAt   DateTime?  @db.Timestamptz
+  id            String     @id @default(uuid()) @db.Uuid
+  userId        String     @db.Uuid
+  deviceType    ClientType
+  jti           String     @unique @db.Uuid
+  deviceId      String?    @db.VarChar(64)
+  createdAt     DateTime   @default(now()) @db.Timestamptz
+  updatedAt     DateTime   @updatedAt @db.Timestamptz
+  expiresAt     DateTime   @db.Timestamptz
+  revokedAt     DateTime?  @db.Timestamptz
+  revokeReason  String?    @db.VarChar(32)
+  lastSeenAt    DateTime?  @db.Timestamptz
   /// İstemcinin GİRİŞ ANINDA bildirdiği kendi sürümü ("1.3.2"). Yalnız GÖZLEM:
   /// hiçbir kapı okumaz, yetki/limit kararına girmez (`constants/client-info.ts`).
   /// NULL = başlığı göndermeyen ya da alan eklenmeden ÖNCE açılmış oturum ⇒
@@ -1521,31 +1523,31 @@ model ProductRecipeProperty {
 /// ⚠️ Levent doğarken tel/denye bu karttan KOPYALANIR (`WarpBeamEvent.WOUND`,
 /// Faz 1b): kart sonradan düzeltilse bile geçmiş leventin kg'ı değişmez.
 model WarpSpec {
-  id     String @id @default(uuid()) @db.Uuid
-  code   String @unique @db.VarChar(32)
-  name   String @db.VarChar(100)
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique @db.VarChar(32)
+  name         String   @db.VarChar(100)
   /// Çözgü ipliği — `ItemType.YARN` ve `linearDensityDen` DOLU olmalı (servis 400).
-  yarnItemId String @db.Uuid
+  yarnItemId   String   @db.Uuid
   /// Toplam tel (kenar dahil). CHECK > 0 — devere formülünün ilk çarpanı.
-  endsCount Int
+  endsCount    Int
   /// Kenar teli — bilgi; toplam telin İÇİNDEDİR, ayrıca eklenmez.
   selvedgeEnds Int?
   /// Tarak numarası. ⚠️ BİRİMİ PROFİLDİR (diş/cm ya da diş/10 cm) ve ölçülmeden
   /// hesaba GİRMEZ; bugün yalnız ekranda gösterilir.
-  reedNo      Decimal? @db.Decimal(6, 2)
+  reedNo       Decimal? @db.Decimal(6, 2)
   /// Dişe tel — bilgi.
-  endsPerDent Int?
+  endsPerDent  Int?
   /// Tarak eni (cm) — bilgi.
-  reedWidthCm Decimal? @db.Decimal(6, 2)
+  reedWidthCm  Decimal? @db.Decimal(6, 2)
   /// Faz 4 TAKE-UP (%) — çözgü ÷ kumaş oranı: `çözgü = kumaş ÷ (1 − takeUp/100)`. [VERİ] ölçüm üçlüsüne
   /// (levent · desen · tezgah) bağlıdır, kartta VARSAYILANDIR; NULL = bilinmiyor → otomatik tüketim
   /// çözgü = kumaş sayar ve UYARIR (ESTIMATED). CHECK `warp_specs_take_up_pct_range` 0 ≤ x < 100.
-  takeUpPct   Decimal? @db.Decimal(5, 2)
-  notes       String?  @db.VarChar(500)
-  isActive    Boolean  @default(true)
+  takeUpPct    Decimal? @db.Decimal(5, 2)
+  notes        String?  @db.VarChar(500)
+  isActive     Boolean  @default(true)
 
-  yarnItem    Item   @relation("WarpSpecYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
-  fabricItems Item[] @relation("ItemWarpSpec")
+  yarnItem      Item           @relation("WarpSpecYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
+  fabricItems   Item[]         @relation("ItemWarpSpec")
   weavingOrders WeavingOrder[] @relation("WeavingOrderWarpSpec")
   warpBeams     WarpBeam[]     @relation("WarpBeamSpec")
 
@@ -1626,25 +1628,25 @@ enum WarpKgSource {
 /// Kalan metre KOLON DEĞİL: WarpBeamEvent'ten türetilir. ⚠️ Faz 3 kolonları (currentMachineId ·
 /// currentPosition) BU DİLİMDE AÇILMADI — yazıcısı olmayan kolon yalan söyler.
 model WarpBeam {
-  id             String         @id @default(uuid()) @db.Uuid
+  id               String         @id @default(uuid()) @db.Uuid
   /// LV+GGAAYY+NNNN — barkod = kod; 8029 kod-kapsam kilidiyle üretilir (yeni advisory uzayı YOK).
-  beamNo         String         @unique @db.VarChar(32)
-  clientToken    String?        @unique @db.Uuid
-  warpSpecId     String         @db.Uuid
-  weavingOrderId String?        @db.Uuid
-  status         WarpBeamStatus @default(PLANNED)
+  beamNo           String         @unique @db.VarChar(32)
+  clientToken      String?        @unique @db.Uuid
+  warpSpecId       String         @db.Uuid
+  weavingOrderId   String?        @db.Uuid
+  status           WarpBeamStatus @default(PLANNED)
   /// Plan metresi — yalnız PLANNED'da düzenlenir; gerçek metre WOUND satırında.
-  plannedLengthM Decimal        @db.Decimal(12, 3)
+  plannedLengthM   Decimal        @db.Decimal(12, 3)
   /// Metal gövde numarası — demirbaş kartı YOK (Faz 5); numarasız fabrika kayıttan düşmez.
-  physicalBeamNo String?        @db.VarChar(32)
+  physicalBeamNo   String?        @db.VarChar(32)
   /// Faz 3 — "şu an nerede": yalnız MOUNTED'da dolu (CHECK `warp_beams_mounted_ck`); yuva seddi
   /// `warp_beams_machine_position_uq` (bir yuvada tek levent). Olayla AYNI tx'te yazılır (§9.6).
-  currentMachineId String? @db.Uuid
-  currentPosition  Int?    @db.SmallInt
+  currentMachineId String?        @db.Uuid
+  currentPosition  Int?           @db.SmallInt
   /// RAŞEL TAKIMI (#23): aynı sarımda "N adet" ile birlikte doğan leventler AYNI anahtarı taşır (kardeş bağı
   /// AÇIK kolon; `beamRole` Faz 5 kataloğuna saklı). Tek levent → NULL. Replay ve "takım" görünümü buradan.
-  setKey         String?        @db.Uuid
-  notes          String?        @db.VarChar(500)
+  setKey           String?        @db.Uuid
+  notes            String?        @db.VarChar(500)
 
   /// KÖKEN ÜÇLÜSÜ — taraf kolonunun TİPİ kökene bağlı, tek kapı `resolveOriginParty` (CHECK ikinci hat):
   ///   IN_HOUSE    → ikisi de NULL (WOUND.machineId dolu)
@@ -1659,17 +1661,17 @@ model WarpBeam {
   /// yalnız create/kalıtım yazar, PATCH gövdesinden yazılamaz (E2b); sahiplik değişimi = yeni doğum. Ayrı defter YOK.
   ownerCustomerId String?        @db.Uuid
 
-  warpSpec      WarpSpec        @relation("WarpBeamSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
-  subcontractor Subcontractor?  @relation("WarpBeamSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
-  supplier      Customer?       @relation("WarpBeamSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
-  ownerCustomer Customer?       @relation("WarpBeamOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
+  warpSpec       WarpSpec                    @relation("WarpBeamSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+  subcontractor  Subcontractor?              @relation("WarpBeamSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  supplier       Customer?                   @relation("WarpBeamSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  ownerCustomer  Customer?                   @relation("WarpBeamOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
   /// Z1 (Y2): "bu levent hangi iş için sarıldı" — OPSİYONEL (stoğa/serbest levent meşru); yalnız aktif IN_HOUSE iş.
-  weavingOrder  WeavingOrder?   @relation("WarpBeamWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
-  events        WarpBeamEvent[]
-  yarnMovements YarnMovement[]
+  weavingOrder   WeavingOrder?               @relation("WarpBeamWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
+  events         WarpBeamEvent[]
+  yarnMovements  YarnMovement[]
   /// Fason sevk kalemleri (F1) — fiziksel çıkış belgesi; olay defteri `SHIP_OUT` bu kaleme bağlanır.
-  dispatchItems SubcontractorDispatchItem[] @relation("DispatchItemWarpBeam")
-  currentMachine Machine? @relation("WarpBeamCurrentMachine", fields: [currentMachineId], references: [id], onDelete: Restrict)
+  dispatchItems  SubcontractorDispatchItem[] @relation("DispatchItemWarpBeam")
+  currentMachine Machine?                    @relation("WarpBeamCurrentMachine", fields: [currentMachineId], references: [id], onDelete: Restrict)
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -1754,10 +1756,10 @@ model WarpBeamEvent {
   createdById String?  @db.Uuid
   createdAt   DateTime @default(now()) @db.Timestamptz
 
-  beam     WarpBeam       @relation(fields: [beamId], references: [id], onDelete: Restrict)
-  reverses WarpBeamEvent? @relation("WarpBeamEventReversal", fields: [reversesEventId], references: [id], onDelete: Restrict)
-  reversal WarpBeamEvent? @relation("WarpBeamEventReversal")
-  machine  Machine?       @relation("WarpBeamEventMachine", fields: [machineId], references: [id], onDelete: Restrict)
+  beam         WarpBeam                   @relation(fields: [beamId], references: [id], onDelete: Restrict)
+  reverses     WarpBeamEvent?             @relation("WarpBeamEventReversal", fields: [reversesEventId], references: [id], onDelete: Restrict)
+  reversal     WarpBeamEvent?             @relation("WarpBeamEventReversal")
+  machine      Machine?                   @relation("WarpBeamEventMachine", fields: [machineId], references: [id], onDelete: Restrict)
   dispatchItem SubcontractorDispatchItem? @relation("WarpBeamEventDispatchItem", fields: [dispatchItemId], references: [id], onDelete: Restrict)
   roll         Roll?                      @relation("WarpBeamEventRoll", fields: [rollId], references: [id], onDelete: Restrict)
 
@@ -1769,7 +1771,6 @@ model WarpBeamEvent {
   @@index([beamId, kind, createdAt])
   @@map("warp_beam_events")
 }
-
 
 /// KİM DOKUYOR — `WarpBeamOrigin` kalıbının kardeşi, ikinci bir desen icat edilmez.
 enum WeavingExecutionKind {
@@ -1823,10 +1824,10 @@ model WeavingOrder {
   /// koşarken işi kapatırdı (§2.2a'da reddedildi).
   plannedM Decimal? @db.Decimal(12, 3)
 
-  executionKind WeavingExecutionKind
+  executionKind   WeavingExecutionKind
   /// XOR: `SUBCONTRACTED` ise DOLU, `IN_HOUSE` ise NULL (CHECK ikinci hat;
   /// birincil doğrulama servis kapısında — `resolveSupplierParty` kalıbı).
-  subcontractorId String? @db.Uuid
+  subcontractorId String?              @db.Uuid
 
   status           WeavingOrderStatus @default(PLANNED)
   plannedStartDate DateTime?          @db.Timestamptz
@@ -1842,22 +1843,22 @@ model WeavingOrder {
   cancelledById String?   @db.Uuid
   cancelReason  String?   @db.VarChar(300)
 
-  item           Item           @relation("WeavingOrderItem", fields: [itemId], references: [id], onDelete: Restrict)
-  color          Color?         @relation("WeavingOrderColor", fields: [colorId], references: [id], onDelete: Restrict)
-  warpSpec       WarpSpec?      @relation("WeavingOrderWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
-  subcontractor  Subcontractor? @relation("WeavingOrderSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  item                    Item                      @relation("WeavingOrderItem", fields: [itemId], references: [id], onDelete: Restrict)
+  color                   Color?                    @relation("WeavingOrderColor", fields: [colorId], references: [id], onDelete: Restrict)
+  warpSpec                WarpSpec?                 @relation("WeavingOrderWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+  subcontractor           Subcontractor?            @relation("WeavingOrderSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
   /// Bu işi hangi tezgah koşumları icra etti. `SUBCONTRACTED` işte BOŞ kalır —
   /// fasona verilen dokumanın koşumu bizde tutulmaz.
-  machineRuns    MachineRun[]   @relation("MachineRunWeavingOrder")
+  machineRuns             MachineRun[]              @relation("MachineRunWeavingOrder")
   /// Z1 (2026-09-18): sipariş satırı bağı PİVOT (bir iş birden çok satırı besleyebilir); levent bağı `WarpBeam.weavingOrderId`.
-  orderLineLinks WeavingOrderToOrderLine[]
-  warpBeams      WarpBeam[]     @relation("WarpBeamWeavingOrder")
+  orderLineLinks          WeavingOrderToOrderLine[]
+  warpBeams               WarpBeam[]                @relation("WarpBeamWeavingOrder")
   /// Fason dokuma (G2): levent/iplik bu iş adına fasona gider, TOP makbuzla döner.
-  subcontractorDispatches SubcontractorDispatch[] @relation("DispatchWeavingOrder")
-  subcontractorReceipts   SubcontractorReceipt[]  @relation("ReceiptWeavingOrder")
+  subcontractorDispatches SubcontractorDispatch[]   @relation("DispatchWeavingOrder")
+  subcontractorReceipts   SubcontractorReceipt[]    @relation("ReceiptWeavingOrder")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
-  updatedAt   DateTime @updatedAt      @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
   createdById String?  @db.Uuid
   updatedById String?  @db.Uuid
 
@@ -1907,8 +1908,8 @@ enum MachineMonitoringState {
 /// besliyorsa saklama süresi o kararın ufkuyla sınırlıdır. Budanırsa
 /// silinemeyen bir makine sessizce silinebilir hâle gelir.
 model MachineRun {
-  id        String  @id @default(uuid()) @db.Uuid
-  machineId String  @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
+  machineId   String  @db.Uuid
   /// İdempotency — koşum açma/kapama tablet çevrimdışı kuyruğundan gelir
   /// (`STATION_MUT` + `OFFLINE_AWARE`) ve kuyruk TEKRAR GÖNDERİR. Doğal anahtar
   /// (`machineId`, `productionLineNo`, `startedAt`) replay'i 409'a düşürürdü;
@@ -1950,7 +1951,7 @@ model MachineRun {
   /// aynı kolonda yaşayamaz. NULL meşru → metre üretilmez, randıman yine çıkar.
   /// ⚠️ Buradan türetilen metre HİÇBİR YERDE STOK YAZMAZ — tek miktar gerçeği
   /// `Roll` ölçümüdür.
-  unitsPerCm Decimal? @db.Decimal(8, 3)
+  unitsPerCm        Decimal? @db.Decimal(8, 3)
 
   // ── KAPANIŞTA DONAN ÜRETİM VE DURUŞ TERİMLERİ ───────────────────────────────
   // Örneklem kovası budandıktan sonra KOŞUM EKSENİ bu terimlerden cevaplanır,
@@ -1958,7 +1959,7 @@ model MachineRun {
   // "bu işte kaç metre üretildi / kaç saat durduk" retention penceresinden sonra
   // karneye sorulamaz. Tek yazar koşumu kapatan yoldur.
   picksAtClose       Int?
-  producedM          Decimal? @db.Decimal(12, 3)
+  producedM          Decimal?  @db.Decimal(12, 3)
   observedSecAtClose Int?
   stopSecAtClose     Int?
   stopCountAtClose   Int?
@@ -1974,8 +1975,8 @@ model MachineRun {
   /// ⚠️ ÜÇ OPSİYONEL BAĞ DA `onDelete: Restrict`. Prisma'nın opsiyonel ilişkideki
   /// varsayılanı `SetNull`dır ve o, gerçekleşmiş bir koşumun BAĞLAMINI sessizce
   /// siler — yani ileri kaydı DEĞİŞTİRMEK olur (defter doktrini yasağı).
-  stops        MachineStopEvent[]
-  doffEvents   DoffEvent[]
+  stops      MachineStopEvent[]
+  doffEvents DoffEvent[]
 
   machine      Machine       @relation(fields: [machineId], references: [id], onDelete: Restrict)
   weavingOrder WeavingOrder? @relation("MachineRunWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
@@ -1983,7 +1984,7 @@ model MachineRun {
   color        Color?        @relation("MachineRunColor", fields: [colorId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt      @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([machineId, startedAt])
   @@index([weavingOrderId])
@@ -2079,7 +2080,7 @@ model ShiftDefinition {
   instances ShiftInstance[]
 
   createdAt   DateTime @default(now()) @db.Timestamptz
-  updatedAt   DateTime @updatedAt      @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
   createdById String?  @db.Uuid
   updatedById String?  @db.Uuid
   createdBy   User?    @relation("ShiftDefinitionCreatedBy", fields: [createdById], references: [id])
@@ -2116,7 +2117,7 @@ model ShiftInstance {
   machineStats    MachineShiftStat[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt      @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
   /// Job iki kez koşarsa ikinci satır DOĞMAZ ⇒ advisory kilit GEREKMEZ.
   @@unique([shiftDefinitionId, factoryDayKey])
@@ -2135,7 +2136,7 @@ model ShiftInstance {
 /// ⇒ Bir sırrı taşıyan kolon, onu koruyan KURALLARLA aynı dilimde iner;
 /// tablo daha erken inebilir, sır inemez. **Eksiklik değil, SIRA.**
 model MachineCollector {
-  id String @id @default(uuid()) @db.Uuid
+  id           String       @id @default(uuid()) @db.Uuid
   /// Ajanın ilk açılışta üretip diskte tuttuğu yerel UUID (`Device.deviceId`
   /// emsali) — KİMLİKTİR, sır değildir.
   collectorKey String       @unique @db.VarChar(64)
@@ -2161,7 +2162,7 @@ model MachineCollector {
   stops    MachineStopEvent[]
 
   createdAt   DateTime @default(now()) @db.Timestamptz
-  updatedAt   DateTime @updatedAt      @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
   createdById String?  @db.Uuid
   updatedById String?  @db.Uuid
   createdBy   User?    @relation("MachineCollectorCreatedBy", fields: [createdById], references: [id])
@@ -2213,17 +2214,17 @@ model MachineStopEvent {
   /// İKİ TARİH: `startedAt` AJAN saatidir ve SÜRE bundan hesaplanır; `createdAt`
   /// sunucu gerçeğidir ve DEFTERİN KRONOLOJİSİDİR.
   /// ⚠️ `startedAt` KİMLİK DEĞİL VERİDİR — ham ajan damgası düzeltilmeden saklanır.
-  startedAt DateTime  @db.Timestamptz
-  endedAt   DateTime? @db.Timestamptz
+  startedAt          DateTime              @db.Timestamptz
+  endedAt            DateTime?             @db.Timestamptz
   /// WATCHDOG'un yazdığı GEÇİCİ kapanışın izi — gerçek kapanış gelip `endedAt`i
   /// düzeltince bile KALIR: geçici değer, geçici olduğunu kolonda söyler.
-  provisionalEndedAt DateTime? @db.Timestamptz
+  provisionalEndedAt DateTime?             @db.Timestamptz
   durationSec        Int?
   /// Süre şüphesinin TEK izi — kimliğin parçası DEĞİL.
   clockSkewMs        Int?
-  endSource      MachineStopEndSource?
+  endSource          MachineStopEndSource?
   /// İleri damga null'lanmaz; düzeltme YENİ damga ekler.
-  endCorrectedAt DateTime? @db.Timestamptz
+  endCorrectedAt     DateTime?             @db.Timestamptz
 
   /// BU DURUŞ HANGİ LEVENT YUVASINDA DOĞDU? NULL = bilinmiyor ve Pareto onu
   /// "atanmamış" kovasında AYRI gösterir — tahminle bir levende YAZILMAZ.
@@ -2275,7 +2276,7 @@ model MachineStopEvent {
   reclasses     MachineStopReclass[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt      @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([machineId, startedAt])
   @@index([factoryDay, machineId])
@@ -2337,39 +2338,39 @@ model DoffEvent {
   /// kötüdür (kurşun `machineId=null` emsali: ATIF UYDURULMAZ). Koşum yoksa
   /// `ApiResponse.warnings` — 400 DEĞİL. ⚠️ `weavingOrderId` KOLON DEĞİLDİR —
   /// koşumdan türetilir; FK ikinci kaynak olurdu ("tek kaynak satır").
-  machineRunId     String? @db.Uuid
+  machineRunId String? @db.Uuid
 
   /// Operatörün "İndir"e bastığı an (`clientEnteredAt` kalıbı; makul aralık
   /// dışındaysa sunucu saatine düşülür). Kronoloji yine `createdAt`tir.
-  doffedAt         DateTime @db.Timestamptz
+  doffedAt   DateTime @db.Timestamptz
   /// Kaç parça indi. CHECK `doff_events_pieceCount_pos` (>= 1) — sıfır parçalı
   /// doff bir doff değildir; gevşetme tek ifadelidir, sıkmak veri temizliği ister.
-  pieceCount       Int
+  pieceCount Int
 
   /// SAYACIN O ANDAKİ DEĞERİ — sıfırlama beyan edilmiş bir olay olur, yorumlanacak
   /// anomali değil. NULL meşru = okunamadı (elle giriş yolu kapatılamaz).
-  counterAtDoff    Decimal? @db.Decimal(18, 0)
+  counterAtDoff Decimal?          @db.Decimal(18, 0)
   /// Sayaç nereden geldi. `@default` VERİLMEZ — her yazar açıkça beyan eder
   /// (`SIMULATED` beyanı burada doğar; kararı backend verir).
-  counterSource    MachineDataSource
+  counterSource MachineDataSource
 
   /// Fiziksel etikete yazılan kısa kod (`buildDailyCode` emsali). Elle
   /// yazılabilir olması yeter — tezgaha yazıcı ŞART DEĞİL.
-  code             String  @unique @db.VarChar(32)
-  notes            String? @db.VarChar(300)
+  code  String  @unique @db.VarChar(32)
+  notes String? @db.VarChar(300)
 
   /// Çevrimdışı kuyruk idempotency'si (`offline/entryAttempt.ts` kalıbı).
-  clientToken      String? @unique @db.Uuid
+  clientToken String? @unique @db.Uuid
 
   /// GERİ ALMA — `MachineRun` ile aynı kalıp. `revokedById`/`createdById`
   /// BİLİNÇLİ FK'sız ve indexsiz (MachineRun emsali, [DB-11]): "kim yaptı"
   /// alanı üstünde süzme yapılmaz.
-  revokedAt        DateTime? @db.Timestamptz
-  revokedById      String?   @db.Uuid
-  revokeReason     String?   @db.VarChar(300)
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
 
-  createdAt        DateTime @default(now()) @db.Timestamptz
-  createdById      String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  createdById String?  @db.Uuid
 
   /// İKİ BAĞ DA `Restrict` — gerçekleşmiş bir indirmenin bağlamı sessizce silinmez.
   machine    Machine     @relation(fields: [machineId], references: [id], onDelete: Restrict)
@@ -2395,8 +2396,8 @@ model DoffEvent {
 /// ⚠️ PK `id` + `machineId @unique` — `MachineRun`la aynı kalıpta DEĞİL ve
 /// bilinçli: künye kendi kimliği olan bir UZANTIDIR, makinenin anlık aynası değil.
 model MachineSpec {
-  id        String  @id @default(uuid()) @db.Uuid
-  machineId String  @unique @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
+  machineId String @unique @db.Uuid
 
   /// ⚠️ NULLABLE — ağızlık açmayan makinede (çözgülü örme) boştur. Sınıfa bağlı
   /// CHECK YAZILMAZ: sınıf üstünde dallanmak `kind`-dispatch olurdu.
@@ -2443,7 +2444,7 @@ model MachineSpec {
   machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
 
   createdAt   DateTime @default(now()) @db.Timestamptz
-  updatedAt   DateTime @updatedAt      @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
   createdById String?  @db.Uuid
   updatedById String?  @db.Uuid
   createdBy   User?    @relation("MachineSpecCreatedBy", fields: [createdById], references: [id])
@@ -2474,32 +2475,32 @@ enum MachineSealAction {
 /// Tanecik (machineId, shiftInstanceId) — hat kırılımı gerekirse EKLEMELİ çocuk
 /// tablo (`MachineShiftLineStat`), bu unique bölünmez (1e hükmü 2026-09-14).
 model MachineShiftStat {
-  id              String @id @default(uuid()) @db.Uuid
-  machineId       String @db.Uuid
-  shiftInstanceId String @db.Uuid
+  id              String   @id @default(uuid()) @db.Uuid
+  machineId       String   @db.Uuid
+  shiftInstanceId String   @db.Uuid
   /// `ShiftInstance.factoryDayKey`ten KOPYA, DONAR — tek yazar materyalizasyon.
   /// `@db.Date` muafı → `test_timestamptz_contract` envanteri.
   factoryDay      DateTime @db.Date
 
   // ── TERİMLER (saniye) — ORAN DEĞİL, rapor bunları TOPLAR ──────────────────
-  calendarSec      Int @default(0)
+  calendarSec      Int  @default(0)
   /// Faz 1a/1b: 0 = BEYAN (gözlemci insan). Faz 2 artık yöntemiyle dolar.
-  unobservedSec    Int @default(0)
-  nonScheduledSec  Int @default(0)
-  plannedBreakSec  Int @default(0)
-  potSec           Int @default(0)
-  aptSec           Int @default(0)
-  setupSec         Int @default(0)
-  plannedDownSec   Int @default(0)
-  unplannedDownSec Int @default(0)
-  minorStopSec     Int @default(0)
-  minorStopCount   Int @default(0)
-  stopCount        Int @default(0)
+  unobservedSec    Int  @default(0)
+  nonScheduledSec  Int  @default(0)
+  plannedBreakSec  Int  @default(0)
+  potSec           Int  @default(0)
+  aptSec           Int  @default(0)
+  setupSec         Int  @default(0)
+  plannedDownSec   Int  @default(0)
+  unplannedDownSec Int  @default(0)
+  minorStopSec     Int  @default(0)
+  minorStopCount   Int  @default(0)
+  stopCount        Int  @default(0)
   /// NULLABLE: `0` = kanal var kopuş yok; `NULL` = ÖLÇÜLMEDİ. Faz 1b'de NULL yazılır.
   warpStopCount    Int?
   weftStopCount    Int?
   /// Sınıflandırılmamış duruş süresi — >0 ise rapor `warnings` çizer.
-  unclassifiedSec  Int @default(0)
+  unclassifiedSec  Int  @default(0)
 
   unitsActual Int @default(0)
   /// Faz 2 (kova) terimleri — bu dilimde 0 kalır.
@@ -2509,8 +2510,8 @@ model MachineShiftStat {
   // ── DONMUŞ PAYDALAR — sonradan değişse bu satırın randımanı DEĞİŞMEZ ──────
   /// Σ(target_i × koşumun APT dakikası) / Σ(target_i × koşumun POT dakikası).
   /// İKİ TERİM ŞART: tek terim P'yi E'ye çökertir.
-  targetUnitCapacityApt Int @default(0)
-  targetUnitCapacityPot Int @default(0)
+  targetUnitCapacityApt Int      @default(0)
+  targetUnitCapacityPot Int      @default(0)
   /// Yalnız TEK koşumlu vardiyada etiket; birden çok hedef → NULL.
   targetUnitsPerMin     Int?
   /// Mikro duruş eşiği karneye DONAR (bugün sabit `MINOR_STOP_THRESHOLD_SEC`).
@@ -2529,7 +2530,7 @@ model MachineShiftStat {
   /// `MachineSpec.monitoringState`ten KOPYA, DONAR — gölge karne LIVE'a terfi etmez.
   monitoringState MachineMonitoringState
   /// Faz 2 kapısı (anomali kaynağı yok); Faz 1b `false` kalır, mührü bloke etmez.
-  anomalyAck      Boolean @default(false)
+  anomalyAck      Boolean                @default(false)
 
   /// MÜHÜR ÇEVRİMİ tek kolona sığmaz: durum `sealState`, sayaç `sealGeneration`,
   /// geçmiş `MachineShiftStatSeal`. `sealedAt` ASLA null'lanmaz ("en son ne zaman").
@@ -2538,15 +2539,15 @@ model MachineShiftStat {
   sealedAt       DateTime?        @db.Timestamptz
   sealedById     String?          @db.Uuid
 
-  machine       Machine       @relation(fields: [machineId], references: [id], onDelete: Restrict)
-  shiftInstance ShiftInstance @relation(fields: [shiftInstanceId], references: [id], onDelete: Restrict)
-  sealedBy      User?         @relation("MachineShiftStatSealedBy", fields: [sealedById], references: [id])
+  machine       Machine                     @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  shiftInstance ShiftInstance               @relation(fields: [shiftInstanceId], references: [id], onDelete: Restrict)
+  sealedBy      User?                       @relation("MachineShiftStatSealedBy", fields: [sealedById], references: [id])
   breakdown     MachineShiftStopBreakdown[]
   seals         MachineShiftStatSeal[]
   lines         MachineShiftLineStat[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt      @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
   /// 6e sözleşmesi: `assertStopShiftWritableTx` `findUnique({ machineId_shiftInstanceId })` okur.
   @@unique([machineId, shiftInstanceId])
@@ -2568,11 +2569,11 @@ model MachineShiftLineStat {
   statId           String @db.Uuid
   productionLineNo Int    @db.SmallInt
 
-  runCount    Int @default(0)
-  unitsActual Int @default(0)
+  runCount              Int      @default(0)
+  unitsActual           Int      @default(0)
   /// Σ(target_i × koşumun APT dk) bu HATTIN koşumları için — ebeveynin kardeşi, aynı kural: donar.
-  targetUnitCapacityApt Int @default(0)
-  targetUnitCapacityPot Int @default(0)
+  targetUnitCapacityApt Int      @default(0)
+  targetUnitCapacityPot Int      @default(0)
   targetUnitsPerMin     Int?
   unitsPerCmAtClose     Decimal? @db.Decimal(8, 3)
   producedM             Decimal? @db.Decimal(12, 3)
@@ -2581,7 +2582,7 @@ model MachineShiftLineStat {
   stat MachineShiftStat @relation(fields: [statId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt      @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@unique([statId, productionLineNo])
   @@map("machine_shift_line_stats")
@@ -2591,18 +2592,18 @@ model MachineShiftLineStat {
 /// KUŞAĞI başına; Pareto burada yaşar. Yeniden hesapta satır GÜNCELLENMEZ/SİLİNMEZ,
 /// YENİ KUŞAK yazılır (ters yol = yeni kuşak); okuma tek helper'dan son kuşak.
 model MachineShiftStopBreakdown {
-  id             String @id @default(uuid()) @db.Uuid
-  statId         String @db.Uuid
+  id             String                @id @default(uuid()) @db.Uuid
+  statId         String                @db.Uuid
   sealGeneration Int
   /// NULL = sınıflandırılmamış kova (rapor UNPLANNED sayar, `unclassifiedSec`).
-  reasonCode   String? @db.VarChar(64)
+  reasonCode     String?               @db.VarChar(64)
   /// Katalog etiketi KOPYA — katalog değişse geçmiş rapor değişmez (d9 ②).
-  reasonLabel  String? @db.VarChar(100)
-  lossClass    MachineStopLossClass?
+  reasonLabel    String?               @db.VarChar(100)
+  lossClass      MachineStopLossClass?
   /// "Atanmamış" kovası — `beamSlot` NULL duruşlar AYRI sayılır, tahminle levende yazılmaz.
-  beamSlotNull Boolean @default(false)
-  stopCount    Int
-  stopSec      Int
+  beamSlotNull   Boolean               @default(false)
+  stopCount      Int
+  stopSec        Int
 
   /// Cascade DEĞİL Restrict: defter satırı sessizce yok olamaz.
   stat MachineShiftStat @relation(fields: [statId], references: [id], onDelete: Restrict)
@@ -2624,21 +2625,21 @@ model MachineShiftStopBreakdown {
 /// mühür `loom:shift-unseal` ile AÇILIR, yeniden hesaplanır, yeniden mühürlenir ve
 /// her adım burada satır bırakır. Ters yolu YOK — defter kapanıştır.
 model MachineShiftStatSeal {
-  id             String            @id @default(uuid()) @db.Uuid
-  statId         String            @db.Uuid
-  action         MachineSealAction
-  sealGeneration Int
+  id                    String            @id @default(uuid()) @db.Uuid
+  statId                String            @db.Uuid
+  action                MachineSealAction
+  sealGeneration        Int
   /// Tam terim fotoğrafının ARŞİVİ — SORGULANMAZ (GIN yok); "aynen yeniden bas"
   /// sözleşmesi aşağıdaki beş kolon + `formulaVersion` + breakdown kuşağından okunur.
-  terms          Json
+  terms                 Json
   potSec                Int
   aptSec                Int
   unitsActual           Int
   targetUnitCapacityPot Int
-  effectivenessPct      Decimal? @db.Decimal(5, 2)
+  effectivenessPct      Decimal?          @db.Decimal(5, 2)
   formulaVersion        Int
-  reason         String? @db.VarChar(300)
-  actedById      String? @db.Uuid
+  reason                String?           @db.VarChar(300)
+  actedById             String?           @db.Uuid
 
   stat    MachineShiftStat @relation(fields: [statId], references: [id], onDelete: Restrict)
   actedBy User?            @relation("MachineShiftSealBy", fields: [actedById], references: [id])
@@ -2695,27 +2696,27 @@ model Item {
   warpSpecId String? @db.Uuid
 
   // Relations
-  rolls              Roll[]
-  orderLines         OrderLine[]
-  swatches           Swatch[]
+  rolls                          Roll[]
+  orderLines                     OrderLine[]
+  swatches                       Swatch[]
   /// Item'a uygulanabilir renkler (allowed). Boş = tüm aktif Color serbest.
-  allowedColors      ItemAllowedColor[]
+  allowedColors                  ItemAllowedColor[]
   /// Item'a uygulanabilir özellikler (allowed). Boş = tüm aktif FabricProperty serbest.
-  allowedProperties  ItemAllowedProperty[]
-  workOrdersAsTarget WorkOrder[]            @relation("WorkOrderTargetItem")
+  allowedProperties              ItemAllowedProperty[]
+  workOrdersAsTarget             WorkOrder[]                 @relation("WorkOrderTargetItem")
   /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
-  customerAliases    CustomerItemAlias[]
+  customerAliases                CustomerItemAlias[]
   /// Müşterinin BU kumaştaki renge verdiği ad (kumaşa özel; genel adı gölgeler).
-  customerColorAliases CustomerItemColorAlias[]
-  productRecipes     ProductRecipe[]
-  weavingOrders      WeavingOrder[]         @relation("WeavingOrderItem")
-  machineRuns        MachineRun[]           @relation("MachineRunItem")
-  rollReturns        RollReturn[]
-  swatchReductions   SwatchStockReduction[]
+  customerColorAliases           CustomerItemColorAlias[]
+  productRecipes                 ProductRecipe[]
+  weavingOrders                  WeavingOrder[]              @relation("WeavingOrderItem")
+  machineRuns                    MachineRun[]                @relation("MachineRunItem")
+  rollReturns                    RollReturn[]
+  swatchReductions               SwatchStockReduction[]
   /// Bu KUMAŞI besleyen çözgü kartı (N:1) — devere modülü.
-  warpSpec           WarpSpec?              @relation("ItemWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+  warpSpec                       WarpSpec?                   @relation("ItemWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
   /// Bu İPLİĞİ kullanan çözgü kartları (1:N) — silme kapısının bağımlılık kaynağı.
-  warpSpecsAsYarn    WarpSpec[]             @relation("WarpSpecYarn")
+  warpSpecsAsYarn                WarpSpec[]                  @relation("WarpSpecYarn")
   /// G1: fasona giden iplik kalemleri (kind=YARN).
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnItem")
 
@@ -2773,7 +2774,7 @@ model Item {
   // Paket D (ticaret) — fabrikada hiçbiri doğmaz.
   yarnStocks         YarnStock[]
   yarnMovements      YarnMovement[]
-  yarnLots           YarnLot[]                @relation("YarnLotItem")
+  yarnLots           YarnLot[]           @relation("YarnLotItem")
   prices             ItemPrice[]
   purchaseOrderLines PurchaseOrderLine[]
   stockCountLines    StockCountLine[]
@@ -3240,7 +3241,7 @@ model Roll {
   operations           RollOperation[]
   variances            RollVariance[]
   /// Bu topun KEŞFİ olan (ebeveyne yazılmış) sapma satırları — `sourceRollId` ters ilişkisi.
-  sourceOfVariances    RollVariance[] @relation("RollVarianceSourceRoll")
+  sourceOfVariances    RollVariance[]              @relation("RollVarianceSourceRoll")
   /// Plan-sapma defteri: bu top KAPIYA GİREN taraf (parent).
   planDeviations       RollPlanDeviation[]         @relation("RollPlanDeviationRoll")
   /// Plan-sapma defteri: bu top o geçişte DOĞAN çocuk.
@@ -3399,10 +3400,10 @@ model Roll {
 // =============================================================================
 
 model Customer {
-  id           String      @id @default(uuid()) @db.Uuid
-  code         String      @unique @db.VarChar(32)
-  name         String      @db.VarChar(100)
-  taxNumber    String?
+  id                  String               @id @default(uuid()) @db.Uuid
+  code                String               @unique @db.VarChar(32)
+  name                String               @db.VarChar(100)
+  taxNumber           String?
   // ---------------------------------------------------------------------------
   // "Her şube = ayrı müşteri" düzeni (2026-07): şube kartında yaşayan alanlar
   // müşteri kartına taşındı — hepsi opsiyonel, mevcut kayıtlar null kalır.
@@ -3410,66 +3411,66 @@ model Customer {
   // (CustomerBranch.code) BAĞIMSIZ ayrı satır; ikisi de kendi section toggle'ıyla
   // ("branchCode" / "exportCode") basılır. Bkz. document-render üreticileri + DOC_DEFS.
   // ---------------------------------------------------------------------------
-  exportCode   String?     @db.VarChar(50)
-  address      String?
-  city         String?     @db.VarChar(80)
-  district     String?     @db.VarChar(80)
-  country      String?     @db.VarChar(80)
+  exportCode          String?              @db.VarChar(50)
+  address             String?
+  city                String?              @db.VarChar(80)
+  district            String?              @db.VarChar(80)
+  country             String?              @db.VarChar(80)
   /// Sevk yönü KİLİDİ (yurtiçi/yurtdışı) — şubenin yönü boşsa sevkiyat bu yönle kurulur,
   /// operatör değiştiremez (çözüm: `resolveShipmentDestination`). NULL = ilk sevkte seçilir
   /// ve buraya yazılır. `Shipment.destination` kendi değerini dondurur (geçmiş değişmez).
-  defaultDestination ShipmentDestination?
-  contactName  String?     @db.VarChar(120)
-  contactPhone String?     @db.VarChar(40)
-  email        String?     @db.VarChar(200)
-  notes        String?
+  defaultDestination  ShipmentDestination?
+  contactName         String?              @db.VarChar(120)
+  contactPhone        String?              @db.VarChar(40)
+  email               String?              @db.VarChar(200)
+  notes               String?
   /// TÜRETİLMİŞ (İş Ortağı Rol Modeli, 2026-09-17): CUSTOMER/SUPPLIER/BOTH = `isCustomerRole`/`isSupplierRole`
   /// bayraklarından, tek yazar `resolveCompanyType` (helpers/partner-roles.helper.ts). Kolon geriye dönük
   /// okuyucular için KALIR; istemciden yazılamaz (servis gövdedeki `type`i rollere çevirir, sonra kendisi yazar).
-  type         CompanyType @default(CUSTOMER)
+  type                CompanyType          @default(CUSTOMER)
   /// İŞ ORTAĞI ROLLERİ (SAP BP sadeleştirilmiş) — kart tek, roller bayrak; en az biri doğru (servis kuralı).
   /// Backfill: `type` CUSTOMER→müşteri, SUPPLIER→tedarikçi, BOTH→ikisi; fason profili bağlı kartta fason.
-  isCustomerRole      Boolean @default(false)
-  isSupplierRole      Boolean @default(false)
+  isCustomerRole      Boolean              @default(false)
+  isSupplierRole      Boolean              @default(false)
   /// Fason rolü = aktif fason PROFİLİ (`Subcontractor.customerId`) — profil bağlanınca/aktifken true, bağ
   /// kalkınca ya da profil pasife alınınca false (aynı tx, tek yazar SubcontractorManagementService).
-  isSubcontractorRole Boolean @default(false)
-  isActive     Boolean     @default(true)
+  isSubcontractorRole Boolean              @default(false)
+  isActive            Boolean              @default(true)
 
   /// Belge şablon profili — bu müşteriye basılan belgeler profil override'ını
   /// kullanır (atanmamışsa genel Belge Şablonları ayarı). Bkz. DocumentProfile.
   documentProfileId String? @db.Uuid
 
   // Relations
-  orders           Order[]
-  defaultRoutes    Route[]                   @relation("CustomerDefaultRoutes")
+  orders            Order[]
+  defaultRoutes     Route[]                   @relation("CustomerDefaultRoutes")
   /// Etiketinde bu müşteri yazan toplar — SAHİPLİK DEĞİL (bkz. `Roll.labelCustomerId`).
-  labelledRolls    Roll[]                    @relation("RollLabelCustomer")
+  labelledRolls     Roll[]                    @relation("RollLabelCustomer")
   /// G3 emanet: bu müşterinin malı olan toplar / leventler / iplik lotları.
-  ownedRolls       Roll[]                    @relation("RollOwner")
-  ownedWarpBeams   WarpBeam[]                @relation("WarpBeamOwner")
-  ownedYarnLots    YarnLot[]                 @relation("YarnLotOwner")
-  branches         CustomerBranch[]
-  itemAliases      CustomerItemAlias[]
-  colorAliases     CustomerColorAlias[]
-  itemColorAliases CustomerItemColorAlias[]
-  shipments        Shipment[]
-  sacks            Sack[]
-  packingGroups    PackingGroup[]
-  rollReturns      RollReturn[]
+  ownedRolls        Roll[]                    @relation("RollOwner")
+  ownedWarpBeams    WarpBeam[]                @relation("WarpBeamOwner")
+  ownedYarnLots     YarnLot[]                 @relation("YarnLotOwner")
+  branches          CustomerBranch[]
+  itemAliases       CustomerItemAlias[]
+  colorAliases      CustomerColorAlias[]
+  itemColorAliases  CustomerItemColorAlias[]
+  shipments         Shipment[]
+  sacks             Sack[]
+  packingGroups     PackingGroup[]
+  rollReturns       RollReturn[]
   /// Bu firmadan alınan mal kabul fişleri (tedarikçi rolü — CompanyType.SUPPLIER).
-  goodsReceipts    GoodsReceipt[]            @relation("GoodsReceiptSupplier")
+  goodsReceipts     GoodsReceipt[]            @relation("GoodsReceiptSupplier")
   // Paket D (ticaret) — müşteri fiyat istisnaları + tedarikçi olarak alış siparişleri.
-  itemPrices       ItemPrice[]
-  purchaseOrders   PurchaseOrder[]           @relation("PurchaseOrderSupplier")
-  suppliedWarpBeams WarpBeam[]               @relation("WarpBeamSupplier")
-  yarnLots          YarnLot[]                @relation("YarnLotSupplier")
-  directShipments  DirectShipment[]
-  templateRoutes   CustomerTemplateRoute[]
-  standaloneLabels CustomerStandaloneLabel[]
-  documentProfile  DocumentProfile?          @relation("CustomerDocProfile", fields: [documentProfileId], references: [id])
+  itemPrices        ItemPrice[]
+  purchaseOrders    PurchaseOrder[]           @relation("PurchaseOrderSupplier")
+  suppliedWarpBeams WarpBeam[]                @relation("WarpBeamSupplier")
+  yarnLots          YarnLot[]                 @relation("YarnLotSupplier")
+  directShipments   DirectShipment[]
+  templateRoutes    CustomerTemplateRoute[]
+  standaloneLabels  CustomerStandaloneLabel[]
+  documentProfile   DocumentProfile?          @relation("CustomerDocProfile", fields: [documentProfileId], references: [id])
   /// Bu carinin fason PROFİLİ (varsa) — "Fason iş yapar" rolü; bkz. Subcontractor.customerId.
-  subcontractor    Subcontractor?            @relation("SubcontractorCustomerProfile")
+  subcontractor     Subcontractor?            @relation("SubcontractorCustomerProfile")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -3533,17 +3534,17 @@ model Customer {
 // sevkiyatları ayrı planlanır. Soft delete: isActive=false.
 // =============================================================================
 model CustomerBranch {
-  id           String  @id @default(uuid()) @db.Uuid
-  customerId   String  @db.Uuid
-  code         String? @db.VarChar(50) // Şube ihracat kodu (opsiyonel) — sevk belgesinde tek "İhracat Kodu" satırına, dolu ise şirket exportCode'unun ÖNÜNE geçerek basılır (branchCode ?? customerExportCode). Kolon adı tarihsel "code"; arama/anahtar değil, salt görüntü.
-  name         String  @db.VarChar(100) // "Ankara Şubesi", "Merkez Depo" gibi
-  address      String?
-  city         String?
-  district     String?
-  contactName  String?
-  contactPhone String?
-  notes        String?
-  isActive     Boolean @default(true)
+  id                 String               @id @default(uuid()) @db.Uuid
+  customerId         String               @db.Uuid
+  code               String?              @db.VarChar(50) // Şube ihracat kodu (opsiyonel) — sevk belgesinde tek "İhracat Kodu" satırına, dolu ise şirket exportCode'unun ÖNÜNE geçerek basılır (branchCode ?? customerExportCode). Kolon adı tarihsel "code"; arama/anahtar değil, salt görüntü.
+  name               String               @db.VarChar(100) // "Ankara Şubesi", "Merkez Depo" gibi
+  address            String?
+  city               String?
+  district           String?
+  contactName        String?
+  contactPhone       String?
+  notes              String?
+  isActive           Boolean              @default(true)
   /// Şubenin sevk yönü (yurtiçi/yurtdışı). Doluysa bu şubeye giden sevkiyatta
   /// carinin yönünün ÖNÜNE geçer; çözüm tek yerde: `resolveShipmentDestination`.
   /// NULL = şube kendi yönünü taşımaz, cariye düşülür.
@@ -3599,14 +3600,14 @@ model CustomerBranch {
 }
 
 model Order {
-  id          String  @id @default(uuid()) @db.Uuid
-  orderNumber String  @unique @db.VarChar(64)
+  id          String               @id @default(uuid()) @db.Uuid
+  orderNumber String               @unique @db.VarChar(64)
   /// İdempotency anahtarı — istemci form-oturumu başına üretir (UUID); timeout
   /// sonrası tekrar gönderimde mükerrer sipariş yaratılmasını önler (Roll emsali).
   /// Sunucu-içi/eski kayıtlar için NULL — partial unique index (NULL'lar çakışmaz).
-  clientToken String? @unique @db.Uuid
-  customerId  String  @db.Uuid
-  branchId    String? @db.Uuid // Hedef şube — opsiyonel; bir sipariş tek bir şubeye gider. Mevcut kayıtlar için null kabul.
+  clientToken String?              @unique @db.Uuid
+  customerId  String               @db.Uuid
+  branchId    String?              @db.Uuid // Hedef şube — opsiyonel; bir sipariş tek bir şubeye gider. Mevcut kayıtlar için null kabul.
   /// Sipariş yönü — DOĞUŞTA donar (`resolveShipmentDestination`: şube → cari), zincir boşsa NULL ("yön
   /// belirsiz"). Kart sonradan değişse de DEĞİŞMEZ; yalnız sipariş açıkça başka cariye/şubeye taşınınca
   /// yeniden çözülür. Tek yazar `OrderService.create/update`; gövdeden yazılamaz. Raporlar buradan okur.
@@ -3921,7 +3922,7 @@ model WorkOrder {
 // Attach dalgasında doğar; ton/izlenebilirlik birimi; refakat kartı parti başına.
 // "Dal" (eski batchSplitId=dispatch.id) kavramının yerini alır. Detay: PARTI-MODELI-TASARIM.md.
 model Batch {
-  id          String @id @default(uuid()) @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
   /// Parti numarası. İKİ BİÇİM, `batch.shortNumberEnabled` bayrağına göre:
   ///   • AÇIK (varsayılan) → `P01 … P99`, 99'dan sonra P01'e SARAR.
   ///   • KAPALI            → `P + GGAAYY + günlük sıra` (dolgusuz, eski biçim).
@@ -3930,8 +3931,8 @@ model Batch {
   /// bir yeniden kullanılır (fabrika numaralı fiziksel parti plakası kullanıyor).
   /// Partinin KİMLİĞİ `id`'dir; hiçbir yerde `batchNumber` ile lookup YAPMA.
   /// Yarış koruması artık kısıt değil, `generateBatchNumberTx`'teki advisory lock.
-  batchNumber String @db.VarChar(64)
-  workOrderId String @db.Uuid
+  batchNumber String  @db.VarChar(64)
+  workOrderId String  @db.Uuid
   /// "Parti Ekle" ucunun idempotency anahtarı (hareket defteri D8) — istemci mantıksal deneme başına üretir.
   clientToken String? @unique @db.Uuid
 
@@ -4037,8 +4038,8 @@ model WorkOrderEvent {
 /// yeniden açılma künyeyi silmez/güncellemez (izi `WorkOrderEvent` karşı kaydı), sonraki kapanış yeni
 /// `version` yazar — "canlı" künye en yüksek sürümdür. Tasarım: docs/design/IS-EMRI-HAREKET-DEFTERI.md §5.
 model WorkOrderCloseSnapshot {
-  id          String @id @default(uuid()) @db.Uuid
-  workOrderId String @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
+  workOrderId String  @db.Uuid
   /// 1..n — aynı iş emrinin kaçıncı kapanışı.
   version     Int
   /// AUTO_LAST_STEP (son adım bitti) · MANUAL (Kapat) · BACKFILL (geçmiş iş emri, yaklaşık) — VarChar + CHECK.
@@ -4049,20 +4050,20 @@ model WorkOrderCloseSnapshot {
 
   rollCount        Int
   /// Kova toplamları üretim metresinden (`Roll.initialQty`) — canlı başlıkla AYNI tanım.
-  warehouseM       Decimal  @db.Decimal(14, 3)
-  a1M              Decimal  @db.Decimal(14, 3)
-  scrapM           Decimal  @db.Decimal(14, 3)
-  outputM          Decimal  @db.Decimal(14, 3)
+  warehouseM       Decimal   @db.Decimal(14, 3)
+  a1M              Decimal   @db.Decimal(14, 3)
+  scrapM           Decimal   @db.Decimal(14, 3)
+  outputM          Decimal   @db.Decimal(14, 3)
   /// Yalnız tartılmış topların kg toplamı; `weighedRollCount` kaçının tartıldığını söyler.
-  totalKg          Decimal? @db.Decimal(14, 3)
+  totalKg          Decimal?  @db.Decimal(14, 3)
   weighedRollCount Int
   /// Giren ham malzeme — `computeWoInput` tek kaynağından (kök top sayısı + metre).
   inputRollCount   Int
-  inputM           Decimal  @db.Decimal(14, 3)
+  inputM           Decimal   @db.Decimal(14, 3)
   /// Metre bazlı (kullanıcı kararı S8): verim = çıkan ÷ giren · çekme = (giren − çıkan) ÷ giren · fire = fire ÷ giren.
-  yieldPct         Decimal? @db.Decimal(9, 3)
-  shrinkagePct     Decimal? @db.Decimal(9, 3)
-  scrapPct         Decimal? @db.Decimal(9, 3)
+  yieldPct         Decimal?  @db.Decimal(9, 3)
+  shrinkagePct     Decimal?  @db.Decimal(9, 3)
+  scrapPct         Decimal?  @db.Decimal(9, 3)
   /// Üretime başlama (ilk IN_PROGRESS geçişi; yoksa iş emrinin açılışı) ve kapanışa kadar geçen süre.
   startedAt        DateTime? @db.Timestamptz
   durationSec      Int?
@@ -4509,16 +4510,16 @@ model QualityGrade {
   /// kapatamadığı yarış/ham-SQL/içe-aktarım yollarına karşı SESSİZ SON HATTIR.
   /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
   @@unique([nameFold])
-  @@index([isActive, sortOrder])
-  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
-  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
-  @@index([descriptionFold])
   /// ROL SEDDİ — rol başına EN FAZLA BİR AKTİF satır. Index PARTIAL'dır
   /// (`WHERE "role" IS NOT NULL AND "isActive"`); Prisma 7 predicate farkını
   /// drift saymaz ama index↔unique farkını SAYAR, bu yüzden şemada `@@unique`
   /// durur (`nameFold` emsali). Migration `20260913120000_quality_grade_role`,
   /// envanter `test_db_invariants.ts` PARTIAL_INDEXES.
   @@unique([role])
+  @@index([isActive, sortOrder])
+  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
+  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
+  @@index([descriptionFold])
   @@map("quality_grades")
 }
 
@@ -4892,11 +4893,11 @@ model RollVariance {
   reversedById String?   @db.Uuid
 
   // Relations
-  roll       Roll           @relation(fields: [rollId], references: [id])
-  sourceRoll Roll?          @relation("RollVarianceSourceRoll", fields: [sourceRollId], references: [id], onDelete: Restrict)
-  step       WorkOrderStep? @relation(fields: [workOrderStepId], references: [id])
-  createdBy  User?          @relation(fields: [createdById], references: [id])
-  reversedBy User?          @relation("RollVarianceReversedBy", fields: [reversedById], references: [id])
+  roll               Roll                @relation(fields: [rollId], references: [id])
+  sourceRoll         Roll?               @relation("RollVarianceSourceRoll", fields: [sourceRollId], references: [id], onDelete: Restrict)
+  step               WorkOrderStep?      @relation(fields: [workOrderStepId], references: [id])
+  createdBy          User?               @relation(fields: [createdById], references: [id])
+  reversedBy         User?               @relation("RollVarianceReversedBy", fields: [reversedById], references: [id])
   /// Sapmanın depo defterindeki etkisi (top stoktayken oluşmuşsa).
   warehouseMovements WarehouseMovement[]
 
@@ -5060,24 +5061,24 @@ model RollPlanDeviation {
 // etiketi çözülmeye devam eder.
 // =============================================================================
 model ReasonPreset {
-  id           String           @id @default(uuid()) @db.Uuid
-  kind         ReasonPresetKind
+  id            String                @id @default(uuid()) @db.Uuid
+  kind          ReasonPresetKind
   /// Rapor anahtarı — `kind` içinde benzersiz, ASLA düzenlenmez.
-  code         String           @db.VarChar(64)
+  code          String                @db.VarChar(64)
   /// Butonun üstünde yazan kısa etiket. Serbestçe düzenlenir.
-  label        String           @db.VarChar(120)
+  label         String                @db.VarChar(120)
   /// Sunucuya GİDEN tam metin — yalnız metin saklayan kind'larda dolu
   /// (ROLL_MANUAL_ENTRY / ROLL_CANCEL). Fire ve kayıt düzeltmesinde NULL:
   /// oralarda satıra `code` yazılır, metin değil.
-  fullText     String?          @db.VarChar(500)
+  fullText      String?               @db.VarChar(500)
   /// true → operatörden ayrıca serbest metin istenir ("Diğer" satırı).
-  requiresText Boolean          @default(false)
+  requiresText  Boolean               @default(false)
   /// Listedeki sıra — en sık seçilen üstte (eldivenli operatör ilk satıra bakar).
-  sortOrder    Int              @default(0)
+  sortOrder     Int                   @default(0)
   /// false → listede ÇİZİLMEZ ama kod DB'de kalır (geçmiş kayıtlar için).
-  isActive     Boolean          @default(true)
+  isActive      Boolean               @default(true)
   /// Kod kataloğundan doğdu → silinemez, boot'ta yeniden uzlaştırılır.
-  isSystem     Boolean          @default(false)
+  isSystem      Boolean               @default(false)
   /// ESKİ ADLAR (alias listesi, 2026-08-21) — `label`/`fullText` her düzenlendiğinde
   /// önceki değer buraya düşer (`ReasonPresetService.update` TEK yazar; API'den
   /// düzenlenmez). NEDEN: kod sabit, metin sunumdur — ama bugünkü mobil istemci
@@ -5089,7 +5090,7 @@ model ReasonPreset {
   /// Sınır 20 (en eskisi düşer); aynı katlanmış metin iki kez yazılmaz; güncel
   /// label/fullText'e eşit olan temizlenir. Belirsizlik (iki satır aynı eski adı
   /// taşıyor) → çözücü kod UYDURMAZ, NULL döner.
-  legacyTexts  String[]         @default([])
+  legacyTexts   String[]              @default([])
   /// DURUŞUN KAYIP SINIFI — YALNIZ `kind = MACHINE_STOP`ta anlamlı (dokuma P2b-2).
   /// NULL = sınıflandırılmamış ⇒ rapor UNPLANNED sayar.
   /// ⚠️ `stopPlanned` diye İKİNCİ bir kolon YOKTUR: planlı/plansız buradan türer,
@@ -5179,16 +5180,16 @@ enum MergeRefKind {
 /// ayda arşivleniyor: "en yıkıcı işlem"in dökümü kayboluyordu. Geri alma bu
 /// defterden okur; satır SİLİNMEZ, geri alma `revertedAt` damgası yazar.
 model MergeOperation {
-  id         String @id @default(uuid()) @db.Uuid
+  id                String  @id @default(uuid()) @db.Uuid
   /// customer | item | color | subcontractor — dört varlık tek kolonda, FK YOK
   /// (`DuplicateReview.aId` emsali: polimorfik kimlik).
-  entity     String @db.VarChar(40)
-  survivorId String @db.Uuid
-  reason     String @db.VarChar(500)
-  conflictsResolved Int @default(0)
+  entity            String  @db.VarChar(40)
+  survivorId        String  @db.Uuid
+  reason            String  @db.VarChar(500)
+  conflictsResolved Int     @default(0)
   /// Survivor'a yazılan alan seçimleri: `[{ field, before, after, fromId }]`.
-  fieldPicks Json?
-  createdById String? @db.Uuid
+  fieldPicks        Json?
+  createdById       String? @db.Uuid
 
   /// GERİ ALMA DAMGASI — ters kayıt; ileri satır değişmez.
   revertedAt   DateTime? @db.Timestamptz
@@ -5211,17 +5212,17 @@ model MergeOperation {
 
 /// Birleştirmenin kaynakları + TOMBSTONE ÖNCESİ hâlleri (geri alma bunları yazar).
 model MergeOperationSource {
-  id          String  @id @default(uuid()) @db.Uuid
-  operationId String  @db.Uuid
-  sourceId    String  @db.Uuid
-  nameBefore  String  @db.VarChar(255)
-  codeBefore  String? @db.VarChar(64)
-  isActiveBefore Boolean
+  id              String               @id @default(uuid()) @db.Uuid
+  operationId     String               @db.Uuid
+  sourceId        String               @db.Uuid
+  nameBefore      String               @db.VarChar(255)
+  codeBefore      String?              @db.VarChar(64)
+  isActiveBefore  Boolean
   /// Yalnız ürün birleştirmesinde: kaynağın tombstone ÖNCESİ yaşam döngüsü durumu (geri alma bunu yazar).
   /// Eski operasyonlarda NULL → geri alma `isActiveBefore`dan eşler (true→ACTIVE, false→ARCHIVED).
   lifecycleBefore ItemLifecycleStatus?
   /// Geri almada ad hayattaki kayıtla çakıştığı için yeni ad verildiyse.
-  renamedTo   String? @db.VarChar(255)
+  renamedTo       String?              @db.VarChar(255)
 
   operation MergeOperation @relation(fields: [operationId], references: [id], onDelete: Restrict)
 
@@ -5307,16 +5308,16 @@ model SystemSetting {
 /// YÜRÜRLÜKTEKİ satırdan türetilen bir ÖNBELLEKTİR ve tek yazar aynı tx'te ikisini
 /// birden yazar. Kaldırma ayrı faz; ölçülebilir koşulu arşiv notunda.
 model NumberSeriesLine {
-  id        String      @id @default(uuid()) @db.Uuid
+  id        String       @id @default(uuid()) @db.Uuid
   series    NumberSeries @relation(fields: [seriesKey], references: [key], onDelete: Cascade)
-  seriesKey String      @db.VarChar(64)
+  seriesKey String       @db.VarChar(64)
 
-  prefix      String                 @db.VarChar(6)
+  prefix      String                  @db.VarChar(6)
   dateSegment NumberSeriesDateSegment
-  digits      Int                    @default(4)
-  separator   String                 @default("") @db.VarChar(2)
+  digits      Int                     @default(4)
+  separator   String                  @default("") @db.VarChar(2)
   /// Tarih ile sayaç arasındaki ayraç; NULL = `separator`a düşer (bugünkü davranış).
-  separator2  String?                @db.VarChar(2)
+  separator2  String?                 @db.VarChar(2)
 
   /// BU SATIRIN BİÇİMİ NEREDEN GELİYOR — kayıt mı, göç tahmini mi?
   ///
@@ -5422,7 +5423,7 @@ model NumberSeries {
   /// numaralı fiziksel plaka setinin karşılığı (kısa parti no emsali, P01…P99).
   /// Sarmalı seride numara KİMLİK DEĞİLDİR; kimlik kaydın kendisidir.
   /// `maxValue` NULL iken bu kolonun hiçbir etkisi yoktur (sarılacak sınır yok).
-  wrap       Boolean @default(false)
+  wrap Boolean @default(false)
 
   /// Biçimin SON değiştiği an — sayacın KAPSAM sınırı. Sıradaki numara yalnız bu
   /// andan SONRA doğan kodlara bakar; eski rejimin kodları sayaca girmez
@@ -5678,18 +5679,18 @@ enum SubcontractorDispatchItemKind {
 /// `SUBCONTRACT_RETURN`; kalem OUTSTANDING kümesine GİRMEZ (`OUTSTANDING_ITEM.roll` yüklemi null bağı dışlar).
 /// Başlık `totalQty` = Σ(ROLL + WARP_BEAM) metre — YARN kg'sı ayrı `yarnTotalKg` (consistency §19 `kind<>'YARN'`).
 model SubcontractorDispatchItem {
-  id               String   @id @default(uuid()) @db.Uuid
-  dispatchId       String   @db.Uuid
+  id               String                        @id @default(uuid()) @db.Uuid
+  dispatchId       String                        @db.Uuid
   kind             SubcontractorDispatchItemKind @default(ROLL)
-  rollId           String?  @db.Uuid
-  warpBeamId       String?  @db.Uuid
+  rollId           String?                       @db.Uuid
+  warpBeamId       String?                       @db.Uuid
   /// G1 iplik kalemi: stok kartı (ItemType.YARN) + çıkış deposu (+ lot); K1(b) fasondaki bakiye TÜRETİLİR
   /// (`YarnMovement` Σ SUBCONTRACT_OUT − OUT_CANCEL − RETURN + RETURN_CANCEL, `dispatchItemId` üstünden), sanal depo YOK.
-  yarnItemId       String?  @db.Uuid
-  warehouseId      String?  @db.Uuid
-  lotId            String?  @db.Uuid
-  dispatchedQty    Decimal  @db.Decimal(12, 3)
-  dispatchedWeight Decimal? @db.Decimal(12, 3)
+  yarnItemId       String?                       @db.Uuid
+  warehouseId      String?                       @db.Uuid
+  lotId            String?                       @db.Uuid
+  dispatchedQty    Decimal                       @db.Decimal(12, 3)
+  dispatchedWeight Decimal?                      @db.Decimal(12, 3)
 
   /// "Kalan gelmeyecek" kapaması (fasonda zayi) — kalemi kabul BEKLEMEDEN kapatır.
   /// ⚠️ DAMGA DEĞİL, DURUM BAYRAĞI: kim/neden/miktar taşımaz, kararın kendisi
@@ -5702,17 +5703,17 @@ model SubcontractorDispatchItem {
   remainderClosedAt DateTime? @db.Timestamptz
 
   // Relations
-  dispatch     SubcontractorDispatch      @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  dispatch       SubcontractorDispatch      @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
   /// `onDelete: Restrict` AÇIK: bağ opsiyonel olunca Prisma varsayılanı SetNull'a kayardı (FK drift).
-  roll         Roll?                      @relation(fields: [rollId], references: [id], onDelete: Restrict)
-  warpBeam     WarpBeam?                  @relation("DispatchItemWarpBeam", fields: [warpBeamId], references: [id], onDelete: Restrict)
-  warpBeamEvents WarpBeamEvent[]          @relation("WarpBeamEventDispatchItem")
-  receiptItems SubcontractorReceiptItem[] @relation("ReceiptItemSource")
-  yarnItem     Item?                      @relation("DispatchItemYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
-  warehouse    Warehouse?                 @relation("DispatchItemWarehouse", fields: [warehouseId], references: [id], onDelete: Restrict)
-  lot          YarnLot?                   @relation("DispatchItemYarnLot", fields: [lotId], references: [id], onDelete: Restrict)
+  roll           Roll?                      @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  warpBeam       WarpBeam?                  @relation("DispatchItemWarpBeam", fields: [warpBeamId], references: [id], onDelete: Restrict)
+  warpBeamEvents WarpBeamEvent[]            @relation("WarpBeamEventDispatchItem")
+  receiptItems   SubcontractorReceiptItem[] @relation("ReceiptItemSource")
+  yarnItem       Item?                      @relation("DispatchItemYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
+  warehouse      Warehouse?                 @relation("DispatchItemWarehouse", fields: [warehouseId], references: [id], onDelete: Restrict)
+  lot            YarnLot?                   @relation("DispatchItemYarnLot", fields: [lotId], references: [id], onDelete: Restrict)
   /// İplik kaleminin defteri — `SUBCONTRACT_*` satırları (CHECK `yarn_movements_fason_link_ck` iki yönlü).
-  yarnMovements YarnMovement[]            @relation("YarnMovementDispatchItem")
+  yarnMovements  YarnMovement[]             @relation("YarnMovementDispatchItem")
 
   /// Sevk kalemi defteri → `updatedAt` YOK (konvansiyon). Güncellemeler DURUM
   /// bayrağı (`remainderClosedAt`; defteri `RollVariance`) ya da parti
@@ -6177,13 +6178,13 @@ model Swatch {
   statusChangedAt DateTime?    @db.Timestamptz
 
   // Relations
-  item          Item            @relation(fields: [itemId], references: [id])
-  color         Color?          @relation(fields: [colorId], references: [id])
-  parentReceipt KartelaReceipt? @relation("SwatchFromReceipt", fields: [parentReceiptId], references: [id])
-  parentRoll    Roll?           @relation("SwatchParentRoll", fields: [parentRollId], references: [id])
-  createdBy     User?           @relation("SwatchCreatedBy", fields: [createdById], references: [id])
-  shipment      Shipment?       @relation(fields: [shipmentId], references: [id])
-  sack          Sack?           @relation(fields: [sackId], references: [id])
+  item                Item                       @relation(fields: [itemId], references: [id])
+  color               Color?                     @relation(fields: [colorId], references: [id])
+  parentReceipt       KartelaReceipt?            @relation("SwatchFromReceipt", fields: [parentReceiptId], references: [id])
+  parentRoll          Roll?                      @relation("SwatchParentRoll", fields: [parentRollId], references: [id])
+  createdBy           User?                      @relation("SwatchCreatedBy", fields: [createdById], references: [id])
+  shipment            Shipment?                  @relation(fields: [shipmentId], references: [id])
+  sack                Sack?                      @relation(fields: [sackId], references: [id])
   stockReductionItems SwatchStockReductionItem[]
   events              SwatchEvent[]
 
@@ -6485,7 +6486,7 @@ model Manifest {
 
   // Relations
   workOrder WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
-  printedBy User?     @relation("ManifestPrintedBy", fields: [printedById], references: [id])
+  printedBy User?      @relation("ManifestPrintedBy", fields: [printedById], references: [id])
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -6674,17 +6675,17 @@ enum ShipmentDestination {
 /// Mühür/rezerv YOK — sipariş bağı yalnız sevkte kurulur. İçinde karışık ürün serbest;
 /// irsaliyedeki çuval-bazlı ürün dökümü buradan türetilir.
 model Sack {
-  id           String            @id @default(uuid()) @db.Uuid
-  sackNo       String            @unique @db.VarChar(64) // Sistem çuval kodu — CV + GGAAYY + NNNN (insan-okur = tarama)
+  id             String            @id @default(uuid()) @db.Uuid
+  sackNo         String            @unique @db.VarChar(64) // Sistem çuval kodu — CV + GGAAYY + NNNN (insan-okur = tarama)
   /// İdempotency anahtarı (A4, 2026-07-31 denetimi) — istemci mantıksal deneme
   /// başına BİR kez üretir; ağ-retry'de mükerrer BOŞ çuval açılmasını önler
   /// (openSack replay). Token'sız eski istemci → NULL (davranış değişmez).
-  clientToken  String?           @unique @db.Uuid
+  clientToken    String?           @unique @db.Uuid
   // Çuval müşterisi OPSİYONEL — oluştururken atanabilir (bilinen sipariş için), yoksa
   // sevk kurarken atanır. Depoda müşterisiz çuval = genel stok.
-  customerId   String?           @db.Uuid
-  branchId     String?           @db.Uuid
-  shipmentId   String?           @db.Uuid // NULL = çuval depo havuzunda; dolu = sevkiyata atanmış
+  customerId     String?           @db.Uuid
+  branchId       String?           @db.Uuid
+  shipmentId     String?           @db.Uuid // NULL = çuval depo havuzunda; dolu = sevkiyata atanmış
   /// Paketleme grubu (çalışma yaftası) — NULL = "Gruplanmamış" (bugünkü davranış).
   /// SEVKTE TEMİZLENMEZ: sevk edilmiş çuval hangi hazırlıkta toplandığını
   /// hatırlar. İki kazancı var — ① sevk anında "grubun notu sevkiyata
@@ -6692,24 +6693,24 @@ model Sack {
   /// havuza geri koyduğunda hazırlık grubu da OLDUĞU GİBİ geri geliyor
   /// ("mal hiç çıkmadı" sözleşmesiyle tutarlı). Alanı sevkte NULL'lamak,
   /// tam da kaçınmak istediğimiz "her çıkış yoluna bir kanca" işiydi.
-  packingGroupId String?        @db.Uuid
+  packingGroupId String?           @db.Uuid
   /// Parti içi AMBALAJ NO (sevk partisi modu): çuval partide doğarken ya da partiye
   /// alınırken verilir, partiden çıkınca NULL. `seq`ten AYRI — seq sevkiyat-içi sıradır
   /// ve sevkiyatla doğar; packageNo partiye aittir ve sevkte KALIR (belgeye basılır).
   /// Tekillik parti içinde DB'de (`@@unique`), NULL'lar çakışmaz (havuz/grup modu).
-  packageNo    Int?
+  packageNo      Int?
   /// Çuvalın bulunduğu depo (2026-08-14, ticaret paketi). NULLABLE — fabrika
   /// sıfır-fark: tek depolu kurulumda hiçbir yüzey okumaz, eski satırlar NULL
   /// kalabilir. Doğumda damgalanır (openSack/split), NULL kalmış eski çuval İLK
   /// transferinde SAHİPLENİLİR (lazy adoption — üye topların ortak deposu).
   /// İnvariant: çuvalın topları çuvalın deposundadır; transfer çuvalı BÜTÜN
   /// taşıdığı ve top-transferi çuvaldaki topu reddettiği için korunur.
-  warehouseId  String?           @db.Uuid
-  seq          Int? // Sevkiyat içinde sıra (Çuval 1, 2, 3...); havuzdayken NULL
-  weightKg     Decimal?          @db.Decimal(12, 3) // Brüt tartı (kumaş + dara); tekli top kg tutulmaz
+  warehouseId    String?           @db.Uuid
+  seq            Int? // Sevkiyat içinde sıra (Çuval 1, 2, 3...); havuzdayken NULL
+  weightKg       Decimal?          @db.Decimal(12, 3) // Brüt tartı (kumaş + dara); tekli top kg tutulmaz
   // O-19: tartı izi — kim tarttı, ne zaman.
-  weighedById  String?           @db.Uuid
-  weighedAt    DateTime?         @db.Timestamptz
+  weighedById    String?           @db.Uuid
+  weighedAt      DateTime?         @db.Timestamptz
   /// Tartının KAYNAĞI. Bu alan olmadan simüle 47.3 kg ile gerçek 47.3 kg DB'de
   /// BİT-BİT AYNIYDI (2026-07-30) — çuval kg'si sevk irsaliyesine ve çeki listesine
   /// basıldığı için (müşteri/gümrük belgesi) "bu sayı nereden geldi?" sorusunun
@@ -6721,7 +6722,7 @@ model Sack {
   /// gelir ve müşteriye giden çuval etiketine iç iz sızar). Aynı şekilde
   /// `document-render/shipment-dispatch.html.ts` kolon setine de eklenmez.
   /// `resetSackWeightsTx` kg'yi sıfırlarken bunu da NULL'lar (bayat kaynak kalmasın).
-  weightSource SackWeightSource?
+  weightSource   SackWeightSource?
   /// Çuvalın ÜSTÜNDEKİ fiziksel etiket geçersiz mi. `Roll.labelDirty` ile aynı
   /// mekanizma. ÜÇ yazma noktası (2026-08-21'den beri):
   ///   1. müşteri değişince MÜŞTERİYE ÖZEL çuval şablonu (`CustomerTemplateRoute`
@@ -6735,7 +6736,7 @@ model Sack {
   ///      bayrak sahte "yeniden bas" uyarısı üretirdi; gereksiz uyarı operatörü körleştirir.
   /// Baskıda temizlenir (`recordSackPrintEvent`). `Sack.labelPrintedAt` YOK — "hiç
   /// basılmamış çuval" ayırt edilemez, fazladan uyarı kabul edilir (fazla işaretlemek güvenli).
-  labelDirty   Boolean           @default(false)
+  labelDirty     Boolean           @default(false)
   // Çuval yorumu — İÇ serbest not ("kendimiz için"): "ölçü şüpheli", "çuval yırtık,
   // aktarılacak" gibi. Ne ölçüm ne içerik → iki bilinçli sonuç:
   //  1) `resetSackWeightsTx` bu alana DOKUNMAZ (içerik değişince kg bayatlar, not bayatlamaz).
@@ -6746,7 +6747,7 @@ model Sack {
   // stüdyosunda `sackNote` alanı), (b) sevk irsaliyesi çuval tablosu "Açıklama" kolonu
   // (kalıcı toggle VEYA tek-seferlik baskı bayrağı), (c) iç ekranlar (mobil + admin).
   // Sevk belgesine ANNOTATION olarak girer — donmuş çekirdeğe yazılmaz, baskıda canlı çözülür.
-  notes        String?           @db.VarChar(500)
+  notes          String?           @db.VarChar(500)
 
   // Relations
   customer           Customer?           @relation(fields: [customerId], references: [id])
@@ -6817,7 +6818,7 @@ model Sack {
 
 /// Çuval izi KATALOĞU — panelden yönetilir ("Kontrol Et", "Eksik", "Bekliyor"…).
 model SackTag {
-  id String @id @default(uuid()) @db.Uuid
+  id   String @id @default(uuid()) @db.Uuid
   /// Rapor/entegrasyon anahtarı — addan türetilir, sonradan DEĞİŞMEZ
   /// (`ReasonPreset.code` ile aynı gerekçe: adı düzelten operatör geçmiş
   /// kırılımı ikiye bölmesin).
@@ -6836,10 +6837,10 @@ model SackTag {
   hex String @db.VarChar(9)
 
   /// Listedeki sıra — en sık kullanılan üstte.
-  sortOrder Int @default(0)
+  sortOrder Int     @default(0)
   /// false → listede ÇİZİLMEZ ama MEVCUT ATAMALAR DURUR (pasif etiket rozeti
   /// soluk görünür, yeni atamaya kapalıdır). Katalogdan çıkarmanın yolu budur.
-  isActive Boolean @default(true)
+  isActive  Boolean @default(true)
 
   assignments SackTagAssignment[]
 
@@ -6884,7 +6885,7 @@ model SackTagAssignment {
   /// ⚠️ CASCADE ZORUNLU: `removeSack` gerçek `tx.sack.delete` yapıyor
   /// (`shipping.service.ts`). Restrict bırakılsaydı ETİKETLİ BOŞ ÇUVAL BİR DAHA
   /// SİLİNEMEZDİ ve hata operatöre ham FK mesajı olarak çıkardı.
-  sack Sack @relation(fields: [sackId], references: [id], onDelete: Cascade)
+  sack      Sack    @relation(fields: [sackId], references: [id], onDelete: Cascade)
   /// Restrict: kullanımdaki etiket SERT silinemez (DB seddi). Uygulama katmanı
   /// 409'u Türkçe söyler; katalogdan çıkarma `isActive:false` iledir.
   tag       SackTag @relation(fields: [tagId], references: [id], onDelete: Restrict)
@@ -6982,15 +6983,15 @@ model PackingGroup {
 
   /// SEVK PARTİSİ modunda canlılık BU alandır (`liveGroupWhere`): boş parti yaşar,
   /// "sevk edildi" parti listeden düşer. Grup modunda okunmaz (türetilmiş canlılık).
-  status PackingGroupStatus @default(OPEN)
+  status        PackingGroupStatus @default(OPEN)
   /// "EN SON ne zaman sevk edildi (tamamlandı)" — storno ile yeniden açılınca
   /// NULL'LANMAZ (dispatchedAt kalıbı); güncel gerçek `status`tadır.
-  closedAt   DateTime? @db.Timestamptz
-  closedById String?   @db.Uuid
+  closedAt      DateTime?          @db.Timestamptz
+  closedById    String?            @db.Uuid
   /// Parti içi AMBALAJ NO sayacı (`packing.packageNumbering = artan`): tek yazar
   /// `UPDATE … SET "nextPackageNo" = "nextPackageNo" + 1 RETURNING` — kilitsiz, atomik.
   /// Parti doğarken `packing.packageNoStartsAtZero`a göre 0 ya da 1 yazılır.
-  nextPackageNo Int @default(1)
+  nextPackageNo Int                @default(1)
 
   createdById String? @db.Uuid
   updatedById String? @db.Uuid
@@ -7000,7 +7001,7 @@ model PackingGroup {
   /// çuvalı havuzdan çıkaran her MEVCUT yol (sevk · dağıtma · storno) grubu
   /// kendiliğinden doğru tutsun. Ayrı üyelik listesi olsaydı o beş yola birer
   /// temizlik kancası gerekirdi ve unutulan biri hayalet üyelik bırakırdı.
-  sacks Sack[]
+  sacks    Sack[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -7188,11 +7189,11 @@ model SackAllocation {
   /// eski satır SİLİNMEZ, damgalanır — sipariş karşılamasını belirleyen ticari pivot
   /// (`defter.md` ③a) sil-yaz edilmez. Okuyan HER yol `ACTIVE_ALLOCATION` süzer
   /// (`helpers/sack-allocation.helper.ts`); Σ'lar yalnız etkin satırı toplar.
-  clearedAt DateTime? @db.Timestamptz
+  clearedAt         DateTime? @db.Timestamptz
   /// Damgayı basan sevkiyat — FK DEĞİL, düz adres (`sourceRefId` deseni).
-  clearedShipmentId String? @db.Uuid
-  clearedById String? @db.Uuid
-  clearedBy   User?   @relation("SackAllocationClearedBy", fields: [clearedById], references: [id])
+  clearedShipmentId String?   @db.Uuid
+  clearedById       String?   @db.Uuid
+  clearedBy         User?     @relation("SackAllocationClearedBy", fields: [clearedById], references: [id])
 
   // Restrict: çuval silinmeden önce tahsis rebalance ile temizlenir (defter kaybolmasın).
   sack      Sack      @relation(fields: [sackId], references: [id], onDelete: Restrict)
@@ -7367,10 +7368,10 @@ model Color {
   itemAllowed         ItemAllowedColor[]
   rolls               Roll[]
   orderLines          OrderLine[]
-  workOrderTargets    WorkOrder[]            @relation("WorkOrderTargetColor")
+  workOrderTargets    WorkOrder[]              @relation("WorkOrderTargetColor")
   swatches            Swatch[]
-  weavingOrders       WeavingOrder[]      @relation("WeavingOrderColor")
-  machineRuns         MachineRun[]        @relation("MachineRunColor")
+  weavingOrders       WeavingOrder[]           @relation("WeavingOrderColor")
+  machineRuns         MachineRun[]             @relation("MachineRunColor")
   stationCapabilities StationColor[]
   /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
   customerAliases     CustomerColorAlias[]
@@ -7381,7 +7382,7 @@ model Color {
   rollReturns         RollReturn[]
   swatchReductions    SwatchStockReduction[]
   /// Rota şablonu adımlarında planlanan hedef renk (şablon varsayılanı).
-  routeStepPlanned    RouteStep[]            @relation("RouteStepPlannedColor")
+  routeStepPlanned    RouteStep[]              @relation("RouteStepPlannedColor")
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -7389,7 +7390,7 @@ model Color {
   /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
-  nameFold            String?                @default(dbgenerated())
+  nameFold            String?                  @default(dbgenerated())
 
   // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
   // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
@@ -8427,7 +8428,7 @@ model ImportRunLine {
   recordId  String @db.Uuid
 
   /// Dosyadaki satır numarası — kullanıcı hatayı DOSYADA bulabilmeli.
-  rowNo Int
+  rowNo  Int
   /// Gruplu şablonda (route · order) gruba giren TÜM satır numaraları: `[4,5,6]`.
   /// `Int[]` DEĞİL: şemada emsali yok, Prisma skaler listesi NOT NULL + DEFAULT
   /// doğuruyor (`MergeOperationRef.rowIds`te P2011'e patlamıştı) ve bu alan yalnız
@@ -8451,14 +8452,14 @@ model ImportRunLine {
   childSnapshot Json?
   /// Başka varlığa yazılan yan satırlar (sipariş → `promoteCustomerAliases`).
   /// Geri sarma bunları SİLMEZ; önizlemede "kalacak" diye listeler.
-  sideEffects Json?
+  sideEffects   Json?
 
   /// GERİ SARMA DAMGASI — ileri satır değişmez.
-  revertedAt   DateTime? @db.Timestamptz
-  revertedById String?   @db.Uuid
+  revertedAt       DateTime? @db.Timestamptz
+  revertedById     String?   @db.Uuid
   /// Atlandıysa GEREKÇE ("kayıt içe aktarımdan sonra değişti" gibi): "neden
   /// atlandı" sorusu da deftere düşer, ekrana özgü bilgi olarak kalmaz.
-  revertSkipReason String? @db.VarChar(300)
+  revertSkipReason String?   @db.VarChar(300)
 
   importRun ImportRun @relation(fields: [importRunId], references: [id], onDelete: Restrict)
 
@@ -8527,8 +8528,8 @@ model Warehouse {
   sacks         Sack[]
 
   // Paket D (ticaret) — iplik kg-stoğu depo bazlıdır.
-  yarnStocks    YarnStock[]
-  yarnMovements YarnMovement[]
+  yarnStocks                     YarnStock[]
+  yarnMovements                  YarnMovement[]
   /// G1: bu depodan fasona giden iplik kalemleri.
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemWarehouse")
 
@@ -8623,35 +8624,35 @@ model WarehouseMovement {
   /// Olayın İKİ UCUNDAKİ top statüsü. Satır "o gün stok kümesindeydi" demez,
   /// "WAREHOUSE'tan SHIPPED'e gitti" der — kapsam kararı değişirse geçmiş okuma
   /// yeniden hesaplanabilir ve as-of kesiti depo × statü kırılımı verebilir.
-  fromStatus RollStatus?
-  toStatus   RollStatus?
+  fromStatus         RollStatus?
+  toStatus           RollStatus?
   /// Sebep ayrıntısı ENUM'a değil kolona (`RollVariance.reasonCode` emsali):
   /// yeni ayrıntı bir katalog satırıdır, migration değil.
-  reasonCode String? @db.VarChar(64)
+  reasonCode         String?     @db.VarChar(64)
   /// Bir kesim/dönüşümün N+1 satırını bağlar — "grup net SIFIR" ölçülebilir olsun.
-  transformGroupId String? @db.Uuid
+  transformGroupId   String?     @db.Uuid
   /// Metraj sapmasının SEBEBİ `RollVariance`ta durur; bu satır onun depo ETKİSİdir.
-  rollVarianceId String? @db.Uuid
+  rollVarianceId     String?     @db.Uuid
   /// Üretim tarafı olayının belgesi (hangi adıma çıktı / hangisinden döndü).
-  workOrderStepId String? @db.Uuid
+  workOrderStepId    String?     @db.Uuid
   /// TERS KAYIT BAĞI — "bu satır ters kayıt mıdır" sorusunun TEK cevabı. Enum
   /// değeri (CANCEL_REVERSAL vb.) yalnız betimleyicidir; tespit bu alandan yapılır.
-  reversesMovementId String? @db.Uuid
+  reversesMovementId String?     @db.Uuid
   /// Defterin doğruluk başlangıcından ÖNCE yazılmış tarihsel satır.
-  preEpoch Boolean @default(false)
+  preEpoch           Boolean     @default(false)
 
-  roll          Roll               @relation(fields: [rollId], references: [id], onDelete: Cascade)
-  fromWarehouse Warehouse?         @relation("MovementFrom", fields: [fromWarehouseId], references: [id])
-  toWarehouse   Warehouse?         @relation("MovementTo", fields: [toWarehouseId], references: [id])
-  transfer      WarehouseTransfer? @relation(fields: [transferId], references: [id])
-  goodsReceipt  GoodsReceipt?      @relation(fields: [goodsReceiptId], references: [id])
-  shipment      Shipment?          @relation(fields: [shipmentId], references: [id])
-  rollReturn    RollReturn?        @relation(fields: [rollReturnId], references: [id])
-  sack          Sack?              @relation(fields: [sackId], references: [id], onDelete: SetNull)
-  stockCount    StockCount?        @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
-  user          User?              @relation("WarehouseMovementUser", fields: [userId], references: [id])
-  rollVariance  RollVariance?      @relation(fields: [rollVarianceId], references: [id], onDelete: Restrict)
-  workOrderStep WorkOrderStep?     @relation(fields: [workOrderStepId], references: [id], onDelete: Restrict)
+  roll             Roll                @relation(fields: [rollId], references: [id], onDelete: Cascade)
+  fromWarehouse    Warehouse?          @relation("MovementFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse      Warehouse?          @relation("MovementTo", fields: [toWarehouseId], references: [id])
+  transfer         WarehouseTransfer?  @relation(fields: [transferId], references: [id])
+  goodsReceipt     GoodsReceipt?       @relation(fields: [goodsReceiptId], references: [id])
+  shipment         Shipment?           @relation(fields: [shipmentId], references: [id])
+  rollReturn       RollReturn?         @relation(fields: [rollReturnId], references: [id])
+  sack             Sack?               @relation(fields: [sackId], references: [id], onDelete: SetNull)
+  stockCount       StockCount?         @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
+  user             User?               @relation("WarehouseMovementUser", fields: [userId], references: [id])
+  rollVariance     RollVariance?       @relation(fields: [rollVarianceId], references: [id], onDelete: Restrict)
+  workOrderStep    WorkOrderStep?      @relation(fields: [workOrderStepId], references: [id], onDelete: Restrict)
   /// Ters kayıt zinciri: satır hangi ileri satırı tersliyor (ve tersi).
   reversesMovement WarehouseMovement?  @relation("WarehouseMovementReversal", fields: [reversesMovementId], references: [id], onDelete: Restrict)
   reversedBy       WarehouseMovement[] @relation("WarehouseMovementReversal")
@@ -8659,6 +8660,9 @@ model WarehouseMovement {
   /// Append-only log → `updatedAt` YOK (konvansiyon).
   createdAt DateTime @default(now()) @db.Timestamptz
 
+  /// Aynı ileri satır İKİ KEZ terslenemez. Düz unique yeterli: PostgreSQL NULL'ları
+  /// birbirinden ayrı sayar, yani bağsız satırlar yan yana durabilir.
+  @@unique([reversesMovementId])
   @@index([rollId, createdAt])
   @@index([toWarehouseId, eventType, createdAt])
   @@index([fromWarehouseId, eventType, createdAt])
@@ -8673,9 +8677,6 @@ model WarehouseMovement {
   @@index([transformGroupId])
   @@index([rollVarianceId])
   @@index([workOrderStepId])
-  /// Aynı ileri satır İKİ KEZ terslenemez. Düz unique yeterli: PostgreSQL NULL'ları
-  /// birbirinden ayrı sayar, yani bağsız satırlar yan yana durabilir.
-  @@unique([reversesMovementId])
   @@map("warehouse_movements")
 }
 
@@ -8792,15 +8793,15 @@ model GoodsReceipt {
   /// mal kabulü meşru kalır; sipariş bir PLANDIR, kabulün ön koşulu değil).
   purchaseOrderId String? @db.Uuid
 
-  warehouse             Warehouse           @relation(fields: [warehouseId], references: [id])
-  supplier              Customer?           @relation("GoodsReceiptSupplier", fields: [supplierId], references: [id])
+  warehouse             Warehouse               @relation(fields: [warehouseId], references: [id])
+  supplier              Customer?               @relation("GoodsReceiptSupplier", fields: [supplierId], references: [id])
   /// C4 — fason tedarikçi bacağı (Restrict: tedarikçisi silinen fiş kalamaz;
   /// subcontractor zaten soft-delete dünyasında).
-  subcontractorSupplier Subcontractor?      @relation("GoodsReceiptSubcontractorSupplier", fields: [subcontractorId], references: [id], onDelete: Restrict)
-  purchaseOrder         PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  subcontractorSupplier Subcontractor?          @relation("GoodsReceiptSubcontractorSupplier", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  purchaseOrder         PurchaseOrder?          @relation(fields: [purchaseOrderId], references: [id])
   yarnMovements         YarnMovement[]
-  createdBy             User?               @relation("GoodsReceiptCreatedBy", fields: [createdById], references: [id])
-  cancelledBy           User?               @relation("GoodsReceiptCancelledBy", fields: [cancelledById], references: [id])
+  createdBy             User?                   @relation("GoodsReceiptCreatedBy", fields: [createdById], references: [id])
+  cancelledBy           User?                   @relation("GoodsReceiptCancelledBy", fields: [cancelledById], references: [id])
   rolls                 Roll[]
   movements             WarehouseMovement[]
   invoices              Invoice[]
@@ -9021,11 +9022,11 @@ model Invoice {
   createdById String? @db.Uuid
   clientToken String? @unique @db.Uuid
 
-  cari                 CariAccount           @relation(fields: [cariId], references: [id], onDelete: Restrict)
-  shipment             Shipment?             @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
-  directShipment       DirectShipment?       @relation(fields: [directShipmentId], references: [id], onDelete: Restrict)
-  subcontractorReceipt SubcontractorReceipt? @relation(fields: [subcontractorReceiptId], references: [id], onDelete: Restrict)
-  goodsReceipt         GoodsReceipt?         @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+  cari                 CariAccount             @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  shipment             Shipment?               @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  directShipment       DirectShipment?         @relation(fields: [directShipmentId], references: [id], onDelete: Restrict)
+  subcontractorReceipt SubcontractorReceipt?   @relation(fields: [subcontractorReceiptId], references: [id], onDelete: Restrict)
+  goodsReceipt         GoodsReceipt?           @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
   /// n irsaliye → 1 fatura (2026-09-18): pivot; `goodsReceiptId` kolonu tek fişte AYRICA dolar (eski okuyucu), n>1 fişte NULL.
   goodsReceiptLinks    InvoiceToGoodsReceipt[]
 
@@ -9298,8 +9299,8 @@ model Payment {
   cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
   bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
 
-  transactions CariTransaction[]
-  allocations  PaymentAllocation[]
+  transactions    CariTransaction[]
+  allocations     PaymentAllocation[]
   /// Kasa/banka defterindeki satırı (tek yazar) — backfill öncesi eski ödemelerde yok.
   cashTransaction CashTransaction?
 
@@ -10097,22 +10098,22 @@ model YarnMovement {
   /// Devere Faz 2 (lot): tedarikçi lotu bağı — nullable, lot izlemesinden önce giren iplik lotsuzdur
   /// ve çıkabilir. Lot bakiyesi AYRI TABLOYA İNMEZ, Σ `yarnMovementSign` × qtyKg WHERE lotId ile TÜRETİLİR
   /// (`yarnLotBalanceTx`); lot kalemi hareketin kalemiyle aynı olmalı (servis 400, mutabakat §40).
-  lotId String? @db.Uuid
+  lotId          String? @db.Uuid
   /// Bobin adedi — BİLGİ alanıdır, bakiye değil (CHECK `yarn_movements_bobbin_positive`: null ya da > 0).
-  bobbinCount Int?
+  bobbinCount    Int?
   /// G1: fason iplik kalemi bağı — `SUBCONTRACT_*` satırı ⇔ bağ dolu (CHECK `yarn_movements_fason_link_ck`);
   /// kalem başına tek `SUBCONTRACT_OUT` (`yarn_movements_subcontract_out_uq` partial); dönüşte sebep ZORUNLU.
   dispatchItemId String? @db.Uuid
 
-  item         Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  item         Item                       @relation(fields: [itemId], references: [id], onDelete: Restrict)
   dispatchItem SubcontractorDispatchItem? @relation("YarnMovementDispatchItem", fields: [dispatchItemId], references: [id], onDelete: Restrict)
-  warehouse    Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  warpBeam     WarpBeam?     @relation(fields: [warpBeamId], references: [id], onDelete: Restrict)
-  lot          YarnLot?      @relation(fields: [lotId], references: [id], onDelete: Restrict)
-  goodsReceipt GoodsReceipt? @relation(fields: [goodsReceiptId], references: [id])
-  invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
-  stockCount   StockCount?   @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
-  user         User?         @relation("YarnMovementUser", fields: [userId], references: [id])
+  warehouse    Warehouse                  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  warpBeam     WarpBeam?                  @relation(fields: [warpBeamId], references: [id], onDelete: Restrict)
+  lot          YarnLot?                   @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  goodsReceipt GoodsReceipt?              @relation(fields: [goodsReceiptId], references: [id])
+  invoice      Invoice?                   @relation(fields: [invoiceId], references: [id])
+  stockCount   StockCount?                @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
+  user         User?                      @relation("YarnMovementUser", fields: [userId], references: [id])
 
   createdAt DateTime @default(now()) @db.Timestamptz
 
@@ -10134,28 +10135,28 @@ model YarnMovement {
 /// (8029 kod-kapsam kilidi `yarnLot`); elle de açılabilir. Tedarikçi NULL olabilir (eski stok).
 /// Silinmez, pasife alınır (`isActive`).
 model YarnLot {
-  id         String  @id @default(uuid()) @db.Uuid
-  itemId     String  @db.Uuid
-  lotNo      String  @db.VarChar(64)
-  supplierId String? @db.Uuid
-  notes      String? @db.VarChar(300)
-  isActive   Boolean @default(true)
+  id                 String               @id @default(uuid()) @db.Uuid
+  itemId             String               @db.Uuid
+  lotNo              String               @db.VarChar(64)
+  supplierId         String?              @db.Uuid
+  notes              String?              @db.VarChar(300)
+  isActive           Boolean              @default(true)
   /// KALİTE BEKLETME (2026-09-18; SAP QM kalite denetim stoğu → serbest/bloke): RELEASED varsayılan = bugünkü davranış.
   /// `goodsReceipt.yarnQualityHoldEnabled` açıkken mal kabulde doğan lot ON_HOLD doğar; ON_HOLD/BLOCKED lota çıkış
   /// (OUT · WARP_ISSUE · SUBCONTRACT_OUT) yazılamaz (400 `YARN_LOT_ON_HOLD`). Karar iş kararıdır → kalıcı kolon
   /// (`qualityDecidedAt/ById`), audit ayrıca; tek yazar `yarnLotService.decideQuality`.
-  qualityStatus     YarnLotQualityStatus @default(RELEASED)
-  qualityDecidedAt  DateTime?            @db.Timestamptz
-  qualityDecidedById String?             @db.Uuid
-  qualityNote       String?              @db.VarChar(300)
+  qualityStatus      YarnLotQualityStatus @default(RELEASED)
+  qualityDecidedAt   DateTime?            @db.Timestamptz
+  qualityDecidedById String?              @db.Uuid
+  qualityNote        String?              @db.VarChar(300)
   /// G3 EMANET — bu lot müşterinin ipliği (mal bizim değil); doğum niteliği (lot create), PATCH'ten yazılamaz.
   /// Bu lottan sarılan levent owner'ı kalıtır (`resolveOwnerFromLotsTx`).
-  ownerCustomerId String? @db.Uuid
+  ownerCustomerId    String?              @db.Uuid
 
-  item          Item           @relation("YarnLotItem", fields: [itemId], references: [id], onDelete: Restrict)
-  supplier      Customer?      @relation("YarnLotSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
-  ownerCustomer Customer?      @relation("YarnLotOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
-  movements YarnMovement[]
+  item                           Item                        @relation("YarnLotItem", fields: [itemId], references: [id], onDelete: Restrict)
+  supplier                       Customer?                   @relation("YarnLotSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  ownerCustomer                  Customer?                   @relation("YarnLotOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
+  movements                      YarnMovement[]
   /// G1: bu lottan fasona giden iplik kalemleri.
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnLot")
 
@@ -10572,9 +10573,9 @@ model StockCount {
   /// (`ReconciliationLetter.createdById` emsali): düşük trafikli "kim yaptı" izi.
   createdById String? @db.Uuid
 
-  warehouse     Warehouse        @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  lines         StockCountLine[]
-  yarnMovements YarnMovement[]
+  warehouse          Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  lines              StockCountLine[]
+  yarnMovements      YarnMovement[]
   warehouseMovements WarehouseMovement[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -10733,4 +10734,52 @@ model CloudInboxReceipt {
   createdAt        DateTime          @default(now()) @db.Timestamptz
 
   @@map("cloud_inbox_receipts")
+}
+
+/// DESTEK TALEBİ (3d-2) — panelden açılır, satıcıya kurulum imzalı `POST /v1/destek` ile gider.
+/// DURUM tablosudur: yerel `GONDERILMEDI` (giden kutusu; yoklama sonrası yeniden denenir) → satıcının
+/// aynası `ACIK · YANITLANDI · KAPANDI` (yoklama yanıtından). Kimliği (`id`) satıcıya `talepId` olarak
+/// gider — tekrar gönderim aynı talebi döndürür. Değer kümesi satıcı protokolüyle büyüyebilir: VarChar.
+model SupportTicket {
+  id             String    @id @default(uuid()) @db.Uuid
+  clientToken    String?   @unique @db.Uuid
+  subject        String    @db.VarChar(200)
+  description    String
+  /// Panelin yakaladığı ekran görüntüsü (PNG/JPEG, ≤1 MB); gönderildikten sonra da talebin parçası.
+  screenshot     Bytes?
+  screenshotType String?   @db.VarChar(20)
+  panelVersion   String?   @db.VarChar(60)
+  status         String    @default("GONDERILMEDI") @db.VarChar(20)
+  /// Satıcının doğuşta materyalize ettiği numara (`DST-NNNNNN`); gönderilene dek NULL.
+  ticketNo       String?   @db.VarChar(40)
+  sentAt         DateTime? @db.Timestamptz
+  lastSyncedAt   DateTime? @db.Timestamptz
+  sendAttempts   Int       @default(0)
+  /// Son gönderim hatasının KODU (ham metin değil).
+  lastErrorCode  String?   @db.VarChar(60)
+  createdById    String    @db.Uuid
+  createdAt      DateTime  @default(now()) @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @db.Timestamptz
+
+  createdBy User                 @relation("SupportTicketCreatedBy", fields: [createdById], references: [id])
+  replies   SupportTicketReply[]
+
+  @@index([status, updatedAt])
+  @@map("support_tickets")
+}
+
+/// Satıcı yanıtının yerel kopyası — ekleme-yalnız (satıcı defterinin aynası; `updatedAt` yok).
+/// `vendorReplyId` satıcının olay kimliğidir: aynı yanıt iki yoklamada gelse de tek satır.
+model SupportTicketReply {
+  id            String   @id @default(uuid()) @db.Uuid
+  ticketId      String   @db.Uuid
+  vendorReplyId String   @unique @db.Uuid
+  body          String
+  repliedAt     DateTime @db.Timestamptz
+  createdAt     DateTime @default(now()) @db.Timestamptz
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId, repliedAt])
+  @@map("support_ticket_replies")
 }

@@ -13,6 +13,7 @@ import {
   VersionTextSchema,
   UuidSchema,
 } from "./belgeler";
+import { isPlainObject } from "./ortak";
 
 export const ENDPOINTS = {
   ACTIVATE: "/v1/etkinlestir",
@@ -131,6 +132,31 @@ export const ActivateRequestSchema = z.strictObject({
   ortam: EnvironmentSchema,
 });
 
+// ── Kurulum kaydı (3d-2) ──────────────────────────────────────────────────────
+/** `kur.ps1`in kurulum kökündeki ekleme-yalnız geçmiş dosyası; yoklama son N satırı taşır. */
+export const INSTALL_HISTORY_FILE_NAME = "kurulum-gecmisi.jsonl";
+export const INSTALL_RECORD_LIMIT = 10;
+export const INSTALL_RECORD_KINDS = ["KURULUM", "GERI_ALMA"] as const;
+/** Geri dönüş noktası DAMGA olarak gider (`app.eski-<damga>` · `premigrate_<damga>`): dosya adı/yol dışarı çıkmaz. */
+const RecoveryStampSchema = z.string().regex(/^\d{8}_\d{6}$/);
+
+/** Kurulum kaydı ALLOWLIST'i — `kayitId` kur.ps1'de doğar; satıcı (kurulum, kayitId) ile idempotent yazar. */
+export const InstallRecordSchema = z.strictObject({
+  kayitId: UuidSchema,
+  tur: z.enum(INSTALL_RECORD_KINDS),
+  tarih: IsoTimeSchema,
+  commit: z.string().regex(/^[0-9a-f]{7,40}$/).nullable(),
+  paketOzeti: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
+  oncekiSurum: VersionTextSchema.nullable(),
+  yeniSurum: VersionTextSchema,
+  migrationSayisi: CounterSchema.nullable(),
+  yeniMigrationSayisi: CounterSchema.nullable(),
+  geriDonus: z.strictObject({ damga: RecoveryStampSchema.nullable(), kod: z.boolean(), veri: z.boolean(), veriSifreli: z.boolean() }),
+});
+export type InstallRecord = z.infer<typeof InstallRecordSchema>;
+/** Yoklama gövdesindeki OPSİYONEL alan (yoksa bugünkü gövde). Eski satıcı KATI şemayla reddeder ⇒ satıcı önce. */
+export const InstallRecordListSchema = z.array(InstallRecordSchema).max(INSTALL_RECORD_LIMIT);
+
 export const PollRequestSchema = z.strictObject({
   v: VersionField,
   /** Kira zinciri: sunucu ucu tutar; geride kalmış uç "yakala", iki farklı parmak izi "kopya şüphesi". */
@@ -149,6 +175,8 @@ export const PollRequestSchema = z.strictObject({
   saglik: HealthSummarySchema,
   /** Gözlem kipinde zorlamanın REDDEDECEĞİ istek/modül sayısı (sıfır-fark ölçümü). */
   gozlem: z.strictObject({ reddedilecekIstek: CounterSchema, reddedilecekModul: CounterSchema }),
+  /** Son N kurulum kaydı (3d-2) — yoksa alan hiç gönderilmez (eski satıcı KATI şemayla reddederdi). */
+  kurulumKayitlari: InstallRecordListSchema.optional(),
 });
 
 /**
@@ -236,3 +264,56 @@ export type ActivateRequest = z.infer<typeof ActivateRequestSchema>;
 export type PollRequest = z.infer<typeof PollRequestSchema>;
 export type LicenseResponse = z.infer<typeof LicenseResponseSchema>;
 export type HealthSummary = z.infer<typeof HealthSummarySchema>;
+
+// ── Destek talebi (3d-2) ──────────────────────────────────────────────────────
+export const SUPPORT_SUBJECT_MAX = 200;
+export const SUPPORT_TEXT_MAX = 5000;
+/** Küçük ek (ekran görüntüsü) üst sınırı — ikili bayt; büyük ek `/y/<belirteç>` yükleme bağlantısıyla gider. */
+export const SUPPORT_ATTACHMENT_MAX_BYTES = 1024 * 1024;
+export const SUPPORT_ATTACHMENT_TYPES = ["image/png", "image/jpeg"] as const;
+/** Satıcıdaki talep durumu; fabrikanın yerel kopyası bunun aynasıdır (+ yerel `GONDERILMEDI`). */
+export const SUPPORT_TICKET_STATES = ["ACIK", "YANITLANDI", "KAPANDI"] as const;
+export type SupportTicketState = (typeof SUPPORT_TICKET_STATES)[number];
+const Base64Schema = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/).max(Math.ceil(SUPPORT_ATTACHMENT_MAX_BYTES / 3) * 4);
+
+/** `POST /v1/destek` (amaç `destek`) — `talepId` fabrikanın yerel talep kimliğidir: tekrar gönderim aynı talebi döner. */
+export const SupportRequestSchema = z.strictObject({
+  v: VersionField,
+  talepId: UuidSchema,
+  konu: z.string().trim().min(1).max(SUPPORT_SUBJECT_MAX),
+  aciklama: z.string().trim().min(1).max(SUPPORT_TEXT_MAX),
+  acan: z.string().trim().min(1).max(120).nullable(),
+  panelSurum: VersionTextSchema.nullable(),
+  ek: z.strictObject({ tur: z.enum(SUPPORT_ATTACHMENT_TYPES), veri: Base64Schema }).nullable(),
+  saglik: HealthSummarySchema,
+  ortam: EnvironmentSchema,
+});
+export type SupportRequest = z.infer<typeof SupportRequestSchema>;
+
+export const SupportResponseSchema = z.object({
+  v: VersionField,
+  talepId: UuidSchema,
+  talepNo: z.string().min(1).max(40),
+  durum: z.enum(SUPPORT_TICKET_STATES),
+});
+
+/** Yoklama YANITINDAKİ destek güncellemesi (gevşek): kurulumun son 30 günde hareketli talepleri + satıcı yanıtları. */
+export const SUPPORT_UPDATE_LIMIT = 20;
+export const SUPPORT_REPLY_LIMIT = 50;
+export const SupportTicketUpdateSchema = z.object({
+  talepId: UuidSchema,
+  talepNo: z.string().min(1).max(40),
+  durum: z.enum(SUPPORT_TICKET_STATES),
+  guncellendi: IsoTimeSchema,
+  yanitlar: z
+    .array(z.object({ yanitId: UuidSchema, metin: z.string().min(1).max(SUPPORT_TEXT_MAX), zaman: IsoTimeSchema }))
+    .max(SUPPORT_REPLY_LIMIT),
+});
+export type SupportTicketUpdate = z.infer<typeof SupportTicketUpdateSchema>;
+/** Yanıttan destek alanını okur; biçimsiz alan kirayı DÜŞÜRMEZ (yok sayılır). */
+export const SupportUpdateListSchema = z.array(SupportTicketUpdateSchema).max(SUPPORT_UPDATE_LIMIT);
+export function readSupportUpdates(raw: unknown): SupportTicketUpdate[] {
+  if (!isPlainObject(raw)) return [];
+  const parsed = SupportUpdateListSchema.safeParse(raw["destek"]);
+  return parsed.success ? parsed.data : [];
+}

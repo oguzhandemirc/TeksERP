@@ -35,6 +35,8 @@ export const PORTAL_PERMISSIONS = {
   "dagitim:yaz": VENDOR,
   /** Yayıncı imza anahtarı kaydı ve pasife alınması (yayın bildirimi güveni). */
   "yayinci:yonet": ADMIN,
+  /** Destek kutusu: fabrikanın talebine yanıt yazma ve talebi kapatma (okuma `portal:oku`). */
+  "destek:yanitla": VENDOR,
   "anahtar:oku": VENDOR,
   /** Bayi alt-portalı (yalnız kendi müşterileri). */
   "bayi:portal": ["BAYI"],

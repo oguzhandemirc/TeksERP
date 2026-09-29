@@ -13,6 +13,8 @@ import { DealerDetailPage } from "./pages/DealerDetail";
 import { DealersPage } from "./pages/Dealers";
 import { FilesPage } from "./pages/Files";
 import { InstallationsPage } from "./pages/Installations";
+import { SupportPage } from "./pages/Support";
+import { SupportDetailPage } from "./pages/SupportDetail";
 import { CopyAlertsPage, DrPage, PlannedActionsPage, TransfersPage } from "./pages/Queues";
 import { ReleasesPage } from "./pages/Releases";
 import { UsersPage } from "./pages/Users";
@@ -27,6 +29,7 @@ export const PORTAL_NAV: readonly NavItem[] = [
   { to: "/tasima-talepleri", label: "Taşıma talepleri", permission: "portal:oku" },
   { to: "/kopya-uyarilari", label: "Kopya uyarıları", permission: "portal:oku" },
   { to: "/dr", label: "DR", permission: "portal:oku" },
+  { to: "/destek", label: "Destek kutusu", permission: "portal:oku" },
   { to: "/bayiler", label: "Bayiler", permission: "portal:oku" },
   { to: "/kanallar", label: "Kanallar", permission: "portal:oku" },
   { to: "/surumler", label: "Sürümler", permission: "portal:oku" },
@@ -50,6 +53,8 @@ export const PORTAL_ROUTES: RouteObject[] = [
       { path: "tasima-talepleri", element: <TransfersPage /> },
       { path: "kopya-uyarilari", element: <CopyAlertsPage /> },
       { path: "dr", element: <DrPage /> },
+      { path: "destek", element: <SupportPage /> },
+      { path: "destek/:id", element: <SupportDetailPage /> },
       { path: "bayiler", element: <DealersPage /> },
       { path: "bayiler/:id", element: <DealerDetailPage /> },
       { path: "kanallar", element: <ChannelsPage /> },

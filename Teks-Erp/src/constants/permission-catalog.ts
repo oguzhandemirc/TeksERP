@@ -226,6 +226,9 @@ export const PERMISSION_CATALOG = [
   // satıcıyla konuşur ve kurulumun lisans bağını değiştirir. Kategori `web`: `admin:*` VERMEZ.
   { code: "license:view", module: "ADMIN", category: "web", description: "Sistem → Lisans (durum, kira, parmak izi ölçümü, yoklama geçmişi — salt-okunur)" },
   { code: "license:manage", module: "ADMIN", category: "web", description: "Lisans yönetimi (etkinleştirme, çevrimdışı/aktarma yanıtı, taşıma talebi, DR devralma, proxy ayarı)" },
+  // Destek (3d-2): talep satıcıya kurulum imzalı gider, sağlık özeti ve isteğe bağlı ekran görüntüsü taşır;
+  // aynı izin talep listesini ve satıcı yanıtlarını da gösterir.
+  { code: "support:create", module: "ADMIN", category: "web", description: "Sistem → Destek (satıcıya talep açma, talepleri ve yanıtları görme)" },
   // 2026-08-05: Tanımlar → Çıktılar altındaki belge/kart TASARIM ekranları
   // (Belge Şablonları, Refakat Kartı, Refakat Kartı Şablonları, Serbest
   // Belgeler). `admin:settings`ten AYRI olması ürün kararıdır — `settings:

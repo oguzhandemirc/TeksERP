@@ -9,7 +9,7 @@
 // bellek olsa da, adları çözmek için DB'ye bakılıyor — o okuma buraya ait.
 // =============================================================================
 
-import { CLIENT_VERSION_POLICIES } from "../config/client-version-policy";
+import { effectiveClientPolicy } from "../lib/client-policy-lease";
 import {
   CLIENT_ACTIVE_WINDOW_MS,
   CLIENT_RETENTION_MS,
@@ -65,7 +65,7 @@ export const ClientRegistryService = {
           version: r.version,
           /** Yayındaki güncel sürüm — "geride mi" kıyasını istemci yapar. */
           expectedVersion: r.kind
-            ? (CLIENT_VERSION_POLICIES[r.kind]?.currentVersion ?? null)
+            ? (effectiveClientPolicy(r.kind)?.currentVersion ?? null)
             : null,
           deviceName: d?.name ?? null,
           deviceKind: d?.kind ?? null,

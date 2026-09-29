@@ -57,6 +57,9 @@ export const ALWAYS_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   // Giriş akışının parçası: sıfırlanan yönetici TOTP'yi kuramazsa K5'te "verilerimi al" için giremez.
   { method: "GET", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu (giriş akışı; K5'te veri erişimi için)" },
   { method: "POST", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu (giriş akışı; K5'te veri erişimi için)" },
+  // Kilitli kurulum da satıcıya ulaşabilmeli: destek talebi kurtarma yoludur, iş verisi yazmaz.
+  { method: "*", path: "/api/destek", reason: "satıcıya destek talebi aç / talepleri gör (kurtarma yolu)" },
+  { method: "GET", path: "/api/destek/:id", reason: "destek talebi ve satıcı yanıtları (kurtarma yolu)" },
 ];
 
 /** KISITLI kipte AYRICA açık yazmalar (okuma zaten serbest). Beyan dışı her yazma RED. */
