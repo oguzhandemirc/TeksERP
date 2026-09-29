@@ -169,8 +169,11 @@ networks:
   kenar:
     name: tekserp-satici-${ORTAM}-kenar
     internal: true
+    # Traefik bu ağa DİNAMİK adresle katılır: dinamik dağıtım ip_range'le sınırlı, satıcının sabit
+    # KENAR_IP'si onun DIŞINDA — yoksa satıcıdan önce bağlanan Traefik ilk boş adresi (KENAR_IP) alır
+    # ve satıcı "Address already in use" ile açılamaz (VDS kurulumunda ölçüldü).
     ipam:
-      config: [{ subnet: "${KENAR_AGI:?KENAR_AGI gerekli}" }]
+      config: [{ subnet: "${KENAR_AGI:?KENAR_AGI gerekli}", ip_range: "${KENAR_DINAMIK_ARALIK:?KENAR_DINAMIK_ARALIK gerekli}" }]
   ic:
     name: tekserp-satici-${ORTAM}-ic
     internal: true

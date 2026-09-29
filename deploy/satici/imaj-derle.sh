@@ -4,7 +4,8 @@
 # =============================================================================
 # VDS'te derleme YOK ve kaynak VDS'e gitmez: bağlam HEAD'in commit'lenmiş hâlinden (git archive)
 # kurulur — kirli ağaç RED (arşivdeki imaj, sha'sının söylediği kod olsun).
-#   sunucu : satici/sunucu (npm ci → prisma generate → tsc → prune)
+#   sunucu : satici/sunucu (npm ci → prisma generate → tsc → prune) + satici/web derlemesi (npm ci →
+#            vite build; yalnız dist/ imaja geçer → PORTAL_WEB_DIZINI) + portal-tunel.cjs (geri döngü kipi)
 #   yedek  : Teks-Erp/scripts/build-araclar.mjs'in ürettiği yedek-sifrele.cjs + yedek-dongusu.sh
 #
 # Kullanım:  deploy/satici/imaj-derle.sh [--platform linux/amd64] [--cikti <dizin>]
@@ -27,7 +28,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-KAYNAKLAR=(satici/sunucu deploy/satici Teks-Erp/scripts Teks-Erp/src Teks-Erp/package.json)
+KAYNAKLAR=(satici/sunucu satici/web deploy/satici Teks-Erp/scripts Teks-Erp/src Teks-Erp/package.json)
 if ! git -C "$KOK" diff --quiet HEAD -- "${KAYNAKLAR[@]}" || [ -n "$(git -C "$KOK" ls-files --others --exclude-standard -- "${KAYNAKLAR[@]}")" ]; then
   echo "⛔ Kirli ağaç: ${KAYNAKLAR[*]} altında commit'lenmemiş değişiklik var — imaj HEAD'i temsil etmezdi." >&2
   exit 1
@@ -49,8 +50,10 @@ ln -s "$KOK/Teks-Erp/node_modules" "$TMP/kaynak/Teks-Erp/node_modules"
 (cd "$TMP/kaynak/Teks-Erp" && node scripts/build-araclar.mjs >/dev/null)
 
 cp -R "$TMP/kaynak/satici/sunucu" "$TMP/baglam/sunucu"
+cp -R "$TMP/kaynak/satici/web" "$TMP/baglam/web"
 cp "$TMP/kaynak/Teks-Erp/dist/tools/yedek-sifrele.cjs" "$TMP/baglam/"
-cp "$TMP/kaynak/deploy/satici/satici-baslat.sh" "$TMP/kaynak/deploy/satici/yedek-dongusu.sh" "$TMP/baglam/"
+cp "$TMP/kaynak/deploy/satici/satici-baslat.sh" "$TMP/kaynak/deploy/satici/yedek-dongusu.sh" \
+   "$TMP/kaynak/deploy/satici/portal-tunel.cjs" "$TMP/baglam/"
 
 for hedef in sunucu yedek; do
   etiket=$([ "$hedef" = sunucu ] && echo "$IMAJ" || echo "$YEDEK_IMAJ")

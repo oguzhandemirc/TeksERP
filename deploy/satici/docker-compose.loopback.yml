@@ -1,0 +1,59 @@
+# =============================================================================
+# Satıcı — GERİ DÖNGÜ KİPİ (geçici): Tailscale onaylanana dek portal yalnız VDS'in içinden açılır
+# =============================================================================
+# Ana dosyanın ÜSTÜNE bindirilir; `.env`'deki `COMPOSE_FILE=docker-compose.yml:docker-compose.loopback.yml`
+# satırı her `docker compose` komutuna ikisini birden verir. Tailscale gelince o satır ve bu dosya
+# kalkar, TAILNET_IP gerçek 100.x adresi olur, birim (`tekserp-satici-tailnet@`) açılır — runbook §4a.
+#
+# Ne değişir (ana dosyaya göre):
+#   · portal port YAYIMLANMAZ (0.0.0.0 da 100.x de yok) ve tailnet köprüsü INTERNAL olur → satıcının
+#     dış bağlantısı yok (DOCKER-USER kuralı gerekmez; ana kipte o kuralı birim koyar)
+#   · satıcının tailnet dinleyicisi konteynerin 127.0.0.1'ine bağlanır (TAILNET_BIND) — dışarıdan
+#     hiçbir soket ona doğrudan ulaşamaz
+#   · `portal-tunel` satıcıyla AYNI ağ ad alanında tailnet köprü adresini (TAILNET_KONTEYNER_IP:4611)
+#     dinler ve 127.0.0.1:4611'e aktarır: portal kaynağı 127.0.0.1 görür. Köprü adresine yalnız
+#     VDS'in kendisi ulaşır (diğer köprüler Docker yalıtımıyla düşer) → erişim Mac'ten SSH üzerinden:
+#       node deploy/satici/portal-baglan.mjs  →  http://127.0.0.1:14611/portal/
+#     (VDS sshd'si `AllowTcpForwarding no` — `ssh -L` reddedilir; araç her bağlantıda SSH oturumu +
+#      VDS'te `nc -N <köprü> 4611` koşturur)
+# Neden iletici: Docker'ın yayımlı port vekili de köprü yolu da kaynağı ağ geçidine çevirir (ölçüldü,
+# runbook §1) — tailnet kapısı onu tailnet saymaz; ağ geçidini listeye eklemek ÇÖZÜM DEĞİLDİR.
+# TAILNET_LOOPBACK=1: satıcının "127.0.0.0/8 yalnız bu anahtarla tailnet sayılır" kuralı (F2) için;
+# anahtar kodda yokken bugünkü davranış 127/8'i zaten tailnet sayar.
+# Yalıtım denetimi bu kipi tanır: node deploy/satici/compose-denetle.mjs --env-file <.env> (COMPOSE_FILE'ı okur)
+# =============================================================================
+
+services:
+  satici:
+    environment:
+      TAILNET_BIND: "127.0.0.1"
+      TAILNET_LOOPBACK: "1"
+    ports: !reset []
+
+  portal-tunel:
+    image: ${SATICI_IMAJ:?SATICI_IMAJ gerekli}
+    container_name: tekserp-satici-${ORTAM:?ORTAM gerekli}-portal-tunel
+    network_mode: "service:satici"
+    depends_on: [satici]
+    user: "10001:10001"
+    entrypoint: ["node", "/usr/local/lib/portal-tunel.cjs"]
+    environment:
+      TUNEL_DINLE: ${TAILNET_KONTEYNER_IP:?TAILNET_KONTEYNER_IP gerekli}
+      TUNEL_PORT: "4611"
+      TUNEL_HEDEF_PORT: "4611"
+    read_only: true
+    init: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "3" }
+    cpus: 0.1
+    mem_limit: 64m
+    memswap_limit: 64m
+    pids_limit: 20
+
+networks:
+  tailnet:
+    internal: true
