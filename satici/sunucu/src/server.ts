@@ -1,6 +1,6 @@
-// SATICI SUNUCUSU — tek süreç, iki dinleyici: GENEL (/v1/*, /q) + TAILNET (portal; kök parolası).
-// Açılış: yapılandırma (fail-closed) → anahtar deposu → anahtar künyesi → zil (PG LISTEN) →
-// dinleyiciler → bakım işi. Kapanış: SIGTERM/SIGINT'te akışlar ve bağlantılar düzgün kapanır.
+// SATICI SUNUCUSU — tek süreç, üç dinleyici: GENEL (/v1/*, /q) + TAILNET (portal; kök parolası) + İÇ
+// (patron bulutunun iç API'si; yalnız ortak sır dosyası geçerliyse açılır). Açılış: yapılandırma
+// (fail-closed) → anahtar deposu → anahtar künyesi → zil (PG LISTEN) → dinleyiciler → bakım işi. Kapanış: SIGTERM/SIGINT'te akışlar ve bağlantılar düzgün kapanır.
 import { mkdirSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -11,10 +11,13 @@ import { setSignerConcurrency } from "./keys/signer";
 import { loadEnvFile } from "./lib/env";
 import { pool, prisma } from "./lib/prisma";
 import { createPublicApp } from "./http/public-app";
+import { createInternalApp } from "./http/internal-app";
 import { createTailnetApp } from "./http/tailnet-app";
+import { loadInternalBearer } from "./lib/internal-bearer";
 import { PortalSecretBox } from "./portal/secret-box";
 import type { VendorContext } from "./services/context";
 import { DoorbellHub } from "./services/doorbell";
+import { InternalApiCounters } from "./services/internal-api.service";
 import { MaintenanceScheduler, syncKeyRegistry } from "./services/maintenance";
 import { webAppAvailable } from "./http/web-static";
 
@@ -54,7 +57,20 @@ async function main(): Promise<void> {
   const tailnetServer = http.createServer(createTailnetApp(ctx, hub, () => tailnetAddress));
   const publicAddress = await listen(publicServer, config.PORT_GENEL, config.GENEL_BIND);
   tailnetAddress = await listen(tailnetServer, config.PORT_TAILNET, config.TAILNET_BIND);
-  console.log(`SATICI_DINLIYOR genel=${publicAddress.port} tailnet=${tailnetAddress.port}`);
+
+  const internalCounters = new InternalApiCounters();
+  const bearer = loadInternalBearer(config.IC_API_BELIRTEC_DOSYASI);
+  let internalAddress: AddressInfo | null = null;
+  let internalServer: http.Server | null = null;
+  if (bearer.ok) {
+    internalServer = http.createServer(createInternalApp(ctx, { bearer: bearer.bearer, counters: internalCounters, listener: () => internalAddress }));
+    internalAddress = await listen(internalServer, config.PORT_IC, config.IC_BIND);
+  } else {
+    console.warn(`[satici] iç API KAPALI: ${bearer.reason}`);
+  }
+  const counterTimer = setInterval(() => void internalCounters.flush(), config.IC_SAYAC_DK * 60_000);
+  counterTimer.unref();
+  console.log(`SATICI_DINLIYOR genel=${publicAddress.port} tailnet=${tailnetAddress.port} ic=${internalAddress ? internalAddress.port : "kapali"}`);
 
   const maintenance = new MaintenanceScheduler(ctx);
   maintenance.start();
@@ -66,11 +82,14 @@ async function main(): Promise<void> {
     closing = true;
     console.log(`[satici] ${signal}: kapanıyor`);
     maintenance.stop();
+    clearInterval(counterTimer);
     await hub.stop();
     await Promise.all([
       new Promise<void>((r) => publicServer.close(() => r())),
       new Promise<void>((r) => tailnetServer.close(() => r())),
+      new Promise<void>((r) => (internalServer ? internalServer.close(() => r()) : r())),
     ]);
+    await internalCounters.flush();
     await prisma.$disconnect().catch(() => undefined);
     await pool.end().catch(() => undefined);
     process.exit(0);

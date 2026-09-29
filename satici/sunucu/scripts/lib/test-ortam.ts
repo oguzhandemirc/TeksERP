@@ -122,6 +122,8 @@ export async function anahtarOrtamiKur(simdi: number = Date.now(), ekOrtam: Reco
 export interface CalisanSunucu {
   readonly genel: string;
   readonly tailnet: string;
+  /** İç API dinleyicisi; ortak sır dosyası verilmediyse null (dinleyici AÇILMAZ). */
+  readonly ic: string | null;
   readonly surec: ChildProcess;
   cikti(): string;
   durdur(): Promise<void>;
@@ -135,6 +137,8 @@ export function sunucuBaslat(ortam: AnahtarOrtami, ekOrtam: Record<string, strin
       ...process.env,
       PORT_GENEL: "0",
       PORT_TAILNET: "0",
+      PORT_IC: "0",
+      IC_BIND: "127.0.0.1",
       GENEL_BIND: "127.0.0.1",
       TAILNET_BIND: "127.0.0.1",
       ANAHTAR_DIZINI: ortam.dizin,
@@ -153,7 +157,7 @@ export function sunucuBaslat(ortam: AnahtarOrtami, ekOrtam: Record<string, strin
     }, 30_000);
     const oku = (c: Buffer): void => {
       log += c.toString("utf8");
-      const m = /SATICI_DINLIYOR genel=(\d+) tailnet=(\d+)/.exec(log);
+      const m = /SATICI_DINLIYOR genel=(\d+) tailnet=(\d+) ic=(\d+|kapali)/.exec(log);
       if (m) {
         clearTimeout(zaman);
         surec.stdout!.off("data", oku);
@@ -161,6 +165,7 @@ export function sunucuBaslat(ortam: AnahtarOrtami, ekOrtam: Record<string, strin
         resolve({
           genel: `http://127.0.0.1:${m[1]}`,
           tailnet: `http://127.0.0.1:${m[2]}`,
+          ic: m[3] === "kapali" ? null : `http://127.0.0.1:${m[3]}`,
           surec,
           cikti: () => log,
           durdur: () =>

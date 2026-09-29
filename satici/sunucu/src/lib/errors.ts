@@ -23,7 +23,14 @@ export const PORTAL_ERROR_CODES = [
 ] as const;
 export type PortalErrorCode = (typeof PORTAL_ERROR_CODES)[number];
 
-export type VendorCode = VendorErrorCode | ProtocolErrorCode | PortalErrorCode;
+/**
+ * İç API (`/ic/v1/*`, patron bulutu → satıcı; iç ağ + Bearer) kodları — fabrika ve portal bunları görmez.
+ * Ortak kodlar (`BULUNAMADI`, `GOVDE_GECERSIZ`, `HIZ_SINIRI`) protokolden gelir; burada TEKRARLANMAZ.
+ */
+export const INTERNAL_ERROR_CODES = ["IC_KIMLIK_GECERSIZ"] as const;
+export type InternalErrorCode = (typeof INTERNAL_ERROR_CODES)[number];
+
+export type VendorCode = VendorErrorCode | ProtocolErrorCode | PortalErrorCode | InternalErrorCode;
 
 export class VendorError extends Error {
   constructor(
