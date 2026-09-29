@@ -20,6 +20,7 @@ import {
   readRequestIdentity,
   verifyRequest,
   type Fingerprint,
+  type EntitlementDoc,
   type LeaseDoc,
   type RequestPurpose,
 } from "../../src/lib/license/protocol";
@@ -32,6 +33,8 @@ export interface SahteSatici {
   kod: string;
   /** Sonraki kiraların ek alanları (zorlama, yaptırım…). */
   kiraEk: Partial<LeaseDoc>;
+  /** Sonraki HAK belgelerinin ek alanları (sınıf, modüller — patron bulutu senaryosu). */
+  hakEk: Partial<EntitlementDoc>;
   /** >0 ise SIRADAKİ yoklamanın kirası hemen basılır ama yanıtı bu kadar ms bekletilir (yarış sondası). */
   sonrakiYanitGecikmesiMs: number;
   /** Satıcının saati = duvar + bu kayma (D4: ±10 dk dışı istek ISTEK_ZAMAN alır). */
@@ -50,6 +53,8 @@ export interface SahteSatici {
   readonly istekler: Array<{ amac: RequestPurpose; kimlik: string | null; govdeKimligi: string | null }>;
   /** Açık zil akışlarına olay gönderir. */
   zil(konu: string): void;
+  /** Etkinleştirmeyle kaydedilen kurulum açık anahtarı (x); henüz yoksa null. */
+  kayitliAnahtarX(): string | null;
   kapat(): Promise<void>;
 }
 
@@ -112,11 +117,12 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
   const { key, cert } = sertifikaUret();
   let kayitliAnahtar: string | null = null;
   const akislar = new Set<http.ServerResponse>();
-  const s: Omit<SahteSatici, "url" | "zil" | "kapat"> & { url: string } = {
+  const s: Omit<SahteSatici, "url" | "zil" | "kapat" | "kayitliAnahtarX"> & { url: string } = {
     url: "",
     ca: cert,
     kod: "TKS-0000-0000-0000",
     kiraEk: {},
+    hakEk: {},
     sonrakiYanitGecikmesiMs: 0,
     saatKaymasiMs: 0,
     sunucuSaatiDondur: true,
@@ -141,7 +147,7 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
       zorlama: false,
       ...s.kiraEk,
     });
-    return JSON.stringify({ v: 1, hak: hakBas(f), kira, indirmeBelirtecleri: [], sunucuSaati: msToIso(simdi), ...ek });
+    return JSON.stringify({ v: 1, hak: hakBas(f, s.hakEk), kira, indirmeBelirtecleri: [], sunucuSaati: msToIso(simdi), ...ek });
   };
   /** Doğrulanamayan istek: zaman reddinde (D4) satıcı kendi saatini İMZASIZ döner. */
   const reddet = (res: http.ServerResponse, d: { kod: string | null }, simdi: number): void => {
@@ -210,6 +216,7 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
   s.url = `https://127.0.0.1:${port}`;
   // Aynı nesne döner: bekçinin `kod`/`kiraEk` yazımları sunucunun okuduğu değerdir.
   return Object.assign(s, {
+    kayitliAnahtarX: () => kayitliAnahtar,
     zil(konu: string): void {
       for (const a of akislar) a.write(`event: zil\ndata: ${JSON.stringify({ konu })}\n\n`);
     },

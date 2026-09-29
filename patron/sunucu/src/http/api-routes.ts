@@ -13,6 +13,7 @@ import type { CloudContext } from "../services/context";
 import type { LoginResponse, PermissionCatalog } from "../wire/api";
 import { facilityStatus, getProjectionRecord, getSnapshot, listProjection } from "../services/data.service";
 import { deactivateDevice, listDevices, registerDevice } from "../services/device.service";
+import { requestSnapshotRefresh } from "../services/doorbell";
 import { cancelInbox, createInboxMessage, getInbox, listInbox } from "../services/inbox.service";
 import { cancelReportRequest, createReportRequest, getReportRequest, listReportRequests } from "../services/report.service";
 import { PermissionList, Template, Token, body, page, param, s, text, uuidCursor, written, type ApiCall, type ApiRouteDef } from "./api-route-kit";
@@ -100,6 +101,8 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     },
   },
   { method: "get", path: `/veri/:${PROJECTION}/:id`, auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await getProjectionRecord(c.ctx, s(c), String(c.req.params[PROJECTION]), String(c.req.params.id)) }) },
+  // Ekran açıkken tazeleme: `ozet` zili (§14 S47); içerik taşımaz, tesis başına 30 sn'de bir.
+  { method: "post", path: "/tazele", auth: "OTURUM", kimlik: { muaf: "zil içerik taşımaz; tekrar yalnız fazladan anlık tur yaptırır (§6.5)" }, handler: async (c) => ({ data: requestSnapshotRefresh(c.ctx.doorbell, s(c).tesisId, c.ctx.now()) }) },
   { method: "get", path: `/anlik/:${PROJECTION}`, auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await getSnapshot(c.ctx, s(c), String(c.req.params[PROJECTION])) }) },
   // ---- gelen kutusu ----
   {

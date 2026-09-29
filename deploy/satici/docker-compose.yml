@@ -171,7 +171,7 @@ secrets:
   # root:SIR_GID 0440 — yalnız bu projenin konteynerleri (group_add) okur.
   db_parolasi:
     file: ${DB_PAROLA_DOSYASI:?DB_PAROLA_DOSYASI gerekli}
-  # Satıcı ↔ patron ortak Bearer'ı (root:SIR_GID 0440; patron tarafı aynı sırrı kendi .env'inde taşır).
+  # Satıcı ↔ patron ortak Bearer'ı (root:SIR_GID 0440; patron aynı değeri KENDİ dizinindeki kopyadan secret olarak alır).
   ic_api_belirteci:
     file: ${IC_API_BELIRTEC_DOSYASI_HOST:?IC_API_BELIRTEC_DOSYASI_HOST gerekli}
 

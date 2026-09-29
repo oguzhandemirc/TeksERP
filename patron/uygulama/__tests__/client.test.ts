@@ -1,6 +1,7 @@
 import { createAttempt, runAttempt } from "../src/api/attempt";
 import { ApiError, createClient, errorMessage } from "../src/api/client";
 import { createApi, pathOf } from "../src/api/endpoints";
+import { AYNI_KOKEN, apiBaseUrl } from "../src/lib/config";
 
 function fakeFetch(status: number, body: unknown, calls: { url: string; init: RequestInit }[] = []) {
   return (async (url: string, init: RequestInit) => {
@@ -76,5 +77,21 @@ describe("işlem kimliği (mantıksal deneme)", () => {
     await runAttempt(a, async (id) => { seen.push(id); return 1; });
     await runAttempt(a, async (id) => { seen.push(id); return 1; });
     expect(seen).toEqual(["k1", "k1", "k1", "k2", "k3"]);
+  });
+});
+
+describe("bulut adresi (apiBaseUrl)", () => {
+  it("derlemede verilen http(s) adresi, sondaki / atılarak", () => {
+    expect(apiBaseUrl("https://patron.example.test/", null)).toBe("https://patron.example.test");
+  });
+  it("web sürümü aynı kökenden: `koken` sayfanın kökenini alır", () => {
+    expect(apiBaseUrl(AYNI_KOKEN, "https://patron.example.test")).toBe("https://patron.example.test");
+    expect(apiBaseUrl(AYNI_KOKEN, "http://127.0.0.1:18620")).toBe("http://127.0.0.1:18620");
+  });
+  it("fail-closed: adres yok, biçimsiz ya da kökensiz ortamda `koken` → null", () => {
+    expect(apiBaseUrl(undefined, "https://patron.example.test")).toBeNull();
+    expect(apiBaseUrl("patron.example.test", null)).toBeNull();
+    expect(apiBaseUrl(AYNI_KOKEN, null)).toBeNull();
+    expect(apiBaseUrl(AYNI_KOKEN, "file://")).toBeNull();
   });
 });

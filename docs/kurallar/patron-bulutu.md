@@ -57,6 +57,8 @@
 - **[ÇEKİRDEK]** Buluttaki satırlar fabrikanın defteri değildir: saklama (tesis başına 3 · 13 · 25 ay · tümü, varsayılan 13) kökü düşen kaydın alt satırını ve kalemini birlikte budar; yaşa göre silinen her tablo `PRUNED_TABLES` beyanındadır. · bekçi: `test_saklama (§1 · §4)` · `test_patron_kapilari (§4)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Kurulum kaydının satıcı iç API önbelleği TAZELİKTİR: süre dolunca sorulur, ulaşılamazsa bayat kayıtla devam edilir, hiç dolmadıysa RED; zil yalnız `{tesisId, konu}` taşır. · bekçi: `test_kurulum_dizini (§1 · §4 · §8)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Audit ailesi ve kişi adı taşıyan rapor (operatör performansı) buluttan istenemez; rapor ailesinin izni bulutta anahtarın önekinden türer, fabrikanın gönderdiği aileye güvenilmez. · bekçi: `test_rapor_istegi (§1a · §1b · §3)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Ekran açıkken tazeleme bulutta `POST /api/tazele` ile `ozet` zilidir: içerik taşımaz, tesis başına 30 sn'de bir çalar; aralık içindeki istek zil çalmaz, kalan süreyi döner. · bekçi: `test_tazele_zili (§1 · §2 · §3)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Hesap API'sinin doğrulama iletisi TR'dir: zod TR yerel ayarı `createApp`'te kurulur, varsayılan İngilizce ileti 400 gövdesine sızmaz. · bekçi: `test_tazele_zili (§4)` <sub>(arşiv:2026-09-29)</sub>
 
 ## Bildirimler (B5)
 
@@ -85,6 +87,19 @@
 - **[ÇEKİRDEK]** Projeksiyon ve anlık verinin şekli fabrikada tanımlıdır; uygulama alanları jenerik biçimler (TR sayı/tarih, `…Id` gizli) ve aritmetik yapmaz. · bekçi: `format.test.ts` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Rapor isteğinin parametresi fabrikanın kendi şemasıdır: uygulama yalnız özel aralığı (`dateFrom`/`dateTo`) ve katalog girdisinin ek alanlarını toplar; istenebilir liste fabrikanın `rapor-katalogu` anlık kaydından okunur. · bekçi: `forms.test.ts` <sub>(arşiv:2026-09-29)</sub>
 
+## Dağıtım (`deploy/patron`, VDS)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Web sürümü API ile AYNI kökenden (`/`) sunulur ve `/api` · `/v1` altı asla HTML'e düşmez; iç/yönetim ad alanları (`web-static.ts` `IC_ONEKLER`) web'de 404'tür ve Traefik kuralının dışında kalır — iki liste bekçiyle eşlenir. · bekçi: `test_web_sunumu (§4 · §5 · §8)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Web CSP'si `unsafe-inline` taşımaz: giriş HTML'indeki satır içi blok yalnız kendi sha256 özetiyle izinlidir (özet açılışta dosyadan hesaplanır) ve react-native-web'in BOŞ `<style>` ögesi boş dizgenin özetiyle; CSP değişikliği gerçek tarayıcıda ölçülür (başlık ölçümü stilin uygulandığını göstermez); içerik özetli dizinler uzun ömürlü, giriş HTML'i `no-store`. · bekçi: `test_web_sunumu (§2 · §3)` · `deploy/patron/tarayici-duman.cjs` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Patron sunucusu göç (tablo sahibi) parolasını ALMAZ: üç DB rolü üç docker secret'ıdır, göç parolası yalnız DB · `patron-goc` · yedek konteynerine bağlanır; sunucu yalnız kenar adresinde dinler, port yayımlamaz, satıcıyla ortak birim ya da sır grubu taşımaz. · bekçi: `deploy/patron/compose-denetle.mjs (① · ⑦ · ⑧ · ⑨)` <sub>(arşiv:2026-09-29)</sub>
+
+### Kararlar
+
+- **[PROFİL]** VDS bütçesi (2 çekirdek / 3 GB): patronun uzun ömürlü servislerinin bellek tavanı toplamı ≤ 1 GiB — sunucu 512m (yığın 320 MB) · DB 384m · yedek 128m; CPU 0,75 · 0,5 · 0,25. · bekçi: `deploy/patron/compose-denetle.mjs (③)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Web derlemesinin bulut adresi `koken`dir: uygulama API'ye sayfanın kökeninden gider, kökensiz ortamda (telefon) `koken` null'dur (fail-closed); telefon derlemesi açık `https://` adresi taşır. · bekçi: `client.test.ts` <sub>(arşiv:2026-09-29)</sub>
+
 ## Bekçiler — bu alana dokununca koş
 
 Fabrika: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (kendi `_test` DB'si; sahte bulut döngü adresinde düz HTTP). Ağır koşum `node scripts/agir-is.mjs -- …` ile.
@@ -95,7 +110,11 @@ Bulut sunucusu bekçileri kendi projesinden: `cd patron/sunucu && node ../../scr
 
 Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`
 
-Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`
+Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`, `test_tazele_zili`, `test_web_sunumu`
+
+Dağıtım (kurulum öncesi, Mac'te, CI dışı): `node deploy/patron/compose-denetle.mjs --env-file <patron .env> --satici-env <satıcı .env>` — çıkış 0 temiz · 1 ihlal · 2 ölçülemedi; yerel duman `deploy/patron/duman.sh kur <sha>` (gerçek tarayıcı dahil); runbook `docs/ops/PATRON-BULUTU-KURULUM.md`.
+
+Uçtan uca: **Senaryo P** (plan §8 P1–P16 + sözleşme §13 P17–P25; gerçek patron bulutu + gerçek fabrika backend'i, lisans fikstürü + sahte satıcı ve iç API'si; iki `_test` DB, patron DB'si `patron/sunucu/.env`den, `migrate deploy` önceden): `cd Teks-Erp && DATABASE_URL='postgresql://…/<fabrika>_test?schema=public' node ../scripts/agir-is.mjs -- npx tsx scripts/senaryo-patron.ts [--json=<dosya>] [--son=P7] [--yalniz=P1,P3]` — ~4 dk; çıkış 0 hepsi yeşil · 1 yeşil olmayan adım · 2 hedef reddi/düzenek.
 
 Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `notifications.test.tsx`, `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
 
@@ -111,3 +130,5 @@ Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## pat
 - 2026-09-29 · Patron uygulaması (B4): Expo tek kod tabanı, salt-okunur çevrimdışı önbellek, tel tipi aynası
 - 2026-09-29 · Patron bulutu eşitleme saat/ufuk düzeltmeleri (BF): bekleyen listesi, kalem ebeveyn kuralı, bulut D4
 - 2026-09-30 · Patron bildirimleri (B5): tür kataloğu, durumsuz olay üretimi, idempotent bildirim kimliği, gönderimde yeniden sınama, VAPID sırrı dosyada
+- 2026-09-29 · Senaryo P koşucusu (Plan B uçtan uca): `ozet` zilinin bulut üreticisi (S47), hesap API'si TR iletisi (S48), sahte satıcı iç API'siyle gerçek zil zinciri
+- 2026-09-29 · Patron bulutu dağıtımı (B-dağıtım): aynı köken web + API, iç ad alanı iki katta 404, üç DB rolü üç sır, satıcıyla ortak birim yok

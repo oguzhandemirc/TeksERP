@@ -18,6 +18,8 @@ const EnvSchema = z
     BIND: z.string().min(1).default("127.0.0.1"),
     /** TOTP sırlarının sarma anahtarı burada (`patron-totp.key`, 0600) — DB'de DEĞİL. */
     ANAHTAR_DIZINI: z.string().min(1).default("anahtarlar"),
+    /** Web sürümünün derlenmiş çıktısı (`expo export --platform web`); verilirse `/` altında sunulur, yoksa yalnız API. */
+    PATRON_WEB_DIZINI: z.string().min(1).optional(),
     /** Kurulum kaydının kaynağı: `kayit` (satıcı CLI'siyle DB'ye yazılmış) · `satici` (iç API + önbellek). */
     KURULUM_KAYNAGI: z.enum(["kayit", "satici"]).default("kayit"),
     SATICI_IC_API_URL: z.url().optional(),
@@ -72,5 +74,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd: string = p
     const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
     throw new Error(`Patron bulutu yapılandırması geçersiz — ${issues}`);
   }
-  return Object.freeze({ ...parsed.data, ANAHTAR_DIZINI: path.resolve(cwd, parsed.data.ANAHTAR_DIZINI) });
+  const web = parsed.data.PATRON_WEB_DIZINI;
+  return Object.freeze({ ...parsed.data, ANAHTAR_DIZINI: path.resolve(cwd, parsed.data.ANAHTAR_DIZINI), PATRON_WEB_DIZINI: web ? path.resolve(cwd, web) : undefined });
 }

@@ -1,6 +1,6 @@
 // PATRON BULUTU SUNUCUSU — tek süreç, tek dinleyici (`/v1/*` fabrika kanalı + `/api/*` hesap API'si).
 // Açılış (fail-closed): yapılandırma → iki DB rolü RLS'i ATLAYAMAZ (süper kullanıcı ya da BYPASSRLS
-// ise sunucu KALKMAZ) → TOTP sır anahtarı → dinleyici → bakım işi. Kapanış: SIGTERM/SIGINT.
+// ise sunucu KALKMAZ) → TOTP sır anahtarı → web çıktısı (verildiyse yoksa KALKMAZ) → dinleyici → bakım işi.
 import { mkdirSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
   };
   const server = http.createServer(createApp(ctx));
   const address = await listen(server, config.PORT, config.BIND);
-  console.log(`PATRON_DINLIYOR port=${address.port} kurulumKaynagi=${config.KURULUM_KAYNAGI}`);
+  console.log(`PATRON_DINLIYOR port=${address.port} kurulumKaynagi=${config.KURULUM_KAYNAGI} web=${config.PATRON_WEB_DIZINI ? "acik" : "yok"}`);
 
   const maintenance = new MaintenanceScheduler(ctx);
   maintenance.start();

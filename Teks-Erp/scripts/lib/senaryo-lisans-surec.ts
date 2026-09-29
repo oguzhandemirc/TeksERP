@@ -86,6 +86,25 @@ function butunlukGonder(
   });
 }
 
+/** Genel IPC: mesajı gönderir, `yanitTipi` tipli ilk yanıtı döner (senaryo girişlerinin test kancaları). */
+function ipcIstek<T>(surec: ChildProcess, mesaj: Record<string, unknown>, yanitTipi: string, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const zaman = setTimeout(() => {
+      surec.off("message", dinle);
+      reject(new Error(`IPC ${yanitTipi} ${ms} ms'de gelmedi`));
+    }, ms);
+    const dinle = (m: unknown): void => {
+      if (m && typeof m === "object" && (m as { tip?: string }).tip === yanitTipi) {
+        clearTimeout(zaman);
+        surec.off("message", dinle);
+        resolve(m as T);
+      }
+    };
+    surec.on("message", dinle);
+    surec.send(mesaj);
+  });
+}
+
 function surecDurdur(surec: ChildProcess): Promise<void> {
   return new Promise((resolve) => {
     if (surec.exitCode !== null || surec.signalCode !== null) return resolve();
@@ -179,6 +198,8 @@ export interface FabrikaSureci {
   saat(k: SaatKaydirmasi): Promise<void>;
   /** L18: süreçte bütünlük denetimini verilen kök + geçici PAKET anahtarıyla koşturur (`kok: null` sıfırlar). */
   butunluk(kok: string | null, anahtar: { kid: string; x: string } | null): Promise<{ durum: string | null; kod: string | null }>;
+  /** Giriş dosyasının IPC test kancası (yalnız kanca taşıyan girişlerde yanıt gelir). */
+  ipc<T>(mesaj: Record<string, unknown>, yanitTipi: string, ms?: number): Promise<T>;
   durdur(): Promise<void>;
   log(): string;
 }
@@ -196,6 +217,10 @@ export interface FabrikaSecenekleri {
   readonly saat: SaatKaydirmasi;
   readonly logDosyasi: string;
   readonly pgBinDir: string | undefined;
+  /** Giriş dosyası (TEKS_KOKU'ya göre); varsayılan Senaryo L girişi. */
+  readonly giris?: string;
+  /** Ek ortam (örn. PATRON_CLOUD_URL) — temel ortamın ÜSTÜNE yazılır. */
+  readonly ekEnv?: NodeJS.ProcessEnv;
 }
 
 export async function fabrikaBaslat(g: FabrikaSecenekleri): Promise<FabrikaSureci> {
@@ -226,10 +251,11 @@ export async function fabrikaBaslat(g: FabrikaSecenekleri): Promise<FabrikaSurec
     SENARYO_SAAT_DUVAR_MS: String(g.saat.duvarMs),
     SENARYO_SAAT_MONO_MS: String(g.saat.monoMs),
     ...(g.pgBinDir ? { PG_BIN_DIR: g.pgBinDir } : {}),
+    ...(g.ekEnv ?? {}),
   };
   fs.mkdirSync(g.lisansDizini, { recursive: true, mode: 0o700 });
   fs.mkdirSync(g.yedekDizini, { recursive: true });
-  const surec = spawn(process.execPath, ["--import", "tsx", "--import", SAAT_ON_YUKLEME, "scripts/lib/senaryo-lisans-sunucu.ts"], {
+  const surec = spawn(process.execPath, ["--import", "tsx", "--import", SAAT_ON_YUKLEME, g.giris ?? "scripts/lib/senaryo-lisans-sunucu.ts"], {
     cwd: TEKS_KOKU,
     env,
     stdio: ["ignore", "pipe", "pipe", "ipc"],
@@ -266,6 +292,7 @@ export async function fabrikaBaslat(g: FabrikaSecenekleri): Promise<FabrikaSurec
     pid: surec.pid ?? -1,
     saat: (k) => saatGonder(surec, k),
     butunluk: (kok, anahtar) => butunlukGonder(surec, kok, anahtar),
+    ipc: <T>(mesaj: Record<string, unknown>, yanitTipi: string, ms = 120_000) => ipcIstek<T>(surec, mesaj, yanitTipi, ms),
     durdur: () => surecDurdur(surec),
     log: () => log,
   };
