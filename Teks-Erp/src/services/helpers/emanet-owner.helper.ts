@@ -18,7 +18,8 @@
 import { ROLL_DISPLAY_ORDER } from "../../constants/roll-order";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { readEmanetEnabled } from "../system-setting.service";
+import { SETTING_KEYS, readEmanetEnabled } from "../system-setting.service";
+import { licenseModuleError } from "../../lib/license/module-ceiling";
 
 type Tx = Prisma.TransactionClient;
 
@@ -26,7 +27,7 @@ type Tx = Prisma.TransactionClient;
 export async function assertEmanetWritableTx(tx: Pick<Tx, "systemSetting">, ownerCustomerId: string | null | undefined, nesne: string): Promise<void> {
   if (!ownerCustomerId) return;
   if (!(await readEmanetEnabled(tx))) {
-    throw AppError.forbidden(`Emanet modülü bu kurulumda kapalı — ${nesne} için sahip müşteri yazılamaz. Genel Ayarlar → Modüller bölümünden açılabilir.`, { code: "MODULE_DISABLED", modul: "emanet" });
+    throw licenseModuleError(SETTING_KEYS.EMANET_ENABLED, "Emanet") ?? AppError.forbidden(`Emanet modülü bu kurulumda kapalı — ${nesne} için sahip müşteri yazılamaz. Genel Ayarlar → Modüller bölümünden açılabilir.`, { code: "MODULE_DISABLED", modul: "emanet" });
   }
   const c = await (tx as Tx).customer.findUnique({ where: { id: ownerCustomerId }, select: { id: true, isActive: true } });
   if (!c || !c.isActive) throw AppError.badRequest("Sahip müşteri bulunamadı ya da pasif", { code: "OWNER_CUSTOMER_INVALID", ownerCustomerId });

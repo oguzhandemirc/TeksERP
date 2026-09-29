@@ -314,9 +314,11 @@ Yanıt zarfı backend'in genel biçimidir: başarı `{ success: true, data: T }`
 | `PUT /proxy` | `license:manage` | `{ adres: string \| null, atla?: string \| null }` (null = kaldır; yeniden başlatma YOK) | `LicenseProxySettings` |
 | `POST /etkinlestir` | `license:manage` | `{ kod }` (elle yazım normalleşir: büyük harf, O→0, I/L→1, tire) | `LicenseDetail` |
 | `POST /yokla` | `license:manage` | — | `{ outcome: PollOutcome, code?: string }` |
-| `GET /cevrimdisi-istek` | `license:manage` | `?amac=yokla\|etkinlestir&kod=` | `LicenseOfflineRequest` (QR: `qrAdresi`) |
+| `POST /cevrimdisi-istek` | `license:manage` | `{ amac?: "yokla" \| "etkinlestir", kod?: string }` — kod GÖVDEDE (URL'de değil) | `LicenseOfflineRequest` (QR: `qrAdresi`) |
+| `GET /cevrimdisi-istek` (ESKİ) | `license:manage` | `?amac=…&kod=` — bir sürüm geçiş; `Deprecation: true`, günlükte kod maskeli | aynı |
 | `POST /cevrimdisi-yanit` | `license:manage` | `{ yanit: string \| object }` — QR'dan base64url(JSON) ya da JSON | `LicenseDetail` |
-| `GET /aktarma-istegi` | `license:manage` | `?amac=…&kod=` | `LicenseOfflineRequest` (panel `istekGovdesi`ni `hedefUrl`e AYNEN POST eder) |
+| `POST /aktarma-istegi` | `license:manage` | `{ amac?, kod? }` — kod GÖVDEDE | `LicenseOfflineRequest` (panel `istekGovdesi`ni `hedefUrl`e AYNEN POST eder) |
+| `GET /aktarma-istegi` (ESKİ) | `license:manage` | `?amac=…&kod=` — bir sürüm geçiş; `Deprecation: true`, günlükte kod maskeli | aynı |
 | `POST /aktarma-yaniti` | `license:manage` | `{ yanit: object }` — satıcının yanıt gövdesi AYNEN | `LicenseDetail` |
 | `POST /tasima-talebi` | `license:manage` | `{ gerekce?: string \| null }` | `LicenseTransferResult` |
 | `POST /dr-devral` | `license:manage` | `{ anaKurulumId: uuid, gerekce: string }` | `LicenseDetail` |
@@ -406,24 +408,24 @@ type PollOutcome = "YAPILANDIRILMAMIS" | "HAZIR_DEGIL" | "ETKIN_DEGIL" | "BASARI
 
 ### 14a. Kapı ve modül tavanı (Faz 1c-kapı) — istemcilerin 403 dalı buna karşı yazılır
 
-**Kapı (`licenseGate`, `Teks-Erp/src/middlewares/license.middleware.ts`):** app düzeyinde `/api` altında, rotalardan önce; YÖNTEM + YOL ile sınıflar (liste tek kaynak `Teks-Erp/src/constants/license-routes.ts`), kimliğe bakmaz. Karar UYGULANAN kademeden verilir — gözlemde daima NORMAL, yani hiçbir istek engellenmez (yalnız `gozlem.reddedilecekIstek` artar). Motor hazır değilse (`detay.hazir=false`) kapı geçirir.
+**Kapı (`licenseGate`, `Teks-Erp/src/middlewares/license.middleware.ts`):** app düzeyinde `/api` altında, rotalardan önce; YÖNTEM + YOL ile sınıflar (liste tek kaynak `Teks-Erp/src/constants/license-routes.ts`). Kapalı yolda KİMLİK ÖNCE gelir (F1b, D6): geçerli oturumu olmayan istek (başlık yok, imza/süre geçersiz, oturum kaydı yok ya da sonlanmış) kapıdan rotaya geçer ve rotanın 401'ini alır; kademe kodu yalnız geçerli oturuma. Karar UYGULANAN kademeden verilir — gözlemde daima NORMAL, yani hiçbir istek engellenmez (yalnız `gozlem.reddedilecekIstek` artar). Motor hazır değilse (`detay.hazir=false`) kapı geçirir.
 
 | Kademe | Açık |
 |---|---|
 | NORMAL · UYARI · EK_SURE | her şey |
-| KISITLI | GET/HEAD/OPTIONS + her-kademe listesi + KISITLI ek listesi (tercih/TOTP, cihaz duyurusu, yazmayan önizleme ve gövdeli okumalar, baskı/yeniden basım ayak izleri + refakat kartı reprint, yedek al · makine dışı · DB kopyası, kullanıcı pasifleştirme · parola/TOTP sıfırlama · cihaz iptali, bakım, çalışma oturumu aç/kapa). Yeniden düzenleme (`reissue`) KAPALI. |
-| DURDURULMUS | her-kademe listesi + "verilerimi al" (`DATA_EXPORT_PATHS` = `/veri-disari` `yollar`) + `GET /api/auth/me` |
+| KISITLI | GET/HEAD/OPTIONS + her-kademe listesi + KISITLI ek listesi (tercih/TOTP + iki adımlı doğrulama kurulum penceresi, cihaz duyurusu, yazmayan önizleme ve gövdeli okumalar, baskı/yeniden basım ayak izleri + refakat kartı reprint, yedek al · makine dışı · DB kopyası, kullanıcı pasifleştirme · parola/TOTP sıfırlama · cihaz iptali, bakım, çalışma oturumu aç/kapa). Yeniden düzenleme (`reissue`) KAPALI. |
+| DURDURULMUS | her-kademe listesi + "verilerimi al" (`DATA_EXPORT_PATHS` = `/veri-disari` `yollar`) + `GET /api/auth/me` — bu küme panelin K5 kilit ekranının gerçek çağrılarını kapsar (bekçi Electron kaynağından çıkarır) |
 
 Her-kademe listesi: `/api/license/*` · `GET /api/admin/health` · `GET /api/mobile/updates/*` · `GET /api/client-policy/*` · `GET /api/discovery/identity` · `GET /api/auth/login-methods` · `POST /api/auth/login|login-card|login-quick-pin|logout`.
 
 **Red gövdeleri (403, `details.code`):**
-- Kimliksiz ya da geçersiz token'lı istek: `{ code: "LICENSE_GATE" }` — başka alan YOK (kademe/gün anonim çağırana sızmaz). İstemci oturum yoksa bunu "lisans nedeniyle kullanılamıyor" diye gösterir; ayrıntı için giriş sonrası `GET /durum`.
+- Geçerli oturumu olmayan istek: kapıdan geçer, rotanın `verifyToken`ı **401** döner (istemci bugünkü gibi girişe yönlenir). Yalnız KİMLİK İSTEMEYEN kapalı uçta (`PUBLIC_ROUTES`: cihaz duyurusu/durumu/eşleşmesi, tablet kullanıcı listesi, TOTP kurulumu…) kapı `{ code: "LICENSE_GATE" }` döner — başka alan YOK (kademe/gün anonim çağırana sızmaz); istemci bunu "lisans nedeniyle kullanılamıyor" diye gösterir, ayrıntı giriş sonrası `GET /durum`.
 - Geçerli oturum, KISITLI: `{ code: "LICENSE_RESTRICTED", kademe: "KISITLI", kisitlamaKalanGun: number | null, devredildi: boolean }`.
 - Geçerli oturum, DURDURULMUS: `{ code: "LICENSE_SUSPENDED", kademe: "DURDURULMUS" }` — panel K5 ekranına geçer; `/api/license/*`, `/api/auth/me` ve "verilerimi al" yolları açıktır.
-- Modül (adlı yedi kapı): `{ code: "LICENSE_MODULE", modul: "<DB anahtarı, ör. finance.enabled>", neden: "LISANSTA_YOK" | "DONDURULDU" }` — bayrak DB'de açık olsa da. Lisans açık modül kapalıysa eskisi gibi `MODULE_DISABLED`.
+- Modül (adlı yedi kapı VE satır içi modül kapıları): `{ code: "LICENSE_MODULE", modul: "<DB anahtarı, ör. finance.enabled>", neden: "LISANSTA_YOK" | "DONDURULDU" }` — bayrak DB'de açık olsa da; `modul` HER yanıtta DB anahtarıdır (tek üretici `licenseModuleError`). Lisans açık modül kapalıysa eskisi gibi `MODULE_DISABLED` (`modul` kısa kod).
 
 **Modül tavanı:** `readX = readXRaw ∧ tavan` (`Teks-Erp/src/lib/license/module-ceiling.ts`); tavan uygulanan etkiden — HAK tavanı yalnız belirsizlik yokken, dondurulan modül her hâlde (kural 7). `PATCH /api/feature-flags` lisansın kapattığı modülü AÇMAYA çalışırsa 403 `LICENSE_MODULE`; kapatmak serbest.
 
 **Panel bloğu:** `GET /api/feature-flags` → `data.license = { kip: "gozlem" | "zorla", kapaliModuller: Array<{ anahtar: string /* DB anahtarı */, neden: "LISANSTA_YOK" | "DONDURULDU" }> }` — SALT OKUNUR (PATCH şeması kabul etmez), önbelleğe girmez, gözlemde daima boş. Modül şalterleri (`financeEnabled`…) HAM değerdir; "lisansınızda yok" rozeti bu listeden çizilir.
 
-**Eski istemci ne yapar:** kapı kodları yalnız zorlamada doğar (Faz 4'e dek derleme varsayılanı gözlem); eski panel/tablet 403'ü genel yetki hatası gibi gösterir. `license` alanı EK'tir, eski istemci yok sayar.
+**Eski istemci ne yapar:** kapı kodları yalnız zorlamada doğar (Faz 4'e dek derleme varsayılanı gözlem); eski panel/tablet 403'ü genel yetki hatası gibi gösterir. `license` alanı EK'tir, eski istemci yok sayar. Kimlik önce (F1b): süresi dolmuş token'lı eski panel K4/K5'te artık 401 alır ve girişe yönlenir (önceden 403 `LICENSE_GATE`); `?kod=`lu GET istek uçları bir sürüm daha çalışır.

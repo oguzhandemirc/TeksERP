@@ -45,7 +45,8 @@ import { AuditService } from "./audit.service";
 import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 import { assertYarnBalanceCoversTx } from "./helpers/yarn-balance-guard.helper";
 import { assertLotMatchesItemTx, assertLotQualityReleasedTx, normalizeLotNo, yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
-import { readIplikEnabled } from "./system-setting.service";
+import { SETTING_KEYS, readIplikEnabled } from "./system-setting.service";
+import { licenseModuleError } from "../lib/license/module-ceiling";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
@@ -172,7 +173,7 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
   // ayrışır ve hangisinin doğru olduğu sorusu doğar.
   // ⚠️ `tx` ile okunur (kendi transaction'ının gördüğü değer), CACHE'siz.
   if (!(await readIplikEnabled(tx))) {
-    throw AppError.forbidden(
+    throw licenseModuleError(SETTING_KEYS.IPLIK_ENABLED, "İplik") ?? AppError.forbidden(
       "İplik modülü bu kurulumda kapalı — iplik hareketi yazılamaz. " +
         "Genel Ayarlar → Modüller bölümünden açılabilir.",
       { code: "MODULE_DISABLED", modul: "iplik" },

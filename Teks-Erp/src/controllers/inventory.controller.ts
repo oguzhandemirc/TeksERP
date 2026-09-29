@@ -12,7 +12,8 @@ import { DuplicateRollsService } from "../services/duplicate-rolls.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
-import { readDokumaEnabled } from "../services/system-setting.service";
+import { SETTING_KEYS, readDokumaEnabled } from "../services/system-setting.service";
+import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 import { RollEntrySource, RollStatus } from "@prisma/client";
 import "../types/express-augment";
@@ -300,7 +301,7 @@ export class InventoryController {
       // Kapalı modülün YAZMA yolu yoktur, tarihsel bağ dahil: `doffEventId` yalnız dokuma
       // açıkken kabul edilir (1e E1 hükmü 2026-09-14; kapı `requireDokumaEnabled` ile aynı gövde).
       if (doffEventId && !(await readDokumaEnabled())) {
-        throw AppError.forbidden("Dokuma modülü bu kurulumda kapalı; indirme bağı verilemez. Sistem → Modüller bölümünden açılabilir.", {
+        throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma") ?? AppError.forbidden("Dokuma modülü bu kurulumda kapalı; indirme bağı verilemez. Sistem → Modüller bölümünden açılabilir.", {
           code: "MODULE_DISABLED",
           modul: "dokuma",
         });

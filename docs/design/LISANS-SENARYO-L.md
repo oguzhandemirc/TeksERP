@@ -3,6 +3,7 @@
 > **Durum:** 2026-09-29, W2 dalgası, `lisans/entegrasyon` (W1 dilimleri inmiş hâli) + bu dilimin düzeltmesi, dal `lisans/senaryo-l`. Plan §8 "Senaryo L" adımları SIRAYLA koşuldu.
 > **Sonuç:** 26 yeşil · 3 kısmi (L15, L18, L25) · 0 kırmızı. Senaryo Y aynı komutta 23/0 (+1 beyanlı atlama: Y6d thinkpad-1).
 > **Entegrasyon koşumu (2026-09-29, W2 entegrasyonu):** `lisans/entegrasyon` üzerinde senaryo-l + satıcı tamamlama + portal web (1f) + hazırlık kökü + 2a ölçümü + B1 tasarımı birlikte: **aynı sonuç** — 26 yeşil · 3 kısmi (L15, L18, L25) · 0 kırmızı; Senaryo Y 23/0 (+Y6d). Koşucu iki satıcı kuralına uyarlandı (Bulgu 6).
+> **F1b koşumu (2026-09-29, `lisans/f1b-kapi`, kapı önce 401):** aynı sonuç — 26 yeşil · 3 kısmi (L15, L18, L25) · 0 kırmızı; L28 yeni beklentiyle (401 önce, `LICENSE_GATE` yalnız kimlik istemeyen uçta) yeşil; Senaryo Y 23/0 (+Y6d).
 > **Koşucu:** `Teks-Erp/scripts/senaryo-lisans.ts` · L + Y tek komut `Teks-Erp/scripts/senaryo-ly.ts` · kural satırı `docs/kurallar/lisans.md` · arşiv notu 2026-09-29 "Senaryo L (lisans uçtan uca) koşucusu".
 
 ## Nasıl koşulur
@@ -62,7 +63,7 @@ PG_BIN_DIR=<sunucuyla aynı ana sürüm pg istemcisi> \
 | L25 saat ileri ama yoklama başarılı → kademe düşmez | ⚠️ kısmi | duvar +40 gün: OLCULEMEDI + SAAT_ILERI, güvenilir = monotonik tahmin, kademe UYARI (EK_SURE/KISITLI YOK) · yoklama `ISTEK_ZAMAN` ile reddedildi, sonra da kademe düşmedi. **Neden kısmi:** "yoklama başarılı" kolu bugünkü protokolde gerçekleşemez — Bulgu 2 |
 | L26 OLCULEMEDI'de production açık | ✅ | üretimsiz HAK sürümü (açık onay) → GECERLI'de `GET /api/work-orders` 403 `LICENSE_MODULE` (tavan uygulanıyor) · saat ileri (OLCULEMEDI) → 200, panel bloğunda kapalı modül yok · üretim geri → 200 |
 | L27 kira zinciri | ✅ | (a) snapshot geri alma → satıcı kararı YAKALA, yeni uyarı yok · (b) yanıt yolda kayboldu → yeniden deneme AYNI kirayı aldı, yoklama sonucu TEKRAR · (c) iki parmak izi: ilk pencerede ikisine de kira + portal uyarısı; ikinci pencerede kopyaya `KIRA_VERILMEDI`, sahip BASARILI; kopya kira bitişinde EK_SURE (anında durdurma yok) |
-| L28 kimliksiz yazma → `LICENSE_GATE` | ✅ | K5'te kimliksiz ve geçersiz token'lı `POST /api/orders` 403, `details` YALNIZ `{code: LICENSE_GATE}` · kimliksiz `/api/license/durum` `{ayrinti:false}` · `/api/admin/health` 200 (license bloğu) · kimliksiz `GET /api/mobile/updates/*` kapıdan geçti (404, `LICENSE_*` değil) · `login-methods` 200 |
+| L28 kimliksiz istek → rotanın 401'i; kimlik istemeyen kapalı uçta `LICENSE_GATE` (F1b, D6) | ✅ | K5'te kimliksiz ve geçersiz token'lı `POST /api/orders` **401** (lisans kodu/kademe yok) · kimlik istemeyen kapalı uç `POST /api/devices/announce` 403, `details` YALNIZ `{code: LICENSE_GATE}` · kimliksiz `/api/license/durum` `{ayrinti:false}` · `/api/admin/health` 200 (license bloğu) · kimliksiz `GET /api/mobile/updates/*` kapıdan geçti (404, `LICENSE_*` değil) · `login-methods` 200 |
 | L29 DR sonrası eski ana bağlanınca DEVREDILDI → KISITLI | ✅ | ana kopukken D devraldı · ana bilmiyor · bağlanınca devredildi kirası → KISITLI + tehlike bandı · `POST /api/orders` 403 {devredildi: true} · `GET` 200 |
 
 ## Bulgular

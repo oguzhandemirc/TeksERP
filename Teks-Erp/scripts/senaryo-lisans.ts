@@ -994,15 +994,17 @@ async function main(): Promise<number> {
     });
 
     // ============================================================ L28
-    await adim("L28", "kimliksiz yazma → genel LICENSE_GATE (ayrıntı yok); K5'te /api/admin/health + /api/mobile/* açık", async (a) => {
+    await adim("L28", "kimliksiz istek → rotanın 401'i (kimlik önce, kademe sızmaz); kimlik istemeyen kapalı uçta genel LICENSE_GATE; K5'te /api/admin/health + /api/mobile/* açık", async (a) => {
       await zilBekle(C, 30_000);
       const k5 = await agirYaptirim("K5");
       const b = await C.istemci.bekle((d) => d.durum.uygulananKademe === "DURDURULMUS", 20_000);
       a.kontrol("K5 → DURDURULMUS", k5.status === 201 && b.ms !== null, ozet(k5));
       const anon = await C.istemci.anonim("POST", "/api/orders", {});
-      a.kontrol("kimliksiz POST /api/orders → 403 LICENSE_GATE, details yalnız {code}", anon.status === 403 && anon.kod === "LICENSE_GATE" && Object.keys(anon.details).join(",") === "code", `${ozet(anon)} ${JSON.stringify(anon.details)}`);
+      a.kontrol("kimliksiz POST /api/orders → 401 (kapı önce kimlik; lisans kodu/kademe yok)", anon.status === 401 && !String(anon.kod ?? "").startsWith("LICENSE") && anon.details.kademe === undefined, `${ozet(anon)} ${JSON.stringify(anon.details)}`);
       const bozuk = await C.istemci.anonim("POST", "/api/orders", {}, { authorization: "Bearer bozuk.token.degeri" });
-      a.kontrol("geçersiz token → aynı genel LICENSE_GATE", bozuk.status === 403 && bozuk.kod === "LICENSE_GATE" && Object.keys(bozuk.details).length === 1, ozet(bozuk));
+      a.kontrol("geçersiz token → 401", bozuk.status === 401 && !String(bozuk.kod ?? "").startsWith("LICENSE"), ozet(bozuk));
+      const duyuru = await C.istemci.anonim("POST", "/api/devices/announce", {});
+      a.kontrol("kimlik istemeyen kapalı uç (POST /api/devices/announce) → 403 LICENSE_GATE, details yalnız {code}", duyuru.status === 403 && duyuru.kod === "LICENSE_GATE" && Object.keys(duyuru.details).join(",") === "code", `${ozet(duyuru)} ${JSON.stringify(duyuru.details)}`);
       const anonDurum = await C.istemci.anonim("GET", "/api/license/durum");
       a.kontrol("kimliksiz /api/license/durum → {ayrinti:false} (K5 sinyali sızmaz)", anonDurum.status === 200 && anonDurum.veri.ayrinti === false && Object.keys(anonDurum.veri).length === 1, JSON.stringify(anonDurum.veri));
       const saglik = await C.istemci.istek("GET", "/api/admin/health");
