@@ -9,8 +9,10 @@
 // Koşum: npx tsx scripts/test_bulut_kira_alanlari.ts
 // =============================================================================
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { ENDPOINTS, parseJws, verifyDownloadToken, type LeaseDoc } from "../src/lisans-protokol";
 import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import { cloudEntitlementUntil, leaseSyncMinutes } from "../src/services/cloud-entitlement";
@@ -185,6 +187,55 @@ async function yayinci(ortam: AnahtarOrtami): Promise<void> {
   kontrol("§4e CLI ömür 71 dk / kanalsız → çıkış 2, stdout'ta belirteç yok", r71.status === 2 && rYok.status === 2 && !r71.stdout.includes("ey") && !rYok.stdout.includes("ey"), `${r71.status} ${rYok.status}`);
 }
 
+interface YayinOkuma {
+  belirtecOku(url?: string): string;
+  indirmeBasliklari(url?: string): Record<string, string>;
+  BelirtecYok: new (...a: unknown[]) => Error;
+}
+
+async function yayinKaynagi(ortam: AnahtarOrtami): Promise<void> {
+  console.log("\n§5 yayın betiği belirteç kaynağı (scripts/lib/yayin-okuma.mjs)");
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "yayin-kaynak-"));
+  const kaynak = path.join(tmp, "kaynak.json");
+  const dosya = path.join(tmp, "belirtec");
+  const ENV = ["TEKSERP_YAYIN_BELIRTEC_KAYNAGI", "TEKSERP_YAYIN_BELIRTECI", "GUVEN_CAPASI_DOSYASI"] as const;
+  const eski = ENV.map((k) => process.env[k]);
+  process.env.TEKSERP_YAYIN_BELIRTEC_KAYNAGI = kaynak;
+  process.env.TEKSERP_YAYIN_BELIRTECI = dosya;
+  process.env.GUVEN_CAPASI_DOSYASI = ortam.capaDosyasi;
+  try {
+    const yo = (await import(pathToFileURL(path.resolve(SATICI_KOKU, "..", "..", "scripts", "lib", "yayin-okuma.mjs")).href)) as YayinOkuma;
+    const anahtarlar = [{ kid: ortam.f.ind.kid, x: ortam.f.ind.x }];
+    const dogrula = (t: string) => verifyDownloadToken(t, { keys: anahtarlar, nowMs: Date.now() });
+    const yok = (fn: () => unknown): boolean => { try { fn(); return false; } catch (e) { return e instanceof yo.BelirtecYok; } };
+    const DOSYA = "d".repeat(40);
+    writeFileSync(dosya, DOSYA, { mode: 0o600 });
+    kontrol("§5a ✓K kaynak yapılandırılmamış → dosya belirteci (bugünkü davranış)", yo.belirtecOku("https://g.test/testfabrika/electron/latest.yml") === DOSYA);
+    writeFileSync(kaynak, JSON.stringify({ tur: "yerel", dizin: ortam.dizin }), { mode: 0o600 });
+    const e = yo.belirtecOku("https://g.test/testfabrika/electron/latest.yml");
+    const m = yo.belirtecOku("/testfabrika/mobil/ota/1.0.0/manifest");
+    const de = dogrula(e);
+    const dm = dogrula(m);
+    kontrol("§5b ✓K yerel CLI: adresin önekine taze belirteç (electron · mobil), dosya belirteci kullanılmaz",
+      e !== DOSYA && de.ok && de.value.yolOneki === "/testfabrika/electron/" && dm.ok && dm.value.yolOneki === "/testfabrika/mobil/");
+    kontrol("§5c aynı önek ikinci okumada aynı belirteç (önbellek) · başlık X-TKL-Indirme", yo.belirtecOku("/testfabrika/electron/TeksERP.exe") === e && yo.indirmeBasliklari("/testfabrika/electron/latest.yml")["X-TKL-Indirme"] === e);
+    kontrol("§5d kanal/ürün öneki dışı adres ya da adressiz → DUR", yok(() => yo.belirtecOku("/testfabrika/baska/x")) && yok(() => yo.belirtecOku()));
+    writeFileSync(kaynak, JSON.stringify({ tur: "yerel", dizin: path.join(tmp, "olmayan") }), { mode: 0o600 });
+    kontrol("§5e yapılandırılmış CLI üretemiyor → DUR (dosyaya DÜŞMEZ)", yok(() => yo.belirtecOku("/adnansahin/electron/latest.yml")));
+    writeFileSync(kaynak, JSON.stringify({ tur: "http", adres: "x" }), { mode: 0o600 });
+    const tanimsiz = yok(() => yo.belirtecOku("/adnansahin/electron/latest.yml"));
+    writeFileSync(kaynak, JSON.stringify({ tur: "ssh", hedef: "h", komut: "x; rm -rf /" }), { mode: 0o600 });
+    const enjeksiyon = yok(() => yo.belirtecOku("/adnansahin/electron/latest.yml"));
+    rmSync(kaynak);
+    writeFileSync(kaynak, JSON.stringify({ tur: "yerel", dizin: ortam.dizin }), { mode: 0o644 });
+    const gevsek = yok(() => yo.belirtecOku("/adnansahin/electron/latest.yml"));
+    kontrol("§5f tanınmayan tür · kabuk karakterli uzak komut · 0644 kaynak dosyası → DUR", tanimsiz && enjeksiyon && gevsek, `${tanimsiz}/${enjeksiyon}/${gevsek}`);
+  } finally {
+    ENV.forEach((k, i) => (eski[i] === undefined ? delete process.env[k] : (process.env[k] = eski[i])));
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   hedefDbKapisi();
   tekKaynak();
@@ -194,6 +245,7 @@ async function main(): Promise<void> {
   try {
     await kiraVeIcApi(ortam, temizlenecek);
     await yayinci(ortam);
+    await yayinKaynagi(ortam);
   } finally {
     await temizleKurulumlar(temizlenecek, ortam.kidler);
     ortam.temizle();

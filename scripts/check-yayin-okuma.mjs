@@ -141,9 +141,9 @@ function sanksiyonDenetimi(d, kirmizi) {
   if (typeof yo === 'string') {
     if (say(yo, SANKSIYON['scripts/lib/yayin-okuma.mjs']) !== 1) kirmizi.push('yayin-okuma.mjs: belirtecliFetch\'in tek fetch satırı yok ya da değişti');
     const govde = /export async function belirtecliFetch\([^)]*\) \{\n([\s\S]*?)\n\}\n/.exec(yo)?.[1] ?? '';
-    if (!govde.includes('...indirmeBasliklari()') || !govde.includes('return fetch(')) kirmizi.push('yayin-okuma.mjs: belirtecliFetch belirteç başlığını (indirmeBasliklari) eklemiyor');
+    if (!govde.includes('...indirmeBasliklari(url)') || !govde.includes('return fetch(')) kirmizi.push('yayin-okuma.mjs: belirtecliFetch belirteç başlığını (indirmeBasliklari) eklemiyor');
     if (!yo.includes("export const INDIRME_BASLIGI = 'X-TKL-Indirme';")) kirmizi.push('yayin-okuma.mjs: başlık adı X-TKL-Indirme değil (3a Worker sözleşmesi)');
-    if (!yo.includes('export const indirmeBasliklari = () => ({ [INDIRME_BASLIGI]: belirtecOku() });')) kirmizi.push('yayin-okuma.mjs: indirmeBasliklari belirteci belirtecOku\'dan (fail-closed) almıyor');
+    if (!yo.includes('export const indirmeBasliklari = (url) => ({ [INDIRME_BASLIGI]: belirtecOku(url) });')) kirmizi.push('yayin-okuma.mjs: indirmeBasliklari belirteci belirtecOku\'dan (fail-closed) almıyor');
     if (say(yo, /throw new BelirtecYok\(/) < 4) kirmizi.push('yayin-okuma.mjs: belirtecOku fail-closed dalları eksik (yok · dosya değil · izin · biçim)');
   }
   const ey = d['deploy/electron-yayinla.sh'];
@@ -157,7 +157,7 @@ function sanksiyonDenetimi(d, kirmizi) {
   }
   const my = d['deploy/mobil-yayinla.mjs'];
   if (typeof my === 'string') {
-    const kapi = my.indexOf('if (!KURU) belirtecGerekli();');
+    const kapi = my.indexOf('if (!KURU) belirtecGerekli(FEED);');
     const yukle = my.indexOf('if (paket) await paketiYayinla(');
     if (kapi < 0 || yukle < 0 || kapi > yukle) kirmizi.push('mobil-yayinla.mjs: belirteç denetimi (belirtecGerekli) yüklemeden ÖNCE değil');
   }
@@ -177,10 +177,10 @@ function sondalar(taban, tabanYollar) {
     ['N3 mobil-yayinla.mjs\'e çıplak fetch → KIRMIZI', 'kirmizi', (d) => degis(d, 'deploy/mobil-yayinla.mjs', 'const r = await belirtecliFetch(url, { method: yontem', 'const r = await fetch(url, { method: yontem'), 'mobil-yayinla.mjs:'],
     ['N4 terfi.mjs curl alt süreci → KIRMIZI', 'kirmizi', (d) => degis(d, 'scripts/lib/terfi.mjs', "import { yayinOku } from './yayin-okuma.mjs';", "import { yayinOku } from './yayin-okuma.mjs';\nconst ham = (u) => execFileSync('curl', ['-sS', u]);"), 'terfi.mjs:'],
     ['N5 surum.mjs https.get → KIRMIZI', 'kirmizi', (d) => degis(d, 'scripts/lib/surum.mjs', 'async function getir(url) {', 'async function getir(url) {\n  https.get(url);'), 'surum.mjs:'],
-    ['N6 belirtecliFetch başlık eklemiyor → KIRMIZI', 'kirmizi', (d) => degis(d, 'scripts/lib/yayin-okuma.mjs', '...indirmeBasliklari() }', '}'), 'indirmeBasliklari'],
+    ['N6 belirtecliFetch başlık eklemiyor → KIRMIZI', 'kirmizi', (d) => degis(d, 'scripts/lib/yayin-okuma.mjs', '...indirmeBasliklari(url) }', '}'), 'indirmeBasliklari'],
     ['N7 yeni yayın betiği (deploy/yeni-yayin.sh) curl ile okuyor → KIRMIZI (keşif)', 'kirmizi', (d, y) => ekle(d, y, 'deploy/yeni-yayin.sh', 'v=$(curl -fsS https://guncelleme.etkiliyazilim.com/x/electron/latest.yml)\n'), 'yeni-yayin.sh:1'],
     ['N8 izinli site kalktı → ÖLÜ İZİN KIRMIZI (iki yönlü)', 'kirmizi', (d) => degis(d, 'scripts/koruma-runtime-indir.mjs', "await fetch(hedef.url, { redirect: 'follow' })", 'await indir(hedef.url)'), 'ÖLÜ İZİN'],
-    ['N9 mobil belirteç denetimi (yükleme öncesi) söküldü → KIRMIZI', 'kirmizi', (d) => degis(d, 'deploy/mobil-yayinla.mjs', 'if (!KURU) belirtecGerekli();\n', ''), 'belirtecGerekli'],
+    ['N9 mobil belirteç denetimi (yükleme öncesi) söküldü → KIRMIZI', 'kirmizi', (d) => degis(d, 'deploy/mobil-yayinla.mjs', 'if (!KURU) belirtecGerekli(FEED);\n', ''), 'belirtecGerekli'],
     ['N10 zorunlu dosya yok (yayin-okuma.mjs) → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { delete d['scripts/lib/yayin-okuma.mjs']; }, 'zorunlu'],
     ['N11 tarama boş (kapsam kırık) → ÖLÇÜLEMEDİ', 'olculemedi', (d, y) => { y.splice(0, y.length); }, 'taban'],
     ['N12 mobil/scripts altına \'curl\' alt süreci → KIRMIZI', 'kirmizi', (d, y) => ekle(d, y, 'mobil/scripts/lib/yeni.mjs', "spawnSync('curl', [u]);\n"), 'yeni.mjs:1'],
