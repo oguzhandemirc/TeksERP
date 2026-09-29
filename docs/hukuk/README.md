@@ -6,9 +6,14 @@
 |---|---|---|
 | `SON-KULLANICI-LISANS-SOZLESMESI.md` | Kalıcı lisans; kurulum ve tesis sınırı; yasaklar; son hak edilen sürüm; çevrimiçi denetim ve taşıma; lisans sınıfları; filigran ve kopya tespiti beyanı | `SKLS-2026.1` |
 | `BAKIM-DESTEK-SOZLESMESI.md` | Yıllık bakım; güncelleme hakkı ve dağıtım yolu; yanıt süreleri; uzaktan erişim (Tailscale); yedek sorumluluğu | `BDS-2026.1` |
-| `VERI-ISLEME-EKI.md` | Lisans yoklamasında giden alanlar tek tek; destek ve uzaktan erişimde veri işleyen; alt işleyenler; saklama süreleri; patron bulutu için ayrı ek iskeleti | `VIE-2026.1` |
+| `VERI-ISLEME-EKI.md` | Lisans yoklamasında giden alanlar tek tek; destek ve uzaktan erişimde veri işleyen; alt işleyenler; saklama süreleri (patron bulutu KAPSAM DIŞI → ayrı ek) | `VIE-2026.1` |
 | `YAPTIRIM-MADDELERI.md` | K0–K5 kademeleri; otomatik mekanizmalar; ödeme merdiveni, taksit, planlı eylem; "verilerimi al" kapısı; ihtar süreleri | `YM-2026.1` |
 | `KABUL-METNI.md` | Panelde ilk kurulumda gösterilecek kısa metin; kabul kaydının içeriği ve yeri | `KM-2026.1` |
+| `PATRON-BULUTU-VERI-ISLEME-EKI.md` | Patron bulutu (ayrı imzalanır): roller (fabrika sorumlu, Etkili Yazılım işleyen), veri kategorileri katalog sınıflarından, amaç ve hukuki sebep, VDS Türkiye, alt işleyenler ve KVKK md. 9 değerlendirmesi | `PBVIE-2026.1` |
+| `PATRON-BULUTU-SAKLAMA-IMHA.md` | 3/13/25 ay/tümü geçmiş seçeneği, günlük budama, bulutta doğan verinin süreleri, abonelik bitişinde dışa aktarma + imha + yedekten düşme, imha kaydı | `PBSI-2026.1` |
+| `PATRON-BULUTU-AYDINLATMA-METNI.md` | Uygulamada gösterilecek kısa + tam aydınlatma metni (fabrika adına), fabrikanın genel metnine eklenecek cümle | `PBAM-2026.1` |
+| `PATRON-BULUTU-TEDBIRLER.md` | Teknik ve idari tedbirler: veri azaltma, RLS, izinler, parola + TOTP, imza ve şifreleme, barındırma, yedek, erişim kaydı | `PBTT-2026.1` |
+| `VERI-IHLALI-BILDIRIM-PROSEDURU.md` | İhlal bildirimi: işleyenden sorumluya en geç 24 saat (öneri), sorumludan Kurul'a 72 saat; roller, içerik, kayıt | `VIBP-2026.1` |
 
 Mobil uygulamanın mağaza gizlilik politikası ayrı bir taslaktır: `docs/legal/GIZLILIK-POLITIKASI.md`. Lisans yoklaması devreye girince o metne de lisans bağlantısının bir satırı eklenmelidir. O metin bugün "geliştirici verilere erişmez" diyor.
 
@@ -34,4 +39,4 @@ Sözleşmeler aşağıdaki değerleri müşteriye TAAHHÜT eder. Koddaki değer 
 - **Ticari:** lisans ve bakım bedelleri, modül fiyat listesi, taksit ve ödeme merdiveni süreleri, taşıma bedeli, yanıt süreleri, sorumluluk tavanı, ceza koşulu, yetkili mahkeme. Hepsi metinlerde `[DOLDURULACAK]` işaretli.
 - **Bilgi eksik:** VDS sağlayıcısının ünvanı; uzak yedek hedefinin kimin hesabında olduğu; Lisans Veren'in ticari ünvanı ve KEP adresi.
 - **Avukat kararı:** her belgenin başındaki kutu.
-- **Patron bulutu eki:** ticari model belirlenince `VERI-ISLEME-EKI.md` Bölüm P ayrı bir belgeye çıkarılır ve tamamlanır.
+- **Patron bulutu ekleri:** beş belge taslak olarak yazıldı (2026-09-29, B7). Açık: ticari model, VDS sağlayıcısı, yurt dışı alt işleyenlerle standart sözleşmenin imzalanabilirliği (`PATRON-BULUTU-VERI-ISLEME-EKI.md` §6.4), bildirim içeriği, bulut yedek yöntemi, fabrikadan aydınlatma bilgileri. Tedbirler eki bir taahhüt listesidir; hizmet açılmadan her tedbir uygulanmış ve Senaryo P ile ölçülmüş olmalıdır.
