@@ -131,7 +131,7 @@ yenilemez** (en çok 20 sn bekler; tavan dolarsa bir sonraki açılışa kalır)
 ### Geri alma
 
 ```bash
-ssh yenisunucu \
+ssh tekserp-yayin \
   "cd /opt/stack/apps/tekserp-guncelleme/html/adnansahin/mobil/ota/<rv> && cp manifest-<eski damga> manifest"
 ```
 
