@@ -2321,7 +2321,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 
 ## lisans
 
-> Alan 2026-09-29'da doğdu (kod koruma + lisanslama planı, Faz 1a: protokol + saf çekirdek). Sözleşme `docs/design/LISANS-PROTOKOLU.md`; lisans alanının kural dosyası kural/belge diliminde doğacak — o güne dek bu iki bekçi hiçbir alan koşum listesinde değil (kimlik defteri B-d yalnız uyarı basar). İkisi de DB'SİZ.
+> Alan 2026-09-29'da doğdu (kod koruma + lisanslama planı, Faz 1a: protokol + saf çekirdek). Sözleşme `docs/design/LISANS-PROTOKOLU.md`; kural dosyası `docs/kurallar/lisans.md` (koşum listesi orada; bu bölüme eklenen her bekçi aynı commit'te oraya da girer — kimlik defteri B-d). İkisi de DB'SİZ.
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|

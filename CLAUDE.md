@@ -4,13 +4,14 @@
 >
 > **Tek gövde, çok fabrika — kural yazarken sor: çekirdek mi, profil mü?** [ÇEKİRDEK] her kurulumda aynıdır (defter semantiği, brüt sevk, idempotency, kilit sırası, atomik claim, fail-closed kapılar, sır hijyeni, veri bütünlüğü). [PROFİL] bu fabrikanın seçimidir ve bayrak/veriyle değişir (rota, istasyon topolojisi, açık modüller, sayısal ayarlar). Ölçüt ve red gerekçeleri: `docs/design/MODUL-BAYRAK-TASARIM.md` §0, §11, §12.
 
-Tekstil fabrikası ERP'si. Üç alt proje, her birinin kendi `CLAUDE.md`'si var:
+Tekstil fabrikası ERP'si. Üç alt proje (+ doğmakta olan satıcı platformu), her birinin kendi `CLAUDE.md`'si var:
 
 | Proje | Stack | Port |
 |---|---|---|
 | `Teks-Erp/` | Express 5 + Prisma 7 + PostgreSQL backend | 4000 |
 | `Electron/` | Electron 42 + React 19 + Vite yönetim paneli (**admin frontend buraya yazılır**; `React/` yok) | 5174 |
 | `mobil/` | React Native + Expo 54, Android tablet (yatay) + telefon (dikey) — saha | — |
+| `satici/` | Express 5 + Prisma 7 satıcı sunucusu (lisans API `/v1/*` + portal web, VDS'te; fabrikaya kurulmaz) — lisans Faz 1b'de doğuyor | 4100 genel · 4101 portal (yalnız tailnet) |
 
 **Dallanma:** `feature/*` → `main`; müşteri dalı YOK. Fabrika paketi ve demo derlemesi `main`'den üretilir; müşteri farkı yalnız bayrak profilinde yaşar — "adnansahin'de yok" = "bayrağı kapalı". `if (musteri === 'X')` fork'un ilk sinyalidir, yasak. Müşteri adı da koda gömülmez: ekrandaki firma adı bağlanılan sunucunun `company.name` ayarından gelir, yedeği nötr (`test_musteri_adi_kodda_yok`).
 
@@ -57,6 +58,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 - Hata kodu `details.code` altında (`body.code` hep undefined); kapalı modül 403 `MODULE_DISABLED`; uzakta kapalı yol 404 (403 varlığı doğrular). Uzak/LAN ayrımı soketten, `clientType` güvenlik sınırı değil; tünel dinleyicisi yalnız `127.0.0.1`.
 - Bir yetenek "VAR" sayılmak için üçü birden: motor + en az bir çıkış yüzeyi + izin ataması. İzin kataloğu koda, atama panele (uzlaştırma getirir, ATAMAZ); SoD üçlüsü (`shipping:invoice`, `shipping:undo-dispatch`, `roll:manual-adjust`) yalnız Muhasebe/Süpervizör; süperadmin rol değil (`["*"]`), panelden atanamaz.
 - Yeni davranış bayrağının varsayılanı = BUGÜNKÜ davranış ve bu cümle ÖLÇÜLMEDEN yazılmaz; çıkışsız kapı üreten bayrak yazılır ama AÇILMAZ; kapı takarken "malın çıktığı başka yol var mı" kardeş bayrağın kapsamına bakılarak sorulur. Rota kapsaması KATEGORİ düzeyinde reddetmez, UYARIR (`ApiResponse.warnings`); özellik-başına kapsama sert kalır (create 400 / replace 409 — `docs/kurallar/rota-renk.md`).
+- **Lisans kapısı fabrikayı aniden durdurmaz:** geçersiz/ölçülemedi → uyarı → imzalı tarihten 30 gün → kısıtlı kip; veri erişimi her kademede açık; fabrikadan dışarı her istek kurulum anahtarıyla imzalanır, yoklama iş verisi taşımaz (`docs/kurallar/lisans.md`).
 - İş emri yalnız üretimi yönetir; tartı/paket/sevkiyat ayrı domain (çuvala bağlanır); top↔sipariş satırı bağı YOKTUR, karşılama `SackAllocation` ile sevk anında. `WorkOrder.type` beyan değil bağın aynasıdır.
 
 ### Dağıtım ve sürüm
@@ -114,6 +116,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 | Filtre · liste · arama | `docs/kurallar/filtre-liste.md` | Sunucu süzmesi; CSV; `updatedAt desc` (giriş sekmeleri Ham Stok + Yarı Mamul hariç); tek metraj; Ctrl+F yok |
 | Raporlar · karneler | `docs/kurallar/raporlar.md` | `finalizedAt` trigger; kaynak statü listesi; takvim günü ↔ mutlak pencere; parti araması aday listesi |
 | Finans · sağlamlık sınıfları | `docs/kurallar/finans.md` | Beş sınıf; iki tarih; ters yol; kilit sırası; çift yüklem; tek kaynak satır; kasa/KDV bayrakları PROFİL |
+| **Lisans · kod koruma · satıcı platformu** | `docs/kurallar/lisans.md` | Gözlem sıfır fark; ek süre imzalı tarihten; KISITLI iki anahtarlı; sunucu kararı ek sürede kalıcı; parmak izi MAC'siz; kök parolası stdin |
 | Genel · uzak erişim · konvansiyon | `docs/kurallar/genel.md` | Soket ayrımı; Access JWT fail-closed; TOTP kurulumu; audit; iki dinleyici tek process |
 
 Dizin ve arşiv tarihleri: `docs/kurallar/README.md`. Tasarım belgeleri: `docs/design/` (canlı), runbook'lar: `docs/ops/`, harita: `docs/README.md`.

@@ -1,0 +1,63 @@
+# Lisans · Kod koruma · Satıcı platformu
+
+> Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Alan 2026-09-29'da doğdu (kod koruma + lisanslama planı). Hikâye, ölçüm ve gerekçe arşivde (`docs/history/CLAUDE-NOT-ARSIVI.md`, 2026-09-29 notları); burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
+> Tasarım: `docs/design/LISANS-KOD-KORUMA.md` (Plan A) · `docs/design/PATRON-BULUTU.md` (Plan B) · kanonik protokol `docs/design/LISANS-PROTOKOLU.md` (tek kaynak kod: `Teks-Erp/src/lib/license/protocol/`; plan adı → kod adı §12a). Kod adları İngilizce, tel şeması anahtarları ve kod DEĞERLERİ Türkçe.
+
+## Ortak (fabrika + satıcı + istemciler)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Lisans kapısı fabrikayı aniden durdurmaz: geçersiz/ölçülemedi → UYARI → imzalı tarihten 30 gün EK_SURE → KISITLI; veri erişimi (okuma, rapor, yeniden basım, dışa aktarma, yedek) her kademede açıktır, K5'te bile yönetici "verilerimi al" kapısından yedek + dışa aktarma alır. · bekçi: `test_lisans_durumu (§3 ek süre · §4 iki anahtar · §11 K0…K5)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Lisans motoru GÖZLEM kipinde doğar ve gözlem SIFIR FARKtır: her şey hesaplanır ve yoklamayla raporlanır, hiçbir istek engellenmez, bant yok; `zorla` yalnız portal kirasıyla, kurulum başına açılır. · bekçi: `test_lisans_durumu (§2 gözlemde uygulanan etki = bugünkü davranış)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Ek süre İMZALI tarihten türer (kira bitişi · vade · kirasız HAK verilişi · etkinleşmemişte DB'deki ilk açılış), yerel dosyadan değil; lisans dosyasını ya da durum kaydını silmek ek süreyi yenilemez, kipi gevşetmez, K4'ü kaldırmaz. · bekçi: `test_lisans_durumu (§3 · §8 etkinleşmemiş · §9 silmek kaçış değil)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Zamanın getirdiği KISITLI iki anahtarlıdır: imzalı çapa + ek süre geçmiş VE son 24 saatte gerçek bir yoklama başarısız olmuş olmalı — internet varken kademeyi yalnız sunucu kararı düşürür; saat ileri sıçraması erken bitirmez, geri alınması süre uzatmaz. · bekçi: `test_lisans_durumu (§4 · §5 saat ileri · §6 saat geri)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Sunucu kararları (K1–K5, `donmusModuller`, DEVREDILDI) son geçerli imzalı kiradan KALICIDIR; ek süre onları GEVŞETMEZ — K2 ile dondurulan modül ek sürede de kapalıdır; tavanın fail-open'ı yalnız BELİRSİZLİK içindir (ÖLÇÜLEMEDİ · etkinleşmemiş · kullanılabilir HAK yok), ek süre belirsizlik değildir. · bekçi: `YOK` · Kapanır: `test_lisans_durumu'na kira bitmiş (EK_SURE) + K2 donmuş modül senaryosu eklenip isModuleLicensed false beklendiğinde ve state.ts buna uyduğunda` · Çapa: `etkiHesapla` · Öncül: ölçüldü (bugünkü kod ek sürede tavanı ham değere düşürüyor — protokol belgesi §11, §12.9) <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Modül tavanı YALNIZ kullanılabilir bir HAK varken uygulanır: etkin = bayrak ∧ (gözlem ∨ belirsizlik ∨ (HAK modülleri ∋ anahtar ∧ anahtar ∉ donmuş)); belirsizlik üretimi KAPATMAZ (`production` okuyucusu satır yoksa TRUE döner), geçerli HAK varken DB'ye elle yazılan bayrağı da keser (403 `LICENSE_MODULE`). · bekçi: `test_lisans_durumu (§7 tavan yalnız geçerli HAK'la, ÖLÇÜLEMEDİ'de üretim açık · §11c K2)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Fabrikadan dışarı giden HER istek (etkinleştirme, yoklama, zil aboneliği, çevrimdışı, taşıma, DR, destek, eşitleme) kurulum anahtarıyla imzalı İSTEK'tir (`typ` sabit, zaman ±10 dk, nonce, gövde özeti, amaç); imzasız dış çağrı yazılmaz. · bekçi: `test_lisans_protokol (§3 İSTEK: kimlik, tazelik, gövde, tekrar)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Yoklama iş verisi TAŞIMAZ: gövde katı şemadır ve sağlık özeti allowlist'tir (sürüm, çalışma süresi, DB boyutu, yedek sağlığı, istemci tür×sürüm SAYISI, iş hatası SAYACI); kullanıcı adı, iş kaydı, ham hata metni, dosya adı gitmez; iş verisi yalnız ayrı kanal + ayrı hakla (`patron-bulut`, varsayılan kapalı) gider. · bekçi: `test_lisans_protokol (§5 istek KATI, sağlık özeti allowlist)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Parmak izi beş etkendir — F1 OS makine kimliği · F2 SMBIOS UUID · F3 sistem diski kimliği · F4 sistem/anakart seri numarası · F5 PostgreSQL `system_identifier` — her biri kurulum tuzuyla HMAC'lenir (ham kimlik dışarı çıkmaz); geçerli = ölçülebilenlerin ≥3'ü (en az 2 ölçülebilir), ölçülemeyen etken uyuşmazlık SAYILMAZ, DR sınıfında F5 dışarıda. · bekçi: `test_lisans_protokol (§4 eşik, ölçülemeyen, normalleştirme, tuz)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Güven çapası parametredir ve üretim kök listesi boş doğar (boşken hiçbir HAK geçerli değildir — fail-closed); hazırlık kökü yalnız TEST/DEMO imzalar; özel anahtar malzemesi `src/`e girmez, test anahtarları çalışma anında üretilir. · bekçi: `test_lisans_protokol (§0 klasör kapalı, src'de özel anahtar yok · §2 güven zinciri)` <sub>(arşiv:2026-09-29)</sub>
+
+### Yasaklar
+
+- **[ÇEKİRDEK]** Parmak izinde MAC adresi ve CPU kimliği KULLANILMAZ (kullanıcı kararı 'MAC alınmaz'; CPU `ProcessorId` makineye özgü değil, ölçüldü); F3'te RAID biriminin `VolumeN` gibi genel serisi ölçülemedi sayılır (Win `Get-Disk UniqueId`, NVMe/SATA'da normalize seri), F4 `Win32_BIOS.SerialNumber` → `Win32_BaseBoard.SerialNumber` (Linux `product_serial`); `Get-PhysicalDisk` ve `Get-NetAdapter -IncludeHidden` çağrılmaz (asılma ölçüldü). · bekçi: `YOK` · Kapanır: `parmak-izi.ts f4 normalleştirmesi seri numarası kabul edip MAC desenini ölçülemedi saydığında ve test_lisans_protokol §4 bunu negatif sondayla ölçtüğünde; toplayıcı (fabrika motoru) iki asılan komutu içermediğinde bir tarayıcıyla` · Çapa: `normalizeFactor` · Öncül: ölçüldü (protokol v1 kodu f4'ü hâlâ MAC olarak normalleştiriyor) <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Kök anahtar parolası YALNIZ portal formu → süreç → imza ALT SÜRECİNİN stdin'i ile taşınır; argv'ye, ortam değişkenine, diske, loga, audite ASLA girmez (paylaşımlı VDS'te süreç listesinden sızar); karşılaştırma sabit zamanlı, çözülen anahtar belleği iş bitince sıfırlanır, kök anahtar dosyası parolalı (scrypt + AES-256-GCM) ve şifreli kopyası VDS dışında durur. · bekçi: `YOK` · Kapanır: `satıcı sunucusunun imza yolu bekçisi argv/env'de parola desenini ve imza alt sürecinin stdin dışı girdisini kırmızı saydığında` · Çapa: `satici imza alt süreci (1b)` · Öncül: ölçüldü (satıcı sunucusu henüz yok) <sub>(arşiv:2026-09-29)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Kira zinciri ÜÇ hâli ayırır: (a) AYNI parmak izinden geride kalmış uç (snapshot geri alma, eski lisans klasörü) → "yakala" kirası, uyarı YOK · (b) aynı istek/kira kimliğinin 15 dk içinde tekrarı (ağ tekrarı) → aynı çocuk kira idempotent döner · (c) İKİ FARKLI parmak izi aynı ucu ileri taşır → KOPYA_SUPHESI: ilk pencerede yalnız portal uyarısı, ikinci pencerede de sürerse eşleşmeyen tarafa kira verilmez (ek süreye düşer); asla anında durdurma. · bekçi: `YOK` · Kapanır: `satıcı sunucusunun kira zinciri bekçisi üç hâli ayrı ayrı (a uyarısız, b idempotent, c iki pencereli) ölçtüğünde` · Çapa: `satici kira verme yolu (1b)` · Öncül: ölçüldü (satıcı sunucusu henüz yok) <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** İş modeli kalıcı lisans + yıllık bakımdır: bakım biterse program DURMAZ, son hak edilen sürümde kalır (bakım sonrası derlenen sürüm ek süre → kısıtlı); sayı sınırı YOK (süre + modül + tesis); modül hakkını lisans TAVANI belirler, bugünkü bayrak makinesi korunur. · bekçi: `test_lisans_durumu (§12 bakım sonu)` <sub>(arşiv:2026-09-29)</sub>
+- **[PROFİL]** Geçiş sırası: her faz ÖNCE testfabrika (thinkpad-1), sonra adnansahin; adnansahin `zorla`ya takvimle değil gözlem ölçümü + kullanıcı cümlesiyle geçer (takvim kapısı YOK); SAHINSRV müdahaleleri thinkpad-1 denemelerinin tamamı bittikten sonra TEK pencerede, vardiya yokken, "uygula" cümlesiyle. <sub>(arşiv:2026-09-29)</sub>
+
+## Backend (fabrika lisans motoru)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** `licenseGate` yöntem + yol ile sınıflar, kimliğe BAKMAZ ve "önce 401" kuralının BEYANLI istisnasıdır (lisans bir SUNUCU durumudur): kimliksiz isteğe yalnız genel `LICENSE_GATE` kodu döner, kademe/gün/modül ayrıntısı yalnız kimlikli `GET /api/license/durum`da (anonim çağırana K5 sinyali sızmaz). · bekçi: `YOK` · Kapanır: `fabrika motoru diliminin kapı bekçisi rota envanterinde çözülemeyen = 0, K5 ⊂ K4, gözlemde sıfır fark ve kimliksiz yanıtta ayrıntı yokluğunu ölçtüğünde` · Çapa: `licenseGate` · Öncül: ölçüldü (kapı henüz yazılmadı) <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** KISITLI'da GET/HEAD serbest, yazmalar varsayılan RED (403 `LICENSE_RESTRICTED`) + tek kaynaktan beyanlı izin listesi (giriş, yedek/dışa aktarma, yeniden basım, güvenlik uçları, bakım); DURDURULMUS'ta yalnız her-kademe listesi + yedek/dışa aktarma (403 `LICENSE_SUSPENDED`); hata `details.code` altında, 503 kullanılmaz. · bekçi: `YOK` · Kapanır: `aynı kapı bekçisi her yazma rotasının ya varsayılan-kapalı ya izin listesinde olduğunu ve ölü desen bulunmadığını ölçtüğünde` · Çapa: `license-routes izin listesi` · Öncül: ölçüldü (kapı henüz yazılmadı) <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** `LICENSE_DIR` kurulum kökündedir (Win `C:\TeksERP\lisans`, SYSTEM + Administrators ACL; Linux 0600): `app\` DIŞINDA (kurulum `app\`i değiştirir) ve `BACKUP_DIR` DIŞINDA (offsite süpürücü klasördeki her dosyayı Drive'a kopyalar); proxy ayarı (kimlik bilgisi taşıyabilir) da DB'de değil burada durur. · bekçi: `YOK` · Kapanır: `fabrika motorunun depo modülü LICENSE_DIR'in app ve BACKUP_DIR altına düşmesini açılışta reddettiğinde ve bir bekçi bunu negatif sondayla ölçtüğünde` · Çapa: `license store` · Öncül: ölçüldü (depo modülü henüz yazılmadı) <sub>(arşiv:2026-09-29)</sub>
+
+## Geçersiz kılınan kurallar — bunlara UYMA
+
+- **KISMI** `docs/design/LISANS-PROTOKOLU.md §6 (f4 = birincil fiziksel ağ kartının MAC'i)` → `R:2026-09-29 yönetici kararı (F3/F4)`: F4 sistem/anakart seri numarasıdır, MAC kullanılmaz; F3 RAID genel serisi ölçülemedi. Kod henüz eski hâlde (borç, yukarıda Yasaklar).
+- **KISMI** `docs/design/LISANS-PROTOKOLU.md §11 ve §12.9 (K2 dondurulan modül ek sürede ham değere düşer)` → `R:2026-09-29 yönetici kararı (sunucu kararları kalıcı)`: donmuş modül ek sürede de kapalı; kod henüz eski hâlde (borç, yukarıda Değişmezler).
+- **KISMI** `R:2026-09-01 Patron modülü (bulut ayna reddi)` → `R:2026-09-29 patron bulutu`: salt-okur özet + gelen kutusu modeli reddin öncülünü aşar; tünel B6'da emekliye ayrılana dek 2026-09-01 güvenlik çekirdeği yürürlükte.
+
+## Bekçiler — bu alana dokununca koş
+
+`cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (ağır koşum `node scripts/agir-is.mjs -- …` ile). İkisi de DB'siz.
+
+**Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## lisans` bölümü.**
+
+Backend: `test_lisans_protokol`, `test_lisans_durumu`
+
+İleride doğacak lisans bekçileri (kapı, modül tavanı, yoklama allowlist'i, protokol aynası, satıcı sunucusu) doğdukları commit'te bu listeye VE haritanın `## lisans` bölümüne birlikte eklenir.
+
+## Arşiv notları (tam metin, gerekçe ve ölçüm)
+
+- 2026-09-29 · Kod koruma + lisanslama: 12 soru turunun kararları (Plan A)
+- 2026-09-29 · Patron bulutu: B-turları kararları (Plan B) — 2026-09-01 bulut ayna reddi KISMEN GEÇERSİZ
+- 2026-09-29 · Lisans planı uygulama kararları: takvim kapısı yok, SAHINSRV tek pencere, deploy key iptali, demo sızıntısı temizliği
+- 2026-09-29 · Lisans yönetici kararları: sunucu kararları ek sürede kalıcı, parmak izi F3/F4 (MAC yok), gözlem sıfır fark
+- 2026-09-29 · Yedek şifreleme (`.tkenc`) — Faz 0.2
+- 2026-09-29 · Konteyner seed'i şemaya bakar; demo aktarımı izin listesi — Faz 0.3/0.4a
