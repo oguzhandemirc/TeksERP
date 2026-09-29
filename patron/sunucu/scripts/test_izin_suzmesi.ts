@@ -39,7 +39,7 @@ function katalogBolumu(): void {
 
 async function fikstur(o: Ortam, k: TestKurulumu): Promise<{ siparis: string; cari: string }> {
   const ufuk = new Date(o.saat.simdi() - 60_000);
-  const w = { t: ufuk.toISOString(), k: "1" };
+  const w = { t: ufuk.toISOString(), k: "000000000001" };
   const siparis = randomUUID();
   const cari = randomUUID();
   const fatura = randomUUID();
@@ -52,8 +52,8 @@ async function fikstur(o: Ortam, k: TestKurulumu): Promise<{ siparis: string; ca
     girdi("fatura.finans", { yaz: [{ id: fatura, genelToplam: "15000.00" }], yeni: w }),
   ];
   const anliklar = [
-    { projeksiyon: "ozet.siparis", icerikOzeti: "1", veri: { acik: 1 } },
-    { projeksiyon: "ozet-finans", icerikOzeti: "1", veri: { kasa: "100.00" } },
+    { projeksiyon: "ozet.siparis", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri: { acik: 1 } },
+    { projeksiyon: "ozet-finans", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri: { kasa: "100.00" } },
   ];
   const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk, kayitlar, anliklar }) });
   if (r.status !== 200 || (r.json as unknown as { ret: unknown[] }).ret.length > 0) throw new Error(`fikstür: ${r.status} ${JSON.stringify(r.json)}`);

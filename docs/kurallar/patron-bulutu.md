@@ -38,6 +38,7 @@
 - **[ÇEKİRDEK]** Gelen kutusu idempotency'si makbuzdadır: varlık ile `CloudInboxReceipt` AYNI tx'te yazılır, 8036 token kilidi mesajId üzerinde tx'in ilk ifadesidir; aynı mesaj tekrar gelirse iş kuralı koşmaz, cevap makbuzdan döner; kesin ret de makbuz yazar, belirsiz hata (5xx/ağ/DB) yazmaz; Order/Customer'a kaynak kolonu eklenmez (kaynak makbuzda ve audit yükünde). · bekçi: `test_bulut_gelen_kutusu (§3 tekrar · §4 aynı tx · §5 ret · §7 çakışma)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Patron bulutu teknik kullanıcısının giriş yöntemi YOKTUR: izinleri yalnız `order:write` + `customer:write`, kimliği ayrılmış ayar anahtarında (`patronBulutu.teknikKullaniciId`; `User`a işaret kolonu yok); tek token üreticisi (`issueToken`) onu parolası bilinse de reddeder ve kimliksiz `mobile-users` listesinden beyanlı hariçtir. · bekçi: `test_bulut_gelen_kutusu (§2 · §9)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Gelen kutusu işi eşitlemeyle AYNI fail-closed ön koşulla çalışır (`cloudEligibility`; ayrıca teknik kullanıcı) — biri eksikse HİÇ dış istek atılmaz; `zorla`da uygulanan kademe sipariş/cari yazmasını kapatıyorsa `al` çağrılmaz ve kayıt bulutta BEKLIYOR kalır. · bekçi: `test_bulut_gelen_kutusu (§10)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Tel sözleşmesi TEK dosyadır (`patron/sunucu/src/wire/esitleme.ts`; uçlar, zarf, istek/yanıt şemaları, mesaj gövdeleri, kodlar) ve yalnız `zod` içe aktarır; fabrika onu `Teks-Erp/src/cloud-sync/wire/esitleme.ts` olarak bayt-eşit taşır ve tel tipini yalnız oradan alır; değişiklik önce kaynakta, sonra `cp -p`; iki katalog (ad/tür, alt satır, kökte yasak alan, saklama alanı, üstten saklama) birebirdir. · bekçi: `test_bulut_tel_aynasi (§1 ayna · §2 zod · §3 yol · §4 kopya · §5 katalog)` <sub>(arşiv:2026-09-29)</sub>
 
 ## Bulut sunucusu (`patron/sunucu`)
 
@@ -64,7 +65,7 @@ Bulut sunucusu bekçileri kendi projesinden: `cd patron/sunucu && node ../../scr
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## patron-bulutu` bölümü.**
 
-Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`
+Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`
 
 Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_patron_kapilari`
 

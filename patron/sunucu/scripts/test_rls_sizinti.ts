@@ -232,8 +232,8 @@ async function main(): Promise<void> {
       const p = paket(k, {
         ufuk,
         kayitlar: [
-          girdi("siparis", { yaz: [{ id, siparisNo: `S-${k.tesisId.slice(0, 4)}`, durum: "ACIK" }], yeni: { t: ufuk.toISOString(), k: "1" } }),
-          girdi("siparis.finans", { yaz: [{ id, tutar: "100.00" }], yeni: { t: ufuk.toISOString(), k: "1" } }),
+          girdi("siparis", { yaz: [{ id, siparisNo: `S-${k.tesisId.slice(0, 4)}`, durum: "ACIK" }], yeni: { t: ufuk.toISOString(), k: "000000000001" } }),
+          girdi("siparis.finans", { yaz: [{ id, tutar: "100.00" }], yeni: { t: ufuk.toISOString(), k: "000000000001" } }),
         ],
       });
       const r = await imzali(o, k, "/v1/esitle", { govde: p });

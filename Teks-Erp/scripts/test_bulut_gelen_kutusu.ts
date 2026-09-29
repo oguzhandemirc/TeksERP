@@ -35,18 +35,8 @@ import { AuditService } from "../src/services/audit.service";
 import { AuthService } from "../src/services/auth.service";
 import { AuthController } from "../src/controllers/auth.controller";
 import { ORDER_HEADER_WRITABLE, ORDER_LINE_WRITABLE } from "../src/services/order.service";
-import {
-  CARD_ROLE_WIRE_MAP,
-  CARD_WIRE_MAP,
-  CardWireSchema,
-  ORDER_HEADER_WIRE_MAP,
-  ORDER_LINE_WIRE_MAP,
-  OrderLineWireSchema,
-  OrderWireSchema,
-  INBOX_ENDPOINTS,
-  type InboxMessage,
-  type InboxOutcome,
-} from "../src/cloud-sync/inbox-wire";
+import { CARD_ROLE_WIRE_MAP, CARD_WIRE_MAP, ORDER_HEADER_WIRE_MAP, ORDER_LINE_WIRE_MAP, orderWireToFactory } from "../src/cloud-sync/inbox-wire";
+import { CustomerMessageSchema, OrderMessageSchema, SYNC_PATHS, type InboxMessage, type InboxOutcome } from "../src/cloud-sync/wire";
 import { processInboxMessage } from "../src/services/cloud-inbox.service";
 import {
   PATRON_CLOUD_PERMISSIONS,
@@ -99,7 +89,7 @@ function mesaj(tur: "SIPARIS" | "CARI", govde: unknown, ek: Partial<InboxMessage
     govde,
     hesapId: "7d4b1f1e-2f44-4c2a-9a55-3f9d8f0a1b2c",
     hesapAdi: "Bulut Patron",
-    olusturma: new Date().toISOString(),
+    olusturulma: new Date().toISOString(),
     ...ek,
   };
   yaratilan.mesaj.add(m.mesajId);
@@ -132,9 +122,9 @@ function bolum1(): void {
   const yasak = new Set(["id", "code", "type", "isSubcontractorRole", "isActive", "nameFold", "createdAt", "updatedAt", "createdById", "updatedById", "mergedIntoId", "mergedAt", "mergedById"]);
   const kart = [...Object.values(CARD_WIRE_MAP), ...Object.values(CARD_ROLE_WIRE_MAP)].filter((k) => !skaler.has(k) || yasak.has(k));
   check("cari eşlemesi Customer skaler kolonu ve kod/tür/fason rolü DEĞİL", kart.length === 0, kart.join(", "));
-  const telBaslik = Object.keys(OrderWireSchema.shape).filter((k) => k !== "kalemler" && !(k in ORDER_HEADER_WIRE_MAP));
-  const telKalem = Object.keys(OrderLineWireSchema.shape).filter((k) => !(k in ORDER_LINE_WIRE_MAP));
-  const telKart = Object.keys(CardWireSchema.shape).filter((k) => k !== "roller" && !(k in CARD_WIRE_MAP));
+  const telBaslik = Object.keys(OrderMessageSchema.shape).filter((k) => k !== "kalemler" && !(k in ORDER_HEADER_WIRE_MAP));
+  const telKalem = Object.keys(OrderMessageSchema.shape.kalemler.element.shape).filter((k) => !(k in ORDER_LINE_WIRE_MAP));
+  const telKart = Object.keys(CustomerMessageSchema.shape).filter((k) => k !== "roller" && !(k in CARD_WIRE_MAP));
   check("her tel alanının eşlemesi var (sessiz düşen alan yok)", telBaslik.length + telKalem.length + telKart.length === 0, [...telBaslik, ...telKalem, ...telKart].join(", "));
 }
 
@@ -234,8 +224,18 @@ async function bolum6ile8(aktor: string, kartId: string): Promise<void> {
   check("tanınmayan anahtar → GOVDE_GECERSIZ", g?.durum === "REDDEDILDI" && g.kod === "GOVDE_GECERSIZ" && turkceMi(g.mesaj), JSON.stringify(g));
   const k = await isle(mesaj("CARI", { ad: `Kod ${DAMGA}`, roller: { musteri: true, tedarikci: false }, kod: "MUS1" }), aktor);
   check("cari gövdesinde kod verilemez → GOVDE_GECERSIZ", k?.kod === "GOVDE_GECERSIZ");
-  const u = await isle(mesaj("SIPARIS", { ...govde, kalemler: [{ urunId: randomUUID(), miktar: 1 }] }), aktor);
+  const u = await isle(mesaj("SIPARIS", { ...govde, kalemler: [{ urunId: randomUUID(), miktar: "1" }] }), aktor);
   check("olmayan ürün → URUN_BULUNAMADI", u?.durum === "REDDEDILDI" && u.kod === "URUN_BULUNAMADI", JSON.stringify(u));
+  const sayi = await isle(mesaj("SIPARIS", { ...govde, kalemler: [{ urunId: fikstur.urunId, miktar: 1 }] }), aktor);
+  check("miktar SAYI gelirse (tel ondalık DİZİ ister) → GOVDE_GECERSIZ", sayi?.kod === "GOVDE_GECERSIZ", JSON.stringify(sayi));
+  const aciklama = await isle(mesaj("SIPARIS", { ...govde, aciklama: "not" }), aktor);
+  check("aciklama tel sözleşmesinde yok (S27) → GOVDE_GECERSIZ", aciklama?.kod === "GOVDE_GECERSIZ");
+  const daire = await isle(mesaj("CARI", { ad: `Daire ${DAMGA}`, roller: { musteri: true, tedarikci: false }, vergiDairesi: "Merkez" }), aktor);
+  check("vergiDairesi tel sözleşmesinde yok (S27) → GOVDE_GECERSIZ", daire?.kod === "GOVDE_GECERSIZ");
+  const esleme = orderWireToFactory({ ...govde, termin: "2026-10-15", kalemler: [{ urunId: fikstur.urunId, miktar: "125.5", birimFiyat: "12.25" }] }, randomUUID());
+  const satir = (esleme.lines as Record<string, unknown>[])[0];
+  check("termin takvim günü → fabrika günü başı (Europe/Istanbul, 21:00Z)", esleme.deadline === "2026-10-14T21:00:00.000Z", String(esleme.deadline));
+  check("ondalık DİZİ → sayı (miktar, birim fiyat)", satir?.quantity === 125.5 && satir?.unitPrice === 12.25, JSON.stringify(satir));
 }
 
 // ── §9 ──────────────────────────────────────────────────────────────────────────────────────────
@@ -284,14 +284,14 @@ function sahteBulut(kurulumX: string, kurulumId: string): SahteBulut {
       const govde = JSON.parse(req.body ?? "{}") as Record<string, unknown>;
       b.cagrilar.push({ yol, govde, imzaGecerli: kimlik.ok && v.ok });
       if (!v.ok) return { status: 401, body: JSON.stringify({ success: false, message: "imza", details: { code: "ISTEK_IMZA" } }) };
-      if (yol === INBOX_ENDPOINTS.ACCOUNTS) {
+      if (yol === SYNC_PATHS.ACCOUNTS) {
         return { status: 200, body: JSON.stringify({ v: 1, hesaplar: [{ id: randomUUID(), ad: "Ayşe Patron", eposta: "ayse@example.com", durum: "AKTIF", sonGiris: null, gizli: "düşer" }] }) };
       }
-      if (yol === INBOX_ENDPOINTS.PULL) {
+      if (yol === SYNC_PATHS.INBOX_CLAIM) {
         const kayitlar = b.kuyruk.splice(0, 20);
         return { status: 200, body: JSON.stringify({ v: 1, kayitlar }) };
       }
-      if (yol === INBOX_ENDPOINTS.RESULT) return { status: 200, body: JSON.stringify({ v: 1, kabul: (govde.sonuclar as unknown[]).length }) };
+      if (yol === SYNC_PATHS.INBOX_RESULT) return { status: 200, body: JSON.stringify({ v: 1, kabul: (govde.sonuclar as { mesajId: string }[]).map((x) => x.mesajId), ret: [] }) };
       return { status: 404, body: "{}" };
     },
   };
@@ -320,13 +320,13 @@ async function bolum10(aktor: string, kartId: string): Promise<void> {
   // Uygun, gözlem kipi → al → işle → sonuç.
   kur = lisansKipKur({ zorlama: false, moduller: tamModul, kiraEk: bulutEk });
   bulut = sahteBulut(kur.f.kurulum.x, kur.f.kurulumId);
-  const yeniKart = mesaj("CARI", { ad: `Bulut İş ${DAMGA}`, roller: { musteri: true, tedarikci: false } }, { olusturma: new Date(Date.now() - 2000).toISOString() });
-  const siparis = mesaj("SIPARIS", { cariKartId: kartId, doviz: "TRY", kalemler: [{ urunId: fikstur.urunId, miktar: 10 }] }, { olusturma: new Date(Date.now() - 1000).toISOString() });
+  const yeniKart = mesaj("CARI", { ad: `Bulut İş ${DAMGA}`, roller: { musteri: true, tedarikci: false } }, { olusturulma: new Date(Date.now() - 2000).toISOString() });
+  const siparis = mesaj("SIPARIS", { cariKartId: kartId, doviz: "TRY", kalemler: [{ urunId: fikstur.urunId, miktar: "10" }] }, { olusturulma: new Date(Date.now() - 1000).toISOString() });
   bulut.kuyruk.push(siparis, yeniKart);
   r = await runCloudInboxOnce(bulut.tasiyici);
   for (const o of r.outcomes) kaydet(o, o.mesajId === siparis.mesajId ? "SIPARIS" : "CARI");
   const yollar = bulut.cagrilar.map((c) => c.yol);
-  check("sıra: hesaplar → al → sonuç; hepsi kurulum anahtarıyla imzalı", JSON.stringify(yollar) === JSON.stringify([INBOX_ENDPOINTS.ACCOUNTS, INBOX_ENDPOINTS.PULL, INBOX_ENDPOINTS.RESULT]) && bulut.cagrilar.every((c) => c.imzaGecerli), yollar.join(" → "));
+  check("sıra: hesaplar → al → sonuç; hepsi kurulum anahtarıyla imzalı", JSON.stringify(yollar) === JSON.stringify([SYNC_PATHS.ACCOUNTS, SYNC_PATHS.INBOX_CLAIM, SYNC_PATHS.INBOX_RESULT]) && bulut.cagrilar.every((c) => c.imzaGecerli), yollar.join(" → "));
   const sonuclar = (bulut.cagrilar[2]?.govde.sonuclar ?? []) as InboxOutcome[];
   check("iki kayıt ISLENDI, olusturma sırasıyla (önce cari)", r.outcome === "BASARILI" && sonuclar.length === 2 && sonuclar.every((s) => s.durum === "ISLENDI") && sonuclar[0]?.mesajId === yeniKart.mesajId, JSON.stringify(sonuclar.map((s) => [s.durum, s.kod])));
   const durum = await getPatronCloudStatus();
@@ -338,7 +338,7 @@ async function bolum10(aktor: string, kartId: string): Promise<void> {
   const once = await prisma.order.count({ where: { clientToken: siparis.mesajId } });
   r = await runCloudInboxOnce(bulut.tasiyici);
   const sonra = await prisma.order.count({ where: { clientToken: siparis.mesajId } });
-  const tekrar = (bulut.cagrilar.find((c) => c.yol === INBOX_ENDPOINTS.RESULT)?.govde.sonuclar ?? []) as InboxOutcome[];
+  const tekrar = (bulut.cagrilar.find((c) => c.yol === SYNC_PATHS.INBOX_RESULT)?.govde.sonuclar ?? []) as InboxOutcome[];
   check("yeniden verilen mesaj → aynı sonuç, ikinci sipariş yok", once === 1 && sonra === 1 && tekrar[0]?.varlikId === sonuclar.find((s) => s.mesajId === siparis.mesajId)?.varlikId);
 
   // zorla + K4 (KISITLI): hesap listesi tazelenir ama `al` ÇAĞRILMAZ.
@@ -348,7 +348,7 @@ async function bolum10(aktor: string, kartId: string): Promise<void> {
   r = await runCloudInboxOnce(bulut.tasiyici);
   check(
     "zorla+KISITLI → LISANS_KISITLI, `al` çağrılmaz (kayıt bulutta BEKLIYOR)",
-    kur.snap.state.uygulananKademe === "KISITLI" && r.outcome === "LISANS_KISITLI" && !bulut.cagrilar.some((c) => c.yol === INBOX_ENDPOINTS.PULL) && bulut.kuyruk.length === 1,
+    kur.snap.state.uygulananKademe === "KISITLI" && r.outcome === "LISANS_KISITLI" && !bulut.cagrilar.some((c) => c.yol === SYNC_PATHS.INBOX_CLAIM) && bulut.kuyruk.length === 1,
     `kademe=${kur.snap.state.uygulananKademe} ${r.outcome} yollar=${bulut.cagrilar.map((c) => c.yol).join(",")}`,
   );
   setCloudUrlForTests(null);

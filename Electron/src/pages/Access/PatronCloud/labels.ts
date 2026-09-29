@@ -23,6 +23,7 @@ export const URL_SOURCE_LABELS: Record<CloudUrlSource, string> = {
 };
 
 export const ACCOUNT_STATE_LABELS: Record<CloudAccount["durum"], string> = {
+  DAVETLI: "Davet bekliyor",
   AKTIF: "Aktif",
   KILITLI: "Kilitli",
   PASIF: "Pasif",

@@ -16,7 +16,7 @@ export interface RootProjection {
   readonly kind: ProjectionKind;
   /** Kök satırı okumak için gereken izinlerin HEPSİ. */
   readonly permissions: readonly CloudPermission[];
-  /** Saklama tarihi: ilk dolu alan (ISO). Yoksa satır saklama budamasına girmez. */
+  /** Saklama tarihi: ilk dolu alan (ISO) — fabrika kataloğunun `retention.wireFields`iyle BİREBİR (uzlaştırma iki ucu aynı tarihle süzer; bekçi `test_bulut_tel_aynasi`). */
   readonly retentionFields?: readonly string[];
   /** Liste sıralaması: ilk dolu alan (ISO); yoksa paketin ufku. */
   readonly sortFields?: readonly string[];
@@ -25,6 +25,8 @@ export interface RootProjection {
   readonly forbiddenRootFields?: readonly string[];
   /** Kalem → üst belge: üstü canlı değilse kalem öksüzdür (bakım budar). */
   readonly parent?: { readonly projection: string; readonly field: string };
+  /** Saklama tarihi kalemin kendisinde yok, ÜST belgeden gelir (fabrika `retention.parent`, S23) — uzlaştırma üstün ufkuyla süzer. */
+  readonly retentionFromParent?: boolean;
 }
 
 const OTURUM: readonly CloudPermission[] = ["bulut:oturum"];
@@ -59,7 +61,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
     name: "siparis",
     kind: "OLGU",
     permissions: ["bulut:siparis:oku"],
-    retentionFields: ["siparisTarihi", "olusturulma"],
+    retentionFields: ["siparisTarihi"],
     sortFields: ["siparisTarihi", "olusturulma"],
     subRows: ["finans"],
     forbiddenRootFields: ["tutar"],
@@ -77,7 +79,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
   { name: "sevkiyat", kind: "OLGU", permissions: ["bulut:sevkiyat:oku"], retentionFields: ["cikisTarihi", "olusturulma"], sortFields: ["cikisTarihi", "olusturulma"] },
   { name: "dogrudan-sevk", kind: "OLGU", permissions: ["bulut:sevkiyat:oku"], retentionFields: ["cikisTarihi", "olusturulma"], sortFields: ["cikisTarihi", "olusturulma"] },
   { name: "cuval", kind: "OLGU", permissions: ["bulut:sevkiyat:oku"], retentionFields: ["olusturulma"], sortFields: ["olusturulma"] },
-  { name: "is-emri", kind: "OLGU", permissions: ["bulut:uretim:oku"], retentionFields: ["planBaslangic", "olusturulma"], sortFields: ["olusturulma"] },
+  { name: "is-emri", kind: "OLGU", permissions: ["bulut:uretim:oku"], retentionFields: ["olusturulma"], sortFields: ["olusturulma"] },
   {
     name: "cari-hesap",
     kind: "OLGU",
@@ -89,7 +91,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
     name: "cari-hareket",
     kind: "OLGU",
     permissions: ["bulut:cari-bakiye:oku"],
-    retentionFields: ["tarih", "olusturulma"],
+    retentionFields: ["tarih"],
     sortFields: ["tarih", "olusturulma"],
     subRows: ["finans"],
     forbiddenRootFields: ["borc", "alacak", "tutarTl", "kur"],
@@ -100,7 +102,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
     name: "kasa-hareketi",
     kind: "OLGU",
     permissions: ["bulut:kasa:oku"],
-    retentionFields: ["tarih", "olusturulma"],
+    retentionFields: ["tarih"],
     sortFields: ["tarih", "olusturulma"],
     subRows: ["finans"],
     forbiddenRootFields: ["tutar", "tutarTl"],
@@ -109,7 +111,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
     name: "cek-senet",
     kind: "OLGU",
     permissions: ["bulut:cek:oku"],
-    retentionFields: ["kayitTarihi", "olusturulma"],
+    retentionFields: ["vade", "olusturulma"],
     sortFields: ["vade", "olusturulma"],
     subRows: ["finans", "kisisel"],
     forbiddenRootFields: ["tutar", "tutarTl", "eslesen", "kesideci"],
@@ -118,7 +120,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
     name: "cek-hareketi",
     kind: "OLGU",
     permissions: ["bulut:cek:oku"],
-    retentionFields: ["tarih", "olusturulma"],
+    retentionFields: ["tarih"],
     sortFields: ["tarih", "olusturulma"],
     parent: { projection: "cek-senet", field: "cekId" },
   },
@@ -126,7 +128,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
     name: "fatura",
     kind: "OLGU",
     permissions: ["bulut:fatura:oku"],
-    retentionFields: ["tarih", "olusturulma"],
+    retentionFields: ["tarih"],
     sortFields: ["tarih", "olusturulma"],
     subRows: ["finans"],
     forbiddenRootFields: ["kur", "araToplam", "iskonto", "kdv", "tevkifat", "genelToplam", "genelToplamTl", "odenen", "acikTutar"],
@@ -138,12 +140,13 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
     subRows: ["finans"],
     forbiddenRootFields: ["birimFiyat", "iskontoOrani", "kdvOrani", "tevkifatOrani", "tutar", "kdvTutari"],
     parent: { projection: "fatura", field: "faturaId" },
+    retentionFromParent: true,
   },
   {
     name: "tahsilat-odeme",
     kind: "OLGU",
     permissions: ["bulut:tahsilat:oku"],
-    retentionFields: ["tarih", "olusturulma"],
+    retentionFields: ["tarih"],
     sortFields: ["tarih", "olusturulma"],
     subRows: ["finans"],
     forbiddenRootFields: ["tutar", "tutarTl", "eslesen", "eslesmemis"],
