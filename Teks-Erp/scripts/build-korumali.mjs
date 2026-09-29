@@ -21,7 +21,7 @@
 //   bytenode ÇALIŞMA ZAMANI bağımlılığıdır (paketin içinde; `--omit=dev` onu ELEMEZ).
 //
 // KULLANIM (Teks-Erp/ içinden, ağır iş sarmalayıcısıyla):
-//   node ../scripts/agir-is.mjs -- node scripts/build-korumali.mjs [--hedef=win-x64|linux-x64] [--cikti=dist]
+//   node ../scripts/agir-is.mjs -- node scripts/build-korumali.mjs [--hedef=win-x64|linux-x64] [--cikti=dist] [--native-zorunlu]
 //   Ortam: KORUMA_ARSIV_DIZINI (varsayılan ~/.tekserp/kaynak-haritalari) — REPO DIŞI.
 // =============================================================================
 
@@ -89,6 +89,8 @@ async function main() {
     format: 'cjs',
     target: `node${nodeSurum.split('.')[0]}`,
     external: DISARIDA,
+    // --native-zorunlu: paket native çekirdeği TAŞIYORSA TS yoluna düşülmez (LISANS-NATIVE-CEKIRDEK.md).
+    define: { __TEKSERP_NATIVE_REQUIRED__: arg('native-zorunlu') ? 'true' : 'false' },
     minify: true,          // boşluk + ölü kod + İSİM KARARTMA
     sourcemap: 'external',  // .map AYRI dosya (arşive; pakete GİRMEZ)
     legalComments: 'none',
@@ -110,13 +112,15 @@ async function main() {
     uretenV8Taban: v8TabanCoz(process.versions.v8),
     platform: hedef.arsivKok.includes('win') ? 'win32' : 'linux',
     arch: 'x64',
-    commit: git('rev-parse', 'HEAD'),
-    kisaCommit: git('rev-parse', '--short', 'HEAD'),
+    // Docker derleme aşamasında .git yok: commit kimliği derleme argümanından gelir.
+    commit: process.env.KORUMA_COMMIT || git('rev-parse', 'HEAD'),
+    kisaCommit: process.env.KORUMA_COMMIT ? process.env.KORUMA_COMMIT.slice(0, 8) : git('rev-parse', '--short', 'HEAD'),
     dal: git('rev-parse', '--abbrev-ref', 'HEAD'),
     zaman: new Date().toISOString(),
     cjsBayt,
     cjsSha256: cjsSha,
     jscUretildi: false,
+    nativeZorunlu: Boolean(arg('native-zorunlu')),
   };
 
   // --- 3. Arşiv (REPO DIŞI): bytenode öncesi .cjs + .map + kimlik ----------------

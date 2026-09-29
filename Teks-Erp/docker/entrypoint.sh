@@ -16,12 +16,15 @@ echo "================================================================"
 # =============================================================================
 # libpq, Prisma'ya özgü `schema=` URI parametresini tanımaz ve bağlanmayı reddeder.
 PSQL_URL=$(printf '%s' "$DATABASE_URL" | sed -E 's/([?&])schema=[^&]*&?/\1/; s/[?&]$//')
+# Korumalı imajda npm/npx YOK (yalnız paketin node ikilisi): Dockerfile PRISMA_BIN'i CLI'ın
+# kendisine çevirir; tanımsızsa bugünkü davranış (npx prisma).
+PRISMA_BIN="${PRISMA_BIN:-npx prisma}"
 
 echo "[1/3] Prisma migration'ları uygulanıyor..."
 
 MAX_RETRIES=20
 for i in $(seq 1 $MAX_RETRIES); do
-  if npx prisma migrate deploy > /tmp/migrate.out 2>&1; then
+  if $PRISMA_BIN migrate deploy > /tmp/migrate.out 2>&1; then
     cat /tmp/migrate.out
     break
   fi
@@ -54,7 +57,7 @@ for i in $(seq 1 $MAX_RETRIES); do
     echo "      → $FAILED 'CREATE INDEX CONCURRENTLY' içeriyor"
     echo "      → psql ile manuel uygulanıyor (transaction'sız)..."
     psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$SQL"
-    npx prisma migrate resolve --applied "$FAILED"
+    $PRISMA_BIN migrate resolve --applied "$FAILED"
     echo "      ✓ $FAILED uygulandı, migrate deploy yeniden deneniyor..."
     echo ""
   else
