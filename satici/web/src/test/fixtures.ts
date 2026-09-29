@@ -27,6 +27,8 @@ export function installationDetail(over: Partial<InstallationDetail> = {}): Inst
       anahtarKimligi: "kurulum-abc",
       zorlama: false,
       yoklamaAraligiDk: 60,
+      esitlemeAraligiDk: 5,
+      bulutSaklamaAy: 13,
       platform: "win32",
       sonOrtam: null,
       sonSaglik: null,
