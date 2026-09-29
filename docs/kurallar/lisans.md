@@ -147,3 +147,4 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-29 · Satıcı düzeltmeleri F2: D2s · D4 · D8 · D9 · D10 · D11 · D14 satıcı ayağı, kod pepper'ı, tailnet geri döngü bayrağı
 - 2026-09-29 · Lisans istemcileri (F3): giriş öncesi K5, tablet kuyruğu lisans reddinde silmez, çok parçalı QR, panel aktarma hedefi
 - 2026-09-29 · Lisans entegrasyonu 2 (I3-2): tek lisans kimliği dikişi, panel tek kaynaktan, TOTP kurulumu her kademede, Senaryo L yeni akışta
+- 2026-09-29 · Lisans 3d-2: kurulum kaydı (kur.ps1 → yoklama → satıcı defteri), destek talepleri, sürüm politikası kiradan
