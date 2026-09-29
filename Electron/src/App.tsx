@@ -9,6 +9,7 @@ import { PreferencesProvider } from "@/providers/PreferencesProvider";
 import { AppShell } from "@/components/layout/AppShell";
 import { BossShell } from "@/components/layout/BossShell";
 import { UpdateGate } from "@/components/layout/UpdateGate";
+import { LicenseLockGate } from "@/components/layout/LicenseLockGate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SettingsPasswordDialog } from "@/components/settings/SettingsPasswordDialog";
 import { LiveReferencesDialog } from "@/components/LiveReferencesDialog";
@@ -138,9 +139,12 @@ function Root() {
   // ⚠️ KURULUM TETİĞİ HER EKRANDA, TEK YERDE: yalnız kabukta çizildiğinde giriş
   // ekranında inen paket hiç kurulmuyordu. Kardeş konumu sabit — kabuk değişse
   // de geri sayım durumu korunur.
+  // Lisans kilidi de kabuktan bağımsız, AYNI katmanda; yalnız oturumda (durum
+  // ayrıntısı kimliksize verilmez). Gözlemde kademe NORMAL → hiç çizilmez.
   return (
     <>
       {kabuk}
+      {!oturumDisi && <LicenseLockGate />}
       <UpdateGate girisEkrani={oturumDisi} />
     </>
   );

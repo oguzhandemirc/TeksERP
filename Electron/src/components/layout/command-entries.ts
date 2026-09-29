@@ -150,6 +150,7 @@ export const commandSections: CommandSection[] = [
       // fabrika yöneticisi satıcı ekranını Ctrl+K'dan bulurdu — hub karosunun
       // gizlenme SEBEBİ (keşfe davet etmemek) o üçüncü kapıdan sızardı.
       superadminOnly: tile.superadminOnly,
+      licenseObservationGate: tile.licenseObservationGate,
     })),
   },
   {

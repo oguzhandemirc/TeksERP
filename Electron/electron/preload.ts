@@ -13,6 +13,7 @@ import type {
   FileSaveOpts,
   UpdateStatus,
 } from "@shared/ipc-contract";
+import type { LicenseRelayRequest } from "@shared/license-relay";
 
 const api: ApiBridge = {
   secureStore: {
@@ -87,6 +88,9 @@ const api: ApiBridge = {
       ipcRenderer.on("updater:status", listener);
       return () => ipcRenderer.removeListener("updater:status", listener);
     },
+  },
+  license: {
+    relay: (req: LicenseRelayRequest) => ipcRenderer.invoke("license:relay", req),
   },
 };
 

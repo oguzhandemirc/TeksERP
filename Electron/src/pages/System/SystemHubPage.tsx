@@ -3,6 +3,7 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuthStore } from "@/store/auth";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
+import { useLicenseScreenVisible } from "@/hooks/useLicenseStatus";
 import { systemTiles, systemTileSections } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 
@@ -23,12 +24,14 @@ export function SystemHubPage() {
   // süperadminsiz bir kurulumda modülleri erişilemez yapardı. Gerekçenin tamamı
   // `lib/superadmin-gate.ts` başlığında.
   const superadminGateOpen = isSuperadminGateOpen({ isSystemAccount, systemAccountExists });
+  const licenseScreenVisible = useLicenseScreenVisible();
   // Karo ile route AYNI kapıyı kullanır: `permission` taşıyan karo yalnız o izne
   // sahip kullanıcıya görünür, yoksa varsayılan `admin:settings` kapısı geçerli
   // (Sistem hub'ı zaten onun arkasında). Ayrışırsa kart görünür ama sayfa açılmaz.
   const visibleTiles = systemTiles.filter((t) => {
     if (t.public) return true;
     if (t.superadminOnly && !superadminGateOpen) return false;
+    if (t.licenseObservationGate && !licenseScreenVisible) return false;
     if (t.adminOnly && !isAdmin) return false;
     if (t.permissionAny) return hasAnyPermission(t.permissionAny);
     if (t.permission) return hasPermission(t.permission);

@@ -26,6 +26,8 @@ import { isSettingRowVisible, type SettingsSearchHit } from "./settings-groups";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
 import { EnumRadioOptions } from "./EnumRadioOptions";
+import { LicenseCeilingBadge } from "@/components/license/LicenseCeilingBadge";
+import { isModuleFlagKey } from "@/lib/module-flags";
 
 /**
  * Bir kategorinin özellik anahtarlarını config'ten render eder — TEK kaydetme
@@ -423,6 +425,8 @@ export function FeatureFlagSection({
             reason={readOnlyReason}
           />
         )}
+        {/* Modül anahtarı lisans tavanının dışındaysa önceden söyler (gözlemde çizilmez). */}
+        {isModuleFlagKey(flag.key) && <LicenseCeilingBadge field={flag.key} />}
         {/* Canlı bilgi bloğu (opsiyonel) — statik `desc`'ten farkı sunucudan okunan
             bir DEĞERİ göstermesi. Bileşen gösterecek şey yoksa kendisi null döner.
             TASLAK değil SUNUCU değerine bakar: gösterge kaydedilmiş durumu anlatır,

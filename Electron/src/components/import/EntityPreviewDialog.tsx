@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { importService } from "@/services/importService";
 import { downloadTemplate } from "@/lib/import/template";
+import { downloadEntityData } from "@/lib/import/entity-data-export";
 import { ImportDataPreview, ImportSpecPreview } from "./ImportSpecPreview";
 
 /** Önizlemede gösterilen satır sayısı — dosyanın ŞEKLİNİ anlamaya yeter. */
@@ -74,20 +75,7 @@ export function EntityPreviewDialog({
   const onDownloadData = async () => {
     setBusy(true);
     try {
-      // İndirme LİMİTSİZ çeker — önizlemedeki 10 satır yalnız bakmak içindi.
-      const res = await importService.exportData(entity);
-      const { columns, rows, label } = res.data;
-      if (rows.length === 0) {
-        toast.info("Aktarılacak kayıt yok.");
-        return;
-      }
-      const { exportRowsToXlsx } = await import("@/lib/list-export");
-      const cols = columns
-        .filter((c) => !c.readOnly)
-        .map((c) => ({ label: c.label, value: (r: Record<string, string>) => r[c.key] ?? "" }));
-      await exportRowsToXlsx(cols, rows, `${label} - veri`, [
-        "Bu dosya içe aktarım şablonuyla AYNI sütunları taşır — düzenleyip geri yükleyebilirsiniz.",
-      ]);
+      if ((await downloadEntityData(entity)) === 0) toast.info("Aktarılacak kayıt yok.");
     } catch {
       toast.error("Veri indirilemedi.");
     } finally {

@@ -40,6 +40,7 @@ import {
 } from "@/lib/search/search-targets";
 import { isRollTabEntryVisible } from "@/pages/Operations/Rolls/tabs-regime";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useLicenseScreenVisible } from "@/hooks/useLicenseStatus";
 import { lowerTr } from "../../lib/tr-case";
 
 interface Props {
@@ -62,6 +63,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   const systemAccountExists = useAuthStore((s) => s.systemAccountExists);
   // Palet de GÖRÜNÜRLÜK yüklemini kullanır (hub karosuyla aynı soru).
   const superadminGateOpen = isSuperadminGateOpen({ isSystemAccount, systemAccountExists });
+  const licenseScreenVisible = useLicenseScreenVisible();
   const { favorites } = useFavorites();
   const { prefs, setPreference } = usePreferences();
   const { theme, setTheme } = useTheme();
@@ -109,6 +111,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
     if (entry.visibleWhen && !entry.visibleWhen(visibilityCtx)) return false;
     // Kimlik kapısı (satıcı ekranları) — hub karosuyla AYNI yüklem, tek kaynak.
     if (entry.superadminOnly && !superadminGateOpen) return false;
+    if (entry.licenseObservationGate && !licenseScreenVisible) return false;
     if (entry.permissionAny) return hasAnyPermission(entry.permissionAny);
     if (entry.permission) return hasPermission(entry.permission);
     if (entry.adminOnly) return isAdmin;
