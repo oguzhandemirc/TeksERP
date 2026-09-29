@@ -150,6 +150,15 @@ function ScramDogrulayici([string]$parola) {
   return "SCRAM-SHA-256`$4096:" + [Convert]::ToBase64String($tuz) + "`$" + [Convert]::ToBase64String($saklanan) + ":" + [Convert]::ToBase64String($sunucu)
 }
 
+# Soru sorulabilir mi: yonlendirilmemis KONSOL + (masaustu oturumu ya da SSH PTY'si); Windows
+# OpenSSH oturumunda UserInteractive False doner. ilk-kurulum.ps1'de AYNI govde.
+function SoruSorabilir {
+  if ([Console]::IsInputRedirected) { return $false }
+  if ($Host.Name -cne "ConsoleHost") { return $false }
+  if ([Environment]::UserInteractive) { return $true }
+  return [bool]($env:SSH_CONNECTION -or $env:SSH_CLIENT)
+}
+
 function SecureCoz([SecureString]$ss) {
   $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ss)
   try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
@@ -214,7 +223,7 @@ elseif ($PostgresParolaDosyasi) {
   $suParola = ([IO.File]::ReadAllText((Resolve-Path $PostgresParolaDosyasi).Path)).TrimEnd("`r", "`n"); $kaynak = "dosya"
 } elseif ((EnvDeger $envSatir "BACKUP_PG_USER") -ceq $PostgresKullanici) {
   $suParola = EnvDeger $envSatir "BACKUP_PG_PASSWORD"; $kaynak = ".env (BACKUP_PG_*)"
-} elseif ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+} elseif (SoruSorabilir) {
   $suParola = SecureCoz (Read-Host -AsSecureString "  PostgreSQL yonetici ($PostgresKullanici) parolasi"); $kaynak = "soru"
 } else { Dur "Yonetici parolasi gerekli ve bu oturum soru soramiyor: -PostgresParolaDosyasi <yol> ver." }
 if (-not $suParola) { Dur "Yonetici parolasi bos." }

@@ -31,6 +31,8 @@
 //    ② sürücü harfi rclone bağlantısı sayıldı     → 1 kırmızı
 //    ③ "makine dışı değil" uyarısı susturuldu     → 1 kırmızı
 //    ④ PATCH şemasındaki `refine` kaldırıldı        → 1 kırmızı
+//    ⑤ (§4) local/alias tür listesi boşaltıldı     → 2 kırmızı
+//    ⑥ (§4) "tür ölçülemedi" uyarısı susturuldu    → 2 kırmızı
 // =============================================================================
 import fs from "fs";
 import os from "os";
@@ -428,6 +430,68 @@ exit 64
   check(
     "⭐ ama 'makine dışı DEĞİL' diye uyarılıyor (başarılı ≠ yeterli)",
     r.remoteIsLocalPath === true && r.warnings.some((w) => /makine dışı/i.test(w)),
+    r.warnings.join(" | ").slice(0, 120),
+  );
+
+  // ── §4 `ad:` biçimli ama makine dışı OLMAYAN bağlantı (local / alias) ─────
+  // Biçim kapısı `yerel:`i kabul eder; rclone'da bu bağlantı `type = local` ise kopya
+  // yine aynı diske gider. Tür `listremotes --long` ile ölçülür, üç sonuç: temiz ·
+  // işaretli (local/alias) · ölçülemedi (uyarı, makine dışı sayılmaz).
+  console.log("\n--- §4 rclone bağlantı türü (local/alias) ---");
+  const typed = path.join(tmp, "typed-rclone.sh");
+  fs.writeFileSync(
+    typed,
+    `#!/bin/sh
+map() { n=$(echo "$1" | cut -d: -f1); echo "${tmp}/uzak-$n"; }
+case "$1" in
+  listremotes)
+    [ "$TYPED_LIST_FAIL" = "1" ] && exit 1
+    printf 'bulut:  drive\\nyerel:  local\\ntakma:  alias\\n'
+    exit 0 ;;
+  copy)
+    D=$(map "$3"); mkdir -p "$D"
+    for f in "$2"/*.dump; do [ -e "$f" ] || continue; b=$(basename "$f"); [ -e "$D/$b" ] || cp "$f" "$D/$b"; done
+    exit 0 ;;
+  lsf)
+    ls -1 "$(map "$2")" 2>/dev/null; exit 0 ;;
+esac
+exit 64
+`,
+    { mode: 0o755 },
+  );
+  process.env.BACKUP_RCLONE_BIN = typed;
+  const disiUyari = (w: string[]): boolean => w.some((x) => /makine dışı/i.test(x));
+
+  process.env.BACKUP_RCLONE_REMOTE = "bulut:";
+  r = await sweepOffsiteBackups();
+  check(
+    "drive türü bağlantı: makine dışı sayılır (işaret YOK, uyarı YOK)",
+    r.ok && r.remoteIsLocalPath === false && !disiUyari(r.warnings),
+    r.warnings.join(" | ").slice(0, 120),
+  );
+  for (const [hedef, tur] of [["yerel:", "local"], ["takma:yedek", "alias"]] as const) {
+    process.env.BACKUP_RCLONE_REMOTE = hedef;
+    r = await sweepOffsiteBackups();
+    check(
+      `⭐ '${tur}' türü bağlantı ("${hedef}") İŞARETLENİR — kopya alınır ama makine dışı sayılmaz`,
+      r.ok && r.remoteIsLocalPath === true && r.warnings.some((w) => w.includes(`'${tur}'`) && /makine dışı/i.test(w)),
+      `ok=${r.ok} yerel=${r.remoteIsLocalPath} ${r.warnings.join(" | ").slice(0, 120)}`,
+    );
+  }
+  process.env.TYPED_LIST_FAIL = "1";
+  process.env.BACKUP_RCLONE_REMOTE = "yerel:";
+  r = await sweepOffsiteBackups();
+  check(
+    "⭐ tür ölçülemezse sessiz kalmaz: 'türü ölçülemedi' uyarısı",
+    r.warnings.some((w) => /türü ölçülemedi/.test(w)),
+    r.warnings.join(" | ").slice(0, 120),
+  );
+  delete process.env.TYPED_LIST_FAIL;
+  process.env.BACKUP_RCLONE_REMOTE = "hic-tanimsiz:";
+  r = await sweepOffsiteBackups();
+  check(
+    "listede olmayan bağlantı adı da 'ölçülemedi' sayılır (makine dışı varsayılmaz)",
+    r.warnings.some((w) => /türü ölçülemedi/.test(w)),
     r.warnings.join(" | ").slice(0, 120),
   );
 

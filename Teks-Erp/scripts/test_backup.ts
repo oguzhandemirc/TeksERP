@@ -160,6 +160,9 @@ async function main(): Promise<void> {
   const backupDir = path.join(root, "backups");
   const offsiteDir = path.join(root, "offsite");
   const testStart = new Date();
+  // Koşuma özgü tablo adı: audit koruması açık bir DB'de (`teks.audit_guard=on`) önceki
+  // koşumun silinemeyen fixture'ı aynı pencereye düşüp rollup sayısını şişirmesin.
+  const impactTable = `TEST_IMPACT_${process.pid}_${testStart.getTime()}`;
   /** 12c-2'de yaratılan geçici top (restore-impact sayımı için) — finally siler. */
   let impactRollId: string | null = null;
   let impactItemId: string | null = null;
@@ -440,9 +443,9 @@ async function main(): Promise<void> {
       // Test için DOMAIN audit satırları yaz (finally'de silinir).
       await prisma.systemLog.createMany({
         data: [
-          { action: "CREATE", tableName: "TEST_IMPACT", recordId: "1", category: "DOMAIN" },
-          { action: "CREATE", tableName: "TEST_IMPACT", recordId: "2", category: "DOMAIN" },
-          { action: "UPDATE", tableName: "TEST_IMPACT", recordId: "1", category: "DOMAIN" },
+          { action: "CREATE", tableName: impactTable, recordId: "1", category: "DOMAIN" },
+          { action: "CREATE", tableName: impactTable, recordId: "2", category: "DOMAIN" },
+          { action: "UPDATE", tableName: impactTable, recordId: "1", category: "DOMAIN" },
         ],
       });
 
@@ -463,7 +466,7 @@ async function main(): Promise<void> {
         const expectedAvailable = oldest !== null && oldest <= cut;
         check("impact: audit.available invariant'ı tutuyor", impPast.audit.available === expectedAvailable, `available=${impPast.audit.available} oldest=${impPast.audit.oldestLogAt} cutoff=${impPast.cutoff.at}`);
         if (impPast.audit.available) {
-          const row = impPast.audit.byTable.find((t) => t.tableName === "TEST_IMPACT");
+          const row = impPast.audit.byTable.find((t) => t.tableName === impactTable);
           if (row) {
             // Sakin ortam (CI'ın temiz DB'si dahil): fixture listede → katı doğrulama.
             check("impact: audit rollup TEST_IMPACT satırını buldu", true);
@@ -661,18 +664,23 @@ async function main(): Promise<void> {
     if (impactItemId) {
       await temizle("12c-2 kalemi", () => prisma.item.deleteMany({ where: { id: impactItemId! } }));
     }
-    try {
-      await prisma.systemLog.deleteMany({
-        where: {
-          OR: [
-            { action: { in: ["BACKUP_COMPLETED", "BACKUP_FAILED"] }, createdAt: { gte: testStart } },
-            { tableName: "TEST_IMPACT" }, // 12c'de yazılan rollup fixture'ı
-          ],
-        },
-      });
-    } catch {
-      /* audit temizliği best-effort — testi düşürmez */
-    }
+    // Audit koruması DB'de açıksa (`teks.audit_guard=on`) silme yalnız bu tx'te kapatılarak
+    // yapılır; önceki koşumların `TEST_IMPACT` kalıntısı da (önek) birlikte süpürülür.
+    await temizle("audit fixture'ı", () =>
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe("SET LOCAL teks.audit_guard = 'off'");
+        await tx.systemLog.deleteMany({
+          where: {
+            OR: [
+              { action: { in: ["BACKUP_COMPLETED", "BACKUP_FAILED"] }, createdAt: { gte: testStart } },
+              { tableName: { startsWith: "TEST_IMPACT" } }, // 12c'de yazılan rollup fixture'ı
+            ],
+          },
+        });
+      }),
+    );
+    const kalinti = await prisma.systemLog.count({ where: { tableName: { startsWith: "TEST_IMPACT" } } }).catch(() => -1);
+    check("audit fixture'ı temizlendi (teks.audit_guard açık DB'de de kalıntı yok)", kalinti === 0, `kalan ${kalinti}`);
     await prisma.$disconnect();
   }
 }

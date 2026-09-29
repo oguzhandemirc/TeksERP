@@ -16,6 +16,7 @@
 //   §10 yedek zinciri (gerçek pg_dump): şifreli yayın, düz yok, offsite şifreli,
 //       "şifreli — çöz" teşhisi, anahtarla tam doğrulama, eski düz yedek, GEÇERSİZ yapılandırma
 //   §11 yedek parolası kapısı: parolasız 403 · yanlış 403 · doğru → anahtar
+//   §12 niyet ayrışması (D13): backend ile gece görevi farklı karar verirse sağlıkta uyarı
 // =============================================================================
 
 import "dotenv/config";
@@ -27,6 +28,7 @@ import { spawnSync } from "child_process";
 import { atlamaDefteri } from "./lib/atlama";
 import * as bc from "../src/lib/backup-crypto";
 import * as naming from "../src/services/helpers/backup-naming.helper";
+import { compareBackupCryptoIntent, readEnvFileValue } from "../src/lib/backup-crypto/intent";
 
 let pass = 0;
 let fail = 0;
@@ -214,6 +216,50 @@ async function yapilandirma(): Promise<void> {
     wrong === "YANLIS_PAROLA" && bc.rawPublic(crypto.createPublicKey(dogru)).equals(uc.yerel.publicRaw));
 }
 
+function niyetAyrismasi(): void {
+  console.log("\n§12 niyet ayrışması (backend ↔ gece görevi)");
+  const kurulum = yol("kurulum");
+  const app = path.join(kurulum, "app");
+  const varsayilan = path.join(kurulum, "yedek-anahtar");
+  const baska = path.join(kurulum, "baska-anahtar");
+  fs.mkdirSync(app, { recursive: true });
+  const envYaz = (satirlar: string[]): void => fs.writeFileSync(path.join(app, ".env"), satirlar.join("\n") + "\n");
+  const kos = (env: Record<string, string>, platform: NodeJS.Platform = "win32") =>
+    compareBackupCryptoIntent({ env, appDir: app, platform });
+
+  check("§12a .env satırı: anahtar büyük/küçük harf DUYARLI, tırnak soyulur, ilk eşleşme",
+    readEnvFileValue('backup_key_dir=x\nBACKUP_KEY_DIR="C:/k"\nBACKUP_KEY_DIR=ikinci', "BACKUP_KEY_DIR") === "C:/k" &&
+      readEnvFileValue("PORT=4000", "BACKUP_KEY_DIR") === null);
+  envYaz(["PORT=4000"]);
+  let r = kos({});
+  check("§12b ikisi de kapalı (satır yok, dizin yok) → ölçüldü, uyarı YOK",
+    r.measured && !r.backend.encrypts && r.nightly?.encrypts === false && r.warning === null, JSON.stringify(r));
+  fs.mkdirSync(varsayilan, { recursive: true });
+  r = kos({});
+  check("§12c ⭐ varsayılan dizin var, backend ortamında yok → gece görevi şifreler, backend düz: UYARI",
+    r.nightly?.encrypts === true && r.nightly.source === "varsayilan" && !r.backend.encrypts && /ŞİFRELİYOR/.test(r.warning ?? ""), r.warning ?? "");
+  envYaz(["PORT=4000", `BACKUP_KEY_DIR="${varsayilan}"`]);
+  r = kos({ BACKUP_KEY_DIR: varsayilan });
+  check("§12d satır .env'de ve backend ortamında aynı dizin → uyarı YOK",
+    r.nightly?.source === "env-dosyasi" && r.backend.encrypts && r.warning === null, r.warning ?? "");
+  r = kos({});
+  check("§12e ⭐ satır .env'de ama backend ortamında yok (pm2 restart edilmedi) → UYARI",
+    /pm2 restart/.test(r.warning ?? "") && /ŞİFRELİYOR/.test(r.warning ?? ""), r.warning ?? "");
+  fs.rmSync(varsayilan, { recursive: true, force: true });
+  envYaz(["PORT=4000"]);
+  r = kos({ BACKUP_KEY_DIR: varsayilan });
+  check("§12f ⭐ backend ortamında var, .env'de satır ve varsayılan dizin yok → gece yedeği düz: UYARI",
+    r.backend.encrypts && r.nightly?.encrypts === false && /ŞİFRELEMİYOR/.test(r.warning ?? ""), r.warning ?? "");
+  envYaz(["PORT=4000", `BACKUP_KEY_DIR=${baska}`]);
+  r = kos({ BACKUP_KEY_DIR: varsayilan });
+  check("§12g ⭐ iki taraf FARKLI dizin → UYARI", /FARKLI/.test(r.warning ?? ""), r.warning ?? "");
+  r = kos({ BACKUP_KEY_DIR: varsayilan }, "linux");
+  check("§12h gece görevi olmayan platform → ölçülmedi, uyarı YOK (sahte alarm yok)", !r.measured && r.warning === null);
+  const saglik = fs.readFileSync(path.join(__dirname, "../src/lib/health-snapshot.ts"), "utf8");
+  check("§12i /api/admin/health ayrışmayı taşıyor (backupCryptoIntent)",
+    /backupCryptoIntent:\s*backupCryptoIntent\(\)/.test(saglik) && /compareBackupCryptoIntent\(\)/.test(saglik));
+}
+
 function adlandirma(): void {
   console.log("\n§7 adlandırma");
   check("§7a .dump ve .dump.tkenc yedek; .part / .tkenc.part değil",
@@ -377,6 +423,7 @@ async function main(): Promise<void> {
     kagitSatiri();
     await yapilandirma();
     adlandirma();
+    niyetAyrismasi();
     await offsiteSuzgeci();
     arac();
     await yedekZinciri();

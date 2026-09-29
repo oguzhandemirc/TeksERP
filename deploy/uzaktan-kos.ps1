@@ -30,7 +30,10 @@ $admin = (New-Object Security.Principal.WindowsPrincipal(
 if (-not $admin) { Dur "YONETICI PowerShell gerekir (SYSTEM gorevi kaydedilecek)." }
 if (-not (Test-Path $Betik)) { Dur "Betik yok: $Betik" }
 $betikTam = (Resolve-Path $Betik).Path
-if ((Split-Path $betikTam -Leaf) -ieq "kur.ps1" -and $Argumanlar -notmatch '(^|\s)-(Zorla|GeriAl)\b') {
+# PowerShell parametre adi buyuk/kucuk harf duyarsizdir (-zorla da gecer) ama -match kulture bagli:
+# tr-TR'de "-GERIAL"daki 'I' 'i'ye inmez. Duyarsizlik GEREKLI -> kultur-bagimsiz regex.
+$onayli = [regex]::IsMatch($Argumanlar, '(^|\s)-(Zorla|GeriAl)\b', 'IgnoreCase, CultureInvariant')
+if ((Split-Path $betikTam -Leaf) -ieq "kur.ps1" -and -not $onayli) {
   Dur "kur.ps1 gorevde etkilesimsiz kosar - onay sorusu cevaplanamaz: -Argumanlar icine -Zorla ekle."
 }
 

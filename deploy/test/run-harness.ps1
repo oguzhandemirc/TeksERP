@@ -56,8 +56,8 @@ Marker $r "app/ecosystem.config.js"; Marker $r "app/MARKER-CALISAN"
 $rc = Kos $r "noeski"
 Check "S1 cikis kodu 1 (rc=$rc)" ($rc -eq 1)
 Check "S1 app\ YERINDE (MARKER-CALISAN duruyor)" (Test-Path (Join-Path $r "app/MARKER-CALISAN"))
-Check "S1 pm2 start + save cagrildi" (((Log $r) -match "start ecosystem.config.js") -and ((Log $r) -match "save"))
-Check "S1 mesaj: DOKUNULMADI" ((Cikti $r) -match "DOKUNULMADI")
+Check "S1 pm2 start + save cagrildi" (((Log $r) -cmatch "start ecosystem.config.js") -and ((Log $r) -cmatch "save"))
+Check "S1 mesaj: DOKUNULMADI" ((Cikti $r) -cmatch "DOKUNULMADI")
 
 # S2: app.eski VAR, app\ yeni/bozuk -> app\ eskisiyle DEGISMELI, pm2 start+save, exit 1
 $r = Setup "eski"
@@ -69,7 +69,7 @@ Check "S2 cikis kodu 1 (rc=$rc)" ($rc -eq 1)
 Check "S2 app\ = eski kurulum (MARKER-ESKI var, YENI-BOZUK yok)" ((Test-Path (Join-Path $r "app/MARKER-ESKI")) -and -not (Test-Path (Join-Path $r "app/YENI-BOZUK")))
 Check "S2 app.eski-TEST tasindi (artik yok)" (-not (Test-Path (Join-Path $r "app.eski-TEST")))
 Check "S2 ic ice klasor OLUSMADI (app\app.eski-TEST yok)" (-not (Test-Path (Join-Path $r "app/app.eski-TEST")))
-Check "S2 pm2 start + save cagrildi" (((Log $r) -match "start ecosystem.config.js") -and ((Log $r) -match "save"))
+Check "S2 pm2 start + save cagrildi" (((Log $r) -cmatch "start ecosystem.config.js") -and ((Log $r) -cmatch "save"))
 
 # S3: app.eski VAR ama ecosystem.config.js YOK -> geri konur, pm2 CAGRILMAZ, exit 1
 $r = Setup "eski-ecosystemsiz"

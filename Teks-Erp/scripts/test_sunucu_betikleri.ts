@@ -349,8 +349,93 @@ for (const yol of SUNUCU_PS1) {
       uz.some((k) => /> `"\$Log`" 2>&1/.test(k)) &&
       uz.some((k) => k.includes("Unregister-ScheduledTask -TaskName $gorevAd")) &&
       uz.some((k) => k.includes("gorev HALA kosuyor")));
-  check("§12c uzaktan-kos.ps1 kur.ps1'i -Zorla/-GeriAl olmadan göreve vermez (onay sorusu görevde cevaplanamaz)",
-    uz.some((k) => k.includes("-notmatch '(^|\\s)-(Zorla|GeriAl)\\b'")));
+  check("§12c uzaktan-kos.ps1 kur.ps1'i -Zorla/-GeriAl olmadan göreve vermez (onay sorusu görevde cevaplanamaz; kültür-bağımsız)",
+    uz.some((k) => k.includes("[regex]::IsMatch($Argumanlar, '(^|\\s)-(Zorla|GeriAl)\\b', 'IgnoreCase, CultureInvariant')")) &&
+      uz.some((k) => /-and -not \$onayli\)/.test(k)));
+}
+
+// §13 — yedek şifreleme niyeti tek kaynak (D13) + ilk kurulumun sır ve soru kapıları.
+//   Gece görevi ile backend aynı `app\.env` BACKUP_KEY_DIR'i okur; satırı ilk-kurulum
+//   .env doğduktan SONRA ve `-YedekSifreleme`den bağımsız yazar. Rol parolası argv'ye
+//   girmez (STDIN + SCRAM); soru kapısı SSH PTY'sini de tanır (UserInteractive tek başına değil).
+{
+  const tara = (y: string) => psTara(readFileSync(join(KOK, y), "utf8"));
+  const ilkT = tara("deploy/ilk-kurulum.ps1");
+  const yedT = tara("deploy/yedekle.ps1");
+  const bakT = tara("deploy/bakim-rolu.ps1");
+  const ilk = ilkT.satirlar.map((x) => x.kod);
+  const yed = yedT.satirlar.map((x) => x.kod);
+  const envOku = yed.findIndex((k) => /EnvDeger \(Get-Content \$envDosya -Encoding UTF8\) "BACKUP_KEY_DIR"/.test(k));
+  const varsayilan = yed.findIndex((k) => /\$AnahtarDizini = Join-Path \$Kok "yedek-anahtar"/.test(k));
+  const beyanHata = yed.findIndex((k) => /if \(\$beyanli -and -not \(Test-Path \$AnahtarDizini\)\)/.test(k));
+  const sifrele = yed.findIndex((k) => /"sifrele", "--girdi", \$yarim/.test(k));
+  check("§13a ⭐ yedekle.ps1 anahtar dizinini app\\.env BACKUP_KEY_DIR'den okur, yoksa <kök>\\yedek-anahtar; beyanlı ama dizin yoksa şifreleme HATASI (sessiz düz değil)",
+    envOku >= 0 && varsayilan > envOku && beyanHata > varsayilan && sifrele > beyanHata &&
+      !yed.some((k) => /\[string\]\$AnahtarDizini\s*=/.test(k)),
+    `env ${envOku + 1} · varsayılan ${varsayilan + 1} · beyan ${beyanHata + 1} · şifrele ${sifrele + 1}`);
+  const envAdim = ilk.findIndex((k) => /^\s*Adim\s+"app\\\.env/.test(k));
+  const yazim = ilk.findIndex((k) => /Add-Content -Path \$envDosya -Value "BACKUP_KEY_DIR=/.test(k));
+  const blok = yazim >= 0 ? ilkT.satirlar[yazim]! : null;
+  const kosul = yazim > 0 ? ilk[yazim - 1] ?? "" : "";
+  check("§13b ⭐ ilk-kurulum BACKUP_KEY_DIR'i .env adımından SONRA, `-YedekSifreleme` dalının DIŞINDA (derinlik 1), dizin varken ve satır yokken yazar",
+    envAdim >= 0 && yazim > envAdim && blok?.derinlik === 1 &&
+      /Test-Path \$anahtarDizini/.test(kosul) && /-not \$envAnahtar/.test(kosul) &&
+      ilk.some((k) => /\$envAnahtar = .*EnvDeger \(Get-Content \$envDosya -Encoding UTF8\) "BACKUP_KEY_DIR"/.test(k)),
+    `.env adımı ${envAdim + 1} · yazım ${yazim + 1} · derinlik ${blok?.derinlik}`);
+  const sirliArgv = [...ilkT.satirlar, ...bakT.satirlar].filter((x) =>
+    /(CREATE|ALTER) ROLE/.test(x.kod) && /PASSWORD/.test(x.kod) && !/PsqlStdin/.test(x.kod) && !/Write-Host/.test(x.kod));
+  check("§13c ⭐ rol parolası psql ARGV'sine girmez: CREATE/ALTER ROLE … PASSWORD yalnız PsqlStdin + SCRAM doğrulayıcısıyla",
+    sirliArgv.length === 0 &&
+      ilk.some((k) => /PsqlStdin \$PostgresKullanici \$PostgresParola "postgres" .*CREATE ROLE .*ScramDogrulayici \$DbParola/.test(k)),
+    sirliArgv.map((x) => x.no).join(", ") || "temiz");
+  const govde = (t: typeof ilkT, ad: string): string | null => {
+    const f = t.fonksiyonlar.find((x) => x.ad === ad);
+    return f ? t.satirlar.filter((x) => x.no >= f.bas && x.no <= f.son).map((x) => x.kod.trim()).filter(Boolean).join("\n") : null;
+  };
+  for (const [ad, dosyalar] of [
+    ["ScramDogrulayici", [ilkT, bakT]],
+    ["Pbkdf2Sha256", [ilkT, bakT]],
+    ["SoruSorabilir", [ilkT, bakT]],
+    ["EnvDeger", [ilkT, bakT, yedT]],
+  ] as const) {
+    const g = dosyalar.map((t) => govde(t, ad));
+    check(`§13d ⭐ \`${ad}\` ikizleri birebir aynı (${dosyalar.length} betik; biri düzelip öteki kalmasın)`,
+      g.every((x) => x !== null && x.length > 20) && new Set(g).size === 1, g.map((x) => (x ? `${x.length} bayt` : "YOK")).join(" · "));
+  }
+  const ui = SUNUCU_PS1.flatMap((y) => {
+    const t = tara(y);
+    return t.satirlar.filter((x) => /UserInteractive/.test(x.ciplak) && kapsayanFonksiyon(t, x.no)?.ad !== "SoruSorabilir").map((x) => `${y}:${x.no}`);
+  });
+  check("§13e ⭐ soru kapısı tek yüklemde: `UserInteractive` yalnız `SoruSorabilir` içinde (SSH PTY'si de soru sorabilir)",
+    ui.length === 0 && ilk.filter((k) => /-not \(SoruSorabilir\)/.test(k)).length >= 2, ui.join(", ") || "temiz");
+}
+
+// §14 — tr-TR kültür tuzağı (thinkpad-1): `-match/-replace/-split` ve `Select-String` büyük/küçük
+//   harfe DUYARSIZ ve kültüre BAĞLIDIR; tr-TR'de 'I' 'i'ye inmez. deploy altındaki her .ps1'de
+//   `-c…` biçimi ya da `-CaseSensitive`; duyarsızlık GEREKİYORSA `[regex]::IsMatch(…, 'IgnoreCase,
+//   CultureInvariant')`. kur.ps1 Faz 2b'nin sahipliğinde: borcu sayılır, taban yalnız DÜŞER.
+{
+  const KUR_KULTUR_BORCU = 8;
+  const DUYARSIZ = /(?:^|[^\w-])-i?(?:match|notmatch|replace|split)\b/i;
+  const ps1 = (d: string): string[] => readdirSync(join(KOK, d), { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? ps1(`${d}/${e.name}`) : e.name.endsWith(".ps1") ? [`${d}/${e.name}`] : []);
+  const dosyalar = ps1("deploy");
+  let kurSayi = 0;
+  const ihlal: string[] = [];
+  for (const y of dosyalar) {
+    // `kod` (string içi korunur): `"$($x -replace …)"` alt ifadesi `ciplak`ta silinir ve kör kalırdı.
+    for (const x of psTara(readFileSync(join(KOK, y), "utf8")).satirlar) {
+      const kotu = DUYARSIZ.test(x.kod) || (/\bSelect-String\b/i.test(x.kod) && !/-CaseSensitive\b/i.test(x.kod));
+      if (!kotu) continue;
+      if (y === "deploy/kur.ps1") kurSayi++;
+      else ihlal.push(`${y}:${x.no}`);
+    }
+  }
+  check("§14 körlük zemini: deploy altındaki .ps1'ler tarandı (kur.ps1 dahil, alt dizinler dahil)",
+    dosyalar.length >= 10 && dosyalar.includes("deploy/kur.ps1") && dosyalar.some((y) => y.startsWith("deploy/test/")), `${dosyalar.length} dosya`);
+  check("§14a ⭐ kur.ps1 dışında kültüre bağlı duyarsız regex/Select-String YOK", ihlal.length === 0, ihlal.join(", ") || "temiz");
+  check(`§14b kur.ps1 kültür borcu = ${KUR_KULTUR_BORCU} (Faz 2b; düzeltilince tabanı İNDİR, artarsa kırmızı)`,
+    kurSayi === KUR_KULTUR_BORCU, `ölçülen ${kurSayi}`);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

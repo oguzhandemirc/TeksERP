@@ -40,6 +40,7 @@ import {
 } from "./backup-naming.helper";
 import { ENCRYPTED_SUFFIX, readBackupCryptoConfig } from "../../lib/backup-crypto";
 import { readOffsiteRemote } from "../system-setting.service";
+import { describeRemoteType, remoteBackendType } from "./rclone-remote-type.helper";
 
 /**
  * Kopyalanacak dosya adı ön ekleri — `backup-naming.helper` TEK KAYNAĞINDAN.
@@ -333,7 +334,14 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
   // Hedef geçerli AMA bu makinede bir yol ise (sürücü harfi / POSIX mutlak),
   // süpürme başarılı olsa bile "makine dışı" değildir. Engellenmez — operatör
   // bunu bilerek seçmiş olabilir (geçici alan, ikinci disk) — ama İŞARETLENİR.
-  const targetIsLocal = !isRcloneRemote(remote) && !remote.trim().startsWith("\\\\");
+  // `ad:` biçimli hedefin kendisi de `local`/`alias` türünde bir bağlantı olabilir.
+  const pathIsLocal = !isRcloneRemote(remote) && !remote.trim().startsWith("\\\\");
+  let targetIsLocal = pathIsLocal;
+  if (isRcloneRemote(remote)) {
+    const t = describeRemoteType(remote, await remoteBackendType(remote, RCLONE_BIN(), configArgs(), LIST_TIMEOUT_MS));
+    if (t.warning) warnings.push(t.warning);
+    targetIsLocal = t.notOffsite;
+  }
 
   const remoteSet = new Set(remoteList);
   const missing = local.filter((n) => !remoteSet.has(n));
@@ -345,7 +353,7 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
     );
   }
 
-  if (targetIsLocal) {
+  if (pathIsLocal) {
     warnings.push(
       `Hedef ("${remote}") bu MAKİNEDE bir yol — kopya alınıyor ama "makine dışı" DEĞİL. ` +
         "Disk arızası/fidye yazılımı ikisini birden götürebilir.",
