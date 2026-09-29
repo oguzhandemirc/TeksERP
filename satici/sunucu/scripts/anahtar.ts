@@ -1,0 +1,308 @@
+// =============================================================================
+// Satıcı ANAHTAR CLI'ı — üretim ve rotasyon (kök · alt · indirme · bayi).
+// =============================================================================
+// Parola YALNIZ TTY'den (gizli) ya da stdin'den okunur; argv/env'den ASLA (paylaşımlı makinede
+// süreç listesinden sızar). Kök imzası imza ALT SÜRECİNDE yapılır (parola onun stdin'ine gider).
+// Dosyalar 0600 yazılır ve var olanın üstüne YAZILMAZ — rotasyon yeni kid ile yeni dosyadır.
+// Kök dosyasının şifreli kopyası VDS DIŞINDA da saklanır (Mac + USB + kâğıt): VDS ölürse kök kaybolmasın.
+//
+// Kullanım (satici/sunucu içinden):
+//   npx tsx scripts/anahtar.ts kok-uret --kid=kok-2026-1 [--siniflar=URETIM,TEST,DR,DEMO,BAYI,BARINDIRILAN]
+//   npx tsx scripts/anahtar.ts kok-uret --kid=hazirlik-2026-1            (yalnız TEST,DEMO)
+//   npx tsx scripts/anahtar.ts alt-uret --kid=alt-2026-1 --kok=kok-2026-1 [--siniflar=…] [--gun=180]
+//   npx tsx scripts/anahtar.ts indirme-uret --kid=ind-2026 --kok=kok-2026-1 [--gun=365]
+//   npx tsx scripts/anahtar.ts bayi-uret --kid=bayi-ornek --bayi-id=<uuid> --moduller=a.enabled,b.enabled
+//                                        --siniflar=URETIM --kok=kok-2026-1 [--gun=365]
+//   Ortak: [--dizin=<anahtar dizini>] (varsayılan ANAHTAR_DIZINI ya da ./anahtarlar)
+// Stdin'den parola (TTY yoksa): her istenen parola bir satır (kök-uret: parola + tekrar).
+// =============================================================================
+import { generateKeyPairSync, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync } from "node:fs";
+import path from "node:path";
+import {
+  CertificateSchema,
+  DAY_MS,
+  LICENSE_CLASSES,
+  ModuleKeySchema,
+  STAGING_ROOT_CLASSES,
+  TYP,
+  UuidSchema,
+  publicKeyX,
+  verifyCertificate,
+  type CertificateDoc,
+  type CertUsage,
+  type LicenseClass,
+} from "../src/lisans-protokol";
+import {
+  assertPasswordStrength,
+  readWrappedKeyFile,
+  subKeyFileFor,
+  wrapPrivateKey,
+  writeKeyFileExclusive,
+} from "../src/keys/key-files";
+import { signWithWrappedKey } from "../src/keys/signer";
+
+class CliError extends Error {}
+
+function args(argv: readonly string[]): { command: string; flags: Map<string, string> } {
+  const [command = "", ...rest] = argv;
+  const flags = new Map<string, string>();
+  for (const a of rest) {
+    const m = /^--([a-z-]+)(?:=(.*))?$/.exec(a);
+    if (!m) throw new CliError(`Tanınmayan argüman: ${a}`);
+    if (/parola|password|sifre|secret/.test(m[1]!)) {
+      throw new CliError("Parola argümandan ALINMAZ — TTY'de sorulur ya da stdin'den okunur");
+    }
+    flags.set(m[1]!, m[2] ?? "");
+  }
+  return { command, flags };
+}
+
+// ---------------------------------------------------------------- parola girişi
+let stdinLines: Buffer[] | null = null;
+
+async function readAllStdin(): Promise<Buffer[]> {
+  const chunks: Buffer[] = [];
+  for await (const c of process.stdin) chunks.push(c as Buffer);
+  const all = Buffer.concat(chunks);
+  for (const c of chunks) c.fill(0);
+  const lines: Buffer[] = [];
+  let start = 0;
+  for (let i = 0; i <= all.length; i++) {
+    if (i === all.length || all[i] === 0x0a) {
+      let end = i;
+      if (end > start && all[end - 1] === 0x0d) end--;
+      if (end > start || i < all.length) lines.push(Buffer.from(all.subarray(start, end)));
+      start = i + 1;
+    }
+  }
+  all.fill(0);
+  return lines;
+}
+
+function readHiddenFromTty(question: string): Promise<Buffer> {
+  return new Promise((resolve) => {
+    process.stderr.write(question);
+    const stdin = process.stdin;
+    stdin.setRawMode(true);
+    stdin.resume();
+    const bytes: number[] = [];
+    const onData = (chunk: Buffer): void => {
+      for (const b of chunk) {
+        if (b === 0x03) {
+          process.stderr.write("\n");
+          process.exit(130);
+        } else if (b === 0x0d || b === 0x0a) {
+          stdin.off("data", onData);
+          stdin.setRawMode(false);
+          stdin.pause();
+          process.stderr.write("\n");
+          const out = Buffer.from(bytes);
+          bytes.fill(0);
+          chunk.fill(0);
+          resolve(out);
+          return;
+        } else if (b === 0x7f || b === 0x08) bytes.pop();
+        else bytes.push(b);
+      }
+      chunk.fill(0);
+    };
+    stdin.on("data", onData);
+  });
+}
+
+/** Parola: TTY'de gizli istem, değilse stdin'in sıradaki satırı. NFC'ye çevrilmiş Buffer döner. */
+async function askPassword(question: string): Promise<Buffer> {
+  let raw: Buffer;
+  if (process.stdin.isTTY) raw = await readHiddenFromTty(question);
+  else {
+    stdinLines ??= await readAllStdin();
+    const next = stdinLines.shift();
+    if (!next) throw new CliError(`Parola bekleniyordu (stdin bitti): ${question.trim()}`);
+    raw = next;
+  }
+  const normalized = Buffer.from(raw.toString("utf8").normalize("NFC"), "utf8");
+  raw.fill(0);
+  return normalized;
+}
+
+// ---------------------------------------------------------------- yardımcılar
+function keyDir(flags: Map<string, string>): string {
+  const dir = path.resolve(flags.get("dizin") || process.env.ANAHTAR_DIZINI || "anahtarlar");
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return dir;
+}
+
+function required(flags: Map<string, string>, name: string): string {
+  const v = flags.get(name);
+  if (!v) throw new CliError(`--${name} zorunlu`);
+  return v;
+}
+
+function classList(text: string | undefined, fallback: readonly LicenseClass[]): LicenseClass[] {
+  if (!text) return [...fallback];
+  const list = text.split(",").map((s) => s.trim()).filter(Boolean);
+  for (const c of list) if (!(LICENSE_CLASSES as readonly string[]).includes(c)) throw new CliError(`Bilinmeyen sınıf: ${c}`);
+  return [...new Set(list)] as LicenseClass[];
+}
+
+function days(flags: Map<string, string>, fallback: number, max: number): number {
+  const n = Number(flags.get("gun") ?? fallback);
+  if (!Number.isInteger(n) || n < 1 || n > max) throw new CliError(`--gun 1–${max} olmalı`);
+  return n;
+}
+
+async function signCertificate(
+  dir: string,
+  rootKid: string,
+  cert: CertificateDoc,
+): Promise<string> {
+  const rootPath = path.join(dir, `${rootKid}.kok.json`);
+  const root = readWrappedKeyFile(rootPath);
+  const password = await askPassword(`Kök (${rootKid}) parolası: `);
+  const token = await signWithWrappedKey({ keyFile: rootPath, typ: TYP.SERTIFIKA, payload: cert, password });
+  const check = verifyCertificate(token, {
+    roots: [{ kid: root.kid, x: root.x, classes: root.siniflar }],
+    usage: cert.kullanim,
+    atMs: Date.now(),
+  });
+  if (!check.ok) throw new CliError(`Üretilen sertifika doğrulanamadı: ${check.code}`);
+  return token;
+}
+
+function certificateFor(g: {
+  usage: CertUsage;
+  kid: string;
+  x: string;
+  classes: LicenseClass[];
+  validDays: number;
+  dealer: { bayiId: string; moduller: string[] } | null;
+}): CertificateDoc {
+  const now = Date.now();
+  return CertificateSchema.parse({
+    v: 1,
+    sertifikaId: randomUUID(),
+    kullanim: g.usage,
+    kid: g.kid,
+    x: g.x,
+    siniflar: g.classes,
+    baslangic: new Date(now).toISOString(),
+    bitis: new Date(now + g.validDays * DAY_MS).toISOString(),
+    bayi: g.dealer,
+  });
+}
+
+// ---------------------------------------------------------------- komutlar
+async function generateRoot(flags: Map<string, string>): Promise<void> {
+  const kid = required(flags, "kid");
+  const staging = kid.startsWith("hazirlik-");
+  if (!/^(kok|hazirlik)-\d{4}-\d{1,3}$/.test(kid)) throw new CliError("Kök kid biçimi: kok-<yıl>-<n> ya da hazirlik-<yıl>-<n>");
+  const classes = classList(flags.get("siniflar"), staging ? STAGING_ROOT_CLASSES : LICENSE_CLASSES);
+  if (staging && classes.some((c) => !STAGING_ROOT_CLASSES.includes(c))) throw new CliError("Hazırlık kökü yalnız TEST/DEMO imzalar");
+  const dir = keyDir(flags);
+  const target = path.join(dir, `${kid}.kok.json`);
+  if (existsSync(target)) throw new CliError(`${target} zaten var — rotasyon yeni kid ile yapılır`);
+  const first = await askPassword("Yeni kök parolası: ");
+  const second = await askPassword("Parola (tekrar): ");
+  const same = first.length === second.length && first.equals(second);
+  second.fill(0);
+  if (!same) {
+    first.fill(0);
+    throw new CliError("Parolalar eşleşmedi");
+  }
+  try {
+    assertPasswordStrength(first);
+    const { privateKey } = generateKeyPairSync("ed25519");
+    const file = await wrapPrivateKey({ tur: "tekserp-kok-anahtar", kid, siniflar: classes }, privateKey, first);
+    writeKeyFileExclusive(target, file);
+    process.stdout.write(
+      `Kök yazıldı: ${target}\n` +
+        `Güven çapası satırı (ROOT_PUBLIC_KEYS — protokol sürümüyle eklenir):\n` +
+        `  { kid: "${kid}", x: "${file.x}", classes: ${JSON.stringify(classes)} }\n` +
+        `⚠ Şifreli dosyanın kopyasını VDS DIŞINDA saklayın (Mac + USB + kâğıt).\n`,
+    );
+  } finally {
+    first.fill(0);
+  }
+}
+
+async function generateSubKey(flags: Map<string, string>, usage: "ALT" | "INDIRME"): Promise<void> {
+  const kid = required(flags, "kid");
+  const prefix = usage === "ALT" ? "alt-" : "ind-";
+  if (!kid.startsWith(prefix)) throw new CliError(`${usage} kid'i ${prefix} ile başlamalı`);
+  const rootKid = required(flags, "kok");
+  const dir = keyDir(flags);
+  const target = path.join(dir, `${kid}.anahtar.json`);
+  if (existsSync(target)) throw new CliError(`${target} zaten var — rotasyon yeni kid ile yapılır`);
+  const root = readWrappedKeyFile(path.join(dir, `${rootKid}.kok.json`));
+  const classes = classList(flags.get("siniflar"), root.siniflar);
+  const { privateKey } = generateKeyPairSync("ed25519");
+  const cert = certificateFor({
+    usage,
+    kid,
+    x: publicKeyX(privateKey),
+    classes,
+    validDays: days(flags, usage === "ALT" ? 180 : 365, 730),
+    dealer: null,
+  });
+  const token = await signCertificate(dir, rootKid, cert);
+  writeKeyFileExclusive(target, subKeyFileFor(usage === "ALT" ? "tekserp-alt-anahtar" : "tekserp-indirme-anahtar", kid, privateKey, token));
+  process.stdout.write(`${usage} anahtarı yazıldı: ${target} (sertifika ${cert.baslangic} → ${cert.bitis})\n`);
+  if (usage === "INDIRME") process.stdout.write(`CF Worker açık anahtarı: { kid: "${kid}", x: "${cert.x}" }\n`);
+}
+
+async function generateDealer(flags: Map<string, string>): Promise<void> {
+  const kid = required(flags, "kid");
+  if (!kid.startsWith("bayi-")) throw new CliError("Bayi kid'i bayi- ile başlamalı");
+  const dealerId = required(flags, "bayi-id");
+  if (!UuidSchema.safeParse(dealerId).success) throw new CliError("--bayi-id UUID olmalı");
+  const modules = required(flags, "moduller").split(",").map((s) => s.trim()).filter(Boolean);
+  for (const m of modules) if (!ModuleKeySchema.safeParse(m).success) throw new CliError(`Modül anahtarı biçimsiz: ${m}`);
+  const rootKid = required(flags, "kok");
+  const dir = keyDir(flags);
+  const target = path.join(dir, `${kid}.bayi.json`);
+  if (existsSync(target)) throw new CliError(`${target} zaten var`);
+  const classes = classList(required(flags, "siniflar"), []);
+  const { privateKey } = generateKeyPairSync("ed25519");
+  const cert = certificateFor({
+    usage: "BAYI",
+    kid,
+    x: publicKeyX(privateKey),
+    classes,
+    validDays: days(flags, 365, 730),
+    dealer: { bayiId: dealerId, moduller: modules },
+  });
+  const token = await signCertificate(dir, rootKid, cert);
+  const dealerPassword = await askPassword("Bayi anahtarı parolası: ");
+  try {
+    const file = await wrapPrivateKey({ tur: "tekserp-bayi-anahtar", kid, siniflar: classes, sertifika: token }, privateKey, dealerPassword);
+    writeKeyFileExclusive(target, file);
+  } finally {
+    dealerPassword.fill(0);
+  }
+  process.stdout.write(`Bayi anahtarı yazıldı: ${target}\n`);
+}
+
+async function main(): Promise<void> {
+  const { command, flags } = args(process.argv.slice(2));
+  switch (command) {
+    case "kok-uret":
+      return generateRoot(flags);
+    case "alt-uret":
+      return generateSubKey(flags, "ALT");
+    case "indirme-uret":
+      return generateSubKey(flags, "INDIRME");
+    case "bayi-uret":
+      return generateDealer(flags);
+    default:
+      throw new CliError("Komut: kok-uret | alt-uret | indirme-uret | bayi-uret (ayrıntı dosya başında)");
+  }
+}
+
+main().then(
+  () => process.exit(0),
+  (err: Error) => {
+    process.stderr.write(`HATA: ${err.message}\n`);
+    process.exit(err instanceof CliError ? 2 : 1);
+  },
+);

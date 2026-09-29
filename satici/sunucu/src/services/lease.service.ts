@@ -1,0 +1,213 @@
+// KİRA basımı: yaptırım defterinin katlanması + kira belgesi + indirme belirteçleri.
+// Kira ALT anahtarla otomatik imzalanır (kök parolası istemez); ticari/operasyonel şartları
+// (yaptırım, zorlama, geçerlilik bitişi, DR devri) taşır. Her kira `kira` defterine satır olur.
+import { randomUUID } from "node:crypto";
+import type { Hak, Kurulum, YaptirimEylemi, ZincirKarari } from "@prisma/client";
+import { z } from "zod";
+import {
+  DAY_MS,
+  IsoTimeSchema,
+  LeaseSchema,
+  LicenseResponseSchema,
+  ModuleKeySchema,
+  SANCTION_LEVELS,
+  TYP,
+  msToIso,
+  signDocument,
+  signDownloadToken,
+  type Fingerprint,
+  type LeaseDoc,
+  type LicenseResponse,
+  type SanctionLevel,
+} from "../lisans-protokol";
+import { VendorError } from "../lib/errors";
+import type { Db, Tx } from "../lib/prisma";
+import type { VendorContext } from "./context";
+
+export interface SanctionState {
+  readonly kademe: SanctionLevel | null;
+  readonly mesaj: string | null;
+  readonly kisitlamaTarihi: string | null;
+  readonly donmusModuller: string[];
+  readonly guncellemeDonuk: boolean;
+}
+
+/** Yaptırım eyleminin parametresi (tür başına alt küme dolu). */
+export const SanctionParamSchema = z.object({
+  mesaj: z.string().max(500).optional(),
+  kisitlamaTarihi: IsoTimeSchema.optional(),
+  moduller: z.array(ModuleKeySchema).max(64).optional(),
+});
+
+const LEVELS: readonly string[] = SANCTION_LEVELS;
+
+/**
+ * Defterin katlanması (SAF): geri alınmamış K0…K5 eylemleri → kiradaki yaptırım.
+ * Kademe en şiddetlisidir; mesaj en son mesajlı eylemden; K3 tarihi en erken; K2 modülleri birleşim.
+ */
+export function foldSanctions(rows: readonly Pick<YaptirimEylemi, "id" | "tur" | "parametre" | "geriAlinanEylemId" | "createdAt">[]): SanctionState {
+  const ordered = [...rows].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+  const reversed = new Set(ordered.filter((r) => r.tur === "GERI_AL" && r.geriAlinanEylemId).map((r) => r.geriAlinanEylemId));
+  const active = ordered.filter((r) => LEVELS.includes(r.tur) && !reversed.has(r.id));
+  let kademe: SanctionLevel | null = null;
+  let mesaj: string | null = null;
+  let kisitlamaTarihi: string | null = null;
+  const frozen = new Set<string>();
+  let guncellemeDonuk = false;
+  for (const r of active) {
+    const level = r.tur as SanctionLevel;
+    if (kademe === null || LEVELS.indexOf(level) > LEVELS.indexOf(kademe)) kademe = level;
+    const p = SanctionParamSchema.safeParse(r.parametre);
+    const param = p.success ? p.data : {};
+    if (param.mesaj) mesaj = param.mesaj;
+    if (level === "K3" && param.kisitlamaTarihi && (kisitlamaTarihi === null || param.kisitlamaTarihi < kisitlamaTarihi)) {
+      kisitlamaTarihi = param.kisitlamaTarihi;
+    }
+    if (level === "K2") for (const m of param.moduller ?? []) frozen.add(m);
+    if (level === "K1") guncellemeDonuk = true;
+  }
+  return { kademe, mesaj, kisitlamaTarihi, donmusModuller: [...frozen].sort(), guncellemeDonuk };
+}
+
+export async function computeSanctionState(db: Db, installationDbId: string): Promise<SanctionState> {
+  const rows = await db.yaptirimEylemi.findMany({
+    where: { kurulumId: installationDbId },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  return foldSanctions(rows);
+}
+
+export interface IssueLeaseInput {
+  readonly installation: Kurulum;
+  readonly entitlement: Hak;
+  readonly previousLeaseId: string | null;
+  readonly decision: ZincirKarari;
+  /** İsteyenin ölçtüğü parmak izi (çatal kararının girdisi). */
+  readonly clientFingerprint: Fingerprint;
+  /** Kiraya yazılan: sunucunun KABUL ettiği küme. */
+  readonly acceptedFingerprint: Fingerprint;
+  readonly nowMs: number;
+}
+
+export interface IssuedLease {
+  readonly id: string;
+  readonly token: string;
+  readonly sanction: SanctionState;
+}
+
+/** Kira basar ve deftere yazar (tx içinde; zincir ucunu çağıran ilerletir). */
+export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput): Promise<IssuedLease> {
+  const { installation, entitlement, nowMs } = g;
+  if (!installation.anahtarKimligi) throw new VendorError(500, "SUNUCU_HATASI", "Kurulumun kayıtlı anahtarı yok");
+  if (entitlement.guncelSurum < 1) throw new VendorError(500, "SUNUCU_HATASI", "Bu kurulum için imzalı lisans (HAK) yok");
+  const key = ctx.keys.leaseKeyFor(installation.sinif, nowMs);
+  if (!key) throw new VendorError(500, "SUNUCU_HATASI", "Kira imzalayacak geçerli alt anahtar yok");
+  const sanction = await computeSanctionState(tx, installation.id);
+  const id = randomUUID();
+  const issuedAt = new Date(nowMs);
+  const expiresAt = new Date(nowMs + ctx.config.KIRA_GUN * DAY_MS);
+  const payload: LeaseDoc = {
+    v: 1,
+    kiraId: id,
+    hakId: entitlement.id,
+    hakSurum: entitlement.guncelSurum,
+    kurulumId: installation.kurulumId,
+    kurulumAnahtarKimligi: installation.anahtarKimligi,
+    parmakIzi: g.acceptedFingerprint,
+    verilis: issuedAt.toISOString(),
+    bitis: expiresAt.toISOString(),
+    sunucuSaati: issuedAt.toISOString(),
+    ekSureGun: ctx.config.EK_SURE_GUN,
+    zorlama: installation.zorlama,
+    gecerlilikBitis: entitlement.gecerlilikBitis ? entitlement.gecerlilikBitis.toISOString() : null,
+    yaptirim: {
+      kademe: sanction.kademe,
+      mesaj: sanction.mesaj,
+      kisitlamaTarihi: sanction.kisitlamaTarihi,
+      donmusModuller: sanction.donmusModuller,
+      guncellemeDonuk: sanction.guncellemeDonuk,
+    },
+    yoklamaAraligiDk: installation.yoklamaAraligiDk,
+    esitlemeAraligiDk: null,
+    patronBulutBitis: null,
+    devredildi: installation.durum === "DEVREDILDI",
+    kanal: { kod: installation.kanalKodu, guncelSurumler: {} },
+    altSertifika: key.certificate,
+  };
+  const token = signDocument({ typ: TYP.KIRA, schema: LeaseSchema, payload, key: { kid: key.kid, privateKey: key.privateKey } });
+  await tx.kira.create({
+    data: {
+      id,
+      kurulumId: installation.id,
+      oncekiKiraId: g.previousLeaseId,
+      hakId: entitlement.id,
+      hakSurum: entitlement.guncelSurum,
+      anahtarKimligi: installation.anahtarKimligi,
+      karar: g.decision,
+      istemciParmakIzi: g.clientFingerprint,
+      verilis: issuedAt,
+      bitis: expiresAt,
+      belge: token,
+    },
+  });
+  return { id, token, sanction };
+}
+
+/**
+ * İndirme belirteçleri (kanalın electron/ ve mobil/ önekleri). Verilmez: K1 (güncelleme donuk),
+ * bakım bitmiş (son hak edilen sürümde kalır), kurulum ETKİN değil, indirme anahtarı yok.
+ */
+export function downloadTokens(
+  ctx: VendorContext,
+  installation: Kurulum,
+  entitlement: Hak,
+  sanction: SanctionState,
+  nowMs: number,
+): { yolOneki: string; belirtec: string }[] {
+  if (sanction.guncellemeDonuk || installation.durum !== "ETKIN" || entitlement.bakimBitis.getTime() < nowMs) return [];
+  const key = ctx.keys.downloadKey(nowMs);
+  if (!key) return [];
+  const exp = msToIso(nowMs + ctx.config.INDIRME_OMUR_DK * 60_000);
+  return ["electron", "mobil"].map((dir) => {
+    const yolOneki = `/${installation.kanalKodu}/${dir}/`;
+    return {
+      yolOneki,
+      belirtec: signDownloadToken({
+        payload: { v: 1, kanal: installation.kanalKodu, yolOneki, kurulumId: installation.kurulumId, exp },
+        key: { kid: key.kid, privateKey: key.privateKey },
+        nowMs,
+      }),
+    };
+  });
+}
+
+/** Güncel imzalı HAK belgesi. */
+export async function currentEntitlementToken(db: Db, entitlement: Hak): Promise<string> {
+  const version = await db.hakSurumu.findUnique({
+    where: { hakId_surum: { hakId: entitlement.id, surum: entitlement.guncelSurum } },
+  });
+  if (!version) throw new VendorError(500, "SUNUCU_HATASI", "Bu kurulum için imzalı lisans (HAK) yok");
+  return version.belge;
+}
+
+/** Kurulumun aktif hakkı. */
+export async function activeEntitlement(db: Db, installationDbId: string): Promise<Hak> {
+  const hak = await db.hak.findFirst({ where: { kurulumId: installationDbId, aktif: true } });
+  if (!hak || hak.guncelSurum < 1) throw new VendorError(500, "SUNUCU_HATASI", "Bu kurulum için imzalı lisans (HAK) yok");
+  return hak;
+}
+
+export function licenseResponse(g: {
+  readonly hak: string | null;
+  readonly kira: string;
+  readonly tokens: { yolOneki: string; belirtec: string }[];
+  readonly nowMs: number;
+}): LicenseResponse {
+  return LicenseResponseSchema.parse({
+    v: 1,
+    hak: g.hak,
+    kira: g.kira,
+    indirmeBelirtecleri: g.tokens,
+    sunucuSaati: msToIso(g.nowMs),
+  });
+}
