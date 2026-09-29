@@ -13,14 +13,8 @@ import { bilgi, uyari } from "../lib/logger";
 import { egressTransport, requireReady, signedHeaders, type VendorTransport } from "../services/helpers/license-wire.helper";
 import { cloudEligibility, inboxWritesAllowed } from "../cloud-sync/eligibility";
 import { getCloudUrl } from "../cloud-sync/cloud-url";
-import {
-  CloudAccountsResponseSchema,
-  INBOX_ENDPOINTS,
-  INBOX_PULL_MAX,
-  INBOX_WIRE_VERSION,
-  InboxPullResponseSchema,
-  type InboxOutcome,
-} from "../cloud-sync/inbox-wire";
+import { INBOX_PULL_MAX } from "../cloud-sync/inbox-wire";
+import { AccountsResponseSchema, ENVELOPE_VERSION, InboxClaimResponseSchema, SYNC_PATHS, type InboxOutcome } from "../cloud-sync/wire";
 import { processInboxMessage } from "../services/cloud-inbox.service";
 import { recordCloudAccounts, recordInboxRun, resolveActivePatronCloudUserId } from "../services/patron-cloud.service";
 
@@ -92,7 +86,7 @@ function done(r: InboxRunResult, nowMs: number, errorCode: string | null = null)
 }
 
 /**
- * Tek tur: ön koşul → `al` (bulut claim eder) → kayıtları `olusturma` sırasıyla SERİ işle (bir kaydın hatası
+ * Tek tur: ön koşul → `al` (bulut claim eder) → kayıtları `olusturulma` sırasıyla SERİ işle (bir kaydın hatası
  * diğerlerini durdurmaz) → kesin sonuçları `sonuc` ile bildir → bulut hesap listesini tazele.
  * @param transport Test enjeksiyonu (sahte bulut); üretimde proxy'li HTTPS.
  */
@@ -114,19 +108,19 @@ export async function runCloudInboxOnce(transport: VendorTransport = egressTrans
     if (!actor) return done({ outcome: "TEKNIK_KULLANICI_YOK", ...empty }, now);
 
     // Hesap listesi yazma değildir: kısıtlı kipte de tazelenir (panel salt okunur listesi).
-    const acc = await cloudPost(base, INBOX_ENDPOINTS.ACCOUNTS, { v: INBOX_WIRE_VERSION }, transport);
+    const acc = await cloudPost(base, SYNC_PATHS.ACCOUNTS, { v: ENVELOPE_VERSION }, transport);
     if (acc.ok) {
-      const parsed = CloudAccountsResponseSchema.safeParse(acc.json);
+      const parsed = AccountsResponseSchema.safeParse(acc.json);
       if (parsed.success) recordCloudAccounts(parsed.data.hesaplar, now);
     }
 
     if (!inboxWritesAllowed(e.snap)) return done({ outcome: "LISANS_KISITLI", ...empty }, now);
 
-    const pull = await cloudPost(base, INBOX_ENDPOINTS.PULL, { v: INBOX_WIRE_VERSION, enFazla: INBOX_PULL_MAX }, transport);
+    const pull = await cloudPost(base, SYNC_PATHS.INBOX_CLAIM, { v: ENVELOPE_VERSION, enFazla: INBOX_PULL_MAX }, transport);
     if (!pull.ok) return done({ outcome: "BASARISIZ", ...empty }, now, pull.code);
-    const parsed = InboxPullResponseSchema.safeParse(pull.json);
+    const parsed = InboxClaimResponseSchema.safeParse(pull.json);
     if (!parsed.success) return done({ outcome: "BASARISIZ", ...empty }, now, "YANIT_GECERSIZ");
-    const messages = [...parsed.data.kayitlar].sort((a, b) => Date.parse(a.olusturma) - Date.parse(b.olusturma) || a.mesajId.localeCompare(b.mesajId));
+    const messages = [...parsed.data.kayitlar].sort((a, b) => Date.parse(a.olusturulma) - Date.parse(b.olusturulma) || a.mesajId.localeCompare(b.mesajId));
 
     const outcomes: InboxOutcome[] = [];
     let uncertain = 0;
@@ -142,7 +136,7 @@ export async function runCloudInboxOnce(transport: VendorTransport = egressTrans
       else uncertain++;
     }
     if (outcomes.length > 0) {
-      const res = await cloudPost(base, INBOX_ENDPOINTS.RESULT, { v: INBOX_WIRE_VERSION, sonuclar: outcomes }, transport);
+      const res = await cloudPost(base, SYNC_PATHS.INBOX_RESULT, { v: ENVELOPE_VERSION, sonuclar: outcomes }, transport);
       // Bildirim kaybolursa zarar yok: claim süresi dolunca bulut yeniden verir, makbuz aynı sonucu döndürür.
       if (!res.ok) return done({ outcome: "BASARISIZ", pulled: messages.length, outcomes, uncertain }, now, res.code);
     }

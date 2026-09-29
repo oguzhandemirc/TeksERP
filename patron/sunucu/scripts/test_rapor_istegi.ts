@@ -5,7 +5,7 @@
 //   §2 fabrika: `rapor/al` ATOMİK claim (eşzamanlı ikisi ayrık) · `rapor/sonuc` HAZIR → hesap sonucu
 //      görür · tekrar sonuç idempotent · sahibi olmayan kurulum 409
 //   §3 sonuç RLS'i: aileye izni olmayan hesap (yönetici görünürlüğüyle bile) sonucu GÖREMEZ
-//   §4 5 dk içinde aynı parametre → yeni istek doğrudan HAZIR (mevcut sonuç), zil YOK
+//   §4 5 dk içinde aynı parametre → yeni istek doğrudan HAZIR (mevcut sonuç), zil YOK · standart görüntü (istekId null)
 //   §5 claim süresi: bir kez BEKLIYOR'a döner, ikincide HATA `ZAMAN_ASIMI` · yazar BEKLIYOR iken iptal
 // Koşum: npx tsx scripts/test_rapor_istegi.ts
 // =============================================================================
@@ -18,12 +18,29 @@ type Alinan = { istekler: { istekId: string; raporAnahtari: string }[] };
 async function katalog(o: Ortam, k: TestKurulumu): Promise<void> {
   const ufuk = new Date(o.saat.simdi() - 10_000);
   const veri = { raporlar: [{ anahtar: "sales/order-intake" }, { anahtar: "finance/aging" }, { anahtar: "audit/user-activity" }] };
-  const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk, anliklar: [{ projeksiyon: "rapor-katalogu", icerikOzeti: "k1", veri }] }) });
+  const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk, anliklar: [{ projeksiyon: "rapor-katalogu", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri }] }) });
   if (r.status !== 200) throw new Error(`katalog: ${r.status}`);
 }
 
 const iste = (o: Ortam, h: TestHesabi, raporAnahtari: string, parametreler: Record<string, unknown> = { baslangic: "2026-09-01", bitis: "2026-09-28" }) =>
   api(o, "POST", "/api/raporlar", { belirtec: h.belirtec, govde: { clientToken: randomUUID(), raporAnahtari, parametreler } });
+
+/** `rapor/sonuc` gövdesi (S13/S14 biçimi — ortak tel şeması `ReportResultRequestSchema`). */
+function sonucGovdesi(istekId: string | null, raporAnahtari: string, hesaplandi: string, g: { veri?: unknown; hataKodu?: string; parametreler?: Record<string, unknown>; donem?: string | null }) {
+  const hazir = g.hataKodu === undefined;
+  return {
+    v: 1,
+    istekId,
+    raporAnahtari,
+    parametreler: g.parametreler ?? {},
+    donem: g.donem ?? null,
+    durum: hazir ? "HAZIR" : "HATA",
+    veri: hazir ? g.veri : null,
+    hataKodu: hazir ? null : g.hataKodu,
+    hesaplandi,
+    kaynakUfuk: hesaplandi,
+  };
+}
 
 async function main(): Promise<void> {
   const o = await ortamKur();
@@ -57,21 +74,25 @@ async function main(): Promise<void> {
     const ib = (b.json as unknown as Alinan).istekler.map((x) => x.istekId);
     kontrol("§2a eşzamanlı iki `al` (enFazla 1) ayrık ve SINIRA uyar: 1+1", ia.length === 1 && ib.length === 1 && !ia.some((x) => ib.includes(x)), `${ia.length}+${ib.length}`);
     const hesap = new Date(o.saat.simdi()).toISOString();
-    const s1 = await imzali(o, k, "/v1/rapor/sonuc", { govde: { v: 1, istekId: id1, durum: "HAZIR", veri: { satirlar: [{ ay: "2026-09", metre: "1200.0" }] }, hesaplandi: hesap } });
+    const s1 = await imzali(o, k, "/v1/rapor/sonuc", { govde: sonucGovdesi(id1, "sales/order-intake", hesap, { veri: { satirlar: [{ ay: "2026-09", metre: "1200.0" }] } }) });
     kontrol("§2b HAZIR sonucu kabul", s1.status === 200 && (s1.json as unknown as { kabul: boolean }).kabul === true, `${s1.status} ${JSON.stringify(s1.json).slice(0, 100)}`);
-    const s1b = await imzali(o, k, "/v1/rapor/sonuc", { govde: { v: 1, istekId: id1, durum: "HAZIR", veri: { satirlar: [] }, hesaplandi: hesap } });
+    const s1b = await imzali(o, k, "/v1/rapor/sonuc", { govde: sonucGovdesi(id1, "sales/order-intake", hesap, { veri: { satirlar: [] } }) });
     kontrol("§2c aynı isteğe tekrar sonuç (ağ tekrarı) → kabul, ilk sonuç korunur", s1b.status === 200);
     const g1 = await api(o, "GET", `/api/raporlar/${id1}`, { belirtec: satis.belirtec });
     const sonuc1 = (g1.json.data as { durum?: string; sonuc?: { veri?: { satirlar?: unknown[] } } }) ?? {};
     kontrol("§2d yazar sonucu görür", sonuc1.durum === "HAZIR" && sonuc1.sonuc?.veri?.satirlar?.length === 1);
     const baska = await tesisKur(o);
     try {
-      const yabanci = await imzali(o, baska, "/v1/rapor/sonuc", { govde: { v: 1, istekId: id2, durum: "HATA", hataKodu: "PARAMETRE_GECERSIZ", hesaplandi: hesap } });
+      const yabanci = await imzali(o, baska, "/v1/rapor/sonuc", { govde: sonucGovdesi(id2, "finance/aging", hesap, { hataKodu: "PARAMETRE_GECERSIZ" }) });
       kontrol("§2e başka tesisin kurulumu isteği göremez → 404", yabanci.status === 404);
     } finally {
       await temizleTesis(o, baska.tesisId);
     }
-    const s2 = await imzali(o, k, "/v1/rapor/sonuc", { govde: { v: 1, istekId: id2, durum: "HAZIR", veri: { kovalar: [{ gun: "0-30", tutar: "500.00" }] }, hesaplandi: hesap } });
+    const yanlisAnahtar = await imzali(o, k, "/v1/rapor/sonuc", { govde: sonucGovdesi(id2, "sales/order-intake", hesap, { veri: { x: 1 } }) });
+    kontrol("§2e2 sonuç isteğin rapor anahtarıyla uyuşmuyor → 400", yanlisAnahtar.status === 400, `${yanlisAnahtar.status}`);
+    const eskiBicim = await imzali(o, k, "/v1/rapor/sonuc", { govde: { v: 1, istekId: id2, durum: "HAZIR", veri: { x: 1 }, hesaplandi: hesap } });
+    kontrol("§2e3 eksik alanlı (S13 öncesi) gövde → 400 GOVDE_GECERSIZ", eskiBicim.status === 400 && eskiBicim.json.details?.code === "GOVDE_GECERSIZ");
+    const s2 = await imzali(o, k, "/v1/rapor/sonuc", { govde: sonucGovdesi(id2, "finance/aging", hesap, { veri: { kovalar: [{ gun: "0-30", tutar: "500.00" }] } }) });
     kontrol("§2f finans raporu sonucu kabul", s2.status === 200);
 
     console.log("\n§3 sonuç RLS'i");
@@ -88,6 +109,15 @@ async function main(): Promise<void> {
     o.saat.ilerlet(6 * 60_000);
     const eskidi = await iste(o, satis, "sales/order-intake");
     kontrol("§4b 5 dk sonra → yeni hesap (BEKLIYOR)", (eskidi.json.data as { durum?: string }).durum === "BEKLIYOR");
+
+    console.log("\n§4c standart görüntü (istekId null, S13)");
+    const stdParam = { baslangic: "2026-08-01", bitis: "2026-08-31" };
+    const std = await imzali(o, k, "/v1/rapor/sonuc", { govde: sonucGovdesi(null, "sales/order-intake", new Date(o.saat.simdi()).toISOString(), { veri: { satirlar: [] }, parametreler: stdParam, donem: "gecen-ay" }) });
+    kontrol("§4c standart görüntü kabul", std.status === 200 && (std.json as unknown as { kabul?: boolean }).kabul === true, `${std.status} ${JSON.stringify(std.json).slice(0, 120)}`);
+    const stdIstek = await iste(o, satis, "sales/order-intake", stdParam);
+    kontrol("§4d aynı parametreli istek standart görüntüden doğrudan HAZIR", (stdIstek.json.data as { durum?: string }).durum === "HAZIR");
+    const stdAudit = await imzali(o, k, "/v1/rapor/sonuc", { govde: sonucGovdesi(null, "audit/user-activity", new Date(o.saat.simdi()).toISOString(), { veri: {} }) });
+    kontrol("§4e bulutta sunulmayan raporun standart görüntüsü → 404", stdAudit.status === 404);
 
     console.log("\n§5 claim süresi + iptal");
     const idE = (eskidi.json.data as { id: string }).id;

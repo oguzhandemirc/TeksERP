@@ -8,7 +8,7 @@ import type { Tx } from "../lib/db";
 import { NO_TENANT } from "../lib/tenant";
 import type { EntryRejectCode, FullRequestReason, RecordEntry, SyncResponse, Watermark } from "../wire/esitleme";
 import type { z } from "zod";
-import type { ReconcileEntrySchema, SnapshotEntrySchema } from "../wire/esitleme";
+import { EMPTY_SET_DIGEST, type ReconcileEntrySchema, type SnapshotEntrySchema } from "../wire/esitleme";
 
 export interface PackageAccumulator {
   kabul: SyncResponse["kabul"];
@@ -175,10 +175,10 @@ export async function reconcile(tx: Tx, g: { tesisId: string; rec: z.infer<typeo
   const horizonFilter = g.rec.ufukTarihi
     ? Prisma.sql`AND (retention_at IS NULL OR retention_at >= ${new Date(g.rec.ufukTarihi)}::timestamptz)`
     : Prisma.empty;
-  const rows = await tx.$queryRaw<{ adet: number; ozet: string | null }[]>(Prisma.sql`
-    SELECT count(*)::int AS adet, md5(string_agg(record_id::text, ',' ORDER BY record_id)) AS ozet
+  const rows = await tx.$queryRaw<{ adet: number; ozet: string }[]>(Prisma.sql`
+    SELECT count(*)::int AS adet, md5(COALESCE(string_agg(record_id::text, ',' ORDER BY record_id), '')) AS ozet
       FROM projection_rows
      WHERE tesis_id = ${g.tesisId}::uuid AND projection = ${g.rec.projeksiyon} AND deleted_at IS NULL ${horizonFilter}`);
-  const mine = rows[0] ?? { adet: 0, ozet: null };
-  if (mine.adet !== g.rec.adet || (mine.ozet ?? null) !== g.rec.ozet) requestFull(acc, g.rec.projeksiyon, "UZLASTIRMA");
+  const mine = rows[0] ?? { adet: 0, ozet: EMPTY_SET_DIGEST };
+  if (mine.adet !== g.rec.adet || mine.ozet !== g.rec.ozet) requestFull(acc, g.rec.projeksiyon, "UZLASTIRMA");
 }

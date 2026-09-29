@@ -33,7 +33,7 @@ import {
   type LeaseDoc,
 } from "../../src/lib/license/protocol";
 import { setCloudUrlForTests } from "../../src/cloud-sync/cloud-url";
-import { ReportResultSchema, SyncPacketSchema, type ReportResult, type SyncPacket } from "../../src/cloud-sync/wire";
+import { PackageSchema, ReportResultRequestSchema, type ReportResult, type SyncPackage } from "../../src/cloud-sync/wire";
 import { PATRON_CLOUD_ENTITLEMENT } from "../../src/cloud-sync/eligibility";
 import { fiksturKur, hakBas, kiraYuku, type Fikstur } from "./lisans-fikstur";
 
@@ -84,7 +84,7 @@ export interface BulutSatiri {
 
 export interface SahteBulut {
   readonly url: string;
-  readonly paketler: SyncPacket[];
+  readonly paketler: SyncPackage[];
   readonly raporSonuclari: ReportResult[];
   /** Her istek: yol, imza geçerli mi, gzip mi, (varsa) paket kimliği. */
   readonly istekler: Array<{ yol: string; imza: boolean; gzip: boolean; paketId: string | null; durum: number }>;
@@ -132,7 +132,7 @@ export function kumeOzeti(ids: string[]): string {
 }
 
 export async function sahteBulutBaslat(x: string): Promise<SahteBulut> {
-  const paketler: SyncPacket[] = [];
+  const paketler: SyncPackage[] = [];
   const raporSonuclari: ReportResult[] = [];
   const istekler: SahteBulut["istekler"] = [];
   const zincir = new Map<string, { t: string; k: string }>();
@@ -148,7 +148,7 @@ export async function sahteBulutBaslat(x: string): Promise<SahteBulut> {
     return verifyRequest(token, { publicKeyX: x, body: govde, nowMs: Date.now(), purposes: ["esitle"], installationId: kimlik.value.installationId }).ok;
   };
 
-  const esitle = (paket: SyncPacket): unknown => {
+  const esitle = (paket: SyncPackage): unknown => {
     const kabul: Array<{ projeksiyon: string; filigran: { t: string; k: string } }> = [];
     const ret: Array<{ projeksiyon: string; kod: string }> = [];
     const istenen: Array<{ projeksiyon: string; tur: string; neden: string }> = [];
@@ -215,7 +215,7 @@ export async function sahteBulutBaslat(x: string): Promise<SahteBulut> {
         return hata(res, 400, "GOVDE_GECERSIZ");
       }
       if (yol === "/v1/esitle") {
-        const p = SyncPacketSchema.safeParse(json);
+        const p = PackageSchema.safeParse(json);
         if (!p.success) {
           kaydet(400);
           return hata(res, 400, "GOVDE_GECERSIZ");
@@ -238,7 +238,7 @@ export async function sahteBulutBaslat(x: string): Promise<SahteBulut> {
         return yanit(res, 200, { v: 1, istekler: mod.bekleyenRaporlar.splice(0) });
       }
       if (yol === "/v1/rapor/sonuc") {
-        const r = ReportResultSchema.safeParse(json);
+        const r = ReportResultRequestSchema.safeParse(json);
         if (!r.success) {
           kaydet(400);
           return hata(res, 400, "GOVDE_GECERSIZ");

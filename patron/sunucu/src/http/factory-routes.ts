@@ -5,12 +5,14 @@ import express, { type Request, type Response, type Router } from "express";
 import type { z } from "zod";
 import { PROTOCOL_VERSION, REQUEST_HEADER, isPlainObject } from "../lisans-protokol";
 import { CloudError, badRequest } from "../lib/errors";
+import { listAccountsForFactory } from "../services/account.service";
 import type { CloudContext } from "../services/context";
 import { claimInbox, recordInboxResults } from "../services/inbox.service";
 import { authenticateFactory, type FactoryCaller } from "../services/installation-auth";
 import { claimReports, recordReportResult } from "../services/report.service";
 import { applyPackage, decodeBody } from "../services/sync.service";
 import {
+  AccountsRequestSchema,
   InboxClaimRequestSchema,
   InboxResultRequestSchema,
   MAX_COMPRESSED_BYTES,
@@ -72,6 +74,12 @@ export function createFactoryRouter(ctx: CloudContext): Router {
   router.post(SYNC_PATHS.INBOX_RESULT.replace("/v1", ""), async (req: Request, res: Response) => {
     const r = await authenticated(ctx, req);
     res.json(await recordInboxResults(ctx, r.caller, strictJson(InboxResultRequestSchema, r, req), r.nowMs));
+  });
+
+  router.post(SYNC_PATHS.ACCOUNTS.replace("/v1", ""), async (req: Request, res: Response) => {
+    const r = await authenticated(ctx, req);
+    strictJson(AccountsRequestSchema, r, req);
+    res.json(await listAccountsForFactory(ctx, r.caller));
   });
 
   router.post(SYNC_PATHS.REPORT_CLAIM.replace("/v1", ""), async (req: Request, res: Response) => {
