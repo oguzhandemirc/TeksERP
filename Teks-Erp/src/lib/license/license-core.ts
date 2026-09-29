@@ -45,6 +45,8 @@ export const CORE_ERROR_CODES = [
   "BUTUNLUK_CAPA_BOS",
   "BUTUNLUK_OKUNAMADI",
   "BUTUNLUK_UYUSMAZ",
+  "BUTUNLUK_FAZLA",
+  "BUTUNLUK_LISTE_BOZUK",
   ...MODULE_KEY_ERROR_CODES,
   ...LEASE_MODULE_KEY_ERROR_CODES,
   // Yerel koruma (Windows DPAPI) — modül anahtarı önbelleği.

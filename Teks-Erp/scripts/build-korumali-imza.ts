@@ -10,7 +10,8 @@
 //   npx tsx scripts/build-korumali-imza.ts belge --belge=<PAKET-DOCKER.json> --anahtar=<dosya>   (Docker teslim künyesi → <belge>.jws)
 //
 // `zip` kipi: zip'i açar, sürüm/müşteri/derleme künyesini PAKET.json + dist/server-kunye.json'dan okur,
-// imzalar, `butunluk.jws`i ekler ve PAKET.json'daki dosya sayısını bir artırır (kur.ps1 sayım kapısı).
+// imzalar, `butunluk.jws` + `butunluk-liste.txt`i ekler ve PAKET.json'daki dosya sayısını iki artırır
+// (kur.ps1 sayım kapısı).
 // Hazırlık anahtarı (`paket-hazirlik`) yalnız TEST/DEMO paketleri içindir: ÜRETİM kurulumu onu reddeder.
 // =============================================================================
 import { execFileSync } from "node:child_process";
@@ -20,6 +21,7 @@ import os from "node:os";
 import path from "node:path";
 import { generatePackageKey, readPackageKey, signManifestDocument, signPackageDirectory, writePackageKey } from "./lib/butunluk-imza";
 import { STAGING_PACKAGE_CLASSES, STAGING_PACKAGE_KID_PREFIX } from "../src/lib/license/integrity-scope";
+import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
 
 function arg(name: string): string | null {
   const p = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -72,7 +74,7 @@ async function signDir(o: DirOptions): Promise<string> {
     paketId: typeof kunye.paketId === "string" ? kunye.paketId : undefined,
     kurulumId: arg("kurulum") ?? (typeof kunye.kurulumId === "string" ? kunye.kurulumId : null),
   });
-  console.log(`✓ ${r.file} — ${r.manifest.dosyalar.length} dosya · kid ${key.kid} · ${r.token.length} bayt`);
+  console.log(`✓ ${r.file} + ${INTEGRITY_LIST_FILE} — ${r.entries.length} dosya · kapsam ${r.manifest.kapsam.dizinler.join(", ")} · kid ${key.kid}`);
   return key.kid;
 }
 
@@ -83,15 +85,17 @@ async function signZip(): Promise<void> {
   try {
     execFileSync("unzip", ["-q", zip, "-d", tmp]);
     const paket = readJson(path.join(tmp, "PAKET.json"));
-    if (fs.existsSync(path.join(tmp, "butunluk.jws"))) throw new Error("paket zaten imzalı (butunluk.jws var)");
+    if (fs.existsSync(path.join(tmp, "butunluk.jws")) || fs.existsSync(path.join(tmp, INTEGRITY_LIST_FILE))) {
+      throw new Error(`paket zaten imzalı (butunluk.jws ya da ${INTEGRITY_LIST_FILE} var)`);
+    }
     if (paket.korumali !== true) throw new Error("yalnız KORUMALI paket imzalanır (PAKET.json korumali=true)");
     const surum = paket.uygulamaSurumu;
     if (typeof surum !== "string") throw new Error("PAKET.json uygulamaSurumu yok");
     const kanal = typeof paket.backendKanal === "string" ? paket.backendKanal : null;
     const kid = await signDir({ root: tmp, keyFile, surum, musteri: arg("musteri") ?? kanal });
-    const updated = { ...paket, dosyaSayisi: Number(paket.dosyaSayisi) + 1, butunlukKid: kid };
+    const updated = { ...paket, dosyaSayisi: Number(paket.dosyaSayisi) + 2, butunlukKid: kid };
     fs.writeFileSync(path.join(tmp, "PAKET.json"), `${JSON.stringify(updated, null, 2)}\n`);
-    execFileSync("zip", ["-q", "-X", zip, "butunluk.jws", "PAKET.json"], { cwd: tmp });
+    execFileSync("zip", ["-q", "-X", zip, "butunluk.jws", INTEGRITY_LIST_FILE, "PAKET.json"], { cwd: tmp });
     const sha = createHash("sha256").update(fs.readFileSync(zip)).digest("hex").toUpperCase();
     console.log(`✓ ${path.basename(zip)} imzalandı · yeni SHA256 ${sha}`);
     const belge = arg("surum-belgesi");

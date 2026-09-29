@@ -287,7 +287,7 @@ function korumaliStatik(dockerfile: string, ignore: string, compose: string): st
 }
 
 // §5c — teslim künyesi İMZALI çıkar (2e aracı, `build-korumali-imza.ts belge`): anahtar yoksa paket
-// üretilmez, imza SHA256SUMS'a girer, imza özetlerden ÖNCE atılır.
+// üretilmez, imza ve imzalı liste dosyası SHA256SUMS'a girer, imza özetlerden ÖNCE atılır.
 function teslimImzaStatik(betik: string): string[] {
   const kod = betik.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
   const ih: string[] = [];
@@ -296,17 +296,19 @@ function teslimImzaStatik(betik: string): string[] {
   if (!/\[ -f "\$ANAHTAR" \] \|\| \{[^}]*exit 1; \}/.test(kod)) ih.push("anahtar yokken paket üretimi durmuyor");
   const ozet = kod.search(/for f in [^;\n]*PAKET-DOCKER\.json\.jws; do/);
   if (ozet < 0) ih.push("imza dosyası SHA256SUMS'a girmiyor");
+  if (!/for f in [^;\n]*butunluk-liste\.txt[^;\n]*; do/.test(kod)) ih.push("imzalı liste dosyası SHA256SUMS'a girmiyor");
   else if (imza > ozet) ih.push("imza özetlerden SONRA atılıyor");
   return ih;
 }
 {
   const t = oku("Teks-Erp/docker/korumali/teslim-paketle.sh");
   const g = teslimImzaStatik(t);
-  check("§5c ⭐ teslim künyesi 2e aracıyla imzalanır (anahtarsız paket yok, .jws SHA256SUMS'ta)", g.length === 0, g.join(" | ") || "temiz");
+  check("§5c ⭐ teslim künyesi 2e aracıyla imzalanır (anahtarsız paket yok, .jws + liste dosyası SHA256SUMS'ta)", g.length === 0, g.join(" | ") || "temiz");
   const sondalar: Array<[string, string]> = [
     ["imza çağrısı silindi", t.replace(/^\( cd "\$REPO\/Teks-Erp" && npx tsx scripts\/build-korumali-imza\.ts belge.*$/m, "( true ) \\")],
     ["anahtarsız devam", t.replace(/imzasız teslim paketi üretilmez" >&2; exit 1; \}/, 'imzasız teslim paketi üretilmez" >&2; }')],
     ["jws özetsiz", t.replace("PAKET-DOCKER.json PAKET-DOCKER.json.jws; do", "PAKET-DOCKER.json; do")],
+    ["liste özetsiz", t.replace(".env.ornek butunluk-liste.txt PAKET-DOCKER.json", ".env.ornek PAKET-DOCKER.json")],
   ];
   for (const [ad, m] of sondalar) {
     check(`§5c sonda: ${ad} → kırmızı`, m !== t && teslimImzaStatik(m).length > 0, m !== t ? "" : "MUTASYON UYGULANMADI");

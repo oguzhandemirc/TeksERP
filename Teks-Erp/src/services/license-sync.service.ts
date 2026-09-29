@@ -16,12 +16,10 @@ import {
   type LicenseResponse,
   type SanctionLevel,
 } from "../lib/license/protocol";
-import { getLicenseStore, saveEntitlement, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
+import { getLicenseStore, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
 import { measureFingerprint } from "../lib/license/fingerprint";
 import { coreCheckLeaseBinding, coreVerifyEntitlement, coreVerifyLease } from "../lib/license/core-bridge";
-import { runIntegrityCheck } from "../lib/license/integrity-check";
-import { integrityCheckTarget, setIntegrityOutcome } from "../lib/license/integrity-state";
-import { NATIVE_REQUIRED, getLicenseCore } from "../lib/license/native";
+import { acceptNewEntitlement } from "./license-integrity.service";
 import {
   getLicenseConfig,
   getLicenseSnapshot,
@@ -80,16 +78,6 @@ export async function refreshLicenseFingerprint(): Promise<void> {
   const store = getLicenseStore();
   if (!store?.key) return;
   setMeasuredFingerprint(await measureFingerprint(store.key.salt));
-}
-
-/**
- * İmzalı dosya listesine karşı bütünlük (açılışta + günlük). Paket kökü süreç kökü (`app/`);
- * hazırlık PAKET anahtarının sınıf kuralı için doğrulanmış HAK'ın sınıfı verilir.
- */
-export async function refreshLicenseIntegrity(): Promise<void> {
-  const entitlementClass = getLicenseSnapshot().entitlement?.document.sinif ?? null;
-  const { root, keys } = integrityCheckTarget();
-  setIntegrityOutcome(await runIntegrityCheck({ root, keys, required: NATIVE_REQUIRED, core: getLicenseCore(), entitlementClass }));
 }
 
 function skewSeconds(): number | undefined {
@@ -193,7 +181,7 @@ export async function acceptLicenseResponse(
   if (known && known.kiraId === leaseDoc.kiraId) {
     // Aynı kira (ağ tekrarı): yeni değil. Silinen ya da eskisiyle değiştirilen dosyalar imzalı yanıttan onarılır.
     if (!getLicenseStore()?.identity) saveLicenseIdentity(licenseId);
-    if (resp.hak && resp.hak !== getLicenseStore()?.entitlementJws) saveEntitlement(resp.hak);
+    if (resp.hak && resp.hak !== getLicenseStore()?.entitlementJws) acceptNewEntitlement(resp.hak);
     if (before.lease?.document.kiraId !== leaseDoc.kiraId) saveLease(resp.kira);
     setDownloadTokens(resp.indirmeBelirtecleri);
     invalidateLicenseSnapshot();
@@ -207,7 +195,7 @@ export async function acceptLicenseResponse(
 
   if (getLicenseStore()?.identity?.kurulumId !== licenseId) saveLicenseIdentity(licenseId);
   startAccumulationForLease({ lease: leaseDoc, entitlement: entitlement.value, licenseId });
-  if (resp.hak && resp.hak !== ctx.store.entitlementJws) saveEntitlement(resp.hak);
+  if (resp.hak && resp.hak !== ctx.store.entitlementJws) acceptNewEntitlement(resp.hak);
   saveLease(resp.kira);
   setDownloadTokens(resp.indirmeBelirtecleri);
   if (getLicenseStore()?.transfer) saveTransfer(null);

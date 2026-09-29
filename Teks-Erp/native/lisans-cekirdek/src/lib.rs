@@ -12,6 +12,7 @@ pub mod chain;
 pub mod collect;
 pub mod fingerprint;
 pub mod integrity;
+pub mod integrity_list;
 pub mod iso;
 pub mod jsonx;
 pub mod jws;

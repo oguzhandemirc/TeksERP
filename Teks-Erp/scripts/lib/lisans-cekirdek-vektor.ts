@@ -4,7 +4,7 @@
 //     + native (.node) aynı vektörde aynı sonucu veriyor mu + CANLI (yeni anahtarlı) vektörde TS = native
 //   · `native/lisans-cekirdek/tests/vektorler.rs` — `cargo test` aynı dosyayı Rust tarafında koşar
 // Anahtarlar çalışma anında üretilir; dosyaya YALNIZ açık yarılar ve imzalı belgeler girer.
-import { createHash, generateKeyPairSync, sign, randomUUID, type KeyObject } from "node:crypto";
+import { generateKeyPairSync, sign, randomUUID, type KeyObject } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -23,7 +23,8 @@ import {
   type RootKey,
 } from "../../src/lib/license/protocol";
 import type { CoreResult, JwsKey, LicenseCore } from "../../src/lib/license/license-core";
-import { INTEGRITY_TYP, type PackageKey } from "../../src/lib/license/integrity";
+import type { PackageKey } from "../../src/lib/license/integrity";
+import { butunlukVektorleri } from "./lisans-butunluk-vektor";
 import { moduleKeyId, wrapModuleKey } from "../../src/lib/license/module-key";
 import {
   HAM_PARMAK_IZI,
@@ -582,79 +583,6 @@ function ozetVektorleri(f: Fikstur): Vektor[] {
     { tur: "ozet", ad: "16 bayt tuz (alt sınır)", raw: HAM_PARMAK_IZI, salt: b64uEncode(Buffer.alloc(16, 3)) },
     { tur: "ozet", ad: "15 bayt tuz (programcı hatası)", raw: HAM_PARMAK_IZI, salt: b64uEncode(Buffer.alloc(15, 3)) },
     { tur: "ozet", ad: "hiç etken yok", raw: {}, salt: tuz },
-  ];
-}
-
-function sha256B64(icerik: Buffer): string {
-  return b64uEncode(createHash("sha256").update(icerik).digest());
-}
-
-function butunlukVektorleri(f: Fikstur): Vektor[] {
-  const paket = anahtarUret("paket-2026");
-  const keys: PackageKey[] = [{ kid: paket.kid, x: paket.x }];
-  const dosyalar: Array<{ yol: string; icerik: Buffer }> = [
-    { yol: "dist/server.jsc", icerik: Buffer.from("bayt kodu yerine örnek içerik — ş ğ ü") },
-    { yol: "prisma/schema.prisma", icerik: Buffer.from("model X { id String @id }") },
-    { yol: "native/@ek+x_1.node", icerik: Buffer.alloc(3000, 9) },
-    { yol: "bos.txt", icerik: Buffer.alloc(0) },
-  ];
-  const girdiler = (degis: (d: { yol: string; icerik: Buffer }) => DosyaGirdisi | null = (d) => ({ yol: d.yol, icerik: b64uEncode(d.icerik) })): DosyaGirdisi[] =>
-    dosyalar.map(degis).filter((d): d is DosyaGirdisi => d !== null);
-  const liste = dosyalar.map((d) => ({ yol: d.yol, sha256: sha256B64(d.icerik), boyut: d.icerik.length }));
-  const yuk = (ek: Record<string, unknown> = {}) => ({
-    v: 1,
-    paketId: randomUUID(),
-    urun: "backend",
-    surum: "2.12.0",
-    derlemeTarihi: msToIso(f.simdi),
-    musteri: "testfabrika",
-    dosyalar: liste,
-    ...ek,
-  });
-  const imzali = (ek: Record<string, unknown> = {}, imzalayan: TestAnahtari = paket, typ: string = INTEGRITY_TYP) => hamImzala(typ, imzalayan, yuk(ek));
-  const v = (ad: string, manifest: unknown, g: { keys?: PackageKey[] | null; dosyalar?: DosyaGirdisi[]; kok?: "var" | "yok" } = {}): Vektor => ({
-    tur: "butunluk",
-    ad,
-    manifest,
-    keys: g.keys === undefined ? keys : g.keys,
-    dosyalar: g.dosyalar ?? girdiler(),
-    kok: g.kok ?? "var",
-  });
-  const cok = Array.from({ length: 55 }, (_, i) => ({ yol: `eksik/d${String(i).padStart(2, "0")}.js`, sha256: sha256B64(Buffer.from("x")), boyut: 1 }));
-  return [
-    v("geçerli", imzali()),
-    v("müşteri null", imzali({ musteri: null })),
-    v("tanınmayan üst alan atılır", imzali({ fazla: 1 })),
-    v("içerik değişmiş (aynı boy)", imzali(), { dosyalar: girdiler((d) => ({ yol: d.yol, icerik: b64uEncode(d.yol === "native/@ek+x_1.node" ? Buffer.alloc(3000, 8) : d.icerik) })) }),
-    v("boyut farklı", imzali(), { dosyalar: girdiler((d) => ({ yol: d.yol, icerik: b64uEncode(d.yol === "bos.txt" ? Buffer.from("x") : d.icerik) })) }),
-    v("dosya eksik", imzali(), { dosyalar: girdiler((d) => (d.yol === "prisma/schema.prisma" ? null : { yol: d.yol, icerik: b64uEncode(d.icerik) })) }),
-    v("dosya yerine dizin", imzali(), { dosyalar: girdiler((d) => ({ yol: d.yol, icerik: d.yol === "dist/server.jsc" ? null : b64uEncode(d.icerik) })) }),
-    v("55 eksik (liste 50'de kesilir)", imzali({ dosyalar: [...liste, ...cok] })),
-    v("kök dizin yok", imzali(), { kok: "yok" }),
-    v("çapa boş", imzali(), { keys: [] }),
-    v("gömülü çapa: test paket anahtarı tanınmıyor", imzali(), { keys: null }),
-    v("çapa kid biçimsiz", imzali(), { keys: [{ kid: "PAKET-1", x: paket.x }] }),
-    v("çapa kid tekrarlı", imzali(), { keys: [...keys, ...keys] }),
-    v("çapa anahtarı biçimsiz", imzali(), { keys: [{ kid: paket.kid, x: "abc" }] }),
-    v("başka paket anahtarı", imzali({}, anahtarUret("paket-2027"))),
-    v("aynı kid başka anahtar", imzali({}, anahtarUret("paket-2026"))),
-    v("typ farklı", imzali({}, paket, TYP.HAK)),
-    v("yol `..`", imzali({ dosyalar: [{ ...liste[0], yol: "../dist/server.jsc" }] })),
-    v("yol `.` segmenti", imzali({ dosyalar: [{ ...liste[0], yol: "dist/./server.jsc" }] })),
-    v("yol ters eğik çizgi", imzali({ dosyalar: [{ ...liste[0], yol: "dist\\server.jsc" }] })),
-    v("yol mutlak", imzali({ dosyalar: [{ ...liste[0], yol: "/etc/passwd" }] })),
-    v("yol sürücü harfli", imzali({ dosyalar: [{ ...liste[0], yol: "C:/x" }] })),
-    v("yol boşluklu", imzali({ dosyalar: [{ ...liste[0], yol: "dist/a b.js" }] })),
-    v("yol tekrarlı", imzali({ dosyalar: [liste[0], liste[0]] })),
-    v("dosya girdisinde fazla alan (katı)", imzali({ dosyalar: [{ ...liste[0], mod: 644 }] })),
-    v("boyut negatif", imzali({ dosyalar: [{ ...liste[0], boyut: -1 }] })),
-    v("boyut kesirli", imzali({ dosyalar: [{ ...liste[0], boyut: 1.5 }] })),
-    v("sha256 kısa", imzali({ dosyalar: [{ ...liste[0], sha256: "abc" }] })),
-    v("dosya listesi boş", imzali({ dosyalar: [] })),
-    v("sürüm biçimsiz", imzali({ surum: "2.12" })),
-    v("derleme tarihi ofsetli", imzali({ derlemeTarihi: "2026-09-29T00:00:00+03:00" })),
-    v("v:2", imzali({ v: 2 })),
-    v("biçimsiz metin", "a.b"),
   ];
 }
 

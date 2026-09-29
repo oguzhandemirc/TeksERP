@@ -1,6 +1,7 @@
 // Bütünlük denetiminin BELLEK durumu (açılışta + günlük; `integrity-check.ts` üretir) ve lisans
-// durumuna giden iki türevi: ölçüm sonucu ve ek süre çapası. Çapa imzalı durum kaydında kalıcıdır;
-// yeniden başlatmak ya da kirayı yenilemek ek süreyi uzatmaz.
+// durumuna giden iki türevi: ölçüm sonucu ve ek süre çapası. Çapa imzalı durum kaydında kalıcıdır ve
+// ait olduğu paketId'yle yazılır: yeniden başlatmak, kirayı yenilemek ya da dosyaları kısa süre geri
+// yüklemek ek süreyi uzatmaz; yalnız yeni imzalı paket kurulunca sıfırlanır.
 import { isoToMs, msToIso } from "./protocol";
 import type { IntegrityOutcome } from "./integrity-check";
 import type { PackageKey } from "./integrity";
@@ -10,7 +11,8 @@ import { bumpLicenseSnapshotVersion } from "./license-signals";
 import { NATIVE_REQUIRED } from "./native";
 
 let integrity: IntegrityOutcome | null = null;
-let firstMismatchMs: number | null = null;
+/** Bu süreçte görülen ilk uyuşmazlık ve ait olduğu imzalı paket (yalnız paket DEĞİŞİNCE sıfırlanır). */
+let firstMismatch: { readonly ms: number; readonly paketId: string | null } | null = null;
 let testTarget: { readonly root?: string; readonly keys?: readonly PackageKey[] } | null = null;
 
 /** Test-only (Senaryo L): denetlenecek kök ve PAKET anahtarı. Zorunlu kipte (korumalı paket) YOK SAYILIR. */
@@ -24,10 +26,24 @@ export function integrityCheckTarget(required: boolean = NATIVE_REQUIRED): { rea
   return { root: testTarget.root ?? process.cwd(), keys: testTarget.keys };
 }
 
+/** İmzası doğrulanmış listenin paket kimliği; imza/şema düşmüşse null (paket bilinmiyor). */
+function packageIdOf(o: IntegrityOutcome | null): string | null {
+  return o?.rapor?.paket?.paketId ?? null;
+}
+
+/** İki paket kimliği FARKLI bir paketi mi gösteriyor (biri bilinmiyorsa aynı sayılır — sıfırlama yok). */
+function isNewPackage(known: string | null | undefined, current: string | null): boolean {
+  return known !== null && known !== undefined && current !== null && known !== current;
+}
+
 export function setIntegrityOutcome(o: IntegrityOutcome | null, nowMs: number = Date.now()): void {
   integrity = o;
-  if (o?.durum === "GECERSIZ") firstMismatchMs ??= nowMs;
-  else if (o && o.durum !== "OLCULEMEDI") firstMismatchMs = null;
+  const pkg = packageIdOf(o);
+  if (firstMismatch && isNewPackage(firstMismatch.paketId, pkg)) firstMismatch = null;
+  if (o?.durum === "GECERSIZ") {
+    if (firstMismatch === null) firstMismatch = { ms: nowMs, paketId: pkg };
+    else if (firstMismatch.paketId === null && pkg !== null) firstMismatch = { ms: firstMismatch.ms, paketId: pkg };
+  }
   bumpLicenseSnapshotVersion();
 }
 
@@ -49,25 +65,48 @@ export function buildDateMsForState(): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-/** Ek süre çapası: kayıttaki ile bu süreçtekinin ERKENİ; uyuşmazlık yoksa null. */
-export function integrityAnchorMs(record: StateRecord | null): number | null {
-  if (integrity?.durum !== "GECERSIZ") return null;
-  const persisted = record?.butunlukIlk ? isoToMs(record.butunlukIlk) : null;
-  const all = [persisted, firstMismatchMs].filter((x): x is number => x !== null && Number.isFinite(x));
-  return all.length > 0 ? Math.min(...all) : null;
+/**
+ * Bu paketin ilk uyuşmazlık damgası: kayıttaki ile bu süreçtekinin ERKENİ. Başka pakete ait
+ * damga sayılmaz; paket bilinmiyorsa (imza düştü, eski kayıt) damga korunur — fail-closed.
+ */
+function stampFor(record: StateRecord | null, pkg: string | null): number | null {
+  const all: number[] = [];
+  if (record?.butunlukIlk && !isNewPackage(record.butunlukPaketId, pkg)) all.push(isoToMs(record.butunlukIlk));
+  if (firstMismatch && !isNewPackage(firstMismatch.paketId, pkg)) all.push(firstMismatch.ms);
+  const finite = all.filter((x) => Number.isFinite(x));
+  return finite.length > 0 ? Math.min(...finite) : null;
 }
 
-/** Kayda yazılacak değer: GEÇERSİZ → çapa · ölçülemedi/henüz yok → kayıttakini koru (`undefined`) · aksi null. */
-export function integrityRecordValue(record: StateRecord | null): string | null | undefined {
-  if (!integrity || integrity.durum === "OLCULEMEDI") return undefined;
-  if (integrity.durum !== "GECERSIZ") return null;
-  const ms = integrityAnchorMs(record);
-  return ms === null ? undefined : msToIso(ms);
+/** Bu paketin ilk uyuşmazlık damgası (şu an uyuşsa bile) — panel ayrıntısı gösterir. */
+export function integrityStampMs(record: StateRecord | null): number | null {
+  return stampFor(record, packageIdOf(integrity));
+}
+
+/** Ek süre çapası (yalnız uyuşmazlık sürerken); dosyalar yeniden uyuşup bozulursa ek süre YENİDEN BAŞLAMAZ. */
+export function integrityAnchorMs(record: StateRecord | null): number | null {
+  if (integrity?.durum !== "GECERSIZ") return null;
+  return stampFor(record, packageIdOf(integrity));
+}
+
+export interface IntegrityRecordPatch {
+  readonly butunlukIlk: string | null;
+  readonly butunlukPaketId: string | null;
+}
+
+/**
+ * Kayda yazılacak çapa: ölçülemedi/kapsam dışı/henüz yok → kayıttakini koru (`undefined`) ·
+ * aksi bu paketin damgası (uyuşma damgayı SİLMEZ; yalnız yeni imzalı paket — farklı paketId — sıfırlar).
+ */
+export function integrityRecordPatch(record: StateRecord | null): IntegrityRecordPatch | undefined {
+  if (!integrity || integrity.durum === "OLCULEMEDI" || integrity.durum === "KAPSAM_DISI") return undefined;
+  const pkg = packageIdOf(integrity);
+  const ms = stampFor(record, pkg);
+  return { butunlukIlk: ms === null ? null : msToIso(ms), butunlukPaketId: pkg ?? record?.butunlukPaketId ?? null };
 }
 
 /** Test-only. */
 export function __resetIntegrityStateForTests(): void {
   integrity = null;
-  firstMismatchMs = null;
+  firstMismatch = null;
   testTarget = null;
 }

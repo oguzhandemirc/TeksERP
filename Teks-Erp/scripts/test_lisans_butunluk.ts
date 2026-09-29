@@ -3,26 +3,30 @@
 // =============================================================================
 // DB'siz. Geçici dizinlerde küçük paketler kurar, GEÇİCİ PAKET anahtarlarıyla imzalar (satıcı
 // anahtarı gerekmez). NE ÖLÇER:
-//   §1 imzalı liste: geçerli · kurcalanmış · eksik · FAZLA (kapsamda / kapsam dışında) · imzasız ·
-//      yanlış anahtar · liste yok (zorunlu/geliştirme) · hazırlık anahtarı ÜRETİM'de · filigran
-//   §2 çapa: PACKAGE_PUBLIC_KEYS yalnız paket kid'i, hazırlık kid'i sınıf kuralında
-//   §3 merdiven + künye + çapa kalıcılığı (saf)
+//   §1 imzalı yük + liste dosyası: geçerli · kurcalanmış · eksik · FAZLA (kapsamda / dışında /
+//      node_modules / sembolik bağ; ÇEKİRDEKTE, TS ikinci katman) · migration SQL · liste dosyası
+//      kurcalı/silinmiş · imzasız · yanlış anahtar · liste yok · hazırlık anahtarı ÜRETİM'de · filigran
+//   §2 çapa: PACKAGE_PUBLIC_KEYS yalnız paket kid'i, hazırlık kid'i sınıf kuralında; kapsam
+//   §3 merdiven + künye + çapa kalıcılığı (saf): uyuşma damgayı silmez, yalnız yeni paketId sıfırlar
 //   §4 native'e bağlama: motor çekirdekten geçer; zorunlu kipte TS'e düşme YOK; `.node` dlopen
 //      ÖNCESİ imzalı listeye karşı (liste yok / yanlış anahtar / kurcalanmış → çekirdek YOK)
-//   §5 imza aracı: öz-denetim, JWS tavanı, derleme künyesi tarihten
-//   §6 Docker teslim künyesi (`PAKET-DOCKER.json`) imzası: ek alanlar imzada, kurcalama GECERSIZ, CLI `belge`
+//   §5 imza aracı: öz-denetim, liste JWS tavanına takılmaz, derleme künyesi, node_modules'süz paket
+//   §5' şifreli modül paketleri (.tkmod, 2d) imzalı kapsamda: değişen UYUSMAZ, sonradan beliren FAZLA
+//   §6 Docker teslim künyesi (`PAKET-DOCKER.json`): kapsamdaki teslim dosyaları imzada listelenir, ek alanlar imzada, kurcalama GECERSIZ, eksik dosyayla imza yok, CLI `belge`
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_lisans_butunluk.ts
 // =============================================================================
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { createHash, createPrivateKey, randomUUID } from "node:crypto";
+import { createPrivateKey, randomUUID } from "node:crypto";
 import { atlamaDefteri } from "./lib/atlama";
 import { generatePackageKey, signManifestDocument, signPackageDirectory, writePackageKey } from "./lib/butunluk-imza";
 import { signJws, type RootKey } from "../src/lib/license/protocol";
 import { INTEGRITY_TYP, PACKAGE_PUBLIC_KEYS, verifyIntegrity, type PackageKey } from "../src/lib/license/integrity";
-import { INTEGRITY_FILE, INTEGRITY_SCOPE_DIRS, isStagingPackageKid } from "../src/lib/license/integrity-scope";
+import { INTEGRITY_FILE, INTEGRITY_SCOPE_DIRS, INTEGRITY_SCOPE_FILES, isStagingPackageKid } from "../src/lib/license/integrity-scope";
+import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
+import { MODULE_PACKAGE_EXT } from "../src/lib/license/encrypted-module";
 import { runIntegrityCheck, type IntegrityCheckInput } from "../src/lib/license/integrity-check";
 import { tsLicenseCore, type LicenseCore } from "../src/lib/license/license-core";
 import { unavailableCore } from "../src/lib/license/native-adapter";
@@ -35,7 +39,7 @@ import {
   __resetIntegrityStateForTests,
   buildDateMsForState,
   integrityAnchorMs,
-  integrityRecordValue,
+  integrityRecordPatch,
   integrityStatusForState,
   setIntegrityOutcome,
 } from "../src/lib/license/integrity-state";
@@ -70,7 +74,7 @@ const B = anahtar("paket-2098");
 const H = anahtar("paket-hazirlik");
 const keysOf = (...k: TestKey[]): PackageKey[] => k.map((x) => ({ kid: x.kid, x: x.x }));
 
-/** Küçük paket kökü: dist/ + native/ + kökte package.json + kapsam dışı logs/. */
+/** Küçük paket kökü: dist/ + native/ + node_modules/ + prisma/migrations/ + kökte package.json + kapsam dışı logs/. */
 function paket(ad: string): string {
   const kok = path.join(TEMP, ad);
   mkdirSync(path.join(kok, "dist", "tools"), { recursive: true });
@@ -80,6 +84,11 @@ function paket(ad: string): string {
   writeFileSync(path.join(kok, "dist", "server.jsc"), Buffer.alloc(2048, 7));
   writeFileSync(path.join(kok, "dist", "tools", "arac.cjs"), "module.exports = 1;\n");
   writeFileSync(path.join(kok, "native", "lisans-cekirdek.test.node"), Buffer.alloc(512, 3));
+  mkdirSync(path.join(kok, "node_modules", "express", "Quick Start"), { recursive: true });
+  writeFileSync(path.join(kok, "node_modules", "express", "index.js"), "module.exports = {};\n");
+  writeFileSync(path.join(kok, "node_modules", "express", "Quick Start", "ilk.md"), "# boşluklu ad\n");
+  mkdirSync(path.join(kok, "prisma", "migrations", "20260929000000_ilk"), { recursive: true });
+  writeFileSync(path.join(kok, "prisma", "migrations", "20260929000000_ilk", "migration.sql"), "CREATE TABLE x (id uuid);\n");
   writeFileSync(path.join(kok, "package.json"), '{"name":"tekserp-backend"}\n');
   writeFileSync(path.join(kok, "logs", "out.log"), "log\n");
   return kok;
@@ -138,6 +147,28 @@ async function bolum1(core: LicenseCore, ek: string): Promise<void> {
   const algNone = await runIntegrityCheck(girdi(k, { core }));
   check(`§1h imzasız (alg none) liste → GECERSIZ (${ek})`, algNone.durum === "GECERSIZ" && algNone.kunye === null, `${algNone.kod}`);
 
+  await imzala(k, A);
+  writeFileSync(path.join(k, "node_modules", "opsiyonel.js"), "evil()\n");
+  const nm = await runIntegrityCheck(girdi(k, { core }));
+  check(`§1m node_modules'te FAZLA dosya (isteğe bağlı bağımlılık gölgesi) → GECERSIZ BUTUNLUK_FAZLA, ÇEKİRDEK raporunda (${ek})`, nm.kod === "BUTUNLUK_FAZLA" && nm.rapor?.kod === "BUTUNLUK_FAZLA" && (nm.rapor?.fazla ?? []).includes("node_modules/opsiyonel.js"), `${nm.kod} rapor=${nm.rapor?.kod}`);
+  rmSync(path.join(k, "node_modules", "opsiyonel.js"));
+  const sql = path.join(k, "prisma", "migrations", "20260929000000_ilk", "migration.sql");
+  writeFileSync(sql, "DROP TABLE x;;;;;;;;;;;;;;;\n");
+  const mig = await runIntegrityCheck(girdi(k, { core }));
+  check(`§1n migration SQL değişti → GECERSIZ BUTUNLUK_UYUSMAZ (${ek})`, mig.kod === "BUTUNLUK_UYUSMAZ" && (mig.rapor?.degisik ?? []).some((f) => f.endsWith("migration.sql")));
+  writeFileSync(sql, "CREATE TABLE x (id uuid);\n");
+  symlinkSync(path.join(k, "logs"), path.join(k, "dist", "bag"));
+  const bag = await runIntegrityCheck(girdi(k, { core }));
+  check(`§1o kapsamda sembolik bağ izlenmez, kendisi FAZLA sayılır (${ek})`, bag.kod === "BUTUNLUK_FAZLA" && (bag.rapor?.fazla ?? []).includes("dist/bag"), `${bag.kod}`);
+  rmSync(path.join(k, "dist", "bag"));
+  const listeYolu = path.join(k, INTEGRITY_LIST_FILE);
+  const listeMetni = readFileSync(listeYolu);
+  writeFileSync(listeYolu, Buffer.from(listeMetni.toString("latin1").replace("dist/server.js", "dist/server.jx"), "latin1"));
+  const lb = await runIntegrityCheck(girdi(k, { core }));
+  rmSync(listeYolu);
+  const ly = await runIntegrityCheck(girdi(k, { core }));
+  check(`§1p liste dosyası kurcalı/silinmiş → GECERSIZ BUTUNLUK_LISTE_BOZUK (${ek})`, lb.kod === "BUTUNLUK_LISTE_BOZUK" && ly.kod === "BUTUNLUK_LISTE_BOZUK" && (ly.rapor?.eksik ?? []).includes(INTEGRITY_LIST_FILE));
+
   rmSync(path.join(k, INTEGRITY_FILE));
   const yokZ = await runIntegrityCheck(girdi(k, { core }));
   const yokG = await runIntegrityCheck(girdi(k, { core, required: false }));
@@ -165,7 +196,8 @@ function bolum2(): void {
   console.log("\n§2 çapa");
   check("§2a PACKAGE_PUBLIC_KEYS dolu, her kid `paket-…`", PACKAGE_PUBLIC_KEYS.length > 0 && PACKAGE_PUBLIC_KEYS.every((k) => /^paket-[a-z0-9-]{1,40}$/.test(k.kid)));
   check("§2b hazırlık kid'i sınıf kuralında (paket-hazirlik*), üretim kid'i değil", isStagingPackageKid("paket-hazirlik") && isStagingPackageKid("paket-hazirlik-2") && !isStagingPackageKid("paket-2027") && !isStagingPackageKid("paket-hazirlikx"));
-  check("§2c kapsam dizinleri native/ + dist/ + runtime/ içerir", ["dist", "native", "runtime"].every((d) => INTEGRITY_SCOPE_DIRS.includes(d)));
+  check("§2c kapsam dizinleri dist/ + native/ + runtime/ + node_modules/ + prisma/migrations/ içerir", ["dist", "native", "runtime", "node_modules", "prisma/migrations"].every((d) => INTEGRITY_SCOPE_DIRS.includes(d)));
+  check("§2d ecosystem.config.js kapsamda DEĞİL (kur.ps1 yükseltmede sunucununkini korur)", !INTEGRITY_SCOPE_FILES.includes("ecosystem.config.js"));
 }
 
 const DAY = 86_400_000;
@@ -191,23 +223,42 @@ function bolum3(): void {
 
   __resetIntegrityStateForTests();
   check("§3f ölçülmeden önce: korumalı pakette OLCULEMEDI, geliştirmede KAPSAM_DISI", integrityStatusForState(true) === "OLCULEMEDI" && integrityStatusForState(false) === "KAPSAM_DISI");
-  const sonuc = (durum: IntegrityOutcome["durum"], derleme: string | null): IntegrityOutcome => ({
-    durum, kod: null, kid: A.kid, rapor: null, fazla: [], fazlaSayisi: 0, denetlendi: new Date(NOW).toISOString(),
-    kunye: derleme ? { derlemeTarihi: derleme, musteri: null, paketId: randomUUID(), surum: "2.12.0" } : null,
+  const P1 = randomUUID();
+  const P2 = randomUUID();
+  const sonuc = (durum: IntegrityOutcome["durum"], derleme: string | null, paketId: string | null = P1): IntegrityOutcome => ({
+    durum, kod: null, kid: A.kid, fazla: [], fazlaSayisi: 0, denetlendi: new Date(NOW).toISOString(),
+    rapor: paketId
+      ? { durum: durum === "GECERSIZ" ? "GECERSIZ" : "GECERLI", kod: null, dosyaSayisi: 1, eksik: [], eksikSayisi: 0, degisik: [], degisikSayisi: 0, okunamayan: [], okunamayanSayisi: 0, fazla: [], fazlaSayisi: 0,
+          paket: { paketId, urun: "backend", surum: "2.12.0", derlemeTarihi: derleme ?? "2026-09-01T00:00:00.000Z", musteri: null } }
+      : null,
+    kunye: derleme && paketId ? { derlemeTarihi: derleme, musteri: null, paketId, surum: "2.12.0" } : null,
   });
-  const kayit = (ilk: string | null): StateRecord => ({
+  const kayit = (ilk: string | null, paketId: string | null | "yok" = P1): StateRecord => ({
     v: 1, kurulumId: randomUUID(), kiraId: randomUUID(), birikenMs: 0, yazildi: new Date(NOW).toISOString(), yuksekSu: new Date(NOW).toISOString(),
-    sonKiraZorlamasi: null, sonYaptirim: null, sira: 1, butunlukIlk: ilk,
+    sonKiraZorlamasi: null, sonYaptirim: null, sira: 1, butunlukIlk: ilk, ...(paketId === "yok" ? {} : { butunlukPaketId: paketId }),
   });
   setIntegrityOutcome(sonuc("GECERSIZ", "2026-09-01T00:00:00.000Z"), NOW);
   const onGun = new Date(NOW - 10 * DAY).toISOString();
   check("§3g çapa = kayıttaki ile süreçtekinin ERKENİ (yeniden başlatma ek süreyi uzatmaz)", integrityAnchorMs(kayit(onGun)) === NOW - 10 * DAY && integrityAnchorMs(null) === NOW);
-  check("§3h kayda yazılan: GECERSIZ → çapa", integrityRecordValue(kayit(onGun)) === onGun);
+  const y = integrityRecordPatch(kayit(onGun));
+  check("§3h kayda yazılan: GECERSIZ → çapa + paketId", y?.butunlukIlk === onGun && y?.butunlukPaketId === P1);
   check("§3i imzalı künyeden derleme tarihi okunur", buildDateMsForState() === Date.parse("2026-09-01T00:00:00.000Z"));
-  setIntegrityOutcome(sonuc("OLCULEMEDI", null), NOW + DAY);
-  check("§3j ölçülemedi: kayıttaki çapa KORUNUR (undefined) · künye yok → derleme tarihi null", integrityRecordValue(kayit(onGun)) === undefined && buildDateMsForState() === null);
+  setIntegrityOutcome(sonuc("OLCULEMEDI", null, null), NOW + DAY);
+  check("§3j ölçülemedi: kayıttaki çapa KORUNUR (undefined) · künye yok → derleme tarihi null", integrityRecordPatch(kayit(onGun)) === undefined && buildDateMsForState() === null);
   setIntegrityOutcome(sonuc("GECERLI", "2026-09-01T00:00:00.000Z"), NOW + 2 * DAY);
-  check("§3k uyuşunca çapa sıfırlanır (kayda null)", integrityRecordValue(kayit(onGun)) === null && integrityAnchorMs(kayit(onGun)) === null);
+  const geri = integrityRecordPatch(kayit(onGun));
+  check("§3k ⭐ dosyalar AYNI pakette yeniden uyuşunca damga SİLİNMEZ (kayıtta kalır), ek süre bulgusu yok", geri?.butunlukIlk === onGun && geri?.butunlukPaketId === P1 && integrityAnchorMs(kayit(onGun)) === null);
+  setIntegrityOutcome(sonuc("GECERSIZ", "2026-09-01T00:00:00.000Z"), NOW + 5 * DAY);
+  check("§3l ⭐ kısa geri yükleme sonrası yeniden bozulma: çapa İLK uyuşmazlıkta kalır (30 gün yeniden başlamaz)", integrityAnchorMs(kayit(onGun)) === NOW - 10 * DAY);
+  setIntegrityOutcome(sonuc("GECERLI", "2026-09-01T00:00:00.000Z", P2), NOW + 6 * DAY);
+  const yeni = integrityRecordPatch(kayit(onGun));
+  check("§3m yeni imzalı paket (farklı paketId) kurulunca damga sıfırlanır", yeni?.butunlukIlk === null && yeni?.butunlukPaketId === P2);
+  setIntegrityOutcome(sonuc("GECERSIZ", "2026-09-01T00:00:00.000Z", P2), NOW + 7 * DAY);
+  check("§3n yeni pakette ilk uyuşmazlık kendi damgasını alır (eski paketin kaydı sayılmaz)", integrityAnchorMs(kayit(onGun, P1)) === NOW + 7 * DAY);
+  check("§3o paketId'siz eski kayıttaki damga BENİMSENİR (fail-closed) · paket bilinmeyen GECERSIZ'de kayıt korunur", integrityAnchorMs(kayit(onGun, "yok")) === NOW - 10 * DAY);
+  setIntegrityOutcome(sonuc("GECERSIZ", null, null), NOW + 8 * DAY);
+  const bilinmez = integrityRecordPatch(kayit(onGun, P1));
+  check("§3p imza düştü (paket bilinmiyor): kayıttaki damga ve paketId korunur", bilinmez?.butunlukIlk === onGun && bilinmez?.butunlukPaketId === P1);
   __resetIntegrityStateForTests();
 }
 
@@ -227,7 +278,10 @@ async function bolum4(): Promise<void> {
   check("§4c korumalı derleme __TEKSERP_NATIVE_REQUIRED__=true + filigran sabitini tanımlar", /__TEKSERP_NATIVE_REQUIRED__:\s*'true'/.test(kb) && /__TEKSERP_FILIGRAN__:\s*JSON\.stringify/.test(kb));
   const pk = oku("../deploy/paketle.ps1");
   const kur = oku("../deploy/kur.ps1");
-  check("§4d paketle.ps1 native'i app/native'e koyar (yoksa Fail) · kur.ps1 imzasız korumalı paketi reddeder", /Join-Path \$stage "native"/.test(pk) && /native lisans cekirdegi yok/.test(pk) && /Korumali paket IMZASIZ/.test(kur));
+  check(
+    "§4d paketle.ps1 native'i app/native'e koyar (yoksa Fail) · kur.ps1 imzasız ya da listesiz korumalı paketi reddeder",
+    /Join-Path \$stage "native"/.test(pk) && /native lisans cekirdegi yok/.test(pk) && /Korumali paket IMZASIZ/.test(kur) && /Join-Path \$temp "butunluk-liste\.txt"/.test(kur),
+  );
 
   const dosya = nativeFileName(process.platform, process.arch);
   const uretim = dosya ? path.join(TEKS, "native", "lisans-cekirdek", "dist-uretim", dosya) : null;
@@ -257,56 +311,99 @@ async function bolum4(): Promise<void> {
 async function bolum5(): Promise<void> {
   console.log("\n§5 imza aracı");
   const kok = paket("s5");
-  for (let i = 0; i < 400; i++) writeFileSync(path.join(kok, "dist", `parca-${String(i).padStart(3, "0")}.js`), `${i}\n`);
-  let hata = "";
-  try {
-    await imzala(kok, A);
-  } catch (e) {
-    hata = e instanceof Error ? e.message : String(e);
-  }
-  check("§5a JWS 32 KB tavanını aşan liste imzalanmaz (paket kapsamı daraltılmalı)", /azami uzunluğu|bayt >/.test(hata), hata.slice(0, 80));
+  for (let i = 0; i < 2000; i++) writeFileSync(path.join(kok, "dist", `parca-${String(i).padStart(4, "0")}.js`), `${i}\n`);
+  const buyuk = await imzala(kok, A);
+  const bk = await runIntegrityCheck(girdi(kok));
+  check("§5a JWS tavanını (32 KB) aşacak liste ayrı dosyada: 2000+ dosya imzalanır, JWS küçük kalır, denetim GECERLI", buyuk.entries.length > 2000 && buyuk.token.length < 2048 && bk.durum === "GECERLI", `${buyuk.entries.length} dosya · jws ${buyuk.token.length} bayt`);
   const k2 = paket("s5b");
   const r = await imzala(k2, A, { derleme: "2027-01-02T03:04:05.000Z", musteri: "testfabrika" });
-  check("§5b imzalı yük: derleme tarihi + müşteri + kapsam dosyaları (logs/ yok, butunluk.jws yok)", r.manifest.derlemeTarihi === "2027-01-02T03:04:05.000Z" && r.manifest.musteri === "testfabrika" && r.manifest.dosyalar.every((f) => !f.yol.startsWith("logs/") && f.yol !== INTEGRITY_FILE));
+  const yollar = r.entries.map((f) => f.yol);
+  check(
+    "§5b imzalı yük: derleme tarihi + müşteri + kapsam (node_modules + migration SQL listede; logs/, butunluk.jws, liste dosyası yok)",
+    r.manifest.derlemeTarihi === "2027-01-02T03:04:05.000Z" && r.manifest.musteri === "testfabrika" &&
+      yollar.includes("node_modules/express/Quick Start/ilk.md") && yollar.some((y) => y.startsWith("prisma/migrations/")) &&
+      yollar.every((y) => !y.startsWith("logs/") && y !== INTEGRITY_FILE && y !== INTEGRITY_LIST_FILE),
+  );
+  const k3 = paket("s5c");
+  rmSync(path.join(k3, "node_modules"), { recursive: true });
+  const ince = await imzala(k3, A);
+  check("§5d node_modules'süz paket (-NodeModulesHaric): imzalı kapsamda node_modules YOK (sunucudaki npm ci FAZLA sayılmaz)", !ince.manifest.kapsam.dizinler.includes("node_modules") && ince.manifest.kapsam.dizinler.includes("dist"));
   const sahte = signJws({ typ: INTEGRITY_TYP, kid: A.kid, payload: { v: 1 }, privateKey: A.privateKey });
   writeFileSync(path.join(k2, INTEGRITY_FILE), sahte);
   const s = await runIntegrityCheck(girdi(k2));
   check("§5c şemaya uymayan imzalı yük → GECERSIZ (BELGE_*)", s.durum === "GECERSIZ" && (s.kod ?? "").startsWith("BELGE_"), `${s.kod}`);
 }
 
+// §5' — Faz 2d'nin şifreli modül paketleri (`dist/moduller/*.tkmod`) 2e-S'nin imzalı listesinde: derleyicinin
+// yazdığı ve yönlendiricinin okuduğu dizin imzalı kapsamda; değişen .tkmod UYUSMAZ, sonradan beliren FAZLA.
+async function bolum5b(): Promise<void> {
+  console.log("\n§5' şifreli modül paketleri (2d .tkmod) imzalı kapsamda");
+  const k = paket("s5m");
+  const modDir = path.join(k, "dist", "moduller");
+  mkdirSync(modDir, { recursive: true });
+  const tk = path.join(modDir, `depo-multi${MODULE_PACKAGE_EXT}`);
+  writeFileSync(tk, Buffer.alloc(512, 7));
+  const r = await imzala(k, A);
+  const derleyici = readFileSync(path.join(TEKS, "scripts", "build-korumali.mjs"), "utf8");
+  const yonlendirici = readFileSync(path.join(TEKS, "src", "lib", "license", "encrypted-module-router.ts"), "utf8");
+  check(
+    "§5e ⭐ .tkmod imzalı listede: derleyici dist/moduller'e yazar, yönlendirici oradan okur, dizin imzalı kapsamda",
+    INTEGRITY_SCOPE_DIRS.some((d) => "dist/moduller".startsWith(`${d}/`)) && r.entries.some((e) => e.yol === `dist/moduller/depo-multi${MODULE_PACKAGE_EXT}`) &&
+      /path\.join\(ciktiDir, 'moduller'\)/.test(derleyici) && /path\.join\(__dirname, "moduller"\)/.test(yonlendirici),
+  );
+  writeFileSync(tk, Buffer.alloc(512, 8));
+  const deg = await runIntegrityCheck(girdi(k));
+  check("§5f imzadan sonra değişen .tkmod → GECERSIZ (BUTUNLUK_UYUSMAZ)", deg.durum === "GECERSIZ" && deg.kod === "BUTUNLUK_UYUSMAZ", `${deg.durum} ${deg.kod}`);
+  writeFileSync(tk, Buffer.alloc(512, 7));
+  writeFileSync(path.join(modDir, `sahte${MODULE_PACKAGE_EXT}`), "x");
+  const fz = await runIntegrityCheck(girdi(k));
+  check("§5g imzadan sonra beliren .tkmod → GECERSIZ (BUTUNLUK_FAZLA)", fz.durum === "GECERSIZ" && fz.kod === "BUTUNLUK_FAZLA", `${fz.durum} ${fz.kod}`);
+}
+
 async function bolum6(): Promise<void> {
-  console.log("\n§6 Docker teslim künyesi imzası (PAKET-DOCKER.json → .jws)");
+  console.log("\n§6 Docker teslim künyesi imzası (PAKET-DOCKER.json → .jws + liste dosyası)");
   const dir = path.join(TEMP, "teslim");
   mkdirSync(dir, { recursive: true });
-  const dosya = (ad: string, icerik: string | Buffer) => {
-    writeFileSync(path.join(dir, ad), icerik);
-    const b = readFileSync(path.join(dir, ad));
-    return { yol: ad, sha256: createHash("sha256").update(b).digest("base64url"), boyut: b.length };
-  };
-  const liste = [dosya("tekserp-korumali_2.12.0_linux-amd64.tar.gz", Buffer.alloc(4096, 5)), dosya("docker-compose.yml", "services: {}\n"), dosya(".env.ornek", "A=1\n")];
-  const kunye = { v: 1, paketId: randomUUID(), urun: "backend-docker", surum: "2.12.0", derlemeTarihi: "2026-09-30T08:00:00.000Z", musteri: "testfabrika", commit: "abc", imaj: { etiket: "x:1", platform: "linux/amd64" }, dosyalar: liste };
+  const ad = "tekserp-korumali_2.12.0_linux-amd64.tar.gz";
+  writeFileSync(path.join(dir, ad), Buffer.alloc(4096, 5));
+  writeFileSync(path.join(dir, "docker-compose.yml"), "services: {}\n");
+  writeFileSync(path.join(dir, ".env.ornek"), "A=1\n");
+  writeFileSync(path.join(dir, "SHA256SUMS"), "kapsam dışı\n");
+  const kunye = { v: 1, paketId: randomUUID(), urun: "backend-docker", surum: "2.12.0", derlemeTarihi: "2026-09-30T08:00:00.000Z", musteri: "testfabrika", commit: "abc", imaj: { etiket: "x:1", platform: "linux/amd64" }, kapsam: { dizinler: [], dosyalar: [ad, "docker-compose.yml", ".env.ornek"] } };
   const belge = path.join(dir, "PAKET-DOCKER.json");
   writeFileSync(belge, `${JSON.stringify(kunye, null, 2)}\n`);
   const r = await signManifestDocument(belge, A);
   const v = await verifyIntegrity(readFileSync(r.file, "utf8").trim(), dir, keysOf(A));
-  const yuk = JSON.parse(Buffer.from(r.token.split(".")[1] ?? "", "base64url").toString("utf8")) as { imaj?: { etiket?: string }; commit?: string };
-  check("§6a ⭐ imzalı künye GECERLI, ek alanlar (imaj · commit) imza kapsamında", v.durum === "GECERLI" && yuk.imaj?.etiket === "x:1" && yuk.commit === "abc", `${v.durum} ${v.kod ?? ""}`);
+  const yuk = JSON.parse(Buffer.from(r.token.split(".")[1] ?? "", "base64url").toString("utf8")) as { imaj?: { etiket?: string }; commit?: string; liste?: { dosyaSayisi?: number } };
+  const yazili = JSON.parse(readFileSync(belge, "utf8")) as unknown;
+  check(
+    "§6a ⭐ imzalı künye GECERLI: üç teslim dosyası listede, ek alanlar (imaj · commit) imzada, künye dosyası = imzalı yük",
+    v.durum === "GECERLI" && yuk.liste?.dosyaSayisi === 3 && yuk.imaj?.etiket === "x:1" && yuk.commit === "abc" && JSON.stringify(yazili) === JSON.stringify(yuk) && existsSync(r.listFile),
+    `${v.durum} ${v.kod ?? ""}`,
+  );
   appendFileSync(path.join(dir, "docker-compose.yml"), "# kurcalandı\n");
   const v2 = await verifyIntegrity(readFileSync(r.file, "utf8").trim(), dir, keysOf(A));
   check("§6b teslim dosyası kurcalanınca GECERSIZ (BUTUNLUK_UYUSMAZ)", v2.durum === "GECERSIZ" && v2.kod === "BUTUNLUK_UYUSMAZ", `${v2.durum} ${v2.kod}`);
+  writeFileSync(path.join(dir, "docker-compose.yml"), "services: {}\n");
+  writeFileSync(r.listFile, readFileSync(r.listFile, "utf8").replace(".env.ornek", ".env.orneX"));
+  const v3 = await verifyIntegrity(readFileSync(r.file, "utf8").trim(), dir, keysOf(A));
+  check("§6c liste dosyası kurcalanınca GECERSIZ (BUTUNLUK_LISTE_BOZUK)", v3.durum === "GECERSIZ" && v3.kod === "BUTUNLUK_LISTE_BOZUK", `${v3.durum} ${v3.kod}`);
+  rmSync(path.join(dir, ".env.ornek"));
+  rmSync(r.file);
+  rmSync(r.listFile);
+  writeFileSync(belge, `${JSON.stringify(kunye, null, 2)}\n`);
   let hata = "";
   try {
     await signManifestDocument(belge, A);
   } catch (e) {
     hata = e instanceof Error ? e.message : String(e);
   }
-  check("§6c kurcalanmış dosyayla imza ATILMAZ (öz-denetim)", /öz-denetim/.test(hata), hata.slice(0, 80));
-  writeFileSync(path.join(dir, "docker-compose.yml"), "services: {}\n");
+  check("§6d teslim dosyası eksikken imza ATILMAZ (ne .jws ne liste dosyası)", /teslim dosyası eksik: \.env\.ornek/.test(hata) && !existsSync(r.file) && !existsSync(r.listFile), hata.slice(0, 80));
+  writeFileSync(path.join(dir, ".env.ornek"), "A=1\n");
   const anahtarDizini = path.join(TEMP, "anahtar6");
   const kf = writePackageKey(anahtarDizini, generatePackageKey("paket-hazirlik", ["TEST", "DEMO"]));
-  rmSync(r.file);
   const cli = spawnSync(process.execPath, ["--import", "tsx", "scripts/build-korumali-imza.ts", "belge", `--belge=${belge}`, `--anahtar=${kf}`], { cwd: TEKS, encoding: "utf8", timeout: 60_000 });
-  check("§6d ⭐ CLI `belge` (teslim-paketle.sh'in çağrısı) .jws yazar", cli.status === 0 && existsSync(r.file), `${cli.status} ${(cli.stderr || cli.stdout).trim().slice(0, 100)}`);
+  check("§6e ⭐ CLI `belge` (teslim-paketle.sh'in çağrısı) .jws + liste dosyası yazar", cli.status === 0 && existsSync(r.file) && existsSync(r.listFile), `${cli.status} ${(cli.stderr || cli.stdout).trim().slice(0, 100)}`);
 }
 
 async function main(): Promise<void> {
@@ -315,12 +412,13 @@ async function main(): Promise<void> {
     await bolum1(tsLicenseCore, "ts");
     const n = loadLicenseCoreFrom({ required: false, cwd: TEKS, env: {}, platform: process.platform, arch: process.arch });
     if (n.status.kaynak === "native" && n.status.kunye.testCapasi) await bolum1(n.core, "native");
-    else ATLAMA.atla("§1 native kolu", "test çapalı native derlemesi yok — `cd native/lisans-cekirdek && npm run derle`", 9);
+    else ATLAMA.atla("§1 native kolu", "test çapalı native derlemesi yok — `cd native/lisans-cekirdek && npm run derle`", 13);
     await bolum1b();
     bolum2();
     bolum3();
     await bolum4();
     await bolum5();
+    await bolum5b();
     await bolum6();
   } finally {
     rmSync(TEMP, { recursive: true, force: true });

@@ -381,6 +381,12 @@ interface LicenseDetail {
   tasima: { talepId: string; istendi: string; gerekce: string | null; durum?: "BEKLIYOR" | "ONAYLANDI" /* ONAYLANDI: taşıma kodu bekleniyor (F1a) */ } | null;
   gozlem: { reddedilecekIstek: number; reddedilecekModul: number };
   proxy: LicenseProxySettings;
+  // 2e-S (EK alan): lisans çekirdeği + imzalı paket bütünlüğü — dosya adı YOK, yalnız sayılar.
+  butunluk: { cekirdek: "native" | "ts" | "yok"; cekirdekNeden: string | null; zorunlu: boolean;
+              durum: "GECERLI" | "GECERSIZ" | "OLCULEMEDI" | "KAPSAM_DISI"; kod: string | null; denetlendi: string | null;
+              paketId: string | null; paketSurumu: string | null; derlemeTarihi: string | null; anahtar: string | null /* PAKET kid */;
+              sayilar: { dosya: number; eksik: number; degisik: number; fazla: number; okunamayan: number } | null;
+              ilkUyusmazlik: string | null /* ek süre çapası; yalnız yeni paketId sıfırlar */ };
 }
 interface LicenseEffect {
   bant: Banner | null; guncellemeIzni: boolean;
@@ -411,6 +417,7 @@ type PollOutcome = "YAPILANDIRILMAMIS" | "HAZIR_DEGIL" | "ETKIN_DEGIL" | "BASARI
 - **Ayak izi:** `LICENSE_STATE_CHANGED` (geçerlilik/kademe/kip değişimi; açılıştaki ilk ölçüm taban, satır yazmaz) · `LICENSE_LEASE_ACCEPTED` · `LICENSE_SANCTION_CHANGED` · `LICENSE_OBSERVATION_SUMMARY` (gözlemde günde bir, etkin kurulumda) · `LICENSE_ADMIN_ACTION` (`eylem` ∈ etkinlestir · cevrimdisi-yanit · aktarma-yaniti · tasima-talebi · dr-devral · proxy · veri-disari). Başarısız yoklama DEFTERE YAZILMAZ (bellek + `detay.yoklama`). Proxy kimlik bilgisi yüke girmez.
 - **Eski istemci ne yapar:** bütün uçlar YENİ; mevcut uç/alan değişmedi → eski panel/tablet etkilenmez. `/api/admin/health` yüküne yalnız EK `license` bloğu geldi (public `/health` DONMUŞ); blok F1a'da `motor` (`BASLAMADI` · `BASLIYOR` · `CALISIYOR` · `DURDU`) + `motorNeden` (`KIMLIK_YOK` · `DB_OLGULARI`) taşır. `detay.kurulum.veritabaniKimligi` ve `detay.tasima.durum` EK alanlardır; `detay.kurulum.kurulumId` artık lisans kimliğidir (etkinleşmemişte null — önceden DB kimliğiydi, sahada lisanslı kurulum yok). `detay.depo.sorun = "OKUNAMADI"` tek bir belge okunamadığında da görünür. `PUT /api/admin/settings/system.installationId` artık 400 `SETTING_KEY_RESERVED` (panelde bu anahtarın yüzeyi yoktu).
 - **Parmak izi yükü:** `detay.parmakIzi.olculen` yalnız etken başına boolean; ham değer ve tuzlu özet uca GİRMEZ.
+- **Bütünlük yükü (2e-S):** `detay.butunluk` EK alandır (eski panel görmezden gelir, yeni panel alan yoksa "eski sürüm" yazar); dosya adı taşımaz.
 
 ### 14a. Kapı ve modül tavanı (Faz 1c-kapı) — istemcilerin 403 dalı buna karşı yazılır
 

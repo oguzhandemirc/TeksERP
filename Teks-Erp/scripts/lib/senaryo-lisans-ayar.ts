@@ -12,7 +12,7 @@ import type { RootKey } from "../../src/lib/license/protocol";
 import { configureIntegrityForTests, getIntegrityOutcome } from "../../src/lib/license/integrity-state";
 import { configureLicenseCoreForTests, getLicenseCore } from "../../src/lib/license/native";
 import { tsLicenseCore } from "../../src/lib/license/license-core";
-import { refreshLicenseIntegrity } from "../../src/services/license-sync.service";
+import { refreshLicenseIntegrity } from "../../src/services/license-integrity.service";
 
 const capaDosyasi = process.env.SENARYO_CAPA_DOSYASI;
 if (!capaDosyasi) {

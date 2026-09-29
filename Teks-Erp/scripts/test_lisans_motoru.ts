@@ -22,6 +22,7 @@
 //   ⭐ kira dosyası yokluğu "yoklama başarısız" değil; HAK/durum varken yoklanır (D3)
 //   ⭐ motor pes etmez, sağlıkta durum (D5) · gözlem sayacı istek başına · zil fırtınası yok ·
 //      ortam künyesinde makine adı yok · kapalı kalan makineye sahte SAAT_İLERİ yok · taşıma onayı kod bekler (D8)
+//   ⭐ yeni HAK kabul edilince bütünlük HEMEN yeniden koşar (hazırlık anahtarının sınıf kararı, §22)
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): M1 persistAccumulation bozuk kayıtta sıfırdan başlatır · M2 kabulde kurulum
@@ -45,7 +46,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createPublicKey, randomUUID } from "node:crypto";
+import { createPrivateKey, createPublicKey, randomUUID } from "node:crypto";
 import type { Request } from "express";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -84,6 +85,9 @@ import {
   updateProxySettings,
 } from "../src/services/license.service";
 import { buildPollBody, pollLicenseOnce, refreshLicenseDbFacts } from "../src/services/license-sync.service";
+import { awaitIntegrityRefreshForTests, refreshLicenseIntegrity } from "../src/services/license-integrity.service";
+import { configureIntegrityForTests, getIntegrityOutcome } from "../src/lib/license/integrity-state";
+import { generatePackageKey, signPackageDirectory } from "./lib/butunluk-imza";
 import {
   configureLicensePollForTests,
   nextPollDelayMs,
@@ -240,6 +244,49 @@ async function kurulumuHazirla(): Promise<Hazir> {
 function yeniden(dizin: string): void {
   loadLicenseStoreSync({ dir: dizin });
   invalidateLicenseSnapshot();
+}
+
+/** EN SONDA koşar: HAK sınıfını değiştirir (sonraki bölümler URETIM HAK'ına dayanır). */
+async function hakButunlukBolumu(x: Hazir): Promise<void> {
+  console.log("\n§22 — yeni HAK kabul edilince bütünlük HEMEN yeniden koşar (hazırlık anahtarının sınıf kararı)");
+  const hazirlik = await hazirlikPaketi();
+  try {
+    await refreshLicenseIntegrity();
+    const once = getIntegrityOutcome()?.kod ?? null;
+    const simdi = new Date().toISOString();
+    const hak = hakBas(x.f, { surum: 2, sinif: "TEST" });
+    const kira = kiraBas(x.f, { hakSurum: 2, parmakIzi: x.f.parmakIzi, zorlama: false, verilis: simdi, sunucuSaati: simdi });
+    await acceptOfflineResponse({ v: 1, hak, kira, indirmeBelirtecleri: [], sunucuSaati: simdi }, "aktarma", null);
+    await awaitIntegrityRefreshForTests();
+    const sonra = getIntegrityOutcome();
+    check(
+      "§22a ⭐ ÜRETİM HAK'ında hazırlık imzası RED → TEST sınıflı yeni HAK kabul edilir edilmez bütünlük yeniden koşar (günlük tur beklenmez)",
+      once === "BUTUNLUK_HAZIRLIK_ANAHTARI" && sonra?.durum === "GECERLI",
+      `önce ${once} · sonra ${sonra?.durum}/${sonra?.kod}`,
+    );
+    const b = getLicenseDetail().butunluk;
+    check(
+      "§22b detay ucu (license:view): çekirdek kaynağı + bütünlük durumu + imzalı paketId; dosya adı YOK, yalnız sayılar",
+      (b.cekirdek === "native" || b.cekirdek === "ts") && b.durum === "GECERLI" && b.paketId !== null && b.paketId === sonra?.rapor?.paket?.paketId &&
+        b.sayilar?.dosya === 1 && b.sayilar.fazla === 0 && !JSON.stringify(b).includes("server.js"),
+      JSON.stringify(b),
+    );
+  } finally {
+    configureIntegrityForTests(null);
+    fs.rmSync(hazirlik, { recursive: true, force: true });
+  }
+}
+
+/** Hazırlık PAKET anahtarıyla imzalı küçük paket; bütünlük hedefi olarak kurulur (sınıf kuralı HAK'a bağlı). */
+async function hazirlikPaketi(): Promise<string> {
+  const kok = fs.mkdtempSync(path.join(os.tmpdir(), "lisans-motor-hazirlik-"));
+  fs.mkdirSync(path.join(kok, "dist"));
+  fs.writeFileSync(path.join(kok, "dist", "server.js"), "// hazırlık paketi\n");
+  const k = generatePackageKey("paket-hazirlik-motor", ["TEST"]);
+  const key = { kid: k.kid, x: k.x, privateKey: createPrivateKey({ key: { kty: "OKP", crv: "Ed25519", x: k.x, d: k.d }, format: "jwk" }) };
+  await signPackageDirectory({ root: kok, key, urun: "backend", surum: "2.12.0", derlemeTarihi: new Date().toISOString(), musteri: null });
+  configureIntegrityForTests({ root: kok, keys: [{ kid: k.kid, x: k.x }] });
+  return kok;
 }
 
 async function etkinlestirmeBolumu(x: Hazir): Promise<void> {
@@ -774,6 +821,7 @@ async function main(): Promise<void> {
     await kapaliSureBolumu(hazir);
     await motorBolumu();
     await tasimaBolumu(hazir);
+    await hakButunlukBolumu(hazir);
     sozlesmeBolumu();
   } catch (e) {
     fail++;

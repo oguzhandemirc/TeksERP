@@ -30,6 +30,8 @@ import {
 } from "../lib/license/runtime";
 import type { Banner, LicenseEffect, StateReason } from "../lib/license/state";
 import { licenseError } from "./helpers/license-wire.helper";
+import { integritySection } from "./helpers/license-integrity-view.helper";
+import type { IntegrityStatus } from "../lib/license/state-rules";
 
 // ── Durum özeti (herkes) ────────────────────────────────────────────────────────
 export interface LicenseStatusSummary {
@@ -145,6 +147,21 @@ export interface LicenseDetail {
   readonly tasima: PendingTransfer | null;
   readonly gozlem: { reddedilecekIstek: number; reddedilecekModul: number };
   readonly proxy: LicenseProxySettings;
+  /** Lisans çekirdeği + imzalı paket bütünlüğü (dosya adı taşımaz; yalnız sayılar). */
+  readonly butunluk: {
+    cekirdek: "native" | "ts" | "yok";
+    cekirdekNeden: string | null;
+    zorunlu: boolean;
+    durum: IntegrityStatus;
+    kod: string | null;
+    denetlendi: string | null;
+    paketId: string | null;
+    paketSurumu: string | null;
+    derlemeTarihi: string | null;
+    anahtar: string | null;
+    sayilar: { dosya: number; eksik: number; degisik: number; fazla: number; okunamayan: number } | null;
+    ilkUyusmazlik: string | null;
+  };
 }
 
 function isoOrNull(ms: number | null): string | null {
@@ -246,6 +263,7 @@ export function getLicenseDetail(): LicenseDetail {
     tasima: store?.transfer ?? null,
     gozlem: peekObservationCounters(),
     proxy: getProxySettings(),
+    butunluk: integritySection(snap),
   };
 }
 

@@ -1,12 +1,14 @@
 // İmzalı dosya listesi — ÜRETİM tarafı (satıcı Mac'i). Kapsam ve dosya özeti tek kaynaktan
-// (`src/lib/license/integrity-scope.ts`), biçim protokolden (`integrity.ts`), imza protokolün
-// `signJws`i. Her imza, yazılmadan ÖNCE aynı kökte çalışan tarafın denetimiyle doğrulanır.
-import { generateKeyPairSync, createPrivateKey, randomUUID, type KeyObject } from "node:crypto";
+// (`src/lib/license/integrity-scope.ts`), liste biçimi `integrity-list.ts`, yük şeması `integrity.ts`,
+// imza protokolün `signJws`i. Liste ayrı dosyadır (`butunluk-liste.txt`); JWS yalnız onun boyunu +
+// sha256'sını imzalar. Her imza, yazılmadan ÖNCE aynı kökte çalışan tarafın denetimiyle doğrulanır.
+import { createHash, generateKeyPairSync, createPrivateKey, randomUUID, type KeyObject } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { JWS_MAX_LENGTH, publicKeyX, signJws } from "../../src/lib/license/protocol";
+import { JWS_MAX_LENGTH, b64uEncode, publicKeyX, signJws } from "../../src/lib/license/protocol";
 import { INTEGRITY_TYP, IntegrityManifestSchema, verifyIntegrity, type IntegrityManifest } from "../../src/lib/license/integrity";
-import { INTEGRITY_FILE, fileEntries, listScopedFiles } from "../../src/lib/license/integrity-scope";
+import { INTEGRITY_LIST_FILE, formatIntegrityList, type IntegrityListEntry } from "../../src/lib/license/integrity-list";
+import { INTEGRITY_FILE, fileEntries, listScopedFiles, packageScope } from "../../src/lib/license/integrity-scope";
 
 export const PACKAGE_KEY_KIND = "tekserp-paket-anahtar";
 
@@ -63,13 +65,21 @@ export interface SignInput {
 export interface SignResult {
   readonly token: string;
   readonly manifest: IntegrityManifest;
+  readonly entries: readonly IntegrityListEntry[];
   readonly file: string;
+  readonly listFile: string;
 }
 
-/** Kökteki kapsam dosyalarını listeler, imzalar, denetimle doğrular ve `butunluk.jws`e yazar. */
+/**
+ * Kapsamı ölçer, liste dosyasını (`butunluk-liste.txt`) ve imzalı yükü (`butunluk.jws`) yazar,
+ * sonra çalışan tarafın denetimiyle doğrular; öz-denetim düşerse iki dosya da silinir.
+ */
 export async function signPackageDirectory(g: SignInput): Promise<SignResult> {
-  const files = await listScopedFiles(g.root);
+  const kapsam = await packageScope(g.root);
+  const files = await listScopedFiles(g.root, kapsam);
   if (files.length === 0) throw new Error("kapsamda dosya yok — paket kökü mü?");
+  const entries = await fileEntries(g.root, files);
+  const listBytes = formatIntegrityList(entries);
   const manifest = IntegrityManifestSchema.parse({
     v: 1,
     paketId: g.paketId ?? randomUUID(),
@@ -77,32 +87,57 @@ export async function signPackageDirectory(g: SignInput): Promise<SignResult> {
     surum: g.surum,
     derlemeTarihi: g.derlemeTarihi,
     musteri: g.musteri,
-    dosyalar: await fileEntries(g.root, files),
+    liste: { sha256: b64uEncode(createHash("sha256").update(listBytes).digest()), boyut: listBytes.length, dosyaSayisi: entries.length },
+    kapsam,
   });
   const payload: Record<string, unknown> = { ...manifest, ...(g.kurulumId ? { kurulumId: g.kurulumId } : {}) };
   const token = signJws({ typ: INTEGRITY_TYP, kid: g.key.kid, payload, privateKey: g.key.privateKey });
-  if (token.length > JWS_MAX_LENGTH) throw new Error(`imzalı liste ${token.length} bayt > ${JWS_MAX_LENGTH}`);
-  const check = await verifyIntegrity(token, g.root, [{ kid: g.key.kid, x: g.key.x }]);
-  if (check.durum !== "GECERLI") throw new Error(`öz-denetim düştü: ${check.durum} ${check.kod ?? ""}`);
+  if (token.length > JWS_MAX_LENGTH) throw new Error(`imzalı yük ${token.length} bayt > ${JWS_MAX_LENGTH}`);
   const file = path.join(g.root, INTEGRITY_FILE);
+  const listFile = path.join(g.root, INTEGRITY_LIST_FILE);
+  fs.writeFileSync(listFile, listBytes);
   fs.writeFileSync(file, `${token}\n`);
-  return { token, manifest, file };
+  const check = await verifyIntegrity(token, g.root, [{ kid: g.key.kid, x: g.key.x }]);
+  if (check.durum !== "GECERLI") {
+    fs.rmSync(file, { force: true });
+    fs.rmSync(listFile, { force: true });
+    throw new Error(`öz-denetim düştü: ${check.durum} ${check.kod ?? ""}`);
+  }
+  return { token, manifest, entries, file, listFile };
 }
 
 /**
- * Hazır bir `tekserp-butunluk` v1 belgesini (Docker teslim künyesi `PAKET-DOCKER.json`) imzalar ve
- * `<belge>.jws`e yazar. Yük dosyanın TAMAMIDIR (şemanın atladığı ek alanlar da imza kapsamında);
- * yazmadan önce listedeki dosyalar belgenin dizinine karşı doğrulanır.
+ * Docker teslim künyesini (`PAKET-DOCKER.json`) imzalar: künyenin `kapsam`ındaki teslim dosyaları belgenin
+ * dizininde ölçülür, liste `butunluk-liste.txt`e yazılır, `liste` alanı künyeye girer; yük künyenin TAMAMIDIR
+ * (şemanın atladığı ek alanlar da imzada). Kapsamdaki dosya eksikse imza atılmaz; öz-denetim düşerse iz kalmaz.
  */
-export async function signManifestDocument(file: string, key: SignInput["key"]): Promise<{ token: string; file: string }> {
+export async function signManifestDocument(file: string, key: SignInput["key"]): Promise<{ token: string; file: string; listFile: string }> {
+  const root = path.dirname(file);
   const doc = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
-  const parsed = IntegrityManifestSchema.safeParse(doc);
-  if (!parsed.success) throw new Error(`belge tekserp-butunluk v1 değil: ${parsed.error.issues[0]?.message ?? "şema"}`);
-  const token = signJws({ typ: INTEGRITY_TYP, kid: key.kid, payload: doc, privateKey: key.privateKey });
+  const kapsam = IntegrityManifestSchema.shape.kapsam.safeParse(doc.kapsam);
+  if (!kapsam.success) throw new Error(`künyede kapsam biçimsiz: ${kapsam.error.issues[0]?.message ?? "şema"}`);
+  const files = await listScopedFiles(root, kapsam.data);
+  const eksik = kapsam.data.dosyalar.filter((f) => !files.includes(f));
+  if (eksik.length > 0 || files.length === 0) throw new Error(`teslim dosyası eksik: ${eksik.join(", ") || "kapsam boş"}`);
+  const entries = await fileEntries(root, files);
+  const listBytes = formatIntegrityList(entries);
+  const payload: Record<string, unknown> = {
+    ...doc,
+    liste: { sha256: b64uEncode(createHash("sha256").update(listBytes).digest()), boyut: listBytes.length, dosyaSayisi: entries.length },
+  };
+  const parsed = IntegrityManifestSchema.safeParse(payload);
+  if (!parsed.success) throw new Error(`künye tekserp-butunluk yükü değil: ${parsed.error.issues[0]?.message ?? "şema"}`);
+  const token = signJws({ typ: INTEGRITY_TYP, kid: key.kid, payload, privateKey: key.privateKey });
   if (token.length > JWS_MAX_LENGTH) throw new Error(`imzalı belge ${token.length} bayt > ${JWS_MAX_LENGTH}`);
-  const check = await verifyIntegrity(token, path.dirname(file), [{ kid: key.kid, x: key.x }]);
-  if (check.durum !== "GECERLI") throw new Error(`öz-denetim düştü: ${check.durum} ${check.kod ?? ""}`);
+  const listFile = path.join(root, INTEGRITY_LIST_FILE);
+  fs.writeFileSync(listFile, listBytes);
+  const check = await verifyIntegrity(token, root, [{ kid: key.kid, x: key.x }]);
+  if (check.durum !== "GECERLI") {
+    fs.rmSync(listFile, { force: true });
+    throw new Error(`öz-denetim düştü: ${check.durum} ${check.kod ?? ""}`);
+  }
+  fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
   const out = `${file}.jws`;
   fs.writeFileSync(out, `${token}\n`);
-  return { token, file: out };
+  return { token, file: out, listFile };
 }

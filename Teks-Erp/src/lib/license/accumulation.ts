@@ -13,6 +13,7 @@ import {
 } from "./saat";
 import { getLicenseStore, saveStateRecord } from "./store";
 import { bumpLicenseSnapshotVersion } from "./license-signals";
+import type { IntegrityRecordPatch } from "./integrity-state";
 
 export interface Accumulation {
   readonly jws: string;
@@ -66,6 +67,11 @@ function writeRecord(record: StateRecord): void {
   bumpLicenseSnapshotVersion();
 }
 
+/** Bütünlük çapası alanları: yama verilmediyse önceki kayıttakiler aynen taşınır. */
+function integrityFields(patch: IntegrityRecordPatch | undefined, prev: StateRecord | null): IntegrityRecordPatch {
+  return patch ?? { butunlukIlk: prev?.butunlukIlk ?? null, butunlukPaketId: prev?.butunlukPaketId ?? null };
+}
+
 export function entitlementPinOf(entitlement: VerifiedEntitlement): EntitlementPin {
   const d = entitlement.document;
   return { hakId: d.hakId, surum: d.surum, sinif: d.sinif, kokTuru: rootKindOf(entitlement.signer.rootKid) };
@@ -83,8 +89,8 @@ export function rewriteRecord(g: {
   readonly clockConsistent: boolean;
   readonly ledgerHighWaterMs: number | null;
   readonly skewSeconds: number | null;
-  /** Kayda yazılacak bütünlük çapası (ISO); `undefined` = kayıttakini koru. */
-  readonly integrityFirst?: string | null;
+  /** Kayda yazılacak bütünlük çapası; `undefined` = kayıttakini koru. */
+  readonly integrity?: IntegrityRecordPatch;
   readonly nowMs: number;
 }): void {
   const r = g.record;
@@ -99,7 +105,7 @@ export function rewriteRecord(g: {
     kapaliMs: (r.kapaliMs ?? 0) + g.a.creditMs,
     duvarTutarli: g.clockConsistent,
     saticiSapmaSn: g.skewSeconds,
-    butunlukIlk: g.integrityFirst === undefined ? (r.butunlukIlk ?? null) : g.integrityFirst,
+    ...integrityFields(g.integrity, r),
   });
 }
 
@@ -113,7 +119,7 @@ export function beginRecordForLease(g: {
   readonly licenseId: string;
   readonly ledgerHighWaterMs: number | null;
   readonly skewSeconds: number | null;
-  readonly integrityFirst?: string | null;
+  readonly integrity?: IntegrityRecordPatch;
   readonly nowMs: number;
 }): void {
   const prev = recordFor(currentAccumulation(), g.licenseId);
@@ -134,7 +140,7 @@ export function beginRecordForLease(g: {
     duvarTutarli: g.nowMs - isoToMs(g.lease.sunucuSaati) <= CLOCK_SKEW_MS,
     saticiSapmaSn: g.skewSeconds,
     // Yeni kira bütünlük çapasını SIFIRLAMAZ (kira yenilemek ek süreyi uzatmasın).
-    butunlukIlk: g.integrityFirst === undefined ? (prev?.butunlukIlk ?? null) : g.integrityFirst,
+    ...integrityFields(g.integrity, prev),
   });
 }
 

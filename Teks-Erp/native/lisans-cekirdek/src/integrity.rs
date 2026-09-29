@@ -1,11 +1,13 @@
-//! Bütünlük denetimi: PAKET anahtarıyla imzalı dosya listesi (`tekserp-butunluk`) — Faz 2e'nin
-//! biçimi için v1 arayüzü. TS başvuru uygulaması `lib/license/integrity.ts`; ikisi aynı
-//! vektörlerde aynı raporu verir (kâhin bekçisi + `tests/vektorler.rs`).
+//! Bütünlük denetimi: PAKET anahtarıyla imzalı yük (`tekserp-butunluk`) + onun sha256'sına bağlı
+//! liste dosyası (`integrity_list.rs`). TS başvuru uygulaması `lib/license/integrity.ts`; ikisi
+//! aynı vektörlerde aynı raporu verir (kâhin bekçisi + `tests/vektorler.rs`).
 //!
-//! Karar sırası: çapa boş → ÖLÇÜLEMEDİ · imza/şema → GEÇERSİZ · eksik ya da değişmiş dosya →
-//! GEÇERSİZ (kurcalama) · yalnız okunamayan dosya → ÖLÇÜLEMEDİ · aksi GEÇERLİ. Listede
-//! olmayan fazla dosya bu sürümde sorulmaz (paket `node_modules` taşır; kapsam 2e'nin kararı).
+//! Karar sırası: çapa boş → ÖLÇÜLEMEDİ · imza/şema → GEÇERSİZ · kök dizin değil → ÖLÇÜLEMEDİ ·
+//! liste yok/özet/dilbilgisi → GEÇERSİZ(LISTE_BOZUK), okunamaz → ÖLÇÜLEMEDİ · eksik ya da
+//! değişmiş dosya → GEÇERSİZ(UYUSMAZ) · imzalı kapsamda listede olmayan girdi → GEÇERSİZ(FAZLA) ·
+//! yalnız okunamayan → ÖLÇÜLEMEDİ · aksi GEÇERLİ.
 use crate::b64;
+use crate::integrity_list::{self as list, Entry};
 use crate::iso;
 use crate::jsonx::{js_number, utf16_len};
 use crate::jws;
@@ -14,14 +16,15 @@ use regex::Regex;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 use std::path::Path;
 use std::sync::OnceLock;
 
 /// TS `TYP.BUTUNLUK` aynası (kâhin §0j ölçer).
 pub const TYP_BUTUNLUK: &str = "tekserp-butunluk";
-pub const MAX_FILES: usize = 20_000;
 pub const MAX_PATH_UTF16: usize = 512;
+const MAX_SCOPE_DIRS: usize = 32;
+const MAX_SCOPE_FILES: usize = 64;
 /// Rapordaki dosya listelerinin tavanı (sayılar ayrıca tam verilir).
 pub const LIST_CAP: usize = 50;
 
@@ -61,14 +64,52 @@ fn is_safe_path(v: Option<&Value>) -> bool {
     utf16_len(s) <= MAX_PATH_UTF16 && patterns().path.is_match(s) && s.split('/').all(|seg| seg != "." && seg != "..")
 }
 
-pub struct ManifestFile {
-    pub path: String,
+/// Yükteki liste künyesi: dosyanın boyu + özeti + satır sayısı.
+pub struct ListRef {
     pub sha256: String,
-    pub size: f64,
+    pub size: u64,
+    pub count: usize,
 }
 
-/// Şema (TS `IntegrityManifestSchema` aynası); başarıda atılmış paket künyesi + dosyalar.
-fn decode_manifest(payload: &Map<String, Value>) -> Result<(Value, Vec<ManifestFile>), &'static str> {
+pub struct Manifest {
+    pub package: Value,
+    pub list: ListRef,
+    pub dirs: Vec<String>,
+    pub files: Vec<String>,
+}
+
+fn int_in(v: Option<&Value>, min: f64, max: f64) -> Option<f64> {
+    let n = v.and_then(js_number)?;
+    (n.is_finite() && n.fract() == 0.0 && n >= min && n <= max).then_some(n)
+}
+
+fn only_keys(o: &Map<String, Value>, allowed: &[&str]) -> bool {
+    o.keys().all(|k| allowed.contains(&k.as_str()))
+}
+
+/// Kapsam listesi: güvenli yol, tekrarsız, en çok `max`.
+fn scope_list(v: Option<&Value>, max: usize) -> Option<Vec<String>> {
+    let Some(Value::Array(items)) = v else { return None };
+    if items.len() > max {
+        return None;
+    }
+    let mut seen = HashSet::new();
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        if !is_safe_path(Some(item)) {
+            return None;
+        }
+        let s = item.as_str()?.to_string();
+        if !seen.insert(s.clone()) {
+            return None;
+        }
+        out.push(s);
+    }
+    Some(out)
+}
+
+/// Şema (TS `IntegrityManifestSchema` aynası): künye + `liste` + `kapsam` (ikisi de KATI nesne).
+fn decode_manifest(payload: &Map<String, Value>) -> Result<Manifest, &'static str> {
     if let Some(v) = payload.get("v") {
         if js_number(v) != Some(1.0) {
             return Err(code::BELGE_SURUM);
@@ -85,28 +126,18 @@ fn decode_manifest(payload: &Map<String, Value>) -> Result<(Value, Vec<ManifestF
     if !ok {
         return Err(code::BELGE_SEMA);
     }
-    let Some(Value::Array(list)) = payload.get("dosyalar") else { return Err(code::BELGE_SEMA) };
-    if list.is_empty() || list.len() > MAX_FILES {
+    let Some(Value::Object(l)) = payload.get("liste") else { return Err(code::BELGE_SEMA) };
+    if !only_keys(l, &["sha256", "boyut", "dosyaSayisi"]) || !str_matches(l.get("sha256"), &p.digest) {
         return Err(code::BELGE_SEMA);
     }
-    let mut seen = HashSet::new();
-    let mut files = Vec::with_capacity(list.len());
-    for item in list {
-        let Value::Object(f) = item else { return Err(code::BELGE_SEMA) };
-        if f.keys().any(|k| !matches!(k.as_str(), "yol" | "sha256" | "boyut")) {
-            return Err(code::BELGE_SEMA);
-        }
-        let size = f.get("boyut").and_then(js_number);
-        let size_ok = size.is_some_and(|n| n.is_finite() && n.fract() == 0.0 && (0.0..=9_007_199_254_740_991.0).contains(&n));
-        if !is_safe_path(f.get("yol")) || !str_matches(f.get("sha256"), &p.digest) || !size_ok {
-            return Err(code::BELGE_SEMA);
-        }
-        let path = f["yol"].as_str().unwrap_or_default().to_string();
-        if !seen.insert(path.clone()) {
-            return Err(code::BELGE_SEMA);
-        }
-        files.push(ManifestFile { path, sha256: f["sha256"].as_str().unwrap_or_default().to_string(), size: size.unwrap_or(-1.0) });
+    let size = int_in(l.get("boyut"), 1.0, list::MAX_LIST_BYTES as f64).ok_or(code::BELGE_SEMA)?;
+    let count = int_in(l.get("dosyaSayisi"), 1.0, list::MAX_FILES as f64).ok_or(code::BELGE_SEMA)?;
+    let Some(Value::Object(k)) = payload.get("kapsam") else { return Err(code::BELGE_SEMA) };
+    if !only_keys(k, &["dizinler", "dosyalar"]) {
+        return Err(code::BELGE_SEMA);
     }
+    let dirs = scope_list(k.get("dizinler"), MAX_SCOPE_DIRS).ok_or(code::BELGE_SEMA)?;
+    let files = scope_list(k.get("dosyalar"), MAX_SCOPE_FILES).ok_or(code::BELGE_SEMA)?;
     let package = json!({
         "paketId": payload["paketId"],
         "urun": payload["urun"],
@@ -114,7 +145,8 @@ fn decode_manifest(payload: &Map<String, Value>) -> Result<(Value, Vec<ManifestF
         "derlemeTarihi": payload["derlemeTarihi"],
         "musteri": payload["musteri"],
     });
-    Ok((package, files))
+    let list = ListRef { sha256: l["sha256"].as_str().unwrap_or_default().to_string(), size: size as u64, count: count as usize };
+    Ok(Manifest { package, list, dirs, files })
 }
 
 #[derive(Default)]
@@ -122,6 +154,11 @@ struct Buckets {
     missing: Vec<String>,
     changed: Vec<String>,
     unreadable: Vec<String>,
+    extra: Vec<String>,
+}
+
+fn not_found(e: &std::io::Error) -> bool {
+    matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory)
 }
 
 fn sha256_file(path: &Path) -> std::io::Result<String> {
@@ -138,13 +175,13 @@ fn sha256_file(path: &Path) -> std::io::Result<String> {
     Ok(b64::encode(&hasher.finalize()))
 }
 
-fn check_file(root: &Path, f: &ManifestFile, out: &mut Buckets) {
-    let full = f.path.split('/').fold(root.to_path_buf(), |acc, seg| acc.join(seg));
+fn check_file(root: &Path, f: &Entry, out: &mut Buckets) {
+    let full = list::join(root, &f.path);
     match std::fs::metadata(&full) {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => out.missing.push(f.path.clone()),
+        Err(e) if not_found(&e) => out.missing.push(f.path.clone()),
         Err(_) => out.unreadable.push(f.path.clone()),
         Ok(m) if !m.is_file() => out.missing.push(f.path.clone()),
-        Ok(m) if m.len() as f64 != f.size => out.changed.push(f.path.clone()),
+        Ok(m) if m.len() != f.size => out.changed.push(f.path.clone()),
         Ok(_) => match sha256_file(&full) {
             Ok(h) if h == f.sha256 => {}
             Ok(_) => out.changed.push(f.path.clone()),
@@ -165,8 +202,34 @@ fn report(durum: &str, kod: Option<&str>, total: usize, b: &Buckets, package: Va
         "degisikSayisi": b.changed.len(),
         "okunamayan": cap(&b.unreadable),
         "okunamayanSayisi": b.unreadable.len(),
+        "fazla": cap(&b.extra),
+        "fazlaSayisi": b.extra.len(),
         "paket": package,
     })
+}
+
+enum ListError {
+    Missing,
+    Changed,
+    Unreadable,
+}
+
+/// Liste dosyası: yok → eksik · boy/özet/dilbilgisi tutmaz → değişik · okunamaz → okunamayan.
+fn read_list(root: &Path, l: &ListRef) -> Result<Vec<Entry>, ListError> {
+    let path = root.join(list::LIST_FILE);
+    let io = |e: std::io::Error| if not_found(&e) { ListError::Missing } else { ListError::Unreadable };
+    let meta = std::fs::metadata(&path).map_err(io)?;
+    if !meta.is_file() {
+        return Err(ListError::Missing);
+    }
+    if meta.len() != l.size {
+        return Err(ListError::Changed);
+    }
+    let bytes = std::fs::read(&path).map_err(io)?;
+    if bytes.len() as u64 != l.size || b64::encode(&Sha256::digest(&bytes)) != l.sha256 {
+        return Err(ListError::Changed);
+    }
+    list::parse(&bytes, l.count).ok_or(ListError::Changed)
 }
 
 /// `keys`: (kid, ham açık anahtar base64url). Rapor TS `IntegrityReport` biçimindedir.
@@ -187,23 +250,44 @@ pub fn verify(manifest: &Value, root: &str, keys: &[(String, String)]) -> Value 
         Ok(p) => p,
         Err(e) => return report("GECERSIZ", Some(e.code), 0, &empty, Value::Null),
     };
-    let (package, files) = match decode_manifest(&parsed.payload) {
-        Ok(ok) => ok,
+    let m = match decode_manifest(&parsed.payload) {
+        Ok(m) => m,
         Err(c) => return report("GECERSIZ", Some(c), 0, &empty, Value::Null),
     };
+    let total = m.list.count;
     let root_path = Path::new(root);
     if !root_path.is_dir() {
-        return report("OLCULEMEDI", Some(code::BUTUNLUK_OKUNAMADI), files.len(), &empty, package);
+        return report("OLCULEMEDI", Some(code::BUTUNLUK_OKUNAMADI), total, &empty, m.package);
     }
-    let mut buckets = Buckets::default();
-    for f in &files {
-        check_file(root_path, f, &mut buckets);
+    let mut b = Buckets::default();
+    let entries = match read_list(root_path, &m.list) {
+        Ok(e) => e,
+        Err(ListError::Unreadable) => {
+            b.unreadable.push(list::LIST_FILE.to_string());
+            return report("OLCULEMEDI", Some(code::BUTUNLUK_OKUNAMADI), total, &b, m.package);
+        }
+        Err(kind) => {
+            let bucket = if matches!(kind, ListError::Missing) { &mut b.missing } else { &mut b.changed };
+            bucket.push(list::LIST_FILE.to_string());
+            return report("GECERSIZ", Some(code::BUTUNLUK_LISTE_BOZUK), total, &b, m.package);
+        }
+    };
+    for f in &entries {
+        check_file(root_path, f, &mut b);
     }
-    if !buckets.missing.is_empty() || !buckets.changed.is_empty() {
-        return report("GECERSIZ", Some(code::BUTUNLUK_UYUSMAZ), files.len(), &buckets, package);
+    let listed: HashSet<&str> = entries.iter().map(|e| e.path.as_str()).collect();
+    let walk = list::walk_scope(root_path, &m.dirs, &m.files);
+    b.extra = walk.entries.into_iter().filter(|e| !listed.contains(e.as_str())).collect();
+    b.unreadable.extend(walk.unreadable);
+    b.unreadable.sort();
+    if !b.missing.is_empty() || !b.changed.is_empty() {
+        return report("GECERSIZ", Some(code::BUTUNLUK_UYUSMAZ), total, &b, m.package);
     }
-    if !buckets.unreadable.is_empty() {
-        return report("OLCULEMEDI", Some(code::BUTUNLUK_OKUNAMADI), files.len(), &buckets, package);
+    if !b.extra.is_empty() {
+        return report("GECERSIZ", Some(code::BUTUNLUK_FAZLA), total, &b, m.package);
     }
-    report("GECERLI", None, files.len(), &buckets, package)
+    if !b.unreadable.is_empty() {
+        return report("OLCULEMEDI", Some(code::BUTUNLUK_OKUNAMADI), total, &b, m.package);
+    }
+    report("GECERLI", None, total, &b, m.package)
 }

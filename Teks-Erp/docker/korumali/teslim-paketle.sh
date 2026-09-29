@@ -6,7 +6,8 @@
 # Üretir (çıktı dizini REPO DIŞI olmalı):
 #   tekserp-korumali_<sürüm>_linux-amd64.tar.gz   docker save | gzip -n (docker load bunu açar)
 #   docker-compose.yml · .env.ornek               kurulumun iki dosyası (imajla aynı commit'ten)
-#   PAKET-DOCKER.json                             künye = `tekserp-butunluk` v1 belgesi
+#   PAKET-DOCKER.json                             künye = `tekserp-butunluk` yükü (kapsam: üç teslim dosyası)
+#   butunluk-liste.txt                            imzalı liste (2e-S biçimi; imza aracı yazar, künyeye özeti girer)
 #   PAKET-DOCKER.json.jws                         künyenin PAKET anahtarıyla imzası (2e aracı: build-korumali-imza.ts belge)
 #   SHA256SUMS                                    sha256sum -c ile doğrulanır
 # İMZA: anahtar dosyası TEKSERP_PAKET_ANAHTARI (varsayılan ~/.tekserp/satici-hazirlik/paket-hazirlik.paket.json —
@@ -45,20 +46,19 @@ node -e '
 const [ad, cikti, etiket, imajId, platform, commit, surum, kunye, ...dosyalar] = process.argv.slice(1);
 const fs = require("fs"), crypto = require("crypto"), path = require("path");
 const k = JSON.parse(kunye);
-// `tekserp-butunluk` v1 belgesi (Teks-Erp/src/lib/license/integrity.ts): sha256 base64url, 2e aynı
-// doğrulayıcıyla imzalar/denetler. Ek alanlar (imaj, sunucu, commit) şemada serbest, imzanın kapsamında.
-const liste = dosyalar.map((d) => { const b = fs.readFileSync(path.join(cikti, d)); return { yol: d, sha256: crypto.createHash("sha256").update(b).digest("base64url"), boyut: b.length }; });
+// `tekserp-butunluk` yükü (Teks-Erp/src/lib/license/integrity.ts): dosya listesini ve özetini imza aracı
+// ölçüp yazar (butunluk-liste.txt); künye yalnız kapsamı söyler. Ek alanlar şemada serbest, imzanın kapsamında.
 const paket = { v: 1, paketId: crypto.randomUUID(), urun: "backend-docker", surum, derlemeTarihi: k.zaman,
   musteri: process.env.TEKSERP_MUSTERI || null, commit: commit || k.commit,
   imaj: { etiket, kimlik: imajId, platform, arsiv: ad },
   sunucu: { nodeSurum: k.nodeSurum, v8Taban: k.v8Taban, jscSha256: k.jscSha256, nativeZorunlu: k.nativeZorunlu === true },
-  dosyalar: liste };
+  kapsam: { dizinler: [], dosyalar } };
 fs.writeFileSync(path.join(cikti, "PAKET-DOCKER.json"), JSON.stringify(paket, null, 2) + "\n");
 ' "$AD" "$CIKTI" "$ETIKET" "$IMAJ_ID" "$PLATFORM" "$COMMIT" "$SURUM" "$KUNYE" "$AD" docker-compose.yml .env.ornek
 
 ( cd "$REPO/Teks-Erp" && npx tsx scripts/build-korumali-imza.ts belge --belge="$CIKTI/PAKET-DOCKER.json" --anahtar="$ANAHTAR" ) \
   || { echo "✖ künye imzalanamadı — teslim paketi eksik" >&2; exit 1; }
 
-( cd "$CIKTI" && for f in "$AD" docker-compose.yml .env.ornek PAKET-DOCKER.json PAKET-DOCKER.json.jws; do printf '%s  %s\n' "$(sha "$f")" "$f"; done > SHA256SUMS )
+( cd "$CIKTI" && for f in "$AD" docker-compose.yml .env.ornek butunluk-liste.txt PAKET-DOCKER.json PAKET-DOCKER.json.jws; do printf '%s  %s\n' "$(sha "$f")" "$f"; done > SHA256SUMS )
 echo "✓ teslim paketi: $CIKTI"
 cat "$CIKTI/SHA256SUMS"
