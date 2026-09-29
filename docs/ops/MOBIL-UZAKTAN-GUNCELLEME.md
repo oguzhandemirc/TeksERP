@@ -54,6 +54,12 @@ durur.
 
 ## 3. Uzaktan güncelleme yayınlamak
 
+> **Yayın belirteci (3c'):** `deploy/mobil-yayinla.mjs` kenar doğrulamasını yalnız satıcı yayın
+> belirteciyle yapar (`~/.tekserp/yayin-belirteci`, tek satır, `chmod 600`; başlık `X-TKL-Indirme`);
+> dosya yoksa yüklemeden ÖNCE durur, anonim okumaya düşmez (`--kuru` istemez). "Ne yayında"
+> (terfi şartı, etiket defteri) VDS diskinden SSH ile okunur. Envanter ve kurulum:
+> `docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md` § 3b.
+
 ```bash
 cd mobil
 npm run yayinla -- --musteri=<kanal>            # ERP adresi kanal kaydından (deploy/kanallar.json)

@@ -45,6 +45,7 @@ import { bundleAdresOlcumu } from '../mobil/scripts/lib/adres.mjs';
 import { zipGirdisiOku } from '../mobil/scripts/lib/zip.mjs';
 import { ApkOlculemedi, apkKimligi } from '../mobil/scripts/lib/apk-kimlik.mjs';
 import { cumleDenetle, istanbulSaati, terfiAtlaKaydi, terfiAtlaMesaji, terfiKapisi, terfiRaporu } from '../scripts/lib/terfi.mjs';
+import { BelirtecYok, belirtecliFetch, belirtecOku } from '../scripts/lib/yayin-okuma.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MOBIL = path.resolve(HERE, '..', 'mobil');
@@ -112,6 +113,7 @@ if (dogrulaUrl) {
     );
   }
 
+  belirtecGerekli();
   const ok = await dosyaDogrula(dogrulaUrl, { yerelBoyut: beklenenBoyut });
   bilgi(
     ok
@@ -204,6 +206,20 @@ const scp = (kaynaklar, uzakYol, aciklama) =>
   kos('scp', ['-r', ...kaynaklar, `${SSH_HEDEF}:${uzakYol}`], aciklama);
 
 /**
+ * YAYIN BELİRTECİ (3c') — güncelleme sunucusu anonim okumaya kapalıdır (Cloudflare Worker,
+ * X-TKL-Indirme). Kenar doğrulaması (dosyaDogrula · iste) yalnız satıcı yayın belirteciyle
+ * yapılır; belirteç yoksa DUR — anonim okumaya düşülmez. Değer hiçbir çıktıya yazılmaz.
+ */
+function belirtecGerekli() {
+  try {
+    belirtecOku();
+  } catch (e) {
+    if (!(e instanceof BelirtecYok)) throw e;
+    dur('YAYIN BELİRTECİ YOK — hiçbir şey yüklenmedi, anonim okumaya düşülmez', ...e.message.split('\n').map((x) => x.trim()));
+  }
+}
+
+/**
  * DOSYA DOĞRULAMA — üç ayrı arızayı BİRBİRİNDEN AYIRIR.
  *
  * ⚠️ Tespit etmek yetmez, AYIRT ETMEK gerekir (komşu oturumun 2026-08-26
@@ -225,8 +241,8 @@ const scp = (kaynaklar, uzakYol, aciklama) =>
  */
 async function dosyaDogrula(url, { yerelBoyut, beklenenTip } = {}) {
   const cbUrl = `${url}${url.includes('?') ? '&' : '?'}onbellek-atla=${process.pid}`;
-  const temiz = await fetch(url, { method: 'HEAD' });
-  const taze = await fetch(cbUrl, { method: 'HEAD' });
+  const temiz = await belirtecliFetch(url, { method: 'HEAD' });
+  const taze = await belirtecliFetch(cbUrl, { method: 'HEAD' });
 
   const ozet = (r) =>
     `${r.status}|${r.headers.get('content-type') ?? ''}|${r.headers.get('content-length') ?? '?'}`;
@@ -301,7 +317,7 @@ async function dosyaDogrula(url, { yerelBoyut, beklenenTip } = {}) {
 }
 
 async function iste(url, yontem = 'GET') {
-  const r = await fetch(url, { method: yontem, redirect: 'follow' });
+  const r = await belirtecliFetch(url, { method: yontem, redirect: 'follow' });
   return {
     durum: r.status,
     basliklar: Object.fromEntries(r.headers.entries()),
@@ -713,6 +729,9 @@ if (!paket && !apk) {
     'Kurulum    : node deploy/mobil-yayinla.mjs --apk=<yol> --surum=2.9.8 --vc=55',
   );
 }
+// Belirteç yükleme ÖNCESİ ölçülür: yoksa hiçbir şey yüklenmez (kenar doğrulaması yapılamayan
+// yayın açılmaz). --kuru ağa çıkmadığı için belirteç istemez.
+if (!KURU) belirtecGerekli();
 if (paket) await paketiYayinla(path.resolve(paket));
 if (apk) await apkYayinla(path.resolve(apk));
 

@@ -124,7 +124,7 @@ if [ -z "$istenen_surum" ]; then
       process.exit(1);
     }
     if (kiyas.durum === 'olculemedi') {
-      console.error('  ⚠  Yayındaki sürüm okunamadı; etiket defteri DOĞRULANMADI (internet?).');
+      console.error('  ⚠  Yayındaki sürüm okunamadı (ssh tekserp-yayin, VDS diski); etiket defteri DOĞRULANMADI.');
     }
     // Yayınlanmamış tur sayısı modal tavanını aşıyorsa söyle (uyarı, blok değil).
     const tavan = tavanUyarisi(surumNotlariniOku('$kok'), 'panel', yayinda, k.surum);

@@ -75,6 +75,25 @@ done
 node "$kok/scripts/kanal-kapisi.mjs" kanal "$musteri" \
   || hata "Kanal kapısı geçilmedi (kayıt defteri: deploy/kanallar.json)."
 
+# --- YAYIN BELİRTECİ (3c') — hiçbir ağ/ssh işinden ÖNCE ------------------------
+# Güncelleme sunucusu anonim okumaya kapalıdır (Cloudflare Worker, X-TKL-Indirme).
+# "Ne yayında" sorusu SSH ile VDS diskinden okunur; "kenardan ne görünüyor"
+# doğrulaması (dogrula) yalnız satıcı yayın belirteciyle yapılır. Belirteç yoksa
+# DUR — anonim okumaya düşülmez. Belirteç argv'ye düşmesin diye `curl -H @dosya`.
+# --kuru ağa çıkmadığı için belirteç istemez.
+BELIRTEC_BASLIK=""
+if [ "$kuru" = "0" ]; then
+  BELIRTEC_BASLIK="$(mktemp "${TMPDIR:-/tmp}/tekserp-belirtec.XXXXXX")" || hata "Geçici dosya açılamadı."
+  trap 'rm -f "$BELIRTEC_BASLIK"' EXIT
+  node --input-type=module -e "
+    import { baslikDosyasiYaz } from '$kok/scripts/lib/yayin-okuma.mjs';
+    try { baslikDosyasiYaz(process.argv[1]); } catch (e) { console.error('HATA: ' + e.message); process.exit(3); }
+  " -- "$BELIRTEC_BASLIK" || hata "Yayın belirteci yok — hiçbir şey yüklenmedi (anonim okumaya düşülmez)."
+  [ -s "$BELIRTEC_BASLIK" ] || hata "Yayın belirteci başlık dosyası boş — hiçbir şey yüklenmedi."
+fi
+# Güncelleme sunucusuna TEK sanksiyonlu HTTP okuması (bekçi: scripts/check-yayin-okuma.mjs).
+belirtecli_curl() { curl -H "@$BELIRTEC_BASLIK" "$@"; }
+
 rel=""
 if [ "$denetim_kipi" = "0" ]; then
   surum="${surum_arg:-$(node -p "require('$electron_dir/package.json').version")}"
@@ -118,8 +137,9 @@ YAYIN_URL="${YAYIN_URL:-$BASE_URL/$musteri/electron}"
 if [ "$denetim_kipi" = "1" ]; then
   denetim_surum="$surum_arg"
   if [ -z "$denetim_surum" ]; then
-    denetim_surum=$(curl -fsS "$YAYIN_URL/latest.yml?onbellek-atla=$$" 2>/dev/null | grep "^version:" | awk '{print $2}') \
-      || hata "Yayındaki latest.yml okunamadı: $YAYIN_URL/latest.yml"
+    # Hangi sürüm yayında: VDS diskinden (SSH, salt okuma) — kenar görünümünü aşağıda dogrula() ölçer.
+    denetim_surum=$(ssh "$SSH_HEDEF" "cat '$UZAK_DIZIN/latest.yml'" 2>/dev/null | grep "^version:" | awk '{print $2}') \
+      || hata "Yayındaki latest.yml okunamadı: $SSH_HEDEF:$UZAK_DIZIN/latest.yml"
     [ -n "$denetim_surum" ] || hata "Yayında latest.yml yok ya da sürüm satırı okunamadı."
   fi
   echo "Yayın denetleniyor: $musteri / $denetim_surum"
@@ -220,9 +240,9 @@ echo "Doğrulanıyor..."
 dogrula() {
   local ad="$1" yerel="$2" url kod origin uzak
   url="$YAYIN_URL/$ad"
-  kod=$(curl -s -o /dev/null -w "%{http_code}" -I "$url")
+  kod=$(belirtecli_curl -s -o /dev/null -w "%{http_code}" -I "$url")
   if [ "$kod" != "200" ]; then
-    origin=$(curl -s -o /dev/null -w "%{http_code}" -I "$url?onbellek-atla=$$")
+    origin=$(belirtecli_curl -s -o /dev/null -w "%{http_code}" -I "$url?onbellek-atla=$$")
     # ⚠️ Bu dal İSTEYEREK ÜRETİLEMEDİ (2026-08-27, mobil oturumuyla birlikte
     # ölçüldü): sunucudaki `error_page 404 → Cache-Control: no-store` ikinci
     # hattı 404'lerin Cloudflare önbelleğine girmesini zaten engelliyor
@@ -238,13 +258,13 @@ dogrula() {
     hata "$ad — yayında görünmüyor (HTTP $kod). Dosya gerçekten yüklenmemiş olabilir."
   fi
   # Boyut kıyası: yarım yüklenmiş dosya 200 döner ama eksiktir.
-  uzak=$(curl -s -o /dev/null -w "%{size_download}" "$url?onbellek-atla=$$")
+  uzak=$(belirtecli_curl -s -o /dev/null -w "%{size_download}" "$url?onbellek-atla=$$")
   if [ -n "$yerel" ] && [ "$uzak" != "$yerel" ]; then
     hata "$ad — boyut uyuşmuyor (yerel: $yerel, yayında: $uzak). Yükleme yarım kalmış olabilir."
   fi
 }
 
-yayindaki=$(curl -fsS "$YAYIN_URL/latest.yml?onbellek-atla=$$" | grep "^version:" | awk '{print $2}')
+yayindaki=$(belirtecli_curl -fsS "$YAYIN_URL/latest.yml?onbellek-atla=$$" | grep "^version:" | awk '{print $2}')
 [ "$yayindaki" = "$surum" ] || hata "Yayındaki sürüm '$yayindaki', beklenen '$surum'."
 
 dogrula "latest.yml" ""
