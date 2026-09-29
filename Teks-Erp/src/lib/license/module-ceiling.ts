@@ -2,7 +2,8 @@
 // Senkron ve bellekten: tx içinde güvenli, DB'ye inmez. Motor hazır değilse ham değer geçer
 // (lisans belirsizliği üretimi kapatmaz); gözlemde uygulanan tavan yoktur (sıfır fark).
 import { AppError } from "../../utils/app-error";
-import { getLicenseSnapshot, recordObservation, type LicenseSnapshot } from "./runtime";
+import { currentOrigin } from "../request-context";
+import { getLicenseSnapshot, recordModuleObservation, type LicenseSnapshot } from "./runtime";
 import { ceilingAllows, type ModuleCeiling } from "./state";
 import type { LicenseMode } from "./protocol";
 
@@ -30,13 +31,18 @@ function closedReason(cap: ModuleCeiling, settingKey: string): ModuleClosedReaso
   return cap.allowed !== null && !cap.allowed.includes(settingKey) ? "LISANSTA_YOK" : null;
 }
 
-/** Ham değeri uygulanan tavandan geçirir; gözlemde tavanın kapatacağı modül sayılır. */
+/**
+ * Ham değeri uygulanan tavandan geçirir; gözlemde tavanın kapatacağı modül İSTEK × modül başına
+ * bir kez sayılır (okuyucu bir istekte defalarca çağrılır — çağrı sayısı ölçü değildir).
+ */
 export function applyModuleCeiling(settingKey: string, rawEnabled: boolean): boolean {
   if (!rawEnabled) return false;
   const snap = readySnapshot();
   if (!snap) return true;
   const allowed = ceilingAllows(snap.state.uygulanan.modulTavani, settingKey);
-  if (allowed && !ceilingAllows(snap.state.hesaplanan.modulTavani, settingKey)) recordObservation("modul");
+  if (allowed && !ceilingAllows(snap.state.hesaplanan.modulTavani, settingKey)) {
+    recordModuleObservation(settingKey, currentOrigin().requestId);
+  }
   return allowed;
 }
 

@@ -3,6 +3,7 @@
 > **Durum:** 2026-09-29, W2 dalgası, `lisans/entegrasyon` (W1 dilimleri inmiş hâli) + bu dilimin düzeltmesi, dal `lisans/senaryo-l`. Plan §8 "Senaryo L" adımları SIRAYLA koşuldu.
 > **Sonuç:** 26 yeşil · 3 kısmi (L15, L18, L25) · 0 kırmızı. Senaryo Y aynı komutta 23/0 (+1 beyanlı atlama: Y6d thinkpad-1).
 > **Entegrasyon koşumu (2026-09-29, W2 entegrasyonu):** `lisans/entegrasyon` üzerinde senaryo-l + satıcı tamamlama + portal web (1f) + hazırlık kökü + 2a ölçümü + B1 tasarımı birlikte: **aynı sonuç** — 26 yeşil · 3 kısmi (L15, L18, L25) · 0 kırmızı; Senaryo Y 23/0 (+Y6d). Koşucu iki satıcı kuralına uyarlandı (Bulgu 6).
+> **F1a koşumu (2026-09-29, `lisans/f1a-motor`, fabrika motoru D1–D5 + D14):** düzenek kurulamadı (çıkış 2, 0/29 adım) — koşucu fabrikayı `detay.kurulum.kurulumId` dolana dek bekliyor, oysa D14 ile bu alan LİSANS kimliğidir ve etkinleştirmeden önce yoktur (DB kimliği `detay.kurulum.veritabaniKimligi`de); ayrıca bu daldaki satıcı kimliksiz etkinleştirmeyi `ISTEK_GECERSIZ` ile reddediyor. Satıcı dilimi (F2: kurulum kimliği portalda, kimliksiz etkinleştirme, taşıma kodu, `sunucuSaati`) inip koşucu yeni akışa (L1 kurulum kimliği portaldan, L2/L12/L13 kimliksiz etkinleştirme ve taşıma kodu) uyarlanınca koşulur; fabrika ayağı sahte satıcıyla `test_lisans_motoru` §10–§20'de ölçüldü.
 > **Koşucu:** `Teks-Erp/scripts/senaryo-lisans.ts` · L + Y tek komut `Teks-Erp/scripts/senaryo-ly.ts` · kural satırı `docs/kurallar/lisans.md` · arşiv notu 2026-09-29 "Senaryo L (lisans uçtan uca) koşucusu".
 
 ## Nasıl koşulur

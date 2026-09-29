@@ -30,6 +30,7 @@ import {
   type LicenseStateInput,
   type ReasonCode,
 } from "./state-rules";
+import { evaluateRollback, evaluateStore, evaluateVendorClock } from "./state-rules-trust";
 import type { ClockResult, SanctionSnapshot } from "./saat";
 
 export type { Banner, DocResult, LicenseStateInput, ReasonCode } from "./state-rules";
@@ -121,7 +122,10 @@ function pickBanner(findings: readonly Finding[]): Banner | null {
   return chosen?.banner ?? null;
 }
 
-/** Kira varsa onun kararı; yoksa son kiranın kararı (silinen kira kipi gevşetmesin); o da yoksa derleme. */
+/**
+ * Kullanılabilir (geri alınmamış) kira varsa onun kararı; yoksa durum kaydındaki son kiranın kararı
+ * (silinen ya da eskisiyle değiştirilen kira kipi gevşetmesin); o da yoksa derleme.
+ */
 function computeMode(g: LicenseStateInput, lease: VerifiedLease | null): LicenseMode {
   if (lease) return lease.document.zorlama ? "zorla" : "gozlem";
   if (g.sonKiraZorlamasi !== null) return g.sonKiraZorlamasi ? "zorla" : "gozlem";
@@ -130,7 +134,7 @@ function computeMode(g: LicenseStateInput, lease: VerifiedLease | null): License
 
 const UPDATE_BLOCKERS: ReadonlySet<ReasonCode> = new Set(["GUNCELLEME_DONDURULDU", "BAKIM_BITTI", "BAKIM_IHLALI"]);
 
-/** Sunucu kararlarının kaynağı: kullanılabilir kira; yoksa son kiranın anlık görüntüsü (silmek gevşetmez). */
+/** Sunucu kararlarının kaynağı: kullanılabilir kira; yoksa (silinmiş/bozuk/geri alınmış) son kiranın anlık görüntüsü. */
 function sanctionSource(g: LicenseStateInput, lease: VerifiedLease | null): SanctionSnapshot | null {
   return lease ? sanctionSnapshotOf(lease.document) : g.sonYaptirim;
 }
@@ -164,9 +168,11 @@ function reasonList(findings: readonly Finding[]): StateReason[] {
 
 export function computeLicenseState(g: LicenseStateInput): LicenseState {
   const findings: Finding[] = [];
+  evaluateStore(g, findings);
   const entitlement = evaluateEntitlement(g, findings);
-  const lease = evaluateLease(g, entitlement, findings);
+  const lease = evaluateRollback(g, entitlement, evaluateLease(g, entitlement, findings), findings);
   const clock = computeClock(g, lease?.document ?? null, findings);
+  evaluateVendorClock(g, findings);
   const now = clock.trustedMs;
   evaluateMeasurements(g, lease?.document ?? null, findings);
   evaluateGrace(g, { entitlement, lease: lease?.document ?? null }, now, findings);

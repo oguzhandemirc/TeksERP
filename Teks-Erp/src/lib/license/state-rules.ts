@@ -15,7 +15,7 @@ import {
   type LicenseMode,
   type ProtocolErrorCode,
 } from "./protocol";
-import { evaluateClock, type ClockResult, type SanctionSnapshot } from "./saat";
+import { evaluateClock, type ClockResult, type EntitlementPin, type SanctionSnapshot } from "./saat";
 
 export const REASON_CODES = [
   "HAK_YOK",
@@ -24,6 +24,10 @@ export const REASON_CODES = [
   "KIRA_YOK",
   "KIRA_GECERSIZ",
   "KIRA_BAG_UYUSMAZ",
+  /** Diskteki kira/HAK durum kaydının bildiği son kabulden ESKİ ya da pini ters: geri alınmış sayılır. */
+  "KIRA_GERI_ALINDI",
+  /** Lisans deposunda bir dosya var ama okunamadı (izin, G/Ç) — yok sayılmaz, ölçülemedi sayılır. */
+  "DEPO_OKUNAMADI",
   "PARMAK_IZI_UYUSMAZ",
   "PARMAK_IZI_OLCULEMEDI",
   "BUTUNLUK_GECERSIZ",
@@ -58,6 +62,9 @@ export const REASON_VALIDITY: Readonly<Record<ReasonCode, Validity | null>> = {
   KIRA_YOK: "GECERSIZ",
   KIRA_GECERSIZ: "GECERSIZ",
   KIRA_BAG_UYUSMAZ: "GECERSIZ",
+  // Geri alınmış kira ne geçerli ne sahte kanıtıdır: sunucu kararları durum kaydından sürer.
+  KIRA_GERI_ALINDI: "OLCULEMEDI",
+  DEPO_OKUNAMADI: "OLCULEMEDI",
   PARMAK_IZI_UYUSMAZ: "GECERSIZ",
   BUTUNLUK_GECERSIZ: "GECERSIZ",
   PARMAK_IZI_OLCULEMEDI: "OLCULEMEDI",
@@ -99,6 +106,8 @@ export interface Finding {
 
 export type DocResult<T> =
   | { readonly status: "YOK" }
+  /** Dosya var ama okunamadı: YOK değildir (silmekle eşit sayılmaz), ölçülemedi bulgusu `depoOkunamadi`dan gelir. */
+  | { readonly status: "OKUNAMADI" }
   | { readonly status: "GECERSIZ"; readonly code: ProtocolErrorCode }
   | { readonly status: "GECERLI"; readonly value: T };
 
@@ -116,6 +125,8 @@ export interface LicenseStateInput {
     /** İmzalı durum kaydındaki birikim ve ait olduğu kira; yoksa null. */
     readonly monotonik: { readonly kiraId: string; readonly gecenMs: number } | null;
     readonly durumDosyasiGecerli: boolean;
+    /** Duvar saatiyle gözlenmiş kapalı kalma süresi (üst eşik kredisi; `evaluateClock`). */
+    readonly kapaliKrediMs?: number;
   };
   readonly parmakIziEslesme: MatchResult;
   readonly butunluk: IntegrityStatus;
@@ -128,6 +139,14 @@ export interface LicenseStateInput {
   readonly sonKiraZorlamasi: boolean | null;
   /** Son kullanılabilir kiranın sunucu kararları (`durum.json`); kira kullanılabilirken yok sayılır. */
   readonly sonYaptirim: SanctionSnapshot | null;
+  /** Durum kaydının bildiği son kabul edilen kira (geri alma tespiti); yoksa denetim yok. */
+  readonly sonKira?: { readonly kiraId: string; readonly verilisMs: number } | null;
+  /** Durum kaydının bildiği son HAK pini (sürüm · sınıf · kök türü). */
+  readonly sonHak?: EntitlementPin | null;
+  /** Satıcının `ISTEK_ZAMAN` ile ölçtürdüğü sapma (duvar − satıcı, ms); null = ölçülmedi. BİLGİdir. */
+  readonly saticiSapmaMs?: number | null;
+  /** Var olan ama okunamayan depo dosyaları (ad listesi); boşsa sorun yok. */
+  readonly depoOkunamadi?: readonly string[];
 }
 
 /** Kiradan sunucu kararlarının anlık görüntüsü — `durum.json` bunu saklar, durum onu okur. */
@@ -153,10 +172,11 @@ export function remainingDays(targetMs: number, nowMs: number): number {
 const warnBanner = (text: string): Banner => ({ metin: text, ton: "uyari" });
 const dangerBanner = (text: string): Banner => ({ metin: text, ton: "tehlike" });
 const UNVERIFIED_BANNER = warnBanner("Lisans doğrulanamadı; sistem yöneticinize ya da destek hattına başvurun.");
-const UNMEASURED_BANNER = warnBanner("Lisans durumu şu an ölçülemiyor; üretim etkilenmez, bağlantı kurulunca düzelir.");
+export const UNMEASURED_BANNER = warnBanner("Lisans durumu şu an ölçülemiyor; üretim etkilenmez, bağlantı kurulunca düzelir.");
 
 export function evaluateEntitlement(g: LicenseStateInput, out: Finding[]): VerifiedEntitlement | null {
   const h = g.hak;
+  if (h.status === "OKUNAMADI") return null;
   if (h.status === "YOK") {
     out.push({ code: "HAK_YOK" });
     return null;
@@ -175,6 +195,7 @@ export function evaluateEntitlement(g: LicenseStateInput, out: Finding[]): Verif
 /** Kira HAK bozuk olsa da kuruluma bağlıysa kullanılır (imzalı zaman çapası ve sunucu kararı taşır). */
 export function evaluateLease(g: LicenseStateInput, entitlement: VerifiedEntitlement | null, out: Finding[]): VerifiedLease | null {
   const k = g.kira;
+  if (k.status === "OKUNAMADI") return null;
   if (k.status === "YOK") {
     if (g.hak.status !== "YOK") out.push({ code: "KIRA_YOK" });
     return null;
@@ -206,6 +227,7 @@ export function computeClock(g: LicenseStateInput, lease: LeaseDoc | null, out: 
     leaseServerTimeMs: lease ? isoToMs(lease.sunucuSaati) : null,
     monotonicElapsedMs: elapsed,
     pollIntervalMs: (lease?.yoklamaAraligiDk ?? POLL_DEFAULT_MINUTES) * 60_000,
+    downtimeCreditMs: g.saat.kapaliKrediMs ?? 0,
   });
   if (s.finding) out.push({ code: s.finding, detail: s.findingSource ?? undefined, tier: "UYARI", banner: UNMEASURED_BANNER });
   return s;

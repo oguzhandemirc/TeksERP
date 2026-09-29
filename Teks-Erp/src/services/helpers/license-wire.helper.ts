@@ -9,12 +9,20 @@ import {
   REQUEST_HEADER,
   VendorErrorResponseSchema,
   VersionTextSchema,
+  isInstallationIdOptional,
+  isoToMs,
   signRequest,
   type RequestPurpose,
   type VendorErrorCode,
 } from "../../lib/license/protocol";
 import { getLicenseStore, type InstallationKey, type LicenseStoreSnapshot } from "../../lib/license/store";
-import { getLicenseConfig, getLicenseDbFacts, getMeasuredFingerprint } from "../../lib/license/runtime";
+import {
+  getLicenseConfig,
+  getLicenseDbFacts,
+  getLicenseSnapshot,
+  getMeasuredFingerprint,
+  recordVendorClockSkew,
+} from "../../lib/license/runtime";
 
 const VENDOR_TIMEOUT_MS = 20_000;
 
@@ -38,7 +46,7 @@ export const egressTransport: VendorTransport = async (req) => {
 
 export type VendorResult =
   | { readonly ok: true; readonly json: unknown }
-  | { readonly ok: false; readonly status: number; readonly code: string };
+  | { readonly ok: false; readonly status: number; readonly code: string; readonly vendorTimeMs?: number };
 
 // ── Hatalar (TR mesaj + `details.code`) ─────────────────────────────────────────
 export function licenseError(status: number, code: string, message: string, extra: Record<string, unknown> = {}): AppError {
@@ -82,7 +90,8 @@ export function vendorFailureToError(r: { status: number; code: string }): AppEr
 export interface ReadyContext {
   readonly store: LicenseStoreSnapshot;
   readonly key: InstallationKey;
-  readonly installationId: string;
+  /** Lisans kimliği (LICENSE_DIR); etkinleşmemişte null — DB `installationId`si DEĞİL (D14). */
+  readonly licenseId: string | null;
 }
 
 export function requireStore(): LicenseStoreSnapshot & { key: InstallationKey } {
@@ -93,11 +102,18 @@ export function requireStore(): LicenseStoreSnapshot & { key: InstallationKey } 
   return { ...store, key: store.key };
 }
 
+/** Depo + anahtar + DB olguları hazır; lisans kimliği henüz yoksa (etkinleşmemiş) `licenseId` null. */
 export function requireReady(): ReadyContext {
   const store = requireStore();
-  const installationId = getLicenseDbFacts().installationId;
-  if (!installationId) throw licenseError(409, "LICENSE_IDENTITY_NOT_READY", "Kurulum kimliği henüz hazır değil; biraz sonra tekrar deneyin.");
-  return { store, key: store.key, installationId };
+  const snap = getLicenseSnapshot();
+  if (!snap.hazir) throw licenseError(409, "LICENSE_IDENTITY_NOT_READY", "Kurulum kimliği henüz hazır değil; biraz sonra tekrar deneyin.");
+  return { store, key: store.key, licenseId: snap.licenseId };
+}
+
+/** Lisans kimliği gerektiren işlem (yoklama, DR, çevrimdışı yoklama) etkinleşmemiş kurulumda 409. */
+export function requireLicenseId(ctx: ReadyContext): string {
+  if (!ctx.licenseId) throw licenseError(409, "LICENSE_NOT_ACTIVE", "Kurulum etkinleşmemiş; önce etkinleştirme kodunu girin.");
+  return ctx.licenseId;
 }
 
 export function requireVendorUrl(): string {
@@ -107,35 +123,111 @@ export function requireVendorUrl(): string {
 }
 
 // ── Satıcıya imzalı istek ───────────────────────────────────────────────────────
-export function signedHeaders(ctx: ReadyContext, purpose: RequestPurpose, bodyText: string): Record<string, string> {
-  const token = signRequest({ installationId: ctx.installationId, purpose, body: bodyText, key: { privateKey: ctx.key.privateKey, nowMs: Date.now() } });
+/**
+ * İstekte taşınacak kimlik: etkinleştirme HİÇ taşımaz (kurulumu kod belirler), taşıma bilinirse taşır,
+ * diğer her amaç lisans kimliği ister (D14; protokol §3 İSTEK).
+ */
+export function requestIdentityFor(ctx: ReadyContext, purpose: RequestPurpose): string | null {
+  if (purpose === "etkinlestir") return null;
+  if (isInstallationIdOptional(purpose)) return ctx.licenseId;
+  return requireLicenseId(ctx);
+}
+
+export function signedHeaders(ctx: ReadyContext, purpose: RequestPurpose, bodyText: string, nowMs: number = Date.now()): Record<string, string> {
+  const token = signRequest({ installationId: requestIdentityFor(ctx, purpose), purpose, body: bodyText, key: { privateKey: ctx.key.privateKey, nowMs } });
   return { "content-type": "application/json", accept: "application/json", [REQUEST_HEADER]: token };
 }
 
-export async function vendorPost(path: string, purpose: RequestPurpose, body: unknown, transport: VendorTransport): Promise<VendorResult> {
-  const ctx = requireReady();
-  const base = requireVendorUrl();
-  const text = JSON.stringify(body);
-  let res: VendorHttpResponse;
-  try {
-    res = await transport({ url: `${base}${path}`, method: "POST", headers: signedHeaders(ctx, purpose, text), body: text });
-  } catch (err) {
-    return { ok: false, status: 0, code: err instanceof EgressError ? err.code : "EGRESS_NETWORK" };
-  }
+/** Satıcının hata gövdesinden kod + (ISTEK_ZAMAN'da) İMZASIZ satıcı saati. */
+export function readVendorError(status: number, bodyText: string): { code: string; vendorTimeMs?: number } {
   let json: unknown = null;
   try {
-    json = JSON.parse(res.body) as unknown;
+    json = JSON.parse(bodyText) as unknown;
   } catch {
     json = null;
   }
-  if (res.status >= 200 && res.status < 300) return { ok: true, json };
   const err = VendorErrorResponseSchema.safeParse(json);
-  return { ok: false, status: res.status, code: err.success ? err.data.details.code : `HTTP_${res.status}` };
+  if (!err.success) return { code: `HTTP_${status}` };
+  const t = err.data.details.sunucuSaati;
+  return t === undefined ? { code: err.data.details.code } : { code: err.data.details.code, vendorTimeMs: isoToMs(t) };
+}
+
+/**
+ * Satıcı saati kayıkken (`ISTEK_ZAMAN` + `sunucuSaati`) sapma öğrenilir ve istek BİR KEZ düzeltilmiş
+ * zamanla, yeni nonce'la yeniden imzalanır; ikinci `ISTEK_ZAMAN`da durulur. Sapma imzasızdır: yalnız
+ * imza damgasına ve `SAAT_KAYIK` bilgisine girer, güvenilir saate/kademeye GİRMEZ (D4).
+ */
+export function learnVendorClock(code: string, vendorTimeMs: number | undefined, receivedAtMs: number = Date.now()): number | null {
+  if (code !== "ISTEK_ZAMAN" || vendorTimeMs === undefined || !Number.isFinite(vendorTimeMs)) return null;
+  const skewMs = receivedAtMs - vendorTimeMs;
+  recordVendorClockSkew(skewMs);
+  return skewMs;
+}
+
+/** Gövde istek başına kurulur: düzeltilmiş denemede taze ölçüm (ör. `saticiSapmaSn`) gövdeye girer. */
+export type VendorBody = unknown | (() => unknown | Promise<unknown>);
+
+export async function vendorPost(path: string, purpose: RequestPurpose, body: VendorBody, transport: VendorTransport): Promise<VendorResult> {
+  const ctx = requireReady();
+  const base = requireVendorUrl();
+  const send = async (nowMs: number): Promise<VendorResult> => {
+    const text = JSON.stringify(typeof body === "function" ? await (body as () => unknown)() : body);
+    let res: VendorHttpResponse;
+    try {
+      res = await transport({ url: `${base}${path}`, method: "POST", headers: signedHeaders(ctx, purpose, text, nowMs), body: text });
+    } catch (err) {
+      return { ok: false, status: 0, code: err instanceof EgressError ? err.code : "EGRESS_NETWORK" };
+    }
+    if (res.status >= 200 && res.status < 300) {
+      let json: unknown = null;
+      try {
+        json = JSON.parse(res.body) as unknown;
+      } catch {
+        json = null;
+      }
+      return { ok: true, json };
+    }
+    const e = readVendorError(res.status, res.body);
+    return { ok: false, status: res.status, code: e.code, vendorTimeMs: e.vendorTimeMs };
+  };
+  const first = await send(Date.now());
+  if (first.ok) {
+    // Düzeltmesiz damga kabul edildi: saat satıcıyla ±10 dk içinde, önceki kayma bilgisi düşer.
+    recordVendorClockSkew(null);
+    return first;
+  }
+  const skewMs = learnVendorClock(first.code, first.vendorTimeMs);
+  if (skewMs === null) return first;
+  return send(Date.now() - skewMs);
 }
 
 // ── Ortam ve gövdeler ───────────────────────────────────────────────────────────
 export function appVersionForWire(): string {
   return VersionTextSchema.safeParse(APP_VERSION).success ? APP_VERSION : "0.0.0";
+}
+
+const OS_TEXT_MAX = 120;
+
+/**
+ * İşletim sistemi künyesi: yalnız tür + sürüm. Makine adı ASLA girmez — bazı çekirdek sürüm
+ * dizgeleri derleyen makinenin adını taşıyabilir, o yüzden ad (büyük/küçük harf duyarsız) silinir.
+ */
+export function describeOperatingSystem(info: { readonly type: string; readonly release: string; readonly hostname: string } = {
+  type: os.type(),
+  release: os.release(),
+  hostname: os.hostname(),
+}): string {
+  let text = `${info.type} ${info.release}`;
+  const host = info.hostname.trim();
+  if (host.length >= 2) {
+    const lower = host.toLowerCase();
+    let at = text.toLowerCase().indexOf(lower);
+    while (at >= 0) {
+      text = `${text.slice(0, at)}${text.slice(at + host.length)}`;
+      at = text.toLowerCase().indexOf(lower);
+    }
+  }
+  return text.replace(/\s+/g, " ").trim().slice(0, OS_TEXT_MAX);
 }
 
 export function buildEnvironment(): {
@@ -146,17 +238,21 @@ export function buildEnvironment(): {
   uygulamaSurum: string;
   derlemeTarihi: string | null;
   konteyner: boolean;
+  installationId?: string;
 } {
   const platform = process.platform === "win32" || process.platform === "darwin" ? process.platform : "linux";
+  // DB kimliği YALNIZ bilgidir (döküm/DR kopyası taşır); satıcıda kimlik değil ipucu.
+  const dbId = getLicenseDbFacts().installationId;
   return {
     platform,
     mimari: process.arch === "arm64" ? "arm64" : "x64",
-    isletimSistemi: `${os.type()} ${os.release()}`.slice(0, 120),
+    isletimSistemi: describeOperatingSystem(),
     nodeSurum: /^v\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(process.version) ? process.version : "v0.0.0",
     uygulamaSurum: appVersionForWire(),
     // İmzalı derleme künyesi Faz 2'de; imzasız tarih bakım kararına girmez.
     derlemeTarihi: null,
     konteyner: fs.existsSync("/.dockerenv") || fs.existsSync("/run/.containerenv"),
+    ...(dbId ? { installationId: dbId } : {}),
   };
 }
 

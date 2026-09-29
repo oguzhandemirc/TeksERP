@@ -12,7 +12,8 @@
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): A1 sağlık özetine ham audit hata metni alanı eklendi · A2 istemci dağılımına
-// kurulum kimliği eklendi · A3 iş hatası dağılımına hata mesajı eklendi.
+// kurulum kimliği eklendi · A3 iş hatası dağılımına hata mesajı eklendi · (F1a) A4 ortamdan DB
+// kimliği düştü (§1d) · A5 yoklamadan satıcı saati sapması düştü (§1d).
 // =============================================================================
 import os from "node:os";
 import path from "node:path";
@@ -25,7 +26,7 @@ import { ensureInstallationIdentity } from "../src/jobs/installation-identity.jo
 import { reportJobFailure } from "../src/jobs/job-failure";
 import { touchClient } from "../src/lib/client-registry";
 import { loadLicenseStoreSync } from "../src/lib/license/store";
-import { configureLicenseRuntimeForTests, setLicenseDbFacts, setMeasuredFingerprint } from "../src/lib/license/runtime";
+import { configureLicenseRuntimeForTests, recordVendorClockSkew, setLicenseDbFacts, setMeasuredFingerprint } from "../src/lib/license/runtime";
 import { PollRequestSchema, type Fingerprint } from "../src/lib/license/protocol";
 import { acceptLicenseResponse, buildPollBody } from "../src/services/license-sync.service";
 import { fiksturKur, hakBas, kiraBas, type Fikstur } from "./lib/lisans-fikstur";
@@ -50,8 +51,8 @@ AuditService.logEvent = async () => undefined;
 const IZINLI_ANAHTARLAR = new Set([
   "v", "sonKiraId", "hak", "hakId", "surum", "parmakIzi", "f1", "f2", "f3", "f4", "f5",
   "durum", "gecerlilik", "nedenler", "kip", "hesaplananKademe", "uygulananKademe",
-  "saat", "duvar", "guvenilir", "bulgu",
-  "ortam", "platform", "mimari", "isletimSistemi", "nodeSurum", "uygulamaSurum", "derlemeTarihi", "konteyner",
+  "saat", "duvar", "guvenilir", "bulgu", "saticiSapmaSn",
+  "ortam", "platform", "mimari", "isletimSistemi", "nodeSurum", "uygulamaSurum", "derlemeTarihi", "konteyner", "installationId",
   "saglik", "calismaSn", "dbBoyutBayt", "yedek", "hukum", "yasSaat", "offsite", "yapilandirildi", "ok", "eksikSayisi",
   "diskDolulukYuzde", "auditYazmaHatasi", "havuzZamanAsimi", "istemciler", "tur", "adet", "isHatalari", "is",
   "gozlem", "reddedilecekIstek", "reddedilecekModul",
@@ -70,27 +71,33 @@ function anahtarlar(deger: unknown, yol: string, out: string[]): string[] {
 
 const DIZIN = fs.mkdtempSync(path.join(os.tmpdir(), "lisans-allowlist-"));
 
-async function hazirla(): Promise<{ f: Fikstur; ornekler: { istemci: string; kullanici: string; hataMetni: string } }> {
+async function hazirla(): Promise<{ f: Fikstur; dbKimligi: string; ornekler: { istemci: string; kullanici: string; hataMetni: string } }> {
   const dizin = DIZIN;
   const key = loadLicenseStoreSync({ dir: dizin }).key;
   if (!key) throw new Error("depo anahtarı yok");
   const kimlik = await ensureInstallationIdentity();
+  // Lisans kimliği portalda doğar (fikstürün kimliği); DB kimliği yalnız bilgi olarak `ortam`da (D14).
   const f0 = fiksturKur(Date.now());
-  const f: Fikstur = { ...f0, kurulumId: kimlik.installationId, kurulum: { kid: key.kid, x: key.x, privateKey: key.privateKey, acik: createPublicKey(key.privateKey) } };
+  const f: Fikstur = { ...f0, kurulum: { kid: key.kid, x: key.x, privateKey: key.privateKey, acik: createPublicKey(key.privateKey) } };
   configureLicenseRuntimeForTests({ roots: f.kokler, vendorUrl: null });
   setLicenseDbFacts({ installationId: kimlik.installationId, firstOpenMs: Date.now() - 86_400_000, ledgerHighWaterMs: null });
   setMeasuredFingerprint({ digest: f.parmakIzi as Fingerprint, measured: { f1: true, f2: true, f3: true, f4: true, f5: true }, measuredAt: new Date().toISOString() });
-  await acceptLicenseResponse({ v: 1, hak: hakBas(f), kira: kiraBas(f, { zorlama: false }), indirmeBelirtecleri: [], sunucuSaati: new Date().toISOString() }, "cevrimdisi");
+  await acceptLicenseResponse(
+    { v: 1, hak: hakBas(f), kira: kiraBas(f, { zorlama: false }), indirmeBelirtecleri: [], sunucuSaati: new Date().toISOString(), kurulumId: f.kurulumId },
+    "cevrimdisi",
+  );
+  // Satıcı saati sapması ölçülmüş olsun: `saticiSapmaSn` beyanlı anahtar olarak gövdede görünsün.
+  recordVendorClockSkew(-20 * 60_000);
   const ornekler = { istemci: `TEST-kurulum-${randomUUID()}`, kullanici: randomUUID(), hataMetni: "GIZLI-HATA-METNI C:\\gizli\\yol\\tekserp_20260929.dump" };
   touchClient({ instanceId: ornekler.istemci, kind: "electron", version: "1.2.3", userId: ornekler.kullanici });
   touchClient({ instanceId: `${ornekler.istemci}-2`, kind: "mobil", version: null, userId: null });
   reportJobFailure("lisans-bekci-is", new Error(ornekler.hataMetni));
-  return { f, ornekler };
+  return { f, dbKimligi: kimlik.installationId, ornekler };
 }
 
 async function main(): Promise<void> {
   try {
-    const { ornekler } = await hazirla();
+    const { f, dbKimligi, ornekler } = await hazirla();
     const govde = await buildPollBody();
     const metin = JSON.stringify(govde);
 
@@ -100,6 +107,11 @@ async function main(): Promise<void> {
     check("§1a körlük zemini: gövde dolu (≥ 40 anahtar yolu)", tumu.length >= 40, `${tumu.length}`);
     check("§1b ⭐ beyan DIŞI anahtar YOK", disarda.length === 0, disarda.join(", "));
     check("§1c ⭐ gövde KATI protokol şemasından geçer", PollRequestSchema.safeParse(govde).success);
+    check(
+      "§1d ortam.installationId = DB kimliği (yalnız bilgi), saat.saticiSapmaSn ölçülen sapma; lisans kimliği gövdede YOK (imzalı başlıkta)",
+      govde.ortam.installationId === dbKimligi && govde.saat.saticiSapmaSn === -1200 && dbKimligi !== f.kurulumId && !metin.includes(f.kurulumId),
+      `${govde.ortam.installationId?.slice(0, 8)} / ${String(govde.saat.saticiSapmaSn)}`,
+    );
 
     console.log("\n§2 — iş/kişisel veri taraması");
     const kullanicilar = await prisma.user.findMany({ select: { username: true, fullName: true }, take: 200 });

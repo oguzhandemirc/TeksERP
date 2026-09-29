@@ -26,6 +26,8 @@ import {
   currentFingerprintDigest,
   egressTransport,
   licenseError,
+  requestIdentityFor,
+  requireLicenseId,
   requireReady,
   requireStore,
   requireVendorUrl,
@@ -86,11 +88,11 @@ export function initLicenseEngine(): void {
 }
 
 // ── API: etkinleştirme ──────────────────────────────────────────────────────────
+/** Etkinleştirme kimlik TAŞIMAZ: kurulumu satıcıda kod belirler, lisans kimliği yanıtla gelir (D14). */
 function buildActivateBody(ctx: ReadyContext, code: string): ReturnType<typeof ActivateRequestSchema.parse> {
   return ActivateRequestSchema.parse({
     v: 1,
     kod: code,
-    kurulumId: ctx.installationId,
     acikAnahtar: ctx.key.x,
     parmakIzi: currentFingerprintDigest(),
     ortam: buildEnvironment(),
@@ -100,7 +102,7 @@ function buildActivateBody(ctx: ReadyContext, code: string): ReturnType<typeof A
 function normalizeCodeOrThrow(raw: string): string {
   const code = normalizeActivationCode(raw);
   if (!ActivationCodeSchema.safeParse(code).success) {
-    throw licenseError(400, "LICENSE_CODE_INVALID", "Etkinleştirme kodu biçimi geçersiz (TKS-XXXX-XXXX-XXXX).");
+    throw licenseError(400, "LICENSE_CODE_INVALID", "Etkinleştirme kodu biçimi geçersiz (TKS-XXXX-XXXX-XXXX-XXXX).");
   }
   return code;
 }
@@ -140,11 +142,13 @@ export async function buildOfflineRequest(g: { amac: OfflinePurpose; kod?: strin
     if (!getMeasuredFingerprint()) await refreshLicenseFingerprint();
     body = buildActivateBody(ctx, normalizeCodeOrThrow(g.kod));
   } else {
-    if (!ctx.store.leaseJws) throw licenseError(409, "LICENSE_NOT_ACTIVE", "Kurulum etkinleşmemiş; önce etkinleştirme isteği oluşturun.");
+    if (!getLicenseSnapshot().activated || !ctx.licenseId) {
+      throw licenseError(409, "LICENSE_NOT_ACTIVE", "Kurulum etkinleşmemiş; önce etkinleştirme isteği oluşturun.");
+    }
     body = await buildPollBody(nowMs);
   }
   const text = JSON.stringify(body);
-  const token = signRequest({ installationId: ctx.installationId, purpose: g.amac, body: text, key: { privateKey: ctx.key.privateKey, nowMs } });
+  const token = signRequest({ installationId: requestIdentityFor(ctx, g.amac), purpose: g.amac, body: text, key: { privateKey: ctx.key.privateKey, nowMs } });
   const zarf = wrapEnvelope(token, text);
   const vendorUrl = getLicenseConfig().vendorUrl;
   return {
@@ -193,7 +197,8 @@ export async function requestTransfer(gerekce: string | null, userId: string | n
 }
 
 export async function drTakeover(anaKurulumId: string, gerekce: string, userId: string | null, transport: VendorTransport = egressTransport): Promise<LicenseDetail> {
-  requireReady();
+  // DR sunucusu kendi (DR sınıfı) lisans kimliğiyle imzalar: önce kendi kodu ile etkinleşmiş olmalı.
+  requireLicenseId(requireReady());
   requireVendorUrl();
   const body = DrTakeoverRequestSchema.parse({ v: 1, anaKurulumId, gerekce });
   await runLeaseExchange(async () => {
