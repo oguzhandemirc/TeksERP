@@ -9,8 +9,8 @@ use crate::chain::RootKey;
 pub const BUILTIN_ROOTS: &[(&str, &str, &[&str])] =
     &[("hazirlik-2026-1", "705hChzAL045Gp-XoG6SaUKAW8muK1SFcW0Vpwhf-mo", &["TEST", "DEMO"])];
 
-/// `PACKAGE_PUBLIC_KEYS` aynası — PAKET anahtarı (2e) henüz yok: boş çapa = bütünlük ÖLÇÜLEMEDİ.
-pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] = &[];
+/// `PACKAGE_PUBLIC_KEYS` aynası — bugün yalnız hazırlık PAKET anahtarı (TEST/DEMO; sınıf kararı TS'te).
+pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] = &[("paket-hazirlik", "auFAoNnXZDIWdyLJ5EVsakwMquIa_GHqCyKxZHz16Z8")];
 
 pub fn builtin_roots() -> Vec<RootKey> {
     BUILTIN_ROOTS

@@ -22,6 +22,7 @@
 //
 // KULLANIM (Teks-Erp/ içinden, ağır iş sarmalayıcısıyla):
 //   node ../scripts/agir-is.mjs -- node scripts/build-korumali.mjs [--hedef=win-x64|linux-x64] [--cikti=dist]
+//     [--musteri=<kanal kodu>] [--kurulum=<uuid>]   (filigran; imza ayrı adım: scripts/build-korumali-imza.ts)
 //   Ortam: KORUMA_ARSIV_DIZINI (varsayılan ~/.tekserp/kaynak-haritalari) — REPO DIŞI.
 // =============================================================================
 
@@ -77,6 +78,18 @@ async function main() {
 
   fs.mkdirSync(ciktiDir, { recursive: true });
 
+  // --- 0. Derleme künyesi + filigran (Faz 2e) -------------------------------------
+  // Derleme anı ve paket kimliği ÖNCE doğar: bayt kodu sabitine (filigran) ve imzalı listeye
+  // (build-korumali-imza.ts, `derlemeTarihi`/`paketId`) aynı değer girer. Müşteri/kurulum
+  // kimliği argümandan (paketle.ps1 -Musteri/-Kurulum); kişisel veri taşımaz.
+  const zaman = new Date().toISOString();
+  const paketId = crypto.randomUUID();
+  const musteri = typeof arg('musteri') === 'string' ? arg('musteri') : null;
+  const kurulumId = typeof arg('kurulum') === 'string' ? arg('kurulum') : null;
+  if (musteri !== null && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(musteri)) throw new Error(`--musteri biçimsiz: ${musteri}`);
+  if (kurulumId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(kurulumId)) throw new Error('--kurulum UUID değil');
+  const filigran = { musteri, kurulumId, paketId, derlemeTarihi: zaman };
+
   // --- 1. esbuild: bizim kod, minify + isim karartma, harita harici -------------
   const { build } = await import('esbuild');
   const cjs = path.join(ciktiDir, 'server.cjs');
@@ -94,6 +107,11 @@ async function main() {
     legalComments: 'none',
     logLevel: 'warning',
     metafile: true,
+    // Korumalı derlemede native lisans çekirdeği ZORUNLU (TS'e düşülmez) + filigran bayt kodu sabiti.
+    define: {
+      __TEKSERP_NATIVE_REQUIRED__: 'true',
+      __TEKSERP_FILIGRAN__: JSON.stringify(JSON.stringify(filigran)),
+    },
   });
   const cjsBayt = fs.statSync(cjs).size;
   const cjsSha = crypto.createHash('sha256').update(fs.readFileSync(cjs)).digest('hex');
@@ -113,7 +131,10 @@ async function main() {
     commit: git('rev-parse', 'HEAD'),
     kisaCommit: git('rev-parse', '--short', 'HEAD'),
     dal: git('rev-parse', '--abbrev-ref', 'HEAD'),
-    zaman: new Date().toISOString(),
+    zaman,
+    paketId,
+    musteri,
+    kurulumId,
     cjsBayt,
     cjsSha256: cjsSha,
     jscUretildi: false,

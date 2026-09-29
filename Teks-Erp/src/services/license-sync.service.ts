@@ -11,16 +11,17 @@ import {
   PollRequestSchema,
   TransferRequestSchema,
   TransferResponseSchema,
-  checkLeaseBinding,
   isoToMs,
   msToIso,
-  verifyEntitlement,
-  verifyLease,
   type LicenseResponse,
   type SanctionLevel,
 } from "../lib/license/protocol";
 import { getLicenseStore, saveEntitlement, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
 import { measureFingerprint } from "../lib/license/fingerprint";
+import { coreCheckLeaseBinding, coreVerifyEntitlement, coreVerifyLease } from "../lib/license/core-bridge";
+import { runIntegrityCheck } from "../lib/license/integrity-check";
+import { integrityCheckTarget, setIntegrityOutcome } from "../lib/license/integrity-state";
+import { NATIVE_REQUIRED, getLicenseCore } from "../lib/license/native";
 import {
   getLicenseConfig,
   getLicenseSnapshot,
@@ -76,6 +77,16 @@ export async function refreshLicenseFingerprint(): Promise<void> {
   const store = getLicenseStore();
   if (!store?.key) return;
   setMeasuredFingerprint(await measureFingerprint(store.key.salt));
+}
+
+/**
+ * İmzalı dosya listesine karşı bütünlük (açılışta + günlük). Paket kökü süreç kökü (`app/`);
+ * hazırlık PAKET anahtarının sınıf kuralı için doğrulanmış HAK'ın sınıfı verilir.
+ */
+export async function refreshLicenseIntegrity(): Promise<void> {
+  const entitlementClass = getLicenseSnapshot().entitlement?.document.sinif ?? null;
+  const { root, keys } = integrityCheckTarget();
+  setIntegrityOutcome(await runIntegrityCheck({ root, keys, required: NATIVE_REQUIRED, core: getLicenseCore(), entitlementClass }));
 }
 
 function skewSeconds(): number | undefined {
@@ -154,7 +165,7 @@ export async function acceptLicenseResponse(
   if (!parsed.success) throw invalidResponse("Lisans yanıtı biçimsiz.");
   const resp: LicenseResponse = parsed.data;
   const roots = getLicenseConfig().roots;
-  const lease = verifyLease(resp.kira, roots);
+  const lease = coreVerifyLease(resp.kira, roots);
   if (!lease.ok) throw invalidResponse(`Kira doğrulanamadı: ${lease.message}`, lease.code);
   const leaseDoc = lease.value.document;
   if (leaseDoc.kurulumAnahtarKimligi !== ctx.key.kid) throw invalidResponse("Kira bu kurulum anahtarına ait değil.");
@@ -165,10 +176,10 @@ export async function acceptLicenseResponse(
   const licenseId = leaseDoc.kurulumId;
   const entitlementJws = resp.hak ?? ctx.store.entitlementJws;
   if (!entitlementJws) throw invalidResponse("Yanıt HAK belgesi taşımıyor ve kurulumda HAK yok.");
-  const entitlement = verifyEntitlement(entitlementJws, roots);
+  const entitlement = coreVerifyEntitlement(entitlementJws, roots);
   if (!entitlement.ok) throw invalidResponse(`HAK doğrulanamadı: ${entitlement.message}`, entitlement.code);
   if (entitlement.value.document.kurulumId !== licenseId) throw invalidResponse("HAK bu kuruluma ait değil.");
-  const binding = checkLeaseBinding(lease.value, entitlement.value);
+  const binding = coreCheckLeaseBinding(resp.kira, entitlementJws, roots);
   if (!binding.ok) throw invalidResponse(`Kira HAK'a bağlı değil: ${binding.message}`, binding.code);
 
   const before = getLicenseSnapshot();
