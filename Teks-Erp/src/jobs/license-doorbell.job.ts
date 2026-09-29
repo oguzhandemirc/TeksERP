@@ -21,6 +21,7 @@ import { getLicenseStore } from "../lib/license/store";
 import { getLicenseConfig, getLicenseDbFacts, updateDoorbellStatus } from "../lib/license/runtime";
 import { onLicenseActivated } from "../services/license-sync.service";
 import { requestImmediateLicensePoll } from "./license-poll.job";
+import { dispatchDoorbellTopic } from "./doorbell-topics";
 
 const HEARTBEAT_TIMEOUT_MS = (DOORBELL_HEARTBEAT_SECONDS * 2 + 10) * 1000;
 const BACKOFF_MIN_MS = 1000;
@@ -135,6 +136,7 @@ async function consume(res: IncomingMessage, signal: AbortSignal): Promise<void>
         else {
           updateDoorbellStatus({ lastEventAt: now });
           if (ev.konu === "lisans") requestImmediateLicensePoll();
+          else dispatchDoorbellTopic(ev.konu);
         }
       }
     });

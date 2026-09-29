@@ -71,6 +71,16 @@ const WORKORDER_DATE_FIELDS = [
 const BATCH_PREVIEW_LIMIT = 3;
 /** Liste select'i: bağdaki siparişin müşterisi yalnız id+ad (opt-in; sipariş no/adres/vergi no listeye girmez). */
 const WO_LIST_ORDER_CUSTOMER = { customer: { select: { id: true, name: true } } } as const;
+/**
+ * Liste "Müşteri" kolonunun bağ seçimi — aktif bağlar bağlanma sırasıyla, müşteri AYNI
+ * sorguda. Patron bulutu projeksiyonu (`cloud-sync` · iş emri `cariKartIdleri`) aynı seçimi
+ * `withProductionMeters`e verir; liste ile bulut aynı müşteri önizlemesini basar.
+ */
+export const WO_LIST_CUSTOMER_LINKS = {
+  where: ACTIVE_ORDER_LINK,
+  orderBy: { createdAt: "asc" },
+  select: { orderLineId: true, createdAt: true, orderLine: { select: { order: { select: WO_LIST_ORDER_CUSTOMER } } } },
+} as const satisfies Prisma.WorkOrder$orderLinksArgs;
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -1803,7 +1813,7 @@ export class WorkOrderService {
         : {
             // Müşteri kolonu: bağdaki müşteri AYNI sorguda (yalnız id+ad; koparılmış bağ
             // `ACTIVE_ORDER_LINK` ile dışarıda). Rollup `rollupWorkOrderCustomers`.
-            orderLinks: { where: ACTIVE_ORDER_LINK, orderBy: { createdAt: "asc" }, select: { orderLineId: true, createdAt: true, orderLine: { select: { order: { select: WO_LIST_ORDER_CUSTOMER } } } } },
+            orderLinks: WO_LIST_CUSTOMER_LINKS,
           }),
     } satisfies Prisma.WorkOrderSelect;
 

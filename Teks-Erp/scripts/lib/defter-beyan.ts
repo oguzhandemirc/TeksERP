@@ -521,6 +521,12 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     gerekce: "kalıcı sayaç/rapor SystemLog'tan değil KALICI KOLONDAN okunur ⇒ audit satırı silindiğinde raporlanan hiçbir sayı değişmez",
     kararUfku: "6 ayda arşivlenir; iş kaynağı olarak okunmaz. ⚠️ ÇÜRÜTMENİN ZAYIF HALKASI ÖLÇÜLDÜ (2026-09-13): audit satırı BİR sayaçta okunuyor — backup-impact.service.ts:331 `systemLog.count`. Ama o satır \"İş kaybı DEĞİL — iz kaydı\" etiketiyle `system` grubunda duruyor (iş sayısı değil) ve kod arşivleme ufkunu ZATEN biliyor: :404 `_min(createdAt)` ile kapsamı ölçüp en eski log cutoff'tan sonraysa rollup'ı alt sınır saymıyor, \"ölçülemedi\" diyor — 0 demiyor. Panzehir yerinde olduğu için sınıf TELEMETRİ kalır. Audit'e uzanma ihtiyacı bir DEFTER EKSİKLİĞİNİN işaretidir (bkz. SackAllocation borcu)." },
 
+  // Patron bulutu eşitlemesi (B1): satırı uygulama kodu DEĞİL silme/ayrılma tetikleyicileri yazar.
+  { model: "SyncMark", sinif: "TELEMETRI",
+    gerekce: "patron bulutu eşitleme işareti (SILINDI/KIRLI) — yalnız \"bu kökü buluta yeniden gönder\" der; tek okuyucusu eşitleme taramasıdır (src/cloud-sync/change-scan.ts), hiçbir rapor/ekran/karar okumaz ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
+    kararUfku: "eşitleme onayı — bulutun onayladığı zincirin gerisinde kalan ve 7 günden eski işaret budanır; eşitleme uzun süre durduysa 30 gün tavanı uygulanır ve kaçan silmeyi günlük uzlaştırma TAM gönderimle onarır (tasarım §4.4, markPruneCutoff)",
+    silen: ["src/cloud-sync/marks-pruning.ts"] },
+
   // ── DURUM ──────────────────────────────────────────────────────────────────
   { model: "UserRecoveryCode", sinif: "DURUM", gerekce: "tek kullanımlık kurtarma kodu; tüketimi `usedAt` ile işaretlenir, defter değil" },
 ];

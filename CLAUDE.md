@@ -116,6 +116,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 | Filtre · liste · arama | `docs/kurallar/filtre-liste.md` | Sunucu süzmesi; CSV; `updatedAt desc` (giriş sekmeleri Ham Stok + Yarı Mamul hariç); tek metraj; Ctrl+F yok |
 | Raporlar · karneler | `docs/kurallar/raporlar.md` | `finalizedAt` trigger; kaynak statü listesi; takvim günü ↔ mutlak pencere; parti araması aday listesi |
 | Finans · sağlamlık sınıfları | `docs/kurallar/finans.md` | Beş sınıf; iki tarih; ters yol; kilit sırası; çift yüklem; tek kaynak satır; kasa/KDV bayrakları PROFİL |
+| **Patron bulutu · eşitleme · rapor isteği** | `docs/kurallar/patron-bulutu.md` | Bulut hesap yapmaz, fabrika tek kaynak yardımcıyla hesaplar; katalog opt-in (`src/cloud-sync/projections.ts`); ön koşul fail-closed (URETIM + `patron-bulut` + kira); filigran güvenli ufukla, yalnız bulut onayıyla ilerler; silme tetikleyiciyle (`sync_marks`, telemetri) |
 | **Lisans · kod koruma · satıcı platformu** | `docs/kurallar/lisans.md` | Gözlem sıfır fark; ek süre imzalı tarihten; KISITLI iki anahtarlı; sunucu kararı ek sürede kalıcı; parmak izi MAC'siz; kök parolası stdin |
 | Genel · uzak erişim · konvansiyon | `docs/kurallar/genel.md` | Soket ayrımı; Access JWT fail-closed; TOTP kurulumu; audit; iki dinleyici tek process |
 

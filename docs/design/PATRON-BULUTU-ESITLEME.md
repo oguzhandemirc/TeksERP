@@ -2,7 +2,7 @@
 
 > **Durum:** B1 TASARIM dilimi (2026-09-29) — **bağlayıcı sözleşme TASLAĞI**; üretim kodu YOK. B1-kod (fabrika `Teks-Erp/src/cloud-sync/`), B2 (`patron/sunucu`) ve B3 (gelen kutusu) dilimleri buna karşı yazılır. Onaydan sonra `LISANS-PROTOKOLU.md` gibi DONAR; değişiklik bu belgenin §14'üne sapma satırıyla girer.
 > **Üst belgeler:** `docs/design/PATRON-BULUTU.md` (Plan B, kullanıcı kararları) · `docs/design/LISANS-PROTOKOLU.md` (imza biçimi, İSTEK, zil konuları, `esitle` amacı, KİRA'daki `esitlemeAraligiDk`/`patronBulutBitis`). Çelişkide plan kazanır; bu belgenin plandan bilinçli sapmaları §14'te.
-> **Tek kaynak geçişi:** §3'ün makinece okunur hâli bugün `Teks-Erp/scripts/olcum/patron-katalog.ts`'tir (TASLAK, ölçüm girdisi). B1-kod dilimi onu `src/cloud-sync/projections.ts`e taşır; o günden sonra tek kaynak KOD olur ve bu belge ona uyar.
+> **Tek kaynak geçişi (TAMAMLANDI, B1-kod 2026-09-29):** §3'ün makinece okunur hâli artık KODDUR — `Teks-Erp/src/cloud-sync/projections.ts` (+ `catalog-facts.ts`, `projection-types.ts`); ölçüm betiklerinin `scripts/olcum/patron-katalog.ts`i yalnız onun Türkçe görünümüdür. Bu belgenin §3 tabloları tasarım anının dökümüdür; farkta KOD kazanır (sapmalar §14 S13–S25).
 > **Ölçüm:** üç betik (§15) — kataloğu ŞEMAYA (`patron-sema-olcumu`), KODA (`patron-yazim-noktalari`) ve HACME (`patron-hacim-olcumu`) karşı ölçer. Bu belgedeki bütün sayılar 2026-09-29'da `tekserp_patb1_test` (363 migration, seed + bekçi fikstürü — fabrika verisi YOK) üzerinde basıldı.
 
 ## 0. Sözlük ve adlandırma
@@ -77,7 +77,7 @@ rapor isteği işleyicisi (zil rapor + her turda yoklama)
 
 ### 3.2 Kayıt projeksiyonları (katalogdan basıldı)
 
-`⟨FINANS⟩`/`⟨KISISEL⟩` = alt satıra bölünen kolon · `⏱` = zamana bağlı türetilmiş alan (§4.3c) · "YOK:" ile başlayan yardımcı = tek kaynak bugün bir servisin İÇİNDE; B1-kod onu adlı bir yardımcıya ÇIKARIR (kopyalamaz) ve liste ekranı ile projeksiyon aynı yardımcıyı çağırır (türetilmiş alan / ayrışan yüzey kuralı).
+`⟨FINANS⟩`/`⟨KISISEL⟩` = alt satıra bölünen kolon · `⏱` = zamana bağlı türetilmiş alan (§4.3c) · "YOK:" ile başlayan yardımcı = tek kaynak bugün bir servisin İÇİNDE; B1-kod onu adlı bir yardımcıya ÇIKARIR (kopyalamaz) ve liste ekranı ile projeksiyon aynı yardımcıyı çağırır (türetilmiş alan / ayrışan yüzey kuralı). **B1-kod: dokuz "YOK:" yardımcısı çıkarıldı** (`helpers/shipment-gross-totals` · `helpers/sack-content-totals` · `helpers/work-order-current-step` · `helpers/order-deadline` · `finance.helper invoiceOpenAmount/unallocatedAmount` · `finance-aging resolveEffectiveDue/daysOverdueAt/isOverdueBucket` · `workorder.service withProductionMeters` dışa açık); güncel yardımcı adları katalog kodundadır.
 
 #### `urun` — BOYUT · kök `items` (Item) · izin `bulut:oturum` · silme **DAMGA**
 - Kolonlar (tel ← kaynak): `id`←id · `kod`←code · `ad`←name · `tur`←itemType · `birim`←unit · `yasamDurumu`←lifecycleStatus · `aktif`←isActive · `birlestigiKayit`←mergedIntoId
@@ -549,6 +549,21 @@ Plan P1–P16 aynen geçerlidir. Bu tasarımın ölçtüğü yeni riskler için 
 - **S11 — bulut deposu genel `projection_rows` + ifade indeksleri** (tip başına tablo değil) — N−1 esnekliği ve tek politika.
 - **S12 — `sync_marks` telemetri sınıfı**, budanır; `test_telemetri_defter_degil` beyanına girer.
 
+**B1-kod (2026-09-29) — uygulamada netleşen / eklenen (B2 bunları uygular):**
+- **S13 — standart rapor görüntüleri** §7'de tel biçimi yoktu: `POST /v1/rapor/sonuc` ile `istekId: null` + `donem` (`bugun` · `bu-ay` · `gecen-ay`; kesit raporda `null`) gider; bulut bunu `report_results`e sonuç satırı olarak yazar (aynı parametre özetiyle gelen istek oradan cevaplanır). Gövde KATI (`ReportResultSchema`), gzip'li.
+- **S14 — rapor hata kodları** genişledi: `RAPOR_BILINMIYOR` · `PARAMETRE_GECERSIZ` · `ZAMAN_ASIMI` + `RAPOR_KAPALI` (rapor görünürlük listesinde kapalı ya da liste ölçülemedi) · `MODUL_KAPALI` · `SONUC_BUYUK` (sıkıştırılmış > 4 MB). `rapor/al` yanıtı `{v:1, istekler:[{istekId, raporAnahtari, parametreler}]}`; `rapor/al` gövdesi gzip'SİZ (küçük), `esitle` ve `rapor/sonuc` gzip'li.
+- **S15 — TAM'ın ilk parçası zinciri SIFIRDAN kurar** (`filigran.onceki: null`); sonraki parçalar zinciri sürdürür. §6.4 kuralı ("saklanan yokken önceki ≠ null → boşluk") TAM'a da uygulanır; bu yüzden TAM önceki değer taşımaz, yoksa kopuk zincirde TAM da reddedilip sonsuz döngü doğardı.
+- **S16 — zamana bağlı alan GEÇİŞ kaynağıyla** (§4.3c'deki 00:05 toplu yeniden hesap yerine): her turda termin/efektif vade (önceki konum, ufuk] aralığına düşen kökler kirlenir (katalog `crossings`). `gecikmis` (sipariş) ve `vadesiGecti` (fatura) BOOLEAN'dır — gün sayısı her gün değişip bütün gecikmiş kümeyi yeniden gönderttirirdi; cari hesabın `gecikmis`i para birimi başına tutar listesidir (yaşlandırma çekirdeği, geçişte değişir).
+- **S17 — bulut adresi** `PATRON_CLOUD_URL` (tek okuyucu `src/cloud-sync/cloud-url.ts`; verilmezse `https://patron.etkiliyazilim.com`, `kapali` → çıkış yok, düz HTTP yalnız döngü adresine). Adres tek başına eşitleme açmaz (§1.4).
+- **S18 — kurulum kimliği** (İSTEK `kurulumId` + paket `kurulumId`) kullanılabilir HAK'ın `kurulumId`sidir (yönetici kararı D14: lisans kimliği LICENSE_DIR'de; DB `installationId` yalnız etiket).
+- **S19 — `sevkiyat.siparisIdleri`** `shipment_orders` kümesinin TAMAMIDIR (liste `_count.orders` ile aynı); `isActive` yalnız "sevkiyat PLANNED" denormudur, sevk sonrası false olur ve süzülmez.
+- **S20 — uzlaştırma yalnız son ONAYLI ufuktan önce doğan satırları sayar** (`createdAt < zincir.t`) — sonra doğan satır henüz bulutta değildir, sahte uyuşmazlık doğmasın. Bulut kendi canlı kümesini sınırsız sayar; uyuşmazlık = TAM.
+- **S21 — anlık kapsam daraltması (v1):** `acik-siparis-karsilama` satır listesini (`lines`: sipariş no · müşteri · ürün adı) TAŞIMAZ (özet + müşteri/ürün kırılımı); `stok-karnesi` en eski top listesini (barkod · top kimliği) TAŞIMAZ (top düzeyi v1 dışı). `ozet.uretim` yalnız `production.enabled` açıkken; `ozet.sevkiyat`/`ozet.fason` dört pencere (`bugun` · `buAy` · `gecenAy` · `son30Gun`).
+- **S22 — `sync_marks (tableName, createdAt, id)` indeksi** eklendi (projeksiyon başına tarama); migration 33 indeks.
+- **S23 — `fatura-kalemi` saklama tarihi ebeveynden** (`retention.parent: fatura.faturaId`) — kalemin kendi tarihi yok.
+- **S24 — rapor çıktısı tel şeması (v1):** rapor başına katı şema YOK; yerine uzak rapor listesi dar (8 karne) ve her biri `personalData: "YOK"` beyanlıdır, çıktı panel süzgeç seçeneklerinden (`secenekler`) arındırılır ve bekçi sondası (kişi/kullanıcı alanı) koşar. Rapor başına katı tel şeması v1.1 borcu.
+- **S25 — ham UPDATE beyanı** (`scripts/lib/bulut-ham-update-beyan.ts`, bekçi `test_bulut_ham_update`): §4.2'deki 16 → 24 ham UPDATE ölçüldü (roll_movements'in 8 çıkış-ölçüsü yazımı eklendi: `updatedAt` yazmaz ama türetmenin okuduğu kolona dokunmaz); `updatedAt`siz her ham UPDATE beyanlı, ölü beyan kırmızı.
+
 ## 15. Ölçüm betikleri (bu dilimin çıktısı)
 
 | Betik | DB | Ne ölçer | Çıkış |
@@ -569,3 +584,5 @@ Koşum: `cd Teks-Erp && node ../scripts/agir-is.mjs -- npx tsx scripts/olcum/<be
 3. **Aralık alt sınırı:** KİRA şeması `esitlemeAraligiDk`yı sınırlamıyor (int \| null); öneri 1–60 dk, portal doğrulaması.
 4. **v2 kapsamı:** parti, sevk partisi, alış siparişi, mal kabul, dokuma/levent/iplik, top düzeyi — §3.4 listesi.
 5. **Rapor kişisel alanları:** `production/operator-performance` gibi kullanıcı adı taşıyan raporlar bulutta hiç sunulmasın mı, yoksa `.kisisel` alt kaydıyla mı?
+
+**B1-kod'da uygulanan varsayılanlar (yönetici kararı, kullanıcı teyidine açık):** 1 maliyet v1'de YOK (`bulut:maliyet:oku` doğmadı) · 2 standart görüntüler = uzak rapor listesinin karne ailesi (`sales/order-intake` · `sales/shipment-scorecard` · `customer/scorecard` · `quality/scorecard` · `subcontract/scorecard` dönemli; `inventory/scorecard` · `finance/aging` · `finance/cheque-due` kesit) — `src/cloud-sync/report-requests.ts` `REMOTE_REPORTS` · 3 aralık fabrikada 1–60 dk'ya kıstırılır (`clampInterval`) · 4 v2 = B2–B6 sonrası · 5 kişi adı taşıyan rapor (operatör performansı) v1'de buluttan istenemez.
