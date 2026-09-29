@@ -22,6 +22,9 @@ import { useDeviceStore } from '../../store/deviceStore';
 import { useSessionStore } from '../../store/sessionStore';
 import { useSubcontractorDefault } from '../../hooks/useSubcontractorDefault';
 import { kuruluVersionName, otaKimlik, paketEtiketi } from '../../services/appUpdate.service';
+import { useAuthStore } from '../../store/authStore';
+import { useLicenseStatus } from '../../hooks/useLicenseStatus';
+import { licenseSummaryRows } from '../../lib/license';
 import type { RootStackParamList } from '../../navigation/types';
 import { SETTINGS_COLORS as COLORS } from './settings/settingsUi';
 
@@ -48,6 +51,9 @@ export default function SettingsScreen() {
   const active = useSessionStore((s) => s.active);
   // Kişisel tercih (2026-08-09) — menü satırında özet göstermek için.
   const { mode: firmMode } = useSubcontractorDefault();
+  // Lisans satırı yalnız girişliye (kimliksiz durum çağrısı ayrıntı döndürmez).
+  const signedIn = useAuthStore((s) => !!s.user);
+  const license = useLicenseStatus();
 
   // Menü satırı sayfanın ÖZETİNİ göstermeli (dosyadaki kural).
   const sonYayin = SURUM_NOTLARI[0];
@@ -122,6 +128,16 @@ export default function SettingsScreen() {
       route: 'SettingsSurumNotlari',
     },
   ];
+  if (signedIn) {
+    rows.push({
+      key: 'license',
+      icon: 'certificate-outline',
+      title: 'Lisans',
+      // Özet = lisans no (görünür filigran); bilgi yoksa sayfa nedenini söyler.
+      value: licenseSummaryRows(license.data)[0]?.value ?? 'Bilgi alınamadı',
+      route: 'SettingsLicense',
+    });
+  }
 
   return (
     <SafeAreaView edges={['left', 'right']} style={styles.root}>

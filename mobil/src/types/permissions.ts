@@ -64,6 +64,13 @@ export type LabelPermission =
   | 'label-template:read'
   | 'label-template:write';
 
+/**
+ * Lisans yetkileri (backend `permission-catalog` aynası). Tablette ekran değil,
+ * Ayarlar → Lisans içi yetenek: `license:manage` çevrimdışı (QR) yanıtı iletir
+ * (`POST /api/license/cevrimdisi-yanit`); özet satırları her girişliye açıktır.
+ */
+export type LicensePermission = 'license:view' | 'license:manage';
+
 export type MobileScreenKey =
   | 'KK1'
   | 'KursunQc'

@@ -15,6 +15,8 @@ export type RootStackParamList = {
   SettingsWorkPreferences: undefined;
   SettingsUpdate: undefined;
   SettingsSurumNotlari: undefined;
+  /** Lisans özeti + (license:manage) çevrimdışı yanıt QR'ı okutma. */
+  SettingsLicense: undefined;
   DevicePairing: undefined;
 };
 
