@@ -213,4 +213,51 @@ Korumalı paketin HEDEF platformda ilk gerçek üretimi ve açılışı. Yalıt�
 3. **npm 11 `allow-scripts` (etkisiz, not).** Kurulum betikleri koşmadı; şema motoru `prisma generate` ile indi.
 4. **Sistem Node'u hâlâ ön koşul (not).** `kur.ps1 [7/9]` `migrate deploy`u ve `ilk-kurulum.ps1`in araç ipucu sistem `node`unu çağırır; pm2 de sistem Node'unda koştuğu için bugün zararsız.
 
-**Açık — duman ÖLÇÜLEMEDİ.** Paket prova köküne açılırken (`Expand-Archive`, 13 bin dosya) thinkpad-1 ağdan düştü (~20:37) ve iki saat içinde dönmedi (Tailscale "offline"; ~21:40'ta tek kısa görünme). Açılış süresi, bellek, `/health` + giriş + `/api/admin/health` + üç GET, yanlış Node ile exit 78 ve Defender uyarısı bu yüzden Windows'ta ölçülmedi; prova kökü thinkpad-1'de temizlenmeyi bekliyor (DB yaratılmadı). Duman betikleri hazır; makine dönünce aynı dilimle koşulur.
+**Kapandı — duman ölçüldü (2b-D2, 2026-09-30).** Aynı zip ile (yeniden üretmeden) paylaşılan makinede ölçüldü; ölçüm sonunda prova izi tamamen silindi (§8.3).
+
+### 8.1 Düşme nedeni (2b-D2 teşhisi, salt okuma)
+
+**Sınıf: UYKU** — S0 modern bekleme; ağ kopması bunun politika gereği sonucu. Çökme/yeniden başlatma DEĞİL: son açılış 2026-09-19 12:33 (uptime 252 sa), Kernel-Power 41 · EventLog 6005/6006/6008 yok.
+
+| Saat (TR) | Olay (System günlüğü, Kernel-Power alanları) | Anlamı |
+|---|---|---|
+| 29.09 19:29:07 | 105 `AcOnline=false` (pil 43,7/44,1 Wh) | şarj çekildi, makine pilde |
+| 20:36:20 | 506 `Reason=12` (IdleTimeout), `LidOpenState=true`; pil 33,2 Wh | pilde 60 dk girdisizlik → ekran kapandı, 10,4 sn sonra modern bekleme |
+| 20:39 – 21:42 | Netwtw10 7025/7026 + e1dexpress 27, her 3 dk | bağlı bekleme: NIC periyodik D3'ten dönüyor (~21:40'taki kısa Tailscale görünmesi) |
+| 21:42:06 → 21:42:17 | 507/506 `Reason=55` (ekransız sistem uyanışı) → 172 `State=2 Reason=1` ("Policy Setting"); WLAN 8003 21:42:18 | ~66 dk sonra politika ağı kesti: bağlantısız bekleme |
+| 30.09 00:30:26 | 507 `Reason=33` (touchpad), `DisconnectedStandby=true`; WLAN 8001 00:30:27 | kullanıcı dokundu, ağ döndü |
+| 00:30:34 – 00:30:47 | 105 `AcOnline` true/false ×7 | şarj takıldı (soket titremesi) |
+
+Güç planı (yalnız okundu): "Dengeli"; `powercfg /a` → S0 Low Power Idle Network Connected + Hibernate (S3 yok); `VIDEOIDLE` ve `STANDBYIDLE` **AC 0 (asla) / DC 3600 sn**; `HIBERNATEIDLE` DC asla.
+
+**Bizim yükümüzün payı: YOK.** (a) Uyku nedeni `IdleTimeout` (12) — pil-kritik (53) ya da termal (23) değil; (b) SSH/WMI arka plan süreçleri güç isteği tutmaz: `powercfg /requests` `tar` açarken bile altı sınıfta `None` — iş makineyi uyanık TUTAMAZ, uyutmaz da; (c) Defender/Operational 20:20–00:30 arası 0 olay (1116/1117 yok). Tek katkı pil tüketimi: 19:29–20:36 derleme + zip sırasında 43,7 → 33,2 Wh (−10,5 Wh, %24) — uykunun nedeni değil. **Kök:** makine şarjdan çekilmişti ve plan pilde 60 dk girdisizlikte uyutuyor; AC'de zaman aşımı yok. Önlem runbook §3c'de (AC kapısı; güç planına dokunulmaz).
+
+### 8.2 Duman (ölçüldü, 2026-09-30 00:40–00:48, thinkpad-1, AC'de)
+
+Her adım WMI (`Win32_Process.Create`) ile ayrık ve **BelowNormal** öncelikte; çocuk süreçler (`tar`, sunucu) önceliği miras aldı — testfabrika'nın süreçleri normal öncelikte kaldı.
+
+| Adım | Sonuç |
+|---|---|
+| Açma | eski `app\` silindi (4,8 sn); `tar -xf` (Windows yerleşik bsdtar) **14 sn**, 13.380 dosya / 499,8 MB, `tar.err` boş (`Expand-Archive` ile aynı paket dakikalar sürüyordu); Defender gerçek zamanlı tarama bu sürede `MsMpEng` +13,2 CPU-sn, tehdit 0 |
+| İçerik | `dist`te `.map` 0, `sourceMappingURL` 0; `schema.prisma` 5.908 satır, yorum 0; runtime `node.exe` v24.18.0 88,2 MB; künye win-x64 / V8 13.6.233.17 / `.jsc` 13.017.528 B; `PAKET.json` `korumali=true`. Araçlar bu zipte hâlâ karartmasız (`superadmin-olustur.cjs` 1.261 KB, 33.884 satır, 679 yol yorumu) — zip araç karartma düzeltmesinden (kusur 1) ÖNCE üretildi, beklenen |
+| DB + şema | prova DB (`tekserp_korumali_prova`), `migrate deploy` paketin runtime Node'u + paket şema motoruyla: rc 0, **34,9 sn, 363 migration** |
+| Satıcı hesabı | `dist\tools\superadmin-olustur.cjs` gerçek terminalde (`ssh -tt` + expect): OLUŞTURULDU rc 0; parola hedefte üretildi, Mac diskine / argv'ye / loga girmedi |
+| Açılış | `runtime\node.exe dist\server.js` → `/health` 200: **1,51 sn** (ilk koşu) · **5,64 sn** (ikinci koşu); `db:UP`, sürüm `2.11.2-prova.a551aa9` |
+| Giriş | `bakim` yerel (127.0.0.1) giriş başarılı, TOTP istenmedi |
+| Uçlar | `/api/admin/health` 200 (1.787 ms) · `/api/rolls?limit=5` 200 (2.134 ms) · `/api/work-orders?limit=5` 200 (301 ms) · `/api/admin/settings` 200 (51 ms) — ilk çağrılar, boş DB |
+| Bellek | WS 330–371 MB · özel 368–393 MB · tepe WS 368–391 MB (iki koşu) |
+| Sunucu uyarıları | `offsite BACKUP_DIR tanımsız` (prova `.env`i bilerek yedeksiz) · `audit-guard KORUMA KAPALI` (taze DB; `teks.audit_guard=on`u `ilk-kurulum.ps1`in DB ayarı adımı yazar, prova o adımı koşmadı) |
+| Yanlış Node | sistem Node v26.4.0 ile `dist\server.js`: **çıkış 78, 0,13 sn**, açık Türkçe: "KORUMALI PAKET bu Node ile AÇILAMAZ" + bu Node V8 14.6.202.34 ↔ paket V8 13.6.233.17 + çözüm satırı (runtime Node / `ecosystem.config.js` interpreter) |
+| Defender | tehdit sayısı önce 0 / sonra 0; 1116/1117/1015 olayı 0 — uyarı yok |
+
+**Not (kusur değil, izlenecek):** `PAKET.json`da sürüm anahtarı yok (sürüm `/health`te ve zip adında); `ureten` alanı üreten makine\kullanıcı adını taşır (`THINKPAD\...`) — müşteri paketinde gerekli mi, 2c'de karar.
+
+**Açık kalan:** araçları karartan (kusur 1 düzeltmeli) paket Windows'ta yeniden üretilip ölçülmedi; araç karartma ölçümü macOS'ta.
+
+### 8.3 Temizlik kanıtı (2026-09-30 00:52)
+
+- Prova süreci 0 (PID ile durduruldu; sunucu ve yanlış-Node süreçleri betik içinde PID ile kapanmıştı), `4090` dinleyen 0.
+- `DROP DATABASE tekserp_korumali_prova` — ad iki kez doğrulandı, bağlantı 0; kalan DB'ler `postgres`, `tekserp_testfabrika`. Prova hiç DB rolü açmadı; roller önce/sonra aynı (`postgres`, `tekserp`, `tekserp_bakim`).
+- `C:\TeksERP-korumali-prova` tamamen silindi (`rd /s /q`, 32.993 dosya / 1,29 GB, 16,9 sn; `sir\pg.txt` ve `sir\sa.txt` dahil). Kullanıcı `TEMP`i ve `C:\Windows\Temp`te prova adlı iz 0; `%USERPROFILE%\.tekserp` yok; kullanıcının `npm-cache`, `prisma-nodejs`, `.gitconfig`i Temmuz tarihli (dokunulmadı).
+- testfabrika `/health` 200 (`2.11.2-lis-prova.771ac50d`, `db:UP`); pm2 süreçleri tabanla aynı PID + başlangıç zamanı (Daemon 18880 · iki fork 18096, 29940); `C:\TeksERP`, görevler, güvenlik duvarı, güç planı, PATH, sistem Node'u dokunulmadı; yeniden başlatma yok.
+- Mac tarafında parola taşıyan betik/dosya yoktu (silinecek dosya çıkmadı).
