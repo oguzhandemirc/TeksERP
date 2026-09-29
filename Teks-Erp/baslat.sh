@@ -46,7 +46,10 @@ fi
 echo "✓ Docker hazır."
 
 # --- 2) .env.docker yoksa otomatik üret ---
+# İlk kurulum onayı yalnız bu koşumun `up`ına gider (seed boş şemada koşar).
+SEED_ON_EMPTY=${SEED_ON_EMPTY:-0}
 if [ ! -f .env.docker ]; then
+  SEED_ON_EMPTY=1
   echo ""
   echo "İlk kurulum: .env.docker üretiliyor..."
 
@@ -78,7 +81,7 @@ echo "Container'lar build edilip başlatılıyor..."
 echo "(İlk seferinde 2-4 dakika sürer, sonraki çalıştırmalarda saniyeler.)"
 echo ""
 
-docker compose --env-file .env.docker up -d --build
+SEED_ON_EMPTY=$SEED_ON_EMPTY docker compose --env-file .env.docker up -d --build
 
 # --- 5) Sağlık bekle ---
 echo ""

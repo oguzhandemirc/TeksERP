@@ -58,7 +58,7 @@ function Assert-Docker {
 
 # .env.docker yoksa rastgele sifre + JWT ile uret (baslat.sh ile ayni format).
 function Ensure-Env {
-    if (Test-Path $EnvFile) { return }
+    if (Test-Path $EnvFile) { return $false }
     Say ".env.docker yok -> rastgele sifre + JWT secret uretiliyor..."
     $content = @"
 POSTGRES_USER=tekserp
@@ -68,6 +68,7 @@ JWT_SECRET=$(New-Secret 32)
 "@
     Set-Content -Path $EnvFile -Value $content -Encoding ascii
     Ok ".env.docker olusturuldu (gizli tut, yedekle - kaybolursa DB'ye baglanilamaz)."
+    return $true
 }
 
 # docker compose'u dogru dizin + env-file ile calistir.
@@ -100,10 +101,13 @@ switch ($Action) {
 
     'up' {
         Assert-Docker
-        Ensure-Env
+        $ilkKurulum = Ensure-Env
         if (-not (Test-Path $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null }
         Say "Container'lar build edilip baslatiliyor (ilk seferde 2-4 dk)..."
-        Compose up -d --build
+        # Seed yalniz bos semada ve yalniz ilk kurulumun `up`inda istenir (entrypoint.sh adim 2).
+        if ($ilkKurulum) { $env:SEED_ON_EMPTY = '1' }
+        try { Compose up -d --build }
+        finally { Remove-Item Env:SEED_ON_EMPTY -ErrorAction SilentlyContinue }
         Say "Backend saglik kontrolu..."
         $healthy = Test-Health
         $ip = Get-LanIp
@@ -118,7 +122,7 @@ switch ($Action) {
         Write-Host "  Swagger:        http://${ip}:$ApiPort/api-docs"
         Write-Host "  Test girisi:    admin / 123123"
         Write-Host ""
-        Write-Host "  Migration + seed container acilisinda otomatik calisti (entrypoint.sh)."
+        Write-Host "  Migration her acilista, seed yalniz bos semada ilk kurulumda calisir (entrypoint.sh)."
         Write-Host "  Log:  .\yonet.ps1 logs    Durum: .\yonet.ps1 status    Durdur: .\yonet.ps1 down"
         Write-Host ""
     }

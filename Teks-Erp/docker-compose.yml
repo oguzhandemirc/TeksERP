@@ -42,6 +42,9 @@ services:
       TZ: Europe/Istanbul
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       JWT_SECRET: ${JWT_SECRET}
+      # Seed yalnız boş şemada VE bu değer 1 iken koşar (docker/entrypoint.sh §2);
+      # kurulum betikleri onu yalnız ilk `up`ta verir, .env.docker'a yazılmaz.
+      SEED_ON_EMPTY: ${SEED_ON_EMPTY:-0}
     ports:
       # Fabrika ağındaki tüm makineler 4000 portundan erişebilir.
       - "4000:4000"

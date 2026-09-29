@@ -43,6 +43,12 @@ fail2ban çalışıyor.
 ssh yenisunucu        # ~/.ssh/config: oguzhan@91.217.119.138:2222, yenisunucu_ed25519
 ```
 
+⚠️ **Hangi sunucu:** demo, repodaki son kayda göre hâlâ ESKİ paylaşımlı sunucuda
+(`91.217.119.138`, takma ad `yenisunucu` — adı yanıltıcı, bu ESKİ makinedir).
+2026-09-01'de yalnız güncelleme yayını `tekserp-vds`e (`80.253.255.188`) taşındı;
+demo bilerek taşınmadı (`VDS-TASIMA.md` "Taşınmıyor", `SUNUCU-ENVANTERI.md`).
+Bu bilgi 2026-09-29'da sunucuda **doğrulanamadı** (repo kaydı; sunucu ölçümü ayrı iş).
+
 `oguzhan` parolasız sudo taşır. ⚠️ Eski notlardaki `root` + parola **geçersiz**:
 22. port kapalı, parola girişi kapalı.
 
@@ -75,16 +81,27 @@ sudo docker exec postgres psql -U postgres -c \
 
 Parola `/opt/stack/apps/.tekserp-db-password` içinde (chmod 600).
 
-### 4.2 Kaynağı gönder
+### 4.2 Kaynağı gönder — yalnız İZİN LİSTESİ
 
 ```bash
-# yerelden, depo kökünden:
-rsync -az --delete \
-  --exclude='.git' --exclude='node_modules' --exclude='mobil' \
-  --exclude='dist' --exclude='dist-web' --exclude='out' \
-  --exclude='.claude' --exclude='.env' \
-  ./ yenisunucu:/opt/stack/apps/tekserp-demo/repo/
+zsh docs/ops/deploy-demo.sh            # KURU: aktarım ağacını kurar, sayar, sunucudan silinecekleri listeler
+zsh docs/ops/deploy-demo.sh --apply
 ```
+
+Sunucuya giden ağaç `docs/ops/deploy-demo-izin-listesi.txt`ten kurulur:
+`git archive HEAD` yalnız listedeki **izlenen** dosyaları çıkarır, ardından yasak
+desen kapısı (`YASAK_DESEN`: `dump/` · `*.dump` · `release/` · `BULGULAR-*.md` ·
+`.env*` · `_anahtarlar` · `.claude/` · `.git/`) bir kez daha tarar ve eşleşme varsa
+gönderimi durdurur. Commit edilmemiş iş gitmez. Bekçi:
+`Teks-Erp/scripts/test_docker_hijyeni.ts` §4 (Dockerfile'ın her `COPY` kaynağının
+listede olduğunu da ölçer — dar liste imajı sunucuda kırmasın).
+
+⚠️ **Eski dışlama listesi sızdırıyordu** (2026-09-29'a kadar): çalışma ağacının
+tamamı gidiyordu ve `dump/` (fabrika dökümü), kök `*.dump`, `Electron/release/`,
+`BULGULAR-*.md`, `.env.production` dışlanmıyordu. Yeni aktarım `rsync --delete`
+ile `repo/` kopyasını listenin birebir aynası yapar — listede olmayan her şey oradan
+silinir. `repo/` DIŞINA kopyalanmış olası dökümler bu adımla temizlenmez; onlar
+ayrı ölçülüp listelenir (lisans planı Faz 0.4b).
 
 İmaj **sunucuda** derleniyor — "yerelde derledim, kopyaladım" sınıfı sürüm kayması
 olmasın diye.
@@ -111,10 +128,14 @@ olmasın diye.
 ```bash
 cd /opt/stack/apps/tekserp-demo
 sudo docker compose build
+sudo docker build --target seed -t tekserp-demo-seed:latest repo      # seed imajı (src + tsx yalnız burada)
 sudo docker compose run --rm --entrypoint sh app -c "npx prisma migrate deploy"
-sudo docker compose run --rm --entrypoint sh app -c "npx tsx prisma/seed.ts"              # izin+rol kataloğu, admin
-sudo docker compose run --rm --entrypoint sh app -c "npx tsx prisma/seed-ticaret-demo.ts" # demo verisi
+sudo docker run --rm --env-file .env --network backend tekserp-demo-seed:latest npx tsx prisma/seed.ts              # izin+rol kataloğu, admin
+sudo docker run --rm --env-file .env --network backend tekserp-demo-seed:latest npx tsx prisma/seed-ticaret-demo.ts # demo verisi
 ```
+
+Çalışma imajı (`tekserp-demo`) **kaynak taşımaz**: `src/`, `tsx` ve seed dosyaları
+yalnız `seed` hedefindedir; o imaj tek seferlik koşar, Traefik'e bağlanmaz.
 
 ⚠️ **Sıra önemli:** `seed.ts` izin ve rol kataloglarını kurar; demo seed'i
 `WEB_TRADE` şablonunu ona atar. Ters sırada demo kullanıcı izinsiz kalır.
@@ -220,14 +241,16 @@ kullanıcıya bırakıldı.
 
 ## 7. Yolda çıkan iki tuzak (ikisi de düzeltildi)
 
-1. **`prisma.config.ts` imaja kopyalanmamıştı.** Prisma 7 datasource URL'ini
-   schema'dan değil o dosyadan okuyor → `migrate deploy` *"datasource.url property
-   is required"* ile durdu. Belirti **derleme sırasında değil ilk deploy'da**
-   çıkar.
-2. **Yalnız `dist` yetmedi.** Seed script'leri TypeScript'tir ve `../src/services/…`
-   üzerinden servis katmanını çağırır (ham insert yerine gerçek defter/bakiye/belge
-   zincirini üretsinler diye) → `MODULE_NOT_FOUND`. Çalışma imajı artık `src`'yi de
-   taşıyor (~5 MB).
+1. **Prisma yapılandırması imaja kopyalanmamıştı.** Prisma 7 datasource URL'ini
+   schema'dan değil yapılandırma dosyasından okuyor → `migrate deploy`
+   *"datasource.url property is required"* ile durdu. Belirti **derleme sırasında
+   değil ilk deploy'da** çıkar. Çalışma imajı bugün fabrika paketiyle aynı dosyayı
+   taşır: `Teks-Erp/deploy/prisma.config.prod.js` → `prisma.config.js` (düz JS, seed
+   kancası yok).
+2. **Yalnız `dist` seed'e yetmedi.** Seed script'leri TypeScript'tir ve
+   `../src/services/…` üzerinden servis katmanını çağırır → `MODULE_NOT_FOUND`.
+   İlk çözüm `src`'yi çalışma imajına koymaktı; 2026-09-29'dan beri seed AYRI
+   hedefte (`--target seed`) koşar ve çalışma imajı kaynaksızdır (§4.4).
 
 Ayrıca imajda **`postgresql-client-16` PGDG deposundan** kuruluyor: Debian
 bookworm'un kendi paketi v15 ve sunucu PG 16 → `pg_dump` *"server version
@@ -267,7 +290,8 @@ değişmez, planı basar) → `--apply` (DB adını **elle yazarak** onaylatır;
 yoksa reddeder — otomasyon için `--apply --yes`). Hedef DB **sabit
 `tekserp_demo`**, parametreyle değiştirilemez; DROP'tan önce `pre-restore_`
 önekli güvenlik yedeği alınır. Sıra: stop app → yedek → DROP/CREATE → migrate
-deploy → `seed.ts` → `seed-ticaret-demo.ts` → up -d → doğrulama.
+deploy → `seed.ts` → `seed-ticaret-demo.ts` → `seed-demo-full.ts` → up -d →
+doğrulama; seed'ler seed imajıyla koşar (betik onu uygulamayı durdurmadan önce derler).
 
 ⚠️ Betiğin İLK sürümü fazladan argümanı sessizce yutuyordu ve bir argüman
 testi canlı demoyu sıfırladı (2026-08-14 ~22:20) — o gün sertleştirildi:

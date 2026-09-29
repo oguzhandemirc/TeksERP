@@ -20,8 +20,12 @@ Burada PostgreSQL + backend **Docker container'ları** olarak çalışır. Tek s
 | PostgreSQL 16 | `postgres` | Container-içi `5432`; **dışarı açılmaz** (yalnız backend erişir) |
 | Backend (Node) | `backend` | Host `0.0.0.0:4000` — fabrika ağına açık |
 
-- **Migration + seed** container ilk açılışında **otomatik** çalışır (`docker/entrypoint.sh`).
-  `migrate deploy` her açılışta (idempotent); **seed yalnız ilk kez** (`/app/data/.seeded`).
+- **Migration** her açılışta otomatik çalışır (`docker/entrypoint.sh`, `migrate deploy` idempotent).
+  **Seed yalnız iki koşul birlikteyken** koşar: şema BOŞ (`users` tablosunda satır yok) **ve**
+  `SEED_ON_EMPTY=1`. Kurulum betikleri (`baslat.sh`, `yonet.ps1 up`) bu değeri yalnız
+  `.env.docker`ı ilk ürettikleri koşumda verir; sonraki her açılışta seed atlanır. İşaret
+  dosyası kullanılmaz — dolu bir DB'ye seed koşup silinmiş `admin`i geri doğurmasın.
+  İlk `up` yarıda kaldıysa: `SEED_ON_EMPTY=1 docker compose --env-file .env.docker up -d`.
 - **Veri** Docker **volume**'lerinde: `pg_data` (veritabanı), `app_data`. Container'ı
   silsen/güncellesen de **veri kalır**. `docker compose down` volume'e dokunmaz;
   `down -v` ise SİLER (dikkat).
@@ -103,7 +107,7 @@ cd Teks-Erp\installer\docker
 .\yonet.ps1 update                    # yeniden build + başlat
 ```
 - Migration'lar entrypoint'te **otomatik** uygulanır.
-- **Seed atlanır** (`.seeded` var) → **veriler korunur.**
+- **Seed atlanır** (DB'de kullanıcı var) → **veriler korunur.**
 - Veri volume'de durduğu için container yeniden build edilse de kaybolmaz.
 
 ---
@@ -127,7 +131,8 @@ docker compose --env-file .env.docker down          # sadece durdur (veri kalır
 docker compose --env-file .env.docker down -v       # VERİ DAHİL her şeyi sil (geri alınamaz)
 ```
 Test verisini silip **tertemiz** başlamak için (fabrikaya geçişte): `down -v` sonra
-`.\yonet.ps1 up` → boş DB + temiz seed.
+`$env:SEED_ON_EMPTY='1'; .\yonet.ps1 up` → boş DB + temiz seed (`.env.docker` durduğu için
+ilk kurulum onayı bu kez elle verilir).
 
 ---
 

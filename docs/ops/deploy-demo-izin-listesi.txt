@@ -1,0 +1,36 @@
+# Demo sunucusuna giden ağacın İZİN LİSTESİ — `deploy-demo.sh` bunu okur.
+# Her satır bir git pathspec'i (depo köküne göre). Yalnız İZLENEN dosyalar gider
+# (`git archive HEAD`): dump, .env, paket çıktısı, anahtar ve rapor dosyaları
+# listede olmadığı ya da git'te durmadığı için sunucuya ULAŞAMAZ.
+# Buraya satır eklemeden önce: imaj bu dosya olmadan derlenemiyor mu?
+# Bekçi: Teks-Erp/scripts/test_docker_hijyeni.ts (yasak desen + zorunlu dosya).
+
+Dockerfile
+.dockerignore
+deploy/kanallar.json
+
+Electron/package.json
+Electron/package-lock.json
+Electron/index.html
+Electron/vite.config.web.ts
+Electron/build-channel.ts
+Electron/tsconfig.json
+Electron/tsconfig.web.json
+Electron/tsconfig.node.json
+Electron/src
+Electron/shared
+
+Teks-Erp/package.json
+Teks-Erp/package-lock.json
+Teks-Erp/tsconfig.json
+Teks-Erp/deploy/prisma.config.prod.js
+Teks-Erp/prisma
+Teks-Erp/src
+Teks-Erp/assets
+Teks-Erp/public
+
+# Dışlamalar (izinli dizinlerin içinden): testler derlemeye gerekmez, ortam
+# dosyaları hiçbir koşulda gitmez.
+:(exclude,glob)**/*.test.*
+:(exclude,glob)**/__tests__/**
+:(exclude,glob)**/.env*
