@@ -130,7 +130,7 @@ for (const proje of etkilenen) {
     env: AGIR_ADIM_ENV,
     agir: true,
   });
-  const anahtar = { "Teks-Erp": "backend", Electron: "electron", mobil: "mobil", "satici/sunucu": "satici" }[proje.ad];
+  const anahtar = { "Teks-Erp": "backend", Electron: "electron", mobil: "mobil", "satici/sunucu": "satici", "patron/sunucu": "patron" }[proje.ad];
   if (existsSync(join(REPO, proje.ad, "lint-baseline.json"))) {
     adimlar.push({
       ad: `${proje.ad} · lint tavanı`,
@@ -206,7 +206,9 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
 // `satici/sunucu/scripts/` (lisans satıcı tamamlama): identity_ledger bekçi dizini olarak BUNU okur
 // (satıcı bekçileri harita + lisans.md listesiyle eşleşmeli); satici'nin src'sini okuyan mandal yok
 // ⇒ tetik `satici/` bütünü DEĞİL, okunan dizin kadar.
-if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/|Teks-Erp\/prisma\/|Electron\/src\/|mobil\/src\/|docs\/|satici\/sunucu\/scripts\/)/.test(f))) {
+// `patron/sunucu/scripts/` (patron bulutu B2): identity_ledger bu dizini de bekçi dizini olarak okur;
+// patron'un src'sini okuyan mandal yok ⇒ tetik yine okunan dizin kadar.
+if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/|Teks-Erp\/prisma\/|Electron\/src\/|mobil\/src\/|docs\/|satici\/sunucu\/scripts\/|patron\/sunucu\/scripts\/)/.test(f))) {
   adimlar.push({ ad: "hızlı mandallar", cwd: ".", cmd: ["node", ["scripts/hooks/hizli-mandallar.mjs"]] });
 }
 

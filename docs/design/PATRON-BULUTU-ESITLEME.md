@@ -548,6 +548,13 @@ Plan P1–P16 aynen geçerlidir. Bu tasarımın ölçtüğü yeni riskler için 
 - **S10 — BOYUT'lar `bulut:oturum`** ile açılır (sözlük olmadan olgu okunamaz); KISISEL kolonları alt satırda kalır.
 - **S11 — bulut deposu genel `projection_rows` + ifade indeksleri** (tip başına tablo değil) — N−1 esnekliği ve tek politika.
 - **S12 — `sync_marks` telemetri sınıfı**, budanır; `test_telemetri_defter_degil` beyanına girer.
+- **S13 — (B2) e-posta bütün bulutta tekil** (§9.4 "tesis içinde tekil" diyordu): giriş tesis sormaz, e-posta kiracıyı çözer; aynı kişinin iki tesiste ayrı e-postası olur (hesap başına tek tesis kararıyla uyumlu).
+- **S14 — (B2) izinler hesap satırında dizi** (§9.1'deki `account_permissions` pivotu yok): izin değişimi hesabın güncellemesidir ve bulut denetimine düşer; pivot replace'i (hard delete) doğmaz.
+- **S15 — (B2) UUID PK + doğal anahtar UNIQUE:** `projection_rows` `id` PK + `(tesis_id, projection, record_id)` UNIQUE (kök "her modelde UUID PK"); kolonlar İngilizce (`projection`, `record_id`, `data`, `version_at`, `deleted_at`, `retention_at`, `sort_at`) — §9.1 taslağındaki Türkçe kolon adları yerine (§0 adlandırma kuralı).
+- **S16 — (B2) iki çalışma rolü** (§9.3 `patron_sync` önerisi uygulandı + uygulama rolü projeksiyona yazamaz): yetkiler `patron/sunucu/src/lib/db-grants.ts`, roller migration'da değil `scripts/db-rolleri.ts`te (küme düzeyi); eşitleme yazıcısı `app.projeksiyonlar`ı paketin ADI GEÇEN projeksiyonlarıyla açar (`*` yok).
+- **S17 — (B2) kök satırda FINANS/KİŞİSEL alan RET** (`ret: ALAN_SINIFI_IHLALI`): bulut katalogda kökte yasak alanları bilir ve fabrika hatasına ikinci sed olur; gelecekteki ufuk 400 (sürüm anı zehirlenmesin); yeni `ret` kodları `PROJEKSIYON_TURU`, `TAM_PARCA_UYUSMAZ` (kod EKLEMEK kırıcı değil).
+- **S18 — (B2) kurulum kaydı iki kaynaklı:** satıcı iç API'si (§17) + satıcı CLI'siyle yazılmış kayıt (`KURULUM_KAYNAGI=kayit`, varsayılan — iç API satıcıda doğana dek).
+- **S19 — (B2) rapor ailesinin izni bulutta rapor ANAHTARININ önekinden** türer (fabrikanın gönderdiği "aile" alanına güvenilmez); `production/operator-performance` v1'de buluttan istenemez (B1 varsayılanı: raporda kişi adı yok).
 
 ## 15. Ölçüm betikleri (bu dilimin çıktısı)
 
@@ -569,3 +576,16 @@ Koşum: `cd Teks-Erp && node ../scripts/agir-is.mjs -- npx tsx scripts/olcum/<be
 3. **Aralık alt sınırı:** KİRA şeması `esitlemeAraligiDk`yı sınırlamıyor (int \| null); öneri 1–60 dk, portal doğrulaması.
 4. **v2 kapsamı:** parti, sevk partisi, alış siparişi, mal kabul, dokuma/levent/iplik, top düzeyi — §3.4 listesi.
 5. **Rapor kişisel alanları:** `production/operator-performance` gibi kullanıcı adı taşıyan raporlar bulutta hiç sunulmasın mı, yoksa `.kisisel` alt kaydıyla mı?
+
+## 17. B2 uygulama notları (bulut sunucusu — `patron/sunucu`)
+
+**Uçlar.** Fabrika kanalı (kurulum imzalı, amaç `esitle`, HAM gövde ≤ 4 MB, `Content-Encoding: gzip` açılır ≤ 32 MB): `POST /v1/esitle` (§6) · `POST /v1/gelen-kutusu/al {v, enFazla ≤ 50}` → `{v, kayitlar: [{mesajId, tur, govde, hesapId, hesapAdi, olusturulma}]}` · `POST /v1/gelen-kutusu/sonuc {v, sonuclar: [{mesajId, durum: ISLENDI|REDDEDILDI, varlikId?, belgeNo?, kod?, mesaj?}]}` → `{v, kabul: [mesajId], ret: [{mesajId, kod, durum}]}` (aynı sonucun tekrarı kabul) · `POST /v1/rapor/al {v, enFazla ≤ 10}` → `{v, istekler: [{istekId, raporAnahtari, parametreler, olusturulma}]}` · `POST /v1/rapor/sonuc {v, istekId, durum: HAZIR|HATA, veri? | hataKodu?, hesaplandi, kaynakUfuk?}` → `{v, kabul, durum}`. Tel şemalarının tek kaynağı `patron/sunucu/src/wire/esitleme.ts`; B1-kod/B3 fabrika istemcisi bu dosyayı AYNA olarak taşımalı (protokol aynası kalıbı) — bugün ayna bekçisi yok (B1-kod ile birlikte doğar).
+
+**Hesap API'si** (`/api/*`, Bearer oturum, yazma yalnız JSON): `oturum/ac` (e-posta + parola + TOTP tek adım) · `oturum` · `oturum/kapat` · `oturum/parola` · `davet/incele|kabul|onay` · `veri/:projeksiyon[/:id]` (süzgeç `durum`, `cariKartId`; imleç `(sort_at, record_id)`) · `anlik/:projeksiyon` · `gelen-kutusu` (+ `/:mesajId`, `/:mesajId/iptal`) · `raporlar` (+ `/:id`, `/:id/iptal`) · `cihazlar` (+ `/:id/kaldir`) · `hesaplar` (+ `/:id`, `/:id/durum`, `/:id/sifirla`, `/denetim`) · `izinler`. Rota tablosu `src/http/api-routes.ts` (bekçi `test_patron_kapilari` §5).
+
+**Satıcı iç API sözleşmesi** (satıcı tarafı AYRI dilim; iç ağ, `Authorization: Bearer <SATICI_IC_API_BELIRTECI>`):
+- `GET /ic/v1/kurulum/:kurulumId` → 200 `{v: 1, kurulumId, tesis: {id, ad}, acikAnahtar: x | null, sinif, moduller[], patronBulutBitis: ISO | null, devredildi, aktif, saklamaAy?: 3|13|25|null}` · 404 = kurulum yok (bulut kaydı pasife çeker). Bulut önbelleği tazeliktir (`KURULUM_ONBELLEK_DK`, varsayılan 5): ulaşılamazsa bayat kayıt, hiç dolmadıysa RED.
+- `POST /ic/v1/zil {v: 1, tesisId, konu: gelen-kutusu|rapor|ozet}` → satıcı tesisin ÜRETİM kurulumlarının SSE zilini çalar; içerik taşımaz, best-effort (fabrika her turda yine yoklar).
+
+**`rapor-katalogu` anlık verisi:** `{raporlar: [{anahtar, baslik, aile, parametreler}]}` — bulut yalnız `anahtar` kümesini okur (istenebilir liste); aile ve izin kararı buluttadır (S19).
+

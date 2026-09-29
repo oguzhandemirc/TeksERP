@@ -34,9 +34,9 @@ import { atlamaDefteri } from "./lib/atlama";
 import { join } from "node:path";
 
 const KOK = join(__dirname, "..", "..");
-// Satıcı sunucusu (`satici/sunucu`) ve portal web arayüzü (`satici/web`) commit kapısının dördüncü ve
-// beşinci projesi; bağımlılığı yoksa beyanla atlanır.
-const PROJELER = ["Teks-Erp", "Electron", "mobil", "satici/sunucu", "satici/web"] as const;
+// Satıcı sunucusu (`satici/sunucu`), portal web arayüzü (`satici/web`) ve patron bulutu sunucusu
+// (`patron/sunucu`) commit kapısının dördüncü–altıncı projesi; bağımlılığı yoksa beyanla atlanır.
+const PROJELER = ["Teks-Erp", "Electron", "mobil", "satici/sunucu", "satici/web", "patron/sunucu"] as const;
 
 let pass = 0;
 let fail = 0;

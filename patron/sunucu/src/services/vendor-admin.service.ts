@@ -1,0 +1,121 @@
+// SATICI YÖNETİMİ (CLI — `scripts/tesis.ts`; göç rolüyle, VDS'te konteyner içinden) — satıcının
+// Müşteri → Tesis → Kurulum ağacının buluttaki yansıması (`KURULUM_KAYNAGI=kayit` kipinde) ve İLK
+// tesis yöneticisinin daveti. Tesis yöneticisi ekibini kendisi yönetir; satıcı yalnız ilk yöneticiyi
+// açar ve yönetici kalmadığında sıfırlar. Her eylem bulut denetimine `satici-cli` aktörüyle düşer.
+import type { LicenseClass, PrismaClient } from "@prisma/client";
+import { createInvite } from "../auth/invite.service";
+import { normalizeEmail } from "../auth/session.service";
+import { ROLE_TEMPLATES } from "../catalog/permissions";
+import { publicKeyFromX } from "../lisans-protokol";
+import { recordAudit } from "../lib/audit";
+import { CloudError, notFound, stateConflict } from "../lib/errors";
+import { uniqueViolationOn } from "../lib/prisma-errors";
+import { withTesis } from "../lib/tenant";
+import { safeKeyId } from "./installation-directory";
+
+export const VENDOR_ACTOR = "satici-cli";
+export const RETENTION_CHOICES: readonly (number | null)[] = [3, 13, 25, null];
+
+export async function openFacility(db: PrismaClient, g: { tesisId: string; name: string; retentionMonths?: number | null }) {
+  if (g.retentionMonths !== undefined && !RETENTION_CHOICES.includes(g.retentionMonths)) throw new CloudError(400, "GOVDE_GECERSIZ", "Saklama 3, 13, 25 ay ya da 'tumu' olmalı");
+  const row = await withTesis(db, { tesisId: g.tesisId }, (tx) =>
+    tx.facility.upsert({
+      where: { tesisId: g.tesisId },
+      create: { tesisId: g.tesisId, name: g.name, ...(g.retentionMonths === undefined ? {} : { retentionMonths: g.retentionMonths }) },
+      update: { name: g.name, status: "AKTIF", ...(g.retentionMonths === undefined ? {} : { retentionMonths: g.retentionMonths }) },
+    }),
+  );
+  await recordAudit(db, { tesisId: g.tesisId, actor: VENDOR_ACTOR, event: "TESIS_KAYDI", entity: "Facility", entityId: g.tesisId, summary: { saklamaAy: row.retentionMonths } });
+  return row;
+}
+
+export async function setFacilityStatus(db: PrismaClient, g: { tesisId: string; status: "AKTIF" | "PASIF" }) {
+  const r = await withTesis(db, { tesisId: g.tesisId }, (tx) => tx.facility.updateMany({ where: { tesisId: g.tesisId }, data: { status: g.status } }));
+  if (r.count === 0) throw notFound("Tesis");
+  await recordAudit(db, { tesisId: g.tesisId, actor: VENDOR_ACTOR, event: `TESIS_${g.status}`, entity: "Facility", entityId: g.tesisId });
+}
+
+export interface InstallationInput {
+  readonly tesisId: string;
+  readonly installationId: string;
+  readonly publicKeyX: string;
+  readonly licenseClass: LicenseClass;
+  readonly modules: readonly string[];
+  readonly cloudUntil: Date | null;
+  readonly handedOver?: boolean;
+  readonly active?: boolean;
+}
+
+export async function registerInstallation(db: PrismaClient, g: InstallationInput, nowMs: number = Date.now()) {
+  if (!publicKeyFromX(g.publicKeyX)) throw new CloudError(400, "GOVDE_GECERSIZ", "Kurulum açık anahtarı biçimsiz (Ed25519 x, base64url)");
+  const fields = {
+    publicKeyX: g.publicKeyX,
+    keyId: safeKeyId(g.publicKeyX),
+    licenseClass: g.licenseClass,
+    modules: [...g.modules],
+    cloudUntil: g.cloudUntil,
+    handedOver: g.handedOver ?? false,
+    active: g.active ?? true,
+    source: "KAYIT" as const,
+    refreshedAt: new Date(nowMs),
+  };
+  const row = await withTesis(db, { tesisId: g.tesisId }, (tx) =>
+    tx.installation.upsert({ where: { installationId: g.installationId }, create: { tesisId: g.tesisId, installationId: g.installationId, ...fields }, update: fields }),
+  );
+  await recordAudit(db, {
+    tesisId: g.tesisId,
+    actor: VENDOR_ACTOR,
+    event: "KURULUM_KAYDI",
+    entity: "Installation",
+    entityId: g.installationId,
+    summary: { sinif: g.licenseClass, patronBulut: g.modules.includes("patron-bulut"), bitis: g.cloudUntil?.toISOString() ?? null },
+  });
+  return row;
+}
+
+/** İlk tesis yöneticisi (Patron şablonu). Davet belirteci BİR KEZ döner; repoya/loga yazılmaz. */
+export async function inviteFacilityAdmin(db: PrismaClient, g: { tesisId: string; email: string; name: string; validHours: number }, nowMs: number = Date.now()) {
+  const invite = createInvite(nowMs, g.validHours);
+  const email = normalizeEmail(g.email);
+  try {
+    const account = await withTesis(db, { tesisId: g.tesisId, lock: { name: "ACCOUNT_ADMIN", key: g.tesisId } }, async (tx) => {
+      if (!(await tx.facility.findUnique({ where: { tesisId: g.tesisId } }))) throw notFound("Tesis");
+      return tx.account.create({
+        data: { tesisId: g.tesisId, email, name: g.name, permissions: [...ROLE_TEMPLATES.PATRON], status: "DAVETLI", inviteTokenHash: invite.digest, inviteExpiresAt: invite.expiresAt },
+      });
+    });
+    await recordAudit(db, { tesisId: g.tesisId, actor: VENDOR_ACTOR, event: "YONETICI_DAVET", entity: "Account", entityId: account.id });
+    return { accountId: account.id, token: invite.token, expiresAt: invite.expiresAt };
+  } catch (err) {
+    if (uniqueViolationOn(err, "email")) throw new CloudError(409, "EPOSTA_KULLANIMDA", "Bu e-posta adresiyle bir bulut hesabı zaten var");
+    throw err;
+  }
+}
+
+/** Yönetici kalmadığında kurtarma: hesabı sıfırlayıp yeniden davet eder (oturumlar kapanır). */
+export async function reinviteAdmin(db: PrismaClient, g: { tesisId: string; email: string; validHours: number }, nowMs: number = Date.now()) {
+  const invite = createInvite(nowMs, g.validHours);
+  const email = normalizeEmail(g.email);
+  const account = await withTesis(db, { tesisId: g.tesisId, lock: { name: "ACCOUNT_ADMIN", key: g.tesisId } }, async (tx) => {
+    const a = await tx.account.findFirst({ where: { tesisId: g.tesisId, email } });
+    if (!a) throw notFound("Hesap");
+    if (a.status === "PASIF") throw stateConflict("Arşivdeki hesap yeniden davet edilemez");
+    await tx.session.updateMany({ where: { accountId: a.id, closedAt: null }, data: { closedAt: new Date(nowMs), closeReason: "SIFIRLAMA" } });
+    return tx.account.update({
+      where: { id: a.id },
+      data: {
+        status: "DAVETLI",
+        passwordHash: null,
+        totpSecretSealed: null,
+        totpLastStep: null,
+        inviteTokenHash: invite.digest,
+        inviteExpiresAt: invite.expiresAt,
+        failedLogins: 0,
+        lockedUntil: null,
+        permissions: [...new Set([...a.permissions, "bulut:hesap:yonet"])],
+      },
+    });
+  });
+  await recordAudit(db, { tesisId: g.tesisId, actor: VENDOR_ACTOR, event: "YONETICI_YENIDEN_DAVET", entity: "Account", entityId: account.id });
+  return { accountId: account.id, token: invite.token, expiresAt: invite.expiresAt };
+}

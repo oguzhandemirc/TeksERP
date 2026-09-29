@@ -1,6 +1,7 @@
 name: CI
 
-# TeksERP monorepo — 3 alt proje (Teks-Erp backend, Electron panel, mobil) + satıcı sunucusu (satici/sunucu).
+# TeksERP monorepo — 3 alt proje (Teks-Erp backend, Electron panel, mobil) + satıcı sunucusu (satici/sunucu)
+# + patron bulutu sunucusu (patron/sunucu).
 # Her push + PR'da tip kontrolü + test takımları koşar. Backend testleri yerel
 # PostgreSQL gerektirir (service container + migrate deploy + seed); Electron
 # (Vitest/jsdom) ve mobil (jest-expo) DB'siz çalışır.
@@ -470,6 +471,64 @@ jobs:
         run: npx vitest run
       - name: Derleme (portal + bayi)
         run: npm run build
+
+  # ===========================================================================
+  # PATRON — patron bulutu sunucusu (patron/sunucu); kendi PG'si + migrate deploy + ÇALIŞMA ROLLERİ +
+  # bekçi koşucusu. RLS bekçisi uygulama/eşitleme rolünün NOSUPERUSER NOBYPASSRLS olduğunu ölçer →
+  # roller `scripts/db-rolleri.ts` ile kurulur (göç rolü = konteynerin süper kullanıcısı). Rol
+  # parolaları yalnız bu geçici konteynerde geçerlidir (sır değil). DB adı `_test` ile biter.
+  # ===========================================================================
+  patron:
+    name: Patron sunucusu (tsc + lint + RLS + bekçi)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: patron/sunucu
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tekserp_patron_ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      GOC_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tekserp_patron_ci_test?schema=public
+      DATABASE_URL: postgresql://tekserp_patron_ci_test_app:ci-uygulama-rolu-parolasi@localhost:5432/tekserp_patron_ci_test?schema=public
+      ESITLEME_DATABASE_URL: postgresql://tekserp_patron_ci_test_sync:ci-esitleme-rolu-parolasi@localhost:5432/tekserp_patron_ci_test?schema=public
+      PATRON_ERISIM_GUNLUGU: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: patron/sunucu/package-lock.json
+      - run: npm ci
+      - name: Prisma generate
+        run: npx prisma generate
+      - name: Migrate deploy (patron migration'ları)
+        run: npx prisma migrate deploy
+      - name: Çalışma rolleri (uygulama + eşitleme; NOSUPERUSER NOBYPASSRLS)
+        run: npx tsx scripts/db-rolleri.ts
+      - name: Lint
+        run: npm run lint
+      - name: Lint tavanı (baseline)
+        run: node scripts/check-lint-baseline.mjs --proje=patron
+        working-directory: .
+      - name: Type-check (src · src + scripts)
+        run: npm run typecheck:plain && npm run typecheck:scripts:plain
+      - name: Kapı kapsamı (tip kapısı SIFIR dosya derlemiyor)
+        run: node scripts/kapi-kapsami.mjs patron/sunucu
+        working-directory: .
+      - name: Patron bekçileri
+        run: npx tsx scripts/run-all-tests.ts
 
   # ===========================================================================
   # E2E — Electron uygulaması gerçekten açılıp Login render oluyor mu (Playwright

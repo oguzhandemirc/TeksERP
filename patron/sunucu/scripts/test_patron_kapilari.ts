@@ -1,0 +1,199 @@
+// =============================================================================
+// PATRON BULUTU ÇEKİRDEK KAPILARI (statik, DB'siz, taban 0):
+//   §1 advisory kilit envanteri: `LOCK_NAMESPACES` ↔ `patron/sunucu/CLAUDE.md` tablosu İKİ YÖNLÜ birebir
+//      (ad + numara) · uzay 92xx (backend 80xx, satıcı 91xx ile çakışmaz)
+//   §2 tek yazar: `set_config` · `pg_advisory` · `$transaction` YALNIZ `src/lib/tenant.ts`te
+//      (kiracı ayarı + kilit her tx'in İLK ifadesi; başka yol RLS kapsamını atlayamaz)
+//   §3 kapsamsız sorgu yok: istemci (`ctx.app` · `ctx.sync` · `this.db` · `db`) üzerinden doğrudan model
+//      ya da ham sorgu çağrısı YOK — hepsi `withTesis/withLookup/withMaintenanceList` tx'inde
+//   §4 budama beyanı: `src`teki HER silme (`deleteMany`/`.delete(`/`DELETE FROM`) `maintenance.ts`te ve
+//      hedefi `PRUNED_TABLES`ta; beyanda olup silme yeri olmayan tablo da KIRMIZI (ölü beyan)
+//   §5 rota tablosu: yöntem+yol tekil · her yazma rotası işlem kimliği ya da GEREKÇELİ muafiyet beyan
+//      eder, her okuma rotası OKUMA · muafiyet gerekçesi boş olamaz
+//   §6 katalog: izin kodları tekil · her okuma izni en az bir projeksiyon/rapor ailesi açar · yazma ve
+//      yönetim izinleri kodda kullanılır (ölü izin yok) · hata kodları tekil
+//   §7 protokol aynası: `src/lisans-protokol/` ↔ `Teks-Erp/src/lib/license/protocol/` bayt-eşit
+// ⭐ KALICI SONDA (her koşumda): §4 ve §5 yüklemleri sentetik girdide ısırır, temiz girdide susar.
+// Koşum: npx tsx scripts/test_patron_kapilari.ts   (DB GEREKMEZ)
+// =============================================================================
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
+import { CLOUD_PERMISSIONS } from "../src/catalog/permissions";
+import { PROJECTION_CATALOG } from "../src/catalog/projections";
+import { REPORT_FAMILY_PERMISSION } from "../src/catalog/reports";
+import { API_ROUTES, type ApiRouteDef } from "../src/http/api-routes";
+import { CLOUD_ERROR_CODES } from "../src/lib/errors";
+import { LOCK_NAMESPACES } from "../src/lib/locks";
+import { PRUNED_TABLES } from "../src/services/maintenance";
+
+const KOK = path.resolve(__dirname, "..");
+let gecti = 0;
+let kaldi = 0;
+function kontrol(ad: string, kosul: boolean, ayrinti = ""): void {
+  if (kosul) gecti++;
+  else kaldi++;
+  console.log(`  ${kosul ? "✅" : "❌"} ${ad}${ayrinti ? ` — ${ayrinti}` : ""}`);
+}
+
+function dosyalar(dizin: string): string[] {
+  const out: string[] = [];
+  for (const ad of readdirSync(dizin)) {
+    const p = path.join(dizin, ad);
+    if (statSync(p).isDirectory()) out.push(...dosyalar(p));
+    else if (p.endsWith(".ts")) out.push(p);
+  }
+  return out;
+}
+
+/** Yorum satırları (// ve * ile başlayan) kod sayılmaz — belge cümlesi yasak kelimeyi anabilir. */
+function kod(metin: string): string {
+  return metin
+    .split("\n")
+    .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+    .join("\n");
+}
+
+const SRC = path.join(KOK, "src");
+const kaynaklar = dosyalar(SRC).filter((f) => !f.includes(`${path.sep}lisans-protokol${path.sep}`));
+const goreli = (f: string) => path.relative(KOK, f);
+
+function envanter(): void {
+  console.log("\n§1 advisory kilit envanteri ↔ CLAUDE.md");
+  const md = readFileSync(path.join(KOK, "CLAUDE.md"), "utf8");
+  const tablo = new Map([...md.matchAll(/^\|\s*(\d{4})\s*\|\s*`([A-Z_]+)`\s*\|/gm)].map((m) => [m[2]!, Number(m[1])]));
+  const kodda = new Map(Object.entries(LOCK_NAMESPACES));
+  const esit = tablo.size === kodda.size && [...kodda].every(([ad, n]) => tablo.get(ad) === n);
+  kontrol("§1a LOCK_NAMESPACES = CLAUDE.md tablosu (iki yönlü, ad + numara)", esit, `kod ${kodda.size} · belge ${tablo.size}`);
+  kontrol("§1b uzay 92xx (backend 80xx · satıcı 91xx ile çakışmaz)", [...kodda.values()].every((n) => n >= 9200 && n < 9300));
+  kontrol("§1c numaralar tekil", new Set(kodda.values()).size === kodda.size);
+}
+
+function tekYazar(): void {
+  console.log("\n§2 tek yazar: set_config · pg_advisory · $transaction");
+  for (const [desen, ad] of [
+    [/set_config\s*\(/, "set_config"],
+    [/pg_(try_)?advisory/, "pg_advisory"],
+    [/\$transaction\s*\(/, "$transaction"],
+  ] as const) {
+    const disarida = kaynaklar.filter((f) => !f.endsWith(path.join("lib", "tenant.ts")) && desen.test(kod(readFileSync(f, "utf8")))).map(goreli);
+    kontrol(`§2 ${ad} yalnız src/lib/tenant.ts`, disarida.length === 0, disarida.join(", ") || "temiz");
+  }
+}
+
+const DOGRUDAN = /\b(?:ctx\.(?:app|sync)|this\.db|db)\.(?:\$queryRaw|\$executeRaw|\$queryRawUnsafe|\$executeRawUnsafe|[a-z][A-Za-z]+\.(?:find\w*|create\w*|update\w*|upsert|delete\w*|count|aggregate|groupBy))\s*\(/;
+
+export function dogrudanCagrilar(metin: string): number {
+  return kod(metin)
+    .split("\n")
+    .filter((l) => DOGRUDAN.test(l)).length;
+}
+
+function kapsamsiz(): void {
+  console.log("\n§3 kapsamsız sorgu yok");
+  const ihlal = kaynaklar.filter((f) => !/lib[/\\](tenant|db)\.ts$/.test(f) && dogrudanCagrilar(readFileSync(f, "utf8")) > 0).map(goreli);
+  kontrol("§3a istemci üzerinden doğrudan model/ham sorgu çağrısı 0", ihlal.length === 0, ihlal.join(", ") || "temiz");
+  kontrol("§3b ✓K sonda: `ctx.app.account.findMany(` ısırır", dogrudanCagrilar("await ctx.app.account.findMany({})") === 1);
+  kontrol("§3c ✓K sonda: tx içindeki `tx.account.findMany(` susar", dogrudanCagrilar("await tx.account.findMany({})") === 0);
+}
+
+function modelTablolari(): Map<string, string> {
+  const sema = readFileSync(path.join(KOK, "prisma", "schema.prisma"), "utf8");
+  const out = new Map<string, string>();
+  for (const m of sema.matchAll(/model\s+(\w+)\s*\{([\s\S]*?)\n\}/g)) {
+    const tablo = /@@map\("([a-z_]+)"\)/.exec(m[2]!)?.[1];
+    if (tablo) out.set(m[1]!.charAt(0).toLowerCase() + m[1]!.slice(1), tablo);
+  }
+  return out;
+}
+
+export function silmeHedefleri(metin: string, modeller: ReadonlyMap<string, string>): { tablolar: Set<string>; bilinmeyen: string[] } {
+  const tablolar = new Set<string>();
+  const bilinmeyen: string[] = [];
+  const k = kod(metin);
+  for (const m of k.matchAll(/\b(?:tx|db|prisma)\.([a-z][A-Za-z]+)\.(?:deleteMany|delete)\s*\(/g)) {
+    const t = modeller.get(m[1]!);
+    if (t) tablolar.add(t);
+    else bilinmeyen.push(m[1]!);
+  }
+  for (const m of k.matchAll(/DELETE\s+FROM\s+"?([a-z_]+)"?/gi)) tablolar.add(m[1]!);
+  return { tablolar, bilinmeyen };
+}
+
+function budama(): void {
+  console.log("\n§4 budama beyanı");
+  const modeller = modelTablolari();
+  const beyan = new Set(Object.keys(PRUNED_TABLES));
+  const bakim = path.join(SRC, "services", "maintenance.ts");
+  const baskaYer = kaynaklar.filter((f) => f !== bakim && silmeHedefleri(readFileSync(f, "utf8"), modeller).tablolar.size > 0).map(goreli);
+  kontrol("§4a silme YALNIZ services/maintenance.ts'te", baskaYer.length === 0, baskaYer.join(", ") || "temiz");
+  const h = silmeHedefleri(readFileSync(bakim, "utf8"), modeller);
+  const beyansiz = [...h.tablolar].filter((t) => !beyan.has(t));
+  const olu = [...beyan].filter((t) => !h.tablolar.has(t));
+  kontrol("§4b her silme hedefi PRUNED_TABLES beyanında", beyansiz.length === 0 && h.bilinmeyen.length === 0, beyansiz.concat(h.bilinmeyen).join(",") || `${h.tablolar.size} tablo`);
+  kontrol("§4c beyanda olup silme yeri olmayan tablo YOK (ölü beyan)", olu.length === 0, olu.join(",") || "temiz");
+  const sonda = silmeHedefleri("await tx.account.deleteMany({})", modeller);
+  kontrol("§4d ✓K sonda: hesap silmesi `accounts` olarak ısırır (beyan dışı)", sonda.tablolar.has("accounts") && !beyan.has("accounts"));
+}
+
+export function rotaIhlalleri(rotalar: readonly Pick<ApiRouteDef, "method" | "path" | "kimlik">[]): string[] {
+  const out: string[] = [];
+  const gorulen = new Set<string>();
+  for (const r of rotalar) {
+    const anahtar = `${r.method} ${r.path}`;
+    if (gorulen.has(anahtar)) out.push(`tekrar: ${anahtar}`);
+    gorulen.add(anahtar);
+    if (r.method === "get" && r.kimlik !== "OKUMA") out.push(`okuma rotası OKUMA değil: ${anahtar}`);
+    if (r.method !== "get" && r.kimlik === "OKUMA") out.push(`yazma rotası kimlik beyansız: ${anahtar}`);
+    if (typeof r.kimlik === "object" && r.kimlik.muaf.trim().length < 10) out.push(`muafiyet gerekçesiz: ${anahtar}`);
+  }
+  return out;
+}
+
+function rotalar(): void {
+  console.log("\n§5 rota tablosu");
+  const ihlal = rotaIhlalleri(API_ROUTES);
+  kontrol(`§5a ${API_ROUTES.length} rota: tekil, yazma kimlik/muafiyet beyanlı, okuma OKUMA`, ihlal.length === 0, ihlal.join(" · ") || "temiz");
+  kontrol("§5b ✓K sonda: beyansız yazma rotası ısırır", rotaIhlalleri([{ method: "post", path: "/x", kimlik: "OKUMA" }]).length === 1);
+  kontrol("§5c ✓K sonda: gerekçesiz muafiyet ısırır", rotaIhlalleri([{ method: "post", path: "/y", kimlik: { muaf: "" } }]).length === 1);
+  kontrol("§5d ✓K sonda: temiz tablo susar", rotaIhlalleri([{ method: "get", path: "/z", kimlik: "OKUMA" }, { method: "post", path: "/z", kimlik: "ISLEM_KIMLIGI" }]).length === 0);
+  const isk = API_ROUTES.filter((r) => r.kimlik === "ISLEM_KIMLIGI").map((r) => `${r.method} ${r.path}`);
+  kontrol("§5e kayıt yaratan uçlar işlem kimliği taşır (gelen kutusu · rapor · hesap)", ["post /gelen-kutusu", "post /raporlar", "post /hesaplar"].every((x) => isk.includes(x)), isk.join(", "));
+}
+
+function katalog(): void {
+  console.log("\n§6 izin + hata kataloğu");
+  kontrol("§6a izin kodları tekil", new Set(CLOUD_PERMISSIONS).size === CLOUD_PERMISSIONS.length);
+  const acilan = new Set<string>();
+  for (const d of PROJECTION_CATALOG.values()) for (const p of d.permissions) acilan.add(p);
+  for (const p of Object.values(REPORT_FAMILY_PERMISSION)) acilan.add(p);
+  acilan.add("bulut:rapor:oku");
+  const tumKod = kaynaklar.filter((f) => !f.endsWith(path.join("catalog", "permissions.ts"))).map((f) => readFileSync(f, "utf8")).join("\n");
+  const olu = CLOUD_PERMISSIONS.filter((p) => !acilan.has(p) && !tumKod.includes(`"${p}"`));
+  kontrol("§6b her izin bir projeksiyon/rapor ailesi açar ya da kodda kapı olarak kullanılır (ölü izin yok)", olu.length === 0, olu.join(",") || "temiz");
+  kontrol("§6c hata kodları tekil", new Set(CLOUD_ERROR_CODES).size === CLOUD_ERROR_CODES.length);
+}
+
+function ayna(): void {
+  console.log("\n§7 protokol aynası");
+  const ozet = (d: string) =>
+    new Map(
+      readdirSync(d)
+        .sort()
+        .map((f) => [f, createHash("sha256").update(readFileSync(path.join(d, f))).digest("hex")]),
+    );
+  const kaynak = ozet(path.join(KOK, "..", "..", "Teks-Erp", "src", "lib", "license", "protocol"));
+  const aynaDizin = ozet(path.join(SRC, "lisans-protokol"));
+  const esit = kaynak.size >= 5 && kaynak.size === aynaDizin.size && [...kaynak].every(([f, h]) => aynaDizin.get(f) === h);
+  kontrol("§7a src/lisans-protokol kaynakla BAYT-EŞİT", esit, `${kaynak.size} dosya`);
+}
+
+envanter();
+tekYazar();
+kapsamsiz();
+budama();
+rotalar();
+katalog();
+ayna();
+console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
+process.exit(kaldi > 0 ? 1 : 0);
