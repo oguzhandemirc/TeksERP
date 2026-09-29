@@ -103,11 +103,10 @@ async function kapsamBolumu(): Promise<void> {
   const sonuc: Record<string, number> = {};
   try {
     await prisma.$transaction(async (tx) => {
-      const cari = randomUUID();
-      await tx.$executeRawUnsafe(
-        `INSERT INTO "cari_accounts" ("id", "kind", "customerId", "updatedAt") SELECT $1::uuid, 'CUSTOMER', c."id", now() FROM "customers" c WHERE NOT EXISTS (SELECT 1 FROM "cari_accounts" a WHERE a."customerId" = c."id") LIMIT 1`,
-        cari,
-      );
+      // Kendi müşterisi (tx geri alınır): taze DB'de hazır müşteri yoktur, "cari'siz ilk müşteri" varsayımı FK'da düşer.
+      const [musteri, cari] = [randomUUID(), randomUUID()];
+      await tx.$executeRawUnsafe(`INSERT INTO "customers" ("id", "code", "name", "updatedAt") VALUES ($1::uuid, $2, $3, now())`, musteri, `${TAG}K`, `${TAG} kapsam müşterisi`);
+      await tx.$executeRawUnsafe(`INSERT INTO "cari_accounts" ("id", "kind", "customerId", "updatedAt") VALUES ($1::uuid, 'CUSTOMER', $2::uuid, now())`, cari, musteri);
       const taslak = randomUUID();
       const onayli = randomUUID();
       await tx.$executeRawUnsafe(

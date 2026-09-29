@@ -32,11 +32,22 @@ export async function bulutKaydiniGeriAl(d: Duzenek, mesajId: string): Promise<n
   return r.rowCount ?? 0;
 }
 
+/** P5 push kaydı: yöneticinin cihazı (Expo belirteci) + sessiz saati kapalı ayar — gece koşumunda ertelenmesin. */
+async function pushHazirla(d: Duzenek): Promise<{ kayit: number; ayar: number; cihazId: string }> {
+  const kayit = await bulutIstek(d.patron.url, "POST", "/cihazlar", { platform: "android", belirtec: `ExponentPushToken[senaryoP5${d.tesisId.slice(0, 8)}]`, ad: "Senaryo P cihazı" }, d.yonetici.belirtec);
+  const gorunum = await bulutIstek(d.patron.url, "GET", "/bildirim/ayarlar", undefined, d.yonetici.belirtec);
+  const etkin = gorunum.veri.etkin as Record<string, unknown> & { sessiz: Record<string, unknown> };
+  const ayar = await bulutIstek(d.patron.url, "POST", "/bildirim/ayarlar", { ayarlar: { ...etkin, sessiz: { ...etkin.sessiz, acik: false } } }, d.yonetici.belirtec);
+  return { kayit: kayit.status, ayar: ayar.status, cihazId: String(kayit.veri.id ?? "") };
+}
+
 export const adimlarB: AdimGrubu = async (d, adim) => {
   const urunId = (await d.fdb.query<{ id: string }>(`SELECT id FROM items WHERE "isActive" ORDER BY "createdAt" LIMIT 1`)).rows[0]?.id ?? "";
   d.ortak.urunId = urunId;
 
-  await adim("P5", "gelen kutusu sipariş → fabrikada normal yoldan kayıt; tekrar aynı sonuç; ISLENDI", async (a) => {
+  await adim("P5", "gelen kutusu sipariş → fabrikada normal yoldan kayıt; tekrar aynı sonuç; ISLENDI + push kaydı", async (a) => {
+    const cihaz = await pushHazirla(d);
+    a.kontrol("bulut: yöneticinin cihazı kayıtlı (Expo belirteci, 201) + sessiz saat kapalı", cihaz.kayit === 201 && cihaz.ayar === 200, `cihaz ${cihaz.kayit} · ayar ${cihaz.ayar}`);
     const govde = { cariKartId: d.ortak.cariId, doviz: "TRY", termin: "2026-10-15", kalemler: [{ urunId, miktar: "125.5", birimFiyat: "10.50" }] };
     const m = await mesajYazVeBekle(d, "SIPARIS", govde);
     a.kontrol("bulut: sipariş mesajı yazıldı (201)", m.yaz.status === 201, `${m.yaz.status} ${m.yaz.kod ?? ""}`);
@@ -57,9 +68,21 @@ export const adimlarB: AdimGrubu = async (d, adim) => {
     const out = (run.outcomes ?? []).find((x) => x.mesajId === m.mesajId) as { durum?: string; belgeNo?: string } | undefined;
     const say = await d.fdb.query<{ n: string }>(`SELECT count(*) AS n FROM orders WHERE "clientToken" = $1`, [m.mesajId]);
     a.kontrol("fabrika tekrarı: tokenReplay AYNI sipariş no, ikinci sipariş YOK", out?.durum === "ISLENDI" && out.belgeNo === m.sonuc.sonuc?.belgeNo && Number(say.rows[0]?.n) === 1, `${JSON.stringify(out ?? run.hata)} · ${say.rows[0]?.n}`);
-    const push = await d.bdb.query<{ n: string }>(`SELECT count(*) AS n FROM push_devices WHERE tesis_id = $1`, [d.tesisId]);
-    a.not(`push: cihaz kaydı tablosu var (${push.rows[0]?.n} cihaz); iş olayı bildirimi gönderim/kayıt yüzeyi bu dalda YOK`);
-    a.kismi("'push kaydı' ölçülemedi — B5 bildirim dilimi (gönderim + kayıt) entegrasyonda yok");
+    let bildirim: { status: string; deliveries: unknown } | undefined;
+    const bSure = await bekleKosul(async () => {
+      const r = await d.bdb.query<{ status: string; deliveries: unknown }>(
+        `SELECT status::text AS status, deliveries FROM notifications WHERE tesis_id = $1 AND kind = 'gelen-kutusu-sonucu' AND dedup_key = $2`,
+        [d.tesisId, `gelen-kutusu:${m.mesajId}:ISLENDI`],
+      );
+      bildirim = r.rows[0];
+      return bildirim?.status === "GONDERILDI";
+    }, 30_000, 500);
+    const teslim = Array.isArray(bildirim?.deliveries) ? (bildirim.deliveries as { cihazId?: string; sonuc?: string }[]) : [];
+    a.kontrol(
+      "push kaydı: ISLENDI olayı yöneticinin bildirimi olarak doğdu ve kayıtlı cihaza GONDERILDI (sahte taşıyıcı, tek satır)",
+      bSure !== null && teslim.some((t) => t.cihazId === cihaz.cihazId && t.sonuc === "OK"),
+      `${bSure ?? "-"} ms ${JSON.stringify(bildirim ?? null)}`,
+    );
   });
 
   await adim("P6", "geçersiz / aynı adlı cari ve geçersiz sipariş → REDDEDILDI, TR mesaj", async (a) => {
@@ -101,8 +124,22 @@ export const adimlarB: AdimGrubu = async (d, adim) => {
     for (let i = 0; i < 3 && (await bulutSayisi(d, "siparis-kalemi", silinecek)) === 1; i++) st = await d.tur();
     const kalan = await bulutSayisi(d, "siparis-kalemi", silinecek);
     const bulutToplam = await bulutSayisi(d, "siparis-kalemi");
-    const fabrikaToplam = Number((await d.fdb.query<{ n: string }>(`SELECT count(*) AS n FROM order_lines`)).rows[0]?.n);
-    a.kontrol("uzlaştırma turu: satır bulutta düştü, küme fabrikaya eşit", kalan === 0 && bulutToplam === fabrikaToplam, `uzlaştırma turu ${uzlastirmaDurumu} → kalan ${kalan} · bulut ${bulutToplam} / fabrika ${fabrikaToplam} · ${st.lastOutcome?.status} uzlaştırma ${st.lastReconcileYmd}`);
+    // Küme ebeveyniyle (S45): kalem ancak siparişi saklama içindeyse (13 ay) kümede — önceki koşumların P9'unun
+    // 14 ay geri tarihli siparişinin kalemi fabrikada durur ama kümede değildir.
+    const fabrikaToplam = Number(
+      (await d.fdb.query<{ n: string }>(`SELECT count(*) AS n FROM order_lines l JOIN orders o ON o.id = l."orderId" WHERE o."orderDate" >= now() - interval '13 months'`)).rows[0]?.n,
+    );
+    const bulutIdleri = new Set((await d.bdb.query<{ id: string }>(`SELECT record_id::text AS id FROM projection_rows WHERE tesis_id = $1 AND projection = 'siparis-kalemi' AND deleted_at IS NULL`, [d.tesisId])).rows.map((r) => r.id));
+    const eksik = (
+      await d.fdb.query<{ id: string; no: string; durum: string; dogus: Date }>(
+        `SELECT l.id, o."orderNumber" AS no, o.status::text AS durum, o."createdAt" AS dogus FROM order_lines l JOIN orders o ON o.id = l."orderId" WHERE o."orderDate" >= now() - interval '13 months'`,
+      )
+    ).rows.filter((r) => !bulutIdleri.has(r.id));
+    a.kontrol(
+      "uzlaştırma turu: satır bulutta düştü, küme fabrikanın saklama içi kümesine eşit (kalem ebeveyniyle, S45)",
+      kalan === 0 && bulutToplam === fabrikaToplam,
+      `uzlaştırma turu ${uzlastirmaDurumu} → kalan ${kalan} · bulut ${bulutToplam} / fabrika ${fabrikaToplam} · ${st.lastOutcome?.status} uzlaştırma ${st.lastReconcileYmd}${eksik.length ? ` · bulutta olmayan: ${eksik.map((e) => `${e.no}/${e.durum}/${e.dogus.toISOString()}`).join(", ")}` : ""}`,
+    );
   });
 
   await adim("P8", "TEST sınıfı gönderemez — fabrika ön koşulu + bulut sınıf kapısı", async (a) => {

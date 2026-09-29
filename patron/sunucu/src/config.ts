@@ -52,7 +52,8 @@ const EnvSchema = z
     /** Sonuçlanmış bildirim satırı bu kadar gün sonra budanır (telemetri). */
     BILDIRIM_SAKLAMA_GUN: positiveInt(7, 3650).default(90),
     /** Web push VAPID `sub` (mailto: ya da https:) — `gercek` kipte zorunlu. Anahtar çifti ANAHTAR_DIZINI'nde. */
-    BILDIRIM_VAPID_KONU: z.string().regex(/^(mailto:|https:\/\/)\S+$/).optional(),
+    // Boş değer = verilmedi: compose `${BILDIRIM_VAPID_KONU:-}` ile her zaman geçirir (kapali kipte boş kalır).
+    BILDIRIM_VAPID_KONU: z.preprocess((v) => (v === "" ? undefined : v), z.string().regex(/^(mailto:|https:\/\/)\S+$/).optional()),
     EXPO_PUSH_URL: z.url().default("https://exp.host/--/api/v2/push/send"),
     /** Expo erişim belirteci (isteğe bağlı "enhanced push security") — SIRdır, günlüğe yazılmaz. */
     EXPO_ERISIM_BELIRTECI: z.string().min(16).optional(),

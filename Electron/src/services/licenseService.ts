@@ -54,8 +54,9 @@ export const licenseService = {
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/aktarma-yaniti`, { yanit }, QUIET)),
   requestTransfer: (gerekce: string | null) =>
     data(apiClient.post<ApiResponse<LicenseTransferResult>>(`${BASE}/tasima-talebi`, { gerekce }, QUIET)),
-  drTakeover: (anaKurulumId: string, gerekce: string) =>
-    data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/dr-devral`, { anaKurulumId, gerekce }, QUIET)),
+  /** `anaKurulumId` null → gövdeye girmez: satıcı tesisin tek etkin ÜRETİM kurulumunu kendisi çıkarır. */
+  drTakeover: (anaKurulumId: string | null, gerekce: string) =>
+    data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/dr-devral`, { ...(anaKurulumId ? { anaKurulumId } : {}), gerekce }, QUIET)),
   setProxy: (adres: string | null, atla: string | null) =>
     data(apiClient.put<ApiResponse<LicenseProxySettings>>(`${BASE}/proxy`, { adres, atla }, QUIET)),
   dataExport: () =>

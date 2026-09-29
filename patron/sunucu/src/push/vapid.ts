@@ -32,7 +32,8 @@ export class VapidKeys {
       if (!g.create) throw new Error(`VAPID anahtar dosyası yok: ${file}`);
       writeFileSync(file, `${JSON.stringify(generate())}\n`, { mode: 0o600, flag: "wx" });
     }
-    chmodSync(file, 0o600);
+    // Salt okunur anahtar biriminde (compose) dosya önceden 0600 gelir: izin zaten darsa chmod çağrılmaz (EROFS).
+    if ((statSync(file).mode & 0o077) !== 0) chmodSync(file, 0o600);
     if ((statSync(file).mode & 0o077) !== 0) throw new Error(`VAPID anahtar dosyası başkalarınca okunabilir: ${file}`);
     let raw: unknown;
     try {

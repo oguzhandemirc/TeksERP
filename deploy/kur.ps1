@@ -485,7 +485,7 @@ if (Test-Path "$temp\PAKET.json") {
   $m = Get-Content "$temp\PAKET.json" -Raw | ConvertFrom-Json
   Write-Host "  commit          : $($m.commit)  ($($m.dal))"
   Write-Host "  uygulama surumu : $($m.uygulamaSurumu)"
-  Write-Host "  uretim          : $($m.uretimZamani)  /  $($m.ureten)"
+  Write-Host "  uretim          : $($m.uretimZamani)  /  derleme $($m.derlemeKimligi)"
   Write-Host "  migration       : $($m.migrationSayisi)"
   Write-Host "  node_modules    : $(if ($m.nodeModulesDahil) {'pakette DAHIL'} else {'YOK - npm ci kosulacak'})"
   if (-not $m.calismaAgaciTemiz) { Uyar "Paket KIRLI calisma agacindan uretilmis (commit'lenmemis degisiklik icerir)." }

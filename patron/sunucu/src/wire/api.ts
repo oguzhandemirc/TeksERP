@@ -67,6 +67,12 @@ export interface Snapshot {
   readonly surum: string;
 }
 
+/** `POST /api/tazele` (§14 S47): `ozet` zili çaldı mı; bir sonraki zile kaç ms var (tesis başına aralık). */
+export interface SnapshotRefresh {
+  readonly zil: boolean;
+  readonly sonrakiMs: number;
+}
+
 export const INBOX_STATUSES = ["BEKLIYOR", "ISLENIYOR", "ISLENDI", "REDDEDILDI", "IPTAL"] as const;
 export type InboxStatus = (typeof INBOX_STATUSES)[number];
 // Hesap API görünümü: eşitleme sözleşmesinin `InboxKind`/`InboxMessage` adları yalnız `esitleme.ts`te (test_bulut_tel_aynasi §4a).

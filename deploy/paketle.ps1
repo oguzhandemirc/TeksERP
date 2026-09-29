@@ -531,6 +531,7 @@ if ($Korumali) {
   $runtimeNodeSurumu = (Get-Content $nsYol -Raw | ConvertFrom-Json).surum
 }
 
+$derlemeKimligi = [guid]::NewGuid().ToString()
 $manifest = [ordered]@{
   ad              = $ad
   commit          = $commit
@@ -547,9 +548,9 @@ $manifest = [ordered]@{
   # Imzali dosya listesi (butunluk.jws) satici Mac'inde eklenir; imza adimi bu alani doldurur.
   butunlukKid     = $null
   uretimZamani    = (Get-Date).ToString("s")
-  # Makine/kullanici adi: Windows'ta COMPUTERNAME+USERNAME, POSIX'te HOSTNAME+USER.
-  # Damga bilgi amacli; cozulemezse "?" yazilir, paketleme DURMAZ.
-  ureten          = "$([System.Environment]::MachineName)\$([System.Environment]::UserName)"
+  # Derleme kimligi: musteri paketi URETENIN makine/kullanici adini TASIMAZ; o bilgi yalniz
+  # paketleyen makinenin derleme kaydinda (~/.tekserp/derleme-kayitlari, paket DISI).
+  derlemeKimligi  = $derlemeKimligi
   paketleyenPlatform = if ($IsWindows) { "windows" } elseif ($IsMacOS) { "macos" } else { "linux" }
   nodeSurumu      = (& node --version).Trim()
   npmSurumu       = (& npm --version).Trim()
@@ -568,6 +569,20 @@ $manifest = [ordered]@{
   serverJsSha256  = (Get-FileHash "$stage\dist\server.js" -Algorithm SHA256).Hash
 }
 $manifest | ConvertTo-Json -Depth 4 | Out-File "$stage\PAKET.json" -Encoding utf8
+# Derleme kaydi (paket DISI): ureticinin kimligi yalniz burada; yazilamazsa paket etkilenmez.
+try {
+  $kayitDir = Join-Path ([Environment]::GetFolderPath("UserProfile")) ".tekserp/derleme-kayitlari"
+  New-Item -ItemType Directory -Force -Path $kayitDir | Out-Null
+  [ordered]@{
+    derlemeKimligi = $derlemeKimligi
+    ad             = $ad
+    commit         = $commit
+    uretimZamani   = $manifest.uretimZamani
+    ureten         = "$([System.Environment]::MachineName)\$([System.Environment]::UserName)"
+  } | ConvertTo-Json | Out-File (Join-Path $kayitDir "$ad.json") -Encoding utf8
+} catch {
+  Write-Host "  UYARI: derleme kaydi yazilamadi ($($_.Exception.Message)) - paket etkilenmez"
+}
 Write-Host "  $($manifest.dosyaSayisi) dosya / $([math]::Round($manifest.toplamBayt/1MB,1)) MB"
 
 # --- [6/6] Zip --------------------------------------------------------------

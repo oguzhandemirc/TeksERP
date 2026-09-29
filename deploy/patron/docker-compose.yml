@@ -7,11 +7,13 @@ name: tekserp-patron-${ORTAM:?ORTAM gerekli (uretim|hazirlik)}
 # kopyalanır; değerler yanındaki `.env`ten (ornek.env). Web sürümü (patron/uygulama) ve API AYNI kökende:
 # patron.etkiliyazilim.com/ → web, /api → hesap API'si, /v1 → fabrika kanalı (kurulum imzalı).
 #
-# Üç ağ — hiçbiri satıcının kendi ağlarıyla, güncelleme ya da `web` ağıyla ORTAK değil:
+# Dört ağ — hiçbiri satıcının kendi ağlarıyla, güncelleme ya da `web` ağıyla ORTAK değil:
 #   kenar   (internal) Traefik ↔ patron. Traefik runbook adımıyla bağlanır (yeniden başlatmasız).
 #   ic      (internal) patron ↔ kendi PG16'sı ↔ yedek işi. Port yayını YOK.
 #   ic-api  (external, satıcının) patron → satıcı iç API'si (/ic/v1/*, 4612). Patron SABİT adresle katılır
 #           (PATRON_IC_IP — satıcının kaynak kapısı yalnız bu /32'yi kabul eder). Patron burada DİNLEMEZ.
+#   cikis   (internal DEĞİL) YALNIZ patron → bildirim sağlayıcıları (Expo push · web push, B5). Patron burada
+#           DİNLEMEZ (BIND = kenar adresi); DB, göç ve yedek bu ağa KATILMAZ (compose-denetle ④).
 # Üç DB rolü (patron/sunucu/scripts/db-rolleri.ts): göç (tablo sahibi; yalnız patron-goc + yedek) ·
 # uygulama · eşitleme (RLS'i atlayamaz; sunucu yalnız bu ikisini alır). Parolalar docker secret'ı.
 # Docker soketi hiçbir servise BAĞLANMAZ. Kök FS salt okunur · root olmayan kullanıcı · yetenek yok ·
@@ -80,6 +82,10 @@ services:
       SATICI_IC_API_URL: http://${SATICI_IC_API_IP:?SATICI_IC_API_IP gerekli}:4612
       # İstemci IP'si (hız sınırı anahtarı) Cloudflare başlığından; köken yalnız CF'ye açılana dek taklit edilebilir (runbook §11).
       VEKIL_IP_BASLIGI: cf-connecting-ip
+      # Bildirimler (B5): varsayılan kapali = bugünkü davranış. `gercek` VAPID konusu ister; VAPID anahtar çifti
+      # anahtar biriminde ÖNCEDEN üretilmiş olmalı (birim salt okunur — runbook §2.1).
+      BILDIRIM_KIPI: ${BILDIRIM_KIPI:-kapali}
+      BILDIRIM_VAPID_KONU: ${BILDIRIM_VAPID_KONU:-}
     secrets: [uygulama_parolasi, esitleme_parolasi, ic_api_belirteci]
     volumes:
       # Anahtar birimi SALT OKUNUR: patron-totp.key önceden üretilir (runbook §2.1); yoksa açılış DURUR.
@@ -90,6 +96,7 @@ services:
       kenar: { ipv4_address: "${KENAR_IP}" }
       ic: {}
       ic-api: { ipv4_address: "${PATRON_IC_IP:?PATRON_IC_IP gerekli}" }
+      cikis: {}
     cpus: 0.75
     mem_limit: 512m
     memswap_limit: 512m
@@ -185,3 +192,8 @@ networks:
     # Satıcı compose'unun ağı (tekserp-satici-<ortam>-ic-api); önce satıcı kurulu olmalı.
     name: ${SATICI_IC_API_AGI:?SATICI_IC_API_AGI gerekli (tekserp-satici-<ortam>-ic-api)}
     external: true
+  cikis:
+    # Dış çıkış (bildirim sağlayıcıları) — internal DEĞİL; yalnız patron katılır, kimse bu ağda dinlemez.
+    name: tekserp-patron-${ORTAM}-cikis
+    ipam:
+      config: [{ subnet: "${CIKIS_AGI:?CIKIS_AGI gerekli}" }]

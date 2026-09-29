@@ -15,7 +15,8 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "single"
+      "output": "single",
+      "lang": "tr"
     },
     "plugins": ["expo-router", "expo-secure-store", "expo-font", "expo-notifications"],
     "experiments": {

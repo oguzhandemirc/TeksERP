@@ -69,7 +69,7 @@ const VENDOR_MESSAGES = {
   KURULUM_BILINMIYOR: "Bu kurulum lisans sunucusunda kayıtlı değil (taşıma talebi gerekebilir).",
   KURULUM_IPTAL: "Bu kurulumun lisansı taşındı ya da iptal edildi.",
   KIRA_VERILMEDI: "Lisans sunucusu bu kuruluma kira vermedi; destek hattıyla görüşün.",
-  DR_ANA_BELIRSIZ: "Ana kurulum kimliğini portaldan ya da ana sunucunun Lisans ekranından alın.",
+  DR_ANA_BELIRSIZ: "Lisans sunucusu ana sunucuyu kendiliğinden bulamadı (tesiste etkin üretim kurulumu yok ya da birden çok var); ana kurulum kimliğini portaldan ya da ana sunucunun Lisans ekranından alıp alana yazın.",
   HIZ_SINIRI: "Çok sık denendi; biraz sonra tekrar deneyin.",
   TEKRAR_DENEYIN: "Lisans sunucusunda eşzamanlı bir işlem çakıştı; biraz sonra tekrar deneyin.",
   BULUNAMADI: "Lisans sunucusu bu isteği tanımadı (adres yanlış ya da sunucu sürümü eski olabilir; LICENSE_SERVER_URL ayarını kontrol edin).",

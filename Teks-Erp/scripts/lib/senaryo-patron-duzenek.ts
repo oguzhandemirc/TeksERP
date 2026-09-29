@@ -159,6 +159,9 @@ export async function duzenekKur(): Promise<Duzenek> {
     SATICI_IC_API_BELIRTECI: ic.belirtec,
     KURULUM_ONBELLEK_DK: "1",
     BAKIM_ARALIGI_SN: "2",
+    // P5 push kaydı (B5): kayıtlı SAHTE taşıyıcı — ağ yok, olay üretimi + gönderim gerçek kodla, en kısa aralık.
+    BILDIRIM_KIPI: "sahte",
+    BILDIRIM_ARALIGI_SN: "5",
   };
   const roller = spawnSync(process.execPath, ["--import", "tsx", "scripts/db-rolleri.ts"], { cwd: PATRON_KOKU, env: patronEnv, encoding: "utf8", timeout: 60_000 });
   if (roller.status !== 0) throw new Error(`patron db-rolleri düştü: ${roller.stderr || roller.stdout}`);

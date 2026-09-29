@@ -3,6 +3,7 @@
 // API'sine yalnız {tesisId, konu} bildirir. Zil kaçarsa fabrika her eşitleme turunda yine yoklar ⇒
 // zil best-effort'tur: hata günlüğe düşer, isteği BOZMAZ. `kayit` kipinde satıcı bağı yok → sessiz.
 import type { CloudConfig } from "../config";
+import type { SnapshotRefresh } from "../wire/api";
 
 export type DoorbellTopic = "gelen-kutusu" | "rapor" | "ozet";
 
@@ -53,7 +54,7 @@ const lastSnapshotRing = new Map<string, number>();
  * Ekran açıkken tazeleme: hesabın isteği fabrikaya `ozet` zili olarak gider (içerik taşımaz). Tesis başına
  * 30 sn'de bir; aralık içindeki istek zil ÇALMAZ, kalan süreyi döner (sahte yağmur fabrikayı yormaz).
  */
-export function requestSnapshotRefresh(doorbell: Doorbell, tesisId: string, nowMs: number): { zil: boolean; sonrakiMs: number } {
+export function requestSnapshotRefresh(doorbell: Doorbell, tesisId: string, nowMs: number): SnapshotRefresh {
   const last = lastSnapshotRing.get(tesisId) ?? 0;
   const wait = last + SNAPSHOT_RING_GAP_MS - nowMs;
   if (wait > 0) return { zil: false, sonrakiMs: wait };

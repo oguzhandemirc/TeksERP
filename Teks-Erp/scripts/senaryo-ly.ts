@@ -13,7 +13,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 const SENARYOLAR = [
-  { ad: "Senaryo L (lisans, L1–L29)", dosya: "senaryo-lisans.ts" },
+  { ad: "Senaryo L (lisans, L1–L30)", dosya: "senaryo-lisans.ts" },
   { ad: "Senaryo Y (yedek şifreleme, Y1–Y6)", dosya: "senaryo-yedek.ts" },
 ] as const;
 

@@ -85,6 +85,7 @@
 ### Kararlar
 
 - **[ÇEKİRDEK]** Projeksiyon ve anlık verinin şekli fabrikada tanımlıdır; uygulama alanları jenerik biçimler (TR sayı/tarih, `…Id` gizli) ve aritmetik yapmaz. · bekçi: `format.test.ts` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Pano ve rapor ekranı odaklanınca `POST /api/tazele` (§14 S47) çağrılır ve sunucunun `sonrakiMs` aralığına uyulur: aralık dolmadan ikinci istek yok, hata sessiz ve geri çekilir; web çıktısının dili `tr`dir (`app.json` `web.lang`). · bekçi: `refresh.test.ts` <sub>(arşiv:2026-09-30 I6)</sub>
 - **[ÇEKİRDEK]** Rapor isteğinin parametresi fabrikanın kendi şemasıdır: uygulama yalnız özel aralığı (`dateFrom`/`dateTo`) ve katalog girdisinin ek alanlarını toplar; istenebilir liste fabrikanın `rapor-katalogu` anlık kaydından okunur. · bekçi: `forms.test.ts` <sub>(arşiv:2026-09-29)</sub>
 
 ## Dağıtım (`deploy/patron`, VDS)
@@ -94,6 +95,9 @@
 - **[ÇEKİRDEK]** Web sürümü API ile AYNI kökenden (`/`) sunulur ve `/api` · `/v1` altı asla HTML'e düşmez; iç/yönetim ad alanları (`web-static.ts` `IC_ONEKLER`) web'de 404'tür ve Traefik kuralının dışında kalır — iki liste bekçiyle eşlenir. · bekçi: `test_web_sunumu (§4 · §5 · §8)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Web CSP'si `unsafe-inline` taşımaz: giriş HTML'indeki satır içi blok yalnız kendi sha256 özetiyle izinlidir (özet açılışta dosyadan hesaplanır) ve react-native-web'in BOŞ `<style>` ögesi boş dizgenin özetiyle; CSP değişikliği gerçek tarayıcıda ölçülür (başlık ölçümü stilin uygulandığını göstermez); içerik özetli dizinler uzun ömürlü, giriş HTML'i `no-store`. · bekçi: `test_web_sunumu (§2 · §3)` · `deploy/patron/tarayici-duman.cjs` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Patron sunucusu göç (tablo sahibi) parolasını ALMAZ: üç DB rolü üç docker secret'ıdır, göç parolası yalnız DB · `patron-goc` · yedek konteynerine bağlanır; sunucu yalnız kenar adresinde dinler, port yayımlamaz, satıcıyla ortak birim ya da sır grubu taşımaz. · bekçi: `deploy/patron/compose-denetle.mjs (① · ⑦ · ⑧ · ⑨)` <sub>(arşiv:2026-09-29)</sub>
+
+- **[ÇEKİRDEK]** Dış çıkış yalnız bildirim için ve yalnız sunucuya açılır: compose'un kurduğu internal OLMAYAN tek ağ `cikis`tir, ona yalnız `patron` katılır ve orada dinlemez; DB · göç · yedek internal ağlarda kalır. · bekçi: `deploy/patron/compose-denetle.mjs (④)` <sub>(arşiv:2026-09-30 I6)</sub>
+- **[ÇEKİRDEK]** Salt okunur anahtar birimindeki sır dosyası (VAPID) konteyner dışında ÖNCEDEN üretilir; sunucu izni zaten dar dosyaya chmod çağırmaz, boş `BILDIRIM_VAPID_KONU` verilmemiş sayılır. · bekçi: `test_bildirim_gonderim (§3)` <sub>(arşiv:2026-09-30 I6)</sub>
 
 ### Kararlar
 
@@ -116,7 +120,7 @@ Dağıtım (kurulum öncesi, Mac'te, CI dışı): `node deploy/patron/compose-de
 
 Uçtan uca: **Senaryo P** (plan §8 P1–P16 + sözleşme §13 P17–P25; gerçek patron bulutu + gerçek fabrika backend'i, lisans fikstürü + sahte satıcı ve iç API'si; iki `_test` DB, patron DB'si `patron/sunucu/.env`den, `migrate deploy` önceden): `cd Teks-Erp && DATABASE_URL='postgresql://…/<fabrika>_test?schema=public' node ../scripts/agir-is.mjs -- npx tsx scripts/senaryo-patron.ts [--json=<dosya>] [--son=P7] [--yalniz=P1,P3]` — ~4 dk; çıkış 0 hepsi yeşil · 1 yeşil olmayan adım · 2 hedef reddi/düzenek.
 
-Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `notifications.test.tsx`, `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
+Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `notifications.test.tsx`, `refresh.test.ts`, `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
 
 Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## patron-bulutu` bölümüne birlikte eklenir. Katalog ya da tetikleyici değişince `test_db_invariants` (TRIGGERS/EXPECTED_FUNCTIONS) de koşulur.
 
@@ -132,3 +136,4 @@ Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## pat
 - 2026-09-30 · Patron bildirimleri (B5): tür kataloğu, durumsuz olay üretimi, idempotent bildirim kimliği, gönderimde yeniden sınama, VAPID sırrı dosyada
 - 2026-09-29 · Senaryo P koşucusu (Plan B uçtan uca): `ozet` zilinin bulut üreticisi (S47), hesap API'si TR iletisi (S48), sahte satıcı iç API'siyle gerçek zil zinciri
 - 2026-09-29 · Patron bulutu dağıtımı (B-dağıtım): aynı köken web + API, iç ad alanı iki katta 404, üç DB rolü üç sır, satıcıyla ortak birim yok
+- 2026-09-30 · Lisans + patron entegrasyonu 5 (I6): tek ABI 2, Docker künyesi 2e-S biçiminde, §14 tek liste (S47/S48), bildirim çıkış ağı, paketten üretici kimliği, DR ana kimliği panelde isteğe bağlı, ekran açılışı tazelemesi, P5 push kaydı

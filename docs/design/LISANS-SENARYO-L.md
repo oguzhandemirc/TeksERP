@@ -11,6 +11,7 @@
 > **Faz 2d koşumu (2026-09-30, `lisans/2d-modul` = entegrasyon + 2c-p0 + 2e + 2d):** **30 yeşil · 0 kısmi · 0 kırmızı** (161 sn); L13 kimliksiz DR (satıcı tesisin tek etkin ÜRETİM kurulumunu çıkarır), yeni L30 şifreli modül (K2 → anahtar kirada yok, çekirdek çalışır). HAK modüllerine `depo.multiEnabled` eklendi.
 > **Faz 2e-S koşumu (2026-09-30, `lisans/2e-sert` = entegrasyon I4-1 + 2c-p0 + 2e + 2e-S):** **29 yeşil · 0 kısmi · 0 kırmızı**; L18 imzalı künye yeni biçimde (liste dosyası + imzalı kapsam) yeşil, bütünlük denetimi native çekirdekte FAZLA dahil.
 > **I5 koşumu (2026-09-30, `lisans/entegrasyon` + I3-1b + 2c-p0 + 2e + 2b + 2f + 3bc + 3d-1 + 3d-2 + B4):** **29 yeşil · 0 kısmi · 0 kırmızı** (29/29 adım, 167 sn); L15 3a Worker modülüyle + L18 gerçek imzalı künyeyle birlikte ilk kez tam; Senaryo Y 26/0 (+Y6d).
+> **I6 koşumu (2026-09-30, `lisans/entegrasyon` + 2b-D2 + 2d + 2e-S + BF + B5 + dağıtım/Senaryo P):** **30 yeşil · 0 kısmi · 0 kırmızı** (30/30 adım, 167 sn); L30 şifreli modül tek ABI 2 altında (2d + 2e-S), L18 künyesi 2e-S liste dosyasıyla. L3'ün zincir kontrolü yarışa düşüyordu (etkinleştirmenin dürttüğü arka plan yoklaması `once` okunduktan sonra kira yeniliyor — ölçüldü: ara yoklama 1) → beklenen `sonKiraId` aradaki yoklamanın kirası. Senaryo Y 26/0 (+Y6d).
 > **Koşucu:** `Teks-Erp/scripts/senaryo-lisans.ts` · L + Y tek komut `Teks-Erp/scripts/senaryo-ly.ts` · kural satırı `docs/kurallar/lisans.md` · arşiv notu 2026-09-29 "Senaryo L (lisans uçtan uca) koşucusu".
 
 ## Nasıl koşulur

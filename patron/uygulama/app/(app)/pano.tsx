@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { visibleCards, visibleModules } from "../../src/lib/access";
 import { formatAgo } from "../../src/lib/format";
 import { useSession } from "../../src/state/session";
+import { useOpenRefresh } from "../../src/state/useOpenRefresh";
 import { FacilityName, Screen, useWide } from "../../src/ui/Frame";
 import { Button, Card, Muted, Row } from "../../src/ui/kit";
 import { SnapshotCard } from "../../src/ui/SnapshotCard";
@@ -14,6 +15,7 @@ export default function Dashboard() {
   const router = useRouter();
   const wide = useWide();
   const cards = visibleCards(permissions);
+  useOpenRefresh();
   const last = facility?.esitleme?.sonEsitleme ?? null;
   return (
     <Screen title="Pano">

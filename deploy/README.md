@@ -46,7 +46,7 @@ git branch -D adnansahin      # yerel kalıntı; origin'de zaten yok
 |---|---|
 | `dist\server.js`, `package.json`, `package-lock.json`, `ecosystem.config.js`, `prisma.config.js`, `prisma\schema.prisma`, `prisma\migrations`, `public`, `assets\fonts` | hepsi ✅ (`assets` tümüyle kopyalanır) |
 | `prisma.config.ts` OLMAMALI (ikisi birden → 400) · `src\` varsa "eski paketle" uyarısı | `.ts` kopyalanmaz, `src` kopyalanmaz ✅ |
-| `PAKET.json`: `commit` `dal` `uygulamaSurumu` `uretimZamani` `ureten` `migrationSayisi` `nodeModulesDahil` `calismaAgaciTemiz` | manifestte var (+ `nodeSurumu`, `npmSurumu`, `dosyaSayisi`, `toplamBayt`, `serverJsSha256` — `kur.ps1` bunları okumaz) ✅ |
+| `PAKET.json`: `commit` `dal` `uygulamaSurumu` `uretimZamani` `derlemeKimligi` `migrationSayisi` `nodeModulesDahil` `calismaAgaciTemiz` | manifestte var — üreticinin makine/kullanıcı adı müşteri paketine GİRMEZ, yalnız paketleyen makinenin `~/.tekserp/derleme-kayitlari/<ad>.json` kaydında (+ `nodeSurumu`, `npmSurumu`, `dosyaSayisi`, `toplamBayt`, `serverJsSha256` — `kur.ps1` bunları okumaz) ✅ |
 | `node_modules` varsa `npm ci` atlanır | varsayılan DAHİL; `-NodeModulesHaric` ile ince paket |
 
 **Bilinen davranışlar (değiştirilmedi):** kirli çalışma ağacında `Read-Host` ile sorar — `-Zorla`

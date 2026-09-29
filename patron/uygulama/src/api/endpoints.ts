@@ -24,6 +24,7 @@ import type {
   ReportRequest,
   ReportRequestDetail,
   Snapshot,
+  SnapshotRefresh,
 } from "./wire";
 
 export const ENDPOINTS = {
@@ -38,6 +39,7 @@ export const ENDPOINTS = {
   list: ["get", "/veri/:projeksiyon"],
   record: ["get", "/veri/:projeksiyon/:id"],
   snapshot: ["get", "/anlik/:projeksiyon"],
+  refresh: ["post", "/tazele"],
   inboxCreate: ["post", "/gelen-kutusu"],
   inboxList: ["get", "/gelen-kutusu"],
   inboxGet: ["get", "/gelen-kutusu/:mesajId"],
@@ -91,6 +93,8 @@ export function createApi(c: ApiClient) {
     list: (projeksiyon: string, p: ListParams = {}) => c.get<Page<ProjectionRecord>>(pathOf("list", { projeksiyon }), q(p)),
     record: (projeksiyon: string, id: string) => c.get<ProjectionRecord>(pathOf("record", { projeksiyon, id })),
     snapshot: (projeksiyon: string) => c.get<Snapshot>(pathOf("snapshot", { projeksiyon })),
+    /** Ekran açılınca `ozet` zili (S47) — içerik taşımaz; aralığa saygı `lib/refresh.ts`te. */
+    refresh: () => c.post<SnapshotRefresh>(pathOf("refresh"), {}),
     inboxCreate: (mesajId: string, tur: InboxItemKind, govde: OrderMessageBody | CustomerMessageBody) =>
       c.post<InboxItem>(pathOf("inboxCreate"), { mesajId, tur, govde }),
     inboxList: (p: { durum?: InboxStatus; imlec?: string; limit?: number } = {}) => c.get<Page<InboxItem>>(pathOf("inboxList"), p),

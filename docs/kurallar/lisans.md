@@ -74,7 +74,7 @@
 
 ### Kararlar
 
-- **[ÇEKİRDEK]** DR devralımında ana kurulum kimliği isteğe bağlıdır: verilmezse satıcı tesisin TEK etkin ÜRETİM kurulumunu çıkarır, 0 ya da birden çok ise 409 `DR_ANA_BELIRSIZ` döner (yanıtı kaybolan yeniden deneme bu DR'nin devraldığı anayı bulur). · bekçi: `satici test_tasima_dr (§4i · §5c · §5d) · Senaryo L13` <sub>(arşiv:2026-09-30 Faz 2d yönetici kararı)</sub>
+- **[ÇEKİRDEK]** DR devralımında ana kurulum kimliği isteğe bağlıdır: verilmezse satıcı tesisin TEK etkin ÜRETİM kurulumunu çıkarır, 0 ya da birden çok ise 409 `DR_ANA_BELIRSIZ` döner (yanıtı kaybolan yeniden deneme bu DR'nin devraldığı anayı bulur); panel formu da alanı isteğe bağlı sunar, ret gelince alanı ister. · bekçi: `satici test_tasima_dr (§4i · §5c · §5d) · Senaryo L13 · Electron LicenseTransferCard.test.tsx` <sub>(arşiv:2026-09-30 Faz 2d yönetici kararı)</sub>
 - **[ÇEKİRDEK]** Geri sayımı 7 günden kısa K3 AĞIR yaptırımdır (K4 gibi): yalnız yönetici uygular/planlar/kaldırır ve lisans numarasıyla ikinci onay ister; planlı K3 ile taksit planının kısıtlama günü de aynı kapıdan geçer, ağırlık yazım anında satıra (`agir`) donar. · bekçi: `test_portal_yaptirim (§5 kısa K3 ağır)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Bayi tavanı modül ⊆ · sınıf ⊆ · kurulum adedi · kanal ⊆ · kalıcı izni (varsayılan HAYIR) · bakım ay tavanı (varsayılan 12) ile bağlar; denetim imzadan önce ve bayi kilidi altında yeniden yapılır, tavan sürümlü defterdir. · bekçi: `test_portal_bayi_tavani (§2c kanal · §3a0/§3a1/§9 kalıcı + bakım)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Kurulum KAYITLI bir kanala bağlıdır (FK; `kod` kimliktir, değişmez, sert silinmez); kiranın `kanal.guncelSurumler`i kanal satırından dolar, bayi yalnız satıcının atadığı kanallarda kurulum açar. · bekçi: `test_portal_uclar (§1k kanal · §1e2 kira kanalı)` <sub>(arşiv:2026-09-29)</sub>
@@ -98,6 +98,7 @@
 - **[ÇEKİRDEK]** Üretim paketinde native ZORUNLUDUR (derleme sabiti `__TEKSERP_NATIVE_REQUIRED__`): zorunlu kipte TS yoluna düşülmez, ortam yolu okunmaz, test çapalı derleme reddedilir; kullanılamayan çekirdek istisna atmaz — doğrulamalar `CEKIRDEK_YOK`, bütünlük GEÇERSİZ, lisans merdiveni işler, süreç düşmez. · bekçi: `test_lisans_native_kahin (§1b · §1e · §1g · §7a)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Güven çapası native ikiliye GÖMÜLÜDÜR (= `ROOT_PUBLIC_KEYS` / `PACKAGE_PUBLIC_KEYS`); dışarıdan çapa yalnız `test-anchor` özellikli derlemede kabul edilir, paket özelliksiz derlemeyi taşır. · bekçi: `test_lisans_native_kahin (§0e gömülü çapa · §7b enjeksiyon reddi)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Parmak izi toplayıcısı iki uygulamada AYNI ham değeri okur — Windows'ta aynı PowerShell sondası (metin satır satır aynı), Linux/macOS'ta aynı dosya/komut aynı sırayla; Faz 1 kiralarının kabul edilen kümesi TS toplayıcısıyla ölçüldüğünden sapma yükseltmede parmak izini uyuşmaz yapar. · bekçi: `test_lisans_native_kahin (§0d sonda metni · §6a aynı makinede aynı özet)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Yayınlanmamış native arayüz değişiklikleri TEK ABI numarası altında birleşir (bir dal yayınlanmadan ikinci dal aynı sayıyı yeniden artırmaz): `api::ABI` = `NATIVE_ABI` ve vektörler birleşimden SONRA yeniden üretilir. · bekçi: `test_lisans_native_kahin (§0f · §2)` <sub>(arşiv:2026-09-30 I6)</sub>
 
 ## Bütünlük · derleme künyesi · filigran (Faz 2e)
 
@@ -191,3 +192,4 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-30 · Lisans entegrasyonu 4 (I5): dokuz dal tek gövdede — tek silme damgası düzeltmesi, native her zaman zorunlu, Docker künyesi imzalı, destek talebi künyesi NULL alabilir
 - 2026-09-30 · Modül şifreleme (Faz 2d): anahtar kiradan native çekirdekte, satıcı kasası, bellekte derleme, DR ana kimliği isteğe bağlı
 - 2026-09-29 · Bütünlük sertleştirmesi (Faz 2e-S): liste ayrı dosyada, node_modules + migration SQL kapsamda, FAZLA native'de, çapa paketle kalıcı, HAK'ta yeniden denetim, panel kartı
+- 2026-09-30 · Lisans + patron entegrasyonu 5 (I6): tek ABI 2, Docker künyesi 2e-S biçiminde, §14 tek liste, bildirim çıkış ağı, paketten üretici kimliği, DR ana kimliği panelde isteğe bağlı, P5 push kaydı

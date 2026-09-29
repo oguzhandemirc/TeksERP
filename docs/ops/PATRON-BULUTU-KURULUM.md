@@ -23,18 +23,19 @@ Cloudflare (proxy AÇIK) ─443─► Traefik (websecure, Origin CA *.etkiliyazi
                          patron :4620 (BIND = kenar adresi)  / web · /api · /v1 · /saglik
                          patron ◄─ ağ: …-ic (internal) ─► patron-db (PG16) ◄─ patron-yedek
                          patron ── ağ: tekserp-satici-<ortam>-ic-api (satıcının, internal) ──► satıcı :4612 /ic/v1/*
+                         patron ── ağ: tekserp-patron-uretim-cikis (internal DEĞİL, yalnız patron) ──► Expo push · web push (B5)
 ```
 
 | Konteyner | İmaj | Kullanıcı | Bellek · CPU · süreç | Ağlar |
 |---|---|---|---|---|
-| `tekserp-patron-uretim` | `tekserp-patron:<sha>` (node 24, `node dist/server.js`, web çıktısı `/uygulama/web`) | 10001 | 512 MB (yığın 320) · 0,75 · 200 | kenar (sabit IP) · ic · ic-api (sabit `PATRON_IC_IP`) |
+| `tekserp-patron-uretim` | `tekserp-patron:<sha>` (node 24, `node dist/server.js`, web çıktısı `/uygulama/web`) | 10001 | 512 MB (yığın 320) · 0,75 · 200 | kenar (sabit IP) · ic · ic-api (sabit `PATRON_IC_IP`) · cikis |
 | `tekserp-patron-uretim-db` | `postgres:16-alpine` (özetle sabit) | 70 | 384 MB (`shared_buffers` 96 MB) · 0,5 · 100 | ic |
 | `tekserp-patron-uretim-yedek` | `tekserp-patron-yedek:<sha>` (pg_dump 16 + `yedek-sifrele.cjs`) | 10001 | 128 MB · 0,25 · 50 | ic |
 | `patron-goc` (profil `goc`, tek seferlik) | `tekserp-patron:<sha>` | 10001 | 384 MB · 0,5 · 100 | ic |
 
 **Kaynak gerekçesi (VDS 2 çekirdek / 2972 MB):** mevcut tavanlar — traefik 192 · socket-proxy 64 · güncelleme 64 · satıcı 384 + 256 + 128 + tünel 64 ≈ 1,15 GB (gerçek kullanım ~150 MB, `SATICI-KURULUM.md` §12). Patronun uzun ömürlü tavanı **1 GiB** (denetim ③ ölçer) → toplam tavan ≈ 2,2 GB, işletim sistemi + Docker'a ≥ 700 MB kalır. En ağır iş fabrika paketi: `/v1/esitle` gövdesi gzip açılmış ≤ 32 MB → JSON ayrıştırma ~100–160 MB yığın; 512 MB tavan + `--max-old-space-size=320` çöp toplayıcıyı OOM öldürmesinden ÖNCE devreye sokar. CPU sınırları rezervasyon değil tavandır (sıkıştırılabilir): patron dolu yükte bile satıcıyı ve güncelleme yayınını aç bırakamaz.
 
-**Ağ kapıları:** kenar internal — patron dış dünyaya ancak Traefik'in içinden görünür, kendisi dışarı çıkamaz; Traefik bu ağa DİNAMİK adresle (`KENAR_DINAMIK_ARALIK`) katılır, patronun sabit `KENAR_IP`'si aralığın dışında (satıcı kurulumunda ölçülen "Traefik satıcının adresini kaptı" çakışması). Patron YALNIZ kenar adresinde dinler: `ic-api` ağından (satıcı ya da oraya katılan konteyner) patrona ulaşılamaz. `ic-api` satıcının ağıdır; patron oraya satıcının kaynak kapısının kabul ettiği tek `/32` ile (`PATRON_IC_IP`) katılır.
+**Ağ kapıları:** kenar internal — patron dış dünyaya ancak Traefik'in içinden görünür, kendisi dışarı çıkamaz; Traefik bu ağa DİNAMİK adresle (`KENAR_DINAMIK_ARALIK`) katılır, patronun sabit `KENAR_IP`'si aralığın dışında (satıcı kurulumunda ölçülen "Traefik satıcının adresini kaptı" çakışması). Patron YALNIZ kenar adresinde dinler: `ic-api` ağından (satıcı ya da oraya katılan konteyner) patrona ulaşılamaz. `ic-api` satıcının ağıdır; patron oraya satıcının kaynak kapısının kabul ettiği tek `/32` ile (`PATRON_IC_IP`) katılır. `cikis` (B5 bildirimleri, I6 kararı) internal OLMAYAN tek ağdır: yalnız patron katılır ve orada DİNLEMEZ (BIND = kenar adresi); DB · göç · yedek internal kalır (denetim ④). `BILDIRIM_KIPI` varsayılanı `kapali` (bugünkü davranış) — ağ açık dursa da `gercek` seçilmedikçe dışarı gönderim olmaz.
 
 **Sırlar ve roller:** üç DB rolü üç docker secret'ı (root:`SIR_GID` 0440; `SIR_GID` satıcınınkinden AYRI — patron satıcının sırrını okuyamaz, tersi de). Göç rolü (`patron_goc`, PG kümesinin sahibi) yalnız DB · `patron-goc` · yedek konteynerine bağlanır; sunucu yalnız uygulama (`patron_uygulama`) ve eşitleme (`patron_esitleme`) rollerini alır ve RLS'i atlayabilen rolle KALKMAZ. İç API belirteci satıcının dosyasının patron dizinindeki **kopyasıdır** (ortak birim yok). `patron-baslat` URL'leri secret dosyalarından kurar — `docker inspect`te parola görünmez.
 
@@ -61,6 +62,12 @@ cd Teks-Erp && npx tsx scripts/yedek-sifrele.ts anahtar-uret --ad patron --dizin
 - Anahtar birimi VDS'te SALT OKUNUR: sunucu anahtarı açılışta üretemez — yoksa açılış DURUR (fail-closed). Anahtar **kaybolursa** buluttaki bütün TOTP sırları çözülemez → her hesap davetle sıfırlanır. Bu yüzden anahtar yedek döngüsüne de girer (şifreli, §7) ve VDS dışı kopyası (USB) kullanıcıdadır.
 - Var olan dosyanın üstüne YAZILMAZ; rotasyon yeni anahtar = bütün hesapların yeniden daveti demektir (planlı iş, kullanıcı kararı).
 
+**Bildirimler `gercek` kipte açılacaksa (B5):** web push VAPID anahtar çifti anahtar biriminde ÖNCEDEN durmalıdır — birim konteynerde salt okunur, sunucu ilk açılışta üretemez. Mac'te bir kez üretilir, `patron-totp.key`le aynı dizine (600) konur ve §4 adım 3'te onunla birlikte kopyalanır (kaybı bütün web aboneliklerinin yenilenmesi demektir):
+
+```bash
+cd patron/sunucu && D=~/.tekserp/patron-uretim/anahtarlar npx tsx -e 'import("./src/push/vapid.ts").then((m) => m.VapidKeys.load(process.env.D, { create: true }))'
+```
+
 ### 2.2 İmaj
 
 ```bash
@@ -80,7 +87,7 @@ VDS'te derleme YOK, kaynak VDS'e gitmez. Web aşaması derleme makinesinin KEND�
 node deploy/patron/compose-denetle.mjs --env-file <patron .env> --satici-env <satıcının .env'i>   # 0 temiz · 1 ihlal · 2 ölçülemedi
 ```
 
-① port yayını yok · ② docker soketi yok · ③ salt okunur/yetenek yok/root değil/sınırlı + uzun ömürlü tavan ≤ 1 GiB · ④ kenar + ic internal, tek dış ağ satıcının ic-api'si ve ona yalnız `patron` · ⑤ anahtar birimi salt okunur · ⑥/⑥b aralıklar, patronun kenar adresi dinamik aralığın dışında · ⑦ Traefik yalnız patronda, kural Host + iç ad alanı dışlaması, `BIND` = kenar adresi, DB portsuz · ⑧ göç parolası sunucuya bağlı değil, ortamda düz sır yok · ⑨ satıcıyla uyum (ağ adı · `PATRON_IC_IP` · iç API adresi aynı; `SIR_GID` farklı; kenar ağı satıcının hiçbir ağıyla çakışmaz). Satıcının `.env`'i verilmezse ⑨ **ölçülemedi** (çıkış 2) — geçti sayılmaz. Not: Node `--env-file` bayrağını kendisi de okur; dosya yoksa betik açılmadan 9 ile çıkar (satıcı denetiminde de aynı).
+① port yayını yok · ② docker soketi yok · ③ salt okunur/yetenek yok/root değil/sınırlı + uzun ömürlü tavan ≤ 1 GiB · ④ kenar + ic internal, tek dış ağ satıcının ic-api'si ve ona yalnız `patron`; internal olmayan tek ağ `cikis` ve ona yalnız `patron` · ⑤ anahtar birimi salt okunur · ⑥/⑥b aralıklar, patronun kenar adresi dinamik aralığın dışında · ⑦ Traefik yalnız patronda, kural Host + iç ad alanı dışlaması, `BIND` = kenar adresi, DB portsuz · ⑧ göç parolası sunucuya bağlı değil, ortamda düz sır yok · ⑨ satıcıyla uyum (ağ adı · `PATRON_IC_IP` · iç API adresi aynı; `SIR_GID` farklı; kenar ve çıkış ağları satıcının hiçbir ağıyla çakışmaz). Satıcının `.env`'i verilmezse ⑨ **ölçülemedi** (çıkış 2) — geçti sayılmaz. Not: Node `--env-file` bayrağını kendisi de okur; dosya yoksa betik açılmadan 9 ile çıkar (satıcı denetiminde de aynı).
 
 ### 2.5 Yerel duman — imajı VDS'e götürmeden önce
 
@@ -126,7 +133,7 @@ ssh tekserp-vds 'docker version --format "{{.Server.Version}}"; docker compose v
 
    ```bash
    scp -rp ~/.tekserp/patron-uretim/anahtarlar tekserp-vds:patron-anahtar-gecici
-   ssh -t tekserp-vds 'sudo install -m 600 -o 10001 -g 10001 ~/patron-anahtar-gecici/patron-totp.key /opt/stack/apps/tekserp-patron-uretim/anahtarlar/ &&
+   ssh -t tekserp-vds 'sudo install -m 600 -o 10001 -g 10001 ~/patron-anahtar-gecici/patron-totp.key $(ls ~/patron-anahtar-gecici/patron-vapid.json 2>/dev/null) /opt/stack/apps/tekserp-patron-uretim/anahtarlar/ &&
      shred -u ~/patron-anahtar-gecici/* && rmdir ~/patron-anahtar-gecici'
    ```
 
@@ -195,7 +202,7 @@ cd Teks-Erp && npx tsx scripts/yedek-sifrele.ts coz --girdi ~/.tekserp/patron-ur
 cd /opt/stack/apps/tekserp-patron-uretim
 sudo docker compose down                                   # birim (patron DB'si) KALIR — silmek kullanıcı kararı
 # Traefik compose'undaki kenar ağı satırı KALDIRILIR (yedeği yanında), sonra:
-sudo docker network disconnect tekserp-patron-uretim-kenar traefik 2>/dev/null; sudo docker network rm tekserp-patron-uretim-kenar tekserp-patron-uretim-ic
+sudo docker network disconnect tekserp-patron-uretim-kenar traefik 2>/dev/null; sudo docker network rm tekserp-patron-uretim-kenar tekserp-patron-uretim-ic tekserp-patron-uretim-cikis
 ```
 
 `compose down` satıcının `ic-api` ağına DOKUNMAZ (external) — yalnız patronun bağlantısı düşer. DNS kaydı (kullanıcı) · `docker rmi tekserp-patron:<sha> tekserp-patron-yedek:<sha>`. Sonunda `vds-dogrula.sh` → ✅. Fabrikalar etkilenmez: bulut adresine ulaşamayan eşitleme turu sessizce bir sonraki tura kalır (veri fabrikada; bulut okuma kopyasıdır).

@@ -58,6 +58,8 @@ let lastSnapshotRoundAt = 0;
 let pendingSnapshot = false;
 let pendingReports = false;
 let lastReconcileAttemptAt = 0;
+/** Test kancası: bir sonraki tık 03:30 kapısını BİR KEZ atlar (senaryo gece de uzlaştırma koşabilsin). */
+let forceReconcileOnce = false;
 let lastPruneYmd: string | null = null;
 let status: CloudSyncStatus = { eligible: false, blockReason: null, lastRoundAt: null, lastOutcome: null, lastReconcileYmd: null };
 
@@ -140,7 +142,9 @@ export async function runCloudSyncTick(nowMs: number = Date.now()): Promise<void
     }
     // Günlük uzlaştırma (§4.4): fabrika saatiyle 03:30'dan sonra, günde bir; kalıcı damga,
     // başarısız deneme 30 dk'da bir tekrarlanır.
-    if (nowMs >= factoryMinuteOfDay(now, RECONCILE_MINUTE_OF_DAY).getTime() && nowMs - lastReconcileAttemptAt >= RECONCILE_RETRY_MS) {
+    const reconcileTime = forceReconcileOnce || nowMs >= factoryMinuteOfDay(now, RECONCILE_MINUTE_OF_DAY).getTime();
+    if (reconcileTime && nowMs - lastReconcileAttemptAt >= RECONCILE_RETRY_MS) {
+      forceReconcileOnce = false;
       const stored = await loadWatermarks();
       if (stored.get(wmKey.reconcile)?.digest !== ymd) {
         lastReconcileAttemptAt = nowMs;
@@ -227,13 +231,17 @@ export function stopCloudSync(): void {
 /** Test-only: sonraki tık aralığı beklemeden tur koşar (senaryo koşucusu; açık turu bozmaz). */
 export function __forceNextCloudSyncRoundForTests(opts: { reconcile?: boolean } = {}): void {
   lastRoundAt = 0;
-  if (opts.reconcile) lastReconcileAttemptAt = 0;
+  if (opts.reconcile) {
+    lastReconcileAttemptAt = 0;
+    forceReconcileOnce = true;
+  }
 }
 
 /** Test-only: sahte bulut taşıması + bellek durumu sıfırlama. */
 export function __configureCloudSyncForTests(p: { transport?: CloudTransport; reset?: boolean }): void {
   if (p.transport) transport = p.transport;
   if (p.reset) {
+    forceReconcileOnce = false;
     lastRoundAt = 0;
     lastHourlyAt = 0;
     lastDailyYmd = null;

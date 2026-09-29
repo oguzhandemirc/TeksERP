@@ -5,6 +5,7 @@ import { formatDateTime } from "../../../src/lib/format";
 import { catalogEntries, requestable } from "../../../src/lib/reports";
 import { useSession } from "../../../src/state/session";
 import { useRemote } from "../../../src/state/useRemote";
+import { useOpenRefresh } from "../../../src/state/useOpenRefresh";
 import { ErrorBox } from "../../../src/ui/data";
 import { Screen } from "../../../src/ui/Frame";
 import { Badge, Body, Card, Loading, Muted, Title } from "../../../src/ui/kit";
@@ -15,6 +16,7 @@ export default function Reports() {
   const router = useRouter();
   const catalog = useRemote("anlik:rapor-katalogu", () => api.snapshot("rapor-katalogu"));
   const mine = useRemote("raporlar:benim", () => api.reportList({ limit: 50 }));
+  useOpenRefresh();
   const entries = catalogEntries(catalog.data?.veri).filter((e) => requestable(e.anahtar, permissions));
   return (
     <Screen title="Raporlar" module="raporlar">

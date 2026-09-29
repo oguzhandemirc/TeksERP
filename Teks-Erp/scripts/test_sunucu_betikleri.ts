@@ -17,6 +17,7 @@
 //      `kur.ps1` prova paketini `-ProvaKabul`suz kurmaz.
 //   §5 son taslağın YAYIN GÜNÜ betikleri pakette derleniyor (`dist/tools`), paket
 //      `ilk-kurulum.ps1`i taşıyor — sunucuya repo ağacı ve `tsx` gitmez.
+//   §17 müşteri paketi (`PAKET.json`) üreticinin makine/kullanıcı adını taşımaz (derleme kaydında).
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync } from "node:fs";
@@ -476,6 +477,45 @@ for (const yol of SUNUCU_PS1) {
   check("§16e ⭐ hem KURULUM hem GERI_ALMA kayıt düşer, türler protokolün kümesinden",
     turler.includes("KURULUM") && turler.includes("GERI_ALMA") && turler.every((x) => (INSTALL_RECORD_KINDS as readonly string[]).includes(x ?? "")),
     turler.join(","));
+}
+
+// §17 — müşteri paketi üreticinin KİMLİĞİNİ taşımaz (I6 kararı b): `PAKET.json` makine/kullanıcı adı
+// taşımaz; derleme kimliği + commit + zaman kalır, üreticinin adı yalnız paketleyen makinenin derleme
+// kaydında (`~/.tekserp/derleme-kayitlari`, paket DIŞI). Kaynak ölçülür; ihlal listesi döner.
+function paketKimlikIhlalleri(paketle: string, kur: string): string[] {
+  const satir = psTara(paketle).satirlar;
+  const ih: string[] = [];
+  const bas = satir.findIndex((x) => /^\$manifest = \[ordered\]@\{/.test(x.kod));
+  const son = bas < 0 ? -1 : satir.findIndex((x, i) => i > bas && /^\}\s*$/.test(x.kod));
+  if (bas < 0 || son < 0) return ["PAKET.json manifest bloğu bulunamadı (körlük)"];
+  const manifest = satir.slice(bas, son + 1).map((x) => x.kod).join("\n");
+  const KIMLIK = /MachineName|UserName|COMPUTERNAME|USERNAME|HOSTNAME|\$env:USER\b|whoami|^\s*ureten\s*=/m;
+  if (KIMLIK.test(manifest)) ih.push("manifest üreticinin makine/kullanıcı adını taşıyor");
+  for (const alan of ["derlemeKimligi", "commit", "uretimZamani"]) {
+    if (!new RegExp(`^\\s*${alan}\\s*=`, "m").test(manifest)) ih.push(`manifestte ${alan} yok`);
+  }
+  const kayit = satir.findIndex((x) => /\.tekserp\/derleme-kayitlari/.test(x.kod));
+  const kayitYaz = satir.findIndex((x, i) => i > kayit && /Out-File \(Join-Path \$kayitDir /.test(x.kod));
+  const kimlikSatirlari = satir.map((x, i) => ({ i, k: x.kod })).filter((x) => /MachineName|UserName/.test(x.k));
+  if (kayit < 0 || kayitYaz < 0) ih.push("derleme kaydı (paket dışı) yazılmıyor");
+  else if (kimlikSatirlari.some((x) => x.i < kayit || x.i > kayitYaz)) ih.push("üreticinin adı derleme kaydı dışında kullanılıyor");
+  if (psTara(kur).satirlar.some((x) => /\$m\.ureten\b/.test(x.kod))) ih.push("kur.ps1 hâlâ `ureten` okuyor");
+  return ih;
+}
+{
+  const pk = readFileSync(join(KOK, "deploy/paketle.ps1"), "utf8");
+  const kr = readFileSync(join(KOK, "deploy/kur.ps1"), "utf8");
+  const ih = paketKimlikIhlalleri(pk, kr);
+  check("§17a ⭐ PAKET.json üreticinin kimliğini taşımaz; derleme kimliği + commit + zaman kalır, ad yalnız derleme kaydında", ih.length === 0, ih.join(" | ") || "temiz");
+  const sondalar: Array<[string, string, string]> = [
+    ["manifeste ureten geri", pk.replace(/^(\s*derlemeKimligi\s*= \$derlemeKimligi)/m, '$1\r\n  ureten = "$([System.Environment]::MachineName)"'), kr],
+    ["derleme kaydı silindi", pk.replace(/\.tekserp\/derleme-kayitlari/g, ".tekserp/baska"), kr],
+    ["kur.ps1 ureten basar", pk, kr.replace("derleme $($m.derlemeKimligi)", "$($m.ureten)")],
+  ];
+  for (const [ad, p2, k2] of sondalar) {
+    const uygulandi = p2 !== pk || k2 !== kr;
+    check(`§17 sonda: ${ad} → kırmızı`, uygulandi && paketKimlikIhlalleri(p2, k2).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

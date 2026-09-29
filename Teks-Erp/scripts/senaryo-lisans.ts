@@ -163,6 +163,18 @@ async function adim(no: string, baslik: string, fn: (a: Adim) => Promise<void>):
   sonuclar.push({ no, baslik, sonuc, kanit: a.kanit, neden: a.kismiNedeni, ms: Date.now() - t0 });
 }
 
+/** Satıcı yanıt gövdesindeki kira JWS'inin `kiraId`si (imza denetlenmez — yalnız zincir karşılaştırması için). */
+function kiraIdYanittan(yanit: string): string | null {
+  try {
+    const kira: unknown = (JSON.parse(yanit) as { kira?: unknown }).kira;
+    if (typeof kira !== "string") return null;
+    const yuk = JSON.parse(Buffer.from(kira.split(".")[1] ?? "", "base64url").toString("utf8")) as { kiraId?: unknown };
+    return typeof yuk.kiraId === "string" ? yuk.kiraId : null;
+  } catch {
+    return null;
+  }
+}
+
 const ozet = (y: Yanit): string => `${y.status}${y.kod ? ` ${y.kod}` : ""}`;
 
 // ---------------------------------------------------------------- hedef kapısı
@@ -463,6 +475,7 @@ async function main(): Promise<number> {
 
     // ============================================================ L3
     await adim("L3", "yoklama kirayı yeniler; gövde allowlist dışı anahtar taşımaz", async (a) => {
+      const n0 = A.aktarici.kayitlar.length;
       const once = (await A.istemci.detay()).kira?.kiraId;
       const y = await A.istemci.yokla();
       const d = await A.istemci.detay();
@@ -476,7 +489,12 @@ async function main(): Promise<number> {
       const metin = kayit?.govde ?? "";
       const sizinti = ["admin", A.lisansDizini, dbAdi(anaUrl), hz.yonetici.kullaniciAdi].filter((s) => metin.includes(s));
       a.kontrol("gövdede kullanıcı adı / dosya yolu / DB adı YOK", sizinti.length === 0, sizinti.join(",") || "temiz");
-      a.kontrol("kira zinciri: gövdedeki sonKiraId önceki kira", govde.sonKiraId === once);
+      // Zincir: gövdenin sonKiraId'si bu istekten ÖNCEKİ son kiradır. Etkinleştirmenin dürttüğü arka plan
+      // yoklaması `once` okunduktan sonra kira yenilemiş olabilir — o zaman beklenen onun kirasıdır (yarış değil zincir).
+      const araYoklamalar = A.aktarici.kayitlar.slice(n0).filter((k) => k.yol === "/v1/yokla" && k !== kayit);
+      const araKira = araYoklamalar.length > 0 ? kiraIdYanittan(araYoklamalar[araYoklamalar.length - 1]!.yanit) : null;
+      const beklenen = araKira ?? once;
+      a.kontrol("kira zinciri: gövdedeki sonKiraId önceki kira", govde.sonKiraId === beklenen, `sonKiraId ${String(govde.sonKiraId).slice(0, 8)} · önceki ${String(beklenen).slice(0, 8)} · ara yoklama ${araYoklamalar.length}`);
     });
 
     // ============================================================ L4

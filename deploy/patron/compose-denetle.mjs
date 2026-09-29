@@ -7,7 +7,8 @@
 //   ② docker soketi hiçbir servise bağlı değil
 //   ③ her servis: salt okunur kök FS · cap_drop ALL · no-new-privileges · root olmayan kullanıcı ·
 //      bellek + CPU + süreç sınırı; uzun ömürlü servislerin bellek tavanı toplamı ≤ 1 GiB (VDS 3 GB)
-//   ④ kenar + ic internal; TEK dış ağ satıcının ic-api'si ve ona yalnız `patron` katılır (`web` yok)
+//   ④ kenar + ic internal; TEK dış ağ satıcının ic-api'si ve ona yalnız `patron` katılır (`web` yok);
+//      compose'un kurduğu internal OLMAYAN tek ağ `cikis` (B5 bildirim çıkışı) ve ona YALNIZ `patron` katılır
 //   ⑤ anahtar birimi her bağlandığı yerde salt okunur
 //   ⑥ köprü ağları 100.64/10 ve 127/8 DIŞINDA · ⑥b kenarda dinamik aralık alt ağda, patronun sabit
 //      adresi aralığın DIŞINDA (Traefik patronun adresini kapamasın)
@@ -16,7 +17,7 @@
 //   ⑧ sırlar: göç parolası sunucuya BAĞLANMAZ (yalnız DB · göç · yedek); çalışma parolaları yalnız
 //      sunucu + göç; iç API belirteci yalnız sunucu; ortamda düz parola/belirteç yok
 //   ⑨ SATICIYLA UYUM (--satici-env): ic-api ağ adı, satıcı iç adresi ve PATRON_IC_IP satıcınınkiyle AYNI;
-//      SIR_GID satıcınınkinden FARKLI; patronun kenar ağı satıcının hiçbir ağıyla çakışmaz
+//      SIR_GID satıcınınkinden FARKLI; patronun kenar ve çıkış ağları satıcının hiçbir ağıyla çakışmaz
 //
 // Kullanım: node deploy/patron/compose-denetle.mjs --env-file <.env> --satici-env <satıcının .env'i> [-f <compose> ...]
 // Çıkış: 0 temiz · 1 ihlal · 2 ölçülemedi (docker yok / config çözülemedi / satıcı .env'i yok).
@@ -143,6 +144,11 @@ const disAglar = Object.entries(aglar).filter(([, n]) => n.external).map(([a]) =
 kontrol("④ tek dış ağ satıcının ic-api'si (tekserp-satici-<ortam>-ic-api)", JSON.stringify(disAglar) === '["ic-api"]' && /^tekserp-satici-[a-z0-9]+-ic-api$/.test(aglar["ic-api"]?.name ?? ""), `${disAglar.join(", ") || "YOK"} · ${aglar["ic-api"]?.name ?? "YOK"}`);
 const disaKatilan = servisler.filter(([, s]) => Object.keys(s.networks ?? {}).some((n) => !(n in aglar) || (aglar[n].external && !(n === "ic-api" && s === patron)))).map(([a]) => a);
 kontrol("④ dış ağa yalnız `patron` katılır; tanımsız (`web` dahil) ağ yok", disaKatilan.length === 0, disaKatilan.join(", "));
+// Bildirim çıkışı (B5): internal olmayan TEK ağ `cikis`tir; DB · göç · yedek dışarı çıkamaz.
+const acikAglar = Object.entries(aglar).filter(([, n]) => !n.external && n.internal !== true).map(([a]) => a);
+kontrol("④ internal OLMAYAN tek ağ `cikis` (bildirim çıkışı)", JSON.stringify(acikAglar) === '["cikis"]', acikAglar.join(", ") || "YOK");
+const cikisaKatilan = servisler.filter(([, s]) => "cikis" in (s.networks ?? {})).map(([a]) => a);
+kontrol("④ `cikis`e YALNIZ `patron` katılır (DB · göç · yedek internal kalır)", JSON.stringify(cikisaKatilan) === '["patron"]', cikisaKatilan.join(", ") || "hiçbiri");
 
 // ⑤ anahtar birimi
 for (const [ad, s] of servisler) {
@@ -204,6 +210,9 @@ if (!saticiEnv) {
   kontrol("⑨ SIR_GID satıcınınkinden FARKLI (sır grubu ortak değil)", !!s.SIR_GID && String(gid) !== String(s.SIR_GID), `patron ${gid} · satıcı ${s.SIR_GID ?? "YOK"}`);
   const cakisan = ["KENAR_AGI", "TAILNET_AGI", "IC_API_AGI"].filter((k) => s[k] && kc.subnet && cakisir(kc.subnet, s[k]));
   kontrol("⑨ patronun kenar ağı satıcının hiçbir ağıyla çakışmaz", !!kc.subnet && cakisan.length === 0, cakisan.join(", "));
+  const cc = aglar.cikis?.ipam?.config?.[0]?.subnet;
+  const cikisCakisan = ["KENAR_AGI", "TAILNET_AGI", "IC_API_AGI"].filter((k) => s[k] && cc && cakisir(cc, s[k]));
+  kontrol("⑨ patronun çıkış ağı satıcının hiçbir ağıyla ve kenarla çakışmaz", !!cc && cikisCakisan.length === 0 && !(kc.subnet && cakisir(cc, kc.subnet)), cikisCakisan.join(", ") || cc || "YOK");
 }
 
 console.log(`\n=== ${gecti} geçti, ${ihlal} ihlal${olculemedi ? `, ${olculemedi} ölçülemedi` : ""} ===`);
