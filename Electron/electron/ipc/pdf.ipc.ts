@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from "electron";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { showSaveDialogFor, showOpenDialogFor } from "./dialog-window.js";
+import { applyPdfLicenseMeta, sanitizePdfLicenseMeta, type PdfLicenseMeta } from "./pdf-metadata.js";
 import type {
   PdfSaveOpts,
   PdfSaveResult,
@@ -21,7 +22,10 @@ function safeFileName(name: string): string {
 // açık, geri kalan yerleşim belgenin kendi CSS'inden gelir.
 // =============================================================================
 
-async function htmlToPdf(html: string): Promise<Buffer> {
+/** Lisans filigranı (renderer lisans durumundan bildirir); main süreç ömrü boyunca bellekte. */
+let licenseMeta: PdfLicenseMeta | null = null;
+
+async function htmlToPdf(html: string): Promise<Uint8Array> {
   const win = new BrowserWindow({
     show: false,
     webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, nodeIntegration: false },
@@ -30,17 +34,22 @@ async function htmlToPdf(html: string): Promise<Buffer> {
     await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
     // Görsellerin (logo/QR data-uri) yerleşmesi için kısa bekleme.
     await new Promise((r) => setTimeout(r, 250));
-    return await win.webContents.printToPDF({
+    const pdf = await win.webContents.printToPDF({
       printBackground: true,
       // Kenar boşluğu belgenin kendi @page kuralından gelsin (0 = belge yönetir).
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
     });
+    return await applyPdfLicenseMeta(pdf, licenseMeta);
   } finally {
     win.destroy();
   }
 }
 
 export function registerPdfIpc(): void {
+  ipcMain.handle("pdf:setLicenseMeta", (_e, meta: unknown): void => {
+    licenseMeta = sanitizePdfLicenseMeta(meta);
+  });
+
   ipcMain.handle("pdf:save", async (e, opts: PdfSaveOpts): Promise<PdfSaveResult> => {
     try {
       const { canceled, filePath } = await showSaveDialogFor(e, {

@@ -9,6 +9,7 @@ import type {
   ScaleReadOpts,
   PdfSaveOpts,
   PdfSaveBatchOpts,
+  PdfLicenseMetaInput,
   FilesSaveBatchOpts,
   FileSaveOpts,
   UpdateStatus,
@@ -73,6 +74,7 @@ const api: ApiBridge = {
   pdf: {
     save: (opts: PdfSaveOpts) => ipcRenderer.invoke("pdf:save", opts),
     saveBatch: (opts: PdfSaveBatchOpts) => ipcRenderer.invoke("pdf:saveBatch", opts),
+    setLicenseMeta: (meta: PdfLicenseMetaInput | null) => ipcRenderer.invoke("pdf:setLicenseMeta", meta),
   },
   files: {
     save: (opts: FileSaveOpts) => ipcRenderer.invoke("files:save", opts),

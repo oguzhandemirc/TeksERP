@@ -381,8 +381,10 @@ async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
     check("§7a zorunlu kip paket yolundaki ÜRETİM derlemesini kabul eder", !zorunlu.status.kunye.testCapasi && zorunlu.status.dosya === paketDosyasi, path.relative(TEKS, zorunlu.status.dosya));
   } else {
     const neden = "neden" in zorunlu.status ? zorunlu.status.neden : "";
-    const beklenen = existsSync(paketDosyasi) ? "TEST_DERLEMESI" : "DOSYA_YOK";
-    check(`§7a zorunlu kip TS'e DÜŞMEZ — paket yolunda ${beklenen === "DOSYA_YOK" ? "dosya yok" : "test derlemesi"} → ${beklenen}`, zorunlu.status.kaynak === "yok" && neden === beklenen, neden);
+    // `.node` varsa açılmadan ÖNCE imzalı listeye bakılır (Teks-Erp kökünde liste yok → LISTE_YOK).
+    const listeVar = existsSync(path.join(TEKS, "butunluk.jws"));
+    const beklenen = !existsSync(paketDosyasi) ? "DOSYA_YOK" : listeVar ? "TEST_DERLEMESI" : "LISTE_YOK";
+    check(`§7a zorunlu kip TS'e DÜŞMEZ — paket yolunda ${beklenen === "DOSYA_YOK" ? "dosya yok" : beklenen === "LISTE_YOK" ? "imzalı liste yok" : "test derlemesi"} → ${beklenen}`, zorunlu.status.kaynak === "yok" && neden === beklenen, neden);
   }
 
   if (!kunye.testCapasi) {

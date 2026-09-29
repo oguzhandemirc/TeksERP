@@ -80,7 +80,12 @@ param(
   [switch]$Korumali,
   # Korumali paketin hedef platformu (bayt kodu kilidi). Bugun yalniz win-x64
   # sahaya cikiyor; linux-x64 Docker yapiti ayri dilim (2f).
-  [ValidateSet("win-x64", "linux-x64")][string]$Hedef = "win-x64")
+  [ValidateSet("win-x64", "linux-x64")][string]$Hedef = "win-x64",
+  # Korumali paketin filigranina girecek kurulum kimligi (UUID; lisans kimligi). Opsiyonel.
+  [string]$Kurulum,
+  # Native lisans cekirdegi (URETIM derlemesi, test capasiz). Verilmezse
+  # Teks-Erp\native\lisans-cekirdek\dist-uretim\<dosya> (CI/cargo-xwin ciktisi).
+  [string]$NativeYol)
 $ErrorActionPreference = "Stop"
 
 function Fail($m) { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; exit 1 }
@@ -240,7 +245,11 @@ KORUMALI paket .jsc'yi HEDEF platformda uretir: '$Hedef' bu hostta ($($PSVersion
   Write-Host "  runtime     : $rtAlt (paketin kendi Node'u - .jsc BUNUNLA uretilir + acilir)"
   # build-korumali: dist\server.js (KUCUK YUKLEYICI) + dist\server.jsc (bayt kodu) +
   # dist\server-kunye.json (V8/platform/mimari kapisi). Kaynak haritasi REPO DISI arsive.
-  & $runtimeNode (Join-Path $proj "scripts\build-korumali.mjs") --hedef=$Hedef --cikti="$proj\dist"
+  # Filigran (Faz 2e): musteri + kurulum kimligi bayt kodu sabitine ve derleme kunyesine girer.
+  $filigranArg = @()
+  if ($Musteri) { $filigranArg += "--musteri=$Musteri" }
+  if ($Kurulum) { $filigranArg += "--kurulum=$Kurulum" }
+  & $runtimeNode (Join-Path $proj "scripts\build-korumali.mjs") --hedef=$Hedef --cikti="$proj\dist" @filigranArg
   if ($LASTEXITCODE -ne 0) { Fail "KORUMALI DERLEME BASARISIZ - paket uretilmedi (runtime Node ile)." }
   if (-not (Test-Path "$proj\dist\server.js"))  { Fail "dist\server.js (yukleyici) yok - build-korumali bozuk." }
   if (-not (Test-Path "$proj\dist\server.jsc")) { Fail "dist\server.jsc (bayt kodu) yok - host hedefe uymadi." }
@@ -348,6 +357,17 @@ if ($Korumali) {
   $rtAlt = if ($Hedef -eq "win-x64") { "runtime\node.exe" } else { "runtime\bin\node" }
   if (-not (Test-Path (Join-Path $stage $rtAlt))) { Fail "runtime ikilisi sahnede yok: $rtAlt (build adiminda inmeliydi)" }
   Write-Host "  runtime     : $rtAlt (paketin kendi Node'u - pakette)"
+  # Native lisans cekirdegi (Faz 2e): paket duzeni app\native\<dosya>; korumali derleme onu
+  # ZORUNLU kilar (TS'e dusulmez). Yoksa paket URETILMEZ - native'siz korumali paket her
+  # dogrulamayi CEKIRDEK_YOK ile dusururdu.
+  $natAd = if ($Hedef -eq "win-x64") { "lisans-cekirdek.win32-x64-msvc.node" } else { "lisans-cekirdek.linux-x64-gnu.node" }
+  $natKaynak = if ($NativeYol) { $NativeYol } else { Join-Path $proj "native\lisans-cekirdek\dist-uretim\$natAd" }
+  if (-not (Test-Path $natKaynak)) {
+    Fail "native lisans cekirdegi yok: $natKaynak (URETIM derlemesi: npm run derle:win:uretim ya da CI korumali-paket.yml; ya da -NativeYol)"
+  }
+  New-Item -ItemType Directory -Force (Join-Path $stage "native") | Out-Null
+  Copy-Item $natKaynak (Join-Path $stage "native\$natAd")
+  Write-Host "  native      : native\$natAd (lisans cekirdegi - zorunlu kip)"
 }
 
 # cwd'den okunan varliklar
@@ -511,6 +531,8 @@ $manifest = [ordered]@{
   korumali        = [bool]$Korumali
   korumaHedef     = if ($Korumali) { $Hedef } else { $null }
   runtimeNodeSurumu = $runtimeNodeSurumu
+  # Imzali dosya listesi (butunluk.jws) satici Mac'inde eklenir; imza adimi bu alani doldurur.
+  butunlukKid     = $null
   uretimZamani    = (Get-Date).ToString("s")
   # Makine/kullanici adi: Windows'ta COMPUTERNAME+USERNAME, POSIX'te HOSTNAME+USER.
   # Damga bilgi amacli; cozulemezse "?" yazilir, paketleme DURMAZ.
@@ -635,6 +657,11 @@ Write-Host "  $zip"
 Write-Host "  $zipMB MB  |  commit $commit  |  $migSayi migration"
 Write-Host "  SHA256: $sha"
 Write-Host ""
+if ($Korumali) {
+  Write-Host "  ! KORUMALI paket IMZASIZ - kur.ps1 imzasiz korumali paketi REDDEDER." -ForegroundColor Yellow
+  Write-Host "    Satici Mac'inde imzala (anahtar CI'a/pakete girmez):" -ForegroundColor Yellow
+  Write-Host "      npx tsx Teks-Erp/scripts/build-korumali-imza.ts zip --zip=<bu zip> --anahtar=<PAKET anahtari> --surum-belgesi=<surum belgesi>" -ForegroundColor Yellow
+}
 Write-Host "  Sunucuya kopyala, sonra YONETICI PowerShell'de (yurutme ilkesi: -ExecutionPolicy Bypass):"
 Write-Host "    powershell -NoProfile -ExecutionPolicy Bypass -File C:\TeksERP\kur.ps1 -Paket <zip yolu>"
 Write-Host "================================================================"

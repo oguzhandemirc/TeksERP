@@ -83,6 +83,8 @@ export function rewriteRecord(g: {
   readonly clockConsistent: boolean;
   readonly ledgerHighWaterMs: number | null;
   readonly skewSeconds: number | null;
+  /** Kayda yazılacak bütünlük çapası (ISO); `undefined` = kayıttakini koru. */
+  readonly integrityFirst?: string | null;
   readonly nowMs: number;
 }): void {
   const r = g.record;
@@ -97,6 +99,7 @@ export function rewriteRecord(g: {
     kapaliMs: (r.kapaliMs ?? 0) + g.a.creditMs,
     duvarTutarli: g.clockConsistent,
     saticiSapmaSn: g.skewSeconds,
+    butunlukIlk: g.integrityFirst === undefined ? (r.butunlukIlk ?? null) : g.integrityFirst,
   });
 }
 
@@ -110,6 +113,7 @@ export function beginRecordForLease(g: {
   readonly licenseId: string;
   readonly ledgerHighWaterMs: number | null;
   readonly skewSeconds: number | null;
+  readonly integrityFirst?: string | null;
   readonly nowMs: number;
 }): void {
   const prev = recordFor(currentAccumulation(), g.licenseId);
@@ -129,6 +133,8 @@ export function beginRecordForLease(g: {
     // Kabul anında duvar saati satıcının İMZALI saatinden ileri kaçmışsa kayıt kredi vermez.
     duvarTutarli: g.nowMs - isoToMs(g.lease.sunucuSaati) <= CLOCK_SKEW_MS,
     saticiSapmaSn: g.skewSeconds,
+    // Yeni kira bütünlük çapasını SIFIRLAMAZ (kira yenilemek ek süreyi uzatmasın).
+    butunlukIlk: g.integrityFirst === undefined ? (prev?.butunlukIlk ?? null) : g.integrityFirst,
   });
 }
 

@@ -10,11 +10,10 @@ import {
   type StateTier,
   type MatchResult,
   type Validity,
-  type EntitlementDoc,
   type LeaseDoc,
   type LicenseMode,
-  type ProtocolErrorCode,
 } from "./protocol";
+import type { CoreErrorCode } from "./license-core";
 import { evaluateClock, type ClockResult, type EntitlementPin, type SanctionSnapshot } from "./saat";
 
 export const REASON_CODES = [
@@ -108,7 +107,7 @@ export type DocResult<T> =
   | { readonly status: "YOK" }
   /** Dosya var ama okunamadı: YOK değildir (silmekle eşit sayılmaz), ölçülemedi bulgusu `depoOkunamadi`dan gelir. */
   | { readonly status: "OKUNAMADI" }
-  | { readonly status: "GECERSIZ"; readonly code: ProtocolErrorCode }
+  | { readonly status: "GECERSIZ"; readonly code: CoreErrorCode }
   | { readonly status: "GECERLI"; readonly value: T };
 
 export type IntegrityStatus = "GECERLI" | "GECERSIZ" | "OLCULEMEDI" | "KAPSAM_DISI";
@@ -130,6 +129,8 @@ export interface LicenseStateInput {
   };
   readonly parmakIziEslesme: MatchResult;
   readonly butunluk: IntegrityStatus;
+  /** Uyuşmazlığın İLK görüldüğü an (imzalı durum kaydı ya da bu süreç); ek süre buradan sayılır. */
+  readonly butunlukIlkUyusmazlikMs?: number | null;
   readonly derlemeTarihiMs: number | null;
   /** DB'den türeyen (dosya silmekle yenilenemeyen) ilk açılış anı; bilinmiyorsa null. */
   readonly ilkAcilisMs: number | null;
@@ -163,15 +164,14 @@ export function sanctionSnapshotOf(lease: LeaseDoc): SanctionSnapshot {
 }
 
 export const DEFAULT_GRACE_DAYS = 30;
-const MAINTENANCE_WARNING_DAYS = 30;
 
 export function remainingDays(targetMs: number, nowMs: number): number {
   return Math.max(0, Math.ceil((targetMs - nowMs) / DAY_MS));
 }
 
-const warnBanner = (text: string): Banner => ({ metin: text, ton: "uyari" });
-const dangerBanner = (text: string): Banner => ({ metin: text, ton: "tehlike" });
-const UNVERIFIED_BANNER = warnBanner("Lisans doğrulanamadı; sistem yöneticinize ya da destek hattına başvurun.");
+export const warnBanner = (text: string): Banner => ({ metin: text, ton: "uyari" });
+export const dangerBanner = (text: string): Banner => ({ metin: text, ton: "tehlike" });
+export const UNVERIFIED_BANNER = warnBanner("Lisans doğrulanamadı; sistem yöneticinize ya da destek hattına başvurun.");
 export const UNMEASURED_BANNER = warnBanner("Lisans durumu şu an ölçülemiyor; üretim etkilenmez, bağlantı kurulunca düzelir.");
 
 export function evaluateEntitlement(g: LicenseStateInput, out: Finding[]): VerifiedEntitlement | null {
@@ -237,8 +237,6 @@ export function evaluateMeasurements(g: LicenseStateInput, lease: LeaseDoc | nul
   // Kabul edilmiş küme kirada; kira yoksa karşılaştıracak bir şey de yok.
   if (lease && g.parmakIziEslesme === "ESLESMEDI") out.push({ code: "PARMAK_IZI_UYUSMAZ", tier: "UYARI", banner: UNVERIFIED_BANNER });
   if (lease && g.parmakIziEslesme === "OLCULEMEDI") out.push({ code: "PARMAK_IZI_OLCULEMEDI", tier: "UYARI", banner: UNMEASURED_BANNER });
-  if (g.butunluk === "GECERSIZ") out.push({ code: "BUTUNLUK_GECERSIZ", tier: "UYARI", banner: UNVERIFIED_BANNER });
-  if (g.butunluk === "OLCULEMEDI") out.push({ code: "BUTUNLUK_OLCULEMEDI", tier: "UYARI", banner: UNMEASURED_BANNER });
 }
 
 interface TimeAnchor {
@@ -326,24 +324,4 @@ export function evaluateSanction(y: SanctionSnapshot, nowMs: number, out: Findin
     default:
       return null;
   }
-}
-
-/** Bakım sonu: bakım içinde çıkmış sürüm durmaz (yalnız güncelleme kesilir); bakım SONRASI çıkmış sürüm ek süreye düşer. */
-export function evaluateMaintenance(g: LicenseStateInput, entitlement: EntitlementDoc, nowMs: number, out: Finding[]): void {
-  const maintenanceEnd = isoToMs(entitlement.bakimBitis);
-  if (g.derlemeTarihiMs === null) out.push({ code: "DERLEME_TARIHI_YOK" });
-  else if (g.derlemeTarihiMs > maintenanceEnd) {
-    const end = g.derlemeTarihiMs + DEFAULT_GRACE_DAYS * DAY_MS;
-    const text = "Bu sürüm bakım süreniz bittikten sonra çıktı";
-    if (nowMs < end) {
-      const left = remainingDays(end, nowMs);
-      out.push({ code: "BAKIM_IHLALI", tier: "EK_SURE", daysLeft: left, banner: warnBanner(`${text}; ${left} gün içinde bakımı yenileyin ya da hak ettiğiniz sürüme dönün.`) });
-    } else if (g.sonYoklamaBasarisizMi) {
-      out.push({ code: "BAKIM_IHLALI", tier: "KISITLI", banner: dangerBanner(`${text}: program kısıtlı kipte.`) });
-    } else {
-      out.push({ code: "BAKIM_IHLALI", tier: "EK_SURE", daysLeft: 0, banner: warnBanner(`${text}; bakımı yenileyin.`) });
-    }
-  }
-  if (nowMs > maintenanceEnd) out.push({ code: "BAKIM_BITTI" });
-  else if (maintenanceEnd - nowMs <= MAINTENANCE_WARNING_DAYS * DAY_MS) out.push({ code: "BAKIM_BITIYOR", detail: String(remainingDays(maintenanceEnd, nowMs)) });
 }
