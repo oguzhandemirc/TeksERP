@@ -193,7 +193,14 @@ async function main(): Promise<void> {
     const son = kopya ? await kopyaBekle(kopya) : null;
     adim("Y2f kopyaya geri yükleme parolayla çözer, kopya DOĞRULANMIŞ hazır",
       k1.status === 202 && son?.phase === "ready", `${k1.status} ${kopya} · ${String(son?.message ?? k1.body.message).slice(0, 100)}`);
-    adim("Y2g geçici çözülmüş kopya klasörde KALMADI", !fs.readdirSync(D.backups).some((f) => f.includes(".coz-")));
+    // İş "hazır"ı `withDecryptedCopy`nin finally'sindeki silmeden ÖNCE yayımlar: geçici dosya birkaç ms
+    // daha durabilir. Ölçülen "kalmadı"dır, "hazır anında yoktu" değil — sınırlı bekleme.
+    let cozKaldi = true;
+    for (let i = 0; i < 20 && cozKaldi; i++) {
+      cozKaldi = fs.readdirSync(D.backups).some((f) => f.includes(".coz-"));
+      if (cozKaldi) await new Promise((res) => setTimeout(res, 100));
+    }
+    adim("Y2g geçici çözülmüş kopya klasörde KALMADI", !cozKaldi);
 
     // ── Y3 ──────────────────────────────────────────────────────────────────
     console.log("\nY3 — offsite dosyası: sarılı yerel anahtar parolasız açamaz, müşteri anahtarı açar");

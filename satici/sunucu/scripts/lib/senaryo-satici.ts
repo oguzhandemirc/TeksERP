@@ -3,7 +3,8 @@
 // (`rootDir` sınırı) — bu dosyayı satıcı kökünde ayrı süreç olarak koşturur, sonucu tek JSON
 // satırından okur. Hedef DB kapısı (yalnız `_test`) her komutta ilk iştir.
 //   hazirla  → anahtar dizini (parolalı kökler, ALT, İNDİRME, çapa) + portal yöneticisi
-//   temizle  → senaryonun kurulumları (kurulum kimliğiyle) · bayileri · portal kullanıcıları · anahtar künyesi
+//   temizle  → senaryonun kurulumları (kurulum kimliğiyle) · bayileri · portal kullanıcıları · anahtar künyesi ·
+//              kanalı (kurulumsuz kaldıysa)
 // Çıktı `SENARYO_JSON <json>` satırıdır; sırlar (parola, TOTP) yalnız bu boruya yazılır, loga değil.
 import { anahtarOrtamiKur, bayiKurulumlari, hedefDbKapisi, kapat, portalKullaniciAc, temizleKurulumlar, temizlePortal, TEST_KOK_PAROLASI } from "./test-ortam";
 
@@ -41,7 +42,7 @@ async function cleanup(): Promise<void> {
   const rows = installationIds.length > 0 ? await prisma.kurulum.findMany({ where: { kurulumId: { in: installationIds } }, select: { id: true } }) : [];
   const dbIds = [...new Set([...rows.map((r) => r.id), ...(await bayiKurulumlari([...dealers]))])];
   await temizleKurulumlar(dbIds, flag("kidler"));
-  await temizlePortal({ kullanicilar: flag("kullanicilar"), bayiler: [...dealers] });
+  await temizlePortal({ kullanicilar: flag("kullanicilar"), bayiler: [...dealers], kanallar: flag("kanallar") });
   emit({ kurulum: dbIds.length, bayi: dealers.size });
 }
 

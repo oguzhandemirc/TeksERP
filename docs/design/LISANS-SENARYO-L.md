@@ -2,6 +2,7 @@
 
 > **Durum:** 2026-09-29, W2 dalgası, `lisans/entegrasyon` (W1 dilimleri inmiş hâli) + bu dilimin düzeltmesi, dal `lisans/senaryo-l`. Plan §8 "Senaryo L" adımları SIRAYLA koşuldu.
 > **Sonuç:** 26 yeşil · 3 kısmi (L15, L18, L25) · 0 kırmızı. Senaryo Y aynı komutta 23/0 (+1 beyanlı atlama: Y6d thinkpad-1).
+> **Entegrasyon koşumu (2026-09-29, W2 entegrasyonu):** `lisans/entegrasyon` üzerinde senaryo-l + satıcı tamamlama + portal web (1f) + hazırlık kökü + 2a ölçümü + B1 tasarımı birlikte: **aynı sonuç** — 26 yeşil · 3 kısmi (L15, L18, L25) · 0 kırmızı; Senaryo Y 23/0 (+Y6d). Koşucu iki satıcı kuralına uyarlandı (Bulgu 6).
 > **Koşucu:** `Teks-Erp/scripts/senaryo-lisans.ts` · L + Y tek komut `Teks-Erp/scripts/senaryo-ly.ts` · kural satırı `docs/kurallar/lisans.md` · arşiv notu 2026-09-29 "Senaryo L (lisans uçtan uca) koşucusu".
 
 ## Nasıl koşulur
@@ -34,7 +35,7 @@ PG_BIN_DIR=<sunucuyla aynı ana sürüm pg istemcisi> \
 
 | Adım | Sonuç | Kanıt (özet) |
 |---|---|---|
-| L1 portalda müşteri → tesis → kurulum → hak (+ kod) | ✅ | portal `/musteriler` `/tesisler` `/kurulumlar` `/kurulumlar/:id/hak` 201 · `TKS-2026-0001` doğuşta · `/haklar/:id/surum` (kök parolası) 201 sürüm 1 · kod 201 `TKS-XXXX-XXXX-XXXX` |
+| L1 portalda (kanal) → müşteri → tesis → kurulum → hak (+ kod) | ✅ | portal `/kanallar` (yoksa 201) `/musteriler` `/tesisler` `/kurulumlar` `/kurulumlar/:id/hak` 201 · `TKS-2026-0001` doğuşta · `/haklar/:id/surum` (kök parolası) 201 sürüm 1 · kod 201 `TKS-XXXX-XXXX-XXXX` |
 | L2 etkinleştirme → hak + kira, NORMAL | ✅ | `POST /api/license/etkinlestir` (küçük harf + boşluklu elle yazım) 200 · GECERLI / NORMAL / NORMAL / gözlem · parmak izi ESLESTI 3/3 · portal kurulum ETKIN + anahtar kimliği · zil bağlandı |
 | L3 yoklama kirayı yeniler; gövde allowlist | ✅ | yoklama BASARILI, yeni kira · tel üstündeki gövde `PollRequestSchema` (katı) ve `HealthSummarySchema` (katı) geçer · kullanıcı adı / `LICENSE_DIR` yolu / DB adı yok · `sonKiraId` önceki kira |
 | L4 K0 → zil → ≤ 5 sn bant | ✅ | portal K0 201 → `hesaplanan.bant.metin` = portal mesajı **124 ms** · gözlemde uygulanan bant null, `/durum.bant` null · geri alma zille yansıdı |
@@ -53,7 +54,7 @@ PG_BIN_DIR=<sunucuyla aynı ana sürüm pg istemcisi> \
 | L17 planlı eylem vadesinde K3 | ✅ | portal planlı K3 (vade +12 sn, 7 gün) BEKLIYOR · vadeden önce yaptırım yok · satıcı bakım işi UYGULANDI · fabrika (zil) UYARI + `kisitlamaKalanGun=7` · defterde planlı eyleme bağlı K3 satırı |
 | L18 bakım sonrası derleme tarihi → UYARI → EK_SURE | ⚠️ kısmi | fabrika derleme tarihi taşımıyor (`DERLEME_TARIHI_YOK`). **Neden kısmi:** imzalı derleme künyesi Faz 2e'de (`buildEnvironment.derlemeTarihi = null`, runtime `derlemeTarihiMs = null`); kural saf fonksiyonda `test_lisans_durumu §12`'de ölçülü |
 | L19 taksit | ✅ | 3 kalemli plan · vade + 15 geçen 1. kalem GECIKTI (K3), vade + 15 dolmamış 2. kalem BEKLIYOR · fabrika K3 geri sayımı 15 gün (plan vadesi geçmiş → EK_SURE) · ödeme → K3 ters kayıtla kalkar, geçerlilik 2. kalem + 15 güne uzar, fabrika kirasında görünür |
-| L20 bayi tavan içi HAK → geçerli; aşım → RED | ✅ | portal bayi + tavan 201 · gerçek CLI `anahtar.ts bayi-uret` (parolalar stdin) + anahtar bağlama · bayi (genel dinleyici) müşteri/tesis/kurulum/hak/imza 201 · fabrika E bayi imzalı HAK'la GECERLI, `hak.bayiId` = bayi · tavan dışı modül ve kurulum adedi → 409 `BAYI_TAVANI_ASILDI` |
+| L20 bayi tavan içi HAK → geçerli; aşım → RED | ✅ | portal bayi + tavan (kanal · kalıcı izni · bakım 12 ay) 201 · gerçek CLI `anahtar.ts bayi-uret` (parolalar stdin) + anahtar bağlama · bayi (genel dinleyici) müşteri/tesis/kurulum/hak/imza 201 · fabrika E bayi imzalı HAK'la GECERLI, `hak.bayiId` = bayi · tavan dışı modül ve kurulum adedi → 409 `BAYI_TAVANI_ASILDI` |
 | L21 kalıcıya çevir | ✅ | yanlış kök parolası 400 `IMZA_PAROLASI_HATALI` (sürüm artmadı) · doğru parola 201, sürüm 1 → 2 · fabrika yeni HAK'ı aldı: `kalici=true`. Parolanın argv/env'e girmediği `test_kok_parola_argv`'de |
 | L22 K1 → belirteç verilmez | ✅ | satıcı yanıtında `indirmeBelirtecleri` 0 · `GET indirme-belirteci` 403 `LICENSE_UPDATES_FROZEN` · `POST /api/colors` 201, `GET /api/orders` 200 · geri alınca belirteç 200 |
 | L23 aktarma yanıtı imzasız/kurcalı → RED | ✅ | kurcalı kira (bitiş +1 yıl) 400 `LICENSE_RESPONSE_INVALID` / `JWS_IMZA` · alg none → `JWS_ALG` · başka kurulumun (DR) imzalı yanıtı RED · aynı yanıtın dokunulmamış hâli 200 |
@@ -71,6 +72,9 @@ PG_BIN_DIR=<sunucuyla aynı ana sürüm pg istemcisi> \
 3. **[NOT] Taşıma onayı saatlik yoklamayı bekler.** Taşıma bekleyen kurulumun kirası yok → zile abone olamaz (fabrika `canConnect` kira ister, satıcı zil kimliği kayıtlı anahtar ister); onay sonrası kurulum ancak bir sonraki yoklamada (kirasız varsayılan 60 dk) ya da yöneticinin "şimdi yokla"sıyla tamamlanır. Senaryo "şimdi yokla" ile ölçtü. İyileştirme adayı: bekleyen taşımada yoklama aralığı kısa.
 4. **[NOT] Yönetici kararı (d) bu tabanda yok.** `GET /api/auth/login-methods` yanıtında `lisansDurduruldu` alanı yok (başka dilimin işi); L28 bunu `ℹ️` satırıyla not eder, alan inince kontrol eklenmeli.
 5. **[DÜZELTİLDİ — entegrasyon dalı, lisans dışı] `test_script_guards §10b` kırmızıydı.** Kendi hedefini kuran kapısız betik tavanı 1, ölçülen 2: `test_bakim_rolu.ts` (Faz 0.8) kümeye kendi kimliğiyle bağlanıp `DATABASE_URL`i yeniden kurar ama hedef kapısını çağırmıyordu. Entegrasyonda §3 küme katmanı bağlanmadan önce `hedefDbEngeli() ?? fixtureHedefEngeli()` sorar (fixture değilse ❌); `test_script_guards` 44/0.
+
+6. **[DÜZELTİLDİ — entegrasyon, koşucu] Satıcı tamamlamanın iki kuralı koşucuyu kırdı (L1 → L29 zincirleme kırmızı).** (a) Kurulum artık KAYITLI bir kanala doğar (`requireChannel`, kanal ana verisi): L1'in `senaryo-kanal`lı kurulumu `400 GOVDE_GECERSIZ` aldı, sonraki bütün adımlar ondan düştü. Koşucu L1'de kanalı portaldan açar (`GET /kanallar` → yoksa `POST /kanallar` 201); satıcı yardımcısının `temizle`si kurulumsuz kalan senaryo kanalını siler (`--kanallar`). (b) Bayi tavanı kanal listesi, kalıcı izni (varsayılan HAYIR) ve bakım ay tavanı taşır: L20'nin bayi tavanı `kanallar: [senaryo-kanal]` · `kaliciIzni: true` · `bakimAyTavani: 12` ile açılır, bayi HAK'ının bakım bitişi +330 gün (12 ayın açıkça içinde). Ürün kodu değişmedi.
+7. **[DÜZELTİLDİ — entegrasyon, Senaryo Y] Y2g aralıklı kırmızı.** Kopya işi "hazır"ı `withDecryptedCopy`nin `finally`sindeki geçici dosya silmesinden ÖNCE yayımlar; Y2g "hazır" anında klasörü okuyunca geçici `.coz-*.part` birkaç ms görülebiliyordu (4 koşumun 1'inde). Y2g artık sınırlı (≤ 2 sn) bekleyip "kalmadı"yı ölçer; ürün davranışı aynı.
 
 ## Borçlar
 

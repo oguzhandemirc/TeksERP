@@ -216,7 +216,7 @@ async function main(): Promise<number> {
 
   // Önceki koşumun artığı (çökmüş koşum) — kurulum kimliğiyle.
   const eskiKimlikler = (await Promise.all([anaUrl, drUrl, bayiUrl].map(kurulumKimligi))).filter((x): x is string => Boolean(x));
-  saticiYardimcisi(saticiEnv, ["temizle", `--kurulum-idleri=${eskiKimlikler.join(",")}`, "--bayi-adi-oneki=Senaryo L Bayi"]);
+  saticiYardimcisi(saticiEnv, ["temizle", `--kurulum-idleri=${eskiKimlikler.join(",")}`, "--bayi-adi-oneki=Senaryo L Bayi", `--kanallar=${KANAL}`]);
   const hz = saticiYardimcisi<Hazirlik>(saticiEnv, ["hazirla"]);
 
   const dunya = { kaymaMs: 0 };
@@ -328,7 +328,12 @@ async function main(): Promise<number> {
     if (opY.status !== 201) throw new Error(`operatör kullanıcısı açılamadı: ${ozet(opY)}`);
 
     // ============================================================ L1
-    await adim("L1", "portalda müşteri → tesis → kurulum → hak (+ etkinleştirme kodu)", async (a) => {
+    await adim("L1", "portalda (kanal) → müşteri → tesis → kurulum → hak (+ etkinleştirme kodu)", async (a) => {
+      // Kurulum KAYITLI bir kanala doğar (kanal ana verisi, sert silme yok): yoksa portaldan açılır.
+      const liste = await portal.istek("GET", "/kanallar");
+      const kanalVar = Array.isArray(liste.json.data) && (liste.json.data as { kod?: string }[]).some((k) => k.kod === KANAL);
+      const kn = kanalVar ? null : await portal.istek("POST", "/kanallar", { kod: KANAL, ad: "Senaryo L kanalı", tur: "uretim" });
+      a.kontrol("kanal kayıtlı (yoksa portaldan açıldı → 201)", liste.status === 200 && (kanalVar || kn?.status === 201), kanalVar ? "vardı" : kn ? ozet(kn) : "?");
       const m = await portal.istek("POST", "/musteriler", { ad: `Senaryo L Tekstil ${randomBytes(3).toString("hex")}` });
       S.musteriId = String(m.veri.id);
       a.kontrol("müşteri → 201", m.status === 201, ozet(m));
@@ -781,7 +786,7 @@ async function main(): Promise<number> {
     // ============================================================ L20
     const E = await yeniFabrika("E", bayiUrl, PARMAK_IZLERI.E);
     await adim("L20", "bayi tavan içi HAK basar → geçerli; tavan aşımı → RED", async (a) => {
-      const by = await portal.istek("POST", "/bayiler", { ad: `Senaryo L Bayi ${randomBytes(3).toString("hex")}`, tavan: { moduller: HAK_MODULLERI, siniflar: ["URETIM"], kurulumAdedi: 1 }, sebep: "Senaryo L bayi" });
+      const by = await portal.istek("POST", "/bayiler", { ad: `Senaryo L Bayi ${randomBytes(3).toString("hex")}`, tavan: { moduller: HAK_MODULLERI, siniflar: ["URETIM"], kurulumAdedi: 1, kanallar: [KANAL], kaliciIzni: true, bakimAyTavani: 12 }, sebep: "Senaryo L bayi" });
       const bayiId = String(by.veri.id);
       olusturulanlar.bayiler.push(bayiId);
       a.kontrol("portal bayi + tavan → 201", by.status === 201, ozet(by));
@@ -801,7 +806,8 @@ async function main(): Promise<number> {
       const m = await bayi.istek("POST", "/musteriler", { ad: `Senaryo L Bayi Müşterisi ${randomBytes(3).toString("hex")}` });
       const t = await bayi.istek("POST", "/tesisler", { musteriId: String(m.veri.id), ad: "Merkez" });
       const k = await bayi.istek("POST", "/kurulumlar", { tesisId: String(t.veri.id), kurulumId: I3, sinif: "URETIM", kanalKodu: KANAL });
-      const h = await bayi.istek("POST", `/kurulumlar/${String(k.veri.id)}/hak`, { moduller: HAK_MODULLERI, kalici: true, bakimBitis: msToIso(saticiSimdi() + 365 * DAY_MS) });
+      // Bakım bitişi tavanın 12 ayının açıkça içinde (sınırdaki eşitlik ay uzunluğuna göre oynar).
+      const h = await bayi.istek("POST", `/kurulumlar/${String(k.veri.id)}/hak`, { moduller: HAK_MODULLERI, kalici: true, bakimBitis: msToIso(saticiSimdi() + 330 * DAY_MS) });
       const s = await bayi.istek("POST", `/haklar/${String(h.veri.id)}/surum`, { bayiParolasi: BAYI_PAROLASI, sebep: "bayi ilk imza" });
       a.kontrol("bayi (genel dinleyici): müşteri · tesis · kurulum · hak · bayi imzası → 201", [m, t, k, h, s].every((x) => x.status === 201), [m, t, k, h, s].map(ozet).join("/"));
       const kod = await bayi.istek("POST", `/kurulumlar/${String(k.veri.id)}/etkinlestirme-kodu`, {});
@@ -1057,6 +1063,7 @@ async function main(): Promise<number> {
         `--bayiler=${olusturulanlar.bayiler.join(",")}`,
         `--kidler=${olusturulanlar.kidler.join(",")}`,
         "--bayi-adi-oneki=Senaryo L Bayi",
+        `--kanallar=${KANAL}`,
       ]);
     } catch (err) {
       console.error(`⚠️ satıcı temizliği: ${(err as Error).message}`);
