@@ -76,7 +76,10 @@ async function main(): Promise<void> {
 
     console.log("\n§2 doğru üçlü → oturum; çerez biçimi");
     const k2 = await ac("SATICI_YONETICI");
-    const giris = await portalGiris(sunucu.tailnet, "/portal/api", k2);
+    // Kod bir kez üretilir: §3a AYNI kodu yeniden oynatır (30 sn adım sınırı iki çağrı arasına düşerse
+    // yeniden hesaplanan kod sonraki adımın kodu olurdu ve kilit ölçülmezdi).
+    const ilkKod = await totpKodu(k2.sir, 0);
+    const giris = await portalGiris(sunucu.tailnet, "/portal/api", k2, { totp: ilkKod });
     kontrol("§2a ✓K doğru kullanıcı + parola + TOTP → 200", giris.status === 200 && giris.cerez !== null, `${giris.status} ${giris.kod ?? ""}`);
     const sc = giris.setCookie ?? "";
     kontrol("§2b çerez HttpOnly + SameSite=Strict + Path=/portal", /HttpOnly/.test(sc) && /SameSite=Strict/.test(sc) && /Path=\/portal(;|$)/.test(sc), sc.replace(/=[A-Za-z0-9_-]{43}/, "=…"));
@@ -88,13 +91,14 @@ async function main(): Promise<void> {
     kontrol("§2e belirteç DB'de düz değil (sha256)", oturumSatiri !== null && !giris.cerez!.includes(oturumSatiri.belirtecOzeti) && oturumSatiri.belirtecOzeti.length === 64);
 
     console.log("\n§3 tekrar oynatma kilidi");
-    const ayniKod = await totpKodu(k2.sir, 0);
-    const tekrar = await portalGiris(sunucu.tailnet, "/portal/api", k2, { totp: ayniKod });
+    const tekrar = await portalGiris(sunucu.tailnet, "/portal/api", k2, { totp: ilkKod });
     kontrol("§3a aynı adımın kodu ikinci kez → 401 (doğru parolaya rağmen)", tekrar.status === 401, `${tekrar.status}`);
     const sonraki = await portalGiris(sunucu.tailnet, "/portal/api", k2, { adimKaydir: 1 });
     kontrol("§3b ✓K SONRAKİ adımın kodu kabul → 200 (kilit adım bazlı)", sonraki.status === 200, `${sonraki.status} ${sonraki.kod ?? ""}`);
-    const saf = verifyTotp(k2.sir, await totpKodu(k2.sir, 0), { atMs: Date.now(), lastUsedStep: null });
-    const safTekrar = saf.ok ? verifyTotp(k2.sir, await totpKodu(k2.sir, 0), { atMs: Date.now(), lastUsedStep: saf.step }) : saf;
+    const an = Date.now();
+    const safKod = await totpKodu(k2.sir, 0, an);
+    const saf = verifyTotp(k2.sir, safKod, { atMs: an, lastUsedStep: null });
+    const safTekrar = saf.ok ? verifyTotp(k2.sir, safKod, { atMs: an, lastUsedStep: saf.step }) : saf;
     kontrol("§3c saf doğrulayıcı: ilk kabul, aynı adım TEKRAR", saf.ok && !safTekrar.ok && safTekrar.reason === "TEKRAR");
 
     console.log("\n§4 ardışık başarısızlık kilidi (eşik 3)");
