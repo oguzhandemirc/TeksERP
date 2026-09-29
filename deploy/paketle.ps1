@@ -59,6 +59,9 @@
 #     gosterir, `express.static` sessizce no-op olur ve kok (/) panelin YERINE
 #     durum sayfasini basar. Bu yuzden derleme basarisizsa paket URETILMEZ.
 # =============================================================================
+# PowerShell 7 SART (uc argumanli Join-Path, $IsWindows): 5.1'de npm ci'den SONRA
+# anlasilmaz hatayla duser; -Korumali Windows x64'te bile "bu hostta uretilemez" derdi.
+#Requires -Version 7.0
 [CmdletBinding()]
 param(
   [switch]$NodeModulesHaric,
