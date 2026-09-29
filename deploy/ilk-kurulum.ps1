@@ -22,6 +22,10 @@
 #   # Veritabani ZATEN varsa (elle olusturulmus): yonetici parolasi gerekmez.
 #   ... -File .\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbKullanici postgres
 #
+#   # Super OLMAYAN bakim rolu (yedek / DB kopyasi kimligi; postgres parolasi .env'e girmez):
+#   ... -File .\ilk-kurulum.ps1 -PgAyarla -BakimRolu
+#   (yonetici parolasi gerekir; mantik deploy\bakim-rolu.ps1'de - var olan kurulumda tek basina kosar)
+#
 #   # Yedek sifrelemeyi kur (istege bagli; tekrar kosmak guvenli, var olan anahtar ezilmez):
 #   ... -File .\ilk-kurulum.ps1 -YedekSifreleme -YedekMusteriAnahtarCikti E:\musteri-yedek-anahtari.txt
 #   (yerel anahtar YEDEK PAROLASIYLA sarilir - parola terminalde sorulur; musteri anahtarinin
@@ -98,13 +102,17 @@ param(
   # Musteri anahtarinin OZEL yarisinin yazilacagi dosya (USB). Verilmezse ekrana bir kez basilir.
   [string]$YedekMusteriAnahtarCikti,
   # Etkili Yazilim alicisinin ACIK anahtar dosyasi (tkpub1:...). Tore sonrasi da eklenebilir.
-  [string]$YedekEtkiliAcikAnahtar
+  [string]$YedekEtkiliAcikAnahtar,
+  # Super OLMAYAN bakim rolu kur + .env BACKUP_PG_*'ya yaz (bakim-rolu.ps1). Verilmezse bugunku gibi.
+  [switch]$BakimRolu,
+  # Ayni PostgreSQL kumesinde ikinci kurulum (test/prova) kendi bakim rolunu kullanir.
+  [string]$BakimKullanici = "tekserp_bakim"
 )
 $ErrorActionPreference = "Stop"
 
 # Adimlar kendiliginden numaralanir; adim eklenince yalniz toplam degisir.
 $script:adimNo = 0
-$script:adimToplam = 14
+$script:adimToplam = 15
 function Adim($m) { $script:adimNo++; Write-Host ""; Write-Host "[$($script:adimNo)/$($script:adimToplam)] $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  + $m" -ForegroundColor Green }
 function Uyar($m) { Write-Host "  ! $m" -ForegroundColor Yellow }
@@ -545,6 +553,24 @@ if (Test-Path $envDosya) {
 if ((Test-Path $envDosya) -and -not $WebPanelKapali -and -not (Select-String -Path $envDosya -Pattern '^\s*WEB_DIST_DIR\s*=' -Quiet)) {
   Uyar "mevcut .env'de WEB_DIST_DIR yok - paketteki web paneli SUNULMUYOR (bilincliyse yok say)."
   Uyar "  acmak icin .env'e ekle:  WEB_DIST_DIR=`"$(($Kok -replace '\\', '/').TrimEnd('/'))/app/dist-web`"  (sonra pm2 restart)"
+}
+
+# --- Bakim rolu (istege bagli) ------------------------------------------------
+# Panelden yedek / geri yukleme / DB kopyasi super kullanici ISTEMEZ (CREATEDB + sahip rolune
+# uyelik + teks.* parametre yetkisi, olculdu PG 16). Mantik tek yerde: bakim-rolu.ps1.
+# Yonetici parolasi surec icinden SecureString olarak gecer - komut satirina girmez.
+Adim "Bakim rolu (istege bagli)..."
+if (-not $BakimRolu) {
+  Uyar "verilmedi - panel yedegi/DB kopyasi uygulama rolunun kimligiyle (bugunku davranis). Kurmak icin: -BakimRolu"
+} elseif (-not $yonetici) {
+  Acik "-BakimRolu super kullanici ister (-PostgresParola...) - bakim rolu KURULMADI (sonra: bakim-rolu.ps1 -Kok $Kok)"
+} elseif (-not (Test-Path (Join-Path $PSScriptRoot "bakim-rolu.ps1"))) {
+  Acik "bakim-rolu.ps1 bu betigin yaninda yok ($PSScriptRoot) - paketi ya da repodaki deploy\ klasorunu kullan"
+} else {
+  $ssYonetici = ConvertTo-SecureString $PostgresParola -AsPlainText -Force
+  & (Join-Path $PSScriptRoot "bakim-rolu.ps1") -Kok $Kok -BakimKullanici $BakimKullanici -PostgresKullanici $PostgresKullanici -PostgresParolaGuvenli $ssYonetici -PgBin $script:pgsqlBin
+  if ($LASTEXITCODE -eq 0) { Ok "bakim rolu kuruldu, .env BACKUP_PG_* yazildi (backend'in gordugu an: pm2 restart)" }
+  else { Acik "bakim rolu KURULAMADI (kod $LASTEXITCODE) - yukaridaki X satirina bak" }
 }
 
 # --- Yedek sifreleme (istege bagli) ------------------------------------------

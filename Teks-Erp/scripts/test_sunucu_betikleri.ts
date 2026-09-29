@@ -33,7 +33,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 }
 
 /** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç). */
-const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1"];
+const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1"];
 
 const YONLENDIRME = /(?:^|\s)2>(?:&1|\$null)/;
 const CIPLAK_NPM = /(?:^|[\s&(;|])npm(?=\s|$)/;
@@ -158,7 +158,7 @@ for (const yol of SUNUCU_PS1) {
       pk.satirlar.some((s) => /Fail\s+"Arac uretilmedi/.test(s.kod)));
   const pakete = (ad: string) => pk.satirlar.some((s) =>
     s.kod.trim() === `Copy-Item "$repo\\deploy\\${ad}" "$stage\\"`);
-  const sunucuDosyalari = ["ilk-kurulum.ps1", "yedekle.ps1", "pm2-boot.cmd", "uzaktan-kos.ps1"];
+  const sunucuDosyalari = ["ilk-kurulum.ps1", "yedekle.ps1", "pm2-boot.cmd", "uzaktan-kos.ps1", "bakim-rolu.ps1"];
   const eksikDosya = sunucuDosyalari.filter((a) => !pakete(a));
   check(`§5d paketle.ps1 sunucu dosyalarını pakete koyuyor (${sunucuDosyalari.join(" + ")}) — sunucuya repo ağacı taşınmaz`,
     eksikDosya.length === 0, eksikDosya.length ? `eksik: ${eksikDosya.join(", ")}` : "hepsi");

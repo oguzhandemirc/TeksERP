@@ -303,6 +303,8 @@ Copy-Item "$repo\deploy\yedekle.ps1" "$stage\"
 Copy-Item "$repo\deploy\pm2-boot.cmd" "$stage\"
 # SSH'tan kurulum SYSTEM gorevi ister (oturum kapaninca pm2 daemon olur).
 Copy-Item "$repo\deploy\uzaktan-kos.ps1" "$stage\"
+# Super OLMAYAN bakim rolu (yedek / DB kopyasi kimligi); ilk-kurulum -BakimRolu da bunu cagirir.
+Copy-Item "$repo\deploy\bakim-rolu.ps1" "$stage\"
 
 # Prisma yapilandirmasi: TS DEGIL, seed kancasi OLMAYAN JS surumu
 $prodCfg = "$proj\deploy\prisma.config.prod.js"

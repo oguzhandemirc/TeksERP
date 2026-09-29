@@ -200,10 +200,11 @@ module.exports = {
         // Yalnız DATABASE_URL'deki uygulama kullanıcısı tabloların sahibi/superuser
         // DEĞİLSE gerekir: aksi halde pg_dump "permission denied" verir ya da
         // nesne atlayıp SESSİZCE eksik yedek üretir. Eski installer bu işi
-        // `postgres` ile yapıyordu. İkisi birlikte verilir; boşsa DATABASE_URL
-        // kimlik bilgileri kullanılır.
-        // BACKUP_PG_USER: "postgres",
-        // BACKUP_PG_PASSWORD: "<postgres-şifresi>",   // ⚠ sır → .env'e koy, buraya DEĞİL
+        // `postgres` ile yapıyordu; süper kullanıcı GEREKMEZ — `bakim-rolu.ps1`
+        // süper olmayan `tekserp_bakim` rolünü kurup .env'e yazar. İkisi birlikte
+        // verilir; boşsa DATABASE_URL kimlik bilgileri kullanılır.
+        // BACKUP_PG_USER: "tekserp_bakim",
+        // BACKUP_PG_PASSWORD: "<bakim-rolu.ps1 yazar>",   // ⚠ sır → .env'e koy, buraya DEĞİL
       },
     },
   ],

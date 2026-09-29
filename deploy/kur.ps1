@@ -704,6 +704,11 @@ if ($wm.Success) {
 } elseif (Test-Path (Join-Path $appDir "dist-web\index.html")) {
   Write-Host "     (web paneli pakette ama .env'de WEB_DIST_DIR yok - sunulmuyor. Acmak icin .env: WEB_DIST_DIR=`"$($appDir -replace '\\', '/')/dist-web`")" -ForegroundColor DarkGray
 }
+# Panel yedegi / DB kopyasi super kullanici istemez; postgres parolasi .env'de ise soylenir (dokunulmaz).
+$bk = [regex]::Match($envMetin, '(?m)^\s*BACKUP_PG_USER\s*=\s*"?([^"\r\n]*)"?')
+if ($bk.Success -and $bk.Groups[1].Value.Trim() -ceq "postgres") {
+  Write-Host "     (BACKUP_PG_USER=postgres: super kullanici parolasi .env'de. Super OLMAYAN bakim rolune gecis: <paket>\bakim-rolu.ps1 -Kok `"$kok`")" -ForegroundColor DarkGray
+}
 if ($ecoBayt) {
   Ok "app\ olusturuldu, .env + ecosystem.config.js (SUNUCUNUNKI) tasindi"
   # Fark ozeti: yalnizca env: blogundaki ANAHTARLAR karsilastirilir; deger
