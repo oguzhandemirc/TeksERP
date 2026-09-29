@@ -10,6 +10,7 @@ import { z } from "zod";
 import {
   DigestSchema,
   IsoTimeSchema,
+  TYP,
   UuidSchema,
   VersionTextSchema,
   b64uEncode,
@@ -18,7 +19,7 @@ import {
   verifyJws,
 } from "./protocol";
 
-export const INTEGRITY_TYP = "tekserp-butunluk";
+export const INTEGRITY_TYP = TYP.BUTUNLUK;
 export const INTEGRITY_MAX_FILES = 20_000;
 /** Rapordaki dosya listelerinin tavanı (sayılar ayrıca tam verilir). */
 export const INTEGRITY_LIST_CAP = 50;

@@ -359,6 +359,8 @@ function hakVektorleri(f: Fikstur): Vektor[] {
     v("veriliş 30 Şubat", ham({ verilis: "2026-02-30T00:00:00Z" })),
     v("artık gün 2028-02-29", ham({ verilis: "2028-02-29T00:00:00Z" })),
     v("bayi sertifikalı ama bayiId yok", ham({ bayiSertifikasi: "x.y.z" })),
+    v("P0 kurulum kimliği boş dizge (istekte meşru, HAK'ta RED)", ham({ kurulumId: "" })),
+    v("P0 kurulum kimliği yok", hamImzala(TYP.HAK, f.kok, Object.fromEntries(Object.entries(hakYuku(f)).filter(([k]) => k !== "kurulumId")))),
     v("kalıcı metin", ham({ kalici: "evet" })),
     v("v:2", ham({ v: 2 })),
     v("v null", ham({ v: null })),
@@ -409,6 +411,13 @@ function kiraVektorleri(f: Fikstur): Vektor[] {
     v("alt sertifika yok", hamImzala(TYP.KIRA, f.alt, Object.fromEntries(Object.entries(yuk).filter(([k]) => k !== "altSertifika")))),
     v("veriliş yok", hamImzala(TYP.KIRA, f.alt, Object.fromEntries(Object.entries(yuk).filter(([k]) => k !== "verilis")))),
     v("veriliş ES tarihi (saatsiz) — sertifika geçer, şema RED", ham({ verilis: "2026-09-28" })),
+    // P0: imzasız satıcı saati güvenilir saate girmez (D4), imzalı tek saat kaynağı kiranın `sunucuSaati`dir;
+    // lisans kimliği kiradır (D14) — istekte boş kurulum kimliği meşru, kirada değil.
+    v("P0 sunucu saati yok", hamImzala(TYP.KIRA, f.alt, Object.fromEntries(Object.entries(yuk).filter(([k]) => k !== "sunucuSaati")))),
+    v("P0 sunucu saati saatsiz", ham({ sunucuSaati: "2026-09-28" })),
+    v("P0 kurulum kimliği yok", hamImzala(TYP.KIRA, f.alt, Object.fromEntries(Object.entries(yuk).filter(([k]) => k !== "kurulumId")))),
+    v("P0 kurulum kimliği boş dizge (istekte meşru, kirada RED)", ham({ kurulumId: "" })),
+    v("P0 kurulum kimliği null", ham({ kurulumId: null })),
     v("HAK belgesi kira yerine", hakBas(f)),
     v("çapa boş (önce ayrıştırma, sonra çapa)", kiraBas(f), []),
     v("çapa boş, biçimsiz metin", "x", []),

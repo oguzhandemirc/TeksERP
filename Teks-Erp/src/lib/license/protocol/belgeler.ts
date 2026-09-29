@@ -16,6 +16,8 @@ export const TYP = {
   INDIRME: "tekserp-indirme",
   SERTIFIKA: "tekserp-sertifika",
   DURUM: "tekserp-durum",
+  /** Paket bütünlük listesi (PAKET anahtarıyla imzalı) — doğrulayan `lib/license/integrity.ts` + native çekirdek. */
+  BUTUNLUK: "tekserp-butunluk",
 } as const;
 
 export const LICENSE_CLASSES = ["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"] as const;
