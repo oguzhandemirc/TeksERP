@@ -13,6 +13,8 @@
 //   §3 kök (demo) Dockerfile: çalışma aşaması src/tsx/seed taşımaz; seed ayrı hedef.
 //   §4 demo aktarımı: izin listesi + `git archive`; yasak desen hem örneklerle hem
 //      gerçek aktarım kümesiyle ölçülür; Dockerfile'ın her COPY kaynağı kümede var.
+//   §5 korumalı Linux imajı (Faz 2f) DURAĞAN: izin listesi `*` ile başlar, çalışma aşaması
+//      root değil + bağlamdan yalnız docker/ betikleri, machine-id silinir; compose ro/127/seed 0.
 // =============================================================================
 import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -237,6 +239,50 @@ console.log("\n=== §4 docs/ops/deploy-demo.sh aktarımı ===\n");
     !/compose run[^\n]*tsx/.test(reset) && /\$SEED_IMAGE npx tsx prisma\/seed\.ts/.test(reset));
   check("§4i deploy-demo seed'i seed imajında koşturur", /\$SEED_IMAGE npx tsx prisma\/seed-ticaret-demo\.ts/.test(betikKod) && !/compose run[^\n]*tsx/.test(betikKod));
   check("§4 körlük zemini: dosyalar var", existsSync(join(KOK, "docs/ops/deploy-demo-izin-listesi.txt")) && existsSync(ENTRYPOINT));
+}
+
+// -----------------------------------------------------------------------------
+// §5 — korumalı Linux imajı (Faz 2f): DURAĞAN kapı — CI'da docker yokken de ölçülür.
+// Derlenmiş imajın İÇERİĞİ kök `scripts/test_korumali_imaj.mjs`te (imaj yoksa ÖLÇÜLEMEDİ).
+// -----------------------------------------------------------------------------
+console.log("\n=== §5 korumalı imaj (Dockerfile · izin listesi · compose) ===\n");
+function korumaliStatik(dockerfile: string, ignore: string, compose: string): string[] {
+  const ih: string[] = [];
+  const satir = ignore.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  if (satir[0] !== "*") ih.push("izin listesi `*` ile başlamıyor (blocklist yeni dosyayı sızdırır)");
+  const son = dockerfile.slice(dockerfile.lastIndexOf("\nFROM "));
+  const kullanici = /^USER\s+(\S+)/m.exec(son)?.[1] ?? "";
+  if (!kullanici || /^(0|root)(:|$)/.test(kullanici)) ih.push(`çalışma aşaması USER root/boş (${kullanici || "yok"})`);
+  for (const m of son.matchAll(/^COPY\s+(?!--from)(?:--\S+\s+)*(\S+)/gm)) {
+    if (!/^Teks-Erp\/docker\//.test(m[1])) ih.push(`çalışma aşaması bağlamdan kaynak kopyalıyor: ${m[1]}`);
+  }
+  if (!/rm -f \/etc\/machine-id/.test(son)) ih.push("çalışma aşaması /etc/machine-id'yi silmiyor");
+  if (!/\/etc\/machine-id:ro/.test(compose)) ih.push("compose makine kimliğini salt-okunur bağlamıyor");
+  if (!/\$\{TEKSERP_DINLE:-127\.0\.0\.1\}/.test(compose)) ih.push("compose portu varsayılan 127.0.0.1'e bağlamıyor");
+  if (!/SEED_ON_EMPTY: \$\{SEED_ON_EMPTY:-0\}/.test(compose)) ih.push("compose SEED_ON_EMPTY varsayılanı 0 değil");
+  if (!/read_only: true/.test(compose)) ih.push("compose kök dosya sistemini salt-okunur açmıyor");
+  return ih;
+}
+{
+  const df = oku("Teks-Erp/docker/korumali/Dockerfile");
+  const ig = oku("Teks-Erp/docker/korumali/Dockerfile.dockerignore");
+  const dc = oku("Teks-Erp/docker/korumali/docker-compose.yml");
+  const gercek = korumaliStatik(df, ig, dc);
+  check("§5a gerçek dosyalar temiz", gercek.length === 0, gercek.join(" | "));
+  const sondalar: Array<[string, string, string, string]> = [
+    ["izin listesi", df, ig.replace(/^\*$/m, "Teks-Erp/node_modules"), dc],
+    ["USER root", df.replace(/^USER 10001:10001$/m, "USER root"), ig, dc],
+    ["src kopyası", df.replace(/^WORKDIR \/app$/m, "COPY Teks-Erp/src /app/src\nWORKDIR /app"), ig, dc],
+    ["machine-id", df.replace("rm -f /etc/machine-id", "true"), ig, dc],
+    ["compose ro", df, ig, dc.replace("/etc/machine-id:ro", "/etc/machine-id")],
+    ["compose port", df, ig, dc.replace("${TEKSERP_DINLE:-127.0.0.1}", "${TEKSERP_DINLE:-0.0.0.0}")],
+    ["compose seed", df, ig, dc.replace("SEED_ON_EMPTY: ${SEED_ON_EMPTY:-0}", "SEED_ON_EMPTY: ${SEED_ON_EMPTY:-1}")],
+    ["compose read_only", df, ig, dc.replace(/read_only: true/g, "read_only: false")],
+  ];
+  for (const [ad, d, i, c] of sondalar) {
+    const uygulandi = d !== df || i !== ig || c !== dc;
+    check(`§5b sonda: ${ad} → kırmızı`, uygulandi && korumaliStatik(d, i, c).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

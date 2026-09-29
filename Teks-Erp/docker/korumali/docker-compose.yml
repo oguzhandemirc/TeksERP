@@ -1,0 +1,100 @@
+# =============================================================================
+# TeksERP — KORUMALI LINUX KURULUMU (müşteri teslimi · Faz 2f)
+# =============================================================================
+# Üç servis: postgres (PG16) · backend (korumalı imaj) · yedek (aynı imaj, gece yedeği).
+# İmaj `docker load` ile gelir (derlenmez) — `TEKSERP_IMAJ` etiketi PAKET künyesinden.
+# Sırlar bu dosyada DEĞİL, yanındaki `.env`de (chmod 600; şablon `.env.ornek`).
+# Runbook: docs/ops/LINUX-DOCKER-KURULUM.md
+#
+# ⚠ Kalıcı birimler: pg_data (veri) · lisans (kurulum anahtarı/HAK/kira — KOPYALANMAZ,
+#   kopyası başka makinede parmak izini tutturmaz) · yedek · yedek-anahtar. `down -v`
+#   BUNLARI SİLER — güncellemede ve geri almada ASLA `-v` verilmez.
+# ⚠ Parmak izi: F1 = konağın /etc/machine-id'si (salt-okunur bağlanır). F2/F4 (DMI) konteynerde
+#   root-only, F3 (disk seri) overlay birimde görünmez → motor "ölçülemedi" beyan eder.
+# =============================================================================
+name: ${TEKSERP_PROJE:-tekserp}
+
+x-guvenlik: &guvenlik
+  read_only: true
+  tmpfs: ["/tmp:size=256m,mode=1777"]
+  cap_drop: ["ALL"]
+  security_opt: ["no-new-privileges:true"]
+  user: "10001:10001"
+
+services:
+  postgres:
+    image: ${TEKSERP_PG_IMAJ:-postgres:16-bookworm}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tekserp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env'de tanımlı olmalı}
+      POSTGRES_DB: ${POSTGRES_DB:-tekserp}
+      TZ: Europe/Istanbul
+      PGTZ: Europe/Istanbul
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    # Port DIŞARI açılmaz: yalnız compose ağından.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    command: ["postgres", "-c", "statement_timeout=50s", "-c", "idle_in_transaction_session_timeout=300000"]
+
+  backend:
+    image: ${TEKSERP_IMAJ:?TEKSERP_IMAJ .env'de tanımlı olmalı (docker load çıktısındaki etiket)}
+    # Bayt kodu (.jsc) ve native çekirdek linux/amd64'e kilitli; başka mimaride öykünmeyle koşar.
+    platform: linux/amd64
+    <<: *guvenlik
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: "4000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tekserp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tekserp}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET .env'de tanımlı olmalı}
+      # Seed yalnız şema BOŞ ve bu değer 1 iken (entrypoint §2); yalnız ilk `up`ta verilir.
+      SEED_ON_EMPTY: ${SEED_ON_EMPTY:-0}
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+    ports:
+      # Varsayılan YALNIZ bu makine (kapalı doğar); fabrika ağına açmak bilinçli karar:
+      # .env'de TEKSERP_DINLE=0.0.0.0 (ya da LAN IP'si).
+      - "${TEKSERP_DINLE:-127.0.0.1}:${TEKSERP_PORT:-4000}:4000"
+    volumes:
+      - lisans:/var/lib/tekserp/lisans
+      - yedek:/var/lib/tekserp/yedek
+      - yedek_anahtar:/var/lib/tekserp/yedek-anahtar:ro
+      # Konak makine kimliği (Linux: /etc/machine-id). Başka yol yalnız prova içindir.
+      - ${TEKSERP_MAKINE_KIMLIGI:-/etc/machine-id}:/etc/machine-id:ro
+
+  yedek:
+    image: ${TEKSERP_IMAJ}
+    platform: linux/amd64
+    <<: *guvenlik
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/usr/local/bin/yedek-zamanlayici.sh"]
+    healthcheck:
+      disable: true
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:-tekserp}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-tekserp}
+      YEDEK_SAAT: ${YEDEK_SAAT:-03:00}
+      YEDEK_SAKLAMA_GUN: ${YEDEK_SAKLAMA_GUN:-30}
+      YEDEK_EN_AZ: ${YEDEK_EN_AZ:-3}
+      YEDEK_ILK_BEKLEME: ${YEDEK_ILK_BEKLEME:-120}
+    volumes:
+      - yedek:/var/lib/tekserp/yedek
+      - yedek_anahtar:/var/lib/tekserp/yedek-anahtar:ro
+
+volumes:
+  pg_data:
+  lisans:
+  yedek:
+  yedek_anahtar:

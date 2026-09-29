@@ -1,0 +1,26 @@
+# Korumalı imajın bağlamı DEPO KÖKÜ, içerik İZİN LİSTESİ (varsayılan: hiçbir şey).
+# BuildKit bu dosyayı Dockerfile'ın yanında `Dockerfile.dockerignore` adıyla okur; kök
+# .dockerignore'u (demo imajı) EZER. Yeni girdi eklemek = imaja girebilecek yeni içerik.
+*
+!deploy/node-surumu.json
+!scripts/lib/node-surumu.mjs
+!scripts/koruma-runtime-indir.mjs
+!Teks-Erp/package.json
+!Teks-Erp/package-lock.json
+!Teks-Erp/tsconfig.json
+!Teks-Erp/src/**
+!Teks-Erp/scripts/**
+!Teks-Erp/prisma/**
+!Teks-Erp/deploy/prisma.config.prod.js
+!Teks-Erp/public/**
+!Teks-Erp/assets/**
+!Teks-Erp/native/lisans-cekirdek/dist-uretim/lisans-cekirdek.linux-x64-gnu.node
+!Teks-Erp/docker/entrypoint.sh
+!Teks-Erp/docker/korumali/sahne.mjs
+!Teks-Erp/docker/korumali/yedek-zamanlayici.sh
+# İzinli ağaçlarda bile giremeyecekler (sır, döküm, derleme artığı).
+**/.env*
+**/*.dump
+**/*.tkenc
+**/node_modules
+Teks-Erp/dist

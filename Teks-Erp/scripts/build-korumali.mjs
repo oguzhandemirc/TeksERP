@@ -128,8 +128,9 @@ async function main() {
     uretenV8Taban: v8TabanCoz(process.versions.v8),
     platform: hedef.arsivKok.includes('win') ? 'win32' : 'linux',
     arch: 'x64',
-    commit: git('rev-parse', 'HEAD'),
-    kisaCommit: git('rev-parse', '--short', 'HEAD'),
+    // Docker derleme aşamasında .git yok: commit kimliği derleme argümanından gelir.
+    commit: process.env.KORUMA_COMMIT || git('rev-parse', 'HEAD'),
+    kisaCommit: process.env.KORUMA_COMMIT ? process.env.KORUMA_COMMIT.slice(0, 8) : git('rev-parse', '--short', 'HEAD'),
     dal: git('rev-parse', '--abbrev-ref', 'HEAD'),
     zaman,
     paketId,
@@ -138,6 +139,7 @@ async function main() {
     cjsBayt,
     cjsSha256: cjsSha,
     jscUretildi: false,
+    nativeZorunlu: true,              // korumalı derlemede native çekirdek her zaman zorunlu (define ile aynı)
   };
 
   // --- 3. Arşiv (REPO DIŞI): bytenode öncesi .cjs + .map + kimlik ----------------
