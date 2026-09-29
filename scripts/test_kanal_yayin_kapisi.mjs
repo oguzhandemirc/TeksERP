@@ -6,7 +6,8 @@
 // sahte `ssh` · `scp` · `curl` · `git` · `npm` · `npx` konur.
 //   ssh/scp → geçici bir "sahte uzak" dizine (komutlar yol yeniden yazılarak orada koşar)
 //   curl    → yalnız guncelleme.etkiliyazilim.com, sahte uzaktan cevaplanır; başka her
-//             adres KIRMIZI (ağa çıkma girişimi)
+//             adres KIRMIZI (ağa çıkma girişimi); `-H @dosya` ile X-TKL-Indirme taşıyıp
+//             taşımadığı kaydedilir (3c': güncelleme sunucusu anonim okumaya kapalı)
 //   git     → okuma serbest, `tag -a`/`push` ENGELLENİR ve kaydedilir
 //   npm     → `run build:win*` iki derleyicinin KİMLİK çıktılarını üretir: electron-builder
 //             package.json + `-c.*` argümanlarından (app-update.yml url + updaterCacheDirName,
@@ -21,6 +22,7 @@
 // NE ÖLÇER:
 //   §1 electron-yayinla.sh — hedef PAKETİN kimliğinden; niyet (--musteri) ≠ paket → ssh'tan ÖNCE dur;
 //      paketin İÇİ (asar package.json · ana süreç · arayüz) başka kanalınsa dur; --kuru ağa hiç çıkmaz
+//      yayın belirteci yoksa/gevşekse/biçimsizse ağdan ÖNCE dur; kenar curl'leri belirteçli (1s–1x)
 //   §2 electron-paketle.sh — bilinmeyen kanal → hiçbir dosya yazılmadan dur; kimlik derleme ANINDA
 //      enjekte edilir: testfabrika paketi kendi kimliğiyle doğar, iki paketleme de dinlenmedeki
 //      dosyaları BAYT BAYT aynı bırakır; enjeksiyonun iki bacağından biri düşerse paket DURUR
@@ -106,6 +108,8 @@ if (arac === 'ssh') {
   const komut = k.join(' ');
   if (/^bash -s\b/.test(komut)) { stdinOku(); yaz({ host, komut, tur: 'budama' }); process.exit(0); }
   yaz({ host, komut });
+  // Kopuk ssh taklidi (bağlantı reddi, çıkış 255): okunamayan kaynak = ÖLÇÜLEMEDİ sondası.
+  if (process.env.SAHTE_SSH_KOPUK && komut.includes(process.env.SAHTE_SSH_KOPUK)) { process.stderr.write('ssh: connect to host: Connection refused\n'); process.exit(255); }
   const r = spawnSync('bash', ['-c', komut.replaceAll('/opt/stack', UZAK + '/opt/stack')], { encoding: 'utf8' });
   process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? '');
   process.exit(r.status ?? 1);
@@ -129,10 +133,14 @@ if (arac === 'curl') {
   const bas = a.includes('-I');
   const f = a.some((x) => /^-[a-zA-Z]*f/.test(x));
   const tem = (url ?? '').split('?')[0];
-  yaz({ url: tem, bas });
+  // Belirteç başlığı (3c'): -H @dosya ile gelir; dosyada X-TKL-Indirme satırı var mı?
+  const hi = a.indexOf('-H');
+  let belirtec = false;
+  if (hi >= 0 && String(a[hi + 1]).startsWith('@')) {
+    try { belirtec = /^X-TKL-Indirme: \S+$/m.test(fs.readFileSync(a[hi + 1].slice(1), 'utf8')); } catch { belirtec = false; }
+  }
+  yaz({ url: tem, bas, belirtec });
   if (!tem.startsWith(HOST)) { yaz({ YABANCI_AG: tem }); process.exit(6); }
-  // Kopuk ağ taklidi (bağlantı reddi, curl çıkış 7): okunamayan kaynak = ÖLÇÜLEMEDİ sondası.
-  if (process.env.SAHTE_CURL_KOPUK && tem.includes(process.env.SAHTE_CURL_KOPUK)) { process.stderr.write('curl: (7) Failed to connect\n'); process.exit(7); }
   const dosya = uzakYol('/opt/stack/apps/tekserp-guncelleme/html/' + tem.slice(HOST.length));
   const var_ = fs.existsSync(dosya) && fs.statSync(dosya).isFile();
   if (bicim) {
@@ -243,6 +251,11 @@ for (const arac of ['ssh', 'scp', 'curl', 'git', 'npm', 'npx']) {
   fs.chmodSync(y, 0o755);
 }
 
+// Satıcı yayın belirteci (3c'): sahte değer, 600 — betikler kenar doğrulamasını yalnız bununla yapar.
+const BELIRTEC = path.join(GECICI, 'yayin-belirteci');
+fs.writeFileSync(BELIRTEC, `sahte-yayin-belirteci-${'x'.repeat(24)}\n`, { mode: 0o600 });
+fs.chmodSync(BELIRTEC, 0o600);
+
 let sayac = 0;
 /** Bir senaryo ortamı: kendi sahte uzağı + çağrı günlüğü. */
 function ortam() {
@@ -273,6 +286,7 @@ function kos(o, komut, argumanlar, { cwd, girdi, ortamEk = {} } = {}) {
       CAGRI_LOG: o.log,
       GERCEK_GIT,
       SSH_HEDEF: 'sahte-hedef',
+      TEKSERP_YAYIN_BELIRTECI: BELIRTEC,
       GIT_CEILING_DIRECTORIES: GECICI,
       ASAR_YAZ: pathToFileURL(ASAR_YAZ).href,
       KANAL_KAYDI_YEDEK: path.join(KOK, 'deploy/kanallar.json'),
@@ -284,6 +298,8 @@ function kos(o, komut, argumanlar, { cwd, girdi, ortamEk = {} } = {}) {
 
 const agText = (o) => o.cagrilar().filter((c) => c.arac === 'ssh' || c.arac === 'scp');
 const yabanciAg = (o) => o.cagrilar().filter((c) => c.YABANCI_AG);
+/** Uzağı DEĞİŞTİREBİLEN çağrılar: scp + okuma olmayan her ssh (terfi/denetim okuması `test -f`/`cat` hariç). */
+const yazanAg = (o) => o.cagrilar().filter((c) => c.arac === 'scp' || (c.arac === 'ssh' && !/^(test -f|cat) '/.test(c.komut)));
 
 /* ------------------------------------------------------------------ *
  * Geçici ağaç kopyaları
@@ -300,7 +316,7 @@ const gitGoster = (ref, rel) =>
 
 const ORTAK_KAYNAK = [
   'deploy/kanallar.json', 'scripts/lib/kanallar.mjs', 'scripts/kanal-kapisi.mjs', 'scripts/lib/surum.mjs', 'scripts/lib/surum-notu-tavan.mjs',
-  'scripts/lib/terfi.mjs',
+  'scripts/lib/terfi.mjs', 'scripts/lib/yayin-okuma.mjs',
   ...PANEL_SABIT_DOSYALAR,
 ];
 function agacKur(o, { ref = null } = {}) {
@@ -367,6 +383,8 @@ function terfiHazirla(o, agac, { urun = 'panel', surum = '9.9.9', kod = 'adnansa
 }
 /** Terfi kapısının okuduğu tek ağ adresi (panel): kaynak kanalın latest.yml'i. */
 const KAYNAK_PANEL_URL = `${YAYIN_HOST}testfabrika/electron/latest.yml`;
+// Terfi şartı ③ kaynak kanalı VDS diskinden okur (3c': güncelleme sunucusu anonim okumaya kapalı).
+const KAYNAK_OKU = `ssh oku ${VDS}/html/testfabrika/electron/latest.yml`;
 const engellenen = (o) => o.cagrilar().filter((c) => c.ENGELLENDI).map((c) => c.ENGELLENDI);
 
 /** Sahte panel derlemesi — electron-builder'ın kimlik taşıyan çıktıları. */
@@ -418,6 +436,7 @@ function iz(o) {
       if (/sha256sum/.test(c.komut)) return `ssh sha256-sorgu ${/'([^']+)'/.exec(c.komut)?.[1]}`;
       if (/openssl dgst/.test(c.komut)) return `ssh sha512 ${/'([^']+)'/.exec(c.komut)?.[1]}`;
       if (/YAYIN-DEFTERI/.test(c.komut)) return `ssh defter ${/>> '([^']+)'/.exec(c.komut)?.[1]}`;
+      if (/^(test -f|cat) '/.test(c.komut)) return `ssh oku ${/'([^']+)'/.exec(c.komut)?.[1]}`;
       return `ssh ?? ${c.komut.slice(0, 60)}`;
     }
     if (c.arac === 'curl') return `curl${c.bas ? ' -I' : ''} ${c.url}`;
@@ -481,12 +500,16 @@ function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artef
   ol('1a sha512 sunucuda doğrulandı + budama; sürüm etiketi zaten var (testfabrika turundan) → yeni etiket girişimi YOK',
     sirali.includes(`ssh sha512 ${kok}/TeksERP-9.9.9-Setup.exe`) && sirali.some((s) => s.startsWith(`ssh budama ${kok} 9.9.9`)) &&
       engellenen(o).length === 0 && /sürüm etiketi zaten var: panel-v9\.9\.9/.test(r.cikti), sirali.join('\n'));
-  ol('1a terfi kapısı geçti: HEAD == panel-v9.9.9 · terfi etiketi · testfabrika 9.9.9 (ssh\'tan ÖNCE okundu)',
-    /✓ terfi kapısı: panel 9\.9\.9 → adnansahin/.test(r.cikti) && sirali.indexOf(`curl ${KAYNAK_PANEL_URL}`) >= 0 &&
-      sirali.indexOf(`curl ${KAYNAK_PANEL_URL}`) < sirali.findIndex((s) => s.startsWith('ssh') || s.startsWith('scp')), r.cikti.slice(0, 900));
-  ol('1a ağ: yayın sunucusunun adnansahin yolu + terfi kapısının TEK okuması (testfabrika latest.yml)', yabanciAg(o).length === 0 &&
-    o.cagrilar().filter((c) => c.arac === 'curl').every((c) => c.url.startsWith(`${YAYIN_HOST}adnansahin/electron/`) || c.url === KAYNAK_PANEL_URL) &&
-    o.cagrilar().filter((c) => c.arac === 'curl' && c.url === KAYNAK_PANEL_URL).length === 1);
+  ol('1a terfi kapısı geçti: HEAD == panel-v9.9.9 · terfi etiketi · testfabrika 9.9.9 (VDS diskinden, yükleme ssh/scp\'sinden ÖNCE okundu)',
+    /✓ terfi kapısı: panel 9\.9\.9 → adnansahin/.test(r.cikti) && sirali.indexOf(KAYNAK_OKU) >= 0 &&
+      sirali.indexOf(KAYNAK_OKU) < sirali.findIndex((s) => (s.startsWith('ssh') || s.startsWith('scp')) && s !== KAYNAK_OKU), r.cikti.slice(0, 900));
+  ol('1a ağ: HTTP yalnız yayın sunucusunun adnansahin yolu; terfi kapısının TEK okuması SSH ile (testfabrika latest.yml), HTTP ile DEĞİL', yabanciAg(o).length === 0 &&
+    o.cagrilar().filter((c) => c.arac === 'curl').every((c) => c.url.startsWith(`${YAYIN_HOST}adnansahin/electron/`)) &&
+    sirali.filter((x) => x === KAYNAK_OKU).length === 1, sirali.join('\n'));
+  const curller = o.cagrilar().filter((c) => c.arac === 'curl');
+  ol('1a ⭐ kenar doğrulaması BELİRTEÇLİ: her curl X-TKL-Indirme başlığını taşır (anonim HTTP okuma SIFIR)',
+    curller.length >= 4 && curller.every((c) => c.belirtec === true), JSON.stringify(curller.slice(0, 3)));
+  ol('1a belirteç değeri çıktıya DÜŞMEZ', !r.cikti.includes('sahte-yayin-belirteci-'), r.cikti.slice(-300));
 
   if (ESKI) {
     // FARK ÖLÇÜMÜ: bugünkü (eski) betik terfi şartsız, etiketsiz ağaçtan; yeni betik terfi şartlı ağaçtan.
@@ -495,7 +518,7 @@ function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artef
     const e = yayinSenaryosu({ ref: ESKI, musteriArg: ESKI_KANALLI ? '--musteri=adnansahin' : null });
     const izEski = iz(e.o);
     const izYeni = iz(o);
-    const TERFI_EK = `curl ${KAYNAK_PANEL_URL}`;
+    const TERFI_EK = KAYNAK_OKU;
     const TERFI_EKSIK = 'git tag -a panel-v9.9.9 (engellendi)';
     const eklenen = izYeni.filter((s) => !izEski.includes(s));
     const eksilen = izEski.filter((s) => !izYeni.includes(s));
@@ -561,7 +584,11 @@ function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artef
   const agac = agacKur(o);
   panelArtefakti(path.join(o.uzak, VDS, 'html/adnansahin/electron'), { ...ADNANSAHIN_PANEL, surum: '9.9.8' });
   const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '--dogrula'], { cwd: agac });
-  ol('1i --dogrula (salt denetim) → çıkış 0, ssh/scp SIFIR', r.kod === 0 && agText(o).length === 0 && /OK — yayında: 9\.9\.8/.test(r.cikti), r.cikti.slice(-400));
+  const izI = iz(o);
+  ol('1i --dogrula (salt denetim) → çıkış 0, scp SIFIR, ssh yalnız latest.yml OKUMASI (VDS diski), kenar curl\'leri belirteçli',
+    r.kod === 0 && /OK — yayında: 9\.9\.8/.test(r.cikti) &&
+      izI.filter((x) => x.startsWith('ssh') || x.startsWith('scp')).join('|') === `ssh oku ${VDS}/html/adnansahin/electron/latest.yml` &&
+      o.cagrilar().filter((c) => c.arac === 'curl').every((c) => c.belirtec === true), `${izI.join('\n')}\n${r.cikti.slice(-400)}`);
 }
 const agSifir = (o) => o.cagrilar().filter((c) => ['ssh', 'scp', 'curl'].includes(c.arac) || c.ENGELLENDI).length === 0;
 {
@@ -577,6 +604,57 @@ const agSifir = (o) => o.cagrilar().filter((c) => ['ssh', 'scp', 'curl'].include
 {
   const { o, r } = yayinSenaryosu({ ekArg: ['--kuru', '--dogrula'] });
   ol('1l --kuru ile --dogrula birlikte → DUR (biri ağa bakar, öbürü hiç çıkmaz)', r.kod !== 0 && agSifir(o) && /birlikte verilemez/.test(r.cikti), r.cikti.slice(-300));
+}
+// 3c' — YAYIN BELİRTECİ: yoksa/gevşekse/biçimsizse hiçbir ağ/ssh işinden ÖNCE dur; anonim okumaya DÜŞME.
+const belirtecDosyasi = (o, icerik, mod = 0o600) => {
+  const y = path.join(o.d, `belirtec-${mod.toString(8)}`);
+  fs.writeFileSync(y, icerik, { mode: mod });
+  fs.chmodSync(y, mod);
+  return y;
+};
+const belirtecSenaryosu = (hazirla, ekArg = []) => {
+  const o = ortam();
+  const agac = agacKur(o);
+  terfiHazirla(o, agac, { surum: '9.9.9' });
+  panelArtefakti(path.join(agac, 'Electron/release/adnansahin/9.9.9'), { ...ADNANSAHIN_PANEL, surum: '9.9.9' });
+  const yol = hazirla(o);
+  const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '9.9.9', ...ekArg], { cwd: agac, ortamEk: { TEKSERP_YAYIN_BELIRTECI: yol } });
+  return { o, r };
+};
+{
+  const { o, r } = belirtecSenaryosu((x) => path.join(x.d, 'olmayan-belirtec'));
+  ol('1s ⭐ belirteç YOK → DUR (çıkış≠0), ssh/scp/curl SIFIR, TR hata dosya yolunu söyler, anonim okumaya DÜŞMEZ',
+    r.kod !== 0 && agSifir(o) && /YAYIN BELİRTECİ YOK/.test(r.cikti) && /hiçbir şey yüklenmedi/.test(r.cikti), r.cikti.slice(-600));
+}
+{
+  const { o, r } = belirtecSenaryosu((x) => belirtecDosyasi(x, `sahte-yayin-belirteci-${'y'.repeat(24)}\n`, 0o644));
+  ol('1t belirteç izinleri GEVŞEK (644) → DUR, ağ SIFIR, değer çıktıya düşmez',
+    r.kod !== 0 && agSifir(o) && /İZİNLERİ GEVŞEK/.test(r.cikti) && !r.cikti.includes('yyyyyyyy'), r.cikti.slice(-500));
+}
+{
+  const { o, r } = belirtecSenaryosu((x) => belirtecDosyasi(x, 'iki satir\nbaslik-enjeksiyonu: x\n'));
+  ol('1u belirteç BİÇİMSİZ (boşluk/çok satır — başlık enjeksiyonu) → DUR, ağ SIFIR', r.kod !== 0 && agSifir(o) && /BİÇİMSİZ/.test(r.cikti), r.cikti.slice(-500));
+}
+{
+  const o = ortam();
+  const agac = agacKur(o);
+  panelArtefakti(path.join(o.uzak, VDS, 'html/adnansahin/electron'), { ...ADNANSAHIN_PANEL, surum: '9.9.8' });
+  const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '--dogrula'], { cwd: agac, ortamEk: { TEKSERP_YAYIN_BELIRTECI: path.join(o.d, 'yok') } });
+  ol('1v --dogrula belirteçsiz → DUR, ağ SIFIR (anonim denetime düşmez)', r.kod !== 0 && agSifir(o) && /YAYIN BELİRTECİ YOK/.test(r.cikti), r.cikti.slice(-400));
+}
+{
+  const o2 = ortam();
+  const agac = agacKur(o2);
+  panelArtefakti(path.join(agac, 'Electron/release/testfabrika/9.9.9'), { ...TESTFABRIKA_PANEL, surum: '9.9.9' });
+  const r2 = kos(o2, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=testfabrika', '9.9.9', '--kuru'], { cwd: agac, ortamEk: { TEKSERP_YAYIN_BELIRTECI: path.join(o2.d, 'yok') } });
+  ol('1w --kuru belirteç İSTEMEZ (ağa çıkmaz): belirteçsiz de KABUL, ağ SIFIR', r2.kod === 0 && agSifir(o2), r2.cikti.slice(-400));
+}
+{
+  // ⭐ SONDA: yayıncıdan belirteç başlığı sökülünce kenar curl'leri anonim gider — 1a'nın belirteç ölçümü bunu görmeli.
+  const { o, r } = yayinSenaryosu({ mutasyon: (m) => m.replace('curl -H "@$BELIRTEC_BASLIK" "$@"', 'curl "$@"') });
+  const curller = o.cagrilar().filter((c) => c.arac === 'curl');
+  ol('1x ⭐ SONDA: belirteç başlığı sökülünce yayın yine geçer ama curl\'ler ANONİM — 1a ölçümü (every belirtec) KIRMIZI verirdi',
+    r.kod === 0 && curller.length >= 4 && curller.every((c) => c.belirtec === false), JSON.stringify(curller.slice(0, 2)));
 }
 {
   // Paketin İÇİ başka kanalın: productName → userData dizini (aynı makinede iki kanal aynı veriyi paylaşır).
@@ -771,6 +849,17 @@ const etiketGirisimi = (o) => o.cagrilar().some((c) => c.ENGELLENDI);
   ol('3a --kuru etiket ATMAZ (git tag/push girişimi yok)', !etiketGirisimi(o) && /\[kuru\] sürüm etiketi atılmadı/.test(r.cikti));
   ol('3a --kuru hiçbir şeyi gerçekten yüklemez (ssh/scp çağrısı yok) ve kaynak kanalı okumaz (ağ yok)',
     agText(o).length === 0 && !o.cagrilar().some((c) => c.arac === 'curl') && /ÖLÇÜLMEDİ \(kuru kip/.test(r.cikti), r.cikti.slice(-600));
+}
+{
+  // 3c' — yayın belirteci: kuru OLMAYAN yayın ve --dogrula belirteçsiz DURUR (yüklemeden ÖNCE; anonim okumaya düşmez).
+  const o = ortam();
+  const yok = { TEKSERP_YAYIN_BELIRTECI: path.join(o.d, 'olmayan-belirtec') };
+  const paketTf = otaPaketi(o, { kanal: 'testfabrika', adres: TEST_ERP, bundleAdres: TEST_ERP });
+  const r = kos(o, process.execPath, [path.join(KOK, 'deploy/mobil-yayinla.mjs'), '--musteri=testfabrika', `--paket=${paketTf}`], { cwd: KOK, ortamEk: yok });
+  ol('3s ⭐ testfabrika OTA (kuru DEĞİL) belirteçsiz → DUR, ssh/scp/curl SIFIR, TR hata',
+    r.kod !== 0 && /YAYIN BELİRTECİ YOK/.test(r.cikti) && agSifir(o), r.cikti.slice(-600));
+  const d = kos(o, process.execPath, [path.join(KOK, 'deploy/mobil-yayinla.mjs'), '--dogrula=https://127.0.0.1:9/testfabrika/mobil/apk/surum.json'], { cwd: KOK, ortamEk: yok });
+  ol('3t --dogrula belirteçsiz → DUR (anonim denetime düşmez)', d.kod !== 0 && /YAYIN BELİRTECİ YOK/.test(d.cikti), d.cikti.slice(-400));
 }
 {
   // Terfi (K5) tablet: git şartları kuru kipte de ölçülür.
@@ -977,7 +1066,7 @@ const otaCheck = (o, apiUrl, { terfi = {}, ek = [], ortamEk = {} } = {}) => {
   ol('4i kaynak kanal (testfabrika) GERİDE → DUR', geride.kod !== 0 && /testfabrika kanalı GERİDE/.test(geride.cikti) && !/Native parmak izi/.test(geride.cikti), geride.cikti.slice(-600));
   const yok = otaCheck(o, FABRIKA_ERP, { terfi: { kaynakSurum: null } });
   ol('4j kaynak kanalda hiç yayın yok (404) → DUR (ihlal, ölçülemedi DEĞİL)', yok.kod !== 0 && /GERİDE — .*yayın yok/.test(yok.cikti), yok.cikti.slice(-600));
-  const kopuk = otaCheck(o, FABRIKA_ERP, { ortamEk: { SAHTE_CURL_KOPUK: '/testfabrika/' } });
+  const kopuk = otaCheck(o, FABRIKA_ERP, { ortamEk: { SAHTE_SSH_KOPUK: '/testfabrika/' } });
   ol('4k kaynak kanal OKUNAMIYOR (bağlantı reddi) → ÖLÇÜLEMEDİ, DUR', kopuk.kod !== 0 && /TERFİ KAPISI ÖLÇÜLEMEDİ/.test(kopuk.cikti) && /OKUNAMADI/.test(kopuk.cikti), kopuk.cikti.slice(-600));
   const etiketsiz = otaCheck(o, FABRIKA_ERP, { terfi: { terfiEtiketi: null, surumEtiketi: null } });
   ol('4l etiketsiz ağaç (bugünkü main ucu) + --musteri=adnansahin → DUR (tablet-vX yok · onay etiketi yok)',
@@ -991,7 +1080,7 @@ const otaCheck = (o, apiUrl, { terfi = {}, ek = [], ortamEk = {} } = {}) => {
   const o = ortam();
   const atla = otaCheck(o, FABRIKA_ERP, { terfi: { terfiEtiketi: null, surumEtiketi: null, kaynakSurum: null }, ek: ['--terfi-atla=fabrika çöktü, test turu beklemeden düzeltmeyi çıkar'] });
   ol('4n --terfi-atla="<cümle>" etiketsiz ağaçta → terfi ATLANDI, ön kontrol TAMAM, kaynak kanal okunmadı',
-    atla.kod === 0 && /TERFİ KAPISI ATLANDI/.test(atla.cikti) && !o.cagrilar().some((c) => c.arac === 'curl' && c.url.includes('/testfabrika/')), atla.cikti.slice(-600));
+    atla.kod === 0 && /TERFİ KAPISI ATLANDI/.test(atla.cikti) && !o.cagrilar().some((c) => (c.arac === 'curl' && c.url.includes('/testfabrika/')) || (c.arac === 'ssh' && String(c.komut).includes('/testfabrika/'))), atla.cikti.slice(-600));
 }
 {
   const o = ortam();
@@ -1223,7 +1312,7 @@ console.log('\n§7 — panel terfi kapısı: ssh\'tan ÖNCE, paketlemede derleme
 {
   const durDurum = (ad, sen, desen) => {
     const { o, r } = yayinSenaryosu(sen);
-    ol(ad, r.kod !== 0 && agText(o).length === 0 && engellenen(o).length === 0 && desen.test(r.cikti), r.cikti.slice(-700));
+    ol(ad, r.kod !== 0 && yazanAg(o).length === 0 && engellenen(o).length === 0 && desen.test(r.cikti), r.cikti.slice(-700));
     return { o, r };
   };
   durDurum('7a HEAD ≠ panel-v9.9.9 (etiket bir önceki commit\'te) → DUR, ssh/scp SIFIR', { terfi: { surumEtiketi: 'onceki' } }, /HEAD \([0-9a-f]+\) ≠ panel-v9\.9\.9/);
@@ -1236,9 +1325,9 @@ console.log('\n§7 — panel terfi kapısı: ssh\'tan ÖNCE, paketlemede derleme
     const agac = agacKur(o);
     terfiHazirla(o, agac, {});
     panelArtefakti(path.join(agac, 'Electron/release/adnansahin/9.9.9'), { ...ADNANSAHIN_PANEL, surum: '9.9.9' });
-    const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '9.9.9'], { cwd: agac, ortamEk: { SAHTE_CURL_KOPUK: '/testfabrika/' } });
-    ol('7f testfabrika okunamıyor (bağlantı reddi) → ÖLÇÜLEMEDİ, DUR, ssh/scp SIFIR',
-      r.kod !== 0 && agText(o).length === 0 && /TERFİ KAPISI ÖLÇÜLEMEDİ/.test(r.cikti) && /OKUNAMADI/.test(r.cikti), r.cikti.slice(-700));
+    const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), ['--musteri=adnansahin', '9.9.9'], { cwd: agac, ortamEk: { SAHTE_SSH_KOPUK: '/testfabrika/' } });
+    ol('7f testfabrika okunamıyor (ssh bağlantı reddi) → ÖLÇÜLEMEDİ, DUR, scp SIFIR, ssh yalnız o okuma girişimi',
+      r.kod !== 0 && iz(o).filter((x) => x.startsWith('ssh') || x.startsWith('scp')).join('|') === KAYNAK_OKU && /TERFİ KAPISI ÖLÇÜLEMEDİ/.test(r.cikti) && /OKUNAMADI/.test(r.cikti), r.cikti.slice(-700));
   }
   durDurum('7g --terfi-atla= (boş cümle) → DUR', { terfi: { terfiEtiketi: null }, ekArg: ['--terfi-atla='] }, /REDDEDİLDİ: cümle BOŞ/);
   durDurum('7h --terfi-atla (cümlesiz bayrak) → DUR', { terfi: { terfiEtiketi: null }, ekArg: ['--terfi-atla'] }, /REDDEDİLDİ: cümle BOŞ/);
@@ -1254,7 +1343,7 @@ console.log('\n§7 — panel terfi kapısı: ssh\'tan ÖNCE, paketlemede derleme
     const etiketler = engellenen(o);
     ol('7k --terfi-atla="<kullanıcının cümlesi>" → yayın yapılır (çıkış 0), kaynak kanal OKUNMAZ',
       r.kod === 0 && /TERFİ KAPISI ATLANDI/.test(r.cikti) && agText(o).some((c) => c.arac === 'scp') &&
-        !o.cagrilar().some((c) => c.arac === 'curl' && c.url.includes('/testfabrika/')), r.cikti.slice(-800));
+        !o.cagrilar().some((c) => (c.arac === 'curl' && c.url.includes('/testfabrika/')) || (c.arac === 'ssh' && String(c.komut).includes('/testfabrika/'))), r.cikti.slice(-800));
     ol('7k yayın defteri satırı 6 kolon, 6. kolon "terfi-atlandi: <cümle>" (tek tırnaklı cümle bozulmadan)',
       satir.split('\t').length === 6 && satir.split('\t')[5] === `terfi-atlandi: ${cumle}`, JSON.stringify(satir));
     ol('7k etiket MESAJLARI cümleyi taşır: panel-v9.9.9 + terfi/adnansahin/panel-v9.9.9 (git tag -a girişimleri)',

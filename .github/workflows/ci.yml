@@ -66,6 +66,11 @@ jobs:
       # SHASUMS doğrulaması yalnız yerelde --ag ile). Zero-dep, DB'siz.
       - name: Node sürüm kaydı (korumalı paket runtime)
         run: node scripts/test_node_surumu.mjs
+      # Yayın betiklerinde belirteçsiz HTTP okuma yok (3c') — güncelleme sunucusu Cloudflare
+      # Worker'la anonim okumaya kapalı; anonim okuma kalırsa Worker açıldığı gün yayın zinciri
+      # kırılır. Zero-dep, DB'siz, ağsız; kapı ve kalıcı sondalar (--sonda) aynı adımda.
+      - name: Yayın okumaları belirteçli/SSH (3c')
+        run: node scripts/check-yayin-okuma.mjs && node scripts/check-yayin-okuma.mjs --sonda
 
   # ===========================================================================
   # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test
