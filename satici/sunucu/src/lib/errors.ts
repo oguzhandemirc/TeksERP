@@ -1,5 +1,5 @@
 // Satıcı hata tipi — gövde backend ile aynı: {success:false, message:<TR>, details:{code}}.
-import type { ProtocolErrorCode, VendorErrorCode } from "../lisans-protokol";
+import { msToIso, type ProtocolErrorCode, type VendorErrorCode } from "../lisans-protokol";
 
 /**
  * Portal (satıcı + bayi JSON API'si) kodları — protokolün DIŞINDA: fabrika bunları hiç görmez.
@@ -10,7 +10,6 @@ import type { ProtocolErrorCode, VendorErrorCode } from "../lisans-protokol";
 export const PORTAL_ERROR_CODES = [
   "OTURUM_YOK",
   "GIRIS_BASARISIZ",
-  "GIRIS_KILITLI",
   "YETKISIZ",
   "DURUM_CAKISMASI",
   "IKINCI_ONAY_GEREKLI",
@@ -18,6 +17,7 @@ export const PORTAL_ERROR_CODES = [
   "BAYI_TAVANI_ASILDI",
   "URETIM_MODULU_UYARISI",
   "IMZA_PAROLASI_HATALI",
+  "IMZA_PAROLASI_KILITLI",
   "PAROLA_ZAYIF",
   "KULLANICI_ADI_KULLANIMDA",
 ] as const;
@@ -40,10 +40,14 @@ export class VendorError extends Error {
 export const vendorError = (status: number, code: VendorCode, message: string): VendorError =>
   new VendorError(status, code, message);
 
-/** İmzalı istek doğrulanamadı: JWS/İSTEK kodları olduğu gibi, diğerleri genel koda iner. */
-export function requestRejected(code: ProtocolErrorCode, message: string): VendorError {
+/**
+ * İmzalı istek doğrulanamadı: JWS/İSTEK kodları olduğu gibi, diğerleri genel koda iner. `ISTEK_ZAMAN`
+ * satıcının o anki saatini taşır (`details.sunucuSaati`, İMZASIZ): fabrika sapmayı ölçüp isteği BİR KEZ
+ * düzeltilmiş zamanla yeniden imzalar (D4).
+ */
+export function requestRejected(code: ProtocolErrorCode, message: string, nowMs: number = Date.now()): VendorError {
   const passThrough = code.startsWith("JWS_") || code.startsWith("ISTEK_");
-  return new VendorError(401, passThrough ? code : "ISTEK_GECERSIZ", message);
+  return new VendorError(401, passThrough ? code : "ISTEK_GECERSIZ", message, code === "ISTEK_ZAMAN" ? { sunucuSaati: msToIso(nowMs) } : undefined);
 }
 
 /** 409 "tekrar deneyin": 40001/40P01 ya da atomik claim kaybı — istemci aynı isteği yeniden dener. */

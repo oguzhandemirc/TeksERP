@@ -64,6 +64,7 @@ async function main(): Promise<void> {
   const { ctx, f } = ortam;
   const { prisma } = await import("../src/lib/prisma");
   const dealerSvc = await import("../src/services/dealer.service");
+  const ownershipSvc = await import("../src/services/dealer-ownership.service");
   const kullanicilar: string[] = [];
   const bayiler: string[] = [];
   const sunucu = await portalSunuculariKur(ctx);
@@ -111,11 +112,11 @@ async function main(): Promise<void> {
     console.log("\n§2 kurulum: sınıf tavanı");
     const m = await bayi("/musteriler", { clientToken: randomUUID(), ad: "Bayi Müşterisi Tekstil" });
     const t = await bayi("/tesisler", { clientToken: randomUUID(), musteriId: m.veri.id, ad: "Merkez" });
-    const kur = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: KANAL });
+    const kur = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, sinif: "URETIM", kanalKodu: KANAL });
     kontrol("§2a müşteri · tesis · URETIM kurulum → 201", m.status === 201 && t.status === 201 && kur.status === 201, `${m.status}/${t.status}/${kur.status} ${kur.kod ?? ""}`);
-    const testSinif = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "TEST", kanalKodu: KANAL });
+    const testSinif = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, sinif: "TEST", kanalKodu: KANAL });
     kontrol("§2b TEST (sertifikada VAR, tavanda YOK) → 409 BAYI_TAVANI_ASILDI · SINIF", testSinif.status === 409 && testSinif.kod === "BAYI_TAVANI_ASILDI" && ihlal(testSinif).includes("SINIF"), `${testSinif.status} ${ihlal(testSinif)}`);
-    const kanalDisi = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: KANAL_DISI });
+    const kanalDisi = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, sinif: "URETIM", kanalKodu: KANAL_DISI });
     kontrol("§2c ✓K kayıtlı ama bayiye ATANMAMIŞ kanal → 409 · KANAL (atanmış kanal §2a'da geçti)", kanalDisi.status === 409 && kanalDisi.kod === "BAYI_TAVANI_ASILDI" && ihlal(kanalDisi).includes(KANAL_DISI), `${kanalDisi.status} ${ihlal(kanalDisi)}`);
     const kurId = kur.veri.id as string;
 
@@ -163,10 +164,10 @@ async function main(): Promise<void> {
 
     console.log("\n§5 kurulum ADEDİ");
     await tavanYaz(bayiId, [URETIM, FINANS], ["URETIM"], 1, "tek kurulum hakkı");
-    const ikinci = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: KANAL });
+    const ikinci = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, sinif: "URETIM", kanalKodu: KANAL });
     kontrol("§5a adet 1, kullanım 1 → ikinci kurulum 409 · ADET", ikinci.status === 409 && ihlal(ikinci).includes("ADET"), `${ikinci.status} ${ihlal(ikinci)}`);
     await tavanYaz(bayiId, [URETIM, FINANS], ["URETIM"], 2, "ek kurulum satıldı");
-    const ikinciOk = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: KANAL });
+    const ikinciOk = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, sinif: "URETIM", kanalKodu: KANAL });
     kontrol("§5b ✓K tavan genişleyince aynı işlem → 201", ikinciOk.status === 201, `${ikinciOk.status} ${ikinciOk.kod ?? ""}`);
 
     console.log("\n§6 tavan sertifikadan GENİŞ — kriptografik katman bağlar");
@@ -181,7 +182,7 @@ async function main(): Promise<void> {
     await prisma.$transaction((tx) => dealerSvc.setDealerCeilingTx(tx, { dealerId: bayiId, ceiling: { modules: [URETIM], classes: ["URETIM"], installationCount: 2, channels: [KANAL] }, reason: "imza sırasında daraldı", actor: "bekci" }));
     let yazim = "";
     try {
-      await prisma.$transaction((tx) => dealerSvc.recordDealerEntitlementVersionTx(tx, hazir));
+      await prisma.$transaction((tx) => ownershipSvc.recordDealerEntitlementVersionTx(tx, { ...hazir, customerId: t.veri.musteriId as string }));
       yazim = "YAZILDI";
     } catch (err) {
       yazim = (err as { code?: string }).code ?? String(err);

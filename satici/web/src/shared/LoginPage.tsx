@@ -7,6 +7,9 @@ import { ApiError } from "./api";
 import { useSession } from "./session";
 import { Button, ErrorText, Field } from "./ui";
 
+/** Giriş ucunun hız sınırı kodu (protokolün ortak kodu; ayna bekçisi sunucuda ölçer). */
+export const LOGIN_RATE_LIMIT_CODE = "HIZ_SINIRI";
+
 export function LoginPage({ product, expired }: { product: string; expired?: boolean }) {
   const { login } = useSession();
   const [username, setUsername] = useState("");
@@ -24,7 +27,9 @@ export function LoginPage({ product, expired }: { product: string; expired?: boo
     } catch (err) {
       setError(err);
       setTotp("");
-      if (!(err instanceof ApiError) || err.code !== "GIRIS_KILITLI") setPassword("");
+      // Hız sınırı kullanıcının hatası değil: parola korunur. Kilitli hesap sunucuda hatalı girişle AYNI yanıtı alır
+      // (hesabın varlığı sızmasın) — ayrı dalı yoktur.
+      if (!(err instanceof ApiError) || err.code !== LOGIN_RATE_LIMIT_CODE) setPassword("");
     } finally {
       setPending(false);
     }

@@ -1,10 +1,26 @@
 // Satıcı sunucusu yapılandırması — ortamdan okunur, Zod ile doğrulanır; geçersiz değer
 // açılışı DURDURUR (fail-closed). Sır (parola, özel anahtar) buradan GEÇMEZ: kök parolası
 // yalnız imza anında imza alt sürecinin stdin'ine gider.
+import { isIPv4, isIPv6 } from "node:net";
 import path from "node:path";
 import { z } from "zod";
 
 const port = z.coerce.number().int().min(0).max(65535);
+
+/** Virgülle ayrılmış CIDR listesi (ör. "173.245.48.0/20, 2400:cb00::/32"); biçimsiz öğe açılışı durdurur. */
+const cidrList = z
+  .string()
+  .transform((v) => v.split(",").map((x) => x.trim()).filter(Boolean))
+  .refine((list) => list.every(isCidr), "CIDR listesi biçimsiz (ör. 10.0.0.0/8, fd00::/8)");
+
+function isCidr(text: string): boolean {
+  const [net, bits, extra] = text.split("/");
+  if (extra !== undefined || !net || bits === undefined || !/^\d{1,3}$/.test(bits)) return false;
+  const n = Number(bits);
+  if (isIPv4(net)) return n <= 32;
+  if (isIPv6(net)) return n <= 128;
+  return false;
+}
 const positiveInt = (min: number, max: number) => z.coerce.number().int().min(min).max(max);
 
 /** Tailnet dinleyicisi joker adrese bağlanamaz: portal internete açılmasın. */
@@ -38,8 +54,30 @@ const EnvSchema = z.object({
   BAKIM_ARALIGI_SN: positiveInt(1, 3600).default(60),
   ETKINLESTIRME_KODU_GUN: positiveInt(1, 365).default(30),
   QR_HIZ_SINIRI_DK: positiveInt(1, 10000).default(30),
+  /** /v1/* hız sınırı (dakikalık, sabit pencere): istemci IP'si başına ve kurulum (ya da kurulumsuz anahtar) başına. */
+  V1_HIZ_IP_DK: positiveInt(1, 100_000).default(120),
+  V1_HIZ_KURULUM_DK: positiveInt(1, 100_000).default(30),
+  /** Kapı zili: kurulum başına eşzamanlı SSE aboneliği tavanı (aşan yeni abonelik en eskisini kapatır). */
+  ZIL_AZAMI_ABONE: positiveInt(1, 10).default(3),
   /** Vekil arkasında istemci IP'sini taşıyan başlık (ör. cf-connecting-ip); boşsa soket adresi. */
   VEKIL_IP_BASLIGI: z.string().min(1).optional(),
+  /**
+   * Başlığa GÜVENİLEN kenar vekili ağları (CIDR listesi, virgülle): yalnız bu ağlardan gelen bağlantıda
+   * VEKIL_IP_BASLIGI okunur. Verilmezse yerleşik Cloudflare aralıkları.
+   */
+  GUVENILIR_VEKIL_AGLARI: cidrList.optional(),
+  /**
+   * Kenar vekili ile satıcı arasındaki İÇ vekiller (ör. Traefik'in köprü ağı). Bu ağlardan gelen bağlantıda
+   * güven kararı X-Forwarded-For'un SON halkasına (iç vekilin gördüğü adres) göre verilir. Boş = iç vekil yok.
+   */
+  IC_VEKIL_AGLARI: cidrList.default([]),
+  /** Geri döngü (127.0.0.0/8 · ::1) yalnız "1" iken tailnet kaynağı sayılır (Tailscale kurulana dek SSH tüneli için). */
+  TAILNET_LOOPBACK: z.enum(["0", "1"]).default("0"),
+  /** İmza parolası (kök/bayi): kullanıcı başına ardışık hata eşiği ve kilit süresi (dk). */
+  IMZA_PAROLA_ESIGI: positiveInt(3, 50).default(5),
+  IMZA_KILIT_DK: positiveInt(1, 24 * 60).default(15),
+  /** İmza alt süreci (scrypt belleği ağır) eşzamanlılık slotu. */
+  IMZA_ESZAMANLI: positiveInt(1, 2).default(1),
   /** Portal oturumu: boşta kalma (dk) ve mutlak ömür (saat). */
   PORTAL_OTURUM_BOSTA_DK: positiveInt(1, 24 * 60).default(30),
   PORTAL_OTURUM_AZAMI_SAAT: positiveInt(1, 72).default(12),

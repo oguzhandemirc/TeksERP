@@ -6,7 +6,9 @@
 // (Teks-Erp protokolünün aynası) geçer; kira kuruluma/anahtara/HAK sürümüne bağlı; gözlem kipi
 // varsayılan; indirme belirteçleri kâhinden geçer; kod tüketildi; kurulum kaydı + künye + denetim
 // sır taşımaz; aynı kod + aynı anahtar tekrar → aynı kira; hata yolları (kod, kurulum, gövde, sürüm,
-// kurcalanmış gövde, anahtar uyuşmazlığı, imzasız istek) doğru kodla.
+// kurcalanmış gövde, anahtar uyuşmazlığı, imzasız istek) doğru kodla. Kod DB'de sunucu sırlı HMAC, son 4
+// yalnız kod satırında. Yanıt lisans kimliğini + kod türünü taşır; KİMLİKSİZ istekte kurulumu kod belirler
+// (D14), kimlik taşıyan istekte başka kurulumun kodu "yok"tur.
 // ⭐ KALICI SONDA ✓K2 (her koşumda): (1) kurcalanmış gövde reddedilir — doğrulayıcı gerçekten
 //    gövdeye bakıyor; (2) başka anahtarla imzalı kira fabrikada KIRA_HAK/JWS_KID ile düşer — bekçinin
 //    "zincir doğrulandı" yeşili kurgu değil.
@@ -23,6 +25,7 @@ import {
   verifyEntitlement,
   verifyLease,
 } from "../src/lisans-protokol";
+import { createHash } from "node:crypto";
 import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
   anahtarOrtamiKur,
@@ -55,7 +58,10 @@ async function main(): Promise<void> {
     kontrol("§1a HAK sürüm 1 KÖK ile imzalandı ve deftere yazıldı", hak.guncelSurum === 1 && surum.imzalayanKid === f.kok.kid);
     kontrol("§1b lisans no doğuşta materyalize (TKS-YYYY-NNNN)", /^TKS-\d{4}-\d{4,6}$/.test(k.lisansNo), k.lisansNo);
     const kodKaydi = await prisma.etkinlestirmeKodu.findFirstOrThrow({ where: { kurulumId: k.kurulumDbId } });
-    kontrol("§1c kodun düz metni DB'de YOK (sha256 + son 4)", kodKaydi.kodOzeti !== k.kod && !JSON.stringify(kodKaydi).includes(k.kod) && kodKaydi.kodSonu === k.kod.slice(-4));
+    kontrol("§1c kodun düz metni DB'de YOK (özet + son 4)", kodKaydi.kodOzeti !== k.kod && !JSON.stringify(kodKaydi).includes(k.kod) && kodKaydi.kodSonu === k.kod.slice(-4));
+    const pepperiz = createHash("sha256").update(k.kod, "utf8").digest("hex");
+    kontrol("§1d ✓K özet sunucu sırlı HMAC: sırsız sha256 TUTMAZ, sırlı özet tutar", kodKaydi.kodOzeti !== pepperiz && kodKaydi.kodOzeti === ctx.codeHasher.digest(k.kod));
+    kontrol("§1e kod türü `ilk`, talepsiz", kodKaydi.tur === "ilk" && kodKaydi.tasimaTalebiId === null);
 
     console.log("\n§2 hata yolları (kod tüketilmeden)");
     const govde = etkinlestirmeGovdesi({ kod: k.kod, kurulumId: k.kurulumId, anahtar: f.kurulum, parmakIzi: f.parmakIzi });
@@ -127,6 +133,7 @@ async function main(): Promise<void> {
       return v.ok && v.value.kurulumId === k.kurulumId && isDownloadPathAllowed(v.value, `${t.yolOneki}paket.exe`);
     });
     kontrol("§3j iki indirme belirteci (electron/ + mobil/) kâhinden geçer", indOk, `${tokenlar.length} belirteç`);
+    kontrol("§3k yanıt lisans kimliğini (kiranınkiyle aynı) ve kod türünü taşır", yanit.data.kurulumId === k.kurulumId && yanit.data.kurulumId === kira.kurulumId && yanit.data.kodTuru === "ilk", `${yanit.data.kurulumId} ${yanit.data.kodTuru}`);
 
     console.log("\n§4 DB izi");
     const kurulum = await prisma.kurulum.findUniqueOrThrow({ where: { id: k.kurulumDbId } });
@@ -144,6 +151,8 @@ async function main(): Promise<void> {
     const denetim = await prisma.denetim.findMany({ where: { varlikId: k.kurulumDbId } });
     const denetimMetni = JSON.stringify(denetim);
     kontrol("§4f denetim: etkinleşme olayı var, kod düz metni/imzalı belge YOK", denetim.some((d) => d.olay === "KURULUM_ETKINLESTI") && !denetimMetni.includes(k.kod) && !denetimMetni.includes(yanit.data.kira));
+    const kayitMetni = JSON.stringify(kayit);
+    kontrol("§4g kodun son 4'ü YALNIZ kod satırında: denetim ve kurulum kaydı kod KİMLİĞİNİ taşır", !denetimMetni.includes("kodSonu") && !kayitMetni.includes("kodSonu") && kayitMetni.includes(kodKaydi.id) && denetimMetni.includes(kodKaydi.id));
 
     console.log("\n§5 tekrar ve ikinci kullanım");
     const tekrar = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, { kurulumId: k.kurulumId, amac: "etkinlestir", anahtar: f.kurulum, govde });
@@ -157,6 +166,31 @@ async function main(): Promise<void> {
       govde: { ...govde, acikAnahtar: ikinci.x },
     });
     kontrol("§5b aynı kod başka anahtarla → 409 ETKINLESTIRME_KODU_KULLANILMIS", baska.status === 409 && baska.kod === "ETKINLESTIRME_KODU_KULLANILMIS", `${baska.status} ${baska.kod}`);
+
+    console.log("\n§5c kimliksiz etkinleştirme (D14) — kurulumu kod belirler");
+    const k2 = await kurulumFiksturu(ctx);
+    temizlenecek.push(k2.kurulumDbId);
+    const kimliksizAnahtar = kurulumAnahtariUret();
+    const kimliksizGovde = etkinlestirmeGovdesi({ kod: k2.kod, kurulumId: null, anahtar: kimliksizAnahtar, parmakIzi: f.parmakIzi });
+    const baskaKodla = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
+      kurulumId: k.kurulumId,
+      amac: "etkinlestir",
+      anahtar: kimliksizAnahtar,
+      govde: { ...kimliksizGovde, kurulumId: k.kurulumId },
+    });
+    kontrol("§5c1 ✓K kimlik taşıyan istek + BAŞKA kurulumun kodu → 404 (kod o kuruluma ait değil)", baskaKodla.status === 404 && baskaKodla.kod === "ETKINLESTIRME_KODU_GECERSIZ", `${baskaKodla.status} ${baskaKodla.kod}`);
+    const govdeKimlikli = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, { kurulumId: null, amac: "etkinlestir", anahtar: kimliksizAnahtar, govde: { ...kimliksizGovde, kurulumId: k2.kurulumId } });
+    kontrol("§5c2 kimliksiz imza + gövdede kimlik → 401 ISTEK_KURULUM", govdeKimlikli.status === 401 && govdeKimlikli.kod === "ISTEK_KURULUM", `${govdeKimlikli.status} ${govdeKimlikli.kod}`);
+    const kimliksiz = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, { kurulumId: null, amac: "etkinlestir", anahtar: kimliksizAnahtar, govde: kimliksizGovde });
+    const kimliksizYanit = LicenseResponseSchema.safeParse(kimliksiz.json);
+    const kimliksizKira = kimliksizYanit.success ? verifyLease(kimliksizYanit.data.kira, f.kokler) : null;
+    kontrol(
+      "§5c3 kimliksiz istek → 200, yanıt kurulumId = portalın kimliği = kiranın kimliği",
+      kimliksiz.status === 200 && kimliksizYanit.success && kimliksizYanit.data.kurulumId === k2.kurulumId && kimliksizKira?.ok === true && kimliksizKira.value.document.kurulumId === k2.kurulumId,
+      `${kimliksiz.status} ${kimliksiz.kod ?? ""}`,
+    );
+    const nonceSatiri = await prisma.nonceDefteri.count({ where: { kapsam: k2.kurulumDbId, kurulumId: k2.kurulumDbId } });
+    kontrol("§5c4 kimliksiz etkinleştirmenin nonce kapsamı koddan bulunan kurulum", nonceSatiri === 1, `${nonceSatiri}`);
 
     console.log("\n§6 ✓K sondası: kurgu yeşil değil");
     const sahte = signJws({ typ: "tekserp-kira", kid: f.alt.kid, payload: parseJws(yanit.data.kira).ok ? (parseJws(yanit.data.kira) as { ok: true; value: { payload: Record<string, unknown> } }).value.payload : {}, privateKey: ikinci.privateKey });

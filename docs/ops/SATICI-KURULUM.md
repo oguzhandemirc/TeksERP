@@ -45,7 +45,7 @@ Hepsinde: kök FS **salt okunur** · `cap_drop: ALL` · `no-new-privileges` · d
 
 | Ne | Nerede (Mac) | İzin |
 |---|---|---|
-| Hazırlık kökü (scrypt + AES-256-GCM parolalı) · ALT · İNDİRME · `portal-totp.key` | `~/.tekserp/satici-hazirlik/` | dizin 700 · dosyalar 600 |
+| Hazırlık kökü (scrypt + AES-256-GCM parolalı) · ALT · İNDİRME · `portal-totp.key` · `etkinlestirme-kodu.pepper` | `~/.tekserp/satici-hazirlik/` | dizin 700 · dosyalar 600 |
 | Kök parolası (rastgele, 43 karakter) | `~/.tekserp/sirlar/hazirlik-kok-parolasi.txt` | 600 |
 | Yedek alıcısı `satici` — açık yarı | `~/.tekserp/satici-hazirlik-yedek-alici/satici.tkpub` | 644 |
 | Yedek alıcısı — özel yarı (satıcı yedeklerini AÇAR) | `~/.tekserp/sirlar/satici-hazirlik-yedek-ozel.txt` | 600 |
@@ -58,7 +58,11 @@ P=~/.tekserp/sirlar/hazirlik-kok-parolasi.txt; D=~/.tekserp/satici-hazirlik
 { cat "$P"; cat "$P"; } | npx tsx scripts/anahtar.ts kok-uret --kid=hazirlik-2026-1 --dizin="$D"
 cat "$P" | npx tsx scripts/anahtar.ts alt-uret --kid=alt-hazirlik-2026-1 --kok=hazirlik-2026-1 --dizin="$D"
 cat "$P" | npx tsx scripts/anahtar.ts indirme-uret --kid=ind-hazirlik-2026 --kok=hazirlik-2026-1 --dizin="$D"
+npx tsx scripts/anahtar.ts sirlar-uret --dizin="$D"   # portal-totp.key + etkinlestirme-kodu.pepper (varsa korunur)
 ```
+
+- **İki simetrik sır (F2):** anahtar birimi VDS'te SALT OKUNUR olduğundan sunucu bunları açılışta üretemez — yoksa açılış düşer (fail-closed). `etkinlestirme-kodu.pepper` etkinleştirme kodunun DB özetini sırlar (HMAC): kaybolursa açık kodlar tanınmaz (yeniden üretilir), TOTP anahtarı kaybolursa portal TOTP'leri sıfırlanır. İkisi de kök dosyasıyla birlikte VDS dışı kopyaya girer.
+- **Hız sınırı ve vekil (F2, D9):** `/v1/*` istemci IP'si başına ve kurulum başına sınırlıdır. İstemci IP'si `cf-connecting-ip`'ten YALNIZ güvenilen kenardan gelen bağlantıda okunur; satıcının soketi Traefik olduğundan compose `IC_VEKIL_AGLARI=${KENAR_AGI}` verir ve güven kararı Traefik'in `X-Forwarded-For`a yazdığı son halkaya (CF kenar adresi) göre verilir — Traefik gelen X-Forwarded-* başlıklarına güvenmez (varsayılan), kökene doğrudan vuran istek kendi adresiyle sayılır.
 
 - **VDS dışı kopya (kullanıcı):** `hazirlik-2026-1.kok.json` + parolası USB'ye ve kâğıda (parola ayrı kâğıtta). Mac tek kopya olarak kalmamalı.
 - **ALT rotasyonu:** sertifika `2027-03-28`'de biter → ondan önce Mac'te `alt-hazirlik-2026-2` üretilir, VDS'teki `anahtarlar/`a kopyalanır; satıcı anahtar deposunu bakım işinde (dakikada bir) yeniden okur, yeniden başlatma gerekmez. Eskisi örtüşme süresince kalır.
@@ -119,7 +123,7 @@ tailscale ip -4        # → TAILNET_IP
 Tailscale kullanıcı onayı beklerken satıcı **geri döngü kipinde** koşar: `.env`'de `COMPOSE_FILE=docker-compose.yml:docker-compose.loopback.yml` (her `docker compose` komutu ikisini birden alır) ve `TAILNET_IP=127.0.0.1` (bu kipte kullanılmaz; ana dosyanın zorunlu alanı).
 
 - Portal **hiçbir yere yayımlanmaz**; tailnet köprüsü **internal** olur (satıcının dış bağlantısı yok → DOCKER-USER kuralı ve `tekserp-satici-tailnet@` birimi bu kipte GEREKMEZ).
-- Satıcının tailnet dinleyicisi konteynerin kendi `127.0.0.1`'ine bağlanır (`TAILNET_BIND`); `portal-tunel` (aynı imaj, `portal-tunel.cjs`) satıcının ağ ad alanında köprü adresini (`TAILNET_KONTEYNER_IP:4611`) dinleyip `127.0.0.1:4611`'e aktarır → portal kaynağı `127.0.0.1` görür. `TAILNET_LOOPBACK=1` F2'nin "127/8 yalnız bu anahtarla tailnet" kuralına hazırdır; anahtar kodda yokken bugünkü davranış 127/8'i zaten tailnet sayar.
+- Satıcının tailnet dinleyicisi konteynerin kendi `127.0.0.1`'ine bağlanır (`TAILNET_BIND`); `portal-tunel` (aynı imaj, `portal-tunel.cjs`) satıcının ağ ad alanında köprü adresini (`TAILNET_KONTEYNER_IP:4611`) dinleyip `127.0.0.1:4611`'e aktarır → portal kaynağı `127.0.0.1` görür. Bu kipte `TAILNET_LOOPBACK=1` ZORUNLUDUR: satıcı 127/8'i yalnız bu anahtarla tailnet sayar (F2; anahtarsız geri döngü kaynağı 404 alır).
 - **Neden iletici:** port VDS'in `127.0.0.1`'ine yayımlansa bile Docker'ın vekili bağlantıyı köprü ağ geçidinin adresiyle konteynere taşır — kapı onu tailnet saymaz, portal 404 döner (§1; VDS'te yeniden ölçüldü §12). Ağ geçidini listeye eklemek ÇÖZÜM DEĞİLDİR.
 - **Erişim (Mac):** `node deploy/satici/portal-baglan.mjs` → tarayıcıda `http://127.0.0.1:14611/portal/`. VDS'in sshd'si TCP yönlendirmeyi kapatır (`AllowTcpForwarding no`, `00-hardening.conf`) — `ssh -L` "administratively prohibited" döner; araç Mac'te yalnız `127.0.0.1`'i dinler, her bağlantıda bir SSH oturumu açıp VDS'te `nc -N 172.31.253.2 4611` koşturur (ortak ana bağlantı, ControlMaster). Köprü adresine yalnız VDS'in kendisi ulaşır (diğer köprülerden Docker yalıtımı düşürür); girişi parola + TOTP korur.
 - **Satıcı yeniden başlarsa:** `portal-tunel` eski ağ ad alanında kalır (Docker `service:` ağ kipinin sınırı); öz denetimi hedefe üç kez (30 sn arayla) ulaşamayınca çıkar, `restart` onu yeni ad alanına bağlar — ölçüldü: `docker restart` sonrası portal 75 sn'de geri geldi.

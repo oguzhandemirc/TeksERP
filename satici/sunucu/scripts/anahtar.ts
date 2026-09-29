@@ -13,6 +13,7 @@
 //   npx tsx scripts/anahtar.ts indirme-uret --kid=ind-2026 --kok=kok-2026-1 [--gun=365]
 //   npx tsx scripts/anahtar.ts bayi-uret --kid=bayi-ornek --bayi-id=<uuid> --moduller=a.enabled,b.enabled
 //                                        --siniflar=URETIM --kok=kok-2026-1 [--gun=365]
+//   npx tsx scripts/anahtar.ts sirlar-uret   (portal TOTP sarma anahtarı + etkinleştirme kodu sırrı; VAR olan korunur)
 //   Ortak: [--dizin=<anahtar dizini>] (varsayılan ANAHTAR_DIZINI ya da ./anahtarlar)
 // Stdin'den parola (TTY yoksa): her istenen parola bir satır (kök-uret: parola + tekrar).
 // =============================================================================
@@ -41,6 +42,8 @@ import {
   writeKeyFileExclusive,
 } from "../src/keys/key-files";
 import { signWithWrappedKey } from "../src/keys/signer";
+import { ACTIVATION_CODE_PEPPER_FILE, ActivationCodeHasher } from "../src/keys/code-pepper";
+import { PORTAL_SECRET_KEY_FILE, PortalSecretBox } from "../src/portal/secret-box";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
 
 // ---------------------------------------------------------------- yardımcılar
@@ -200,6 +203,23 @@ async function generateDealer(flags: Map<string, string>): Promise<void> {
   process.stdout.write(`Bayi anahtarı yazıldı: ${target}\n`);
 }
 
+/**
+ * Sunucunun iki simetrik sırrı (anahtar birimi VDS'te SALT OKUNUR — sunucu açılışta üretemez): portal TOTP
+ * sarma anahtarı ve etkinleştirme kodu sırrı (pepper). Var olan dosyanın üstüne YAZILMAZ; kaybolursa
+ * TOTP'ler sıfırlanır / açık kodlar yeniden üretilir.
+ */
+function generateServerSecrets(flags: Map<string, string>): void {
+  const dir = keyDir(flags);
+  for (const [ad, yukle] of [
+    [PORTAL_SECRET_KEY_FILE, () => PortalSecretBox.load(dir, { create: true })],
+    [ACTIVATION_CODE_PEPPER_FILE, () => ActivationCodeHasher.load(dir, { create: true })],
+  ] as const) {
+    const vardi = existsSync(path.join(dir, ad));
+    yukle();
+    process.stdout.write(`${ad}: ${vardi ? "vardı, korundu" : "üretildi (0600)"}\n`);
+  }
+}
+
 async function main(): Promise<void> {
   const { command, flags } = args(process.argv.slice(2));
   switch (command) {
@@ -211,8 +231,10 @@ async function main(): Promise<void> {
       return generateSubKey(flags, "INDIRME");
     case "bayi-uret":
       return generateDealer(flags);
+    case "sirlar-uret":
+      return generateServerSecrets(flags);
     default:
-      throw new CliError("Komut: kok-uret | alt-uret | indirme-uret | bayi-uret (ayrıntı dosya başında)");
+      throw new CliError("Komut: kok-uret | alt-uret | indirme-uret | bayi-uret | sirlar-uret (ayrıntı dosya başında)");
   }
 }
 

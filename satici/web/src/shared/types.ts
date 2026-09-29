@@ -151,9 +151,26 @@ export interface InstallationRef {
   readonly tesis: { readonly ad: string; readonly musteri: { readonly ad: string } };
 }
 
+/** Bağsız (kimliksiz) taşıma talebine İPUCU: DB kimliği son yoklamasında aynı olan kurulumlar. */
+export interface SuggestedInstallation {
+  readonly id: string;
+  readonly kurulumId: string;
+  readonly ad: string | null;
+  readonly durum: string;
+  readonly tesis: { readonly ad: string; readonly musteri: { readonly ad: string } };
+}
+
+/** Onay yanıtı: tek kullanımlık taşıma kodu ve son 4'ü yalnız canlı yanıtta (tekrar yanıtında `kodGosterilemez`). */
+export interface TransferApproved {
+  readonly id: string;
+  readonly tasimaKodu: { readonly id: string; readonly kod: string | null; readonly kodSonu?: string; readonly gecerlilikBitis: string; readonly kodGosterilemez?: boolean } | null;
+}
+
 export interface TransferRequest {
   readonly id: string;
-  readonly kurulumId?: string;
+  /** Satıcı kaydının id'si; kimliksiz talepte onaya dek YOK (bağı operatör kurar). */
+  readonly kurulumId?: string | null;
+  readonly onerilenKurulumlar?: readonly SuggestedInstallation[];
   readonly yeniAnahtarKimligi: string;
   readonly ortam: Record<string, unknown>;
   readonly gerekce: string | null;
@@ -358,11 +375,11 @@ export interface Dashboard {
   readonly yirmiDortSaattirSessiz: number;
 }
 
-/** Bir kez gösterilen kod yanıtı (tekrar yanıtında `kod: null`, `kodGosterilemez: true`). */
+/** Bir kez gösterilen kod yanıtı (tekrar yanıtında `kod: null`, `kodGosterilemez: true`, son 4 yok). */
 export interface ActivationCodeCreated {
   readonly id: string;
   readonly kod: string | null;
-  readonly kodSonu: string;
+  readonly kodSonu?: string;
   readonly gecerlilikBitis: string;
   readonly kodGosterilemez?: boolean;
 }

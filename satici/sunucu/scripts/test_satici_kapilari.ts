@@ -11,7 +11,7 @@
 //   §8 hata kodu TEK KAYNAK: portal kodları (`PORTAL_ERROR_CODES`) protokol kodlarıyla (`VENDOR_ERROR_CODES` ∪
 //      `PROTOCOL_ERROR_CODES`) kesişmez — ortak kod (BULUNAMADI, TEKRAR_DENEYIN…) yalnız protokolde yaşar
 //   §7 kilit SIRASI: bir fonksiyon birden çok kilit alıyorsa sıra PORTAL_TOKEN → DEALER → CUSTOMER →
-//      INSTALLATION → LICENSE_NUMBER (lib/locks.ts başlığı); ters sıra kilitlenme (40P01) doğurur
+//      TRANSFER_KEY → INSTALLATION → LICENSE_NUMBER (lib/locks.ts başlığı); ters sıra kilitlenme (40P01) doğurur
 // Taban 0 — tarayıcı (cırcır değil): ihlal doğduğu an kırmızı.
 // ⭐ KALICI SONDA ✓K6 (her koşumda): aynı çözümleyiciler sentetik ihlalli kaynakta ISIRIR —
 //    kilitsiz tx · tx içinde Promise.all · defter modelinde deleteMany · tabloda olmayan uzay ·
@@ -32,10 +32,12 @@ const SRC = path.join(SATICI_KOKU, "src");
 const LOCK_RANK: Readonly<Record<string, number>> = {
   lockPortalToken: 0,
   lockDealer: 1,
+  lockDealers: 1,
   lockCustomer: 2,
-  lockInstallation: 3,
-  lockInstallations: 3,
-  lockLicenseNumber: 4,
+  lockTransferKey: 3,
+  lockInstallation: 4,
+  lockInstallations: 4,
+  lockLicenseNumber: 5,
 };
 const LOCK_FUNCS = new Set(Object.keys(LOCK_RANK));
 const DB_CLIENTS = new Set(["prisma", "tx", "db"]);
@@ -192,7 +194,7 @@ function main(): void {
   kontrol("§2 her $transaction'ın ilk ifadesi kilit", f.unlockedTx.length === 0, f.unlockedTx.join(", "));
   kontrol("§3 tx içinde Promise.all yok", f.promiseAllInTx.length === 0, f.promiseAllInTx.join(", "));
   kontrol(`§4 sert silme yalnız telemetride (${PRUNED_MODELS.join(" · ")})`, f.hardDeletes.length === 0, f.hardDeletes.join(", "));
-  kontrol("§7 çoklu kilit sırası PORTAL_TOKEN → DEALER → CUSTOMER → INSTALLATION → LICENSE_NUMBER", f.lockOrder.length === 0, f.lockOrder.join(", "));
+  kontrol("§7 çoklu kilit sırası PORTAL_TOKEN → DEALER → CUSTOMER → TRANSFER_KEY → INSTALLATION → LICENSE_NUMBER", f.lockOrder.length === 0, f.lockOrder.join(", "));
 
   console.log("\n§5 şema aynası");
   const schema = readFileSync(path.join(SATICI_KOKU, "prisma", "schema.prisma"), "utf8");
@@ -220,7 +222,8 @@ function main(): void {
     { name: "sonda/c.ts", text: `async function c(){ await prisma.kira.deleteMany({ where: {} }); await tx.$executeRaw\`DELETE FROM kira\`; }` },
     { name: "sonda/d.ts", text: `const q = "SELECT pg_advisory_xact_lock(9999, 1)";` },
     { name: "sonda/e.ts", text: `async function e(tx){ await lockInstallation(tx, "1"); await lockDealer(tx, "2"); }` },
-    { name: "sonda/f.ts", text: `async function f(tx){ await lockPortalToken(tx, "t"); await lockDealer(tx, "2"); await lockCustomer(tx, "c"); await lockInstallations(tx, ["1"]); await lockLicenseNumber(tx, 2026); }` },
+    { name: "sonda/f.ts", text: `async function f(tx){ await lockPortalToken(tx, "t"); await lockDealers(tx, ["2"]); await lockCustomer(tx, "c"); await lockTransferKey(tx, "k"); await lockInstallations(tx, ["1"]); await lockLicenseNumber(tx, 2026); }` },
+    { name: "sonda/g.ts", text: `async function g(tx){ await lockInstallation(tx, "1"); await lockTransferKey(tx, "k"); }` },
   ]);
   kontrol("§6a kilitsiz tx yakalanır", sonda.unlockedTx.some((w) => w.startsWith("sonda/a.ts")));
   kontrol("§6b tx içinde Promise.all yakalanır", sonda.promiseAllInTx.some((w) => w.startsWith("sonda/b.ts")));
@@ -228,7 +231,8 @@ function main(): void {
   kontrol("§6c defter modelinde deleteMany + ham DELETE yakalanır", c.some((w) => w.endsWith("kira.deleteMany")) && c.some((w) => w.endsWith("ham SQL")), c.join(" · "));
   kontrol("§6d kilit dosyası dışında pg_advisory yakalanır", sonda.advisoryOutsideLocks.includes("sonda/d.ts"));
   kontrol("§6e kurulum kilidinden SONRA bayi kilidi yakalanır", sonda.lockOrder.some((w) => w.startsWith("sonda/e.ts") && w.endsWith("lockDealer")));
-  kontrol("§6f doğru sıradaki beşli kilit zinciri SUSAR (kör reddetme yok)", !sonda.lockOrder.some((w) => w.startsWith("sonda/f.ts")));
+  kontrol("§6f doğru sıradaki altılı kilit zinciri SUSAR (kör reddetme yok)", !sonda.lockOrder.some((w) => w.startsWith("sonda/f.ts")));
+  kontrol("§6g kurulum kilidinden SONRA taşıma anahtarı kilidi yakalanır", sonda.lockOrder.some((w) => w.startsWith("sonda/g.ts") && w.endsWith("lockTransferKey")));
   sonuc();
 }
 

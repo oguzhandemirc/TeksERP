@@ -16,6 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { loadConfig } from "../src/config";
 import { KeyStore } from "../src/keys/key-store";
+import { ActivationCodeHasher } from "../src/keys/code-pepper";
 import { createPublicApp } from "../src/http/public-app";
 import { createTailnetApp } from "../src/http/tailnet-app";
 import { PortalSecretBox } from "../src/portal/secret-box";
@@ -65,10 +66,11 @@ async function main(): Promise<void> {
 
   const f = fiksturKur(Date.now());
   writeFileSync(path.join(kok, "capa.json"), JSON.stringify(f.kokler));
-  const taban = { DATABASE_URL: "postgresql://x@127.0.0.1:1/x_test", ANAHTAR_DIZINI: kok, GUVEN_CAPASI_DOSYASI: path.join(kok, "capa.json") };
+  // Bekçi 127.0.0.1'den bağlanır: geri döngü tailnet kaynağı sayılsın (kapının kendisi test_tailnet_kapisi'nde).
+  const taban = { DATABASE_URL: "postgresql://x@127.0.0.1:1/x_test", ANAHTAR_DIZINI: kok, GUVEN_CAPASI_DOSYASI: path.join(kok, "capa.json"), TAILNET_LOOPBACK: "1" };
   const baglam = (webDizini: string): VendorContext => {
     const config = loadConfig({ ...taban, PORTAL_WEB_DIZINI: webDizini });
-    return { config, keys: KeyStore.load(config), portalSecrets: PortalSecretBox.load(kok, { create: true }) };
+    return { config, keys: KeyStore.load(config), portalSecrets: PortalSecretBox.load(kok, { create: true }), codeHasher: ActivationCodeHasher.load(kok, { create: true }) };
   };
 
   console.log("\n§0 yapılandırma");

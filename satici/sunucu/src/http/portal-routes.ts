@@ -14,6 +14,7 @@ import {
   assertProductionKept,
 } from "../portal/module-catalog";
 import { hashPortalPassword } from "../portal/password";
+import { withSigningPasswordGuard } from "../portal/signing-guard";
 import * as q from "../portal/queries";
 import { PORTAL_ROLES, roleHas } from "../portal/roles";
 import {
@@ -36,6 +37,7 @@ import {
   setDealerCeilingTx,
   type DealerCeilingInput,
 } from "../services/dealer.service";
+import { assertDealerCanTakeCustomer } from "../services/dealer-ownership.service";
 import { revertDrTakeoverTx } from "../services/dr.service";
 import {
   createActivationCodeTx,
@@ -47,9 +49,11 @@ import {
 } from "../services/entitlement.service";
 import { cancelInstallationTx, closeCopyAlertTx, findCopyAlert, reinstateInstallationTx } from "../services/installation-admin.service";
 import {
+  changesDealer,
   createCustomerTx,
   createInstallationTx,
   createSiteTx,
+  findCustomer,
   findInstallationWithSite,
   findSite,
   setCustomerActiveTx,
@@ -106,10 +110,10 @@ const CustomerCreate = z.strictObject({ clientToken: Token, ad: z.string().min(1
 const CustomerUpdate = z.strictObject({ clientToken: Token, ad: z.string().min(1).max(200).optional(), vergiNo: TaxNo, bayiId: z.uuid().nullable().optional() });
 const SiteCreate = z.strictObject({ clientToken: Token, musteriId: z.uuid(), ad: z.string().min(1).max(200) });
 const SiteUpdate = z.strictObject({ clientToken: Token, ad: z.string().min(1).max(200) });
+// Lisans kimliği (kurulumId) gövdede YOK: sunucu üretir (D14) — fabrikaya etkinleştirme yanıtıyla gider.
 const InstallationCreate = z.strictObject({
   clientToken: Token,
   tesisId: z.uuid(),
-  kurulumId: z.uuid(),
   sinif: ClassEnum,
   kanalKodu: z.string().min(1).max(40),
   ad: z.string().max(200).nullable().optional(),
@@ -182,6 +186,8 @@ const InstallmentPlan = z.strictObject({
   onay: z.string().max(40).optional(),
 });
 const TokenOnly = z.strictObject({ clientToken: Token });
+/** Kimliksiz (bağsız) talepte hedef kurulumu operatör seçer (satıcı kaydının id'si); bağlı talepte verilirse aynı olmalı. */
+const TransferApprove = z.strictObject({ clientToken: Token, sebep: Reason, kurulumId: z.uuid().optional() });
 const CopyAlertClose = z.strictObject({ clientToken: Token, sebep: Reason, digerParmakIziniKabulEt: z.boolean() });
 const Ceiling = z.strictObject({
   moduller: ModuleList,
@@ -365,6 +371,10 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     kimlik: "ISLEM_KIMLIGI",
     handler: async (c) => {
       const b = bodyOf(c, CustomerCreate);
+      // Yeni müşteriyi bir bayiye bağlamak da bayi ATAMASIdır: yalnız yönetici (D10; güncellemedeki kapıyla aynı).
+      if (b.bayiId && !roleHas(c.session.user.rol, "bayi:yonet")) {
+        throw new VendorError(403, "YETKISIZ", "Müşteriyi bir bayiye yalnız yönetici bağlar");
+      }
       return portalAction(c, {
         action: "MUSTERI_EKLE",
         clientToken: b.clientToken,
@@ -383,11 +393,16 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     handler: async (c) => {
       const id = idParam(c.req, "id", "Müşteri");
       const b = bodyOf(c, CustomerUpdate);
+      const customer = await findCustomer(prisma, id);
+      // Bayi bağı (atama · başka bayiye geçiş · bayiden alma) yalnız yönetici: bayi o müşterinin hak/kodunu yönetir (D10).
+      if (changesDealer(customer, b.bayiId) && !roleHas(c.session.user.rol, "bayi:yonet")) {
+        throw new VendorError(403, "YETKISIZ", "Müşterinin bayisini yalnız yönetici değiştirir");
+      }
       return portalAction(c, {
         action: "MUSTERI_GUNCELLE",
         clientToken: b.clientToken,
         body: withPath(b, id),
-        run: (tx) => updateCustomerTx(tx, { customerId: id, name: b.ad, taxNo: b.vergiNo, dealerId: b.bayiId }),
+        run: (tx) => updateCustomerTx(tx, { customer, name: b.ad, taxNo: b.vergiNo, dealerId: b.bayiId, assertDealerCanTake: assertDealerCanTakeCustomer }),
         respond: (row) => ({ data: row }),
         audit: (row) => [{ event: "MUSTERI_GUNCELLENDI", entity: "Musteri", entityId: row.id, summary: { alanlar: Object.keys(b).filter((k) => k !== "clientToken") } }],
       });
@@ -460,7 +475,7 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         clientToken: b.clientToken,
         body: b,
         run: (tx) =>
-          createInstallationTx(tx, { site, siteId: site.id, installationId: b.kurulumId, licenseClass: b.sinif, channelCode: b.kanalKodu, name: b.ad, pollMinutes: b.yoklamaAraligiDk }),
+          createInstallationTx(tx, { site, siteId: site.id, licenseClass: b.sinif, channelCode: b.kanalKodu, name: b.ad, pollMinutes: b.yoklamaAraligiDk }),
         respond: (row) => ({ status: 201, data: row }),
         audit: (row) => [{ event: "KURULUM_EKLENDI", entity: "Kurulum", entityId: row.id, summary: { sinif: row.sinif, kanal: row.kanalKodu } }],
       });
@@ -540,7 +555,10 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         action: "HAK_SURUM",
         clientToken: b.clientToken,
         body: withPath(b, id),
-        prepare: () => prepareEntitlementVersion(c.ctx, { entitlementId: id, changes, password, reason: b.sebep, actor: c.session.actor, nowMs: c.nowMs }),
+        prepare: () =>
+          withSigningPasswordGuard(c.ctx, { userId: c.session.user.id, actor: c.session.actor, kind: "KOK", nowMs: c.nowMs }, () =>
+            prepareEntitlementVersion(c.ctx, { entitlementId: id, changes, password, reason: b.sebep, actor: c.session.actor, nowMs: c.nowMs }),
+          ),
         run: async (tx, p) => ({ row: await recordEntitlementVersionTx(tx, p), p }),
         respond: ({ row }) => ({ status: 201, data: { id: row.id, hakId: row.hakId, surum: row.surum, imzalayanKid: row.imzalayanKid, verilis: row.verilis } }),
         audit: ({ row, p }) => [entitlementVersionAudit(row, p)],
@@ -561,13 +579,13 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         clientToken: b.clientToken,
         body: withPath(b, id),
         run: (tx) => createActivationCodeTx(tx, c.ctx, { installationDbId: id, validDays: b.gecerlilikGun, actor: c.session.actor, nowMs: c.nowMs }),
-        // Düz kod YALNIZ canlı yanıtta: saklanan (tekrar) yanıtta yok — yeni kod üretilir.
+        // Düz kod ve son 4'ü YALNIZ canlı yanıtta: saklanan (tekrar) yanıtta yok (son 4 yalnız kod satırında).
         respond: (r) => ({
           status: 201,
           data: { id: r.id, kod: r.code, kodSonu: r.codeTail, gecerlilikBitis: r.expiresAt },
-          stored: { id: r.id, kod: null, kodSonu: r.codeTail, gecerlilikBitis: r.expiresAt, kodGosterilemez: true },
+          stored: { id: r.id, kod: null, gecerlilikBitis: r.expiresAt, kodGosterilemez: true },
         }),
-        audit: (r) => [{ event: "ETKINLESTIRME_KODU", entity: "Kurulum", entityId: id, summary: { kodSonu: r.codeTail } }],
+        audit: (r) => [{ event: "ETKINLESTIRME_KODU", entity: "Kurulum", entityId: id, summary: { kodId: r.id, tur: r.kind } }],
       });
     },
   },
@@ -821,28 +839,55 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
   },
 
   // ------------------------------------------------------------ kurulum yönetimi
-  ...(["onayla", "reddet"] as const).map(
-    (verb): PortalRouteDef => ({
-      method: "post",
-      path: `/tasima-talepleri/:id/${verb}`,
-      permission: "kurulum:yonet",
-      kimlik: "ISLEM_KIMLIGI",
-      handler: async (c) => {
-        const id = idParam(c.req, "id", "Taşıma talebi");
-        const b = bodyOf(c, ReasonOnly);
-        const talep = await findTransferRequest(id);
-        const decision = verb === "onayla" ? "ONAYLANDI" : "REDDEDILDI";
-        return portalAction(c, {
-          action: `TASIMA_${decision}`,
-          clientToken: b.clientToken,
-          body: withPath(b, id),
-          run: (tx) => decideTransferTx(tx, { talep, decision, actor: c.session.actor, reason: b.sebep }),
-          respond: (row) => ({ data: { ...row, yeniAcikAnahtar: undefined } }),
-          audit: (row) => [{ event: `TASIMA_${decision}`, entity: "TasimaTalebi", entityId: row.id, summary: { sebep: b.sebep } }],
-        });
-      },
-    }),
-  ),
+  // Onay tek kullanımlık TAŞIMA KODU üretir (D8): düz kod YALNIZ canlı yanıtta, müşteriye portaldan iletilir;
+  // yeni makine onu /v1/etkinlestir'de kullanınca anahtar değişir. Saklanan (tekrar) yanıtta kod da son 4'ü de yok.
+  {
+    method: "post",
+    path: "/tasima-talepleri/:id/onayla",
+    permission: "kurulum:yonet",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Taşıma talebi");
+      const b = bodyOf(c, TransferApprove);
+      const talep = await findTransferRequest(id);
+      return portalAction(c, {
+        action: "TASIMA_ONAYLANDI",
+        clientToken: b.clientToken,
+        body: withPath(b, id),
+        run: (tx) => decideTransferTx(tx, c.ctx, { talep, decision: "ONAYLANDI", actor: c.session.actor, reason: b.sebep, installationDbId: b.kurulumId, nowMs: c.nowMs }),
+        respond: (r) => {
+          const row = { ...r.talep, yeniAcikAnahtar: undefined };
+          const code = r.code ? { id: r.code.id, gecerlilikBitis: r.code.expiresAt } : null;
+          return {
+            data: { ...row, tasimaKodu: code ? { ...code, kod: r.code!.code, kodSonu: r.code!.codeTail } : null },
+            stored: { ...row, tasimaKodu: code ? { ...code, kod: null, kodGosterilemez: true } : null },
+          };
+        },
+        audit: (r) => [
+          { event: "TASIMA_ONAYLANDI", entity: "TasimaTalebi", entityId: r.talep.id, summary: { sebep: b.sebep, kurulumId: r.talep.kurulumId, kodId: r.code?.id ?? null } },
+        ],
+      });
+    },
+  },
+  {
+    method: "post",
+    path: "/tasima-talepleri/:id/reddet",
+    permission: "kurulum:yonet",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Taşıma talebi");
+      const b = bodyOf(c, ReasonOnly);
+      const talep = await findTransferRequest(id);
+      return portalAction(c, {
+        action: "TASIMA_REDDEDILDI",
+        clientToken: b.clientToken,
+        body: withPath(b, id),
+        run: (tx) => decideTransferTx(tx, c.ctx, { talep, decision: "REDDEDILDI", actor: c.session.actor, reason: b.sebep }),
+        respond: (r) => ({ data: { ...r.talep, yeniAcikAnahtar: undefined } }),
+        audit: (r) => [{ event: "TASIMA_REDDEDILDI", entity: "TasimaTalebi", entityId: r.talep.id, summary: { sebep: b.sebep } }],
+      });
+    },
+  },
   {
     method: "post",
     path: "/kopya-uyarilari/:id/kapat",

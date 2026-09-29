@@ -7,11 +7,9 @@ import { useWrite } from "./attempt";
 import { dateInputToIso, fmtDate, isoToDateInput } from "./format";
 import { CLASS_LABEL, MODULE_LABEL, PRODUCTION_MODULE_KEY, label } from "./labels";
 import { OnceSecretModal } from "./OnceSecret";
-import { useApi } from "./session";
+import { useApi, useCan } from "./session";
 import type { ActivationCodeCreated, Customer, EntitlementSummary, Installation, Ref, Site } from "./types";
 import { Button, ErrorText, Field, Modal, ModalActions } from "./ui";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---------------------------------------------------------------- modül seçici
 
@@ -85,10 +83,12 @@ export function CustomerFormModal({
   const [name, setName] = useState(customer?.ad ?? "");
   const [taxNo, setTaxNo] = useState(customer?.vergiNo ?? "");
   const [dealerId, setDealerId] = useState(customer?.bayiId ?? "");
+  // Bayi bağı (atama · değişim · kaldırma) yalnız yöneticinin (sunucu da 403 verir); operatör bağı görür, değiştiremez.
+  const canAssignDealer = useCan("bayi:yonet");
   const write = useWrite<Customer>((body) => (customer ? api.patch(`/musteriler/${customer.id}`, body) : api.post("/musteriler", body)));
   const submit = async () => {
     const body: Record<string, unknown> = { ad: name.trim(), vergiNo: taxNo.trim() || null };
-    if (dealers) body.bayiId = dealerId || null;
+    if (dealers && canAssignDealer) body.bayiId = dealerId || null;
     const r = await write.run(body);
     if (r.ok) onSaved(r.data);
   };
@@ -101,8 +101,8 @@ export function CustomerFormModal({
         <input value={taxNo} maxLength={20} onChange={(e) => setTaxNo(e.target.value)} />
       </Field>
       {dealers ? (
-        <Field label="Bayi" hint="Boş: müşteriyi doğrudan satıcı yönetir.">
-          <select value={dealerId} onChange={(e) => setDealerId(e.target.value)}>
+        <Field label="Bayi" hint={canAssignDealer ? "Boş: müşteriyi doğrudan satıcı yönetir." : "Bayi bağını yalnız yönetici değiştirir."}>
+          <select value={dealerId} disabled={!canAssignDealer} onChange={(e) => setDealerId(e.target.value)}>
             <option value="">— Doğrudan satıcı —</option>
             {dealers.map((d) => (
               <option key={d.id} value={d.id}>
@@ -154,8 +154,8 @@ export function SiteFormModal({ customerId, site, onClose, onSaved }: { customer
 // ---------------------------------------------------------------- kurulum
 
 /**
- * Kurulum fabrikanın installationId'siyle açılır (fabrika panelinde Sistem → Lisans ekranında
- * görünür); etkinleştirme kodu bu kuruluma bağlıdır ve başka kurulumu etkinleştiremez.
+ * Kurulumun lisans kimliği (`kurulumId`) SUNUCUDA doğar (D14) — formda sorulmaz; fabrikaya etkinleştirme
+ * yanıtıyla gider. Etkinleştirme kodu bu kuruluma bağlıdır ve başka kurulumu etkinleştiremez.
  */
 export function InstallationFormModal({
   siteId,
@@ -180,20 +180,17 @@ export function InstallationFormModal({
   onSaved: (i: Installation) => void;
 }) {
   const api = useApi();
-  const [installationId, setInstallationId] = useState(installation?.kurulumId ?? "");
   const [cls, setCls] = useState(installation?.sinif ?? classes[0] ?? "URETIM");
   const [channel, setChannel] = useState(installation?.kanalKodu ?? "");
   const [name, setName] = useState(installation?.ad ?? "");
   const [poll, setPoll] = useState(String(installation?.yoklamaAraligiDk ?? 60));
   const write = useWrite<Installation>((body) => (installation ? api.patch(`/kurulumlar/${installation.id}`, body) : api.post("/kurulumlar", body)));
-  const idOk = installation !== undefined || UUID.test(installationId.trim());
   // Düzenlenen kurulumun bugünkü kanalı listede olmasa da (ör. bayi tavanından çıkmış) seçili görünür.
   const channelChoices = installation && !channelOptions.includes(installation.kanalKodu) ? [installation.kanalKodu, ...channelOptions] : channelOptions;
   const submit = async () => {
     const body: Record<string, unknown> = { kanalKodu: channel.trim(), ad: name.trim() || null };
     if (!installation) {
       body.tesisId = siteId;
-      body.kurulumId = installationId.trim().toLowerCase();
       body.sinif = cls;
     } else if (cls !== installation.sinif) body.sinif = cls;
     if (allowPollInterval) body.yoklamaAraligiDk = Number(poll);
@@ -202,12 +199,7 @@ export function InstallationFormModal({
   };
   return (
     <Modal title={installation ? "Kurulumu düzenle" : "Yeni kurulum"} onClose={onClose} busy={write.pending}>
-      {installation ? null : (
-        <Field label="Fabrikanın kurulum kimliği (installationId)" hint="Fabrika panelinde Sistem → Lisans ekranında yazar. Etkinleştirme kodu yalnız bu kurulumu etkinleştirir.">
-          <input value={installationId} spellCheck={false} autoComplete="off" onChange={(e) => setInstallationId(e.target.value)} />
-        </Field>
-      )}
-      {!idOk && installationId.trim() ? <p className="error">Kurulum kimliği UUID biçiminde olmalı.</p> : null}
+      {installation ? null : <p className="field-hint">Lisans kimliği kaydedince üretilir; fabrikaya etkinleştirme koduyla gider.</p>}
       <Field label="Lisans sınıfı" hint={installation ? "İmzalı hakkı olan kurulumun sınıfı değişmez." : undefined}>
         <select value={cls} onChange={(e) => setCls(e.target.value)}>
           {classes.map((c) => (
@@ -241,7 +233,7 @@ export function InstallationFormModal({
         <Button onClick={onClose} disabled={write.pending}>
           Vazgeç
         </Button>
-        <Button variant="primary" onClick={submit} disabled={write.pending || !idOk || !channel.trim()}>
+        <Button variant="primary" onClick={submit} disabled={write.pending || !channel.trim()}>
           Kaydet
         </Button>
       </ModalActions>
@@ -355,6 +347,7 @@ export function EntitlementVersionModal({
     if (r.ok) onSaved();
   };
   const wrongPassword = write.error instanceof ApiError && write.error.code === "IMZA_PAROLASI_HATALI";
+  const signingLocked = write.error instanceof ApiError && write.error.code === "IMZA_PAROLASI_KILITLI";
   return (
     <Modal title={entitlement.guncelSurum === 0 ? "Lisansı imzala" : "Lisansı yenile (yeni imzalı sürüm)"} onClose={onClose} busy={write.pending} wide>
       <p className="muted">
@@ -383,7 +376,15 @@ export function EntitlementVersionModal({
       <Field label={passwordLabel} hint="Yalnız bu imza için kullanılır; kaydedilmez.">
         <input type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
       </Field>
-      {wrongPassword ? <p className="error">Parola hatalı.</p> : <ErrorText error={write.error} />}
+      {wrongPassword ? (
+        <p className="error">Parola hatalı. Art arda hatalı denemede imza bir süre kilitlenir.</p>
+      ) : signingLocked ? (
+        <p className="error" role="alert">
+          Çok sayıda hatalı parola: imza geçici olarak kilitli ({(write.error as ApiError).message}). Portalı kullanmaya devam edebilirsiniz.
+        </p>
+      ) : (
+        <ErrorText error={write.error} />
+      )}
       <ModalActions>
         <Button onClick={onClose} disabled={write.pending}>
           Vazgeç

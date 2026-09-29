@@ -81,7 +81,7 @@ export function InstallationDetailPage() {
       <Section title="Özet">
         <KeyValues
           items={[
-            ["Kurulum kimliği (installationId)", <code key="k">{inst.kurulumId}</code>],
+            ["Lisans kimliği (kurulumId)", <code key="k">{inst.kurulumId}</code>],
             ["Durum", <Badge key="d" tone={statusTone(inst.durum)}>{label(INSTALLATION_STATUS_LABEL, inst.durum)}</Badge>],
             ["Sınıf", label(CLASS_LABEL, inst.sinif)],
             ["Kanal", inst.kanalKodu],

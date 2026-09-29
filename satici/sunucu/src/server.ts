@@ -5,7 +5,9 @@ import { mkdirSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { loadConfig } from "./config";
+import { ActivationCodeHasher } from "./keys/code-pepper";
 import { KeyStore } from "./keys/key-store";
+import { setSignerConcurrency } from "./keys/signer";
 import { loadEnvFile } from "./lib/env";
 import { pool, prisma } from "./lib/prisma";
 import { createPublicApp } from "./http/public-app";
@@ -29,16 +31,22 @@ function listen(server: http.Server, port: number, host: string): Promise<Addres
 async function main(): Promise<void> {
   loadEnvFile();
   const config = loadConfig();
+  setSignerConcurrency(config.IMZA_ESZAMANLI);
   const keys = KeyStore.load(config);
   for (const w of keys.warnings) console.warn(`[satici] anahtar: ${w}`);
   for (const app of ["portal", "bayi"] as const) {
     if (!webAppAvailable(config.PORTAL_WEB_DIZINI, app)) console.warn(`[satici] web arayüzü (${app}) derlenmemiş: /${app} 404 döner, API çalışır`);
   }
   mkdirSync(config.ANAHTAR_DIZINI, { recursive: true, mode: 0o700 });
-  const ctx: VendorContext = { config, keys, portalSecrets: PortalSecretBox.load(config.ANAHTAR_DIZINI, { create: true }) };
+  const ctx: VendorContext = {
+    config,
+    keys,
+    portalSecrets: PortalSecretBox.load(config.ANAHTAR_DIZINI, { create: true }),
+    codeHasher: ActivationCodeHasher.load(config.ANAHTAR_DIZINI, { create: true }),
+  };
   await syncKeyRegistry(keys).catch((err: Error) => console.error(`[satici] anahtar künyesi yazılamadı: ${err.message}`));
 
-  const hub = new DoorbellHub(config.DATABASE_URL, config.ZIL_KALP_SN);
+  const hub = new DoorbellHub(config.DATABASE_URL, config.ZIL_KALP_SN, config.ZIL_AZAMI_ABONE);
   await hub.start();
 
   const publicServer = http.createServer(createPublicApp(ctx, hub));

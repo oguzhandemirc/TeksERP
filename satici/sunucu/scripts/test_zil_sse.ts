@@ -4,8 +4,10 @@
 // YOK); bağlanınca ve periyodik yorum satırı (kalp atışı; burada 1 sn); BAŞKA bir süreçten
 // (portal/CLI/zamanlayıcı yerine bu bekçi) PG NOTIFY ile çalınan zil her konuda ≤2 sn'de gelir;
 // yaptırım eylemi zili KENDİ tx'inde çalar; abone sayısı tailnet sağlık ucunda görünür ve kopunca
-// düşer; imzasız/yanlış amaçlı abonelik reddedilir.
-// ⭐ KALICI SONDA ✓K1 (her koşumda): başka kurulumun zili bu aboneye GELMEZ (çapraz teslim yok).
+// düşer; imzasız/yanlış amaçlı abonelik reddedilir; kurulum başına en çok ZIL_AZAMI_ABONE (3) akış —
+// dördüncüsü EN ESKİSİNİ kapatır (yarı açık eski bağlantı meşru yeniden bağlanmayı kilitlemez, D9).
+// ⭐ KALICI SONDA ✓K2 (her koşumda): başka kurulumun zili bu aboneye GELMEZ (çapraz teslim yok) · tavanın
+//    altındaki üç akışın üçü de zili alır (tavan körü körüne reddetmiyor).
 // Koşum: npx tsx scripts/test_zil_sse.ts
 // =============================================================================
 import { DOORBELL_TOPICS, ENDPOINTS, REQUEST_HEADER } from "../src/lisans-protokol";
@@ -106,6 +108,25 @@ async function main(): Promise<void> {
     kontrol("§6a abone sayısı 0", s2.abone === 0, JSON.stringify(s2));
     const genelPortal = await fetch(`${sunucu.genel}/portal/saglik`, { headers: { [REQUEST_HEADER]: "x" } });
     kontrol("§6b portal sağlık ucu GENEL dinleyicide YOK (404)", genelPortal.status === 404, `${genelPortal.status}`);
+
+    console.log("\n§7 kurulum başına abonelik tavanı (3) — dördüncü en eskisini kapatır");
+    const akislar = [];
+    for (let i = 0; i < 3; i++) akislar.push(await zilAboneOl(sunucu.genel, { kurulumId: k.kurulumId, anahtar }));
+    await bekle(300);
+    const ucBekle = akislar.map((a) => a.bekleKonu("destek", 2_000));
+    await notifyDoorbell(prisma, k.kurulumDbId, "destek");
+    const ucSonuc = await Promise.all(ucBekle);
+    kontrol("§7a ✓K tavan içinde üç akışın ÜÇÜ de zili alır", ucSonuc.every((x) => x !== null) && (await saglik()).abone === 3, ucSonuc.map((x) => (x === null ? "yok" : "ok")).join(","));
+    const dorduncu = await zilAboneOl(sunucu.genel, { kurulumId: k.kurulumId, anahtar });
+    await bekle(300);
+    const s3 = await saglik();
+    const enEski = akislar[0]!.bekleKonu("ozet", 1_000);
+    const yeni = dorduncu.bekleKonu("ozet", 2_000);
+    await notifyDoorbell(prisma, k.kurulumDbId, "ozet");
+    const [eskiMs, yeniMs] = await Promise.all([enEski, yeni]);
+    kontrol("§7b dördüncü abonelik kabul (200), abone sayısı 3'te kaldı", dorduncu.status === 200 && s3.abone === 3, `${dorduncu.status} abone ${s3.abone}`);
+    kontrol("§7c en eski akış kapandı (zil gelmez), yenisi alır", eskiMs === null && yeniMs !== null, `eski ${eskiMs} yeni ${yeniMs}`);
+    for (const a of [...akislar, dorduncu]) a.kapat();
   } finally {
     await sunucu.durdur();
     await temizleKurulumlar(temizlenecek, ortam.kidler);

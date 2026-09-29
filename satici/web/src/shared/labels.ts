@@ -57,6 +57,8 @@ export const COPY_ALERT_LABEL: Record<string, string> = {
   ZINCIR_CATALI: "Kira zinciri çatalı (iki makine)",
   PARMAK_IZI_UYUSMAZ: "Parmak izi uyuşmuyor",
   AYNI_PARMAK_IZI_TEKRAR: "Aynı parmak izi tekrarı (tam kopya şüphesi)",
+  YABANCI_KIRA: "Yabancı kira (defterde olmayan kira sunuldu)",
+  KIP_UYUSMAZ: "Kip uyuşmuyor (kira/durum silinmiş olabilir)",
 };
 export const LEASE_DECISION_LABEL: Record<string, string> = {
   ETKINLESTIRME: "Etkinleştirme",

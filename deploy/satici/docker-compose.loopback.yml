@@ -18,8 +18,8 @@
 #      VDS'te `nc -N <köprü> 4611` koşturur)
 # Neden iletici: Docker'ın yayımlı port vekili de köprü yolu da kaynağı ağ geçidine çevirir (ölçüldü,
 # runbook §1) — tailnet kapısı onu tailnet saymaz; ağ geçidini listeye eklemek ÇÖZÜM DEĞİLDİR.
-# TAILNET_LOOPBACK=1: satıcının "127.0.0.0/8 yalnız bu anahtarla tailnet sayılır" kuralı (F2) için;
-# anahtar kodda yokken bugünkü davranış 127/8'i zaten tailnet sayar.
+# TAILNET_LOOPBACK=1 ZORUNLU: satıcı 127.0.0.0/8'i yalnız bu anahtarla tailnet sayar (F2) — anahtarsız
+# iletici üzerinden gelen portal isteği 404 alır.
 # Yalıtım denetimi bu kipi tanır: node deploy/satici/compose-denetle.mjs --env-file <.env> (COMPOSE_FILE'ı okur)
 # =============================================================================
 

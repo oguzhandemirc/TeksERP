@@ -16,6 +16,7 @@
 import { mkdirSync } from "node:fs";
 import { loadConfig } from "../src/config";
 import { KeyStore } from "../src/keys/key-store";
+import { ActivationCodeHasher } from "../src/keys/code-pepper";
 import { recordAudit } from "../src/lib/audit";
 import { loadEnvFile } from "../src/lib/env";
 import { normalizeUsername } from "../src/portal/auth.service";
@@ -60,7 +61,12 @@ async function main(): Promise<void> {
   loadEnvFile();
   const config = loadConfig();
   mkdirSync(config.ANAHTAR_DIZINI, { recursive: true, mode: 0o700 });
-  const ctx: VendorContext = { config, keys: KeyStore.load(config), portalSecrets: PortalSecretBox.load(config.ANAHTAR_DIZINI, { create: true }) };
+  const ctx: VendorContext = {
+    config,
+    keys: KeyStore.load(config),
+    portalSecrets: PortalSecretBox.load(config.ANAHTAR_DIZINI, { create: true }),
+    codeHasher: ActivationCodeHasher.load(config.ANAHTAR_DIZINI, { create: true }),
+  };
   const { prisma, pool } = await import("../src/lib/prisma");
   try {
     const find = async () => {

@@ -2,7 +2,7 @@
 // Günlüğe istek gövdesi/başlığı yazılmaz (imzalı istek, sağlık özeti, parmak izi).
 import type { NextFunction, Request, Response } from "express";
 import { VendorError, retryConflict, type VendorCode } from "../lib/errors";
-import { isRetryableConflict } from "../lib/prisma-errors";
+import { isRetryableConflict, isUniqueViolation } from "../lib/prisma-errors";
 
 export function notFound(_req: Request, res: Response): void {
   res.status(404).json({ success: false, message: "Bulunamadı", details: { code: "BULUNAMADI" satisfies VendorCode } });
@@ -22,8 +22,9 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     res.status(400).json({ success: false, message: "İstek gövdesi okunamadı", details: { code: "GOVDE_GECERSIZ" } });
     return;
   }
-  if (isRetryableConflict(err)) {
-    const e409 = retryConflict();
+  // Yarışı kaybeden tekillik ihlali (P2002) de "tekrar deneyin"dir: yeniden deneme ön okumada doğru cevabı bulur (500 değil).
+  if (isRetryableConflict(err) || isUniqueViolation(err)) {
+    const e409 = retryConflict(isUniqueViolation(err) ? "Kayıt aynı anda başka bir işlemle çakıştı; lütfen tekrar deneyin" : undefined);
     res.status(e409.status).json({ success: false, message: e409.message, details: { code: e409.code } });
     return;
   }

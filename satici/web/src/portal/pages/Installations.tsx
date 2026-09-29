@@ -36,7 +36,7 @@ export function InstallationsPage() {
     <>
       <PageTitle
         title="Kurulumlar"
-        sub={siteId ? <>Tesis: {siteName ?? "—"} · <Link to="/kurulumlar">tüm kurulumlar</Link></> : "Fabrika sunucuları (installationId ile)"}
+        sub={siteId ? <>Tesis: {siteName ?? "—"} · <Link to="/kurulumlar">tüm kurulumlar</Link></> : "Fabrika sunucuları (lisans kimliğiyle)"}
         actions={canWrite && siteId ? <Button variant="primary" onClick={() => setParam("yeni", "1")}>Yeni kurulum</Button> : null}
       />
       <Section title="Liste">

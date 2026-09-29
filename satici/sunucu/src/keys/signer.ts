@@ -2,9 +2,56 @@
 // Ana süreç anahtarı hiç açmaz; alt süreç imzalar, Buffer'ları sıfırlar ve çıkar.
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
+import { VendorError } from "../lib/errors";
 import { KeyFileError } from "./key-files";
 
 const SIGNER_TIMEOUT_MS = 60_000;
+/** Slot bekleyen imza isteği tavanı: kuyruk dolarsa yeni istek beklemez, 429 alır. */
+const MAX_WAITING = 8;
+
+/**
+ * İmza alt süreci SEMAFORU (D11): her alt süreç scrypt ile ~64 MB bellek ister ve parola tahmininin
+ * birimidir — eşzamanlı alt süreç sayısı 1–2 slotla sınırlı (IMZA_ESZAMANLI), fazlası sıraya girer.
+ */
+class SignerSlots {
+  private active = 0;
+  private readonly waiting: (() => void)[] = [];
+  constructor(public limit: number) {}
+
+  async acquire(): Promise<() => void> {
+    if (this.active >= this.limit) {
+      if (this.waiting.length >= MAX_WAITING) throw new VendorError(429, "HIZ_SINIRI", "İmza kuyruğu dolu; biraz sonra deneyin");
+      await new Promise<void>((resolve) => this.waiting.push(resolve));
+    } else {
+      this.active++;
+    }
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const next = this.waiting.shift();
+      if (next) next();
+      else this.active--;
+    };
+  }
+
+  inUse(): number {
+    return this.active;
+  }
+}
+
+const slots = new SignerSlots(1);
+
+/** Açılışta yapılandırmadan (IMZA_ESZAMANLI, 1–2). */
+export function setSignerConcurrency(limit: number): void {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 2) throw new Error("İmza eşzamanlılığı 1–2 olmalı");
+  slots.limit = limit;
+}
+
+/** Bekçi için: şu an çalışan imza alt süreci sayısı. */
+export function signerSlotsInUse(): number {
+  return slots.inUse();
+}
 
 /** Alt süreç giriş dosyası: tsx altında .ts, derlenmişte .js — ana dosyanın uzantısı. */
 export function signerEntryPath(): string {
@@ -40,6 +87,21 @@ export interface SignWithWrappedKeyInput {
 }
 
 export async function signWithWrappedKey(g: SignWithWrappedKeyInput): Promise<string> {
+  let release: () => void;
+  try {
+    release = await slots.acquire();
+  } catch (err) {
+    g.password.fill(0);
+    throw err;
+  }
+  try {
+    return await signInChild(g);
+  } finally {
+    release();
+  }
+}
+
+async function signInChild(g: SignWithWrappedKeyInput): Promise<string> {
   const child = g.child ?? spawnSignerProcess();
   const request = Buffer.from(`${JSON.stringify({ anahtarDosyasi: g.keyFile, typ: g.typ, yuk: g.payload })}\n`, "utf8");
   let stderrTail = "";

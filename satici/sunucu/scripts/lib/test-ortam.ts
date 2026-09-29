@@ -31,11 +31,19 @@ import {
 import { loadConfig } from "../../src/config";
 import { passwordBuffer, subKeyFileFor, wrapPrivateKey, writeKeyFileExclusive } from "../../src/keys/key-files";
 import { KeyStore } from "../../src/keys/key-store";
+import { ActivationCodeHasher } from "../../src/keys/code-pepper";
 import { loadEnvFile } from "../../src/lib/env";
 import { PortalSecretBox } from "../../src/portal/secret-box";
 import type { VendorContext } from "../../src/services/context";
 
 export const SATICI_KOKU = path.resolve(__dirname, "..", "..");
+
+/**
+ * Bekçi ortamının varsayılanları: sunucu 127.0.0.1'de dinler (geri döngü tailnet sayılsın) ve /v1 hız sınırı
+ * akış bekçilerini ısırmasın. Hız sınırı ve geri döngü kapısı KENDİ bekçilerinde düşük/kapalı değerle ölçülür
+ * (`ekOrtam` bu varsayılanları ezer).
+ */
+export const BEKCI_ORTAMI: Readonly<Record<string, string>> = { TAILNET_LOOPBACK: "1", V1_HIZ_IP_DK: "100000", V1_HIZ_KURULUM_DK: "100000" };
 export const TEST_KOK_PAROLASI = "bekci-kok-parolasi-2026";
 
 let gecti = 0;
@@ -100,8 +108,13 @@ export async function anahtarOrtamiKur(simdi: number = Date.now(), ekOrtam: Reco
   const capaDosyasi = path.join(dizin, "capa.json");
   writeFileSync(capaDosyasi, JSON.stringify(f.kokler));
   loadEnvFile();
-  const config = loadConfig({ ...process.env, ...ekOrtam, ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: capaDosyasi }, SATICI_KOKU);
-  const ctx: VendorContext = { config, keys: KeyStore.load(config, simdi), portalSecrets: PortalSecretBox.load(dizin, { create: true }) };
+  const config = loadConfig({ ...process.env, ...BEKCI_ORTAMI, ...ekOrtam, ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: capaDosyasi }, SATICI_KOKU);
+  const ctx: VendorContext = {
+    config,
+    keys: KeyStore.load(config, simdi),
+    portalSecrets: PortalSecretBox.load(dizin, { create: true }),
+    codeHasher: ActivationCodeHasher.load(dizin, { create: true }),
+  };
   const kidler = [f.kok.kid, f.hazirlik.kid, f.alt.kid, f.ind.kid];
   return { f, dizin, capaDosyasi, ctx, kidler, temizle: () => rmSync(dizin, { recursive: true, force: true }) };
 }
@@ -127,6 +140,7 @@ export function sunucuBaslat(ortam: AnahtarOrtami, ekOrtam: Record<string, strin
       ANAHTAR_DIZINI: ortam.dizin,
       GUVEN_CAPASI_DOSYASI: ortam.capaDosyasi,
       SATICI_ERISIM_GUNLUGU: "0",
+      ...BEKCI_ORTAMI,
       ...ekOrtam,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -174,7 +188,7 @@ export interface KurulumFiksturu {
   readonly tesisId: string;
   /** Satıcı kaydının id'si. */
   readonly kurulumDbId: string;
-  /** Fabrikanın installationId'si. */
+  /** Lisans kimliği (portalda doğar, D14). */
   readonly kurulumId: string;
   readonly hakId: string;
   readonly lisansNo: string;
@@ -193,7 +207,7 @@ export async function kanalFiksturu(kod: string, tur: "uretim" | "hazirlik" = "u
 
 export async function kurulumFiksturu(
   ctx: VendorContext,
-  g: { sinif?: LicenseClass; kanal?: string; moduller?: string[]; tesisId?: string; musteriId?: string; kurulumId?: string } = {},
+  g: { sinif?: LicenseClass; kanal?: string; moduller?: string[]; tesisId?: string; musteriId?: string } = {},
 ): Promise<KurulumFiksturu> {
   const svc = await import("../../src/services/entitlement.service");
   await kanalFiksturu(g.kanal ?? "bekci-kanal");
@@ -201,7 +215,6 @@ export async function kurulumFiksturu(
   const tesisId = g.tesisId ?? (await svc.createSite({ customerId: musteriId, name: "Merkez Tesis", actor: "bekci" })).id;
   const kurulum = await svc.createInstallation({
     siteId: tesisId,
-    installationId: g.kurulumId ?? randomUUID(),
     licenseClass: g.sinif ?? "URETIM",
     channelCode: g.kanal ?? "bekci-kanal",
     actor: "bekci",
@@ -261,12 +274,13 @@ export function yoklamaGovdesi(g: { sonKiraId: string | null; hak?: { hakId: str
   };
 }
 
-export function etkinlestirmeGovdesi(g: { kod: string; kurulumId: string; anahtar: TestAnahtari; parmakIzi: Fingerprint }) {
-  return { v: 1, kod: g.kod, kurulumId: g.kurulumId, acikAnahtar: g.anahtar.x, parmakIzi: g.parmakIzi, ortam: ORTAM };
+/** `kurulumId: null` → kimliksiz etkinleştirme (yeni makine lisans kimliğini bilmez; kurulumu kod belirler). */
+export function etkinlestirmeGovdesi(g: { kod: string; kurulumId: string | null; anahtar: TestAnahtari; parmakIzi: Fingerprint }) {
+  return { v: 1, kod: g.kod, ...(g.kurulumId === null ? {} : { kurulumId: g.kurulumId }), acikAnahtar: g.anahtar.x, parmakIzi: g.parmakIzi, ortam: ORTAM };
 }
 
-/** Kurulum imzalı istek (ham gövde baytları imzalanır, aynen gönderilir). */
-export function imzaliBaslik(g: { kurulumId: string; amac: RequestPurpose; govde: string; anahtar: TestAnahtari; zamanMs?: number; nonce?: string }): string {
+/** Kurulum imzalı istek (ham gövde baytları imzalanır, aynen gönderilir). `kurulumId: null` = kimliksiz. */
+export function imzaliBaslik(g: { kurulumId: string | null; amac: RequestPurpose; govde: string; anahtar: TestAnahtari; zamanMs?: number; nonce?: string }): string {
   return signRequest({
     installationId: g.kurulumId,
     purpose: g.amac,
@@ -296,7 +310,7 @@ export async function gonder(url: string, g: { baslik?: string; govde?: string; 
 export async function imzaliPost(
   taban: string,
   yol: string,
-  g: { kurulumId: string; amac: RequestPurpose; govde: unknown; anahtar: TestAnahtari; zamanMs?: number; nonce?: string },
+  g: { kurulumId: string | null; amac: RequestPurpose; govde: unknown; anahtar: TestAnahtari; zamanMs?: number; nonce?: string },
 ): Promise<Yanit & { baslik: string; metin: string }> {
   const metin = JSON.stringify(g.govde);
   const baslik = imzaliBaslik({ kurulumId: g.kurulumId, amac: g.amac, govde: metin, anahtar: g.anahtar, zamanMs: g.zamanMs, nonce: g.nonce });
@@ -329,6 +343,9 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     await tx.planliEylem.deleteMany({ where: w });
     await tx.etkinlestirmeKodu.deleteMany({ where: w });
     await tx.nonceDefteri.deleteMany({ where: w });
+    // Kurulumsuz taşıma talebinin nonce'u anahtar kapsamında (`kid:…`) — o anahtarlar kurulumların talep/kayıtlarından.
+    const talepAnahtarlari = (await tx.tasimaTalebi.findMany({ where: w, select: { yeniAnahtarKimligi: true } })).map((t) => `kid:${t.yeniAnahtarKimligi}`);
+    await tx.nonceDefteri.deleteMany({ where: { kapsam: { in: talepAnahtarlari } } });
     await tx.yoklama.deleteMany({ where: w });
     await tx.kopyaUyarisi.deleteMany({ where: w });
     await tx.tasimaTalebi.deleteMany({ where: w });
@@ -347,6 +364,20 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     await tx.musteri.deleteMany({ where: { id: { in: musteriIdleri }, tesisler: { none: {} } } });
     for (const x of [...bosTesisler.map((t) => t.id), ...musteriIdleri]) denetimIdleri.add(x);
     await tx.denetim.deleteMany({ where: { varlikId: { in: [...denetimIdleri] } } });
+  });
+}
+
+/** Kuruluma bağlanmamış (kimliksiz, onaylanmamış) taşıma talepleri ve anahtar kapsamlı nonce'ları — anahtar kimliğiyle. */
+export async function temizleBagsizTalepler(anahtarKimlikleri: readonly string[]): Promise<void> {
+  const { prisma } = await import("../../src/lib/prisma");
+  const kidler = anahtarKimlikleri.filter((k) => typeof k === "string" && k.length > 0);
+  if (kidler.length === 0) return;
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL satici.defter_temizlik = 'test'`);
+    const talepler = await tx.tasimaTalebi.findMany({ where: { yeniAnahtarKimligi: { in: kidler }, kurulumId: null }, select: { id: true } });
+    await tx.tasimaTalebi.deleteMany({ where: { id: { in: talepler.map((t) => t.id) } } });
+    await tx.nonceDefteri.deleteMany({ where: { kapsam: { in: kidler.map((k) => `kid:${k}`) } } });
+    await tx.denetim.deleteMany({ where: { varlikId: { in: talepler.map((t) => t.id) } } });
   });
 }
 

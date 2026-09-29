@@ -1,6 +1,6 @@
 // Advisory kilit ENVANTERİ — satıcı DB'sinin kendi uzayı (backend'in 80xx uzayından bağımsız).
 // Kural: kilit tx'in İLK ifadesidir; birden çok kilit deterministik sırada alınır:
-//   PORTAL_TOKEN → DEALER → CUSTOMER → INSTALLATION (kimlik sırasıyla) → LICENSE_NUMBER.
+//   PORTAL_TOKEN → DEALER (kimlik sırasıyla) → CUSTOMER → TRANSFER_KEY → INSTALLATION (kimlik sırasıyla) → LICENSE_NUMBER.
 // Envanter CLAUDE.md tablosuyla birebir; bekçi: scripts/test_satici_kapilari.ts.
 import type { Tx } from "./prisma";
 
@@ -13,8 +13,10 @@ export const LOCK_NAMESPACES = {
   DEALER: 9103,
   /** Portal işlem kimliği (clientToken) başına: aynı kimlikli eşzamanlı denemeler sıraya girer. */
   PORTAL_TOKEN: 9104,
-  /** Müşteri ağacı başına: tesis/kurulum doğumu ↔ müşteri/tesis/kurulum pasife-aktife alma (MV-06). */
+  /** Müşteri ağacı başına: tesis/kurulum doğumu ↔ müşteri/tesis/kurulum pasife-aktife alma (MV-06) · müşterinin bayi bağı. */
   CUSTOMER: 9105,
+  /** Taşıma talebinin yeni anahtarı başına: kimliksiz (kurulumsuz) talebin doğumu ↔ kararı (D8). */
+  TRANSFER_KEY: 9106,
 } as const;
 
 export async function lockInstallation(tx: Tx, installationDbId: string): Promise<void> {
@@ -34,6 +36,17 @@ export async function lockLicenseNumber(tx: Tx, year: number): Promise<void> {
 
 export async function lockDealer(tx: Tx, dealerId: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_NAMESPACES.DEALER}::int4, hashtext(${dealerId}))`;
+}
+
+/** Birden çok bayi (müşterinin bayisini değiştirmek: eski + yeni): kimlik sırasıyla. */
+export async function lockDealers(tx: Tx, dealerIds: readonly string[]): Promise<void> {
+  for (const id of [...new Set(dealerIds)].sort()) {
+    await lockDealer(tx, id);
+  }
+}
+
+export async function lockTransferKey(tx: Tx, keyId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_NAMESPACES.TRANSFER_KEY}::int4, hashtext(${keyId}))`;
 }
 
 export async function lockPortalToken(tx: Tx, clientToken: string): Promise<void> {

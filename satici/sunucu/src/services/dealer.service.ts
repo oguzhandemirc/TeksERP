@@ -1,28 +1,20 @@
 // BAYİ — hesap, TAVAN (modül ⊆ · sınıf ⊆ · kurulum adedi · kanal ⊆ · kalıcı izni · bakım ay tavanı;
-// sürümlü defter) ve bayi imzalı HAK.
+// sürümlü defter) ve bayi imzalı HAK. Bayinin kayıt üzerindeki yazmaları (sahiplik kilit altında):
+// dealer-ownership.service.ts.
 // Protokol bayi sertifikasının kısıtını KRİPTOGRAFİK uygular (sertifikadaki modül/sınıf); portal
 // bunun ÜSTÜNE bayinin GÜNCEL tavanını uygular — sertifika verildikten sonra daraltılan tavan
 // sertifika süresince de bağlar. Denetim iki kez: imzadan ÖNCE (parola boşa sorulmasın) ve
 // deftere yazarken bayi kilidi ALTINDA (tavan aynı anda değişemez).
-import type { Bayi, BayiTavani, HakSurumu, Kurulum, LisansSinifi, Tesis } from "@prisma/client";
+import type { Bayi, BayiTavani, LisansSinifi } from "@prisma/client";
 import { LICENSE_CLASSES, verifyCertificate, verifyEntitlement } from "../lisans-protokol";
 import { KeyStore } from "../keys/key-store";
 import { VendorError, badRequest, notFoundError, retryConflict, stateConflict } from "../lib/errors";
-import { lockCustomer, lockDealer, lockInstallation } from "../lib/locks";
+import { lockDealer } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
 import type { VendorContext } from "./context";
-import {
-  buildEntitlementPayload,
-  issueActivationCodeUnderLock,
-  loadEntitlementTree,
-  signEntitlement,
-  writeEntitlementVersionUnderLock,
-  type EntitlementChanges,
-  type IssuedActivationCode,
-  type PreparedEntitlementVersion,
-} from "./entitlement.service";
+import { buildEntitlementPayload, loadEntitlementTree, signEntitlement, type EntitlementChanges, type PreparedEntitlementVersion } from "./entitlement.service";
 import { cleanChannelList } from "./channel.service";
-import { cleanName, cleanTaxNo, createInstallationUnderLock, type CreateInstallationInput } from "./master-data.service";
+import { cleanName, cleanTaxNo } from "./master-data.service";
 import { requireReason } from "./sanction.service";
 
 /** Bayi tavanının bakım ay tavanı varsayılanı (yıllık bakım kalıbı) ve üst sınırı. */
@@ -236,21 +228,6 @@ export function reloadKeys(ctx: VendorContext): void {
 
 // ---------------------------------------------------------------- bayinin kurulumu
 
-/** Bayi kurulum açar: sınıf ve kanal tavanda, kullanım + 1 ≤ adet (bayi + müşteri ağacı kilidi altında). */
-export async function createDealerInstallationTx(
-  tx: Tx,
-  g: CreateInstallationInput & { dealerId: string; site: Tesis },
-): Promise<Kurulum> {
-  await lockDealer(tx, g.dealerId);
-  await lockCustomer(tx, g.site.musteriId);
-  const dealer = await findDealer(tx, g.dealerId);
-  if (!dealer.aktif) throw stateConflict("Bayi pasif");
-  const ceiling = await currentCeiling(tx, dealer);
-  const usage = (await dealerUsage(tx, dealer.id)) + 1;
-  assertWithinCeiling(ceilingViolations(ceiling, { licenseClass: g.licenseClass, usage, channelCode: g.channelCode }));
-  return createInstallationUnderLock(tx, g);
-}
-
 // ---------------------------------------------------------------- bayi imzalı HAK
 
 /** HAK'ın tavana giden alanları (modül · sınıf · kalıcı · bakım bitişi `atMs`e göre). */
@@ -317,36 +294,5 @@ export async function prepareDealerEntitlementVersion(
   } finally {
     g.password.fill(0);
   }
-}
-
-/** Bayi kilidi ALTINDA tavan YENİDEN denetlenir (imzadan bu yana değişmiş olabilir), sonra sürüm yazılır. */
-export async function recordDealerEntitlementVersionTx(tx: Tx, p: PreparedEntitlementVersion): Promise<HakSurumu> {
-  await lockDealer(tx, p.dealerId ?? "");
-  await lockInstallation(tx, p.installationDbId);
-  if (!p.dealerId) throw new VendorError(500, "SUNUCU_HATASI", "Bayi imzası bayi kimliği taşımıyor");
-  const dealer = await findDealer(tx, p.dealerId);
-  if (!dealer.aktif) throw stateConflict("Bayi pasif");
-  const ceiling = await currentCeiling(tx, dealer);
-  assertWithinCeiling(ceilingViolations(ceiling, { ...signedFieldsOf(p.fields, p.issuedAt.getTime()), usage: await dealerUsage(tx, dealer.id) }));
-  return writeEntitlementVersionUnderLock(tx, p);
-}
-
-/** Bayinin kod üretimi: son sürüm bayi imzalıysa GÜNCEL tavana hâlâ sığmalı (eski imzalı hak daraltılmış tavanla yeni kuruluma gitmesin). */
-export async function createDealerActivationCodeTx(
-  tx: Tx,
-  ctx: VendorContext,
-  g: { dealerId: string; installationDbId: string; validDays?: number; actor: string; nowMs?: number },
-): Promise<IssuedActivationCode> {
-  await lockDealer(tx, g.dealerId);
-  await lockInstallation(tx, g.installationDbId);
-  const dealer = await findDealer(tx, g.dealerId);
-  if (!dealer.aktif) throw stateConflict("Bayi pasif");
-  const hak = await tx.hak.findFirst({ where: { kurulumId: g.installationDbId, aktif: true }, include: { kurulum: true } });
-  if (hak && hak.guncelSurum >= 1) {
-    const ceiling = await currentCeiling(tx, dealer);
-    const fields = { modules: hak.moduller, licenseClass: hak.kurulum.sinif, perpetual: hak.kalici, maintenanceUntil: hak.bakimBitis };
-    assertWithinCeiling(ceilingViolations(ceiling, { ...signedFieldsOf(fields, g.nowMs ?? Date.now()), usage: await dealerUsage(tx, dealer.id) }));
-  }
-  return issueActivationCodeUnderLock(tx, ctx, g);
 }
 

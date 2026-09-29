@@ -1,4 +1,4 @@
-// SIR YALNIZ BİR KEZ — etkinleştirme kodu ve TOTP sırrı/QR'ı yalnız canlı yanıtta gösterilir; pencere
+// SIR YALNIZ BİR KEZ — etkinleştirme kodu, taşıma kodu ve TOTP sırrı/QR'ı yalnız canlı yanıtta gösterilir; pencere
 // kapanınca DOM'dan, önbellekten ve yeniden çizimden gider (liste yalnız "…son 4"ü taşır). Tekrar
 // yanıtı (aynı işlem kimliği, `…Gosterilemez: true`) sırrı taşımaz ve arayüz bunu açıkça söyler.
 // İŞLEM KİMLİĞİ: belirsiz hatada (5xx/ağ) aynı deneme AYNI kimlikle yinelenir; başarı ya da kesin
@@ -53,7 +53,7 @@ describe("etkinleştirme kodu bir kez gösterilir", () => {
   it("tekrar yanıtı kodu taşımaz ve arayüz 'gösterilemez' der", async () => {
     const user = userEvent.setup();
     openEntitlement({
-      [`POST /kurulumlar/${INSTALLATION_DB_ID}/etkinlestirme-kodu`]: () => ({ status: 201, data: { id: "c1", kod: null, kodSonu: "9BDA", gecerlilikBitis: "2026-10-29T00:00:00Z", kodGosterilemez: true } }),
+      [`POST /kurulumlar/${INSTALLATION_DB_ID}/etkinlestirme-kodu`]: () => ({ status: 201, data: { id: "c1", kod: null, gecerlilikBitis: "2026-10-29T00:00:00Z", kodGosterilemez: true } }),
     });
     await generate(user);
     const shown = await screen.findByRole("dialog", { name: "Etkinleştirme kodu" });
@@ -139,6 +139,62 @@ describe("TOTP kurulumu: sır ve QR yalnız hesabı açan yöneticinin ekranınd
     const shown = await screen.findByRole("dialog", { name: "Doğrulayıcı kurulumu — mehmet" });
     expect(within(shown).getByRole("alert")).toHaveTextContent("artık gösterilemez");
     expect(within(shown).queryByTestId("totp-qr")).toBeNull();
+  });
+});
+
+describe("taşıma kodu bir kez gösterilir (D8)", () => {
+  const TALEP = "5b0c6a4e-5555-4000-8000-000000000005";
+  const HEDEF = "5b0c6a4e-6666-4000-8000-000000000006";
+  const TASIMA_KODU = "TKS-3M8Q-VX2A-7KPD-9WNE";
+  const talep = {
+    id: TALEP,
+    kurulumId: null,
+    yeniAnahtarKimligi: "kur-yeni",
+    ortam: {},
+    gerekce: "yeni sunucu",
+    durum: "BEKLIYOR",
+    kararZamani: null,
+    kararVeren: null,
+    kararSebebi: null,
+    createdAt: "2026-09-29T08:00:00.000Z",
+    onerilenKurulumlar: [{ id: HEDEF, kurulumId: "9e8d7c6b-0000-4000-8000-00000000abcd", ad: "Merkez sunucu", durum: "ETKIN", tesis: { ad: "Ana tesis", musteri: { ad: "Örnek Tekstil" } } }],
+  };
+  const open = (reply: Handler) =>
+    renderApp({
+      base: "/portal/api",
+      routes: PORTAL_ROUTES,
+      path: "/tasima-talepleri",
+      handlers: {
+        "GET /oturum": () => ({ data: sessionFor("SATICI_OPERATOR") }),
+        "GET /tasima-talepleri": () => ({ data: { items: [talep], nextCursor: null } }),
+        [`POST /tasima-talepleri/${TALEP}/onayla`]: reply,
+      },
+    });
+  const approve = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole("button", { name: "Onayla" }));
+    const dialog = await screen.findByRole("dialog", { name: "Taşımayı onayla" });
+    await user.type(within(dialog).getByRole("textbox"), "müşteri aradı");
+    await user.click(within(dialog).getByRole("button", { name: "Onayla ve kod üret" }));
+  };
+
+  it("kimliksiz talepte hedef öneriden gider; kod canlı yanıtta gösterilir, kapanınca hiçbir yerde görünmez", async () => {
+    const user = userEvent.setup();
+    const { calls } = open(() => ({ data: { id: TALEP, tasimaKodu: { id: "k1", kod: TASIMA_KODU, kodSonu: "9WNE", gecerlilikBitis: "2026-10-29T00:00:00Z" } } }));
+    await approve(user);
+    const shown = await screen.findByRole("dialog", { name: "Taşıma kodu" });
+    expect(within(shown).getByTestId("once-secret")).toHaveTextContent(TASIMA_KODU);
+    expect(writes(calls)[0]!.body).toMatchObject({ kurulumId: HEDEF, sebep: "müşteri aradı" });
+    await user.click(within(shown).getByRole("button", { name: "Kaydettim, kapat" }));
+    expect(document.body.innerHTML).not.toContain(TASIMA_KODU);
+  });
+
+  it("tekrar yanıtı kodu taşımaz ve arayüz 'gösterilemez' der", async () => {
+    const user = userEvent.setup();
+    open(() => ({ data: { id: TALEP, tasimaKodu: { id: "k1", kod: null, gecerlilikBitis: "2026-10-29T00:00:00Z", kodGosterilemez: true } } }));
+    await approve(user);
+    const shown = await screen.findByRole("dialog", { name: "Taşıma kodu" });
+    expect(within(shown).getByRole("alert")).toHaveTextContent("artık gösterilemez");
+    expect(within(shown).queryByTestId("once-secret")).toBeNull();
   });
 });
 

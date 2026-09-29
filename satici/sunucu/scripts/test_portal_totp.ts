@@ -1,7 +1,8 @@
 // =============================================================================
 // PORTAL — TOTP ZORUNLULUĞU. TOTP'siz oturum YOKTUR: giriş tek adımdır (kullanıcı adı + parola +
 // TOTP), eksik/yanlış/tekrar oynatılmış kod oturum açmaz; hata iletisi tek (hangi faktörün tutmadığı
-// sızmaz); ardışık başarısızlık hesabı süreli kilitler. Sır DB'de sarılı (AAD kullanıcıya bağlı);
+// sızmaz); ardışık başarısızlık hesabı süreli kilitler ve KİLİTLİ hesap BİLİNMEYEN hesapla aynı yanıtı
+// alır (kilit hesabın varlığını sızdırmaz). Sır DB'de sarılı (AAD kullanıcıya bağlı);
 // kurulum sırrı yalnız açılış yanıtında bir kez (saklanan tekrar yanıtında yok). Çerez httpOnly +
 // SameSite=Strict + yol sınırlı. TOTP sıfırlanınca açık oturumlar kapanır.
 // Ölçüm gerçek HTTP ile (süreç içi iki dinleyici, kendi `_test` DB'si).
@@ -105,7 +106,14 @@ async function main(): Promise<void> {
     const k3 = await ac("SATICI_OPERATOR");
     for (let i = 0; i < 3; i++) await portalGiris(sunucu.tailnet, "/portal/api", k3, { totp: "000000" });
     const kilitli = await portalGiris(sunucu.tailnet, "/portal/api", k3);
-    kontrol("§4a 3 hatadan sonra DOĞRU üçlü → 429 GIRIS_KILITLI", kilitli.status === 429 && kilitli.kod === "GIRIS_KILITLI", `${kilitli.status} ${kilitli.kod}`);
+    const hayalet = await portalGiris(sunucu.tailnet, "/portal/api", { ...k3, kullaniciAdi: `yok-${randomUUID().slice(0, 12)}` });
+    kontrol(
+      "§4a 3 hatadan sonra DOĞRU üçlü bile giremez ve yanıt BİLİNMEYEN hesapla aynı (401 GIRIS_BASARISIZ, aynı ileti)",
+      kilitli.status === 401 && kilitli.kod === "GIRIS_BASARISIZ" && kilitli.status === hayalet.status && kilitli.kod === hayalet.kod && kilitli.json.message === hayalet.json.message && kilitli.cerez === null,
+      `${kilitli.status} ${kilitli.kod} / ${hayalet.status} ${hayalet.kod}`,
+    );
+    const kilitliRed = await prisma.denetim.count({ where: { varlikId: k3.id, olay: "PORTAL_GIRIS_REDDEDILDI" } });
+    kontrol("§4a2 kilitli girişin reddi denetimde (PORTAL_GIRIS_REDDEDILDI · KILITLI)", kilitliRed === 1, `${kilitliRed}`);
     const satir = await prisma.portalKullanici.findUniqueOrThrow({ where: { id: k3.id } });
     const kilitDk = satir.kilitBitis ? (satir.kilitBitis.getTime() - Date.now()) / 60_000 : 0;
     kontrol("§4b kilitBitis ~15 dk sonra, sayaç sıfırlandı", kilitDk > 14 && kilitDk <= 15 && satir.basarisizGiris === 0, kilitDk.toFixed(1));

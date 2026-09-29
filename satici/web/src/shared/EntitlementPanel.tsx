@@ -21,6 +21,8 @@ export interface EntitlementPolicy {
   readonly allowPerpetual: boolean;
   /** Bakım bitişi en geç (bayide tavanın bakım ay tavanı); yoksa sınırsız. */
   readonly maxMaintenanceMonths?: number;
+  /** Kod yalnız hiç etkinleşmemiş kuruluma (bayi — D8; etkin kurulumun makine değişimi satıcı onaylı taşımadır). */
+  readonly codeOnlyUnactivated?: boolean;
 }
 
 export function EntitlementPanel({ detail, policy, onChanged }: { detail: InstallationDetail; policy: EntitlementPolicy; onChanged: () => void }) {
@@ -29,6 +31,7 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
   const inst = detail.kurulum;
   const hak = detail.hak;
   const closed = inst.durum === "IPTAL" || !inst.aktif;
+  const codeBlockedByState = policy.codeOnlyUnactivated === true && inst.durum !== "ETKINLESMEDI";
   const done = () => {
     setDialog(null);
     onChanged();
@@ -82,8 +85,9 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
       </Section>
       <Section
         title="Etkinleştirme kodları"
-        actions={canCode && !closed ? <ActivationCodeAction installation={inst} disabled={!hak || hak.guncelSurum === 0} /> : null}
+        actions={canCode && !closed ? <ActivationCodeAction installation={inst} disabled={!hak || hak.guncelSurum === 0 || codeBlockedByState} /> : null}
       >
+        {codeBlockedByState ? <p className="muted small">Etkin kurulumun makine değişimi satıcı onaylı taşımadır; bayi yalnız hiç etkinleşmemiş kuruluma kod üretir.</p> : null}
         {hak && hak.guncelSurum === 0 ? <p className="muted small">Kod üretmek için önce lisansı imzalayın.</p> : null}
         <Table
           rows={detail.etkinlestirmeKodlari}

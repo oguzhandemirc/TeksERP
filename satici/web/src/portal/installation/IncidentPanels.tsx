@@ -1,12 +1,13 @@
-// OLAYLAR — kopya uyarıları (kapat · diğer parmak izini kabul et), taşıma talepleri (onay/ret; her
-// taşıma satıcı onayıyla), sağlık/parmak izi/yoklama/kira görünümü ve kurulum kaydı (eylem defteri).
+// OLAYLAR — kopya uyarıları (kapat · diğer parmak izini kabul et), taşıma talepleri (onay → tek kullanımlık
+// taşıma kodu / ret; her taşıma satıcı onayıyla, kimliksiz talepte hedefi operatör seçer), sağlık/parmak izi/yoklama/kira görünümü ve kurulum kaydı (eylem defteri).
 import { useState } from "react";
 import { ConfirmAction } from "../../shared/ConfirmAction";
-import { fmtBytes, fmtDateTime, fmtDuration, shortId } from "../../shared/format";
+import { OnceSecretModal } from "../../shared/OnceSecret";
+import { fmtBytes, fmtDate, fmtDateTime, fmtDuration, shortId } from "../../shared/format";
 import { COPY_ALERT_LABEL, LEASE_DECISION_LABEL, TRANSFER_STATUS_LABEL, label } from "../../shared/labels";
 import { useApi, useCan } from "../../shared/session";
-import { installationName, type CopyAlert, type InstallationDetail, type InstallationRef, type TransferRequest } from "../../shared/types";
-import { Badge, Button, KeyValues, Section, Table } from "../../shared/ui";
+import { installationName, type CopyAlert, type InstallationDetail, type InstallationRef, type TransferApproved, type TransferRequest } from "../../shared/types";
+import { Badge, Button, Field, KeyValues, Section, Table } from "../../shared/ui";
 
 function refName(r: InstallationRef | undefined, fallback: string): string {
   return r ? `${r.tesis.musteri.ad} › ${r.tesis.ad} › ${r.ad ?? r.kurulumId.slice(0, 8)}` : fallback;
@@ -34,6 +35,9 @@ export function CopyAlertCloseDialog({ alert, target, onClose, onDone }: { alert
   );
 }
 
+/** Kimliksiz talepte hedef kurulumun satıcı kaydı (ipucu listesinden ya da elle). */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function TransferDecisionDialog({
   transfer,
   decision,
@@ -48,19 +52,61 @@ export function TransferDecisionDialog({
   onDone: () => void;
 }) {
   const api = useApi();
+  const unbound = !transfer.kurulumId;
+  const suggestions = transfer.onerilenKurulumlar ?? [];
+  const [chosen, setChosen] = useState(suggestions[0]?.id ?? "");
+  const [code, setCode] = useState<NonNullable<TransferApproved["tasimaKodu"]> | null>(null);
+  const targetOk = !unbound || decision === "reddet" || UUID_PATTERN.test(chosen.trim());
+  if (code) {
+    return (
+      <OnceSecretModal
+        title="Taşıma kodu"
+        secret={code.kod}
+        unavailable={code.kodGosterilemez === true}
+        note={`Kodu müşterinin yöneticisine iletin: yeni makine Lisans ekranında bu kodla etkinleşir, eski makinenin kirası o anda biter (son geçerlilik ${fmtDate(code.gecerlilikBitis)}).`}
+        onClose={onDone}
+      />
+    );
+  }
   return (
-    <ConfirmAction
+    <ConfirmAction<TransferApproved | unknown>
       title={decision === "onayla" ? "Taşımayı onayla" : "Taşımayı reddet"}
       description={
         decision === "onayla"
-          ? "Yeni makinenin anahtarı kuruluma bağlanır; ESKİ makinenin kirası iptal olur (aynı anda iki üretim olmaz)."
+          ? "Onay tek kullanımlık TAŞIMA KODU üretir (yalnız bir kez gösterilir). Yeni makine kodla etkinleşince anahtar değişir ve ESKİ makinenin kirası biter; kod kullanılana dek eski makine çalışır."
           : "Talep reddedilir; eski makine çalışmaya devam eder, yeni makine kira alamaz."
       }
-      targets={[`${refName(transfer.kurulum, target ?? "Kurulum")} — yeni anahtar ${transfer.yeniAnahtarKimligi}${transfer.gerekce ? ` — gerekçe: ${transfer.gerekce}` : ""}`]}
-      confirmLabel={decision === "onayla" ? "Onayla" : "Reddet"}
+      targets={[`${refName(transfer.kurulum, target ?? (unbound ? "Kuruluma bağlanmamış (kimliksiz) talep" : "Kurulum"))} — yeni anahtar ${transfer.yeniAnahtarKimligi}${transfer.gerekce ? ` — gerekçe: ${transfer.gerekce}` : ""}`]}
+      confirmLabel={decision === "onayla" ? "Onayla ve kod üret" : "Reddet"}
       danger={decision === "reddet"}
-      send={(b) => api.post(`/tasima-talepleri/${transfer.id}/${decision === "onayla" ? "onayla" : "reddet"}`, b)}
-      onDone={onDone}
+      extra={
+        unbound && decision === "onayla" ? (
+          <Field label="Hedef kurulum (satıcı kaydı)" hint="Makine lisans kimliğini bilmiyor: talebi hangi kuruluma bağlayacağınızı seçin. Öneri, fabrika DB kimliği aynı olan kurulumlardır (ipucu, kanıt değil).">
+            {suggestions.length > 0 ? (
+              <select value={chosen} onChange={(e) => setChosen(e.target.value)}>
+                {suggestions.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {`${k.tesis.musteri.ad} › ${k.tesis.ad} › ${k.ad ?? k.kurulumId.slice(0, 8)}`}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input value={chosen} placeholder="kurulum kaydının id'si (UUID)" spellCheck={false} autoComplete="off" onChange={(e) => setChosen(e.target.value)} />
+            )}
+          </Field>
+        ) : null
+      }
+      extraValid={targetOk}
+      send={(b) =>
+        decision === "onayla"
+          ? api.post<TransferApproved>(`/tasima-talepleri/${transfer.id}/onayla`, unbound ? { ...b, kurulumId: chosen.trim() } : b)
+          : api.post(`/tasima-talepleri/${transfer.id}/reddet`, b)
+      }
+      onDone={(r) => {
+        const approved = r as TransferApproved | null;
+        if (decision === "onayla" && approved?.tasimaKodu) setCode(approved.tasimaKodu);
+        else onDone();
+      }}
       onClose={onClose}
     />
   );
