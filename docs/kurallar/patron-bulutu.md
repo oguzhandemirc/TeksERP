@@ -80,7 +80,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** Web sürümü API ile AYNI kökenden (`/`) sunulur ve `/api` · `/v1` altı asla HTML'e düşmez; iç/yönetim ad alanları (`web-static.ts` `IC_ONEKLER`) web'de 404'tür ve Traefik kuralının dışında kalır — iki liste bekçiyle eşlenir. · bekçi: `test_web_sunumu (§4 · §5 · §8)` <sub>(arşiv:2026-09-29)</sub>
-- **[ÇEKİRDEK]** Web CSP'si `unsafe-inline` taşımaz: giriş HTML'indeki satır içi blok yalnız kendi sha256 özetiyle izinlidir (özet açılışta dosyadan hesaplanır); içerik özetli dizinler uzun ömürlü, giriş HTML'i `no-store`. · bekçi: `test_web_sunumu (§2 · §3)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Web CSP'si `unsafe-inline` taşımaz: giriş HTML'indeki satır içi blok yalnız kendi sha256 özetiyle izinlidir (özet açılışta dosyadan hesaplanır) ve react-native-web'in BOŞ `<style>` ögesi boş dizgenin özetiyle; CSP değişikliği gerçek tarayıcıda ölçülür (başlık ölçümü stilin uygulandığını göstermez); içerik özetli dizinler uzun ömürlü, giriş HTML'i `no-store`. · bekçi: `test_web_sunumu (§2 · §3)` · `deploy/patron/tarayici-duman.cjs` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Patron sunucusu göç (tablo sahibi) parolasını ALMAZ: üç DB rolü üç docker secret'ıdır, göç parolası yalnız DB · `patron-goc` · yedek konteynerine bağlanır; sunucu yalnız kenar adresinde dinler, port yayımlamaz, satıcıyla ortak birim ya da sır grubu taşımaz. · bekçi: `deploy/patron/compose-denetle.mjs (① · ⑦ · ⑧ · ⑨)` <sub>(arşiv:2026-09-29)</sub>
 
 ### Kararlar
@@ -100,7 +100,7 @@ Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bul
 
 Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_patron_kapilari`, `test_tazele_zili`, `test_web_sunumu`
 
-Dağıtım (kurulum öncesi, Mac'te, CI dışı): `node deploy/patron/compose-denetle.mjs --env-file <patron .env> --satici-env <satıcı .env>` — çıkış 0 temiz · 1 ihlal · 2 ölçülemedi.
+Dağıtım (kurulum öncesi, Mac'te, CI dışı): `node deploy/patron/compose-denetle.mjs --env-file <patron .env> --satici-env <satıcı .env>` — çıkış 0 temiz · 1 ihlal · 2 ölçülemedi; yerel duman `deploy/patron/duman.sh kur <sha>` (gerçek tarayıcı dahil); runbook `docs/ops/PATRON-BULUTU-KURULUM.md`.
 
 Uçtan uca: **Senaryo P** (plan §8 P1–P16 + sözleşme §13 P17–P25; gerçek patron bulutu + gerçek fabrika backend'i, lisans fikstürü + sahte satıcı ve iç API'si; iki `_test` DB, patron DB'si `patron/sunucu/.env`den, `migrate deploy` önceden): `cd Teks-Erp && DATABASE_URL='postgresql://…/<fabrika>_test?schema=public' node ../scripts/agir-is.mjs -- npx tsx scripts/senaryo-patron.ts [--json=<dosya>] [--son=P7] [--yalniz=P1,P3]` — ~4 dk; çıkış 0 hepsi yeşil · 1 yeşil olmayan adım · 2 hedef reddi/düzenek.
 
