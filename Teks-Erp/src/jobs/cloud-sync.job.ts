@@ -224,6 +224,12 @@ export function stopCloudSync(): void {
   timer = null;
 }
 
+/** Test-only: sonraki tık aralığı beklemeden tur koşar (senaryo koşucusu; açık turu bozmaz). */
+export function __forceNextCloudSyncRoundForTests(opts: { reconcile?: boolean } = {}): void {
+  lastRoundAt = 0;
+  if (opts.reconcile) lastReconcileAttemptAt = 0;
+}
+
 /** Test-only: sahte bulut taşıması + bellek durumu sıfırlama. */
 export function __configureCloudSyncForTests(p: { transport?: CloudTransport; reset?: boolean }): void {
   if (p.transport) transport = p.transport;
