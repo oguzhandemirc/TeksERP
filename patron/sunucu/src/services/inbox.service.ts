@@ -9,7 +9,7 @@ import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError, forbidden, notFound, stateConflict } from "../lib/errors";
 import { executeWrite, type WriteResult } from "../lib/idempotency";
 import { withTesis } from "../lib/tenant";
-import { CustomerMessageSchema, OrderMessageSchema, type InboxClaimRequestSchema, type InboxResultRequestSchema } from "../wire/esitleme";
+import { CustomerMessageSchema, OrderMessageSchema, type InboxClaimRequestSchema, type InboxClaimResponse, type InboxResultRequestSchema, type InboxResultResponse } from "../wire/esitleme";
 import type { z } from "zod";
 import type { SessionContext } from "../auth/session.service";
 import type { CloudContext } from "./context";
@@ -128,7 +128,7 @@ interface ClaimedRow {
   created_at: Date;
 }
 
-export async function claimInbox(ctx: CloudContext, caller: FactoryCaller, req: z.infer<typeof InboxClaimRequestSchema>, nowMs: number) {
+export async function claimInbox(ctx: CloudContext, caller: FactoryCaller, req: z.infer<typeof InboxClaimRequestSchema>, nowMs: number): Promise<InboxClaimResponse> {
   const until = new Date(nowMs + ctx.config.GELEN_KUTUSU_CLAIM_DK * 60_000);
   const rows = await withTesis(ctx.sync, { tesisId: caller.tesisId }, (tx) =>
     tx.$queryRaw<ClaimedRow[]>`
@@ -177,7 +177,7 @@ function sameOutcome(stored: Prisma.JsonValue, wanted: InboxOutcome): boolean {
   return o.varlikId === wanted.varlikId && o.belgeNo === wanted.belgeNo && o.kod === wanted.kod && o.mesaj === wanted.mesaj;
 }
 
-export async function recordInboxResults(ctx: CloudContext, caller: FactoryCaller, req: z.infer<typeof InboxResultRequestSchema>, nowMs: number) {
+export async function recordInboxResults(ctx: CloudContext, caller: FactoryCaller, req: z.infer<typeof InboxResultRequestSchema>, nowMs: number): Promise<InboxResultResponse> {
   const kabul: string[] = [];
   const ret: { mesajId: string; kod: "BULUNAMADI" | "DURUM_CAKISMASI"; durum: string | null }[] = [];
   await withTesis(ctx.sync, { tesisId: caller.tesisId }, async (tx) => {

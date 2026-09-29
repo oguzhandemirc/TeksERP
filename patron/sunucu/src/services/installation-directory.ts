@@ -8,7 +8,7 @@ import type { Installation, PrismaClient } from "@prisma/client";
 import type { CloudConfig } from "../config";
 import { installationKeyId } from "../lisans-protokol";
 import { withLookup, withTesis } from "../lib/tenant";
-import { VendorInstallationSchema, type VendorInstallation } from "../wire/esitleme";
+import { VendorInstallationSchema, type VendorInstallation } from "../wire/satici-ic";
 
 export interface InstallationRecord {
   readonly installationId: string;

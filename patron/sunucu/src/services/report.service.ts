@@ -11,7 +11,7 @@ import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError, badRequest, forbidden, notFound, stateConflict } from "../lib/errors";
 import { bodyDigestOf, executeWrite, toPlainJson, type WriteResult } from "../lib/idempotency";
 import { NO_TENANT, withTesis } from "../lib/tenant";
-import type { ReportClaimRequestSchema, ReportResultRequestSchema } from "../wire/esitleme";
+import type { ReportClaimRequestSchema, ReportClaimResponse, ReportResult, ReportResultResponse } from "../wire/esitleme";
 import type { CloudContext } from "./context";
 import { assertFacilityCloudOpen } from "./facility-gate";
 import type { FactoryCaller } from "./installation-auth";
@@ -145,7 +145,12 @@ interface ClaimedReport {
   created_at: Date;
 }
 
-export async function claimReports(ctx: CloudContext, caller: FactoryCaller, req: z.infer<typeof ReportClaimRequestSchema>, nowMs: number) {
+/** Saklı parametreler yazılırken nesne olarak doğrulandı; jsonb okuması tipsiz döner. */
+function paramsObject(v: unknown): Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v)) : {};
+}
+
+export async function claimReports(ctx: CloudContext, caller: FactoryCaller, req: z.infer<typeof ReportClaimRequestSchema>, nowMs: number): Promise<ReportClaimResponse> {
   const until = new Date(nowMs + ctx.config.RAPOR_CLAIM_DK * 60_000);
   const rows = await withTesis(ctx.sync, { tesisId: caller.tesisId }, (tx) =>
     tx.$queryRaw<ClaimedReport[]>`
@@ -161,13 +166,40 @@ export async function claimReports(ctx: CloudContext, caller: FactoryCaller, req
       RETURNING t.id, t.report_key, t.params, t.created_at`,
   );
   rows.sort((a, b) => a.created_at.getTime() - b.created_at.getTime() || a.id.localeCompare(b.id));
-  return { v: 1 as const, istekler: rows.map((r) => ({ istekId: r.id, raporAnahtari: r.report_key, parametreler: r.params, olusturulma: r.created_at.toISOString() })) };
+  return { v: 1 as const, istekler: rows.map((r) => ({ istekId: r.id, raporAnahtari: r.report_key, parametreler: paramsObject(r.params), olusturulma: r.created_at.toISOString() })) };
 }
 
-export async function recordReportResult(ctx: CloudContext, caller: FactoryCaller, req: z.infer<typeof ReportResultRequestSchema>, nowMs: number) {
+/**
+ * Standart görüntü (S13 — `istekId: null`): fabrikanın saatlik ürettiği sonuç `report_results`e yazılır; aynı
+ * parametre özetiyle gelen hesap isteği oradan cevaplanır. HATA'lı standart görüntü saklanmaz (son iyi sonuç kalır).
+ */
+async function recordStandardResult(ctx: CloudContext, caller: FactoryCaller, req: ReportResult): Promise<ReportResultResponse> {
+  const verdict = reportVerdict(req.raporAnahtari);
+  if (!verdict.ok) throw new CloudError(404, "RAPOR_BILINMIYOR", "Bu rapor patron bulutunda sunulmuyor");
+  if (req.durum === "HATA") return { v: 1, kabul: true, durum: "HATA" };
+  await withTesis(ctx.sync, { tesisId: caller.tesisId, projections: [verdict.projection] }, (tx) =>
+    tx.reportResult.create({
+      data: {
+        tesisId: caller.tesisId,
+        reportKey: req.raporAnahtari,
+        projection: verdict.projection,
+        paramsDigest: bodyDigestOf(req.parametreler),
+        data: toPlainJson(req.veri),
+        computedAt: new Date(req.hesaplandi),
+        sourceHorizon: new Date(req.kaynakUfuk),
+      },
+    }),
+  );
+  return { v: 1, kabul: true, durum: "HAZIR" };
+}
+
+export async function recordReportResult(ctx: CloudContext, caller: FactoryCaller, req: ReportResult, nowMs: number): Promise<ReportResultResponse> {
+  if (req.istekId === null) return recordStandardResult(ctx, caller, req);
+  const istekId = req.istekId;
   const scope = { tesisId: caller.tesisId };
-  const request = await withTesis(ctx.sync, scope, (tx) => tx.reportRequest.findFirst({ where: { id: req.istekId, tesisId: caller.tesisId } }));
+  const request = await withTesis(ctx.sync, scope, (tx) => tx.reportRequest.findFirst({ where: { id: istekId, tesisId: caller.tesisId } }));
   if (!request) throw notFound("Rapor isteği");
+  if (request.reportKey !== req.raporAnahtari) throw badRequest("Rapor sonucu isteğin rapor anahtarıyla uyuşmuyor");
   const mine = request.ownerInstallationId === caller.installation.installationId;
   if (request.status !== "HESAPLANIYOR") {
     if (mine && (request.status === "HAZIR" || request.status === "HATA")) return { v: 1 as const, kabul: true, durum: request.status };
@@ -186,7 +218,7 @@ export async function recordReportResult(ctx: CloudContext, caller: FactoryCalle
                 paramsDigest: request.paramsDigest,
                 data: toPlainJson(req.veri),
                 computedAt: new Date(req.hesaplandi),
-                sourceHorizon: req.kaynakUfuk ? new Date(req.kaynakUfuk) : null,
+                sourceHorizon: new Date(req.kaynakUfuk),
               },
             })
           ).id

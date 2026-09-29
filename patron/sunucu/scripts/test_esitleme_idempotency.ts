@@ -31,7 +31,7 @@ async function idempotency(o: Ortam, k: TestKurulumu): Promise<void> {
   console.log("\n§1 aynı paket → saklı yanıt, ikinci etki yok");
   const id = randomUUID();
   const ufuk = o.saat.simdi() - 120_000;
-  const p = paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("urun", { yaz: [{ id, kod: "U1", ad: "Kumaş A" }], yeni: { t: iso(ufuk), k: "1" } })] });
+  const p = paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("urun", { yaz: [{ id, kod: "U1", ad: "Kumaş A" }], yeni: { t: iso(ufuk), k: "000000000001" } })] });
   const r1 = await imzali(o, k, "/v1/esitle", { govde: p });
   const once = await satir(o, k.tesisId, "urun", id);
   o.saat.ilerlet(1_000);
@@ -42,7 +42,7 @@ async function idempotency(o: Ortam, k: TestKurulumu): Promise<void> {
   kontrol("§1c ikinci etki yok (updated_at değişmedi)", once !== null && sonra !== null && once.updatedAt.getTime() === sonra.updatedAt.getTime());
   const makbuz = await withTesis(o.goc.prisma, { tesisId: k.tesisId }, (tx) => tx.packageReceipt.count({ where: { tesisId: k.tesisId, packageId: p.paketId } }));
   kontrol("§1d tek makbuz", makbuz === 1);
-  const baska = { ...p, kayitlar: [girdi("urun", { yaz: [{ id, kod: "U1", ad: "DEĞİŞTİ" }], yeni: { t: iso(ufuk), k: "1" } })] };
+  const baska = { ...p, kayitlar: [girdi("urun", { yaz: [{ id, kod: "U1", ad: "DEĞİŞTİ" }], yeni: { t: iso(ufuk), k: "000000000001" } })] };
   const r3 = await imzali(o, k, "/v1/esitle", { govde: baska });
   kontrol("§1e aynı paketId başka gövde → 409 PAKET_KIMLIGI_CAKISTI", r3.status === 409 && r3.json.details?.code === "PAKET_KIMLIGI_CAKISTI");
   const r4 = await imzali(o, k, "/v1/esitle", { ham: r2.ham, baslik: r2.baslik });
@@ -53,15 +53,15 @@ async function surumAni(o: Ortam, k: TestKurulumu): Promise<void> {
   console.log("\n§2 sürüm anı = ufuk (eski paket ezemez)");
   const id = randomUUID();
   const t0 = o.saat.simdi() - 600_000;
-  const yeni = paket(k, { ufuk: new Date(t0 + 300_000), kayitlar: [girdi("renk", { yaz: [{ id, kod: "R1", ad: "YENİ" }], yeni: { t: iso(t0 + 300_000), k: "5" } })] });
-  const eski = paket(k, { ufuk: new Date(t0), kayitlar: [girdi("renk", { yaz: [{ id, kod: "R1", ad: "ESKİ" }], yeni: { t: iso(t0), k: "1" } })] });
+  const yeni = paket(k, { ufuk: new Date(t0 + 300_000), kayitlar: [girdi("renk", { yaz: [{ id, kod: "R1", ad: "YENİ" }], yeni: { t: iso(t0 + 300_000), k: "000000000005" } })] });
+  const eski = paket(k, { ufuk: new Date(t0), kayitlar: [girdi("renk", { yaz: [{ id, kod: "R1", ad: "ESKİ" }], yeni: { t: iso(t0), k: "000000000001" } })] });
   await imzali(o, k, "/v1/esitle", { govde: yeni });
   const r = await imzali(o, k, "/v1/esitle", { govde: eski });
   const s = await satir(o, k.tesisId, "renk", id);
   kontrol("§2a geç gelen eski paket yeni veriyi EZMEDİ", r.status === 200 && (s?.data as { ad?: string })?.ad === "YENİ", (s?.data as { ad?: string })?.ad);
-  const sil = paket(k, { ufuk: new Date(t0 + 400_000), kayitlar: [girdi("renk", { sil: [{ id, neden: "SILINDI" }], onceki: { t: iso(t0 + 300_000), k: "5" }, yeni: { t: iso(t0 + 400_000), k: "6" } })] });
+  const sil = paket(k, { ufuk: new Date(t0 + 400_000), kayitlar: [girdi("renk", { sil: [{ id, neden: "SILINDI" }], onceki: { t: iso(t0 + 300_000), k: "000000000005" }, yeni: { t: iso(t0 + 400_000), k: "000000000006" } })] });
   await imzali(o, k, "/v1/esitle", { govde: sil });
-  const dirilt = paket(k, { ufuk: new Date(t0 + 350_000), kayitlar: [girdi("renk", { yaz: [{ id, kod: "R1", ad: "HAYALET" }], yeni: { t: iso(t0 + 350_000), k: "5" } })] });
+  const dirilt = paket(k, { ufuk: new Date(t0 + 350_000), kayitlar: [girdi("renk", { yaz: [{ id, kod: "R1", ad: "HAYALET" }], yeni: { t: iso(t0 + 350_000), k: "000000000005" } })] });
   await imzali(o, k, "/v1/esitle", { govde: dirilt });
   const s2 = await satir(o, k.tesisId, "renk", id);
   kontrol("§2b silinmiş satırı eski paket DİRİLTEMEDİ (mezar taşı)", s2?.deletedAt !== null && (s2?.data as { ad?: string })?.ad === "YENİ");
@@ -70,16 +70,16 @@ async function surumAni(o: Ortam, k: TestKurulumu): Promise<void> {
 async function filigran(o: Ortam, k: TestKurulumu): Promise<void> {
   console.log("\n§3 filigran zinciri");
   const base = o.saat.simdi() - 900_000;
-  const p1 = paket(k, { ufuk: new Date(base), kayitlar: [girdi("depo", { yaz: [{ id: randomUUID(), ad: "D1" }], yeni: { t: iso(base), k: "10" } })] });
+  const p1 = paket(k, { ufuk: new Date(base), kayitlar: [girdi("depo", { yaz: [{ id: randomUUID(), ad: "D1" }], yeni: { t: iso(base), k: "000000000010" } })] });
   const r1 = (await imzali(o, k, "/v1/esitle", { govde: p1 })).json as unknown as SyncBody;
-  const ortusme = paket(k, { ufuk: new Date(base + 1000), kayitlar: [girdi("depo", { yaz: [{ id: randomUUID(), ad: "D2" }], onceki: { t: iso(base), k: "9" }, yeni: { t: iso(base + 1000), k: "11" } })] });
+  const ortusme = paket(k, { ufuk: new Date(base + 1000), kayitlar: [girdi("depo", { yaz: [{ id: randomUUID(), ad: "D2" }], onceki: { t: iso(base), k: "000000000009" }, yeni: { t: iso(base + 1000), k: "000000000011" } })] });
   const r2 = (await imzali(o, k, "/v1/esitle", { govde: ortusme })).json as unknown as SyncBody;
-  const bosluk = paket(k, { ufuk: new Date(base + 2000), kayitlar: [girdi("depo", { yaz: [{ id: randomUUID(), ad: "D3" }], onceki: { t: iso(base + 1500), k: "12" }, yeni: { t: iso(base + 2000), k: "13" } })] });
+  const bosluk = paket(k, { ufuk: new Date(base + 2000), kayitlar: [girdi("depo", { yaz: [{ id: randomUUID(), ad: "D3" }], onceki: { t: iso(base + 1500), k: "000000000012" }, yeni: { t: iso(base + 2000), k: "000000000013" } })] });
   const r3 = (await imzali(o, k, "/v1/esitle", { govde: bosluk })).json as unknown as SyncBody;
   kontrol("§3a ilk girdi (önceki null) kabul", r1.kabul.some((x) => x.projeksiyon === "depo"));
   kontrol("§3b örtüşen önceki (≤ saklanan) kabul", r2.kabul.some((x) => x.projeksiyon === "depo"));
   kontrol("§3c boşluk → istenen TAM FILIGRAN_KOPUK, kabul YOK", r3.istenen.some((x) => x.projeksiyon === "depo" && x.neden === "FILIGRAN_KOPUK") && !r3.kabul.some((x) => x.projeksiyon === "depo"));
-  const sayac = paket(k, { ufuk: new Date(base + 1000), kayitlar: [girdi("depo", { onceki: { t: iso(base + 1000), k: "9" }, yeni: { t: iso(base + 1000), k: "11" } })] });
+  const sayac = paket(k, { ufuk: new Date(base + 1000), kayitlar: [girdi("depo", { onceki: { t: iso(base + 1000), k: "000000000009" }, yeni: { t: iso(base + 1000), k: "000000000011" } })] });
   const r4 = (await imzali(o, k, "/v1/esitle", { govde: sayac })).json as unknown as SyncBody;
   kontrol("§3d sayaç eşitlik bozucusu SAYISAL karşılaştırılır (9 < 11 → kabul)", r4.kabul.some((x) => x.projeksiyon === "depo"));
 }
@@ -89,19 +89,19 @@ async function tam(o: Ortam, k: TestKurulumu): Promise<void> {
   const eskiId = randomUUID();
   const kalanId = randomUUID();
   const t0 = o.saat.simdi() - 1_200_000;
-  await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(t0), kayitlar: [girdi("istasyon", { yaz: [{ id: eskiId, ad: "Eski" }, { id: kalanId, ad: "Kalan" }], yeni: { t: iso(t0), k: "1" } })] }) });
+  await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(t0), kayitlar: [girdi("istasyon", { yaz: [{ id: eskiId, ad: "Eski" }, { id: kalanId, ad: "Kalan" }], yeni: { t: iso(t0), k: "000000000001" } })] }) });
   const bas = t0 + 60_000;
-  const parca1 = paket(k, { ufuk: new Date(bas), tur: "TAM", kayitlar: [girdi("istasyon", { yaz: [{ id: kalanId, ad: "Kalan" }], yeni: { t: iso(bas), k: "1" }, tam: { parca: 1, toplamParca: 2, baslangic: iso(bas) } })] });
+  const parca1 = paket(k, { ufuk: new Date(bas), tur: "TAM", kayitlar: [girdi("istasyon", { yaz: [{ id: kalanId, ad: "Kalan" }], yeni: { t: iso(bas), k: "000000000001" }, tam: { parca: 1, toplamParca: 2, baslangic: iso(bas) } })] });
   await imzali(o, k, "/v1/esitle", { govde: parca1 });
   const araEski = await satir(o, k.tesisId, "istasyon", eskiId);
   kontrol("§4a eksik parçada süpürme YOK (eski satır canlı)", araEski !== null && araEski.deletedAt === null);
-  const parca2 = paket(k, { ufuk: new Date(bas), tur: "TAM", kayitlar: [girdi("istasyon", { yaz: [{ id: randomUUID(), ad: "Yeni" }], yeni: { t: iso(bas), k: "2" }, tam: { parca: 2, toplamParca: 2, baslangic: iso(bas) } })] });
+  const parca2 = paket(k, { ufuk: new Date(bas), tur: "TAM", kayitlar: [girdi("istasyon", { yaz: [{ id: randomUUID(), ad: "Yeni" }], yeni: { t: iso(bas), k: "000000000002" }, tam: { parca: 2, toplamParca: 2, baslangic: iso(bas) } })] });
   await imzali(o, k, "/v1/esitle", { govde: parca2 });
   const sonEski = await satir(o, k.tesisId, "istasyon", eskiId);
   const sonKalan = await satir(o, k.tesisId, "istasyon", kalanId);
   kontrol("§4b son parça: pakette olmayan satır DÜŞTÜ", sonEski?.deletedAt != null);
   kontrol("§4c pakette olan satır CANLI", sonKalan !== null && sonKalan.deletedAt === null);
-  const uyusmaz = paket(k, { ufuk: new Date(bas), tur: "TAM", kayitlar: [girdi("istasyon", { yeni: { t: iso(bas), k: "3" }, tam: { parca: 1, toplamParca: 5, baslangic: iso(bas) } })] });
+  const uyusmaz = paket(k, { ufuk: new Date(bas), tur: "TAM", kayitlar: [girdi("istasyon", { yeni: { t: iso(bas), k: "000000000003" }, tam: { parca: 1, toplamParca: 5, baslangic: iso(bas) } })] });
   const r = (await imzali(o, k, "/v1/esitle", { govde: uyusmaz })).json as unknown as SyncBody;
   kontrol("§4d aynı TAM turunda toplam parça değişirse RET (TAM_PARCA_UYUSMAZ)", r.ret.some((x) => x.kod === "TAM_PARCA_UYUSMAZ"));
 }
@@ -110,12 +110,12 @@ async function kapilar(o: Ortam, k: TestKurulumu): Promise<void> {
   console.log("\n§5 kapılar");
   const ufuk = o.saat.simdi() - 30_000;
   const id = randomUUID();
-  const sizinti = paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("siparis", { yaz: [{ id, siparisNo: "S1", tutar: "99.00" }], yeni: { t: iso(ufuk), k: "1" } })] });
+  const sizinti = paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("siparis", { yaz: [{ id, siparisNo: "S1", tutar: "99.00" }], yeni: { t: iso(ufuk), k: "000000000001" } })] });
   const r1 = (await imzali(o, k, "/v1/esitle", { govde: sizinti })).json as unknown as SyncBody;
   kontrol("§5a kök satırda FINANS alanı (tutar) → RET ALAN_SINIFI_IHLALI ve SAKLANMADI", r1.ret.some((x) => x.kod === "ALAN_SINIFI_IHLALI") && (await satir(o, k.tesisId, "siparis", id)) === null);
-  const bilinmez = (await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("maas-bordrosu", { yeni: { t: iso(ufuk), k: "1" } })] }) })).json as unknown as SyncBody;
+  const bilinmez = (await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("maas-bordrosu", { yeni: { t: iso(ufuk), k: "000000000001" } })] }) })).json as unknown as SyncBody;
   kontrol("§5b bilinmeyen projeksiyon → RET PROJEKSIYON_BILINMIYOR", bilinmez.ret.some((x) => x.kod === "PROJEKSIYON_BILINMIYOR"));
-  const gz = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("sube", { yaz: [{ id: randomUUID(), ad: "Şube" }], yeni: { t: iso(ufuk), k: "1" } })] }), gzip: true });
+  const gz = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("sube", { yaz: [{ id: randomUUID(), ad: "Şube" }], yeni: { t: iso(ufuk), k: "000000000001" } })] }), gzip: true });
   kontrol("§5c gzip gövde (özet SIKIŞTIRILMIŞ baytlardan) 200", gz.status === 200, `${gz.status}`);
   const gelecek = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(o.saat.simdi() + 3_600_000) }) });
   kontrol("§5d gelecekteki ufuk → 400 (sürüm anı zehirlenmesin)", gelecek.status === 400 && gelecek.json.details?.code === "GOVDE_GECERSIZ");
@@ -159,16 +159,29 @@ async function uzlastirma(o: Ortam, k: TestKurulumu): Promise<void> {
   console.log("\n§6 uzlaştırma + anlık");
   const ufuk = o.saat.simdi() - 20_000;
   const ids = [randomUUID(), randomUUID()].sort();
-  await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("fason-firma", { yaz: ids.map((id) => ({ id, ad: id.slice(0, 4) })), yeni: { t: iso(ufuk), k: "1" } })] }) });
+  await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), kayitlar: [girdi("fason-firma", { yaz: ids.map((id) => ({ id, ad: id.slice(0, 4) })), yeni: { t: iso(ufuk), k: "000000000001" } })] }) });
   const md5 = (await import("node:crypto")).createHash("md5").update(ids.join(",")).digest("hex");
   const esit = (await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), tur: "UZLASTIRMA", uzlastirma: [{ projeksiyon: "fason-firma", adet: 2, ozet: md5, ufukTarihi: null }] }) })).json as unknown as SyncBody;
   kontrol("§6a eşit küme → istenen YOK", esit.istenen.length === 0, JSON.stringify(esit.istenen));
   const farkli = (await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), tur: "UZLASTIRMA", uzlastirma: [{ projeksiyon: "fason-firma", adet: 3, ozet: md5, ufukTarihi: null }] }) })).json as unknown as SyncBody;
   kontrol("§6b farklı küme → istenen TAM UZLASTIRMA", farkli.istenen.some((x) => x.projeksiyon === "fason-firma" && x.neden === "UZLASTIRMA"));
-  const anlik = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), anliklar: [{ projeksiyon: "ozet.stok", icerikOzeti: "abc", veri: { toplamMetre: "1234.50" } }] }) });
+  const bos = (await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), tur: "UZLASTIRMA", uzlastirma: [{ projeksiyon: "banka", adet: 0, ozet: "d41d8cd98f00b204e9800998ecf8427e", ufukTarihi: null }] }) })).json as unknown as SyncBody;
+  kontrol("§6b2 BOŞ küme md5('') ile eşit → istenen YOK (her gün TAM döngüsü yok)", bos.istenen.length === 0, JSON.stringify(bos.istenen));
+  const eskiFatura = randomUUID();
+  const yeniFatura = randomUUID();
+  const kalemEski = randomUUID();
+  const kalemYeni = randomUUID();
+  await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), kayitlar: [
+    girdi("fatura", { yaz: [{ id: eskiFatura, tarih: "2020-01-15T00:00:00.000Z" }, { id: yeniFatura, tarih: iso(ufuk) }], yeni: { t: iso(ufuk), k: "000000000001" } }),
+    girdi("fatura-kalemi", { yaz: [{ id: kalemEski, faturaId: eskiFatura }, { id: kalemYeni, faturaId: yeniFatura }], yeni: { t: iso(ufuk), k: "000000000001" } }),
+  ] }) });
+  const kalemOzeti = (await import("node:crypto")).createHash("md5").update(kalemYeni).digest("hex");
+  const ustten = (await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), tur: "UZLASTIRMA", uzlastirma: [{ projeksiyon: "fatura-kalemi", adet: 1, ozet: kalemOzeti, ufukTarihi: "2024-01-01T00:00:00.000Z" }] }) })).json as unknown as SyncBody;
+  kontrol("§6b3 saklama tarihi ÜSTTEN gelen kalem (S23): ufuktan eski faturanın kalemi sayılmaz → istenen YOK", ustten.istenen.length === 0, JSON.stringify(ustten.istenen));
+  const anlik = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), anliklar: [{ projeksiyon: "ozet.stok", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri: { toplamMetre: "1234.50" } }] }) });
   const s = await satir(o, k.tesisId, "ozet.stok", "00000000-0000-0000-0000-000000000000");
   kontrol("§6c ANLIK kayıt tek satır olarak yazıldı", anlik.status === 200 && (s?.data as { toplamMetre?: string })?.toplamMetre === "1234.50");
-  const yanlisTur = (await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), anliklar: [{ projeksiyon: "siparis", icerikOzeti: "x", veri: {} }] }) })).json as unknown as SyncBody;
+  const yanlisTur = (await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), anliklar: [{ projeksiyon: "siparis", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri: {} }] }) })).json as unknown as SyncBody;
   kontrol("§6d KAYIT projeksiyonu anlık olarak gelirse RET PROJEKSIYON_TURU", yanlisTur.ret.some((x) => x.kod === "PROJEKSIYON_TURU"));
   kontrol("§6e yanıt saklama ufkunu taşır (siparis)", typeof esit.ufukTarihi.siparis === "string");
 }

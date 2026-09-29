@@ -13,6 +13,7 @@
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { expireClaims } from "../src/services/maintenance";
+import { AccountsResponseSchema } from "../src/wire/esitleme";
 import { api, ekKurulum, hesapKur, imzali, kanonik, kontrol, ortamKur, sonuc, temizleTesis, tesisKur, type Ortam, type TestHesabi, type TestKurulumu } from "./lib/test-ortam";
 
 const siparisGovdesi = () => ({ cariKartId: randomUUID(), doviz: "TRY", kalemler: [{ urunId: randomUUID(), miktar: "120.50" }] });
@@ -137,6 +138,20 @@ async function sureBolumu(o: Ortam, k: TestKurulumu, satis: TestHesabi, m3: stri
   kontrol("§5b yeniden alınabilir", (al.json as unknown as Alinan).kayitlar.some((x) => x.mesajId === m3));
 }
 
+/** S38: fabrika kanalından tesisin hesap listesi — yalnız açık alanlar, yalnız kendi tesisi, sözleşme şemasına uyar. */
+async function hesaplarBolumu(o: Ortam, k: TestKurulumu, hesaplar: readonly TestHesabi[], yabanci: TestHesabi): Promise<void> {
+  console.log("\n§6 `POST /v1/hesaplar` (S38)");
+  const r = await imzali(o, k, "/v1/hesaplar", { govde: { v: 1 } });
+  const liste = AccountsResponseSchema.safeParse(r.json);
+  kontrol("§6a 200 + sözleşme şemasına uyar", r.status === 200 && liste.success, `${r.status}`);
+  const ids = liste.success ? liste.data.hesaplar.map((h) => h.id) : [];
+  kontrol("§6b tesisin hesapları var, başka tesisin hesabı YOK", hesaplar.every((h) => ids.includes(h.accountId)) && !ids.includes(yabanci.accountId));
+  const anahtarlar = new Set((r.json as { hesaplar?: Record<string, unknown>[] }).hesaplar?.flatMap((h) => Object.keys(h)) ?? []);
+  kontrol("§6c yalnız açık alanlar (sır/izin/davet yok)", [...anahtarlar].every((a) => ["id", "ad", "eposta", "durum", "sonGiris"].includes(a)), [...anahtarlar].join(","));
+  const fazla = await imzali(o, k, "/v1/hesaplar", { govde: { v: 1, tesisId: yabanci.accountId } });
+  kontrol("§6d gövdede tanınmayan anahtar → 400 GOVDE_GECERSIZ", fazla.status === 400 && fazla.json.details?.code === "GOVDE_GECERSIZ");
+}
+
 async function main(): Promise<void> {
   const o = await ortamKur();
   const k = await tesisKur(o);
@@ -153,6 +168,7 @@ async function main(): Promise<void> {
     await iptalBolumu(o, k, satis, baska, alinan[0]!);
     await sonucBolumu(o, k, satis, alinan);
     await sureBolumu(o, k, satis, alinan[2]!);
+    await hesaplarBolumu(o, k, [satis, okur, baska], kapaliHesap);
   } finally {
     await temizleTesis(o, k.tesisId);
     await temizleTesis(o, kapali.tesisId);
