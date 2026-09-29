@@ -7,6 +7,7 @@
 // DR: yalnız aynı tesisin ETKİN DR sınıfı kurulumu, aynı tesisin ÜRETİM kurulumunu devralır →
 // ana DEVREDILDI (kurulum kaydı iki satır + denetim), anaya zil 'lisans' ≤2 sn, ana yoklamada
 // `devredildi: true` kira (indirme belirteci yok); tekrar idempotent; geri alma ETKİN'e döndürür.
+// İptal: kurulum IPTAL → 403 KURULUM_IPTAL, ikinci iptal 409; ters yol önceki duruma döndürür.
 // ⭐ KALICI SONDA ✓K2 (her koşumda): DR sınıfı olmayan kurulum devralamaz · başka tesisin DR'si
 //    devralamaz — kapı "her imzalı isteği kabul et" diye kör olsaydı kırmızı.
 // Koşum: npx tsx scripts/test_tasima_dr.ts
@@ -174,6 +175,23 @@ async function main(): Promise<void> {
     kontrol("§5a geri alma → ana ETKİN, kira devredildi=false", kiraOf(geri)?.devredildi === false && (await prisma.kurulum.findUniqueOrThrow({ where: { id: ana.kurulumDbId } })).durum === "ETKIN");
     kontrol("§5b geri alma kurulum kaydında (DR_GERI_ALINDI)", (await prisma.kurulumKaydi.count({ where: { kurulumId: ana.kurulumDbId, olay: "DR_GERI_ALINDI" } })) === 1);
     temizlenecek.push(yabanciDr.kurulumDbId);
+
+    console.log("\n§6 kurulum iptali ve ters yolu");
+    const { cancelInstallation, reinstateInstallation } = await import("../src/services/installation-admin.service");
+    await cancelInstallation({ installationDbId: ana.kurulumDbId, reason: "sözleşme feshedildi", actor: "bekci" });
+    const iptalYoklama = await yokla(ana.kurulumId, anaAnahtar, kiraOf(geri)?.kiraId ?? null);
+    kontrol("§6a iptal edilen kurulum → 403 KURULUM_IPTAL", iptalYoklama.status === 403 && iptalYoklama.kod === "KURULUM_IPTAL", `${iptalYoklama.status} ${iptalYoklama.kod}`);
+    let ikinciIptal = "";
+    try {
+      await cancelInstallation({ installationDbId: ana.kurulumDbId, reason: "tekrar", actor: "bekci" });
+    } catch (err) {
+      ikinciIptal = String((err as { status?: number }).status);
+    }
+    kontrol("§6b ikinci iptal → 409", ikinciIptal === "409");
+    await reinstateInstallation({ installationDbId: ana.kurulumDbId, reason: "yeni sözleşme", actor: "bekci" });
+    const donus = await yokla(ana.kurulumId, anaAnahtar, kiraOf(geri)?.kiraId ?? null);
+    const iptalKayitlari = await prisma.kurulumKaydi.findMany({ where: { kurulumId: ana.kurulumDbId, olay: { in: ["IPTAL", "IPTAL_GERI_ALINDI"] } } });
+    kontrol("§6c ters yol → önceki duruma (ETKİN) döner, yoklama 200; iki kurulum kaydı", donus.status === 200 && iptalKayitlari.length === 2, `${donus.status} ${donus.kod ?? ""}`);
   } finally {
     await sunucu.durdur();
     await temizleKurulumlar([...new Set(temizlenecek)], ortam.kidler);

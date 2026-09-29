@@ -6,8 +6,9 @@
 //       uyarı (kira verilir), ikinci pencerede sürerse EŞLEŞMEYEN tarafa kira yok (403
 //       KIRA_VERILMEDI); sahip taraf hiç reddedilmez — asla anında durdurma.
 // Ek: kabul edilen küme yalnız tek etkenlik değişimde kayar (çatal açıkken asla) · kabul edilen
-// kümeyle ESLESMEDI (kopyalanan LICENSE_DIR) → uyarı, ikinci pencerede red · ardışık "yakala" →
-// ayırt edilemeyen kopya uyarısı (yalnız uyarı).
+// kümeyle ESLESMEDI (kopyalanan LICENSE_DIR) → uyarı, ikinci pencerede red; satıcı uyarıyı kapatıp
+// kümeyi kabul edince (meşru donanım değişimi) kira döner · ardışık "yakala" → ayırt edilemeyen
+// kopya uyarısı (yalnız uyarı).
 // Sunucu kısa kopya penceresiyle kalkar (KOPYA_PENCERE_SN=2) — ikinci pencere beklenerek ölçülür.
 // ⭐ KALICI SONDA ✓K2 (her koşumda): sahip taraf ikinci pencerede de 200 alır (kapı "çatalda herkesi
 //    reddet" diye kör olsaydı kırmızı) · pencere dolmadan eşleşmeyen taraf 200 alır (anında red yok).
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
   const ortam = await anahtarOrtamiKur();
   const { f, ctx } = ortam;
   const { prisma } = await import("../src/lib/prisma");
+  const { closeCopyAlert } = await import("../src/services/installation-admin.service");
   const temizlenecek: string[] = [];
   const sunucu: CalisanSunucu = await sunucuBaslat(ortam, { KOPYA_PENCERE_SN: String(PENCERE_SN) });
   const fpA = f.parmakIzi;
@@ -136,6 +138,19 @@ async function main(): Promise<void> {
     await bekle(PENCERE_SN * 1000 + 300);
     const u2y = await yokla(k3.kurulumId, anahtar3, u1?.kiraId ?? null, fpC);
     kontrol("§6b ikinci pencere: 403 KIRA_VERILMEDI", u2y.status === 403 && u2y.kod === "KIRA_VERILMEDI", `${u2y.status} ${u2y.kod}`);
+    // Meşru donanım değişimi: satıcı uyarıyı kapatır ve ölçülen kümeyi kabul eder → kira döner.
+    await closeCopyAlert({ alertId: uy!.id, acceptOtherFingerprint: true, reason: "anakart değişti — müşteriyle doğrulandı", actor: "bekci" });
+    const u3y = await yokla(k3.kurulumId, anahtar3, u1?.kiraId ?? null, fpC);
+    const kabul4 = (await prisma.kurulum.findUniqueOrThrow({ where: { id: k3.kurulumDbId } })).kabulEdilenParmakIzi;
+    const kapandi = await prisma.kopyaUyarisi.findUniqueOrThrow({ where: { id: uy!.id } });
+    kontrol("§6c uyarı kapatılıp küme kabul edilince → 200, kabul edilen küme = yeni makine, uyarı KAPANDI", u3y.status === 200 && JSON.stringify(kabul4) === JSON.stringify(fpC) && kapandi.durum === "KAPANDI", `${u3y.status} ${u3y.kod ?? ""}`);
+    let ikinciKapanis = "";
+    try {
+      await closeCopyAlert({ alertId: uy!.id, acceptOtherFingerprint: false, reason: "tekrar", actor: "bekci" });
+    } catch (err) {
+      ikinciKapanis = String((err as { status?: number }).status);
+    }
+    kontrol("§6d kapalı uyarı ikinci kez kapatılamaz → 409", ikinciKapanis === "409");
 
     console.log("\n§7 ardışık 'yakala' — ayırt edilemeyen kopya (yalnız uyarı)");
     const anahtar4 = kurulumAnahtariUret();
