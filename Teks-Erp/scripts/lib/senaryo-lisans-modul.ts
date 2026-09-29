@@ -7,12 +7,14 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
+import { PG_SESSION_OPTIONS } from "../../src/lib/pg-session";
 import { LICENSE_FILES } from "../../src/lib/license/store";
 import { tsLicenseCore } from "../../src/lib/license/license-core";
 import { openModulePackage, sealModulePackage } from "../../src/lib/license/encrypted-module";
 import type { RootKey } from "../../src/lib/license/protocol";
 import type { Yanit } from "./senaryo-lisans-istemci";
 import { SATICI_KOKU } from "./senaryo-lisans-surec";
+import { fixtureHedefEngeli } from "./hedef-db-kapisi";
 
 type Kontrol = (ad: string, ok: boolean, ayrinti?: string) => boolean;
 const MODUL = "depo.multiEnabled";
@@ -29,6 +31,11 @@ export async function l30ModulOlc(g: {
   readonly istek: (yontem: string, yol: string) => Promise<Yanit>;
   readonly kontrol: Kontrol;
 }): Promise<void> {
+  // Kendi havuzunu (satıcı kasası temizliği) kurduğu için hedefi kendisi de sınar: fabrika fikstür DB'si +
+  // satıcı yalnız `*_test` (koşucunun kapısı atlanarak doğrudan çağrılırsa da fail-closed).
+  const saticiAdi = new URL(g.saticiDbUrl).pathname.replace(/^\//, "");
+  const engel = fixtureHedefEngeli() ?? (saticiAdi.endsWith("_test") && !saticiAdi.startsWith("tekserp_fabrika_") ? null : `satıcı hedefi '${saticiAdi}' yalnız *_test olabilir`);
+  if (engel) throw new Error(`L30 hedef kapısı: ${engel}`);
   const dizin = fs.mkdtempSync(path.join(g.kok, "modul-anahtari-"));
   // Kasa satırı silinmez ve modül×sürüm tekildir: her koşum kendi sürümüyle (saniye damgası) girer.
   const surum = Math.floor(Date.now() / 1000);
@@ -66,7 +73,7 @@ export async function l30ModulOlc(g: {
     const donus = kiradanAc();
     g.kontrol("K2 geri alınınca anahtar kiraya döner", geri.status === 201 && donus.ok, donus.ok ? "" : donus.code);
   } finally {
-    const pool = new Pool({ connectionString: g.saticiDbUrl });
+    const pool = new Pool({ connectionString: g.saticiDbUrl, options: PG_SESSION_OPTIONS });
     await pool.query(`UPDATE modul_anahtari SET aktif = false, "updatedAt" = now() WHERE kid = $1`, [kayit.kid]).catch(() => undefined);
     await pool.end().catch(() => undefined);
     anahtar.fill(0);
