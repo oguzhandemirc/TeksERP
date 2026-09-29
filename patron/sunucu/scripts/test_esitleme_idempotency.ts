@@ -167,6 +167,17 @@ async function uzlastirma(o: Ortam, k: TestKurulumu): Promise<void> {
   kontrol("§6b farklı küme → istenen TAM UZLASTIRMA", farkli.istenen.some((x) => x.projeksiyon === "fason-firma" && x.neden === "UZLASTIRMA"));
   const bos = (await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), tur: "UZLASTIRMA", uzlastirma: [{ projeksiyon: "banka", adet: 0, ozet: "d41d8cd98f00b204e9800998ecf8427e", ufukTarihi: null }] }) })).json as unknown as SyncBody;
   kontrol("§6b2 BOŞ küme md5('') ile eşit → istenen YOK (her gün TAM döngüsü yok)", bos.istenen.length === 0, JSON.stringify(bos.istenen));
+  const eskiFatura = randomUUID();
+  const yeniFatura = randomUUID();
+  const kalemEski = randomUUID();
+  const kalemYeni = randomUUID();
+  await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), kayitlar: [
+    girdi("fatura", { yaz: [{ id: eskiFatura, tarih: "2020-01-15T00:00:00.000Z" }, { id: yeniFatura, tarih: iso(ufuk) }], yeni: { t: iso(ufuk), k: "000000000001" } }),
+    girdi("fatura-kalemi", { yaz: [{ id: kalemEski, faturaId: eskiFatura }, { id: kalemYeni, faturaId: yeniFatura }], yeni: { t: iso(ufuk), k: "000000000001" } }),
+  ] }) });
+  const kalemOzeti = (await import("node:crypto")).createHash("md5").update(kalemYeni).digest("hex");
+  const ustten = (await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), tur: "UZLASTIRMA", uzlastirma: [{ projeksiyon: "fatura-kalemi", adet: 1, ozet: kalemOzeti, ufukTarihi: "2024-01-01T00:00:00.000Z" }] }) })).json as unknown as SyncBody;
+  kontrol("§6b3 saklama tarihi ÜSTTEN gelen kalem (S23): ufuktan eski faturanın kalemi sayılmaz → istenen YOK", ustten.istenen.length === 0, JSON.stringify(ustten.istenen));
   const anlik = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(ufuk), anliklar: [{ projeksiyon: "ozet.stok", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri: { toplamMetre: "1234.50" } }] }) });
   const s = await satir(o, k.tesisId, "ozet.stok", "00000000-0000-0000-0000-000000000000");
   kontrol("§6c ANLIK kayıt tek satır olarak yazıldı", anlik.status === 200 && (s?.data as { toplamMetre?: string })?.toplamMetre === "1234.50");

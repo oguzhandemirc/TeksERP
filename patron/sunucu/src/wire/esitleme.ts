@@ -27,22 +27,31 @@ export type SyncPath = (typeof SYNC_PATHS)[keyof typeof SYNC_PATHS];
 /** Gövdesi gzip'li giden uçlar (S14); diğerleri küçük yoklamadır ve sıkıştırılmaz. Bulut ikisini de kabul eder. */
 export const GZIP_PATHS: readonly SyncPath[] = [SYNC_PATHS.SYNC, SYNC_PATHS.REPORT_RESULT];
 
-/** Bulutun `details.code` değerleri (§6.7 + §17). Gövde `{success:false, message:<TR>, details:{code}}`. */
-export const CLOUD_ERROR_CODES = [
+/**
+ * Fabrika kanalının (`/v1/*`) `details.code` değerleri (§6.7 + §17); gövde `{success:false, message:<TR>, details:{code}}`.
+ * Bunlara ek olarak protokol kodları (`JWS_*`, `ISTEK_*`, 401) olduğu gibi geçer. Bulutun kod listesi bu kümeyi İÇERİR.
+ */
+export const FACTORY_CHANNEL_ERROR_CODES = [
   "GOVDE_GECERSIZ",
   "PROTOKOL_SURUMU",
-  "SOZLESME_ESKI",
-  "SOZLESME_BILINMIYOR",
+  "ISTEK_GECERSIZ",
+  "KURULUM_BILINMIYOR",
+  "KURULUM_IPTAL",
+  "HIZ_SINIRI",
+  "TEKRAR_DENEYIN",
+  "BULUNAMADI",
+  "SUNUCU_HATASI",
   "SINIF_GONDEREMEZ",
   "PATRON_BULUT_KAPALI",
-  "ISTEK_TEKRAR",
+  "SOZLESME_ESKI",
+  "SOZLESME_BILINMIYOR",
   "PAKET_ISLENIYOR",
-  "PAKET_KIMLIGI_CAKISTI",
   "PAKET_BUYUK",
-  "BULUNAMADI",
+  "PAKET_KIMLIGI_CAKISTI",
   "DURUM_CAKISMASI",
-  "SUNUCU_HATASI",
+  "RAPOR_BILINMIYOR",
 ] as const;
+export type FactoryChannelErrorCode = (typeof FACTORY_CHANNEL_ERROR_CODES)[number];
 export const CloudErrorResponseSchema = z.object({ success: z.literal(false), message: z.string(), details: z.looseObject({ code: z.string() }) });
 
 const Iso = z.iso.datetime();
