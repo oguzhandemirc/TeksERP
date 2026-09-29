@@ -14,6 +14,7 @@ import prisma from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
 import { OrderService } from "../src/services/order.service";
 import { ShippingService } from "../src/services/shipping.service";
+import { ensureTestAdmin } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -95,12 +96,16 @@ async function main() {
     await prisma.roll.delete({ where: { id: inProd.id } }).catch(() => {});
 
     // 3+4) quickOrderFromRolls: r1+r2 (aynı spec) + r3 (farklı) → 2 satır
+    const actor = await ensureTestAdmin();
     const qo = await orderSvc.quickOrderFromRolls(
       { customerId: customer.id, rollIds: [r1.id, r2.id, r3.id] },
-      undefined,
+      actor.id,
     );
     const qd = qo.data as { order: { id: string; orderNumber: string }; lineCount: number; rollCount: number };
     createdOrders.push(qd.order.id);
+    // Oluşturan panel siparişiyle AYNI dikişten (`prepareOrderCreate` aktörü → `withActor`).
+    const qoRow = await prisma.order.findUnique({ where: { id: qd.order.id }, select: { createdById: true } });
+    check("quickOrder: createdById = aktör", qoRow?.createdById === actor.id, String(qoRow?.createdById));
     check("quickOrder: 3 top → 2 satır (spec grupla)", qd.lineCount === 2 && qd.rollCount === 3, `${qd.lineCount} satır`);
 
     const lines = await prisma.orderLine.findMany({
