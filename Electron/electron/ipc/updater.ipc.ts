@@ -1,8 +1,9 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, net } from "electron";
 import electronUpdater from "electron-updater";
 import log from "electron-log/main.js";
 import type { UpdateStatus } from "@shared/ipc-contract";
 import { DEFAULT_UPDATE_FEED_URL, UPDATE_FEED_OVERRIDE_KEY } from "@shared/update-feed";
+import { API_BASE_URL_STORE_KEY, AUTH_TOKEN_STORE_KEY, feedOptions, fetchDownloadToken } from "@shared/download-token";
 import {
   UPDATE_CHECK_INTERVAL_MS,
   UPDATE_FIRST_CHECK_DELAY_MS,
@@ -104,10 +105,18 @@ function resolveFeedUrl(): { url: string; overridden: boolean } {
   }
 }
 
-/** Çözülen adresi autoUpdater'a uygula ve duruma yansıt. */
-function applyFeedUrl(): void {
+/**
+ * Çözülen adresi autoUpdater'a uygula ve duruma yansıt. Her denetimde fabrikanın backend'inden taze
+ * indirme belirteci istenir (3b); alınamazsa başlıksız — bugünkü davranış (@shared/download-token).
+ */
+async function applyFeedUrl(): Promise<void> {
   const { url, overridden } = resolveFeedUrl();
-  updater().setFeedURL({ provider: "generic", url });
+  const token = await fetchDownloadToken({
+    apiBaseUrl: readSecureValue(API_BASE_URL_STORE_KEY),
+    authToken: readSecureValue(AUTH_TOKEN_STORE_KEY),
+    fetchImpl: (u, init) => net.fetch(u, init),
+  });
+  updater().setFeedURL(feedOptions(url, token));
   publish({ feedUrl: url, feedUrlOverridden: overridden });
 }
 
@@ -131,7 +140,7 @@ async function check(): Promise<UpdateStatus> {
 
   const calisan = (async () => {
     try {
-      applyFeedUrl();
+      await applyFeedUrl();
       await updater().checkForUpdates();
     } catch (err) {
       // checkForUpdates hem reject eder hem "error" olayı yayar; ikisi de aynı
@@ -161,10 +170,10 @@ export function registerUpdaterIpc(): void {
 
   ipcMain.handle("updater:status", () => status);
   ipcMain.handle("updater:check", () => check());
-  ipcMain.handle("updater:set-feed-url", (_e, next: string | null) => {
+  ipcMain.handle("updater:set-feed-url", async (_e, next: string | null) => {
     if (next && next.trim()) writeSecureValue(UPDATE_FEED_OVERRIDE_KEY, next.trim());
     else deleteSecureValue(UPDATE_FEED_OVERRIDE_KEY);
-    if (status.enabled) applyFeedUrl();
+    if (status.enabled) await applyFeedUrl();
     else {
       const r = resolveFeedUrl();
       publish({ feedUrl: r.url, feedUrlOverridden: r.overridden });
@@ -196,7 +205,7 @@ export function registerUpdaterIpc(): void {
   // sonra ekranda cevapsız bir izin penceresi asılı kalır. Kurulum yalnız
   // kullanıcı bandan "Yeniden Başlat" dediğinde, yani başındayken yapılır.
   updater().autoInstallOnAppQuit = false;
-  applyFeedUrl();
+  void applyFeedUrl();
 
   updater().on("checking-for-update", () => publish({ state: "checking", error: undefined }));
   updater().on("update-available", (info) =>

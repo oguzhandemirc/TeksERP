@@ -121,6 +121,8 @@ Native çekirdek (cargo, `cd Teks-Erp/native/lisans-cekirdek && npm test`; commi
 
 Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koşar): `mirrors.test.ts`, `sanction.test.tsx`, `once-secret.test.tsx`, `login.test.tsx`, `app-isolation.test.ts`
 
+Panel (vitest, `cd Electron && npx vitest run <yol>`): `src/lib/download-token.test.ts` (indirme belirteci, 3b)
+
 Yeni lisans bekçisi doğduğu commit'te bu listeye VE haritanın `## lisans` bölümüne birlikte eklenir.
 
 Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnız `_test` DB'ler): Senaryo L + Y tek komut `cd Teks-Erp && npx tsx scripts/senaryo-ly.ts` (ortam değişkenleri dosya başında) — L1…L29 sonuç tablosu `docs/design/LISANS-SENARYO-L.md`.
