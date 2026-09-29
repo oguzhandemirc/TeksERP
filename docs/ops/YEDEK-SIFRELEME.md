@@ -19,7 +19,7 @@
 | `musteri` | `<kök>\yedek-anahtar\musteri.tkpub` | Müşterinin USB'si + kâğıt (`tksec1:…` tek satır) | Sunucu ölürse/çalınırsa bağımsız erişim; K5 "verilerimi al" dosyası |
 | `etkili` | `<kök>\yedek-anahtar\etkili.tkpub` | Etkili Yazılım, çevrimdışı | Destek/kurtarma. **Tören kullanıcıda — henüz yok;** eklenene dek yedekler iki alıcılıdır |
 
-Anahtar dizini **yedek klasörünün DIŞINDADIR** (offsite süpürücü `backups\`i makine dışına kopyalar). Backend dizini `BACKUP_KEY_DIR` ortam değişkeninden okur (`.env`); `yedekle.ps1` ve `kur.ps1` varsayılan olarak `<kök>\yedek-anahtar`'a bakar.
+Anahtar dizini **yedek klasörünün DIŞINDADIR** (offsite süpürücü `backups\`i makine dışına kopyalar). Niyetin TEK kaynağı `app\.env`teki `BACKUP_KEY_DIR`dir: backend onu pm2 açılışında ortamdan, gece görevi (`yedekle.ps1`) her koşumda dosyadan okur; satır yoksa gece görevi `<kök>\yedek-anahtar` VARSA şifreler. Satır beyanlı ama dizin yoksa gece görevi düz yedeği korur ve kırmızı (çıkış 3) biter. İki taraf farklı karar verirse `/api/admin/health` → `backupCryptoIntent.warning` söyler (tipik sebep: satır eklendi, `pm2 restart` yapılmadı). `kur.ps1` bugün hâlâ yalnız `<kök>\yedek-anahtar`a bakar (Faz 2b).
 
 ## 3. Anahtar töreni (ilk kurulum)
 
@@ -33,7 +33,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\ilk-kurulum.ps1 -YedekSifr
 
 1. **Yedek parolası** terminalde gizli iki kez sorulur (en az 10 karakter). Komut satırına, loga, sürüm notuna YAZILMAZ.
 2. `musteri` özel yarısı USB dosyasına (ya da parametre yoksa **ekrana bir kez**) yazılır → kâğıda yazılır, USB müşteriye teslim edilir, **sunucuda bırakılmaz** (dosya USB'de; sunucuya kopyalanmışsa silinir).
-3. `.env`'e `BACKUP_KEY_DIR="C:/TeksERP/yedek-anahtar"` eklenir → backend'in görmesi için `pm2 restart`.
+3. `.env`'e `BACKUP_KEY_DIR="C:/TeksERP/yedek-anahtar"` eklenir (`.env` oluştuktan sonra; dizin önceden kurulmuşsa `-YedekSifreleme` verilmese de) → backend'in görmesi için `pm2 restart`. Yedek parolası konsolda ya da `ssh -t` (PTY) oturumunda sorulur; PTY'siz SSH'ta ve zamanlanmış görevde sorulamaz, yerel anahtar açık iş olarak kalır.
 4. Adım sonunda `durum` çıktısı basılır: `durum: acik`, üç (ya da iki) alıcı, `yerel anahtar: …\yerel.tkkey`.
 
 Etkili Yazılım anahtarı sonradan: açık yarıyı `<kök>\yedek-anahtar\etkili.tkpub` olarak koy — bir sonraki yedekten itibaren alıcı olur (eskiler yeniden şifrelenmez).

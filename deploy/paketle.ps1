@@ -191,7 +191,7 @@ if (-not (Test-Path "$proj\dist\server.js")) { Fail "dist\server.js yok. tsconfi
 # `//# sourceMappingURL=` pragmasi yorum DEGILDIR (--removeComments onu birakir, .map dosyalari
 # asagida ayrica cikarilir) - eski desen onu da sayiyordu ve her deploy'da "67 (0 olmali)"
 # basip gercek bir yorum sizintisini gorunmez kiliyordu (2026-08-25 saha olcumu: 67/67 pragma).
-$kalanYorum = (Select-String -Path "$proj\dist\services\*.js" -Pattern '^\s*//(?!#\s*sourceMappingURL)' -ErrorAction SilentlyContinue | Measure-Object).Count
+$kalanYorum = (Select-String -Path "$proj\dist\services\*.js" -Pattern '^\s*//(?!#\s*sourceMappingURL)' -CaseSensitive -ErrorAction SilentlyContinue | Measure-Object).Count
 Write-Host "  yorum temizligi: dist\services icinde kalan // satiri = $kalanYorum (0 olmali)"
 
 # --- Sunucu araclari (dist\tools) -------------------------------------------
@@ -456,7 +456,7 @@ try {
 # Bu kapi 2026-09-04'te yoktu ve 140 dosyalik kayip sahaya kadar gitti.
 $beklenen = $dosyalar.Count + 1   # +1 = PAKET.json
 $arsivOku = [IO.Compression.ZipFile]::OpenRead($zip)
-try   { $gercek = @($arsivOku.Entries | Where-Object { $_.FullName -notmatch '/$' }).Count
+try   { $gercek = @($arsivOku.Entries | Where-Object { $_.FullName -cnotmatch '/$' }).Count
         $iceriyor = { param($yol) [bool]($arsivOku.Entries | Where-Object { $_.FullName -eq $yol }) } }
 finally { $arsivOku.Dispose() }
 
@@ -513,9 +513,9 @@ if ($Prova) {
   Write-Host "  ! PROVA: surum belgesine YAZILMADI (paket adi + SHA256 asagida)." -ForegroundColor Yellow
 } else {
   $belgeMetni = Get-Content $surumBelgesi -Raw
-  $belgeMetni = $belgeMetni -replace '(?m)^\*\*Paket:\*\*.*$',  "**Paket:** ``$([System.IO.Path]::GetFileName($zip))``"
-  $belgeMetni = $belgeMetni -replace '(?m)^\*\*SHA256:\*\*.*$', "**SHA256:** ``$sha``"
-  $belgeMetni = $belgeMetni -replace '(?m)^\*\*Commit:\*\*.*$', "**Commit:** ``$commit``"
+  $belgeMetni = $belgeMetni -creplace '(?m)^\*\*Paket:\*\*.*$',  "**Paket:** ``$([System.IO.Path]::GetFileName($zip))``"
+  $belgeMetni = $belgeMetni -creplace '(?m)^\*\*SHA256:\*\*.*$', "**SHA256:** ``$sha``"
+  $belgeMetni = $belgeMetni -creplace '(?m)^\*\*Commit:\*\*.*$', "**Commit:** ``$commit``"
   Set-Content $surumBelgesi $belgeMetni -NoNewline
   Write-Host "  + surum belgesi guncellendi (paket adi + SHA256 + commit)" -ForegroundColor DarkGray
 }

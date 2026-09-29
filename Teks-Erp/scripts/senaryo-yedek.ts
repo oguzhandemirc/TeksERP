@@ -9,7 +9,8 @@
 // içi HTTP (bu sürecin kendi 127.0.0.1 dinleyicisi — ikinci Node süreci yok).
 //
 //   Y1 döküm → doğrula → şifrele → ÜÇ alıcının her biriyle ayrı çöz → pg_restore --list
-//      birebir; offsite ve ikinci hedef (yedekle.ps1, pwsh varsa) klasöründe düz dosya yok
+//      birebir; offsite ve ikinci hedef (yedekle.ps1, pwsh varsa) klasöründe düz dosya yok;
+//      Y1g–Y1i yedekle.ps1 niyeti app\.env BACKUP_KEY_DIR'den okur (yoksa varsayılan dizin)
 //   Y2 panel yolu: önizleme parolasız 403 · yanlış 403 · doğru 200 + tam doğrulama;
 //      kopyaya geri yükleme parolayla çözer ve DOĞRULANMIŞ kopya kurar
 //   Y3 sarılı yerel anahtar parolasız offsite dosyayı AÇAMAZ, müşteri anahtarı açar
@@ -302,6 +303,30 @@ function yedekleps1(): void {
     r.status === 0 && yed.some((f) => f.endsWith(".dump.tkenc")) && !yed.some((f) => f.endsWith(".dump") || f.endsWith(".part")) &&
       ikinci.length === 1 && ikinci[0]!.endsWith(".tkenc"),
     `çıkış ${r.status} · yedek: ${yed.filter((f) => f !== "backup.log").join(",")} · E: ${ikinci.join(",")}${r.status ? ` · ${r.stdout.slice(-300)}` : ""}`);
+
+  // Y1g–Y1i — niyet TEK KAYNAKTAN (D13): -AnahtarDizini verilmez, gece görevi app\.env'i okur.
+  const envYol = path.join(psKok, "app", ".env");
+  const kos = (envMetni: string | null): { kod: number | null; dosyalar: string[]; cikti: string } => {
+    fs.rmSync(path.join(psKok, "backups"), { recursive: true, force: true });
+    if (envMetni === null) fs.rmSync(envYol, { force: true });
+    else fs.writeFileSync(envYol, envMetni);
+    const s = spawnSync("pwsh", ["-NoProfile", "-File", betik, "-Kok", psKok], {
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${nodeDir}${path.delimiter}${process.env.PATH}` },
+      timeout: 300_000,
+    });
+    const d = path.join(psKok, "backups");
+    return { kod: s.status, dosyalar: fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f !== "backup.log") : [], cikti: s.stdout.slice(-300) };
+  };
+  let k = kos(`PORT=4000\nBACKUP_KEY_DIR="${D.anahtar}"\n`);
+  adim("Y1g yedekle.ps1: anahtar dizini app\\.env BACKUP_KEY_DIR'den okunur (parametresiz) → şifreli",
+    k.kod === 0 && k.dosyalar.length === 1 && k.dosyalar[0]!.endsWith(".dump.tkenc"), `çıkış ${k.kod} · ${k.dosyalar.join(",")}`);
+  k = kos(`BACKUP_KEY_DIR="${path.join(kok, "olmayan-anahtar")}"\n`);
+  adim("Y1h yedekle.ps1: .env niyet beyan ediyor ama dizin yok → düz yedek KORUNUR, çıkış 3 (sessiz düz değil)",
+    k.kod === 3 && k.dosyalar.length === 1 && k.dosyalar[0]!.endsWith(".dump"), `çıkış ${k.kod} · ${k.dosyalar.join(",")} · ${k.cikti}`);
+  k = kos(null);
+  adim("Y1i yedekle.ps1: .env satırı ve <kök>\\yedek-anahtar yok → bugünkü davranış (düz, çıkış 0)",
+    k.kod === 0 && k.dosyalar.length === 1 && k.dosyalar[0]!.endsWith(".dump"), `çıkış ${k.kod} · ${k.dosyalar.join(",")}`);
 }
 
 void main();

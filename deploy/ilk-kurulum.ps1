@@ -121,6 +121,30 @@ function Dur($m)  { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; Wri
 $script:acik = @()
 function Acik($m) { Uyar $m; $script:acik += $m }
 
+# Soru sorulabilir mi: yonlendirilmemis KONSOL + (masaustu oturumu ya da SSH PTY'si). Windows OpenSSH
+# oturumunda da zamanlanmis gorevde de UserInteractive False; ikisini SSH_CONNECTION/SSH_CLIENT ayirir
+# (gorevde soru asili kalirdi). bakim-rolu.ps1'de AYNI govde.
+function SoruSorabilir {
+  if ([Console]::IsInputRedirected) { return $false }
+  if ($Host.Name -cne "ConsoleHost") { return $false }
+  if ([Environment]::UserInteractive) { return $true }
+  return [bool]($env:SSH_CONNECTION -or $env:SSH_CLIENT)
+}
+
+# .env degeri: ilk eslesen satir, cevreleyen tek/cift tirnak soyulur. Anahtar buyuk/kucuk
+# harf DUYARLI (-cmatch): tr-TR kulturunde -match 'I'yi 'i'ye indirger (thinkpad-1 dersi).
+# yedekle.ps1 ve bakim-rolu.ps1'de AYNI govde (bekci ikizligi olcer).
+function EnvDeger($satirlar, $ad) {
+  foreach ($l in $satirlar) {
+    if ($l -cmatch ('^\s*' + $ad + '\s*=\s*(.*)$')) {
+      $v = $Matches[1].Trim()
+      if ($v.Length -ge 2 -and (($v[0] -eq '"' -and $v[-1] -eq '"') -or ($v[0] -eq "'" -and $v[-1] -eq "'"))) { $v = $v.Substring(1, $v.Length - 2) }
+      return $v
+    }
+  }
+  return $null
+}
+
 # Parola: dosya > duz (uyarili) > gizli soru. Etkilesimsiz oturumda soru sorulamaz.
 # -Zorunlu: yoksa durur. Degilse etkilesimli oturumda bos birakilabilir soru sorulur.
 function ParolaCoz($duz, $dosya, $etiket, [switch]$Zorunlu) {
@@ -135,8 +159,7 @@ function ParolaCoz($duz, $dosya, $etiket, [switch]$Zorunlu) {
     Uyar "$etiket parolasi komut satirinda verildi - PowerShell gecmisine ve surec listesine duser (tercih: soru ya da ...ParolaDosyasi)."
     return $duz
   }
-  $soramaz = -not [Environment]::UserInteractive -or [Console]::IsInputRedirected
-  if ($soramaz) {
+  if (-not (SoruSorabilir)) {
     if ($Zorunlu) { Dur "$etiket parolasi gerekli ve bu oturum soru soramiyor: -...ParolaDosyasi <yol> ver." }
     return $null
   }
@@ -180,7 +203,7 @@ function GenisErisim($yol) {
 function NativeArg([string]$s) {
   $pas = Get-Variable -Name PSNativeCommandArgumentPassing -ValueOnly -ErrorAction SilentlyContinue
   if ($PSVersionTable.PSVersion.Major -ge 7 -and $pas -and $pas -ne "Legacy") { return $s }
-  return ($s -replace '(\\*)"', '$1$1\"')
+  return ($s -creplace '(\\*)"', '$1$1\"')
 }
 
 # psql'i belirli bir kimlikle kosturur; PGPASSWORD cagri BASINA set/temizlenir
@@ -203,6 +226,47 @@ function Psql($kullanici, $parola, $veritabani, $sorgu) {
     $env:PGPASSWORD = ""
     $ErrorActionPreference = $eskiEAP
   }
+}
+
+# psql'e SQL STDIN'den gider: sir tasiyan ifade (rol parolasi) surec listesine / argv'ye
+# girmez (bakim-rolu.ps1 `PsqlStdin` kalibi). PGPASSWORD ve EAP `Psql` ile ayni disiplinde.
+function PsqlStdin($kullanici, $parola, $veritabani, $sql) {
+  $eskiEAP = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $env:PGPASSWORD = $parola
+  try {
+    $c = $sql | & (Join-Path $script:pgsqlBin "psql.exe") -X -w -h localhost -p $DbPort -U $kullanici -d $veritabani -v ON_ERROR_STOP=1 -tA -f - 2>&1
+    $kod = $LASTEXITCODE
+    $satirlar = @($c | ForEach-Object {
+      if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+    })
+    return [pscustomobject]@{ kod = $kod; cikti = ($satirlar -join "`n").Trim() }
+  } finally {
+    $env:PGPASSWORD = ""
+    $ErrorActionPreference = $eskiEAP
+  }
+}
+
+# RFC 5802/7677 SCRAM-SHA-256 dogrulayicisi (PostgreSQL saklama bicimi): duz parola SQL
+# metnine ve sunucu loguna hic girmez. bakim-rolu.ps1'de AYNI govde (bekci ikizligi olcer).
+function Pbkdf2Sha256([byte[]]$parola, [byte[]]$tuz, [int]$tur) {
+  $h = [Security.Cryptography.HMACSHA256]::new($parola)
+  $u = $h.ComputeHash([byte[]]($tuz + [byte[]](0, 0, 0, 1)))
+  $t = [byte[]]$u.Clone()
+  for ($i = 1; $i -lt $tur; $i++) {
+    $u = $h.ComputeHash($u)
+    for ($j = 0; $j -lt 32; $j++) { $t[$j] = $t[$j] -bxor $u[$j] }
+  }
+  return $t
+}
+function ScramDogrulayici([string]$parola) {
+  $tuz = New-Object byte[] 16
+  [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($tuz)
+  $tuzlu = Pbkdf2Sha256 ([Text.Encoding]::UTF8.GetBytes($parola)) $tuz 4096
+  $istemci = [Security.Cryptography.HMACSHA256]::new($tuzlu).ComputeHash([Text.Encoding]::ASCII.GetBytes("Client Key"))
+  $sunucu = [Security.Cryptography.HMACSHA256]::new($tuzlu).ComputeHash([Text.Encoding]::ASCII.GetBytes("Server Key"))
+  $saklanan = [Security.Cryptography.SHA256]::Create().ComputeHash($istemci)
+  return "SCRAM-SHA-256`$4096:" + [Convert]::ToBase64String($tuz) + "`$" + [Convert]::ToBase64String($saklanan) + ":" + [Convert]::ToBase64String($sunucu)
 }
 
 Write-Host ""
@@ -238,7 +302,7 @@ if (-not $PgBin) {
   # Program Files altindaki EN YUKSEK surum. `kur.ps1` bunlari $Kok\pgsql\bin
   # altinda arar; asagida oraya baglanacak.
   $adaylar = Get-ChildItem "C:\Program Files\PostgreSQL" -Directory -ErrorAction SilentlyContinue |
-             Sort-Object { [int]($_.Name -replace '\D', '0') } -Descending
+             Sort-Object { [int]($_.Name -creplace '\D', '0') } -Descending
   foreach ($a in $adaylar) {
     if (Test-Path (Join-Path $a.FullName "bin\pg_dump.exe")) { $PgBin = Join-Path $a.FullName "bin"; break }
   }
@@ -246,7 +310,7 @@ if (-not $PgBin) {
 if (-not $PgBin -or -not (Test-Path (Join-Path $PgBin "pg_dump.exe"))) {
   Dur "PostgreSQL bulunamadi. Kuruluysa yolu ver: -PgBin `"C:\Program Files\PostgreSQL\16\bin`""
 }
-$pgSurum = (& (Join-Path $PgBin "pg_dump.exe") --version) -replace '.*\s'
+$pgSurum = (& (Join-Path $PgBin "pg_dump.exe") --version) -creplace '.*\s'
 Ok "pg_dump $pgSurum  ($PgBin)"
 
 # --- Klasorler --------------------------------------------------------------
@@ -290,10 +354,7 @@ if ($hazir) {
   $y = Psql $PostgresKullanici $PostgresParola "postgres" "SELECT 1"
   if ($y.kod -ne 0) { Dur "PostgreSQL'e '$PostgresKullanici' ile baglanilamadi. Parolayi kontrol et.`n       $($y.cikti)" }
 
-  # SQL string literali: tek tirnak ikilenir. Tanimlayicilar cift tirnakli.
-  $sqlParola = $DbParola -replace "'", "''"
-
-  $rolVar = (Psql $PostgresKullanici $PostgresParola "postgres" "SELECT 1 FROM pg_roles WHERE rolname='$($DbKullanici -replace "'","''")'").cikti -eq "1"
+  $rolVar = (Psql $PostgresKullanici $PostgresParola "postgres" "SELECT 1 FROM pg_roles WHERE rolname='$($DbKullanici -creplace "'","''")'").cikti -eq "1"
   if ($rolVar) {
     # Parolayi DEGISTIRMIYORUZ: bu rolu baska bir kurulum kullaniyor olabilir ve
     # sessizce ezmek onu dusururdu. Dogru komutu yazip birakiyoruz.
@@ -303,12 +364,16 @@ if ($hazir) {
       Write-Host "      ALTER ROLE `"$DbKullanici`" WITH PASSWORD '<yeni>';" -ForegroundColor DarkGray
     }
   } else {
-    $r = Psql $PostgresKullanici $PostgresParola "postgres" "CREATE ROLE `"$DbKullanici`" WITH LOGIN PASSWORD '$sqlParola'"
+    # Parola STDIN'den ve SCRAM dogrulayicisi olarak: argv'de, surec listesinde, SQL metninde ve
+    # sunucu loguna duz parola yok. Super kullanicida ifade loglamasi da bu oturum icin kapatilir.
+    $suMu = (Psql $PostgresKullanici $PostgresParola "postgres" "SELECT rolsuper FROM pg_roles WHERE rolname = current_user").cikti -ceq "t"
+    $onEk = if ($suMu) { "SET log_statement = 'none';`n" } else { "" }
+    $r = PsqlStdin $PostgresKullanici $PostgresParola "postgres" ($onEk + "CREATE ROLE `"$($DbKullanici -creplace '"', '""')`" WITH LOGIN PASSWORD '" + (ScramDogrulayici $DbParola) + "';")
     if ($r.kod -ne 0) { Dur "Rol olusturulamadi: $($r.cikti)" }
     Ok "rol olusturuldu: $DbKullanici  (superuser DEGIL - uygulama yetkili hesapla kosmaz)"
   }
 
-  $dbVar = (Psql $PostgresKullanici $PostgresParola "postgres" "SELECT 1 FROM pg_database WHERE datname='$($DbAdi -replace "'","''")'").cikti -eq "1"
+  $dbVar = (Psql $PostgresKullanici $PostgresParola "postgres" "SELECT 1 FROM pg_database WHERE datname='$($DbAdi -creplace "'","''")'").cikti -eq "1"
   if ($dbVar) {
     Uyar "'$DbAdi' veritabani zaten var - DOKUNULMADI (icindeki veri korunur)."
   } else {
@@ -374,7 +439,7 @@ if (-not $Dump) {
     # CTE: psql `-t` UPDATE'in komut etiketini ("UPDATE 2") de basar; SELECT basmaz.
     $o = Psql $DbKullanici $DbParola $DbAdi "WITH u AS (UPDATE system_settings SET value = '""""'::jsonb, ""updatedAt"" = now(), ""updatedById"" = NULL WHERE key IN ('backup.offsiteRemote', 'backup.offsiteDir') AND value <> '""""'::jsonb RETURNING key) SELECT key FROM u ORDER BY key"
     if ($o.kod -ne 0) { Dur "Offsite hedefi bosaltilamadi: $($o.cikti)" }
-    $bosalan = @($o.cikti -split "`n" | Where-Object { $_ })
+    $bosalan = @($o.cikti -csplit "`n" | Where-Object { $_ })
     if ($bosalan.Count) { Ok "makine disi yedek hedefi BOSALTILDI: $($bosalan -join ', ')  (panelden yeniden girilir)" }
     else                { Ok "dokumde makine disi yedek hedefi yok" }
     $iz = "{""kaynak"":""ilk-kurulum -DumpAmaci Kopya"",""old"":""$eski"",""new"":""$(if ($eski) { $yeni } else { '' })"",""offsiteBosaltilan"":""$($bosalan -join ',')""}"
@@ -398,11 +463,11 @@ $yonetici = $false
 if ($PostgresParola) { $yonetici = (Psql $PostgresKullanici $PostgresParola "postgres" "SELECT 1").kod -eq 0 }
 $mevcutAyar = @{}
 $r = Psql $DbKullanici $DbParola $DbAdi "SELECT unnest(setconfig) FROM pg_db_role_setting WHERE setrole = 0 AND setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())"
-foreach ($satir in @($r.cikti -split "`n" | Where-Object { $_ -match '=' })) {
-  $parca = $satir -split '=', 2
+foreach ($satir in @($r.cikti -csplit "`n" | Where-Object { $_ -cmatch '=' })) {
+  $parca = $satir -csplit '=', 2
   $mevcutAyar[$parca[0]] = $parca[1]
 }
-$dbAdiSql = $DbAdi -replace '"', '""'
+$dbAdiSql = $DbAdi -creplace '"', '""'
 foreach ($ad in $dbAyarlari.Keys) {
   $hedef = $dbAyarlari[$ad]
   if ($mevcutAyar.ContainsKey($ad)) {
@@ -457,8 +522,8 @@ $okuSql = "SELECT lower(name) || '|' || current_setting(name) || '|' || pending_
 # rapor YAKLASIKTIR (yazma zaten superuser ister).
 $oku = if ($yonetici) { Psql $PostgresKullanici $PostgresParola "postgres" $okuSql } else { Psql $DbKullanici $DbParola $DbAdi $okuSql }
 $pgMevcut = @{}
-foreach ($satir in @($oku.cikti -split "`n" | Where-Object { $_ -match '\|' })) {
-  $parca = $satir -split '\|', 4
+foreach ($satir in @($oku.cikti -csplit "`n" | Where-Object { $_ -cmatch '\|' })) {
+  $parca = $satir -csplit '\|', 4
   $pgMevcut[$parca[0]] = [pscustomobject]@{ deger = $parca[1]; bekliyor = ($parca[2] -in @("t", "true")); dosya = $parca[3] }
 }
 # Yazilmis ama yeniden baslatma bekleyen ayar "farkli" sayilmaz: ikinci kosum onu
@@ -490,7 +555,7 @@ if (-not $farkli.Count) {
     if ($a.kod -eq 0) { $yazilan++; Ok "yazildi: $ad = $($pgHedef[$ad])  (onceki $($m.deger))" } else { Acik "$ad yazilamadi: $($a.cikti)" }
   }
   [void](Psql $PostgresKullanici $PostgresParola "postgres" "SELECT pg_reload_conf()")
-  $bekleyen = @((Psql $PostgresKullanici $PostgresParola "postgres" "SELECT lower(name) FROM pg_settings WHERE pending_restart ORDER BY 1").cikti -split "`n" | Where-Object { $_ })
+  $bekleyen = @((Psql $PostgresKullanici $PostgresParola "postgres" "SELECT lower(name) FROM pg_settings WHERE pending_restart ORDER BY 1").cikti -csplit "`n" | Where-Object { $_ })
 }
 if ($bekleyen.Count) {
   $servis = @()
@@ -534,7 +599,7 @@ if (Test-Path $envDosya) {
   # oturum imzasini tahmin edilebilir kilar.
   $bayt = New-Object byte[] 48
   [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bayt)
-  $gizli = [Convert]::ToBase64String($bayt) -replace '[+/=]', ''
+  $gizli = [Convert]::ToBase64String($bayt) -creplace '[+/=]', ''
   # DATABASE_URL bir URI'dir: parola/kullanici URL-kodlanir. Ham yazilirsa
   # icindeki @ : / ? # karakterleri adresi sessizce baska bir yere isaret ettirir.
   $uKod = [uri]::EscapeDataString($DbKullanici)
@@ -546,13 +611,13 @@ if (Test-Path $envDosya) {
   )
   # Paket web panelini (`app\dist-web`) tasir; degisken yoksa backend onu sunmaz ve
   # kok (/) durum sayfasi olur. Mutlak yol: express.static goreliyi pm2 cwd'sine gore cozer.
-  if (-not $WebPanelKapali) { $satirlar += "WEB_DIST_DIR=`"$(($Kok -replace '\\', '/').TrimEnd('/'))/app/dist-web`"" }
+  if (-not $WebPanelKapali) { $satirlar += "WEB_DIST_DIR=`"$(($Kok -creplace '\\', '/').TrimEnd('/'))/app/dist-web`"" }
   $satirlar | Set-Content $envDosya -Encoding UTF8
   Ok "olusturuldu: $envDosya  (JWT_SECRET bu makinede uretildi$(if (-not $WebPanelKapali) { '; web paneli: WEB_DIST_DIR' }))"
 }
-if ((Test-Path $envDosya) -and -not $WebPanelKapali -and -not (Select-String -Path $envDosya -Pattern '^\s*WEB_DIST_DIR\s*=' -Quiet)) {
+if ((Test-Path $envDosya) -and -not $WebPanelKapali -and -not (Select-String -Path $envDosya -Pattern '^\s*WEB_DIST_DIR\s*=' -CaseSensitive -Quiet)) {
   Uyar "mevcut .env'de WEB_DIST_DIR yok - paketteki web paneli SUNULMUYOR (bilincliyse yok say)."
-  Uyar "  acmak icin .env'e ekle:  WEB_DIST_DIR=`"$(($Kok -replace '\\', '/').TrimEnd('/'))/app/dist-web`"  (sonra pm2 restart)"
+  Uyar "  acmak icin .env'e ekle:  WEB_DIST_DIR=`"$(($Kok -creplace '\\', '/').TrimEnd('/'))/app/dist-web`"  (sonra pm2 restart)"
 }
 
 # --- Bakim rolu (istege bagli) ------------------------------------------------
@@ -579,7 +644,12 @@ if (-not $BakimRolu) {
 # (cevrimdisi). Anahtar dizini yedek klasorunun DISINDA: offsite supurucu backups\'u
 # makine disina kopyalar. Var olan anahtar EZILMEZ; parola argumana/loga girmez (arac sorar).
 Adim "Yedek sifreleme (istege bagli)..."
-$anahtarDizini = "$Kok\yedek-anahtar"
+# Anahtar dizini TEK KAYNAK: app\.env BACKUP_KEY_DIR (backend ve gece gorevi de onu okur);
+# satir yoksa varsayilan <kok>\yedek-anahtar ve satir asagida .env'e yazilir.
+$envAnahtar = if (Test-Path $envDosya) { EnvDeger (Get-Content $envDosya -Encoding UTF8) "BACKUP_KEY_DIR" } else { $null }
+$anahtarDizini = if (-not $envAnahtar) { "$Kok\yedek-anahtar" }
+                 elseif ([IO.Path]::IsPathRooted($envAnahtar)) { $envAnahtar }
+                 else { Join-Path "$Kok\app" $envAnahtar }
 $sifreArac = Join-Path (Join-Path (Join-Path $PSScriptRoot "dist") "tools") "yedek-sifrele.cjs"
 if (-not $YedekSifreleme) {
   if (Test-Path $anahtarDizini) { Ok "anahtar dizini var: $anahtarDizini (yedekler sifreleniyor)" }
@@ -592,8 +662,8 @@ if (-not $YedekSifreleme) {
   New-Item -ItemType Directory -Path $anahtarDizini -Force | Out-Null
   if (Test-Path "$anahtarDizini\yerel.tkkey") {
     Uyar "yerel anahtar zaten var, DOKUNULMADI: $anahtarDizini\yerel.tkkey"
-  } elseif (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
-    Acik "yedek parolasi terminal ister - yerel anahtar KURULMADI (etkilesimli pencerede tekrar kos)"
+  } elseif (-not (SoruSorabilir)) {
+    Acik "yedek parolasi terminal ister - yerel anahtar KURULMADI (konsolda ya da ssh -t ile tekrar kos)"
   } else {
     Write-Host "  Yedek parolasi (en az 10 karakter): musteri yoneticisinde VE Etkili Yazilim kasasinda saklanacak."
     & node $sifreArac anahtar-uret --ad yerel --dizin $anahtarDizini --parolali
@@ -620,11 +690,16 @@ if (-not $YedekSifreleme) {
   } elseif (-not (Test-Path "$anahtarDizini\etkili.tkpub")) {
     Acik "Etkili Yazilim alicisi YOK - tore sonrasi acik anahtari $anahtarDizini\etkili.tkpub olarak koy"
   }
-  if ((Test-Path $envDosya) -and -not (Select-String -Path $envDosya -Pattern '^\s*BACKUP_KEY_DIR\s*=' -Quiet)) {
-    Add-Content -Path $envDosya -Value "BACKUP_KEY_DIR=`"$(($anahtarDizini -replace '\\', '/'))`"" -Encoding UTF8
-    Ok ".env: BACKUP_KEY_DIR eklendi (backend'in gordugu an: pm2 restart)"
-  }
   & node $sifreArac durum --anahtar-dizini $anahtarDizini
+}
+# Niyet .env'de BEYANLI olsun: dizin varsa (bu kosumda ya da once kurulmus) ve satir yoksa
+# yazilir - .env olustuktan SONRA, -YedekSifreleme verilmese de. Yoksa backend dizini gormez,
+# gece gorevi varsayilandan sifreler ve iki taraf ayrisir (/api/admin/health uyarir).
+if ((Test-Path $anahtarDizini) -and (Test-Path $envDosya) -and -not $envAnahtar) {
+  Add-Content -Path $envDosya -Value "BACKUP_KEY_DIR=`"$(($anahtarDizini -creplace '\\', '/'))`"" -Encoding UTF8
+  Ok ".env: BACKUP_KEY_DIR eklendi (backend'in gordugu an: pm2 restart)"
+} elseif ((Test-Path $anahtarDizini) -and -not (Test-Path $envDosya)) {
+  Acik "anahtar dizini var ama app\.env yok - BACKUP_KEY_DIR YAZILAMADI: $anahtarDizini"
 }
 
 # --- Lisans deposu dizini -----------------------------------------------------
@@ -753,7 +828,7 @@ if (-not (Get-Command New-NetFirewallRule -ErrorAction SilentlyContinue)) {
     $adres = @(($kural | Get-NetFirewallAddressFilter).RemoteAddress)
     $profil = "$($kural.Profile)"
     Uyar "kural zaten var, DOKUNULMADI: $kuralAd  (profil: $profil, uzak adres: $($adres -join ', '))"
-    if ($profil -match 'Any|Public' -or $adres -contains "Any") {
+    if ($profil -cmatch 'Any|Public' -or $adres -contains "Any") {
       Acik "$kuralAd Public profilde ya da her adrese acik - daraltmak icin: Set-NetFirewallRule -DisplayName '$kuralAd' -Profile $($ApiAgProfili -join ',') -RemoteAddress $($ApiIzinliAdres -join ',')"
     }
   } else {
@@ -765,7 +840,7 @@ if (-not (Get-Command New-NetFirewallRule -ErrorAction SilentlyContinue)) {
   foreach ($r in $ts) {
     $arayuz = @(($r | Get-NetFirewallInterfaceFilter).InterfaceAlias)
     $port = @(($r | Get-NetFirewallPortFilter).LocalPort)
-    if ("$($r.Profile)" -match 'Any|Private' -and ($arayuz -contains "Any" -or -not $arayuz.Count) -and ($port -contains "Any")) {
+    if ("$($r.Profile)" -cmatch 'Any|Private' -and ($arayuz -contains "Any" -or -not $arayuz.Count) -and ($port -contains "Any")) {
       $ozel = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { "$($_.NetworkCategory)" -eq "Private" } | ForEach-Object { $_.InterfaceAlias })
       Acik ("Tailscale-In kurali Private profilde HER porta acik (arayuz sinirsiz). Private aglar: " +
             "$(if ($ozel.Count) { $ozel -join ', ' } else { '(yok)' }) - Wi-Fi'yi Public tut ya da kurali Tailscale arayuzuyle sinirla (DEPLOY-RUNBOOK 2.2).")

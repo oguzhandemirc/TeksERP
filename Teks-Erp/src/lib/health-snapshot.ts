@@ -21,6 +21,7 @@ import { isBackupFileName, NIGHTLY_PREFIX } from "../services/helpers/backup-nam
 import { seriesExhaustionWarnings } from "../services/helpers/series-exhaustion.helper";
 import { masterDataArchiveHealthSnapshot } from "../services/helpers/master-data-health.helper";
 import { licenseHealthBlock } from "./license/runtime";
+import { compareBackupCryptoIntent, type BackupCryptoIntent } from "./backup-crypto/intent";
 
 // Yedek klasörü: BACKUP_DIR üretimde pm2 ortamından gelir (ecosystem.config env
 // veya .env — tipik değer C:\ProgramData\TeksERP\backups). Tanımlıysa durum sayfası
@@ -160,6 +161,17 @@ export function backupHealth(): {
           ? `Son gece yedeği ${yuvarlak} saat önce — bir gece atlanmış olabilir.`
           : `Son gece yedeği ${yuvarlak} saat önce — gece yedeği ÇALIŞMIYOR.`,
   };
+}
+
+// Yedek şifreleme niyeti: backend ile gece görevi aynı kararı mı veriyor (D13). Disk okur;
+// uç 5 sn'de bir sorulduğu için yedek taramasıyla aynı 30 sn önbellek.
+let cryptoIntentCache: { at: number; value: BackupCryptoIntent } | null = null;
+function backupCryptoIntent(): BackupCryptoIntent {
+  const now = Date.now();
+  if (!cryptoIntentCache || now - cryptoIntentCache.at >= BACKUP_CACHE_MS) {
+    cryptoIntentCache = { at: now, value: compareBackupCryptoIntent() };
+  }
+  return cryptoIntentCache.value;
 }
 
 // =============================================================================
@@ -379,6 +391,8 @@ export async function buildRichHealth(): Promise<Record<string, unknown>> {
     // Ham veri değil HÜKÜM: "gece yedeği çalışıyor mu". `lastBackup` bilerek
     // olduğu gibi bırakıldı (eski panel sözleşmesi), bu alan EK'tir.
     backupHealth: backupHealth(),
+    // Şifreleme niyeti ayrışması: `warning` null değilse bir taraf düz döküm üretiyor.
+    backupCryptoIntent: backupCryptoIntent(),
     // Havuzun KENDİ durumu + kümülatif zaman aşımı sayacı. Yukarıdaki
     // `dbConnections` `pg_stat_activity` sayımıdır → SUNUCU tarafını sayar
     // (psql/pgAdmin/pg_dump dahil), idle/busy ayırt etmez ve havuzun kaç bağlantı

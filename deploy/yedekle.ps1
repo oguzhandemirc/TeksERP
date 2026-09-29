@@ -14,12 +14,15 @@
 #   backend'in yedek listesi, /health ve offsite supurucusu `.part` gormez) -> saklama:
 #   <SaklamaGun> gunden eski dokum silinir, yasina bakilmaksizin en yeni <EnAzTut>
 #   korunur -> [ikinci hedef].
-# SIFRELEME: <AnahtarDizini> (varsayilan <kok>\yedek-anahtar) icinde `*.tkpub` alici
-#   varsa dogrulanmis `.part` paketteki `app\dist\tools\yedek-sifrele.cjs` ile TUM
-#   alicilara sifrelenir ve duz dokum silinir; ikinci hedefe de sifreli dosya gider.
-#   Dizin yoksa BUGUNKU davranis (duz `.dump`). Dizin var ama alici yok / sifreleme
-#   dusuyor: duz yedek KORUNUR (yedeksiz kalmaktan iyidir), ikinci hedefe KOPYALANMAZ,
-#   cikis 3 (gorev kirmizi). Sifreleme icin parola GEREKMEZ (yalniz acik anahtarlar).
+# SIFRELEME: anahtar dizini TEK KAYNAKTAN - backend ile ayni: <kok>\app\.env'deki
+#   BACKUP_KEY_DIR (satir varsa niyet BEYANLIDIR); satir yoksa <kok>\yedek-anahtar VARSA.
+#   (-AnahtarDizini verilirse o, beyanli.) Dizinde `*.tkpub` alici varsa dogrulanmis `.part`
+#   paketteki `app\dist\tools\yedek-sifrele.cjs` ile TUM alicilara sifrelenir ve duz dokum
+#   silinir; ikinci hedefe de sifreli dosya gider. Niyet yoksa BUGUNKU davranis (duz `.dump`).
+#   Niyet var ama dizin/alici yok ya da sifreleme dusuyor: duz yedek KORUNUR (yedeksiz
+#   kalmaktan iyidir), ikinci hedefe KOPYALANMAZ, cikis 3 (gorev kirmizi). Sifreleme icin
+#   parola GEREKMEZ (yalniz acik anahtarlar). Backend baska karar verirse /api/admin/health
+#   `backupCryptoIntent.warning` soyler.
 # AD: `<db>_<yyyyMMdd_HHmmss>.dump`; db `tekserp` ile baslamiyorsa `tekserp_<db>_...`
 #   (backend rotasyonu ve offsite supurucusu `tekserp_` onekini okur). Saklama YALNIZ
 #   bu desene dokunur: premigrate_ / pre-restore_ / elle getirilenler silinmez.
@@ -33,8 +36,9 @@ param(
   [int]$EnAzTut = 3,
   # Opsiyonel ikinci kopya (ikinci disk / baglanmis surucu). Ayni saklama kurali.
   [string]$IkinciHedef,
-  # Yedek sifreleme anahtar dizini (BACKUP_DIR DISINDA). Yoksa yedek duz kalir.
-  [string]$AnahtarDizini = (Join-Path $Kok "yedek-anahtar")
+  # Yedek sifreleme anahtar dizini (BACKUP_DIR DISINDA). Verilmezse app\.env BACKUP_KEY_DIR,
+  # o da yoksa <kok>\yedek-anahtar (varsa).
+  [string]$AnahtarDizini
 )
 $ErrorActionPreference = "Stop"
 
@@ -43,6 +47,20 @@ $logDosya = Join-Path $yedekDir "backup.log"
 $credDosya = Join-Path (Join-Path $Kok "pg-setup") "db-credentials.json"
 $pgbin = Join-Path (Join-Path $Kok "pgsql") "bin"
 $sifreArac = Join-Path (Join-Path (Join-Path (Join-Path $Kok "app") "dist") "tools") "yedek-sifrele.cjs"
+
+# .env degeri: ilk eslesen satir, cevreleyen tek/cift tirnak soyulur. Anahtar buyuk/kucuk
+# harf DUYARLI (-cmatch): tr-TR kulturunde -match 'I'yi 'i'ye indirger (thinkpad-1 dersi).
+# Backend'in gece gorevini taklit eden okuyucusu (backup-crypto/intent.ts) AYNI kurali uygular.
+function EnvDeger($satirlar, $ad) {
+  foreach ($l in $satirlar) {
+    if ($l -cmatch ('^\s*' + $ad + '\s*=\s*(.*)$')) {
+      $v = $Matches[1].Trim()
+      if ($v.Length -ge 2 -and (($v[0] -eq '"' -and $v[-1] -eq '"') -or ($v[0] -eq "'" -and $v[-1] -eq "'"))) { $v = $v.Substring(1, $v.Length - 2) }
+      return $v
+    }
+  }
+  return $null
+}
 
 function Log($m) {
   $satir = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $m"
@@ -71,7 +89,7 @@ function NativeKos($exe, [string[]]$argumanlar) {
 # gunden eski olani sil. Saat ileri kayarsa gun hesabi hepsini eski sayardi - taban bu.
 function Sakla($dizin, $desen) {
   $hepsi = @(Get-ChildItem $dizin -File -ErrorAction SilentlyContinue |
-             Where-Object { $_.Name -match $desen } | Sort-Object LastWriteTime -Descending)
+             Where-Object { $_.Name -cmatch $desen } | Sort-Object LastWriteTime -Descending)
   $sinir = (Get-Date).AddDays(-$SaklamaGun)
   foreach ($f in @($hepsi | Select-Object -Skip $EnAzTut | Where-Object { $_.LastWriteTime -lt $sinir })) {
     Remove-Item $f.FullName -Force
@@ -105,9 +123,23 @@ try {
     Remove-Item $yarim -Force -ErrorAction SilentlyContinue
     throw "dogrulama basarisiz (pg_restore --list kod $($v.kod)) - bozuk dokum SILINDI: $($v.cikti)"
   }
-  # Sifreleme niyeti: anahtar dizini VARSA. Alici yoksa ya da arac dusuyorsa duz kalir.
+  # Sifreleme niyeti: -AnahtarDizini > app\.env BACKUP_KEY_DIR (beyanli) > <kok>\yedek-anahtar (varsa).
+  $appDir = Join-Path $Kok "app"
+  $beyanli = [bool]$AnahtarDizini
+  if (-not $AnahtarDizini) {
+    $envDosya = Join-Path $appDir ".env"
+    $envDizin = if (Test-Path $envDosya) { EnvDeger (Get-Content $envDosya -Encoding UTF8) "BACKUP_KEY_DIR" } else { $null }
+    if ($envDizin) {
+      $beyanli = $true
+      $AnahtarDizini = if ([IO.Path]::IsPathRooted($envDizin)) { $envDizin } else { Join-Path $appDir $envDizin }
+    } else {
+      $AnahtarDizini = Join-Path $Kok "yedek-anahtar"
+    }
+  }
   $sifreHatasi = $null
-  if (Test-Path $AnahtarDizini) {
+  if ($beyanli -and -not (Test-Path $AnahtarDizini)) {
+    $sifreHatasi = "sifreleme niyeti beyanli (BACKUP_KEY_DIR) ama anahtar dizini yok: $AnahtarDizini"
+  } elseif (Test-Path $AnahtarDizini) {
     $alicilar = @(Get-ChildItem $AnahtarDizini -Filter "*.tkpub" -File -ErrorAction SilentlyContinue)
     $node = (Get-Command node.exe -ErrorAction SilentlyContinue).Source
     if (-not $node) { $node = Join-Path $env:ProgramFiles "nodejs\node.exe" }
