@@ -30,9 +30,10 @@
 //
 // SAF: DB'ye yazmaz, HTTP isteği atmaz; yalnız Express route ağacını gezer.
 // =============================================================================
-import { readFileSync, readdirSync } from "fs";
+import { readFileSync } from "fs";
 import { join } from "path";
 import app from "../src/app";
+import { rotaEnvanteri, type RotaEnvanteri } from "./lib/rota-envanteri";
 
 /**
  * Kimlik doğrulaması TAŞIMAYAN uçlar — her biri GEREKÇELİ.
@@ -195,15 +196,6 @@ const BARE_CHAIN_BASELINE = 15;
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;
 
-type Layer = {
-  name?: string;
-  route?: { path: string; methods: Record<string, boolean>; stack: Array<{ name: string }> };
-  handle?: { stack?: Layer[] };
-  /** Express 5 katmanı: mount önekini düz metin vermez, yalnız eşleştirici sunar. */
-  match?: (path: string) => boolean;
-  path?: string;
-};
-
 let pass = 0;
 let fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -216,112 +208,13 @@ function check(label: string, ok: boolean, extra = ""): void {
   }
 }
 
-interface RouteInfo {
-  key: string;
-  hasAuth: boolean;
-  chainLength: number;
-}
-
 /**
- * MOUNT ÖNEKİ ADAYLARI — `app.use("/api/x", router)` ve `router.use("/y", alt)`
- * satırlarından toplanır. Express 5 katmanı öneki düz metin TAŞIMAZ (`layer.path`
- * ancak `match()` çağrıldıktan sonra dolar, `regexp` yoktur); bu yüzden önek,
- * adayları katmanın kendi eşleştiricisine sorarak çözülür.
+ * Route ağacının yürüyücüsü `scripts/lib/rota-envanteri.ts`e taşındı (lisans kapısı bekçisi
+ * aynı envanteri okur — kopya yürüyücü, bir düzeltmenin yalnız birine girmesi demekti).
+ * Anahtar biçimi ve kimlik zinciri sayımı aynen korunur.
  */
-function mountCandidates(): string[] {
-  const dosyalar: string[] = [join(__dirname, "..", "src", "app.ts")];
-  const routesDir = join(__dirname, "..", "src", "routes");
-  const gez = (dir: string): void => {
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
-      const p = join(dir, e.name);
-      if (e.isDirectory()) gez(p);
-      else if (e.name.endsWith(".ts")) dosyalar.push(p);
-    }
-  };
-  gez(routesDir);
-  const set = new Set<string>();
-  for (const f of dosyalar) {
-    const src = readFileSync(f, "utf8");
-    for (const m of src.matchAll(/\.use\(\s*["'`](\/[^"'`]*)["'`]/g)) set.add(m[1]);
-  }
-  // Uzun önek önce denenir: "/api" kısa öneki "/api/admin/devices"i gölgelemesin.
-  return [...set].sort((a, b) => b.length - a.length);
-}
-
-function birlestir(onek: string, yol: string): string {
-  const tam = `${onek}${yol}`.replace(/\/{2,}/g, "/");
-  return tam.length > 1 && tam.endsWith("/") ? tam : tam;
-}
-
-function collectRoutes(): { routes: RouteInfo[]; cozulemeyen: number } {
-  const out: RouteInfo[] = [];
-  const adaylar = mountCandidates();
-  let cozulemeyen = 0;
-  /**
-   * İKİ AYRI DÜZELTME BİRLİKTE YAŞIYOR (merge, 2026-09-01):
-   *  ① `onek` — anahtar TAM YOL olsun (muafiyet bir deseni değil TEK ucu affetsin).
-   *  ② `inheritedAuth/Count` — `router.use(verifyToken)` ile MİRAS alınan kimlik
-   *     guard'ı sayılsın; ticaret route'ları kimliği router seviyesinde kuruyor
-   *     ve bu olmadan hepsi "kimliksiz uç" diye yanlış kırmızı verir.
-   * İkisi birbirinden bağımsızdır; biri çıkarılırsa o sınıf hata geri döner.
-   *
-   * @param inheritedAuth üstteki router katmanlarından `router.use(verifyToken)`
-   *   ile miras alınan kimlik guard'ı var mı.
-   */
-  const walk = (
-    layers: Layer[],
-    onek: string,
-    inheritedAuth: boolean,
-    inheritedCount: number,
-  ): void => {
-    // Bu seviyedeki `router.use(...)` katmanları — route TANIMLARINDAN ÖNCE
-    // gelenler sonrakileri korur. Express sırayı korur; bu yüzden tek geçişte
-    // biriktirilir ve o andan itibaren geçerli sayılır.
-    let levelAuth = inheritedAuth;
-    let levelCount = inheritedCount;
-    for (const l of layers) {
-      if (l.route) {
-        const methods = Object.keys(l.route.methods)
-          .filter((m) => l.route!.methods[m])
-          .join(",")
-          .toUpperCase();
-        out.push({
-          // ANAHTAR TAM YOLDUR (mount öneki dahil). Router'a göreli anahtar
-          // ("GET /") HER router'ın kök ucuna uyar; muafiyet listesi o zaman
-          // tek bir ucu değil bir DESENİ affeder — bekçinin kendi kör noktası
-          // (BULGU-T1-016 düzeltmesinde ölçüldü: "GET /" 4 ayrı uca uyuyordu).
-          key: `${methods} ${birlestir(onek, l.route.path)}`,
-          // Kimlik ya route zincirinde ya da ÜST router'da (`router.use`) kurulmuş
-          // olabilir — ikisi de geçerlidir.
-          hasAuth: levelAuth || l.route.stack.some((s) => s.name === "verifyToken"),
-          chainLength: levelCount + l.route.stack.length,
-        });
-      } else if (l.handle?.stack) {
-        let alt = "";
-        if (typeof l.match === "function") {
-          for (const c of adaylar) {
-            try {
-              if (l.match(c)) { alt = c; break; }
-            } catch {
-              /* eşleştirici bu adayı reddetti */
-            }
-          }
-        }
-        if (!alt && l.handle.stack.some((x) => x.route)) cozulemeyen++;
-        walk(l.handle.stack, birlestir(onek, alt), levelAuth, levelCount);
-      } else if (l.name === "verifyToken") {
-        // `router.use(verifyToken)` — bundan SONRAKİ her route korumalı.
-        levelAuth = true;
-        levelCount += 1;
-      } else if (levelAuth) {
-        // Kimlikten SONRA gelen router seviyesi guard'lar (örn.
-        // `requireFinanceEnabled`) da etkin zincire dahildir.
-        levelCount += 1;
-      }
-    }
-  };
-  walk((app as unknown as { router: { stack: Layer[] } }).router.stack, "", false, 0);
-  return { routes: out, cozulemeyen };
+function collectRoutes(): RotaEnvanteri {
+  return rotaEnvanteri(app);
 }
 
 function main(): void {

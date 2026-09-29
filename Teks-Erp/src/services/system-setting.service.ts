@@ -20,7 +20,9 @@ import {
 import {
   MODULE_DEPENDENCIES,
   MODULE_LABELS,
+  MODULE_SETTING_KEYS,
 } from "../constants/module-flags";
+import { applyModuleCeiling, licenseModuleBlock, licenseModuleError, type LicenseModuleBlock } from "../lib/license/module-ceiling";
 import {
   sanitizeBlankGrid,
   sanitizeDocFields,
@@ -1831,7 +1833,31 @@ export interface FeatureFlags {
    *  (jobs/backup-scheduler.ts her turda okur → değişiklik restart GEREKTİRMEZ).
    *  Kayıt yoksa `BACKUP_HOUR` env'ine, o da yoksa 3'e düşer. */
   backupHour: number;
+  /** Lisans modül tavanı — SALT OKUNUR (PATCH şemasında yok), önbelleğe girmez. Modül
+   *  şalterleri HAM değerdir; lisansın kapattığı modül yalnız burada görünür (gözlemde boş). */
+  license: LicenseModuleBlock;
 }
+
+/** Önbelleğe giren kısım: lisans bloğu her okumada taze hesaplanır. */
+type CachedFeatureFlags = Omit<FeatureFlags, "license">;
+
+function withLicenseBlock(flags: CachedFeatureFlags): FeatureFlags {
+  return { ...flags, license: licenseModuleBlock(MODULE_SETTING_KEYS) };
+}
+
+/** Modül şalteri (PATCH alanı) → DB anahtarı; lisans yazma tavanı bu eşlemeyle sorar. */
+const MODULE_SETTING_KEY_BY_FLAG: Readonly<Record<string, string>> = {
+  productionEnabled: SETTING_KEYS.PRODUCTION_ENABLED,
+  financeEnabled: SETTING_KEYS.FINANCE_ENABLED,
+  ticaretEnabled: SETTING_KEYS.TICARET_ENABLED,
+  iplikEnabled: SETTING_KEYS.IPLIK_ENABLED,
+  depoMultiEnabled: SETTING_KEYS.DEPO_MULTI_ENABLED,
+  kumasTeknikEnabled: SETTING_KEYS.KUMAS_TEKNIK_ENABLED,
+  tezgahEnabled: SETTING_KEYS.TEZGAH_ENABLED,
+  devereEnabled: SETTING_KEYS.DEVERE_ENABLED,
+  dokumaEnabled: SETTING_KEYS.DOKUMA_ENABLED,
+  emanetEnabled: SETTING_KEYS.EMANET_ENABLED,
+};
 
 // =============================================================================
 // Feature-flag agregat cache
@@ -1844,7 +1870,7 @@ export interface FeatureFlags {
 // readDevicePairingRequired, readTamburOverQuantityEnabled ...) KASITEN cache'siz
 // kalır — transaction içi + middleware tazeliği aynen korunur. Tek-sunucu yerel
 // kurulum → bellek cache yeterli (TTL ayrıca olası out-of-band değişimi bounded tutar).
-let featureFlagsCache: { value: FeatureFlags; expiresAt: number } | null = null;
+let featureFlagsCache: { value: CachedFeatureFlags; expiresAt: number } | null = null;
 const FEATURE_FLAGS_TTL_MS = 30_000;
 // Lost-invalidation guard: getFeatureFlags okumaya BAŞLAMADAN önce bu sayacı yakalar.
 // findMany sürerken araya bir set()+invalidate girerse sayaç artar ve okuma bayat
@@ -2011,7 +2037,7 @@ export class SystemSettingService {
   async getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
     const now = Date.now();
     if (featureFlagsCache && featureFlagsCache.expiresAt > now) {
-      return { success: true, data: featureFlagsCache.value };
+      return { success: true, data: withLicenseBlock(featureFlagsCache.value) };
     }
     const gen = cacheGeneration; // okumanın başladığı sürüm (lost-invalidation guard)
     // Tek sorguda tüm ayarları çek → reader'lara in-memory client enjekte et.
@@ -2034,10 +2060,10 @@ export class SystemSettingService {
     // Oturum ömrü tek kaynaktan (dakika); saat alanı geriye-uyum için aynı değerden türetilir.
     const sessionMinutes = await readSessionDurationMinutes(cacheClient);
     const reportsClosedRead = await readReportsClosedKeys(cacheClient);
-    const flags: FeatureFlags = {
+    const flags: CachedFeatureFlags = {
       companyName: await readCompanyName(cacheClient),
       pricingEnabled: await readPricingEnabled(cacheClient),
-      financeEnabled: await readFinanceEnabled(cacheClient),
+      financeEnabled: await readFinanceEnabledRaw(cacheClient),
       financeBlockNegativeCashEnabled: await readFinanceBlockNegativeCashEnabled(cacheClient),
       financeDefaultVatRate: await readFinanceDefaultVatRate(cacheClient),
       financeInvoiceMatchTolerance: await readFinanceInvoiceMatchTolerance(cacheClient),
@@ -2058,19 +2084,19 @@ export class SystemSettingService {
       financeFutureDatedDocumentBlockEnabled:
         await readFinanceFutureDatedDocumentBlockEnabled(cacheClient),
       financeYarnOutOnInvoiceEnabled: await readFinanceYarnOutOnInvoiceEnabled(cacheClient),
-      productionEnabled: await readProductionEnabled(cacheClient),
+      productionEnabled: await readProductionEnabledRaw(cacheClient),
       // MODÜL ANAHTARLARI — ⚠️ `cacheClient` argümanı ATLANAMAZ: bu yol tek
       // atışlık toplu okumadır, argümansız çağrı beş DB round-trip'i ekler.
       // ⚠️ HAM değer döner (etkin `iplik = ticaret && iplik` DEĞİL): panel
       // toggle'ı kendi yazdığını geri okumak zorunda, yoksa kullanıcı ticaret
       // kapalıyken ipliği açar ve anahtar kapalı görünmeye devam eder.
-      ticaretEnabled: await readTicaretEnabled(cacheClient),
-      iplikEnabled: await readIplikEnabled(cacheClient),
-      depoMultiEnabled: await readDepoMultiEnabled(cacheClient),
-      kumasTeknikEnabled: await readKumasTeknikEnabled(cacheClient),
-      tezgahEnabled: await readTezgahEnabled(cacheClient),
-      devereEnabled: await readDevereEnabled(cacheClient),
-      emanetEnabled: await readEmanetEnabled(cacheClient),
+      ticaretEnabled: await readTicaretEnabledRaw(cacheClient),
+      iplikEnabled: await readIplikEnabledRaw(cacheClient),
+      depoMultiEnabled: await readDepoMultiEnabledRaw(cacheClient),
+      kumasTeknikEnabled: await readKumasTeknikEnabledRaw(cacheClient),
+      tezgahEnabled: await readTezgahEnabledRaw(cacheClient),
+      devereEnabled: await readDevereEnabledRaw(cacheClient),
+      emanetEnabled: await readEmanetEnabledRaw(cacheClient),
       devereLotRequired: await readDevereLotRequired(cacheClient),
       devereMountTracking: await readDevereMountTracking(cacheClient),
       devereMountTrackingRequired: await readDevereMountTrackingRequired(cacheClient),
@@ -2078,7 +2104,7 @@ export class SystemSettingService {
       devereBeamWeavingLinkRequired: await readDevereBeamWeavingLinkRequired(cacheClient),
       dokumaRunWeavingOrderRequired: await readDokumaRunWeavingOrderRequired(cacheClient),
       dokumaOrderLineLinkRequired: await readDokumaOrderLineLinkRequired(cacheClient),
-      dokumaEnabled: await readDokumaEnabled(cacheClient),
+      dokumaEnabled: await readDokumaEnabledRaw(cacheClient),
       // ⚠️ ÜÇ SONUÇLU okumanın panele TAŞINAN hâli: ölçülemedi ⇒ `null`. Boş diziye
       // düşürmek, bozuk bir satırda paneli "hepsi açık" diye çizdirirdi.
       reportsClosedKeys: ((): string[] | null => {
@@ -2178,7 +2204,7 @@ export class SystemSettingService {
     if (cacheGeneration === gen) {
       featureFlagsCache = { value: flags, expiresAt: now + FEATURE_FLAGS_TTL_MS };
     }
-    return { success: true, data: flags };
+    return { success: true, data: withLicenseBlock(flags) };
   }
 
   /**
@@ -2204,25 +2230,25 @@ export class SystemSettingService {
     }
     switch (key) {
       case "ticaretEnabled":
-        return readTicaretEnabled();
+        return readTicaretEnabledRaw();
       case "iplikEnabled":
-        return readIplikEnabled();
+        return readIplikEnabledRaw();
       case "productionEnabled":
-        return readProductionEnabled();
+        return readProductionEnabledRaw();
       case "tezgahEnabled":
-        return readTezgahEnabled();
+        return readTezgahEnabledRaw();
       case "devereEnabled":
-        return readDevereEnabled();
+        return readDevereEnabledRaw();
       case "dokumaEnabled":
-        return readDokumaEnabled();
+        return readDokumaEnabledRaw();
       case "emanetEnabled":
-        return readEmanetEnabled();
+        return readEmanetEnabledRaw();
       case "depoMultiEnabled":
-        return readDepoMultiEnabled();
+        return readDepoMultiEnabledRaw();
       case "kumasTeknikEnabled":
-        return readKumasTeknikEnabled();
+        return readKumasTeknikEnabledRaw();
       case "financeEnabled":
-        return readFinanceEnabled();
+        return readFinanceEnabledRaw();
       default:
         // Bağımlılık haritasına modül olmayan bir anahtar girmiş demektir.
         throw AppError.badRequest(`Bilinmeyen modül anahtarı: ${key}`);
@@ -2270,6 +2296,18 @@ export class SystemSettingService {
   }
 
   /**
+   * LİSANS YAZMA TAVANI: uygulanan tavanın kapattığı modül AÇILAMAZ (403 `LICENSE_MODULE`);
+   * kapatmak serbesttir. Gözlemde tavan yoktur. Doğrulama gibi TÜM yazmalardan önce koşar.
+   */
+  private assertModuleWritesLicensed(input: Record<string, unknown>): void {
+    for (const [flag, settingKey] of Object.entries(MODULE_SETTING_KEY_BY_FLAG)) {
+      if (input[flag] !== true) continue;
+      const denial = licenseModuleError(settingKey, MODULE_LABELS[flag] ?? flag);
+      if (denial) throw denial;
+    }
+  }
+
+  /**
    * Bir feature flag'i toggle et. Kabul: { pricingEnabled: boolean }.
    * Verilmeyen alanlar dokunulmaz.
    */
@@ -2280,7 +2318,7 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart"
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -2300,6 +2338,7 @@ export class SystemSettingService {
     // Doğrulama dalların arasına serpiştirilseydi "ticaret kapandı, iplik açık
     // kaldı" gibi YARIM bir gövde yazılır ve geri alınamazdı.
     await this.assertModuleDependencies(input as Record<string, unknown>);
+    this.assertModuleWritesLicensed(input as Record<string, unknown>);
 
     if (Object.prototype.hasOwnProperty.call(input, "pricingEnabled")) {
       if (typeof input.pricingEnabled !== "boolean") {
@@ -3943,7 +3982,7 @@ export async function readPricingEnabled(
  * ayrı ayrı test edilir (`test_finance_flag_off`) — yalnız menüyü gizlemek,
  * adresi bilen birine modülü açık bırakırdı.
  */
-export async function readFinanceEnabled(
+export async function readFinanceEnabledRaw(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
@@ -3952,6 +3991,12 @@ export async function readFinanceEnabled(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readFinanceEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readFinanceEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.FINANCE_ENABLED, await readFinanceEnabledRaw(tx));
 }
 
 /**
@@ -4167,7 +4212,7 @@ export async function readFinanceYarnOutOnInvoiceEnabled(
  * olduğu için bu tersliği bilerek yazıyoruz: burada "kapalı" demek, kurulmuş
  * bir fabrikanın üretim ekranlarını yok etmek olurdu.
  */
-export async function readProductionEnabled(
+export async function readProductionEnabledRaw(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
@@ -4186,6 +4231,12 @@ export async function readProductionEnabled(
   return setting.value === true || setting.value === "true";
 }
 
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readProductionEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readProductionEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.PRODUCTION_ENABLED, await readProductionEnabledRaw(tx));
+}
+
 /**
  * Ticaret modülü açık mı? Default FALSE.
  *
@@ -4195,7 +4246,7 @@ export async function readProductionEnabled(
  * kapatma yolu. Mevcut kurulumdaki değeri migration DAMGALAR (20260902230000);
  * aşağıdaki varsayılan yalnız satır-yok sigortasıdır.
  */
-export async function readTicaretEnabled(
+export async function readTicaretEnabledRaw(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
@@ -4206,6 +4257,12 @@ export async function readTicaretEnabled(
   return asBoolean(setting?.value);
 }
 
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readTicaretEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readTicaretEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.TICARET_ENABLED, await readTicaretEnabledRaw(tx));
+}
+
 /**
  * İplik modülü açık mı? Default FALSE. HAM değer döner.
  *
@@ -4214,7 +4271,7 @@ export async function readTicaretEnabled(
  * Burada da çözülseydi panel toggle'ı kendi yazdığını geri okuyamaz, kullanıcı
  * ipliği açar ve anahtar kapalı görünmeye devam ederdi.
  */
-export async function readIplikEnabled(
+export async function readIplikEnabledRaw(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
@@ -4225,6 +4282,12 @@ export async function readIplikEnabled(
   return asBoolean(setting?.value);
 }
 
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readIplikEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readIplikEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.IPLIK_ENABLED, await readIplikEnabledRaw(tx));
+}
+
 /**
  * Çoklu depo modülü açık mı? Default FALSE.
  *
@@ -4233,7 +4296,7 @@ export async function readIplikEnabled(
  * Bundan sonra ikinci depoyu açmak yüzeyleri kendiliğinden AÇMAZ — bilinçli
  * bir davranış değişikliği (bkz. migration 20260902230000 başlığı).
  */
-export async function readDepoMultiEnabled(
+export async function readDepoMultiEnabledRaw(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
@@ -4244,9 +4307,15 @@ export async function readDepoMultiEnabled(
   return asBoolean(setting?.value);
 }
 
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readDepoMultiEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readDepoMultiEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.DEPO_MULTI_ENABLED, await readDepoMultiEnabledRaw(tx));
+}
+
 /** Kumaş teknik kartı modülü açık mı? Default FALSE. YER TUTUCU — arkasında
  *  henüz yüzey yok, bu yüzden middleware'i de YAZILMADI (ölü kapı yazmıyoruz). */
-export async function readKumasTeknikEnabled(
+export async function readKumasTeknikEnabledRaw(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
@@ -4257,8 +4326,14 @@ export async function readKumasTeknikEnabled(
   return asBoolean(setting?.value);
 }
 
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readKumasTeknikEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readKumasTeknikEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.KUMAS_TEKNIK_ENABLED, await readKumasTeknikEnabledRaw(tx));
+}
+
 /** Dokuma tezgah izleme modülü açık mı? Default FALSE. YER TUTUCU (üretime bağımlı). */
-export async function readTezgahEnabled(
+export async function readTezgahEnabledRaw(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
@@ -4269,10 +4344,16 @@ export async function readTezgahEnabled(
   return asBoolean(setting?.value);
 }
 
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readTezgahEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readTezgahEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.TEZGAH_ENABLED, await readTezgahEnabledRaw(tx));
+}
+
 /** Devere / levent modülü açık mı? Default FALSE (satır yoksa kapalı — dünkü
  *  davranış: devere yoktu). HAM değer döner; zinciri (ticaret → iplik → devere)
  *  `requireDevereEnabled` ölçer. */
-export async function readDevereEnabled(
+export async function readDevereEnabledRaw(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
@@ -4283,9 +4364,15 @@ export async function readDevereEnabled(
   return asBoolean(setting?.value);
 }
 
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readDevereEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readDevereEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.DEVERE_ENABLED, await readDevereEnabledRaw(tx));
+}
+
 /** G3 Emanet / konsinye mülkiyet modülü açık mı? Default FALSE (satır yoksa kapalı — dünkü davranış:
  *  sahiplik alanı yoktu). Bağımlılık yok; owner yazan uçların gövde kapısı bunu okur. */
-export async function readEmanetEnabled(
+export async function readEmanetEnabledRaw(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
@@ -4294,6 +4381,12 @@ export async function readEmanetEnabled(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readEmanetEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readEmanetEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.EMANET_ENABLED, await readEmanetEnabledRaw(tx));
 }
 
 /** Devere Faz 2: lot zorunlu mu? Default FALSE (satır yoksa lotsuz satır yazılır, yalnız
@@ -4391,7 +4484,7 @@ export async function readReportsClosedKeys(
   return { durum: "okundu", kapali: ham };
 }
 
-export async function readDokumaEnabled(
+export async function readDokumaEnabledRaw(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
@@ -4400,6 +4493,12 @@ export async function readDokumaEnabled(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readDokumaEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readDokumaEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.DOKUMA_ENABLED, await readDokumaEnabledRaw(tx));
 }
 
 /**

@@ -6,7 +6,7 @@
 //   · `GET /indirme-belirteci` tabletin giriş ÖNCESİ güncelleme denetimi için onaylı cihazı
 //     da kabul eder.
 // Geri kalan her uç `router.use(verifyToken)`un ARKASINDA — sıra load-bearing.
-// Kapı (kısıtlı kip) bu dosyada DEĞİL; app düzeyinde ayrı dilim.
+// Kapı (kısıtlı kip) bu dosyada DEĞİL: app düzeyinde `licenseGate`; `/api/license/*` her kademede açık.
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";

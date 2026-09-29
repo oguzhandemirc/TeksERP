@@ -242,6 +242,7 @@
 8. **Adlandırma:** plan ve görev metni kod adlarını Türkçe veriyor (`KOK_ACIK_ANAHTARLAR`, `lisansModuluAcik`…); `src/` bildirim adları `[IL-16]`/`[IL-32]` gereği İngilizce yazıldı (bekçi `test_identifier_language` ilk Türkçe yazımda 115 yeni ad saydı). Karşılıklar 12a tablosunda; tel alanları ve değerler Türkçe.
 9. **Karar verildi (yönetici kararı 2, Faz 1c):** sunucu kararları (K1–K5, dondurulan modül, DEVREDİLDİ) son geçerli imzalı kiradan KALICIDIR; ek süre gevşetmez; tavanın fail-open'ı yalnız belirsizlik içindir. Uygulama: `state.ts` `computeEffect` + `sanctionSource`, `saat.ts` `sonYaptirim`; bekçi `test_lisans_durumu` §3b/§7d/§14.
 10. **Parmak izi f3/f4 (yönetici kararı 3, Faz 1c):** f4 MAC değil sistem/anakart seri numarası; f3 genel RAID serisi ölçülemedi. `parmak-izi.ts` normalleştirmesi değişti — satıcı aynası (1b) bu dosyayı yeniden kopyalar (özet biçimi aynı; yalnız f3/f4 normalleştirmesi).
+11. **Kapı listeleri (Faz 1c-kapı):** plan listesine iki ek — `GET /api/client-policy/*` her kademede (panelin sürüm kurtarması, tablet OTA ile aynı sınıf) ve `GET /api/auth/me` DURDURULMUŞ'ta ("verilerimi al" ekranı oturum izinlerini çözer); etiket içeriği dondurma (`seed-snapshot`) baskı sayılmadı, kapalı. `LICENSE_MODULE.modul` DB anahtarıdır (HAK sözlüğü), `MODULE_DISABLED.modul` kısa koddur.
 
 ## 12a. Adlandırma — plan adı → kod adı
 
@@ -360,7 +361,7 @@ interface LicenseDataExportManifest {
 type PollOutcome = "YAPILANDIRILMAMIS" | "HAZIR_DEGIL" | "ETKIN_DEGIL" | "BASARILI" | "BASARISIZ";
 ```
 
-**Hata kodları (`details.code`):** `LICENSE_STORE_UNAVAILABLE` 409 (depo `app\`/`BACKUP_DIR` içinde ya da yazılamıyor) · `LICENSE_IDENTITY_NOT_READY` 409 · `LICENSE_NOT_CONFIGURED` 409 (`LICENSE_SERVER_URL` yok) · `LICENSE_NOT_ACTIVE` 409 · `LICENSE_ALREADY_ACTIVE` 409 · `LICENSE_CODE_INVALID` 400 · `LICENSE_VENDOR_UNREACHABLE` 502 (+ `egressCode`) · `LICENSE_VENDOR_REJECTED` 409 (+ `vendorCode` ∈ §5 satıcı kodları; mesaj TR) · `LICENSE_RESPONSE_INVALID` 400 (+ `protocolCode`; imzasız/kurcalı/başka kuruluma ait yanıt) · `LICENSE_LEASE_STALE` 409 · `LICENSE_UPDATES_FROZEN` 403 · `LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE` 404 · `LICENSE_PROXY_INVALID` 400 · `LICENSE_PROXY_UNSUPPORTED` 409 (Node < 22.21 / 24.5) · `DEVICE_OR_SESSION_REQUIRED` 401. Kapı kodları (`LICENSE_RESTRICTED` · `LICENSE_SUSPENDED` · `LICENSE_MODULE` · `LICENSE_GATE`) 1c-kapı dilimindedir.
+**Hata kodları (`details.code`):** `LICENSE_STORE_UNAVAILABLE` 409 (depo `app\`/`BACKUP_DIR` içinde ya da yazılamıyor) · `LICENSE_IDENTITY_NOT_READY` 409 · `LICENSE_NOT_CONFIGURED` 409 (`LICENSE_SERVER_URL` yok) · `LICENSE_NOT_ACTIVE` 409 · `LICENSE_ALREADY_ACTIVE` 409 · `LICENSE_CODE_INVALID` 400 · `LICENSE_VENDOR_UNREACHABLE` 502 (+ `egressCode`) · `LICENSE_VENDOR_REJECTED` 409 (+ `vendorCode` ∈ §5 satıcı kodları; mesaj TR) · `LICENSE_RESPONSE_INVALID` 400 (+ `protocolCode`; imzasız/kurcalı/başka kuruluma ait yanıt) · `LICENSE_LEASE_STALE` 409 · `LICENSE_UPDATES_FROZEN` 403 · `LICENSE_DOWNLOAD_TOKEN_UNAVAILABLE` 404 · `LICENSE_PROXY_INVALID` 400 · `LICENSE_PROXY_UNSUPPORTED` 409 (Node < 22.21 / 24.5) · `DEVICE_OR_SESSION_REQUIRED` 401. Kapı kodları (`LICENSE_RESTRICTED` · `LICENSE_SUSPENDED` · `LICENSE_MODULE` · `LICENSE_GATE`) §14a'da.
 
 **Davranış sözleşmesi:**
 - **Gözlem = sıfır fark:** `durum.kademe` NORMAL, `bant` null, `guncellemeIzni` true — istemci bant/kilit ÇİZMEZ; yalnız Lisans ekranı `detay.durum.hesaplanan*` alanlarını gösterir.
@@ -369,3 +370,26 @@ type PollOutcome = "YAPILANDIRILMAMIS" | "HAZIR_DEGIL" | "ETKIN_DEGIL" | "BASARI
 - **Eski istemci ne yapar:** bütün uçlar YENİ; mevcut uç/alan değişmedi → eski panel/tablet etkilenmez. `/api/admin/health` yüküne yalnız EK `license` bloğu geldi (public `/health` DONMUŞ). `PUT /api/admin/settings/system.installationId` artık 400 `SETTING_KEY_RESERVED` (panelde bu anahtarın yüzeyi yoktu).
 - **Parmak izi yükü:** `detay.parmakIzi.olculen` yalnız etken başına boolean; ham değer ve tuzlu özet uca GİRMEZ.
 
+### 14a. Kapı ve modül tavanı (Faz 1c-kapı) — istemcilerin 403 dalı buna karşı yazılır
+
+**Kapı (`licenseGate`, `Teks-Erp/src/middlewares/license.middleware.ts`):** app düzeyinde `/api` altında, rotalardan önce; YÖNTEM + YOL ile sınıflar (liste tek kaynak `Teks-Erp/src/constants/license-routes.ts`), kimliğe bakmaz. Karar UYGULANAN kademeden verilir — gözlemde daima NORMAL, yani hiçbir istek engellenmez (yalnız `gozlem.reddedilecekIstek` artar). Motor hazır değilse (`detay.hazir=false`) kapı geçirir.
+
+| Kademe | Açık |
+|---|---|
+| NORMAL · UYARI · EK_SURE | her şey |
+| KISITLI | GET/HEAD/OPTIONS + her-kademe listesi + KISITLI ek listesi (tercih/TOTP, cihaz duyurusu, yazmayan önizleme ve gövdeli okumalar, baskı/yeniden basım ayak izleri + refakat kartı reprint, yedek al · makine dışı · DB kopyası, kullanıcı pasifleştirme · parola/TOTP sıfırlama · cihaz iptali, bakım, çalışma oturumu aç/kapa). Yeniden düzenleme (`reissue`) KAPALI. |
+| DURDURULMUS | her-kademe listesi + "verilerimi al" (`DATA_EXPORT_PATHS` = `/veri-disari` `yollar`) + `GET /api/auth/me` |
+
+Her-kademe listesi: `/api/license/*` · `GET /api/admin/health` · `GET /api/mobile/updates/*` · `GET /api/client-policy/*` · `GET /api/discovery/identity` · `GET /api/auth/login-methods` · `POST /api/auth/login|login-card|login-quick-pin|logout`.
+
+**Red gövdeleri (403, `details.code`):**
+- Kimliksiz ya da geçersiz token'lı istek: `{ code: "LICENSE_GATE" }` — başka alan YOK (kademe/gün anonim çağırana sızmaz). İstemci oturum yoksa bunu "lisans nedeniyle kullanılamıyor" diye gösterir; ayrıntı için giriş sonrası `GET /durum`.
+- Geçerli oturum, KISITLI: `{ code: "LICENSE_RESTRICTED", kademe: "KISITLI", kisitlamaKalanGun: number | null, devredildi: boolean }`.
+- Geçerli oturum, DURDURULMUS: `{ code: "LICENSE_SUSPENDED", kademe: "DURDURULMUS" }` — panel K5 ekranına geçer; `/api/license/*`, `/api/auth/me` ve "verilerimi al" yolları açıktır.
+- Modül (adlı yedi kapı): `{ code: "LICENSE_MODULE", modul: "<DB anahtarı, ör. finance.enabled>", neden: "LISANSTA_YOK" | "DONDURULDU" }` — bayrak DB'de açık olsa da. Lisans açık modül kapalıysa eskisi gibi `MODULE_DISABLED`.
+
+**Modül tavanı:** `readX = readXRaw ∧ tavan` (`Teks-Erp/src/lib/license/module-ceiling.ts`); tavan uygulanan etkiden — HAK tavanı yalnız belirsizlik yokken, dondurulan modül her hâlde (kural 7). `PATCH /api/feature-flags` lisansın kapattığı modülü AÇMAYA çalışırsa 403 `LICENSE_MODULE`; kapatmak serbest.
+
+**Panel bloğu:** `GET /api/feature-flags` → `data.license = { kip: "gozlem" | "zorla", kapaliModuller: Array<{ anahtar: string /* DB anahtarı */, neden: "LISANSTA_YOK" | "DONDURULDU" }> }` — SALT OKUNUR (PATCH şeması kabul etmez), önbelleğe girmez, gözlemde daima boş. Modül şalterleri (`financeEnabled`…) HAM değerdir; "lisansınızda yok" rozeti bu listeden çizilir.
+
+**Eski istemci ne yapar:** kapı kodları yalnız zorlamada doğar (Faz 4'e dek derleme varsayılanı gözlem); eski panel/tablet 403'ü genel yetki hatası gibi gösterir. `license` alanı EK'tir, eski istemci yok sayar.

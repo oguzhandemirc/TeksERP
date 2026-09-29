@@ -108,6 +108,7 @@ import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
 import workSessionRoutes from "./routes/work-session.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
 import { latencyMiddleware } from "./middlewares/latency.middleware";
+import { licenseGate } from "./middlewares/license.middleware";
 import { clientInfoMiddleware } from "./middlewares/client-info.middleware";
 import {
   readWebHardeningConfig,
@@ -451,6 +452,11 @@ if (hardening.rateLimit.enabled) {
 // burada uzak erişim DURUR — sessiz bir açık yerine gürültülü bir arıza.
 app.use("/api", verifyAccessJwt(remoteAccess));
 
+// LİSANS KAPISI — rotalardan ÖNCE, yöntem + yol ile sınıflar (kimliğe bakmaz; "önce 401"
+// kuralının beyanlı istisnası). Gözlem kipinde hiçbir isteği engellemez (sıfır fark).
+// Açık yol listeleri: `constants/license-routes.ts`; bekçi `test_lisans_kapisi`.
+app.use("/api", licenseGate);
+
 // =============================================================================
 // API Routes
 // =============================================================================
@@ -605,7 +611,7 @@ app.use("/api/client-policy", clientPolicyRoutes);
 // Patron özeti — bölüm bazlı izin süzmesi SERVİSTE (bkz. routes/boss.routes.ts).
 app.use("/api/boss", bossRoutes);
 // Lisans (fabrika motoru): durum · etkinleştirme · çevrimdışı/aktarma · taşıma · DR ·
-// indirme belirteci · veri dışarı · proxy. Kapı (kısıtlı kip) AYRI dilimde; burada yalnız uçlar.
+// indirme belirteci · veri dışarı · proxy. Bu uçlar kapının HER kademede açık listesindedir.
 app.use("/api/license", licenseRoutes);
 
 // =============================================================================

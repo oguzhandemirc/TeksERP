@@ -55,7 +55,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 }
 
 const olaylar: Array<{ action: string; payload: unknown }> = [];
-(AuditService as unknown as { logEvent: (p: { action: string; payload?: unknown }) => Promise<void> }).logEvent = async (p) => {
+AuditService.logEvent = async (p) => {
   olaylar.push({ action: p.action, payload: p.payload ?? null });
 };
 for (const k of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy"]) delete process.env[k];

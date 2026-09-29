@@ -44,7 +44,7 @@ function check(label: string, ok: boolean, detay = ""): void {
   console.log(`${ok ? "✅" : "❌"} ${label}${detay ? ` — ${detay}` : ""}`);
 }
 
-(AuditService as unknown as { logEvent: () => Promise<void> }).logEvent = async () => undefined;
+AuditService.logEvent = async () => undefined;
 
 /** BEYAN: gövdede geçebilecek anahtarların TAMAMI (her derinlikte). Genişletmek bir karardır. */
 const IZINLI_ANAHTARLAR = new Set([

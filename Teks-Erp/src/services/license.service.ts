@@ -18,6 +18,7 @@ import {
 import { loadLicenseStoreSync, saveProxy } from "../lib/license/store";
 import { getLicenseConfig, getLicenseSnapshot, getMeasuredFingerprint, invalidateLicenseSnapshot } from "../lib/license/runtime";
 import { adminAction } from "./license-trail.service";
+import { DATA_EXPORT_PATHS } from "../constants/license-routes";
 import { acceptLicenseResponse, buildPollBody, pollLicenseOnce, refreshLicenseFingerprint, sendTransfer, type PollOutcome } from "./license-sync.service";
 import { getLicenseDetail, getProxySettings, type LicenseDetail, type LicenseProxySettings } from "./license-view.service";
 import {
@@ -214,13 +215,8 @@ export async function getDataExportManifest(userId: string | null): Promise<Lice
       sifreli: f.encrypted,
       indirmeYolu: `/api/admin/backups/${encodeURIComponent(f.name)}/download`,
     })),
-    yollar: {
-      yedekAl: "POST /api/admin/backup",
-      yedekListesi: "GET /api/admin/backups",
-      yedekIndir: "GET /api/admin/backups/{ad}/download",
-      varliklar: "GET /api/import/entities",
-      disariAktar: "GET /api/import/{entity}/export",
-    },
+    // Kapının DURDURULMUŞ listesi aynı sabitten doğar: bildirilen yol kapıda kapalı olamaz.
+    yollar: DATA_EXPORT_PATHS,
   };
 }
 

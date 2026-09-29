@@ -56,9 +56,14 @@
 //                             ayrım sonraki pakette.
 // Bu liste bekçinin (`test_production_regime_gate`) beklenti listesiyle
 // BİREBİR olmalı — ayrışırsa ya kapı sessizce düşer ya bekçi ölü satır sayar.
+//
+// LİSANS TAVANI: okuyucu `readX = readXRaw ∧ tavan`; kapalıyken önce lisansa sorulur —
+// modülü lisans kapatıyorsa 403 `LICENSE_MODULE` (bayrak DB'de açık olsa da), yoksa
+// `MODULE_DISABLED` (`test_lisans_modul_tavani` her kapıda anahtar eşini ölçer).
 // =============================================================================
 import { Request, Response, NextFunction } from "express";
 import {
+  SETTING_KEYS,
   readDepoMultiEnabled,
   readDevereEnabled,
   readDokumaEnabled,
@@ -66,6 +71,7 @@ import {
   readProductionEnabled,
   readTicaretEnabled,
 } from "../services/system-setting.service";
+import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 
 /**
@@ -93,7 +99,7 @@ export async function requireTicaretEnabled(
   try {
     const enabled = await readTicaretEnabled();
     if (!enabled) {
-      throw modulKapali("ticaret", "Ticaret");
+      throw licenseModuleError(SETTING_KEYS.TICARET_ENABLED, "Ticaret") ?? modulKapali("ticaret", "Ticaret");
     }
     next();
   } catch (e) {
@@ -118,7 +124,7 @@ export async function requireIplikEnabled(
   try {
     const ticaret = await readTicaretEnabled();
     if (!ticaret) {
-      throw AppError.forbidden(
+      throw licenseModuleError(SETTING_KEYS.TICARET_ENABLED, "Ticaret") ?? AppError.forbidden(
         "İplik modülü Ticaret modülüne bağlıdır; Ticaret modülü bu kurulumda kapalı. " +
           "Genel Ayarlar → Modüller bölümünden açılabilir.",
         { code: "MODULE_DISABLED", modul: "ticaret", dependent: "iplik" },
@@ -126,7 +132,7 @@ export async function requireIplikEnabled(
     }
     const enabled = await readIplikEnabled();
     if (!enabled) {
-      throw modulKapali("iplik", "İplik");
+      throw licenseModuleError(SETTING_KEYS.IPLIK_ENABLED, "İplik") ?? modulKapali("iplik", "İplik");
     }
     next();
   } catch (e) {
@@ -152,7 +158,7 @@ export async function requireDevereEnabled(
   try {
     const enabled = await readDevereEnabled();
     if (!enabled) {
-      throw modulKapali("devere", "Devere / levent");
+      throw licenseModuleError(SETTING_KEYS.DEVERE_ENABLED, "Devere / levent") ?? modulKapali("devere", "Devere / levent");
     }
     next();
   } catch (e) {
@@ -169,7 +175,7 @@ export async function requireDepoMultiEnabled(
   try {
     const enabled = await readDepoMultiEnabled();
     if (!enabled) {
-      throw modulKapali("depoMulti", "Çoklu depo");
+      throw licenseModuleError(SETTING_KEYS.DEPO_MULTI_ENABLED, "Çoklu depo") ?? modulKapali("depoMulti", "Çoklu depo");
     }
     next();
   } catch (e) {
@@ -194,7 +200,7 @@ export async function requireProductionEnabled(
   try {
     const enabled = await readProductionEnabled();
     if (!enabled) {
-      throw modulKapali("production", "Üretim");
+      throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim") ?? modulKapali("production", "Üretim");
     }
     next();
   } catch (e) {
@@ -219,7 +225,7 @@ export async function requireDokumaEnabled(
   try {
     const production = await readProductionEnabled();
     if (!production) {
-      throw AppError.forbidden(
+      throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim") ?? AppError.forbidden(
         "Dokuma işi modülü Üretim modülüne bağlıdır; Üretim modülü bu kurulumda kapalı. " +
           "Sistem → Modüller bölümünden açılabilir.",
         { code: "MODULE_DISABLED", modul: "production", dependent: "dokuma" },
@@ -227,7 +233,7 @@ export async function requireDokumaEnabled(
     }
     const enabled = await readDokumaEnabled();
     if (!enabled) {
-      throw modulKapali("dokuma", "Dokuma işi");
+      throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma işi") ?? modulKapali("dokuma", "Dokuma işi");
     }
     next();
   } catch (e) {
