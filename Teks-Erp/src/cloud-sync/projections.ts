@@ -97,6 +97,10 @@ const SNAPSHOTS: readonly SnapshotProjection[] = [
     cadence: "HER_TUR", permission: "bulut:uretim:oku", module: "production.enabled",
     reads: ["rolls", "work_order_steps", "stations", "sacks", "shipments"],
   },
+  {
+    name: "saglik", kind: "ANLIK", source: "lib/health-snapshot backupHealth (gece yedeği hükmü + zamanı; patron bildirimi 'yedek-basarisiz')",
+    cadence: "HER_TUR", permission: "bulut:ozet:oku", reads: [],
+  },
 ];
 export const RECORD_PROJECTIONS: readonly RecordProjection[] = [...DIMENSIONS, ...FACTS];
 export const SNAPSHOT_PROJECTIONS: readonly SnapshotProjection[] = SNAPSHOTS;

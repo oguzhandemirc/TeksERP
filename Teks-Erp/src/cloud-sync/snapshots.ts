@@ -4,6 +4,7 @@
 // alan buluta gitmez (opt-in). İçerik özeti son ONAYLANANLA aynıysa paketlenmez.
 import { z } from "zod";
 import prisma from "../lib/prisma";
+import { backupHealth } from "../lib/health-snapshot";
 import { FLOW_COLUMNS, getBossOverview, bossShippingSection, bossSubcontractSection } from "../services/boss/overview.service";
 import { getStockScorecard } from "../services/reports/stock-scorecard.report.service";
 import { getOpenOrderCoverage } from "../services/reports/open-order-coverage.report.service";
@@ -41,6 +42,7 @@ export const SNAPSHOT_WIRE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   "ozet.stok": z.strictObject({ hamMiktar: Num, yariMamulMiktar: Num, bitmisMiktar: Num, oluMiktar: Num, oluStokGun: Num, enCokUrun: z.array(Label) }),
   "ozet.siparis": z.strictObject({ acikKalem: Num, acikMiktar: Num, karsilanmayanMiktar: Num, karsilanmaYuzde: Num, gecikenKalem: Num, gecikenMiktar: Num, enCokCari: z.array(Label) }),
   "ozet.uretim": z.strictObject({
+    bugunTamamlananToplam: Num,
     kolonlar: z.array(z.strictObject({ anahtar: Str, etiket: Str, adet: Num })),
     istasyonlar: z.array(z.strictObject({ ad: Str, kuyruk: Num, aktif: Num, bugunTamamlanan: Num })),
   }),
@@ -71,6 +73,9 @@ export const SNAPSHOT_WIRE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   }),
   "rapor-katalogu": z.strictObject({
     raporlar: z.array(z.strictObject({ anahtar: Str, baslik: Str, soru: Str, aile: Str, izin: Str, parametreler: z.array(Str), standartDonemler: z.array(Str) })),
+  }),
+  saglik: z.strictObject({
+    yedek: z.strictObject({ hukum: z.enum(["ok", "uyari", "kritik", "yapilandirilmamis"]), sonGeceYedegi: Str.nullable(), yasSaat: Num.nullable() }),
   }),
   "uretim-akisi": z.strictObject({
     kolonlar: z.array(z.strictObject({ anahtar: Str, etiket: Str, adet: Num })),
@@ -107,6 +112,8 @@ async function buildOverview(now: Date, productionOn: boolean): Promise<BuiltSna
   }
   if (o.production && productionOn) {
     out.push(seal("ozet.uretim", {
+      // Toplamı fabrika hesaplar (bulut yalnız eşikle karşılaştırır — patron bildirimi 'gunluk-uretim').
+      bugunTamamlananToplam: o.production.stations.reduce((n, s) => n + s.todayCompleted, 0),
       kolonlar: o.production.columns.map((c) => ({ anahtar: c.key, etiket: c.label, adet: c.count })),
       istasyonlar: o.production.stations.map((s) => ({ ad: s.name, kuyruk: s.queueCount, aktif: s.activeCount, bugunTamamlanan: s.todayCompleted })),
     }));
@@ -186,6 +193,12 @@ async function buildProductionFlow(): Promise<BuiltSnapshot> {
   });
 }
 
+/** Sistem sağlığı (yalnız gece yedeği): yaş saate YUVARLANIR ki içerik özeti saatte bir değişsin. */
+function buildHealth(): BuiltSnapshot {
+  const b = backupHealth();
+  return seal("saglik", { yedek: { hukum: b.verdict, sonGeceYedegi: b.nightly ? new Date(b.nightly.time).toISOString() : null, yasSaat: b.ageHours === null ? null : Math.floor(b.ageHours) } });
+}
+
 async function buildReportCatalog(): Promise<BuiltSnapshot> {
   return seal("rapor-katalogu", { raporlar: await remoteReportCatalog() });
 }
@@ -220,6 +233,9 @@ export async function buildSnapshots(ctx: SnapshotContext): Promise<BuiltSnapsho
         break;
       case "rapor-katalogu":
         out.push(await buildReportCatalog());
+        break;
+      case "saglik":
+        out.push(buildHealth());
         break;
       case "uretim-akisi":
         out.push(await buildProductionFlow());

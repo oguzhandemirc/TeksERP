@@ -9,7 +9,7 @@ import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError, forbidden, notFound, stateConflict } from "../lib/errors";
 import { executeWrite, type WriteResult } from "../lib/idempotency";
 import { withTesis } from "../lib/tenant";
-import type { InboxMessage as InboxMessageWire } from "../wire/api";
+import type { InboxEntry as InboxMessageWire } from "../wire/api";
 import { CustomerMessageSchema, OrderMessageSchema, type InboxClaimRequestSchema, type InboxClaimResponse, type InboxResultRequestSchema, type InboxResultResponse } from "../wire/esitleme";
 import type { z } from "zod";
 import type { SessionContext } from "../auth/session.service";

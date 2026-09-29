@@ -1,4 +1,4 @@
-// BİLDİRİM CİHAZI KAYDI — push belirteci (Expo/FCM/APNs ya da web-push aboneliği); GÖNDERİM B5'tir.
+// BİLDİRİM CİHAZI KAYDI — push belirteci (Expo/FCM/APNs ya da web-push aboneliği); gönderim `notification-sender.ts`.
 // Belirtecin KENDİSİ doğal işlem kimliğidir: aynı cihaz aynı belirteçle tekrar kaydolursa aynı satır
 // güncellenir (tesis + belirteç özeti TEKİL; kilit CLIENT_TOKEN, anahtar özet). Cihaz başka hesaba
 // geçerse satır o hesaba taşınır (bir telefonda tek oturum). Kayıt silinmez: `active=false` (soft).
@@ -6,8 +6,9 @@ import { createHash } from "node:crypto";
 import type { DevicePlatform, PushDevice } from "@prisma/client";
 import type { SessionContext } from "../auth/session.service";
 import { accountActor, recordAudit } from "../lib/audit";
-import { notFound } from "../lib/errors";
+import { badRequest, notFound } from "../lib/errors";
 import { withTesis } from "../lib/tenant";
+import { validPushToken } from "../push/targets";
 import type { Device } from "../wire/api";
 import type { CloudContext } from "./context";
 
@@ -18,6 +19,8 @@ function deviceView(d: PushDevice): Device {
 }
 
 export async function registerDevice(ctx: CloudContext, s: SessionContext, input: { platform: keyof typeof PLATFORM_WIRE; token: string; ad?: string }) {
+  // Biçim kapısı kayıtta VE gönderimde aynı yüklem (web aboneliği yalnız izinli push servisine; SSRF kapısı).
+  if (!validPushToken(PLATFORM_WIRE[input.platform], input.token)) throw badRequest("Bildirim belirteci platformla uyumlu değil ya da izinli bir push servisine ait değil");
   const tokenHash = createHash("sha256").update(input.token, "utf8").digest("hex");
   const now = new Date(ctx.now());
   const { device, changed } = await withTesis(ctx.app, { tesisId: s.tesisId, lock: { name: "CLIENT_TOKEN", key: `${s.tesisId}:cihaz:${tokenHash}` } }, async (tx) => {

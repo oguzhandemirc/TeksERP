@@ -6,8 +6,8 @@ import type {
   AccountInviteResult,
   CustomerMessageBody,
   FacilityStatus,
-  InboxKind,
-  InboxMessage,
+  InboxEntryKind,
+  InboxEntry,
   InboxStatus,
   InviteAccepted,
   InviteConfirmed,
@@ -80,11 +80,11 @@ export function createApi(c: ApiClient) {
     list: (projeksiyon: string, p: ListParams = {}) => c.get<Page<ProjectionRecord>>(pathOf("list", { projeksiyon }), q(p)),
     record: (projeksiyon: string, id: string) => c.get<ProjectionRecord>(pathOf("record", { projeksiyon, id })),
     snapshot: (projeksiyon: string) => c.get<Snapshot>(pathOf("snapshot", { projeksiyon })),
-    inboxCreate: (mesajId: string, tur: InboxKind, govde: OrderMessageBody | CustomerMessageBody) =>
-      c.post<InboxMessage>(pathOf("inboxCreate"), { mesajId, tur, govde }),
-    inboxList: (p: { durum?: InboxStatus; imlec?: string; limit?: number } = {}) => c.get<Page<InboxMessage>>(pathOf("inboxList"), p),
-    inboxGet: (mesajId: string) => c.get<InboxMessage>(pathOf("inboxGet", { mesajId })),
-    inboxCancel: (mesajId: string) => c.post<InboxMessage>(pathOf("inboxCancel", { mesajId }), {}),
+    inboxCreate: (mesajId: string, tur: InboxEntryKind, govde: OrderMessageBody | CustomerMessageBody) =>
+      c.post<InboxEntry>(pathOf("inboxCreate"), { mesajId, tur, govde }),
+    inboxList: (p: { durum?: InboxStatus; imlec?: string; limit?: number } = {}) => c.get<Page<InboxEntry>>(pathOf("inboxList"), p),
+    inboxGet: (mesajId: string) => c.get<InboxEntry>(pathOf("inboxGet", { mesajId })),
+    inboxCancel: (mesajId: string) => c.post<InboxEntry>(pathOf("inboxCancel", { mesajId }), {}),
     reportCreate: (clientToken: string, raporAnahtari: string, parametreler: Record<string, unknown>) =>
       c.post<ReportRequest>(pathOf("reportCreate"), { clientToken, raporAnahtari, parametreler }),
     reportList: (p: { imlec?: string; limit?: number } = {}) => c.get<Page<ReportRequest>>(pathOf("reportList"), p),

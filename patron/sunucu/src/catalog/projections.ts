@@ -163,6 +163,7 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
   { name: "acik-siparis-karsilama", kind: "ANLIK", permissions: ["bulut:siparis:oku"] },
   { name: "rapor-katalogu", kind: "ANLIK", permissions: OTURUM },
   { name: "uretim-akisi", kind: "ANLIK", permissions: ["bulut:uretim:oku"] },
+  { name: "saglik", kind: "ANLIK", permissions: ["bulut:ozet:oku"] },
 ];
 
 export interface ProjectionDef {

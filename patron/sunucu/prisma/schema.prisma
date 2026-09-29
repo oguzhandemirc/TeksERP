@@ -91,6 +91,16 @@ enum DevicePlatform {
   WEB
 }
 
+/// Bildirim kuyruğu (hepsi atomik claim): BEKLIYOR → GONDERILIYOR → GONDERILDI | BASARISIZ | BEKLIYOR (yeniden
+/// deneme / sessiz saat ertelemesi); doğuşta ya da gönderim anında kural düşürürse ATLANDI (`skip_reason`).
+enum NotificationStatus {
+  BEKLIYOR
+  GONDERILIYOR
+  GONDERILDI
+  BASARISIZ
+  ATLANDI
+}
+
 // -----------------------------------------------------------------------------
 // TESİS · KURULUM (satıcının Müşteri → Tesis → Kurulum ağacının buluttaki yansıması)
 // -----------------------------------------------------------------------------
@@ -308,6 +318,63 @@ model PushDevice {
   @@unique([tesisId, tokenHash])
   @@index([tesisId, accountId])
   @@map("push_devices")
+}
+
+// -----------------------------------------------------------------------------
+// BİLDİRİMLER (B5) — kurallar hesap başına, varsayılanlar tesis yöneticisinden; kuyruk + gönderim kaydı
+// -----------------------------------------------------------------------------
+
+/// Tesis yöneticisinin bildirim varsayılanları (hesap kendi ayarını yazmadıysa bunlar geçer; satır yoksa
+/// koddaki varsayılan). `settings` şeması `src/catalog/notifications.ts` (`SettingsSchema`).
+model NotificationDefaults {
+  tesisId     String   @id @map("tesis_id") @db.Uuid
+  settings    Json     @map("settings")
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("notification_defaults")
+}
+
+/// Hesabın bildirim ayarı — KULLANICI TERCİHİ. `settings` NULL = tesis varsayılanına uy.
+model NotificationPreference {
+  id        String   @id @default(uuid()) @db.Uuid
+  tesisId   String   @map("tesis_id") @db.Uuid
+  accountId String   @map("account_id") @db.Uuid
+  settings  Json?    @map("settings")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([tesisId, accountId])
+  @@map("notification_preferences")
+}
+
+/// Bildirim — kuyruk + gönderim kaydı; TELEMETRİ (raporlanan sayı okumaz, sonuçlanmış satır budanır).
+/// `dedup_key` idempotent bildirim kimliğidir: aynı olay aynı hesaba İKİNCİ kez doğamaz (tekrar gönderim yok).
+model Notification {
+  id            String             @id @default(uuid()) @db.Uuid
+  tesisId       String             @map("tesis_id") @db.Uuid
+  accountId     String             @map("account_id") @db.Uuid
+  kind          String             @map("kind") @db.VarChar(40)
+  dedupKey      String             @map("dedup_key") @db.VarChar(200)
+  title         String             @map("title") @db.VarChar(120)
+  body          String             @map("body") @db.VarChar(500)
+  route         String?            @map("route") @db.VarChar(200)
+  status        NotificationStatus @default(BEKLIYOR) @map("status")
+  skipReason    String?            @map("skip_reason") @db.VarChar(40)
+  attempts      Int                @default(0) @map("attempts")
+  nextAttemptAt DateTime           @map("next_attempt_at") @db.Timestamptz
+  claimUntil    DateTime?          @map("claim_until") @db.Timestamptz
+  sentAt        DateTime?          @map("sent_at") @db.Timestamptz
+  lastError     String?            @map("last_error") @db.VarChar(60)
+  deliveries    Json?              @map("deliveries")
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([tesisId, accountId, dedupKey])
+  @@index([tesisId, status, nextAttemptAt])
+  @@index([tesisId, accountId, createdAt])
+  @@map("notifications")
 }
 
 // -----------------------------------------------------------------------------

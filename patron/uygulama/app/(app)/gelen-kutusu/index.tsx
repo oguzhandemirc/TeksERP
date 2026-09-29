@@ -2,7 +2,7 @@
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { errorMessage } from "../../../src/api/client";
-import { INBOX_STATUSES, type InboxMessage, type InboxStatus } from "../../../src/api/wire";
+import { INBOX_STATUSES, type InboxEntry, type InboxStatus } from "../../../src/api/wire";
 import { formatDateTime, statusLabel } from "../../../src/lib/format";
 import { INBOX_KIND_LABEL } from "../../../src/lib/inbox";
 import { useSession } from "../../../src/state/session";
@@ -17,7 +17,7 @@ export default function Inbox() {
   const { api, cache, markOnline } = useSession();
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>("HEPSI");
-  const [items, setItems] = useState<InboxMessage[]>([]);
+  const [items, setItems] = useState<InboxEntry[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

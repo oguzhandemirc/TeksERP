@@ -14,7 +14,7 @@
 // =============================================================================
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
 import { APP_GRANTS, CLOUD_TABLES, SYNC_GRANTS } from "../src/lib/db-grants";
@@ -62,10 +62,16 @@ async function semaBolumu(o: Ortam): Promise<void> {
     const pol = await goc.query<{ tablename: string }>(`SELECT tablename FROM pg_policies WHERE policyname = 'tesis_yalitimi'`);
     const polSet = new Set(pol.rows.map((r) => r.tablename));
     kontrol("§1c her tabloda tesis_yalitimi politikası", tables.every((x) => polSet.has(x)));
-    const mig = readFileSync(path.join(PATRON_KOKU, "prisma/migrations/20260929200000_ilk_sema/migration.sql"), "utf8");
-    const dizi = /FOREACH t IN ARRAY ARRAY\[([\s\S]*?)\]/.exec(mig)?.[1] ?? "";
-    const migTables = [...dizi.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
-    kontrol("§1d migration RLS listesi = CLOUD_TABLES", JSON.stringify(migTables) === JSON.stringify([...CLOUD_TABLES].sort()));
+    // Bütün migration'ların RLS döngü listelerinin birleşimi (yeni tabloyu getiren migration kendi listesini taşır).
+    const migDir = path.join(PATRON_KOKU, "prisma/migrations");
+    const migTables = readdirSync(migDir)
+      .filter((d) => existsSync(path.join(migDir, d, "migration.sql")))
+      .flatMap((d) => {
+        const dizi = /FOREACH t IN ARRAY ARRAY\[([\s\S]*?)\]/.exec(readFileSync(path.join(migDir, d, "migration.sql"), "utf8"))?.[1] ?? "";
+        return [...dizi.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+      })
+      .sort();
+    kontrol("§1d migration RLS listeleri (birleşim) = CLOUD_TABLES", JSON.stringify(migTables) === JSON.stringify([...CLOUD_TABLES].sort()), `${migTables.length}/${CLOUD_TABLES.length}`);
     for (const [label, url, want] of [
       ["uygulama", o.ctx.config.DATABASE_URL, APP_GRANTS],
       ["eşitleme", o.ctx.config.ESITLEME_DATABASE_URL, SYNC_GRANTS],

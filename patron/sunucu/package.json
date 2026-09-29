@@ -28,12 +28,14 @@
     "express": "5.2.1",
     "pg": "8.20.0",
     "prisma": "7.10.0",
+    "web-push": "3.6.7",
     "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/express": "5.0.6",
     "@types/node": "25.6.0",
     "@types/pg": "8.20.0",
+    "@types/web-push": "3.6.4",
     "@typescript-eslint/eslint-plugin": "8.58.2",
     "@typescript-eslint/parser": "8.58.2",
     "eslint": "10.2.1",

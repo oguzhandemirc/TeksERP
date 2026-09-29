@@ -23,6 +23,7 @@ import { REQUEST_HEADER, publicKeyX, signRequest } from "../../src/lisans-protok
 import type { CloudContext } from "../../src/services/context";
 import type { Doorbell, DoorbellTopic } from "../../src/services/doorbell";
 import { InstallationDirectory } from "../../src/services/installation-directory";
+import { createNotificationRuntime } from "../../src/services/notification-scheduler";
 import { inviteFacilityAdmin, openFacility, registerInstallation } from "../../src/services/vendor-admin.service";
 import { acceptInvite, confirmInvite } from "../../src/auth/invite.service";
 import { applyRoles } from "../db-rolleri";
@@ -106,6 +107,7 @@ export async function ortamKur(ekOrtam: Record<string, string> = {}, fetchImpl?:
     directory: new InstallationDirectory(sync.prisma, config, fetchImpl),
     doorbell: doorbell ?? zil,
     now: saat.simdi,
+    notifications: createNotificationRuntime(config),
   };
   const server = http.createServer(createApp(ctx));
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
@@ -245,6 +247,9 @@ export async function temizleTesis(o: Ortam, tesisId: string): Promise<void> {
   await withTesis(o.goc.prisma, { tesisId }, async (tx) => {
     await tx.session.deleteMany({ where: { tesisId } });
     await tx.pushDevice.deleteMany({ where: { tesisId } });
+    await tx.notification.deleteMany({ where: { tesisId } });
+    await tx.notificationPreference.deleteMany({ where: { tesisId } });
+    await tx.notificationDefaults.deleteMany({ where: { tesisId } });
     await tx.accountAudit.deleteMany({ where: { tesisId } });
     await tx.operationReceipt.deleteMany({ where: { tesisId } });
     await tx.inboxMessage.deleteMany({ where: { tesisId } });

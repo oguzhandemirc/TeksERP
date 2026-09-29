@@ -1,8 +1,8 @@
 // Gelen kutusu kuralları (istemci aynası; karar sunucuda): iptal yalnız YAZAR ve yalnız BEKLIYOR'da.
 // Yönetici tesisin bütün mesajlarını görür; başkasının mesajında iptal düğmesi çıkmaz.
-import type { InboxMessage } from "../api/wire";
+import type { InboxEntry } from "../api/wire";
 
-export function canCancel(m: Pick<InboxMessage, "durum" | "hesapAdi">, me: { ad: string; admin: boolean }): boolean {
+export function canCancel(m: Pick<InboxEntry, "durum" | "hesapAdi">, me: { ad: string; admin: boolean }): boolean {
   return m.durum === "BEKLIYOR" && (!me.admin || m.hesapAdi === me.ad);
 }
 
