@@ -1877,9 +1877,10 @@ export class WorkOrderService {
    * (`producedOutputWhere`); YALNIZ fire (katalogda `targetStatus=SCRAP`) olan
    * rulolar dışlanır — A1 (2. kalite) SATILABİLİR olduğu için SAYILIR; initialQty
    * toplamı. Tek groupBy ile sayfa başına 1 sorgu. Ayrıca üretime GİREN ham
-   * metrajı ve bağlı SİPARİŞ TOPLAMINI (talep) ekler.
+   * metrajı ve bağlı SİPARİŞ TOPLAMINI (talep) ekler. Patron bulutu projeksiyonu
+   * (`cloud-sync` · iş emri) aynı sayıları buradan okur — liste ile bulut ayrışmasın.
    */
-  private async withProductionMeters<
+  async withProductionMeters<
     T extends {
       id: string;
       // `station` ve `orderLinks` OPSİYONEL: liste select'i ikisini de getirir ve

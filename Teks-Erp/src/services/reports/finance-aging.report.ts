@@ -89,7 +89,7 @@
 import { Prisma, CariKind, Currency, InvoiceType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { optionList, type WithSecenekler } from "./_secenekler";
-import { D, D0, invoiceLedgerSide } from "../helpers/finance.helper";
+import { D, D0, invoiceLedgerSide, invoiceOpenAmount } from "../helpers/finance.helper";
 import { factoryDayKeyUtcMidnight } from "../../constants/time";
 
 const DAY_MS = 86_400_000;
@@ -122,6 +122,36 @@ export function bucketOfDaysOverdue(daysOverdue: number | null): AgingBucketKey 
   if (daysOverdue <= 60) return "d31_60";
   if (daysOverdue <= 90) return "d61_90";
   return "d90plus";
+}
+
+/** Gecikmiş kova mı (vadesi gelmemiş ve vadesiz HARİÇ) — patron bulutunun `vadesiGecti`si bununla aynı. */
+export function isOverdueBucket(bucket: AgingBucketKey): boolean {
+  return bucket !== "notDue" && bucket !== "noDueDate";
+}
+
+/**
+ * EFEKTİF VADE — TEK KAYNAK (dosya başlığı): belge vadesi → tarih + cari vade günü →
+ * yok. Uydurma vade basılmaz; hangi yoldan geldiği `dueSource` ile döner.
+ */
+export function resolveEffectiveDue(r: {
+  dueDate: Date | null;
+  issueDate: Date;
+  paymentTermDays: number | null | undefined;
+}): { effectiveDue: Date | null; dueSource: AgingOpenItem["dueSource"] } {
+  if (r.dueDate) return { effectiveDue: r.dueDate, dueSource: "DOCUMENT" };
+  if (r.paymentTermDays !== null && r.paymentTermDays !== undefined) {
+    return { effectiveDue: new Date(r.issueDate.getTime() + r.paymentTermDays * DAY_MS), dueSource: "PAYMENT_TERM" };
+  }
+  return { effectiveDue: null, dueSource: "NONE" };
+}
+
+/**
+ * Gecikme günü — iki AN arasındaki mutlak fark (takvim günü sorusu değil, fabrika
+ * saat dilimine kesilmez); vadesiz satırda `null`.
+ */
+export function daysOverdueAt(asOf: Date, effectiveDue: Date | null): number | null {
+  // tz-ok: mutlak an farkı.
+  return effectiveDue === null ? null : Math.floor((asOf.getTime() - effectiveDue.getTime()) / DAY_MS);
 }
 
 type BucketMap = Record<AgingBucketKey, Prisma.Decimal>;
@@ -518,26 +548,14 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
   for (const r of invoiceRows) {
     const grand = D(r.grandTotal);
     const paid = D(r.paidAsOf);
-    const open = grand.minus(paid);
+    const open = invoiceOpenAmount(grand, paid);
     if (open.isZero()) continue;
     const sign = signOfInvoiceType(r.type);
     const signedOpen = open.mul(sign);
 
     // EFEKTİF VADE — uydurma vade basılmaz (bkz. dosya başlığı).
-    let effectiveDue: Date | null = null;
-    let dueSource: AgingOpenItem["dueSource"] = "NONE";
-    if (r.dueDate) {
-      effectiveDue = r.dueDate;
-      dueSource = "DOCUMENT";
-    } else if (r.paymentTermDays !== null && r.paymentTermDays !== undefined) {
-      effectiveDue = new Date(r.issueDate.getTime() + r.paymentTermDays * DAY_MS);
-      dueSource = "PAYMENT_TERM";
-    }
-
-    // tz-ok: gecikme İKİ AN arasındaki mutlak farktır (takvim günü sorusu
-    // değil) — fabrika saat dilimine kesilmez.
-    const daysOverdue =
-      effectiveDue === null ? null : Math.floor((asOf.getTime() - effectiveDue.getTime()) / DAY_MS);
+    const { effectiveDue, dueSource } = resolveEffectiveDue(r);
+    const daysOverdue = daysOverdueAt(asOf, effectiveDue);
 
     const a = touch(r.cariId, r.currency);
     a.items.push({

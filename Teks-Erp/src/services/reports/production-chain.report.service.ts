@@ -20,6 +20,7 @@ import { receivedMetersByWeavingOrder } from "../helpers/weaving-order-of-roll.h
 import { remainingByBeam } from "../helpers/warp-beam.helper";
 import { readDevereEnabled } from "../system-setting.service";
 import { droppedRows, optionList, type Secenekler, type WithSecenekler } from "./_secenekler";
+import { currentWorkOrderStep } from "../helpers/work-order-current-step.helper";
 
 export const CHAIN_STATUSES = ["BEKLEYEN", "DEVAM", "GECIKMIS", "TAMAMLANAN"] as const;
 export type ChainStatus = (typeof CHAIN_STATUSES)[number];
@@ -93,11 +94,9 @@ export function rowStatus(r: { siparisM: number; sevkM: number; gecikmeGun: numb
   return "BEKLEYEN";
 }
 
-/** İş emrinin ŞU ANKİ adımı: ilk ACTIVE, yoksa ilk PENDING, hepsi bittiyse son adım. */
+/** İş emrinin ŞU ANKİ adımının istasyon adı — tanım `currentWorkOrderStep`te (tek kaynak). */
 function currentStepName(steps: Array<{ stepSequence: number; status: StepStatus; station: { name: string } | null }>): string | null {
-  const sorted = [...steps].sort((a, b) => a.stepSequence - b.stepSequence);
-  const hit = sorted.find((s) => s.status === StepStatus.ACTIVE) ?? sorted.find((s) => s.status === StepStatus.PENDING) ?? sorted[sorted.length - 1];
-  return hit?.station?.name ?? null;
+  return currentWorkOrderStep(steps)?.station?.name ?? null;
 }
 
 const beamRank = (s: WarpBeamStatus): number => LIVE_BEAM.indexOf(s);

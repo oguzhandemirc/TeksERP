@@ -38,7 +38,7 @@ import { Prisma, InvoiceStatus, InvoiceType, PaymentStatus, PaymentDirection, Ch
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { D, D0, findCariAccountIdByCustomer } from "./helpers/finance.helper";
+import { D, D0, findCariAccountIdByCustomer, invoiceOpenAmount, unallocatedAmount } from "./helpers/finance.helper";
 // ⚠️ Çek durum adları TEK KAYNAK: `cheque.service` sözlüğü ("Ekranda ve hata
 // mesajında okunan durum adları"). Buraya ikinci bir sözlük yazmak, aynı
 // durumun iki farklı adla anılmasına giden en kısa yoldur.
@@ -689,8 +689,8 @@ export class PaymentAllocationService {
       );
     }
 
-    const invOpen = D(inv.grandTotal).minus(D(inv.paidTotal));
-    const srcFree = src.amount.minus(src.allocatedTotal);
+    const invOpen = invoiceOpenAmount(inv.grandTotal, inv.paidTotal);
+    const srcFree = unallocatedAmount(src.amount, src.allocatedTotal);
 
     // ── ATOMİK SAYAÇLAR ──────────────────────────────────────────────────
     // ⚠️ SIRA SABİT (önce fatura, sonra kaynak): iki eşzamanlı kapama aynı
@@ -1007,7 +1007,7 @@ export class PaymentAllocationService {
        LIMIT ${limit}
     `;
 
-    const opens = rows.map((r) => D(r.grandTotal).minus(D(r.paidTotal)));
+    const opens = rows.map((r) => invoiceOpenAmount(r.grandTotal, r.paidTotal));
     const totalOpen = opens.reduce((a, b) => a.plus(b), D0());
     const suggestion =
       params.amount != null ? suggestFifo(opens, D(params.amount).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)) : null;
@@ -1058,7 +1058,7 @@ export class PaymentAllocationService {
     `;
     let totalFree = D0();
     const data = rows.map((r) => {
-      const free = D(r.amount).minus(D(r.allocatedTotal));
+      const free = unallocatedAmount(r.amount, r.allocatedTotal);
       totalFree = totalFree.plus(free);
       return {
         id: r.id,
@@ -1154,7 +1154,7 @@ export async function autoAllocatePaymentFifo(
   // Kalan = tutar − zaten bağlanmış. Yeni kayıtta `allocatedTotal` 0'dır; çıkarma
   // yine de yapılır, çünkü fonksiyon kısmen bağlanmış bir tahsilat için elle de
   // çağrılabilir ve o durumda tutarın tamamını dağıtmak aşım 409'u üretirdi.
-  const free = D(p.amount).minus(D(p.allocatedTotal));
+  const free = unallocatedAmount(p.amount, p.allocatedTotal);
   if (free.lte(0)) return EMPTY_AUTO_ALLOCATE;
 
   // Aday listesi + FIFO önerisi TEK KAYNAK: kapama ekranının gördüğü liste.

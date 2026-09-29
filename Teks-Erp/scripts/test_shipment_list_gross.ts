@@ -237,14 +237,21 @@ async function main() {
   // sayılır ya KAYBOLUR — geçici ve bu yüzden teşhis edilemez. `Promise.all`
   // bunu sağlamaz (ayrı bağlantılar); batch `$transaction` tek başına da yetmez
   // (READ COMMITTED'da her İFADE kendi görüntüsünü alır) → izolasyon şart.
+  // Formül ve tek görüntü `loadShipmentGrossTotals`e taşındı (patron bulutu da okur);
+  // liste `attachTotals` o yardımcıyı çağırmak ZORUNDA — kendi sayımını yazarsa ayrışır.
   {
-    const src = require("fs").readFileSync(
-      require("path").join(__dirname, "../src/services/shipping.service.ts"),
-      "utf8",
-    ) as string;
-    const at = src.indexOf("const attachTotals =");
-    const body = at === -1 ? "" : src.slice(at, at + 3000);
-    check("attachTotals gövdesi çözülebildi", body.length > 500);
+    const fs = require("fs") as typeof import("fs");
+    const path = require("path") as typeof import("path");
+    const svc = fs.readFileSync(path.join(__dirname, "../src/services/shipping.service.ts"), "utf8");
+    const at = svc.indexOf("const attachTotals =");
+    const attach = at === -1 ? "" : svc.slice(at, at + 1500);
+    check("attachTotals gövdesi çözülebildi", attach.length > 300);
+    check("attachTotals brüt toplamı TEK KAYNAKTAN okur (loadShipmentGrossTotals)",
+      attach.includes("loadShipmentGrossTotals(") && !attach.includes("rollReturn.groupBy"));
+    const helper = fs.readFileSync(path.join(__dirname, "../src/services/helpers/shipment-gross-totals.helper.ts"), "utf8");
+    const hs = helper.indexOf("export async function loadShipmentGrossTotals");
+    const body = hs === -1 ? "" : helper.slice(hs, hs + 2500);
+    check("loadShipmentGrossTotals gövdesi çözülebildi", body.length > 500);
     check(
       "üç groupBy TEK transaction'da (Promise.all DEĞİL)",
       body.includes("prisma.$transaction(") && !/const \[rollGroups[\s\S]{0,40}Promise\.all/.test(body),
