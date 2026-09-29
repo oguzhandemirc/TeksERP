@@ -3,10 +3,9 @@
 // =============================================================================
 // `seed-demo-full.ts` ve modülleri buradan beslenir.
 //
-// ⚠️ NEDEN `prisma/` ALTINDA, `scripts/` DEĞİL: Dockerfile imaja yalnız
-// `prisma`, `src`, `assets` kopyalar (ölçüldü — `COPY Teks-Erp/prisma ./prisma`).
-// `Teks-Erp/scripts/` imaja HİÇ girmez, yani orada yaşayan bir seed sunucuda
-// koşturulamaz.
+// ⚠️ NEDEN `prisma/` ALTINDA, `scripts/` DEĞİL: kök Dockerfile'ın `seed` hedefi
+// yalnız `prisma`, `src`, `assets` taşır; `Teks-Erp/scripts/` imaja HİÇ girmez,
+// yani orada yaşayan bir seed sunucuda koşturulamaz.
 // =============================================================================
 import { v5 as uuidv5 } from "uuid";
 import prisma from "../../src/lib/prisma";

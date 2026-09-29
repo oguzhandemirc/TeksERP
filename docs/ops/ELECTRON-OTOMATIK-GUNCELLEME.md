@@ -65,6 +65,11 @@ release/<sürüm>/           latest.yml              latest.yml'e bakar
 Yayın servisi kuruldu ve uçtan uca doğrulandı. Burada anlatılan şey **tekrar
 yapılacak bir iş değil**, ne olduğunun kaydıdır.
 
+> ⚠️ **Sunucu değişti (2026-09-01):** yayın ESKİ paylaşımlı sunucudan (`91.217.119.138`,
+> takma ad `yenisunucu`) **tekserp-vds**'e (`80.253.255.188`) taşındı ve DNS oraya
+> döndü (`deploy/electron-yayinla.sh` `SSH_HEDEF=tekserp-yayin`). Aşağıdaki tablo
+> BUGÜNKÜ durumu gösterir; ayrıntı `SUNUCU-ENVANTERI.md` · `VDS-TASIMA.md`.
+
 Sunucuda nginx YOK — ortam **Docker + Traefik v3.5**. `demo.etkiliyazilim.com`
 zaten `tekserp-demo` konteynerine (backend, port 4000) gidiyordu. Yayın için
 ayrı bir statik servis eklendi:
@@ -75,9 +80,9 @@ ayrı bir statik servis eklendi:
 | Yayın klasörü | `/opt/stack/apps/tekserp-guncelleme/html/adnansahin/electron/` |
 | Traefik kuralı | ``Host(`guncelleme.etkiliyazilim.com`)`` |
 | Yol şeması | **müşteri bazlı**: `/<müşteri>/<ürün>/` → `/adnansahin/electron/`, mobil `/adnansahin/mobil/` |
-| DNS | Cloudflare A kaydı → `91.217.119.138`, **proxy AÇIK (turuncu bulut)** |
-| Sahiplik | `oguzhan:oguzhan` — `scp` doğrudan yazar (`sudo` ile scp yapılamaz) |
-| SSH | `oguzhan@91.217.119.138`, **port 2222** (yerel takma ad: `yenisunucu`, anahtar erişimi kurulu) |
+| DNS | Cloudflare A kaydı → `80.253.255.188` (tekserp-vds), **proxy AÇIK (turuncu bulut)** |
+| Yazma | yalnız `yayinci` hesabı (sudo YOK) — yayın betikleri `tekserp-yayin` takma adıyla bağlanır |
+| SSH | **port 2222**, anahtarla: yayın `ssh tekserp-yayin` (`yayinci`) · yönetim `ssh tekserp-vds` (`oguzhan`, sudo) |
 
 **Neden `tekserp-demo` konteynerinin `public/` klasörüne konulmadı:** orası imajın
 parçası; demo her yeniden derlendiğinde yayın silinirdi. Ayrı servis + host
@@ -87,9 +92,11 @@ tuzak var: `kur.ps1` her deploy'da `app\` klasörünü komple değiştirir.)
 ### ⚠️ Cloudflare proxy'si AÇIK kalmalı — kapanırsa güncelleme sessizce durur
 
 Sunucudaki sertifika bir **Cloudflare Origin CA** sertifikasıdır
-(`*.etkiliyazilim.com` wildcard, 2036'ya kadar; `traefik/dynamic/tls.yml` →
-default store). ACME/Let's Encrypt kullanılmıyor çünkü `etkiliyazilim.com` bu
-Cloudflare hesabının zone'unda değil, DNS-01 çalışmıyor.
+(`*.etkiliyazilim.com` wildcard; tekserp-vds'te geçerlilik **2041-08-28**, 2026-09-01
+kurulumunda ölçüldü; `traefik/dynamic/tls.yml` → default store). Eski belgelerdeki
+"2036" değeri eski sunucudaki sertifikanın 2026-08-26 kaydıdır. ACME/Let's Encrypt
+kullanılmıyor çünkü `etkiliyazilim.com` bu Cloudflare hesabının zone'unda değil,
+DNS-01 çalışmıyor.
 
 **Origin CA sertifikasına yalnız Cloudflare Edge güvenir.** Kayıt DNS-only'ye
 (gri bulut) çevrilirse istemci doğrudan origin'e bağlanır, sertifikayı reddeder
@@ -148,7 +155,7 @@ birbirini hiç görmez.
 
 ```bash
 # 1) Sunucuda klasör (DNS, sertifika, servis GEREKMEZ)
-ssh yenisunucu 'mkdir -p /opt/stack/apps/tekserp-guncelleme/html/yenifabrika/electron'
+ssh tekserp-yayin 'mkdir -p /opt/stack/apps/tekserp-guncelleme/html/yenifabrika/electron'
 
 # 2) Kanalı kayıt defterine ekle — deploy/kanallar.json (bütün kimlikler; bekçi:
 #    node scripts/check-kanallar.mjs — iki kanal hiçbir kimliği paylaşamaz)
@@ -522,7 +529,7 @@ düzeltilmiş **daha yüksek** bir numara (örn. 2.7.2) çıkarmak gerekir.
 | Şerit hiç çıkmıyor, hata da yok | Sürüm numarası artırılmamış | `package.json > version` |
 | Bir makine güncellenmiyor, ötekiler oluyor | O makinede izin penceresine "Hayır" denmiş | Yönetici hesabıyla tekrar dene (bkz. sınır ①) |
 | Ayrıntı gerekiyor | — | `%APPDATA%\Adnan Şahin ERP\logs\main.log` — `[updater]` satırları |
-| Sunucu tarafı şüpheli | — | `ssh yenisunucu 'sudo docker logs --tail 50 tekserp-guncelleme'` |
+| Sunucu tarafı şüpheli | — | `ssh tekserp-vds 'sudo docker logs --tail 50 tekserp-guncelleme'` |
 | **Dosya sunucuda VAR ama 404 dönüyor** | Cloudflare eski bir 404'ü önbelleğe almış | Aşağıdaki "Cloudflare 404 tuzağı" |
 
 ---

@@ -1,6 +1,6 @@
 # Sunucu envanteri — hangi makine ne yapıyor
 
-> Son güncelleme: **2026-09-01**. Yeni bir makine, kullanıcı, port ya da zamanlanmış
+> Son güncelleme: **2026-09-29** (fabrika satırları SAHINSRV salt-okuma envanterinden). Yeni bir makine, kullanıcı, port ya da zamanlanmış
 > iş eklendiğinde **buraya da yazılır** — aksi hâlde "bu port neden açık" sorusunun
 > cevabı kimsede kalmaz.
 
@@ -10,9 +10,9 @@
 
 | Makine | Adres | Rolü | Durum |
 |---|---|---|---|
-| **Fabrika sunucusu** | Fabrika LAN'ı (Windows) | ERP backend + PostgreSQL + yerel yedek | Canlı üretim |
-| **tekserp-vds** | `80.253.255.188` | Güncelleme yayını + makine dışı yedek | **YENİ** (2026-09-01) |
-| Eski yayın sunucusu | `91.217.119.138` | Güncelleme yayını (devrediliyor) + `demo` | Geçiş sürüyor |
+| **Fabrika sunucusu — adnansahin** | SAHINSRV, fabrika LAN'ı (Windows 10 Pro) | ERP backend + PostgreSQL + yerel yedek | Canlı üretim · uzak erişim **Tailscale** |
+| **tekserp-vds** | `80.253.255.188` | Güncelleme yayını + makine dışı yedek hedefi | 2026-09-01'den beri yayın burada |
+| Eski paylaşımlı sunucu | `91.217.119.138` (takma ad `yenisunucu` — adı yanıltıcı) | `demo` | Yayın 2026-09-01'de taşındı; demo burada kaldı (repo kaydı — sunucuda doğrulanmadı) |
 
 > ⚠️ Çok müşteri notu — bu tablo **fabrika başına bir satır** taşımalıdır (`Fabrika sunucusu — <müşteri kodu>`), çünkü her kurulumun kendi LAN'ı, kendi tünel hostname'i (`<musteri>-erp.etkiliyazilim.com`), kendi yedek kullanıcısı (`fab-<müşteri>`) ve kendi yayın klasörü (`/<müşteri>/electron`, `/<müşteri>/mobil`) vardır. Aşağıdaki "Fabrika sunucusu — ağ / servisler" bölümleri **her fabrika için aynı şablondur** (4000 LAN · 4001 yalnız 127.0.0.1 · 5432 yerel) — şablon çekirdektir, satırlar müşteri başına çoğalır.
 
@@ -28,11 +28,13 @@
 | Port | Ne | Kim erişir |
 |---|---|---|
 | **4000** | ERP backend (HTTP) | Fabrika LAN'ı — panel + tabletler |
-| **4001** | ERP backend, **tünel dinleyicisi** | ⚠️ **YALNIZ `127.0.0.1`** — pratikte yalnız aynı makinedeki `cloudflared` |
+| **4001** | ERP backend, **tünel dinleyicisi** | ⚠️ **YALNIZ `127.0.0.1`** — yalnız aynı makinedeki `cloudflared` (tünel kuruluysa) |
 | 5432 | PostgreSQL | `listen_addresses='127.0.0.1'` — yalnız yerel |
 
-⚠️ **GELEN PORT AÇILMAZ.** Uzaktan erişim `cloudflared` servisiyle sağlanır ve
-o **dışarı doğru** bağlanır; güvenlik duvarında hiçbir kural değişmez.
+⚠️ **GELEN PORT AÇILMAZ.** Uzaktan erişim **dışarı doğru** bağlanan bir ajanla
+sağlanır; güvenlik duvarında hiçbir kural değişmez. **SAHINSRV'de bu ajan
+Tailscale'dir** — `cloudflared` hizmeti YOK ve 4001 dinlemiyor (ölçüldü 2026-09-29).
+Patron tüneli (`UZAK-ERISIM-KURULUM.md`) bu fabrikada kurulu değil.
 
 ⚠️ **4001 `0.0.0.0`a AÇILAMAZ.** Uzak/LAN ayrımının tamamı bu porta LAN'dan
 erişilememesine dayanıyor (`req.socket.localPort` → `req.isRemote`). Açılırsa
@@ -41,11 +43,22 @@ yönde de kural seti sessizce yanlış uygulanır.
 
 ### Fabrika sunucusundaki servisler
 
+SAHINSRV'de ölçülen değerler (2026-09-29, salt okuma). Yeni kurulumda adlar
+`ilk-kurulum.ps1`/`kur.ps1` varsayılanlarından gelir ve farklı olabilir:
+
 | Servis | Ne yapar | Not |
 |---|---|---|
-| `pm2` → tekserp | ERP backend | **fork modu, tek instance** (tek-process invariant) |
-| Görev Zamanlayıcı → `TeksERP-DB-Backup` | Gece yedeği 02:00 | Backend çökse de koşar |
-| **`cloudflared`** | Uzaktan erişim tüneli | **YENİ (2026-09-01)** · Windows servisi · reçete: [`UZAK-ERISIM-KURULUM.md`](UZAK-ERISIM-KURULUM.md) |
+| `pm2` → **`tekserp-backend-yeni`** | ERP backend (`C:\TeksERP\app`, `dist\server.js`, PORT 4000) | **fork modu, tek instance** (tek-process invariant) · daemon SYSTEM, `PM2_HOME=C:\TeksERP\pm2-home` |
+| Hizmet `postgresql-tekserp` | PostgreSQL 16.9 | program `D:\PostgreSQL\16`, veri `D:\PostgreSQL\data`; `C:\TeksERP\pgsql\bin` o bin'e junction |
+| Görev Zamanlayıcı → **`TeksERP-DB-Backup-Yeni`** | Gece yedeği **03:00** (`C:\TeksERP\yedekle.ps1`) | Backend çökse de koşar · ikinci kopya `E:\TeksERP-yedek` · eski `TeksERP-DB-Backup` görevi YOK (yeni kurulumda `ilk-kurulum.ps1` bu adla kurar) |
+| Görev Zamanlayıcı → `TeksERP-Backend-Boot` | Açılışta `pm2-boot.cmd` → `pm2 resurrect` | SYSTEM |
+| Hizmet `Tailscale` | Uzak erişim | `cloudflared` **YOK** |
+| rclone → `gdrive` | Makine dışı yedek (backend'in saatlik süpürmesi) | Hedef Google Drive — tekserp-vds DEĞİL |
+
+⚠️ **Sunucuda eski kalıntılar duruyor** (temizlik kararı kullanıcıda, lisans planı
+Faz 0.7): `D:\tekserp-build\tekserp` Ağustos'tan kalma tam **git build klonu**
+(`.env`'li; hiçbir şey bağlı değil — paket geliştirme makinesinde üretilir),
+`C:\Etkili-Yazilim.SILINECEK-20260925` (eski kök), Haziran installer'ı kalıntıları.
 
 ---
 
@@ -145,7 +158,7 @@ yazmak kırılgandır, yarın oraya konan ikinci bir iç dosya yine sızar.
 | | Fabrika sunucusu | tekserp-vds | Yedek arşivi |
 |---|---|---|---|
 | **Müşteri / fabrika personeli** | ✅ (kendi ERP'si) | ❌ | ❌ |
-| **Patron (uzaktan, tünel)** | ✅ salt takip + dar yazma — Access OTP + parola + TOTP | ❌ | ❌ |
+| **Patron (uzaktan, tünel)** | tasarım: salt takip + dar yazma — Access OTP + parola + TOTP · **SAHINSRV'de kurulu değil** | ❌ | ❌ |
 | **Fabrikanın yedek servisi** | ✅ | yalnız `gelen/`e **yazar** | ❌ |
 | **Biz** | ✅ | ✅ | ✅ |
 | **Sunucuyu ele geçiren** | — | ✅ | yalnız **şifreli** bloblar |
@@ -174,8 +187,8 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
 - [ ] **Cloudflare SSL kipi → "Full (strict)"** — şu an "Full": CF↔origin bacağı
       şifreli ama kimliği doğrulanmıyor. Gerçek Origin CA sertifikası artık
       yerinde olduğu için sıkılaştırılabilir.
-- [ ] Fabrika sunucusuna rclone kurulumu (`YEDEK-VPS-KURULUM.md` §B) — sunucuya
-      henüz tek yedek gelmedi
+- [ ] Fabrika sunucusundan tekserp-vds'e yedek (`YEDEK-VPS-KURULUM.md` §B) — SAHINSRV'de
+      rclone VAR ama hedefi Google Drive (`gdrive`); VDS'e gelen yedek ölçülmedi
 - [ ] Geri yükleme provası
 - [ ] Eski sunucudaki yayın kopyasını kapat (~2026-09-08, bir haftalık geri dönüş)
 - [ ] **Kod imzalama** — taşıma ihtimali düşürür, imza sonucu ortadan kaldırır

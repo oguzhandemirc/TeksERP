@@ -6,9 +6,9 @@ Fabrikadaki Electron panelleri yeni sürümü buradan indirir.
 | | |
 |---|---|
 | Adres | `https://guncelleme.etkiliyazilim.com/adnansahin/electron/` |
-| Sunucu | `oguzhan@91.217.119.138`, port **2222** (ssh takma adı `yenisunucu`) |
+| Sunucu | **tekserp-vds** `80.253.255.188`, port **2222** — yönetim `ssh tekserp-vds` (`oguzhan`, sudo) · yayın `ssh tekserp-yayin` (`yayinci`, sudo YOK). Yayın 2026-09-01'de buraya taşındı (`deploy/electron-yayinla.sh` `SSH_HEDEF`); `yenisunucu` = ESKİ sunucu `91.217.119.138` (yalnız demo) |
 | Ortam | Docker + Traefik v3.5 (nginx **yok** — bu servis kendi nginx'ini taşır) |
-| Yayın klasörü | `/opt/stack/apps/tekserp-guncelleme/html/adnansahin/electron/` (sahibi `oguzhan`) |
+| Yayın klasörü | `/opt/stack/apps/tekserp-guncelleme/html/<kanal>/electron/` — yalnız `yayinci` yazar (`docs/ops/SUNUCU-ENVANTERI.md`) |
 | Yol şeması | **`/<müşteri>/<ürün>/`** — yeni müşteri = yeni klasör, başka hiçbir şey |
 
 Reçete ve işletme adımları: [`docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md`](../../docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md)
@@ -19,9 +19,9 @@ Bu dosyalar **sunucuya elle kopyalanır** (`kur.ps1` ile aynı durum — servis
 kendi yapılandırmasını güncelleyemez):
 
 ```bash
-scp docker-compose.yml yenisunucu:/tmp/dc.yml
-scp nginx/default.conf  yenisunucu:/tmp/nginx-default.conf
-ssh yenisunucu 'cd /opt/stack/apps/tekserp-guncelleme
+scp docker-compose.yml tekserp-vds:/tmp/dc.yml
+scp nginx/default.conf  tekserp-vds:/tmp/nginx-default.conf
+ssh tekserp-vds 'cd /opt/stack/apps/tekserp-guncelleme
   sudo cp /tmp/dc.yml docker-compose.yml
   sudo cp /tmp/nginx-default.conf nginx/default.conf
   sudo docker compose up -d
@@ -38,7 +38,9 @@ olarak bu yaşandı (kurulum sırasındaki 404 sondası önbelleğe girdi). İki
 olarak `error_page 404 → no-store` eklendi.
 
 **② Cloudflare proxy'si (turuncu bulut) AÇIK kalmalı.** Sertifika bir Cloudflare
-**Origin CA** wildcard'ıdır (`*.etkiliyazilim.com`, 2036'ya kadar,
+**Origin CA** wildcard'ıdır (`*.etkiliyazilim.com`, tekserp-vds'te geçerlilik
+**2041-08-28** — 2026-09-01 kurulumunda ölçüldü, `docs/ops/SUNUCU-ENVANTERI.md`;
+eski belgelerdeki "2036" eski sunucudaki sertifikanın 2026-08-26 kaydıdır;
 `traefik/dynamic/tls.yml`); ACME yok çünkü alan adı bu CF hesabının zone'unda
 değil. Origin CA'ya **yalnız Cloudflare Edge güvenir** — kayıt DNS-only'ye
 çevrilirse istemci sertifikayı reddeder ve güncelleme sessizce durur.
@@ -53,7 +55,7 @@ uzantısı `no-cache` tarafına**, paket (`.apk`) uzun cache tarafına.
 ## Yeni müşteri eklemek
 
 ```bash
-ssh yenisunucu 'mkdir -p /opt/stack/apps/tekserp-guncelleme/html/<musteri>/electron'
+ssh tekserp-yayin 'mkdir -p /opt/stack/apps/tekserp-guncelleme/html/<musteri>/electron'
 # önce kanal deploy/kanallar.json'a (bütün kimlikler; bekçi: node scripts/check-kanallar.mjs)
 ./deploy/electron-paketle.sh <musteri>                # adres pakete gömülür + kapı doğrular
 ./deploy/electron-yayinla.sh --musteri=<musteri>      # hedefi paketin kimliğinden çözer; argüman niyettir

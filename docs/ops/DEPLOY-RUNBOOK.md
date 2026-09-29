@@ -47,14 +47,15 @@ kurulum** şudur. Çelişki görürseniz bu tablo geçerlidir.
 | PG yolları | program **`D:\PostgreSQL\16`** (bin `D:\PostgreSQL\16\bin`) · veri **`D:\PostgreSQL\data`** — ölçüldü (2026-09-27 prova raporu + `backend-2.10.0.md` sınırlar listesi). `C:\TeksERP\pgsql\bin` o bin dizinine bir **JUNCTION**'dır (`kur.ps1`, `yedekle.ps1` ve `PG_BIN_DIR` bu yolu kullanır — `Remove-Item -Recurse` ile SİLİNMEZ). ⚠️ Bu satır eskiden `C:\TeksERP\pgsql\bin` · `C:\TeksERP\pgdata` diyordu: yazılı olan ölçülmüş olandan farklıydı |
 | Veritabanı / kullanıcı | **`app\.env` → `DATABASE_URL`den okunur** (yan yana kurulumda iki kurulum AYRI DB kullanır — adı buraya sabitleme) · superuser `postgres` |
 | Backend (ÇALIŞAN) | **`C:\TeksERP\app`** — `kur.ps1` ile kurulan PAKET (git klonu DEĞİL) · pm2 adı **`tekserp-backend-yeni`** (`kur.ps1 -UygulamaAdi` belirler; `ecosystem.config.js` onu env'den okur) · önceki sürüm `app.eski-<damga>` |
-| Paketin üretildiği yer | **GELİŞTİRME MAKİNESİ** — sunucuda build klonu YOK ve gerekmiyor (düzeltildi 2026-09-07; bu satır eskiden `D:\tekserp-build\tekserp` diyordu). Windows şart değil: macOS/Linux'ta `pwsh` ile koşar, üretilen paket Windows içindir (`deploy/paketle.ps1` başlığı). Çalışan kod klondan KOŞMAZ |
+| Paketin üretildiği yer | **GELİŞTİRME MAKİNESİ** — sunucuda build klonu GEREKMİYOR ve kullanılmıyor. Windows şart değil: macOS/Linux'ta `pwsh` ile koşar, üretilen paket Windows içindir (`deploy/paketle.ps1` başlığı). Çalışan kod klondan KOŞMAZ. ⚠️ Ama sunucuda eski bir klon DURUYOR: `D:\tekserp-build\tekserp` (Ağustos, emekli `adnansahin` dalı, `.env`'li; yanında 9 eski paket kopyası + zip'ler) — hiçbir şey ona bağlı değil, silinmesi kullanıcı kararıyla (lisans planı Faz 0.7). Ölçüldü 2026-09-29; bu satır 2026-09-07'den beri "klon YOK" diyordu |
 | Deploy script'leri | `C:\TeksERP\kur.ps1` (repo kaynağı `deploy/kur.ps1` — **elle kopyalanır**; script kendini güncelleyemez, paket `app\` altına iner) · `deploy/paketle.ps1` geliştirme makinesinde |
 | pm2 daemon | **SYSTEM** hesabı → **pm2 komutları YÖNETİCİ shell ister** (`EPERM \\.\pipe\rpc.sock` alıyorsanız sebebi budur) |
 | Boot | Görev **`TeksERP-Backend-Boot`** → `C:\TeksERP\pm2-boot.cmd` → `pm2 resurrect` (sistem açılışında, SYSTEM) |
-| Gece yedeği | Görev **`TeksERP-DB-Backup`**, **03:00** (fabrika dökümlerinin damgası `…_030001` — ölçüldü; bu satır eskiden 02:00 diyordu), `yedekle.ps1` → `C:\TeksERP\backups` + `E:\TeksERP-yedek`, **30 gün** |
+| Gece yedeği | Görev **`TeksERP-DB-Backup-Yeni`**, **03:00**, SYSTEM → `C:\TeksERP\yedekle.ps1` → `C:\TeksERP\backups` + `E:\TeksERP-yedek`, **30 gün** (ölçüldü 2026-09-29; eski `TeksERP-DB-Backup` görevi YOK — `ilk-kurulum.ps1` yeni kurulumda görevi `TeksERP-DB-Backup` adıyla kurar) |
 | Backend scheduler | **KAPALI** (`BACKUP_SCHEDULE_ENABLED=false`) — gece yedeğini yukarıdaki görev alır |
+| Uzak erişim | **Tailscale** hizmeti — `cloudflared` YOK, 4001 (tünel dinleyicisi) dinlemiyor (ölçüldü 2026-09-29) |
 
-> ⚠️ **2026-09-02 —** `adnansahin` dalı **EMEKLİ**; build klonu `main` ucundadır ve paket `main`'den üretilir (`docs/design/MODUL-BAYRAK-TASARIM.md` §0: müşteri dalı/forku yasak). ⚠️ 2026-09-07: sunucudaki build klonu tartışması tamamen KAPANDI — sunucuda klon yok, paket geliştirme makinesinde üretiliyor.
+> ⚠️ **2026-09-02 —** `adnansahin` dalı **EMEKLİ**; paket `main`'den üretilir (`docs/design/MODUL-BAYRAK-TASARIM.md` §0: müşteri dalı/forku yasak). Paket geliştirme makinesinde üretilir; sunucudaki eski `D:\tekserp-build\tekserp` klonu (emekli dal) KULLANILMAZ.
 
 > **Neden gece yedeğini backend almıyor:** bağımsız görev, **backend çökmüş ya da
 > kapalıyken bile** yedek alır — backend'e bağlı bir zamanlayıcının veremeyeceği
@@ -371,7 +372,7 @@ alır**; migration sonrası hatada durur, komutları yazar, karar insanındır:
 | 1 | Paketi aç, zorunlu dosyaları ve `PAKET.json`'ı doğrula | durur, hiçbir şey değişmemiştir |
 | 2 | Mevcut kurulumu ve `.env`'i bul, `.env`'i kenara al | durur |
 | 3 | **`premigrate_<damga>.dump`** yedeği + `pg_restore --list` doğrulaması (rotasyon dışı) | durur — yedeksiz devam etmez |
-| 4 | `pm2 delete tekserp-backend` | — |
+| 4 | `pm2 delete <UygulamaAdi>` (varsayılan ve SAHINSRV'deki ad `tekserp-backend-yeni`) | — |
 | 5 | Çalışanı `app.eski-<damga>` olarak kenara al, paketi `app\`'a yerleştir, `.env`'i geri koy | **otomatik geri alma** (aşağıdaki not) |
 | 6 | `npm ci --omit=dev` + `prisma generate` (paket `node_modules` taşımıyorsa) | otomatik geri alma |
 | 7 | `prisma migrate deploy` — **GERİ ALINAMAZ EŞİK** | durur; kod `-GeriAl`, DB `premigrate_` dump |
@@ -456,7 +457,7 @@ curl -s http://localhost:4000/health
   rolls ölü-satır %, en uzun aktif sorgu sn, kilitli sorgu sayısı).
 - API çalışıyorsa HTTP her zaman 200 döner; DB ayrı test edilir (`db: "DOWN"`
   ise DB bağlantısı yok). Deploy sonrası `db: "UP"` ve 200 beklenir.
-- `pm2 status` / `pm2 logs tekserp-backend` süreç tarafını gösterir.
+- `pm2 status` / `pm2 logs tekserp-backend-yeni` süreç tarafını gösterir (SAHINSRV'deki ad; `kur.ps1 -UygulamaAdi`).
 - **`lastBackup` null dönüyorsa** yedekleme yapılandırması bozuktur (§1 uyarısı).
 
 ---

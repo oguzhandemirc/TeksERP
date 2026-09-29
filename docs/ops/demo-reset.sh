@@ -39,7 +39,7 @@
 #      tek kaynak), yani bu dosya kendiliğinden silinmez.
 #
 # ⚠️ SIRA PAZARLIK DIŞI:
-#   stop app → yedek → DROP/CREATE → statement_timeout → migrate deploy →
+#   seed imajı → stop app → yedek → DROP/CREATE → statement_timeout → migrate deploy →
 #   seed.ts → seed-ticaret-demo.ts → seed-demo-full.ts → up -d → doğrulama
 #
 #   • `stop app` ÖNCE: açık bağlantı varken `DROP DATABASE` hata verir. Betik
@@ -54,13 +54,13 @@
 #   • `seed.ts` demo seed'inden ÖNCE: izin ve rol kataloglarını o kurar; ticaret
 #     seed'i `WEB_TRADE` şablonunu demo kullanıcısına uygular. Ters sırada demo
 #     kullanıcısı giriş yapar ama hiçbir ekranı açamaz.
-#   • `up -d` seed'lerden SONRA: `docker compose run --rm` tek seferlik bir
-#     konteyner kaldırır ve uygulamanın kendisi ayakta olmadan koşar; boot
+#   • `up -d` seed'lerden SONRA: seed'ler tek seferlik `docker run --rm` (seed
+#     imajı) ile koşar ve uygulamanın kendisi ayakta olmadan çalışır; boot
 #     uzlaştırması (izin + rol katalogları) `seed.ts` ile zaten geldiği için
 #     sıralamada kayıp yok.
 #
 # ⚠️ DEMO KULLANICISININ ŞİFRESİ `$APPDIR/.env` içindeki `DEMO_USER_PASSWORD`'tan
-# gelir (`docker compose run` `env_file`'ı okur). Orada tanımlı DEĞİLSE seed
+# gelir (seed konteyneri `--env-file .env` ile koşar). Orada tanımlı DEĞİLSE seed
 # rastgele bir şifre üretip EKRANA basar — betiğin çıktısını kaybetmeyin.
 #
 # Emsal / ayrıntı: docs/ops/DEMO-YAYIN-RUNBOOK.md · docs/ops/deploy-demo.sh
@@ -102,6 +102,8 @@ DB=tekserp_demo          # ⚠️ SABİT. Parametreyle değiştirilemez.
 DB_OWNER=tekserp
 PG_CONTAINER=postgres    # komşu canlı servislerin de kullandığı konteyner
 APP_CONTAINER=tekserp-demo
+# Çalışma imajı src/tsx taşımaz; seed'ler Dockerfile'ın `seed` hedefinden koşar.
+SEED_IMAGE=tekserp-demo-seed:latest
 APP_URL=https://demo.etkiliyazilim.com
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP=$APPDIR/backups/pre-reset_${DB}_${STAMP}.dump
@@ -166,6 +168,10 @@ if [ "$APPLY" -eq 1 ] && [ "$ASSUME_YES" -eq 0 ]; then
   fi
 fi
 
+# --- 0) Seed imajı — uygulama DURMADAN önce (derleme süresi kesintiye eklenmesin)
+say "0/8 seed imajı (Dockerfile --target seed; repo/ son deploy'un ağacı)"
+run "ssh $HOST 'cd $APPDIR && sudo docker build --target seed -t $SEED_IMAGE repo'"
+
 # --- 1) Uygulamayı durdur ------------------------------------------------------
 say "1/8 docker compose stop app  (açık bağlantı DROP'u engeller)"
 run "ssh $HOST 'cd $APPDIR && sudo docker compose stop app'"
@@ -204,14 +210,14 @@ run "ssh $HOST 'cd $APPDIR && sudo docker compose run --rm --entrypoint sh app -
 
 # --- 6) Seed'ler (SIRA ÖNEMLİ) -------------------------------------------------
 say "6/8 seed.ts  → izin + rol katalogları, admin, istasyonlar"
-run "ssh $HOST 'cd $APPDIR && sudo docker compose run --rm --entrypoint sh app -c \"npx tsx prisma/seed.ts\"'"
+run "ssh $HOST 'cd $APPDIR && sudo docker run --rm --env-file .env --network backend $SEED_IMAGE npx tsx prisma/seed.ts'"
 
 say "7/8 seed-ticaret-demo.ts  → demo verisi + WEB_TRADE yetkisi"
 # ⚠️ Bu seed idempotenttir ve KENDİ mükerrer taramasını koşar; mükerrer bulursa
 # çıkış kodu 1 verir → `run` betiği durdurur. Sıfır veritabanında kırmızı
 # vermesi, seed'in bir yazma yolunda `clientToken` çıpasını kaybettiği anlamına
 # gelir (bkz. `findDuplicateDemoRecords` başlığı).
-run "ssh $HOST 'cd $APPDIR && sudo docker compose run --rm --entrypoint sh app -c \"npx tsx prisma/seed-ticaret-demo.ts\"'"
+run "ssh $HOST 'cd $APPDIR && sudo docker run --rm --env-file .env --network backend $SEED_IMAGE npx tsx prisma/seed-ticaret-demo.ts'"
 
 say "7.5/8 seed-demo-full.ts  → tam vitrin (katalog · sipariş · üretim · sevkiyat · muhasebe)"
 # ⚠️ SIRA: ticaret seed'inden SONRA. Bu seed onun ürettiği carileri, kasa/banka
@@ -221,7 +227,7 @@ say "7.5/8 seed-demo-full.ts  → tam vitrin (katalog · sipariş · üretim · 
 # Seed kendi kabul ölçütlerini ölçer (en önemlisi: bitmiş/sevk edilmiş hiçbir top
 # RENKSİZ olamaz) ve ekran doluluk tablosunu basar. `run` betiği durdurur — bu
 # BİLİNÇLİDİR: boş ekranla yayına çıkmak, demonun tek kabul edilemez sonucudur.
-run "ssh $HOST 'cd $APPDIR && sudo docker compose run --rm --entrypoint sh app -c \"npx tsx prisma/seed-demo-full.ts\"'"
+run "ssh $HOST 'cd $APPDIR && sudo docker run --rm --env-file .env --network backend $SEED_IMAGE npx tsx prisma/seed-demo-full.ts'"
 
 # --- 8) Ayağa kaldır + doğrula -------------------------------------------------
 say "8/8 docker compose up -d + doğrulama"

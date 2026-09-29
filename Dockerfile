@@ -14,19 +14,25 @@
 #
 # ⚠️ BUILD CONTEXT DEPO KÖKÜDÜR (Teks-Erp/ + Electron/ birlikte gerekiyor):
 # panel de burada derleniyor ki imaj kendi kendine yeter olsun ve "yerelde
-# derledim, sunucuya kopyaladım" sınıfı sürüm kayması olmasın.
+# derledim, sunucuya kopyaladım" sınıfı sürüm kayması olmasın. Sunucuya giden
+# ağaç izin listesiyle sınırlıdır (`docs/ops/deploy-demo-izin-listesi.txt`).
+#
+# ⚠️ ÇALIŞMA İMAJI KAYNAK TAŞIMAZ: `src/`, `tsx` ve seed dosyaları yalnız ayrı
+# `seed` hedefinde durur (tek seferlik `docker run`, dışarıya açık değil).
 # =============================================================================
 
 # ---------------------------------------------------------------------------
 # 1) PANEL — Electron kod tabanının WEB hedefi (vite.config.web.ts)
 # ---------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS panel
-WORKDIR /panel
+# Depo düzeni korunur: `build-channel.ts` kanal kaydını `../deploy/kanallar.json`dan okur.
+WORKDIR /repo/Electron
 COPY Electron/package.json Electron/package-lock.json ./
 # ⚠️ `--ignore-scripts`: Electron paketi ve native donanım modülleri
 # (serialport, node-hid) kurulum betiği koşturuyor — web hedefinde HİÇBİRİ
 # kullanılmıyor, derlemede yalnız zaman ve hata riski üretirler.
 RUN npm ci --ignore-scripts
+COPY deploy/kanallar.json /repo/deploy/kanallar.json
 COPY Electron/ ./
 RUN npm run build:web
 
@@ -43,7 +49,20 @@ COPY Teks-Erp/prisma ./prisma
 RUN npx prisma generate
 COPY Teks-Erp/tsconfig.json ./
 COPY Teks-Erp/src ./src
-RUN npm run build
+# Yalnız tsc: `npm run build`in ikinci yarısı (fabrika araçları, `scripts/`) demoya
+# gitmez. Kaynak haritaları da atılır (fabrika paketi gibi; src olmadan işe yaramaz).
+# tsc ~3 GB bellek ister; varsayılan yığın sınırında "heap out of memory" ile düşer.
+RUN NODE_OPTIONS=--max-old-space-size=4096 npx tsc && find dist -name "*.js.map" -delete
+
+# ---------------------------------------------------------------------------
+# 2b) SEED — demo verisi betikleri (TypeScript, servis katmanını çağırır)
+# ---------------------------------------------------------------------------
+# Kaynak + tsx yalnız burada; çalışma imajından ayrı tutulur ve derleme hedefi
+# açıkça verilmedikçe üretilmez (`docker build --target seed`).
+FROM backend AS seed
+# Servis katmanı etiket üretirken fontları `assets/`ten okur.
+COPY Teks-Erp/assets ./assets
+CMD ["npx", "tsx", "prisma/seed-ticaret-demo.ts"]
 
 # ---------------------------------------------------------------------------
 # 3) ÇALIŞMA İMAJI
@@ -70,38 +89,25 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY Teks-Erp/package.json Teks-Erp/package-lock.json ./
-# ⚠️ `--omit=dev` AMA İKİ ARAÇ AYRICA GEREKLİ, ikisi de devDependencies'te:
-#   • prisma CLI → `migrate deploy` konteyner içinde koşuyor
-#   • tsx        → demo seed'i (prisma/seed-ticaret-demo.ts) TS olarak koşuyor
-# Sürümleri package.json'dan OKUNUR, elle sabitlenmez: elle yazılan sürüm
-# `@prisma/client` ile ayrışırsa Prisma "client/CLI version mismatch" der.
-RUN npm ci --omit=dev \
-  && PRISMA_V="$(node -p "require('./package.json').devDependencies.prisma || require('./package.json').dependencies.prisma")" \
-  && TSX_V="$(node -p "require('./package.json').devDependencies.tsx || 'latest'")" \
-  && npm i --no-save "prisma@${PRISMA_V}" "tsx@${TSX_V}" \
-  && npm cache clean --force
+# prisma CLI üretim bağımlılığıdır (`migrate deploy` konteyner içinde koşar) —
+# kilit dosyasındaki sürümle gelir, `@prisma/client` ile ayrışamaz.
+RUN npm ci --omit=dev && npm cache clean --force
 
-COPY Teks-Erp/prisma ./prisma
-# ⚠️ `prisma.config.ts` ZORUNLU: Prisma 7 datasource URL'ini schema'dan değil
-# BU dosyadan okuyor. Kopyalanmazsa `migrate deploy` çalışma anında
-# "datasource.url property is required" ile durur — ve bu, imaj derlenirken
-# DEĞİL ilk deploy denemesinde ortaya çıkar (ölçüldü).
-COPY Teks-Erp/prisma.config.ts ./
+# Yalnız şema + migration'lar: seed dosyaları çalışma imajına girmez.
+COPY Teks-Erp/prisma/schema.prisma ./prisma/schema.prisma
+COPY Teks-Erp/prisma/migrations ./prisma/migrations
+# Fabrika paketiyle aynı yapılandırma: düz JS (ts-node'suz) ve seed kancası YOK.
+COPY Teks-Erp/deploy/prisma.config.prod.js ./prisma.config.js
 RUN npx prisma generate
 
 COPY --from=backend /app/dist ./dist
-# ⚠️ KAYNAK DA GEREKLİ — yalnız `dist` yetmiyor: seed script'leri TypeScript'tir
-# ve `../src/services/...` üzerinden SERVİS KATMANINI çağırır (ham insert yerine
-# gerçek defter/bakiye/belge zincirini üretsinler diye). Yalnız dist kopyalanınca
-# `npx tsx prisma/seed.ts` MODULE_NOT_FOUND ile durur (ölçüldü). Maliyet ~5 MB;
-# karşılığında konteynerin içinde seed/bakım script'i koşturulabiliyor.
-COPY Teks-Erp/src ./src
-COPY Teks-Erp/tsconfig.json ./
+# Durum sayfası (`public/`) — fabrika paketiyle aynı.
+COPY Teks-Erp/public ./public
 # Etiket fontları ve varlıklar — raster etiket üreticisi bunları dosyadan okur
 # (`assets/fonts/`); kopyalanmazsa etiket baskısı çalışma anında patlar.
 COPY Teks-Erp/assets ./assets
 # Panel build'i — `WEB_DIST_DIR` bunu gösterir.
-COPY --from=panel /panel/dist-web ./dist-web
+COPY --from=panel /repo/Electron/dist-web ./dist-web
 
 # Yedek dizini: `BACKUP_DIR` TANIMSIZSA YEDEK HİÇ ALINMAZ (backup.service).
 # Dizini imajda hazırlıyoruz; compose onu kalıcı bir birime bağlıyor.
