@@ -19,7 +19,7 @@ import { loadLicenseStoreSync, saveProxy } from "../lib/license/store";
 import { getLicenseConfig, getLicenseSnapshot, getMeasuredFingerprint, invalidateLicenseSnapshot } from "../lib/license/runtime";
 import { adminAction } from "./license-trail.service";
 import { DATA_EXPORT_PATHS } from "../constants/license-routes";
-import { acceptLicenseResponse, buildPollBody, pollLicenseOnce, refreshLicenseFingerprint, sendTransfer, type PollOutcome } from "./license-sync.service";
+import { acceptLicenseResponse, buildPollBody, pollLicenseOnce, refreshLicenseFingerprint, runLeaseExchange, sendTransfer, type PollOutcome } from "./license-sync.service";
 import { getLicenseDetail, getProxySettings, type LicenseDetail, type LicenseProxySettings } from "./license-view.service";
 import {
   buildEnvironment,
@@ -109,14 +109,16 @@ export async function activateLicense(rawCode: string, userId: string | null, tr
   const ctx = requireReady();
   requireVendorUrl();
   const code = normalizeCodeOrThrow(rawCode);
-  if (getLicenseSnapshot().lease) {
-    throw licenseError(409, "LICENSE_ALREADY_ACTIVE", "Bu kurulumun geçerli bir lisansı var; yeniden etkinleştirme gerekmez.");
-  }
   if (!getMeasuredFingerprint()) await refreshLicenseFingerprint();
-  const r = await vendorPost(ENDPOINTS.ACTIVATE, "etkinlestir", buildActivateBody(ctx, code), transport);
-  adminAction(userId, "etkinlestir", { sonuc: r.ok ? "yanit" : r.code });
-  if (!r.ok) throw vendorFailureToError(r);
-  await acceptLicenseResponse(r.json, "etkinlestirme", userId);
+  await runLeaseExchange(async () => {
+    if (getLicenseSnapshot().lease) {
+      throw licenseError(409, "LICENSE_ALREADY_ACTIVE", "Bu kurulumun geçerli bir lisansı var; yeniden etkinleştirme gerekmez.");
+    }
+    const r = await vendorPost(ENDPOINTS.ACTIVATE, "etkinlestir", buildActivateBody(ctx, code), transport);
+    adminAction(userId, "etkinlestir", { sonuc: r.ok ? "yanit" : r.code });
+    if (!r.ok) throw vendorFailureToError(r);
+    await acceptLicenseResponse(r.json, "etkinlestirme", userId);
+  });
   return getLicenseDetail();
 }
 
@@ -171,7 +173,7 @@ function decodeOfflinePayload(raw: unknown): unknown {
 
 export async function acceptOfflineResponse(raw: unknown, source: "cevrimdisi" | "aktarma", userId: string | null): Promise<LicenseDetail> {
   try {
-    const r = await acceptLicenseResponse(decodeOfflinePayload(raw), source, userId);
+    const r = await runLeaseExchange(() => acceptLicenseResponse(decodeOfflinePayload(raw), source, userId));
     adminAction(userId, source === "aktarma" ? "aktarma-yaniti" : "cevrimdisi-yanit", { sonuc: r.yeniKira ? "kabul" : "ayni-kira" });
   } catch (err) {
     adminAction(userId, source === "aktarma" ? "aktarma-yaniti" : "cevrimdisi-yanit", {
@@ -185,7 +187,7 @@ export async function acceptOfflineResponse(raw: unknown, source: "cevrimdisi" |
 // ── API: taşıma + DR ────────────────────────────────────────────────────────────
 export async function requestTransfer(gerekce: string | null, userId: string | null, transport: VendorTransport = egressTransport): Promise<LicenseTransferResult> {
   if (!getMeasuredFingerprint()) await refreshLicenseFingerprint();
-  const r = await sendTransfer(gerekce, transport);
+  const r = await runLeaseExchange(() => sendTransfer(gerekce, transport));
   adminAction(userId, "tasima-talebi", { talepId: r.talepId, sonuc: r.durum });
   return { talepId: r.talepId, durum: r.durum, lisans: getLicenseDetail() };
 }
@@ -194,10 +196,12 @@ export async function drTakeover(anaKurulumId: string, gerekce: string, userId: 
   requireReady();
   requireVendorUrl();
   const body = DrTakeoverRequestSchema.parse({ v: 1, anaKurulumId, gerekce });
-  const r = await vendorPost(ENDPOINTS.DR_TAKEOVER, "dr-devral", body, transport);
-  adminAction(userId, "dr-devral", { anaKurulumId, sonuc: r.ok ? "yanit" : r.code });
-  if (!r.ok) throw vendorFailureToError(r);
-  await acceptLicenseResponse(r.json, "dr-devral", userId);
+  await runLeaseExchange(async () => {
+    const r = await vendorPost(ENDPOINTS.DR_TAKEOVER, "dr-devral", body, transport);
+    adminAction(userId, "dr-devral", { anaKurulumId, sonuc: r.ok ? "yanit" : r.code });
+    if (!r.ok) throw vendorFailureToError(r);
+    await acceptLicenseResponse(r.json, "dr-devral", userId);
+  });
   return getLicenseDetail();
 }
 

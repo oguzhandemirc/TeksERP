@@ -14,11 +14,13 @@
 //   ⭐ yoklama CONNECT proxy üzerinden; proxy kimlik bilgisi ekrana/audit'e sızmaz
 //   ⭐ gözlem kipinde K5 bile uygulanmaz (sıfır fark)
 //   ⭐ satıcının HER hata kodu tanınır (TR mesaj; TEKRAR_DENEYIN tekrar denenebilir, BULUNAMADI adres ipucu)
+//   ⭐ kira alışverişleri (yoklama · etkinleştirme · DR · taşıma · aktarma) süreç içinde SIRALI
 //
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile birebir geri alındı; sonuçlar commit
 // mesajında): M1 persistAccumulation bozuk kayıtta sıfırdan başlatır · M2 kabulde kurulum
 // bağı denetimi kaldırılır · M3 zil konusu süzgeci kaldırılır · M4 proxy ayarı ajanı değiştirmez ·
-// M5 TEKRAR_DENEYIN tekrar denenebilir kümesinden çıkarılır (§8b).
+// M5 TEKRAR_DENEYIN tekrar denenebilir kümesinden çıkarılır (§8b) · M6 `runLeaseExchange` kuyruğu
+// atlanır (§9 kırmızı: LICENSE_LEASE_STALE).
 // ⭐ KALICI SONDA ✓K1 (her koşumda): bilinmeyen kod genel mesaja düşer — §8a'nın "her kodun kendi
 // mesajı var" karşılaştırıcısı kör değil.
 // =============================================================================
@@ -242,6 +244,21 @@ async function proxyBolumu(x: { dizin: string }): Promise<void> {
   }
 }
 
+async function siraBolumu(x: { satici: SahteSatici }): Promise<void> {
+  console.log("\n§9 — kira alışverişleri SIRALI: eşzamanlı iki yoklama ters sırada kabul edilmez");
+  // İlk yoklamanın kirası ÖNCE basılır ama yanıtı geç gelir; ikincisi hemen döner. Sırasız motorda
+  // yeni kira önce yazılır, eskisi LICENSE_LEASE_STALE ile düşer (zil + "şimdi yokla" / DR yarışı).
+  const once = getLicenseSnapshot().lease?.document.kiraId;
+  x.satici.sonrakiYanitGecikmesiMs = 800;
+  const [r1, r2] = await Promise.all([pollLicenseOnce(), pollLicenseOnce()]);
+  check(
+    "§9a ⭐ eşzamanlı iki yoklama: ikisi de BAŞARILI (sahte LICENSE_LEASE_STALE / başarısız yoklama yok)",
+    r1.outcome === "BASARILI" && r2.outcome === "BASARILI",
+    `${r1.outcome}${r1.code ? ` ${r1.code}` : ""} / ${r2.outcome}${r2.code ? ` ${r2.code}` : ""}`,
+  );
+  check("§9b ikinci yoklama birincinin kirasını sundu (zincir ucu ilerledi)", getLicenseSnapshot().lease?.document.kiraId !== once);
+}
+
 function sozlesmeBolumu(): void {
   console.log("\n§7 — kurulum kimliği ham ayar ucundan yazılamaz");
   check("§7a rezerve anahtar SETTING_KEYS ile aynı değer (döngüsüz literal)", INSTALLATION_ID_SETTING_KEY === SETTING_KEYS.SYSTEM_INSTALLATION_ID);
@@ -278,6 +295,7 @@ async function main(): Promise<void> {
     await yoklamaBolumu(hazir);
     await zilBolumu(hazir);
     await proxyBolumu(hazir);
+    await siraBolumu(hazir);
     sozlesmeBolumu();
   } catch (e) {
     fail++;

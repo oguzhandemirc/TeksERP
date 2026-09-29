@@ -30,6 +30,8 @@ export interface SahteSatici {
   kod: string;
   /** Sonraki kiraların ek alanları (zorlama, yaptırım…). */
   kiraEk: Partial<LeaseDoc>;
+  /** >0 ise SIRADAKİ yoklamanın kirası hemen basılır ama yanıtı bu kadar ms bekletilir (yarış sondası). */
+  sonrakiYanitGecikmesiMs: number;
   readonly sayac: { etkinlestir: number; yokla: number; zil: number; red: number };
   readonly yoklamaGovdeleri: unknown[];
   /** Açık zil akışlarına olay gönderir. */
@@ -91,6 +93,7 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
     ca: cert,
     kod: "TKS-0000-0000-0000",
     kiraEk: {},
+    sonrakiYanitGecikmesiMs: 0,
     sayac: { etkinlestir: 0, yokla: 0, zil: 0, red: 0 },
     yoklamaGovdeleri: [],
   };
@@ -141,8 +144,12 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
       s.yoklamaGovdeleri.push(json);
       if (!p.success) return hata(res, 400, "GOVDE_GECERSIZ");
       s.sayac.yokla++;
+      const yanit = lisansYaniti(p.data.parmakIzi);
+      const gecikme = s.sonrakiYanitGecikmesiMs;
+      s.sonrakiYanitGecikmesiMs = 0;
+      if (gecikme > 0) await new Promise((r) => setTimeout(r, gecikme));
       res.writeHead(200, { "content-type": "application/json" });
-      return res.end(lisansYaniti(p.data.parmakIzi));
+      return res.end(yanit);
     })();
   });
   await new Promise<void>((r) => sunucu.listen(0, "127.0.0.1", () => r()));

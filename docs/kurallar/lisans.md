@@ -35,6 +35,7 @@
 
 - **[ÇEKİRDEK]** `licenseGate` yöntem + yol ile sınıflar, kimliğe BAKMAZ ve "önce 401" kuralının BEYANLI istisnasıdır (lisans bir SUNUCU durumudur): kimliksiz isteğe yalnız genel `LICENSE_GATE` kodu döner, kademe/gün/modül ayrıntısı yalnız kimlikli `GET /api/license/durum`da (anonim çağırana K5 sinyali sızmaz). · bekçi: `YOK` · Kapanır: `fabrika motoru diliminin kapı bekçisi rota envanterinde çözülemeyen = 0, K5 ⊂ K4, gözlemde sıfır fark ve kimliksiz yanıtta ayrıntı yokluğunu ölçtüğünde` · Çapa: `licenseGate` · Öncül: ölçüldü (kapı henüz yazılmadı) <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** KISITLI'da GET/HEAD serbest, yazmalar varsayılan RED (403 `LICENSE_RESTRICTED`) + tek kaynaktan beyanlı izin listesi (giriş, yedek/dışa aktarma, yeniden basım, güvenlik uçları, bakım); DURDURULMUS'ta yalnız her-kademe listesi + yedek/dışa aktarma (403 `LICENSE_SUSPENDED`); hata `details.code` altında, 503 kullanılmaz. · bekçi: `YOK` · Kapanır: `aynı kapı bekçisi her yazma rotasının ya varsayılan-kapalı ya izin listesinde olduğunu ve ölü desen bulunmadığını ölçtüğünde` · Çapa: `license-routes izin listesi` · Öncül: ölçüldü (kapı henüz yazılmadı) <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Satıcıyla her kira alışverişi (istek + yanıtın kabulü: yoklama, etkinleştirme, DR devralımı, taşıma, aktarma/QR yanıtı) süreç içinde tek kuyruktan (`runLeaseExchange`) geçer; yeni bir alışveriş kuyruğu atlayamaz — eşzamanlı iki alışverişin yanıtı ters sırada kabul edilip, satıcıda başarılı olmuş işlem sahte `LICENSE_LEASE_STALE` ya da başarısız yoklama olarak dönmesin. · bekçi: `test_lisans_motoru (§9 eşzamanlı yoklama)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** `LICENSE_DIR` kurulum kökündedir (Win `C:\TeksERP\lisans`, SYSTEM + Administrators ACL; Linux 0600): `app\` DIŞINDA (kurulum `app\`i değiştirir) ve `BACKUP_DIR` DIŞINDA (offsite süpürücü klasördeki her dosyayı Drive'a kopyalar); proxy ayarı (kimlik bilgisi taşıyabilir) da DB'de değil burada durur. · bekçi: `YOK` · Kapanır: `fabrika motorunun depo modülü LICENSE_DIR'in app ve BACKUP_DIR altına düşmesini açılışta reddettiğinde ve bir bekçi bunu negatif sondayla ölçtüğünde` · Çapa: `license store` · Öncül: ölçüldü (depo modülü henüz yazılmadı) <sub>(arşiv:2026-09-29)</sub>
 
 ## Satıcı sunucusu (`satici/sunucu`)
@@ -76,6 +77,8 @@ Satıcı web (vitest, `cd satici/web && npx vitest run`; commit kapısında koş
 
 Yeni lisans bekçisi doğduğu commit'te bu listeye VE haritanın `## lisans` bölümüne birlikte eklenir.
 
+Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnız `_test` DB'ler): Senaryo L + Y tek komut `cd Teks-Erp && npx tsx scripts/senaryo-ly.ts` (ortam değişkenleri dosya başında) — L1…L29 sonuç tablosu `docs/design/LISANS-SENARYO-L.md`.
+
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
 - 2026-09-29 · Kod koruma + lisanslama: 12 soru turunun kararları (Plan A)
@@ -86,3 +89,4 @@ Yeni lisans bekçisi doğduğu commit'te bu listeye VE haritanın `## lisans` b�
 - 2026-09-29 · Konteyner seed'i şemaya bakar; demo aktarımı izin listesi — Faz 0.3/0.4a
 - 2026-09-29 · Satıcı tamamlama: kısa K3 ağır, bayi tavanı kalıcı izni + bakım ay tavanı, denetim budaması, kanal varlığı, iki protokol hata kodu
 - 2026-09-29 · Portal web (1f): aynı kökenden statik servis, TOTP kurulumu yöneticide, ayna bekçisi, commit kapısının beşinci projesi
+- 2026-09-29 · Senaryo L (lisans uçtan uca) koşucusu; kira alışverişleri süreç içinde sıralı

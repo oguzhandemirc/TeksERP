@@ -197,10 +197,26 @@ export async function acceptLicenseResponse(
   return { yeniKira: true, kiraId: leaseDoc.kiraId };
 }
 
+// ── Kira alışverişleri SIRALI ───────────────────────────────────────────────────
+// Zil yoklaması ile yöneticinin eylemi (şimdi yokla · etkinleştir · DR · taşıma) aynı anda satıcıya
+// giderse yanıtlar ters sırada kabul edilir: yeni kira önce yazılır, eskisi LICENSE_LEASE_STALE
+// ile düşer ya da başarısız yoklama sayılır — işlem satıcıda başarılıyken. İstek + kabul tek kuyruk.
+let exchangeTail: Promise<unknown> = Promise.resolve();
+
+export function runLeaseExchange<T>(fn: () => Promise<T>): Promise<T> {
+  const run = exchangeTail.then(fn, fn);
+  exchangeTail = run.catch(() => undefined);
+  return run;
+}
+
 // ── Yoklama (iş çağırır) ────────────────────────────────────────────────────────
 export type PollOutcome = "YAPILANDIRILMAMIS" | "HAZIR_DEGIL" | "ETKIN_DEGIL" | "BASARILI" | "BASARISIZ";
 
-export async function pollLicenseOnce(transport: VendorTransport = egressTransport): Promise<{ outcome: PollOutcome; code?: string }> {
+export function pollLicenseOnce(transport: VendorTransport = egressTransport): Promise<{ outcome: PollOutcome; code?: string }> {
+  return runLeaseExchange(() => pollOnce(transport));
+}
+
+async function pollOnce(transport: VendorTransport): Promise<{ outcome: PollOutcome; code?: string }> {
   const store = getLicenseStore();
   const config = getLicenseConfig();
   if (!store || store.problem || !store.key || !getLicenseDbFacts().installationId) return { outcome: "HAZIR_DEGIL" };
