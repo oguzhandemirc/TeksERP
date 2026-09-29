@@ -12,8 +12,10 @@
 #     hiçbir soket ona doğrudan ulaşamaz
 #   · `portal-tunel` satıcıyla AYNI ağ ad alanında tailnet köprü adresini (TAILNET_KONTEYNER_IP:4611)
 #     dinler ve 127.0.0.1:4611'e aktarır: portal kaynağı 127.0.0.1 görür. Köprü adresine yalnız
-#     VDS'in kendisi ulaşır (diğer köprüler Docker yalıtımıyla düşer) → erişim Mac'ten SSH tüneliyle:
-#       ssh -N -L 14611:${TAILNET_KONTEYNER_IP}:4611 -p 2222 <yönetici>@<VDS>  →  http://127.0.0.1:14611/portal/
+#     VDS'in kendisi ulaşır (diğer köprüler Docker yalıtımıyla düşer) → erişim Mac'ten SSH üzerinden:
+#       node deploy/satici/portal-baglan.mjs  →  http://127.0.0.1:14611/portal/
+#     (VDS sshd'si `AllowTcpForwarding no` — `ssh -L` reddedilir; araç her bağlantıda SSH oturumu +
+#      VDS'te `nc -N <köprü> 4611` koşturur)
 # Neden iletici: Docker'ın yayımlı port vekili de köprü yolu da kaynağı ağ geçidine çevirir (ölçüldü,
 # runbook §1) — tailnet kapısı onu tailnet saymaz; ağ geçidini listeye eklemek ÇÖZÜM DEĞİLDİR.
 # TAILNET_LOOPBACK=1: satıcının "127.0.0.0/8 yalnız bu anahtarla tailnet sayılır" kuralı (F2) için;

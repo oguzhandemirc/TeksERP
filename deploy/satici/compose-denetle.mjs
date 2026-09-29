@@ -12,6 +12,8 @@
 //   ⑥ satıcı köprü ağları 100.64/10 ve 127/8 DIŞINDA — köprü ağ geçidi tailnet kapısını kandırmasın
 //      (ölçüldü: tailnet ağı 100.100.100.0/28 iken host'tan yayımlı porta gelen istek geçidin
 //      adresiyle girip portalı 200 açtı)
+//   ⑥b kenar ağında dinamik dağıtım aralığı (ip_range) alt ağın içinde ve satıcının sabit adresi
+//      onun DIŞINDA — Traefik (dinamik) satıcının adresini kapamasın
 //   ⑦ Traefik etiketi yalnız `satici`de ve kenar ağını gösteriyor; DB'nin portu ve dış ağı yok
 //   Ⓛ GERİ DÖNGÜ KİPİ (docker-compose.loopback.yml, satıcıda TAILNET_LOOPBACK=1 — Tailscale gelene dek):
 //      ① yerine: HİÇBİR port yayımlanmaz · satıcının tailnet dinleyicisi 127.0.0.1'de · tailnet ağı
@@ -177,6 +179,18 @@ for (const [anahtar, n] of Object.entries(aglar)) {
     const kotu = ["100.64.0.0/10", "127.0.0.0/8"].filter((y) => cakisir(c.subnet, y));
     kontrol(`⑥ ${anahtar} ağı (${c.subnet}) tailnet/geri döngü aralığında DEĞİL`, kotu.length === 0, kotu.join(", "));
   }
+}
+
+// ⑥b kenar: dinamik aralık alt ağda, satıcının sabit adresi aralık dışında ve alt ağda
+{
+  const kc = aglar.kenar?.ipam?.config?.[0] ?? {};
+  const sabit = cfg.services?.satici?.networks?.kenar?.ipv4_address ?? "";
+  const aralikIcinde = kc.ip_range && kc.subnet ? cakisir(kc.ip_range, kc.subnet) && Number(kc.ip_range.split("/")[1]) >= Number(kc.subnet.split("/")[1]) : false;
+  kontrol(
+    "⑥b kenar ağında dinamik aralık alt ağda, satıcının sabit adresi aralığın DIŞINDA",
+    aralikIcinde && sabit !== "" && aralikta(sabit, kc.subnet) && !aralikta(sabit, kc.ip_range),
+    `alt ağ ${kc.subnet ?? "YOK"} · dinamik ${kc.ip_range ?? "YOK"} · satıcı ${sabit || "YOK"}`,
+  );
 }
 
 // ⑦ Traefik + DB

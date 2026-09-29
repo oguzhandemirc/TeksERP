@@ -1,6 +1,6 @@
 # Satıcı (lisans) sunucusu — tekserp-vds kurulum runbook'u
 
-> **Durum:** HAZIRLIK — yapıtlar repoda, anahtarlar Mac'te üretildi, VDS'e **henüz hiçbir şey yazılmadı**. VDS yazımı (§5), Cloudflare DNS kaydı (§6) ve Tailscale onayı (§4) **kullanıcı işidir**; plan onayı bunları kapsamaz (plan §11).
+> **Durum (2026-09-29):** hazırlık satıcısı tekserp-vds'te **KURULU** — `ORTAM=hazirlik`, **geri döngü kipinde** (§4a; Tailscale kullanıcı onayı bekliyor), imaj `tekserp-satici:0ca31403525a`, `https://lisans-test.etkiliyazilim.com` yanıt veriyor, portal Mac'ten `portal-baglan.mjs` ile. Kurulum kaydı ve ölçümler §12. Kullanıcıya kalan: Tailscale onayı (§4) ve ana kipe geçiş (§4a), sudo gerektiren adımlar (§12 "sudo'suz kurulum").
 > Yapıtlar: [`deploy/satici/`](../../deploy/satici/) (compose · Dockerfile · imaj derleme · yalıtım denetimi · VDS birimi). Protokol: [`LISANS-PROTOKOLU.md`](../design/LISANS-PROTOKOLU.md). Alan kuralları: [`kurallar/lisans.md`](../kurallar/lisans.md). Sunucu envanteri: [`SUNUCU-ENVANTERI.md`](SUNUCU-ENVANTERI.md).
 > **Değişmez:** her VDS yazımından ÖNCE ve SONRA `Teks-Erp-wt/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur.
 
@@ -9,8 +9,9 @@
 | Kurulur | Kurulmaz |
 |---|---|
 | `ORTAM=hazirlik` — `lisans-test.etkiliyazilim.com` (genel) + tailnet portalı | Üretim kökü (`kok-<yıl>-<n>`, kullanıcı töreni) ve `lisans.etkiliyazilim.com` — ileride **aynı** compose, `ORTAM=uretim` `.env`'iyle ayrı proje |
-| Hazırlık kökü `hazirlik-2026-1` (yalnız TEST/DEMO imzalar), ALT `alt-hazirlik-2026-1`, İNDİRME `ind-hazirlik-2026` | CF Worker (Faz 3a) · portal web arayüzü (1f) |
-| Satıcının kendi PG16'sı + şifreli yedek döngüsü | Fabrika verisi — satıcı DB'si yalnız lisans kayıtlarını taşır |
+| Hazırlık kökü `hazirlik-2026-1` (yalnız TEST/DEMO imzalar), ALT `alt-hazirlik-2026-1`, İNDİRME `ind-hazirlik-2026` | CF Worker (Faz 3a) |
+| Portal web arayüzü (1f): satıcı arayüzü `/portal` (tailnet) · bayi arayüzü `/bayi` (genel) — imajın içinde (`/uygulama/web`, §2.2) | Fabrika verisi — satıcı DB'si yalnız lisans kayıtlarını taşır |
+| Satıcının kendi PG16'sı + şifreli yedek döngüsü | |
 
 Dokunulmayan: `tekserp-guncelleme` (compose · nginx · `html/` · `defter/`), `/srv/tekserp-yedek`, `/srv/tekserp-arsiv`. Traefik'e yalnız **bir ağ bağlantısı** eklenir (yeniden başlatmasız, §5.5).
 
@@ -70,7 +71,7 @@ deploy/satici/imaj-derle.sh                 # HEAD'den (git archive); kirli ağa
 # → ~/.tekserp/satici-imaj/tekserp-satici-<sha>.tar.gz + .sha256 ; SATICI_IMAJ / SATICI_YEDEK_IMAJ satırlarını basar
 ```
 
-VDS'te derleme YOK, kaynak VDS'e gitmez. Portal kullanıcı CLI'ı imajda derlenmiş durur (`dist-cli/scripts/portal-kullanici.js`).
+VDS'te derleme YOK, kaynak VDS'e gitmez. Portal kullanıcı CLI'ı imajda derlenmiş durur (`dist-cli/scripts/portal-kullanici.js`). Web arayüzü (`satici/web`) Dockerfile'ın `web` aşamasında derleme makinesinin KENDİ mimarisinde derlenir (çıktı statik dosya, öykünme gerekmez); imaja yalnız `dist/` geçer → `/uygulama/web` (`PORTAL_WEB_DIZINI`). İmaj `src/`, `tsx`, web kaynağı ya da web `node_modules`'ü taşımaz (ölçüm §12).
 
 ### 2.3 Sunucunun `.env`'i
 
@@ -82,7 +83,7 @@ VDS'te derleme YOK, kaynak VDS'e gitmez. Portal kullanıcı CLI'ı imajda derlen
 node deploy/satici/compose-denetle.mjs --env-file <doldurulmuş .env>   # 0 temiz · 1 ihlal · 2 ölçülemedi
 ```
 
-① port yalnız `satici`de ve yalnız 100.64/10 adresine · ② docker soketi yok · ③ salt okunur/yetenek yok/root değil/sınırlı · ④ kenar + ic internal, dış ağa katılım yok · ⑤ anahtar birimi salt okunur · ⑥ köprü ağları tailnet/geri döngü aralığı dışında · ⑦ Traefik yalnız satıcıda ve kenar ağında, DB portsuz. Negatif sondalar (docker soketi · `read_only` yok · anahtar rw · `web` ağı · 0.0.0.0 yayını · kenar internal değil · DB portu) her biri kırmızı verdi.
+① port yalnız `satici`de ve yalnız 100.64/10 adresine · ② docker soketi yok · ③ salt okunur/yetenek yok/root değil/sınırlı · ④ kenar + ic internal, dış ağa katılım yok · ⑤ anahtar birimi salt okunur · ⑥ köprü ağları tailnet/geri döngü aralığı dışında · ⑥b kenarda dinamik aralık alt ağda, satıcının sabit adresi onun dışında · ⑦ Traefik yalnız satıcıda ve kenar ağında, DB portsuz · Ⓛ geri döngü kipi (§4a): ① yerine portsuzluk + `TAILNET_BIND=127.0.0.1` + `portal-tunel` satıcının ad alanında, portsuz/birimsiz, köprü adresinde + tailnet internal; ana kipte geri döngü kalıntısı ❌. Denetim `.env`'deki `COMPOSE_FILE`'ı okur (ya da çoklu `-f`). Negatif sondalar (docker soketi · `read_only` yok · anahtar rw · `web` ağı · 0.0.0.0 yayını · kenar internal değil · DB portu) her biri kırmızı verdi.
 
 ## 3. VDS'i ölç (salt okuma)
 
@@ -94,6 +95,7 @@ ssh tekserp-vds 'docker version --format "{{.Server.Version}}"; docker compose v
 ```
 
 - `KENAR_AGI` / `TAILNET_AGI` hiçbir mevcut ağla ve rota ile çakışmamalı (varsayılan `172.31.252.0/28` · `172.31.253.0/28`); ikisi de 100.64/10 dışında.
+- `KENAR_DINAMIK_ARALIK` (varsayılan `172.31.252.8/29`): Traefik kenar ağına DİNAMİK adresle katılır; dağıtım bu aralıkla sınırlı, satıcının sabit `KENAR_IP`'si aralığın DIŞINDA (denetim ⑥b). Aralık yokken Traefik satıcıdan önce bağlanınca ilk boş adresi — yani `KENAR_IP`'yi — aldı (kurulumda ölçüldü, §12).
 - Bellek: mevcut üç konteyner ~320 MB tavanlı; satıcı üçlüsü +768 MB (3 GB makinede yer var — `free -m` ile ölç).
 
 ## 4. Tailscale (VDS) — resmî paket deposu
@@ -111,6 +113,17 @@ tailscale ip -4        # → TAILNET_IP
 - `--accept-dns=false`: VDS'in çözümleyicisi değişmesin (mevcut servisler etkilenmez). SSH tailnet'ten AÇILMAZ (`--ssh` yok); yönetim 2222'den sürer.
 - Yönetim konsolunda (kullanıcı): bu makinenin **anahtar süresi dolması kapatılır** (sunucu düğümü) ve ACL ile 4611'e yalnız bizim cihazlarımız (Mac) izinli olur.
 - Tailscale kendi iptables zincirlerini ekler (`ts-input` · `ts-forward`); 80/443/2222 etkilenmez — §7'de `vds-dogrula.sh` + `curl https://guncelleme…` ile ölçülür.
+
+### 4a. Geri döngü kipi — Tailscale onaylanana dek (bugünkü kurulum)
+
+Tailscale kullanıcı onayı beklerken satıcı **geri döngü kipinde** koşar: `.env`'de `COMPOSE_FILE=docker-compose.yml:docker-compose.loopback.yml` (her `docker compose` komutu ikisini birden alır) ve `TAILNET_IP=127.0.0.1` (bu kipte kullanılmaz; ana dosyanın zorunlu alanı).
+
+- Portal **hiçbir yere yayımlanmaz**; tailnet köprüsü **internal** olur (satıcının dış bağlantısı yok → DOCKER-USER kuralı ve `tekserp-satici-tailnet@` birimi bu kipte GEREKMEZ).
+- Satıcının tailnet dinleyicisi konteynerin kendi `127.0.0.1`'ine bağlanır (`TAILNET_BIND`); `portal-tunel` (aynı imaj, `portal-tunel.cjs`) satıcının ağ ad alanında köprü adresini (`TAILNET_KONTEYNER_IP:4611`) dinleyip `127.0.0.1:4611`'e aktarır → portal kaynağı `127.0.0.1` görür. `TAILNET_LOOPBACK=1` F2'nin "127/8 yalnız bu anahtarla tailnet" kuralına hazırdır; anahtar kodda yokken bugünkü davranış 127/8'i zaten tailnet sayar.
+- **Neden iletici:** port VDS'in `127.0.0.1`'ine yayımlansa bile Docker'ın vekili bağlantıyı köprü ağ geçidinin adresiyle konteynere taşır — kapı onu tailnet saymaz, portal 404 döner (§1; VDS'te yeniden ölçüldü §12). Ağ geçidini listeye eklemek ÇÖZÜM DEĞİLDİR.
+- **Erişim (Mac):** `node deploy/satici/portal-baglan.mjs` → tarayıcıda `http://127.0.0.1:14611/portal/`. VDS'in sshd'si TCP yönlendirmeyi kapatır (`AllowTcpForwarding no`, `00-hardening.conf`) — `ssh -L` "administratively prohibited" döner; araç Mac'te yalnız `127.0.0.1`'i dinler, her bağlantıda bir SSH oturumu açıp VDS'te `nc -N 172.31.253.2 4611` koşturur (ortak ana bağlantı, ControlMaster). Köprü adresine yalnız VDS'in kendisi ulaşır (diğer köprülerden Docker yalıtımı düşürür); girişi parola + TOTP korur.
+- **Satıcı yeniden başlarsa:** `portal-tunel` eski ağ ad alanında kalır (Docker `service:` ağ kipinin sınırı); öz denetimi hedefe üç kez (30 sn arayla) ulaşamayınca çıkar, `restart` onu yeni ad alanına bağlar — ölçüldü: `docker restart` sonrası portal 75 sn'de geri geldi.
+- **Tailscale gelince (ana kipe geçiş):** §4 → `.env`'den `COMPOSE_FILE` satırı silinir, `TAILNET_IP=<tailscale ip -4>` → `node deploy/satici/compose-denetle.mjs --env-file <.env>` ana kipte yeşil → §5.7 birimi (`sudo systemctl enable --now tekserp-satici-tailnet@hazirlik`; DOCKER-USER kurallarını koyar ve `compose up -d` ile satıcıyı yeniden yaratır, `portal-tunel` artık tanımsız kalır → `sudo docker compose up -d --remove-orphans`). Yalıtım denetimi iki kipi tanır ve karıştırmaz (ana kipte `TAILNET_LOOPBACK`/`portal-tunel` kalıntısı ❌).
 
 ## 5. Kurulum (VDS YAZIMI — kullanıcının "uygula" cümlesiyle)
 
@@ -165,7 +178,8 @@ tailscale ip -4        # → TAILNET_IP
 
 ## 6. DNS (kullanıcı — Cloudflare)
 
-`lisans-test` A → `80.253.255.188`, **proxy AÇIK (turuncu bulut)** — sertifika Origin CA `*.etkiliyazilim.com`, ona yalnız CF Edge güvenir (DNS-only'de istemci reddeder). Önbellek kuralı gerekmez (yanıtlar dinamik JSON, `Cache-Control: no-store`); zil (SSE) 25 sn kalp atışıyla CF'nin 100 sn boşta zaman aşımının altında kalır. İleride `lisans` kaydı üretim projesi için aynı biçimde. **Durum 2026-09-29:** `lisans-test` kaydı açık (CF adresleri döner); satıcı kurulana dek `https://lisans-test.etkiliyazilim.com/saglik` → `404` (Traefik'te yönlendirici yok, ölçüldü) — §5 sonrası `200` olur.
+
+`lisans-test` A → `80.253.255.188`, **proxy AÇIK (turuncu bulut)** — sertifika Origin CA `*.etkiliyazilim.com`, ona yalnız CF Edge güvenir (DNS-only'de istemci reddeder). Önbellek kuralı gerekmez (yanıtlar dinamik JSON, `Cache-Control: no-store`); zil (SSE) 25 sn kalp atışıyla CF'nin 100 sn boşta zaman aşımının altında kalır. İleride `lisans` kaydı üretim projesi için aynı biçimde. **Durum 2026-09-29:** `lisans-test` kaydı açık (CF adresleri döner); kurulumdan önce `/saglik` → `404` (Traefik'te yönlendirici yoktu), kurulumdan sonra `200 {"success":true}` (ölçüldü, §12).
 
 ## 7. Doğrulama (sonra)
 
@@ -174,6 +188,7 @@ tailscale ip -4        # → TAILNET_IP
 | `curl -s https://lisans-test.etkiliyazilim.com/saglik` | internet | `{"success":true}` |
 | `curl -s -o /dev/null -w '%{http_code}' https://lisans-test.etkiliyazilim.com/portal/saglik` | internet | `404` (portal genelde YOK) |
 | `curl -s http://<TAILNET_IP>:4611/portal/saglik` | Mac (tailnet) | `200` · `capa: gomulu` · `altGecerli: 1` · `indirmeVar: true` · `uyariSayisi: 0` |
+| **geri döngü kipinde** aynı ölçüm: `portal-baglan.mjs` açıkken `curl -s http://127.0.0.1:14611/portal/saglik` · `/portal/` | Mac | aynı `200` gövdesi · giriş sayfası `200` (`TeksERP Satıcı Portalı`, CSP başlığı) |
 | aynı adres | VDS'in kendisi | ÖLÇ ve yaz: `404` (vekil/ağ geçidi) ya da `200` (NAT kaynağı VDS'in tailnet adresi) — ikisi de kabul; 200 ise host kullanıcısını parola + TOTP durdurur |
 | `curl -m 5 http://80.253.255.188:4611/` | internet | zaman aşımı / reddedildi |
 | `sudo docker compose ps` | VDS | üçü `healthy` / `Up` |
@@ -195,6 +210,8 @@ cd Teks-Erp && npx tsx scripts/yedek-sifrele.ts coz --girdi ~/.tekserp/satici-ye
 
 (Yerel duman testinde ölçüldü: döküm açıldı, 24 tablo verisi; anahtar arşivi kaynakla bayt-eşit; yabancı anahtar `YANLIS_ANAHTAR`, çıkış 2.)
 
+sudo'suz çekim (docker grubu yeter; dosya konteynerin kullanıcısıyla okunur, ara kopya yok): `ssh -p 2222 oguzhan@80.253.255.188 'cd /opt/stack/apps/tekserp-satici-hazirlik && docker compose exec -T satici-yedek cat /yedek/<dosya>' > ~/.tekserp/satici-hazirlik-yedek/<dosya>` — özet iki uçta `sha256sum`/`shasum -a 256` ile karşılaştırılır.
+
 ## 8. Geri alma
 
 ```bash
@@ -206,6 +223,8 @@ sudo iptables -D DOCKER-USER -s <TAILNET_AGI> -m conntrack --ctstate NEW -j DROP
 # Traefik compose'undaki kenar ağı satırı KALDIRILIR, sonra:
 sudo docker network disconnect tekserp-satici-hazirlik-kenar traefik 2>/dev/null; sudo docker network rm tekserp-satici-hazirlik-kenar
 ```
+
+Traefik compose'unun kurulum öncesi hâli yanında durur: `/opt/stack/traefik/docker-compose.yml.yedek-20260929-satici` → geri alırken `sudo cp -p` ile yerine konur (ağ bağlantısı kesildikten SONRA değil, ağ silinmeden ÖNCE — dosya dış ağı andığı sürece Traefik yeniden yaratılamaz). Geri döngü kipinde DOCKER-USER kuralı ve birim YOKTUR (o iki satır atlanır); `compose down` `portal-tunel`i de kaldırır.
 
 DNS kaydı (kullanıcı) · Tailscale (`sudo tailscale down`; kaldırma kullanıcı kararı) · `docker rmi tekserp-satici:<sha> tekserp-satici-yedek:<sha>`. Sonunda `vds-dogrula.sh` → ✅. Güncelleme yayını geri almada hiç durmaz (Traefik yeniden başlatılmaz).
 
@@ -237,5 +256,19 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 
 - **`cf-connecting-ip` taklit edilebilir** — köken (VDS:443) yalnız Cloudflare IP'lerine açılana dek (Faz 3a) doğrudan köke gelen istek başlığı uydurabilir; etkisi yalnız IP başına hız sınırının aşılmasıdır (her `/v1` isteği kurulum imzalıdır).
 - **Satıcı `denetim` budaması** (yönetici kararı h: başarısız giriş 90 gün, diğer denetim 2 yıl) bu dilimin tabanında YOK — `lisans/satici-tamamlama` dilimi getirir; imaj o dilim indikten sonraki HEAD'den derlenmezse denetim tablosu budanmadan büyür (kurulumdan önce `git log -- satici/sunucu/src/services/maintenance.ts` ile ölç).
-- Traefik'in kalıcı ağ satırı Traefik compose'unu değiştirir (§5.5) — o dosya bu repoda değil.
+- Traefik'in kalıcı ağ satırı Traefik compose'unu değiştirir (§5.5) — o dosya bu repoda değil (2026-09-29'da yazıldı, öncesi yanında `.yedek-20260929-satici`).
+- Geri döngü kipinde portal erişimi SSH oturumu + VDS'te `nc` ile (sshd TCP yönlendirmeyi kapatır) — kabuk erişimi olan her VDS hesabı köprü adresine zaten ulaşır; kapı parola + TOTP'tir. Tailscale ana kipi bunu kaldırır (§4a).
 - Kök anahtar VDS'te (parolalı) — konteyner kaçışı kök dosyasını okur ama parolasız işe yaramaz; parola yalnız imza anında formdan alt sürece gider (plan §12).
+
+## 12. Kurulum kaydı — 2026-09-29 (hazırlık, geri döngü kipi)
+
+- **Taban:** `vds-dogrula.sh`'ın 09-28 11:08 tabanı adnansahin 1.3.7 yayınından (09-28 22:09, yayın defterinde) önce alınmıştı → betik o yayını fark gösterir, kurulumla ilgisi yok. Kurulumdan hemen önce aynı ölçümle yeni taban alındı (420 adnansahin dosyası · kök electron · defter/nginx/compose), kurulum sonrası **✅ AYNI**. `adnansahin/electron/latest.yml` 200, özet `ae919241…` önce/sonra aynı; Traefik yeniden başlatılmadı (`StartedAt` 2026-09-01, `RestartCount` 0).
+- **VDS:** Docker 29.7.2 · compose v5.5.0 · 2972 MB bellek (kurulum öncesi kullanılabilir 2398, sonrası 2251 MB) · disk 55 GB boş · mevcut ağlar 172.17/18/19 (satıcınınkiler çakışmaz) · tailscaled yok.
+- **sudo'suz kurulum:** `oguzhan`ın sudo'su parola ister (etkileşimsiz oturumda verilemez) ama hesap docker grubundadır. Kök sahipli yazımlar (yeni dizinler, sahiplikler, DB parolası, Traefik compose satırı) tek seferlik yardımcı konteynerle yapıldı (`tekserp-satici-yedek` imajı, `--network none`, yalnız hedef dizin bağlı); host yapılandırması (iptables, systemd, `/etc`) YAZILMADI — geri döngü kipi onları gerektirmez. `.env` oguzhan 0600 (sır içermez; `docker compose` sudo'suz okusun) · `sirlar/` 0711 root:61061 · `db-parolasi` 0440 root:61061 (64 hex, ekrana basılmadı) · `anahtarlar/` 0700 10001 (dört dosya 0600, Mac ile bayt-eşit) · `/srv/tekserp-satici-yedek/hazirlik` 0700 10001. Birim dosyası `$K/tekserp-satici-tailnet@.service` olarak durur; `/etc/systemd/system`'e kopyalanması ana kipe geçişte (sudo).
+- **İletici gerekçesi (ölçüm):** `127.0.0.1`'e yayımlı porta host'tan gelen istek konteynerde `172.17.0.1` (köprü ağ geçidi) kaynağıyla göründü — tailnet kapısı onu 404'ler.
+- **Kenar ağı çakışması:** Traefik satıcı başlamadan kenar ağına bağlanınca ilk boş adresi (`KENAR_IP` = `172.31.252.2`) aldı; bağlantı kesildi, compose'a `ip_range` + denetim ⑥b eklendi, ağlar yeniden yaratıldı → Traefik `172.31.252.9`. Docker `ip_range` verilince ağ geçidini aralığın ilk adresinden seçti (`172.31.252.8`; iç ağda işlevsiz).
+- **Traefik:** compose'a iki satır (servis ağ listesi + dış ağ tanımı; yedek `docker-compose.yml.yedek-20260929-satici`), `docker compose config -q` yeşil; bağlantı `docker network connect` ile, yeniden başlatmasız. Bir sonraki `compose up -d` Traefik'i dosyadan aynı ağlarla yeniden yaratır.
+- **Göç:** 3 migration. **Portal yöneticisi** `oguzhan` (SATICI_YONETICI) CLI ile (parola stdin'den; parola + TOTP sırrı yalnız Mac'te `~/.tekserp/sirlar/portal-yonetici-hazirlik.txt`, 0600 — authenticator'a girilir). **Kanal** `testfabrika` (tur `hazirlik`) portal API'siyle: tünelden giriş 200 → `POST /portal/api/kanallar` 201.
+- **Doğrulama (internet):** `/saglik` 200 · `/v1/yokla` imzasız 401 `ISTEK_GECERSIZ` · `/v1/etkinlestir` boş 400 `GOVDE_GECERSIZ` · `/q` 200 · `/bayi/` 200 · `/portal`, `/portal/`, `/portal/saglik`, `/portal/api/oturum` 404 · köken `:4610`/`:4611` doğrudan ulaşılamaz. **Tünelden:** `/portal/saglik` 200 (`capa: gomulu · altGecerli: 1 · indirmeVar: true · uyariSayisi: 0 · denetimYazmaHatasi: 0`) · `/portal/` 200 + CSP · varlık 200 · oturumsuz API 401 · `/bayi/` 404. VDS host'undan kenar `/portal/saglik` 404 (genel dinleyici portalı sunmaz).
+- **Kaynak:** satıcı 85 / 384 MB · DB 37 / 256 · yedek 1,4 / 128 · tünel 11 / 64; portal yayını yok (`ports` boş), host'ta 4610/4611 dinleyicisi yok; dördü de salt okunur kök FS, `cap_drop ALL`, 10001 (DB 70).
+- **Yedek:** döngü açılışta ilk yedeği aldı + elle `tek`; `satici_20260929_164008.dump.tkenc` + `anahtarlar_20260929_164008.tar.tkenc` Mac'e (`~/.tekserp/satici-hazirlik-yedek/`, 0600) bayt-eşit çekildi ve özel yarıyla açıldı: 25 tablo verisi (`kanal`, `portal_kullanici` dahil), anahtar arşivi dört dosya kaynakla bayt-eşit.
