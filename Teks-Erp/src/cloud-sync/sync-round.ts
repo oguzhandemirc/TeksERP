@@ -14,19 +14,21 @@ import { buildRecords } from "./record-builder";
 import { buildSnapshots } from "./snapshots";
 import { membershipDigest } from "./reconcile";
 import { chainOf, entryOf, needsFull, packDrafts, planFull, retentionOf, toUnits, withCompletion, type PacketDraft, type Unit } from "./packing";
-import { RECORD_PROJECTIONS, SYNC_CONTRACT_VERSION, SYNC_ENVELOPE_VERSION, type ModuleKey, type SnapshotCadence } from "./projections";
+import { RECORD_PROJECTIONS, type ModuleKey, type SnapshotCadence } from "./projections";
 import { FULL_RESEND_MARKER, formatRoundCounter, loadWatermarks, saveWatermarks, wmKey, type StoredWatermark, type WatermarkWrite } from "./watermarks";
 import {
-  CLOUD_ENDPOINTS,
-  PACKET_MAX_GZIP_BYTES,
-  PACKET_MAX_RAW_BYTES,
-  SyncPacketSchema,
+  ENVELOPE_VERSION,
+  MAX_COMPRESSED_BYTES,
+  MAX_DECOMPRESSED_BYTES,
+  PackageSchema,
+  SYNC_CONTRACT_VERSION,
+  SYNC_PATHS,
   SyncResponseSchema,
   type ReconcileEntry,
-  type SyncPacket,
-  type SyncResponse,
+  type SyncPackage,
+  type SyncResponseRead,
   type SyncRoundKind,
-  type WireWatermark,
+  type Watermark,
 } from "./wire";
 
 
@@ -119,13 +121,13 @@ interface SendState {
   readonly kind: RoundOptions["kind"];
   readonly horizon: Date;
   counter: number;
-  readonly chains: Map<string, WireWatermark | null>;
+  readonly chains: Map<string, Watermark | null>;
   readonly failed: Set<string>;
   readonly outcome: { packets: number; accepted: string[]; rejected: Array<{ projection: string; code: string }>; fullRequested: string[]; contractWarning: string | null };
 }
 
 /** Bulut yanıtını fabrikaya yansıtır — filigran YALNIZ kabul edilen birimde ilerler (tek tx). */
-async function applyResponse(r: SyncResponse, draft: { units: Unit[]; snapshots: PacketDraft["snapshots"] }, yeni: WireWatermark, st: SendState): Promise<void> {
+async function applyResponse(r: SyncResponseRead, draft: { units: Unit[]; snapshots: PacketDraft["snapshots"] }, yeni: Watermark, st: SendState): Promise<void> {
   const horizon = st.horizon;
   const acceptedNames = new Set(r.kabul.map((k) => k.projeksiyon));
   const rejectedNames = new Set(r.ret.map((x) => x.projeksiyon));
@@ -157,9 +159,9 @@ async function applyResponse(r: SyncResponse, draft: { units: Unit[]; snapshots:
   await saveWatermarks(writes);
 }
 
-function buildPacket(draft: PacketDraft, units: Unit[], yeni: WireWatermark, st: SendState): SyncPacket {
+function buildPacket(draft: PacketDraft, units: Unit[], yeni: Watermark, st: SendState): SyncPackage {
   return {
-    v: SYNC_ENVELOPE_VERSION,
+    v: ENVELOPE_VERSION,
     sozlesme: SYNC_CONTRACT_VERSION,
     paketId: randomUUID(),
     kurulumId: st.ctx.installationId,
@@ -180,11 +182,11 @@ async function sendDrafts(queue: PacketDraft[], st: SendState): Promise<{ status
     const draft = queue[qi]!;
     const live = draft.units.filter((u) => !st.failed.has(u.projection.name));
     st.counter++;
-    const yeni: WireWatermark = { t: st.horizon.toISOString(), k: formatRoundCounter(st.counter) };
+    const yeni: Watermark = { t: st.horizon.toISOString(), k: formatRoundCounter(st.counter) };
     // Sözleşmede olmayan anahtar dışarı çıkamaz: kendi ürettiğimizi de katı şemadan geçiririz.
-    const checked = SyncPacketSchema.parse(buildPacket(draft, live, yeni, st));
+    const checked = PackageSchema.parse(buildPacket(draft, live, yeni, st));
     const raw = Buffer.from(JSON.stringify(checked), "utf8");
-    if (raw.length > PACKET_MAX_RAW_BYTES || gzipSync(raw).length > PACKET_MAX_GZIP_BYTES) {
+    if (raw.length > MAX_DECOMPRESSED_BYTES || gzipSync(raw).length > MAX_COMPRESSED_BYTES) {
       st.counter--;
       if (live.length > 1) {
         const half = Math.ceil(live.length / 2);
@@ -196,7 +198,7 @@ async function sendDrafts(queue: PacketDraft[], st: SendState): Promise<{ status
       for (const u of live) st.failed.add(u.projection.name);
       continue;
     }
-    const res = await cloudPost(st.ctx, CLOUD_ENDPOINTS.SYNC, checked, { gzip: true });
+    const res = await cloudPost(st.ctx, SYNC_PATHS.SYNC, checked, { gzip: true });
     st.outcome.packets++;
     const parsed = res.ok ? SyncResponseSchema.safeParse(res.json) : null;
     if (!res.ok || !parsed?.success || parsed.data.paketId !== checked.paketId) {

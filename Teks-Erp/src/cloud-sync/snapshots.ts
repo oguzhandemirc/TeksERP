@@ -15,7 +15,7 @@ import { InventoryService } from "../services/inventory.service";
 import { DashboardService } from "../services/dashboard.service";
 import { STANDARD_PERIODS, periodRange, type StandardPeriod } from "./periods";
 import { SNAPSHOT_PROJECTIONS, type SnapshotProjection } from "./projections";
-import { toWireValue, type WireValue } from "./wire";
+import { toWireValue, type WireContainer } from "./wire";
 import { remoteReportCatalog } from "./report-requests";
 import { snapshotDigest } from "./digest";
 
@@ -23,7 +23,7 @@ export interface BuiltSnapshot {
   /** Tel adı (`ozet.stok`, `stok-karnesi`…). */
   readonly projection: string;
   readonly digest: string;
-  readonly data: WireValue;
+  readonly data: WireContainer;
 }
 
 const Num = z.number();
@@ -82,6 +82,8 @@ function seal(projection: string, raw: unknown): BuiltSnapshot {
   const schema = SNAPSHOT_WIRE_SCHEMAS[projection];
   if (!schema) throw new Error(`Anlık tel şeması yok: ${projection}`);
   const data = toWireValue(schema.parse(toWireValue(raw)));
+  // Tel sözleşmesi anlık veriyi nesne ya da dizi ister (`SnapshotEntrySchema.veri`); skaler sessizce gitmez.
+  if (data === null || typeof data !== "object") throw new Error(`Anlık veri nesne/dizi değil: ${projection}`);
   return { projection, digest: snapshotDigest(data), data };
 }
 

@@ -13,6 +13,7 @@ import { CloudError, forbidden, notFound, stateConflict } from "../lib/errors";
 import { executeWrite, type WriteResult } from "../lib/idempotency";
 import { uniqueViolationOn } from "../lib/prisma-errors";
 import { withTesis } from "../lib/tenant";
+import type { AccountsResponse } from "../wire/esitleme";
 import type { CloudContext } from "./context";
 
 export const ADMIN_PERMISSION = "bulut:hesap:yonet";
@@ -65,6 +66,25 @@ export async function listAccounts(ctx: CloudContext, s: SessionContext) {
   requireAdmin(s);
   const rows = await withTesis(ctx.app, { tesisId: s.tesisId }, (tx) => tx.account.findMany({ where: { tesisId: s.tesisId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }));
   return rows.map(accountView);
+}
+
+/**
+ * Fabrika kanalı `POST /v1/hesaplar` (S29): tesisin hesap listesi — fabrika panelinde salt okunur gösterilir.
+ * Eşitleme rolü `accounts`ı OKUYAMAZ (mühürlü sırlar aynı satırda) ⇒ uygulama rolüyle, yalnız açık kolonlar seçilir.
+ */
+export async function listAccountsForFactory(ctx: CloudContext, caller: { readonly tesisId: string }): Promise<AccountsResponse> {
+  const rows = await withTesis(ctx.app, { tesisId: caller.tesisId }, (tx) =>
+    tx.account.findMany({
+      where: { tesisId: caller.tesisId },
+      select: { id: true, name: true, email: true, status: true, lastLoginAt: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 1000,
+    }),
+  );
+  return {
+    v: 1,
+    hesaplar: rows.map((a) => ({ id: a.id, ad: a.name, eposta: a.email, durum: a.status, sonGiris: a.lastLoginAt?.toISOString() ?? null })),
+  };
 }
 
 export interface CreateAccountInput {

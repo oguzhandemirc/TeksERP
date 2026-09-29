@@ -11,11 +11,6 @@ export type SnapshotCadence = "HER_TUR" | "SAATLIK" | "GUNLUK";
 /** Projeksiyonu kapatan fabrika modül anahtarı (enforcement okuyucusu — lisans tavanı dahil). */
 export type ModuleKey = "production.enabled" | "finance.enabled";
 
-/** Eşitleme sözleşmesi (§6.6) — bulut N ve N−1'i kabul eder. */
-export const SYNC_CONTRACT_VERSION = 1;
-/** Paket zarfı sürümü (§6.2 `v`). */
-export const SYNC_ENVELOPE_VERSION = 1;
-
 export interface ColumnSpec {
   /** Paketteki alan adı (sözleşme; fabrika kolonu yeniden adlandırılsa da değişmez). */
   readonly wire: string;
