@@ -98,6 +98,7 @@
 | `devredildi` | bool | DR devralımı sonrası eski ana |
 | `kanal` | `{kod, guncelSurumler: {backend?, panel?, tablet?}}` | |
 | `altSertifika` | JWS | kirayı imzalayan ALT anahtarın sertifikası |
+| `modulAnahtarlari?` | `[{modul, surum, kid: mk-…22, sarma: {v:1, modul, epk, sarili}}]` ≤ 32, kid tekrarsız | Faz 2d: HAK'taki, dondurulmamış modüllerin şifreli paket anahtarları, kurulumun X25519'una sarılı (geçici X25519 → HKDF-SHA256, bilgi = önek ␟ modül → AES-256-GCM); X25519 bilinmiyorsa ya da hak yoksa alan YOK. Açma yalnız çekirdekte, doğrulanmış kira + HAK'la (`unwrapLeaseModuleKey`) |
 
 ### SERTİFİKA (`tekserp-sertifika`) — KÖK imzalı
 
@@ -131,15 +132,15 @@
 
 | Uç | Amaç | İstek gövdesi | Yanıt |
 |---|---|---|---|
-| `POST /v1/etkinlestir` | `etkinlestir` | `ActivateRequestSchema` `{v, kod: TKS-XXXX-XXXX-XXXX-XXXX, kurulumId?, acikAnahtar, parmakIzi, ortam}` — `kurulumId` yok/`""`/`null` = yok (kurulumu kod belirler) | `LicenseResponseSchema` (+ `kurulumId`, `kodTuru`) |
+| `POST /v1/etkinlestir` | `etkinlestir` | `ActivateRequestSchema` `{v, kod: TKS-XXXX-XXXX-XXXX-XXXX, kurulumId?, acikAnahtar, sifrelemeAnahtari?, parmakIzi, ortam}` (`sifrelemeAnahtari` = kurulumun X25519 açık yarısı, Faz 2d; KATI gövde → satıcı fabrikadan ÖNCE yayınlanır) — `kurulumId` yok/`""`/`null` = yok (kurulumu kod belirler) | `LicenseResponseSchema` (+ `kurulumId`, `kodTuru`) |
 | `POST /v1/yokla` | `yokla` | `PollRequestSchema` (aşağıda) | `LicenseResponseSchema` |
 | `GET /v1/zil` (SSE) | `zil` | — | `event: zil` / `data: {konu}`; 25 sn'de bir yorum satırı |
 | `POST /v1/cevrimdisi` | zarfın içindeki | `OfflineRequestSchema` `{v, zarf}` | `LicenseResponseSchema` |
 | `POST /v1/tasima` | `tasima` | `TransferRequestSchema` `{v, kurulumId?, acikAnahtar, parmakIzi, ortam, gerekce}` — yalnız TALEP, `kod` anahtarı RED (D8) | `TransferResponseSchema` `{v, talepId, durum: BEKLIYOR·ONAYLANDI·REDDEDILDI, lisans: null}` |
-| `POST /v1/dr-devral` | `dr-devral` | `DrTakeoverRequestSchema` `{v, anaKurulumId, gerekce}` — `anaKurulumId` ananın LİSANS kimliğidir (portal/ana `LICENSE_DIR`); DR'nin DB replikası onu taşımaz | `LicenseResponseSchema` |
+| `POST /v1/dr-devral` | `dr-devral` | `DrTakeoverRequestSchema` `{v, anaKurulumId?, gerekce}` — `anaKurulumId` ananın LİSANS kimliğidir (portal/ana `LICENSE_DIR`); DR'nin DB replikası onu taşımaz. Verilmezse (2d kararı) satıcı tesisin TEK etkin ÜRETİM kurulumunu çıkarır; 0 ya da >1 → 409 `DR_ANA_BELIRSIZ` | `LicenseResponseSchema` |
 | `POST /v1/destek` | `destek` | Faz 3d'de tanımlanır (amaç şimdiden ayrıldı) | — |
 
-- **`PollRequestSchema`:** `sonKiraId` (kira zinciri) · `hak {hakId, surum} \| null` · `parmakIzi` · `durum {gecerlilik, nedenler[], kip, hesaplananKademe, uygulananKademe}` · `saat {duvar, guvenilir, bulgu, saticiSapmaSn?}` · `ortam` · `saglik` · `gozlem {reddedilecekIstek, reddedilecekModul}`. `saticiSapmaSn` (tam sayı, ±1e9) = son `ISTEK_ZAMAN`dan ölçülen duvar − satıcı saati (sn); yok = ölçülmedi; bilgidir, kademeye girmez (D4).
+- **`PollRequestSchema`:** `sonKiraId` (kira zinciri) · `hak {hakId, surum} \| null` · `sifrelemeAnahtari?` (kurulumun X25519 açık yarısı — eski kurulum ilk yoklamada üretip bildirir; satıcı yalnız temiz zincirde kaydeder, Faz 2d) · `parmakIzi` · `durum {gecerlilik, nedenler[], kip, hesaplananKademe, uygulananKademe}` · `saat {duvar, guvenilir, bulgu, saticiSapmaSn?}` · `ortam` · `saglik` · `gozlem {reddedilecekIstek, reddedilecekModul}`. `saticiSapmaSn` (tam sayı, ±1e9) = son `ISTEK_ZAMAN`dan ölçülen duvar − satıcı saati (sn); yok = ölçülmedi; bilgidir, kademeye girmez (D4).
 - **`ortam`:** `platform` (win32·linux·darwin) · `mimari` (x64·arm64) · `isletimSistemi` ≤120 · `nodeSurum` (`vX.Y.Z`) · `uygulamaSurum` · `derlemeTarihi \| null` · `konteyner` · `installationId?` (uuid; fabrika DB'sinin `system.installationId`si — YALNIZ BİLGİ, dökümle/DR replikasıyla kopyalanır, lisans kimliği DEĞİL; D14).
 - **Sağlık özeti ALLOWLIST'i (`saglik`):** `surum` · `calismaSn` · `dbBoyutBayt` · `yedek {hukum: ok·uyari·kritik·yapilandirilmamis, yasSaat}` · `offsite {yapilandirildi, ok, eksikSayisi}` · `diskDolulukYuzde` · `auditYazmaHatasi` · `havuzZamanAsimi` · `istemciler [{tur: panel·tablet·web·diger, surum, adet}]` (≤50, kullanıcı adı YOK) · `isHatalari [{is, adet}]` (≤50). Serbest metin alanı bilerek yok: ham hata metni, dosya adı, iş verisi yapısal olarak giremez.
 - **`LicenseResponseSchema`:** `{v, hak: JWS \| null (yalnız değiştiyse ya da kurulumda yoksa), kira: JWS, indirmeBelirtecleri: [{yolOneki, belirtec}] (≤4), sunucuSaati, kurulumId?, kodTuru?}`. **`kurulumId`** (uuid) etkinleştirme yanıtında DAİMA dolu: lisans kimliği fabrikaya buradan gelir ve `LICENSE_DIR`e yazılır (D14); OTORİTE imzalı kiradır — yanıttaki değer kiranın `kurulumId`siyle aynı olmalı, ayrışırsa yanıt reddedilir. **`kodTuru`** (`ilk` · `tasima`, `ACTIVATION_CODE_KINDS`) tüketilen kodun türüdür, bilgidir; tanınmayan değer yanıtı düşürmez, yok sayılır.
@@ -161,6 +162,7 @@
 | `TASIMA_ONAYI_BEKLIYOR` | 409 | ikinci anahtar onay bekliyor (kurulum ek sürede çalışır) |
 | `TASIMA_KODU_GEREKLI` | 409 | kurulum başka anahtarla ETKİN — yeni makine yalnız onaylı taşıma koduyla etkinleşir, `ilk` kod yetmez (D8) |
 | `KIRA_VERILMEDI` | 403 | kopya şüphesinin ikinci penceresi |
+| `DR_ANA_BELIRSIZ` | 409 | kimliksiz DR devralımında tesiste tek etkin ÜRETİM kurulumu yok (0 ya da birden çok) — ana kimliği portaldan/ana Lisans ekranından verilir |
 | `HIZ_SINIRI` | 429 | istemci IP'si başına ya da (imza doğrulandıktan sonra) kurulum başına dakikalık sınır aşıldı (`Retry-After`); vekil başlığı yalnız güvenilen kenardan okunur |
 | `TEKRAR_DENEYIN` | 409 | eşzamanlı işlem çakıştı (PG 40001/40P01, atomik claim kaybı) — AYNI istek yeniden denenebilir |
 | `BULUNAMADI` | 404 | satıcıda böyle bir yol yok (adres yanlış ya da satıcı sürümü eski); portal uçlarının "kayıt yok" 404'ü de bu kodu taşır |
@@ -321,7 +323,7 @@ Yanıt zarfı backend'in genel biçimidir: başarı `{ success: true, data: T }`
 | `GET /aktarma-istegi` (ESKİ) | `license:manage` | `?amac=…&kod=` — bir sürüm geçiş; `Deprecation: true`, günlükte kod maskeli | aynı |
 | `POST /aktarma-yaniti` | `license:manage` | `{ yanit: object }` — satıcının yanıt gövdesi AYNEN | `LicenseDetail` |
 | `POST /tasima-talebi` | `license:manage` | `{ gerekce?: string \| null }` | `LicenseTransferResult` |
-| `POST /dr-devral` | `license:manage` | `{ anaKurulumId: uuid, gerekce: string }` | `LicenseDetail` |
+| `POST /dr-devral` | `license:manage` | `{ anaKurulumId?: uuid, gerekce: string }` (kimlik yoksa satıcı çıkarır — 2d) | `LicenseDetail` |
 | `GET /veri-disari` | `admin:settings` ∨ `system:backups`, VE `admin:users` (yedek zinciriyle aynı) | — | `LicenseDataExportManifest` |
 
 ```ts

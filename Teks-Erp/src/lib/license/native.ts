@@ -19,7 +19,7 @@ declare const __TEKSERP_NATIVE_REQUIRED__: boolean | undefined;
 export const NATIVE_REQUIRED: boolean = typeof __TEKSERP_NATIVE_REQUIRED__ !== "undefined" && __TEKSERP_NATIVE_REQUIRED__ === true;
 
 /** Native `api::ABI` ile eşit olmalı: istek/yanıt biçimi kırılınca ikisi birlikte artar. */
-export const NATIVE_ABI = 1;
+export const NATIVE_ABI = 2;
 /** Açık dosya yolu (geliştirme/test); ZORUNLU kipte OKUNMAZ — yamalı çekirdek enjekte edilemesin. */
 export const NATIVE_PATH_ENV = "TEKSERP_LISANS_CEKIRDEK";
 
@@ -47,6 +47,8 @@ export interface NativeIdentity {
   readonly yerTutucular: readonly string[];
   readonly windowsSondasi: readonly string[];
   readonly modulHkdfOneki: string;
+  readonly modulKidOneki: string;
+  readonly korumaEntropisi: string;
 }
 
 export type CoreLoadStatus =
@@ -104,6 +106,8 @@ const NativeIdentitySchema = z.object({
   yerTutucular: z.array(z.string()),
   windowsSondasi: z.array(z.string()),
   modulHkdfOneki: z.string(),
+  modulKidOneki: z.string(),
+  korumaEntropisi: z.string(),
 });
 
 // Aynı `.node` bir süreçte BİR KEZ açılır (napi modülünü ikinci kez kaydetmek tanımsız davranıştır).

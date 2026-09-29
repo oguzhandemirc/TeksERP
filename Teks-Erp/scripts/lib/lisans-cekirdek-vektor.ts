@@ -18,12 +18,13 @@ import {
   msToIso,
   type CertUsage,
   type FingerprintFactor,
+  type LeaseDoc,
   type RawFingerprint,
   type RootKey,
 } from "../../src/lib/license/protocol";
 import type { CoreResult, JwsKey, LicenseCore } from "../../src/lib/license/license-core";
 import { INTEGRITY_TYP, type PackageKey } from "../../src/lib/license/integrity";
-import { wrapModuleKey } from "../../src/lib/license/module-key";
+import { moduleKeyId, wrapModuleKey } from "../../src/lib/license/module-key";
 import {
   HAM_PARMAK_IZI,
   anahtarUret,
@@ -71,6 +72,16 @@ export type Vektor =
       readonly kok: "var" | "yok";
     }
   | { readonly tur: "modul"; readonly ad: string; readonly wrap: unknown; readonly privateKey: string; readonly modul: string }
+  | {
+      readonly tur: "kiraModul";
+      readonly ad: string;
+      readonly lease: unknown;
+      readonly entitlement: unknown;
+      readonly privateKey: string;
+      readonly modul: string;
+      readonly kid: string;
+      readonly roots: RootKey[] | null;
+    }
   | { readonly tur: "tarih"; readonly ad: string; readonly metin: string };
 
 export interface VektorKaydi {
@@ -157,6 +168,17 @@ export async function degerlendir(core: LicenseCore, v: Vektor): Promise<unknown
     }
     case "modul":
       return sonuc(core.unwrapModuleKey(v.wrap, v.privateKey, v.modul));
+    case "kiraModul":
+      return sonuc(
+        core.unwrapLeaseModuleKey({
+          lease: v.lease,
+          entitlement: v.entitlement,
+          privateKeyX: v.privateKey,
+          modul: v.modul,
+          kid: v.kid,
+          ...(v.roots ? { roots: v.roots } : {}),
+        }),
+      );
     case "tarih": {
       const ms = Date.parse(v.metin);
       return { ms: Number.isNaN(ms) ? null : ms };
@@ -418,10 +440,74 @@ function kiraVektorleri(f: Fikstur): Vektor[] {
     v("P0 kurulum kimliği yok", hamImzala(TYP.KIRA, f.alt, Object.fromEntries(Object.entries(yuk).filter(([k]) => k !== "kurulumId")))),
     v("P0 kurulum kimliği boş dizge (istekte meşru, kirada RED)", ham({ kurulumId: "" })),
     v("P0 kurulum kimliği null", ham({ kurulumId: null })),
+    ...kiraHakVektorleri(f, ham),
     v("HAK belgesi kira yerine", hakBas(f)),
     v("çapa boş (önce ayrıştırma, sonra çapa)", kiraBas(f), []),
     v("çapa boş, biçimsiz metin", "x", []),
     v("gömülü çapa", kiraBas(f), null),
+  ];
+}
+
+/** Faz 2d: kirada `modulAnahtarlari` şeması (atılan alan · modül bağı · kid biçimi · tekrarsızlık · tavan). */
+function kiraHakVektorleri(f: Fikstur, ham: (ek: Record<string, unknown>) => string): Vektor[] {
+  const v = (ad: string, token: unknown): Vektor => ({ tur: "kira", ad, token, roots: f.kokler });
+  const alici = generateKeyPairSync("x25519").publicKey.export({ format: "jwk" });
+  const acik = typeof alici.x === "string" ? alici.x : "";
+  const anahtar = Buffer.alloc(32, 0x3c);
+  const hak = { modul: "depo.multiEnabled", surum: 1, kid: moduleKeyId(anahtar), sarma: wrapModuleKey({ moduleKey: anahtar, recipientPublicX: acik, modul: "depo.multiEnabled" }) };
+  return [
+    v("2d modül anahtarı hakkı geçerli", ham({ modulAnahtarlari: [hak] })),
+    v("2d modül hakkı boş liste", ham({ modulAnahtarlari: [] })),
+    v("2d hakta ve sarmada tanınmayan alan atılır", ham({ modulAnahtarlari: [{ ...hak, fazla: 1, sarma: { ...hak.sarma, fazla: 2 } }] })),
+    v("2d sarmanın modülü hakkınkinden farklı", ham({ modulAnahtarlari: [{ ...hak, modul: "finance.enabled" }] })),
+    v("2d kid biçimsiz", ham({ modulAnahtarlari: [{ ...hak, kid: "mk-kisa" }] })),
+    v("2d kid tekrarlı", ham({ modulAnahtarlari: [hak, hak] })),
+    v("2d hak sürümü 0", ham({ modulAnahtarlari: [{ ...hak, surum: 0 }] })),
+    v("2d sarılı 63 karakter", ham({ modulAnahtarlari: [{ ...hak, sarma: { ...hak.sarma, sarili: hak.sarma.sarili.slice(1) } }] })),
+    v("2d geçici anahtar biçimsiz", ham({ modulAnahtarlari: [{ ...hak, sarma: { ...hak.sarma, epk: "abc" } }] })),
+    v("2d liste null", ham({ modulAnahtarlari: null })),
+    v("2d liste 33", ham({ modulAnahtarlari: Array.from({ length: 33 }, (_, i) => ({ ...hak, kid: moduleKeyId(Buffer.alloc(32, i)) })) })),
+  ];
+}
+
+/** Faz 2d: anahtar YALNIZ doğrulanmış kiradan — HAK, dondurma, hak, başka kurulum, kid, bağ. */
+function kiraModulVektorleri(f: Fikstur): Vektor[] {
+  const cift = generateKeyPairSync("x25519");
+  const jwk = cift.privateKey.export({ format: "jwk" });
+  const ozel = typeof jwk.d === "string" ? jwk.d : "";
+  const acik = typeof jwk.x === "string" ? jwk.x : "";
+  const baska = generateKeyPairSync("x25519").privateKey.export({ format: "jwk" });
+  const baskaOzel = typeof baska.d === "string" ? baska.d : "";
+  const modul = "finance.enabled";
+  const anahtar = Buffer.alloc(32, 0x7e);
+  const kid = moduleKeyId(anahtar);
+  const hak = (m: string = modul, k: Buffer = anahtar, kimlik: string = kid) => ({ modul: m, surum: 2, kid: kimlik, sarma: wrapModuleKey({ moduleKey: k, recipientPublicX: acik, modul: m }) });
+  const kira = (ek: Partial<LeaseDoc> = {}) => kiraBas(f, { modulAnahtarlari: [hak()], ...ek });
+  const v = (ad: string, lease: unknown, g: { entitlement?: unknown; privateKey?: string; modul?: string; kid?: string } = {}): Vektor => ({
+    tur: "kiraModul",
+    ad,
+    lease,
+    entitlement: g.entitlement ?? hakBas(f),
+    privateKey: g.privateKey ?? ozel,
+    modul: g.modul ?? modul,
+    kid: g.kid ?? kid,
+    roots: f.kokler,
+  });
+  const yaptirim = { kademe: "K2" as const, mesaj: null, kisitlamaTarihi: null, donmusModuller: [modul], guncellemeDonuk: false };
+  const yanlisKimlik = moduleKeyId(Buffer.alloc(32, 0x11));
+  return [
+    v("geçerli", kira()),
+    v("HAK'ta yok", kira(), { entitlement: hakBas(f, { moduller: ["production.enabled"] }) }),
+    v("K2 dondurulmuş (hak kirada olsa bile)", kira({ yaptirim })),
+    v("kirada hak yok", kiraBas(f)),
+    v("kirada başka kid", kira(), { kid: yanlisKimlik }),
+    v("başka kurulumun özel anahtarı", kira(), { privateKey: baskaOzel }),
+    v("kid anahtarın özeti değil", kiraBas(f, { modulAnahtarlari: [hak(modul, anahtar, yanlisKimlik)] }), { kid: yanlisKimlik }),
+    v("kira HAK'a bağlı değil", kira({ hakSurum: 2 })),
+    v("kira imzasız/bozuk", "a.b.c"),
+    v("HAK bozuk", kira(), { entitlement: "a.b.c" }),
+    v("özel anahtar biçimsiz", kira(), { privateKey: "abc" }),
+    v("başka modülün hakkı istenen modüle geçmez", kiraBas(f, { modulAnahtarlari: [hak("ticaret.enabled")] }), { kid }),
   ];
 }
 
@@ -660,6 +746,7 @@ export function vektorleriKur(simdi: number): Vektor[] {
     ...ozetVektorleri(f),
     ...butunlukVektorleri(f),
     ...modulVektorleri(),
+    ...kiraModulVektorleri(f),
     ...tarihVektorleri(),
   ];
 }

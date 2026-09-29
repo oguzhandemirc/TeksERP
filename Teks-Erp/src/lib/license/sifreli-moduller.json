@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "not": "Faz 2d şifreli modül kataloğu — build-korumali.mjs ile encrypted-module.ts ORTAK okur. Yalnız sınırı temiz modül (KOD-KORUMA-OLCUM.md §2): bugün depoMulti.",
+  "paketler": [
+    {
+      "paket": "depo-multi",
+      "modul": "depo.multiEnabled",
+      "ad": "Çoklu depo",
+      "giris": "routes/warehouse-transfer.routes.ts",
+      "dosyalar": ["routes/warehouse-transfer.routes.ts", "services/warehouse-transfer.service.ts"],
+      "yol": "/api/warehouse-transfers"
+    }
+  ]
+}

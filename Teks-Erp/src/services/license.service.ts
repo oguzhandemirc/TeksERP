@@ -19,7 +19,7 @@ import { loadLicenseStoreSync, saveProxy } from "../lib/license/store";
 import { getLicenseConfig, getLicenseSnapshot, getMeasuredFingerprint, invalidateLicenseSnapshot } from "../lib/license/runtime";
 import { adminAction } from "./license-trail.service";
 import { DATA_EXPORT_PATHS } from "../constants/license-routes";
-import { acceptLicenseResponse, buildPollBody, pollLicenseOnce, refreshLicenseFingerprint, runLeaseExchange, sendTransfer, type PollOutcome } from "./license-sync.service";
+import { acceptLicenseResponse, buildPollBody, encryptionKeyField, pollLicenseOnce, refreshLicenseFingerprint, runLeaseExchange, sendTransfer, type PollOutcome } from "./license-sync.service";
 import { getLicenseDetail, getProxySettings, type LicenseDetail, type LicenseProxySettings } from "./license-view.service";
 import {
   buildEnvironment,
@@ -94,6 +94,7 @@ function buildActivateBody(ctx: ReadyContext, code: string): ReturnType<typeof A
     v: 1,
     kod: code,
     acikAnahtar: ctx.key.x,
+    ...encryptionKeyField(),
     parmakIzi: currentFingerprintDigest(),
     ortam: buildEnvironment(),
   });
@@ -196,14 +197,14 @@ export async function requestTransfer(gerekce: string | null, userId: string | n
   return { talepId: r.talepId, durum: r.durum, lisans: getLicenseDetail() };
 }
 
-export async function drTakeover(anaKurulumId: string, gerekce: string, userId: string | null, transport: VendorTransport = egressTransport): Promise<LicenseDetail> {
+export async function drTakeover(anaKurulumId: string | undefined, gerekce: string, userId: string | null, transport: VendorTransport = egressTransport): Promise<LicenseDetail> {
   // DR sunucusu kendi (DR sınıfı) lisans kimliğiyle imzalar: önce kendi kodu ile etkinleşmiş olmalı.
   requireLicenseId(requireReady());
   requireVendorUrl();
-  const body = DrTakeoverRequestSchema.parse({ v: 1, anaKurulumId, gerekce });
+  const body = DrTakeoverRequestSchema.parse({ v: 1, ...(anaKurulumId ? { anaKurulumId } : {}), gerekce });
   await runLeaseExchange(async () => {
     const r = await vendorPost(ENDPOINTS.DR_TAKEOVER, "dr-devral", body, transport);
-    adminAction(userId, "dr-devral", { anaKurulumId, sonuc: r.ok ? "yanit" : r.code });
+    adminAction(userId, "dr-devral", { anaKurulumId: anaKurulumId ?? null, sonuc: r.ok ? "yanit" : r.code });
     if (!r.ok) throw vendorFailureToError(r);
     await acceptLicenseResponse(r.json, "dr-devral", userId);
   });

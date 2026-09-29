@@ -47,6 +47,14 @@ pub mod code {
     pub const MODUL_UYUSMAZ: &str = "MODUL_UYUSMAZ";
     pub const MODUL_ANAHTAR_GECERSIZ: &str = "MODUL_ANAHTAR_GECERSIZ";
     pub const MODUL_SARMA_ACILAMADI: &str = "MODUL_SARMA_ACILAMADI";
+    /// Faz 2d: anahtar YALNIZ doğrulanmış kiradan açılır — HAK'ta yok · dondurulmuş · kirada hak yok · kimlik uyuşmaz.
+    pub const MODUL_HAK_YOK: &str = "MODUL_HAK_YOK";
+    pub const MODUL_DONMUS: &str = "MODUL_DONMUS";
+    pub const MODUL_ANAHTARI_YOK: &str = "MODUL_ANAHTARI_YOK";
+    pub const MODUL_KID_UYUSMAZ: &str = "MODUL_KID_UYUSMAZ";
+    /// Yerel koruma (Windows DPAPI): bu platformda yok · işletim sistemi reddetti.
+    pub const KORUMA_YOK: &str = "KORUMA_YOK";
+    pub const KORUMA_HATASI: &str = "KORUMA_HATASI";
 
     pub const PROTOCOL: &[&str] = &[
         JWS_BICIM,
@@ -79,5 +87,11 @@ pub mod code {
         MODUL_UYUSMAZ,
         MODUL_ANAHTAR_GECERSIZ,
         MODUL_SARMA_ACILAMADI,
+        MODUL_HAK_YOK,
+        MODUL_DONMUS,
+        MODUL_ANAHTARI_YOK,
+        MODUL_KID_UYUSMAZ,
+        KORUMA_YOK,
+        KORUMA_HATASI,
     ];
 }

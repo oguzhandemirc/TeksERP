@@ -18,6 +18,7 @@ export async function processPoll(
     measured: body.parmakIzi,
     clientEntitlement: body.hak,
     telemetry: { durum: body.durum, saat: body.saat, ortam: body.ortam, saglik: body.saglik, gozlem: body.gozlem },
+    ...(body.sifrelemeAnahtari ? { encryptionKey: body.sifrelemeAnahtari } : {}),
     nowMs,
   });
   return response;

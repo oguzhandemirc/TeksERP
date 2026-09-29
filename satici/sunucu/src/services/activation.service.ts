@@ -111,6 +111,8 @@ async function activateInTx(
         ...(code.tasimaTalebiId ? { talepId: code.tasimaTalebiId } : {}),
         platform: g.body.ortam.platform,
         uygulamaSurum: g.body.ortam.uygulamaSurum,
+        // Faz 2d: yeni anahtar (taşıma) eski makinenin X25519'unu devralmaz — yoksa null yazılır.
+        sifrelemeAnahtari: g.body.sifrelemeAnahtari ?? null,
       },
       yapan: "kurulum",
     },
@@ -121,6 +123,7 @@ async function activateInTx(
       durum: "ETKIN",
       acikAnahtar: g.body.acikAnahtar,
       anahtarKimligi: g.kid,
+      sifrelemeAnahtari: g.body.sifrelemeAnahtari ?? null,
       kabulEdilenParmakIzi: g.body.parmakIzi,
       platform: g.body.ortam.platform,
       sonOrtam: g.body.ortam,

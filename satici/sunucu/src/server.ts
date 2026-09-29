@@ -15,6 +15,7 @@ import { createInternalApp } from "./http/internal-app";
 import { createTailnetApp } from "./http/tailnet-app";
 import { loadInternalBearer } from "./lib/internal-bearer";
 import { PortalSecretBox } from "./portal/secret-box";
+import { ModuleKeyVault } from "./keys/module-vault";
 import type { VendorContext } from "./services/context";
 import { DoorbellHub } from "./services/doorbell";
 import { InternalApiCounters } from "./services/internal-api.service";
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
     config,
     keys,
     portalSecrets: PortalSecretBox.load(config.ANAHTAR_DIZINI, { create: true }),
+    moduleVault: ModuleKeyVault.load(config.ANAHTAR_DIZINI, { create: true }),
     codeHasher: ActivationCodeHasher.load(config.ANAHTAR_DIZINI, { create: true }),
   };
   await syncKeyRegistry(keys).catch((err: Error) => console.error(`[satici] anahtar künyesi yazılamadı: ${err.message}`));

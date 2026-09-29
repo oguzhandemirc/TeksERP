@@ -24,6 +24,7 @@ import {
 import { VendorError } from "../lib/errors";
 import type { Db, Tx } from "../lib/prisma";
 import { channelVersionsForLease } from "./channel.service";
+import { moduleKeyGrants } from "./module-key.service";
 import type { VendorContext } from "./context";
 
 export interface SanctionState {
@@ -106,6 +107,8 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
   if (!key) throw new VendorError(500, "SUNUCU_HATASI", "Kira imzalayacak geçerli alt anahtar yok");
   const sanction = await computeSanctionState(tx, installation.id);
   const channel = await tx.kanal.findUnique({ where: { kod: installation.kanalKodu } });
+  // Faz 2d: yalnız HAK'taki, dondurulmamış modüllerin anahtarları; kurulumun X25519'u yoksa hiçbiri.
+  const grants = await moduleKeyGrants(tx, ctx, { installation, entitlement, frozen: sanction.donmusModuller });
   const id = randomUUID();
   const issuedAt = new Date(nowMs);
   const expiresAt = new Date(nowMs + ctx.config.KIRA_GUN * DAY_MS);
@@ -136,6 +139,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
     devredildi: installation.durum === "DEVREDILDI",
     kanal: { kod: installation.kanalKodu, guncelSurumler: channelVersionsForLease(channel) },
     altSertifika: key.certificate,
+    ...(grants.length > 0 ? { modulAnahtarlari: grants } : {}),
   };
   const token = signDocument({ typ: TYP.KIRA, schema: LeaseSchema, payload, key: { kid: key.kid, privateKey: key.privateKey } });
   await tx.kira.create({

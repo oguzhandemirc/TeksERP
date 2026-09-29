@@ -127,6 +127,8 @@ export const ActivateRequestSchema = z.strictObject({
   kod: ActivationCodeSchema,
   kurulumId: OptionalInstallationIdSchema,
   acikAnahtar: PublicKeyXSchema,
+  /** Kurulumun X25519 AÇIK anahtarı (Faz 2d): modül anahtarları buna sarılır. İstek kurulum anahtarıyla imzalıdır. */
+  sifrelemeAnahtari: PublicKeyXSchema.optional(),
   parmakIzi: FingerprintSchema,
   ortam: EnvironmentSchema,
 });
@@ -136,6 +138,8 @@ export const PollRequestSchema = z.strictObject({
   /** Kira zinciri: sunucu ucu tutar; geride kalmış uç "yakala", iki farklı parmak izi "kopya şüphesi". */
   sonKiraId: UuidSchema.nullable(),
   hak: z.strictObject({ hakId: UuidSchema, surum: z.number().int().min(1) }).nullable(),
+  /** Kurulumun X25519 açık anahtarı (Faz 2d) — eski kurulum ilk yoklamada üretip bildirir. */
+  sifrelemeAnahtari: PublicKeyXSchema.optional(),
   parmakIzi: FingerprintSchema,
   durum: StateSummarySchema,
   saat: z.strictObject({
@@ -164,9 +168,10 @@ export const TransferRequestSchema = z.strictObject({
   gerekce: z.string().max(500).nullable(),
 });
 
+/** `anaKurulumId` verilmezse satıcı tesisin TEK etkin ÜRETİM kurulumunu çıkarır (0 ya da >1 → 409 `DR_ANA_BELIRSIZ`). */
 export const DrTakeoverRequestSchema = z.strictObject({
   v: VersionField,
-  anaKurulumId: UuidSchema,
+  anaKurulumId: UuidSchema.optional(),
   gerekce: z.string().min(1).max(500),
 });
 
@@ -210,6 +215,8 @@ export const VENDOR_ERROR_CODES = [
   /** 409: kurulum başka bir anahtarla ETKİN — yeni makine yalnız onaylı taşıma koduyla etkinleşir (ilk kod yetmez). */
   "TASIMA_KODU_GEREKLI",
   "KIRA_VERILMEDI",
+  /** 409: DR devralımında ana kurulum verilmedi ve tesiste tek etkin ÜRETİM kurulumu yok (0 ya da birden çok). */
+  "DR_ANA_BELIRSIZ",
   "HIZ_SINIRI",
   /** 409: eşzamanlı işlem çakıştı (40001/40P01, atomik claim kaybı) — aynı istek yeniden denenebilir. */
   "TEKRAR_DENEYIN",

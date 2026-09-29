@@ -116,6 +116,34 @@ const SanctionSchema = z
     message: "K3 kısıtlama tarihi taşımalı",
   });
 
+/** Modül anahtarı kimliği: `mk-` + sha256(önek ␟ anahtar) ilk 22 base64url (bkz. `modul-anahtari.ts`). */
+export const ModuleKeyIdSchema = z.string().regex(/^mk-[A-Za-z0-9_-]{22}$/);
+
+/** Kurulumun X25519 açık anahtarına sarılı modül anahtarı (Faz 2d): geçici X25519 → HKDF-SHA256 → AES-256-GCM. */
+export const ModuleKeyWrapSchema = z.object({
+  v: z.literal(1),
+  modul: ModuleKeySchema,
+  epk: PublicKeyXSchema,
+  sarili: z.string().regex(/^[A-Za-z0-9_-]{64}$/),
+});
+export type ModuleKeyWrap = z.infer<typeof ModuleKeyWrapSchema>;
+
+/** Kiradaki modül anahtarı hakkı: `surum` anahtarın sürümü (döndürme), `kid` şifreli paketin başlığındaki kimlik. */
+export const ModuleKeyGrantSchema = z
+  .object({
+    modul: ModuleKeySchema,
+    surum: z.number().int().min(1),
+    kid: ModuleKeyIdSchema,
+    sarma: ModuleKeyWrapSchema,
+  })
+  .refine((g) => g.sarma.modul === g.modul, { message: "Sarmanın modülü hakkın modülüyle aynı olmalı" });
+export type ModuleKeyGrant = z.infer<typeof ModuleKeyGrantSchema>;
+
+const ModuleKeyGrantListSchema = z
+  .array(ModuleKeyGrantSchema)
+  .max(32)
+  .refine((list) => isUnique(list.map((g) => g.kid)), "Modül anahtarı listesinde tekrar var");
+
 export const LeaseSchema = z
   .object({
     v: z.literal(PROTOCOL_VERSION),
@@ -145,6 +173,8 @@ export const LeaseSchema = z
       }),
     }),
     altSertifika: JwsTextSchema,
+    /** Faz 2d: HAK'taki, dondurulmamış ve kurulumun X25519'u bilinen modüllerin anahtarları; yoksa şifreli modül açılmaz. */
+    modulAnahtarlari: ModuleKeyGrantListSchema.optional(),
   })
   .refine((k) => isoToMs(k.bitis) > isoToMs(k.verilis), { message: "Kira bitişi verilişten sonra olmalı" })
   .refine((k) => isoToMs(k.bitis) - isoToMs(k.verilis) <= LEASE_MAX_DAYS * DAY_MS, {

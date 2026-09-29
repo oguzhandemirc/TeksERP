@@ -30,7 +30,13 @@ import {
 } from "./protocol";
 import { collectOsFactors } from "./fingerprint-os";
 import { verifyIntegrity, type IntegrityReport, type PackageKey } from "./integrity";
-import { unwrapModuleKey, MODULE_KEY_ERROR_CODES } from "./module-key";
+import {
+  unwrapModuleKey,
+  unwrapLeaseModuleKey,
+  LEASE_MODULE_KEY_ERROR_CODES,
+  MODULE_KEY_ERROR_CODES,
+  type LeaseModuleKeyRequest,
+} from "./module-key";
 import type { KeyObject } from "node:crypto";
 
 /** Çekirdeğe özgü kodlar (protokol kümesinde yok). Native aynası `outcome.rs` `code::CORE`. */
@@ -40,6 +46,10 @@ export const CORE_ERROR_CODES = [
   "BUTUNLUK_OKUNAMADI",
   "BUTUNLUK_UYUSMAZ",
   ...MODULE_KEY_ERROR_CODES,
+  ...LEASE_MODULE_KEY_ERROR_CODES,
+  // Yerel koruma (Windows DPAPI) — modül anahtarı önbelleği.
+  "KORUMA_YOK",
+  "KORUMA_HATASI",
 ] as const;
 /** Zorunlu kipte native kullanılamıyorsa her doğrulama bu kodla düşer (TS'e düşülmez). */
 export const CORE_UNAVAILABLE_CODE = "CEKIRDEK_YOK";
@@ -106,6 +116,11 @@ export interface LicenseCore {
   collectFingerprint(salt: Uint8Array, f5: string | null): Promise<CollectedFingerprint>;
   verifyIntegrity(manifest: unknown, root: string, keys?: readonly PackageKey[]): Promise<CoreResult<IntegrityReport>>;
   unwrapModuleKey(wrap: unknown, privateKeyX: string, modul: string): CoreResult<{ readonly anahtar: string }>;
+  /** Faz 2d: anahtar YALNIZ doğrulanmış kira + HAK'tan (bağlı, modül HAK'ta, dondurulmamış, kid eşit). */
+  unwrapLeaseModuleKey(g: LeaseModuleKeyRequest): CoreResult<{ readonly anahtar: string; readonly surum: number }>;
+  /** Yerel sarma (Windows DPAPI); başka platformda `KORUMA_YOK`. Veri base64url. */
+  protectLocal(veri: string): CoreResult<{ readonly veri: string }>;
+  unprotectLocal(veri: string): CoreResult<{ readonly veri: string }>;
 }
 
 export function certificateView(c: VerifiedCertificate): CertificateView {
@@ -125,6 +140,8 @@ function measuredOf(digest: Fingerprint): Record<FingerprintFactor, boolean> {
   for (const f of FINGERPRINT_FACTORS) out[f] = digest[f] !== null;
   return out;
 }
+
+const NO_LOCAL_PROTECTION = Object.freeze({ ok: false, code: "KORUMA_YOK", message: "Yerel koruma yalnız native çekirdekte (Windows DPAPI)" } as const);
 
 /** TS uygulaması — protokolün kendisi; geliştirme/test yolu ve native'in kâhini. */
 export const tsLicenseCore: LicenseCore = Object.freeze({
@@ -173,4 +190,10 @@ export const tsLicenseCore: LicenseCore = Object.freeze({
   unwrapModuleKey(wrap: unknown, privateKeyX: string, modul: string): CoreResult<{ anahtar: string }> {
     return unwrapModuleKey(wrap, privateKeyX, modul);
   },
+  unwrapLeaseModuleKey(g: LeaseModuleKeyRequest): CoreResult<{ anahtar: string; surum: number }> {
+    return unwrapLeaseModuleKey(g);
+  },
+  // TS'te yerel koruma yok (DPAPI native'dedir): önbellek dosya iznine düşer ya da hiç tutulmaz.
+  protectLocal: (): CoreResult<{ veri: string }> => NO_LOCAL_PROTECTION,
+  unprotectLocal: (): CoreResult<{ veri: string }> => NO_LOCAL_PROTECTION,
 });

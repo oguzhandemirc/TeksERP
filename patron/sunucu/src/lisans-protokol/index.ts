@@ -8,3 +8,4 @@ export * from "./indirme";
 export * from "./parmak-izi";
 export * from "./istek";
 export * from "./uclar";
+export * from "./modul-anahtari";

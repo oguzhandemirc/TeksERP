@@ -224,6 +224,9 @@ model Kurulum {
   anahtarKimligi       String? @unique @db.VarChar(64)
   /// Kabul edilen parmak izi kümesi `{f1..f5: özet | null}` — yoklamada kayar (eşleşince).
   kabulEdilenParmakIzi Json?
+  /// Kurulumun X25519 AÇIK anahtarı (Faz 2d): modül anahtarları buna sarılır. Kurulum anahtarıyla imzalı
+  /// etkinleştirme/yoklamadan yazılır (çatal/red/açık kopya uyarısında YAZILMAZ); değişimi `kurulum_kaydi`nda.
+  sifrelemeAnahtari    String? @db.VarChar(64)
 
   /// Zincir ucu: bu kuruluma verilmiş en son kira.
   sonKiraId String? @unique @db.Uuid
@@ -589,6 +592,25 @@ model KurulumKaydi {
   @@index([kurulumId, createdAt])
   @@index([eskiAnahtarKimligi])
   @@map("kurulum_kaydi")
+}
+
+/// Modül anahtarı KASASI (Faz 2d): şifreli modül paketinin AES-256 anahtarı, kasa anahtarıyla
+/// (`ANAHTAR_DIZINI/modul-kasasi.key`, 0600 — DB'de DEĞİL) AES-256-GCM sarılı. Düz anahtar DB'ye,
+/// loga, denetime GİRMEZ; `kid` anahtarın özetidir (sır değil). Silinmez: emeklilik `aktif=false`.
+model ModulAnahtari {
+  id        String   @id @default(uuid()) @db.Uuid
+  modul     String   @db.VarChar(64)
+  /// Anahtarın sürümü (döndürme): paket başlığı `modul + surum + kid` taşır.
+  surum     Int
+  kid       String   @unique @db.VarChar(40)
+  sarili    String   @db.VarChar(200)
+  aktif     Boolean  @default(true)
+  yapan     String   @db.VarChar(120)
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([modul, surum])
+  @@map("modul_anahtari")
 }
 
 /// Satıcı anahtarlarının KÜNYESİ — yalnız AÇIK yarı; özel yarı DB'ye ASLA girmez.

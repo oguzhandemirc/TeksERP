@@ -20,6 +20,7 @@ import { ActivationCodeHasher } from "../src/keys/code-pepper";
 import { createPublicApp } from "../src/http/public-app";
 import { createTailnetApp } from "../src/http/tailnet-app";
 import { PortalSecretBox } from "../src/portal/secret-box";
+import { ModuleKeyVault } from "../src/keys/module-vault";
 import type { VendorContext } from "../src/services/context";
 import { fiksturKur } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import { kontrol, sonuc } from "./lib/test-ortam";
@@ -70,7 +71,7 @@ async function main(): Promise<void> {
   const taban = { DATABASE_URL: "postgresql://x@127.0.0.1:1/x_test", ANAHTAR_DIZINI: kok, GUVEN_CAPASI_DOSYASI: path.join(kok, "capa.json"), TAILNET_LOOPBACK: "1" };
   const baglam = (webDizini: string): VendorContext => {
     const config = loadConfig({ ...taban, PORTAL_WEB_DIZINI: webDizini });
-    return { config, keys: KeyStore.load(config), portalSecrets: PortalSecretBox.load(kok, { create: true }), codeHasher: ActivationCodeHasher.load(kok, { create: true }) };
+    return { config, keys: KeyStore.load(config), portalSecrets: PortalSecretBox.load(kok, { create: true }), codeHasher: ActivationCodeHasher.load(kok, { create: true }), moduleVault: ModuleKeyVault.load(kok, { create: true }) };
   };
 
   console.log("\n§0 yapılandırma");

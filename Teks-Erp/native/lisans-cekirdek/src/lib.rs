@@ -15,6 +15,7 @@ pub mod integrity;
 pub mod iso;
 pub mod jsonx;
 pub mod jws;
+pub mod local_protect;
 pub mod module_key;
 pub mod outcome;
 pub mod schema;

@@ -34,6 +34,7 @@ import { KeyStore } from "../../src/keys/key-store";
 import { ActivationCodeHasher } from "../../src/keys/code-pepper";
 import { loadEnvFile } from "../../src/lib/env";
 import { PortalSecretBox } from "../../src/portal/secret-box";
+import { ModuleKeyVault } from "../../src/keys/module-vault";
 import type { VendorContext } from "../../src/services/context";
 
 export const SATICI_KOKU = path.resolve(__dirname, "..", "..");
@@ -113,6 +114,7 @@ export async function anahtarOrtamiKur(simdi: number = Date.now(), ekOrtam: Reco
     config,
     keys: KeyStore.load(config, simdi),
     portalSecrets: PortalSecretBox.load(dizin, { create: true }),
+    moduleVault: ModuleKeyVault.load(dizin, { create: true }),
     codeHasher: ActivationCodeHasher.load(dizin, { create: true }),
   };
   const kidler = [f.kok.kid, f.hazirlik.kid, f.alt.kid, f.ind.kid];

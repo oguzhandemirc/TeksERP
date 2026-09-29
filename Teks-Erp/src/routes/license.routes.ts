@@ -66,7 +66,11 @@ const ResponseBody = z.object({
   yanit: z.union([z.string().min(10).max(64 * 1024), z.record(z.string(), z.unknown())]),
 });
 const TransferBody = z.object({ gerekce: z.string().trim().max(500).nullable().optional() });
-const DrBody = z.object({ anaKurulumId: z.uuid(), gerekce: z.string().trim().min(1).max(500) });
+// `anaKurulumId` isteğe bağlı: verilmezse satıcı tesisin tek etkin ÜRETİM kurulumunu çıkarır (belirsizse 409 DR_ANA_BELIRSIZ).
+const DrBody = z.object({
+  anaKurulumId: z.preprocess((v) => (v === "" || v === null ? undefined : v), z.uuid().optional()),
+  gerekce: z.string().trim().min(1).max(500),
+});
 const DownloadQuery = z.object({
   urun: z.enum(["electron", "mobil"]),
   kanal: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/).optional(),

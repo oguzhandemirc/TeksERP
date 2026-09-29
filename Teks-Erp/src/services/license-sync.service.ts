@@ -16,7 +16,7 @@ import {
   type LicenseResponse,
   type SanctionLevel,
 } from "../lib/license/protocol";
-import { getLicenseStore, saveEntitlement, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
+import { ensureInstallationX25519, getLicenseStore, saveEntitlement, saveLease, saveLicenseIdentity, saveTransfer } from "../lib/license/store";
 import { measureFingerprint } from "../lib/license/fingerprint";
 import { coreCheckLeaseBinding, coreVerifyEntitlement, coreVerifyLease } from "../lib/license/core-bridge";
 import { runIntegrityCheck } from "../lib/license/integrity-check";
@@ -94,6 +94,12 @@ function skewSeconds(): number | undefined {
   return ms === null ? undefined : Math.max(-1e9, Math.min(1e9, Math.round(ms / 1000)));
 }
 
+/** Kurulumun X25519 açık yarısı (Faz 2d) — eski kurulumda burada doğar; üretilemezse alan gönderilmez. */
+export function encryptionKeyField(): { sifrelemeAnahtari?: string } {
+  const pair = ensureInstallationX25519();
+  return pair ? { sifrelemeAnahtari: pair.publicX } : {};
+}
+
 /** Yoklama gövdesi — protokolün KATI şemasından geçer (allowlist dışı alan kod yolunda patlar). */
 export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnType<typeof PollRequestSchema.parse>> {
   const snap = getLicenseSnapshot(nowMs);
@@ -104,6 +110,7 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     // Zincir ucu: kira dosyası silinmiş/eskisiyle değiştirilmişse durum kaydının bildiği son kabul.
     sonKiraId: snap.lastKnownLease?.kiraId ?? null,
     hak: snap.entitlement ? { hakId: snap.entitlement.document.hakId, surum: snap.entitlement.document.surum } : null,
+    ...encryptionKeyField(),
     parmakIzi: currentFingerprintDigest(),
     durum: {
       gecerlilik: s.gecerlilik,

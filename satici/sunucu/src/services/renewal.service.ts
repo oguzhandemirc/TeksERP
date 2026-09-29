@@ -35,6 +35,8 @@ export interface RenewInput {
   readonly measured: Fingerprint | null;
   readonly clientEntitlement: { readonly hakId: string; readonly surum: number } | null;
   readonly telemetry: PollTelemetry | null;
+  /** Kurulumun bildirdiği X25519 açık anahtarı (Faz 2d); temiz zincirde kaydedilir. */
+  readonly encryptionKey?: string;
   readonly nowMs: number;
 }
 
@@ -189,6 +191,28 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     return { kind: "DENIED" };
   }
 
+  // Faz 2d: X25519 yalnız TEMİZ zincirde kaydedilir — çatal/açık kopya uyarısında bir kopya kendi anahtarını
+  // yazıp sahibin modül anahtarlarını kendine sardıramasın. Değişim kurulum kaydına (defter) satır olur.
+  let installation = inst;
+  const openForkNow = decision === "FORK" ? null : await tx.kopyaUyarisi.findFirst({ where: { kurulumId: inst.id, tur: "ZINCIR_CATALI", durum: "ACIK" } });
+  if (g.encryptionKey && g.encryptionKey !== inst.sifrelemeAnahtari && decision !== "FORK" && !openForkNow) {
+    const set = await tx.kurulum.updateMany({
+      where: { id: inst.id, sifrelemeAnahtari: inst.sifrelemeAnahtari, anahtarKimligi: g.kid },
+      data: { sifrelemeAnahtari: g.encryptionKey },
+    });
+    if (set.count === 0) throw retryConflict();
+    await tx.kurulumKaydi.create({
+      data: {
+        kurulumId: inst.id,
+        olay: "SIFRELEME_ANAHTARI",
+        anahtarKimligi: g.kid,
+        ayrinti: { sifrelemeAnahtari: g.encryptionKey, eski: inst.sifrelemeAnahtari },
+        yapan: "kurulum",
+      },
+    });
+    installation = { ...inst, sifrelemeAnahtari: g.encryptionKey };
+  }
+
   const includeEntitlement =
     g.clientEntitlement === null || g.clientEntitlement.hakId !== hak.id || g.clientEntitlement.surum !== hak.guncelSurum;
   const hakToken = includeEntitlement ? await currentEntitlementToken(tx, hak) : null;
@@ -211,7 +235,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
   const nextAccepted = canDrift ? driftAccepted(accepted, measured) : accepted;
 
   const lease = await issueLease(tx, ctx, {
-    installation: inst,
+    installation,
     entitlement: hak,
     previousLeaseId: tip?.id ?? null,
     decision: decision === "ROOT" ? "TASIMA" : decision === "CATCH_UP" ? "YAKALA" : decision === "FORK" ? "CATAL" : "NORMAL",

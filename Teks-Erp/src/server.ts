@@ -21,6 +21,7 @@ import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
 import { startPatronCloudJobs, stopPatronCloudJobs } from './jobs/patron-cloud.jobs';
 import { initLicenseEngine } from './services/license.service';
+import { preloadEncryptedModules } from './lib/license/encrypted-module-router';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
@@ -61,6 +62,8 @@ const remoteAccess = readRemoteAccessConfig();
 // HAK/kira ve proxy bellekte olsun. Hata sunucuyu düşürmez (motor gözlemde "ölçülemedi" kalır).
 try {
     initLicenseEngine();
+    // Faz 2d: şifreli pakette anahtarı olan modüller önceden yüklenir (geliştirmede kapı yok → no-op).
+    preloadEncryptedModules();
 } catch (err) {
     uyari("lisans", "lisans deposu yüklenemedi — motor ölçülemedi durumunda", err);
 }

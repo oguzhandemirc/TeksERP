@@ -1,5 +1,5 @@
 // =============================================================================
-// SENARYO L — lisans uçtan uca (plan §8 "Senaryo L", adımlar L1…L29 SIRAYLA)
+// SENARYO L — lisans uçtan uca (plan §8 "Senaryo L", adımlar L1…L30 SIRAYLA)
 // =============================================================================
 // Koşum (Teks-Erp/ içinden; hedefler YALNIZ `_test` DB — fabrika DB'lerine ASLA):
 //   DATABASE_URL='postgresql://…/<ana>_test?schema=public' \
@@ -36,6 +36,7 @@ import {
 import { fixtureHedefEngeli, hacimHedefEngeli } from "./lib/hedef-db-kapisi";
 import { FabrikaIstemcisi, PortalIstemcisi, type LisansDetayi, type Yanit } from "./lib/senaryo-lisans-istemci";
 import { l18KunyeOlc } from "./lib/senaryo-lisans-kunye";
+import { l30ModulOlc } from "./lib/senaryo-lisans-modul";
 import {
   Aktarici,
   ConnectVekili,
@@ -200,7 +201,8 @@ const RENK_DESENI_SQL = "^(senaryo reng(i|İ|ı|I) [0-9a-f]{6}|[0-9a-f]{6} senar
 /** Etkinleştirme / taşıma kodu: 16 karakter Crockford base32 (`TKS-XXXX-XXXX-XXXX-XXXX`). */
 const KOD_DESENI = /^TKS(-[0-9A-HJKMNP-TV-Z]{4}){4}$/;
 const UUID_DESENI = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const HAK_MODULLERI = ["production.enabled", "finance.enabled"];
+// depo.multiEnabled: Faz 2d şifreli modülü (L30) — anahtarı yalnız HAK'taki modüle sarılır.
+const HAK_MODULLERI = ["production.enabled", "finance.enabled", "depo.multiEnabled"];
 const BAYI_PAROLASI = `senaryo-bayi-${randomBytes(6).toString("hex")}`;
 const PARMAK_IZLERI = {
   A: { makine: "5E0A0001-0000-4000-8000-00000000000A", seri: "SENARYOA01" },
@@ -729,7 +731,7 @@ async function main(): Promise<number> {
 
     // ============================================================ L13
     const D = await yeniFabrika("D", drUrl, PARMAK_IZLERI.D);
-    await adim("L13", "DR devral → üretim kirası iptal (DEVREDILDI)", async (a) => {
+    await adim("L13", "DR devral (ana kimliksiz → satıcı tesisin tek etkin üretimini çıkarır) → üretim kirası iptal (DEVREDILDI)", async (a) => {
       await baslat(D);
       const k = await portal.istek("POST", "/kurulumlar", { tesisId: S.tesisId, sinif: "DR", kanalKodu: KANAL, yoklamaAraligiDk: 5 });
       S.drDbId = String(k.veri.id);
@@ -744,10 +746,11 @@ async function main(): Promise<number> {
         e.status === 200 && de.kurulum.kurulumId === String(k.veri.kurulumId) && de.kurulum.kurulumId !== S.anaLisansId && de.kurulum.kurulumId !== de.kurulum.veritabaniKimligi,
         `${ozet(e)} ${de.kurulum.kurulumId?.slice(0, 8)} / db ${String(de.kurulum.veritabaniKimligi).slice(0, 8)}`,
       );
-      // anaKurulumId ananın LİSANS kimliğidir (portaldan/ana Lisans ekranından; DR'nin DB replikası taşımaz).
-      const dr = await D.istemci.istek("POST", "/api/license/dr-devral", { anaKurulumId: S.anaLisansId, gerekce: "Senaryo L: ana sunucu arızası" });
+      // Faz 2d kararı: anaKurulumId isteğe bağlı — tesiste TEK etkin ÜRETİM varken satıcı onu çıkarır
+      // (belirsizlik 409 DR_ANA_BELIRSIZ satıcı bekçisinde: test_tasima_dr §4i). Kimlikli yol L29'da.
+      const dr = await D.istemci.istek("POST", "/api/license/dr-devral", { gerekce: "Senaryo L: ana sunucu arızası" });
       const dd = await D.istemci.detay();
-      a.kontrol("D: dr-devral → 200, GECERLI", dr.status === 200 && dd.durum.gecerlilik === "GECERLI", `${ozet(dr)} ${dd.durum.gecerlilik}`);
+      a.kontrol("D: kimliksiz dr-devral → 200, GECERLI", dr.status === 200 && dd.durum.gecerlilik === "GECERLI", `${ozet(dr)} ${dd.durum.gecerlilik}`);
       const pk = await detayKurulum(S.anaDbId);
       const kayit = (pk.kurulumKaydi as Array<{ olay: string }>).map((x) => x.olay);
       a.kontrol("portal: ana kurulum DEVREDILDI + kurulum kaydı", (pk.kurulum as { durum?: string }).durum === "DEVREDILDI" && kayit.includes("DEVREDILDI"), `${(pk.kurulum as { durum?: string }).durum} ${kayit.slice(0, 3).join(",")}`);
@@ -1167,6 +1170,22 @@ async function main(): Promise<number> {
       await portal.istek("POST", `/kurulumlar/${S.anaDbId}/dr-geri-al`, { sebep: "Senaryo L sonu" });
       await durdur(D);
     });
+
+    // ============================================================ L30
+    await adim("L30", "K2 donmuş modül → şifreli modül açılmaz, çekirdek çalışır (Faz 2d)", async (a) => {
+      await l30ModulOlc({
+        kok,
+        saticiEnv: { ...saticiEnv, ANAHTAR_DIZINI: hz.dizin, GUVEN_CAPASI_DOSYASI: hz.capaDosyasi },
+        saticiDbUrl: saticiUrl,
+        lisansDizini: C.lisansDizini,
+        capaDosyasi: hz.capaDosyasi,
+        yokla: () => C.istemci.yokla(),
+        yaptirim,
+        geriAl,
+        istek: (yontem, yol) => C.istemci.istek(yontem, yol),
+        kontrol: (ad, ok, ayrinti) => a.kontrol(ad, ok, ayrinti),
+      });
+    });
   } catch (err) {
     if (err instanceof DurNoktasi) console.log(`\n⏹  --son=${err.message}: sonraki adımlar koşulmadı`);
     else {
@@ -1214,10 +1233,10 @@ async function main(): Promise<number> {
   const yesil = sonuclar.filter((s) => s.sonuc === "YESIL").length;
   const kismi = sonuclar.filter((s) => s.sonuc === "KISMI").length;
   const kirmizi = sonuclar.filter((s) => s.sonuc === "KIRMIZI").length;
-  console.log(`\n=== Senaryo L: ${yesil} yeşil · ${kismi} kısmi · ${kirmizi} kırmızı (${sonuclar.length}/29 adım koştu) ===`);
+  console.log(`\n=== Senaryo L: ${yesil} yeşil · ${kismi} kısmi · ${kirmizi} kırmızı (${sonuclar.length}/30 adım koştu) ===`);
   if (jsonCikti) fs.writeFileSync(jsonCikti, JSON.stringify({ sonuclar, ozet: { yesil, kismi, kirmizi } }, null, 2));
   if (cikis !== 0) return cikis;
-  return yesil === 29 ? 0 : 1;
+  return yesil === 30 ? 0 : 1;
 }
 
 main().then(
