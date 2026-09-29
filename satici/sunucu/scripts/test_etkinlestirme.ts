@@ -1,0 +1,178 @@
+// =============================================================================
+// ETKİNLEŞTİRME UÇTAN UCA — gerçek satıcı süreci (tek süreç, iki dinleyici) + kendi _test DB'si.
+// Portal tarafı: müşteri → tesis → kurulum → hak → HAK KÖK imzası (parola imza alt sürecine
+// stdin'den) → tek kullanımlık kod. Fabrika tarafı: kurulum anahtarıyla imzalı istek.
+// Ölçülen: yanıt sözleşmesi; HAK + KİRA + ALT sertifika zinciri fabrikanın doğrulayıcısından
+// (Teks-Erp protokolünün aynası) geçer; kira kuruluma/anahtara/HAK sürümüne bağlı; gözlem kipi
+// varsayılan; indirme belirteçleri kâhinden geçer; kod tüketildi; kurulum kaydı + künye + denetim
+// sır taşımaz; aynı kod + aynı anahtar tekrar → aynı kira; hata yolları (kod, kurulum, gövde, sürüm,
+// kurcalanmış gövde, anahtar uyuşmazlığı, imzasız istek) doğru kodla.
+// ⭐ KALICI SONDA ✓K2 (her koşumda): (1) kurcalanmış gövde reddedilir — doğrulayıcı gerçekten
+//    gövdeye bakıyor; (2) başka anahtarla imzalı kira fabrikada KIRA_HAK/JWS_KID ile düşer — bekçinin
+//    "zincir doğrulandı" yeşili kurgu değil.
+// Koşum: npx tsx scripts/test_etkinlestirme.ts
+// =============================================================================
+import {
+  ENDPOINTS,
+  LicenseResponseSchema,
+  checkLeaseBinding,
+  isDownloadPathAllowed,
+  parseJws,
+  signJws,
+  verifyDownloadToken,
+  verifyEntitlement,
+  verifyLease,
+} from "../src/lisans-protokol";
+import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
+import {
+  anahtarOrtamiKur,
+  etkinlestirmeGovdesi,
+  gonder,
+  hedefDbKapisi,
+  imzaliBaslik,
+  imzaliPost,
+  kapat,
+  kontrol,
+  kurulumFiksturu,
+  sonuc,
+  sunucuBaslat,
+  temizleKurulumlar,
+} from "./lib/test-ortam";
+
+async function main(): Promise<void> {
+  hedefDbKapisi();
+  const ortam = await anahtarOrtamiKur();
+  const { f, ctx } = ortam;
+  const { prisma } = await import("../src/lib/prisma");
+  const temizlenecek: string[] = [];
+  const sunucu = await sunucuBaslat(ortam);
+  try {
+    console.log("\n§1 portal fikstürü");
+    const k = await kurulumFiksturu(ctx);
+    temizlenecek.push(k.kurulumDbId);
+    const hak = await prisma.hak.findUniqueOrThrow({ where: { id: k.hakId } });
+    const surum = await prisma.hakSurumu.findUniqueOrThrow({ where: { hakId_surum: { hakId: k.hakId, surum: 1 } } });
+    kontrol("§1a HAK sürüm 1 KÖK ile imzalandı ve deftere yazıldı", hak.guncelSurum === 1 && surum.imzalayanKid === f.kok.kid);
+    kontrol("§1b lisans no doğuşta materyalize (TKS-YYYY-NNNN)", /^TKS-\d{4}-\d{4,6}$/.test(k.lisansNo), k.lisansNo);
+    const kodKaydi = await prisma.etkinlestirmeKodu.findFirstOrThrow({ where: { kurulumId: k.kurulumDbId } });
+    kontrol("§1c kodun düz metni DB'de YOK (sha256 + son 4)", kodKaydi.kodOzeti !== k.kod && !JSON.stringify(kodKaydi).includes(k.kod) && kodKaydi.kodSonu === k.kod.slice(-4));
+
+    console.log("\n§2 hata yolları (kod tüketilmeden)");
+    const govde = etkinlestirmeGovdesi({ kod: k.kod, kurulumId: k.kurulumId, anahtar: f.kurulum, parmakIzi: f.parmakIzi });
+    const url = `${sunucu.genel}${ENDPOINTS.ACTIVATE}`;
+    const imzasiz = await gonder(url, { govde: JSON.stringify(govde) });
+    kontrol("§2a imzasız istek → 401 ISTEK_GECERSIZ", imzasiz.status === 401 && imzasiz.kod === "ISTEK_GECERSIZ", `${imzasiz.status} ${imzasiz.kod}`);
+    const yanlisKod = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
+      kurulumId: k.kurulumId,
+      amac: "etkinlestir",
+      anahtar: f.kurulum,
+      govde: { ...govde, kod: "TKS-0000-0000-0000" },
+    });
+    kontrol("§2b tanınmayan kod → 404 ETKINLESTIRME_KODU_GECERSIZ", yanlisKod.status === 404 && yanlisKod.kod === "ETKINLESTIRME_KODU_GECERSIZ", `${yanlisKod.status} ${yanlisKod.kod}`);
+    const bilinmeyen = kurulumAnahtariUret();
+    const yabanci = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
+      kurulumId: f.hakId, // satıcıda kaydı olmayan bir installationId
+      amac: "etkinlestir",
+      anahtar: bilinmeyen,
+      govde: { ...govde, kurulumId: f.hakId, acikAnahtar: bilinmeyen.x },
+    });
+    kontrol("§2c kayıtsız kurulum → 401 KURULUM_BILINMIYOR", yabanci.status === 401 && yabanci.kod === "KURULUM_BILINMIYOR", `${yabanci.status} ${yabanci.kod}`);
+    const fazlaAlan = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
+      kurulumId: k.kurulumId,
+      amac: "etkinlestir",
+      anahtar: f.kurulum,
+      govde: { ...govde, musteriAdi: "sızıntı" },
+    });
+    kontrol("§2d KATI gövde: allowlist dışı anahtar → 400 GOVDE_GECERSIZ", fazlaAlan.status === 400 && fazlaAlan.kod === "GOVDE_GECERSIZ", `${fazlaAlan.status} ${fazlaAlan.kod}`);
+    const v2 = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, { kurulumId: k.kurulumId, amac: "etkinlestir", anahtar: f.kurulum, govde: { ...govde, v: 2 } });
+    kontrol("§2e bilinmeyen v → 400 PROTOKOL_SURUMU", v2.status === 400 && v2.kod === "PROTOKOL_SURUMU", `${v2.status} ${v2.kod}`);
+    // ✓K1: imza bir gövdeye verilip BAŞKA gövde gönderilirse özet tutmaz.
+    const metin = JSON.stringify(govde);
+    const baslik = imzaliBaslik({ kurulumId: k.kurulumId, amac: "etkinlestir", govde: metin, anahtar: f.kurulum });
+    const kurcali = await gonder(url, { baslik, govde: metin.replace(`"win32"`, `"linux"`) });
+    kontrol("§2f ✓K kurcalanmış gövde → 401 ISTEK_GOVDE_OZETI", kurcali.status === 401 && kurcali.kod === "ISTEK_GOVDE_OZETI", `${kurcali.status} ${kurcali.kod}`);
+    const baskaAnahtar = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
+      kurulumId: k.kurulumId,
+      amac: "etkinlestir",
+      anahtar: bilinmeyen,
+      govde, // gövdedeki anahtar f.kurulum, imza bilinmeyen anahtarla
+    });
+    kontrol("§2g gövdedeki anahtarla imzalanmamış → 401 ISTEK_KID", baskaAnahtar.status === 401 && baskaAnahtar.kod === "ISTEK_KID", `${baskaAnahtar.status} ${baskaAnahtar.kod}`);
+    const yanlisAmac = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, { kurulumId: k.kurulumId, amac: "yokla", anahtar: f.kurulum, govde });
+    kontrol("§2h yanlış amaçlı istek → 401 ISTEK_AMAC", yanlisAmac.status === 401 && yanlisAmac.kod === "ISTEK_AMAC", `${yanlisAmac.status} ${yanlisAmac.kod}`);
+    const hala = await prisma.etkinlestirmeKodu.findFirstOrThrow({ where: { kurulumId: k.kurulumDbId } });
+    kontrol("§2i reddedilen istekler kodu TÜKETMEDİ", hala.durum === "AKTIF");
+
+    console.log("\n§3 etkinleştirme");
+    const r = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, { kurulumId: k.kurulumId, amac: "etkinlestir", anahtar: f.kurulum, govde });
+    kontrol("§3a 200", r.status === 200, `${r.status} ${r.kod ?? ""}`);
+    const yanit = LicenseResponseSchema.safeParse(r.json);
+    kontrol("§3b yanıt LicenseResponseSchema'ya uyar", yanit.success);
+    if (!yanit.success) throw new Error("yanıt sözleşmeye uymuyor");
+    const hakDogru = verifyEntitlement(yanit.data.hak, f.kokler);
+    kontrol("§3c HAK fabrikanın doğrulayıcısından geçer (kök zinciri)", hakDogru.ok, hakDogru.ok ? "" : hakDogru.code);
+    const kiraDogru = verifyLease(yanit.data.kira, f.kokler);
+    kontrol("§3d KİRA + gömülü ALT sertifika doğrulanır", kiraDogru.ok, kiraDogru.ok ? "" : kiraDogru.code);
+    if (!hakDogru.ok || !kiraDogru.ok) throw new Error("zincir doğrulanamadı");
+    const bag = checkLeaseBinding(kiraDogru.value, hakDogru.value);
+    kontrol("§3e kira HAK sürümüne bağlı (checkLeaseBinding)", bag.ok);
+    const kira = kiraDogru.value.document;
+    kontrol("§3f kira kuruluma ve anahtara bağlı", kira.kurulumId === k.kurulumId && kira.kurulumAnahtarKimligi === f.kurulum.kid);
+    kontrol("§3g varsayılan GÖZLEM kipi (zorlama=false), yaptırım yok", kira.zorlama === false && kira.yaptirim.kademe === null && kira.devredildi === false);
+    kontrol("§3h kiradaki parmak izi = etkinleştirmede ölçülen", JSON.stringify(kira.parmakIzi) === JSON.stringify(f.parmakIzi));
+    kontrol("§3i kira ALT anahtarla imzalı", kiraDogru.value.subCertificate.document.kid === f.alt.kid);
+    const tokenlar = yanit.data.indirmeBelirtecleri;
+    const indOk = tokenlar.length === 2 && tokenlar.every((t) => {
+      const v = verifyDownloadToken(t.belirtec, { keys: [{ kid: f.ind.kid, x: f.ind.x }], nowMs: Date.now() });
+      return v.ok && v.value.kurulumId === k.kurulumId && isDownloadPathAllowed(v.value, `${t.yolOneki}paket.exe`);
+    });
+    kontrol("§3j iki indirme belirteci (electron/ + mobil/) kâhinden geçer", indOk, `${tokenlar.length} belirteç`);
+
+    console.log("\n§4 DB izi");
+    const kurulum = await prisma.kurulum.findUniqueOrThrow({ where: { id: k.kurulumDbId } });
+    kontrol("§4a kurulum ETKİN, anahtar + parmak izi + zincir ucu yazıldı", kurulum.durum === "ETKIN" && kurulum.anahtarKimligi === f.kurulum.kid && kurulum.sonKiraId === kira.kiraId);
+    const kod2 = await prisma.etkinlestirmeKodu.findFirstOrThrow({ where: { kurulumId: k.kurulumDbId } });
+    kontrol("§4b kod KULLANILDI (anahtar + kira bağlı)", kod2.durum === "KULLANILDI" && kod2.kullananAnahtarKimligi === f.kurulum.kid && kod2.kiraId === kira.kiraId);
+    const kayit = await prisma.kurulumKaydi.findMany({ where: { kurulumId: k.kurulumDbId } });
+    kontrol("§4c kurulum kaydı: ETKINLESTI", kayit.length === 1 && kayit[0]!.olay === "ETKINLESTI");
+    const kiraSatiri = await prisma.kira.findUniqueOrThrow({ where: { id: kira.kiraId } });
+    kontrol("§4d kira defterde (zincir kökü)", kiraSatiri.karar === "ETKINLESTIRME" && kiraSatiri.oncekiKiraId === null);
+    const kunye = await prisma.anahtarKaydi.findMany();
+    const kunyeMetni = JSON.stringify(kunye);
+    const ozelYarilar = [f.kok, f.alt, f.ind, f.hazirlik].map((a) => String(a.privateKey.export({ format: "jwk" }).d));
+    kontrol("§4e anahtar künyesi: açık yarılar var, ÖZEL yarı YOK", kunye.some((a) => a.kid === f.alt.kid) && ozelYarilar.every((d) => !kunyeMetni.includes(d)));
+    const denetim = await prisma.denetim.findMany({ where: { varlikId: k.kurulumDbId } });
+    const denetimMetni = JSON.stringify(denetim);
+    kontrol("§4f denetim: etkinleşme olayı var, kod düz metni/imzalı belge YOK", denetim.some((d) => d.olay === "KURULUM_ETKINLESTI") && !denetimMetni.includes(k.kod) && !denetimMetni.includes(yanit.data.kira));
+
+    console.log("\n§5 tekrar ve ikinci kullanım");
+    const tekrar = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, { kurulumId: k.kurulumId, amac: "etkinlestir", anahtar: f.kurulum, govde });
+    const tekrarKira = tekrar.status === 200 ? parseJws(tekrar.json.kira).ok : false;
+    kontrol("§5a aynı kod + aynı anahtar (ağ tekrarı) → 200 AYNI kira", tekrar.status === 200 && tekrarKira && tekrar.json.kira === yanit.data.kira, `${tekrar.status}`);
+    const ikinci = kurulumAnahtariUret();
+    const baska = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
+      kurulumId: k.kurulumId,
+      amac: "etkinlestir",
+      anahtar: ikinci,
+      govde: { ...govde, acikAnahtar: ikinci.x },
+    });
+    kontrol("§5b aynı kod başka anahtarla → 409 ETKINLESTIRME_KODU_KULLANILMIS", baska.status === 409 && baska.kod === "ETKINLESTIRME_KODU_KULLANILMIS", `${baska.status} ${baska.kod}`);
+
+    console.log("\n§6 ✓K sondası: kurgu yeşil değil");
+    const sahte = signJws({ typ: "tekserp-kira", kid: f.alt.kid, payload: parseJws(yanit.data.kira).ok ? (parseJws(yanit.data.kira) as { ok: true; value: { payload: Record<string, unknown> } }).value.payload : {}, privateKey: ikinci.privateKey });
+    const sahteDogru = verifyLease(sahte, f.kokler);
+    kontrol("§6a başka anahtarla imzalı kira fabrikada düşer (JWS_IMZA)", !sahteDogru.ok && sahteDogru.code === "JWS_IMZA", sahteDogru.ok ? "GEÇTİ?!" : sahteDogru.code);
+  } finally {
+    await sunucu.durdur();
+    await temizleKurulumlar(temizlenecek, ortam.kidler);
+    ortam.temizle();
+    await kapat();
+  }
+  sonuc();
+}
+
+main().catch(async (err: Error) => {
+  console.error(`❌ bekçi çöktü: ${err.stack ?? err.message}`);
+  await kapat();
+  process.exit(1);
+});

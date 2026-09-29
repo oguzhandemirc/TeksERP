@@ -1,0 +1,13 @@
+node_modules
+dist
+# Ortam dosyası: DATABASE_URL + anahtar dizini yolu — repoya girmez.
+.env
+.env.*
+!.env.example
+# Anahtar dosyaları (kök parolalı, alt/indirme 0600) — ASLA repoya girmez.
+anahtarlar/
+*.kok.json
+*.anahtar.json
+*.bayi.json
+# Portal TOTP sırlarının sarma anahtarı (ANAHTAR_DIZINI içinde) — ASLA repoya girmez.
+portal-totp.key

@@ -1,0 +1,11 @@
+// Tip kontrolü kapsamı src + scripts (bekçiler, anahtar CLI'ı). Yalnız doğrular, çıktı üretmez;
+// build kök tsconfig.json ile yapılır (dist/ düzeni src'den).
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "../.."
+  },
+  "include": ["scripts/**/*", "src/**/*", "prisma.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}

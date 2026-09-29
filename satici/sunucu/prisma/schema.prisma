@@ -1,0 +1,697 @@
+// =============================================================================
+// TeksERP satıcı sunucusu — Prisma şeması
+// =============================================================================
+// Çekirdek kurallar burada da geçerli (kök CLAUDE.md):
+//   - PK: UUID; her DateTime timestamptz; UUID kolon @db.Uuid.
+//   - Durum tabloları "şu an ne", defterler "ne oldu" — defter satırı DEĞİŞMEZ
+//     (yalnız createdAt; geri alma ters satırdır, silme/düzeltme değil).
+//   - Soft delete: `aktif` / durum geçişi. Hard delete yalnız TELEMETRİ sınıfında
+//     (Yoklama, NonceDefteri — yaşa göre budanır; hiçbir iş kararı onları okumaz).
+//   - Sır hijyeni: özel anahtar, parola, etkinleştirme kodunun düz metni DB'ye GİRMEZ.
+// Model adları tel sözlüğüyle aynı dilde (Türkçe); kod bildirimleri İngilizce.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// -----------------------------------------------------------------------------
+// ENUM'LAR — protokoldeki kümelerin aynası (bekçi: test_sema_aynasi)
+// -----------------------------------------------------------------------------
+
+/// Protokol `LICENSE_CLASSES` ile birebir.
+enum LisansSinifi {
+  URETIM
+  TEST
+  DR
+  DEMO
+  BAYI
+  BARINDIRILAN
+}
+
+enum KurulumDurumu {
+  /// Portalda açıldı, fabrika henüz etkinleştirmedi.
+  ETKINLESMEDI
+  ETKIN
+  /// DR sunucusu üretimi devraldı; kira `devredildi: true` taşır.
+  DEVREDILDI
+  /// Kira verilmez (403 KURULUM_IPTAL).
+  IPTAL
+}
+
+enum KodDurumu {
+  AKTIF
+  KULLANILDI
+  IPTAL
+}
+
+enum TasimaDurumu {
+  BEKLIYOR
+  ONAYLANDI
+  REDDEDILDI
+}
+
+/// Kiranın zincirdeki doğuş biçimi (plan §4 çatal kararı).
+enum ZincirKarari {
+  /// Etkinleştirme: zincirin kökü.
+  ETKINLESTIRME
+  /// Uçtaki kiranın çocuğu.
+  NORMAL
+  /// (a) Aynı parmak izinden geride kalmış uç — uca yakalar, uyarı yok.
+  YAKALA
+  /// (c) Farklı parmak izi aynı ucu taşıyor — ilk pencerede uyarıyla verilir.
+  CATAL
+  /// Onaylı taşımadan sonra yeni anahtarın ilk kirası (yeni zincir).
+  TASIMA
+}
+
+enum YaptirimTuru {
+  /// Yalnız mesaj bandı.
+  K0
+  /// Güncelleme dondurma.
+  K1
+  /// Modül dondurma.
+  K2
+  /// Süreli kısıtlı kip (kisitlamaTarihi).
+  K3
+  /// Anında kısıtlı kip.
+  K4
+  /// Anında tam durdurma.
+  K5
+  /// Gözlem ↔ zorla geçişi (önceki/yeni değer parametrede).
+  ZORLAMA
+  /// Vadeli geçerlilik bitişi değişimi (uzat / kalıcıya çevir / vade).
+  GECERLILIK
+  /// Ters kayıt: `geriAlinanEylemId`yi kaldırır.
+  GERI_AL
+}
+
+enum PlanliEylemDurumu {
+  BEKLIYOR
+  UYGULANDI
+  IPTAL
+}
+
+enum TaksitKalemDurumu {
+  BEKLIYOR
+  ODENDI
+  /// Vade + gecikme günü geçti, planlı yaptırım uygulandı.
+  GECIKTI
+  IPTAL
+}
+
+enum KopyaUyariTuru {
+  /// İki farklı parmak izi aynı kira ucunu ileri taşıyor.
+  ZINCIR_CATALI
+  /// Ölçülen parmak izi kabul edilen kümeyle eşleşmiyor.
+  PARMAK_IZI_UYUSMAZ
+  /// Aynı parmak izi ardışık "yakala" üretiyor (ayırt edilemeyen tam kopya) — yalnız uyarı.
+  AYNI_PARMAK_IZI_TEKRAR
+}
+
+enum KopyaUyariDurumu {
+  ACIK
+  KAPANDI
+}
+
+enum AnahtarTuru {
+  KOK
+  HAZIRLIK_KOK
+  ALT
+  INDIRME
+  BAYI
+}
+
+enum AnahtarDurumu {
+  AKTIF
+  EMEKLI
+  IPTAL
+}
+
+// -----------------------------------------------------------------------------
+// MASTER: Müşteri → Tesis → Kurulum → Hak
+// -----------------------------------------------------------------------------
+
+model Musteri {
+  id        String   @id @default(uuid()) @db.Uuid
+  ad        String   @db.VarChar(200)
+  vergiNo   String?  @db.VarChar(20)
+  /// Müşteriyi yöneten bayi (yoksa doğrudan satıcı). Bayinin kurulum adedi bu bağdan sayılır.
+  bayiId    String?  @db.Uuid
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  bayi     Bayi?   @relation(fields: [bayiId], references: [id], onDelete: Restrict)
+  tesisler Tesis[]
+
+  @@index([bayiId])
+  @@map("musteri")
+}
+
+model Tesis {
+  id        String   @id @default(uuid()) @db.Uuid
+  musteriId String   @db.Uuid
+  ad        String   @db.VarChar(200)
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  musteri    Musteri   @relation(fields: [musteriId], references: [id])
+  kurulumlar Kurulum[]
+
+  @@index([musteriId])
+  @@map("tesis")
+}
+
+/// Bir fabrika sunucusu (backend kurulumu). `kurulumId` fabrikanın `installationId`sidir
+/// (HAK bu kimliğe bağlanır); `id` satıcının kendi anahtarıdır.
+model Kurulum {
+  id        String        @id @default(uuid()) @db.Uuid
+  tesisId   String        @db.Uuid
+  /// Fabrikanın installationId'si — HAK ve kira bu kimliğe bağlanır.
+  kurulumId String        @unique @db.Uuid
+  ad        String?       @db.VarChar(200)
+  sinif     LisansSinifi
+  kanalKodu String        @db.VarChar(40)
+  durum     KurulumDurumu @default(ETKINLESMEDI)
+
+  /// Kurulum anahtarının açık yarısı (base64url x) ve kimliği (`kur-…`). Etkinleştirmede yazılır.
+  acikAnahtar          String? @db.VarChar(64)
+  anahtarKimligi       String? @unique @db.VarChar(64)
+  /// Kabul edilen parmak izi kümesi `{f1..f5: özet | null}` — yoklamada kayar (eşleşince).
+  kabulEdilenParmakIzi Json?
+
+  /// Zincir ucu: bu kuruluma verilmiş en son kira.
+  sonKiraId String? @unique @db.Uuid
+
+  /// Kip: false = gözlem (varsayılan; bugünkü davranış), true = zorla. Değişim defteri YaptirimEylemi(ZORLAMA).
+  zorlama          Boolean @default(false)
+  yoklamaAraligiDk Int     @default(60)
+
+  platform         String?   @db.VarChar(10)
+  sonOrtam         Json?
+  sonSaglik        Json?
+  sonYoklamaZamani DateTime? @db.Timestamptz
+  etkinlesmeZamani DateTime? @db.Timestamptz
+  aktif            Boolean   @default(true)
+  createdAt        DateTime  @default(now()) @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @db.Timestamptz
+
+  tesis          Tesis               @relation(fields: [tesisId], references: [id])
+  sonKira        Kira?               @relation("KurulumSonKira", fields: [sonKiraId], references: [id], onDelete: NoAction)
+  haklar         Hak[]
+  kiralar        Kira[]              @relation("KurulumKiralari")
+  kodlar         EtkinlestirmeKodu[]
+  tasimalar      TasimaTalebi[]
+  kayitlar       KurulumKaydi[]
+  yoklamalar     Yoklama[]
+  noncelar       NonceDefteri[]
+  yaptirimlar    YaptirimEylemi[]
+  planliEylemler PlanliEylem[]
+  kopyaUyarilari KopyaUyarisi[]
+  taksitPlanlari TaksitPlani[]
+
+  @@index([tesisId])
+  @@map("kurulum")
+}
+
+/// Lisans hakkı (yapısal şartlar). Değişen her şey yeni bir HakSurumu (KÖK imzalı HAK belgesi) doğurur.
+model Hak {
+  id              String    @id @default(uuid()) @db.Uuid
+  kurulumId       String    @db.Uuid
+  /// `TKS-YYYY-NNNN` — doğuşta materyalize edilir, render'da biçimlenmez.
+  lisansNo        String    @unique @db.VarChar(20)
+  moduller        String[]
+  kalici          Boolean   @default(false)
+  bakimBitis      DateTime  @db.Timestamptz
+  /// Vadeli/demo/taksit geçerlilik bitişi (kiraya yazılır). Değişim defteri YaptirimEylemi(GECERLILIK).
+  gecerlilikBitis DateTime? @db.Timestamptz
+  /// Son imzalı sürüm (0 = henüz imzalanmadı).
+  guncelSurum     Int       @default(0)
+  aktif           Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @db.Timestamptz
+
+  kurulum  Kurulum     @relation(fields: [kurulumId], references: [id])
+  surumler HakSurumu[]
+  kiralar  Kira[]
+
+  @@index([kurulumId])
+  @@map("hak")
+}
+
+/// HAK belgesinin imzalı sürümleri — EKLEME-YALNIZ defter.
+model HakSurumu {
+  id           String   @id @default(uuid()) @db.Uuid
+  hakId        String   @db.Uuid
+  surum        Int
+  /// İmzalı HAK (JWS). Açık belge — sır değil.
+  belge        String
+  imzalayanKid String   @db.VarChar(64)
+  verilis      DateTime @db.Timestamptz
+  sebep        String   @db.VarChar(500)
+  yapan        String   @db.VarChar(120)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+
+  hak Hak @relation(fields: [hakId], references: [id])
+
+  @@unique([hakId, surum])
+  @@map("hak_surumu")
+}
+
+// -----------------------------------------------------------------------------
+// KİRA ZİNCİRİ
+// -----------------------------------------------------------------------------
+
+/// Verilen her kira — EKLEME-YALNIZ defter; zincir `oncekiKiraId` ile kurulur.
+model Kira {
+  /// Belgedeki `kiraId` ile aynı.
+  id               String       @id @default(uuid()) @db.Uuid
+  kurulumId        String       @db.Uuid
+  oncekiKiraId     String?      @db.Uuid
+  hakId            String       @db.Uuid
+  hakSurum         Int
+  anahtarKimligi   String       @db.VarChar(64)
+  karar            ZincirKarari
+  /// Kirayı İSTEYENİN ölçtüğü parmak izi (çatal kararı bununla verilir).
+  istemciParmakIzi Json
+  verilis          DateTime     @db.Timestamptz
+  bitis            DateTime     @db.Timestamptz
+  /// İmzalı KİRA (JWS).
+  belge            String
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+
+  kurulum           Kurulum             @relation("KurulumKiralari", fields: [kurulumId], references: [id])
+  hak               Hak                 @relation(fields: [hakId], references: [id])
+  onceki            Kira?               @relation("KiraZinciri", fields: [oncekiKiraId], references: [id], onDelete: NoAction)
+  cocuklar          Kira[]              @relation("KiraZinciri")
+  uctaOlduguKurulum Kurulum?            @relation("KurulumSonKira")
+  etkinlestirmeKodu EtkinlestirmeKodu[]
+
+  @@index([kurulumId, createdAt])
+  @@index([oncekiKiraId])
+  @@map("kira")
+}
+
+/// Tekrar oynatma defteri — TELEMETRİ sınıfı: `sonKullanim` geçince budanır (istek zaten
+/// ±10 dk zaman denetiminden geçemez). `(kurulumId, nonce)` UNIQUE = atomik kayıt.
+model NonceDefteri {
+  id          String   @id @default(uuid()) @db.Uuid
+  kurulumId   String   @db.Uuid
+  nonce       String   @db.VarChar(64)
+  amac        String   @db.VarChar(20)
+  sonKullanim DateTime @db.Timestamptz
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
+
+  @@unique([kurulumId, nonce])
+  @@index([sonKullanim])
+  @@map("nonce_defteri")
+}
+
+/// Yoklama telemetrisi — allowlist'li sağlık özeti. Yaşa göre budanır; iş kararı okumaz
+/// (zincir kararı Kira'dan, güncel sağlık Kurulum.sonSaglik'ten).
+model Yoklama {
+  id        String   @id @default(uuid()) @db.Uuid
+  kurulumId String   @db.Uuid
+  /// NORMAL · YAKALA · TEKRAR · CATAL · RED_KIRA_VERILMEDI · DEVREDILDI …
+  sonuc     String   @db.VarChar(40)
+  kiraId    String?  @db.Uuid
+  durum     Json
+  saat      Json
+  ortam     Json
+  saglik    Json
+  gozlem    Json
+  parmakIzi Json
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
+
+  @@index([kurulumId, createdAt])
+  @@index([createdAt])
+  @@map("yoklama")
+}
+
+// -----------------------------------------------------------------------------
+// YAPTIRIM
+// -----------------------------------------------------------------------------
+
+/// Yaptırım DEFTERİ — eylem ve ters eylem satır olarak; satır değişmez, silinmez.
+model YaptirimEylemi {
+  id                String       @id @default(uuid()) @db.Uuid
+  kurulumId         String       @db.Uuid
+  tur               YaptirimTuru
+  /// Türe göre: {mesaj?, kisitlamaTarihi?, donmusModuller?, onceki?, yeni?}
+  parametre         Json
+  sebep             String       @db.VarChar(500)
+  yapan             String       @db.VarChar(120)
+  /// GERI_AL satırında kaldırılan eylem — UNIQUE: bir eylem yalnız bir kez geri alınır.
+  geriAlinanEylemId String?      @unique @db.Uuid
+  /// Planlı eylemden doğduysa kaynağı.
+  planliEylemId     String?      @unique @db.Uuid
+  createdAt         DateTime     @default(now()) @db.Timestamptz
+
+  kurulum      Kurulum         @relation(fields: [kurulumId], references: [id])
+  geriAlinan   YaptirimEylemi? @relation("YaptirimTers", fields: [geriAlinanEylemId], references: [id], onDelete: NoAction)
+  tersKaydi    YaptirimEylemi? @relation("YaptirimTers")
+  planliEylem  PlanliEylem?    @relation(fields: [planliEylemId], references: [id], onDelete: NoAction)
+  taksitKalemi TaksitKalemi?
+
+  @@index([kurulumId, createdAt])
+  @@map("yaptirim_eylemi")
+}
+
+/// Vadesinde kendiliğinden uygulanacak yaptırım (ör. vade + 15 gün ödeme yoksa K3).
+model PlanliEylem {
+  id             String            @id @default(uuid()) @db.Uuid
+  kurulumId      String            @db.Uuid
+  tur            YaptirimTuru
+  parametre      Json
+  vade           DateTime          @db.Timestamptz
+  durum          PlanliEylemDurumu @default(BEKLIYOR)
+  sebep          String            @db.VarChar(500)
+  yapan          String            @db.VarChar(120)
+  uygulamaZamani DateTime?         @db.Timestamptz
+  /// İptal (BEKLIYOR → IPTAL) — kim, ne zaman, neden; durumla çift yüklem (CHECK).
+  iptalZamani    DateTime?         @db.Timestamptz
+  iptalEden      String?           @db.VarChar(120)
+  iptalSebebi    String?           @db.VarChar(500)
+  createdAt      DateTime          @default(now()) @db.Timestamptz
+  updatedAt      DateTime          @updatedAt @db.Timestamptz
+
+  kurulum  Kurulum         @relation(fields: [kurulumId], references: [id])
+  yaptirim YaptirimEylemi?
+
+  @@index([durum, vade])
+  @@map("planli_eylem")
+}
+
+model TaksitPlani {
+  id           String   @id @default(uuid()) @db.Uuid
+  kurulumId    String   @db.Uuid
+  aciklama     String   @db.VarChar(500)
+  /// Ödeme onayında geçerlilik bitişi bir sonraki bekleyen vade + bu kadar gün olur.
+  uzatmaGun    Int      @default(15)
+  /// Vade + bu kadar gün ödeme yoksa K3.
+  gecikmeGun   Int      @default(15)
+  /// K3'ün geri sayımı (gün).
+  kisitlamaGun Int      @default(15)
+  aktif        Boolean  @default(true)
+  yapan        String   @db.VarChar(120)
+  /// Planın kapanışı (aktif → pasif): bekleyen kalemler IPTAL olur; durumla çift yüklem (CHECK).
+  kapanisZamani DateTime? @db.Timestamptz
+  kapatan       String?   @db.VarChar(120)
+  kapanisSebebi String?   @db.VarChar(500)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  kurulum  Kurulum        @relation(fields: [kurulumId], references: [id])
+  kalemler TaksitKalemi[]
+
+  @@index([kurulumId])
+  @@map("taksit_plani")
+}
+
+model TaksitKalemi {
+  id               String            @id @default(uuid()) @db.Uuid
+  planId           String            @db.Uuid
+  sira             Int
+  vade             DateTime          @db.Timestamptz
+  tutar            Decimal           @db.Decimal(14, 2)
+  durum            TaksitKalemDurumu @default(BEKLIYOR)
+  odemeZamani      DateTime?         @db.Timestamptz
+  /// Gecikmede uygulanan yaptırım eylemi.
+  yaptirimEylemiId String?           @unique @db.Uuid
+  createdAt        DateTime          @default(now()) @db.Timestamptz
+  updatedAt        DateTime          @updatedAt @db.Timestamptz
+
+  plan     TaksitPlani     @relation(fields: [planId], references: [id])
+  yaptirim YaptirimEylemi? @relation(fields: [yaptirimEylemiId], references: [id], onDelete: NoAction)
+
+  @@unique([planId, sira])
+  @@index([durum, vade])
+  @@map("taksit_kalemi")
+}
+
+// -----------------------------------------------------------------------------
+// ETKİNLEŞTİRME · TAŞIMA · KOPYA
+// -----------------------------------------------------------------------------
+
+/// Tek kullanımlık etkinleştirme kodu. Düz metin saklanmaz: sha256 özeti + son 4 karakter.
+model EtkinlestirmeKodu {
+  id                     String    @id @default(uuid()) @db.Uuid
+  kurulumId              String    @db.Uuid
+  kodOzeti               String    @unique @db.VarChar(64)
+  kodSonu                String    @db.VarChar(4)
+  durum                  KodDurumu @default(AKTIF)
+  gecerlilikBitis        DateTime  @db.Timestamptz
+  kullanimZamani         DateTime? @db.Timestamptz
+  /// Kodu tüketen kurulum anahtarı — aynı anahtarla tekrar (ağ tekrarı) aynı sonucu alır.
+  kullananAnahtarKimligi String?   @db.VarChar(64)
+  /// Etkinleştirmede verilen kira — tekrarın cevabı buradan.
+  kiraId                 String?   @db.Uuid
+  yapan                  String    @db.VarChar(120)
+  createdAt              DateTime  @default(now()) @db.Timestamptz
+  updatedAt              DateTime  @updatedAt @db.Timestamptz
+
+  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
+  kira    Kira?   @relation(fields: [kiraId], references: [id], onDelete: NoAction)
+
+  @@index([kurulumId])
+  @@map("etkinlestirme_kodu")
+}
+
+/// Taşıma talebi: yeni anahtar + parmak izi, portal onayını bekler (durum makinesi, atomik claim).
+model TasimaTalebi {
+  id                 String       @id @default(uuid()) @db.Uuid
+  kurulumId          String       @db.Uuid
+  yeniAcikAnahtar    String       @db.VarChar(64)
+  yeniAnahtarKimligi String       @db.VarChar(64)
+  yeniParmakIzi      Json
+  ortam              Json
+  gerekce            String?      @db.VarChar(500)
+  durum              TasimaDurumu @default(BEKLIYOR)
+  kararZamani        DateTime?    @db.Timestamptz
+  kararVeren         String?      @db.VarChar(120)
+  kararSebebi        String?      @db.VarChar(500)
+  createdAt          DateTime     @default(now()) @db.Timestamptz
+  updatedAt          DateTime     @updatedAt @db.Timestamptz
+
+  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
+
+  @@unique([kurulumId, yeniAnahtarKimligi])
+  @@index([durum])
+  @@map("tasima_talebi")
+}
+
+/// Kopya şüphesi. İlk pencerede yalnız uyarı; ikinci pencerede sürerse eşleşmeyen tarafa kira yok.
+model KopyaUyarisi {
+  id             String           @id @default(uuid()) @db.Uuid
+  kurulumId      String           @db.Uuid
+  tur            KopyaUyariTuru
+  durum          KopyaUyariDurumu @default(ACIK)
+  ilkGorulme     DateTime         @db.Timestamptz
+  sonGorulme     DateTime         @db.Timestamptz
+  gorulmeSayisi  Int              @default(1)
+  /// Kabul edilen kümeye uyan taraf ve uymayan taraf (özetler; ham kimlik yok).
+  sahipParmakIzi Json?
+  digerParmakIzi Json
+  /// İkinci pencerede kira reddedildi mi (ilk red anı).
+  redZamani      DateTime?        @db.Timestamptz
+  kapanisZamani  DateTime?        @db.Timestamptz
+  kapatan        String?          @db.VarChar(120)
+  createdAt      DateTime         @default(now()) @db.Timestamptz
+  updatedAt      DateTime         @updatedAt @db.Timestamptz
+
+  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
+
+  @@index([kurulumId, durum])
+  @@map("kopya_uyarisi")
+}
+
+/// Kurulum geçmişi DEFTERİ: etkinleşme, anahtar değişimi (taşıma), DR devri, iptal…
+/// Eski anahtarın açık yarısı burada kalır — taşınmış anahtarla gelen istek KURULUM_IPTAL alır.
+model KurulumKaydi {
+  id                 String   @id @default(uuid()) @db.Uuid
+  kurulumId          String   @db.Uuid
+  /// ETKINLESTI · YENIDEN_ETKINLESTI · TASINDI · DR_DEVRALDI · DEVREDILDI · DR_GERI_ALINDI · IPTAL …
+  olay               String   @db.VarChar(40)
+  anahtarKimligi     String?  @db.VarChar(64)
+  acikAnahtar        String?  @db.VarChar(64)
+  /// Değişimde bırakılan (eski) anahtar.
+  eskiAnahtarKimligi String?  @db.VarChar(64)
+  eskiAcikAnahtar    String?  @db.VarChar(64)
+  ayrinti            Json?
+  yapan              String   @db.VarChar(120)
+  createdAt          DateTime @default(now()) @db.Timestamptz
+
+  kurulum Kurulum @relation(fields: [kurulumId], references: [id])
+
+  @@index([kurulumId, createdAt])
+  @@index([eskiAnahtarKimligi])
+  @@map("kurulum_kaydi")
+}
+
+/// Satıcı anahtarlarının KÜNYESİ — yalnız AÇIK yarı; özel yarı DB'ye ASLA girmez.
+model AnahtarKaydi {
+  id          String         @id @default(uuid()) @db.Uuid
+  kid         String         @unique @db.VarChar(80)
+  tur         AnahtarTuru
+  acikAnahtar String         @db.VarChar(64)
+  siniflar    LisansSinifi[]
+  /// Kök imzalı sertifika (açık belge); kökler için null.
+  sertifika   String?
+  baslangic   DateTime?      @db.Timestamptz
+  bitis       DateTime?      @db.Timestamptz
+  durum       AnahtarDurumu  @default(AKTIF)
+  createdAt   DateTime       @default(now()) @db.Timestamptz
+  updatedAt   DateTime       @updatedAt @db.Timestamptz
+
+  @@map("anahtar_kaydi")
+}
+
+/// Denetim (audit) — AYAK İZİ: iş kararı buradan okunmaz. Sır/özel anahtar/parola/kod düz metni GİRMEZ.
+model Denetim {
+  id        String   @id @default(uuid()) @db.Uuid
+  olay      String   @db.VarChar(60)
+  varlik    String   @db.VarChar(40)
+  varlikId  String?  @db.VarChar(64)
+  yapan     String   @db.VarChar(120)
+  ozet      Json?
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([varlik, varlikId])
+  @@index([createdAt])
+  @@map("denetim")
+}
+
+// -----------------------------------------------------------------------------
+// BAYİ — hesap + tavan (modül ⊆ · sınıf ⊆ · kurulum adedi). Bayi imzalı HAK, protokolün
+// kriptografik sertifika kısıtına EK olarak GÜNCEL tavana karşı sunucuda yeniden doğrulanır.
+// -----------------------------------------------------------------------------
+
+model Bayi {
+  id               String   @id @default(uuid()) @db.Uuid
+  ad               String   @db.VarChar(200)
+  vergiNo          String?  @db.VarChar(20)
+  /// Bayinin imza anahtarının kid'i (`bayi-…`); kök imzalı sertifikası bu bayinin id'sini taşır.
+  anahtarKid       String?  @unique @db.VarChar(80)
+  /// Güncel tavan sürümü (0 = tavan yok → bayi hiçbir HAK imzalayamaz). Değişim defteri BayiTavani.
+  guncelTavanSurum Int      @default(0)
+  aktif            Boolean  @default(true)
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+
+  tavanlar     BayiTavani[]
+  musteriler   Musteri[]
+  kullanicilar PortalKullanici[]
+
+  @@map("bayi")
+}
+
+/// Bayi tavanının sürümleri — EKLEME-YALNIZ defter (tetikleyiciyle değişmez).
+model BayiTavani {
+  id           String         @id @default(uuid()) @db.Uuid
+  bayiId       String         @db.Uuid
+  surum        Int
+  moduller     String[]
+  siniflar     LisansSinifi[]
+  /// Bayinin müşterilerinde açık (iptal edilmemiş, aktif) kurulum sayısının üst sınırı.
+  kurulumAdedi Int
+  sebep        String         @db.VarChar(500)
+  yapan        String         @db.VarChar(120)
+  createdAt    DateTime       @default(now()) @db.Timestamptz
+
+  bayi Bayi @relation(fields: [bayiId], references: [id])
+
+  @@unique([bayiId, surum])
+  @@map("bayi_tavani")
+}
+
+// -----------------------------------------------------------------------------
+// PORTAL — kullanıcı (parola scrypt + TOTP ZORUNLU), oturum (telemetri), işlem kimliği (idempotency)
+// -----------------------------------------------------------------------------
+
+enum PortalRolu {
+  SATICI_YONETICI
+  SATICI_OPERATOR
+  BAYI
+}
+
+/// Oturumun doğduğu dinleyici — oturum yalnız orada geçerlidir (satıcı rolleri tailnet, bayi genel).
+enum PortalDinleyici {
+  GENEL
+  TAILNET
+}
+
+model PortalKullanici {
+  id             String     @id @default(uuid()) @db.Uuid
+  /// Küçük harf, [a-z0-9._-] — doğuşta normalleştirilir.
+  kullaniciAdi   String     @unique @db.VarChar(60)
+  adSoyad        String     @db.VarChar(120)
+  rol            PortalRolu
+  /// Yalnız BAYI rolünde dolu (CHECK).
+  bayiId         String?    @db.Uuid
+  /// scrypt$N$r$p$tuz$özet — düz parola DB'ye girmez.
+  parolaOzeti    String     @db.VarChar(200)
+  /// TOTP sırrı AES-256-GCM ile sarılı (anahtar ANAHTAR_DIZINI'nde, DB'de değil).
+  totpSirSifreli String     @db.VarChar(200)
+  /// Son kabul edilen TOTP adımı (tekrar oynatma kilidi).
+  totpSonAdim    Int?
+  basarisizGiris Int        @default(0)
+  kilitBitis     DateTime?  @db.Timestamptz
+  sonGiris       DateTime?  @db.Timestamptz
+  parolaDegisim  DateTime   @db.Timestamptz
+  aktif          Boolean    @default(true)
+  createdAt      DateTime   @default(now()) @db.Timestamptz
+  updatedAt      DateTime   @updatedAt @db.Timestamptz
+
+  bayi      Bayi?           @relation(fields: [bayiId], references: [id], onDelete: Restrict)
+  oturumlar PortalOturumu[]
+
+  @@map("portal_kullanici")
+}
+
+/// Portal oturumu — TELEMETRİ sınıfı: iş kararı okumaz, bitişinden sonra budanır. Belirteç düz
+/// saklanmaz (sha256). Oturum doğduğu dinleyiciye bağlıdır.
+model PortalOturumu {
+  id            String          @id @default(uuid()) @db.Uuid
+  kullaniciId   String          @db.Uuid
+  belirtecOzeti String          @unique @db.VarChar(64)
+  dinleyici     PortalDinleyici
+  sonKullanim   DateTime        @db.Timestamptz
+  bitis         DateTime        @db.Timestamptz
+  kapanisZamani DateTime?       @db.Timestamptz
+  kapanisNedeni String?         @db.VarChar(40)
+  createdAt     DateTime        @default(now()) @db.Timestamptz
+  updatedAt     DateTime        @updatedAt @db.Timestamptz
+
+  kullanici PortalKullanici @relation(fields: [kullaniciId], references: [id])
+
+  @@index([kullaniciId])
+  @@index([bitis])
+  @@map("portal_oturumu")
+}
+
+/// Portal işlem kimliği (clientToken) — idempotency: eylem ile AYNI tx'te yazılır, yanıt (sırsız)
+/// saklanır; aynı kimlikle tekrar aynı yanıtı alır. TELEMETRİ sınıfı: saklama süresi sonunda budanır.
+model PortalIslemi {
+  id          String   @id @default(uuid()) @db.Uuid
+  clientToken String   @unique @db.Uuid
+  kullaniciId String   @db.Uuid
+  eylem       String   @db.VarChar(60)
+  /// Gövdenin (sır alanları çıkarılmış) sha256'sı — gövde kapısı.
+  govdeOzeti  String   @db.VarChar(64)
+  yanitDurumu Int
+  yanit       Json
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  @@index([createdAt])
+  @@map("portal_islemi")
+}
