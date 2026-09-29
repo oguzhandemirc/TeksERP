@@ -11,3 +11,31 @@ export function isRetryableConflict(err: unknown): boolean {
   const text = err instanceof Error ? err.message : "";
   return /40P01|40001|deadlock detected|could not serialize/.test(text);
 }
+
+/**
+ * Tekillik ihlali BU kolondan mı? pg sürücü adaptörü (Prisma 7) `meta.target` vermez; hedef
+ * `meta.driverAdapterError.cause` altında (`constraint.fields` · `constraint.index` · iletideki kısıt adı).
+ * Hedef okunamazsa `false` (varsayım yok — çağıran ham hatayı yeniden atar).
+ */
+export function uniqueViolationOn(err: unknown, field: string): boolean {
+  if (!isUniqueViolation(err)) return false;
+  const meta = ((err as Prisma.PrismaClientKnownRequestError).meta ?? {}) as {
+    target?: unknown;
+    driverAdapterError?: { cause?: { constraint?: unknown; originalMessage?: unknown } };
+  };
+  const parts: string[] = [];
+  if (Array.isArray(meta.target)) parts.push(...meta.target.map(String));
+  else if (typeof meta.target === "string") parts.push(meta.target);
+  const cause = meta.driverAdapterError?.cause;
+  const c = cause?.constraint as { fields?: unknown; index?: unknown } | string | undefined;
+  if (typeof c === "string") parts.push(c);
+  else if (c && Array.isArray(c.fields)) parts.push(...c.fields.map((f) => String(f).replace(/"/g, "")));
+  else if (c && typeof c.index === "string") parts.push(c.index);
+  const named = typeof cause?.originalMessage === "string" ? /constraint "([^"]+)"/.exec(cause.originalMessage) : null;
+  if (named) parts.push(named[1]!);
+  const f = field.toLowerCase();
+  return parts.some((p) => {
+    const q = p.toLowerCase();
+    return q === f || q.includes(`_${f}_`) || q.endsWith(`_${f}_key`);
+  });
+}

@@ -5,9 +5,13 @@
 // kalır, defter yalnız büyür; ikinci geri alma 409. Her eylem sebep ister. Aynı işlem kimliği
 // aynı yanıtı alır (eylem ikinci kez koşmaz), başka gövdeyle 409 ISLEM_KIMLIGI_CAKISTI. Eylem
 // kendi tx'inde zili ('lisans') çalar — PG NOTIFY bu bekçinin dinleyicisine gelir.
-// ⭐ KALICI SONDA ✓K3 (her koşumda): (1) doğru onayla K4 UYGULANIR (201 + kademe K4) · (2) geri
+// §5 geri sayımı 7 günden KISA K3 AĞIRDIR (yönetici kararı f): operatör uygulayamaz/planlayamaz/
+// kaldıramaz (403), yönetici de ancak lisans numarasıyla (400 IKINCI_ONAY_GEREKLI); planlı K3 ve
+// taksit planının kısıtlama günü de aynı kapıdan geçer.
+// ⭐ KALICI SONDA ✓K4 (her koşumda): (1) doğru onayla K4 UYGULANIR (201 + kademe K4) · (2) geri
 //    alma kademeyi DÜŞÜRÜR (katlama ters satırı okuyor) · (3) FARKLI işlem kimliğiyle aynı gövde
-//    YENİ satır yazar (tekrar kapısı kimliğe bakıyor, gövdeye değil).
+//    YENİ satır yazar (tekrar kapısı kimliğe bakıyor, gövdeye değil) · (4) 7 günlük K3 operatörde
+//    GEÇER (sınır ağır sayılmıyor — kapı kör reddetmiyor).
 // Koşum: npx tsx scripts/test_portal_yaptirim.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -128,6 +132,39 @@ async function main(): Promise<void> {
     await bekle(300);
     const buKurulum = ziller.filter((z) => z.k === k.kurulumDbId && z.konu === "lisans");
     kontrol("§4d her eylem zili 'lisans' konusuyla çaldı (ret ve tekrar çalmaz)", buKurulum.length === (await defter()).length, `${buKurulum.length} zil / ${(await defter()).length} satır`);
+
+    console.log("\n§5 geri sayımı 7 günden kısa K3 = AĞIR yaptırım");
+    const operator = await portalKullaniciAc(ctx, "SATICI_OPERATOR");
+    kullanicilar.push(operator.id);
+    const opCerez = (await portalGiris(sunucu.tailnet, "/portal/api", operator)).cerez!;
+    const op = (u: string, govde: object) => portalIstek(sunucu.tailnet, u, { cerez: opCerez, govde: { clientToken: randomUUID(), ...govde } });
+    const yon = (u: string, govde: object) => portalIstek(sunucu.tailnet, u, { cerez, govde: { clientToken: randomUUID(), ...govde } });
+    const satirSayisi = (await defter()).length;
+    const opKisa = await op(yol("yaptirim"), { kademe: "K3", kisitlamaGun: 3, sebep: "kısa geri sayım" });
+    const opTarih = await op(yol("yaptirim"), { kademe: "K3", kisitlamaTarihi: new Date(Date.now() + 2 * 86_400_000).toISOString(), sebep: "kısa tarih" });
+    kontrol("§5a operatör: 3 günlük K3 ve 2 gün sonraki tarihli K3 → 403 YETKISIZ, satır YOK", opKisa.status === 403 && opKisa.kod === "YETKISIZ" && opTarih.status === 403 && (await defter()).length === satirSayisi, `${opKisa.status}/${opTarih.status}`);
+    const opSinir = await op(yol("yaptirim"), { kademe: "K3", kisitlamaGun: 7, sebep: "sınır" });
+    kontrol("§5b ✓K operatör: 7 günlük K3 → 201 (sınır hafif)", opSinir.status === 201, `${opSinir.status} ${opSinir.kod ?? ""}`);
+    const yonOnaysiz = await yon(yol("yaptirim"), { kademe: "K3", kisitlamaGun: 3, sebep: "kısa geri sayım" });
+    const yonOnayli = await yon(yol("yaptirim"), { kademe: "K3", kisitlamaGun: 3, sebep: "kısa geri sayım", onay: k.lisansNo });
+    kontrol("§5c yönetici: onaysız → 400 IKINCI_ONAY_GEREKLI; lisans no ile → 201", yonOnaysiz.status === 400 && yonOnaysiz.kod === "IKINCI_ONAY_GEREKLI" && yonOnayli.status === 201, `${yonOnaysiz.status}/${yonOnayli.status}`);
+    const opGeri = await op(`/portal/api/yaptirimlar/${yonOnayli.veri.id as string}/geri-al`, { sebep: "ödendi" });
+    const opHafifGeri = await op(`/portal/api/yaptirimlar/${opSinir.veri.id as string}/geri-al`, { sebep: "ödendi" });
+    kontrol("§5d ağır K3'ü operatör geri alamaz → 403; hafif K3'ü alır → 201", opGeri.status === 403 && opHafifGeri.status === 201, `${opGeri.status}/${opHafifGeri.status}`);
+    const vade = new Date(Date.now() + 3 * 86_400_000).toISOString();
+    const opPlan = await op(yol("planli-eylem"), { kademe: "K3", vade, kisitlamaGun: 2, sebep: "vade" });
+    const yonPlanOnaysiz = await yon(yol("planli-eylem"), { kademe: "K3", vade, kisitlamaGun: 2, sebep: "vade" });
+    const yonPlan = await yon(yol("planli-eylem"), { kademe: "K3", vade, kisitlamaGun: 2, sebep: "vade", onay: k.lisansNo });
+    kontrol("§5e planlı kısa K3: operatör 403 · yönetici onaysız 400 · onaylı 201", opPlan.status === 403 && yonPlanOnaysiz.status === 400 && yonPlan.status === 201, `${opPlan.status}/${yonPlanOnaysiz.status}/${yonPlan.status}`);
+    const kalem = [{ vade: new Date(Date.now() + 20 * 86_400_000).toISOString(), tutar: "10.00" }];
+    const opTaksit = await op(yol("taksit-plani"), { aciklama: "kısa kısıtlama", kalemler: kalem, kisitlamaGun: 5 });
+    const yonTaksitOnaysiz = await yon(yol("taksit-plani"), { aciklama: "kısa kısıtlama", kalemler: kalem, kisitlamaGun: 5 });
+    const opTaksitVarsayilan = await op(yol("taksit-plani"), { aciklama: "varsayılan kısıtlama", kalemler: kalem });
+    kontrol(
+      "§5f taksit planı kısıtlama günü < 7: operatör 403 · yönetici onaysız 400; varsayılan (15) operatörde 201",
+      opTaksit.status === 403 && yonTaksitOnaysiz.status === 400 && opTaksitVarsayilan.status === 201,
+      `${opTaksit.status}/${yonTaksitOnaysiz.status}/${opTaksitVarsayilan.status}`,
+    );
   } finally {
     await dinleyici.end().catch(() => undefined);
     await sunucu.kapat();

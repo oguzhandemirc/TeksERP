@@ -49,6 +49,9 @@ const EnvSchema = z.object({
   /** Budama: kapanmış/bitmiş oturum ve işlem kimliği satırlarının saklama süresi (gün). */
   PORTAL_OTURUM_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
   PORTAL_ISLEM_SAKLAMA_GUN: positiveInt(1, 3650).default(30),
+  /** Denetim budaması (günlük; denetim defter değil ayak izidir): başarısız giriş satırları ve diğer denetim (gün). */
+  DENETIM_GIRIS_SAKLAMA_GUN: positiveInt(30, 3650).default(90),
+  DENETIM_SAKLAMA_GUN: positiveInt(365, 3650).default(730),
   /** Tailnet çerezine Secure: yalnız tailnet dinleyicisi HTTPS arkasındaysa "1" (genel dinleyicide her zaman Secure). */
   TAILNET_CEREZ_GUVENLI: z.enum(["0", "1"]).default("0"),
 });

@@ -17,19 +17,20 @@ Fabrikaların lisansını verir ve yönetir: **etkinleştirme** (tek kullanıml�
 | Portal | `src/portal/` + `src/http/portal-*.ts` · `dealer-routes.ts` | Rota TABLOSU veridir: her rota izin (`roles.ts`) + kimlik beyanı taşır; yazma `executePortalAction` (işlem kimliği + eylem + denetim tek boğaz). Oturum: parola scrypt + TOTP ZORUNLU tek adım, çerez httpOnly + SameSite=Strict, oturum doğduğu dinleyiciye bağlı |
 | Şema | `prisma/` | Müşteri → Tesis → Kurulum → Hak; defterler (`hak_surumu`, `kira`, `yaptirim_eylemi`, `kurulum_kaydi`) DB tetikleyicisiyle değişmez; telemetri (`nonce_defteri`, `yoklama`) yaşa göre budanır |
 
-- **Tek süreç, iki dinleyici** (`src/server.ts`): `PORT_GENEL`/`GENEL_BIND` + `PORT_TAILNET`/`TAILNET_BIND` (joker adres açılışta RED). Sıkıştırma ara katmanı yok (zil `no-transform`).
+- **Tek süreç, iki dinleyici** (`src/server.ts`): `PORT_GENEL`/`GENEL_BIND` + `PORT_TAILNET`/`TAILNET_BIND` (joker adres açılışta RED). Portlar **4610 genel · 4611 portal (tailnet)** — `.env.example` ile aynı; yerel oturum ağacı başka port seçebilir, bekçiler port 0'da kalkar. Sıkıştırma ara katmanı yok (zil `no-transform`).
 - **Zil**: portal eylemi kendi tx'inde `pg_notify('satici_zil', …)` → COMMIT'te sunucunun PG dinleyicisi aboneye iletir (eylemi yapan süreç sunucu olmak zorunda değil).
 - **Kira zinciri** (`services/lease-chain.ts`, SAF): uçta NORMAL · (b) 15 dk içinde aynı ucun tekrarı → AYNI kira · (a) aynı makine geride → YAKALA (uyarı yok) · (c) farklı makine → ÇATAL (ilk pencere uyarı, ikincide eşleşmeyen tarafa 403 `KIRA_VERILMEDI`; sahip asla reddedilmez).
 - **Sır**: özel anahtar, parola, etkinleştirme kodunun düz metni DB'ye, loga, denetime GİRMEZ (kod sha256 + son 4). `.env` ve `anahtarlar/` repoya girmez.
 
 ## Portal (JSON API)
 
-- **Rol × dinleyici KESKİN:** `SATICI_YONETICI` · `SATICI_OPERATOR` yalnız TAILNET'ten, `BAYI` yalnız GENEL'den girer; uymayan hesap bilinmeyen hesap gibi davranır (sayaç değişmez, eşdeğer scrypt işi). İzin tablosu tek kaynak `src/portal/roles.ts`; K4/K5 · zorlama · kurulum iptali · bayi · kullanıcı yönetimi yalnız YÖNETİCİ.
+- **Rol × dinleyici KESKİN:** `SATICI_YONETICI` · `SATICI_OPERATOR` yalnız TAILNET'ten, `BAYI` yalnız GENEL'den girer; uymayan hesap bilinmeyen hesap gibi davranır (sayaç değişmez, eşdeğer scrypt işi). İzin tablosu tek kaynak `src/portal/roles.ts`; K4/K5 · geri sayımı 7 günden KISA K3 (planlı ve taksit kısıtlama günü dahil; lisans numarasıyla ikinci onay, ağırlık satıra `agir` olarak donar) · zorlama · kurulum iptali · kanal · bayi · kullanıcı yönetimi yalnız YÖNETİCİ.
 - **Giriş:** kullanıcı adı + parola + TOTP (RFC 6238, tekrar oynatma kilidi) TEK adımda; hata iletisi tek; ardışık başarısızlıkta hesap süreli kilit. TOTP sırrı AES-256-GCM ile sarılı (anahtar `ANAHTAR_DIZINI/portal-totp.key`, DB'de değil); kurulumu hesabı açan yönetici yapar, sır yalnız o yanıtta BİR KEZ. İlk yönetici: `scripts/portal-kullanici.ts ekle`.
 - **İdempotency:** her yazma `clientToken` taşır; eylem ile `portal_islemi` satırı AYNI tx'te yazılır → aynı kimlik aynı yanıtı alır, eylem ikinci kez koşmaz; başka kullanıcı/eylem/gövde 409 `ISLEM_KIMLIGI_CAKISTI`. Sır alanları gövde özetine ve saklanan yanıta girmez (kod/TOTP tekrarında `…Gosterilemez: true`).
 - **Kök/bayi parolası** formdan → imza alt sürecinin stdin'ine (hazırlık tx DIŞINDA), Buffer sıfırlanır. HAK'ın yapısal değişikliği (modül tavanı · kalıcı · bakım) yalnız YENİ İMZALI SÜRÜMLE olur; `production.enabled` varsayılan dahil, çıkarılırken açık onay (`URETIM_MODULU_UYARISI`).
-- **Bayi imzalı HAK:** protokolün sertifika kısıtına EK olarak bayinin GÜNCEL tavanı (modül ⊆ · sınıf ⊆ · kurulum adedi) imzadan önce ve bayi kilidi altında yeniden denetlenir (`BAYI_TAVANI_ASILDI`). Tavan sürümlü defterdir (`bayi_tavani`).
-- **Portal hata kodları** (`src/lib/errors.ts` `PORTAL_ERROR_CODES`) protokolün DIŞINDADIR; `/v1/*` yalnız protokol kodlarını döndürür.
+- **Bayi imzalı HAK:** protokolün sertifika kısıtına EK olarak bayinin GÜNCEL tavanı (modül ⊆ · sınıf ⊆ · kurulum adedi · kanal ⊆ · kalıcı izni, varsayılan HAYIR · bakım ay tavanı, varsayılan 12 — bakım bitişi imza anı + tavan ayını aşamaz) imzadan önce ve bayi kilidi altında yeniden denetlenir (`BAYI_TAVANI_ASILDI`). Tavan sürümlü defterdir (`bayi_tavani`).
+- **Kanal** (`kanal`, asgari ana veri): `kod` (kimlik, DEĞİŞMEZ, sert silinmez — indirme yolunun öneki) · `ad` · `tur` (`uretim`|`hazirlik`) · `guncelSurumler` (`{backend?, panel?, tablet?}`). Kurulum KAYITLI kanala bağlıdır (FK `kurulum.kanalKodu → kanal.kod`); kiranın `kanal.guncelSurumler`i kanal satırından dolar; bayi yalnız satıcının tavanına atadığı kanallarda kurulum açar. Yayın bildirimi (sürümün otomatik yazılması) Faz 3.
+- **Hata kodları — tek kaynak iki liste:** fabrikanın da gördüğü kodlar protokolün `VENDOR_ERROR_CODES` / `PROTOCOL_ERROR_CODES`inde yaşar (`GOVDE_GECERSIZ` 400 · `BULUNAMADI` 404 — bilinmeyen yol ve portalda "kayıt yok" · `TEKRAR_DENEYIN` 409 — PG 40001/40P01 ve atomik claim kaybı, aynı istek yeniden denenir · `SUNUCU_HATASI` 500 · …). Portal kodları (`src/lib/errors.ts` `PORTAL_ERROR_CODES`, yalnız `/portal/api` · `/bayi/api`): `OTURUM_YOK` 401 · `GIRIS_BASARISIZ` 401 · `GIRIS_KILITLI` 429 · `YETKISIZ` 403 · `DURUM_CAKISMASI` 409 · `IKINCI_ONAY_GEREKLI` 400 · `ISLEM_KIMLIGI_CAKISTI` 409 · `BAYI_TAVANI_ASILDI` 409 · `URETIM_MODULU_UYARISI` 409 · `IMZA_PAROLASI_HATALI` 400 · `PAROLA_ZAYIF` 400 · `KULLANICI_ADI_KULLANIMDA` 409 (ön okuma da, yarışın UNIQUE ihlali de). İki liste KESİŞMEZ (bekçi `test_satici_kapilari` §8); `/v1/*` yalnız protokol kodlarını döndürür.
 
 ## Advisory kilit envanteri (satıcı DB'si — backend'in 80xx uzayından bağımsız)
 
@@ -43,9 +44,9 @@ Kilit tx'in İLK ifadesidir; birden çok kilit bu SIRADA alınır: `PORTAL_TOKEN
 | 9104 | `PORTAL_TOKEN` | portal işlem kimliği (clientToken) başına: aynı kimlikli eşzamanlı denemeler sıraya girer |
 | 9105 | `CUSTOMER` | müşteri ağacı başına: tesis/kurulum doğumu ↔ müşteri/tesis/kurulum pasife-aktife alma (MV-06) |
 
-## Budama beyanı (telemetri)
+## Budama beyanı (telemetri + ayak izi)
 
-Yaşa göre silinen tablolar YALNIZ: `nonce_defteri` (`sonKullanim` = istek zamanı + 10 dk geçti) · `yoklama` (`YOKLAMA_SAKLAMA_GUN`) · `portal_oturumu` (bitişinden/kapanışından `PORTAL_OTURUM_SAKLAMA_GUN` sonra) · `portal_islemi` (işlem kimliği; `PORTAL_ISLEM_SAKLAMA_GUN`). Hiçbir iş kararı bunları okumaz (zincir kararı `kira`dan, güncel sağlık `kurulum.sonSaglik`ten, eylemin kendisi kendi defterinden). Başka her silme yasak; bekçi ölçer. Defterler (tetikleyiciyle değişmez): `hak_surumu` · `kira` · `yaptirim_eylemi` · `kurulum_kaydi` · `bayi_tavani`.
+Yaşa göre silinen tablolar YALNIZ (`src/services/maintenance.ts` `PRUNED_MODELS`): `nonce_defteri` (`sonKullanim` = istek zamanı + 10 dk geçti) · `yoklama` (`YOKLAMA_SAKLAMA_GUN`) · `portal_oturumu` (bitişinden/kapanışından `PORTAL_OTURUM_SAKLAMA_GUN` sonra) · `portal_islemi` (işlem kimliği; `PORTAL_ISLEM_SAKLAMA_GUN`) · `denetim` (ayak izi, günde bir, iki sınıf tek tx'te: `PORTAL_GIRIS_BASARISIZ`/`PORTAL_GIRIS_REDDEDILDI` `DENETIM_GIRIS_SAKLAMA_GUN` = 90, diğer her satır `DENETIM_SAKLAMA_GUN` = 730; bekçi `test_denetim_budama`). Hiçbir iş kararı bunları okumaz (zincir kararı `kira`dan, güncel sağlık `kurulum.sonSaglik`ten, eylemin kendisi kendi defterinden). Başka her silme yasak; bekçi ölçer. Defterler (tetikleyiciyle değişmez): `hak_surumu` · `kira` · `yaptirim_eylemi` · `kurulum_kaydi` · `bayi_tavani`.
 
 ## Komutlar
 
@@ -54,8 +55,8 @@ cd satici/sunucu
 npx prisma migrate deploy && npx prisma generate      # migrate dev/reset YASAK (yeni migration: migrate diff ile üret)
 npx tsx scripts/anahtar.ts kok-uret --kid=kok-2026-1  # parola TTY/stdin; alt-uret · indirme-uret · bayi-uret
 npx tsx scripts/portal-kullanici.ts ekle --kullanici=ad --ad-soyad="Ad Soyad" --rol=SATICI_YONETICI  # ilk yönetici (parola TTY/stdin; TOTP sırrı BİR KEZ basılır)
-npm run typecheck && npm run typecheck:scripts
+npm run typecheck && npm run typecheck:scripts && npm run lint   # commit kapısı dördüncü proje olarak aynısını ölçer (tip + eslint + lint-baseline.json tavanı)
 node ../../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts [ad-parçası]   # yalnız *_test DB
 ```
 
-`.env` (repoya girmez, 0600): `DATABASE_URL` (kendi `_test` DB'si; `tekserp_fabrika_*` ASLA) · `PORT_GENEL` · `TAILNET_BIND` · `PORT_TAILNET` · `ANAHTAR_DIZINI` · (yalnız test) `GUVEN_CAPASI_DOSYASI`. Bekçiler `scripts/test_*.ts`; harita `Teks-Erp/docs/BEKCI-HARITASI.md` § lisans.
+`.env` (repoya girmez, 0600): `DATABASE_URL` (kendi `_test` DB'si; `tekserp_fabrika_*` ASLA) · `PORT_GENEL` · `TAILNET_BIND` · `PORT_TAILNET` · `ANAHTAR_DIZINI` · (yalnız test) `GUVEN_CAPASI_DOSYASI`; saklama süreleri ve diğer isteğe bağlılar `.env.example`te. Bekçiler `scripts/test_*.ts`; harita `Teks-Erp/docs/BEKCI-HARITASI.md` § lisans. CI'da ayrı "Satıcı" job'ı (PG 16, `migrate deploy`, lint + tavan + tip + kapı kapsamı + bekçi koşucusu).

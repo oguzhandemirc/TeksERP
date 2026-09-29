@@ -5,12 +5,13 @@
 // Ebeveyn–çocuk yarışı müşteri ağacı kilidiyle (9105) kapanır: çocuk doğarken ebeveyn pasife geçemez.
 // `…Tx` biçimlerinin ilk ifadesi kilittir; kilidin anahtarı (müşteri/tesis) değişmeyen alandan okunur.
 import type { Kurulum, LisansSinifi, Musteri, Tesis } from "@prisma/client";
-import { ChannelCodeSchema, UuidSchema } from "../lisans-protokol";
+import { UuidSchema } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
 import { badRequest, notFoundError, stateConflict } from "../lib/errors";
 import { lockCustomer, lockInstallation } from "../lib/locks";
 import { prisma, type Db, type Tx } from "../lib/prisma";
 import { isUniqueViolation } from "../lib/prisma-errors";
+import { requireChannel } from "./channel.service";
 import { notifyDoorbell } from "./doorbell";
 import { requireReason } from "./sanction.service";
 
@@ -134,7 +135,7 @@ export interface CreateInstallationInput {
 /** Kilit ALTINDA (müşteri ağacı) çağrılır: tesis/müşteri tazeden okunur ve aktif olmalı. */
 export async function createInstallationUnderLock(tx: Tx, g: CreateInstallationInput): Promise<Kurulum> {
   if (!UuidSchema.safeParse(g.installationId).success) throw badRequest("Kurulum kimliği (installationId) UUID olmalı");
-  if (!ChannelCodeSchema.safeParse(g.channelCode).success) throw badRequest("Kanal kodu biçimsiz");
+  await requireChannel(tx, g.channelCode);
   const name = g.name === undefined || g.name === null ? null : cleanName(g.name, "Kurulum");
   const site = await tx.tesis.findUnique({ where: { id: g.siteId }, include: { musteri: true } });
   if (!site) throw notFoundError("Tesis");
@@ -173,7 +174,7 @@ export async function updateInstallationTx(tx: Tx, g: UpdateInstallationInput): 
   await lockInstallation(tx, g.installationDbId);
   const inst = await tx.kurulum.findUnique({ where: { id: g.installationDbId } });
   if (!inst) throw notFoundError("Kurulum");
-  if (g.channelCode !== undefined && !ChannelCodeSchema.safeParse(g.channelCode).success) throw badRequest("Kanal kodu biçimsiz");
+  if (g.channelCode !== undefined) await requireChannel(tx, g.channelCode);
   if (g.licenseClass !== undefined && g.licenseClass !== inst.sinif) {
     const signed = await tx.hak.count({ where: { kurulumId: inst.id, guncelSurum: { gte: 1 } } });
     if (signed > 0) throw stateConflict("Sınıf imzalı HAK'ın parçası: imzalı hakkı olan kurulumun sınıfı değişmez (yeni kurulum açın)");

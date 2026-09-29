@@ -22,6 +22,7 @@ import {
 } from "../lisans-protokol";
 import { VendorError } from "../lib/errors";
 import type { Db, Tx } from "../lib/prisma";
+import { channelVersionsForLease } from "./channel.service";
 import type { VendorContext } from "./context";
 
 export interface SanctionState {
@@ -103,6 +104,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
   const key = ctx.keys.leaseKeyFor(installation.sinif, nowMs);
   if (!key) throw new VendorError(500, "SUNUCU_HATASI", "Kira imzalayacak geçerli alt anahtar yok");
   const sanction = await computeSanctionState(tx, installation.id);
+  const channel = await tx.kanal.findUnique({ where: { kod: installation.kanalKodu } });
   const id = randomUUID();
   const issuedAt = new Date(nowMs);
   const expiresAt = new Date(nowMs + ctx.config.KIRA_GUN * DAY_MS);
@@ -131,7 +133,7 @@ export async function issueLease(tx: Tx, ctx: VendorContext, g: IssueLeaseInput)
     esitlemeAraligiDk: null,
     patronBulutBitis: null,
     devredildi: installation.durum === "DEVREDILDI",
-    kanal: { kod: installation.kanalKodu, guncelSurumler: {} },
+    kanal: { kod: installation.kanalKodu, guncelSurumler: channelVersionsForLease(channel) },
     altSertifika: key.certificate,
   };
   const token = signDocument({ typ: TYP.KIRA, schema: LeaseSchema, payload, key: { kid: key.kid, privateKey: key.privateKey } });

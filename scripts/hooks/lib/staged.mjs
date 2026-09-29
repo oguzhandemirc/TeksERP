@@ -136,6 +136,15 @@ export const PROJELER = [
     lint: ["npm", ["run", "lint"]],
     test: ["npx", ["jest", "--runInBand"]], // ölçüm: 29 sn
   },
+  {
+    // Satıcı (lisans) sunucusu: `ad` DİZİNDİR (iç içe). Geniş tip config'i (src + scripts + ortak
+    // protokol fikstürü) dar olanı kapsar — ayrıca `typecheck:plain` koşmak aynı src'yi iki kez derlerdi.
+    // Bekçileri kendi `_test` DB'sini ister → commit kadansında DEĞİL (CI "Satıcı" job'ı + elle).
+    ad: "satici/sunucu",
+    typecheck: ["npm", ["run", "typecheck:scripts:plain"]],
+    lint: ["npm", ["run", "lint"]],
+    test: null,
+  },
 ];
 
 /** Staged dosyalardan etkilenen alt projeler (kod dosyası şartıyla). */

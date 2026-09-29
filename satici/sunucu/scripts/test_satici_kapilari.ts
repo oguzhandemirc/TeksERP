@@ -8,18 +8,21 @@
 //   §4 SERT SİLME yalnız telemetride: `.delete/.deleteMany` yalnız `PRUNED_MODELS` modellerinde;
 //      ham SQL'de DELETE/TRUNCATE yok
 //   §5 şema aynası: Prisma `LisansSinifi` = protokol `LICENSE_CLASSES`; `YaptirimTuru` ⊇ K0…K5
+//   §8 hata kodu TEK KAYNAK: portal kodları (`PORTAL_ERROR_CODES`) protokol kodlarıyla (`VENDOR_ERROR_CODES` ∪
+//      `PROTOCOL_ERROR_CODES`) kesişmez — ortak kod (BULUNAMADI, TEKRAR_DENEYIN…) yalnız protokolde yaşar
 //   §7 kilit SIRASI: bir fonksiyon birden çok kilit alıyorsa sıra PORTAL_TOKEN → DEALER → CUSTOMER →
 //      INSTALLATION → LICENSE_NUMBER (lib/locks.ts başlığı); ters sıra kilitlenme (40P01) doğurur
 // Taban 0 — tarayıcı (cırcır değil): ihlal doğduğu an kırmızı.
-// ⭐ KALICI SONDA ✓K5 (her koşumda): aynı çözümleyiciler sentetik ihlalli kaynakta ISIRIR —
+// ⭐ KALICI SONDA ✓K6 (her koşumda): aynı çözümleyiciler sentetik ihlalli kaynakta ISIRIR —
 //    kilitsiz tx · tx içinde Promise.all · defter modelinde deleteMany · tabloda olmayan uzay ·
-//    kurulum kilidinden SONRA bayi kilidi.
+//    kurulum kilidinden SONRA bayi kilidi · kod listesi kesişimi (§8c).
 // Koşum: npx tsx scripts/test_satici_kapilari.ts   (DB GEREKMEZ)
 // =============================================================================
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { LICENSE_CLASSES, SANCTION_LEVELS } from "../src/lisans-protokol";
+import { LICENSE_CLASSES, PROTOCOL_ERROR_CODES, SANCTION_LEVELS, VENDOR_ERROR_CODES } from "../src/lisans-protokol";
+import { PORTAL_ERROR_CODES } from "../src/lib/errors";
 import { LOCK_NAMESPACES } from "../src/lib/locks";
 import { PRUNED_MODELS } from "../src/services/maintenance";
 import { SATICI_KOKU, kontrol, sonuc } from "./lib/test-ortam";
@@ -153,6 +156,12 @@ export function analyze(files: { name: string; text: string }[]): Findings {
   return f;
 }
 
+/** İki kod listesinin kesişimi (tek kaynak ihlali). */
+export function sharedCodes(a: readonly string[], b: readonly string[]): string[] {
+  const bs = new Set(b);
+  return a.filter((x) => bs.has(x));
+}
+
 function enumValues(schema: string, name: string): string[] {
   const m = new RegExp(`^enum ${name} \\{([\\s\\S]*?)^\\}`, "m").exec(schema);
   if (!m) return [];
@@ -191,6 +200,12 @@ function main(): void {
   kontrol("§5a LisansSinifi = LICENSE_CLASSES", JSON.stringify(siniflar) === JSON.stringify([...LICENSE_CLASSES]), siniflar.join(","));
   const turler = enumValues(schema, "YaptirimTuru");
   kontrol("§5b YaptirimTuru ⊇ K0…K5", SANCTION_LEVELS.every((k) => turler.includes(k)), turler.join(","));
+
+  console.log("\n§8 hata kodu tek kaynak");
+  const ortak = sharedCodes(PORTAL_ERROR_CODES, [...VENDOR_ERROR_CODES, ...PROTOCOL_ERROR_CODES]);
+  kontrol("§8a portal kodları protokol kodlarıyla kesişmez", ortak.length === 0 && PORTAL_ERROR_CODES.length > 0, ortak.join(", "));
+  kontrol("§8b protokolde TEKRAR_DENEYIN ve BULUNAMADI var", (["TEKRAR_DENEYIN", "BULUNAMADI"] as const).every((k) => (VENDOR_ERROR_CODES as readonly string[]).includes(k)));
+  kontrol("§8c ✓K kesişim karşılaştırıcısı sentetik ortak kodu yakalar", sharedCodes(["A", "BULUNAMADI"], ["BULUNAMADI", "C"]).join() === "BULUNAMADI");
 
   console.log("\n§6 ✓K sondaları: çözümleyiciler sentetik ihlalde ısırır");
   const sonda = analyze([

@@ -34,7 +34,8 @@ import { atlamaDefteri } from "./lib/atlama";
 import { join } from "node:path";
 
 const KOK = join(__dirname, "..", "..");
-const PROJELER = ["Teks-Erp", "Electron", "mobil"] as const;
+// Satıcı sunucusu (`satici/sunucu`) commit kapısının dördüncü projesi; bağımlılığı yoksa beyanla atlanır.
+const PROJELER = ["Teks-Erp", "Electron", "mobil", "satici/sunucu"] as const;
 
 let pass = 0;
 let fail = 0;

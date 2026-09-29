@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import type { PortalKullanici, PortalRolu } from "@prisma/client";
 import { VendorError, badRequest, notFoundError, stateConflict } from "../lib/errors";
 import { prisma, type Db } from "../lib/prisma";
+import { uniqueViolationOn } from "../lib/prisma-errors";
 import type { VendorContext } from "../services/context";
 import { requireReason } from "../services/sanction.service";
 import { normalizeUsername } from "./auth.service";
@@ -13,6 +14,8 @@ import { hashPortalPassword, verifyPortalPassword } from "./password";
 import { generateTotpSecret, otpauthUri, verifyTotp } from "./totp";
 
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,59}$/;
+
+const usernameTaken = (): VendorError => new VendorError(409, "KULLANICI_ADI_KULLANIMDA", "Bu kullanıcı adı kullanımda");
 
 export interface TotpEnrollment {
   readonly sir: string;
@@ -66,21 +69,26 @@ export async function createPortalUserTx(db: Db, ctx: VendorContext, g: CreatePo
     throw badRequest("Satıcı rolleri bayiye bağlanamaz");
   }
   const taken = await db.portalKullanici.findUnique({ where: { kullaniciAdi: username }, select: { id: true } });
-  if (taken) throw stateConflict("Bu kullanıcı adı alınmış");
+  if (taken) throw usernameTaken();
   const id = randomUUID();
   const secret = generateTotpSecret();
-  const user = await db.portalKullanici.create({
-    data: {
-      id,
-      kullaniciAdi: username,
-      adSoyad: fullName,
-      rol: g.role,
-      bayiId: g.role === "BAYI" ? (g.dealerId ?? null) : null,
-      parolaOzeti: g.passwordHash,
-      totpSirSifreli: ctx.portalSecrets.seal(secret, id),
-      parolaDegisim: new Date(),
-    },
-  });
+  // Ön okuma yarışı kapatmaz (iki işlem kimliği aynı adı aynı anda açabilir): UNIQUE ihlali de aynı 409.
+  const user = await db.portalKullanici
+    .create({
+      data: {
+        id,
+        kullaniciAdi: username,
+        adSoyad: fullName,
+        rol: g.role,
+        bayiId: g.role === "BAYI" ? (g.dealerId ?? null) : null,
+        parolaOzeti: g.passwordHash,
+        totpSirSifreli: ctx.portalSecrets.seal(secret, id),
+        parolaDegisim: new Date(),
+      },
+    })
+    .catch((err: unknown) => {
+      throw uniqueViolationOn(err, "kullaniciAdi") ? usernameTaken() : err;
+    });
   return { user, totp: { sir: secret, otpauthUri: otpauthUri(username, secret) } };
 }
 

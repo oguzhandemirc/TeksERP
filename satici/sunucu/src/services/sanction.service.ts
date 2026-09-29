@@ -65,6 +65,49 @@ export function buildSanctionParam(g: Omit<ApplySanctionInput, "installationDbId
   return param;
 }
 
+/** Geri sayımı bundan KISA K3 AĞIR yaptırımdır (yönetici kararı f): K4 gibi yalnız yönetici + lisans no ikinci onayı. */
+export const HEAVY_K3_MIN_DAYS = 7;
+
+const restrictionAtMs = (param: Prisma.InputJsonObject): number | null =>
+  typeof param.kisitlamaTarihi === "string" ? Date.parse(param.kisitlamaTarihi) : null;
+
+/** TEK yüklem: K4 · K5 · kısıtlama anı `atMs` + 7 günden önce olan K3. Rol kapısı ve ikinci onay bunu sorar. */
+export function isHeavySanction(level: string, restrictionMs: number | null, atMs: number): boolean {
+  if (level === "K4" || level === "K5") return true;
+  return level === "K3" && restrictionMs !== null && restrictionMs < atMs + HEAVY_K3_MIN_DAYS * DAY_MS;
+}
+
+/** Uygulanacak eylem ağır mı (portal rolü tx'ten ÖNCE sorar; parametre aynı kurucudan geçer). */
+export function sanctionInputIsHeavy(g: Pick<ApplySanctionInput, "level" | "restrictionDays" | "restrictionDate">, nowMs: number): boolean {
+  if (g.level !== "K3") return isHeavySanction(g.level, null, nowMs);
+  return isHeavySanction(g.level, restrictionAtMs(buildSanctionParam(g, nowMs)), nowMs);
+}
+
+/**
+ * Deftere yazılmış eylem ağır mıydı (geri alma da aynı rolü ister). K3'ün sınıfı YAZIM ANINDA karar
+ * verilip parametrede (`agir`) donar — satırın `createdAt`i istek anından ms'ler sonra olduğu için
+ * sonradan yeniden hesap sınırdaki (tam 7 gün) eylemi ağır sayardı.
+ */
+export function sanctionRowIsHeavy(row: Pick<YaptirimEylemi, "tur" | "parametre">): boolean {
+  if (row.tur === "K4" || row.tur === "K5") return true;
+  return row.tur === "K3" && (row.parametre as { agir?: unknown } | null)?.agir === true;
+}
+
+/** K3 parametresine yazım anındaki ağırlık kararını ekler (yalnız ağırsa; hafif satır değişmez). */
+const markHeavy = (param: Prisma.InputJsonObject, heavy: boolean): Prisma.InputJsonObject => (heavy ? { ...param, agir: true } : param);
+
+/** Vadesinde K3 uygulayacak planlı eylem / taksit gecikmesi: geri sayım günü 7'den kısaysa ağır. */
+export const plannedK3IsHeavy = (level: string, restrictionDays: number | undefined): boolean =>
+  level === "K3" && restrictionDays !== undefined && restrictionDays < HEAVY_K3_MIN_DAYS;
+
+/** Ağır yaptırımın ikinci onayı: kurulumun lisans numarası AYNEN yazılır (kurulum kilidi altında okunur). */
+async function assertSecondConfirmation(tx: Tx, installationDbId: string, what: string, confirmation: string | undefined): Promise<void> {
+  const hak = await tx.hak.findFirst({ where: { kurulumId: installationDbId, aktif: true } });
+  if (!hak || (confirmation ?? "").trim() !== hak.lisansNo) {
+    throw new VendorError(400, "IKINCI_ONAY_GEREKLI", `${what} ikinci onay ister: kurulumun lisans numarasını aynen yazın`);
+  }
+}
+
 async function writeAction(
   tx: Tx,
   g: { installationDbId: string; type: YaptirimTuru; param: Prisma.InputJsonObject; reason: string; actor: string; revertsId?: string; plannedId?: string },
@@ -96,15 +139,15 @@ async function auditRow(row: YaptirimEylemi | null, actor: string): Promise<void
 export async function applySanctionTx(tx: Tx, g: ApplySanctionInput): Promise<YaptirimEylemi> {
   await lockInstallation(tx, g.installationDbId);
   const reason = requireReason(g.reason);
-  const param = buildSanctionParam(g, g.nowMs ?? Date.now());
+  const nowMs = g.nowMs ?? Date.now();
+  const param = buildSanctionParam(g, nowMs);
   await assertInstallation(tx, g.installationDbId);
-  if (g.level === "K4" || g.level === "K5") {
-    const hak = await tx.hak.findFirst({ where: { kurulumId: g.installationDbId, aktif: true } });
-    if (!hak || (g.confirmation ?? "").trim() !== hak.lisansNo) {
-      throw new VendorError(400, "IKINCI_ONAY_GEREKLI", `${g.level} ikinci onay ister: kurulumun lisans numarasını aynen yazın`);
-    }
+  const heavy = isHeavySanction(g.level, restrictionAtMs(param), nowMs);
+  if (heavy) {
+    const what = g.level === "K3" ? `Geri sayımı ${HEAVY_K3_MIN_DAYS} günden kısa K3` : g.level;
+    await assertSecondConfirmation(tx, g.installationDbId, what, g.confirmation);
   }
-  return writeAction(tx, { installationDbId: g.installationDbId, type: g.level, param, reason, actor: g.actor });
+  return writeAction(tx, { installationDbId: g.installationDbId, type: g.level, param: markHeavy(param, heavy && g.level === "K3"), reason, actor: g.actor });
 }
 
 export async function applySanction(g: ApplySanctionInput): Promise<YaptirimEylemi> {
@@ -224,6 +267,8 @@ export interface SchedulePlannedInput {
   readonly modules?: readonly string[];
   readonly reason: string;
   readonly actor: string;
+  /** Geri sayımı 7 günden kısa K3 (ağır): lisans numarası AYNEN. */
+  readonly confirmation?: string;
 }
 
 export async function schedulePlannedActionTx(tx: Tx, g: SchedulePlannedInput): Promise<PlanliEylem> {
@@ -234,6 +279,9 @@ export async function schedulePlannedActionTx(tx: Tx, g: SchedulePlannedInput): 
   // Parametre planlama anında doğrulanır; K3 tarihi vade anına göre yeniden kurulur.
   buildSanctionParam({ level: g.level, message: g.message, restrictionDays: g.restrictionDays, modules: g.modules }, g.dueAt.getTime());
   await assertInstallation(tx, g.installationDbId);
+  if (plannedK3IsHeavy(g.level, g.restrictionDays)) {
+    await assertSecondConfirmation(tx, g.installationDbId, `Geri sayımı ${HEAVY_K3_MIN_DAYS} günden kısa planlı K3`, g.confirmation);
+  }
   return tx.planliEylem.create({
     data: {
       kurulumId: g.installationDbId,
@@ -299,7 +347,8 @@ export async function applyPlannedAction(p: PlanliEylem, nowMs: number): Promise
       data: { durum: "UYGULANDI", uygulamaZamani: new Date(nowMs) },
     });
     if (claim.count === 0) return false;
-    await writeAction(tx, { installationDbId: p.kurulumId, type: p.tur, param: sanctionParam, reason: p.sebep, actor: `planli:${p.yapan}`, plannedId: p.id });
+    const heavy = plannedK3IsHeavy(p.tur, param.gun ?? undefined);
+    await writeAction(tx, { installationDbId: p.kurulumId, type: p.tur, param: markHeavy(sanctionParam, heavy), reason: p.sebep, actor: `planli:${p.yapan}`, plannedId: p.id });
     return true;
   });
 }
@@ -327,7 +376,12 @@ export interface CreateInstallmentPlanInput {
   readonly graceDays?: number;
   readonly restrictionDays?: number;
   readonly actor: string;
+  /** Kısıtlama günü 7'den kısa (gecikmede ağır K3): lisans numarası AYNEN. */
+  readonly confirmation?: string;
 }
+
+/** Taksit gecikmesinin K3 geri sayımı (varsayılan dahil) — rol kapısı ve servis aynı değeri sorar. */
+export const installmentRestrictionDays = (restrictionDays: number | undefined): number => restrictionDays ?? 15;
 
 const dayCount = (v: number | undefined, fallback: number, name: string): number => {
   const n = v ?? fallback;
@@ -346,14 +400,18 @@ export async function createInstallmentPlanTx(tx: Tx, g: CreateInstallmentPlanIn
   }
   const items = [...g.items].sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
   const extendDays = dayCount(g.extendDays, 15, "Uzatma");
+  const restrictionDays = dayCount(installmentRestrictionDays(g.restrictionDays), 15, "Kısıtlama");
   await assertInstallation(tx, g.installationDbId);
+  if (plannedK3IsHeavy("K3", restrictionDays)) {
+    await assertSecondConfirmation(tx, g.installationDbId, `Kısıtlama günü ${HEAVY_K3_MIN_DAYS}'den kısa taksit planı`, g.confirmation);
+  }
   const plan = await tx.taksitPlani.create({
     data: {
       kurulumId: g.installationDbId,
       aciklama: description,
       uzatmaGun: extendDays,
       gecikmeGun: dayCount(g.graceDays, 15, "Gecikme"),
-      kisitlamaGun: dayCount(g.restrictionDays, 15, "Kısıtlama"),
+      kisitlamaGun: restrictionDays,
       yapan: g.actor,
     },
   });
@@ -467,7 +525,7 @@ export async function runOverdueInstallments(nowMs: number): Promise<number> {
       const action = await writeAction(tx, {
         installationDbId: item.plan.kurulumId,
         type: "K3",
-        param,
+        param: markHeavy(param, plannedK3IsHeavy("K3", item.plan.kisitlamaGun)),
         reason: `Taksit ${item.sira} vadesi + ${item.plan.gecikmeGun} gün geçti`,
         actor: "taksit",
       });

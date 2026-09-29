@@ -18,14 +18,16 @@ export const PORTAL_PERMISSIONS = {
   /** HAK taslağı + kök imzalı sürüm (kök parolası formdan). */
   "hak:yaz": VENDOR,
   "kod:uret": VENDOR,
-  /** K0–K3, uzatma, geçerlilik bitişi, planlı eylem, taksit. */
+  /** K0–K3 (K3 geri sayımı ≥ 7 gün), uzatma, geçerlilik bitişi, planlı eylem, taksit. */
   "yaptirim:yaz": VENDOR,
-  /** K4 · K5 (yazarak ikinci onay) · gözlem ↔ zorla. */
+  /** K4 · K5 · geri sayımı 7 günden kısa K3 (planlı/taksit dahil; yazarak ikinci onay) · gözlem ↔ zorla. */
   "yaptirim:agir": ADMIN,
   /** Taşıma onay/ret, kopya uyarısı kapatma, DR geri alma. */
   "kurulum:yonet": VENDOR,
   /** Kurulum iptali ve iptalin geri alınması. */
   "kurulum:iptal": ADMIN,
+  /** Kanal ana verisi (kod · ad · tür · güncel sürümler). */
+  "kanal:yonet": ADMIN,
   "bayi:yonet": ADMIN,
   "kullanici:yonet": ADMIN,
   "denetim:oku": VENDOR,

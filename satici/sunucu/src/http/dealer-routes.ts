@@ -17,6 +17,7 @@ import {
   createDealerActivationCodeTx,
   createDealerInstallationTx,
   currentCeiling,
+  signedFieldsOf,
   findDealer,
   prepareDealerEntitlementVersion,
   recordDealerEntitlementVersionTx,
@@ -180,7 +181,8 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       assertProductionKept(modules, b.uretimModuluCikarilsin);
       // Taslak da tavana sığmalı (imza anında kilit altında yeniden denetlenir).
       const dealer = await findDealer(prisma, dealerId);
-      assertWithinCeiling(ceilingViolations(await currentCeiling(prisma, dealer), { modules, licenseClass: inst.sinif }));
+      const draft = { modules, licenseClass: inst.sinif, perpetual: b.kalici, maintenanceUntil: new Date(b.bakimBitis) };
+      assertWithinCeiling(ceilingViolations(await currentCeiling(prisma, dealer), signedFieldsOf(draft, c.nowMs)));
       return portalAction(c, {
         action: "BAYI_HAK_EKLE",
         clientToken: b.clientToken,

@@ -181,11 +181,22 @@ export interface KurulumFiksturu {
   readonly kod: string;
 }
 
+/**
+ * Kurulum kanala bağlı doğar (FK): bekçi kanalı yoksa açılır. Kanal kalıcı ana veridir ve kurulum
+ * kaydı yokken bırakılması zararsızdır; aynı kod her koşumda yeniden kullanılır (upsert, yarışsız).
+ */
+export async function kanalFiksturu(kod: string, tur: "uretim" | "hazirlik" = "uretim"): Promise<string> {
+  const { prisma } = await import("../../src/lib/prisma");
+  await prisma.kanal.upsert({ where: { kod }, create: { kod, ad: `Bekçi kanalı ${kod}`, tur }, update: {} });
+  return kod;
+}
+
 export async function kurulumFiksturu(
   ctx: VendorContext,
   g: { sinif?: LicenseClass; kanal?: string; moduller?: string[]; tesisId?: string; musteriId?: string; kurulumId?: string } = {},
 ): Promise<KurulumFiksturu> {
   const svc = await import("../../src/services/entitlement.service");
+  await kanalFiksturu(g.kanal ?? "bekci-kanal");
   const musteriId = g.musteriId ?? (await svc.createCustomer({ name: `Bekçi Tekstil ${randomUUID().slice(0, 8)}`, actor: "bekci" })).id;
   const tesisId = g.tesisId ?? (await svc.createSite({ customerId: musteriId, name: "Merkez Tesis", actor: "bekci" })).id;
   const kurulum = await svc.createInstallation({
@@ -297,8 +308,9 @@ export async function imzaliPost(
 export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidler: readonly string[] = []): Promise<void> {
   const { prisma } = await import("../../src/lib/prisma");
   if (kidler.length > 0) await prisma.anahtarKaydi.deleteMany({ where: { kid: { in: [...kidler] } } });
-  if (kurulumDbIdleri.length === 0) return;
-  const ids = [...kurulumDbIdleri];
+  // Yarıda düşen bekçinin `undefined` kimliği temizliği de düşürmesin (sonraki koşumu kalıntı kirletir).
+  const ids = kurulumDbIdleri.filter((id): id is string => typeof id === "string" && id.length > 0);
+  if (ids.length === 0) return;
   await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL satici.defter_temizlik = 'test'`);
     const w = { kurulumId: { in: ids } };
@@ -530,8 +542,14 @@ export async function portalGiris(
   return { ...y, cerez, setCookie };
 }
 
-/** Portal fikstürünün temizliği: kullanıcılar (oturum + işlem kimliği) · boş tesis/müşteri · bayi + tavan defteri. */
-export async function temizlePortal(g: { kullanicilar?: readonly string[]; bayiler?: readonly string[]; tesisler?: readonly string[]; musteriler?: readonly string[] }): Promise<void> {
+/** Portal fikstürünün temizliği: kullanıcılar (oturum + işlem kimliği) · boş tesis/müşteri · bayi + tavan defteri · kurulumsuz kanal. */
+export async function temizlePortal(g: {
+  kullanicilar?: readonly string[];
+  bayiler?: readonly string[];
+  tesisler?: readonly string[];
+  musteriler?: readonly string[];
+  kanallar?: readonly string[];
+}): Promise<void> {
   const { prisma } = await import("../../src/lib/prisma");
   const kullanicilar = [...(g.kullanicilar ?? [])];
   const bayiler = [...(g.bayiler ?? [])];
@@ -546,7 +564,9 @@ export async function temizlePortal(g: { kullanicilar?: readonly string[]; bayil
     await tx.musteri.deleteMany({ where: { id: { in: musteriler }, tesisler: { none: {} } } });
     await tx.bayiTavani.deleteMany({ where: { bayiId: { in: bayiler } } });
     await tx.bayi.deleteMany({ where: { id: { in: bayiler } } });
-    await tx.denetim.deleteMany({ where: { varlikId: { in: [...kullanicilar, ...bayiler, ...tesisler, ...musteriler] } } });
+    const kanallar = (await tx.kanal.findMany({ where: { kod: { in: [...(g.kanallar ?? [])] }, kurulumlar: { none: {} } }, select: { id: true } })).map((k) => k.id);
+    await tx.kanal.deleteMany({ where: { id: { in: kanallar } } });
+    await tx.denetim.deleteMany({ where: { varlikId: { in: [...kullanicilar, ...bayiler, ...tesisler, ...musteriler, ...kanallar] } } });
   });
 }
 

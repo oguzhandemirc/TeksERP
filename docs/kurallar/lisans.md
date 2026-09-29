@@ -37,6 +37,19 @@
 - **[ÇEKİRDEK]** KISITLI'da GET/HEAD serbest, yazmalar varsayılan RED (403 `LICENSE_RESTRICTED`) + tek kaynaktan beyanlı izin listesi (giriş, yedek/dışa aktarma, yeniden basım, güvenlik uçları, bakım); DURDURULMUS'ta yalnız her-kademe listesi + yedek/dışa aktarma (403 `LICENSE_SUSPENDED`); hata `details.code` altında, 503 kullanılmaz. · bekçi: `YOK` · Kapanır: `aynı kapı bekçisi her yazma rotasının ya varsayılan-kapalı ya izin listesinde olduğunu ve ölü desen bulunmadığını ölçtüğünde` · Çapa: `license-routes izin listesi` · Öncül: ölçüldü (kapı henüz yazılmadı) <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** `LICENSE_DIR` kurulum kökündedir (Win `C:\TeksERP\lisans`, SYSTEM + Administrators ACL; Linux 0600): `app\` DIŞINDA (kurulum `app\`i değiştirir) ve `BACKUP_DIR` DIŞINDA (offsite süpürücü klasördeki her dosyayı Drive'a kopyalar); proxy ayarı (kimlik bilgisi taşıyabilir) da DB'de değil burada durur. · bekçi: `YOK` · Kapanır: `fabrika motorunun depo modülü LICENSE_DIR'in app ve BACKUP_DIR altına düşmesini açılışta reddettiğinde ve bir bekçi bunu negatif sondayla ölçtüğünde` · Çapa: `license store` · Öncül: ölçüldü (depo modülü henüz yazılmadı) <sub>(arşiv:2026-09-29)</sub>
 
+## Satıcı sunucusu (`satici/sunucu`)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Satıcının hata kodu TEK KAYNAKtır: fabrikanın da gördüğü kodlar (`BULUNAMADI` 404 · `TEKRAR_DENEYIN` 409 · `SUNUCU_HATASI`…) protokolün `VENDOR_ERROR_CODES`inde yaşar, portal kodları (`PORTAL_ERROR_CODES`) onlarla kesişmez; eşzamanlılık çakışması (40001/40P01, claim kaybı) `TEKRAR_DENEYIN`dir, `SUNUCU_HATASI` değil; fabrika her satıcı kodunu TR mesajla tanır ve tekrar denenebilirliği `details.tekrarDenenebilir` ile söyler. · bekçi: `test_satici_kapilari (§8 kesişim)`, `test_lisans_motoru (§8 her kod tanınır)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Satıcı denetimi (`denetim`) DEFTER DEĞİL ayak izidir ve günde bir budanır — başarısız/reddedilen giriş 90 gün, diğer her satır 2 yıl, iki sınıf tek tx'te; budanan model `PRUNED_MODELS` beyanındadır, iş kararı denetimden okunmaz. · bekçi: `test_denetim_budama (§1 sınıf × yaş · §2 günde bir)` <sub>(arşiv:2026-09-29)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Geri sayımı 7 günden kısa K3 AĞIR yaptırımdır (K4 gibi): yalnız yönetici uygular/planlar/kaldırır ve lisans numarasıyla ikinci onay ister; planlı K3 ile taksit planının kısıtlama günü de aynı kapıdan geçer, ağırlık yazım anında satıra (`agir`) donar. · bekçi: `test_portal_yaptirim (§5 kısa K3 ağır)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Bayi tavanı modül ⊆ · sınıf ⊆ · kurulum adedi · kanal ⊆ · kalıcı izni (varsayılan HAYIR) · bakım ay tavanı (varsayılan 12) ile bağlar; denetim imzadan önce ve bayi kilidi altında yeniden yapılır, tavan sürümlü defterdir. · bekçi: `test_portal_bayi_tavani (§2c kanal · §3a0/§3a1/§9 kalıcı + bakım)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Kurulum KAYITLI bir kanala bağlıdır (FK; `kod` kimliktir, değişmez, sert silinmez); kiranın `kanal.guncelSurumler`i kanal satırından dolar, bayi yalnız satıcının atadığı kanallarda kurulum açar. · bekçi: `test_portal_uclar (§1k kanal · §1e2 kira kanalı)` <sub>(arşiv:2026-09-29)</sub>
+
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
 - **KISMI** `docs/design/LISANS-PROTOKOLU.md §6 (f4 = birincil fiziksel ağ kartının MAC'i)` → `R:2026-09-29 yönetici kararı (F3/F4)`: F4 sistem/anakart seri numarasıdır, MAC kullanılmaz; F3 RAID genel serisi ölçülemedi. Kod henüz eski hâlde (borç, yukarıda Yasaklar).
@@ -49,7 +62,7 @@ Fabrika tarafı: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## lisans` bölümü.**
 
-Backend: `test_lisans_protokol`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`
+Backend: `test_lisans_protokol`, `test_lisans_durumu`, `test_lisans_protokol_aynasi`, `test_lisans_motoru`, `test_lisans_yoklama_allowlist`, `test_lisans_kapisi`, `test_lisans_modul_tavani`, `test_etkinlestirme`, `test_kod_tek_kullanim`, `test_nonce_tekrar`, `test_kira_zinciri`, `test_tasima_dr`, `test_kok_parola_argv`, `test_zil_sse`, `test_yaptirim_kira`, `test_planli_eylem_taksit`, `test_satici_kapilari`, `test_tailnet_kapisi`, `test_portal_uclar`, `test_portal_totp`, `test_portal_rol_dinleyici`, `test_portal_yaptirim`, `test_portal_bayi_tavani`, `test_portal_taksit_planli`, `test_denetim_budama`
 
 Yeni lisans bekçisi doğduğu commit'te bu listeye VE haritanın `## lisans` bölümüne birlikte eklenir.
 
@@ -61,3 +74,4 @@ Yeni lisans bekçisi doğduğu commit'te bu listeye VE haritanın `## lisans` b�
 - 2026-09-29 · Lisans yönetici kararları: sunucu kararları ek sürede kalıcı, parmak izi F3/F4 (MAC yok), gözlem sıfır fark
 - 2026-09-29 · Yedek şifreleme (`.tkenc`) — Faz 0.2
 - 2026-09-29 · Konteyner seed'i şemaya bakar; demo aktarımı izin listesi — Faz 0.3/0.4a
+- 2026-09-29 · Satıcı tamamlama: kısa K3 ağır, bayi tavanı kalıcı izni + bakım ay tavanı, denetim budaması, kanal varlığı, iki protokol hata kodu

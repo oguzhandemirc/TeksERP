@@ -1,15 +1,18 @@
 // =============================================================================
 // PORTAL — BAYİ TAVANI AŞIMI RED. Bayi imzalı HAK iki katmanla sınırlıdır: (1) protokolün
 // KRİPTOGRAFİK kısıtı — bayi sertifikasındaki modül/sınıf (fabrika da denetler) · (2) EK olarak
-// sunucuda bayinin GÜNCEL tavanı (modül ⊆ · sınıf ⊆ · kurulum adedi). Sertifika geniş kalsa da
+// sunucuda bayinin GÜNCEL tavanı (modül ⊆ · sınıf ⊆ · kurulum adedi · kanal ⊆ · kalıcı izni · bakım
+// ay tavanı — yönetici kararı g). Sertifika geniş kalsa da
 // sonradan daraltılan tavan bağlar; tavan sertifikadan genişse sertifika bağlar. Denetim imzadan
 // ÖNCE ve deftere yazarken bayi kilidi ALTINDA yeniden yapılır. Tavan sürümlü defterdir.
 //   §0 portal modül kataloğu = backend MODULE_SETTING_KEYS ∪ {patron-bulut}
+//   §9 kalıcı izni (varsayılan HAYIR) + bakım ay tavanı sürüm imzasında da bağlar
 // Ölçüm gerçek HTTP ile (süreç içi iki dinleyici: satıcı tailnet, bayi genel; kendi `_test` DB'si).
-// ⭐ KALICI SONDA ✓K3 (her koşumda): (1) tavan içindeki HAK imzalanır ve protokolden BAYİ imzalı
+// ⭐ KALICI SONDA ✓K5 (her koşumda): (1) tavan içindeki HAK imzalanır ve protokolden BAYİ imzalı
 //    olarak geçer · (2) sertifikanın izin verdiği ama tavanın dışındaki modüllü HAK'ı protokol
 //    TEK BAŞINA kabul eder (sunucu katmanı gerçekten EK) · (3) tavan tekrar genişleyince aynı
-//    işlem geçer (ret tavandan, körlükten değil).
+//    işlem geçer (ret tavandan, körlükten değil) · (4) atanmamış kanal RED, atanmış kanal geçer ·
+//    (5) kalıcı izni/bakım tavanı genişleyince aynı imza geçer.
 // Koşum: npx tsx scripts/test_portal_bayi_tavani.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -23,6 +26,7 @@ import {
   anahtarOrtamiKur,
   bayiKurulumlari,
   hedefDbKapisi,
+  kanalFiksturu,
   kapat,
   kontrol,
   portalGiris,
@@ -40,6 +44,9 @@ const URETIM = "production.enabled";
 const FINANS = "finance.enabled";
 const TICARET = "ticaret.enabled";
 const DOKUMA = "dokuma.enabled";
+const KANAL = "bayi-kanal";
+const KANAL_DISI = "bayi-kanal-disi";
+const yilSonra = (gun = 365): string => new Date(Date.now() + gun * DAY_MS).toISOString();
 
 const ihlal = (y: PortalYanit): string =>
   JSON.stringify((y.json.details as { ihlaller?: unknown; protokolKodu?: unknown } | undefined) ?? {});
@@ -65,14 +72,23 @@ async function main(): Promise<void> {
     kullanicilar.push(yonetici.id);
     const yCerez = (await portalGiris(sunucu.tailnet, "/portal/api", yonetici)).cerez!;
     const satici = (yol: string, govde?: unknown) => portalIstek(sunucu.tailnet, `/portal/api${yol}`, { cerez: yCerez, govde });
-    const tavanYaz = (bayiId: string, moduller: string[], siniflar: string[], kurulumAdedi: number, sebep: string) =>
-      satici(`/bayiler/${bayiId}/tavan`, { clientToken: randomUUID(), tavan: { moduller, siniflar, kurulumAdedi }, sebep });
+    const tavanYaz = (bayiId: string, moduller: string[], siniflar: string[], kurulumAdedi: number, sebep: string, ek: { kaliciIzni?: boolean; bakimAyTavani?: number } = {}) =>
+      satici(`/bayiler/${bayiId}/tavan`, { clientToken: randomUUID(), tavan: { moduller, siniflar, kurulumAdedi, kanallar: [KANAL], ...ek }, sebep });
+    await kanalFiksturu(KANAL);
+    await kanalFiksturu(KANAL_DISI);
 
     console.log("\n§1 bayi hesabı + anahtar");
-    const bayiY = await satici("/bayiler", { clientToken: randomUUID(), ad: "Bekçi Bayi", tavan: { moduller: [URETIM, FINANS], siniflar: ["URETIM"], kurulumAdedi: 2 }, sebep: "yeni bayi sözleşmesi" });
+    const kayitsizKanal = await satici("/bayiler", { clientToken: randomUUID(), ad: "Bekçi Bayi", tavan: { moduller: [URETIM], siniflar: ["URETIM"], kurulumAdedi: 1, kanallar: ["kayitsiz-kanal-yok"] }, sebep: "x" });
+    kontrol("§1a0 tavana kayıtsız kanal yazılamaz → 400", kayitsizKanal.status === 400, `${kayitsizKanal.status} ${kayitsizKanal.kod ?? ""}`);
+    const bayiY = await satici("/bayiler", { clientToken: randomUUID(), ad: "Bekçi Bayi", tavan: { moduller: [URETIM, FINANS], siniflar: ["URETIM"], kurulumAdedi: 2, kanallar: [KANAL] }, sebep: "yeni bayi sözleşmesi" });
     const bayiId = bayiY.veri.id as string;
     bayiler.push(bayiId);
-    kontrol("§1a bayi + tavan v1 → 201", bayiY.status === 201 && (bayiY.veri.tavan as { surum?: number }).surum === 1, `${bayiY.status} ${bayiY.kod ?? ""}`);
+    const v1 = bayiY.veri.tavan as { surum?: number; kaliciIzni?: boolean; bakimAyTavani?: number; kanallar?: string[] };
+    kontrol(
+      "§1a bayi + tavan v1 → 201; kalıcı izni varsayılan HAYIR, bakım tavanı 12 ay, kanal atandı",
+      bayiY.status === 201 && v1.surum === 1 && v1.kaliciIzni === false && v1.bakimAyTavani === 12 && JSON.stringify(v1.kanallar) === JSON.stringify([KANAL]),
+      `${bayiY.status} ${bayiY.kod ?? ""} ${JSON.stringify(v1)}`,
+    );
     // Sertifika tavandan GENİŞ: TICARET ve TEST sertifikada var, tavanda yok.
     const sertifika = sertifikaBas(f.kok, sertifikaYuku(f, f.bayi, "BAYI", { siniflar: ["URETIM", "TEST"], bayi: { bayiId, moduller: [URETIM, FINANS, TICARET] } }));
     writeKeyFileExclusive(
@@ -95,16 +111,22 @@ async function main(): Promise<void> {
     console.log("\n§2 kurulum: sınıf tavanı");
     const m = await bayi("/musteriler", { clientToken: randomUUID(), ad: "Bayi Müşterisi Tekstil" });
     const t = await bayi("/tesisler", { clientToken: randomUUID(), musteriId: m.veri.id, ad: "Merkez" });
-    const kur = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: "bayi-kanal" });
+    const kur = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: KANAL });
     kontrol("§2a müşteri · tesis · URETIM kurulum → 201", m.status === 201 && t.status === 201 && kur.status === 201, `${m.status}/${t.status}/${kur.status} ${kur.kod ?? ""}`);
-    const testSinif = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "TEST", kanalKodu: "bayi-kanal" });
+    const testSinif = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "TEST", kanalKodu: KANAL });
     kontrol("§2b TEST (sertifikada VAR, tavanda YOK) → 409 BAYI_TAVANI_ASILDI · SINIF", testSinif.status === 409 && testSinif.kod === "BAYI_TAVANI_ASILDI" && ihlal(testSinif).includes("SINIF"), `${testSinif.status} ${ihlal(testSinif)}`);
+    const kanalDisi = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: KANAL_DISI });
+    kontrol("§2c ✓K kayıtlı ama bayiye ATANMAMIŞ kanal → 409 · KANAL (atanmış kanal §2a'da geçti)", kanalDisi.status === 409 && kanalDisi.kod === "BAYI_TAVANI_ASILDI" && ihlal(kanalDisi).includes(KANAL_DISI), `${kanalDisi.status} ${ihlal(kanalDisi)}`);
     const kurId = kur.veri.id as string;
 
     console.log("\n§3 HAK: modül tavanı + bayi imzası");
-    const ticaretli = await bayi(`/kurulumlar/${kurId}/hak`, { clientToken: randomUUID(), moduller: [URETIM, TICARET], kalici: true, bakimBitis: new Date(Date.now() + 365 * DAY_MS).toISOString() });
+    const kalici = await bayi(`/kurulumlar/${kurId}/hak`, { clientToken: randomUUID(), moduller: [URETIM, FINANS], kalici: true, bakimBitis: yilSonra() });
+    kontrol("§3a0 kalıcı izni yokken KALICI taslak → 409 · KALICI", kalici.status === 409 && ihlal(kalici).includes("KALICI"), `${kalici.status} ${ihlal(kalici)}`);
+    const uzunBakim = await bayi(`/kurulumlar/${kurId}/hak`, { clientToken: randomUUID(), moduller: [URETIM, FINANS], kalici: false, bakimBitis: yilSonra(400) });
+    kontrol("§3a1 bakım bitişi 12 ay tavanını aşan taslak → 409 · BAKIM", uzunBakim.status === 409 && ihlal(uzunBakim).includes("BAKIM"), `${uzunBakim.status} ${ihlal(uzunBakim)}`);
+    const ticaretli = await bayi(`/kurulumlar/${kurId}/hak`, { clientToken: randomUUID(), moduller: [URETIM, TICARET], kalici: false, bakimBitis: yilSonra() });
     kontrol("§3a TICARET (sertifikada VAR, tavanda YOK) → 409 · MODUL", ticaretli.status === 409 && ihlal(ticaretli).includes(TICARET), `${ticaretli.status} ${ihlal(ticaretli)}`);
-    const hak = await bayi(`/kurulumlar/${kurId}/hak`, { clientToken: randomUUID(), moduller: [URETIM, FINANS], kalici: true, bakimBitis: new Date(Date.now() + 365 * DAY_MS).toISOString() });
+    const hak = await bayi(`/kurulumlar/${kurId}/hak`, { clientToken: randomUUID(), moduller: [URETIM, FINANS], kalici: false, bakimBitis: yilSonra() });
     const hakId = hak.veri.id as string;
     kontrol("§3b tavan içindeki taslak → 201", hak.status === 201, `${hak.status} ${hak.kod ?? ""}`);
     const yanlisParola = await bayi(`/haklar/${hakId}/surum`, { clientToken: randomUUID(), bayiParolasi: "yanlis-bayi-parolasi", sebep: "ilk imza" });
@@ -141,10 +163,10 @@ async function main(): Promise<void> {
 
     console.log("\n§5 kurulum ADEDİ");
     await tavanYaz(bayiId, [URETIM, FINANS], ["URETIM"], 1, "tek kurulum hakkı");
-    const ikinci = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: "bayi-kanal" });
+    const ikinci = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: KANAL });
     kontrol("§5a adet 1, kullanım 1 → ikinci kurulum 409 · ADET", ikinci.status === 409 && ihlal(ikinci).includes("ADET"), `${ikinci.status} ${ihlal(ikinci)}`);
     await tavanYaz(bayiId, [URETIM, FINANS], ["URETIM"], 2, "ek kurulum satıldı");
-    const ikinciOk = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: "bayi-kanal" });
+    const ikinciOk = await bayi("/kurulumlar", { clientToken: randomUUID(), tesisId: t.veri.id, kurulumId: randomUUID(), sinif: "URETIM", kanalKodu: KANAL });
     kontrol("§5b ✓K tavan genişleyince aynı işlem → 201", ikinciOk.status === 201, `${ikinciOk.status} ${ikinciOk.kod ?? ""}`);
 
     console.log("\n§6 tavan sertifikadan GENİŞ — kriptografik katman bağlar");
@@ -156,7 +178,7 @@ async function main(): Promise<void> {
 
     console.log("\n§7 imzadan SONRA daralan tavan — kilit altında yeniden denetim");
     const hazir = await dealerSvc.prepareDealerEntitlementVersion(ctx, { dealerId: bayiId, entitlementId: hakId, changes: { modules: [URETIM, FINANS] }, password: passwordBuffer(BAYI_PAROLASI), reason: "yarış", actor: "bekci" });
-    await prisma.$transaction((tx) => dealerSvc.setDealerCeilingTx(tx, { dealerId: bayiId, ceiling: { modules: [URETIM], classes: ["URETIM"], installationCount: 2 }, reason: "imza sırasında daraldı", actor: "bekci" }));
+    await prisma.$transaction((tx) => dealerSvc.setDealerCeilingTx(tx, { dealerId: bayiId, ceiling: { modules: [URETIM], classes: ["URETIM"], installationCount: 2, channels: [KANAL] }, reason: "imza sırasında daraldı", actor: "bekci" }));
     let yazim = "";
     try {
       await prisma.$transaction((tx) => dealerSvc.recordDealerEntitlementVersionTx(tx, hazir));
@@ -180,6 +202,20 @@ async function main(): Promise<void> {
     kontrol("§8b DB seddi: tavan satırı düzeltilemez", /Defter satırı/.test(red));
     const bayiYaptirim = await bayi(`/kurulumlar/${kurId}/yaptirim`, { clientToken: randomUUID(), kademe: "K0", sebep: "x" });
     kontrol("§8c bayi alt-portalında yaptırım ucu YOK → 404", bayiYaptirim.status === 404, `${bayiYaptirim.status}`);
+
+    console.log("\n§9 kalıcı izni + bakım ay tavanı sürüm imzasında");
+    const kaliciSurum = { bayiParolasi: BAYI_PAROLASI, sebep: "kalıcıya çevir", kalici: true, bakimBitis: yilSonra(700) };
+    const kaliciRed = await bayi(`/haklar/${hakId}/surum`, { clientToken: randomUUID(), ...kaliciSurum });
+    const hak4 = await prisma.hak.findUniqueOrThrow({ where: { id: hakId } });
+    kontrol(
+      "§9a izinsiz tavanla kalıcı + 23 aylık bakım sürümü → 409 · KALICI + BAKIM, sürüm yazılmadı",
+      kaliciRed.status === 409 && ihlal(kaliciRed).includes("KALICI") && ihlal(kaliciRed).includes("BAKIM") && hak4.guncelSurum === 2,
+      `${kaliciRed.status} ${ihlal(kaliciRed)} v${hak4.guncelSurum}`,
+    );
+    await tavanYaz(bayiId, [URETIM], ["URETIM"], 2, "kalıcı satış yetkisi", { kaliciIzni: true, bakimAyTavani: 24 });
+    const kaliciOk = await bayi(`/haklar/${hakId}/surum`, { clientToken: randomUUID(), ...kaliciSurum });
+    const hak5 = await prisma.hak.findUniqueOrThrow({ where: { id: hakId } });
+    kontrol("§9b ✓K kalıcı izni + 24 ay tavanıyla aynı sürüm → 201, hak kalıcı", kaliciOk.status === 201 && hak5.kalici && hak5.guncelSurum === 3, `${kaliciOk.status} ${kaliciOk.kod ?? ""} ${ihlal(kaliciOk)}`);
   } finally {
     await sunucu.kapat();
     await temizleKurulumlar(await bayiKurulumlari(bayiler), ortam.kidler);
