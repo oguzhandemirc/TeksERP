@@ -120,7 +120,7 @@ for (const proje of etkilenen) {
   // Lint doğrudan değil KAPI üzerinden: taranan küme aynı kalır (tavan aynı kümeyi
   // ölçmek zorunda), yalnız verdikt commit'in kendi dosyalarına daralır. Staged liste
   // stdin'den geçer — kapı tabanı yeniden türetmesin (bkz. lint-gate.mjs § KÜME).
-  // ESLint'i olmayan proje (`lint: null` — native Rust çekirdeği: clippy tip adımında) atlanır.
+  // `lint: null` beyanlı projede lint aracı yoktur (native Rust çekirdeği: clippy tip adımında · patron/uygulama): adım eklenmez.
   if (proje.lint) adimlar.push({
     ad: `${proje.ad} · lint`,
     cwd: ".",

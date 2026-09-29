@@ -7,6 +7,7 @@ import type { SessionContext } from "../auth/session.service";
 import { projectionDef, type ProjectionDef } from "../catalog/projections";
 import { badRequest, forbidden, notFound } from "../lib/errors";
 import { NO_TENANT, withTesis } from "../lib/tenant";
+import type { FacilityStatus, Page, ProjectionRecord, Snapshot } from "../wire/api";
 import type { CloudContext } from "./context";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -54,7 +55,7 @@ interface Row {
   kisisel: unknown;
 }
 
-function rowView(r: Row, sub: { finans: boolean; kisisel: boolean }) {
+function rowView(r: Row, sub: { finans: boolean; kisisel: boolean }): ProjectionRecord {
   return {
     id: r.record_id,
     kayit: r.data,
@@ -75,7 +76,7 @@ function selectRows(s: SessionContext, def: ProjectionDef, where: Prisma.Sql, li
      LIMIT ${limit}`;
 }
 
-export async function listProjection(ctx: CloudContext, s: SessionContext, name: string, q: ListQuery) {
+export async function listProjection(ctx: CloudContext, s: SessionContext, name: string, q: ListQuery): Promise<Page<ProjectionRecord>> {
   const def = readableDef(s, name, "KAYIT");
   if (q.durum !== undefined && !/^[A-Z][A-Z0-9_]{0,39}$/.test(q.durum)) throw badRequest("durum biçimsiz");
   if (q.cariKartId !== undefined && !UUID.test(q.cariKartId)) throw badRequest("cariKartId biçimsiz");
@@ -106,7 +107,7 @@ export async function getProjectionRecord(ctx: CloudContext, s: SessionContext, 
   return rowView(rows[0], sub);
 }
 
-export async function getSnapshot(ctx: CloudContext, s: SessionContext, name: string) {
+export async function getSnapshot(ctx: CloudContext, s: SessionContext, name: string): Promise<Snapshot> {
   const def = readableDef(s, name, "ANLIK");
   const row = await withTesis(ctx.app, { tesisId: s.tesisId, projections: s.projections }, (tx) =>
     tx.projectionRow.findUnique({ where: { tesisId_projection_recordId: { tesisId: s.tesisId, projection: def.name, recordId: NO_TENANT } } }),
@@ -116,7 +117,7 @@ export async function getSnapshot(ctx: CloudContext, s: SessionContext, name: st
 }
 
 /** Ekranın üst şeridi: tesis adı · son eşitleme · sözleşme uyarısı · takılan ufuk · görülebilir projeksiyonlar. */
-export async function facilityStatus(ctx: CloudContext, s: SessionContext) {
+export async function facilityStatus(ctx: CloudContext, s: SessionContext): Promise<FacilityStatus> {
   const nowMs = ctx.now();
   const { facility, state } = await withTesis(ctx.app, { tesisId: s.tesisId }, async (tx) => ({
     facility: await tx.facility.findUnique({ where: { tesisId: s.tesisId } }),

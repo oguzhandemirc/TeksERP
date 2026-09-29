@@ -11,7 +11,8 @@ import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError, badRequest, forbidden, notFound, stateConflict } from "../lib/errors";
 import { bodyDigestOf, executeWrite, toPlainJson, type WriteResult } from "../lib/idempotency";
 import { NO_TENANT, withTesis } from "../lib/tenant";
-import type { ReportClaimRequestSchema, ReportClaimResponse, ReportResult, ReportResultResponse } from "../wire/esitleme";
+import type { ReportClaimRequestSchema, ReportClaimResponse, ReportResult, ReportResultRequestSchema, ReportResultResponse } from "../wire/esitleme";
+import type { ReportRequest as ReportRequestWire, ReportRequestDetail } from "../wire/api";
 import type { CloudContext } from "./context";
 import { assertFacilityCloudOpen } from "./facility-gate";
 import type { FactoryCaller } from "./installation-auth";
@@ -19,7 +20,7 @@ import type { FactoryCaller } from "./installation-auth";
 const DEDUPE_WINDOW_MS = 5 * 60_000;
 const MAX_PARAMS_BYTES = 8 * 1024;
 
-function requestView(r: ReportRequest) {
+function requestView(r: ReportRequest): ReportRequestWire {
   return {
     id: r.id,
     raporAnahtari: r.reportKey,
@@ -108,7 +109,7 @@ export async function listReportRequests(ctx: CloudContext, s: SessionContext, q
 }
 
 /** İstek + (HAZIR ise) sonuç. Sonuç RLS'le korunur: ailenin izni yoksa satır görünmez. */
-export async function getReportRequest(ctx: CloudContext, s: SessionContext, id: string) {
+export async function getReportRequest(ctx: CloudContext, s: SessionContext, id: string): Promise<ReportRequestDetail> {
   const out = await withTesis(ctx.app, { tesisId: s.tesisId, projections: s.projections }, async (tx) => {
     const r = await tx.reportRequest.findFirst({ where: { ...visibility(s), id } });
     if (!r) return null;
