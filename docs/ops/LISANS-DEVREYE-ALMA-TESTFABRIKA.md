@@ -493,3 +493,62 @@ Traefik hiçbir geri almada yeniden başlatılmaz; kenar ağı satırı yerinde 
 | **G3** | Compose satıcı servisinde 3d-1 ortamı (`DOSYA_DIZINI`, `DERLEME_DIZINI`, `YAYIN_DIZINI`, `GENEL_KOK_ADRESI`) ve bağları yoktu; kök FS salt okunur | `/y` yükleme ve dosya gövdeleri EROFS; sürüm görünümü "ölçülemedi"; portal bağlantısı göreli | **KAPANDI (I7):** ortam + üç bağ (`/dosyalar` yazılır · `/derlemeler` + `/yayin` salt okunur; `/yayin` = güncelleme kökü `html/` + `defter/`), `ornek.env`, `compose-denetle.mjs` ⑨a–f + `test_docker_hijyeni` §6 docker'sız ikizi |
 | **G4** | ~~`vds-dogrula.sh` tabanı bayat (09-28) ve betik taban yolu almıyor~~ KAPANDI: betik repoda (`deploy/vds-dogrula.sh --taban=<dizin>`, `--taban-yaz`), bekçi `test_lisans_devreye_kuru` §5 | her koşum FARK basar, gerçek farkı gizler | §1.2 tazeleme |
 | **G5** | `paketle.ps1` şifreli modül (`build-korumali.mjs --sifrele`) seçeneği taşımıyordu | şifreli modül provası (§7.4) yapılamazdı | **KAPANDI (I7):** `-Sifrele` [`-SifreliPaketler`] [`-ModulAnahtarDizini`]; varsayılan ŞİFRESİZ; yalnız `-Korumali` ile, CI'da ve repo içi anahtar dizininde durur; bekçi `test_sunucu_betikleri` §18 |
+
+## 12. Hazırlıktan ÜRETİM satıcısına geçiş (testfabrika, patron sitesi için) — PLAN, UYGULANMADI
+
+> **Neden:** patron bulutu yalnız ÜRETİM sınıfı + `patron-bulut` hakkı + GEÇERLİ lisanstan veri kabul eder (`cloud-sync/eligibility.ts`); hazırlık kökü ÜRETİM imzalayamaz. Kullanıcı kararı (2026-09-30): testfabrika üretim satıcısından geçici ÜRETİM hakkı alır; adnansahin'e dokunulmaz. Kodun davranışı (ölçüldü, dal `lisans/uretim-gecis`): satıcı adresi yalnız açılışta okunur (`vendor-url.ts` `STARTUP_VENDOR`) → yeniden başlatma şart · geçerli kira varken etkinleştirme 409 `LICENSE_ALREADY_ACTIVE` · `LICENSE_DIR`deki kimlik (`kurulum-kimligi.json`) başka `kurulumId`li kirayı "Kira bu kuruluma ait değil" diye reddeder ⇒ geçiş = **yeni `LICENSE_DIR`** (eskisi yeniden ADLANDIRILIR, silinmez; geri dönüş yolu) · ÜRETİM HAK'ı `paket-hazirlik` imzalı pakette `BUTUNLUK_HAZIRLIK_ANAHTARI` → GEÇERSİZ → patron `LISANS_GECERSIZ` (gözlem kipi aşmaz) ⇒ paket ÜRETİM PAKET anahtarıyla imzalı olmalı.
+
+### 12.0 Kapılar (hepsi ✅ olmadan 12.3'e geçilmez)
+
+| # | Kapı | Sahibi | Ölçüm |
+|---|---|---|---|
+| K1 | `kok-2026-1` töreni (satıcı `anahtar.ts kok-uret`, parolalı, VDS dışı kopya) → açık yarı çapaya: `cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts kok --dosya=<dizin>/kok-2026-1.kok.json` (KURU) → `--yaz` → betiğin bastığı bekçiler + `cd native/lisans-cekirdek && npm run denetle && npm test` → commit | tören: kullanıcı · commit: geliştirici | `test_guven_capasi_ekle` · `test_lisans_native_kahin` §0e · `test_lisans_protokol_aynasi` |
+| K2 | Üretim PAKET anahtarı töreni (Mac): `cd Teks-Erp && npx tsx scripts/build-korumali-imza.ts anahtar-uret --kid=paket-2026 --dizin=~/.tekserp/satici-uretim` (parola TTY'de iki kez; TTY yoksa stdin'in ilk iki satırı; `--json` tek satır `{v, kid, x, dosya, parolali}`) → `guven-capasi-ekle.ts paket --dosya=~/.tekserp/satici-uretim/paket-2026.paket.json` (KURU) → `--yaz` → aynı bekçiler → commit (K1 ile aynı commit olabilir). Parolalı dosyanın kopyası Mac DIŞINDA (USB + kâğıt, parola ayrı) | kullanıcı (parola) + geliştirici | `test_lisans_paket_anahtari` · `test_lisans_native_kahin` §0e' · `test_guven_capasi_ekle` |
+| K3 | Native üretim derlemesi YENİ çapayla (`npm run derle:win:uretim`, §4.1) → paket (§4.2, klis2 kökünde; çalışan backend'e dokunmaz) → imza **`paket-2026`** anahtarıyla: §4.3 komutu `--anahtar=$HOME/.tekserp/satici-uretim/paket-2026.paket.json` ile (parola TTY'de sorulur; hazırlık anahtarıyla imza parola sormaz) | geliştirici/ops + kullanıcı (parola) | zip'te `butunlukKid paket-2026` |
+| K4 | Üretim satıcısı yayında (`https://lisans.etkiliyazilim.com`), imajı K1 commit'inden (gömülü çapa aynasında `kok-2026-1`; `GUVEN_CAPASI_DOSYASI` VERİLMEZ), ALT + İNDİRME sertifikaları `kok-2026-1` imzalı, iç API (`ORTAM=uretim` ağı + `IC_API_IP`/`PATRON_IC_IP` + sır) kurulu, `testfabrika` kanalı kayıtlı | ops (dal `lisans/uretim-satici`) | `/portal/saglik` `capa gomulu` · `altGecerli ≥ 1` · `uyariSayisi 0` |
+| K5 | T4 (hazırlık kesiti) 24 saati TAMAMLADI ve özeti alındı: `asama-dogrula.mjs --asama=8 --olc --t4-tsv=<dosya>` | ops | 8.3 UYUMLU |
+
+**T4 zamanlaması:** T4 özeti TEK ölçülemeyen örnekte bile hükmü ÖLÇÜLEMEDİ'ye çeker (`lib/gozlem.mjs ozet`) — 12.2 ve 12.3'ün yeniden başlatmaları (2–5 dk) T4 penceresinde YAPILMAZ. K1–K4 hazırlıkları T4 sürerken paralel ilerler (çalışan backend'e dokunmazlar). Kullanıcı T4'ü beklemek istemezse: T4 durdurulur, eldeki TSV `--ozet` ile "hazırlık kesiti" olarak kaydedilir, 12.2'ye geçilir.
+
+### 12.1 Portal (ÜRETİM satıcısı) — müşteri · tesis · kurulum · HAK · kod
+
+- **Komut:** üretim portalında (§6'nın aynası) müşteri (gerçek müşteri adı değil) → tesis `thinkpad-1` → kurulum: sınıf **URETIM**, kanal `testfabrika`, kip gözlem (varsayılan; `zorla` AÇILMAZ), `esitlemeAraligiDk` 5, `bulutSaklamaAy` 13 → HAK: modüller = testfabrika'nın açık modülleri (bugün `production.enabled`) + **`patron-bulut`**, kalıcı değil, bakım bitişi paket derleme tarihinden SONRA (+12 ay) → kök parolasıyla `kok-2026-1` imzası → `ilk` etkinleştirme kodu (düz metin yalnız formda; dosyaya yazılacaksa 0600, sohbete girmez).
+- **Beklenen:** HAK sürüm 1 `imzalayanKid kok-2026-1`; tesis UUID'si not edilir (patron `tesis-ac`/`yonetici-davet` onu ister).
+- **Geri alma:** kodu iptal · kurulumu iptal/pasif (defter kalır).
+
+### 12.2 Paket — önce HAZIRLIK lisansıyla (K3 paketi, `kur.ps1`, §4.4)
+
+- **Komut:** §4.4 aynen (SYSTEM görevi, `-UygulamaAdi tekserp-backend-yeni`). Bu adımda satıcı ve lisans DEĞİŞMEZ.
+- **Beklenen:** `asama-dogrula.mjs --asama=4 --olc --backend-surum=<X> --paket-kid=paket-2026 --belirtec-dosyasi=…` → 4.3 `butunlukKid paket-2026`, 4.4 `cekirdek native` · `butunluk GECERLI` (üretim PAKET anahtarının sınıf kısıtı yok; TEST HAK'ıyla da geçerli) · aşama 7 (varsayılan TEST beklentisi) ✅✅.
+- **Geri alma:** `kur.ps1 -GeriAl` (§4.4).
+
+### 12.3 Satıcı değişimi — yeni `LICENSE_DIR` + adres + yeniden başlatma (TEK SYSTEM görevi)
+
+- **Komut (thinkpad-1, `uzaktan-kos.ps1 -Betik <bu betik> -Zorla`; SSH'tan pm2 KOŞULMAZ):**
+
+  ```powershell
+  $k = 'C:\TeksERP'; $env:PM2_HOME = "$k\pm2-home"; $pm2 = "$k\pm2\node_modules\.bin\pm2.cmd"; $ad = 'tekserp-backend-yeni'
+  $d = Get-Date -Format 'yyyyMMdd_HHmmss'
+  & $pm2 stop $ad
+  Rename-Item "$k\lisans" "lisans-hazirlik-$d"                      # SİLİNMEZ: geri dönüş yolu
+  New-Item -ItemType Directory "$k\lisans" | Out-Null
+  & icacls.exe "$k\lisans" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null   # kur.ps1 LisansDiziniKur ile aynı
+  $e = "$k\app\.env"; $s = [IO.File]::ReadAllLines($e)
+  $s = $s | ForEach-Object { if ($_ -match '^LICENSE_SERVER_URL=') { 'LICENSE_SERVER_URL=https://lisans.etkiliyazilim.com' } else { $_ } }
+  [IO.File]::WriteAllLines($e, [string[]]$s, (New-Object Text.UTF8Encoding $false))   # BOM'suz, ACL korunur
+  & $pm2 start $ad
+  ```
+
+- **Beklenen:** `/health` UP/UP; lisans motoru `CALISIYOR`, yeni kurulum anahtarı (yeni `kur-…` kid), `kurulum.etkin=false` (etkinleşmemiş kurulum dışarı istek ATMAZ); 4.3 `--satici-kok=https://lisans.etkiliyazilim.com --paket-kid=paket-2026` ✅.
+- **Geri alma:** aynı kalıp ters: `pm2 stop` → `lisans` → `lisans-uretim-<damga>`, `lisans-hazirlik-<damga>` → `lisans` → `.env` satırı `https://lisans-test.etkiliyazilim.com` → `pm2 start`. Hazırlık kirası (~30 gün) geçerliyse zincir kaldığı yerden sürer (aynı parmak izi, uyarı yok). ⚠️ Bu adımdan SONRA `kur.ps1 -GeriAl` eski paketi (çapasında `kok-2026-1` YOK) ve o kurulumun `.env`ini geri koyar — ÜRETİM HAK'ı doğrulanamaz; önce bu geri alma, sonra `-GeriAl`.
+
+### 12.4 Etkinleştirme (kullanıcı adımı) ve ölçüm
+
+- **Komut:** `license:manage` taşıyan hesapla 12.1'in kodu (panel Sistem → Lisans ya da §10j'deki kullanıcı betiği).
+- **Beklenen:** `asama-dogrula.mjs --asama=7 --olc --hak-sinif=URETIM --satici-kok=https://lisans.etkiliyazilim.com --belirtec-dosyasi=…` → 7.1 `hak.sinif URETIM` · `patron-bulut var` · kira · son yoklama başarılı; 7.2 `gozlem` · `GECERLI` · `NORMAL` · sayaç 0. Panel Erişim → Patron bulutu `uygunluk.ok` (neden yoksa sessiz: `ABONELIK_YOK` = HAK'ta `patron-bulut` yok ya da bitiş geçmiş · `LISANS_GECERSIZ` = bütünlük/HAK).
+- **Sonra:** yeni T4 (üretim kesiti) §7.3'teki komutla; 8.3 `--t4-tsv=<yeni dosya>`.
+- **Temizlik:** hazırlık portalında `testfabrika-thinkpad-1` kurulumu pasif (yoklama gelmeyecek); `~/.tekserp/sirlar/testfabrika-etkinlestirme.txt` artık geçersiz koddur.
+
+### 12.5 Patron bulutu
+
+Patron tek satıcıya bağlanır (`KURULUM_KAYNAGI=satici`, `SATICI_IC_API_URL` · `SATICI_IC_API_BELIRTECI` · `ic-api` ağı); fabrika ile patronun baktığı satıcı AYNI olmalı (patron açık anahtarı ve hakkı satıcının iç API'sinden alır). Sıra: K4'ten sonra `PATRON-BULUTU-KURULUM.md` §10 kalıbıyla yedek → patron `.env`'inde üç değer üretim satıcısının iç API'sine + sır kopyası → `compose-denetle` → `up -d --force-recreate patron` (12.4'ten ÖNCE; bugün buluta gönderen başka kurulum yok) → 12.4'ten sonra iç API'den yeni kurulum 200 (`URETIM`, `[patron-bulut]`) → `tesis.js tesis-ac --tesis=<12.1 tesis UUID>` + `yonetici-davet --tesis=… --eposta=<YENİ adres; hazırlıktaki e-posta tekil>` → bağlantı `https://patron.etkiliyazilim.com/davet?davet=<belirteç>` (elle kurulur). İlk eşitleme TAM tur (filigran boş), sonraki turlar `esitlemeAraligiDk`; finans modülü kapalı olduğundan finans ekranları boş. Geçici hakkı bitirmek: HAK'tan `patron-bulut` çıkarılır → fabrika `ABONELIK_YOK`.

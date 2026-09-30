@@ -30,20 +30,22 @@ export const ASAMA_6 = [
 ];
 
 export const ASAMA_7 = [
-  { no: '7.1', ad: 'etkin · HAK TEST · kira var · satıcı hazırlık · son yoklama başarılı', bearer: true, kos: detay, degerlendir: (r, g) => {
+  { no: '7.1', ad: 'etkin · HAK sınıfı (--hak-sinif) · kira var · satıcı (--satici-kok) · son yoklama başarılı', bearer: true, kos: detay, degerlendir: (r, g) => {
     const h = httpSonuc(r);
     if (h) return h;
     const d = veri(r);
     const kotu = [];
     if (d.kurulum?.etkin !== true) kotu.push('etkin değil');
-    if (d.hak?.sinif !== 'TEST') kotu.push(`hak.sinif=${d.hak?.sinif ?? 'yok'}`);
-    if ((d.hak?.moduller ?? []).includes('patron-bulut')) kotu.push('HAK patron-bulut taşıyor (TEST sınıfı gönderemez; eklenmez)');
+    if (d.hak?.sinif !== g.hakSinif) kotu.push(`hak.sinif=${d.hak?.sinif ?? 'yok'} (beklenen ${g.hakSinif})`);
+    const patronBulut = (d.hak?.moduller ?? []).includes('patron-bulut');
+    // Yalnız ÜRETİM sınıfı buluta gönderir: TEST/DEMO HAK'ında hak yanlış beyandır (runbook §6.1).
+    if (patronBulut && d.hak?.sinif !== 'URETIM') kotu.push(`HAK patron-bulut taşıyor (${d.hak?.sinif} sınıfı gönderemez; eklenmez)`);
     if (!d.kira?.kiraId) kotu.push('kira yok');
     // Detay satıcıyı yalnız ana makine (host) olarak gösterir (license-view.service): kökün host'uyla karşılaştırılır.
     const saticiHost = new URL(g.saticiKok).host;
     if (d.yoklama?.saticiAdresi !== saticiHost) kotu.push(`satıcı ${d.yoklama?.saticiAdresi ?? 'yok'} (beklenen ${saticiHost})`);
     if (!d.yoklama?.sonBasari) kotu.push(`başarılı yoklama yok (son hata ${d.yoklama?.sonHataKodu ?? '-'})`);
-    return kotu.length ? s(I, kotu.join(', ')) : s(U, `kurulum ${d.kurulum?.kurulumId} · kira bitiş ${d.kira?.bitis}`);
+    return kotu.length ? s(I, kotu.join(', ')) : s(U, `kurulum ${d.kurulum?.kurulumId} · kira bitiş ${d.kira?.bitis}${d.hak?.sinif === 'URETIM' ? ` · patron-bulut ${patronBulut ? 'var' : 'YOK'}` : ''}`);
   } },
   { no: '7.2', ad: 'GÖZLEM kipi · GECERLI · kademe NORMAL · gözlem sayacı 0', bearer: true, kos: detay, degerlendir: (r) => {
     const h = httpSonuc(r);

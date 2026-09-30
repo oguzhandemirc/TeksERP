@@ -5,11 +5,11 @@
 //! ikiliden hem bu kaynak metinden).
 use crate::chain::RootKey;
 
-/// `ROOT_PUBLIC_KEYS` aynası — bugün yalnız hazırlık kökü (TEST/DEMO).
+/// `ROOT_PUBLIC_KEYS` aynası (kid, açık anahtar, sınıflar) — `scripts/guven-capasi-ekle.ts` yazar, elle düzenlenmez.
 pub const BUILTIN_ROOTS: &[(&str, &str, &[&str])] =
     &[("hazirlik-2026-1", "705hChzAL045Gp-XoG6SaUKAW8muK1SFcW0Vpwhf-mo", &["TEST", "DEMO"])];
 
-/// `PACKAGE_PUBLIC_KEYS` aynası — bugün yalnız hazırlık PAKET anahtarı (TEST/DEMO; sınıf kararı TS'te).
+/// `PACKAGE_PUBLIC_KEYS` aynası (kid, açık anahtar; sınıf kararı TS'te) — `scripts/guven-capasi-ekle.ts` yazar.
 pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] = &[("paket-hazirlik", "auFAoNnXZDIWdyLJ5EVsakwMquIa_GHqCyKxZHz16Z8")];
 
 pub fn builtin_roots() -> Vec<RootKey> {

@@ -3,7 +3,10 @@
 // =============================================================================
 // Satıcı Mac'inde koşar; imza anahtarı CI'a ve pakete GİRMEZ. Kapsam: src/lib/license/integrity-scope.ts.
 //
-//   npx tsx scripts/build-korumali-imza.ts anahtar-uret [--kid=paket-hazirlik] [--dizin=~/.tekserp/satici-hazirlik]
+//   npx tsx scripts/build-korumali-imza.ts anahtar-uret [--kid=paket-hazirlik] [--dizin=~/.tekserp/satici-hazirlik]   (hazırlık, parolasız)
+//   npx tsx scripts/build-korumali-imza.ts anahtar-uret --kid=paket-<yıl>[-<n>] [--dizin=~/.tekserp/satici-uretim] [--json]
+//       ÜRETİM (tören): parolalı (kök dosyasıyla aynı sarma, `protocol/anahtar-sarma.ts`); parola iki kez — TTY'de
+//       gizli istem, TTY yoksa stdin'in ilk iki satırı. Çıktı `<dizin>/<kid>.paket.json` (0600, var olanı ezmez).
 //   npx tsx scripts/build-korumali-imza.ts imzala --kok=<paket dizini> --anahtar=<dosya> --surum=<x.y.z>
 //       [--urun=backend] [--musteri=<kod>] [--kurulum=<uuid>] [--derleme-tarihi=<ISO>]
 //   npx tsx scripts/build-korumali-imza.ts zip --zip=<paket.zip> --anahtar=<dosya> [--kurulum=<uuid>] [--surum-belgesi=<md>]
@@ -13,14 +16,26 @@
 // imzalar, `butunluk.jws` + `butunluk-liste.txt`i ekler ve PAKET.json'daki dosya sayısını iki artırır
 // (kur.ps1 sayım kapısı).
 // Hazırlık anahtarı (`paket-hazirlik`) yalnız TEST/DEMO paketleri içindir: ÜRETİM kurulumu onu reddeder.
+// Parolalı anahtarla imzada (`imzala` · `zip` · `belge`) parola TTY'den ya da stdin'in satırından sorulur;
+// parola argümandan/ortamdan ASLA alınmaz (`--parola…` biçimli argüman çıkış 2 ile reddedilir).
 // =============================================================================
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { generatePackageKey, readPackageKey, signManifestDocument, signPackageDirectory, writePackageKey } from "./lib/butunluk-imza";
-import { STAGING_PACKAGE_CLASSES, STAGING_PACKAGE_KID_PREFIX } from "../src/lib/license/integrity-scope";
+import {
+  generatePackageKey,
+  generateWrappedPackageKey,
+  openPackageKey,
+  packageKeyInfo,
+  readPackageKey,
+  signManifestDocument,
+  signPackageDirectory,
+  writePackageKey,
+} from "./lib/butunluk-imza";
+import { CliError, args, askPassword } from "./lib/cli-girdi";
+import { STAGING_PACKAGE_CLASSES, STAGING_PACKAGE_KID_PREFIX, isProductionPackageKid, isStagingPackageKid } from "../src/lib/license/integrity-scope";
 import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
 
 function arg(name: string): string | null {
@@ -39,17 +54,52 @@ function readJson(file: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(file, "utf8").replace(/^﻿/, "")) as Record<string, unknown>;
 }
 
-function keygen(): void {
-  const kid = arg("kid") ?? STAGING_PACKAGE_KID_PREFIX;
-  if (!kid.startsWith(STAGING_PACKAGE_KID_PREFIX)) {
-    throw new Error("bu komut yalnız HAZIRLIK anahtarı üretir; üretim anahtarı (paket-<yıl>, parolalı) ayrı törende");
-  }
-  const dir = home(arg("dizin") ?? "~/.tekserp/satici-hazirlik");
-  const file = writePackageKey(dir, generatePackageKey(kid, STAGING_PACKAGE_CLASSES));
-  const k = readPackageKey(file);
-  console.log(`✓ ${file} (0600)`);
-  console.log(`  PACKAGE_PUBLIC_KEYS girdisi: { kid: "${k.kid}", x: "${k.x}" }`);
+/** Depo kökü: üretim anahtarı bunun içine yazılmaz (yanlışlıkla commit'lenmesin). */
+const DEPO_KOKU = path.resolve(__dirname, "..", "..");
+
+function icinde(dizin: string, kok: string): boolean {
+  const rel = path.relative(kok, dizin);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
+
+async function keygen(): Promise<void> {
+  const kid = arg("kid") ?? STAGING_PACKAGE_KID_PREFIX;
+  if (isStagingPackageKid(kid)) {
+    const dir = home(arg("dizin") ?? "~/.tekserp/satici-hazirlik");
+    const file = writePackageKey(dir, generatePackageKey(kid, STAGING_PACKAGE_CLASSES));
+    const k = readPackageKey(file);
+    console.log(`✓ ${file} (0600)`);
+    console.log(`  PACKAGE_PUBLIC_KEYS girdisi: { kid: "${k.kid}", x: "${k.x}" }`);
+    return;
+  }
+  if (!isProductionPackageKid(kid)) throw new Error(`kid biçimi: paket-hazirlik[-…] (hazırlık, parolasız) ya da paket-<yıl>[-<n>] (üretim, parolalı): ${kid}`);
+  const dir = path.resolve(home(arg("dizin") ?? "~/.tekserp/satici-uretim"));
+  if (icinde(dir, DEPO_KOKU)) throw new Error(`üretim PAKET anahtarı depo içine yazılmaz: ${dir}`);
+  const hedef = path.join(dir, `${kid}.paket.json`);
+  if (fs.existsSync(hedef)) throw new Error(`${hedef} zaten var — rotasyon yeni kid ile yapılır`);
+  const first = await askPassword(`Yeni PAKET anahtarı (${kid}) parolası: `);
+  const second = await askPassword("Parola (tekrar): ");
+  const same = first.length === second.length && first.equals(second);
+  second.fill(0);
+  let file: string;
+  try {
+    if (!same) throw new Error("Parolalar eşleşmedi");
+    file = writePackageKey(dir, await generateWrappedPackageKey(kid, first));
+  } finally {
+    first.fill(0);
+  }
+  const k = packageKeyInfo(file);
+  if (process.argv.includes("--json")) {
+    console.log(JSON.stringify({ v: 1, kid: k.kid, x: k.x, dosya: file, parolali: k.parolali }));
+    return;
+  }
+  console.log(`✓ ${file} (0600, parolalı — kök dosyasıyla aynı sarma)`);
+  console.log(`  PACKAGE_PUBLIC_KEYS girdisi: { kid: "${k.kid}", x: "${k.x}" }`);
+  console.log(`  Çapaya ekle: cd Teks-Erp && npx tsx scripts/guven-capasi-ekle.ts paket --dosya=${file}   (KURU; sonra --yaz)`);
+  console.log("  ⚠ Parolalı dosyanın kopyası Mac DIŞINDA saklanır (USB + kâğıt; parola ayrı kâğıtta).");
+}
+
+const paketParolasi = (kid: string): Promise<Buffer> => askPassword(`PAKET anahtarı (${kid}) parolası: `);
 
 interface DirOptions {
   readonly root: string;
@@ -59,7 +109,7 @@ interface DirOptions {
 }
 
 async function signDir(o: DirOptions): Promise<string> {
-  const key = readPackageKey(o.keyFile);
+  const key = await openPackageKey(o.keyFile, paketParolasi);
   const kunyeFile = path.join(o.root, "dist", "server-kunye.json");
   const kunye = fs.existsSync(kunyeFile) ? readJson(kunyeFile) : {};
   const derlemeTarihi = arg("derleme-tarihi") ?? (typeof kunye.zaman === "string" ? kunye.zaman : null);
@@ -112,6 +162,8 @@ async function signZip(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Parola taşıyan argüman (`--parola=…` · `--password` …) değerine bakılmadan reddedilir.
+  args(process.argv.slice(2));
   const cmd = process.argv[2];
   if (cmd === "anahtar-uret") return keygen();
   if (cmd === "imzala") {
@@ -120,7 +172,7 @@ async function main(): Promise<void> {
   }
   if (cmd === "zip") return signZip();
   if (cmd === "belge") {
-    const key = readPackageKey(home(need("anahtar")));
+    const key = await openPackageKey(home(need("anahtar")), paketParolasi);
     const r = await signManifestDocument(path.resolve(need("belge")), key);
     console.log(`✓ ${r.file} · kid ${key.kid} · ${r.token.length} bayt`);
     return;
@@ -130,5 +182,5 @@ async function main(): Promise<void> {
 
 main().catch((e: unknown) => {
   console.error(`✖ ${e instanceof Error ? e.message : String(e)}`);
-  process.exit(1);
+  process.exit(e instanceof CliError ? 2 : 1);
 });

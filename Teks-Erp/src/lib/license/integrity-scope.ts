@@ -46,6 +46,11 @@ export function isStagingPackageKid(kid: string): boolean {
   return kid === STAGING_PACKAGE_KID_PREFIX || kid.startsWith(`${STAGING_PACKAGE_KID_PREFIX}-`);
 }
 
+/** Üretim PAKET anahtarının kid'i: `paket-<yıl>`, yıl içi rotasyonda `-<n>`; anahtar parolalıdır (tören). */
+export function isProductionPackageKid(kid: string): boolean {
+  return /^paket-\d{4}(?:-\d{1,3})?$/.test(kid);
+}
+
 
 /** İmzalanacak kapsam: pakette DİZİN olarak duran kapsam dizinleri + bütün kapsam dosyaları. */
 export async function packageScope(root: string): Promise<IntegrityScope> {

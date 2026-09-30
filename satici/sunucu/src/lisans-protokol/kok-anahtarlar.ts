@@ -10,9 +10,10 @@ export interface RootKey {
 }
 
 /**
- * Bugün yalnız HAZIRLIK kökü: ÜRETİM kökü kullanıcı töreniyle ayrı bir sürümde eklenir; o güne dek
- * ÜRETİM · DR · BAYI · BARINDIRILAN sınıfında hiçbir HAK geçerli olamaz (fail-closed).
- * Rotasyonda yeni kid bir sürümle EKLENİR, eskisi örtüşme penceresi boyunca kalır.
+ * Hazırlık kökü yalnız TEST/DEMO imzalar; ÜRETİM · DR · BAYI · BARINDIRILAN yalnız törenle eklenen üretim
+ * kökleriyle (`kok-<yıl>-<n>`) geçerli olur — listede üretim kökü yokken o sınıflarda hiçbir HAK geçerli
+ * değildir (fail-closed). Satır yalnız `Teks-Erp/scripts/guven-capasi-ekle.ts kok` ile eklenir (satıcı ve
+ * patron aynası + native `anchor.rs` birlikte); rotasyonda yeni kid EKLENİR, eskisi örtüşme penceresinde kalır.
  * Doğrulama fonksiyonları çapayı ARGÜMAN alır; bu sabit yalnız üretim çağıranının girdisidir.
  */
 export const ROOT_PUBLIC_KEYS: readonly RootKey[] = Object.freeze([

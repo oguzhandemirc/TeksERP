@@ -18,6 +18,10 @@ export const VARSAYILAN = Object.freeze({
   /** vds-dogrula tabanı: sahaya özgü veri, repo DIŞI (betiğin varsayılanıyla aynı; `--vds-taban=` ezer). */
   vdsTaban: '~/.tekserp/vds-taban',
   traefikBaslangic: '2026-09-01T09:47:37',
+  /** 7.1'in beklediği HAK sınıfı; hazırlık satıcısı yalnız TEST/DEMO verir (üretim satıcısına geçişte `--hak-sinif=URETIM`). */
+  hakSinif: 'TEST',
+  /** 4.3'ün beklediği PAKET imza anahtarı öneki (`--paket-kid=`; üretim anahtarıyla imzalı pakette `paket-2026`). */
+  paketKidOnek: 'paket-hazirlik',
 });
 export const SATICI_KONTEYNER = 'tekserp-satici-hazirlik';
 export const GUNCELLEME_KOK = '/opt/stack/apps/tekserp-guncelleme';

@@ -8,6 +8,7 @@
 //   node deploy/lisans-devreye/asama-dogrula.mjs --asama=2 [--olc] [--satici-sha=<12>] [--backend-surum=<x>]
 //        [--panel-surum=<x>] [--belirtec-dosyasi=~/.tekserp/testfabrika-gozlem.jwt] [--t4-tsv=<dosya>]
 //        [--traefik-baslangic=<ISO önek>] [--vds-taban=<dizin>] [--satici-kok=<url>] [--tp-kok=<url>] [--portal-kok=<url>]
+//        [--hak-sinif=<TEST|URETIM|…>] [--paket-kid=<önek>]   (üretim satıcısına geçişten sonra: URETIM · paket-2026)
 //   --asama: 1..8 | hepsi (virgülle birden çok: --asama=1,2)
 //
 // Çıkış: 0 hepsi UYUMLU (ya da kuru plan) · 1 en az bir IHLAL (DUR) · 2 IHLAL yok ama ÖLÇÜLEMEDİ var ·
@@ -42,6 +43,8 @@ export function parametreler(argv) {
     panelSurum: arg(argv, 'panel-surum') ?? null,
     belirtecDosyasi: arg(argv, 'belirtec-dosyasi') ?? null,
     t4Tsv: arg(argv, 't4-tsv') ?? null,
+    hakSinif: arg(argv, 'hak-sinif') ?? VARSAYILAN.hakSinif,
+    paketKidOnek: arg(argv, 'paket-kid') ?? VARSAYILAN.paketKidOnek,
     belirtec: null,
   };
   const secim = arg(argv, 'asama');
