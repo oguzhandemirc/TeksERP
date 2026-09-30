@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
 import { PG_SESSION_OPTIONS } from "../lib/pg-session";
+import { privilegeReport, type PrivilegeReport, type Queryable } from "./sender-role";
 
 export interface SenderDb {
   readonly prisma: PrismaClient;
@@ -23,27 +24,25 @@ export function openSenderDb(url: string): SenderDb {
   };
 }
 
-interface PrivilegeProbe {
-  readonly oku: boolean;
-  readonly kurulum: boolean;
-  readonly ekle: boolean;
-  readonly sil: boolean;
-  readonly govde: boolean;
-}
-
 /**
- * Açılış kapısı (fail-closed): bağlanan rol `bildirim`i okuyabilmeli ama kurulumu okuyamamalı, `bildirim`e satır
- * ekleyip silememeli ve gövdeyi değiştirememeli — sahip rolle (satıcının URL'i) yanlışlıkla kalkan gönderici DURUR.
+ * Açılış kapısı (fail-closed): bağlanan rolün TAM yetki kümesi girişi açan yolla aynı ölçümden geçer (`privilegeReport`:
+ * tablo × yetki · kolon · dizi · öznitelik — REPLICATION dahil · rol üyeliği — önceden tanımlı roller dahil · public dışı
+ * şema · veritabanı CREATE · fonksiyon EXECUTE). Fazla tek kalem → gönderici DURUR; ölçülemezse de durur. Sahip rolle
+ * (satıcının URL'i) yanlışlıkla kalkan gönderici böyle durur.
  */
 export async function assertLeastPrivilege(prisma: PrismaClient): Promise<void> {
-  const rows = await prisma.$queryRaw<PrivilegeProbe[]>`
-    SELECT has_table_privilege('bildirim', 'SELECT') AS oku,
-           has_table_privilege('kurulum', 'SELECT') AS kurulum,
-           has_table_privilege('bildirim', 'INSERT') AS ekle,
-           has_table_privilege('bildirim', 'DELETE') AS sil,
-           has_column_privilege('bildirim', 'govde', 'UPDATE') AS govde`;
-  const r = rows[0];
-  if (!r?.oku) throw new Error("Gönderici DB rolü `bildirim` tablosunu okuyamıyor (göç ya da rol kurulumu eksik)");
-  const extra = [r.kurulum ? "kurulum okunuyor" : "", r.ekle ? "bildirim'e ekleme" : "", r.sil ? "bildirim silme" : "", r.govde ? "gövde yazımı" : ""].filter(Boolean);
-  if (extra.length > 0) throw new Error(`Gönderici DB rolü FAZLA yetkili (${extra.join(", ")}) — yalnız satici_bildirim rolüyle çalışır`);
+  const q: Queryable = { query: async <R>(sql: string, params: unknown[]) => ({ rows: await prisma.$queryRawUnsafe<R[]>(sql, ...params) }) };
+  let report: PrivilegeReport;
+  try {
+    const me = (await q.query<{ u: string }>("SELECT current_user::text AS u", [])).rows[0]?.u ?? "";
+    report = await privilegeReport(q, me);
+  } catch (err) {
+    throw new Error(`Gönderici DB rolünün yetkisi ÖLÇÜLEMEDİ (${(err as Error).message.slice(0, 160)}) — fail-closed, gönderici durur`);
+  }
+  if (report.missing.includes("bildirim:SELECT")) throw new Error("Gönderici DB rolü `bildirim` tablosunu okuyamıyor (göç ya da rol kurulumu eksik)");
+  if (report.extra.length > 0) {
+    const shown = report.extra.slice(0, 12).join(", ");
+    throw new Error(`Gönderici DB rolü FAZLA yetkili (${shown}${report.extra.length > 12 ? ` … +${report.extra.length - 12}` : ""}) — yalnız satici_bildirim rolüyle çalışır`);
+  }
+  if (report.missing.length > 0) throw new Error(`Gönderici DB rolünün yetkisi EKSİK (${report.missing.join(", ")}) — göç ya da rol kurulumu eksik`);
 }

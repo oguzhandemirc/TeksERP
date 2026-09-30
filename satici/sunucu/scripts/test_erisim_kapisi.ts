@@ -18,7 +18,8 @@
 //      RED (JWKS_ESKI), yarısında uyarı, yenilenen dosya onarır, tavan ortamdan (1–30 gün, varsayılan 7)
 //   §4 izin listesi (BEYANA bakar, gövde metnine değil): liste ⊆ rota tablosu · kök parolalı ve hassas izinli
 //      (TAILNET_ONLY_PERMISSIONS) rota listede yok · doğrulayıcı sentetik kusurlu listede ısırır · kusurlu listeyle
-//      yönlendirici KURULMAZ
+//      yönlendirici KURULMAZ · §4g access-app BAĞLAMA ENVANTERİ: `createAccessApp`teki her `app.*` çağrısı (ara katman,
+//      yönlendirici, rota, ayar) beklenen sıralı kümeyle BİREBİR — küme dışı bağlama (izin listesini atlayan yol) kırmızı
 //   §5 compose: portal yönlendiricisinin Traefik ipallowlist aralıkları = CLOUDFLARE_NETWORKS · üst dosya satıcıya AĞ
 //      EKLEMEZ, JWKS bağı satıcıda salt okunur · yan konteyner sertleştirilmiş, sırsız, yalnız kendi çıkış köprüsünde
 //      · birleşik yapılandırmada (docker compose config) satıcının HER ağı internal (docker yoksa ÖLÇÜLEMEDİ beyanı)
@@ -32,13 +33,18 @@
 //    (5) dosya kaynağı geçerli dosyayla GEÇER (§3h4 · §3h7 — her dosyayı reddeden kör okuyucu yeşil veremez)
 //    (6) yan konteyner geçerli yanıtı GERÇEKTEN yazar (§3i1 — hiç yazmayan çekici "eski dosya korundu" yeşili veremez)
 //    (7) 8 günlük JWKS RED, aynı küme yenilenince GEÇER (§3j1 · §3j4) (8) listeye sızmış kök imza rotası TAILNET'te
-//    GERÇEKTEN imzalar (§6q2 — boğazın reddi kör RED değil) (9) listedeki her rota ERİŞİM'de 401 (§6p — bağlama ölçülüyor).
+//    GERÇEKTEN imzalar (§6q2 — boğazın reddi kör RED değil) (9) listedeki her rota ERİŞİM'de 401 (§6p — bağlama ölçülüyor)
+//    (10–12) §4h bağlama envanteri sentetik ek yönlendiricide · yerel Router'da · JWT kapısı yönlendiricilerin arkasına
+//    alınınca ısırır.
+// NEGATİF SONDA (sertleştirme 2, dosya DIŞI): access-app.ts'e diskte `app.use("/hata-ayikla", createPortalRouter(ctx,
+//   "TAILNET", …))` → §4g ❌ (§6 HTTP sondaları görmedi); cp + shasum ile geri alındı.
 // Koşum: npx tsx scripts/test_erisim_kapisi.ts   (§6–§7 kendi _test DB'si)
 // =============================================================================
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { spawnSync } from "node:child_process";
 import { createHmac, generateKeyPairSync, randomBytes, randomUUID, sign, type KeyObject } from "node:crypto";
+import ts from "typescript";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -155,6 +161,60 @@ function servisBlogu(yaml: string, ad: string): string {
 }
 
 const neden = (r: AccessResult): string => (r.ok ? "GECTI" : r.reason);
+
+/** access-app'in beklenen `app.*` çağrıları (boşluksuz metin, sıra dahil) — yeni bağlama bilinçli satırla eklenir. */
+const ERISIM_BAGLAMALARI: readonly string[] = [
+  'disable("x-powered-by")',
+  'set("etag",false)',
+  "use(accessLog)",
+  "use(requireOwnListener(deps.listener))",
+  "use(requireAccessJwt(deps.verifier))",
+  'use("/portal/api/ham",createDistributionRawRouter(ctx,"ERISIM"))',
+  'use("/portal/api",createPortalRouter(ctx,"ERISIM",VENDOR_PORTAL_ROUTES))',
+  'get("/",(_req:Request,res:Response)=>{res.set("Cache-Control","no-store").redirect(302,"/portal/");})',
+  'use("/portal",createWebAppRouter(ctx.config.PORTAL_WEB_DIZINI,"portal"))',
+  "use(notFound)",
+  "use(errorHandler)",
+];
+
+const BAGLAMA_YONTEMLERI = new Set(["use", "get", "post", "put", "patch", "delete", "all", "head", "options", "route", "param", "set", "enable", "disable", "engine", "listen"]);
+/** Yalnız uygulama/yönlendiricide olan yöntemler (Map'in get/set/delete'i karışmasın): `app` dışı alıcıda görülürse bulgu. */
+const YALNIZ_YONLENDIRICI = new Set(["use", "route", "param", "all", "listen", "post", "put", "patch"]);
+
+/**
+ * access-app.ts'in `createAccessApp`indeki her `app.<yöntem>(…)` çağrısı (boşluksuz metin, sırayla) + yapı bulguları:
+ * dosyada ikinci `express()` · `Router(` üretimi · `app` dışı alıcıya bağlama yöntemi çağrısı · `app`in başka ada aktarılması.
+ */
+function erisimBaglamalari(metin: string): { baglamalar: string[]; bulgular: string[] } {
+  const sf = ts.createSourceFile("access-app.ts", metin, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const baglamalar: string[] = [];
+  const bulgular: string[] = [];
+  let expressCagrisi = 0;
+  let fonksiyon = false;
+  const yaz = (n: ts.Node) => n.getText(sf).replace(/\s+/g, "");
+  const visit = (n: ts.Node, icinde: boolean): void => {
+    const buIcinde = icinde || (ts.isFunctionDeclaration(n) && n.name?.text === "createAccessApp");
+    if (ts.isFunctionDeclaration(n) && n.name?.text === "createAccessApp") fonksiyon = true;
+    if (ts.isCallExpression(n)) {
+      const c = n.expression;
+      if (ts.isIdentifier(c) && c.text === "express") expressCagrisi++;
+      if ((ts.isIdentifier(c) && c.text === "Router") || (ts.isPropertyAccessExpression(c) && c.name.text === "Router")) bulgular.push(`Router üretimi: ${yaz(n).slice(0, 60)}`);
+      if (ts.isPropertyAccessExpression(c)) {
+        const alici = c.expression.getText(sf);
+        if (alici === "app" && BAGLAMA_YONTEMLERI.has(c.name.text)) {
+          if (buIcinde) baglamalar.push(`${c.name.text}(${n.arguments.map(yaz).join(",")})`);
+          else bulgular.push(`createAccessApp dışında app çağrısı: ${yaz(n).slice(0, 80)}`);
+        } else if (alici !== "app" && YALNIZ_YONLENDIRICI.has(c.name.text)) bulgular.push(`app dışı bağlama çağrısı: ${yaz(n).slice(0, 80)}`);
+      }
+    }
+    if (buIcinde && ts.isVariableDeclaration(n) && n.initializer && ts.isIdentifier(n.initializer) && n.initializer.text === "app") bulgular.push(`app başka ada aktarıldı: ${yaz(n)}`);
+    n.forEachChild((k) => visit(k, buIcinde));
+  };
+  visit(sf, false);
+  if (!fonksiyon) bulgular.push("createAccessApp bulunamadı");
+  if (expressCagrisi !== 1) bulgular.push(`express() ${expressCagrisi} kez çağrıldı (beklenen 1)`);
+  return { baglamalar, bulgular };
+}
 
 function dinle(server: http.Server): Promise<AddressInfo> {
   return new Promise((r) => server.listen(0, "127.0.0.1", () => r(server.address() as AddressInfo)));
@@ -554,6 +614,27 @@ async function main(): Promise<void> {
   kontrol("§4f ham ERİŞİM listesi ham yönlendiricinin rotalarının alt kümesi (parça PUT + dosya indirme)", [...ERISIM_HAM_ROTALARI].every((k) => RAW_ROUTE_KEYS.includes(k)) && ERISIM_HAM_ROTALARI.size === 2);
   const disarida = [...tablo.keys()].filter((k) => !ERISIM_PORTAL_ROTALARI.has(k));
   console.log(`  ℹ️  ERİŞİM dışı ${disarida.length} tablo rotası (tailnet/geri döngüden): ${disarida.join(" · ")}`);
+  const erisimUygulamasi = readFileSync(path.join(__dirname, "..", "src", "http", "access-app.ts"), "utf8");
+  const envanter = erisimBaglamalari(erisimUygulamasi);
+  const farklar = (e: typeof envanter) => [
+    ...e.bulgular,
+    ...e.baglamalar.filter((b, i) => b !== ERISIM_BAGLAMALARI[i]).map((b) => `beklenmeyen: ${b}`),
+    ...ERISIM_BAGLAMALARI.filter((b, i) => e.baglamalar[i] !== b).map((b) => `eksik/yer değiştirmiş: ${b}`),
+  ];
+  const baglamaFarki = farklar(envanter);
+  kontrol(
+    `§4g access-app bağlama envanteri beklenen ${ERISIM_BAGLAMALARI.length} çağrıyla BİREBİR (sıra dahil: soket → JWT → yönlendiriciler → 404)`,
+    baglamaFarki.length === 0,
+    baglamaFarki.join(" | ").slice(0, 300) || `${envanter.baglamalar.length} çağrı`,
+  );
+  const ekli = erisimBaglamalari(erisimUygulamasi.replace('  app.use("/portal", createWebAppRouter', '  app.use("/hata-ayikla", createPortalRouter(ctx, "TAILNET", VENDOR_PORTAL_ROUTES));\n  app.use("/portal", createWebAppRouter'));
+  const yerel = erisimBaglamalari(erisimUygulamasi.replace("  app.use(notFound);", '  const r = express.Router();\n  r.get("/ic", (_q: Request, s2: Response) => s2.end());\n  app.use(r);\n  app.use(notFound);'));
+  const once = erisimBaglamalari(erisimUygulamasi.replace("  app.use(requireAccessJwt(deps.verifier));\n", "").replace("  app.use(notFound);", "  app.use(requireAccessJwt(deps.verifier));\n  app.use(notFound);"));
+  kontrol(
+    "§4h ✓K envanter ısırır: ek yönlendirici (izin listesiz TAILNET portalı) · yerel Router + ek bağlama · JWT kapısı yönlendiricilerin ARKASINA",
+    farklar(ekli).some((x) => x.includes('/hata-ayikla')) && farklar(yerel).some((x) => x.includes("Router")) && farklar(once).length > 0 && ekli.baglamalar.length === ERISIM_BAGLAMALARI.length + 1,
+    `${farklar(ekli).length} · ${farklar(yerel).length} · ${farklar(once).length}`,
+  );
 
   console.log("\n§5 compose (Traefik ipallowlist = Cloudflare aralıkları · satıcı dış bağlantısız · yan konteyner)");
   const composeYolu = path.join(__dirname, "..", "..", "..", "deploy", "satici", "docker-compose.portal-genel.yml");
