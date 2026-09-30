@@ -13,8 +13,14 @@ export const SIGNING_ORIGINS: Readonly<Record<SigningKeyKind, readonly ScopeOrig
   BAYI: ["GENEL", "CLI"],
 };
 
+/** Tür → kapsam haritası AÇIK: tanınmayan tür (yeni anahtar türü, bozuk dosya, "__proto__") BAYİ SAYILMAZ, RED. */
+const KIND_OF: Readonly<Record<WrappedKeyType, SigningKeyKind>> = { "tekserp-kok-anahtar": "KOK", "tekserp-bayi-anahtar": "BAYI" };
+
 export function signingKindOf(tur: WrappedKeyType): SigningKeyKind {
-  return tur === "tekserp-kok-anahtar" ? "KOK" : "BAYI";
+  const kind = Object.hasOwn(KIND_OF, tur) ? KIND_OF[tur] : undefined;
+  if (kind === "KOK" || kind === "BAYI") return kind;
+  console.error(`[satici] imza: tanınmayan anahtar türü (${String(tur).slice(0, 40)}) — RED`);
+  throw new VendorError(500, "SUNUCU_HATASI", "Anahtar türü tanınmıyor; imza reddedildi");
 }
 
 /** Kapsamsız istek 500 (programlama hatası, imza yok); izinsiz dinleyici 404 (ERİŞİM'de rota yokmuş gibi). */

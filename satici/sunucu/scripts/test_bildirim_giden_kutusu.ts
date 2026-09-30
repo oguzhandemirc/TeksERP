@@ -9,11 +9,18 @@
 //      DR tekrarı · zamanlayıcının ikinci turu) yeni satır doğurmaz
 //   §3 ALLOWLIST: kanarya metinler (açıklama · açan · gerekçe · sebep · mesaj · taksit açıklaması) hiçbir gövdede
 //      yok; gövde anahtarları = allowlist; DB seddi fazla anahtar · dış bağlantı · uzun değer · ham hata metni REDDEDER
+//   §4 GÖVDE SINIRI (bildirim iş olayını ASLA düşürmez): kodun ölçüsü = PG'nin octet_length(govde::text)'i · JSON.stringify'a
+//      göre tam 2000 bayt (PG'de 2017) gövde kısaltılır · 3 baytlık 200 karakterli adlar + eşsiz vekilli konu → destek
+//      talebi yine açılır, gövde ≤ 2000 · eşsiz vekil U+FFFD olur
+//   §5 DENEME HIZI: kullanıcı başına 5 dk'da bir — yeni işlem kimliği 429 HIZ_SINIRI (satır yok, işlem kimliği yok) ·
+//      aynı kimliğin tekrarı yanıtı alır · başka kullanıcı etkilenmez · pencere dolunca / yazım düşünce yer iade
 // ⭐ KALICI SONDA ✓K (her koşumda): §0a çözümleyici sentetik `enqueueNotificationTx(prisma, …)`i yakalar ·
 //    §1'in her maddesi önce DÜŞÜRÜLMÜŞ yazımla ölçülür (tetikleyici kör olsaydı olay satırı doğardı).
 // NEGATİF SONDA (dosya DIŞI, cp + shasum ile geri alındı): N1 destek bildirimi tx SONRASI ayrı tx'te (ilk argüman
 //   yine `tx` — §0a göremez) → §1a/§1a' ❌ · N2 `skipDuplicates` yok → §2f ❌ · N3 kurucu girdiyi yayar → §0d ❌ ·
-//   N4 açıklama konuya eklenir → §1a'/§3a ❌ · N5 kira reddi bildirimsiz → §1h/§1h' ❌.
+//   N4 açıklama konuya eklenir → §1a'/§3a ❌ · N5 kira reddi bildirimsiz → §1h/§1h' ❌ · N6 eski kurucu (JSON.stringify
+//   ölçüsü, vekil normalleştirmesi yok) → §0f/§4a/§4b/§4c/§4d ❌ (destek talebi 500) · N7 deneme rotası sınırsız → §5a ❌ ·
+//   N8 iade kaldırıldı → §1f'/§2d/§5b ❌.
 // Koşum: npx tsx scripts/test_bildirim_giden_kutusu.ts   (yalnız *_test DB)
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -22,7 +29,7 @@ import path from "node:path";
 import ts from "typescript";
 import { ENDPOINTS, digestFingerprint } from "../src/lisans-protokol";
 import { HAM_PARMAK_IZI, kurulumAnahtariUret, type TestAnahtari } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
-import { NOTIFICATION_BODY_KEYS, NOTIFICATION_CHANNELS, NOTIFICATION_EVENTS, NOTIFICATION_STATES, notificationBody } from "../src/notifications/catalog";
+import { BODY_TOTAL_MAX_BYTES, BODY_VALUE_MAX, NOTIFICATION_BODY_KEYS, NOTIFICATION_CHANNELS, NOTIFICATION_EVENTS, NOTIFICATION_STATES, notificationBody, pgJsonbTextBytes, type NotificationBody } from "../src/notifications/catalog";
 import {
   ORTAM,
   SATICI_KOKU,
@@ -81,7 +88,13 @@ function enumValues(schema: string, name: string): string[] {
   return m ? m[1]!.split("\n").map((l) => l.replace(/\/\/.*$/, "").trim()).filter((l) => /^[A-Z0-9_]+$/.test(l)) : [];
 }
 
-function statik(): void {
+/** Eşsiz UTF-16 vekili (jsonb reddeder). */
+const ESSIZ_VEKIL = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+/** 2/3/4 baytlık karakter, PG'nin kaçışladığı karakter, kontrol karakteri, eşsiz vekil — gövde içeriği saldırı yüzeyi. */
+const HAVUZ = ["a", "Z", "7", " ", "ş", "Ğ", "é", "€", "“", "中", "😀", "𝄞", '"', "\\", "\t", "\n", "\u0001", "\u007f", "\ud800", "\udc00", "\ufffd"];
+const rastgeleMetin = (n: number): string => Array.from({ length: n }, () => HAVUZ[Math.floor(Math.random() * HAVUZ.length)]!).join("");
+
+function statik(): NotificationBody[] {
   console.log("\n§0 statik");
   const files = tsFiles(path.join(SATICI_KOKU, "src")).map((p) => ({ name: path.relative(SATICI_KOKU, p), text: readFileSync(p, "utf8") }));
   const f = enqueueCallFindings(files);
@@ -107,6 +120,31 @@ function statik(): void {
     yolRed = true;
   }
   kontrol("§0e kurucu dış bağlantıyı portal yolu olarak REDDEDER", yolRed);
+  // §0f İçerik kaynaklı hata YOK: 400 rastgele gövde (uzun, çok baytlı, kaçışlı, kontrol, eşsiz vekil, geçersiz tarih) —
+  // kurucu fırlatmaz; PG ölçüsü tavanda, değer ≤ 300 kod birimi, eşsiz vekil yok.
+  const ornekler: NotificationBody[] = [];
+  const bulgu = { atan: 0, asan: 0, uzun: 0, vekil: 0, kisaltilan: 0 };
+  for (let i = 0; i < 400; i++) {
+    const m = () => (Math.random() < 0.1 ? null : rastgeleMetin(Math.floor(Math.random() * 420)));
+    try {
+      const b = notificationBody({ portalYolu: "/destek/x", musteri: m(), tesis: m(), kurulum: m(), lisansNo: m(), sinif: m(), konu: m(), referans: m(), tarih: i % 9 === 0 ? new Date(Number.NaN) : new Date() });
+      ornekler.push(b);
+      if (pgJsonbTextBytes(b) > BODY_TOTAL_MAX_BYTES) bulgu.asan++;
+      for (const v of Object.values(b)) {
+        if (v !== null && v.length > BODY_VALUE_MAX) bulgu.uzun++;
+        if (v !== null && ESSIZ_VEKIL.test(v)) bulgu.vekil++;
+        if (v !== null && v.endsWith("…")) bulgu.kisaltilan++;
+      }
+    } catch {
+      bulgu.atan++;
+    }
+  }
+  kontrol(
+    "§0f gövde içeriği ASLA fırlatmaz: 400 rastgele gövde (çok baytlı · kaçışlı · kontrol · eşsiz vekil · geçersiz tarih) — PG ölçüsü ≤ 2000, değer ≤ 300, eşsiz vekil yok",
+    bulgu.atan === 0 && bulgu.asan === 0 && bulgu.uzun === 0 && bulgu.vekil === 0 && bulgu.kisaltilan > 0,
+    JSON.stringify(bulgu),
+  );
+  return ornekler;
 }
 
 // ---------------------------------------------------------------- DB yardımcıları
@@ -344,9 +382,122 @@ async function allowlist(o: Ortam, token: string): Promise<void> {
   await prisma.bildirim.deleteMany({ where: { tekillikAnahtari: { startsWith: "DENEME:sed-" } } });
 }
 
+/**
+ * §4 gövde sınırı: kodun ölçüsü PG'ninkiyle aynı; JSON.stringify'a göre sınırdaki gövde (PG'de +17 bayt) kısaltılarak
+ * yazılır; uzun çok baytlı adlar ve eşsiz vekilli konu İŞ OLAYINI DÜŞÜRMEZ (destek talebi yine açılır).
+ */
+async function govdeSiniri(o: Ortam, ornekler: readonly NotificationBody[], b: KurulumFiksturu, bAnahtar: TestAnahtari): Promise<void> {
+  const { prisma } = o;
+  console.log("\n§4 gövde sınırı — içerik iş olayını ASLA düşürmez");
+  const olcum = await prisma
+    .$queryRawUnsafe<{ i: bigint; n: number; ok: boolean }[]>(
+      `SELECT t.i, octet_length(t.x::jsonb::text)::int AS n, "bildirim_govde_gecerli"(t.x::jsonb) AS ok FROM unnest($1::text[]) WITH ORDINALITY AS t(x, i) ORDER BY t.i`,
+      ornekler.map((g) => JSON.stringify(g)),
+    )
+    .catch((err: Error) => err);
+  const farkli = olcum instanceof Error ? -1 : olcum.filter((r) => r.n !== pgJsonbTextBytes(ornekler[Number(r.i) - 1]!)).length;
+  const red = olcum instanceof Error ? -1 : olcum.filter((r) => !r.ok).length;
+  kontrol(
+    "§4a kodun ölçüsü = PG'nin octet_length(govde::text)'i ve her gövde DB seddinden geçer (§0f'nin 400 gövdesi)",
+    !(olcum instanceof Error) && olcum.length === ornekler.length && farkli === 0 && red === 0,
+    olcum instanceof Error ? `PG RED: ${olcum.message.split("\n").filter(Boolean).pop()?.slice(0, 120) ?? ""}` : `${olcum.length} gövde · farklı ${farkli} · red ${red}`,
+  );
+
+  // JSON.stringify'a göre TAM 2000 bayt: eski kod kabul ederdi, PG'de 2017 → seddin reddi olayın tx'ini düşürürdü.
+  const alti = { musteri: "x".repeat(300), tesis: "x".repeat(300), kurulum: "x".repeat(300), lisansNo: "x".repeat(300), sinif: "x".repeat(300), konu: "x".repeat(300) };
+  const taban = { ...alti, referans: "", tarih: null, portalYolu: "/bildirimler" };
+  const ref = "x".repeat(2000 - Buffer.byteLength(JSON.stringify(taban), "utf8"));
+  const ham = { ...taban, referans: ref };
+  const sinirda = (() => {
+    try {
+      return notificationBody({ ...alti, referans: ref, portalYolu: "/bildirimler" });
+    } catch {
+      return ham;
+    }
+  })();
+  const yaz = async (govde: object): Promise<string> => {
+    try {
+      await prisma.bildirim.create({ data: { olay: "DENEME", kanal: "EPOSTA", tekillikAnahtari: `DENEME:sed-${randomUUID()}`, govde: govde as never } });
+      return "KABUL";
+    } catch (err) {
+      return /violates check constraint \\?"([a-z_]+)\\?"/.exec((err as Error).message)?.[1] ?? "RED";
+    }
+  };
+  const hamSonuc = await yaz(ham);
+  const sinirSonuc = await yaz(sinirda);
+  kontrol(
+    "§4b JSON.stringify'a göre tam 2000 bayt (PG'de 2017): ham gövde seddin REDDİ; kurucu PG ölçüsüyle kısaltır → KABUL",
+    Buffer.byteLength(JSON.stringify(ham), "utf8") === 2000 && pgJsonbTextBytes(ham) === 2017 && hamSonuc === "bildirim_govde_allowlist" && pgJsonbTextBytes(sinirda) <= 2000 && sinirSonuc === "KABUL",
+    `ham ${pgJsonbTextBytes(ham)} → ${hamSonuc} · kurucu ${pgJsonbTextBytes(sinirda)} → ${sinirSonuc}`,
+  );
+  await prisma.bildirim.deleteMany({ where: { tekillikAnahtari: { startsWith: "DENEME:sed-" } } });
+
+  // Uzun çok baytlı (3 bayt) adlar: müşteri · tesis · kurulum 200'er karakter (VARCHAR(200) tavanı).
+  const uc = (n: number) => `${"€".repeat(n - 8)}${randomUUID().slice(0, 8)}`;
+  const k = await prisma.kurulum.findUniqueOrThrow({ where: { id: b.kurulumDbId }, select: { tesisId: true } });
+  await prisma.musteri.update({ where: { id: b.musteriId }, data: { ad: uc(200) } });
+  await prisma.tesis.update({ where: { id: k.tesisId }, data: { ad: uc(200) } });
+  await prisma.kurulum.update({ where: { id: b.kurulumDbId }, data: { ad: uc(200) } });
+  const destek = async (konu: string) => {
+    const talepId = randomUUID();
+    const y = yoklamaGovdesi({ sonKiraId: null, parmakIzi: o.fpSahip });
+    const r = await imzaliPost(o.genel, ENDPOINTS.SUPPORT, { kurulumId: b.kurulumId, amac: "destek", anahtar: bAnahtar, govde: { v: 1, talepId, konu, aciklama: "sınır", acan: "bekçi", panelSurum: "1.3.2", ek: null, saglik: y.saglik, ortam: ORTAM } });
+    const talep = await prisma.destekTalebi.findFirst({ where: { kurulumId: b.kurulumDbId, konu: { not: "" } }, orderBy: { createdAt: "desc" } });
+    const rows = await prisma.bildirim.findMany({ where: { olay: "DESTEK_TALEBI", kurulumId: b.kurulumDbId, ilgiliKayit: talep?.id ?? "00000000-0000-0000-0000-000000000000" } });
+    const boy = rows.length ? (await prisma.$queryRawUnsafe<{ n: number }[]>(`SELECT max(octet_length("govde"::text))::int AS n FROM "bildirim" WHERE "ilgiliKayit" = $1::uuid`, talep!.id))[0]!.n : -1;
+    return { status: r.status, kod: r.kod, rows, boy };
+  };
+  const uzun = await destek(`${"€".repeat(199)}\ud800`);
+  const g0 = uzun.rows[0]?.govde as Record<string, string | null> | undefined;
+  kontrol(
+    "§4c ✓K 3 baytlık 200 karakterli adlar + eşsiz vekille biten 200 karakterlik konu: destek talebi AÇILIR, iki kanal satırı, gövde PG'de ≤ 2000, uzun alanlar '…' ile kısaltıldı",
+    uzun.status === 200 && ikiKanal(uzun.rows) && uzun.boy > 0 && uzun.boy <= 2000 && !!g0 && [g0.musteri, g0.tesis, g0.kurulum, g0.konu].every((v) => typeof v === "string" && v.endsWith("…")),
+    `${uzun.status} ${uzun.kod ?? ""} · ${uzun.rows.length} satır · ${uzun.boy} bayt`,
+  );
+  const vekil = await destek("Tartı\ud800 ekranı \udc00donuyor");
+  const g1 = vekil.rows[0]?.govde as Record<string, string | null> | undefined;
+  kontrol(
+    "§4d eşsiz vekilli konu (kısa): destek talebi AÇILIR, konu U+FFFD ile yazılır",
+    vekil.status === 200 && ikiKanal(vekil.rows) && g1?.konu === "Tartı\ufffd ekranı \ufffddonuyor",
+    `${vekil.status} ${vekil.kod ?? ""} · konu ${JSON.stringify(g1?.konu ?? null)}`,
+  );
+}
+
+/** §5 deneme bildirimi hızı — kullanıcı başına pencere; tekrar oynatma ve başka kullanıcı etkilenmez. */
+async function denemeHizi(o: Ortam, ilkToken: string, ikinci: { cerez: string }): Promise<string[]> {
+  const { prisma } = o;
+  console.log("\n§5 deneme bildirimi hızı (kullanıcı başına 5 dk'da bir)");
+  const { CooldownLimiter } = await import("../src/http/rate-limit");
+  const yeni = randomUUID();
+  const r = await deneme(o, yeni);
+  const satir = await prisma.bildirim.count({ where: { tekillikAnahtari: `DENEME:${yeni}` } });
+  const islem = await prisma.portalIslemi.count({ where: { clientToken: yeni } });
+  const tekrarSn = (r.json.details as { tekrarSn?: number } | undefined)?.tekrarSn ?? 0;
+  kontrol("§5a aynı kullanıcı, YENİ işlem kimliği pencerede → 429 HIZ_SINIRI (tekrarSn), bildirim satırı ve işlem kimliği YOK", r.status === 429 && r.kod === "HIZ_SINIRI" && tekrarSn > 0 && tekrarSn <= 300 && satir === 0 && islem === 0, `${r.status} ${r.kod ?? ""} · ${tekrarSn} sn · ${satir} satır · ${islem} işlem`);
+  const tekrar = await deneme(o, ilkToken);
+  kontrol("§5b ✓K aynı işlem kimliğinin tekrarı pencerede de YANITI alır (201 · idempotent-replay) — sınır tekrar oynatmayı bozmaz", tekrar.status === 201 && tekrar.basliklar.get("idempotent-replay") === "true", `${tekrar.status}`);
+  const baska = randomUUID();
+  const b = await portalIstek(o.tailnet, "/portal/api/bildirimler/deneme", { cerez: ikinci.cerez, govde: { clientToken: baska } });
+  kontrol("§5c başka kullanıcı etkilenmez (201, iki kanal satırı)", b.status === 201 && (await prisma.bildirim.count({ where: { tekillikAnahtari: `DENEME:${baska}` } })) === 2, `${b.status}`);
+  const s = new CooldownLimiter(300_000);
+  const t0 = 1_000_000;
+  const a1 = s.take("u", t0);
+  const a2 = s.take("u", t0 + 299_000);
+  const a3 = s.take("u", t0 + 300_000);
+  const d1 = s.take("v", t0);
+  if (d1.ok) d1.refund();
+  const d2 = s.take("v", t0 + 1);
+  kontrol(
+    "§5d sınırlayıcı: pencerede ikinci RED (kalan sn), pencere dolunca GEÇER, iade edilen yer hemen yeniden alınır",
+    a1.ok && !a2.ok && a2.retryAfterSec === 1 && a3.ok && d1.ok && d2.ok,
+    JSON.stringify({ a2: a2.ok ? "GEÇTİ" : a2.retryAfterSec, a3: a3.ok, d2: d2.ok }),
+  );
+  return [yeni, baska];
+}
+
 async function main(): Promise<void> {
   hedefDbKapisi();
-  statik();
+  const ornekler = statik();
   const ortam = await anahtarOrtamiKur(Date.now(), { KOPYA_PENCERE_SN: "1" });
   const { f, ctx } = ortam;
   const { prisma } = await import("../src/lib/prisma");
@@ -379,6 +530,15 @@ async function main(): Promise<void> {
     await ayniTxSonra(o, x);
     await tekillik(o, x);
     await allowlist(o, x.token);
+    const bAnahtar = kurulumAnahtariUret();
+    const b = await kurulumFiksturu(ctx);
+    kurulumlar.push(b.kurulumDbId);
+    await etkin(b, bAnahtar);
+    await govdeSiniri(o, ornekler, b, bAnahtar);
+    const ikinciKullanici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
+    kullanicilar.push(ikinciKullanici.id);
+    const ikinciCerez = (await portalGiris(sunucu.tailnet, "/portal/api", ikinciKullanici)).cerez ?? "";
+    tokenler.push(...(await denemeHizi(o, x.token, { cerez: ikinciCerez })));
   } catch (err) {
     kontrol("beklenmeyen hata", false, err instanceof Error ? (err.stack ?? err.message) : String(err));
   } finally {

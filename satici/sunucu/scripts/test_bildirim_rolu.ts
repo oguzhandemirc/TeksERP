@@ -10,11 +10,17 @@
 //   §5 girişi açan yol (`enableSenderLogin` / `role-cli`): parola stdin'den, SCRAM istemcide (sunucu düz parola
 //      görmez; kayıtlı doğrulayıcı SCRAM), biçimsiz parola ve üye olmayan rol RED, parola döndürme eskisini düşürür
 //   §6 göçün rol bölümü İKİNCİ kez koşar (aynı kümede başka DB) — hata yok, yetki aynı
+//   §7 ızgaranın ötesi (girişi açan yol ve göndericinin açılış kapısı AYNI ölçüm): REPLICATION özniteliği · önceden
+//      tanımlı rol üyeliği (pg_read/write_server_files · pg_execute_server_program) ve herhangi bir rol üyeliği · public
+//      dışı şema USAGE / public CREATE · public dışı şemada fonksiyon · public'te SECURITY DEFINER ya da açık GRANT'lı
+//      fonksiyon · veritabanında CREATE → giriş AÇILMAZ; girişi açık rol sonradan üyelik kazanırsa gönderici DURUR
 // ⭐ KALICI SONDA ✓K (her koşumda): fazladan TEK yetki (kurulum SELECT) verilmiş üye rolde giriş AÇILMAZ ve ızgara
-//    o yetkiyi adıyla bulur — ölçüm kör olsaydı giriş açılırdı.
+//    o yetkiyi adıyla bulur — ölçüm kör olsaydı giriş açılırdı · §7'nin on bir sondası adıyla · §7k geri alınınca TAM küme
+//    (kör RED değil) · §7l açılış kapısı temizde GEÇER.
 // NEGATİF SONDA (DB'de GRANT/REVOKE ya da dosya DIŞI cp + shasum ile geri alındı): R1 role `govde` UPDATE +
 //   `destek_talebi` SELECT verildi → §3a ❌ (gönderici rolü de açılmadı) · R2 ızgara `kurulum`u atlar → §5d ❌ ·
-//   R4 SCRAM anahtarları yer değiştirir → giriş 28P01 ❌ · R5 göçün rol bölümü koşulsuz CREATE ROLE → §6a ❌.
+//   R4 SCRAM anahtarları yer değiştirir → giriş 28P01 ❌ · R5 göçün rol bölümü koşulsuz CREATE ROLE → §6a ❌ · R6 eski
+//   sender-role + sender-db (yalnız ızgara) → §7'nin on iki satırı ❌ (giriş AÇILDI, açılış kapısı GEÇTİ).
 // Koşum: npx tsx scripts/test_bildirim_rolu.ts   (yalnız *_test DB)
 // =============================================================================
 import { spawn } from "node:child_process";
@@ -22,6 +28,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
+import { assertLeastPrivilege, openSenderDb } from "../src/notifications/sender-db";
 import { SENDER_ROLE, SENDER_UPDATE_COLUMNS, enableSenderLogin, privilegeReport } from "../src/notifications/sender-role";
 import { gondericiRoluKur, sahipIstemci, type GondericiRolu } from "./lib/bildirim-rolu";
 import { SATICI_KOKU, hedefDbKapisi, kontrol, sonuc } from "./lib/test-ortam";
@@ -63,6 +70,7 @@ async function main(): Promise<void> {
   const db = hedefDbKapisi();
   const sahip = await sahipIstemci();
   const roller: string[] = [];
+  const temizlik: string[] = [];
   let rol: GondericiRolu | null = null;
   try {
     console.log("\n§1 rol öznitelikleri");
@@ -161,9 +169,68 @@ async function main(): Promise<void> {
     }
     const sonra = await privilegeReport(sahip, SENDER_ROLE);
     kontrol(`§6a rol bölümü aynı kümede ikinci kez (başka DB benzetimi, ${db}) hatasız, yetki kümesi aynı`, ikinci === "TEMIZ" && sonra.extra.length === 0 && sonra.missing.length === 0, ikinci);
+
+    console.log("\n§7 öznitelik · üyelik · şema · fonksiyon · veritabanı yetkisi");
+    const ek = randomBytes(4).toString("hex");
+    const sema = `bekci_sema_${ek}`;
+    temizlik.push(`DROP SCHEMA IF EXISTS "${sema}" CASCADE`, `DROP FUNCTION IF EXISTS public."bekci_tanimlayici_${ek}"()`, `DROP FUNCTION IF EXISTS public."bekci_acik_${ek}"()`);
+    const sondalar: [string, (r: string) => string[], RegExp, string[]][] = [
+      ["REPLICATION özniteliği", (r) => [`ALTER ROLE "${r}" REPLICATION`], /çoğaltma yapan olamaz/, []],
+      ["pg_read_server_files üyeliği", (r) => [`GRANT pg_read_server_files TO "${r}"`], /fazla: [^·]*üyelik pg_read_server_files/, []],
+      ["pg_write_server_files üyeliği", (r) => [`GRANT pg_write_server_files TO "${r}"`], /fazla: [^·]*üyelik pg_write_server_files/, []],
+      ["pg_execute_server_program üyeliği", (r) => [`GRANT pg_execute_server_program TO "${r}"`], /fazla: [^·]*üyelik pg_execute_server_program/, []],
+      ["herhangi bir rol üyeliği", (r) => [`CREATE ROLE "${r}_ust" NOLOGIN`, `GRANT "${r}_ust" TO "${r}"`], /fazla: [^·]*üyelik sat_bld_[0-9a-f]+_ust/, []],
+      ["public dışı şemada USAGE", (r) => [`CREATE SCHEMA "${sema}"`, `GRANT USAGE ON SCHEMA "${sema}" TO "${r}"`], new RegExp(`fazla: [^·]*şema ${sema}:USAGE`), [`DROP SCHEMA "${sema}" CASCADE`]],
+      ["public şemasında CREATE", (r) => [`GRANT CREATE ON SCHEMA public TO "${r}"`], /fazla: [^·]*şema public:CREATE/, []],
+      ["public dışı şemada fonksiyon (PUBLIC EXECUTE)", () => [`CREATE SCHEMA "${sema}"`, `CREATE FUNCTION "${sema}".f() RETURNS int LANGUAGE sql AS 'SELECT 1'`], new RegExp(`fazla: [^·]*fonksiyon ${sema}\\.f:EXECUTE`), [`DROP SCHEMA "${sema}" CASCADE`]],
+      ["public'te SECURITY DEFINER fonksiyon", () => [`CREATE FUNCTION public."bekci_tanimlayici_${ek}"() RETURNS int LANGUAGE sql SECURITY DEFINER AS 'SELECT 1'`], /fazla: [^·]*\(SECURITY DEFINER\)/, [`DROP FUNCTION public."bekci_tanimlayici_${ek}"()`]],
+      ["public'te açık GRANT'lı fonksiyon", (r) => [`CREATE FUNCTION public."bekci_acik_${ek}"() RETURNS int LANGUAGE sql AS 'SELECT 1'`, `REVOKE EXECUTE ON FUNCTION public."bekci_acik_${ek}"() FROM PUBLIC`, `GRANT EXECUTE ON FUNCTION public."bekci_acik_${ek}"() TO "${r}"`], /fazla: [^·]*\(açık yetki\)/, [`DROP FUNCTION public."bekci_acik_${ek}"()`]],
+      ["veritabanında CREATE", (r) => [`GRANT CREATE ON DATABASE "${db}" TO "${r}"`], /fazla: [^·]*veritabanı CREATE/, []],
+    ];
+    for (const [ad, kur, desen, geriAl] of sondalar) {
+      const r = `sat_bld_${randomBytes(5).toString("hex")}`;
+      roller.push(r, `${r}_ust`);
+      await sahip.query(`CREATE ROLE "${r}" NOLOGIN IN ROLE "${SENDER_ROLE}"`);
+      for (const sql of kur(r)) await sahip.query(sql);
+      const mesaj = await hatali({ role: r, password: randomBytes(20).toString("hex") });
+      const rapor = await privilegeReport(sahip, r);
+      const giris = (await sahip.query<{ l: boolean }>("SELECT rolcanlogin AS l FROM pg_roles WHERE rolname = $1", [r])).rows[0]?.l;
+      for (const sql of geriAl) await sahip.query(sql);
+      const raporda = ad.startsWith("REPLICATION") ? rapor.extra.includes("öznitelik REPLICATION") : rapor.extra.length > 0;
+      kontrol(`§7 ${ad} → giriş AÇILMAZ, ölçüm fazlayı adıyla bulur (açılış kapısının raporunda da)`, desen.test(mesaj) && giris === false && raporda, `${mesaj.slice(0, 150)} · rapor ${rapor.extra.slice(0, 3).join(",")}`);
+    }
+    const temiz = await privilegeReport(sahip, SENDER_ROLE);
+    kontrol("§7k ✓K sondalar geri alınınca satici_bildirim yine TAM küme (ölçüm her şeyi reddeden kör kapı değil)", temiz.extra.length === 0 && temiz.missing.length === 0, temiz.extra.join(","));
+
+    // Açılış kapısı: girişi AÇIK rol sonradan önceden tanımlı role üye yapılırsa gönderici DURUR (aynı ölçüm, kendi bağlantısından).
+    const acik = await gondericiRoluKur();
+    roller.push(acik.rol);
+    const kapi = async (): Promise<string> => {
+      const g = openSenderDb(acik.url);
+      try {
+        await assertLeastPrivilege(g.prisma);
+        return "GECTI";
+      } catch (err) {
+        return (err as Error).message;
+      } finally {
+        await g.close();
+      }
+    };
+    const once = await kapi();
+    await sahip.query(`GRANT pg_read_server_files TO "${acik.rol}"`);
+    const sonra7 = await kapi();
+    await sahip.query(`REVOKE pg_read_server_files FROM "${acik.rol}"`);
+    await sahip.query(`ALTER ROLE "${acik.rol}" REPLICATION`);
+    const cogaltma = await kapi();
+    kontrol(
+      "§7l açılış kapısı (göndericinin kendi bağlantısı): temiz rol GEÇER · sonradan pg_read_server_files üyeliği → DURUR · REPLICATION → DURUR",
+      once === "GECTI" && /FAZLA yetkili \([^)]*üyelik pg_read_server_files/.test(sonra7) && /FAZLA yetkili \([^)]*öznitelik REPLICATION/.test(cogaltma),
+      `${once} · ${sonra7.slice(0, 110)} · ${cogaltma.slice(0, 110)}`,
+    );
   } catch (err) {
     kontrol("beklenmeyen hata", false, err instanceof Error ? (err.stack ?? err.message) : String(err));
   } finally {
+    for (const sql of temizlik) await sahip.query(sql).catch(() => undefined);
     for (const r of roller) {
       await sahip.query(`DROP OWNED BY "${r}"`).catch(() => undefined);
       await sahip.query(`DROP ROLE IF EXISTS "${r}"`).catch((err: Error) => console.error(`rol kaldırılamadı (${r}): ${err.message}`));

@@ -10,12 +10,17 @@
 //   ③b her servis (yan konteynerler dahil): yalıtım GEVŞETMESİ yok — volumes_from · privileged · cap_add · pid/ipc/uts/
 //      userns/cgroup · devices · runtime · sysctls YASAK; network_mode yalnız beyanlı istisna (geri döngü kipinde
 //      portal-tunel → service:satici); security_opt TAM OLARAK no-new-privileges:true (seccomp/apparmor/label gevşetmesi yok)
-//   ③c her servisin anahtarları TANINAN kümede (fail-closed: bilinmeyen anahtar = ihlal; yeni anahtar bilinçli eklenir)
+//   ③c her servisin anahtarları TANINAN kümede (fail-closed: bilinmeyen anahtar = ihlal; yeni anahtar bilinçli eklenir);
+//      yapılandırma BÜTÜN profillerle çözülür (`--profile '*'`) ve `profiles` yalnız satici-goc'ta, tam olarak ["goc"]
+//   ③d host bağları servis başına ALLOWLIST (hedef → .env değişkeni, salt okunurluk; DB yalnız kendi birimi): beyansız
+//      bağ, .env'den farklı kaynak, sistem yolu (/ · /etc · /root · /run · docker…), iç içe kaynak, bağın içinde sır YASAK
+//   ③e group_add yalnız SIR_GID (sayısal, ≥ 1000) ve yalnız sırrı okuyan servislerde; birincil grup root olamaz (③)
 //   ④ kenar + ic ağları internal; dış (`external`) ağa katılan servis yok (Traefik'in `web`i dahil)
 //   ⑤ anahtar birimi her bağlandığı yerde salt okunur
 //   ⑥ satıcı köprü ağları 100.64/10 ve 127/8 DIŞINDA — köprü ağ geçidi tailnet kapısını kandırmasın
 //      (ölçüldü: tailnet ağı 100.100.100.0/28 iken host'tan yayımlı porta gelen istek geçidin
 //      adresiyle girip portalı 200 açtı)
+//   ⑥c her ağda IPv6 KAPALI (enable_ipv6 · v6 alt ağı · ipv6 sürücü seçeneği yok) — çıkış kuralları yalnız IPv4'ü daraltır
 //   ⑥b kenar ağında dinamik dağıtım aralığı (ip_range) alt ağın içinde ve satıcının sabit adresi
 //      onun DIŞINDA — Traefik (dinamik) satıcının adresini kapamasın
 //   ⑦ Traefik etiketi yalnız `satici`de ve kenar ağını gösteriyor; DB'nin portu ve dış ağı yok
@@ -40,15 +45,17 @@
 //   ⑬ PORTAL-GENEL: PORT_ERISIM 4613 · ERISIM_BIND = kenar adresi · 4613 yayımlanmaz · Access ayarı biçimli · JWKS bağı
 //      satıcıda salt okunur, yan konteynerde yazılır, create_host_path yok, anahtar/dağıtım birimlerinin dışında ·
 //      `satici-jwks` satıcı imajı + çekici giriş noktası, sırsız/bağsız/portsuz/etiketsiz, yalnız `jwks-cikis`te ·
-//      `jwks-cikis` internal değil, tek üyeli · portal yönlendiricisi 4613'e, ipallowlist = CLOUDFLARE_NETWORKS birebir.
+//      `jwks-cikis` internal değil, tek üyeli · portal yönlendiricisi 4613'e, ipallowlist = CLOUDFLARE_NETWORKS birebir ·
+//      ⑬g yan konteyner ortamı ALLOWLIST · ⑬h `jwks-cikis` alt ağı = .env'deki JWKS_CIKIS_AGI (DOCKER-USER kuralının ağı).
 //   Ⓑ BİLDİRİM (`docker-compose.bildirim.yml`: dosya COMPOSE_FILE'da ya da `satici-bildirim` servisi) — satıcı dış
 //      bağlantısız kalır, dışarı YALNIZ en az yetkili gönderici çıkar: Ⓑ0 dosya ↔ servis · Ⓑ1 internal olmayan ağlar
 //      tam olarak (ana kipte tailnet +) örtü çıkış ağları, bildirim-cikis tek üyeli · Ⓑ2 gönderici ağları tam ic +
 //      bildirim-cikis, çekirdek servisler bildirim-cikis'e katılmaz · Ⓑ3 port/birim/Traefik etiketi/soket yok · Ⓑ4 tam dört
-//      kanal sırrı, başka serviste yok · Ⓑ5 ortam: satici_bildirim rolü, sır yolları /run/secrets/, düz sır/DATABASE_URL yok,
-//      sağlayıcı kökü https · Ⓑ6 satıcı imajı + gönderici komutu · Ⓑ7 çıkış alt ağı 100.64/10 · 127/8 · satıcı ağları ·
-//      patron ağlarıyla (--patron-env; verilmezse ÖLÇÜLMEDİ) çakışmaz · Ⓑ8 dns iki sabit IPv4 = `vds/bildirim-cikis.sh`in
-//      53'ü açtığı adresler (betiğin varsayılanı + .env'deki BILDIRIM_DNS_1/2).
+//      kanal sırrı, başka serviste yok · Ⓑ5 ortam ALLOWLIST: satici_bildirim rolü, sır yolları /run/secrets/, DB adresi ve
+//      sağlayıcı kökleri yalnız beklenen değer, tanınmayan anahtar (NODE_OPTIONS, düz sır, DATABASE_URL…) yok · Ⓑ6 satıcı
+//      imajı + gönderici komutu · Ⓑ7 çıkış alt ağı 100.64/10 · 127/8 · satıcı ağları · patron ağlarıyla (--patron-env;
+//      verilmezse ÖLÇÜLMEDİ) çakışmaz · Ⓑ7b çıkış alt ağı = .env'deki BILDIRIM_CIKIS_AGI = betiğin kural koyduğu ağ ·
+//      Ⓑ8 dns iki sabit IPv4 = `vds/bildirim-cikis.sh`in 53'ü açtığı adresler (betiğin varsayılanı + .env'deki BILDIRIM_DNS_1/2).
 //   ⑫ İKİ ORTAM YAN YANA (--diger-env <öteki ortamın .env'i>): proje/DB hacmi/Host/genel kök/sır grubu farklı,
 //      köprü alt ağları çakışmaz, host bağları ve sır dosyaları ortak ya da iç içe değil (tek istisna salt
 //      okunur yayın kökü), yayımlı portlar çakışmaz — üretim hazırlığın anahtarını/DB'sini ASLA bağlamasın.
@@ -99,9 +106,11 @@ function coz(env, fDosyalari) {
       : composeFileSatiri
         ? composeFileSatiri.replace(/^["']|["']$/g, "").split(":").filter(Boolean).map((f) => path.resolve(burasi, f))
         : [path.join(burasi, "docker-compose.yml")];
+  // BÜTÜN profiller çözülür ("*"): yalnız `goc` açılsaydı başka profildeki servis hiç denetlenmezdi. Profil anahtarı
+  // ③c'de ölçülür (yalnız satici-goc = ["goc"]); "*"i tanımayan compose satici-goc'u çözmez → körlük zemini kırmızı.
   const r = spawnSync(
     "docker",
-    ["compose", "--env-file", env, ...dosyalar.flatMap((f) => ["-f", f]), "--profile", "goc", "config", "--format", "json"],
+    ["compose", "--env-file", env, ...dosyalar.flatMap((f) => ["-f", f]), "--profile", "*", "config", "--format", "json"],
     { encoding: "utf8" },
   );
   if (r.status !== 0) {
@@ -154,8 +163,28 @@ const BILDIRIM_SIR_ORTAMI = {
   RESEND_API_KEY_DOSYASI: "resend_api_key",
 };
 const BILDIRIM_SIRLARI = Object.values(BILDIRIM_SIR_ORTAMI).sort();
-// Sır olmayan tek beyanlı *_DOSYASI: nabız dosyası (tmpfs /tmp'de, healthcheck okur).
-const BILDIRIM_SIR_DISI_DOSYA = { BILDIRIM_NABIZ_DOSYASI: "/tmp/" };
+const BILDIRIM_DUZ_SIRLAR = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "RESEND_API_KEY", "DATABASE_URL"];
+const sabit = (deger) => ({ gecerli: (v) => v === deger, aciklama: `≠ ${deger}` });
+const tamsayi = { gecerli: (v) => /^\d{1,6}$/.test(v), aciklama: "tamsayı değil" };
+const serbest = { gecerli: () => true, aciklama: "" };
+/** Göndericinin ortam ALLOWLIST'i (sender-config.ts + satici-baslat.sh'ın okuduğu anahtarlar); başka her anahtar Ⓑ5 ihlali. */
+const BILDIRIM_ORTAMI = {
+  NODE_ENV: { ...sabit("production"), zorunlu: true },
+  DB_KULLANICI: { ...sabit("satici_bildirim"), zorunlu: true },
+  ...Object.fromEntries(Object.entries(BILDIRIM_SIR_ORTAMI).map(([k, sir]) => [k, { ...sabit(`/run/secrets/${sir}`), zorunlu: true }])),
+  DB_HOST: sabit("satici-db"),
+  DB_ADI: sabit("satici"),
+  BILDIRIM_NABIZ_DOSYASI: { gecerli: (v) => /^\/tmp\/[A-Za-z0-9._-]+$/.test(v), aciklama: "/tmp/ altında değil" },
+  BILDIRIM_EPOSTA_ALICI: serbest,
+  BILDIRIM_EPOSTA_GONDEREN: serbest,
+  BILDIRIM_PORTAL_ADRESI: { gecerli: (v) => v === "" || /^https?:\/\/[^\s]+$/.test(v), aciklama: "http(s) adresi değil" },
+  TELEGRAM_API_KOKU: sabit("https://api.telegram.org"),
+  RESEND_API_KOKU: sabit("https://api.resend.com"),
+  BILDIRIM_DONGU_SN: tamsayi,
+  BILDIRIM_DENEME_TAVANI: tamsayi,
+  BILDIRIM_AZAMI_YAS_SAAT: tamsayi,
+  BILDIRIM_SAAT_DILIMI: { gecerli: (v) => /^[A-Za-z_]+(\/[A-Za-z0-9_+-]+){0,2}$/.test(v), aciklama: "saat dilimi adı değil" },
+};
 
 // Örtüler: her biri kendi algısı, yan konteynerleri, çıkış ağları (ağ → izinli tek üyeler), Traefik yönlendiricileri ve
 // hizmet portlarıyla. Yeni örtü buraya bir girdi + kendi denetim işleviyle eklenir.
@@ -227,12 +256,13 @@ kontrol("② docker soketi hiçbir servise bağlı değil", soket.length === 0, 
 // ③ servis sertliği
 for (const [ad, s] of servisler) {
   const kullanici = String(s.user ?? "");
-  const uid = kullanici.split(":")[0];
+  const [uid, gid] = kullanici.split(":");
   const eksik = [];
   if (s.read_only !== true) eksik.push("read_only");
   if (!(s.cap_drop ?? []).includes("ALL")) eksik.push("cap_drop ALL");
   if (!(s.security_opt ?? []).includes("no-new-privileges:true")) eksik.push("no-new-privileges");
   if (!kullanici || uid === "0" || uid === "root") eksik.push("root olmayan user");
+  if (gid === "0" || gid === "root") eksik.push("root olmayan birincil grup");
   if (!s.mem_limit) eksik.push("mem_limit");
   if (!s.cpus) eksik.push("cpus");
   if (!s.pids_limit) eksik.push("pids_limit");
@@ -260,9 +290,91 @@ const TANINAN_ANAHTARLAR = new Set([
   "init", "labels", "logging", "mem_limit", "memswap_limit", "network_mode", "networks", "pids_limit", "ports", "profiles", "read_only",
   "restart", "secrets", "security_opt", "tmpfs", "user", "volumes",
 ]);
+// Profil tek beyanlı: göç servisi `goc` profilinde (her `up`ta koşmasın); başka her profil ihlal (denetimden saklanan servis).
+const PROFILLER = { "satici-goc": ["goc"] };
 for (const [ad, s] of servisler) {
   const bilinmeyen = Object.keys(s).filter((k) => !TANINAN_ANAHTARLAR.has(k));
-  kontrol(`③c ${ad} yalnız tanınan anahtarlar`, bilinmeyen.length === 0, bilinmeyen.length ? `tanınmayan: ${bilinmeyen.join(", ")}` : "");
+  const beklenenProfil = Object.hasOwn(PROFILLER, ad) ? PROFILLER[ad] : [];
+  const profil = s.profiles ?? [];
+  const profilKotu = JSON.stringify(profil) !== JSON.stringify(beklenenProfil);
+  kontrol(
+    `③c ${ad} yalnız tanınan anahtarlar · profil ${beklenenProfil.length ? `tam olarak ${JSON.stringify(beklenenProfil)}` : "yok"}`,
+    bilinmeyen.length === 0 && !profilKotu,
+    [bilinmeyen.length ? `tanınmayan: ${bilinmeyen.join(", ")}` : "", profilKotu ? `profiles=${JSON.stringify(profil)}` : ""].filter(Boolean).join(" · "),
+  );
+}
+
+// ③d HOST BAĞLARI — servis başına beyanlı bağ kümesi (hedef → .env değişkeni + salt okunurluk; DB yalnız kendi birimi);
+// beyansız hedef, kaynağı .env'deki değerden farklı bağ, salt okunurluğu kalkmış bağ ihlal. Kaynak sistem yolu olamaz,
+// farklı değişkenlerin kaynakları iç içe olamaz, sır dosyaları hiçbir bağın içinde olamaz (anahtar/sır dizini sızmasın).
+const BAGLAR = {
+  "satici-db": [{ hedef: "/var/lib/postgresql/data", birim: "satici-pg" }],
+  satici: [
+    { hedef: "/anahtarlar", degisken: "ANAHTAR_DIZINI_HOST", ro: true },
+    { hedef: "/dosyalar", degisken: "DOSYA_DIZINI_HOST", ro: false },
+    { hedef: "/derlemeler", degisken: "DERLEME_DIZINI_HOST", ro: true },
+    { hedef: "/yayin", degisken: "YAYIN_DIZINI_HOST", ro: true },
+    { hedef: "/erisim-jwks", degisken: "ERISIM_JWKS_DIZINI_HOST", ro: true },
+  ],
+  "satici-yedek": [
+    { hedef: "/yedek", degisken: "YEDEK_DIZINI_HOST", ro: false },
+    { hedef: "/yedek-alici", degisken: "YEDEK_ALICI_DIZINI_HOST", ro: true },
+    { hedef: "/anahtarlar", degisken: "ANAHTAR_DIZINI_HOST", ro: true },
+  ],
+  "satici-jwks": [{ hedef: "/erisim-jwks", degisken: "ERISIM_JWKS_DIZINI_HOST", ro: false }],
+};
+const SISTEM_YOLLARI = ["/etc", "/root", "/home", "/run", "/var/run", "/proc", "/sys", "/dev", "/boot", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/var/lib/docker", "/var/lib/containerd", "/snap"];
+const yolNorm = (p) => String(p ?? "").replace(/\/+$/, "") || "/";
+const yolIcIce = (x, y) => {
+  const a = yolNorm(x);
+  const b = yolNorm(y);
+  return a === b || a === "/" || b === "/" || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+};
+{
+  const kullanilan = [];
+  for (const [ad, s] of servisler) {
+    const izinli = Object.hasOwn(BAGLAR, ad) ? BAGLAR[ad] : [];
+    const kotu = [];
+    for (const v of s.volumes ?? []) {
+      const b = izinli.find((x) => x.hedef === v.target);
+      const etiket = `${v.source ?? "?"}:${v.target ?? "?"}`;
+      if (!b) {
+        kotu.push(`beyansız bağ ${etiket}`);
+        continue;
+      }
+      if (b.birim) {
+        if (v.type !== "volume" || v.source !== b.birim) kotu.push(`${v.target} yalnız ${b.birim} birimi (${v.type} ${v.source ?? "?"})`);
+        continue;
+      }
+      const beklenenKaynak = envDegeri(envDosyasi, b.degisken);
+      if (v.type !== "bind") kotu.push(`${v.target} bind değil (${v.type})`);
+      else if (!beklenenKaynak.startsWith("/") || yolNorm(v.source) !== yolNorm(beklenenKaynak)) kotu.push(`${v.target} kaynağı .env'deki ${b.degisken} değil (${v.source ?? "?"})`);
+      else kullanilan.push({ ad, degisken: b.degisken, kaynak: yolNorm(v.source) });
+      if (b.ro && v.read_only !== true) kotu.push(`${v.target} salt okunur değil`);
+    }
+    kontrol(`③d ${ad} host bağları beyanlı (hedef · kaynak = .env değişkeni · salt okunurluk)`, kotu.length === 0, kotu.join(" · "));
+  }
+  const tumBaglar = servisler.flatMap(([ad, s]) => (s.volumes ?? []).filter((v) => v.type === "bind").map((v) => ({ ad, kaynak: yolNorm(v.source) })));
+  const sistem = tumBaglar.filter((x) => x.kaynak === "/" || SISTEM_YOLLARI.some((y) => yolIcIce(x.kaynak, y))).map((x) => `${x.ad}:${x.kaynak}`);
+  const icIceler = kullanilan.flatMap((x, i) => kullanilan.slice(i + 1).filter((y) => y.degisken !== x.degisken && yolIcIce(x.kaynak, y.kaynak)).map((y) => `${x.degisken}↔${y.degisken}`));
+  const sirDosyalari = Object.entries(cfg.secrets ?? {}).map(([ad, x]) => [ad, x.file]).filter(([, f]) => !!f);
+  const sizan = sirDosyalari.flatMap(([sir, f]) => tumBaglar.filter((x) => yolIcIce(f, x.kaynak)).map((x) => `${sir}→${x.ad}:${x.kaynak}`));
+  kontrol(
+    "③d bağ kaynakları sistem yolu değil (/ · /etc · /root · /run · /var/run · docker …) · farklı değişkenlerin kaynakları iç içe değil · sır dosyaları hiçbir bağın içinde değil",
+    sistem.length === 0 && icIceler.length === 0 && sizan.length === 0,
+    [...sistem.map((x) => `sistem yolu ${x}`), ...[...new Set(icIceler)].map((x) => `iç içe ${x}`), ...sizan.map((x) => `sır bağda ${x}`)].join(" · "),
+  );
+}
+
+// ③e group_add YALNIZ sır grubu (SIR_GID; sayısal, sistem grubu değil) ve yalnız sırrı okuyan servislerde.
+{
+  const GRUPLU = ["satici-db", "satici", "satici-goc", "satici-yedek", "satici-bildirim"];
+  const sirGid = envDegeri(envDosyasi, "SIR_GID");
+  const gidGecerli = /^\d{1,10}$/.test(sirGid) && Number(sirGid) >= 1000 && Number(sirGid) !== 65534;
+  const kotu = servisler
+    .filter(([ad, s]) => JSON.stringify((s.group_add ?? []).map(String)) !== JSON.stringify(GRUPLU.includes(ad) ? [sirGid] : []))
+    .map(([ad, s]) => `${ad}: ${JSON.stringify(s.group_add ?? [])}`);
+  kontrol(`③e group_add yalnız SIR_GID (sayısal, ≥ 1000) ve yalnız ${GRUPLU.join(" · ")}'de`, gidGecerli && kotu.length === 0, [gidGecerli ? "" : `SIR_GID=${sirGid || "YOK"} geçersiz`, ...kotu].filter(Boolean).join(" · "));
 }
 
 // ④ ağlar
@@ -301,6 +413,15 @@ for (const [anahtar, n] of Object.entries(aglar)) {
     const kotu = ["100.64.0.0/10", "127.0.0.0/8"].filter((y) => cakisir(c.subnet, y));
     kontrol(`⑥ ${anahtar} ağı (${c.subnet}) tailnet/geri döngü aralığında DEĞİL`, kotu.length === 0, kotu.join(", "));
   }
+}
+
+// ⑥c IPv6 KAPALI — çıkış kuralları (DOCKER-USER, vds/bildirim-cikis.sh · runbook §5) yalnız IPv4'ü daraltır; v6 açık bir
+// köprü (özellikle bildirim-cikis / jwks-cikis) kuralı atlayan ikinci çıkış olur. Her ağda enable_ipv6 ve v6 alt ağı YASAK.
+for (const [anahtar, n] of Object.entries(aglar)) {
+  const v6 = (n.ipam?.config ?? []).map((c) => c.subnet ?? "").filter((x) => x.includes(":"));
+  const secenek = Object.keys(n.driver_opts ?? {}).filter((k) => /ipv6/i.test(k));
+  kontrol(`⑥c ${anahtar} ağında IPv6 kapalı (enable_ipv6 · v6 alt ağı · ipv6 sürücü seçeneği YOK)`, n.enable_ipv6 !== true && v6.length === 0 && secenek.length === 0,
+    [n.enable_ipv6 === true ? "enable_ipv6=true" : "", ...v6.map((x) => `v6 alt ağ ${x}`), ...secenek].filter(Boolean).join(" · "));
 }
 
 // ⑥b kenar: dinamik aralık alt ağda, satıcının sabit adresi aralık dışında ve alt ağda
@@ -449,6 +570,22 @@ function portalGenelDenetle(c) {
     /^Host\(`[a-z0-9.-]+`\)$/.test(e[`traefik.http.routers.${r}.rule`] ?? "") && e[`traefik.http.services.${h}.loadbalancer.server.port`] === "4613" &&
       !ara.includes(",") && cf !== null && JSON.stringify(kaynaklar) === JSON.stringify([...cf].sort()),
     `${e[`traefik.http.routers.${r}.rule`] ?? "kural YOK"} · hizmet ${h || "YOK"} · ${kaynaklar.length} kaynak ↔ ${cf === null ? "CLOUDFLARE_NETWORKS OKUNAMADI" : `${cf.length} Cloudflare aralığı`}`);
+  // Ortam ALLOWLIST'i: çekicinin okuduğu üç anahtar (+ NODE_ENV); vekil/CA/NODE_OPTIONS gibi her fazla anahtar ihlal.
+  const jIzinli = {
+    CF_ACCESS_TAKIM_ALANI: (v) => v === alan,
+    JWKS_DOSYASI: (v) => v === dosya,
+    JWKS_CEKIM_DK: (v) => /^\d{1,2}$/.test(v) && Number(v) >= 1 && Number(v) <= 60,
+    NODE_ENV: (v) => v === "production",
+  };
+  // Object.hasOwn: `in` prototip zincirine bakar — `toString`/`constructor` adlı ortam anahtarı allowlist'i geçmesin.
+  const jKotu = Object.entries(jOrtam).filter(([k, v]) => !Object.hasOwn(jIzinli, k) || !jIzinli[k](String(v ?? ""))).map(([k]) => (Object.hasOwn(jIzinli, k) ? `${k} beklenen değer değil` : `tanınmayan ${k}`));
+  for (const k of ["CF_ACCESS_TAKIM_ALANI", "JWKS_DOSYASI"]) if (!Object.hasOwn(jOrtam, k)) jKotu.push(`${k} YOK`);
+  kontrol("⑬g satici-jwks ortamı ALLOWLIST: CF_ACCESS_TAKIM_ALANI · JWKS_DOSYASI (satıcınınkiyle aynı) · JWKS_CEKIM_DK 1–60 · NODE_ENV=production; başka anahtar YOK", jKotu.length === 0, jKotu.join(" · "));
+  const jAg = envDegeri(envDosyasi, "JWKS_CIKIS_AGI");
+  const jCfg = ca.ipam?.config ?? [];
+  kontrol("⑬h jwks-cikis alt ağı = .env'deki JWKS_CIKIS_AGI (DOCKER-USER kuralının ağı, runbook §5) · tek ipam girdisi",
+    jAg !== "" && jCfg.length === 1 && jCfg[0]?.subnet === jAg,
+    `compose ${jCfg.map((x) => x.subnet ?? "?").join(", ") || "YOK"} · .env ${jAg || "YOK"}`);
 }
 
 function bildirimDenetle(c) {
@@ -497,19 +634,18 @@ function bildirimDenetle(c) {
     [`gönderici: ${bSirlar.join(", ") || "yok"}`, ...hedefKotu, ...(baskasinda.length ? [`başka serviste: ${baskasinda.join(", ")}`] : [])].join(" · "),
   );
 
-  // Değer basılmaz (sır olabilir): ayrıntıda yalnız anahtar adı ve yol.
+  // Ortam ALLOWLIST'i (değer basılmaz — sır olabilir; ayrıntıda yalnız anahtar adı): zorunlu sabitler + göndericinin
+  // okuduğu isteğe bağlı ayarlar. NODE_OPTIONS · vekil · CA · DATABASE_URL · düz sır gibi her tanınmayan anahtar ihlal;
+  // DB adresi/adı ve sağlayıcı kökleri yalnız beklenen değerle (başka kök belirteci ve iletiyi dışarı taşır).
   const e = b.environment ?? {};
   const k5 = [];
-  if (e.DB_KULLANICI !== "satici_bildirim") k5.push(`DB_KULLANICI ${e.DB_KULLANICI === undefined ? "YOK" : "satici_bildirim değil"}`);
-  for (const [k, sir] of Object.entries(BILDIRIM_SIR_ORTAMI)) if (e[k] !== `/run/secrets/${sir}`) k5.push(`${k} ≠ /run/secrets/${sir}`);
   for (const [k, v] of Object.entries(e)) {
-    if (!k.endsWith("_DOSYASI") || k in BILDIRIM_SIR_ORTAMI) continue;
-    const kok = BILDIRIM_SIR_DISI_DOSYA[k] ?? "/run/secrets/";
-    if (!String(v ?? "").startsWith(kok)) k5.push(`${k} ${kok} altında değil`);
+    const kural = Object.hasOwn(BILDIRIM_ORTAMI, k) ? BILDIRIM_ORTAMI[k] : undefined;
+    if (!kural) k5.push(`tanınmayan ${BILDIRIM_DUZ_SIRLAR.includes(k) ? `düz ${k}` : k}`);
+    else if (!kural.gecerli(String(v ?? ""))) k5.push(`${k} ${kural.aciklama}`);
   }
-  for (const k of ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "RESEND_API_KEY", "DATABASE_URL"]) if (k in e) k5.push(`düz ${k} var`);
-  for (const k of ["TELEGRAM_API_KOKU", "RESEND_API_KOKU"]) if (k in e && !/^https:\/\/[^\s/]+/.test(String(e[k] ?? ""))) k5.push(`${k} https değil`);
-  kontrol("Ⓑ5 ortam: DB_KULLANICI=satici_bildirim · *_DOSYASI /run/secrets/ altında (nabız /tmp) · düz sır ve DATABASE_URL yok · sağlayıcı kökü https", k5.length === 0, k5.join(" · "));
+  for (const [k, kural] of Object.entries(BILDIRIM_ORTAMI)) if (kural.zorunlu && !Object.hasOwn(e, k)) k5.push(`${k} YOK`);
+  kontrol("Ⓑ5 ortam ALLOWLIST: DB_KULLANICI=satici_bildirim · sır yolları /run/secrets/ · nabız /tmp · DB_HOST/DB_ADI ve sağlayıcı kökleri yalnız beklenen değer · başka anahtar YOK", k5.length === 0, k5.join(" · "));
 
   const k6 = [];
   if (!b.image || b.image !== hizmetler.satici?.image) k6.push(`imaj ${b.image ?? "YOK"} ≠ satıcı ${hizmetler.satici?.image ?? "YOK"}`);
@@ -531,6 +667,15 @@ function bildirimDenetle(c) {
     const pCakisan = alt ? pAltlar.filter(([, sn]) => cakisir(alt, sn)).map(([a, sn]) => `${p.name}/${a} ${sn}`) : [];
     kontrol("Ⓑ7 bildirim-cikis patronun ağlarıyla çakışmaz (--patron-env)", alt !== "" && pAltlar.length > 0 && pCakisan.length === 0, `${alt || "alt ağ YOK"} ↔ ${pCakisan.join(", ") || pAltlar.map(([a, sn]) => `${a} ${sn}`).join(" · ") || "patron alt ağı YOK"}`);
   }
+  // Çıkış kuralı ALT AĞA bağlıdır (-s $AG): compose'un köprüsü betiğin daralttığı ağdan farklıysa gönderici kuralsız çıkar.
+  const betikDegiskeni = bildirimCikisAgDegiskeni();
+  const envAgi = betikDegiskeni ? envDegeri(envDosyasi, betikDegiskeni) : "";
+  const bCfg = ag["bildirim-cikis"]?.ipam?.config ?? [];
+  kontrol(
+    "Ⓑ7b bildirim-cikis alt ağı = .env'deki BILDIRIM_CIKIS_AGI = vds/bildirim-cikis.sh'ın kural koyduğu ağ · tek ipam girdisi",
+    betikDegiskeni !== null && envAgi !== "" && bCfg.length === 1 && bCfg[0]?.subnet === envAgi,
+    `compose ${bCfg.map((x) => x.subnet ?? "?").join(", ") || "YOK"} · .env ${envAgi || "YOK"} · betik ${betikDegiskeni ? `AG=$${betikDegiskeni}` : "OKUNAMADI"}`,
+  );
 
   const betik = bildirimCikisDns();
   const beklenenDns = betik ? betik.map(([ad, vars]) => envDegeri(envDosyasi, ad) || vars).sort() : null;
@@ -549,6 +694,18 @@ function bildirimCikisDns() {
     const tanim = [...metin.matchAll(/^DNS([12])=\$\{([A-Z0-9_]+):-([0-9.]+)\}$/gm)].map((m) => [m[1], m[2], m[3]]);
     const dongu = /for d in "\$DNS1" "\$DNS2"; do/.test(metin);
     return tanim.length === 2 && dongu && tanim[0][0] === "1" && tanim[1][0] === "2" ? tanim.map(([, ad, vars]) => [ad, vars]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** bildirim-cikis.sh'ın kural koyduğu ağın .env değişkeni (`. ./.env` + `AG=$<DEĞİŞKEN>`); betik biçimi değişirse null (Ⓑ7b kırmızı). */
+function bildirimCikisAgDegiskeni() {
+  try {
+    const metin = readFileSync(path.join(burasi, "vds", "bildirim-cikis.sh"), "utf8");
+    const env = /^\. \.\/\.env$/m.test(metin);
+    const ag = [...metin.matchAll(/^AG=\$\{?([A-Z0-9_]+)\}?$/gm)].map((m) => m[1]);
+    return env && ag.length === 1 && /-s "\$AG"/.test(metin) ? ag[0] : null;
   } catch {
     return null;
   }
