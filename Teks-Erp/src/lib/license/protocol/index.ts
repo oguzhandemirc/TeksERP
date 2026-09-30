@@ -11,3 +11,5 @@ export * from "./uclar";
 export * from "./modul-anahtari";
 export * from "./kabul";
 export * from "./kabul-katalogu";
+export * from "./guncelleme";
+export * from "./guncelleme-karar";

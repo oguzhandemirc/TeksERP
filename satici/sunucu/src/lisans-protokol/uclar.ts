@@ -13,6 +13,7 @@ import {
   VersionTextSchema,
   UuidSchema,
 } from "./belgeler";
+import { UpdateReportSchema } from "./guncelleme";
 import { isPlainObject } from "./ortak";
 
 export const ENDPOINTS = {
@@ -186,6 +187,8 @@ export const PollRequestSchema = z.strictObject({
   gozlem: z.strictObject({ reddedilecekIstek: CounterSchema, reddedilecekModul: CounterSchema }),
   /** Son N kurulum kaydı (3d-2) — yoksa alan hiç gönderilmez (eski satıcı KATI şemayla reddederdi). */
   kurulumKayitlari: InstallRecordListSchema.optional(),
+  /** Dağıtım v2 güncelleme raporu (dilim, güncelleyici, bekleyen karar, son sonuç) — yoksa alan HİÇ gönderilmez; satıcı ÖNCE. */
+  guncelleme: UpdateReportSchema.optional(),
 });
 
 /**
