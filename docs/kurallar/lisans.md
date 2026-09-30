@@ -234,4 +234,4 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-09-30 · Sözleşme kabulü (Ek-7 §5): kabulsüz etkinleştirme satıcıda RED, metin hukuk belgesinden üretilir, kabul kurulum anahtarına bağlı imzalı belge
 - 2026-09-30 · Satıcı sertleştirmesi 2 (bağımsız doğrulama): compose denetimi bütün profiller + bağ/grup/ortam allowlist'i + çıkış ağı ↔ .env/betik + IPv6, gönderici rolü öznitelik/üyelik/şema/fonksiyon ölçümü, bildirim gövdesi iş olayını düşürmez, ERİŞİM bağlama envanteri, imza türü fail-closed, deneme hız sınırı
 - 2026-09-30 · Üretim güven çapası: `kok-2026-1` + `paket-2026` dört yerde (tören 2026-09-30), çalışan ikilinin gömülü çapası ölçüldü
-- 2026-09-30 · Entegrasyon düzeltmeleri (sertleştirme 2 + güven çapası inişi): satıcıda tx içi kabul kapısı
+- 2026-09-30 · Entegrasyon düzeltmeleri (sertleştirme 2 + güven çapası inişi): satıcıda tx içi kabul kapısı, demofabrika aynasız hazırlık kanalı

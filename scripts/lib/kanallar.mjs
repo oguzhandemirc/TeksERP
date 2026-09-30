@@ -157,9 +157,10 @@ export function kayitHatalari(kayit) {
     if (k.tur === 'hazirlik' && (typeof k.gorunurEtiket !== 'string' || !k.gorunurEtiket.trim())) {
       h.push(`${on}: hazırlık kanalı görünür etiket taşımalı (S9)`);
     }
-    if (k.tur === 'hazirlik') {
+    // `ayna: null` = AYNASIZ hazırlık kanalı (demo/deneme müşterisi): hiçbir üretim kanalına terfi kaynağı olmaz.
+    if (k.tur === 'hazirlik' && k.ayna !== null) {
       const ayna = kanallar[k.ayna];
-      if (!ayna || ayna.tur !== 'uretim') h.push(`${on}: ayna "${k.ayna}" kayıtlı bir üretim kanalı değil`);
+      if (!ayna || ayna.tur !== 'uretim') h.push(`${on}: ayna "${k.ayna}" kayıtlı bir üretim kanalı değil (aynasız hazırlık kanalı için null)`);
       // K5 (terfi) yapısal: aynası olduğu üretim kanalı yalnız BU kanaldan terfi alır. Anahtarı
       // silmek ya da null'lamak terfi kapısını sessizce kapatırdı — burada kırmızıdır.
       else if (ayna.terfiKaynagi !== kod) {

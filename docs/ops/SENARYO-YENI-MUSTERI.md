@@ -2,7 +2,7 @@
 
 > **Durum (2026-09-30):** TASLAK. Kullanıcı kararı: bu gecenin işleri bitince thinkpad-1'deki testfabrika kurulumu silinir ve yeni bir müşteriye satış baştan sona, lisans **ZORUNLU** kipte koşulur. Kullanıcı adımları kendisi yapar; §0'ı yönetici oturum (1e) ve dilim oturumları hazırlar.
 > **Tek hikâye:** "Demo Fabrika Tekstil" TeksERP satın alıyor. Sunucusu thinkpad-1 (Windows 11, Tailscale `thinkpad-1`), sahadaki tableti Galaxy Tab A9+. Firma adı yalnız kurulumda `company.name` ayarına yazılır; koda, kanal kaydına ve pakete girmez.
-> **Kanal:** `demofabrika` — üretim türü, terfi kaynağı yok, görünür etiket yok (`deploy/kanallar.json`; reçete `docs/RECETELER.md` § Yeni müşteri kanalı).
+> **Kanal:** `demofabrika` — HAZIRLIK türü, AYNASIZ (demo/test müşterisi: hiçbir üretim kanalının terfi kaynağı değildir, ona yayın terfi istemez), görünür etiket "DEMO FABRİKA" (`deploy/kanallar.json`; reçete `docs/RECETELER.md` § Yeni müşteri kanalı, 2. adım).
 > **Adım biçimi:** **Nerede** (menü yolu · sekme · düğme — etiketler koddan birebir) · **Yap** · **Beklenen** · **Kanıt**. Sonuç her adımın sonuna yazılır: ✅ · ❌ · ⚠️ bilinen sınır.
 > **Değişmez:** adnansahin (SAHINSRV, `adnansahin` kanalı, VDS'teki `html/adnansahin/**`) bu senaryodan ETKİLENMEZ; ölçüm §18.
 
@@ -19,7 +19,7 @@
 | 0.5 | Panel paketi + yayını | `./deploy/electron-paketle.sh demofabrika` → `ssh tekserp-yayin "mkdir -p /opt/stack/apps/tekserp-guncelleme/html/demofabrika/electron"` (bir kez) → `./deploy/electron-yayinla.sh --musteri=demofabrika` | ilk yayında uzak dizin elle açılır |
 | 0.6 | Tablet APK + yayını | `cd mobil && TEKSERP_KANAL=demofabrika npx expo prebuild --platform android --clean --no-install` → `npm run build:apk -- --musteri=demofabrika` → `node deploy/mobil-yayinla.mjs --apk=<yol> --surum=<X> --vc=<N> --musteri=demofabrika` | — |
 | 0.7 | İlk kurulum dosyaları satıcıda | backend zip + `TeksERP-<X>-Setup.exe` + APK → satıcının derleme dizini (hazırlık: `/opt/stack/apps/tekserp-satici-hazirlik/derlemeler`, salt okunur bağ) | portal §4 bu dizinden okur |
-| 0.8 | Portal kanal kaydı | Portal → "Kanallar" → "Yeni kanal" → "Kod" `demofabrika` · "Ad" · "Tür" **Üretim** → "Kaydet" (izin `kanal:yonet`) | — |
+| 0.8 | Portal kanal kaydı | Portal → "Kanallar" → "Yeni kanal" → "Kod" `demofabrika` · "Ad" · "Tür" **Hazırlık** (kayıt defterindekiyle aynı) → "Kaydet" (izin `kanal:yonet`) | — |
 | 0.9 | İndirme kapısı Worker'ı | yayındaysa rota `…/demofabrika/*` (ya da `…/*`) | **yayında değil** (`docs/ops/INDIRME-KAPISI-WORKER.md`) ⇒ indirmeler bugün anonim, K1 etkisiz |
 | 0.10 | thinkpad-1 temizliği | `Teks-Erp-wt/testfabrika-araclar/thinkpad-temizle.ps1` (repo dışı): KURU → gözden geçir → `-Uygula -Onay <N>` | betik hazır, koşulmadı. Salt okuma ölçümü (2026-09-30): makinede İKİ panel var — "TeksERP Test Fabrika" silinir, "Adnan Şahin ERP" varsayılan KORUNUR (sıfırdan müşteri görüntüsü isteniyorsa `-PanelAdlari`/`-PanelPaketAdlari`na eklenir — **KARAR**); PostgreSQL servisinin adı `postgresql-tekserp` (kurulum korunur, ad kalır); `C:\TeksERP-offsite-prova` ve `rclone.conf` silinir, makine dışı yedek hedefindeki kopyalar kapsam dışı |
 | 0.11 | Eski tablet uygulaması | Galaxy Tab'dan `com.teks.erp.mobil.testfabrika` kaldırılır (`adb uninstall …`) | yoksa gömülü eski adresiyle yeni sunucuya ulaşır ve "farklı kurulum" der |
@@ -75,7 +75,7 @@
 
 - **Nerede:** müşteri bilgisayarı (thinkpad-1 ya da ikinci Windows) → §4'ün panel bağlantısı → "İndir" → `TeksERP-<X>-Setup.exe`.
 - **Yap:** çalıştır → imzasız pakette SmartScreen ("Ek bilgi" → "Yine de çalıştır") → kurulum sihirbazı (tüm kullanıcılar için; dizin değiştirilebilir) → masaüstü kısayolu **TeksERP Demo Fabrika**.
-- **Beklenen:** pencere başlığı "TeksERP Demo Fabrika"; kanal rozeti YOK (üretim kanalı); giriş ekranı sağ altta "TeksERP v<X>". Varsayılan sunucu `http://thinkpad-1.tail702784.ts.net:4000`; ulaşılamazsa "Sunucuya ulaşılamadı" → "Sunucuyu Ara" / "Adresi Elle Gir" → "Sunucu Adresi": "Protokol" · "IP / Sunucu adresi" · "Port" → "Bağlantıyı Test Et" → "Kaydet".
+- **Beklenen:** pencere başlığı "DEMO FABRİKA · TeksERP Demo Fabrika"; başlık çubuğunda kırmızı "DEMO FABRİKA" kanal rozeti (hazırlık kanalı; üzerine gelince "— deneme kanalı. Burada gerçek iş girilmez."); giriş ekranı sağ altta "TeksERP v<X>". Varsayılan sunucu `http://thinkpad-1.tail702784.ts.net:4000`; ulaşılamazsa "Sunucuya ulaşılamadı" → "Sunucuyu Ara" / "Adresi Elle Gir" → "Sunucu Adresi": "Protokol" · "IP / Sunucu adresi" · "Port" → "Bağlantıyı Test Et" → "Kaydet".
 - **Yap:** giriş "Kullanıcı adı" · "Şifre" → "Giriş Yap" (satıcı hesabıyla; TOTP açıksa "Doğrulama kodu" → "Doğrula ve gir").
 - **Kanıt:** giriş ekranı + ilk anasayfa görüntüsü.
 
@@ -107,7 +107,7 @@
 - **Beklenen:** eşleştirme zorunluysa "Cihaz Atama Bekliyor" ("Yöneticinin onayı bekleniyor…", "CİHAZ KİMLİĞİ") → panelde "Yetkilendirme" → "Cihaz Erişimi" → "Tabletler" → filtre "Onay bekliyor" → "Onayla" → "Cihazı Onayla": "Takma Ad (opsiyonel)" · "Tür" → "Onayla". Değilse doğrudan giriş.
 - **Sunucu:** gömülü `http://thinkpad-1.tail702784.ts.net:4000/api`; ulaşılamazsa dişli → Ayarlar → "API Sunucusu" → "Ağda Ara" / "Bağlantıyı Test Et" / "Kaydet" (keşif alt ağ taramasıdır; Tailscale üzerinden bulamaz, adres elle girilir).
 - **Yap:** giriş "Kullanıcı + Şifre" ("1 · KULLANICI" / "2 · ŞİFRE") ya da "QR Personel Kartı" (§9'un kartı).
-- **Beklenen:** "Bölüm Seçimi"; başlıkta "Demo Fabrika Tekstil"; kanal etiketi YOK.
+- **Beklenen:** "Bölüm Seçimi"; başlıkta "Demo Fabrika Tekstil"; ekranın üstünde (durum çubuğu şeridinde) "DEMO FABRİKA" kanal şeridi.
 
 ## 11. İlk veriler — cari, ürün, stok girişi
 

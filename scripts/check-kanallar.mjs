@@ -349,6 +349,7 @@ function sondalar(taban, tabanYollar) {
   };
   const tf = (o) => o.kanallar.testfabrika;
   const as = (o) => o.kanallar.adnansahin;
+  const df = (o) => o.kanallar.demofabrika;
   const yeniKanal = (o, kod, tur = 'uretim') => {
     const k = JSON.parse(JSON.stringify(as(o)));
     k.tur = tur;
@@ -427,6 +428,10 @@ function sondalar(taban, tabanYollar) {
     ['N41 mjs yayıncıdan terfi yüklemi çağrısı silindi, import kaldı (mobil-yayinla.mjs) → KIRMIZI', 'kirmizi', (d) => { d['deploy/mobil-yayinla.mjs'] = d['deploy/mobil-yayinla.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
     ['N42 build-apk terfi kapısı çağrısı silindi → KIRMIZI', 'kirmizi', (d) => { d['mobil/scripts/build-apk.mjs'] = d['mobil/scripts/build-apk.mjs'].replaceAll('terfiKapisi(', 'baskaKapi('); }, 'terfi kapısı'],
     ['N43 backend paketleyiciden (paketle.ps1) kanal kapısı çağrısı silindi → KIRMIZI', 'kirmizi', (d) => { d['deploy/paketle.ps1'] = d['deploy/paketle.ps1'].replaceAll('kanal-kapisi.mjs', 'baska.mjs'); }],
+    ['N44 AYNASIZ hazırlık kanalında (demofabrika) görünür etiket yok → KIRMIZI (S9 aynasızda da geçerli)', 'kirmizi', kayitta((o) => { df(o).gorunurEtiket = null; }), 'görünür etiket'],
+    ['N45 üretim kanalının terfiKaynagi AYNASIZ hazırlık kanalını gösteriyor → KIRMIZI', 'kirmizi', kayitta((o) => { as(o).terfiKaynagi = 'demofabrika'; }), 'terfiKaynagi'],
+    ['N46 aynasız hazırlık kanalına terfiKaynagi anahtarı → KIRMIZI (şema kapalı)', 'kirmizi', kayitta((o) => { df(o).terfiKaynagi = null; }), 'tanınmayan anahtar'],
+    ['N47 hazırlık kanalında ayna anahtarı YOK (null değil) → KIRMIZI (şema kapalı: aynasızlık açıkça null yazılır)', 'kirmizi', kayitta((o) => { delete df(o).ayna; }), 'eksik anahtar'],
     ['O1 kayıt defteri bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[KAYIT_REL] = d[KAYIT_REL].slice(0, 40); }],
     ['O2 update-feed.ts UPDATE_BASE_URL adı değişti → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/shared/update-feed.ts'] = d['Electron/shared/update-feed.ts'].replace('export const UPDATE_BASE_URL', 'export const YAYIN_KOKU_URL'); }],
     ['O3 main.ts setAppUserModelId çağrısı kalktı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d['Electron/electron/main.ts'] = d['Electron/electron/main.ts'].replace('app.setAppUserModelId(APP_ID);', 'void 0;'); }],
