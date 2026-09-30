@@ -19,6 +19,7 @@ import {
 } from "./beamPayload";
 import type { DevereScreenState } from "./useDevereScreen";
 import MountedTab from "./MountedTab";
+import { factoryLocaleTimeString } from '../../../lib/factory-time';
 
 type Tab = "planned" | "today" | "mounted";
 
@@ -26,7 +27,7 @@ function fmtTime(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime())
     ? "—"
-    : d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+    : factoryLocaleTimeString(d, "tr-TR", { hour: "2-digit", minute: "2-digit" });
 }
 
 function Row({ beam, state }: { beam: WarpBeam; state: DevereScreenState }) {

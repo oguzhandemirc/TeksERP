@@ -7,7 +7,6 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
@@ -20,6 +19,7 @@ import { returnService, type ReturnRow, type ReturnCancelledFilter } from '../..
 import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
 import { showScreenError } from '../../../lib/screenToast';
+import { formatFactory } from '../../../lib/factory-time';
 
 const STATUS_TABS: { key: ReturnCancelledFilter; label: string }[] = [
   { key: 'active', label: 'Aktif' },
@@ -229,7 +229,7 @@ function ReturnHistoryRow({ item, onOpen }: { item: ReturnRow; onOpen: () => voi
                 {item.customer?.name ?? '—'}
                 {item.order ? `  ·  ${item.order.orderNumber}` : ''}
               </Text>
-              <Text style={styles.dateText}>{dayjs(item.createdAt).format('DD.MM.YYYY · HH:mm')}</Text>
+              <Text style={styles.dateText}>{formatFactory(item.createdAt, 'dd.MM.yyyy · HH:mm')}</Text>
             </View>
 
             <View style={styles.statsRow}>
@@ -332,7 +332,7 @@ function ReturnDetailModal({
             <DetailRow
               icon="clock-outline"
               label="Tarih"
-              value={dayjs(current.createdAt).format('DD.MM.YYYY · HH:mm')}
+              value={formatFactory(current.createdAt, 'dd.MM.yyyy · HH:mm')}
             />
             {current.cancelledAt && (
               <>
@@ -341,7 +341,7 @@ function ReturnDetailModal({
                   <Text style={styles.cancelReason}>{current.cancelReason ?? '—'}</Text>
                   <Text style={styles.cancelMeta}>
                     {current.cancelledBy?.fullName ?? '—'} ·{' '}
-                    {dayjs(current.cancelledAt).format('DD.MM.YYYY · HH:mm')}
+                    {formatFactory(current.cancelledAt, 'dd.MM.yyyy · HH:mm')}
                   </Text>
                 </View>
               </>

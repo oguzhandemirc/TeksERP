@@ -7,11 +7,11 @@ import {
 } from 'react-native';
 import { Text, IconButton, ActivityIndicator, Button, Surface, Icon } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 
 import AppModal from '../AppModal';
 import { subcontractorService } from '../../services/subcontractor.service';
 import type { SubcontractorReceipt } from '../../types/models';
+import { formatFactory } from '../../lib/factory-time';
 
 interface Props {
   receiptId: string | null;
@@ -117,7 +117,7 @@ export default function ReceiptDetailModal({ receiptId, onDismiss }: Props) {
                   <Icon source="clock-outline" size={16} color="#475569" />
                   <Text style={styles.summaryLabel}>Kabul Zamanı:</Text>
                   <Text style={styles.summaryValue}>
-                    {dayjs(receipt.receivedAt).format('DD.MM.YYYY HH:mm')}
+                    {formatFactory(receipt.receivedAt, 'dd.MM.yyyy HH:mm')}
                   </Text>
                 </View>
                 {receipt.receivedBy?.fullName && (

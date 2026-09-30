@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, TouchableRipple, Icon } from 'react-native-paper';
-import dayjs from 'dayjs';
 
 import type { KursunDistributionRowBase } from '../../../services/kursunBypass.service';
 import { colors, spacing, radius } from '../../../theme';
+import { factoryDayKey, formatFactory } from '../../../lib/factory-time';
 
 // =============================================================================
 // Kurşun Dağıtım — "Bekleyen" ve "Dağıtılmış" listelerinin PAYLAŞTIĞI kart
@@ -25,17 +25,16 @@ export function fmtMeters(m: number): string {
 /** "Ne zamandır bekliyor" — en eski topun adıma giriş anından türetilir. */
 export function waitText(since: string | null): string | null {
   if (!since) return null;
-  const mins = dayjs().diff(dayjs(since), 'minute');
+  const mins = Math.trunc((Date.now() - new Date(since).getTime()) / 60_000);
   if (mins < 60) return 'az önce girdi';
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours} saattir bekliyor`;
   return `${Math.floor(hours / 24)} gündür bekliyor`;
 }
 
-/** Atama anı — bugünse saat, değilse gün + saat. */
+/** Atama anı — (fabrika günüyle) bugünse saat, değilse gün + saat. */
 export function fmtAssignedAt(iso: string): string {
-  const d = dayjs(iso);
-  return d.isSame(dayjs(), 'day') ? d.format('HH:mm') : d.format('DD.MM HH:mm');
+  return factoryDayKey(iso) === factoryDayKey() ? formatFactory(iso, 'HH:mm') : formatFactory(iso, 'dd.MM HH:mm');
 }
 
 /**

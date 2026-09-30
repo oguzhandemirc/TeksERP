@@ -145,6 +145,7 @@ import type {
 } from '../../../types/models';
 import { upperTr } from '../../../utils/trCase';
 import { showScreenError } from '../../../lib/screenToast';
+import { formatFactory } from '../../../lib/factory-time';
 
 // =============================================================================
 // Multi-job state — Tambur'da operatör paralel iş yürütebilir (KursunQc paralel).
@@ -6145,11 +6146,7 @@ const relabelStyles = StyleSheet.create({
  * kırpılırdı. Serbest tarih filtresi zaten hangi aralığa bakıldığını söylüyor.
  */
 function formatOutputDate(v: string | Date | null | undefined): string {
-  if (!v) return '—';
-  const d = v instanceof Date ? v : new Date(v);
-  if (Number.isNaN(d.getTime())) return '—';
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return formatFactory(v, 'dd.MM HH:mm');
 }
 
 /**

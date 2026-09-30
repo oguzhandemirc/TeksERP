@@ -85,12 +85,13 @@ describe('buildRollQueryParams', () => {
     expect(p.filters.itemId).toBe('item-1');
   });
 
-  it('⭐ özel aralık kısa yolu EZER', () => {
+  it('⭐ özel aralık kısa yolu EZER — takvim günleri FABRİKA gününün ilk/son anına çevrilir', () => {
     const custom = { from: new Date(2026, 0, 1, 0, 0), to: new Date(2026, 0, 5, 23, 59, 59, 999) };
     const state: RollHistoryFilterState = { ...EMPTY_ROLL_FILTER, quick: 'today', custom };
     const p = buildRollQueryParams(state, NOW);
-    expect(p.dateFrom).toBe(custom.from.toISOString());
-    expect(p.dateTo).toBe(custom.to.toISOString());
+    // Varsayılan fabrika dilimi Europe/Istanbul (UTC+3) — tabletin saat diliminden bağımsız.
+    expect(p.dateFrom).toBe('2025-12-31T21:00:00.000Z');
+    expect(p.dateTo).toBe('2026-01-05T20:59:59.999Z');
   });
 });
 

@@ -60,7 +60,6 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
@@ -129,6 +128,7 @@ import type {
 import type { MainStackParamList } from '../../../navigation/types';
 import { foldSearchText } from '../../../utils/searchFold';
 import { showScreenError } from '../../../lib/screenToast';
+import { formatFactory } from '../../../lib/factory-time';
 
 const RECEIPTS_PAGE_SIZE = 12;
 const DRAFT_KEY = 'fason_kabul_draft_v1';
@@ -1577,7 +1577,7 @@ export default function FasonKabulScreen() {
                         </Text>
                         {party.dispatchedAt && (
                           <Text style={styles.partyCardDate}>
-                            Sevk: {dayjs(party.dispatchedAt).format('DD.MM.YYYY HH:mm')}
+                            Sevk: {formatFactory(party.dispatchedAt, 'dd.MM.yyyy HH:mm')}
                           </Text>
                         )}
                       </View>
@@ -2788,7 +2788,7 @@ function ScanActionCard({
           <View style={scanActionStyles.metaBox}>
             <Text style={scanActionStyles.metaText}>
               Makbuz {action.details.receiptNo} ·{' '}
-              {dayjs(action.details.receivedAt).format('DD.MM.YYYY HH:mm')}
+              {formatFactory(action.details.receivedAt, 'dd.MM.yyyy HH:mm')}
             </Text>
             <Text style={scanActionStyles.metaHint}>
               Mal fiziksel olarak hâlâ fasondaysa (kabul yanlış iş emrine yapıldıysa)
@@ -3344,7 +3344,7 @@ function PendingDispatchRow({
               </Text>
               {group.lastDispatch && (
                 <Text style={cameraStyles.rowDate}>
-                  {dayjs(group.lastDispatch.dispatchedAt).format('DD.MM HH:mm')}
+                  {formatFactory(group.lastDispatch.dispatchedAt, 'dd.MM HH:mm')}
                 </Text>
               )}
             </View>
@@ -3787,7 +3787,7 @@ function PendingCard({
             </Text>
             {group.lastDispatch && (
               <Text style={styles.pendingDate}>
-                {dayjs(group.lastDispatch.dispatchedAt).format('DD.MM HH:mm')}
+                {formatFactory(group.lastDispatch.dispatchedAt, 'dd.MM HH:mm')}
               </Text>
             )}
           </View>

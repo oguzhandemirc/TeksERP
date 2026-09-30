@@ -44,7 +44,6 @@ import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import AppModal from '../../../components/AppModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
@@ -150,6 +149,7 @@ import {
 import { colors, radius, spacing } from '../../../theme';
 import type { Item, QualityGrade, Roll } from '../../../types/models';
 import { showScreenError } from '../../../lib/screenToast';
+import { formatFactory } from '../../../lib/factory-time';
 
 const RECENT_PAGE_SIZE = 6;
 const HISTORY_PAGE_SIZE = 20;
@@ -3440,7 +3440,7 @@ function RollListItem({
   hideOperator?: boolean;
 }) {
   const operator = roll.createdBy?.fullName ?? roll.createdBy?.username ?? 'Bilinmiyor';
-  const at = roll.createdAt ? dayjs(roll.createdAt) : null;
+  const at = roll.createdAt ?? null;
   const qty = `${roll.initialQty} mt`;
   const widthLabel = roll.width != null ? `${roll.width} cm` : null;
   const isInactive = roll.status === 'SCRAP';
@@ -3580,7 +3580,7 @@ function RollListItem({
             </View>
           )}
           <Text style={[styles.recentTime, hideOperator && styles.recentTimeRight]}>
-            {at ? at.format('DD.MM HH:mm') : ''}
+            {at ? formatFactory(at, 'dd.MM HH:mm') : ''}
           </Text>
           {renderActions(true)}
         </View>
@@ -3646,7 +3646,7 @@ function RollListItem({
           </View>
           {/* Tarih — kalite rozetinin hemen sağında */}
           <Text style={[styles.recentTime, compactLayout && { fontSize: 11 }]}>
-            {at ? at.format('DD.MM HH:mm') : ''}
+            {at ? formatFactory(at, 'dd.MM HH:mm') : ''}
           </Text>
         </View>
 

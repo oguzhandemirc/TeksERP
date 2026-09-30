@@ -7,10 +7,11 @@ import { Text, Button, ActivityIndicator, Icon } from 'react-native-paper';
 import RevokeReasonModal from './RevokeReasonModal';
 import { colors, spacing, radius, typography } from '../../../theme';
 import type { DoffEntry, DoffListRow } from './useDoffEntry';
+import { factoryLocaleTimeString } from '../../../lib/factory-time';
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(d.getTime()) ? '—' : factoryLocaleTimeString(d, 'tr-TR', { hour: '2-digit', minute: '2-digit' });
 }
 
 function Row({ row, canRevoke, onRevoke }: { row: DoffListRow; canRevoke: boolean; onRevoke: (r: DoffListRow) => void }) {

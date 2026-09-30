@@ -46,6 +46,7 @@ import {
   settingsStyles,
 } from './settingsUi';
 import { UpdateActions } from './UpdateActions';
+import { formatFactory } from '../../../lib/factory-time';
 
 /**
  * `https://guncelleme.etkiliyazilim.com/mobil/ota/54.2/manifest`
@@ -61,9 +62,7 @@ function sunucuGoster(url: string | null): string {
 
 /** `14:07` — "denetledim ama hiçbir şey olmadı" hissine karşı zaman damgası. */
 function saatSimdi(): string {
-  const d = new Date();
-  const iki = (n: number) => String(n).padStart(2, '0');
-  return `${iki(d.getHours())}:${iki(d.getMinutes())}`;
+  return formatFactory(new Date(), 'HH:mm');
 }
 
 export default function UpdateSettingsScreen() {

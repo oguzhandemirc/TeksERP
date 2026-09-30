@@ -10,7 +10,6 @@ import {
   Button,
 } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 
 import type {
   SubcontractorDispatch,
@@ -18,6 +17,7 @@ import type {
 } from '../../types/models';
 import { subcontractorService } from '../../services/subcontractor.service';
 import DispatchDetailPanel from './DispatchDetailPanel';
+import { formatFactory } from '../../lib/factory-time';
 
 interface Props {
   dispatch: SubcontractorDispatchListItem;
@@ -82,7 +82,7 @@ function DispatchRow({
               {dispatch.dispatchNo}
             </Text>
             <Text style={styles.time}>
-              {dayjs(dispatch.dispatchedAt).format('DD.MM HH:mm')}
+              {formatFactory(dispatch.dispatchedAt, 'dd.MM HH:mm')}
             </Text>
           </View>
 

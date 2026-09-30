@@ -6,6 +6,7 @@
 //   §4 izinsiz hesaba gitmez: finans içerikli çek bildirimi yalnız finans izinli hesaba; doğuştan sonra izni
 //      düşürülen hesaba gönderim anında da gitmez
 //   §5 gelen kutusu sonucu yalnız yazana; eşik yalnız karşılaştırma (eşik = değer → olay yok)
+//   §6 tesis saati: gün anahtarı ve sessiz saat ANLIK `tesis.saatDilimi`nden (RLS altında okunur; yoksa İstanbul)
 // Koşum: npx tsx scripts/test_bildirim_kurallari.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -16,6 +17,26 @@ import { hesapKur, kontrol, ortamKur, sonuc, temizleTesis, tesisKur, type Ortam,
 
 const OZET_SIPARIS = ["bulut:ozet:oku", "bulut:siparis:oku"];
 const DAY = 86_400_000;
+
+/** İstanbul 05:00 = New York 22:00 (önceki gün): gün anahtarı ve 21:00–23:00 sessizliği TESİS diliminden. */
+async function tesisSaatiBolumu(o: Ortam): Promise<void> {
+  o.saat.ayarla(Date.parse("2026-10-10T02:00:00Z"));
+  const k = await tesisKur(o);
+  try {
+    const h = await hesapKur(o, k.tesisId, OZET_SIPARIS);
+    await cihazKaydet(o, h);
+    await ayarYaz(o, h, ayar({ sessiz: { acik: true, baslangic: "21:00", bitis: "23:00" } }));
+    await anlikYaz(o, k.tesisId, "ozet.siparis", GECIKEN(3));
+    await anlikYaz(o, k.tesisId, "tesis", { saatDilimi: "America/New_York" });
+    const t = new RecordingTransport();
+    const r = await tur(o, k.tesisId, t);
+    const satir = (await bildirimler(o, k.tesisId, "geciken-siparis"))[0];
+    kontrol("§6a ⭐ gün anahtarı tesis gününden (New York 09.10, İstanbul 10.10 değil)", satir?.dedupKey === "geciken-siparis:2026-10-09", satir?.dedupKey ?? "satır yok");
+    kontrol("§6b ⭐ sessiz saat tesis saatinden: New York 22:00 sessizde → ertelendi, gitmedi", r.created === 1 && t.sent.length === 0 && satir?.status === "BEKLIYOR", JSON.stringify(r));
+  } finally {
+    await temizleTesis(o, k.tesisId);
+  }
+}
 
 async function main(): Promise<void> {
   const o = await ortamKur();
@@ -98,6 +119,9 @@ async function main(): Promise<void> {
 
     console.log("\n§5 gelen kutusu + eşik karşılaştırması");
     await gelenKutusuBolumu(o, k.tesisId, a, finsiz);
+
+    console.log("\n§6 tesis saati (ANLIK tesis.saatDilimi)");
+    await tesisSaatiBolumu(o);
   } finally {
     await temizleTesis(o, k.tesisId);
     await o.kapat();

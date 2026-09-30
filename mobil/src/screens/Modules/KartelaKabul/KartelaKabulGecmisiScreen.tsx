@@ -7,7 +7,6 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
@@ -26,6 +25,7 @@ import { blockedSwatchCardNumbers } from './blockedSwatches.helper';
 import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
 import { showScreenError } from '../../../lib/screenToast';
+import { formatFactory } from '../../../lib/factory-time';
 
 const STATUS_TABS: { key: KartelaReceiptStatusFilter; label: string }[] = [
   { key: 'all', label: 'Tümü' },
@@ -271,7 +271,7 @@ function ReceiptRow({ item, onOpen }: { item: KartelaReceiptListItem; onOpen: ()
                 {item.subcontractor.name}
               </Text>
               <Text style={styles.dateText}>
-                {dayjs(item.receivedAt).format('DD.MM.YYYY · HH:mm')}
+                {formatFactory(item.receivedAt, 'dd.MM.yyyy · HH:mm')}
               </Text>
             </View>
 
@@ -343,7 +343,7 @@ function ReceiptDetailModal({
                   {current.subcontractor.name}
                 </Text>
                 <Text style={styles.sheetDate}>
-                  {dayjs(current.receivedAt).format('DD.MM.YYYY · HH:mm')}
+                  {formatFactory(current.receivedAt, 'dd.MM.yyyy · HH:mm')}
                 </Text>
               </View>
             </View>

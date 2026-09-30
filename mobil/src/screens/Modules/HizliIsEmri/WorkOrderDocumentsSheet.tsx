@@ -3,7 +3,6 @@ import { View, StyleSheet } from 'react-native';
 import { Text, TouchableRipple, Icon, ActivityIndicator } from 'react-native-paper';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
-import dayjs from 'dayjs';
 
 import RemoteListSheet from '../../../components/RemoteListSheet';
 import {
@@ -14,6 +13,7 @@ import {
 import { colors, spacing, radius } from '../../../theme';
 import { useDeviceSettingsStore, type DocPageSize } from '../../../store/deviceSettingsStore';
 import { upperTr } from '../../../utils/trCase';
+import { formatFactory } from '../../../lib/factory-time';
 
 // =============================================================================
 // İŞ EMRİ BELGELERİ — sahadaki operatör iş emrine basınca TÜM belgelerine
@@ -154,7 +154,7 @@ export default function WorkOrderDocumentsSheet({
                 {d.subtitle}
               </Text>
             )}
-            <Text style={styles.cardDate}>{dayjs(d.date).format('DD.MM.YYYY HH:mm')}</Text>
+            <Text style={styles.cardDate}>{formatFactory(d.date, 'dd.MM.yyyy HH:mm')}</Text>
           </View>
           <View style={styles.cardAction}>
             {/* KÂĞIT BOYU ROZETİ — dokunmak BASMAZ, yalnız boyu değiştirir.

@@ -4,13 +4,13 @@ import { Text, ActivityIndicator, Chip, Button, Surface } from 'react-native-pap
 import { useQuery } from '@tanstack/react-query';
 import { printHtml } from '../../../services/printHtml';
 import Toast from 'react-native-toast-message';
-import dayjs from 'dayjs';
 import {
   packingService,
   SHIPMENT_STATUS_TR,
   type ShipmentStatus,
 } from '../../../services/packing.service';
 import { getShipmentDispatchHtml } from '../../../services/shipmentDispatchPrint';
+import { formatFactory } from '../../../lib/factory-time';
 
 const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-TR');
 
@@ -68,7 +68,7 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
         </Chip>
       </View>
       <Text style={styles.meta}>
-        {d.dispatchedAt ? dayjs(d.dispatchedAt).format('DD.MM.YYYY HH:mm') : '—'}
+        {d.dispatchedAt ? formatFactory(d.dispatchedAt, 'dd.MM.yyyy HH:mm') : '—'}
         {d.plateNumber ? ` · ${d.plateNumber}` : ''}
         {d.driverName ? ` · ${d.driverName}` : ''}
         {d.carrier ? ` · ${d.carrier}` : ''}

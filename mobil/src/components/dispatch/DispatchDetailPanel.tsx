@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Icon } from 'react-native-paper';
-import dayjs from 'dayjs';
 
 import type { SubcontractorDispatch } from '../../types/models';
 import { fasonNoteLabel } from '../../utils/labels';
 import { upperTr } from '../../utils/trCase';
+import { formatFactory } from '../../lib/factory-time';
 
 /**
  * Bir sevkin tüm detayları — toplar, plaka/sürücü, planlanan vs sevk firması,
@@ -122,7 +122,7 @@ export default function DispatchDetailPanel({
           <Icon source="clock-outline" size={14} color="#64748b" />
           <Text style={styles.rowLabel}>Sevkeden</Text>
           <Text style={styles.rowValue} numberOfLines={1}>
-            {dispatcher} · {dayjs(dispatch.dispatchedAt).format('DD.MM.YYYY HH:mm')}
+            {dispatcher} · {formatFactory(dispatch.dispatchedAt, 'dd.MM.yyyy HH:mm')}
           </Text>
         </View>
 
@@ -208,7 +208,7 @@ export default function DispatchDetailPanel({
                 dispatch.cancelledBy?.username ??
                 '—'}
               {' · '}
-              {dayjs(dispatch.cancelledAt).format('DD.MM.YYYY HH:mm')}
+              {formatFactory(dispatch.cancelledAt, 'dd.MM.yyyy HH:mm')}
             </Text>
           </View>
           {dispatch.cancelReason && (

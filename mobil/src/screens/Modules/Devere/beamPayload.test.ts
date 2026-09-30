@@ -117,10 +117,10 @@ describe('classifyBeamFailure — details.code → eylem (kod uydurulmaz)', () =
 });
 
 describe('isSameLocalDay — "bugün sarılan" sekmesi', () => {
-  it('aynı gün · farklı gün · geçersiz tarih', () => {
-    const now = new Date(2026, 8, 14, 15, 0, 0);
-    expect(isSameLocalDay(new Date(2026, 8, 14, 0, 5).toISOString(), now)).toBe(true);
-    expect(isSameLocalDay(new Date(2026, 8, 13, 23, 59).toISOString(), now)).toBe(false);
+  it('aynı gün · farklı gün · geçersiz tarih (FABRİKA günü, tabletin dilimi değil)', () => {
+    const now = new Date('2026-09-14T12:00:00Z'); // İstanbul 15:00
+    expect(isSameLocalDay('2026-09-13T21:05:00Z', now)).toBe(true); // İstanbul 14.09 00:05
+    expect(isSameLocalDay('2026-09-13T20:59:00Z', now)).toBe(false); // İstanbul 13.09 23:59
     expect(isSameLocalDay('bozuk', now)).toBe(false);
   });
 });

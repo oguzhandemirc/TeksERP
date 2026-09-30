@@ -25,6 +25,7 @@ import Constants from 'expo-constants';
 
 import { queryClient } from '../offline/queryClient';
 import { downloadTokenHeaders, refreshOtaDownloadToken } from './downloadToken.service';
+import { formatFactory } from '../lib/factory-time';
 
 /* ------------------------------------------------------------------ *
  * 1) UZAKTAN GÜNCELLEME
@@ -53,9 +54,7 @@ export function paketEtiketi(k: OtaKimlik): string {
   if (k.gomulu || !k.paketId) return 'kurulumla gelen';
   const kisa = k.paketId.replace(/-/g, '').slice(0, 8);
   if (!k.paketTarihi) return `#${kisa}`;
-  const d = k.paketTarihi;
-  const iki = (n: number) => String(n).padStart(2, '0');
-  return `#${kisa} · ${iki(d.getDate())}.${iki(d.getMonth() + 1)} ${iki(d.getHours())}:${iki(d.getMinutes())}`;
+  return `#${kisa} · ${formatFactory(k.paketTarihi, 'dd.MM HH:mm')}`;
 }
 
 export function otaKimlik(): OtaKimlik {

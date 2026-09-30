@@ -18,7 +18,6 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
@@ -55,6 +54,7 @@ import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import { KartelaStockReduceModal } from './KartelaStockReduceModal';
 import { useScanClassifier } from '../../../hooks/useScanSeries';
 import { showScreenError } from '../../../lib/screenToast';
+import { formatFactory } from '../../../lib/factory-time';
 
 const PAGE_SIZE = 50;
 
@@ -935,7 +935,7 @@ function SwatchDetailModal({
     {
       icon: 'clock-outline',
       label: 'Üretildi',
-      value: dayjs(swatch.createdAt).format('DD.MM.YYYY HH:mm'),
+      value: formatFactory(swatch.createdAt, 'dd.MM.yyyy HH:mm'),
     },
   ];
 
@@ -1174,7 +1174,7 @@ function RollDetailModal({
                   {e.title}
                 </Text>
                 <Text style={modalStyles.eventTime}>
-                  {dayjs(e.at).format('DD.MM HH:mm')}
+                  {formatFactory(e.at, 'dd.MM HH:mm')}
                 </Text>
               </View>
               {(e.stationName || e.operatorName) && (

@@ -5,6 +5,7 @@ import {
   type DocumentsConfig,
   DEFAULT_COMPANY_LETTERHEAD,
 } from './documentConfig';
+import { setFactoryTimezone } from '../lib/factory-time';
 
 // =============================================================================
 // Public feature flag'ler — backend: GET /api/feature-flags (auth-only, özel
@@ -17,6 +18,8 @@ import {
 export const DEFAULT_COMPANY_NAME = 'TeksERP';
 
 export interface FeatureFlags {
+  /** Fabrika saat dilimi (IANA, salt-okunur) — bütün tarih/saat gösterimi bununla (`lib/factory-time`). */
+  factoryTimezone?: string;
   /** ÜRETİM MODÜLÜ (`production.enabled`) — tabletteki tek modül kapısı bugün
    *  (KK1 · Kurşun · Tambur · Hızlı İş Emri · Kurşun Dağıtım; `constants/screenModules.ts`).
    *  Backend satır yoksa TRUE döner; ayna da öyle. */
@@ -221,5 +224,9 @@ export const featureFlagService = {
   get: (): Promise<FeatureFlags> =>
     apiClient
       .get<ApiResponse<FeatureFlags>>('/feature-flags')
-      .then((r) => r.data.data ?? DEFAULT_FEATURE_FLAGS),
+      .then((r) => {
+        const flags = r.data.data ?? DEFAULT_FEATURE_FLAGS;
+        setFactoryTimezone(flags.factoryTimezone);
+        return flags;
+      }),
 };

@@ -11,10 +11,11 @@ import { useRunPanel } from './useRunPanel';
 import RunOpenModal from './RunOpenModal';
 import RunCloseModal from './RunCloseModal';
 import RevokeReasonModal from './RevokeReasonModal';
+import { factoryLocaleTimeString } from '../../../lib/factory-time';
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(d.getTime()) ? '—' : factoryLocaleTimeString(d, 'tr-TR', { hour: '2-digit', minute: '2-digit' });
 }
 
 export default function RunPanel({ entry }: { entry: DoffEntry }) {

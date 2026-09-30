@@ -57,6 +57,7 @@ import { foldSearchText } from '../../../utils/searchFold';
 import { useScanClassifier } from '../../../hooks/useScanSeries';
 import { resolvePoolScan } from './resolvePoolScan';
 import { showScreenError } from '../../../lib/screenToast';
+import { formatFactory } from '../../../lib/factory-time';
 
 // =============================================================================
 // Paketleme — ÇUVAL DEPO akış (MÜŞTERİ-BAZLI). Param: { customerId, branchId? }.
@@ -73,12 +74,7 @@ import { showScreenError } from '../../../lib/screenToast';
 
 const kgText = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
 // Tartı zamanı — yalnız saat:dakika (tarih kartta gürültü; çuval aynı gün tartılır).
-const hhmm = (iso: string) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? ''
-    : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
+const hhmm = (iso: string) => formatFactory(iso, 'HH:mm', '');
 // Metraj — GERÇEK değeri göster (44,5 → "44,5"). tr-TR ondalık = virgül.
 const mText = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 

@@ -13,7 +13,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 // paper `Menu` YERİNE — Fabric "Maximum update depth exceeded" ailesi. Bkz. AppMenu.tsx.
@@ -33,6 +32,7 @@ import type { SubcontractorDispatchListItem } from '../../../types/models';
 import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
 import { showScreenError } from '../../../lib/screenToast';
+import { factoryDayStart } from '../../../lib/factory-time';
 
 // =============================================================================
 // Fason Sevk Geçmişi — eski "Son Sevkler" modalının yerini alan tam sayfa.
@@ -75,8 +75,8 @@ export default function FasonSevkGecmisiScreen() {
 
   // Dönem → ISO dateFrom (server filtresi, dispatchedAt indeksi üzerinden).
   const dateFrom = useMemo(() => {
-    if (period === 'today') return dayjs().startOf('day').toISOString();
-    if (period === 'week') return dayjs().subtract(7, 'day').toISOString();
+    if (period === 'today') return factoryDayStart().toISOString();
+    if (period === 'week') return new Date(Date.now() - 7 * 86_400_000).toISOString();
     return undefined;
   }, [period]);
 

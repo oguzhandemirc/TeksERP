@@ -3,7 +3,6 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, TextInput, TouchableRipple, ActivityIndicator, Icon } from 'react-native-paper';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 
 import { workOrderService } from '../../../services/workOrder.service';
 import type { WorkOrder } from '../../../types/models';
@@ -15,6 +14,7 @@ import {
   trLabel,
 } from '../../../utils/labels';
 import { colors, spacing, radius } from '../../../theme';
+import { formatFactory } from '../../../lib/factory-time';
 
 const PAGE_SIZE = 20;
 
@@ -98,7 +98,7 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
             </Text>
             <Text style={styles.rowMeta} numberOfLines={1}>
               {trLabel(WORK_ORDER_TYPE_LABEL, item.type)}
-              {item.createdAt ? ` · ${dayjs(item.createdAt).format('DD.MM.YYYY')}` : ''}
+              {item.createdAt ? ` · ${formatFactory(item.createdAt, 'dd.MM.yyyy')}` : ''}
             </Text>
             {/* Parti no (2026-08-17 saha talebi): arama kutusu "Parti no ara"
                 diyordu ama satırda parti hiç yazmıyordu — operatör aradığı

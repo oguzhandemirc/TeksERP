@@ -138,9 +138,7 @@ export function useNewOrder() {
   /** Termin ISO damgası — `null` seçiliyse alan HİÇ gönderilmez (backend default'u koşsun). */
   const deadlineIso = useMemo(() => {
     if (deadlineDays == null) return undefined;
-    const d = new Date();
-    d.setDate(d.getDate() + deadlineDays);
-    return d.toISOString();
+    return new Date(Date.now() + deadlineDays * 86_400_000).toISOString();
   }, [deadlineDays]);
 
   const mutation = useMutation({

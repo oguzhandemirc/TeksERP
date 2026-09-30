@@ -14,7 +14,6 @@ import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 import ScreenChrome from '../../../components/ScreenChrome';
 // paper `Menu` YERİNE — Fabric "Maximum update depth exceeded" ailesi. Bkz. AppMenu.tsx.
 import AppMenu from '../../../components/AppMenu';
@@ -27,6 +26,7 @@ import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import type { MainStackParamList } from '../../../navigation/types';
 import { foldSearchText } from '../../../utils/searchFold';
+import { factoryDayStart, formatFactory } from '../../../lib/factory-time';
 
 // =============================================================================
 // Sevkiyat Geçmişi — DISPATCHED sevkiyatlar. FlashList + cursor sonsuz kaydırma
@@ -84,14 +84,14 @@ export default function SevkiyatGecmisiScreen() {
     const q = foldSearchText(search);
     const cutoff =
       period === 'today'
-        ? dayjs().startOf('day').valueOf()
+        ? factoryDayStart().getTime()
         : period === 'week'
-          ? dayjs().subtract(7, 'day').valueOf()
+          ? Date.now() - 7 * 86_400_000
           : 0;
     return all.filter((s) => {
       if (branchFilter && s.branch?.id !== branchFilter) return false;
       if (cutoff) {
-        const t = s.dispatchedAt ? dayjs(s.dispatchedAt).valueOf() : 0;
+        const t = s.dispatchedAt ? new Date(s.dispatchedAt).getTime() : 0;
         if (t < cutoff) return false;
       }
       if (!q) return true;
@@ -113,7 +113,7 @@ export default function SevkiyatGecmisiScreen() {
         <View style={styles.cardHead}>
           <Text style={styles.rowMono}>{s.shipmentNo}</Text>
           <Text style={styles.meta}>
-            {s.dispatchedAt ? dayjs(s.dispatchedAt).format('DD.MM HH:mm') : ''}
+            {s.dispatchedAt ? formatFactory(s.dispatchedAt, 'dd.MM HH:mm') : ''}
           </Text>
         </View>
         <Text style={styles.rowMain}>

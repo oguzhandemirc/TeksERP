@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, TouchableRipple, IconButton, Chip } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import { customerService } from '../../../services/customer.service';
@@ -11,6 +10,7 @@ import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { emptyOrProblemText } from '../../../utils/queryState';
 import { colors, spacing, radius } from '../../../theme';
 import { DEADLINE_CHOICES, type NewOrderState } from './useNewOrder';
+import { addDaysToKey, factoryDayKey, fmtDayKey } from '../../../lib/factory-time';
 
 // =============================================================================
 // ① MÜŞTERİ — kime, nereye, ne zaman.
@@ -79,7 +79,7 @@ export default function StepCustomer({ state, branchesEnabled }: Props) {
   const deadlinePreview =
     state.deadlineDays == null
       ? 'Sistem varsayılanı uygulanacak'
-      : dayjs().add(state.deadlineDays, 'day').format('DD.MM.YYYY');
+      : fmtDayKey(addDaysToKey(factoryDayKey(), state.deadlineDays));
 
   return (
     <>

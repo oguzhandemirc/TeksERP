@@ -7,6 +7,7 @@ import type { FacilityStatus } from "../api/wire";
 import { apiBaseUrl } from "../lib/config";
 import { clearCache, createCache, type Cache } from "./cache";
 import { plainStore, secretStore } from "./store";
+import { setFactoryTimezone } from "../lib/factory-time";
 
 const TOKEN_KEY = "patron.belirtec";
 const SCOPE_KEY = "patron.kapsam";
@@ -29,6 +30,20 @@ export interface SessionValue {
 }
 
 const Ctx = createContext<SessionValue | null>(null);
+
+/**
+ * Tesisin saat dilimi (ANLIK `tesis` → `saatDilimi`): bütün tarih/saat gösterimi fabrikanın diliminden yapılır,
+ * telefonun diliminden değil. Best-effort — projeksiyon henüz yoksa (eski fabrika sürümü) varsayılan dilim kalır.
+ */
+async function loadFacilityTimezone(c: Cache, api: Api): Promise<void> {
+  try {
+    const r = await c.load("anlik:tesis", () => api.snapshot("tesis"));
+    const veri = r.data.veri as { saatDilimi?: unknown } | null;
+    setFactoryTimezone(veri?.saatDilimi);
+  } catch {
+    // Dilim okunamadı: son geçerli (ya da varsayılan) dilimle devam.
+  }
+}
 
 export function SessionProvider({ children, platform = "mobil" }: { children: ReactNode; platform?: "mobil" | "web" }) {
   const token = useRef<string | null>(null);
@@ -63,6 +78,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
   const loadFacility = useCallback(
     async (c: Cache) => {
       const r = await c.load("oturum", () => api.session());
+      await loadFacilityTimezone(c, api);
       setFacility(r.data);
       markOnline(!r.offline, r.savedAt);
     },

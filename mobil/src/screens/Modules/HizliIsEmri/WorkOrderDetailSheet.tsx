@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button, TouchableRipple, Icon, ActivityIndicator } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 
@@ -25,6 +24,7 @@ import {
   trLabel,
 } from '../../../utils/labels';
 import { colors, spacing, radius } from '../../../theme';
+import { formatFactory } from '../../../lib/factory-time';
 
 interface Props {
   workOrderId: string | null;
@@ -131,7 +131,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       ['Tip', trLabel(WORK_ORDER_TYPE_LABEL, wo.type)],
       ['Hedef Metraj', wo.targetQuantity != null ? `${Math.round(wo.targetQuantity)} m` : '—'],
       ['Hedef Kg', wo.targetWeight != null ? `${Math.round(wo.targetWeight)} kg` : '—'],
-      ['Oluşturma', wo.createdAt ? dayjs(wo.createdAt).format('DD.MM.YYYY HH:mm') : '—'],
+      ['Oluşturma', wo.createdAt ? formatFactory(wo.createdAt, 'dd.MM.yyyy HH:mm') : '—'],
     ];
   }, [wo, rolls, targetPropertyNames]);
 

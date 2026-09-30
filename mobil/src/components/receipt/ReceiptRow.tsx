@@ -7,10 +7,10 @@ import {
   Icon,
   TouchableRipple,
 } from 'react-native-paper';
-import dayjs from 'dayjs';
 
 import type { SubcontractorReceiptListItem } from '../../types/models';
 import { useDeviceType } from '../../hooks/useDeviceType';
+import { formatFactory } from '../../lib/factory-time';
 
 interface Props {
   receipt: SubcontractorReceiptListItem;
@@ -50,10 +50,10 @@ export default function ReceiptRow({ receipt, onShowDetail, onCancel }: Props) {
           <View style={styles.row}>
             <View style={styles.col1Phone}>
               <Text style={styles.dateDay}>
-                {dayjs(receipt.receivedAt).format('DD.MM')}
+                {formatFactory(receipt.receivedAt, 'dd.MM')}
               </Text>
               <Text style={styles.dateTime}>
-                {dayjs(receipt.receivedAt).format('HH:mm')}
+                {formatFactory(receipt.receivedAt, 'HH:mm')}
               </Text>
               {isCancelled && (
                 <Text style={styles.cancelTag} numberOfLines={1}>
@@ -139,7 +139,7 @@ export default function ReceiptRow({ receipt, onShowDetail, onCancel }: Props) {
               {receipt.receiptNo}
             </Text>
             <Text style={styles.time}>
-              {dayjs(receipt.receivedAt).format('DD.MM HH:mm')}
+              {formatFactory(receipt.receivedAt, 'dd.MM HH:mm')}
             </Text>
             {isCancelled && (
               <Text style={styles.cancelTag} numberOfLines={1}>

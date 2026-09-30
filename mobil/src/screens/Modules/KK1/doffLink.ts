@@ -8,6 +8,7 @@
 // "doff'suz top" kovası. Yarı mamulle birlikte verilemez (backend 400 + burada).
 // =============================================================================
 import type { DoffListRow } from '../../../services/doff.service';
+import { factoryLocaleTimeString } from '../../../lib/factory-time';
 
 export interface DoffLinkState {
   /** Operatörün cevabı: bu top tezgahtan mı indi? Mod SEÇİLİ KALIR (yarı mamul kalıbı). */
@@ -42,7 +43,7 @@ export function doffLinkPayload(state: DoffLinkState, dokumaEnabled: boolean, se
 /** Listede okunan satır: kod · saat · parça · hat · TEZGAH (masa KK1 tüm tezgahları görür; eski sunucu makineyi göndermez → satır makinesiz). */
 export function doffRowLabel(row: Pick<DoffListRow, 'code' | 'doffedAt' | 'pieceCount' | 'productionLineNo' | 'machine'>): string {
   const d = new Date(row.doffedAt);
-  const saat = Number.isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  const saat = Number.isNaN(d.getTime()) ? '—' : factoryLocaleTimeString(d, 'tr-TR', { hour: '2-digit', minute: '2-digit' });
   const makine = row.machine ? ` · ${row.machine.code}` : '';
   return `${row.code} · ${saat} · ${row.pieceCount} parça · hat ${row.productionLineNo}${makine}`;
 }

@@ -7,7 +7,6 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
@@ -25,6 +24,7 @@ import {
 import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
 import { showScreenError } from '../../../lib/screenToast';
+import { formatFactory } from '../../../lib/factory-time';
 
 const STATUS_TABS: { key: KartelaDispatchStatusFilter; label: string }[] = [
   { key: 'all', label: 'Tümü' },
@@ -233,7 +233,7 @@ function DispatchRow({ item, onOpen }: { item: KartelaDispatchListItem; onOpen: 
                 {item.subcontractor.name}
               </Text>
               <Text style={styles.dateText}>
-                {dayjs(item.dispatchedAt).format('DD.MM.YYYY · HH:mm')}
+                {formatFactory(item.dispatchedAt, 'dd.MM.yyyy · HH:mm')}
               </Text>
             </View>
 
@@ -307,7 +307,7 @@ function DispatchDetailModal({
                   {current.subcontractor.name}
                 </Text>
                 <Text style={styles.sheetDate}>
-                  {dayjs(current.dispatchedAt).format('DD.MM.YYYY · HH:mm')}
+                  {formatFactory(current.dispatchedAt, 'dd.MM.yyyy · HH:mm')}
                 </Text>
               </View>
             </View>
