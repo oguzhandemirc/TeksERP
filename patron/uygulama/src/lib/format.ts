@@ -1,7 +1,6 @@
-// TR biçimleri — Intl'e bağlı değil (Hermes/web/Node aynı çıktıyı versin). Fabrika günü Europe/Istanbul
-// (2016'dan beri sabit UTC+3, yaz saati yok). Sayılar telde ondalık DİZİ de gelebilir ("1234.5").
-
-const TR_OFFSET_MS = 3 * 3_600_000;
+// TR biçimleri. Tarih/saat TESİSİN saat diliminden basılır (ANLIK `tesis.saatDilimi` → `lib/factory-time`),
+// telefonun diliminden değil; varsayılan Europe/Istanbul. Sayılar telde ondalık DİZİ de gelebilir ("1234.5").
+import { fmtDayKey, formatFactory } from "./factory-time";
 
 function group(intPart: string): string {
   return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
@@ -25,25 +24,18 @@ export function formatMoney(value: unknown, currency = "TRY"): string {
   return `${n} ${sym[currency] ?? currency}`;
 }
 
-function parts(iso: unknown): { d: string; m: string; y: string; hh: string; mm: string } | null {
-  if (typeof iso !== "string" || iso === "") return null;
-  const t = Date.parse(iso.length === 10 ? `${iso}T00:00:00+03:00` : iso);
-  if (!Number.isFinite(t)) return null;
-  const x = new Date(t + TR_OFFSET_MS);
-  const p = (v: number) => String(v).padStart(2, "0");
-  return { d: p(x.getUTCDate()), m: p(x.getUTCMonth() + 1), y: String(x.getUTCFullYear()), hh: p(x.getUTCHours()), mm: p(x.getUTCMinutes()) };
-}
+const DAY_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** "2026-09-29T10:05:00Z" → "29.09.2026". */
+/** "2026-09-29T10:05:00Z" → "29.09.2026"; takvim günü "2026-09-29" dilimsiz basılır. */
 export function formatDate(iso: unknown): string {
-  const p = parts(iso);
-  return p ? `${p.d}.${p.m}.${p.y}` : "—";
+  if (typeof iso !== "string" || iso === "") return "—";
+  return DAY_ONLY.test(iso) ? fmtDayKey(iso) : formatFactory(iso, "dd.MM.yyyy");
 }
 
-/** "2026-09-29T10:05:00Z" → "29.09.2026 13:05". */
+/** "2026-09-29T10:05:00Z" → "29.09.2026 13:05" (tesis dilimi İstanbul iken). */
 export function formatDateTime(iso: unknown): string {
-  const p = parts(iso);
-  return p ? `${p.d}.${p.m}.${p.y} ${p.hh}:${p.mm}` : "—";
+  if (typeof iso !== "string" || iso === "") return "—";
+  return DAY_ONLY.test(iso) ? `${fmtDayKey(iso)} 00:00` : formatFactory(iso, "dd.MM.yyyy HH:mm");
 }
 
 /** Göreli süre: "az önce" · "12 dk önce" · "3 sa önce" · aksi hâlde tarih-saat. */

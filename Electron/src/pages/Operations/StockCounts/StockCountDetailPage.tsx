@@ -24,8 +24,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { tr } from "date-fns/locale";
+import { formatFactory } from "@/lib/factory-time";
 import { Ban, CheckCheck, Printer, ScanBarcode, Search, Undo2 } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -188,7 +187,7 @@ export function StockCountDetailPage() {
         }
         description={
           count
-            ? `${count.warehouse.name} · açılış ${format(new Date(count.createdAt), "dd MMM yyyy HH:mm", { locale: tr })}`
+            ? `${count.warehouse.name} · açılış ${formatFactory(count.createdAt, "dd MMM yyyy HH:mm")}`
             : undefined
         }
         onBack={() => openTarget(STOCK_COUNTS_PATH)}
@@ -328,11 +327,11 @@ export function StockCountDetailPage() {
               <p className="rounded-md border p-3 text-sm text-muted-foreground">
                 Sayım{" "}
                 {count.completedAt
-                  ? format(new Date(count.completedAt), "dd MMM yyyy HH:mm", { locale: tr })
+                  ? formatFactory(count.completedAt, "dd MMM yyyy HH:mm")
                   : ""}{" "}
                 tamamlandı; fark fişi yazıldı ve tutanak donduruldu.{" "}
                 {count.reversedAt
-                  ? `${format(new Date(count.reversedAt), "dd MMM yyyy HH:mm", { locale: tr })} tarihinde stornolandı${count.reverseReason ? ` — ${count.reverseReason}` : ""}: toplar rafına döndü, iplik farkı geri alındı, tutanak geçersiz.`
+                  ? `${formatFactory(count.reversedAt, "dd MMM yyyy HH:mm")} tarihinde stornolandı${count.reverseReason ? ` — ${count.reverseReason}` : ""}: toplar rafına döndü, iplik farkı geri alındı, tutanak geçersiz.`
                   : "Yanlış işaret varsa sayımı stornolayın (yalnız deponun en son sayımı)."}
               </p>
             )}

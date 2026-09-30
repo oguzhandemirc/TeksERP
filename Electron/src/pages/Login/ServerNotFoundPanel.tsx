@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ServerDiscoveryPanel } from "@/components/settings/ServerDiscoveryPanel";
 import { useServerDiscovery } from "@/hooks/useServerDiscovery";
 import { connectToDiscoveredServer } from "@/lib/server-identity";
+import { factoryLocaleTimeString } from "@/lib/factory-time";
 
 /**
  * Giriş formunun YERİNE çizilen "sunucuya ulaşılamadı" yüzeyi.
@@ -114,7 +115,7 @@ export function ServerNotFoundPanel({
           </div>
           <div>
             Son arama:{" "}
-            {state?.finishedAt ? new Date(state.finishedAt).toLocaleTimeString("tr-TR") : "—"}
+            {state?.finishedAt ? factoryLocaleTimeString(state.finishedAt, "tr-TR") : "—"}
           </div>
         </div>
       )}

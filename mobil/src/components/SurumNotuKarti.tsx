@@ -3,12 +3,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Icon } from 'react-native-paper';
 import { SETTINGS_COLORS as C } from '../screens/Common/settings/settingsUi';
 import type { NotTip, SurumNotuYayini } from '../services/surumNotlari';
+import { formatFactory } from '../lib/factory-time';
 
-const dateFmt = new Intl.DateTimeFormat('tr-TR', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-});
 
 /**
  * Madde türünün ikon + rengi. Markdown paketi EKLENMEDİ (paket onayı ister ve
@@ -21,8 +17,8 @@ const TIP_GORUNUM: Record<NotTip, { ikon: string; renk: string }> = {
 };
 
 function tarihBasligi(id: string): string {
-  const t = new Date(id.slice(0, 10));
-  return Number.isNaN(t.getTime()) ? id : dateFmt.format(t);
+  // Kimlik bir TAKVİM günüdür (an değil): dilim uygulanmaz.
+  return formatFactory(`${id.slice(0, 10)}T00:00:00Z`, 'd MMMM yyyy', id, 'UTC');
 }
 
 /** Tek bir yayın turunun kartı — hem açılış modalında hem Ayarlar ekranında. */

@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Surface, Icon, Divider } from 'react-native-paper';
-import dayjs from 'dayjs';
 
 import { colors, spacing, radius } from '../../../theme';
 import type { NewOrderState } from './useNewOrder';
+import { addDaysToKey, factoryDayKey, fmtDayKey } from '../../../lib/factory-time';
 
 // =============================================================================
 // ③ ONAY — gönderilecek şeyin tamamı tek ekranda. Bu adımın varlık sebebi
@@ -22,7 +22,7 @@ export default function StepConfirm({ state, branchesEnabled, online }: Props) {
   const deadlineText =
     state.deadlineDays == null
       ? 'Sistem varsayılanı'
-      : `${dayjs().add(state.deadlineDays, 'day').format('DD.MM.YYYY')} (${state.deadlineDays} gün)`;
+      : `${fmtDayKey(addDaysToKey(factoryDayKey(), state.deadlineDays))} (${state.deadlineDays} gün)`;
 
   // Sipariş açıldı — artık özet değil SONUÇ gösterilir.
   if (state.result) {

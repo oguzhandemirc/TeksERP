@@ -17,6 +17,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { swatchService, type KartelaStockReduction } from "./swatchService";
+import { factoryDateTimeFormat } from "@/lib/factory-time";
 
 interface Props {
   open: boolean;
@@ -25,7 +26,7 @@ interface Props {
   colorId?: string;
 }
 
-const DATE_FMT = new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short" });
+const DATE_FMT = () => factoryDateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short" });
 const PAGE_SIZE = 30;
 const REDUCTIONS_KEY = ["kartela", "stock-reductions"] as const;
 
@@ -129,14 +130,14 @@ function ReductionRow({ row }: { row: KartelaStockReduction }) {
         )}
       </div>
       <div className="text-xs text-muted-foreground">
-        {DATE_FMT.format(new Date(row.createdAt))} · {row.createdBy ?? "—"} · {row.reason}
+        {DATE_FMT().format(new Date(row.createdAt))} · {row.createdBy ?? "—"} · {row.reason}
       </div>
       {row.cardNumbers.length > 0 && (
         <div className="text-xs text-muted-foreground">Kartelalar: {row.cardNumbers.join(", ")}</div>
       )}
       {row.reversedAt && (
         <div className="text-xs text-muted-foreground">
-          Geri alma: {DATE_FMT.format(new Date(row.reversedAt))} · {row.reversedBy ?? "—"} ·{" "}
+          Geri alma: {DATE_FMT().format(new Date(row.reversedAt))} · {row.reversedBy ?? "—"} ·{" "}
           {row.reverseReason}
         </div>
       )}

@@ -19,6 +19,7 @@ import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import type { Order, OrderLine } from "@/pages/Operations/Orders/types";
 import { trCompare } from "@/lib/collate";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 export interface PickedOrderLineProperty {
   id: string;
@@ -659,7 +660,7 @@ function DeadlineBadge({ deadline }: { deadline: string | null }) {
         : "";
   return (
     <Badge variant={tone === "muted" ? "muted" : "outline"} className={`text-[10px] ${cls}`}>
-      Termin: {new Date(deadline).toLocaleDateString("tr-TR")}
+      Termin: {factoryLocaleDateString(deadline, "tr-TR")}
     </Badge>
   );
 }

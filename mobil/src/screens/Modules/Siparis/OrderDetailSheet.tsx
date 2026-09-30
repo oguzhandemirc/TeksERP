@@ -2,13 +2,13 @@ import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { isMeasuredUnit, unitLabel } from '../../../lib/item-unit';
 import { Surface, Text, Button, Divider } from 'react-native-paper';
-import dayjs from 'dayjs';
 
 import AppModal from '../../../components/AppModal';
 import type { Order } from '../../../types/models';
 import { ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, trLabel } from '../../../utils/labels';
 import { colors, spacing, radius } from '../../../theme';
 import { num, orderTotals } from './OrderListView';
+import { formatFactory } from '../../../lib/factory-time';
 
 // =============================================================================
 // Sipariş detayı — SALT OKUNUR. Veri listedeki satırdan gelir (backend
@@ -48,10 +48,10 @@ export default function OrderDetailSheet({ order, onClose }: Props) {
             </View>
 
             <View style={styles.metaRow}>
-              <Meta label="Sipariş" value={dayjs(order.orderDate ?? order.createdAt).format('DD.MM.YYYY')} />
+              <Meta label="Sipariş" value={formatFactory(order.orderDate ?? order.createdAt, 'dd.MM.yyyy')} />
               <Meta
                 label="Termin"
-                value={order.deadline ? dayjs(order.deadline).format('DD.MM.YYYY') : '—'}
+                value={order.deadline ? formatFactory(order.deadline, 'dd.MM.yyyy') : '—'}
               />
               <Meta label="Kalem" value={String(order.lines?.length ?? 0)} />
             </View>

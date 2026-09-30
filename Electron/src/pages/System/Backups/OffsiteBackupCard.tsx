@@ -16,6 +16,7 @@ import {
   OFFSITE_QUERY_KEY,
 } from "./service";
 import { useOffsiteStatus } from "./hooks";
+import { factoryLocaleTimeString } from "@/lib/factory-time";
 
 /**
  * OFFSITE YEDEK KARTI — "yedeklerim başka bir yerde mi" sorusunun tek yüzeyi.
@@ -128,7 +129,7 @@ export function OffsiteBackupCard() {
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Yerel {o.localCount} · Uzak {o.remoteCount} · Eksik yok
-                  {o.finishedAt ? ` · son süpürme ${new Date(o.finishedAt).toLocaleTimeString("tr-TR")}` : ""}
+                  {o.finishedAt ? ` · son süpürme ${factoryLocaleTimeString(o.finishedAt, "tr-TR")}` : ""}
                 </p>
               )}
             </div>

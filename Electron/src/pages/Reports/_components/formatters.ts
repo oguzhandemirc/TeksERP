@@ -1,3 +1,4 @@
+import { factoryLocaleDateString, factoryLocaleString } from "@/lib/factory-time";
 // Rapor sayfalarında tekrar tekrar kullanılan formatlayıcılar.
 
 const trNum = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
@@ -35,14 +36,14 @@ export const fmtDate = (s: string | Date | null | undefined): string => {
   if (!s) return "—";
   const d = typeof s === "string" ? new Date(s) : s;
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return factoryLocaleDateString(d, "tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
 
 export const fmtDateTime = (s: string | Date | null | undefined): string => {
   if (!s) return "—";
   const d = typeof s === "string" ? new Date(s) : s;
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("tr-TR", {
+  return factoryLocaleString(d, "tr-TR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -56,5 +57,5 @@ export const fmtDayShort = (ymd: string): string => {
   const [y, m, d] = ymd.split("-").map(Number);
   if (!y || !m || !d) return ymd;
   const dt = new Date(y, m - 1, d);
-  return dt.toLocaleDateString("tr-TR", { day: "numeric", month: "short" });
+  return factoryLocaleDateString(dt, "tr-TR", { day: "numeric", month: "short" });
 };

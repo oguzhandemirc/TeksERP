@@ -2,6 +2,7 @@ import { useState } from "react";
 import { formatNumber } from "@/lib/format";
 import type { WorkOrder } from "../types";
 import { closeSnapshotLabel, diffCloseSnapshot, totalsDelta } from "./closeSnapshotDiff";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 /**
  * v3 üretilen nihai toplar — çıkan yoksa boş kutu (nerede işlendiği ipucuyla),
@@ -62,7 +63,7 @@ function ClosedProduced({ wo }: { wo: WorkOrder }) {
         {a1 > 0 && <span className="chip dim num">A1: {a1}</span>}
         {fire > 0 && <span className="chip bad num">Fire: {fire}</span>}
         {snap.yieldPct != null && <span className="chip dim num">Verim %{formatNumber(snap.yieldPct, 1)}</span>}
-        <span className="comp">{new Date(snap.closedAt).toLocaleString("tr-TR")}</span>
+        <span className="comp">{factoryLocaleString(snap.closedAt, "tr-TR")}</span>
       </div>
       {(delta || changes.length > 0) && (
         <div className="wc-sum" style={{ marginTop: 6 }}>

@@ -30,11 +30,14 @@ import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
 import MainNavigator from './MainNavigator';
 import { rootNavigationRef } from './navigationRef';
 import type { RootStackParamList } from './types';
+import { useFactoryTimezone } from '../hooks/useFactoryTimezone';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
   const { user, isLoading: authLoading, loadStoredAuth, clearAuth } = useAuthStore();
+  // Dilim değişince ekranlar yeniden kurulur: çizilmiş her tarih/saat fabrika dilimiyle basılsın (nadir).
+  const factoryTimezone = useFactoryTimezone();
   const {
     isLoading: deviceLoading,
     init: initDevice,
@@ -201,7 +204,7 @@ export default function RootNavigator() {
 
   return (
     <NavigationContainer ref={rootNavigationRef}>
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+      <Stack.Navigator key={factoryTimezone} screenOptions={{ headerShown: false, animation: 'fade' }}>
         {showPairingGate ? (
           <Stack.Screen name="Pairing" component={AwaitingAssignmentScreen} />
         ) : !user ? (

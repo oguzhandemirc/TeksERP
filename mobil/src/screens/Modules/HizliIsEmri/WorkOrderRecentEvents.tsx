@@ -2,10 +2,10 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 
 import { workOrderService } from '../../../services/workOrder.service';
 import { colors, spacing } from '../../../theme';
+import { formatFactory } from '../../../lib/factory-time';
 
 /**
  * İş emrinin son 5 hareketi — salt-okunur özet (kullanıcı kararı S9). Tam liste,
@@ -30,7 +30,7 @@ export default function WorkOrderRecentEvents({ workOrderId }: { workOrderId: st
       ) : (
         rows.map((r) => (
           <View key={r.id} style={styles.line}>
-            <Text style={styles.when}>{dayjs(r.at).format('DD.MM HH:mm')}</Text>
+            <Text style={styles.when}>{formatFactory(r.at, 'dd.MM HH:mm')}</Text>
             <View style={styles.body}>
               <Text style={styles.head} numberOfLines={1}>
                 {r.title}

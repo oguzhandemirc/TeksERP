@@ -1,5 +1,6 @@
 import { memo } from "react";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { formatFactory } from "@/lib/factory-time";
 import { tr } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -86,7 +87,7 @@ const ActivityRow = memo(function ActivityRow({
             </span>
           </TooltipTrigger>
           <TooltipContent side="left">
-            {format(date, "dd.MM.yyyy HH:mm:ss", { locale: tr })}
+            {formatFactory(date, "dd.MM.yyyy HH:mm:ss")}
           </TooltipContent>
         </Tooltip>
       </button>

@@ -8,6 +8,7 @@ import NumpadInput from '../../../components/NumpadInput';
 import { colors, spacing, radius, typography } from '../../../theme';
 import type { DoffEntry } from './useDoffEntry';
 import type { MachineDataSource } from '../../../types/models';
+import { factoryLocaleTimeString } from '../../../lib/factory-time';
 
 const SOURCE_LABEL: Record<MachineDataSource, string> = {
   MACHINE: 'Cihazdan okundu',
@@ -19,7 +20,7 @@ const SOURCE_LABEL: Record<MachineDataSource, string> = {
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(d.getTime()) ? '—' : factoryLocaleTimeString(d, 'tr-TR', { hour: '2-digit', minute: '2-digit' });
 }
 
 function Chip({ on, label, onPress }: { on: boolean; label: string; onPress: () => void }) {

@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle } from "lucide-react";
 import { isSackAbsent, sackAbsentLabels, type SackContentRoll } from "./types";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 const fmtM = (n: number) => `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
 
@@ -47,7 +48,7 @@ function EtiketHucresi({ r }: { r: SackContentRoll }) {
 
   const ad = [e.itemName, e.colorName].filter(Boolean).join(" · ");
   const baslik = [
-    e.printedAt ? `Basıldı: ${new Date(e.printedAt).toLocaleString("tr-TR")}` : null,
+    e.printedAt ? `Basıldı: ${factoryLocaleString(e.printedAt, "tr-TR")}` : null,
     e.customerName ? `Etiketteki müşteri: ${e.customerName}` : null,
     e.orderNumber ? `Sipariş: ${e.orderNumber}` : null,
     e.operatorName ? `Basan: ${e.operatorName}` : null,

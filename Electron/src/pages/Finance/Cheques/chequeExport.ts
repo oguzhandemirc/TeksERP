@@ -32,6 +32,7 @@ import { LIVE_STATUS, type ChequeFilterState } from "./ChequeFilterBar";
 import { dueHint, dueTone, ymd } from "./dates";
 import { DOCTYPE_LABEL, KIND_LABEL, STATUS_LABEL, cariName } from "./labels";
 import { toNum, type ChequeRow, type ChequeStatus } from "./service";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 const MONEY = "#,##0.00";
 
@@ -64,7 +65,7 @@ const COLUMNS: ReportColumn[] = [
 function dateCell(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("tr-TR");
+  return Number.isNaN(d.getTime()) ? "" : factoryLocaleDateString(d, "tr-TR");
 }
 
 /**

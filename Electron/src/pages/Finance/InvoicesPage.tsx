@@ -37,6 +37,7 @@ import { draftBadgeText, trimNotice } from "./invoicesList";
 import { GoodsReceiptDetailSheet } from "@/pages/Operations/GoodsReceipts/GoodsReceiptDetailSheet";
 import { ShipmentDetailSheet } from "@/pages/Operations/Shipments/ShipmentDetailSheet";
 import { DirectShipmentDetailSheet } from "@/pages/Operations/Shipments/DirectShipmentDetailSheet";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 // ⚠️ Rozet sözlükleri 2026-08-14'te `service.ts`'e TAŞINDI (buradan kopyalanmadı,
 // taşındı): detay yüzeyi ikinci tüketici oldu ve iki kopya, aynı faturayı iki
@@ -249,7 +250,7 @@ export function InvoicesPage() {
                       <td className="px-3 py-2">{INVOICE_TYPE_LABEL[inv.type]}</td>
                       <td className="px-3 py-2 font-medium">{partyName(inv.cari)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        {new Date(inv.issueDate).toLocaleDateString("tr-TR")}
+                        {factoryLocaleDateString(inv.issueDate, "tr-TR")}
                       </td>
                       <td className="px-3 py-2">
                         <Badge className={badge.cls}>{badge.label}</Badge>

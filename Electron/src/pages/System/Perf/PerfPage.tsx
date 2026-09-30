@@ -12,8 +12,9 @@ import { usePerfSnapshot, usePerfReset, type PerfRoute, type SlowRequest } from 
 import { LiveTable } from "./LiveTable";
 import { SlowList } from "./SlowList";
 import { TrendChart } from "./TrendChart";
+import { factoryLocaleString } from "@/lib/factory-time";
 
-const trStamp = (ms: number): string => new Date(ms).toLocaleString("tr-TR");
+const trStamp = (ms: number): string => factoryLocaleString(ms, "tr-TR");
 
 // Uç bazında canlı istatistik. TOPLANABİLİR yalnız SAYAÇLAR (istek/hata adedi);
 // p50/p95/max birer YÜZDELİK — toplanmaları anlamsızdır (ölçüm ≠ miktar), o yüzden
@@ -68,7 +69,7 @@ export function PerfPage() {
         title="Endpoint Performansı"
         description={
           snap
-            ? `${new Date(snap.sinceAt).toLocaleString("tr-TR")} tarihinden beri ${snap.totalCount.toLocaleString("tr-TR")} istek ölçüldü.`
+            ? `${factoryLocaleString(snap.sinceAt, "tr-TR")} tarihinden beri ${snap.totalCount.toLocaleString("tr-TR")} istek ölçüldü.`
             : "Route bazında gecikme istatistikleri ve yavaş istek defteri."
         }
         actions={

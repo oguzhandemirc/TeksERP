@@ -15,7 +15,6 @@ import AppModal from '../../../components/AppModal';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
-import dayjs from 'dayjs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ScreenChrome from '../../../components/ScreenChrome';
@@ -45,7 +44,7 @@ const fmtM = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2
 
 function waitText(since: string | null): string | null {
   if (!since) return null;
-  const mins = dayjs().diff(dayjs(since), 'minute');
+  const mins = Math.trunc((Date.now() - new Date(since).getTime()) / 60_000);
   if (mins < 60) return 'az önce';
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours} saattir`;

@@ -11,6 +11,7 @@ import {
   StokCard,
   UretimCard,
 } from "./cards/BossCards";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 /** Sevkiyat/fason gibi DÖNEMSEL bölümlerin aralığı. Stok ve sipariş anlık
  *  fotoğraftır ve aralıktan etkilenmez — bu yüzden seçici yalnız iki bölümü
@@ -122,7 +123,7 @@ export function BossPage() {
           )}
 
           <p className="pt-1 text-center text-[11px] text-muted-foreground">
-            {new Date(d.generatedAt).toLocaleString("tr-TR")} itibarıyla
+            {factoryLocaleString(d.generatedAt, "tr-TR")} itibarıyla
           </p>
         </>
       )}

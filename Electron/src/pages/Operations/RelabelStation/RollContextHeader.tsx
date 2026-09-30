@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import { shipmentStatusLabels, type ShipmentStatus } from "@/pages/Operations/Shipments/types";
 import type { RelabelContext, RelabelLastLabelSnapshot } from "./types";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 export function EmptyState() {
   return (
@@ -103,7 +104,7 @@ export function LastLabelBanner({ snap }: { snap: RelabelLastLabelSnapshot | nul
       <span>
         Son basıldığı yer (A): <strong>{snap.customerName}</strong>
         {snap.orderNumber ? ` · ${snap.orderNumber}` : ""}
-        {snap.printedAt ? ` · ${new Date(snap.printedAt).toLocaleString("tr-TR")}` : ""}
+        {snap.printedAt ? ` · ${factoryLocaleString(snap.printedAt, "tr-TR")}` : ""}
         {snap.operatorName ? ` · ${snap.operatorName}` : ""}
       </span>
     </div>

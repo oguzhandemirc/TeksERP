@@ -12,10 +12,12 @@
 // tarafı hazır: `filter[itemId]` + `dateField=createdAt&dateFrom&dateTo`
 // (`inventory.buildRollWhere` → `applyDateRange`, ROLL_DATE_FIELDS).
 //
-// ⚠️ GÜN SINIRI CİHAZIN YEREL GÜNÜDÜR. Tabletler fabrikada (Europe/Istanbul)
-// ve backend `dateFrom`/`dateTo`yu MUTLAK AN olarak alır — yani istemcinin
-// niyetini iki kez yorumlamaz (Electron `useReportDateRange` ile aynı sözleşme).
+// ⚠️ GÜN SINIRI FABRİKA GÜNÜDÜR (tabletin saat dilimi değil). `DateRange` bir TAKVİM
+// modelidir (seçicinin yerel gece yarısı = o takvim günü); ana çeviri yalnız sorgu
+// sınırında yapılır: gün anahtarı → fabrikanın o günkü ilk/son anı (`lib/factory-time`).
+// Backend `dateFrom`/`dateTo`yu MUTLAK AN olarak alır (Electron `useReportDateRange` ile aynı sözleşme).
 // =============================================================================
+import { factoryDayEndIso, factoryDayKey, factoryDayStartIso } from '../../lib/factory-time';
 
 /** Tek dokunuşluk aralıklar. `all` = tarih filtresi YOK. */
 export type QuickRangeKind = 'all' | 'today' | 'yesterday' | 'last7';
@@ -61,6 +63,18 @@ export const QUICK_LABELS: Record<QuickRangeKind, string> = {
   last7: 'Son 7 gün',
 };
 
+/** Takvim modelindeki günün anahtarı `yyyy-MM-dd` (seçicinin yerel parçaları — an değil). */
+export function calendarKey(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** Fabrikanın BUGÜNÜ, takvim modelinde (yerel gece yarısı) — kısa yollar ve seçicinin "bugün"ü. */
+export function factoryTodayNaive(at: Date = new Date()): Date {
+  const [y = 1970, m = 1, d = 1] = factoryDayKey(at).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 /** Yerel gün başı (00:00:00.000). */
 export function startOfDay(d: Date): Date {
   const x = new Date(d);
@@ -88,7 +102,8 @@ export function addDays(d: Date, n: number): Date {
  * kişinin "son 7 gün" derken kastettiği budur; bugünü dışlamak bugün girilen
  * topu listeden düşürür ve filtre "bozuk" görünür.
  */
-export function resolveQuickRange(kind: QuickRangeKind, now: Date): DateRange | null {
+export function resolveQuickRange(kind: QuickRangeKind, at: Date): DateRange | null {
+  const now = factoryTodayNaive(at);
   switch (kind) {
     case 'today':
       return { from: startOfDay(now), to: endOfDay(now) };
@@ -136,8 +151,8 @@ export function buildRollQueryParams(
   const range = effectiveRange(state, now);
   if (range) {
     out.dateField = 'createdAt';
-    out.dateFrom = range.from.toISOString();
-    out.dateTo = range.to.toISOString();
+    out.dateFrom = factoryDayStartIso(calendarKey(range.from));
+    out.dateTo = factoryDayEndIso(calendarKey(range.to));
   }
   return out;
 }

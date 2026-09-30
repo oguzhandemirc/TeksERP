@@ -22,8 +22,9 @@ import {
   isOutdated,
   kindLabel,
 } from "./clients-utils";
+import { factoryLocaleString } from "@/lib/factory-time";
 
-const stamp = (iso: string): string => new Date(iso).toLocaleString("tr-TR");
+const stamp = (iso: string): string => factoryLocaleString(iso, "tr-TR");
 
 /**
  * Bağlı İstemciler — hangi kurulum, hangi sürüm, en son ne zaman istek

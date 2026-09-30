@@ -1,3 +1,4 @@
+import { factoryDayKey, factoryLocaleDateString } from "@/lib/factory-time";
 // =============================================================================
 // DOKUMA İŞİ — panel tipleri (backend `WeavingOrderDto` aynası)
 // =============================================================================
@@ -104,17 +105,14 @@ export function plannedToIso(day: string | undefined | null): string | null {
 /** ISO → `YYYY-MM-DD` (form ön-doldurma). */
 export function isoToDay(iso: string | null | undefined): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return factoryDayKey(iso);
 }
 
 /** Ekranda bir GÜN — yerel tarih. */
 export function formatDay(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("tr-TR");
+  return Number.isNaN(d.getTime()) ? "—" : factoryLocaleDateString(d, "tr-TR");
 }
 
 const M = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });

@@ -18,10 +18,11 @@
 // (backend "şimdi"yi kullanır) ya da düğmeyi kapatır.
 // =============================================================================
 import type { ChequeStatus } from "./service";
+import { factoryDayDiff, factoryDayEndIso, factoryDayKey, factoryDayStartIso, factoryLocaleDateString } from "@/lib/factory-time";
 
 /** `<input type="date">` değeri — YYYY-MM-DD, yerel bileşenlerden. */
 export function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return factoryDayKey(d);
 }
 
 /**
@@ -46,27 +47,23 @@ export function parseYmdLocal(value: string): Date | null {
   return dt;
 }
 
-/** Yerel günün başlangıcı (mutlak an) — boş/bozuk girdide `undefined`. */
+/** Fabrika gününün başlangıcı (mutlak an) — boş/bozuk girdide `undefined`. */
 export function dayStartIso(value: string): string | undefined {
-  const d = parseYmdLocal(value);
-  if (!d) return undefined;
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  if (!parseYmdLocal(value)) return undefined;
+  return factoryDayStartIso(value.trim());
 }
 
-/** Yerel günün sonu (mutlak an) — boş/bozuk girdide `undefined`. */
+/** Fabrika gününün sonu (mutlak an) — boş/bozuk girdide `undefined`. */
 export function dayEndIso(value: string): string | undefined {
-  const d = parseYmdLocal(value);
-  if (!d) return undefined;
-  d.setHours(23, 59, 59, 999);
-  return d.toISOString();
+  if (!parseYmdLocal(value)) return undefined;
+  return factoryDayEndIso(value.trim());
 }
 
 /** Ekranda tarih — tek biçim (`tr-TR`), listede ve defterde aynı. */
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("tr-TR");
+  return Number.isNaN(d.getTime()) ? "—" : factoryLocaleDateString(d, "tr-TR");
 }
 
 /**
@@ -84,11 +81,7 @@ export function dueTone(dueDate: string, status: ChequeStatus): DueTone {
   if (!LIVE_STATUSES.includes(status)) return "closed";
   const due = new Date(dueDate);
   if (Number.isNaN(due.getTime())) return "normal";
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dueDay = new Date(due);
-  dueDay.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((dueDay.getTime() - today.getTime()) / 86_400_000);
+  const diffDays = factoryDayDiff(due, new Date());
   if (diffDays < 0) return "overdue";
   // 7 gün: haftalık planlama penceresi — "bu hafta ne var" sorusunun karşılığı.
   if (diffDays <= 7) return "soon";

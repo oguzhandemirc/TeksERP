@@ -37,6 +37,7 @@
 import type { ReportColumn, ReportExportSpec, ReportTableSpec } from "../_components/reportExport";
 import { formatDayKey } from "../../Finance/PeriodClose/service";
 import { CARI_TXN_SOURCE_LABEL, toNum, type Currency } from "./service";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 const MONEY = "#,##0.00";
 
@@ -90,7 +91,7 @@ function fmtYmd(ymd: string): string {
 /** Hareket tarihi — mutlak an, `tr-TR` (ekrandaki `fmtDate` ile aynı biçim). */
 function fmtInstant(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("tr-TR");
+  return Number.isNaN(d.getTime()) ? "" : factoryLocaleDateString(d, "tr-TR");
 }
 
 /**

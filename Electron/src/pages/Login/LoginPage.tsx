@@ -21,6 +21,7 @@ import type { ExistingSessionInfo } from "@/types/auth";
 import { LoginHero } from "./LoginHero";
 import { useLoginLicenseSuspended } from "./useServerCompanyName";
 import { LicenseSuspendedLogin } from "./LicenseSuspendedLogin";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 /** 409 SESSION_EXISTS onay diyaloğu için, mevcut oturumu okunur cümleye çevir. */
 function describeExistingSession(info: ExistingSessionInfo): string {
@@ -35,7 +36,7 @@ function describeExistingSession(info: ExistingSessionInfo): string {
   };
   const where = WHERE[info.deviceType] ?? "başka bir cihazda";
   const when = info.createdAt
-    ? ` (${new Date(info.createdAt).toLocaleString("tr-TR")}'de açıldı)`
+    ? ` (${factoryLocaleString(info.createdAt, "tr-TR")}'de açıldı)`
     : "";
   return (
     `Bu hesap ${where} zaten açık${when}. Yine de giriş yapmak istiyor musunuz? ` +

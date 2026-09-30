@@ -16,6 +16,7 @@ import {
   fmtBackupAge,
   type Alert,
 } from "./serverHealth";
+import { factoryLocaleString, factoryLocaleTimeString } from "@/lib/factory-time";
 
 function InfoRow({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
@@ -226,7 +227,7 @@ export function ServerStatusPage() {
                     data?.poolAcquireTimeouts
                       ? `${data.poolAcquireTimeouts} kez` +
                         (data.lastPoolTimeoutAt
-                          ? ` · son ${new Date(data.lastPoolTimeoutAt).toLocaleString("tr-TR")}`
+                          ? ` · son ${factoryLocaleString(data.lastPoolTimeoutAt, "tr-TR")}`
                           : "")
                       : data?.poolAcquireTimeouts === 0
                         ? "yok"
@@ -246,7 +247,7 @@ export function ServerStatusPage() {
           </div>
           {dataUpdatedAt > 0 && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Son güncelleme: {new Date(dataUpdatedAt).toLocaleTimeString("tr-TR")}
+              Son güncelleme: {factoryLocaleTimeString(dataUpdatedAt, "tr-TR")}
             </p>
           )}
         </section>

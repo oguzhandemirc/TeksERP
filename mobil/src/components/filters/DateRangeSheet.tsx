@@ -15,7 +15,7 @@ import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Text, TouchableRipple } from 'react-native-paper';
 import AppModal from '../AppModal';
-import { addDays, endOfDay, formatRange, startOfDay, type DateRange } from './rollHistoryFilter';
+import { addDays, endOfDay, factoryTodayNaive, formatRange, startOfDay, type DateRange } from './rollHistoryFilter';
 
 const WEEKDAYS = ['Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct', 'Pz'];
 const MONTHS = [
@@ -51,7 +51,7 @@ interface Props {
 }
 
 export default function DateRangeSheet({ visible, onDismiss, initial, onApply }: Props) {
-  const today = useMemo(() => new Date(), []);
+  const today = useMemo(() => factoryTodayNaive(), []);
   const [cursor, setCursor] = useState(() => {
     const base = initial?.from ?? today;
     return new Date(base.getFullYear(), base.getMonth(), 1);
@@ -157,7 +157,7 @@ export default function DateRangeSheet({ visible, onDismiss, initial, onApply }:
         <Button
           mode="text"
           onPress={() => {
-            const t = new Date();
+            const t = factoryTodayNaive();
             setCursor(new Date(t.getFullYear(), t.getMonth(), 1));
             setFrom(startOfDay(addDays(t, -6)));
             setTo(endOfDay(t));

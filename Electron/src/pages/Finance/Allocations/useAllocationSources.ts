@@ -21,6 +21,7 @@ import {
   type Direction,
   type SourceKind,
 } from "./service";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 export interface SourceItem {
   kind: SourceKind;
@@ -42,7 +43,7 @@ interface Params {
   kind: SourceKind;
 }
 
-const trDate = (iso: string): string => new Date(iso).toLocaleDateString("tr-TR");
+const trDate = (iso: string): string => factoryLocaleDateString(iso, "tr-TR");
 
 export function useAllocationSources({ cariId, currency, direction, kind }: Params): {
   items: SourceItem[];

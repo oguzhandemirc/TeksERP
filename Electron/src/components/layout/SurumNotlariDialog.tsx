@@ -21,8 +21,8 @@ import { SON_GORULEN_ANAHTAR, sonGorulenOku, sonGorulenYaz } from "@/lib/surum-n
 import { useSurumNotuStore } from "@/store/surum-notu";
 import { useTabsStore } from "@/store/tabs";
 import { RELEASE_NOTES_PATH } from "@/pages/ReleaseNotes/release-notes-path";
+import { formatFactory } from "@/lib/factory-time";
 
-const dateFmt = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 
 const TIP_GORUNUM: Record<NotTip, { ikon: typeof Sparkles; sinif: string; etiket: string }> = {
   yeni: { ikon: Sparkles, sinif: "text-success", etiket: "Yeni" },
@@ -38,9 +38,8 @@ const KAPSAM_ETIKET: Record<NotKapsam, string> = {
 
 /** Tarih kimliğini ("2026-08-28", "2026-08-28b") okunur başlığa çevirir. */
 function tarihBasligi(id: string): string {
-  const t = new Date(id.slice(0, 10));
-  if (Number.isNaN(t.getTime())) return id;
-  return dateFmt.format(t);
+  // Kimlik bir TAKVİM günüdür (an değil): dilim uygulanmaz.
+  return formatFactory(`${id.slice(0, 10)}T00:00:00Z`, "d MMMM yyyy", id, "UTC");
 }
 
 function YayinKarti({ yayin }: { yayin: SurumNotuYayini }) {

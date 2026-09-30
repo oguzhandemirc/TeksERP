@@ -30,14 +30,11 @@ import { useQuery } from '@tanstack/react-query';
 import { tamburService } from '../../../services/tambur.service';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import type { Roll } from '../../../types/models';
+import { formatFactory } from '../../../lib/factory-time';
 
 /** "SS:dd" — panelde tarih GEREKMEZ: kapsam zaten tek iş emri. */
 function hhmm(v: string | Date | null | undefined): string {
-  if (!v) return '—';
-  const d = v instanceof Date ? v : new Date(v);
-  if (Number.isNaN(d.getTime())) return '—';
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+  return formatFactory(v, 'HH:mm');
 }
 
 export default function WorkOrderOutputPanel({

@@ -1,5 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { SlowRequest } from "./perfService";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 /** Yavaş istek defteri (≥1sn, son 50 — en yenisi başta). 499 = istemci bekledi
  *  ama vazgeçti (timeout/pencere kapandı) — çoğu zaman EN önemli satırlar. */
@@ -25,7 +26,7 @@ export function SlowList({ items }: { items: SlowRequest[] }) {
         {items.map((s, i) => (
           <TableRow key={`${s.at}-${i}`}>
             <TableCell className="whitespace-nowrap text-xs tabular-nums">
-              {new Date(s.at).toLocaleString("tr-TR")}
+              {factoryLocaleString(s.at, "tr-TR")}
             </TableCell>
             <TableCell className="font-mono text-xs">
               {s.method} {s.route}

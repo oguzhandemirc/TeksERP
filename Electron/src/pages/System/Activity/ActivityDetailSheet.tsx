@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { tr } from "date-fns/locale";
+import { formatFactory } from "@/lib/factory-time";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -86,9 +85,7 @@ export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props
                   <span className="font-mono text-xs">{query.data.recordId}</span>
                 </Row>
                 <Row label="Tarih">
-                  {format(new Date(query.data.createdAt), "dd.MM.yyyy HH:mm:ss", {
-                    locale: tr,
-                  })}
+                  {formatFactory(query.data.createdAt, "dd.MM.yyyy HH:mm:ss")}
                 </Row>
                 {requestId && (
                   <Row label="İşlem no">

@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
-import { format } from "date-fns";
-import { tr } from "date-fns/locale";
+import { formatFactory } from "@/lib/factory-time";
 import {
   Sheet,
   SheetContent,
@@ -31,7 +30,7 @@ export type KartelaSelection =
   | null;
 
 const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
-const fmtDate = (s: string) => format(new Date(s), "dd.MM.yyyy HH:mm", { locale: tr });
+const fmtDate = (s: string) => formatFactory(s, "dd.MM.yyyy HH:mm");
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (

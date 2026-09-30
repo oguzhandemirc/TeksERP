@@ -23,6 +23,7 @@ import {
   paymentFilterKey,
   type PaymentFilterState,
 } from "./paymentFilters";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 const PAGE_SIZE = 100;
 
@@ -138,7 +139,7 @@ export function PaymentsPage() {
                     </td>
                     <td className="px-3 py-2">{p.cashTransaction ? <CashLedgerLink docNo={p.cashTransaction.docNo} /> : <span className="text-xs text-muted-foreground" title="Defter satırı yok — geçmiş kayıt (backfill bekliyor) ya da eski sunucu">—</span>}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {new Date(p.paymentDate).toLocaleDateString("tr-TR")}
+                      {factoryLocaleDateString(p.paymentDate, "tr-TR")}
                     </td>
                     <td className="px-3 py-2 text-right font-medium">
                       {p.status === "CANCELLED" ? (

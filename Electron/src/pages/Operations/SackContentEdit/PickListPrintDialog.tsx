@@ -16,6 +16,7 @@ import { isDarkHex } from "@/pages/SackTags/service";
 import { isAmbiguousFailure } from "@/lib/attemptToken";
 import { sackHubService } from "./service";
 import { shipmentStatusLabels, type PickListPrint, type PickListRow } from "./types";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 const locLabel = (r: PickListRow) => (r.shipment ? shipmentStatusLabels[r.shipment.status] : "Depoda");
@@ -124,7 +125,7 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
               </div>
               <div className="text-xs text-muted-foreground">
                 {customers.join(", ")} · {rows.length} çuval · {totalRolls} top · {fmtM(totalQty)} m
-                {totalKg > 0 ? ` · ${fmtM(totalKg)} kg` : ""} · Basım: {new Date().toLocaleString("tr-TR")}
+                {totalKg > 0 ? ` · ${fmtM(totalKg)} kg` : ""} · Basım: {factoryLocaleString(new Date(), "tr-TR")}
               </div>
             </div>
             <table className="w-full border-collapse text-xs">

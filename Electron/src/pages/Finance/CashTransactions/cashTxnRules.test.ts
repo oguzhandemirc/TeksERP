@@ -55,6 +55,7 @@ import {
   cashTxnSearchPath,
 } from "./cashTxnRules";
 import type { CashTxnRow } from "./service";
+import { formatFactory } from "@/lib/factory-time";
 
 const ACC = (over: Partial<AccountLike> = {}): AccountLike => ({
   kind: "CASH_BOX",
@@ -113,19 +114,19 @@ describe("§1 buildListQuery — süzgeç sözleşmesi", () => {
     expect("cashBoxId" in bank).toBe(false);
   });
 
-  it("tarih YEREL gün sınırına çevrilir — ham 'YYYY-MM-DD' GİTMEZ", () => {
+  it("tarih FABRİKA gün sınırına çevrilir — ham 'YYYY-MM-DD' GİTMEZ", () => {
     const q = buildListQuery(FILTERS({ from: "2026-03-15", to: "2026-03-15" }));
     // Ham metin gitseydi backend onu UTC gece yarısı sayardı; negatif ofsetli
     // makinede gün BİR GERİ kayar ve o günün kayıtları listede görünmezdi.
     expect(q.from).not.toBe("2026-03-15");
     const from = new Date(q.from as string);
     const to = new Date(q.to as string);
-    expect(from.getFullYear()).toBe(2026);
-    expect(from.getMonth()).toBe(2);
-    expect(from.getDate()).toBe(15);
-    expect(from.getHours()).toBe(0);
-    expect(to.getHours()).toBe(23);
-    expect(to.getMinutes()).toBe(59);
+    expect(Number(formatFactory(from, "yyyy"))).toBe(2026);
+    expect(Number(formatFactory(from, "M")) - 1).toBe(2);
+    expect(Number(formatFactory(from, "d"))).toBe(15);
+    expect(Number(formatFactory(from, "H"))).toBe(0);
+    expect(Number(formatFactory(to, "H"))).toBe(23);
+    expect(Number(formatFactory(to, "mm"))).toBe(59);
     // Aralık gerçekten TÜM günü kapsıyor mu (24 saate 1 ms kala).
     expect(to.getTime() - from.getTime()).toBe(86_400_000 - 1);
   });

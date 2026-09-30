@@ -19,6 +19,7 @@ import { HorizonNote, SealBadge, SourceBreakdownStrip, fmtSec } from "./DokumaSh
 import { SOURCE_LABELS, formatPct } from "./dokuma-regime";
 import { useFactoryDay } from "../_hooks/useReportDay";
 import { dokumaReportsApi, type ShiftMachineRow, type ShiftRow } from "./service";
+import { factoryLocaleTimeString } from "@/lib/factory-time";
 
 const columns: ColumnDef<ShiftMachineRow>[] = [
   { accessorKey: "machine.code", header: "Tezgah", cell: ({ row }) => `${row.original.machine.code} · ${row.original.machine.name}` },
@@ -38,7 +39,7 @@ function ShiftCard({ v }: { v: ShiftRow }) {
     <Card className="space-y-3 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold">
-          {v.shift.name} ({v.shift.code}) · {new Date(v.startsAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{new Date(v.endsAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+          {v.shift.name} ({v.shift.code}) · {factoryLocaleTimeString(v.startsAt, "tr-TR", { hour: "2-digit", minute: "2-digit" })}–{factoryLocaleTimeString(v.endsAt, "tr-TR", { hour: "2-digit", minute: "2-digit" })}
           {v.isCancelled ? " · İPTAL" : ""}
         </h3>
         <p className="text-xs text-muted-foreground">

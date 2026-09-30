@@ -4,6 +4,7 @@
 import { reportsClient } from "../_services/reportsClient";
 import type { ReportCompareParams, ReportResponse } from "../_services/types";
 import type { ReportExportSpec } from "../_components/reportExport";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 export type AbcClass = "A" | "B" | "C";
 
@@ -79,7 +80,7 @@ export const customerScorecardApi = {
     reportsClient.get<CustomerScorecard>("customer/scorecard", params),
 };
 
-const dt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("tr-TR") : "—");
+const dt = (iso: string | null) => (iso ? factoryLocaleDateString(iso, "tr-TR") : "—");
 
 /** Çıktı başlığındaki şerhler — süzgeç satırları EN ÜSTTE (K10). */
 function scorecardMeta(sc: CustomerScorecard, filterNotes: string[], compareLabel: string | null): string[] {

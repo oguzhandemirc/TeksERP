@@ -9,6 +9,7 @@
 import type { PlanWarpBeamRequest, WarpBeam, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WindWarpBeamRequest } from '../../../services/warpBeam.service';
 import type { YarnLotQualityStatus } from '../../../types/models';
 import { foldSearchText } from '../../../utils/searchFold';
+import { factoryDayKey } from '../../../lib/factory-time';
 
 // İplik lotu kalite durumu — SAR lot seçicisinde rozet (yarnQualityHold AÇIKken); ON_HOLD/BLOCKED çıkışını
 // sunucu 400 `YARN_LOT_ON_HOLD` ile reddeder, tablet erken UYARIR (tahmin etmez, kapı sunucudan).
@@ -309,8 +310,8 @@ export function classifyBeamFailure(error: unknown, fallback: string): BeamFailu
   return { kind: 'plain', message };
 }
 
-/** Sarım tarihi fabrika gününde mi (cihaz saati Türkiye'de) — "bugün sarılan" sekmesi. */
+/** Sarım tarihi `now` ile aynı FABRİKA gününde mi — "bugün sarılan" sekmesi (tabletin saat dilimi değil). */
 export function isSameLocalDay(iso: string, now: Date): boolean {
-  const d = new Date(iso);
-  return !Number.isNaN(d.getTime()) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  const day = factoryDayKey(iso);
+  return day !== '' && day === factoryDayKey(now);
 }

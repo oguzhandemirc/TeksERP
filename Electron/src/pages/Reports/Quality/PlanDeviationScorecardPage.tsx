@@ -21,6 +21,7 @@ import {
   type PlanDeviationDetailRow,
 } from "./service";
 import { buildPlanDeviationExport } from "./planDeviationExport";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 // =============================================================================
 // PLAN-SAPMA KARNESİ — "plan dışı onayla depoya inen mal"
@@ -60,7 +61,7 @@ const detailColumns: ColumnDef<PlanDeviationDetailRow, unknown>[] = [
     header: "Tarih",
     cell: ({ getValue }) => (
       <span className="whitespace-nowrap tabular-nums text-muted-foreground">
-        {new Date(getValue() as string).toLocaleString("tr-TR")}
+        {factoryLocaleString(getValue() as string, "tr-TR")}
       </span>
     ),
   },

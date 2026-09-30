@@ -17,6 +17,7 @@
 // her zaman metin olarak da basılır ("+" / "−") ve yön sütunu kelimeyle yazılır.
 // =============================================================================
 import { formatNumber } from "@/lib/format";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 /**
  * Backend `WarehouseEventType` enum'unun aynası (Electron backend'i import edemez).
@@ -260,7 +261,7 @@ export function formatInstant(iso: string | null | undefined): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime())
     ? "—"
-    : d.toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" });
+    : factoryLocaleString(d, "tr-TR", { dateStyle: "short", timeStyle: "short" });
 }
 
 // -----------------------------------------------------------------------------

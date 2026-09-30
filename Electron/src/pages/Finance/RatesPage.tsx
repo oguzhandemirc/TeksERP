@@ -10,13 +10,14 @@ import { Label } from "@/components/ui/label";
 import { PermissionGate } from "@/components/PermissionGate";
 import { listRates, createRate, fetchTcmbRates, type Currency } from "./service";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { factoryDayKey, factoryLocaleDateString, fmtDayKey } from "@/lib/factory-time";
 
 // TL kur tablosuna GİRMEZ: kendi para birimimizin kendine kuru 1'dir ve backend
 // bunu koda gömer. Listede göstermek "girmeyi unuttum mu" sorusu doğururdu.
 const CURRENCIES: Currency[] = ["USD", "EUR", "GBP", "RUB"];
 
 function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return factoryDayKey(d);
 }
 
 export function RatesPage() {
@@ -40,7 +41,7 @@ export function RatesPage() {
   const tcmbM = useMutation({
     mutationFn: fetchTcmbRates,
     onSuccess: (s) => {
-      const date = new Date(`${s.fetched}T00:00:00Z`).toLocaleDateString("tr-TR", { timeZone: "UTC" });
+      const date = fmtDayKey(s.fetched, s.fetched);
       const parts: string[] = [];
       if (s.written.length > 0) parts.push(`${s.written.length} kur yazıldı`);
       if (s.unchanged.length > 0) parts.push(`${s.unchanged.length} kur zaten günceldi`);
@@ -149,7 +150,7 @@ export function RatesPage() {
                 {rows.map((r) => (
                   <tr key={r.id} className="border-t">
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {new Date(r.rateDate).toLocaleDateString("tr-TR")}
+                      {factoryLocaleDateString(r.rateDate, "tr-TR")}
                     </td>
                     <td className="px-3 py-2 font-medium">{r.currency}</td>
                     <td className="px-3 py-2 text-right font-mono">{Number(r.rate).toFixed(4)}</td>

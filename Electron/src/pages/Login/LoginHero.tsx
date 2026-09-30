@@ -1,4 +1,5 @@
 import { useServerCompanyName } from "./useServerCompanyName";
+import { factoryDayKey } from "@/lib/factory-time";
 
 export function LoginHero() {
   const companyName = useServerCompanyName();
@@ -57,7 +58,7 @@ export function LoginHero() {
             `SurumRozeti` ile — o `app.getVersion()`tan okur. */}
         <div className="flex items-center text-xs text-white/40">
           <span>
-            © {new Date().getFullYear()}{" "}
+            © {factoryDayKey().slice(0, 4)}{" "}
             <a
               href="https://etkiliyazilim.com"
               target="_blank"

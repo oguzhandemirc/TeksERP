@@ -11,6 +11,7 @@ import { printHtmlString } from "@/lib/print";
 import { buildSackDumpHtml } from "./dumpHtml";
 import { buildSackDumpSheets } from "./dumpSheets";
 import { dumpRowCount, type SackDump, type SackDumpOptions } from "./types";
+import { factoryDayKey } from "@/lib/factory-time";
 
 // Yazdır/PDF üst sınırı — `table-export.ts` PDF_MAX_ROWS ile aynı gerekçe: bu kadar
 // satırın üstünde tek belge hem üretilemez (offscreen render çökme riski) hem
@@ -19,9 +20,7 @@ const PDF_MAX_ROWS = 10000;
 
 /** yyyy-MM-dd — dosya adına eklenen sıralanabilir tarih damgası. */
 function dateStamp(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return factoryDayKey();
 }
 
 /** "İçerik Dökümü CV3007260003 2026-07-30" / "İçerik Dökümü 12 çuval 2026-07-30" */

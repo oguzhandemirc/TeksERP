@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { tr } from "date-fns/locale";
+import { formatFactory } from "@/lib/factory-time";
 import { ArrowRight, Ban, Plus, Printer } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -114,7 +113,7 @@ export function WarehouseTransfersPage() {
                 {rows.map((r) => (
                   <tr key={r.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => setDetailId(r.id)}>
                     <td className="p-3 font-mono text-xs">{r.transferNo}</td>
-                    <td className="p-3">{format(new Date(r.createdAt), "dd MMM yyyy HH:mm", { locale: tr })}</td>
+                    <td className="p-3">{formatFactory(r.createdAt, "dd MMM yyyy HH:mm")}</td>
                     <td className="p-3">
                       <span className="inline-flex items-center gap-1">
                         {r.fromWarehouse.name}

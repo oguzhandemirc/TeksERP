@@ -39,6 +39,7 @@ import {
   reconciliationBlockReason,
   type ReconciliationDraft,
 } from "./reconciliationLetter";
+import { formatFactory } from "@/lib/factory-time";
 
 const draft = (over: Partial<ReconciliationDraft> = {}): ReconciliationDraft => ({
   cariId: "11111111-1111-1111-1111-111111111111",
@@ -54,11 +55,11 @@ describe("§1 asOf GÜN SONUDUR", () => {
   it("§1a seçilen günün SON anı gönderilir (o günün hareketleri DAHİL)", () => {
     const body = buildReconciliationLetterBody(draft({ asOfYmd: "2026-07-31" }));
     const d = new Date(body.asOf);
-    expect(d.getFullYear()).toBe(2026);
-    expect(d.getMonth()).toBe(6);
-    expect(d.getDate()).toBe(31);
-    expect(d.getHours()).toBe(23);
-    expect(d.getMinutes()).toBe(59);
+    expect(Number(formatFactory(d, "yyyy"))).toBe(2026);
+    expect(Number(formatFactory(d, "M")) - 1).toBe(6);
+    expect(Number(formatFactory(d, "d"))).toBe(31);
+    expect(Number(formatFactory(d, "H"))).toBe(23);
+    expect(Number(formatFactory(d, "mm"))).toBe(59);
     expect(d.getSeconds()).toBe(59);
   });
 

@@ -2,7 +2,7 @@
 // taşıyıcı `RecordingTransport` (sahte); olay üretimi ve gönderim servis fonksiyonlarıyla, yalnız bekçinin tesisinde.
 import { randomUUID } from "node:crypto";
 import { DEFAULT_SETTINGS } from "../../src/catalog/notifications";
-import { istanbulMinute } from "../../src/lib/istanbul";
+import { facilityMinute } from "../../src/lib/facility-clock";
 import { NO_TENANT, withTesis } from "../../src/lib/tenant";
 import type { PushTransport } from "../../src/push/transports";
 import { generateForFacility } from "../../src/services/notification-events";
@@ -20,9 +20,9 @@ export function ayar(g: { acik?: boolean; turler?: Partial<NotificationSettings[
   };
 }
 
-/** Şu anı (İstanbul) içine alan sessiz pencere: [şimdi − önce dk, şimdi + sonra dk). */
+/** Şu anı (tesis saati; bekçi tesisinde `tesis` projeksiyonu yok → varsayılan İstanbul) içine alan sessiz pencere: [şimdi − önce dk, şimdi + sonra dk). */
 export function simdikiSessiz(nowMs: number, sonraDk = 60, onceDk = 60): NotificationSettings["sessiz"] {
-  const m = istanbulMinute(nowMs);
+  const m = facilityMinute(nowMs);
   const saat = (x: number) => {
     const v = ((x % 1440) + 1440) % 1440;
     return `${String(Math.floor(v / 60)).padStart(2, "0")}:${String(v % 60).padStart(2, "0")}`;

@@ -15,8 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { mergeService, type MergeEntity, type MergeOperationRow, type UnmergePlan } from "@/services/mergeService";
+import { factoryDateTimeFormat } from "@/lib/factory-time";
 
-const DATE_FMT = new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short" });
+const DATE_FMT = () => factoryDateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short" });
 export const MERGES_KEY = ["master-data", "merges"] as const;
 
 interface Props {
@@ -91,11 +92,11 @@ function OperationRow({ row }: { row: MergeOperationRow }) {
         )}
       </div>
       <div className="text-xs text-muted-foreground">
-        {DATE_FMT.format(new Date(row.createdAt))} · {row.reason}
+        {DATE_FMT().format(new Date(row.createdAt))} · {row.reason}
       </div>
       {row.revertedAt && (
         <div className="text-xs text-muted-foreground">
-          Geri alma: {DATE_FMT.format(new Date(row.revertedAt))} · {row.revertReason}
+          Geri alma: {DATE_FMT().format(new Date(row.revertedAt))} · {row.revertReason}
         </div>
       )}
       {open && <RevertForm row={row} onClose={() => setOpen(false)} />}

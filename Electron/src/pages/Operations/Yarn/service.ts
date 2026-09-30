@@ -30,6 +30,7 @@
 // =============================================================================
 import apiClient from "@/services/apiClient";
 import type { YarnLotQualityStatus } from "./yarnLotQuality";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 /** Backend `YarnMovementKind` enum'unun aynası (Electron backend'i import edemez). */
 export type YarnMovementKind = "IN" | "OUT" | "ADJUST_IN" | "ADJUST_OUT" | "WARP_ISSUE" | "WARP_ISSUE_REVERSAL" | "WARP_RETURN" | "WARP_RETURN_REVERSAL" | "SUBCONTRACT_OUT" | "SUBCONTRACT_OUT_CANCEL" | "SUBCONTRACT_RETURN" | "SUBCONTRACT_RETURN_CANCEL";
@@ -232,7 +233,7 @@ export function kindBadgeClass(kind: YarnMovementKind): string {
 export function formatInstant(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" });
+  return Number.isNaN(d.getTime()) ? "—" : factoryLocaleString(d, "tr-TR", { dateStyle: "short", timeStyle: "short" });
 }
 
 /** Hareketi kimin yazdığı — ad yoksa kullanıcı adı, o da yoksa "—" (sistem). */

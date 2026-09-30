@@ -4,7 +4,6 @@ import { isMeasuredUnit } from '../../../lib/item-unit';
 import { Text, TextInput, TouchableRipple, ActivityIndicator, Icon } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 
 import { orderService } from '../../../services/order.service';
 import type { Order } from '../../../types/models';
@@ -12,6 +11,7 @@ import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, trLabel } from '../../../utils/labels';
 import { queryProblem, QUERY_PROBLEM_TEXT } from '../../../utils/queryState';
 import { colors, spacing, radius } from '../../../theme';
+import { formatFactory } from '../../../lib/factory-time';
 
 // =============================================================================
 // Sipariş listesi — cursor + infinite scroll (mobil sayfalama standardı).
@@ -126,7 +126,7 @@ export default function OrderListView({ onOpen, refreshKey = 0 }: Props) {
                 </Text>
               )}
               {item.deadline ? (
-                <Text style={styles.deadline}>termin {dayjs(item.deadline).format('DD.MM.YY')}</Text>
+                <Text style={styles.deadline}>termin {formatFactory(item.deadline, 'dd.MM.yy')}</Text>
               ) : null}
             </View>
           </View>

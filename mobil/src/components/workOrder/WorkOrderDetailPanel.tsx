@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Icon, IconButton } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 
 import type { WorkOrder, SubcontractorDispatchListItem } from '../../types/models';
 import { subcontractorService } from '../../services/subcontractor.service';
@@ -12,6 +11,7 @@ import {
   STEP_STATUS_LABEL,
   trLabel,
 } from '../../utils/labels';
+import { formatFactory } from '../../lib/factory-time';
 
 /**
  * Seçili iş emrinin sevkiyat odaklı özet paneli.
@@ -250,7 +250,7 @@ export default function WorkOrderDetailPanel({
                       <Icon source="calendar" size={12} color="#64748b" />
                       <Text style={styles.dispatchLabel}>Tarih</Text>
                       <Text style={styles.dispatchValue}>
-                        {dayjs(dispatch.dispatchedAt).format('DD.MM.YYYY HH:mm')}
+                        {formatFactory(dispatch.dispatchedAt, 'dd.MM.yyyy HH:mm')}
                       </Text>
                     </View>
                     <View style={styles.dispatchRow}>

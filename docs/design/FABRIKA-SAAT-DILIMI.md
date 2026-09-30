@@ -1,6 +1,6 @@
 # Fabrika saat dilimi — tek kaynak, fabrikaya göre seçilebilir
 
-> Durum: TZ-B (sözleşme + backend + bulut teli) İNDİ · TZ-P (panel) · TZ-T (tablet) · TZ-İ (patron uygulaması) sırada.
+> Durum: TZ-B (sözleşme + backend + bulut teli) İNDİ · TZ-İ (istemciler: panel + ayar ekranı · tablet · patron uygulaması · bulut bildirim saati) dalda `fabrika/saat-dilimi-istemci` (§6).
 > Karar: kullanıcı 2026-09-30 — *"tek kaynaktan olsun ama her fabrikaya göre seçilebilir olsun saat dilimi"*.
 
 ## 0. Sınıflandırma
@@ -20,10 +20,10 @@
 | Migration literal'leri | `20260922210000_roll_return_number` · `20260922120000_packing_group_code` (tek seferlik backfill) | tarihsel, DOKUNULMAZ (migration değişmez) |
 | Belge çözücüleri (`document-render/fmt-date.ts`) | zaten time.ts'ten | aynı (artık seçilen dilimden) |
 | Süreç diliminden biçimleyen | etiket `formatDate` (`label-html.shared`) · belge basım damgası (`printed-document`) · serbest belge `printedAtText` · kur/numara serisi mesajları (5 servis + `number-series.routes`) | `factoryDateTimeTr` / `factoryDateTr` |
-| Excel | ÜRETİMİ PANELDE (`Electron/src/lib/xlsx-export.ts` · `table-export.ts` · `reportExport.ts` …) | TZ-P: PDF ile AYNI çözücü (`pdf-excel-tek-cozucu`) |
+| Excel | ÜRETİMİ PANELDE (`Electron/src/lib/xlsx-export.ts` · `table-export.ts` · `reportExport.ts` …) | TZ-İ: hücreler metin; metni üreten biçimleyiciler (`safeFormat` · `factoryLocale*` · `cellText`) fabrika diliminden — PDF ile aynı gün/saat |
 | Yedek dosya adı (`backup-naming.helper`) | sunucunun yerel saati, bekçide BEYANLI meşru | değişmedi (dosya adı ↔ `rebuildStamp` çifti) |
 | Bulut teli | dönem pencereleri (`cloud-sync/periods.ts`) time.ts'ten; tesis dilimi GİTMİYORDU | yeni ANLIK projeksiyon `tesis` → `{ saatDilimi }` |
-| Bulut sunucusu | `patron/sunucu/src/lib/istanbul.ts` (bildirim gün anahtarı + sessiz saat) sabit İstanbul | TZ-İ: `tesis.saatDilimi` okunur |
+| Bulut sunucusu | `patron/sunucu/src/lib/istanbul.ts` (bildirim gün anahtarı + sessiz saat) sabit İstanbul | TZ-İ: `lib/facility-clock.ts` — olay üretimi ve gönderim `tesis.saatDilimi`ni okur |
 | Bekçiler | `test_report_day_boundary` · `test_gun_anahtari_kaynagi` (süreç dilimi cırcırı 39) · `test_doc_fmt_date` · `test_timestamptz_contract` | + `test_fabrika_saat_dilimi`; cırcır 39 → 32 ölçüldü (sabiti yönetici indirir) |
 
 ## 2. Sözleşme
@@ -46,12 +46,23 @@
 
 - Yeni ANLIK projeksiyon `tesis` = `{ saatDilimi }`, izin `bulut:oturum`, sıklık `HER_TUR` (özet aynıysa gönderilmez).
 - Tel: katalog fabrika `cloud-sync/projections.ts` + `snapshots.ts` tel şeması; bulut `patron/sunucu/src/catalog/projections.ts` + `katalog-ozeti.json` (`--yaz`). **Bulut ÖNCE yayınlanır** (bilinmeyen projeksiyon `PROJEKSIYON_BILINMIYOR` ile reddedilir; fabrika tekrar dener).
-- Uygulama gösterimi istemci diliminde kalır (TZ-İ kararı); bildirim gün anahtarı ve sessiz saat `tesis.saatDilimi`ye TZ-İ'de bağlanır.
+- Uygulama gösterimi TESİSİN diliminden (TZ-İ; oturum `anlik:tesis`i okur, önbellekle çevrimdışı da); bildirim gün anahtarı ve sessiz saat `tesis.saatDilimi`nden (`facility-clock.ts`; projeksiyon yoksa varsayılan).
 
 ## 5. Şıklar — açık kararlar (kullanıcı onayı bekleyen)
 
 1. **Yazma izni:** (a) yalnız `admin:settings` [UYGULANDI] · (b) `settings:company` da açsın · (c) yalnız süperadmin.
 2. **Geçersiz kayıtlı dilimde açılış:** (a) sunucu açılmaz [UYGULANDI] · (b) varsayılanla açılır + sağlık uyarısı.
 3. **Yedek dosya adı:** (a) sunucu yerel saati kalır [UYGULANDI] · (b) fabrika dilimine geçer (`rebuildStamp` ile birlikte).
-4. **Bulut bildirim/sessiz saat dilimi (TZ-İ):** (a) tesisin dilimi · (b) hesabın cihaz dilimi.
+4. **Bulut bildirim/sessiz saat dilimi (TZ-İ):** (a) tesisin dilimi [UYGULANDI] · (b) hesabın cihaz dilimi.
 5. **`sl_day_exact` istatistiği:** (a) dokunma, varsayılan dışı kurulumda plan yavaşlığı kabul [UYGULANDI] · (b) dilim değişince istatistiği yeniden kuran ops adımı.
+6. **Takvim günü alanları (`@db.Date`: vade, fatura/ödeme tarihi, termin) negatif ofsetli dilimde:** (a) PDF gibi AN olarak fabrika diliminde basılır — UTC'nin batısındaki dilimde bir gün geri görünür [UYGULANDI, PDF ile aynı] · (b) takvim günü olarak UTC parçalarından basılır; backend `fmt-date` ile AYNI dilimde değişir (belge ↔ ekran eşitliği).
+7. **Açık istemcide dilim değişince:** (a) panel kabuğu / tablet ekran yığını yeniden kurulur, açık sekme durumu sıfırlanır [UYGULANDI] · (b) yalnız yeni çizilen ekranlar yeni dilimle, "yeniden başlatın" uyarısı.
+8. **Giriş ekranı (oturum öncesi):** (a) varsayılan dilim (bayrak ucu kimlik ister) [UYGULANDI] · (b) son bilinen dilim cihazda saklanır (çok sunuculu cihazda yanlış dilim riski).
+
+## 6. İstemciler (TZ-İ)
+
+- **Tek biçimleyici:** `src/lib/factory-time.ts` — Electron · mobil · patron/uygulama'da BAYT-EŞİT (bağımlılıksız TS). Intl `formatToParts` + fabrika dilimi; Intl'in dilim desteği olmayan motorda varsayılan dilim sabit UTC+3 ile yine doğru. Yüzey: `factoryLocaleString/DateString/TimeString` (yerleşik `toLocale*String`in ECMA-402 varsayılan kuralıyla birebir, dilim eklenmiş) · `factoryDateTimeFormat` · `formatFactory(an, "dd.MM.yyyy HH:mm")` (date-fns belirteçleri) · `fmtFactoryDate/Time/DateTime/Stamp` · `factoryDayKey` · `factoryDayDiff` · `factoryDayStart[Iso]`/`factoryDayEndIso`/`factoryBackWindowIso` · `toFactoryDateTimeInput`/`fromFactoryDateTimeInput` · `fmtDayKey` (takvim günü, dilimsiz).
+- **Dilimin geldiği yer:** panel ve tablet `GET /api/feature-flags` → `factoryTimezone` (servis katmanı uygular; tablet kalıcı önbellekteki değeri de uygular); patron uygulaması oturumda ANLIK `tesis` → `saatDilimi`. Geçersiz değer yok sayılır, son geçerli dilim kalır. Dilim değişince panel kabuğu / tablet ekran yığını yeniden kurulur (şık 7).
+- **An ↔ takvim ayrımı:** bir AN (createdAt, dispatchedAt…) fabrika diliminde basılır; bir TAKVİM GÜNÜ (seçicinin yyyy-MM-dd'si, sürüm notu kimliği) dilimsiz basılır. Tarih seçicisi/takvim ızgarası takvim modelidir; ana çeviri yalnız sorgu sınırında (`factoryDayStartIso`/`factoryDayEndIso`) yapılır. "Bugün" daima fabrikanın bugünüdür (`factoryDayKey()`).
+- **Ayar ekranı:** Genel Ayarlar → Şirket Bilgileri → Saat dilimi (`FactoryTimezoneField`): arama + liste, seçim önizleme ucunu çağırır ("gün sınırları kayar" uyarısı, ofset, bugün, son 30 günde günü değişecek top/sevkiyat, uyarılar), `expectedCurrent = preview.current` ile PUT (ayar şifresi); 409'da önizleme yenilenir. Yazma yalnız `admin:settings`; diğerleri geçerli dilimi salt-okunur görür.
+- **Bekçiler:** `Teks-Erp/scripts/test_istemci_saat_dilimi.ts` (ayna · ham API yasağı AST'li · bağ; beyanlı sayılı istisna iki yönlü) · `patron/sunucu/scripts/test_tesis_saati.ts` (bulut gün anahtarı/sessiz saat dilimden) · istemci birim testleri (`factory-time.test.ts` üç projede; süreç dilimi UTC / America/New_York / Asia/Tokyo'da aynı çıktı).

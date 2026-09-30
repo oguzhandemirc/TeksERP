@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { buildSackDumpHtml } from "./dumpHtml";
 import { dumpKombinasyonlari, SABIT_AN } from "./__tests__/dumpFixtures";
+import { formatFactory } from "@/lib/factory-time";
 
 /**
  * Çuval İçerik Dökümü PDF'inin (HTML) ALTIN KOPYASI — görünüm bilinçsiz değişmesin.
@@ -11,14 +12,8 @@ import { dumpKombinasyonlari, SABIT_AN } from "./__tests__/dumpFixtures";
  * `ALTIN_YAZ=1 npx vitest run <bu dosya>` ile yenile ve commit mesajına NEDEN'ini yaz.
  * Karşılaştırma boşluk normalizasyonu dışında bayt bayt; basım anı sabit.
  */
-// Ortam varsayımı AÇIK: "Basım:" satırı makinenin saat dilimiyle biçimlenir; altın
-// Europe/Istanbul'da yazıldı. Dilim burada sabitlenir ki CI (UTC) ile yerel aynı çıktıyı versin.
-const ONCEKI_TZ = process.env.TZ;
-process.env.TZ = "Europe/Istanbul";
-afterAll(() => {
-  if (ONCEKI_TZ === undefined) delete process.env.TZ;
-  else process.env.TZ = ONCEKI_TZ;
-});
+// "Basım:" satırı FABRİKA diliminde (varsayılan Europe/Istanbul) basılır, makinenin diliminden bağımsız:
+// süreç dilimi burada BİLEREK sabitlenmez — CI (UTC) ile yerel aynı altını vermek zorunda.
 
 const ALTIN = resolve(__dirname, "dumpHtml.altin.json");
 const sha = (s: string) => createHash("sha256").update(s.replace(/\s+/g, " ").trim()).digest("hex");
@@ -33,9 +28,8 @@ describe("Çuval İçerik Dökümü HTML — altın kopya", () => {
     return;
   }
 
-  it("ortam zemini: saat dilimi sabitlemesi tuttu (basım anı İstanbul saatiyle 11:30)", () => {
-    expect(SABIT_AN.getHours()).toBe(11);
-    expect(SABIT_AN.getMinutes()).toBe(30);
+  it("ortam zemini: basım anı fabrika diliminde (varsayılan İstanbul) 11:30 — süreç diliminden bağımsız", () => {
+    expect(formatFactory(SABIT_AN, "HH:mm")).toBe("11:30");
   });
 
   it("körlük zemini: kombinasyonlar farklı çıktılar üretiyor", () => {

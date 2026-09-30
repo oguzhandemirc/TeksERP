@@ -29,7 +29,6 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import dayjs from 'dayjs';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -80,6 +79,7 @@ import {
 import { useScanClassifier } from '../../../hooks/useScanSeries';
 import { isWrongTypeForCardField, isWrongTypeForRollField } from './fasonScanGuards';
 import { showScreenError } from '../../../lib/screenToast';
+import { formatFactory } from '../../../lib/factory-time';
 
 // Barkod tipi sezgisi — yanlış alana okutmayı backend 404'üne güvenmeden anında,
 // net mesajla yakalar. Tür SUNUCU TABLOSUNDAN gelir (ön ek tablette sabit
@@ -374,9 +374,9 @@ export default function FasonSevkScreen() {
         }
       }
       const earliestDeadline = w.plannedEndDate
-        ? dayjs(w.plannedEndDate)
+        ? w.plannedEndDate
         : earliestDeadlineMs !== null
-          ? dayjs(earliestDeadlineMs)
+          ? earliestDeadlineMs
           : null;
 
       // Ürünler — ilk 2 unique
@@ -395,10 +395,10 @@ export default function FasonSevkScreen() {
       // Tek satır: tarih · termin · ürün(ler) — dikey yer tasarrufu
       const line1: string[] = [];
       if (w.createdAt) {
-        line1.push(`📅 ${dayjs(w.createdAt).format('DD.MM.YYYY')}`);
+        line1.push(`📅 ${formatFactory(w.createdAt, 'dd.MM.yyyy')}`);
       }
       if (earliestDeadline) {
-        line1.push(`⏳ ${earliestDeadline.format('DD.MM.YYYY')}`);
+        line1.push(`⏳ ${formatFactory(earliestDeadline, 'dd.MM.yyyy')}`);
       }
       if (itemLabel) {
         line1.push(`🧵 ${itemLabel}`);

@@ -6,7 +6,7 @@
 import { Prisma, type DevicePlatform } from "@prisma/client";
 import { effectivePermissions } from "../catalog/permissions";
 import { NOTIFICATION_KINDS, type NotificationKind } from "../wire/api";
-import { quietUntil } from "../lib/istanbul";
+import { FACILITY_TIMEZONE_SOURCE, facilityTimeZone, quietUntil } from "../lib/facility-clock";
 import { withTesis } from "../lib/tenant";
 import type { PushOutcome, PushTransport } from "../push/transports";
 import type { CloudContext } from "./context";
@@ -60,14 +60,16 @@ async function claim(ctx: CloudContext, tesisId: string, nowMs: number, until: D
 
 async function decide(ctx: CloudContext, tesisId: string, n: Claimed, nowMs: number): Promise<Decision> {
   if (!(NOTIFICATION_KINDS as readonly string[]).includes(n.kind)) return { kind: "ATLA", reason: "TUR_BILINMIYOR" };
-  return withTesis(ctx.app, { tesisId }, async (tx) => {
+  return withTesis(ctx.app, { tesisId, projections: [FACILITY_TIMEZONE_SOURCE] }, async (tx) => {
     const account = await tx.account.findUnique({ where: { id: n.account_id }, select: { status: true, permissions: true } });
     if (!account || account.status !== "AKTIF") return { kind: "ATLA", reason: "HESAP_KAPALI" };
     const cfg = await loadFacilitySettings(tx, tesisId);
     const settings = resolveSettings(cfg.byAccount.get(n.account_id) ?? null, cfg.facility).settings;
     const skip = ruleVerdict(settings, n.kind as NotificationKind, effectivePermissions(account.permissions));
     if (skip) return { kind: "ATLA", reason: skip };
-    const quiet = quietUntil(settings.sessiz, nowMs);
+    const tesis = await tx.projectionRow.findFirst({ where: { tesisId, projection: FACILITY_TIMEZONE_SOURCE, deletedAt: null }, select: { data: true } });
+    const saatDilimi = (tesis?.data as { saatDilimi?: unknown } | null)?.saatDilimi;
+    const quiet = quietUntil(settings.sessiz, nowMs, facilityTimeZone(saatDilimi));
     if (quiet !== null) return { kind: "ERTELE", until: new Date(quiet) };
     const devices = await tx.pushDevice.findMany({ where: { tesisId, accountId: n.account_id, active: true }, select: { id: true, platform: true, token: true }, orderBy: { id: "asc" } });
     if (devices.length === 0) return { kind: "ATLA", reason: "CIHAZ_YOK" };

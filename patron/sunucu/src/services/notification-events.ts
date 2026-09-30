@@ -5,7 +5,7 @@
 // doğar ki tür sonradan açılınca eski olay gönderilmesin. Değerlendirme saf (`evaluate`), yazım ayrı.
 import { KIND_RULES, kindPermitted } from "../catalog/notifications";
 import { effectivePermissions } from "../catalog/permissions";
-import { istanbulDay, istanbulMinute } from "../lib/istanbul";
+import { FACILITY_TIMEZONE_SOURCE, facilityDay, facilityMinute, facilityTimeZone } from "../lib/facility-clock";
 import { withTesis } from "../lib/tenant";
 import type { NotificationKind, NotificationSettings } from "../wire/api";
 import type { CloudContext } from "./context";
@@ -22,6 +22,8 @@ export interface Candidate {
 
 export interface FacilityFacts {
   readonly nowMs: number;
+  /** Tesisin saat dilimi (ANLIK `tesis.saatDilimi`) — gün anahtarı ve "günlük üretim saati" bununla. */
+  readonly timeZone: string;
   readonly accounts: readonly { readonly id: string; readonly settings: NotificationSettings }[];
   readonly snapshots: ReadonlyMap<string, unknown>;
   readonly lastPackageAt: Date | null;
@@ -39,7 +41,7 @@ const DUE_LABEL: Readonly<Record<string, string>> = { OVERDUE: "vadesi geçmiş"
 
 /** Saf değerlendirme: hesap × olay adayları (izin/tür/sessiz kararı YAZIMDA ve GÖNDERİMDE verilir). */
 export function evaluate(f: FacilityFacts): Candidate[] {
-  const day = istanbulDay(f.nowMs);
+  const day = facilityDay(f.nowMs, f.timeZone);
   const out: Candidate[] = [];
   const stock = obj(f.snapshots.get("ozet.stok"));
   const orders = obj(f.snapshots.get("ozet.siparis"));
@@ -57,7 +59,7 @@ export function evaluate(f: FacilityFacts): Candidate[] {
     const late = num(orders.gecikenKalem);
     if (e.gecikenKalemUst !== null && late !== null && late > e.gecikenKalemUst) add("geciken-siparis", `geciken-siparis:${day}`, { title: "Geciken sipariş", body: `Termini geçmiş ${fmt(late)} açık kalem var`, route: "/siparisler" });
     const today = num(production.bugunTamamlananToplam);
-    if (e.gunlukUretimAlt !== null && today !== null && istanbulMinute(f.nowMs) >= e.gunlukUretimSaati * 60 && today < e.gunlukUretimAlt) {
+    if (e.gunlukUretimAlt !== null && today !== null && facilityMinute(f.nowMs, f.timeZone) >= e.gunlukUretimSaati * 60 && today < e.gunlukUretimAlt) {
       add("gunluk-uretim", `gunluk-uretim:${day}`, { title: "Günlük üretim düşük", body: `Bugün tamamlanan ${fmt(today)} (eşik ${fmt(e.gunlukUretimAlt)})`, route: "/uretim" });
     }
     if (f.lastPackageAt && f.nowMs - f.lastPackageAt.getTime() > e.esitlemeGecikmeDk * 60_000) {
@@ -97,21 +99,23 @@ export function ruleVerdict(settings: NotificationSettings, kind: NotificationKi
 
 /** Tesisin olaylarını üret: yeni doğan satır sayısı (tekrarlar sessizce yok sayılır). */
 export async function generateForFacility(ctx: CloudContext, tesisId: string, nowMs: number): Promise<number> {
-  return withTesis(ctx.app, { tesisId, projections: SNAPSHOT_SOURCES }, async (tx) => {
+  return withTesis(ctx.app, { tesisId, projections: [...SNAPSHOT_SOURCES, FACILITY_TIMEZONE_SOURCE] }, async (tx) => {
     const accounts = await tx.account.findMany({ where: { tesisId, status: "AKTIF" }, select: { id: true, permissions: true }, orderBy: { id: "asc" } });
     if (accounts.length === 0) return 0;
     const cfg = await loadFacilitySettings(tx, tesisId);
     const settingsOf = new Map(accounts.map((a) => [a.id, resolveSettings(cfg.byAccount.get(a.id) ?? null, cfg.facility).settings]));
-    const snaps = await tx.projectionRow.findMany({ where: { tesisId, projection: { in: [...SNAPSHOT_SOURCES] }, deletedAt: null }, select: { projection: true, data: true } });
+    const snaps = await tx.projectionRow.findMany({ where: { tesisId, projection: { in: [...SNAPSHOT_SOURCES, FACILITY_TIMEZONE_SOURCE] }, deletedAt: null }, select: { projection: true, data: true } });
     const state = await tx.syncState.findUnique({ where: { tesisId }, select: { lastPackageAt: true } });
     const inbox = await tx.inboxMessage.findMany({
       where: { tesisId, status: { in: ["ISLENDI", "REDDEDILDI"] }, processedAt: { gte: new Date(nowMs - INBOX_WINDOW_MS) } },
       select: { messageId: true, accountId: true, kind: true, status: true },
     });
+    const snapshots = new Map(snaps.map((s) => [s.projection, s.data]));
     const candidates = evaluate({
       nowMs,
+      timeZone: facilityTimeZone(obj(snapshots.get(FACILITY_TIMEZONE_SOURCE)).saatDilimi),
       accounts: accounts.map((a) => ({ id: a.id, settings: settingsOf.get(a.id)! })),
-      snapshots: new Map(snaps.map((s) => [s.projection, s.data])),
+      snapshots,
       lastPackageAt: state?.lastPackageAt ?? null,
       inbox,
     });

@@ -30,13 +30,14 @@ import { OFFICIAL_DOC_STATUS_LABEL, officialDocCancelBlockReason } from "../offi
 import { DeliveryNoteCancelPanel } from "./DeliveryNoteCancelPanel";
 import { KIND_LABEL } from "./labels";
 import { listChequeDeliveryNotes, type DeliveryNoteRow } from "./service";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const dt = (iso: string): string => new Date(iso).toLocaleDateString("tr-TR");
+const dt = (iso: string): string => factoryLocaleDateString(iso, "tr-TR");
 
 const targetOf = (r: DeliveryNoteRow): string => {
   const party = r.cari?.customer?.name ?? r.cari?.subcontractor?.name ?? null;

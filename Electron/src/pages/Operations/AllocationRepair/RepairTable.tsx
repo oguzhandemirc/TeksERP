@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Loader2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { RepairableShipment } from "./service";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 const LINK_CLS = "cursor-pointer underline decoration-dotted underline-offset-4 hover:text-primary";
 
@@ -102,7 +103,7 @@ function RepairShipmentRow({
           {s.shipmentNo}
         </button>
         <div className="text-xs text-muted-foreground">
-          {s.dispatchedAt ? new Date(s.dispatchedAt).toLocaleDateString("tr-TR") : "—"}
+          {s.dispatchedAt ? factoryLocaleDateString(s.dispatchedAt, "tr-TR") : "—"}
         </div>
       </td>
       <td>{s.customer?.name ?? "—"}</td>

@@ -1,3 +1,4 @@
+import { factoryLocaleString, fromFactoryDateTimeInput, toFactoryDateTimeInput } from "@/lib/factory-time";
 // =============================================================================
 // TEZGAH DURUŞLARI — panel tipleri (backend `MachineStopDto` / `StopReclassDto` aynası)
 // =============================================================================
@@ -77,7 +78,7 @@ export const SOURCE_LABEL: Record<StopSource, string> = {
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(d.getTime()) ? "—" : factoryLocaleString(d, "tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 /** "1 sa 05 dk" / "12 dk" / "<1 dk"; açık duruşta `now`dan hesaplanır. */
@@ -94,14 +95,12 @@ export function formatDuration(sec: number | null, startedAt: string, endedAt: s
 /** `datetime-local` girdisi → ISO (yerel saat; sunucu `startedAt`i ajan saati sayar, süre bundan). */
 export function localInputToIso(v: string): string | null {
   if (!v) return null;
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  return fromFactoryDateTimeInput(v)?.toISOString() ?? null;
 }
 
 /** Şimdi → `datetime-local` biçimi (yerel). */
 export function nowLocalInput(at: Date = new Date()): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())}T${p(at.getHours())}:${p(at.getMinutes())}`;
+  return toFactoryDateTimeInput(at);
 }
 
 /** Bugünün fabrika günü anahtarı (`YYYY-MM-DD`, yerel takvim). */

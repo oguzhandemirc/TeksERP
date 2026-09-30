@@ -1,5 +1,6 @@
 import { formatAgo, formatDate, formatDateTime, formatMoney, formatNumber, syncIsLate } from "../src/lib/format";
 import { formatValue, humanize, recordTitle, scalarEntries } from "../src/lib/present";
+import { DEFAULT_FACTORY_TIMEZONE, setFactoryTimezone } from "../src/lib/factory-time";
 
 describe("TR biçimleri", () => {
   it("sayılar nokta binlik, virgül ondalık", () => {
@@ -41,5 +42,18 @@ describe("jenerik sunum", () => {
     expect(e.map((x) => x.key)).toEqual(["ad", "adet"]);
     expect(recordTitle({ sevkNo: "SV-1" })).toBe("SV-1");
     expect(recordTitle(null)).toBe("Kayıt");
+  });
+});
+
+describe("tesis saat dilimi (ANLIK tesis.saatDilimi)", () => {
+  it("seçilen dilimde basılır, telefonun diliminde değil; takvim günü dilimsiz kalır", () => {
+    try {
+      expect(setFactoryTimezone("America/New_York")).toBe(true);
+      expect(formatDateTime("2026-09-29T10:05:00Z")).toBe("29.09.2026 06:05");
+      expect(formatDate("2026-09-30T02:30:00Z")).toBe("29.09.2026");
+      expect(formatDate("2026-09-29")).toBe("29.09.2026");
+    } finally {
+      setFactoryTimezone(DEFAULT_FACTORY_TIMEZONE);
+    }
   });
 });

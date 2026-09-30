@@ -27,7 +27,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import dayjs from 'dayjs';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -57,6 +56,7 @@ import type { MainStackParamList } from '../../../navigation/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { foldSearchText } from '../../../utils/searchFold';
 import { showScreenError } from '../../../lib/screenToast';
+import { formatFactory } from '../../../lib/factory-time';
 
 // O12 fix: uzun kabul formu (per-top sayım + cm/kg ölçümleri) Android LMK
 // kill'inde sıfırlanıyordu — FasonKabul'daki draft deseni (debounce + savedAt
@@ -489,7 +489,7 @@ export default function KartelaKabulScreen() {
                       {selectedJob.dispatchNo}
                     </Text>
                     <Text variant="bodySmall" style={styles.rollMeta}>
-                      {selectedJob.firm.name} · {dayjs(selectedJob.dispatchedAt).format('DD.MM HH:mm')}
+                      {selectedJob.firm.name} · {formatFactory(selectedJob.dispatchedAt, 'dd.MM HH:mm')}
                     </Text>
                   </View>
                   <Text variant="labelMedium" style={styles.backHint}>
@@ -723,7 +723,7 @@ function KartelaJobCard({ job, onPress }: { job: KartelaJob; onPress: () => void
             <Text variant="bodyMedium" style={styles.jobNo} numberOfLines={1}>
               {job.dispatchNo}
             </Text>
-            <Text style={styles.jobDate}>{dayjs(job.dispatchedAt).format('DD.MM HH:mm')}</Text>
+            <Text style={styles.jobDate}>{formatFactory(job.dispatchedAt, 'dd.MM HH:mm')}</Text>
           </View>
 
           {/* Firma · kumaş · renk tek satır */}

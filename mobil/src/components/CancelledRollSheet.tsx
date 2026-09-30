@@ -4,12 +4,12 @@ import { Text, Button, Icon, ActivityIndicator } from 'react-native-paper';
 import { useMutation } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
-import dayjs from 'dayjs';
 
 import AppModal from './AppModal';
 import { rollService } from '../services/roll.service';
 import type { Roll } from '../types/models';
 import { colors, spacing, radius } from '../theme';
+import { formatFactory } from '../lib/factory-time';
 
 /**
  * OKUTULAN BARKOD İPTAL EDİLMİŞ — teşhis + tek dokunuş geri alma.
@@ -94,7 +94,7 @@ export default function CancelledRollSheet({
             label="İptal"
             value={
               roll?.cancelledAt
-                ? `${dayjs(roll.cancelledAt).format('DD.MM.YYYY HH:mm')}${who ? ` · ${who}` : ''}`
+                ? `${formatFactory(roll.cancelledAt, 'dd.MM.yyyy HH:mm')}${who ? ` · ${who}` : ''}`
                 : '—'
             }
           />

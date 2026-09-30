@@ -57,10 +57,7 @@ const CONDITIONAL_GATES: Record<string, string> = {
     "diğer türlerin kendi uçlarında kapı yok",
 };
 /** Kapılı ama panelden çağrılmayan uç — gerekçeli, iki yönlü (kullanılmayan muaf da kırmızı). */
-const NO_CALLER_EXEMPT: Record<string, string> = {
-  "PUT /api/feature-flags/factory-timezone":
-    "fabrika saat dilimi ucu backend diliminde (TZ-B) indi; panel ekranı (Şirket Bilgileri → Saat dilimi) TZ-P diliminde — panel inince bu muaf bayatlar (§3a')",
-};
+const NO_CALLER_EXEMPT: Record<string, string> = {};
 
 interface GatedRoute { method: string; path: string; where: string; conditional: boolean }
 interface ClientCall { method: string; pattern: string[] | null; raw: string; where: string; wrapped: boolean; passesHeaders: boolean; wrapperId: number | null; mobile: boolean }

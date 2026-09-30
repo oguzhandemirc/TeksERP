@@ -19,8 +19,7 @@
 // =============================================================================
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { tr } from "date-fns/locale";
+import { formatFactory } from "@/lib/factory-time";
 import { ClipboardList, Plus, RotateCcw, Search } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -185,7 +184,7 @@ export function StockCountsPage() {
                       >
                         <td className="p-3 font-mono text-xs">{r.countNo}</td>
                         <td className="p-3">
-                          {format(new Date(r.createdAt), "dd MMM yyyy HH:mm", { locale: tr })}
+                          {formatFactory(r.createdAt, "dd MMM yyyy HH:mm")}
                         </td>
                         <td className="p-3">{r.warehouse?.name ?? "—"}</td>
                         {/* Kırılım (top/iplik) DETAYDA — listede tek sayı yeterli ve
@@ -200,7 +199,7 @@ export function StockCountsPage() {
                           )}
                         </td>
                         <td className="p-3 text-xs text-muted-foreground">
-                          {closedAt ? format(new Date(closedAt), "dd MMM yyyy HH:mm", { locale: tr }) : "—"}
+                          {closedAt ? formatFactory(closedAt, "dd MMM yyyy HH:mm") : "—"}
                         </td>
                       </tr>
                     );

@@ -13,6 +13,7 @@
 export { dayEndIso, dayStartIso, fmtDate, parseYmdLocal, ymd } from "@/pages/Finance/Cheques/dates";
 
 import type { PurchaseOrderStatus } from "./service";
+import { factoryDayDiff } from "@/lib/factory-time";
 
 /** Beklenen tarihin tonu — yalnız İŞİ BİTMEMİŞ siparişte anlamlı. */
 export type ExpectedTone = "overdue" | "soon" | "normal" | "closed" | "none";
@@ -35,11 +36,7 @@ export function expectedTone(
   const d = new Date(expectedDate);
   if (Number.isNaN(d.getTime())) return "none";
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const day = new Date(d);
-  day.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((day.getTime() - today.getTime()) / 86_400_000);
+  const diffDays = factoryDayDiff(d, new Date());
 
   if (diffDays < 0) return "overdue";
   // 7 gün: haftalık planlama penceresi — "bu hafta ne gelecek" sorusunun karşılığı.

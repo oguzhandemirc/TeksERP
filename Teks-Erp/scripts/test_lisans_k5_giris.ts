@@ -98,6 +98,7 @@ const DISLAMALAR: K5Dislama[] = [
   { dosya: "Electron/src/components/layout/AppShell.tsx", ad: "AppShell", gerekce: "K5'te kabuk bağlanmaz (Root: oturum-dışı ⊇ K5)", kanit: { dosya: APP, desen: /const oturumDisi = [^;]*licenseSuspended;/ } },
   { dosya: "Electron/src/components/layout/BossShell.tsx", ad: "BossShell", gerekce: "patron kabuğu da yalnız oturum-içi dalda", kanit: { dosya: APP, desen: /if \(oturumDisi\) \{\s*kabuk = <RouterProvider router=\{authRouter\} \/>;/ } },
   { dosya: "Electron/src/components/layout/LicenseLockGate.tsx", ad: "LicenseLockGate", gerekce: "kısıtlı kip kilidi oturum-dışında çizilmez", kanit: { dosya: APP, desen: /\{!oturumDisi && <LicenseLockGate \/>\}/ } },
+  { dosya: APP, ad: "FactoryTimezoneLoader", gerekce: "fabrika saat dilimi bayrak ucundan yalnız oturum-içi dalda yüklenir (K5'te varsayılan dilim)", kanit: { dosya: APP, desen: /\{!oturumDisi && <FactoryTimezoneLoader \/>\}/ } },
   { dosya: APP, ad: "ScanSeriesLoader", gerekce: "okutma seri tablosu K5'te yüklenmez", kanit: { dosya: APP, desen: /if \(!userId \|\| suspended\) return;/ } },
   { dosya: "Electron/src/providers/PreferencesProvider.tsx", ad: "PreferencesProvider", gerekce: "tercih sorgusu K5'te kapalı; kayıt yalnız ayar ekranlarından (kabuk)", kanit: { dosya: "Electron/src/providers/PreferencesProvider.tsx", desen: /const enabled = hydrated && !!user && !licenseSuspended;/ } },
 ];

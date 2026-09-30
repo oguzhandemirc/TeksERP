@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import { format } from "date-fns";
-import { tr } from "date-fns/locale";
+import { formatFactory } from "@/lib/factory-time";
 import { useAuthStore } from "@/store/auth";
 import { FadeInUp } from "@/components/motion";
 
@@ -8,7 +7,7 @@ import { FadeInUp } from "@/components/motion";
  *  Marka accent gradient'i ve blur blob ile; accent değişince yeniden renklenir. */
 export function DashboardHero({ actions }: { actions?: ReactNode }) {
   const user = useAuthStore((s) => s.user);
-  const today = format(new Date(), "d MMMM yyyy · EEEE", { locale: tr });
+  const today = formatFactory(new Date(), "d MMMM yyyy · EEEE");
 
   return (
     <FadeInUp>

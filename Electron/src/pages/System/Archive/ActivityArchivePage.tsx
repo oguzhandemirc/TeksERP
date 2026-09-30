@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { systemLogService } from "@/services/systemLogService";
+import { factoryLocaleDateString, factoryLocaleString } from "@/lib/factory-time";
 
 const STATS_KEY = "system-log-stats";
 
@@ -60,7 +61,7 @@ export function ActivityArchivePage() {
 
   const stats = statsQuery.data;
   const oldestLogDate = stats?.oldestLog
-    ? new Date(stats.oldestLog).toLocaleDateString("tr-TR")
+    ? factoryLocaleDateString(stats.oldestLog, "tr-TR")
     : "—";
 
   return (
@@ -103,7 +104,7 @@ export function ActivityArchivePage() {
             eski log'ları kendisi arşivler. Son otomatik çalışma:{" "}
             <span className="font-medium text-foreground">
               {stats?.lastAutoArchiveAt
-                ? new Date(stats.lastAutoArchiveAt).toLocaleString("tr-TR")
+                ? factoryLocaleString(stats.lastAutoArchiveAt, "tr-TR")
                 : "henüz çalışmadı"}
             </span>
             .

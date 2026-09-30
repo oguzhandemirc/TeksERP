@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import type { NumberSeriesRow } from "./types";
+import { factoryLocaleDateString } from "@/lib/factory-time";
 
 /**
  * BEKLEYEN DEĞİŞİKLİK + DEVRALINAN ÇAKIŞMA bilgisi (K4, 2026-09-23).
@@ -27,7 +28,7 @@ export function NumberingPendingBlock({
         <div className="flex items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40">
           <span>
             <span className="font-medium">Bekleyen değişiklik:</span>{" "}
-            {new Date(row.pending.effectiveFrom).toLocaleDateString("tr-TR")} itibarıyla{" "}
+            {factoryLocaleDateString(row.pending.effectiveFrom, "tr-TR")} itibarıyla{" "}
             <span className="font-mono">{row.pending.preview}</span>
           </span>
           <Button size="sm" variant="outline" disabled={busy} onClick={onCancel}>

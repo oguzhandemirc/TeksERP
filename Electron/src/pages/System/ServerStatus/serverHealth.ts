@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import apiClient from "@/services/apiClient";
+import { factoryLocaleString } from "@/lib/factory-time";
 
 /** Backend `/health` ucundan KULLANILAN alanlar (uç daha fazlasını döner). */
 export interface HealthResponse {
@@ -278,11 +279,11 @@ export function fmtPct(p: number | null | undefined): string {
 export function fmtBackupAge(lb: HealthResponse["lastBackup"]): string {
   if (!lb) return "Henüz yedek yok";
   const diffMs = Date.now() - new Date(lb.time).getTime();
-  if (diffMs < 0 || isNaN(diffMs)) return new Date(lb.time).toLocaleString("tr-TR");
+  if (diffMs < 0 || isNaN(diffMs)) return factoryLocaleString(lb.time, "tr-TR");
   const hrs = Math.floor(diffMs / 3_600_000);
   let rel: string;
   if (hrs < 1) rel = "1 saatten az önce";
   else if (hrs < 24) rel = hrs + " saat önce";
   else rel = Math.floor(hrs / 24) + " gün önce";
-  return `${new Date(lb.time).toLocaleString("tr-TR")} (${rel})`;
+  return `${factoryLocaleString(lb.time, "tr-TR")} (${rel})`;
 }
