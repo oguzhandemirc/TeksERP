@@ -30,7 +30,7 @@ Betik sözleşmesi bekçiyle ölçülür: `node scripts/test_lisans_devreye_kuru
 ### 1.1 İniş A2 ve önkoşul borçları
 
 - **Komut:** `git fetch && git log --oneline -1 origin/main` ve A2 dallarının indiğini ölç: `git merge-base --is-ancestor <2d ucu> origin/main` (2d modül şifreleme — `satici/sunucu/scripts/modul-anahtari.ts`, göç `20261001090000_modul_anahtari_kasasi`) · 2e-S (`butunluk-liste.txt`) · 3d-1/3d-2 · patron dağıtımı.
-- **Beklenen:** hepsi ata. §11'deki **G1–G3 önkoşul borçları kapanmış** (satıcı imajı ve compose A2'de bunları taşımıyorsa §2 KOŞULMAZ — 2026-09-30 ölçümünde üçü de açık).
+- **Beklenen:** hepsi ata ve §11'deki G1–G3 + G5'in kapanışı (iniş A2 I7) ata: `satici/sunucu/src/keys/server-secrets.ts` var (G1), `deploy/satici/Dockerfile` `dist-cli/scripts/modul-anahtari.js`'i `test -f`'ler (G2), `deploy/satici/docker-compose.yml` `/dosyalar` · `/derlemeler:ro` · `/yayin:ro` taşır (G3), `deploy/paketle.ps1` `-Sifrele` taşır (G5). Biri yoksa §2 KOŞULMAZ.
 - **Geri alma:** yok (okuma).
 
 ### 1.2 vds-dogrula tabanı tazeliği (aşama 1.6 · 1.7)
@@ -79,18 +79,16 @@ thinkpad-1 bir dizüstü: "Dengeli" planda pilde 60 dk girdisizlikte modern bekl
 
 ### 2.2 Sırlar (Mac → VDS anahtar birimi)
 
-A2 imajı açılışta anahtar biriminde `etkinlestirme-kodu.pepper` (F2 kod özeti sırrı) ve `modul-kasasi.key` (2d modül anahtarı kasası) ARAR; birim konteynerde SALT OKUNUR olduğundan yoksa ÜRETEMEZ ve açılış düşer (fail-closed). 2026-09-30 ölçümü: VDS'te ikisi de YOK, Mac'teki hazırlık dizininde de pepper YOK.
+A2 imajı açılışta anahtar birimindeki üç sırrı (`portal-totp.key` · `etkinlestirme-kodu.pepper` F2 kod özeti sırrı · `modul-kasasi.key` 2d modül anahtarı kasası) YALNIZ OKUR; birim konteynerde SALT OKUNUR ve sunucu eksik sırrı YARATMAZ (G1, I7): biri yoksa açılış `Sunucu sırları eksik (…): <adlar>` hatasıyla durur ve `sirlar-uret`i söyler (fail-closed, bekçi `test_sunucu_sirlari`). Üçünün tek üreticisi `anahtar.ts sirlar-uret`tir. 2026-09-30 ölçümü: VDS'te pepper ve kasa anahtarı YOK, Mac'teki hazırlık dizininde de pepper YOK.
 
 - **Komut (Mac):**
 
   ```bash
   cd satici/sunucu && npx tsx scripts/anahtar.ts sirlar-uret --dizin="$HOME/.tekserp/satici-hazirlik"
-  # G1 A2'de kapanmadıysa modül kasası anahtarını AYNI kodla üret (elle biçim yazılmaz):
-  npx tsx -e 'import("./src/keys/module-vault").then((m) => m.ModuleKeyVault.load(process.env.HOME + "/.tekserp/satici-hazirlik", { create: true }))'
   ls -l ~/.tekserp/satici-hazirlik/{etkinlestirme-kodu.pepper,modul-kasasi.key,portal-totp.key}   # üçü -rw-------
   ```
 
-  `sirlar-uret` VAR olanı korur (`portal-totp.key`in üzerine yazmaz — yazsaydı portal TOTP'leri sıfırlanırdı).
+  `sirlar-uret` eksik olanı üretir, VAR olanı korur (`portal-totp.key`in üzerine yazmaz — yazsaydı portal TOTP'leri sıfırlanırdı); çıktı dosya başına `üretildi (0600)` / `vardı, korundu`.
 - **Komut (VDS'e kopya — sudo'suz, yardımcı konteyner):**
 
   ```bash
@@ -134,7 +132,7 @@ IC_API_IP=172.31.254.2
 PATRON_IC_IP=172.31.254.3
 IC_API_DINAMIK_ARALIK=172.31.254.8/29
 IC_API_BELIRTEC_DOSYASI_HOST=/opt/stack/apps/tekserp-satici-hazirlik/sirlar/ic-api-belirteci
-# 3d-1 dağıtım (G3 önerisi — A2 compose'undaki adlar esas alınır)
+# 3d-1 dağıtım (A2 compose'u, G3 kapandı — denetim ⑨: /dosyalar yazılır, /derlemeler + /yayin salt okunur)
 DOSYA_DIZINI_HOST=/srv/tekserp-satici-dosya/hazirlik        # → /dosyalar (YAZILIR, 10001 0700)
 DERLEME_DIZINI_HOST=/opt/stack/apps/tekserp-satici-hazirlik/derlemeler   # → /derlemeler (salt okunur)
 YAYIN_DIZINI_HOST=/opt/stack/apps/tekserp-guncelleme        # → /yayin (salt okunur; html/ + defter/)
@@ -169,7 +167,7 @@ Genel yönlendirici ``Host(`lisans-test.etkiliyazilim.com`)`` kuralıyla TÜM yo
 
 Şifreli modül paketinin AES anahtarı satıcı KASASINA alınır; kira basımında HAK'taki, dondurulmamış ve X25519'u bilinen kuruluma sarılı gider. Mac'te hazır: `~/.tekserp/satici-hazirlik/modul-anahtarlari/depo.multiEnabled.1.json` (0600).
 
-- **Komut (G2 kapandıktan sonra — imajda `dist-cli/scripts/modul-anahtari.js`):** anahtar dosyasını §2.2'deki gibi geçici dizine taşı, sonra
+- **Komut (imajda `dist-cli/scripts/modul-anahtari.js` — G2 kapandı, imaj derlemesi `test -f` kapısında):** anahtar dosyasını §2.2'deki gibi geçici dizine taşı, sonra
 
   ```bash
   ssh -p 2222 oguzhan@80.253.255.188 'cd /opt/stack/apps/tekserp-satici-hazirlik && docker compose run --rm --no-deps \
@@ -179,7 +177,6 @@ Genel yönlendirici ``Host(`lisans-test.etkiliyazilim.com`)`` kuralıyla TÜM yo
 
 - **Beklenen:** `✅ kasaya alındı: depo.multiEnabled 1. sürüm · <kid>` (tekrar koşumda `= zaten kasada`). Düz anahtar argv/env/log/denetime girmez.
 - **Geri alma:** kasa satırı silinmez/değişmez (defter); modülü kiradan çıkarmak = HAK'tan çıkarmak ya da dondurmak (portal).
-- **G2 açıksa:** bu adım ATLANIR; testfabrika şifresiz korumalı paketle ilerler (§4), şifreli modül provası §7.4'te G2 kapanınca.
 
 ### 2.9 Sağlık ve dış ölçüm
 
@@ -358,9 +355,9 @@ Bayt kodu (`.jsc`) OS + mimari + V8'e kilitlidir → korumalı paket HEDEFTE ür
 - **Komut:** `node deploy/lisans-devreye/t4-gozlem.mjs --olc --belirtec-dosyasi=~/.tekserp/testfabrika-gozlem.jwt --aralik-sn=300 --sure-dk=1440` (arka planda; önce KURU koşup planı gör).
 - **Beklenen:** her 5 dk bir satır `~/.tekserp/testfabrika-t4/gozlem-<damga>.tsv` (0600); bitişte özet. Faz ilerlemesi bunu BEKLEMEZ (kullanıcı kararı: takvim kapısı yok); Faz 4 (zorlama) kararına ölçüm girdisidir.
 
-### 7.4 Şifreli modül provası (G2 ve G5 kapandıysa, §2.8 koşulduysa)
+### 7.4 Şifreli modül provası (§2.8 koşulduysa)
 
-- **Komut:** §4.2'yi `paketle.ps1`'in şifreli modül seçeneğiyle yeniden üret → §4.3 → §4.4. ⚠ 2026-09-30 ölçümü: `paketle.ps1` `build-korumali.mjs --sifrele`'yi geçiren bir seçenek TAŞIMIYOR (`main`, `lisans/2d-modul`, `lisans/2e-sert`, `lisans/entegrasyon`) → G5; o kapanana dek bu adım ATLANIR.
+- **Komut:** §4.2'yi şifreli modülle yeniden üret → §4.3 → §4.4. Anahtar dosyası (`depo.multiEnabled.1.json`, 0600) §2.2'deki gibi geçici olarak `$R\modul-anahtarlari\`e (kaynak ağacının DIŞI) taşınır; sarmalayıcıdaki çağrıya `-Sifrele -ModulAnahtarDizini "$R\modul-anahtarlari"` eklenir (G5, I7; `-SifreliPaketler` verilmezse katalogdaki hepsi). Betik `-Korumali`sız, CI'da ya da repo içindeki anahtar diziniyle DURUR ve `.tkmod` üretilmezse paket çıkmaz. Paketten sonra anahtar kopyası silinir (anahtar pakete girmez, pakete yalnız `dist\moduller\*.tkmod` girer).
 - **Beklenen:** `depo.multiEnabled` HAK'ta ise modül açılır (kiradan anahtar, bellekte derleme); HAK'ta değilse `403 LICENSE_MODULE` `neden: ANAHTAR_YOK` — gözlem kipinde bile (anahtar fiziksel olarak yoktur). testfabrika `depo.multiEnabled` kullanıyorsa bu adım HAK doğrulanmadan KOŞULMAZ.
 - **Geri alma:** §4.4 `-GeriAl` (şifresiz pakete dönüş).
 
@@ -412,12 +409,12 @@ Traefik hiçbir geri almada yeniden başlatılmaz; kenar ağı satırı yerinde 
 - **Mac:** `~/.tekserp/satici-hazirlik/` kök · ALT · İNDİRME · `portal-totp.key` · `paket-hazirlik.paket.json` · `modul-anahtarlari/depo.multiEnabled.1.json`; pepper YOK; `~/.tekserp/yayinci/` ve `yayin-belirteci*` YOK.
 - **Doğrulayıcı gerçek koşumu:** aşama 1 (taban hariç ✅), 2 (A2 öncesi beklenen ❌'ler: anahtarlar, göçler, ortam adları, bağlar, `/d`, yayın kökü), 4 (4.3 ❌ korumasız paket), 5 ✅ — ayrıştırıcılar gerçek çıktıyla sınandı.
 
-## 11. A2 önkoşul borçları (bu dilimde UYGULANMADI — ölçüldü 2026-09-30)
+## 11. A2 önkoşul borçları (ölçüldü 2026-09-30 · G1–G3 + G5 iniş A2 I7'de KAPANDI)
 
-| # | Borç | Etki | Kapatma önerisi |
+| # | Borç | Etki | Durum |
 |---|---|---|---|
-| **G1** | Satıcı açılışı `etkinlestirme-kodu.pepper` + `modul-kasasi.key`'i `create: true` ile yükler; VDS anahtar birimi SALT OKUNUR ve ikisi de yok | A2 imajı VDS'te açılmaz (EROFS) | `anahtar.ts sirlar-uret` kasa anahtarını da üretsin (tek kaynak `ModuleKeyVault.load`); runbook §2.2 kopyası |
-| **G2** | İmajın `dist-cli`'ında `modul-anahtari` CLI'ı yok (yalnız `portal-kullanici` + `anahtar`) | `ice-aktar` VDS'te koşamaz; kira modül anahtarı taşımaz | `deploy/satici/Dockerfile` `dist-cli` derleme listesine `scripts/modul-anahtari.ts` + `test -f` kapısı |
-| **G3** | Compose satıcı servisinde 3d-1 ortamı (`DOSYA_DIZINI`, `DERLEME_DIZINI`, `YAYIN_DIZINI`, `GENEL_KOK_ADRESI`) ve bağları yok; kök FS salt okunur | `/y` yükleme ve dosya gövdeleri EROFS; sürüm görünümü "ölçülemedi"; portal bağlantısı göreli | §2.5'teki üç bağ (`/dosyalar` yazılır · `/derlemeler` + `/yayin` salt okunur) + ortam; `compose-denetle.mjs`'e "yayın/derleme salt okunur" kontrolü; `ornek.env` |
+| **G1** | Satıcı açılışı `etkinlestirme-kodu.pepper` + `modul-kasasi.key`'i `create: true` ile yüklüyordu; VDS anahtar birimi SALT OKUNUR ve ikisi de yok | A2 imajı VDS'te açılmazdı (EROFS) | **KAPANDI (I7):** sunucu + `portal-kullanici` + `modul-anahtari` üç sırrı yalnız OKUR (`src/keys/server-secrets.ts`), eksikse açık TR hata + komut; `anahtar.ts sirlar-uret` üçünü üretir, var olanı ezmez; bekçi `test_sunucu_sirlari` |
+| **G2** | İmajın `dist-cli`'ında `modul-anahtari` CLI'ı yoktu (yalnız `portal-kullanici` + `anahtar`) | `ice-aktar` VDS'te koşamazdı | **KAPANDI (I7):** `deploy/satici/Dockerfile` derleme listesinde + `test -f dist-cli/scripts/modul-anahtari.js`; bekçi `test_docker_hijyeni` §6 (her satıcı CLI'ı derlenir + kapıda) |
+| **G3** | Compose satıcı servisinde 3d-1 ortamı (`DOSYA_DIZINI`, `DERLEME_DIZINI`, `YAYIN_DIZINI`, `GENEL_KOK_ADRESI`) ve bağları yoktu; kök FS salt okunur | `/y` yükleme ve dosya gövdeleri EROFS; sürüm görünümü "ölçülemedi"; portal bağlantısı göreli | **KAPANDI (I7):** ortam + üç bağ (`/dosyalar` yazılır · `/derlemeler` + `/yayin` salt okunur; `/yayin` = güncelleme kökü `html/` + `defter/`), `ornek.env`, `compose-denetle.mjs` ⑨a–f + `test_docker_hijyeni` §6 docker'sız ikizi |
 | **G4** | `vds-dogrula.sh` tabanı bayat (09-28) ve betik taban yolu almıyor | her koşum FARK basar, gerçek farkı gizler | §1.2 tazeleme; betiğe taban dizini argümanı (repo dışı araç — yönetici) |
-| **G5** | `paketle.ps1` şifreli modül (`build-korumali.mjs --sifrele`) seçeneği taşımıyor | şifreli modül provası (§7.4) yapılamaz | 2b paket hattı sahibine: `-SifreliModul` + anahtar dosyası yolu (anahtar pakete girmez) |
+| **G5** | `paketle.ps1` şifreli modül (`build-korumali.mjs --sifrele`) seçeneği taşımıyordu | şifreli modül provası (§7.4) yapılamazdı | **KAPANDI (I7):** `-Sifrele` [`-SifreliPaketler`] [`-ModulAnahtarDizini`]; varsayılan ŞİFRESİZ; yalnız `-Korumali` ile, CI'da ve repo içi anahtar dizininde durur; bekçi `test_sunucu_betikleri` §18 |

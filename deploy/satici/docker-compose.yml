@@ -91,10 +91,21 @@ services:
       IC_BIND: ${IC_API_IP:?IC_API_IP gerekli}
       IC_KAYNAK_AGLARI: ${PATRON_IC_IP:?PATRON_IC_IP gerekli}/32
       IC_API_BELIRTEC_DOSYASI: /run/secrets/ic_api_belirteci
+      # Dağıtım (3d-1): paylaşılan dosya gövdeleri satıcının KENDİ birimine yazılır; ilk kurulum derlemeleri ve
+      # güncelleme sunucusunun yayın kökü (html/ + defter/) yalnız OKUNUR. Genel kök /d · /y bağlantısını tam adresle verir.
+      DOSYA_DIZINI: /dosyalar
+      DERLEME_DIZINI: /derlemeler
+      YAYIN_DIZINI: /yayin
+      GENEL_KOK_ADRESI: ${GENEL_KOK_ADRESI:?GENEL_KOK_ADRESI gerekli (https://<SATICI_HOST>)}
     secrets: [db_parolasi, ic_api_belirteci]
     volumes:
-      # Anahtar birimi SALT OKUNUR: kök (parolalı) · alt/indirme (0600) · portal-totp.key — hepsi önceden hazır.
+      # Anahtar birimi SALT OKUNUR: kök (parolalı) · alt/indirme · portal-totp.key · etkinlestirme-kodu.pepper ·
+      # modul-kasasi.key — hepsi önceden hazır (`anahtar.ts sirlar-uret`); sunucu eksikse yaratmaz, açılmaz.
       - ${ANAHTAR_DIZINI_HOST:?ANAHTAR_DIZINI_HOST gerekli}:/anahtarlar:ro
+      # Kök FS salt okunur → yazılan TEK yol satıcıya ait dosya birimi; derleme ve yayın kökü salt okunur (denetim ⑨).
+      - ${DOSYA_DIZINI_HOST:?DOSYA_DIZINI_HOST gerekli}:/dosyalar
+      - ${DERLEME_DIZINI_HOST:?DERLEME_DIZINI_HOST gerekli}:/derlemeler:ro
+      - ${YAYIN_DIZINI_HOST:?YAYIN_DIZINI_HOST gerekli (güncelleme sunucusu kökü)}:/yayin:ro
     tmpfs:
       - /tmp:mode=1777
     networks:

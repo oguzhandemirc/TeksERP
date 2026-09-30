@@ -18,6 +18,9 @@
 //   ⑧ İÇ API (patron bulutu → satıcı): `ic-api` ağı internal, satıcı sabit adresinde dinler (IC_BIND = o
 //      adres, 4612), kaynak YALNIZ patronun sabit /32'si (alt ağda, ağ geçidi .1 değil, satıcı değil,
 //      dinamik aralığın DIŞINDA); sır docker secret'ı (`ic_api_belirteci`) yalnız satıcıya bağlı
+//   ⑨ DAĞITIM BAĞLARI (3d-1): kök FS salt okunur → satıcının yazdığı TEK yol `/dosyalar` (kendi birimi, rw);
+//      `/derlemeler` ve `/yayin` (güncelleme sunucusu kökü) salt okunur; ortam adları bağlarla aynı; genel kök
+//      https; dosya birimi yayın kökünün/anahtar biriminin içinde değil; üç bağ YALNIZ satıcıda
 //   Ⓛ GERİ DÖNGÜ KİPİ (docker-compose.loopback.yml, satıcıda TAILNET_LOOPBACK=1 — Tailscale gelene dek):
 //      ① yerine: HİÇBİR port yayımlanmaz · satıcının tailnet dinleyicisi 127.0.0.1'de · tailnet ağı
 //      internal · `portal-tunel` satıcının ağ ad alanında, portsuz/birimsiz, tailnet köprü adresini dinler.
@@ -230,6 +233,27 @@ kontrol("⑦ DB portsuz ve yalnız iç ağda", (db.ports ?? []).length === 0 && 
   kontrol("⑧d iç API sırrı docker secret'ı, yalnız satıcıda", JSON.stringify(sirli) === '["satici"]' && ortamIc.IC_API_BELIRTEC_DOSYASI === "/run/secrets/ic_api_belirteci", `${sirli.join(", ") || "hiçbiri"} · ${ortamIc.IC_API_BELIRTEC_DOSYASI ?? "YOK"}`);
   const yayin4612 = servisler.flatMap(([a, sv]) => (sv.ports ?? []).filter((p) => String(p.target) === "4612").map(() => a));
   kontrol("⑧e 4612 hiçbir yere yayımlanmaz", yayin4612.length === 0, yayin4612.join(", "));
+}
+
+// ⑨ dağıtım bağları
+{
+  const bag = (hedef) => (satici.volumes ?? []).find((v) => v.target === hedef);
+  const ortam = satici.environment ?? {};
+  const dosya = bag("/dosyalar");
+  kontrol("⑨a /dosyalar bağlı ve YAZILIR (satıcının kendi birimi)", !!dosya && dosya.read_only !== true, dosya ? `${dosya.source} ro=${dosya.read_only === true}` : "YOK");
+  for (const hedef of ["/derlemeler", "/yayin"]) {
+    const v = bag(hedef);
+    kontrol(`⑨b ${hedef} bağlı ve SALT OKUNUR`, !!v && v.read_only === true, v ? `${v.source} ro=${v.read_only === true}` : "YOK");
+  }
+  const bek = { DOSYA_DIZINI: "/dosyalar", DERLEME_DIZINI: "/derlemeler", YAYIN_DIZINI: "/yayin" };
+  const kotu = Object.entries(bek).filter(([k, v]) => ortam[k] !== v).map(([k, v]) => `${k}=${ortam[k] ?? "YOK"} (beklenen ${v})`);
+  kontrol("⑨c ortam adları bağlarla aynı", kotu.length === 0, kotu.join(", "));
+  kontrol("⑨d GENEL_KOK_ADRESI https kökü", /^https:\/\/[a-z0-9.-]+\/?$/.test(String(ortam.GENEL_KOK_ADRESI ?? "")), String(ortam.GENEL_KOK_ADRESI ?? "YOK"));
+  const icinde = (a, b) => !!a && !!b && (a === b || a.startsWith(`${b.replace(/\/$/, "")}/`) || b.startsWith(`${a.replace(/\/$/, "")}/`));
+  const src = dosya?.source ?? "";
+  kontrol("⑨e dosya birimi yayın kökü ve anahtar birimiyle iç içe değil", !!src && !icinde(src, bag("/yayin")?.source) && !icinde(src, bag("/anahtarlar")?.source), src || "YOK");
+  const baska = servisler.filter(([ad, sv]) => ad !== "satici" && (sv.volumes ?? []).some((v) => ["/dosyalar", "/derlemeler", "/yayin"].includes(v.target))).map(([ad]) => ad);
+  kontrol("⑨f dağıtım bağları yalnız satıcıda", baska.length === 0, baska.join(", "));
 }
 
 console.log(`\n=== ${gecti} geçti, ${ihlal} ihlal ===`);

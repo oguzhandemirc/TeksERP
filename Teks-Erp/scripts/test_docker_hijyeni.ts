@@ -16,8 +16,10 @@
 //   §5 korumalı Linux imajı (Faz 2f) DURAĞAN: izin listesi `*` ile başlar, çalışma aşaması
 //      root değil + bağlamdan yalnız docker/ betikleri, machine-id silinir; compose ro/127/seed 0.
 //      §5c teslim künyesi 2e aracıyla imzalanır: anahtar yoksa paket yok, .jws SHA256SUMS'ta.
+//   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
+//      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 // =============================================================================
-import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -312,6 +314,43 @@ function teslimImzaStatik(betik: string): string[] {
   ];
   for (const [ad, m] of sondalar) {
     check(`§5c sonda: ${ad} → kırmızı`, m !== t && teslimImzaStatik(m).length > 0, m !== t ? "" : "MUTASYON UYGULANMADI");
+  }
+}
+
+// -----------------------------------------------------------------------------
+// §6 — satıcı imajı: VDS'te tsx/kaynak yok → her CLI imajda derlenmiş durmalı (G2: `modul-anahtari`
+// eksikti, `ice-aktar` VDS'te koşamıyordu); compose dağıtım bağları (G3) docker'sız da ölçülür.
+// -----------------------------------------------------------------------------
+console.log("\n=== §6 satıcı imajı (dist-cli · dağıtım bağları) ===\n");
+const SATICI_CLI = readdirSync(join(KOK, "satici/sunucu/scripts"))
+  .filter((f) => f.endsWith(".ts") && !f.startsWith("test_") && f !== "run-all-tests.ts")
+  .map((f) => f.slice(0, -3));
+function saticiImajStatik(dockerfile: string, compose: string): string[] {
+  const ih: string[] = [];
+  const derleme = /--outDir dist-cli[^\n]*\n[^\n]*/.exec(dockerfile)?.[0] ?? "";
+  for (const cli of SATICI_CLI) {
+    if (!derleme.includes(`scripts/${cli}.ts`)) ih.push(`dist-cli derlemesinde yok: ${cli}`);
+    if (!dockerfile.includes(`test -f dist-cli/scripts/${cli}.js`)) ih.push(`test -f kapısı yok: ${cli}`);
+  }
+  if (!/\}:\/dosyalar\s*$/m.test(compose)) ih.push("/dosyalar yazılır bağlı değil");
+  for (const h of ["derlemeler", "yayin"]) if (!new RegExp(`\\}:/${h}:ro\\s*$`, "m").test(compose)) ih.push(`/${h} salt okunur bağlı değil`);
+  return ih;
+}
+{
+  const df = oku("deploy/satici/Dockerfile");
+  const dc = oku("deploy/satici/docker-compose.yml");
+  check("§6 körlük zemini: satıcı CLI'ları bulundu (anahtar · modul-anahtari · portal-kullanici)", ["anahtar", "modul-anahtari", "portal-kullanici"].every((c) => SATICI_CLI.includes(c)), SATICI_CLI.join(", "));
+  const g = saticiImajStatik(df, dc);
+  check("§6a ⭐ her satıcı CLI'ı imajda derlenir + test -f; /dosyalar rw, /derlemeler + /yayin ro", g.length === 0, g.join(" | ") || "temiz");
+  const sondalar: Array<[string, string, string]> = [
+    ["modul-anahtari derlenmiyor", df.replace(" scripts/modul-anahtari.ts", ""), dc],
+    ["test -f kapısı yok", df.replace(" && test -f dist-cli/scripts/modul-anahtari.js", ""), dc],
+    ["yayın kökü yazılır", df, dc.replace(":/yayin:ro", ":/yayin")],
+    ["dosyalar salt okunur", df, dc.replace(/\}:\/dosyalar$/m, "}:/dosyalar:ro")],
+  ];
+  for (const [ad, d, c] of sondalar) {
+    const uygulandi = d !== df || c !== dc;
+    check(`§6b sonda: ${ad} → kırmızı`, uygulandi && saticiImajStatik(d, c).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
   }
 }
 

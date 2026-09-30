@@ -13,17 +13,14 @@
 //   npx tsx scripts/portal-kullanici.ts kilit-ac --kullanici=ad
 // Stdin'den parola (TTY yoksa): parola + tekrar, her biri bir satır.
 // =============================================================================
-import { mkdirSync } from "node:fs";
 import { loadConfig } from "../src/config";
 import { KeyStore } from "../src/keys/key-store";
-import { ActivationCodeHasher } from "../src/keys/code-pepper";
 import { recordAudit } from "../src/lib/audit";
 import { loadEnvFile } from "../src/lib/env";
 import { normalizeUsername } from "../src/portal/auth.service";
 import { hashPortalPassword } from "../src/portal/password";
 import { PORTAL_ROLES, type PortalRole } from "../src/portal/roles";
-import { PortalSecretBox } from "../src/portal/secret-box";
-import { ModuleKeyVault } from "../src/keys/module-vault";
+import { loadServerSecrets } from "../src/keys/server-secrets";
 import { createPortalUserTx, resetPortalUserTotpTx, setPortalUserPasswordTx, unlockPortalUserTx } from "../src/portal/users.service";
 import type { VendorContext } from "../src/services/context";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
@@ -61,14 +58,7 @@ async function main(): Promise<void> {
   const { command, flags } = args(process.argv.slice(2));
   loadEnvFile();
   const config = loadConfig();
-  mkdirSync(config.ANAHTAR_DIZINI, { recursive: true, mode: 0o700 });
-  const ctx: VendorContext = {
-    config,
-    keys: KeyStore.load(config),
-    portalSecrets: PortalSecretBox.load(config.ANAHTAR_DIZINI, { create: true }),
-    moduleVault: ModuleKeyVault.load(config.ANAHTAR_DIZINI, { create: true }),
-    codeHasher: ActivationCodeHasher.load(config.ANAHTAR_DIZINI, { create: true }),
-  };
+  const ctx: VendorContext = { config, keys: KeyStore.load(config), ...loadServerSecrets(config.ANAHTAR_DIZINI) };
   const { prisma, pool } = await import("../src/lib/prisma");
   try {
     const find = async () => {

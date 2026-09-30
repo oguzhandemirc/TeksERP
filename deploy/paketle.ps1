@@ -88,7 +88,15 @@ param(
   [string]$Kurulum,
   # Native lisans cekirdegi (URETIM derlemesi, test capasiz). Verilmezse
   # Teks-Erp\native\lisans-cekirdek\dist-uretim\<dosya> (CI/cargo-xwin ciktisi).
-  [string]$NativeYol)
+  [string]$NativeYol,
+  # SIFRELI MODUL (Faz 2d): yalniz -Korumali ile; build-korumali.mjs --sifrele'ye gecer. Verilmezse
+  # bugunku SIFRESIZ korumali paket. Muhurleme anahtari (modul anahtari dosyasi) REPO, PAKET ve CI
+  # DISIDIR: hazirlik makinesinde `modul-anahtari.ts uret` ile dogar; CI'da -Sifrele reddedilir.
+  [switch]$Sifrele,
+  # Sifrelenecek paketler: "hepsi" ya da katalogdaki paket adlari (virgullu).
+  [string]$SifreliPaketler = "hepsi",
+  # Modul anahtari dizini (verilmezse build-korumali'nin varsayilani ~/.tekserp/satici-hazirlik/modul-anahtarlari).
+  [string]$ModulAnahtarDizini)
 $ErrorActionPreference = "Stop"
 
 function Fail($m) { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; exit 1 }
@@ -98,6 +106,19 @@ $repo = (Get-Location).Path
 $proj = Join-Path $repo "Teks-Erp"
 if (-not (Test-Path (Join-Path $proj "package.json"))) {
   Fail "Teks-Erp\package.json bulunamadi. Bu scripti REPO KOKUNDE calistir."
+}
+
+# --- Sifreli modul kapisi (Faz 2d) -------------------------------------------
+# Anahtar hicbir zaman CI'a, repoya ya da pakete girmez; yalniz .tkmod (muhurlu) pakete girer.
+$anahtarTam = $null
+if ($Sifrele) {
+  if (-not $Korumali) { Fail "-Sifrele yalniz -Korumali ile: sifreli modul korumali derlemenin parcasidir." }
+  if ($env:CI -or $env:GITHUB_ACTIONS) { Fail "-Sifrele CI'da KOSMAZ: modul muhurleme anahtari CI'a girmez (anahtarin bulundugu makinede, dizin elle verilir)." }
+  if ($ModulAnahtarDizini) {
+    $anahtarTam = [System.IO.Path]::GetFullPath($ModulAnahtarDizini)
+    if ($anahtarTam.StartsWith([System.IO.Path]::GetFullPath($repo), [System.StringComparison]::OrdinalIgnoreCase)) { Fail "Modul anahtar dizini REPO ICINDE olamaz (anahtar depoya/pakete girmez): $anahtarTam" }
+    if (-not (Test-Path $anahtarTam)) { Fail "Modul anahtar dizini yok: $anahtarTam" }
+  }
 }
 
 Write-Host ""
@@ -252,11 +273,18 @@ KORUMALI paket .jsc'yi HEDEF platformda uretir: '$Hedef' bu hostta ($($PSVersion
   $filigranArg = @()
   if ($Musteri) { $filigranArg += "--musteri=$Musteri" }
   if ($Kurulum) { $filigranArg += "--kurulum=$Kurulum" }
-  & $runtimeNode (Join-Path $proj "scripts\build-korumali.mjs") --hedef=$Hedef --cikti="$proj\dist" @filigranArg
+  $sifreArg = @()
+  if ($Sifrele) {
+    $sifreArg += "--sifrele=$SifreliPaketler"
+    if ($anahtarTam) { $sifreArg += "--modul-anahtar-dizini=$anahtarTam" }
+    Write-Host "  sifreli modul: $SifreliPaketler (anahtar paket DISI; pakete yalniz dist\moduller\*.tkmod girer)"
+  }
+  & $runtimeNode (Join-Path $proj "scripts\build-korumali.mjs") --hedef=$Hedef --cikti="$proj\dist" @filigranArg @sifreArg
   if ($LASTEXITCODE -ne 0) { Fail "KORUMALI DERLEME BASARISIZ - paket uretilmedi (runtime Node ile)." }
   if (-not (Test-Path "$proj\dist\server.js"))  { Fail "dist\server.js (yukleyici) yok - build-korumali bozuk." }
   if (-not (Test-Path "$proj\dist\server.jsc")) { Fail "dist\server.jsc (bayt kodu) yok - host hedefe uymadi." }
   if (-not (Test-Path "$proj\dist\server-kunye.json")) { Fail "dist\server-kunye.json yok - yukleyici kapisi kurulmamis." }
+  if ($Sifrele -and -not (Get-ChildItem "$proj\dist\moduller" -Filter *.tkmod -ErrorAction SilentlyContinue)) { Fail "-Sifrele verildi ama dist\moduller\*.tkmod yok - sifreli modul uretilmedi." }
   Write-Host "  korumali: dist\server.js (yukleyici) + server.jsc (bayt kodu) + server-kunye.json"
 } else {
   Adim "[2/6] Derleniyor (tsc --removeComments -> dist)..."

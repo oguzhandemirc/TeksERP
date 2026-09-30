@@ -48,7 +48,7 @@ Hepsinde: kök FS **salt okunur** · `cap_drop: ALL` · `no-new-privileges` · d
 
 | Ne | Nerede (Mac) | İzin |
 |---|---|---|
-| Hazırlık kökü (scrypt + AES-256-GCM parolalı) · ALT · İNDİRME · `portal-totp.key` · `etkinlestirme-kodu.pepper` | `~/.tekserp/satici-hazirlik/` | dizin 700 · dosyalar 600 |
+| Hazırlık kökü (scrypt + AES-256-GCM parolalı) · ALT · İNDİRME · `portal-totp.key` · `etkinlestirme-kodu.pepper` · `modul-kasasi.key` | `~/.tekserp/satici-hazirlik/` | dizin 700 · dosyalar 600 |
 | Kök parolası (rastgele, 43 karakter) | `~/.tekserp/sirlar/hazirlik-kok-parolasi.txt` | 600 |
 | Yedek alıcısı `satici` — açık yarı | `~/.tekserp/satici-hazirlik-yedek-alici/satici.tkpub` | 644 |
 | Yedek alıcısı — özel yarı (satıcı yedeklerini AÇAR) | `~/.tekserp/sirlar/satici-hazirlik-yedek-ozel.txt` | 600 |
@@ -61,10 +61,10 @@ P=~/.tekserp/sirlar/hazirlik-kok-parolasi.txt; D=~/.tekserp/satici-hazirlik
 { cat "$P"; cat "$P"; } | npx tsx scripts/anahtar.ts kok-uret --kid=hazirlik-2026-1 --dizin="$D"
 cat "$P" | npx tsx scripts/anahtar.ts alt-uret --kid=alt-hazirlik-2026-1 --kok=hazirlik-2026-1 --dizin="$D"
 cat "$P" | npx tsx scripts/anahtar.ts indirme-uret --kid=ind-hazirlik-2026 --kok=hazirlik-2026-1 --dizin="$D"
-npx tsx scripts/anahtar.ts sirlar-uret --dizin="$D"   # portal-totp.key + etkinlestirme-kodu.pepper (varsa korunur)
+npx tsx scripts/anahtar.ts sirlar-uret --dizin="$D"   # portal-totp.key + etkinlestirme-kodu.pepper + modul-kasasi.key (varsa korunur)
 ```
 
-- **İki simetrik sır (F2):** anahtar birimi VDS'te SALT OKUNUR olduğundan sunucu bunları açılışta üretemez — yoksa açılış düşer (fail-closed). `etkinlestirme-kodu.pepper` etkinleştirme kodunun DB özetini sırlar (HMAC): kaybolursa açık kodlar tanınmaz (yeniden üretilir), TOTP anahtarı kaybolursa portal TOTP'leri sıfırlanır. İkisi de kök dosyasıyla birlikte VDS dışı kopyaya girer.
+- **Üç simetrik sır (F2 + 2d):** tek üreticisi `anahtar.ts sirlar-uret`tir; anahtar birimi VDS'te SALT OKUNUR olduğundan sunucu ve imajdaki CLI'lar (`portal-kullanici`, `modul-anahtari`) bunları YALNIZ OKUR — biri eksikse açılış yaratmaya kalkmadan açık TR hatayla durur (hangi dosyalar eksik + bu komut; fail-closed, bekçi `test_sunucu_sirlari`). `etkinlestirme-kodu.pepper` etkinleştirme kodunun DB özetini sırlar (HMAC): kaybolursa açık kodlar tanınmaz (yeniden üretilir); TOTP anahtarı kaybolursa portal TOTP'leri sıfırlanır; `modul-kasasi.key` kaybolursa kasa satırları açılamaz (kira modül anahtarı taşıyamaz). Üçü de kök dosyasıyla birlikte VDS dışı kopyaya girer.
 - **Hız sınırı ve vekil (F2, D9):** `/v1/*` istemci IP'si başına ve kurulum başına sınırlıdır. İstemci IP'si `cf-connecting-ip`'ten YALNIZ güvenilen kenardan gelen bağlantıda okunur; satıcının soketi Traefik olduğundan compose `IC_VEKIL_AGLARI=${KENAR_AGI}` verir ve güven kararı Traefik'in `X-Forwarded-For`a yazdığı son halkaya (CF kenar adresi) göre verilir — Traefik gelen X-Forwarded-* başlıklarına güvenmez (varsayılan), kökene doğrudan vuran istek kendi adresiyle sayılır.
 
 - **VDS dışı kopya (kullanıcı):** `hazirlik-2026-1.kok.json` + parolası USB'ye ve kâğıda (parola ayrı kâğıtta). Mac tek kopya olarak kalmamalı.

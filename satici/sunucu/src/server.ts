@@ -1,11 +1,9 @@
 // SATICI SUNUCUSU — tek süreç, üç dinleyici: GENEL (/v1/*, /q) + TAILNET (portal; kök parolası) + İÇ
 // (patron bulutunun iç API'si; yalnız ortak sır dosyası geçerliyse açılır). Açılış: yapılandırma
 // (fail-closed) → anahtar deposu → anahtar künyesi → zil (PG LISTEN) → dinleyiciler → bakım işi. Kapanış: SIGTERM/SIGINT'te akışlar ve bağlantılar düzgün kapanır.
-import { mkdirSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { loadConfig } from "./config";
-import { ActivationCodeHasher } from "./keys/code-pepper";
 import { KeyStore } from "./keys/key-store";
 import { setSignerConcurrency } from "./keys/signer";
 import { loadEnvFile } from "./lib/env";
@@ -14,8 +12,7 @@ import { createPublicApp } from "./http/public-app";
 import { createInternalApp } from "./http/internal-app";
 import { createTailnetApp } from "./http/tailnet-app";
 import { loadInternalBearer } from "./lib/internal-bearer";
-import { PortalSecretBox } from "./portal/secret-box";
-import { ModuleKeyVault } from "./keys/module-vault";
+import { loadServerSecrets } from "./keys/server-secrets";
 import type { VendorContext } from "./services/context";
 import { DoorbellHub } from "./services/doorbell";
 import { InternalApiCounters } from "./services/internal-api.service";
@@ -41,14 +38,8 @@ async function main(): Promise<void> {
   for (const app of ["portal", "bayi"] as const) {
     if (!webAppAvailable(config.PORTAL_WEB_DIZINI, app)) console.warn(`[satici] web arayüzü (${app}) derlenmemiş: /${app} 404 döner, API çalışır`);
   }
-  mkdirSync(config.ANAHTAR_DIZINI, { recursive: true, mode: 0o700 });
-  const ctx: VendorContext = {
-    config,
-    keys,
-    portalSecrets: PortalSecretBox.load(config.ANAHTAR_DIZINI, { create: true }),
-    moduleVault: ModuleKeyVault.load(config.ANAHTAR_DIZINI, { create: true }),
-    codeHasher: ActivationCodeHasher.load(config.ANAHTAR_DIZINI, { create: true }),
-  };
+  // Anahtar birimi salt okunur: sırlar yalnız OKUNUR, eksikse açılış yaratmadan durur (`anahtar.ts sirlar-uret`).
+  const ctx: VendorContext = { config, keys, ...loadServerSecrets(config.ANAHTAR_DIZINI) };
   await syncKeyRegistry(keys).catch((err: Error) => console.error(`[satici] anahtar künyesi yazılamadı: ${err.message}`));
 
   const hub = new DoorbellHub(config.DATABASE_URL, config.ZIL_KALP_SN, config.ZIL_AZAMI_ABONE);

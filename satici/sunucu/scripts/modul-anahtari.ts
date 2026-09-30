@@ -18,11 +18,9 @@ import os from "node:os";
 import path from "node:path";
 import { loadConfig } from "../src/config";
 import { KeyStore } from "../src/keys/key-store";
-import { ActivationCodeHasher } from "../src/keys/code-pepper";
-import { ModuleKeyVault } from "../src/keys/module-vault";
+import { loadServerSecrets } from "../src/keys/server-secrets";
 import { loadEnvFile } from "../src/lib/env";
 import { ModuleKeySchema, moduleKeyId, parseModuleKeyFile } from "../src/lisans-protokol";
-import { PortalSecretBox } from "../src/portal/secret-box";
 import type { VendorContext } from "../src/services/context";
 import { importModuleKey } from "../src/services/module-key.service";
 import { CliError, args } from "./lib/cli-girdi";
@@ -59,14 +57,8 @@ async function importFile(flags: Map<string, string>): Promise<void> {
   const key = readModuleKeyFile(path.resolve(file));
   loadEnvFile();
   const config = loadConfig(process.env, path.resolve(__dirname, ".."));
-  mkdirSync(config.ANAHTAR_DIZINI, { recursive: true, mode: 0o700 });
-  const ctx: VendorContext = {
-    config,
-    keys: KeyStore.load(config),
-    portalSecrets: PortalSecretBox.load(config.ANAHTAR_DIZINI, { create: true }),
-    codeHasher: ActivationCodeHasher.load(config.ANAHTAR_DIZINI, { create: true }),
-    moduleVault: ModuleKeyVault.load(config.ANAHTAR_DIZINI, { create: true }),
-  };
+  // Anahtar birimi imajda salt okunur: kasa anahtarı yalnız OKUNUR (üreticisi `anahtar.ts sirlar-uret`).
+  const ctx: VendorContext = { config, keys: KeyStore.load(config), ...loadServerSecrets(config.ANAHTAR_DIZINI) };
   const { prisma, pool } = await import("../src/lib/prisma");
   try {
     const r = await importModuleKey(ctx, { modul: key.modul, surum: key.surum, anahtar: key.anahtar, yapan: "cli" });

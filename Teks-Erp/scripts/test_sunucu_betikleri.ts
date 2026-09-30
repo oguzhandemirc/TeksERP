@@ -18,6 +18,8 @@
 //   §5 son taslağın YAYIN GÜNÜ betikleri pakette derleniyor (`dist/tools`), paket
 //      `ilk-kurulum.ps1`i taşıyor — sunucuya repo ağacı ve `tsx` gitmez.
 //   §17 müşteri paketi (`PAKET.json`) üreticinin makine/kullanıcı adını taşımaz (derleme kaydında).
+//   §18 `paketle.ps1 -Sifrele` (G5): varsayılan ŞİFRESİZ, yalnız -Korumali ile, CI'da reddedilir, anahtar dizini
+//      repo içinde olamaz; CI iş akışı şifreleme bayrağı geçirmez (mühürleme anahtarı CI'a girmez).
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync } from "node:fs";
@@ -515,6 +517,38 @@ function paketKimlikIhlalleri(paketle: string, kur: string): string[] {
   for (const [ad, p2, k2] of sondalar) {
     const uygulandi = p2 !== pk || k2 !== kr;
     check(`§17 sonda: ${ad} → kırmızı`, uygulandi && paketKimlikIhlalleri(p2, k2).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §18 — şifreli modül paketi (G5): `-Sifrele` → `build-korumali.mjs --sifrele`; bayrak yoksa bugünkü
+// şifresiz korumalı paket. Mühürleme anahtarı CI'a girmez: betik CI'da reddeder, iş akışı bayrağı geçirmez.
+function sifreleIhlalleri(paketle: string, isAkisi: string): string[] {
+  const kod = psTara(paketle).satirlar.map((x) => x.kod).join("\n");
+  const ih: string[] = [];
+  if (!/\[switch\]\$Sifrele\b/.test(kod)) ih.push("-Sifrele anahtarı tanımlı değil");
+  const kapi = /^if \(\$Sifrele\) \{\n([\s\S]*?)^\}/m.exec(kod)?.[1] ?? "";
+  if (!/if \(-not \$Korumali\) \{ Fail /.test(kapi)) ih.push("-Sifrele -Korumali'sız kabul ediliyor");
+  if (!/if \(\$env:CI -or \$env:GITHUB_ACTIONS\) \{ Fail /.test(kapi)) ih.push("-Sifrele CI'da reddedilmiyor");
+  if (!/StartsWith\(\[System\.IO\.Path\]::GetFullPath\(\$repo\)[^\n]*\{ Fail /.test(kapi)) ih.push("anahtar dizini repo içinde kabul ediliyor");
+  if (!/^\s*\$sifreArg = @\(\)\s*$/m.test(kod) || !/^\s*if \(\$Sifrele\) \{\s*\n\s*\$sifreArg \+= "--sifrele=\$SifreliPaketler"/m.test(kod)) ih.push("--sifrele varsayılanda geçiyor (bugünkü şifresiz davranış bozulur)");
+  if (!/build-korumali\.mjs"\) [^\n]*@sifreArg/.test(kod)) ih.push("build-korumali çağrısı @sifreArg taşımıyor");
+  if (/-Sifrele|--sifrele|modul-anahtar/i.test(isAkisi)) ih.push("CI iş akışı şifreleme bayrağı/anahtar dizini geçiriyor");
+  return ih;
+}
+{
+  const pk = readFileSync(join(KOK, "deploy/paketle.ps1"), "utf8");
+  const wf = readFileSync(join(KOK, ".github/workflows/korumali-paket.yml"), "utf8");
+  const ih = sifreleIhlalleri(pk, wf);
+  check("§18a ⭐ -Sifrele: varsayılan şifresiz, yalnız -Korumali ile, CI'da ret, anahtar repo dışı; iş akışı bayraksız", ih.length === 0, ih.join(" | ") || "temiz");
+  const sondalar: Array<[string, string, string]> = [
+    ["CI reddi silindi", pk.replace(/^\s*if \(\$env:CI -or \$env:GITHUB_ACTIONS\) \{ Fail .*\r?\n/m, ""), wf],
+    ["varsayılan şifreli", pk.replace(/\$sifreArg = @\(\)/, '$sifreArg = @("--sifrele=hepsi")'), wf],
+    ["çağrıdan düştü", pk.replace(" @filigranArg @sifreArg", " @filigranArg"), wf],
+    ["iş akışı şifreliyor", pk, wf.replace("--cikti=../koruma-cikti/dist", "--cikti=../koruma-cikti/dist --sifrele=hepsi")],
+  ];
+  for (const [ad, p2, w2] of sondalar) {
+    const uygulandi = p2 !== pk || w2 !== wf;
+    check(`§18 sonda: ${ad} → kırmızı`, uygulandi && sifreleIhlalleri(p2, w2).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
   }
 }
 

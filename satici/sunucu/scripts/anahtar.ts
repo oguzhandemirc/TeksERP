@@ -13,7 +13,7 @@
 //   npx tsx scripts/anahtar.ts indirme-uret --kid=ind-2026 --kok=kok-2026-1 [--gun=365]
 //   npx tsx scripts/anahtar.ts bayi-uret --kid=bayi-ornek --bayi-id=<uuid> --moduller=a.enabled,b.enabled
 //                                        --siniflar=URETIM --kok=kok-2026-1 [--gun=365]
-//   npx tsx scripts/anahtar.ts sirlar-uret   (portal TOTP sarma anahtarı + etkinleştirme kodu sırrı; VAR olan korunur)
+//   npx tsx scripts/anahtar.ts sirlar-uret   (portal TOTP sarma anahtarı + etkinleştirme kodu sırrı + modül kasası anahtarı; VAR olan korunur)
 //   npx tsx scripts/anahtar.ts indirme-belirteci --kanal=testfabrika[,adnansahin] [--dk=60]
 //       YAYINCI indirme belirteçleri (kanal × electron/mobil, ≤ 70 dk). Parola istemez (İNDİRME alt anahtarı).
 //       Çıktı stdout'a TEK satır JSON: {"v":1,"belirtecler":[{kanal,yolOneki,belirtec,exp}]} — yayın betiği
@@ -48,8 +48,7 @@ import {
 import { signWithWrappedKey } from "../src/keys/signer";
 import { KeyStore } from "../src/keys/key-store";
 import { PUBLISHER_DEFAULT_MINUTES, PublisherTokenError, publisherTokens } from "../src/keys/publisher-token";
-import { ACTIVATION_CODE_PEPPER_FILE, ActivationCodeHasher } from "../src/keys/code-pepper";
-import { PORTAL_SECRET_KEY_FILE, PortalSecretBox } from "../src/portal/secret-box";
+import { generateServerSecrets } from "../src/keys/server-secrets";
 import { CliError, args, askPassword } from "./lib/cli-girdi";
 
 // ---------------------------------------------------------------- yardımcılar
@@ -210,19 +209,13 @@ async function generateDealer(flags: Map<string, string>): Promise<void> {
 }
 
 /**
- * Sunucunun iki simetrik sırrı (anahtar birimi VDS'te SALT OKUNUR — sunucu açılışta üretemez): portal TOTP
- * sarma anahtarı ve etkinleştirme kodu sırrı (pepper). Var olan dosyanın üstüne YAZILMAZ; kaybolursa
- * TOTP'ler sıfırlanır / açık kodlar yeniden üretilir.
+ * Sunucunun üç simetrik sırrının TEK üreticisi (anahtar birimi VDS'te SALT OKUNUR — sunucu ve CLI'lar yalnız okur):
+ * portal TOTP sarma anahtarı · etkinleştirme kodu sırrı (pepper) · modül kasası anahtarı. Var olanın üstüne
+ * YAZILMAZ; kaybolursa TOTP'ler sıfırlanır / açık kodlar yeniden üretilir / kasa satırları açılamaz.
  */
-function generateServerSecrets(flags: Map<string, string>): void {
-  const dir = keyDir(flags);
-  for (const [ad, yukle] of [
-    [PORTAL_SECRET_KEY_FILE, () => PortalSecretBox.load(dir, { create: true })],
-    [ACTIVATION_CODE_PEPPER_FILE, () => ActivationCodeHasher.load(dir, { create: true })],
-  ] as const) {
-    const vardi = existsSync(path.join(dir, ad));
-    yukle();
-    process.stdout.write(`${ad}: ${vardi ? "vardı, korundu" : "üretildi (0600)"}\n`);
+function generateSecrets(flags: Map<string, string>): void {
+  for (const { file, created } of generateServerSecrets(keyDir(flags))) {
+    process.stdout.write(`${file}: ${created ? "üretildi (0600)" : "vardı, korundu"}\n`);
   }
 }
 
@@ -254,7 +247,7 @@ async function main(): Promise<void> {
     case "bayi-uret":
       return generateDealer(flags);
     case "sirlar-uret":
-      return generateServerSecrets(flags);
+      return generateSecrets(flags);
     case "indirme-belirteci":
       return publisherDownloadTokens(flags);
     default:

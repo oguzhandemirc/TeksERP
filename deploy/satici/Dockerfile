@@ -37,15 +37,17 @@ COPY sunucu/package.json sunucu/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY sunucu/ ./
 # generate: istemci + bu platformun şema motoru indirilir (çalışma anında ağ YOK — iç ağ internal).
-# Portal kullanıcı CLI'ı (ilk yönetici · kurtarma) ve anahtar CLI'ı (VDS'te yalnız `indirme-belirteci` işler: yayıncı
-# indirme belirteci, kök parolası istemez; anahtar birimi salt okunur) imajda derlenmiş durur: VDS'te tsx/kaynak yok.
+# Portal kullanıcı CLI'ı (ilk yönetici · kurtarma), anahtar CLI'ı (VDS'te yalnız `indirme-belirteci` işler: yayıncı
+# indirme belirteci, kök parolası istemez; anahtar birimi salt okunur) ve modül anahtarı CLI'ı (2d: hazırlıkta üretilen
+# anahtar dosyasını `ice-aktar` ile kasaya alır) imajda derlenmiş durur: VDS'te tsx/kaynak yok. Her biri `test -f` kapısında.
 RUN npx prisma generate \
  && npx prisma version \
  && npx tsc -p tsconfig.json \
  && npx tsc --ignoreConfig --outDir dist-cli --rootDir . --target es2022 --module commonjs --esModuleInterop \
-      --strict --skipLibCheck --resolveJsonModule --types node scripts/portal-kullanici.ts scripts/anahtar.ts \
+      --strict --skipLibCheck --resolveJsonModule --types node scripts/portal-kullanici.ts scripts/anahtar.ts scripts/modul-anahtari.ts \
  && npm prune --omit=dev \
  && test -f dist/server.js && test -f dist/keys/signer-child.js && test -f dist-cli/scripts/portal-kullanici.js && test -f dist-cli/scripts/anahtar.js \
+ && test -f dist-cli/scripts/modul-anahtari.js \
  && ls node_modules/@prisma/engines | grep -q '^schema-engine-'
 
 # -----------------------------------------------------------------------------
