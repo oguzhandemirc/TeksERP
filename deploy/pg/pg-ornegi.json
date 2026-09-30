@@ -1,0 +1,81 @@
+{
+  "_aciklama": [
+    "TeksERP KENDI PostgreSQL ORNEGI - kurulum/guncelleme sozlesmesi. TEK KAYNAK: kurulum (setup.exe), guncelleyici (Rust) ve gecis araci degerleri BURADAN okur, koda kopyalamaz. Ikili surum/adres/ozet: pg-surumu.json.",
+    "Bellek formulu TAMSAYI yuzdedir: deger = floor(ramMB * yuzde / 100), sonra altMB ile tabana, ustMB ile tavana (ust null = tavansiz); bicim: 1024'un kati ise <n>GB, degilse <n>MB (ilk-kurulum.ps1 MbDeger ile ayni). Tamsayi aritmetigi diller arasi bayt-esit sonuc verir; baska dilde yazan taraf pg-sablon-vektorleri.json ile kendini dogrular.",
+    "Port: onceki kurulumun portu (ornek kaydi) varsa O kullanilir; acik istenen port mesgulse DURULUR (sessiz baska port yok); yoksa aralikta ilk bos port. Mesgul = 127.0.0.1'e baglanilamiyor YA DA herhangi bir adreste dinleyen var YA DA makinedeki bir PostgreSQL hizmetinin yapilandirmasi o portu tutuyor (durmus olsa bile).",
+    "Dizin: ikili <ikiliKok>\\<surum>-<derleme> (ayni surumun yeni derlemesi de yan yana acilabilsin); istemci araclari <istemciBaglanti> JUNCTION'u uzerinden (PG_BIN_DIR, yedekle.ps1, bakim-rolu.ps1, kur.ps1 bu yolu okur - sozlesme korunur).",
+    "Tasarim + gerekceler: docs/design/KENDI-POSTGRESQL.md. Bekci: node scripts/test_pg_ornegi.mjs."
+  ],
+  "bicim": 1,
+  "hizmet": {
+    "ad": "TeksERP-PostgreSQL",
+    "gorunenAd": "TeksERP PostgreSQL",
+    "hesap": "NT SERVICE\\TeksERP-PostgreSQL",
+    "baslangic": "auto",
+    "cokmeEylemleri": "restart/60000/restart/60000/restart/300000",
+    "cokmeSayacSifirlamaSn": 86400,
+    "baslatmaBeklemeSn": 120
+  },
+  "dizinler": {
+    "varsayilanKok": "C:\\TeksERP",
+    "ikiliKok": "pgsql",
+    "istemciBaglanti": "pgsql\\bin",
+    "veri": "pgveri",
+    "veriVarsayilanSurucu": "C:",
+    "ornekKaydi": "pgsql\\ornek.json",
+    "yoneticiParolasi": "pg-setup\\pg-yonetici.dpapi"
+  },
+  "port": {
+    "baslangic": 5432,
+    "bitis": 5499
+  },
+  "initdb": {
+    "yoneticiRolu": "postgres",
+    "argumanlar": [
+      "--encoding=UTF8",
+      "--locale=C",
+      "--locale-provider=libc",
+      "--auth=scram-sha-256",
+      "--data-checksums",
+      "--username=postgres",
+      "--no-instructions"
+    ],
+    "parolaDosyasiArgumani": "--pwfile"
+  },
+  "yapilandirma": {
+    "includeDosyasi": "tekserp.conf",
+    "includeSatiri": "include 'tekserp.conf'",
+    "confSablonu": "deploy/pg/postgresql.tekserp.conf.sablon",
+    "hbaSablonu": "deploy/pg/pg_hba.conf.sablon",
+    "bellek": {
+      "SHARED_BUFFERS": { "ayar": "shared_buffers", "yuzde": 25, "altMB": 128, "ustMB": 8192 },
+      "EFFECTIVE_CACHE_SIZE": { "ayar": "effective_cache_size", "yuzde": 60, "altMB": 512, "ustMB": null },
+      "MAINTENANCE_WORK_MEM": { "ayar": "maintenance_work_mem", "yuzde": 5, "altMB": 64, "ustMB": 512 }
+    }
+  },
+  "roller": {
+    "uygulama": {
+      "ad": "tekserp",
+      "ozellik": "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+    },
+    "bakim": {
+      "ad": "tekserp_bakim",
+      "ozellik": "LOGIN CREATEDB NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS",
+      "uyelik": ["<uygulama>", "pg_read_all_settings"],
+      "parametreSet": ["teks.audit_guard"]
+    }
+  },
+  "veritabani": {
+    "ad": "tekserp",
+    "sahip": "<uygulama>",
+    "ayarlar": {
+      "statement_timeout": "50s",
+      "idle_in_transaction_session_timeout": "5min",
+      "teks.audit_guard": "on"
+    }
+  },
+  "parola": {
+    "uzunluk": 32,
+    "alfabe": "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+  }
+}

@@ -75,6 +75,11 @@ jobs:
       # SHASUMS doğrulaması yalnız yerelde --ag ile). Zero-dep, DB'siz.
       - name: Node sürüm kaydı (korumalı paket runtime)
         run: node scripts/test_node_surumu.mjs
+      # Kendi PostgreSQL örneği (deploy/pg/): kayıt + sözleşme + şablon yasakları (yalnız 127.0.0.1,
+      # yalnız scram-sha-256, trust yok, UTC, initdb UTF8/C) + altın vektörler. Ağsız; indirme +
+      # SHA256 ayrı iş akışında (pg-ikili.yml — yalnız deploy/pg değişince).
+      - name: Kendi PostgreSQL örneği (kayıt + şablon yasakları)
+        run: node scripts/test_pg_ornegi.mjs && node scripts/test_pg_ornegi.mjs --sonda
       # Yayın betiklerinde belirteçsiz HTTP okuma yok (3c') — güncelleme sunucusu Cloudflare
       # Worker'la anonim okumaya kapalı; anonim okuma kalırsa Worker açıldığı gün yayın zinciri
       # kırılır. Zero-dep, DB'siz, ağsız; kapı ve kalıcı sondalar (--sonda) aynı adımda.
