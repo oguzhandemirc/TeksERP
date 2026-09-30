@@ -59,7 +59,7 @@ export interface LicenseAcceptanceView {
   readonly kayitlar: readonly LicenseAcceptanceRecord[];
   /** Kurulum anahtarı (etkinleştirme bunu imzalar); depo hazır değilse null — kabul alınamaz. */
   readonly anahtarKimligi: string | null;
-  /** Formun ön doldurması: oturumdaki kullanıcının adı (kabul eden değiştirebilir; unvan serbest). */
+  /** Formun ön doldurması: oturumdaki kullanıcının adı (kabul eden değiştirebilir; unvan serbest). Satıcı hesabına öneri YOK. */
   readonly oneri: { readonly adSoyad: string | null };
 }
 
@@ -110,14 +110,15 @@ export async function getLicenseAcceptanceView(viewerId: string | null): Promise
   const kid = getLicenseStore()?.key?.kid ?? null;
   const { state, row } = await evaluate(kid);
   const rows = await prisma.licenseAcceptance.findMany({ orderBy: NEWEST_FIRST, take: HISTORY_LIMIT, select: RECORD_SELECT });
-  const viewer = viewerId ? await prisma.user.findUnique({ where: { id: viewerId }, select: { fullName: true } }) : null;
+  const viewer = viewerId ? await prisma.user.findUnique({ where: { id: viewerId }, select: { fullName: true, isSystemAccount: true } }) : null;
   return {
     metin: { kimlik: t.kimlik, ozet: t.ozet, taslak: t.taslak, bloklar: t.bloklar, kutular: t.kutular },
     durum: state,
     gecerli: state === "GECERLI" && row ? toRecord(row) : null,
     kayitlar: rows.map(toRecord),
     anahtarKimligi: kid,
-    oneri: { adSoyad: viewer?.fullName?.trim() || null },
+    // Satıcı (sistem) hesabı Lisans Alan'ın yetkilisi değildir: adı öneri olarak kabul kaydına sızmasın.
+    oneri: { adSoyad: viewer && !viewer.isSystemAccount ? viewer.fullName.trim() || null : null },
   };
 }
 

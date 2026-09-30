@@ -7,6 +7,7 @@ import { currentAcceptanceText } from "../../src/lib/license/acceptance-text";
 import { getLicenseStore } from "../../src/lib/license/store";
 import { recordLicenseAcceptance, type LicenseAcceptanceView } from "../../src/services/license-acceptance.service";
 import { testActorId } from "../fixture-test-user";
+import { hedefDbEngeli } from "./hedef-db-kapisi";
 
 const anahtarlar = new Set<string>();
 
@@ -36,5 +37,8 @@ export function kabulAnahtariIzle(kid: string): void {
 
 export async function temizleKabuller(): Promise<void> {
   if (anahtarlar.size === 0) return;
+  // Silme yalnız bekçi DB'sinde (fabrika verisine ASLA) — çağıran bekçinin kapısına ek, fail-closed.
+  const engel = hedefDbEngeli();
+  if (engel) throw new Error(`kabul fikstürü temizliği durduruldu — ${engel}`);
   await prisma.licenseAcceptance.deleteMany({ where: { installationKeyId: { in: [...anahtarlar] } } });
 }

@@ -138,6 +138,9 @@ async function defterBolumu(x: Hazir): Promise<string> {
   check("§3e kabul → GECERLI, görünüm ad/unvan/metin taşır", v.durum === "GECERLI" && v.gecerli?.adSoyad === "Ayşe Yılmaz" && v.gecerli.unvan === "Genel Müdür" && v.gecerli.metinOzeti === t.ozet && v.gecerli.kabulId === satir.id);
   const oturum = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { fullName: true } });
   check("§3e2 form önerisi oturumdaki kullanıcının adı (kabul eden değiştirebilir)", v.oneri.adSoyad === oturum.fullName && v.gecerli?.kabulEden.id === userId, String(v.oneri.adSoyad));
+  const sistem = await prisma.user.findFirst({ where: { isSystemAccount: true }, select: { id: true } });
+  if (sistem) check("§3e3 satıcı (sistem) hesabına ad önerisi YOK (Lisans Alan yetkilisi değil)", (await getLicenseAcceptanceView(sistem.id)).oneri.adSoyad === null);
+  else console.log("⏭ §3e3 ölçülmedi: bu DB'de sistem hesabı yok (tek yazarı superadmin betiği; bekçi yaratmaz)");
   const dogru = verifyAcceptance(satir.document, { publicKeyX: x.x });
   check(
     "§3f ⭐ satırın belgesi KURULUM anahtarıyla doğrulanır; belge = satır (kabulId · kullanıcı · ad/unvan · zaman · kutular)",
