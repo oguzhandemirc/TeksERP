@@ -318,7 +318,9 @@ KORUMALI paket .jsc'yi HEDEF platformda uretir: '$Hedef' bu hostta ($($PSVersion
 #   tek parca bir dosya adi olur (`$env:TEMP` vakasiyla ayni sinif hata).
 # Korumali pakette araclar da karartilir (build-araclar --korumali): karartmasiz cikti
 # src'nin onlarca modulunu (lisans protokolu dahil) okunur JS olarak tasiyordu (2b-D).
-$aracArg = if ($Korumali) { @("--korumali") } else { @() }
+# @(...) SART: `= if {...}` tek elemanli diziyi dizgeye acar, dizge splat edilince
+#   harflerine bolunur ("-","-","k",...) ve --korumali hic gecmez (kapi asagida yakalar).
+$aracArg = @(if ($Korumali) { "--korumali" })
 node (Join-Path $proj "scripts" "build-araclar.mjs") @aracArg
 if ($LASTEXITCODE -ne 0) { Fail "Arac derlemesi basarisiz - paket uretilmedi." }
 if (-not (Test-Path "$proj\dist\tools\superadmin-olustur.cjs")) {
