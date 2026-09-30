@@ -78,6 +78,39 @@
         "urunAdi": "TeksERP Test Fabrika Backend",
         "pm2Ad": "tekserp-backend-testfabrika"
       }
+    },
+    "demofabrika": {
+      "tur": "uretim",
+      "terfiKaynagi": null,
+      "ad": "Demo Fabrika (sıfırdan satış provası)",
+      "gorunurEtiket": null,
+      "yayin": {
+        "panelFeed": "https://guncelleme.etkiliyazilim.com/demofabrika/electron/",
+        "panelManifest": "https://guncelleme.etkiliyazilim.com/demofabrika/electron/latest.yml",
+        "mobilFeed": "https://guncelleme.etkiliyazilim.com/demofabrika/mobil/",
+        "otaManifest": "https://guncelleme.etkiliyazilim.com/demofabrika/mobil/ota/54.2/manifest",
+        "apkKunye": "https://guncelleme.etkiliyazilim.com/demofabrika/mobil/apk/surum.json",
+        "vdsPanel": "/opt/stack/apps/tekserp-guncelleme/html/demofabrika/electron",
+        "vdsMobil": "/opt/stack/apps/tekserp-guncelleme/html/demofabrika/mobil",
+        "panelDefter": "/opt/stack/apps/tekserp-guncelleme/defter/demofabrika-YAYIN-DEFTERI.tsv"
+      },
+      "panel": {
+        "appId": "com.etkiliyazilim.teks-erp.demofabrika",
+        "urunAdi": "TeksERP Demo Fabrika",
+        "paketAdi": "teks-erp-demofabrika",
+        "erpAdresi": "http://thinkpad-1.tail702784.ts.net:4000"
+      },
+      "tablet": {
+        "androidPaket": "com.teks.erp.mobil.demofabrika",
+        "gorunenAd": "TeksERP Demo",
+        "erpAdresi": "http://thinkpad-1.tail702784.ts.net:4000/api",
+        "runtimeVersion": "54.2",
+        "otaSertifika": "keystore/ota-certs-demofabrika/certificate.pem"
+      },
+      "backend": {
+        "urunAdi": "TeksERP Demo Fabrika Backend",
+        "pm2Ad": "tekserp-backend-demofabrika"
+      }
     }
   }
 }
