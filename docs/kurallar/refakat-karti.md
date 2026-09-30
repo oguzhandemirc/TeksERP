@@ -46,7 +46,7 @@
 
 ### Reçeteler
 
-- **[ÇEKİRDEK]** `middlewares/` envanteri (auth·rbac·error·device·uuid-param·latency·login-lockout) EKSİK: dizinde 15 dosya var (client-info, demo, finance, module, remote-access, settings-password, system-account, web-hardening listede yok) — liste güncellenmeli ya da 'başlıcaları' diye daraltılmalı. <sub>(CLAUDE.md:147)</sub>
+- **[ÇEKİRDEK]** `middlewares/` envanteri (auth·rbac·error·device·uuid-param·latency·login-lockout) EKSİK: dizinde 18 dosya var (ölçüldü 2026-09-30; backup-password, client-info, demo, devere-station-fields, finance, license, module, report, settings-password, system-account, web-hardening listede yok) — liste güncellenmeli ya da 'başlıcaları' diye daraltılmalı. <sub>(CLAUDE.md:147)</sub>
 
 ### Kararlar
 

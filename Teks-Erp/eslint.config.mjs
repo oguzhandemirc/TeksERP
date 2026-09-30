@@ -417,7 +417,7 @@ export default [
     // koruyan bekçiyi cezalandırır.
     // ⚠️ Ölçüt DAR: dosyanın KONUSU yasağın kendisi olmalı. Yasağa tek satırda
     // değen bekçi buraya GİRMEZ, gerekçeli satır-içi disable taşır (emsal:
-    // test_module_grandfathering.ts:159, test_remote_access_guard.ts:431).
+    // test_module_grandfathering.ts:159).
     ignores: [
       "scripts/test_migration_hygiene.ts",
       "scripts/test_raw_sql_hygiene.ts",

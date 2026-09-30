@@ -11,8 +11,7 @@ import { RecoveryCodesPanel } from "./RecoveryCodesPanel";
 /**
  * İKİ ADIMLI DOĞRULAMA KURULUM SAYFASI — oturum GEREKTİRMEZ.
  *
- * Bu sayfayı açan kişi tanımı gereği henüz GİREMEYEN kişidir (uzaktan giriş
- * TOTP olmadan reddediliyor, TOTP de burada kuruluyor). Koruma kimlik değil,
+ * Bu sayfayı açan kişi çoğu zaman henüz oturum açmamış kişidir. Koruma kimlik değil,
  * URL'deki tek kullanımlık token'dır — yalnız `admin:users` taşıyan biri
  * üretebilir ve 15 dakika yaşar.
  *

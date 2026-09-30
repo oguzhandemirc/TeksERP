@@ -155,20 +155,6 @@ const EXEMPT: Record<string, string> = {
  * ucunun izni + her kod katalogda tanımlı).
  */
 /**
- * ⚠️ 12 → 13 (2026-09-01, BİLİNÇLİ): `GET /api/boss/overview` (patron özeti)
- * yalnız `verifyToken` taşır — `GET /api/search` ile BİREBİR aynı gerekçe.
- * Uç ÇOK BÖLÜMLÜDÜR (stok · sipariş · üretim · sevkiyat · fason) ve tek bir
- * statik izin kodu doğru cevabı veremez: yalnız `report:sales` taşıyan biri
- * sipariş özetini görebilmeli ama stok ve fason rakamlarını GÖRMEMELİ.
- * Route satırına dar bir kod yazmak özeti o kişiye tamamen kapatır, geniş bir
- * kod yazmak ise izni anlamsızlaştırır — bu yüzden eleme BÖLÜM BAZINDA
- * serviste yapılır (F221 deseni): `getBossOverview` her bölümü
- * `matchesPermission` ile eler ve yetkisiz bölüm HİÇ SORGULANMAZ.
- * Kapsam `test_permission_catalog`in `DINAMIK_IZIN_KAYNAKLARI` tablosunda
- * beyanlı; `test_boss_overview §1` her bölümü hem pozitif hem NEGATİF yönde
- * mekanik doğruluyor (tek izin yalnız kendi bölümünü açıyor mu).
- */
-/**
  * ⚠️ 13 → 15 (2026-09-22, BİLİNÇLİ): `GET /api/scan/series` ve
  * `GET /api/scan/resolve` yalnız `verifyToken` taşır — `GET /api/reason-presets`
  * emsaliyle BİREBİR aynı gerekçe. Okutma her operatör ekranının İLK adımıdır;
@@ -190,6 +176,10 @@ const EXEMPT: Record<string, string> = {
  * KAPIYA bağlandı — `scripts/test_scan_series.ts §6` her koşumda
  * `scan.service.ts` ve `scan.routes.ts` kaynağında `prisma.`/`tx.` çağrısı ve
  * prisma import'u ARAR. Gerekçe değişirse bekçi kırmızı verir.
+ */
+/**
+ * ⚠️ 15 → 14 (2026-09-30, B6): `GET /api/boss/overview` tünelle birlikte kalktı (özet
+ * artık yalnız `cloud-sync/overview`de, uç yok). Sabitin düşürülmesi yöneticide.
  */
 const BARE_CHAIN_BASELINE = 15;
 

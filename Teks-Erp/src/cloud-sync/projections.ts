@@ -64,7 +64,7 @@ const DIMENSIONS: readonly RecordProjection[] = [
 // GÖNDERİLMEZ. Çıktı `snapshots.ts`teki katı tel şemasından geçer (opt-in).
 const SNAPSHOTS: readonly SnapshotProjection[] = [
   {
-    name: "ozet", kind: "ANLIK", source: "services/boss/overview.service getBossOverview (izin süzmesiz) + dönem pencereleri",
+    name: "ozet", kind: "ANLIK", source: "cloud-sync/overview getFactoryOverview + dönem pencereleri",
     cadence: "HER_TUR", permission: "bulut:ozet:oku",
     reads: ["rolls", "order_lines", "orders", "sacks", "shipments", "work_order_steps", "subcontractor_dispatches", "subcontractor_dispatch_items"],
     sections: [

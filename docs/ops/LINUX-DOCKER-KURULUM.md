@@ -74,7 +74,7 @@ docker compose logs -f backend                 # [1/3] migration → [2/3] seed 
 ## 7. Ağ ve güvenlik notları
 
 - Postgres portu dışarı açılmaz (yalnız compose ağı). Backend portu varsayılan `127.0.0.1`e bağlanır.
-- Docker köprüsü istemci adresini NAT'lar: backend'in soket tabanlı uzak/LAN ayrımı konteynerde köprü adresini görür. Bu imajla uzak erişim tüneli (`REMOTE_PORT`) YAPILANDIRILMADI — uzak erişim gerekiyorsa ayrı karar.
+- Docker köprüsü istemci adresini NAT'lar (giriş kilidi köprü adresini görür). Uzak erişim tüneli 2026-09-30'da emekli (B6); patron erişimi patron bulutundandır.
 - Servisler `cap_drop: ALL`, `no-new-privileges`, salt-okunur kök ile koşar; yazılabilir yerler yalnız birimler + `/tmp`.
 - Web paneli (`WEB_DIST_DIR`) bu imajda YOK: panel Electron'dan ve tabletten bağlanır; `/` durum sayfasıdır.
 

@@ -20,7 +20,7 @@ import { fixtureHedefEngeli, hacimHedefEngeli, hedefDbAdi } from "../lib/hedef-d
 import { KAYIT_PROJEKSIYONLARI } from "./patron-katalog";
 import { getStockScorecard } from "../../src/services/reports/stock-scorecard.report.service";
 import { getOpenOrderCoverage } from "../../src/services/reports/open-order-coverage.report.service";
-import { getBossOverview } from "../../src/services/boss/overview.service";
+import { getFactoryOverview } from "../../src/cloud-sync/overview";
 import { resolveDateRange } from "../../src/services/reports/_shared";
 
 const JSON_CIKTI = process.argv.includes("--json");
@@ -111,7 +111,7 @@ async function main(): Promise<void> {
     anlik.push({ ad, bayt: Buffer.byteLength(s), gzip: gzipSync(Buffer.from(s)).length, ms });
   };
   await olc("ozet (tüm bölümler, son 30 gün)", () =>
-    getBossOverview({ permissions: ["*"], range: resolveDateRange({}) }));
+    getFactoryOverview(resolveDateRange({})));
   await olc("stok-karnesi", () => getStockScorecard());
   await olc("acik-siparis-karsilama", () => getOpenOrderCoverage());
 

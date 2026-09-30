@@ -108,11 +108,10 @@ function main(): void {
     idx("licenseGate") !== -1 && ilkRouter !== -1 && idx("licenseGate") < ilkRouter,
     `licenseGate@${idx("licenseGate")} ilkRouter@${ilkRouter}`,
   );
-  // Kapı `/api` önekinde bağlı ve Access JWT katmanından SONRA (uzak isteğin kimlik duvarı önce).
+  // Kapı `/api` önekinde bağlı (statik SPA dosyaları kapsam dışı; Access JWT katmanı B6'da kalktı).
   const appKaynak = require("fs").readFileSync(require("path").join(__dirname, "../src/app.ts"), "utf8") as string;
-  const iAccess = appKaynak.indexOf('app.use("/api", verifyAccessJwt(');
   const iGate = appKaynak.indexOf('app.use("/api", licenseGate)');
-  check("licenseGate `/api` önekinde, verifyAccessJwt'den SONRA bağlı", iAccess !== -1 && iGate > iAccess, `access@${iAccess} gate@${iGate}`);
+  check("licenseGate `/api` önekinde bağlı", iGate !== -1, `gate@${iGate}`);
 
   // ── 2) errorHandler ZİNCİRİN SONU ─────────────────────────────────────────
   check(

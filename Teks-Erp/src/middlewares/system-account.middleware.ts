@@ -10,9 +10,8 @@
 //      satıcının kimliğine bürünür ve sonraki her işlem audit'e "Sistem Bakımı"
 //      adıyla yazılır.
 //
-// NEDEN 404, 403 DEĞİL: 403 hesabın VARLIĞINI doğrular. Uzak erişimdeki PIN/kart
-// uçlarının `notFound` kararı (`auth.service.assertNotRemote`) ile aynı gerekçe:
-// "bu kaynak var mı" sorusu cevapsız kalmalı.
+// NEDEN 404, 403 DEĞİL: 403 hesabın VARLIĞINI doğrular — "bu kaynak var mı"
+// sorusu cevapsız kalmalı.
 //
 // NEDEN ÖNEK (`router.use("/users/:id", …)`), route başına DEĞİL: bugün 17 uç
 // var ve on sekizincisi yarın yazılacak. Önek kapısı YENİ ucu da kapsar —

@@ -6,12 +6,6 @@ import helmet from "helmet";
 import morgan from "morgan";
 import compression from "compression";
 import { setupSwagger } from "./config/swagger";
-import {
-  markRemote,
-  readRemoteAccessConfig,
-  remoteDenylist,
-  verifyAccessJwt,
-} from "./middlewares/remote-access.middleware";
 import { APP_VERSION } from "./lib/app-version";
 import { errorHandler } from "./middlewares/error.middleware";
 import { installDecimalNumberSerializer } from "./utils/json-replacer";
@@ -121,7 +115,6 @@ import { runWithRequestContext } from "./lib/request-context";
 import searchRoutes from "./routes/search.routes";
 import mobileUpdateRoutes from "./routes/mobile-update.routes";
 import clientPolicyRoutes from "./routes/client-policy.routes";
-import bossRoutes from "./routes/boss.routes";
 import licenseRoutes from "./routes/license.routes";
 import supportRoutes from "./routes/support.routes";
 import patronCloudRoutes from "./routes/patron-cloud.routes";
@@ -164,28 +157,9 @@ if (hardening.trustProxy !== null) {
 // Degisken YOKKEN davranis bayt-bayt bugunku gibidir; fabrika deploy'u etkilenmez.
 const webDistDir = process.env.WEB_DIST_DIR ?? null;
 
-// =============================================================================
-// UZAKTAN ERİŞİM (Cloudflare Tunnel) — zincirin EN BAŞI
-// =============================================================================
-// `markRemote` yalnız `req.isRemote`i doldurur (soket portundan, senkron, ~0
-// maliyet). helmet'ten ÖNCE olmak ZORUNDA: aşağıdaki güvenlik başlıkları bu
-// bayrağa göre AYRIŞIYOR. Uzaktan erişim kapalıysa (`REMOTE_PORT` yok) bayrak
-// her istekte `false` kalır ve bundan sonraki her şey bugünküyle birebir aynıdır.
-const remoteAccess = readRemoteAccessConfig();
-app.use(markRemote(remoteAccess.remotePort));
-// Uzakta kapalı yollar (PIN/kart girişi, cihaz eşleştirme, keşif, swagger) —
-// gerekçeler `remote-access.middleware.ts` içinde. LAN'da tam no-op.
-app.use(remoteDenylist);
-
-// ⚠️ HELMET İKİ ÖRNEK, TEK PROCESS. Aynı süreç LAN'a HTTP, tünele HTTPS servis
-// ediyor ve bu iki dünyanın güvenlik başlıkları BİRBİRİNİ DIŞLIYOR:
-//   • HSTS + CSP `upgrade-insecure-requests` internette gereklidir;
-//   • LAN'da AYNI başlıklar paneli KIRAR — tarayıcı `http://192.168.1.250:4000`
-//     adresini kalıcı olarak https'e çevirir, sunucu 443 dinlemediği için panel
-//     açılmaz ve geri dönüş SUNUCUDA DEĞİL kullanıcının HSTS önbelleğindedir.
-// Tek bir helmet örneğini "ortalama" bir yapılandırmayla kurmak mümkün değil;
-// bu yüzden iki örnek kurulup istek başına seçilir. `hardening.httpsEnabled`
-// hâlâ onurlandırılır (demo kurulumu onu kullanıyor) — uzak istek onu ZORLAR.
+// HSTS + CSP `upgrade-insecure-requests` yalnız operatör HTTPS beyan ettiğinde
+// (`HTTPS_ENABLED`): HTTP-only LAN'da aynı başlıklar paneli kırar ve geri dönüş
+// kullanıcının HSTS önbelleğindedir.
 function buildHelmet(httpsMode: boolean): express.RequestHandler {
   return helmet({
     contentSecurityPolicy: {
@@ -224,16 +198,9 @@ function buildHelmet(httpsMode: boolean): express.RequestHandler {
       : { strictTransportSecurity: false }),
   });
 }
-const helmetLan = buildHelmet(hardening.httpsEnabled);
-const helmetRemote = buildHelmet(true);
-// ⚠️ FONKSİYON ADI LOAD-BEARING: `helmetMiddleware`. Express katman adını
-// fonksiyondan alır ve `test_middleware_order` zincirdeki sırayı ADLA doğruluyor
-// (helmet → cors → compression → …). İsimsiz bir arrow yazıldığında katman
-// "bulunamadı" olur ve sıra sözleşmesi SESSİZCE ölçülmez hâle gelir — ilk
-// yazımda tam bu oldu. Ad, helmet'in kendi katman adıyla da tutarlı.
-app.use(function helmetMiddleware(req, res, next) {
-  (req.isRemote ? helmetRemote : helmetLan)(req, res, next);
-});
+// Katman adı helmet'in kendi `helmetMiddleware`idir; `test_middleware_order` sırayı bu ADLA ölçer
+// (sarmalayan isimsiz bir arrow katmanı "bulunamadı" yapar).
+app.use(buildHelmet(hardening.httpsEnabled));
 // exposedHeaders: tarayıcı/Electron renderer'ı cross-origin custom response
 // header'larını ancak burada listelenirse JS'e açar. Etiket dili (native baskı
 // guard'ı buna bakar) + sunucu saati (apiClient offset) okunabilsin diye gerekli.
@@ -443,24 +410,9 @@ if (hardening.rateLimit.enabled) {
       // ⚠️ Giriş kilidiyle AYNI istemci kaynağı: biri kenar IP'sini, diğeri
       // gerçek ziyaretçiyi sayarsa iki koruma farklı kişileri sınırlar.
       clientIpHeader: hardening.clientIpHeader,
-      // ⚠️ Karışık modda başlık yalnız tünel isteklerinde okunur — LAN'daki
-      // biri `CF-Connecting-IP` uydurup hız sınırını atlayamasın.
-      clientIpHeaderRemoteOnly: hardening.clientIpHeaderRemoteOnly,
     }),
   );
 }
-
-// =============================================================================
-// CLOUDFLARE ACCESS JWT — uzak isteklerde ikinci kimlik katmanı (FAIL-CLOSED)
-// =============================================================================
-// Yalnız `/api` altında ve yalnız `req.isRemote` iken koşar. Statik SPA
-// dosyaları kapsam dışı: onlar zaten kamuya açık JS/CSS ve her birinde JWKS
-// araması yapmak bedava değil.
-//
-// Asıl kimlik duvarı Cloudflare'in kendisidir; bu katman o duvarın HÂLÂ ORADA
-// olduğunun kanıtıdır. Access politikası panelden yanlışlıkla kaldırılırsa
-// burada uzak erişim DURUR — sessiz bir açık yerine gürültülü bir arıza.
-app.use("/api", verifyAccessJwt(remoteAccess));
 
 // LİSANS KAPISI — rotalardan ÖNCE, yöntem + yol ile sınıflar; kapalı yolda kimlik önce gelir
 // (oturumsuz istek rotanın 401'ini alır, kademe yalnız geçerli oturuma). Gözlem kipinde hiçbir
@@ -618,8 +570,6 @@ app.use("/api/mobile", mobileUpdateRoutes);
 // İstemci sürüm politikası — PUBLIC (panel giriş ekranından ÖNCE sorar).
 // Bkz. src/config/client-version-policy.ts.
 app.use("/api/client-policy", clientPolicyRoutes);
-// Patron özeti — bölüm bazlı izin süzmesi SERVİSTE (bkz. routes/boss.routes.ts).
-app.use("/api/boss", bossRoutes);
 // Lisans (fabrika motoru): durum · etkinleştirme · çevrimdışı/aktarma · taşıma · DR ·
 // indirme belirteci · veri dışarı · proxy. Bu uçlar kapının HER kademede açık listesindedir.
 app.use("/api/license", licenseRoutes);

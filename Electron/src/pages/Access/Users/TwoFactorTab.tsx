@@ -74,9 +74,9 @@ export function TwoFactorTab({ userId, username }: Props) {
               : ""}
           </p>
           <p className="mt-1 text-muted-foreground">
-            İki adımlı doğrulama yalnız <span className="font-medium">uzaktan</span>{" "}
-            (fabrika dışından) girişlerde istenir. Fabrika ağındaki panel ve
-            tabletler bundan etkilenmez.
+            İki adımlı doğrulama bugün hiçbir girişte istenmez (fabrika dışından
+            erişim tüneli kaldırıldı; patron bulutunun kendi hesapları vardır).
+            Kayıt ileride kullanılmak üzere korunur.
           </p>
           {status?.enabled && (
             <p className="mt-1 text-muted-foreground">
@@ -154,7 +154,7 @@ export function TwoFactorTab({ userId, username }: Props) {
         description={
           `${username} kullanıcısının 2FA kaydı ve kullanılmamış kurtarma kodları silinecek. ` +
           "Açık oturumları kapanacak ve yeniden giriş yapması gerekecek. " +
-          "Sıfırlandıktan sonra UZAKTAN GİREMEZ — yeni bir kurulum bağlantısı üretmelisiniz."
+          "Yeniden kurmak için yeni bir kurulum bağlantısı üretmelisiniz."
         }
         confirmLabel="Sıfırla"
         cancelLabel="Vazgeç"

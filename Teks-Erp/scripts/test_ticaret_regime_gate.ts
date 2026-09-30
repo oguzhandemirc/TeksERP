@@ -145,17 +145,6 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "eklenirse bu muaf YENİDEN DEĞERLENDİRİLMELİ.",
   },
   {
-    dosya: "routes/boss.routes.ts",
-    neden:
-      "PATRON ÖZETİ (2026-09-01). Ticaret modeline dokunuş GEÇİŞLİ ve YANILTICI: router " +
-      "hiçbir ticaret işi yapmaz, `getBossOverview` üretim akışı kolonları için " +
-      "`InventoryService`i import ediyor ve transitif tarama `purchaseOrder`a kadar " +
-      "uzanıyor — `demo.routes.ts` ve `inventory.routes.ts` ile BİREBİR aynı olgu. Rejim " +
-      "kapısı KONULAMAZ: patron özeti üretim/stok/sevkiyat takibidir ve ticaret KAPALI olan " +
-      "üretici fabrikada çalışmak zorundadır (zaten ilk müşterisi orası). Yazma yüzeyi SIFIR: " +
-      "router'da tek bir GET var, hiçbir tabloya INSERT/UPDATE üretmez.",
-  },
-  {
     dosya: "routes/inventory.routes.ts",
     neden:
       "Envanter FABRİKANIN ana router'ıdır → rejim kapısı KONULAMAZ. purchaseOrder izi tek " +

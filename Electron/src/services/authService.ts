@@ -7,13 +7,10 @@ import { IS_ELECTRON } from "@/lib/runtime-env";
 /**
  * Bu build hangi istemci tipi olarak giriş yapıyor.
  *
- * ⚠️ AYNI KOD, İKİ HEDEF. `dist-web` build'i Electron renderer'ının ta kendisidir
- * ve eskiden o da `clientType:"electron"` gönderiyordu — sonucu, patronun telefon
- * tarayıcısından girince masaüstü oturumunu DÜŞÜRMESİYDİ (aynı-tip politikası
- * varsayılanı `kick`). Artık her hedef kendi oturum yuvasını alıyor.
- *
- * Bu bir güvenlik sınırı DEĞİLDİR (istemci uydurabilir) ve backend de öyle
- * kullanmaz: uzak/LAN ayrımı soket portundan çözülür.
+ * ⚠️ AYNI KOD, İKİ HEDEF. `dist-web` build'i (bugün yalnız demo imajı) Electron
+ * renderer'ının ta kendisidir; `clientType:"electron"` gönderseydi tarayıcıdan giren
+ * masaüstü oturumunu DÜŞÜRÜRDÜ (aynı-tip politikası varsayılanı `kick`). Her hedef
+ * kendi oturum yuvasını alır. Bu bir güvenlik sınırı DEĞİLDİR (istemci uydurabilir).
  */
 const CLIENT_TYPE = IS_ELECTRON ? "electron" : "web";
 

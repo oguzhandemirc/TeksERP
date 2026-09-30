@@ -36,14 +36,6 @@ const loginSchema = z.object({
   password: z.string().min(1, "Şifre gerekli"),
   clientType: clientTypeSchema,
   confirmKick: z.boolean().optional(),
-  /**
-   * İkinci faktör — YALNIZ uzak (tünel) girişlerinde istenir. TOTP kodu (6 hane)
-   * ya da kurtarma kodu (XXXX-XXXX) olabilir; ayrımı servis yapar.
-   *
-   * ⚠️ Uzunluk üst sınırı var: `bcrypt.compare` kurtarma kodu yolunda çağrılıyor
-   * ve sınırsız bir metin kabul etmek gereksiz CPU yakardı.
-   */
-  totpCode: z.string().trim().min(1).max(64).optional(),
 });
 
 const loginCardSchema = z.object({
@@ -173,11 +165,6 @@ export class AuthController {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
-      // ⚠️ GÖVDEDEN DEĞİL — `remote-access.middleware` soket portundan çözer.
-      // Gövdeye açılsaydı internetten gelen biri `isRemote:false` yazıp ikinci
-      // faktörü tamamen atlardı.
-      isRemote: req.isRemote === true,
-      totpCode: body.totpCode,
       clientVersion: resolveClientVersion(req),
     };
 
@@ -270,7 +257,6 @@ export class AuthController {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
-      isRemote: req.isRemote === true,
       clientVersion: resolveClientVersion(req),
     };
     try {
@@ -354,7 +340,6 @@ export class AuthController {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
-      isRemote: req.isRemote === true,
       clientVersion: resolveClientVersion(req),
     };
     try {

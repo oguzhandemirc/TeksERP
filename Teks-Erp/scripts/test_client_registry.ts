@@ -173,7 +173,7 @@ const mw = fs.readFileSync(mwPath, "utf-8");
 check("middleware hiçbir isteği reddetmiyor (res.status/res.json/throw YOK)",
   !/res\.status\(|res\.json\(|res\.send\(|throw /.test(mw));
 check("middleware `req`e alan yazmıyor (kapılar ondan bir şey okuyamaz)",
-  !/req\.(user|device|isRemote|isSystemAccount)\s*=/.test(mw));
+  !/req\.(user|device|isSystemAccount)\s*=/.test(mw));
 check("middleware her dalda next() çağırıyor",
   (mw.match(/next\(\)/g) ?? []).length >= 3);
 check("mount app.ts'te ve latency'den sonra",

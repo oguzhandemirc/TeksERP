@@ -699,14 +699,9 @@ function sectionWiring(): void {
     ["app.ts trustProxy null iken set ETMİYOR", /hardening\.trustProxy\s*!==\s*null/],
     ["app.ts corsOrigins'i cors()'a veriyor", /hardening\.corsOrigins\s*\?\s*\{\s*origin:/],
     ["app.ts swaggerEnabled ile setupSwagger'ı kapılıyor", /if\s*\(\s*hardening\.swaggerEnabled\s*\)/],
-    // ⚠️ 2026-09-01'de bu sonda ÜÇE BÖLÜNDÜ. helmet artık İKİ ÖRNEK kurulup
-    // istek başına seçiliyor (LAN'a HTTP, tünele HTTPS — bkz. app.ts). Eski tek
-    // regex (`hardening.httpsEnabled` … `strictTransportSecurity` yakınlığı)
-    // yeni yapıda eşleşmiyordu; sondayı GEVŞETMEK yerine üç ayrı iddiaya
-    // bölmek, "HSTS bayraktan sürülüyor" garantisini kaybetmeden korur.
+    // İki iddia: HSTS bir bayraktan sürülüyor VE o bayrak `hardening.httpsEnabled` (tek helmet örneği).
     ["app.ts HSTS'i bir BAYRAKTAN sürüyor (sabit değil)", /httpsMode[\s\S]{0,300}strictTransportSecurity/],
-    ["app.ts LAN helmet'ini hardening.httpsEnabled ile kuruyor", /buildHelmet\(\s*hardening\.httpsEnabled\s*\)/],
-    ["app.ts helmet'i istek başına isRemote'a göre seçiyor", /req\.isRemote\s*\?\s*helmetRemote\s*:\s*helmetLan/],
+    ["app.ts helmet'i hardening.httpsEnabled ile kuruyor", /buildHelmet\(\s*hardening\.httpsEnabled\s*\)/],
     ["app.ts rateLimit.enabled ile limiter'ı mount ediyor", /if\s*\(\s*hardening\.rateLimit\.enabled\s*\)/],
     ["app.ts limiter'ı /api altına bağlıyor", /app\.use\(\s*\n?\s*["']\/api["'],\s*\n?\s*createRateLimiter/],
     // Fabrika dalının LİTERALLERİ duruyor — `test_middleware_order` bunlara bakıyor;
@@ -823,6 +818,25 @@ function sectionClientIp(): void {
   check(
     "§CI-10 ⭐ config: değişken YOKKEN null (fabrika)",
     readWebHardeningConfig(cleanEnv(), silent).clientIpHeader === null,
+  );
+
+  // ⭐ EMEKLİ TÜNEL KİPİ (B6): eski .env'de `REMOTE_PORT` kalmışsa başlık LAN'da hiç okunmazdı; tünel
+  // kalktıktan sonra her isteğe uygulamak LAN'dan uydurulabilir kilit/hız sınırı demekti → yok sayılır.
+  const uyarilar: string[] = [];
+  const eski = readWebHardeningConfig(
+    cleanEnv({ REMOTE_PORT: "4001", CLIENT_IP_HEADER: "cf-connecting-ip" }),
+    (m) => uyarilar.push(m),
+  );
+  check("§CI-11 ⭐ REMOTE_PORT kalmış eski .env → CLIENT_IP_HEADER YOK SAYILIR", eski.clientIpHeader === null);
+  check(
+    "§CI-12 REMOTE_PORT kalmışsa uyarı basılır (anahtar adı, emeklilik + yok sayma)",
+    uyarilar.some((u) => u.includes("REMOTE_PORT emekli") && u.includes("YOK SAYILDI")),
+    uyarilar.join(" | "),
+  );
+  check(
+    "§CI-13 körlük zemini: REMOTE_PORT boşken başlık okunur (yok saymayı REMOTE_PORT sağlıyor)",
+    readWebHardeningConfig(cleanEnv({ REMOTE_PORT: " ", CLIENT_IP_HEADER: "cf-connecting-ip" }), silent)
+      .clientIpHeader === "cf-connecting-ip",
   );
 }
 

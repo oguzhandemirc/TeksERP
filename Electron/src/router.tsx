@@ -27,9 +27,8 @@ function AuthLanding() {
   if (user && licenseSuspended) {
     return <Navigate to={LICENSE_SUSPENDED_PATH} replace />;
   }
-  // ⚠️ GİDİLMEK İSTENEN YOL KORUNUR. Patron ekranını yer imine ekleyip
-  // `#/boss` ile gelen biri, giriş sonrası köke (AppShell) düşüyordu — yani
-  // yer imi işe yaramıyordu ve sebebi hiçbir yerde görünmüyordu.
+  // ⚠️ GİDİLMEK İSTENEN YOL KORUNUR: yer imiyle bir iç yola gelen biri giriş
+  // sonrası köke (AppShell) düşmesin.
   // `/login` ve `/` hariç tutulur: onlara "geri dön" demek anlamsız döngüdür.
   const from = location.pathname;
   const keep = from && from !== "/" && from !== "/login";

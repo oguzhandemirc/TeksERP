@@ -188,7 +188,7 @@ doğrulama sırrını üretip **QR olarak BİR KEZ** basar.
   olmadığı için** güncellemelerde kaybolmaz — ama yeni kurulumda **atlanırsa
   hesap hiç doğmaz** ve kimse fark etmez.
 
-Ayrıntı + uzaktan erişim bağlamı: [`UZAK-ERISIM-KURULUM.md`](./UZAK-ERISIM-KURULUM.md) §5.
+Ayrıntı: [`SUPERADMIN-KURULUM.md`](./SUPERADMIN-KURULUM.md).
 
 7. DB-level (migration ile DEĞİL, manuel, önerilir):
    ```

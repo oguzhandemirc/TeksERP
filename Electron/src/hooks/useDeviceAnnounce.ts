@@ -18,9 +18,7 @@ export function useDeviceAnnounce(): void {
     // ⚠️ YALNIZ MASAÜSTÜ (2026-09-04). Kayıt "bu MAKİNEYİ tanıt ki kantar/tarayıcı
     // atanabilsin" demektir; tarayıcıda `window.api` yoktur, yani atanan donanım
     // hiçbir zaman kullanılamaz — her tarayıcı profili için boşuna bir cihaz
-    // satırı doğardı. Uzakta (tünel) ise `/api/devices` zaten 404 ve bu istek
-    // ÖLÇÜLDÜ: her uzak girişte, kullanıcının başlatmadığı bir arka plan
-    // çağrısından kırmızı **"Kaynak bulunamadı"** toast'ı çıkıyordu.
+    // satırı doğardı.
     if (!IS_ELECTRON) return;
     let cancelled = false;
     void (async () => {

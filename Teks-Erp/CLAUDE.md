@@ -30,7 +30,7 @@ npm run check:migrations · check:docs
 
 - `controllers/` HTTP + Zod · `services/` (+`helpers/`, `reports/`) iş mantığı, transaction, `AuditService.log()` · `routes/` Swagger JSDoc + `verifyToken` + `requirePermission` · `middlewares/` (auth, rbac, error, device, uuid-param, latency, login-lockout, module, system-account, settings-password… — dizin kanonik) · `prisma/schema.prisma` (`@prisma/adapter-pg`; `clientToken @unique @db.Uuid` 15+ modelde).
 - Master data CRUD için `BaseController` + `BaseService` (`searchFields`); liste/cursor/özet tek where `buildListWhere`.
-- Hata kodu `details.code`; kapalı modül 403 `MODULE_DISABLED` (uzakta da 403); uzakta kapalı yollar 404 `REMOTE_DENIED` listesi.
+- Hata kodu `details.code`; kapalı modül 403 `MODULE_DISABLED`.
 
 ## İzin ve rol — katalog koda, atama panele
 

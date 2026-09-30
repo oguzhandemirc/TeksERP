@@ -31,7 +31,6 @@ const SURFACE = [
   "src/pages/Operations/GoodsReceipts/receiptFeedback.ts",
   "src/pages/Operations/GoodsReceipts/GoodsReceiptDetailSheet.tsx",
   "src/pages/Operations/Kartela/KartelaPage.tsx",
-  "src/pages/Boss/cards/BossCards.tsx",
   "src/pages/GeneralSettings/settings-config.ts",
 ].map((p) => resolve(process.cwd(), p));
 /** Evren DIŞI (dokunulmadı, beyanlı): Raporlar hub'ı — "envanter" rapor terimi ayrı dilim. */

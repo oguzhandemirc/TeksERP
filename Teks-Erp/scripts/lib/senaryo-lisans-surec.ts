@@ -233,7 +233,6 @@ export async function fabrikaBaslat(g: FabrikaSecenekleri): Promise<FabrikaSurec
     PORT: String(port),
     HOST: "127.0.0.1",
     REMOTE_PORT: "",
-    CF_ACCESS_ENABLED: "",
     DISCOVERY_MDNS_ENABLED: "false",
     BACKUP_SCHEDULE_ENABLED: "false",
     BACKUP_DIR: g.yedekDizini,

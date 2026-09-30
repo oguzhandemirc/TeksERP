@@ -1,4 +1,4 @@
-# Genel · Uzak erişim · Konvansiyon
+# Genel · Konvansiyon
 
 > Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Kaynak: anlama turu 2026-09-05 (kök `CLAUDE.md` + `docs/history/CLAUDE-NOT-ARSIVI.md` notlarından ayrıştırıldı). Hikâye, ölçüm ve gerekçe arşivde; burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
 
@@ -18,20 +18,15 @@
 - **[ÇEKİRDEK]** Her CUD operasyonu `AuditService.log()` ile `SystemLog`a yazılır; **istisnalar `AUDIT_EXEMPT_MODELS`te BEYANLIDIR** ve sınıf kümesi KAPALI (`KULLANICI_TERCIHI` · `TELEMETRI` · `KIMLIK_AKISI` · `EBEVEYN_EYLEMDE` · `SISTEM_ISI`) — **beyansız bir sessizlik kırmızıdır**, çünkü beyansız sessizlik UNUTULMUŞ bir audit'ten ayırt edilemez. Denetim modelin YAZMA YOLUNDA aranır, dosya KATMANINDA değil: serviste `AuditService.log` da, ucunda `tableName:` de olur. ⚠️ Ölçüldü 2026-09-14: "tek istisna `UserPreference`" cümlesi YANLIŞTI — CUD yapan 136 modelin 127'si audit yazıyor, DOKUZU sessiz ve sekizi meşru ama beyansızdı. `EBEVEYN_EYLEMDE` bir İDDİADIR ve ölçülür (yazan yardımcının çağıranlarından en az biri audit taşımalı). · bekçi: `test_audit_muafiyeti.ts` (§2 sessizlik beyanlı · §3 ölü muafiyet · §4 kapalı küme · §5 ebeveyn iddiası ölçülür · §7 dosya düzeyi cırcır) + `test_audit_depth.ts` (kapsam kısmi) <sub>(arşiv:2026-09-14; CLAUDE.md:285)</sub>
 - **[ÇEKİRDEK]** Audit best-effort'tur: yazım hatası isteği DÜŞÜRMEZ ve çağrı transaction DIŞINDA yapılır. Başarısızlık sayacı `/health`te DEĞİL `/api/admin/health`tedir (`auditWriteFailures`) — `/health`in alan kümesi DONDURULMUŞ, yeni operasyonel metrik `buildRichHealth`e eklenir. <sub>(CLAUDE.md:285)</sub>
 - **[ÇEKİRDEK]** Validation hata mesajları Türkçe yazılır. <sub>(CLAUDE.md:297)</sub>
-- **[ÇEKİRDEK]** Uzak/LAN ayrımı SOKETTEN çözülür (`req.socket.localPort` === REMOTE_PORT); `clientType` gövdeden gelir ve GÜVENLİK SINIRI DEĞİLDİR. Soket okunamazsa istek LAN sayılır — fail-closed yönü budur (LAN kuralları zaten dar). · bekçi: `scripts/test_remote_access_guard.ts` <sub>(CLAUDE.md:95)</sub>
-- **[ÇEKİRDEK]** Uzak `/api` isteğinde Cloudflare Access JWT ikinci katmandır ve FAIL-CLOSED'dır (politika panelden kalkarsa sessiz açık değil gürültülü arıza). JWKS önbelleğinde TTL TAZELİKTİR geçerlilik değil: bayat anahtar döner + arka planda tazelenir; önbellek HİÇ dolmadıysa fail-closed KALIR. · bekçi: `scripts/test_remote_access_guard.ts (Access JWT negatif sondası)` <sub>(CLAUDE.md:95)</sub>
-- **[ÇEKİRDEK]** `users.quickPin` 6 hane, DÜZ METİN ve sistem genelinde `@unique` — PIN tek başına kimliği belirler. PIN/kart uçları internete açılmaz; PIN repoya, log'a, sürüm notuna ve audit diff'ine girmez. · bekçi: `scripts/test_remote_access_guard.ts (denylist sondası)` <sub>(CLAUDE.md:95)</sub>
-- **[ÇEKİRDEK]** İki dinleyici İKİ PROCESS DEĞİLDİR: presence Map'i, feature-flag cache'i ve zamanlayıcı bayrakları process-local'dir; aynı `app`i ikinci bir sokette dinletmek invariantı bozmaz — İKİNCİ BİR NODE SÜRECİ hâlâ YASAK. <sub>(CLAUDE.md:95)</sub>
-- **[ÇEKİRDEK]** TOTP kurulumunun TEK yolu yöneticinin açtığı 15 dk'lık tek kullanımlık penceredir (TOFU REDDEDİLDİ: parola sızmışsa saldırgan 2FA'yı kendi telefonuna bağlar); ikinci faktör `issueToken`den ÖNCE koşar; üç hata üç ayrı statü (403/409/401) ve giriş kilidi yalnız 401'i sayar. · bekçi: `scripts/test_totp.ts (RFC 4226/6238 dış vektörleri)` <sub>(CLAUDE.md:95)</sub>
+- **[ÇEKİRDEK]** `users.quickPin` 6 hane, DÜZ METİN ve sistem genelinde `@unique` — PIN tek başına kimliği belirler. PIN/kart uçları internete açılmaz (fabrika sunucusuna gelen port açılmaz; patron bulutu yalnız fabrikanın ÇIKAN imzalı kanalından beslenir); PIN repoya, log'a, sürüm notuna ve audit diff'ine girmez. · bekçi: `scripts/test_audit_depth.ts (sır alanları diff dışı)`, `scripts/test_user_credentials_guard.ts (okuma iki izin + iz)` <sub>(CLAUDE.md:95 · arşiv 2026-09-30 B6)</sub>
+- **[ÇEKİRDEK]** TOTP kurulumunun TEK yolu yöneticinin açtığı 15 dk'lık tek kullanımlık penceredir (TOFU REDDEDİLDİ: parola sızmışsa saldırgan 2FA'yı kendi telefonuna bağlar). Girişte ikinci faktör bugün HİÇBİR yolda istenmez (uzak-yalnız zorunluluk tünelle kalktı, 2026-09-30 B6); yeniden bağlanırsa `issueToken`den ÖNCE koşar ve üç hata üç ayrı statüdür (403/409/401 — giriş kilidi yalnız 401'i sayar). · bekçi: `scripts/test_totp.ts (RFC 4226/6238 dış vektörleri)` <sub>(CLAUDE.md:95 · arşiv 2026-09-30 B6)</sub>
 - **[ÇEKİRDEK]** Kullanıcının indirdiği içe aktarım şablonu bir SÖZLEŞMENİN DONDURULMUŞ KOPYASIDIR: panel Excel başlığını etiketle eşler, başlık/sütun adı değişikliği sürüm kırıcıdır ve `minVersion` uygulanamaz — mevcut başlık korunur, bilgi yeni sütunla/yardım metniyle eklenir ("Miktar (m)" + "Birim" emsali). <sub>(arşiv:2026-09-13)</sub>
 
 - **[ÇEKİRDEK]** Müşteri adı koda gömülmez: ekranda, belgede ve etikette firma adı bağlanılan sunucunun `company.name` ayarından okunur, okunamazsa nötr yedek "TeksERP" (`constants/company.ts` + iki istemci aynası) gösterilir; bir müşteriye özgü görünüm kanal kaydında ya da veride yaşar. · bekçi: `scripts/test_musteri_adi_kodda_yok.ts`, `scripts/test_firma_adi_dondur.ts` <sub>(arşiv 2026-09-28 firma adı)</sub>
 
 ### Yasaklar
 
-- **[ÇEKİRDEK]** Tünel dinleyicisi YALNIZ `127.0.0.1`e bağlanır; uzak port `0.0.0.0`a AÇILMAZ (açılırsa uzak/LAN ayrımı komple çöker, iki yönde de kural seti sessizce yanlış uygulanır) ve `HOST` env'i bu dinleyicide bilerek onurlandırılmaz. · bekçi: `scripts/test_remote_access_guard.ts` <sub>(CLAUDE.md:95)</sub>
-- **[ÇEKİRDEK]** Uzakta kapalı yollar 404 döner, 403 DEĞİL (403 'burada bir şey var' der, keşfe davet eder): login-card · login-quick-pin · mobile-users + /api/devices, /api/discovery, /api/mobile, /api-docs. Liste YOL bazlıdır; servis katmanında ikinci hat `assertNotRemote` vardır. · bekçi: `scripts/test_remote_access_guard.ts` <sub>(CLAUDE.md:95)</sub>
-- **[ÇEKİRDEK]** `CLIENT_IP_HEADER` app-wide OKUNMAZ — yalnız uzak istekte geçerlidir (`clientIpHeaderRemoteOnly`, `REMOTE_PORT`ten türer); `TRUST_PROXY` de app-wide AYARLANMAZ. Aksi hâlde LAN'daki biri `CF-Connecting-IP` uydurup giriş kilidini VE hız sınırını etkisizleştirir (her denemede farklı kova). · bekçi: `scripts/test_remote_access_guard.ts (IP başlığı negatif sondası)` <sub>(CLAUDE.md:95)</sub>
+- **[ÇEKİRDEK]** `CLIENT_IP_HEADER` yalnız operatörün beyan ettiği ters vekil arkasında verilir (demo) ve verildiğinde HER isteğe uygulanır; LAN kurulumunda VERİLMEZ (LAN'daki biri `CF-Connecting-IP` uydurup giriş kilidini VE hız sınırını etkisizleştirir). Emekli tünelden kalan `REMOTE_PORT` .env'de duruyorsa başlık YOK SAYILIR ve uyarılır; `TRUST_PROXY` de app-wide AYARLANMAZ. · bekçi: `scripts/test_web_hardening.ts §CI-11..13` <sub>(arşiv 2026-09-30 B6)</sub>
 
 ## Backend
 - **[ÇEKİRDEK]** P2002'nin hangi kolondan geldiği YALNIZ `src/utils/p2002.ts` yardımcılarıyla okunur (`p2002OnField` · `p2002TargetParts` · `p2002UniqueColumn` · `p2002Mentions`); `meta.target` doğrudan okunmaz — pg adaptörü (Prisma 7) onu VERMEZ, hedef `meta.driverAdapterError.cause` altındadır; doğrudan okuyan retry/409 yüklemi adaptör altında hiç eşleşmez. · bekçi: `test_p2002_hedef_tek_kaynak` (AST, takma ad + yapı çözme; hızlı mandal) + `test_numara_yarisi_levent_dokuma` ① <sub>(arşiv:2026-09-23)</sub>
@@ -53,7 +48,6 @@
 
 ### Kararlar
 
-- **[PROFİL]** `GET /api/boss/overview` beş bölümü TEK uçtan döner, izin süzmesi SERVİSTE yapılır (yetkisiz bölümün sorgusu HİÇ koşmaz) ve YENİ İZİN KODU AÇILMAZ; patron üretim kartı ADET basar — metraj ikinci bir 'üretilen' tanımı doğururdu. · bekçi: `scripts/test_boss_overview.ts` <sub>(CLAUDE.md:95)</sub>
 
 ## Panel (Electron)
 
@@ -61,7 +55,6 @@
 ### Tuzaklar
 
 - **[ÇEKİRDEK]** Route haritası `src/router.tsx`te DEĞİL `src/routes/content-routes.tsx`tedir (router.tsx 39 satır: yalnız login/forbidden/totp/AuthLanding); `src/` altında ağaçta yazmayan data/, providers/, routes/, test/ de vardır. <sub>(CLAUDE.md:31)</sub>
-- **[PROFİL]** `BossShell` sekme sistemini bypass eder ama router altyapısını KULLANIR — kendi memory router'ını kurma (sayfalar useTabId/TabPortalProvider/history-depth'e bağlı; PageHeader geri oku sessizce ölür, modaller yanlış portallanır). Hash `useHashPath` ile REAKTİF okunur. · bekçi: `Electron/src/test/boss-shell.test.ts` <sub>(CLAUDE.md:95)</sub>
 
 ### Reçeteler
 
@@ -69,11 +62,11 @@
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
+- **TAM** `R:2026-09-01__2026-09-01-patron-modulu-fabrikaya` → `R:2026-09-30__b6-tunel-emekliligi`: Uzaktan erişim tüneli (cloudflared + `REMOTE_PORT` 127.0.0.1 dinleyicisi + Cloudflare Access JWT + uzakta 404 yol listesi + `assertNotRemote` + uzak-yalnız TOTP + `clientIpHeaderRemoteOnly` + helmet iki örnek + `/api/boss/overview` + BossShell + `WEB_BOSS`) KALDIRILDI; patron patron bulutundan (salt-okur özet + gelen kutusu) izler. Soket tabanlı uzak/LAN ayrımı başka hiçbir amaçla yaşamıyordu (ölçüldü), kavram da kalktı. Tek dinleyici, tek process.
 - **KISMI** `R:undated__her-cud-operasyonu-tablosu-istisna-kisisel` → `kök CLAUDE.md 2026-08-25 notu ('Prod'un üç dev'de yapılacaklar notu', CLAUDE.md:84) — küme dışı`: Audit best-effort sayacının adresi: eski satır 'yazım hatası … /health sayacına düşer' der; 2026-08-25 notu '/health'te auditGuard YOK (/api/admin/health)' diyerek operasyonel alanların taşındığını kaydeder. /health'in alan kümesi DONDURULMUŞ; auditWriteFailures buildRichHealth() içinde, yalnız /api/admin/health'ten okunur. Kuralın 'best-effort + tx dışında' kısmı geçerli; değişen ADRES. ✅ çürütmeden geçti
 
 ## Çözülmüş çelişkiler
 
-- `B:undated__uc-bir-module-aitse-router-adlandirilmis` ↔ `R:2026-09-01__2026-09-01-patron-modulu-fabrikaya`: Kod patron notunu uyguluyor: uzakta 404 YALNIZ sabit yol denylist'idir (login-card/login-quick-pin/mobile-users + /api/devices,/api/discovery,/api/mobile,/api-docs). Modül kapısı uzak/LAN ayrımına HİÇ bakmaz, her zaman 403 + details.code döner ve bekçi de bunu ölçer. Kontrol listesindeki 'tünelde 404' cümlesi hatalıdır, SİLİNMELİ.
 
 ## Açık sorular
 
@@ -85,11 +78,12 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_lisans_kapisi`, `test_audit_depth`, `test_audit_labels`, `test_boss_overview`, `test_device_activity`, `test_device_pairing_flag`, `test_discovery_identity`, `test_dispatch_allocation_fresh`, `test_identity_ledger`, `test_label_snapshot_audit_split`, `test_manual_attributes_reason`, `test_merge_field_picks`, `test_o19_operator_trace`, `test_observability_cache`, `test_observability_contract`, `test_period_close`, `test_permission_grant_source`, `test_phase0_quickwins`, `test_process_warnings`, `test_record_provenance`, `test_remote_access_guard`, `test_report_day_boundary`, `test_reports`, `test_roll_entry_station`, `test_sack_notes`, `test_settings_password`, `test_shipment_invoice`, `test_superadmin`, `test_superadmin_provision`, `test_superadmin_visible`, `test_system_log`, `test_system_log_query_gate`, `test_totp`, `test_user_credentials_guard`, `test_web_hardening`, `test_work_session_close_all`, `test_work_session_stamping`, `test_mobil_enum_aynasi`, `test_musteri_adi_kodda_yok`, `test_firma_adi_dondur`
+Backend: `test_lisans_kapisi`, `test_audit_depth`, `test_audit_labels`, `test_device_activity`, `test_device_pairing_flag`, `test_discovery_identity`, `test_dispatch_allocation_fresh`, `test_identity_ledger`, `test_label_snapshot_audit_split`, `test_manual_attributes_reason`, `test_merge_field_picks`, `test_o19_operator_trace`, `test_observability_cache`, `test_observability_contract`, `test_period_close`, `test_permission_grant_source`, `test_phase0_quickwins`, `test_process_warnings`, `test_record_provenance`, `test_report_day_boundary`, `test_reports`, `test_roll_entry_station`, `test_sack_notes`, `test_settings_password`, `test_shipment_invoice`, `test_superadmin`, `test_superadmin_provision`, `test_superadmin_visible`, `test_system_log`, `test_system_log_query_gate`, `test_totp`, `test_user_credentials_guard`, `test_web_hardening`, `test_work_session_close_all`, `test_work_session_stamping`, `test_mobil_enum_aynasi`, `test_musteri_adi_kodda_yok`, `test_firma_adi_dondur`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- 2026-09-01 · 2026-09-01 — Patron modülü: fabrikaya GELEN PORT AÇMADAN uzaktan takip — `CLAUDE-NOT-ARSIVI.md:1791-2032`
+- 2026-09-01 · 2026-09-01 — Patron modülü: fabrikaya GELEN PORT AÇMADAN uzaktan takip (GEÇERSİZ → 2026-09-29/30) — `CLAUDE-NOT-ARSIVI.md:1791-2032`
+- 2026-09-30 · 2026-09-30 — Eski tünel emekliliği (B6) [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-30 B6
 - 2026-09-10 · 2026-09-10 — Fabrika prod log'undan üç bulgu (kapanış teşhisi ③) [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-10
 - 2026-09-10 · 2026-09-10 — Künyesiz istemci görünmezdi: sürüm UA'dan okunuyor [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-10 künyesiz
 - 2026-09-17 · 2026-09-17 — Oturum kaydına istemci sürümü: künye ilk kez kalıcı satıra yazıldı, §1 üç kollu oldu [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-17 oturum sürümü
