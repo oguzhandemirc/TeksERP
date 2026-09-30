@@ -13,7 +13,7 @@ export const ASAMA_6 = [
     if (r.durum === null || r.durum === undefined) return s(O, 'tünel kapalı — portal-baglan.mjs açılmadan ölçülemez');
     const h = httpSonuc(r);
     if (h) return h;
-    const p = veri(r);
+    const p = veri(r).anahtarlar ?? {}; // satıcı /portal/saglik: data.anahtarlar.{capa, altGecerli, uyariSayisi}
     const kotu = [];
     if (p.capa !== 'gomulu') kotu.push(`capa=${p.capa}`);
     if (!(Number(p.altGecerli) >= 1)) kotu.push(`altGecerli=${p.altGecerli}`);
