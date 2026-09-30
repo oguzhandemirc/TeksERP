@@ -24,6 +24,7 @@ export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   notifications: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   projection_rows: ["SELECT"],
   sync_state: ["SELECT"],
+  support_access: ["SELECT"],
 };
 
 export const SYNC_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
@@ -65,4 +66,39 @@ export const CLOUD_TABLES: readonly string[] = [
   "full_sync_runs",
   "request_nonces",
   "facility_destructions",
+  "support_access",
 ];
+
+/**
+ * DESTEK ROLÜ (Ek-6/B §3.2) — `<veritabanı>_destek` (üretimde `patron_destek`): NOLOGIN doğar (göç), NOSUPERUSER
+ * NOBYPASSRLS; yalnız SELECT, yalnız burada adı geçen tablolarda. Kolon listesi verilen tabloda yalnız o kolonlar
+ * (sır kolonları — parola özeti, TOTP sırrı, davet/oturum belirteç özeti, push belirteci — HARİÇ); `"*"` bütün tablo.
+ * Her tablo göçte RESTRICTIVE `destek_kapisi` politikası taşır (izin `destek_ac` kaydından; bekçi iki yönlü).
+ * Destek rolü `support_access` (kendi erişim kaydı) ve `facility_destructions`ı OKUYAMAZ.
+ */
+export const SUPPORT_GRANTS: Readonly<Record<string, "*" | readonly string[]>> = {
+  facilities: "*",
+  installations: "*",
+  accounts: ["id", "tesis_id", "email", "name", "permissions", "status", "invite_expires_at", "failed_logins", "locked_until", "last_login_at", "closed_at", "identity_purged_at", "created_by_id", "created_at", "updated_at"],
+  sessions: ["id", "tesis_id", "account_id", "client", "last_used_at", "expires_at", "closed_at", "close_reason", "created_at", "updated_at"],
+  account_audit: "*",
+  operation_receipts: "*",
+  inbox_messages: "*",
+  report_requests: "*",
+  report_results: "*",
+  push_devices: ["id", "tesis_id", "account_id", "platform", "name", "active", "last_seen_at", "created_at", "updated_at"],
+  notification_defaults: "*",
+  notification_preferences: "*",
+  notifications: "*",
+  projection_rows: "*",
+  sync_watermarks: "*",
+  package_receipts: "*",
+  sync_state: "*",
+  full_sync_runs: "*",
+  request_nonces: "*",
+};
+
+/** Destek rolünün adı (göç SQL'i `current_database() || '_destek'` ile AYNI kural). */
+export function supportRoleName(database: string): string {
+  return `${database}_destek`;
+}

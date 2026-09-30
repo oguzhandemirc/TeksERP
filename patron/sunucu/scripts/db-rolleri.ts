@@ -4,11 +4,12 @@
 // Roller KÜME düzeyindedir, migration'a girmez. Ad + parola çalışma URL'lerinden (`DATABASE_URL`,
 // `ESITLEME_DATABASE_URL`) okunur, işlemi GÖÇ rolü (`GOC_DATABASE_URL`, tablo sahibi) yapar.
 // İki çalışma rolü: LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE; DB'ye bağlanma PUBLIC'ten
-// geri alınır (REVOKE CONNECT). Parola çıktıya/loga YAZILMAZ.
+// geri alınır (REVOKE CONNECT). Parola çıktıya/loga YAZILMAZ. Üçüncüsü destek rolü (`<db>_destek`, göçte NOLOGIN
+// doğar): yalnız SELECT (SUPPORT_GRANTS, sır kolonları hariç); giriş yetkisine bu betik dokunmaz (runbook).
 // =============================================================================
 import { Client } from "pg";
 import { loadEnvFile } from "../src/lib/env";
-import { APP_GRANTS, CLOUD_TABLES, SYNC_GRANTS, type Privilege } from "../src/lib/db-grants";
+import { APP_GRANTS, CLOUD_TABLES, SUPPORT_GRANTS, SYNC_GRANTS, supportRoleName, type Privilege } from "../src/lib/db-grants";
 
 const ROLE_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
 
@@ -49,6 +50,26 @@ async function grantAll(client: Client, role: string, grants: Readonly<Record<st
   }
 }
 
+/**
+ * Destek rolü (Ek-6/B §3.2): göç NOLOGIN kurar (politikalar adıyla anar); burada özellikleri sertleşir ve
+ * yetkileri SUPPORT_GRANTS'ten verilir. LOGIN'e DOKUNULMAZ — giriş yetkisi runbook'la açılır/kapanır.
+ */
+async function applySupportRole(client: Client, database: string): Promise<string> {
+  const role = supportRoleName(database);
+  const exists = await client.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [role]);
+  if (exists.rowCount === 0) throw new Error(`Destek rolü ${role} yok — önce \`prisma migrate deploy\``);
+  await client.query(`ALTER ROLE ${ident(role)} WITH NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT`);
+  await client.query(`GRANT CONNECT ON DATABASE ${ident(database)} TO ${ident(role)}`);
+  await client.query(`REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${ident(role)}`);
+  await client.query(`GRANT USAGE ON SCHEMA public TO ${ident(role)}`);
+  for (const [table, columns] of Object.entries(SUPPORT_GRANTS)) {
+    if (!CLOUD_TABLES.includes(table)) throw new Error(`Destek yetki listesinde bilinmeyen tablo: ${table}`);
+    const target = columns === "*" ? "" : ` (${columns.map(ident).join(", ")})`;
+    await client.query(`GRANT SELECT${target} ON ${ident(table)} TO ${ident(role)}`);
+  }
+  return role;
+}
+
 export async function applyRoles(env: NodeJS.ProcessEnv = process.env): Promise<{ app: string; sync: string; database: string }> {
   const goc = env.GOC_DATABASE_URL;
   if (!goc || !env.DATABASE_URL || !env.ESITLEME_DATABASE_URL) throw new Error("GOC_DATABASE_URL, DATABASE_URL ve ESITLEME_DATABASE_URL zorunlu");
@@ -70,6 +91,7 @@ export async function applyRoles(env: NodeJS.ProcessEnv = process.env): Promise<
     await client.query(`GRANT CONNECT ON DATABASE ${ident(database)} TO ${ident(app.name)}, ${ident(sync.name)}`);
     await grantAll(client, app.name, APP_GRANTS);
     await grantAll(client, sync.name, SYNC_GRANTS);
+    await applySupportRole(client, database);
   } finally {
     await client.end();
   }

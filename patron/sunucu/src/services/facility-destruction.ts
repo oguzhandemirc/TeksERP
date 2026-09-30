@@ -16,6 +16,7 @@ const DAY_MS = 86_400_000;
 /** İmhada KALAN tablolar → gerekçe. Başka her tablo silinir. */
 export const RETAINED_TABLES = {
   facility_destructions: "imha kaydının kendisi (tutanak verisi, en az 3 yıl; içerik taşımaz)",
+  support_access: "destek erişim kaydı SİLİNEMEZ (Ek-6/B §3.2; Lisans Alan dökümünü isteyebilir, §3.3)",
 } as const;
 
 type Where = { readonly tesisId: string };

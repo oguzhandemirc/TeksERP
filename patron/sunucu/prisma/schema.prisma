@@ -492,6 +492,30 @@ model FacilityDestruction {
   @@map("facility_destructions")
 }
 
+/// Destek erişim kaydı (Ek-6/B §3.2) — destek rolünün (`<db>_destek`) her içerik erişimi: kim (DB oturum kullanıcısı),
+/// ne zaman, hangi tesis, hangi veri kümesi (kapsam), gerekçe + talep no, bitiş. Aynı zamanda erişim İZNİDİR: destek
+/// rolünün okuyabildiği her tablo RESTRICTIVE `destek_kapisi` politikasıyla bu kaydın açık + süresi dolmamış satırına
+/// (oturumun pid + başlangıç anı) bağlıdır. Yazan yalnız `destek_ac`/`destek_kapat` (SECURITY DEFINER, göç SQL'i);
+/// SİLİNEMEZ (tetikleyici; yalnız açık kaydın kapanışı yazılır), tesis imhasında da KALIR. Uygulama rolü okur (döküm).
+model SupportAccess {
+  id           String    @id @db.Uuid
+  tesisId      String    @map("tesis_id") @db.Uuid
+  dbUser       String    @map("db_user") @db.VarChar(63)
+  pid          Int       @map("pid")
+  backendStart DateTime  @map("backend_start") @db.Timestamptz
+  ticket       String    @map("ticket") @db.VarChar(60)
+  reason       String    @map("reason") @db.VarChar(500)
+  scope        String    @map("scope") @db.VarChar(200)
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz
+  closedAt     DateTime? @map("closed_at") @db.Timestamptz
+  closeReason  String?   @map("close_reason") @db.VarChar(20)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([tesisId, createdAt])
+  @@index([pid, backendStart])
+  @@map("support_access")
+}
+
 /// İmzalı istek nonce defteri — TELEMETRİ (tekrar oynatma engeli; saklama = istek zamanı + 10 dk).
 model RequestNonce {
   id             String   @id @default(uuid()) @db.Uuid
