@@ -368,11 +368,14 @@ model Notification {
   sentAt        DateTime?          @map("sent_at") @db.Timestamptz
   lastError     String?            @map("last_error") @db.VarChar(60)
   deliveries    Json?              @map("deliveries")
+  /// Expo makbuzu (ikinci aşama) yoklama zamanı: bilet alınmış teslim varken dolu, makbuzlar çözülünce null.
+  receiptDueAt  DateTime?          @map("receipt_due_at") @db.Timestamptz
   createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz
 
   @@unique([tesisId, accountId, dedupKey])
   @@index([tesisId, status, nextAttemptAt])
+  @@index([tesisId, receiptDueAt])
   @@index([tesisId, accountId, createdAt])
   @@map("notifications")
 }

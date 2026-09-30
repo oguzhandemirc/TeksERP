@@ -70,6 +70,8 @@
 - **[ÇEKİRDEK]** `notifications` TELEMETRİ'dir: sonuçlanmış satır `BILDIRIM_SAKLAMA_GUN` sonra budanır, iş kararı ondan okunmaz.
 - **[ÇEKİRDEK]** VAPID gizli anahtarı dosyada (0600) yaşar ve günlüğe, DB'ye, API yanıtına girmez; taşıyıcı hatası yalnız kısa KOD olarak saklanır; web aboneliği yalnız izinli push servisine kaydolur (SSRF kapısı).
 - **[ÇEKİRDEK]** Bildirime dokununca açılan yol yalnız uygulamanın kendi ekranıdır: telefonda `safeRoute`, web'de service worker AYNI kalıpla süzer (dış adres, `//`, bilinmeyen bölüm açılmaz; jest ölçer).
+- **[ÇEKİRDEK]** Expo teslimi iki aşamalıdır: bilet kabulü bildirimi GONDERILDI yapar, makbuzdaki `DeviceNotRegistered` cihazı pasife çeker; makbuz yoklaması atomik claim'lidir ve 24 saatte vazgeçer. · bekçi: `test_bildirim_makbuz (§1 · §2)` <sub>(arşiv:2026-09-30 F1)</sub>
+- **[ÇEKİRDEK]** Deneme bildirimi yalnız hesabın KENDİ etkin cihazlarına gider, kuyruğa ve geçmişe yazılmaz, hesap başına dakikada birle sınırlıdır; kip kapalıyken 409 döner. · bekçi: `test_bildirim_makbuz (§3)` <sub>(arşiv:2026-09-30 F1)</sub>
 - **[PROFİL]** `BILDIRIM_KIPI` varsayılanı `kapali`dır (bugünkü davranış); `gercek` yalnız mağaza hesapları + patron VDS kurulumundan sonra açılır.
 
 ## Uygulama (`patron/uygulama`)
@@ -82,6 +84,8 @@
 - **[ÇEKİRDEK]** Yazma işlem kimliği (`mesajId`/`clientToken`) mantıksal deneme başına bir kez üretilir, yalnız sonucu belirsiz bırakan hatada (ağ/5xx) yapışır, kesin 4xx'te ve gövde değişince yenilenir; hata kodu yalnız `details.code`ten okunur. · bekçi: `client.test.ts` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Firma adı ve logosu koda gömülmez: tesisin `ad`ından gelir, yoksa nötr "TeksERP Patron" yazılır; oturum belirteci gizli depoda (web'de yalnız sekme ömrü), TOTP sırrı ve davet kodu hiçbir depoya yazılmaz. · bekçi: `ui.test.tsx` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Yıkıcı işlem (gelen kutusu/rapor isteği iptali, hesap kilidi/arşivi, davet yenileme) iki adımlı onayla uygulanır. · bekçi: `ui.test.tsx` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Seçici (cari · ürün · renk) dokununca doğrudan modal açar; arama ve tek açılır süzgeç SUNUCUDA yürür (`LIST_SEARCH`, Türkçe katlama JS ↔ SQL birebir, LIKE jokeri kaçırılır), istemci listeyi süzmez. · bekçi: `test_liste_arama` · `picker.test.tsx` <sub>(arşiv:2026-09-30 F1)</sub>
+- **[ÇEKİRDEK]** TOTP kurulumunda `otpauth` karekodu ve elle girilecek anahtar birlikte gösterilir; sır yalnız o ekranda bellektedir. · bekçi: `totp-qr.test.tsx` <sub>(arşiv:2026-09-30 F1)</sub>
 
 ### Kararlar
 
@@ -95,6 +99,8 @@
 
 - **[ÇEKİRDEK]** Web sürümü API ile AYNI kökenden (`/`) sunulur ve `/api` · `/v1` altı asla HTML'e düşmez; iç/yönetim ad alanları (`web-static.ts` `IC_ONEKLER`) web'de 404'tür ve Traefik kuralının dışında kalır — iki liste bekçiyle eşlenir. · bekçi: `test_web_sunumu (§4 · §5 · §8)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Web CSP'si `unsafe-inline` taşımaz: giriş HTML'indeki satır içi blok yalnız kendi sha256 özetiyle izinlidir (özet açılışta dosyadan hesaplanır) ve react-native-web'in BOŞ `<style>` ögesi boş dizgenin özetiyle; CSP değişikliği gerçek tarayıcıda ölçülür (başlık ölçümü stilin uygulandığını göstermez); içerik özetli dizinler uzun ömürlü, giriş HTML'i `no-store`. · bekçi: `test_web_sunumu (§2 · §3)` · `deploy/patron/tarayici-duman.cjs` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Web yolunda ardışık ya da ters eğik çizgi GET/HEAD'de tek '/'li aynı köken hedefe 301 ile katlanır (expo-router `Invalid URL` boş sayfası); katlanan hedef API/iç ad alanıysa 404. · bekçi: `test_web_sunumu (§9)` <sub>(arşiv:2026-09-30 F1)</sub>
+- **[ÇEKİRDEK]** Tarayıcı dumanının CSP istisnası yalnız Cloudflare Web Analytics beacon'ıdır (kenar enjekte eder; CSP gevşetilmez, bölge ayarına dokunulmaz); başka her ihlal kırmızıdır. · bekçi: `test_web_sunumu (§10)` <sub>(arşiv:2026-09-30 F1)</sub>
 - **[ÇEKİRDEK]** Patron sunucusu göç (tablo sahibi) parolasını ALMAZ: üç DB rolü üç docker secret'ıdır, göç parolası yalnız DB · `patron-goc` · yedek konteynerine bağlanır; sunucu yalnız kenar adresinde dinler, port yayımlamaz, satıcıyla ortak birim ya da sır grubu taşımaz. · bekçi: `deploy/patron/compose-denetle.mjs (① · ⑦ · ⑧ · ⑨)` <sub>(arşiv:2026-09-29)</sub>
 
 - **[ÇEKİRDEK]** Dış çıkış yalnız bildirim için ve yalnız sunucuya açılır: compose'un kurduğu internal OLMAYAN tek ağ `cikis`tir, ona yalnız `patron` katılır ve orada dinlemez; DB · göç · yedek internal ağlarda kalır. · bekçi: `deploy/patron/compose-denetle.mjs (④)` <sub>(arşiv:2026-09-30 I6)</sub>
@@ -115,7 +121,7 @@ Bulut sunucusu bekçileri kendi projesinden: `cd patron/sunucu && node ../../scr
 
 Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`
 
-Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`, `test_tazele_zili`, `test_web_sunumu`, `test_katalog_ozeti`
+Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`, `test_tazele_zili`, `test_web_sunumu`, `test_katalog_ozeti`, `test_liste_arama`, `test_bildirim_makbuz`
 
 Dağıtım (kurulum öncesi, Mac'te, CI dışı): `node deploy/patron/compose-denetle.mjs --env-file <patron .env> --satici-env <satıcı .env>` — çıkış 0 temiz · 1 ihlal · 2 ölçülemedi; yerel duman `deploy/patron/duman.sh kur <sha>` (gerçek tarayıcı dahil); runbook `docs/ops/PATRON-BULUTU-KURULUM.md`.
 
@@ -138,4 +144,5 @@ Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## pat
 - 2026-09-29 · Senaryo P koşucusu (Plan B uçtan uca): `ozet` zilinin bulut üreticisi (S47), hesap API'si TR iletisi (S48), sahte satıcı iç API'siyle gerçek zil zinciri
 - 2026-09-29 · Patron bulutu dağıtımı (B-dağıtım): aynı köken web + API, iç ad alanı iki katta 404, üç DB rolü üç sır, satıcıyla ortak birim yok
 - 2026-09-30 · Lisans + patron entegrasyonu 5 (I6): tek ABI 2, Docker künyesi 2e-S biçiminde, §14 tek liste (S47/S48), bildirim çıkış ağı, paketten üretici kimliği, DR ana kimliği panelde isteğe bağlı, ekran açılışı tazelemesi, P5 push kaydı
+- 2026-09-30 · Patron uygulaması eksikleri (F1): sunucu aramalı seçici, çift eğik çizgi 301, CF beacon istisnası, TOTP karekodu, Expo makbuzu, deneme bildirimi
 - 2026-09-30 · Proje sınırı: bulut kataloğu statik özetten okunur, hiçbir proje başkasının kaynağını içe aktarmaz (CI-2)
