@@ -8,9 +8,11 @@
 // JWKS önbelleği: TTL TAZELİKTİR geçerlilik değil — bayat anahtar döner ve arka planda tazelenir; önbellek HİÇ
 // dolmadıysa (dosya yok/bozuk/boş anahtar kümesi) RED (fail-closed); bilinmeyen kid kaynağı tek uçuşla bir kez
 // yeniden okur. Zorunlu okumalar arasında soğuma süresi var: uydurma kid istek başına okuma tetikleyemez.
+// Eski ama geçerli küme YAŞ TAVANINA dek kabul (varsayılan 7 gün, kaynağın yazım zamanından): tavanı aşan küme RED,
+// tavanın yarısında uyarı — durmuş yan konteyner geri çekilmiş bir Cloudflare anahtarını süresiz geçerli tutamasın.
 import { createPublicKey, verify as verifySignature, type KeyObject } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
-import type { VendorConfig } from "../config";
+import { JWKS_AZAMI_YAS_GUN_VARSAYILAN, type VendorConfig } from "../config";
 
 export const ACCESS_HEADER = "cf-access-jwt-assertion";
 /** Kabul edilen TEK algoritma: RSA PKCS#1 v1.5 + SHA-256. */
@@ -21,6 +23,9 @@ export const JWKS_TIMEOUT_MS = 5_000;
 /** Dosya kaynağı yerel ve ucuz: sık tazelenir, bilinmeyen kid'de kısa soğumayla yeniden okunur. */
 export const JWKS_FILE_TTL_MS = 60_000;
 export const JWKS_FILE_COOLDOWN_MS = 1_000;
+const DAY_MS = 86_400_000;
+/** Yaş uyarısı en çok saatte bir (dosya saatlerce eskirken günlük boğulmasın). */
+const AGE_WARN_INTERVAL_MS = 3_600_000;
 const JWKS_MAX_BYTES = 64 * 1024;
 const JWKS_MAX_KEYS = 20;
 const MIN_RSA_BITS = 2048;
@@ -35,7 +40,7 @@ export interface AccessSettings {
   readonly jwksFile: string;
 }
 
-type AccessConfig = Pick<VendorConfig, "CF_ACCESS_TAKIM_ALANI" | "CF_ACCESS_AUD" | "CF_ACCESS_JWKS_DOSYASI">;
+type AccessConfig = Pick<VendorConfig, "CF_ACCESS_TAKIM_ALANI" | "CF_ACCESS_AUD" | "CF_ACCESS_JWKS_DOSYASI"> & Partial<Pick<VendorConfig, "CF_ACCESS_JWKS_AZAMI_YAS_GUN">>;
 
 /** Access yapılandırması: takım alanı, AUD ve JWKS dosyası BİRLİKTE yoksa ERİŞİM kipi KAPALI (null). */
 export function accessSettingsOf(config: AccessConfig): AccessSettings | null {
@@ -127,17 +132,25 @@ export interface JwksCacheOptions {
   readonly ttlMs?: number;
   readonly cooldownMs?: number;
   readonly timeoutMs?: number;
+  /** Kaynaktaki yazım zamanından bu yana kabul edilen en büyük yaş; aşan küme RED (varsayılan 7 gün). */
+  readonly maxSourceAgeMs?: number;
   readonly now?: () => number;
   readonly warn?: (message: string) => void;
 }
+
+/** Kümenin yaş durumu: TAZE · UYARI (tavanın yarısı geçti) · ASILDI (RED). */
+export type JwksAgeLevel = "TAZE" | "UYARI" | "ASILDI";
 
 export interface JwksState {
   readonly filled: boolean;
   readonly keyCount: number;
   /** Son başarılı okumadan bu yana geçen süre (sn); hiç dolmadıysa null. */
   readonly ageSec: number | null;
-  /** Anahtar kümesinin kaynaktaki yaşı (sn; dosyada mtime'dan) — eski ama geçerli küme kabul edilir, yaşı görünür. */
+  /** Anahtar kümesinin kaynaktaki yaşı (sn; dosyada mtime'dan) — eski ama geçerli küme tavana dek kabul, yaşı görünür. */
   readonly sourceAgeSec: number | null;
+  readonly maxSourceAgeSec: number;
+  /** Hiç dolmadıysa null. */
+  readonly ageLevel: JwksAgeLevel | null;
   readonly lastError: string | null;
 }
 
@@ -146,6 +159,8 @@ export class JwksCache {
   private fetchedAt = 0;
   private sourceTime = 0;
   private lastWarnAt = Number.NEGATIVE_INFINITY;
+  private lastAgeWarnAt = Number.NEGATIVE_INFINITY;
+  private lastAgeWarnLevel: JwksAgeLevel = "TAZE";
   private lastAttemptAt = Number.NEGATIVE_INFINITY;
   private inFlight: Promise<void> | null = null;
   private lastError: string | null = null;
@@ -153,6 +168,7 @@ export class JwksCache {
   private readonly ttlMs: number;
   private readonly cooldownMs: number;
   private readonly timeoutMs: number;
+  private readonly maxSourceAgeMs: number;
   private readonly now: () => number;
   private readonly warn: (message: string) => void;
 
@@ -161,6 +177,7 @@ export class JwksCache {
     this.ttlMs = options.ttlMs ?? JWKS_TTL_MS;
     this.cooldownMs = options.cooldownMs ?? JWKS_REFRESH_COOLDOWN_MS;
     this.timeoutMs = options.timeoutMs ?? JWKS_TIMEOUT_MS;
+    this.maxSourceAgeMs = options.maxSourceAgeMs ?? JWKS_AZAMI_YAS_GUN_VARSAYILAN * DAY_MS;
     this.now = options.now ?? Date.now;
     this.warn = options.warn ?? ((m) => console.warn(`[satici] erisim: ${m}`));
   }
@@ -176,18 +193,44 @@ export class JwksCache {
       keyCount: this.keys?.size ?? 0,
       ageSec: this.keys ? Math.max(0, Math.round((this.now() - this.fetchedAt) / 1000)) : null,
       sourceAgeSec: this.keys ? Math.max(0, Math.round((this.now() - this.sourceTime) / 1000)) : null,
+      maxSourceAgeSec: Math.round(this.maxSourceAgeMs / 1000),
+      ageLevel: this.keys ? this.ageLevel() : null,
       lastError: this.lastError,
     };
   }
 
-  /** kid'in anahtarı; hiç dolmamış/erişilemeyen JWKS → "JWKS", tazelemeden sonra da bilinmeyen kid → "KID". */
-  async keyFor(kid: string): Promise<KeyObject | "JWKS" | "KID"> {
+  private ageLevel(): JwksAgeLevel {
+    const age = this.now() - this.sourceTime;
+    return age > this.maxSourceAgeMs ? "ASILDI" : age > this.maxSourceAgeMs / 2 ? "UYARI" : "TAZE";
+  }
+
+  private warnAge(level: JwksAgeLevel): void {
+    // Kademe değişince hemen, aynı kademede saatte bir.
+    const same = level === this.lastAgeWarnLevel;
+    this.lastAgeWarnLevel = level;
+    if (level === "TAZE" || (same && this.now() - this.lastAgeWarnAt < AGE_WARN_INTERVAL_MS)) return;
+    this.lastAgeWarnAt = this.now();
+    const hours = Math.round((this.now() - this.sourceTime) / 3_600_000);
+    const cap = Math.round(this.maxSourceAgeMs / 3_600_000);
+    this.warn(
+      level === "ASILDI"
+        ? `JWKS ${hours} saattir yenilenmedi — yaş tavanı (${cap} sa) AŞILDI, istekler reddediliyor; yan konteyneri (satici-jwks) denetle`
+        : `JWKS ${hours} saattir yenilenmedi (tavan ${cap} sa, yarısı geçti) — yan konteyneri (satici-jwks) denetle`,
+    );
+  }
+
+  /** kid'in anahtarı; hiç dolmamış/erişilemeyen JWKS → "JWKS", yaş tavanını aşan küme → "ESKI", tazelemeden sonra da bilinmeyen kid → "KID". */
+  async keyFor(kid: string): Promise<KeyObject | "JWKS" | "KID" | "ESKI"> {
     if (this.keys === null) {
       if (this.mayFetch()) await this.refresh();
       if (this.keys === null) return "JWKS";
     } else if (this.now() - this.fetchedAt > this.ttlMs && this.mayFetch()) {
       void this.refresh(); // bayat anahtar döner, tazeleme arka planda
     }
+    if (this.ageLevel() === "ASILDI" && this.mayFetch()) await this.refresh(); // kaynak bu arada yenilenmiş olabilir
+    const level = this.ageLevel();
+    this.warnAge(level);
+    if (level === "ASILDI") return "ESKI";
     const hit = this.keys.get(kid);
     if (hit) return hit;
     if (this.mayFetch()) await this.refresh();
@@ -235,7 +278,7 @@ export class JwksCache {
 
 // ---------------------------------------------------------------- doğrulama
 
-export type AccessRejection = "BASLIK_YOK" | "BICIM" | "ALG" | "KID" | "JWKS" | "IMZA" | "ISS" | "AUD" | "SURE" | "KIMLIK";
+export type AccessRejection = "BASLIK_YOK" | "BICIM" | "ALG" | "KID" | "JWKS" | "JWKS_ESKI" | "IMZA" | "ISS" | "AUD" | "SURE" | "KIMLIK";
 
 export interface AccessIdentity {
   readonly email: string;
@@ -289,6 +332,7 @@ export class AccessVerifier {
 
     const key = await this.jwks.keyFor(head.kid);
     if (key === "JWKS") return reject("JWKS", "anahtar kümesi yok (hiç çekilemedi)");
+    if (key === "ESKI") return reject("JWKS_ESKI", "anahtar kümesi yaş tavanını aştı (yan konteyner yenilemiyor)");
     if (key === "KID") return reject("KID", "bilinmeyen kid");
     const signature = Buffer.from(s64, "base64url");
     const bits = key.asymmetricKeyDetails?.modulusLength ?? 0;
@@ -322,6 +366,12 @@ export class AccessVerifier {
 export function createAccessVerifier(config: AccessConfig): AccessVerifier | null {
   const settings = accessSettingsOf(config);
   if (!settings) return null;
-  const cache = new JwksCache({ source: settings.jwksFile, fetchJwks: jwksFromFile(settings.jwksFile), ttlMs: JWKS_FILE_TTL_MS, cooldownMs: JWKS_FILE_COOLDOWN_MS });
+  const cache = new JwksCache({
+    source: settings.jwksFile,
+    fetchJwks: jwksFromFile(settings.jwksFile),
+    ttlMs: JWKS_FILE_TTL_MS,
+    cooldownMs: JWKS_FILE_COOLDOWN_MS,
+    maxSourceAgeMs: (config.CF_ACCESS_JWKS_AZAMI_YAS_GUN ?? JWKS_AZAMI_YAS_GUN_VARSAYILAN) * DAY_MS,
+  });
   return new AccessVerifier(settings, cache);
 }

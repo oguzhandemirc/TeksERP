@@ -30,13 +30,15 @@
 
 1. **İki parola belirle** (ekranda görünmezler, her biri iki kez yazılır): **kök parolası** — en az 12 karakter, öneri 5–6 rastgele kelime; kâğıda yazılacak (tören sorar). **Paket parolası** — en az 12 karakter, kökten farklı; parola yöneticisine ("TeksERP paket-2026") (7. adımda PAKET aracı sorar).
 2. **Kâğıt + kalem** hazır; kâğıdın duracağı yer (kasa) belli. USB gelince USB, kâğıtla AYNI yerde durmaz (biri ele geçerse öteki tek başına işe yaramasın).
-3. **Temiz ağaç + bağımlılıklar** (repo kökünde):
+3. **Temiz ağaç + bağımlılıklar** (repo kökünde) — ZORUNLU, tören kendisi ölçer ve parola sormadan REDDEDER:
 
    ```bash
-   git fetch && git switch main && git pull --ff-only && git status --short   # boş çıkmalı
-   (cd satici/sunucu && npm ci) && (cd Teks-Erp && npm ci)                    # zaten kuruluysa atlanabilir
+   git fetch && git switch main && git pull --ff-only && git status --short   # boş çıkmalı (izlenmeyen dosya da sayılır)
+   (cd satici/sunucu && npm ci) && (cd Teks-Erp && npm ci)                    # ZORUNLU: node_modules kilit dosyasından
    ls ~/.tekserp/satici-uretim                                                # "No such file" görülmeli — varsa DUR
    ```
+
+   Tören başında: ağaç temiz mi (`git status --porcelain --untracked-files=all` boş), HEAD origin/main'de mi (ya da açık `--etiket=<ad>` o commit'i mi gösteriyor), iki projede `npm ls --all` hatasız mı — biri tutmazsa RED (çıkış 2). HEAD'in tam sha'sı ve iki `package-lock.json` özeti ekrana ve künyeye (`kaynak`) yazılır.
 
 4. **PAKET aracı hazır:** üretim PAKET anahtarını üreten araç ayrı dilimdedir (`lisans/uretim-gecis`); o `main`e inmeden tören 7. adımda durur (bugünkü araç üretim kid'ini reddeder; yarım dizin silinir, hedefe hiçbir şey yazılmaz). Yönetici "PAKET aracı indi" demeden tören başlatılmaz.
 
@@ -48,7 +50,7 @@ node deploy/satici/uretim-toren.mjs
 
 | Ekranda | Sen |
 |---|---|
-| `kaynak : <sha> (kirli: hayır)` · hedef · `USB : verilmedi …` · kid'ler (`kok-2026-1 · alt-2026-1 (180 gün) · ind-2026 (365 gün) · paket-2026 · modül: depo.multiEnabled`) · `PAKET : <komut>` | `kirli: EVET` ya da `PAKET` satırında `varsayılan DEĞİL` görürsen Ctrl+C, yöneticiye sor |
+| `kaynak : <tam sha> (temiz · origin/main · npm ls hatasız)` · iki `kilit : …package-lock.json sha256 …` · hedef · `USB : verilmedi …` · kid'ler (`kok-2026-1 · alt-2026-1 (180 gün) · ind-2026 (365 gün) · paket-2026 · modül: depo.multiEnabled`) · `PAKET : <komut>` | `PAKET` satırında `varsayılan DEĞİL` görürsen Ctrl+C, yöneticiye sor (kirli ağaç / origin/main dışı HEAD tören tarafından zaten REDDEDİLİR) |
 | `[1/10] Önkoşullar ✓` · `[2/10] Kök parolası …` | — |
 | `Kök parolası (en az 12 karakter):` → `Kök parolası (tekrar):` | kök parolasını iki kez yaz (görünmez), Enter |
 | `[3/10] KÖK` … `[6/10] Sunucu sırları` | bekle; hiçbir şey sorulmaz |
@@ -70,6 +72,10 @@ node deploy/satici/uretim-toren.mjs
 | `Hedef zaten var` | tören daha önce yapılmış — üstüne yazılmaz | DUR; yöneticiye sor (yeniden tören ancak hiçbir açık anahtar çapaya girmediyse) |
 | `Yarım kalmış tören dizini var` | önceki koşum elektrik/kapanma ile yarıda kaldı | `rm -rf ~/.tekserp/satici-uretim.yarim-*` sonra yeniden |
 | `Önkoşul: … npm ci` | bağımlılık yok | §1.3 |
+| `Ağaç KİRLİ` · `origin/main'de DEĞİL` · `--etiket=… HEAD'i göstermiyor` | kaynak donmuş değil (değişiklik / izlenmeyen dosya / başka commit) — parola sorulmadı | §1.3 (`git status --short` boş, `git switch main && git pull --ff-only`); yöneticiye sor |
+| `npm ls --all hatalı` | node_modules kilit dosyasıyla aynı değil | `(cd <proje> && npm ci)` sonra yeniden |
+| `Yolda sembolik bağ` · `Üst dizine grup/başkaları yazabiliyor` · `Üst dizin başka kullanıcının` | hedef yolu güvensiz (bağ izlenmez; üst dizin yalnız senin olmalı) | gerçek yolu ver / `chmod go-w <üst dizin>`; yöneticiye sor |
+| `Araya giren yol` · `Hedef tören sürerken doğdu` | tören sürerken yarım dizin ya da hedef başka biri/şey tarafından yaratıldı — dokunulmadı, hedefe hiçbir şey yazılmadı | DUR; o yolu kimin yarattığını yöneticiye bildir |
 
 Ctrl+C her an güvenlidir: yarım dizin silinir.
 
@@ -137,6 +143,8 @@ COPYFILE_DISABLE=1 tar -C "$D" -cf "$T/s.tar" anahtarlar paket modul-anahtarlari
 - **Alt süreçler:** kök/ALT/İNDİRME/sırlar `satici/sunucu/scripts/anahtar.ts` (`kok-uret` · `alt-uret` · `indirme-uret` · `sirlar-uret`), PAKET = `PAKET_KOMUTU` (tek satır, törenin başında: `Teks-Erp/scripts/build-korumali-imza.ts anahtar-uret --kid={kid} --dizin={dizin} --json` — arayüz değişirse yalnız bu satır; `--paket-komutu="…"` koşum başına ezer ve ekranda `varsayılan DEĞİL` diye görünür), modül `satici/sunucu/scripts/modul-anahtari.ts uret` (DB'siz), yedek alıcıları + sınama + kurtarma arşivi `Teks-Erp/scripts/yedek-sifrele.ts`. Kurtarma alıcısı `--parolali --parola-stdin` ile KÖK parolasına sarılır.
 - **PAKET sözleşmesi:** araç `{dizin}/{kid}.paket.json` üretir (parolalı v2, 0600, `kid` + `x`; ham `d` alanı OLMAZ — parolasız dosya RED) ve `--json` ile stdout'a tek satır `{"v":1,"kid","x","dosya","parolali":true}` basar; tören bu özeti dosyayla karşılaştırır (kid · x · dosya · `parolali`), uyuşmazsa RED. TTY'de terminali devralıp parolayı kendisi sorar (iki kez), TTY yoksa törenin stdin'inde kalan satırlar ona geçer; kök parolası ona hiç verilmez. Ölçüm (2026-09-30): `lisans/uretim-gecis` dalının aracıyla bekçi §4a yeşil (34/0); `expect` ile gerçek terminalde iki parola da ekrana hiç yansımadı; `guven-capasi-ekle.ts` kuru kipte törenin kök ve paket dosyalarını okudu.
 - **Parola yolu:** kök parolası TTY'den gizli (TTY yoksa stdin satırları: kök, kök tekrar, sonra PAKET aracının satırları — yalnız bekçi); alt süreçlere yalnız stdin; alt süreç ortamı yalın (`PATH` · `HOME` · `TMPDIR` · `COPYFILE_DISABLE`) — `ANAHTAR_DIZINI`, `GUVEN_CAPASI_DOSYASI`, `DATABASE_URL`, `NODE_OPTIONS` geçmez. Alt süreç hata çıktısı parola baytı içeriyorsa hiç basılmaz.
-- **Hepsi ya da hiçbiri:** `<hedef>.yarim-<pid>`de kurulur, en sonda tek `rename`; her hata ve Ctrl+C yarım dizini siler. Hedef ya da yarım kalıntı VARSA parola sorulmadan RED.
-- **Künye** (`TOREN-KUNYE.json`, açık): `kok{kid,x,siniflar}` · `alt`/`indirme`{kid,x,baslangic,bitis} · `paket{kid,x}` · `modulAnahtarlari[]{modul,surum,kid}` · `yedekAlicilari[]{ad,parmakIzi}` · `capaSatirlari{ROOT_PUBLIC_KEYS, PACKAGE_PUBLIC_KEYS, CF_WORKER_INDIRME}` · `vds{anahtarBirimi, yedekAlici, kasayaIceAktar}` · `usb[]` · `ozetler{yol: sha256}` · `kaynak{commit, kirli}`. Çapa ekleme betiği bu dosyayı girdi olarak okur.
-- **Seçenekler:** `--dizin` · `--yil` (kid'ler `kok-<yıl>-1` · `alt-<yıl>-1` · `ind-<yıl>` · `paket-<yıl>`) · `--alt-gun` (180) · `--ind-gun` (365) · `--moduller=a.b,c.d|yok` (varsayılan şifreli modül kataloğu `Teks-Erp/src/lib/license/sifreli-moduller.json`) · `--usb` (törenle aynı anda kopya) · `--paket-komutu` (yukarıda).
+- **Hepsi ya da hiçbiri:** `<hedef>.yarim-<pid>`de kurulur, en sonda tek `rename`; her hata ve Ctrl+C yarım dizini siler (yalnız törenin YARATTIĞI yolu — araya giren yol/bağ dokunulmadan kalır). Hedef ya da yarım kalıntı VARSA parola sorulmadan RED.
+- **Yol güvenliği (TOCTOU):** yol boyunca her bileşen `lstat`la ölçülür — sembolik bağ RED (root'a ait sistem bağı, macOS `/var` · `/tmp`, hariç); üst dizin kullanıcının ve grup/başkalarına kapalı olmalı (yoksa bileşen bileşen 0700 yaratılır); yarım dizin ve alt dizinleri recursive OLMADAN yaratılır (varsa RED); tören dosyaları `wx` (varsa ezmez); hedef rename'den HEMEN önce yeniden ölçülür ve özel `mkdir` ile sahiplenilir — araya giren boş dizinin üstüne geçilmez.
+- **Kaynak kapısı:** ağaç temiz + HEAD origin/main'de ya da `--etiket=<ad>`in commit'i + `npm ls --all` hatasız (iki proje); künyede `kaynak{commit (tam sha), dayanak, kirli:false, kilitler{yol: sha256}, npmLs}`.
+- **Künye** (`TOREN-KUNYE.json`, açık): `kok{kid,x,siniflar}` · `alt`/`indirme`{kid,x,baslangic,bitis} · `paket{kid,x}` · `modulAnahtarlari[]{modul,surum,kid}` · `yedekAlicilari[]{ad,parmakIzi}` · `capaSatirlari{ROOT_PUBLIC_KEYS, PACKAGE_PUBLIC_KEYS, CF_WORKER_INDIRME}` · `vds{anahtarBirimi, yedekAlici, kasayaIceAktar}` · `usb[]` · `ozetler{yol: sha256}` · `kaynak{commit, dayanak, kirli, kilitler, npmLs}`. Çapa ekleme betiği bu dosyayı girdi olarak okur.
+- **Seçenekler:** `--dizin` · `--yil` (kid'ler `kok-<yıl>-1` · `alt-<yıl>-1` · `ind-<yıl>` · `paket-<yıl>`) · `--alt-gun` (180) · `--ind-gun` (365) · `--moduller=a.b,c.d|yok` (varsayılan şifreli modül kataloğu `Teks-Erp/src/lib/license/sifreli-moduller.json`) · `--usb` (törenle aynı anda kopya) · `--etiket=<git etiketi>` (HEAD origin/main'de değilse: etiket HEAD'i göstermeli) · `--paket-komutu` (yukarıda).

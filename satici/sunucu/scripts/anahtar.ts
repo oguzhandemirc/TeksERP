@@ -46,6 +46,7 @@ import {
   writeKeyFileExclusive,
 } from "../src/keys/key-files";
 import { signWithWrappedKey } from "../src/keys/signer";
+import { runAsCli } from "../src/lib/request-scope";
 import { KeyStore } from "../src/keys/key-store";
 import { PUBLISHER_DEFAULT_MINUTES, PublisherTokenError, publisherTokens } from "../src/keys/publisher-token";
 import { generateServerSecrets } from "../src/keys/server-secrets";
@@ -85,7 +86,7 @@ async function signCertificate(
   const rootPath = path.join(dir, `${rootKid}.kok.json`);
   const root = readWrappedKeyFile(rootPath);
   const password = await askPassword(`Kök (${rootKid}) parolası: `);
-  const token = await signWithWrappedKey({ keyFile: rootPath, typ: TYP.SERTIFIKA, payload: cert, password });
+  const token = await runAsCli(() => signWithWrappedKey({ keyFile: rootPath, typ: TYP.SERTIFIKA, payload: cert, password }));
   const check = verifyCertificate(token, {
     roots: [{ kid: root.kid, x: root.x, classes: root.siniflar }],
     usage: cert.kullanim,

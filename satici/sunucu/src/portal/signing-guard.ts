@@ -2,12 +2,14 @@
 // tahmin denemesi kullanıcı başına sayılır. Ardışık IMZA_PAROLA_ESIGI hatada hesap IMZA_KILIT_DK dakika
 // imza atamaz (girişten AYRI kilit — portalı okumaya devam eder); her başarısız deneme denetime satır yazar
 // (parola hiçbir satıra girmez). Başarılı imza sayacı sıfırlar. Kilit, parola alt sürece GİTMEDEN denetlenir.
+// İmza kapsamı (dinleyici) sayaçlardan ÖNCE: izinsiz yoldan gelen deneme sayaca da denetime de dokunmaz.
+import { assertSigningScope, type SigningKeyKind } from "../keys/signing-scope";
 import { recordAudit } from "../lib/audit";
 import { VendorError } from "../lib/errors";
 import { prisma } from "../lib/prisma";
 import type { VendorContext } from "../services/context";
 
-export type SigningKeyKind = "KOK" | "BAYI";
+export type { SigningKeyKind };
 
 export interface SigningActor {
   readonly userId: string;
@@ -53,6 +55,11 @@ export function withSigningPasswordGuard<T>(
   g: SigningActor & { readonly kind: SigningKeyKind; readonly nowMs?: number },
   sign: () => Promise<T>,
 ): Promise<T> {
+  try {
+    assertSigningScope(g.kind);
+  } catch (err) {
+    return Promise.reject(err);
+  }
   const startedAt = Date.now();
   // Sırada beklenen süre de "şimdi"ye eklenir: kilit denetimi sıra gelince yapılır.
   return serializedPerUser(g.userId, () => guardedSign(ctx, g, (g.nowMs ?? startedAt) + (Date.now() - startedAt), sign));

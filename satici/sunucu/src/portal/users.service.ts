@@ -4,6 +4,7 @@
 // kendi telefonuna bağlayamaz. Pasife alma / TOTP sıfırlama / parola değişimi açık oturumları kapatır.
 import { randomUUID } from "node:crypto";
 import type { PortalKullanici, PortalRolu } from "@prisma/client";
+import { recordAudit } from "../lib/audit";
 import { VendorError, badRequest, notFoundError, stateConflict } from "../lib/errors";
 import { prisma, type Db } from "../lib/prisma";
 import { uniqueViolationOn } from "../lib/prisma-errors";
@@ -11,6 +12,7 @@ import type { VendorContext } from "../services/context";
 import { requireReason } from "../services/sanction.service";
 import { normalizeUsername } from "./auth.service";
 import { hashPortalPassword, verifyPortalPassword } from "./password";
+import { actorOf } from "./roles";
 import { generateTotpSecret, otpauthUri, verifyTotp } from "./totp";
 
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,59}$/;
@@ -158,5 +160,6 @@ export async function changeOwnPassword(
     data: { parolaOzeti: hash, parolaDegisim: new Date(nowMs), totpSonAdim: totp.step },
   });
   if (claim.count === 0) throw new VendorError(401, "GIRIS_BASARISIZ", "Mevcut parola ya da doğrulama kodu hatalı");
-  await closeUserSessions(prisma, user.id, "PAROLA_DEGISTI", g.sessionId);
+  const closed = await closeUserSessions(prisma, user.id, "PAROLA_DEGISTI", g.sessionId);
+  await recordAudit({ event: "PORTAL_PAROLA_DEGISTI", entity: "PortalKullanici", entityId: user.id, actor: actorOf(user), summary: { kapananOturum: closed } });
 }

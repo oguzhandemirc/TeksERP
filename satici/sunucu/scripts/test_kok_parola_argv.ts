@@ -17,6 +17,7 @@ import path from "node:path";
 import { CertificateSchema, DAY_MS, LICENSE_CLASSES, TYP, publicKeyX, verifyCertificate } from "../src/lisans-protokol";
 import { KeyFileError, passwordBuffer, wrapPrivateKey, writeKeyFileExclusive } from "../src/keys/key-files";
 import { signWithWrappedKey, spawnSignerProcess } from "../src/keys/signer";
+import { runAsCli } from "../src/lib/request-scope";
 import { SATICI_KOKU, kontrol, sonuc } from "./lib/test-ortam";
 
 /** Sürecin argv'si (herkese açık yüzey) ve env'i (aynı kullanıcıya açık yüzey), düz metin. */
@@ -66,7 +67,7 @@ async function main(): Promise<void> {
     kontrol("§1c env'de parola YOK", !yuzey.env.includes(parola));
     kontrol("§1d ana sürecin ortam sırları (DATABASE_URL · diğer) alt sürece GEÇMEDİ", !yuzey.env.includes(ortamSirri) && !/DATABASE_URL/.test(yuzey.env));
     const verilen = passwordBuffer(parola);
-    const belge = await signWithWrappedKey({ keyFile: kokDosyasi, typ: TYP.SERTIFIKA, payload: sertifika, password: verilen, child: cocuk });
+    const belge = await runAsCli(() => signWithWrappedKey({ keyFile: kokDosyasi, typ: TYP.SERTIFIKA, payload: sertifika, password: verilen, child: cocuk }));
     const dogru = verifyCertificate(belge, { roots: [{ kid: kok.kid, x: kok.x, classes: kok.siniflar }], usage: "ALT", atMs: Date.now() });
     kontrol("§1e aynı alt süreç imzaladı; sertifika köke karşı doğrulanır", dogru.ok, dogru.ok ? "" : dogru.code);
     kontrol("§1f verilen parola Buffer'ı iş bitince SIFIRLANDI", verilen.every((b) => b === 0));
@@ -74,7 +75,7 @@ async function main(): Promise<void> {
     console.log("\n§2 yanlış parola");
     let hata: unknown = null;
     try {
-      await signWithWrappedKey({ keyFile: kokDosyasi, typ: TYP.SERTIFIKA, payload: sertifika, password: passwordBuffer(`${parola}-yanlis`) });
+      await runAsCli(() => signWithWrappedKey({ keyFile: kokDosyasi, typ: TYP.SERTIFIKA, payload: sertifika, password: passwordBuffer(`${parola}-yanlis`) }));
     } catch (err) {
       hata = err;
     }

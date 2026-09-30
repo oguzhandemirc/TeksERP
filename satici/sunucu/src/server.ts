@@ -60,7 +60,7 @@ async function main(): Promise<void> {
   let accessAddress: AddressInfo | null = null;
   let accessServer: http.Server | null = null;
   if (config.PORT_ERISIM !== undefined) {
-    accessServer = http.createServer(createAccessApp(ctx, { listener: () => accessAddress, tailnetListener: () => tailnetAddress, verifier: accessVerifier }));
+    accessServer = http.createServer(createAccessApp(ctx, { listener: () => accessAddress, verifier: accessVerifier }));
     accessAddress = await listen(accessServer, config.PORT_ERISIM, config.ERISIM_BIND);
     if (accessVerifier) {
       void accessVerifier.jwks.warm();

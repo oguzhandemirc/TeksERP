@@ -15,6 +15,7 @@
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { DAY_MS, ENDPOINTS } from "../src/lisans-protokol";
+import { runAsCli } from "../src/lib/request-scope";
 import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
   TEST_KOK_PAROLASI,
@@ -146,7 +147,7 @@ async function main(): Promise<void> {
 
     console.log("\n§4 bayi kodu yalnız etkinleşmemiş kuruluma");
     const hak = await hakSvc.createEntitlement({ installationDbId: kurId, modules: MODULLER, perpetual: false, maintenanceUntil: new Date(Date.now() + 200 * DAY_MS), actor: "bekci" });
-    await hakSvc.issueEntitlementVersion(ctx, { entitlementId: hak.id, password: passwordBuffer(TEST_KOK_PAROLASI), reason: "sahiplik bekçisi", actor: "bekci" });
+    await runAsCli(() => hakSvc.issueEntitlementVersion(ctx, { entitlementId: hak.id, password: passwordBuffer(TEST_KOK_PAROLASI), reason: "sahiplik bekçisi", actor: "bekci" }));
     const ilkKod = await B.istek(`/kurulumlar/${kurId}/etkinlestirme-kodu`, { clientToken: randomUUID() });
     kontrol("§4a ✓K etkinleşmemiş kuruluma bayi kodu → 201", ilkKod.status === 201 && typeof ilkKod.veri.kod === "string", `${ilkKod.status} ${ilkKod.kod ?? ""}`);
     const kurulum = await prisma.kurulum.findUniqueOrThrow({ where: { id: kurId } });

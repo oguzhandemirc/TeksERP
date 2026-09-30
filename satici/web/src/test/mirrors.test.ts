@@ -12,7 +12,7 @@ import { RETRY_CONFLICT_CODE } from "../shared/api";
 import { LOGIN_RATE_LIMIT_CODE } from "../shared/LoginPage";
 import { DEFAULT_MAINTENANCE_MONTHS, MAX_MAINTENANCE_MONTHS } from "../shared/CeilingFields";
 import { CLASS_LABEL, MODULE_LABEL } from "../shared/labels";
-import { PORTAL_PERMISSIONS } from "../shared/permissions";
+import { PORTAL_PERMISSIONS, TAILNET_ONLY_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
 import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
 import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "../shared/cloud-settings";
@@ -112,6 +112,12 @@ describe("izin tablosu aynası (satici/sunucu src/portal/roles.ts)", () => {
     expect(Object.keys(server).length).toBeGreaterThan(5);
     const web = Object.fromEntries(Object.entries(PORTAL_PERMISSIONS).map(([k, v]) => [k, [...v].sort()]));
     expect(web).toEqual(Object.fromEntries(Object.entries(server).map(([k, v]) => [k, [...v].sort()])));
+  });
+
+  it("yalnız tailnet izinleri (hassas sınıf: ERİŞİM oturumunda ekran yok) birebir aynı", () => {
+    const server = listStrings(read("portal/roles.ts"), "export const TAILNET_ONLY_PERMISSIONS: readonly PortalPermission\\[\\]");
+    expect(server).toContain("kullanici:yonet");
+    expect([...TAILNET_ONLY_PERMISSIONS].sort()).toEqual([...server].sort());
   });
 });
 

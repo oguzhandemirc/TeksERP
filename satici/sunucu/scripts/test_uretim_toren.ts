@@ -8,16 +8,23 @@
 //   §2 usb-kopyala: yalnız künyedeki şifreli/açık küme, özetler aynı, düz sır USB'ye GİRMEZ, hiçbir şey üretmez,
 //      aynı USB'ye ikinci kez yazmaz, künyeyle uyuşmayan kaynağı kopyalamaz
 //   §3 RED (hedefe hiçbir şey yazılmadan): hedef VAR · argv'de parola · ortamdaki parola kullanılmaz · zayıf ·
-//      eşleşmeyen · yarım kalıntı · tanınmayan bayrak · PAKET aracı parolasız dosya üretirse · ortada düşen adım
+//      eşleşmeyen · yarım kalıntı · tanınmayan bayrak · PAKET aracı parolasız dosya üretirse · ortada düşen adım ·
+//      TOCTOU: yolda sembolik bağ · parola beklerken yarım yola konan bağ · parola beklerken doğan BOŞ hedef dizini
+//      (ezilmez) · grup/başkalarına açık üst dizin
 //   §4 GERÇEK PAKET aracı (varsayılan PAKET_KOMUTU): üretim kid'ini tanıyorsa tören onunla uçtan uca; tanımıyorsa
 //      (ayrı dilim henüz inmedi) beyanlı ⏭ — araç tanıdığı gün bu bölüm kendiliğinden koşar
-// ⭐ KALICI SONDA ✓K (her koşumda): süreç yüzeyi okuyucusu KÖR DEĞİL — parolayı argv'de ve env'de taşıyan kukla
-//    süreçlerde BULUR.
+//   §5 KAYNAK (parola sorulmadan RED): kirli ağaç (izlenen değişiklik · izlenmeyen dosya) · HEAD origin/main'de değil ·
+//      etiket başka commit'i gösteriyor · npm ls hatalı; origin/main'deki HEAD etiketsiz GEÇER; künye tam sha + kilit özetleri
+//   Tören her koşumda TEMİZ bir kopyadan koşar (çalışma ağacının izlenen + izlenmeyen dosyaları → geçici git deposu,
+//   yerel `toren-sonda` etiketi; node_modules kopya — npm ls bağlı node_modules'ü "extraneous" sayar).
+// ⭐ KALICI SONDA ✓K5 (her koşumda): süreç yüzeyi okuyucusu KÖR DEĞİL — parolayı argv'de ve env'de taşıyan kukla
+//    süreçlerde BULUR (§0a · §0b) · temiz + etiketli kopyada tören GEÇER (§0c · §1q — kaynak kapısı kör RED değil) ·
+//    origin/main'deki HEAD etiketsiz geçer (§5e) · araya giren bağ/dizin sondası gerçekten ARAYA girer (§3k · §3l).
 // Koşum: node ../../scripts/agir-is.mjs -- npx tsx scripts/test_uretim_toren.ts   (DB GEREKMEZ; Teks-Erp npm ci ister)
 // =============================================================================
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { LICENSE_CLASSES, parseModuleKeyFile } from "../src/lisans-protokol";
@@ -28,7 +35,40 @@ import { SATICI_KOKU, kontrol, sonuc } from "./lib/test-ortam";
 
 const REPO = path.resolve(SATICI_KOKU, "..", "..");
 const TEKS = path.join(REPO, "Teks-Erp");
-const TOREN = path.join(REPO, "deploy", "satici", "uretim-toren.mjs");
+/** Törenin temiz kopyası (§0b kurar): tören kendi deposunun temizliğini ve etiketini ölçer. */
+let KLON = "";
+let TOREN = "";
+const ETIKET = "toren-sonda";
+const ET = `--etiket=${ETIKET}`;
+/** Kopyaya giren yollar: törenin koşturduğu araçlar + onların kaynakları. */
+const KLON_YOLLARI = [".gitignore", "deploy/satici", "satici/sunucu", "Teks-Erp/src", "Teks-Erp/scripts", "Teks-Erp/package.json", "Teks-Erp/package-lock.json", "Teks-Erp/tsconfig.json"];
+const gitK = (args: string[]) => spawnSync("git", ["-C", KLON, "-c", "user.name=bekci", "-c", "user.email=bekci@ornek.test", ...args], { encoding: "utf8" });
+
+/**
+ * Çalışma ağacının (izlenen + izlenmeyen, yok sayılmayan) dosyaları → geçici git deposu, tek commit + yerel etiket.
+ * node_modules KOPYALANIR (APFS/reflink): bağlı node_modules'ü npm ls "extraneous" sayar, tören npm ls ister.
+ */
+function klonKur(tmp: string): void {
+  KLON = path.join(tmp, "klon");
+  const dosyalar = execFileSync("git", ["-C", REPO, "ls-files", "-z", "-co", "--exclude-standard", "--", ...KLON_YOLLARI], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
+    .split("\0")
+    .filter(Boolean);
+  for (const f of dosyalar) {
+    const kaynak = path.join(REPO, f);
+    if (!existsSync(kaynak) || lstatSync(kaynak).isDirectory()) continue;
+    mkdirSync(path.dirname(path.join(KLON, f)), { recursive: true });
+    cpSync(kaynak, path.join(KLON, f), { verbatimSymlinks: true });
+  }
+  for (const nm of ["satici/sunucu/node_modules", "Teks-Erp/node_modules"]) {
+    const r = spawnSync("cp", process.platform === "darwin" ? ["-Rc", path.join(REPO, nm), path.join(KLON, nm)] : ["-R", "--reflink=auto", path.join(REPO, nm), path.join(KLON, nm)], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`node_modules kopyalanamadı (${nm}): ${r.stderr}`);
+  }
+  for (const args of [["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "tören sondası"], ["tag", ETIKET]]) {
+    const r = gitK(args);
+    if (r.status !== 0) throw new Error(`klon git ${args[0]}: ${r.stderr}`);
+  }
+  TOREN = path.join(KLON, "deploy", "satici", "uretim-toren.mjs");
+}
 const YIL = "2099";
 const KOK_PAROLA = `kok-sonda-${randomBytes(9).toString("hex")}`;
 const PAKET_PAROLA = `paket-sonda-${randomBytes(9).toString("hex")}`;
@@ -79,16 +119,24 @@ function surecYuzeyi(): string {
   return execFileSync("ps", ["-A", "-E", "-ww", "-o", "command="], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
 }
 
-/** Töreni gerçek alt süreçte koşar; koşum boyunca süreç yüzeyinde parolayı arar. */
-async function tore(argv: string[], stdin: string, ekOrtam: Record<string, string> = {}, ev?: string): Promise<Kosum> {
+/**
+ * Töreni gerçek alt süreçte koşar; koşum boyunca süreç yüzeyinde parolayı arar. `araya`: tören parola BEKLERKEN
+ * (`[2/` satırı basıldı, stdin açık) koşar — sonra parolalar yazılır (TOCTOU sondası).
+ */
+async function tore(argv: string[], stdin: string, ekOrtam: Record<string, string> = {}, ev?: string, araya?: (pid: number) => void): Promise<Kosum> {
   const cocuk = spawn(process.execPath, [TOREN, ...argv], {
-    cwd: REPO,
+    cwd: KLON,
     env: { ...process.env, ...(ev ? { HOME: ev } : {}), ...ekOrtam },
     stdio: ["pipe", "pipe", "pipe"],
   });
   let cikti = "";
   cocuk.stdout.on("data", (c: Buffer) => (cikti += c.toString("utf8")));
   cocuk.stderr.on("data", (c: Buffer) => (cikti += c.toString("utf8")));
+  if (araya) {
+    const son = Date.now() + 60_000;
+    while (!/\[2\/\d+\]/.test(cikti) && cocuk.exitCode === null && Date.now() < son) await bekle(20);
+    if (/\[2\/\d+\]/.test(cikti)) araya(cocuk.pid!);
+  }
   cocuk.stdin.end(stdin);
   let bitti = false;
   let status: number | null = null;
@@ -141,8 +189,13 @@ async function main(): Promise<void> {
     kuklaArgv.kill();
     kuklaEnv.kill();
 
+    console.log("\n§0b törenin temiz kopyası (izlenen + izlenmeyen dosyalar, yerel etiket, node_modules kopya)");
+    klonKur(tmp);
+    const klonHead = gitK(["rev-parse", "HEAD"]).stdout.trim();
+    kontrol("§0c kopya TEMİZ (git status boş) ve etiket HEAD'i gösteriyor", gitK(["status", "--porcelain", "--untracked-files=all"]).stdout === "" && gitK(["rev-parse", `${ETIKET}^{commit}`]).stdout.trim() === klonHead && /^[0-9a-f]{40}$/.test(klonHead), klonHead.slice(0, 12));
+
     console.log("\n§1 tören uçtan uca (geçici dizin, stdin parolaları, saplama PAKET aracı)");
-    const t = await tore([`--dizin=${D}`, `--yil=${YIL}`, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+    const t = await tore([`--dizin=${D}`, `--yil=${YIL}`, ET, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
     kontrol("§1a tören çıkış 0, hedef dizin doğdu, yarım dizin kalmadı", t.status === 0 && existsSync(D) && !readdirSync(tmp).some((n) => n.includes(".yarim-")), `${t.status} ${t.status === 0 ? "" : t.cikti.slice(-400)}`);
     if (t.status !== 0) {
       rmSync(tmp, { recursive: true, force: true });
@@ -256,6 +309,20 @@ async function main(): Promise<void> {
       ekranSizinti === 0 && [k.kok.x, k.paket.x, k.indirme.x, `kok-${YIL}-1`, `paket-${YIL}`, k.yedekAlicilari[0]!.parmakIzi, "usb-kopyala", "Sonraki adımlar"].every((s) => t.cikti.includes(s)),
       `${ekranSizinti} sızıntı`);
     kontrol("§1n ⭐ parola koşum boyunca HİÇBİR sürecin argv/env'inde görünmedi (tören + alt süreçler)", !t.parolaGoruldu && t.yoklama >= 5, `${t.yoklama} yoklama`);
+    const kay = (k as unknown as { kaynak?: { commit?: string; dayanak?: string; kirli?: boolean; kilitler?: Record<string, string>; npmLs?: string } }).kaynak ?? {};
+    const kilitOzeti = (f: string) => createHash("sha256").update(readFileSync(path.join(KLON, f))).digest("hex");
+    kontrol(
+      "§1q künye kaynağı: TAM HEAD sha · dayanak etiket · temiz · iki package-lock özeti (kopyanınkiyle aynı) · npm ls hatasız; ekranda kilit satırları",
+      kay.commit === klonHead &&
+        kay.dayanak === `etiket:${ETIKET}` &&
+        kay.kirli === false &&
+        kay.npmLs === "hatasız" &&
+        kay.kilitler?.["satici/sunucu/package-lock.json"] === kilitOzeti("satici/sunucu/package-lock.json") &&
+        kay.kilitler?.["Teks-Erp/package-lock.json"] === kilitOzeti("Teks-Erp/package-lock.json") &&
+        t.cikti.includes(`kaynak : ${klonHead}`) &&
+        (t.cikti.match(/kilit {2}: .*package-lock\.json sha256 [0-9a-f]{64}/g) ?? []).length === 2,
+      JSON.stringify(kay).slice(0, 160),
+    );
     kontrol("§1o künye çapa satırları: kök (bütün sınıflar) · paket · CF Worker İNDİRME",
       k.capaSatirlari.ROOT_PUBLIC_KEYS!.includes(k.kok.x) && k.capaSatirlari.PACKAGE_PUBLIC_KEYS!.includes(`paket-${YIL}`) && k.capaSatirlari.CF_WORKER_INDIRME!.includes(k.indirme.x));
 
@@ -295,34 +362,71 @@ async function main(): Promise<void> {
     console.log("\n§3 RED — hedefe hiçbir şey yazılmadan");
     const H = path.join(tmp, "hedef-yok");
     const temiz = () => !existsSync(H) && !readdirSync(tmp).some((n) => n.startsWith("hedef-yok.yarim-"));
-    const var_ = await tore([`--dizin=${D}`, `--yil=${YIL}`, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+    const var_ = await tore([`--dizin=${D}`, `--yil=${YIL}`, ET, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
     kontrol("§3a hedef VAR → çıkış 2, dokunulmadı (özetler künyeyle aynı)", var_.status === 2 && /zaten var/.test(var_.cikti) && spawnSync(process.execPath, [TOREN, "dogrula", `--dizin=${D}`]).status === 0);
     const argv = await tore([`--dizin=${H}`, `--kok-parolasi=${KOK_PAROLA}`], "", {}, ev);
     kontrol("§3b argv'de parola → çıkış 2, değer basılmadı", argv.status === 2 && /argümandan ALINMAZ/.test(argv.cikti) && !argv.cikti.includes(KOK_PAROLA) && temiz());
-    const env = await tore([`--dizin=${H}`, `--yil=${YIL}`, paketBayragi()], "", { KOK_PAROLASI: KOK_PAROLA, TOREN_PAROLA: KOK_PAROLA, PAKET_PAROLASI: PAKET_PAROLA }, ev);
+    const env = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, paketBayragi()], "", { KOK_PAROLASI: KOK_PAROLA, TOREN_PAROLA: KOK_PAROLA, PAKET_PAROLASI: PAKET_PAROLA }, ev);
     kontrol("§3c ortamdaki parola KULLANILMAZ (stdin boşken 'stdin bitti' ile durur)", env.status === 2 && /stdin bitti/.test(env.cikti) && temiz());
-    const zayif = await tore([`--dizin=${H}`, `--yil=${YIL}`, paketBayragi()], iki("kisa-parola", PAKET_PAROLA), {}, ev);
+    const zayif = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, paketBayragi()], iki("kisa-parola", PAKET_PAROLA), {}, ev);
     kontrol("§3d zayıf kök parolası (<12) → çıkış 2", zayif.status === 2 && /en az 12/.test(zayif.cikti) && temiz());
-    const farkli = await tore([`--dizin=${H}`, `--yil=${YIL}`, paketBayragi()], `${KOK_PAROLA}\n${KOK_PAROLA}x\n${PAKET_PAROLA}\n${PAKET_PAROLA}\n`, {}, ev);
+    const farkli = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, paketBayragi()], `${KOK_PAROLA}\n${KOK_PAROLA}x\n${PAKET_PAROLA}\n${PAKET_PAROLA}\n`, {}, ev);
     kontrol("§3e eşleşmeyen tekrar → çıkış 2", farkli.status === 2 && /eşleşmedi/.test(farkli.cikti) && temiz());
-    const parolasiz = await tore([`--dizin=${H}`, `--yil=${YIL}`, paketBayragi("parolasiz")], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
-    const dosyasiz = await tore([`--dizin=${H}`, `--yil=${YIL}`, paketBayragi("dosyasiz")], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
-    const yalanci = await tore([`--dizin=${H}`, `--yil=${YIL}`, paketBayragi("yalanci")], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+    const parolasiz = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, paketBayragi("parolasiz")], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+    const dosyasiz = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, paketBayragi("dosyasiz")], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+    const yalanci = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, paketBayragi("yalanci")], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
     kontrol("§3f PAKET aracı parolasız (ham d) dosya üretir, hiç dosya üretmez ya da --json özeti dosyayla uyuşmazsa → RED, yarım dizin silinir",
       parolasiz.status === 1 && /PAROLASIZ/.test(parolasiz.cikti) && dosyasiz.status === 1 && /beklenen dosyayı üretmedi/.test(dosyasiz.cikti) &&
         yalanci.status === 1 && /özeti dosyayla uyuşmuyor/.test(yalanci.cikti) && temiz(),
       `${parolasiz.status}/${dosyasiz.status}/${yalanci.status}`);
     const kalinti = path.join(tmp, "hedef-yok.yarim-12345");
     mkdirSync(kalinti);
-    const yarim = await tore([`--dizin=${H}`, `--yil=${YIL}`, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+    const yarim = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
     rmSync(kalinti, { recursive: true });
     kontrol("§3g yarım tören dizini kalıntısı → çıkış 2 (sil ve yeniden başla)", yarim.status === 2 && /Yarım kalmış/.test(yarim.cikti) && !existsSync(H));
     const bilinmez = await tore([`--dizin=${H}`, "--kok-kid=kok-2099-9"], "", {}, ev);
     kontrol("§3h tanınmayan bayrak → çıkış 2", bilinmez.status === 2 && /Tanınmayan argüman/.test(bilinmez.cikti) && temiz());
     const uzun = `depo.${"a".repeat(70)}`;
-    const ortada = await tore([`--dizin=${H}`, `--yil=${YIL}`, `--moduller=${uzun}`, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+    const ortada = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, `--moduller=${uzun}`, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
     kontrol("§3i ⭐ ortada düşen adım (kök · ALT · İND · sırlar · PAKET üretildikten SONRA modül) → yarım dizin silinir, hedef doğmaz",
       ortada.status === 1 && /\[7\/10\] PAKET/.test(ortada.cikti) && /yarım dizin silindi/.test(ortada.cikti) && temiz() && !ortada.parolaGoruldu, `${ortada.status}`);
+
+    console.log("\n§3 TOCTOU — yol ve araya girenler");
+    const gercekUst = path.join(tmp, "gercek-ust");
+    mkdirSync(gercekUst, { mode: 0o700 });
+    symlinkSync(gercekUst, path.join(tmp, "bagli-ust"));
+    const bagli = await tore([`--dizin=${path.join(tmp, "bagli-ust", "satici-uretim")}`, `--yil=${YIL}`, ET, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+    kontrol("§3j yolda sembolik bağ (üst dizin bağ) → çıkış 2 parola SORULMADAN, bağın hedefine hiçbir şey yazılmadı", bagli.status === 2 && /sembolik bağ/.test(bagli.cikti) && !/\[2\/10\]/.test(bagli.cikti) && readdirSync(gercekUst).length === 0, `${bagli.status} ${bagli.cikti.trim().split("\n").pop()?.slice(0, 120)}`);
+    const tuzak = path.join(tmp, "tuzak");
+    mkdirSync(tuzak, { mode: 0o700 });
+    let bagKondu = "";
+    const yarimBag = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev, (pid) => {
+      bagKondu = `${H}.yarim-${pid}`;
+      symlinkSync(tuzak, bagKondu);
+    });
+    const bagDurdu = bagKondu !== "" && lstatSync(bagKondu).isSymbolicLink();
+    kontrol(
+      "§3k ⭐ parola beklerken yarım yola konan sembolik bağ → RED (araya giren yol), bağın hedefine hiçbir şey yazılmadı, bağa dokunulmadı, hedef doğmadı",
+      bagKondu !== "" && yarimBag.status === 1 && /Araya giren yol/.test(yarimBag.cikti) && readdirSync(tuzak).length === 0 && bagDurdu && !existsSync(H),
+      `${yarimBag.status} · bağ ${bagKondu ? "kondu" : "KONAMADI"} · ${yarimBag.cikti.trim().split("\n").slice(-2).join(" / ").slice(0, 160)}`,
+    );
+    if (bagKondu) rmSync(bagKondu);
+    let hedefKondu = false;
+    const hedefYarisi = await tore([`--dizin=${H}`, `--yil=${YIL}`, ET, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev, () => {
+      mkdirSync(H, { mode: 0o700 });
+      hedefKondu = true;
+    });
+    kontrol(
+      "§3l ⭐ parola beklerken doğan BOŞ hedef dizini → tören sonunda RED, boş dizin EZİLMEDİ (hâlâ boş), yarım dizin silindi",
+      hedefKondu && hedefYarisi.status === 1 && /Hedef tören sürerken doğdu/.test(hedefYarisi.cikti) && existsSync(H) && readdirSync(H).length === 0 && !readdirSync(tmp).some((n) => n.startsWith("hedef-yok.yarim-")),
+      `${hedefYarisi.status} · ${hedefYarisi.cikti.trim().split("\n").slice(-2).join(" / ").slice(0, 160)}`,
+    );
+    rmSync(H, { recursive: true, force: true });
+    const acikUst = path.join(tmp, "acik-ust");
+    mkdirSync(acikUst);
+    chmodSync(acikUst, 0o777);
+    const acik = await tore([`--dizin=${path.join(acikUst, "satici-uretim")}`, `--yil=${YIL}`, ET, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+    kontrol("§3m grup/başkalarına yazılabilir üst dizin → RED, içine hiçbir şey yazılmadı", acik.status === 2 && /grup\/başkaları yazabiliyor/.test(acik.cikti) && readdirSync(acikUst).length === 0, `${acik.status} ${acik.cikti.trim().split("\n").slice(-2).join(" / ").slice(0, 140)}`);
 
     console.log("\n§4 GERÇEK PAKET aracı (varsayılan PAKET_KOMUTU)");
     const yoklamaDizini = path.join(tmp, "paket-yoklama");
@@ -339,7 +443,7 @@ async function main(): Promise<void> {
       : null;
     if (yok.status === 0 && typeof yokJson?.x === "string" && yokJson.d === undefined) {
       const G = path.join(tmp, "satici-uretim-gercek");
-      const g = await tore([`--dizin=${G}`, `--yil=${YIL}`], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+      const g = await tore([`--dizin=${G}`, `--yil=${YIL}`, ET], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
       const gk = existsSync(path.join(G, "TOREN-KUNYE.json")) ? (JSON.parse(readFileSync(path.join(G, "TOREN-KUNYE.json"), "utf8")) as { paket?: { x?: string } }) : {};
       const gp = existsSync(path.join(G, "paket", `paket-${YIL}.paket.json`)) ? readFileSync(path.join(G, "paket", `paket-${YIL}.paket.json`), "utf8") : "";
       kontrol("§4a tören gerçek PAKET aracıyla uçtan uca: parolalı dosya (ham d yok), künyede açık yarı; parola hiçbir süreçte görünmedi",
@@ -348,6 +452,41 @@ async function main(): Promise<void> {
       atlanan++;
       console.log(`  ⏭ ATLANDI — gerçek PAKET aracı üretim kid'ini henüz tanımıyor (lisans/uretim-gecis dilimi): ${(yok.stderr || yok.stdout).trim().split("\n").pop()?.slice(0, 140) ?? ""}`);
     }
+
+    console.log("\n§5 KAYNAK — kirli ağaç, origin/main dışı HEAD, yanlış etiket, npm ls (parola SORULMADAN RED)");
+    const H5 = path.join(tmp, "kaynak-hedef");
+    const kaynakRed = async (argv: string[], desen: RegExp): Promise<[boolean, string]> => {
+      const r = await tore([`--dizin=${H5}`, `--yil=${YIL}`, ...argv, paketBayragi()], iki(KOK_PAROLA, PAKET_PAROLA), {}, ev);
+      return [r.status === 2 && desen.test(r.cikti) && !/\[2\/10\]/.test(r.cikti) && !existsSync(H5), `${r.status} ${r.cikti.trim().split("\n").pop()?.slice(0, 140)}`];
+    };
+    const ornekEnv = path.join(KLON, "deploy", "satici", "ornek.env");
+    writeFileSync(ornekEnv, `${readFileSync(ornekEnv, "utf8")}# kirli\n`);
+    const [kirli, kirliA] = await kaynakRed([ET], /Ağaç KİRLİ/);
+    gitK(["checkout", "--", "deploy/satici/ornek.env"]);
+    kontrol("§5a izlenen dosyada değişiklik → RED (kirli)", kirli, kirliA);
+    writeFileSync(path.join(KLON, "satici", "sunucu", "src", "sonda-izlenmeyen.ts"), "export {};\n");
+    const [izsiz, izsizA] = await kaynakRed([ET], /Ağaç KİRLİ/);
+    rmSync(path.join(KLON, "satici", "sunucu", "src", "sonda-izlenmeyen.ts"));
+    kontrol("§5b izlenmeyen dosya → RED (kirli)", izsiz, izsizA);
+    const yetim = gitK(["commit-tree", gitK(["write-tree"]).stdout.trim(), "-m", "ilgisiz"]).stdout.trim();
+    gitK(["update-ref", "refs/remotes/origin/main", yetim]);
+    const [disarida, disaridaA] = await kaynakRed([], /origin\/main'de DEĞİL/);
+    kontrol("§5c etiketsiz ve HEAD origin/main'de değil → RED", disarida, disaridaA);
+    gitK(["tag", "baska-sonda", yetim]);
+    const [baska, baskaA] = await kaynakRed(["--etiket=baska-sonda"], /HEAD'i göstermiyor/);
+    kontrol("§5d etiket başka commit'i gösteriyor → RED", baska, baskaA);
+    gitK(["update-ref", "refs/remotes/origin/main", klonHead]);
+    const icinde = await tore([`--dizin=${H5}`, `--yil=${YIL}`, paketBayragi()], iki("kisa-parola", PAKET_PAROLA), {}, ev);
+    kontrol("§5e ✓K etiketsiz ama HEAD origin/main'de → kaynak kapısı GEÇER (parola adımına kadar gelir, zayıf parolada durur)", icinde.status === 2 && /\[2\/10\]/.test(icinde.cikti) && /en az 12/.test(icinde.cikti) && /origin\/main/.test(icinde.cikti), `${icinde.status}`);
+    const pj = path.join(KLON, "satici", "sunucu", "package.json");
+    const pjEski = readFileSync(pj, "utf8");
+    const pjYeni = JSON.parse(pjEski) as { dependencies?: Record<string, string> };
+    pjYeni.dependencies = { ...(pjYeni.dependencies ?? {}), "tekserp-sonda-kurulmamis": "1.0.0" };
+    writeFileSync(pj, `${JSON.stringify(pjYeni, null, 2)}\n`);
+    gitK(["commit", "-q", "-am", "kurulmamış bağımlılık"]);
+    gitK(["tag", "npm-sonda"]);
+    const [npmls, npmlsA] = await kaynakRed(["--etiket=npm-sonda"], /npm ls --all hatalı/);
+    kontrol("§5f ⭐ temiz + etiketli ama node_modules kilitle uyuşmuyor (kurulmamış bağımlılık) → RED npm ls", npmls, npmlsA);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

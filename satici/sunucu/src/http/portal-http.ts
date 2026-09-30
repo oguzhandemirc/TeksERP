@@ -4,17 +4,24 @@
 // (portal-routes.ts · dealer-routes.ts) veridir: bekçi her rotanın iznini ve kimlik beyanını ölçer.
 // Kök parolalı rota (`kokParolasi: true`) kapısıyla bağlanır (tailnet kaynağı ara katmanı); kapı verilmeyen
 // yönlendirici o rotayı bağlamaz, AÇILIŞTA düşer (fail-closed).
+// ERİŞİM (Cloudflare Access) yönlendiricisi OPT-IN: yalnız erisim-rotalari.ts listesindeki rotalar bağlanır, liste
+// dışı istek gövde okunmadan 404. Her işleyici istek kapsamında koşar (lib/request-scope.ts): imza boğazı dinleyiciyi,
+// denetim Access e-postasını oradan okur; denetim satırı yazmayan ERİŞİM yazması genel ayak izi satırı alır.
 // CSRF: SameSite=Strict + yazmada yalnız application/json (tarayıcı formu bu türü gönderemez) + CORS yok.
 import express, { Router, type NextFunction, type Request, type RequestHandler, type Response } from "express";
 import { z } from "zod";
+import { recordAudit } from "../lib/audit";
 import { VendorError, notFoundError } from "../lib/errors";
+import { currentScope, runInScope } from "../lib/request-scope";
 import { login, logout, resolveSession, SESSION_COOKIE, SESSION_COOKIE_PATH, type PortalSession } from "../portal/auth.service";
 import { executePortalAction, type PortalActionResult, type PortalActionSpec } from "../portal/idempotency";
-import { roleHas, type PortalListener, type PortalPermission } from "../portal/roles";
+import { TAILNET_ONLY_PERMISSIONS, roleHas, type PortalListener, type PortalPermission } from "../portal/roles";
 import { changeOwnPassword } from "../portal/users.service";
 import type { VendorContext } from "../services/context";
 import { parseStrict } from "./body";
 import { proxyTrustFrom } from "./client-address";
+import { ERISIM_PORTAL_ROTALARI } from "./erisim-rotalari";
+import { notFound } from "./error-handler";
 import { rateLimit } from "./rate-limit";
 
 export type PortalMethod = "get" | "post" | "patch";
@@ -169,13 +176,113 @@ export async function requirePortalSession(ctx: VendorContext, listener: PortalL
     throw new VendorError(401, "OTURUM_YOK", "Oturum yok ya da süresi doldu; yeniden giriş yapın");
   }
   if (permission && !roleHas(session.user.rol, permission)) throw new VendorError(403, "YETKISIZ", "Bu işlem için yetkiniz yok");
+  const scope = currentScope();
+  if (scope) scope.actor = session.actor;
   return session;
+}
+
+// ---------------------------------------------------------------- dinleyici kapsamı + ERİŞİM izin listesi
+
+export type RouteMethod = PortalMethod | "put";
+
+/** İzin listesi anahtarı: "YÖNTEM /yol" (rota tablosundaki yazımla birebir). */
+export const routeKey = (method: RouteMethod, path: string): string => `${method.toUpperCase()} ${path}`;
+
+/** Oturum uçları (tablo dışı, bu dosyada bağlanır) — ERİŞİM listesinin tanıdığı anahtarlar. */
+export const SESSION_ROUTE_KEYS: readonly string[] = ["POST /oturum/ac", "POST /oturum/kapat", "GET /oturum", "POST /oturum/parola"];
+
+/**
+ * ERİŞİM izin listesinin kusurları: tabloda olmayan satır · kök parolalı rota · hassas izinli rota (roles.ts
+ * `TAILNET_ONLY_PERMISSIONS`). Boş dizi = geçerli; yönlendirici kurulurken dolu dizi AÇILIŞI durdurur.
+ */
+export function erisimListesiBulgulari(routes: readonly PortalRouteDef[], list: ReadonlySet<string>, fixedKeys: readonly string[] = SESSION_ROUTE_KEYS): string[] {
+  const out: string[] = [];
+  const byKey = new Map(routes.map((d) => [routeKey(d.method, d.path), d]));
+  for (const key of list) {
+    const def = byKey.get(key);
+    if (!def) {
+      if (!fixedKeys.includes(key)) out.push(`${key}: listede ama rota tablosunda yok`);
+      continue;
+    }
+    if (def.kokParolasi) out.push(`${key}: kök parolalı rota ERİŞİM'e açılamaz`);
+    if (TAILNET_ONLY_PERMISSIONS.includes(def.permission)) out.push(`${key}: hassas izinli (${def.permission}) rota ERİŞİM'e açılamaz`);
+  }
+  return out;
+}
+
+const ALLOWED_MARK = "erisimIzinliRota";
+
+/** Listede olmayan istek gövde OKUNMADAN 404 (eşleşme Express'in kendi yol eşleyicisiyle — bağlamayla aynı anlam). */
+export function allowlistGate(list: ReadonlySet<string>): RequestHandler {
+  const marker = express.Router();
+  const mark: RequestHandler = (_req, res, next) => {
+    res.locals[ALLOWED_MARK] = true;
+    next();
+  };
+  for (const key of list) {
+    const [method, path] = key.split(" ") as [string, string];
+    const m = method.toLowerCase() as RouteMethod;
+    if (!["get", "post", "patch", "put"].includes(m) || !path?.startsWith("/")) throw new Error(`ERİŞİM izin listesi: biçimsiz anahtar ${key}`);
+    marker[m](path, mark);
+  }
+  return (req, res, next) => {
+    marker(req, res, (err?: unknown) => {
+      if (err) {
+        next(err);
+        return;
+      }
+      if (res.locals[ALLOWED_MARK] === true) next();
+      else notFound(req, res);
+    });
+  };
+}
+
+export interface ScopedOptions {
+  /** ERİŞİM yazma ayak izi satırından muafiyet — gerekçesi yazılı (ör. parça yazımı: oturumun açılışı/tamamlanışı taşır). */
+  readonly ayakIziMuaf?: string;
+}
+
+const isWrite = (req: Request): boolean => req.method !== "GET" && req.method !== "HEAD";
+
+/**
+ * İşleyiciyi istek kapsamında koşar. ERİŞİM'de doğrulanmış Access kimliği yoksa (JWT kapısının arkasında değil) 404.
+ * ERİŞİM'de oturumlu, başarılı, tekrar oynatma olmayan ve denetim satırı yazmamış yazma → genel ayak izi satırı.
+ */
+export function scopedHandler(listener: PortalListener, key: string, fn: (req: Request, res: Response) => Promise<void>, opts: ScopedOptions = {}): RequestHandler {
+  return async (req, res) => {
+    const raw = listener === "ERISIM" ? (res.locals.erisimKimligi as { email?: unknown } | undefined)?.email : undefined;
+    const email = typeof raw === "string" && raw !== "" ? raw : undefined;
+    if (listener === "ERISIM" && email === undefined) {
+      notFound(req, res);
+      return;
+    }
+    await runInScope(
+      listener,
+      async () => {
+        await fn(req, res);
+        const scope = currentScope();
+        if (listener !== "ERISIM" || !isWrite(req) || opts.ayakIziMuaf || !scope?.actor || scope.audits > 0) return;
+        if (res.statusCode >= 400 || res.get("Idempotent-Replay") === "true") return;
+        await recordAudit({ event: "ERISIM_YAZMA", entity: "PortalRota", actor: scope.actor, summary: { rota: key, yol: `${req.baseUrl}${req.path}`, durum: res.statusCode } });
+      },
+      email,
+    );
+  };
 }
 
 export function createPortalRouter(ctx: VendorContext, listener: PortalListener, routes: readonly PortalRouteDef[], options: PortalRouterOptions = {}): Router {
   const router = express.Router();
+  // ERİŞİM: YALNIZ izin listesi (opt-in). Kusurlu liste açılışı durdurur; liste dışı istek gövde okunmadan 404.
+  const allowed = listener === "ERISIM" ? ERISIM_PORTAL_ROTALARI : null;
+  if (allowed) {
+    const problems = erisimListesiBulgulari(routes, allowed);
+    if (problems.length > 0) throw new Error(`ERİŞİM izin listesi geçersiz: ${problems.join(" | ")}`);
+    router.use(allowlistGate(allowed));
+  }
+  const bind = (key: string): boolean => allowed === null || allowed.has(key);
+  const bound = routes.filter((d) => bind(routeKey(d.method, d.path)));
   // Kök parolalı rota kapısı EN ÖNDE: reddedilen isteğin gövdesi (parola) hiç ayrıştırılmaz.
-  for (const def of routes.filter((d) => d.kokParolasi)) {
+  for (const def of bound.filter((d) => d.kokParolasi)) {
     if (!options.rootPasswordGate) throw new Error(`${def.method.toUpperCase()} ${def.path}: kök parolalı rota kapısız bağlanamaz`);
     router[def.method](def.path, options.rootPasswordGate);
   }
@@ -184,42 +291,68 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
   router.use(express.json({ limit: "64kb", strict: true }));
   // Vekil başlığı yalnız Cloudflare arkasındaki dinleyicilerde (GENEL · ERİŞİM) ve yalnız güvenilen vekilden gelen bağlantıda okunur.
   const trust = listener === "TAILNET" ? proxyTrustFrom({ VEKIL_IP_BASLIGI: undefined, GUVENILIR_VEKIL_AGLARI: [], IC_VEKIL_AGLARI: [] }) : proxyTrustFrom(ctx.config);
+  const scoped = (key: string, fn: (req: Request, res: Response) => Promise<void>): RequestHandler => scopedHandler(listener, key, fn);
 
-  router.post("/oturum/ac", rateLimit({ perMinute: ctx.config.PORTAL_GIRIS_HIZ_DK, trust }), async (req: Request, res: Response) => {
-    const body = parseStrict(LoginSchema, req.body ?? {});
-    const { token, session } = await login(ctx, { listener, username: body.kullaniciAdi, password: body.parola, totp: body.totp });
-    res.append("Set-Cookie", cookieHeader(ctx, listener, token, ctx.config.PORTAL_OTURUM_AZAMI_SAAT * 3600));
-    res.status(200).json({ success: true, data: sessionView(session) });
-  });
+  if (bind("POST /oturum/ac")) {
+    router.post(
+      "/oturum/ac",
+      rateLimit({ perMinute: ctx.config.PORTAL_GIRIS_HIZ_DK, trust }),
+      scoped("POST /oturum/ac", async (req, res) => {
+        const body = parseStrict(LoginSchema, req.body ?? {});
+        const { token, session } = await login(ctx, { listener, username: body.kullaniciAdi, password: body.parola, totp: body.totp });
+        res.append("Set-Cookie", cookieHeader(ctx, listener, token, ctx.config.PORTAL_OTURUM_AZAMI_SAAT * 3600));
+        res.status(200).json({ success: true, data: sessionView(session) });
+      }),
+    );
+  }
 
   const requireSession = (req: Request, res: Response): Promise<PortalSession> => requirePortalSession(ctx, listener, { req, res });
 
-  router.post("/oturum/kapat", async (req: Request, res: Response) => {
-    const session = await resolveSession(ctx, { listener, token: readCookie(req, SESSION_COOKIE[listener]) });
-    if (session) await logout(session);
-    res.append("Set-Cookie", cookieHeader(ctx, listener, "", 0));
-    res.json({ success: true, data: null });
-  });
+  if (bind("POST /oturum/kapat")) {
+    router.post(
+      "/oturum/kapat",
+      scoped("POST /oturum/kapat", async (req, res) => {
+        const session = await resolveSession(ctx, { listener, token: readCookie(req, SESSION_COOKIE[listener]) });
+        if (session) await logout(session);
+        res.append("Set-Cookie", cookieHeader(ctx, listener, "", 0));
+        res.json({ success: true, data: null });
+      }),
+    );
+  }
 
-  router.get("/oturum", async (req: Request, res: Response) => {
-    res.json({ success: true, data: sessionView(await requireSession(req, res)) });
-  });
+  if (bind("GET /oturum")) {
+    router.get(
+      "/oturum",
+      scoped("GET /oturum", async (req, res) => {
+        res.json({ success: true, data: sessionView(await requireSession(req, res)) });
+      }),
+    );
+  }
 
-  router.post("/oturum/parola", async (req: Request, res: Response) => {
-    const session = await requireSession(req, res);
-    const body = parseStrict(PasswordChangeSchema, req.body ?? {});
-    await changeOwnPassword(ctx, { userId: session.user.id, sessionId: session.id, currentPassword: body.mevcutParola, newPassword: body.yeniParola, totp: body.totp });
-    res.json({ success: true, data: null });
-  });
+  if (bind("POST /oturum/parola")) {
+    router.post(
+      "/oturum/parola",
+      scoped("POST /oturum/parola", async (req, res) => {
+        const session = await requireSession(req, res);
+        const body = parseStrict(PasswordChangeSchema, req.body ?? {});
+        await changeOwnPassword(ctx, { userId: session.user.id, sessionId: session.id, currentPassword: body.mevcutParola, newPassword: body.yeniParola, totp: body.totp });
+        res.json({ success: true, data: null });
+      }),
+    );
+  }
 
-  for (const def of routes) {
-    router[def.method](def.path, async (req: Request, res: Response) => {
-      const session = await requireSession(req, res);
-      if (!roleHas(session.user.rol, def.permission)) throw new VendorError(403, "YETKISIZ", "Bu işlem için yetkiniz yok");
-      const result = await def.handler({ ctx, session, req, nowMs: Date.now() });
-      if (result.replayed) res.set("Idempotent-Replay", "true");
-      res.status(result.status ?? 200).json({ success: true, data: result.data });
-    });
+  for (const def of bound) {
+    const key = routeKey(def.method, def.path);
+    router[def.method](
+      def.path,
+      scoped(key, async (req, res) => {
+        const session = await requireSession(req, res);
+        if (!roleHas(session.user.rol, def.permission)) throw new VendorError(403, "YETKISIZ", "Bu işlem için yetkiniz yok");
+        const result = await def.handler({ ctx, session, req, nowMs: Date.now() });
+        if (result.replayed) res.set("Idempotent-Replay", "true");
+        res.status(result.status ?? 200).json({ success: true, data: result.data });
+      }),
+    );
   }
   return router;
 }

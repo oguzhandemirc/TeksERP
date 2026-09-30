@@ -7,6 +7,10 @@
 //   ② docker soketi hiçbir servise bağlı değil
 //   ③ her servis: salt okunur kök FS · cap_drop ALL · no-new-privileges · root olmayan kullanıcı ·
 //      bellek + CPU + süreç sınırı
+//   ③b her servis (yan konteynerler dahil): yalıtım GEVŞETMESİ yok — volumes_from · privileged · cap_add · pid/ipc/uts/
+//      userns/cgroup · devices · runtime · sysctls YASAK; network_mode yalnız beyanlı istisna (geri döngü kipinde
+//      portal-tunel → service:satici); security_opt TAM OLARAK no-new-privileges:true (seccomp/apparmor/label gevşetmesi yok)
+//   ③c her servisin anahtarları TANINAN kümede (fail-closed: bilinmeyen anahtar = ihlal; yeni anahtar bilinçli eklenir)
 //   ④ kenar + ic ağları internal; dış (`external`) ağa katılan servis yok (Traefik'in `web`i dahil)
 //   ⑤ anahtar birimi her bağlandığı yerde salt okunur
 //   ⑥ satıcı köprü ağları 100.64/10 ve 127/8 DIŞINDA — köprü ağ geçidi tailnet kapısını kandırmasın
@@ -199,6 +203,32 @@ for (const [ad, s] of servisler) {
   if (!s.cpus) eksik.push("cpus");
   if (!s.pids_limit) eksik.push("pids_limit");
   kontrol(`③ ${ad} sertleştirilmiş`, eksik.length === 0, eksik.length ? `eksik: ${eksik.join(", ")}` : `user ${kullanici} · ${s.mem_limit} · ${s.cpus} cpu · ${s.pids_limit} süreç`);
+}
+
+// ③b yalıtım gevşetmesi — cap_drop ALL'ı cap_add/privileged ezse ③ yine yeşil verirdi; burada her anahtar ayrı ölçülür.
+// Beyanlı istisnalar (servis · anahtar · değer · koşul); başka her gevşetme ihlaldir.
+const ISTISNALAR = [
+  { servis: "portal-tunel", anahtar: "network_mode", deger: "service:satici", kosul: () => geriDongu, neden: "geri döngü iletici (§4a)" },
+];
+const istisna = (ad, anahtar, deger) => ISTISNALAR.some((i) => i.servis === ad && i.anahtar === anahtar && i.deger === deger && i.kosul());
+const doluMu = (v) => v !== undefined && v !== null && v !== false && v !== "" && !(Array.isArray(v) && v.length === 0) && !(typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 0);
+const YASAK_ANAHTARLAR = ["volumes_from", "privileged", "cap_add", "pid", "ipc", "uts", "userns_mode", "cgroup", "cgroup_parent", "devices", "device_cgroup_rules", "runtime", "isolation", "sysctls", "network_mode"];
+for (const [ad, s] of servisler) {
+  const gevsek = YASAK_ANAHTARLAR.filter((k) => doluMu(s[k]) && !istisna(ad, k, s[k])).map((k) => `${k}=${JSON.stringify(s[k])}`);
+  const so = s.security_opt ?? [];
+  if (JSON.stringify(so) !== JSON.stringify(["no-new-privileges:true"])) gevsek.push(`security_opt=${JSON.stringify(so)} (yalnız no-new-privileges:true)`);
+  kontrol(`③b ${ad} yalıtım gevşetmesi yok`, gevsek.length === 0, gevsek.join(" · ") || (s.network_mode ? `beyanlı istisna: network_mode=${s.network_mode}` : ""));
+}
+
+// ③c tanınan anahtarlar: `docker compose config` çıktısında bugün görülen (+ bildirim yan konteynerinin `dns`i) küme.
+const TANINAN_ANAHTARLAR = new Set([
+  "cap_drop", "command", "container_name", "cpus", "depends_on", "dns", "entrypoint", "environment", "group_add", "healthcheck", "image",
+  "init", "labels", "logging", "mem_limit", "memswap_limit", "network_mode", "networks", "pids_limit", "ports", "profiles", "read_only",
+  "restart", "secrets", "security_opt", "tmpfs", "user", "volumes",
+]);
+for (const [ad, s] of servisler) {
+  const bilinmeyen = Object.keys(s).filter((k) => !TANINAN_ANAHTARLAR.has(k));
+  kontrol(`③c ${ad} yalnız tanınan anahtarlar`, bilinmeyen.length === 0, bilinmeyen.length ? `tanınmayan: ${bilinmeyen.join(", ")}` : "");
 }
 
 // ④ ağlar

@@ -30,6 +30,8 @@ const WILDCARD_ADDRESSES = new Set(["0.0.0.0", "::", "[::]", "*", ""]);
 export const ACCESS_TEAM_DOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/;
 /** Access uygulamasının AUD etiketi (64 onaltılık). */
 export const ACCESS_AUD_PATTERN = /^[a-f0-9]{64}$/;
+/** Eski ama geçerli JWKS kabulünün yaş tavanı (gün): Cloudflare anahtarı döndürünce eskisi ~7 gün geçerli kalır. */
+export const JWKS_AZAMI_YAS_GUN_VARSAYILAN = 7;
 
 const accessTeamDomain = z
   .string()
@@ -132,6 +134,8 @@ const EnvSchema = z.object({
   CF_ACCESS_AUD: accessAud.optional(),
   /** Yan konteynerin (satici-jwks) atomik yazdığı JWKS dosyası; satıcı salt okunur okur, ağa ÇIKMAZ. */
   CF_ACCESS_JWKS_DOSYASI: z.string().min(1).optional(),
+  /** JWKS dosyasının yaş tavanı (gün, dosyanın mtime'ından): aşan küme RED (genel portal 404), yarısında uyarı. */
+  CF_ACCESS_JWKS_AZAMI_YAS_GUN: positiveInt(1, 30).default(JWKS_AZAMI_YAS_GUN_VARSAYILAN),
   /** İç zil: tesis başına dakikalık tavan. */
   IC_ZIL_HIZ_DK: positiveInt(1, 1000).default(12),
   /** İç API çağrı sayacının denetime yazılma aralığı (dk; her istek değil, pencere başına tek satır). */

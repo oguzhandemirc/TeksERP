@@ -1,9 +1,11 @@
 // Kök/bayi imzası: parola İMZA ALT SÜRECİNE yalnız stdin'den gider (argv/env ASLA).
-// Ana süreç anahtarı hiç açmaz; alt süreç imzalar, Buffer'ları sıfırlar ve çıkar.
+// Ana süreç anahtarı hiç açmaz; alt süreç imzalar, Buffer'ları sıfırlar ve çıkar. Parolalı anahtarla imzanın TEK
+// boğazı burasıdır: istek kapsamı (dinleyici) anahtarın DOSYADAKİ türüne göre denetlenir (keys/signing-scope.ts).
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { VendorError } from "../lib/errors";
-import { KeyFileError } from "./key-files";
+import { KeyFileError, readWrappedKeyFile } from "./key-files";
+import { assertSigningScope, signingKindOf } from "./signing-scope";
 
 const SIGNER_TIMEOUT_MS = 60_000;
 /** Slot bekleyen imza isteği tavanı: kuyruk dolarsa yeni istek beklemez, 429 alır. */
@@ -89,6 +91,8 @@ export interface SignWithWrappedKeyInput {
 export async function signWithWrappedKey(g: SignWithWrappedKeyInput): Promise<string> {
   let release: () => void;
   try {
+    // Kapsam alt süreçten ve slottan ÖNCE: izinsiz yoldan gelen parola hiçbir sürece gitmez.
+    assertSigningScope(signingKindOf(readWrappedKeyFile(g.keyFile).tur));
     release = await slots.acquire();
   } catch (err) {
     g.password.fill(0);

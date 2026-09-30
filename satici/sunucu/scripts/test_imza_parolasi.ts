@@ -10,16 +10,22 @@
 //      aşılınca yeni istek beklemez, 429 HIZ_SINIRI alır
 //   §6 aynı kullanıcının EŞZAMANLI denemeleri sıraya girer: 8 paralel yanlış parolanın tam 5'i denetlenir,
 //      kalanı kilide takılır (sıra olmasaydı hepsi kilit denetimini birlikte geçip 8 tahmin yaptırırdı)
-// ⭐ KALICI SONDA ✓K4 (her koşumda): kilit öncesi 5 deneme GERÇEKTEN parola denetler (400, 429 değil) ·
+//   §7 imza KAPSAMI (tek boğaz `signWithWrappedKey`, anahtar türü DOSYADAN): kapsamsız kök imzası 500 · ERİŞİM ve
+//      GENEL'den kök imzası 404 · TAILNET ve CLI geçer · bayi anahtarı yalnız GENEL/CLI; reddedilen parola hiçbir
+//      sürece YAZILMAZ ve Buffer'ı sıfırlanır
+// ⭐ KALICI SONDA ✓K5 (her koşumda): kilit öncesi 5 deneme GERÇEKTEN parola denetler (400, 429 değil) ·
 //    araya giren başarı kilidi önler · 2 slotta iki imza GERÇEKTEN aynı anda koşar (slot kör değil) ·
-//    eşzamanlı denemelerin 5'i gerçekten denetlenir (kilit körü körüne herkesi reddetmez).
+//    eşzamanlı denemelerin 5'i gerçekten denetlenir (kilit körü körüne herkesi reddetmez) · TAILNET kapsamında kök
+//    imzası GERÇEKTEN imzalar ve GENEL'de bayi anahtarı kapsamı geçer (§7 reddi kör RED değil).
 // Koşum: npx tsx scripts/test_imza_parolasi.ts   (kendi _test DB'si)
 // =============================================================================
+import type { Socket } from "node:net";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { TYP } from "../src/lisans-protokol";
-import { passwordBuffer } from "../src/keys/key-files";
+import { passwordBuffer, wrapPrivateKey, writeKeyFileExclusive } from "../src/keys/key-files";
+import { runAsCli, runInScope, type ScopeOrigin } from "../src/lib/request-scope";
 import { sertifikaYuku } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
   SATICI_KOKU,
@@ -45,7 +51,7 @@ async function main(): Promise<void> {
   const ortam = await anahtarOrtamiKur();
   const { f, ctx } = ortam;
   const { prisma } = await import("../src/lib/prisma");
-  const { signWithWrappedKey, setSignerConcurrency, signerSlotsInUse } = await import("../src/keys/signer");
+  const { signWithWrappedKey, setSignerConcurrency, signerSlotsInUse, spawnSignerProcess } = await import("../src/keys/signer");
   const temizlenecek: string[] = [];
   const kullanicilar: string[] = [];
   const sunucu = await portalSunuculariKur(ctx);
@@ -115,7 +121,7 @@ async function main(): Promise<void> {
     console.log("\n§5 imza alt süreci semaforu");
     const kokDosyasi = path.join(ortam.dizin, `${f.kok.kid}.kok.json`);
     const imzala = () =>
-      signWithWrappedKey({ keyFile: kokDosyasi, typ: TYP.SERTIFIKA, payload: sertifikaYuku(f, f.alt, "ALT") as unknown as Record<string, unknown>, password: passwordBuffer(TEST_KOK_PAROLASI) });
+      runAsCli(() => signWithWrappedKey({ keyFile: kokDosyasi, typ: TYP.SERTIFIKA, payload: sertifikaYuku(f, f.alt, "ALT") as unknown as Record<string, unknown>, password: passwordBuffer(TEST_KOK_PAROLASI) }));
     const olc = async (adet: number): Promise<{ enCok: number; hepsi: boolean }> => {
       let enCok = 0;
       let bitti = false;
@@ -161,6 +167,47 @@ async function main(): Promise<void> {
       "§6a ✓K aynı kullanıcının 8 eşzamanlı yanlış denemesi → tam 5'i parola denetler (400), kalan 3'ü kilide takılır (429); denetimde 5 satır",
       denendi === 5 && kilitlendi === 3 && basarisizSatir === 5,
       `${denendi}×400 ${kilitlendi}×429 · denetim ${basarisizSatir}`,
+    );
+
+    console.log("\n§7 imza kapsamı — tek boğaz, anahtar türü dosyadan");
+    const kokYolu = path.join(ortam.dizin, `${f.kok.kid}.kok.json`);
+    const bayiYolu = path.join(ortam.dizin, "bayi-sonda-2099.bayi.json");
+    writeKeyFileExclusive(bayiYolu, await wrapPrivateKey({ tur: "tekserp-bayi-anahtar", kid: "bayi-sonda-2099", siniflar: ["URETIM"] }, generateKeyPairSync("ed25519").privateKey, passwordBuffer("bayi-sonda-parolasi")));
+    const yuk = sertifikaYuku(f, f.alt, "ALT") as unknown as Record<string, unknown>;
+    /** Kapsam altında imza dener; kukla alt sürece YAZILAN bayt sayısı ve parola Buffer'ının sonu ölçülür. */
+    const dene = async (keyFile: string, parola: string, kapsam: ScopeOrigin | null): Promise<{ sonuc: string; yazilan: number; sifir: boolean }> => {
+      const kukla = spawnSignerProcess();
+      const buf = passwordBuffer(parola);
+      const is = () => signWithWrappedKey({ keyFile, typ: TYP.SERTIFIKA, payload: yuk, password: buf, child: kukla });
+      let sonuc = "GECTI";
+      try {
+        await (kapsam === null ? is() : runInScope(kapsam, is, kapsam === "ERISIM" ? "sonda@ornek.test" : undefined));
+      } catch (err) {
+        const e = err as { status?: number; code?: string; message?: string };
+        sonuc = e.status !== undefined ? `${e.status} ${e.code}` : `HATA ${e.message ?? ""}`;
+      }
+      const yazilan = (kukla.stdin as Socket | null)?.bytesWritten ?? -1;
+      kukla.kill();
+      return { sonuc, yazilan, sifir: buf.every((b) => b === 0) };
+    };
+    const kapsamsiz = await dene(kokYolu, TEST_KOK_PAROLASI, null);
+    kontrol("§7a ⭐ kapsamsız kök imzası RED 500; parola hiçbir sürece yazılmadı, Buffer sıfırlandı", kapsamsiz.sonuc === "500 SUNUCU_HATASI" && kapsamsiz.yazilan === 0 && kapsamsiz.sifir, JSON.stringify(kapsamsiz));
+    const erisimden = await dene(kokYolu, TEST_KOK_PAROLASI, "ERISIM");
+    const genelden = await dene(kokYolu, TEST_KOK_PAROLASI, "GENEL");
+    kontrol(
+      "§7b ⭐ ERİŞİM'den ve GENEL'den kök imzası 404; parola alt sürece yazılmadı",
+      erisimden.sonuc === "404 BULUNAMADI" && genelden.sonuc === "404 BULUNAMADI" && erisimden.yazilan === 0 && genelden.yazilan === 0 && erisimden.sifir && genelden.sifir,
+      `${erisimden.sonuc} / ${genelden.sonuc}`,
+    );
+    const tailnetten = await dene(kokYolu, TEST_KOK_PAROLASI, "TAILNET");
+    const cliden = await dene(kokYolu, TEST_KOK_PAROLASI, "CLI");
+    kontrol("§7c ✓K TAILNET ve CLI kapsamında kök imzası GERÇEKTEN imzalar (parola alt sürece gitti)", tailnetten.sonuc === "GECTI" && cliden.sonuc === "GECTI" && tailnetten.yazilan > 0, `${tailnetten.sonuc}/${cliden.sonuc} · ${tailnetten.yazilan} bayt`);
+    const bayiTailnet = await dene(bayiYolu, "bayi-sonda-parolasi", "TAILNET");
+    const bayiGenel = await dene(bayiYolu, "bayi-sonda-parolasi", "GENEL");
+    kontrol(
+      "§7d tür DOSYADAN: bayi anahtarı TAILNET'te 404; GENEL'de kapsamı GEÇER (alt süreç sertifikayı kendi kuralıyla reddeder)",
+      bayiTailnet.sonuc === "404 BULUNAMADI" && bayiTailnet.yazilan === 0 && bayiGenel.sonuc.startsWith("HATA İmza reddedildi (YETKISIZ)") && bayiGenel.yazilan > 0,
+      `${bayiTailnet.sonuc} / ${bayiGenel.sonuc.slice(0, 60)}`,
     );
   } finally {
     setSignerConcurrency(1);
