@@ -15,6 +15,8 @@
 //      P2 meşru yeni salt-okuma kontrolü eklenmiş kopya YEŞİL kalmalı (kapı meşru eklemeyi engellemez)
 //   §5 deploy/vds-dogrula.sh — tek ssh, uzak komut §3'ün izin listesinden (ag.mjs sshDenetle), yerel yazım yalnız
 //      taban dizinine; sahte `ssh` ile AYNI · FARK · ÖLÇÜLEMEDİ · taban ezilmez. Sondalar N6…N10 kırmızı, P3/P4 yeşil
+//   §6 T4 özeti (lib/gozlem.mjs, ağsız) — etkinleşmemiş kurulumun `gecerlilik≠GECERLI` örneği AYRI sayılır, yanlış
+//      pozitif DEĞİLDİR; etkin örnekte aynı durum IHLAL kalır; hiç etkin örnek yoksa ÖLÇÜLEMEDİ. Sondalar N11/N12, P5
 //
 // Koşum: node scripts/test_lisans_devreye_kuru.mjs     (çıkış 0 yeşil · 1 kırmızı)
 // =============================================================================
@@ -254,6 +256,49 @@ const VDS_SONDALAR = [
   ['P4 meşru salt-okuma ekleme (uzak komuta ls)', null, [["ls -1 $K/html $K/defter\"", "ls -1 $K/html $K/defter; ls -1 $K/nginx\""]], true],
 ];
 
+// ---- §6 T4 özeti: etkinleşmemiş kurulumun örneği hüküm dışı (testfabrika O4: T4 etkinleşmeden başlatılsaydı
+// ilk örnekler `gecerlilik≠GECERLI` diye YANLIŞ POZİTİF sayılırdı) ----
+async function t4OzetDenetimi(dizin, tmp) {
+  const g = await import(path.join(dizin, 'lib/gozlem.mjs'));
+  fs.mkdirSync(tmp, { recursive: true });
+  const sonuc = [];
+  const ekle = (ad, ok, ayrinti = '') => sonuc.push({ ad, ok, ayrinti });
+  let n = 0;
+  const satir = (etkin, gecerlilik, { kademe = 'NORMAL', istek = 0 } = {}) => g.satirKur(`2026-09-30T00:00:${String(n++).padStart(2, '0')}Z`,
+    { durum: 200, json: { data: { kurulum: { etkin }, parmakIzi: { karar: 'ESLESTI', olculen: { f1: true } }, yoklama: {}, gozlem: { reddedilecekIstek: istek, reddedilecekModul: 0 } } } },
+    { durum: 200, json: { license: { kip: 'GOZLEM', gecerlilik, uygulananKademe: kademe, nedenler: [] } } });
+  const tsv = (satirlar) => {
+    const f = path.join(tmp, `t4-${n++}.tsv`);
+    fs.writeFileSync(f, g.tsvBaslik() + satirlar.map(g.tsvSatir).join(''));
+    return g.tsvOku(f);
+  };
+  const iki = (satirlar) => [g.ozet(satirlar), g.ozet(tsv(satirlar))]; // bellekten (boolean) ve dosyadan (metin)
+  const kisa = (o) => `${o.sonuc} yp=${o.yanlisPozitif.length} etkinlesmemis=${o.etkinlesmemis}`;
+  const a = iki([satir(false, 'GECERSIZ', { kademe: 'KISITLI' }), satir(true, 'GECERLI')]);
+  ekle('§6a ⭐ etkinleşmemiş örnek (gecerlilik≠GECERLI) yanlış pozitif DEĞİL, ayrı sayılır',
+    a.every((o) => o.sonuc === 'UYUMLU' && o.yanlisPozitif.length === 0 && o.etkinlesmemis === 1), a.map(kisa).join(' · '));
+  const b = iki([satir(true, 'GECERLI'), satir(true, 'GECERSIZ')]);
+  ekle('§6b etkin örnekte gecerlilik≠GECERLI hâlâ IHLAL (kapı körleşmedi)', b.every((o) => o.sonuc === 'IHLAL' && o.yanlisPozitif.length === 1), b.map(kisa).join(' · '));
+  const c = iki([satir(false, 'GECERSIZ'), satir(false, 'OLCULEMEDI')]);
+  ekle('§6c hiç etkin örnek yok → ÖLÇÜLEMEDİ (UYUMLU değil)', c.every((o) => o.sonuc === 'OLCULEMEDI' && o.yanlisPozitif.length === 0 && o.etkinlesmemis === 2), c.map(kisa).join(' · '));
+  const d = iki([satir(false, 'GECERSIZ', { istek: 5 }), satir(true, 'GECERLI', { istek: 0 }), satir(true, 'GECERLI', { istek: 1 })]);
+  ekle('§6d gözlem sayacı yalnız ardışık ETKİN örnekler arasında (0→1 IHLAL, etkinleşme sınırı sayılmaz)',
+    d.every((o) => o.sonuc === 'IHLAL' && o.yanlisPozitif.length === 1 && /reddedilecekIstek/.test(o.yanlisPozitif[0].sebep)), d.map(kisa).join(' · '));
+  const eskiF = path.join(tmp, 't4-eski.tsv');
+  const eskiKol = g.KOLONLAR.filter((k) => k !== 'etkin');
+  fs.writeFileSync(eskiF, `${eskiKol.join('\t')}\n${eskiKol.map((k) => ({ zaman: 'z', durum: 'OLCULDU', gecerlilik: 'GECERSIZ', kademe: 'NORMAL' })[k] ?? '').join('\t')}\n`);
+  const e = g.ozet(g.tsvOku(eskiF));
+  ekle('§6e `etkin` kolonsuz eski TSV bugünkü gibi hükme girer (IHLAL)', e.sonuc === 'IHLAL' && e.etkinlesmemis === 0, kisa(e));
+  ekle('§6f özet metni etkinleşmemiş sayısını basar', /etkinleşmemiş 1/.test(g.ozetYaz(g.ozet(tsv([satir(false, 'GECERSIZ'), satir(true, 'GECERLI')])))));
+  return sonuc;
+}
+
+const T4_SONDALAR = [
+  ['N11 etkinleşmemiş filtresi kalktı', '§6a', [['lib/gozlem.mjs', "if (String(r.etkin) === 'false') {", 'if (false) {']], false],
+  ['N12 etkin örneksiz özet UYUMLU', '§6c', [['lib/gozlem.mjs', 'etkinOrnek === 0 || ', '']], false],
+  ['P5 temiz kopya', null, [], true],
+];
+
 async function main() {
   console.log('── §1 statik');
   for (const x of statikDenetim(HEDEF)) yaz(x.ok, x.ad, x.ok ? '' : x.ayrinti);
@@ -287,7 +332,16 @@ async function main() {
     const ok = yesilBeklenir ? kotu.length === 0 : kotu.some((x) => x.ad.startsWith(beklenenKirmizi));
     yaz(ok, `${ad} → ${yesilBeklenir ? 'YEŞİL' : `KIRMIZI (${beklenenKirmizi})`} beklenir`, `kırmızı ${kotu.length}${kotu.length ? `: ${kotu.map((x) => x.ad.slice(0, 40)).join(' | ')}` : ''}`);
   }
-  const toplam = SONDALAR.length + VDS_SONDALAR.length;
+  console.log('── §6 T4 özeti (etkinleşmemiş kurulum hüküm dışı)');
+  for (const x of await t4OzetDenetimi(HEDEF, path.join(TMP, 't4-asil'))) yaz(x.ok, x.ad, x.ayrinti);
+  for (const [ad, beklenenKirmizi, degistir, yesilBeklenir] of T4_SONDALAR) {
+    const { d, tmp } = kopyala(`t4-${ad.split(' ')[0]}`, degistir);
+    const kotu = (await t4OzetDenetimi(d, tmp)).filter((x) => !x.ok);
+    if (!yesilBeklenir) negatif += 1;
+    const ok = yesilBeklenir ? kotu.length === 0 : kotu.some((x) => x.ad.startsWith(beklenenKirmizi));
+    yaz(ok, `${ad} → ${yesilBeklenir ? 'YEŞİL' : `KIRMIZI (${beklenenKirmizi})`} beklenir`, `kırmızı ${kotu.length}${kotu.length ? `: ${kotu.map((x) => x.ad.slice(0, 40)).join(' | ')}` : ''}`);
+  }
+  const toplam = SONDALAR.length + VDS_SONDALAR.length + T4_SONDALAR.length;
   console.log(`\n${kirmizi === 0 ? '✅ YEŞİL' : `❌ ${kirmizi} kırmızı`} · ${negatif} negatif + ${toplam - negatif} pozitif sonda`);
   fs.rmSync(TMP, { recursive: true, force: true });
   return kirmizi === 0 ? 0 : 1;

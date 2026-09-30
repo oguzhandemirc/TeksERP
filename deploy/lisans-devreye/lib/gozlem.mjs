@@ -2,7 +2,7 @@
 // Özet AĞSIZDIR (dosyadan) — bekçi aynı fonksiyonu sahte satırlarla ölçer.
 import fs from 'node:fs';
 
-export const KOLONLAR = Object.freeze(['zaman', 'durum', 'hata', 'kip', 'gecerlilik', 'kademe', 'nedenler', 'sonDeneme', 'sonBasari',
+export const KOLONLAR = Object.freeze(['zaman', 'durum', 'hata', 'etkin', 'kip', 'gecerlilik', 'kademe', 'nedenler', 'sonDeneme', 'sonBasari',
   'sonHataKodu', 'karar', 'eslesen', 'olculebilen', 'olculen', 'reddedilecekIstek', 'reddedilecekModul', 'butunluk', 'cekirdek', 'zil']);
 
 const temiz = (v) => (v === null || v === undefined ? '' : String(v).replace(/[\t\r\n]/g, ' '));
@@ -19,7 +19,7 @@ export function satirKur(zaman, detayR, saglikR) {
   const y = d.yoklama ?? {};
   const maske = fp.olculen ? ['f1', 'f2', 'f3', 'f4', 'f5'].map((f) => (fp.olculen[f] ? '1' : '0')).join('') : '';
   return {
-    ...bos, zaman, durum: 'OLCULDU', kip: l.kip, gecerlilik: l.gecerlilik, kademe: l.uygulananKademe,
+    ...bos, zaman, durum: 'OLCULDU', etkin: d.kurulum?.etkin, kip: l.kip, gecerlilik: l.gecerlilik, kademe: l.uygulananKademe,
     nedenler: (l.nedenler ?? []).join(','), sonDeneme: y.sonDeneme, sonBasari: y.sonBasari, sonHataKodu: y.sonHataKodu,
     karar: fp.karar, eslesen: fp.eslesen, olculebilen: fp.olculebilen, olculen: maske,
     reddedilecekIstek: d.gozlem?.reddedilecekIstek, reddedilecekModul: d.gozlem?.reddedilecekModul,
@@ -39,6 +39,8 @@ export function tsvOku(dosya) {
 /**
  * Yanlış pozitif = motorun LİSANSLI bir kurulumu kısıtlayacak olması: geçerlilik GECERLI değil, uygulanan
  * kademe NORMAL değil ya da gözlem sayacı (reddedilecek istek/modül) arttı. Nedenler ayrıca bilgi olarak sayılır.
+ * Etkinleşmemiş kurulumun örneği (`etkin=false`) lisanslı değildir: AYRI sayılır, hükme girmez; hiç etkin örnek
+ * yoksa sonuç ÖLÇÜLEMEDİ. `etkin` kolonu olmayan eski TSV bugünkü gibi etkin sayılır.
  */
 export function ozet(satirlar) {
   const olculen = satirlar.filter((r) => r.durum === 'OLCULDU');
@@ -51,24 +53,33 @@ export function ozet(satirlar) {
   const basariliDeneme = [...denemeler.values()].filter(Boolean).length;
   const yp = [];
   let onceki = null;
+  let oncekiEtkin = null; // sayaç artışı yalnız ardışık ETKİN örnekler arasında
   let izDegisimi = 0;
+  let etkinlesmemis = 0;
   const kararlar = {};
   const nedenler = {};
   for (const r of olculen) {
+    if (onceki && (onceki.karar !== r.karar || onceki.olculen !== r.olculen)) izDegisimi += 1;
+    kararlar[r.karar || '-'] = (kararlar[r.karar || '-'] ?? 0) + 1;
+    onceki = r;
+    if (String(r.etkin) === 'false') { // TSV'den metin, satirKur'dan boolean
+      etkinlesmemis += 1;
+      oncekiEtkin = null;
+      continue;
+    }
     const sebep = [];
     if (r.gecerlilik !== 'GECERLI') sebep.push(`gecerlilik=${r.gecerlilik}`);
     if (r.kademe !== 'NORMAL') sebep.push(`kademe=${r.kademe}`);
-    if (onceki && Number(r.reddedilecekIstek) > Number(onceki.reddedilecekIstek)) sebep.push('reddedilecekIstek arttı');
-    if (onceki && Number(r.reddedilecekModul) > Number(onceki.reddedilecekModul)) sebep.push('reddedilecekModul arttı');
+    if (oncekiEtkin && Number(r.reddedilecekIstek) > Number(oncekiEtkin.reddedilecekIstek)) sebep.push('reddedilecekIstek arttı');
+    if (oncekiEtkin && Number(r.reddedilecekModul) > Number(oncekiEtkin.reddedilecekModul)) sebep.push('reddedilecekModul arttı');
     if (sebep.length) yp.push({ zaman: r.zaman, sebep: sebep.join(', ') });
-    if (onceki && (onceki.karar !== r.karar || onceki.olculen !== r.olculen)) izDegisimi += 1;
-    kararlar[r.karar || '-'] = (kararlar[r.karar || '-'] ?? 0) + 1;
     for (const n of (r.nedenler || '').split(',').filter(Boolean)) nedenler[n] = (nedenler[n] ?? 0) + 1;
-    onceki = r;
+    oncekiEtkin = r;
   }
-  const sonuc = yp.length > 0 ? 'IHLAL' : olculen.length === 0 || olculen.length < satirlar.length ? 'OLCULEMEDI' : 'UYUMLU';
+  const etkinOrnek = olculen.length - etkinlesmemis;
+  const sonuc = yp.length > 0 ? 'IHLAL' : etkinOrnek === 0 || olculen.length < satirlar.length ? 'OLCULEMEDI' : 'UYUMLU';
   return {
-    sonuc, ornek: satirlar.length, olculen: olculen.length, olculemeyen: satirlar.length - olculen.length,
+    sonuc, ornek: satirlar.length, olculen: olculen.length, olculemeyen: satirlar.length - olculen.length, etkinlesmemis,
     yoklamaDenemesi: denemeler.size, basariliDeneme, basariOrani: denemeler.size ? basariliDeneme / denemeler.size : null,
     parmakIziKararlari: kararlar, parmakIziDegisimi: izDegisimi, nedenler, yanlisPozitif: yp,
   };
@@ -77,10 +88,10 @@ export function ozet(satirlar) {
 export function ozetYaz(o) {
   const oran = o.basariOrani === null ? 'ölçülemedi' : `%${(o.basariOrani * 100).toFixed(1)}`;
   return [
-    `T4 özet: ${o.sonuc} · örnek ${o.ornek} (ölçülen ${o.olculen}, ölçülemeyen ${o.olculemeyen})`,
+    `T4 özet: ${o.sonuc} · örnek ${o.ornek} (ölçülen ${o.olculen}, ölçülemeyen ${o.olculemeyen}, etkinleşmemiş ${o.etkinlesmemis} — hüküm dışı)`,
     `  yoklama: ${o.basariliDeneme}/${o.yoklamaDenemesi} başarılı (${oran}; örnekler arasında kalan deneme görülmez)`,
     `  parmak izi: kararlar ${JSON.stringify(o.parmakIziKararlari)} · karar/etken değişimi ${o.parmakIziDegisimi}`,
-    `  nedenler (bilgi): ${Object.keys(o.nedenler).length ? JSON.stringify(o.nedenler) : 'yok'}`,
+    `  nedenler (bilgi, etkin örnekler): ${Object.keys(o.nedenler).length ? JSON.stringify(o.nedenler) : 'yok'}`,
     `  yanlış pozitif: ${o.yanlisPozitif.length}${o.yanlisPozitif.slice(0, 5).map((y) => `\n    ${y.zaman} ${y.sebep}`).join('')}`,
   ].join('\n');
 }

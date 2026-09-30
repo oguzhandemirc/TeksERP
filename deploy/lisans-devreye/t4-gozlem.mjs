@@ -4,7 +4,8 @@
 // =============================================================================
 // Aralıkla `/api/license/detay` + `/api/admin/health` (yalnız GET) okur, her örneği TSV'ye yazar ve özetler:
 // yoklama başarı oranı, parmak izi kararı/etken maskesi kararlılığı, YANLIŞ POZİTİF (lisanslı kurulumda
-// geçerlilik ≠ GECERLI · kademe ≠ NORMAL · gözlem sayacı artışı). Bekleme kapısı DEĞİLDİR — faz ilerler, ölçüm sürer.
+// geçerlilik ≠ GECERLI · kademe ≠ NORMAL · gözlem sayacı artışı). Etkinleşmemiş kurulumun örneği ayrı sayılır, yanlış
+// pozitif sayılmaz — gözlem etkinleştirmeden önce başlatılabilir. Bekleme kapısı DEĞİLDİR — faz ilerler, ölçüm sürer.
 //
 //   node deploy/lisans-devreye/t4-gozlem.mjs [--olc] --belirtec-dosyasi=~/.tekserp/testfabrika-gozlem.jwt
 //        [--adres=http://100.70.47.46:4000] [--aralik-sn=300] [--sure-dk=1440] [--cikti=<tsv>]
@@ -69,7 +70,7 @@ export async function main(argv) {
       satir = satirKur(new Date().toISOString(), { durum: null, hata: e.message }, { durum: null });
     }
     fs.appendFileSync(cikti, tsvSatir(satir));
-    console.log(`  ${satir.zaman} ${satir.durum} ${satir.gecerlilik || satir.hata} ${satir.kademe} karar=${satir.karar} yoklama=${satir.sonBasari || '-'}`);
+    console.log(`  ${satir.zaman} ${satir.durum}${satir.etkin === false ? ' ETKINLESMEMIS' : ''} ${satir.gecerlilik || satir.hata} ${satir.kademe} karar=${satir.karar} yoklama=${satir.sonBasari || '-'}`);
     if (i + 1 < ornekSayisi) await bekle(aralikSn * 1000);
   }
   const o = ozet(tsvOku(cikti));

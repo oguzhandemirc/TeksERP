@@ -356,7 +356,7 @@ Bayt kodu (`.jsc`) OS + mimari + V8'e kilitlidir → korumalı paket HEDEFTE ür
 ### 7.3 T4 gözlemini BAŞLAT (paralel, bekleme kapısı değil)
 
 - **Komut:** `node deploy/lisans-devreye/t4-gozlem.mjs --olc --belirtec-dosyasi=~/.tekserp/testfabrika-gozlem.jwt --aralik-sn=300 --sure-dk=1440` (arka planda; önce KURU koşup planı gör).
-- **Beklenen:** her 5 dk bir satır `~/.tekserp/testfabrika-t4/gozlem-<damga>.tsv` (0600); bitişte özet. Faz ilerlemesi bunu BEKLEMEZ (kullanıcı kararı: takvim kapısı yok); Faz 4 (zorlama) kararına ölçüm girdisidir.
+- **Beklenen:** her 5 dk bir satır `~/.tekserp/testfabrika-t4/gozlem-<damga>.tsv` (0600); bitişte özet. Etkinleştirmeden ÖNCE başlatılabilir: etkinleşmemiş kurulumun örneği (`etkin=false`) özette AYRI sayılır, yanlış pozitif sayılmaz; hiç etkin örnek yoksa özet ÖLÇÜLEMEDİ. Faz ilerlemesi bunu BEKLEMEZ (kullanıcı kararı: takvim kapısı yok); Faz 4 (zorlama) kararına ölçüm girdisidir.
 
 ### 7.4 Şifreli modül provası (§2.8 koşulduysa)
 

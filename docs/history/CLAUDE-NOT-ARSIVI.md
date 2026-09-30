@@ -13801,3 +13801,14 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 **Ölçüm (2026-09-30, macOS pwsh 7.6.5, sahte pm2).** `kur.ps1`in kendi `Pm2AdiDogrula` + `EcoPortu` + here-string'i AST'den yüklendi: thinkpad-1 kalıbı varsayılan adla GEÇTİ · kanal adıyla (`tekserp-backend-testfabrika`) IHLAL "-UygulamaAdi tekserp-backend-yeni verin" · boş liste ILK · pm2 hata satırı OLCULEMEDI · başka kök + açık ad + farklı port YAN_YANA uyarısı · `PATH`/`Path` çift anahtarlı env ve Türkçe karakterli yol sorunsuz. Windows PowerShell 5.1 canlı provası (stdin kodlaması) sonraki testfabrika operasyonunun işi.
 
 **Açık.** Eski `Teks-Erp-wt/vds-dogrula.sh` + `vds-taban-*.sha` repo dışında duruyor; tek seferlik göç komutu runbook §1.2'de (taban `~/.tekserp/vds-taban/`e kopyalanır) — kullanıcı/yönetici.
+
+## 2026-09-30 — Lisans entegrasyonu I8: yedi dal birleşti; kurulum ölçümünün üç yanıltıcı çıktısı düzeltildi [ÇEKİRDEK] + [PROFİL]
+
+**Bağlam.** [PROFİL] testfabrika devreye alma operasyonları (O2b §4 yeniden deneme, O3 yayın, O4 portal, O6 parola döndürme, O7 Traefik kalıcılığı) ile patron uygulaması eksikleri (F1) ve kurulum güvenliği (F2) `lisans/entegrasyon`da birleşti. Runbook kayıtları aynı gün aynı harfle doğmuştu (O3 ve O4 ikisi de §10e, O6 §10f) → kronolojik sıraya çevrildi: §10d O2b · §10e O3 · §10f O4 · §10g O6. [PROFİL] testfabrika kurulumu ölçümün üç çıktısını yanıltıcı gösterdi.
+
+**Kararlar [ÇEKİRDEK].**
+- `kur.ps1` `[5/9]` birleşik ecosystem yazdıysa başlık `BIRLESTIRILDI` basar; `sunucununki KORUNDU` yalnız birleşmeyen dalda (birleşik dosya sunucununki değildir).
+- Kurulum kaydının `yeniMigrationSayisi`si bu kurulumda DB'ye GERÇEKTEN uygulanan migration sayısıdır: `[7/9]`de `migrate deploy`ın önünde ve arkasında `_prisma_migrations` (bitmiş, geri alınmamış) sayılır; paket klasör farkı (testfabrika: 363→367 yazdı) kayda girmez. Alan adı ve protokol şeması değişmez; ölçülemezse `null`, kurulum durmaz.
+- T4 gözlem özeti etkinleşmemiş kurulumun örneğini (`/api/license/detay` `kurulum.etkin=false`) ayrı sayar ve yanlış pozitife katmaz; gözlem sayacı artışı yalnız ardışık etkin örnekler arasında karşılaştırılır; hiç etkin örnek yoksa sonuç ÖLÇÜLEMEDİ; `etkin` kolonsuz eski TSV bugünkü gibi hükme girer. T4 artık etkinleştirmeden önce başlatılabilir.
+
+**Kapılar.** `test_sunucu_betikleri` §23 (4 gömülü sonda: paket farkına dönüş · sonra-sayım deploy'dan önce · geri alınmış satır sayılır · başlık koşulsuz KORUNDU) · `test_lisans_devreye_kuru` §6 (N11 etkinleşmemiş filtresi kalktı · N12 etkin örneksiz özet UYUMLU; P5 temiz kopya). Dış sonda: birleşim ucundaki `kur.ps1` ve `lib/gozlem.mjs` geri konunca §23a / §6a·c·d·e·f kırmızı, sha eşit geri alındı. `DbMigrationSayisi` pwsh 7'de sahte `psql.exe` ile: 367 → Int32 · psql hatası → null · çöp çıktı → null · psql yok → null; `PGPASSWORD` çağrı sonunda boş, EAP geri kondu.

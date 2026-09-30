@@ -265,6 +265,29 @@ function MigrationSayisi($dizin) {
   if (-not (Test-Path $p)) { return $null }
   return @(Get-ChildItem $p -Directory).Count
 }
+# 5.1 (Legacy kip) yerel komut argumanindaki `"`yi KACIRMAZ; psql'e giden SQL buradan gecer.
+function NativeArg([string]$s) {
+  $pas = Get-Variable -Name PSNativeCommandArgumentPassing -ValueOnly -ErrorAction SilentlyContinue
+  if ($PSVersionTable.PSVersion.Major -ge 7 -and $pas -and $pas -ne "Legacy") { return $s }
+  return ($s -creplace '(\\*)"', '$1$1\"')
+}
+# DB'de UYGULANMIS migration sayisi (paketteki klasor sayisi DEGIL - DB paketin gerisinde de olabilir).
+# Olculemezse $null: kurulum kaydi "bilinmiyor" der, kurulum durmaz. stderr YONLENDIRILMEZ (test_deploy_log_rotation §6);
+# psql hatasi ekrana duser, EAP=Continue onu olumcul yapmaz.
+function DbMigrationSayisi($binDir, $c, $kul, $par) {
+  if (-not $c -or -not $kul -or -not $par -or -not (Test-Path (Join-Path $binDir "psql.exe"))) { return $null }
+  $eskiEAP = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $env:PGPASSWORD = $par
+  try {
+    $cikti = & (Join-Path $binDir "psql.exe") -X -w -h localhost -p $c.port -U $kul -d $c.db -v ON_ERROR_STOP=1 -tAc (NativeArg "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL")
+    if ($LASTEXITCODE -ne 0) { return $null }
+    $s = ([string](@($cikti)[0])).Trim()
+    if ($s -cmatch '^\d{1,6}$') { return [int]$s }
+    return $null
+  } catch { return $null }
+  finally { $env:PGPASSWORD = ""; $ErrorActionPreference = $eskiEAP }
+}
 function KurulumKaydiYaz($alanlar) {
   try {
     $kayit = [ordered]@{
@@ -1147,7 +1170,7 @@ if ($bk.Success -and $bk.Groups[1].Value.Trim() -ceq "postgres") {
   Write-Host "     (BACKUP_PG_USER=postgres: super kullanici parolasi .env'de. Super OLMAYAN bakim rolune gecis: <paket>\bakim-rolu.ps1 -Kok `"$kok`")" -ForegroundColor DarkGray
 }
 if ($ecoBayt) {
-  Ok "app\ olusturuldu, .env + ecosystem.config.js (SUNUCUNUNKI) tasindi"
+  Ok "app\ olusturuldu, .env + ecosystem.config.js ($(if ($ecoBirlesikBayt) { 'BIRLESIK: paketin sablonu + sunucunun ayarlari' } else { 'SUNUCUNUNKI' })) tasindi"
   # Fark ozeti: yalnizca env: blogundaki ANAHTARLAR karsilastirilir; deger
   # basilmaz (sir olmasa da operasyonel bilgi ekrana dokulmesin).
   # Yollar burada YENIDEN kurulur - try blogundaki degiskene guvenilmez.
@@ -1178,7 +1201,12 @@ if ($ecoBayt) {
     $dusen  = @($sunucu       | Where-Object { $paketAnahtar -notcontains $_ })
     if ($yeni.Count -or $dusen.Count) {
       Write-Host ""
-      Write-Host "  ecosystem.config.js: sunucununki KORUNDU (paketinki: ecosystem.config.js.paket)" -ForegroundColor Yellow
+      # Birlesik dosya sunucununki DEGILDIR: "KORUNDU" demek operatoru yaniltir.
+      if ($ecoBirlesikBayt) {
+        Write-Host "  ecosystem.config.js: BIRLESTIRILDI (paketin sablonu + sunucunun ayarlari; paketinki: ecosystem.config.js.paket, onceki: ecosystem.config.js.onceki)" -ForegroundColor Yellow
+      } else {
+        Write-Host "  ecosystem.config.js: sunucununki KORUNDU (paketinki: ecosystem.config.js.paket)" -ForegroundColor Yellow
+      }
       if ($yeni.Count)  { Write-Host "    pakette YENI ayar : $($yeni  -join ', ')  -> gerekiyorsa elle ekleyin" -ForegroundColor Yellow }
       if ($dusen.Count) { Write-Host "    pakette ARTIK YOK : $($dusen -join ', ')  -> sunucuda duruyor, gozden gecirin" -ForegroundColor Yellow }
       Write-Host ""
@@ -1214,6 +1242,7 @@ Adim "[7/9] Migration'lar uygulaniyor (GERI ALINAMAZ ESIK)..."
 #   pakette ya hic yoktur ya da Windows'ta calismayan sembolik baglar tasir
 #   (npm `.cmd` shim'lerini KURULUM ANINDA, kendi platformunda uretir). Giris
 #   noktasini dogrudan cagirmak her platformda ayni sekilde calisir.
+$dbMigOnce = DbMigrationSayisi $pgbin $cred $dbKul $dbPar
 & node $prismaCli migrate deploy
 if ($LASTEXITCODE -ne 0) {
   Write-Host ""
@@ -1230,7 +1259,9 @@ if ($LASTEXITCODE -ne 0) {
   KokeDon
   exit 1
 }
-Ok "migration'lar uygulandi"
+$dbMigSonra = DbMigrationSayisi $pgbin $cred $dbKul $dbPar
+$dbMigUygulanan = $(if ($null -ne $dbMigOnce -and $null -ne $dbMigSonra -and $dbMigSonra -ge $dbMigOnce) { $dbMigSonra - $dbMigOnce } else { $null })
+Ok "migration'lar uygulandi (bu kurulumda DB'ye uygulanan: $(if ($null -ne $dbMigUygulanan) { $dbMigUygulanan } else { 'OLCULEMEDI' }))"
 
 # --- [8/9] pm2 --------------------------------------------------------------
 Adim "[8/9] pm2 baslatiliyor..."
@@ -1340,14 +1371,14 @@ if (-not $h) {
 Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
 KokeDon   # cwd'yi app\ icinde birakma - ayni oturumdaki ikinci kosum kendi kilidine takilir
 
-# Kurulum kaydi (3d-2): onceki surum ve migration farki kenara alinan kurulumdan olculur.
-$eskiMig = MigrationSayisi $eskiAd
+# Kurulum kaydi (3d-2): onceki surum kenara alinan kurulumdan; yeniMigrationSayisi [7/9]'da DB'den
+# olculen, GERCEKTEN uygulanan sayidir (paket farki degil).
 $yeniMig = MigrationSayisi $appDir
 KurulumKaydiYaz @{
   tur = "KURULUM"; commit = $(if ($m) { $m.commit } else { $null })
   paketOzeti = $paketOzeti
   oncekiSurum = (PaketSurumu $eskiAd); yeniSurum = (PaketSurumu $appDir)
-  migrationSayisi = $yeniMig; yeniMigrationSayisi = $(if ($null -ne $eskiMig -and $null -ne $yeniMig -and $yeniMig -ge $eskiMig) { $yeniMig - $eskiMig } else { $null })
+  migrationSayisi = $yeniMig; yeniMigrationSayisi = $dbMigUygulanan
   damga = $damga; kod = (Test-Path $eskiAd); veri = (Test-Path $dump); veriSifreli = ($dump -clike "*.tkenc")
 }
 

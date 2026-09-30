@@ -24,6 +24,8 @@
 //      karar, yedek önce, [8/9] delete+start, -GeriAl simetrik, korumasız dal aynen); §20 birleştiricinin davranışı.
 //   §21 pm2 AD KAPISI: [1/9] ve -GeriAl dokunmadan önce pm2 listesini ölçer (aynı portta ikinci backend yok);
 //      §22 aracın DAVRANIŞI (Node birim, sahte `pm2 jlist`).
+//   §23 kurulum kaydının `yeniMigrationSayisi`si DB'de GERÇEKTEN uygulanan sayıdır ([7/9] önü/arkası) ve
+//      [5/9] birleşik ecosystem'de "KORUNDU" başlığı basılmaz.
 // Kaynak ölçülür, davranış değil: pwsh her ortamda yok, 5.1 hiç yok.
 // =============================================================================
 import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
@@ -824,6 +826,49 @@ function pm2AdBirimIhlalleri(js: string): string[] {
     const uygulandi = j2 !== js && js !== "";
     const ih2 = uygulandi ? pm2AdBirimIhlalleri(j2) : [];
     check(`§22 sonda: ${ad} → kırmızı`, ih2.length > 0, uygulandi ? ih2.join(" | ") : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §23 — kurulum kaydı DB'de GERÇEKTEN uygulananı yazar, paket klasör farkını değil (DB paketin gerisinde
+// ya da ilerisinde olabilir): [7/9]'da `migrate deploy`ın önünde ve arkasında `_prisma_migrations` sayılır
+// (bitmiş, geri alınmamış). [5/9] birleşik ecosystem'e "sunucununki KORUNDU" demek operatörü yanıltır.
+function kurulumOlcumIhlalleri(kur: string): string[] {
+  const t = psTara(kur);
+  const kod = t.satirlar.map((x) => x.kod);
+  const metin = kod.join("\n");
+  const ih: string[] = [];
+  const ilk = (re: RegExp, bas = 0): number => kod.findIndex((x, i) => i >= bas && re.test(x));
+  const f = t.fonksiyonlar.find((x) => x.ad === "DbMigrationSayisi");
+  const govde = f ? t.satirlar.filter((x) => x.no > f.bas && x.no <= f.son).map((x) => x.kod).join("\n") : "";
+  if (!f) ih.push("DbMigrationSayisi yok");
+  else if (!/FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL/.test(govde)) ih.push("DB sayımı bitmiş + geri alınmamış satırlarla sınırlı değil");
+  const adim7 = ilk(/^Adim "\[7\/9\]/);
+  const dep = adim7 < 0 ? -1 : ilk(/^& node \$prismaCli migrate deploy/, adim7);
+  const once = ilk(/^\$dbMigOnce = DbMigrationSayisi /), sonra = ilk(/^\$dbMigSonra = DbMigrationSayisi /);
+  if (dep < 0 || !(adim7 < once && once < dep)) ih.push("DB sayımı migrate deploy'dan ÖNCE değil");
+  if (dep < 0 || !(sonra > dep)) ih.push("DB sayımı migrate deploy'dan SONRA değil");
+  if (!/yeniMigrationSayisi = \$dbMigUygulanan\b/.test(metin)) ih.push("kayıttaki yeniMigrationSayisi DB ölçümünden gelmiyor");
+  if (/\$eskiMig\b/.test(metin)) ih.push("paket klasör farkı ($eskiMig) hâlâ hesaplanıyor");
+  const korundu = kod.filter((x) => /sunucununki KORUNDU/.test(x)).length;
+  const kosullu = /if \(\$ecoBirlesikBayt\) \{\s*\n\s*Write-Host "  ecosystem\.config\.js: BIRLESTIRILDI[^\n]*\n\s*\} else \{\s*\n\s*Write-Host "  ecosystem\.config\.js: sunucununki KORUNDU/.test(metin);
+  if (!kosullu || korundu !== 1) ih.push("[5/9] birleşik ecosystem'de de 'sunucununki KORUNDU' basılıyor");
+  return ih;
+}
+{
+  const kr = readFileSync(join(KOK, "deploy/kur.ps1"), "utf8");
+  const ih = kurulumOlcumIhlalleri(kr);
+  check("§23a ⭐ yeniMigrationSayisi = [7/9]'da DB'ye GERÇEKTEN uygulanan (önce/sonra sayım) · [5/9] birleşikte başlık BIRLESTIRILDI",
+    ih.length === 0, ih.join(" | ") || "temiz");
+  const sondalar: Array<[string, string]> = [
+    ["paket farkına dönüş", kr.replace("yeniMigrationSayisi = $dbMigUygulanan", "yeniMigrationSayisi = $(if ($null -ne $eskiMig) { $yeniMig - $eskiMig } else { $null })")],
+    ["sonra-sayım deploy'dan önce", kr.replace(/^(\$dbMigSonra = DbMigrationSayisi [^\r\n]*\r?\n)/m, "").replace(/^(\$dbMigOnce = DbMigrationSayisi [^\r\n]*\r?\n)/m, "$1$$dbMigSonra = DbMigrationSayisi $$pgbin $$cred $$dbKul $$dbPar\r\n")],
+    ["geri alınmış satır da sayılır", kr.replace(" AND rolled_back_at IS NULL", "")],
+    ["başlık koşulsuz KORUNDU", kr.replace(/if \(\$ecoBirlesikBayt\) \{\r?\n\s*Write-Host "  ecosystem\.config\.js: BIRLESTIRILDI[^\r\n]*\r?\n\s*\} else \{\r?\n/, "")],
+  ];
+  for (const [ad, k2] of sondalar) {
+    const uygulandi = k2 !== kr;
+    const ih2 = uygulandi ? kurulumOlcumIhlalleri(k2) : [];
+    check(`§23 sonda: ${ad} → kırmızı`, ih2.length > 0, uygulandi ? ih2.join(" | ") : "MUTASYON UYGULANMADI");
   }
 }
 
