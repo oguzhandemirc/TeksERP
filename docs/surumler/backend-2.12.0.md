@@ -140,3 +140,27 @@ o migration'ı FAILED işaretler — elle `resolve` YAPILMAZ, insana rapor edili
   bağlı istemci 0; etkin oturumlar (ELECTRON 7 · MOBILE 12) değişmedi.
 - Geri dönüş noktaları: kod `C:\TeksERP\app.eski-20260930_045319` şimdi yine `app` · başarısız kurulum
   `C:\TeksERP\app.basarisiz-20260930_050608` · veri `C:\TeksERP\backups\premigrate_20260930_045319.dump.tkenc`.
+
+**Kurulum kaydı — 2026-09-30 (testfabrika / thinkpad-1, KORUMALI PROVA, ikinci deneme — F-ECO `kur.ps1`) — BAŞARILI:**
+
+- Kaynak `origin/main` `47b9d825`in `git archive`ı (hedefte tek yerel commit; sürüm `2.12.0-prova.05b962e`, son ek o yerel commit'tir,
+  depoda yoktur). Native yeniden kullanıldı: `Teks-Erp/native` `55203d97`..`47b9d825` arasında farksız, `e2691bc1…7c90`.
+- Paket `tekserp-backend-prova-20260930_054621-05b962e.zip` · imzasız SHA256 `1E2A114CFABB144C000ADCB961323E01BABD1D1B748E97029497843C14E85F95`
+  → imzalı (kid `paket-hazirlik`, 13377 dosya kapsam) SHA256 `BB757C725CE01943D2D3AAE0B20A5CF301DB094F4EEA05A246E467BA543DB7A1` ·
+  13386 dosya · 367 migration · paketin `kur.ps1`i depodaki `deploy/kur.ps1` ile bayt-eşit.
+- `-UygulamaAdi tekserp-backend-yeni` (çalışan ad pm2 pid dosyası + `dump.pm2`'den ölçüldü); paketin kanal kimliği
+  `tekserp-backend-testfabrika` → `[1/9]` beklenen uyarıyı bastı, ad değiştirilmedi.
+- `[2/9]` `ecosystem.config.js BIRLESTIRILECEK: yorumlayici sistem Node -> runtime/node.exe … env 14 anahtar AYNEN` ·
+  `[3/9]` `premigrate_20260930_055943.dump.tkenc` (9,56 MB, doğrulandı) · `[7/9]` DB O2'den 367'de, yeni migration yok ·
+  `[8/9]` `pm2 delete` + `start` + `save` · `[9/9]` `KURULUM TAMAM`, `API UP DB UP 2.12.0-prova.05b962e`, kayıt `kurulum-gecmisi.jsonl`'de.
+- Ölçüm: uygulama süreci `C:\TeksERP\app\runtime\node.exe` (SYSTEM), `dump.pm2` `exec_interpreter` aynı yol, restart 0 ·
+  `app\ecosystem.config.js` birleşik (`KUR.PS1 BIRLESTIRMESI` başlığı), `.onceki` önceki sunucu dosyasıyla bayt-eşit ·
+  `/health` 200 `UP/UP 2.12.0-prova.05b962e` · `asama-dogrula --asama=4`: 4.1–4.3 ✅, 4.4 ⚠️ (belirteç dosyası yok) ·
+  açılış günlüğü `yoklama zamanlayıcısı aktif — satıcı: lisans-test.etkiliyazilim.com (ortam); etkinleşmemiş kurulum dışarı
+  istek atmaz` (motor `CALISIYOR`) · `backend-err` yalnız bilinen offsite uyarısı. Çekirdek `native` · bütünlük `GECERLI` ·
+  kip `gozlem` ÖLÇÜLEMEDİ: native düşüşü sessizdir (`CEKIRDEK_YOK`, süreç düşmez), yalnız kimlikli `/api/license/durum` gösterir.
+- Kesinti ≤ 2 dk (`[4/9]` → `[8/9]`); bağlı istemci 0; etkin oturumlar (ELECTRON 7 · MOBILE 12) değişmedi.
+- Geri dönüş noktaları: kod `C:\TeksERP\app.eski-20260930_055943` (2.11.2-lis) · veri `premigrate_20260930_055943.dump.tkenc` ·
+  `-GeriAl` birleştirmeyi simetrik geri alır. İlk denemenin kalıntıları (`app.basarisiz-20260930_050608`, klis2'deki iki eski zip) silindi.
+- Kozmetik bulgu: `[5/9]` birleştirmeden sonra da `ecosystem.config.js: sunucununki KORUNDU (paketinki: .paket)` başlığıyla anahtar
+  farkını basıyor — birleşik dosyada yanıltıcı (ölçüm birleştirmenin yapıldığını gösteriyor).
