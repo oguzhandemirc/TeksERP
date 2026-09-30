@@ -1,8 +1,8 @@
 # Backend `2.13.0`
 
-**Paket:** _(paketleme doldurur)_
-**SHA256:** _(paketleme doldurur)_
-**Commit:** _(paketleme doldurur)_
+**Paket:** `tekserp-backend-20261001_005124-8b98dc3.zip`
+**SHA256:** `284001E32EE4FDC4CD70B99B95FEB748AFC6DAF996B01D21ACC55787EAD7816F`
+**Commit:** `8b98dc3`
 **Önceki saha sürümü:** **yok — sıfırdan kurulum** (`demofabrika`, thinkpad-1; `docs/ops/SENARYO-YENI-MUSTERI.md` §5).
 Öteki kanallar (ölçüldü 2026-10-01): `adnansahin` **2.11.2** (etiket `backend-v2.11.2` = `72889f5a`, kurulum kaydı
 `backend-2.11.2.md`) · `testfabrika` **2.12.1** prova paketi (sürüm son eki hedefteki yerel commit; `backend-2.12.1.md`

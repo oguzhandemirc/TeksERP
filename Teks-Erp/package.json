@@ -1,6 +1,6 @@
 {
   "name": "tekserp-backend",
-  "version": "2.11.2",
+  "version": "2.13.0",
   "engines": {
     "node": ">=22.21"
   },
