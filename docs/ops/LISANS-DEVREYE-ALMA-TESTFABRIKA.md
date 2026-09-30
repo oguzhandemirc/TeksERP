@@ -460,6 +460,15 @@ Traefik hiçbir geri almada yeniden başlatılmaz; kenar ağı satırı yerinde 
 - **Eski değer taraması (değer basılmadan, 25.982 dosya; `C:\TeksERP` · `C:\ProgramData\{testfabrika,teksacl}` · kullanıcı klasörleri):** önce 6 dosya, sonra **0**. Yeni değer yalnız yukarıdaki 6 dosyada. Geçici yedekler (`teksacl\o6-*`) doğrulamadan sonra silindi. Mac'te değer yalnız `~/.tekserp/sirlar/thinkpad-1-tekserp.txt`te (600). Son 75 dakikanın olay günlüklerinde (Application · PowerShell Operational · Windows PowerShell · OpenSSH · System; 4.617 olay) eski ve yeni değer 0 kez geçiyor; PostgreSQL olaylarında `ALTER ROLE`/`PASSWORD` metni de 0.
 - **Ders:** PowerShell değişken adları büyük/küçük harf duyarsızdır. Betikte `$y` (giriş sonucu) `$Y`yi (yedek dizini) ezdi, bu yüzden geri alma yolu yedek dizinini kaybederdi. Tetiklenmedi. Rotasyon betiklerinde yalnız harf büyüklüğüyle ayrılan iki ad kullanılmaz.
 
+## 10i. Uygulama kaydı — 2026-09-30 (P3: §5 yayın — panel 1.4.1 · tablet 1.0.14 OTA)
+
+- **Önce:** backend thinkpad-1 `/health` UP/UP `2.12.1-prova.4b8d916` (backend ÖNCE sağlandı) · §5.1 not kapısı `2026-09-30b` girdisi `--panel=1.4.1` ve `--tablet=1.0.14` 32/0 · aşama 5.1 ❌ yayında `1.4.0` (beklenen) · `vds-dogrula` ✅ AYNI (420). Kaynak `dd54c252`, yayın ağacında Electron · mobil · `satici/sunucu` · Teks-Erp `npm ci` (§3.3 önkoşulu ilk denemede sağlandı).
+- **§5.2 panel 1.4.1:** `electron-paketle.sh testfabrika 1.4.1` → Setup.exe sha16 `775f55a5b782a0a4` (143450111 B), gömülü adres `testfabrika/electron/`. `electron-yayinla.sh --musteri=testfabrika` ✅: `latest.yml` EN SON, sha512 ✓, defter satırı `2026-09-30T14:13:11+03:00 1.4.1`, saklama kuralı kanaldaki `TeksERP-1.3.4-Setup.exe`yi budadı, etiket `panel-v1.4.1`. `--dogrula` ✅.
+- **§5.3 tablet 1.0.14 (OTA):** native parmak izi `78437ad8da4d280f` = önceki kayıt, rv 54.2 → OTA (APK gerekmedi). Damga `1790766577572`, manifest id `bf1cd57d-9e39-e75b-4db5-9f6a46f3c556`; adnansahin sertifikası imzayı REDDEDİYOR ✓. Yayın: manifest EN SON, dış ölçüm 200 `multipart/mixed` protokol 1, bundle 8418998 B eşleşti, manifest `version 1.0.14`, etiket `tablet-v1.0.14`. `--dogrula=<manifest dosya adresi> --boyut=` ve bundle dosya adresi `--boyut=` ✅ (boyut verilmeyen `--dogrula` yalnız erişilebilirliği ölçer).
+- **Yayın bildirimi:** satıcı `yayin_bildirimi` (salt-okuma oturumu) iki yeni satır: `YAYIN panel testfabrika 1.4.1` (sha16 eşleşir) · `YAYIN tablet testfabrika 1.0.14` (`ota`), kid `yayinci-hazirlik-2026`; adnansahin satırı yok.
+- **Sonra:** aşama 5 ✅✅ · aşama 3 ✅✅✅ · `vds-dogrula` ✅ AYNI (420) her yazım öncesi/sonrası · Traefik, `tekserp-guncelleme`, `docker-socket-proxy` başlangıç zamanları değişmedi. adnansahin kanalında hiçbir betik koşmadı.
+- **Geri alma:** electron-updater sürüm düşürmez → ileri yayın `1.4.2`; tablet `ota/54.2/manifest` üzerine `manifest-1790729819552` (1.0.13) ileri yayın.
+
 ## 11. A2 önkoşul borçları (ölçüldü 2026-09-30 · G1–G3 + G5 iniş A2 I7'de KAPANDI)
 
 | # | Borç | Etki | Durum |
