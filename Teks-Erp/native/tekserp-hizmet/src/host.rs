@@ -22,6 +22,8 @@ const LINE_CAP: usize = 256 * 1024;
 #[derive(Debug, Clone)]
 pub struct HostConfig {
     pub root: PathBuf,
+    /// Hizmetin adı (`--ad`; node'a `TEKSERP_HIZMET_ADI` olarak geçer — aynı makinede iki kanal).
+    pub service_name: String,
     /// `--dogrulama` başlatma argümanı: yalnız 127.0.0.1, arka plan işi yok (§4.3).
     pub verify_mode: bool,
     pub shutdown_grace: Duration,
@@ -99,7 +101,7 @@ pub fn host_paths(root: &Path, version_dir: &Path) -> HostPaths {
 pub fn child_env(cfg: &HostConfig) -> Vec<(String, String)> {
     let mut out = vec![
         (contract::ENV_ROOT.to_string(), cfg.root.to_string_lossy().trim_end_matches(['\\', '/']).to_string()),
-        (contract::ENV_SERVICE_NAME.to_string(), contract::BACKEND_SERVICE.to_string()),
+        (contract::ENV_SERVICE_NAME.to_string(), cfg.service_name.clone()),
         (contract::ENV_SHUTDOWN_CHANNEL.to_string(), contract::SHUTDOWN_CHANNEL_STDIN.to_string()),
         ("NODE_ENV".to_string(), "production".to_string()),
         (contract::ENV_SYSTEM_CA.to_string(), "1".to_string()),
@@ -293,7 +295,12 @@ mod tests {
     }
 
     fn cfg(root: &Path, verify_mode: bool, grace_ms: u64) -> HostConfig {
-        HostConfig { root: root.to_path_buf(), verify_mode, shutdown_grace: Duration::from_millis(grace_ms) }
+        HostConfig {
+            root: root.to_path_buf(),
+            service_name: "TeksERP-Backend-sinama".into(),
+            verify_mode,
+            shutdown_grace: Duration::from_millis(grace_ms),
+        }
     }
 
     fn logs(root: &Path) -> BackendLogs {
@@ -334,11 +341,11 @@ mod tests {
             "HOST=127.0.0.1",
             "TEKSERP_DOGRULAMA_KIPI=1",
             "TEKSERP_KAPANIS=stdin",
-            "TEKSERP_HIZMET_ADI=TeksERP-Backend",
+            "TEKSERP_HIZMET_ADI=TeksERP-Backend-sinama",
             "NODE_ENV=production",
             "NODE_USE_SYSTEM_CA=1",
         ] {
-            assert!(env.contains(want), "{want} yok: {env}");
+            assert!(env.lines().any(|l| l == want), "{want} satırı yok (hizmet adı parametreden gelmeli): {env}");
         }
         assert!(env.contains(&format!("TEKSERP_KOK={}", root.display())));
         assert!(!env.contains("NODE_OPTIONS"), "NODE_OPTIONS silinmeli: {env}");

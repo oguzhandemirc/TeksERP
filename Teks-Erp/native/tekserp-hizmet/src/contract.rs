@@ -2,11 +2,12 @@
 //! kurulum komutları bu sabitleri okur. Dizin adları backend'in `Teks-Erp/src/lib/hizmet-duzeni.ts`
 //! `SERVICE_DIRS`iyle AYNIDIR (D3); ortam adları oradaki sabitlerle aynıdır.
 
-/// Backend hizmeti (konak bu adla kaydolur; güncelleyici bu adı durdurur/başlatır).
+/// Backend hizmetinin VARSAYILAN adı (konak bu adla kaydolur; güncelleyici bu adı durdurur/başlatır).
+/// Aynı makinede ikinci kanal kendi adını alır (kanal kaydı `backend.hizmetAdi`, `hizmet-kur --ad`).
 pub const BACKEND_SERVICE: &str = "TeksERP-Backend";
 pub const BACKEND_DISPLAY_NAME: &str = "TeksERP Backend";
 pub const BACKEND_DESCRIPTION: &str = "TeksERP ERP sunucusu (Node) — hizmet konağı; güncelleyici yönetir.";
-/// Düşük yetkili sanal hizmet hesabı (parolasız).
+/// Düşük yetkili sanal hizmet hesabı (parolasız) — varsayılan adın; genel biçim `service_account`.
 pub const BACKEND_ACCOUNT: &str = "NT SERVICE\\TeksERP-Backend";
 /// Backend hesabının ayrıcalıkları (D3: SeImpersonate bilerek YOK).
 pub const BACKEND_PRIVILEGES: [&str; 2] = ["SeChangeNotifyPrivilege", "SeCreateGlobalPrivilege"];
@@ -17,6 +18,33 @@ pub const UPDATER_DESCRIPTION: &str = "TeksERP backend güncellemelerini imzalı
 
 /// Kendi PostgreSQL örneğinin hizmeti (D4); backend buna bağımlı kaydedilir (varsa).
 pub const PG_SERVICE: &str = "TeksERP-PostgreSQL";
+
+/// Hizmet adı argümanı (`hizmet` · `hizmet-kur` · `hizmet-kaldir` · `on-planda`): yoksa varsayılan ad.
+pub const ARG_SERVICE_NAME: &str = "--ad";
+
+/// Hizmet adı: harf/rakamla başlar; harf · rakam · `.` · `_` · `-`; en çok 80 karakter (SCM adı, olay
+/// kaynağı ve `NT SERVICE\<ad>` sanal hesabı olur — boşluk, ters bölü ve yol ayıracı YOK).
+pub fn valid_service_name(name: &str) -> bool {
+    let b = name.as_bytes();
+    !b.is_empty()
+        && b.len() <= 80
+        && b[0].is_ascii_alphanumeric()
+        && b.iter().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
+}
+
+/// Hizmetin sanal hesabı: `NT SERVICE\<ad>` (hizmet kaydıyla DOĞAR — ACL kayıttan SONRA, §4.2).
+pub fn service_account(name: &str) -> String {
+    format!("NT SERVICE\\{name}")
+}
+
+/// Argümanlardaki `--ad` değeri (doğrulanmış) ya da varsayılan.
+pub fn service_name_arg(args: &[String], default: &str) -> Result<String, String> {
+    match args.iter().position(|a| a == ARG_SERVICE_NAME).map(|i| args.get(i + 1)) {
+        None => Ok(default.to_string()),
+        Some(Some(n)) if valid_service_name(n) => Ok(n.clone()),
+        Some(_) => Err(format!("{ARG_SERVICE_NAME} <ad> biçimsiz (harf/rakamla başlar; harf · rakam · . _ -; ≤ 80)")),
+    }
+}
 
 /// Doğrulama kipi: güncelleyici backend'i bu başlatma argümanıyla açar (yalnız 127.0.0.1, arka plan işi yok).
 pub const VERIFY_ARG: &str = "--dogrulama";
@@ -76,5 +104,24 @@ pub fn node_file_name() -> &'static str {
         "node.exe"
     } else {
         "node"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn service_names() {
+        assert!(valid_service_name("TeksERP-Backend") && valid_service_name("TeksERP-Backend-testfabrika"));
+        for bad in ["", "-x", "Teks ERP", "a\\b", "a/b", "é", &"a".repeat(81)] {
+            assert!(!valid_service_name(bad), "{bad}");
+        }
+        assert_eq!(service_account("TeksERP-Backend"), BACKEND_ACCOUNT);
+        let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(service_name_arg(&args(&["hizmet"]), BACKEND_SERVICE).unwrap(), BACKEND_SERVICE);
+        assert_eq!(service_name_arg(&args(&["hizmet", "--ad", "TeksERP-Backend-demo"]), BACKEND_SERVICE).unwrap(), "TeksERP-Backend-demo");
+        assert!(service_name_arg(&args(&["hizmet", "--ad"]), BACKEND_SERVICE).is_err());
+        assert!(service_name_arg(&args(&["hizmet", "--ad", "a b"]), BACKEND_SERVICE).is_err());
     }
 }

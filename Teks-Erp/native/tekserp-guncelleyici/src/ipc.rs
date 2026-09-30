@@ -234,6 +234,14 @@ pub struct StatusDoc {
     /// ölçülemiyor sayılabilir).
     #[serde(rename = "zaman")]
     pub at: String,
+    /// KALP ATIŞI: her turun sonunda (ve işlem/indirme ilerledikçe) yazılır — güncelleyici DURMUŞ olsa da
+    /// dosya kalır; canlılık yalnız bu damganın yaşıyla ölçülür (`canlilikEsigiSn`).
+    #[serde(rename = "sonCanlilik")]
+    pub heartbeat: String,
+    /// `sonCanlilik`in bu durumda en çok ne kadar eskiyebileceği (sn): boşta 3 tur; indirmede + 10 dk;
+    /// işlemde en uzun adımın zaman aşımı + 5 dk. Aşılırsa güncelleyici ölçülemiyor sayılır.
+    #[serde(rename = "canlilikEsigiSn")]
+    pub liveness_threshold_s: u64,
     #[serde(rename = "turSn")]
     pub tick_s: u64,
     #[serde(rename = "guncelleyiciSurum")]
@@ -293,6 +301,8 @@ impl StatusDoc {
         StatusDoc {
             v: 1,
             at: String::new(),
+            heartbeat: String::new(),
+            liveness_threshold_s: 0,
             tick_s: 0,
             updater_version: env!("CARGO_PKG_VERSION").into(),
             installed_version: None,

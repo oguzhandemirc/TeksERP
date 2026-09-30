@@ -1,9 +1,12 @@
 //! `tekserp-hizmet` — TeksERP backend hizmet konağı (`TeksERP-Backend`).
 //!
-//!   hizmet --kok <KOK>                  SCM'in başlattığı kip (ImagePath argümanları)
-//!   on-planda --kok <KOK> [--dogrulama] ön planda koş; stdin'de satır/EOF = durdur (tanı için)
-//!   hizmet-kur --kok <KOK> [--pg-hizmeti <ad> | --pg-yok]   kaydet/güncelle (yönetici)
-//!   hizmet-kaldir                       durdur + sil (yönetici)
+//!   hizmet --kok <KOK> [--ad <ad>]      SCM'in başlattığı kip (ImagePath argümanları)
+//!   on-planda --kok <KOK> [--ad <ad>] [--dogrulama]   ön planda koş; stdin'de satır/EOF = durdur (tanı)
+//!   hizmet-kur --kok <KOK> [--ad <ad>] [--pg-hizmeti <ad> | --pg-yok]   kaydet/güncelle (yönetici)
+//!   hizmet-kaldir [--ad <ad>]           durdur + sil (yönetici)
+//!
+//! `--ad` yoksa `TeksERP-Backend`; aynı makinedeki ikinci kanal kanal kaydının `backend.hizmetAdi`ni
+//! verir (`kanal-kapisi.mjs backend-paketle` → `TEKSERP_HIZMET_ADI`).
 //!   kunye                               {ad, surum, hedef} JSON
 //!
 //! Sözleşme: docs/design/GUNCELLEYICI.md §4.2–§4.3.
@@ -32,6 +35,7 @@ fn identity() -> String {
 
 fn foreground(args: &[String]) -> Result<u32, String> {
     let root = root_arg(args)?;
+    let service_name = contract::service_name_arg(args, contract::BACKEND_SERVICE)?;
     let verify_mode = args.iter().any(|a| a == contract::VERIFY_ARG);
     let (tx, rx) = mpsc::channel::<()>();
     std::thread::spawn(move || {
@@ -45,7 +49,7 @@ fn foreground(args: &[String]) -> Result<u32, String> {
         out: Arc::new(RotatingLog::open(&log_dir, path::LOG_OUT, LogSpec::BACKEND_OUTPUT)),
         err: Arc::new(RotatingLog::open(&log_dir, path::LOG_ERR, LogSpec::BACKEND_OUTPUT)),
     };
-    let cfg = HostConfig { root, verify_mode, shutdown_grace: SHUTDOWN_GRACE };
+    let cfg = HostConfig { root, service_name, verify_mode, shutdown_grace: SHUTDOWN_GRACE };
     let outcome = host::run(&cfg, &rx, &log, &logs, &NoHooks);
     eprintln!("konak bitti: {outcome:?}");
     Ok(outcome.exit_code())
@@ -55,9 +59,10 @@ fn foreground(args: &[String]) -> Result<u32, String> {
 fn windows_command(command: &str, args: &[String]) -> Result<u32, String> {
     use tekserp_hizmet::windows::{host_service, scm};
     match command {
-        "hizmet" => host_service::run(root_arg(args)?).map(|()| 0),
+        "hizmet" => host_service::run(root_arg(args)?, contract::service_name_arg(args, contract::BACKEND_SERVICE)?).map(|()| 0),
         "hizmet-kur" => {
             let root = root_arg(args)?;
+            let name = contract::service_name_arg(args, contract::BACKEND_SERVICE)?;
             let dependencies = if args.iter().any(|a| a == "--pg-yok") {
                 vec![]
             } else if let Some(name) = flag_value(args, "--pg-hizmeti") {
@@ -71,25 +76,39 @@ fn windows_command(command: &str, args: &[String]) -> Result<u32, String> {
                 );
                 vec![]
             };
+            let display_name = if name == contract::BACKEND_SERVICE {
+                contract::BACKEND_DISPLAY_NAME.to_string()
+            } else {
+                format!("{} ({name})", contract::BACKEND_DISPLAY_NAME)
+            };
             scm::install(&scm::ServiceSpec {
-                name: contract::BACKEND_SERVICE.into(),
-                display_name: contract::BACKEND_DISPLAY_NAME.into(),
+                name: name.clone(),
+                display_name,
                 description: contract::BACKEND_DESCRIPTION.into(),
                 executable: root.join(path::CURRENT).join(path::RUNTIME).join(path::HOST_EXE),
-                arguments: vec!["hizmet".into(), "--kok".into(), root.clone().into_os_string()],
-                account: Some(contract::BACKEND_ACCOUNT.into()),
+                arguments: vec![
+                    "hizmet".into(),
+                    "--kok".into(),
+                    root.clone().into_os_string(),
+                    contract::ARG_SERVICE_NAME.into(),
+                    name.clone().into(),
+                ],
+                account: Some(contract::service_account(&name)),
                 dependencies,
                 // D3 (`backend-hizmeti.ps1`) ile aynı: 5 sn · 5 sn · 30 sn, sayaç 1 günde sıfırlanır.
                 restart_delays: [5, 5, 30].map(std::time::Duration::from_secs).to_vec(),
                 required_privileges: contract::BACKEND_PRIVILEGES.iter().map(|p| p.to_string()).collect(),
             })?;
-            println!("{} kaydedildi (kök {})", contract::BACKEND_SERVICE, root.display());
+            println!("{name} kaydedildi (kök {}; hesap {})", root.display(), contract::service_account(&name));
             Ok(0)
         }
-        "hizmet-kaldir" => scm::uninstall(contract::BACKEND_SERVICE).map(|()| {
-            println!("{} kaldırıldı", contract::BACKEND_SERVICE);
-            0
-        }),
+        "hizmet-kaldir" => {
+            let name = contract::service_name_arg(args, contract::BACKEND_SERVICE)?;
+            scm::uninstall(&name).map(|()| {
+                println!("{name} kaldırıldı");
+                0
+            })
+        }
         _ => Err(format!("bilinmeyen komut: {command}")),
     }
 }
@@ -109,7 +128,7 @@ fn main() -> ExitCode {
         }
         "on-planda" => foreground(&args),
         "hizmet" | "hizmet-kur" | "hizmet-kaldir" => windows_command(&command, &args),
-        _ => Err("kullanım: tekserp-hizmet <hizmet|on-planda|hizmet-kur|hizmet-kaldir|kunye> [--kok <dizin>]".into()),
+        _ => Err("kullanım: tekserp-hizmet <hizmet|on-planda|hizmet-kur|hizmet-kaldir|kunye> [--kok <dizin>] [--ad <hizmet adı>]".into()),
     };
     match result {
         Ok(code) => ExitCode::from(u8::try_from(code).unwrap_or(1)),

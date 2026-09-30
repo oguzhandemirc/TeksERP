@@ -24,6 +24,10 @@ pub struct UpdaterSettings {
     pub backup_timeout_s: u64,
     #[serde(rename = "turAraligiSn", default = "default_tick")]
     pub tick_s: u64,
+    /// Yönetilen backend hizmetinin adı (kanal kaydı `backend.hizmetAdi`; aynı makinede ikinci kanal).
+    /// Yoksa `TeksERP-Backend`.
+    #[serde(rename = "backendHizmeti", default)]
+    pub backend_service: Option<String>,
 }
 
 fn default_health() -> u64 {
@@ -52,6 +56,7 @@ impl Default for UpdaterSettings {
             migrate_timeout_s: default_migrate(),
             backup_timeout_s: default_backup(),
             tick_s: default_tick(),
+            backend_service: None,
         }
     }
 }
@@ -68,6 +73,11 @@ impl UpdaterSettings {
     }
     pub fn backup_timeout(&self) -> Duration {
         Duration::from_secs(self.backup_timeout_s.clamp(60, 12 * 3600))
+    }
+
+    /// Backend hizmetinin adı (okunurken doğrulanmıştır).
+    pub fn backend_service(&self) -> &str {
+        self.backend_service.as_deref().unwrap_or(tekserp_hizmet::contract::BACKEND_SERVICE)
     }
 
     /// Sunucu kökü YALNIZ `https://` (test derlemesinde döngü adresine `http://` da).
@@ -88,7 +98,13 @@ pub fn read_settings(fs: &dyn Fs, layout: &Layout) -> Result<UpdaterSettings, St
     match fs.read(&layout.settings_file()) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(UpdaterSettings::default()),
         Err(e) => Err(format!("ayar.json okunamadı: {e}")),
-        Ok(b) => serde_json::from_slice(&b).map_err(|e| format!("ayar.json biçimsiz: {e}")),
+        Ok(b) => {
+            let s: UpdaterSettings = serde_json::from_slice(&b).map_err(|e| format!("ayar.json biçimsiz: {e}"))?;
+            if s.backend_service.as_deref().is_some_and(|n| !tekserp_hizmet::contract::valid_service_name(n)) {
+                return Err("ayar.json backendHizmeti biçimsiz (harf/rakamla başlar; harf · rakam · . _ -; ≤ 80)".into());
+            }
+            Ok(s)
+        }
     }
 }
 

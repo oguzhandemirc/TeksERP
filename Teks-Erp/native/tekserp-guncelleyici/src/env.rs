@@ -628,13 +628,19 @@ impl Protect for NoProtect {
 }
 
 /// Üretim ortamı: gerçek dosya/süreç/ağ/saat + platformun hizmet/olay/koruma bağları.
-pub fn real(proxy: Option<&str>) -> Result<Env, String> {
+/// `event_source`: olay günlüğü kaynağı (güncelleyici hizmetinin adı).
+pub fn real(proxy: Option<&str>, event_source: &str) -> Result<Env, String> {
     let net: Arc<dyn Net> = Arc::new(RealNet::new(proxy)?);
     #[cfg(windows)]
-    let (svc, events, protect): (Arc<dyn Services>, Arc<dyn Events>, Arc<dyn Protect>) =
-        (Arc::new(crate::windows::WinServices), Arc::new(crate::windows::WinEvents), Arc::new(crate::windows::Dpapi));
+    let (svc, events, protect): (Arc<dyn Services>, Arc<dyn Events>, Arc<dyn Protect>) = (
+        Arc::new(crate::windows::WinServices),
+        Arc::new(crate::windows::WinEvents { source: event_source.to_string() }),
+        Arc::new(crate::windows::Dpapi),
+    );
     #[cfg(not(windows))]
-    let (svc, events, protect): (Arc<dyn Services>, Arc<dyn Events>, Arc<dyn Protect>) =
-        (Arc::new(NoServices), Arc::new(NoEvents), Arc::new(NoProtect));
+    let (svc, events, protect): (Arc<dyn Services>, Arc<dyn Events>, Arc<dyn Protect>) = {
+        let _ = event_source;
+        (Arc::new(NoServices), Arc::new(NoEvents), Arc::new(NoProtect))
+    };
     Ok(Env { fs: Arc::new(RealFs), svc, procs: Arc::new(RealProcs), net, clock: Arc::new(SystemClock), events, protect })
 }

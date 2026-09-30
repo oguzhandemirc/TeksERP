@@ -12,7 +12,6 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tekserp_hizmet::contract;
 use tekserp_hizmet::timefmt;
 
 /// Sahne içerik manifestosu (D4: `shasum -c` biçimi, `<hex>  <yol>`).
@@ -285,7 +284,7 @@ impl Operation for PgOp {
         match step {
             "PG_YEDEK" => operation::take_backup(ctx, &p.op_id, &p.tools_dir),
             "BACKEND_DURDUR" => {
-                stop_service(ctx, contract::BACKEND_SERVICE, codes::HIZMET_YOK, codes::HIZMET_DURMADI).map(|()| Value::Null)
+                stop_service(ctx, ctx.settings.backend_service(), codes::HIZMET_YOK, codes::HIZMET_DURMADI).map(|()| Value::Null)
             }
             "PG_DURDUR" => {
                 stop_service(ctx, &p.service, codes::HIZMET_YOK, codes::PG_DURMADI)?;
@@ -309,7 +308,7 @@ impl Operation for PgOp {
                 Ok(json!({ "yenidenDizinlendi": p.icu_changed }))
             }
             "BACKEND_BASLAT" => {
-                start_service(ctx, contract::BACKEND_SERVICE, &[], codes::HIZMET_BASLAMADI)?;
+                start_service(ctx, ctx.settings.backend_service(), &[], codes::HIZMET_BASLAMADI)?;
                 self.backend_health(ctx).map(|()| Value::Null)
             }
             "ONAY" => self.update_instance(ctx).map(|()| Value::Null),
@@ -325,7 +324,7 @@ impl Operation for PgOp {
         let p = &self.plan;
         let done = |r: Result<(), StepError>| r.map(|()| Value::Null);
         match step {
-            "BACKEND_BASLAT" => done(stop_service(ctx, contract::BACKEND_SERVICE, codes::HIZMET_YOK, codes::HIZMET_DURMADI)),
+            "BACKEND_BASLAT" => done(stop_service(ctx, ctx.settings.backend_service(), codes::HIZMET_YOK, codes::HIZMET_DURMADI)),
             "PG_BASLAT" => done(stop_service(ctx, &p.service, codes::HIZMET_YOK, codes::PG_DURMADI)),
             "PG_BAGLANTI" => done(switch_link(ctx, &ctx.layout.pg_bin_link(), &p.old_dir.join("bin"), codes::PG_YOL_HATASI)),
             "PG_YOL" => done(self.set_image_path(ctx, &p.old_image_path)),
@@ -338,7 +337,7 @@ impl Operation for PgOp {
                 Ok(Value::Null)
             }
             "BACKEND_DURDUR" => {
-                start_service(ctx, contract::BACKEND_SERVICE, &[], codes::GERI_DONUS_SAGLIKSIZ)?;
+                start_service(ctx, ctx.settings.backend_service(), &[], codes::GERI_DONUS_SAGLIKSIZ)?;
                 done(
                     self.backend_health(ctx).map_err(|e| {
                         step_err(codes::GERI_DONUS_SAGLIKSIZ, format!("backend sağlıklı başlamadı: {} {}", e.code, e.message))

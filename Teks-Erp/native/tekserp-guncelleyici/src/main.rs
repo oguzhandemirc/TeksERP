@@ -1,10 +1,14 @@
 //! `tekserp-guncelleyici` — TeksERP güncelleyici hizmeti (`TeksERP-Guncelleyici`, LocalSystem).
 //!
-//!   hizmet --kok <KOK>              SCM'in başlattığı kip (ImagePath argümanları)
+//!   hizmet --kok <KOK> [--veri <D>] [--ad <ad>]   SCM'in başlattığı kip (ImagePath argümanları)
 //!   tur --kok <KOK> [--veri <D>]    tek tur ön planda (tanı; yarım işlemi de sonuçlandırır — "onar")
 //!   durum --kok <KOK> [--veri <D>]  durum.json + son işlemin özeti
-//!   hizmet-kur --kok <KOK>          kaydet/güncelle (yönetici)
-//!   hizmet-kaldir                   durdur + sil (yönetici)
+//!   hizmet-kur --kok <KOK> [--veri <D>] [--ad <ad>]   kaydet/güncelle (yönetici)
+//!   hizmet-kaldir [--ad <ad>]       durdur + sil (yönetici)
+//!
+//! Aynı makinede ikinci kanal: güncelleyici kendi adını (`--ad`, varsayılan `TeksERP-Guncelleyici`) ve
+//! kendi veri kökünü (`--veri`; backend'in `TEKSERP_GUNCELLEME_DIZINI` = `<veri>\guncelleme`) alır; yönettiği
+//! backend hizmetinin adı `ayar.json` `backendHizmeti`dir (kanal kaydı `backend.hizmetAdi`).
 //!   kunye                           {ad, surum, hedef, testCapasi} JSON (kendini güncellemede sınanır)
 //!
 //! Sözleşme: docs/design/GUNCELLEYICI.md §4–§13.
@@ -50,7 +54,7 @@ fn one_tick(args: &[String]) -> Result<u32, String> {
     let layout = Layout::new(&root, &data_arg(args, &root));
     let _lock = lock::acquire(&layout.lock_file()).map_err(|e| format!("KILIT_DOLU: {e}"))?;
     let s = settings::read_settings(&env::RealFs, &layout).unwrap_or_default();
-    let e = env::real(s.proxy.as_deref())?;
+    let e = env::real(s.proxy.as_deref(), &tekserp_hizmet::contract::service_name_arg(args, tekserp_hizmet::contract::UPDATER_SERVICE)?)?;
     let log = Arc::new(RotatingLog::open(&layout.log_dir(), "guncelleyici", LogSpec::SERVICE));
     let engine = Engine::new(e, layout.clone(), TrustAnchor::for_process()?, log, None);
     let r = engine.tick(&|| false);
@@ -83,28 +87,46 @@ fn windows_command(command: &str, args: &[String]) -> Result<u32, String> {
         "hizmet" => {
             let root = root_arg(args)?;
             let data = data_arg(args, &root);
-            tekserp_guncelleyici::windows::service::run(root, data).map(|()| 0)
+            let name = contract::service_name_arg(args, contract::UPDATER_SERVICE)?;
+            tekserp_guncelleyici::windows::service::run(root, data, name).map(|()| 0)
         }
         "hizmet-kur" => {
             let root = root_arg(args)?;
+            let name = contract::service_name_arg(args, contract::UPDATER_SERVICE)?;
+            let mut arguments: Vec<std::ffi::OsString> = vec!["hizmet".into(), "--kok".into(), root.clone().into_os_string()];
+            if let Some(d) = flag_value(args, "--veri") {
+                if !std::path::Path::new(&d).is_absolute() {
+                    return Err(format!("--veri mutlak yol olmalı: {d}"));
+                }
+                arguments.extend(["--veri".into(), d.into()]);
+            }
+            arguments.extend([contract::ARG_SERVICE_NAME.into(), name.clone().into()]);
+            let display_name = if name == contract::UPDATER_SERVICE {
+                contract::UPDATER_DISPLAY_NAME.to_string()
+            } else {
+                format!("{} ({name})", contract::UPDATER_DISPLAY_NAME)
+            };
             scm::install(&scm::ServiceSpec {
-                name: contract::UPDATER_SERVICE.into(),
-                display_name: contract::UPDATER_DISPLAY_NAME.into(),
+                name: name.clone(),
+                display_name,
                 description: contract::UPDATER_DESCRIPTION.into(),
                 executable: root.join(path::UPDATER).join(path::UPDATER_EXE),
-                arguments: vec!["hizmet".into(), "--kok".into(), root.clone().into_os_string()],
+                arguments,
                 account: None,
                 dependencies: vec![],
                 restart_delays: [10, 30, 60].map(std::time::Duration::from_secs).to_vec(),
                 required_privileges: vec![],
             })?;
-            println!("{} kaydedildi (kök {})", contract::UPDATER_SERVICE, root.display());
+            println!("{name} kaydedildi (kök {})", root.display());
             Ok(0)
         }
-        "hizmet-kaldir" => scm::uninstall(contract::UPDATER_SERVICE).map(|()| {
-            println!("{} kaldırıldı", contract::UPDATER_SERVICE);
-            0
-        }),
+        "hizmet-kaldir" => {
+            let name = contract::service_name_arg(args, contract::UPDATER_SERVICE)?;
+            scm::uninstall(&name).map(|()| {
+                println!("{name} kaldırıldı");
+                0
+            })
+        }
         _ => Err(format!("bilinmeyen komut: {command}")),
     }
 }
@@ -126,7 +148,7 @@ fn main() -> ExitCode {
         "durum" => show_status(&args),
         "hizmet" | "hizmet-kur" | "hizmet-kaldir" => windows_command(&command, &args),
         _ => {
-            Err("kullanım: tekserp-guncelleyici <hizmet|tur|onar|durum|hizmet-kur|hizmet-kaldir|kunye> [--kok <dizin>] [--veri <dizin>]"
+            Err("kullanım: tekserp-guncelleyici <hizmet|tur|onar|durum|hizmet-kur|hizmet-kaldir|kunye> [--kok <dizin>] [--veri <dizin>] [--ad <hizmet adı>]"
                 .into())
         }
     };

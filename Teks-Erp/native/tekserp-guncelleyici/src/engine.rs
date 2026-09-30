@@ -116,10 +116,26 @@ impl Engine {
 
     fn write_status(&self, mut doc: StatusDoc) {
         doc.at = timefmt::iso_millis(self.now());
+        doc.heartbeat = doc.at.clone();
+        doc.liveness_threshold_s = self.liveness_threshold(&doc);
         if let Err(e) = ipc::write_status(self.env.fs.as_ref(), &self.layout, &doc) {
             self.log.warn(&format!("durum.json yazılamadı: {e}"));
         }
         *self.last_status.borrow_mut() = Some(doc);
+    }
+
+    /// `canlilikEsigiSn`: bu durumda iki kalp atışı arası en uzun beklenen süre.
+    fn liveness_threshold(&self, doc: &StatusDoc) -> u64 {
+        let tick = doc.tick_s.max(10);
+        let s = settings::read_settings(self.env.fs.as_ref(), &self.layout).unwrap_or_default();
+        match doc.state {
+            State::Applying => {
+                let longest = s.backup_timeout().max(s.migrate_timeout()).max(s.health_timeout() + s.stop_timeout());
+                longest.as_secs() + 300
+            }
+            State::Downloading => 3 * tick + 600,
+            _ => 3 * tick,
+        }
     }
 
     fn doc(&self, f: &Frame, state: State, code: Option<&str>, message: &str) -> StatusDoc {
@@ -510,6 +526,12 @@ impl Engine {
         if let Some(l) = last.as_ref().filter(|l| l.attempt_end && l.outcome != OpOutcome::Succeeded && l.target == m.doc.surum) {
             let fresh = used_approval.is_some_and(|a| Some(&a.id) != l.approval_id.as_ref());
             if !fresh {
+                // Karar KUR/pencere dese de bu sürüm ancak YENİ bir onayla denenir: aday onay bekler.
+                if let Some(p) = f.pending.as_mut() {
+                    p.karar = Kind::AwaitingApproval.label().into();
+                    p.neden = None;
+                    p.aralik = None;
+                }
                 let msg =
                     format!("{} geri dönmüştü — aynı sürüm kendiliğinden yeniden denenmez; yeni bir panel onayı gerekir", m.doc.surum);
                 let state = self.resting_state(last.as_ref(), &installed, Some(&m.doc.surum));

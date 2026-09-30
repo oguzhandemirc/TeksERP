@@ -5,7 +5,6 @@ pub mod service;
 use crate::env::{EnvError, EnvResult, Events, Protect, Services, SvcState};
 use std::io;
 use std::path::Path;
-use tekserp_hizmet::contract;
 use tekserp_hizmet::logfile::Level;
 use tekserp_hizmet::windows::{eventlog, scm, wide};
 use windows_sys::Win32::Foundation::{CloseHandle, LocalFree, HANDLE};
@@ -179,11 +178,14 @@ impl Services for WinServices {
     }
 }
 
-pub struct WinEvents;
+/// Olay günlüğü kaynağı = güncelleyici hizmetinin adı (`hizmet-kur` o adla kaydeder).
+pub struct WinEvents {
+    pub source: String,
+}
 
 impl Events for WinEvents {
     fn event(&self, level: Level, message: &str) {
-        eventlog::write(contract::UPDATER_SERVICE, level, message);
+        eventlog::write(&self.source, level, message);
     }
 }
 

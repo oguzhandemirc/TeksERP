@@ -19,12 +19,18 @@ use windows_service::service_control_handler::{self, ServiceControlHandlerResult
 use windows_service::{define_windows_service, service_dispatcher};
 
 static PATHS: OnceLock<(PathBuf, PathBuf)> = OnceLock::new();
+static NAME: OnceLock<String> = OnceLock::new();
+
+fn name() -> &'static str {
+    NAME.get().map_or(contract::UPDATER_SERVICE, String::as_str)
+}
 
 define_windows_service!(ffi_service_main, service_main);
 
-pub fn run(root: PathBuf, data: PathBuf) -> Result<(), String> {
+pub fn run(root: PathBuf, data: PathBuf, service_name: String) -> Result<(), String> {
     let _ = PATHS.set((root, data));
-    service_dispatcher::start(contract::UPDATER_SERVICE, ffi_service_main)
+    let _ = NAME.set(service_name);
+    service_dispatcher::start(name(), ffi_service_main)
         .map_err(|e| format!("hizmet dağıtıcısı başlatılamadı (SCM dışından mı koşuldu? tanı için `tur`): {e}"))
 }
 
@@ -44,7 +50,7 @@ fn service_main(_arguments: Vec<OsString>) {
             _ => ServiceControlHandlerResult::NotImplemented,
         }
     };
-    let Ok(handle) = service_control_handler::register(contract::UPDATER_SERVICE, handler) else {
+    let Ok(handle) = service_control_handler::register(name(), handler) else {
         log.error("denetim işleyicisi kaydedilemedi");
         return;
     };
@@ -67,7 +73,7 @@ fn service_main(_arguments: Vec<OsString>) {
     let code = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(&layout, &log, &stop, &|| report(ServiceState::Running, 0))))
         .unwrap_or_else(|_| {
             log.error("güncelleyici paniğe düştü — hata koduyla çıkılıyor (SCM yeniden başlatır; yarım işlem açılışta sürdürülür)");
-            eventlog::write(contract::UPDATER_SERVICE, Level::Error, "Güncelleyici iç hatası (panik); SCM kurtarması yeniden başlatacak.");
+            eventlog::write(name(), Level::Error, "Güncelleyici iç hatası (panik); SCM kurtarması yeniden başlatacak.");
             1
         });
     report(ServiceState::Stopped, code);
@@ -76,7 +82,7 @@ fn service_main(_arguments: Vec<OsString>) {
 fn body(layout: &Layout, log: &Arc<RotatingLog>, stop: &AtomicBool, running: &dyn Fn()) -> u32 {
     let own = std::env::current_exe().ok();
     let settings = crate::settings::read_settings(&crate::env::RealFs, layout).unwrap_or_default();
-    let env = match crate::env::real(settings.proxy.as_deref()) {
+    let env = match crate::env::real(settings.proxy.as_deref(), name()) {
         Ok(e) => e,
         Err(e) => {
             log.error(&format!("ortam kurulamadı: {e}"));
@@ -86,7 +92,7 @@ fn body(layout: &Layout, log: &Arc<RotatingLog>, stop: &AtomicBool, running: &dy
     if let Some(own) = &own {
         if selfupdate::on_startup(&env, layout, own, env!("CARGO_PKG_VERSION")) == Startup::RevertedRestart {
             log.error("yeni güncelleyici ikilisi 3 açılışta doğrulanamadı — eski ikili geri kondu");
-            eventlog::write(contract::UPDATER_SERVICE, Level::Error, "Güncelleyicinin yeni ikilisi doğrulanamadı; eski ikiliye dönüldü.");
+            eventlog::write(name(), Level::Error, "Güncelleyicinin yeni ikilisi doğrulanamadı; eski ikiliye dönüldü.");
             return codes::EXIT_SELF_UPDATE;
         }
     }

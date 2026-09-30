@@ -162,6 +162,13 @@ fn rolled_back_version_is_not_retried_until_a_fresh_approval() {
     w.run(3).unwrap();
     assert_eq!(w.backend().starts, starts, "geri dönen sürüm kendiliğinden yeniden denendi");
     assert_eq!(w.state(), Some(State::RolledBack));
+    let st = w.status().unwrap();
+    assert_eq!(st.decision.map(|d| d.karar.label()), Some("KUR"), "karar (TS aynası) KUR der");
+    assert_eq!(
+        st.pending.map(|p| (p.karar, p.neden)),
+        Some(("ONAY_BEKLIYOR".to_string(), None)),
+        "ama aday yeni onay bekler (rapor bunu gösterir)"
+    );
     *w.faults.unhealthy_version.lock().unwrap() = None;
     // Başka bir sürümün onayı açmaz; aynı sürüme YENİ onay açar.
     w.write_intent(&intent(Some(approval("onay-baska", "2.12.9", "HEMEN"))));
@@ -187,4 +194,41 @@ fn download_resumes_after_cut() {
     assert_eq!(w.state(), Some(State::Succeeded));
     assert!(!part.exists());
     assert_invariants(&w, "kesilen indirme");
+}
+
+/// Aynı makinede ikinci kanal: yönetilen backend hizmetinin adı `ayar.json` `backendHizmeti`den
+/// (kanal kaydı `backend.hizmetAdi`); varsayılan adlı hizmete hiç dokunulmaz.
+#[test]
+fn backend_service_name_comes_from_settings() {
+    let w = world("hizmet-adi");
+    w.rename_backend("TeksERP-Backend-testkanal");
+    w.run_to_rest(0);
+    assert_eq!(w.state(), Some(State::Succeeded), "{:?}", w.status().map(|s| (s.error_code, s.message)));
+    assert_invariants(&w, "hizmet adı parametresi");
+    assert!(w.svcs.lock().unwrap().get(BACKEND).is_none(), "varsayılan adla hizmet aranmadı/yaratılmadı");
+    // Biçimsiz ad: ayar okunmaz, hiçbir şey yapılmaz.
+    let w = world("hizmet-adi-bicimsiz");
+    std::fs::write(w.layout.settings_file(), r#"{"v":1,"guncellemeSunucusu":"https://guncelleme.test","backendHizmeti":"a b"}"#).unwrap();
+    w.run(1).unwrap();
+    let st = w.status().unwrap();
+    assert_eq!(st.error_code.as_deref(), Some("AYAR_BICIMSIZ"));
+    assert_eq!(w.backend().starts, 0);
+}
+
+/// Kalp atışı (§5.2): her tur `sonCanlilik`i tazeler — değişen bir şey olmasa da; eşik duruma göre.
+#[test]
+fn heartbeat_is_refreshed_every_tick() {
+    let w = World::new(
+        "canlilik",
+        Setup { lease: LeaseOpts { update: Some(policy("DONDUR", &[], None)), ..LeaseOpts::default() }, ..Setup::default() },
+    );
+    w.run(1).unwrap();
+    let a = w.status().unwrap();
+    assert!(!a.heartbeat.is_empty() && a.heartbeat == a.at);
+    assert_eq!((a.tick_s, a.liveness_threshold_s), (60, 180), "boşta: 3 tur");
+    w.clock.fetch_add(61_000, Ordering::SeqCst);
+    w.run(1).unwrap();
+    let b = w.status().unwrap();
+    assert!(b.heartbeat > a.heartbeat, "hiçbir şey değişmese de kalp atışı ilerler: {} → {}", a.heartbeat, b.heartbeat);
+    assert_eq!(b.decision, a.decision);
 }

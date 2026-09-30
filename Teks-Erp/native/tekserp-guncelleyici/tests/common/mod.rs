@@ -215,6 +215,7 @@ pub struct World {
     pub files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
     pub clock: Arc<AtomicI64>,
     pub events: Arc<Mutex<Vec<String>>>,
+    pub backend_name: Arc<Mutex<String>>,
     pub keys: Keys,
     pub anchor: TrustAnchor,
 }
@@ -277,6 +278,8 @@ pub struct WorldRefs {
     pub files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
     pub clock: Arc<AtomicI64>,
     pub events: Arc<Mutex<Vec<String>>>,
+    /// Backend hizmetinin adı (varsayılan `TeksERP-Backend`; `ayar.json` `backendHizmeti` ile değişir).
+    pub backend_name: Arc<Mutex<String>>,
 }
 
 fn current_version(root: &Path) -> Option<String> {
@@ -305,7 +308,8 @@ impl Services for FakeServices {
         s.state = SvcState::Running;
         s.args = args.iter().map(|a| a.to_string()).collect();
         s.starts += 1;
-        s.version = if name == BACKEND { current_version(&self.w.root) } else { pg_version_of_image(&s.image) };
+        let is_backend = *self.w.backend_name.lock().unwrap() == name;
+        s.version = if is_backend { current_version(&self.w.root) } else { pg_version_of_image(&s.image) };
         Ok(())
     }
     fn stop(&self, name: &str) -> EnvResult<()> {
@@ -497,7 +501,8 @@ impl Net for FakeNet {
         if let Some(port) = url.strip_prefix("http://127.0.0.1:").and_then(|r| r.strip_suffix("/health")) {
             assert_eq!(port, "4999");
             let svcs = self.w.svcs.lock().unwrap();
-            let Some(b) = svcs.get(BACKEND).filter(|s| s.state == SvcState::Running) else {
+            let backend = self.w.backend_name.lock().unwrap().clone();
+            let Some(b) = svcs.get(&backend).filter(|s| s.state == SvcState::Running) else {
                 return Err(EnvError("bağlantı reddedildi".into()));
             };
             let v = b.version.clone().unwrap_or_default();
@@ -897,9 +902,24 @@ impl World {
             files: Arc::new(Mutex::new(served)),
             clock: Arc::new(AtomicI64::new(T0)),
             events: Arc::new(Mutex::new(vec![])),
+            backend_name: Arc::new(Mutex::new(BACKEND.to_string())),
             keys,
             anchor,
         }
+    }
+
+    /// Backend hizmetini başka adla yeniden kaydeder ve güncelleyiciye `ayar.json` `backendHizmeti`yle söyler
+    /// (aynı makinede ikinci kanal).
+    pub fn rename_backend(&self, name: &str) {
+        let mut svcs = self.svcs.lock().unwrap();
+        let svc = svcs.remove(BACKEND).unwrap();
+        svcs.insert(name.to_string(), svc);
+        *self.backend_name.lock().unwrap() = name.to_string();
+        std::fs::write(
+            self.layout.settings_file(),
+            json!({ "v": 1, "guncellemeSunucusu": "https://guncelleme.test", "backendHizmeti": name }).to_string(),
+        )
+        .unwrap();
     }
 
     pub fn refs(&self) -> WorldRefs {
@@ -912,6 +932,7 @@ impl World {
             files: Arc::clone(&self.files),
             clock: Arc::clone(&self.clock),
             events: Arc::clone(&self.events),
+            backend_name: Arc::clone(&self.backend_name),
         }
     }
 
@@ -950,7 +971,8 @@ impl World {
     }
 
     pub fn backend(&self) -> Svc {
-        self.svcs.lock().unwrap().get(BACKEND).cloned().unwrap()
+        let name = self.backend_name.lock().unwrap().clone();
+        self.svcs.lock().unwrap().get(&name).cloned().unwrap()
     }
 
     pub fn db(&self) -> Db {

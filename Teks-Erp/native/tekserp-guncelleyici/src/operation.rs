@@ -507,8 +507,8 @@ impl BackendOp {
     }
 
     fn restart_backend(&self, ctx: &Ctx, args: &[&str]) -> Result<(), StepError> {
-        stop_service(ctx, contract::BACKEND_SERVICE, codes::HIZMET_YOK, codes::HIZMET_DURMADI)?;
-        start_service(ctx, contract::BACKEND_SERVICE, args, codes::HIZMET_BASLAMADI)
+        stop_service(ctx, ctx.settings.backend_service(), codes::HIZMET_YOK, codes::HIZMET_DURMADI)?;
+        start_service(ctx, ctx.settings.backend_service(), args, codes::HIZMET_BASLAMADI)
     }
 
     /// Göç DB'yi değiştirmiş olabilir mi? Ölçülemiyorsa EVET (fail-closed: geri yükle).
@@ -613,7 +613,7 @@ impl Operation for BackendOp {
     fn run_step(&self, ctx: &Ctx, view: &OpView, step: &str) -> Result<Value, StepError> {
         match step {
             "BACKEND_DURDUR" => {
-                stop_service(ctx, contract::BACKEND_SERVICE, codes::HIZMET_YOK, codes::HIZMET_DURMADI).map(|()| Value::Null)
+                stop_service(ctx, ctx.settings.backend_service(), codes::HIZMET_YOK, codes::HIZMET_DURMADI).map(|()| Value::Null)
             }
             "YEDEK" => take_backup(ctx, &self.plan.op_id, &self.plan.tools_dir),
             "GECIS" => switch_link(ctx, &ctx.layout.current(), &self.plan.new_target, codes::GECIS_HATASI).map(|()| Value::Null),
@@ -638,7 +638,7 @@ impl Operation for BackendOp {
     fn compensate(&self, ctx: &Ctx, view: &OpView, step: &str) -> Result<Value, StepError> {
         match step {
             "BASLAT" | "DOGRULAMA" => {
-                stop_service(ctx, contract::BACKEND_SERVICE, codes::HIZMET_YOK, codes::HIZMET_DURMADI).map(|()| Value::Null)
+                stop_service(ctx, ctx.settings.backend_service(), codes::HIZMET_YOK, codes::HIZMET_DURMADI).map(|()| Value::Null)
             }
             "GOC" => {
                 if self.db_changed(ctx, view) {
@@ -654,7 +654,7 @@ impl Operation for BackendOp {
             }
             "GECIS" => switch_link(ctx, &ctx.layout.current(), &self.plan.previous_target, codes::GECIS_HATASI).map(|()| Value::Null),
             "BACKEND_DURDUR" => {
-                start_service(ctx, contract::BACKEND_SERVICE, &[], codes::GERI_DONUS_SAGLIKSIZ)?;
+                start_service(ctx, ctx.settings.backend_service(), &[], codes::GERI_DONUS_SAGLIKSIZ)?;
                 self.health(ctx, &self.plan.source_version, false).map(|_| Value::Null).map_err(|e| {
                     step_err(codes::GERI_DONUS_SAGLIKSIZ, format!("önceki sürüm sağlıklı başlamadı: {} {}", e.code, e.message))
                 })

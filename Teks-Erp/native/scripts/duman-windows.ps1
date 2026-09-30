@@ -11,7 +11,10 @@
 #   2. --dogrulama baslatma argumani -> yalniz 127.0.0.1 + TEKSERP_DOGRULAMA_KIPI
 #   3. node olurse konak hata koduyla cikar, SCM kurtarmasi yeniden baslatir (yeni pid)
 #   4. konak olurse is nesnesi node'u da oldurur (yetim node portu tutmaz)
-#   5. guncelleyici: hizmet-kur -> baslat -> durum.json (NIYET_YOK) -> is\ korumali DACL -> durdur
+#   5. guncelleyici: hizmet-kur -> baslat -> durum.json (kira yok: DONDURULDU/KIRA_YOK + kalp atisi)
+#      -> is\ korumali DACL -> durdur
+#   6. hizmet adi parametresi (ayni makinede ikinci kanal): konak --ad ile kendi sanal hesabi ve
+#      TEKSERP_HIZMET_ADI; ACL KAYITTAN SONRA (sanal hesap kayitla dogar); guncelleyici --ad + --veri
 # ASCII: bilerek yalniz ASCII (PS 5.1 BOM'suz UTF-8'i ANSI okur).
 # =============================================================================
 param([Parameter(Mandatory = $true)][string]$Bin)
@@ -20,7 +23,8 @@ $ErrorActionPreference = "Stop"
 function Adim($m) { Write-Host "== $m" -ForegroundColor Cyan }
 function Dur($m) { Write-Host "XX $m" -ForegroundColor Red; exit 1 }
 
-foreach ($ad in @("TeksERP-Backend", "TeksERP-Guncelleyici")) {
+$adlar = @("TeksERP-Backend", "TeksERP-Guncelleyici", "TeksERP-Backend-duman", "TeksERP-Guncelleyici-duman")
+foreach ($ad in $adlar) {
   if (Get-Service -Name $ad -ErrorAction SilentlyContinue) { Dur "$ad zaten kayitli - duman gercek kuruluma dokunmaz" }
 }
 
@@ -131,7 +135,9 @@ try {
   for ($i = 0; $i -lt 60 -and -not (Test-Path $durumYolu); $i++) { Start-Sleep -Milliseconds 500 }
   if (-not (Test-Path $durumYolu)) { Get-Content "$kok\guncelleyici\gunluk\*.log" -ErrorAction SilentlyContinue; Dur "durum.json yazilmadi" }
   $d = Get-Content $durumYolu -Raw | ConvertFrom-Json
-  if ($d.durum -ne "BEKLIYOR" -or $d.hataKodu -ne "NIYET_YOK" -or $d.kuruluSurum -ne $surum) { Dur "durum beklenen degil: $($d | ConvertTo-Json -Compress)" }
+  if ($d.durum -ne "BEKLIYOR" -or $d.hataKodu -ne "KIRA_YOK" -or $d.kuruluSurum -ne $surum) { Dur "durum beklenen degil: $($d | ConvertTo-Json -Compress)" }
+  if ($d.karar.karar -ne "DONDURULDU" -or $d.karar.neden -ne "KIRA_YOK") { Dur "karar beklenen degil: $($d.karar | ConvertTo-Json -Compress)" }
+  if (-not $d.sonCanlilik -or $d.canlilikEsigiSn -lt 30) { Dur "kalp atisi alanlari yok: $($d | ConvertTo-Json -Compress)" }
   $acl = Get-Acl "$veri\guncelleme\is"
   if (-not $acl.AreAccessRulesProtected) { Dur "is\ DACL korumali degil (miras acik)" }
   $kimler = $acl.Access | ForEach-Object { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value } | Sort-Object -Unique
@@ -142,10 +148,42 @@ try {
   $kod = (Get-CimInstance Win32_Service -Filter "Name='TeksERP-Guncelleyici'").ExitCode
   if ($kod -ne 0) { Dur "guncelleyici cikis kodu $kod" }
   & "$kok\guncelleyici\tekserp-guncelleyici.exe" hizmet-kaldir
-  Write-Host "OK duman: iki hizmet de beklenen gibi" -ForegroundColor Green
+
+  Adim "6. hizmet adi parametresi (ikinci kanal): --ad + ACL kayittan SONRA + --veri"
+  & "$ver\runtime\tekserp-hizmet.exe" hizmet-kur --kok $kok --pg-yok --ad TeksERP-Backend-duman
+  if ($LASTEXITCODE -ne 0) { Dur "hizmet-kur --ad $LASTEXITCODE" }
+  $cfg = sc.exe qc TeksERP-Backend-duman | Out-String
+  if ($cfg -notmatch "NT SERVICE\\TeksERP-Backend-duman") { Dur "ikinci hizmetin hesabi kendi sanal hesabi degil: $cfg" }
+  if ($cfg -notmatch "--ad TeksERP-Backend-duman") { Dur "ImagePath --ad tasimiyor: $cfg" }
+  icacls $kok /grant "NT SERVICE\TeksERP-Backend-duman:(OI)(CI)RX" | Out-Null
+  if ($LASTEXITCODE -ne 0) { Dur "sanal hesaba ACL kayittan sonra verilemedi ($LASTEXITCODE)" }
+  icacls "$kok\logs" /grant "NT SERVICE\TeksERP-Backend-duman:(OI)(CI)M" | Out-Null
+  Start-Service TeksERP-Backend-duman
+  Bekle "TeksERP-Backend-duman" "Running"
+  $r = Saglik $null
+  if ($r.env.ad -ne "TeksERP-Backend-duman") { Dur "TEKSERP_HIZMET_ADI parametreden gelmedi: $($r.env.ad)" }
+  Stop-Service TeksERP-Backend-duman
+  Bekle "TeksERP-Backend-duman" "Stopped"
+  & "$ver\runtime\tekserp-hizmet.exe" hizmet-kaldir --ad TeksERP-Backend-duman
+  if (Get-Service -Name "TeksERP-Backend-duman" -ErrorAction SilentlyContinue) { Dur "hizmet-kaldir --ad silmedi" }
+  $veri2 = Join-Path $env:RUNNER_TEMP "tekserp-duman-veri"
+  Remove-Item -Recurse -Force $veri2 -ErrorAction SilentlyContinue
+  & "$kok\guncelleyici\tekserp-guncelleyici.exe" hizmet-kur --kok $kok --veri $veri2 --ad TeksERP-Guncelleyici-duman
+  if ($LASTEXITCODE -ne 0) { Dur "guncelleyici hizmet-kur --ad $LASTEXITCODE" }
+  $cfg = sc.exe qc TeksERP-Guncelleyici-duman | Out-String
+  if ($cfg -notmatch "--veri" -or $cfg -notmatch "--ad TeksERP-Guncelleyici-duman") { Dur "guncelleyici ImagePath --veri/--ad tasimiyor: $cfg" }
+  Start-Service TeksERP-Guncelleyici-duman
+  Bekle "TeksERP-Guncelleyici-duman" "Running"
+  $durum2 = "$veri2\guncelleme\durum\durum.json"
+  for ($i = 0; $i -lt 60 -and -not (Test-Path $durum2); $i++) { Start-Sleep -Milliseconds 500 }
+  if (-not (Test-Path $durum2)) { Dur "ikinci guncelleyici kendi veri kokune yazmadi" }
+  Stop-Service TeksERP-Guncelleyici-duman
+  Bekle "TeksERP-Guncelleyici-duman" "Stopped"
+  & "$kok\guncelleyici\tekserp-guncelleyici.exe" hizmet-kaldir --ad TeksERP-Guncelleyici-duman
+  Write-Host "OK duman: iki hizmet de beklenen gibi (varsayilan ve parametreli adlarla)" -ForegroundColor Green
 }
 finally {
-  foreach ($ad in @("TeksERP-Backend", "TeksERP-Guncelleyici")) {
+  foreach ($ad in $adlar) {
     if (Get-Service -Name $ad -ErrorAction SilentlyContinue) { Stop-Service $ad -Force -ErrorAction SilentlyContinue; sc.exe delete $ad | Out-Null }
   }
 }
