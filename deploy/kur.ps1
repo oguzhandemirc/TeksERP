@@ -108,7 +108,9 @@ param(
   #   Verilmezse [1/9] durur - fabrikaya kazara prova kurulmasin.
   [switch]$ProvaKabul,
   # SSH oturumunda pm2 daemon YOKKEN yine de kos (daemon oturumla olecek - bilerek).
-  [switch]$SshKabul
+  [switch]$SshKabul,
+  # Calisan TeksERP-Backend Windows hizmetinin YANINA (farkli PORT) pm2 kurulumu - bilerek.
+  [switch]$HizmetYanYana
 )
 $ErrorActionPreference = "Stop"
 
@@ -624,6 +626,18 @@ $admin = (New-Object Security.Principal.WindowsPrincipal(
   [Security.Principal.WindowsIdentity]::GetCurrent())
 ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $admin) { Fail "YONETICI PowerShell gerekir (pm2 daemon SYSTEM olarak kosuyor: EPERM \\.\pipe\rpc.sock)." }
+
+# --- Hizmet duzeni kapisi (Dagitim v2) --------------------------------------
+# Bu betik yalniz pm2 duzeni icindir. Kok Windows hizmeti duzenine (TeksERP-Backend: surumler\ +
+# current + yapilandirma\) gecmisse guncellemeyi guncelleyici yapar; burada pm2 AYNI PORTA ikinci
+# backend dogurur ve [9/9] saglik hizmetin backend'ini "API UP" okurdu (sessiz yalanci gecis).
+# Hicbir seye dokunmadan, -GeriAl dahil her kolda once olculur.
+$hizmetIzi = @(@("surumler", "current", "yapilandirma\.env") | Where-Object { Test-Path (Join-Path $kok $_) } | ForEach-Object { "$kok\$_" })
+if ($hizmetIzi.Count) { Fail "Bu kok Windows hizmeti duzeninde ($($hizmetIzi -join ', ')) - kur.ps1 pm2 duzeni icindir, guncellemeyi guncelleyici yapar." }
+$hizmetBackend = Get-CimInstance Win32_Service -Filter "Name='TeksERP-Backend'" -ErrorAction SilentlyContinue
+if ($hizmetBackend -and "$($hizmetBackend.State)" -ceq "Running" -and -not $HizmetYanYana) {
+  Fail "TeksERP-Backend Windows hizmeti CALISIYOR ($($hizmetBackend.PathName)) - pm2 ile ikinci backend ayni portu isterdi. Bilerek yan yana (farkli PORT) kuruyorsan: -HizmetYanYana"
+}
 
 # --- Uzaktan (SSH) kosum -----------------------------------------------------
 # Daemon yoksa bu kosum onu SSH oturumunun icinde dogurur ve oturumla birlikte olur;

@@ -45,7 +45,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 }
 
 /** Fabrika/müşteri sunucusunda koşan PowerShell betikleri (geliştirme makinesinde koşan `paketle.ps1` hariç). */
-const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1"];
+const SUNUCU_PS1 = ["deploy/kur.ps1", "deploy/ilk-kurulum.ps1", "deploy/yedekle.ps1", "deploy/uzaktan-kos.ps1", "deploy/bakim-rolu.ps1", "deploy/hizmet/backend-hizmeti.ps1"];
 
 const YONLENDIRME = /(?:^|\s)2>(?:&1|\$null)/;
 const CIPLAK_NPM = /(?:^|[\s&(;|])npm(?=\s|$)/;

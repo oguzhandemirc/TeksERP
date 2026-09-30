@@ -18,6 +18,7 @@ import {
 } from "./protocol";
 import { readDocField, readFileState, readJsonField, writeFileAtomicSync } from "./store-files";
 import { generateX25519, keyFileBody, x25519FromFile } from "./store-key-file";
+import { resolveServiceRoot, isInProgramDir } from "../hizmet-duzeni";
 
 export { writeFileAtomicSync } from "./store-files";
 
@@ -127,7 +128,7 @@ function sameOrInside(child: string, parent: string): boolean {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-/** `LICENSE_DIR` (env) ya da kurulum kökü\lisans; `app\` ve `BACKUP_DIR` içi RED (fail-closed). */
+/** `LICENSE_DIR` (env) ya da kurulum kökü\lisans; `app\` (hizmette program dizini) ve `BACKUP_DIR` içi RED (fail-closed). */
 export function resolveLicenseDir(
   env: NodeJS.ProcessEnv = process.env,
   cwd: string = process.cwd(),
@@ -135,6 +136,9 @@ export function resolveLicenseDir(
   const configured = env.LICENSE_DIR?.trim();
   const dir = configured ? path.resolve(configured) : path.resolve(cwd, "..", "lisans");
   if (sameOrInside(dir, cwd)) return { dir, problem: "APP_ICINDE" };
+  // Hizmet düzeninde program dizini sürümler + etkin sürüm bağlantısıdır; güncelleyici onu değiştirir.
+  const { root } = resolveServiceRoot(env);
+  if (root && isInProgramDir(dir, root)) return { dir, problem: "APP_ICINDE" };
   const backupDir = env.BACKUP_DIR?.trim();
   if (backupDir && sameOrInside(dir, backupDir)) return { dir, problem: "YEDEK_ICINDE" };
   return { dir, problem: null };

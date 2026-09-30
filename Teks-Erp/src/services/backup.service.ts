@@ -62,6 +62,7 @@ import {
 } from "./helpers/pg-tool.helper";
 import prisma from "../lib/prisma";
 import { uyari } from "../lib/logger";
+import { processControlInfo } from "../lib/hizmet-duzeni";
 
 const BACKUP_DIR = process.env.BACKUP_DIR;
 // Offsite (makine dışı) ikinci kopya hedefi — NAS/UNC/harici disk. Y-4: tek disk
@@ -614,7 +615,11 @@ export interface BackupListing {
   files: BackupFileInfo[];
   backupDir: string | null; // mutlak yedek klasörü (geri-yükleme komutu için)
   restoreTarget: BackupRestoreTarget | null; // pg_restore hedefi (şifre hariç)
-  pm2AppName: string; // geri-yükleme sırasında durdurulacak pm2 süreç adı
+  pm2AppName: string; // geri-yükleme sırasında durdurulacak pm2 süreç adı (pm2 düzeni)
+  /** Geri yükleme komutunun süreci nasıl durduracağı: pm2 ya da Windows hizmeti (SCM). */
+  processManager: "pm2" | "service";
+  /** Hizmet düzeninde `Stop-Service`/`Start-Service` adı; pm2 düzeninde null. */
+  serviceName: string | null;
   running: boolean; // yedek şu an koşuyor mu (panel butonu kilitlenir)
   lastResult: BackupRunResult | null; // son işin sonucu (başarısızlık panelde görünsün)
   /**
@@ -638,12 +643,15 @@ export interface BackupListing {
 
 export async function listBackups(): Promise<BackupListing> {
   const conn = parseDatabaseUrl();
+  const proc = processControlInfo(process.env);
   const base = {
     restoreTarget: conn
       ? { host: conn.host, port: conn.port, user: conn.user, database: conn.database }
       : null,
     // pm2 çalıştırdığı sürece kendi uygulama adını `name` env'iyle enjekte eder.
     pm2AppName: process.env.name || "teks-erp-backend",
+    processManager: proc.processManager,
+    serviceName: proc.processManager === "service" ? proc.name : null,
     running,
     lastResult,
     // Kapı `backup-scheduler` ile BİREBİR aynı yüklem olmalı — orada

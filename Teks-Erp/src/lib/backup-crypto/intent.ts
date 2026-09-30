@@ -1,7 +1,8 @@
 // =============================================================================
 // Yedek şifreleme NİYETİ — backend ile gece görevi (`deploy/yedekle.ps1`) aynı kararı mı veriyor?
 // =============================================================================
-// Tek kaynak `app\.env`teki `BACKUP_KEY_DIR`dir. Backend onu pm2 açılışında ortamdan okur;
+// Tek kaynak `.env`teki `BACKUP_KEY_DIR`dir (pm2 düzeninde `app\.env`, hizmette `<kök>\yapilandirma\.env`).
+// Backend onu açılışta ortamdan okur;
 // gece görevi aynı dosyayı her koşumda kendisi okur, satır yoksa `<kök>\yedek-anahtar`
 // dizini VARSA şifreler. İkisi ayrışabilir (satır eklenip pm2 yeniden başlatılmadı · dizin
 // elle kondu · ortam ecosystem'den geldi) ve ayrışma sessizdir: bir taraf düz döküm üretir.
@@ -10,6 +11,7 @@
 
 import fs from "fs";
 import path from "path";
+import { SERVICE_DIRS, detectProcessManager, resolveEnvFilePath, resolveServiceRoot, serviceName, underRoot } from "../hizmet-duzeni";
 
 export const NIGHTLY_DEFAULT_KEY_DIR_NAME = "yedek-anahtar";
 
@@ -53,8 +55,15 @@ function isDirectory(p: string): boolean {
   }
 }
 
+/** Operatöre "ayar görünsün" cümlesi: süreç yöneticisine göre yeniden başlatma komutu. */
+function restartHint(env: NodeJS.ProcessEnv): string {
+  if (detectProcessManager(env) !== "service") return "pm2 restart";
+  return `Restart-Service ${serviceName(env)}`;
+}
+
 /**
- * `appDir` = backend'in çalışma dizini (pm2 cwd = `<kök>\app`); gece görevi `<kök>\app\.env`i okur.
+ * `appDir` = backend'in çalışma dizini (pm2 cwd = `<kök>\app`, hizmette sürüm dizini); gece görevi
+ * `.env`i backend'le AYNI yoldan okur (`resolveEnvFilePath`), varsayılan anahtar dizini kökün altında.
  * Env ve platform parametre: test gerçek ortama dokunmadan ölçebilsin.
  */
 export function compareBackupCryptoIntent(
@@ -67,16 +76,22 @@ export function compareBackupCryptoIntent(
   const backend = { encrypts: Boolean(rawBackend), dir: rawBackend ? path.resolve(appDir, rawBackend) : null };
   if (platform !== "win32") return { measured: false, backend, nightly: null, warning: null };
 
+  const envFile = resolveEnvFilePath(env, appDir);
+  const { root } = resolveServiceRoot(env);
   let fileValue: string | null = null;
   try {
-    fileValue = readEnvFileValue(fs.readFileSync(path.join(appDir, ".env"), "utf8"), "BACKUP_KEY_DIR");
+    fileValue = readEnvFileValue(fs.readFileSync(envFile, "utf8"), "BACKUP_KEY_DIR");
   } catch {
     fileValue = null;
   }
   const fromFile = fileValue !== null && fileValue.trim() !== "";
   const nightlyDir = fromFile
     ? path.resolve(appDir, fileValue!.trim())
-    : path.resolve(appDir, "..", NIGHTLY_DEFAULT_KEY_DIR_NAME);
+    : root
+      ? path.resolve(underRoot(root, SERVICE_DIRS.backupKeys))
+      : path.resolve(appDir, "..", NIGHTLY_DEFAULT_KEY_DIR_NAME);
+  const restart = restartHint(env);
+  const envLabel = root ? envFile : "app\\.env";
   // Satır varsa niyet beyanlıdır (dizin yoksa gece görevi kırmızı biter); yoksa dizinin varlığı.
   const nightly = {
     encrypts: fromFile || isDirectory(nightlyDir),
@@ -89,16 +104,16 @@ export function compareBackupCryptoIntent(
     warning =
       `Gece görevi yedekleri ŞİFRELİYOR (${nightlyDir}) ama backend şifrelemeyi KAPALI görüyor (ortamında BACKUP_KEY_DIR yok) — ` +
       `panelden alınan yedekler düz kalır ve düz dosyalar makine dışına kopyalanır. ` +
-      (fromFile ? "Satır .env'de var: pm2 restart." : `.env'e BACKUP_KEY_DIR="${nightlyDir.replace(/\\/g, "/")}" ekleyip pm2 restart.`);
+      (fromFile ? `Satır .env'de var: ${restart}.` : `.env'e BACKUP_KEY_DIR="${nightlyDir.replace(/\\/g, "/")}" ekleyip ${restart}.`);
   } else if (!nightly.encrypts && backend.encrypts) {
     warning =
       `Backend yedek şifrelemesini AÇIK görüyor (${backend.dir}) ama gece görevi ŞİFRELEMİYOR ` +
       `(.env'de BACKUP_KEY_DIR yok, ${nightlyDir} dizini de yok) — gece yedekleri düz kalır ve makine dışına çıkmaz. ` +
-      `BACKUP_KEY_DIR satırını app\\.env'e yazın.`;
+      `BACKUP_KEY_DIR satırını ${envLabel}'e yazın.`;
   } else if (nightly.encrypts && backend.encrypts && backend.dir && !sameDir(nightlyDir, backend.dir, platform)) {
     warning =
       `Backend ile gece görevi FARKLI anahtar dizinlerini kullanıyor (backend ${backend.dir} · gece görevi ${nightlyDir}) — ` +
-      `iki yedek türü farklı alıcılara şifrelenir. Tek dizin app\\.env'deki BACKUP_KEY_DIR olmalı (sonra pm2 restart).`;
+      `iki yedek türü farklı alıcılara şifrelenir. Tek dizin ${envLabel}'deki BACKUP_KEY_DIR olmalı (sonra ${restart}).`;
   }
   return { measured: true, backend, nightly, warning };
 }
