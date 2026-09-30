@@ -11,8 +11,11 @@ import { Pool } from "pg";
 import dotenv from "dotenv";
 import { PG_SESSION_OPTIONS } from "./pg-session";
 import { hata } from "./logger";
+import { resolveEnvFilePath } from "./hizmet-duzeni";
 
-dotenv.config();
+// Betik girişleri için; sunucuda server.ts zaten yükledi. Yol düzenden: Windows hizmetinde
+// `<kök>/yapilandirma/.env`, değilse cwd'deki `.env` (dotenv'in kendi varsayılanıyla aynı).
+dotenv.config({ path: resolveEnvFilePath(process.env, process.cwd()) });
 
 const connectionString = process.env.DATABASE_URL;
 

@@ -267,3 +267,77 @@ describe("restoreCommand — şifreli yedek (.tkenc)", () => {
     expect(plain).not.toContain("yedek-sifrele");
   });
 });
+
+describe("restoreCommand — Windows hizmeti düzeni (TeksERP-Backend)", () => {
+  const HIZMET = {
+    processManager: "service",
+    serviceName: "TeksERP-Backend",
+    nodePath: "C:\\TeksERP\\surumler\\2.13.0\\runtime\\node.exe",
+    envFile: "C:/TeksERP/yapilandirma/.env",
+    pgDumpPath: "C:/TeksERP/pgsql/bin/pg_dump.exe",
+    pgRestorePath: "C:/TeksERP/pgsql/bin/pg_restore.exe",
+    backendCwd: "C:\\TeksERP\\surumler\\2.13.0",
+  };
+  const svcImpact = (over: Record<string, unknown> = {}) => ({ ...IMPACT, ...HIZMET, ...over }) as unknown as RestoreImpact;
+  const cmd = restoreCommand(LISTING, NAME, svcImpact())!;
+  const code = cmd.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#"));
+
+  it("pm2 komutu HİÇ yok; durdurma Stop-Service, başlatma Start-Service ve EN SON satır", () => {
+    expect(cmd).not.toMatch(/\bpm2\b/);
+    expect(code.some((l) => l === "Stop-Service -Name $svc -ErrorAction SilentlyContinue")).toBe(true);
+    expect(code[code.length - 1]).toBe("Start-Service -Name $svc -ErrorAction SilentlyContinue");
+  });
+
+  it("KRİTİK: durdurma guard'lı — hizmet durmadıysa güvenlik yedeği/geri yükleme yok", () => {
+    expect(cmd).toContain("$stopped = ((Get-Service -Name $svc -ErrorAction SilentlyContinue).Status -eq 'Stopped')");
+    const dump = code.find((l) => l.includes("pg_dump.exe"))!;
+    expect(dump.startsWith("if ($stopped) { & \"C:/TeksERP/pgsql/bin/pg_dump.exe\"")).toBe(true);
+  });
+
+  it("pg araçları TAM YOLLA (hizmette PATH'te değil); npx YOK, göç paketin Node'uyla", () => {
+    expect(code.filter((l) => /(^|[{ ])pg_(dump|restore) /.test(l))).toEqual([]);
+    expect(cmd).not.toContain("npx");
+    const deploy = code.find((l) => l.includes("migrate deploy"))!;
+    expect(deploy).toBe(`if ($restored) { & "${HIZMET.nodePath}" "node_modules\\prisma\\build\\index.js" migrate deploy }`);
+    const env = code.findIndex((l) => l.includes("DOTENV_CONFIG_PATH = "));
+    expect(env).toBeGreaterThan(-1);
+    expect(env).toBeLessThan(code.indexOf(deploy));
+  });
+
+  it("temizlik koşulsuz: PGPASSWORD ve DOTENV_CONFIG_PATH if dışında", () => {
+    for (const k of ["Remove-Item Env:PGPASSWORD", "Remove-Item Env:DOTENV_CONFIG_PATH"]) {
+      const l = code.find((x) => x.startsWith(k));
+      expect(l).toBeDefined();
+    }
+  });
+
+  it("şifreli yedekte araç paketin Node'uyla koşar (sistem Node'u yok sayılır)", () => {
+    const enc = restoreCommand(
+      LISTING,
+      NAME,
+      svcImpact({
+        encryption: {
+          state: "acik",
+          keyDir: "C:\\TeksERP\\yedek-anahtar",
+          toolPath: "C:\\TeksERP\\surumler\\2.13.0\\dist\\tools\\yedek-sifrele.cjs",
+          fileEncrypted: true,
+          decryptedPath: "C:\\TeksERP\\backups\\x.dump.coz-elle.part",
+          unlocked: true,
+        },
+      }),
+    )!;
+    expect(enc).toContain(`if ($ok) { & "${HIZMET.nodePath}" "C:\\TeksERP\\surumler\\2.13.0\\dist\\tools\\yedek-sifrele.cjs" coz `);
+    expect(enc).not.toMatch(/\{ node /);
+  });
+
+  it("FAIL-CLOSED: hizmet düzeni ama yol eksik → komut ÜRETİLMEZ (pm2 bloğu yanlış süreci hedeflerdi)", () => {
+    for (const eksik of ["serviceName", "nodePath", "envFile", "pgDumpPath", "pgRestorePath"]) {
+      expect(restoreCommand(LISTING, NAME, svcImpact({ [eksik]: null }))).toBeNull();
+    }
+  });
+
+  it("eski sunucu (alan yok) → pm2 bloğu, bugünkü gibi", () => {
+    const eski = restoreCommand(LISTING, NAME, IMPACT)!;
+    expect(eski.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).pop()).toBe("pm2 start teks-erp-backend");
+  });
+});

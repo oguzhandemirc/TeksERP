@@ -39,6 +39,7 @@ import {
   buildSwapCommands,
   type SwapCommands,
 } from "./helpers/db-swap-command.helper";
+import { resolveEnvFilePath, processControlInfo } from "../lib/hizmet-duzeni";
 import {
   describePgError,
   liveConn,
@@ -857,7 +858,10 @@ export async function getSwapCommands(copyName: string): Promise<
       port: conn.port,
       user: conn.user,
       pm2AppName: process.env.name || "teks-erp-backend",
+      process: processControlInfo(process.env),
       backendCwd: process.cwd(),
+      nodePath: process.execPath,
+      envFile: resolveEnvFilePath(process.env, process.cwd()),
       // Doğrulama okunamadıysa MUHAFAZAKÂR davran: deploy adımını yine de koy
       // (idempotent; atlanması P2022 ile sessiz audit kaybına yol açar).
       needsMigrateDeploy: verification?.needsMigrateDeploy ?? true,

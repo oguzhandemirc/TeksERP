@@ -1,4 +1,6 @@
+import "./lib/hizmet-duzeni-once"; // Windows hizmetinde .env yolunu kurar — dotenv'den ÖNCE (pm2/geliştirmede no-op)
 import "dotenv/config"; // .env yükle — diğer tüm importlardan ÖNCE (JWT_SECRET vb. modül-load anında okunur)
+import "./lib/hizmet-duzeni-sonra"; // Windows hizmetinde .env'de olmayan yolları doldurur — env okuyan modüllerden ÖNCE
 import "./lib/zod-locale"; // Zod tr locale
 import app from './app';
 import prisma, { pool } from './lib/prisma';
@@ -30,6 +32,8 @@ import { readWebHardeningConfig, isWebHardeningDeclared } from './middlewares/we
 import { hata, uyari, bilgi, satir } from "./lib/logger";
 import type { Server } from "node:http";
 import { bootFactoryTimezone } from "./services/factory-timezone.service";
+import { shutdownChannel } from "./lib/hizmet-duzeni";
+import { listenShutdownChannel } from "./lib/kapanis-kanali";
 
 const PORT = process.env.PORT || 4000;
 // 0.0.0.0 = tüm ağ arayüzlerinden dinle (tablet/diğer cihazlar LAN üzerinden erişebilsin).
@@ -328,7 +332,19 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
 }
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-// pm2 + Windows: Windows'ta gerçek POSIX sinyali gönderilemez, bu yüzden pm2
+// Windows konsolunda Ctrl+Break: dinleyici yoksa Node süreci ANINDA öldürür (uçuştaki istek kopar).
+process.on("SIGBREAK", () => gracefulShutdown("SIGBREAK"));
+// Windows hizmet konağı (`TEKSERP_KAPANIS=stdin`): `kapat` satırı ya da boru kapanışı. Konak
+// ölünce boru da kapanır — yetim backend portu tutup ikinci süreci doğurmaz (tek-process).
+{
+    const shutdown = shutdownChannel(process.env);
+    if (shutdown.channel === "stdin") {
+        listenShutdownChannel(process.stdin, (reason) => gracefulShutdown(reason));
+    } else if (shutdown.unknown) {
+        uyari("shutdown", `TEKSERP_KAPANIS='${shutdown.unknown}' tanınmıyor — kapanış kanalı açılmadı (konak zorla durdurur)`);
+    }
+}
+// pm2 düzeni (hizmete geçene dek): Windows'ta gerçek POSIX sinyali gönderilemez, bu yüzden pm2
 // `shutdown_with_message: true` (ecosystem.config.js) ile IPC üzerinden "shutdown"
 // mesajı yollar. Bu dinleyici OLMADAN `pm2 restart/stop` prosesi HARD KILL eder →
 // yukarıdaki graceful shutdown hiç çalışmaz: uçuştaki istekler TCP düzeyinde kopar
@@ -345,7 +361,7 @@ process.on("message", (msg) => {
 //   - unhandledRejection: süreç hâlâ tanımlı durumda → logla, AYAKTA KAL
 //     (LAN-only tek-process; gereksiz restart vardiyayı keser).
 //   - uncaughtException: süreç tanımsız/bozuk durumda olabilir → logla + temiz
-//     kapan; süreç yöneticisi (pm2) otomatik yeniden başlatır.
+//     kapan; süreç yöneticisi (pm2 ya da hizmette SCM kurtarma eylemi) yeniden başlatır.
 process.on("unhandledRejection", (reason) => {
     hata("unhandled-rejection", "Yakalanmamış promise reddi", reason);
     void AuditService.logEvent({

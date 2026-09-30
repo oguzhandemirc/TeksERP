@@ -277,6 +277,12 @@ Write-Host "  Kok       : $Kok"
 Write-Host "  Veritabani: $DbAdi @ localhost:$DbPort"
 Write-Host "  Rol       : $DbKullanici"
 
+# Hizmet duzeni kapisi (Dagitim v2): bu betik pm2 iskeleti kurar. Kok Windows hizmeti duzenindeyse ya da
+# TeksERP-Backend hizmeti varsa pm2 + acilis gorevi AYNI PORTA ikinci backend dogururdu - durulur.
+$hizmetIzi = @(@("surumler", "current", "yapilandirma\.env") | Where-Object { Test-Path (Join-Path $Kok $_) } | ForEach-Object { "$Kok\$_" })
+if ($hizmetIzi.Count) { Dur "Bu kok Windows hizmeti duzeninde ($($hizmetIzi -join ', ')) - ilk-kurulum.ps1 pm2 iskeleti icindir; yeni kurulum setup ile yapilir." }
+if (Get-Service -Name "TeksERP-Backend" -ErrorAction SilentlyContinue) { Dur "TeksERP-Backend Windows hizmeti kayitli - bu makinede pm2 iskeleti kurulmaz (ayni port, iki backend)." }
+
 if ($Dump -and -not $DumpAmaci) {
   Dur @"
 -Dump verildi ama -DumpAmaci verilmedi. Dokumun kurulum kimligi icin karar ver:
