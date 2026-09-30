@@ -6,7 +6,9 @@
 # kaynak VDS'e gitmez (imaj `docker save` arşiviyle taşınır). Runbook: docs/ops/SATICI-KURULUM.md
 #
 #   sunucu — node dist/server.js (tek süreç, iki dinleyici) · Prisma şema motoru göç işi için içeride ·
-#            portal web arayüzü (satici/web derlemesi: /portal tailnet'te, /bayi genelde) /uygulama/web'de
+#            portal web arayüzü (satici/web derlemesi: /portal tailnet'te, /bayi genelde) /uygulama/web'de ·
+#            AYNI imaj bildirim yan konteynerini de koşar (`node dist/notifications/sender-main.js`,
+#            docker-compose.bildirim.yml) ve gönderici rolüne girişi açar (`dist/notifications/role-cli.js`)
 #   yedek  — pg_dump 16 + yedek-sifrele.cjs (.tkenc) döngüsü; anahtar dizini arşivi de şifreli
 #
 # İkisi de root OLMAYAN kullanıcıyla (10001) koşar; compose kök FS'i salt okunur bağlar.
@@ -48,6 +50,7 @@ RUN npx prisma generate \
  && npm prune --omit=dev \
  && test -f dist/server.js && test -f dist/keys/signer-child.js && test -f dist-cli/scripts/portal-kullanici.js && test -f dist-cli/scripts/anahtar.js \
  && test -f dist-cli/scripts/modul-anahtari.js \
+ && test -f dist/notifications/sender-main.js && test -f dist/notifications/role-cli.js \
  && ls node_modules/@prisma/engines | grep -q '^schema-engine-'
 
 # -----------------------------------------------------------------------------

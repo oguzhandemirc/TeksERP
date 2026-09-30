@@ -1,0 +1,16 @@
+# /etc/systemd/system/tekserp-satici-bildirim-cikis@.service — örnek: tekserp-satici-bildirim-cikis@hazirlik
+# Açılışta Docker'dan SONRA bildirim yan konteynerinin çıkış kurallarını (DOCKER-USER + INPUT) koyar
+# (bildirim-cikis.sh). Satıcıyı ve Docker'ı BEKLETMEZ; kural yoksa yalnız bildirim çıkışı geniştir (açık risk §11).
+[Unit]
+Description=TeksERP satıcı (%i) — bildirim çıkışı DOCKER-USER kuralları
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/stack/apps/tekserp-satici-%i/bildirim-cikis.sh /opt/stack/apps/tekserp-satici-%i
+ExecStop=/opt/stack/apps/tekserp-satici-%i/bildirim-cikis.sh /opt/stack/apps/tekserp-satici-%i kaldir
+
+[Install]
+WantedBy=multi-user.target
