@@ -17,6 +17,57 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-30b",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Fabrika saat dilimi ayarı; iki adımlı giriş isteğe bağlı; eski uzaktan takip ekranı kalktı",
+      "surumler": {
+        "panel": "1.4.1",
+        "tablet": "1.0.14"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Fabrikanın saat dilimi artık programdan ayarlanır: Genel Ayarlar → Sistem → Şirket Bilgileri → “Saat dilimi”. Programdaki tarih ve saatler, raporların gün sınırları ve basılan belgelerdeki saatler bu dilime göre gösterilir; bilgisayarın kendi saat ayarı artık etkilemez. Varsayılan İstanbul'dur, bugünkü kurulumlarda görünen saatler değişmez. Dilimi değiştirmeden önce son günlerdeki kaç top ve sevkiyatın gününün kayacağı gösterilir; değiştirmek için “Ayarlar (yönetici)” yetkisi gerekir."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Tabletteki tarih ve saatler de fabrikanın saat diliminden gösterilir; tabletin kendi saat ayarı farklı olsa bile panel ile aynı saat görünür."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "duzeltme",
+          "metin": "Termin ve vade tarihleri, bilgisayarın ya da tabletin saat dilimi farklı olduğunda bir gün kaymış görünebiliyordu. Artık her ekranda ve basılan belgede aynı gün görünür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "İki adımlı doğrulama artık herkes için isteğe bağlıdır ve Yetkilendirme → Kullanıcılar → kullanıcı → “İki Adımlı” sekmesinden kurulur. Kuran kullanıcıya panelde her parolalı girişte telefondaki kod sorulur; kurmayan kullanıcıya sorulmaz. Daha önce kurmuş kullanıcılara kod artık fabrika içindeki girişlerde de sorulur. Tabletteki PIN ve kart girişleri etkilenmez."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "İki adımlı doğrulaması kurulu bir kullanıcı tablette parolayla giriş yapmak isterse “Bu hesapta iki adımlı doğrulama açık — tablette PIN ya da kartla giriş yapın.” uyarısı çıkar; bu kullanıcılar tablete PIN ya da kartla girer."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Tarayıcıdan açılan eski uzaktan takip ekranı (“Patron (Uzaktan Takip)” yetki şablonuyla kullanılan sayfa) kaldırıldı ve fabrika sunucusu artık dışarıdan gelen bağlantı kabul etmez. Patronun fabrikayı dışarıdan izlemesinin yeni yolu Patron Bulutu'dur. Bu şablon daha önce kullanıldıysa yetki şablonları listesinde durur, isterseniz pasife alabilirsiniz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Yetkilendirme → Patron Bulutu → “Bulut hesapları” listesinde etkin bir hesabın yanında “Kilitle” düğmesi eklendi: hesap patron bulutunda kilitlenir ve açık oturumları kapanır. Bulut hizmeti henüz açık olmadığı için bugün sahada kullanılmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Yeni açılan şube ve ürün kartlarında kartı kimin açtığı artık kaydedilir; ürün kartının bilgi düğmesinde “Oluşturulma” altında görünür."
+        }
+      ]
+    },
+    {
       "id": "2026-09-30",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Hakkında ve Destek ekranları; şifreli yedekte geri yükleme yedek parolası ister; tablet lisans reddinde kaydı kaybetmez",
