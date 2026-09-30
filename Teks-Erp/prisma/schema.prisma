@@ -494,6 +494,7 @@ model User {
   shortClosedPurchaseOrders     PurchaseOrder[]          @relation("PurchaseOrderShortClosedBy")
   manualClosedOrders            Order[]                  @relation("OrderManualClosedBy")
   systemSettingsUpdates         SystemSetting[]
+  factoryTimezonePeriods        FactoryTimezonePeriod[]
   numberSeriesUpdates           NumberSeries[]
   preference                    UserPreference?
   receivedReturns               RollReturn[]             @relation("RollReturnReceivedBy")
@@ -5277,6 +5278,29 @@ model SystemSetting {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@map("system_settings")
+}
+
+/// Fabrika saat dilimi DÖNEM DEFTERİ — ekleme-yalnız (kullanıcı kararı 2026-09-30: geçmiş kayıtlar etkilenmez).
+/// `validFrom` anından sonraki dönem başlayana dek kayıtların saati/günü `timeZone` ile yorumlanır; satır yoksa
+/// bütün zaman `Europe/Istanbul`. Aynı `validFrom`da en son satır (createdAt, id) kazanır; iptal SİLME değil
+/// aynı `validFrom`da önceki dilimle ters kayıttır (`reversesPeriodId`). Tek yazar: factory-timezone.service.
+model FactoryTimezonePeriod {
+  id               String   @id @default(uuid()) @db.Uuid
+  /// IANA adı; geçersizse o dönem varsayılanla yorumlanır + FACTORY_TIMEZONE_INVALID_STORED.
+  timeZone         String   @db.VarChar(64)
+  validFrom        DateTime @db.Timestamptz
+  reason           String?  @db.VarChar(200)
+  reversesPeriodId String?  @unique @db.Uuid
+  createdById      String?  @db.Uuid
+  createdAt        DateTime @default(now()) @db.Timestamptz
+
+  reverses   FactoryTimezonePeriod? @relation("FactoryTimezonePeriodReversal", fields: [reversesPeriodId], references: [id], onDelete: Restrict)
+  reversedBy FactoryTimezonePeriod? @relation("FactoryTimezonePeriodReversal")
+  createdBy  User?                  @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([validFrom, createdAt])
+  @@index([createdById])
+  @@map("factory_timezone_periods")
 }
 
 // =============================================================================

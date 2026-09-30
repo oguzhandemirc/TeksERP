@@ -34,14 +34,8 @@ import {
 import { REPORT_BY_KEY } from "../constants/report-catalog";
 import { DEFAULT_COMPANY_NAME } from "../constants/company";
 import { uyari } from "../lib/logger";
-import {
-  DEFAULT_FACTORY_TIMEZONE,
-  applyFactoryTimezone,
-  factoryTimezoneWarning,
-  getFactoryTimezone,
-  noteStoredFactoryTimezone,
-  isValidFactoryTimezone,
-} from "../constants/time";
+import { factoryTimezoneWarning, getFactoryTimezone } from "../constants/time";
+import { applyFactoryTimezoneRows } from "./helpers/factory-timezone-state.helper";
 import { SECURITY_SETTING_PREFIX } from "../constants/reserved-settings";
 import { resolveConfigPageSize } from "./document-render/traveler-card.density";
 import {
@@ -535,8 +529,8 @@ export const SETTING_KEYS = {
   /** ERP'nin kurulduğu firmanın adı — panel başlığı + uygulama genelinde gösterilir.
    *  Refakat kartının kendi firma adından bağımsızdır (kart snapshot'ı ayrı tutulur). */
   COMPANY_NAME: "company.name",
-  /** Fabrikanın saat dilimi (IANA adı; yoksa `DEFAULT_FACTORY_TIMEZONE`). KURULUM DEĞERİ: gün anahtarlarını
-   *  kaydırır → ham ayar ucundan ve PATCH'ten YAZILAMAZ, tek yazıcı `factory-timezone.service`. */
+  /** ESKİ tek değerli fabrika saat dilimi (TZ-B, hiçbir sürüme çıkmadı). Yerini `factory_timezone_periods` dönem
+   *  defteri aldı; satır varsa ilk dönemden önceki dilim olarak YORUMLANIR. Ham ayar ucundan ve PATCH'ten YAZILAMAZ. */
   COMPANY_TIMEZONE: "company.timezone",
   /** Belge künyesi: irsaliye/çeki başına basılan firma adresi/telefon/vergi bilgisi.
    *  Firma adı ayrı (COMPANY_NAME); burada sadece ek künye satırları. */
@@ -1527,8 +1521,10 @@ export type DocumentsConfig = Record<string, DocumentConfig>;
 export interface FeatureFlags {
   /** ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli). */
   companyName: string;
-  /** Fabrikanın saat dilimi (IANA) — fabrika günü ve bütün görüntü/basım saatleri bundan; istemci
-   *  kendi bilgisayar dilimini KULLANMAZ. Salt-okunur: yalnız `PUT /api/feature-flags/factory-timezone` yazar. */
+  /** Fabrikanın ŞU ANKİ saat dilimi (IANA). Bir kaydın saati/günü KAYDIN ANINDAKİ dilimle basılır: dönem
+   *  DURUMU (`factoryTimezoneBase` · `factoryTimezonePeriods` · `factoryTimezonePending`) bayrak değildir, route
+   *  yanıta süreç değerinden ekler; istemci kendi bilgisayar dilimini KULLANMAZ. Salt-okunur: yalnız
+   *  `PUT /api/feature-flags/factory-timezone` (+ iptal ucu) dönem ekler. */
   factoryTimezone: string;
   /** YALNIZ kayıtlı dilim geçersizken VAR (`FACTORY_TIMEZONE_INVALID_STORED`; sunucu `factoryTimezone` ile koşuyor).
    *  Sorun yokken anahtar hiç gönderilmez — null göndermek sayısal ayar sözleşmesine karışırdı. */
@@ -2080,8 +2076,8 @@ export class SystemSettingService {
     const reportsClosedRead = await readReportsClosedKeys(cacheClient);
     const flags: CachedFeatureFlags = {
       companyName: await readCompanyName(cacheClient),
-      factoryTimezone: syncFactoryTimezone(await readFactoryTimezoneSetting(cacheClient)),
-      // Sıra önemli: sync önce koşar, uyarı onun ölçtüğü duruma göre.
+      factoryTimezone: await readFactoryTimezonePeriods(valueByKey),
+      // Sıra önemli: dönemler önce uygulanır, uyarı onun ölçtüğü duruma göre.
       ...publicTimezoneWarning(),
       pricingEnabled: await readPricingEnabled(cacheClient),
       financeEnabled: await readFinanceEnabledRaw(cacheClient),
@@ -6033,36 +6029,23 @@ export async function readCompanyName(
   return typeof v === "string" && v.trim() ? v : DEFAULT_COMPANY_NAME;
 }
 
-/**
- * `company.timezone` satırı: yoksa varsayılan, GEÇERSİZSE `null` (çağıran son geçerli değerde kalır —
- * yanlış güne yazmaktansa bayat ama bilinen dilim).
- */
-export async function readFactoryTimezoneSetting(
-  tx?: Pick<typeof prisma, "systemSetting">,
-): Promise<string | null> {
-  const client = tx ?? prisma;
-  const row = await client.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.COMPANY_TIMEZONE },
-    select: { value: true },
-  });
-  if (!row) return DEFAULT_FACTORY_TIMEZONE;
-  return isValidFactoryTimezone(row.value) ? row.value : null;
-}
-
 function publicTimezoneWarning(): { factoryTimezoneWarning?: { code: string; message: string } } {
   const w = factoryTimezoneWarning();
   return w ? { factoryTimezoneWarning: { code: w.code, message: w.message } } : {};
 }
 
-/** Ayar önbelleği tazelenirken süreç içi dilimi DB ile hizalar; sonuçta KULLANILAN dilimi döner. */
-function syncFactoryTimezone(fromDb: string | null): string {
-  if (fromDb === null) {
-    if (!factoryTimezoneWarning()) noteStoredFactoryTimezone(false, "geçersiz kayıt");
-    uyari("saat-dilimi", `company.timezone geçersiz — son geçerli dilimde kalındı (${getFactoryTimezone()})`);
-  } else {
-    if (fromDb !== getFactoryTimezone()) applyFactoryTimezone(fromDb);
-    noteStoredFactoryTimezone(true);
-  }
+/**
+ * Ayar önbelleği tazelenirken süreç içi dönem listesini dönem defteriyle (+ eski tek değerli `company.timezone`
+ * yorumu) hizalar ve ŞU ANKİ dilimi döner. Tek yazar dışı değişiklik de böylece görünür.
+ */
+export async function readFactoryTimezonePeriods(valueByKey: Map<string, unknown>): Promise<string> {
+  const rows = await prisma.factoryTimezonePeriod.findMany({
+    select: { id: true, timeZone: true, validFrom: true, createdAt: true, reversesPeriodId: true },
+    orderBy: [{ validFrom: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+  });
+  const legacyKey = SETTING_KEYS.COMPANY_TIMEZONE;
+  const { storedInvalid } = applyFactoryTimezoneRows(rows, { present: valueByKey.has(legacyKey), value: valueByKey.get(legacyKey) });
+  if (storedInvalid) uyari("saat-dilimi", `kayıtlı saat dilimi geçersiz — o dönem varsayılanla yorumlanıyor (şu an ${getFactoryTimezone()})`);
   return getFactoryTimezone();
 }
 

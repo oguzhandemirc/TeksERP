@@ -286,7 +286,10 @@ async function anlikBolumu(): Promise<void> {
   check("§6d saglik yalnız yedek hükmü + zamanı + yaşı taşır (dosya adı/yol GİTMEZ)", !!saglik && JSON.stringify(anahtarlar(saglik.data)) === JSON.stringify(["yedek", "yedek.hukum", "yedek.sonGeceYedegi", "yedek.yasSaat"]),
     saglik ? anahtarlar(saglik.data).join(",") : "üretilmedi");
   const tesis = snaps.find((s) => s.projection === "tesis");
-  check("§6e tesis yalnız saat dilimini taşır (fabrikanın kullandığı dilim)", !!tesis && JSON.stringify(anahtarlar(tesis.data)) === JSON.stringify(["saatDilimi"]) &&
+  const TESIS_IZINLI = ["donemler", "donemler.gecerliBaslangic", "donemler.saatDilimi", "saatDilimi", "tabanDilim"];
+  const tesisAnahtar = tesis ? [...new Set(anahtarlar(tesis.data))].sort() : [];
+  check("§6e tesis yalnız saat dilimi DÖNEMLERİNİ taşır (şimdiki dilim + taban + dönemler)", !!tesis &&
+    tesisAnahtar.every((k) => TESIS_IZINLI.includes(k)) && ["donemler", "saatDilimi", "tabanDilim"].every((k) => tesisAnahtar.includes(k)) &&
     (tesis.data as { saatDilimi?: unknown }).saatDilimi === getFactoryTimezone(), tesis ? JSON.stringify(tesis.data) : "üretilmedi");
 }
 

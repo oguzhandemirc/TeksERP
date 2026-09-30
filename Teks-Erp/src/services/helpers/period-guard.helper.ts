@@ -59,6 +59,7 @@
 //   8034  PACKING_GROUP_CODE_LOCK_NS  services/helpers/packing-group.helper.ts  parti kodu aylık sayacı (PRT-YYMM-NNNN, kurulum-geneli)
 //   8035  POOL_PACKAGE_NO_LOCK_NS  services/helpers/sack-seq.helper.ts  partisiz çuval ambalaj no (cari başına, `packing.poolPackageNo = acilista`)
 //   8036  CLIENT_TOKEN_LOCK_NS  services/helpers/token-replay.helper.ts  clientToken replay serileştirme (token başına; ilk kullanıcı çek teslim bordrosu)
+//   8037  FACTORY_TIMEZONE_LOCK_NS  services/factory-timezone.service.ts  fabrika saat dilimi dönem defteri (tek anahtar; değişiklik ↔ iptal)
 // İKİ KURAL: ① Aynı uzaydan birden çok kilit alan tx anahtarları SIRALI alır
 // (aşağıdaki `assertPeriodsOpenTx` bunun tek meşru kapısıdır — tekil guard'ı
 // bir tx'te İKİ KEZ elle çağırmak YASAK ve `cheque.bounce` vakasında canlı

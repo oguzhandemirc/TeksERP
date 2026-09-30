@@ -4,7 +4,7 @@
 
 | Alan | Dosya | Arşiv tarihleri |
 |---|---|---|
-| **Defter · Hareket tablosu · Ters kayıt · Hard delete** | `docs/kurallar/defter.md` | 2026-09-10 |
+| **Defter · Hareket tablosu · Ters kayıt · Hard delete** | `docs/kurallar/defter.md` | 2026-09-10, 2026-09-30 |
 | Sevkiyat · Çuval · Brüt · Storno/İade | `docs/kurallar/sevkiyat.md` | 2026-08-02, 2026-08-03, 2026-08-05, 2026-08-21, 2026-08-22, 2026-08-25, 2026-09-13 |
 | Fason · Kartela | `docs/kurallar/fason.md` | 2026-08-04, 2026-08-19 |
 | Tambur · Finalize · Kesim · Geri alma | `docs/kurallar/tambur.md` | 2026-08-04, 2026-08-12, 2026-08-13, 2026-09-03 |
@@ -29,10 +29,10 @@
 | Süperadmin · Ayar şifresi | `docs/kurallar/superadmin.md` | 2026-09-03 |
 | Yetki · İzin · Rol | `docs/kurallar/yetki-izin.md` | 2026-08-06, 2026-08-26, 2026-09-03 |
 | Filtre · Liste · Arama · Sıralama | `docs/kurallar/filtre-liste.md` | 2026-08-06, 2026-08-12, 2026-08-27 |
-| Raporlar · Karneler | `docs/kurallar/raporlar.md` | 2026-08-09 |
+| Raporlar · Karneler | `docs/kurallar/raporlar.md` | 2026-08-09, 2026-09-30 |
 | Finans · Sağlamlık sınıfları | `docs/kurallar/finans.md` | 2026-08-02, 2026-09-13 |
 | Lisans · Kod koruma · Satıcı platformu | `docs/kurallar/lisans.md` | 2026-09-29 |
-| Patron bulutu · Eşitleme · Gelen kutusu · Bulut sunucusu · Rapor isteği | `docs/kurallar/patron-bulutu.md` | 2026-09-29 |
+| Patron bulutu · Eşitleme · Gelen kutusu · Bulut sunucusu · Rapor isteği | `docs/kurallar/patron-bulutu.md` | 2026-09-29, 2026-09-30 |
 | Genel · Uzak erişim · Konvansiyon | `docs/kurallar/genel.md` | 2026-09-01, 2026-09-13 |
 
 > ⚠️ **"Arşiv tarihleri" kolonu ELLE tutulur ve KAPISI YOKTUR.** Ölçüldü 2026-09-14: 26 satırın 19'u dosyanın kendi en yeni arşiv atfının gerisinde (ör. `fason.md` kolonda 2026-08-19, dosyada 2026-09-14; `belge-etiket.md` 09-04 ↔ 09-14; `tambur.md` 09-03 ↔ 09-14) ve 9 dosyanın atıfları bu kolonun okuyamadığı biçimde (`R:…`, `CLAUDE.md:…`). ⇒ Bir alanın güncel arşiv tarihini bu kolondan OKUMA, dosyanın kendisinden ölç (`grep -oE 'arşiv:?[ ]?2026-[0-9-]+' docs/kurallar/<dosya>.md | sort | tail -1`). Kolon yalnız kaba bir işarettir; ölçülene dek bayat varsayılır.

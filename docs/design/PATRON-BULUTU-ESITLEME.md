@@ -193,7 +193,7 @@ rapor isteği işleyicisi (zil rapor + her turda yoklama)
 | `acik-siparis-karsilama` | reports/open-order-coverage.report.service.ts getOpenOrderCoverage | SAATLIK | `bulut:siparis:oku` | — | order_lines, orders, rolls |
 | `rapor-katalogu` | constants/report-catalog.ts (audit/* ailesi HARİÇ; anahtar, başlık, parametre şeması, aile) | GUNLUK | `bulut:oturum` | — |  |
 | `uretim-akisi` | inventory.service.ts getProductionFlow({includeQueues,includeSevk}) + DashboardService.getStationsLiveState | HER_TUR | `bulut:uretim:oku` | production.enabled | rolls, work_order_steps, stations, sacks, shipments |
-| `tesis` | constants/time.ts getFactoryTimezone — tesisin saat dilimi `{ saatDilimi }` (bulut gün anahtarı/gösterim bundan; `docs/design/FABRIKA-SAAT-DILIMI.md`) | HER_TUR | `bulut:oturum` | — |  |
+| `tesis` | factory-timezone-state publicFactoryTimezone — tesisin saat dilimi DÖNEMLERİ `{ saatDilimi, tabanDilim, donemler[{ gecerliBaslangic, saatDilimi }] }` (tel `TesisVerisiSchema`; bulutta her anın gün anahtarı/gösterimi kendi döneminden; `docs/design/FABRIKA-SAAT-DILIMI.md`) | HER_TUR | `bulut:oturum` | — |  |
 
 ### 3.3 Anlık projeksiyonların iç yapısı
 

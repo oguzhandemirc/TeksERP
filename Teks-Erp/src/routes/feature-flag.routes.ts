@@ -30,7 +30,13 @@ import {
   refreshSystemAccountRegistry,
 } from "../services/helpers/system-account.registry";
 import { AuditService } from "../services/audit.service";
-import { previewFactoryTimezone, setFactoryTimezone } from "../services/factory-timezone.service";
+import {
+  cancelFactoryTimezoneChange,
+  listFactoryTimezonePeriods,
+  setFactoryTimezone,
+} from "../services/factory-timezone.service";
+import { previewFactoryTimezone } from "../services/factory-timezone-preview.service";
+import { publicFactoryTimezone } from "../services/helpers/factory-timezone-state.helper";
 import { AppError } from "../utils/app-error";
 import "../types/express-augment";
 import { manualNumberModes } from "../services/helpers/manual-number.helper";
@@ -64,6 +70,11 @@ const factoryTimezonePreviewQuery = z.object({ timeZone: z.string().trim().min(1
 export const factoryTimezoneUpdateSchema = z.strictObject({
   timeZone: z.string().trim().min(1).max(64),
   expectedCurrent: z.string().trim().min(1).max(64),
+  reason: z.string().trim().min(1).max(200).optional(),
+});
+export const factoryTimezoneCancelSchema = z.strictObject({
+  periodId: z.string().uuid(),
+  reason: z.string().trim().min(1).max(200).optional(),
 });
 
 const flagWriteGuard = (req: Request, res: Response, next: NextFunction): void => {
@@ -710,6 +721,9 @@ router.get(
         ...result,
         data: {
           ...result.data,
+          // Saat dilimi DÖNEMLERİ de bayrak değil DURUM: önbellekten değil süreç değerinden — bekleyen değişiklik
+          // yürürlüğe girdiği an `factoryTimezone` yeni dilimi söyler (30 sn TTL'yi beklemez).
+          ...publicFactoryTimezone(),
           settingsPasswordRequired: await isSettingsPasswordConfigured(),
           // ⚠️ `numberSources` da bayrak DEĞİL, DURUM — ve aynı gerekçeyle
           // burada: istemci "elle numara alanını çizeyim mi, zorunlu mu" kararını
@@ -859,7 +873,7 @@ router.put(
  *     parameters:
  *       - { in: query, name: timeZone, required: true, schema: { type: string }, description: "IANA adı, ör. Europe/Berlin" }
  *     responses:
- *       200: { description: "{ current, proposed, changed, currentOffset, proposedOffset, todayCurrent, todayProposed, recentRollsShifted, recentShipmentsShifted, windowDays, warnings[] }" }
+ *       200: { description: "{ current, proposed, changed, storedInvalid, pending, currentOffset, proposedOffset, todayCurrent, effectiveFrom, effectiveFromCurrentLocal, effectiveFromProposedLocal, transitionDays[], warnings[] }" }
  *       400: { description: "FACTORY_TIMEZONE_INVALID" }
  */
 // Saat dilimi KURULUM DEĞERİ: gün anahtarlarını kaydırır → yalnız `admin:settings` (settings:company AÇMAZ).
@@ -882,7 +896,7 @@ router.get(
  * /api/feature-flags/factory-timezone:
  *   put:
  *     tags: [FeatureFlags]
- *     summary: Fabrika saat dilimini değiştir (tek yazma yolu; atomik, audit'li)
+ *     summary: Fabrika saat dilimi değişikliği planla — yeni dilim bir sonraki gün başından geçerli DÖNEM olur, geçmiş kayıtlar değişmez (tek yazma yolu; 8037 kilidi, audit'li)
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -894,10 +908,11 @@ router.get(
  *             properties:
  *               timeZone: { type: string }
  *               expectedCurrent: { type: string, description: "Önizlemede görülen mevcut dilim" }
+ *               reason: { type: string }
  *     responses:
- *       200: { description: "{ timeZone, changed }" }
+ *       200: { description: "{ timeZone, changed, effectiveFrom, pending }" }
  *       400: { description: "FACTORY_TIMEZONE_INVALID" }
- *       409: { description: "FACTORY_TIMEZONE_CHANGED — arada başka biri değiştirdi" }
+ *       409: { description: "FACTORY_TIMEZONE_CHANGED — arada başka biri değiştirdi · FACTORY_TIMEZONE_PENDING — bekleyen değişiklik var" }
  */
 router.put(
   "/factory-timezone",
@@ -908,7 +923,67 @@ router.put(
     try {
       const body = factoryTimezoneUpdateSchema.parse(req.body);
       const data = await setFactoryTimezone(body, req.user?.userId);
-      res.status(200).json({ success: true, data, message: data.changed ? "Fabrika saat dilimi güncellendi" : "Saat dilimi zaten bu" });
+      res.status(200).json({ success: true, data, message: data.changed ? "Saat dilimi değişikliği planlandı" : "Değişiklik yok" });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/feature-flags/factory-timezone/cancel:
+ *   post:
+ *     tags: [FeatureFlags]
+ *     summary: Bekleyen saat dilimi değişikliğini iptal et — SİLMEZ, aynı anda önceki dilimle ters kayıt yazar
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [periodId]
+ *             properties:
+ *               periodId: { type: string, format: uuid }
+ *               reason: { type: string }
+ *     responses:
+ *       200: { description: "{ cancelledId, timeZone, validFrom }" }
+ *       409: { description: "FACTORY_TIMEZONE_NOT_PENDING — iptal edilmiş ya da yürürlüğe girmiş" }
+ */
+router.post(
+  "/factory-timezone/cancel",
+  verifyToken,
+  requirePermission("admin:settings"),
+  requireSettingsPassword,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = factoryTimezoneCancelSchema.parse(req.body);
+      const data = await cancelFactoryTimezoneChange(body, req.user?.userId);
+      res.status(200).json({ success: true, data, message: "Saat dilimi değişikliği iptal edildi" });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/feature-flags/factory-timezone/periods:
+ *   get:
+ *     tags: [FeatureFlags]
+ *     summary: Saat dilimi dönem defteri (en yeni önce; iptal ve ters kayıtlar dahil)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "[{ id, timeZone, validFrom, createdAt, reason, reversesPeriodId, valid, status, createdBy }]" }
+ */
+router.get(
+  "/factory-timezone/periods",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({ success: true, data: await listFactoryTimezonePeriods() });
     } catch (error) {
       next(error);
     }

@@ -107,6 +107,18 @@ export const SnapshotEntrySchema = z.strictObject({
 export type SnapshotEntry = z.infer<typeof SnapshotEntrySchema>;
 
 /**
+ * ANLIK `tesis` projeksiyonunun verisi — fabrikanın saat dilimi DÖNEMLERİ (geçmiş kayıtlar etkilenmez: bir anın
+ * dilimi, `gecerliBaslangic ≤ an` olan son dönemin dilimidir, yoksa `tabanDilim`). `saatDilimi` üretim anındaki
+ * dilimdir (eski okuyucu yalnız bunu okur). Dönem alanları eski fabrika paketinde yoktur ⇒ isteğe bağlı.
+ */
+export const TesisVerisiSchema = z.strictObject({
+  saatDilimi: z.string().min(1).max(64),
+  tabanDilim: z.string().min(1).max(64).optional(),
+  donemler: z.array(z.strictObject({ gecerliBaslangic: Iso, saatDilimi: z.string().min(1).max(64) })).max(64).optional(),
+});
+export type TesisVerisi = z.infer<typeof TesisVerisiSchema>;
+
+/**
  * Küme özeti: `md5(COALESCE(string_agg(id::text, ',' ORDER BY id), ''))` — uuid tip sırası, virgül, küçük harf;
  * BOŞ küme `md5('')`dir, `null` değil (iki uç aynı biçimde özetler; aksi hâlde boş projeksiyon her gün TAM ister).
  */
@@ -319,7 +331,7 @@ const ShortText = (max: number) => z.string().trim().min(1).max(max);
 export const OrderMessageSchema = z.strictObject({
   cariKartId: Uuid,
   subeId: Uuid.optional(),
-  /** Takvim günü (fabrika günü, tesisin saat dilimi — ANLIK `tesis.saatDilimi`) — saat taşımaz. */
+  /** Takvim günü (fabrika günü, tesisin o günkü saat dilimi — ANLIK `tesis`) — saat taşımaz. */
   termin: z.iso.date().optional(),
   doviz: z.string().regex(/^[A-Z]{3}$/),
   kalemler: z

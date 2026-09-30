@@ -1,6 +1,7 @@
-// Tesis saati — bildirim gün anahtarı (dedup kimliği) ve sessiz saat TESİSİN saat diliminden hesaplanır (ANLIK
-// `tesis.saatDilimi`, fabrikanın `company.timezone`u); çıplak UTC günü ya da sunucunun dilimi kullanılmaz.
-// Projeksiyon henüz gelmediyse (eski fabrika sürümü) varsayılan Europe/Istanbul = bugünkü davranış.
+// Tesis saati — bildirim gün anahtarı (dedup kimliği) ve sessiz saat TESİSİN o andaki saat diliminden hesaplanır
+// (ANLIK `tesis`: fabrikanın saat dilimi DÖNEMLERİ; bir anın dilimi kendi döneminden); çıplak UTC günü ya da
+// sunucunun dilimi kullanılmaz. Projeksiyon henüz gelmediyse (eski fabrika sürümü) varsayılan Europe/Istanbul.
+import { TesisVerisiSchema } from "../wire/esitleme";
 
 export const DEFAULT_FACILITY_TIMEZONE = "Europe/Istanbul";
 /** Saat dilimini taşıyan ANLIK projeksiyon (katalogda `tesis`, izin `bulut:oturum`). */
@@ -28,6 +29,29 @@ export function facilityTimeZone(raw: unknown): string {
   } catch {
     return DEFAULT_FACILITY_TIMEZONE;
   }
+}
+
+/**
+ * ANLIK `tesis` verisinden `ms` anının dilimi: `gecerliBaslangic ≤ ms` olan son dönem, yoksa `tabanDilim`
+ * (eski fabrika paketi dönem taşımaz ⇒ `saatDilimi`). Tanınmayan veri varsayılana düşer.
+ */
+export function facilityTimeZoneAt(data: unknown, ms: number): string {
+  const v = TesisVerisiSchema.safeParse(data);
+  if (!v.success) {
+    const raw = data !== null && typeof data === "object" ? (data as { saatDilimi?: unknown }).saatDilimi : undefined;
+    return facilityTimeZone(raw);
+  }
+  if (!v.data.donemler) return facilityTimeZone(v.data.saatDilimi);
+  let zone: unknown = v.data.tabanDilim ?? DEFAULT_FACILITY_TIMEZONE;
+  let at = -Infinity;
+  for (const d of v.data.donemler) {
+    const t = Date.parse(d.gecerliBaslangic);
+    if (t <= ms && t >= at) {
+      at = t;
+      zone = d.saatDilimi;
+    }
+  }
+  return facilityTimeZone(zone);
 }
 
 function dayFormat(timeZone: string): Intl.DateTimeFormat {

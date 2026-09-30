@@ -69,6 +69,7 @@
 - **[ÇEKİRDEK]** Eşik bulutta HESAPLANMAZ, yalnız fabrikanın özet sayısıyla karşılaştırılır; karşılaştırmanın ihtiyaç duyduğu toplam (bugün tamamlanan, gece yedeği hükmü) fabrikanın anlık projeksiyonuna girer.
 - **[ÇEKİRDEK]** Aynı olay aynı hesaba ikinci kez doğmaz: bildirim kimliği (`dedup_key`, gün ya da olay kimliği) `UNIQUE(tesis, hesap, dedup_key)` ile seddedilir; kural düşüren olay da ATLANDI olarak doğar.
 - **[ÇEKİRDEK]** Gönderim anında izin, tür ve sessiz saat YENİDEN sınanır (doğuştan sonra düşen izin tutar); sessiz saatte gönderilmez, bitişe ertelenir.
+- **[ÇEKİRDEK]** Bulutta bir anın saat dilimini ANLIK `tesis` DÖNEMLERİNDEN çöz (`facilityTimeZoneAt(veri, an)`: `gecerliBaslangic ≤ an` olan son dönem, yoksa `tabanDilim`; eski paket → `saatDilimi`) — bildirim gün anahtarı ve sessiz saat dahil; yalnız `saatDilimi` okumak bekleyen dönemi kaçırır. · bekçi: `patron/sunucu/scripts/test_tesis_saati.ts §3'` <sub>(arşiv 2026-09-30 TZ-D)</sub>
 - **[ÇEKİRDEK]** `notifications` TELEMETRİ'dir: sonuçlanmış satır `BILDIRIM_SAKLAMA_GUN` sonra budanır, iş kararı ondan okunmaz.
 - **[ÇEKİRDEK]** VAPID gizli anahtarı dosyada (0600) yaşar ve günlüğe, DB'ye, API yanıtına girmez; taşıyıcı hatası yalnız kısa KOD olarak saklanır; web aboneliği yalnız izinli push servisine kaydolur (SSRF kapısı).
 - **[ÇEKİRDEK]** Bildirime dokununca açılan yol yalnız uygulamanın kendi ekranıdır: telefonda `safeRoute`, web'de service worker AYNI kalıpla süzer (dış adres, `//`, bilinmeyen bölüm açılmaz; jest ölçer).

@@ -27,7 +27,7 @@ import { listAdapters, getImportAdapter } from "../src/services/import/import-re
 import { parseAliasKey } from "../src/services/import/adapters/customer-alias.adapter";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { parseLocaleNumber, parseBool, parseDateCell, isClearLiteral } from "../src/services/import/import-coerce";
-import { getFactoryTimezone } from "../src/constants/time";
+import { factoryTimezoneAt } from "../src/constants/time";
 
 let pass = 0;
 let fail = 0;
@@ -90,7 +90,7 @@ async function main(): Promise<void> {
   const istHour = d
     ? Number(
         new Intl.DateTimeFormat("en-US", {
-          timeZone: getFactoryTimezone(),
+          timeZone: factoryTimezoneAt(d),
           hour: "2-digit",
           hour12: false,
         }).format(d),

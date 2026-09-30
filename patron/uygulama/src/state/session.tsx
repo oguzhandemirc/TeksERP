@@ -7,7 +7,7 @@ import type { FacilityStatus } from "../api/wire";
 import { apiBaseUrl } from "../lib/config";
 import { clearCache, createCache, type Cache } from "./cache";
 import { plainStore, secretStore } from "./store";
-import { setFactoryTimezone } from "../lib/factory-time";
+import { applyServerFactoryTimezone } from "../lib/factory-time";
 
 const TOKEN_KEY = "patron.belirtec";
 const SCOPE_KEY = "patron.kapsam";
@@ -32,14 +32,21 @@ export interface SessionValue {
 const Ctx = createContext<SessionValue | null>(null);
 
 /**
- * Tesisin saat dilimi (ANLIK `tesis` → `saatDilimi`): bütün tarih/saat gösterimi fabrikanın diliminden yapılır,
- * telefonun diliminden değil. Best-effort — projeksiyon henüz yoksa (eski fabrika sürümü) varsayılan dilim kalır.
+ * Tesisin saat dilimi DÖNEMLERİ (ANLIK `tesis` → `tabanDilim` + `donemler`): her an kendi dönemindeki dilimle
+ * basılır (geçmiş kayıtlar kaymaz), telefonun diliminden değil. Eski fabrika paketi yalnız `saatDilimi` taşır →
+ * tek dilim. Best-effort — projeksiyon henüz yoksa varsayılan dilim kalır.
  */
 async function loadFacilityTimezone(c: Cache, api: Api): Promise<void> {
   try {
     const r = await c.load("anlik:tesis", () => api.snapshot("tesis"));
-    const veri = r.data.veri as { saatDilimi?: unknown } | null;
-    setFactoryTimezone(veri?.saatDilimi);
+    const veri = r.data.veri as { saatDilimi?: unknown; tabanDilim?: unknown; donemler?: unknown } | null;
+    const donemler = Array.isArray(veri?.donemler)
+      ? (veri.donemler as Array<{ gecerliBaslangic?: unknown; saatDilimi?: unknown } | null>).map((d) => ({
+          validFrom: d?.gecerliBaslangic,
+          timeZone: d?.saatDilimi,
+        }))
+      : undefined;
+    applyServerFactoryTimezone({ factoryTimezone: veri?.saatDilimi, factoryTimezoneBase: veri?.tabanDilim, factoryTimezonePeriods: donemler });
   } catch {
     // Dilim okunamadı: son geçerli (ya da varsayılan) dilimle devam.
   }

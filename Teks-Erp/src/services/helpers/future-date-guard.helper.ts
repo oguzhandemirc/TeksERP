@@ -34,24 +34,20 @@
 
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { factoryDayStart } from "../../constants/time";
+import { factoryDayEnd, factoryTimezoneAt } from "../../constants/time";
 import { readFinanceFutureDatedDocumentBlockEnabled } from "../system-setting.service";
-import { getFactoryTimezone } from "../../constants/time";
 
 /** Verilen an, FABRİKA takvim gününün İLERİSİNDE mi? (saf — bayrak okumaz) */
 export function isFutureFactoryDay(date: Date, now: Date = new Date()): boolean {
-  const todayStart = factoryDayStart(now);
-  // +36 saat, bugünün başlangıcından yarın öğlene düşer → `factoryDayStart` onu
-  // YARININ 00:00'ına indirger. Düz `+24 saat` DST'li bir saat diliminde gün
-  // sınırını 1 saat kaydırabilirdi (Türkiye kalıcı UTC+3 ama yardımcılar
-  // bilinçli olarak DST'ye dayanıklı yazıldı — bkz. constants/time.ts).
-  const tomorrowStart = factoryDayStart(new Date(todayStart.getTime() + 36 * 3_600_000));
+  // Bugünün SONU + 1 ms = yarının ilk anı. Sabit `+24 saat` DST gününde ve saat dilimi dönem sınırında (gün
+  // uzar/kısalır) gün sınırını kaydırırdı; gün sonu time.ts'ten gelir.
+  const tomorrowStart = new Date(factoryDayEnd(now).getTime() + 1);
   return date.getTime() >= tomorrowStart.getTime();
 }
 
 /** Türkçe gün etiketi — mesajda hangi tarihin sorun olduğu OKUNABİLİR yazılır. */
 function trDay(d: Date): string {
-  return d.toLocaleDateString("tr-TR", { timeZone: getFactoryTimezone() });
+  return d.toLocaleDateString("tr-TR", { timeZone: factoryTimezoneAt(d) });
 }
 
 export interface FutureDateRef {

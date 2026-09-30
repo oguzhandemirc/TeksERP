@@ -4,13 +4,15 @@ import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { FEATURE_FLAGS_QUERY_KEY, useFactoryTimezoneWarning } from "@/hooks/usePricingEnabled";
-import { featureFlagService } from "@/services/featureFlagService";
+import { FEATURE_FLAGS_QUERY_KEY, useFactoryTimezonePending, useFactoryTimezoneWarning } from "@/hooks/usePricingEnabled";
+import { featureFlagService, type FactoryTimezonePreview } from "@/services/featureFlagService";
 import { apiErrorText } from "@/lib/api-error";
-import { DEFAULT_FACTORY_TIMEZONE, fmtFactoryDateTime } from "@/lib/factory-time";
+import { DEFAULT_FACTORY_TIMEZONE, fmtDayKey, fmtFactoryDateTime } from "@/lib/factory-time";
 import { useFactoryTimezone } from "@/lib/factory-time-react";
 import { FieldLabel } from "./SettingRow";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
+import { FACTORY_TIMEZONE_PERIODS_QUERY_KEY, FactoryTimezonePendingBox } from "./FactoryTimezonePending";
+import { FactoryTimezoneHistory } from "./FactoryTimezoneHistory";
 
 /** Tarayıcının bildiği IANA dilimleri (arama listesi); eski motorda en azından varsayılan + UTC. */
 function zoneCatalog(): string[] {
@@ -19,14 +21,37 @@ function zoneCatalog(): string[] {
   return [...new Set([DEFAULT_FACTORY_TIMEZONE, "UTC", ...list])].sort((a, b) => a.localeCompare(b));
 }
 
-function errorCode(error: unknown): string | undefined {
-  return (error as { response?: { data?: { details?: { code?: string } } } })?.response?.data?.details?.code;
+function PreviewDetails({ preview }: { preview: FactoryTimezonePreview }) {
+  return (
+    <>
+      {preview.effectiveFrom && (
+        <p>
+          Yürürlük: <b>{preview.effectiveFromProposedLocal}</b> ({preview.proposed}) = {preview.effectiveFromCurrentLocal} ({preview.current}) ·
+          fark {preview.currentOffset} → {preview.proposedOffset}
+        </p>
+      )}
+      {preview.transitionDays.some((d) => d.hours !== 24) && (
+        <p>
+          Geçiş günü:{" "}
+          {preview.transitionDays.filter((d) => d.hours !== 24).map((d) => `${fmtDayKey(d.day)} ${d.hours} saat`).join(" · ")}
+        </p>
+      )}
+      {preview.warnings.length > 0 && (
+        <ul className="list-disc pl-5">
+          {preview.warnings.map((w) => (
+            <li key={w}>{w}</li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
 }
 
 /**
- * Fabrika saat dilimi — KURULUM DEĞERİ: fabrika günü ve bütün tarih/saat gösterimi buna bağlıdır.
- * Değiştirmek gün sınırlarını kaydırır; önce önizleme (etki) gösterilir, yazım yalnız `admin:settings` +
- * ayar şifresiyle ve önizlemedeki dilim hâlâ geçerliyse (`expectedCurrent`) yapılır.
+ * Fabrika saat dilimi — TARİHLİ DÖNEMLER: bir değişiklik yeni dilimin bir sonraki gün başından geçerli olur,
+ * geçmiş kayıtların saati/günü değişmez. Önce önizleme (yürürlük anı iki dilimde, geçiş günü) gösterilir; yazım
+ * yalnız `admin:settings` + ayar şifresiyle ve önizlemedeki dilim hâlâ geçerliyse (`expectedCurrent`). Bekleyen
+ * değişiklik başlamadan iptal edilebilir (ters kayıt).
  */
 export function FactoryTimezoneField() {
   const qc = useQueryClient();
@@ -34,6 +59,7 @@ export function FactoryTimezoneField() {
   const canWrite = useRoleAccess().hasPermission(SETTINGS_ADMIN_PERMISSION);
   // Kayıtlı değer geçersizken yürürlükteki dilimi seçip kaydetmek de onu düzeltir.
   const invalidStored = useFactoryTimezoneWarning();
+  const pending = useFactoryTimezonePending();
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const zones = useMemo(zoneCatalog, []);
@@ -50,17 +76,21 @@ export function FactoryTimezoneField() {
   });
   const preview = previewQ.data?.data;
 
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
+    void qc.invalidateQueries({ queryKey: FACTORY_TIMEZONE_PERIODS_QUERY_KEY });
+  };
   const mut = useMutation({
     mutationFn: (p: { timeZone: string; expectedCurrent: string }) => featureFlagService.updateFactoryTimezone(p),
     onSuccess: (r) => {
-      toast.success(`Fabrika saat dilimi ${r.data?.timeZone ?? ""} oldu.`);
+      const at = r.data?.effectiveFrom;
+      toast.success(at ? `${r.data?.timeZone ?? ""} ${fmtFactoryDateTime(at)} itibarıyla geçerli olacak.` : "Değişiklik yok.");
       setPicked(null);
-      void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
+      refresh();
     },
     // Hata metnini apiClient basar; burada yalnız eşzamanlı değişikliğe (409) göre ekranı tazele.
-    onError: (e) => {
-      if (errorCode(e) !== "FACTORY_TIMEZONE_CHANGED") return;
-      void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
+    onError: () => {
+      refresh();
       void previewQ.refetch();
     },
   });
@@ -70,18 +100,21 @@ export function FactoryTimezoneField() {
       <FieldLabel
         htmlFor="factory-timezone-search"
         label="Saat dilimi"
-        desc="Fabrika günü, raporların gün sınırları ve programdaki/belgelerdeki bütün tarih-saatler bu dilimden gösterilir — bilgisayarın saat diliminden değil."
+        desc="Fabrika günü, raporların gün sınırları ve programdaki/belgelerdeki tarih-saatler bu dilimden gösterilir — bilgisayarın saat diliminden değil. Değişiklik ertesi gün başından geçerli olur; geçmiş kayıtlar kaydedildikleri andaki dilimle kalır."
       />
       <p className="text-sm">
-        Geçerli: <b>{current}</b> · şu an {fmtFactoryDateTime(new Date())}
+        Şu anki dilim: <b>{current}</b> · şu an {fmtFactoryDateTime(new Date())}
       </p>
       {invalidStored && (
         <p role="alert" className="flex items-center gap-1 text-sm font-medium text-amber-700">
           <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" /> {invalidStored.message}
         </p>
       )}
+      {pending && <FactoryTimezonePendingBox pending={pending} canWrite={canWrite} />}
       {!canWrite ? (
         <p className="text-xs text-muted-foreground">Değiştirmek için “Ayarlar (yönetici)” yetkisi gerekir.</p>
+      ) : pending ? (
+        <p className="text-xs text-muted-foreground">Yeni bir değişiklik için önce bekleyen değişikliği iptal edin.</p>
       ) : (
         <>
           <input
@@ -111,27 +144,11 @@ export function FactoryTimezoneField() {
             <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
               <p className="flex items-center gap-1 font-medium">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />{" "}
-                {picked === current ? `Geçersiz kayıt ${picked} ile düzeltilecek` : `Gün sınırları kayar: ${current} → ${picked}`}
+                {picked === current ? `Geçersiz kayıt ${picked} ile düzeltilecek` : `Yeni dilim: ${current} → ${picked} (geçmiş kayıtlar değişmez)`}
               </p>
               {previewQ.isLoading && <p className="text-muted-foreground">Etki hesaplanıyor…</p>}
               {previewQ.isError && <p className="text-destructive">{apiErrorText(previewQ.error, "Önizleme alınamadı.")}</p>}
-              {preview && (
-                <>
-                  <p>
-                    Fark: {preview.currentOffset} → {preview.proposedOffset} · bugün {preview.todayCurrent} → {preview.todayProposed}
-                  </p>
-                  <p>
-                    Son {preview.windowDays} günde günü değişecek kayıt: {preview.recentRollsShifted} top · {preview.recentShipmentsShifted} sevkiyat
-                  </p>
-                  {preview.warnings.length > 0 && (
-                    <ul className="list-disc pl-5">
-                      {preview.warnings.map((w) => (
-                        <li key={w}>{w}</li>
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
+              {preview && <PreviewDetails preview={preview} />}
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -149,6 +166,7 @@ export function FactoryTimezoneField() {
           )}
         </>
       )}
+      <FactoryTimezoneHistory canWrite={canWrite} />
     </div>
   );
 }

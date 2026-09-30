@@ -35,7 +35,7 @@ import { assertMasterDataLiveTx } from "./helpers/master-data-live.helper";
 import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 import { assertRollReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
-import { getFactoryTimezone } from "../constants/time";
+import { factoryTimezoneAt } from "../constants/time";
 import { resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
 // G4 sayım metraj düzeltmesi — sapma satırı TEK yazma noktasından doğar
 // (`roll-variance.helper` başlığındaki kural: çağıran `tx.rollVariance.create` yazmaz).
@@ -401,13 +401,13 @@ export interface RollCancelPreview {
 }
 
 /**
- * Operatöre gösterilecek tarih-saat — FABRİKA saat diliminde (`Europe/Istanbul`).
+ * Operatöre gösterilecek tarih-saat — kaydın ANINDAKİ fabrika saat diliminde.
  * Süreç `TZ`'sine yaslanmaz: mesaj sahadaki insana "10:48'de bastınız" demeli ve
  * sunucu UTC'ye kurulsa da aynı şeyi demeli (bkz. `constants/time.ts`).
  */
 function formatFactoryDateTime(at: Date): string {
   return at.toLocaleString("tr-TR", {
-    timeZone: getFactoryTimezone(),
+    timeZone: factoryTimezoneAt(at),
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

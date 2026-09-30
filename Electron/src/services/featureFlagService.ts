@@ -22,7 +22,7 @@ import {
   DEFAULT_COMPANY_LETTERHEAD,
 } from "./documentConfig";
 import type { NumberSourceInfo } from "@/lib/number-source";
-import { setFactoryTimezone } from "@/lib/factory-time";
+import { applyServerFactoryTimezone } from "@/lib/factory-time";
 
 export type { CompanyLetterhead, DocumentsConfig } from "./documentConfig";
 
@@ -631,28 +631,61 @@ export interface BatchNumberState {
  * Yeni bir uç açılmadı — izin guard'sız uç sayısı cırcırlı bir tabandır ve onu
  * bir form ayrıntısı için yükseltmek kapıyı gevşetirdi.
  */
+/** Yürürlüğe girmemiş (iptal edilebilir) saat dilimi değişikliği. */
+export interface FactoryTimezonePending {
+  id: string;
+  timeZone: string;
+  validFrom: string;
+  previousTimeZone: string;
+}
+
 /** `GET /api/feature-flags/factory-timezone/preview` — hiçbir şey yazmaz. */
 export interface FactoryTimezonePreview {
   current: string;
   proposed: string;
+  /** Yazılırsa bir dönem eklenir mi. */
   changed: boolean;
-  /** Kayıtlı değer geçersiz — yürürlükteki dilimi kaydetmek de onu düzeltir (eski backend göndermez). */
+  /** Kayıtlı değer geçersiz — yürürlükteki dilimi kaydetmek de onu düzeltir. */
   storedInvalid?: boolean;
+  /** Bekleyen değişiklik varken yenisi yazılamaz (önce iptal). */
+  pending: FactoryTimezonePending | null;
   currentOffset: string;
   proposedOffset: string;
   todayCurrent: string;
-  todayProposed: string;
-  recentRollsShifted: number;
-  recentShipmentsShifted: number;
-  windowDays: number;
+  /** Yürürlük anı (ISO) ve o anın iki dilimdeki duvar saati (`dd.MM.yyyy HH:mm`). */
+  effectiveFrom: string | null;
+  effectiveFromCurrentLocal: string | null;
+  effectiveFromProposedLocal: string | null;
+  /** Geçişin dokunduğu fabrika günleri ve süreleri (saat). */
+  transitionDays: Array<{ day: string; hours: number }>;
   warnings: string[];
+}
+
+export type FactoryTimezonePeriodStatus = "YURURLUKTE" | "BEKLIYOR" | "GECMIS" | "IPTAL_EDILDI" | "IPTAL_KAYDI" | "ETKISIZ";
+
+/** `GET /api/feature-flags/factory-timezone/periods` — dönem defteri (en yeni önce). */
+export interface FactoryTimezonePeriodRow {
+  id: string;
+  timeZone: string;
+  validFrom: string;
+  createdAt: string;
+  reason: string | null;
+  reversesPeriodId: string | null;
+  valid: boolean;
+  status: FactoryTimezonePeriodStatus;
+  createdBy: { id: string; username: string; fullName: string; isSystemAccount: boolean } | null;
 }
 
 export type FeatureFlagsView = FeatureFlags & {
   settingsPasswordRequired?: boolean;
   numberSources?: NumberSourceInfo[];
-  /** Fabrika saat dilimi (IANA, salt-okunur) — bütün tarih/saat gösterimi bununla (`lib/factory-time`). */
+  /** Fabrikanın ŞU ANKİ saat dilimi (IANA, salt-okunur). */
   factoryTimezone?: string;
+  /** İlk dönemden önceki dilim + etkin dönemler: her an kendi dönemindeki dilimle basılır (`lib/factory-time`). */
+  factoryTimezoneBase?: string;
+  factoryTimezonePeriods?: Array<{ validFrom: string; timeZone: string }>;
+  /** Yürürlüğe girmemiş değişiklik; eski backend göndermez. */
+  factoryTimezonePending?: FactoryTimezonePending | null;
   /** Kayıtlı dilim geçersiz (sunucu `factoryTimezone` ile açıldı) — metin sunucunun; eski backend göndermez. */
   factoryTimezoneWarning?: { code: string; message: string } | null;
 };
@@ -660,7 +693,7 @@ export type FeatureFlagsView = FeatureFlags & {
 export const featureFlagService = {
   get: (): Promise<ApiResponse<FeatureFlagsView>> =>
     apiClient.get<ApiResponse<FeatureFlagsView>>("/api/feature-flags").then((r) => {
-      setFactoryTimezone(r.data?.data?.factoryTimezone);
+      applyServerFactoryTimezone(r.data?.data);
       return r.data;
     }),
 
@@ -676,24 +709,43 @@ export const featureFlagService = {
         .then((r) => r.data),
     ),
 
-  /** Saat dilimi değişikliğinin etkisi (gün sınırı kayması) — yazmadan önce gösterilir. */
+  /** Saat dilimi değişikliğinin önizlemesi (yürürlük anı, geçiş günü) — yazmadan önce gösterilir. */
   previewFactoryTimezone: (timeZone: string): Promise<ApiResponse<FactoryTimezonePreview>> =>
     apiClient
       .get<ApiResponse<FactoryTimezonePreview>>("/api/feature-flags/factory-timezone/preview", { params: { timeZone } })
       .then((r) => r.data),
 
+  /** Saat dilimi dönem defteri (kim, ne zaman, hangi durumda). */
+  listFactoryTimezonePeriods: (): Promise<ApiResponse<FactoryTimezonePeriodRow[]>> =>
+    apiClient.get<ApiResponse<FactoryTimezonePeriodRow[]>>("/api/feature-flags/factory-timezone/periods").then((r) => r.data),
+
   /**
-   * Fabrika saat dilimini değiştirir — TEK yazma ucu (PATCH bu alanı taşımaz). `expectedCurrent` önizlemede
-   * görülen dilimdir: arada başkası değiştirdiyse 409 `FACTORY_TIMEZONE_CHANGED`. AYAR ŞİFRESİ KAPISINDAN GEÇER.
+   * Saat dilimi değişikliği PLANLAR — yeni dilim bir sonraki gün başından geçerli dönem olur, geçmiş kayıtlar
+   * değişmez. TEK yazma ucu (PATCH bu alanı taşımaz). `expectedCurrent` önizlemede görülen dilimdir: arada
+   * başkası değiştirdiyse 409 `FACTORY_TIMEZONE_CHANGED`, bekleyen değişiklik varsa 409 `FACTORY_TIMEZONE_PENDING`.
+   * AYAR ŞİFRESİ KAPISINDAN GEÇER.
    */
-  updateFactoryTimezone: (body: { timeZone: string; expectedCurrent: string }): Promise<ApiResponse<{ timeZone: string; changed: boolean }>> =>
+  updateFactoryTimezone: (body: { timeZone: string; expectedCurrent: string; reason?: string }): Promise<
+    ApiResponse<{ timeZone: string; changed: boolean; effectiveFrom: string | null; pending: FactoryTimezonePending | null }>
+  > =>
     withSettingsPassword((headers) =>
       apiClient
-        .put<ApiResponse<{ timeZone: string; changed: boolean }>>("/api/feature-flags/factory-timezone", body, { headers })
-        .then((r) => {
-          setFactoryTimezone(r.data?.data?.timeZone);
-          return r.data;
-        }),
+        .put<ApiResponse<{ timeZone: string; changed: boolean; effectiveFrom: string | null; pending: FactoryTimezonePending | null }>>(
+          "/api/feature-flags/factory-timezone", body, { headers },
+        )
+        .then((r) => r.data),
+    ),
+
+  /** Bekleyen değişikliği iptal eder (ters kayıt; silme değil). AYAR ŞİFRESİ KAPISINDAN GEÇER. */
+  cancelFactoryTimezoneChange: (body: { periodId: string; reason?: string }): Promise<
+    ApiResponse<{ cancelledId: string; timeZone: string; validFrom: string }>
+  > =>
+    withSettingsPassword((headers) =>
+      apiClient
+        .post<ApiResponse<{ cancelledId: string; timeZone: string; validFrom: string }>>(
+          "/api/feature-flags/factory-timezone/cancel", body, { headers },
+        )
+        .then((r) => r.data),
     ),
 
   /**

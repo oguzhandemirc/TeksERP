@@ -5,7 +5,7 @@
 // doğar ki tür sonradan açılınca eski olay gönderilmesin. Değerlendirme saf (`evaluate`), yazım ayrı.
 import { KIND_RULES, kindPermitted } from "../catalog/notifications";
 import { effectivePermissions } from "../catalog/permissions";
-import { FACILITY_TIMEZONE_SOURCE, facilityDay, facilityMinute, facilityTimeZone } from "../lib/facility-clock";
+import { FACILITY_TIMEZONE_SOURCE, facilityDay, facilityMinute, facilityTimeZoneAt } from "../lib/facility-clock";
 import { withTesis } from "../lib/tenant";
 import type { NotificationKind, NotificationSettings } from "../wire/api";
 import type { CloudContext } from "./context";
@@ -22,7 +22,7 @@ export interface Candidate {
 
 export interface FacilityFacts {
   readonly nowMs: number;
-  /** Tesisin saat dilimi (ANLIK `tesis.saatDilimi`) — gün anahtarı ve "günlük üretim saati" bununla. */
+  /** Tesisin `nowMs` anındaki saat dilimi (ANLIK `tesis` dönemleri) — gün anahtarı ve "günlük üretim saati" bununla. */
   readonly timeZone: string;
   readonly accounts: readonly { readonly id: string; readonly settings: NotificationSettings }[];
   readonly snapshots: ReadonlyMap<string, unknown>;
@@ -113,7 +113,7 @@ export async function generateForFacility(ctx: CloudContext, tesisId: string, no
     const snapshots = new Map(snaps.map((s) => [s.projection, s.data]));
     const candidates = evaluate({
       nowMs,
-      timeZone: facilityTimeZone(obj(snapshots.get(FACILITY_TIMEZONE_SOURCE)).saatDilimi),
+      timeZone: facilityTimeZoneAt(snapshots.get(FACILITY_TIMEZONE_SOURCE), nowMs),
       accounts: accounts.map((a) => ({ id: a.id, settings: settingsOf.get(a.id)! })),
       snapshots,
       lastPackageAt: state?.lastPackageAt ?? null,

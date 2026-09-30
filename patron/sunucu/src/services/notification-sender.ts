@@ -6,7 +6,7 @@
 import { Prisma, type DevicePlatform } from "@prisma/client";
 import { effectivePermissions } from "../catalog/permissions";
 import { NOTIFICATION_KINDS, type NotificationKind } from "../wire/api";
-import { FACILITY_TIMEZONE_SOURCE, facilityTimeZone, quietUntil } from "../lib/facility-clock";
+import { FACILITY_TIMEZONE_SOURCE, facilityTimeZoneAt, quietUntil } from "../lib/facility-clock";
 import { withTesis } from "../lib/tenant";
 import type { PushOutcome, PushTransport } from "../push/transports";
 import type { CloudContext } from "./context";
@@ -68,8 +68,7 @@ async function decide(ctx: CloudContext, tesisId: string, n: Claimed, nowMs: num
     const skip = ruleVerdict(settings, n.kind as NotificationKind, effectivePermissions(account.permissions));
     if (skip) return { kind: "ATLA", reason: skip };
     const tesis = await tx.projectionRow.findFirst({ where: { tesisId, projection: FACILITY_TIMEZONE_SOURCE, deletedAt: null }, select: { data: true } });
-    const saatDilimi = (tesis?.data as { saatDilimi?: unknown } | null)?.saatDilimi;
-    const quiet = quietUntil(settings.sessiz, nowMs, facilityTimeZone(saatDilimi));
+    const quiet = quietUntil(settings.sessiz, nowMs, facilityTimeZoneAt(tesis?.data ?? null, nowMs));
     if (quiet !== null) return { kind: "ERTELE", until: new Date(quiet) };
     const devices = await tx.pushDevice.findMany({ where: { tesisId, accountId: n.account_id, active: true }, select: { id: true, platform: true, token: true }, orderBy: { id: "asc" } });
     if (devices.length === 0) return { kind: "ATLA", reason: "CIHAZ_YOK" };

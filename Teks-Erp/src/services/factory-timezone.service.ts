@@ -1,66 +1,58 @@
-// Fabrika saat dilimi — okuma (açılış yükleyicisi), önizleme ve TEK yazma yolu.
-// Dilim bir KURULUM DEĞERİDİR: gün anahtarlarını kaydırdığı için ham ayar ucundan yazılmaz,
-// değişiklik önizlenir ve atomik claim + audit ile yazılır. Tasarım: docs/design/FABRIKA-SAAT-DILIMI.md.
+// Fabrika saat dilimi — dönem defteri (`factory_timezone_periods`): açılış yükleyicisi, önizleme, TEK yazma yolu
+// ve iptal. Kullanıcı kararı 2026-09-30: geçmiş kayıtlar etkilenmez — değişiklik yeni dilimin bir sonraki gün
+// başından geçerli bir DÖNEM ekler; iptal SİLME değil aynı anda önceki dilimle ters kayıttır.
+// Tasarım: docs/design/FABRIKA-SAAT-DILIMI.md.
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import {
   DEFAULT_FACTORY_TIMEZONE,
-  applyFactoryTimezone,
+  factoryTimezoneAt,
+  factoryTimezoneChangeStart,
   factoryTimezoneWarning,
   getFactoryTimezone,
+  getFactoryTimezonePeriods,
   isValidFactoryTimezone,
-  noteStoredFactoryTimezone,
 } from "../constants/time";
-import { SETTING_KEYS, invalidateFeatureFlagsCache, readFactoryTimezoneSetting } from "./system-setting.service";
+import { SETTING_KEYS, invalidateFeatureFlagsCache } from "./system-setting.service";
+import {
+  type FactoryTimezonePending,
+  applyFactoryTimezoneRows,
+  pendingFactoryTimezone,
+} from "./helpers/factory-timezone-state.helper";
 
-const KEY = SETTING_KEYS.COMPANY_TIMEZONE;
-const PREVIEW_DAYS = 30;
+export type Db = Pick<typeof prisma, "factoryTimezonePeriod" | "systemSetting">;
 
-/** Bir anın verilen dilimdeki UTC ofseti (dakika). */
-export function zoneOffsetMinutes(timeZone: string, at: Date): number {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  }).formatToParts(at);
-  const get = (t: string): number => Number(parts.find((p) => p.type === t)?.value ?? "0");
-  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
-  return Math.round((asUtc - Math.floor(at.getTime() / 1000) * 1000) / 60_000);
-}
+/** Advisory kilit uzayı (envanter: helpers/period-guard.helper.ts) — dönem defterine yazan her tx'in İLK ifadesi. */
+export const FACTORY_TIMEZONE_LOCK_NS: number = 8037;
 
-function zoneDay(timeZone: string, at: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
-}
+const PERIOD_SELECT = { id: true, timeZone: true, validFrom: true, createdAt: true, reversesPeriodId: true } as const;
+const PERIOD_ORDER: Prisma.FactoryTimezonePeriodOrderByWithRelationInput[] = [
+  { validFrom: "asc" }, { createdAt: "asc" }, { id: "asc" },
+];
 
-function fmtOffset(min: number): string {
-  const sign = min < 0 ? "-" : "+";
-  const a = Math.abs(min);
-  return `UTC${sign}${String(Math.floor(a / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}`;
+/** Defteri ve eski tek değerli ayarı okuyup süreç değerine uygular (tx içinde de aynı okuma). */
+export async function loadAndApply(db: Db, now: Date = new Date()): Promise<ReturnType<typeof applyFactoryTimezoneRows> & { legacyRaw: unknown }> {
+  const rows = await db.factoryTimezonePeriod.findMany({ select: PERIOD_SELECT, orderBy: PERIOD_ORDER });
+  const legacy = await db.systemSetting.findUnique({ where: { key: SETTING_KEYS.COMPANY_TIMEZONE }, select: { value: true } });
+  return { ...applyFactoryTimezoneRows(rows, { present: legacy !== null, value: legacy?.value }, now), legacyRaw: legacy?.value };
 }
 
 /**
- * Kayıtlı dilimi okuyup süreç içi değere yazar. Geçersiz kayıt sunucuyu DURDURMAZ: varsayılan dilimle
- * açılır ve sağlık ucu + panel `FACTORY_TIMEZONE_INVALID_STORED` uyarısını gösterir (kullanıcı kararı §5.2).
+ * Dönemleri okuyup süreç içi değere yazar. Geçersiz kayıt sunucuyu DURDURMAZ: o dönem varsayılanla yorumlanır ve
+ * sağlık ucu + panel `FACTORY_TIMEZONE_INVALID_STORED` uyarısını gösterir (kullanıcı kararı I9 §5.2).
  */
 export async function loadFactoryTimezoneAtBoot(): Promise<{ timeZone: string; storedInvalid: boolean }> {
-  const row = await prisma.systemSetting.findUnique({ where: { key: KEY }, select: { value: true } });
-  const stored = row ? row.value : DEFAULT_FACTORY_TIMEZONE;
-  if (!isValidFactoryTimezone(stored)) {
-    applyFactoryTimezone(DEFAULT_FACTORY_TIMEZONE);
-    noteStoredFactoryTimezone(false, stored);
-    return { timeZone: DEFAULT_FACTORY_TIMEZONE, storedInvalid: true };
-  }
-  applyFactoryTimezone(stored);
-  noteStoredFactoryTimezone(true);
-  return { timeZone: stored, storedInvalid: false };
+  const { storedInvalid } = await loadAndApply(prisma);
+  return { timeZone: getFactoryTimezone(), storedInvalid };
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref());
 
 function logLoaded(log: { info: (m: string) => void; warn: (m: string) => void }, r: { timeZone: string; storedInvalid: boolean }): void {
-  if (r.storedInvalid) log.warn(factoryTimezoneWarning()?.message ?? `company.timezone geçersiz — ${r.timeZone}`);
-  else log.info(`fabrika saat dilimi: ${r.timeZone}`);
+  if (r.storedInvalid) log.warn(factoryTimezoneWarning()?.message ?? `saat dilimi kaydı geçersiz — ${r.timeZone}`);
+  else log.info(`fabrika saat dilimi: ${r.timeZone} (${getFactoryTimezonePeriods().length} dönem)`);
 }
 
 /**
@@ -81,7 +73,7 @@ export async function bootFactoryTimezone(
       await sleep(1000);
     }
   }
-  log.warn(`ayar okunamadı — ${getFactoryTimezone()} ile açılıyor, arka planda yeniden denenecek`);
+  log.warn(`saat dilimi dönemleri okunamadı — ${getFactoryTimezone()} ile açılıyor, arka planda yeniden denenecek`);
   void (async () => {
     for (;;) {
       await sleep(5000);
@@ -95,128 +87,186 @@ export async function bootFactoryTimezone(
   })();
 }
 
-export interface FactoryTimezonePreview {
-  current: string;
-  proposed: string;
-  changed: boolean;
-  /** Kayıtlı değer geçersiz (sunucu `current` ile koşuyor) — aynı dilimi kaydetmek de onu düzeltir. */
-  storedInvalid: boolean;
-  currentOffset: string;
-  proposedOffset: string;
-  todayCurrent: string;
-  todayProposed: string;
-  recentRollsShifted: number;
-  recentShipmentsShifted: number;
-  windowDays: number;
-  warnings: string[];
+export interface FactoryTimezonePendingDto {
+  id: string;
+  timeZone: string;
+  validFrom: string;
+  previousTimeZone: string;
 }
 
-async function countShifted(from: string, to: string, now: Date): Promise<{ rolls: number; shipments: number }> {
-  const since = new Date(now.getTime() - PREVIEW_DAYS * 86_400_000);
-  // Saat dilimleri bind parametresi — bu sorgu ifade istatistiği aramaz.
-  const rows = await prisma.$queryRaw<Array<{ rolls: bigint; shipments: bigint }>>`
-    SELECT
-      (SELECT count(*) FROM rolls
-        WHERE "createdAt" >= ${since}
-          AND ("createdAt" AT TIME ZONE ${from})::date <> ("createdAt" AT TIME ZONE ${to})::date)::bigint AS rolls,
-      (SELECT count(*) FROM shipments
-        WHERE "dispatchedAt" >= ${since}
-          AND ("dispatchedAt" AT TIME ZONE ${from})::date <> ("dispatchedAt" AT TIME ZONE ${to})::date)::bigint AS shipments`;
-  return { rolls: Number(rows[0]?.rolls ?? 0), shipments: Number(rows[0]?.shipments ?? 0) };
+export const pendingDto = (p: FactoryTimezonePending | null): FactoryTimezonePendingDto | null =>
+  p ? { id: p.id, timeZone: p.timeZone, validFrom: p.validFrom.toISOString(), previousTimeZone: p.previousTimeZone } : null;
+
+export function invalidTz(): never {
+  throw AppError.badRequest("Geçerli bir IANA saat dilimi seçin (ör. Europe/Istanbul)", { code: "FACTORY_TIMEZONE_INVALID" });
 }
 
-export async function previewFactoryTimezone(proposed: string, now: Date = new Date()): Promise<FactoryTimezonePreview> {
-  if (!isValidFactoryTimezone(proposed)) {
-    throw AppError.badRequest("Geçerli bir IANA saat dilimi seçin (ör. Europe/Istanbul)", { code: "FACTORY_TIMEZONE_INVALID" });
+/** Defterin kronolojisi belirlenimli artar: DB saati ya da son satır + 1 ms (aynı `validFrom`da son satır kazanır). */
+async function nextCreatedAt(tx: Prisma.TransactionClient): Promise<Date> {
+  const r = await tx.$queryRaw<Array<{ at: Date }>>`
+    SELECT GREATEST(clock_timestamp(), COALESCE((SELECT max("createdAt") FROM factory_timezone_periods) + interval '1 millisecond', clock_timestamp())) AS at`;
+  return r[0]!.at;
+}
+
+async function reloadAfterCommit(): Promise<void> {
+  try {
+    await loadAndApply(prisma);
+  } finally {
+    invalidateFeatureFlagsCache();
   }
-  const stored = await readFactoryTimezoneSetting();
-  const storedInvalid = stored === null;
-  const current = stored ?? getFactoryTimezone();
-  const shifts = current !== proposed;
-  // Geçersiz kayıt yürürlükteki dilimle de düzeltilebilsin: aynı dilimi kaydetmek bir değişikliktir.
-  const changed = shifts || storedInvalid;
-  const curOff = zoneOffsetMinutes(current, now);
-  const newOff = zoneOffsetMinutes(proposed, now);
-  const { rolls, shipments } = shifts ? await countShifted(current, proposed, now) : { rolls: 0, shipments: 0 };
-  const warnings: string[] = [];
-  if (storedInvalid) warnings.push(`Kayıtlı değer geçersiz; kaydetmek onu ${proposed} ile değiştirir.`);
-  if (shifts) {
-    warnings.push(
-      `Gün sınırı ${fmtOffset(curOff)} yerine ${fmtOffset(newOff)} ile çizilecek: geçmiş günlerin rapor toplamları yeni dilimle yeniden hesaplanır.`,
-      `Son ${PREVIEW_DAYS} günde ${rolls} top girişi ve ${shipments} sevkiyat başka bir güne düşecek.`,
-      "Basılmış belgeler ve verilmiş numaralar DEĞİŞMEZ; yeni numaraların tarih segmenti yeni dilimin gününden üretilir.",
-      "Panel, tablet, belge ve patron bulutu saatleri yeni dilimle gösterilir.",
-      "Sunucu yöneticisi denetim raporu gün istatistiğini yeni dilim için yeniden kurmalı (DEPLOY-RUNBOOK §12); yapılmazsa rapor doğru ama yavaş olur.",
-    );
+}
+
+/**
+ * TEK yazma yolu: yeni dilimi bir sonraki gün başından geçerli bir DÖNEM olarak ekler. `expectedCurrent`
+ * önizlemede görülen dilimdir. Eşzamanlı iki değişiklik 8037 kilidiyle sıraya girer (tx'in İLK ifadesi); kilitten
+ * sonra defter taze okunur: arada dilim değiştiyse 409 `FACTORY_TIMEZONE_CHANGED`, bekleyen başka değişiklik varsa
+ * 409 `FACTORY_TIMEZONE_PENDING`. Aynı değişiklik zaten bekliyorsa yeniden deneme sonucu döner (idempotent).
+ */
+export async function setFactoryTimezone(
+  input: { timeZone: string; expectedCurrent: string; reason?: string },
+  userId: string | undefined,
+): Promise<{ timeZone: string; changed: boolean; effectiveFrom: string | null; pending: FactoryTimezonePendingDto | null }> {
+  if (!userId) throw AppError.unauthorized();
+  if (!isValidFactoryTimezone(input.timeZone)) invalidTz();
+  const out = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${FACTORY_TIMEZONE_LOCK_NS}::int, 0)`;
+    const now = new Date();
+    const { periodInvalid, legacyInvalid, legacyRaw } = await loadAndApply(tx, now);
+    const current = factoryTimezoneAt(now);
+    const pending = pendingFactoryTimezone(now);
+    if (pending) {
+      if (pending.timeZone === input.timeZone) return { created: null, legacyFixed: false, current, pending };
+      throw AppError.conflict(
+        `Bekleyen bir saat dilimi değişikliği var (${pending.timeZone}). Önce onu iptal edin.`,
+        { code: "FACTORY_TIMEZONE_PENDING", pending: pendingDto(pending) },
+      );
+    }
+    if (current !== input.expectedCurrent) {
+      throw AppError.conflict(
+        `Saat dilimi bu arada değişti (şu an: ${current}). Önizlemeyi yenileyip tekrar deneyin.`,
+        { code: "FACTORY_TIMEZONE_CHANGED", current },
+      );
+    }
+    // Eski tek değerli ayar geçersizse zaten varsayılanla yorumlanıyor: varsayılanı yazmak hiçbir anın dilimini
+    // değiştirmez, yalnız uyarıyı kapatır (claim ham değer üzerinden — arada değiştiyse dokunulmaz).
+    let legacyFixed = false;
+    if (legacyInvalid) {
+      const r = await tx.systemSetting.updateMany({
+        where: { key: SETTING_KEYS.COMPANY_TIMEZONE, value: { equals: (legacyRaw ?? null) as Prisma.InputJsonValue } },
+        data: { value: DEFAULT_FACTORY_TIMEZONE, updatedById: userId },
+      });
+      legacyFixed = r.count === 1;
+    }
+    if (input.timeZone === current && !periodInvalid) return { created: null, legacyFixed, current, pending: null };
+    const validFrom = factoryTimezoneChangeStart(input.timeZone, now);
+    const created = await tx.factoryTimezonePeriod.create({
+      data: {
+        timeZone: input.timeZone, validFrom, reason: input.reason ?? null,
+        createdById: userId, createdAt: await nextCreatedAt(tx),
+      },
+      select: { id: true, validFrom: true },
+    });
+    return { created, legacyFixed, current, pending: null };
+  });
+  if (out.legacyFixed) {
+    await AuditService.log({
+      userId, action: "UPDATE", tableName: "SYSTEM_SETTING", recordId: SETTING_KEYS.COMPANY_TIMEZONE,
+      oldData: { value: "geçersiz kayıt" }, newData: { value: DEFAULT_FACTORY_TIMEZONE },
+    });
   }
+  if (!out.created) {
+    if (out.legacyFixed) await reloadAfterCommit();
+    return {
+      timeZone: input.timeZone, changed: out.legacyFixed, effectiveFrom: out.pending?.validFrom.toISOString() ?? null,
+      pending: pendingDto(out.pending),
+    };
+  }
+  await reloadAfterCommit();
+  await AuditService.log({
+    userId,
+    action: "CREATE",
+    tableName: "FACTORY_TIMEZONE_PERIOD",
+    recordId: out.created.id,
+    oldData: { timeZone: out.current },
+    newData: { timeZone: input.timeZone, validFrom: out.created.validFrom.toISOString(), reason: input.reason ?? null },
+  });
   return {
-    current, proposed, changed, storedInvalid,
-    currentOffset: fmtOffset(curOff), proposedOffset: fmtOffset(newOff),
-    todayCurrent: zoneDay(current, now), todayProposed: zoneDay(proposed, now),
-    recentRollsShifted: rolls, recentShipmentsShifted: shipments, windowDays: PREVIEW_DAYS, warnings,
+    timeZone: input.timeZone, changed: true, effectiveFrom: out.created.validFrom.toISOString(),
+    pending: pendingDto(pendingFactoryTimezone()),
   };
 }
 
 /**
- * TEK yazma yolu. `expectedCurrent` önizlemede görülen dilimdir: arada başka biri değiştirdiyse 409
- * (atomik claim — `updateMany WHERE value = beklenen`; satır yoksa varsayılandan `create`, yarışı P2002 → 409).
+ * Bekleyen değişikliği iptal eder — SİLMEZ: aynı `validFrom`da önceki dilimle ters kayıt yazar (`reversesPeriodId`;
+ * aynı anda en son satır kazanır). Yürürlüğe girmiş dönem iptal edilemez (geçmiş değişmez) → 409.
  */
-export async function setFactoryTimezone(
-  input: { timeZone: string; expectedCurrent: string },
+export async function cancelFactoryTimezoneChange(
+  input: { periodId: string; reason?: string },
   userId: string | undefined,
-): Promise<{ timeZone: string; changed: boolean }> {
+): Promise<{ cancelledId: string; timeZone: string; validFrom: string }> {
   if (!userId) throw AppError.unauthorized();
-  if (!isValidFactoryTimezone(input.timeZone)) {
-    throw AppError.badRequest("Geçerli bir IANA saat dilimi seçin (ör. Europe/Istanbul)", { code: "FACTORY_TIMEZONE_INVALID" });
-  }
-  if (input.timeZone === input.expectedCurrent) {
-    const current = await readFactoryTimezoneSetting();
-    if (current === input.timeZone) return { timeZone: current, changed: false };
-  }
-  let claimed = await prisma.systemSetting.updateMany({
-    where: { key: KEY, value: { equals: input.expectedCurrent } },
-    data: { value: input.timeZone, updatedById: userId },
+  const out = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${FACTORY_TIMEZONE_LOCK_NS}::int, 0)`;
+    const now = new Date();
+    await loadAndApply(tx, now);
+    const pending = pendingFactoryTimezone(now);
+    if (!pending || pending.id !== input.periodId) {
+      throw AppError.conflict(
+        "Bu değişiklik artık beklemiyor (iptal edilmiş ya da yürürlüğe girmiş). Ekranı yenileyin.",
+        { code: "FACTORY_TIMEZONE_NOT_PENDING", pending: pendingDto(pending) },
+      );
+    }
+    const row = await tx.factoryTimezonePeriod.create({
+      data: {
+        timeZone: pending.previousTimeZone, validFrom: pending.validFrom, reason: input.reason ?? "İptal",
+        reversesPeriodId: pending.id, createdById: userId, createdAt: await nextCreatedAt(tx),
+      },
+      select: { id: true },
+    });
+    return { row, pending };
   });
-  let oldValue: unknown = input.expectedCurrent;
-  // Kayıtlı değer geçersizse panel yürürlükteki dilimi görmüştür: claim ham geçersiz değer üzerinden.
-  if (claimed.count === 0 && input.expectedCurrent === getFactoryTimezone()) {
-    const row = await prisma.systemSetting.findUnique({ where: { key: KEY }, select: { value: true } });
-    if (row && row.value !== null && !isValidFactoryTimezone(row.value)) {
-      claimed = await prisma.systemSetting.updateMany({
-        where: { key: KEY, value: { equals: row.value as Prisma.InputJsonValue } },
-        data: { value: input.timeZone, updatedById: userId },
-      });
-      oldValue = row.value;
-    }
-  }
-  let created = false;
-  if (claimed.count === 0 && input.expectedCurrent === DEFAULT_FACTORY_TIMEZONE) {
-    try {
-      await prisma.systemSetting.create({
-        data: { key: KEY, value: input.timeZone, description: "Fabrika saat dilimi (IANA)", updatedById: userId },
-      });
-      created = true;
-    } catch (err) {
-      if ((err as { code?: string }).code !== "P2002") throw err;
-    }
-  }
-  if (claimed.count === 0 && !created) {
-    const fresh = await readFactoryTimezoneSetting();
-    throw AppError.conflict(
-      `Saat dilimi bu arada değişti (şu an: ${fresh ?? "geçersiz kayıt"}). Önizlemeyi yenileyip tekrar deneyin.`,
-      { code: "FACTORY_TIMEZONE_CHANGED", current: fresh },
-    );
-  }
-  applyFactoryTimezone(input.timeZone);
-  noteStoredFactoryTimezone(true);
-  invalidateFeatureFlagsCache();
+  await reloadAfterCommit();
   await AuditService.log({
     userId,
-    action: created ? "CREATE" : "UPDATE",
-    tableName: "SYSTEM_SETTING",
-    recordId: KEY,
-    oldData: { value: oldValue },
-    newData: { value: input.timeZone },
+    action: "CREATE",
+    tableName: "FACTORY_TIMEZONE_PERIOD",
+    recordId: out.row.id,
+    oldData: { timeZone: out.pending.timeZone, periodId: out.pending.id },
+    newData: { timeZone: out.pending.previousTimeZone, validFrom: out.pending.validFrom.toISOString(), reversesPeriodId: out.pending.id },
   });
-  return { timeZone: input.timeZone, changed: true };
+  return { cancelledId: out.pending.id, timeZone: out.pending.previousTimeZone, validFrom: out.pending.validFrom.toISOString() };
+}
+
+export type FactoryTimezonePeriodStatus = "YURURLUKTE" | "BEKLIYOR" | "GECMIS" | "IPTAL_EDILDI" | "IPTAL_KAYDI" | "ETKISIZ";
+
+/** Dönem defterinin tamamı (en yeni önce) — kim, ne zaman, hangi dilim, hangi durumda. */
+export async function listFactoryTimezonePeriods(now: Date = new Date()): Promise<Array<{
+  id: string; timeZone: string; validFrom: string; createdAt: string; reason: string | null;
+  reversesPeriodId: string | null; valid: boolean; status: FactoryTimezonePeriodStatus;
+  createdBy: { id: string; username: string; fullName: string; isSystemAccount: boolean } | null;
+}>> {
+  await loadAndApply(prisma, now);
+  const rows = await prisma.factoryTimezonePeriod.findMany({
+    select: { ...PERIOD_SELECT, reason: true, reversedBy: { select: { id: true } },
+      createdBy: { select: { id: true, username: true, fullName: true, isSystemAccount: true } } },
+    orderBy: [{ validFrom: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+  });
+  const effective = getFactoryTimezonePeriods();
+  const currentStart = effective.filter((p) => p.validFrom <= now).at(-1)?.validFrom.getTime();
+  const winners = new Map<number, string>();
+  for (const r of [...rows].reverse()) if (!r.reversesPeriodId && !r.reversedBy) winners.set(r.validFrom.getTime(), r.id);
+  return rows.map((r) => {
+    const t = r.validFrom.getTime();
+    const isWinner = winners.get(t) === r.id && effective.some((p) => p.validFrom.getTime() === t);
+    const status: FactoryTimezonePeriodStatus = r.reversesPeriodId ? "IPTAL_KAYDI"
+      : r.reversedBy ? "IPTAL_EDILDI"
+      : !isWinner ? "ETKISIZ"
+      : t > now.getTime() ? "BEKLIYOR"
+      : t === currentStart ? "YURURLUKTE" : "GECMIS";
+    return {
+      id: r.id, timeZone: r.timeZone, validFrom: r.validFrom.toISOString(), createdAt: r.createdAt.toISOString(),
+      reason: r.reason, reversesPeriodId: r.reversesPeriodId, valid: isValidFactoryTimezone(r.timeZone), status,
+      createdBy: r.createdBy,
+    };
+  });
 }

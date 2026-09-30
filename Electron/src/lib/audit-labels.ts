@@ -129,6 +129,7 @@ export const TABLE_LABELS: Record<string, string> = {
   PERMISSION: "Yetki",
   PERMISSION_TEMPLATE: "Yetki Şablonu",
   SYSTEM_SETTING: "Sistem Ayarı",
+  FACTORY_TIMEZONE_PERIOD: "Saat Dilimi Dönemi",
   WORK_SESSION: "Çalışma Oturumu",
   MACHINE_RUN: "Tezgah Koşumu",
   MACHINE_SPEC: "Tezgah Künyesi",
