@@ -4,6 +4,7 @@
 import { isIPv4, isIPv6 } from "node:net";
 import path from "node:path";
 import { z } from "zod";
+import { LICENSE_CLASSES, type LicenseClass } from "./lisans-protokol";
 
 const port = z.coerce.number().int().min(0).max(65535);
 
@@ -22,6 +23,13 @@ function isCidr(text: string): boolean {
   return false;
 }
 const positiveInt = (min: number, max: number) => z.coerce.number().int().min(min).max(max);
+
+/** Virgülle ayrılmış lisans sınıfı listesi (ör. "URETIM,DR"); tanınmayan sınıf açılışı durdurur. */
+const classList = z
+  .string()
+  .transform((v) => v.split(",").map((x) => x.trim()).filter(Boolean))
+  .refine((list) => list.length > 0 && list.every((x) => (LICENSE_CLASSES as readonly string[]).includes(x)), `Sınıf listesi yalnız ${LICENSE_CLASSES.join(" · ")} taşır`)
+  .transform((list) => list as LicenseClass[]);
 
 /** Tailnet dinleyicisi joker adrese bağlanamaz: portal internete açılmasın. */
 const WILDCARD_ADDRESSES = new Set(["0.0.0.0", "::", "[::]", "*", ""]);
@@ -127,6 +135,15 @@ const EnvSchema = z.object({
   GENEL_KOK_ADRESI: z.url({ protocol: /^https?$/ }).optional(),
   /** /d · /y · /yayin/bildirim istemci IP'si başına dakikalık sınır. */
   DAGITIM_HIZ_IP_DK: positiveInt(1, 100_000).default(120),
+  // ---- Bildirim (olay → giden kutusu; gönderim çıkışı olan yan konteynerde, satıcı DIŞ BAĞLANTISIZ) ----
+  /** Bu kadar saattir başarılı yoklama yoksa "kurulum ses vermiyor" (kurulum + son yoklama anı başına bir kez). */
+  BILDIRIM_SESSIZ_SAAT: positiveInt(1, 24 * 30).default(24),
+  /** Bitiş/vade bu kadar gün içindeyse "yaklaşıyor" (kira · geçerlilik · taksit; dönem başına bir kez). */
+  BILDIRIM_VADE_GUN: positiveInt(1, 90).default(7),
+  /** Zamana bağlı olay taraması aralığı (dk; dakikalık bakım işinin içinde). */
+  BILDIRIM_TARAMA_DK: positiveInt(1, 24 * 60).default(15),
+  /** Sessizlik ve kira bitişi uyarısının sınıfları (TEST · DEMO varsayılanda YOK: kapatılan deneme makinesi gürültüsü). */
+  BILDIRIM_SESSIZ_SINIFLAR: classList.default(["URETIM", "DR", "BARINDIRILAN"]),
 });
 
 export type VendorConfig = Readonly<

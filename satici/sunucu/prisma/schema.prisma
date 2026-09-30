@@ -270,6 +270,7 @@ model Kurulum {
   taksitPlanlari         TaksitPlani[]
   ilkKurulumBaglantilari IndirmeBaglantisi[]
   destekTalepleri        DestekTalebi[]
+  bildirimler            Bildirim[]
 
   @@index([tesisId])
   @@index([kanalKodu])
@@ -1072,4 +1073,77 @@ model YayinBildirimi {
 
   @@index([kanalKodu, createdAt])
   @@map("yayin_bildirimi")
+}
+
+// -----------------------------------------------------------------------------
+// BİLDİRİM GİDEN KUTUSU — satıcı olayı KENDİ tx'inde satır yazar (tx geri alınırsa satır yok); gönderimi
+// çıkışı olan yan konteyner (`satici-bildirim`) yapar: DB'ye YALNIZ bu tabloda SELECT + durum kolonlarında
+// UPDATE yetkili `satici_bildirim` rolüyle bağlanır, satıcının kendisi dış bağlantısız kalır.
+// Defter DEĞİL (silinse raporlanan hiçbir sayı değişmez) — iletim kaydıdır. Gövde ALLOWLIST'tir (DB CHECK
+// `bildirim_govde_gecerli`): talep metni, ekran görüntüsü, sağlık ayrıntısı, kişisel veri GİRMEZ.
+// -----------------------------------------------------------------------------
+
+enum BildirimOlayi {
+  DESTEK_TALEBI
+  KOPYA_SUPHESI
+  KOPYA_KIRA_REDDI
+  TASIMA_TALEBI
+  DR_DEVRI
+  KURULUM_SESSIZ
+  KIRA_BITISI_YAKLASIYOR
+  GECERLILIK_BITISI_YAKLASIYOR
+  TAKSIT_VADESI_YAKLASIYOR
+  PLANLI_EYLEM_UYGULANDI
+  TAKSIT_GECIKTI
+  DENEME
+}
+
+enum BildirimKanali {
+  EPOSTA
+  TELEGRAM
+}
+
+enum BildirimDurumu {
+  BEKLIYOR
+  /// Bir gönderici aldı (`kilitBitis`e dek); süre dolarsa yeniden alınabilir.
+  GONDERILIYOR
+  GONDERILDI
+  /// Kalıcı hata · deneme tavanı · süresi geçti — `sonHata` kısa KOD taşır.
+  HATA
+  /// Kanal yapılandırılmamış: gönderim denenmedi.
+  KAPALI
+}
+
+/// Olay × kanal başına bir satır; aynı olay aynı kanala ikinci kez yazılmaz (`tekillikAnahtari`, UNIQUE = atomik).
+model Bildirim {
+  id               String         @id @default(uuid()) @db.Uuid
+  olay             BildirimOlayi
+  kanal            BildirimKanali
+  /// Olay + kayıt (+ tarih/uç): zamana bağlı olayda aynı dönem ikinci satır doğurmaz.
+  tekillikAnahtari String         @db.VarChar(200)
+  kurulumId        String?        @db.Uuid
+  /// İlgili kaydın kimliği (destek talebi, kopya uyarısı, taşıma talebi…) — yalnız süzme/temizlik.
+  ilgiliKayit      String?        @db.Uuid
+  /// ALLOWLIST gövde: musteri · tesis · kurulum · lisansNo · sinif · konu · referans · tarih · portalYolu.
+  govde            Json
+  durum            BildirimDurumu @default(BEKLIYOR)
+  deneme           Int            @default(0)
+  sonrakiDeneme    DateTime       @default(now()) @db.Timestamptz
+  kilitBitis       DateTime?      @db.Timestamptz
+  /// Kısa hata KODU (ham yanıt gövdesi, başlık, sır GİRMEZ).
+  sonHata          String?        @db.VarChar(80)
+  /// Sağlayıcının ileti kimliği (Resend e-posta id · Telegram message_id).
+  saglayiciKimligi String?        @db.VarChar(100)
+  gonderimZamani   DateTime?      @db.Timestamptz
+  createdAt        DateTime       @default(now()) @db.Timestamptz
+  updatedAt        DateTime       @updatedAt @db.Timestamptz
+
+  kurulum Kurulum? @relation(fields: [kurulumId], references: [id], onDelete: Restrict)
+
+  @@unique([tekillikAnahtari, kanal])
+  @@index([durum, sonrakiDeneme])
+  @@index([kanal, updatedAt])
+  @@index([createdAt])
+  @@index([kurulumId])
+  @@map("bildirim")
 }

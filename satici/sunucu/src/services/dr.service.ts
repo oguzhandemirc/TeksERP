@@ -8,6 +8,7 @@ import { recordAudit } from "../lib/audit";
 import { VendorError, stateConflict } from "../lib/errors";
 import { lockInstallation, lockInstallations } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
+import { enqueueNotificationTx } from "../notifications/outbox";
 import type { VendorContext } from "./context";
 import { notifyDoorbell } from "./doorbell";
 import type { AuthenticatedRequest } from "./installation-auth";
@@ -62,7 +63,7 @@ export async function processDrTakeover(
     if (freshMain.durum !== "ETKIN") throw new VendorError(400, "GOVDE_GECERSIZ", "Ana kurulum ETKİN değil; devralınacak üretim yok");
     const claim = await tx.kurulum.updateMany({ where: { id: main.id, durum: "ETKIN" }, data: { durum: "DEVREDILDI" } });
     if (claim.count === 0) return false;
-    await tx.kurulumKaydi.create({
+    const handover = await tx.kurulumKaydi.create({
       data: {
         kurulumId: main.id,
         olay: "DEVREDILDI",
@@ -79,6 +80,8 @@ export async function processDrTakeover(
       },
     });
     await notifyDoorbell(tx, main.id, "lisans");
+    // Satıcıya anında bildirim AYNI tx'te (devir başına bir kez; gerekçe metni GİTMEZ).
+    await enqueueNotificationTx(tx, { event: "DR_DEVRI", keyParts: [handover.id], installationDbId: main.id, relatedId: main.id, portalPath: `/kurulumlar/${main.id}`, referans: `DR: ${dr.ad ?? dr.kurulumId.slice(0, 8)}` });
     return true;
   });
   if (changed) {
@@ -89,7 +92,7 @@ export async function processDrTakeover(
       actor: `kurulum:${dr.kurulumId}`,
       summary: { drKurulumId: dr.id, gerekce: body.gerekce },
     });
-    // Satıcıya anında bildirim: portal (1f) bu denetim olayını ve kurulum kaydını gösterir.
+    // Portal (1f) bu denetim olayını ve kurulum kaydını gösterir; e-posta/Telegram giden kutusundan (tx içinde yazıldı).
     console.warn(`[satici] DR DEVRALIMI: tesis ${dr.tesisId} — üretim ${main.id} → DR ${dr.id}`);
   }
   const { response } = await renewLease(ctx, {

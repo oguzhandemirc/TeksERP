@@ -9,6 +9,7 @@ import { recordAudit } from "../lib/audit";
 import { VendorError, badRequest, notFoundError, retryConflict, stateConflict } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
+import { enqueueNotificationTx } from "../notifications/outbox";
 import { notifyDoorbell } from "./doorbell";
 
 const LEVELS: readonly string[] = SANCTION_LEVELS;
@@ -349,6 +350,8 @@ export async function applyPlannedAction(p: PlanliEylem, nowMs: number): Promise
     if (claim.count === 0) return false;
     const heavy = plannedK3IsHeavy(p.tur, param.gun ?? undefined);
     await writeAction(tx, { installationDbId: p.kurulumId, type: p.tur, param: markHeavy(sanctionParam, heavy), reason: p.sebep, actor: `planli:${p.yapan}`, plannedId: p.id });
+    // Tetiklenme bildirimi AYNI tx'te (sebep metni GİTMEZ; tür + vade).
+    await enqueueNotificationTx(tx, { event: "PLANLI_EYLEM_UYGULANDI", keyParts: [p.id], installationDbId: p.kurulumId, relatedId: p.id, portalPath: `/kurulumlar/${p.kurulumId}`, referans: `Yaptırım ${p.tur}`, tarih: p.vade });
     return true;
   });
 }
@@ -530,6 +533,7 @@ export async function runOverdueInstallments(nowMs: number): Promise<number> {
         actor: "taksit",
       });
       await tx.taksitKalemi.update({ where: { id: item.id }, data: { yaptirimEylemiId: action.id } });
+      await enqueueNotificationTx(tx, { event: "TAKSIT_GECIKTI", keyParts: [item.id], installationDbId: item.plan.kurulumId, relatedId: item.id, portalPath: `/kurulumlar/${item.plan.kurulumId}`, referans: `Taksit ${item.sira} · K3`, tarih: item.vade });
       return true;
     });
     if (done) applied++;

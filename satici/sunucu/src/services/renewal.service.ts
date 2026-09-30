@@ -6,6 +6,7 @@ import { compareFingerprints, parseJws, type Fingerprint, type LicenseResponse, 
 import { VendorError, retryConflict } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
+import { enqueueNotificationTx } from "../notifications/outbox";
 import type { VendorContext } from "./context";
 import { decideChain, driftAccepted, forkSide, readFingerprint, type ChainDecision } from "./lease-chain";
 import {
@@ -69,7 +70,7 @@ async function upsertCopyAlert(
       data: { sonGorulme: new Date(nowMs), gorulmeSayisi: { increment: 1 }, digerParmakIzi: sides.other },
     });
   }
-  return tx.kopyaUyarisi.create({
+  const created = await tx.kopyaUyarisi.create({
     data: {
       kurulumId: installationDbId,
       tur: type,
@@ -79,6 +80,9 @@ async function upsertCopyAlert(
       digerParmakIzi: sides.other,
     },
   });
+  // Yeni uyarı bildirimi AYNI tx'te (sürmekte olan uyarının tekrar görülmesi bildirim DOĞURMAZ).
+  await enqueueNotificationTx(tx, { event: "KOPYA_SUPHESI", keyParts: [created.id], installationDbId, relatedId: created.id, portalPath: "/kopya-uyarilari", referans: type });
+  return created;
 }
 
 function inSecondWindow(ctx: VendorContext, alert: KopyaUyarisi, nowMs: number): boolean {
@@ -185,6 +189,7 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
     for (const alert of alerts) {
       if (!alert.redZamani && inSecondWindow(ctx, alert, g.nowMs)) {
         await tx.kopyaUyarisi.update({ where: { id: alert.id }, data: { redZamani: new Date(g.nowMs) } });
+        await enqueueNotificationTx(tx, { event: "KOPYA_KIRA_REDDI", keyParts: [alert.id], installationDbId: inst.id, relatedId: alert.id, portalPath: "/kopya-uyarilari", referans: alert.tur });
       }
     }
     await recordPoll("RED_KIRA_VERILMEDI", null);

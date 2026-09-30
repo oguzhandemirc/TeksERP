@@ -397,3 +397,47 @@ export interface TotpEnrollmentResponse {
 export function installationName(i: { ad: string | null; kurulumId: string }): string {
   return i.ad?.trim() ? i.ad : `Kurulum ${i.kurulumId.slice(0, 8)}`;
 }
+
+// ---------------------------------------------------------------- bildirimler (giden kutusu görünümü)
+
+/** Allowlist gövde (sunucu `NOTIFICATION_BODY_KEYS`): etiketler + portal yolu; talep metni vb. YOK. */
+export interface NotificationBody {
+  readonly musteri: string | null;
+  readonly tesis: string | null;
+  readonly kurulum: string | null;
+  readonly lisansNo: string | null;
+  readonly sinif: string | null;
+  readonly konu: string | null;
+  readonly referans: string | null;
+  readonly tarih: string | null;
+  readonly portalYolu: string;
+}
+
+export interface NotificationRow {
+  readonly id: string;
+  readonly olay: string;
+  readonly kanal: string;
+  readonly durum: string;
+  readonly deneme: number;
+  readonly sonrakiDeneme: string;
+  readonly sonHata: string | null;
+  readonly gonderimZamani: string | null;
+  readonly govde: NotificationBody;
+  readonly kurulumId: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ChannelOverview {
+  readonly kanal: string;
+  readonly durum: string;
+  readonly sonGonderim: string | null;
+  readonly sonSonuc: { readonly durum: string; readonly kod: string | null; readonly zaman: string } | null;
+  readonly bekleyen: number;
+  readonly geciken: number;
+}
+
+export interface NotificationOverview {
+  readonly kanallar: ChannelOverview[];
+  readonly esikler: { readonly sessizSaat: number; readonly vadeGun: number; readonly taramaDk: number; readonly sessizSiniflar: string[] };
+}

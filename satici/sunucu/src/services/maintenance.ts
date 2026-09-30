@@ -1,6 +1,7 @@
 // Dakikalık bakım işi (tek süreç içinde): telemetri budaması, planlı eylemler, geciken taksitler,
-// anahtar deposunun tazelenmesi. `running` koruması üst üste binmeyi engeller; her adım ayrı
-// hata sınırında (biri düşerse diğerleri koşar).
+// zamana bağlı bildirim taraması (giden kutusuna yazar; gönderim yan konteynerde), anahtar deposunun
+// tazelenmesi. `running` koruması üst üste binmeyi engeller; her adım ayrı hata sınırında (biri düşerse
+// diğerleri koşar).
 //
 // BUDAMA BEYANI — yaşa göre SİLİNEN tablolar yalnız bunlardır (hiçbir iş kararı okumaz; bekçi:
 // scripts/test_satici_kapilari.ts): TELEMETRİ nonce_defteri (sonKullanim geçti) · yoklama (saklama günü) ·
@@ -14,6 +15,7 @@ import { KeyStore } from "../keys/key-store";
 import { prisma } from "../lib/prisma";
 import type { VendorContext } from "./context";
 import { abandonStaleSessions, pruneExpiredBodies } from "../distribution/retention";
+import { scanTimedNotifications } from "../notifications/scanner";
 import { runDuePlannedActions, runOverdueInstallments } from "./sanction.service";
 
 export const PRUNED_MODELS = ["nonceDefteri", "yoklama", "portalOturumu", "portalIslemi", "denetim"] as const;
@@ -81,6 +83,8 @@ export class MaintenanceScheduler {
   private running = false;
   /** Denetim budaması günde bir (dakikalık işin içinde; süreç açılışında bir kez). */
   private lastAuditPruneMs: number | null = null;
+  /** Zamana bağlı bildirim taraması `BILDIRIM_TARAMA_DK`da bir (açılışta bir kez). */
+  private lastNotificationScanMs: number | null = null;
 
   constructor(private readonly ctx: VendorContext) {}
 
@@ -100,6 +104,13 @@ export class MaintenanceScheduler {
     this.lastAuditPruneMs = nowMs;
   }
 
+  private async scanNotifications(nowMs: number): Promise<void> {
+    const c = this.ctx.config;
+    if (this.lastNotificationScanMs !== null && nowMs - this.lastNotificationScanMs < c.BILDIRIM_TARAMA_DK * 60_000) return;
+    await scanTimedNotifications({ silentHours: c.BILDIRIM_SESSIZ_SAAT, dueDays: c.BILDIRIM_VADE_GUN, silentClasses: c.BILDIRIM_SESSIZ_SINIFLAR }, nowMs);
+    this.lastNotificationScanMs = nowMs;
+  }
+
   async runOnce(nowMs: number = Date.now()): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -114,6 +125,7 @@ export class MaintenanceScheduler {
         ["yarım yükleme temizliği", () => abandonStaleSessions(this.ctx.config, nowMs)],
         ["planlı eylemler", () => runDuePlannedActions(nowMs)],
         ["geciken taksitler", () => runOverdueInstallments(nowMs)],
+        ["bildirim taraması", () => this.scanNotifications(nowMs)],
         [
           "anahtar deposu",
           async () => {

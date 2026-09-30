@@ -64,6 +64,7 @@ async function main(): Promise<void> {
   const kanal = `uclar-${randomUUID().slice(0, 8)}`;
   const sunucu = await portalSunuculariKur(ctx);
   const vendorHit = new Set<string>();
+  const bildirimJetonlari: string[] = [];
   const dealerHit = new Set<string>();
   const sapmalar: string[] = [];
   try {
@@ -303,6 +304,17 @@ async function main(): Promise<void> {
     const anahtarlar = await s("get", "/anahtarlar", "/anahtarlar", 200);
     const anahtarMetni = JSON.stringify(anahtarlar.veri);
     kontrol("§2d anahtar durumu yalnız açık yarı (özel yarı / parola yok)", !anahtarMetni.includes('"d"') && !/privateKey|parola|sifreli/.test(anahtarMetni) && anahtarMetni.includes(f.kok.x));
+    // Bildirimler (davranış test_bildirim_* bekçilerinde): deneme giden kutusuna kanal başına satır yazar.
+    const bildirimJetonu = randomUUID();
+    bildirimJetonlari.push(bildirimJetonu);
+    const deneme = await s("post", "/bildirimler/deneme", "/bildirimler/deneme", 201, { clientToken: bildirimJetonu });
+    const bListe = await s("get", "/bildirimler", "/bildirimler?olay=DENEME&kanal=TELEGRAM&durum=BEKLIYOR&limit=5", 200);
+    const bDurum = await s("get", "/bildirimler/durum", "/bildirimler/durum", 200);
+    kontrol(
+      "§2e bildirim: deneme kanal başına satır yazar · liste süzülür · kanal durumu iki kanalı taşır",
+      deneme.veri.yazilan === 2 && (bListe.veri.items as { kanal: string }[]).every((x) => x.kanal === "TELEGRAM") && (bDurum.veri.kanallar as unknown[]).length === 2,
+      `${String(deneme.veri.yazilan)} · ${(bListe.veri.items as unknown[]).length}`,
+    );
 
     console.log("\n§3 bayi alt-portalı okumaları");
     const bayiK = await portalKullaniciAc(ctx, "BAYI", bayiId);
@@ -360,6 +372,7 @@ async function main(): Promise<void> {
     kontrol("§5d ✓K karşılaştırıcı sentetik kümede ısırır (eksik POST /b · hayalet PATCH /c)", sonda.missing.join() === "POST /b" && sonda.ghost.join() === "PATCH /c");
   } finally {
     await sunucu.kapat();
+    await prisma.bildirim.deleteMany({ where: { tekillikAnahtari: { in: bildirimJetonlari.map((j) => `DENEME:${j}`) } } });
     await temizleDagitim({ musteriler, yayinciKidler: [`uclar-${kanal}`] });
     rmSync(dagitimKoku, { recursive: true, force: true });
     await temizleKurulumlar([...kurulumlar, ...(await bayiKurulumlari(bayiler))], ortam.kidler);

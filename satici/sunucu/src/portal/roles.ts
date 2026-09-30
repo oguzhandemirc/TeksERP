@@ -38,6 +38,10 @@ export const PORTAL_PERMISSIONS = {
   /** Destek kutusu: fabrikanın talebine yanıt yazma ve talebi kapatma (okuma `portal:oku`). */
   "destek:yanitla": VENDOR,
   "anahtar:oku": VENDOR,
+  /** Bildirimler: kanal durumu + son bildirimler (salt okuma). */
+  "bildirim:oku": VENDOR,
+  /** Bildirim yönetimi: deneme bildirimi (kanal sırları satıcıda DEĞİL, gönderici yan konteynerde). */
+  "bildirim:yonet": ADMIN,
   /** Bayi alt-portalı (yalnız kendi müşterileri). */
   "bayi:portal": ["BAYI"],
 } as const satisfies Record<string, readonly PortalRole[]>;

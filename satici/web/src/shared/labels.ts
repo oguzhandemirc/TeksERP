@@ -68,6 +68,38 @@ export const LEASE_DECISION_LABEL: Record<string, string> = {
   TASIMA: "Taşıma",
 };
 
+/** Bildirim olayları — sunucunun `NOTIFICATION_EVENTS` listesinin HER değeri (ayna: src/test/mirrors.test.ts). */
+export const NOTIFICATION_EVENT_LABEL: Record<string, string> = {
+  DESTEK_TALEBI: "Yeni destek talebi",
+  KOPYA_SUPHESI: "Kopya şüphesi uyarısı",
+  KOPYA_KIRA_REDDI: "Kopya şüphesi — kira verilmedi",
+  TASIMA_TALEBI: "Taşıma talebi",
+  DR_DEVRI: "DR devri",
+  KURULUM_SESSIZ: "Kurulum ses vermiyor",
+  KIRA_BITISI_YAKLASIYOR: "Kira bitişi yaklaşıyor",
+  GECERLILIK_BITISI_YAKLASIYOR: "Geçerlilik bitişi yaklaşıyor",
+  TAKSIT_VADESI_YAKLASIYOR: "Taksit vadesi yaklaşıyor",
+  PLANLI_EYLEM_UYGULANDI: "Planlı eylem uygulandı",
+  TAKSIT_GECIKTI: "Taksit gecikti",
+  DENEME: "Deneme bildirimi",
+};
+export const NOTIFICATION_CHANNEL_LABEL: Record<string, string> = { EPOSTA: "E-posta", TELEGRAM: "Telegram" };
+export const NOTIFICATION_STATUS_LABEL: Record<string, string> = {
+  BEKLIYOR: "Bekliyor",
+  GONDERILIYOR: "Gönderiliyor",
+  GONDERILDI: "Gönderildi",
+  HATA: "Hata",
+  KAPALI: "Kanal kapalı",
+};
+/** Kanal durumu (sunucu satırların sonucundan türetir). */
+export const CHANNEL_HEALTH_LABEL: Record<string, string> = {
+  CALISIYOR: "Çalışıyor",
+  HATA: "Son gönderim hatalı",
+  YAPILANDIRILMAMIS: "Kanal yapılandırılmamış",
+  GONDERICI_YANITSIZ: "Gönderici yanıt vermiyor",
+  BILINMIYOR: "Henüz bildirim yok",
+};
+
 export function label(map: Record<string, string>, v: string | null | undefined): string {
   if (!v) return "—";
   return map[v] ?? v;

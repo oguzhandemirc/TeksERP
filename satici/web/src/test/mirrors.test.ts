@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { RETRY_CONFLICT_CODE } from "../shared/api";
 import { LOGIN_RATE_LIMIT_CODE } from "../shared/LoginPage";
 import { DEFAULT_MAINTENANCE_MONTHS, MAX_MAINTENANCE_MONTHS } from "../shared/CeilingFields";
-import { CLASS_LABEL, MODULE_LABEL } from "../shared/labels";
+import { CLASS_LABEL, MODULE_LABEL, NOTIFICATION_CHANNEL_LABEL, NOTIFICATION_EVENT_LABEL, NOTIFICATION_STATUS_LABEL } from "../shared/labels";
 import { PORTAL_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
 import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
@@ -136,6 +136,20 @@ describe("katalog ekran adları", () => {
     expect(vendorCodes).toContain(LOGIN_RATE_LIMIT_CODE);
   });
 
+  it("her bildirim olayı · kanalı · durumunun ekran adı var (notifications/catalog.ts)", () => {
+    const src = read("notifications/catalog.ts");
+    for (const [name, map] of [
+      ["export const NOTIFICATION_EVENTS", NOTIFICATION_EVENT_LABEL],
+      ["export const NOTIFICATION_CHANNELS", NOTIFICATION_CHANNEL_LABEL],
+      ["export const NOTIFICATION_STATES", NOTIFICATION_STATUS_LABEL],
+    ] as const) {
+      const values = listStrings(src, name);
+      expect(values.length).toBeGreaterThan(1);
+      expect(values.filter((v) => !map[v])).toEqual([]);
+      expect(Object.keys(map).filter((k) => !values.includes(k))).toEqual([]);
+    }
+  });
+
   it("her kanal türünün ekran adı var", () => {
     const kinds = listStrings(read("services/channel.service.ts"), "export const CHANNEL_KINDS");
     expect(kinds.length).toBeGreaterThan(0);
@@ -190,7 +204,7 @@ describe("eşikler ve biçim desenleri aynası", () => {
 
 describe("arayüzün çağırdığı her uç sunucuda var", () => {
   // Satıcı tablosu başka dosyadan yayılan parçaları da taşır (`...SUPPORT_PORTAL_ROUTES`): her yayılan tablo bu listede.
-  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts"];
+  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/notification-routes.ts"];
   const vendor = [...VENDOR_ROUTE_FILES.flatMap(serverRoutes), ...sessionRoutes()];
   const dealer = [...serverRoutes("http/dealer-routes.ts"), ...sessionRoutes()];
   const calls = clientCalls();
