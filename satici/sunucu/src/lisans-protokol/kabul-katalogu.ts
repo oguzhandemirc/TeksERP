@@ -3,5 +3,5 @@
 import type { AcceptanceTextEntry } from "./kabul";
 
 export const ACCEPTANCE_TEXTS: readonly AcceptanceTextEntry[] = [
-  { kimlik: "KM-2026.1-taslak", ozet: "4fe1d14e24fafffafc203f7b4d1c2930ceaa76ee4ec50f7e116a9f780fec5daf", kutular: ["1", "2", "3", "4"] },
+  { kimlik: "KM-2026.1-taslak", ozet: "a50db0c578357bdd4e4e573dbee797208930a890af327fed53209ed717b43726", kutular: ["1", "2", "3", "4"] },
 ];
