@@ -1,6 +1,6 @@
 # TeksERP İlk Kurulum Kabul Metni
 
-> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin panelde ilk kurulumda gösterilecek kısa kabul ekranının taslağıdır ve kabul kaydının nereye, hangi alanlarla yazılacağını tanımlar. Taslaktır; hukuki görüş değildir. Köşeli parantezli yerler kurulumun kendi bilgisinden doldurulur ya da `[DOLDURULACAK]`tır.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin panelde ilk kurulumda gösterilecek kısa kabul ekranının taslağıdır ve kabul kaydının nereye, hangi alanlarla yazılacağını tanımlar. Taslaktır; hukuki görüş değildir. Köşeli parantezli yerler kurulumun kendi bilgisinden doldurulur.
 >
 > Metin kimliği: `KM-2026.1-taslak` · Ek-7
 
@@ -26,7 +26,7 @@
 
 > **TeksERP Lisans Sözleşmesi**
 >
-> Bu yazılımı **[Lisans Alan ünvanı]** adına, **[Tesis adı]** tesisinde kullanmak üzere kuruyorsunuz.
+> Bu yazılımı **[Lisans Alan unvanı]** adına, **[Tesis adı]** tesisinde kullanmak üzere kuruyorsunuz.
 > Lisans numarası: **[TKS-YYYY-NNNN]** · Lisans sınıfı: **[Üretim / Test / DR / Demo]**
 >
 > Devam etmeden önce aşağıdaki belgeleri okuyun. Tam metinleri bu ekrandan açabilir, PDF olarak indirebilirsiniz.
@@ -34,7 +34,7 @@
 > **Kısaca:**
 > - Yazılım bu kurulum ve bu tesis için lisanslıdır. Kopyalanamaz, başkasına devredilemez, tersine mühendislikle incelenemez.
 > - Kullanıcı ve cihaz sayısı sınırsızdır. Kullanabileceğiniz modüller lisansınızda yazılıdır.
-> - Sunucu, lisansı doğrulamak için saatte bir [Lisans Veren]'e bağlanır. Bu bağlantı iş verisi ve kişisel veri taşımaz; giden her bilgi Veri İşleme Eki'nde tek tek yazılıdır.
+> - Sunucu, lisansı doğrulamak için saatte bir Etkili Yazılım'a bağlanır. Bu bağlantı iş verisi ve kişisel veri taşımaz; giden her bilgi Veri İşleme Eki'nde tek tek yazılıdır.
 > - İnternet kesilirse yazılım yaklaşık 60 gün tam çalışır. Sonrasında lisans, panel bilgisayarı ya da telefon (QR) üzerinden de yenilenebilir.
 > - Bakım biterse yazılım durmaz; son hak ettiğiniz sürümde kalırsınız.
 > - Ödeme gecikmesi ya da lisans ihlali gibi hallerde yazılım uyarı gösterebilir, güncellemeyi durdurabilir, yeni kayıt girişini kısıtlayabilir. Bu kurallar Yaptırım Maddeleri'nde yazılıdır; ayrıca onayınız istenir.
@@ -53,7 +53,7 @@
 >
 > ☐ **4.** [Lisans Alan] adına bu beyanı vermeye yetkili olduğumu beyan ederim.
 >
-> *Adınız ve unvanınız, kabulün kanıtı olarak [Lisans Veren]'e gönderilir ve sözleşme süresince saklanır (Veri İşleme Eki, Bölüm A.5).*
+> *Adınız ve unvanınız, kabulün kanıtı olarak Etkili Yazılım'a gönderilir ve sözleşme süresince saklanır (Veri İşleme Eki, Bölüm A.5).*
 >
 > [ **Kabul ediyorum ve devam et** ]  [ Vazgeç ]
 
@@ -89,7 +89,7 @@ Kabul edilmeden lisans etkinleştirilmez. Kurulum etkinleşmemiş sayılır ve L
 
 ## 5. Kurulum sırasındaki yer
 
-İlk kurulum akışında sıra: yönetici hesabı → **kabul ekranı** → lisans etkinleştirme (kod) → modüller. Kabul, etkinleştirmenin ön şartıdır. Etkinleştirme isteği kabul kaydının kimliğini taşır; Lisans Veren sunucusu kabul kaydı olmayan etkinleştirmeyi [DOLDURULACAK — reddeder mi, uyarıyla kabul eder mi].
+İlk kurulum akışında sıra: yönetici hesabı → **kabul ekranı** → lisans etkinleştirme (kod) → modüller. Kabul, etkinleştirmenin ön şartıdır. Etkinleştirme isteği kabul kaydının kimliğini taşır; Lisans Veren sunucusu kabul kaydı olmayan etkinleştirmeyi reddeder; panel etkinleştirmeden önce kabul adımını gösterir.
 
 ## 6. Yeni metin sürümü
 

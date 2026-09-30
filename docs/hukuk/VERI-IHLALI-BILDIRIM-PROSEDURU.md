@@ -1,6 +1,6 @@
 # Kişisel Veri İhlali Bildirim Prosedürü
 
-> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Mevzuat atıfları incelemeye yön vermek içindir. `[DOLDURULACAK]` işaretli yerler kişi bilgisidir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Mevzuat atıfları incelemeye yön vermek içindir.
 >
 > Metin kimliği: `VIBP-2026.1-taslak` · Ek-8 · Kapsam: Lisans Veren'in veri işleyen olduğu iki alan — **patron bulutu** (Patron Bulutu Veri İşleme Eki, Ek-6) ve **destek / uzaktan erişim / lisans kanalı** (Veri İşleme Eki, Ek-3, Bölüm B.4). Lisans Alan'ın kendi sunucusundaki bir ihlalde bu prosedür, Lisans Veren'in Lisans Alan'a vereceği desteği düzenler (§7).
 
@@ -20,10 +20,12 @@
 
 | Rol | Kim | Görev |
 |---|---|---|
-| İhlal sorumlusu (Lisans Veren) | [DOLDURULACAK — ad, yedek kişi] | Değerlendirme, kayıt, Lisans Alan'a bildirim, müdahale koordinasyonu |
-| Teknik müdahale | [DOLDURULACAK] | Sınırlama, kanıt koruma, kök neden, düzeltme |
-| Hukuk danışmanı | [DOLDURULACAK] | Bildirim metinleri ve gecikme gerekçesi |
+| İhlal sorumlusu (Lisans Veren) | Lisans Veren'in görevlendirdiği ihlal sorumlusu ve yedeği | Değerlendirme, kayıt, Lisans Alan'a bildirim, müdahale koordinasyonu |
+| Teknik müdahale | Lisans Veren'in görevlendirdiği teknik sorumlu | Sınırlama, kanıt koruma, kök neden, düzeltme |
+| Hukuk danışmanı | Lisans Veren'in hukuk danışmanı | Bildirim metinleri ve gecikme gerekçesi |
 | Lisans Alan irtibat kişisi | Her Lisans Alan'ın sözleşmede bildirdiği kişi ve kanal (KEP adresi ve telefon) | Bildirimi alır; Kurul'a ve ilgili kişilere bildirimi yapar |
+
+Lisans Veren rollerine atanan kişilerin adları ve iletişim bilgileri Lisans Veren'in iç kaydında tutulur ve değiştikçe güncellenir.
 
 ## 3. Zaman çizelgesi
 

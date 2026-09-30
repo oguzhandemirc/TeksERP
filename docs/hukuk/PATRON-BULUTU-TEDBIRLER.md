@@ -34,12 +34,12 @@
 - Giriş: e-posta + parola + **iki aşamalı doğrulama (TOTP)**, her hesap için zorunlu.
 - Parolalar geri döndürülemez biçimde (scrypt) özetlenir. TOTP sırları veritabanında şifreli durur.
 - Başarısız girişler sınırlanır ve kaydedilir: art arda 5 hatalı denemede hesap 15 dakika kilitlenir; giriş istekleri ayrıca IP adresi başına dakikada 20 ile sınırlıdır.
-- Kurtarma kodu yoktur: TOTP kaybında Tesis Yöneticisi sıfırlar; yöneticinin kendisi için Lisans Veren kimlik doğrulaması yaparak sıfırlar [DOLDURULACAK — doğrulama yöntemi].
+- Kurtarma kodu yoktur: TOTP kaybında Tesis Yöneticisi sıfırlar. Tesis Yöneticisi'nin kendi TOTP'si için yazılı başvuru gerekmez: Lisans Alan yetkilisi Lisans Veren'e ulaşır; Lisans Veren sözleşmede kayıtlı telefon numarasını geri arayarak kimliği doğrular ve doğrulanınca yeni cihaz için yeniden kurulum bağlantısı gönderir.
 
 ### 1.5. Şifreleme ve bütünlük
 - Bütün bağlantılar TLS ile şifrelidir.
 - Kurulum'dan buluta giden her paket Kurulum anahtarıyla **imzalıdır** (Ed25519) ve gövde özeti taşır; yolda değiştirilen ya da tekrar oynatılan paket reddedilir. Bulut, fabrika verisine yazamaz; tek yazma kanalı Gelen Kutusu'dur ve Kurulum onu normal iş kurallarıyla, tekrar güvenli (idempotent) biçimde işler.
-- Sunucu diski: [DOLDURULACAK — VDS disk şifrelemesi var mı].
+- Sunucu diski ayrıca şifrelenmez; yedekler ve TOTP sırları şifrelidir.
 - Yedekler, fabrika yedekleriyle aynı yöntemle şifrelenir (X25519 + AES-256-GCM, açık anahtarla); açan özel anahtar sunucuda durmaz, Lisans Veren'in sunucu dışındaki ortamında (yönetim bilgisayarı ve USB) tutulur.
 - Uygulamanın cihazdaki önbelleği uygulamanın korumalı alanında tutulur (mobilde uygulamaya ayrılmış depolama alanı, web sürümünde tarayıcının bu siteye ayırdığı depolama); uygulama önbelleği ayrıca şifrelemez. Oturum anahtarı işletim sisteminin güvenli depolamasında (iOS Keychain, Android Keystore) tutulur; web sürümünde yalnız tarayıcı sekmesi açıkken saklanır. Önbellek oturum kapatılınca, oturum geçersiz sayılınca ve her yeni girişte silinir; izni kaldırılan verinin önbellekteki kopyası bir sonraki okumada silinir.
 
@@ -61,19 +61,19 @@
 
 ## 2. İdari tedbirler
 
-- Bulut sunucusuna ve veritabanına erişebilen Lisans Veren çalışanları adıyla belirlidir [DOLDURULACAK — liste ve rol]; her biri yazılı gizlilik taahhüdü altındadır.
+- Bulut sunucusuna ve veritabanına erişebilen Lisans Veren çalışanları rolleriyle belirlidir; adları Lisans Veren'in iç kaydında tutulur. Her biri yazılı gizlilik sözleşmesi altındadır.
 - En az yetki: çalışanlar günlük işte Bulut Kopyası içeriğini görmez; işletme ekranları sayı ve durum gösterir.
-- Yılda bir kez [DOLDURULACAK] çalışanlara kişisel veri ve güvenlik eğitimi verilir, kayda geçer.
+- Yılda bir kez çalışanlara kişisel veri ve güvenlik eğitimi verilir, kayda geçer.
 - Alt işleyenlerle yazılı sözleşme (Patron Bulutu Veri İşleme Eki, Ek-6, §6).
 - Güvenlik ihlali prosedürü: Veri İhlali Bildirim Prosedürü (Ek-8).
-- Tedbirler yılda bir gözden geçirilir; sızma testi [DOLDURULACAK].
+- Tedbirler yılda bir gözden geçirilir; yılda bir bağımsız sızma testi yaptırılır.
 - İşten ayrılan çalışanın erişimi ayrıldığı gün kapatılır.
 
 ## 3. Lisans Veren'in Bulut Kopyası'na erişimi ve erişim kaydı
 
 3.1. Lisans Veren çalışanı bir Tesis'in Bulut Kopyası içeriğine **yalnız** şu hâllerde bakar: Lisans Alan'ın destek talebi; bir güvenlik ihlalinin incelenmesi; yetkili makamın hukuken bağlayıcı talebi.
 
-3.2. Her içerik erişimi silinemeyen bir kayda yazılır: kim, ne zaman, hangi Tesis, hangi veri kümesi, gerekçe (destek talebi numarası). Doğrudan veritabanı sorgusu da bu kurala tabidir [DOLDURULACAK — teknik zorlama: ayrı rol + oturum kaydı].
+3.2. Her içerik erişimi silinemeyen bir kayda yazılır: kim, ne zaman, hangi Tesis, hangi veri kümesi, gerekçe (destek talebi numarası). Doğrudan veritabanı sorgusu da bu kurala tabidir: yalnız ayrı, salt okunur bir destek rolüyle yapılır ve oturumu kayda geçer.
 
 3.3. Lisans Alan, kendi Tesis'ine ait erişim kayıtlarının dökümünü isteyebilir; döküm 10 iş günü içinde verilir.
 

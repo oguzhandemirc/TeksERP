@@ -1,6 +1,6 @@
 # Patron Bulutu Aydınlatma Metni (uygulamada gösterilir)
 
-> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Aydınlatma yükümlülüğü (KVKK md. 10) **veri sorumlusu olan fabrikanındır**; bu metin fabrika adına, onun onayıyla gösterilecek şablondur. `{…}` yer tutucuları uygulamada o Tesis'in bilgisiyle doldurulur; `[DOLDURULACAK]` ticari ya da eksik bilgidir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Aydınlatma yükümlülüğü (KVKK md. 10) **veri sorumlusu olan fabrikanındır**; bu metin fabrika adına, onun onayıyla gösterilecek şablondur. `{…}` yer tutucuları uygulamada o Tesis'in bilgisiyle doldurulur; köşeli parantezli alanlar Lisans Veren'in şirket kuruluşu tamamlanınca ya da metin yayımlanırken doldurulur.
 >
 > Metin kimliği: `PBAM-2026.1-taslak` · Ek-6/C · Patron Bulutu Veri İşleme Eki'ne (Ek-6) dayanır.
 
@@ -23,7 +23,7 @@
 
 > **Kişisel verileriniz hakkında**
 >
-> Bu uygulamada gördüğünüz ve girdiğiniz veriler **{Tesis ünvanı}** adına işlenir; veri sorumlusu {Tesis ünvanı}'dır. Uygulamayı ve bulut sunucusunu **{Lisans Veren ünvanı}** veri işleyen olarak Türkiye'deki sunucularda işletir.
+> Bu uygulamada gördüğünüz ve girdiğiniz veriler **{Tesis ünvanı}** adına işlenir; veri sorumlusu {Tesis ünvanı}'dır. Uygulamayı ve bulut sunucusunu **Etkili Yazılım** veri işleyen olarak Türkiye'deki sunucularda işletir.
 >
 > Hesabınız için adınızı, e-postanızı, giriş kayıtlarınızı (IP ve zaman) ve bildirim tercihlerinizi; hesabınızla girdiğiniz sipariş ve cari taleplerini işliyoruz. Amaç: hesabınızı güvenle çalıştırmak, fabrika verisini size göstermek, girdiğiniz talebi fabrikaya iletmek ve istediğiniz bildirimleri göndermek.
 >
@@ -37,7 +37,7 @@
 
 **Veri sorumlusu:** {Tesis ünvanı}, {Tesis adresi}, {MERSİS no / vergi no}. İletişim: {Tesis KVKK iletişim adresi}.
 
-**Veri işleyen:** {Lisans Veren ünvanı} [DOLDURULACAK], {adres}. Uygulamayı ve bulut sunucusunu {Tesis ünvanı}'nın talimatıyla işletir; verilerinizi kendi amaçları için kullanmaz.
+**Veri işleyen:** Etkili Yazılım ([Lisans Veren ticaret unvanı — kuruluş tamamlanınca]), [Lisans Veren adresi — kuruluş tamamlanınca]. Uygulamayı ve bulut sunucusunu {Tesis ünvanı}'nın talimatıyla işletir; verilerinizi kendi amaçları için kullanmaz.
 
 **Hangi verileriniz işlenir**
 - Kimlik ve iletişim: adınız, e-posta adresiniz.
@@ -57,8 +57,8 @@
 | Bir uyuşmazlıkta talebin kimden geldiğinin ispatı | (e) bir hakkın tesisi, kullanılması veya korunması |
 
 **Kimlere aktarılır**
-- **Yurt içi:** {Lisans Veren ünvanı} (veri işleyen) ve Türkiye'deki sunucu sağlayıcısı [DOLDURULACAK].
-- **Yurt dışı:** Cloudflare, Inc. (bağlantı güvenliği; bağlantınız onun sunucusundan geçer), Apple Inc., Google LLC ve 650 Industries, Inc. (Expo) (bildirim iletimi). Bildirimler varsayılan olarak tutar ve kişi adı içermez. Aktarım KVKK md. 9'a uygun güvencelere dayanır [DOLDURULACAK — dayanak kurulunca: standart sözleşme].
+- **Yurt içi:** Etkili Yazılım (veri işleyen) ve Türkiye'de yerleşik barındırma sağlayıcısı.
+- **Yurt dışı:** Cloudflare, Inc. (bağlantı güvenliği; bağlantınız onun sunucusundan geçer), Apple Inc., Google LLC ve 650 Industries, Inc. (Expo) (bildirim iletimi). Bildirimler cari adı ve kişi adı içermez; toplam tutar içerebilir. Aktarım KVKK md. 9'a uygun güvencelere (standart sözleşme) dayanır; bu güvence kurulamayan bildirim hizmetine yalnız içeriksiz uyandırma bildirimi gönderilir.
 - Hukuken yetkili kamu kurumlarına, talep hâlinde.
 
 **Toplama yöntemi:** Uygulamaya girdiğiniz bilgiler, uygulamanın ve sunucunun otomatik oluşturduğu kayıtlar ve hesabınızı açan tesis yöneticisinin girdiği bilgiler yoluyla, elektronik ortamda.
@@ -67,7 +67,7 @@
 
 **Haklarınız (KVKK md. 11):** verinizin işlenip işlenmediğini öğrenme; işlenmişse bilgi isteme; amacını ve amacına uygun kullanılıp kullanılmadığını öğrenme; aktarıldığı üçüncü kişileri bilme; eksik ya da yanlışsa düzeltilmesini, şartları oluşmuşsa silinmesini ya da yok edilmesini isteme ve bunun aktarılanlara bildirilmesini isteme; münhasıran otomatik sistemlerle analiz sonucu aleyhinize bir sonuç çıkmasına itiraz; kanuna aykırı işleme nedeniyle zarara uğrarsanız zararın giderilmesini isteme.
 
-**Başvuru:** {Tesis ünvanı}'na {başvuru adresi / KEP / e-posta} yoluyla, Veri Sorumlusuna Başvuru Usul ve Esasları Hakkında Tebliğ'e uygun olarak başvurabilirsiniz. Başvurunuz en geç 30 gün içinde sonuçlandırılır. {Lisans Veren ünvanı}'na gelen başvurular {Tesis ünvanı}'na iletilir.
+**Başvuru:** {Tesis ünvanı}'na {başvuru adresi / KEP / e-posta} yoluyla, Veri Sorumlusuna Başvuru Usul ve Esasları Hakkında Tebliğ'e uygun olarak başvurabilirsiniz. Başvurunuz en geç 30 gün içinde sonuçlandırılır. Etkili Yazılım'a gelen başvurular {Tesis ünvanı}'na iletilir.
 
 Metin sürümü: `PBAM-2026.1` · Yürürlük: [Yürürlük tarihi]
 
@@ -75,4 +75,4 @@ Metin sürümü: `PBAM-2026.1` · Yürürlük: [Yürürlük tarihi]
 
 Buluttaki cari yetkilileri ve keşideciler uygulamayı kullanmaz; onlar için aydınlatma, fabrikanın müşteri ve tedarikçilerine verdiği genel aydınlatma metniyle yapılır. O metne eklenmesi önerilen cümle [avukat]:
 
-> "Cari ilişkimiz kapsamında işlenen ad, yetkili adı ve telefon bilgileriniz ile finansal kayıtlarınız, yöneticilerimizin uzaktan erişimi amacıyla, veri işleyenimiz {Lisans Veren ünvanı}'nın Türkiye'deki sunucularında tutulan bir kopyada da işlenir."
+> "Cari ilişkimiz kapsamında işlenen ad, yetkili adı ve telefon bilgileriniz ile finansal kayıtlarınız, yöneticilerimizin uzaktan erişimi amacıyla, veri işleyenimiz Etkili Yazılım'ın Türkiye'deki sunucularında tutulan bir kopyada da işlenir."

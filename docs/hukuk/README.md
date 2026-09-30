@@ -47,16 +47,23 @@ Sözleşmeler aşağıdaki değerleri müşteriye TAAHHÜT eder. Koddaki değer 
 | Rapor istekleri ve sonuçları (Ek-6/A §2.4) | 30 gün | `RAPOR_SONUC_SAKLAMA_GUN` (`patron/sunucu/src/config.ts`) |
 | Gelen Kutusu (Ek-6/A §2.4) | tesisin geçmiş seçeneği kadar | tesis `retentionMonths` (`patron/sunucu/src/services/maintenance.ts`) |
 | Web bildirim hizmetleri (Ek-6 §6.1) | Google, Mozilla, Apple, Microsoft | `WEB_PUSH_HOSTS` (`patron/sunucu/src/push/targets.ts`) |
+| Bildirim içeriği (Ek-6 §6.2, Ek-6/C §3) | cari ve kişi adı yok; toplam tutar olabilir | `patron/sunucu/src/services/notification-events.ts` |
+| Hizmet bitişinden sonra erişim (Ek-6/A §4.2) | 90 gün salt okuma + JSON/CSV dışa aktarma | **kod borcu** — ayrı dilim (`UYGULAMA-NOTLARI.md`) |
+| Kapatılan bulut hesabının kimlik verisi (Ek-6/A §2.5, Ek-6/C §3) | 30 gün içinde silinir | **kod borcu** — ayrı dilim |
+| Erişim kayıtları (IP) (Ek-3 D, Ek-6/A §2.4) | 30 gün, zamana göre | **işletim borcu** — bugün boyuta göre dönüyor |
+| Doğrudan veritabanı sorgusu (Ek-6/B §3.2) | ayrı salt okunur destek rolü + oturum kaydı | **işletim borcu** — hizmet açılmadan kurulur |
+| Kabul kaydı olmadan etkinleştirme (Ek-7 §5) | satıcı reddeder; panel önce kabul adımını gösterir | **kod borcu** — satıcı + panel |
 
 ## Avukata ön not
 
 Bu pakette lisans sözleşmesi, ekleri ve mobil uygulamanın gizlilik politikası taslak olarak yer alır. Hiçbiri avukat onayı olmadan imzaya, panele ya da müşteriye çıkmaz. Belgeler birbirine Ek numarasıyla atıf yapar; Ek numaraları Lisans Sözleşmesi §16'da tanımlıdır.
 
 - **Avukat kararı:** Her belgenin başındaki kutu, o belgede özellikle bakılmasını istediğimiz FSEK, TBK, KVKK ve TCK maddelerini listeler. Metin içindeki "[avukat]" ve "[avukat: …]" işaretleri de avukat teyidi beklenen yerlerdir.
-- **Ticari kararlar (henüz verilmedi):** lisans ve bakım bedelleri, modül fiyat listesi ve ücretli hizmetler, bakımın otomatik yenilenmesi, sorumluluk tavanı, ceza koşulu, bedel iadesi, yetkili mahkeme, patron bulutunun ticari modeli. Hepsi metinlerde "[DOLDURULACAK]" işaretlidir. Bildirim, giderme, saklama ve yanıt süreleri taslağa önerilen değerleriyle işlendi; yazılımda ölçülebilen yerlerde yazılımın gerçek değeri yazıldı.
-- **Şablon alanları:** Köşeli parantez içindeki "[Lisans Alan ünvanı]", "[Bakım başlangıç tarihi]", "[Yürürlük tarihi]" gibi alanlar sözleşme imzalanırken ya da metin yayımlanırken doldurulur. Aydınlatma Metni'ndeki (Ek-6/C) {…} alanlarını uygulama, ilgili tesisin kaydından doldurur.
-- **Eksik bilgi:** VDS sağlayıcısının ünvanı, veri merkezi ve disk şifrelemesi; Lisans Veren'in ticari ünvanı, KEP adresi ve iletişim bilgileri; ihlal müdahalesinde görevli kişiler.
-- **Patron bulutu ekleri (Ek-6, Ek-6/A–C, Ek-8):** açık noktalar ticari model, VDS sağlayıcısı, yurt dışı alt işleyenlerle standart sözleşmenin imzalanabilirliği (Ek-6 §6.4) ve bildirim içeriğidir. Tedbirler eki (Ek-6/B) bir taahhüt listesidir: hizmet satışa açılmadan her tedbirin uygulanmış ve doğrulanmış olması öngörülür.
+- **Şirket kuruluşu:** Lisans Veren Etkili Yazılım'ın resmî kuruluşu sürüyor. Ticaret unvanı, adresi, vergi dairesi ve numarası, MERSİS numarası, KEP adresi, telefonu ve yetkili mahkemenin ili "[Lisans Veren … — kuruluş tamamlanınca]" alanlarında duruyor; kuruluş tamamlanınca doldurulacak. Metinde kısa ad "Etkili Yazılım" kullanıldı; iletişim adresi info@etkiliyazilim.com.
+- **Ticari kararlar:** bakım bedeli (lisans bedelinin %15'i), teklif bazında fiyatlandırma, bakımın kendiliğinden yenilenmesi, bütün ekler için tek sorumluluk tavanı, ceza koşulu, iade yapılmaması ve patron bulutunun ayrı yıllık abonelikle satılması metne işlendi. Bildirim, giderme, saklama ve yanıt süreleri taslağa önerilen değerleriyle işlendi; yazılımda ölçülebilen yerlerde yazılımın gerçek değeri yazıldı.
+- **Şablon alanları:** Köşeli parantez içindeki "[Lisans Alan unvanı]" gibi Lisans Alan alanları ve "[Bakım başlangıç tarihi]" sözleşme imzalanırken, "[Yürürlük tarihi]" ve "[Yayın tarihi]" metin yayımlanırken doldurulur. Aydınlatma Metni'ndeki (Ek-6/C) {…} alanlarını uygulama, ilgili tesisin kaydından doldurur.
+- **Eksik bilgi:** barındırma sağlayıcısının adı teyit edilince alt işleyen listelerine (Ek-3 C, Ek-6 §6.1) yazılacak; metinde bugün "Türkiye'de yerleşik barındırma sağlayıcısı" diye geçiyor.
+- **Patron bulutu ekleri (Ek-6, Ek-6/A–C, Ek-8):** açık nokta yurt dışı alt işleyenlerle standart sözleşmenin imzalanabilirliğidir (Ek-6 §6.4); imzalanamazsa bildirimler içeriksiz "uyandırma" bildirimine iner. Tedbirler eki (Ek-6/B) bir taahhüt listesidir: hizmet satışa açılmadan her tedbirin uygulanmış ve doğrulanmış olması öngörülür.
 - **Mobil Gizlilik Politikası (ayrı belge):** metin bugün "Uygulama geliştiricisi bu verilere erişmez" diyor (§1). Lisans yoklaması devreye girince bu metne lisans bağlantısına ilişkin bir satır eklenmesi gerekir.
 
 ## Açık kalanlar (iç)
@@ -64,4 +71,5 @@ Bu pakette lisans sözleşmesi, ekleri ve mobil uygulamanın gizlilik politikas�
 - Yukarıdaki ön notun iç karşılığı: tedbirler ekinin her maddesi hizmet açılmadan uygulanmış ve Senaryo P ile ölçülmüş olmalıdır (`UYGULAMA-NOTLARI.md`).
 - Patron bulutu ekleri 2026-09-29'da B7 diliminde taslak olarak yazıldı.
 - 2026-09-30: hukuk metinlerinden çıkarılan iç notlar, iki olgu dolgusunun (Ek-6 §3.5, Ek-6/B §1.5) kod kaynağı ve Ek numaralandırmasının gerekçesi `UYGULAMA-NOTLARI.md`'dedir.
-- 2026-09-30 ikinci tur: 112 "[DOLDURULACAK]" işaretinin 44'ü öneriyle, 17'si koddan ya da işletim belgelerinden olguyla dolduruldu, 6'sı şablon alanı oldu; kalan 45'i karar sorusu olarak kullanıcıda. Soru ↔ yer eşlemesi ve metin ↔ kod farkları `UYGULAMA-NOTLARI.md`'de.
+- 2026-09-30 ikinci tur: 112 "[DOLDURULACAK]" işaretinin 44'ü öneriyle, 17'si koddan ya da işletim belgelerinden olguyla dolduruldu, 6'sı şablon alanı oldu; kalan 45'i karar sorusu olarak kullanıcıya gitti.
+- 2026-09-30 üçüncü tur: kullanıcının 15 cevabı işlendi; metinde "[DOLDURULACAK]" kalmadı. Kalanlar şablon alanıdır (Lisans Veren alanları şirket kuruluşuyla, Lisans Alan alanları imzada, tarihler yayında dolar). Cevap ↔ yer tablosu, kod ve işletim borçları `UYGULAMA-NOTLARI.md`'de.
