@@ -41,9 +41,10 @@ export interface PackageKey {
 }
 
 /**
- * PAKET anahtarının açık yarısı — native çekirdeğe GÖMÜLÜ çapanın (`anchor.rs`) kaynağı.
- * Bugün yalnız HAZIRLIK anahtarı (`paket-hazirlik`): yalnız TEST/DEMO kurulumunda kabul, ÜRETİM'de
- * red (`integrity-scope.ts` `STAGING_PACKAGE_*`). Üretim anahtarı `paket-<yıl>` ayrı törende eklenir.
+ * PAKET anahtarının açık yarısı — native çekirdeğe GÖMÜLÜ çapanın (`anchor.rs`) kaynağı. Hazırlık
+ * anahtarı (`paket-hazirlik*`) yalnız TEST/DEMO kurulumunda kabul, ÜRETİM'de red (`integrity-scope.ts`
+ * `STAGING_PACKAGE_*`); üretim anahtarı (`paket-<yıl>`) törenle girer. Satır yalnız
+ * `scripts/guven-capasi-ekle.ts paket` ile eklenir (`anchor.rs` ile birlikte), elle düzenlenmez.
  */
 export const PACKAGE_PUBLIC_KEYS: readonly PackageKey[] = Object.freeze([
   Object.freeze({ kid: "paket-hazirlik", x: "auFAoNnXZDIWdyLJ5EVsakwMquIa_GHqCyKxZHz16Z8" }),

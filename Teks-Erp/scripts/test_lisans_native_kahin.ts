@@ -24,7 +24,8 @@
 //      reddeder / üretim derlemesi çapa enjeksiyonunu reddeder
 //   §8 ⭐ KALICI SONDA ✓K (her koşumda): karşılaştırıcı farkı ısırır, eşitte susar · bayatlık
 //      denetimi mutasyona uğramış beklenenle kırmızı · kapsam denetimi eksik kodu yakalar ·
-//      regex aynası değişmiş deseni yakalar · TYP aynası değişmiş/kayıtsız türü yakalar
+//      regex aynası değişmiş deseni yakalar · TYP aynası değişmiş/kayıtsız türü yakalar · gömülü paket
+//      çapası üç rustfmt düzeninde de okunur (ikinci anahtar `&[`i alt satıra taşır)
 //
 // NEGATİF SONDA — dosya DIŞI mutasyonlar (commit mesajında sayılarla; her biri geri alındı, sha eşit):
 //   bkz. Teks-Erp/docs/BEKCI-HARITASI.md `## lisans` satırı.
@@ -189,6 +190,21 @@ async function vektorYaz(): Promise<void> {
   console.log(`✍️  ${path.relative(TEKS, VEKTOR_DOSYASI)} yazıldı — ${dosya.kayitlar.length} kayıt, ${metin.length} bayt`);
 }
 
+/**
+ * `anchor.rs` gömülü çapası; rustfmt düzeninden BAĞIMSIZ (tek satır · `=` sonrası · dikey). İkinci anahtar
+ * rustfmt'i `&[`i alt satıra taşımaya iter — düzene bağlı desen o gün çapayı "yok" okurdu (§8h).
+ */
+function gomuluCapa(anchor: string): { kokler: Array<{ kid: string; x: string; classes: string[] }>; paketler: Array<{ kid: string; x: string }> | null } {
+  const kokler = [...anchor.matchAll(/\("([^"]+)", "([^"]+)", &\[([^\]]*)\]\)/g)].map((m) => ({
+    kid: m[1],
+    x: m[2],
+    classes: [...m[3].matchAll(/"([^"]+)"/g)].map((c) => c[1]),
+  }));
+  const paketBlok = /BUILTIN_PACKAGE_KEYS: &\[\(&str, &str\)\] =\s*&\[([\s\S]*?)\];/.exec(anchor);
+  const paketler = paketBlok ? [...paketBlok[1].matchAll(/\("([^"]+)", "([^"]+)"\)/g)].map((m) => ({ kid: m[1], x: m[2] })) : null;
+  return { kokler, paketler };
+}
+
 // ── Bölümler ─────────────────────────────────────────────────────────────────
 function bolum0(): void {
   console.log("\n§0 statik aynalar (native gerekmez)");
@@ -208,15 +224,9 @@ function bolum0(): void {
   check("§0d Windows parmak izi sondası satır satır aynı", WINDOWS_PROBE_LINES.length >= 5 && jsonEsit(rustSonda, [...WINDOWS_PROBE_LINES]), `${WINDOWS_PROBE_LINES.length} satır`);
 
   const anchor = rustKaynak("anchor.rs");
-  const rustKokler = [...anchor.matchAll(/\("([^"]+)", "([^"]+)", &\[([^\]]*)\]\)/g)].map((m) => ({
-    kid: m[1],
-    x: m[2],
-    classes: [...m[3].matchAll(/"([^"]+)"/g)].map((c) => c[1]),
-  }));
+  const { kokler: rustKokler, paketler: rustPaket } = gomuluCapa(anchor);
   const tsKokler = ROOT_PUBLIC_KEYS.map((r) => ({ kid: r.kid, x: r.x, classes: [...r.classes] }));
   check("§0e gömülü kök çapası = ROOT_PUBLIC_KEYS", rustKokler.length === tsKokler.length && jsonEsit(rustKokler, tsKokler), `${tsKokler.length} kök`);
-  const paketBlok = /BUILTIN_PACKAGE_KEYS: &\[\(&str, &str\)\] = &\[([\s\S]*?)\];/.exec(anchor);
-  const rustPaket = paketBlok ? [...paketBlok[1].matchAll(/\("([^"]+)", "([^"]+)"\)/g)].map((m) => ({ kid: m[1], x: m[2] })) : null;
   check("§0e' gömülü paket çapası = PACKAGE_PUBLIC_KEYS", !!rustPaket && jsonEsit(rustPaket, PACKAGE_PUBLIC_KEYS.map((k) => ({ ...k }))), `${PACKAGE_PUBLIC_KEYS.length} anahtar`);
 
   const abi = /pub const ABI: u32 = (\d+);/.exec(rustKaynak("api.rs"));
@@ -464,6 +474,16 @@ async function bolum8(dosya: VektorDosyasi | null): Promise<void> {
   const sentetik = rustTypSabitleri([`pub const TYP_HAK: &str = "tekserp-hak";\npub const TYP_BUTUNLUK: &str = "tekserp-butunlukx";\npub const TYP_YENI: &str = "tekserp-yeni";`]);
   const sentetikFark = typFarklari(sentetik, { HAK: "tekserp-hak", BUTUNLUK: "tekserp-butunluk" });
   check("§8g TYP aynası değişmiş değeri ve kayıt defterinde olmayan türü yakalar, eşitte susar", sentetik.length === 3 && sentetikFark.length === 2 && typFarklari(sentetik.slice(0, 1), { HAK: "tekserp-hak" }).length === 0, sentetikFark.join(" · "));
+  const iki = [{ kid: "paket-hazirlik", x: "a" }, { kid: "paket-2026", x: "b" }];
+  const duzenler = [
+    `pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] = &[("paket-hazirlik", "a")];`,
+    `pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] =\n    &[("paket-hazirlik", "a"), ("paket-2026", "b")];`,
+    `pub const BUILTIN_PACKAGE_KEYS: &[(&str, &str)] = &[\n    ("paket-hazirlik", "a"),\n    ("paket-2026", "b"),\n];`,
+  ].map((d) => gomuluCapa(d).paketler);
+  check(
+    "§8h gömülü paket çapası üç rustfmt düzeninde de okunur (tek satır · `=` sonrası · dikey); blok yoksa null",
+    jsonEsit(duzenler[0], iki.slice(0, 1)) && jsonEsit(duzenler[1], iki) && jsonEsit(duzenler[2], iki) && gomuluCapa("pub const X: u8 = 1;").paketler === null,
+  );
 }
 
 async function main(): Promise<void> {

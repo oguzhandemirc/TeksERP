@@ -41,6 +41,15 @@ import {
   type TestAnahtari,
 } from "./lisans-fikstur";
 
+/**
+ * Gömülü çapa vektörlerinin kökü: kid üretim biçiminde DEĞİL (`kok-<yıl>-<n>` — test_lisans_protokol §0i),
+ * yani çapaya hiçbir zaman giremez. Fikstür kökünün kid'i (`kok-2026-1`) gerçek üretim kökünün adıdır;
+ * onunla imzalı vektör, tören günü çapaya girince KOK_BILINMIYOR'dan JWS_IMZA'ya kayardı.
+ */
+function capaDisiKok(): TestAnahtari {
+  return anahtarUret("kok-fikstur-1");
+}
+
 /** `Teks-Erp/` köküne göre (paketlenmiş koşumda `__dirname` tek olduğundan kök çağırandan gelir). */
 export function vektorDosyasiYolu(teksKok: string): string {
   return path.join(teksKok, "native", "lisans-cekirdek", "test-vektorleri", "protokol.json");
@@ -323,7 +332,7 @@ function sertifikaVektorleri(f: Fikstur): Vektor[] {
     v("çapa sınıfsız", alt, { roots: [kokAnahtari(f.kok, [])] }),
     v("çapada hazırlık kökü ÜRETİM'e genişletilmiş", alt, { roots: [kokAnahtari(f.hazirlik, ["TEST", "URETIM"])] }),
     v("çapa anahtarı biçimsiz", alt, { roots: [{ kid: f.kok.kid, x: "abc", classes: ["URETIM"] }] }),
-    v("gömülü çapa: kök tanınmıyor", alt, { roots: null }),
+    v("gömülü çapa: kök tanınmıyor", sertifikaBas(capaDisiKok(), sertifikaYuku(f, f.alt, "ALT")), { roots: null }),
     v("gömülü çapa: hazırlık kid'i, yabancı imza", sertifikaBas(anahtarUret("hazirlik-2026-1"), sertifikaYuku(f, f.alt, "ALT", { siniflar: ["TEST"] })), { roots: null }),
   ];
 }
@@ -390,7 +399,7 @@ function hakVektorleri(f: Fikstur): Vektor[] {
     v("kira belgesi HAK yerine", kiraBas(f)),
     v("çapa boş", hakBas(f), []),
     v("çözümsüz metin", "a.b.c"),
-    v("gömülü çapa: üretim kökü tanınmıyor", hakBas(f), null),
+    v("gömülü çapa: kök tanınmıyor", hakBas(f, {}, capaDisiKok()), null),
   ];
 }
 
@@ -445,7 +454,7 @@ function kiraVektorleri(f: Fikstur): Vektor[] {
     v("HAK belgesi kira yerine", hakBas(f)),
     v("çapa boş (önce ayrıştırma, sonra çapa)", kiraBas(f), []),
     v("çapa boş, biçimsiz metin", "x", []),
-    v("gömülü çapa", kiraBas(f), null),
+    v("gömülü çapa: alt sertifikanın kökü tanınmıyor", kiraBas(f, { altSertifika: sertifikaBas(capaDisiKok(), sertifikaYuku(f, f.alt, "ALT")) }), null),
   ];
 }
 

@@ -67,14 +67,14 @@ export const ASAMA_4 = [
     if (!g.backendSurum) return s(O, `beklenen sürüm verilmedi (--backend-surum); çalışan ${v}`);
     return v === g.backendSurum && r.json?.db === 'UP' ? s(U, v) : s(I, `çalışan ${v} db=${r.json?.db} (beklenen ${g.backendSurum})`);
   } },
-  { no: '4.3', ad: 'korumalı paket: native + imzalı liste + bayt kodu + LICENSE_SERVER_URL hazırlık + SYSTEM', kos: (ag) => ag.tp(PS_PAKET), degerlendir: (r, g) => {
+  { no: '4.3', ad: 'korumalı paket: native + imzalı liste (--paket-kid) + bayt kodu + LICENSE_SERVER_URL (--satici-kok) + SYSTEM', kos: (ag) => ag.tp(PS_PAKET), degerlendir: (r, g) => {
     const u = uzakSonuc(r);
     if (u) return u;
     const m = satirlar(r.cikti);
     if (m.surum === undefined) return s(O, 'PAKET.json okunamadı');
     const kotu = [];
     for (const k of ['korumali', 'native', 'jws', 'liste', 'jsc', 'lisansDizini']) if (m[k] !== 'True') kotu.push(`${k}=${m[k]}`);
-    if (!/^paket-hazirlik/.test(m.butunlukKid ?? '')) kotu.push(`butunlukKid=${m.butunlukKid || 'yok'} (hazırlık anahtarı bekleniyor)`);
+    if (!(m.butunlukKid ?? '').startsWith(g.paketKidOnek)) kotu.push(`butunlukKid=${m.butunlukKid || 'yok'} (beklenen ${g.paketKidOnek}…)`);
     if (m.saticiAdresi !== g.saticiKok) kotu.push(`LICENSE_SERVER_URL=${m.saticiAdresi || 'yok'} (beklenen ${g.saticiKok})`);
     if (m.nodeSahipleri !== 'SYSTEM') kotu.push(`node sahipleri ${m.nodeSahipleri}`);
     return kotu.length ? s(I, kotu.join(', ')) : s(U, `${m.surum} kanal=${m.kanal}`);

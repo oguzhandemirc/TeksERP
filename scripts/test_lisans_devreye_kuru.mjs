@@ -17,6 +17,8 @@
 //      taban dizinine; sahte `ssh` ile AYNI · FARK · ÖLÇÜLEMEDİ · taban ezilmez. Sondalar N6…N10 kırmızı, P3/P4 yeşil
 //   §6 T4 özeti (lib/gozlem.mjs, ağsız) — etkinleşmemiş kurulumun `gecerlilik≠GECERLI` örneği AYRI sayılır, yanlış
 //      pozitif DEĞİLDİR; etkin örnekte aynı durum IHLAL kalır; hiç etkin örnek yoksa ÖLÇÜLEMEDİ. Sondalar N11/N12, P5
+//   §7 BEKLENTİ PARAMETRELERİ (ağsız) — 7.1 HAK sınıfını `--hak-sinif`ten, 4.3 PAKET kid önekini `--paket-kid`ten
+//      bekler (varsayılan bugünkü TEST · paket-hazirlik); TEST HAK'ında patron-bulut hâlâ IHLAL. Sondalar N13/N14, P6
 //
 // Koşum: node scripts/test_lisans_devreye_kuru.mjs     (çıkış 0 yeşil · 1 kırmızı)
 // =============================================================================
@@ -293,6 +295,40 @@ async function t4OzetDenetimi(dizin, tmp) {
   return sonuc;
 }
 
+// ---- §7 beklenti parametreleri: hazırlıktan üretim satıcısına geçişte 7.1/4.3 sabit TEST/paket-hazirlik
+// beklentisiyle sahte IHLAL vermesin; varsayılan bugünkü davranış ----
+async function beklentiDenetimi(dizin) {
+  const { parametreler } = await import(path.join(dizin, 'asama-dogrula.mjs'));
+  const { ASAMA_4 } = await import(path.join(dizin, 'lib/asamalar-b.mjs'));
+  const { ASAMA_7 } = await import(path.join(dizin, 'lib/asamalar-c.mjs'));
+  const sonuc = [];
+  const ekle = (ad, ok, ayrinti = '') => sonuc.push({ ad, ok, ayrinti });
+  const v = parametreler(['--asama=7']).g;
+  const u = parametreler(['--asama=7', '--hak-sinif=URETIM', '--paket-kid=paket-2026', '--satici-kok=https://lisans.etkiliyazilim.com']).g;
+  ekle('§7a varsayılan beklenti bugünkü (TEST · paket-hazirlik); parametre okunur',
+    v.hakSinif === 'TEST' && v.paketKidOnek === 'paket-hazirlik' && u.hakSinif === 'URETIM' && u.paketKidOnek === 'paket-2026', `${v.hakSinif}/${v.paketKidOnek} → ${u.hakSinif}/${u.paketKidOnek}`);
+  const k71 = ASAMA_7.find((k) => k.no === '7.1');
+  const detay = (g, sinif, moduller) => ({ durum: 200, json: { data: { kurulum: { etkin: true, kurulumId: 'k' }, hak: { sinif, moduller }, kira: { kiraId: 'r', bitis: 'b' }, yoklama: { saticiAdresi: g.saticiKok, sonBasari: 'z' } } } });
+  const r = [
+    k71.degerlendir(detay(v, 'TEST', ['production.enabled']), v).sonuc,
+    k71.degerlendir(detay(u, 'URETIM', ['production.enabled', 'patron-bulut']), u).sonuc,
+    k71.degerlendir(detay(v, 'URETIM', ['production.enabled', 'patron-bulut']), v).sonuc,
+    k71.degerlendir(detay(v, 'TEST', ['production.enabled', 'patron-bulut']), v).sonuc,
+  ];
+  ekle('§7b 7.1 sınıfı --hak-sinif\'ten bekler (TEST✓ · URETIM+patron-bulut --hak-sinif=URETIM✓ · URETIM varsayılanla✗ · TEST+patron-bulut✗)', r.join() === 'UYUMLU,UYUMLU,IHLAL,IHLAL', r.join(' · '));
+  const k43 = ASAMA_4.find((k) => k.no === '4.3');
+  const tp = (g, kid) => ({ kod: 0, cikti: ['surum=2.12.1', 'korumali=True', 'kanal=testfabrika', `butunlukKid=${kid}`, 'native=True', 'jws=True', 'liste=True', 'jsc=True', 'lisansDizini=True', `saticiAdresi=${g.saticiKok}`, 'nodeSahipleri=SYSTEM'].join('\n') });
+  const p = [k43.degerlendir(tp(v, 'paket-hazirlik'), v).sonuc, k43.degerlendir(tp(u, 'paket-2026'), u).sonuc, k43.degerlendir(tp(v, 'paket-2026'), v).sonuc];
+  ekle('§7c 4.3 PAKET kid önekini --paket-kid\'ten bekler (hazırlık✓ · paket-2026 --paket-kid=paket-2026✓ · paket-2026 varsayılanla✗)', p.join() === 'UYUMLU,UYUMLU,IHLAL', p.join(' · '));
+  return sonuc;
+}
+
+const BEKLENTI_SONDALAR = [
+  ['N13 7.1 sınıfı sabit TEST', '§7b', [['lib/asamalar-c.mjs', 'if (d.hak?.sinif !== g.hakSinif)', "if (d.hak?.sinif !== 'TEST')"]], false],
+  ['N14 4.3 PAKET kid önekini yok sayar', '§7c', [['lib/asamalar-b.mjs', "startsWith(g.paketKidOnek)", "startsWith('paket-hazirlik')"]], false],
+  ['P6 temiz kopya', null, [], true],
+];
+
 const T4_SONDALAR = [
   ['N11 etkinleşmemiş filtresi kalktı', '§6a', [['lib/gozlem.mjs', "if (String(r.etkin) === 'false') {", 'if (false) {']], false],
   ['N12 etkin örneksiz özet UYUMLU', '§6c', [['lib/gozlem.mjs', 'etkinOrnek === 0 || ', '']], false],
@@ -341,7 +377,16 @@ async function main() {
     const ok = yesilBeklenir ? kotu.length === 0 : kotu.some((x) => x.ad.startsWith(beklenenKirmizi));
     yaz(ok, `${ad} → ${yesilBeklenir ? 'YEŞİL' : `KIRMIZI (${beklenenKirmizi})`} beklenir`, `kırmızı ${kotu.length}${kotu.length ? `: ${kotu.map((x) => x.ad.slice(0, 40)).join(' | ')}` : ''}`);
   }
-  const toplam = SONDALAR.length + VDS_SONDALAR.length + T4_SONDALAR.length;
+  console.log('── §7 beklenti parametreleri (hazırlık → üretim satıcısı geçişi)');
+  for (const x of await beklentiDenetimi(HEDEF)) yaz(x.ok, x.ad, x.ayrinti);
+  for (const [ad, beklenenKirmizi, degistir, yesilBeklenir] of BEKLENTI_SONDALAR) {
+    const { d } = kopyala(`bk-${ad.split(' ')[0]}`, degistir);
+    const kotu = (await beklentiDenetimi(d)).filter((x) => !x.ok);
+    if (!yesilBeklenir) negatif += 1;
+    const ok = yesilBeklenir ? kotu.length === 0 : kotu.some((x) => x.ad.startsWith(beklenenKirmizi));
+    yaz(ok, `${ad} → ${yesilBeklenir ? 'YEŞİL' : `KIRMIZI (${beklenenKirmizi})`} beklenir`, `kırmızı ${kotu.length}${kotu.length ? `: ${kotu.map((x) => x.ad.slice(0, 40)).join(' | ')}` : ''}`);
+  }
+  const toplam = SONDALAR.length + VDS_SONDALAR.length + T4_SONDALAR.length + BEKLENTI_SONDALAR.length;
   console.log(`\n${kirmizi === 0 ? '✅ YEŞİL' : `❌ ${kirmizi} kırmızı`} · ${negatif} negatif + ${toplam - negatif} pozitif sonda`);
   fs.rmSync(TMP, { recursive: true, force: true });
   return kirmizi === 0 ? 0 : 1;
