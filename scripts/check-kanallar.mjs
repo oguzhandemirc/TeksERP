@@ -68,7 +68,6 @@ const DONMUS = {
     'panel.appId': 'com.etkiliyazilim.adnan-sahin-erp',
     'panel.urunAdi': 'Adnan Şahin ERP',
     'panel.paketAdi': 'adnan-sahin-erp-admin',
-    'panel.erpDisAdresi': 'https://adnansahin-erp.etkiliyazilim.com',
     // Electron/.env.production (a84fa180) VITE_API_BASE_URL — paketin arayüzüne gömülü (ölçüldü: 1.3.3 derlemesi).
     'panel.erpAdresi': 'http://192.168.1.250:4000',
     'tablet.androidPaket': 'com.teks.erp.mobil',
@@ -356,7 +355,7 @@ function sondalar(taban, tabanYollar) {
     k.terfiKaynagi = null;
     k.ad = `Kanal ${kod}`;
     for (const a of Object.keys(k.yayin)) k.yayin[a] = k.yayin[a].replaceAll('/adnansahin', `/${kod}`);
-    k.panel = { appId: `com.ornek.${kod}`, urunAdi: `Urun ${kod}`, paketAdi: `urun-${kod}`, erpDisAdresi: '', erpAdresi: `http://10.9.8.${kod.length}:4000` };
+    k.panel = { appId: `com.ornek.${kod}`, urunAdi: `Urun ${kod}`, paketAdi: `urun-${kod}`, erpAdresi: `http://10.9.8.${kod.length}:4000` };
     k.tablet = { ...k.tablet, androidPaket: `com.ornek.${kod}`, gorunenAd: `Tablet ${kod}`,
       erpAdresi: `http://10.9.9.${kod.length}:4000/api`, otaSertifika: `keystore/ota-certs-${kod}/certificate.pem` };
     // Backend kimliği de AYRIK (urunAdi/pm2Ad her kanalda benzersiz — Faz 2b).
@@ -377,7 +376,7 @@ function sondalar(taban, tabanYollar) {
         }
       });
     }],
-    ['P3 uzak erişimsiz kanal (erpDisAdresi boş) YEŞİL', 'yesil', kayitta((o) => { tf(o).panel.erpDisAdresi = ''; })],
+    ['N0 emekli panel.erpDisAdresi (B6) geri gelirse → KIRMIZI (şema kapalı)', 'kirmizi', kayitta((o) => { tf(o).panel.erpDisAdresi = 'https://x.ornek.com'; })],
     ['N1 iki kanal aynı androidPaket → KIRMIZI', 'kirmizi', kayitta((o) => { tf(o).tablet.androidPaket = 'com.teks.erp.mobil'; })],
     ['N2 iki kanal aynı tablet erpAdresi → KIRMIZI', 'kirmizi', kayitta((o) => { tf(o).tablet.erpAdresi = 'http://192.168.1.250:4000/api'; })],
     ['N3 iki kanal aynı panel appId → KIRMIZI', 'kirmizi', kayitta((o) => { tf(o).panel.appId = 'com.etkiliyazilim.adnan-sahin-erp'; })],

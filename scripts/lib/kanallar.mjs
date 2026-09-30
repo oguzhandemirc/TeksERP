@@ -39,7 +39,7 @@ const KANAL_ANAHTARLARI = {
 export const YAYIN_ANAHTARLARI = [
   'panelFeed', 'panelManifest', 'mobilFeed', 'otaManifest', 'apkKunye', 'vdsPanel', 'vdsMobil', 'panelDefter',
 ];
-export const PANEL_ANAHTARLARI = ['appId', 'urunAdi', 'paketAdi', 'erpDisAdresi', 'erpAdresi'];
+export const PANEL_ANAHTARLARI = ['appId', 'urunAdi', 'paketAdi', 'erpAdresi'];
 export const TABLET_ANAHTARLARI = ['androidPaket', 'gorunenAd', 'erpAdresi', 'runtimeVersion', 'otaSertifika'];
 /**
  * Backend paketinin (paketle.ps1 -Musteri <kod>) müşteriye özel dağıtım kimliği. Faz 2b:
@@ -53,13 +53,12 @@ export const BACKEND_ANAHTARLARI = ['urunAdi', 'pm2Ad'];
 /**
  * İki kanal arasında AYNI OLAMAYAN alanlar. `runtimeVersion` bilerek YOK: uyum
  * kimliğidir, kanal kimliği değil (iki kanal aynı native'i taşır ki OTA↔APK
- * kararı birebir prova edilsin). Boş/null değer karşılaştırılmaz (ör. uzak
- * erişimi olmayan kanalın dış adresi).
+ * kararı birebir prova edilsin). Boş/null değer karşılaştırılmaz.
  */
 export const AYRIK_ALANLAR = [
   'ad', 'gorunurEtiket',
   ...YAYIN_ANAHTARLARI.map((a) => `yayin.${a}`),
-  'panel.appId', 'panel.urunAdi', 'panel.paketAdi', 'panel.erpDisAdresi', 'panel.erpAdresi',
+  'panel.appId', 'panel.urunAdi', 'panel.paketAdi', 'panel.erpAdresi',
   'tablet.androidPaket', 'tablet.gorunenAd', 'tablet.erpAdresi', 'tablet.otaSertifika',
   'backend.urunAdi', 'backend.pm2Ad',
 ];
@@ -186,8 +185,7 @@ export function kayitHatalari(kayit) {
       if (bk.eksik.length) h.push(`${on}: ${blok} bloğunda eksik anahtar: ${bk.eksik.join(', ')}`);
       for (const a of anahtarlar) {
         const v = b[a];
-        const bosOlabilir = blok === 'panel' && a === 'erpDisAdresi';
-        if (typeof v !== 'string' || (!bosOlabilir && !v.trim())) h.push(`${on}: ${blok}.${a} boş ya da metin değil`);
+        if (typeof v !== 'string' || !v.trim()) h.push(`${on}: ${blok}.${a} boş ya da metin değil`);
       }
     }
     // pm2 adı sunucuda süreç/servis kimliğidir: boşluk/ters bölü/kabuk taşıyamaz.
@@ -200,10 +198,6 @@ export function kayitHatalari(kayit) {
       h.push(`${on}: tablet.erpAdresi "${erp}" biçimi tutmuyor (http(s)://<host>[:port]/api)`);
     }
     if (typeof erp === 'string' && /(localhost|127\.0\.0\.1)/i.test(erp)) h.push(`${on}: tablet.erpAdresi localhost olamaz`);
-    const dis = k.panel?.erpDisAdresi;
-    if (typeof dis === 'string' && dis !== '' && !/^https?:\/\/[^/\s]+$/.test(dis)) {
-      h.push(`${on}: panel.erpDisAdresi "${dis}" biçimi tutmuyor (http(s)://<host>[:port], sonda / yok)`);
-    }
     // Keşif sonuç vermezse panelin bağlandığı sunucu — tabletin `/api`li adresinin panel karşılığı.
     const panelErp = k.panel?.erpAdresi;
     if (typeof panelErp === 'string' && panelErp !== '' && !/^https?:\/\/[^/\s]+$/.test(panelErp)) {
@@ -218,7 +212,7 @@ export function kayitHatalari(kayit) {
     for (const kod of kodlar) {
       const v = al(kanallar[kod], alan);
       if (bosMu(v)) continue;
-      const anahtar = alan.endsWith('erpAdresi') || alan.endsWith('erpDisAdresi') ? adresNormal(v) : v;
+      const anahtar = alan.endsWith('erpAdresi') ? adresNormal(v) : v;
       if (sahip.has(anahtar)) h.push(`ÇAKIŞMA: ${alan} = "${v}" hem "${sahip.get(anahtar)}" hem "${kod}" kanalında`);
       else sahip.set(anahtar, kod);
     }
@@ -620,7 +614,7 @@ export function panelArtefaktFarki(kayit, kod, artefakt) {
       ['ana süreç', artefakt.anaSurec, 'appId', d.panel.appId], ['ana süreç', artefakt.anaSurec, 'güncelleme adresi', d.yayin.panelFeed],
       ['ana süreç', artefakt.anaSurec, 'ürün adı', d.panel.urunAdi],
       ['arayüz', artefakt.arayuz, 'appId', d.panel.appId], ['arayüz', artefakt.arayuz, 'ürün adı', d.panel.urunAdi],
-      ['arayüz', artefakt.arayuz, 'varsayılan sunucu', d.panel.erpAdresi], ['arayüz', artefakt.arayuz, 'dış adres', d.panel.erpDisAdresi],
+      ['arayüz', artefakt.arayuz, 'varsayılan sunucu', d.panel.erpAdresi],
       ['arayüz', artefakt.arayuz, 'görünür etiket', d.gorunurEtiket],
     ];
     for (const [yer, metin, ne, v] of yabanci) {

@@ -331,8 +331,9 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
   const KAYNAK_DIZINLER = ["Electron/src", "mobil/src", "Teks-Erp/src"];
   const KAYNAK_UZANTI = new Set([".ts", ".tsx"]);
   const EN_AZ_DOSYA = 500; // altına düşerse tarama BOZUK demektir, "hepsi bulunamadı" değil
-  /** Kapalı küme: muafiyet ancak bu iki sınıftan biriyle yazılır. */
-  const MUAF_SINIFLARI = new Set(["ALAN_ADI", "RAPOR_BOLUMU", "ORNEK_METIN", "DINAMIK", "ALINTI"]);
+  /** Kapalı küme: muafiyet ancak bu sınıflardan biriyle yazılır. `EMEKLI`: yayınlanmış notun andığı, sonra
+   *  koddan kaldırılmış ekran adı — yayımlanmış not donuktur, düzeltilmez (kaldıran commit beyan eder). */
+  const MUAF_SINIFLARI = new Set(["ALAN_ADI", "RAPOR_BOLUMU", "ORNEK_METIN", "DINAMIK", "ALINTI", "EMEKLI"]);
   /**
    * Beyanlı muafiyet — tırnak içinde olup da EKRAN ADI OLMAYAN dizeler.
    * Yeni satır, sınıfı ve gerekçesiyle gelir; ölü satır da kırmızıdır.
@@ -360,6 +361,8 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
     { etiket: "bunun yerine pasife alın", sinif: "ALINTI", gerekce: "Onay penceresinin verdiği öğüdün özeti." },
     { etiket: "bunlar kalacak", sinif: "ALINTI", gerekce: "Geri sarma penceresindeki listenin konuşulan adı." },
     { etiket: "bu rakam neden böyle", sinif: "ALINTI", gerekce: "Sonradan bakan kişinin sorusu." },
+    // --- EMEKLI: yayınlanmış notun andığı ad koddan kalktı (not donuk)
+    { etiket: "Patron (Uzaktan Takip)", sinif: "EMEKLI", gerekce: "WEB_BOSS şablonunun adı; tünelle birlikte 2026-09-30'da (B6) katalogdan çıktı." },
   ];
 
   let dosyaSayisi = 0;

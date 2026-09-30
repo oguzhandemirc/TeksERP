@@ -21,7 +21,7 @@
 #   .\paketle.ps1                      # node_modules DAHIL (varsayilan, onerilen)
 #   .\paketle.ps1 -NodeModulesHaric    # ince paket; sunucu npm ci kosar (internet ister)
 #   .\paketle.ps1 -Cikti D:\paketler   # zip'in yazilacagi klasor
-#   .\paketle.ps1 -WebPanelHaric      # web panelini pakete KOYMA (asagidaki nota bak)
+#   .\paketle.ps1 -WebPanelHaric      # EMEKLI (B6): etkisiz, web paneli zaten pakete girmez
 #   .\paketle.ps1 -Prova              # PROVA paketi: etiket/push YOK, repo DEGISMEZ (asagida)
 #
 # PROVA KIPI (-Prova): yayin provasi icin paket (bkz. arsiv 2026-09-27 thinkpad-1 provasi).
@@ -50,14 +50,9 @@
 #   * prisma\migrations CALISMA ZAMANINDA da okunuyor (process.cwd()/prisma/
 #     migrations), yalniz migrate deploy icin degil. Cikarilamaz.
 #   * .env PAKETE GIRMEZ. Sunucunun kendi .env'i yerinde korunur (kur.ps1 tasir).
-#   * WEB PANELI (dist-web) PAKETE GIRER ve backend ile AYNI ZIP'te gider.
-#     Gerekce: panel ile backend'in surumleri AYRISAMAZ. Ayri bir kanaldan
-#     yayinlansaydi (VPS'e kopyalama gibi) SPA bir surumu, API baska bir surumu
-#     konusabilirdi ve arizanin belirtisi "ekran bos" olurdu - teshis edilecek iz
-#     birakmadan. Ayni pakette gitmesi bu sinifi TAMAMEN kapatir.
-#     ⚠️ Eksik olursa ariza SESSIZDIR: `WEB_DIST_DIR` var olmayan bir klasoru
-#     gosterir, `express.static` sessizce no-op olur ve kok (/) panelin YERINE
-#     durum sayfasini basar. Bu yuzden derleme basarisizsa paket URETILMEZ.
+#   * WEB PANELI (dist-web) PAKETE GIRMEZ (2026-09-30, B6): tek tuketicisi emekli
+#     tunelin patron kabuguydu. Web hedefi yalniz demo imajinda (Dockerfile) derlenir;
+#     eski .env'deki WEB_DIST_DIR'i kur.ps1 uyarir.
 # =============================================================================
 # PowerShell 7 SART (uc argumanli Join-Path, $IsWindows): 5.1'de npm ci'den SONRA
 # anlasilmaz hatayla duser; -Korumali Windows x64'te bile "bu hostta uretilemez" derdi.
@@ -342,32 +337,9 @@ if ($Korumali) {
   Write-Host "  araclar karartildi: kaynak yolu yorumu = 0"
 }
 
-# --- Web paneli (Electron/dist-web) -----------------------------------------
-# Ayni React kaynagi, Electron kabugu OLMADAN (Electron\vite.config.web.ts).
-# Backend onu `WEB_DIST_DIR` ile ayni origin'den servis eder -> CORS/karisik-icerik/
-# sunucu-adresi ucluSU tamamen duser ve patron paneli de bu yoldan yayinlanir.
-$elektron = Join-Path $repo "Electron"
-$webDist  = Join-Path $elektron "dist-web"
-if ($WebPanelHaric) {
-  Adim "[2b] Web paneli ATLANDI (-WebPanelHaric)."
-  Write-Host "  UYARI: WEB_DIST_DIR tanimliysa sunucuda panel ACILMAZ, kok (/) durum sayfasi olur." -ForegroundColor Yellow
-} else {
-  Adim "[2b] Web paneli derleniyor (Electron -> dist-web)..."
-  if (-not (Test-Path (Join-Path $elektron "node_modules"))) {
-    Fail "Electron\node_modules yok - web paneli derlenemez. 'npm install' kos ya da -WebPanelHaric ver."
-  }
-  if (Test-Path $webDist) { Remove-Item $webDist -Recurse -Force }  # bayat cikti gitmesin
-  Push-Location $elektron
-  npm run build:web
-  $webRc = $LASTEXITCODE
-  Pop-Location
-  if ($webRc -ne 0) { Fail "Web paneli derlemesi basarisiz - paket uretilmedi." }
-  # ⚠️ Cikti KONTROL EDILIR: derleme 0 dondurup bos klasor birakirsa ariza
-  # sunucuda "panel yerine durum sayfasi" olarak, haftalar sonra gorunurdu.
-  if (-not (Test-Path (Join-Path $webDist "index.html"))) {
-    Fail "dist-web\index.html yok - web paneli derlemesi bos cikti uretti."
-  }
-}
+# --- Web paneli: 2026-09-30'dan (B6) beri pakete GIRMEZ ----------------------
+# -WebPanelHaric geriye uyum icin kabul edilir (runbook komutlari kirilmasin), etkisizdir.
+if ($WebPanelHaric) { Write-Host "  (-WebPanelHaric etkisiz: web paneli artik pakete girmez)" -ForegroundColor DarkGray }
 
 # --- [3/6] Calisma zamani dosyalari -----------------------------------------
 Adim "[3/6] Calisma zamani dosyalari toplaniyor..."
@@ -418,13 +390,6 @@ Copy-Item "$proj\public" "$stage\public" -Recurse
 Copy-Item "$proj\assets" "$stage\assets" -Recurse
 Write-Host "  public+assets: durum sayfasi + etiket fontlari"
 
-# Web paneli - sunucuda `app\dist-web` olur; .env'deki WEB_DIST_DIR bunu gosterir.
-if (-not $WebPanelHaric) {
-  Copy-Item $webDist "$stage\dist-web" -Recurse
-  $webSayi = (Get-ChildItem "$stage\dist-web" -Recurse -File).Count
-  $webMB = [math]::Round(((Get-ChildItem "$stage\dist-web" -Recurse -File | Measure-Object Length -Sum).Sum) / 1MB, 1)
-  Write-Host "  dist-web    : $webSayi dosya / $webMB MB  (WEB_DIST_DIR bunu gosterir)"
-}
 
 # manifest / calistirici
 Copy-Item "$proj\package.json"        "$stage\"

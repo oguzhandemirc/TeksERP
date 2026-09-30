@@ -30,7 +30,6 @@ export interface PanelChannel {
   appId: string;
   productName: string;
   packageName: string;
-  publicErpUrl: string;
   erpUrl: string;
   updateFeedUrl: string;
   windowTitle: string;
@@ -40,7 +39,7 @@ interface RegistryChannel {
   ad: string;
   gorunurEtiket: string | null;
   yayin: { panelFeed: string };
-  panel: { appId: string; urunAdi: string; paketAdi: string; erpDisAdresi: string; erpAdresi: string };
+  panel: { appId: string; urunAdi: string; paketAdi: string; erpAdresi: string };
 }
 
 const channels = registry.kanallar as unknown as Record<string, RegistryChannel>;
@@ -63,7 +62,6 @@ export function panelChannel(code: string): PanelChannel {
     appId: c.panel.appId,
     productName: c.panel.urunAdi,
     packageName: c.panel.paketAdi,
-    publicErpUrl: c.panel.erpDisAdresi,
     erpUrl: c.panel.erpAdresi,
     updateFeedUrl: c.yayin.panelFeed,
     windowTitle: windowTitleOf(c.panel.urunAdi, c.gorunurEtiket),

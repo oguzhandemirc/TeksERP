@@ -11,7 +11,6 @@ export {
   label as CHANNEL_LABEL,
   appId as APP_ID,
   productName as PRODUCT_NAME,
-  publicErpUrl as PUBLIC_ERP_URL,
   erpUrl as DEFAULT_ERP_URL,
   updateFeedUrl as UPDATE_FEED_URL,
   windowTitle as WINDOW_TITLE,

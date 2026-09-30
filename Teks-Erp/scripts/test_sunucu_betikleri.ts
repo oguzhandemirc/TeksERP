@@ -314,17 +314,19 @@ for (const yol of SUNUCU_PS1) {
       ilk.some((k) => k.includes('$sirYollari = @(') && k.includes('"$Kok\\yedek-anahtar"')));
 }
 
-// §11 — web paneli + API güvenlik duvarı (bulgu 13, 18). `dist-web` pakette ama
-//   `.env`e WEB_DIST_DIR yazılmıyordu (panel sunulmuyordu); 4000 kuralı elle ve
-//   profilsiz açılıyordu; Tailscale-In kuralı Private profilde her portu açabiliyor.
+// §11 — web paneli + API güvenlik duvarı (bulgu 13, 18). Web paneli 2026-09-30'dan (B6) beri fabrika
+//   paketine GİRMEZ (tek tüketicisi emekli tünelin patron kabuğuydu); 4000 kuralı elle ve profilsiz
+//   açılıyordu; Tailscale-In kuralı Private profilde her portu açabiliyor.
 {
   const ilk = psTara(readFileSync(join(KOK, "deploy/ilk-kurulum.ps1"), "utf8")).satirlar.map((s) => s.kod);
   const kur = psTara(readFileSync(join(KOK, "deploy/kur.ps1"), "utf8")).satirlar.map((s) => s.kod);
-  check("§11a ⭐ yeni .env WEB_DIST_DIR'i kurulum kökünden MUTLAK yazar (-WebPanelKapali hariç); mevcut .env'de yoksa söyler",
-    ilk.some((k) => k.includes("if (-not $WebPanelKapali) { $satirlar += \"WEB_DIST_DIR=") && k.includes("/app/dist-web")) &&
-      ilk.some((k) => k.includes("mevcut .env'de WEB_DIST_DIR yok")));
-  check("§11b ⭐ kur.ps1 WEB_DIST_DIR'in index.html taşıdığını ölçer (yoksa kök sessizce durum sayfası olur)",
-    kur.some((k) => k.includes("WEB_DIST_DIR\\s*=")) && kur.some((k) => k.includes('(Join-Path $wd "index.html")')));
+  const pak = psTara(readFileSync(join(KOK, "deploy/paketle.ps1"), "utf8")).satirlar.map((s) => s.kod);
+  check("§11a ⭐ (B6) paket web panelini TAŞIMAZ ve yeni .env'e WEB_DIST_DIR YAZILMAZ",
+    !pak.some((k) => k.includes("build:web") || k.includes("\\dist-web")) &&
+      !ilk.some((k) => k.includes("WEB_DIST_DIR")));
+  check("§11b ⭐ (B6) kur.ps1 eski .env'deki emekli anahtarları (WEB_DIST_DIR · REMOTE_PORT · CF_ACCESS_*) SÖYLER, .env'e dokunmaz",
+    kur.some((k) => k.includes("@('WEB_DIST_DIR', 'REMOTE_PORT', 'CF_ACCESS_ENABLED', 'CF_ACCESS_TEAM_DOMAIN', 'CF_ACCESS_AUD')")) &&
+      kur.some((k) => k.includes("emekli (fabrika web paneli + uzaktan erisim tuneli kaldirildi)")));
   const profilVars = ilk.find((k) => k.includes("[string[]]$ApiAgProfili =")) ?? "";
   const adresVars = ilk.find((k) => k.includes("[string[]]$ApiIzinliAdres =")) ?? "";
   check("§11c ⭐ API kuralı varsayılanı Domain+Private ve LocalSubnet (Public ve 'Any' DEĞİL), kural bu parametrelerle kurulur",

@@ -1,17 +1,9 @@
 /**
  * 2FA KURULUM BAĞLANTISI — yöneticinin kullanıcıya ilettiği adres.
  *
- * ⚠️ ADRESİ `window.location`TAN TÜRETMEK YANLIŞTIR. Yönetici bu bağlantıyı
- * çoğunlukla FABRİKA İÇİNDEN, Electron panelinden üretir; orada konum
- * `file://` (Electron) ya da `http://192.168.1.250:4000` (LAN web) olur ve
- * ikisi de kullanıcının DIŞARIDAN açabileceği bir adres DEĞİLDİR — üstelik
- * hata sessizdir: bağlantı yöneticinin makinesinde çalışır, patronun
- * telefonunda açılmaz.
- *
- * Bu yüzden dış adres AÇIKÇA yapılandırılır (`VITE_PUBLIC_APP_URL`, derleme
- * anında gömülür). Yapılandırılmamışsa mevcut origin'e düşülür ve bu, LAN'da
- * kurulum yapan kurulumlar için doğru davranıştır (uzaktan erişim yoksa
- * kullanıcı zaten fabrikadadır).
+ * Kök açıkça verilebilir (`VITE_PUBLIC_APP_URL`, yalnız web derlemesinde gömülür); verilmezse
+ * mevcut origin'e düşülür — fabrika dış adresi tünelle birlikte emekli (B6), kurulum LAN'dadır.
+ * Electron'da konum `file://`dir; oradan bağlantı ÜRETİLMEZ (aşağıdaki boş dönüş sorunu görünür kılar).
  */
 /** Kurulum sayfasının hash-router yolu — router, App kapısı ve URL üreteci
  *  AYNI sabitten beslenir. Üç yerde elle yazılsaydı biri değişince bağlantı

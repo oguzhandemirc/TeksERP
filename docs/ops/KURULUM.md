@@ -77,7 +77,7 @@ sorulamaz; dosyayı yalnız yöneticinin okuyacağı yerde oluştur, kurulumdan 
 
 ⚠️ **Güvenlik duvarı:** API kuralı (`TeksERP API 4000`) yalnız `Domain,Private` + `LocalSubnet`
 (`-ApiAgProfili` / `-ApiIzinliAdres`); Tailscale kuruluysa `Tailscale-In` kuralı ölçülür (runbook §2.2).
-**Web paneli:** yeni `.env`e `WEB_DIST_DIR` (mutlak) yazılır; istenmiyorsa `-WebPanelKapali`.
+**Web paneli:** fabrika paketi web panelini taşımaz (2026-09-30, B6); `.env`e `WEB_DIST_DIR` yazılmaz.
 
 ⚠️ **Sır dosyalarının izni** (`.env` · `db-credentials.json` · `backups\` · `rclone.conf`) yalnız
 SYSTEM + Administrators'a daraltılır ve ölçülür; kalan genişlik "YAPILMADAN KALANLAR"da yazar.

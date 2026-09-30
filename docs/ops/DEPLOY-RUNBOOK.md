@@ -312,10 +312,10 @@ New-NetFirewallRule -DisplayName "TeksERP mDNS 5353" -Direction Inbound `
 > Kontrol: `Get-NetFirewallRule -DisplayName Tailscale-In | Get-NetFirewallInterfaceFilter` ·
 > `Get-NetConnectionProfile`.
 
-> **Web paneli (`dist-web`):** paket paneli taşır; backend onu yalnız `.env`de `WEB_DIST_DIR`
-> MUTLAK yolu varsa sunar (yoksa kök `/` durum sayfasıdır). `ilk-kurulum.ps1` yeni `.env`e
-> `WEB_DIST_DIR="<kök>/app/dist-web"` yazar (`-WebPanelKapali` ile yazmaz), var olan `.env`e dokunmaz
-> ve eksikse söyler; `kur.ps1` her sürümde yolun `index.html` taşıdığını ölçer.
+> **Web paneli (`dist-web`):** 2026-09-30'dan (B6) beri paket paneli TAŞIMAZ ve `ilk-kurulum.ps1`
+> `.env`e `WEB_DIST_DIR` yazmaz (`-WebPanelKapali` / `-WebPanelHaric` geriye uyum için kabul edilir,
+> etkisizdir). Eski `.env`de `WEB_DIST_DIR` · `REMOTE_PORT` · `CF_ACCESS_*` kaldıysa `kur.ps1` söyler
+> (`.env`e dokunmaz) — satırları elle silin.
 
 > **Keşif gerçekten çalışıyor mu?** Tek ölçüm noktası:
 > `GET /api/admin/health` → `discovery.mdns.reason`. `"ok"` değilse ilan
