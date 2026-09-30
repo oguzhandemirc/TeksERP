@@ -6,7 +6,8 @@
 // anahtarıyla kullanılır, anahtar o anda değişir (eski anahtar emekli: sonraki isteği 403) ve zincir yeniden başlar.
 // Aynı kod + aynı anahtarla tekrar (ağ tekrarı) aynı kirayı alır; başka anahtarla ikinci kullanım 409.
 // İlk kurulum kabulü (Ek-7 §5): kodu TÜKETECEK istek kurulum imzalı kabul belgesi taşımalı (yoksa 409 KABUL_GEREKLI);
-// kabul etkinleştirmeyle aynı tx'te kurulum kaydına `SOZLESME_KABUL_EDILDI` olarak yazılır.
+// kabul etkinleştirmeyle aynı tx'te kurulum kaydına `SOZLESME_KABUL_EDILDI` olarak yazılır. Kapı iki yerde: ucuz ön
+// denetim (nonce'tan önce) ve kodu tüketen claim'in kendisi (tx içi, taze satırla).
 import type { EtkinlestirmeKodu, KodTuru, Kurulum, Prisma, TasimaTalebi } from "@prisma/client";
 import { verifyAcceptance, type AcceptanceDoc, type AcceptanceRejection, type ActivateRequest, type LicenseResponse } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
@@ -47,10 +48,12 @@ interface VerifiedAcceptance {
   readonly belge: string;
 }
 
+const acceptanceRequired = (neden: AcceptanceRejection): VendorError => new VendorError(409, "KABUL_GEREKLI", ACCEPTANCE_MESSAGES[neden], { neden });
+
 /** Kodu tüketecek etkinleştirmenin kabul kapısı — saf, nonce ve kilitten ÖNCE koşar (red defter tüketmez). */
 function requireAcceptance(body: ActivateRequest): VerifiedAcceptance {
   const r = verifyAcceptance(body.kabul, { publicKeyX: body.acikAnahtar });
-  if (!r.ok || !body.kabul) throw new VendorError(409, "KABUL_GEREKLI", ACCEPTANCE_MESSAGES[r.ok ? "YOK" : r.neden], { neden: r.ok ? "YOK" : r.neden });
+  if (!r.ok || !body.kabul) throw acceptanceRequired(r.ok ? "YOK" : r.neden);
   return { doc: r.doc, belge: body.kabul };
 }
 
@@ -98,7 +101,8 @@ interface Activated {
   readonly event: "ETKINLESTI" | "YENIDEN_ETKINLESTI" | "TASINDI";
 }
 
-async function activateInTx(
+/** Kilitli tx gövdesi; dışa açık yalnız bekçi içindir (`test_etkinlestirme_kabul` §7 tx içi kabul kapısını sınar). */
+export async function activateInTx(
   tx: Tx,
   ctx: VendorContext,
   g: { codeId: string; installationDbId: string; kid: string; body: ActivateRequest; acceptance: VerifiedAcceptance | null; nowMs: number },
@@ -112,6 +116,8 @@ async function activateInTx(
     return { kind: "replay", response: await replayOrConflict(tx, ctx, code, inst, g.kid, g.nowMs) };
   }
   assertUsable({ code, inst, kid: g.kid, role: await bodyKeyRoleTx(tx, inst, g.kid), nowMs: g.nowMs });
+  // Ön denetim tx DIŞI okumayla karar verdi (kod tüketilmiş göründüyse kabul sorulmadı); kodu tüketen claim kabulsüz koşmaz.
+  if (!g.acceptance) throw acceptanceRequired("YOK");
   const claim = await tx.etkinlestirmeKodu.updateMany({
     where: { id: code.id, durum: "AKTIF" },
     data: { durum: "KULLANILDI", kullanimZamani: new Date(g.nowMs), kullananAnahtarKimligi: g.kid },

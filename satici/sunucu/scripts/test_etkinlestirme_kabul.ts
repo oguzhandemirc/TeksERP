@@ -5,14 +5,16 @@
 // kod/nonce TÜKETİLMEZ (ucuz ön denetim). Kabullü etkinleştirme kabulü AYNI tx'te kurulum kaydına
 // `SOZLESME_KABUL_EDILDI` olarak yazar (kaynakKayitId = kabulId, kanıt belge kod taşımaz, etkinleşmeden 1 ms önce);
 // tüketilmiş kodun ağ tekrarı kabul istemez; çevrimdışı zarf (/v1/cevrimdisi) aynı kapıdan geçer; aynı kabul ikinci
-// etkinleştirmede ikinci satır doğurmaz; portal kurulum ayrıntısı kabulü taşır.
+// etkinleştirmede ikinci satır doğurmaz; portal kurulum ayrıntısı kabulü taşır; kodu TÜKETEN claim kabulün yokluğunu tx
+// İÇİNDE de denetler (ön denetimin bayat okumasına güvenilmez — §7).
 // NEGATİF SONDA (dosya dışı mutasyon, geri alındı; sonuç commit mesajında): S1 kapı kaldırıldı (`requireAcceptance`
-// çağrısı yok) · S2 kutu denetimi gevşetildi (eksik kutu kabul) · S3 kabul satırı yazılmadı.
+// çağrısı yok) · S2 kutu denetimi gevşetildi (eksik kutu kabul) · S3 kabul satırı yazılmadı · S4 tx içi kapı kaldırıldı.
 // Koşum: npx tsx scripts/test_etkinlestirme_kabul.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import {
   ACCEPTANCE_TEXTS,
+  ActivateRequestSchema,
   ENDPOINTS,
   TYP,
   installationKeyId,
@@ -136,6 +138,35 @@ async function main(): Promise<void> {
     const det = (await installationDetail(prisma, k.kurulumDbId)) as { kurulumKaydi?: Array<{ olay: string; ayrinti: unknown }> };
     const portalKabul = det.kurulumKaydi?.find((r) => r.olay === ACCEPTANCE_EVENT);
     kontrol("§6a ayrıntının kurulum kaydında kabul satırı + kabul eden", !!portalKabul && JSON.stringify(portalKabul.ayrinti).includes("Bekçi Yetkili"));
+
+    console.log("\n§7 ⭐ tx İÇİ kapı: kodu tüketen claim kabulsüz koşmaz (ön denetim tx dışı okumaya dayanır)");
+    const { activateInTx } = await import("../src/services/activation.service");
+    const { VendorError } = await import("../src/lib/errors");
+    const k3 = await kurulumFiksturu(ctx);
+    temizlenecek.push(k3.kurulumDbId);
+    const kod3 = await prisma.etkinlestirmeKodu.findFirstOrThrow({ where: { kurulumId: k3.kurulumDbId } });
+    const anahtar3 = kurulumAnahtariUret();
+    const govde3 = ActivateRequestSchema.parse(etkinlestirmeGovdesi({ kod: k3.kod, kurulumId: k3.kurulumId, anahtar: anahtar3, parmakIzi: f.parmakIzi, kabul: null }));
+    const txRed = await prisma
+      .$transaction((tx) => activateInTx(tx, ctx, { codeId: kod3.id, installationDbId: k3.kurulumDbId, kid: anahtar3.kid, body: govde3, acceptance: null, nowMs: Date.now() }))
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    const kod3Sonra = await prisma.etkinlestirmeKodu.findUniqueOrThrow({ where: { id: kod3.id } });
+    const kayit3 = await prisma.kurulumKaydi.count({ where: { kurulumId: k3.kurulumDbId } });
+    kontrol(
+      "§7a kabulsüz (acceptance null) tx → 409 KABUL_GEREKLI (neden YOK) · kod AKTIF kalır · kurulum kaydı yazılmaz",
+      txRed instanceof VendorError && txRed.status === 409 && txRed.code === "KABUL_GEREKLI" && txRed.extra?.neden === "YOK" && kod3Sonra.durum === "AKTIF" && kod3Sonra.kullananAnahtarKimligi === null && kayit3 === 0,
+      `${txRed instanceof VendorError ? `${txRed.status} ${txRed.code}` : txRed === null ? "tx GEÇTİ" : String(txRed)} · kod ${kod3Sonra.durum} · kayıt ${kayit3}`,
+    );
+    const ok3 = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
+      kurulumId: k3.kurulumId,
+      amac: "etkinlestir",
+      anahtar: anahtar3,
+      govde: etkinlestirmeGovdesi({ kod: k3.kod, kurulumId: k3.kurulumId, anahtar: anahtar3, parmakIzi: f.parmakIzi, kabul: kabulBelgesi(anahtar3) }),
+    });
+    kontrol("§7b aynı kod kabullü istekle etkinleşir (red kodu tüketmemişti) → 200, kabul satırı yazılır", ok3.status === 200 && (await prisma.kurulumKaydi.count({ where: { kurulumId: k3.kurulumDbId, olay: ACCEPTANCE_EVENT } })) === 1, `${ok3.status} ${ok3.kod ?? ""}`);
   } finally {
     await sunucu.durdur();
     await temizleKurulumlar(temizlenecek, ortam.kidler);
