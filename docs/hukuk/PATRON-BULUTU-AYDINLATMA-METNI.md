@@ -1,13 +1,13 @@
 # Patron Bulutu Aydınlatma Metni (uygulamada gösterilir)
 
-> **TASLAK — AVUKAT ONAYI BEKLİYOR.** Claude tarafından hazırlanmıştır; hukuki görüş değildir. Aydınlatma yükümlülüğü (KVKK md. 10) **veri sorumlusu olan fabrikanındır**; bu metin fabrika adına, onun onayıyla gösterilecek şablondur. `{…}` yer tutucuları uygulamada o Tesis'in bilgisiyle doldurulur; `[DOLDURULACAK]` ticari ya da eksik bilgidir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Aydınlatma yükümlülüğü (KVKK md. 10) **veri sorumlusu olan fabrikanındır**; bu metin fabrika adına, onun onayıyla gösterilecek şablondur. `{…}` yer tutucuları uygulamada o Tesis'in bilgisiyle doldurulur; `[DOLDURULACAK]` ticari ya da eksik bilgidir.
 >
-> Metin kimliği: `PBAM-2026.1-taslak` · `PATRON-BULUTU-VERI-ISLEME-EKI.md`'ye dayanır.
+> Metin kimliği: `PBAM-2026.1-taslak` · Ek-6/C · Patron Bulutu Veri İşleme Eki'ne (Ek-6) dayanır.
 
 > **Avukat şu maddelere özellikle baksın**
 > - **Aydınlatma Yükümlülüğünün Yerine Getirilmesinde Uyulacak Usul ve Esaslar Hakkında Tebliğ:** Metin katmanlı (kısa ekran + tam metin) kurgulandı. Kısa ekran Tebliğ'in asgari içeriğini karşılıyor mu?
 > - **Aydınlatma ile açık rıza ayrımı:** Metinde onay kutusu YOK; yalnız "okudum" teyidi var. Bu ayrım Kurul'un yaklaşımına uygun mu?
-> - **İlgili kişi grupları:** Bu metin yalnız Bulut Hesabı sahiplerine gösterilir. Buluttaki cari yetkilileri ve keşideciler için fabrikanın kendi genel aydınlatma metnine bulut işlemesi eklenmeli mi (§5)?
+> - **İlgili kişi grupları:** Bu metin yalnız Bulut Hesabı sahiplerine gösterilir. Buluttaki cari yetkilileri ve keşideciler için fabrikanın kendi genel aydınlatma metnine bulut işlemesi eklenmeli mi (§4)?
 > - **Veri sorumlusu kimliği:** Fabrika şahıs işletmesiyse kimlik bilgisinin nasıl yazılacağı.
 
 ---
@@ -71,13 +71,7 @@
 
 Metin sürümü: `PBAM-2026.1` · Yürürlük: [DOLDURULACAK]
 
-## 4. Uygulama için teknik notlar (metnin parçası değildir)
-
-- Kısa ve tam metin **sunucudan** gelir (sürüm kimliği + SHA-256 özeti); uygulama metni gömülü taşımaz. Böylece metin değişince yeni sürüm gerekmez ve okundu kaydı hangi metnin gösterildiğini kanıtlar.
-- `{…}` yer tutucuları Tesis kaydından doldurulur; eksik alan varsa metin gösterilmez ve tesis yöneticisine "aydınlatma bilgileri eksik" uyarısı çıkar (eksik kimlikle metin yayınlanmaz).
-- Okundu teyidi hesap güvenlik kaydına yazılır; bu bir rıza değildir, kullanıcıya rıza gibi sunulmaz.
-
-## 5. Fabrikanın kendi aydınlatma metnine eklenecek cümle (öneri)
+## 4. Fabrikanın kendi aydınlatma metnine eklenecek cümle (öneri)
 
 Buluttaki cari yetkilileri ve keşideciler uygulamayı kullanmaz; onlar için aydınlatma, fabrikanın müşteri ve tedarikçilerine verdiği genel aydınlatma metniyle yapılır. O metne eklenmesi önerilen cümle [avukat]:
 

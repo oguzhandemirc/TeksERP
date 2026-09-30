@@ -1,8 +1,8 @@
 # TeksERP İlk Kurulum Kabul Metni
 
-> **TASLAK — AVUKAT ONAYI BEKLİYOR.** Bu metin panelde ilk kurulumda gösterilecek kısa kabul ekranının taslağıdır ve kabul kaydının nereye, hangi alanlarla yazılacağını tanımlar. Kullanıcının 2026-09-29 kararına ("ilk kurulumda panelde kabul adımı; kabul kaydı kurulum geçmişine") göre Claude tarafından hazırlanmıştır; hukuki görüş değildir. Köşeli parantezli yerler kurulumun kendi bilgisinden doldurulur ya da `[DOLDURULACAK]`tır.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin panelde ilk kurulumda gösterilecek kısa kabul ekranının taslağıdır ve kabul kaydının nereye, hangi alanlarla yazılacağını tanımlar. Taslaktır; hukuki görüş değildir. Köşeli parantezli yerler kurulumun kendi bilgisinden doldurulur ya da `[DOLDURULACAK]`tır.
 >
-> Metin kimliği: `KM-2026.1-taslak`
+> Metin kimliği: `KM-2026.1-taslak` · Ek-7
 
 > **Türk hukuku: FSEK, TBK, KVKK, TCK 244 açısından avukat şu maddelere özellikle baksın**
 > - **FSEK md. 52 ve 5070 sayılı Kanun md. 5:** ekranda "kabul ediyorum" demek yazılı şekil ve imza yerine geçmez. Taslak bu ekranı asıl imzalı sözleşmenin TEYİDİ olarak kurdu (§1). Asıl sözleşme imzalanmadan kurulum yapılırsa bu kabulün hukuki değeri nedir?
@@ -18,7 +18,7 @@
 
 1.1. Kabul ekranı yönetim panelinde gösterilir: **ilk kurulumda, lisans etkinleştirme adımından önce**. Ekranı yalnız lisans yönetme yetkisi olan yönetici görür.
 
-1.2. Ekran, asıl sözleşmenin yerine geçmez. Asıl sözleşme ıslak ya da güvenli elektronik imzayla kurulur (`SON-KULLANICI-LISANS-SOZLESMESI.md` §3). Bu ekran, o sözleşmenin **bu Kurulum'a** uygulandığını ve yaptırım hükümlerinin ayrıca okunduğunu teyit eder.
+1.2. Ekran, asıl sözleşmenin yerine geçmez. Asıl sözleşme ıslak ya da güvenli elektronik imzayla kurulur (Lisans Sözleşmesi §3). Bu ekran, o sözleşmenin **bu Kurulum'a** uygulandığını ve yaptırım hükümlerinin ayrıca okunduğunu teyit eder.
 
 1.3. Metinlerden birinin yeni sürümü yayımlanırsa ekran, lisans yetkisi olan bir yöneticinin bir sonraki girişinde yeniden gösterilir (§6).
 
@@ -64,7 +64,7 @@
 
 ## 3. Vazgeçilirse
 
-Kabul edilmeden lisans etkinleştirilmez. Kurulum etkinleşmemiş sayılır ve `SON-KULLANICI-LISANS-SOZLESMESI.md` §8'deki kurallarla işler. Gözlem kipinde hiçbir işlem engellenmez; zorlama kipinde ilk açılıştan 30 gün sonra Kısıtlı Kip'e geçilir. Kurulumda henüz iş verisi yoktur; olsa da erişim açıktır. Yönetici ekrana istediği zaman lisans sayfasından dönebilir.
+Kabul edilmeden lisans etkinleştirilmez. Kurulum etkinleşmemiş sayılır ve Lisans Sözleşmesi §8'deki kurallarla işler. Gözlem kipinde hiçbir işlem engellenmez; zorlama kipinde ilk açılıştan 30 gün sonra Kısıtlı Kip'e geçilir. Kurulumda henüz iş verisi yoktur; olsa da erişim açıktır. Yönetici ekrana istediği zaman lisans sayfasından dönebilir.
 
 ## 4. Kabul kaydı
 
@@ -85,9 +85,7 @@ Kabul edilmeden lisans etkinleştirilmez. Kurulum etkinleşmemiş sayılır ve `
 - (a) **Fabrika tarafında:** Kurulum'un kendi kabul kayıtlarına. Bu bir defterdir: kayıt değiştirilmez, silinmez; yeni kabul yeni satırdır. Panelde "Lisans → Sözleşmeler" altında görünür, PDF olarak indirilebilir.
 - (b) **Lisans Veren tarafında:** imzalı istekle Lisans Portalı'ndaki **kurulum geçmişine**. Kurulum çevrimdışıysa kayıt yerelde bekler; ilk başarılı bağlantıda, en geç etkinleştirme isteğiyle birlikte gönderilir. Panel aktarma ya da QR yolu kullanılıyorsa kayıt o zarfın içinde gider.
 
-4.3. Kabulün sistem günlüğüne (audit) de bir ayak izi düşer, ama kabulün **kaynağı** §4.2'deki kayıttır; audit'ten kabul bilgisi türetilmez.
-
-4.4. Kabul kaydındaki kişisel veri: `VERI-ISLEME-EKI.md` Bölüm A.5 ve Bölüm D.
+4.3. Kabul kaydındaki kişisel veri: Veri İşleme Eki (Ek-3) Bölüm A.5 ve Bölüm D.
 
 ## 5. Kurulum sırasındaki yer
 
@@ -98,8 +96,3 @@ Kabul edilmeden lisans etkinleştirilmez. Kurulum etkinleşmemiş sayılır ve `
 6.1. Metinlerden birinin yeni sürümü, Lisans Belgesi ya da Kullanım Onayı ile bildirilir. Lisans yetkisi olan bir yönetici bir sonraki girişinde yalnız **değişen** belgeleri yeniden onaylar. Ekranda değişikliklerin kısa özeti gösterilir.
 
 6.2. Yeni sürüm onaylanana kadar önceki kabul edilen sürüm geçerlidir. Onay vermemek yazılımı kısıtlamaz. Lisans Veren yeni sürümü yalnız yeni bakım yılı ya da yeni lisans için şart koşabilir [avukat: TBK — sözleşmenin tek taraflı değiştirilemeyeceği].
-
-## 7. Uygulayıcılar için notlar
-
-- Lisans protokolü v:1'de kabul kaydı için alan yoktur. Protokolün sürüm kuralı, v:1 içinde yalnız "yok sayılabilir" alan eklenmesine izin verir (`docs/design/LISANS-PROTOKOLU.md` §9). Kabul kaydı etkinleştirme isteğine isteğe bağlı bir alan olarak ya da ayrı bir istek amacıyla eklenir. Karar, lisans motorunun ve satıcı sunucusunun sahibine aittir.
-- Tam metinler ve özetleri tek kaynaktan gelir: Lisans Veren'in onaylı son metni. Panel metni kendi içinde kopyalamaz; aksi hâlde gösterilen metin ile kaydedilen özet ayrışır.

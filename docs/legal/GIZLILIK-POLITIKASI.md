@@ -1,17 +1,15 @@
 # TeksERP Mobil — Gizlilik Politikası
 
-> **TASLAK.** Google Play zorunlu gizlilik politikası için hazırlandı. Veri
-> akışları `mobil/` kaynak kodundan çıkarılmıştır ve doğrudur; **`[DOLDUR]`**
-> alanları şirket bilgileriyle tamamlanmalı ve metin yayına çıkmadan bir hukukçu
-> tarafından KVKK / GDPR uyumu açısından gözden geçirilmelidir.
->
-> Yayın: herkese açık, sabit bir URL'de barındırılmalı (GitHub Pages veya şirket
-> sitesi). Play Console → Store listing → Privacy policy alanına bu URL girilir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Google Play'in zorunlu tuttuğu gizlilik politikası
+> için hazırlanmış bir taslaktır; hukuki görüş değildir. Veri akışları uygulamanın
+> kaynak kodundan çıkarılmıştır ve doğrudur; **`[DOLDURULACAK]`** alanları şirket
+> bilgileriyle tamamlanmalı ve metin yayına çıkmadan bir hukukçu tarafından
+> KVKK / GDPR uyumu açısından gözden geçirilmelidir.
 
-**Son güncelleme:** [DOLDUR — yayın tarihi]
+**Son güncelleme:** [DOLDURULACAK — yayın tarihi]
 **Uygulama:** TeksERP Mobil (`com.teks.erp.mobil`)
-**Veri sorumlusu:** [DOLDUR — şirket ünvanı, adres]
-**İletişim:** [DOLDUR — e-posta]
+**Veri sorumlusu:** [DOLDURULACAK — şirket ünvanı, adres]
+**İletişim:** [DOLDURULACAK — e-posta]
 
 ## 1. Uygulamanın niteliği
 
@@ -62,7 +60,7 @@ Demo sunucusuna girilen veriler **test verisidir**, gerçek üretim verisi
 niteliğinde değildir, üçüncü taraflarla paylaşılmaz ve düzenli olarak silinir.
 Demo sunucusuna hassas veya kişisel veri girilmemelidir.
 
-Demo adresi: [DOLDUR]
+Demo adresi: [DOLDURULACAK]
 
 ## 6. Veri paylaşımı
 
@@ -75,7 +73,7 @@ gönderilmez.
 - Oturum anahtarı cihazın güvenli deposunda (Android Keystore) tutulur.
 - Çevrimdışı kuyruk ve önbellek, oturum kapatıldığında cihazdan temizlenir.
 - Sunucu tarafı saklama süresi ve yedekleme politikası, sunucuyu işleten
-  kuruluşun sorumluluğundadır: [DOLDUR — kuruluş politikasına atıf].
+  kuruluşun sorumluluğundadır: [DOLDURULACAK — kuruluş politikasına atıf].
 
 ## 8. Hesaplar
 
@@ -87,7 +85,7 @@ kuruluşunun yöneticisine ya da aşağıdaki adrese başvurur.
 
 KVKK md. 11 ve (uygulanabildiği yerde) GDPR kapsamında; kişisel verilerinize
 erişme, düzeltilmesini, silinmesini veya işlenmesinin kısıtlanmasını isteme
-haklarına sahipsiniz. Talepler: [DOLDUR — e-posta].
+haklarına sahipsiniz. Talepler: [DOLDURULACAK — e-posta].
 
 ## 10. Çocukların gizliliği
 

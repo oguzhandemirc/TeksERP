@@ -1,20 +1,20 @@
 # TeksERP Son Kullanıcı Lisans Sözleşmesi
 
-> **TASLAK — AVUKAT ONAYI BEKLİYOR.** Bu metin, kullanıcının 2026-09-29 lisanslama kararlarına göre Claude tarafından hazırlanmış bir taslaktır; hukuki görüş değildir. Avukat onayı olmadan imzaya, panele ya da müşteriye çıkmaz. `[DOLDURULACAK]` işaretli yerler ticari varsayım ya da eksik bilgidir; "öneri" diye verilen değerler bağlayıcı değildir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Avukat onayı olmadan imzaya, panele ya da müşteriye çıkmaz. `[DOLDURULACAK]` işaretli yerler ticari varsayım ya da eksik bilgidir; "öneri" diye verilen değerler bağlayıcı değildir.
 >
-> Metin kimliği: `SKLS-2026.1-taslak` · Kabul kaydında bu kimlik ve son metnin SHA-256 özeti tutulur (bkz. `KABUL-METNI.md`).
+> Metin kimliği: `SKLS-2026.1-taslak` · Ana sözleşme; ekleri §16'da · Kabul kaydında bu kimlik ve son metnin SHA-256 özeti tutulur (bkz. Kabul Metni, Ek-7).
 
 > **Türk hukuku: FSEK, TBK, KVKK, TCK 244 açısından avukat şu maddelere özellikle baksın**
-> - **FSEK md. 48 ve 52 — şekil şartı:** mali haklara ilişkin sözleşme yazılı olmalı ve haklar ayrı ayrı gösterilmeli. Panelde "kabul ediyorum" demek (`KABUL-METNI.md`) bu şartı tek başına karşılar mı? Taslakta asıl sözleşme ıslak ya da güvenli elektronik imzalı (5070 md. 5) varsayıldı, panel kabulü yalnız TEYİT sayıldı. Doğru mu? (§3, §15)
+> - **FSEK md. 48 ve 52 — şekil şartı:** mali haklara ilişkin sözleşme yazılı olmalı ve haklar ayrı ayrı gösterilmeli. Panelde "kabul ediyorum" demek (Kabul Metni, Ek-7) bu şartı tek başına karşılar mı? Taslakta asıl sözleşme ıslak ya da güvenli elektronik imzalı (5070 md. 5) varsayıldı, panel kabulü yalnız TEYİT sayıldı. Doğru mu? (§3, §15)
 > - **FSEK md. 38 — emredici istisnalar:** yedek kopya, gözlem/inceleme/test ve birlikte çalışabilirlik için kodun çözülmesi sözleşmeyle kaldırılabilir mi? §5.2'deki "kanunun emredici izinleri saklıdır" cümlesi yeterli mi?
 > - **FSEK md. 72 — koruma önlemleri:** lisans denetimini, filigranı ya da bütünlük denetimini etkisiz kılmayı yasaklayan §5.1(e) ve §9 bu maddeye dayanabilir mi?
 > - **FSEK md. 68 ve TBK md. 179–182 (TTK md. 22 ile birlikte):** lisans ihlalinde ceza koşulu konacak mı, tutarı ne olmalı? §12.3 boş bırakıldı.
-> - **TBK md. 20–25 — genel işlem koşulları:** bu metin standart sözleşmedir. Yaptırım hükümleri (§8, `YAPTIRIM-MADDELERI.md`) karşı tarafın aleyhine "şaşırtıcı" sayılabilir mi? Taslakta bu hükümler için ayrı bilgilendirme ve ayrı kabul kutusu öngörüldü (`KABUL-METNI.md` kutu 2).
+> - **TBK md. 20–25 — genel işlem koşulları:** bu metin standart sözleşmedir. Yaptırım hükümleri (§8; Yaptırım Maddeleri, Ek-2) karşı tarafın aleyhine "şaşırtıcı" sayılabilir mi? Taslakta bu hükümler için ayrı bilgilendirme ve ayrı kabul kutusu öngörüldü (Kabul Metni, Ek-7, kutu 2).
 > - **TBK md. 115 — sorumsuzluk anlaşması:** §11'deki sorumluluk sınırı ağır kusuru kapsamıyor mu? Tavan ve dolaylı zarar istisnası geçerli mi?
 > - **HMK md. 193 — delil sözleşmesi:** Lisans Veren'in imzalı elektronik kayıtlarını (yoklama, portal defteri, filigran) delil sayan §9.4 geçerli mi, karşı delil hakkı yeterince korunuyor mu?
-> - **TCK md. 243–244:** lisans denetiminin çalışmayı kısıtlaması ("kısıtlı kip", "durdurulmuş") ve Lisans Veren'in uzaktan erişimi "sistemi engelleme" ya da "sisteme izinsiz girme" sayılabilir mi? Taslak her kademede verilere erişimi açık tuttu ve uzaktan erişimi Lisans Alan onayına bağladı (§8, `BAKIM-DESTEK-SOZLESMESI.md` §6). Bu önlemler riski ne ölçüde azaltır?
-> - **KVKK:** lisans yoklaması iş ya da kişisel veri taşımaz (`VERI-ISLEME-EKI.md` Bölüm A); iş verisi taşıyan tek kanal, ayrı eki olan patron bulutudur (§12.2). Kabul kaydındaki ad-soyad ve destek talepleri kişisel veridir. Aydınlatma yükümlülüğü (md. 10) nasıl karşılanmalı?
-> - **TMK md. 2 — hakkın kötüye kullanılması:** tek taraflı ve anında uygulanan K4 ve K5 kademeleri (`YAPTIRIM-MADDELERI.md` §4) bu açıdan savunulabilir mi?
+> - **TCK md. 243–244:** lisans denetiminin çalışmayı kısıtlaması ("kısıtlı kip", "durdurulmuş") ve Lisans Veren'in uzaktan erişimi "sistemi engelleme" ya da "sisteme izinsiz girme" sayılabilir mi? Taslak her kademede verilere erişimi açık tuttu ve uzaktan erişimi Lisans Alan onayına bağladı (§8; Bakım ve Destek Sözleşmesi, Ek-4, §6). Bu önlemler riski ne ölçüde azaltır?
+> - **KVKK:** lisans yoklaması iş ya da kişisel veri taşımaz (Veri İşleme Eki, Ek-3, Bölüm A); iş verisi taşıyan tek kanal, ayrı eki olan patron bulutudur (§12.2). Kabul kaydındaki ad-soyad ve destek talepleri kişisel veridir. Aydınlatma yükümlülüğü (md. 10) nasıl karşılanmalı?
+> - **TMK md. 2 — hakkın kötüye kullanılması:** tek taraflı ve anında uygulanan K4 ve K5 kademeleri (Yaptırım Maddeleri, Ek-2, §4) bu açıdan savunulabilir mi?
 
 ---
 
@@ -35,19 +35,19 @@ Taraflar tacirdir. Bu sözleşme ticari iştir; tüketici mevzuatı uygulanmaz [
 | **Lisans Belgesi** | Lisans Veren'in anahtarıyla elektronik olarak imzalanan belge. Lisans Alan'ı, Tesis'i, Kurulum'u, lisans sınıfını, lisanslı modülleri, lisansın kalıcı olup olmadığını ve Bakım Bitiş Tarihi'ni gösterir |
 | **Kullanım Onayı** | Lisans Veren sunucusunun belirli aralıklarla verdiği imzalı çalışma onayı. Varsayılan geçerlilik süresi 30 gündür; hiçbir onay 45 günden uzun olamaz |
 | **Ek Süre** | Kullanım Onayı bittikten sonra yazılımın tam işlevle çalışmaya devam ettiği süre: **30 gün** |
-| **Bakım** | `BAKIM-DESTEK-SOZLESMESI.md` kapsamındaki yıllık güncelleme ve destek hizmeti |
+| **Bakım** | Bakım ve Destek Sözleşmesi (Ek-4) kapsamındaki yıllık güncelleme ve destek hizmeti |
 | **Bakım Bitiş Tarihi** | Lisans Belgesi'nde yazılı, bakım hakkının sona erdiği tarih |
 | **Son Hak Edilen Sürüm** | Derleme tarihi Bakım Bitiş Tarihi'nden önce olan en son sürüm |
 | **Lisans Portalı** | Lisans Veren'in lisans, kurulum, güncelleme ve destek kayıtlarını yönettiği sistem |
-| **Kısıtlı Kip** | Verilerin okunabildiği, raporların, yeniden basımın, dışa aktarmanın ve yedeğin açık olduğu, yeni kayıt ve değişikliğin kapalı olduğu çalışma durumu (`YAPTIRIM-MADDELERI.md` §2) |
-| **Durdurulmuş** | Olağan girişin kapalı olduğu, yalnız lisans ekranının ve "verilerimi al" kapısının açık olduğu durum (`YAPTIRIM-MADDELERI.md` §2) |
+| **Kısıtlı Kip** | Verilerin okunabildiği, raporların, yeniden basımın, dışa aktarmanın ve yedeğin açık olduğu, yeni kayıt ve değişikliğin kapalı olduğu çalışma durumu (Yaptırım Maddeleri, Ek-2, §2) |
+| **Durdurulmuş** | Olağan girişin kapalı olduğu, yalnız lisans ekranının ve "verilerimi al" kapısının açık olduğu durum (Yaptırım Maddeleri, Ek-2, §2) |
 | **Makine Parmak İzi** | Kurulum'un yapıldığı makineye ait kimlik değerlerinden, Kurulum'a özel bir anahtarla üretilen tek yönlü özetler (§7.2) |
 
 ## 3. Sözleşmenin konusu ve şekli
 
 3.1. Bu sözleşme, Yazılım'ın Lisans Alan tarafından kullanımına ilişkin basit (münhasır olmayan), devredilemez lisansın şartlarını düzenler.
 
-3.2. Sözleşme yazılı olarak kurulur: ıslak imza ya da güvenli elektronik imza. Yazılımın ilk kurulumunda yönetim panelinde gösterilen kabul adımı (`KABUL-METNI.md`) bu sözleşmenin yerine geçmez. O adım, sözleşmenin o Kurulum'a uygulandığının ve yaptırım hükümlerinin ayrıca okunduğunun TEYİDİDİR [avukat: FSEK md. 52].
+3.2. Sözleşme yazılı olarak kurulur: ıslak imza ya da güvenli elektronik imza. Yazılımın ilk kurulumunda yönetim panelinde gösterilen kabul adımı (Kabul Metni, Ek-7) bu sözleşmenin yerine geçmez. O adım, sözleşmenin o Kurulum'a uygulandığının ve yaptırım hükümlerinin ayrıca okunduğunun TEYİDİDİR [avukat: FSEK md. 52].
 
 3.3. Lisans Belgesi bu sözleşmenin ekidir. Lisans Belgesi'ndeki modül, sınıf, Tesis ve tarih bilgileri bu sözleşmenin kapsamını belirler.
 
@@ -55,7 +55,7 @@ Taraflar tacirdir. Bu sözleşme ticari iştir; tüketici mevzuatı uygulanmaz [
 
 4.1. **Kalıcı kullanım hakkı.** Lisans Alan, Lisans Belgesi'nde "kalıcı" yazıyorsa Yazılım'ı süresiz kullanabilir. Bakım sona erse de Yazılım çalışmaya devam eder (§6).
 
-4.2. **Vadeli hak.** Lisans bedeli taksitle ya da vadeli ödeniyorsa, ya da lisans deneme amaçlıysa, Lisans Belgesi ya da Kullanım Onayı bir **geçerlilik bitiş tarihi** taşıyabilir. Bu tarih her ödemeyle ileri alınır. Bedelin tamamı ödenince lisans kalıcıya çevrilir (`YAPTIRIM-MADDELERI.md` §5).
+4.2. **Vadeli hak.** Lisans bedeli taksitle ya da vadeli ödeniyorsa, ya da lisans deneme amaçlıysa, Lisans Belgesi ya da Kullanım Onayı bir **geçerlilik bitiş tarihi** taşıyabilir. Bu tarih her ödemeyle ileri alınır. Bedelin tamamı ödenince lisans kalıcıya çevrilir (Yaptırım Maddeleri, Ek-2, §5).
 
 4.3. **Kurulum ve Tesis sınırı.** Lisans; bir Kurulum için, Lisans Belgesi'nde yazılı Tesis'te ve lisans sınıfının izin verdiği amaçla verilir. Aynı lisansla ikinci bir Kurulum yalnız §7 (taşıma) ve §10.3 (felaket kurtarma) çerçevesinde çalıştırılabilir.
 
@@ -85,15 +85,15 @@ Taraflar tacirdir. Bu sözleşme ticari iştir; tüketici mevzuatı uygulanmaz [
 
 6.2. Bakım bitince Lisans Alan'a yeni sürüm verilmez. Yazılım'ın güncelleme bağlantıları yeni sürüm indirmez; kurulum aracı, derleme tarihi Bakım Bitiş Tarihi'nden sonra olan sürümü kurmayı reddeder.
 
-6.3. Bakım bitiş tarihinden sonra derlenmiş bir sürüm herhangi bir yolla kurulmuşsa Yazılım uyarı gösterir. Derleme tarihinden itibaren 30 gün Ek Süre işler; sonunda Kısıtlı Kip'e geçilir (`YAPTIRIM-MADDELERI.md` §3.3). Veritabanı yapısı yeni sürümle değiştiği için eski sürüme dönüş yalnız yedekten geri yüklemeyle mümkündür. Bu durumdan doğan veri kaybında Lisans Veren sorumlu değildir.
+6.3. Bakım bitiş tarihinden sonra derlenmiş bir sürüm herhangi bir yolla kurulmuşsa Yazılım uyarı gösterir. Derleme tarihinden itibaren 30 gün Ek Süre işler; sonunda Kısıtlı Kip'e geçilir (Yaptırım Maddeleri, Ek-2, §3.3). Veritabanı yapısı yeni sürümle değiştiği için eski sürüme dönüş yalnız yedekten geri yüklemeyle mümkündür. Bu durumdan doğan veri kaybında Lisans Veren sorumlu değildir.
 
 6.4. Lisans Veren, Son Hak Edilen Sürüm'ün kurulum dosyasını Bakım Bitiş Tarihi'nden sonra [DOLDURULACAK — öneri: 3 yıl] Lisans Portalı'ndan Lisans Alan'a özel bağlantıyla indirilebilir tutar.
 
-6.5. Bakımın sonradan yeniden başlatılması `BAKIM-DESTEK-SOZLESMESI.md` §8'e tabidir.
+6.5. Bakımın sonradan yeniden başlatılması Bakım ve Destek Sözleşmesi (Ek-4) §8'e tabidir.
 
 ## 7. Çevrimiçi lisans denetimi, kurulum bağı ve taşıma
 
-7.1. **Yoklama.** Kurulum, Lisans Veren sunucusuna varsayılan olarak saatte bir bağlanır (HTTPS, dışarı doğru; kurumsal vekil sunucu desteklenir) ve yeni Kullanım Onayı alır. Bu bağlantıda gönderilen bilgiler **tek tek** `VERI-ISLEME-EKI.md` Bölüm A'da sayılmıştır. Yoklama iş verisi ve kişisel veri **taşımaz**.
+7.1. **Yoklama.** Kurulum, Lisans Veren sunucusuna varsayılan olarak saatte bir bağlanır (HTTPS, dışarı doğru; kurumsal vekil sunucu desteklenir) ve yeni Kullanım Onayı alır. Bu bağlantıda gönderilen bilgiler **tek tek** Veri İşleme Eki (Ek-3) Bölüm A'da sayılmıştır. Yoklama iş verisi ve kişisel veri **taşımaz**.
 
 7.2. **Makine bağı.** Kullanım Onayı, Kurulum'un anahtarına ve Makine Parmak İzi'ne bağlıdır. Parmak izi en çok beş değerden türetilir: işletim sistemi makine kimliği, donanım (SMBIOS) kimliği, sistem diski kimliği, sistem/anakart seri numarası, veritabanı küme kimliği. Ağ kartı adresi (MAC) ve işlemci kimliği **kullanılmaz**. Değerler Kurulum'a özel bir anahtarla tek yönlü özetlenir; ham değerler Lisans Veren'e gönderilmez. Ölçülemeyen değer uyuşmazlık sayılmaz. Değerlerin çoğu değişirse (örneğin sunucu değişimi) taşıma gerekir.
 
@@ -109,9 +109,9 @@ Taraflar tacirdir. Bu sözleşme ticari iştir; tüketici mevzuatı uygulanmaz [
 
 8.1. Lisans geçersiz ya da ölçülemez hâle gelirse (örneğin belge bozuldu, makine bağı uyuşmuyor, bütünlük denetimi başarısız) Yazılım önce uyarır. İmzalı tarihten türeyen 30 gün Ek Süre sonunda Kısıtlı Kip'e geçilir. Geçerli lisans gelince durum **hemen** düzelir.
 
-8.2. Ödeme gecikmesi, lisans ihlali ve olağan dışı hallerde Lisans Veren'in uygulayabileceği kademeler (K0–K5), ihtar süreleri, taksit ve planlı eylemler `YAPTIRIM-MADDELERI.md`'de düzenlenmiştir. O belge bu sözleşmenin ayrılmaz ekidir ve **ayrıca kabul edilir**.
+8.2. Ödeme gecikmesi, lisans ihlali ve olağan dışı hallerde Lisans Veren'in uygulayabileceği kademeler (K0–K5), ihtar süreleri, taksit ve planlı eylemler Yaptırım Maddeleri'nde (Ek-2) düzenlenmiştir. O belge bu sözleşmenin ayrılmaz ekidir ve **ayrıca kabul edilir**.
 
-8.3. **Veri erişimi her kademede açıktır.** Hiçbir kademe Lisans Alan'ın kendi verisini okumasını, yedeğini almasını ve dışa aktarmasını engellemez. Durdurulmuş durumda bile giriş ekranındaki "verilerimi al" kapısı, yönetici parolasıyla tam yedek ve dışa aktarma verir (`YAPTIRIM-MADDELERI.md` §6).
+8.3. **Veri erişimi her kademede açıktır.** Hiçbir kademe Lisans Alan'ın kendi verisini okumasını, yedeğini almasını ve dışa aktarmasını engellemez. Durdurulmuş durumda bile giriş ekranındaki "verilerimi al" kapısı, yönetici parolasıyla tam yedek ve dışa aktarma verir (Yaptırım Maddeleri, Ek-2, §6).
 
 8.4. **Geçiş dönemi (gözlem kipi).** Lisans denetimi önce gözlem kipinde çalışır: durum hesaplanır ve Lisans Veren'e raporlanır, ama hiçbir istek engellenmez, uyarı bandı gösterilmez. Zorlama kipine geçiş Lisans Alan'a en az [DOLDURULACAK — öneri: 30 gün] önceden yazılı bildirilir.
 
@@ -133,7 +133,7 @@ Lisans Alan aşağıdaki koruma önlemlerini bildiğini ve kabul ettiğini beyan
 
 Her Lisans Belgesi tek bir sınıf taşır:
 
-10.1. **Üretim:** Tesis'in günlük işi. Patron bulutu gibi dışarıya veri gönderen ek hizmetler yalnız bu sınıfta açılabilir. Patron bulutu bu sözleşmeyle verilmez; ayrı hak (`patron-bulut`) ve ayrı imzalanan `PATRON-BULUTU-VERI-ISLEME-EKI.md` ile açılır (§12.2, Ek-6).
+10.1. **Üretim:** Tesis'in günlük işi. Patron bulutu gibi dışarıya veri gönderen ek hizmetler yalnız bu sınıfta açılabilir. Patron bulutu bu sözleşmeyle verilmez; ayrı hak (Patron Bulutu hakkı) ve ayrı imzalanan Patron Bulutu Veri İşleme Eki ile açılır (§12.2, Ek-6).
 
 10.2. **Test / hazırlık:** Yalnız deneme, eğitim ve sürüm provası için kullanılır. Canlı üretim işlemi yapılamaz (gerçek sevkiyat, fatura ve tahsilat kaydı gibi). Üretim verisinin kopyasıyla test yapılırsa, bu kopyadaki kişisel verilerden Lisans Alan sorumludur.
 
@@ -157,7 +157,7 @@ Her Lisans Belgesi tek bir sınıf taşır:
 
 12.1. Yazılım'ın, kaynak ve derlenmiş kodunun, belgelerinin ve Lisans Alan için yapılan özel geliştirmelerin bütün hakları Lisans Veren'dedir [avukat: özel geliştirme için ayrı hüküm istenirse]. Bu sözleşme yalnız §4'teki kullanım hakkını verir.
 
-12.2. **İş verisi Lisans Alan'ındır.** Yazılım'a girilen ve Yazılım'ın ürettiği iş verisi (üretim, stok, sipariş, cari, finans, kullanıcı kayıtları) Lisans Alan'a aittir. Lisans Veren bu veriye yalnız `BAKIM-DESTEK-SOZLESMESI.md` §6'daki uzaktan erişimle ve Lisans Alan onayıyla ulaşır. Lisans Alan patron bulutu hizmetini açarsa, seçilmiş verinin okuma kopyası Lisans Veren'in bulut sunucusunda veri işleyen sıfatıyla tutulur; bu kopya da Lisans Alan'ındır ve `PATRON-BULUTU-VERI-ISLEME-EKI.md`'ye göre işlenir, saklanır ve imha edilir.
+12.2. **İş verisi Lisans Alan'ındır.** Yazılım'a girilen ve Yazılım'ın ürettiği iş verisi (üretim, stok, sipariş, cari, finans, kullanıcı kayıtları) Lisans Alan'a aittir. Lisans Veren bu veriye yalnız Bakım ve Destek Sözleşmesi (Ek-4) §6'daki uzaktan erişimle ve Lisans Alan onayıyla ulaşır. Lisans Alan patron bulutu hizmetini açarsa, seçilmiş verinin okuma kopyası Lisans Veren'in bulut sunucusunda veri işleyen sıfatıyla tutulur; bu kopya da Lisans Alan'ındır ve Patron Bulutu Veri İşleme Eki'ne (Ek-6) göre işlenir, saklanır ve imha edilir.
 
 12.3. **Lisans ihlalinde tazminat:** [DOLDURULACAK — ceza koşulu olacak mı, tutarı; avukat: FSEK md. 68, TBK md. 179–182, TTK md. 22].
 
@@ -169,7 +169,7 @@ Her Lisans Belgesi tek bir sınıf taşır:
 
 13.2. Lisans Veren sözleşmeyi aşağıdaki hallerde feshedebilir:
 - §5'teki yasakların ihlali: yazılı bildirimle, hemen;
-- ödeme temerrüdü: `YAPTIRIM-MADDELERI.md` §5'teki ihtar süreleri dolduktan sonra;
+- ödeme temerrüdü: Yaptırım Maddeleri (Ek-2) §5'teki ihtar süreleri dolduktan sonra;
 - diğer esaslı ihlaller: yazılı bildirim ve [DOLDURULACAK — öneri: 30 gün] giderme süresinden sonra.
 
 13.3. Fesih hâlinde Yazılım Durdurulmuş duruma alınabilir. "Verilerimi al" kapısı fesihten sonra da [DOLDURULACAK — öneri: en az 90 gün] açık kalır. Lisans Alan bu sürede verilerini alır.
@@ -187,8 +187,10 @@ Türk hukuku uygulanır. Uyuşmazlıklarda [DOLDURULACAK] mahkemeleri ve icra da
 ## 16. Ekler
 
 - Ek-1: Lisans Belgesi (elektronik, imzalı)
-- Ek-2: `YAPTIRIM-MADDELERI.md`
-- Ek-3: `VERI-ISLEME-EKI.md`
-- Ek-4: `BAKIM-DESTEK-SOZLESMESI.md` (bakım satın alınmışsa)
+- Ek-2: Lisans Yaptırım Maddeleri
+- Ek-3: Veri İşleme Eki
+- Ek-4: Yıllık Bakım ve Destek Sözleşmesi (bakım satın alınmışsa)
 - Ek-5: Fiyat ve ödeme planı [DOLDURULACAK]
-- Ek-6: `PATRON-BULUTU-VERI-ISLEME-EKI.md` ve ekleri (yalnız patron bulutu hizmeti satın alınmışsa; ayrı imzalanır)
+- Ek-6: Patron Bulutu Veri İşleme Eki ve ekleri — Ek-6/A Saklama ve İmha Prosedürü, Ek-6/B Teknik ve İdari Tedbirler, Ek-6/C Aydınlatma Metni (yalnız patron bulutu hizmeti satın alınmışsa; ayrı imzalanır)
+- Ek-7: İlk Kurulum Kabul Metni
+- Ek-8: Kişisel Veri İhlali Bildirim Prosedürü (Ek-3 ve Ek-6 için ortak)

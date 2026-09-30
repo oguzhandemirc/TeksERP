@@ -1,12 +1,12 @@
 # TeksERP Yıllık Bakım ve Destek Sözleşmesi
 
-> **TASLAK — AVUKAT ONAYI BEKLİYOR.** Bu metin, kullanıcının 2026-09-29 lisanslama kararlarına göre Claude tarafından hazırlanmış bir taslaktır; hukuki görüş değildir. Tanımlar `SON-KULLANICI-LISANS-SOZLESMESI.md` (Lisans Sözleşmesi) §2'den alınır. `[DOLDURULACAK]` işaretli süre ve bedeller ticari varsayımdır; "öneri" değerleri bağlayıcı değildir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. Tanımlar Son Kullanıcı Lisans Sözleşmesi (Lisans Sözleşmesi) §2'den alınır. `[DOLDURULACAK]` işaretli süre ve bedeller ticari varsayımdır; "öneri" değerleri bağlayıcı değildir.
 >
-> Metin kimliği: `BDS-2026.1-taslak`
+> Metin kimliği: `BDS-2026.1-taslak` · Ek-4
 
 > **Türk hukuku: FSEK, TBK, KVKK, TCK 244 açısından avukat şu maddelere özellikle baksın**
 > - **TCK md. 243 ve 244 — uzaktan erişim:** Lisans Veren'in müşteri sunucusuna uzaktan bağlanması ancak rızayla hukuka uygundur. §6'daki onay, kayıt ve kapsam sınırı (yalnız TeksERP klasörleri) rızanın kapsamını yeterince belirliyor mu? Rıza bir kez mi verilmeli, yoksa her oturum için ayrı mı?
-> - **KVKK md. 12 ve veri işleyen sıfatı:** destek ve uzaktan erişim sırasında Lisans Veren, müşterinin kişisel verilerini (personel, müşteri iletişim bilgileri) görebilir; bu sırada veri işleyen sıfatıyla davranır. `VERI-ISLEME-EKI.md` Bölüm B bu ilişkiyi yeterince düzenliyor mu?
+> - **KVKK md. 12 ve veri işleyen sıfatı:** destek ve uzaktan erişim sırasında Lisans Veren, müşterinin kişisel verilerini (personel, müşteri iletişim bilgileri) görebilir; bu sırada veri işleyen sıfatıyla davranır. Veri İşleme Eki (Ek-3) Bölüm B bu ilişkiyi yeterince düzenliyor mu?
 > - **KVKK md. 9 — yurt dışına aktarım:** uzaktan erişim aracı Tailscale'in koordinasyon hizmeti yurt dışındadır. Trafik uçtan uca şifrelidir, ancak cihaz adı ve IP gibi meta veri yurt dışına gider. Bu aktarım için standart sözleşme ve Kurum'a bildirim gerekir mi?
 > - **TBK md. 470 vd. (eser) ve md. 502 vd. (vekâlet):** bakım sözleşmesi hangi tipe girer (karma sözleşme)? Yanıt süreleri (§4) taahhüt mü, özen borcu mu? İhlal hâlinde yaptırım (bedel indirimi) konacak mı?
 > - **TBK md. 115:** §9'daki sorumluluk sınırı, yedek kaybı gibi ağır sonuçlarda ağır kusuru dışlıyor mu?
@@ -43,12 +43,12 @@
 
 3.6. **Zorunlu güncelleme.** Sunucu ile eski panel ya da tablet sürümü birbiriyle çalışamaz hâle gelirse, Yazılım eski istemciden güncelleme ister. Lisans Veren bunu yalnız gerçek uyumsuzlukta kullanır.
 
-3.7. K1 kademesi (`YAPTIRIM-MADDELERI.md` §2) uygulanırken güncelleme hakkı askıdadır. Askı süresi Bakım Bitiş Tarihi'ni uzatmaz [DOLDURULACAK].
+3.7. K1 kademesi (Yaptırım Maddeleri, Ek-2, §2) uygulanırken güncelleme hakkı askıdadır. Askı süresi Bakım Bitiş Tarihi'ni uzatmaz [DOLDURULACAK].
 
 ## 4. Destek ve yanıt süreleri
 
 4.1. **Kanallar:**
-- Panelden destek talebi: ekran görüntüsü ve sağlık özeti eklenebilir. Gönderilmeden önce kullanıcıya gösterilir (`VERI-ISLEME-EKI.md` Bölüm A.4);
+- Panelden destek talebi: ekran görüntüsü ve sağlık özeti eklenebilir. Gönderilmeden önce kullanıcıya gösterilir (Veri İşleme Eki, Ek-3, Bölüm A.4);
 - telefon: [DOLDURULACAK];
 - e-posta: [DOLDURULACAK].
 
@@ -69,7 +69,7 @@
 
 ## 5. Sağlık izleme
 
-5.1. Kurulum, lisans yoklamasıyla birlikte bir sağlık özeti gönderir: son yedeğin yaşı, uzak yedek durumu, veritabanı boyutu, disk doluluğu, istemci sürümleri, hata sayaçları. Alanların tam listesi `VERI-ISLEME-EKI.md` Bölüm A'dadır. Bu özet iş verisi taşımaz.
+5.1. Kurulum, lisans yoklamasıyla birlikte bir sağlık özeti gönderir: son yedeğin yaşı, uzak yedek durumu, veritabanı boyutu, disk doluluğu, istemci sürümleri, hata sayaçları. Alanların tam listesi Veri İşleme Eki (Ek-3) Bölüm A'dadır. Bu özet iş verisi taşımaz.
 
 5.2. Lisans Veren özeti izler ve bir risk gördüğünde Lisans Alan'ı uyarır: yedek alınmıyor, disk doluyor, sürümler dağınık gibi. Bu izleme bir özen yükümlülüğüdür; kesintisiz gözetim ya da sonuç taahhüdü değildir.
 
@@ -86,7 +86,7 @@ Her bağlantı başlangıç ve bitiş saatiyle, yapılan işin özetiyle kayda g
 
 6.4. **Kapsam sınırı.** Lisans Veren yalnız TeksERP'in kurulum, yedek ve veritabanı klasörlerinde ve TeksERP servislerinde işlem yapar. Lisans Alan'ın diğer yazılımlarına, kullanıcı hesaplarına, uzak masaüstü ayarlarına ve ağ yapısına dokunmaz. Bunlarla ilgili bir önerisi olursa yazılı bildirir.
 
-6.5. **Veri.** Uzaktan erişim sırasında görülen iş ve kişisel verilere ilişkin yükümlülükler `VERI-ISLEME-EKI.md` Bölüm B'dedir. Lisans Veren veriyi sunucudan dışarı çıkarmaz. Bir hatanın incelenmesi için veri gerekiyorsa önce Lisans Alan'ın yazılı onayını alır, gerekmeyen alanları çıkarır ya da anonimleştirir, inceleme bitince siler.
+6.5. **Veri.** Uzaktan erişim sırasında görülen iş ve kişisel verilere ilişkin yükümlülükler Veri İşleme Eki (Ek-3) Bölüm B'dedir. Lisans Veren veriyi sunucudan dışarı çıkarmaz. Bir hatanın incelenmesi için veri gerekiyorsa önce Lisans Alan'ın yazılı onayını alır, gerekmeyen alanları çıkarır ya da anonimleştirir, inceleme bitince siler.
 
 ## 7. Yedek sorumluluğu
 
@@ -129,8 +129,8 @@ Lisans Sözleşmesi §15 uygulanır.
 
 ## 12. Patron bulutu
 
-12.1. Patron bulutu (fabrika verisinin okuma kopyasının Lisans Veren'in bulut sunucusunda tutulması ve "TeksERP Patron" uygulamasıyla gösterilmesi) bu sözleşmenin konusu değildir. Ayrı hakla (`patron-bulut`) ve ayrı imzalanan `PATRON-BULUTU-VERI-ISLEME-EKI.md` ile açılır [DOLDURULACAK — ticari model: ayrı abonelik mi, bakıma dahil mi].
+12.1. Patron bulutu (fabrika verisinin okuma kopyasının Lisans Veren'in bulut sunucusunda tutulması ve "TeksERP Patron" uygulamasıyla gösterilmesi) bu sözleşmenin konusu değildir. Ayrı hakla (Patron Bulutu hakkı) ve ayrı imzalanan Patron Bulutu Veri İşleme Eki (Ek-6) ile açılır [DOLDURULACAK — ticari model: ayrı abonelik mi, bakıma dahil mi].
 
-12.2. Patron bulutu bakıma dahil satılırsa bakımın sona ermesi (§8) patron bulutunu da sona erdirir: eşitleme durur, dışa aktarma ve imha `PATRON-BULUTU-SAKLAMA-IMHA.md` §4'e göre yapılır. Yazılım'ın kendisi Son Hak Edilen Sürüm'de çalışmaya devam eder; fabrika verisi etkilenmez.
+12.2. Patron bulutu bakıma dahil satılırsa bakımın sona ermesi (§8) patron bulutunu da sona erdirir: eşitleme durur, dışa aktarma ve imha Saklama ve İmha Prosedürü (Ek-6/A) §4'e göre yapılır. Yazılım'ın kendisi Son Hak Edilen Sürüm'de çalışmaya devam eder; fabrika verisi etkilenmez.
 
-12.3. Patron bulutuna ilişkin destek taleplerinde Lisans Veren'in bulut kopyasına erişimi `PATRON-BULUTU-TEDBIRLER.md` §3'e, güvenlik ihlali `VERI-IHLALI-BILDIRIM-PROSEDURU.md`'ye tabidir.
+12.3. Patron bulutuna ilişkin destek taleplerinde Lisans Veren'in bulut kopyasına erişimi Teknik ve İdari Tedbirler (Ek-6/B) §3'e, güvenlik ihlali Veri İhlali Bildirim Prosedürü'ne (Ek-8) tabidir.

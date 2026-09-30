@@ -1,8 +1,8 @@
 # Patron Bulutu Saklama ve İmha Prosedürü
 
-> **TASLAK — AVUKAT ONAYI BEKLİYOR.** Claude tarafından, 2026-09-29 patron bulutu kararlarına ve eşitleme sözleşmesi v1 tasarımına (`docs/design/PATRON-BULUTU-ESITLEME.md` §9.5) göre hazırlanmıştır; hukuki görüş değildir. `[DOLDURULACAK]` işaretli süreler ticari karardır; "öneri" bağlayıcı değildir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin bir taslaktır; hukuki görüş değildir. `[DOLDURULACAK]` işaretli süreler ticari karardır; "öneri" bağlayıcı değildir.
 >
-> Metin kimliği: `PBSI-2026.1-taslak` · `PATRON-BULUTU-VERI-ISLEME-EKI.md`'nin ekidir.
+> Metin kimliği: `PBSI-2026.1-taslak` · Ek-6/A · Patron Bulutu Veri İşleme Eki'nin (Ek-6) ekidir.
 
 > **Avukat şu maddelere özellikle baksın**
 > - **Kişisel Verilerin Silinmesi, Yok Edilmesi veya Anonim Hale Getirilmesi Hakkında Yönetmelik (2017):** Bu prosedür, Lisans Alan'ın kişisel veri saklama ve imha politikasına eklenecek bölüm olarak yeterli mi? Periyodik imha aralığı (Yönetmelik en çok 6 ay öngörür) burada günlük otomatik budamayla karşılanıyor; ayrıca 6 aylık gözden geçirme gerekir mi (§5)?
@@ -18,7 +18,7 @@
 
 1.2. **Fabrikada silinen, bulutta da silinir.** Kurulum'da silinen ya da buluta gönderilme kapsamından çıkan bir kayıt, bir sonraki eşitlemede bulutta "silindi" işaretlenir ve §2.3'teki süre sonunda fiziksel olarak silinir.
 
-1.3. **İmha yöntemi.** Bulut veritabanındaki satırlar fiziksel silme ile silinir. Silinen verinin veritabanı dosyalarında ve yedeklerde kalan izleri §4.4'teki yedek döngüsüyle düşer. Anonimleştirme yalnız kimliksiz toplam ölçümler için kullanılır (`PATRON-BULUTU-VERI-ISLEME-EKI.md` §2.4).
+1.3. **İmha yöntemi.** Bulut veritabanındaki satırlar fiziksel silme ile silinir. Silinen verinin veritabanı dosyalarında ve yedeklerde kalan izleri §4.4'teki yedek döngüsüyle düşer. Anonimleştirme yalnız kimliksiz toplam ölçümler için kullanılır (Patron Bulutu Veri İşleme Eki, Ek-6, §2.4).
 
 ## 2. Hizmet sürerken saklama
 
@@ -63,7 +63,7 @@ fiziksel olarak siler. Kısa seçeneğe geçilirse fazlası bir sonraki günlük
 
 ## 4. Hizmetin bitmesi: dışa aktarma ve imha
 
-4.1. **Eşitleme durur.** Patron bulutu hizmetinin süresi (`patronBulutBitis`) dolduğunda, hizmet feshedildiğinde ya da Lisans Alan kapattığında Kurulum buluta veri göndermeyi bırakır. Bulut da o Kurulum'dan gelen paketi reddeder.
+4.1. **Eşitleme durur.** Patron bulutu hizmetinin süresi (Kullanım Onayı'nda yazılı patron bulutu bitiş tarihi) dolduğunda, hizmet feshedildiğinde ya da Lisans Alan kapattığında Kurulum buluta veri göndermeyi bırakır. Bulut da o Kurulum'dan gelen paketi reddeder.
 
 4.2. **Dışa aktarma süresi.** Bitişten itibaren [DOLDURULACAK — öneri: 90 gün] boyunca:
 - Bulut Hesapları salt-okunur olarak girebilir; Gelen Kutusu'na yeni kayıt girilemez;

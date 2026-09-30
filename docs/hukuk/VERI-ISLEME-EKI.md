@@ -1,13 +1,13 @@
 # TeksERP Veri İşleme Eki
 
-> **TASLAK — AVUKAT ONAYI BEKLİYOR.** Bu metin `SON-KULLANICI-LISANS-SOZLESMESI.md` (Lisans Sözleşmesi) ve `BAKIM-DESTEK-SOZLESMESI.md`'nin ekidir. Kullanıcının 2026-09-29 kararlarına göre Claude tarafından hazırlanmıştır; hukuki görüş değildir. Bölüm A'daki alan listesi yazılımın lisans protokolünden birebir alınmıştır. `[DOLDURULACAK]` işaretli süre ve adlar ticari ya da eksik bilgidir.
+> **TASLAK — AVUKAT İNCELEMESİ BEKLİYOR.** Bu metin Son Kullanıcı Lisans Sözleşmesi (Lisans Sözleşmesi) ve Bakım ve Destek Sözleşmesi'nin ekidir; taslaktır, hukuki görüş değildir. `[DOLDURULACAK]` işaretli süre ve adlar ticari ya da eksik bilgidir.
 >
-> Metin kimliği: `VIE-2026.1-taslak` · Patron bulutu bu ekin kapsamında değildir; ayrı eki `PATRON-BULUTU-VERI-ISLEME-EKI.md`dir (Bölüm P).
+> Metin kimliği: `VIE-2026.1-taslak` · Ek-3 · Patron bulutu bu ekin kapsamında değildir; ayrı eki Patron Bulutu Veri İşleme Eki'dir (Ek-6; Bölüm P).
 
 > **Türk hukuku: FSEK, TBK, KVKK, TCK 244 açısından avukat şu maddelere özellikle baksın**
 > - **KVKK md. 3 ve 5 — kişisel veri mi?** Bölüm A'daki yoklama alanları bir şirket sunucusunu tanımlar; gerçek kişiye ait değildir. Taslak bunları "kişisel veri değil" diye niteledi (A.1). Kurulum kimliği ve IP adresi, şahıs işletmesi olan bir müşteride gerçek kişiyle ilişkilendirilebilir mi? Öyleyse hukuki sebep olarak md. 5/2-c (sözleşmenin ifası) ve md. 5/2-f (meşru menfaat) yeterli mi?
 > - **KVKK md. 9 — yurt dışına aktarım (2024 değişikliği):** Cloudflare (ABD) trafiği kenar sunucularında açar; Tailscale (ABD) meta veri alır. Standart sözleşme ve beş iş günü içinde Kurum'a bildirim gerekir mi? Kim bildirir: Lisans Veren mi, Lisans Alan mı?
-> - **KVKK md. 10 — aydınlatma:** kabul kaydındaki ad-soyad (A.5) ve destek talepleri (A.4) için Lisans Veren'in kendi aydınlatma metni gerekir. Panelde gösterilen kabul metni (`KABUL-METNI.md`) bu yükümlülüğü karşılar mı?
+> - **KVKK md. 10 — aydınlatma:** kabul kaydındaki ad-soyad (A.5) ve destek talepleri (A.4) için Lisans Veren'in kendi aydınlatma metni gerekir. Panelde gösterilen kabul metni (Kabul Metni, Ek-7) bu yükümlülüğü karşılar mı?
 > - **KVKK md. 12 — veri işleyen:** Bölüm B, Lisans Veren'in destek ve uzaktan erişimdeki veri işleyen sıfatını yazılı talimata bağladı. Müşterek sorumluluk ve ihlal bildirimi (72 saat) doğru kurulmuş mu?
 > - **Silme, Yok Etme veya Anonim Hale Getirme Yönetmeliği:** Bölüm D'deki süreler ve periyodik imha aralığı (en çok 6 ay) uygun mu? Kayıt defterlerinin sözleşme süresi + 10 yıl saklanması (TBK md. 146, TTK md. 82) kişisel veri içeren kısımlar için ölçülü mü?
 > - **TCK md. 136 ve 243:** Bölüm B'deki "sunucudan veri çıkarmama" kuralı ve istisnası (yazılı onay) yeterli mi?
@@ -81,7 +81,7 @@ Panelden açılan destek talebi, A.3'teki sağlık özetine ek olarak kullanıc�
 
 ### A.5. Kabul kaydı
 
-İlk kurulumdaki kabul adımında (`KABUL-METNI.md`) kabul eden yöneticinin **adı-soyadı, unvanı ve kullanıcı kimliği**, kabul zamanı ve kabul edilen metinlerin sürümü Lisans Veren'e gönderilir. Bu bilgi kişisel veridir. Lisans Veren bunu sözleşmenin kurulduğunu ispat etmek için veri sorumlusu olarak işler (KVKK md. 5/2-c ve 5/2-e) [avukat].
+İlk kurulumdaki kabul adımında (Kabul Metni, Ek-7) kabul eden yöneticinin **adı-soyadı, unvanı ve kullanıcı kimliği**, kabul zamanı ve kabul edilen metinlerin sürümü Lisans Veren'e gönderilir. Bu bilgi kişisel veridir. Lisans Veren bunu sözleşmenin kurulduğunu ispat etmek için veri sorumlusu olarak işler (KVKK md. 5/2-c ve 5/2-e) [avukat].
 
 ### A.6. Ağ düzeyinde görülenler
 
@@ -97,14 +97,14 @@ B.1. Lisans Veren, destek talebi, uzaktan erişim ve güncelleme sırasında Lis
 
 B.2. Lisans Veren bu verileri:
 - (a) yalnız Lisans Alan'ın talimatıyla ve yalnız destek ya da bakım amacıyla işler;
-- (b) sunucudan dışarı çıkarmaz. İstisnası `BAKIM-DESTEK-SOZLESMESI.md` §6'da yazılıdır: yazılı onay, asgari veri, anonimleştirme, iş bitince silme;
+- (b) sunucudan dışarı çıkarmaz. İstisnası Bakım ve Destek Sözleşmesi (Ek-4) §6'da yazılıdır: yazılı onay, asgari veri, anonimleştirme, iş bitince silme;
 - (c) yalnız bu işle görevli, gizlilik yükümlülüğü altındaki çalışanlarına gösterir;
 - (d) Bölüm C'deki alt işleyenler dışında kimseyle paylaşmaz;
-- (e) her uzaktan erişimi kayda geçirir (`BAKIM-DESTEK-SOZLESMESI.md` §6).
+- (e) her uzaktan erişimi kayda geçirir (Bakım ve Destek Sözleşmesi, Ek-4, §6).
 
-B.3. **Yedek anahtarları.** Lisans Veren'in kasasında tutulan yedek parolası ve Lisans Veren yedek anahtarı, Lisans Alan'ın bütün geçmiş yedeklerini açabilir. Bunlar yalnız `BAKIM-DESTEK-SOZLESMESI.md` §7'deki hallerde kullanılır ve her kullanım Lisans Alan'a bildirilir.
+B.3. **Yedek anahtarları.** Lisans Veren'in kasasında tutulan yedek parolası ve Lisans Veren yedek anahtarı, Lisans Alan'ın bütün geçmiş yedeklerini açabilir. Bunlar yalnız Bakım ve Destek Sözleşmesi (Ek-4) §7'deki hallerde kullanılır ve her kullanım Lisans Alan'a bildirilir.
 
-B.4. **İhlal bildirimi.** Lisans Veren, Lisans Alan verisini etkileyen bir güvenlik ihlalini öğrendiğinde Lisans Alan'a gecikmeden, en geç [DOLDURULACAK — öneri: 24 saat] içinde bildirir. Kurul'a bildirim (72 saat) veri sorumlusu olan Lisans Alan'ındır; Lisans Veren bunun için gereken bilgiyi verir. Adımlar ve içerik: `VERI-IHLALI-BILDIRIM-PROSEDURU.md`.
+B.4. **İhlal bildirimi.** Lisans Veren, Lisans Alan verisini etkileyen bir güvenlik ihlalini öğrendiğinde Lisans Alan'a gecikmeden, en geç [DOLDURULACAK — öneri: 24 saat] içinde bildirir. Kurul'a bildirim (72 saat) veri sorumlusu olan Lisans Alan'ındır; Lisans Veren bunun için gereken bilgiyi verir. Adımlar ve içerik: Veri İhlali Bildirim Prosedürü (Ek-8).
 
 B.5. **İlgili kişi başvuruları.** Lisans Veren'e gelen bir ilgili kişi başvurusu Lisans Alan'a yönlendirilir. Lisans Veren, Lisans Alan'ın cevap vermesi için gereken teknik desteği verir.
 
@@ -143,11 +143,11 @@ Periyodik imha [DOLDURULACAK — öneri: 6 ayda bir] yapılır ve kayda geçer [
 - Lisans Veren'in kök imza anahtarı parolayla şifreli durur. Parola yalnız imza anında girilir; diske ve günlüğe yazılmaz.
 - Lisans Portalı'na Lisans Veren çalışanları yalnız Lisans Veren'in özel ağından girer. Bayi hesapları kendi bölümlerine internetten girer. İki yolda da parola ve iki aşamalı doğrulama (TOTP) gerekir.
 - Lisans Portalı'ndaki her işlem silinemeyen bir deftere yazılır.
-- Yedekler şifrelenebilir; şifre çözme anahtarlarının kimde durduğu `BAKIM-DESTEK-SOZLESMESI.md` §7'dedir.
+- Yedekler şifrelenebilir; şifre çözme anahtarlarının kimde durduğu Bakım ve Destek Sözleşmesi (Ek-4) §7'dedir.
 - Lisans Veren'in müşteri sistemlerine erişen çalışanları gizlilik taahhüdü altındadır [DOLDURULACAK].
 
 ---
 
 ## P. Patron bulutu
 
-Patron bulutu bu ekin kapsamında DEĞİLDİR. Ayrı imzalanan `PATRON-BULUTU-VERI-ISLEME-EKI.md` (`PBVIE-2026.1`) ve onun ekleri düzenler: `PATRON-BULUTU-SAKLAMA-IMHA.md` · `PATRON-BULUTU-TEDBIRLER.md` · `PATRON-BULUTU-AYDINLATMA-METNI.md` · `VERI-IHLALI-BILDIRIM-PROSEDURU.md`. Bu bölümde daha önce duran iskelet o belgeye taşındı ve tamamlandı.
+Patron bulutu bu ekin kapsamında DEĞİLDİR. Ayrı imzalanan Patron Bulutu Veri İşleme Eki (Ek-6, `PBVIE-2026.1`) ve onun ekleri düzenler: Saklama ve İmha Prosedürü (Ek-6/A) · Teknik ve İdari Tedbirler (Ek-6/B) · Aydınlatma Metni (Ek-6/C) · Veri İhlali Bildirim Prosedürü (Ek-8).
