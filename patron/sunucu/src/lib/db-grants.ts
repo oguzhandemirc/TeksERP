@@ -6,6 +6,8 @@
 //     hesap/oturum/parola satırına ulaşamaz.
 // Migration yeni tablo eklerse buraya satırı AYNI dilimde girer (girmezse iki rol de erişemez: fail-closed).
 export type Privilege = "SELECT" | "INSERT" | "UPDATE" | "DELETE";
+/** Kolon düzeyi yetki: tablo düzeyindekine EK, yalnız adı geçen kolonlarda (aynı yetki iki düzeyde birden verilmez). */
+export type ColumnGrants = Readonly<Record<string, Readonly<Partial<Record<"UPDATE", readonly string[]>>>>>;
 
 export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   facilities: ["SELECT"],
@@ -26,6 +28,14 @@ export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   sync_state: ["SELECT"],
   support_access: ["SELECT"],
 };
+
+export const APP_COLUMN_GRANTS: ColumnGrants = {
+  // Kimlik silmesi makbuz yanıtındaki ad/e-postayı tombstone'a çevirir (`maintenance.ts` `purgeClosedIdentities`);
+  // makbuzun kimliği, eylemi ve gövde özeti yazılamaz (tekrar kapısı onlara dayanır).
+  operation_receipts: { UPDATE: ["response"] },
+};
+
+export const SYNC_COLUMN_GRANTS: ColumnGrants = {};
 
 export const SYNC_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   facilities: ["SELECT", "INSERT", "UPDATE"],

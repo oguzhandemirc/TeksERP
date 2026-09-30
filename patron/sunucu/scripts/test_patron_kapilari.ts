@@ -16,7 +16,8 @@
 //   §7 protokol aynası: `src/lisans-protokol/` ↔ `Teks-Erp/src/lib/license/protocol/` bayt-eşit
 //   §8 yaşa göre silinen ALAN beyanı (`AGED_FIELDS`, IP 30 gün): denetim satırı YALNIZ `maintenance.ts`te güncellenir
 //      ve güncellenen her alan beyanda, beyandaki her alanın silme yeri var (iki yönlü) · istemci adresi
-//      (`clientAddress(`) yalnız HTTP katmanında okunur
+//      (`clientAddress(`) yalnız HTTP katmanında okunur · işlem makbuzu da YALNIZ `maintenance.ts`te (kimlik silmesi)
+//      güncellenir
 // ⭐ KALICI SONDA (her koşumda): §4 ve §5 yüklemleri sentetik girdide ısırır, temiz girdide susar.
 // Koşum: npx tsx scripts/test_patron_kapilari.ts   (DB GEREKMEZ)
 // =============================================================================
@@ -212,6 +213,17 @@ function alanBeyani(): void {
   kontrol("§8c istemci adresi yalnız HTTP katmanında okunur", okuyan.length === 0, okuyan.join(", ") || "temiz");
   const sonda = denetimGuncellemeleri("await tx.$executeRaw`UPDATE account_audit SET summary = summary - 'eposta' WHERE x`; await tx.accountAudit.updateMany({});");
   kontrol("§8d ✓K sonda: beyansız alan silmesi ve Prisma güncellemesi ısırır", sonda.alanlar.has("account_audit.summary.eposta") && !beyan.has("account_audit.summary.eposta") && sonda.prisma === 1);
+  const makbuzYazan = kaynaklar.filter((f) => f !== bakim && makbuzGuncellemesi(readFileSync(f, "utf8"))).map(goreli);
+  kontrol("§8e işlem makbuzu YALNIZ services/maintenance.ts'te (kimlik silmesi) güncellenir — tekrar yanıtı başka yolda değişmez", makbuzYazan.length === 0, makbuzYazan.join(", ") || "temiz");
+  kontrol(
+    "§8f ✓K sonda: makbuz güncellemesi (Prisma + ham SQL) ısırır, yaratma ve okuma susar",
+    makbuzGuncellemesi("await tx.operationReceipt.updateMany({})") && makbuzGuncellemesi("await tx.$executeRaw`UPDATE operation_receipts SET response = '{}'`") && !makbuzGuncellemesi("await tx.operationReceipt.create({}); await tx.operationReceipt.findUnique({})"),
+  );
+}
+
+/** Makbuzu güncelleyen ifade var mı (yorum satırı sayılmaz). */
+export function makbuzGuncellemesi(metin: string): boolean {
+  return /UPDATE\s+"?operation_receipts|\boperationReceipt\.(?:update|updateMany|upsert)\s*\(/i.test(kod(metin));
 }
 
 function ayna(): void {
