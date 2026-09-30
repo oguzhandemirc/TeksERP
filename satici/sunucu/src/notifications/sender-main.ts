@@ -18,8 +18,9 @@ function transportsOf(cfg: SenderConfig): Partial<Record<BildirimKanali, Notific
   };
 }
 
-function heartbeat(cfg: SenderConfig, totals: CycleTotals): void {
-  const body = { zaman: new Date().toISOString(), kanallar: channelSummary(cfg), son: totals };
+function heartbeat(cfg: SenderConfig, totals: CycleTotals, telegram: TelegramTransport | undefined): void {
+  const runtime = telegram?.migration ? { telegramMigratedTo: telegram.migration.chatId } : {};
+  const body = { zaman: new Date().toISOString(), kanallar: channelSummary(cfg, runtime), son: totals };
   writeFileSync(cfg.heartbeatFile, `${JSON.stringify(body)}\n`, { mode: 0o600 });
 }
 
@@ -30,11 +31,15 @@ async function main(): Promise<void> {
   const cfg = loadSenderConfig(process.env);
   const db = openSenderDb(cfg.databaseUrl);
   await assertLeastPrivilege(db.prisma);
+  const transports = transportsOf(cfg);
+  const telegram = transports.TELEGRAM instanceof TelegramTransport ? transports.TELEGRAM : undefined;
   const deps = {
     db: db.prisma,
-    transports: transportsOf(cfg),
+    transports,
     settings: { maxAttempts: cfg.maxAttempts, maxAgeHours: cfg.maxAgeHours, portalBase: cfg.portalBase, timeZone: cfg.timeZone },
+    pausedUntil: new Map<BildirimKanali, number>(),
   };
+  let warnedMigration: number | null = null;
   for (const [kanal, durum] of Object.entries(channelSummary(cfg))) console.log(`[bildirim] ${kanal}: ${durum}`);
   console.log(`BILDIRIM_GONDERICI_HAZIR eposta=${cfg.email.ok ? "acik" : "kapali"} telegram=${cfg.telegram.ok ? "acik" : "kapali"}`);
 
@@ -52,8 +57,12 @@ async function main(): Promise<void> {
   do {
     try {
       const t = await runSenderCycle(deps, Date.now());
-      if (busy(t)) console.log(`[bildirim] tur: gönderilen ${t.sent} · yeniden denenecek ${t.retried} · hata ${t.failed} · kapalı kanal ${t.closed} · süresi geçen ${t.expired} · kaçan claim ${t.lost}`);
-      heartbeat(cfg, t);
+      if (busy(t)) console.log(`[bildirim] tur: gönderilen ${t.sent} · yeniden denenecek ${t.retried} · hata ${t.failed} · kapalı kanal ${t.closed} · süresi geçen ${t.expired} · kaçan claim ${t.lost} · kanal beklemesi ${t.paused}`);
+      if (telegram?.migration && telegram.migration.atMs !== warnedMigration) {
+        warnedMigration = telegram.migration.atMs;
+        console.warn(`[bildirim] TELEGRAM: ${channelSummary(cfg, { telegramMigratedTo: telegram.migration.chatId }).TELEGRAM}`);
+      }
+      heartbeat(cfg, t, telegram);
     } catch (err) {
       console.error(`[bildirim] tur düştü: ${(err as Error).message.slice(0, 200)}`);
     }

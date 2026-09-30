@@ -27,6 +27,8 @@ import { gondericiRoluKur, sahipIstemci, type GondericiRolu } from "./lib/bildir
 import { SATICI_KOKU, hedefDbKapisi, kontrol, sonuc } from "./lib/test-ortam";
 
 const GOC = path.join(SATICI_KOKU, "prisma", "migrations", "20261001130000_bildirim_giden_kutusu", "migration.sql");
+/** Gönderici rolüne kolon yetkisi veren göçler (sırayla); `SENDER_UPDATE_COLUMNS` bunların birleşimidir. */
+const YETKI_GOCLERI = ["20261001130000_bildirim_giden_kutusu", "20261001130100_bildirim_sohbet_tasinmasi"].map((d) => path.join(SATICI_KOKU, "prisma", "migrations", d, "migration.sql"));
 
 async function yetkiHatasi(c: Client, sql: string): Promise<string> {
   try {
@@ -69,9 +71,11 @@ async function main(): Promise<void> {
 
     console.log("\n§2 statik");
     const goc = readFileSync(GOC, "utf8");
-    const kolonlar = [.../GRANT UPDATE \(([^)]+)\) ON "bildirim"/.exec(goc)?.[1]?.matchAll(/"([^"]+)"/g) ?? []].map((m) => m[1]!);
-    kontrol("§2a göçün UPDATE kolonları = SENDER_UPDATE_COLUMNS (sıra dahil)", JSON.stringify(kolonlar) === JSON.stringify([...SENDER_UPDATE_COLUMNS]), kolonlar.join(","));
-    kontrol("§2b göç tabloyu yalnız SELECT ile verir (INSERT/DELETE/tam UPDATE yok)", /GRANT SELECT ON "bildirim" TO "satici_bildirim";/.test(goc) && !/GRANT (INSERT|DELETE|ALL)/.test(goc) && !/GRANT UPDATE ON/.test(goc));
+    const metinler = YETKI_GOCLERI.map((p) => readFileSync(p, "utf8"));
+    const kolonlar = metinler.flatMap((m) => [...m.matchAll(/GRANT UPDATE \(([^)]+)\) ON "bildirim"/g)].flatMap((g) => [...g[1]!.matchAll(/"([^"]+)"/g)].map((x) => x[1]!)));
+    kontrol("§2a göçlerin UPDATE kolonları (birleşim, sırayla) = SENDER_UPDATE_COLUMNS", JSON.stringify(kolonlar) === JSON.stringify([...SENDER_UPDATE_COLUMNS]), kolonlar.join(","));
+    const hepsi = metinler.join("\n");
+    kontrol("§2b göçler tabloyu yalnız SELECT ile verir (INSERT/DELETE/tam UPDATE yok)", /GRANT SELECT ON "bildirim" TO "satici_bildirim";/.test(goc) && !/GRANT (INSERT|DELETE|ALL)/.test(hepsi) && !/GRANT UPDATE ON/.test(hepsi));
 
     console.log("\n§3 yetki ızgarası");
     const temel = await privilegeReport(sahip, SENDER_ROLE);
@@ -147,7 +151,8 @@ async function main(): Promise<void> {
     kontrol("§5f role-cli boş stdin → RED (çıkış 1)", bos.kod === 1 && /32–128/.test(bos.cikti), bos.cikti.trim());
 
     console.log("\n§6 göçün rol bölümü ikinci kez");
-    const rolBolumu = goc.slice(goc.indexOf("DO $$"));
+    // İlk göçün rol bölümü + sonraki göçlerin GRANT satırları, göç sırasıyla (başka DB'de koşan zincirin benzetimi).
+    const rolBolumu = [goc.slice(goc.indexOf("DO $$")), ...metinler.slice(1).map((m) => m.split("\n").filter((l) => l.startsWith("GRANT ")).join("\n"))].join("\n");
     let ikinci = "TEMIZ";
     try {
       await sahip.query(rolBolumu);

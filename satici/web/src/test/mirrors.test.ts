@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { RETRY_CONFLICT_CODE } from "../shared/api";
 import { LOGIN_RATE_LIMIT_CODE } from "../shared/LoginPage";
 import { DEFAULT_MAINTENANCE_MONTHS, MAX_MAINTENANCE_MONTHS } from "../shared/CeilingFields";
-import { CLASS_LABEL, MODULE_LABEL, NOTIFICATION_CHANNEL_LABEL, NOTIFICATION_EVENT_LABEL, NOTIFICATION_STATUS_LABEL } from "../shared/labels";
+import { CHANNEL_HEALTH_LABEL, CLASS_LABEL, MODULE_LABEL, NOTIFICATION_CHANNEL_LABEL, NOTIFICATION_EVENT_LABEL, NOTIFICATION_STATUS_LABEL } from "../shared/labels";
 import { PORTAL_PERMISSIONS } from "../shared/permissions";
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
 import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
@@ -148,6 +148,13 @@ describe("katalog ekran adları", () => {
       expect(values.filter((v) => !map[v])).toEqual([]);
       expect(Object.keys(map).filter((k) => !values.includes(k))).toEqual([]);
     }
+  });
+
+  it("her bildirim kanal durumunun ekran adı var (notifications/portal-view.ts, iki yönlü)", () => {
+    const states = listStrings(read("notifications/portal-view.ts"), "export const CHANNEL_HEALTH_STATES");
+    expect(states.length).toBeGreaterThan(3);
+    expect(states.filter((v) => !CHANNEL_HEALTH_LABEL[v])).toEqual([]);
+    expect(Object.keys(CHANNEL_HEALTH_LABEL).filter((k) => !states.includes(k))).toEqual([]);
   });
 
   it("her kanal türünün ekran adı var", () => {

@@ -12,9 +12,11 @@
 #   · DB rolü `satici_bildirim` (göç: YALNIZ `bildirim`de SELECT + durum kolonlarında UPDATE); parolası ayrı sır
 #     `bildirim_db_parolasi`. Satıcının sahip parolası (`db_parolasi`) bu servise BAĞLANMAZ; açılış kapısı fazla
 #     yetkili rolü reddeder (`FAZLA yetkili`).
-#   · kanal sırları docker secret (root:SIR_GID 0440): `telegram_bot_token` · `resend_api_key` — BOŞ dosya = kanal
-#     KAPALI (gönderim yok, nabız/günlük "kanal yapılandırılmamış" der). Sır `.env`e ve `docker inspect`e girmez.
-#   · kanal hedefleri (sır DEĞİL) `.env`den: TELEGRAM_CHAT_ID · BILDIRIM_EPOSTA_ALICI · BILDIRIM_EPOSTA_GONDEREN ·
+#   · kanal değerleri docker secret DOSYASI (root:SIR_GID 0440; değer koda/runbook'a/.env'e GİRMEZ): `telegram_bot_token`
+#     · `telegram_chat_id` (grup kimliği; sıradan grup -<sayı>) · `resend_api_key` — BOŞ dosya = kanal KAPALI (gönderim
+#     yok, nabız/günlük "kanal yapılandırılmamış" der). Grup süper gruba taşınırsa satır kalıcı HATA olur ve YENİ
+#     kimlik (yalnız sayı) nabızda + portalda görünür → dosyaya yazılıp servis yeniden yaratılır.
+#   · e-posta hedefleri ve portal kökü (sır DEĞİL) `.env`den: BILDIRIM_EPOSTA_ALICI · BILDIRIM_EPOSTA_GONDEREN ·
 #     BILDIRIM_PORTAL_ADRESI (tailnet portal kökü, bağlantı için; boşsa iletide yalnız yol).
 #   · birim YOK, port YOK, kök FS salt okunur, /tmp tmpfs (nabız dosyası), cgroup sınırları.
 # =============================================================================
@@ -44,13 +46,13 @@ services:
       DB_KULLANICI: satici_bildirim
       DB_PAROLA_DOSYASI: /run/secrets/bildirim_db_parolasi
       TELEGRAM_BOT_TOKEN_DOSYASI: /run/secrets/telegram_bot_token
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_CHAT_ID_DOSYASI: /run/secrets/telegram_chat_id
       RESEND_API_KEY_DOSYASI: /run/secrets/resend_api_key
       BILDIRIM_EPOSTA_ALICI: ${BILDIRIM_EPOSTA_ALICI:-}
       BILDIRIM_EPOSTA_GONDEREN: ${BILDIRIM_EPOSTA_GONDEREN:-}
       BILDIRIM_PORTAL_ADRESI: ${BILDIRIM_PORTAL_ADRESI:-}
       BILDIRIM_NABIZ_DOSYASI: /tmp/satici-bildirim.nabiz
-    secrets: [bildirim_db_parolasi, telegram_bot_token, resend_api_key]
+    secrets: [bildirim_db_parolasi, telegram_bot_token, telegram_chat_id, resend_api_key]
     tmpfs:
       - /tmp:mode=1777
     networks: [ic, bildirim-cikis]
@@ -73,6 +75,8 @@ secrets:
     file: ${BILDIRIM_DB_PAROLA_DOSYASI:?BILDIRIM_DB_PAROLA_DOSYASI gerekli}
   telegram_bot_token:
     file: ${TELEGRAM_BOT_TOKEN_DOSYASI_HOST:?TELEGRAM_BOT_TOKEN_DOSYASI_HOST gerekli (boş dosya = Telegram kapalı)}
+  telegram_chat_id:
+    file: ${TELEGRAM_CHAT_ID_DOSYASI_HOST:?TELEGRAM_CHAT_ID_DOSYASI_HOST gerekli (grup kimliği; boş dosya = Telegram kapalı)}
   resend_api_key:
     file: ${RESEND_API_KEY_DOSYASI_HOST:?RESEND_API_KEY_DOSYASI_HOST gerekli (boş dosya = e-posta kapalı)}
 

@@ -1116,27 +1116,30 @@ enum BildirimDurumu {
 
 /// Olay × kanal başına bir satır; aynı olay aynı kanala ikinci kez yazılmaz (`tekillikAnahtari`, UNIQUE = atomik).
 model Bildirim {
-  id               String         @id @default(uuid()) @db.Uuid
-  olay             BildirimOlayi
-  kanal            BildirimKanali
+  id                String         @id @default(uuid()) @db.Uuid
+  olay              BildirimOlayi
+  kanal             BildirimKanali
   /// Olay + kayıt (+ tarih/uç): zamana bağlı olayda aynı dönem ikinci satır doğurmaz.
-  tekillikAnahtari String         @db.VarChar(200)
-  kurulumId        String?        @db.Uuid
+  tekillikAnahtari  String         @db.VarChar(200)
+  kurulumId         String?        @db.Uuid
   /// İlgili kaydın kimliği (destek talebi, kopya uyarısı, taşıma talebi…) — yalnız süzme/temizlik.
-  ilgiliKayit      String?        @db.Uuid
+  ilgiliKayit       String?        @db.Uuid
   /// ALLOWLIST gövde: musteri · tesis · kurulum · lisansNo · sinif · konu · referans · tarih · portalYolu.
-  govde            Json
-  durum            BildirimDurumu @default(BEKLIYOR)
-  deneme           Int            @default(0)
-  sonrakiDeneme    DateTime       @default(now()) @db.Timestamptz
-  kilitBitis       DateTime?      @db.Timestamptz
+  govde             Json
+  durum             BildirimDurumu @default(BEKLIYOR)
+  deneme            Int            @default(0)
+  sonrakiDeneme     DateTime       @default(now()) @db.Timestamptz
+  kilitBitis        DateTime?      @db.Timestamptz
   /// Kısa hata KODU (ham yanıt gövdesi, başlık, sır GİRMEZ).
-  sonHata          String?        @db.VarChar(80)
+  sonHata           String?        @db.VarChar(80)
   /// Sağlayıcının ileti kimliği (Resend e-posta id · Telegram message_id).
-  saglayiciKimligi String?        @db.VarChar(100)
-  gonderimZamani   DateTime?      @db.Timestamptz
-  createdAt        DateTime       @default(now()) @db.Timestamptz
-  updatedAt        DateTime       @updatedAt @db.Timestamptz
+  saglayiciKimligi  String?        @db.VarChar(100)
+  /// Telegram sohbeti süper gruba taşındıysa (400 + migrate_to_chat_id) YENİ sohbet kimliği — yalnız sayı, sır
+  /// DEĞİL; yalnız `TELEGRAM_SOHBET_TASINDI` satırında (CHECK). Portal ve nabız gösterir, gönderici kendisi GEÇMEZ.
+  yeniSohbetKimligi String?        @db.VarChar(24)
+  gonderimZamani    DateTime?      @db.Timestamptz
+  createdAt         DateTime       @default(now()) @db.Timestamptz
+  updatedAt         DateTime       @updatedAt @db.Timestamptz
 
   kurulum Kurulum? @relation(fields: [kurulumId], references: [id], onDelete: Restrict)
 

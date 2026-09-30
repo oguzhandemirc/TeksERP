@@ -10,8 +10,10 @@ import type { RenderedMessage } from "./message";
 
 export type SendOutcome =
   | { readonly kind: "OK"; readonly providerId: string | null }
-  | { readonly kind: "GECICI"; readonly code: string; readonly retryAfterMs?: number }
-  | { readonly kind: "KALICI"; readonly code: string };
+  /** `rateLimited`: sağlayıcı hız sınırı (429) — kanal `retryAfterMs` boyunca bekler, deneme hakkı YANMAZ. */
+  | { readonly kind: "GECICI"; readonly code: string; readonly retryAfterMs?: number; readonly rateLimited?: boolean }
+  /** `newChatId`: Telegram sohbeti süper gruba taşındı — yeni kimlik (yalnız sayı; sır değil) satıra ve nabza yazılır. */
+  | { readonly kind: "KALICI"; readonly code: string; readonly newChatId?: string };
 
 export interface NotificationTransport {
   readonly channel: BildirimKanali;
@@ -20,10 +22,12 @@ export interface NotificationTransport {
 
 const TIMEOUT_MS = 10_000;
 const PROVIDER_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
+/** Telegram sohbet kimliği: işaretli tam sayı (sıradan grup `-<n>`, süper grup `-100<n>`). DB seddiyle aynı. */
+export const CHAT_ID_PATTERN = /^-?\d{1,20}$/;
 
 /** HTTP durumunun ortak sınıflaması (429/5xx geçici, diğer 4xx kalıcı). */
 function classify(prefix: string, status: number, retryAfterSec: number | null): SendOutcome {
-  if (status === 429) return { kind: "GECICI", code: `${prefix}_HIZ_SINIRI`, ...(retryAfterSec ? { retryAfterMs: retryAfterSec * 1000 } : {}) };
+  if (status === 429) return { kind: "GECICI", code: `${prefix}_HIZ_SINIRI`, rateLimited: true, ...(retryAfterSec ? { retryAfterMs: retryAfterSec * 1000 } : {}) };
   if (status >= 500 || status === 408) return { kind: "GECICI", code: `${prefix}_HTTP_${status}` };
   return { kind: "KALICI", code: `${prefix}_HTTP_${status}` };
 }
@@ -41,6 +45,8 @@ export interface TelegramSettings {
 
 export class TelegramTransport implements NotificationTransport {
   readonly channel = "TELEGRAM" as const;
+  /** Bu süreçte görülen son sohbet taşınması (nabız + günlük) — yeni kimlik yalnız sayı, sır değil. */
+  migration: { readonly chatId: string | null; readonly atMs: number } | null = null;
   constructor(
     private readonly s: TelegramSettings,
     private readonly fetchImpl: typeof fetch = fetch,
@@ -63,8 +69,14 @@ export class TelegramTransport implements NotificationTransport {
       const id = String(json.result?.message_id ?? "");
       return { kind: "OK", providerId: PROVIDER_ID.test(id) ? id : null };
     }
-    // Grup süper gruba yükseldi: sohbet kimliği değişti (TELEGRAM_CHAT_ID güncellenmeli) — yeniden denemek boşuna.
-    if (json?.parameters?.migrate_to_chat_id !== undefined) return { kind: "KALICI", code: "TELEGRAM_SOHBET_TASINDI" };
+    // Sıradan grup süper gruba yükseldi: sohbet kimliği DEĞİŞTİ — yeniden denemek boşuna (KALICI, tavan tüketilmez);
+    // yeni kimlik sayıysa satıra ve nabza gider, operatör sohbet kimliği dosyasını günceller (otomatik geçiş YOK).
+    if (json?.parameters?.migrate_to_chat_id !== undefined) {
+      const id = String(json.parameters.migrate_to_chat_id);
+      const newChatId = CHAT_ID_PATTERN.test(id) ? id : null;
+      this.migration = { chatId: newChatId, atMs: Date.now() };
+      return { kind: "KALICI", code: "TELEGRAM_SOHBET_TASINDI", ...(newChatId ? { newChatId } : {}) };
+    }
     return classify("TELEGRAM", res.status, seconds(json?.parameters?.retry_after));
   }
 }

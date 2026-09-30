@@ -1,7 +1,8 @@
 // PORTAL "BİLDİRİMLER" GÖRÜNÜMÜ — satıcı yalnız KENDİ giden kutusunu okur (gönderici ayrı konteynerde; satıcı ona
 // bağlanmaz): kanal durumu satırların sonucundan TÜRER — son sonuç KAPALI → "yapılandırılmamış", HATA → "hata",
-// GONDERILDI → "çalışıyor"; vadesi 10 dk'dan uzun süredir geçmiş bekleyen varsa "gönderici yanıtsız" (yan
-// konteyner çalışmıyor). Deneme bildirimi giden kutusuna İŞLEM KİMLİĞİYLE satır yazar (aynı kimlik ikinci satır doğurmaz).
+// Telegram sohbeti taşındı → "sohbet taşındı" + YENİ kimlik (yalnız sayı), GONDERILDI → "çalışıyor"; vadesi 10 dk'dan
+// uzun süredir geçmiş bekleyen varsa "gönderici yanıtsız" (yan konteyner çalışmıyor). Deneme bildirimi giden kutusuna
+// İŞLEM KİMLİĞİYLE satır yazar (aynı kimlik ikinci satır doğurmaz).
 import type { BildirimDurumu, BildirimKanali, BildirimOlayi, Prisma } from "@prisma/client";
 import type { VendorConfig } from "../config";
 import type { Db, Tx } from "../lib/prisma";
@@ -12,7 +13,9 @@ import { enqueueNotificationTx } from "./outbox";
 /** Bekleyen bu kadar süredir vadesini geçmişse gönderici yanıtsız sayılır. */
 export const SENDER_STALE_MS = 10 * 60_000;
 
-export type ChannelHealth = "CALISIYOR" | "HATA" | "YAPILANDIRILMAMIS" | "GONDERICI_YANITSIZ" | "BILINMIYOR";
+/** Kanal durumu (web ekran adları bu listenin aynası — `satici/web/src/test/mirrors.test.ts`). */
+export const CHANNEL_HEALTH_STATES = ["CALISIYOR", "HATA", "YAPILANDIRILMAMIS", "GONDERICI_YANITSIZ", "SOHBET_TASINDI", "BILINMIYOR"] as const;
+export type ChannelHealth = (typeof CHANNEL_HEALTH_STATES)[number];
 
 const LIST_SELECT = {
   id: true,
@@ -23,6 +26,7 @@ const LIST_SELECT = {
   sonrakiDeneme: true,
   sonHata: true,
   gonderimZamani: true,
+  yeniSohbetKimligi: true,
   govde: true,
   kurulumId: true,
   createdAt: true,
@@ -42,18 +46,28 @@ async function channelOverview(db: Db, kanal: BildirimKanali, nowMs: number) {
   const last = await db.bildirim.findFirst({
     where: { kanal, durum: { in: ["GONDERILDI", "HATA", "KAPALI"] } },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    select: { durum: true, sonHata: true, updatedAt: true },
+    select: { durum: true, sonHata: true, updatedAt: true, yeniSohbetKimligi: true },
   });
   const lastSent = await db.bildirim.findFirst({ where: { kanal, durum: "GONDERILDI" }, orderBy: [{ gonderimZamani: "desc" }, { id: "desc" }], select: { gonderimZamani: true } });
   const pending = await db.bildirim.count({ where: { kanal, durum: { in: ["BEKLIYOR", "GONDERILIYOR"] } } });
   const overdue = await db.bildirim.count({ where: { kanal, durum: "BEKLIYOR", sonrakiDeneme: { lt: new Date(nowMs - SENDER_STALE_MS) } } });
   const status: ChannelHealth =
-    overdue > 0 ? "GONDERICI_YANITSIZ" : last?.durum === "KAPALI" ? "YAPILANDIRILMAMIS" : last?.durum === "HATA" ? "HATA" : last?.durum === "GONDERILDI" ? "CALISIYOR" : "BILINMIYOR";
+    overdue > 0
+      ? "GONDERICI_YANITSIZ"
+      : last?.sonHata === "TELEGRAM_SOHBET_TASINDI"
+        ? "SOHBET_TASINDI"
+        : last?.durum === "KAPALI"
+          ? "YAPILANDIRILMAMIS"
+          : last?.durum === "HATA"
+            ? "HATA"
+            : last?.durum === "GONDERILDI"
+              ? "CALISIYOR"
+              : "BILINMIYOR";
   return {
     kanal,
     durum: status,
     sonGonderim: lastSent?.gonderimZamani ?? null,
-    sonSonuc: last ? { durum: last.durum, kod: last.sonHata, zaman: last.updatedAt } : null,
+    sonSonuc: last ? { durum: last.durum, kod: last.sonHata, zaman: last.updatedAt, yeniSohbetKimligi: last.yeniSohbetKimligi } : null,
     bekleyen: pending,
     geciken: overdue,
   };

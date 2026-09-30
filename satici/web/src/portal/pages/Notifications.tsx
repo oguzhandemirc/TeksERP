@@ -17,6 +17,7 @@ const HEALTH_TONE: Record<string, "ok" | "warn" | "danger" | "neutral"> = {
   HATA: "danger",
   YAPILANDIRILMAMIS: "warn",
   GONDERICI_YANITSIZ: "danger",
+  SOHBET_TASINDI: "danger",
   BILINMIYOR: "neutral",
 };
 
@@ -34,6 +35,7 @@ export function whereOf(b: NotificationBody): string {
 }
 
 function ChannelCard({ c }: { c: ChannelOverview }) {
+  const moved = c.durum === "SOHBET_TASINDI" ? (c.sonSonuc?.yeniSohbetKimligi ?? null) : null;
   return (
     <div className="card">
       <h3>
@@ -45,6 +47,9 @@ function ChannelCard({ c }: { c: ChannelOverview }) {
           ["Son sonuç", c.sonSonuc ? `${label(NOTIFICATION_STATUS_LABEL, c.sonSonuc.durum)}${c.sonSonuc.kod ? ` · ${c.sonSonuc.kod}` : ""} · ${fmtDateTime(c.sonSonuc.zaman)}` : "—"],
           ["Bekleyen", String(c.bekleyen)],
           ["Vadesi geçmiş bekleyen", String(c.geciken)],
+          ...(c.durum === "SOHBET_TASINDI"
+            ? ([["Yeni sohbet kimliği", `${moved ?? "okunamadı"} — gönderici ortamındaki sohbet kimliği dosyasına yazıp göndericiyi yeniden başlatın`]] as const)
+            : []),
         ]}
       />
     </div>
@@ -144,7 +149,7 @@ export function NotificationsPage() {
             { header: "Fabrika", render: (r) => whereOf(r.govde) },
             { header: "Ayrıntı", render: (r) => r.govde.konu ?? r.govde.referans ?? "—" },
             { header: "Durum", render: (r) => <Badge tone={STATUS_TONE[r.durum] ?? "neutral"}>{`${label(NOTIFICATION_STATUS_LABEL, r.durum)}${r.deneme > 1 ? ` · ${r.deneme}. deneme` : ""}`}</Badge> },
-            { header: "Son hata", render: (r) => (r.sonHata ? <code>{r.sonHata}</code> : "—") },
+            { header: "Son hata", render: (r) => (r.sonHata ? <code>{r.yeniSohbetKimligi ? `${r.sonHata} → ${r.yeniSohbetKimligi}` : r.sonHata}</code> : "—") },
             { header: "Gönderim", render: (r) => fmtDateTime(r.gonderimZamani) },
             { header: "", render: (r) => <Link to={r.govde.portalYolu}>Aç</Link> },
           ]}

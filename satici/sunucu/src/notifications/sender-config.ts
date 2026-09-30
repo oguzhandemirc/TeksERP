@@ -1,12 +1,12 @@
-// GÖNDERİCİ YAPILANDIRMASI (yan konteyner `satici-bildirim`) — ortamdan; sırlar ortamdan YA DA dosyadan (docker
-// secret: `…_DOSYASI`). Biçimsiz genel ayar açılışı durdurur (fail-closed); bir KANALIN eksik/okunamayan/biçimsiz
+// GÖNDERİCİ YAPILANDIRMASI (yan konteyner `satici-bildirim`) — ortamdan; bot belirteci, Telegram sohbet kimliği ve
+// Resend anahtarı ortamdan YA DA dosyadan (docker secret: `…_DOSYASI`; dağıtımda DOSYA — değer koda/runbook'a gömülmez). Biçimsiz genel ayar açılışı durdurur (fail-closed); bir KANALIN eksik/okunamayan/biçimsiz
 // sırrı yalnız o kanalı KAPALI yapar (diğer kanal çalışır): gönderim yok, nabız ve günlük "kanal yapılandırılmamış"
 // der, gerekçe yalnız DEĞİŞKEN ADINI taşır — sırrın kendisi hiçbir iletiye girmez. `.env` OKUNMAZ (yerelde satıcının
 // sahip URL'i sızmasın): gönderici yalnız kendi ortamıyla ve yalnız kendi DB rolüyle koşar.
 import { readFileSync, statSync } from "node:fs";
 import type { BildirimKanali } from "@prisma/client";
 import { z } from "zod";
-import type { ResendSettings, TelegramSettings } from "./transports";
+import { CHAT_ID_PATTERN, type ResendSettings, type TelegramSettings } from "./transports";
 
 const positiveInt = (min: number, max: number) => z.coerce.number().int().min(min).max(max);
 
@@ -31,7 +31,9 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_BOT_TOKEN_DOSYASI: z.string().min(1).optional(),
-  TELEGRAM_CHAT_ID: z.string().trim().regex(/^(-?\d{1,20}|@[A-Za-z0-9_]{5,32})$/, "TELEGRAM_CHAT_ID sayı (grup: -100…) ya da @kanal olmalı").optional(),
+  /** Sohbet (grup) kimliği — dağıtımda DOSYADAN (`…_DOSYASI`, docker secret); doğrudan değer yalnız yerel/bekçi. */
+  TELEGRAM_CHAT_ID: z.string().optional(),
+  TELEGRAM_CHAT_ID_DOSYASI: z.string().min(1).optional(),
   RESEND_API_KEY: z.string().optional(),
   RESEND_API_KEY_DOSYASI: z.string().min(1).optional(),
   BILDIRIM_EPOSTA_ALICI: emailList.optional(),
@@ -80,7 +82,7 @@ const RESEND_KEY = /^re_[A-Za-z0-9_]{16,128}$/;
  * Sır: ortamdan ya da dosyadan (ikisi birden → belirsiz, kanal kapalı). Dosya okunamaz ya da HERKESE açıksa (o+r)
  * kanal kapalı; boş dosya = kanal bilerek kapalı. Dönen gerekçe yalnız değişken adını taşır.
  */
-function secret(env: Env, name: "TELEGRAM_BOT_TOKEN" | "RESEND_API_KEY"): { value: string } | { reason: string } {
+function secret(env: Env, name: "TELEGRAM_BOT_TOKEN" | "TELEGRAM_CHAT_ID" | "RESEND_API_KEY"): { value: string } | { reason: string } {
   const direct = env[name]?.trim() || undefined;
   const file = env[`${name}_DOSYASI`];
   if (direct && file) return { reason: `${name} ve ${name}_DOSYASI birlikte verilmiş (belirsiz)` };
@@ -97,10 +99,12 @@ function secret(env: Env, name: "TELEGRAM_BOT_TOKEN" | "RESEND_API_KEY"): { valu
 
 function telegramState(env: Env): ChannelState<TelegramSettings> {
   const token = secret(env, "TELEGRAM_BOT_TOKEN");
-  const missing = [...("reason" in token ? [token.reason] : []), ...(env.TELEGRAM_CHAT_ID ? [] : ["TELEGRAM_CHAT_ID yok"])];
-  if (missing.length > 0 || !("value" in token)) return { ok: false, reason: missing.join("; ") };
+  const chat = secret(env, "TELEGRAM_CHAT_ID");
+  const missing = [...("reason" in token ? [token.reason] : []), ...("reason" in chat ? [chat.reason] : [])];
+  if (missing.length > 0 || !("value" in token) || !("value" in chat)) return { ok: false, reason: missing.join("; ") };
   if (!TELEGRAM_TOKEN.test(token.value)) return { ok: false, reason: "TELEGRAM_BOT_TOKEN biçimsiz" };
-  return { ok: true, settings: { apiRoot: env.TELEGRAM_API_KOKU, token: token.value, chatId: env.TELEGRAM_CHAT_ID! } };
+  if (!CHAT_ID_PATTERN.test(chat.value)) return { ok: false, reason: "TELEGRAM_CHAT_ID biçimsiz (işaretli tam sayı: grup -<sayı>, süper grup -100<sayı>)" };
+  return { ok: true, settings: { apiRoot: env.TELEGRAM_API_KOKU, token: token.value, chatId: chat.value } };
 }
 
 function emailState(env: Env): ChannelState<ResendSettings> {
@@ -137,8 +141,12 @@ export function loadSenderConfig(raw: NodeJS.ProcessEnv): SenderConfig {
   };
 }
 
-/** Kanal → nabız/günlük metni (sır YOK). */
-export function channelSummary(cfg: SenderConfig): Record<BildirimKanali, string> {
+/** Kanal → nabız/günlük metni (sır YOK). Telegram sohbeti taşındıysa yeni kimlik (yalnız sayı) ve yapılacak iş yazılır. */
+export function channelSummary(cfg: SenderConfig, runtime: { telegramMigratedTo?: string | null } = {}): Record<BildirimKanali, string> {
   const s = (st: ChannelState<unknown>) => (st.ok ? "hazır" : `kanal yapılandırılmamış (${st.reason}) — gönderim KAPALI`);
-  return { EPOSTA: s(cfg.email), TELEGRAM: s(cfg.telegram) };
+  const moved =
+    runtime.telegramMigratedTo === undefined
+      ? null
+      : `sohbet süper gruba taşındı — yeni sohbet kimliği ${runtime.telegramMigratedTo ?? "(okunamadı)"}: sohbet kimliği dosyasını güncelleyip göndericiyi yeniden başlatın (gönderim HATA)`;
+  return { EPOSTA: s(cfg.email), TELEGRAM: moved ?? s(cfg.telegram) };
 }

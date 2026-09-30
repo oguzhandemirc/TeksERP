@@ -6,7 +6,8 @@
 //      GONDERILIYOR + kilit süresi; count 0 → başka gönderici almış, dokunulmaz. Süresi dolan kilit (çöken
 //      gönderici) yeniden alınabilir.
 //   ④ ağ çağrısı tx DIŞINDA; sonuç YALNIZ kendi claim'imiz duruyorsa yazılır (`WHERE {id, GONDERILIYOR, deneme,
-//      kilitBitis}`): OK → GONDERILDI · GECICI → üstel geri çekilme (tavanda HATA) · KALICI → HATA.
+//      kilitBitis}`): OK → GONDERILDI · GECICI → üstel geri çekilme (tavanda HATA) · 429 → sağlayıcının süresi kadar
+//      KANAL beklemesi, deneme hakkı yanmaz · KALICI → HATA (Telegram sohbeti taşındıysa yeni kimlik satırda).
 // Hata kaydı yalnız kısa KODdur (DB seddi); gövde okunurken allowlist şemasından geçmeyen satır gönderilmez.
 import type { BildirimDurumu, BildirimKanali, BildirimOlayi, Prisma, PrismaClient } from "@prisma/client";
 import { NOTIFICATION_CHANNELS, NotificationBodySchema } from "./catalog";
@@ -36,6 +37,8 @@ export interface SenderDeps {
   /** YALNIZ yapılandırılmış kanallar; olmayan kanal KAPALI sayılır. */
   readonly transports: Partial<Record<BildirimKanali, NotificationTransport>>;
   readonly settings: SenderSettings;
+  /** Kanal beklemesi (sağlayıcı 429 `retry_after`): bu ana dek o kanala İSTEK ATILMAZ. Turlar arası taşınır. */
+  readonly pausedUntil?: Map<BildirimKanali, number>;
 }
 
 export interface CycleTotals {
@@ -46,6 +49,8 @@ export interface CycleTotals {
   failed: number;
   /** Claim'i başka gönderici aldı ya da kilit bitmeden sonuç yazılamadı. */
   lost: number;
+  /** Kanal beklemesinde (429) dokunulmadan bırakılan aday. */
+  paused: number;
 }
 
 interface Candidate {
@@ -114,11 +119,27 @@ async function attempt(deps: SenderDeps, c: Claimed): Promise<SendOutcome> {
   }
 }
 
-async function deliver(deps: SenderDeps, c: Claimed, nowMs: number, t: CycleTotals): Promise<void> {
+/** Bir turun ortak durumu: an · sayaçlar · kanal beklemeleri. */
+interface Cycle {
+  readonly nowMs: number;
+  readonly t: CycleTotals;
+  readonly paused: Map<BildirimKanali, number>;
+}
+
+async function deliver(deps: SenderDeps, c: Claimed, cycle: Cycle): Promise<void> {
+  const { nowMs, t, paused } = cycle;
   const outcome = await attempt(deps, c);
   if (outcome.kind === "OK") {
     const ok = await finish(deps.db, c, { durum: "GONDERILDI", gonderimZamani: new Date(nowMs), saglayiciKimligi: outcome.providerId, sonHata: null });
     if (ok) t.sent++;
+    else t.lost++;
+    return;
+  }
+  if (outcome.kind === "GECICI" && outcome.rateLimited) {
+    // Hız sınırı satırın kusuru değil: deneme hakkı YANMAZ, kanal bekleme süresince istek görmez.
+    const wait = outcome.retryAfterMs ?? backoffMs(c.deneme);
+    paused.set(c.kanal, nowMs + wait);
+    if (await finish(deps.db, c, { durum: "BEKLIYOR", sonrakiDeneme: new Date(nowMs + wait), sonHata: outcome.code, deneme: c.deneme - 1 })) t.retried++;
     else t.lost++;
     return;
   }
@@ -128,14 +149,16 @@ async function deliver(deps: SenderDeps, c: Claimed, nowMs: number, t: CycleTota
     else t.lost++;
     return;
   }
-  if (await finish(deps.db, c, { durum: "HATA", sonHata: outcome.code })) t.failed++;
+  const moved = outcome.kind === "KALICI" && outcome.newChatId ? { yeniSohbetKimligi: outcome.newChatId } : {};
+  if (await finish(deps.db, c, { durum: "HATA", sonHata: outcome.code, ...moved })) t.failed++;
   else t.lost++;
 }
 
 /** Bir tur: kapat → eskit → al → gönder. Aynı anda birden çok gönderici koşabilir (claim atomik). */
 export async function runSenderCycle(deps: SenderDeps, nowMs: number): Promise<CycleTotals> {
   const now = new Date(nowMs);
-  const t: CycleTotals = { closed: 0, expired: 0, sent: 0, retried: 0, failed: 0, lost: 0 };
+  const t: CycleTotals = { closed: 0, expired: 0, sent: 0, retried: 0, failed: 0, lost: 0, paused: 0 };
+  const paused = deps.pausedUntil ?? new Map<BildirimKanali, number>();
   t.closed = await closeUnconfigured(deps, now);
   t.expired = await expireStale(deps, nowMs);
   const live = NOTIFICATION_CHANNELS.filter((k) => deps.transports[k]);
@@ -147,12 +170,16 @@ export async function runSenderCycle(deps: SenderDeps, nowMs: number): Promise<C
     select: { id: true, olay: true, kanal: true, govde: true, durum: true, deneme: true, createdAt: true },
   });
   for (const row of candidates) {
+    if ((paused.get(row.kanal) ?? 0) > nowMs) {
+      t.paused++;
+      continue;
+    }
     const c = await claim(deps.db, row, nowMs);
     if (!c) {
       t.lost++;
       continue;
     }
-    await deliver(deps, c, nowMs, t);
+    await deliver(deps, c, { nowMs, t, paused });
   }
   return t;
 }

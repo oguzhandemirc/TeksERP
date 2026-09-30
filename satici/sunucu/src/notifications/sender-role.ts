@@ -6,8 +6,8 @@ import { createHash, createHmac, pbkdf2Sync, randomBytes } from "node:crypto";
 import type { Client } from "pg";
 
 export const SENDER_ROLE = "satici_bildirim";
-/** Göçün kolon düzeyinde UPDATE verdiği kolonlar — gönderici YALNIZ bunları yazar (bekçi ölçer). */
-export const SENDER_UPDATE_COLUMNS = ["durum", "deneme", "sonrakiDeneme", "kilitBitis", "sonHata", "saglayiciKimligi", "gonderimZamani", "updatedAt"] as const;
+/** Göçlerin (20261001130000 · 20261001130100) kolon düzeyinde UPDATE verdiği kolonlar — gönderici YALNIZ bunları yazar (bekçi ölçer). */
+export const SENDER_UPDATE_COLUMNS = ["durum", "deneme", "sonrakiDeneme", "kilitBitis", "sonHata", "saglayiciKimligi", "gonderimZamani", "updatedAt", "yeniSohbetKimligi"] as const;
 /** satici-baslat.sh URL'i parolayla kurar: yalnız harf/rakam (onaltılık üretilir). */
 export const SENDER_PASSWORD = /^[0-9A-Za-z]{32,128}$/;
 const ROLE_NAME = /^[a-z_][a-z0-9_]{0,62}$/;

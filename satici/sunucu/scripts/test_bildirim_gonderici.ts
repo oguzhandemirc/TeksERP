@@ -132,6 +132,14 @@ function yapilandirma(): void {
       aliciRed = true;
     }
     kontrol("§0d düz http sağlayıcı kökü (geri döngü dışı) ve biçimsiz alıcı açılışı DURDURUR", httpRed && aliciRed);
+    const grupDosyasi = dosya("grup", "-4012345678\n", 0o440);
+    const dosyadan = loadSenderConfig({ ...temel, TELEGRAM_BOT_TOKEN_DOSYASI: path.join(dizin, "iyi"), TELEGRAM_CHAT_ID_DOSYASI: grupDosyasi }).telegram;
+    const kanalAdi = loadSenderConfig({ ...temel, TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_CHAT_ID: "@bekci_kanali" }).telegram;
+    kontrol(
+      "§0f sohbet (grup) kimliği DOSYADAN okunur (sıradan grup -<sayı>); sayı olmayan kimlik → KAPALI, değer gerekçeye girmez",
+      dosyadan.ok && dosyadan.settings.chatId === "-4012345678" && !kanalAdi.ok && /TELEGRAM_CHAT_ID biçimsiz/.test(kanalAdi.reason) && !kanalAdi.reason.includes("bekci_kanali"),
+      dosyadan.ok ? dosyadan.settings.chatId : dosyadan.reason,
+    );
     const bosCompose = loadSenderConfig({ ...temel, TELEGRAM_CHAT_ID: "", BILDIRIM_EPOSTA_ALICI: "", BILDIRIM_EPOSTA_GONDEREN: "", BILDIRIM_PORTAL_ADRESI: "", TELEGRAM_BOT_TOKEN: TOKEN });
     kontrol("§0e compose'un boş değişkeni (`${X:-}`) verilmemiş sayılır: açılış durmaz, kanal kapalı", !bosCompose.telegram.ok && !bosCompose.email.ok && bosCompose.portalBase === null);
   } finally {
@@ -223,12 +231,45 @@ async function geriCekilme(o: Ortak): Promise<void> {
   const kopuk = await tek({ status: 0, kopar: true });
   kontrol("§2g bağlantı kopması → geçici (TELEGRAM_AG_HATASI)", kopuk.durum === "BEKLIYOR" && kopuk.sonHata === "TELEGRAM_AG_HATASI", `${kopuk.durum} ${kopuk.sonHata}`);
   await o.prisma.bildirim.update({ where: { id: kopuk.id }, data: { durum: "HATA", sonHata: "BEKCI_KAPATTI" } });
-  const tasindi = await tek({ status: 400, body: { ok: false, error_code: 400, parameters: { migrate_to_chat_id: -1009999 } } });
-  kontrol("§2h süper gruba taşınan sohbet → kalıcı TELEGRAM_SOHBET_TASINDI", tasindi.durum === "HATA" && tasindi.sonHata === "TELEGRAM_SOHBET_TASINDI");
+  const tasindi = await tek({ status: 400, body: { ok: false, error_code: 400, description: "Bad Request: group chat was upgraded to a supergroup chat", parameters: { migrate_to_chat_id: -1009999 } } });
+  const sonra = o.tg.istekler.length;
+  await runSenderCycle(deps(o.db, ikisi(o)), Date.now() + 24 * 3_600_000);
+  kontrol(
+    "§2h sıradan grup süper gruba taşındı → İLK denemede kalıcı HATA (tavan tüketilmez), yeni kimlik (yalnız sayı) satırda, bir daha denenmez",
+    tasindi.durum === "HATA" && tasindi.deneme === 1 && tasindi.sonHata === "TELEGRAM_SOHBET_TASINDI" && tasindi.yeniSohbetKimligi === "-1009999" && o.tg.istekler.length === sonra,
+    `${tasindi.durum} ${tasindi.deneme} ${tasindi.yeniSohbetKimligi ?? "-"}`,
+  );
+  const bozuk = await tek({ status: 400, body: { ok: false, parameters: { migrate_to_chat_id: "-100abc; DROP" } } });
+  kontrol("§2h' sayı olmayan taşınma kimliği yazılmaz (kod yine TELEGRAM_SOHBET_TASINDI)", bozuk.durum === "HATA" && bozuk.sonHata === "TELEGRAM_SOHBET_TASINDI" && bozuk.yeniSohbetKimligi === null);
   const yetkisiz = await tek({ status: 401, body: { ok: false, description: `Unauthorized ${TOKEN}` } });
   kontrol("§2i 401 (yanıt belirteci yansıtsa da) → kayıtta yalnız KOD", yetkisiz.durum === "HATA" && yetkisiz.sonHata === "TELEGRAM_HTTP_401" && !JSON.stringify(yetkisiz).includes(TOKEN));
   const resend = await tek({ status: 422, body: { name: "validation_error", message: "Invalid `to` field" } }, "EPOSTA");
   kontrol("§2j Resend 422 → HATA RESEND_HTTP_422", resend.durum === "HATA" && resend.sonHata === "RESEND_HTTP_422", `${resend.durum} ${resend.sonHata}`);
+  await hizSiniri(o);
+}
+
+/** 429 retry_after: kanal o süre boyunca İSTEK görmez (aynı turdaki diğer satır da), deneme hakkı yanmaz. */
+async function hizSiniri(o: Ortak): Promise<void> {
+  const d = { ...deps(o.db, { TELEGRAM: ikisi(o).TELEGRAM }), pausedUntil: new Map() };
+  const a = await satir(o.prisma, "TELEGRAM", `hiz-${RUN}-a`);
+  const b = await satir(o.prisma, "TELEGRAM", `hiz-${RUN}-b`);
+  o.tg.sonraki.push({ status: 429, body: { ok: false, error_code: 429, description: "Too Many Requests: retry after 30", parameters: { retry_after: 30 } } });
+  const t = Date.now();
+  const n0 = o.tg.istekler.length;
+  const c1 = await runSenderCycle(d, t);
+  const [a1, b1] = [await tazele(o.prisma, a.id), await tazele(o.prisma, b.id)];
+  const ilk = a1.sonHata === "TELEGRAM_HIZ_SINIRI" ? a1 : b1;
+  const ikinci = ilk === a1 ? b1 : a1;
+  kontrol(
+    "§2k 429 → aynı turda kanala ikinci istek YOK; satır 30 sn sonra, deneme hakkı YANMAZ (0); diğer satır dokunulmadan bekler",
+    o.tg.istekler.length === n0 + 1 && c1.paused >= 1 && ilk.durum === "BEKLIYOR" && ilk.deneme === 0 && Math.abs(ilk.sonrakiDeneme.getTime() - (t + 30_000)) < 1_000 && ikinci.durum === "BEKLIYOR" && ikinci.deneme === 0 && ikinci.sonHata === null,
+    JSON.stringify(c1),
+  );
+  await runSenderCycle(d, t + 10_000);
+  kontrol("§2l kanal beklemesi sürerken vadesi gelmiş satıra da istek YOK", o.tg.istekler.length === n0 + 1);
+  await runSenderCycle(d, t + 31_000);
+  const [a2, b2] = [await tazele(o.prisma, a.id), await tazele(o.prisma, b.id)];
+  kontrol("§2m bekleme bitince ikisi de gönderilir (deneme 1)", o.tg.istekler.length === n0 + 3 && [a2, b2].every((r) => r.durum === "GONDERILDI" && r.deneme === 1), `${a2.durum}/${b2.durum}`);
 }
 
 async function kapaliKanal(o: Ortak): Promise<void> {
@@ -248,6 +289,22 @@ async function kapaliKanal(o: Ortak): Promise<void> {
       "§3b süreç: 'kanal yapılandırılmamış' (günlük + nabız, değişken adıyla), belirteç günlükte YOK",
       p.kod === 0 && p.cikti.includes("BILDIRIM_GONDERICI_HAZIR eposta=kapali telegram=acik") && /kanal yapılandırılmamış \(RESEND_API_KEY yok/.test(kalp.kanallar.EPOSTA ?? "") && kalp.kanallar.TELEGRAM === "hazır" && !p.cikti.includes(TOKEN),
       `${p.kod} ${kalp.kanallar.EPOSTA ?? ""}`,
+    );
+    const grup = path.join(dizin, "grup");
+    writeFileSync(grup, "-4012345678\n");
+    chmodSync(grup, 0o440);
+    const tasinan = await satir(o.prisma, "TELEGRAM", `tasinan-${RUN}`);
+    o.tg.sonraki.push({ status: 400, body: { ok: false, error_code: 400, parameters: { migrate_to_chat_id: -1004012345678 } } });
+    const nabiz2 = path.join(dizin, "nabiz2.json");
+    const p2 = await surec({ DATABASE_URL: o.rol.url, TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_CHAT_ID_DOSYASI: grup, TELEGRAM_API_KOKU: o.tg.kok, BILDIRIM_NABIZ_DOSYASI: nabiz2 }, ["--tek-tur"]);
+    const kalp2 = JSON.parse(readFileSync(nabiz2, "utf8")) as { kanallar: Record<string, string> };
+    const giden = o.tg.istekler[o.tg.istekler.length - 1]?.govde.chat_id;
+    const t1 = await tazele(o.prisma, tasinan.id);
+    kontrol(
+      "§3c süreç: sohbet kimliği DOSYADAN (-4012345678) gider; taşınınca nabız + günlük YENİ kimliği (-1004012345678) ve yapılacak işi söyler, satır kalıcı HATA",
+      p2.kod === 0 && giden === "-4012345678" && /yeni sohbet kimliği -1004012345678/.test(kalp2.kanallar.TELEGRAM ?? "") && /yeni sohbet kimliği -1004012345678/.test(p2.cikti) &&
+        t1.durum === "HATA" && t1.yeniSohbetKimligi === "-1004012345678" && !p2.cikti.includes(TOKEN),
+      `${p2.kod} ${String(giden)} · ${kalp2.kanallar.TELEGRAM ?? ""}`,
     );
   } finally {
     rmSync(dizin, { recursive: true, force: true });

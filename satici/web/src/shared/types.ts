@@ -422,6 +422,8 @@ export interface NotificationRow {
   readonly sonrakiDeneme: string;
   readonly sonHata: string | null;
   readonly gonderimZamani: string | null;
+  /** Telegram sohbeti süper gruba taşındıysa YENİ sohbet kimliği (yalnız sayı; sır değil). */
+  readonly yeniSohbetKimligi: string | null;
   readonly govde: NotificationBody;
   readonly kurulumId: string | null;
   readonly createdAt: string;
@@ -432,7 +434,7 @@ export interface ChannelOverview {
   readonly kanal: string;
   readonly durum: string;
   readonly sonGonderim: string | null;
-  readonly sonSonuc: { readonly durum: string; readonly kod: string | null; readonly zaman: string } | null;
+  readonly sonSonuc: { readonly durum: string; readonly kod: string | null; readonly zaman: string; readonly yeniSohbetKimligi?: string | null } | null;
   readonly bekleyen: number;
   readonly geciken: number;
 }

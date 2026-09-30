@@ -327,11 +327,20 @@ async function allowlist(o: Ortam, token: string): Promise<void> {
     uzun: await reddedilir({ ...temel, konu: "x".repeat(301) }),
     nesne: await reddedilir({ ...temel, konu: { gizli: 1 } }),
     hata: await reddedilir(temel, { durum: "HATA", sonHata: "Bad Request: chat not found (token 123:abc)" }),
+    sohbetMetin: await reddedilir(temel, { kanal: "TELEGRAM", durum: "HATA", sonHata: "TELEGRAM_SOHBET_TASINDI", yeniSohbetKimligi: "-100abc" }),
+    sohbetBaskaKod: await reddedilir(temel, { kanal: "TELEGRAM", durum: "HATA", sonHata: "TELEGRAM_HTTP_400", yeniSohbetKimligi: "-1001234" }),
+    sohbetEposta: await reddedilir(temel, { kanal: "EPOSTA", durum: "HATA", sonHata: "TELEGRAM_SOHBET_TASINDI", yeniSohbetKimligi: "-1001234" }),
   };
   const govdeSeddi = [sonuclar.fazla, sonuclar.dis, sonuclar.uzun, sonuclar.nesne].every((v) => v === "bildirim_govde_allowlist");
-  kontrol("§3c DB seddi: fazla anahtar · dış bağlantı · 300+ karakter · nesne değer (allowlist) · ham hata metni (kod biçimi) REDDEDİLİR", govdeSeddi && sonuclar.hata === "bildirim_hata_kodu_bicimi", JSON.stringify(sonuclar));
+  const sohbetSeddi = [sonuclar.sohbetMetin, sonuclar.sohbetBaskaKod, sonuclar.sohbetEposta].every((v) => v === "bildirim_yeni_sohbet_bicimi");
+  kontrol(
+    "§3c DB seddi: fazla anahtar · dış bağlantı · 300+ karakter · nesne değer (allowlist) · ham hata metni (kod biçimi) · yeni sohbet kimliği yalnız SAYI, yalnız Telegram + taşınma kodunda REDDEDİLİR",
+    govdeSeddi && sonuclar.hata === "bildirim_hata_kodu_bicimi" && sohbetSeddi,
+    JSON.stringify(sonuclar),
+  );
   const gecerli = await reddedilir(temel);
-  kontrol("§3d ✓K aynı yoldan geçerli gövde KABUL edilir (sed kör değil)", gecerli === "KABUL", gecerli);
+  const gecerliSohbet = await reddedilir(temel, { kanal: "TELEGRAM", durum: "HATA", sonHata: "TELEGRAM_SOHBET_TASINDI", yeniSohbetKimligi: "-1001234567890" });
+  kontrol("§3d ✓K aynı yoldan geçerli gövde ve geçerli taşınma kimliği KABUL edilir (sed kör değil)", gecerli === "KABUL" && gecerliSohbet === "KABUL", `${gecerli} · ${gecerliSohbet}`);
   await prisma.bildirim.deleteMany({ where: { tekillikAnahtari: { startsWith: "DENEME:sed-" } } });
 }
 

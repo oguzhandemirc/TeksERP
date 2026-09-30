@@ -97,6 +97,7 @@ export const CHANNEL_HEALTH_LABEL: Record<string, string> = {
   HATA: "Son gönderim hatalı",
   YAPILANDIRILMAMIS: "Kanal yapılandırılmamış",
   GONDERICI_YANITSIZ: "Gönderici yanıt vermiyor",
+  SOHBET_TASINDI: "Telegram sohbeti süper gruba taşındı",
   BILINMIYOR: "Henüz bildirim yok",
 };
 
