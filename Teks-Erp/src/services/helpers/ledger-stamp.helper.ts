@@ -52,3 +52,13 @@ export async function warpBeamEventStampTx(tx: Tx, beamId: string): Promise<Date
     ) AS at`;
   return rows[0]!.at;
 }
+
+/** Fabrika saat dilimi dönem defteri (`factory_timezone_periods`) — defter tek varlıktır (kurulum); aynı `validFrom`da son satır kazanır. */
+export async function factoryTimezonePeriodStampTx(tx: Tx): Promise<Date> {
+  const rows = await tx.$queryRaw<Array<{ at: Date }>>`
+    SELECT GREATEST(
+      to_timestamp(ceil(extract(epoch FROM clock_timestamp()) * 1000) / 1000), -- tz-ok: timestamptz, tx başı değil ŞU AN
+      (SELECT max("createdAt") + interval '1 millisecond' FROM factory_timezone_periods)
+    ) AS at`;
+  return rows[0]!.at;
+}

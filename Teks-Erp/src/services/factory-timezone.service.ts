@@ -16,6 +16,7 @@ import {
   isValidFactoryTimezone,
 } from "../constants/time";
 import { SETTING_KEYS, invalidateFeatureFlagsCache } from "./system-setting.service";
+import { factoryTimezonePeriodStampTx } from "./helpers/ledger-stamp.helper";
 import {
   type FactoryTimezonePending,
   applyFactoryTimezoneRows,
@@ -101,13 +102,6 @@ export function invalidTz(): never {
   throw AppError.badRequest("Geçerli bir IANA saat dilimi seçin (ör. Europe/Istanbul)", { code: "FACTORY_TIMEZONE_INVALID" });
 }
 
-/** Defterin kronolojisi belirlenimli artar: DB saati ya da son satır + 1 ms (aynı `validFrom`da son satır kazanır). */
-async function nextCreatedAt(tx: Prisma.TransactionClient): Promise<Date> {
-  const r = await tx.$queryRaw<Array<{ at: Date }>>`
-    SELECT GREATEST(clock_timestamp(), COALESCE((SELECT max("createdAt") FROM factory_timezone_periods) + interval '1 millisecond', clock_timestamp())) AS at`;
-  return r[0]!.at;
-}
-
 async function reloadAfterCommit(): Promise<void> {
   try {
     await loadAndApply(prisma);
@@ -162,7 +156,7 @@ export async function setFactoryTimezone(
     const created = await tx.factoryTimezonePeriod.create({
       data: {
         timeZone: input.timeZone, validFrom, reason: input.reason ?? null,
-        createdById: userId, createdAt: await nextCreatedAt(tx),
+        createdById: userId, createdAt: await factoryTimezonePeriodStampTx(tx),
       },
       select: { id: true, validFrom: true },
     });
@@ -219,7 +213,7 @@ export async function cancelFactoryTimezoneChange(
     const row = await tx.factoryTimezonePeriod.create({
       data: {
         timeZone: pending.previousTimeZone, validFrom: pending.validFrom, reason: input.reason ?? "İptal",
-        reversesPeriodId: pending.id, createdById: userId, createdAt: await nextCreatedAt(tx),
+        reversesPeriodId: pending.id, createdById: userId, createdAt: await factoryTimezonePeriodStampTx(tx),
       },
       select: { id: true },
     });
