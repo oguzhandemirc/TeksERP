@@ -28,7 +28,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Fabrikanın saat dilimi artık programdan ayarlanır: Genel Ayarlar → Sistem → Şirket Bilgileri → “Saat dilimi”. Programdaki tarih ve saatler, raporların gün sınırları ve basılan belgelerdeki saatler bu dilime göre gösterilir; bilgisayarın kendi saat ayarı artık etkilemez. Varsayılan İstanbul'dur, bugünkü kurulumlarda görünen saatler değişmez. Dilimi değiştirmeden önce son günlerdeki kaç top ve sevkiyatın gününün kayacağı gösterilir; değiştirmek için “Ayarlar (yönetici)” yetkisi gerekir."
+          "metin": "Fabrikanın saat dilimi artık programdan ayarlanır: Genel Ayarlar → Sistem → Şirket Bilgileri → “Saat dilimi”. Programdaki tarih ve saatler, raporların gün sınırları ve basılan belgelerdeki saatler bu dilime göre gösterilir; bilgisayarın kendi saat ayarı artık etkilemez. Varsayılan İstanbul'dur, bugünkü kurulumlarda görünen saatler değişmez. Saat dilimi değiştirilirse yeni dilim ertesi gün başından geçerli olur; geçmiş kayıtların saatleri ve günleri değişmez; bekleyen değişiklik “Değişikliği iptal et” düğmesiyle iptal edilebilir. Değiştirmek için “Ayarlar (yönetici)” yetkisi gerekir."
         },
         {
           "kapsam": "tablet",
