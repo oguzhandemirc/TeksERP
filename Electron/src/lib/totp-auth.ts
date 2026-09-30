@@ -3,17 +3,23 @@ import type { AxiosError } from "axios";
 // -----------------------------------------------------------------------------
 // İKİ ADIMLI DOĞRULAMA — hata kodu dedektörleri (saf, React'ten bağımsız)
 // -----------------------------------------------------------------------------
-// Backend uzak (tünel) girişlerde ikinci faktör ister ve ÜÇ FARKLI durumu ÜÇ
+// Backend, hesabında 2FA açık kullanıcının PAROLALI girişinde ikinci faktör ister
+// (isteğe bağlı; kimseye zorunlu değil) ve ÜÇ FARKLI durumu ÜÇ
 // FARKLI HTTP koduyla ayırır. Ayrım keyfi değil, giriş kilidine bağlı: kilit
 // yalnız **401**'i kaba kuvvet sayar (`auth.controller` F49 kuralı).
 //
-//   • 403 TOTP_ENROLLMENT_REQUIRED → 2FA hiç kurulmamış. Kimlik denemesi DEĞİL.
+//   • 403 TOTP_ENROLLMENT_REQUIRED → 2FA hiç kurulmamış (zorunluluk yok → bugün dönmez).
 //   • 409 TOTP_REQUIRED            → kod istendi. Kimlik denemesi DEĞİL.
 //   • 401 TOTP_INVALID             → yanlış kod. SAYILIR ve sayılmalı (TOTP uzayı
 //                                    yalnız 10^6; kilitsiz çevrimiçi tahmin edilebilir).
 //
-// ⚠️ Bu kodlar LAN'da HİÇ görülmez — fabrika girişleri hiç değişmedi.
+// 2FA'sı kapalı hesap bu kodları hiç görmez; PIN/kart girişleri de sorulmaz.
 // -----------------------------------------------------------------------------
+
+/** 2FA sekmesinin açıklaması — isteğe bağlı 2FA sözleşmesi (kullanıcı kararı 2026-09-30). */
+export const TWO_FACTOR_HINT =
+  "İki adımlı doğrulama isteğe bağlıdır: açarsanız bu hesabın her parolalı girişinde " +
+  "telefondaki kod sorulur. Kapalıyken sorulmaz. Tabletteki PIN ve kart girişleri etkilenmez.";
 
 export const TOTP_REQUIRED_CODE = "TOTP_REQUIRED";
 export const TOTP_ENROLLMENT_REQUIRED_CODE = "TOTP_ENROLLMENT_REQUIRED";

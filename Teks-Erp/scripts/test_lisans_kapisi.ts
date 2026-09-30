@@ -8,7 +8,8 @@
 // NE ÖLÇER (rota envanteri `scripts/lib/rota-envanteri.ts` ile, gerçek Express ağacı):
 //   §1 envanter tam (çözülemeyen mount 0) · §2 sınıflayıcı listelerden BAĞIMSIZ yeniden
 //   hesapla birebir (listede olmayan açık yol yok) · §3 ölü desen yok; KISITLI ek listesi
-//   yalnız yazma; bilerek kapalı yollar gerçekten kapalı · §4 K5 ⊂ K4 · §5 "verilerimi al"
+//   yalnız yazma; bilerek kapalı yollar gerçekten kapalı; güvenlik eylemleri (pasifleştir ·
+//   2FA sıfırla · bulut hesabını kilitle) K4'te açık, K5'te kapalı · §4 K5 ⊂ K4 · §5 "verilerimi al"
 //   yolları var ve HER kademede açık · §6 export/excel/pdf/print/backup adlı yazma rotası
 //   açıkça sınıflı · §7 eşleştirici Express'le aynı (harf duyarsız, boş segment yok, HEAD=GET)
 //   · §8 ⭐ gözlemde SIFIR FARK (K5 hesaplanır; her uç kapıdan eşzamanlı geçer, yanıta
@@ -124,6 +125,20 @@ function oluDesenler(): void {
     (u) => eslesir(DECLARED_CLOSED_ROUTES, u) && (isOpenInTier("KISITLI", u.m, u.ornek) || isOpenInTier("DURDURULMUS", u.m, u.ornek)),
   );
   check("§3d bilerek kapalı yollar KISITLI ve DURDURULMUŞ'ta kapalı (reissue = yeni iş)", acikKapali.length === 0, acikKapali.map((u) => u.desen).join(" | "));
+  // §3e GÜVENLİK EYLEMLERİ: işten çıkanı kapatmak / sızan hesabı kilitlemek kısıtlı kipte de
+  // yapılabilmeli (K4 AÇIK); DURDURULMUŞ kip yalnız "verilerimi al"dır (K5 KAPALI).
+  const GUVENLIK = [
+    "POST /api/admin/users/:id/deactivate",
+    "POST /api/admin/users/:id/totp/reset",
+    "POST /api/patron-bulut/hesap/:id/kilitle",
+  ];
+  for (const spec of GUVENLIK) {
+    const [m, desen] = spec.split(" ");
+    const var_ = uclar.some((u) => u.m === m && routePatternMatches(desen, u.ornek));
+    const k4 = isOpenInTier("KISITLI", m, ornekYol(desen));
+    const k5 = isOpenInTier("DURDURULMUS", m, ornekYol(desen));
+    check(`§3e ⭐ güvenlik eylemi ${spec}: gerçek uç · KISITLI'da AÇIK · DURDURULMUŞ'ta KAPALI`, var_ && k4 && !k5, `var=${var_} K4=${k4} K5=${k5}`);
+  }
 }
 
 function kapsamaVeDisariAktarim(): void {

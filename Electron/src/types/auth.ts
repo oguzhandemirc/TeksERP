@@ -56,8 +56,8 @@ export interface LoginRequest {
   /**
    * İkinci faktör — TOTP kodu (6 hane) ya da kurtarma kodu (XXXX-XXXX).
    *
-   * ⚠️ YALNIZ UZAK (tünel) girişlerinde istenir; LAN'da backend hiç bakmaz.
-   * İstemci bunu kendiliğinden göndermez: önce kodsuz dener, backend
+   * Yalnız hesabında 2FA AÇIK kullanıcının parolalı girişinde istenir (ağdan
+   * bağımsız); 2FA'sı kapalı hesaba backend hiç sormaz. İstemci bunu kendiliğinden göndermez: önce kodsuz dener, backend
    * `409 TOTP_REQUIRED` derse kod adımını açar. "Her ihtimale karşı sor"
    * yaklaşımı fabrikadaki her operatöre gereksiz bir alan gösterirdi.
    */

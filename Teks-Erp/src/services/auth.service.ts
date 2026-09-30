@@ -19,6 +19,7 @@ import {
   readAbsoluteSessionCapDays,
 } from "./system-setting.service";
 import { SessionRegistryService } from "./session-registry.service";
+import { TotpAccountService } from "./totp-account.service";
 
 /** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
  *  clientType body'den (default 'mobile'); deviceId x-device-id/req.device'den;
@@ -27,6 +28,8 @@ export interface LoginContext {
   clientType?: LoginClientType;
   deviceId?: string | null;
   confirmKick?: boolean;
+  /** Parolalı girişte ikinci faktör: TOTP kodu ya da kurtarma kodu (ayrımı servis yapar). */
+  totpCode?: string;
   /**
    * İstemcinin künye başlığında bildirdiği kendi sürümü — `Session.clientVersion`e
    * yazılır. ⚠️ Bu değer İSTEMCİDEN gelir ve uydurulabilir, o yüzden hiçbir
@@ -106,6 +109,11 @@ export class AuthService {
     if (!isPasswordValid) {
       throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
     }
+
+    // ⚠️ SIRA: ikinci faktör `issueToken`den ÖNCE — `issueToken` oturum açar ve
+    // `kick` politikasında diğer oturumları düşürür; yalnız parolayı bilen biri
+    // meşru kullanıcıyı oturumundan atamamalı.
+    await this.assertSecondFactor(user.id, ctx);
 
     return this.issueToken(
       { id: user.id, username: user.username, tokenVersion: user.tokenVersion },
@@ -296,6 +304,30 @@ export class AuthService {
    *  registry'ye kayıt açar (aynı-tip politikası burada uygulanır) ve jti'yi jwtid
    *  olarak token'a gömer → middleware anlık iptal kontrolü yapabilir. 'notify'
    *  politikası + onaysız çakışma → openLoginSession 409 SESSION_EXISTS fırlatır. */
+  /**
+   * İKİNCİ FAKTÖR KAPISI — yalnız PAROLALI giriş, yalnız kullanıcı TOTP'yi AÇTIYSA
+   * (ağdan bağımsız; açmayana hiç sorulmaz). Kart/PIN/cihaz girişleri buradan geçmez.
+   * Kodlar giriş kilidine göre seçildi (yalnız 401 kaba kuvvet sayılır):
+   *   • 409 TOTP_REQUIRED → kod istendi; kimlik denemesi DEĞİL (istemci kodu ekleyip tekrar POST eder).
+   *   • 401 TOTP_INVALID  → yanlış kod; SAYILIR (TOTP uzayı 10^6, kilitsiz tahmin edilirdi).
+   */
+  private static async assertSecondFactor(userId: string, ctx?: LoginContext): Promise<void> {
+    const status = await TotpAccountService.getStatus(userId);
+    if (!status.enabled) return;
+
+    const code = (ctx?.totpCode ?? "").trim();
+    if (!code) {
+      // Tablet uygulamasında kod adımı yok: kullanıcıyı PIN/kart yoluna yönlendir.
+      const message = isDesktopClient(ctx?.clientType)
+        ? "Doğrulama kodu gerekli."
+        : "Bu hesapta iki adımlı doğrulama açık — tablette PIN ya da kartla giriş yapın.";
+      throw AppError.conflict(message, { code: "TOTP_REQUIRED" });
+    }
+    if (!(await TotpAccountService.verifySecondFactor(userId, code))) {
+      throw AppError.unauthorized("Doğrulama kodu geçersiz.", { code: "TOTP_INVALID" });
+    }
+  }
+
   private static async issueToken(
     user: {
       id: string;

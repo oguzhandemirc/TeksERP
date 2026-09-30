@@ -10,7 +10,7 @@
 // ⚠️ `.env` TOHUMLAMA YOLU KALDIRILDI (2026-09-03, P8 kullanıcı kararı).
 // Hesabın TEK doğuş yolu artık sunucuda elle koşulan interaktif script'tir:
 //     npm run superadmin:kur            (idempotent — hesap varsa DOKUNMAZ)
-//     npm run superadmin:kur -- --rotate  (parola + PIN + TOTP yenilenir)
+//     npm run superadmin:kur -- --rotate  (parola + PIN yenilenir, 2FA kapatılır)
 // Neden tek yol: iki doğuş yolu = iki sır yüzeyi. `.env` yolunda parola hash'i,
 // PIN ve TOTP sırrı diskte KALICI olarak duruyordu (yedeğe, `kur.ps1`in taşıdığı
 // dosyaya, ekran paylaşımına giriyordu) ve "FORCE_SYNC satırını sonra kaldırın"
@@ -140,8 +140,8 @@ export async function ensureSuperadminAccount(): Promise<SuperadminRegistryResul
 export async function logSuperadminLifecycleEvent(params: {
   rotated: boolean;
   userId: string;
-  /** TOTP sırrı yazıldı mı — sırrın KENDİSİ değil, yalnız durumu. */
-  totp: "seeded" | "cleared";
+  /** 2FA durumu (sır DEĞİL): doğuşta "none", rotasyonda "cleared" — tohumlanmaz. */
+  totp: "none" | "cleared";
 }): Promise<void> {
   const ortak = {
     category: "SYSTEM" as const,

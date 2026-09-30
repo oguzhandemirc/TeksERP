@@ -177,11 +177,8 @@ const EXEMPT: Record<string, string> = {
  * `scan.service.ts` ve `scan.routes.ts` kaynağında `prisma.`/`tx.` çağrısı ve
  * prisma import'u ARAR. Gerekçe değişirse bekçi kırmızı verir.
  */
-/**
- * ⚠️ 15 → 14 (2026-09-30, B6): `GET /api/boss/overview` tünelle birlikte kalktı (özet
- * artık yalnız `cloud-sync/overview`de, uç yok). Sabitin düşürülmesi yöneticide.
- */
-const BARE_CHAIN_BASELINE = 15;
+/** 15 → 14 (B6): `GET /api/boss/overview` tünelle kalktı; özet yalnız `cloud-sync/overview`de. */
+const BARE_CHAIN_BASELINE = 14;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

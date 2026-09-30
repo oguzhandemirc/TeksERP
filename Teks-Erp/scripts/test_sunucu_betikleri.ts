@@ -425,7 +425,7 @@ for (const yol of SUNUCU_PS1) {
 //   `-c…` biçimi ya da `-CaseSensitive`; duyarsızlık GEREKİYORSA `[regex]::IsMatch(…, 'IgnoreCase,
 //   CultureInvariant')`. kur.ps1 Faz 2b'nin sahipliğinde: borcu sayılır, taban yalnız DÜŞER.
 {
-  const KUR_KULTUR_BORCU = 8;
+  const KUR_KULTUR_BORCU = 7;
   const DUYARSIZ = /(?:^|[^\w-])-i?(?:match|notmatch|replace|split)\b/i;
   const ps1 = (d: string): string[] => readdirSync(join(KOK, d), { withFileTypes: true }).flatMap((e) =>
     e.isDirectory() ? ps1(`${d}/${e.name}`) : e.name.endsWith(".ps1") ? [`${d}/${e.name}`] : []);

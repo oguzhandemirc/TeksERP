@@ -36,6 +36,9 @@ const loginSchema = z.object({
   password: z.string().min(1, "Şifre gerekli"),
   clientType: clientTypeSchema,
   confirmKick: z.boolean().optional(),
+  // İkinci faktör — yalnız hesabında TOTP açık kullanıcıdan istenir. Üst sınır:
+  // kurtarma kodu yolunda bcrypt.compare çağrılır, sınırsız metin CPU yakar.
+  totpCode: z.string().trim().min(1).max(64).optional(),
 });
 
 const loginCardSchema = z.object({
@@ -93,11 +96,16 @@ export class AuthController {
    *               password:
    *                 type: string
    *                 example: 123123
+   *               totpCode:
+   *                 type: string
+   *                 description: Hesabında TOTP açık kullanıcı için 6 haneli kod ya da kurtarma kodu
    *     responses:
    *       200:
    *         description: Başarılı giriş
    *       401:
-   *         description: Geçersiz kimlik bilgisi
+   *         description: Geçersiz kimlik bilgisi ya da TOTP_INVALID
+   *       409:
+   *         description: TOTP_REQUIRED (hesapta iki adımlı doğrulama açık, kod gönderilmedi) ya da SESSION_EXISTS
    */
   static async login(req: Request, res: Response, next: NextFunction): Promise<void> {
     const body = (() => {
@@ -165,6 +173,7 @@ export class AuthController {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
+      totpCode: body.totpCode,
       clientVersion: resolveClientVersion(req),
     };
 

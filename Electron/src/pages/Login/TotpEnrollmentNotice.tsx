@@ -2,7 +2,8 @@ import { ShieldAlert, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
- * "Girmek için 2FA kurulmalı" ekranı (403 TOTP_ENROLLMENT_REQUIRED; bugün sunucu bunu hiçbir yolda dönmez).
+ * "Girmek için 2FA kurulmalı" ekranı (403 TOTP_ENROLLMENT_REQUIRED; 2FA isteğe bağlı olduğundan
+ * bugün sunucu bunu hiçbir yolda dönmez — zorunluluk dönerse ekran hazır).
  *
  * ⚠️ BURADA "KENDİN KUR" DÜĞMESİ YOK ve bu bilinçli. Kurulumun tek yolu bir
  * yöneticinin açtığı tek kullanımlık penceredir; "parola doğruysa kullanıcı

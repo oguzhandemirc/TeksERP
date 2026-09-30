@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { adminUserService } from "@/services/adminUserService";
 import { buildTotpEnrollUrl } from "@/lib/totp-enroll-url";
+import { TWO_FACTOR_HINT } from "@/lib/totp-auth";
 
 interface Props {
   userId: string;
@@ -74,9 +75,7 @@ export function TwoFactorTab({ userId, username }: Props) {
               : ""}
           </p>
           <p className="mt-1 text-muted-foreground">
-            İki adımlı doğrulama bugün hiçbir girişte istenmez (fabrika dışından
-            erişim tüneli kaldırıldı; patron bulutunun kendi hesapları vardır).
-            Kayıt ileride kullanılmak üzere korunur.
+            {TWO_FACTOR_HINT}
           </p>
           {status?.enabled && (
             <p className="mt-1 text-muted-foreground">
