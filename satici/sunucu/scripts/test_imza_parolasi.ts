@@ -13,10 +13,16 @@
 //   §7 imza KAPSAMI (tek boğaz `signWithWrappedKey`, anahtar türü DOSYADAN): kapsamsız kök imzası 500 · ERİŞİM ve
 //      GENEL'den kök imzası 404 · TAILNET ve CLI geçer · bayi anahtarı yalnız GENEL/CLI; reddedilen parola hiçbir
 //      sürece YAZILMAZ ve Buffer'ı sıfırlanır
+//   §8 kapsam boğazının kaynağı: `signingKindOf` tanınmayan türde RED (fail-closed; eskiden bayi sayılırdı) · src/ içinde
+//      `runAsCli` / serbest `runInScope` ANILMAZ (içe aktarma · ad alanı · dizgi erişimi dahil; yalnız scripts/ ve bekçiler) ·
+//      sunucu kapsamı yalnız `runInListenerScope` ile ve yalnız portal-http.ts'ten · o yol CLI kapsamı açamaz
 // ⭐ KALICI SONDA ✓K5 (her koşumda): kilit öncesi 5 deneme GERÇEKTEN parola denetler (400, 429 değil) ·
 //    araya giren başarı kilidi önler · 2 slotta iki imza GERÇEKTEN aynı anda koşar (slot kör değil) ·
 //    eşzamanlı denemelerin 5'i gerçekten denetlenir (kilit körü körüne herkesi reddetmez) · TAILNET kapsamında kök
-//    imzası GERÇEKTEN imzalar ve GENEL'de bayi anahtarı kapsamı geçer (§7 reddi kör RED değil).
+//    imzası GERÇEKTEN imzalar ve GENEL'de bayi anahtarı kapsamı geçer (§7 reddi kör RED değil) · §8d çözümleyici sentetik
+//    içe aktarma/ad alanı/dizgi/iç çağrı dört biçimini yakalar · §8e CLI kapsamı açılamaz.
+// NEGATİF SONDA (dosya DIŞI, cp + shasum ile geri alındı): I8 eski signing-scope (bilinmeyen tür → BAYI) + eski
+//   portal-http (runInScope) → §8a–§8d ❌.
 // Koşum: npx tsx scripts/test_imza_parolasi.ts   (kendi _test DB'si)
 // =============================================================================
 import type { Socket } from "node:net";
@@ -25,7 +31,9 @@ import path from "node:path";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { TYP } from "../src/lisans-protokol";
 import { passwordBuffer, wrapPrivateKey, writeKeyFileExclusive } from "../src/keys/key-files";
-import { runAsCli, runInScope, type ScopeOrigin } from "../src/lib/request-scope";
+import ts from "typescript";
+import { runAsCli, runInListenerScope, runInScope, type ScopeOrigin } from "../src/lib/request-scope";
+import { signingKindOf } from "../src/keys/signing-scope";
 import { sertifikaYuku } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
   SATICI_KOKU,
@@ -46,8 +54,85 @@ import {
 
 const bekle = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const YASAK_KAPSAM = new Set(["runAsCli", "runInScope"]);
+
+/** src/ dosyalarında yasak kapsam girişlerinin ANILDIĞI yerler (tanımlayıcı · özellik adı · dizgi) ve `runInListenerScope` çağıranları. */
+export function kapsamBulgulari(files: readonly { name: string; text: string }[]): { yasak: string[]; dinleyici: string[] } {
+  const yasak: string[] = [];
+  const dinleyici: string[] = [];
+  for (const { name, text } of files) {
+    const sf = ts.createSourceFile(name, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+    const tanim = name.endsWith("lib/request-scope.ts");
+    const yer = (n: ts.Node) => `${name}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1}`;
+    const visit = (n: ts.Node): void => {
+      const metin = ts.isIdentifier(n) || ts.isStringLiteralLike(n) ? n.text : null;
+      if (metin !== null && YASAK_KAPSAM.has(metin)) {
+        // Tanım dosyasında yalnız DEKLARASYON adı serbest (dosya içi çağrı/başvuru da ihlal).
+        const deklarasyon = tanim && ts.isIdentifier(n) && ts.isFunctionDeclaration(n.parent) && n.parent.name === n;
+        if (!deklarasyon) yasak.push(`${yer(n)} ${metin}`);
+      }
+      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "runInListenerScope") dinleyici.push(name);
+      n.forEachChild(visit);
+    };
+    visit(sf);
+  }
+  return { yasak, dinleyici: [...new Set(dinleyici)] };
+}
+
+function srcDosyalari(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = path.join(dir, e.name);
+    return e.isDirectory() ? srcDosyalari(p) : e.name.endsWith(".ts") ? [p] : [];
+  });
+}
+
+/** §8 — DB'siz: tür haritası fail-closed, kapsam girişleri src/'de yok. */
+function kapsamKaynagi(): void {
+  console.log("\n§8 kapsam boğazının kaynağı — tür haritası ve kapsam girişleri");
+  const tur = (t: string): string => {
+    try {
+      return signingKindOf(t as never);
+    } catch (err) {
+      const e = err as { status?: number; code?: string };
+      return `RED ${e.status ?? "?"} ${e.code ?? ""}`.trim();
+    }
+  };
+  const bilinmeyen = ["tekserp-alt-anahtar", "tekserp-indirme-anahtar", "__proto__", "toString", "constructor", "", "tekserp-kok-anahtar "].map(tur);
+  kontrol(
+    "§8a signingKindOf: kök → KOK · bayi → BAYI · tanınmayan tür (alt · indirme · __proto__ · toString · boş · boşluklu) → RED 500",
+    tur("tekserp-kok-anahtar") === "KOK" && tur("tekserp-bayi-anahtar") === "BAYI" && bilinmeyen.every((x) => x === "RED 500 SUNUCU_HATASI"),
+    bilinmeyen.join(" · "),
+  );
+  const kok = path.join(SATICI_KOKU, "src");
+  const dosyalar = srcDosyalari(kok).map((p) => ({ name: path.relative(SATICI_KOKU, p), text: readFileSync(p, "utf8") }));
+  const b = kapsamBulgulari(dosyalar);
+  kontrol(`§8b src/ içinde runAsCli / runInScope ANILMAZ (${dosyalar.length} dosya; yalnız scripts/ ve bekçiler)`, dosyalar.length > 50 && b.yasak.length === 0, b.yasak.join(", ") || "ihlal yok");
+  kontrol("§8c sunucu kapsamı yalnız runInListenerScope ile, yalnız src/http/portal-http.ts'ten", JSON.stringify(b.dinleyici) === JSON.stringify(["src/http/portal-http.ts"]), b.dinleyici.join(", "));
+  const sonda = kapsamBulgulari([
+    { name: "src/http/sonda-a.ts", text: 'import { runAsCli } from "../lib/request-scope";\nrunAsCli(() => 1);' },
+    { name: "src/http/sonda-b.ts", text: 'import * as rs from "../lib/request-scope";\nrs.runInScope("CLI", () => 1);' },
+    { name: "src/http/sonda-c.ts", text: 'const m = require("../lib/request-scope");\nm["runAsCli"](() => 1);' },
+    { name: "src/lib/request-scope.ts", text: "export function runAsCli(fn) { return runInScope(\"CLI\", fn); }\nexport function runInScope(o, fn) { return fn(); }" },
+  ]);
+  kontrol(
+    "§8d ✓K çözümleyici içe aktarma + çağrıyı · ad alanı özelliğini · dizgi erişimini · tanım dosyasındaki iç çağrıyı yakalar (deklarasyon adı serbest)",
+    b.yasak.length === 0 && sonda.yasak.length === 5 && sonda.yasak.some((x) => x.startsWith("src/lib/request-scope.ts:1 runInScope")),
+    sonda.yasak.join(", "),
+  );
+  let cliAcildi = "AÇILMADI";
+  try {
+    runInListenerScope("CLI" as never, () => {
+      cliAcildi = "AÇILDI";
+    });
+  } catch {
+    // beklenen
+  }
+  kontrol("§8e runInListenerScope CLI kapsamı AÇAMAZ (tip dışı çağrı çalışma anında da RED)", cliAcildi === "AÇILMADI");
+}
+
 async function main(): Promise<void> {
   hedefDbKapisi();
+  kapsamKaynagi();
   const ortam = await anahtarOrtamiKur();
   const { f, ctx } = ortam;
   const { prisma } = await import("../src/lib/prisma");

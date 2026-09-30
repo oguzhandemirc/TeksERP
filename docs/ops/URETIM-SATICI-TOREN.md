@@ -1,6 +1,6 @@
 # Üretim satıcısı — anahtar töreni (kullanıcıyla, gerçek terminalde)
 
-> **Durum (2026-09-30):** YAZILDI, UYGULANMADI. Kullanıcı kararı: tören ŞİMDİ, **USB'siz** (USB kopyası sonra, §4); kâğıda **yalnız kök parolası**.
+> **Durum (2026-09-30):** TÖREN YAPILDI (22:17, kullanıcı, gerçek terminalde; `dogrula` ✅ 15 dosya — kayıt §7) · güven çapası dilimi yazıldı (§5.1, iniş yöneticide) · USB kopyası BEKLİYOR (§4). Kullanıcı kararı: tören **USB'siz** (USB kopyası sonra, §4); kâğıda **yalnız kök parolası**.
 > **Araç:** [`deploy/satici/uretim-toren.mjs`](../../deploy/satici/uretim-toren.mjs) — kriptoyu yazmaz, var olan araçları sırayla koşturur; PAKET anahtarını ayrı dilimin PAKET aracı üretir (`lisans/uretim-gecis`; tören onu tek satırlık `PAKET_KOMUTU` ile çağırır). Bekçi `satici/sunucu/scripts/test_uretim_toren.ts`. Kurallar: [`kurallar/lisans.md`](../kurallar/lisans.md). Sonraki adım (VDS): [`SATICI-KURULUM.md`](SATICI-KURULUM.md) §13.
 > **Değişmez:** adnansahin (SAHINSRV, adnansahin kanalı, VDS'teki `html/adnansahin/**`) bu törenden ETKİLENMEZ — tören yalnız Mac'e (`~/.tekserp/satici-uretim/`) yazar; ağa çıkmaz, VDS'e dokunmaz.
 
@@ -111,6 +111,7 @@ node deploy/satici/uretim-toren.mjs usb-kopyala --usb=/Volumes/<USB adı>
    ```
 
    Commit yöneticide; yeni backend sürümü (native yeniden derlenir). Üretim satıcısının imajı bu commit'ten SONRAKİ HEAD'den derlenir (satıcının gömülü çapası).
+   **YAPILDI (2026-09-30, dal `lisans/capa`):** iki kuru koşumun `x`i yöneticinin aktardığı değerle birebir → `--yaz`; dört yer yazıldı, ikinci koşum "zaten çapada" (kayıt §7). Kalan: iniş · yeni backend sürümü (native `derle:win:uretim` / `derle:linux:uretim`) · satıcı imajı (SATICI-KURULUM §13.2).
 2. **VDS:** [`SATICI-KURULUM.md`](SATICI-KURULUM.md) §13 — anahtar birimi, ayrı DB, yedek döngüsü, iç API, DNS (`lisans`).
 3. **CF Worker:** İNDİRME açık anahtarı (`capaSatirlari.CF_WORKER_INDIRME`) [`INDIRME-KAPISI-WORKER.md`](INDIRME-KAPISI-WORKER.md) ayarına eklenir (kullanıcı).
 4. **Patron bulutu:** iç API kaynağı hazırlıktan üretime — [`PATRON-BULUTU-KURULUM.md`](PATRON-BULUTU-KURULUM.md) §14.
@@ -137,6 +138,23 @@ COPYFILE_DISABLE=1 tar -C "$D" -cf "$T/s.tar" anahtarlar paket modul-anahtarlari
 ```
 
 `dogrula` bu yeni dosyaları "künyede olmayan dosya (rotasyon sonrası beklenir)" diye listeler; USB'ye elle kopyalanır.
+
+## 7. Tören kaydı — 2026-09-30 (YAPILDI)
+
+Hepsi açık bilgi (künyeden ve çapa betiğinin kuru çıktısından; sır, parola, özel yarı YOK). Açık anahtarın ilk 8 karakteri kâğıttaki satırla eşleşir (§2).
+
+| Alan | Değer |
+|---|---|
+| Zaman | 2026-09-30 22:17 (İstanbul; künye `tarih` `2026-09-30T19:17:24.518Z`) · `dogrula` ✅ 15 dosya (≈22:25) · USB'siz (§4 bekliyor) |
+| Kaynak | `3cae05ef` — `origin/main`, ağaç temiz, iki projede `npm ls --all` hatasız (künye `kaynak`) |
+| KÖK | `kok-2026-1` · URETIM · TEST · DR · DEMO · BAYI · BARINDIRILAN · `x` ilk 8: `sPveT3g3` |
+| ALT | `alt-2026-1` · 2026-09-30 → 2027-03-29 (180 gün) · `x` ilk 8: `6goSeQri` |
+| İNDİRME | `ind-2026` · 2026-09-30 → 2027-09-30 (365 gün) · `x` ilk 8: `ckusT12f` (CF Worker'a giden tam değer künyenin `capaSatirlari.CF_WORKER_INDIRME` satırında; SATICI-KURULUM §10) |
+| PAKET | `paket-2026` · `x` ilk 8: `j7xjeBy3` |
+| Modül anahtarı | `depo.multiEnabled` sürüm 1 |
+| Yedek alıcıları | `satici-uretim-mac` (parmak izi `ff7b57fd2d1d2361`) · `satici-uretim-kurtarma` (`161678a8ce9dec7f`) |
+| Künye özeti | `TOREN-KUNYE.json` sha256 `39242ad386e301c26f4ffb5eba983e6b322fa7e5f1834b98f54cf02e201fbf8f` (4886 bayt) |
+| Güven çapası | §5.1 — `kok-2026-1` + `paket-2026` dört yerde (TS kök + satıcı/patron aynası · TS PAKET · native `anchor.rs`); iniş yöneticide |
 
 ## Ek A — yönetici için teknik özet
 

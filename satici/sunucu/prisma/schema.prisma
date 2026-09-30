@@ -143,6 +143,16 @@ enum AnahtarDurumu {
   IPTAL
 }
 
+/// Backend güncelleme politikası (Dağıtım v2 — docs/design/GUNCELLEYICI.md §2): kiranın `guncelleme.kip`i.
+enum GuncellemeKipi {
+  /// Pencerede kendiliğinden.
+  OTOMATIK
+  /// Yalnız fabrikada yetkili onayla (varsayılan = bugünkü davranış: kendiliğinden hiçbir şey kurulmaz).
+  ONAYLI
+  /// Hiçbir şey (onay da açmaz).
+  DONDUR
+}
+
 /// Dağıtım kanalının türü — `deploy/kanallar.json` `tur` değerleriyle aynı sözlük.
 enum KanalTuru {
   uretim
@@ -244,6 +254,19 @@ model Kurulum {
   esitlemeAraligiDk Int     @default(5)
   /// Buluttaki geçmişin saklama süresi (ay: 3 · 13 · 25; NULL = tüm geçmiş; CHECK) — iç API `saklamaAy`.
   bulutSaklamaAy    Int?    @default(13)
+
+  /// Güncelleme politikası (Dağıtım v2): kip · pencere (fabrika saatiyle HH:MM, ISO gün listesi; üçü birlikte ya boş ya dolu — CHECK)
+  /// · sabitleme. Değişimi `kurulum_kaydi` GUNCELLEME_POLITIKASI satırı; kiraya `guncelleme` alanıyla basılır.
+  guncellemeKipi              GuncellemeKipi @default(ONAYLI)
+  guncellemePencereBaslangic  String?        @db.VarChar(5)
+  guncellemePencereBitis      String?        @db.VarChar(5)
+  guncellemePencereGunleri    Int[]          @default([])
+  guncellemeHedefSurum        String?        @db.VarChar(40)
+  /// Fabrikanın yoklamada bildirdiği BUGÜNKÜ saat dilimi (IANA) — pencere bununla mutlak aralığa çevrilir; yoksa fabrika varsayılanı.
+  saatDilimi                  String?        @db.VarChar(64)
+  /// Son yoklamanın güncelleme raporu (güncelleyici durumu · bekleyen karar · son sonuç) — DURUM; tamamlanan denemeler defterde.
+  sonGuncellemeRaporu         Json?
+  sonGuncellemeRaporuZamani   DateTime?      @db.Timestamptz
 
   platform         String?   @db.VarChar(10)
   sonOrtam         Json?

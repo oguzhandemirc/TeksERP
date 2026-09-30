@@ -12,6 +12,7 @@ import { DashboardPage } from "./pages/Dashboard";
 import { DealerDetailPage } from "./pages/DealerDetail";
 import { DealersPage } from "./pages/Dealers";
 import { FilesPage } from "./pages/Files";
+import { FleetPage } from "./pages/Fleet";
 import { InstallationsPage } from "./pages/Installations";
 import { NotificationsPage } from "./pages/Notifications";
 import { SupportPage } from "./pages/Support";
@@ -35,6 +36,7 @@ export const PORTAL_NAV: readonly NavItem[] = [
   { to: "/bayiler", label: "Bayiler", permission: "portal:oku" },
   { to: "/kanallar", label: "Kanallar", permission: "portal:oku" },
   { to: "/surumler", label: "Sürümler", permission: "portal:oku" },
+  { to: "/filo", label: "Filo", permission: "portal:oku" },
   { to: "/dosyalar", label: "Dosyalar", permission: "portal:oku" },
   { to: "/kullanicilar", label: "Portal kullanıcıları", permission: "kullanici:yonet" },
   { to: "/denetim", label: "Denetim defteri", permission: "denetim:oku" },
@@ -62,6 +64,7 @@ export const PORTAL_ROUTES: RouteObject[] = [
       { path: "bayiler/:id", element: <DealerDetailPage /> },
       { path: "kanallar", element: <ChannelsPage /> },
       { path: "surumler", element: <ReleasesPage /> },
+      { path: "filo", element: <FleetPage /> },
       { path: "dosyalar", element: <FilesPage /> },
       { path: "kullanicilar", element: <UsersPage /> },
       { path: "denetim", element: <AuditPage /> },

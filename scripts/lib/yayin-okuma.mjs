@@ -1,8 +1,8 @@
 // =============================================================================
 // TeksERP — YAYIN SUNUCUSU OKUMALARI — tek kaynak (3c')
 // =============================================================================
-// Güncelleme sunucusu kenarda Cloudflare Worker ile korunur: `/<kanal>/electron/*`
-// ve `/<kanal>/mobil/*` yalnız İNDİRME belirteciyle (başlık `X-TKL-Indirme`) açılır,
+// Güncelleme sunucusu kenarda Cloudflare Worker ile korunur: `/<kanal>/electron/*`,
+// `/<kanal>/mobil/*` ve `/<kanal>/backend/*` yalnız İNDİRME belirteciyle (başlık `X-TKL-Indirme`) açılır,
 // anonim okuma 403 alır. Yayın betiklerinin okuması bu yüzden iki yoldan birinden geçer:
 //   ① SSH (tercih) — VDS dosya sisteminden, `yayinci` hesabıyla (sır gerektirmez):
 //      "ne yayında" sorusunun kaynağı (latest.yml · OTA manifesti · APK künyesi).
@@ -57,7 +57,7 @@ const CLI_OMUR_DK = 60;
 /** Bu kadar süresi kalmış belirteç yeniden kullanılmaz — uzun yükleme ortasında dolmasın. */
 const TAZELIK_PAYI_MS = 10 * 60_000;
 const CLI_ZAMAN_ASIMI_MS = 60_000;
-const KAPSAM_DESENI = /^\/([a-z0-9][a-z0-9-]{0,39})\/(electron|mobil)\//;
+const KAPSAM_DESENI = /^\/([a-z0-9][a-z0-9-]{0,39})\/(electron|mobil|backend)\//;
 const SSH_HEDEF_DESENI = /^[A-Za-z0-9@._-]{1,120}$/;
 const UZAK_KOMUT_DESENI = /^[A-Za-z0-9 ._/=-]{1,300}$/;
 const onbellek = new Map();
@@ -94,7 +94,7 @@ function kaynakOku() {
   throw new BelirtecYok(`YAYIN BELİRTECİ KAYNAĞI tanınmıyor: ${yol} — {"tur":"yerel","dizin":…} ya da {"tur":"ssh","hedef":…,"komut":…}`);
 }
 
-/** Adresin kanal + ürün öneki (`/<kanal>/electron/` · `/<kanal>/mobil/`); değilse null. */
+/** Adresin kanal + ürün öneki (`/<kanal>/electron/` · `/<kanal>/mobil/` · `/<kanal>/backend/`); değilse null. */
 export function kapsamCoz(url) {
   let yol;
   try {
@@ -132,7 +132,7 @@ function cliCalistir(kaynak, kanal) {
 
 function cliBelirteci(kaynak, url) {
   const kapsam = kapsamCoz(url);
-  if (!kapsam) throw new BelirtecYok(`YAYIN BELİRTECİ: adres kanal/ürün önekinde değil (/<kanal>/electron|mobil/): ${String(url ?? '(yok)').split(/[?#]/)[0]}`);
+  if (!kapsam) throw new BelirtecYok(`YAYIN BELİRTECİ: adres kanal/ürün önekinde değil (/<kanal>/electron|mobil|backend/): ${String(url ?? '(yok)').split(/[?#]/)[0]}`);
   const taze = (b) => b.yolOneki === kapsam.yolOneki && b.expMs - Date.now() >= TAZELIK_PAYI_MS;
   let b = (onbellek.get(kapsam.kanal) ?? []).find(taze);
   if (!b) {
@@ -199,13 +199,13 @@ const GUVENLI_YOL = /^\/[A-Za-z0-9._/-]+$/;
 
 /**
  * Yayın adresinin VDS dosya yolu — kanal kayıt defterinden (panelFeed↔vdsPanel,
- * mobilFeed↔vdsMobil); kök sabiti ikinci kez yazılmaz. Tanınmayan adres ÖLÇÜLEMEDİ.
+ * mobilFeed↔vdsMobil, backendFeed↔vdsBackend); kök sabiti ikinci kez yazılmaz. Tanınmayan adres ÖLÇÜLEMEDİ.
  */
 export function vdsYolu(url, kayit = kayitOku()) {
   const temiz = String(url ?? '').split(/[?#]/)[0];
   for (const kanal of Object.values(kayit.kanallar ?? {})) {
     const y = kanal.yayin ?? {};
-    for (const [feed, vds] of [[y.panelFeed, y.vdsPanel], [y.mobilFeed, y.vdsMobil]]) {
+    for (const [feed, vds] of [[y.panelFeed, y.vdsPanel], [y.mobilFeed, y.vdsMobil], [y.backendFeed, y.vdsBackend]]) {
       if (!feed || !vds || !temiz.startsWith(feed)) continue;
       const yol = `${vds.replace(/\/+$/, '')}/${temiz.slice(feed.length)}`.replace(/\/+$/, '');
       if (!GUVENLI_YOL.test(yol) || yol.split('/').includes('..')) throw new Olculemedi(`güvensiz yayın yolu: ${yol}`);

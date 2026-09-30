@@ -15,6 +15,7 @@
 // Koşum: npx tsx scripts/test_etkinlestirme.ts
 // =============================================================================
 import {
+  DOWNLOAD_PRODUCTS,
   ENDPOINTS,
   LicenseResponseSchema,
   checkLeaseBinding,
@@ -128,11 +129,11 @@ async function main(): Promise<void> {
     kontrol("§3h kiradaki parmak izi = etkinleştirmede ölçülen", JSON.stringify(kira.parmakIzi) === JSON.stringify(f.parmakIzi));
     kontrol("§3i kira ALT anahtarla imzalı", kiraDogru.value.subCertificate.document.kid === f.alt.kid);
     const tokenlar = yanit.data.indirmeBelirtecleri;
-    const indOk = tokenlar.length === 2 && tokenlar.every((t) => {
+    const indOk = tokenlar.length === DOWNLOAD_PRODUCTS.length && tokenlar.every((t) => {
       const v = verifyDownloadToken(t.belirtec, { keys: [{ kid: f.ind.kid, x: f.ind.x }], nowMs: Date.now() });
       return v.ok && v.value.kurulumId === k.kurulumId && isDownloadPathAllowed(v.value, `${t.yolOneki}paket.exe`);
     });
-    kontrol("§3j iki indirme belirteci (electron/ + mobil/) kâhinden geçer", indOk, `${tokenlar.length} belirteç`);
+    kontrol("§3j indirme belirteçleri (electron/ + mobil/ + backend/ — DOWNLOAD_PRODUCTS) kâhinden geçer", indOk, `${tokenlar.length} belirteç`);
     kontrol("§3k yanıt lisans kimliğini (kiranınkiyle aynı) ve kod türünü taşır", yanit.data.kurulumId === k.kurulumId && yanit.data.kurulumId === kira.kurulumId && yanit.data.kodTuru === "ilk", `${yanit.data.kurulumId} ${yanit.data.kodTuru}`);
 
     console.log("\n§4 DB izi");

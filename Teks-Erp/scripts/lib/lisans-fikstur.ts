@@ -68,10 +68,18 @@ export interface Fikstur {
   readonly kokler: RootKey[];
 }
 
+/**
+ * Fikstür köklerinin kid'leri gerçek çapadaki (üretim `kok-2026-1`, hazırlık `hazirlik-2026-1`) hiçbir kid'le aynı
+ * olamaz ve üretim biçimi (`<tür>-<yıl>-<n>`) DIŞINDADIR: gömülü çapayla koşan doğrulamada ÇARPIŞMAZ, çapa betiğine
+ * de giremez (bekçi `test_guven_capasi_ekle` §0g). Önek sınıf kuralını taşır (`hazirlik-` yalnız TEST/DEMO).
+ */
+export const FIKSTUR_KOK_KID = "kok-fikstur-1";
+export const FIKSTUR_HAZIRLIK_KID = "hazirlik-fikstur-1";
+
 export function fiksturKur(simdi: number): Fikstur {
   const tuz = Buffer.alloc(32, 7);
-  const kok = anahtarUret("kok-2026-1");
-  const hazirlik = anahtarUret("hazirlik-2026-1");
+  const kok = anahtarUret(FIKSTUR_KOK_KID);
+  const hazirlik = anahtarUret(FIKSTUR_HAZIRLIK_KID);
   return {
     simdi,
     kurulumId: randomUUID(),

@@ -2,12 +2,13 @@
 // RLS SIZINTI BEKÇİSİ — çok kiracılı tek DB'de kiracı yalıtımı DB DÜZEYİNDE (sözleşme §9.2–9.3).
 // Ham `pg` bağlantısıyla (uygulama katmanı atlanarak) ölçer; kapı SQL'dedir, koda güvenilmez:
 //   §1 şema: her tablo RLS ENABLE + FORCE + `tesis_yalitimi`; tablo kümesi ↔ CLOUD_TABLES ↔ migration
-//      listesi birebir; rol yetkileri ↔ db-grants.ts BİREBİR; iki rol NOSUPERUSER NOBYPASSRLS.
+//      listesi birebir; rol yetkileri (tablo + KOLON düzeyi) ↔ db-grants.ts BİREBİR; iki rol NOSUPERUSER NOBYPASSRLS.
 //   §2 `app.tesis_id` AYARSIZ bağlantı → HATA (sıfır satır) · SIFIRLANMIŞ (önceki tx SET LOCAL) → HATA.
 //   §3 tesis A kapsamında B'nin satırı görünmez (liste, kimlikle doğrudan, projeksiyon) · WITH CHECK:
 //      A kapsamında B'ye yazılamaz · ön-kiracı arama yalnız TEK anahtarlı satırı açar.
 //   §4 alan izni (RESTRICTIVE): izinsiz alt satır (`siparis.finans`) doğrudan SQL'le de 0 satır.
-//   §5 rol ayrımı: uygulama rolü projeksiyona YAZAMAZ; eşitleme rolü hesap tablosunu OKUYAMAZ.
+//   §5 rol ayrımı: uygulama rolü projeksiyona YAZAMAZ; eşitleme rolü hesap tablosunu OKUYAMAZ; uygulama rolü
+//      denetim satırında yalnız `summary`yi (IP alanı silmesi) güncelleyebilir.
 //   §6 kapsam yardımcısı: sıfır UUID / biçimsiz tesis / `*` projeksiyon REDDEDİLİR.
 //   §7 açılış kapısı: RLS'i atlayabilen rol (göç rolü = süper kullanıcı) ile sunucu KALKMAZ.
 // Koşum: npx tsx scripts/test_rls_sizinti.ts   (kendi *_test DB'si; roller her koşumda hizalanır)
@@ -17,7 +18,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
-import { APP_GRANTS, CLOUD_TABLES, SYNC_GRANTS } from "../src/lib/db-grants";
+import { APP_COLUMN_GRANTS, APP_GRANTS, CLOUD_TABLES, SYNC_COLUMN_GRANTS, SYNC_GRANTS, type ColumnGrants } from "../src/lib/db-grants";
 import { NO_TENANT, withTesis } from "../src/lib/tenant";
 import { PATRON_KOKU, hesapKur, imzali, kontrol, ortamKur, paket, girdi, sonuc, temizleTesis, tesisKur, type Ortam } from "./lib/test-ortam";
 
@@ -72,9 +73,9 @@ async function semaBolumu(o: Ortam): Promise<void> {
       })
       .sort();
     kontrol("§1d migration RLS listeleri (birleşim) = CLOUD_TABLES", JSON.stringify(migTables) === JSON.stringify([...CLOUD_TABLES].sort()), `${migTables.length}/${CLOUD_TABLES.length}`);
-    for (const [label, url, want] of [
-      ["uygulama", o.ctx.config.DATABASE_URL, APP_GRANTS],
-      ["eşitleme", o.ctx.config.ESITLEME_DATABASE_URL, SYNC_GRANTS],
+    for (const [label, url, want, wantColumns] of [
+      ["uygulama", o.ctx.config.DATABASE_URL, APP_GRANTS, APP_COLUMN_GRANTS],
+      ["eşitleme", o.ctx.config.ESITLEME_DATABASE_URL, SYNC_GRANTS, SYNC_COLUMN_GRANTS],
     ] as const) {
       const role = decodeURIComponent(new URL(url).username);
       const g = await goc.query<{ table_name: string; privilege_type: string }>(
@@ -88,6 +89,19 @@ async function semaBolumu(o: Ortam): Promise<void> {
       kontrol(`§1e ${label} rolü yetkileri = db-grants.ts (birebir)`, same, [...got].map(([k, v]) => `${k}:${v.join("/")}`).join(" ").slice(0, 200));
       const r = await goc.query<{ rolsuper: boolean; rolbypassrls: boolean }>("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1", [role]);
       kontrol(`§1f ${label} rolü NOSUPERUSER NOBYPASSRLS`, r.rows[0]?.rolsuper === false && r.rows[0]?.rolbypassrls === false);
+      // Kolon ACL'i (`attacl`) YALNIZ kolon düzeyinde verileni taşır; tablo düzeyi yetki burada görünmez.
+      const kg = await goc.query<{ t: string; c: string; p: string }>(
+        `SELECT c.relname AS t, a.attname AS c, x.privilege_type AS p
+           FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+           CROSS JOIN LATERAL aclexplode(a.attacl) x
+          WHERE n.nspname = 'public' AND a.attnum > 0 AND NOT a.attisdropped AND x.grantee = (SELECT oid FROM pg_roles WHERE rolname = $1)`,
+        [role],
+      );
+      const gotCol = kg.rows.map((x) => `${x.t}.${x.c}:${x.p}`).sort();
+      const wantCol = Object.entries(wantColumns as ColumnGrants)
+        .flatMap(([t, byP]) => Object.entries(byP).flatMap(([p, cols]) => (cols ?? []).map((c) => `${t}.${c}:${p}`)))
+        .sort();
+      kontrol(`§1g ${label} rolü KOLON yetkileri = db-grants.ts (birebir)`, JSON.stringify(gotCol) === JSON.stringify(wantCol), gotCol.join(" ") || "yok");
     }
   } finally {
     await goc.end();
@@ -172,6 +186,16 @@ async function rolAyrimi(o: Ortam, a: { tesisId: string }): Promise<void> {
     kontrol("§5b eşitleme rolü hesap tablosunu OKUYAMAZ", oku.hata && /permission denied/i.test(oku.mesaj), oku.mesaj.slice(0, 60));
     const oturum = await kapsamda(sync, { "app.tesis_id": a.tesisId }, () => hataVerir(sync, "SELECT * FROM sessions"));
     kontrol("§5c eşitleme rolü oturum tablosunu OKUYAMAZ", oturum.hata && /permission denied/i.test(oturum.mesaj));
+    // Denetim satırı ayak izidir: uygulama rolü yalnız `summary` kolonunu (IP alanı silmesi) güncelleyebilir.
+    const denetim = async (sql: string) => kapsamda(app, { "app.tesis_id": a.tesisId }, () => hataVerir(app, sql, [a.tesisId]));
+    const olay = await denetim("UPDATE account_audit SET event = 'DEGISTI' WHERE tesis_id = $1");
+    const aktor = await denetim("UPDATE account_audit SET actor = 'sahte', created_at = now() WHERE tesis_id = $1");
+    const ozet = await denetim("UPDATE account_audit SET summary = summary - 'ip' WHERE tesis_id = $1 AND summary ? 'ip'");
+    kontrol(
+      "§5d ⭐ uygulama rolü account_audit'te olay/aktör/zaman GÜNCELLEYEMEZ (permission denied), yalnız summary (IP alanı silmesi) güncellenir",
+      olay.hata && /permission denied/i.test(olay.mesaj) && aktor.hata && /permission denied/i.test(aktor.mesaj) && !ozet.hata,
+      [olay, aktor, ozet].map((x) => (x.hata ? x.mesaj.slice(0, 40) : "GECTI")).join(" | "),
+    );
   } finally {
     await app.end();
     await sync.end();

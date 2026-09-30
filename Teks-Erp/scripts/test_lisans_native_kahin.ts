@@ -19,8 +19,9 @@
 //   §2 vektör dosyası (`native/lisans-cekirdek/test-vektorleri/protokol.json`, `cargo test` de okur):
 //      her kaydın beklenen sonucu BUGÜNKÜ TS protokolüyle aynı (bayat vektör yok) · native'in
 //      üretebildiği her kod en az bir beklenende geçiyor (kapsam) · her türde geçer + kalır
-//   §3–§7 NATIVE (yoksa "⏭ ATLANDI — native yok", sayıyla): künye/ayna listeleri canlı · gömülü
-//      çapa canlı · kayıtlı vektörler native'de beklenenle aynı · CANLI (taze anahtarlı) vektörlerde
+//   §3–§7 NATIVE (yoksa "⏭ ATLANDI — native yok", sayıyla; canlı çapa ÖLÇÜLMEDİ, yeşil sayılmaz): künye/ayna
+//      listeleri canlı · ⭐ gömülü çapa CANLI (§3d: derlenmiş her .node'un `builtinAnchor()`ı — yüklenen · `dist` ·
+//      `dist-uretim` · paket yolu — TS çapasıyla birebir; bayat ikili kırmızı) · kayıtlı vektörler native'de beklenenle aynı · CANLI (taze anahtarlı) vektörlerde
 //      TS = native · bu makinede parmak izi toplama TS = native · zorunlu kip test derlemesini
 //      reddeder / üretim derlemesi çapa enjeksiyonunu reddeder
 //   §8 ⭐ KALICI SONDA ✓K (her koşumda): karşılaştırıcı farkı ısırır, eşitte susar · bayatlık
@@ -44,6 +45,7 @@ import {
   NATIVE_REQUIRED,
   identityRejection,
   loadLicenseCoreFrom,
+  nativeBuiltinAnchor,
   nativeCandidates,
   nativeFileName,
   type LoaderOptions,
@@ -388,11 +390,12 @@ async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
   if (yukle.status.kaynak !== "native") {
     const neden = "neden" in yukle.status ? `${yukle.status.neden}: ${yukle.status.ayrinti}` : "";
     const denenen = yukle.status.kaynak === "ts" ? yukle.status.denenen.map((d) => path.relative(TEKS, d)).join(" · ") : "";
-    // Adet = koşmayan KONTROL (§3a §3b §4a §5a §6a §6b §7a); kıyaslanmayan vektörler gerekçede.
+    // Adet = koşmayan KONTROL (§3a §3b §3d §4a §5a §6a §6b §7a); kıyaslanmayan vektörler gerekçede. Canlı çapa
+    // (§3d) ÖLÇÜLMEDİ sayılır — yeşil değil: kaynak metin (§0e) güncel olsa da derlenmiş ikili bayat olabilir.
     ATLAMA.atla(
-      "native yok: §3–§7 native karşılaştırması",
+      "native yok: §3–§7 native karşılaştırması (§3d canlı çapa ÖLÇÜLMEDİ)",
       `${process.platform}-${process.arch}; ${neden}; denenen: ${denenen} — ${kayitSayi} kayıtlı + ${canliSayi} canlı vektör kıyaslanmadı; derle: cd native/lisans-cekirdek && npm run derle`,
-      7,
+      8,
     );
     return;
   }
@@ -407,6 +410,27 @@ async function bolum3ile7(dosya: VektorDosyasi | null): Promise<void> {
       jsonEsit(kunye.windowsSondasi, [...WINDOWS_PROBE_LINES]) &&
       kunye.modulHkdfOneki === MODULE_KEY_HKDF_PREFIX &&
       kunye.modulKidOneki === MODULE_KEY_KID_PREFIX,
+  );
+  // §3d CANLI çapa: yüklenen ikili + geliştirme dizinlerindeki öteki derlemeler (test çapalı `dist` · üretim `dist-uretim`
+  // · paket yolu) — hangisi varsa hepsi. Kaynak metin (§0e) güncel olsa da eski çapayla derlenmiş ikili ayrışır.
+  const tsCapa = {
+    roots: ROOT_PUBLIC_KEYS.map((r) => ({ kid: r.kid, x: r.x, classes: [...r.classes] })),
+    packageKeys: PACKAGE_PUBLIC_KEYS.map((k) => ({ kid: k.kid, x: k.x })),
+  };
+  const dosyaAdi = nativeFileName(process.platform, process.arch) ?? "";
+  const derlemeler = [...new Set([yukle.status.dosya, path.join(NATIVE_DIZIN, "dist", dosyaAdi), path.join(NATIVE_DIZIN, "dist-uretim", dosyaAdi), path.join(TEKS, "native", dosyaAdi)])].filter((f) => existsSync(f));
+  const capaFarki = derlemeler.flatMap((f) => {
+    try {
+      const canli = nativeBuiltinAnchor(f);
+      return jsonEsit(canli, tsCapa) ? [] : [`${path.relative(TEKS, f)} → ${JSON.stringify(canli).slice(0, 160)}`];
+    } catch (e) {
+      return [`${path.relative(TEKS, f)} açılamadı: ${e instanceof Error ? e.message : String(e)}`];
+    }
+  });
+  check(
+    "§3d ⭐ CANLI çapa: derlenmiş her .node'un builtinAnchor() = ROOT_PUBLIC_KEYS + PACKAGE_PUBLIC_KEYS (birebir)",
+    derlemeler.length >= 1 && capaFarki.length === 0,
+    capaFarki.length ? `BAYAT/AYRIŞIK (yeniden derle: npm run derle · derle:uretim): ${capaFarki.join(" | ")}` : derlemeler.map((f) => path.relative(TEKS, f)).join(" · "),
   );
   // §3c yerel koruma (Faz 2d önbelleği): Windows'ta DPAPI gidiş-dönüş, başka platformda KORUMA_YOK (TS de).
   const koruma = native.protectLocal(b64uEncode(Buffer.from("tekserp-onbellek-sondasi")));

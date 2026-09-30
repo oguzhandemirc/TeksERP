@@ -16,6 +16,7 @@ import { readClientVersionHeader } from "../constants/client-info";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
+import { DOWNLOAD_PRODUCTS } from "../lib/license/protocol";
 import {
   activateLicense,
   acceptOfflineResponse,
@@ -74,7 +75,7 @@ const DrBody = z.object({
   gerekce: z.string().trim().min(1).max(500),
 });
 const DownloadQuery = z.object({
-  urun: z.enum(["electron", "mobil"]),
+  urun: z.enum(DOWNLOAD_PRODUCTS),
   kanal: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/).optional(),
 });
 const ProxyBody = z.object({
@@ -103,7 +104,7 @@ router.get("/durum", verifyTokenIfPresent, (req: Request, res: Response) => {
  *     tags: [Lisans]
  *     summary: Güncelleme indirme belirteci (onaylı cihaz ya da oturum)
  *     parameters:
- *       - { in: query, name: urun, required: true, schema: { type: string, enum: [electron, mobil] } }
+ *       - { in: query, name: urun, required: true, schema: { type: string, enum: [electron, mobil, backend] } }
  *       - { in: query, name: kanal, required: false, schema: { type: string } }
  *     responses:
  *       200: { description: "{ yolOneki, belirtec, gecerlilikSonu }" }

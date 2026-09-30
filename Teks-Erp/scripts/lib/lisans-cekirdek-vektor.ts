@@ -43,8 +43,7 @@ import {
 
 /**
  * Gömülü çapa vektörlerinin kökü: kid üretim biçiminde DEĞİL (`kok-<yıl>-<n>` — test_lisans_protokol §0i),
- * yani çapaya hiçbir zaman giremez. Fikstür kökünün kid'i (`kok-2026-1`) gerçek üretim kökünün adıdır;
- * onunla imzalı vektör, tören günü çapaya girince KOK_BILINMIYOR'dan JWS_IMZA'ya kayardı.
+ * yani çapaya hiçbir zaman giremez; fikstür kökünden AYRI bir anahtar (çapa dışı bir kökün imzası).
  */
 function capaDisiKok(): TestAnahtari {
   return anahtarUret("kok-fikstur-1");
@@ -239,7 +238,7 @@ function jwsVektorleri(f: Fikstur): Vektor[] {
     typ: g.typ ?? TYP.HAK,
     keys: g.keys ?? kok,
   });
-  const baskaAnahtar = anahtarUret("kok-2026-1");
+  const baskaAnahtar = anahtarUret(f.kok.kid);
   return [
     v("geçerli HAK", hak),
     v("alg none", hamJws({ baslik: baslik({ alg: "none" }), yuk, anahtar: f.kok.privateKey })),

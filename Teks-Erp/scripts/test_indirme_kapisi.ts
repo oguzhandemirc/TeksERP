@@ -20,6 +20,8 @@
 //   §6 ayar/yöntem/önbellek: tanınmayan alan 503 · GET/HEAD dışı 405 · değişmez dosyada
 //      cacheEverything + 404 tutulmaz, değişken dosyada cf yok
 //   §7 varsayılan dışa aktarım: gerçek saat + `env.TKL_INDIRME_AYAR` (dize ve nesne)
+//   §8 backend/ öneki (Dağıtım v2): Worker ürün kümesi = kâhin `DOWNLOAD_PRODUCTS` · backend belirteci
+//      yalnız backend/ altında · başka ürünün belirteci backend/de RED · son.json değişken, zip değişmez
 // ÖLÇMEDİĞİ: Cloudflare çalışma zamanı (workerd). WebCrypto Ed25519 burada Node'unkidir;
 // kenar ölçümü runbook'un prova adımında (docs/ops/INDIRME-KAPISI-WORKER.md).
 // =============================================================================
@@ -27,6 +29,7 @@ import path from "node:path";
 import { generateKeyPairSync } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import {
+  DOWNLOAD_PRODUCTS,
   TYP,
   msToIso,
   signDownloadToken,
@@ -54,6 +57,7 @@ interface WorkerModulu {
   sozlukDegeri: (metin: string, anahtar: string) => string | null;
   extensionsYaz: (metin: string, sinir: string, belirtec: string) => string | null;
   VARSAYILAN_AYAR: Record<string, unknown>;
+  URUN_DIZINLERI: readonly string[];
 }
 
 let pass = 0;
@@ -69,10 +73,11 @@ const IND2 = anahtarUret("ind-2026-yedek");
 const YABANCI = anahtarUret("ind-yabanci");
 const KURULUM = "3f0c8a52-6d1e-4b7a-9c2f-1a2b3c4d5e6f";
 
-function yuk(urun: "electron" | "mobil", ek: Partial<DownloadDoc> = {}, kanal = KANAL): DownloadDoc {
+type Urun = "electron" | "mobil" | "backend";
+function yuk(urun: Urun, ek: Partial<DownloadDoc> = {}, kanal = KANAL): DownloadDoc {
   return { v: 1, kanal, yolOneki: `/${kanal}/${urun}/`, kurulumId: KURULUM, exp: msToIso(SIMDI + 60 * DAKIKA), ...ek };
 }
-function bas(urun: "electron" | "mobil", ek: Partial<DownloadDoc> = {}, anahtar: TestAnahtari = IND, simdi = SIMDI): string {
+function bas(urun: Urun, ek: Partial<DownloadDoc> = {}, anahtar: TestAnahtari = IND, simdi = SIMDI): string {
   return signDownloadToken({ payload: yuk(urun, ek), key: { kid: anahtar.kid, privateKey: anahtar.privateKey }, nowMs: simdi });
 }
 const acik = (a: TestAnahtari) => ({ kid: a.kid, x: a.x });
@@ -163,6 +168,8 @@ async function bolum0(w: WorkerModulu): Promise<void> {
     ["ömür 79 dk (70 + tolerans içi)", ham({ exp: exp(79) }), "OK"],
     ["ömür 81 dk", ham({ exp: exp(81) }), "INDIRME_OMUR"],
     ["mobil önekli geçerli", bas("mobil"), "OK"],
+    ["backend önekli geçerli (Dağıtım v2)", bas("backend"), "OK"],
+    ["tanınmayan ürün öneki", ham({ yolOneki: `/${KANAL}/diger/` }), "BELGE_SEMA"],
   ];
   for (const [ad, belirtec, beklenen, anahtarlar = [acik(IND), acik(IND2)]] of tablo) {
     const k = verifyDownloadToken(belirtec, { keys: anahtarlar, nowMs: SIMDI });
@@ -491,6 +498,28 @@ async function bolum7(w: WorkerModulu): Promise<void> {
   }
 }
 
+// §8 — backend/ öneki (Dağıtım v2): tek ürün kümesi, önek ayrımı, işaretçi değişken.
+async function bolum8(w: WorkerModulu): Promise<void> {
+  console.log("\n§8 — backend/ öneki");
+  check("§8a Worker ürün dizinleri = kâhin DOWNLOAD_PRODUCTS", JSON.stringify([...w.URUN_DIZINLERI]) === JSON.stringify([...DOWNLOAD_PRODUCTS]), JSON.stringify(w.URUN_DIZINLERI));
+  const a = ayarKur(w);
+  const be = bas("backend");
+  const zip = `/${KANAL}/backend/2.11.0/tekserp-backend-2.11.0.zip`;
+  const son = `/${KANAL}/backend/son.json`;
+  const o = await kabul(w, "§8b backend belirteci → paket zip", a, istek(zip, bsl(be)));
+  check("§8b' zip DEĞİŞMEZ: kenar önbelleği", o.cagrilar[0]?.init?.cf?.cacheEverything === true);
+  const o2 = await kabul(w, "§8c backend belirteci → son.json", a, istek(son, bsl(be)));
+  check("§8c' son.json DEĞİŞKEN: cf seçeneği YOK", o2.cagrilar[0]?.init === undefined);
+  await kabul(w, "§8d backend belirteci → sürüm işaretçisi", a, istek(`/${KANAL}/backend/2.11.0/surum.json`, bsl(be)));
+  await ret(w, "§8e belirteçsiz son.json", a, istek(son), "INDIRME_BELIRTEC_YOK");
+  await ret(w, "§8f electron belirteci backend/de", a, istek(son, bsl(bas("electron"))), "INDIRME_YOL");
+  await ret(w, "§8g backend belirteci electron/da", a, istek(`/${KANAL}/electron/latest.yml`, bsl(be)), "INDIRME_YOL");
+  await ret(w, "§8h başka kanalın backend'i", a, istek("/baska-kanal/backend/son.json", bsl(be)), "INDIRME_YOL");
+  await ret(w, "§8i kodlanmış atlatma (%62ackend)", a, istek(`/${KANAL}/%62ackend/son.json`), "INDIRME_BELIRTEC_YOK");
+  const { y, o: o3 } = await kapidan(w, a, istek(`/${KANAL}/backendx/a`, {}, "POST"));
+  check("§8j benzer ad (backendx) kapsam dışı, aynen geçer", y.status === 200 && o3.cagrilar.length === 1);
+}
+
 async function main(): Promise<void> {
   const w = await yukle<WorkerModulu>(WORKER_YOLU);
   const u = await yukle<UreticiModulu>(MANIFEST_URETICI);
@@ -502,6 +531,7 @@ async function main(): Promise<void> {
   await bolum5(w, u);
   await bolum6(w);
   await bolum7(w);
+  await bolum8(w);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail === 0 ? 0 : 1);
 }

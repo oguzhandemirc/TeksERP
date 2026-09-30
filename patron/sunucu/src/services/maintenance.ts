@@ -8,6 +8,7 @@
 // Hard delete YALNIZ burada ve YALNIZ `PRUNED_TABLES` beyanındaki tablolarda (bekçi
 // `test_patron_kapilari` ölçer). Budanan hiçbir satır fabrikanın defteri değildir: bulut okuma
 // kopyası + kanal durumu + telemetridir; iş kararı bunlardan okunmaz.
+import type { Prisma } from "@prisma/client";
 import { allProjectionNames, ROOT_PROJECTIONS, type RootProjection } from "../catalog/projections";
 import { allReportProjections } from "../catalog/reports";
 import { recordAudit } from "../lib/audit";
@@ -38,8 +39,9 @@ const TOMBSTONE_DAYS = 7;
 /**
  * Kapanan hesabın KİMLİĞİ bu kadar gün sonra silinir (Ek-6/A §2.5, "30 gün içinde") — metnin sözü, ortamdan
  * değiştirilemez. Silinen: ad · e-posta · parola özeti · TOTP sırrı + adımı · davet · kilit sayaçları · oturumlar ·
- * cihaz anahtarları; gelen kutusundaki yazar adı tombstone olur. KALAN: satır ve kimliği (iş kayıtları ona bağlı),
- * durum, izinler, tarihler. Ayak izi `HESAP_KIMLIGI_SILINDI` (imha kaydı, Ek-6/A §6.1).
+ * cihaz anahtarları; gelen kutusundaki yazar adı ve işlem makbuzu yanıtlarındaki ad/e-posta tombstone olur. KALAN:
+ * satır ve kimliği (iş kayıtları ona bağlı), durum, izinler, tarihler, makbuzun kendisi. Ayak izi
+ * `HESAP_KIMLIGI_SILINDI` (imha kaydı, Ek-6/A §6.1).
  */
 export const IDENTITY_PURGE_DAYS = 30;
 
@@ -57,6 +59,41 @@ export const IP_RETENTION_DAYS = 30;
 export const tombstoneName = (accountId: string): string => `Silinmiş hesap #${accountId.slice(0, 8)}`;
 export const tombstoneEmail = (accountId: string): string => `silinmis-${accountId}@hesap.invalid`;
 const FAILED_LOGIN_EVENTS = ["GIRIS_BASARISIZ", "GIRIS_REDDEDILDI", "HESAP_GECICI_KILIT"];
+
+/**
+ * İşlem makbuzu yanıtındaki silinen hesabın kimlik alanları → tombstone: hesap görünümü (`id` = hesap → `ad` ·
+ * `eposta`, iç içe dahil) ve makbuz o hesabınsa gelen kutusu yazar adı (`hesapAdi`). Yanıtın biçimi ve öteki alanlar
+ * aynen kalır; makbuzun kimliği · eylemi · gövde özeti değişmez ⇒ aynı işlem kimliği aynı (tombstone'lu) yanıtı
+ * alır, başka gövde yine 409 (idempotency sözleşmesi bozulmaz).
+ */
+export function scrubReceiptIdentity(value: unknown, accountId: string, ownReceipt: boolean): unknown {
+  if (Array.isArray(value)) return value.map((v) => scrubReceiptIdentity(v, accountId, ownReceipt));
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value)) out[k] = scrubReceiptIdentity(v, accountId, ownReceipt);
+  if (out.id === accountId) {
+    if ("ad" in out) out.ad = tombstoneName(accountId);
+    if ("eposta" in out) out.eposta = tombstoneEmail(accountId);
+  }
+  if (ownReceipt && "hesapAdi" in out) out.hesapAdi = tombstoneName(accountId);
+  return out;
+}
+
+/** Hesabın kimliğini taşıyabilecek makbuzlar (sahibi o hesap ya da yanıtında kimliği geçen) — tombstone yazılan sayı. */
+async function scrubReceipts(tx: Tx, tesisId: string, accountId: string): Promise<number> {
+  const adaylar = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM operation_receipts
+     WHERE tesis_id = ${tesisId}::uuid AND (account_id = ${accountId}::uuid OR strpos(response::text, ${accountId}) > 0)`;
+  if (adaylar.length === 0) return 0;
+  const rows = await tx.operationReceipt.findMany({ where: { tesisId, id: { in: adaylar.map((a) => a.id) } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+  let n = 0;
+  for (const r of rows) {
+    const temiz = scrubReceiptIdentity(r.response, accountId, r.accountId === accountId);
+    if (JSON.stringify(temiz) === JSON.stringify(r.response)) continue;
+    n += (await tx.operationReceipt.updateMany({ where: { id: r.id, tesisId }, data: { response: temiz as Prisma.InputJsonValue } })).count;
+  }
+  return n;
+}
 
 function monthsBefore(nowMs: number, months: number): Date {
   const d = new Date(nowMs);
@@ -195,7 +232,7 @@ export async function purgeClosedIdentities(ctx: CloudContext, tesisId: string, 
   const ids = await withTesis(ctx.app, { tesisId }, (tx) => tx.account.findMany({ where: due, select: { id: true } }));
   if (ids.length === 0) return 0;
   const purged = await withTesis(ctx.app, { tesisId, lock: { name: "ACCOUNT_ADMIN", key: tesisId } }, async (tx) => {
-    const out: { id: string; oturum: number; cihaz: number; gelenKutusu: number }[] = [];
+    const out: { id: string; oturum: number; cihaz: number; gelenKutusu: number; makbuz: number }[] = [];
     for (const { id } of ids) {
       const claim = await tx.account.updateMany({
         where: { ...due, id },
@@ -216,12 +253,13 @@ export async function purgeClosedIdentities(ctx: CloudContext, tesisId: string, 
       const oturum = (await tx.session.deleteMany({ where: { tesisId, accountId: id } })).count;
       const cihaz = (await tx.pushDevice.deleteMany({ where: { tesisId, accountId: id } })).count;
       const gelenKutusu = (await tx.inboxMessage.updateMany({ where: { tesisId, accountId: id }, data: { accountName: tombstoneName(id) } })).count;
-      out.push({ id, oturum, cihaz, gelenKutusu });
+      const makbuz = await scrubReceipts(tx, tesisId, id);
+      out.push({ id, oturum, cihaz, gelenKutusu, makbuz });
     }
     return out;
   });
   for (const p of purged) {
-    const summary = { kategoriler: ["ad", "eposta", "parola", "totp", "oturum", "cihaz"], oturum: p.oturum, cihaz: p.cihaz, gelenKutusu: p.gelenKutusu };
+    const summary = { kategoriler: ["ad", "eposta", "parola", "totp", "oturum", "cihaz"], oturum: p.oturum, cihaz: p.cihaz, gelenKutusu: p.gelenKutusu, makbuz: p.makbuz };
     await recordAudit(ctx.app, { tesisId, actor: "sistem", event: "HESAP_KIMLIGI_SILINDI", entity: "Account", entityId: p.id, summary });
   }
   return purged.length;

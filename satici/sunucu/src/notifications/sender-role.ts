@@ -1,9 +1,14 @@
 // GÖNDERİCİ ROLÜ — göç `satici_bildirim`i NOLOGIN doğurur ve yetkisini verir (YALNIZ `bildirim`de SELECT + durum
 // kolonlarında UPDATE); girişi (LOGIN + parola) kurulumda bu modül açar. Parola stdin'den gelir (argv/ortam ASLA),
 // SCRAM-SHA-256 doğrulayıcısı İSTEMCİDE kurulur → düz parola sunucuya, sorgu günlüğüne, `pg_stat_activity`e gitmez.
-// Giriş açılmadan ÖNCE yetki kümesi ölçülür: rol fazladan tek bir yetki taşıyorsa RED (fail-closed).
+// Giriş açılmadan ÖNCE (ve gönderici her açılışta) yetki kümesi ölçülür: rol fazladan tek bir yetki, öznitelik, rol
+// üyeliği, şema ya da fonksiyon yetkisi taşıyorsa RED (fail-closed).
 import { createHash, createHmac, pbkdf2Sync, randomBytes } from "node:crypto";
-import type { Client } from "pg";
+
+/** pg `Client`/`Pool` ya da Prisma üzerinden parametreli sorgu (ölçüm iki yoldan da aynı SQL'le koşar). */
+export interface Queryable {
+  query<R>(sql: string, params: unknown[]): Promise<{ rows: R[] }>;
+}
 
 export const SENDER_ROLE = "satici_bildirim";
 /** Göçlerin (20261001130000 · 20261001130100) kolon düzeyinde UPDATE verdiği kolonlar — gönderici YALNIZ bunları yazar (bekçi ölçer). */
@@ -23,18 +28,24 @@ export function scramVerifier(password: string, iterations = 4096): string {
 }
 
 export interface PrivilegeReport {
-  /** Ölçülen fazla yetkiler ("tablo:YETKİ"); boş = en az yetki. */
+  /** Ölçülen fazlalar ("tablo:YETKİ" · "öznitelik X" · "üyelik R" · "şema s:YETKİ" · "fonksiyon s.f:EXECUTE …"); boş = en az yetki. */
   readonly extra: string[];
   /** Beklenen ama eksik yetkiler. */
   readonly missing: string[];
   readonly tables: number;
 }
 
+/** Rol öznitelikleri: hiçbiri olamaz (REPLICATION akış/yedek kanalı açar, BYPASSRLS satır kapısını atlar). */
+const ROLE_ATTRIBUTES = { rolsuper: "SUPERUSER", rolbypassrls: "BYPASSRLS", rolcreaterole: "CREATEROLE", rolcreatedb: "CREATEDB", rolreplication: "REPLICATION" } as const;
+
 /**
  * Rolün BU DB'deki yetki kümesi (üyelikten gelenler dahil): her tablo × her tablo yetkisi, her kolon UPDATE'i,
- * her dizi. Beklenen TAM küme: `bildirim` SELECT + `SENDER_UPDATE_COLUMNS` UPDATE; başka hiçbir şey.
+ * her dizi · rol öznitelikleri · rol üyelikleri (önceden tanımlı roller dahil — pg_read_server_files …; izinli TEK üyelik
+ * üye rolün `satici_bildirim`i) · public dışı şema USAGE/CREATE ve public CREATE · veritabanında CREATE · fonksiyon
+ * EXECUTE'u (sistem şemaları dışında: public dışı şemada her biri, public'te SECURITY DEFINER ya da açık GRANT).
+ * Beklenen TAM küme: `bildirim` SELECT + `SENDER_UPDATE_COLUMNS` UPDATE + public USAGE; başka hiçbir şey.
  */
-export async function privilegeReport(client: Client, role: string): Promise<PrivilegeReport> {
+export async function privilegeReport(client: Queryable, role: string): Promise<PrivilegeReport> {
   if (!ROLE_NAME.test(role)) throw new Error("Rol adı biçimsiz");
   const extra: string[] = [];
   const missing: string[] = [];
@@ -68,6 +79,46 @@ export async function privilegeReport(client: Client, role: string): Promise<Pri
     [role],
   );
   for (const r of seqs.rows) extra.push(`dizi ${r.s}`);
+
+  const attrs = await client.query<Record<keyof typeof ROLE_ATTRIBUTES, boolean>>(
+    "SELECT rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolreplication FROM pg_roles WHERE rolname = $1",
+    [role],
+  );
+  const a = attrs.rows[0];
+  if (!a) missing.push(`rol ${role} yok`);
+  else for (const [k, label] of Object.entries(ROLE_ATTRIBUTES)) if (a[k as keyof typeof ROLE_ATTRIBUTES]) extra.push(`öznitelik ${label}`);
+
+  const members = await client.query<{ r: string }>("SELECT r.rolname AS r FROM pg_roles r WHERE r.rolname <> $1 AND pg_has_role($1, r.oid, 'MEMBER') ORDER BY 1", [role]);
+  const allowedMembership = role === SENDER_ROLE ? [] : [SENDER_ROLE];
+  for (const r of members.rows) if (!allowedMembership.includes(r.r)) extra.push(`üyelik ${r.r}`);
+
+  const schemas = await client.query<{ s: string; u: boolean; c: boolean }>(
+    `SELECT n.nspname AS s, has_schema_privilege($1, n.oid, 'USAGE') AS u, has_schema_privilege($1, n.oid, 'CREATE') AS c
+       FROM pg_namespace n
+      WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname !~ '^pg_(toast|temp_|toast_temp_)'`,
+    [role],
+  );
+  for (const r of schemas.rows) {
+    if (r.c) extra.push(`şema ${r.s}:CREATE`);
+    if (r.u && r.s !== "public") extra.push(`şema ${r.s}:USAGE`);
+    if (!r.u && r.s === "public") missing.push("şema public:USAGE");
+  }
+  const db = await client.query<{ c: boolean }>("SELECT has_database_privilege($1, current_database(), 'CREATE') AS c", [role]);
+  if (db.rows[0]?.c) extra.push("veritabanı CREATE");
+
+  const funcs = await client.query<{ s: string; f: string; d: boolean; g: boolean }>(
+    `SELECT n.nspname AS s, p.proname AS f, p.prosecdef AS d,
+            EXISTS (SELECT 1 FROM aclexplode(p.proacl) x WHERE x.grantee <> 0 AND x.grantee <> p.proowner AND pg_has_role($1, x.grantee, 'MEMBER')) AS g
+       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname !~ '^pg_(toast|temp_|toast_temp_)'
+        AND has_function_privilege($1, p.oid, 'EXECUTE')`,
+    [role],
+  );
+  for (const r of funcs.rows) {
+    if (r.s !== "public") extra.push(`fonksiyon ${r.s}.${r.f}:EXECUTE`);
+    else if (r.d) extra.push(`fonksiyon ${r.s}.${r.f}:EXECUTE (SECURITY DEFINER)`);
+    else if (r.g) extra.push(`fonksiyon ${r.s}.${r.f}:EXECUTE (açık yetki)`);
+  }
   return { extra, missing, tables: tables.size };
 }
 
@@ -75,22 +126,22 @@ export async function privilegeReport(client: Client, role: string): Promise<Pri
  * Girişi aç: rol göçün rolü (ya da onun üyesi) ve yetki kümesi TAM beklenen olmalı; sonra LOGIN + SCRAM
  * doğrulayıcısı + bağlantı tavanı. İdempotent (parola döndürme de aynı komut).
  */
-export async function enableSenderLogin(client: Client, g: { role: string; password: string }): Promise<PrivilegeReport> {
+export async function enableSenderLogin(client: Queryable, g: { role: string; password: string }): Promise<PrivilegeReport> {
   if (!ROLE_NAME.test(g.role)) throw new Error("Rol adı biçimsiz");
   if (!SENDER_PASSWORD.test(g.password)) throw new Error("Parola 32–128 harf/rakam olmalı (onaltılık üretin: openssl rand -hex 32)");
   const member = await client.query<{ v: boolean }>("SELECT pg_has_role($1, $2, 'MEMBER') AS v", [g.role, SENDER_ROLE]);
   if (member.rows[0]?.v !== true) throw new Error(`${g.role} rolü ${SENDER_ROLE} değil ve onun üyesi değil`);
-  const attrs = await client.query<{ s: boolean; b: boolean; c: boolean; d: boolean }>(
-    "SELECT rolsuper AS s, rolbypassrls AS b, rolcreaterole AS c, rolcreatedb AS d FROM pg_roles WHERE rolname = $1",
+  const attrs = await client.query<{ s: boolean; b: boolean; c: boolean; d: boolean; r: boolean }>(
+    "SELECT rolsuper AS s, rolbypassrls AS b, rolcreaterole AS c, rolcreatedb AS d, rolreplication AS r FROM pg_roles WHERE rolname = $1",
     [g.role],
   );
   const a = attrs.rows[0];
-  if (!a || a.s || a.b || a.c || a.d) throw new Error(`${g.role} rolü süper kullanıcı/RLS atlayan/rol ya da DB yaratan olamaz`);
+  if (!a || a.s || a.b || a.c || a.d || a.r) throw new Error(`${g.role} rolü süper kullanıcı/RLS atlayan/rol ya da DB yaratan/çoğaltma yapan olamaz`);
   const report = await privilegeReport(client, g.role);
   if (report.extra.length > 0 || report.missing.length > 0) {
     throw new Error(`${g.role} yetki kümesi beklenenden farklı — fazla: ${report.extra.join(", ") || "yok"} · eksik: ${report.missing.join(", ") || "yok"} (göç uygulandı mı?)`);
   }
   // Doğrulayıcı yalnız base64 + `$:` taşır (tırnak yok) — sorguya gömülmesi güvenli; ALTER ROLE parametre almaz.
-  await client.query(`ALTER ROLE "${g.role}" WITH LOGIN CONNECTION LIMIT 4 PASSWORD '${scramVerifier(g.password)}'`);
+  await client.query(`ALTER ROLE "${g.role}" WITH LOGIN CONNECTION LIMIT 4 PASSWORD '${scramVerifier(g.password)}'`, []);
   return report;
 }

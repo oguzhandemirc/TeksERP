@@ -27,6 +27,7 @@ import { execFileSync } from 'node:child_process';
 import { KOK, kanalCoz, Olculemedi } from './kanallar.mjs';
 import { ayristir, etiketAdi, karsilastir, manifestGovdesindenSurum, terfiEtiketAdi } from './surum.mjs';
 import { yayinOku } from './yayin-okuma.mjs';
+import { isaretciSurumu } from './backend-yayin.mjs';
 
 export const TERFI_URUNLERI = ['panel', 'tablet', 'backend'];
 /** Kullanıcı cümlesi — onay (etiket mesajı) ve kaçış (`--terfi-atla`) için aynı asgari. */
@@ -114,6 +115,14 @@ export function gitOlgulari({ kod, urun, surum, kok = KOK }) {
   return { bas: bas.cikti, surumEtiketi, terfiEtiketi };
 }
 
+/** Kaynak kanalın `son.json`undaki bildirimin sürümü (imza yayıncıda değil güncelleyicide doğrulanır). */
+function ozetBackend(url, r) {
+  const ne = 'backend son.json';
+  if (r.durum !== 'var') return { ne, url, ...r };
+  const surum = isaretciSurumu(r.govde);
+  return surum ? { ne, url, durum: 'var', surum } : { ne, url, durum: 'olculemedi', neden: `${url}: bildirim sürümü okunamadı` };
+}
+
 /**
  * Kaynak kanalda yayındaki sürüm(ler). Panel: `latest.yml`; tablet: OTA manifesti + APK künyesi
  * (aynı `tablet-v*` çizgisi — biri ≥ X ise yeter).
@@ -122,14 +131,9 @@ export function gitOlgulari({ kod, urun, surum, kok = KOK }) {
 export function kaynakSurumleri(kaynakKanal, urun, oku) {
   // Adres → VDS yolu yalnız KAYNAK kanalın kaydından çözülür (başka kanalın dosyası okunamaz).
   oku ??= (url) => yayinOku(url, { kayit: { kanallar: { kaynak: kaynakKanal } } });
-  // Backend'in HTTP yayın feed'i YOK (paketle.ps1 zip'i elden/portaldan gider; Faz 3
-  // dağıtım kapısı VDS feed'ini ekleyene kadar). ③ şartı ÖLÇÜLEMEZ → terfi ÖLÇÜLEMEDİ =
-  // DUR (fail-closed: backend üretim kanalına HTTP kapısıyla otomatik terfi ettirilemez).
-  if (urun === 'backend') {
-    return [{ ne: 'backend yayın sürümü', url: null, durum: 'olculemedi',
-      neden: 'backend HTTP yayın feed\'i Faz 3 dağıtım kapısına kadar YOK — kaynak kanaldaki sürüm ölçülemez' }];
-  }
   const y = kaynakKanal.yayin;
+  // Backend (Dağıtım v2): kaynak kanalın `son.json` işaretçisindeki imzalı bildirimin sürümü.
+  if (urun === 'backend') return [ozetBackend(y.backendManifest, oku(y.backendManifest))];
   const ozet = (ne, url, r, cikar) => {
     if (r.durum !== 'var') return { ne, url, ...r };
     const surum = cikar(r.govde);
@@ -211,7 +215,11 @@ export function terfiHukmu({ kod, urun, surum, kaynak, git, kaynaklar, atla }) {
   if (kaynaklar === null) {
     tamam.push(`③ ${kaynak} kanalında yayındaki sürüm ÖLÇÜLMEDİ (kuru kip: ağ yok) — gerçek yayında ölçülür`);
   } else if (ayristir(surum)) {
-    const yeter = kaynaklar.filter((k) => k.durum === 'var' && karsilastir(k.surum, surum) >= 0);
+    // `karsilastir` biçimsiz (ör. prova ön sürümü) tarafta null döner; `null >= 0` JS'te TRUE'dur — açık denetim şart.
+    const yeter = kaynaklar.filter((k) => {
+      const c = k.durum === 'var' ? karsilastir(k.surum, surum) : null;
+      return c !== null && c >= 0;
+    });
     if (yeter.length) tamam.push(`③ ${kaynak}: ${yeter.map((k) => `${k.ne} ${k.surum}`).join(' · ')} ≥ ${surum}`);
     else {
       const okunamayan = kaynaklar.filter((k) => k.durum === 'olculemedi');

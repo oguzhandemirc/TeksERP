@@ -216,6 +216,14 @@ export function loadLicenseCoreFrom(o: LoaderOptions): LoadedCore {
   return { core: nativeCore(binding), status: { kaynak: "native", dosya: file, kunye: identity, zorunlu: o.required } };
 }
 
+/**
+ * Derlenmiş ikilinin GÖMÜLÜ çapası (`builtinAnchor`, JSON). Kâhin bekçisi TS çapasıyla birebir kıyaslar: kaynak
+ * metin (`anchor.rs`) güncel olsa da eski çapayla derlenmiş ikili ayrışır. Açılmış `.node` önbellekten gelir.
+ */
+export function nativeBuiltinAnchor(file: string): unknown {
+  return JSON.parse(openBinding(file).builtinAnchor()) as unknown;
+}
+
 let loaded: LoadedCore | null = null;
 
 function defaultOptions(): LoaderOptions {
