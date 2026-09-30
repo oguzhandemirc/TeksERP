@@ -119,3 +119,20 @@ o migration'ı FAILED işaretler — elle `resolve` YAPILMAZ, insana rapor edili
 - `GET /api/license/durum` → `kip: gozlem`; hiçbir istek 403 `LICENSE_*` almamış
 - panel/tablet oturumları kurulum sonrası yeniden bağlandı
 - ölçülen kesinti
+
+**Kurulum kaydı — 2026-09-30 (testfabrika / thinkpad-1, KORUMALI PROVA) — BAŞARISIZ, GERİ ALINDI:**
+
+- Paket `tekserp-backend-prova-20260930_043616-e970149.zip` · imzasız SHA256 `9D537D0DB8207AD2A7CCEA551C999D9A9798B7023E0F2F141F060494617537B6`
+  → imzalı (kid `paket-hazirlik`) SHA256 `2CDDB44F5087FEC287203D58B3B2AEC55D3D92A07DF350370A80E1EA170AD651` · sürüm
+  `2.12.0-prova.e970149` (kaynak: dal `ops/testfabrika-2.12.0` ucunun `git archive`ı; son ek hedefteki tek yerel commit, depoda yok) · 13386 dosya · 367 migration.
+- `[1/9]`–`[8/9]` yeşil: korumalı + imzalı liste + native çekirdek + runtime node 24.18.0 kapıları OK; premigrate
+  `premigrate_20260930_045319.dump.tkenc` (9,52 MB, doğrulandı); `[7/9]` 367 found, 4 uygulandı.
+- `[9/9]` ❌ 120 sn sağlık yok: pm2 uygulamayı SİSTEM Node'uyla (v26.4.0, V8 14.6) başlattı, yükleyici reddetti
+  ("KORUMALI PAKET bu Node ile ACILAMAZ" — paket V8 13.6). Kök neden: `kur.ps1` sunucunun ESKİ `ecosystem.config.js`ini
+  korudu ve onda `interpreter`/`RUNTIME_NODE` bağı yok (paketin `.paket` kopyasında var). **Korumalı paketin ilk
+  kurulumundan ÖNCE sunucu ecosystem'ine runtime bağı eklenmeli ya da `kur.ps1` bu durumda `[3/9]`dan önce durmalı.**
+- Geri alma (SYSTEM, `-Kok C:\TeksERP -GeriAl -Zorla`): `API UP / DB UP / v2.11.2-lis-prova.771ac50d`; DB 367 migration'da
+  kaldı (dördü yalnız ekler; eski kod açıldı, `backend-err` yalnız bilinen offsite uyarısı). Kesinti ~7 dk (04:59 → 05:06);
+  bağlı istemci 0; etkin oturumlar (ELECTRON 7 · MOBILE 12) değişmedi.
+- Geri dönüş noktaları: kod `C:\TeksERP\app.eski-20260930_045319` şimdi yine `app` · başarısız kurulum
+  `C:\TeksERP\app.basarisiz-20260930_050608` · veri `C:\TeksERP\backups\premigrate_20260930_045319.dump.tkenc`.
