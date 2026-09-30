@@ -1,11 +1,30 @@
 // Fabrika saat dilimi — istemcilerin TEK tarih/saat biçimleyicisi. Gösterim ve basım istemcinin bilgisayar
-// diliminden DEĞİL, sunucunun bildirdiği fabrika diliminden yapılır (`GET /api/feature-flags` → factoryTimezone).
+// diliminden DEĞİL, sunucunun bildirdiği fabrika dilimi DÖNEMLERİNDEN yapılır (`GET /api/feature-flags` →
+// factoryTimezoneBase + factoryTimezonePeriods): her an kendi anındaki dilimle basılır, geçmiş kayıtlar kaymaz.
 // Bu dosya Electron · mobil · patron/uygulama `src/lib/factory-time.ts` olarak BAYT-EŞİT durur; değişiklik
 // Electron'da yapılır, sonra `cp -p` (bekçi: Teks-Erp/scripts/test_istemci_saat_dilimi.ts).
 
-export const DEFAULT_FACTORY_TIMEZONE = "Europe/Istanbul";
+import {
+  type DateInput,
+  type Segment,
+  cachedFormatter,
+  currentSegments,
+  zoneAtMs,
+} from "./factory-time-zone";
 
-export type DateInput = Date | string | number | null | undefined;
+export {
+  DEFAULT_FACTORY_TIMEZONE,
+  applyServerFactoryTimezone,
+  factoryTimezoneAt,
+  getFactoryBaseTimezone,
+  getFactoryTimezone,
+  getFactoryTimezonePeriods,
+  isValidTimeZone,
+  onFactoryTimezoneChange,
+  setFactoryTimezone,
+  setFactoryTimezonePeriods,
+  type DateInput,
+} from "./factory-time-zone";
 
 type ZonedParts = {
   year: number;
@@ -17,57 +36,12 @@ type ZonedParts = {
   weekday: number;
 };
 
-const SAFE_ZONE = /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+){0,2}$/;
 const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 const MONTHS_SHORT = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 const WEEKDAYS = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
 const WEEKDAYS_SHORT = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cts"];
 // İstanbul 2016'dan beri sabit UTC+3: Intl'in dilim desteği olmayan motorda varsayılan dilim yine doğru basılır.
 const DEFAULT_OFFSET_MS = 3 * 3_600_000;
-
-let currentZone = DEFAULT_FACTORY_TIMEZONE;
-const listeners = new Set<(timeZone: string) => void>();
-const formatterCache = new Map<string, Intl.DateTimeFormat>();
-
-function cachedFormatter(locale: string | string[] | undefined, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  const key = `${JSON.stringify(locale ?? null)}|${JSON.stringify(opts)}`;
-  let fmt = formatterCache.get(key);
-  if (!fmt) {
-    if (formatterCache.size > 256) formatterCache.clear();
-    fmt = new Intl.DateTimeFormat(locale, opts);
-    formatterCache.set(key, fmt);
-  }
-  return fmt;
-}
-
-export function isValidTimeZone(timeZone: unknown): timeZone is string {
-  if (typeof timeZone !== "string" || timeZone.length > 64 || !SAFE_ZONE.test(timeZone)) return false;
-  try {
-    cachedFormatter("en-US", { timeZone });
-    return true;
-  } catch {
-    return timeZone === DEFAULT_FACTORY_TIMEZONE;
-  }
-}
-
-export function getFactoryTimezone(): string {
-  return currentZone;
-}
-
-/** Sunucunun bildirdiği dilimi uygular; geçersiz değer yok sayılır (son geçerli dilim kalır). */
-export function setFactoryTimezone(timeZone: unknown): boolean {
-  if (!isValidTimeZone(timeZone)) return false;
-  if (timeZone !== currentZone) {
-    currentZone = timeZone;
-    for (const l of listeners) l(timeZone);
-  }
-  return true;
-}
-
-export function onFactoryTimezoneChange(listener: (timeZone: string) => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
 
 /** Yerleşik `Date` yapıcısıyla aynı yorum (drop-in'ler eski çıktıyı birebir korusun). */
 function looseDate(input: DateInput): Date {
@@ -121,9 +95,9 @@ function zonedParts(d: Date, timeZone: string): ZonedParts {
 }
 
 /** Fabrika duvar saati − UTC (ms). */
-export function factoryOffsetMs(input: DateInput, timeZone: string = currentZone): number {
+export function factoryOffsetMs(input: DateInput, timeZone?: string): number {
   const d = toValidDate(input) ?? new Date();
-  const p = zonedParts(d, timeZone);
+  const p = zonedParts(d, timeZone ?? zoneAtMs(d.getTime()));
   const wall = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
   return wall - Math.floor(d.getTime() / 1000) * 1000;
 }
@@ -154,12 +128,12 @@ function renderPattern(p: ZonedParts, pattern: string): string {
 }
 
 /**
- * Kalıpla biçim (date-fns belirteçleri: yyyy yy MMMM MMM MM M dd d EEEE EEE HH H mm ss, 'metin').
- * Boş/geçersiz girdi → `fallback`.
+ * Kalıpla biçim (date-fns belirteçleri: yyyy yy MMMM MMM MM M dd d EEEE EEE HH H mm ss, 'metin') — anın KENDİ
+ * dönemindeki dilimle (verilirse `timeZone` ile). Boş/geçersiz girdi → `fallback`.
  */
-export function formatFactory(input: DateInput, pattern: string, fallback = "—", timeZone: string = currentZone): string {
+export function formatFactory(input: DateInput, pattern: string, fallback = "—", timeZone?: string): string {
   const d = toValidDate(input);
-  return d ? renderPattern(zonedParts(d, timeZone), pattern) : fallback;
+  return d ? renderPattern(zonedParts(d, timeZone ?? zoneAtMs(d.getTime())), pattern) : fallback;
 }
 
 export const fmtFactoryDate = (input: DateInput, fallback = "—"): string => formatFactory(input, "dd.MM.yyyy", fallback);
@@ -176,7 +150,7 @@ export const fmtFactoryStamp = (input: DateInput = new Date(), fallback = "—")
  */
 export function calendarDayZone(input: DateInput): string {
   const d = toValidDate(input);
-  return d && d.getTime() % 86_400_000 === 0 ? "UTC" : currentZone;
+  return d && d.getTime() % 86_400_000 === 0 ? "UTC" : zoneAtMs(d ? d.getTime() : Date.now());
 }
 
 /** Takvim günü alanını kalıpla basar (`calendarDayZone`); boş/geçersiz → `fallback`. */
@@ -202,34 +176,92 @@ export function calendarLocaleDateString(input: DateInput, locale?: string | str
   const d = looseDate(input);
   if (Number.isNaN(d.getTime())) return "Invalid Date";
   try {
-    return cachedFormatter(locale, { ...zonedOptions(opts, "date"), timeZone: calendarDayZone(d) }).format(d);
+    return cachedFormatter(locale, zonedOptions(opts, "date", calendarDayZone(d))).format(d);
   } catch {
     return formatCalendarDay(d);
   }
 }
 
-/** Fabrika takvim günü `yyyy-MM-dd` (girdi yoksa bugün). */
-export function factoryDayKey(input: DateInput = new Date(), timeZone: string = currentZone): string {
-  return formatFactory(input, "yyyy-MM-dd", "", timeZone);
+type DayParts = { y: number; m: number; d: number };
+const ymdNum = (p: DayParts): number => p.y * 10_000 + p.m * 100 + p.d;
+
+function parseDayKey(dayKey: string): DayParts | null {
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
+  return dm ? { y: Number(dm[1]), m: Number(dm[2]), d: Number(dm[3]) } : null;
 }
 
-/** Fabrika duvar saati → an. `dayKey` `yyyy-MM-dd`, `time` `HH:mm[:ss]`; biçim bozuksa null. */
-export function factoryWallTimeToDate(dayKey: string, time = "00:00", timeZone: string = currentZone): Date | null {
-  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
-  const tm = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(time);
-  if (!dm || !tm) return null;
-  const wall = Date.UTC(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]), Number(tm[1]), Number(tm[2]), Number(tm[3] ?? 0));
-  if (Number.isNaN(wall)) return null;
+type Wall = DayParts & { h: number; mi: number; s: number };
+const segEnd = (segs: readonly Segment[], i: number): number => (i + 1 < segs.length ? (segs[i + 1] as Segment).from : Infinity);
+
+/** Duvar saati → an, TEK dilimde (iki turlu ofset çözümü; DST'de de doğru). */
+function wallInZone(w: Wall, timeZone: string): number {
+  const wall = Date.UTC(w.y, w.m - 1, w.d, w.h, w.mi, w.s);
   let t = wall - factoryOffsetMs(wall, timeZone);
   const second = wall - factoryOffsetMs(t, timeZone);
   if (second !== t) t = second;
-  return new Date(t);
+  return t;
 }
 
-/** Girdinin düştüğü fabrika gününün başlangıç anı. */
-export function factoryDayStart(input: DateInput = new Date(), timeZone: string = currentZone): Date {
+/**
+ * Fabrika gününün İLK anı. Dönem sınırı gün içine düşerse gün iki dilimde sürer (uzar/kısalır, bölünmez) ve ilk
+ * parçanın başı döner. Tek dilimde doğrudan yerel gece yarısı (backend `time.ts` ile aynı kural).
+ */
+function dayStartMs(p: DayParts): number {
+  const segs = currentSegments();
+  const mid = { ...p, h: 0, mi: 0, s: 0 };
+  if (segs.length === 1) return wallInZone(mid, (segs[0] as Segment).zone);
+  const key = ymdNum(p);
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i] as Segment;
+    const midnight = wallInZone(mid, seg.zone);
+    const start = Math.max(midnight, seg.from);
+    if (start >= segEnd(segs, i)) continue;
+    const z = zonedParts(new Date(start), seg.zone);
+    if (start === midnight || ymdNum({ y: z.year, m: z.month, d: z.day }) === key) return start;
+  }
+  for (let i = 1; i < segs.length; i++) {
+    const seg = segs[i] as Segment;
+    const z = zonedParts(new Date(seg.from), seg.zone);
+    if (ymdNum({ y: z.year, m: z.month, d: z.day }) > key) return seg.from;
+  }
+  return wallInZone(mid, (segs[segs.length - 1] as Segment).zone);
+}
+
+/** Fabrika gününde duvar saati → an: o saati TAŞIYAN dönemin dilimiyle (iki dönemde varsa erkeni). */
+function wallMs(w: Wall): number {
+  const segs = currentSegments();
+  if (segs.length === 1) return wallInZone(w, (segs[0] as Segment).zone);
+  for (let i = 0; i < segs.length; i++) {
+    const t = wallInZone(w, (segs[i] as Segment).zone);
+    if (t >= (segs[i] as Segment).from && t < segEnd(segs, i)) return t;
+  }
+  return wallInZone(w, zoneAtMs(dayStartMs(w)));
+}
+
+/** Fabrika takvim günü `yyyy-MM-dd` (girdi yoksa bugün) — anın KENDİ dilimiyle; `timeZone` verilirse o dilimle. */
+export function factoryDayKey(input: DateInput = new Date(), timeZone?: string): string {
+  return formatFactory(input, "yyyy-MM-dd", "", timeZone);
+}
+
+/**
+ * Fabrika duvar saati → an. `dayKey` `yyyy-MM-dd`, `time` `HH:mm[:ss]`; biçim bozuksa null. `timeZone` verilmezse
+ * o günün (dönem sınırında o saatin) dilimi kullanılır.
+ */
+export function factoryWallTimeToDate(dayKey: string, time = "00:00", timeZone?: string): Date | null {
+  const p = parseDayKey(dayKey);
+  const tm = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(time);
+  if (!p || !tm) return null;
+  const w: Wall = { ...p, h: Number(tm[1]), mi: Number(tm[2]), s: Number(tm[3] ?? 0) };
+  if (Number.isNaN(Date.UTC(w.y, w.m - 1, w.d, w.h, w.mi, w.s))) return null;
+  return new Date(timeZone ? wallInZone(w, timeZone) : wallMs(w));
+}
+
+/** Girdinin düştüğü fabrika gününün başlangıç anı (dönem sınırındaki uzamış günde ilk parçanın başı). */
+export function factoryDayStart(input: DateInput = new Date(), timeZone?: string): Date {
   const key = factoryDayKey(input, timeZone) || factoryDayKey(new Date(), timeZone);
-  return factoryWallTimeToDate(key, "00:00", timeZone) ?? new Date(NaN);
+  if (timeZone) return factoryWallTimeToDate(key, "00:00", timeZone) ?? new Date(NaN);
+  const p = parseDayKey(key);
+  return p ? new Date(dayStartMs(p)) : new Date(NaN);
 }
 
 /** İki anın fabrika takvim günleri arasındaki fark (`later` − `earlier`, gün); geçersiz girdi → NaN. */
@@ -258,8 +290,8 @@ const EPOCH_DAY = "1970-01-01";
 
 /** Fabrika gününün ilk anı (ISO); bozuk gün anahtarı 1970-01-01 sayılır. */
 export function factoryDayStartIso(dayKey: string): string {
-  const d = factoryWallTimeToDate(dayKey, "00:00") ?? factoryWallTimeToDate(EPOCH_DAY, "00:00");
-  return (d ?? new Date(0)).toISOString();
+  const p = parseDayKey(dayKey) ?? parseDayKey(EPOCH_DAY);
+  return new Date(p ? dayStartMs(p) : 0).toISOString();
 }
 
 /** Fabrika gününün son anı (ISO) = ertesi günün ilk anı − 1 ms. */
@@ -290,14 +322,14 @@ const DATE_KEYS = ["weekday", "year", "month", "day"] as const;
 const TIME_KEYS = ["dayPeriod", "hour", "minute", "second", "fractionalSecondDigits"] as const;
 
 // ECMA-402 ToDateTimeOptions: yerleşik toLocale*String'in varsayılan alan kuralı, fabrika dilimi eklenmiş.
-function zonedOptions(opts: Intl.DateTimeFormatOptions | undefined, required: Required): Intl.DateTimeFormatOptions {
+function zonedOptions(opts: Intl.DateTimeFormatOptions | undefined, required: Required, timeZone: string): Intl.DateTimeFormatOptions {
   const o: Record<string, unknown> = { ...(opts ?? {}) };
   let needDefaults = o.dateStyle === undefined && o.timeStyle === undefined;
   if (required !== "time" && DATE_KEYS.some((k) => o[k] !== undefined)) needDefaults = false;
   if (required !== "date" && TIME_KEYS.some((k) => o[k] !== undefined)) needDefaults = false;
   if (needDefaults && required !== "time") Object.assign(o, { year: "numeric", month: "numeric", day: "numeric" });
   if (needDefaults && required !== "date") Object.assign(o, { hour: "numeric", minute: "numeric", second: "numeric" });
-  o.timeZone = currentZone;
+  o.timeZone = timeZone;
   return o as Intl.DateTimeFormatOptions;
 }
 
@@ -305,7 +337,7 @@ function localeFormat(input: DateInput, locale: string | string[] | undefined, o
   const d = looseDate(input);
   if (Number.isNaN(d.getTime())) return "Invalid Date";
   try {
-    return cachedFormatter(locale, zonedOptions(opts, required)).format(d);
+    return cachedFormatter(locale, zonedOptions(opts, required, zoneAtMs(d.getTime()))).format(d);
   } catch {
     return formatFactory(d, required === "date" ? "dd.MM.yyyy" : required === "time" ? "HH:mm:ss" : "dd.MM.yyyy HH:mm:ss");
   }
@@ -326,7 +358,26 @@ export function factoryLocaleTimeString(input: DateInput, locale?: string | stri
   return localeFormat(input, locale, opts, "time");
 }
 
-/** `new Intl.DateTimeFormat(locale, opts)` yerine — dilim her zaman fabrikanınki. */
-export function factoryDateTimeFormat(locale?: string | string[], opts?: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  return cachedFormatter(locale, { ...(opts ?? {}), timeZone: currentZone });
+/** `factoryDateTimeFormat` dönüşü: her `format` çağrısı anın KENDİ dönemindeki dilimle biçimler. */
+export interface FactoryDateTimeFormat {
+  format(input?: DateInput): string;
+  formatToParts(input?: DateInput): Intl.DateTimeFormatPart[];
+}
+
+/** `new Intl.DateTimeFormat(locale, opts)` yerine — dilim her anın fabrika dilimi. */
+export function factoryDateTimeFormat(locale?: string | string[], opts?: Intl.DateTimeFormatOptions): FactoryDateTimeFormat {
+  const at = (input?: DateInput): { d: Date; fmt: Intl.DateTimeFormat } => {
+    const d = input === undefined ? new Date() : looseDate(input);
+    return { d, fmt: cachedFormatter(locale, { ...(opts ?? {}), timeZone: zoneAtMs(Number.isNaN(d.getTime()) ? Date.now() : d.getTime()) }) };
+  };
+  return {
+    format: (input) => {
+      const { d, fmt } = at(input);
+      return fmt.format(d);
+    },
+    formatToParts: (input) => {
+      const { d, fmt } = at(input);
+      return fmt.formatToParts(d);
+    },
+  };
 }

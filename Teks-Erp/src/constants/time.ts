@@ -29,12 +29,14 @@
 //                    saat diliminden BAĞIMSIZDIR → dokunma, yalnız yorumla
 //                    belirt (örn. rulo yaşlandırma kovaları, geciken sipariş).
 //
-// ── FABRİKAYA GÖRE SEÇİLEBİLİR (kullanıcı kararı 2026-09-30) ─────────────────
-// Saat dilimi PROFİL değeridir: `company.timezone` ayarı (IANA adı), varsayılan
-// `DEFAULT_FACTORY_TIMEZONE` = bugünkü davranış. Kural ÇEKİRDEK: gün anahtarı ve
-// her görüntü/basım saati bu dosyadan okunur — literal YALNIZ burada durur.
-// Süreç içi değer açılışta `listen`den ÖNCE yüklenir (factory-timezone.service),
-// yazma ucu ve ayar önbelleği tazelemesi `applyFactoryTimezone` ile günceller.
+// ── FABRİKAYA GÖRE SEÇİLEBİLİR, TARİHLİ DÖNEMLERLE (kullanıcı kararı 2026-09-30) ──
+// Saat dilimi PROFİL değeridir ve bir DÖNEM DEFTERİDİR (`factory_timezone_periods`):
+// satır yoksa bütün zaman `DEFAULT_FACTORY_TIMEZONE` = bugünkü davranış. Bir kaydın
+// saati, günü, vardiyası ve rapor günü KAYDIN ANINDAKİ dilimle yorumlanır
+// (`factoryTimezoneAt`) — değişiklik yalnız yürürlüğe girdiği andan SONRAKİ kayıtları
+// etkiler, geçmiş kayıtların saati/günü asla kaymaz. "Bugün" şimdiki dilimde bugündür.
+// Kural ÇEKİRDEK: gün anahtarı, her görüntü/basım saati ve ham `AT TIME ZONE` YALNIZ
+// bu dosyadan. Dönem listesi açılışta `listen`den ÖNCE yüklenir (factory-timezone.service).
 // Tasarım: docs/design/FABRIKA-SAAT-DILIMI.md.
 // =============================================================================
 
@@ -65,23 +67,145 @@ export function isValidFactoryTimezone(value: unknown): value is string {
   return value === "UTC" || supportedTimeZones().has(value);
 }
 
-let currentTimezone: string = DEFAULT_FACTORY_TIMEZONE;
+/** Etkin dönem: `from` anından (ms; ilk dönem -∞) sonraki dönem başlayana dek `zone`. */
+interface ZoneSegment {
+  from: number;
+  zone: string;
+}
 
-/** Fabrikanın ŞU ANKİ saat dilimi — senkron, tx içinde güvenli (bellek içi değer). */
-export function getFactoryTimezone(): string {
-  return currentTimezone;
+/** Dönem defterinin (`factory_timezone_periods`) bir satırı — çözümleyicinin gördüğü kadarı. */
+export interface FactoryTimezonePeriodRow {
+  id: string;
+  timeZone: string;
+  validFrom: Date;
+  createdAt: Date;
+  /** Ters kayıt: iptal ettiği satır. Çift birbirini söndürür. */
+  reversesPeriodId: string | null;
+}
+
+/** Bir anın saat dilimi değişimi: `validFrom`dan itibaren `timeZone` (istemciye ve buluta giden biçim). */
+export interface FactoryTimezonePeriod {
+  validFrom: Date;
+  timeZone: string;
+}
+
+let segments: ZoneSegment[] = [{ from: -Infinity, zone: DEFAULT_FACTORY_TIMEZONE }];
+
+/**
+ * Defter satırlarından etkin dönemler. İptal, aynı ana önceki dilimle yazılan ters kayıttır (`reversesPeriodId`) ve
+ * çift BİRBİRİNİ SÖNDÜRÜR: sonradan daha erken başlayan bir değişiklik, iptal satırındaki eski dilimi yeniden
+ * yürürlüğe sokamaz. Kalanlarda aynı `validFrom`da en son satır (createdAt, sonra id) kazanır; geçersiz dilim o
+ * dönemde `base` ile yorumlanır (I9 şık 2); ardışık aynı dilimler birleşir.
+ */
+export function resolveFactoryTimezonePeriods(
+  rows: readonly FactoryTimezonePeriodRow[],
+  base: string = DEFAULT_FACTORY_TIMEZONE,
+): { periods: Array<FactoryTimezonePeriod & { id: string }>; invalid: FactoryTimezonePeriodRow[] } {
+  const latest = new Map<number, FactoryTimezonePeriodRow>();
+  const reversed = new Set(rows.map((r) => r.reversesPeriodId).filter((x): x is string => x !== null));
+  for (const r of rows) {
+    if (r.reversesPeriodId !== null || reversed.has(r.id)) continue;
+    const k = r.validFrom.getTime();
+    const cur = latest.get(k);
+    const newer = !cur || r.createdAt.getTime() > cur.createdAt.getTime() ||
+      (r.createdAt.getTime() === cur.createdAt.getTime() && r.id > cur.id);
+    if (newer) latest.set(k, r);
+  }
+  const invalid: FactoryTimezonePeriodRow[] = [];
+  const periods: Array<FactoryTimezonePeriod & { id: string }> = [];
+  let prev = base;
+  for (const k of [...latest.keys()].sort((a, b) => a - b)) {
+    const r = latest.get(k)!;
+    const valid = isValidFactoryTimezone(r.timeZone);
+    if (!valid) invalid.push(r);
+    const zone = valid ? r.timeZone : base;
+    if (zone === prev) continue;
+    periods.push({ id: r.id, validFrom: new Date(k), timeZone: zone });
+    prev = zone;
+  }
+  return { periods, invalid };
 }
 
 /**
- * Süreç içi değeri günceller. Geçersiz ad FIRLATIR (fail-closed: yanlış güne yazmaktansa
- * dur); çağıran önbellek tazelemesiyse hatayı yakalayıp son geçerli değerde kalır.
+ * Süreç içi dönem listesini değiştirir (`resolveFactoryTimezonePeriods` çıktısı). `base` ilk dönemden önceki
+ * dilimdir (varsayılan = bugünkü davranış). Geçersiz ad FIRLATIR: yanlış güne yazmaktansa dur.
  */
-export function applyFactoryTimezone(value: string): void {
-  if (!isValidFactoryTimezone(value)) throw new Error(`Geçersiz fabrika saat dilimi: ${String(value)}`);
-  currentTimezone = value;
+export function applyFactoryTimezonePeriods(
+  periods: readonly FactoryTimezonePeriod[],
+  base: string = DEFAULT_FACTORY_TIMEZONE,
+): void {
+  if (!isValidFactoryTimezone(base)) throw new Error(`Geçersiz fabrika saat dilimi: ${String(base)}`);
+  const next: ZoneSegment[] = [{ from: -Infinity, zone: base }];
+  for (const p of [...periods].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime())) {
+    if (!isValidFactoryTimezone(p.timeZone)) throw new Error(`Geçersiz fabrika saat dilimi: ${String(p.timeZone)}`);
+    const t = p.validFrom.getTime();
+    if (!Number.isFinite(t)) throw new Error("Geçersiz dönem başlangıcı");
+    const last = next[next.length - 1]!;
+    if (last.zone === p.timeZone) continue;
+    if (last.from === t) last.zone = p.timeZone;
+    else next.push({ from: t, zone: p.timeZone });
+  }
+  segments = next;
 }
 
-/** Sağlık ucu + panel uyarısının kodu: kayıtlı `company.timezone` geçersiz, sunucu başka dilimle koşuyor. */
+/** Bütün zamanı TEK dilimle yorumlar (dönemsiz kurulum / bekçi). Geçersiz ad FIRLATIR. */
+export function applyFactoryTimezone(value: string): void {
+  applyFactoryTimezonePeriods([], value);
+}
+
+/**
+ * `fn`i VARSAYIMSAL bir dönem listesiyle SENKRON koşar ve süreç değerini geri koyar (önizleme: "değişiklik
+ * yazılsaydı geçiş günü kaç saat olurdu"). `fn` asenkron olamaz — `await` araya başka isteği sokar.
+ */
+export function withFactoryTimezonePeriods<T>(
+  periods: readonly FactoryTimezonePeriod[],
+  base: string,
+  fn: () => T,
+): T {
+  const saved = segments;
+  try {
+    applyFactoryTimezonePeriods(periods, base);
+    return fn();
+  } finally {
+    segments = saved;
+  }
+}
+
+/** Etkin dönemler (ilk dönemden önceki dilim `DEFAULT_FACTORY_TIMEZONE`); dönemsiz kurulumda boş. */
+export function getFactoryTimezonePeriods(): FactoryTimezonePeriod[] {
+  return segments.slice(1).map((s) => ({ validFrom: new Date(s.from), timeZone: s.zone }));
+}
+
+/** İlk dönemden önceki dilim — normalde varsayılan; tek dilimli yorumda (bekçi) o dilim. */
+export function getFactoryBaseTimezone(): string {
+  return segments[0]!.zone;
+}
+
+function segmentIndexAt(ms: number): number {
+  let lo = 0;
+  let hi = segments.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (segments[mid]!.from <= ms) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+/**
+ * `at` anında yürürlükteki fabrika dilimi — kaydın saati, günü, vardiyası ve rapor günü BU dilimle yorumlanır
+ * (kayıt ANINDAKİ dilim; sonradan yapılan değişiklik geçmişi kaydırmaz). Senkron, tx içinde güvenli.
+ */
+export function factoryTimezoneAt(at: Date): string {
+  return segments[segmentIndexAt(at.getTime())]!.zone;
+}
+
+/** Fabrikanın ŞU ANKİ saat dilimi ("bugün" bu dilimde bugündür). */
+export function getFactoryTimezone(): string {
+  return factoryTimezoneAt(new Date());
+}
+
+/** Sağlık ucu + panel uyarısının kodu: kayıtlı dilim geçersiz, o dönem varsayılanla yorumlanıyor. */
 export const FACTORY_TIMEZONE_INVALID_STORED = "FACTORY_TIMEZONE_INVALID_STORED";
 
 // Kayıtlı değer geçersiz okunduysa ham hâli (uyarıda gösterilir); geçerli okununca null.
@@ -95,10 +219,11 @@ export function noteStoredFactoryTimezone(valid: boolean, raw?: unknown): void {
 /** Kayıtlı dilim geçersizken sağlık ucu ve panelin göstereceği uyarı; sorun yoksa `null`. */
 export function factoryTimezoneWarning(): { code: string; message: string; stored: string } | null {
   if (storedInvalidRaw === null) return null;
-  const used = currentTimezone === DEFAULT_FACTORY_TIMEZONE ? "İstanbul" : currentTimezone;
+  const used = getFactoryTimezone();
+  const label = used === DEFAULT_FACTORY_TIMEZONE ? "İstanbul" : used;
   return {
     code: FACTORY_TIMEZONE_INVALID_STORED,
-    message: `Kayıtlı saat dilimi geçersiz; ${used} kullanılıyor — Şirket Bilgileri → Saat dilimi'den düzeltin`,
+    message: `Kayıtlı saat dilimi geçersiz; ${label} kullanılıyor — Şirket Bilgileri → Saat dilimi'den düzeltin`,
     stored: storedInvalidRaw,
   };
 }
@@ -108,27 +233,48 @@ function assertSqlZone(timeZone: string): void {
 }
 
 /**
+ * `<kolon>` mutlak anını FABRİKA duvar saatine (timestamp) çeviren SQL metni — ham `AT TIME ZONE` YALNIZ burada.
+ * Dönemsiz kurulumda bugünkü tek ifade (`col AT TIME ZONE 'Europe/Istanbul'`, ifade istatistiğiyle birebir);
+ * dönem varsa her satır kendi ANINDAKİ dilimle çevrilir:
+ * `CASE WHEN col < TIMESTAMPTZ '<t1>' THEN col AT TIME ZONE 'Z0' … ELSE col AT TIME ZONE 'Zn' END`.
+ * Dilimler `assertSqlZone` ile, anlar `toISOString()` ile üretilir — `columnExpr` derleme zamanı sabitidir.
+ */
+function factoryLocalTimestampSqlText(columnExpr: string): string {
+  const segs = segments;
+  for (const s of segs) assertSqlZone(s.zone);
+  if (segs.length === 1) return `${columnExpr} AT TIME ZONE '${segs[0]!.zone}'`;
+  let sql = "CASE";
+  for (let i = 1; i < segs.length; i++) {
+    sql += ` WHEN ${columnExpr} < TIMESTAMPTZ '${new Date(segs[i]!.from).toISOString()}' THEN ${columnExpr} AT TIME ZONE '${segs[i - 1]!.zone}'`;
+  }
+  return `${sql} ELSE ${columnExpr} AT TIME ZONE '${segs[segs.length - 1]!.zone}' END`;
+}
+
+/** `factoryLocalTimestampSqlText`in `Prisma.Sql` hâli (saat/vardiya gruplaması gibi gün dışı çözünürlükler). */
+export function factoryLocalTimestampSql(columnExpr: string): Prisma.Sql {
+  return Prisma.raw(factoryLocalTimestampSqlText(columnExpr));
+}
+
+/**
  * Günlük gruplama/etiketleme için SQL ifadesi: `<kolon>` mutlak anını FABRİKA
- * takvim gününe çevirir ve `date` döndürür.
+ * takvim gününe çevirir ve `date` döndürür — her satır kendi anındaki dilimle.
  *
  * Neden `Prisma.raw`: `AT TIME ZONE` bir bind parametresi (`$1`) kabul eder ama
  * o zaman ifade planner için sabit olmaktan çıkar ve
  * `20260801050000_system_log_daily_stats_tz` ile kurulan İFADE İSTATİSTİĞİ
  * eşleşmez (audit raporu sessizce yavaş plana düşer). Bu yüzden saat dilimi
- * SQL metnine gömülür. Saat dilimi `assertSqlZone` ile IANA listesine karşı
- * doğrulanır; `columnExpr` derleme zamanı sabitidir — ASLA kullanıcı girdisi geçirme.
- * Varsayılan dışı dilimde metin istatistikle eşleşmez: sonuç doğru, plan yavaş olabilir.
+ * SQL metnine gömülür. Dönemli kurulumda metin istatistikle eşleşmez: sonuç
+ * doğru, plan yavaş olabilir (DEPLOY-RUNBOOK §12).
  *
- * ⚠️ Üretilen metin `system_logs` istatistik nesnesiyle BİREBİR eşleşmelidir.
- *    Buradaki ifadeyi değiştirirsen migration'ı da güncelle
+ * ⚠️ Dönemsiz kurulumda üretilen metin `system_logs` istatistik nesnesiyle BİREBİR
+ *    eşleşmelidir. Buradaki ifadeyi değiştirirsen migration'ı da güncelle
  *    (bekçi: `scripts/test_db_invariants.ts` yalnız nesnenin VARLIĞINI görür,
  *    ifade uyumsuzluğu KIRMIZI vermez — sonuç doğru kalır, sorgu yavaşlar).
  *
  * @param columnExpr Tırnaklanmış kolon ifadesi, örn. `rm."enteredAt"`.
  */
-export function factoryDaySql(columnExpr: string, timeZone: string = getFactoryTimezone()): Prisma.Sql {
-  assertSqlZone(timeZone);
-  return Prisma.raw(`DATE_TRUNC('day', ${columnExpr} AT TIME ZONE '${timeZone}')::date`);
+export function factoryDaySql(columnExpr: string): Prisma.Sql {
+  return Prisma.raw(`DATE_TRUNC('day', ${factoryLocalTimestampSqlText(columnExpr)})::date`);
 }
 
 /**
@@ -146,13 +292,12 @@ export function factoryDaySql(columnExpr: string, timeZone: string = getFactoryT
  *
  * @param columnExpr Tırnaklanmış kolon ifadesi, örn. `o."orderDate"`.
  */
-export function factoryMonthSql(columnExpr: string, timeZone: string = getFactoryTimezone()): Prisma.Sql {
-  assertSqlZone(timeZone);
-  return Prisma.raw(`DATE_TRUNC('month', ${columnExpr} AT TIME ZONE '${timeZone}')::date`);
+export function factoryMonthSql(columnExpr: string): Prisma.Sql {
+  return Prisma.raw(`DATE_TRUNC('month', ${factoryLocalTimestampSqlText(columnExpr)})::date`);
 }
 
 /**
- * Verilen anın FABRİKA saat dilimindeki duvar-saati parçaları.
+ * Verilen anın bir dilimdeki duvar-saati parçaları.
  * `Intl` kullanılır (izinli paket listesinde date kütüphanesi yok) — süreç
  * saat diliminden (`TZ` env) BAĞIMSIZ çalışır. `new Date().setHours(0,0,0,0)`
  * deseni süreç dilimi fabrikanınkiyle aynıyken doğru sonuç verir ama bunu HİÇBİR YERDE
@@ -175,19 +320,75 @@ function zoneFormatter(kind: "day" | "clock" | "hm", timeZone: string): Intl.Dat
   return f;
 }
 
-function factoryParts(at: Date): { y: number; m: number; d: number } {
-  const parts = zoneFormatter("day", getFactoryTimezone()).formatToParts(at);
+type DayParts = { y: number; m: number; d: number };
+
+function partsIn(at: Date, timeZone: string): DayParts {
+  const parts = zoneFormatter("day", timeZone).formatToParts(at);
   const get = (type: string): number => Number(parts.find((p) => p.type === type)?.value ?? "0");
   return { y: get("year"), m: get("month"), d: get("day") };
 }
 
-/** Bir anın fabrika saat dilimindeki UTC ofseti (ms). DST'de değişebilir. */
-function factoryOffsetMs(at: Date): number {
-  const parts = zoneFormatter("clock", getFactoryTimezone()).formatToParts(at);
+/** `at` anının kendi dönemindeki (kayıt anındaki dilim) takvim günü parçaları. */
+function factoryParts(at: Date): DayParts {
+  return partsIn(at, factoryTimezoneAt(at));
+}
+
+/** Bir anın verilen dilimdeki UTC ofseti (ms). DST'de değişebilir. */
+function offsetMsIn(at: Date, timeZone: string): number {
+  const parts = zoneFormatter("clock", timeZone).formatToParts(at);
   const get = (type: string): number => Number(parts.find((p) => p.type === type)?.value ?? "0");
   const asIfUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
   // Milisaniye kırpılır: formatToParts ms taşımaz, ofset her zaman dakika katıdır.
   return asIfUtc - Math.floor(at.getTime() / 1000) * 1000;
+}
+
+/** Duvar saati (gün + gece yarısından dakika) → mutlak an, TEK dilimde; iki turlu ofset çözümü DST'de de doğru. */
+function wallToInstantIn(p: DayParts, minuteOfDay: number, timeZone: string): number {
+  const wallAsUtc = Date.UTC(p.y, p.m - 1, p.d, 0, minuteOfDay, 0, 0);
+  let guess = wallAsUtc;
+  for (let i = 0; i < 2; i++) {
+    guess = wallAsUtc - offsetMsIn(new Date(guess), timeZone);
+  }
+  return guess;
+}
+
+const ymdNum = (p: DayParts): number => p.y * 10_000 + p.m * 100 + p.d;
+const segmentEnd = (i: number): number => (i + 1 < segments.length ? segments[i + 1]!.from : Infinity);
+
+function nextDayParts(p: DayParts): DayParts {
+  const x = new Date(Date.UTC(p.y, p.m - 1, p.d + 1));
+  return { y: x.getUTCFullYear(), m: x.getUTCMonth() + 1, d: x.getUTCDate() };
+}
+
+/**
+ * Fabrika gününün İLK anı. Dönem sınırı gün içine düşerse gün iki dilimde sürer (uzar/kısalır, bölünmez):
+ * ilk parçanın başı döner. Dönemsiz kurulumda tek dilimli iki turlu çözüm (bugünkü hesap, birebir).
+ */
+function dayStartMs(p: DayParts): number {
+  if (segments.length === 1) return wallToInstantIn(p, 0, segments[0]!.zone);
+  const key = ymdNum(p);
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]!;
+    const midnight = wallToInstantIn(p, 0, seg.zone);
+    const start = Math.max(midnight, seg.from);
+    if (start >= segmentEnd(i)) continue;
+    if (start === midnight || ymdNum(partsIn(new Date(start), seg.zone)) === key) return start;
+  }
+  // Gün hiçbir dönemde yok (tarih çizgisi ötesi geçiş): anahtarı bu günü aşan ilk sınır — boş gün.
+  for (let i = 1; i < segments.length; i++) {
+    if (ymdNum(partsIn(new Date(segments[i]!.from), segments[i]!.zone)) > key) return segments[i]!.from;
+  }
+  return wallToInstantIn(p, 0, segments[segments.length - 1]!.zone);
+}
+
+/** Fabrika gününde duvar saati → an: o duvar saatini TAŞIYAN dönemin dilimiyle (iki dönemde varsa erkeni). */
+function wallInstantMs(p: DayParts, minuteOfDay: number): number {
+  if (segments.length === 1) return wallToInstantIn(p, minuteOfDay, segments[0]!.zone);
+  for (let i = 0; i < segments.length; i++) {
+    const t = wallToInstantIn(p, minuteOfDay, segments[i]!.zone);
+    if (t >= segments[i]!.from && t < segmentEnd(i)) return t;
+  }
+  return wallToInstantIn(p, minuteOfDay, factoryTimezoneAt(new Date(dayStartMs(p))));
 }
 
 /**
@@ -199,13 +400,7 @@ function factoryOffsetMs(at: Date): number {
  * İki turlu ofset çözümü DST geçiş günlerinde de doğru sonucu verir.
  */
 export function factoryDayStart(at: Date = new Date()): Date {
-  const { y, m, d } = factoryParts(at);
-  const wallMidnightAsUtc = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
-  let guess = wallMidnightAsUtc;
-  for (let i = 0; i < 2; i++) {
-    guess = wallMidnightAsUtc - factoryOffsetMs(new Date(guess));
-  }
-  return new Date(guess);
+  return new Date(dayStartMs(factoryParts(at)));
 }
 
 /**
@@ -216,13 +411,7 @@ export function factoryDayStart(at: Date = new Date()): Date {
  * ≥ 1440 ertesi güne TAŞAR (gece yarısını geçen vardiyanın bitişi).
  */
 export function factoryMinuteOfDay(at: Date, minuteOfDay: number): Date {
-  const { y, m, d } = factoryParts(at);
-  const wallAsUtc = Date.UTC(y, m - 1, d, 0, minuteOfDay, 0, 0);
-  let guess = wallAsUtc;
-  for (let i = 0; i < 2; i++) {
-    guess = wallAsUtc - factoryOffsetMs(new Date(guess));
-  }
-  return new Date(guess);
+  return new Date(wallInstantMs(factoryParts(at), minuteOfDay));
 }
 
 /** `at` anının FABRİKA haftagünü (0=Pazar..6=Cumartesi) — `getDay()` süreç dilimini okur. */
@@ -244,11 +433,11 @@ export function factoryDateTr(at: Date): string {
 }
 
 /**
- * `at` anının FABRİKA günü ve saati, `GG.AA.YYYY SS:DD`. Saat de fabrika
- * dilimindendir — `getHours()` süreç dilimini okur ve UTC sunucuda 3 saat kayar.
+ * `at` anının FABRİKA günü ve saati, `GG.AA.YYYY SS:DD`. Saat de kaydın anındaki
+ * dilimdendir — `getHours()` süreç dilimini okur ve UTC sunucuda 3 saat kayar.
  */
 export function factoryDateTimeTr(at: Date): string {
-  const parts = zoneFormatter("hm", getFactoryTimezone()).formatToParts(at);
+  const parts = zoneFormatter("hm", factoryTimezoneAt(at)).formatToParts(at);
   const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "00";
   return `${factoryDateTr(at)} ${get("hour")}:${get("minute")}`;
 }
@@ -271,13 +460,51 @@ export function factoryDayKeyUtcMidnight(at: Date = new Date()): Date {
  *
  * Ertesi günün başlangıcından 1 ms geri sayılır — "23:59:59.999'u elle kur"
  * yaklaşımı DST ileri-atlama günlerinde var olmayan bir duvar saatine denk
- * gelebilir; gün başlangıcı üzerinden türetmek her takvimde doğrudur.
- * (+36 sa: DST kaymasından büyük, iki günden küçük → hedef her zaman ERTESİ gün.)
+ * gelebilir; gün başlangıcı üzerinden türetmek her takvimde ve dönem sınırında doğrudur.
  */
 export function factoryDayEnd(at: Date = new Date()): Date {
-  const start = factoryDayStart(at);
-  const nextStart = factoryDayStart(new Date(start.getTime() + 36 * 3600_000));
-  return new Date(nextStart.getTime() - 1);
+  return new Date(dayStartMs(nextDayParts(factoryParts(at))) - 1);
+}
+
+function parseDayKey(value: string): DayParts | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return m ? { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) } : null;
+}
+
+/** `YYYY-MM-DD` fabrika gününün ilk anı; bozuk anahtar → `Invalid Date`. */
+export function factoryDayStartOfKey(dayKey: string): Date {
+  const p = parseDayKey(dayKey);
+  return p ? new Date(dayStartMs(p)) : new Date(NaN);
+}
+
+/** `YYYY-MM-DD` fabrika gününün son anı (ertesi günün ilk anı − 1 ms); bozuk anahtar → `Invalid Date`. */
+export function factoryDayEndOfKey(dayKey: string): Date {
+  const p = parseDayKey(dayKey);
+  return p ? new Date(dayStartMs(nextDayParts(p)) - 1) : new Date(NaN);
+}
+
+/**
+ * Dilim değişikliğinin yürürlük anı: YENİ dilimde şimdiden sonraki ilk yerel gece yarısı — gün bölünmez,
+ * değişiklik o günün başından geçerli olur. Eski dilimin E'den hemen önceki günü yeni günden ileride olmamalı
+ * ve aradan gün atlanmamalı; olmuyorsa sonraki gece yarısı denenir. İki dilim arası 24 saati aşıyorsa
+ * (tarih çizgisi ötesi) bu hiçbir gece yarısında sağlanmaz: ilk gece yarısı döner, bir takvim günü iki kez yaşanır.
+ */
+export function factoryTimezoneChangeStart(newZone: string, now: Date = new Date()): Date {
+  if (!isValidFactoryTimezone(newZone)) throw new Error(`Geçersiz fabrika saat dilimi: ${newZone}`);
+  let p = partsIn(now, newZone);
+  let first: number | null = null;
+  for (let k = 1; k <= 3; k++) {
+    p = nextDayParts(p);
+    let e = wallToInstantIn(p, 0, newZone);
+    if (ymdNum(partsIn(new Date(e), newZone)) !== ymdNum(p)) e = wallToInstantIn(p, 60, newZone);
+    if (e <= now.getTime()) continue;
+    first ??= e;
+    const old = factoryParts(new Date(e - 1));
+    const gapDays = (Date.UTC(p.y, p.m - 1, p.d) - Date.UTC(old.y, old.m - 1, old.d)) / 86_400_000;
+    if (gapDays === 0 || gapDays === 1) return new Date(e);
+  }
+  if (first === null) throw new Error(`Saat dilimi geçiş anı bulunamadı: ${newZone}`);
+  return new Date(first);
 }
 
 /**
@@ -301,11 +528,9 @@ export function factoryDayEnd(at: Date = new Date()): Date {
  */
 function resolveDayBoundary(value: string, edge: "start" | "end"): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(value);
-  // Gün-yalnız değer ÖĞLEN UTC ile çıpalanır: hangi saat diliminde yorumlanırsa
-  // yorumlansın aynı takvim gününe düşer (gece yarısı çıpası negatif ofsetli bir
-  // sunucuda günü bir geri kaydırırdı).
-  const anchor = new Date(`${value}T12:00:00.000Z`);
-  return edge === "start" ? factoryDayStart(anchor) : factoryDayEnd(anchor);
+  // Gün-yalnız değer doğrudan gün anahtarıdır: sınır o FABRİKA gününün kendisinden çözülür (dönem sınırındaki
+  // uzamış/kısalmış gün dahil) — bir çıpa anını dilime göre yorumlamak +12 ve ötesi dilimde günü kaydırırdı.
+  return edge === "start" ? factoryDayStartOfKey(value) : factoryDayEndOfKey(value);
 }
 
 /** `lte` (bitiş, DAHİL) sınırı — gün-yalnız değer o günün SONUNA çözülür. */

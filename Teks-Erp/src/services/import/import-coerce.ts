@@ -9,7 +9,7 @@
 // olmadan veri SİLMESİ demekti; "temizle" niyeti açıkça yazılmalı.
 
 import { AppError } from "../../utils/app-error";
-import { getFactoryTimezone } from "../../constants/time";
+import { factoryDayStartOfKey } from "../../constants/time";
 import { upperTr } from "../../utils/tr-case";
 
 /** "Temizle" niyetinin açık yazımı. Şablonun Açıklama sayfasında anlatılır. */
@@ -91,30 +91,10 @@ export function parseDateCell(raw: string): Date | null {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
   if (m < 1 || m > 12 || d < 1 || d > 31) return null;
-  // Fabrika gününün başı: yerel 00:00'ın MUTLAK karşılığı. Ofset yaz/kış
-  // değişebildiği için sabit "+03:00" yazılmaz — o günün ofseti hesaplanır.
-  const utcGuess = Date.UTC(y, m - 1, d, 0, 0, 0);
-  const offsetMs = istanbulOffsetMs(new Date(utcGuess));
-  const at = new Date(utcGuess - offsetMs);
+  // Fabrika gününün başı: o GÜNÜN yürürlükteki dilimindeki yerel 00:00'ın MUTLAK karşılığı (dönem ve DST dahil
+  // time.ts çözer; sabit "+03:00" yazılmaz).
+  const at = factoryDayStartOfKey(`${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
   return Number.isNaN(at.getTime()) ? null : at;
-}
-
-/** Verilen andaki Europe/Istanbul UTC ofseti (ms). DST'yi Intl üzerinden çözer. */
-function istanbulOffsetMs(at: Date): number {
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone: getFactoryTimezone(),
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  const parts = dtf.formatToParts(at);
-  const get = (t: string): number => Number(parts.find((p) => p.type === t)?.value ?? "0");
-  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
-  return asUtc - at.getTime();
 }
 
 /** `;` (veya `,`) ile ayrılmış kod listesi → temizlenmiş dizi. Boşlar düşer. */

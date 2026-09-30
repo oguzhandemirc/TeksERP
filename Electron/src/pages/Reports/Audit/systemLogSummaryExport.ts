@@ -26,7 +26,7 @@ export function buildSystemLogSummaryExport(opts: {
     subtitle: periodLabel,
     meta: [
       "Kapsam: SystemLog tablosunda aralık İÇİNDE oluşan kayıtlar (kaydın oluşma anına göre).",
-      `Günlük kırılım FABRİKA takvim gününe göredir (${getFactoryTimezone()}) — gece yarısından sonraki işlemler kendi gününde sayılır.`,
+      `Günlük kırılım FABRİKA takvim gününe göredir (her kayıt kendi anındaki dilimle; şu an ${getFactoryTimezone()}) — gece yarısından sonraki işlemler kendi gününde sayılır.`,
       "Toplam kayıt, yalnız CUD değildir: giriş/çıkış ve sistem olayları da işlem türü kırılımına dahildir.",
     ],
     tables: [
@@ -56,7 +56,7 @@ export function buildSystemLogSummaryExport(opts: {
           delete: s.daily.reduce((a, d) => a + d.delete, 0),
         },
         notes: [
-          `Gün etiketi fabrika takvim günüdür (${getFactoryTimezone()}), biçim YYYY-AA-GG.`,
+          `Gün etiketi fabrika takvim günüdür (kaydın anındaki dilim; şu an ${getFactoryTimezone()}), biçim YYYY-AA-GG.`,
           "Bu tablo yalnız Oluştur/Güncelle/Sil'i ayırır; diğer olaylar sütunlara girmez, bu yüzden satır toplamı 'İşlem Türü' toplamından küçük olabilir.",
         ],
       },

@@ -427,6 +427,14 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/machine-stop.service.ts", sembol: "reclassifyStop" }],
     ["src/services/machine-stop.service.ts"]),
 
+  // ── FABRİKA SAAT DİLİMİ DÖNEMLERİ (kullanıcı kararı 2026-09-30) ───────────────
+  // "Geçmiş kayıtlar etkilenmesin": bir anın dilimi o anda yürürlükteki dönemdir; satır silinirse geçmiş
+  // kayıtların raporlanan günü/saati değişir ⇒ DEFTERDİR. İptal aynı `validFrom`da önceki dilimle ters kayıt.
+  D("FactoryTimezonePeriod", "fabrika saat dilimi dönem defteri — \"hangi andan itibaren hangi dilim\"; kaydın saati/günü/vardiyası kaydın anındaki dönemden, geçmiş dönem değişmez; bekleyen (başlamamış) değişikliğin iptali orijinaline `reversesPeriodId` bağlı ters kayıt (tek ters, çift iptal DB'de imkânsız) ve çift birbirini söndürür",
+    { tur: "TERS_BAG", kolon: "reversesPeriodId" },
+    [{ dosya: "src/services/factory-timezone.service.ts", sembol: "cancelFactoryTimezoneChange" }],
+    ["src/services/factory-timezone.service.ts"]),
+
   // ── TOP DURUM DEFTERİ (K-A3, 37, 2026-09-25) ────────────────────────────────
   // Yazar UYGULAMA KODU DEĞİL, DB trigger'ı (`rolls_write_status_event`): topun her durum
   // geçişi bir satır — 11 iptal yolunun hepsi, yarınki yollar da. Ters yol karşı kayıttır:

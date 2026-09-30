@@ -33,7 +33,7 @@ devDbGuard();
 
 // ÜRETİM KODU — birebir import (kopya değil).
 import { parseDateCell, parseLocaleNumber } from "../src/services/import/import-coerce";
-import { getFactoryTimezone } from "../src/constants/time";
+import { factoryTimezoneAt } from "../src/constants/time";
 
 let fail = 0;
 let pass = 0;
@@ -44,7 +44,7 @@ const check = (ok: boolean, label: string) => {
 
 const trLocal = (d: Date) =>
   new Intl.DateTimeFormat("tr-TR", {
-    timeZone: getFactoryTimezone(),
+    timeZone: factoryTimezoneAt(d),
     dateStyle: "short",
     timeStyle: "short",
   }).format(d);

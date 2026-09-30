@@ -2,14 +2,16 @@
 // İSTEMCİ SAAT DİLİMİ — panel · tablet · patron uygulaması tarih/saati FABRİKANIN diliminden basar
 // (`src/lib/factory-time.ts`, sunucu `GET /api/feature-flags` → factoryTimezone / bulut ANLIK `tesis`),
 // istemcinin bilgisayar/telefon diliminden DEĞİL (kullanıcı kararı 2026-09-30; docs/design/FABRIKA-SAAT-DILIMI.md).
-//   §1 biçimleyici üç projede BAYT-EŞİT (sha256; eksik dosya ÖLÇÜLEMEDİ → kırmızı)
+//   §1 biçimleyici (`factory-time.ts` + dönem durumu `factory-time-zone.ts`) üç projede BAYT-EŞİT (sha256; eksik
+//      dosya ÖLÇÜLEMEDİ → kırmızı)
 //   §2 biçimleyici DIŞINDA ham yerel-dilim API'si yasak (AST, sözdizimsel):
 //      a toLocaleDateString/toLocaleTimeString · b Intl.DateTimeFormat · c tarih toLocaleString (seçenekte tarih
 //      anahtarı · alıcı `new Date(...)` · tarih adlı alıcı · `instanceof Date` daraltması) · d date-fns
 //      biçimleyici/takvim içe aktarımı (izinli: göreli süre + ayrıştırma) · e dayjs/moment · f "Europe/Istanbul"
 //      dizgesi · g yerel saat okuyucu/yazıcı (getHours… setHours…)
 //      İstisna BEYANLI ve SAYILI (dosya → kural → adet + gerekçe); beyan fazlası da kırmızı (çürümesin).
-//   §3 bağ: üç istemci dilimi sunucudan uygular (panel/tablet bayrak ucu · patron `tesis` projeksiyonu)
+//   §1c dönem test vektörleri (`factory-time-periods.test.ts`) üç istemcide birebir aynı
+//   §3 bağ: üç istemci dilim DÖNEMLERİNİ sunucudan uygular (panel/tablet bayrak ucu · patron `tesis` projeksiyonu)
 // ÖLÇMEDİĞİ: tip bilgisi (c'nin sezgisel yüklemi 2026-09-30'da tip denetimli taramayla karşılaştırıldı:
 //   panel 78/78 · tablet 6/6, sızan yok) · `new Date(y, m, d)` yerel kurucusu · render dışı biçim kütüphaneleri.
 // ⭐ KALICI SONDA ✓K (her koşumda): her kural sentetik ihlalde ısırır, biçimleyici çağrısında susar.
@@ -30,7 +32,10 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 const KOK = path.resolve(__dirname, "..", "..");
-const AYNA = ["Electron/src/lib/factory-time.ts", "mobil/src/lib/factory-time.ts", "patron/uygulama/src/lib/factory-time.ts"];
+// Biçimleyici iki dosyadır: `factory-time.ts` (biçim/gün) + `factory-time-zone.ts` (dönem durumu); ikisi de üç projede bayt-eşit.
+const AYNA_DOSYA = ["factory-time.ts", "factory-time-zone.ts"];
+const AYNA_KOK = ["Electron/src/lib", "mobil/src/lib", "patron/uygulama/src/lib"];
+const AYNA = AYNA_DOSYA.flatMap((f) => AYNA_KOK.map((k) => `${k}/${f}`));
 const TARAMA = ["Electron/src", "mobil/src", "patron/uygulama/src", "patron/uygulama/app"];
 
 export type Rule = "a" | "b" | "c" | "d" | "e" | "f" | "g";
@@ -116,16 +121,19 @@ export function findViolations(src: string, fileName = "x.tsx"): Violation[] {
 
 // ── §1 ayna ──────────────────────────────────────────────────────────────────
 console.log("── §1 biçimleyici üç projede bayt-eşit ──");
-const hashes = AYNA.map((f) => {
-  const p = path.join(KOK, f);
-  return existsSync(p) ? createHash("sha256").update(readFileSync(p)).digest("hex") : null;
-});
-check("§1a üç dosya da VAR (yoksa ÖLÇÜLEMEDİ)", hashes.every((h) => h !== null), AYNA.filter((_, i) => hashes[i] === null).join(", "));
-check(
-  "§1b sha256 birebir (düzeltme: Electron'da değiştir, sonra `cp -p` mobil + patron/uygulama)",
-  hashes.every((h) => h !== null && h === hashes[0]),
-  AYNA.map((f, i) => `${f}=${(hashes[i] ?? "yok").slice(0, 10)}`).join(" · "),
-);
+for (const dosya of AYNA_DOSYA) {
+  const grup = AYNA_KOK.map((k) => `${k}/${dosya}`);
+  const hashes = grup.map((f) => {
+    const p = path.join(KOK, f);
+    return existsSync(p) ? createHash("sha256").update(readFileSync(p)).digest("hex") : null;
+  });
+  check(`§1a ${dosya}: üç dosya da VAR (yoksa ÖLÇÜLEMEDİ)`, hashes.every((h) => h !== null), grup.filter((_, i) => hashes[i] === null).join(", "));
+  check(
+    `§1b ${dosya}: sha256 birebir (düzeltme: Electron'da değiştir, sonra \`cp -p\` mobil + patron/uygulama)`,
+    hashes.every((h) => h !== null && h === hashes[0]),
+    grup.map((f, i) => `${f}=${(hashes[i] ?? "yok").slice(0, 10)}`).join(" · "),
+  );
+}
 
 // ── §2 ham API yasağı ────────────────────────────────────────────────────────
 console.log("── §2 biçimleyici dışında ham yerel-dilim API'si ──");
@@ -163,15 +171,29 @@ for (const [file, rules] of Object.entries(ISTISNA)) {
 check("§2a–g beyansız ihlal YOK (biçimleyiciye çevir: lib/factory-time)", undeclared.length === 0, undeclared.join("\n    "));
 check("§2' beyanlı istisna çürümedi (ihlal kalkınca beyan da silinir)", stale.length === 0, stale.join(" · "));
 
+// ── §1c dönem vektörleri üç istemcide AYNI (içe aktarma bloğu hariç bayt-eşit) ─────────────
+console.log("── §1c dönem test vektörleri üç istemcide aynı ──");
+const PERIOD_TESTS = ["Electron/src/lib/factory-time-periods.test.ts", "mobil/src/lib/factory-time-periods.test.ts", "patron/uygulama/__tests__/factory-time-periods.test.ts"];
+const periodBodies = PERIOD_TESTS.map((f) => {
+  const p = path.join(KOK, f);
+  if (!existsSync(p)) return null;
+  const src = readFileSync(p, "utf8");
+  const cut = src.indexOf("\n// Saat dilimi DÖNEMLERİ");
+  return cut < 0 ? null : src.slice(cut);
+});
+check("§1c dönem test dosyaları var ve gövde başlığı bulundu", periodBodies.every((b) => b !== null), PERIOD_TESTS.filter((_, i) => periodBodies[i] === null).join(", ") || "3/3");
+check("§1c dönem vektörleri üç istemcide birebir", periodBodies.every((b) => b !== null && b === periodBodies[0]), "gövdeler farklı — Electron'dakini kopyala");
+
 // ── §3 bağ: dilim sunucudan uygulanır ────────────────────────────────────────
 console.log("── §3 dilim sunucudan uygulanır ──");
 const BAG: [string, RegExp, string][] = [
-  ["Electron/src/services/featureFlagService.ts", /setFactoryTimezone\(r\.data\?\.data\?\.factoryTimezone\)/, "panel bayrak ucu → setFactoryTimezone"],
+  ["Electron/src/services/featureFlagService.ts", /applyServerFactoryTimezone\(r\.data\?\.data\)/, "panel bayrak ucu → dönemler (applyServerFactoryTimezone)"],
   ["Electron/src/App.tsx", /<FactoryTimezoneLoader \/>/, "panel girişten sonra bayrakları yükler"],
   ["Electron/src/App.tsx", /key=\{factoryTimezone\}/, "panel dilim değişince kabuğu yeniden kurar"],
-  ["mobil/src/services/featureFlag.service.ts", /setFactoryTimezone\(flags\.factoryTimezone\)/, "tablet bayrak ucu → setFactoryTimezone"],
+  ["mobil/src/services/featureFlag.service.ts", /applyServerFactoryTimezone\(flags\)/, "tablet bayrak ucu → dönemler (applyServerFactoryTimezone)"],
+  ["mobil/src/hooks/useFactoryTimezone.ts", /applyServerFactoryTimezone\(flags\)/, "tablet kalıcı önbellekteki dönemleri uygular"],
   ["mobil/src/navigation/RootNavigator.tsx", /key=\{factoryTimezone\}/, "tablet kalıcı önbellekteki dilimi uygular ve yeniden kurar"],
-  ["patron/uygulama/src/state/session.tsx", /api\.snapshot\("tesis"\)[\s\S]*setFactoryTimezone\(veri\?\.saatDilimi\)/, "patron uygulaması ANLIK tesis.saatDilimi"],
+  ["patron/uygulama/src/state/session.tsx", /api\.snapshot\("tesis"\)[\s\S]*donemler[\s\S]*applyServerFactoryTimezone\(\{ factoryTimezone: veri\?\.saatDilimi, factoryTimezoneBase: veri\?\.tabanDilim, factoryTimezonePeriods: donemler \}\)/, "patron uygulaması ANLIK tesis dönemleri"],
 ];
 for (const [file, re, what] of BAG) {
   const p = path.join(KOK, file);

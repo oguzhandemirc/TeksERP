@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { featureFlagService, DEFAULT_COMPANY_NAME } from "@/services/featureFlagService";
+import { featureFlagService, DEFAULT_COMPANY_NAME, type FactoryTimezonePending } from "@/services/featureFlagService";
 import type { SameTypeSessionPolicy } from "@/types/auth";
 import { isSameTypeSessionPolicy } from "@/lib/session-auth";
 import {
@@ -389,6 +389,12 @@ export function useBackupHour(): number {
 export function useFactoryTimezoneWarning(): { code: string; message: string } | null {
   const q = useFeatureFlags();
   return q.data?.data?.factoryTimezoneWarning ?? null;
+}
+
+/** Yürürlüğe girmemiş (iptal edilebilir) saat dilimi değişikliği; yoksa ya da eski backend'de null. */
+export function useFactoryTimezonePending(): FactoryTimezonePending | null {
+  const q = useFeatureFlags();
+  return q.data?.data?.factoryTimezonePending ?? null;
 }
 
 export const FEATURE_FLAGS_QUERY_KEY = QUERY_KEY;

@@ -53,7 +53,7 @@
 // =============================================================================
 import { Prisma, RollStatus, RollVarianceKind } from "@prisma/client";
 
-import { getFactoryTimezone } from "../src/constants/time";
+import { factoryTimezoneAt } from "../src/constants/time";
 import { VARIANCE_SOURCES } from "../src/constants/variance-reasons";
 import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
@@ -315,7 +315,7 @@ function m(d: Prisma.Decimal): string {
 }
 
 function zaman(d: Date): string {
-  return d.toLocaleString("tr-TR", { timeZone: getFactoryTimezone(), dateStyle: "short", timeStyle: "medium" });
+  return d.toLocaleString("tr-TR", { timeZone: factoryTimezoneAt(d), dateStyle: "short", timeStyle: "medium" });
 }
 
 function kimlik(b: Ihlal): string {

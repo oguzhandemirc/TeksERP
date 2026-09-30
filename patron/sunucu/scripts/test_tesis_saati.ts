@@ -1,7 +1,8 @@
 // =============================================================================
 // TESİS SAATİ — bildirim gün anahtarı (dedup kimliği) ve sessiz saat TESİSİN saat diliminden (ANLIK
-// `tesis.saatDilimi`), bulut sunucusunun ya da UTC'nin diliminden DEĞİL (`src/lib/facility-clock.ts`).
+// `tesis` dönemleri — bir anın dilimi kendi döneminden), bulut sunucusunun ya da UTC'nin diliminden DEĞİL (`src/lib/facility-clock.ts`).
 //   §1 gün/dakika seçilen dilimden · §2 sessiz pencere tesis saatine göre · §3 tanınmayan dilim → varsayılan
+//   §3' dönemler: bir anın dilimi `facilityTimeZoneAt` ile kendi döneminden (eski paket → saatDilimi)
 //   §4 `evaluate` gün anahtarı `timeZone`dan (aynı an iki dilimde iki ayrı gün) · §5 okuyucular dilimi TAŞIR
 //   (olay üretimi ve gönderim `tesis` projeksiyonunu okur; çıplak çağrı varsayılana düşerdi).
 // ⭐ KALICI SONDA: §5 yüklemi dilimsiz çağrıda ısırır, dilimli çağrıda susar (sentetik metin).
@@ -10,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_SETTINGS } from "../src/catalog/notifications";
-import { DEFAULT_FACILITY_TIMEZONE, facilityDay, facilityMinute, facilityTimeZone, quietUntil } from "../src/lib/facility-clock";
+import { DEFAULT_FACILITY_TIMEZONE, facilityDay, facilityMinute, facilityTimeZone, facilityTimeZoneAt, quietUntil } from "../src/lib/facility-clock";
 import { evaluate } from "../src/services/notification-events";
 
 let gecti = 0;
@@ -42,6 +43,20 @@ kontrol(
   [undefined, null, 5, "", "Mars/Olympus", "Europe/Istanbul'; --"].every((v) => facilityTimeZone(v) === DEFAULT_FACILITY_TIMEZONE),
 );
 
+console.log("§3' dönemler: bir anın dilimi kendi döneminden (geçmiş kayıtlar etkilenmez)");
+const E = "2026-09-30T22:00:00.000Z"; // Berlin 1 Ekim 00:00
+const donemli = { saatDilimi: "Europe/Istanbul", tabanDilim: "Europe/Istanbul", donemler: [{ gecerliBaslangic: E, saatDilimi: "Europe/Berlin" }] };
+kontrol("§3'a ⭐ E'den önceki an eski dilimde, E ve sonrası yeni dilimde",
+  facilityTimeZoneAt(donemli, Date.parse(E) - 1) === "Europe/Istanbul" && facilityTimeZoneAt(donemli, Date.parse(E)) === "Europe/Berlin");
+kontrol("§3'b ⭐ bekleyen dönem yürürlük anında kendiliğinden uygulanır (paket tazelenmeden)",
+  facilityDay(Date.parse(E) + 30 * 60_000, facilityTimeZoneAt(donemli, Date.parse(E) + 30 * 60_000)) === "2026-10-01" &&
+  facilityMinute(Date.parse(E) + 30 * 60_000, facilityTimeZoneAt(donemli, Date.parse(E) + 30 * 60_000)) === 30);
+kontrol("§3'c eski fabrika paketi (dönemsiz) → saatDilimi · tanınmayan → varsayılan",
+  facilityTimeZoneAt({ saatDilimi: "America/New_York" }, AT) === "America/New_York" && facilityTimeZoneAt(null, AT) === DEFAULT_FACILITY_TIMEZONE &&
+  facilityTimeZoneAt({ saatDilimi: "Mars/Olympus" }, AT) === DEFAULT_FACILITY_TIMEZONE);
+kontrol("§3'd ⭐ NEGATİF sonda: yalnız saatDilimi okuyan (dönemsiz) yorum E'den önceki anı yanlış dilime koyar",
+  facilityTimeZone({ ...donemli, saatDilimi: "Europe/Berlin" }.saatDilimi) !== facilityTimeZoneAt({ ...donemli, saatDilimi: "Europe/Berlin" }, Date.parse(E) - 1));
+
 console.log("§4 evaluate gün anahtarı dilimden");
 const facts = (timeZone: string) => ({
   nowMs: AT,
@@ -68,6 +83,7 @@ for (const f of ["src/services/notification-events.ts", "src/services/notificati
   const src = readFileSync(path.join(KOK, f), "utf8");
   kontrol(`§5 ${f}: dilimsiz çağrı yok`, dilimsizCagri(src).length === 0, dilimsizCagri(src).join(" · "));
   kontrol(`§5 ${f}: 'tesis' projeksiyonunu okur`, src.includes("FACILITY_TIMEZONE_SOURCE"));
+  kontrol(`§5 ${f}: dilimi ANA göre dönemlerden çözer (facilityTimeZoneAt)`, src.includes("facilityTimeZoneAt(") && !/facilityTimeZone\(/.test(src));
 }
 
 console.log("\n✓K kalıcı sonda (sentetik)");

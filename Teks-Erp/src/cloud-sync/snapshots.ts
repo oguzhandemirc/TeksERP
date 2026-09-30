@@ -19,7 +19,8 @@ import { SNAPSHOT_PROJECTIONS, type SnapshotProjection } from "./projections";
 import { toWireValue, type WireContainer } from "./wire";
 import { remoteReportCatalog } from "./report-requests";
 import { snapshotDigest } from "./digest";
-import { getFactoryTimezone } from "../constants/time";
+import { publicFactoryTimezone } from "../services/helpers/factory-timezone-state.helper";
+import { TesisVerisiSchema } from "./wire/esitleme";
 
 export interface BuiltSnapshot {
   /** Tel adı (`ozet.stok`, `stok-karnesi`…). */
@@ -75,7 +76,7 @@ export const SNAPSHOT_WIRE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   "rapor-katalogu": z.strictObject({
     raporlar: z.array(z.strictObject({ anahtar: Str, baslik: Str, soru: Str, aile: Str, izin: Str, parametreler: z.array(Str), standartDonemler: z.array(Str) })),
   }),
-  tesis: z.strictObject({ saatDilimi: Str }),
+  tesis: TesisVerisiSchema.required(),
   saglik: z.strictObject({
     yedek: z.strictObject({ hukum: z.enum(["ok", "uyari", "kritik", "yapilandirilmamis"]), sonGeceYedegi: Str.nullable(), yasSaat: Num.nullable() }),
   }),
@@ -195,9 +196,17 @@ async function buildProductionFlow(): Promise<BuiltSnapshot> {
   });
 }
 
-/** Tesisin saat dilimi (IANA) — bulut gün anahtarını ve gösterimi fabrikanın gününe hizalar. */
+/**
+ * Tesisin saat dilimi DÖNEMLERİ — bulut gün anahtarını ve gösterimi her anın KENDİ dilimine hizalar (geçmiş
+ * kayıtlar etkilenmez). Bekleyen değişiklik de listededir: bulut onu yürürlük anında kendiliğinden uygular.
+ */
 function buildFacility(): BuiltSnapshot {
-  return seal("tesis", { saatDilimi: getFactoryTimezone() });
+  const tz = publicFactoryTimezone();
+  return seal("tesis", {
+    saatDilimi: tz.factoryTimezone,
+    tabanDilim: tz.factoryTimezoneBase,
+    donemler: tz.factoryTimezonePeriods.map((p) => ({ gecerliBaslangic: p.validFrom, saatDilimi: p.timeZone })),
+  });
 }
 
 /** Sistem sağlığı (yalnız gece yedeği): yaş saate YUVARLANIR ki içerik özeti saatte bir değişsin. */

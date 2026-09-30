@@ -888,20 +888,25 @@ deploy öncesi tekrarlanmalı (bkz. `URETIM-KONTROL-LISTESI.md §C`). Detay:
 
 ---
 
-## 12) Fabrika saat dilimi değiştirildiyse — denetim raporu istatistiği (`sl_day_exact`)
+## 12) Fabrika saat dilimi değişikliği planlandıysa / iptal edildiyse — denetim raporu istatistiği (`sl_day_exact`)
 
-Panelde **Genel Ayarlar → Şirket Bilgileri → Saat dilimi** değiştirildikten sonra sunucu yöneticisi, denetim (audit) özetinin günlük serisinin kullandığı ifade istatistiğini yeni dilim için yeniden kurar. İstatistik SQL metnine bağlıdır (`factoryDaySql` dilimi metne gömer): kurulmazsa rapor **doğru ama yavaş** olur (tasarım `docs/design/FABRIKA-SAAT-DILIMI.md` §5.5). Yazma yoluna maliyeti yoktur, tabloya kilit almaz; mesai içinde koşulabilir.
+Saat dilimi bir **dönem defteridir** (`docs/design/FABRIKA-SAAT-DILIMI.md`): panelde **Genel Ayarlar → Şirket Bilgileri → Saat dilimi**'nden bir değişiklik planlandığında (ya da bekleyen değişiklik iptal edildiğinde) denetim özetinin gün ifadesi değişir — dönem yokken `"createdAt" AT TIME ZONE 'Europe/Istanbul'`, dönem varken her dönemi taşıyan bir `CASE` ifadesi. İfade istatistiği SQL metnine bağlıdır: yeniden kurulmazsa rapor **doğru ama yavaş** olur (§5.5). Yazma yoluna maliyeti yoktur, tabloya kilit almaz; mesai içinde koşulabilir. Bekleyen değişiklik zaten ifadeye dahildir — yürürlük anında ayrıca bir şey yapılmaz.
+
+1. Güncel ifadeyi sunucunun kendi koduyla üret (backend dizininde; kayıtlı dönemleri okur, hiçbir şey yazmaz):
+
+```bash
+node -e 'const t=require("./dist/constants/time");require("./dist/services/factory-timezone.service").loadFactoryTimezoneAtBoot().then(()=>{console.log(t.factoryDaySql("\"createdAt\"").sql);process.exit(0)})'
+```
+
+2. Çıktıyı `<IFADE>` yerine koyarak istatistiği yeniden kur:
 
 ```sql
--- '<YENI_DILIM>' = panelde seçilen IANA adı (ör. Europe/Berlin); İstanbul'a dönüşte 'Europe/Istanbul'.
 SET statement_timeout = 0;
 DROP STATISTICS IF EXISTS sl_day_exact;
-CREATE STATISTICS sl_day_exact
-  ON ((DATE_TRUNC('day', "createdAt" AT TIME ZONE '<YENI_DILIM>')::date))
-  FROM system_logs;
+CREATE STATISTICS sl_day_exact ON ((<IFADE>)) FROM system_logs;
 ANALYZE system_logs;
 ```
 
-- Kontrol: `SELECT pg_get_statisticsobjdef(oid) FROM pg_statistic_ext WHERE stxname = 'sl_day_exact';` çıktısındaki dilim, panelde görünen dilimle aynı olmalı.
-- Sonraki bir migration `sl_day_exact`i İstanbul ifadesiyle yeniden kurarsa (varsayılan dışı kurulumda) bu adım tekrarlanır.
-- Kayıtlı dilim geçersizse sunucu İstanbul ile açılır ve `/api/admin/health` → `factoryTimezone.warning` (`FACTORY_TIMEZONE_INVALID_STORED`) ile panel şeridi uyarır; düzeltme panelden yapılır, bu adım yalnız dilim fiilen değiştiyse gerekir.
+- Kontrol: `SELECT pg_get_statisticsobjdef(oid) FROM pg_statistic_ext WHERE stxname = 'sl_day_exact';` çıktısı 1. adımın ifadesini taşımalı.
+- Sonraki bir migration `sl_day_exact`i İstanbul ifadesiyle yeniden kurarsa (dönemli kurulumda) bu adım tekrarlanır.
+- Kayıtlı dilim geçersizse o dönem İstanbul ile yorumlanır ve `/api/admin/health` → `factoryTimezone.warning` (`FACTORY_TIMEZONE_INVALID_STORED`) ile panel şeridi uyarır; düzeltme panelden yapılır.
