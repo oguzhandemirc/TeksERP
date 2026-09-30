@@ -52,6 +52,8 @@
 - **[ÇEKİRDEK]** Projeksiyonun sürüm anı paketin UFKUDUR: geç gelen eski paket yeni veriyi ezemez, silinmiş satırı diriltemez (mezar taşı 7 gün); aynı `paketId` saklı yanıtla döner, başka gövdeyle 409; filigran boşluğu `istenen: TAM` doğurur ve filigran yalnız kabulde ilerler. · bekçi: `test_esitleme_idempotency (§1 · §2 · §3 · §4)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Bulut hesabı TOTP'siz doğamaz ve TOTP'siz oturum açamaz (DB CHECK dahil); hesap davetle doğar, kurtarma kodu yoktur, son aktif hesap yöneticisi düşürülemez. · bekçi: `test_totp_zorunlu (§1 · §2 · §3 · §4j)` <sub>(arşiv:2026-09-29)</sub>
 
+- **[ÇEKİRDEK]** Fabrika bulut hesabını yalnız KİLİTLER (`POST /v1/hesap-kilitle`, kurulum imzalı, işlem kimliğiyle idempotent): yalnız AKTIF → KILITLI, oturumlar kapanır, son aktif hesap yöneticisi kilitlenemez; hesap açma ve kilit açma bulutta kalır, değişmeyen istek iz bırakmaz. · bekçi: `test_hesap_kilitle_fabrika (§1d · §5b)`, `test_bulut_hesap_kilitle (§1 · §2c)` <sub>(arşiv 2026-09-30 B6)</sub>
+
 ### Kararlar
 
 - **[ÇEKİRDEK]** Kuyruk claim'i (gelen kutusu, rapor isteği) `WITH … FOR UPDATE SKIP LOCKED` CTE'siyle alınır; `WHERE id IN (… LIMIT n FOR UPDATE SKIP LOCKED)` biçimi LIMIT'i aşar (ölçüldü: enFazla 1 iken 2 kayıt). · bekçi: `test_rapor_istegi (§2a)` <sub>(arşiv:2026-09-29)</sub>
@@ -113,9 +115,9 @@ Bulut sunucusu bekçileri kendi projesinden: `cd patron/sunucu && node ../../scr
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## patron-bulutu` bölümü.**
 
-Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`
+Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`, `test_bulut_hesap_kilitle`, `test_bulut_ozet_mutabakat`
 
-Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`, `test_tazele_zili`, `test_web_sunumu`, `test_katalog_ozeti`
+Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`, `test_tazele_zili`, `test_web_sunumu`, `test_katalog_ozeti`, `test_hesap_kilitle_fabrika`
 
 Dağıtım (kurulum öncesi, Mac'te, CI dışı): `node deploy/patron/compose-denetle.mjs --env-file <patron .env> --satici-env <satıcı .env>` — çıkış 0 temiz · 1 ihlal · 2 ölçülemedi; yerel duman `deploy/patron/duman.sh kur <sha>` (gerçek tarayıcı dahil); runbook `docs/ops/PATRON-BULUTU-KURULUM.md`.
 
@@ -139,3 +141,4 @@ Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## pat
 - 2026-09-29 · Patron bulutu dağıtımı (B-dağıtım): aynı köken web + API, iç ad alanı iki katta 404, üç DB rolü üç sır, satıcıyla ortak birim yok
 - 2026-09-30 · Lisans + patron entegrasyonu 5 (I6): tek ABI 2, Docker künyesi 2e-S biçiminde, §14 tek liste (S47/S48), bildirim çıkış ağı, paketten üretici kimliği, DR ana kimliği panelde isteğe bağlı, ekran açılışı tazelemesi, P5 push kaydı
 - 2026-09-30 · Proje sınırı: bulut kataloğu statik özetten okunur, hiçbir proje başkasının kaynağını içe aktarmaz (CI-2)
+- 2026-09-30 · Eski tünel emekliliği (B6): özet tek kaynağı `cloud-sync/overview.ts`, fabrikadan bulut hesabı kilitleme

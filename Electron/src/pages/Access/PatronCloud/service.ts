@@ -66,4 +66,15 @@ export const patronCloudService = {
         .post<ApiResponse<PatronCloudActivation>>("/api/patron-bulut/etkinlestir", {}, { headers, ...QUIET })
         .then((r) => ({ data: r.data.data, message: r.data.message })),
     ),
+
+  /**
+   * Bulut hesabını KİLİTLE — backend buluta kurulum imzalı istek atar (bulut tek yazar; kilidi bulut yöneticisi açar).
+   * `islemKimligi` mantıksal deneme başına bir kez (`useAttemptToken`); ⚠️ ayar şifresi kapısından geçer.
+   */
+  lock: (hesapId: string, islemKimligi: string): Promise<{ data: CloudAccount; message?: string }> =>
+    withSettingsPassword((headers) =>
+      apiClient
+        .post<ApiResponse<CloudAccount>>(`/api/patron-bulut/hesap/${hesapId}/kilitle`, { islemKimligi }, { headers, ...QUIET })
+        .then((r) => ({ data: r.data.data, message: r.data.message })),
+    ),
 };

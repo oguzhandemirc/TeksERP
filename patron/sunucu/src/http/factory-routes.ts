@@ -5,13 +5,14 @@ import express, { type Request, type Response, type Router } from "express";
 import type { z } from "zod";
 import { PROTOCOL_VERSION, REQUEST_HEADER, isPlainObject } from "../lisans-protokol";
 import { CloudError, badRequest } from "../lib/errors";
-import { listAccountsForFactory } from "../services/account.service";
+import { listAccountsForFactory, lockAccountFromFactory } from "../services/account.service";
 import type { CloudContext } from "../services/context";
 import { claimInbox, recordInboxResults } from "../services/inbox.service";
 import { authenticateFactory, type FactoryCaller } from "../services/installation-auth";
 import { claimReports, recordReportResult } from "../services/report.service";
 import { applyPackage, decodeBody } from "../services/sync.service";
 import {
+  AccountLockRequestSchema,
   AccountsRequestSchema,
   InboxClaimRequestSchema,
   InboxResultRequestSchema,
@@ -80,6 +81,12 @@ export function createFactoryRouter(ctx: CloudContext): Router {
     const r = await authenticated(ctx, req);
     strictJson(AccountsRequestSchema, r, req);
     res.json(await listAccountsForFactory(ctx, r.caller));
+  });
+
+  router.post(SYNC_PATHS.ACCOUNT_LOCK.replace("/v1", ""), async (req: Request, res: Response) => {
+    const r = await authenticated(ctx, req);
+    const out = await lockAccountFromFactory(ctx, r.caller, strictJson(AccountLockRequestSchema, r, req));
+    res.status(out.status).json(out.data);
   });
 
   router.post(SYNC_PATHS.REPORT_CLAIM.replace("/v1", ""), async (req: Request, res: Response) => {

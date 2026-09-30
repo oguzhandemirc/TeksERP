@@ -126,6 +126,12 @@ const LICENSE_EVENTS = {
   LICENSE_ADMIN_ACTION: "LICENSE_ADMIN_ACTION",
 } as const;
 
+/** Patron bulutu — fabrika yöneticisinin buluta verdiği emir (iz fabrikada da kalır; bulut kendi denetimini yazar). */
+const PATRON_CLOUD_EVENTS = {
+  /** Fabrika panelinden bir bulut hesabı kilitlendi (`POST /api/patron-bulut/hesap/:id/kilitle`). */
+  PATRON_CLOUD_ACCOUNT_LOCKED: "PATRON_CLOUD_ACCOUNT_LOCKED",
+} as const;
+
 /**
  * Ayar şifresi olayları.
  * ⚠️ BU AİLE KAPININ KÖR NOKTASIYDI: çağrı yerleri adı SABİTTEN kuruyor
@@ -193,6 +199,7 @@ export const SYSTEM_EVENT = {
   ...ADMIN_EVENTS,
   ...DISCOVERY_EVENTS,
   ...LICENSE_EVENTS,
+  ...PATRON_CLOUD_EVENTS,
   ...SETTINGS_PASSWORD_EVENT_NAMES,
   ...REPAIR_EVENTS,
 } as const;
