@@ -7,5 +7,5 @@
     "paths": { "@/*": ["src/*"] },
     "types": ["jest", "node"]
   },
-  "include": ["app/**/*.ts", "app/**/*.tsx", "src/**/*.ts", "src/**/*.tsx", "scripts/**/*.ts", "__tests__/**/*.ts", "__tests__/**/*.tsx", "expo-env.d.ts"]
+  "include": ["entry.ts", "app/**/*.ts", "app/**/*.tsx", "src/**/*.ts", "src/**/*.tsx", "scripts/**/*.ts", "__tests__/**/*.ts", "__tests__/**/*.tsx", "expo-env.d.ts"]
 }

@@ -1,5 +1,6 @@
 // Web sürümünü GERÇEK Chromium'da açar (duman.sh; playwright paneldeki e2e kurulumundan, PW=<yol>):
-// CSP ihlali ve konsol hatası sayar, giriş ekranı çizildi mi ölçer, ekran görüntüsü alır.
+// CSP ihlali ve konsol hatası sayar, giriş ekranı çizildi mi ölçer, ekran görüntüsü alır; fazla eğik
+// çizgili adreslerde (`//`, `/cariler//x`) sayfa hatası 0 · giriş formu · son adres tek eğik ister.
 // Çıkış: 0 temiz · 1 ihlal/hata/giriş formu yok. curl başlığı ölçer; stilin gerçekten uygulandığını
 // yalnız tarayıcı gösterir (react-native-web'in boş <style> ögesi CSP'ye takılınca sayfa stilsiz çizildi).
 //   PW=Electron/node_modules/playwright node deploy/patron/tarayici-duman.cjs <url> <ekran.png>
@@ -9,6 +10,10 @@
 // CSP'miz dış betiğe izin vermediği için engellenir ve sayfaya etkisi yoktur (analitik gitmez, o kadar).
 // Bölge ayarına dokunulmaz, CSP gevşetilmez; yalnız BU ihlal duman sayımından düşer, sayısı ayrıca basılır.
 const BEACON = "https://static.cloudflareinsights.com/";
+
+// Kenar vekili (Traefik sanitizePath) yolu katlayıp iletir, sunucunun 301'i tetiklenmez; tarayıcıda `//`
+// kalır ve katlamayı istemci yapar (patron/uygulama/src/web-path-fix.ts). Kökene doğrudan erişimde 301 yapar.
+const CIFT_EGIK = ["//", "//cariler//x"];
 
 /** CSP ihlali satırı: "<yönerge> <engellenen URI>". Yalnız script-src* + beacon kökü istisnadır. */
 function beyanliIhlal(satir) {
@@ -63,6 +68,18 @@ async function main() {
   const girdi = await sayfa.locator("input").count();
   const metin = ((await sayfa.textContent("body")) || "").replace(/\s+/g, " ").trim();
   if (ekran) await sayfa.screenshot({ path: ekran });
+  const egik = [];
+  for (const yol of CIFT_EGIK) {
+    const s = await tarayici.newPage();
+    const sayfaHatasi = [];
+    s.on("pageerror", (e) => sayfaHatasi.push(String(e).slice(0, 200)));
+    const y = await s.goto(`${url}${yol}`, { waitUntil: "networkidle" });
+    await s.waitForTimeout(1500);
+    const son = new URL(s.url()).pathname;
+    const g = await s.locator("input").count();
+    egik.push({ yol, durum: y.status(), son, girdi: g, sayfaHatasi, temiz: sayfaHatasi.length === 0 && g >= 2 && !/\/\//.test(son) });
+    await s.close();
+  }
   await tarayici.close();
   const istisna = ihlal.filter(beyanliIhlal).length + hata.filter(beyanliKonsol).length;
   const ihlalKalan = ihlal.filter((x) => !beyanliIhlal(x));
@@ -70,7 +87,11 @@ async function main() {
   const temiz = yanit.status() === 200 && ihlalKalan.length === 0 && hataKalan.length === 0 && girdi >= 2;
   console.log(`  ${temiz ? "✅" : "❌"} durum ${yanit.status()} · CSP ihlali ${ihlalKalan.length} · konsol hatası ${hataKalan.length} · beyanlı istisna (CF beacon) ${istisna} · girdi ${girdi} · "${metin.slice(-60)}"`);
   for (const x of [...ihlalKalan, ...hataKalan]) console.log(`     ↳ ${x.slice(0, 200)}`);
-  process.exit(temiz ? 0 : 1);
+  for (const e of egik) {
+    console.log(`  ${e.temiz ? "✅" : "❌"} fazla eğik ${e.yol} → durum ${e.durum} · son adres ${e.son} · sayfa hatası ${e.sayfaHatasi.length} · girdi ${e.girdi}`);
+    for (const x of e.sayfaHatasi) console.log(`     ↳ ${x}`);
+  }
+  process.exit(temiz && egik.every((e) => e.temiz) ? 0 : 1);
 }
 
 if (process.argv[2] === "--oz-sinama") ozSinama();

@@ -89,6 +89,7 @@
 - **[ÇEKİRDEK]** Yıkıcı işlem (gelen kutusu/rapor isteği iptali, hesap kilidi/arşivi, davet yenileme) iki adımlı onayla uygulanır. · bekçi: `ui.test.tsx` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Seçici (cari · ürün · renk) dokununca doğrudan modal açar; arama ve tek açılır süzgeç SUNUCUDA yürür (`LIST_SEARCH`, Türkçe katlama JS ↔ SQL birebir, LIKE jokeri kaçırılır), istemci listeyi süzmez. · bekçi: `test_liste_arama` · `picker.test.tsx` <sub>(arşiv:2026-09-30 F1)</sub>
 - **[ÇEKİRDEK]** TOTP kurulumunda `otpauth` karekodu ve elle girilecek anahtar birlikte gösterilir; sır yalnız o ekranda bellektedir. · bekçi: `totp-qr.test.tsx` <sub>(arşiv:2026-09-30 F1)</sub>
+- **[ÇEKİRDEK]** Web girişinde adres yolundaki ardışık ya da ters eğik çizgi, yönlendirici başlamadan ÖNCE tek '/'ye katlanır (`history.replaceState`, sorgu ve hash korunur, yalnız web); giriş sırası `entry.ts`te sabittir (metro-runtime → katlama → `expo-router/entry`). · bekçi: `web-path.test.ts` · `deploy/patron/tarayici-duman.cjs` <sub>(arşiv:2026-09-30 I12)</sub>
 
 ### Kararlar
 
@@ -102,7 +103,7 @@
 
 - **[ÇEKİRDEK]** Web sürümü API ile AYNI kökenden (`/`) sunulur ve `/api` · `/v1` altı asla HTML'e düşmez; iç/yönetim ad alanları (`web-static.ts` `IC_ONEKLER`) web'de 404'tür ve Traefik kuralının dışında kalır — iki liste bekçiyle eşlenir. · bekçi: `test_web_sunumu (§4 · §5 · §8)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Web CSP'si `unsafe-inline` taşımaz: giriş HTML'indeki satır içi blok yalnız kendi sha256 özetiyle izinlidir (özet açılışta dosyadan hesaplanır) ve react-native-web'in BOŞ `<style>` ögesi boş dizgenin özetiyle; CSP değişikliği gerçek tarayıcıda ölçülür (başlık ölçümü stilin uygulandığını göstermez); içerik özetli dizinler uzun ömürlü, giriş HTML'i `no-store`. · bekçi: `test_web_sunumu (§2 · §3)` · `deploy/patron/tarayici-duman.cjs` <sub>(arşiv:2026-09-29)</sub>
-- **[ÇEKİRDEK]** Web yolunda ardışık ya da ters eğik çizgi GET/HEAD'de tek '/'li aynı köken hedefe 301 ile katlanır (expo-router `Invalid URL` boş sayfası); katlanan hedef API/iç ad alanıysa 404. · bekçi: `test_web_sunumu (§9)` <sub>(arşiv:2026-09-30 F1)</sub>
+- **[ÇEKİRDEK]** Kökene doğrudan erişimde web yolundaki ardışık ya da ters eğik çizgi GET/HEAD'de tek '/'li aynı köken hedefe 301 ile katlanır (kenar vekili yolu katlayıp ilettiği için arkasında katlamayı istemci yapar — § Uygulama); katlanan hedef API/iç ad alanıysa 404. · bekçi: `test_web_sunumu (§9)` <sub>(arşiv:2026-09-30 F1)</sub>
 - **[ÇEKİRDEK]** Tarayıcı dumanının CSP istisnası yalnız Cloudflare Web Analytics beacon'ıdır (kenar enjekte eder; CSP gevşetilmez, bölge ayarına dokunulmaz); başka her ihlal kırmızıdır. · bekçi: `test_web_sunumu (§10)` <sub>(arşiv:2026-09-30 F1)</sub>
 - **[ÇEKİRDEK]** Patron sunucusu göç (tablo sahibi) parolasını ALMAZ: üç DB rolü üç docker secret'ıdır, göç parolası yalnız DB · `patron-goc` · yedek konteynerine bağlanır; sunucu yalnız kenar adresinde dinler, port yayımlamaz, satıcıyla ortak birim ya da sır grubu taşımaz. · bekçi: `deploy/patron/compose-denetle.mjs (① · ⑦ · ⑧ · ⑨)` <sub>(arşiv:2026-09-29)</sub>
 
@@ -130,7 +131,7 @@ Dağıtım (kurulum öncesi, Mac'te, CI dışı): `node deploy/patron/compose-de
 
 Uçtan uca: **Senaryo P** (plan §8 P1–P16 + sözleşme §13 P17–P25; gerçek patron bulutu + gerçek fabrika backend'i, lisans fikstürü + sahte satıcı ve iç API'si; iki `_test` DB, patron DB'si `patron/sunucu/.env`den, `migrate deploy` önceden): `cd Teks-Erp && DATABASE_URL='postgresql://…/<fabrika>_test?schema=public' node ../scripts/agir-is.mjs -- npx tsx scripts/senaryo-patron.ts [--json=<dosya>] [--son=P7] [--yalniz=P1,P3]` — ~4 dk; çıkış 0 hepsi yeşil · 1 yeşil olmayan adım · 2 hedef reddi/düzenek.
 
-Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `notifications.test.tsx`, `refresh.test.ts`, `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
+Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `notifications.test.tsx`, `refresh.test.ts`, `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`, `web-path.test.ts`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
 
 Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## patron-bulutu` bölümüne birlikte eklenir. Katalog ya da tetikleyici değişince `test_db_invariants` (TRIGGERS/EXPECTED_FUNCTIONS) de koşulur.
 
@@ -150,3 +151,4 @@ Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## pat
 - 2026-09-30 · Patron uygulaması eksikleri (F1): sunucu aramalı seçici, çift eğik çizgi 301, CF beacon istisnası, TOTP karekodu, Expo makbuzu, deneme bildirimi
 - 2026-09-30 · Proje sınırı: bulut kataloğu statik özetten okunur, hiçbir proje başkasının kaynağını içe aktarmaz (CI-2)
 - 2026-09-30 · Eski tünel emekliliği (B6): özet tek kaynağı `cloud-sync/overview.ts`, fabrikadan bulut hesabı kilitleme
+- 2026-09-30 · Patron web `//` boş sayfası (I12): kenar vekili yolu katlayıp iletir, 301 tetiklenmez; katlama istemcide, yönlendiriciden önce
