@@ -7,7 +7,7 @@
 //
 //   node deploy/lisans-devreye/asama-dogrula.mjs --asama=2 [--olc] [--satici-sha=<12>] [--backend-surum=<x>]
 //        [--panel-surum=<x>] [--belirtec-dosyasi=~/.tekserp/testfabrika-gozlem.jwt] [--t4-tsv=<dosya>]
-//        [--traefik-baslangic=<ISO önek>] [--satici-kok=<url>] [--tp-kok=<url>] [--portal-kok=<url>]
+//        [--traefik-baslangic=<ISO önek>] [--vds-taban=<dizin>] [--satici-kok=<url>] [--tp-kok=<url>] [--portal-kok=<url>]
 //   --asama: 1..8 | hepsi (virgülle birden çok: --asama=1,2)
 //
 // Çıkış: 0 hepsi UYUMLU (ya da kuru plan) · 1 en az bir IHLAL (DUR) · 2 IHLAL yok ama ÖLÇÜLEMEDİ var ·
@@ -36,6 +36,7 @@ export function parametreler(argv) {
     tpKok: arg(argv, 'tp-kok') ?? VARSAYILAN.tpKok,
     portalKok: arg(argv, 'portal-kok') ?? VARSAYILAN.portalKok,
     traefikBaslangic: arg(argv, 'traefik-baslangic') ?? VARSAYILAN.traefikBaslangic,
+    vdsTaban: arg(argv, 'vds-taban') ?? VARSAYILAN.vdsTaban,
     saticiSha: arg(argv, 'satici-sha') ?? null,
     backendSurum: arg(argv, 'backend-surum') ?? null,
     panelSurum: arg(argv, 'panel-surum') ?? null,

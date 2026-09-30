@@ -18,10 +18,73 @@ export const INTEGRITY_GUARD_CODES = [
   "BUTUNLUK_HAZIRLIK_ANAHTARI",
   "BUTUNLUK_SINIF_BILINMIYOR",
   "BUTUNLUK_FILIGRAN",
+  "BUTUNLUK_YUKLEYICI",
 ] as const;
 export type IntegrityGuardCode = (typeof INTEGRITY_GUARD_CODES)[number];
 
 const EXTRA_LIST_CAP = 50;
+
+/**
+ * Korumalı pakette KOD ENJEKTE eden Node başlatma bayrakları: imzalı dosyalar uyuşsa da süreç yamalı koşar.
+ * `ecosystem.config.js` imzalanamaz (kur.ps1 sunucununkini birleştirir) — `node_args` / `NODE_OPTIONS` bu yoldur.
+ */
+const LOADER_INJECTION_FLAG = /^(?:-r|--require|--import|--loader|--experimental-loader|--inspect(?:-[a-z]+)*)$/;
+
+export interface LoaderInjection {
+  readonly bayrak: string;
+  readonly kaynak: "execArgv" | "NODE_OPTIONS";
+}
+
+/** `NODE_OPTIONS` Node'un kuralıyla bölünür: boşluk ayırır, çift tırnak birleştirir, tırnak içinde ters bölü kaçırır. */
+export function splitNodeOptions(value: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let started = false;
+  let quoted = false;
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i]!;
+    if (quoted && c === "\\" && i + 1 < value.length) {
+      cur += value[++i];
+      continue;
+    }
+    if (c === '"') {
+      quoted = !quoted;
+      started = true;
+      continue;
+    }
+    if (!quoted && /\s/.test(c)) {
+      if (started) out.push(cur);
+      cur = "";
+      started = false;
+      continue;
+    }
+    cur += c;
+    started = true;
+  }
+  if (started) out.push(cur);
+  return out;
+}
+
+/** Bayrak adı (`=değer` atılır; Node alt çizgiyi tireyle eş tutar); enjeksiyon bayrağı değilse null. */
+function injectionFlagName(token: string): string | null {
+  if (!token.startsWith("-")) return null;
+  const name = (token.split("=")[0] ?? "").replace(/_/g, "-");
+  return LOADER_INJECTION_FLAG.test(name) ? name : null;
+}
+
+/** execArgv + NODE_OPTIONS içindeki enjeksiyon bayrakları (değerleri DEĞİL — yol/sır taşıyabilir). */
+export function detectLoaderInjection(execArgv: readonly string[], nodeOptions: string | undefined): LoaderInjection[] {
+  const found: LoaderInjection[] = [];
+  const scan = (tokens: readonly string[], kaynak: LoaderInjection["kaynak"]): void => {
+    for (const t of tokens) {
+      const bayrak = injectionFlagName(t);
+      if (bayrak !== null && !found.some((f) => f.bayrak === bayrak && f.kaynak === kaynak)) found.push({ bayrak, kaynak });
+    }
+  };
+  scan(execArgv, "execArgv");
+  scan(splitNodeOptions(nodeOptions ?? ""), "NODE_OPTIONS");
+  return found;
+}
 
 export interface IntegrityOutcome {
   readonly durum: IntegrityStatus;
@@ -33,6 +96,8 @@ export interface IntegrityOutcome {
   readonly rapor: IntegrityReport | null;
   readonly fazla: readonly string[];
   readonly fazlaSayisi: number;
+  /** Korumalı kipte süreçte görülen enjeksiyon bayrakları (boş = temiz ya da korumasız kip). */
+  readonly yukleyiciBayraklari: readonly LoaderInjection[];
   readonly denetlendi: string;
 }
 
@@ -48,11 +113,13 @@ export interface IntegrityCheckInput {
   readonly entitlementClass: string | null;
   /** Bayt kodu filigranı (varsayılan bu derlemeninki); yalnız testler verir. */
   readonly watermark?: BuildWatermark | null;
+  /** Sürecin başlatma bayrakları (varsayılan bu süreçinki); yalnız testler verir. */
+  readonly runtimeFlags?: { readonly execArgv: readonly string[]; readonly nodeOptions: string | undefined };
   readonly nowMs?: number;
 }
 
 function outcome(o: Partial<IntegrityOutcome> & Pick<IntegrityOutcome, "durum" | "kod">, nowMs: number): IntegrityOutcome {
-  return { kid: null, kunye: null, rapor: null, fazla: [], fazlaSayisi: 0, ...o, denetlendi: new Date(nowMs).toISOString() };
+  return { kid: null, kunye: null, rapor: null, fazla: [], fazlaSayisi: 0, yukleyiciBayraklari: [], ...o, denetlendi: new Date(nowMs).toISOString() };
 }
 
 async function readList(root: string): Promise<string | null> {
@@ -77,7 +144,27 @@ async function extraEntries(token: string, root: string): Promise<string[]> {
   return (await walkIntegrityScope(root, m.value.kapsam)).entries.filter((e) => !expectedPaths.has(e));
 }
 
+/**
+ * Bütünlük = imzalı dosyalar + (korumalı kipte) sürecin başlatma bayrakları. Enjeksiyon dosya sonucundan
+ * bağımsız ölçülür ve onu GECERSIZ'e çeker (merdiven: ek süre → kısıtlı; gözlem kipinde yalnız rapor);
+ * dosya raporu ve imzalı künye korunur (panel sayıları, bakım kuralı, ek süre çapası paketi tanır).
+ */
 export async function runIntegrityCheck(g: IntegrityCheckInput): Promise<IntegrityOutcome> {
+  const files = await checkPackageFiles(g);
+  if (!g.required) return files;
+  const flags = g.runtimeFlags ?? { execArgv: process.execArgv, nodeOptions: process.env.NODE_OPTIONS };
+  const injected = detectLoaderInjection(flags.execArgv, flags.nodeOptions);
+  if (injected.length === 0) return files;
+  return { ...files, durum: "GECERSIZ", kod: "BUTUNLUK_YUKLEYICI", yukleyiciBayraklari: injected };
+}
+
+/** İnsan okur neden (health lisans bloğu); yalnız bayrak adı ve kaynağı — değer basılmaz. */
+export function integrityReason(o: IntegrityOutcome | null): string | null {
+  if (!o || o.yukleyiciBayraklari.length === 0) return null;
+  return `Node başlatma bayrağıyla kod enjeksiyonu: ${o.yukleyiciBayraklari.map((f) => `${f.bayrak} (${f.kaynak})`).join(", ")}`;
+}
+
+async function checkPackageFiles(g: IntegrityCheckInput): Promise<IntegrityOutcome> {
   const now = g.nowMs ?? Date.now();
   const token = await readList(g.root);
   if (token === null) {

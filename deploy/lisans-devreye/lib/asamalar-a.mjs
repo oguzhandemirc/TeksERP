@@ -5,7 +5,7 @@ import path from 'node:path';
 import { evYolu } from './ag.mjs';
 import {
   GUNCELLEME_KOK, I, O, PS_GUC, SATICI_KONTEYNER, U, birlestir, gucDegerlendir, httpSonuc, izin600, s, satirlar,
-  traefikDegerlendir, uzakSonuc, vdsDogrulaDegerlendir,
+  traefikDegerlendir, uzakSonuc, VDS_DOGRULA, VDS_TABAN_DOSYALARI, vdsDogrulaDegerlendir, vdsDogrulaKos,
 } from './ortak.mjs';
 
 export const A2_GOCLERI = ['20260930120000_tasima_kodu_kimliksiz', '20261001090000_dagitim_dosya', '20261001090000_modul_anahtari_kasasi'];
@@ -13,7 +13,7 @@ export const ANAHTAR_DOSYALARI = ['hazirlik-2026-1.kok.json', 'alt-hazirlik-2026
   'portal-totp.key', 'etkinlestirme-kodu.pepper', 'modul-kasasi.key'];
 export const SATICI_ORTAM_ADLARI = ['DOSYA_DIZINI', 'DERLEME_DIZINI', 'YAYIN_DIZINI', 'GENEL_KOK_ADRESI', 'IC_API_BELIRTEC_DOSYASI'];
 
-const vdsDogrula = (no) => ({ no, ad: 'vds-dogrula: adnansahin AYNI', kos: (ag, g) => ag.yerelBetik(path.join(g.wtKok, 'vds-dogrula.sh')), degerlendir: vdsDogrulaDegerlendir });
+const vdsDogrula = (no) => ({ no, ad: 'vds-dogrula: adnansahin AYNI', kos: vdsDogrulaKos, degerlendir: vdsDogrulaDegerlendir });
 const traefik = (no) => ({ no, ad: 'Traefik yeniden başlatılmamış', kos: (ag) => ag.ssh('docker inspect traefik --format "{{.State.StartedAt}} {{.RestartCount}}"'), degerlendir: traefikDegerlendir });
 const guc = (no) => ({ no, ad: 'thinkpad-1 prizde (PowerOnline) + pwsh 7', kos: (ag) => ag.tp(PS_GUC), degerlendir: gucDegerlendir });
 const listede = (r, adlar) => {
@@ -26,7 +26,7 @@ const listede = (r, adlar) => {
 
 export const ASAMA_1 = [
   { no: '1.1', ad: 'vds-dogrula ve üç taban dosyası yerinde', yerel: (g) => {
-    const eksik = ['vds-dogrula.sh', 'vds-taban-adnansahin.sha', 'vds-taban-kok.sha', 'vds-taban-diger.sha'].filter((f) => !fs.existsSync(path.join(g.wtKok, f)));
+    const eksik = [VDS_DOGRULA, ...VDS_TABAN_DOSYALARI.map((f) => path.join(evYolu(g.vdsTaban), f))].filter((f) => !fs.existsSync(f));
     return eksik.length ? s(O, `eksik: ${eksik.join(', ')}`) : s(U);
   } },
   { no: '1.2', ad: 'portal yönetici + kök parola dosyaları 0600 (içerik okunmaz)', yerel: () =>
@@ -44,7 +44,7 @@ export const ASAMA_1 = [
     const u = uzakSonuc(r);
     if (u) return u;
     const enYeni = Number(`${r.cikti}`.trim()) * 1000;
-    const taban = path.join(g.wtKok, 'vds-taban-adnansahin.sha');
+    const taban = path.join(evYolu(g.vdsTaban), 'adnansahin.sha');
     if (!Number.isFinite(enYeni) || !fs.existsSync(taban)) return s(O, 'yayın zamanı ya da taban okunamadı');
     const tabanMs = fs.statSync(taban).mtimeMs;
     return enYeni <= tabanMs ? s(U) : s(O, `taban bayat: adnansahin'e ${new Date(enYeni).toISOString()} yayını tabandan (${new Date(tabanMs).toISOString()}) yeni — önce taban tazele (runbook §1.2)`);

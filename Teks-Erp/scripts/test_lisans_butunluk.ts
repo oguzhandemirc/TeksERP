@@ -12,6 +12,7 @@
 //      ÖNCESİ imzalı listeye karşı (liste yok / yanlış anahtar / kurcalanmış → çekirdek YOK)
 //   §5 imza aracı: öz-denetim, liste JWS tavanına takılmaz, derleme künyesi, node_modules'süz paket
 //   §5' şifreli modül paketleri (.tkmod, 2d) imzalı kapsamda: değişen UYUSMAZ, sonradan beliren FAZLA
+//   §7 korumalı yükleyici: execArgv/NODE_OPTIONS enjeksiyon bayrağı → GECERSIZ BUTUNLUK_YUKLEYICI (dosya raporu korunur, geliştirme etkilenmez)
 //   §6 Docker teslim künyesi (`PAKET-DOCKER.json`): kapsamdaki teslim dosyaları imzada listelenir, ek alanlar imzada, kurcalama GECERSIZ, eksik dosyayla imza yok, CLI `belge`
 // Koşum: node ../scripts/agir-is.mjs -- npx tsx scripts/test_lisans_butunluk.ts
 // =============================================================================
@@ -27,7 +28,7 @@ import { INTEGRITY_TYP, PACKAGE_PUBLIC_KEYS, verifyIntegrity, type PackageKey } 
 import { INTEGRITY_FILE, INTEGRITY_SCOPE_DIRS, INTEGRITY_SCOPE_FILES, isStagingPackageKid } from "../src/lib/license/integrity-scope";
 import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
 import { MODULE_PACKAGE_EXT } from "../src/lib/license/encrypted-module";
-import { runIntegrityCheck, type IntegrityCheckInput } from "../src/lib/license/integrity-check";
+import { detectLoaderInjection, integrityReason, runIntegrityCheck, type IntegrityCheckInput } from "../src/lib/license/integrity-check";
 import { tsLicenseCore, type LicenseCore } from "../src/lib/license/license-core";
 import { unavailableCore } from "../src/lib/license/native-adapter";
 import { loadLicenseCoreFrom, nativeFileName } from "../src/lib/license/native";
@@ -105,7 +106,8 @@ const imzala = (kok: string, k: TestKey, o: { musteri?: string | null; paketId?:
   });
 
 function girdi(kok: string, o: Partial<IntegrityCheckInput> = {}): IntegrityCheckInput {
-  return { root: kok, required: true, core: tsLicenseCore, keys: keysOf(A), entitlementClass: "URETIM", watermark: null, ...o };
+  // Süreç bayrakları temiz verilir: bekçinin kendisi tsx yükleyicisiyle (--require/--import) koşar; §7 ayrıca ölçer.
+  return { root: kok, required: true, core: tsLicenseCore, keys: keysOf(A), entitlementClass: "URETIM", watermark: null, runtimeFlags: { execArgv: [], nodeOptions: undefined }, ...o };
 }
 
 async function bolum1(core: LicenseCore, ek: string): Promise<void> {
@@ -226,7 +228,7 @@ function bolum3(): void {
   const P1 = randomUUID();
   const P2 = randomUUID();
   const sonuc = (durum: IntegrityOutcome["durum"], derleme: string | null, paketId: string | null = P1): IntegrityOutcome => ({
-    durum, kod: null, kid: A.kid, fazla: [], fazlaSayisi: 0, denetlendi: new Date(NOW).toISOString(),
+    durum, kod: null, kid: A.kid, fazla: [], fazlaSayisi: 0, yukleyiciBayraklari: [], denetlendi: new Date(NOW).toISOString(),
     rapor: paketId
       ? { durum: durum === "GECERSIZ" ? "GECERSIZ" : "GECERLI", kod: null, dosyaSayisi: 1, eksik: [], eksikSayisi: 0, degisik: [], degisikSayisi: 0, okunamayan: [], okunamayanSayisi: 0, fazla: [], fazlaSayisi: 0,
           paket: { paketId, urun: "backend", surum: "2.12.0", derlemeTarihi: derleme ?? "2026-09-01T00:00:00.000Z", musteri: null } }
@@ -406,6 +408,87 @@ async function bolum6(): Promise<void> {
   check("§6e ⭐ CLI `belge` (teslim-paketle.sh'in çağrısı) .jws + liste dosyası yazar", cli.status === 0 && existsSync(r.file) && existsSync(r.listFile), `${cli.status} ${(cli.stderr || cli.stdout).trim().slice(0, 100)}`);
 }
 
+// §7 — korumalı yükleyici sertleştirmesi (F2): `ecosystem.config.js` imzalanamaz (kur.ps1 sunucununkini birleştirir),
+// `node_args` / `NODE_OPTIONS` ile `--require/-r/--import/--loader/--experimental-loader/--inspect*` imzalı dosyalar
+// uyuşsa da kod enjekte eder. Korumalı kipte bu bayraklar bütünlüğü GECERSIZ `BUTUNLUK_YUKLEYICI` yapar (merdiven;
+// gözlemde yalnız rapor), dosya raporu + künye korunur; geliştirme (tsx `--import`) etkilenmez. Karşılaştırıcılar
+// fonksiyon alır: KALICI SONDA bozuk tespit/denetim verilince ısırır, gerçeği verilince susar.
+type Tespit = typeof detectLoaderInjection;
+type Denetim = typeof runIntegrityCheck;
+const ENJEKSIYON: ReadonlyArray<[string, readonly string[], string | undefined, string]> = [
+  ["execArgv --require", ["--require", "/tmp/x.js", "dist/server.js"], undefined, "--require"],
+  ["execArgv -r", ["-r", "x"], undefined, "-r"],
+  ["execArgv --import=", ["--import=data:text/javascript,1"], undefined, "--import"],
+  ["execArgv --experimental-loader", ["--experimental-loader", "x.mjs"], undefined, "--experimental-loader"],
+  ["execArgv --loader=", ["--loader=x.mjs"], undefined, "--loader"],
+  ["execArgv --inspect-brk=", ["--inspect-brk=0.0.0.0:9229"], undefined, "--inspect-brk"],
+  ["execArgv alt çizgi --inspect_port", ["--inspect_port=9"], undefined, "--inspect-port"],
+  ["NODE_OPTIONS tırnaklı --require", [], '--max-old-space-size=4096 --require "C:\\a b\\x.js"', "--require"],
+  ["NODE_OPTIONS --inspect", [], "--inspect", "--inspect"],
+];
+const TEMIZ: ReadonlyArray<[string, readonly string[], string | undefined]> = [
+  ["bellek/kaynak haritası bayrakları", ["--max-old-space-size=2048", "--enable-source-maps", "--expose-gc"], "--max-old-space-size=4096"],
+  ["tırnak içindeki metin bayrak değil", [], '--title "x --require y"'],
+  ["değer içinde bayrak adı", ["--title=--require"], "--experimental-require-module"],
+];
+
+function tespitIhlalleri(tespit: Tespit): string[] {
+  const ih: string[] = [];
+  for (const [ad, argv, env, bayrak] of ENJEKSIYON) {
+    const r = tespit(argv, env);
+    if (!r.some((f) => f.bayrak === bayrak && f.kaynak === (argv.length ? "execArgv" : "NODE_OPTIONS"))) ih.push(`${ad} yakalanmadı`);
+  }
+  for (const [ad, argv, env] of TEMIZ) if (tespit(argv, env).length > 0) ih.push(`${ad} yanlış pozitif`);
+  return ih;
+}
+
+async function denetimIhlalleri(denetim: Denetim, kok: string): Promise<string[]> {
+  const ih: string[] = [];
+  const bayrak = (execArgv: readonly string[], nodeOptions?: string) => ({ execArgv, nodeOptions });
+  const temiz = await denetim(girdi(kok, { runtimeFlags: bayrak(["--max-old-space-size=2048"]) }));
+  if (temiz.durum !== "GECERLI" || temiz.yukleyiciBayraklari.length) ih.push(`temiz süreç ${temiz.durum}/${temiz.kod}`);
+  const req = await denetim(girdi(kok, { runtimeFlags: bayrak(["--require", "/tmp/yama.js"]) }));
+  if (req.durum !== "GECERSIZ" || req.kod !== "BUTUNLUK_YUKLEYICI") ih.push(`--require → ${req.durum}/${req.kod}`);
+  if (req.kunye?.paketId !== temiz.kunye?.paketId || !req.rapor) ih.push("enjeksiyon dosya raporunu/künyeyi düşürdü");
+  const env = await denetim(girdi(kok, { runtimeFlags: bayrak([], "--inspect=0.0.0.0:9229") }));
+  if (env.kod !== "BUTUNLUK_YUKLEYICI") ih.push(`NODE_OPTIONS --inspect → ${env.kod}`);
+  const gelistirme = await denetim(girdi(kok, { required: false, runtimeFlags: bayrak(["--import", "tsx"]) }));
+  if (gelistirme.kod === "BUTUNLUK_YUKLEYICI") ih.push("korumasız kipte (geliştirme) enjeksiyon sayıldı");
+  return ih;
+}
+
+async function bolum7(): Promise<void> {
+  console.log("\n§7 korumalı yükleyici: execArgv / NODE_OPTIONS enjeksiyonu → BUTUNLUK_YUKLEYICI");
+  const kok = paket("s7");
+  await imzala(kok, A);
+  const t = tespitIhlalleri(detectLoaderInjection);
+  check("§7a ⭐ tespit: --require/-r/--import/--loader/--experimental-loader/--inspect* (execArgv + NODE_OPTIONS, alt çizgi) yakalanır, zararsız bayrak susar", t.length === 0, t.join(" | ") || "temiz");
+  const d = await denetimIhlalleri(runIntegrityCheck, kok);
+  check("§7b ⭐ korumalı kipte enjeksiyon → GECERSIZ BUTUNLUK_YUKLEYICI (rapor + künye korunur); geliştirme kipi etkilenmez", d.length === 0, d.join(" | ") || "temiz");
+  const inj = await runIntegrityCheck(girdi(kok, { runtimeFlags: { execArgv: ["--require", "/gizli/yol.js"], nodeOptions: "--inspect" } }));
+  const neden = integrityReason(inj) ?? "";
+  const saglik = oku("src/lib/license/license-health.ts");
+  check("§7c health lisans bloğu nedeni taşır: bayrak adı + kaynak, DEĞER yok (yol/sır basılmaz)",
+    neden.includes("--require (execArgv)") && neden.includes("--inspect (NODE_OPTIONS)") && !neden.includes("/gizli") && integrityReason(null) === null &&
+    /butunlukNeden: integrityReason\(getIntegrityOutcome\(\)\)/.test(saglik), neden);
+  __resetIntegrityStateForTests();
+  setIntegrityOutcome(inj, NOW);
+  check("§7d lisans merdivenine girer: durum GECERSIZ + ek süre çapası", integrityStatusForState(true) === "GECERSIZ" && integrityAnchorMs(null) === NOW);
+  __resetIntegrityStateForTests();
+  const tespitSonda: Array<[string, Tespit]> = [
+    ["NODE_OPTIONS okunmuyor", (a) => detectLoaderInjection(a, undefined)],
+    ["alt çizgi eşlenmiyor", (a, n) => detectLoaderInjection(a.filter((x) => !x.includes("_")), n)],
+    ["her bayrak enjeksiyon", (a, n) => [...detectLoaderInjection(a, n), ...(a.length || n ? [{ bayrak: "--x", kaynak: "execArgv" as const }] : [])]],
+  ];
+  for (const [ad, f] of tespitSonda) check(`§7 sonda: ${ad} → kırmızı`, tespitIhlalleri(f).length > 0);
+  const denetimSonda: Array<[string, Denetim]> = [
+    ["bayraklar yok sayılır", (g) => runIntegrityCheck({ ...g, runtimeFlags: { execArgv: [], nodeOptions: undefined } })],
+    ["geliştirme kipi de korumalı sayılır", (g) => runIntegrityCheck({ ...g, required: true })],
+  ];
+  for (const [ad, f] of denetimSonda) check(`§7 sonda: ${ad} → kırmızı`, (await denetimIhlalleri(f, kok)).length > 0);
+  check("§7 pozitif sonda: gerçek tespit + denetim → yeşil", tespitIhlalleri(detectLoaderInjection).length === 0 && (await denetimIhlalleri(runIntegrityCheck, kok)).length === 0);
+}
+
 async function main(): Promise<void> {
   console.log("=== Lisans bütünlük · künye · filigran · native bağlama ===");
   try {
@@ -420,6 +503,7 @@ async function main(): Promise<void> {
     await bolum5();
     await bolum5b();
     await bolum6();
+    await bolum7();
   } finally {
     rmSync(TEMP, { recursive: true, force: true });
   }

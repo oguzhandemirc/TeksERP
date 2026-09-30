@@ -10,7 +10,7 @@ export const VDS = Object.freeze({ hedef: 'oguzhan@80.253.255.188', port: '2222'
 export const YAYIN_SSH = 'tekserp-yayin';
 export const TP = Object.freeze({ hedef: 'oguzhan@100.70.47.46', tailscaleIp: '100.70.47.46' });
 export const OKUMA_YONTEMLERI = Object.freeze(['GET', 'HEAD']);
-/** Kuru kipte bile koşturulabilen tek yerel betik: VDS'i salt okur (Teks-Erp-wt kökünde, repo dışı). */
+/** `--olc`ta koşturulabilen tek yerel betik: VDS'i salt okur (repoda deploy/vds-dogrula.sh; bekçi uzak komutunu ölçer). */
 export const YEREL_BETIKLER = Object.freeze(['vds-dogrula.sh']);
 
 // ssh: her `&&`/`;`/`|` parçasının ilk sözcükleri bu listeden biri olmalı (salt-okuma).
@@ -119,10 +119,10 @@ export class Ag {
   }
 
   /** Yalnız `YEREL_BETIKLER`deki salt-okuma betiği (tam yol verilir, adı listede olmalı). */
-  yerelBetik(tamYol) {
+  yerelBetik(tamYol, args = []) {
     if (!YEREL_BETIKLER.includes(path.basename(tamYol))) throw new SozlesmeIhlali(`yerel betik izinli değil: ${tamYol}`);
-    if (!this.olc) return this.#kuru(`yerel ${tamYol}`);
-    return this.#kos(tamYol, []);
+    if (!this.olc) return this.#kuru(`yerel ${[tamYol, ...args].join(' ')}`);
+    return this.#kos(tamYol, args);
   }
 
   #kuru(satir) {

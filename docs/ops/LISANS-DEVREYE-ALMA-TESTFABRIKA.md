@@ -13,7 +13,7 @@
 | `node deploy/lisans-devreye/asama-dogrula.mjs --asama=<1..8\|hepsi>` | Her aşamanın SALT-OKUMA ölçümü; üç sonuç ✅ UYUMLU · ❌ IHLAL (DUR) · ⚠️ ÖLÇÜLEMEDİ (araç/erişim yok — uyumlu SAYILMAZ). Çıkış 0 · 1 · 2 (3 = betiğin salt-okuma sözleşmesi bozuk) | **KURU** — ağa çıkmaz, koşacağı ölçümleri basar; gerçek ölçüm `--olc` |
 | `node deploy/lisans-devreye/t4-gozlem.mjs` | Senaryo T4 sürekli gözlem (yoklama başarı oranı · parmak izi kararlılığı · yanlış pozitif); `--ozet=<tsv>` ağsız özet | **KURU**; ölçüm `--olc` |
 | `Teks-Erp-wt/testfabrika-araclar/tp.sh <betik.ps1>` | thinkpad-1'de PowerShell 5.1; önce Tailscale kimlik kapısı (100.70.47.46), tutmazsa 99 | — |
-| `Teks-Erp-wt/vds-dogrula.sh` | adnansahin'e ait her VDS baytı tabanla AYNI mı (0 aynı · 1 fark · 2 ölçülemedi) | salt okuma |
+| `deploy/vds-dogrula.sh [--taban=<dizin>]` | adnansahin'e ait her VDS baytı tabanla AYNI mı (0 aynı · 1 fark · 2 ölçülemedi); `--taban-yaz` tabanı yazar (dolu dizini ezmez), `--komut-yaz` uzak komutu basar | VDS'e salt okuma; taban repo DIŞI `~/.tekserp/vds-taban/` |
 | `node deploy/satici/portal-baglan.mjs` | Portal geri döngü kipinde Mac'ten SSH tüneli → `http://127.0.0.1:14611/portal/` | salt okuma dışı değil — tarayıcı oturumu |
 
 Betik sözleşmesi bekçiyle ölçülür: `node scripts/test_lisans_devreye_kuru.mjs` (kuru kipte sıfır ağ/süreç girişimi; `--olc`ta bile yalnız GET/HEAD ve ssh/PowerShell salt-okuma izin listesi).
@@ -35,20 +35,18 @@ Betik sözleşmesi bekçiyle ölçülür: `node scripts/test_lisans_devreye_kuru
 
 ### 1.2 vds-dogrula tabanı tazeliği (aşama 1.6 · 1.7)
 
-`vds-dogrula.sh` sabit tabana (`Teks-Erp-wt/vds-taban-{adnansahin,kok,diger}.sha`) karşı ölçer. Taban son adnansahin yayınından ESKİYSE betik o yayını "FARK" diye basar (2026-09-30 ölçümü: taban 09-28 11:08, adnansahin 1.3.7 + OTA 09-28 22:09 → FARK; kurulumla ilgisi yok). Aşama 1.6 bunu ÖLÇÜLEMEDİ olarak ayırır.
+`deploy/vds-dogrula.sh` taban dizinindeki üç dosyaya (`adnansahin.sha` · `kok.sha` · `diger.sha`; varsayılan `~/.tekserp/vds-taban/`, `--taban=<dizin>` ya da `TEKSERP_VDS_TABAN` ezer; doğrulayıcıda `--vds-taban=`) karşı ölçer. Taban sahaya özgü VERİDİR, repoya girmez. Taban son adnansahin yayınından ESKİYSE betik o yayını "FARK" diye basar (2026-09-30 ölçümü: taban 09-28 11:08, adnansahin 1.3.7 + OTA 09-28 22:09 → FARK; kurulumla ilgisi yok). Aşama 1.6 bunu ÖLÇÜLEMEDİ olarak ayırır.
 
-- **Komut (yalnız 1.6 ⚠️ ise):** önce `vds-dogrula.sh` çıktısındaki HER farkın bilinen bir yayına ait olduğunu yayın defterinden doğrula (`ssh tekserp-yayin 'tail -3 /opt/stack/apps/tekserp-guncelleme/defter/adnansahin-YAYIN-DEFTERI.tsv'` + OTA dizin adları). Bilinmeyen fark varsa DUR (taban onu yutmasın). Sonra eskiyi kenara al ve aynı ölçümle yeni taban yaz:
+- **Komut (yalnız 1.6 ⚠️ ise):** önce `deploy/vds-dogrula.sh` çıktısındaki HER farkın bilinen bir yayına ait olduğunu yayın defterinden doğrula (`ssh tekserp-yayin 'tail -3 /opt/stack/apps/tekserp-guncelleme/defter/adnansahin-YAYIN-DEFTERI.tsv'` + OTA dizin adları). Bilinmeyen fark varsa DUR (taban onu yutmasın). Sonra eskiyi kenara al ve AYNI uzak komutla yeni taban yaz (betik dolu dizini ezmez):
 
   ```bash
-  B=/Users/demirci/Documents/Projeler/Teks-Erp-wt; K=/opt/stack/apps/tekserp-guncelleme
-  D=$B/vds-taban-$(date +%Y%m%d_%H%M)-onceki && mkdir -p $D && cp -p $B/vds-taban-{adnansahin,kok,diger}.sha $D/
-  ssh -n tekserp-yayin "cd $K/html && find adnansahin -type f -print0 | sort -z | xargs -0 sha256sum" | sort -k2 > $B/vds-taban-adnansahin.sha
-  ssh -n tekserp-yayin "cd $K/html && find electron -type f -print0 | sort -z | xargs -0 sha256sum" | sort -k2 > $B/vds-taban-kok.sha
-  ssh -n tekserp-yayin "sha256sum $K/defter/adnansahin-YAYIN-DEFTERI.tsv $K/nginx/default.conf $K/docker-compose.yml" | sort -k2 > $B/vds-taban-diger.sha
+  T=~/.tekserp/vds-taban; D=$T-onceki-$(date +%Y%m%d_%H%M)
+  mv $T $D && deploy/vds-dogrula.sh --taban-yaz && deploy/vds-dogrula.sh
   ```
 
-- **Beklenen:** `vds-dogrula.sh` → `✅ adnansahin AYNI (<n> dosya)`; aşama 1.6 ✅.
-- **Geri alma:** `cp -p $D/* $B/` (eski taban geri).
+- **Tek seferlik göç (repo dışı eski betikten):** `mkdir -p ~/.tekserp/vds-taban && for f in adnansahin kok diger; do cp -p Teks-Erp-wt/vds-taban-$f.sha ~/.tekserp/vds-taban/$f.sha; done` — eski `Teks-Erp-wt/vds-dogrula.sh` artık çağrılmaz.
+- **Beklenen:** `deploy/vds-dogrula.sh` → `✅ adnansahin AYNI (<n> dosya)`; aşama 1.6 ✅.
+- **Geri alma:** `rm -r $T && mv $D $T` (eski taban geri).
 
 ### 1.3 thinkpad-1 prizde, pwsh 7 var (aşama 1.3)
 
@@ -303,7 +301,7 @@ Bayt kodu (`.jsc`) OS + mimari + V8'e kilitlidir → korumalı paket HEDEFTE ür
 
 ### 5.4 adnansahin'e dokunulmadı
 
-- **Komut:** `vds-dogrula.sh` (aşama 1.7 · 8.4).
+- **Komut:** `deploy/vds-dogrula.sh` (aşama 1.7 · 8.4).
 - **Beklenen:** ✅ AYNI. FARK → §9 DUR.
 
 ## 6. Portal — müşteri → tesis → kurulum (TEST) → HAK → etkinleştirme kodu
@@ -434,5 +432,5 @@ Traefik hiçbir geri almada yeniden başlatılmaz; kenar ağı satırı yerinde 
 | **G1** | Satıcı açılışı `etkinlestirme-kodu.pepper` + `modul-kasasi.key`'i `create: true` ile yüklüyordu; VDS anahtar birimi SALT OKUNUR ve ikisi de yok | A2 imajı VDS'te açılmazdı (EROFS) | **KAPANDI (I7):** sunucu + `portal-kullanici` + `modul-anahtari` üç sırrı yalnız OKUR (`src/keys/server-secrets.ts`), eksikse açık TR hata + komut; `anahtar.ts sirlar-uret` üçünü üretir, var olanı ezmez; bekçi `test_sunucu_sirlari` |
 | **G2** | İmajın `dist-cli`'ında `modul-anahtari` CLI'ı yoktu (yalnız `portal-kullanici` + `anahtar`) | `ice-aktar` VDS'te koşamazdı | **KAPANDI (I7):** `deploy/satici/Dockerfile` derleme listesinde + `test -f dist-cli/scripts/modul-anahtari.js`; bekçi `test_docker_hijyeni` §6 (her satıcı CLI'ı derlenir + kapıda) |
 | **G3** | Compose satıcı servisinde 3d-1 ortamı (`DOSYA_DIZINI`, `DERLEME_DIZINI`, `YAYIN_DIZINI`, `GENEL_KOK_ADRESI`) ve bağları yoktu; kök FS salt okunur | `/y` yükleme ve dosya gövdeleri EROFS; sürüm görünümü "ölçülemedi"; portal bağlantısı göreli | **KAPANDI (I7):** ortam + üç bağ (`/dosyalar` yazılır · `/derlemeler` + `/yayin` salt okunur; `/yayin` = güncelleme kökü `html/` + `defter/`), `ornek.env`, `compose-denetle.mjs` ⑨a–f + `test_docker_hijyeni` §6 docker'sız ikizi |
-| **G4** | `vds-dogrula.sh` tabanı bayat (09-28) ve betik taban yolu almıyor | her koşum FARK basar, gerçek farkı gizler | §1.2 tazeleme; betiğe taban dizini argümanı (repo dışı araç — yönetici) |
+| **G4** | ~~`vds-dogrula.sh` tabanı bayat (09-28) ve betik taban yolu almıyor~~ KAPANDI: betik repoda (`deploy/vds-dogrula.sh --taban=<dizin>`, `--taban-yaz`), bekçi `test_lisans_devreye_kuru` §5 | her koşum FARK basar, gerçek farkı gizler | §1.2 tazeleme |
 | **G5** | `paketle.ps1` şifreli modül (`build-korumali.mjs --sifrele`) seçeneği taşımıyordu | şifreli modül provası (§7.4) yapılamazdı | **KAPANDI (I7):** `-Sifrele` [`-SifreliPaketler`] [`-ModulAnahtarDizini`]; varsayılan ŞİFRESİZ; yalnız `-Korumali` ile, CI'da ve repo içi anahtar dizininde durur; bekçi `test_sunucu_betikleri` §18 |

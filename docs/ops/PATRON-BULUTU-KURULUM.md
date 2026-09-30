@@ -2,7 +2,7 @@
 
 > **Durum (2026-09-30):** tekserp-vds'te **KURULU** — `tekserp-patron:55203d9708ba`, hazırlık satıcısının iç API ağına bağlı (§11 ilk madde: gerçek fabrika eşitlemesi BEKLENMEZ), `https://patron.etkiliyazilim.com` yanıt veriyor. Kurulum kaydı §13; yerel duman kaydı §12.
 > Yapıtlar: [`deploy/patron/`](../../deploy/patron/) (compose · Dockerfile · imaj derleme · yalıtım denetimi · duman). Sözleşme: [`PATRON-BULUTU-ESITLEME.md`](../design/PATRON-BULUTU-ESITLEME.md). Alan kuralları: [`kurallar/patron-bulutu.md`](../kurallar/patron-bulutu.md) § Dağıtım. Emsal ve paylaşılan adımlar: [`SATICI-KURULUM.md`](SATICI-KURULUM.md) (satıcı ÖNCE kurulu olmalı — patron onun iç API ağına katılır).
-> **Değişmez:** her VDS yazımından ÖNCE ve SONRA `Teks-Erp-wt/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur. Traefik **yeniden başlatılmaz**.
+> **Değişmez:** her VDS yazımından ÖNCE ve SONRA `deploy/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur. Traefik **yeniden başlatılmaz**.
 
 ## 0. Kapsam
 
@@ -115,7 +115,7 @@ ssh tekserp-vds 'docker version --format "{{.Server.Version}}"; docker compose v
 
 ## 4. Kurulum (VDS YAZIMI — kullanıcının "uygula" cümlesiyle)
 
-0. **Önce:** `Teks-Erp-wt/vds-dogrula.sh` → ✅ (çıkış 0).
+0. **Önce:** `deploy/vds-dogrula.sh` → ✅ (çıkış 0).
 1. **Dizinler ve sahiplik** (`SIR_GID` .env'deki sayı, satıcınınkinden AYRI; sunucuda grup olması gerekmez). `oguzhan`ın sudo'su parola ister: etkileşimsiz oturumda kök sahipli yazımlar satıcı kurulumundaki gibi tek seferlik yardımcı konteynerle yapılır (`--network none`, yalnız hedef dizin bağlı — `SATICI-KURULUM.md` §12 "sudo'suz kurulum").
 
    ```bash
@@ -157,7 +157,7 @@ ssh tekserp-vds 'docker version --format "{{.Server.Version}}"; docker compose v
 
    Yönetici davetle `https://patron.etkiliyazilim.com/` üzerinden parolasını belirler, TOTP sırrını authenticator'a girer ve ilk kodla onaylar; ekibini kendisi davet eder. Kayıpta: `tesis.js yonetici-yeniden-davet`. Kurulum kaydı `KURULUM_KAYNAGI=satici` kipinde satıcı iç API'sinden dolar (CLI'yle kayıt gerekmez).
 9. **İlk yedek:** `sudo docker compose exec patron-yedek /arac/yedek-dongusu.sh tek` → `patron_<damga>.dump.tkenc` + `anahtarlar_<damga>.tar.tkenc` ("Yerel anahtar (yerel.tkkey) yok" uyarısı BEKLENİR — VDS kendi yedeğini açamaz).
-10. **Sonra:** `Teks-Erp-wt/vds-dogrula.sh` → ✅ adnansahin AYNI.
+10. **Sonra:** `deploy/vds-dogrula.sh` → ✅ adnansahin AYNI.
 
 ## 5. DNS (kullanıcı — Cloudflare)
 

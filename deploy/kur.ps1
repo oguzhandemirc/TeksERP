@@ -102,6 +102,7 @@ param(
   #   tasirsa ikincisi birincisini pm2'den SILER (`pm2 delete` [4/9]) - eski
   #   surum sessizce durur ve operator bunu ancak fabrika calismayinca anlar.
   #   Ornek: -UygulamaAdi tekserp-backend-yeni
+  #   pm2'de bu kurulumun backend'i BASKA adla kayitliysa [1/9] ve -GeriAl DURUR (pm2 ad kapisi).
   [string]$UygulamaAdi = "tekserp-backend-yeni",
   # PROVA paketini (paketle.ps1 -Prova: etiketsiz, surum belgesiz) kurmaya izin.
   #   Verilmezse [1/9] durur - fabrikaya kazara prova kurulmasin.
@@ -238,6 +239,8 @@ $anahtarDizini = "$kok\yedek-anahtar"
 $lisansDizini = "$kok\lisans"
 $credFile  = "$kok\pg-setup\db-credentials.json"
 $uygulama  = $UygulamaAdi
+# Ad acikca verildi mi: varsayilan ad baska adla calisan backend'i HEDEFLEMEZ (pm2 ad kapisi).
+$adAcik    = $PSBoundParameters.ContainsKey('UygulamaAdi')
 # Operatore basilan komutlar: cipla `kur.ps1` yurutme ilkesine takilir (baslik).
 $kurKomut  = "powershell -NoProfile -ExecutionPolicy Bypass -File $kok\kur.ps1"
 $env:PM2_HOME = "$kok\pm2-home"
@@ -489,6 +492,110 @@ function EcoGeriAlOlc($geriApp, $birakilan) {
   else { Uyar "ecosystem: geri alinan dosya birlestirme oncesi yedekten FARKLI (baska app.eski secildi?) - yedek: $onceki" }
 }
 
+# =============================================================================
+# PM2 AD KAPISI - ayni portta IKINCI BACKEND dogmasin (tek-process yasagi)
+# =============================================================================
+# Silinen/baslatilan ad daima -UygulamaAdi (varsayilan tekserp-backend-yeni); pm2 kaydi baska
+# adla calisiyorsa (thinkpad-1: kanal kimligi testfabrika, pm2'de tekserp-backend-yeni) [4/9]
+# `delete` hicbir seyi durdurmaz, [8/9] `start` AYNI PORTA ikinci backend dogururdu. Bu yuzden
+# [1/9] ve -GeriAl HICBIR SEYE dokunmadan once pm2'deki TeksERP backend'lerini OLCER; ad calisan
+# backend'le eslesmiyorsa, liste okunamiyorsa DURUR. Liste diske yazilmaz (env tasir): stdin.
+$pm2AdJs = @'
+// pm2 ad olcumu - kur.ps1 bunu gecici dosyaya yazar ve sistem Node'uyla kosar; stdin `pm2 jlist` ciktisidir.
+// Karar: UYUMLU | ILK | YAN_YANA (uyari) | IHLAL | OLCULEMEDI. stdout'un SON satiri tek satir JSON (ASCII).
+"use strict";
+const fs = require("fs");
+function arg(ad) { const i = process.argv.indexOf("--" + ad); return i > 1 ? String(process.argv[i + 1] || "") : ""; }
+function cik(nesne) {
+  const s = JSON.stringify(nesne).replace(/[\u007f-\uffff]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+  process.stdout.write("\n" + s + "\n");
+}
+function listeCoz(metin) {
+  const satirlar = String(metin).replace(/^\uFEFF/, "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  for (let i = satirlar.length - 1; i >= 0; i--) {
+    if (satirlar[i][0] !== "[") continue;
+    try { const v = JSON.parse(satirlar[i]); if (Array.isArray(v)) return v; } catch (e) { /* pm2 log satiri */ }
+  }
+  return null;
+}
+function yolDuz(y) { return String(y || "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase(); }
+function ozet(u) {
+  const e = (u && u.pm2_env) || {};
+  const env = e.env && typeof e.env === "object" ? e.env : {};
+  const port = String(env.PORT || e.PORT || "");
+  return { ad: String((u && u.name) || ""), durum: String(e.status || "?"), cwd: String(e.pm_cwd || ""),
+    betik: String(e.pm_exec_path || ""), port: /^\d+$/.test(port) ? port : "" };
+}
+function backendMi(x) { return /(^|[\\/])dist[\\/]server\.js$/i.test(x.betik) || /^tekserp-backend/i.test(x.ad); }
+function tarif(x) { return "'" + x.ad + "' (" + x.durum + (x.port ? ", port " + x.port : "") + ", " + (x.cwd || "?") + ")"; }
+function karar(o) {
+  if (!/^[A-Za-z0-9._-]{2,60}$/.test(o.ad)) return { karar: "IHLAL", neden: "pm2 adi gecersiz ya da bos: '" + o.ad + "'" };
+  const l = listeCoz(o.jlist);
+  if (l === null) return { karar: "OLCULEMEDI", neden: "pm2 listesi (pm2 jlist) okunamadi - hangi backend'in calistigi bilinmeden kurulum yapilmaz" };
+  const b = l.map(ozet).filter(backendMi);
+  const app = yolDuz(o.app);
+  const ayniKok = (x) => app !== "" && yolDuz(x.cwd) === app;
+  const calisan = b.filter((x) => x.durum === "online");
+  if (b.some((x) => x.ad === o.ad)) {
+    const diger = calisan.filter((x) => x.ad !== o.ad && (ayniKok(x) || (o.port !== "" && x.port === o.port)));
+    if (diger.length) return { karar: "IHLAL", neden: "Sunucuda " + diger.map(tarif).join(", ") + " de calisiyor - '" + o.ad + "' ile ayni kurulumda/portta IKINCI backend. Once fazlasini durdur: pm2 delete <ad>" };
+    return { karar: "UYUMLU" };
+  }
+  if (b.length === 0) return { karar: "ILK" };
+  const kok = b.filter(ayniKok);
+  if (kok.length) return { karar: "IHLAL", neden: "Sunucuda " + kok.map(tarif).join(", ") + " kayitli - bu kurulumun backend'i; '" + o.ad + "' adiyla kurmak AYNI PORTTA IKINCI BACKEND dogurur. -UygulamaAdi " + kok[0].ad + " verin" };
+  if (calisan.length && !o.acik) return { karar: "IHLAL", neden: "Sunucuda " + calisan.map(tarif).join(", ") + " calisiyor; varsayilan ad '" + o.ad + "' onunla eslesmiyor. Bu kurulumun backend'iyse -UygulamaAdi " + calisan[0].ad + " verin; bilerek YAN YANA kurulumsa -UygulamaAdi <yeni-ad> ve farkli PORT ile kos" };
+  const cakisan = calisan.filter((x) => o.port === "" || x.port === "" || x.port === o.port);
+  if (cakisan.length) return { karar: "IHLAL", neden: "Sunucuda " + cakisan.map(tarif).join(", ") + " calisiyor ve port ayriligi yok ya da OLCULEMEDI (bu kurulum: " + (o.port || "?") + ") - '" + o.ad + "' AYNI PORTTA IKINCI BACKEND olur. Yan yana kurulum farkli PORT ister (ecosystem.config.js env.PORT)" };
+  return { karar: "YAN_YANA", neden: "pm2'de baska TeksERP backend'i var: " + b.map(tarif).join(", ") + " - '" + o.ad + "' YAN YANA kurulacak (baska kok" + (o.port ? ", port " + o.port : "") + ")" };
+}
+try {
+  const port = arg("port");
+  cik(karar({ jlist: fs.readFileSync(0, "utf8"), ad: arg("ad"), app: arg("app"), port: /^\d+$/.test(port) ? port : "", acik: arg("acik") === "1" }));
+} catch (e) {
+  cik({ karar: "OLCULEMEDI", neden: "pm2 ad olcumu dustu: " + String((e && e.message) || e) });
+}
+'@
+
+# ecosystem dosyasinin env.PORT'u (sistem Node'uyla okunur); okunamazsa "" = olculemedi.
+function EcoPortu($eco) {
+  if (-not (Test-Path $eco)) { return "" }
+  try {
+    $p = & node -e "try{const c=require(process.argv[1]);process.stdout.write(String(c.apps?.[0]?.env?.PORT??''))}catch(e){}" $eco
+    if ([string]$p -cmatch '^\d+$') { return [string]$p }
+  } catch { }
+  return ""
+}
+
+# Karar UYUMLU / ILK -> gec · YAN_YANA -> uyar · IHLAL / OLCULEMEDI / cevapsiz -> Fail.
+function Pm2AdiDogrula($port) {
+  if (-not (Test-Path $pm2)) { Fail "pm2 bulunamadi: $pm2 - once ilk-kurulum.ps1." }
+  $arac = Join-Path ([System.IO.Path]::GetTempPath()) ("tekserp-pm2-ad-" + [guid]::NewGuid().ToString("N") + ".cjs")
+  $acikArg = if ($adAcik) { "1" } else { "0" }
+  $eskiEAP = $ErrorActionPreference
+  $eskiKodlama = $OutputEncoding
+  $satirlar = @()
+  try {
+    [System.IO.File]::WriteAllText($arac, $pm2AdJs, (New-Object System.Text.UTF8Encoding $false))
+    $ErrorActionPreference = "Continue"
+    $liste = (@(& $pm2 jlist) -join "`n")
+    $OutputEncoding = New-Object System.Text.UTF8Encoding $false
+    $satirlar = @($liste | & node $arac --ad $uygulama --app $appDir --port "$port" --acik $acikArg)
+  } finally {
+    $ErrorActionPreference = $eskiEAP
+    $OutputEncoding = $eskiKodlama
+    Remove-Item -LiteralPath $arac -Force -ErrorAction SilentlyContinue
+  }
+  $r = $null
+  if ($satirlar.Count -gt 0) { try { $r = [string]$satirlar[-1] | ConvertFrom-Json } catch { $r = $null } }
+  if (-not $r) { Fail "pm2 uygulama adi OLCULEMEDI (olcum araci cevap vermedi) - hangi backend'in calistigi bilinmeden kurulum yapilmaz." }
+  $karar = [string]$r.karar
+  if ($karar -ceq "UYUMLU") { Ok "pm2: '$uygulama' bu kurulumun backend'i" }
+  elseif ($karar -ceq "ILK") { Ok "pm2: kayitli TeksERP backend'i yok - '$uygulama' ilk kez baslatilacak" }
+  elseif ($karar -ceq "YAN_YANA") { Uyar ([string]$r.neden) }
+  else { Fail "pm2 ad kapisi ($karar): $([string]$r.neden)" }
+}
+
 # --- Yonetici kontrolu ------------------------------------------------------
 $admin = (New-Object Security.Principal.WindowsPrincipal(
   [Security.Principal.WindowsIdentity]::GetCurrent())
@@ -589,6 +696,8 @@ if ($GeriAl) {
     Uyar "$($tumAdaylar.Count - $gecerli.Count) aday calistirilamaz oldugu icin ATLANDI."
   }
   $hedef = $gecerli[0].FullName
+  # pm2 ad kapisi: hicbir seye dokunmadan ONCE (port geri donulecek surumun dosyasindan).
+  Pm2AdiDogrula (EcoPortu (Join-Path $hedef "ecosystem.config.js"))
   Write-Host ""
   Write-Host "GERI ALMA: $hedef  ->  $appDir" -ForegroundColor Yellow
   if (-not $Zorla) { if ((Read-Host "Devam? (e/h)") -ne 'e') { Fail "Iptal." } }
@@ -673,6 +782,10 @@ if (Test-Path "$temp\PAKET.json") {
     Uyar "Paketin kanal kimligi pm2 adi '$($m.backendPm2Ad)', bu kurulum '$uygulama' (-UygulamaAdi). Yalniz '$uygulama' silinip baslatilir."
   }
 } else { Uyar "PAKET.json yok - eski surum paket." }
+
+# pm2 ad kapisi (hicbir seye dokunmadan once). Port [5/9]'un koruyacagi sunucu dosyasindan, yoksa paketinkinden.
+$ecoPortKaynak = if (Test-Path "$appDir\ecosystem.config.js") { "$appDir\ecosystem.config.js" } else { "$temp\ecosystem.config.js" }
+Pm2AdiDogrula (EcoPortu $ecoPortKaynak)
 
 $nmVar = Test-Path "$temp\node_modules"
 

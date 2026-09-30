@@ -26,6 +26,7 @@ const CODE_LABEL: Readonly<Record<string, string | undefined>> = {
   BUTUNLUK_HAZIRLIK_ANAHTARI: "Hazırlık imzası üretim kurulumunda geçersiz",
   BUTUNLUK_SINIF_BILINMIYOR: "Kurulum sınıfı bilinmiyor (etkinleştirme bekleniyor)",
   BUTUNLUK_FILIGRAN: "Program filigranı imzalı paketle uyuşmuyor",
+  BUTUNLUK_YUKLEYICI: "Program kod enjekte eden başlatma bayrağıyla çalışıyor (--require/--import/--inspect)",
 };
 
 function statusVariant(s: IntegrityStatus): "secondary" | "destructive" | "outline" {

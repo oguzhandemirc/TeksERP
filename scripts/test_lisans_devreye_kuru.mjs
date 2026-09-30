@@ -13,6 +13,8 @@
 //   §3 SÖZLEŞME BİRİMİ — sshDenetle/psDenetle/httpDenetle sabit vektörlerle (izin listesi sessizce gevşemesin)
 //   §4 SONDALAR (her koşumda, geçici kopyada) — NEGATİF N1…N5 kırmızı vermeli; POZİTİF P1 temiz kopya ve
 //      P2 meşru yeni salt-okuma kontrolü eklenmiş kopya YEŞİL kalmalı (kapı meşru eklemeyi engellemez)
+//   §5 deploy/vds-dogrula.sh — tek ssh, uzak komut §3'ün izin listesinden (ag.mjs sshDenetle), yerel yazım yalnız
+//      taban dizinine; sahte `ssh` ile AYNI · FARK · ÖLÇÜLEMEDİ · taban ezilmez. Sondalar N6…N10 kırmızı, P3/P4 yeşil
 //
 // Koşum: node scripts/test_lisans_devreye_kuru.mjs     (çıkış 0 yeşil · 1 kırmızı)
 // =============================================================================
@@ -183,6 +185,75 @@ const SONDALAR = [
   ['P2 meşru yeni salt-okuma kontrolü', null, [['lib/asamalar-b.mjs', "export const ASAMA_5 = [", "export const ASAMA_5 = [\n  { no: '5.0', ad: 'sonda', kos: (ag) => ag.ssh('docker ps --format \"{{.Names}}\"', { hedef: 'yayin' }), degerlendir: () => ({ sonuc: 'UYUMLU', not: '' }) },"]], true],
 ];
 
+// ---- §5 deploy/vds-dogrula.sh: VDS'e yalnız OKUMA (tek ssh, uzak komut ag.mjs izin listesinden), yerel yazım
+// yalnız taban dizinine; davranış sahte `ssh` ile (AYNI · FARK · ÖLÇÜLEMEDİ · taban ezilmez) ----
+const VDS_BETIK = path.join(KOK, 'deploy/vds-dogrula.sh');
+const kodSatirlari = (metin) => metin.split('\n').filter((x) => !/^\s*#/.test(x));
+const SAHTE_SSH = '#!/usr/bin/env bash\nprintf \'%s\\n\' "$@" > "$SAHTE_ARG"\ncat "$SAHTE_CIKTI"\nexit "${SAHTE_KOD:-0}"\n';
+
+function sahteCikti(bozuk = false) {
+  const h = (i) => (i === 7 && bozuk ? 'f' : 'a').repeat(2) + i.toString(16).padStart(62, '0');
+  const a = Array.from({ length: 320 }, (_, i) => `${h(i)}  adnansahin/electron/d${i}.bin`);
+  return [...a, '@@KOK', `${h(900)}  electron/latest.yml`, '@@DIGER', `${h(901)}  /opt/x/defter.tsv`, '@@LS', 'adnansahin', 'electron', ''].join('\n');
+}
+
+async function vdsDogrulaDenetimi(betik, tmp) {
+  const sonuc = [];
+  const ekle = (ad, ok, ayrinti = '') => sonuc.push({ ad, ok, ayrinti });
+  const { sshDenetle } = await import(path.join(HEDEF, 'lib/ag.mjs'));
+  const kod = kodSatirlari(fs.readFileSync(betik, 'utf8'));
+  const ssh = kod.filter((x) => /(^|[\s;|&(])ssh\s/.test(x));
+  ekle('§5a tek ssh çağrısı: -n BatchMode, yalnız "$SSH_HEDEF" "$UZAK"', ssh.length === 1 && /ssh -n -o BatchMode=yes -o ConnectTimeout=10 "\$SSH_HEDEF" "\$UZAK"\)/.test(ssh[0]), `${ssh.length} ssh satırı`);
+  const yasak = kod.filter((x) => /(^|[\s;|&(])(scp|rsync|sftp|curl|wget|docker|nc|rm|mv|cp|tee|chmod|chown|sudo|dd|truncate|touch)(?=\s|$)/.test(x));
+  ekle('§5b yerel yazma/ağ aracı yok (rm · mv · cp · docker · scp · curl …)', yasak.length === 0, yasak.map((x) => x.trim().slice(0, 60)).join(' | '));
+  const hedefler = kod.flatMap((x) => [...x.matchAll(/\d?>>?\s*([^\s;)]+)/g)].map((m) => m[1]));
+  const disari = hedefler.filter((h) => h !== '/dev/null' && h !== '&2' && !/^"\$TABAN\/[a-z]+\.sha"$/.test(h));
+  ekle('§5c yerel yazım yalnız taban dizinine ("$TABAN/<ad>.sha")', hedefler.length >= 3 && disari.length === 0, disari.join(' ') || `${hedefler.length} yönlendirme`);
+
+  const bin = path.join(tmp, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  fs.writeFileSync(path.join(bin, 'ssh'), SAHTE_SSH, { mode: 0o755 });
+  const argDosya = path.join(tmp, 'ssh-arg.txt');
+  const ciktiDosya = path.join(tmp, 'ssh-cikti.txt');
+  const kos = (args, { cikti = sahteCikti(), kodu = '0' } = {}) => {
+    fs.rmSync(argDosya, { force: true });
+    fs.writeFileSync(ciktiDosya, cikti);
+    const r = spawnSync('bash', [betik, ...args], { encoding: 'utf8', timeout: 30_000,
+      env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, HOME: tmp, LC_ALL: 'C', TEKSERP_VDS_TABAN: '', SAHTE_ARG: argDosya, SAHTE_CIKTI: ciktiDosya, SAHTE_KOD: kodu } });
+    return { kod: r.status, cikti: `${r.stdout}${r.stderr}`, ssh: fs.existsSync(argDosya) ? fs.readFileSync(argDosya, 'utf8').split('\n') : null };
+  };
+  const k = kos(['--komut-yaz']);
+  const uzak = k.cikti.trim();
+  let denetim = 'geçti';
+  try { sshDenetle(uzak); } catch (e) { denetim = e.message.slice(0, 120); }
+  ekle('§5d --komut-yaz: bağlanmaz, tek uzak komut ag.mjs salt-okuma izin listesinden geçer', k.kod === 0 && k.ssh === null && uzak.split('\n').length === 1 && denetim === 'geçti', `kod ${k.kod} · ssh ${k.ssh ? 'ÇAĞRILDI' : 'yok'} · ${denetim}`);
+  const taban = path.join(tmp, 'taban');
+  const y = kos([`--taban=${taban}`, '--taban-yaz']);
+  const olc = kos([`--taban=${taban}`]);
+  const sshOk = olc.ssh !== null && olc.ssh.includes('BatchMode=yes') && olc.ssh.includes('tekserp-yayin') && olc.ssh.includes(uzak);
+  ekle('§5e taban-yaz → ölç: AYNI (çıkış 0), ssh uzak komutu --komut-yaz ile birebir', y.kod === 0 && olc.kod === 0 && /AYNI/.test(olc.cikti) && sshOk, `yaz ${y.kod} · ölç ${olc.kod} · ssh arg ${sshOk ? 'uyumlu' : 'UYUMSUZ'}`);
+  const fark = kos([`--taban=${taban}`], { cikti: sahteCikti(true) });
+  ekle('§5f tek bayt farkı → FARK (çıkış 1)', fark.kod === 1 && /FARK: html\/adnansahin/.test(fark.cikti), `çıkış ${fark.kod}`);
+  const once = fs.readFileSync(path.join(taban, 'adnansahin.sha'), 'utf8');
+  const ez = kos([`--taban=${taban}`, '--taban-yaz'], { cikti: sahteCikti(true) });
+  const yok = kos([`--taban=${path.join(tmp, 'yok')}`]);
+  const kopuk = kos([`--taban=${taban}`], { kodu: '255' });
+  const az = kos([`--taban=${taban}`], { cikti: '@@KOK\n@@DIGER\n@@LS\n' });
+  ekle('§5g ÖLÇÜLEMEDİ (çıkış 2): taban ezilmez · taban yok · ssh kopuk · az dosya', ez.kod === 2 && fs.readFileSync(path.join(taban, 'adnansahin.sha'), 'utf8') === once && yok.kod === 2 && kopuk.kod === 2 && az.kod === 2,
+    `ez ${ez.kod} · yok ${yok.kod} · kopuk ${kopuk.kod} · az ${az.kod}`);
+  return sonuc;
+}
+
+const VDS_SONDALAR = [
+  ['N6 uzak komutta silme', '§5d', [["ls -1 $K/html $K/defter\"", "ls -1 $K/html $K/defter; rm -f $K/html/x\""]], false],
+  ['N7 uzak komutta docker', '§5d', [["echo '@@LS';", "docker restart traefik; echo '@@LS';"]], false],
+  ['N8 ikinci ssh (yazan)', '§5a', [['rc=0\n', 'rc=0\nssh -n "$SSH_HEDEF" "touch /tmp/x"\n']], false],
+  ['N9 taban dışına yerel yazım', '§5c', [['rc=0\n', 'rc=0\nprintf x > "$HOME/vds-iz"\n']], false],
+  ['N10 var olan taban ezilir', '§5g', [['[ -e "$TABAN/$f" ] && {', '[ -e "$TABAN/$f" ] && false && {']], false],
+  ['P3 temiz kopya', null, [], true],
+  ['P4 meşru salt-okuma ekleme (uzak komuta ls)', null, [["ls -1 $K/html $K/defter\"", "ls -1 $K/html $K/defter; ls -1 $K/nginx\""]], true],
+];
+
 async function main() {
   console.log('── §1 statik');
   for (const x of statikDenetim(HEDEF)) yaz(x.ok, x.ad, x.ok ? '' : x.ayrinti);
@@ -200,7 +271,24 @@ async function main() {
     const ok = yesilBeklenir ? kotu.length === 0 : kotu.some((x) => x.ad.startsWith(beklenenKirmizi));
     yaz(ok, `${ad} → ${yesilBeklenir ? 'YEŞİL' : `KIRMIZI (${beklenenKirmizi})`} beklenir`, `kırmızı ${kotu.length}${kotu.length ? `: ${kotu.map((x) => x.ad.slice(0, 40)).join(' | ')}` : ''}`);
   }
-  console.log(`\n${kirmizi === 0 ? '✅ YEŞİL' : `❌ ${kirmizi} kırmızı`} · ${negatif} negatif + ${SONDALAR.length - negatif} pozitif sonda`);
+  console.log('── §5 deploy/vds-dogrula.sh (VDS salt okuma · sahte ssh)');
+  for (const x of await vdsDogrulaDenetimi(VDS_BETIK, path.join(TMP, 'vds-asil'))) yaz(x.ok, x.ad, x.ayrinti);
+  for (const [ad, beklenenKirmizi, degistir, yesilBeklenir] of VDS_SONDALAR) {
+    const d = path.join(TMP, `vds-${ad.split(' ')[0]}`);
+    fs.mkdirSync(d, { recursive: true });
+    let k = fs.readFileSync(VDS_BETIK, 'utf8');
+    for (const [eski, yeni] of degistir) {
+      if (!k.includes(eski)) throw new Error(`sonda ${ad}: '${eski.slice(0, 40)}' vds-dogrula.sh'ta yok — sonda uygulanamadı`);
+      k = k.replace(eski, () => yeni);
+    }
+    fs.writeFileSync(path.join(d, 'vds-dogrula.sh'), k);
+    const kotu = (await vdsDogrulaDenetimi(path.join(d, 'vds-dogrula.sh'), path.join(d, 'tmp'))).filter((x) => !x.ok);
+    if (!yesilBeklenir) negatif += 1;
+    const ok = yesilBeklenir ? kotu.length === 0 : kotu.some((x) => x.ad.startsWith(beklenenKirmizi));
+    yaz(ok, `${ad} → ${yesilBeklenir ? 'YEŞİL' : `KIRMIZI (${beklenenKirmizi})`} beklenir`, `kırmızı ${kotu.length}${kotu.length ? `: ${kotu.map((x) => x.ad.slice(0, 40)).join(' | ')}` : ''}`);
+  }
+  const toplam = SONDALAR.length + VDS_SONDALAR.length;
+  console.log(`\n${kirmizi === 0 ? '✅ YEŞİL' : `❌ ${kirmizi} kırmızı`} · ${negatif} negatif + ${toplam - negatif} pozitif sonda`);
   fs.rmSync(TMP, { recursive: true, force: true });
   return kirmizi === 0 ? 0 : 1;
 }

@@ -1,6 +1,8 @@
 // Aşama doğrulayıcı ve T4 gözleminin ortak parçaları: üç sonuçlu değerlendirme ve ölçüm çıktısı ayrıştırıcıları.
 // Üç sonuç ayrıdır — "araç yok/erişilemedi" (OLCULEMEDI) "uyumsuz" (IHLAL) sayılmaz, "uyumlu" da sayılmaz.
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { evYolu } from './ag.mjs';
 
 export const U = 'UYUMLU';
@@ -13,11 +15,17 @@ export const VARSAYILAN = Object.freeze({
   tpKok: 'http://100.70.47.46:4000',
   portalKok: 'http://127.0.0.1:14611',
   kanal: 'testfabrika',
-  wtKok: '/Users/demirci/Documents/Projeler/Teks-Erp-wt',
+  /** vds-dogrula tabanı: sahaya özgü veri, repo DIŞI (betiğin varsayılanıyla aynı; `--vds-taban=` ezer). */
+  vdsTaban: '~/.tekserp/vds-taban',
   traefikBaslangic: '2026-09-01T09:47:37',
 });
 export const SATICI_KONTEYNER = 'tekserp-satici-hazirlik';
 export const GUNCELLEME_KOK = '/opt/stack/apps/tekserp-guncelleme';
+/** Repodaki VDS salt-okuma betiği (deploy/vds-dogrula.sh) ve üç taban dosyası. */
+export const VDS_DOGRULA = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../vds-dogrula.sh');
+export const VDS_TABAN_DOSYALARI = Object.freeze(['adnansahin.sha', 'kok.sha', 'diger.sha']);
+/** vds-dogrula koşumu: taban dizini açıkça verilir (betiğin ortam varsayılanına güvenilmez). */
+export const vdsDogrulaKos = (ag, g) => ag.yerelBetik(VDS_DOGRULA, [`--taban=${evYolu(g.vdsTaban)}`]);
 
 /** Birden çok sonucun en kötüsü: IHLAL > OLCULEMEDI > UYUMLU. */
 export function birlestir(sonuclar) {
