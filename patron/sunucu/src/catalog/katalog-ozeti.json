@@ -472,6 +472,13 @@
       "permissions": [
         "bulut:ozet:oku"
       ]
+    },
+    {
+      "name": "tesis",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:oturum"
+      ]
     }
   ],
   "PROJECTION_PERMISSIONS": {
@@ -630,6 +637,9 @@
     ],
     "saglik": [
       "bulut:ozet:oku"
+    ],
+    "tesis": [
+      "bulut:oturum"
     ]
   },
   "REPORT_FAMILY_PERMISSION": {

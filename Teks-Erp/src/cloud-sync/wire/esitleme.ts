@@ -303,7 +303,7 @@ const ShortText = (max: number) => z.string().trim().min(1).max(max);
 export const OrderMessageSchema = z.strictObject({
   cariKartId: Uuid,
   subeId: Uuid.optional(),
-  /** Takvim günü (fabrika günü, Europe/Istanbul) — saat taşımaz. */
+  /** Takvim günü (fabrika günü, tesisin saat dilimi — ANLIK `tesis.saatDilimi`) — saat taşımaz. */
   termin: z.iso.date().optional(),
   doviz: z.string().regex(/^[A-Z]{3}$/),
   kalemler: z
