@@ -427,6 +427,15 @@ Traefik hiçbir geri almada yeniden başlatılmaz; kenar ağı satırı yerinde 
 - **Duruldu:** kurulum tekrar denenmedi. Bırakılan: `C:\ProgramData\testfabrika\klis2` (imzalı zip dahil) · `C:\TeksERP\app.basarisiz-20260930_050608` · `.env`deki `LICENSE_SERVER_URL` satırı. 4.4 ayrıca belirteç dosyası ister (ölçüm hesabı henüz yok).
 - **Araç notları:** WMI `Win32_Process.Create` Store `pwsh` diğer adını (rv 8) ve gerçek `WindowsApps` yolunu (rv 2) başlatamıyor — WMI ile `powershell.exe` 5.1 önyükleyici açılır, o `pwsh` diğer adını çağırır. `tp.sh` 5.1 oturumu `Restricted`: betik `Set-ExecutionPolicy -Scope Process Bypass` ile başlar. `uzaktan-kos.ps1` görev bittikten sonra SSH üzerinden çıkmadı (iki kez); görev kaydı elle silindi.
 
+## 10f. Uygulama kaydı — 2026-09-30 (O6: sır hijyeni — thinkpad-1 `tekserp` rol parolası döndürüldü)
+
+- **Neden:** O2'de uygulama rolünün parolası bir ajanın araç çıktısına düştü (yalnız yerel transcript; repo/log/argv'ye girmedi) → parola döndürüldü. `JWT_SECRET` ve `tekserp_bakim` DÖNMEDİ (kapsam dışı; oturumlar düşmedi).
+- **Kalıp:** thinkpad-1 Faz 0 P4b. Yeni parola Mac'te üretildi (32 alfasayısal); SCRAM doğrulayıcısı Mac'te hesaplandı; doğrulayıcı, düz parola ve `postgres` parolası `ssh` stdin'inden gitti (`tp.sh`in `-n`'siz eşi, aynı kimlik kapısı). `ALTER ROLE tekserp PASSWORD '<doğrulayıcı>'` `log_statement='none'` ile koşuldu. Geri alma için `pg_authid`teki eski doğrulayıcı bellekte tutuldu.
+- **Parolayı taşıyan yerler (ölçüldü, önce/sonra aynı küme):** `app\.env` ve dört `app.eski-*\.env` (`kur.ps1 -GeriAl` onları geri koyar) `DATABASE_URL` · `pg-setup\db-credentials.json` `pass` (`yedekle.ps1` + `kur.ps1`). ecosystem ve `dump.pm2`de `DATABASE_URL` yok → `pm2 restart` `.env`i okur, `pm2 save` gerekmez.
+- **Doğrulama:** yeni parolayla giriş OK, eski RED · dosyalarda ACL aynı, BOM yok · `pm2 restart` 10 sn, daemon PID'i aynı, uygulama `runtime\node.exe` · `/health` UP/UP `2.12.0-prova.05b962e` · `backend-err`de kimlik hatası 0 · lisans `yoklama zamanlayıcısı aktif` (restart'tan ~2 dk sonra) · `TeksERP-DB-Backup` (SYSTEM, günlük 03:00) elle tetiklendi, sonuç 0, `OK … .dump.tkenc (dogrulandi, sifreli)`.
+- **Eski değer taraması (değer basılmadan, 25.982 dosya; `C:\TeksERP` · `C:\ProgramData\{testfabrika,teksacl}` · kullanıcı klasörleri):** önce 6 dosya, sonra **0**. Yeni değer yalnız yukarıdaki 6 dosyada. Geçici yedekler (`teksacl\o6-*`) doğrulamadan sonra silindi. Mac'te değer yalnız `~/.tekserp/sirlar/thinkpad-1-tekserp.txt`te (600). Son 75 dakikanın olay günlüklerinde (Application · PowerShell Operational · Windows PowerShell · OpenSSH · System; 4.617 olay) eski ve yeni değer 0 kez geçiyor; PostgreSQL olaylarında `ALTER ROLE`/`PASSWORD` metni de 0.
+- **Ders:** PowerShell değişken adları büyük/küçük harf duyarsızdır. Betikte `$y` (giriş sonucu) `$Y`yi (yedek dizini) ezdi, bu yüzden geri alma yolu yedek dizinini kaybederdi. Tetiklenmedi. Rotasyon betiklerinde yalnız harf büyüklüğüyle ayrılan iki ad kullanılmaz.
+
 ## 11. A2 önkoşul borçları (ölçüldü 2026-09-30 · G1–G3 + G5 iniş A2 I7'de KAPANDI)
 
 | # | Borç | Etki | Durum |
