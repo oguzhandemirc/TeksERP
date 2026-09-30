@@ -1,7 +1,7 @@
 # Güncelleyici (Dağıtım v2) — backend Windows hizmeti · Rust güncelleyici · yerel sözleşme
 
 > **Durum:** 2026-09-30, program "Dağıtım v2" (W1). Kullanıcı kararları: güncelleyici BAŞTAN TAMAMEN Rust (uygulama adımında `kur.ps1`/PowerShell YOK) · backend pm2 yerine Windows hizmeti · kendi PostgreSQL örneği · güncelleme politikası kurulum başına (OTOMATİK · ONAYLI · DONDUR).
-> **Bölüm sahipliği:** §1–§3 (manifest biçimi · kira `guncelleme` alanı · yayın hattı) **D1**'indir; §4–§13 (fabrika sunucusundaki YEREL sözleşme: dizinler · hizmetler · IPC · güven · durum makinesi · adımlar) **D2**'nindir. Birleştirmede iki dalın bu dosyası üst üste konur: D1'in §1–§3'ü + bu dalın §4–§13'ü.
+> **Bölüm sahipliği:** §1–§3 (manifest biçimi · kira `guncelleme` alanı · yayın hattı) **D1**'indir; §4–§13 (fabrika sunucusundaki YEREL sözleşme: dizinler · hizmetler · IPC · güven · durum makinesi · adımlar) **D2**'nindir; dizin/ortam adları ve güvenilmez dizin kuralı D3 (`hizmet-duzeni.ts`) ile, PG düzeni D4 (`KENDI-POSTGRESQL.md`) ile hizalıdır. Birleştirmede iki dalın bu dosyası üst üste konur: D1'in §1–§3'ü + bu dalın §4–§13'ü.
 > **Kod:** `Teks-Erp/native/` Cargo çalışma alanı — `tekserp-dogrulama` (ORTAK doğrulama: lisans çekirdeği ile güncelleyici aynı kodu bağlar) · `tekserp-guncelleyici` (hizmet: `TeksERP-Guncelleyici`) · `tekserp-hizmet` (backend hizmet konağı: `TeksERP-Backend`) · `lisans-cekirdek` (napi `.node`, davranışı değişmedi).
 
 ## §1–§3 — D1 (manifest · kira `guncelleme` · yayın hattı)
@@ -12,67 +12,63 @@
 
 ### §4.1 Dizin düzeni
 
-Kök `<KOK>` kuruluma özgüdür (varsayılan `C:\TeksERP`; SAHINSRV bugün `C:\Etkili-Yazilim`) — hiçbir ikili kökü koda gömmez, iki hizmet de `--kok <KOK>` argümanıyla kurulur (§4.2).
+Kök `<KOK>` kuruluma özgüdür (varsayılan `C:\TeksERP`; SAHINSRV bugün `C:\Etkili-Yazilim`) — hiçbir ikili kökü koda gömmez, iki hizmet de `--kok <KOK>` argümanıyla kurulur (§4.2). Dizin adları backend'in `hizmet-duzeni.ts` `SERVICE_DIRS`iyle AYNIDIR (D3, dal `dagitim/d3-hizmet`; Rust tarafı `tekserp-hizmet/src/contract.rs`).
 
 | Yol | İçerik | Yazan | Not |
 |---|---|---|---|
 | `<KOK>\surumler\<surum>\` | Backend paketinin AÇILMIŞ hâli (zip kökü = bu dizin): `dist\` · `runtime\node.exe` · `runtime\tekserp-hizmet.exe` · `runtime\tekserp-guncelleyici.exe` · `native\` · `node_modules\` · `prisma\` · `public\` · `assets\` · `package.json` · `butunluk.jws` · `butunluk-liste.txt` · `PAKET.json` | yalnız güncelleyici | Açıldıktan sonra DEĞİŞMEZ; imzalı kapsamın içine dosya eklenmez (bütünlük `FAZLA` verir). |
-| `<KOK>\surumler\.hazirlik-<surum>\` | Açılmakta olan sürüm | güncelleyici | Bütünlük GEÇERLİ olunca `surumler\<surum>`e yeniden adlandırılır; yarım kalanı açılışta silinir. |
+| `<KOK>\surumler\.hazirlik-<surum>\` | Açılmakta olan sürüm | güncelleyici | Bütünlük GEÇERLİ olunca `surumler\<surum>`e yeniden adlandırılır; yarım kalanı sonraki tur siler. |
 | `<KOK>\current` | **Dizin bağlantısı (junction)** → `surumler\<surum>` | yalnız güncelleyici | Backend hizmeti YALNIZ bu yoldan koşar. Backend DURMUŞKEN değiştirilir. |
-| `<KOK>\ayar\backend.env` | Backend ortamı (`KEY=VALUE`; bugünkü `app\.env` + ecosystem `env` bloğunun birleşimi) | kurulum (D5) · geçiş (D6) · yönetici | Sır taşır. Konak okur ve node'a ortam olarak verir; güncelleyici `DATABASE_URL` · `PORT` · `BACKUP_KEY_DIR` · `PG_BIN_DIR` · `LICENSE_DIR` okur. Sürüm dizinine `.env` KONMAZ. |
-| `<KOK>\guncelleyici\` | `tekserp-guncelleyici.exe` (+ kendini güncellemede `.yeni.exe` / `.eski.exe`) · `ayar.json` | kurulum · güncelleyici | Hizmetin ImagePath'i buradadır (`current`in DIŞINDA — geri dönüş güncelleyiciyi değiştirmez). |
-| `<KOK>\lisans\` | `LICENSE_DIR` (kira, HAK, kurulum anahtarı, `durum.json`) | backend | Güncelleyici YALNIZ OKUR (kira + kök zinciri, §6.2). |
-| `<KOK>\veri\` | Backend'in yazdığı kalıcı dosyalar (yükleme, belge önbelleği…) | backend | |
-| `<KOK>\gunluk\backend\` | Konağın yakaladığı node stdout/stderr (`backend.log`, 10 × 20 MB döner) + `hizmet.log` | konak (backend hesabı) | |
-| `<KOK>\gunluk\guncelleyici\` | `guncelleyici.log` (10 × 10 MB döner) | güncelleyici | |
-| `<KOK>\yedek\` | Gece yedekleri (bugünkü `backups\`; geçiş D6) | backend / zamanlanmış görev | |
-| `<KOK>\yedek\guncelleme\<islemId>\` | Güncelleme öncesi şifreli yedek `db.dump.tkenc` | güncelleyici | Son 3 işlemin yedeği tutulur; daha eskisi silinir (yalnız bu dizin). |
-| `<KOK>\yedek-anahtar\` | `*.tkpub` alıcılar (+ `yerel.tkkey`) — bugünkü düzen; `BACKUP_KEY_DIR` varsa o | kurulum | Güncelleyici yalnız `*.tkpub` okur. |
+| `<KOK>\yapilandirma\.env` | Backend ortamı (bugünkü `app\.env` + ecosystem `env` bloğu; D6 taşır) | kurulum (D5) · geçiş (D6) · yönetici | Sır. Backend kendisi okur (`TEKSERP_KOK` → `resolveEnvFilePath`); konak OKUMAZ; güncelleyici yalnız `DATABASE_URL` · `PORT` · `BACKUP_*` · `PG_BIN_DIR` · `LICENSE_DIR` için okur (§6.5). |
+| `<KOK>\guncelleyici\` | `tekserp-guncelleyici.exe` (+ kendini güncellemede `.yeni.exe` / `.eski.exe`) · `ayar.json` · `gunluk\guncelleyici.log` | kurulum · güncelleyici | Hizmetin ImagePath'i buradadır (`current`in DIŞINDA — geri dönüş güncelleyiciyi değiştirmez). Günlük BURADA: backend'in yazabildiği `logs\` altında olsaydı önceden konan bir bağlantı SYSTEM'in yazısını yönlendirebilirdi. |
+| `<KOK>\lisans\` | `LICENSE_DIR` (kira, HAK, kurulum anahtarı, `durum.json`) | backend | Güncelleyici YALNIZ OKUR, güvenilmez girdi olarak (§6.5). |
+| `<KOK>\logs\` | Konak: `backend-out.log` · `backend-err.log` (satır başı yerel saat + ofset, 10 MB × 14, eskiler gzip) · `hizmet.log` | konak (backend hesabı) | D3 düzeni. |
+| `<KOK>\backups\` | Gece yedekleri (SYSTEM görevi `yedekle.ps1`, D3/D5) | zamanlanmış görev | Güncelleme öncesi yedek burada DEĞİL (aşağıda `is\yedek\`). |
+| `<KOK>\yedek-anahtar\` | `*.tkpub` alıcılar (+ `yerel.tkkey`) — `BACKUP_KEY_DIR` varsa o | kurulum | Güncelleyici yalnız `*.tkpub` okur. |
+| `<KOK>\veri\` · `mobil-guncelleme\` · `rclone\` · `pg-setup\` | D3 `SERVICE_DIRS` | backend / kurulum | Güncelleyici dokunmaz. |
 | `<KOK>\pgsql\<surum>-<derleme>\` | PostgreSQL ikilileri, sürüm başına YAN YANA (D4 `KENDI-POSTGRESQL.md` §0) — ör. `pgsql\16.15-4` | kurulum · güncelleyici | Bir önceki sürüm geri dönüş için kalır, daha eskisi silinir (D4 §5 U11). |
 | `<KOK>\pgsql\bin` | **junction** → etkin sürümün `bin`'i | kurulum · güncelleyici | `PG_BIN_DIR` bu yoldur; yedekleme, bakım betikleri ve backend bu yolu okur — sözleşme KORUNUR (D4). |
 | `<KOK>\pgsql\ornek.json` | Örnek kaydı (D4 §6): `{bicim, kip: kendi\|harici, hizmet, surum, derleme, ikiliDizin, oncekiIkiliDizin, veriDizini, port, kuruldu, guncellendi}` | kurulum · güncelleyici (SYSTEM/Administrators) | `kip: harici` ⇒ güncelleyici PG'ye HİÇ dokunmaz (§9). |
 | `<KOK>\pgveri\` | `PGDATA` (D4; başka sabit NTFS sürücü seçilebilir — yol `ornek.json`da) | PG hizmeti | Güncelleyici veri dizinine DOKUNMAZ (küçük sürüm aynı disk biçimi). |
-| `<KOK>\kurulum-gecmisi.jsonl` | Kurulum/geri alma kayıtları (`InstallRecordSchema`, `dirname(LICENSE_DIR)`) | güncelleyici | Backend son 10 satırı yoklamada satıcıya taşır — biçim bugünkü `kur.ps1` ile BİREBİR (§8.8). |
-| `%ProgramData%\TeksERP\guncelleme\niyet\niyet.json` | NİYET (§5.1) | backend | |
+| `<KOK>\kurulum-gecmisi.jsonl` | Kurulum/geri alma kayıtları (`InstallRecordSchema`, `dirname(LICENSE_DIR)`) | güncelleyici | Backend son 10 satırı yoklamada satıcıya taşır — biçim bugünkü `kur.ps1` ile BİREBİR (§8.8). Dosya bir bağlantıysa YAZILMAZ. |
+| `%ProgramData%\TeksERP\guncelleme\niyet\niyet.json` | NİYET (§5.1) | backend | Güncelleyici bu dizinde hiçbir şeyi yazmaz/silmez. |
 | `%ProgramData%\TeksERP\guncelleme\durum\durum.json` · `gecmis.jsonl` | DURUM (§5.2) · işlem geçmişi (§5.3) | güncelleyici | |
-| `%ProgramData%\TeksERP\guncelleme\is\` | Güncelleyicinin özel alanı: işlem günlüğü `islem.jsonl`, indirmeler, doğrulanmış manifest, geçici yedek anahtarı (DPAPI) | güncelleyici | Backend hesabına KAPALI. |
+| `%ProgramData%\TeksERP\guncelleme\is\` | Güncelleyicinin ÖZEL alanı: işlem günlüğü `islem.jsonl`, `indirme\`, `manifest\`, `hazir\`, `anahtar\<islemId>\` (geçici yedek anahtarı, DPAPI), **`yedek\<islemId>\`** (güncelleme öncesi şifreli yedek) | güncelleyici | Backend ERİŞEMEZ: güncelleyici her turda korumalı DACL'i (SYSTEM + Administrators, miras kesik) KENDİSİ uygular; `is\` ya da üstü bağlantıysa hiçbir şey yapmaz (fail-closed). |
 
-`<KOK>\current` junction'dır, sembolik bağ değildir: yerel ve ayrıcalık istemez. Backend'in çalışma dizini `<KOK>\current` (ÇÖZÜLMEMİŞ yol) — `LICENSE_DIR`/`MOBILE_UPDATE_DIR` varsayılanları `cwd\..` üzerinden `<KOK>`e iner; `backend.env` bu dizinleri ayrıca açık verir. ⚠ Node ana modülün yolunu ÇÖZER: `__dirname` = `surumler\<surum>\dist` — `__dirname`den iki üst dizine çıkan kod `surumler\` altına düşer (D3 tarar).
+Konak açılışta `<KOK>\current`i ÇÖZER (bağlantı `<KOK>\surumler\<ad>` dışını gösteriyorsa node başlatılmaz, çıkış 14): çalışma dizini SÜRÜM dizinidir; backend bütün yollarını `TEKSERP_KOK`tan türetir (D3), `cwd\..` varsayımı yoktur.
 
 ### §4.2 Hizmetler (SCM)
 
 | Hizmet | İkili (ImagePath) | Hesap | Başlatma | Bağımlılık | Kurtarma |
 |---|---|---|---|---|---|
 | `TeksERP-PostgreSQL` | `<KOK>\pgsql\<surum>-<derleme>\bin\pg_ctl.exe runservice -N TeksERP-PostgreSQL -D "<PGDATA>" -w` (D4 §4.9; küçük sürümde güncelleyici sürüm dizinini değiştirir) | `NT SERVICE\TeksERP-PostgreSQL` | otomatik | — | 60 sn · 60 sn · 300 sn (D4) |
-| `TeksERP-Backend` | `"<KOK>\current\runtime\tekserp-hizmet.exe" hizmet --kok "<KOK>"` | `NT SERVICE\TeksERP-Backend` (sanal hesap, parolasız) | otomatik (gecikmeli) | `TeksERP-PostgreSQL` | 5 sn · 15 sn · 60 sn sonra yeniden başlat; sayaç 1 günde sıfırlanır; çökmesiz hata çıkışında da uygulanır |
-| `TeksERP-Guncelleyici` | `"<KOK>\guncelleyici\tekserp-guncelleyici.exe" hizmet --kok "<KOK>"` | `LocalSystem` | otomatik (gecikmeli) | — | 10 sn · 30 sn · 60 sn; çökmesiz hata çıkışında da |
+| `TeksERP-Backend` | `"<KOK>\current\runtime\tekserp-hizmet.exe" hizmet --kok "<KOK>"` | `NT SERVICE\TeksERP-Backend` (sanal hesap, parolasız; SID türü unrestricted; ayrıcalıklar YALNIZ `SeChangeNotifyPrivilege` + `SeCreateGlobalPrivilege` — SeImpersonate düşer, D3) | gecikmeli otomatik | `TeksERP-PostgreSQL` (varsa; harici PG'de `--pg-hizmeti <ad>`) | 5 sn · 5 sn · 30 sn; sayaç 1 günde sıfırlanır; çökmesiz hata çıkışında da (D3) |
+| `TeksERP-Guncelleyici` | `"<KOK>\guncelleyici\tekserp-guncelleyici.exe" hizmet --kok "<KOK>"` | `LocalSystem` | gecikmeli otomatik | — | 10 sn · 30 sn · 60 sn; çökmesiz hata çıkışında da |
 
-- Kayıt TEK YERDE, ikililerin kendi alt komutuyla: `tekserp-hizmet.exe hizmet-kur --kok <KOK>` · `tekserp-guncelleyici.exe hizmet-kur --kok <KOK>` (ve `hizmet-kaldir`). Kurulum (D5), geçiş (D6) ve CI dumanı bu komutları çağırır; `sc.exe create` elle YAZILMAZ — hesap, bağımlılık, kurtarma ve olay günlüğü kaynağı (§11) tek kaynaktan gelsin.
-- Backend ImagePath'i `current` ÜZERİNDENDİR: konak sürümle birlikte gelir, geri dönüşte eskisine döner; ayrı bir kendini güncelleme yolu yoktur.
-- "Tek backend süreci" kuralı: konak node'u bir **Windows iş nesnesine** (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) koyar — konak ölürse node da ölür; SCM yeniden başlattığında yetim node portu tutmaz.
+- Kayıt ikililerin kendi alt komutuyla, TEK kaynaktan: `tekserp-hizmet.exe hizmet-kur --kok <KOK> [--pg-hizmeti <ad> | --pg-yok]` · `tekserp-guncelleyici.exe hizmet-kur --kok <KOK>` (ve `hizmet-kaldir`). Hesap, SID türü, ayrıcalıklar, bağımlılık, kurtarma, açıklama ve olay günlüğü kaynağı buradan gelir; D3'ün `deploy/hizmet/backend-hizmeti.ps1`i dizin İZİNLERİNİ uygular ve kayıt için bu komutu çağırır (iki yerde kayıt yazılmaz — ayrışma riski).
+- Konak `current` ÜZERİNDEN koşar (`<KOK>\hizmet\` KULLANILMAZ): konak sürümle birlikte imzalı gelir, geri dönüşte eskisine döner; ayrı bir kendini güncelleme yolu yoktur.
+- "Tek backend süreci": konak KENDİNİ `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` işine koyar, node işe kendiliğinden girer — konak ölürse node da ölür; SCM yeniden başlattığında yetim node portu tutmaz. Güncelleyici de kendini ve araç çocuklarını aynı yolla bağlar (yarım `pg_dump`/`migrate` yaşamaz); her aracın ağacı ayrıca kendi işinde (zaman aşımında bütün ağaç sonlanır).
 
-### §4.3 Backend hizmet konağı (`tekserp-hizmet`) sözleşmesi
+### §4.3 Backend hizmet konağı (`tekserp-hizmet`) sözleşmesi — D3 ile kesinleşti
 
-- **Başlatma:** `<KOK>\ayar\backend.env` okunur (yoksa ya da biçimsizse node BAŞLATILMAZ, çıkış 12). Ortam = sistem ortamı + `backend.env` + sabitler: `NODE_ENV=production` · `TEKSERP_KOK=<KOK>` · `TEKSERP_HIZMET_KONAGI=1`. Süreç: `<KOK>\current\runtime\node.exe dist\server.js`, çalışma dizini `<KOK>\current`, stdin = boru, stdout/stderr → `gunluk\backend\backend.log` (döner). Ortam DEĞERLERİ hiçbir günlüğe yazılmaz (yalnız anahtar adları).
-- **Doğrulama kipi:** hizmet `--dogrulama` başlatma argümanıyla başlatılırsa (güncelleyici §8.6'da böyle başlatır) ortama `HOST=127.0.0.1` ve `TEKSERP_DOGRULAMA_KIPI=1` eklenir. **D3:** bu kipte backend yalnız döngü arayüzünde dinler, arka plan işlerini (bulut eşitleme, zamanlanmış yedek, mDNS keşfi, dış yoklama) BAŞLATMAZ — geri dönüşte DB yedekten geri yüklenebilsin diye istemci yazısı kabul edilmez.
-- **Durdurma:** SCM `STOP`/`SHUTDOWN`/`PRESHUTDOWN` → konak node'un stdin'ine `kapat\n` yazar ve stdin'i kapatır; 25 sn bekler (SCM'e `STOP_PENDING` + bekleme ipucu bildirir); süre dolarsa iş nesnesini sonlandırır. **D3:** `TEKSERP_HIZMET_KONAGI=1` iken backend stdin'de `kapat` satırı ya da EOF görünce bugünkü düzgün kapanış yolunu (pm2 `shutdown` mesajının yaptığı) koşar ve 0 ile çıkar.
-- **Çıkış kodları (hizmete özgü, SCM kurtarmasını tetikler):** `0` istenen durdurma · `10` node beklenmedik çıktı (çökme) · `11` node başlatılamadı (`runtime\node.exe` ya da `dist\server.js` yok) · `12` ortam dosyası yok/biçimsiz · `13` iş nesnesi kurulamadı. Node'un kendi kodu (ör. korumalı yükleyicinin `78`i) `hizmet.log`a ve olay günlüğüne yazılır.
+- **Başlatma:** `<KOK>\current` çözülür → `<sürüm>\runtime\node.exe <sürüm>\dist\server.js`, çalışma dizini `<sürüm>`. `<KOK>\yapilandirma\.env` yoksa node BAŞLATILMAZ (çıkış 12; konak dosyayı OKUMAZ, yalnız varlığını ölçer). Ortam = hizmet ortamı + `TEKSERP_KOK=<KOK>` · `TEKSERP_HIZMET_ADI=TeksERP-Backend` · `TEKSERP_KAPANIS=stdin` · `NODE_ENV=production` · `NODE_USE_SYSTEM_CA=1` (Node açılışta okur, `.env`den gelirse etkisiz); **`NODE_OPTIONS` SİLİNİR** (yükleyici enjeksiyonu). stdin = boru; stdout → `logs\backend-out.log`, stderr → `logs\backend-err.log` (satır başı RFC 3339 yerel saat + ofset, ms; 10 MB × 14, eskiler gzip; yazım hatası çocuğu bloklamaz — satır düşer, sayılır). Ortam DEĞERİ günlüğe yazılmaz (yalnız anahtar adları).
+- **Doğrulama kipi:** hizmet `--dogrulama` başlatma argümanıyla başlatılırsa (güncelleyici §8.6'da böyle başlatır) ortama `HOST=127.0.0.1` ve `TEKSERP_DOGRULAMA_KIPI=1` eklenir (`.env` bunları ezmez: dotenv var olanı değiştirmez). **D3 (açık):** bu kipte backend arka plan işlerini (bulut eşitleme, zamanlanmış yedek, mDNS keşfi, dış yoklama) BAŞLATMAZ — geri dönüşte DB yedekten geri yüklenebilsin diye istemci yazısı kabul edilmez.
+- **Durdurma:** SCM `STOP`/`PRESHUTDOWN` → stdin'e `kapat\n` + boru kapanır; backend `gracefulShutdown` yolunu koşar (D3: ≤ 5,3 sn); konak 15 sn bekler (SCM'e `STOP_PENDING` + bekleme ipucu), çıkmazsa sonlandırır.
+- **Çıkış kodları (hizmete özgü, SCM kurtarmasını tetikler; konak döngü KURMAZ):** `0` istenen durdurma · `10` node beklenmedik çıktı · `11` node başlatılamadı (`runtime\node.exe`/`dist\server.js` yok) · `12` `.env` yok · `13` iş nesnesi kurulamadı · `14` `current` çözülemedi ya da sürümler dışını gösteriyor. Node'un kendi kodu (ör. korumalı yükleyicinin `78`i) `logs\hizmet.log`a ve olay günlüğüne yazılır.
 
-### §4.4 Erişim denetimi (ACL) — D3 uygular
+### §4.4 Erişim denetimi (ACL) ve güvenilmez dizinler — D3 uygular
 
-| Yol | SYSTEM · Administrators | `NT SERVICE\TeksERP-Backend` | Diğer |
-|---|---|---|---|
-| `surumler\` (+ `current` üzerinden) | Tam | Okuma + Yürütme | — |
-| `guncelleyici\` | Tam | — | — |
-| `ayar\` · `ayar\backend.env` | Tam | Okuma | — |
-| `lisans\` · `veri\` · `gunluk\backend\` · `yedek\` (gece yedeği backend'in işiyse) · `mobil-guncelleme\` | Tam | Değiştirme | — |
-| `gunluk\guncelleyici\` · `yedek\guncelleme\` | Tam | — | — |
-| `%ProgramData%\TeksERP\guncelleme\niyet\` | Tam | Değiştirme | — |
-| `%ProgramData%\TeksERP\guncelleme\durum\` | Tam | Okuma | — |
-| `%ProgramData%\TeksERP\guncelleme\is\` | Tam | — | — |
-| `pgsql\` · `pgveri\` | D4 | — | — |
+| Yol | SYSTEM · Administrators | `NT SERVICE\TeksERP-Backend` |
+|---|---|---|
+| `<KOK>` (kök) · `surumler\` (+ `current` üzerinden) · `mobil-guncelleme\` · `rclone\` | Tam | Okuma + Yürütme |
+| `yapilandirma\` · `yedek-anahtar\` | Tam | Okuma |
+| `lisans\` · `backups\` · `logs\` · `veri\` | Tam | Değiştirme |
+| `guncelleyici\` · `pg-setup\` · `pgsql\` · `pgveri\` | Tam (PG dizinleri D4) | — |
+| `%ProgramData%\TeksERP\guncelleme\niyet\` | Tam | Değiştirme |
+| `%ProgramData%\TeksERP\guncelleme\durum\` | Tam | Okuma |
+| `%ProgramData%\TeksERP\guncelleme\is\` | Tam — korumalı DACL'i güncelleyici her turda kendisi uygular | — |
 
-İki IPC dosyası AYRI dizinlerdedir: her tarafın kendi dizininde "geçici dosyaya yaz + yeniden adlandır" hakkı vardır ve öbürünün dosyasını silemez/değiştiremez (dosya düzeyi ACL'le aynı dizinde bu sağlanamaz).
+İki IPC dosyası AYRI dizinlerdedir: aynı dizinde "niyet yazılabilir / durum salt okunur" atomik yeniden adlandırmayla kurulamaz (yeni dosya dizinin mirasını alır). **Güvenilmez dizin kuralı (D3):** backend'in yazabildiği dizinler (`lisans\` · `backups\` · `logs\` · `veri\` · `guncelleme\niyet\`) SYSTEM'in gözünde güvenilmez girdidir — güncelleyici oralara YAZMAZ, oradan okurken bağlantı izlemez ve boyu sınırlar (§6.5); kendi günlüğü, yedeği ve anahtarı backend'in erişemediği dizinlerdedir.
 
 ## §5 IPC — niyet · durum · geçmiş
 
@@ -164,6 +160,10 @@ JWS, PAKET anahtarıyla imzalı (`kid` `paket-*`, gömülü `BUILTIN_PACKAGE_KEY
 
 İndirilen zip'in sha256'sı ve boyu manifestteki değere EŞİT olmadan zip AÇILMAZ (imzasız veri zip ayrıştırıcısına girmez). Açma: yalnız göreli yollar (`..`, sürücü harfi, mutlak yol, ters eğik çizgi → RED `PAKET_YOL`), sembolik bağ girdisi RED. Açıldıktan sonra `butunluk.jws` gömülü PAKET anahtarlarıyla ve `butunluk-liste.txt`e karşı doğrulanır (`integrity::verify`): `GECERLI` değilse sürüm dizini silinir (`PAKET_BUTUNLUK`). Ek olarak `butunluk.jws`nin `surum`u = manifest `surum`, `urun` = `tekserp-backend` ailesi, `musteri` null ya da kanal kodu.
 
+### §6.5 Güvenilmez girdi (D3 güvenlik kuralı)
+
+Backend'in yazabildiği ya da okuyabildiği dizinlerden okunan her dosya (`lisans\kira.jws` · `hak.jws` · `guncelleme\niyet\niyet.json` · `yapilandirma\.env` · `<PGDATA>\PG_VERSION`) şöyle okunur: dosya da üst dizini de bağlantı (junction/sembolik bağ) OLAMAZ, düz dosya olmalı, boy tavanı var (JWS/niyet 64 KB, `.env` 256 KB), Windows'ta tutamaç `FILE_FLAG_OPEN_REPARSE_POINT` ile açılır ve açılan tutamaç yeniden ölçülür; hata iletisi içerikten beslenmez. SYSTEM yazdığı hiçbir dosyayı backend'in yazabildiği dizine koymaz; ekleme yaptığı `kurulum-gecmisi.jsonl` bir bağlantıysa yazmaz. Çocuk araçların ortamından `NODE_OPTIONS` silinir; göç ve araçlar `.env`i `DOTENV_CONFIG_PATH`ten okur (sırlar ortama kopyalanmaz).
+
 ## §7 Durum makinesi ve çökme güvenliği
 
 - **İşlem günlüğü** `is\islem.jsonl`: her adımın BAŞLADI satırı adım ÇALIŞMADAN önce, BİTTİ satırı adım bittikten sonra yazılır; her satır `FlushFileBuffers` ile diske iner. Satır: `{sira, islemId, adim, olay: BASLADI|BITTI|TELAFI_BASLADI|TELAFI_BITTI|SONUC, zaman, veri}`. `veri` kararlaştırılmış değerleri taşır (önceki `current` hedefi, göç sayısı öncesi, yedek yolu…) ki yeniden başlayan süreç yeniden HESAPLAMASIN.
@@ -177,15 +177,15 @@ JWS, PAKET anahtarıyla imzalı (`kid` `paket-*`, gömülü `BUILTIN_PACKAGE_KEY
 |---|---|---|---|---|
 | 1 | `ON_KOSUL` | kira + politika + pencere/onay + manifest + `surumler\<surum>` bütünlüğü (HAZIR'dakiyle aynı denetim) + boş disk (≥ paket×3 + 2 GB) + kurulu sürüm/göç sayısı ölçümü + ÖNCEKİ sağlık görüntüsü (`/health`, §8.7) | — | DEVAM |
 | 2 | `BACKEND_DURDUR` | `TeksERP-Backend` durdur (≤ `durdurmaZamanAsimiSn`) | backend'i ESKİ `current` ile başlat + sağlık | DEVAM |
-| 3 | `YEDEK` | backend DURMUŞKEN `pg_dump -Fc` → `yedek-sifrele sifrele` (alıcılar: `yedek-anahtar\*.tkpub` + işleme özgü GEÇİCİ anahtar, §8.3) → `pg_restore --list` | — | DEVAM (yeniden al) |
+| 3 | `YEDEK` | backend DURMUŞKEN `pg_dump -Fc` → `pg_restore --list` → `yedek-sifrele sifrele` (alıcılar: `yedek-anahtar\*.tkpub` + işleme özgü GEÇİCİ anahtar, §8.3) → düz döküm silinir; sonuç `is\yedek\<islemId>\db.dump.tkenc` | — | DEVAM (yeniden al) |
 | 4 | `GECIS` | `current` → `surumler\<yeni>` (önceki hedef günlüğe) | `current` → önceki hedef | DEVAM |
-| 5 | `GOC` | göç sayısı (önce) → `current\runtime\node.exe node_modules\prisma\build\index.js migrate deploy` (ortam `backend.env`; çalışma dizini `current`) → göç sayısı (sonra) | göç BAŞLADIYSA: eski sürümün aracıyla yedek çöz → `pg_restore --clean --if-exists` → göç sayısı = önceki | GERİ AL |
+| 5 | `GOC` | `<yeni>\runtime\node.exe node_modules\prisma\build\index.js migrate deploy` (çalışma dizini `<yeni>`; ortam `DOTENV_CONFIG_PATH=<KOK>\yapilandirma\.env` + `NODE_ENV=production`) → göç sayısı (sonra) | göç DB'yi değiştirdiyse (bitmiş ya da toplam satır sayısı farklı; ölçülemezse değiştirmiş sayılır): yedek aracıyla geçici anahtardan çöz → `public` şeması sıfırlanır → `pg_restore` → göç sayısı = önceki | GERİ AL |
 | 6 | `DOGRULAMA` | backend'i `--dogrulama` ile başlat (yalnız 127.0.0.1) → sağlık (§8.7) | backend'i durdur | DEVAM (yeniden doğrula) |
 | 7 | `BASLAT` | durdur → normal başlat → sağlık (sürüm + DB) | backend'i durdur | DEVAM |
 | 8 | `ONAY` | SONUÇ=BASARILI · `kurulum-gecmisi.jsonl` · `gecmis.jsonl` · eski sürüm dizinlerini buda (son 2 sürüm + `current` kalır) · eski yedekleri buda · kendini güncelleme denetimi (§10) | — | DEVAM |
 
-- **§8.3 Geçici yedek anahtarı:** mevcut `.tkenc` yerel anahtarı YEDEK PAROLASIYLA sarılıdır — sunucu kendi yedeğini gözetimsiz ÇÖZEMEZ. Otomatik geri dönüş için güncelleyici her işlemde paketteki araçla (`yedek-sifrele anahtar-uret --ad guncelleme --dizin <is> --ozel-cikti <dosya>`) bir X25519 çifti üretir, özel yarıyı DPAPI (SYSTEM kapsamı) ile sarar ve düzünü siler; yedek hem kurulumun kendi alıcılarına hem bu anahtara şifrelenir (`--alici` tekrarlı). Müşteri anahtarı yedeği her zaman açar; geçici anahtar yalnız bu sunucuda ve bir sonraki başarılı işleme kadar yaşar. `yedek-anahtar\` boşsa yedek yalnız geçici anahtara şifrelenir.
-- **§8.5 Göç:** SİSTEM node'u DEĞİL, sürümün kendi `runtime\node.exe`si. Göç sayısı bugünkü sorguyla (`_prisma_migrations`: `finished_at IS NOT NULL AND rolled_back_at IS NULL`) `<PG_BIN_DIR>\psql.exe` ile ölçülür; ölçülemezse "göç BAŞLADI ve bilinmiyor" sayılır (geri dönüşte DB geri yüklenir). `migrate deploy` 30 dk'dan uzun sürerse süreç ağacı sonlandırılır → geri dönüş.
+- **§8.3 Geçici yedek anahtarı (yer: `is\anahtar\<islemId>\`, yedek: `is\yedek\<islemId>\` — backend ERİŞEMEZ):** mevcut `.tkenc` yerel anahtarı YEDEK PAROLASIYLA sarılıdır — sunucu kendi yedeğini gözetimsiz ÇÖZEMEZ. Otomatik geri dönüş için güncelleyici her işlemde paketteki araçla (`yedek-sifrele anahtar-uret --ad guncelleme --dizin <is> --ozel-cikti <dosya>`) bir X25519 çifti üretir, özel yarıyı DPAPI (SYSTEM kapsamı) ile sarar ve düzünü siler; yedek hem kurulumun kendi alıcılarına hem bu anahtara şifrelenir (`--alici` tekrarlı). Müşteri anahtarı yedeği her zaman açar; geçici anahtar yalnız bu sunucuda ve bir sonraki başarılı işleme kadar yaşar. `yedek-anahtar\` boşsa yedek yalnız geçici anahtara şifrelenir.
+- **§8.5 Göç:** SİSTEM node'u DEĞİL, sürümün kendi `runtime\node.exe`si. Göç sayısı iki değerle ölçülür (`<PG_BIN_DIR>\psql.exe`): bitmiş (bugünkü `kur.ps1` sorgusu: `finished_at IS NOT NULL AND rolled_back_at IS NULL`) + TOPLAM satır (başlamış ama bitmemiş göç de görünsün); ölçülemezse "göç BAŞLADI ve bilinmiyor" sayılır (geri dönüşte DB geri yüklenir). `migrate deploy` 30 dk'dan uzun sürerse süreç ağacı sonlandırılır → geri dönüş. Geri yükleme veritabanını ve DB düzeyi ayarlarını (`teks.*`) KORUR: yalnız `public` şeması sıfırlanıp döküm aynı rolle geri yüklenir (göçün doğurduğu yeni tablo artık kalmaz; `pg_restore`un bilinen zararsız hataları — `schema "public" already exists`, `must be owner of extension plpgsql` — yok sayılır, başarının ölçüsü göç sayısıdır). Rol DB sahibi olmalı (D4: `tekserp` sahip; `BACKUP_PG_USER` = bakım rolü `tekserp` üyesi).
 - **§8.6 İki aşamalı başlatma:** doğrulama başlatması (6) istemcilere kapalıdır; bu yüzden sağlık düşerse DB'yi yedekten geri yüklemek istemci yazısı KAYBETTİRMEZ. Normal başlatmadan (7) sonra geri dönüş gerekirse aradaki kısa pencerenin yazısı kaybolabilir — adım 7 yalnız "sürüm + DB" bakar ve doğrulamadan geçmiş aynı ikiliyle koşar.
 - **§8.7 Sağlık:** `GET http://127.0.0.1:<PORT>/health` (5 sn istek zaman aşımı, 2 sn aralık, toplam `saglikZamanAsimiSn`): HTTP 200 · `status = UP` · `db = UP` · `version = <yeni surum>`. Lisans: **D3** `/health`e YALNIZ döngü adresinden gelen istekte `lisans: {kip, butunluk, cekirdek}` ekler; güncelleyici yeni sürümde bu alanı ZORUNLU sayar (yoksa `SAGLIK_LISANS_OLCULEMEDI`) ve işlem öncesi görüntüden KÖTÜ olamaz: `butunluk` önce `GECERLI` idiyse sonra da `GECERLI`, `cekirdek` önce `native` idiyse sonra da `native`, `kip` önce `KISITLI`/`DURDURULMUS` değilken sonra o olamaz.
 - **§8.8 Kurulum kaydı:** `<KOK>\kurulum-gecmisi.jsonl`e `kur.ps1` ile birebir biçim (`InstallRecordSchema`): `tur` KURULUM (başarı) · GERI_ALMA (geri dönüş sonrası, `oncekiSurum` yeni, `yeniSurum` eski) · `damga` = işlem başlangıcı `yyyyMMdd_HHmmss` · `paketOzeti` zip'in hex sha256'sı · `commit` `PAKET.json`dan · `geriDonus {kod: true, veri: true, veriSifreli: true}`.
@@ -218,7 +218,7 @@ Paket `runtime\tekserp-guncelleyici.exe` taşır. Backend işlemi `BASARILI` olu
 ## §11 Günlük
 
 - **Olay günlüğü** (Uygulama): kaynaklar `TeksERP-Guncelleyici` · `TeksERP-Backend`; `hizmet-kur` kaydeder. Bilgi: işlem başladı/bitti, sürüm; Uyarı: geri dönüş; Hata: `HATA` durumu, konağın beklenmedik node çıkışı.
-- **Dosya:** `gunluk\guncelleyici\guncelleyici.log` · `gunluk\backend\hizmet.log` · `gunluk\backend\backend.log` (node çıktısı). Satır: `<ISO zaman> <DÜZEY> <ileti>`; sır YOK (`backend.env` değerleri, belirteç, parolalar yazılmaz — belirteç yalnız ilk 8 karakteriyle).
+- **Dosya:** güncelleyici `<KOK>\guncelleyici\gunluk\guncelleyici.log` (UTC, 10 MB × 10) · konak `<KOK>\logs\hizmet.log` · node çıktısı `<KOK>\logs\backend-out.log` + `backend-err.log` (yerel saat + ofset, 10 MB × 14, gzip). Satır: `<zaman> <DÜZEY> <ileti>`; sır YOK (`.env` değerleri, belirteç, parolalar yazılmaz; araç çıktısındaki `şema://kullanıcı:parola@` maskelenir).
 
 ## §12 Hata kodları (`durum.json` `hataKodu`)
 
@@ -227,8 +227,8 @@ Paket `runtime\tekserp-guncelleyici.exe` taşır. Backend işlemi `BASARILI` olu
 ## §13 Diğer dilimlerin bu sözleşmeden işi
 
 - **D1:** manifest (`surum` = `package.json` `version` = `butunluk.jws` `surum`; `kanal`; `paket{yol, sha256, boyut}`; `enAzKaynakSurum?`; `gocSayisi`; `pg?: {cizgi, enAz, hedef: {surum, derleme, paket, boyut, sha256, icerikSha256, icuSurum}}` — D4 §8) · kira `guncelleme{kip, pencere, hedefSurum?, dondur}` · İNDİRME belirtecinin `yolOneki`ne `/<kanal>/backend/` · paket `runtime\`e iki Rust ikilisi (`tekserp-hizmet.exe`, `tekserp-guncelleyici.exe`) — `runtime` imzalı kapsamdadır.
-- **D3:** stdin `kapat`/EOF kapanışı · `TEKSERP_DOGRULAMA_KIPI` · `/health` döngü adresine `lisans{kip,butunluk,cekirdek}` · `niyet.json` yazıcısı (yoklama sonrası; ONAYLI onayı panelden) · `durum.json`/`gecmis.jsonl` okuyucusu (panel, D7) · §4.4 ACL'leri · `__dirname` üst dizin taraması · pm2 sökümü.
+- **D3:** CEVAPLANDI (dal `dagitim/d3-hizmet`: `hizmet-duzeni.ts` · stdin kapanışı · `backend-hizmeti.ps1`) — bu sözleşmeye alındı (§4.1–§4.4, §6.5). AÇIK: `TEKSERP_DOGRULAMA_KIPI` (arka plan işleri başlamaz) · `/health` döngü adresine `lisans{kip,butunluk,cekirdek}` · `niyet.json` yazıcısı · `backend-hizmeti.ps1`in hizmet kaydını `tekserp-hizmet.exe hizmet-kur`a bırakması, `guncelleme\is\`i yasak sınıfa alması, `hizmet\` dizininin (konak `current\runtime\`de) düşmesi.
 - **D4:** CEVAPLANDI (şartname `KENDI-POSTGRESQL.md`, dal `dagitim/d4-pg`): `pgsql\<surum>-<derleme>` + `pgsql\bin` junction + `ornek.json` bu sözleşmeye alındı (§4.1, §9); `PG_BIN_DIR = <KOK>\pgsql\bin`.
-- **D5:** `ayar\backend.env` · `guncelleyici\ayar.json` · iki `hizmet-kur` çağrısı · ACL'ler (D3'ün betiği).
-- **D6:** `app\` + pm2 + `.env` + ecosystem `env` → `surumler\<surum>` + `current` + `ayar\backend.env`; `backups\` → `yedek\`.
+- **D5:** `yapilandirma\.env` · `guncelleyici\ayar.json` (`guncellemeSunucusu` ZORUNLU — yoksa güncelleyici `AYAR_BICIMSIZ` ile bekler) · iki `hizmet-kur` çağrısı · ACL'ler (D3'ün betiği).
+- **D6:** `app\` + pm2 + `.env` + ecosystem `env` → `surumler\<surum>` + `current` + `yapilandirma\.env` (D3 düzeni); `backups\` ve `logs\` yerinde kalır.
 - **D7:** panel `durum.json` + `gecmis.jsonl` okur, onayı `niyet.json`a yazdırır.
