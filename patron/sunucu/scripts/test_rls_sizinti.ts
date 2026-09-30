@@ -7,7 +7,8 @@
 //   §3 tesis A kapsamında B'nin satırı görünmez (liste, kimlikle doğrudan, projeksiyon) · WITH CHECK:
 //      A kapsamında B'ye yazılamaz · ön-kiracı arama yalnız TEK anahtarlı satırı açar.
 //   §4 alan izni (RESTRICTIVE): izinsiz alt satır (`siparis.finans`) doğrudan SQL'le de 0 satır.
-//   §5 rol ayrımı: uygulama rolü projeksiyona YAZAMAZ; eşitleme rolü hesap tablosunu OKUYAMAZ.
+//   §5 rol ayrımı: uygulama rolü projeksiyona YAZAMAZ; eşitleme rolü hesap tablosunu OKUYAMAZ; uygulama rolü
+//      denetim satırında yalnız `summary`yi (IP alanı silmesi) güncelleyebilir.
 //   §6 kapsam yardımcısı: sıfır UUID / biçimsiz tesis / `*` projeksiyon REDDEDİLİR.
 //   §7 açılış kapısı: RLS'i atlayabilen rol (göç rolü = süper kullanıcı) ile sunucu KALKMAZ.
 // Koşum: npx tsx scripts/test_rls_sizinti.ts   (kendi *_test DB'si; roller her koşumda hizalanır)
@@ -185,6 +186,16 @@ async function rolAyrimi(o: Ortam, a: { tesisId: string }): Promise<void> {
     kontrol("§5b eşitleme rolü hesap tablosunu OKUYAMAZ", oku.hata && /permission denied/i.test(oku.mesaj), oku.mesaj.slice(0, 60));
     const oturum = await kapsamda(sync, { "app.tesis_id": a.tesisId }, () => hataVerir(sync, "SELECT * FROM sessions"));
     kontrol("§5c eşitleme rolü oturum tablosunu OKUYAMAZ", oturum.hata && /permission denied/i.test(oturum.mesaj));
+    // Denetim satırı ayak izidir: uygulama rolü yalnız `summary` kolonunu (IP alanı silmesi) güncelleyebilir.
+    const denetim = async (sql: string) => kapsamda(app, { "app.tesis_id": a.tesisId }, () => hataVerir(app, sql, [a.tesisId]));
+    const olay = await denetim("UPDATE account_audit SET event = 'DEGISTI' WHERE tesis_id = $1");
+    const aktor = await denetim("UPDATE account_audit SET actor = 'sahte', created_at = now() WHERE tesis_id = $1");
+    const ozet = await denetim("UPDATE account_audit SET summary = summary - 'ip' WHERE tesis_id = $1 AND summary ? 'ip'");
+    kontrol(
+      "§5d ⭐ uygulama rolü account_audit'te olay/aktör/zaman GÜNCELLEYEMEZ (permission denied), yalnız summary (IP alanı silmesi) güncellenir",
+      olay.hata && /permission denied/i.test(olay.mesaj) && aktor.hata && /permission denied/i.test(aktor.mesaj) && !ozet.hata,
+      [olay, aktor, ozet].map((x) => (x.hata ? x.mesaj.slice(0, 40) : "GECTI")).join(" | "),
+    );
   } finally {
     await app.end();
     await sync.end();

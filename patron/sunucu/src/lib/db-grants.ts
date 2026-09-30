@@ -14,8 +14,8 @@ export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   installations: ["SELECT"],
   accounts: ["SELECT", "INSERT", "UPDATE"],
   sessions: ["SELECT", "INSERT", "UPDATE", "DELETE"],
-  // UPDATE yalnız bakım işinin IP alanı silmesi için (`maintenance.ts` `AGED_FIELDS`; bekçi başka yazanı ısırır).
-  account_audit: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  // UPDATE tablo düzeyinde YOK: yalnız `summary` kolonunda (APP_COLUMN_GRANTS) — bakımın IP alanı silmesi.
+  account_audit: ["SELECT", "INSERT", "DELETE"],
   operation_receipts: ["SELECT", "INSERT", "DELETE"],
   inbox_messages: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   report_requests: ["SELECT", "INSERT", "UPDATE", "DELETE"],
@@ -30,6 +30,8 @@ export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
 };
 
 export const APP_COLUMN_GRANTS: ColumnGrants = {
+  // Yaşa göre silinen alan (`maintenance.ts` `AGED_FIELDS`: giriş olayının IP'si); olay, aktör, zaman yazılamaz.
+  account_audit: { UPDATE: ["summary"] },
   // Kimlik silmesi makbuz yanıtındaki ad/e-postayı tombstone'a çevirir (`maintenance.ts` `purgeClosedIdentities`);
   // makbuzun kimliği, eylemi ve gövde özeti yazılamaz (tekrar kapısı onlara dayanır).
   operation_receipts: { UPDATE: ["response"] },

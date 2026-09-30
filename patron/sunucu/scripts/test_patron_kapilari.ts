@@ -17,7 +17,7 @@
 //   §8 yaşa göre silinen ALAN beyanı (`AGED_FIELDS`, IP 30 gün): denetim satırı YALNIZ `maintenance.ts`te güncellenir
 //      ve güncellenen her alan beyanda, beyandaki her alanın silme yeri var (iki yönlü) · istemci adresi
 //      (`clientAddress(`) yalnız HTTP katmanında okunur · işlem makbuzu da YALNIZ `maintenance.ts`te (kimlik silmesi)
-//      güncellenir
+//      güncellenir · uygulama rolünün denetim UPDATE'i yalnız kolon düzeyinde ve AGED_FIELDS kolonlarında (§8g)
 // ⭐ KALICI SONDA (her koşumda): §4 ve §5 yüklemleri sentetik girdide ısırır, temiz girdide susar.
 // Koşum: npx tsx scripts/test_patron_kapilari.ts   (DB GEREKMEZ)
 // =============================================================================
@@ -29,7 +29,7 @@ import { PROJECTION_CATALOG } from "../src/catalog/projections";
 import { REPORT_FAMILY_PERMISSION } from "../src/catalog/reports";
 import { API_ROUTES, type ApiRouteDef } from "../src/http/api-routes";
 import { CLOUD_ERROR_CODES } from "../src/lib/errors";
-import { CLOUD_TABLES } from "../src/lib/db-grants";
+import { APP_COLUMN_GRANTS, APP_GRANTS, CLOUD_TABLES } from "../src/lib/db-grants";
 import { LOCK_NAMESPACES } from "../src/lib/locks";
 import { DESTRUCTION_STEPS, RETAINED_TABLES } from "../src/services/facility-destruction";
 import { AGED_FIELDS, PRUNED_TABLES } from "../src/services/maintenance";
@@ -215,10 +215,21 @@ function alanBeyani(): void {
   kontrol("§8d ✓K sonda: beyansız alan silmesi ve Prisma güncellemesi ısırır", sonda.alanlar.has("account_audit.summary.eposta") && !beyan.has("account_audit.summary.eposta") && sonda.prisma === 1);
   const makbuzYazan = kaynaklar.filter((f) => f !== bakim && makbuzGuncellemesi(readFileSync(f, "utf8"))).map(goreli);
   kontrol("§8e işlem makbuzu YALNIZ services/maintenance.ts'te (kimlik silmesi) güncellenir — tekrar yanıtı başka yolda değişmez", makbuzYazan.length === 0, makbuzYazan.join(", ") || "temiz");
+  const kolonlar = denetimKolonlari(AGED_FIELDS);
+  kontrol(
+    "§8g uygulama rolünün account_audit UPDATE'i tablo düzeyinde YOK, kolon düzeyinde = AGED_FIELDS kolonları (iki yönlü)",
+    !APP_GRANTS.account_audit?.includes("UPDATE") && JSON.stringify([...(APP_COLUMN_GRANTS.account_audit?.UPDATE ?? [])].sort()) === JSON.stringify(kolonlar),
+    `tablo ${APP_GRANTS.account_audit?.join("/") ?? "yok"} · kolon ${(APP_COLUMN_GRANTS.account_audit?.UPDATE ?? []).join(",") || "yok"} · beyan ${kolonlar.join(",")}`,
+  );
   kontrol(
     "§8f ✓K sonda: makbuz güncellemesi (Prisma + ham SQL) ısırır, yaratma ve okuma susar",
     makbuzGuncellemesi("await tx.operationReceipt.updateMany({})") && makbuzGuncellemesi("await tx.$executeRaw`UPDATE operation_receipts SET response = '{}'`") && !makbuzGuncellemesi("await tx.operationReceipt.create({}); await tx.operationReceipt.findUnique({})"),
   );
+}
+
+/** `account_audit.<kolon>.<alan>` beyanlarının kolonları (tekil, sıralı). */
+export function denetimKolonlari(beyan: Readonly<Record<string, string>>): string[] {
+  return [...new Set(Object.keys(beyan).filter((k) => k.startsWith("account_audit.")).map((k) => k.split(".")[1]!))].sort();
 }
 
 /** Makbuzu güncelleyen ifade var mı (yorum satırı sayılmaz). */
