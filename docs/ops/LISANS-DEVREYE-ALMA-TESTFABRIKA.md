@@ -427,6 +427,14 @@ Traefik hiçbir geri almada yeniden başlatılmaz; kenar ağı satırı yerinde 
 - **Duruldu:** kurulum tekrar denenmedi. Bırakılan: `C:\ProgramData\testfabrika\klis2` (imzalı zip dahil) · `C:\TeksERP\app.basarisiz-20260930_050608` · `.env`deki `LICENSE_SERVER_URL` satırı. 4.4 ayrıca belirteç dosyası ister (ölçüm hesabı henüz yok).
 - **Araç notları:** WMI `Win32_Process.Create` Store `pwsh` diğer adını (rv 8) ve gerçek `WindowsApps` yolunu (rv 2) başlatamıyor — WMI ile `powershell.exe` 5.1 önyükleyici açılır, o `pwsh` diğer adını çağırır. `tp.sh` 5.1 oturumu `Restricted`: betik `Set-ExecutionPolicy -Scope Process Bypass` ile başlar. `uzaktan-kos.ps1` görev bittikten sonra SSH üzerinden çıkmadı (iki kez); görev kaydı elle silindi.
 
+## 10d. Uygulama kaydı — 2026-09-30 (O2b: §4 yeniden deneme — BAŞARILI)
+
+- **Kaynak:** `origin/main` `47b9d825` (F-ECO `kur.ps1`); §4.1 native yeniden kullanıldı (`Teks-Erp/native` `55203d97`..`47b9d825` farksız, `e2691bc1…7c90`). §4.2 paketleme ~9 dk, `cikis=0`; §4.3 imza kid `paket-hazirlik`, imzalı SHA256 `BB757C725CE01943D2D3AAE0B20A5CF301DB094F4EEA05A246E467BA543DB7A1`, sürüm `2.12.0-prova.*` (hedefteki yerel commit), 13386 dosya, 367 migration.
+- **§4.4 ✅:** çalışan pm2 adı ÖLÇÜLDÜ (`pm2-home\pids\tekserp-backend-yeni-*.pid` + `dump.pm2`) ve `-UygulamaAdi tekserp-backend-yeni` verildi (kanal kimliği `tekserp-backend-testfabrika` uyarısı beklenen). `[2/9]` BIRLESTIR (env 14 anahtar aynen) → `[8/9]` delete + start + save → `[9/9]` `KURULUM TAMAM`. Uygulama süreci `app\runtime\node.exe` (SYSTEM, restart 0), `dump.pm2` yorumlayıcısı aynı yol. `.env` satırı (§4.4 adım 1) O2'den duruyordu, yeniden eklenmedi. Kesinti ≤ 2 dk, bağlı istemci 0, oturumlar değişmedi.
+- **§4.5:** aşama 4 → 4.1–4.3 ✅, 4.4 ⚠️ ÖLÇÜLEMEDİ (ölçüm hesabı ve `~/.tekserp/testfabrika-gozlem.jwt` yok). Motor `CALISIYOR` açılış günlüğünden (`yoklama zamanlayıcısı aktif — satıcı: lisans-test…`); çekirdek/bütünlük/kip yalnız kimlikli uçtan okunur. 4.4 ⚠️ ile §5'e geçiş kararı yöneticide.
+- **Geri dönüş noktası:** `app.eski-20260930_055943` + `premigrate_20260930_055943.dump.tkenc` (`-GeriAl`). O2 kalıntıları (`app.basarisiz-20260930_050608`, klis2'deki iki eski zip) silindi.
+- **Araç notu:** `uzaktan-kos.ps1` izleme süreci üçüncü kez çıkmadı (SSH çıktısı `[1/9]`da dondu, görev `Ready`/0); ilerleme `C:\TeksERP\logs\uzaktan-<damga>.log`'dan okundu, yerel ssh ve uzak izleme süreci PID'le kapatıldı, görev kaydı elle silindi.
+
 ## 11. A2 önkoşul borçları (ölçüldü 2026-09-30 · G1–G3 + G5 iniş A2 I7'de KAPANDI)
 
 | # | Borç | Etki | Durum |
