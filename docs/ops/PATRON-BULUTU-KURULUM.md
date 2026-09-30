@@ -1,6 +1,6 @@
 # Patron bulutu — tekserp-vds kurulum runbook'u
 
-> **Durum (2026-09-29):** YAZILDI, VDS'e **UYGULANMADI** — her VDS yazımı kullanıcının "uygula" cümlesiyle. Yerel duman (§2.5) yeşil; kayıt §12.
+> **Durum (2026-09-30):** tekserp-vds'te **KURULU** — `tekserp-patron:55203d9708ba`, hazırlık satıcısının iç API ağına bağlı (§11 ilk madde: gerçek fabrika eşitlemesi BEKLENMEZ), `https://patron.etkiliyazilim.com` yanıt veriyor. Kurulum kaydı §13; yerel duman kaydı §12.
 > Yapıtlar: [`deploy/patron/`](../../deploy/patron/) (compose · Dockerfile · imaj derleme · yalıtım denetimi · duman). Sözleşme: [`PATRON-BULUTU-ESITLEME.md`](../design/PATRON-BULUTU-ESITLEME.md). Alan kuralları: [`kurallar/patron-bulutu.md`](../kurallar/patron-bulutu.md) § Dağıtım. Emsal ve paylaşılan adımlar: [`SATICI-KURULUM.md`](SATICI-KURULUM.md) (satıcı ÖNCE kurulu olmalı — patron onun iç API ağına katılır).
 > **Değişmez:** her VDS yazımından ÖNCE ve SONRA `Teks-Erp-wt/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur. Traefik **yeniden başlatılmaz**.
 
@@ -122,7 +122,7 @@ ssh tekserp-vds 'docker version --format "{{.Server.Version}}"; docker compose v
    K=/opt/stack/apps/tekserp-patron-uretim
    sudo install -d -m 755 -o root -g root $K $K/yedek-alici
    sudo install -d -m 700 -o 10001 -g 10001 $K/anahtarlar /srv/tekserp-patron-yedek/uretim
-   sudo install -d -m 750 -o root -g 61062 $K/sirlar
+   sudo install -d -m 711 -o root -g 61062 $K/sirlar     # 711: sudo'suz `docker compose` (oguzhan) sır dosyalarını çözebilsin — satıcı kalıbı; içerik yine 0440
    for s in goc uygulama esitleme; do openssl rand -hex 32 | sudo tee $K/sirlar/$s-parolasi >/dev/null; done   # ekrana BASILMAZ
    sudo cp /opt/stack/apps/tekserp-satici-hazirlik/sirlar/ic-api-belirteci $K/sirlar/ic-api-belirteci          # satıcıyla AYNI değer, AYRI dosya
    sudo chown root:61062 $K/sirlar/* && sudo chmod 440 $K/sirlar/*
@@ -238,3 +238,18 @@ Satıcı tarafı `SATICI-KURULUM.md` §5b'dedir: ağ (`IC_API_AGI`), sabit adres
 - **Kaynak (öykünme altında, boşta):** patron 172 / 512 MiB · DB 31 / 384 · yedek 6 / 128; süreç 12 · 9 · 3. VDS'te yerel mimaride daha düşük beklenir — kurulum sonrası `docker stats` bu satırın yanına yazılır.
 - **Temizlik:** `duman.sh kaldir` → proje `tekserp-patron-duman` (konteyner · birim · ağ) ve yalnız iki `tekserp-patron*:<sha>` imajı silindi; satıcı imajları ve ortak `tekserp-local-db` konteynerine dokunulmadı.
 
+
+## 13. Kayıt — VDS kurulumu (2026-09-30, `ORTAM=uretim`, hazırlık satıcısına bağlı)
+
+- **Önce/sonra:** her VDS yazımının (dizin+sır · anahtar · imaj · `up --no-start` + ağ bağlantısı · göç · başlatma · satıcı kaydı · tesis/davet · yedek) önünde ve arkasında `vds-dogrula.sh` → ✅ adnansahin AYNI (420 dosya) · kök · defter/nginx/compose AYNI. `asama-dogrula --asama=1,2 --olc` önce ve sonra 7/7 + 12/12 UYUMLU. Traefik, `tekserp-guncelleme`, `docker-socket-proxy` yeniden başlatılmadı (StartedAt/RestartCount değişmedi).
+- **§3 ölçüm:** Docker 29.7.2 · compose v5.5.0 · kullanılabilir 2253 MB · disk 54 GB boş · köprüler 172.17–172.20 + satıcı 172.31.252–254 → kenar `172.31.250.0/28` (dinamik `.8/29`) ve çıkış `172.31.250.16/28` çakışmaz; `ic-api` üzerinde yalnız satıcı (`.2`), `PATRON_IC_IP` `.3` boştu.
+- **Hazırlık (Mac):** `patron-totp.key` + `patron-vapid.json` (VAPID, `BILDIRIM_KIPI=kapali` olsa da birim salt okunur olduğu için önceden) · yedek alıcısı `patron` (parmak izi `3dd3e2e16139c32a`) · imaj `imaj-derle.sh --platform linux/amd64` (arşiv 321 MB). `.env` = `ornek.env` + iki imaj etiketi; `compose-denetle --satici-env` 40 geçti / 0 ihlal.
+- **sudo'suz kurulum:** kök sahipli yazımlar satıcı yedek imajıyla tek seferlik yardımcı konteynerde (`-u 0 --network none`, yalnız hedef yollar bağlı; `-v` eksik host dizinini root 755 yaratır). `sirlar/` 0711 root:61062 (§4.1 notu) · üç parola 64 hex + `ic-api-belirteci` kopyası (satıcınınkiyle bayt-eşit) 0440 root:61062 · `anahtarlar/` 0700 10001 (iki dosya 0600, Mac ile bayt-eşit) · `.env` oguzhan 0600 · `/srv/tekserp-patron-yedek/uretim` 0700 10001.
+- **Traefik:** yalnız `docker network connect tekserp-patron-uretim-kenar traefik` (dinamik adres `172.31.250.9`). Traefik compose dosyasına kalıcılık satırı **YAZILMADI** (bu kurulumun kapsamı yalnız bağlantıya izin verdi) → Traefik bir gün yeniden YARATILIRSA patron yönlendiricisi düşer; satır §4.5'teki gibi eklenmeli (açık iş).
+- **Göç + roller:** 2 migration (`20260929200000_ilk_sema`, `20260930090000_bildirimler`) · `✅ roller hizalandı`. Açılış: `PATRON_DINLIYOR port=4620 kurulumKaynagi=satici web=acik` · `PATRON_BILDIRIM kip=kapali`.
+- **Dış ölçüm (§6):** `/saglik` 200 · `/` 200 `no-store` + CSP (`unsafe-inline` yok) + `x-frame-options: DENY` · `entry-<özet>.js` `immutable` · `/cariler/x` 200 · `/api/yok` · `/v1/yok` 404 JSON · `/ic/v1/zil` · `/ic` · `/yonetim` 404 (Traefik) · `/api/oturum` 401 · imzasız `POST /v1/esitle` 401 `ISTEK_GECERSIZ` · köken `:4620` zaman aşımı · etiket kuralı tek `$`.
+- **İç API:** patrondan sıfır UUID 404 `BULUNAMADI`, belirteçsiz 401 `IC_KIMLIK_GECERSIZ`; patronun ic-api adresinde 4620 `ECONNREFUSED`. Hazırlık satıcısında portalla açılan müşteri `Etkili Yazılım (hazırlık)` → tesis `Etkili Yazılım Hazırlık` (`c0f70948-9d5b-45dd-896c-f4ba346ee02b`) → kurulum TEST `patron-hazirlik` (`kurulumId eecfd6b7-3777-40e8-afa6-cbe16acbe7ab`, `ETKINLESMEDI`): patrondan okuma 200 (`v1`, tesis adı doğru, `moduller []`, `saklamaAy 13`).
+- **Tesis + ilk yönetici:** `tesis-ac` (satıcının tesis kimliğiyle) + `yonetici-davet` (`hazirlik@etkiliyazilim.com`, 72 saat). Bağlantı `https://patron.etkiliyazilim.com/davet?davet=…` yalnız Mac'te `~/.tekserp/sirlar/patron-davet-hazirlik.txt` (0600); `POST /api/davet/incele` 200.
+- **Tarayıcı:** `tarayici-duman.cjs <kök URL, SONUNDA / YOK>` → stilli giriş ekranı, uygulamanın kendi CSP ihlali 0; tek ihlal Cloudflare'in HTML'e enjekte ettiği Web Analytics beacon'ı (`static.cloudflareinsights.com`, `script-src 'self'` engelliyor) — bölge ayarıdır, kapatmak kullanıcı kararı. URL `/` ile biterse araç `//` açar ve uygulama `Failed to construct 'URL'` (expo-router `parseQueryParams`) ile çizilmez.
+- **Yedek:** açılışta otomatik ilk tur + elle `tek` → `patron_20260930_011717.dump.tkenc` + `anahtarlar_…011717.tar.tkenc`; iki uç sha eşit, Mac'te özel yarıyla açıldı: `pg_restore --list` 20 tablo verisi, anahtar arşivi Mac ile bayt-eşit.
+- **Kaynak (VDS, boşta):** patron 96 / 512 MiB (12 süreç) · DB 36 / 384 · yedek 3 / 128; kullanılabilir bellek 2118 MB.
