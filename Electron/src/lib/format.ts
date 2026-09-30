@@ -1,4 +1,4 @@
-import { formatFactory } from "@/lib/factory-time";
+import { formatCalendarDay, formatFactory } from "@/lib/factory-time";
 
 /** Tarih/saat kalıpla, FABRİKA diliminde (date-fns belirteçleri; bkz. `lib/factory-time`). */
 export function safeFormat(
@@ -8,6 +8,16 @@ export function safeFormat(
 ): string {
   if (!date) return fallback;
   return formatFactory(date, fmt, fallback);
+}
+
+/** TAKVİM GÜNÜ alanı (termin · vade · planlanan tarih) kalıpla — `formatCalendarDay` kuralı (UTC gece yarısı gün kaymaz). */
+export function safeFormatCalendar(
+  date: string | Date | null | undefined,
+  fmt: string,
+  fallback = "—",
+): string {
+  if (!date) return fallback;
+  return formatCalendarDay(date, fmt, fallback);
 }
 
 // Perf: Intl.NumberFormat kurulumu görece pahalı; locale + useGrouping sabit,

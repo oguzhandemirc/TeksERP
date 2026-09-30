@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from "@jest/globals";
 import {
   DEFAULT_FACTORY_TIMEZONE,
+  calendarDayZone,
+  calendarLocaleDateString,
+  fmtCalendarDay,
+  formatCalendarDay,
   factoryBackWindowIso,
   factoryDayDiff,
   factoryDayEndIso,
@@ -105,5 +109,30 @@ describe("factory-time — seçilen dilim", () => {
     expect(setFactoryTimezone("Europe/Istanbul'; DROP")).toBe(false);
     expect(setFactoryTimezone(undefined)).toBe(false);
     expect(getFactoryTimezone()).toBe(DEFAULT_FACTORY_TIMEZONE);
+  });
+});
+
+describe("factory-time — takvim günü alanı (vade · termin; şık 6 kararı b)", () => {
+  const DUE = "2026-09-30T00:00:00.000Z"; // "YYYY-MM-DD" / @db.Date saklaması
+  const DERIVED = "2026-10-30T22:30:00.000Z"; // düzenleme anından türetilmiş vade (AN)
+  it("⭐ UTC'nin batısındaki dilimde takvim günü bir gün KAYMAZ; AN alanı fabrika diliminde", () => {
+    expect(setFactoryTimezone("America/New_York")).toBe(true);
+    eachProcessZone(() => {
+      expect(fmtCalendarDay(DUE)).toBe("30.09.2026");
+      expect(calendarLocaleDateString(DUE, "tr-TR")).toBe("30.09.2026");
+      expect(formatCalendarDay(DUE, "dd.MM.yy")).toBe("30.09.26");
+      expect(formatFactory(DUE, "dd.MM.yyyy")).toBe("29.09.2026");
+      expect(fmtCalendarDay("2026-09-30T02:00:00.000Z")).toBe("29.09.2026");
+    });
+  });
+  it("türetilmiş vade (gece yarısı olmayan an) fabrika gününe düşer; varsayılan dilimde bugünkü çıktı", () => {
+    eachProcessZone(() => {
+      expect(calendarDayZone(DUE)).toBe("UTC");
+      expect(calendarDayZone(DERIVED)).toBe(DEFAULT_FACTORY_TIMEZONE);
+      expect(fmtCalendarDay(DERIVED)).toBe("31.10.2026");
+      expect(fmtCalendarDay(DUE)).toBe(formatFactory(DUE, "dd.MM.yyyy"));
+      expect(fmtCalendarDay(null)).toBe("—");
+      expect(fmtCalendarDay("bozuk", "")).toBe("");
+    });
   });
 });

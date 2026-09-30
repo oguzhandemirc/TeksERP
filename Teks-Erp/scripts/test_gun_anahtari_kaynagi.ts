@@ -195,7 +195,8 @@ const ANAHTAR_TABAN: Record<string, { adet: number; gerekce: string }> = {
  */
 // 48 → 39 (2026-09-14, entegratör 1e): document-render `fmtDate` kopyaları tek
 // yardımcıya taşındı (ea `58c019ba`); aynı trende ölçüldü.
-const DIGER_TABAN = 39;
+// 39 → 32 (2026-09-30, yönetici izniyle I9 entegrasyonu): TZ-B süreç diliminden biçimleyen yüzeyleri fabrika dilimine taşıdı.
+const DIGER_TABAN = 32;
 
 function main(): void {
   console.log("\n=== Gün anahtarı TEK KAYNAKTAN mı? (süreç saat dilimi taraması) ===\n");

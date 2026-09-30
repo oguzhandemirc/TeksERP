@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
-import { safeFormat, formatNumber } from "@/lib/format";
+import { formatNumber, safeFormatCalendar } from "@/lib/format";
 import type { WorkOrder } from "../types";
 import type { LinkedFulfillment } from "../order-fulfillment";
 import { OrdersDetailModal, type OrderDetailRow } from "./OrdersDetailModal";
@@ -57,7 +57,7 @@ export function WorkOrderKpis({
           <span className="lab">Termin</span>
           <div className="term">
             <span className="d num">
-              {wo.plannedEndDate ? safeFormat(wo.plannedEndDate, "dd.MM.yyyy") : "—"}
+              {wo.plannedEndDate ? safeFormatCalendar(wo.plannedEndDate, "dd.MM.yyyy") : "—"}
             </span>
           </div>
           <span className={`chip ${term.cls} num`} style={{ alignSelf: "flex-start" }}>

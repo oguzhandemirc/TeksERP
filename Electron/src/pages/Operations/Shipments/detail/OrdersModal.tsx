@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { formatNumber, safeFormat } from "@/lib/format";
+import { formatNumber, safeFormatCalendar } from "@/lib/format";
 import { normalizeSearch } from "../roll-search";
 import type { ShipmentDetail, ShipmentDetailLine } from "../types";
 import { FacetSelect } from "./FacetSelect";
@@ -222,7 +222,7 @@ export function OrdersModal({
                       <span className="font-mono">{r.orderNumber}</span>
                       {r.deadline && (
                         <span className="ml-1 text-[10px] text-muted-foreground">
-                          {safeFormat(r.deadline, "dd.MM.yy")}
+                          {safeFormatCalendar(r.deadline, "dd.MM.yy")}
                         </span>
                       )}
                     </td>

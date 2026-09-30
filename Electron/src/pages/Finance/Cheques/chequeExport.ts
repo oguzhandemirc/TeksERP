@@ -32,7 +32,7 @@ import { LIVE_STATUS, type ChequeFilterState } from "./ChequeFilterBar";
 import { dueHint, dueTone, ymd } from "./dates";
 import { DOCTYPE_LABEL, KIND_LABEL, STATUS_LABEL, cariName } from "./labels";
 import { toNum, type ChequeRow, type ChequeStatus } from "./service";
-import { factoryLocaleDateString } from "@/lib/factory-time";
+import { factoryLocaleDateString, calendarLocaleDateString } from "@/lib/factory-time";
 
 const MONEY = "#,##0.00";
 
@@ -66,6 +66,13 @@ function dateCell(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : factoryLocaleDateString(d, "tr-TR");
+}
+
+/** Vade hücresi — takvim günü alanı (`calendarLocaleDateString`), boşta BOŞ (bkz. `dateCell`). */
+function dueDateCell(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : calendarLocaleDateString(d, "tr-TR");
 }
 
 /**
@@ -148,7 +155,7 @@ export function buildChequeExport(opts: {
       bank: c.bankName ?? "",
       postingDate: dateCell(c.postingDate),
       issueDate: dateCell(c.issueDate),
-      dueDate: dateCell(c.dueDate),
+      dueDate: dueDateCell(c.dueDate),
       dueHint: dueHint(tone),
       status: STATUS_LABEL[c.status],
       atBank: c.bankAccount?.name ?? "",

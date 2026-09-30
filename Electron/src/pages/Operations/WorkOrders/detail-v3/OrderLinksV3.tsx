@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { safeFormat, formatNumber } from "@/lib/format";
+import { formatNumber, safeFormatCalendar } from "@/lib/format";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { lineOpenMeasured } from "../order-fulfillment";
 import type { WorkOrder } from "../types";
@@ -96,7 +96,7 @@ export function OrderLinksV3({ wo }: { wo: WorkOrder }) {
               </button>
             )}
             {order?.deadline && (
-              <span className="pill neutral sm num">{safeFormat(order.deadline, "dd.MM.yyyy")}</span>
+              <span className="pill neutral sm num">{safeFormatCalendar(order.deadline, "dd.MM.yyyy")}</span>
             )}
           </div>
 

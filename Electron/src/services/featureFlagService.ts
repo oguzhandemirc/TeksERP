@@ -636,6 +636,8 @@ export interface FactoryTimezonePreview {
   current: string;
   proposed: string;
   changed: boolean;
+  /** Kayıtlı değer geçersiz — yürürlükteki dilimi kaydetmek de onu düzeltir (eski backend göndermez). */
+  storedInvalid?: boolean;
   currentOffset: string;
   proposedOffset: string;
   todayCurrent: string;
@@ -651,6 +653,8 @@ export type FeatureFlagsView = FeatureFlags & {
   numberSources?: NumberSourceInfo[];
   /** Fabrika saat dilimi (IANA, salt-okunur) — bütün tarih/saat gösterimi bununla (`lib/factory-time`). */
   factoryTimezone?: string;
+  /** Kayıtlı dilim geçersiz (sunucu `factoryTimezone` ile açıldı) — metin sunucunun; eski backend göndermez. */
+  factoryTimezoneWarning?: { code: string; message: string } | null;
 };
 
 export const featureFlagService = {

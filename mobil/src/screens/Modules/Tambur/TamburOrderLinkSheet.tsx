@@ -26,7 +26,7 @@ import {
 import { canUnlinkOrderLine } from './canUnlinkOrderLine';
 import { colors, spacing, radius } from '../../../theme';
 import { showScreenError } from '../../../lib/screenToast';
-import { factoryLocaleDateString } from '../../../lib/factory-time';
+import { calendarLocaleDateString } from '../../../lib/factory-time';
 
 const PAGE_SIZE = 20;
 // OrderLinkPicker ile aynı gerekçe: "yazmayı bıraktım" sinyali, hecede bir istek değil.
@@ -341,7 +341,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
               {item.itemName}
               {item.colorName ? ` · ${item.colorName}` : ''}
               {item.width != null ? ` · ${item.width}cm` : ''}
-              {item.deadline ? ` · termin ${factoryLocaleDateString(item.deadline, 'tr-TR')}` : ''}
+              {item.deadline ? ` · termin ${calendarLocaleDateString(item.deadline, 'tr-TR')}` : ''}
             </Text>
             {item.warnings.length > 0
               ? renderMismatchChips({ itemDiff: false, colorDiff: false, widthDiff: false }, item.warnings)

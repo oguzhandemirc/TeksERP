@@ -1,4 +1,4 @@
-import { factoryLocaleDateString, factoryLocaleString } from "@/lib/factory-time";
+import { factoryLocaleDateString, factoryLocaleString, formatCalendarDay } from "@/lib/factory-time";
 // Rapor sayfalarında tekrar tekrar kullanılan formatlayıcılar.
 
 const trNum = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
@@ -38,6 +38,9 @@ export const fmtDate = (s: string | Date | null | undefined): string => {
   if (Number.isNaN(d.getTime())) return "—";
   return factoryLocaleDateString(d, "tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
+
+/** TAKVİM GÜNÜ alanı (termin · vade) — `formatCalendarDay` kuralı; `fmtDate` ile aynı görünüm. */
+export const fmtCalendarDate = (s: string | Date | null | undefined): string => (s ? formatCalendarDay(s, "dd.MM.yyyy") : "—");
 
 export const fmtDateTime = (s: string | Date | null | undefined): string => {
   if (!s) return "—";

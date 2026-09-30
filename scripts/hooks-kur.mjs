@@ -14,6 +14,7 @@
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gitKapisiKurulu } from "./claude-hooks/lib/commit-hedefi.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
 const git = (args) => execFileSync("git", args, { cwd: REPO, encoding: "utf8" }).trim();
@@ -23,7 +24,8 @@ let mevcut = "";
 try { mevcut = git(["config", "--get", "core.hooksPath"]); } catch { mevcut = ""; }
 
 if (arg === "--durum") {
-  console.log(mevcut === ".githooks" ? "✅ commit kapısı KURULU (core.hooksPath=.githooks)" : `⚠️  kapı kurulu değil (core.hooksPath=${mevcut || "<varsayılan>"}) → node scripts/hooks-kur.mjs`);
+  // Göreli (.githooks) ve mutlak (ortak config) yol aynı çözücüden — bash-guard'ın "kurulu mu" sorusuyla tek kaynak.
+  console.log(gitKapisiKurulu(REPO) ? `✅ commit kapısı KURULU (core.hooksPath=${mevcut})` : `⚠️  kapı kurulu değil (core.hooksPath=${mevcut || "<varsayılan>"}) → node scripts/hooks-kur.mjs`);
   process.exit(0);
 }
 if (arg === "--kaldir") {

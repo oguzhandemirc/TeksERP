@@ -885,3 +885,23 @@ sayısı sürekli artar — kanonik kaynak `prisma/migrations/` (2026-07-14 itib
 ~114, en yeni `20260714151000_dispatch_item_unique_dispatch_roll`); prova her
 deploy öncesi tekrarlanmalı (bkz. `URETIM-KONTROL-LISTESI.md §C`). Detay:
 `Teks-Erp/MIGRATION-DEPLOY.md`.
+
+---
+
+## 12) Fabrika saat dilimi değiştirildiyse — denetim raporu istatistiği (`sl_day_exact`)
+
+Panelde **Genel Ayarlar → Şirket Bilgileri → Saat dilimi** değiştirildikten sonra sunucu yöneticisi, denetim (audit) özetinin günlük serisinin kullandığı ifade istatistiğini yeni dilim için yeniden kurar. İstatistik SQL metnine bağlıdır (`factoryDaySql` dilimi metne gömer): kurulmazsa rapor **doğru ama yavaş** olur (tasarım `docs/design/FABRIKA-SAAT-DILIMI.md` §5.5). Yazma yoluna maliyeti yoktur, tabloya kilit almaz; mesai içinde koşulabilir.
+
+```sql
+-- '<YENI_DILIM>' = panelde seçilen IANA adı (ör. Europe/Berlin); İstanbul'a dönüşte 'Europe/Istanbul'.
+SET statement_timeout = 0;
+DROP STATISTICS IF EXISTS sl_day_exact;
+CREATE STATISTICS sl_day_exact
+  ON ((DATE_TRUNC('day', "createdAt" AT TIME ZONE '<YENI_DILIM>')::date))
+  FROM system_logs;
+ANALYZE system_logs;
+```
+
+- Kontrol: `SELECT pg_get_statisticsobjdef(oid) FROM pg_statistic_ext WHERE stxname = 'sl_day_exact';` çıktısındaki dilim, panelde görünen dilimle aynı olmalı.
+- Sonraki bir migration `sl_day_exact`i İstanbul ifadesiyle yeniden kurarsa (varsayılan dışı kurulumda) bu adım tekrarlanır.
+- Kayıtlı dilim geçersizse sunucu İstanbul ile açılır ve `/api/admin/health` → `factoryTimezone.warning` (`FACTORY_TIMEZONE_INVALID_STORED`) ile panel şeridi uyarır; düzeltme panelden yapılır, bu adım yalnız dilim fiilen değiştiyse gerekir.

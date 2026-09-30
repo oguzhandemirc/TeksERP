@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { Undo2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { safeFormat, formatNumber } from "@/lib/format";
+import { safeFormat, formatNumber, safeFormatCalendar } from "@/lib/format";
 import { rollMatchesQuery, rollMatchesContext } from "./roll-search";
 import type { ShipmentDetail, ShipmentDetailRoll } from "./types";
 import { ShipmentSheetSackCard } from "./ShipmentSheetSackCard";
@@ -74,7 +74,7 @@ export function ShipmentSheetBody({
             <div className="mb-2 flex items-center gap-2 text-xs">
               <span className="font-mono font-semibold">{o.orderNumber}</span>
               {o.deadline && (
-                <span className="text-muted-foreground">termin {safeFormat(o.deadline, "dd.MM.yyyy")}</span>
+                <span className="text-muted-foreground">termin {safeFormatCalendar(o.deadline, "dd.MM.yyyy")}</span>
               )}
             </div>
             <table className="w-full text-[11px] tabular-nums">

@@ -23,7 +23,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '../../../navigation/types';
 import { showScreenError } from '../../../lib/screenToast';
-import { formatFactory } from '../../../lib/factory-time';
+import { formatCalendarDay } from '../../../lib/factory-time';
 
 // İade modülü vurgu rengi (amber) — alt bardaki "İade Al" ve geçmiş ekranındaki
 // "İade" rozetiyle aynı kimlik.
@@ -89,7 +89,7 @@ export default function IadeGirisiScreen() {
       (result?.candidateOrders ?? []).map((o) => ({
         value: o.id,
         label: o.orderNumber,
-        sublabel: o.deadline ? `Termin: ${formatFactory(o.deadline, 'dd.MM.yyyy')}` : undefined,
+        sublabel: o.deadline ? `Termin: ${formatCalendarDay(o.deadline, 'dd.MM.yyyy')}` : undefined,
         badge: {
           text: trLabel(ORDER_STATUS_LABEL, o.status),
           color: ORDER_STATUS_COLOR[o.status] ?? colors.textMuted,

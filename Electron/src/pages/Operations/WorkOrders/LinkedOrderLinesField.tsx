@@ -16,7 +16,7 @@ import { AnimatedNumber } from "@/components/motion";
 import { springSnappy } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { OrderPickerDialog, type PickedOrderLine } from "./OrderPickerDialog";
-import { factoryLocaleDateString } from "@/lib/factory-time";
+import { calendarLocaleDateString } from "@/lib/factory-time";
 
 interface Props {
   lines: PickedOrderLine[];
@@ -311,7 +311,7 @@ function LineCard({
             {line.orderDeadline && (
               <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning">
                 <CalendarClock className="h-2.5 w-2.5" />
-                {factoryLocaleDateString(line.orderDeadline, "tr-TR")}
+                {calendarLocaleDateString(line.orderDeadline, "tr-TR")}
               </span>
             )}
             {line.requiredProperties.map((rp) => (

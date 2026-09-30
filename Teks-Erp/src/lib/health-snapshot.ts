@@ -22,6 +22,7 @@ import { seriesExhaustionWarnings } from "../services/helpers/series-exhaustion.
 import { masterDataArchiveHealthSnapshot } from "../services/helpers/master-data-health.helper";
 import { licenseHealthBlock } from "./license/license-health";
 import { compareBackupCryptoIntent, type BackupCryptoIntent } from "./backup-crypto/intent";
+import { factoryTimezoneWarning, getFactoryTimezone } from "../constants/time";
 
 // Yedek klasörü: BACKUP_DIR üretimde pm2 ortamından gelir (ecosystem.config env
 // veya .env — tipik değer C:\ProgramData\TeksERP\backups). Tanımlıysa durum sayfası
@@ -385,6 +386,9 @@ export async function buildRichHealth(): Promise<Record<string, unknown>> {
     // Pasif ana veride canlı referans (URUN-YASAM-DONGUSU §10): `total` beklenen 0 · `null` ölçülemedi.
     // Ölçüm 10 dk önbellekli (bu uç 5 sn'de bir sorulur); `stale` = arkada tazeleniyor.
     masterDataArchive: masterDataArchiveHealthSnapshot(),
+    // Fabrika saat dilimi: `warning` null değilse kayıtlı değer geçersiz ve sunucu `active` ile koşuyor
+    // (kod FACTORY_TIMEZONE_INVALID_STORED; düzeltme Şirket Bilgileri → Saat dilimi). Bellek içi, sorgusuz.
+    factoryTimezone: { active: getFactoryTimezone(), warning: factoryTimezoneWarning() },
     // Validate edilmemiş DB kısıtı: `[]` beklenen · dolu = eski veri ihlalde (kuru script adı NOTICE'ta) · `null` okunamadı.
     unvalidatedConstraints,
     lastBackup: latestBackupInfo(),

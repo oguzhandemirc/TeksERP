@@ -37,7 +37,9 @@ import { uyari } from "../lib/logger";
 import {
   DEFAULT_FACTORY_TIMEZONE,
   applyFactoryTimezone,
+  factoryTimezoneWarning,
   getFactoryTimezone,
+  noteStoredFactoryTimezone,
   isValidFactoryTimezone,
 } from "../constants/time";
 import { SECURITY_SETTING_PREFIX } from "../constants/reserved-settings";
@@ -1528,6 +1530,9 @@ export interface FeatureFlags {
   /** Fabrikanın saat dilimi (IANA) — fabrika günü ve bütün görüntü/basım saatleri bundan; istemci
    *  kendi bilgisayar dilimini KULLANMAZ. Salt-okunur: yalnız `PUT /api/feature-flags/factory-timezone` yazar. */
   factoryTimezone: string;
+  /** YALNIZ kayıtlı dilim geçersizken VAR (`FACTORY_TIMEZONE_INVALID_STORED`; sunucu `factoryTimezone` ile koşuyor).
+   *  Sorun yokken anahtar hiç gönderilmez — null göndermek sayısal ayar sözleşmesine karışırdı. */
+  factoryTimezoneWarning?: { code: string; message: string };
   pricingEnabled: boolean;
   /** Ön muhasebe modülü (cari · fatura · tahsilat · kasa/banka) açık mı.
    *  Varsayılan KAPALI — üretici fabrika bu modülü kullanmıyor ve kapalıyken
@@ -2076,6 +2081,8 @@ export class SystemSettingService {
     const flags: CachedFeatureFlags = {
       companyName: await readCompanyName(cacheClient),
       factoryTimezone: syncFactoryTimezone(await readFactoryTimezoneSetting(cacheClient)),
+      // Sıra önemli: sync önce koşar, uyarı onun ölçtüğü duruma göre.
+      ...publicTimezoneWarning(),
       pricingEnabled: await readPricingEnabled(cacheClient),
       financeEnabled: await readFinanceEnabledRaw(cacheClient),
       financeBlockNegativeCashEnabled: await readFinanceBlockNegativeCashEnabled(cacheClient),
@@ -6042,12 +6049,19 @@ export async function readFactoryTimezoneSetting(
   return isValidFactoryTimezone(row.value) ? row.value : null;
 }
 
+function publicTimezoneWarning(): { factoryTimezoneWarning?: { code: string; message: string } } {
+  const w = factoryTimezoneWarning();
+  return w ? { factoryTimezoneWarning: { code: w.code, message: w.message } } : {};
+}
+
 /** Ayar önbelleği tazelenirken süreç içi dilimi DB ile hizalar; sonuçta KULLANILAN dilimi döner. */
 function syncFactoryTimezone(fromDb: string | null): string {
   if (fromDb === null) {
+    if (!factoryTimezoneWarning()) noteStoredFactoryTimezone(false, "geçersiz kayıt");
     uyari("saat-dilimi", `company.timezone geçersiz — son geçerli dilimde kalındı (${getFactoryTimezone()})`);
-  } else if (fromDb !== getFactoryTimezone()) {
-    applyFactoryTimezone(fromDb);
+  } else {
+    if (fromDb !== getFactoryTimezone()) applyFactoryTimezone(fromDb);
+    noteStoredFactoryTimezone(true);
   }
   return getFactoryTimezone();
 }

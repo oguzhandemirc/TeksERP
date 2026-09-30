@@ -51,7 +51,7 @@ import { listAllocations } from "./Allocations/service";
 import { allocationSourceOf, paidDriftK, sumAllocationsK } from "./invoiceDetail";
 // Tarih biçimi TEK yerden: üçüncü bir `toLocaleDateString` kopyası, bir gün
 // birinin "saat de yazalım" demesiyle ekranlar arası ayrışmaya döner.
-import { fmtDate } from "./Cheques/dates";
+import { fmtDate, fmtDueDate } from "./Cheques/dates";
 
 interface Props {
   invoiceId: string;
@@ -252,7 +252,7 @@ export function InvoiceDetailDialog({
               <Field label="Dış belge no" value={inv.externalNo ?? ""} />
               <Field label="Fatura tarihi" value={fmtDate(inv.issueDate)} />
               {/* Vadesiz fatura meşrudur ("—"); uydurma vade basılmaz. */}
-              <Field label="Vade" value={fmtDate(inv.dueDate)} />
+              <Field label="Vade" value={fmtDueDate(inv.dueDate)} />
               <Field
                 label="Para birimi"
                 value={inv.currency === "TRY" ? "TRY" : `${inv.currency} · kur ${Number(inv.exchangeRate).toFixed(4)}`}

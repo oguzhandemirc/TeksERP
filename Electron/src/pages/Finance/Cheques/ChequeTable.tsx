@@ -42,7 +42,7 @@ import { money } from "../service";
 import type { Currency } from "../service";
 import { toNum, type ChequeRow } from "./service";
 import { DOCTYPE_LABEL, KIND_LABEL, STATUS_BADGE, STATUS_LABEL, cariName } from "./labels";
-import { DUE_TONE_CLASS, dueHint, dueTone, fmtDate } from "./dates";
+import { DUE_TONE_CLASS, dueHint, dueTone, fmtDate, fmtDueDate } from "./dates";
 import { availableActions, type ChequeActionDef } from "./transitions";
 
 /** Toplu seçim kancası — verilmezse seçim sütunu HİÇ ÇİZİLMEZ. */
@@ -153,7 +153,7 @@ export function ChequeTable({ rows, onDetail, onAction, selection }: Props) {
                   <div>Keşide: {fmtDate(c.issueDate)}</div>
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
-                  <span className={DUE_TONE_CLASS[tone]}>{fmtDate(c.dueDate)}</span>
+                  <span className={DUE_TONE_CLASS[tone]}>{fmtDueDate(c.dueDate)}</span>
                   {hint && <div className={cn("text-[11px]", DUE_TONE_CLASS[tone])}>{hint}</div>}
                 </td>
                 <td className="px-3 py-2">

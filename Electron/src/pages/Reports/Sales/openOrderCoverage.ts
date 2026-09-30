@@ -5,7 +5,7 @@
 import apiClient from "@/services/apiClient";
 import type { ReportExportSpec } from "../_components/reportExport";
 import type { ReportResponse } from "../_services/types";
-import { factoryLocaleDateString } from "@/lib/factory-time";
+import { calendarLocaleDateString } from "@/lib/factory-time";
 
 export type CoverageState = "HAZIR" | "KISMI" | "URETIM_GEREKLI";
 
@@ -135,7 +135,7 @@ export function buildCoverageExport(c: OpenOrderCoverage, filterNotes: string[] 
         rows: c.lines.map((l) => ({
           ...l,
           colorName: l.colorName ?? "—",
-          deadlineText: l.deadline ? factoryLocaleDateString(l.deadline, "tr-TR") : "—",
+          deadlineText: l.deadline ? calendarLocaleDateString(l.deadline, "tr-TR") : "—",
           daysLate: l.daysLate ?? "",
           stateText: COVERAGE_STATE_LABEL[l.state],
         })),

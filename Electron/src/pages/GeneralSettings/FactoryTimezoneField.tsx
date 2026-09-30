@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { FEATURE_FLAGS_QUERY_KEY } from "@/hooks/usePricingEnabled";
+import { FEATURE_FLAGS_QUERY_KEY, useFactoryTimezoneWarning } from "@/hooks/usePricingEnabled";
 import { featureFlagService } from "@/services/featureFlagService";
 import { apiErrorText } from "@/lib/api-error";
 import { DEFAULT_FACTORY_TIMEZONE, fmtFactoryDateTime } from "@/lib/factory-time";
@@ -32,6 +32,8 @@ export function FactoryTimezoneField() {
   const qc = useQueryClient();
   const current = useFactoryTimezone();
   const canWrite = useRoleAccess().hasPermission(SETTINGS_ADMIN_PERMISSION);
+  // Kayıtlı değer geçersizken yürürlükteki dilimi seçip kaydetmek de onu düzeltir.
+  const invalidStored = useFactoryTimezoneWarning();
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const zones = useMemo(zoneCatalog, []);
@@ -43,7 +45,7 @@ export function FactoryTimezoneField() {
   const previewQ = useQuery({
     queryKey: ["factory-timezone-preview", picked],
     queryFn: () => featureFlagService.previewFactoryTimezone(picked ?? ""),
-    enabled: canWrite && picked !== null && picked !== current,
+    enabled: canWrite && picked !== null && (picked !== current || invalidStored !== null),
     staleTime: 0,
   });
   const preview = previewQ.data?.data;
@@ -73,6 +75,11 @@ export function FactoryTimezoneField() {
       <p className="text-sm">
         Geçerli: <b>{current}</b> · şu an {fmtFactoryDateTime(new Date())}
       </p>
+      {invalidStored && (
+        <p role="alert" className="flex items-center gap-1 text-sm font-medium text-amber-700">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" /> {invalidStored.message}
+        </p>
+      )}
       {!canWrite ? (
         <p className="text-xs text-muted-foreground">Değiştirmek için “Ayarlar (yönetici)” yetkisi gerekir.</p>
       ) : (
@@ -91,7 +98,7 @@ export function FactoryTimezoneField() {
                   type="button"
                   role="option"
                   aria-selected={z === (picked ?? current)}
-                  onClick={() => setPicked(z === current ? null : z)}
+                  onClick={() => setPicked(z === current && !invalidStored ? null : z)}
                   className={`w-full px-3 py-1 text-left hover:bg-muted ${z === (picked ?? current) ? "bg-muted font-medium" : ""}`}
                 >
                   {z}
@@ -103,7 +110,8 @@ export function FactoryTimezoneField() {
           {picked && (
             <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
               <p className="flex items-center gap-1 font-medium">
-                <AlertTriangle className="h-4 w-4 text-amber-600" /> Gün sınırları kayar: {current} → {picked}
+                <AlertTriangle className="h-4 w-4 text-amber-600" />{" "}
+                {picked === current ? `Geçersiz kayıt ${picked} ile düzeltilecek` : `Gün sınırları kayar: ${current} → ${picked}`}
               </p>
               {previewQ.isLoading && <p className="text-muted-foreground">Etki hesaplanıyor…</p>}
               {previewQ.isError && <p className="text-destructive">{apiErrorText(previewQ.error, "Önizleme alınamadı.")}</p>}

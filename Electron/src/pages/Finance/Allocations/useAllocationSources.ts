@@ -21,7 +21,7 @@ import {
   type Direction,
   type SourceKind,
 } from "./service";
-import { factoryLocaleDateString } from "@/lib/factory-time";
+import { factoryLocaleDateString, calendarLocaleDateString } from "@/lib/factory-time";
 
 export interface SourceItem {
   kind: SourceKind;
@@ -99,7 +99,7 @@ export function useAllocationSources({ cariId, currency, direction, kind }: Para
         ]
           .filter(Boolean)
           .join(" · "),
-        dateLabel: `Vade ${trDate(c.dueDate)}`,
+        dateLabel: `Vade ${calendarLocaleDateString(c.dueDate, "tr-TR")}`,
         amountKurus,
         freeKurus: amountKurus - toKurus(c.allocatedTotal),
       };

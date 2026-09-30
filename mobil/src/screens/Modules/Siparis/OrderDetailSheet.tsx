@@ -8,7 +8,7 @@ import type { Order } from '../../../types/models';
 import { ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, trLabel } from '../../../utils/labels';
 import { colors, spacing, radius } from '../../../theme';
 import { num, orderTotals } from './OrderListView';
-import { formatFactory } from '../../../lib/factory-time';
+import { formatFactory, formatCalendarDay } from '../../../lib/factory-time';
 
 // =============================================================================
 // Sipariş detayı — SALT OKUNUR. Veri listedeki satırdan gelir (backend
@@ -51,7 +51,7 @@ export default function OrderDetailSheet({ order, onClose }: Props) {
               <Meta label="Sipariş" value={formatFactory(order.orderDate ?? order.createdAt, 'dd.MM.yyyy')} />
               <Meta
                 label="Termin"
-                value={order.deadline ? formatFactory(order.deadline, 'dd.MM.yyyy') : '—'}
+                value={order.deadline ? formatCalendarDay(order.deadline, 'dd.MM.yyyy') : '—'}
               />
               <Meta label="Kalem" value={String(order.lines?.length ?? 0)} />
             </View>

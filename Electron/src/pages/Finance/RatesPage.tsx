@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { PermissionGate } from "@/components/PermissionGate";
 import { listRates, createRate, fetchTcmbRates, type Currency } from "./service";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
-import { factoryDayKey, factoryLocaleDateString, fmtDayKey } from "@/lib/factory-time";
+import { factoryDayKey, fmtDayKey, calendarLocaleDateString } from "@/lib/factory-time";
 
 // TL kur tablosuna GİRMEZ: kendi para birimimizin kendine kuru 1'dir ve backend
 // bunu koda gömer. Listede göstermek "girmeyi unuttum mu" sorusu doğururdu.
@@ -150,7 +150,7 @@ export function RatesPage() {
                 {rows.map((r) => (
                   <tr key={r.id} className="border-t">
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {factoryLocaleDateString(r.rateDate, "tr-TR")}
+                      {calendarLocaleDateString(r.rateDate, "tr-TR")}
                     </td>
                     <td className="px-3 py-2 font-medium">{r.currency}</td>
                     <td className="px-3 py-2 text-right font-mono">{Number(r.rate).toFixed(4)}</td>

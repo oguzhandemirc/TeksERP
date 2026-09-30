@@ -8,7 +8,7 @@ import { workOrderStatusLabels } from "@/types/enums";
 import type { WorkOrder } from "@/pages/Operations/WorkOrders/types";
 import { useTabsStore } from "@/store/tabs";
 import { fetchOverdueWorkOrders } from "./dashboardService";
-import { factoryDayDiff, factoryLocaleDateString } from "@/lib/factory-time";
+import { calendarDaysFromToday, calendarLocaleDateString } from "@/lib/factory-time";
 
 export function OverdueWorkOrders() {
   // O8 fix: izin yoksa sorgu HİÇ atılmaz (enabled) ve widget gizlenir.
@@ -96,7 +96,7 @@ function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
           </p>
           <p className="text-[10px] text-muted-foreground">
             {end
-              ? factoryLocaleDateString(end, "tr-TR", {
+              ? calendarLocaleDateString(end, "tr-TR", {
                   day: "2-digit",
                   month: "short",
                   year: "numeric",
@@ -130,5 +130,5 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function daysSince(date: Date): number {
-  return Math.max(0, factoryDayDiff(new Date(), date));
+  return Math.max(0, -calendarDaysFromToday(date));
 }

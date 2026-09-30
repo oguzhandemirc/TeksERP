@@ -11,11 +11,13 @@
 //      Eski formüller burada REFERANS olarak duruyor — ürün kodunda değil.
 //   §2 GÜN KAYNAĞI FABRİKA: `TZ=UTC` altında 21:30Z anı eski formülde bir gün
 //      geri, yeni yardımcıda fabrika günü (`factoryYmd`); saat de fabrika saati.
+//   §3 TAKVİM GÜNÜ (şık 6 kararı b): UTC'nin batısındaki dilimde (America/New_York) tam UTC gece yarısı
+//      vade/termin bir gün KAYMAZ; AN alanı fabrika diliminde; türetilmiş vade (gece yarısı değil) fabrika günü.
 // Negatif sonda: `fmtDate`i `getDate()` formülüne çevir → §2 `TZ=UTC` ile kırmızı;
 // biçimi değiştir (örn. `/` ayırıcı) → §1 her TZ'de kırmızı.
 
-import { fmtDate, fmtDateTime } from "../src/services/document-render/fmt-date";
-import { getFactoryTimezone, factoryYmd } from "../src/constants/time";
+import { fmtCalendarDate, fmtDate, fmtDateTime } from "../src/services/document-render/fmt-date";
+import { DEFAULT_FACTORY_TIMEZONE, applyFactoryTimezone, getFactoryTimezone, factoryYmd } from "../src/constants/time";
 
 let pass = 0;
 let fail = 0;
@@ -110,6 +112,20 @@ if (TZ === "UTC") {
     "§2 UTC'de eski formül bir gün GERİ, yeni yardımcı fabrika günü (kusurun kanıtı)",
     legacy.bos("2026-09-13T21:30:00Z") === "13.09.2026" && fmtDate("2026-09-13T21:30:00Z") === "14.09.2026"
   );
+}
+
+// §3 — takvim günü alanı: istemci `fmtCalendarDay` ile aynı kural
+check("§3a varsayılan dilimde takvim günü bugünkü çıktı", fmtCalendarDate("2026-09-30T00:00:00.000Z") === fmtDate("2026-09-30T00:00:00.000Z"));
+check("§3b türetilmiş vade (gece yarısı değil) fabrika günü", fmtCalendarDate("2026-10-30T22:30:00.000Z") === "31.10.2026", fmtCalendarDate("2026-10-30T22:30:00.000Z"));
+check("§3c boş/bozuk girdi fallback", fmtCalendarDate(null, "—") === "—" && fmtCalendarDate("abc") === "");
+applyFactoryTimezone("America/New_York");
+try {
+  check("§3d ⭐ New York: vade (UTC gece yarısı) bir gün KAYMAZ", fmtCalendarDate("2026-09-30T00:00:00.000Z") === "30.09.2026", fmtCalendarDate("2026-09-30T00:00:00.000Z"));
+  check("§3e ⭐ New York: AN alanı fabrika diliminde (önceki gün)", fmtDate("2026-09-30T00:00:00.000Z") === "29.09.2026" &&
+    fmtDateTime("2026-09-30T02:00:00.000Z") === "29.09.2026 22:00", fmtDateTime("2026-09-30T02:00:00.000Z"));
+  check("§3f New York: gece yarısı olmayan an takvim alanında da fabrika günü", fmtCalendarDate("2026-09-30T02:00:00.000Z") === "29.09.2026");
+} finally {
+  applyFactoryTimezone(DEFAULT_FACTORY_TIMEZONE);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

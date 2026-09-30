@@ -18,7 +18,7 @@
 // (backend "şimdi"yi kullanır) ya da düğmeyi kapatır.
 // =============================================================================
 import type { ChequeStatus } from "./service";
-import { factoryDayDiff, factoryDayEndIso, factoryDayKey, factoryDayStartIso, factoryLocaleDateString } from "@/lib/factory-time";
+import { factoryDayEndIso, factoryDayKey, factoryDayStartIso, factoryLocaleDateString, calendarDaysFromToday, calendarLocaleDateString } from "@/lib/factory-time";
 
 /** `<input type="date">` değeri — YYYY-MM-DD, yerel bileşenlerden. */
 export function ymd(d: Date): string {
@@ -59,6 +59,13 @@ export function dayEndIso(value: string): string | undefined {
   return factoryDayEndIso(value.trim());
 }
 
+/** Vade (takvim günü alanı) ekranda — `calendarLocaleDateString` kuralı; boş/bozuk → "—". */
+export function fmtDueDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : calendarLocaleDateString(d, "tr-TR");
+}
+
 /** Ekranda tarih — tek biçim (`tr-TR`), listede ve defterde aynı. */
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -81,7 +88,7 @@ export function dueTone(dueDate: string, status: ChequeStatus): DueTone {
   if (!LIVE_STATUSES.includes(status)) return "closed";
   const due = new Date(dueDate);
   if (Number.isNaN(due.getTime())) return "normal";
-  const diffDays = factoryDayDiff(due, new Date());
+  const diffDays = calendarDaysFromToday(due);
   if (diffDays < 0) return "overdue";
   // 7 gün: haftalık planlama penceresi — "bu hafta ne var" sorusunun karşılığı.
   if (diffDays <= 7) return "soon";

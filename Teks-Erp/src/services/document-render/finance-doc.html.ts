@@ -39,7 +39,7 @@ import {
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize, scaleW } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import type { PrintedDocSnapshot } from "../printed-document.service";
-import { fmtDate } from "./fmt-date";
+import { fmtCalendarDate, fmtDate } from "./fmt-date";
 import { docNum, type DocNum } from "./fmt-num";
 import { upperTr } from "../../utils/tr-case";
 
@@ -376,7 +376,7 @@ export function renderInvoiceInternalHtml(snapshot: PrintedDocSnapshot, meta: Re
     configKey: "fatura",
     headerLines: [
       sectionOn(cfg.sections, "dueDate") && h.dueDate
-        ? `<div class="ln">Vade: <b>${esc(fmtDate(h.dueDate, "—"))}</b></div>`
+        ? `<div class="ln">Vade: <b>${esc(fmtCalendarDate(h.dueDate, "—"))}</b></div>`
         : "",
       sectionOn(cfg.sections, "externalNo") && h.externalNo
         ? `<div class="ln">Belge/İrsaliye No: <b>${esc(h.externalNo)}</b></div>`
@@ -578,7 +578,7 @@ function chequeTableCols(single: ChequeDeliveryTotal | null): DocColSpec<ChequeD
     { key: "docNo", label: "BELGE NO", align: "l", cellClass: "mono", kind: TEXT, value: (r) => r.docNo },
     { key: "serialNo", label: "SERİ NO", align: "l", cellClass: "mono", kind: TEXT, value: (r) => r.serialNo ?? "—" },
     { key: "issueDate", label: "KEŞİDE", align: "c", width: "80px", kind: TEXT, value: (r) => fmtDate(r.issueDate, "—") },
-    { key: "dueDate", label: "VADE", align: "c", width: "80px", kind: TEXT, value: (r) => fmtDate(r.dueDate, "—") },
+    { key: "dueDate", label: "VADE", align: "c", width: "80px", kind: TEXT, value: (r) => fmtCalendarDate(r.dueDate, "—") },
     { key: "drawer", label: "KEŞİDECİ", align: "l", kind: TEXT, value: (r) => r.drawerName ?? "—" },
     { key: "bank", label: "BANKA", align: "l", kind: TEXT, value: (r) => r.bankName ?? "—" },
     { key: "currency", label: "PARA", align: "c", width: "50px", kind: TEXT, value: (r) => r.currency },

@@ -81,6 +81,28 @@ export function applyFactoryTimezone(value: string): void {
   currentTimezone = value;
 }
 
+/** Sağlık ucu + panel uyarısının kodu: kayıtlı `company.timezone` geçersiz, sunucu başka dilimle koşuyor. */
+export const FACTORY_TIMEZONE_INVALID_STORED = "FACTORY_TIMEZONE_INVALID_STORED";
+
+// Kayıtlı değer geçersiz okunduysa ham hâli (uyarıda gösterilir); geçerli okununca null.
+let storedInvalidRaw: string | null = null;
+
+/** Son DB okumasının sonucu: geçersizse ham değeri tutar, geçerliyse uyarıyı kaldırır. */
+export function noteStoredFactoryTimezone(valid: boolean, raw?: unknown): void {
+  storedInvalidRaw = valid ? null : JSON.stringify(raw ?? null).slice(0, 80);
+}
+
+/** Kayıtlı dilim geçersizken sağlık ucu ve panelin göstereceği uyarı; sorun yoksa `null`. */
+export function factoryTimezoneWarning(): { code: string; message: string; stored: string } | null {
+  if (storedInvalidRaw === null) return null;
+  const used = currentTimezone === DEFAULT_FACTORY_TIMEZONE ? "İstanbul" : currentTimezone;
+  return {
+    code: FACTORY_TIMEZONE_INVALID_STORED,
+    message: `Kayıtlı saat dilimi geçersiz; ${used} kullanılıyor — Şirket Bilgileri → Saat dilimi'den düzeltin`,
+    stored: storedInvalidRaw,
+  };
+}
+
 function assertSqlZone(timeZone: string): void {
   if (!isValidFactoryTimezone(timeZone)) throw new Error(`SQL'e geçersiz saat dilimi verilemez: ${timeZone}`);
 }

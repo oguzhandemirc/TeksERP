@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { safeFormat } from "@/lib/format";
+import { safeFormatCalendar } from "@/lib/format";
 import { sackHubService } from "./service";
 
 const fmtM = (n: number) => `${Math.round(Number(n))}m`;
@@ -137,7 +137,7 @@ export function ShipmentOrderSelect({ customerId, branchId, selectedIds, onToggl
                       <span className="font-mono font-medium">{o.order.orderNumber}</span>
                       <span className="text-xs text-muted-foreground">{o.lines.length} kalem · {fmtM(openSum)} açık</span>
                       {o.order.deadline && (
-                        <span className="text-xs text-muted-foreground">termin {safeFormat(o.order.deadline, "dd.MM.yyyy")}</span>
+                        <span className="text-xs text-muted-foreground">termin {safeFormatCalendar(o.order.deadline, "dd.MM.yyyy")}</span>
                       )}
                     </div>
                     {/* Bizdeki ad — sevk kurma akışının geri kalanı (çuval/top listeleri)

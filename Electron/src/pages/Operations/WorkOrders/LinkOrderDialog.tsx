@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { safeFormat } from "@/lib/format";
+import { safeFormatCalendar } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -219,7 +219,7 @@ export function LinkOrderDialog({
                       </div>
                     </td>
                     <td className="p-2 text-xs">
-                      {l.deadline ? safeFormat(l.deadline, "dd.MM.yyyy") : <Badge variant="muted">—</Badge>}
+                      {l.deadline ? safeFormatCalendar(l.deadline, "dd.MM.yyyy") : <Badge variant="muted">—</Badge>}
                     </td>
                   </tr>
                 ))}

@@ -10,6 +10,7 @@ import { useSurumNotuAcilis } from "@/hooks/useSurumNotuAcilis";
 import { useGirisGuncellemeKontrolu } from "@/hooks/useGirisGuncellemeKontrolu";
 import { ServerOfflineBanner } from "./ServerOfflineBanner";
 import { LicenseBanner } from "./LicenseBanner";
+import { FactoryTimezoneBanner } from "./FactoryTimezoneBanner";
 import { ScanResultOverlay } from "@/components/scanner/ScanResultOverlay";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useTabShortcuts } from "@/hooks/useTabShortcuts";
@@ -98,6 +99,7 @@ export function AppShell() {
       <UpdateDownloadStrip />
       {/* Lisans bandı backend'in uyguladığı karardır; gözlemde hiç çizilmez. */}
       <LicenseBanner />
+      <FactoryTimezoneBanner />
       <ServerOfflineBanner />
       <div className="flex min-h-0 flex-1">
         <Sidebar collapsed={collapsed} />

@@ -31,7 +31,7 @@ import {
   wrapRawDocument,
   resolveTravelerCompanyName,
 } from "./traveler-card-raw";
-import { fmtDate, fmtDateTime } from "./fmt-date";
+import { fmtCalendarDate, fmtDateTime } from "./fmt-date";
 import { cssFixed } from "./fmt-num";
 
 interface SnapStep {
@@ -349,8 +349,8 @@ export function renderTravelerCardHtml(
   add(sf.targetQuantity, "Hedef Metraj", `${esc(fmtNum(snapshot.targetQuantity))} m`, true);
   add(sf.targetWeight, "Hedef Ağırlık", snapshot.targetWeight != null ? `${esc(fmtNum(snapshot.targetWeight))} kg` : "—");
   add(sf.foldType, "Kat Tipi", esc(snapshot.foldType ?? "—"));
-  add(sf.startDate, "Başlangıç", esc(fmtDate(snapshot.plannedStartDate, "—")));
-  add(sf.endDate, "Bitiş", esc(fmtDate(snapshot.plannedEndDate, "—")));
+  add(sf.startDate, "Başlangıç", esc(fmtCalendarDate(snapshot.plannedStartDate, "—")));
+  add(sf.endDate, "Bitiş", esc(fmtCalendarDate(snapshot.plannedEndDate, "—")));
   const grid = gridCells.length ? `<div class="grid">${gridCells.join("")}</div>` : "";
 
   const propsBlock =

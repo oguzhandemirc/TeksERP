@@ -9,7 +9,7 @@ import { workOrderTypeLabels } from "@/types/enums";
 import type { WorkOrder } from "@/pages/Operations/WorkOrders/types";
 import { useTabsStore } from "@/store/tabs";
 import { fetchUpcomingWorkOrders } from "./dashboardService";
-import { factoryDayDiff, factoryLocaleDateString } from "@/lib/factory-time";
+import { calendarDaysFromToday, calendarLocaleDateString } from "@/lib/factory-time";
 
 export function UpcomingWorkOrders() {
   // O8 fix: izin yoksa sorgu HİÇ atılmaz (enabled) ve widget gizlenir — dar
@@ -108,7 +108,7 @@ function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
           </p>
           <p className="text-[10px] text-muted-foreground">
             {start
-              ? factoryLocaleDateString(start, "tr-TR", {
+              ? calendarLocaleDateString(start, "tr-TR", {
                   day: "2-digit",
                   month: "short",
                 })
@@ -141,5 +141,5 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function daysUntil(date: Date): number {
-  return factoryDayDiff(date, new Date());
+  return calendarDaysFromToday(date);
 }

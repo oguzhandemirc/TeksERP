@@ -51,7 +51,7 @@ import {
   chequePay, chequeReturn, chequeReverse, toNum, type ChequeRow,
 } from "./service";
 import { DOCTYPE_LABEL, cariName } from "./labels";
-import { dayStartIso, fmtDate, ymd } from "./dates";
+import { dayStartIso, ymd, fmtDueDate } from "./dates";
 import { allocationBlockReason, type ChequeActionDef } from "./transitions";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
@@ -177,7 +177,7 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
   const head = `${row.docNo} · ${DOCTYPE_LABEL[row.docType]} · ${cariName(row.cari)} · ${money(
     toNum(row.amount),
     row.currency as Currency,
-  )} · vade ${fmtDate(row.dueDate)}`;
+  )} · vade ${fmtDueDate(row.dueDate)}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

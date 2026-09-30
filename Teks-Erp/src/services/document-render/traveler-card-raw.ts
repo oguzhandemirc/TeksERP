@@ -28,7 +28,7 @@ import {
   TRAVELER_LOOP_KEYS,
   TRAVELER_LOOPS,
 } from "../../config/traveler-card-fields";
-import { fmtDate, fmtDateTime } from "./fmt-date";
+import { fmtCalendarDate, fmtDateTime } from "./fmt-date";
 import { DEFAULT_COMPANY_NAME } from "../../constants/company";
 
 /** Kartın firma adı: snapshot'taki kart adı → kurulumun adı → nötr yedek. */
@@ -103,8 +103,8 @@ export function buildRawContext(
       routeName: snapshot.routeTemplate?.name ?? "",
       targetQuantity: fmtNum(snapshot.targetQuantity),
       targetWeight: fmtNum(snapshot.targetWeight),
-      startDate: fmtDate(snapshot.plannedStartDate, "—"),
-      endDate: fmtDate(snapshot.plannedEndDate, "—"),
+      startDate: fmtCalendarDate(snapshot.plannedStartDate, "—"),
+      endDate: fmtCalendarDate(snapshot.plannedEndDate, "—"),
 
       batchCount: String(batches.length),
       batchRollTotal: String(batches.reduce((s, b) => s + b.rollCount, 0)),

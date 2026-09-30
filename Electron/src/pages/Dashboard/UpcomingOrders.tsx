@@ -11,7 +11,7 @@ import { orderStatusLabels } from "@/types/enums";
 import type { Order } from "@/pages/Operations/Orders/types";
 import { useTabsStore } from "@/store/tabs";
 import { fetchUpcomingOrders } from "./dashboardService";
-import { factoryDayDiff, factoryLocaleDateString } from "@/lib/factory-time";
+import { calendarLocaleDateString, calendarDaysFromToday } from "@/lib/factory-time";
 
 export function UpcomingOrders() {
   // O8 fix: izin yoksa sorgu HİÇ atılmaz (enabled) ve widget gizlenir.
@@ -126,7 +126,7 @@ function DeadlineBadge({ days, deadline }: { days: number | null; deadline: Date
         {overdue ? `${Math.abs(days)} gün geçti` : days === 0 ? "Bugün" : `${days} gün`}
       </p>
       <p className="text-[10px] text-muted-foreground">
-        {factoryLocaleDateString(deadline, "tr-TR", { day: "2-digit", month: "short", year: "numeric" })}
+        {calendarLocaleDateString(deadline, "tr-TR", { day: "2-digit", month: "short", year: "numeric" })}
       </p>
     </div>
   );
@@ -149,5 +149,5 @@ function LoadingRows() {
 }
 
 function daysUntil(date: Date): number {
-  return factoryDayDiff(date, new Date());
+  return calendarDaysFromToday(date);
 }

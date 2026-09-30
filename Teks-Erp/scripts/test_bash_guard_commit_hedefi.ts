@@ -8,6 +8,7 @@
 // --amend` ANA ağacın kapısını koşup onun kırmızısını verdi; `git -C <wt> …` hiç
 // tanınmadı; heredoc/echo içindeki "git commit" metni de ana kapıyı koşturdu;
 // `core.hooksPath` MUTLAK yazılınca git kancası "kurulu değil" sayıldı (çift koşum).
+// §12: `scripts/hooks-kur.mjs --durum` aynı çözücüyü (`gitKapisiKurulu`) kullanır — mutlak yolu da tanır.
 //
 // Kurgu: geçici bir depo (ana + worktree) GERÇEK kanca betiğinin kopyasını taşır;
 // commit gövdesi SAHTEDİR ve yalnız hangi ağaçta koştuğunu basar (ana'da çıkış 1).
@@ -45,6 +46,7 @@ function kur(tmp: string): { ana: string; wt: string } {
   mkdirSync(join(ana, "Teks-Erp", "src"), { recursive: true });
   cpSync(join(KOK, "scripts", "claude-hooks"), join(ana, "scripts", "claude-hooks"), { recursive: true });
   cpSync(join(KOK, "scripts", "hooks", "lib", "staged.mjs"), join(ana, "scripts", "hooks", "lib", "staged.mjs"));
+  cpSync(join(KOK, "scripts", "hooks-kur.mjs"), join(ana, "scripts", "hooks-kur.mjs"));
   writeFileSync(join(ana, "scripts", "hooks", "pre-commit.mjs"), SAHTE_GOVDE);
   git(ana, "init", "-q", "-b", "main");
   git(ana, "config", "user.email", "t@t");
@@ -70,6 +72,10 @@ function kanca(ana: string, command: string, cwd = ana): { cikis: number | null;
   });
   return { cikis: r.status, err: r.stderr ?? "" };
 }
+
+/** `hooks-kur.mjs --durum` çıktısı: kurulu mu (bash-guard ile aynı çözücü). */
+const durumKurulu = (ana: string): boolean =>
+  /KURULU/.test(spawnSync("node", [join(ana, "scripts", "hooks-kur.mjs"), "--durum"], { cwd: ana, env: ENV, encoding: "utf8" }).stdout ?? "");
 
 const agac = (err: string): string => (err.match(/SAHTE-KAPI agac=(\S+)/)?.[1] ?? "yok");
 const taban = (err: string): string => err.match(/taban=(\S+)/)?.[1] ?? "-";
@@ -108,12 +114,14 @@ function main(): void {
     git(ana, "config", "core.hooksPath", join(ana, ".githooks"));
     r = kanca(ana, `cd ${wt} && git commit -m x`);
     check("§10a ⭐ MUTLAK core.hooksPath → git kancası kurulu sayılır, çift koşum yok", agac(r.err) === "yok" && r.cikis === 0, `agac=${agac(r.err)}`);
+    check("§12a ⭐ hooks-kur --durum MUTLAK yolu da KURULU der (tek çözücü)", durumKurulu(ana));
     git(ana, "config", "core.hooksPath", ".githooks");
     r = kanca(ana, "git commit -m x");
     check("§10b göreli core.hooksPath (.githooks) → kurulu", agac(r.err) === "yok");
     writeFileSync(join(ana, ".githooks", "pre-commit"), "exit 0\n");
     r = kanca(ana, "git commit -m x");
     check("§10c ⭐ bizim gövdeyi çağırmayan pre-commit kurulu SAYILMAZ", agac(r.err) === "ana");
+    check("§12b hooks-kur --durum gövdesiz kancayı kurulu SAYMAZ", !durumKurulu(ana));
     git(ana, "config", "--unset", "core.hooksPath");
     r = kanca(ana, ["prisma", "migrate", "reset"].join(" "));
     check("§11 yasak kolu dokunulmadı: yasak komut çıkış 2", r.cikis === 2);

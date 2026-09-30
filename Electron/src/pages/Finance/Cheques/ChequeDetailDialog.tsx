@@ -37,7 +37,7 @@ import {
   STATUS_LABEL,
   cariName,
 } from "./labels";
-import { fmtDate } from "./dates";
+import { fmtDate, fmtDueDate } from "./dates";
 
 interface Props {
   chequeId: string;
@@ -111,7 +111,7 @@ export function ChequeDetailDialog({ chequeId, open, onOpenChange }: Props) {
                   etikete indirmek eski karışıklığı ekranda yeniden üretirdi. */}
               <Field label="İşlem tarihi (defter)" value={fmtDate(c.postingDate)} />
               <Field label="Keşide tarihi (kâğıt)" value={fmtDate(c.issueDate)} />
-              <Field label="Vade" value={fmtDate(c.dueDate)} />
+              <Field label="Vade" value={fmtDueDate(c.dueDate)} />
               <Field
                 label="Banka / şube"
                 value={[c.bankName, c.branchName].filter(Boolean).join(" · ")}

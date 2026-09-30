@@ -1,7 +1,7 @@
 // Yurtiçi / Yurtdışı Satış — sekme tabloları (müşteri · ülke · ürün · açık sipariş).
 // Tutar ve birim fiyat aynı satırda: ayrı "fiyat" sekmesi yok (sadelik).
 import type { ColumnDef } from "@tanstack/react-table";
-import { fmtDate, fmtNum } from "../_components/formatters";
+import { fmtNum, fmtCalendarDate } from "../_components/formatters";
 import { amountText, avgPriceText, BUCKET_LABELS, pricedCoverageText, type BacklogRow, type MixBreakdownRow } from "./destinationMix";
 
 const right = (label: string) => () => <div className="text-right">{label}</div>;
@@ -30,7 +30,7 @@ export const backlogExportColumns: ColumnDef<BacklogRow, unknown>[] = [
   { accessorKey: "customerName", header: "Müşteri" },
   { accessorKey: "openQty", header: right("Açık (m)"), cell: ({ getValue }) => num(getValue() as number) },
   { accessorKey: "overdueQty", header: right("Termini geçen (m)"), cell: ({ getValue }) => num(getValue() as number) },
-  { accessorKey: "earliestDeadline", header: "En yakın termin", cell: ({ getValue }) => fmtDate(getValue() as string | null) },
+  { accessorKey: "earliestDeadline", header: "En yakın termin", cell: ({ getValue }) => fmtCalendarDate(getValue() as string | null) },
   {
     id: "tutar",
     header: "Açık tutar",

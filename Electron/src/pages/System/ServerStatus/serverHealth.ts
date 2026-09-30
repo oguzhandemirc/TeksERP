@@ -50,6 +50,8 @@ export interface HealthResponse {
   /** Pasif ana veride canlı referans (URUN-YASAM-DONGUSU §10). `null` = henüz ölçülmedi
    *  (sunucu 10 dk önbellekli ölçer) — 0 ile karıştırılmaz; eski backend alanı göndermez. */
   masterDataArchive?: { total: number; archivedWithLiveRefs: Record<string, number>; stale: boolean } | null;
+  /** Fabrika saat dilimi: `warning` doluysa kayıtlı değer geçersiz, sunucu `active` ile koşuyor. Eski backend göndermez. */
+  factoryTimezone?: { active: string; warning: { code: string; message: string } | null };
 }
 
 const MASTER_DATA_LABEL: Record<string, string> = {
@@ -232,6 +234,10 @@ export function evaluateAlerts(d: HealthResponse | undefined): Alert[] {
       level: "warn",
       message: `Pasif ana veride canlı kayıt var (${masterDataSummary(md.archivedWithLiveRefs)}) — kayıtları kapatın ya da kartı yeniden kullanıma alın.`,
     });
+
+  // Metin sunucunundur (FACTORY_TIMEZONE_INVALID_STORED): sunucu varsayılan dilimle açıldı, düzeltme panelden.
+  const tzWarn = d.factoryTimezone?.warning;
+  if (tzWarn) out.push({ level: "warn", message: tzWarn.message });
 
   // Yedek bayatlığı: 24sa üstü uyarı, 48sa üstü kritik.
   const ageH = d.lastBackup ? (Date.now() - new Date(d.lastBackup.time).getTime()) / 3_600_000 : null;

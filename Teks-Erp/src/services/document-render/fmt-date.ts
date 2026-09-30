@@ -26,3 +26,16 @@ export function fmtDateTime(iso: string | null | undefined, fallback = "—"): s
   const d = parse(iso);
   return d ? factoryDateTimeTr(d) : fallback;
 }
+
+/**
+ * TAKVİM GÜNÜ alanı (vade · termin · planlanan tarih) `GG.AA.YYYY`: tam UTC gece yarısı `@db.Date` ve
+ * "YYYY-MM-DD" girdisinin saklamasıdır → UTC parçaları (dilim değişse de gün kaymaz); başka bir an
+ * (türetilmiş vade) fabrika gününde. İstemci `factory-time.ts` → `fmtCalendarDay` ile AYNI kural.
+ */
+export function fmtCalendarDate(iso: string | null | undefined, fallback = ""): string {
+  const d = parse(iso);
+  if (!d) return fallback;
+  if (d.getTime() % 86_400_000 !== 0) return factoryDateTr(d);
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  return `${p2(d.getUTCDate())}.${p2(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
+}

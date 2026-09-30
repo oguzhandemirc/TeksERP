@@ -385,4 +385,10 @@ export function useBackupHour(): number {
   return q.data?.data?.backupHour ?? 3;
 }
 
+/** Kayıtlı fabrika saat dilimi geçersizse sunucunun uyarısı (FACTORY_TIMEZONE_INVALID_STORED), yoksa null. */
+export function useFactoryTimezoneWarning(): { code: string; message: string } | null {
+  const q = useFeatureFlags();
+  return q.data?.data?.factoryTimezoneWarning ?? null;
+}
+
 export const FEATURE_FLAGS_QUERY_KEY = QUERY_KEY;

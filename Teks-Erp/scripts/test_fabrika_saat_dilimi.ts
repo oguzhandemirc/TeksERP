@@ -7,6 +7,7 @@
 //   §4 saf: doğrulama (IANA listesi, SQL'e gömülecek metin) ve geçersiz dilimin REDDİ
 //   §5 DB: yokken varsayılan · atomik claim (yanlış beklenen → 409) · önizleme yazmaz · ham uç rezerve
 //          · ayar yanıtı süreç içi dilimi taşır · SQL gün kesimi JS ile aynı gün
+//   §8 DB: geçersiz kayıtlı dilimle açılış → varsayılan + uyarı (sağlık · panel), aynı dilimle düzeltme (karar §5.2)
 //   §6 sondalar: tarayıcı literal'i/SQL'i YAKALAR (negatif) ve tek kaynak çağrısını TEMİZ sayar (pozitif)
 // Koşum: npx tsx scripts/test_fabrika_saat_dilimi.ts   (§5 kendi `_test` DB'sini ister)
 // =============================================================================
@@ -14,12 +15,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
 import {
-  DEFAULT_FACTORY_TIMEZONE, applyFactoryTimezone, factoryDateTimeTr, factoryDayEnd, factoryDaySql,
-  factoryDayStart, factoryYmd, getFactoryTimezone, isValidFactoryTimezone, resolveRangeStart,
+  DEFAULT_FACTORY_TIMEZONE, FACTORY_TIMEZONE_INVALID_STORED, applyFactoryTimezone, factoryDateTimeTr, factoryDayEnd,
+  factoryDaySql, factoryDayStart, factoryTimezoneWarning, factoryYmd, getFactoryTimezone, isValidFactoryTimezone,
+  resolveRangeStart,
 } from "../src/constants/time";
 import { isReservedSettingKey } from "../src/constants/reserved-settings";
-import { SETTING_KEYS, systemSettingService } from "../src/services/system-setting.service";
-import { previewFactoryTimezone, setFactoryTimezone } from "../src/services/factory-timezone.service";
+import { SETTING_KEYS, invalidateFeatureFlagsCache, systemSettingService } from "../src/services/system-setting.service";
+import { loadFactoryTimezoneAtBoot, previewFactoryTimezone, setFactoryTimezone } from "../src/services/factory-timezone.service";
+import { buildRichHealth } from "../src/lib/health-snapshot";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
@@ -189,6 +192,41 @@ async function dbSection(): Promise<void> {
   check("§5l iki başarılı yazım audit'e düştü", audits >= 2, `${audits}`);
 }
 
+const TZ_INVALID_MSG = "Kayıtlı saat dilimi geçersiz; İstanbul kullanılıyor — Şirket Bilgileri → Saat dilimi'den düzeltin";
+const tzWarningCode = (v: unknown): unknown => (v as { code?: unknown } | null | undefined)?.code;
+
+/** §8 — geçersiz kayıtlı dilim: sunucu DURMAZ, varsayılanla açılır ve uyarır; panelden aynı dilimle düzeltilir. */
+async function invalidStoredSection(): Promise<void> {
+  console.log("\n§8 — geçersiz kayıtlı dilimle açılış");
+  const admin = await ensureTestAdmin();
+  await prisma.systemSetting.deleteMany({ where: { key: KEY } });
+  await prisma.systemSetting.create({ data: { key: KEY, value: "Mars/Olympus", description: "bekçi §8" } });
+  applyFactoryTimezone("Europe/Berlin");
+  const boot = await loadFactoryTimezoneAtBoot();
+  check("§8a ⭐ geçersiz kayıtla açılış REDDEDİLMEZ, varsayılanla sürer", boot.storedInvalid &&
+    boot.timeZone === DEFAULT_FACTORY_TIMEZONE && getFactoryTimezone() === DEFAULT_FACTORY_TIMEZONE, getFactoryTimezone());
+  const w = factoryTimezoneWarning();
+  check("§8b ⭐ uyarı kodu ve metni", w?.code === FACTORY_TIMEZONE_INVALID_STORED && w.message === TZ_INVALID_MSG, w?.message ?? "uyarı yok");
+  const health = (await buildRichHealth()).factoryTimezone as { active?: string; warning?: unknown } | undefined;
+  check("§8c sağlık ucu uyarıyı taşır", tzWarningCode(health?.warning) === FACTORY_TIMEZONE_INVALID_STORED &&
+    health?.active === DEFAULT_FACTORY_TIMEZONE, JSON.stringify(health));
+  invalidateFeatureFlagsCache();
+  const flags = (await systemSettingService.getFeatureFlags()).data as unknown as Record<string, unknown>;
+  check("§8d ayar yanıtı (panel şeridi) uyarıyı taşır", tzWarningCode(flags.factoryTimezoneWarning) === FACTORY_TIMEZONE_INVALID_STORED &&
+    flags.factoryTimezone === DEFAULT_FACTORY_TIMEZONE, String(flags.factoryTimezone));
+  const pv = await previewFactoryTimezone(DEFAULT_FACTORY_TIMEZONE);
+  check("§8e önizleme geçersiz kaydı söyler, aynı dilimi değişiklik sayar, gün kaydırmaz",
+    pv.storedInvalid && pv.changed && pv.recentRollsShifted === 0 && pv.current === DEFAULT_FACTORY_TIMEZONE);
+  let stale = "";
+  try { await setFactoryTimezone({ timeZone: DEFAULT_FACTORY_TIMEZONE, expectedCurrent: "Asia/Tokyo" }, admin.id); }
+  catch (e) { stale = String((e as { details?: { code?: string } }).details?.code ?? ""); }
+  check("§8f yanlış beklenenle geçersiz kayıt claim edilmez (409)", stale === "FACTORY_TIMEZONE_CHANGED", stale);
+  const fixed = await setFactoryTimezone({ timeZone: DEFAULT_FACTORY_TIMEZONE, expectedCurrent: pv.current }, admin.id);
+  const row = await prisma.systemSetting.findUnique({ where: { key: KEY }, select: { value: true } });
+  check("§8g ⭐ yürürlükteki dilimle kaydetmek geçersiz kaydı düzeltir ve uyarıyı kaldırır",
+    fixed.changed && row?.value === DEFAULT_FACTORY_TIMEZONE && factoryTimezoneWarning() === null, JSON.stringify(row?.value));
+}
+
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4112";
 const HTTP_CHECKS = 8;
 
@@ -251,7 +289,7 @@ async function main(): Promise<void> {
     return;
   }
   console.log(`\nHedef veritabanı: ${hedefDbAdi()}`);
-  try { await dbSection(); await httpSection(); } finally { await temizle(); }
+  try { await dbSection(); await invalidStoredSection(); await httpSection(); } finally { await temizle(); }
 }
 
 main()

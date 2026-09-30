@@ -58,6 +58,15 @@ describe("evaluateAlerts — pasif ana veride canlı kayıt (URUN-YASAM-DONGUSU 
     expect(msgs(base()).some((m) => m.includes("Pasif ana veri"))).toBe(false);
   });
 });
+describe("evaluateAlerts — fabrika saat dilimi", () => {
+  const TZ_MSG = "Kayıtlı saat dilimi geçersiz; İstanbul kullanılıyor — Şirket Bilgileri → Saat dilimi'den düzeltin";
+  it("⭐ kayıtlı dilim geçersiz → sunucunun metniyle uyarı; uyarı yok ya da eski backend → sessiz", () => {
+    const warning = { code: "FACTORY_TIMEZONE_INVALID_STORED", message: TZ_MSG };
+    expect(msgs(base({ factoryTimezone: { active: "Europe/Istanbul", warning } }))).toContain(TZ_MSG);
+    expect(msgs(base({ factoryTimezone: { active: "Europe/Istanbul", warning: null } })).some((m) => m.includes("saat dilimi"))).toBe(false);
+    expect(msgs(base()).some((m) => m.includes("saat dilimi"))).toBe(false);
+  });
+});
 const poolAlerts = (d: HealthResponse) => evaluateAlerts(d).filter((a) => a.message.includes("havuz"));
 
 describe("evaluateAlerts — bağlantı havuzu", () => {

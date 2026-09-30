@@ -279,7 +279,7 @@ function startRemoteListener(): Server | null {
 }
 
 // Fabrika saat dilimi dinleyiciden ÖNCE yüklenir: ilk istek de ilk zamanlayıcı da doğru günü görür.
-// Geçersiz kayıtlı dilim → açılmaz (fail-closed); DB'ye ulaşılamazsa bugünkü gibi açılır.
+// Geçersiz kayıtlı dilim → varsayılanla açılır + sağlık/panel uyarısı; DB'ye ulaşılamazsa bugünkü gibi açılır.
 let lanListener: Server | null = null;
 let remoteServer: Server | null = null;
 void bootFactoryTimezone({

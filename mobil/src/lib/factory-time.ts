@@ -169,6 +169,45 @@ export const fmtFactoryDateTime = (input: DateInput, fallback = "—"): string =
 export const fmtFactoryStamp = (input: DateInput = new Date(), fallback = "—"): string =>
   formatFactory(input, "dd.MM.yyyy HH:mm:ss", fallback);
 
+/**
+ * TAKVİM GÜNÜ alanının (vade · termin · planlanan tarih · kur günü) dilimi. Tam UTC gece yarısı `@db.Date` ve
+ * "YYYY-MM-DD" girdisinin saklama biçimidir → UTC parçaları (dilim değişse de gün kaymaz); başka bir an
+ * (ör. düzenleme tarihinden türetilmiş vade) fabrika gününe düşer. Backend `fmt-date.ts` aynı kuralı taşır.
+ */
+export function calendarDayZone(input: DateInput): string {
+  const d = toValidDate(input);
+  return d && d.getTime() % 86_400_000 === 0 ? "UTC" : currentZone;
+}
+
+/** Takvim günü alanını kalıpla basar (`calendarDayZone`); boş/geçersiz → `fallback`. */
+export function formatCalendarDay(input: DateInput, pattern = "dd.MM.yyyy", fallback = "—"): string {
+  const d = toValidDate(input);
+  if (!d) return fallback;
+  const zone = calendarDayZone(d);
+  return renderPattern(zone === "UTC" ? fixedParts(d, 0) : zonedParts(d, zone), pattern);
+}
+
+export const fmtCalendarDay = (input: DateInput, fallback = "—"): string => formatCalendarDay(input, "dd.MM.yyyy", fallback);
+
+/** Takvim günü alanına kalan gün: alanın günü (`calendarDayZone`) − fabrikanın bugünü; geçersiz girdi → NaN. */
+export function calendarDaysFromToday(input: DateInput, today: DateInput = new Date()): number {
+  const a = formatCalendarDay(input, "yyyy-MM-dd", "");
+  const b = factoryDayKey(today);
+  if (!a || !b) return NaN;
+  return Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000);
+}
+
+/** `toLocaleDateString(locale, opts)` yerine — takvim günü alanı için (`calendarDayZone`). */
+export function calendarLocaleDateString(input: DateInput, locale?: string | string[], opts?: Intl.DateTimeFormatOptions): string {
+  const d = looseDate(input);
+  if (Number.isNaN(d.getTime())) return "Invalid Date";
+  try {
+    return cachedFormatter(locale, { ...zonedOptions(opts, "date"), timeZone: calendarDayZone(d) }).format(d);
+  } catch {
+    return formatCalendarDay(d);
+  }
+}
+
 /** Fabrika takvim günü `yyyy-MM-dd` (girdi yoksa bugün). */
 export function factoryDayKey(input: DateInput = new Date(), timeZone: string = currentZone): string {
   return formatFactory(input, "yyyy-MM-dd", "", timeZone);

@@ -1,4 +1,4 @@
-import { factoryDayDiff } from "@/lib/factory-time";
+import { calendarDaysFromToday } from "@/lib/factory-time";
 import { deriveWoRollup } from "./work-order-rollup";
 import type { Order } from "./types";
 
@@ -40,7 +40,7 @@ export function deriveDeadlineRisk(
   // Kapanan/iptal olan sipariş risk taşımaz.
   if (order.status === "COMPLETED" || order.status === "CANCELLED") return null;
 
-  const daysLeft = factoryDayDiff(order.deadline, today);
+  const daysLeft = calendarDaysFromToday(order.deadline, today);
   if (daysLeft > RISK_WINDOW_DAYS) return null;
 
   const { state } = deriveWoRollup(order.lines);

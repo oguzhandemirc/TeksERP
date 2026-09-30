@@ -13,7 +13,7 @@ import {
   ReportAxisBar,
   ReportFilterNotes,
 } from "../_components";
-import { fmtDate, fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
+import { fmtDate, fmtInt, fmtNum, fmtPercent, fmtCalendarDate } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { useReportCompare } from "../_hooks/useReportCompare";
 import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
@@ -25,7 +25,7 @@ type OverdueRow = ShipmentScorecard["overdueOpen"][number];
 const overdueColumns: ColumnDef<OverdueRow, unknown>[] = [
   { accessorKey: "orderNumber", header: "Sipariş No" },
   { accessorKey: "customerName", header: "Müşteri" },
-  { accessorKey: "deadline", header: "Termin", cell: ({ getValue }) => fmtDate(getValue() as string) },
+  { accessorKey: "deadline", header: "Termin", cell: ({ getValue }) => fmtCalendarDate(getValue() as string) },
   {
     accessorKey: "daysLate",
     header: () => <div className="text-right">Gecikme</div>,

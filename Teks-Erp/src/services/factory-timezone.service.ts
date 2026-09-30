@@ -1,14 +1,17 @@
 // Fabrika saat dilimi — okuma (açılış yükleyicisi), önizleme ve TEK yazma yolu.
 // Dilim bir KURULUM DEĞERİDİR: gün anahtarlarını kaydırdığı için ham ayar ucundan yazılmaz,
 // değişiklik önizlenir ve atomik claim + audit ile yazılır. Tasarım: docs/design/FABRIKA-SAAT-DILIMI.md.
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import {
   DEFAULT_FACTORY_TIMEZONE,
   applyFactoryTimezone,
+  factoryTimezoneWarning,
   getFactoryTimezone,
   isValidFactoryTimezone,
+  noteStoredFactoryTimezone,
 } from "../constants/time";
 import { SETTING_KEYS, invalidateFeatureFlagsCache, readFactoryTimezoneSetting } from "./system-setting.service";
 
@@ -36,27 +39,33 @@ function fmtOffset(min: number): string {
   return `UTC${sign}${String(Math.floor(a / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}`;
 }
 
-/** Kayıtlı değer geçersiz — DB hatasından ayrı sınıf: bu durumda sunucu AÇILMAZ. */
-export class InvalidFactoryTimezoneError extends Error {}
-
-/** Kayıtlı dilimi okuyup süreç içi değere yazar. Geçersiz kayıt → `InvalidFactoryTimezoneError`. */
-export async function loadFactoryTimezoneAtBoot(): Promise<string> {
-  const stored = await readFactoryTimezoneSetting();
-  if (stored === null) {
-    throw new InvalidFactoryTimezoneError(
-      "company.timezone geçerli bir IANA saat dilimi değil — sunucu açılmadı. " +
-        "Değeri geçerli bir adla (ör. Europe/Istanbul) düzeltip yeniden başlatın.",
-    );
+/**
+ * Kayıtlı dilimi okuyup süreç içi değere yazar. Geçersiz kayıt sunucuyu DURDURMAZ: varsayılan dilimle
+ * açılır ve sağlık ucu + panel `FACTORY_TIMEZONE_INVALID_STORED` uyarısını gösterir (kullanıcı kararı §5.2).
+ */
+export async function loadFactoryTimezoneAtBoot(): Promise<{ timeZone: string; storedInvalid: boolean }> {
+  const row = await prisma.systemSetting.findUnique({ where: { key: KEY }, select: { value: true } });
+  const stored = row ? row.value : DEFAULT_FACTORY_TIMEZONE;
+  if (!isValidFactoryTimezone(stored)) {
+    applyFactoryTimezone(DEFAULT_FACTORY_TIMEZONE);
+    noteStoredFactoryTimezone(false, stored);
+    return { timeZone: DEFAULT_FACTORY_TIMEZONE, storedInvalid: true };
   }
   applyFactoryTimezone(stored);
-  return stored;
+  noteStoredFactoryTimezone(true);
+  return { timeZone: stored, storedInvalid: false };
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref());
 
+function logLoaded(log: { info: (m: string) => void; warn: (m: string) => void }, r: { timeZone: string; storedInvalid: boolean }): void {
+  if (r.storedInvalid) log.warn(factoryTimezoneWarning()?.message ?? `company.timezone geçersiz — ${r.timeZone}`);
+  else log.info(`fabrika saat dilimi: ${r.timeZone}`);
+}
+
 /**
- * `listen`den ÖNCE beklenir. Geçersiz kayıt → FIRLATIR (fail-closed). DB'ye `waitMs` içinde ulaşılamazsa
- * dinleyici bugünkü gibi açılır (DB kapalıyken hiçbir yazma zaten olmaz) ve yükleme arka planda sürer.
+ * `listen`den ÖNCE beklenir. DB'ye `waitMs` içinde ulaşılamazsa dinleyici bugünkü gibi açılır
+ * (DB kapalıyken hiçbir yazma zaten olmaz) ve yükleme arka planda sürer.
  */
 export async function bootFactoryTimezone(
   log: { info: (m: string) => void; warn: (m: string, e?: unknown) => void },
@@ -65,10 +74,9 @@ export async function bootFactoryTimezone(
   const deadline = Date.now() + waitMs;
   for (;;) {
     try {
-      log.info(`fabrika saat dilimi: ${await loadFactoryTimezoneAtBoot()}`);
+      logLoaded(log, await loadFactoryTimezoneAtBoot());
       return;
-    } catch (err) {
-      if (err instanceof InvalidFactoryTimezoneError) throw err;
+    } catch {
       if (Date.now() >= deadline) break;
       await sleep(1000);
     }
@@ -78,13 +86,10 @@ export async function bootFactoryTimezone(
     for (;;) {
       await sleep(5000);
       try {
-        log.info(`fabrika saat dilimi yüklendi: ${await loadFactoryTimezoneAtBoot()}`);
+        logLoaded(log, await loadFactoryTimezoneAtBoot());
         return;
-      } catch (err) {
-        if (err instanceof InvalidFactoryTimezoneError) {
-          log.warn(err.message);
-          return;
-        }
+      } catch {
+        /* DB hâlâ yok — tekrar dene */
       }
     }
   })();
@@ -94,6 +99,8 @@ export interface FactoryTimezonePreview {
   current: string;
   proposed: string;
   changed: boolean;
+  /** Kayıtlı değer geçersiz (sunucu `current` ile koşuyor) — aynı dilimi kaydetmek de onu düzeltir. */
+  storedInvalid: boolean;
   currentOffset: string;
   proposedOffset: string;
   todayCurrent: string;
@@ -122,22 +129,28 @@ export async function previewFactoryTimezone(proposed: string, now: Date = new D
   if (!isValidFactoryTimezone(proposed)) {
     throw AppError.badRequest("Geçerli bir IANA saat dilimi seçin (ör. Europe/Istanbul)", { code: "FACTORY_TIMEZONE_INVALID" });
   }
-  const current = (await readFactoryTimezoneSetting()) ?? getFactoryTimezone();
-  const changed = current !== proposed;
+  const stored = await readFactoryTimezoneSetting();
+  const storedInvalid = stored === null;
+  const current = stored ?? getFactoryTimezone();
+  const shifts = current !== proposed;
+  // Geçersiz kayıt yürürlükteki dilimle de düzeltilebilsin: aynı dilimi kaydetmek bir değişikliktir.
+  const changed = shifts || storedInvalid;
   const curOff = zoneOffsetMinutes(current, now);
   const newOff = zoneOffsetMinutes(proposed, now);
-  const { rolls, shipments } = changed ? await countShifted(current, proposed, now) : { rolls: 0, shipments: 0 };
+  const { rolls, shipments } = shifts ? await countShifted(current, proposed, now) : { rolls: 0, shipments: 0 };
   const warnings: string[] = [];
-  if (changed) {
+  if (storedInvalid) warnings.push(`Kayıtlı değer geçersiz; kaydetmek onu ${proposed} ile değiştirir.`);
+  if (shifts) {
     warnings.push(
       `Gün sınırı ${fmtOffset(curOff)} yerine ${fmtOffset(newOff)} ile çizilecek: geçmiş günlerin rapor toplamları yeni dilimle yeniden hesaplanır.`,
       `Son ${PREVIEW_DAYS} günde ${rolls} top girişi ve ${shipments} sevkiyat başka bir güne düşecek.`,
       "Basılmış belgeler ve verilmiş numaralar DEĞİŞMEZ; yeni numaraların tarih segmenti yeni dilimin gününden üretilir.",
       "Panel, tablet, belge ve patron bulutu saatleri yeni dilimle gösterilir.",
+      "Sunucu yöneticisi denetim raporu gün istatistiğini yeni dilim için yeniden kurmalı (DEPLOY-RUNBOOK §12); yapılmazsa rapor doğru ama yavaş olur.",
     );
   }
   return {
-    current, proposed, changed,
+    current, proposed, changed, storedInvalid,
     currentOffset: fmtOffset(curOff), proposedOffset: fmtOffset(newOff),
     todayCurrent: zoneDay(current, now), todayProposed: zoneDay(proposed, now),
     recentRollsShifted: rolls, recentShipmentsShifted: shipments, windowDays: PREVIEW_DAYS, warnings,
@@ -157,13 +170,25 @@ export async function setFactoryTimezone(
     throw AppError.badRequest("Geçerli bir IANA saat dilimi seçin (ör. Europe/Istanbul)", { code: "FACTORY_TIMEZONE_INVALID" });
   }
   if (input.timeZone === input.expectedCurrent) {
-    const current = (await readFactoryTimezoneSetting()) ?? getFactoryTimezone();
+    const current = await readFactoryTimezoneSetting();
     if (current === input.timeZone) return { timeZone: current, changed: false };
   }
-  const claimed = await prisma.systemSetting.updateMany({
+  let claimed = await prisma.systemSetting.updateMany({
     where: { key: KEY, value: { equals: input.expectedCurrent } },
     data: { value: input.timeZone, updatedById: userId },
   });
+  let oldValue: unknown = input.expectedCurrent;
+  // Kayıtlı değer geçersizse panel yürürlükteki dilimi görmüştür: claim ham geçersiz değer üzerinden.
+  if (claimed.count === 0 && input.expectedCurrent === getFactoryTimezone()) {
+    const row = await prisma.systemSetting.findUnique({ where: { key: KEY }, select: { value: true } });
+    if (row && row.value !== null && !isValidFactoryTimezone(row.value)) {
+      claimed = await prisma.systemSetting.updateMany({
+        where: { key: KEY, value: { equals: row.value as Prisma.InputJsonValue } },
+        data: { value: input.timeZone, updatedById: userId },
+      });
+      oldValue = row.value;
+    }
+  }
   let created = false;
   if (claimed.count === 0 && input.expectedCurrent === DEFAULT_FACTORY_TIMEZONE) {
     try {
@@ -183,13 +208,14 @@ export async function setFactoryTimezone(
     );
   }
   applyFactoryTimezone(input.timeZone);
+  noteStoredFactoryTimezone(true);
   invalidateFeatureFlagsCache();
   await AuditService.log({
     userId,
     action: created ? "CREATE" : "UPDATE",
     tableName: "SYSTEM_SETTING",
     recordId: KEY,
-    oldData: { value: input.expectedCurrent },
+    oldData: { value: oldValue },
     newData: { value: input.timeZone },
   });
   return { timeZone: input.timeZone, changed: true };

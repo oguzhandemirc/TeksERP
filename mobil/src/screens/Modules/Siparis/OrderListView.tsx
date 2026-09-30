@@ -11,7 +11,7 @@ import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, trLabel } from '../../../utils/labels';
 import { queryProblem, QUERY_PROBLEM_TEXT } from '../../../utils/queryState';
 import { colors, spacing, radius } from '../../../theme';
-import { formatFactory } from '../../../lib/factory-time';
+import { formatCalendarDay } from '../../../lib/factory-time';
 
 // =============================================================================
 // Sipariş listesi — cursor + infinite scroll (mobil sayfalama standardı).
@@ -126,7 +126,7 @@ export default function OrderListView({ onOpen, refreshKey = 0 }: Props) {
                 </Text>
               )}
               {item.deadline ? (
-                <Text style={styles.deadline}>termin {formatFactory(item.deadline, 'dd.MM.yy')}</Text>
+                <Text style={styles.deadline}>termin {formatCalendarDay(item.deadline, 'dd.MM.yy')}</Text>
               ) : null}
             </View>
           </View>
