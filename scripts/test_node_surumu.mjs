@@ -76,7 +76,8 @@ const RUNTIME_DENETCILERI = {
 // `dist/tools/*.cjs` src'nin onlarca modülünü (lisans protokolü dahil) okunur JS olarak taşıyordu.
 const ARAC_KARARTMA = {
   'deploy/paketle.ps1': [
-    [/\$aracArg = if \(\$Korumali\) \{ @\("--korumali"\) \}/, "build-araclar'a --korumali geçirmiyor"],
+    // `@(if …)` ŞART: `= if { @("x") }` tek elemanlı diziyi dizgeye açar, splat harflere böler.
+    [/\$aracArg = @\(if \(\$Korumali\) \{ "--korumali" \}\)/, "build-araclar'a --korumali geçirmiyor (dizi korunmalı)"],
     [/build-araclar\.mjs"\) @aracArg/, 'build-araclar çağrısı bayrağı taşımıyor'],
     [/if \(\$yolYorumu -gt 0\) \{ Fail/, 'araç karartma kapısı (kaynak yolu yorumu sayımı) yok'],
   ],
@@ -258,7 +259,9 @@ function sondalar(taban) {
     ['N10 CI iş akışı node-surumu.json\'u okumuyor → KIRMIZI (§2)', 'kirmizi',
       (d) => { d['.github/workflows/korumali-paket.yml'] = d['.github/workflows/korumali-paket.yml'].replace(/deploy\/node-surumu\.json/g, 'deploy/x.json'); }, '§2'],
     ['N11 paketle.ps1 build-araclar\'a --korumali geçirmiyor → KIRMIZI (§5)', 'kirmizi',
-      (d) => { d['deploy/paketle.ps1'] = d['deploy/paketle.ps1'].replace('$aracArg = if ($Korumali) { @("--korumali") }', '$aracArg = if ($Korumali) { @() }'); }, '§5'],
+      (d) => { d['deploy/paketle.ps1'] = d['deploy/paketle.ps1'].replace('$aracArg = @(if ($Korumali) { "--korumali" })', '$aracArg = @(if ($Korumali) { })'); }, '§5'],
+    ['N11b paketle.ps1 tek elemanlı dizi dizgeye açılıyor (splat harflere böler) → KIRMIZI (§5)', 'kirmizi',
+      (d) => { d['deploy/paketle.ps1'] = d['deploy/paketle.ps1'].replace('$aracArg = @(if ($Korumali) { "--korumali" })', '$aracArg = if ($Korumali) { @("--korumali") } else { @() }'); }, '§5'],
     ['N12 build-araclar minify bayrağa bağlı değil (hep okunur) → KIRMIZI (§5)', 'kirmizi',
       (d) => { d['Teks-Erp/scripts/build-araclar.mjs'] = d['Teks-Erp/scripts/build-araclar.mjs'].replace('minify: KORUMALI,', 'minify: false,'); }, '§5'],
     ['N13 paketle.ps1 araç karartma kapısı kaldırıldı → KIRMIZI (§5)', 'kirmizi',

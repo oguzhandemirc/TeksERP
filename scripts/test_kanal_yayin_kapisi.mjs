@@ -287,6 +287,9 @@ function kos(o, komut, argumanlar, { cwd, girdi, ortamEk = {} } = {}) {
       GERCEK_GIT,
       SSH_HEDEF: 'sahte-hedef',
       TEKSERP_YAYIN_BELIRTECI: BELIRTEC,
+      // Makinedeki ~/.tekserp/yayin-belirteci-kaynagi.json (CLI kaynağı) dosya belirtecinden ÖNCE okunur;
+      // koşum onu görmemeli — yoksa sahte ağaçta gerçek CLI'ı arar (ENOENT) ve 7i–7k düşer.
+      TEKSERP_YAYIN_BELIRTEC_KAYNAGI: path.join(GECICI, 'yayin-belirteci-kaynagi-yok.json'),
       GIT_CEILING_DIRECTORIES: GECICI,
       ASAR_YAZ: pathToFileURL(ASAR_YAZ).href,
       KANAL_KAYDI_YEDEK: path.join(KOK, 'deploy/kanallar.json'),
