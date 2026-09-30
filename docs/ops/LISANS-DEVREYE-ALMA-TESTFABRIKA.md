@@ -139,7 +139,7 @@ YAYIN_DIZINI_HOST=/opt/stack/apps/tekserp-guncelleme        # → /yayin (salt o
 GENEL_KOK_ADRESI=https://lisans-test.etkiliyazilim.com
 ```
 
-- **Komut:** Mac'te `node deploy/satici/compose-denetle.mjs --env-file <yeni .env>` → YEŞİL (olmadan geçilmez). VDS'e: `.env` `oguzhan` 0600 olduğundan doğrudan (`cp -p .env .env.yedek-<damga>` sonra yeni dosya); `docker-compose.yml` root sahipli → yardımcı konteynerle ÖNCE yedek sonra kurulum (`cp /k/docker-compose.yml /k/docker-compose.yml.yedek-<damga> && install -m 644 /g/docker-compose.yml /k/`). Yeni dizinler aynı konteynerle: `install -d -m 700 -o 10001 -g 10001` (dosya) · `install -d -m 755 -o root -g root` (derleme). Yayın kökü `yayinci` sahipli ve herkese okunur → 10001 okur (ölçüldü: `html/` 755/775).
+- **Komut:** Mac'te `node deploy/satici/compose-denetle.mjs --env-file <yeni .env>` → YEŞİL (olmadan geçilmez). VDS'e: `$K` dizini root sahipli (755) → `oguzhan` orada dosya YARATAMAZ (`.env` 0600 `oguzhan` olsa da `cp -p .env .env.yedek-…` düşer); üç dosyanın (`.env` · `docker-compose.yml` · `docker-compose.loopback.yml`) yedeği ve kurulumu tek yardımcı konteynerle: `cp -p /k/<f> /k/<f>.yedek-<damga>` → `install -m 644 -o 0 -g 0 /g/docker-compose*.yml /k/` → `.env` içeriği yerinde (`cat /g/env > /k/.env` — sahip/izin korunur). §2.7'deki etiket değişimi de yerinde yazılır (`sed … .env > ~/env.yeni && cat ~/env.yeni > .env`; `sed -i` aynı dizinde geçici dosya ister). Yeni dizinler aynı konteynerle: `install -d -m 700 -o 10001 -g 10001` (dosya) · `install -d -m 755 -o root -g root` (derleme). Yayın kökü `yayinci` sahipli ve herkese okunur → 10001 okur (ölçüldü: `html/` 755/775).
 - **Beklenen:** `docker compose config -q` yeşil (VDS'te, `cd $K`).
 - **Geri alma:** iki `.yedek-<damga>` dosyası yerine konur; yeni dizinler boş kalır (silmek kullanıcı kararı).
 
@@ -167,13 +167,16 @@ Genel yönlendirici ``Host(`lisans-test.etkiliyazilim.com`)`` kuralıyla TÜM yo
 
 Şifreli modül paketinin AES anahtarı satıcı KASASINA alınır; kira basımında HAK'taki, dondurulmamış ve X25519'u bilinen kuruluma sarılı gider. Mac'te hazır: `~/.tekserp/satici-hazirlik/modul-anahtarlari/depo.multiEnabled.1.json` (0600).
 
-- **Komut (imajda `dist-cli/scripts/modul-anahtari.js` — G2 kapandı, imaj derlemesi `test -f` kapısında):** anahtar dosyasını §2.2'deki gibi geçici dizine taşı, sonra
+- **Komut (imajda `dist-cli/scripts/modul-anahtari.js` — G2 kapandı, imaj derlemesi `test -f` kapısında; §2.7'den SONRA, çalışan satıcının içinde):** anahtar SSH stdin'iyle konteynerin `/tmp`'ine (tmpfs — VDS diskine düşmez) girer, içe aktarılır, silinir:
 
   ```bash
-  ssh -p 2222 oguzhan@80.253.255.188 'cd /opt/stack/apps/tekserp-satici-hazirlik && docker compose run --rm --no-deps \
-      -v ~/satici-anahtar-gecici:/g:ro satici satici-baslat node dist-cli/scripts/modul-anahtari.js ice-aktar --dosya=/g/depo.multiEnabled.1.json \
-    ; shred -u ~/satici-anahtar-gecici/* && rmdir ~/satici-anahtar-gecici'
+  ssh -p 2222 oguzhan@80.253.255.188 'docker exec -i tekserp-satici-hazirlik sh -c "umask 077; cat > /tmp/mk.json"' \
+    < ~/.tekserp/satici-hazirlik/modul-anahtarlari/depo.multiEnabled.1.json
+  ssh -p 2222 oguzhan@80.253.255.188 'docker exec tekserp-satici-hazirlik satici-baslat node dist-cli/scripts/modul-anahtari.js ice-aktar --dosya=/tmp/mk.json; \
+    docker exec tekserp-satici-hazirlik shred -u /tmp/mk.json'
   ```
+
+  `docker compose run satici …` KULLANILMAZ: satıcı servisinin kenar/tailnet/iç API adresleri sabittir, çalışan satıcıyla aynı adresi isteyen `run` konteyneri `Address already in use` ile açılmaz (ölçüldü 2026-09-30).
 
 - **Beklenen:** `✅ kasaya alındı: depo.multiEnabled 1. sürüm · <kid>` (tekrar koşumda `= zaten kasada`). Düz anahtar argv/env/log/denetime girmez.
 - **Geri alma:** kasa satırı silinmez/değişmez (defter); modülü kiradan çıkarmak = HAK'tan çıkarmak ya da dondurmak (portal).
@@ -408,6 +411,13 @@ Traefik hiçbir geri almada yeniden başlatılmaz; kenar ağı satırı yerinde 
 - **thinkpad-1:** prizde; pwsh 7.6.6 (Store diğer adı); `/health` `2.11.2-lis-prova.771ac50d` (Mac'te paketlenmiş, KORUMASIZ, native yok, 363 göç); `C:\TeksERP\lisans\kurulum-anahtari.json` var (kurulum anahtarı doğmuş, etkinleşmemiş); `.env` anahtarları `DATABASE_URL JWT_SECRET PORT BACKUP_PG_USER BACKUP_PG_PASSWORD` — `LICENSE_*` yok, pm2 env bloğunda da yok; node süreçleri SYSTEM (pm2 daemon 27.09'dan); görevler `TeksERP-Backend-Boot`, `TeksERP-DB-Backup`.
 - **Mac:** `~/.tekserp/satici-hazirlik/` kök · ALT · İNDİRME · `portal-totp.key` · `paket-hazirlik.paket.json` · `modul-anahtarlari/depo.multiEnabled.1.json`; pepper YOK; `~/.tekserp/yayinci/` ve `yayin-belirteci*` YOK.
 - **Doğrulayıcı gerçek koşumu:** aşama 1 (taban hariç ✅), 2 (A2 öncesi beklenen ❌'ler: anahtarlar, göçler, ortam adları, bağlar, `/d`, yayın kökü), 4 (4.3 ❌ korumasız paket), 5 ✅ — ayrıştırıcılar gerçek çıktıyla sınandı.
+
+## 10b. Uygulama kaydı — 2026-09-30 (O1: §1 → §3)
+
+- **§1:** taban bayattı (51 fark = panel 1.3.7 + OTA `1790619945836` + 1.2.7 rotasyonu + defterde yalnız eklenen 1.3.7 satırı; bilinmeyen fark YOK) → §1.2 ile tazelendi (eski: `Teks-Erp-wt/vds-taban-20260930_0327-onceki/`, yeni kopya `…-yeni/`, 420 dosya). Aşama 1: yedi ✅.
+- **§2:** imaj `tekserp-satici:55203d9708ba` (+ yedek); pepper + kasa anahtarı üretildi ve kuruldu (anahtar birimi altı ad); `sirlar/ic-api-belirteci` (64 B, root:61061 0440); yedek `satici_20260930_003005` + `anahtarlar_20260930_003005` (Mac'te açıldı: 25 tablo, anahtar arşivi bayt-eşit); compose/`.env` yedekleri `.yedek-20260930-0335`; göç 3 → 8; `SATICI_DINLIYOR genel=4610 tailnet=4611 ic=4612`; kasaya `depo.multiEnabled` 1. sürüm (§2.8'in yeni komutuyla). Aşama 2: on iki ✅. İç API kapısı §7 tablosundaki gibi (patron adresi: Bearer 404 · Bearer'sız 401; dinamik adres: 404/404). Traefik `StartedAt`/`RestartCount` değişmedi; her VDS yazımının önünde ve arkasında `vds-dogrula` ✅.
+- **§3:** yayıncı kid `yayinci-hazirlik-2026` (portalda aktif); belirteç kaynağı `yerel`. Aşama 3: üç ✅.
+- **Geri alma noktası:** önceki imaj `0ca31403525a` (VDS'te duruyor) + yukarıdaki DB yedeği + `.yedek-20260930-0335` dosyaları (§9 tablosu, satır 2).
 
 ## 11. A2 önkoşul borçları (ölçüldü 2026-09-30 · G1–G3 + G5 iniş A2 I7'de KAPANDI)
 
