@@ -107,6 +107,7 @@ import {
 import { fiksturKur, kiraBas, hakBas, anahtarUret, type Fikstur } from "./lib/lisans-fikstur";
 import { sahteSaticiBaslat, sahteProxyBaslat, type SahteSatici } from "./lib/lisans-sahte-satici";
 import { scanLicenseIdentitySeam } from "./lib/lisans-kimlik-dikisi";
+import { kabulEt, temizleKabuller } from "./lib/lisans-kabul-fikstur";
 import { logObservationSummaryIfDue, __resetLicenseTrailForTests } from "../src/services/license-trail.service";
 
 const engel = hedefDbEngeli();
@@ -289,6 +290,7 @@ async function etkinlestirmeButunlukBolumu(x: Hazir): Promise<void> {
   const onceki = { kod: x.satici.kod, hakEk: x.satici.hakEk };
   try {
     yeniden(path.join(GECICI, "hazirlik-makine"));
+    await kabulEt();
     await refreshLicenseIntegrity();
     const once = getIntegrityOutcome();
     x.satici.hakEk = { sinif: "TEST" };
@@ -350,6 +352,9 @@ async function etkinlestirmeBolumu(x: Hazir): Promise<void> {
   check("§2a kimliksiz durum çağrısına ayrıntı YOK", JSON.stringify(getLicenseStatus(false)) === '{"ayrinti":false}');
   const once = await pollLicenseOnce();
   check("§2b ⭐ etkinleşmemiş kurulum YOKLAMAZ (satıcıya istek gitmez)", once.outcome === "ETKIN_DEGIL" && x.satici.sayac.yokla === 0, once.outcome);
+  const kabulsuz = await hataKodu(activateLicense(x.satici.kod, null));
+  check("§2b2 ⭐ sözleşme kabulü yokken etkinleştirme satıcıya GİTMEDEN 409 (Ek-7)", kabulsuz === "LICENSE_ACCEPTANCE_REQUIRED" && x.satici.sayac.etkinlestir === 0, kabulsuz);
+  await kabulEt();
   check("§2c yanlış kod → satıcı reddi TR mesajla", (await hataKodu(activateLicense("TKS-1111-1111-1111-1111", null))) === "LICENSE_VENDOR_REJECTED/ETKINLESTIRME_KODU_GECERSIZ");
   const d = await activateLicense(x.satici.kod.toLowerCase().replace(/-/g, " "), null);
   check("§2d ⭐ doğru kod (elle yazım normalleşir) → etkin, GEÇERLİ, gözlem", d.kurulum.etkin && d.durum.gecerlilik === "GECERLI" && d.durum.kip === "gozlem", `${d.durum.gecerlilik}/${d.durum.nedenler.map((n) => n.kod).join(",")}`);
@@ -819,6 +824,8 @@ async function tasimaBolumu(x: Hazir): Promise<void> {
     `${r.outcome} ${r.code ?? ""} ${d.tasima?.durum}`,
   );
   x.satici.kod = "TKS-TASM-4K0D-9QRT-7PVW";
+  // Yeni makine = yeni kurulum anahtarı: eski makinenin kabulü geçmez, sözleşme yeniden kabul edilir (Ek-7).
+  await kabulEt();
   const e = await activateLicense(x.satici.kod, null);
   check(
     "§20d taşıma koduyla etkinleşme → aynı lisans kimliği yeni makinede, talep temizlendi",
@@ -885,6 +892,7 @@ async function main(): Promise<void> {
     console.log(`❌ beklenmeyen hata — ${e instanceof Error ? e.stack : String(e)}`);
   } finally {
     await satici?.kapat();
+    await temizleKabuller();
     fs.rmSync(GECICI, { recursive: true, force: true });
     await prisma.$disconnect();
     await pool.end();

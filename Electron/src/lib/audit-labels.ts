@@ -190,9 +190,10 @@ export const TABLE_LABELS: Record<string, string> = {
 
   // Fabrika tarafında da etiketsiz kalmış olanlar (aynı tarama).
   ROLL_QTY_ADJUST: "Top Metraj Düzeltmesi",
-  // Patron bulutu gelen kutusu makbuzu (B3) · destek talebi (3d-2).
+  // Patron bulutu gelen kutusu makbuzu (B3) · destek talebi (3d-2) · lisans sözleşmesi kabulü (Ek-7).
   CLOUD_INBOX_RECEIPT: "Bulut Gelen Kutusu Makbuzu",
   SUPPORT_TICKET: "Destek Talebi",
+  LICENSE_ACCEPTANCE: "Lisans Sözleşmesi Kabulü",
 };
 
 /** Ham tableName'i Türkçe etiketle. Boş → "—", bilinmeyen → ham değer. */

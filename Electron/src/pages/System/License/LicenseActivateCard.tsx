@@ -2,6 +2,7 @@ import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { AcceptanceGate } from "@/lib/license/acceptance";
 import { canRelay, relayViaPanel } from "@/lib/license/relay";
 import { licenseService } from "@/services/licenseService";
 import type { LicenseDetail, OfflinePurpose } from "@/types/license";
@@ -17,12 +18,14 @@ const POLL_TEXT: Record<string, string> = {
 
 /**
  * Etkinleştirme ve yenileme. Backend satıcıya çıkabiliyorsa doğrudan; çıkamıyorsa
- * "bu bilgisayar üzerinden" — panel imzalı isteği taşır (sır görmez).
+ * "bu bilgisayar üzerinden" — panel imzalı isteği taşır (sır görmez). Etkinleştirme
+ * sözleşme kabulünü ister (Ek-7): kapı kapalıyken iki düğme de pasif.
  */
-export function LicenseActivateCard({ d }: { d: LicenseDetail }) {
+export function LicenseActivateCard({ d, gate }: { d: LicenseDetail; gate: AcceptanceGate }) {
   const [kod, setKod] = useState("");
   const { busy, run } = useLicenseAction();
   const active = d.kurulum.etkin;
+  const canActivate = busy === null && kod.trim().length > 0 && gate.ready;
   const relay = (amac: OfflinePurpose) =>
     run(`aktar-${amac}`, async () => {
       const r = await relayViaPanel(amac, amac === "etkinlestir" ? kod.trim() : undefined);
@@ -42,17 +45,22 @@ export function LicenseActivateCard({ d }: { d: LicenseDetail }) {
             aria-label="Etkinleştirme kodu"
           />
           <Button
-            disabled={busy !== null || !kod.trim()}
+            disabled={!canActivate}
             onClick={() => void run("etkinlestir", () => licenseService.activate(kod.trim()).then(() => "Kurulum etkinleştirildi."))}
           >
             Etkinleştir
           </Button>
           {canRelay() && (
-            <Button variant="outline" disabled={busy !== null || !kod.trim()} onClick={() => void relay("etkinlestir")}>
+            <Button variant="outline" disabled={!canActivate} onClick={() => void relay("etkinlestir")}>
               Bu bilgisayar üzerinden etkinleştir
             </Button>
           )}
         </div>
+      )}
+      {!active && !gate.ready && gate.reason && (
+        <p className="text-xs text-amber-700 dark:text-amber-400" data-testid="lisans-kabul-kapisi">
+          {gate.reason}
+        </p>
       )}
       {active && (
         <div className="flex flex-wrap gap-2">

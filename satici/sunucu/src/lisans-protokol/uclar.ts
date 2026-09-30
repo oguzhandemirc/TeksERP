@@ -132,6 +132,11 @@ export const ActivateRequestSchema = z.strictObject({
   sifrelemeAnahtari: PublicKeyXSchema.optional(),
   parmakIzi: FingerprintSchema,
   ortam: EnvironmentSchema,
+  /**
+   * İlk kurulum kabul belgesi (`tekserp-kabul`, KURULUM imzalı — `kabul.ts`). Şemada opsiyonel (v:1 uyumu, eski
+   * gövde anlamlı kodla reddedilsin); satıcı iş kuralıyla ZORUNLU tutar → 409 `KABUL_GEREKLI`. KATI gövde ⇒ satıcı önce.
+   */
+  kabul: JwsTextSchema.optional(),
 });
 
 // ── Kurulum kaydı (3d-2) ──────────────────────────────────────────────────────
@@ -245,6 +250,8 @@ export const VENDOR_ERROR_CODES = [
   "KIRA_VERILMEDI",
   /** 409: DR devralımında ana kurulum verilmedi ve tesiste tek etkin ÜRETİM kurulumu yok (0 ya da birden çok). */
   "DR_ANA_BELIRSIZ",
+  /** 409: etkinleştirme geçerli bir ilk kurulum kabul belgesi taşımıyor (Ek-7 §5) — `details.neden` ∈ ACCEPTANCE_REJECTIONS. */
+  "KABUL_GEREKLI",
   "HIZ_SINIRI",
   /** 409: eşzamanlı işlem çakıştı (40001/40P01, atomik claim kaybı) — aynı istek yeniden denenebilir. */
   "TEKRAR_DENEYIN",

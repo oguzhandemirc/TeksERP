@@ -18,6 +18,7 @@ import {
   installationKeyId,
   msToIso,
   readRequestIdentity,
+  verifyAcceptance,
   verifyRequest,
   type Fingerprint,
   type EntitlementDoc,
@@ -51,6 +52,8 @@ export interface SahteSatici {
   readonly yoklamaGovdeleri: unknown[];
   /** Her imzalı isteğin amacı + taşıdığı kurulum kimliği (null = kimliksiz) + gövdedeki kurulumId. */
   readonly istekler: Array<{ amac: RequestPurpose; kimlik: string | null; govdeKimligi: string | null }>;
+  /** Etkinleştirme gövdelerinde gelen kabul belgeleri (gerçek satıcının kapısıyla doğrulanır; kabulsüz → 409 KABUL_GEREKLI). */
+  readonly kabuller: string[];
   /** Açık zil akışlarına olay gönderir. */
   zil(konu: string): void;
   /** Etkinleştirmeyle kaydedilen kurulum açık anahtarı (x); henüz yoksa null. */
@@ -132,6 +135,7 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
     sayac: { etkinlestir: 0, yokla: 0, zil: 0, red: 0, zaman: 0, tasima: 0 },
     yoklamaGovdeleri: [],
     istekler: [],
+    kabuller: [],
   };
   const talepId = randomUUID();
   const lisansYaniti = (parmakIzi: Fingerprint, ek: Record<string, unknown> = {}): string => {
@@ -187,6 +191,10 @@ export async function sahteSaticiBaslat(f: Fikstur): Promise<SahteSatici> {
         const b = ActivateRequestSchema.safeParse(json);
         if (!b.success) return hata(res, 400, "GOVDE_GECERSIZ");
         if (b.data.kod !== s.kod) return hata(res, 404, "ETKINLESTIRME_KODU_GECERSIZ");
+        // Gerçek satıcının kapısı (Ek-7 §5): kodu tüketecek istek kurulum imzalı kabul belgesi taşımalı.
+        const kabul = verifyAcceptance(b.data.kabul, { publicKeyX: b.data.acikAnahtar });
+        if (!kabul.ok) return hata(res, 409, "KABUL_GEREKLI", { neden: kabul.neden });
+        s.kabuller.push(b.data.kabul ?? "");
         s.sayac.etkinlestir++;
         kayitliAnahtar = d.x;
         res.writeHead(200, { "content-type": "application/json" });

@@ -5,6 +5,13 @@ import { licenseService } from "@/services/licenseService";
 import { LICENSE_DETAIL_KEY, LICENSE_STATUS_KEY } from "@/hooks/useLicenseStatus";
 import { apiErrorText } from "@/lib/api-error";
 
+export const LICENSE_ACCEPTANCE_KEY = ["license", "kabul"] as const;
+
+/** Sözleşme kabul metni + durumu (Ek-7). Eski backend'de uç yok (404) → kapı kapalı kalır. */
+export function useLicenseAcceptance(enabled: boolean) {
+  return useQuery({ queryKey: LICENSE_ACCEPTANCE_KEY, queryFn: licenseService.acceptance, enabled, retry: false });
+}
+
 export function useLicenseDetail(enabled: boolean) {
   return useQuery({
     queryKey: LICENSE_DETAIL_KEY,

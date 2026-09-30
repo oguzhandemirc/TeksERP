@@ -127,6 +127,8 @@ const SURUM_OKUYUCULARI = new Map<string, string>([
    "`lastSeenAt` dokunuşunda NULL kalmış satırı doldurur (panel sürümü ASENKRON okuduğu için ilk istek sürümsüz gidebiliyor) — `updateMany`ye argüman"],
   ["routes/support.routes.ts",
    "destek talebine panel sürümü (3d-2) — yalnız `createSupportTicket` argüman nesnesine konur, satıcıya bilgi olarak gider"],
+  ["routes/license.routes.ts",
+   "sözleşme kabulüne panel sürümü (Ek-7) — yalnız `recordLicenseAcceptance` argüman nesnesine konur, imzalı kabul belgesine bilgi olarak girer"],
 ]);
 const okuyucular: string[] = [];
 for (const file of walk(SRC)) {

@@ -589,7 +589,7 @@ model KopyaUyarisi {
 model KurulumKaydi {
   id                 String   @id @default(uuid()) @db.Uuid
   kurulumId          String   @db.Uuid
-  /// ETKINLESTI · YENIDEN_ETKINLESTI · TASINDI · DR_DEVRALDI · DEVREDILDI · DR_GERI_ALINDI · IPTAL …
+  /// ETKINLESTI · YENIDEN_ETKINLESTI · TASINDI · SOZLESME_KABUL_EDILDI · DR_DEVRALDI · DEVREDILDI · DR_GERI_ALINDI · IPTAL …
   olay               String   @db.VarChar(40)
   anahtarKimligi     String?  @db.VarChar(64)
   acikAnahtar        String?  @db.VarChar(64)
@@ -598,7 +598,8 @@ model KurulumKaydi {
   eskiAcikAnahtar    String?  @db.VarChar(64)
   ayrinti            Json?
   yapan              String   @db.VarChar(120)
-  /// Fabrikanın `kur.ps1` kaydının kimliği (`kurulumKayitlari[].kayitId`) — yoklama tekrarında aynı satır ikinci kez yazılmaz.
+  /// Fabrikada doğan kaydın kimliği — `kur.ps1` kaydı (`kurulumKayitlari[].kayitId`) ya da sözleşme kabulü (`kabulId`);
+  /// tekrar gönderimde aynı satır ikinci kez yazılmaz.
   kaynakKayitId      String?  @db.Uuid
   createdAt          DateTime @default(now()) @db.Timestamptz
 

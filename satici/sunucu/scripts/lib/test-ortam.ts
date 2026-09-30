@@ -12,11 +12,14 @@ import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
+  ACCEPTANCE_TEXTS,
   DAY_MS,
   REQUEST_HEADER,
   generateNonce,
   parseJws,
+  signAcceptance,
   signRequest,
+  type AcceptanceDoc,
   type Fingerprint,
   type LicenseClass,
   type RequestPurpose,
@@ -282,9 +285,41 @@ export function yoklamaGovdesi(g: { sonKiraId: string | null; hak?: { hakId: str
   };
 }
 
-/** `kurulumId: null` → kimliksiz etkinleştirme (yeni makine lisans kimliğini bilmez; kurulumu kod belirler). */
-export function etkinlestirmeGovdesi(g: { kod: string; kurulumId: string | null; anahtar: TestAnahtari; parmakIzi: Fingerprint }) {
-  return { v: 1, kod: g.kod, ...(g.kurulumId === null ? {} : { kurulumId: g.kurulumId }), acikAnahtar: g.anahtar.x, parmakIzi: g.parmakIzi, ortam: ORTAM };
+/** Güncel katalog metninin (bütün kutular) kurulum imzalı kabul belgesi (Ek-7); `ek` alanları ezer (negatif sondalar). */
+export function kabulBelgesi(anahtar: TestAnahtari, ek: Partial<AcceptanceDoc> = {}): string {
+  const metin = ACCEPTANCE_TEXTS.at(-1);
+  if (!metin) throw new Error("kabul metni kataloğu boş");
+  return signAcceptance({
+    privateKey: anahtar.privateKey,
+    payload: {
+      v: 1,
+      kabulId: randomUUID(),
+      metin: { kimlik: metin.kimlik, ozet: metin.ozet },
+      kutular: [...metin.kutular],
+      kabulEden: { kullaniciId: randomUUID(), ad: "Bekçi Yetkili", unvan: "Genel Müdür" },
+      zaman: new Date().toISOString(),
+      istemci: { tur: "panel", surum: "1.5.0" },
+      sunucuSurum: "2.13.0",
+      ...ek,
+    },
+  });
+}
+
+/**
+ * `kurulumId: null` → kimliksiz etkinleştirme (yeni makine lisans kimliğini bilmez; kurulumu kod belirler). Gövde
+ * varsayılan olarak aynı anahtarla imzalı geçerli kabul belgesini taşır; `kabul: null` alanı hiç koymaz.
+ */
+export function etkinlestirmeGovdesi(g: { kod: string; kurulumId: string | null; anahtar: TestAnahtari; parmakIzi: Fingerprint; kabul?: string | null }) {
+  const kabul = g.kabul === undefined ? kabulBelgesi(g.anahtar) : g.kabul;
+  return {
+    v: 1,
+    kod: g.kod,
+    ...(g.kurulumId === null ? {} : { kurulumId: g.kurulumId }),
+    acikAnahtar: g.anahtar.x,
+    parmakIzi: g.parmakIzi,
+    ortam: ORTAM,
+    ...(kabul === null ? {} : { kabul }),
+  };
 }
 
 /** Kurulum imzalı istek (ham gövde baytları imzalanır, aynen gönderilir). `kurulumId: null` = kimliksiz. */

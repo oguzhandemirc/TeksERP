@@ -9,3 +9,5 @@ export * from "./parmak-izi";
 export * from "./istek";
 export * from "./uclar";
 export * from "./modul-anahtari";
+export * from "./kabul";
+export * from "./kabul-katalogu";

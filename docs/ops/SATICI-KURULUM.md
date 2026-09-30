@@ -362,7 +362,7 @@ Tek çözüm yeri `Teks-Erp/src/lib/license/vendor-url.ts` → `resolveVendorUrl
 | `kapali` | yok — dışarı hiç çıkılmaz | internetsiz kurulum, geliştirme |
 | biçimsiz (yol · sorgu · kimlik bilgisi · döngü dışı `http`) | yok + açılışta uyarı | fail-closed |
 
-Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_motoru §2b`); etkinleştirme bir yönetici eylemidir. thinkpad-1: backend `.env`'ine `LICENSE_SERVER_URL=https://lisans-test.etkiliyazilim.com` + `pm2 restart` (thinkpad provası runbook'u). Hazırlık satıcısının imzaladığı HAK yalnız TEST/DEMO sınıfındadır; üretim kurulumu yanlışlıkla ona etkinleşse bile ÜRETİM HAK'ı alamaz (portalda kurulum kaydı da gerekir).
+Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_motoru §2b`); etkinleştirme bir yönetici eylemidir ve **sözleşme kabulünden sonra** açılır (Ek-7 §5): panel Lisans ekranında önce kabul adımını gösterir, etkinleştirme isteği (çevrimiçi · QR · panel aktarması) kurulum imzalı kabul belgesini taşır; satıcı kabulsüz ya da tanımadığı metnin kabulüyle gelen etkinleştirmeyi 409 `KABUL_GEREKLI` ile reddeder, kabulü kurulum kaydına `SOZLESME_KABUL_EDILDI` olarak yazar (portal: kurulum → Kayıt → "Sözleşme kabulleri"). Kabul metni kataloğu (`kabul-katalogu.ts`, hukuk belgesinden üretilir) değişen sürümde satıcı fabrikadan ÖNCE yayınlanır; kabul adımı olmayan eski fabrika (backend) yeni satıcıya etkinleşemez. thinkpad-1: backend `.env`'ine `LICENSE_SERVER_URL=https://lisans-test.etkiliyazilim.com` + `pm2 restart` (thinkpad provası runbook'u). Hazırlık satıcısının imzaladığı HAK yalnız TEST/DEMO sınıfındadır; üretim kurulumu yanlışlıkla ona etkinleşse bile ÜRETİM HAK'ı alamaz (portalda kurulum kaydı da gerekir).
 
 ## 10. Anahtar künyesi (sır DEĞİL — açık yarılar)
 

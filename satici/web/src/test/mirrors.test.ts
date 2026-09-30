@@ -16,6 +16,7 @@ import { PORTAL_PERMISSIONS, TAILNET_ONLY_PERMISSIONS } from "../shared/permissi
 import { HEAVY_K3_MIN_DAYS, INSTALLMENT_DEFAULT_RESTRICTION_DAYS } from "../shared/sanctions";
 import { CHANNEL_CODE_PATTERN, CHANNEL_KIND_LABEL, VERSION_PATTERN } from "../portal/pages/Channels";
 import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "../shared/cloud-settings";
+import { ACCEPTANCE_EVENT } from "../portal/installation/AcceptancePanel";
 
 const WEB_SRC = path.resolve(__dirname, "..");
 const SERVER_SRC = path.resolve(__dirname, "../../../sunucu/src");
@@ -206,6 +207,12 @@ describe("eşikler ve biçim desenleri aynası", () => {
     const src = read("services/dealer.service.ts");
     expect(DEFAULT_MAINTENANCE_MONTHS).toBe(numberConst(src, /export const DEFAULT_MAINTENANCE_MONTHS = (\d+);/));
     expect(MAX_MAINTENANCE_MONTHS).toBe(numberConst(src, /export const MAX_MAINTENANCE_MONTHS = (\d+);/));
+  });
+
+  it("sözleşme kabulünün kurulum kaydı olay adı (activation.service.ts ACCEPTANCE_EVENT)", () => {
+    const m = /export const ACCEPTANCE_EVENT = "([A-Z_]+)";/.exec(read("services/activation.service.ts"));
+    expect(m, "ACCEPTANCE_EVENT bulunamadı").not.toBeNull();
+    expect(ACCEPTANCE_EVENT).toBe(m![1]);
   });
 
   it("kanal kodu ve sürüm metni desenleri (lisans-protokol/belgeler.ts)", () => {

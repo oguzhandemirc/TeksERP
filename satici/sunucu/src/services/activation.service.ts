@@ -5,8 +5,10 @@
 // anahtarla ETKİN kuruluma 409 TASIMA_KODU_GEREKLI (kod TÜKETİLMEZ); `tasima` kodu yalnız onaylanan talebin
 // anahtarıyla kullanılır, anahtar o anda değişir (eski anahtar emekli: sonraki isteği 403) ve zincir yeniden başlar.
 // Aynı kod + aynı anahtarla tekrar (ağ tekrarı) aynı kirayı alır; başka anahtarla ikinci kullanım 409.
-import type { EtkinlestirmeKodu, KodTuru, Kurulum, TasimaTalebi } from "@prisma/client";
-import type { ActivateRequest, LicenseResponse } from "../lisans-protokol";
+// İlk kurulum kabulü (Ek-7 §5): kodu TÜKETECEK istek kurulum imzalı kabul belgesi taşımalı (yoksa 409 KABUL_GEREKLI);
+// kabul etkinleştirmeyle aynı tx'te kurulum kaydına `SOZLESME_KABUL_EDILDI` olarak yazılır.
+import type { EtkinlestirmeKodu, KodTuru, Kurulum, Prisma, TasimaTalebi } from "@prisma/client";
+import { verifyAcceptance, type AcceptanceDoc, type AcceptanceRejection, type ActivateRequest, type LicenseResponse } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
 import { VendorError, retryConflict } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
@@ -27,6 +29,30 @@ const codeInvalid = (reason: string): VendorError => new VendorError(404, "ETKIN
 const codeUsed = (): VendorError => new VendorError(409, "ETKINLESTIRME_KODU_KULLANILMIS", "Bu etkinleştirme kodu daha önce kullanıldı");
 const transferCodeRequired = (): VendorError =>
   new VendorError(409, "TASIMA_KODU_GEREKLI", "Bu kurulum başka bir makinede etkin: yeni makine yalnız onaylı taşıma koduyla etkinleşir (portaldan taşıma talebi)");
+
+/** Kurulum kaydındaki olay adı — kabul, etkinleştirmeyle aynı tx'te ve ondan 1 ms önce yazılır. */
+export const ACCEPTANCE_EVENT = "SOZLESME_KABUL_EDILDI";
+
+const ACCEPTANCE_MESSAGES: Readonly<Record<AcceptanceRejection, string>> = {
+  YOK: "Etkinleştirme için ilk kurulum sözleşme kabulü gerekli: panelin Lisans ekranında kabul adımını tamamlayın (kabul adımı olmayan eski panel ya da sunucu sürümü güncellenmeli)",
+  IMZA: "Sözleşme kabul belgesi bu kurulumun anahtarıyla doğrulanamadı; kabul adımını bu sunucuda yeniden yapın",
+  SEMA: "Sözleşme kabul belgesi biçimsiz; kabul adımını yeniden yapın",
+  METIN: "Kabul edilen sözleşme metni sürümü lisans sunucusunda tanınmıyor; satıcıyla görüşün",
+  KUTU: "Sözleşme kabul belgesi metnin bütün onay kutularını taşımıyor; kabul adımını yeniden yapın",
+};
+
+interface VerifiedAcceptance {
+  readonly doc: AcceptanceDoc;
+  /** İmzalı belgenin kendisi — kurulum kaydına kanıt olarak girer. */
+  readonly belge: string;
+}
+
+/** Kodu tüketecek etkinleştirmenin kabul kapısı — saf, nonce ve kilitten ÖNCE koşar (red defter tüketmez). */
+function requireAcceptance(body: ActivateRequest): VerifiedAcceptance {
+  const r = verifyAcceptance(body.kabul, { publicKeyX: body.acikAnahtar });
+  if (!r.ok || !body.kabul) throw new VendorError(409, "KABUL_GEREKLI", ACCEPTANCE_MESSAGES[r.ok ? "YOK" : r.neden], { neden: r.ok ? "YOK" : r.neden });
+  return { doc: r.doc, belge: body.kabul };
+}
 
 type CodeWithTransfer = EtkinlestirmeKodu & { tasimaTalebi: TasimaTalebi | null };
 
@@ -75,7 +101,7 @@ interface Activated {
 async function activateInTx(
   tx: Tx,
   ctx: VendorContext,
-  g: { codeId: string; installationDbId: string; kid: string; body: ActivateRequest; nowMs: number },
+  g: { codeId: string; installationDbId: string; kid: string; body: ActivateRequest; acceptance: VerifiedAcceptance | null; nowMs: number },
 ): Promise<{ kind: "replay"; response: LicenseResponse } | { kind: "activated"; activated: Activated }> {
   await lockInstallation(tx, g.installationDbId);
   const inst = await tx.kurulum.findUniqueOrThrow({ where: { id: g.installationDbId } });
@@ -97,8 +123,12 @@ async function activateInTx(
   const hak = await activeEntitlement(tx, inst.id);
   const keyChanged = inst.durum === "ETKIN" && inst.anahtarKimligi !== g.kid;
   const event: Activated["event"] = code.tur === "tasima" ? "TASINDI" : inst.durum === "ETKIN" ? "YENIDEN_ETKINLESTI" : "ETKINLESTI";
+  // Aynı tx'te aynı kuruluma iki satır: kronoloji belirlenimli (kabul → etkinleşme, +1 ms), `now()` ikisine eşit verirdi.
+  const [{ simdi }] = await tx.$queryRaw<{ simdi: Date }[]>`SELECT now() AS simdi`;
+  if (g.acceptance) await recordAcceptance(tx, { installationDbId: inst.id, kid: g.kid, codeId: code.id, acceptance: g.acceptance, at: simdi });
   await tx.kurulumKaydi.create({
     data: {
+      createdAt: new Date(simdi.getTime() + 1),
       kurulumId: inst.id,
       olay: event,
       anahtarKimligi: g.kid,
@@ -166,6 +196,27 @@ async function activateInTx(
   };
 }
 
+/** Kabul kurulum kaydına: kimlik fabrikanın `kabulId`si (aynı kabul ikinci etkinleştirmede yeniden yazılmaz). */
+async function recordAcceptance(tx: Tx, g: { installationDbId: string; kid: string; codeId: string; acceptance: VerifiedAcceptance; at: Date }): Promise<void> {
+  const d = g.acceptance.doc;
+  const detail: Prisma.InputJsonObject = {
+    kabulId: d.kabulId,
+    metin: d.metin,
+    kutular: d.kutular,
+    kabulEden: d.kabulEden,
+    zaman: d.zaman,
+    istemci: d.istemci,
+    sunucuSurum: d.sunucuSurum,
+    kodId: g.codeId,
+    // İmzalı kabul belgesinin kendisi (kod TAŞIMAZ): kanıt kurulum anahtarıyla sonradan da doğrulanır.
+    belge: g.acceptance.belge,
+  };
+  await tx.kurulumKaydi.createMany({
+    data: [{ kurulumId: g.installationDbId, olay: ACCEPTANCE_EVENT, anahtarKimligi: g.kid, ayrinti: detail, yapan: "kurulum", kaynakKayitId: d.kabulId, createdAt: g.at }],
+    skipDuplicates: true,
+  });
+}
+
 /** Kilit altındaki taze rol (emekli anahtar tx içinde okunur). */
 async function bodyKeyRoleTx(tx: Tx, inst: Kurulum, kid: string): Promise<KeyRole> {
   if (inst.anahtarKimligi === kid) return "CURRENT";
@@ -200,10 +251,12 @@ export async function handleActivation(
   if (code.durum === "AKTIF") assertUsable({ code, inst, kid: verified.kid, role, nowMs: g.nowMs });
   else if (inst.durum === "IPTAL" || inst.durum === "DEVREDILDI") throw new VendorError(403, "KURULUM_IPTAL", "Bu kurulum etkinleştirilemez (devredildi ya da iptal)");
   else if (code.kullananAnahtarKimligi !== verified.kid) throw codeUsed();
+  // Yalnız kodu TÜKETECEK istek kabul ister: tüketilmiş kodun ağ tekrarı önceki sonucu alır (kabul o gün yazıldı).
+  const acceptance = code.durum === "AKTIF" ? requireAcceptance(body) : null;
   g.limit?.(inst.id);
   await recordRequestNonce({ installationDbId: inst.id, kid: verified.kid, request: verified.request, nowMs: g.nowMs });
   const result = await prisma.$transaction((tx) =>
-    activateInTx(tx, ctx, { codeId: code.id, installationDbId: inst.id, kid: verified.kid, body, nowMs: g.nowMs }),
+    activateInTx(tx, ctx, { codeId: code.id, installationDbId: inst.id, kid: verified.kid, body, acceptance, nowMs: g.nowMs }),
   );
   if (result.kind === "replay") return result.response;
   const a = result.activated;
@@ -212,7 +265,7 @@ export async function handleActivation(
     entity: "Kurulum",
     entityId: a.installationDbId,
     actor: "kurulum",
-    summary: { kodId: a.codeId, kodTuru: a.kind, anahtarKimligi: verified.kid },
+    summary: { kodId: a.codeId, kodTuru: a.kind, anahtarKimligi: verified.kid, kabulId: acceptance?.doc.kabulId ?? null },
   });
   return a.response;
 }

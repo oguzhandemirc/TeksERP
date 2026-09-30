@@ -86,7 +86,9 @@ async function main(): Promise<void> {
     const A = randomUUID();
     const B = randomUUID();
     const y1 = await yokla({ kurulumKayitlari: [kayit(A), kayit(B, "GERI_ALMA")] });
-    const satirlar = () => prisma.kurulumKaydi.findMany({ where: { kurulumId: k.kurulumDbId, kaynakKayitId: { not: null } }, orderBy: { createdAt: "asc" } });
+    // Kaynak kimlikli başka satır da var (etkinleştirmedeki sözleşme kabulü, kaynak = kabulId): yalnız kur.ps1 olayları sayılır.
+    const satirlar = () =>
+      prisma.kurulumKaydi.findMany({ where: { kurulumId: k.kurulumDbId, kaynakKayitId: { not: null }, olay: { in: ["BACKEND_KURULDU", "BACKEND_GERI_ALINDI"] } }, orderBy: { createdAt: "asc" } });
     const s1 = await satirlar();
     kontrol("§1a yoklama kayıtlı gövdeyle 200", y1.status === 200, `${y1.status} ${y1.kod ?? ""}`);
     kontrol("§1b ⭐ iki kayıt deftere yazıldı (olay türü + kaynak kimliği + ayrıntı)",

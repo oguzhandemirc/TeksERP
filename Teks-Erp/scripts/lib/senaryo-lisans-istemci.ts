@@ -71,6 +71,21 @@ export class FabrikaIstemcisi {
     return y.veri as unknown as LisansDetayi;
   }
 
+  /** Ek-7: etkinleştirmeden önce panelin sözleşme kabul adımı — güncel metnin bütün kutularıyla (201 beklenir). */
+  async sozlesmeyiKabulEt(g: { adSoyad?: string; unvan?: string } = {}): Promise<Yanit> {
+    const v = await this.istek("GET", "/api/license/kabul");
+    if (v.status !== 200) return v;
+    const metin = (v.veri as { metin: { kimlik: string; ozet: string; kutular: string[] } }).metin;
+    return this.istek("POST", "/api/license/kabul", {
+      clientToken: randomUUID(),
+      metinKimligi: metin.kimlik,
+      metinOzeti: metin.ozet,
+      kutular: metin.kutular,
+      adSoyad: g.adSoyad ?? "Senaryo Yetkili",
+      unvan: g.unvan ?? "Genel Müdür",
+    });
+  }
+
   async yokla(): Promise<{ outcome: string; code?: string }> {
     const y = await this.istek("POST", "/api/license/yokla");
     return y.veri as { outcome: string; code?: string };

@@ -6,7 +6,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useLicenseScreenVisible } from "@/hooks/useLicenseStatus";
 import { apiErrorText } from "@/lib/api-error";
-import { useLicenseDetail } from "./hooks";
+import { acceptanceGate } from "@/lib/license/acceptance";
+import { useLicenseAcceptance, useLicenseDetail } from "./hooks";
+import { LicenseAcceptanceCard } from "./LicenseAcceptanceCard";
 import { LicenseStatusCard } from "./LicenseStatusCard";
 import { LicenseEntitlementCard } from "./LicenseEntitlementCard";
 import { LicenseLeaseCard } from "./LicenseLeaseCard";
@@ -33,6 +35,9 @@ export function LicensePage() {
   const canManage = hasPermission("license:manage");
   const q = useLicenseDetail(visible);
   const d = q.data;
+  const acceptance = useLicenseAcceptance(visible);
+  const gate = acceptanceGate(acceptance);
+  const acceptanceCard = d ? <LicenseAcceptanceCard q={acceptance} canManage={canManage} active={d.kurulum.etkin} /> : null;
 
   return (
     <PageShell>
@@ -57,15 +62,18 @@ export function LicensePage() {
         )}
         {d && (
           <div className="grid gap-4 xl:grid-cols-2">
+            {/* Etkinleşmemiş kurulumda sözleşme kabulü İLK adımdır (Ek-7 §5): kod girişinden önce, tam genişlik. */}
+            {!d.kurulum.etkin && <div className="xl:col-span-2">{acceptanceCard}</div>}
             <LicenseStatusCard d={d} />
             <LicenseEntitlementCard d={d} />
             <LicenseLeaseCard d={d} />
             <LicenseMachineCard d={d} />
             <LicenseIntegrityCard b={d.butunluk} />
-            {canManage && <LicenseActivateCard d={d} />}
-            {canManage && <LicenseOfflineCard d={d} />}
+            {canManage && <LicenseActivateCard d={d} gate={gate} />}
+            {canManage && <LicenseOfflineCard d={d} gate={gate} />}
             {canManage && <LicenseTransferCard d={d} />}
             <LicenseProxyCard proxy={d.proxy} canManage={canManage} />
+            {d.kurulum.etkin && acceptanceCard}
             {hasAnyPermission(HISTORY_ACCESS) && <LicenseHistoryCard />}
           </div>
         )}
