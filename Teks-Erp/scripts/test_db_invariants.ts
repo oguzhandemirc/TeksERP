@@ -750,6 +750,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "work_order_close_snapshots", name: "work_order_close_snapshots_version_pos" },
   { table: "work_order_close_snapshots", name: "work_order_close_snapshots_output_sum" },
   { table: "work_order_close_snapshot_lines", name: "work_order_close_snapshot_lines_bucket_known" },
+  // TZ-D (2026-09-30): saat dilimi dönem defterinde boş dilim adı yazılamaz (çözümleme onu varsayılana düşürürdü).
+  { table: "factory_timezone_periods", name: "factory_timezone_periods_timezone_not_blank" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

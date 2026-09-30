@@ -13813,7 +13813,9 @@ Negatif sondalar (tetik md5(prosrc) ve dosya md5 ile geri alındı):
 
 **Kapılar.** `test_sunucu_betikleri` §23 (4 gömülü sonda: paket farkına dönüş · sonra-sayım deploy'dan önce · geri alınmış satır sayılır · başlık koşulsuz KORUNDU) · `test_lisans_devreye_kuru` §6 (N11 etkinleşmemiş filtresi kalktı · N12 etkin örneksiz özet UYUMLU; P5 temiz kopya). Dış sonda: birleşim ucundaki `kur.ps1` ve `lib/gozlem.mjs` geri konunca §23a / §6a·c·d·e·f kırmızı, sha eşit geri alındı. `DbMigrationSayisi` pwsh 7'de sahte `psql.exe` ile: 367 → Int32 · psql hatası → null · çöp çıktı → null · psql yok → null; `PGPASSWORD` çağrı sonunda boş, EAP geri kondu.
 
-## 2026-09-30 — Fabrika saat dilimi: tek kaynak, fabrikaya göre seçilebilir (TZ-B) [ÇEKİRDEK]/[PROFİL] — tek değerli `company.timezone` GEÇERSİZ → 2026-09-30 TZ-D (tarihli dönemler)
+## 2026-09-30 — Fabrika saat dilimi: tek kaynak, fabrikaya göre seçilebilir (TZ-B) [ÇEKİRDEK]/[PROFİL]
+
+> **GEÇERSİZ → 2026-09-30 TZ-D:** tek değerli `company.timezone` (dilim değişince geçmiş kayıtlar da kayar) yerini tarihli dönem defterine bıraktı — bkz. aynı günün "tarihli dönemler (TZ-D)" notu.
 
 **Karar (kullanıcı, 2026-09-30, aynen).** "tek kaynaktan olsun ama her fabrikaya göre seçilebilir olsun saat dilimi". [ÇEKİRDEK] Fabrika günü ve bütün görüntü/basım saatleri (panel · tablet · PDF/Excel · patron bulutu) fabrikanın saat diliminden ve TEK kaynaktan (`src/constants/time.ts`) gelir; istemcinin bilgisayar dilimi kullanılmaz. [PROFİL] Hangi dilim olduğu fabrikanın seçimidir: `company.timezone` (IANA), varsayılan Europe/Istanbul = bugünkü davranış. 2026-08-01'in "fabrika günü = Europe/Istanbul" kuralı geçersiz değil, GENELLEŞTİ: İstanbul artık varsayılandır, sabit değil.
 
