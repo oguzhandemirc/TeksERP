@@ -46,6 +46,12 @@ export function requireTailnet(listener: () => AddressInfo | string | null, allo
   };
 }
 
+/** ERİŞİM kipinin sağlık özeti: JWKS dosyasının yaşı görünür (eski ama geçerli küme kabul edilir). */
+function erisimDurumu(access: AccessVerifier) {
+  const j = access.jwks.state();
+  return { kip: "acik", jwks: { dolu: j.filled, anahtarSayisi: j.keyCount, dosyaYasiSn: j.sourceAgeSec, okumaYasiSn: j.ageSec, sonHata: j.lastError } };
+}
+
 export function createTailnetApp(
   ctx: VendorContext,
   hub: DoorbellHub | null,
@@ -75,7 +81,7 @@ export function createTailnetApp(
           uyariSayisi: ctx.keys.warnings.length,
         },
         denetimYazmaHatasi: auditFailureCount(),
-        erisim: access ? { kip: "acik", jwks: access.jwks.state() } : { kip: "kapali" },
+        erisim: access ? erisimDurumu(access) : { kip: "kapali" },
       },
     });
   });

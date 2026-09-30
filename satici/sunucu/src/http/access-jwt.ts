@@ -3,10 +3,13 @@
 // anahtar takımın JWKS'inden (adres yapılandırmadaki takım alanından türer — jetondaki jku/jwk/x5u/x5c ASLA
 // okunmaz), `aud` Access uygulamasının AUD etiketi, `iss` takım alanı, `exp` zorunlu, `nbf`/`iat` saat payıyla,
 // e-posta kimliği zorunlu. Kaynak IP'ye ve istemcinin beyanına güvenilmez.
+// Satıcı DIŞ BAĞLANTISIZDIR: JWKS'i ağdan yalnız yan konteyner (`src/jwks-cekici.ts`) çeker ve dosyaya atomik
+// yazar; satıcının doğrulayıcısı YALNIZ o dosyayı (salt okunur bağ) okur — ağ çekimi sunucuda bağlanmaz.
 // JWKS önbelleği: TTL TAZELİKTİR geçerlilik değil — bayat anahtar döner ve arka planda tazelenir; önbellek HİÇ
-// dolmadıysa RED (fail-closed); bilinmeyen kid tek uçuşla bir kez tazeler. Zorunlu çekimler arasında soğuma
-// süresi var: uydurma kid ya da erişilemeyen JWKS istek başına Cloudflare'e çekim tetikleyemez.
+// dolmadıysa (dosya yok/bozuk/boş anahtar kümesi) RED (fail-closed); bilinmeyen kid kaynağı tek uçuşla bir kez
+// yeniden okur. Zorunlu okumalar arasında soğuma süresi var: uydurma kid istek başına okuma tetikleyemez.
 import { createPublicKey, verify as verifySignature, type KeyObject } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
 import type { VendorConfig } from "../config";
 
 export const ACCESS_HEADER = "cf-access-jwt-assertion";
@@ -15,6 +18,9 @@ export const ACCESS_ALG = "RS256";
 export const JWKS_TTL_MS = 15 * 60_000;
 export const JWKS_REFRESH_COOLDOWN_MS = 10_000;
 export const JWKS_TIMEOUT_MS = 5_000;
+/** Dosya kaynağı yerel ve ucuz: sık tazelenir, bilinmeyen kid'de kısa soğumayla yeniden okunur. */
+export const JWKS_FILE_TTL_MS = 60_000;
+export const JWKS_FILE_COOLDOWN_MS = 1_000;
 const JWKS_MAX_BYTES = 64 * 1024;
 const JWKS_MAX_KEYS = 20;
 const MIN_RSA_BITS = 2048;
@@ -25,13 +31,23 @@ const B64URL = /^[A-Za-z0-9_-]+$/;
 export interface AccessSettings {
   readonly teamDomain: string;
   readonly aud: string;
+  /** Yan konteynerin yazdığı JWKS dosyası (satıcıda salt okunur bağ). */
+  readonly jwksFile: string;
 }
 
-/** Access yapılandırması: takım alanı ve AUD birlikte yoksa ERİŞİM kipi KAPALI (null). */
-export function accessSettingsOf(config: Pick<VendorConfig, "CF_ACCESS_TAKIM_ALANI" | "CF_ACCESS_AUD">): AccessSettings | null {
+type AccessConfig = Pick<VendorConfig, "CF_ACCESS_TAKIM_ALANI" | "CF_ACCESS_AUD" | "CF_ACCESS_JWKS_DOSYASI">;
+
+/** Access yapılandırması: takım alanı, AUD ve JWKS dosyası BİRLİKTE yoksa ERİŞİM kipi KAPALI (null). */
+export function accessSettingsOf(config: AccessConfig): AccessSettings | null {
   const teamDomain = config.CF_ACCESS_TAKIM_ALANI ?? "";
   const aud = config.CF_ACCESS_AUD ?? "";
-  return teamDomain && aud ? { teamDomain, aud } : null;
+  const jwksFile = config.CF_ACCESS_JWKS_DOSYASI ?? "";
+  return teamDomain && aud && jwksFile ? { teamDomain, aud, jwksFile } : null;
+}
+
+/** Kip KAPALI ise eksik ayarların adları (günlük için; değer basılmaz). */
+export function missingAccessSettings(config: AccessConfig): string[] {
+  return (["CF_ACCESS_TAKIM_ALANI", "CF_ACCESS_AUD", "CF_ACCESS_JWKS_DOSYASI"] as const).filter((k) => !config[k]);
 }
 
 export function jwksUrlOf(teamDomain: string): string {
@@ -44,9 +60,13 @@ export function issuerOf(teamDomain: string): string {
 
 // ---------------------------------------------------------------- JWKS
 
-/** JWKS gövdesini getirir (ağ). Testte sahtesi verilir; yönlendirme izlenmez, gövde tavanlıdır. */
-export type JwksFetch = (url: string, signal: AbortSignal) => Promise<{ readonly status: number; readonly body: string }>;
+/**
+ * JWKS gövdesini getirir. `sourceTimeMs`: içeriğin kaynaktaki zamanı (dosyada mtime = yan konteynerin son
+ * başarılı yazımı); verilmezse okuma anı. Testte sahtesi verilir.
+ */
+export type JwksFetch = (source: string, signal: AbortSignal) => Promise<{ readonly status: number; readonly body: string; readonly sourceTimeMs?: number }>;
 
+/** AĞ çekimi — YALNIZ yan konteyner (`jwks-cekici`) kullanır; yönlendirme izlenmez, gövde tavanlıdır. */
 export const fetchJwksOverNetwork: JwksFetch = async (url, signal) => {
   const res = await fetch(url, { signal, redirect: "error", headers: { accept: "application/json" } });
   const declared = Number(res.headers.get("content-length") ?? "0");
@@ -54,6 +74,15 @@ export const fetchJwksOverNetwork: JwksFetch = async (url, signal) => {
   const body = await res.text();
   return { status: res.status, body };
 };
+
+/** DOSYA kaynağı — satıcının tek kaynağı: yok/okunamaz/tavan üstü dosya hata (önbellek hiç dolmadıysa RED). */
+export function jwksFromFile(file: string): JwksFetch {
+  return async () => {
+    const st = await stat(file);
+    if (!st.isFile() || st.size > JWKS_MAX_BYTES) throw new Error("JWKS dosyası geçersiz (düz dosya değil ya da çok büyük)");
+    return { status: 200, body: await readFile(file, "utf8"), sourceTimeMs: st.mtimeMs };
+  };
+}
 
 /** JWKS gövdesini anahtar haritasına çevirir; yalnız RSA ≥ 2048 imza anahtarları. Geçerli anahtar yoksa hata. */
 export function parseJwks(body: string): Map<string, KeyObject> {
@@ -80,9 +109,21 @@ export function parseJwks(body: string): Map<string, KeyObject> {
   return keys;
 }
 
+/** Doğrulanmış anahtarları yalın JWKS'e çevirir (yalnız kid · kty · n · e · alg · use); geçerli anahtar yoksa hata. */
+export function normalizeJwks(body: string): { readonly json: string; readonly count: number } {
+  const keys = parseJwks(body);
+  const out = [...keys].map(([kid, key]) => {
+    const jwk = key.export({ format: "jwk" });
+    return { kid, kty: "RSA", n: jwk.n, e: jwk.e, alg: ACCESS_ALG, use: "sig" };
+  });
+  return { json: `${JSON.stringify({ keys: out })}\n`, count: out.length };
+}
+
 export interface JwksCacheOptions {
-  readonly url: string;
-  readonly fetchJwks?: JwksFetch;
+  /** Kaynak (ağ adresi ya da dosya yolu) — `fetchJwks`e aynen verilir. */
+  readonly source: string;
+  /** Zorunlu: sunucuda YALNIZ dosya kaynağı (`jwksFromFile`) bağlanır; varsayılan ağ çekimi YOK. */
+  readonly fetchJwks: JwksFetch;
   readonly ttlMs?: number;
   readonly cooldownMs?: number;
   readonly timeoutMs?: number;
@@ -93,14 +134,18 @@ export interface JwksCacheOptions {
 export interface JwksState {
   readonly filled: boolean;
   readonly keyCount: number;
-  /** Son başarılı çekimden bu yana geçen süre (sn); hiç dolmadıysa null. */
+  /** Son başarılı okumadan bu yana geçen süre (sn); hiç dolmadıysa null. */
   readonly ageSec: number | null;
+  /** Anahtar kümesinin kaynaktaki yaşı (sn; dosyada mtime'dan) — eski ama geçerli küme kabul edilir, yaşı görünür. */
+  readonly sourceAgeSec: number | null;
   readonly lastError: string | null;
 }
 
 export class JwksCache {
   private keys: Map<string, KeyObject> | null = null;
   private fetchedAt = 0;
+  private sourceTime = 0;
+  private lastWarnAt = Number.NEGATIVE_INFINITY;
   private lastAttemptAt = Number.NEGATIVE_INFINITY;
   private inFlight: Promise<void> | null = null;
   private lastError: string | null = null;
@@ -112,7 +157,7 @@ export class JwksCache {
   private readonly warn: (message: string) => void;
 
   constructor(private readonly options: JwksCacheOptions) {
-    this.fetchJwks = options.fetchJwks ?? fetchJwksOverNetwork;
+    this.fetchJwks = options.fetchJwks;
     this.ttlMs = options.ttlMs ?? JWKS_TTL_MS;
     this.cooldownMs = options.cooldownMs ?? JWKS_REFRESH_COOLDOWN_MS;
     this.timeoutMs = options.timeoutMs ?? JWKS_TIMEOUT_MS;
@@ -130,6 +175,7 @@ export class JwksCache {
       filled: this.keys !== null,
       keyCount: this.keys?.size ?? 0,
       ageSec: this.keys ? Math.max(0, Math.round((this.now() - this.fetchedAt) / 1000)) : null,
+      sourceAgeSec: this.keys ? Math.max(0, Math.round((this.now() - this.sourceTime) / 1000)) : null,
       lastError: this.lastError,
     };
   }
@@ -158,14 +204,20 @@ export class JwksCache {
     this.lastAttemptAt = this.now();
     this.inFlight = this.load()
       .then(
-        (keys) => {
+        ({ keys, sourceTimeMs }) => {
           this.keys = keys;
           this.fetchedAt = this.now();
+          this.sourceTime = sourceTimeMs ?? this.fetchedAt;
           this.lastError = null;
         },
         (err: unknown) => {
-          this.lastError = err instanceof Error ? err.message : String(err);
-          this.warn(`JWKS çekilemedi (${this.keys ? "bayat anahtarlarla sürüyor" : "önbellek BOŞ — istekler reddedilir"}): ${this.lastError}`);
+          const message = err instanceof Error ? err.message : String(err);
+          // Aynı hata dakikada bir kez günlüğe (dosya yokken her istek okuma dener).
+          if (message !== this.lastError || this.now() - this.lastWarnAt >= 60_000) {
+            this.lastWarnAt = this.now();
+            this.warn(`JWKS alınamadı (${this.keys ? "bayat anahtarlarla sürüyor" : "önbellek BOŞ — istekler reddedilir"}): ${message}`);
+          }
+          this.lastError = message;
         },
       )
       .finally(() => {
@@ -174,10 +226,10 @@ export class JwksCache {
     return this.inFlight;
   }
 
-  private async load(): Promise<Map<string, KeyObject>> {
-    const r = await this.fetchJwks(this.options.url, AbortSignal.timeout(this.timeoutMs));
+  private async load(): Promise<{ keys: Map<string, KeyObject>; sourceTimeMs: number | undefined }> {
+    const r = await this.fetchJwks(this.options.source, AbortSignal.timeout(this.timeoutMs));
     if (r.status !== 200) throw new Error(`JWKS HTTP ${r.status}`);
-    return parseJwks(r.body);
+    return { keys: parseJwks(r.body), sourceTimeMs: r.sourceTimeMs };
   }
 }
 
@@ -266,9 +318,10 @@ export class AccessVerifier {
   }
 }
 
-/** Yapılandırmadan doğrulayıcı (kapalıysa null). Ağ çekimi yalnız burada bağlanır; test sahte çekim verir. */
-export function createAccessVerifier(config: Pick<VendorConfig, "CF_ACCESS_TAKIM_ALANI" | "CF_ACCESS_AUD">, fetchJwks?: JwksFetch): AccessVerifier | null {
+/** Yapılandırmadan doğrulayıcı (kapalıysa null). Kaynak YALNIZ yan konteynerin yazdığı dosya — satıcı ağa çıkmaz. */
+export function createAccessVerifier(config: AccessConfig): AccessVerifier | null {
   const settings = accessSettingsOf(config);
   if (!settings) return null;
-  return new AccessVerifier(settings, new JwksCache({ url: jwksUrlOf(settings.teamDomain), fetchJwks }));
+  const cache = new JwksCache({ source: settings.jwksFile, fetchJwks: jwksFromFile(settings.jwksFile), ttlMs: JWKS_FILE_TTL_MS, cooldownMs: JWKS_FILE_COOLDOWN_MS });
+  return new AccessVerifier(settings, cache);
 }

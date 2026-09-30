@@ -127,9 +127,11 @@ const EnvSchema = z.object({
     .string()
     .default("127.0.0.1")
     .refine((v) => !WILDCARD_ADDRESSES.has(v.trim()), "ERISIM_BIND joker adres olamaz (0.0.0.0 / ::)"),
-  /** Access takım alanı ve uygulama AUD etiketi; ikisinden biri yoksa ERİŞİM dinleyicisi her isteğe 404 (kapalı). */
+  /** Access takım alanı, uygulama AUD etiketi ve JWKS dosyası; biri yoksa ERİŞİM dinleyicisi her isteğe 404 (kapalı). */
   CF_ACCESS_TAKIM_ALANI: accessTeamDomain.optional(),
   CF_ACCESS_AUD: accessAud.optional(),
+  /** Yan konteynerin (satici-jwks) atomik yazdığı JWKS dosyası; satıcı salt okunur okur, ağa ÇIKMAZ. */
+  CF_ACCESS_JWKS_DOSYASI: z.string().min(1).optional(),
   /** İç zil: tesis başına dakikalık tavan. */
   IC_ZIL_HIZ_DK: positiveInt(1, 1000).default(12),
   /** İç API çağrı sayacının denetime yazılma aralığı (dk; her istek değil, pencere başına tek satır). */
@@ -158,7 +160,7 @@ const EnvSchema = z.object({
 export type VendorConfig = Readonly<
   Omit<
     z.infer<typeof EnvSchema>,
-    "ANAHTAR_DIZINI" | "GUVEN_CAPASI_DOSYASI" | "PORTAL_WEB_DIZINI" | "IC_API_BELIRTEC_DOSYASI" | "DOSYA_DIZINI" | "DERLEME_DIZINI" | "YAYIN_DIZINI"
+    "ANAHTAR_DIZINI" | "GUVEN_CAPASI_DOSYASI" | "PORTAL_WEB_DIZINI" | "IC_API_BELIRTEC_DOSYASI" | "DOSYA_DIZINI" | "DERLEME_DIZINI" | "YAYIN_DIZINI" | "CF_ACCESS_JWKS_DOSYASI"
   > & {
     ANAHTAR_DIZINI: string;
     PORTAL_WEB_DIZINI: string;
@@ -167,6 +169,7 @@ export type VendorConfig = Readonly<
     DOSYA_DIZINI: string;
     DERLEME_DIZINI: string;
     YAYIN_DIZINI: string | undefined;
+    CF_ACCESS_JWKS_DOSYASI: string | undefined;
   }
 >;
 
@@ -186,5 +189,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd: string = p
     DOSYA_DIZINI: path.resolve(cwd, c.DOSYA_DIZINI),
     DERLEME_DIZINI: path.resolve(cwd, c.DERLEME_DIZINI),
     YAYIN_DIZINI: c.YAYIN_DIZINI ? path.resolve(cwd, c.YAYIN_DIZINI) : undefined,
+    CF_ACCESS_JWKS_DOSYASI: c.CF_ACCESS_JWKS_DOSYASI ? path.resolve(cwd, c.CF_ACCESS_JWKS_DOSYASI) : undefined,
   });
 }

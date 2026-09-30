@@ -10,22 +10,43 @@
 //   §3 JWKS önbelleği (TTL tazeliktir, geçerlilik değil): hiç dolmamış + erişilemez → RED · bayat ama dolu →
 //      GEÇER ve tazeleme denenir · BAYAT ≠ BOŞ · onarım · bilinmeyen kid tek çekim, soğuma içinde ikincisi yok ·
 //      anahtar dönümü tek çekimle kabul · zehirli JWKS (<2048 bit, use/alg uyumsuz) anahtar vermez · adres sabit
+//      §3h DOSYA kaynağı (satıcının TEK kaynağı; satıcı ağa çıkmaz): dosya yok / bozuk / boş küme → RED · eski ama
+//      geçerli → kabul + yaş görünür · dolduktan sonra bozulursa bayat sürer · bilinmeyen kid dosyayı bir kez okur ·
+//      sunucunun doğrulayıcısı ağa HİÇ çıkmaz · §3i yan konteyner (jwks-cekici): yalnız doğrulanmış anahtarı atomik
+//      yazar, her başarısızlıkta eski dosya bayt-eşit kalır, geçici dosya bırakmaz
 //   §4 statik: kök parolası anan her satıcı rotası `kokParolasi: true` beyanlı (ve tersi) · kapısız bağlama hata
-//   §5 compose: portal yönlendiricisinin Traefik ipallowlist aralıkları = CLOUDFLARE_NETWORKS
-//   §6 HTTP (süreç içi dinleyiciler, kendi `_test` DB'si) · §7 gerçek süreç: açılış satırı ve KAPALI kip
-// ⭐ KALICI SONDA ✓K4 (her koşumda): (1) geçerli jeton GEÇER (§2a, §6c — her şeyi reddeden kör kapı yeşil veremez)
+//   §5 compose: portal yönlendiricisinin Traefik ipallowlist aralıkları = CLOUDFLARE_NETWORKS · üst dosya satıcıya AĞ
+//      EKLEMEZ, JWKS bağı satıcıda salt okunur · yan konteyner sertleştirilmiş, sırsız, yalnız kendi çıkış köprüsünde
+//      · birleşik yapılandırmada (docker compose config) satıcının HER ağı internal (docker yoksa ÖLÇÜLEMEDİ beyanı)
+//   §6 HTTP (süreç içi dinleyiciler, kendi `_test` DB'si) · §7 gerçek süreç: açılış satırı, KAPALI kip ve JWKS dosyalı AÇIK kip
+// ⭐ KALICI SONDA ✓K6 (her koşumda): (1) geçerli jeton GEÇER (§2a, §6c — her şeyi reddeden kör kapı yeşil veremez)
 //    (2) BAYAT önbellek geçer, BOŞ önbellek reddeder (§3c) (3) AYNI kök parolalı istek tailnet'te 404 DEĞİL (§6k —
-//    404 rotanın kapısından geliyor, eksik rotadan değil) (4) §4 çözümleyicisi sentetik beyansız rotada ısırır.
+//    404 rotanın kapısından geliyor, eksik rotadan değil) (4) §4 çözümleyicisi sentetik beyansız rotada ısırır
+//    (5) dosya kaynağı geçerli dosyayla GEÇER (§3h4 · §3h7 — her dosyayı reddeden kör okuyucu yeşil veremez)
+//    (6) yan konteyner geçerli yanıtı GERÇEKTEN yazar (§3i1 — hiç yazmayan çekici "eski dosya korundu" yeşili veremez).
 // Koşum: npx tsx scripts/test_erisim_kapisi.ts   (§6–§7 kendi _test DB'si)
 // =============================================================================
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { spawnSync } from "node:child_process";
 import { createHmac, generateKeyPairSync, randomBytes, randomUUID, sign, type KeyObject } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { loadConfig } from "../src/config";
-import { AccessVerifier, JwksCache, accessSettingsOf, jwksUrlOf, type AccessResult, type JwksFetch } from "../src/http/access-jwt";
+import {
+  AccessVerifier,
+  JwksCache,
+  accessSettingsOf,
+  createAccessVerifier,
+  jwksFromFile,
+  jwksUrlOf,
+  missingAccessSettings,
+  normalizeJwks,
+  type AccessResult,
+  type JwksFetch,
+} from "../src/http/access-jwt";
+import { cekiciAyari, jwksCekVeYaz } from "../src/jwks-cekici";
 import { createAccessApp } from "../src/http/access-app";
 import { CLOUDFLARE_NETWORKS } from "../src/http/client-address";
 import { createPortalRouter, type PortalRouteDef } from "../src/http/portal-http";
@@ -98,9 +119,20 @@ function sahteAg(govde: string) {
   return { d, fetchJwks };
 }
 
+/** Önbellek kuralları kaynaktan bağımsızdır: ağ benzeri sahte kaynakla ölçülür; gerçek dosya kaynağı §3h'de. */
+const AYAR = { teamDomain: TAKIM, aud: AUD, jwksFile: "(sahte kaynak)" };
 function dogrulayici(ag: ReturnType<typeof sahteAg>, g: { ttlMs?: number; cooldownMs?: number } = {}) {
-  const cache = new JwksCache({ url: jwksUrlOf(TAKIM), fetchJwks: ag.fetchJwks, now: () => saat, ttlMs: g.ttlMs ?? 60_000, cooldownMs: g.cooldownMs ?? 10_000, warn: () => undefined });
-  return new AccessVerifier({ teamDomain: TAKIM, aud: AUD }, cache, () => saat);
+  const cache = new JwksCache({ source: jwksUrlOf(TAKIM), fetchJwks: ag.fetchJwks, now: () => saat, ttlMs: g.ttlMs ?? 60_000, cooldownMs: g.cooldownMs ?? 10_000, warn: () => undefined });
+  return new AccessVerifier(AYAR, cache, () => saat);
+}
+
+/** Satırlar arasından üst dosyanın bir servis bloğu (iki boşluk girintili ad → sonraki servis ya da üst düzey anahtar). */
+function servisBlogu(yaml: string, ad: string): string {
+  const satirlar = yaml.split("\n");
+  const bas = satirlar.findIndex((l) => l === `  ${ad}:`);
+  if (bas < 0) return "";
+  const son = satirlar.findIndex((l, i) => i > bas && (/^  [a-z0-9-]+:\s*$/.test(l) || /^[a-z]/.test(l)));
+  return satirlar.slice(bas + 1, son < 0 ? undefined : son).join("\n");
 }
 
 const neden = (r: AccessResult): string => (r.ok ? "GECTI" : r.reason);
@@ -143,12 +175,15 @@ async function main(): Promise<void> {
   const norm = loadConfig({ ...TABAN, CF_ACCESS_TAKIM_ALANI: " https://Bekci-Erisim.cloudflareaccess.com/ ", CF_ACCESS_AUD: AUD.toUpperCase() });
   kontrol("§1d https:// öneki, sondaki / ve büyük harf normalleşir", norm.CF_ACCESS_TAKIM_ALANI === TAKIM && norm.CF_ACCESS_AUD === AUD, `${norm.CF_ACCESS_TAKIM_ALANI}`);
   kontrol("§1e AUD 64 onaltılık değilse RED", reddeder({ CF_ACCESS_AUD: "abc" }) && reddeder({ CF_ACCESS_AUD: `${AUD}0` }) && reddeder({ CF_ACCESS_AUD: "g".repeat(64) }));
+  const uclu = { CF_ACCESS_TAKIM_ALANI: TAKIM, CF_ACCESS_AUD: AUD, CF_ACCESS_JWKS_DOSYASI: "/erisim-jwks/certs.json" };
   kontrol(
-    "§1f takım alanı ya da AUD eksikse kip KAPALI (null); ikisi varsa açık",
+    "§1f takım alanı, AUD ya da JWKS dosyası eksikse kip KAPALI (null); üçü varsa açık; eksikler ADIYLA sayılır",
     accessSettingsOf(loadConfig(TABAN)) === null &&
-      accessSettingsOf(loadConfig({ ...TABAN, CF_ACCESS_TAKIM_ALANI: TAKIM })) === null &&
-      accessSettingsOf(loadConfig({ ...TABAN, CF_ACCESS_AUD: AUD })) === null &&
-      accessSettingsOf(loadConfig({ ...TABAN, CF_ACCESS_TAKIM_ALANI: TAKIM, CF_ACCESS_AUD: AUD }))?.aud === AUD,
+      accessSettingsOf(loadConfig({ ...TABAN, ...uclu, CF_ACCESS_TAKIM_ALANI: "" })) === null &&
+      accessSettingsOf(loadConfig({ ...TABAN, ...uclu, CF_ACCESS_AUD: "" })) === null &&
+      accessSettingsOf(loadConfig({ ...TABAN, CF_ACCESS_TAKIM_ALANI: TAKIM, CF_ACCESS_AUD: AUD })) === null &&
+      accessSettingsOf(loadConfig({ ...TABAN, ...uclu }))?.jwksFile === "/erisim-jwks/certs.json" &&
+      missingAccessSettings(loadConfig({ ...TABAN, CF_ACCESS_AUD: AUD })).join(",") === "CF_ACCESS_TAKIM_ALANI,CF_ACCESS_JWKS_DOSYASI",
   );
 
   console.log("\n§2 doğrulayıcı — her saldırı kendi gerekçesiyle");
@@ -260,10 +295,159 @@ async function main(): Promise<void> {
   kontrol("§3f2 use=enc ya da alg=RS512 anahtarı alınmaz → JWKS", (await zehir(jwks(jwk(ANA.publicKey, KID_ANA, { use: "enc" })))) === "JWKS" && (await zehir(jwks(jwk(ANA.publicKey, KID_ANA, { alg: "RS512" })))) === "JWKS");
   kontrol("§3f3 biçimsiz JWKS (keys yok / JSON değil) → JWKS", (await zehir(JSON.stringify({ anahtarlar: [] }))) === "JWKS" && (await zehir("<html>")) === "JWKS");
   const agHttp: JwksFetch = async () => ({ status: 302, body: jwks(jwk(ANA.publicKey, KID_ANA)) });
-  const vHttp = new AccessVerifier({ teamDomain: TAKIM, aud: AUD }, new JwksCache({ url: jwksUrlOf(TAKIM), fetchJwks: agHttp, now: () => saat, warn: () => undefined }), () => saat);
+  const vHttp = new AccessVerifier(AYAR, new JwksCache({ source: jwksUrlOf(TAKIM), fetchJwks: agHttp, now: () => saat, warn: () => undefined }), () => saat);
   kontrol("§3f4 200 dışı yanıt (yönlendirme dahil) anahtar vermez → JWKS", neden(await vHttp.verify(gecerli())) === "JWKS");
-  const agSrc = readFileSync(path.join(__dirname, "..", "src", "http", "access-jwt.ts"), "utf8");
-  kontrol("§3g ağ çekimi yönlendirme İZLEMEZ (redirect: \"error\") ve tek adres jwksUrlOf'tan", /redirect:\s*"error"/.test(agSrc) && /url:\s*jwksUrlOf\(settings\.teamDomain\)/.test(agSrc));
+  const SRC = path.join(__dirname, "..", "src");
+  const kaynak = (f: string): string => readFileSync(path.join(SRC, f), "utf8");
+  const agSrc = kaynak("http/access-jwt.ts");
+  kontrol(
+    "§3g ağ çekimi yönlendirme İZLEMEZ (redirect: \"error\"); sunucunun doğrulayıcısı YALNIZ dosya kaynağından, varsayılan ağ çekimi yok",
+    /redirect:\s*"error"/.test(agSrc) && /fetchJwks:\s*jwksFromFile\(settings\.jwksFile\)/.test(agSrc) && !/\?\?\s*fetchJwksOverNetwork/.test(agSrc),
+  );
+  const tsDosyalari = (readdirSync(SRC, { recursive: true }) as string[]).filter((f) => f.endsWith(".ts")).map((f) => f.split(path.sep).join("/"));
+  const agiKullanan = tsDosyalari.filter((f) => kaynak(f).includes("fetchJwksOverNetwork")).sort();
+  // Dosya düzeyi süzgeç tanımın KENDİ dosyasındaki ikinci kullanımı göremez: orada yalnız tanımın kendisi (1 kez) olmalı.
+  const tanimDosyasindaki = (agSrc.match(/fetchJwksOverNetwork/g) ?? []).length;
+  kontrol(
+    "§3g2 ağ çekimini src/'de YALNIZ tanımı (kendi dosyasında 1 kez) ve yan konteynerin girişi anar (sunucu ağa çıkmaz)",
+    tsDosyalari.length > 30 && JSON.stringify(agiKullanan) === JSON.stringify(["http/access-jwt.ts", "jwks-cekici.ts"]) && tanimDosyasindaki === 1,
+    `${agiKullanan.join(", ")} · tanım dosyasında ${tanimDosyasindaki}`,
+  );
+
+  console.log("\n§3h JWKS DOSYA kaynağı (satıcının tek kaynağı) — aynı fail-closed kurallar");
+  const jDizin = mkdtempSync(path.join(os.tmpdir(), "satici-jwks-"));
+  const jDosya = path.join(jDizin, "certs.json");
+  const gecerliKume = normalizeJwks(jwks(jwk(ANA.publicKey, KID_ANA))).json;
+  const dosyaDogrulayici = () =>
+    new AccessVerifier({ teamDomain: TAKIM, aud: AUD, jwksFile: jDosya }, new JwksCache({ source: jDosya, fetchJwks: jwksFromFile(jDosya), now: () => saat, ttlMs: 60_000, cooldownMs: 1_000, warn: () => undefined }), () => saat);
+  const beklet = () => new Promise((r) => setTimeout(r, 30));
+  try {
+    kontrol("§3h1 dosya YOK (hiç dolmadı) → RED (JWKS)", neden(await dosyaDogrulayici().verify(gecerli())) === "JWKS");
+    writeFileSync(jDosya, "{bozuk");
+    kontrol("§3h2 BOZUK dosya (JSON değil) → RED (JWKS)", neden(await dosyaDogrulayici().verify(gecerli())) === "JWKS");
+    writeFileSync(jDosya, JSON.stringify({ keys: [] }));
+    kontrol("§3h3 BOŞ anahtar kümesi → RED (JWKS)", neden(await dosyaDogrulayici().verify(gecerli())) === "JWKS");
+    mkdirSync(path.join(jDizin, "dizin.json"));
+    const dizinV = new AccessVerifier({ teamDomain: TAKIM, aud: AUD, jwksFile: "x" }, new JwksCache({ source: "x", fetchJwks: jwksFromFile(path.join(jDizin, "dizin.json")), now: () => saat, warn: () => undefined }), () => saat);
+    kontrol("§3h3b düz dosya olmayan yol → RED (JWKS)", neden(await dizinV.verify(gecerli())) === "JWKS");
+    writeFileSync(jDosya, gecerliKume);
+    const ikiGunOnce = (saat - 2 * 86_400_000) / 1000;
+    utimesSync(jDosya, ikiGunOnce, ikiGunOnce);
+    const dEski = dosyaDogrulayici();
+    const eski = await dEski.verify(gecerli());
+    const yas = dEski.jwks.state().sourceAgeSec ?? -1;
+    kontrol("§3h4 ESKİ ama geçerli dosya → KABUL; dosya yaşı durumda görünür (~2 gün, mtime'dan)", eski.ok && Math.abs(yas - 172_800) < 120, `${neden(eski)} · yaş ${yas} sn`);
+    writeFileSync(jDosya, "{bozuk");
+    saat += 61_000;
+    const bayatDosya = await dEski.verify(gecerli());
+    await beklet();
+    kontrol("§3h5 dolduktan sonra dosya bozulursa BAYAT küme sürer (kabul), hata durumda görünür", bayatDosya.ok && dEski.jwks.state().lastError !== null, `${neden(bayatDosya)} · ${dEski.jwks.state().lastError ?? "hata yok"}`);
+    writeFileSync(jDosya, gecerliKume);
+    const dKid = dosyaDogrulayici();
+    await dKid.verify(gecerli());
+    writeFileSync(jDosya, normalizeJwks(jwks(jwk(ANA.publicKey, KID_ANA), jwk(DONUM.publicKey, KID_DONUM))).json);
+    saat += 2_000;
+    const kidDosya = await dKid.verify(jeton(DONUM.privateKey, { alg: "RS256", kid: KID_DONUM }, gecerliYuk()));
+    kontrol("§3h6 bilinmeyen kid → dosya BİR KEZ yeniden okunur, yeni anahtarla geçer (ağa gidilmez)", kidDosya.ok, neden(kidDosya));
+    const gercekFetch = globalThis.fetch;
+    let agCagrisi = 0;
+    globalThis.fetch = (async () => {
+      agCagrisi++;
+      throw new Error("TST: ağ yasak");
+    }) as typeof fetch;
+    try {
+      const simdiGercek = Math.floor(Date.now() / 1000);
+      const gercekJeton = gecerli({ iat: simdiGercek - 5, nbf: simdiGercek - 5, exp: simdiGercek + 3600 });
+      const sunucuV = createAccessVerifier(loadConfig({ ...TABAN, CF_ACCESS_TAKIM_ALANI: TAKIM, CF_ACCESS_AUD: AUD, CF_ACCESS_JWKS_DOSYASI: jDosya }));
+      const r1 = sunucuV ? await sunucuV.verify(gercekJeton) : null;
+      const yokV = createAccessVerifier(loadConfig({ ...TABAN, CF_ACCESS_TAKIM_ALANI: TAKIM, CF_ACCESS_AUD: AUD, CF_ACCESS_JWKS_DOSYASI: path.join(jDizin, "yok.json") }));
+      const r2 = yokV ? await yokV.verify(gercekJeton) : null;
+      kontrol(
+        "§3h7 ⭐ sunucunun doğrulayıcısı dosyadan geçer, dosya yoksa RED — ve ağa HİÇ çıkmaz",
+        r1?.ok === true && r2 !== null && neden(r2) === "JWKS" && agCagrisi === 0,
+        `${r1 ? neden(r1) : "-"} / ${r2 ? neden(r2) : "-"} · ağ çağrısı ${agCagrisi}`,
+      );
+    } finally {
+      globalThis.fetch = gercekFetch;
+    }
+  } finally {
+    rmSync(jDizin, { recursive: true, force: true });
+  }
+
+  console.log("\n§3i yan konteyner (jwks-cekici): tek çekim, atomik yazım, başarısızlıkta eski dosya korunur");
+  const cDizin = mkdtempSync(path.join(os.tmpdir(), "satici-jwks-cekici-"));
+  const cDosya = path.join(cDizin, "certs.json");
+  try {
+    let istenen = "";
+    const cAg =
+      (cevap: () => { status: number; body: string }): JwksFetch =>
+      async (u) => {
+        istenen = u;
+        return cevap();
+      };
+    const ilkGovde = JSON.stringify({ keys: [jwk(ANA.publicKey, KID_ANA), jwk(ZAYIF.publicKey, "zayif")], public_cert: { kid: "x", cert: "-----BEGIN CERTIFICATE-----" } });
+    const ilk = await jwksCekVeYaz({ teamDomain: TAKIM, file: cDosya }, cAg(() => ({ status: 200, body: ilkGovde })));
+    const yazilan = JSON.parse(readFileSync(cDosya, "utf8")) as { keys: { kid: string }[] } & Record<string, unknown>;
+    kontrol(
+      "§3i1 başarı: dosya yazılır, YALNIZ doğrulanmış anahtar (1024 bit ve fazlalık alanlar atılır), adres takım alanından",
+      ilk.ok && yazilan.keys.length === 1 && yazilan.keys[0]?.kid === KID_ANA && !("public_cert" in yazilan) && istenen === `https://${TAKIM}/cdn-cgi/access/certs`,
+      JSON.stringify({ ok: ilk.ok, n: yazilan.keys.length }),
+    );
+    const once = readFileSync(cDosya);
+    const oku = (f: string): Buffer | null => {
+      try {
+        return readFileSync(f);
+      } catch {
+        return null;
+      }
+    };
+    const hatalar: [string, JwksFetch][] = [
+      ["HTTP 500", cAg(() => ({ status: 500, body: "x" }))],
+      ["HTML gövde", cAg(() => ({ status: 200, body: "<html>" }))],
+      ["boş küme", cAg(() => ({ status: 200, body: JSON.stringify({ keys: [] }) }))],
+      ["yalnız zayıf anahtar", cAg(() => ({ status: 200, body: jwks(jwk(ZAYIF.publicKey, KID_ANA)) }))],
+      [
+        "ağ hatası",
+        async () => {
+          throw new Error("TST: ağ yok");
+        },
+      ],
+    ];
+    for (const [ad, f] of hatalar) {
+      const r = await jwksCekVeYaz({ teamDomain: TAKIM, file: cDosya }, f);
+      const simdiki = oku(cDosya);
+      kontrol(
+        `§3i2 ${ad}: eski dosya BAYT-EŞİT kalır, geçici dosya bırakılmaz`,
+        !r.ok && simdiki !== null && simdiki.equals(once) && readdirSync(cDizin).length === 1,
+        `${r.ok ? "YAZDI" : r.error}${simdiki === null ? " · eski dosya SİLİNDİ" : ""}`,
+      );
+      if (simdiki === null) writeFileSync(cDosya, once);
+    }
+    const ayarRed = (env: Record<string, string>): boolean => {
+      try {
+        cekiciAyari(env);
+        return false;
+      } catch {
+        return true;
+      }
+    };
+    const ayarTamam = cekiciAyari({ CF_ACCESS_TAKIM_ALANI: ` https://${TAKIM.toUpperCase()}/ `, JWKS_DOSYASI: "/erisim-jwks/certs.json" });
+    kontrol(
+      "§3i3 çekici ayarı: takım alanı sabitli (başka alan RED), dosya mutlak yol, aralık 1–60 dk (varsayılan 10)",
+      ayarTamam.teamDomain === TAKIM &&
+        ayarTamam.intervalMs === 600_000 &&
+        ayarRed({ CF_ACCESS_TAKIM_ALANI: "evil.com", JWKS_DOSYASI: "/x" }) &&
+        ayarRed({ CF_ACCESS_TAKIM_ALANI: TAKIM, JWKS_DOSYASI: "goreli.json" }) &&
+        ayarRed({ CF_ACCESS_TAKIM_ALANI: TAKIM, JWKS_DOSYASI: "/x", JWKS_CEKIM_DK: "0" }),
+    );
+    const cekiciSrc = kaynak("jwks-cekici.ts");
+    kontrol(
+      "§3i4 yazım ATOMİK: aynı dizinde geçici dosya + fsync + rename; hedefe doğrudan yazım yok",
+      /path\.join\(path\.dirname\(ayar\.file\)/.test(cekiciSrc) && /fsyncSync\(fd\)/.test(cekiciSrc) && /renameSync\(gecici, ayar\.file\)/.test(cekiciSrc) && !/writeFileSync\(ayar\.file/.test(cekiciSrc),
+    );
+  } finally {
+    rmSync(cDizin, { recursive: true, force: true });
+  }
 
   console.log("\n§4 kök parolalı rota beyanı (statik)");
   const bulgular = kokParolaBulgulari(VENDOR_PORTAL_ROUTES);
@@ -277,7 +461,7 @@ async function main(): Promise<void> {
   const sonda = kokParolaBulgulari(sentetik);
   kontrol("§4c ✓K çözümleyici sentetik beyansız rotada ve anmayan beyanlı rotada ısırır", sonda.some((b) => b.startsWith("POST /x")) && sonda.some((b) => b.startsWith("POST /y")), `${sonda.length} bulgu`);
 
-  console.log("\n§5 compose (Traefik ipallowlist = Cloudflare aralıkları)");
+  console.log("\n§5 compose (Traefik ipallowlist = Cloudflare aralıkları · satıcı dış bağlantısız · yan konteyner)");
   const composeYolu = path.join(__dirname, "..", "..", "..", "deploy", "satici", "docker-compose.portal-genel.yml");
   const compose = readFileSync(composeYolu, "utf8");
   const aralik = /ipallowlist\.sourcerange=([^"\n]+)/.exec(compose)?.[1]?.split(",").map((x) => x.trim()) ?? [];
@@ -296,6 +480,76 @@ async function main(): Promise<void> {
     mw || "ara katman yok",
   );
   kontrol("§5c ERİŞİM portu yayımlanmaz, dinleyici kenar adresinde, Access ayarı zorunlu (:?)", !/^\s*ports:/m.test(compose) && /ERISIM_BIND:\s*\$\{KENAR_IP\}/.test(compose) && /CF_ACCESS_TAKIM_ALANI:\s*\$\{CF_ACCESS_TAKIM_ALANI:\?/.test(compose) && /CF_ACCESS_AUD:\s*\$\{CF_ACCESS_AUD:\?/.test(compose));
+  const saticiB = servisBlogu(compose, "satici");
+  const jwksB = servisBlogu(compose, "satici-jwks");
+  kontrol(
+    "§5d üst dosya satıcıya AĞ EKLEMEZ; JWKS bağı satıcıda SALT OKUNUR ve dizin önceden kurulmalı (create_host_path: false)",
+    saticiB !== "" && !/^    networks:/m.test(saticiB) && /target: \/erisim-jwks\n\s+read_only: true\n\s+bind: \{ create_host_path: false \}/.test(saticiB) && /CF_ACCESS_JWKS_DOSYASI: \/erisim-jwks\//.test(saticiB),
+  );
+  kontrol(
+    "§5d2 yan konteyner: aynı imaj, satici-baslat atlanır, root değil, salt okunur kök FS, yetenek yok, sır/anahtar birimi/port yok, YALNIZ kendi çıkış köprüsünde",
+    jwksB !== "" &&
+      /image: \$\{SATICI_IMAJ/.test(jwksB) &&
+      /entrypoint: \["node", "\/uygulama\/dist\/jwks-cekici\.js"\]/.test(jwksB) &&
+      /user: "10001:10001"/.test(jwksB) &&
+      /read_only: true/.test(jwksB) &&
+      /cap_drop: \["ALL"\]/.test(jwksB) &&
+      /no-new-privileges:true/.test(jwksB) &&
+      /networks: \[jwks-cikis\]/.test(jwksB) &&
+      !/secrets:|anahtarlar|ports:|DATABASE_URL/.test(jwksB),
+  );
+  kontrol("§5d3 eski satıcı çıkış ağı (ERISIM_CIKIS_AGI / erisim-cikis) YOK", !/ERISIM_CIKIS_AGI|erisim-cikis/.test(compose));
+  const composeKoku = path.dirname(composeYolu);
+  const dockerVar = spawnSync("docker", ["compose", "version"], { encoding: "utf8" }).status === 0;
+  if (!dockerVar) {
+    console.log("  ⏭ §5e ÖLÇÜLEMEDİ: docker compose yok — birleşik yapılandırma ölçülmedi (statik §5d koştu)");
+  } else {
+    const gDizin = mkdtempSync(path.join(os.tmpdir(), "satici-compose-"));
+    try {
+      const ortamMetni = readFileSync(path.join(composeKoku, "ornek.env"), "utf8")
+        .replace(/^SATICI_IMAJ=.*$/m, "SATICI_IMAJ=tekserp-satici:bekci")
+        .replace(/^SATICI_YEDEK_IMAJ=.*$/m, "SATICI_YEDEK_IMAJ=tekserp-satici-yedek:bekci")
+        .replace(/^TAILNET_IP=.*$/m, "TAILNET_IP=100.64.0.9");
+      const envDosyasi = path.join(gDizin, "bekci.env");
+      writeFileSync(envDosyasi, `${ortamMetni}\nPORTAL_HOST=portal.bekci.test\nCF_ACCESS_TAKIM_ALANI=${TAKIM}\nCF_ACCESS_AUD=${AUD}\nERISIM_JWKS_DIZINI_HOST=${gDizin}\nJWKS_CIKIS_AGI=172.31.255.0/29\n`);
+      type Birlesik = { services: Record<string, { networks?: Record<string, unknown>; volumes?: { target?: string; read_only?: boolean }[] }>; networks: Record<string, { internal?: boolean }> };
+      const birlestir = (dosyalar: string[]): Birlesik | string => {
+        const r = spawnSync("docker", ["compose", "--env-file", envDosyasi, ...dosyalar.flatMap((f) => ["-f", path.join(composeKoku, f)]), "config", "--format", "json"], { encoding: "utf8" });
+        return r.status === 0 ? (JSON.parse(r.stdout) as Birlesik) : (r.stderr || "config başarısız").trim().slice(0, 300);
+      };
+      const loop = birlestir(["docker-compose.yml", "docker-compose.loopback.yml", "docker-compose.portal-genel.yml"]);
+      const ana = birlestir(["docker-compose.yml", "docker-compose.portal-genel.yml"]);
+      if (typeof loop === "string" || typeof ana === "string") {
+        kontrol("§5e birleşik yapılandırma çözüldü", false, typeof loop === "string" ? loop : String(ana));
+      } else {
+        const aglar = (c: Birlesik, sv: string) => Object.keys(c.services[sv]?.networks ?? {});
+        const dis = (c: Birlesik, sv: string) => aglar(c, sv).filter((n) => c.networks[n]?.internal !== true);
+        const uyeler = (c: Birlesik, ag: string) => Object.entries(c.services).filter(([, s]) => ag in (s.networks ?? {})).map(([a]) => a);
+        const bag = (c: Birlesik, sv: string) => (c.services[sv]?.volumes ?? []).find((v) => v.target === "/erisim-jwks");
+        kontrol(
+          "§5e ⭐ geri döngü kipi (bugünkü kurulum): satıcının katıldığı HER ağ internal — dış bağlantı yok",
+          aglar(loop, "satici").length >= 4 && dis(loop, "satici").length === 0,
+          `ağlar: ${aglar(loop, "satici").join(",")} · internal olmayan: ${dis(loop, "satici").join(",") || "yok"}`,
+        );
+        kontrol(
+          "§5e2 ana kip: satıcının internal olmayan TEK ağı tailnet (Tailscale yayını; DOCKER-USER ile çıkışı kapalı) — üst dosya ağ eklemedi",
+          JSON.stringify(dis(ana, "satici")) === JSON.stringify(["tailnet"]),
+          dis(ana, "satici").join(","),
+        );
+        kontrol(
+          "§5e3 çıkışlı köprünün (jwks-cikis) TEK üyesi satici-jwks; JWKS bağı satıcıda ro, yan konteynerde rw",
+          JSON.stringify(uyeler(loop, "jwks-cikis")) === JSON.stringify(["satici-jwks"]) &&
+            loop.networks["jwks-cikis"]?.internal !== true &&
+            bag(loop, "satici")?.read_only === true &&
+            bag(loop, "satici-jwks") !== undefined &&
+            bag(loop, "satici-jwks")?.read_only !== true,
+          uyeler(loop, "jwks-cikis").join(","),
+        );
+      }
+    } finally {
+      rmSync(gDizin, { recursive: true, force: true });
+    }
+  }
 
   // ---------------------------------------------------------------- §6 HTTP
   hedefDbKapisi();
@@ -303,12 +557,15 @@ async function main(): Promise<void> {
   const webDizini = mkdtempSync(path.join(os.tmpdir(), "satici-erisim-web-"));
   mkdirSync(path.join(webDizini, "portal"), { recursive: true });
   writeFileSync(path.join(webDizini, "portal", "portal.html"), "<!doctype html><title>portal</title>");
+  const jwksDosyasi = path.join(webDizini, "certs.json");
+  writeFileSync(jwksDosyasi, normalizeJwks(jwks(jwk(ANA.publicKey, KID_ANA))).json);
   const ortam = await anahtarOrtamiKur(Date.now(), { PORTAL_GIRIS_HIZ_DK: "1000", PORTAL_WEB_DIZINI: webDizini });
   const { ctx } = ortam;
   const { prisma } = await import("../src/lib/prisma");
   saat = Date.now();
-  const httpAg = sahteAg(jwks(jwk(ANA.publicKey, KID_ANA)));
-  const httpV = new AccessVerifier({ teamDomain: TAKIM, aud: AUD }, new JwksCache({ url: jwksUrlOf(TAKIM), fetchJwks: httpAg.fetchJwks, warn: () => undefined }));
+  // Sunucunun kurduğu doğrulayıcının AYNISI: yapılandırmadan, JWKS yan konteynerin dosyasından.
+  const httpV = createAccessVerifier(loadConfig({ ...TABAN, CF_ACCESS_TAKIM_ALANI: TAKIM, CF_ACCESS_AUD: AUD, CF_ACCESS_JWKS_DOSYASI: jwksDosyasi }));
+  if (!httpV) throw new Error("doğrulayıcı kurulamadı");
   let tailnetAdresi: AddressInfo | null = null;
   let erisimAdresi: AddressInfo | null = null;
   let kapaliAdresi: AddressInfo | null = null;
@@ -409,15 +666,19 @@ async function main(): Promise<void> {
     }
     kontrol("§6n kök parolalı rota kapısız bağlanamaz (yönlendirici kurulurken hata)", kapisiz);
     const saglik = await portalIstek(T, "/portal/saglik");
-    const erisimDurumu = (saglik.veri.erisim ?? {}) as { kip?: string; jwks?: { filled?: boolean } };
-    kontrol("§6o tailnet sağlığı ERİŞİM kipini ve JWKS durumunu gösterir (sır yok)", erisimDurumu.kip === "acik" && erisimDurumu.jwks?.filled === true && !/"n"|"d"|BEGIN/.test(JSON.stringify(saglik.veri)), JSON.stringify(erisimDurumu));
+    const erisimDurumu = (saglik.veri.erisim ?? {}) as { kip?: string; jwks?: { dolu?: boolean; dosyaYasiSn?: number | null } };
+    kontrol(
+      "§6o tailnet sağlığı ERİŞİM kipini, JWKS durumunu ve DOSYA YAŞINI gösterir (sır yok)",
+      erisimDurumu.kip === "acik" && erisimDurumu.jwks?.dolu === true && typeof erisimDurumu.jwks?.dosyaYasiSn === "number" && !/"n"|"d"|BEGIN/.test(JSON.stringify(saglik.veri)),
+      JSON.stringify(erisimDurumu),
+    );
   } finally {
     for (const s of [tailnet, erisim, yanlisSoket, kapali]) await kapatSunucu(s);
     await temizleKurulumlar(kurulumlar, ortam.kidler);
     await temizlePortal({ kullanicilar, bayiler });
   }
 
-  console.log("\n§7 gerçek süreç — açılış satırı ve KAPALI kip");
+  console.log("\n§7 gerçek süreç — açılış satırı, KAPALI kip, JWKS dosyalı AÇIK kip");
   const kapaliSurec = await sunucuBaslat(ortam);
   kontrol("§7a PORT_ERISIM verilmeyen süreç ERİŞİM dinleyicisini AÇMAZ (erisim=kapali)", /SATICI_DINLIYOR [^\n]* erisim=kapali/.test(kapaliSurec.cikti()), kapaliSurec.cikti().match(/SATICI_DINLIYOR[^\n]*/)?.[0] ?? "");
   await kapaliSurec.durdur();
@@ -432,6 +693,24 @@ async function main(): Promise<void> {
     );
   } finally {
     await acikSurec.durdur();
+  }
+  // Açık kip, gerçek süreç: JWKS yan konteynerin dosyasından (süreç ağa çıkmaz — sahte takım alanı DNS'e hiç sorulmaz).
+  const surecJwks = path.join(webDizini, "surec-certs.json");
+  writeFileSync(surecJwks, normalizeJwks(jwks(jwk(ANA.publicKey, KID_ANA))).json);
+  const tamSurec = await sunucuBaslat(ortam, { PORT_ERISIM: "0", ERISIM_BIND: "127.0.0.1", CF_ACCESS_TAKIM_ALANI: TAKIM, CF_ACCESS_AUD: AUD, CF_ACCESS_JWKS_DOSYASI: surecJwks });
+  try {
+    const port = /SATICI_DINLIYOR [^\n]* erisim=(\d+)/.exec(tamSurec.cikti())?.[1];
+    const simdiGercek = Math.floor(Date.now() / 1000);
+    const basliklar = { "cf-access-jwt-assertion": gecerli({ iat: simdiGercek - 5, nbf: simdiGercek - 5, exp: simdiGercek + 3600 }) };
+    const gecti = port ? await portalIstek(`http://127.0.0.1:${port}`, "/portal/api/oturum", { basliklar }) : null;
+    const jwtsiz = port ? await portalIstek(`http://127.0.0.1:${port}`, "/portal/api/oturum") : null;
+    kontrol(
+      "§7c gerçek süreç, JWKS dosyadan: kapı AÇIK günlüğü; geçerli JWT → 401 (kapı geçti), JWT'siz → 404",
+      port !== undefined && gecti?.status === 401 && gecti.kod === "OTURUM_YOK" && jwtsiz?.status === 404 && /Cloudflare Access kapısı AÇIK/.test(tamSurec.cikti()),
+      `${port ?? "port yok"} · ${gecti?.status ?? "-"}/${jwtsiz?.status ?? "-"}`,
+    );
+  } finally {
+    await tamSurec.durdur();
     ortam.temizle();
     rmSync(webDizini, { recursive: true, force: true });
     await kapat();

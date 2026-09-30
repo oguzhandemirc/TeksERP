@@ -57,7 +57,7 @@ export function requireOwnListener(listener: ListenerOf) {
 export function requireAccessJwt(verifier: AccessVerifier | null, log = rejectionLogger()) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!verifier) {
-      log("KAPALI", "CF_ACCESS_TAKIM_ALANI / CF_ACCESS_AUD yok");
+      log("KAPALI", "Access ayarı eksik (CF_ACCESS_TAKIM_ALANI / CF_ACCESS_AUD / CF_ACCESS_JWKS_DOSYASI)");
       notFound(req, res);
       return;
     }

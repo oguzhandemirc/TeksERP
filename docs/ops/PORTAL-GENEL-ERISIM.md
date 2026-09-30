@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 1 | Cloudflare Access — One-time PIN, izinli e-posta listesi, oturum 12 sa | Cloudflare kenarı | 3. kapı yine her isteği ister |
 | 2 | Traefik `ipallowlist` — portal yönlendiricisi yalnız Cloudflare kenar aralıklarından gelen TCP bağlantısını kabul eder | VDS Traefik (etiketle, statik yapılandırma değişmez) | 3. kapı yine her isteği ister |
-| 3 | Satıcının **ERİŞİM** dinleyicisi (4613, kenar adresi, port yayını YOK) — **her** istekte `Cf-Access-Jwt-Assertion`: RS256 · takım JWKS'i · `aud` = uygulamanın AUD etiketi · `iss` = takım · `exp`/`nbf` · e-posta; değilse **404** | satıcı süreci | — (son teknik kapı) |
+| 3 | Satıcının **ERİŞİM** dinleyicisi (4613, kenar adresi, port yayını YOK) — **her** istekte `Cf-Access-Jwt-Assertion`: RS256 · takım JWKS'i (yan konteynerin yazdığı dosyadan, satıcı ağa çıkmaz) · `aud` = uygulamanın AUD etiketi · `iss` = takım · `exp`/`nbf` · e-posta; değilse **404** | satıcı süreci | — (son teknik kapı) |
 | 4 | Portal parolası + TOTP; kök parolalı uç (`POST /portal/api/haklar/:id/surum`) bu yolda gövde okunmadan **404**, arayüz imza formunu açmaz | satıcı süreci + web arayüzü | — |
 
 Kök parolası Cloudflare'den (TLS'i kenarda sonlanan üçüncü taraf) **geçmez**: sunucunun 404'ü parolanın gönderilmesini engelleyemez, engel ekrandadır — ERİŞİM oturumunda "Lisansı imzala/yenile" düğmesi yerine tailnet/geri döngü yolunu anlatan açıklama durur.
@@ -25,7 +25,7 @@ Kök parolası Cloudflare'den (TLS'i kenarda sonlanan üçüncü taraf) **geçme
 | `portal.etkiliyazilim.com` DNS kaydı | **YOK** (`dig +short` boş) | Mac |
 | Köken Cloudflare'e kapalı mı? | **HAYIR** — Mac'ten (CF dışı IP) `curl -sk --resolve lisans-test.etkiliyazilim.com:443:80.253.255.188 https://lisans-test.etkiliyazilim.com/saglik` → **200**; Traefik'te CF IP daraltması yok. Bu yüzden 2. ve 3. kapı ŞART | Mac |
 | Köken sertifikası | Cloudflare Origin CA `*.etkiliyazilim.com` → `portal.` kapsanır | `SATICI-KURULUM.md` §1 |
-| Satıcının dış bağlantısı | **YOK** (geri döngü kipinde dört ağ da internal) → JWKS çekimi için `erisim-cikis` köprüsü gerekir (§4, §5) | `deploy/satici/docker-compose*.yml` |
+| Satıcının dış bağlantısı | **YOK ve öyle KALIR** (yönetici kararı B, 2026-09-30: anahtar tutan konteynere çıkış açılmaz) → Access imza anahtarlarını `satici-jwks` yan konteyneri çeker, satıcı dosyayı salt okunur okur (§4, §5) | `deploy/satici/docker-compose*.yml` |
 
 ## 2. Cloudflare — API ile (sıralı; yönetici koşturur)
 
@@ -99,34 +99,38 @@ Proxy (turuncu bulut) **AÇIK** kalmalı: Origin CA'ya yalnız Cloudflare güven
 
 ## 4. VDS — satıcıyı genel portal kipine al
 
-Önkoşul: satıcı imajı bu dilimi içerir (ERİŞİM dinleyicisi + göç `20261001120000_portal_erisim_dinleyicisi`) — `deploy/satici/imaj-derle.sh` birleşmiş HEAD'den.
+Önkoşul: satıcı imajı bu dilimi içerir (ERİŞİM dinleyicisi + `dist/jwks-cekici.js` + göç `20261001120000_portal_erisim_dinleyicisi`) — `deploy/satici/imaj-derle.sh` birleşmiş HEAD'den. Yan konteyner AYNI imajdır (yeni imaj/paket yok).
 
 1. `deploy/vds-dogrula.sh` → AYNI.
 2. Yedek: `sudo docker compose exec satici-yedek /arac/yedek-dongusu.sh tek`.
 3. Göç (yeni imajla, tek seferlik): `sudo docker compose --profile goc run --rm satici-goc` → "All migrations have been successfully applied".
 4. `deploy/satici/docker-compose.portal-genel.yml` → `/opt/stack/apps/tekserp-satici-<ortam>/` (compose'un yanına).
+4b. **JWKS dizini** (yan konteyner yazar, satıcı salt okur; yoksa compose DURUR — `create_host_path: false`): `sudo install -d -o 10001 -g 10001 -m 0755 /opt/stack/apps/tekserp-satici-<ortam>/erisim-jwks` — sudo'suz: `SATICI-KURULUM.md` §12'deki tek seferlik yardımcı konteyner kalıbı (`--network none`, yalnız üst dizin bağlı, içeride `install -d -o 10001 -g 10001 -m 0755 …/erisim-jwks`). Anahtar biriminin, `/dosyalar`ın ve yayın kökünün İÇİNDE olmaz.
 5. `.env`'e (sır DEĞİL):
    ```
    PORTAL_HOST=portal.etkiliyazilim.com
    CF_ACCESS_TAKIM_ALANI=gentle-snow-a8b9.cloudflareaccess.com
    CF_ACCESS_AUD=<§2.4 çıktısı>
-   ERISIM_CIKIS_AGI=172.31.255.0/29        # docker network ls + ip -4 route ile çakışmadığı ÖLÇÜLÜR
+   ERISIM_JWKS_DIZINI_HOST=/opt/stack/apps/tekserp-satici-<ortam>/erisim-jwks
+   JWKS_CIKIS_AGI=172.31.255.0/29          # YALNIZ yan konteynerin köprüsü; docker network ls + ip -4 route ile çakışmadığı ÖLÇÜLÜR
    COMPOSE_FILE=docker-compose.yml:docker-compose.loopback.yml:docker-compose.portal-genel.yml   # geri döngü kipi
    ```
-6. Mac'te yalıtım denetimi: `node deploy/satici/compose-denetle.mjs --env-file <.env>` → yeşil (2026-09-30 yerel ölçüm: geri döngü + portal-genel birleşik 39/0).
-7. `sudo docker compose up -d satici` → günlük: `SATICI_DINLIYOR genel=4610 tailnet=4611 ic=4612 erisim=4613` ve `erisim: Cloudflare Access kapısı AÇIK (takım gentle-snow-a8b9…)`. Access ayarı eksikse satıcı AÇILIR ama `genel portal KAPALI … her isteğe 404` basar (fail-closed; `/v1` etkilenmez).
-8. JWKS sağlığı (tailnet/geri döngü yolundan): `/portal/saglik` → `erisim.kip: "acik"`, `erisim.jwks.filled: true`, `lastError: null`.
+6. Mac'te yalıtım denetimi: `node deploy/satici/compose-denetle.mjs --env-file <.env>`. ⚠️ Denetim portal-genel kipini henüz TANIMIYOR: yan konteyner yüzünden "körlük zemini" (servis sayısı 6) TEK ihlal olarak ❌ verir, diğer 39 madde yeşil olmalı (2026-09-30 yerel ölçüm; `satici-jwks` ③ sertlik ve ⑥ alt ağ maddelerinden geçer). Denetime eklenecek Ⓟ maddeleri dilimin dönüş notunda; eklenene dek bu tek ihlal beklenen sayılır.
+7. `sudo docker compose up -d satici-jwks satici` → yan konteyner günlüğü `[jwks] yazıldı: N anahtar` (dosya `…/erisim-jwks/certs.json`, 10001, 0644); satıcı günlüğü `SATICI_DINLIYOR genel=4610 tailnet=4611 ic=4612 erisim=4613` ve `erisim: Cloudflare Access kapısı AÇIK (takım gentle-snow-a8b9…, JWKS dosyası /erisim-jwks/certs.json)`. Access ayarı eksikse satıcı AÇILIR ama `… yok — genel portal KAPALI … her isteğe 404` basar (fail-closed; `/v1` etkilenmez). Dosya henüz yoksa istekler 404 alır, yan konteyner yazınca (≤ 1 dk'da tekrar dener) kendiliğinden açılır.
+8. JWKS sağlığı (tailnet/geri döngü yolundan): `/portal/saglik` → `erisim.kip: "acik"`, `erisim.jwks.dolu: true`, `sonHata: null`, `dosyaYasiSn` < ~660 (10 dk çekim + tazelik). Yaş saatlerce büyüyorsa yan konteynerin günlüğüne bak — eski ama geçerli küme KABUL edilir (Cloudflare anahtarı 6 haftada döndürür, eskisi 7 gün daha geçerli).
 9. §2.5 DNS kaydı → §6 doğrulama → `deploy/vds-dogrula.sh` → AYNI.
 
-## 5. Çıkış (JWKS) — isteğe bağlı daraltma
+## 5. Çıkış (JWKS) — yalnız yan konteyner, yalnız 443
 
-Satıcı Access imza anahtarlarını kendisi çeker (15 dk tazelik; bayat anahtar döner, hiç dolmadıysa her istek 404). Bu kip satıcıya dış bağlantı açar: `erisim-cikis` köprüsüne YALNIZ satıcı katılır ve üzerinde dinleyici yoktur. Hedefi daraltmak host kuralıdır (sudo; ana kipteki tailnet kuralları gibi DOCKER-USER'da):
+Satıcı DIŞ BAĞLANTISIZDIR: katıldığı her ağ internal (geri döngü kipi; ana kipte internal olmayan tek ağı tailnet'tir ve DOCKER-USER onun çıkışını kapatır) — üst dosya ona ağ eklemez. Access imza anahtarlarını `satici-jwks` çeker: satıcıyla AYNI imaj, `node /uygulama/dist/jwks-cekici.js`; 10 dk'da bir `https://<takım>/cdn-cgi/access/certs` → satıcının kuralıyla doğrulama (RS256 · ≥ 2048 bit RSA · use=sig; geçerli anahtar yoksa YAZMAZ) → aynı dizinde geçici dosya + fsync + rename. Başarısız çekim eski dosyaya dokunmaz, 1 dk sonra yeniden dener. Sır, anahtar birimi, DB, port, Traefik etiketi YOK; yalnız kendi `jwks-cikis` köprüsünde. Satıcı dosyayı salt okunur okur (60 sn tazelik; bilinmeyen kid'de dosyayı bir kez yeniden okur; dosya yok/bozuk/boş küme ve önbellek hiç dolmadıysa RED; eski ama geçerli küme kabul, yaşı sağlıkta).
+
+Yan konteynerin çıkışı YALNIZ 443 (+ DNS) — host kuralı (sudo; ana kipteki tailnet kuralları gibi DOCKER-USER'da; son eklenen başa geçer):
 ```bash
-sudo iptables -I DOCKER-USER 1 -s <ERISIM_CIKIS_AGI> -m conntrack --ctstate NEW -j DROP
-sudo iptables -I DOCKER-USER 1 -s <ERISIM_CIKIS_AGI> -p udp --dport 53 -m conntrack --ctstate NEW -j RETURN
-sudo iptables -I DOCKER-USER 1 -s <ERISIM_CIKIS_AGI> -p tcp -m multiport --dports 53,443 -m conntrack --ctstate NEW -j RETURN
+sudo iptables -I DOCKER-USER 1 -s <JWKS_CIKIS_AGI> -m conntrack --ctstate NEW -j DROP
+sudo iptables -I DOCKER-USER 1 -s <JWKS_CIKIS_AGI> -p udp --dport 53 -m conntrack --ctstate NEW -j RETURN
+sudo iptables -I DOCKER-USER 1 -s <JWKS_CIKIS_AGI> -p tcp -m multiport --dports 53,443 -m conntrack --ctstate NEW -j RETURN
 ```
-Kuraldan sonra §4.8 (JWKS `filled: true`, `lastError: null`) yeniden ölçülür. Satıcıyı dış bağlantısız tutmak isteniyorsa seçenek: JWKS'i yalnız çıkışlı bir yan konteyner ya da host zamanlayıcısı dosyaya çeker, satıcı dosyadan okur (doğrulayıcının çekim kancası hazır; ayrı dilim, karar yöneticide).
+Kuraldan sonra ölç: yan konteyner günlüğünde yeni `[jwks] yazıldı` (en geç 10 dk; `sudo docker compose restart satici-jwks` hemen dener) ve §4.8. Kalıcılık: kurallar yeniden başlatmada kaybolur — ana kipte `tekserp-satici-tailnet@` biriminin yaptığı gibi birime alınır (sudo, ayrı adım).
 
 ## 6. Doğrulama
 
@@ -140,6 +144,8 @@ Kuraldan sonra §4.8 (JWKS `filled: true`, `lastError: null`) yeniden ölçülü
 | 6 | Kurulum → Lisans sekmesi (genel yoldan girişte) | tarayıcı | "Lisansı imzala/yenile" YOK, tailnet/geri döngü yolunu anlatan açıklama VAR |
 | 7 | `node deploy/satici/portal-baglan.mjs` → `http://127.0.0.1:14611/portal/` | Mac | tailnet/geri döngü yolu DEĞİŞMEDİ: giriş + imza formu açık |
 | 8 | `sudo docker compose logs satici \| grep "erisim:"` | VDS | `Cloudflare Access kapısı AÇIK`; 2. adımdan sonra (ara katman yoksa) `RED BASLIK_YOK` satırı, dakikada en çok bir |
+| 9 | `sudo docker compose logs satici-jwks \| tail -3` | VDS | `[jwks] yazıldı: N anahtar` (10 dk'da bir); `çekilemedi (eski dosya KORUNDU)` sürüyorsa çıkış kuralı/DNS |
+| 10 | `sudo docker network inspect tekserp-satici-<ortam>-jwks-cikis --format '{{range .Containers}}{{.Name}} {{end}}'` | VDS | YALNIZ `tekserp-satici-<ortam>-jwks` — satıcı bu köprüde DEĞİL |
 
 ## 6b. Bilinen davranış
 
@@ -149,11 +155,11 @@ Kuraldan sonra §4.8 (JWKS `filled: true`, `lastError: null`) yeniden ölçülü
 
 ## 7. Ana (Tailscale) kipe geçerken
 
-Ana kipte `tailnet` köprüsü de ağ geçitlidir; ikinci ağ geçitli ağ (`erisim-cikis`) konteynerin varsayılan rotasını değiştirebilir ve tailnet'ten gelen portal isteklerinin yanıtı başka köprüden çıkabilir. Geçişten ÖNCE ölçülür: konteynerin varsayılan rotası (`/proc/net/route`) · tailnet'ten `/portal/saglik` 200 · JWKS `filled: true`. Tutmazsa JWKS dosya yoluna (§5 son paragraf) geçilir.
+Üst dosya satıcıya ağ eklemediği için satıcının yönlendirmesi ana kipte de DEĞİŞMEZ (internal olmayan tek ağı tailnet; DOCKER-USER onun çıkışını kapatır). Yan konteyner kendi köprüsünde bağımsızdır; ana kipte de §5'teki 443 kuralı geçerlidir.
 
 ## 8. Geri alma
 
-1. `.env`'deki `COMPOSE_FILE`'dan `:docker-compose.portal-genel.yml` çıkarılır → `sudo docker compose up -d satici` → günlük `erisim=kapali`; sonra `sudo docker network rm tekserp-satici-<ortam>-erisim-cikis`.
+1. `.env`'deki `COMPOSE_FILE`'dan `:docker-compose.portal-genel.yml` çıkarılır → `sudo docker compose up -d --remove-orphans satici` (yan konteyner kaldırılır) → günlük `erisim=kapali`; sonra `sudo docker network rm tekserp-satici-<ortam>-jwks-cikis` ve §5'in DOCKER-USER satırları `-D` ile silinir. JWKS dizini kalabilir (açık anahtarlar, sır değil).
 2. Cloudflare: DNS `portal` kaydı silinir (ya da kalır — köken artık o Host'u yönlendirmez); Access uygulaması silinir ya da politikası boşaltılır.
 3. Göç geri alınmaz (enum değeri `ERISIM` kalır, zararsız): eski imaj bu değeri yazmaz, oturumu yalnız belirteç özetiyle okur; ERİŞİM oturumları budamayla gider.
 4. `deploy/vds-dogrula.sh` → AYNI.

@@ -13,7 +13,7 @@ import { createPublicApp } from "./http/public-app";
 import { createInternalApp } from "./http/internal-app";
 import { createTailnetApp } from "./http/tailnet-app";
 import { createAccessApp } from "./http/access-app";
-import { createAccessVerifier } from "./http/access-jwt";
+import { createAccessVerifier, missingAccessSettings } from "./http/access-jwt";
 import { loadInternalBearer } from "./lib/internal-bearer";
 import { loadServerSecrets } from "./keys/server-secrets";
 import type { VendorContext } from "./services/context";
@@ -48,7 +48,8 @@ async function main(): Promise<void> {
   const hub = new DoorbellHub(config.DATABASE_URL, config.ZIL_KALP_SN, config.ZIL_AZAMI_ABONE);
   await hub.start();
 
-  // ERİŞİM: Access doğrulayıcısı yalnız dinleyici açılacaksa kurulur; JWKS açılışta ısıtılır (başarısızlık uyarıdır).
+  // ERİŞİM: doğrulayıcı yalnız dinleyici açılacaksa kurulur; JWKS yan konteynerin dosyasından (satıcı ağa çıkmaz),
+  // açılışta ısıtılır (dosya henüz yoksa uyarıdır, istek RED alır).
   const accessVerifier = config.PORT_ERISIM !== undefined ? createAccessVerifier(config) : null;
   const publicServer = http.createServer(createPublicApp(ctx, hub));
   let tailnetAddress: AddressInfo | null = null;
@@ -63,9 +64,9 @@ async function main(): Promise<void> {
     accessAddress = await listen(accessServer, config.PORT_ERISIM, config.ERISIM_BIND);
     if (accessVerifier) {
       void accessVerifier.jwks.warm();
-      console.log(`[satici] erisim: Cloudflare Access kapısı AÇIK (takım ${accessVerifier.settings.teamDomain})`);
+      console.log(`[satici] erisim: Cloudflare Access kapısı AÇIK (takım ${accessVerifier.settings.teamDomain}, JWKS dosyası ${accessVerifier.settings.jwksFile})`);
     } else {
-      console.warn("[satici] erisim: CF_ACCESS_TAKIM_ALANI/CF_ACCESS_AUD yok — genel portal KAPALI, ERİŞİM dinleyicisi her isteğe 404");
+      console.warn(`[satici] erisim: ${missingAccessSettings(config).join(", ")} yok — genel portal KAPALI, ERİŞİM dinleyicisi her isteğe 404`);
     }
   }
 
