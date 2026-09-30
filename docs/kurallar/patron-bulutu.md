@@ -10,6 +10,7 @@
 - **[ÇEKİRDEK]** Bulut HESAP YAPMAZ, fabrika tek yazardır: türetilmiş her alan fabrikanın tek kaynak yardımcısıyla hesaplanıp projeksiyona girer; bulut saklar, izinle süzer, gösterir — aritmetik ve tarih karşılaştırması yapmaz. <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Buluttaki tek yazma kanalı gelen kutusudur: hesabın yazdığı sipariş/cari bir MESAJdır, fabrika onu çeker ve normal servis yolundan idempotent yazar; bulut hiçbir fabrika satırını değiştiremez. · bekçi: `test_gelen_kutusu_claim (§1 · §2 · §4)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Eşitleme hakkı FAIL-CLOSED ön koşuldur: yalnız `URETIM` sınıfı + `patron-bulut` modülü + bitmemiş abonelik + devredilmemiş kurulum gönderir; bulut İKİNCİ kapıdır (403 `SINIF_GONDEREMEZ` / `PATRON_BULUT_KAPALI`). · bekçi: `test_esitleme_idempotency (§5j–§5l)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** Hiçbir proje başka projenin kaynağını ya da `node_modules`ünü çalışma anında veya tip denetiminde içe aktarmaz: tel tipi bayt-eşit aynayla taşınır, bulut kataloğu yalnız üretilmiş `patron/sunucu/src/catalog/katalog-ozeti.json` dosyasından okunur ve özetin canlı katalogla eşitliğini sunucunun kendi işi ölçer (bayatsa `--yaz`). · bekçi: `test_katalog_ozeti` · `test_bulut_tel_aynasi (§7)` · `mirror.test.ts` <sub>(arşiv:2026-09-30)</sub>
 
 ## Eşitleme (fabrika)
 
@@ -114,7 +115,7 @@ Bulut sunucusu bekçileri kendi projesinden: `cd patron/sunucu && node ../../scr
 
 Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`
 
-Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`, `test_tazele_zili`, `test_web_sunumu`
+Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`, `test_tazele_zili`, `test_web_sunumu`, `test_katalog_ozeti`
 
 Dağıtım (kurulum öncesi, Mac'te, CI dışı): `node deploy/patron/compose-denetle.mjs --env-file <patron .env> --satici-env <satıcı .env>` — çıkış 0 temiz · 1 ihlal · 2 ölçülemedi; yerel duman `deploy/patron/duman.sh kur <sha>` (gerçek tarayıcı dahil); runbook `docs/ops/PATRON-BULUTU-KURULUM.md`.
 
@@ -137,3 +138,4 @@ Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## pat
 - 2026-09-29 · Senaryo P koşucusu (Plan B uçtan uca): `ozet` zilinin bulut üreticisi (S47), hesap API'si TR iletisi (S48), sahte satıcı iç API'siyle gerçek zil zinciri
 - 2026-09-29 · Patron bulutu dağıtımı (B-dağıtım): aynı köken web + API, iç ad alanı iki katta 404, üç DB rolü üç sır, satıcıyla ortak birim yok
 - 2026-09-30 · Lisans + patron entegrasyonu 5 (I6): tek ABI 2, Docker künyesi 2e-S biçiminde, §14 tek liste (S47/S48), bildirim çıkış ağı, paketten üretici kimliği, DR ana kimliği panelde isteğe bağlı, ekran açılışı tazelemesi, P5 push kaydı
+- 2026-09-30 · Proje sınırı: bulut kataloğu statik özetten okunur, hiçbir proje başkasının kaynağını içe aktarmaz (CI-2)

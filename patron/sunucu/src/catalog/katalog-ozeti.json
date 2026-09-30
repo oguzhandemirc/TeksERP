@@ -1,0 +1,649 @@
+{
+  "_aciklama": "ÜRETİLMİŞ — elle düzenlenmez. Tek kaynak patron/sunucu/src/catalog/*.ts; yeniden üret: cd patron/sunucu && npx tsx scripts/test_katalog_ozeti.ts --yaz",
+  "CLOUD_PERMISSIONS": [
+    "bulut:oturum",
+    "bulut:ozet:oku",
+    "bulut:siparis:oku",
+    "bulut:sevkiyat:oku",
+    "bulut:uretim:oku",
+    "bulut:stok:oku",
+    "bulut:cari:oku",
+    "bulut:cari-bakiye:oku",
+    "bulut:kasa:oku",
+    "bulut:cek:oku",
+    "bulut:fatura:oku",
+    "bulut:tahsilat:oku",
+    "bulut:fiyat:oku",
+    "bulut:rapor:oku",
+    "bulut:siparis:yaz",
+    "bulut:cari:yaz",
+    "bulut:hesap:yonet"
+  ],
+  "ROOT_PROJECTIONS": [
+    {
+      "name": "urun",
+      "kind": "BOYUT",
+      "permissions": [
+        "bulut:oturum"
+      ]
+    },
+    {
+      "name": "renk",
+      "kind": "BOYUT",
+      "permissions": [
+        "bulut:oturum"
+      ]
+    },
+    {
+      "name": "depo",
+      "kind": "BOYUT",
+      "permissions": [
+        "bulut:oturum"
+      ]
+    },
+    {
+      "name": "istasyon",
+      "kind": "BOYUT",
+      "permissions": [
+        "bulut:oturum"
+      ]
+    },
+    {
+      "name": "cari-kart",
+      "kind": "BOYUT",
+      "permissions": [
+        "bulut:oturum"
+      ],
+      "subRows": [
+        "kisisel"
+      ],
+      "forbiddenRootFields": [
+        "yetkili",
+        "telefon"
+      ]
+    },
+    {
+      "name": "sube",
+      "kind": "BOYUT",
+      "permissions": [
+        "bulut:oturum"
+      ]
+    },
+    {
+      "name": "fason-firma",
+      "kind": "BOYUT",
+      "permissions": [
+        "bulut:oturum"
+      ]
+    },
+    {
+      "name": "siparis",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:siparis:oku"
+      ],
+      "retentionFields": [
+        "siparisTarihi"
+      ],
+      "sortFields": [
+        "siparisTarihi",
+        "olusturulma"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "tutar"
+      ]
+    },
+    {
+      "name": "siparis-kalemi",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:siparis:oku"
+      ],
+      "retentionFields": [
+        "olusturulma"
+      ],
+      "sortFields": [
+        "olusturulma"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "birimFiyat"
+      ],
+      "parent": {
+        "projection": "siparis",
+        "field": "siparisId"
+      }
+    },
+    {
+      "name": "sevkiyat",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:sevkiyat:oku"
+      ],
+      "retentionFields": [
+        "cikisTarihi",
+        "olusturulma"
+      ],
+      "sortFields": [
+        "cikisTarihi",
+        "olusturulma"
+      ]
+    },
+    {
+      "name": "dogrudan-sevk",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:sevkiyat:oku"
+      ],
+      "retentionFields": [
+        "cikisTarihi",
+        "olusturulma"
+      ],
+      "sortFields": [
+        "cikisTarihi",
+        "olusturulma"
+      ]
+    },
+    {
+      "name": "cuval",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:sevkiyat:oku"
+      ],
+      "retentionFields": [
+        "olusturulma"
+      ],
+      "sortFields": [
+        "olusturulma"
+      ]
+    },
+    {
+      "name": "is-emri",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:uretim:oku"
+      ],
+      "retentionFields": [
+        "olusturulma"
+      ],
+      "sortFields": [
+        "olusturulma"
+      ]
+    },
+    {
+      "name": "cari-hesap",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:cari-bakiye:oku"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "vadeGun",
+        "riskLimiti",
+        "bakiyeler",
+        "gecikmis"
+      ]
+    },
+    {
+      "name": "cari-hareket",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:cari-bakiye:oku"
+      ],
+      "retentionFields": [
+        "tarih"
+      ],
+      "sortFields": [
+        "tarih",
+        "olusturulma"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "borc",
+        "alacak",
+        "tutarTl",
+        "kur"
+      ]
+    },
+    {
+      "name": "kasa",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:kasa:oku"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "bakiye"
+      ]
+    },
+    {
+      "name": "banka",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:kasa:oku"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "bakiye"
+      ]
+    },
+    {
+      "name": "kasa-hareketi",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:kasa:oku"
+      ],
+      "retentionFields": [
+        "tarih"
+      ],
+      "sortFields": [
+        "tarih",
+        "olusturulma"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "tutar",
+        "tutarTl"
+      ]
+    },
+    {
+      "name": "cek-senet",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:cek:oku"
+      ],
+      "retentionFields": [
+        "vade",
+        "olusturulma"
+      ],
+      "sortFields": [
+        "vade",
+        "olusturulma"
+      ],
+      "subRows": [
+        "finans",
+        "kisisel"
+      ],
+      "forbiddenRootFields": [
+        "tutar",
+        "tutarTl",
+        "eslesen",
+        "kesideci"
+      ]
+    },
+    {
+      "name": "cek-hareketi",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:cek:oku"
+      ],
+      "retentionFields": [
+        "tarih"
+      ],
+      "sortFields": [
+        "tarih",
+        "olusturulma"
+      ],
+      "parent": {
+        "projection": "cek-senet",
+        "field": "cekId"
+      }
+    },
+    {
+      "name": "fatura",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:fatura:oku"
+      ],
+      "retentionFields": [
+        "tarih"
+      ],
+      "sortFields": [
+        "tarih",
+        "olusturulma"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "kur",
+        "araToplam",
+        "iskonto",
+        "kdv",
+        "tevkifat",
+        "genelToplam",
+        "genelToplamTl",
+        "odenen",
+        "acikTutar"
+      ]
+    },
+    {
+      "name": "fatura-kalemi",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:fatura:oku"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "birimFiyat",
+        "iskontoOrani",
+        "kdvOrani",
+        "tevkifatOrani",
+        "tutar",
+        "kdvTutari"
+      ],
+      "parent": {
+        "projection": "fatura",
+        "field": "faturaId"
+      },
+      "retentionFromParent": true
+    },
+    {
+      "name": "tahsilat-odeme",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:tahsilat:oku"
+      ],
+      "retentionFields": [
+        "tarih"
+      ],
+      "sortFields": [
+        "tarih",
+        "olusturulma"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "tutar",
+        "tutarTl",
+        "eslesen",
+        "eslesmemis"
+      ]
+    },
+    {
+      "name": "fiyat",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:fiyat:oku"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "fiyat"
+      ]
+    },
+    {
+      "name": "ozet.stok",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:ozet:oku",
+        "bulut:stok:oku"
+      ]
+    },
+    {
+      "name": "ozet.siparis",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:ozet:oku",
+        "bulut:siparis:oku"
+      ]
+    },
+    {
+      "name": "ozet.uretim",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:ozet:oku",
+        "bulut:uretim:oku"
+      ]
+    },
+    {
+      "name": "ozet.sevkiyat",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:ozet:oku",
+        "bulut:sevkiyat:oku"
+      ]
+    },
+    {
+      "name": "ozet.fason",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:ozet:oku",
+        "bulut:uretim:oku"
+      ]
+    },
+    {
+      "name": "ozet-finans",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:cari-bakiye:oku"
+      ]
+    },
+    {
+      "name": "stok-karnesi",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:stok:oku"
+      ]
+    },
+    {
+      "name": "acik-siparis-karsilama",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:siparis:oku"
+      ]
+    },
+    {
+      "name": "rapor-katalogu",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:oturum"
+      ]
+    },
+    {
+      "name": "uretim-akisi",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:uretim:oku"
+      ]
+    },
+    {
+      "name": "saglik",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:ozet:oku"
+      ]
+    }
+  ],
+  "PROJECTION_PERMISSIONS": {
+    "urun": [
+      "bulut:oturum"
+    ],
+    "renk": [
+      "bulut:oturum"
+    ],
+    "depo": [
+      "bulut:oturum"
+    ],
+    "istasyon": [
+      "bulut:oturum"
+    ],
+    "cari-kart": [
+      "bulut:oturum"
+    ],
+    "cari-kart.kisisel": [
+      "bulut:oturum",
+      "bulut:cari:oku"
+    ],
+    "sube": [
+      "bulut:oturum"
+    ],
+    "fason-firma": [
+      "bulut:oturum"
+    ],
+    "siparis": [
+      "bulut:siparis:oku"
+    ],
+    "siparis.finans": [
+      "bulut:siparis:oku",
+      "bulut:fiyat:oku"
+    ],
+    "siparis-kalemi": [
+      "bulut:siparis:oku"
+    ],
+    "siparis-kalemi.finans": [
+      "bulut:siparis:oku",
+      "bulut:fiyat:oku"
+    ],
+    "sevkiyat": [
+      "bulut:sevkiyat:oku"
+    ],
+    "dogrudan-sevk": [
+      "bulut:sevkiyat:oku"
+    ],
+    "cuval": [
+      "bulut:sevkiyat:oku"
+    ],
+    "is-emri": [
+      "bulut:uretim:oku"
+    ],
+    "cari-hesap": [
+      "bulut:cari-bakiye:oku"
+    ],
+    "cari-hesap.finans": [
+      "bulut:cari-bakiye:oku"
+    ],
+    "cari-hareket": [
+      "bulut:cari-bakiye:oku"
+    ],
+    "cari-hareket.finans": [
+      "bulut:cari-bakiye:oku"
+    ],
+    "kasa": [
+      "bulut:kasa:oku"
+    ],
+    "kasa.finans": [
+      "bulut:kasa:oku"
+    ],
+    "banka": [
+      "bulut:kasa:oku"
+    ],
+    "banka.finans": [
+      "bulut:kasa:oku"
+    ],
+    "kasa-hareketi": [
+      "bulut:kasa:oku"
+    ],
+    "kasa-hareketi.finans": [
+      "bulut:kasa:oku"
+    ],
+    "cek-senet": [
+      "bulut:cek:oku"
+    ],
+    "cek-senet.finans": [
+      "bulut:cek:oku"
+    ],
+    "cek-senet.kisisel": [
+      "bulut:cek:oku",
+      "bulut:cari:oku"
+    ],
+    "cek-hareketi": [
+      "bulut:cek:oku"
+    ],
+    "fatura": [
+      "bulut:fatura:oku"
+    ],
+    "fatura.finans": [
+      "bulut:fatura:oku"
+    ],
+    "fatura-kalemi": [
+      "bulut:fatura:oku"
+    ],
+    "fatura-kalemi.finans": [
+      "bulut:fatura:oku"
+    ],
+    "tahsilat-odeme": [
+      "bulut:tahsilat:oku"
+    ],
+    "tahsilat-odeme.finans": [
+      "bulut:tahsilat:oku"
+    ],
+    "fiyat": [
+      "bulut:fiyat:oku"
+    ],
+    "fiyat.finans": [
+      "bulut:fiyat:oku"
+    ],
+    "ozet.stok": [
+      "bulut:ozet:oku",
+      "bulut:stok:oku"
+    ],
+    "ozet.siparis": [
+      "bulut:ozet:oku",
+      "bulut:siparis:oku"
+    ],
+    "ozet.uretim": [
+      "bulut:ozet:oku",
+      "bulut:uretim:oku"
+    ],
+    "ozet.sevkiyat": [
+      "bulut:ozet:oku",
+      "bulut:sevkiyat:oku"
+    ],
+    "ozet.fason": [
+      "bulut:ozet:oku",
+      "bulut:uretim:oku"
+    ],
+    "ozet-finans": [
+      "bulut:cari-bakiye:oku"
+    ],
+    "stok-karnesi": [
+      "bulut:stok:oku"
+    ],
+    "acik-siparis-karsilama": [
+      "bulut:siparis:oku"
+    ],
+    "rapor-katalogu": [
+      "bulut:oturum"
+    ],
+    "uretim-akisi": [
+      "bulut:uretim:oku"
+    ],
+    "saglik": [
+      "bulut:ozet:oku"
+    ]
+  },
+  "REPORT_FAMILY_PERMISSION": {
+    "sales": "bulut:siparis:oku",
+    "customer": "bulut:siparis:oku",
+    "inventory": "bulut:stok:oku",
+    "production": "bulut:uretim:oku",
+    "quality": "bulut:uretim:oku",
+    "dokuma": "bulut:uretim:oku",
+    "subcontract": "bulut:uretim:oku",
+    "finance": "bulut:cari-bakiye:oku"
+  },
+  "REPORTS_NOT_IN_CLOUD": [
+    "audit/*",
+    "production/operator-performance"
+  ]
+}

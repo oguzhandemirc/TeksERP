@@ -12,9 +12,13 @@
 //      yasağı (S34 ikinci seddi), saklama alanları ve üstten saklama (S23) birebir
 //   §6 uzlaştırma ebeveyn bağı (S45): sözleşmedeki her kalem → üst belge bağı iki katalogda çözülür (fabrikada alan
 //      kolon, bulutta `parent` aynı), fabrikanın üstten saklamalı kalemi sözleşmede
-// ⭐ KALICI SONDA ✓K1–✓K4 (her koşumda): karşılaştırıcılar sentetik girdide ısırır, temiz girdide susar.
-// NEGATİF SONDA (dosya dışı, cp + shasum geri): T1 bulut `cek-hareketi` bağı elle `cekNo` → §6b · T2 fabrika tel alanı
-//   `cekId` → `cekNo` → §6a.
+//   §7 fabrika projesi patron kaynağını içe aktarmaz (statik/dinamik); bulut kataloğu yalnız ÜRETİLMİŞ özetten
+//      (`patron/sunucu/src/catalog/katalog-ozeti.json`) dosya olarak okunur — özetin canlı katalogla eşitliğini
+//      patron işinde `patron/sunucu/scripts/test_katalog_ozeti.ts` ölçer (sunucu bağımlılığı orada kurulu)
+// ⭐ KALICI SONDA ✓K1–✓K5 (her koşumda): karşılaştırıcılar sentetik girdide ısırır, temiz girdide susar.
+// NEGATİF SONDA (dosya dışı, cp + shasum geri): T1 bulut `cek-hareketi` bağı elle `cekNo` → özet bayat (patron
+//   `test_katalog_ozeti` §1b), `--yaz` sonrası §6b · T2 fabrika tel alanı `cekId` → `cekNo` → §6a · T3 bulut
+//   kataloğu yeniden dinamik içe aktarıldı → §7a (ve patron bağımlılığı yoksa çöküş).
 // Düzeltme: değişiklik ÖNCE kaynakta, sonra `cp -p patron/sunucu/src/wire/esitleme.ts Teks-Erp/src/cloud-sync/wire/`.
 // Koşum: npx tsx scripts/test_bulut_tel_aynasi.ts   (DB GEREKMEZ)
 // =============================================================================
@@ -35,6 +39,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 const KOK = path.resolve(__dirname, "..", "..");
 export const KAYNAK = "patron/sunucu/src/wire/esitleme.ts";
 export const AYNA = "Teks-Erp/src/cloud-sync/wire/esitleme.ts";
+export const BULUT_OZETI = "patron/sunucu/src/catalog/katalog-ozeti.json";
 const TARANAN: readonly string[] = ["Teks-Erp/src", "patron/sunucu/src"];
 
 const sha = (p: string): string => createHash("sha256").update(readFileSync(p)).digest("hex");
@@ -133,10 +138,11 @@ function fabrikaKatalogu(): { kayitlar: FabrikaKaydi[]; anliklar: string[] } {
 const kayit = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const metinler = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 
-/** Bulut kataloğu ÇALIŞMA ANINDA okunur: fabrika derlemesinin `rootDir`i patron projesini kapsamaz (tip bağı kurulmaz). */
-async function bulutKatalogu(): Promise<BulutKaydi[]> {
-  const mod: unknown = await import(path.join(KOK, "patron/sunucu/src/catalog/projections.ts"));
-  const liste = kayit(mod) ? mod.ROOT_PROJECTIONS : undefined;
+/** Bulut kataloğu ÜRETİLMİŞ özetten DOSYA olarak okunur: patron kaynağı içe aktarılmaz (bağımlılığı bu işte kurulu değil). */
+function bulutKatalogu(): BulutKaydi[] {
+  const p = path.join(KOK, BULUT_OZETI);
+  const ozet: unknown = existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : undefined;
+  const liste = kayit(ozet) ? ozet.ROOT_PROJECTIONS : undefined;
   if (!Array.isArray(liste)) return [];
   return liste.filter(kayit).map((p) => {
     const ust = kayit(p.parent) && typeof p.parent.projection === "string" ? p.parent.projection : null;
@@ -153,7 +159,12 @@ async function bulutKatalogu(): Promise<BulutKaydi[]> {
   });
 }
 
-async function main(): Promise<void> {
+/** Patron projesinin kaynağını içe aktaran satırlar (statik `import … from` · `require(` · dinamik `import(`). */
+export function patronIceAktarimi(src: string): string[] {
+  return src.split("\n").filter((s) => /\b(import|require)\b[^\n]*patron\/(sunucu|uygulama)\//.test(s) && !/readFileSync/.test(s));
+}
+
+function main(): void {
   console.log("§1 ayna bayt-eşit");
   const kaynak = path.join(KOK, KAYNAK);
   const ayna = path.join(KOK, AYNA);
@@ -185,9 +196,11 @@ async function main(): Promise<void> {
     check("§4a ⭐ sözleşmenin adı başka dosyada yeniden tanımlanmıyor", kopya.length === 0, kopya.slice(0, 5).join(" · "));
   }
 
-  console.log("\n§5 katalog çapraz ölçümü (fabrika ↔ bulut)");
+  console.log("\n§5 katalog çapraz ölçümü (fabrika ↔ bulut özeti)");
+  const ozetVar = existsSync(path.join(KOK, BULUT_OZETI));
+  check(`§5 bulut özeti var (${BULUT_OZETI})`, ozetVar, ozetVar ? "" : "cd patron/sunucu && npx tsx scripts/test_katalog_ozeti.ts --yaz");
   const f = fabrikaKatalogu();
-  const b = await bulutKatalogu();
+  const b = bulutKatalogu();
   check("§5a iki katalog da boş değil", f.kayitlar.length >= 20 && b.length >= 20, `${f.kayitlar.length} ↔ ${b.length}`);
   const fark = katalogFarki(f.kayitlar, f.anliklar, b);
   check("§5b ⭐ ad · tür · alt satır · kökte yasak alan · saklama alanı birebir", fark.length === 0, fark.slice(0, 6).join(" · "));
@@ -209,6 +222,16 @@ async function main(): Promise<void> {
   const ustten = f.kayitlar.filter((k) => k.usttenSaklama && RECONCILE_PARENTS[k.ad]?.parent !== k.usttenSaklama).map((k) => k.ad);
   check("§6c fabrikanın üstten saklamalı kalemi sözleşmedeki ebeveynle aynı", ustten.length === 0, ustten.join(","));
 
+  console.log("\n§7 fabrika projesi patron kaynağını içe aktarmaz");
+  const patronIhlal: string[] = [];
+  for (const kok of ["Teks-Erp/src", "Teks-Erp/scripts"]) {
+    for (const p of tsDosyalari(path.join(KOK, kok))) {
+      if (p === __filename) continue;
+      for (const s of patronIceAktarimi(readFileSync(p, "utf8"))) patronIhlal.push(`${path.relative(KOK, p)}: ${s.trim()}`);
+    }
+  }
+  check("§7a ⭐ Teks-Erp/src + scripts patron/sunucu|uygulama kaynağını içe aktarmaz (yalnız dosya okuması)", patronIhlal.length === 0, patronIhlal.slice(0, 3).join(" · "));
+
   console.log("\n✓K kalıcı sondalar (sentetik)");
   check("✓K1 zod dışı içe aktarım ısırır · zod susar", iceAktarimlar('import { z } from "zod";\nimport x from "../lib/db";').join() === "zod,../lib/db" && iceAktarimlar('import { z } from "zod";').join() === "zod");
   check("✓K2 tel yolu literali ısırır · SYNC_PATHS kullanımı susar", telYollari('post(base + "/v1/gelen-kutusu/al")').length === 1 && telYollari("post(SYNC_PATHS.INBOX_CLAIM)").length === 0);
@@ -224,12 +247,20 @@ async function main(): Promise<void> {
       katalogFarki(temizF, ["ozet.stok"], temizB).length > 0 &&
       katalogFarki(temizF, [], temizB).length === 0,
   );
+  check(
+    "✓K5 patron içe aktarımı ısırır (dinamik · statik) · dosya okuması susar",
+    patronIceAktarimi('const m = await import(path.join(KOK, "patron/sunucu/src/wire/esitleme.ts"));').length === 1 &&
+      patronIceAktarimi('import { x } from "../../patron/uygulama/src/api/wire";').length === 1 &&
+      patronIceAktarimi('JSON.parse(readFileSync(path.join(KOK, "patron/sunucu/src/wire/esitleme.ts"), "utf8"));').length === 0,
+  );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
 
-main().catch((err: Error) => {
-  console.error(`❌ bekçi çöktü: ${err.stack ?? err.message}`);
+try {
+  main();
+} catch (err) {
+  console.error(`❌ bekçi çöktü: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
   process.exit(1);
-});
+}

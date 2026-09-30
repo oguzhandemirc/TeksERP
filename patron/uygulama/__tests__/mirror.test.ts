@@ -1,16 +1,29 @@
 // AYNA BEKÇİSİ: tel tipleri, uç tablosu, izin literalleri ve rapor aile eşlemesi bulut sunucusuyla
-// aynı mı. Sunucu kataloğu saf modüldür (yalnız tip içe aktarır) — doğrudan içe aktarılır.
+// aynı mı. Sunucu YALNIZ DOSYA olarak okunur (kaynak metni + üretilmiş `catalog/katalog-ozeti.json`); içe aktarılmaz —
+// sunucunun bağımlılıkları bu işte kurulu değil, tip denetimi ve jest sunucu kaynağına uzanamaz.
 import { readFileSync, readdirSync, statSync } from "fs";
-import { join } from "path";
+import { dirname, join, relative, resolve } from "path";
 import { ENDPOINTS } from "../src/api/endpoints";
 import { DASHBOARD_CARDS, MODULES } from "../src/lib/access";
 import { REPORT_FAMILY_PERMISSION, REPORTS_NOT_IN_CLOUD } from "../src/lib/reports";
-import { CLOUD_PERMISSIONS } from "../../sunucu/src/catalog/permissions";
-import { projectionDef } from "../../sunucu/src/catalog/projections";
-import * as serverReports from "../../sunucu/src/catalog/reports";
 
 const ROOT = join(__dirname, "..");
 const SERVER = join(ROOT, "..", "sunucu", "src");
+
+/** Bulut kataloğunun üretilmiş özeti (tek kaynak `patron/sunucu/src/catalog/*.ts`; tazeliği `test_katalog_ozeti`). */
+interface KatalogOzeti {
+  readonly CLOUD_PERMISSIONS: readonly string[];
+  readonly PROJECTION_PERMISSIONS: Readonly<Record<string, readonly string[]>>;
+  readonly REPORT_FAMILY_PERMISSION: Readonly<Record<string, string>>;
+  readonly REPORTS_NOT_IN_CLOUD: readonly string[];
+}
+const OZET = JSON.parse(readFileSync(join(SERVER, "catalog/katalog-ozeti.json"), "utf8")) as KatalogOzeti;
+
+/** Uygulama kökünün DIŞINA çıkan göreli içe aktarımlar (statik `from` · `import(` · `require(`). */
+function outsideImports(file: string, src: string): string[] {
+  const specs = [...src.matchAll(/(?:\bfrom\s+|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)["'](\.{1,2}\/[^"']+)["']/gm)].map((m) => m[1]!);
+  return specs.filter((s) => relative(ROOT, resolve(dirname(file), s)).startsWith(".."));
+}
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {
@@ -39,7 +52,8 @@ describe("ayna: patron/sunucu ↔ patron/uygulama", () => {
   });
 
   it("uygulamadaki her 'bulut:' izin literali bulut kataloğunda var", () => {
-    const known = new Set<string>(CLOUD_PERMISSIONS);
+    const known = new Set<string>(OZET.CLOUD_PERMISSIONS);
+    expect(known.size).toBeGreaterThan(10);
     const used = new Set<string>();
     for (const f of [...files(join(ROOT, "src")), ...files(join(ROOT, "app"))]) {
       for (const m of readFileSync(f, "utf8").matchAll(/"(bulut:[a-z-]+(?::[a-z-]+)?)"/g)) used.add(m[1]!);
@@ -50,14 +64,30 @@ describe("ayna: patron/sunucu ↔ patron/uygulama", () => {
 
   it("pano kartı izinleri sunucudaki projeksiyon izinleriyle aynı", () => {
     for (const c of DASHBOARD_CARDS) {
-      const def = projectionDef(c.projection);
-      expect(def && [...def.permissions].sort()).toEqual([...c.allOf].sort());
+      const perms = OZET.PROJECTION_PERMISSIONS[c.projection];
+      expect(perms && [...perms].sort()).toEqual([...c.allOf].sort());
     }
   });
 
   it("rapor aile → izin eşlemesi ve buluta gitmeyenler aynı", () => {
-    expect(REPORT_FAMILY_PERMISSION).toEqual(serverReports.REPORT_FAMILY_PERMISSION);
-    expect(REPORTS_NOT_IN_CLOUD).toEqual(serverReports.REPORTS_NOT_IN_CLOUD);
+    expect(Object.keys(OZET.REPORT_FAMILY_PERMISSION).length).toBeGreaterThan(0);
+    expect(REPORT_FAMILY_PERMISSION).toEqual(OZET.REPORT_FAMILY_PERMISSION);
+    expect(REPORTS_NOT_IN_CLOUD).toEqual(OZET.REPORTS_NOT_IN_CLOUD);
+  });
+
+  it("uygulama kökünün dışını içe aktarmaz (sunucu kaynağı dahil; paylaşılan sözleşme bayt-eşit aynayla gelir)", () => {
+    const all = ["src", "app", "__tests__", "scripts"].flatMap((d) => files(join(ROOT, d)));
+    expect(all.length).toBeGreaterThan(20);
+    const bad = all.flatMap((f) => outsideImports(f, readFileSync(f, "utf8")).map((s) => `${relative(ROOT, f)} → ${s}`));
+    expect(bad).toEqual([]);
+    // Kalıcı sonda: kök dışı (statik · dinamik · require) ısırır, kök içi susar.
+    // Belirteç parçalı kurulur ki sonda satırı bu dosyanın kendi taramasında ısırmasın.
+    const probe = join(ROOT, "__tests__", "probe.ts");
+    const out = ["..", "..", "sunucu", "src", "wire", "api"].join("/");
+    expect(outsideImports(probe, `import { A } from "${out}";`)).toHaveLength(1);
+    expect(outsideImports(probe, `const m = await import("${out}");`)).toHaveLength(1);
+    expect(outsideImports(probe, `const m = require("${out}");`)).toHaveLength(1);
+    expect(outsideImports(probe, `import { A } from "../src/api/wire";\nimport "./setup";`)).toEqual([]);
   });
 
   it("modül tanımları tek anahtarlı ve rotalı", () => {

@@ -619,8 +619,9 @@ jobs:
 
   # ===========================================================================
   # PATRON UYGULAMASI — patron/uygulama (Expo; telefon/tablet/web). DB'siz: tip + kapı kapsamı + jest
-  # (ayna bekçisi sunucu kataloğunu kaynaktan okur — sunucunun node_modules'ü gerekmez) + web dışa
-  # aktarımı. ESLint izinli paket değil ⇒ lint adımı yok (commit kapısında da `lint: null`).
+  # (ayna bekçisi sunucuyu yalnız DOSYA olarak okur — katalog üretilmiş `katalog-ozeti.json`dan; sunucu
+  # kaynağı içe aktarılmaz, node_modules'ü bu işte kurulmaz) + web dışa aktarımı. ESLint izinli paket
+  # değil ⇒ lint adımı yok (commit kapısında da `lint: null`).
   # ===========================================================================
   patron-uygulama:
     name: Patron uygulaması (tsc + jest + web export)
