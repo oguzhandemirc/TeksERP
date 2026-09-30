@@ -1,4 +1,4 @@
-// Hesaplar (yalnız tesis yöneticisi): tesisin bulut hesapları.
+// Hesaplar (yalnız tesis yöneticisi): tesisin bulut hesapları + verinin dışa aktarımı (Ek-6/A §4.2).
 import { useRouter } from "expo-router";
 import { formatDateTime } from "../../../src/lib/format";
 import { useSession } from "../../../src/state/session";
@@ -14,6 +14,7 @@ export default function Accounts() {
   return (
     <Screen title="Hesaplar" module="hesaplar">
       <Button label="Hesap davet et" disabled={offline} onPress={() => router.push("/hesaplar/yeni")} testID="hesap-davet" />
+      <Button label="Verileri dışa aktar (JSON / CSV)" tone="plain" onPress={() => router.push("/hesaplar/disa-aktar")} testID="hesap-disa-aktar" />
       {r.loading && !r.data ? <Loading /> : null}
       {r.error && !r.data ? <ErrorBox text={r.error} onRetry={r.reload} /> : null}
       {r.data?.map((a) => (

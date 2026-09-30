@@ -16,7 +16,8 @@ import { deactivateDevice, listDevices, registerDevice } from "../services/devic
 import { requestSnapshotRefresh } from "../services/doorbell";
 import { cancelInbox, createInboxMessage, getInbox, listInbox } from "../services/inbox.service";
 import { cancelReportRequest, createReportRequest, getReportRequest, listReportRequests } from "../services/report.service";
-import { PermissionList, Template, Token, body, page, param, s, text, uuidCursor, written, type ApiCall, type ApiRouteDef } from "./api-route-kit";
+import { PermissionList, Template, Token, body, page, param, s, sendFile, text, uuidCursor, written, type ApiCall, type ApiRouteDef } from "./api-route-kit";
+import { EXPORT_ROUTES } from "./export-routes";
 import { NOTIFICATION_ROUTES } from "./notification-routes";
 import { rateLimit } from "./rate-limit";
 
@@ -185,6 +186,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     handler: async (c) => ({ data: await deactivateDevice(c.ctx, s(c), param(c, "id")) }),
   },
   ...NOTIFICATION_ROUTES,
+  ...EXPORT_ROUTES,
   // ---- hesap yönetimi (bulut:hesap:yonet) ----
   { method: "get", path: "/hesaplar", auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await listAccounts(c.ctx, s(c)) }) },
   {
@@ -267,6 +269,7 @@ export function createApiRouter(ctx: CloudContext): Router {
         if (!session) throw new CloudError(401, "OTURUM_YOK", "Oturum yok ya da süresi doldu; yeniden giriş yapın");
       }
       const r = await def.handler({ ctx, req, session });
+      if ("file" in r) return sendFile(res, r.file);
       if (r.replayed) res.set("Idempotent-Replay", "true");
       res.status(r.status ?? 200).json({ success: true, data: r.data });
     });

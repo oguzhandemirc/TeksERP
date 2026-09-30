@@ -39,7 +39,10 @@ export const SYNC_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   request_nonces: ["SELECT", "INSERT", "DELETE"],
 };
 
-/** Şemadaki bütün uygulama tabloları (bekçi: şema ↔ bu liste birebir; her tablo en az bir rolde). */
+/**
+ * Şemadaki bütün uygulama tabloları (bekçi: şema ↔ bu liste birebir). Çalışma rollerinin hiçbirinde
+ * yetkisi olmayan tablo yalnız göç rolünün (satıcı CLI'si) tablosudur: `facility_destructions`.
+ */
 export const CLOUD_TABLES: readonly string[] = [
   "facilities",
   "installations",
@@ -60,4 +63,5 @@ export const CLOUD_TABLES: readonly string[] = [
   "sync_state",
   "full_sync_runs",
   "request_nonces",
+  "facility_destructions",
 ];

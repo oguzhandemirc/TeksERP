@@ -107,11 +107,14 @@ enum NotificationStatus {
 
 /// Tesis — `tesis_id` satıcının HAK'taki `tesis.id`sidir (kimlik satıcıda doğar). Saklama süresi
 /// portal ayarıdır (3 · 13 · 25 ay · NULL = tümü; varsayılan 13).
+/// `serviceEndedAt`: hizmetin bittiği DONMUŞ an (NULL = açık); aşama tek kaynaktan türer
+/// (`src/services/service-lifecycle.ts`: açık → 90 gün salt okuma → kapalı/imha bekliyor).
 model Facility {
   tesisId         String         @id @map("tesis_id") @db.Uuid
   name            String         @map("name") @db.VarChar(200)
   retentionMonths Int?           @default(13) @map("retention_months")
   status          FacilityStatus @default(AKTIF) @map("status")
+  serviceEndedAt  DateTime?      @map("service_ended_at") @db.Timestamptz
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -463,6 +466,25 @@ model FullSyncRun {
 
   @@unique([tesisId, projection, startedAt])
   @@map("full_sync_runs")
+}
+
+/// İmha kaydı (Ek-6/A §4.5 tutanak verisi) — tesisin verisi silindikten SONRA da kalır; değiştirilemez ve
+/// silinemez (DB tetikleyicisi). Silinen verinin içeriğini taşımaz: tablo başına sayı, neden, işlemi yapan.
+/// Yazan yalnız satıcı CLI'si (`scripts/tesis.ts imha`, göç rolü); çalışma rollerine yetki yok.
+model FacilityDestruction {
+  id             String    @id @default(uuid()) @db.Uuid
+  tesisId        String    @map("tesis_id") @db.Uuid
+  facilityName   String    @map("facility_name") @db.VarChar(200)
+  reason         String    @map("reason") @db.VarChar(20)
+  requestRef     String?   @map("request_ref") @db.VarChar(60)
+  operator       String    @map("operator") @db.VarChar(120)
+  serviceEndedAt DateTime? @map("service_ended_at") @db.Timestamptz
+  deletedCounts  Json      @map("deleted_counts")
+  backupClearBy  DateTime  @map("backup_clear_by") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([tesisId, createdAt])
+  @@map("facility_destructions")
 }
 
 /// İmzalı istek nonce defteri — TELEMETRİ (tekrar oynatma engeli; saklama = istek zamanı + 10 dk).

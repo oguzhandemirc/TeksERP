@@ -39,6 +39,32 @@ describe("izinli menü", () => {
   });
 });
 
+describe("hizmet sonu bandı (Ek-6/A §4.2)", () => {
+  it("SALT_OKUNUR: salt okuma bandı çıkar, eşitleme gecikme bandı susar", () => {
+    session.permissions = ["bulut:oturum"];
+    session.facility = {
+      tesis: { id: "t", ad: "Örnek", saklamaAy: 13 },
+      hesap: { ad: "A" },
+      esitleme: { sonEsitleme: "2026-01-01T00:00:00Z", ufuk: "2026-01-01T00:00:00Z", ufukTakildi: false, sozlesmeUyarisi: null, fabrikaSurumu: null },
+      hizmet: { asama: "SALT_OKUNUR", bitis: "2026-10-01T00:00:00Z", saltOkunurBitis: "2026-12-30T00:00:00Z" },
+    };
+    render(<Screen title="Pano"><Text>İÇERİK</Text></Screen>);
+    expect(screen.getByTestId("bant-salt-okunur")).toBeTruthy();
+    expect(screen.queryByTestId("bant-gecikme")).toBeNull();
+    expect(screen.getByText("İÇERİK")).toBeTruthy();
+    session.facility = null;
+  });
+  it("ACIK (ya da eski sunucu, alan yok): bant YOK", () => {
+    session.facility = { tesis: { id: "t", ad: "Örnek", saklamaAy: 13 }, hesap: { ad: "A" }, esitleme: null, hizmet: { asama: "ACIK", bitis: null, saltOkunurBitis: null } };
+    render(<Screen title="Pano"><Text>X</Text></Screen>);
+    expect(screen.queryByTestId("bant-salt-okunur")).toBeNull();
+    session.facility = { tesis: { id: "t", ad: "Örnek", saklamaAy: 13 }, hesap: { ad: "A" }, esitleme: null };
+    render(<Screen title="Pano"><Text>Y</Text></Screen>);
+    expect(screen.queryByTestId("bant-salt-okunur")).toBeNull();
+    session.facility = null;
+  });
+});
+
 describe("yıkıcı işlem onayı", () => {
   it("ilk dokunuş sorar, ikinci uygular; vazgeç uygulamaz", () => {
     const fn = jest.fn();

@@ -1,11 +1,12 @@
 // Hesap API'si rota kiti — rota tablosunun ortak tipleri ve gövde/parametre yardımcıları (rota dosyaları
 // bölündüğünde tek kaynak kalsın diye ayrı dosyada; davranış `api-routes.ts`teki tabloyla aynı).
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { z } from "zod";
 import type { SessionContext } from "../auth/session.service";
 import { CloudError, badRequest } from "../lib/errors";
 import type { WriteResult } from "../lib/idempotency";
 import type { CloudContext } from "../services/context";
+import type { ExportFile, ExportSink } from "../services/export.service";
 
 export interface ApiCall {
   readonly ctx: CloudContext;
@@ -14,13 +15,49 @@ export interface ApiCall {
   readonly session: SessionContext | null;
 }
 
+/** Rota sonucu: JSON zarfı (`{success, data}`) ya da dosya akışı (dışa aktarma). */
+export type ApiResult = { status?: number; data: unknown; replayed?: boolean } | { file: ExportFile };
+
 export interface ApiRouteDef {
   readonly method: "get" | "post" | "patch";
   readonly path: string;
   readonly auth: "ACIK" | "OTURUM";
   /** Yazma: işlem kimliğiyle idempotent ("ISLEM_KIMLIGI") ya da gerekçesi yazılı muafiyet; okuma "OKUMA". */
   readonly kimlik: "OKUMA" | "ISLEM_KIMLIGI" | { readonly muaf: string };
-  readonly handler: (c: ApiCall) => Promise<{ status?: number; data: unknown; replayed?: boolean }>;
+  readonly handler: (c: ApiCall) => Promise<ApiResult>;
+}
+
+class ClientGone extends Error {}
+
+/** Geri basınçlı yazıcı: tampon doluysa `drain` beklenir; istemci koparsa akış durur (yarım dosya "başarılı" sayılmaz). */
+function responseSink(res: Response): ExportSink {
+  return (chunk) =>
+    new Promise<void>((resolve, reject) => {
+      if (res.destroyed || res.writableEnded) return reject(new ClientGone());
+      if (res.write(chunk)) return resolve();
+      const onDrain = (): void => {
+        res.off("close", onClose);
+        resolve();
+      };
+      const onClose = (): void => {
+        res.off("drain", onDrain);
+        reject(new ClientGone());
+      };
+      res.once("drain", onDrain);
+      res.once("close", onClose);
+    });
+}
+
+/** Dosya yanıtı: ek olarak indirilir, önbelleğe girmez; hata akış ortasındaysa bağlantı kesilir (hata işleyicisi). */
+export async function sendFile(res: Response, file: ExportFile): Promise<void> {
+  res.status(200).set({ "Content-Type": file.contentType, "Content-Disposition": `attachment; filename="${file.fileName}"` });
+  try {
+    await file.write(responseSink(res));
+  } catch (err) {
+    if (err instanceof ClientGone) return;
+    throw err;
+  }
+  res.end();
 }
 
 export const Uuid = z.uuid();

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { errorMessage } from "../api/client";
 import type { ProjectionRecord } from "../api/wire";
-import { formatAgo, syncIsLate } from "../lib/format";
+import { formatAgo, formatDateTime, syncIsLate } from "../lib/format";
 import { nestedEntries, recordSubtitle, recordTitle, scalarEntries } from "../lib/present";
 import { useSession } from "../state/session";
 import { Banner, Body, Button, Card, Loading, Muted, Row, Stat, Title } from "./kit";
@@ -59,10 +59,20 @@ export function SnapshotView({ value, depth = 0 }: { value: unknown; depth?: num
 export function StatusBands() {
   const { offline, offlineSince, facility } = useSession();
   const last = facility?.esitleme?.sonEsitleme ?? null;
+  // Eski sunucu/önbellek `hizmet` taşımayabilir → açık say (bugünkü davranış).
+  const service = facility?.hizmet;
+  const readOnly = service?.asama === "SALT_OKUNUR";
   return (
     <View>
       {offline ? <Banner tone="off" testID="bant-cevrimdisi" text={`Çevrimdışı — son veri ${offlineSince ? formatAgo(offlineSince) : "bilinmiyor"}. Değişiklik yapılamaz.`} /> : null}
-      {facility && syncIsLate(last) ? (
+      {readOnly ? (
+        <Banner
+          tone="warn"
+          testID="bant-salt-okunur"
+          text={`Patron bulutu hizmeti ${formatDateTime(service?.bitis)} tarihinde sona erdi — veriler ${formatDateTime(service?.saltOkunurBitis)} tarihine kadar yalnız görüntülenir ve dışa aktarılabilir (Hesaplar › Dışa aktar); yeni kayıt girilemez.`}
+        />
+      ) : null}
+      {facility && !readOnly && syncIsLate(last) ? (
         <Banner tone="warn" testID="bant-gecikme" text={last ? `Fabrikadan eşitleme gecikti — son eşitleme ${formatAgo(last)}` : "Fabrikadan henüz veri gelmedi"} />
       ) : null}
     </View>

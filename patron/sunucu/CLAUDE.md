@@ -39,7 +39,16 @@ Kilit tx'in İLK ifadesidir ve kiracı ayarıyla AYNI SELECT'te alınır (`lib/t
 
 `KURULUM_KAYNAGI=kayit` (varsayılan): satıcı CLI'si (`scripts/tesis.ts kurulum-kaydet`) açık anahtarı, sınıfı, modülleri, patron bulutu bitişini yazar. `KURULUM_KAYNAGI=satici`: satıcı İÇ API'si (`GET <SATICI_IC_API_URL>/ic/v1/kurulum/:id`, Bearer, iç ağ) + `installations` önbelleği — önbellek TAZELİKTİR: süre (`KURULUM_ONBELLEK_DK`) dolunca sorulur, ulaşılamazsa bayat kayıt, HİÇ dolmadıysa RED; satıcının 404'ü kaydı pasife çeker. Zil (`POST /ic/v1/zil {tesisId, konu}`) yalnız bu kipte gider, içerik taşımaz. Satıcı tarafı iç API'si AYRI dilimdir (sözleşme §17).
 
-Eşitleme hakkı (bulut İKİNCİ kapıdır; fabrika zaten göndermez): `sinif = URETIM` ∧ `patron-bulut ∈ modüller` ∧ `patronBulutBitis > şimdi` ∧ devredilmemiş — yoksa 403 `SINIF_GONDEREMEZ` / `PATRON_BULUT_KAPALI`. Hesap yazmaları (gelen kutusu, rapor isteği) da tesisin açık aboneliğini ister; OKUMA abonelik bitse de açık kalır (veri sözleşme süresi sonunda imha edilir).
+Eşitleme hakkı (bulut İKİNCİ kapıdır; fabrika zaten göndermez): `sinif = URETIM` ∧ `patron-bulut ∈ modüller` ∧ `patronBulutBitis > şimdi` ∧ devredilmemiş ∧ tesisin hizmet aşaması ACIK — yoksa 403 `SINIF_GONDEREMEZ` / `PATRON_BULUT_KAPALI`. Hesap yazmaları (gelen kutusu, rapor isteği) da tesisin açık aboneliğini ister.
+
+## Hizmet aşaması (Ek-6/A §4 — tek kaynak `src/services/service-lifecycle.ts`)
+
+- **ACIK** — sözleşme açık: tesis AKTİF ∧ en az bir aktif kurulumda `patron-bulut` ∧ bitiş gelecekte. Sınıf ve DR devri işletme durumudur (eşitleme kapısı ayrıca ister), hizmeti bitirmez.
+- **SALT_OKUNUR** — kira bitti, hak düştü ya da tesis `tesis-durum --durum=PASIF` ile kapatıldı: bitişten itibaren 90 gün giriş, okuma, dışa aktarma ve hesap yönetimi AÇIK; eşitleme, gelen kutusu, rapor isteği ve bildirim KAPALI. `GET /api/oturum` `hizmet` alanı aşamayı ve salt okuma bitişini taşır.
+- **KAPALI** — 90 gün doldu: giriş 403 `HIZMET_KAPANDI`, oturum 401; veri imha bekler (bakım günlüğü her gün hatırlatır).
+- Bitiş anı DONAR: `facilities.service_ended_at`ın tek yazarı bakım tikindeki `refreshServiceEnd` (kapanışta kira bitişiyle yazar, yeniden açılışta siler; ayak izi `HIZMET_SONA_ERDI`/`HIZMET_YENIDEN_ACILDI`). Satıcı kipinde hak donunca bitiş NULL gelir — damga olmasa süre hiç dolmazdı.
+- **Dışa aktarma** (`GET /api/disa-aktar` manifest · `GET /api/disa-aktar/:kume?bicim=json|csv`): yalnız `bulut:hesap:yonet`; projeksiyonlar hesabın okuyabildiği kadar (RLS `app.projeksiyonlar` oturumla aynı), bulutta doğan veri sırsız görünümle (gelen kutusu · hesaplar · hesap denetimi); sayfalı akış, ayak izi `DISA_AKTARIM`.
+- **İmha** yalnız satıcı CLI'si: `scripts/tesis.ts imha --tesis=<uuid> --isleyen="Ad Soyad" [--erken-talep=<no>] [--uygula]` — kuru koşum varsayılan; ACIK'ta asla, SALT_OKUNUR'da yalnız yazılı erken talep numarasıyla; tek tx, `ACCOUNT_ADMIN` kilidi; silme sırası `src/services/facility-destruction.ts` `DESTRUCTION_STEPS` (= `CLOUD_TABLES` − `RETAINED_TABLES`, bekçi iki yönlü), imha kaydı `facility_destructions` (tutanak verisi; değiştirilemez, silinemez). Runbook `docs/ops/PATRON-BULUTU-HIZMET-SONU.md`.
 
 ## Hesaplar
 
@@ -47,7 +56,7 @@ Bulutta BAĞIMSIZ (fabrika kullanıcısına bağlanmaz), hesap başına TEK tesi
 
 ## Budama beyanı (telemetri + okuma kopyası)
 
-Yaşa göre silinen tablolar YALNIZ `src/services/maintenance.ts` `PRUNED_TABLES` (bekçi `test_patron_kapilari` §4 iki yönlü ölçer): `projection_rows` (tesisin saklama süresi — 3 · 13 · 25 ay · tümü, varsayılan 13 — kökü düşen kaydın alt satırı ve kalemiyle; 7 günden eski mezar taşı) · `request_nonces` · `package_receipts` · `full_sync_runs` · `report_results` · `report_requests` · `inbox_messages` (sonuçlanmış; asıl kayıt fabrikada) · `sessions` · `operation_receipts` · `account_audit` (ayak izi: başarısız giriş 90 gün, diğerleri 730 gün) · `notifications` (sonuçlanmış bildirim, `BILDIRIM_SAKLAMA_GUN` = 90). Hiçbiri fabrikanın defteri değildir; iş kararı bunlardan okunmaz. Başka her silme yasak; hesap ve cihaz soft (durum/`active`).
+Yaşa göre silinen tablolar YALNIZ `src/services/maintenance.ts` `PRUNED_TABLES` (bekçi `test_patron_kapilari` §4 iki yönlü ölçer; tesis imhasının silmeleri ayrı beyanlı dosyada, § Hizmet aşaması): `projection_rows` (tesisin saklama süresi — 3 · 13 · 25 ay · tümü, varsayılan 13 — kökü düşen kaydın alt satırı ve kalemiyle; 7 günden eski mezar taşı) · `request_nonces` · `package_receipts` · `full_sync_runs` · `report_results` · `report_requests` · `inbox_messages` (sonuçlanmış; asıl kayıt fabrikada) · `sessions` · `operation_receipts` · `account_audit` (ayak izi: başarısız giriş 90 gün, diğerleri 730 gün) · `notifications` (sonuçlanmış bildirim, `BILDIRIM_SAKLAMA_GUN` = 90). Hiçbiri fabrikanın defteri değildir; iş kararı bunlardan okunmaz. Başka her silme yasak; hesap ve cihaz soft (durum/`active`).
 
 Audit istisnaları (beyanlı sınıflar): fabrika kanalı yazımları (paket makbuzu kendi kaydıdır — sistem işi) · bakım işi (sistem işi) · oturum dokunuşu (telemetri). Hesap CUD'u, davet, giriş/çıkış, gelen kutusu/rapor yazımı/iptali, cihaz kaydı `account_audit`e düşer.
 
@@ -70,6 +79,7 @@ npx prisma migrate deploy && npx prisma generate && npx tsx scripts/db-rolleri.t
 npx tsx scripts/tesis.ts tesis-ac --tesis=<uuid> --ad="Fabrika" [--saklama=13|3|25|tumu]
 npx tsx scripts/tesis.ts kurulum-kaydet --tesis=<uuid> --kurulum=<uuid> --acik-anahtar=<x> --sinif=URETIM --moduller=patron-bulut,production.enabled --bitis=<ISO>
 npx tsx scripts/tesis.ts yonetici-davet --tesis=<uuid> --eposta=<e-posta> --ad="Ad Soyad"   # davet belirteci BİR KEZ basılır
+npx tsx scripts/tesis.ts imha --tesis=<uuid> --isleyen="Ad Soyad" [--erken-talep=<no>] [--uygula]   # kuru koşum varsayılan
 npm run typecheck:scripts && npm run lint        # commit kapısı altıncı proje olarak aynısını ölçer (tip + eslint + lint-baseline.json tavanı)
 node ../../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts [ad-parçası]   # yalnız *_test DB
 ```

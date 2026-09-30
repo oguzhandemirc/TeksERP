@@ -12,6 +12,7 @@ import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError } from "../lib/errors";
 import { withLookup, withTesis } from "../lib/tenant";
 import type { CloudContext } from "../services/context";
+import { loadServiceFacts, serviceState } from "../services/service-lifecycle";
 import { assertPasswordStrength, burnPasswordCheck, hashPassword, verifyPassword } from "./password";
 import { verifyTotp } from "./totp";
 
@@ -94,8 +95,10 @@ export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: 
   const { token, digest } = newToken();
   const expiresAt = new Date(nowMs + ctx.config.OTURUM_AZAMI_GUN * 86_400_000);
   const session = await withTesis(ctx.app, { tesisId: account.tesisId }, async (tx) => {
-    const facility = await tx.facility.findUnique({ where: { tesisId: account.tesisId } });
-    if (!facility || facility.status !== "AKTIF") return null;
+    const facts = await loadServiceFacts(tx, account.tesisId);
+    if (!facts) return null;
+    // Hizmet bitince 90 gün salt okuma (giriş AÇIK); süre dolunca giriş kapanır (Ek-6/A §4.2).
+    if (serviceState(facts, nowMs).phase === "KAPALI") return "KAPALI" as const;
     // Adım iddiası atomik: aynı kodla eşzamanlı iki giriş ikisi de geçemez.
     const claim = await tx.account.updateMany({
       where: { id: account.id, status: "AKTIF", OR: [{ totpLastStep: null }, { totpLastStep: { lt: totp.step } }] },
@@ -106,6 +109,7 @@ export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: 
       data: { tesisId: account.tesisId, accountId: account.id, tokenHash: digest, client: g.client, lastUsedAt: new Date(nowMs), expiresAt },
     });
   });
+  if (session === "KAPALI") throw new CloudError(403, "HIZMET_KAPANDI", "Patron bulutu hizmeti sona erdi ve salt okuma süresi doldu; veriler imha sürecinde");
   if (!session) {
     await registerFailure(ctx, account, nowMs);
     throw loginFailed();
@@ -127,7 +131,7 @@ export async function login(ctx: CloudContext, g: LoginInput): Promise<{ token: 
   };
 }
 
-/** Bearer belirtecinden oturum: kapalı · süresi dolmuş · hesap/tesis AKTİF değil → null. */
+/** Bearer belirtecinden oturum: kapalı · süresi dolmuş · hesap AKTİF değil · hizmet KAPALI (90 gün doldu) → null. */
 export async function resolveSession(ctx: CloudContext, token: string | undefined): Promise<SessionContext | null> {
   if (!token || !TOKEN_PATTERN.test(token)) return null;
   const nowMs = ctx.now();
@@ -140,8 +144,10 @@ export async function resolveSession(ctx: CloudContext, token: string | undefine
       await tx.session.updateMany({ where: { id: row.id, closedAt: null }, data: { closedAt: new Date(nowMs), closeReason: "SURE_DOLDU" } });
       return null;
     }
-    const account = await tx.account.findUnique({ where: { id: row.accountId }, include: { facility: true } });
-    if (!account || account.status !== "AKTIF" || account.facility.status !== "AKTIF") return null;
+    const account = await tx.account.findUnique({ where: { id: row.accountId } });
+    if (!account || account.status !== "AKTIF") return null;
+    const facts = await loadServiceFacts(tx, row.tesisId);
+    if (!facts || serviceState(facts, nowMs).phase === "KAPALI") return null;
     if (nowMs - row.lastUsedAt.getTime() > TOUCH_INTERVAL_MS) {
       await tx.session.updateMany({ where: { id: row.id, closedAt: null }, data: { lastUsedAt: new Date(nowMs) } });
     }

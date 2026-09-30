@@ -10,6 +10,7 @@ import { searchCondition } from "../lib/search";
 import { NO_TENANT, withTesis } from "../lib/tenant";
 import { ARAMA_AZAMI, LIST_SEARCH, type FacilityStatus, type Page, type ProjectionRecord, type Snapshot } from "../wire/api";
 import type { CloudContext } from "./context";
+import { loadServiceFacts, serviceState } from "./service-lifecycle";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -22,7 +23,7 @@ function readableDef(s: SessionContext, name: string, kind: "KAYIT" | "ANLIK"): 
 }
 
 /** Hesabın görebildiği alt satırlar (uygulama kapısı; RLS aynı kararı DB'de verir). */
-function visibleSubRows(s: SessionContext, def: ProjectionDef): { finans: boolean; kisisel: boolean } {
+export function visibleSubRows(s: SessionContext, def: ProjectionDef): { finans: boolean; kisisel: boolean } {
   const can = (sub: "finans" | "kisisel") => (def.root.subRows ?? []).includes(sub) && s.projections.includes(`${def.name}.${sub}`);
   return { finans: can("finans"), kisisel: can("kisisel") };
 }
@@ -68,7 +69,7 @@ function decodeCursor(cursor: string): { sortAt: Date; id: string } {
 
 const encodeCursor = (sortAt: Date, id: string): string => Buffer.from(JSON.stringify([sortAt.toISOString(), id])).toString("base64url");
 
-interface Row {
+export interface Row {
   record_id: string;
   data: unknown;
   version_at: Date;
@@ -77,7 +78,7 @@ interface Row {
   kisisel: unknown;
 }
 
-function rowView(r: Row, sub: { finans: boolean; kisisel: boolean }): ProjectionRecord {
+export function rowView(r: Row, sub: { finans: boolean; kisisel: boolean }): ProjectionRecord {
   return {
     id: r.record_id,
     kayit: r.data,
@@ -87,7 +88,8 @@ function rowView(r: Row, sub: { finans: boolean; kisisel: boolean }): Projection
   };
 }
 
-function selectRows(s: SessionContext, def: ProjectionDef, where: Prisma.Sql, limit: number): Prisma.Sql {
+/** Kök + (izinliyse) alt satırlar tek sorguda; imleç `(sort_at, record_id)` azalan (liste ve dışa aktarma aynı sıra). */
+export function selectRows(s: SessionContext, def: ProjectionDef, where: Prisma.Sql, limit: number): Prisma.Sql {
   return Prisma.sql`
     SELECT r.record_id, r.data, r.version_at, r.sort_at, f.data AS finans, k.data AS kisisel
       FROM projection_rows r
@@ -138,14 +140,16 @@ export async function getSnapshot(ctx: CloudContext, s: SessionContext, name: st
   return { projeksiyon: def.name, veri: row.data, surum: row.versionAt.toISOString() };
 }
 
-/** Ekranın üst şeridi: tesis adı · son eşitleme · sözleşme uyarısı · takılan ufuk · görülebilir projeksiyonlar. */
+/** Ekranın üst şeridi: tesis adı · son eşitleme · sözleşme uyarısı · takılan ufuk · görülebilir projeksiyonlar · hizmet aşaması. */
 export async function facilityStatus(ctx: CloudContext, s: SessionContext): Promise<FacilityStatus> {
   const nowMs = ctx.now();
-  const { facility, state } = await withTesis(ctx.app, { tesisId: s.tesisId }, async (tx) => ({
+  const { facility, state, facts } = await withTesis(ctx.app, { tesisId: s.tesisId }, async (tx) => ({
     facility: await tx.facility.findUnique({ where: { tesisId: s.tesisId } }),
     state: await tx.syncState.findUnique({ where: { tesisId: s.tesisId } }),
+    facts: await loadServiceFacts(tx, s.tesisId),
   }));
   const stuckMs = state ? nowMs - state.horizonChangedAt.getTime() : 0;
+  const service = facts ? serviceState(facts, nowMs) : { phase: "KAPALI" as const, endedAt: null, readOnlyUntil: null };
   return {
     tesis: { id: s.tesisId, ad: facility?.name ?? null, saklamaAy: facility?.retentionMonths ?? null },
     hesap: { id: s.accountId, ad: s.accountName, eposta: s.email, izinler: [...s.permissions].sort() },
@@ -159,5 +163,6 @@ export async function facilityStatus(ctx: CloudContext, s: SessionContext): Prom
           fabrikaSurumu: state.appVersion,
         }
       : null,
+    hizmet: { asama: service.phase, bitis: service.endedAt?.toISOString() ?? null, saltOkunurBitis: service.readOnlyUntil?.toISOString() ?? null },
   };
 }

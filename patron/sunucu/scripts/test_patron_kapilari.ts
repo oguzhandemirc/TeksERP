@@ -6,8 +6,9 @@
 //      (kiracı ayarı + kilit her tx'in İLK ifadesi; başka yol RLS kapsamını atlayamaz)
 //   §3 kapsamsız sorgu yok: istemci (`ctx.app` · `ctx.sync` · `this.db` · `db`) üzerinden doğrudan model
 //      ya da ham sorgu çağrısı YOK — hepsi `withTesis/withLookup/withMaintenanceList` tx'inde
-//   §4 budama beyanı: `src`teki HER silme (`deleteMany`/`.delete(`/`DELETE FROM`) `maintenance.ts`te ve
-//      hedefi `PRUNED_TABLES`ta; beyanda olup silme yeri olmayan tablo da KIRMIZI (ölü beyan)
+//   §4 silme beyanı: `src`teki HER silme (`deleteMany`/`.delete(`/`DELETE FROM`) iki beyanlı dosyadan birinde:
+//      `maintenance.ts` (yaşa göre; hedef `PRUNED_TABLES`ta, ölü beyan da KIRMIZI) · `facility-destruction.ts`
+//      (tesis imhası; hedef kümesi = CLOUD_TABLES − RETAINED_TABLES İKİ YÖNLÜ — yeni tablo imhadan kaçamaz)
 //   §5 rota tablosu: yöntem+yol tekil · her yazma rotası işlem kimliği ya da GEREKÇELİ muafiyet beyan
 //      eder, her okuma rotası OKUMA · muafiyet gerekçesi boş olamaz
 //   §6 katalog: izin kodları tekil · her okuma izni en az bir projeksiyon/rapor ailesi açar · yazma ve
@@ -24,7 +25,9 @@ import { PROJECTION_CATALOG } from "../src/catalog/projections";
 import { REPORT_FAMILY_PERMISSION } from "../src/catalog/reports";
 import { API_ROUTES, type ApiRouteDef } from "../src/http/api-routes";
 import { CLOUD_ERROR_CODES } from "../src/lib/errors";
+import { CLOUD_TABLES } from "../src/lib/db-grants";
 import { LOCK_NAMESPACES } from "../src/lib/locks";
+import { DESTRUCTION_STEPS, RETAINED_TABLES } from "../src/services/facility-destruction";
 import { PRUNED_TABLES } from "../src/services/maintenance";
 
 const KOK = path.resolve(__dirname, "..");
@@ -121,12 +124,13 @@ export function silmeHedefleri(metin: string, modeller: ReadonlyMap<string, stri
 }
 
 function budama(): void {
-  console.log("\n§4 budama beyanı");
+  console.log("\n§4 silme beyanı (budama + imha)");
   const modeller = modelTablolari();
   const beyan = new Set(Object.keys(PRUNED_TABLES));
   const bakim = path.join(SRC, "services", "maintenance.ts");
-  const baskaYer = kaynaklar.filter((f) => f !== bakim && silmeHedefleri(readFileSync(f, "utf8"), modeller).tablolar.size > 0).map(goreli);
-  kontrol("§4a silme YALNIZ services/maintenance.ts'te", baskaYer.length === 0, baskaYer.join(", ") || "temiz");
+  const imha = path.join(SRC, "services", "facility-destruction.ts");
+  const baskaYer = kaynaklar.filter((f) => f !== bakim && f !== imha && silmeHedefleri(readFileSync(f, "utf8"), modeller).tablolar.size > 0).map(goreli);
+  kontrol("§4a silme YALNIZ services/maintenance.ts ve services/facility-destruction.ts'te", baskaYer.length === 0, baskaYer.join(", ") || "temiz");
   const h = silmeHedefleri(readFileSync(bakim, "utf8"), modeller);
   const beyansiz = [...h.tablolar].filter((t) => !beyan.has(t));
   const olu = [...beyan].filter((t) => !h.tablolar.has(t));
@@ -134,6 +138,15 @@ function budama(): void {
   kontrol("§4c beyanda olup silme yeri olmayan tablo YOK (ölü beyan)", olu.length === 0, olu.join(",") || "temiz");
   const sonda = silmeHedefleri("await tx.account.deleteMany({})", modeller);
   kontrol("§4d ✓K sonda: hesap silmesi `accounts` olarak ısırır (beyan dışı)", sonda.tablolar.has("accounts") && !beyan.has("accounts"));
+  const imhaHedef = silmeHedefleri(readFileSync(imha, "utf8"), modeller);
+  const kalan = new Set(Object.keys(RETAINED_TABLES));
+  const beklenen = CLOUD_TABLES.filter((t) => !kalan.has(t)).sort();
+  const bulunan = [...imhaHedef.tablolar].sort();
+  kontrol("§4e imha silme kümesi = CLOUD_TABLES − RETAINED_TABLES (iki yönlü)", JSON.stringify(bulunan) === JSON.stringify(beklenen) && imhaHedef.bilinmeyen.length === 0, `${bulunan.length}/${beklenen.length}${imhaHedef.bilinmeyen.length ? ` bilinmeyen ${imhaHedef.bilinmeyen.join(",")}` : ""}`);
+  kontrol("§4f imha adım listesi = silinen tablolar (DESTRUCTION_STEPS birebir)", JSON.stringify(DESTRUCTION_STEPS.map((st) => st.table).sort()) === JSON.stringify(beklenen));
+  kontrol("§4g kalan tablo CLOUD_TABLES'ta ve imhada silinmiyor", [...kalan].every((t) => CLOUD_TABLES.includes(t) && !imhaHedef.tablolar.has(t)));
+  const eksikSonda = CLOUD_TABLES.filter((t) => !kalan.has(t) && t !== "sessions").sort();
+  kontrol("§4h ✓K sonda: bir tablo eksik silinirse küme eşitliği bozulur", JSON.stringify(eksikSonda) !== JSON.stringify(beklenen));
 }
 
 export function rotaIhlalleri(rotalar: readonly Pick<ApiRouteDef, "method" | "path" | "kimlik">[]): string[] {

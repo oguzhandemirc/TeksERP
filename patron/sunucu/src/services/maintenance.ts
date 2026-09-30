@@ -1,7 +1,8 @@
 // BAKIM İŞİ — süreç içi zamanlayıcı (dakikalık tik + günde bir budama). Tesis listesi bakım kipinde,
 // her satır işi o tesisin kiracı kapsamında (RLS) koşar.
 //   · Tik: süresi dolan claim'ler — gelen kutusu ISLENIYOR → BEKLIYOR (fabrikanın makbuzu tekrarı
-//     idempotent kılar); rapor HESAPLANIYOR → BEKLIYOR (bir kez), ikincide HATA `ZAMAN_ASIMI`.
+//     idempotent kılar); rapor HESAPLANIYOR → BEKLIYOR (bir kez), ikincide HATA `ZAMAN_ASIMI`; hizmet
+//     bitiş damgası (`service-lifecycle.ts`).
 //   · Günlük: SAKLAMA (tesis başına 3 · 13 · 25 ay · tümü) + telemetri/ayak izi budaması.
 // Hard delete YALNIZ burada ve YALNIZ `PRUNED_TABLES` beyanındaki tablolarda (bekçi
 // `test_patron_kapilari` ölçer). Budanan hiçbir satır fabrikanın defteri değildir: bulut okuma
@@ -11,6 +12,7 @@ import { allReportProjections } from "../catalog/reports";
 import type { Tx } from "../lib/db";
 import { withMaintenanceList, withTesis } from "../lib/tenant";
 import type { CloudContext } from "./context";
+import { refreshAllServiceEnds } from "./service-lifecycle";
 
 /** Yaşa göre hard delete izni olan tablolar (beyan) → gerekçe. Başka her silme yasak. */
 export const PRUNED_TABLES = {
@@ -192,11 +194,14 @@ export class MaintenanceScheduler {
     this.running = true;
     try {
       await expireClaims(this.ctx, nowMs);
+      const service = await refreshAllServiceEnds(this.ctx, nowMs);
       const day = new Date(nowMs).toISOString().slice(0, 10);
       if (this.lastDailyDay !== day) {
         const n = await runDaily(this.ctx, nowMs);
         this.lastDailyDay = day;
         if (n > 0) console.log(`[patron] bakım: ${n} satır budandı (saklama + telemetri)`);
+        // İmha insan işidir (tutanak): salt okuma süresi dolan tesis her gün hatırlatılır (Ek-6/A §4.3).
+        if (service.awaitingDestruction.length > 0) console.warn(`[patron] imha bekleyen tesis (salt okuma süresi doldu — scripts/tesis.ts imha): ${service.awaitingDestruction.join(", ")}`);
       }
     } catch (err) {
       console.error(`[patron] bakım turu başarısız: ${(err as Error).message}`);

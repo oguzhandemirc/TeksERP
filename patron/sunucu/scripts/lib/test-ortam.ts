@@ -264,6 +264,9 @@ export async function temizleTesis(o: Ortam, tesisId: string): Promise<void> {
     await tx.account.deleteMany({ where: { tesisId } });
     await tx.installation.deleteMany({ where: { tesisId } });
     await tx.facility.deleteMany({ where: { tesisId } });
+    // Değiştirilemez kayıtlar (imha kaydı): tetikleyiciyi YALNIZ bu tx'te susturarak (süper kullanıcı, _test DB).
+    await tx.$executeRaw`SET LOCAL session_replication_role = replica`;
+    await tx.$executeRaw`DELETE FROM facility_destructions WHERE tesis_id = ${tesisId}::uuid`;
   });
 }
 

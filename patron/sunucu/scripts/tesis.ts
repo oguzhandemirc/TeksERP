@@ -6,6 +6,9 @@
 //        --sinif=URETIM --moduller=patron-bulut,production.enabled --bitis=<ISO|yok> [--pasif]
 //   npx tsx scripts/tesis.ts yonetici-davet --tesis=<uuid> --eposta=<e-posta> --ad="Ad Soyad" [--saat=72]
 //   npx tsx scripts/tesis.ts yonetici-yeniden-davet --tesis=<uuid> --eposta=<e-posta> [--saat=72]
+//   npx tsx scripts/tesis.ts imha --tesis=<uuid> --isleyen="Ad Soyad" [--erken-talep=<talep no>] [--uygula]
+//        (Ek-6/A §4.3: KURU KOŞUM varsayılan — tablo başına silinecek satır; `--uygula` tek tx'te siler ve imha
+//        kaydını yazar. Hizmet açıkken ASLA; salt okuma süresi dolmadan yalnız yazılı erken talep numarasıyla.)
 // Tesis/kurulum kimlikleri SATICIDAN gelir (HAK'taki `tesis.id` · `kurulumId`), burada uydurulmaz.
 // Davet belirteci YALNIZ bu komutun çıktısında, BİR KEZ basılır; repoya/loga/denetime yazılmaz.
 // Satıcı iç API'si kurulunca (`KURULUM_KAYNAGI=satici`) kurulum kaydı oradan dolar; bu CLI yine
@@ -15,6 +18,7 @@ import type { LicenseClass } from "@prisma/client";
 import { z } from "zod";
 import { closeDatabase, createDatabase } from "../src/lib/db";
 import { loadEnvFile } from "../src/lib/env";
+import { destroyFacility, sweepAfterDestruction } from "../src/services/facility-destruction";
 import { inviteFacilityAdmin, openFacility, registerInstallation, reinviteAdmin, setFacilityStatus } from "../src/services/vendor-admin.service";
 
 function args(argv: readonly string[]): Record<string, string> {
@@ -85,8 +89,24 @@ async function main(): Promise<void> {
         console.log(`   Davet belirteci (BİR KEZ gösterilir; yöneticiye güvenli kanaldan iletin): ${r.token}`);
         break;
       }
+      case "imha": {
+        const tesisId = uuidArg(a, "tesis");
+        const erken = a["erken-talep"];
+        const r = await destroyFacility(db.prisma, { tesisId, operator: z.string().trim().min(3).max(120).parse(need(a, "isleyen")), apply: a.uygula === "true", ...(erken ? { earlyRequestRef: z.string().trim().min(3).max(60).parse(erken) } : {}) });
+        if (!r.applied) {
+          console.log(`🔎 KURU KOŞUM — tesis ${r.tesisId} (${r.facilityName}) · aşama ${r.phase} · neden ${r.reason}; silinecek satırlar:`);
+          console.log(JSON.stringify(r.counts, null, 2));
+          console.log("   Uygulamak için aynı komutu --uygula ile yeniden koşun.");
+          break;
+        }
+        const late = await sweepAfterDestruction(db.prisma, tesisId);
+        console.log(`✅ imha tamam — tesis ${r.tesisId}; kayıt ${r.recordId}${Object.keys(late).length ? ` (geç düşen satır ikinci geçişte silindi: ${JSON.stringify(late)})` : ""}`);
+        console.log("   İmha tutanağı verisi (Ek-6/A §4.5; satıcı kayıtlarında saklanır, yedekten geri yüklemede yeniden koşulur):");
+        console.log(JSON.stringify({ tesisId: r.tesisId, tesis: r.facilityName, neden: r.reason, hizmetBitisi: r.serviceEndedAt, saltOkunurBitis: r.readOnlyUntil, silinen: r.counts, yedektenDusme: r.backupClearBy, kayitId: r.recordId }, null, 2));
+        break;
+      }
       default:
-        throw new Error("Komut: tesis-ac | tesis-durum | kurulum-kaydet | yonetici-davet | yonetici-yeniden-davet");
+        throw new Error("Komut: tesis-ac | tesis-durum | kurulum-kaydet | yonetici-davet | yonetici-yeniden-davet | imha");
     }
   } finally {
     await closeDatabase(db);
