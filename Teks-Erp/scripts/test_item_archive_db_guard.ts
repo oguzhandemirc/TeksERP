@@ -13,7 +13,7 @@
 // =============================================================================
 import { ItemLifecycleStatus, OrderStatus, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { ensureTestAdmin } from "./fixture-test-user";
+import { ensureTestAdmin, testActorId } from "./fixture-test-user";
 import { itemService } from "../src/routes/item.routes";
 import { DEAD_ROLL_STATUSES } from "../src/services/helpers/live-ref-where.helper";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
@@ -52,7 +52,7 @@ let customerId = "";
 let seq = 0;
 
 async function mkItem(tag: string): Promise<string> {
-  const r = await itemService.create({ name: `${T} ${tag}`, itemType: "FABRIC", unit: "MT" });
+  const r = await itemService.create({ name: `${T} ${tag}`, itemType: "FABRIC", unit: "MT" }, await testActorId());
   const id = (r.data as { id: string }).id;
   itemIds.push(id);
   return id;

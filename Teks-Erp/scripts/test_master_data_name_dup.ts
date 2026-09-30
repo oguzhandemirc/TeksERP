@@ -26,6 +26,7 @@ import {
 } from "../src/services/subcontractor-management.service";
 import { CustomerBranchService } from "../src/services/customer-branch.service";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -159,17 +160,17 @@ async function main() {
     // --- 2) Ürün ---
     const i1 = await itemSvc.create(
       { name: `test dup kumaş ${suffix}`, itemType: "FABRIC", unit: "MT" },
-      undefined,
+      await testActorId(),
     );
     created.itemIds.push((i1.data as { id: string }).id);
     await expectReject(
       "Ürün: aynı ad (case-farklı) 409",
-      () => itemSvc.create({ name: `TEST DUP KUMAŞ ${suffix}`, itemType: "FABRIC", unit: "MT" }, undefined),
+      async () => itemSvc.create({ name: `TEST DUP KUMAŞ ${suffix}`, itemType: "FABRIC", unit: "MT" }, await testActorId()),
       "zaten var",
     );
     const i2 = await itemSvc.create(
       { name: `test dup kumaş b ${suffix}`, itemType: "FABRIC", unit: "MT" },
-      undefined,
+      await testActorId(),
     );
     created.itemIds.push((i2.data as { id: string }).id);
     check("Ürün: farklı ad serbest", true);
@@ -271,13 +272,13 @@ async function main() {
     const cu2 = await customerSvc.create({ name: `Test Dup Müşteri C ${suffix}` }, undefined);
     const cuBId = (cu2.data as { id: string }).id;
     created.customerIds.push(cuBId);
-    await branchSvc.create(cuAId, { name: `Test Şube ${suffix}` }, undefined);
+    await branchSvc.create(cuAId, { name: `Test Şube ${suffix}` }, await testActorId());
     await expectReject(
       "Şube: aynı müşteride aynı ad 409",
-      () => branchSvc.create(cuAId, { name: `TEST ŞUBE ${suffix}` }, undefined),
+      async () => branchSvc.create(cuAId, { name: `TEST ŞUBE ${suffix}` }, await testActorId()),
       "zaten var",
     );
-    await branchSvc.create(cuBId, { name: `Test Şube ${suffix}` }, undefined);
+    await branchSvc.create(cuBId, { name: `Test Şube ${suffix}` }, await testActorId());
     check("Şube: farklı müşteride aynı ad serbest", true);
 
     // --- 8) Tarihsel mükerrer düzenlenebilir kalır ---

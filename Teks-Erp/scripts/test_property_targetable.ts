@@ -32,6 +32,7 @@ import { WorkOrderService } from "../src/services/workorder.service";
 import { RouteService, ROUTE_SERVICE_CONFIG } from "../src/services/route.service";
 import { ItemService } from "../src/services/item.service";
 import { FabricPropertyService } from "../src/services/fabric-property.service";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -163,20 +164,20 @@ async function main() {
     check("rota adımı: FLAG hedef geçer", okRoute.success === true);
 
     // ── 4) Ürün izinli listesi ───────────────────────────────────────────────
-    await expectReject("ürün create: izinli listede CHOICE 400", choice.name, () =>
+    await expectReject("ürün create: izinli listede CHOICE 400", choice.name, async () =>
       itemSvc.create({
         code: `TEST-TGT-ITM2-${ts}`,
         name: `TEST Hedef 2 ${ts}`,
         itemType: "FABRIC",
         allowedPropertyIds: [choice.id],
-      }),
+      }, await testActorId()),
     );
     const okItem = await itemSvc.create({
       code: `TEST-TGT-ITM2-${ts}`,
       name: `TEST Hedef 2 ${ts}`,
       itemType: "FABRIC",
       allowedPropertyIds: [flag.id],
-    });
+    }, await testActorId());
     const okItemId = (okItem.data as { id: string }).id;
     cleanupItemIds.push(okItemId);
     check("ürün create: FLAG izinli geçer", okItem.success === true);

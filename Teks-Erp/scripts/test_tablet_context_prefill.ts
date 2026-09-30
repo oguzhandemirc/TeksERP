@@ -31,6 +31,7 @@ import { getWarpBeamTabletContext } from "../src/services/warp-beam-tablet.servi
 import { runOpenSuggestions } from "../src/services/helpers/tablet-prefill.helper";
 import { machineRunTabletContext } from "../src/services/helpers/machine-run-suggest.helper";
 import { AppError } from "../src/utils/app-error";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -120,7 +121,7 @@ async function main(): Promise<void> {
     const woNull = await createWeavingOrder({ itemId: fabric.id, executionKind: WeavingExecutionKind.IN_HOUSE, warpSpecId: null });
     woIds.push(woNull.data.id);
     check("§3c ⭐ dokuma işi çözgü kartı vermezse kumaş kartının varsayılanı; `null` verirse kartsız (açık tercih korunur)", woDef.data.warpSpecId === spec.id && woNull.data.warpSpecId === null, `${woDef.data.warpSpecId === spec.id} / ${woNull.data.warpSpecId}`);
-    const created = await items.create({ code: `${TAG}-KM3`, name: `${TAG} kumaş 3`, itemType: "FABRIC", warpSpecId: spec.id });
+    const created = await items.create({ code: `${TAG}-KM3`, name: `${TAG} kumaş 3`, itemType: "FABRIC", warpSpecId: spec.id }, await testActorId());
     itemIds.push((created.data as { id: string }).id);
     check("§3d create de kartı yazar (aynı sözleşme)", (created.data as { warpSpecId?: string | null }).warpSpecId === spec.id);
     await prisma.warpSpec.update({ where: { id: spec.id }, data: { isActive: false } });

@@ -285,7 +285,10 @@ export class CustomerService extends BaseService {
     const clean = this.normalizeNameFields(this.sanitizeWriteData(data));
     await this.assertCardNameFree(clean);
     const prismaData = withActor({ ...clean }, userId, "CREATE", "customer");
-    if (Array.isArray(prismaData.branches)) prismaData.branches = { create: prismaData.branches };
+    // İç-içe doğan şubeler de künyeyi aynı aktörle alır (iki-adım yolu `CustomerBranchService.create`).
+    if (Array.isArray(prismaData.branches)) {
+      prismaData.branches = { create: prismaData.branches.map((b: Record<string, unknown>) => withActor(b, userId, "CREATE", "customerBranch")) };
+    }
     const c = (await tx.customer.create({ data: prismaData as never, include: { subcontractor: { select: { id: true, isActive: true } } } })) as unknown as {
       id: string; code: string; name: string; taxNumber: string | null; contactPhone: string | null; address: string | null;
     };

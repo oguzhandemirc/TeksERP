@@ -6,12 +6,7 @@ import path from "path";
 import ts from "typescript";
 
 /** Oluşturanı yazmayan, bilinen ve beyanlı yaratma çağrıları. Anahtar: `<src'ye göre yol>::<model>.<metot>`. */
-export const KUNYE_BORCLARI: Readonly<Record<string, string>> = {
-  "services/customer-branch.service.ts::customerBranch.create":
-    "Şube doğuşu BaseService dışı elle insert; userId parametresi alıyor ama createdById/updatedById yazmıyor.",
-  "services/item.service.ts::item.create":
-    "Ürün kartı doğuşu (kod kilidi + diriltme dalı) elle insert; createdById/updatedById yazmıyor.",
-};
+export const KUNYE_BORCLARI: Readonly<Record<string, string>> = {};
 
 const CREATE_METHODS = new Set(["create", "createMany", "createManyAndReturn", "upsert"]);
 

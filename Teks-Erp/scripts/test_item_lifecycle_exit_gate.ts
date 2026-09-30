@@ -13,7 +13,7 @@
 // iki yönde `warnings[]` ile söyler (1e kararı 2026-09-25 — çapraz kapı reddedildi).
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
-import { ensureTestAdmin } from "./fixture-test-user";
+import { ensureTestAdmin, testActorId } from "./fixture-test-user";
 import { itemService } from "../src/routes/item.routes";
 import { ItemLifecycleStatus } from "@prisma/client";
 import { assertItemUsable } from "../src/services/helpers/item-usage.helper";
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
     original.set(k, row ? row.value : undefined);
   }
   const admin = await ensureTestAdmin();
-  const r = await itemService.create({ name: `${TAG} KART`, itemType: "FABRIC", unit: "MT" });
+  const r = await itemService.create({ name: `${TAG} KART`, itemType: "FABRIC", unit: "MT" }, await testActorId());
   const P = (r.data as { id: string }).id;
   itemIds.push(P);
   await itemService.transitionLifecycle(P, ItemLifecycleStatus.PHASE_OUT, null, admin.id);

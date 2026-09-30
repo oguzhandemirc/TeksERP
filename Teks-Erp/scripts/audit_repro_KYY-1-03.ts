@@ -36,6 +36,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { SubcontractorCategoryService } from "../src/services/subcontractor-management.service";
 import { ItemService } from "../src/services/item.service";
 import { BaseService } from "../src/services/base.service";
+import { testActorId } from "./fixture-test-user";
 
 const STAMP = `ARK103${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 const ROUNDS = 6;
@@ -113,9 +114,10 @@ async function main(): Promise<void> {
     for (let i = 1; i <= ROUNDS; i++) {
       const lower = `${STAMP}i${i}`.toLowerCase().slice(0, 30);
       const upper = lower.toUpperCase();
+      const actor = await testActorId();
       const rs = await Promise.allSettled([
-        itemSvc.create({ code: lower, name: `${STAMP} Kumas A${i}`, itemType: "FABRIC" }),
-        itemSvc.create({ code: upper, name: `${STAMP} Kumas B${i}`, itemType: "FABRIC" }),
+        itemSvc.create({ code: lower, name: `${STAMP} Kumas A${i}`, itemType: "FABRIC" }, actor),
+        itemSvc.create({ code: upper, name: `${STAMP} Kumas B${i}`, itemType: "FABRIC" }, actor),
       ]);
       for (const r of rs) {
         if (r.status === "fulfilled") {

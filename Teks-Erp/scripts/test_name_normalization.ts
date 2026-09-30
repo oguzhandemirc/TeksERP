@@ -19,6 +19,7 @@ import {
   foldColorNameForCompare,
 } from "../src/services/helpers/name-normalize.helper";
 import { buildWhereClause } from "../src/utils/query-parser";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -94,7 +95,7 @@ async function main() {
     // sınanmaya devam eder.
     const itemRes = await itemSvc.create(
       { code: `TST-NRM-${ts}`, name: "tsnrm saha ürünü", itemType: "FABRIC", unit: "MT" },
-      undefined,
+      await testActorId(),
     );
     const item = itemRes.data as { id: string; name: string };
     itemId = item.id;

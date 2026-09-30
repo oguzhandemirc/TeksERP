@@ -33,6 +33,7 @@
 - **[ÇEKİRDEK]** Enforce bekleyen kurulumda `test_db_invariants` §1 / EXPRESSION_UNIQUES satırının KIRMIZI kalması BİLİNÇLİDİR ('enforce bekliyor' sinyali, unutulmasın diye) — bekçiyi bu yüzden daraltma; ad mükerrerini temizlemek mükerrer panelinin ve iş kararının işidir, toplu UPDATE'in değil. · bekçi: `test_db_invariants §1` <sub>(CLAUDE.md:78, CLAUDE.md:81)</sub>
 - **[PROFİL]** "Tükenene kadar" kartın yeni sipariş · açık satırda miktar · yeni üretim planı davranışı kurulum ayarıdır (varsayılan: okutulan toplar · serbest uyarılı · açık); pasif kartta canlı kayıt olmaması (D1) ayara bağlanmaz. · bekçi: `test_item_lifecycle_policy`, `test_item_lifecycle_exit_gate` <sub>(arşiv:2026-09-25)</sub>
 - **[ÇEKİRDEK]** Kimlik alanına (VKN vb.) DB seddi BİLİNÇLİ KONULMAZ: aynı tüzel kişiye ikinci cari kart meşru bir iş kararı olabilir; kimlik alanı sektörde EŞLEŞTİRME SİNYALİDİR, tekillik kısıtı değil — aday kuyruğa düşer, yazma engellenmez. <sub>(CLAUDE.md:80)</sub>
+- **[ÇEKİRDEK]** Ana veri kartının oluşturanı doğuşta kolona yazılır: şube (`CustomerBranchService.create` · cari kartıyla iç-içe doğan şube) ve ürün kartı (`ItemService.create` · saha hızlı desen) aktörü ZORUNLU alır ve `withActor` ile `createdById`/`updatedById` yazar; aktörsüz doğuş sessiz NULL değil 401; diriltme ve güncelleme yalnız `updatedById` yazar; geçmiş NULL backfill edilmez. · bekçi: `test_record_provenance` §7/§9 <sub>(arşiv:2026-09-30 KÜN)</sub>
 
 ## Backend
 
@@ -82,3 +83,4 @@ Backend: `test_color_name_dup`, `test_tr_case`, `test_consistency`, `test_data_i
 - 2026-08-25 · 2026-08-25 — Prod oturumunun üç "dev'de yapılacaklar" notu teyit edildi ve uygulandı (kur.ps1 · renk seddi · d — `CLAUDE-NOT-ARSIVI.md:810-839`
 - 2026-09-17 · 2026-09-17 — Master veri kimlik tekilliği: tekillik TABLOLAR ARASI sorulur [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-17 master veri
 - 2026-09-25 · 2026-09-25 — Ürün kartı yaşam döngüsü ve ana veri arşiv kapısı (MV-06) — `CLAUDE-NOT-ARSIVI.md` §2026-09-25 ürün yaşam döngüsü
+- 2026-09-30 · 2026-09-30 — Şube ve ürün kartının oluşturanı doğuşta (KÜN) [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-30 şube ve ürün kartı oluşturanı

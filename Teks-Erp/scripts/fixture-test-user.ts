@@ -138,3 +138,20 @@ export async function ensureTestAdmin(opts?: {
   // çalıştığımız seed bağımlılığının ta kendisi.
   return { id: user.id, username: TEST_ADMIN_USERNAME, password };
 }
+
+let actorIdMemo: Promise<string> | null = null;
+/**
+ * Doğuşta aktör isteyen servis çağrıları (künye) için fikstür aktörü: test yöneticisinin id'si.
+ * Parolaya, izinlere ve token sürümüne DOKUNMAZ — bekçinin açık oturumu düşmesin.
+ */
+export function testActorId(): Promise<string> {
+  actorIdMemo ??= prisma.user
+    .upsert({
+      where: { username: TEST_ADMIN_USERNAME },
+      update: {},
+      create: { username: TEST_ADMIN_USERNAME, passwordHash: "!", fullName: "Test Yöneticisi (fixture)", isActive: true },
+      select: { id: true },
+    })
+    .then((u) => u.id);
+  return actorIdMemo;
+}

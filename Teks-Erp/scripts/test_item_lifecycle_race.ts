@@ -9,7 +9,7 @@
 // =============================================================================
 import { ItemLifecycleStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { ensureTestAdmin } from "./fixture-test-user";
+import { ensureTestAdmin, testActorId } from "./fixture-test-user";
 import { itemService } from "../src/routes/item.routes";
 import { InventoryService } from "../src/services/inventory.service";
 import { ITEM_DEAD_ROLL_STATUSES } from "../src/services/helpers/item-lifecycle.helper";
@@ -43,7 +43,7 @@ async function main(): Promise<void> {
   let ihlal = 0;
   let sunucuHatasi = 0;
   for (let i = 0; i < TURLAR; i++) {
-    const r = await itemService.create({ name: `${TAG} ${i}`, itemType: "FABRIC", unit: "MT" });
+    const r = await itemService.create({ name: `${TAG} ${i}`, itemType: "FABRIC", unit: "MT" }, await testActorId());
     const id = (r.data as { id: string }).id;
     itemIds.push(id);
     // Kademeli gecikme: arşiv girişin tx'i açıldıktan SONRA da gelsin — yoksa hep arşiv

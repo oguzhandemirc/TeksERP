@@ -7,8 +7,10 @@
 
 import { parseDestinationInput } from "./helpers/shipment-destination.helper";
 import prisma from "../lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { normalizeDisplayName } from "./helpers/name-normalize.helper";
 import { AuditService } from "./audit.service";
+import { requireActorId, withActor } from "./base.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
@@ -119,8 +121,10 @@ export class CustomerBranchService {
   async create(
     customerId: string,
     data: CustomerBranchInput,
-    userId?: string
+    userId: string | undefined,
   ): Promise<ApiResponse<unknown>> {
+    // Oluşturan doğuşta yazılır (künye); eksik aktör sessiz NULL değil 401.
+    const actorId = requireActorId(userId, "Şube");
     const customer = await prisma.customer.findUnique({
       where: { id: customerId },
       select: { id: true, isActive: true },
@@ -135,7 +139,7 @@ export class CustomerBranchService {
     const defaultDestination = parseDestinationInput(data.defaultDestination, "Şube sevk yönü") ?? null;
 
     const created = await prisma.customerBranch.create({
-      data: {
+      data: withActor({
         customerId,
         code,
         name,
@@ -147,11 +151,11 @@ export class CustomerBranchService {
         notes: data.notes ?? null,
         isActive: data.isActive ?? true,
         defaultDestination,
-      },
+      }, actorId, "CREATE", "customerBranch") as Prisma.CustomerBranchUncheckedCreateInput,
     });
 
     await AuditService.log({
-      userId,
+      userId: actorId,
       action: "CREATE",
       tableName: TABLE,
       recordId: created.id,
@@ -197,7 +201,7 @@ export class CustomerBranchService {
 
     const updated = await prisma.customerBranch.update({
       where: { id },
-      data: {
+      data: withActor({
         code,
         name,
         address: data.address === undefined ? undefined : data.address,
@@ -211,7 +215,7 @@ export class CustomerBranchService {
         isActive: data.isActive,
         // Planlı sevkiyatlar kendi yönünü dondurdu; şube yönü değişince onlar değişmez.
         defaultDestination,
-      },
+      }, userId, "UPDATE", "customerBranch") as Prisma.CustomerBranchUncheckedUpdateInput,
     });
 
     await AuditService.log({
@@ -256,7 +260,7 @@ export class CustomerBranchService {
 
     await prisma.customerBranch.update({
       where: { id },
-      data: { isActive: false },
+      data: withActor({ isActive: false }, userId, "UPDATE", "customerBranch"),
     });
 
     await AuditService.log({

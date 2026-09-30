@@ -69,6 +69,15 @@ export function withActor(
   return { ...data, updatedById: userId };
 }
 
+/**
+ * Elle insert eden doğuş yolunda aktör ZORUNLU: oluşturansız kayıt sonradan audit'ten türetilemez
+ * (künye audit'ten okunmaz), yani eksik aktör sessiz NULL değil 401'dir.
+ */
+export function requireActorId(userId: string | undefined, what: string): string {
+  if (typeof userId === "string" && userId.length > 0) return userId;
+  throw AppError.unauthorized(`${what} oluşturan kullanıcı olmadan kaydedilemez (oturum kimliği yok)`);
+}
+
 
 import {
   decideCodeUniqueness,
