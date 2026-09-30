@@ -6,6 +6,7 @@
 > |---|---|---|
 > | 1 | 2026-09-30, D1 ilk dondurma | bildirim `tekserp-surum`, kira `guncelleme`, karar, rapor, ortak vektörler |
 > | **2** | 2026-10-01, D1 (bu belgenin §1.6'sı) | **PG eki (D4 isteği, `KENDI-POSTGRESQL.md` §8):** bildirimin `pg` bloğu `{cizgi, enAz, hedef}` oldu (1'deki `{gerekenSurum, paket}` KALKTI — yayınlanmış bildirim yoktu, tel `v` 1 kalır); PG paketi AYRI imzalı künyeyle (`tekserp-pg`) `/<kanal>/backend/pg/<sürüm>-<derleme>/`; `PG_BAGI` kodu; karar girdisi `pgSurumu` → `pg {kip, surum, derleme}`; farklı ANA sürümlü PG hiçbir yoldan kurulmaz. Vektörler yeniden üretildi — D2 bu sürüme göre yazar. |
+> | 3 | 2026-10-01, D1 (§3.2 — yalnız EKLER) | Fabrika API'si uygulandı: `UpdateStatus`a `yerel` (güncelleyicinin durum dosyası) + `gecmis` (son backend denemeleri) eklendi; rapor ve panel görünümü D2'nin `durum.json` + `gecmis.jsonl` (§5) biçiminden TEK eşlemeyle doğar (`src/services/update-status.service.ts`). Tel ve vektörler DEĞİŞMEDİ. |
 > **Tek kaynak KOD'dur:** `Teks-Erp/src/lib/license/protocol/guncelleme.ts` (bildirim · paket bağı · sürüm karşılaştırma · karar sözlüğü · rapor) + `protocol/guncelleme-ortak.ts` (paket künyesi · PAKET anahtar kümesi · işaretçi) + `protocol/guncelleme-pg.ts` (PG gereksinimi · PG künyesi · PG bağı) + `protocol/guncelleme-karar.ts` (pencere aritmetiği · etkin politika · karar) + `protocol/belgeler.ts` (`TYP.SURUM`, `UPDATE_MODES`, `LeaseUpdatePolicySchema`, `defaultUpdatePolicy`, `DOWNLOAD_PRODUCTS`, `ReleaseVersionSchema`) + `protocol/uclar.ts` (`PollRequestSchema.guncelleme`). Satıcı ve patron aynası bayt-eşit (`test_lisans_protokol_aynasi`). Belge ayrışırsa kod kazanır.
 > **Ortak test vektörleri:** `Teks-Erp/native/test-vektorleri/guncelleme-surum.json` · `guncelleme-kira.json` · `guncelleme-karar.json` · `guncelleme-rapor.json` — üretici `npx tsx scripts/test_guncelleme_protokol.ts --vektor-yaz` (Teks-Erp'te), elle düzenlenmez; bekçi her kaydın beklenenini bugünkü TS ile yeniden hesaplar. Rust güncelleyici aynı dosyaları okur (kayıt başına `{vektor, beklenen}`; hata metni değil yalnız `code` karşılaştırılır).
 > **Üst plan:** Dağıtım v2 (kullanıcı onayı 2026-09-30): backend Windows hizmeti, pm2 kalkar; güncelleyici baştan Rust; backend sürümleri kanal bazlı; politika kurulum başına (OTOMATIK · ONAYLI · DONDUR).
@@ -153,7 +154,7 @@ Kurulu backend sürümü ayrıca taşınmaz: `ortam.uygulamaSurum` odur. Rapor y
 | `GET /api/guncelleme/durum` | `license:view` ∨ `license:manage` | — | `UpdateStatus` (aşağıda) |
 
 ```ts
-interface UpdateStatus {
+interface UpdateStatus {                                 // src/services/update-status.service.ts (tek eşleme)
   kuruluSurum: string;                                   // çalışan backend
   kanal: string | null;                                  // kiranın kanalı
   politika: { kip: "OTOMATIK" | "ONAYLI" | "DONDUR"; pencere: UpdateWindowRule | null; hedefSurum: string | null;
@@ -164,8 +165,15 @@ interface UpdateStatus {
   guncelleyici: { durum: "CALISIYOR" | "DURDU" | "YOK" | "OLCULEMEDI"; surum: string | null };
   bekleyen: { surum: string; karar: string; neden: string | null } | null;
   son: UpdateResult | null;
+  // sürüm 3 (yalnız EKLER) — panel ekranı (D7) için:
+  yerel: { durum: string; surum: string | null; kuruluSurum: string | null; adim: string | null; hataKodu: string | null;
+           mesaj: string | null; ilerleme: { indirilen: number; toplam: number } | null; planlanan: string | null;
+           zaman: string | null } | null;                // güncelleyicinin `durum.json`u (§5.2); okunamıyorsa null
+  gecmis: UpdateResult[];                                // son backend denemeleri, en yeni önce (≤ 20; §5.3)
 }
 ```
+
+**Güncelleyici dosyalarından eşleme (TEK yer: `update-status.service.ts`; dosyalar `src/lib/license/updater-ipc.ts` ile okunur).** Kök: `TEKSERP_GUNCELLEME_DIZINI` (mutlak; geliştirme/test) > Windows'ta `%ProgramData%\TeksERP\guncelleme` > yok. Dosya düz olmalı (bağlantı İZLENMEZ), `durum.json` ≤ 64 KB, geçmişin son 64 KB'ı okunur. `guncelleyici.durum`: dosya yok → `YOK` · okunamıyor/biçimsiz → `OLCULEMEDI` · `durum = HATA` (insan gerekir) → `DURDU` · diğer → `CALISIYOR` (canlılık SCM'den ölçülmez; `durum.json` yalnız değişince yazılır). `bekleyen` (yalnız `BEKLIYOR · INDIRILIYOR · HAZIR · UYGULANIYOR` ve `surum ≠ kuruluSurum`): `UYGULANIYOR` → `KUR` · `politika.izin = false` ya da `BEKLIYOR` + `hataKodu` → güncelleyici kodu rapor sözlüğüne (`POLITIKA_DONDUR` → `DONDURULDU/POLITIKA` · `YAPTIRIM_DONUK` → `DONDURULDU/YAPTIRIM` · `KIRA_*` → `DONDURULDU/KIRA_YOK` · `SURUM_IZINSIZ` → `UYGUN_DEGIL/HEDEF_DISI` · `KAYNAK_SURUM_ESKI` · `PG_SURUM_ESKI` → `PG_SURUMU_ESKI` · `PG_BUYUK_SURUM` → `PG_ANA_SURUM`; tanınmayan kod `UYGUN_DEGIL` + kodun kendisi) · `ONAYLI` + planlanmamış → `ONAY_BEKLIYOR` · diğer → `PENCERE_BEKLIYOR`. `son`/`gecmis`: yalnız `urun = backend` satırları; `HATA` → `BASARISIZ`, kodsuz başarısızlık `BILINMEYEN`; `kayitId` = `islemId` (UUID değilse satır atlanır); `veriGeriYuklendi` satırda açıkça `true` değilse `false`. Rapor `UpdateReportSchema`dan geçmezse GÖNDERİLMEZ (yoklama bu yüzden düşmez); güncelleyici yoksa alan hiç gitmez. Bekçi: `test_guncelleme_durumu` · `test_lisans_yoklama_allowlist` §5.
 
 Onay yazan uç (`POST /api/guncelleme/onay` — `{clientToken, surum, zamanlama}`) niyet dosyasının biçimi (§4, D2) donunca bağlanır; izin ve denetim satırı o dilimde.
 

@@ -15,6 +15,8 @@
 // kurulum kimliği eklendi · A3 iş hatası dağılımına hata mesajı eklendi · (F1a) A4 ortamdan DB
 // kimliği düştü (§1d) · A5 yoklamadan satıcı saati sapması düştü (§1d) · (3d-2) A6 kurulum kaydı şeması
 // gevşetildi (`looseObject`): dosya yolu taşıyan satır gövdeye girdi → §1b · §2c · §4a/b/c kırmızı (5).
+// (Dağıtım v2) §5 güncelleme raporu: güncelleyicinin durum/geçmiş dosyası taklit edilir; rapor beyanlı
+// anahtarlarla gider, güncelleyicinin serbest iletisi ve onaylayanın adı GİTMEZ, dosya yoksa alan yok.
 // =============================================================================
 import os from "node:os";
 import path from "node:path";
@@ -61,6 +63,9 @@ const IZINLI_ANAHTARLAR = new Set([
   "gozlem", "reddedilecekIstek", "reddedilecekModul",
   "kurulumKayitlari", "kayitId", "tarih", "commit", "paketOzeti", "oncekiSurum", "yeniSurum", "migrationSayisi",
   "yeniMigrationSayisi", "geriDonus", "damga", "kod", "veri", "veriSifreli",
+  // Dağıtım v2 güncelleme raporu (GUNCELLEYICI.md §3.1): dilim · güncelleyici durumu · bekleyen karar · son sonuç.
+  "guncelleme", "saatDilimi", "guncelleyici", "bekleyen", "karar", "neden", "son", "hedefSurum", "kaynakSurum",
+  "sonuc", "baslangic", "bitis", "veriGeriYuklendi",
 ]);
 
 function anahtarlar(deger: unknown, yol: string, out: string[]): string[] {
@@ -87,6 +92,21 @@ function kayit(kayitId: string, ek: Record<string, unknown> = {}): string {
     geriDonus: { damga: "20260929_213000", kod: true, veri: true, veriSifreli: true }, ...ek,
   });
 }
+// Güncelleyicinin durum dizini taklidi (D2 §5): serbest ileti ve onaylayan adı dosyada VAR, gövdede olmamalı.
+const GUNCELLEYICI = path.join(KOK, "guncelleme");
+const ISLEM = randomUUID();
+fs.mkdirSync(path.join(GUNCELLEYICI, "durum"), { recursive: true });
+fs.writeFileSync(path.join(GUNCELLEYICI, "durum", "durum.json"), JSON.stringify({
+  v: 1, durum: "HAZIR", urun: "backend", surum: "2.15.0", kaynakSurum: "2.14.0", kuruluSurum: "2.14.0", adim: null, hataKodu: null,
+  mesaj: "GIZLI-GUNCELLEYICI-ILETISI C:\\TeksERP\\surumler", niyetId: "n1", islemId: null, ilerleme: null, planlanan: null,
+  politika: { kip: "ONAYLI", izin: true, neden: null }, guncelleyiciSurum: "0.1.0", zaman: "2026-09-30T20:07:12.000Z",
+}));
+fs.writeFileSync(path.join(GUNCELLEYICI, "durum", "gecmis.jsonl"), JSON.stringify({
+  v: 1, islemId: ISLEM, niyetId: "n0", urun: "backend", kaynakSurum: "2.13.1", surum: "2.14.0", sonuc: "GERI_DONDU", hataKodu: "SAGLIK_ZAMAN_ASIMI",
+  basladi: "2026-09-29T23:00:00.000Z", bitti: "2026-09-29T23:20:00.000Z", gocSayisi: { once: 380, sonra: 384 }, yedek: ISLEM,
+  onay: { kullaniciId: randomUUID(), ad: "Onaylayan-Kisi-Adi", zaman: "2026-09-29T22:58:00Z", planlanan: null },
+}) + "\n");
+process.env.TEKSERP_GUNCELLEME_DIZINI = GUNCELLEYICI;
 // BOM + bozuk satır + allowlist dışı alanlı satır (dosya adı taşıyor) + aynı kaydın ikinci hâli.
 fs.writeFileSync(GECMIS, [
   "\uFEFF" + kayit(KAYIT_A, { yeniSurum: "2.11.0" }), "{bozuk", kayit(randomUUID(), { yol: "C:\\TeksERP\\premigrate_x.dump" }),
@@ -171,6 +191,16 @@ async function main(): Promise<void> {
     fs.rmSync(GECMIS);
     const govde2 = await buildPollBody();
     check("§4d dosya yoksa alan HİÇ gitmez (eski satıcı uyumu)", !("kurulumKayitlari" in govde2));
+
+    console.log("\n§5 — güncelleme raporu (Dağıtım v2): allowlist, serbest metin yok, dosya yoksa alan yok");
+    const g = govde.guncelleme;
+    check("§5a ⭐ rapor gövdede: güncelleyici çalışıyor, onay bekleyen 2.15.0, son deneme geri döndü (kodlu)",
+      g?.guncelleyici.durum === "CALISIYOR" && g.bekleyen?.surum === "2.15.0" && g.bekleyen.karar === "ONAY_BEKLIYOR" &&
+      g.son?.kayitId === ISLEM && g.son.sonuc === "GERI_DONDU" && g.son.kod === "SAGLIK_ZAMAN_ASIMI", JSON.stringify(g));
+    check("§5b ⭐ güncelleyicinin serbest iletisi ve onaylayanın adı gövdede YOK", !metin.includes("GIZLI-GUNCELLEYICI-ILETISI") && !metin.includes("Onaylayan-Kisi-Adi"));
+    fs.rmSync(GUNCELLEYICI, { recursive: true, force: true });
+    const govde3 = await buildPollBody();
+    check("§5c güncelleyici yoksa alan HİÇ gitmez (eski satıcı uyumu)", !("guncelleme" in govde3));
   } catch (e) {
     fail++;
     console.log(`❌ beklenmeyen hata — ${e instanceof Error ? e.stack : String(e)}`);

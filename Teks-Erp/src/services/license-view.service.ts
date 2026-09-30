@@ -6,6 +6,7 @@ import { effectiveProxy, maskProxyUrl, nodeSupportsProxyEnv, type ProxySource } 
 import {
   msToIso,
   parseJws,
+  type DownloadProduct,
   type EntitlementDoc,
   type LeaseDoc,
   type LicenseClass,
@@ -302,7 +303,7 @@ export function decideDownloadToken(g: {
   return { kind: "ok", token: { yolOneki: token.yolOneki, belirtec: token.belirtec, gecerlilikSonu: exp }, nudge: expMs - g.nowMs < DOWNLOAD_TOKEN_REFRESH_MARGIN_MS };
 }
 
-export function getDownloadToken(g: { urun: "electron" | "mobil"; kanal?: string | null }): LicenseDownloadToken {
+export function getDownloadToken(g: { urun: DownloadProduct; kanal?: string | null }): LicenseDownloadToken {
   const snap = getLicenseSnapshot();
   const kanal = g.kanal ?? snap.lease?.document.kanal.kod ?? null;
   const d = decideDownloadToken({

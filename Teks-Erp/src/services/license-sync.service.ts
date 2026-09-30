@@ -36,6 +36,7 @@ import {
 } from "../lib/license/runtime";
 import { evaluateLicenseTransitions } from "./license-trail.service";
 import { syncSupportAfterPoll } from "./support-sync.service";
+import { updateReportField } from "./update-status.service";
 import {
   buildEnvironment,
   currentFingerprintDigest,
@@ -115,6 +116,8 @@ export async function buildPollBody(nowMs: number = Date.now()): Promise<ReturnT
     gozlem: peekObservationCounters(),
     // Kurulum kaydı yoksa alan hiç gitmez: eski satıcı KATI şemayla tanımadığı anahtarı reddeder.
     ...installRecordsField(),
+    // Güncelleyici yoksa ya da rapor şemadan geçmezse alan hiç gitmez (yoklama bu yüzden düşmez).
+    ...updateReportField(),
   });
 }
 

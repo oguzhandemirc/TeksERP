@@ -47,7 +47,7 @@ export const TABLET_ANAHTARLARI = ['androidPaket', 'gorunenAd', 'erpAdresi', 'ru
  * Backend paketinin (paketle.ps1 -Musteri <kod>) müşteriye özel dağıtım kimliği. Faz 2b:
  *   · urunAdi — /health + PAKET.json'da görünen backend adı (filigran; her kanalda AYRIK);
  *   · pm2Ad   — sunucudaki pm2 süreç adı (TEKSERP_PM2_AD; iki kurulum çakışmasın — her kanalda AYRIK);
- *   · hizmetAdi — backend'in Windows hizmet adı (Dağıtım v2, TEKSERP_HIZMET_AD; aynı makinede iki kanal yan yana —
+ *   · hizmetAdi — backend'in Windows hizmet adı (Dağıtım v2, TEKSERP_HIZMET_ADI — hizmet konağının ortam adıyla aynı; aynı makinede iki kanal yan yana —
  *     her kanalda AYRIK, Windows hizmet adı büyük/küçük harf duyarsız olduğu için duyarsız ölçülür).
  * DAVRANIŞ TAŞIMAZ: bayrak/ayar değil, dağıtım kimliği (feed'ler gibi). Backend YAYIN yolları
  * (feed · son.json · VDS · defter) panel/tablet gibi `yayin` bloğundadır (Dağıtım v2, `deploy/backend-yayinla.mjs`).
@@ -454,7 +454,7 @@ export function backendPaketleAyarlari(kod, kanal) {
   return {
     TEKSERP_PM2_AD: kanal.backend.pm2Ad,
     TEKSERP_BACKEND_URUN: kanal.backend.urunAdi,
-    TEKSERP_HIZMET_AD: kanal.backend.hizmetAdi,
+    TEKSERP_HIZMET_ADI: kanal.backend.hizmetAdi,
   };
 }
 
