@@ -2,7 +2,7 @@
 
 > **Durum (2026-09-29):** hazırlık satıcısı tekserp-vds'te **KURULU** — `ORTAM=hazirlik`, **geri döngü kipinde** (§4a; Tailscale kullanıcı onayı bekliyor), imaj `tekserp-satici:0ca31403525a`, `https://lisans-test.etkiliyazilim.com` yanıt veriyor, portal Mac'ten `portal-baglan.mjs` ile. Kurulum kaydı ve ölçümler §12. Kullanıcıya kalan: Tailscale onayı (§4) ve ana kipe geçiş (§4a), sudo gerektiren adımlar (§12 "sudo'suz kurulum").
 > Yapıtlar: [`deploy/satici/`](../../deploy/satici/) (compose · Dockerfile · imaj derleme · yalıtım denetimi · VDS birimi). Protokol: [`LISANS-PROTOKOLU.md`](../design/LISANS-PROTOKOLU.md). Alan kuralları: [`kurallar/lisans.md`](../kurallar/lisans.md). Sunucu envanteri: [`SUNUCU-ENVANTERI.md`](SUNUCU-ENVANTERI.md).
-> **Üretim (2026-09-30):** `ORTAM=uretim` · `lisans.etkiliyazilim.com` — §13'te HAZIRLANDI, UYGULANMADI; anahtarlar törenden ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md)).
+> **Üretim (2026-09-30):** `ORTAM=uretim` · `lisans.etkiliyazilim.com` — §13'te HAZIRLANDI, UYGULANMADI; anahtar töreni YAPILDI 2026-09-30 ([`URETIM-SATICI-TOREN.md`](URETIM-SATICI-TOREN.md) §7), üretim kökü + PAKET anahtarı güven çapasına yazıldı (çapa dilimi `lisans/capa`; açık yarılar §10).
 > **Değişmez:** her VDS yazımından ÖNCE ve SONRA `deploy/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur.
 
 ## 0. Kapsam
@@ -372,6 +372,11 @@ Etkinleşmemiş kurulum hiçbir durumda dışarı istek atmaz (`test_lisans_moto
 | `alt-hazirlik-2026-1` | ALT (kira) | TEST · DEMO | anahtar künyesinde (`/portal/api`) | 2026-09-29 → 2027-03-28 |
 | `ind-hazirlik-2026` | İNDİRME | TEST · DEMO | `olL5-kJO9x2ll70S07upNYejiB1-pim7IfU7wFPnGlw` (CF Worker, Faz 3a) | 2026-09-29 → 2027-09-29 |
 | `satici` | yedek alıcısı (.tkenc) | — | parmak izi `9795275bc12a5faa` | — |
+| `kok-2026-1` | ÜRETİM kökü (parolalı; tören 2026-09-30) | URETIM · TEST · DR · DEMO · BAYI · BARINDIRILAN | `sPveT3g3QhV8F_-xN2ZF0MVXFX1HHSiYzZ1GHYbPhEY` | süresiz (çapada) |
+| `alt-2026-1` | ALT (kira, üretim) | kökün altı sınıfı | anahtar künyesinde (`/portal/api`) · ilk 8 `6goSeQri` | 2026-09-30 → 2027-03-29 |
+| `ind-2026` | İNDİRME (üretim) | kökün sınıfları (`anahtar.ts` varsayılanı; künye sınıf yazmaz) | `ckusT12f_3VBSKC2b0nnB-UWbalN9BtlR5AOWaZbSwE` (CF Worker — `URETIM-SATICI-TOREN.md` §5.3) | 2026-09-30 → 2027-09-30 |
+| `paket-2026` | PAKET — korumalı paketin bütünlük listesi (parolalı; tören 2026-09-30) | — (üretim kid'i; sınıf kısıtı yok) | `j7xjeBy3BGQu38IZrvaaJJFcQ0OJCp22z8fUNiYwaCM` | çapada; yıllık rotasyon (`paket-2027`) |
+| `satici-uretim-mac` · `satici-uretim-kurtarma` | üretim satıcısı yedek alıcıları (.tkenc) | — | parmak izi `ff7b57fd2d1d2361` · `161678a8ce9dec7f` | — |
 
 ## 11. Açık riskler
 

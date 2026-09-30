@@ -22,6 +22,11 @@ export const ROOT_PUBLIC_KEYS: readonly RootKey[] = Object.freeze([
     x: "705hChzAL045Gp-XoG6SaUKAW8muK1SFcW0Vpwhf-mo",
     classes: Object.freeze<LicenseClass[]>(["TEST", "DEMO"]),
   }),
+  Object.freeze({
+    kid: "kok-2026-1",
+    x: "sPveT3g3QhV8F_-xN2ZF0MVXFX1HHSiYzZ1GHYbPhEY",
+    classes: Object.freeze<LicenseClass[]>(["URETIM", "TEST", "DR", "DEMO", "BAYI", "BARINDIRILAN"]),
+  }),
 ]);
 
 /** Hazırlık kökü ÜRETİM imzalayamaz; çapa bu kümeyi aşan bir hazırlık kökünü reddeder. */
