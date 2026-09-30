@@ -477,6 +477,13 @@ Traefik hiçbir geri almada yeniden başlatılmaz; kenar ağı satırı yerinde 
 - **Sonra:** aşama 5 ✅✅ · aşama 3 ✅✅✅ · `vds-dogrula` ✅ AYNI (420) her yazım öncesi/sonrası · Traefik, `tekserp-guncelleme`, `docker-socket-proxy` başlangıç zamanları değişmedi. adnansahin kanalında hiçbir betik koşmadı.
 - **Geri alma:** electron-updater sürüm düşürmez → ileri yayın `1.4.2`; tablet `ota/54.2/manifest` üzerine `manifest-1790729819552` (1.0.13) ileri yayın.
 
+## 10j. Uygulama kaydı — 2026-09-30 (P4: §7 etkinleştirme — araç ikinci sistem hesabını REDDETTİ · §8 kısmi)
+
+- **Karar ve sonuç:** kimlik engeli için yönetici kararı "bizim adımıza AYRI bir sistem hesabı aç" idi. Hedefte `2.12.1-prova.4b8d916` paketinin `dist\tools\superadmin-olustur.cjs`i gerçek terminalde koşuldu (`ssh -tt` + `expect`, `log_user 0`, soru sorarsa Ctrl-C). Sonuç `ZATEN KURULU`, çıkış 0: araç soru sormadı, hiçbir şey yazmadı. Kaynak (`scripts/superadmin-olustur.ts`, kural ①) bir `isSystemAccount` hesabı varken İKİNCİSİNE yol vermez. Tek diğer yol `--rotate`tır; o da mevcut hesabın parolasını, PIN'ini ve 2FA'sını değiştirir, oturumlarını düşürür. Bu zorlama sayıldı ve UYGULANMADI. DB'ye elle yazım da yok. Önce ve sonra ölçüm aynı: sistem hesabı 1 (aktif 1), kullanıcı 12.
+- **§7 KULLANICI ADIMI kaldı.** Etkinleştirme `license:manage` taşıyan bir hesapla yapılır: `node ~/.tekserp/testfabrika-t4/kullanici-etkinlestir.mjs` (gerçek terminal; parola gizli sorulur). Bu, O4 betiğinin kalıcı kopyasıdır; tek eki, 200 yanıtından sonra tek kullanımlık kod dosyasını silmesidir. Panel yolu (§7.1) ile T5, gözlem kipinde yalnız sistem hesabına görünür (`lib/license/visibility.ts`).
+- **§8:** T3 ✅ vekil ölçüm (2.12.1 kurulumundan sonra yeniden): rol `tekserp`, `pg_control_system()` EXECUTE var, süper kullanıcı değil. Modüller değişmedi: yalnız `production.enabled`, HAK ile aynı. T6 ✅ (aşama 8.4): adnansahin AYNI (420 dosya), kök electron AYNI, defter/nginx/compose AYNI. 7.1, 7.2, 8.1 ve 8.2 belirteç yok diye ÖLÇÜLEMEDİ. T2 yapılmadı (canlı).
+- **T4 bekleyicisi kalıcı dizine taşındı:** O4 bekleyicisi çıktısını geçici dizine yazıyordu; gün dönümünde silinme riski vardı. Henüz örnek almamıştı. Aynı mantıkla `~/.tekserp/testfabrika-t4/t4-bekle-p4.mjs` başlatıldı (log `bekle.log`, pid `bekle.pid`, çıktı `gozlem-<damga>.tsv`, 0600), eski süreç PID ile durduruldu. Belirteç dosyası ve `kurulum.etkin=true` görülünce 24 saatlik `t4-gozlem --olc` kendiliğinden başlar.
+
 ## 11. A2 önkoşul borçları (ölçüldü 2026-09-30 · G1–G3 + G5 iniş A2 I7'de KAPANDI)
 
 | # | Borç | Etki | Durum |
