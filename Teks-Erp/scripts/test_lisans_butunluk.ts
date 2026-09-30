@@ -5,7 +5,8 @@
 // anahtarı gerekmez). NE ÖLÇER:
 //   §1 imzalı yük + liste dosyası: geçerli · kurcalanmış · eksik · FAZLA (kapsamda / dışında /
 //      node_modules / sembolik bağ; ÇEKİRDEKTE, TS ikinci katman) · migration SQL · liste dosyası
-//      kurcalı/silinmiş · imzasız · yanlış anahtar · liste yok · hazırlık anahtarı ÜRETİM'de · filigran
+//      kurcalı/silinmiş · imzasız · yanlış anahtar · liste yok · hazırlık anahtarı ÜRETİM'de · filigran ·
+//      yeni HAK: aynı ölçümün kararı yeni sınıfla (`decideForClass`) o sınıfla tam denetime eşit (§1q–§1s)
 //   §2 çapa: PACKAGE_PUBLIC_KEYS yalnız paket kid'i, hazırlık kid'i sınıf kuralında; kapsam
 //   §3 merdiven + künye + çapa kalıcılığı (saf): uyuşma damgayı silmez, yalnız yeni paketId sıfırlar
 //   §4 native'e bağlama: motor çekirdekten geçer; zorunlu kipte TS'e düşme YOK; `.node` dlopen
@@ -28,7 +29,7 @@ import { INTEGRITY_TYP, PACKAGE_PUBLIC_KEYS, verifyIntegrity, type PackageKey } 
 import { INTEGRITY_FILE, INTEGRITY_SCOPE_DIRS, INTEGRITY_SCOPE_FILES, isStagingPackageKid } from "../src/lib/license/integrity-scope";
 import { INTEGRITY_LIST_FILE } from "../src/lib/license/integrity-list";
 import { MODULE_PACKAGE_EXT } from "../src/lib/license/encrypted-module";
-import { detectLoaderInjection, integrityReason, runIntegrityCheck, type IntegrityCheckInput } from "../src/lib/license/integrity-check";
+import { decideForClass, detectLoaderInjection, integrityReason, runIntegrityCheck, type IntegrityCheckInput } from "../src/lib/license/integrity-check";
 import { tsLicenseCore, type LicenseCore } from "../src/lib/license/license-core";
 import { unavailableCore } from "../src/lib/license/native-adapter";
 import { loadLicenseCoreFrom, nativeFileName } from "../src/lib/license/native";
@@ -194,6 +195,40 @@ async function bolum1b(): Promise<void> {
   check("§1l filigran: bayt kodu = imzalı künye → GECERLI · başka müşteri/paket → GECERSIZ BUTUNLUK_FILIGRAN", esit.durum === "GECERLI" && baska.kod === "BUTUNLUK_FILIGRAN" && baskaPaket.kod === "BUTUNLUK_FILIGRAN");
 }
 
+async function bolum1c(): Promise<void> {
+  console.log("\n§1'' yeni HAK: aynı ölçümün kararı yeni sınıfla (decideForClass) = o sınıfla tam denetim");
+  const k = paket("s1c");
+  const pid = "7a2b3c4d-5e6f-4a70-8b9c-0d1e2f3a4b5c";
+  await imzala(k, H, { musteri: "testfabrika", paketId: pid });
+  const g = (o: Partial<IntegrityCheckInput>) => runIntegrityCheck(girdi(k, { keys: keysOf(H), ...o }));
+  const iz = (o: IntegrityOutcome | null) =>
+    o === null ? "null" : JSON.stringify([o.durum, o.kod, o.kid, o.kunye, o.fazla, o.fazlaSayisi, o.yukleyiciBayraklari, o.rapor]);
+  const esdeger = async (ad: string, olcumGirdisi: Partial<IntegrityCheckInput>, sinif: string | null): Promise<string | null> => {
+    const once = await g({ ...olcumGirdisi, entitlementClass: null });
+    const karar = decideForClass(once, sinif);
+    const tam = await g({ ...olcumGirdisi, entitlementClass: sinif });
+    return iz(karar) === iz(tam) && karar?.denetlendi === once.denetlendi ? null : `${ad}: ${karar?.durum}/${karar?.kod} ≠ ${tam.durum}/${tam.kod}`;
+  };
+  const baska = { musteri: "baskafabrika", kurulumId: null, paketId: pid, derlemeTarihi: null };
+  const enjeksiyon = { execArgv: ["--require", "/x.js"], nodeOptions: undefined };
+  const farklar: string[] = [];
+  for (const sinif of ["TEST", "DEMO", "URETIM", null]) farklar.push((await esdeger(`sınıf ${sinif}`, {}, sinif)) ?? "");
+  farklar.push((await esdeger("filigran uyuşmaz", { watermark: baska }, "TEST")) ?? "");
+  farklar.push((await esdeger("yükleyici enjeksiyonu", { runtimeFlags: enjeksiyon }, "TEST")) ?? "");
+  writeFileSync(path.join(k, "dist", "yama.js"), "evil()\n");
+  farklar.push((await esdeger("kapsamda FAZLA", {}, "TEST")) ?? "");
+  rmSync(path.join(k, "dist", "yama.js"));
+  const kotu = farklar.filter(Boolean);
+  check("§1q ⭐ sınıfsız ölçümün kararı TEST/DEMO/URETIM/null · filigran · enjeksiyon · FAZLA'da o sınıfla tam denetime EŞİT, `denetlendi` ölçüm anı", kotu.length === 0, kotu.join(" | ") || `${farklar.length} durum eşit`);
+  const bilinmez = await g({ entitlementClass: null });
+  const test = decideForClass(bilinmez, "TEST");
+  check("§1r etkinleştirme penceresi: sınıf bilinmiyorken OLCULEMEDI/künyesiz → TEST HAK'ıyla GECERLI + imzalı künye (derleme tarihi)",
+    bilinmez.durum === "OLCULEMEDI" && bilinmez.kunye === null && test?.durum === "GECERLI" && test.kunye?.derlemeTarihi === "2026-09-29T20:00:00.000Z", `${bilinmez.kod} → ${test?.durum}`);
+  rmSync(path.join(k, INTEGRITY_FILE));
+  const listesiz = await g({ entitlementClass: null });
+  check("§1s ölçümü olmayan sonuç (liste yok) yeniden kararlanmaz → null (tam denetim beklenir)", listesiz.olcum === null && decideForClass(listesiz, "TEST") === null, `${listesiz.kod}`);
+}
+
 function bolum2(): void {
   console.log("\n§2 çapa");
   check("§2a PACKAGE_PUBLIC_KEYS dolu, her kid `paket-…`", PACKAGE_PUBLIC_KEYS.length > 0 && PACKAGE_PUBLIC_KEYS.every((k) => /^paket-[a-z0-9-]{1,40}$/.test(k.kid)));
@@ -228,7 +263,7 @@ function bolum3(): void {
   const P1 = randomUUID();
   const P2 = randomUUID();
   const sonuc = (durum: IntegrityOutcome["durum"], derleme: string | null, paketId: string | null = P1): IntegrityOutcome => ({
-    durum, kod: null, kid: A.kid, fazla: [], fazlaSayisi: 0, yukleyiciBayraklari: [], denetlendi: new Date(NOW).toISOString(),
+    durum, kod: null, kid: A.kid, fazla: [], fazlaSayisi: 0, yukleyiciBayraklari: [], olcum: null, denetlendi: new Date(NOW).toISOString(),
     rapor: paketId
       ? { durum: durum === "GECERSIZ" ? "GECERSIZ" : "GECERLI", kod: null, dosyaSayisi: 1, eksik: [], eksikSayisi: 0, degisik: [], degisikSayisi: 0, okunamayan: [], okunamayanSayisi: 0, fazla: [], fazlaSayisi: 0,
           paket: { paketId, urun: "backend", surum: "2.12.0", derlemeTarihi: derleme ?? "2026-09-01T00:00:00.000Z", musteri: null } }
@@ -497,6 +532,7 @@ async function main(): Promise<void> {
     if (n.status.kaynak === "native" && n.status.kunye.testCapasi) await bolum1(n.core, "native");
     else ATLAMA.atla("§1 native kolu", "test çapalı native derlemesi yok — `cd native/lisans-cekirdek && npm run derle`", 13);
     await bolum1b();
+    await bolum1c();
     bolum2();
     bolum3();
     await bolum4();
